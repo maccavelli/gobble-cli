@@ -15,7 +15,7 @@ README.md                 repository entry; links here
 docs/
   README.md               ToC and the "I want to…" matrix
   architecture.md         this file
-  decisions/              MADR/PLAN pairs (empty)
+  decisions/              MADR/PLAN pairs
   reports/                numbered observations
   guides/                 unnumbered how-to documents (empty)
 ```
