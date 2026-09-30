@@ -19,12 +19,12 @@ command API.
 
 A first draft of this record chose ACP as that command API. The owner then
 tightened the target: v1 is designed to be the **native CLI supported by
-magic-cli-remote**. Other CLI providers in that daemon continue. pi-go is
+magic-cli-remote**. Other CLI providers in that daemon continue. pigo is
 fully optimized for, and fully supported by, that stack — leveraging the
 existing **mcremote** / **mcrelay** protocols and the canonical slash-command
 standard (magic-cli-remote MADR 0023), and exposing agent CLI commands such
 as `/compact` and `/usage` **natively over ACP** so they actually execute.
-pi-go may be rewritten; TypeScript Pi's JSONL RPC, Charm TUI, and jiti
+pigo may be rewritten; TypeScript Pi's JSONL RPC, Charm TUI, and jiti
 extensions are not constraints on the shape.
 
 TypeScript Pi's headless control surface is a custom JSONL command protocol
@@ -50,13 +50,13 @@ honestly advertised and actually executed.
   TypeScript extensions, Chord/Pico, and the TypeScript SDK are outside that
   cut.
 * Owner-stated integration target: native CLI of magic-cli-remote; other
-  providers in that daemon keep working; pi-go is the fully supported,
+  providers in that daemon keep working; pigo is the fully supported,
   fully optimized agent.
 * One agent command API, used by Cobra, by editors, and by mcremote, rather
   than a Cobra vocabulary plus a private RPC dialect plus a TUI-only slash
   catalog.
 * mcremote/mcrelay already define the phone/desktop hop (WebSocket
-  protocol-v1 / v2). pi-go belongs on the **ACP stdio** hop those daemons
+  protocol-v1 / v2). pigo belongs on the **ACP stdio** hop those daemons
   already spawn. It does not reimplement the WebSocket.
 * magic-cli-remote MADR 0023: a provider table beats advertisement;
   capabilities are proven by execution and by optional session interfaces,
@@ -77,7 +77,7 @@ honestly advertised and actually executed.
 * Cobra CLI plus a faithful port of TypeScript Pi JSONL RPC, ACP added later
 * Dual headless protocols in v1 (Pi JSONL RPC and ACP)
 * ACP-only stdio agent with no Cobra command surface beyond `acp`
-* pi-go speaks mcremote WebSocket (protocol-v1/v2) in addition to ACP
+* pigo speaks mcremote WebSocket (protocol-v1/v2) in addition to ACP
 * Grok-shaped adapter: advertise a TUI catalog and rely on daemon
   workarounds (`KindNone`, native-name aliases, vendor `_x.ai/*`)
 
@@ -86,7 +86,7 @@ honestly advertised and actually executed.
 Chosen option: "Native magic-cli-remote CLI: Cobra over one `acp.Agent`,
 ACP stdio headless, MCP client, honest slash commands that execute",
 because the owner asked for those three surfaces, for ACP to expose the
-agent command API, and for pi-go to be the native agent of
+agent command API, and for pigo to be the native agent of
 magic-cli-remote.
 
 One `acp.Agent` implementation is the command API. The Cobra CLI is an ACP
@@ -96,17 +96,20 @@ capability (stdio and streamable HTTP), configured from `mcp.json` and from
 `session/new.mcpServers`. Agent-owned slash commands (`/compact`, `/usage`,
 `/context`, `/model`, `/thinking`, and the rest of the native set below)
 are handled in `session/prompt` and, where mcremote has an optional
-session interface, also as `_pi/` extension methods so either a
+session interface, also as `_pigo/` extension methods so either a
 `KindNative` or a `KindOp` table mapping works.
 
-pi-go does **not** implement mcremote or mcrelay WebSocket. Those stay in
+pigo does **not** implement mcremote or mcrelay WebSocket. Those stay in
 magic-cli-remote. Other providers there (grok, opencode, kilo, codex, fake)
 continue. A future `provider.IDPi` Spec in that repository is companion
 work specified here, not executed in this tree.
 
 TypeScript Pi's JSONL `--mode rpc` is **out of v1**. A later MADR may add a
 translation shim. Charm TUI, jiti extensions, codemode, Chord/Pico, and a
-browser/TypeScript SDK remain out of v1.
+browser/TypeScript SDK remain out of v1. *(Scope superseded 2026-09-29 by
+[0005-MADR](0005-MADR-v1-feature-scope.md): the TUI and the JSONL RPC shim
+return to the v1 line as ACP clients, and codemode returns under `exp/`.
+The ACP-as-command-API decision above is unchanged.)*
 
 ### Consequences
 
@@ -128,7 +131,7 @@ browser/TypeScript SDK remain out of v1.
   SDK the fleet already runs, not the website's v2 names.
 * Neutral, because Pi-only operations that ACP does not baseline (`steer`,
   `follow_up`, `clear_queue`, typed compact with instructions) become
-  `_pi/`-prefixed extension methods. Editors that ignore unknown extensions
+  `_pigo/`-prefixed extension methods. Editors that ignore unknown extensions
   still run the baseline and the slash forms.
 * Neutral, because registering `IDPi` in magic-cli-remote is a change in
   **that** repository. This record specifies the Spec and command table
@@ -142,7 +145,7 @@ browser/TypeScript SDK remain out of v1.
 * Bad, because today's shared `acpagent` session implements grok vendor
   paths (`session/set_model` `_meta.reasoningEffort`,
   `x.ai/compact_conversation`). An `IDPi` Spec that reuses those paths
-  unchanged would call methods pi-go does not implement. Companion work
+  unchanged would call methods pigo does not implement. Companion work
   must parameterize those hooks (see More Information).
 
 ### Confirmation
@@ -159,10 +162,12 @@ browser/TypeScript SDK remain out of v1.
   server advertises tools to the model; `pi mcp list` reports the same
   servers. SSE is not implemented (TypeScript Pi rejects `sse`; ACP's SSE
   capability stays `false`).
-* No package under this module imports a Charm / Lip Gloss / Bubble Tea
-  module in v1.
+* ~~No package under this module imports a Charm / Lip Gloss / Bubble Tea
+  module in v1.~~ *Superseded (2026-09-29, second amendment):* only
+  `internal/tui` imports Charm, and it is an ACP client ([0004-MADR](0004-MADR-go-module-architecture.md) import rules
+  5 and 6).
 * A mapping table in this record's More Information is kept honest: each
-  TypeScript Pi RPC command is either an ACP baseline method, a `_pi/`
+  TypeScript Pi RPC command is either an ACP baseline method, a `_pigo/`
   extension, a Cobra config command, or explicitly out of v1.
 * `available_commands_update` lists only commands `session/prompt` actually
   executes. A test sends `/compact`, `/usage`, and `/context` as
@@ -174,8 +179,11 @@ browser/TypeScript SDK remain out of v1.
   resolve from tracked usage.
 * `session/set_mode` honors at least `default` and `plan`, each confirmed
   by `current_mode_update`. `session/set_config_option` changes model and
-  thinking. `session/set_model` with `{sessionId, modelId}` (the request
-  mcremote `acpagent.SetModel` already sends) also changes the model.
+  thinking (option categories `model` and `thought_level`).
+  ~~`session/set_model` with `{sessionId, modelId}` (the request
+  mcremote `acpagent.SetModel` already sends) also changes the model.~~
+  *Withdrawn (2026-09-29, second amendment):* the SDK cannot route that
+  method to the agent.
 * No `_x.ai/` method is implemented or advertised.
 
 ## Pros and Cons of the Options
@@ -187,7 +195,7 @@ The CLI process always hosts (or is) an ACP agent. Headless mode is
 Interactive-ish CLI commands (`prompt`, `session new`, `session resume`)
 are `ClientSideConnection` calls, in-process over pipes or to a spawned
 stdio child. Slash commands the agent owns execute in `Prompt` and, where
-needed for `KindOp`, as `_pi/` extensions. The PLAN picks in-process vs
+needed for `KindOp`, as `_pigo/` extensions. The PLAN picks in-process vs
 child transport; this record requires that the bytes are ACP.
 
 * Good, because it matches the owner's ACP, CLI, MCP, and
@@ -225,7 +233,7 @@ mcremote, or `acp-go-sdk`'s example client.
 * Bad, because the owner asked for a CLI, including `pi mcp …`, `pi auth …`,
   and print-style prompting, which TypeScript Pi offers without an editor.
 
-### pi-go speaks mcremote WebSocket (protocol-v1/v2) in addition to ACP
+### pigo speaks mcremote WebSocket (protocol-v1/v2) in addition to ACP
 
 Put the daemon protocol inside the agent binary.
 
@@ -247,7 +255,7 @@ Ship `available_commands` as a superset, mark the ones that do not work
 * Bad, because the owner asked for a rewrite that is fully supported, and
   MADR 0023 exists precisely because that shape silently drops `/compact`
   and `/usage`.
-* Bad, because `_x.ai/*` is grok vendor; implementing it in pi-go would
+* Bad, because `_x.ai/*` is grok vendor; implementing it in pigo would
   couple the native CLI to another product's extensions.
 
 ## More Information
@@ -255,7 +263,7 @@ Ship `available_commands` as a superset, mark the ones that do not work
 ### Amendment (2026-09-29)
 
 This record is still `proposed`. The first draft chose ACP as the sole
-agent command API, mapped TypeScript Pi RPC onto baseline ACP plus `_pi/`
+agent command API, mapped TypeScript Pi RPC onto baseline ACP plus `_pigo/`
 extensions, and allowed v1 to ship with an empty slash-command list. The
 owner then required native magic-cli-remote support: honest slash commands
 that execute over ACP (`/compact`, `/usage`, and the rest of the native
@@ -264,6 +272,39 @@ left in place. The Decision Outcome, Confirmation, mapping tables, and
 companion Spec below replace that empty-list allowance. The ACP-as-command-API
 choice, the JSONL-RPC-out-of-v1 choice, and the Cobra-is-an-ACP-client
 choice are unchanged.
+
+### Amendment (2026-09-29, second): `pigo` identity, SDK routing correction, wider v1 line
+
+Still `proposed`. Four changes; the ACP-as-command-API decision, the
+Cobra-is-an-ACP-client rule, and the honest-advertisement rule are
+unchanged.
+
+1. **Identity.** The owner named the runtime binary `pigo`. [0003-MADR](0003-MADR-pigo-product-identity.md) fixes
+   the rest (directories, `PIGO_` environment, User-Agent, ACP
+   `agentInfo`). In this record the product and binary now read `pigo`
+   where they read `pi-go`, and extension methods read `_pigo/…` where
+   they read `_pi/…`. The repository and module path keep `pi-go`.
+2. **Correction: `session/set_model` cannot be served.** This record said
+   v1 implements `session/set_model` because mcremote's
+   `acpagent.SetModel` sends it. `github.com/coder/acp-go-sdk` v0.13.5 has
+   no such method in its schema. `AgentSideConnection` sends only
+   `_`-prefixed methods to `ExtensionMethodHandler` (`extensions.go`), and
+   `agent_gen.go` answers every other unknown method with
+   `NewMethodNotFound`. pigo therefore handles model and thinking changes
+   only through `session/set_config_option` (categories `model` and
+   `thought_level`) and the `/model` and `/thinking` slash commands. The
+   companion Spec must route `OpSetModel` and `OpSetThinkingLevel` through
+   `SetConfigOption`, which mcremote already has, or map them `KindNative`.
+   Options not taken: forking the SDK to add a route, or wrapping the
+   stdio reader to intercept the method before the SDK sees it. Both would
+   put a non-standard method into the agent that the standard makes
+   unnecessary.
+3. **Module shape and toolchain** are decided in [0004-MADR](0004-MADR-go-module-architecture.md). [0004-PLAN](0004-PLAN-go-module-architecture.md) replaces
+   Phase 0 of the associated PLAN.
+4. **v1 line.** [0005-MADR](0005-MADR-v1-feature-scope.md) widens v1 at the owner's request ("include as much as
+   possible"), with tiers (1.0 gate, 1.x train, `exp/`, out). It supersedes
+   "What v1 is not" and the companion command table below as the target.
+   [0005-PLAN](0005-PLAN-v1-feature-scope.md) follows the associated PLAN.
 
 ### What v1 is
 
@@ -275,6 +316,10 @@ choice are unchanged.
 | MCP client | stdio and streamable HTTP; tools become ordinary agent tools |
 
 ### What v1 is not
+
+> *Superseded (2026-09-29, second amendment) by [0005-MADR](0005-MADR-v1-feature-scope.md):* the Charm TUI, HTML
+> export, data-package install, and the Pi JSONL RPC shim return to the v1
+> line; codemode returns under `exp/`. The rest of this list stays out.
 
 Charm TUI, TypeScript/jiti extensions, npm package install of extensions,
 codemode, Chord, Pico/`pi-durable`, `pi-protocol` CBOR, HTML export,
@@ -288,7 +333,7 @@ phone / desktop  --WS protocol-v1/v2-->  mcrelay  -->  mcremote daemon
                                                       |
                                                       | ACP JSON-RPC 2.0 stdio
                                                       v
-                                                   pi-go acp
+                                                   pigo acp
 ```
 
 * mcremote interprets **canonical** slash commands (magic-cli-remote
@@ -298,13 +343,15 @@ phone / desktop  --WS protocol-v1/v2-->  mcrelay  -->  mcremote daemon
   (`KindNative`).
 * Non-canonical names the agent advertised are forwarded as `session/prompt`.
 * protocol-v2 is a WebSocket delta (caps, resume, liveness). It does not
-  change the ACP hop. pi-go is unaffected by v2 negotiation.
-* pi-go never opens a magic-cli-remote WebSocket.
+  change the ACP hop. pigo is unaffected by v2 negotiation.
+* pigo never opens a magic-cli-remote WebSocket.
 
 ### SDK and protocol pin
 
-* Module: `github.com/coder/acp-go-sdk` at **v0.13.5** (same pin as
-  magic-cli-remote).
+* Module: `github.com/coder/acp-go-sdk` at **v0.13.5**. magic-cli-remote
+  requires the same version, then `replace`s it with the owner's fork
+  `v0.13.6-mcr.1` (its MADR 0167). Whether pigo carries that replace is
+  decided in [0004-PLAN](0004-PLAN-go-module-architecture.md) Phase 0.
 * `ProtocolVersionNumber = 1`.
 * Agent baseline on that SDK: `initialize`, `authenticate`, `logout`,
   `session/new`, `session/prompt`, `session/cancel`, `session/list`,
@@ -312,12 +359,16 @@ phone / desktop  --WS protocol-v1/v2-->  mcrelay  -->  mcremote daemon
   `session/set_config_option`.
 * Optional: `session/load` (`AgentLoader`) when session JSONL exists —
   advertised only once it works.
-* Additional method mcremote already sends on ACP sessions:
+* ~~Additional method mcremote already sends on ACP sessions:
   `session/set_model` with `{sessionId, modelId}`. v1 implements it as a
   model switch. Unknown `_meta` keys are ignored; `_meta.reasoningEffort`
   is accepted as a thinking-level change so a companion Spec can reuse
   today's `SetThinkingLevel` **or** route thinking through
-  `session/set_config_option`.
+  `session/set_config_option`.~~ *Corrected (2026-09-29, second
+  amendment):* `session/set_model` is not in the ACP schema this SDK
+  generates. The SDK's agent side answers MethodNotFound for any
+  non-schema method that does not start with `_`. Model and thinking are
+  `session/set_config_option` categories `model` and `thought_level`.
 * Unstable methods (`session/fork`, NES, document/*) are not a v1
   requirement. `/fork` is a slash command (copy JSONL / branch the
   session) rather than ACP `UnstableForkSession`.
@@ -332,13 +383,13 @@ Pi at the commit named in 0001-REPORT (`312184edb`).
 1. **Layering already matches.** mcremote's ACP adapter
    (`internal/provider/acpagent`) launches a binary, handshakes
    `initialize`, opens `session/new` with `mcpServers`, streams
-   `session/update` into daemon events, and maps permissions. pi-go is
+   `session/update` into daemon events, and maps permissions. pigo is
    that binary. There is no `provider.IDPi` today (`IDFake`, `IDGrok`,
    `IDOpencode`, `IDCodex`, `IDKilo` only).
 2. **Advertisement is not capability.** MADR 0023 (accepted 2026-07-25):
    grok advertises `/compact` and `/context` over ACP; sending them
    returned zero `session/update` frames. A provider `command.Table` beats
-   `available_commands`. pi-go advertises only what `Prompt` executes.
+   `available_commands`. pigo advertises only what `Prompt` executes.
 3. **Canonical vocabulary is daemon-owned.** `internal/command.Specs`
    lists help, plan, mode, permissions, reviewer, approve, model,
    thinking, context, status, usage, compact, clear/reset, new, sessions,
@@ -359,13 +410,13 @@ Pi at the commit named in 0001-REPORT (`312184edb`).
    forwards configured servers whose transport the agent advertised
    (`mcpCapabilities.http` / `sse`) and drops the rest. Stdio MCP is the
    ACP default untagged form; the daemon config type in that function does
-   not forward it. pi-go still accepts stdio and HTTP on `session/new`
+   not forward it. pigo still accepts stdio and HTTP on `session/new`
    (Zed, Cobra, `mcp.json`) and advertises `http = true`, `sse = false`,
    `acp = false`.
 6. **Grok vendor extensions stay grok's.** `ExtensionNotifications` on the
    grok Spec subscribe to `_x.ai/models/update`, MCP status, session
    notifications, and related methods. Several others are deliberately
-   declined (announcements, settings, queue). pi-go uses `_pi/` for
+   declined (announcements, settings, queue). pigo uses `_pigo/` for
    Pi-only ops and standard ACP otherwise. Plan approval uses
    `session/request_permission`.
 7. **TypeScript Pi slash commands that are TUI chrome must not be
@@ -383,7 +434,7 @@ Pi at the commit named in 0001-REPORT (`312184edb`).
 8. **protocol-v1 `commands.list` / `remote_commands`.** The daemon
    advertises the resolved canonical list, including unavailable commands
    with reasons. Clients invoke with `session.prompt` text `/name args…`.
-   pi-go's job is to make the agent-side mappings true, and to emit the
+   pigo's job is to make the agent-side mappings true, and to emit the
    ACP events (`available_commands_update`, `usage_update`,
    `current_mode_update`, `config_option_update`) the daemon already
    consumes.
@@ -396,18 +447,25 @@ Rules:
    (non-empty `session/update` stream or a structured extension result
    that the prompt path also surfaces as agent text).
 2. Dual-path every command that MADR 0023 prefers as `KindOp`: implement
-   the slash form **and** a `_pi/` method the companion Spec can call, so
+   the slash form **and** a `_pigo/` method the companion Spec can call, so
    either table mapping works.
 3. Daemon-owned commands (`/help`, `/clear`, `/new`, `/sessions`) work
-   even if the agent is silent. pi-go still handles native equivalents for
+   even if the agent is silent. pigo still handles native equivalents for
    Cobra and for ACP clients that are not mcremote (`/new` → `session/new`
    semantics in-process, `/help` lists advertised commands).
-4. Codex-only or provider-specific commands that pi-go does not implement
+4. Codex-only or provider-specific commands that pigo does not implement
    are omitted from `available_commands` and, in the companion table,
    `KindNone` with a user-readable reason. They are never advertised as
    working.
 
 ### Intended companion `command.Table` (magic-cli-remote `IDPi`)
+
+> *Superseded as the target (2026-09-29, second amendment) by the table in
+> [0005-MADR](0005-MADR-v1-feature-scope.md).* This table stays the floor for a pigo release that predates the
+> 0005 handlers. The `model` and `thinking` rows cannot use
+> `session/set_model` (see the second amendment). Until the Spec routes
+> those ops through `session/set_config_option`, they are `KindNative`
+> (`/model`, `/thinking`).
 
 This table is the contract for a future Spec in magic-cli-remote. It is
 not implemented in this repository. Cite magic-cli-remote MADR 0023 and
@@ -416,7 +474,7 @@ not implemented in this repository. Cite magic-cli-remote MADR 0023 and
 
 | Canonical | Kind | Mechanism | Notes |
 |---|---|---|---|
-| `help` | KindDaemon | daemon | pi-go also answers `/help` over ACP for non-mcremote clients |
+| `help` | KindDaemon | daemon | pigo also answers `/help` over ACP for non-mcremote clients |
 | `plan` | KindMode, ModeID `plan` | `session/set_mode` | v1 implements modes `default` and `plan` |
 | `mode` | KindMode | `session/set_mode` | |
 | `permissions` | KindNone | — | reason: this agent uses `/mode` for agent modes, not permission presets |
@@ -426,8 +484,8 @@ not implemented in this repository. Cite magic-cli-remote MADR 0023 and
 | `thinking` | KindOp, OpSetThinkingLevel | `session/set_config_option`; `_meta.reasoningEffort` accepted | mutability **live** |
 | `context` | KindOp, OpContext | daemon from last `usage_update` | also slash `/context` and Pi `/session` (non-canonical alias advertised) |
 | `status` | KindNone | — | no host runtime status in v1 |
-| `usage` | KindNative, Native `usage` | `session/prompt` `/usage`; `_pi/usage` for a later RuntimeSession | account/rate-limit if known, else session tokens/cost |
-| `compact` | KindNative, Native `compact` until Compact is Spec-hooked; then KindOp OpCompact | `/compact [instructions]` and `_pi/compact` | **do not** call `x.ai/compact_conversation` |
+| `usage` | KindNative, Native `usage` | `session/prompt` `/usage`; `_pigo/usage` for a later RuntimeSession | account/rate-limit if known, else session tokens/cost |
+| `compact` | KindNative, Native `compact` until Compact is Spec-hooked; then KindOp OpCompact | `/compact [instructions]` and `_pigo/compact` | **do not** call `x.ai/compact_conversation` |
 | `clear` / `reset` | KindDaemon | daemon | |
 | `new` | KindDaemon | daemon | |
 | `sessions` | KindDaemon | daemon | |
@@ -450,7 +508,7 @@ not implemented in this repository. Cite magic-cli-remote MADR 0023 and
 Companion Spec sketch (fields that exist on `acpagent.Spec` today):
 
 * `ID`: new `provider.IDPi` (exact string chosen in that repo).
-* `DefaultBin`: `pi-go` (until D17 says otherwise).
+* `DefaultBin`: `pigo` ([0003-MADR](0003-MADR-pigo-product-identity.md)).
 * `DefaultArgs`: `[]string{"acp"}`.
 * `Commands`: the table above, every Specs name declared.
 * `CommandCaveat`: empty unless a session-wide quirk appears.
@@ -482,21 +540,21 @@ named in the report (`312184edb`).
 | `new_session` | ACP `session/new` |
 | `switch_session` | ACP `session/load` or `session/resume` |
 | `get_commands` | ACP `session/update` / `available_commands_update` (honest list) |
-| `set_model`, `cycle_model`, `get_available_models` | ACP `session/set_config_option` and `session/set_model` |
+| `set_model`, `cycle_model`, `get_available_models` | ACP `session/set_config_option` (category `model`); `session/set_model` withdrawn by the second amendment |
 | `set_thinking_level`, `cycle_thinking_level`, `get_available_thinking_levels` | ACP `session/set_config_option` (thinking); `_meta.reasoningEffort` accepted |
-| `get_state`, `get_messages`, `get_entries`, `get_tree`, `get_last_assistant_text`, `get_session_stats` | `_pi/…` extensions (read models); stats also via `/session` and `/usage` slash |
-| `steer`, `follow_up`, `clear_queue` | `_pi/steer`, `_pi/follow_up`, `_pi/clear_queue` |
-| `compact`, `set_auto_compaction`, `set_auto_retry`, `abort_retry` | slash `/compact [instructions]`; `_pi/compact`; `_pi/set_auto_compaction` (retry policy may wait) |
-| `bash`, `abort_bash` | `_pi/bash` (agent-local exec; not ACP `terminal/*`, which is a **client** capability) |
+| `get_state`, `get_messages`, `get_entries`, `get_tree`, `get_last_assistant_text`, `get_session_stats` | `_pigo/…` extensions (read models); stats also via `/session` and `/usage` slash |
+| `steer`, `follow_up`, `clear_queue` | `_pigo/steer`, `_pigo/follow_up`, `_pigo/clear_queue` |
+| `compact`, `set_auto_compaction`, `set_auto_retry`, `abort_retry` | slash `/compact [instructions]`; `_pigo/compact`; `_pigo/set_auto_compaction` (retry policy may wait) |
+| `bash`, `abort_bash` | `_pigo/bash` (agent-local exec; not ACP `terminal/*`, which is a **client** capability) |
 | `fork`, `clone`, `get_fork_messages` | slash `/fork` `/clone`; out of ACP unstable fork |
-| `set_session_name` | slash `/name`; `_pi/set_session_name` |
-| `export_html` | out of v1 |
-| `set_steering_mode`, `set_follow_up_mode` | `_pi/…` |
+| `set_session_name` | slash `/name`; `_pigo/set_session_name` |
+| `export_html` | out of this cut; `pigo session export --format html` and `/export` in [0005-MADR](0005-MADR-v1-feature-scope.md) (1.x) |
+| `set_steering_mode`, `set_follow_up_mode` | `_pigo/…` |
 
 Cobra `pi mcp add|remove|list|login|logout` and `pi auth …` are
 **configuration** commands. They edit files / credentials. They are not ACP
 methods. A running session sees MCP changes on the next `session/new` or
-via a `_pi/mcp_reload` extension if v1 implements live reload — live reload
+via a `_pigo/mcp_reload` extension if v1 implements live reload — live reload
 is not required.
 
 ### MCP
@@ -526,26 +584,30 @@ picks one in its MCP phase and records the module path.
 The binary has two process roles, selected by Cobra:
 
 1. **Agent** — stdio ACP server (headless). Editors and mcremote spawn
-   `pi-go acp` (exact binary name still D17).
+   `pigo acp` (binary named by [0003-MADR](0003-MADR-pigo-product-identity.md)).
 2. **Client** — Cobra command runs an in-process agent through
    `ClientSideConnection` / `AgentSideConnection` on an in-memory pipe, or
    prints a one-shot `session/prompt`. No Charm views.
 
 A Cobra command must not call the agent loop except through ACP methods
-(baseline, `session/set_model`, or `_pi/` extension). That is the
+(baseline or `_pigo/` extension). That is the
 "extensive use" rule.
 
 ### Launch shape mcremote will use
 
 Analogous to grok's `grok agent --no-leader … stdio`:
 
-* DefaultBin `pi-go`
+* DefaultBin `pigo`
 * DefaultArgs `acp`
 * `KnownGoodVersion` set when a release exists; mismatch warns, never
   refuses (magic-cli-remote MADR 0137).
 * Capability is proven by live probes, not by this MADR's table alone.
 
 ### Still open (not this MADR)
+
+> *Updated (2026-09-29, second amendment):* D11, D17 and D18 are decided
+> by [0003-MADR](0003-MADR-pigo-product-identity.md); D4, D10, D14, D15 and D16 by [0004-MADR](0004-MADR-go-module-architecture.md); D1–D3, D5–D9, D12 and D13 by
+> [0005-MADR](0005-MADR-v1-feature-scope.md). The paragraph below is the state before those records.
 
 From the report, still open after this cut: D8 (images), D9
 (distribution), D10 (providers / `go-llmprovider-sdk`), D11 (home

@@ -1,0 +1,469 @@
+---
+status: proposed
+date: 2026-09-29
+decision-makers: repository owner
+consulted: 0001-REPORT-go-port-feasibility.md, 0002-MADR-cli-acp-headless-mcp-v1.md, 0003-MADR-pigo-product-identity.md, 0004-MADR-go-module-architecture.md
+informed: magic-cli-remote (companion command table)
+---
+# The v1 line carries every portable Pi capability, plus the ones Pi left to example extensions, tiered into a v1.0.0 gate, a v1.x train, and `exp/`
+
+## Context and Problem Statement
+
+[0002-MADR-cli-acp-headless-mcp-v1.md](0002-MADR-cli-acp-headless-mcp-v1.md)
+cut v1 narrowly. Its scope was the Cobra CLI, the ACP stdio agent, the MCP
+client, and native slash commands. It put the Charm TUI, the package
+manager, HTML export, and "anything else" out of v1. The owner has since
+asked to include as much as possible in v1, to be creative, and to mine
+the original Pi sources for features.
+
+A survey of Pi at `312184edb` (see More Information for paths) found
+three kinds of capability:
+
+1. **Built in and portable.** These are:
+   * the eight tools, with exact limits;
+   * the agent loop with steering and follow-up queues;
+   * retry, auto-compaction, and branch summaries;
+   * session JSONL v3 with a tree, labels, and context edits;
+   * settings with patch-merge rules;
+   * `AGENTS.md`/`CLAUDE.md` discovery, `SYSTEM.md`/`APPEND_SYSTEM.md`,
+     and a sectioned system prompt;
+   * Agent Skills, and prompt templates with shell-style argument
+     substitution;
+   * an MCP client with OAuth and exposure modes, plus `tool_search`
+     (BM25);
+   * project trust, cache warming, image auto-resize, HTML export, and
+     `!cmd` shell input.
+2. **Shipped only as example extensions.** Subagents
+   (`examples/extensions/subagent/`), a todo tool (`todo.ts`), plan mode
+   (`plan-mode/`), git checkpoints (`git-checkpoint.ts`), a permission
+   gate, protected paths, and a sandbox. Pi has no built-in permission
+   prompts, no background jobs, and no file-level undo. Its docs say so.
+3. **Language-bound.** The jiti TypeScript extension host, the TypeScript
+   SDK and browser `pi-ai`, and codemode's QuickJS VM. Also the
+   experimental second product (Chord, `pi-durable`, `pi-protocol`,
+   `pi-server`).
+
+magic-cli-remote's canonical vocabulary (its MADR 0023) has 30 commands.
+0002 had to mark 18 of them `KindNone` because the handler did not exist:
+`/undo`, `/redo`, `/diff`, `/ps`, `/stop`, `/review`, `/permissions`, and
+others. Several of those handlers are exactly the kind-2 features above.
+
+[0004-MADR-go-module-architecture.md](0004-MADR-go-module-architecture.md)
+gives each capability a package, and `exp/` a home for unstable ones. The
+problem: decide what the v1 line contains, and how to keep a wide scope
+shippable.
+
+## Decision Drivers
+
+* Owner: include as much as possible in v1, and take ideas from Pi.
+* The magic-cli-remote-native contract from 0002 is unchanged: advertise
+  only what executes, and emit the ACP events mcremote consumes. Every
+  canonical command that pigo can execute natively is one fewer
+  `KindNone` on the phone.
+* Pi compatibility where Pi's formats are data: session v3, `mcp.json`,
+  `models.json`, `SKILL.md`, prompt templates, and settings key names. A
+  Pi user's assets keep working (see
+  [0003-MADR-pigo-product-identity.md](0003-MADR-pigo-product-identity.md)).
+* Open standards over private extension APIs: MCP for tools, Agent Skills
+  for procedures, `AGENTS.md` for instructions, exec hooks with JSON over
+  stdio for policy, and ACP for every client.
+* A release that can actually be tagged: a wide scope needs a gate subset,
+  or `v1.0.0` never ships.
+
+## Considered Options
+
+* Tiered v1 line: a `1.0` gate, a `1.x` train, `exp/`, and an explicit out
+  list
+* Keep 0002's narrow v1; everything else is v2
+* Everything in scope must pass the `v1.0.0` gate (no tiers)
+* Full Pi parity including TypeScript extensions through an embedded JS
+  runtime
+
+## Decision Outcome
+
+Chosen option: "Tiered v1 line: a `1.0` gate, a `1.x` train, `exp/`, and
+an explicit out list". It puts nearly every Pi capability, and the
+example-only ones, into the v1 line, and keeps `v1.0.0` reachable.
+
+Tier definitions:
+
+| Tier | Meaning |
+|---|---|
+| **1.0** | Must work, with its tests, for the `v1.0.0` tag. |
+| **1.x** | Decided here. Lands in a `v1.N` minor release without a new MADR, and is advertised only when it works. |
+| **exp** | Lives under `exp/`, off by default, enabled by a setting. No compatibility promise. A later MADR promotes or drops it. |
+| **out** | Not in the v1 line. A later MADR may revisit. |
+
+### Capability inventory
+
+#### Agent core (`agent`, `compaction`)
+
+| Capability | Tier | Behaviour (Pi source) |
+|---|---|---|
+| Turn loop with parallel tool batches | 1.0 | Preflight sequentially, execute concurrently, emit results in source order. A tool marked `sequential` makes its batch sequential (`agent/src/types.ts`). |
+| Steering and follow-up queues | 1.0 | Steer is injected after the current tool calls finish. Follow-up is injected only when idle. Modes are `one-at-a-time` and `all`. Over ACP these are `_pigo/steer`, `_pigo/follow_up`, and `_pigo/clear_queue`. In the TUI, Enter while busy steers and Alt+Enter queues a follow-up (`agent.ts:134-320`). |
+| Retry | 1.0 | Defaults: `enabled`, 3 retries, 2 s base, 60 s cap. Honours `Retry-After`. Classification is by typed error, not regex. Context overflow is never retried; it compacts instead (`ai/src/utils/retry.ts`). |
+| Auto-compaction | 1.0 | Trigger when `contextTokens > contextWindow − reserveTokens` (16384). Keep 20000 recent tokens. Never cut at a tool result. The summary is iterative, and a split turn is handled. The summary format has Goal, Constraints, Progress, Decisions, Next Steps, Critical Context, and read/modified file lists. On overflow: compact once, then retry (`docs/compaction.md`). |
+| Manual compaction | 1.0 | `/compact [instructions]` and `_pigo/compact`. Emits `usage_update`. |
+| Thinking levels | 1.0 | `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`, with a per-model map and budgets (1024, 2048, 8192, 16384). Exposed as ACP config option category `thought_level`. |
+| Branch summaries | 1.x | Summarise an abandoned path when navigating the tree (`compaction/branch-summarization.ts`). |
+| Context edits | 1.x | `context_edit` entries omit or replace an earlier entry's model context. `_pigo/context_edit`. |
+| Prompt-cache warming | 1.x | Refresh at 90% of the TTL when the expected saving is at least $0.05. Recorded as `usage{kind:"cache_warm"}` (`core/cache-warmer.ts`). |
+| Provider server tools | 1.x | Pass through provider-hosted tools (web search, code execution) where the adapter's SDK exposes them, enabled per model in settings. |
+
+#### Tools (`tool/builtin`, `tool/toolsearch`)
+
+| Tool | Tier | Behaviour |
+|---|---|---|
+| `read` | 1.0 | `{path, offset?, limit?}`. Head truncation at 2000 lines or 50 KB, with continuation hints. Images (png, jpeg, gif, webp, bmp) are returned as image content and auto-resized to 2000×2000 and 4.5 MB of base64, keeping the smaller of PNG and JPEG. EXIF orientation is applied. A text note replaces the image for text-only models. Pure Go (`image/*`, `golang.org/x/image`). This decides report D8. |
+| `write` | 1.0 | `{path, content}`. Creates parent directories. Goes through the client's `fs/write_text_file` when advertised. |
+| `edit` | 1.0 | `{path, edits:[{oldText,newText}]}` multi-edit. Each `oldText` must be unique in the original, and edits must not overlap. Preserves BOM and CRLF. Falls back to fuzzy matching (NFKC, trailing whitespace, smart quotes, dashes, special spaces). Returns ACP `diff` content (`tools/edit.ts`, `edit-diff.ts`). |
+| `bash` | 1.0 | `{command, timeout?, background?}`. Tail truncation at 2000 lines or 50 KB, with the full output in `pigo-bash-<id>.log`. The child runs in its own process group, and the whole tree is killed on cancel. Honours `shellPath` and `shellCommandPrefix`. Children see the 0003 environment markers. Uses a client terminal when that is advertised and enabled. |
+| `powershell` | 1.0 (windows) | Same contract as `bash`, with a UTF-8 prefix. |
+| `grep` | 1.0 | `{pattern, path?, glob?, ignoreCase?, literal?, context?, limit?=100}`. Pure Go: `regexp`, a gitignore-aware walk, and `doublestar` globs. Lines are capped at 500 characters. No ripgrep download. This decides report D13. |
+| `find` | 1.0 | `{pattern, path?, limit?=1000}`. Pure Go, includes hidden files, respects `.gitignore`, and skips `.git` and `node_modules`. |
+| `ls` | 1.0 | `{path?, limit?=500}`. Sorted, with a `/` suffix on directories. |
+| `tool_search` | 1.0 | BM25 over names, descriptions, and schema properties. Loaded tools are recorded in the transcript so they survive resume and fork (`extensions/tool-search/tool.ts`). |
+| `todo` | 1.0 | `{todos:[{content,status,priority}]}`. Published as ACP `plan` updates and persisted as `custom{pigo.todo}`. `/todos`. Pi has this only as an example. |
+| `task` (subagents) | 1.x | `{agent, prompt, description}`. Runs a child pigo session in-process through ACP, linked by `parentSession`. Progress is relayed as `tool_call_update`. Batches may run in parallel. Depth limit 1 by default. Agents are `agents/*.md` (frontmatter `name`, `description`, `model`, `thinking`, `tools`, `mode`; the body is the system prompt). Pi has this only as an example. |
+| `web_fetch` | 1.x | `{url, format: markdown|text|html, maxBytes?}`. HTML is converted to Markdown. Open-world: asks by default. |
+| Background jobs | 1.x | `bash{background:true}` returns a job id. `job_output{id, since?}` and `job_kill{id}`. Jobs die when the session closes. Enables `/ps` and `/stop`. Pi has no equivalent. |
+| MCP resource tools | 1.0 | `list_mcp_resources`, `list_mcp_resource_templates`, `read_mcp_resource` (`docs/mcp.md`). |
+| Exposure modes | 1.0 | `direct`, `deferred` (loaded by `tool_search`), `hidden`. The Pi values `codemode` and `codemode-deferred` are accepted only when `exp/codemode` is enabled; otherwise they are read as `deferred`, with a warning. |
+| Per-file mutation queue | 1.0 | Writes to the same real path are serialised; different files still run in parallel (`file-mutation-queue.ts`). |
+| Workspace confinement | 1.0 | File tools open paths through `os.Root` over `cwd` plus ACP `additionalDirectories`. A path outside those roots requires a permission decision. |
+
+#### Sessions (`session`, `session/jsonl`)
+
+| Capability | Tier | Behaviour |
+|---|---|---|
+| JSONL v3 read and write | 1.0 | Every Pi entry type is supported: `message`, `model_change`, `thinking_level_change`, `usage`, `compaction`, `context_edit`, `branch_summary`, `custom`, `custom_message`, `label`, `session_info`. v1 and v2 files migrate when loaded. pigo-only data is stored as `custom{pigo.*}`, so the files stay valid v3. Unknown fields round-trip. This decides report D5 for sessions. |
+| ACP session methods | 1.0 | `session/list`, `session/load`, `session/resume`, `session/close`. `session_info_update` carries names and titles. |
+| Names, fork, clone | 1.0 | `/name`, `/fork [entry]`, `/clone`, and the matching `_pigo/*` methods. |
+| Tree navigation and labels | 1.x | `/tree` prints the tree. `/tree <id>` moves the leaf, with a branch summary. `/label`. The TUI has a tree navigator. |
+| Automatic titles | 1.x | After the first turn, a cheap model call sets `session_info.name` when it is empty. |
+| Pi import | 1.x | `pigo session list --pi` and `pigo session import`, through the 0003 bridge. |
+| Export | 1.x | `pigo session export --format jsonl|md|html` and `/export`. The HTML is self-contained, rendered server-side with a Go Markdown renderer, and needs no JavaScript. |
+| Share | 1.x | `/share` through `gh gist create` when `gh` is present. There is no hosted gateway. |
+| Archive and delete | 1.x | `/archive` hides a session from lists (`custom{pigo.archived}`). `/delete` removes the session file after an ACP permission request. `_pigo/delete`. The unstable ACP `session/delete` is advertised only under `acp.unstable`. |
+
+#### Context and prompts (`prompt`, `skill`, `command`)
+
+| Capability | Tier | Behaviour |
+|---|---|---|
+| Context files | 1.0 | Per directory the first match wins: `AGENTS.override.md`, `AGENTS.md`, `CLAUDE.md`. Loaded from the config directory, then from `cwd` and each ancestor, with nested git worktrees de-duplicated. No trust is needed. `--no-context-files` disables it (`resource-loader.ts`). |
+| `SYSTEM.md` and `APPEND_SYSTEM.md` | 1.0 | Replace or append to the default prompt. The trusted project copy wins over the user copy. |
+| Sectioned system prompt | 1.0 | Named sections (`preamble`, `tools`, `rules`, `project_context`, `skills`, `cwd`, custom). Section changes are stored as system-message patches, so the transcript replays exactly (`core/system-prompt.ts`). |
+| Agent Skills | 1.0 | `SKILL.md` frontmatter follows the agentskills.io spec. Discovery order: `.pigo/skills`, config `skills/`, `.agents/skills` from `cwd` up to the repo root, `~/.agents/skills`, then the Pi bridge. Only name, description, and location go into the prompt. `/skill:<name> [args]`. |
+| Prompt templates | 1.0 | `prompts/*.md` with `description` and `argument-hint` frontmatter. Substitution supports `$1`, `$@`, `$ARGUMENTS`, `${1:-d}`, `${@:N}`, `${@:N:L}`, with shell-style quoting. Each template is a `/name` command. |
+| `@` mentions | 1.0 | `@path` in a prompt becomes an ACP `resource_link` or an embedded resource. Prompt capability `embeddedContext = true`, `image = true`. |
+| MCP prompts as commands | 1.x | MCP `prompts/list` entries appear as `/mcp:<server>:<prompt>`. Pi does not do this. |
+| Built-in templates | 1.x | `/review` reviews the working-tree diff. `/init` drafts an `AGENTS.md`. The `deep-research` skill uses `task` and `web_fetch`. |
+
+#### Models, providers, auth (`llm`, `llm/provider/*`, `llm/catalog`, `internal/auth`)
+
+| Capability | Tier | Behaviour |
+|---|---|---|
+| Anthropic Messages | 1.0 | Official SDK. API key. Prompt caching markers. Thinking. |
+| OpenAI Responses and Chat Completions | 1.0 | Official `openai-go/v3`. API key. Reasoning effort. |
+| Google Gemini | 1.0 | Official `genai`. API key. Thinking budget. |
+| OpenAI-compatible | 1.0 | One adapter with presets for Groq, Cerebras, DeepSeek, xAI, OpenRouter, Together, Fireworks, Mistral, Hugging Face, Ollama, LM Studio, llama.cpp server, and vLLM. Covers the long tail of Pi's 42 factories through one wire family. |
+| Bedrock, Vertex, Azure OpenAI | 1.x | Through the same official SDKs' cloud options and ambient cloud credentials. |
+| Subscription OAuth | 1.x | Only for providers whose terms permit third-party clients (for example GitHub Copilot, and OpenAI ChatGPT/Codex through go-llmprovider-sdk's flows). Each provider is checked and recorded in the PLAN before it lands. |
+| go-llmprovider-sdk adapter | 1.x | Lands once that module has a `go.mod` and public streaming (its MADR 0015). |
+| Model catalog | 1.0 | Embedded snapshot in Pi's `Model` shape (context window, max tokens, cost tiers, input modalities, reasoning, thinking map, image input limits). `pigo models list|info`. The source is recorded in `NOTICE` if copied. |
+| Catalog refresh | 1.x | `pigo models refresh` into the cache directory. |
+| `models.json` | 1.0 | Pi-compatible custom providers and models, with `modelOverrides`. `$ENV`, `${ENV}`, and `!command` values are resolved at request time. |
+| Credential store | 1.0 | Precedence: `--api-key`, then keyring (or the 0600 file), then `models.json`, then environment or ambient credentials. `pigo auth login|logout|status|token|import --from-pi`. ACP `authMethods` and `authenticate`/`logout`. |
+
+#### MCP (`mcpclient`)
+
+| Capability | Tier | Behaviour |
+|---|---|---|
+| stdio and Streamable HTTP | 1.0 | Through the official go-sdk. SSE is rejected. Advertises `mcpCapabilities.http = true`, `sse = false`, `acp = false`. |
+| `mcp.json` | 1.0 | Pi-compatible schema (`command`, `args`, `env`, `cwd`, `url`, `headers`, `oauth`, `timeout`, `enabled`, `exposure`, `toolExposure` globs) with `${ENV}` and `!command` values. Unioned with `session/new.mcpServers`; the session's names win. |
+| Tool naming and output | 1.0 | `mcp__<server>__<tool>`, at most 64 characters, with a hash suffix on overflow. Output over 20 KB is middle-truncated, with the full text in a file. |
+| Lifecycle | 1.0 | Start-up waits up to 10 s. HTTP 408, 429, and 5xx are retried twice; tool calls are never retried. `list_changed` is handled, and the server reconnects on its next use. For a stdio server, stop means close stdin, then SIGTERM, then SIGKILL to the process group. Roots are `cwd` plus the additional directories. Progress notifications reset the timeout. |
+| OAuth | 1.0 | Discovery, dynamic client registration, PKCE, a loopback callback guarded by `CrossOriginProtection`, and manual paste. Tokens are kept in the secret store. |
+| CLI | 1.0 | `pigo mcp add|remove|list|get|login|logout`. `/mcp [status|reconnect]`. |
+| Sampling and elicitation | 1.x | An MCP server's `sampling/createMessage` is served by the session's model after a permission request. Elicitation maps to ACP elicitation when the client advertises it (unstable), otherwise to `session/request_permission`. |
+| `pigo mcp serve` | 1.x | pigo as an MCP **server**. It exposes `pigo_run` (prompt to final text in a new session) and `pigo_session_prompt`, so any MCP host can delegate to pigo. |
+
+#### Clients and modes (`acpserver`, `acpclient`, `internal/cli`, `internal/tui`)
+
+| Capability | Tier | Behaviour |
+|---|---|---|
+| `pigo acp` | 1.0 | The headless ACP agent, per 0002. |
+| Print mode | 1.0 | `pigo -p "…"` or piped stdin. `--output-format text|json|stream-json`. `json` is one final object `{text, stopReason, usage, cost, sessionId}`. `stream-json` writes each ACP `session/update` params object as one JSONL line after a header line. The streaming vocabulary is ACP; there is no private event dialect. In non-interactive mode an `ask` decision resolves to deny unless `--yes` or mode `bypass` is set (Pi's "ask means skip"). |
+| Charm TUI | 1.0 | `pigo` on a TTY. An ACP client over `acpclient`, on Charm v2 with fang-styled help. Includes: <br>• streamed Markdown transcript; <br>• collapsible tool cards with diffs; <br>• permission dialog; <br>• model, thinking, and mode pickers; <br>• session picker; <br>• multi-line editor with history; <br>• slash and `@path` completion; <br>• `!cmd` and `!!cmd`; <br>• Esc to interrupt; <br>• steer and follow-up keys; <br>• Ctrl+G for the external editor; <br>• a footer with model, mode, context %, and cost. <br>This decides report D6: Charm v2, extracting shared widgets into go-tui-lib as they settle. |
+| TUI themes and keybindings | 1.x | Pi theme JSON and `keybindings.json` with Pi's action ids (`app.*`, `tui.*`) where the action exists. |
+| Tree navigator, inline images | 1.x / exp | The tree navigator is 1.x. Kitty and iTerm2 inline images are exp. |
+| Pi RPC shim | 1.x | `pigo rpc` speaks Pi's JSONL RPC (`docs/rpc-commands.md`) as an ACP client of an in-process agent. Existing Pi RPC clients work, and there is still one command API (0002's objection to dual protocols was two inventories; the shim is a translator with none of its own). Extension-UI records are out. |
+| Shell completions and man pages | 1.0 | Through fang and Cobra. |
+
+#### Safety and policy (`permission`, `checkpoint`)
+
+| Capability | Tier | Behaviour |
+|---|---|---|
+| ACP modes | 1.0 | See the list after this table. |
+| Rules | 1.0 | `permissions.allow`, `ask`, and `deny` patterns such as `bash(git status*)`, `edit(src/**)`, `mcp__github__*`, `web_fetch(domain:example.com)`. Deny beats ask, and ask beats allow. Defaults come from each tool's `readOnlyHint` and `destructiveHint`. |
+| Permission requests | 1.0 | ACP `session/request_permission` with `allow_once`, `allow_always`, `reject_once`, `reject_always`. `allow_always` writes a rule. `/permissions` lists and edits rules. |
+| Project trust | 1.0 | Pi's order: flag, then hook, then the saved decision in `trust.json`, then `defaultProjectTrust`. `pigo trust|untrust`, `/trust`. Protects `.pigo/*` and the project `.agents/skills`. |
+| Protected paths | 1.0 | Built-in `deny` rules for `.git/**`, the pigo secret store, and `~/.ssh/**`. |
+| Checkpoints | 1.x | See the paragraph after this table. `/undo`, `/redo`, and `/diff [turn]` then execute natively (Pi's `git-checkpoint.ts` idea, made exact). |
+| OS sandbox for bash | exp | `exp/sandbox`: macOS Seatbelt profile, Linux Landlock. Opt-in. |
+
+ACP modes:
+
+* `default`: read-only tools allowed; edits and bash ask.
+* `accept-edits`: edits allowed; bash asks.
+* `plan`: read-only. Leaving plan mode goes through `request_permission`
+  carrying the plan.
+* `bypass`: no prompts, which is Pi's behaviour. It is advertised only
+  when `permissions.allowBypass` is set.
+
+A `current_mode_update` is emitted on every change.
+
+Checkpoints:
+
+* Before each mutating batch, the file contents that `edit` and `write`
+  will change are journaled, which is exact.
+* When the workspace is a git repository and `git` is on PATH, a
+  shadow-index snapshot also covers changes made by bash. It uses its own
+  `GIT_INDEX_FILE` and refs under the data directory, and it never touches
+  the user's index, stash, or refs.
+
+#### Extensibility (`hook`, packages, report D2/D7)
+
+| Capability | Tier | Behaviour |
+|---|---|---|
+| Exec hooks | 1.0 | Configured under `hooks` in settings, and from project settings only when trusted. Each hook is `{event, match?, command[], timeout}`. The event is sent as JSON on stdin and a JSON outcome is read from stdout. Exit code 2 blocks, with stderr as the reason. Event names reuse Pi's: `session_start`, `session_shutdown`, `input`, `before_agent_start`, `tool_call`, `tool_result`, `session_before_compact`, `session_compact`, `turn_end`, `agent_settled`, `model_select`. |
+| Go hooks | 1.0 | The same events as a `hook.Hook` passed to `pigo.New`, which gives embedders Pi's extension power in Go. `before_provider_request` is Go-only. |
+| Packages | 1.x | `pigo pkg install|remove|list|update`. Sources are `git:<url>[@ref]`, a local path, or `https://…tar.gz#sha256=…`. A package bundles skills, prompts, agents, themes, hooks, an `mcp.json` fragment, and a `models.json` fragment, described by `pigo-package.json`. Pi packages with a `package.json` `pi` manifest load their skills, prompts, and themes; their TypeScript `extensions` are listed and skipped, with a warning. `packages.lock.json` pins the commit and sha256. Project packages need trust. This decides report D7. |
+| OCI package source | exp | `oci://` through an ORAS-style client. |
+| WASM tool plugins | exp | `exp/wasmtool`: WASI modules as tools under wazero, with no host filesystem unless granted. |
+| Codemode | exp | `exp/codemode`: Pi's contract (`tools.*`, `text()`, `store/load`, `// @options:`) on `quickjs-wasi` under wazero, which is pure Go with CGO off. This decides report D3. |
+| External ACP agents as subagents | exp | An `agents/*.md` entry with `acp: {command: […]}` makes `task` run another ACP agent binary as the child. pigo is then an ACP client too. |
+| Virtual models and routing | exp | A setting-driven router maps a (model, thinking) pair to a physical model per request (`docs/virtual-models.md`). |
+
+#### Observability and operations (`telemetry`, `internal/cli`)
+
+| Capability | Tier | Behaviour |
+|---|---|---|
+| Structured logs | 1.0 | `slog` rolling files in the state directory, with redaction. `--log-level`. |
+| Usage ledger | 1.0 | Every provider call is appended to `data/usage/*.jsonl` with provider, model, tokens, cost, and session. `/usage` shows the session and today. `pigo usage [--since] [--by model|provider|day]`. |
+| OpenTelemetry | 1.x | GenAI semantic-convention spans (`invoke_agent`, `chat`, `execute_tool`) and token and duration metrics, exported over OTLP from the standard `OTEL_*` variables. Off by default. |
+| Flight recorder | 1.x | `runtime/trace.FlightRecorder` ring. `pigo debug trace` and slow-turn automatic dumps. |
+| `pigo doctor` | 1.0 | Checks directories, settings against the schema, provider credentials (a models list call), MCP start-up, `git` and shell presence, bridge sources, and terminal capabilities. `--json` output. |
+| `/bug` | 1.x | A redacted diagnostic bundle (version, settings with secrets removed, the last N log lines, the session file on request). |
+| No phone-home | 1.0 | pigo has no install telemetry, analytics, device id, or tracking id. Pi's `enableInstallTelemetry`, `enableAnalytics`, `trackingId`, and `deviceId` are dropped on `config import`. |
+
+#### Distribution (report D9)
+
+| Capability | Tier | Behaviour |
+|---|---|---|
+| GitHub releases | 1.0 | Six targets, `SHA256SUMS`, SBOM, and provenance attestations (0004-PLAN Phase 4). |
+| `go install` | 1.0 | `go install github.com/maccavelli/pi-go/cmd/pigo@latest`. |
+| Self-update | 1.0 | `pigo update [--check]` through `mcplib/selfupdate` with checksum verification. |
+| Homebrew tap, container image | 1.x | A tap formula, and a `ko`-built distroless image for CI agents. |
+| magic-cli-remote `KnownGoodVersion` | 1.0 | Published in the release notes for the companion Spec. |
+
+### CLI surface
+
+```
+pigo [prompt…]                      TUI on a TTY; print mode with -p or piped stdin
+pigo acp                            ACP agent on stdio
+pigo rpc                            Pi JSONL RPC shim (1.x)
+pigo session list|show|export|import|fork|rm|prune
+pigo mcp add|remove|list|get|login|logout|serve
+pigo auth login|logout|status|token|import
+pigo models list|info|refresh
+pigo config get|set|edit|path|validate|schema|import
+pigo skills list|show|new
+pigo prompts list
+pigo agents list|show
+pigo pkg install|remove|list|update          (1.x)
+pigo tools list
+pigo trust | untrust
+pigo usage
+pigo doctor
+pigo update
+pigo version
+pigo debug trace                              (1.x)
+pigo completion bash|zsh|fish|powershell
+```
+
+Global flags: `--model`, `--thinking`, `--mode`, `--cwd`, `--continue`,
+`--resume <id>`, `--fork <id>`, `--tools`, `--no-context-files`,
+`--no-skills`, `--no-pi-bridge`, `--approve`/`--no-approve` (project
+trust), `--yes`, `--output-format`, `--api-key`, `--log-level`.
+
+### Slash commands over ACP
+
+Advertised in `available_commands_update` only once the handler lands.
+The rule from 0002 still applies: advertisement is a subset of the
+handlers, and a test enforces it.
+
+| Command | Tier |
+|---|---|
+| `/help`, `/compact [instr]`, `/usage`, `/context`, `/session`, `/status`, `/model [id]`, `/thinking [level]`, `/mode [id]`, `/plan`, `/name [name]`, `/fork [entry]`, `/clone`, `/todos`, `/mcp [status\|reconnect]`, `/permissions`, `/trust`, `/reload`, `/skill:<name>`, template commands | 1.0 |
+| `/tree [id]`, `/label`, `/undo`, `/redo`, `/diff [turn]`, `/ps`, `/stop [job]`, `/review`, `/init`, `/agents`, `/export [path]`, `/share`, `/archive`, `/delete`, `/mcp:<server>:<prompt>` | 1.x |
+| TUI only, never advertised: `/settings`, `/hotkeys`, `/quit`, `/copy`, `/new`, `/resume`, `/login`, `/logout`, `/theme`, `/changelog`, `/editor` | 1.0 (TUI) |
+
+### Companion `command.Table` target (magic-cli-remote `IDPi`)
+
+This table supersedes the table in 0002-MADR's More Information as the
+**target**. A row may be registered in magic-cli-remote only in the pigo
+release whose `available_commands_update` contains the command. Until then
+the 0002 row applies.
+
+| Canonical | Kind | Mechanism | Tier |
+|---|---|---|---|
+| `help` | KindDaemon | daemon | — |
+| `plan` | KindMode `plan` | `session/set_mode` | 1.0 |
+| `mode` | KindMode | `session/set_mode` | 1.0 |
+| `permissions` | KindNative | `/permissions` | 1.0 |
+| `reviewer`, `approve` | KindNone | no separate reviewer or guardian | — |
+| `model` | KindNative | `/model id`; becomes KindOp once the Spec routes `OpSetModel` through `session/set_config_option` | 1.0 |
+| `thinking` | KindNative | `/thinking level`; becomes KindOp on the same condition | 1.0 |
+| `context` | KindOp OpContext | last `usage_update` | 1.0 |
+| `status` | KindNative | `/status` | 1.0 |
+| `usage` | KindNative | `/usage` | 1.0 |
+| `compact` | KindNative, then KindOp once the Compact hook exists | `/compact`, `_pigo/compact` | 1.0 |
+| `clear`, `new`, `sessions` | KindDaemon | daemon | — |
+| `goal`, `workflow`, `loop`, `fast`, `personality` | KindNone | no v1 equivalent | — |
+| `deep-research` | KindNative | built-in skill through `/skill:deep-research` | 1.x |
+| `review` | KindNative | `/review` | 1.x |
+| `fork` | KindNative | `/fork` | 1.0 |
+| `archive`, `delete` | KindNative | `/archive`, `/delete` | 1.x |
+| `ps`, `stop` | KindNative | background jobs | 1.x |
+| `diff`, `undo`, `redo` | KindNative | checkpoints | 1.x |
+
+At full 1.x, 19 of the 30 canonical names execute natively or through a
+mode or op. The other 11 are daemon-owned (4) or honestly `KindNone` (7).
+
+### Out of the v1 line
+
+TypeScript/jiti extensions and any JavaScript extension host; Pi's
+TypeScript SDK and browser `pi-ai`; Chord, `pi-durable`, the Pico harness,
+`pi-protocol` CBOR, `pi-server`, and `pi-client` (report D12); the
+mcremote/mcrelay WebSocket; `_x.ai/*`; installing npm packages; the
+Radius share gateway; install telemetry and analytics; the Codex
+WebSocket transport; image-generation and classifier model types; Pi's
+RPC extension-UI subprotocol; the special-purpose `/llama` command (the
+compatible provider covers llama.cpp servers).
+
+### Consequences
+
+* Good, because nearly every Pi capability is in the v1 line. So are the
+  ones Pi left to examples (subagents, todo, plan mode, checkpoints,
+  permission gating), which become first-class and tested.
+* Good, because magic-cli-remote gains 11 more canonical commands that
+  execute natively (`/permissions`, `/status`, `/review`, `/archive`,
+  `/delete`, `/ps`, `/stop`, `/diff`, `/undo`, `/redo`, `/deep-research`)
+  compared with 0002's table, where 8 of the 30 names executed in the
+  agent.
+* Good, because every extensibility path is an open standard (MCP, Agent
+  Skills, `AGENTS.md`, exec hooks over JSON on stdio, ACP) or a Go
+  interface. Pi users' data assets carry over. Their TypeScript does not,
+  and pigo says so.
+* Good, because the tiers make `v1.0.0` a finite checklist, while 1.x
+  items need no new decision to land.
+* Neutral, because the TUI returns to v1 (0002 had excluded it). The
+  import-boundary rules in 0004 keep Charm out of the agent core, and the
+  TUI remains an ACP client.
+* Neutral, because pigo adds permission prompts that Pi never had. Pi-like
+  behaviour is one setting away (`bypass`). Remote users get approvals on
+  the phone through ACP.
+* Bad, because the scope is large. The 1.0 gate alone includes a TUI,
+  four provider adapters, MCP with OAuth, and full session v3. Calendar
+  time is long even with the tiers.
+* Bad, because Pi parity details (the fuzzy edit, template quoting,
+  compaction cut points) need golden tests against Pi's behaviour. Those
+  tests have not been written, and some edge cases will differ until they
+  are.
+
+### Confirmation
+
+* Each 1.0 row has at least one test named in
+  [0005-PLAN-v1-feature-scope.md](0005-PLAN-v1-feature-scope.md). The
+  release-gate phase lists them all and records their results.
+* The advertisement-is-a-subset-of-handlers test (0002 Phase 6) runs
+  against the final 1.0 command list.
+* A Pi-fixture suite runs pigo against Pi's documented behaviour:
+  * session v3 samples from `docs/session-format.md` round-trip;
+  * template substitution cases from `docs/prompt-templates.md`;
+  * edit uniqueness, overlap, and fuzzy cases;
+  * truncation boundaries at 2000 lines, 50 KB, and 500 characters.
+* A Pi-user smoke test: with a fake `~/.pi/agent` holding one skill, one
+  template, one MCP server, and one session, `pigo` lists the skill, runs
+  the template, connects the server, and imports the session. The
+  `~/.pi` tree's hash is unchanged.
+* `go list ./exp/...` packages are unreachable from stable and beta
+  packages (0004 archtest rule 7).
+
+## Pros and Cons of the Options
+
+### Tiered v1 line: a `1.0` gate, a `1.x` train, `exp/`, and an explicit out list
+
+* Good, because it satisfies "as much as possible" without an unshippable
+  gate.
+* Good, because each tier has a concrete meaning a reviewer can check.
+* Bad, because 1.x items can linger. Mitigation: each has a PLAN phase and
+  a status.
+
+### Keep 0002's narrow v1; everything else is v2
+
+* Good, because it gives the fastest `v1.0.0`.
+* Bad, because it contradicts the owner's instruction.
+* Bad, because v2 of a Go module means a new import path. Pushing features
+  past v1 costs embedders an import migration, whereas minor releases
+  inside v1 cost nothing.
+
+### Everything in scope must pass the `v1.0.0` gate (no tiers)
+
+* Good, because it is simple to state.
+* Bad, because one slow item (codemode, WASM plugins, OAuth for a
+  particular provider) would block every other feature's release.
+
+### Full Pi parity including TypeScript extensions through an embedded JS runtime
+
+Use goja or QuickJS under wazero to host jiti-style extensions against a
+re-created `ExtensionAPI`.
+
+* Good, because Pi's extension gallery would run.
+* Bad, because the extension API imports `pi-tui`, `pi-ai`, and
+  `typebox`, and receives Node's full permissions. Re-creating that
+  surface in a JS host inside Go is the "JS host written in Go" that
+  0001-REPORT F1 warns against.
+* Bad, because it would take the calendar the tiers above spend on
+  features.
+
+## More Information
+
+* Decides report D1 (the v1 line is the shipping `pigo` a user runs, plus
+  a Go SDK), D2, D3 (exp), D5, D6, D7, D8, D9 (distribution), D12 (out),
+  and D13. D4, D10, D14, D15, and D16 are in 0004-MADR. D11, D17, and D18
+  are in 0003-MADR.
+* Amends [0002-MADR-cli-acp-headless-mcp-v1.md](0002-MADR-cli-acp-headless-mcp-v1.md):
+  its "What v1 is not" list and its companion table are superseded by this
+  record. Its ACP-as-command-API decision stands.
+* Implemented by [0005-PLAN-v1-feature-scope.md](0005-PLAN-v1-feature-scope.md),
+  after 0004-PLAN and 0002-PLAN.
+* Pi sources (at `312184edb`, under `packages/`):
+  * tools: `coding-agent/src/core/tools/*.ts`, `truncate.ts`,
+    `file-mutation-queue.ts`, `utils/image-resize-core.ts`;
+  * agent loop: `agent/src/agent.ts`, `agent/src/types.ts`;
+  * compaction and retry: `coding-agent/docs/compaction.md`,
+    `ai/src/utils/retry.ts`;
+  * sessions: `coding-agent/docs/session-format.md`;
+  * settings: `coding-agent/src/core/settings-manager.ts`;
+  * context and skills: `resource-loader.ts`, `core/system-prompt.ts`,
+    `docs/skills.md`, `docs/prompt-templates.md`;
+  * MCP: `mcp/src/`, `coding-agent/docs/mcp.md`;
+  * providers: `ai/src/types.ts`, `docs/models.md`;
+  * extensions: `core/extensions/types.ts`, `docs/extensions.md`;
+  * RPC: `docs/rpc.md`, `docs/rpc-commands.md`;
+  * example extensions: `coding-agent/examples/extensions/`;
+  * cache warming: `core/cache-warmer.ts`;
+  * trust: `core/project-trust.ts`, `docs/security.md`.

@@ -4,9 +4,9 @@ How `pi-go` is put together, as it is now. This file carries no history and no r
 
 ## What it is
 
-A Git repository for a Go rewrite of the Pi coding-agent CLI and the libraries that CLI needs. The stated command and configuration stack is Cobra and Viper. The stated terminal-UI stack is Charm (Lip Gloss and related packages).
+A Git repository for a Go rewrite of the Pi coding-agent CLI and the libraries that CLI needs. The stated binary name is `pigo`. The stated command and configuration stack is Cobra and Viper. The stated terminal-UI stack is Charm (Lip Gloss and related packages).
 
-There is no Go module, no `cmd/` tree, and no binary. The working tree is documentation.
+There is no Go module, no `cmd/` tree, and no binary. The working tree is documentation. The package map in [0004-MADR](decisions/0004-MADR-go-module-architecture.md) is proposed, not built. This file describes it only once the packages exist.
 
 ## Tree
 

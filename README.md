@@ -1,6 +1,6 @@
 # pi-go
 
-A Go rewrite of the [Pi](https://github.com/earendil-works/pi) agent harness: a terminal coding agent with tool calling, sessions, providers, and a Charm-based TUI.
+**pigo** is a Go rewrite of the [Pi](https://github.com/earendil-works/pi) agent harness. It is a coding agent with tool calling, sessions, providers, MCP, and a Charm TUI, and its command API is the [Agent Client Protocol](https://agentclientprotocol.com). The runtime binary is `pigo`; the repository and module path are `pi-go`.
 
 This repository is a greenfield rewrite. It does not share history with the TypeScript monorepo. There is no Go module or binary yet.
 
@@ -8,17 +8,38 @@ This repository is a greenfield rewrite. It does not share history with the Type
 
 ## Status
 
-The tree currently holds documentation only. Proposed v1 ([0002-MADR](docs/decisions/0002-MADR-cli-acp-headless-mcp-v1.md)) is the native [magic-cli-remote](https://github.com/maccavelli/magic-cli-remote) CLI: a Cobra process whose agent command API is [ACP](https://agentclientprotocol.com), a headless ACP stdio server that mcremote already knows how to spawn, and an MCP client. Agent slash commands (`/compact`, `/usage`, `/context`, …) execute over ACP. Charm TUI is out of that cut.
+The tree currently holds documentation only. The records below are all `proposed`.
+
+- **[0002-MADR](docs/decisions/0002-MADR-cli-acp-headless-mcp-v1.md)** makes one `acp.Agent` the command API.
+  - Cobra, the TUI, editors and magic-cli-remote's `mcremote` daemon are all ACP clients of it.
+  - `pigo acp` is the headless stdio agent.
+- **[0003-MADR](docs/decisions/0003-MADR-pigo-product-identity.md)** fixes the identity.
+  - Names: `pigo`, `PIGO_*`, `_pigo/` extensions.
+  - Directories: XDG, plus a read-only bridge that imports a Pi user's `~/.pi` assets.
+- **[0004-MADR](docs/decisions/0004-MADR-go-module-architecture.md)** shapes the module: one Go 1.27.1 module of contract-first packages.
+  - An official SDK sits at each protocol boundary: ACP, MCP, and the vendor LLM SDKs.
+  - Import boundaries are enforced by a test.
+  - An `exp/` tree holds unstable work.
+- **[0005-MADR](docs/decisions/0005-MADR-v1-feature-scope.md)** puts nearly every Pi capability in the v1 line, tiered into a v1.0.0 gate, a v1.x train, and `exp/`.
+  - Pi features that exist only as example extensions are built in: subagents, todo/plan, checkpoints with undo, permission gating, and background jobs.
 
 | I want to… | Start here |
 | :--- | :--- |
 | know whether a complete Go port is feasible, and what would have to change | [0001-REPORT](docs/reports/0001-REPORT-go-port-feasibility.md) |
-| know what v1 is | [0002-MADR](docs/decisions/0002-MADR-cli-acp-headless-mcp-v1.md) |
-| see the v1 implementation phases | [0002-PLAN](docs/decisions/0002-PLAN-cli-acp-headless-mcp-v1.md) |
+| know how pigo talks to editors and magic-cli-remote | [0002-MADR](docs/decisions/0002-MADR-cli-acp-headless-mcp-v1.md) |
+| know what the binary, directories and wire names are | [0003-MADR](docs/decisions/0003-MADR-pigo-product-identity.md) |
+| see the package layout, SDK surface and Go 1.27 idioms | [0004-MADR](docs/decisions/0004-MADR-go-module-architecture.md) |
+| see everything that is in v1, and at which tier | [0005-MADR](docs/decisions/0005-MADR-v1-feature-scope.md) |
+| see the build order | [docs/README.md](docs/README.md#build-order) |
 | see what this repository contains today | [architecture.md](docs/architecture.md) |
 
-Stack for v1: [Cobra](https://github.com/spf13/cobra), [Viper](https://github.com/spf13/viper), [ACP Go SDK](https://github.com/coder/acp-go-sdk) v0.13.5. Charm (Lip Gloss and related packages) is the TUI stack when a TUI exists.
+Stack for v1:
+
+- **CLI and config:** [Cobra](https://github.com/spf13/cobra) with [fang](https://github.com/charmbracelet/fang), and [Viper](https://github.com/spf13/viper).
+- **Protocols:** [ACP Go SDK](https://github.com/coder/acp-go-sdk) v0.13.5 and the [MCP Go SDK](https://github.com/modelcontextprotocol/go-sdk).
+- **LLM providers:** the official Anthropic, OpenAI and Google Gen AI Go SDKs behind pigo's own `llm` contract.
+- **TUI:** Charm v2 (Bubble Tea, Bubbles, Lip Gloss).
 
 ## Source
 
-The TypeScript product lives at [earendil-works/pi](https://github.com/earendil-works/pi). The report measured a clone of that tree at commit `312184edb` (2026-09-29).
+The TypeScript product lives at [earendil-works/pi](https://github.com/earendil-works/pi). The report and the v1 scope were measured against a clone of that tree at commit `312184edb` (2026-09-29).
