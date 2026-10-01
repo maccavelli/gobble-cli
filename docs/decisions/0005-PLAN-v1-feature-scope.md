@@ -1,6 +1,6 @@
 ---
 status: proposed
-date: 2026-09-30
+date: 2026-10-01
 associated-madr: "0005-MADR-v1-feature-scope.md"
 ---
 # Implement the v1 line: the v1.0.0 gate, the v1.x train, and `exp/`
@@ -483,16 +483,19 @@ make release-dry-run
 ## Companion work (magic-cli-remote, not this tree)
 
 Do not mutate magic-cli-remote under this plan. When it gains `IDPi`, it
-needs its own MADR/PLAN pair. The contract is:
+needs its own MADR/PLAN pair. The contract is the 2026-10-01 amendment of
+[0002-MADR-cli-acp-headless-mcp-v1.md](0002-MADR-cli-acp-headless-mcp-v1.md)
+and the target table in
+[0005-MADR-v1-feature-scope.md](0005-MADR-v1-feature-scope.md):
 
-1. `DefaultBin` `pigo`, `DefaultArgs` `acp`.
+1. `DefaultBin` `pigo`, `DefaultArgs` `[]string{"acp"}`.
 2. The 0005-MADR target command table, registering only rows whose
    commands the pinned pigo release advertises.
-3. Model and thinking: `KindNative` (`/model`, `/thinking`) until the Spec
-   gains a hook that routes `OpSetModel` and `OpSetThinkingLevel` through
-   `SetConfigOption`. Never through `session/set_model`: pigo's SDK cannot
-   receive it (0002-MADR amendment of 2026-09-29).
-4. Compact: `KindNative` until a Spec Compact hook calls `_pigo/compact`.
+3. Parameterize Compact / Fork / Rename / Usage / SetModel / SetThinking /
+   Undo on `acpagent.Spec`. Until then those rows are `KindNative`.
+   Model and thinking never use `session/set_model`.
+4. `ConfigureSession` applies the start-up model through
+   `SetConfigOption`. Map `session_info_update` to `session_title`.
 5. Live-tagged probes for every native row, and `/settings` absent.
 6. `KnownGoodVersion` from the pigo release notes.
 
@@ -515,3 +518,8 @@ None. This plan is proposed and has not been approved.
 * X5 no longer waits for a `go.mod` and streaming. Bedrock / Vertex /
   Azure and the unnamed OpenAI-compatible long tail land only if the
   SDK grows them.
+
+**2026-10-01 — native agent of magic-cli-remote.** Companion checklist
+follows 0002-MADR's fourth amendment (Spec-parameterized ops, title
+mapping). X3 subagents stay `tool_call_update` on the parent: acpagent
+drops child-session ids. No new phases.

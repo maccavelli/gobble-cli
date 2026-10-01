@@ -1,6 +1,6 @@
 ---
 status: proposed
-date: 2026-09-30
+date: 2026-10-01
 associated-madr: "0002-MADR-cli-acp-headless-mcp-v1.md"
 ---
 # Implement v1 as the native magic-cli-remote CLI: Cobra over ACP, ACP stdio, MCP client
@@ -294,25 +294,35 @@ on 2026-09-29; see Amendments.)
 
 Do not mutate magic-cli-remote under this plan. When that repository
 grows an `IDPi` provider, it needs its own MADR/PLAN pair. The contract
-to match is in
-[0002-MADR-cli-acp-headless-mcp-v1.md](0002-MADR-cli-acp-headless-mcp-v1.md)
-(intended `command.Table`, Spec sketch, Compact hook). Checklist copied
-from magic-cli-remote MADR 0023:
+is the 2026-10-01 amendment of
+[0002-MADR-cli-acp-headless-mcp-v1.md](0002-MADR-cli-acp-headless-mcp-v1.md).
+Checklist:
 
-1. `acpagent.Spec` with `DefaultBin` `pigo`, `DefaultArgs` `acp`.
-2. `command.Table` declaring every canonical Specs name. `KindNone`
-   reasons in words a user reads. `compact` stays `KindNative` until
-   `(*session).Compact` is a Spec hook (today it always calls
-   `x.ai/compact_conversation`).
-3. Probe, do not assume: live-tagged tests send `/compact`, `/usage`,
-   `/context` and assert output. `/settings` is absent from
-   `available_commands`.
-4. No grok `ExtensionNotifications`. Empty `CommandCaveat` unless a
-   real quirk appears.
-5. `KnownGoodVersion` once a pigo release exists; mismatch warns.
-6. `OpSetModel` / `OpSetThinkingLevel` go through `SetConfigOption`,
-   or the rows stay `KindNative` (`/model`, `/thinking`). Never
-   `session/set_model` (MADR second amendment).
+1. `acpagent.Spec` with `ID` a new `provider.IDPi`, `DefaultBin` `pigo`,
+   `DefaultArgs` `[]string{"acp"}`. `SessionMeta` nil.
+   `SynthesizeAutoMode` false. `ExtensionNotifications` empty.
+2. Parameterize Compact / Fork / Rename / Usage / Status / SetModel /
+   SetThinking / Undo on the Spec (today they are grok `_x.ai/` and
+   raw `session/set_model` on `*session`). Until those fields exist,
+   the `IDPi` table uses `KindNative` for compact, usage, model,
+   thinking, fork, and undo.
+3. `command.Table` declaring every canonical Specs name. `KindNone`
+   reasons in words a user reads. Default Specs `/model` is
+   `KindDaemon` (relaunch); `IDPi` must not leave that default in
+   place.
+4. `ConfigureSession` applies the start-up model through
+   `session/set_config_option` category `model`.
+5. Map ACP `session_info_update` to `event.TypeSessionTitle` so `/name`
+   is visible on the phone.
+6. Probe, do not assume: live-tagged tests send `/compact`, `/usage`,
+   `/context` and assert `session/update` frames. `/settings` is absent
+   from `available_commands`. `session/set_model` is MethodNotFound.
+   `_x.ai/` is absent from pigo.
+7. Empty `CommandCaveat` unless a real quirk appears.
+8. `KnownGoodVersion` once a pigo release exists; mismatch warns
+   (MADR 0137).
+9. Every connection uses `OverflowDropNewest` (MADR 0167), matching
+   pigo's Phase 0 ACP `replace`.
 
 Existing providers (grok, opencode, kilo, codex, fake) stay registered.
 
@@ -356,3 +366,9 @@ longer open at phase time. Phase 3 imports `go-llmprovider-sdk` at a
 commit pin and uses `providers.New` + `Stream`. Phase 5 pins the
 official MCP go-sdk version. Tests still use `llm/llmtest` so ACP chunk
 assertions do not depend on the SDK's `NativeStreaming: Unsupported`.
+
+**2026-10-01 — native agent of magic-cli-remote.** Follows the fourth
+amendment of the associated MADR. Companion checklist expands from a
+Compact hook to Spec-parameterized ops, `ConfigureSession` for model,
+`session_info_update` → title, and live probes that include
+MethodNotFound for `session/set_model`. No new phases in this tree.

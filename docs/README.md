@@ -16,12 +16,12 @@
 | Number | Kind | Record | Status |
 | :--- | :--- | :--- | :--- |
 | 0001 | REPORT | [Go port feasibility of the Pi agent harness](reports/0001-REPORT-go-port-feasibility.md) | observation |
-| 0002 | MADR | [v1 native magic-cli-remote CLI: Cobra over ACP, ACP stdio, MCP client](decisions/0002-MADR-cli-acp-headless-mcp-v1.md) | proposed (amended three times) |
+| 0002 | MADR | [v1 native magic-cli-remote CLI: Cobra over ACP, ACP stdio, MCP client](decisions/0002-MADR-cli-acp-headless-mcp-v1.md) | proposed (amended four times) |
 | 0002 | PLAN | [Implement the ACP core](decisions/0002-PLAN-cli-acp-headless-mcp-v1.md) | proposed |
 | 0003 | MADR | [The product is `pigo`: binary, module path, directories, wire names, read-only Pi bridge](decisions/0003-MADR-pigo-product-identity.md) | proposed (amended 2026-10-01) |
 | 0004 | MADR | [One Go 1.27.1 module of contract-first packages, open standards at every boundary](decisions/0004-MADR-go-module-architecture.md) | proposed (amended 2026-09-30, 2026-10-01) |
 | 0004 | PLAN | [Scaffold: module, contracts, import boundaries, toolchain, release](decisions/0004-PLAN-go-module-architecture.md) | proposed |
-| 0005 | MADR | [The v1 line: every portable Pi capability, tiered 1.0 / 1.x / exp](decisions/0005-MADR-v1-feature-scope.md) | proposed (amended 2026-09-30) |
+| 0005 | MADR | [The v1 line: every portable Pi capability, tiered 1.0 / 1.x / exp](decisions/0005-MADR-v1-feature-scope.md) | proposed (amended 2026-09-30, 2026-10-01) |
 | 0005 | PLAN | [Implement the v1.0.0 gate, the v1.x train, and `exp/`](decisions/0005-PLAN-v1-feature-scope.md) | proposed |
 
 0003-MADR has no PLAN of its own. 0004-PLAN Phase 2 and 0005-PLAN F10 implement it.

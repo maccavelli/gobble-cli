@@ -1,8 +1,8 @@
 ---
 status: proposed
-date: 2026-09-30
+date: 2026-10-01
 decision-makers: repository owner
-consulted: 0001-REPORT-go-port-feasibility.md
+consulted: 0001-REPORT-go-port-feasibility.md, magic-cli-remote (ACP stdio adapter, command tables, protocol-v1/v2), TypeScript Pi at 312184edb
 informed: go-llmprovider-sdk, go-core-lib, acp-go-sdk, magic-cli-remote
 ---
 # v1 is the native magic-cli-remote CLI: Cobra over ACP, ACP stdio, MCP client
@@ -631,3 +631,305 @@ SDKs are not 1.0 dependencies. D14 remains the official MCP go-sdk.
 The ACP-as-command-API decision, the Cobra-is-an-ACP-client rule, and
 the honest-advertisement rule are unchanged. [0002-PLAN](0002-PLAN-cli-acp-headless-mcp-v1.md)
 Phase 3 and Phase 5 record the module versions they pin.
+
+### Amendment (2026-10-01, fourth): pigo is the native agentic CLI of magic-cli-remote
+
+Still `proposed`. The owner directed a live assessment of magic-cli-remote
+(transports, protocols, API and command surfaces, provider wrappers) and
+of TypeScript Pi, so pigo can be built from the ground up as the
+**native agentic CLI of the magic-cli-remote platform**. Other providers
+there (grok, opencode, kilo, codex, fake) stay registered. The
+ACP-as-command-API decision, the Cobra-is-an-ACP-client rule, and the
+honest-advertisement rule are unchanged. The Grok-shaped adapter option
+stays rejected, now with file-level evidence.
+
+Evidence is from the magic-cli-remote and Pi working trees on 2026-10-01.
+Pi HEAD is still `312184edb68c38248e1acfc3eec68500ba49d9cb` (`v0.99.0`,
+zero commits since 0001-REPORT). Pi has no ACP implementation.
+
+#### Transport layering
+
+```
+phone / desktop  --WSS JSON, protocol-v1/v2-->  mcrelay (optional)  -->  mcremote daemon
+                                                                          |
+                                                                          | ACP JSON-RPC 2.0 stdio
+                                                                          v
+                                                                       pigo acp
+```
+
+* The phone hop is `GET /v1/ws` (`docs/protocol-v1.md`). Envelope
+  `{v, type, id, payload}`, 1 MiB frames, pair-URI TLS pin. Message
+  types live in `internal/protocol/messages.go`: session create / prompt /
+  cancel / set_mode / set_config_option / fork / rename / diagnostics,
+  `commands.list`, `permission.respond`, provider auth, workspace, and
+  Codex-only extras.
+* Protocol-v2 (`docs/protocol-v2.md`, MADR 0068) is a **delta on that
+  hop**: capability negotiation, liveness, resume, history ring. It does
+  not change the ACP hop. pigo never opens a magic-cli-remote WebSocket.
+* Agent hops already in the daemon:
+
+  | Provider | Package | Agent transport |
+  |---|---|---|
+  | grok | `internal/provider/grok` over `acpagent` | ACP stdio subprocess (`grok … agent --no-leader stdio`) |
+  | opencode | `internal/provider/opencode` over `httpagent` | shared `opencode serve` HTTP + SSE |
+  | kilo | `internal/provider/kilo` over `httpagent` | shared `kilo serve` HTTP + SSE |
+  | codex | `internal/provider/codex` | Codex app-server JSON-RPC over WebSocket |
+  | fake | `internal/provider/fake` | in-process, for tests |
+
+  There is no `provider.IDPi`. The native slot for pigo is **ACP stdio
+  through `acpagent`**, the same machinery grok uses, with a Spec of
+  pigo's own. HTTP/SSE and Codex app-server are other products' wires.
+
+#### Command surface (magic-cli-remote MADR 0023, live)
+
+`internal/command.Specs` is the canonical vocabulary (30 names). A
+provider `Table` beats `available_commands`. Kinds:
+
+* `KindDaemon` — `/help`, `/clear`, `/new`, `/sessions` (and default
+  `/model` in Specs; grok overrides `/model` to `KindOp`).
+* `KindMode` — `/plan`, `/mode` via `session/set_mode`.
+* `KindOp` — requires an optional interface on the live session
+  (`CompactSession`, `ModelSession`, `ThinkingSession`, `ForkSession`,
+  `DiffSession`, `RevertSession`, `RuntimeSession`, …). `/context` is
+  `OpContext` and is true only after a `usage_update` has been stored.
+* `KindNative` — forward `/name` as `session/prompt`. The forwarded
+  name may differ (grok maps `/context` → `/session-info`).
+* `KindNone` — unavailable, with a user-readable `Note`.
+
+`commands.list` / `remote_commands` advertise the **resolved** list,
+including unavailable rows with reasons. Clients invoke with
+`session.prompt` text `/name args…`.
+
+#### Provider wrappers evaluated
+
+**Grok (`acpagent` + grok Spec)** is the only shipping ACP stdio
+adapter, and it is grok-shaped in the session methods:
+
+| Session op | Implementation today | pigo consequence |
+|---|---|---|
+| `Compact` | `x.ai/compact_conversation` (`acpagent/sessioncaps.go`) | An `IDPi` Spec that reuses this method calls a grok vendor RPC. Grok's own `commandTable` still maps `compact` to `KindNone`. |
+| `SetModel` | raw `session/set_model` (`acpagent/session.go`) | The pinned SDK answers MethodNotFound for this method (second amendment). |
+| `SetThinkingLevel` | `session/set_model` `_meta.reasoningEffort` then `session/resume` snapshot (`acpagent/thinking.go`) | Same MethodNotFound. |
+| `Fork` | `_x.ai/session/fork` (`acpagent/fork.go`) | Grok vendor. |
+| `Rename` | `x.ai/session/rename` | Grok vendor. |
+| `RuntimeUsage` / `RuntimeStatus` | `_x.ai/session/usage` and `_x.ai/billing` (`acpagent/runtime.go`) | Grok vendor. |
+| `UndoLast` | `_x.ai/rewind/points` then `_x.ai/rewind/execute` (`acpagent/rewind.go`) | Grok vendor. pigo 1.x checkpoints stay `/undo` native until a Spec hook exists. |
+| Plan approval | client extension `_x.ai/exit_plan_mode` (`acpagent/extensions.go`) | Grok vendor; translated to a permission card. |
+| Questions | `_x.ai/ask_user_question` | Grok vendor. |
+
+`acpagent.Spec` already parameterizes launch, `Commands`,
+`ExtensionNotifications`, `StaticModes`, `SynthesizeAutoMode`,
+`SessionMeta`, and `ConfigureSession`. `ConfigureSession` runs after
+`session/new` and is the documented place to apply a model through
+`session/set_config_option`. Grok leaves it nil and uses `SessionMeta`
+instead. Compact / Fork / Rename / Usage / SetModel / SetThinking are
+**hardcoded on `*session`**, not Spec fields.
+
+Grok `ExtensionNotifications` subscribe to `_x.ai/models/update`,
+MCP status, session notifications, MCP membership, MCP init progress.
+Four others are declined (`announcements`, `settings`, `sessions/changed`,
+`queue/changed`). pigo's Spec sets this map empty.
+
+**OpenCode and Kilo** are the model of a table that tells the truth:
+`compact`, `model`, `fork`, `diff`, `undo`, `redo` are `KindOp` because
+the HTTP dialect implements those interfaces over engine routes. They
+do not forward slash text and hope. ACP has no HTTP summarize route, so
+pigo's equivalent of those routes is **honest slash execution plus
+`_pigo/` extensions**, then Spec hooks so `KindOp` can resolve.
+
+**Codex** is a third wire (app-server JSON-RPC, collaboration modes,
+Guardian, Fast, personality). Those ops stay Codex's. pigo does not
+grow them to look like Codex.
+
+**Fake** implements the session contract for tests (turn-busy, control
+events, a startup `usage_update` so `/context` resolves). pigo's
+`acptest` pair is the ACP analogue.
+
+**MCP on the daemon hop.** `acpagent.buildMcpServers` forwards only
+configured servers whose transport the agent advertised
+(`mcpCapabilities.http` / `sse`). Stdio MCP is the ACP default untagged
+form; the daemon config type has no stdio case, so those entries are
+dropped with "unknown transport". pigo still accepts stdio and HTTP on
+`session/new` from Zed, Cobra, and its own `mcp.json`, and advertises
+`http = true`, `sse = false`, `acp = false` so mcremote can forward HTTP
+MCP from daemon config.
+
+**ACP client capabilities mcremote already hosts** and pigo must use
+when advertised: `fs/read_text_file` and `fs/write_text_file` (file
+tools then see editor buffers; every callback is a tool event), and
+`terminal/*` (`acpagent/terminal.go`) when `tools.bash.useClientTerminal`
+is on. Permission requests are standard `session/request_permission`.
+Plan-mode exit uses that path (0005), with no `_x.ai/exit_plan_mode`.
+
+Further adapter facts that shape the native contract:
+
+* Specs default `/model` is `KindDaemon` (relaunch, context lost).
+  `ModelSession` is what keeps the conversation. pigo's start-up table
+  uses `KindNative` `/model` (config option) until the Spec routes
+  `OpSetModel` through `SetConfigOption`.
+* `session/new` from acpagent does not send `AdditionalDirectories`.
+  Workspace extra roots are pigo settings / ACP client fs, not a daemon
+  field today.
+* `session/update` `sessionInfoUpdate` is unhandled in acpagent, so a
+  pigo `session_info_update` does not become phone `session_title` until
+  that mapping lands in the companion pair. `/name` still executes for
+  Cobra and other ACP clients.
+* Child-session ids on the same ACP connection are dropped (MADR 0051
+  D6). 0005 subagents relay progress as `tool_call_update` on the parent
+  session, which is the path the adapter already forwards.
+* Every ACP connection is built with
+  `OverflowDropNewest` (MADR 0167). The Phase 0 `replace` to
+  `acp-go-sdk v0.13.6-mcr.1` is required on pigo's agent side as well.
+
+**SDK overflow.** magic-cli-remote MADR 0167: upstream `acp-go-sdk`
+closes the connection when its 1024-notification queue fills. The fleet
+`replace` to `github.com/maccavelli/acp-go-sdk v0.13.6-mcr.1` is the
+Phase 0 pin so pigo's agent side has the same overflow policy its main
+client relies on.
+
+#### Native pigo contract (ACP hop)
+
+This is the floor a first-class `IDPi` Spec can drive with almost no
+workarounds. Capability inventory and slash tiers stay in
+[0005-MADR](0005-MADR-v1-feature-scope.md).
+
+1. **Process.** `DefaultBin` `pigo`, `DefaultArgs` `[]string{"acp"}`.
+   `KnownGoodVersion` from the pigo release notes; mismatch warns
+   (magic-cli-remote MADR 0137).
+2. **Initialize.** Protocol `1`. Honest `AgentCapabilities`:
+   `loadSession` once JSONL load works; `mcpCapabilities.http = true`,
+   `sse = false`, `acp = false`; prompt `image` and `embeddedContext`
+   true. Headless-safe `authMethods` only.
+3. **Baseline methods** the SDK already routes: `initialize`,
+   `authenticate`, `logout`, `session/new`, `session/prompt`,
+   `session/cancel`, `session/list`, `session/resume`, `session/close`,
+   `session/set_mode`, `session/set_config_option`, `session/load`.
+4. **Events mcremote already maps** (`acpagent/session.go` →
+   `internal/event`): agent message chunks, tool_call / tool_call_update
+   (with ACP `ToolKind`, `locations`, `diff` for edits), plan updates
+   (todo widget), `available_commands_update`, `usage_update`
+   (`used`, `size`, optional `cost` — this is what makes `/context`
+   `KindOp`), `current_mode_update`, `session_info_update`,
+   `config_option_update`, `session/request_permission`.
+5. **Modes** advertised on `session/new`: at least `default` and `plan`.
+   0005 adds `accept-edits` and `bypass` (bypass only when
+   `permissions.allowBypass`). `SynthesizeAutoMode` stays false if pigo
+   advertises its own modes. Confirm every switch with
+   `current_mode_update`.
+6. **Model and thinking** are `session/set_config_option` categories
+   `model` and `thought_level`, plus `/model` and `/thinking`.
+   `ConfigureSession` on the companion Spec applies the start-up model
+   the same way.
+7. **Slash honesty.** `available_commands_update` ⊆ handlers.
+   `/compact`, `/usage`, `/context` (and `/session` as a non-canonical
+   alias), `/model`, `/thinking`, `/name`, `/fork`, `/clone`, `/help`
+   execute over `session/prompt` with a non-empty `session/update`
+   stream. TUI chrome (`/settings`, `/hotkeys`, `/quit`, `/copy`) is
+   never advertised.
+8. **Dual-path `_pigo/`** for every command MADR 0023 prefers as
+   `KindOp`: `_pigo/compact`, `_pigo/usage`, `_pigo/steer`,
+   `_pigo/follow_up`, `_pigo/clear_queue`, `_pigo/set_session_name`,
+   and the read helpers the mapping table freezes. Editors that ignore
+   extensions still run the slash forms.
+9. **Empty `ExtensionNotifications`.** No `_x.ai/` methods, no grok
+   `_meta` on `session/new`.
+10. **Empty `CommandCaveat`** unless a real session-wide quirk appears.
+
+#### Companion Spec (magic-cli-remote, still not this tree)
+
+`IDPi` needs a MADR/PLAN pair **there**. The robust implementation is
+to **parameterize `acpagent.Spec`** so Compact / Fork / Rename / Usage /
+SetModel / SetThinking are Spec-chosen methods, then point those fields
+at `_pigo/…` and `session/set_config_option`. Until that lands, the
+`IDPi` table uses `KindNative` for those rows so the daemon forwards
+slash text that pigo actually executes.
+
+| Canonical | Until Spec hooks | After Spec hooks |
+|---|---|---|
+| compact | KindNative `/compact` | KindOp `OpCompact` → `_pigo/compact` |
+| usage | KindNative `/usage` | KindOp `OpUsage` → `_pigo/usage` (or `RuntimeSession`) |
+| context | KindOp `OpContext` once `usage_update` has been seen | same |
+| model | KindNative `/model` | KindOp `OpSetModel` → `SetConfigOption` category `model` |
+| thinking | KindNative `/thinking` | KindOp `OpSetThinkingLevel` → category `thought_level` |
+| fork | KindNative `/fork` | KindOp `OpFork` → `_pigo/fork` (JSONL branch) |
+| plan, mode | KindMode | same (`session/set_mode`) |
+| permissions, status | KindNative once handlers exist (0005) | same |
+| help, clear, new, sessions | KindDaemon | same |
+| reviewer, approve, goal, workflow, loop, fast, personality | KindNone with a readable reason | same unless 0005 later grows them |
+
+Live-tagged tests in that repo (MADR 0023 checklist): send `/compact`,
+`/usage`, `/context` and assert `session/update` frames; assert
+`/settings` is absent; assert `session/set_model` is MethodNotFound;
+assert `_x.ai/` is absent from the module.
+
+#### Pi at `312184edb`: keep, port, redesign, drop
+
+Pi has **no ACP**. pigo supplies that skin. Behaviour worth keeping is
+ported into Go packages; the wire is ACP.
+
+**Keep / port (data and documented behaviour)**
+
+* Session JSONL v3 tree, v1/v2 migrate on load, unknown fields
+  round-trip (`packages/coding-agent/docs/session-format.md`).
+* Prompt templates (`docs/prompt-templates.md`) and Agent Skills
+  (`docs/skills.md`, first-wins, collision warning). Discovery order
+  kept; paths are pigo's, with a read-only Pi bridge (0003).
+* Context files `AGENTS.override.md` / `AGENTS.md` / `CLAUDE.md`;
+  `SYSTEM.md` / `APPEND_SYSTEM.md`; sectioned system-prompt patches.
+* `mcp.json` schema, SSE rejected, tool names `mcp__<server>__<tool>`,
+  20 KB middle truncation.
+* Settings JSON key names and Pi merge rules (`settings-manager.ts`).
+* Tool contracts and limits: read 2000 lines / 50 KB; image resize
+  2000×2000 and 4.5 MB base64; edit uniqueness, overlap, BOM/CRLF,
+  fuzzy fallback; bash tail truncate and process-group kill; grep line
+  cap 500; find/ls limits; per-realpath mutation queue.
+* Agent loop: parallel tool batches (preflight sequential, results in
+  source order), sequential tools, steer after the current batch,
+  follow-up when idle (`packages/agent/src/agent-loop.ts`).
+* Compaction cut-point rules and summary format (`docs/compaction.md`).
+* Retry numbers (3, 2 s, 60 s cap, honour `Retry-After`). Classifier
+  is typed errors, matching go-llmprovider-sdk.
+
+**Redesign (same idea, ACP/Go shape)**
+
+* Plan mode, permission gate, todo, subagents, checkpoints: Pi ships
+  these only as example extensions. pigo makes them first-class (0005)
+  over ACP modes, `session/request_permission`, `plan` updates, and
+  `_pigo/` / slash commands.
+* TUI: Charm v2 as an `acpclient`, not a port of `pi-tui`.
+* Image pipeline: Go `image` / `x/image` (report D8).
+* grep/find: pure Go (report D13). No rg/fd download.
+* Background jobs (`/ps`, `/stop`): new in 0005 1.x; Pi bash has no
+  `background` field.
+
+**Drop (fights mcremote, or is language-bound)**
+
+* jiti TypeScript extension host; TypeScript SDK; browser `pi-ai`.
+* Chord, Pico/`pi-durable`, `pi-protocol` CBOR, `pi-server`/`pi-client`.
+* Pi JSONL `--mode rpc` as a 1.0 command API (1.x shim over ACP is 0005).
+* Sharing `~/.pi` writes and `PI_*`.
+* Advertising TUI chrome over ACP.
+* Implementing `_x.ai/` so the grok Spec would drive pigo unchanged.
+* Speaking protocol-v1/v2 from the agent binary.
+* Install telemetry, analytics, `deviceId`.
+* Photon WASM; npm install of TypeScript extensions.
+
+RPC `steer` / `follow_up` / `clear_queue` / `compact` become `_pigo/`
+plus slash. RPC `set_model` / thinking become `session/set_config_option`.
+`get_commands` honesty (TUI commands omitted because they would not
+execute) is the same rule as ACP `available_commands_update`.
+
+#### Confirmation added by this amendment
+
+* A stdio client that speaks only the JSON-RPC mcremote `acpagent`
+  already sends — `initialize`, `session/new` (`mcpServers: []`),
+  `session/prompt` `/compact`, `session/set_mode` `plan`,
+  `session/set_config_option` category `model` — completes without
+  unknown-method errors.
+* The grok-silence shape (echo or empty turn on a leading slash) is
+  shown failing the Phase 6 tests before those tests are green.
+* `grep` of the module for `_x.ai/` is empty.
+* File tools through an ACP client that advertises `fs.writeTextFile`
+  produce a `fs/write_text_file` frame.
+* Companion `IDPi` work remains a magic-cli-remote MADR/PLAN pair. This
+  record is the contract that pair must match.

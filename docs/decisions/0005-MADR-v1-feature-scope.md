@@ -1,6 +1,6 @@
 ---
 status: proposed
-date: 2026-09-30
+date: 2026-10-01
 decision-makers: repository owner
 consulted: 0001-REPORT-go-port-feasibility.md, 0002-MADR-cli-acp-headless-mcp-v1.md, 0003-MADR-pigo-product-identity.md, 0004-MADR-go-module-architecture.md
 informed: magic-cli-remote (companion command table), go-llmprovider-sdk, go-core-lib
@@ -485,3 +485,25 @@ Still `proposed`. Follows 0004-MADR's amendment of this date.
   * example extensions: `coding-agent/examples/extensions/`;
   * cache warming: `core/cache-warmer.ts`;
   * trust: `core/project-trust.ts`, `docs/security.md`.
+
+### Amendment (2026-10-01): native agent of magic-cli-remote
+
+Still `proposed`. Follows the fourth amendment of
+[0002-MADR-cli-acp-headless-mcp-v1.md](0002-MADR-cli-acp-headless-mcp-v1.md).
+
+The capability inventory and slash-command tiers in this record stand.
+The companion `command.Table` above remains the **target**. How an
+`IDPi` Spec reaches those rows is now specified in 0002: `KindNative`
+until `acpagent.Spec` parameterizes Compact / Fork / Rename / Usage /
+SetModel / SetThinking / Undo; then `KindOp` against `_pigo/…` and
+`session/set_config_option`. Grok vendor methods stay grok's.
+
+Pi HEAD is still `312184edb` and still has no ACP. Plan mode,
+permissions, todo, subagents, and checkpoints remain first-class Go
+work in this inventory (Pi ships them only as example extensions).
+Retry classification stays typed errors. Background jobs (`/ps`,
+`/stop`) remain a 1.x addition; Pi bash has no `background` field.
+
+Subagent progress stays `tool_call_update` on the parent session:
+acpagent drops child-session ids on the same ACP connection
+(magic-cli-remote MADR 0051 D6).
