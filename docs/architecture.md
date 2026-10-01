@@ -8,10 +8,14 @@ A Git repository for a Go rewrite of the Pi coding-agent CLI and the libraries t
 
 There is no Go module, no `cmd/` tree, and no binary. The working tree is documentation. The package map in [0004-MADR](decisions/0004-MADR-go-module-architecture.md) is proposed, not built. This file describes it only once the packages exist.
 
+The planned 1.0 provider library is `github.com/maccavelli/go-llmprovider-sdk`. The planned self-update library and release-publish workflow are `github.com/maccavelli/go-core-lib` `v1.1.0`. Neither is imported in this tree yet.
+
 ## Tree
 
 ```
 README.md                 repository entry; links here
+LICENSE                   Apache License 2.0
+NOTICE                    Pi MIT credit; sibling Apache-2.0 libraries
 docs/
   README.md               ToC and the "I want to…" matrix
   architecture.md         this file

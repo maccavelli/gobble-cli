@@ -1,9 +1,9 @@
 ---
 status: proposed
-date: 2026-09-29
+date: 2026-10-01
 decision-makers: repository owner
 consulted: 0001-REPORT-go-port-feasibility.md, 0002-MADR-cli-acp-headless-mcp-v1.md
-informed: magic-cli-remote (companion provider Spec), go-llmprovider-sdk
+informed: magic-cli-remote (companion provider Spec), go-llmprovider-sdk, go-core-lib
 ---
 # The product is `pigo`: its own binary, module path, directories, wire names, and a read-only bridge to `~/.pi`
 
@@ -135,10 +135,13 @@ avoids contention with Pi's `proper-lockfile` locks.
 pigo is a **specification-derived rewrite**. Pi's public documentation and
 its source are read as a behavioural specification: tool limits, session
 format, template syntax, merge rules. Go code is written fresh, not
-transcribed. pigo is released under MIT. A `NOTICE` file credits Pi
+transcribed. pigo is released under the Apache License 2.0. `LICENSE`
+is the fleet copy (201 lines, appendix unfilled), `cmp`-identical to
+`go-core-lib` and `magic-cli-remote`. A `NOTICE` file credits Pi
 (MIT, Copyright (c) 2025 Mario Zechner) and marks any data files copied
 verbatim, such as theme JSON or prompt text. Those files keep the upstream
-notice.
+notice. It also names `github.com/maccavelli/go-core-lib` and
+`github.com/maccavelli/go-llmprovider-sdk`, both Apache License 2.0.
 
 ### Consequences
 
@@ -161,9 +164,9 @@ notice.
   `gh`.
 * Bad, because two copies of settings can drift for a user who runs both
   products. `config import` is a one-time copy, not a sync.
-* Bad, because the licence position (D18) has had no legal review. MIT
-  permits even a derived copy with notice, so the exposure is small, but it
-  is unreviewed.
+* Bad, because the licence position (D18) has had no legal review.
+  Apache-2.0 and the Pi MIT notice in `NOTICE` state the grant; it is
+  unreviewed.
 
 ### Confirmation
 
@@ -178,7 +181,9 @@ notice.
   provider request all carry the name `pigo` and the same semver.
 * `grep -rn '"_pi/' --include=*.go .` is empty; every extension method
   starts with `_pigo/`.
-* `LICENSE` is MIT and `NOTICE` names Pi's copyright line.
+* `LICENSE` is Apache-2.0 (`cmp`-identical to `go-core-lib/LICENSE`)
+  and `NOTICE` names Pi's MIT copyright line, `go-core-lib`, and
+  `go-llmprovider-sdk`.
 
 ## Pros and Cons of the Options
 
@@ -227,6 +232,15 @@ notice.
   [0004-PLAN-go-module-architecture.md](0004-PLAN-go-module-architecture.md)
   (directories, build info, names) and by the bridge phase of
   [0005-PLAN-v1-feature-scope.md](0005-PLAN-v1-feature-scope.md).
+* Amended 2026-09-30: `NOTICE` also names `go-core-lib` (Apache-2.0).
+  `go-llmprovider-sdk` has no LICENSE in tree; none is invented.
+* Amended 2026-10-01: the owner directed Apache-2.0 for this
+  repository, `go-llmprovider-sdk`, and `go-core-lib`. pigo's `LICENSE`
+  is that fleet copy. `NOTICE` names Pi (MIT) and both sibling
+  libraries (Apache-2.0). The 2026-09-30 "do not invent" line for
+  `go-llmprovider-sdk` is closed by that repository's
+  `0018-MADR-apache-2-license.md`. `LICENSE` and `NOTICE` land in this
+  change, ahead of 0004-PLAN Phase 0.
 * Pi facts come from Pi at `312184edb`: `docs/configuration.md`,
   `docs/environment-variables.md`, `docs/skills.md`, `docs/security.md`,
   and `core/resource-loader.ts`.

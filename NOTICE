@@ -1,0 +1,20 @@
+pigo
+Copyright 2026 the pigo authors
+
+This product is licensed under the Apache License, Version 2.0.
+See the LICENSE file in the same directory.
+
+This product is a specification-derived rewrite of Pi
+(https://github.com/earendil-works/pi), which is licensed under the
+MIT License:
+
+  Copyright (c) 2025 Mario Zechner
+
+Data files copied verbatim from that tree (for example theme JSON or
+prompt text) keep the upstream notice.
+
+This product uses github.com/maccavelli/go-core-lib, licensed under
+the Apache License, Version 2.0.
+
+This product uses github.com/maccavelli/go-llmprovider-sdk, licensed
+under the Apache License, Version 2.0.

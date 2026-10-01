@@ -17,7 +17,7 @@ The tree currently holds documentation only. The records below are all `proposed
   - Names: `pigo`, `PIGO_*`, `_pigo/` extensions.
   - Directories: XDG, plus a read-only bridge that imports a Pi user's `~/.pi` assets.
 - **[0004-MADR](docs/decisions/0004-MADR-go-module-architecture.md)** shapes the module: one Go 1.27.1 module of contract-first packages.
-  - An official SDK sits at each protocol boundary: ACP, MCP, and the vendor LLM SDKs.
+  - An official SDK sits at each protocol boundary: ACP, MCP, and go-llmprovider-sdk.
   - Import boundaries are enforced by a test.
   - An `exp/` tree holds unstable work.
 - **[0005-MADR](docs/decisions/0005-MADR-v1-feature-scope.md)** puts nearly every Pi capability in the v1 line, tiered into a v1.0.0 gate, a v1.x train, and `exp/`.
@@ -36,10 +36,16 @@ The tree currently holds documentation only. The records below are all `proposed
 Stack for v1:
 
 - **CLI and config:** [Cobra](https://github.com/spf13/cobra) with [fang](https://github.com/charmbracelet/fang), and [Viper](https://github.com/spf13/viper).
-- **Protocols:** [ACP Go SDK](https://github.com/coder/acp-go-sdk) v0.13.5 and the [MCP Go SDK](https://github.com/modelcontextprotocol/go-sdk).
-- **LLM providers:** the official Anthropic, OpenAI and Google Gen AI Go SDKs behind pigo's own `llm` contract.
+- **Protocols:** [ACP Go SDK](https://github.com/coder/acp-go-sdk) v0.13.5 (with the fleet `replace` to `github.com/maccavelli/acp-go-sdk v0.13.6-mcr.1`) and the [MCP Go SDK](https://github.com/modelcontextprotocol/go-sdk).
+- **LLM providers:** [go-llmprovider-sdk](https://github.com/maccavelli/go-llmprovider-sdk) behind pigo's own `llm` facade. Official Anthropic / OpenAI / Google vendor SDKs are not 1.0 dependencies.
+- **Self-update:** [go-core-lib](https://github.com/maccavelli/go-core-lib) `selfupdate` v1.1.0; GitHub releases are the raw binaries that package selects.
 - **TUI:** Charm v2 (Bubble Tea, Bubbles, Lip Gloss).
 
 ## Source
 
 The TypeScript product lives at [earendil-works/pi](https://github.com/earendil-works/pi). The report and the v1 scope were measured against a clone of that tree at commit `312184edb` (2026-09-29).
+
+## License
+
+Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE).
+Third-party notices are in [NOTICE](NOTICE).

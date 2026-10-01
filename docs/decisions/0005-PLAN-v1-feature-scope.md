@@ -1,6 +1,6 @@
 ---
 status: proposed
-date: 2026-09-29
+date: 2026-09-30
 associated-madr: "0005-MADR-v1-feature-scope.md"
 ---
 # Implement the v1 line: the v1.0.0 gate, the v1.x train, and `exp/`
@@ -125,33 +125,69 @@ They may start after F4 in any order.
 
 ### F4 — providers, catalog, auth (1.0)
 
-1. `llm/provider/anthropic`, `openai`, `google`, and `compat` (with
-   presets), each streaming `iter.Seq2[llm.Event, error]`.
-2. Record each SDK version pinned, in this PLAN as a dated note.
-3. Typed error mapping in every adapter (`APIError`, `RetryAfter`,
-   `ErrContextOverflow`, `ErrQuota`, `ErrAuth`).
-4. `llm/catalog`: an embedded snapshot and the `models.json` overlay, with
-   `$ENV` and `!command` resolution.
-5. Record the snapshot's source (Pi's generated catalog under MIT with a
+Grounded in `go-llmprovider-sdk` as probed on 2026-09-30
+(`origin/main` `3d4aff5f2be9363877aae0987755e6781f1cae98`; 0015-PLAN
+in S7). Re-resolve the module version at the start of this phase and
+record the pseudo-version here. Do not import the pre-S8 `Generate*`
+API.
+
+1. `llm/provider` is the only adapter. It:
+   * constructs through `llmprovider/providers.New(id, opts...)`;
+   * streams through `llmprovider.Stream` (synthesised events until a
+     provider sets `NativeStreaming`);
+   * wraps `llmprovider.WithRetry` for retryable kinds;
+   * maps `llmprovider.Event` and `APIError` onto `llm`'s sealed events
+     and sentinels as 0004-MADR specifies;
+   * passes `WithClientInfo` from 0003-MADR (`pigo`, semver).
+2. 1.0 ids on day one of this phase: every id `providers.New` already
+   implements (`openai`, `claude`, `gemini`, `grok` on the probed
+   commit). As 0015-PLAN S7 moves `opencode-zen`, `opencode-go`,
+   `huggingface`, `kilo`, `together`, and `ollama` onto the contract,
+   add each id in a follow-up commit of this phase, recording the SDK
+   commit. Do not ship a pigo wrapper of the old API for those ids.
+3. Record the pinned `go-llmprovider-sdk` pseudo-version here.
+4. Typed error mapping is the 0004-MADR table. A 429 with `Retry-After`
+   must round-trip through the adapter as `llm.ErrRateLimited` plus
+   `APIError.RetryAfter`. Context overflow must round-trip as
+   `llm.ErrContextOverflow` and must **not** be retried by `WithRetry`.
+5. `llm/catalog`: an embedded snapshot and the `models.json` overlay, with
+   `$ENV` and `!command` resolution. Overlay ids that the SDK does not
+   implement yet fail closed with a clear error, not a silent skip.
+6. Record the snapshot's source (Pi's generated catalog under MIT with a
    `NOTICE` entry, or another public catalog) here before it lands.
-6. `internal/auth`: keyring with the 0600-file fallback, the credential
-   precedence order, `pigo auth login|logout|status|token`, and ACP
-   `authMethods`, `authenticate`, and `logout`.
-7. `pigo models list|info`.
-8. Config option category `model` (0002-PLAN Phase 4, amended).
+7. `internal/auth`: keyring with the 0600-file fallback; implements
+   `llmprovider.TokenStore` so SDK `OAuthSession` rotations persist.
+   Credential precedence, `pigo auth login|logout|status|token`, and ACP
+   `authMethods`, `authenticate`, and `logout`. ChatGPT/Codex login uses
+   the SDK `openai` backend; do not reimplement that loopback in pigo.
+8. `pigo models list|info`.
+9. Config option category `model` (0002-PLAN Phase 4, amended).
 
 **Accept:**
 
-* Each adapter passes a shared conformance suite against an
-  `httptest.NewTestServer` fake of its wire: streaming text, thinking, a
-  tool call, usage, 429 with `Retry-After`, and context overflow.
-* `live_<provider>` tests exist and are documented, and have been run once
-  by the owner with credentials. Record the date and outcome here.
-* Nothing under `internal/cli` imports a vendor SDK (archtest).
+* For each 1.0 id, an adapter test against `httptest.NewTestServer`
+  (or the SDK's own `llmtest.Run` harness behind the facade) covers:
+  text, a tool call, usage on `done`, 429 with `Retry-After`, and
+  context overflow. Because `NativeStreaming` is `Unsupported`, the
+  text case asserts one `TextDelta` (or a small number of events after
+  `Generate` returns), not a token stream.
+* `live_<id>` tests exist for `openai`, `claude`, `gemini`, and `grok`,
+  skipped without credentials, and have been run once by the owner.
+  Record the date and outcome here.
+* `go list -m github.com/maccavelli/go-llmprovider-sdk` prints the
+  recorded pin. `go list -m` does not name `anthropic-sdk-go`,
+  `openai-go`, or `google.golang.org/genai`.
+* Nothing under `internal/cli` imports `go-llmprovider-sdk` (archtest
+  rule 4).
 
 ### F5 — compaction and retry (1.0; extends 0002-PLAN Phase 6)
 
 1. Retry with typed classification and back-off, honouring `Retry-After`.
+   The provider-level retries are `llmprovider.WithRetry` from F4.
+   This phase adds the agent-level policy (compaction on
+   `llm.ErrContextOverflow`, the 2 s / 4 s / 8 s schedule and 60 s cap
+   matching Pi, never retry exhausted quota). Do not duplicate the SDK's
+   retry loop.
 2. Auto-compaction trigger and cut-point rules. The iterative summary
    format. Split-turn merge. Overflow compacts and retries once.
 3. `/compact [instructions]` and `_pigo/compact` share one code path, and
@@ -260,7 +296,20 @@ They may start after F4 in any order.
 1. Print mode `-p`, piped stdin, `--output-format text|json|stream-json`.
 2. The usage ledger, `/usage` (session plus today), and `pigo usage`.
 3. `pigo doctor [--json]`.
-4. `pigo update` through `mcplib/selfupdate`.
+4. `pigo update [--check]` through
+   `github.com/maccavelli/go-core-lib/selfupdate` `v1.1.0`
+   (`96b30961180671ab3697585951219001ecbb1c90`). Bind it as
+   `selfupdate/example_test.go` does for a standalone program:
+   `NewGitHubSource` (User-Agent from 0003, repository owner/name of
+   this module's GitHub), `NewStrictVersionPolicy`,
+   `NewExactAssetSelector` for the six Phase 4 platforms,
+   `NewStandaloneInstaller`, `NewTextReporter(os.Stderr)`,
+   `NewTerminalConfirmer(os.Stdin, os.Stderr)`. `--check` is
+   `Request.CheckOnly`; `--force` is `Request.Force`; `--yes` is
+   `Request.Yes`. `Request.Product` is `pigo`. `Request.CurrentVersion`
+   and `CurrentBuild` come from `internal/buildinfo`. Map `ExitCode` to
+   process status (0, 10, 1). `internal/cli` is the only importer of
+   `go-core-lib` (0004-MADR import-boundary rule 8).
 5. The Pi bridge (0003): discovery sources, `session list --pi`,
    `session import`, `config import --from-pi`, `auth import --from-pi`,
    and `--no-pi-bridge`.
@@ -273,6 +322,12 @@ They may start after F4 in any order.
 
 * `stream-json` output of a fixture session equals the recorded ACP
   `session/update` params, line for line.
+* `pigo update --check` against `selfupdatetest.GitHubServer` with a
+  fixture named `pigo-linux-amd64` reports availability (exit 10) and
+  writes nothing but reporter text to stderr. A planted archive name
+  (`pigo-linux-amd64.tar.gz`) is not selected (`ErrIntegrity` or
+  missing asset). `go list -m github.com/maccavelli/go-core-lib`
+  prints `v1.1.0`.
 * The Pi-user smoke test from 0005-MADR Confirmation passes, and the
   `~/.pi` fixture hash is unchanged.
 * The gate table has no empty row.
@@ -344,11 +399,16 @@ exceeds the depth limit gets a tool error.
 
 ### X5 — providers, packages, operations 1.x
 
-1. Bedrock, Vertex, and Azure through the SDK options.
-2. Subscription OAuth: one provider per step, each with a recorded check
-   of the provider's terms.
-3. The go-llmprovider-sdk adapter once that module has a `go.mod` and
-   streaming.
+1. Bedrock, Vertex, and Azure **only if** `go-llmprovider-sdk` has grown
+   those ids or options. If it has not, this step is skipped and the
+   gap is recorded here; pigo does not add vendor LLM SDKs to close it.
+2. Subscription OAuth beyond ChatGPT/Codex: one provider per step, each
+   with a recorded check of the provider's terms, through the SDK's
+   `OAuthSession`.
+3. Unnamed OpenAI-compatible presets (Groq, Cerebras, DeepSeek,
+   OpenRouter, Fireworks, Mistral, LM Studio, llama.cpp, vLLM) **only
+   if** the SDK exposes a Chat Completions provider that takes a base
+   URL, or adds those ids. pigo does not speak those wires itself.
 4. `pigo models refresh`.
 5. `pigo pkg install|remove|list|update`: git, path, and https-with-sha256
    sources; `pigo-package.json`; Pi `package.json` manifests with their
@@ -405,7 +465,7 @@ Before the gate, from a clean clone:
 make preflight
 go test ./...
 go test -race ./...
-go test -tags live_anthropic,live_openai,live_google ./llm/provider/...   # owner-run, credentials required
+go test -tags live_openai,live_claude,live_gemini,live_grok ./llm/provider/...   # owner-run, credentials required
 make release-dry-run
 ```
 
@@ -439,3 +499,19 @@ needs its own MADR/PLAN pair. The contract is:
 ## Execution record
 
 None. This plan is proposed and has not been approved.
+
+## Amendments
+
+**2026-09-30 — shared libraries as they exist.** Follows 0004-MADR and
+0005-MADR of this date.
+
+* F4 is a single `llm/provider` adapter over `go-llmprovider-sdk`
+  (`providers.New`, `Stream`, `WithRetry`, `TokenStore`). Official
+  vendor LLM SDKs are out. Native token streaming is not claimed.
+* F5 uses `llmprovider.WithRetry` for provider retries and keeps
+  compaction-on-overflow in pigo.
+* F10 `pigo update` binds `go-core-lib/selfupdate` `v1.1.0` as the
+  standalone example does.
+* X5 no longer waits for a `go.mod` and streaming. Bedrock / Vertex /
+  Azure and the unnamed OpenAI-compatible long tail land only if the
+  SDK grows them.

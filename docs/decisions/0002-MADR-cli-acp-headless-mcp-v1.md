@@ -1,9 +1,9 @@
 ---
 status: proposed
-date: 2026-09-29
+date: 2026-09-30
 decision-makers: repository owner
 consulted: 0001-REPORT-go-port-feasibility.md
-informed: go-llmprovider-sdk, acp-go-sdk, magic-cli-remote
+informed: go-llmprovider-sdk, go-core-lib, acp-go-sdk, magic-cli-remote
 ---
 # v1 is the native magic-cli-remote CLI: Cobra over ACP, ACP stdio, MCP client
 
@@ -576,8 +576,10 @@ v1:
 * OAuth for HTTP MCP is in v1 if the chosen Go MCP client supports it;
   otherwise it is a dated PLAN deviation, not a silent drop.
 
-Which Go MCP client library (report D14) is **not** chosen here. The PLAN
-picks one in its MCP phase and records the module path.
+Which Go MCP client library (report D14) is chosen in
+[0004-MADR](0004-MADR-go-module-architecture.md): the official
+`github.com/modelcontextprotocol/go-sdk`. The PLAN records the version
+it pins in Phase 5.
 
 ### CLI as ACP client
 
@@ -619,3 +621,13 @@ clean-room). D3 (codemode), D6 (Charm), D7 (package manager), D12
 Companion `IDPi` registration, Compact Spec hook, and live-tagged tests
 live in magic-cli-remote and need a MADR/PLAN pair **there** before that
 tree is mutated.
+
+### Amendment (2026-09-30, third): shared libraries as they exist
+
+Still `proposed`. D10 is decided in [0004-MADR](0004-MADR-go-module-architecture.md)
+as of that record's 2026-09-30 amendment: 1.0 providers are the
+`llm/provider` adapter over `go-llmprovider-sdk`; official vendor LLM
+SDKs are not 1.0 dependencies. D14 remains the official MCP go-sdk.
+The ACP-as-command-API decision, the Cobra-is-an-ACP-client rule, and
+the honest-advertisement rule are unchanged. [0002-PLAN](0002-PLAN-cli-acp-headless-mcp-v1.md)
+Phase 3 and Phase 5 record the module versions they pin.

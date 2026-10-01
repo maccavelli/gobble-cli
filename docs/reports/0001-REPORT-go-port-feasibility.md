@@ -565,3 +565,39 @@ experimental stack dominate calendar time if they are in scope.
 - Whether `go-llmprovider-sdk`'s OpenAI/Anthropic/xAI wire details match
   `pi-ai` was not compared byte-for-byte.
 - Legal review of derived-vs-clean-room (D18) was not done.
+
+## Later observation (2026-09-30)
+
+This report is an observation from 2026-09-29. It is not rewritten. The
+library rows in F13 and the "each is open" table above are that day's
+facts. On 2026-09-30 the sibling libraries were re-probed, and the
+decisions that this report left open were recorded in MADRs:
+
+* **`go-llmprovider-sdk`** is the module
+  `github.com/maccavelli/go-llmprovider-sdk` (Go 1.27.1, stdlib +
+  `x/term`). It has a v1 contract (`Provider`, `Stream`, `APIError`,
+  `providers.New`, `llmtest`) on `origin/main` at
+  `3d4aff5f2be9363877aae0987755e6781f1cae98`. 0015-PLAN is in S7: four
+  providers implement the contract (`openai`, `claude`, `gemini`,
+  `grok`); the rest still use the old `Generate*` API. There is no git
+  tag and no LICENSE file. Native streaming is `Unsupported` on every
+  moved provider; `Stream` synthesises events from `Generate`.
+* **`go-core-lib`** is tagged `v1.0.0` / `v1.0.1` / `v1.1.0`
+  (`v1.1.0` = `96b30961180671ab3697585951219001ecbb1c90`, Apache-2.0).
+  The live package is `selfupdate`. It is not a README stub.
+* **D10, D9 (toolchain), D14** are decided in
+  [0004-MADR](../decisions/0004-MADR-go-module-architecture.md).
+  **`pigo update`** is decided in
+  [0005-MADR](../decisions/0005-MADR-v1-feature-scope.md).
+
+The feasibility conclusions (source-faithful port is not achievable; a
+product rewrite is) are unchanged.
+
+## Later observation (2026-10-01)
+
+The owner directed Apache-2.0 for this repository, `go-llmprovider-sdk`,
+and `go-core-lib`. `go-core-lib` already was. pigo's `LICENSE` is the
+fleet copy; `NOTICE` credits Pi (MIT) and both sibling libraries.
+`go-llmprovider-sdk` records the same choice in
+`0018-MADR-apache-2-license.md`. The 2026-09-30 "no LICENSE file" line
+for that SDK is that day's fact.

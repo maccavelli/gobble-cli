@@ -1,6 +1,6 @@
 ---
 status: proposed
-date: 2026-09-29
+date: 2026-09-30
 associated-madr: "0002-MADR-cli-acp-headless-mcp-v1.md"
 ---
 # Implement v1 as the native magic-cli-remote CLI: Cobra over ACP, ACP stdio, MCP client
@@ -53,10 +53,17 @@ Out of **this** repository: registering `provider.IDPi` in
 magic-cli-remote. The companion checklist at the end of this plan is the
 contract for that tree; it is not a phase here.
 
-Not chosen here, must be chosen in the named phase before that phase's
-code lands: MCP client module (D14), provider module (D10), config
-directory and binary name (D11, D17). Record the choice in this PLAN as a
-dated deviation (or a follow-up MADR if it is architectural).
+Chosen elsewhere, recorded here so a phase does not re-open them:
+
+* D10, D14, D15, D16 — [0004-MADR](0004-MADR-go-module-architecture.md)
+  (2026-09-30: 1.0 providers are the `llm/provider` adapter over
+  `go-llmprovider-sdk`; MCP client is the official go-sdk).
+* D11, D17 — [0003-MADR](0003-MADR-pigo-product-identity.md).
+
+The version of `go-llmprovider-sdk` and of
+`github.com/modelcontextprotocol/go-sdk` is recorded as a dated note in
+the phase that first imports them. That is not a new architectural
+choice.
 
 ## Implementation Steps
 
@@ -116,9 +123,20 @@ than a grep.)*
 
 ### Phase 3 — real prompt loop and built-in tools
 
-1. Agent loop: one provider (D10: use `go-llmprovider-sdk` if it builds
-   in this module, otherwise one raw-HTTP provider). Faux/static provider
-   is enough for tests.
+1. Agent loop: one provider through `llm/provider`, which is the
+   `go-llmprovider-sdk` adapter (0004-MADR D10, 2026-09-30). First import
+   of `github.com/maccavelli/go-llmprovider-sdk` lands here: pin a commit
+   pseudo-version of that module's `origin/main` (probed
+   `3d4aff5f2be9363877aae0987755e6781f1cae98` on 2026-09-30; re-resolve
+   and record the chosen version here). Construct with
+   `providers.New("openai", …)` or another id that already implements
+   `llmprovider.Provider`. Call `llmprovider.Stream`, not the pre-S8
+   `Generate*` API. Tests use `llm/llmtest` (a scripted fake that can
+   emit per-token deltas); they do not need the SDK. Native
+   `NativeStreaming` is `Unsupported` on every moved SDK provider, so a
+   live provider in this phase will emit coarse chunks. The faux
+   provider still streams deltas so ACP `session/update` tests stay
+   strict.
 2. Tools: `read`, `write`, `edit`, `bash` with the session `cwd`.
 3. Stream ACP `session/update` for message chunks and tool calls.
 4. `session/cancel` aborts the in-flight provider request and tool.
@@ -160,8 +178,8 @@ live (applies in this session).
 
 ### Phase 5 — MCP client
 
-1. Choose the Go MCP client module (D14). Write the module path and
-   version into this PLAN as a dated deviation if no separate MADR.
+1. MCP client module, already chosen: `github.com/modelcontextprotocol/go-sdk`
+   (0004-MADR D14). Record the resolved version here as a dated note.
 2. Stdio and streamable HTTP. Advertise `mcpCapabilities.http = true`,
    `sse = false`, `acp = false`.
 3. Union `session/new.mcpServers` with on-disk `mcp.json` (session name
@@ -332,3 +350,9 @@ become archtest rule 5. The Phase 2 grep becomes archtest rule 6 over
 `internal/cli` and `acpclient`. Phase 4 writes Pi v3 entry shapes from
 the start. Features the widened v1 line adds ([0005-MADR](0005-MADR-v1-feature-scope.md)) are
 delivered by [0005-PLAN](0005-PLAN-v1-feature-scope.md) after this plan, not by new phases here.
+
+**2026-09-30 — shared libraries as they exist.** D10 and D14 are no
+longer open at phase time. Phase 3 imports `go-llmprovider-sdk` at a
+commit pin and uses `providers.New` + `Stream`. Phase 5 pins the
+official MCP go-sdk version. Tests still use `llm/llmtest` so ACP chunk
+assertions do not depend on the SDK's `NativeStreaming: Unsupported`.

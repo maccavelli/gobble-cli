@@ -1,9 +1,9 @@
 ---
 status: proposed
-date: 2026-09-29
+date: 2026-09-30
 decision-makers: repository owner
 consulted: 0001-REPORT-go-port-feasibility.md, 0002-MADR-cli-acp-headless-mcp-v1.md, 0003-MADR-pigo-product-identity.md, 0004-MADR-go-module-architecture.md
-informed: magic-cli-remote (companion command table)
+informed: magic-cli-remote (companion command table), go-llmprovider-sdk, go-core-lib
 ---
 # The v1 line carries every portable Pi capability, plus the ones Pi left to example extensions, tiered into a v1.0.0 gate, a v1.x train, and `exp/`
 
@@ -164,13 +164,16 @@ Tier definitions:
 
 | Capability | Tier | Behaviour |
 |---|---|---|
-| Anthropic Messages | 1.0 | Official SDK. API key. Prompt caching markers. Thinking. |
-| OpenAI Responses and Chat Completions | 1.0 | Official `openai-go/v3`. API key. Reasoning effort. |
-| Google Gemini | 1.0 | Official `genai`. API key. Thinking budget. |
-| OpenAI-compatible | 1.0 | One adapter with presets for Groq, Cerebras, DeepSeek, xAI, OpenRouter, Together, Fireworks, Mistral, Hugging Face, Ollama, LM Studio, llama.cpp server, and vLLM. Covers the long tail of Pi's 42 factories through one wire family. |
-| Bedrock, Vertex, Azure OpenAI | 1.x | Through the same official SDKs' cloud options and ambient cloud credentials. |
-| Subscription OAuth | 1.x | Only for providers whose terms permit third-party clients (for example GitHub Copilot, and OpenAI ChatGPT/Codex through go-llmprovider-sdk's flows). Each provider is checked and recorded in the PLAN before it lands. |
-| go-llmprovider-sdk adapter | 1.x | Lands once that module has a `go.mod` and public streaming (its MADR 0015). |
+| Anthropic Messages | 1.0 | `go-llmprovider-sdk` id `claude` (`llmprovider/providers/claude`). API key. Thinking and caching as that package sends them. |
+| OpenAI Responses | 1.0 | SDK id `openai` (`llmprovider/providers/openai`), including the ChatGPT/Codex backend the package already has. API key or that backend's OAuth. |
+| Google Gemini | 1.0 | SDK id `gemini` (`llmprovider/providers/gemini`, Interactions wire). |
+| Grok (xAI) | 1.0 | SDK id `grok` (`llmprovider/providers/grok`, Responses wire). |
+| Other named SDK providers | 1.0 as each implements `llmprovider.Provider` | Ids already in the SDK: `opencode-zen`, `opencode-go`, `huggingface`, `kilo`, `together`, `ollama`. On 2026-09-30 those five still use the old `Generate*` API (0015-PLAN S7). pigo does not wrap that old API; each id joins 1.0 when `providers.New` returns it. |
+| Stream shape | 1.0 | pigo calls `llmprovider.Stream`. Every moved provider sets `NativeStreaming` to `Unsupported`, so 1.0 ACP `session/update` text chunks are whole-message events synthesised from `Generate`, not token-by-token SSE. A later SDK `Streamer` is picked up with no pigo API change. |
+| Unnamed OpenAI-compatible endpoints | 1.x | Groq, Cerebras, DeepSeek, OpenRouter, Fireworks, Mistral, LM Studio, llama.cpp server, vLLM. The SDK has no generic Chat Completions constructor (`WithBaseURL` on `openai` would send the Responses wire). These land when the SDK adds a Chat Completions provider that takes a base URL, or adds those ids. pigo does not speak those wires itself. |
+| Bedrock, Vertex, Azure OpenAI | 1.x | Needs SDK support. pigo will not add `anthropic-sdk-go`, `openai-go/v3`, `google.golang.org/genai`, or `aws-sdk-go-v2` to speak them. |
+| Subscription OAuth | 1.0 for ChatGPT/Codex through the SDK `openai` backend; 1.x for any other provider | Only for providers whose terms permit third-party clients. Each extra provider is checked and recorded in the PLAN before it lands. |
+| go-llmprovider-sdk adapter | 1.0 | The only 1.0 provider implementation, in `llm/provider`. The "once it has a `go.mod` and public streaming" gate is withdrawn: the module exists, `Stream` exists, native per-token streaming does not. |
 | Model catalog | 1.0 | Embedded snapshot in Pi's `Model` shape (context window, max tokens, cost tiers, input modalities, reasoning, thinking map, image input limits). `pigo models list|info`. The source is recorded in `NOTICE` if copied. |
 | Catalog refresh | 1.x | `pigo models refresh` into the cache directory. |
 | `models.json` | 1.0 | Pi-compatible custom providers and models, with `modelOverrides`. `$ENV`, `${ENV}`, and `!command` values are resolved at request time. |
@@ -262,9 +265,9 @@ Checkpoints:
 
 | Capability | Tier | Behaviour |
 |---|---|---|
-| GitHub releases | 1.0 | Six targets, `SHA256SUMS`, SBOM, and provenance attestations (0004-PLAN Phase 4). |
+| GitHub releases | 1.0 | Six **raw binaries** named `pigo-<goos>-<goarch>[.exe]`, `SHA256SUMS`, SPDX SBOM extra asset, and provenance attestations, published by go-core-lib's reusable workflow (0004-PLAN Phase 4). Strict `vMAJOR.MINOR.PATCH` tags only. |
 | `go install` | 1.0 | `go install github.com/maccavelli/pi-go/cmd/pigo@latest`. |
-| Self-update | 1.0 | `pigo update [--check]` through `mcplib/selfupdate` with checksum verification. |
+| Self-update | 1.0 | `pigo update [--check]` through `github.com/maccavelli/go-core-lib/selfupdate` `v1.1.0`. Product `pigo`. `Request.CheckOnly` for `--check`. `NewStandaloneInstaller`, `NewExactAssetSelector` for the six platforms, `NewGitHubSource` with the 0003-MADR User-Agent, `NewTextReporter` on stderr, `NewTerminalConfirmer`, `ExitCode` mapped to process status (0 current/declined/applied, 10 update available, 1 error). `--force` is `Request.Force`; `--yes` is `Request.Yes`. |
 | Homebrew tap, container image | 1.x | A tap formula, and a `ko`-built distroless image for CI agents. |
 | magic-cli-remote `KnownGoodVersion` | 1.0 | Published in the release notes for the companion Spec. |
 
@@ -450,6 +453,21 @@ re-created `ExtensionAPI`.
   record. Its ACP-as-command-API decision stands.
 * Implemented by [0005-PLAN-v1-feature-scope.md](0005-PLAN-v1-feature-scope.md),
   after 0004-PLAN and 0002-PLAN.
+
+### Amendment (2026-09-30): shared libraries as they exist
+
+Still `proposed`. Follows 0004-MADR's amendment of this date.
+
+* The go-llmprovider-sdk adapter moves from 1.x to **1.0** and is the
+  only 1.0 provider implementation. Official vendor LLM SDKs are out of
+  1.0. The unnamed OpenAI-compatible long tail, and Bedrock / Vertex /
+  Azure, stay **1.x** because the SDK does not speak them today.
+* Grok (xAI) is 1.0 through the SDK's `grok` id, not through a pigo
+  compat preset.
+* ChatGPT/Codex subscription auth is 1.0 through the SDK `openai`
+  backend; other subscription OAuth stays 1.x.
+* `pigo update` uses `go-core-lib/selfupdate` `v1.1.0`, not
+  `mcplib/selfupdate`. Release assets are raw binaries, not archives.
 * Pi sources (at `312184edb`, under `packages/`):
   * tools: `coding-agent/src/core/tools/*.ts`, `truncate.ts`,
     `file-mutation-queue.ts`, `utils/image-resize-core.ts`;
