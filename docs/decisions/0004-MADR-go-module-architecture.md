@@ -616,3 +616,160 @@ licence. `LICENSE` and `NOTICE` land ahead of 0004-PLAN Phase 0.
 `0018-MADR-apache-2-license.md`). The 2026-09-30 "do not invent" line
 above is closed. The 2026-09-30 probe that the SDK had no LICENSE
 file remains that day's fact.
+
+### Amendment (2026-10-01, second): the shared libraries measured in code
+
+Still `proposed`. Three sibling trees were re-read and built in scratch copies:
+
+* go-llmprovider-sdk at `940fee0`, pushed 2026-10-01 15:09 -0500 ("extract shared wire format packages");
+* go-core-lib at `v1.2.0` and at its working tree;
+* the acp-go-sdk fork at `v0.13.6-mcr.1`.
+
+`go build`, `go vet` and `go test ./...` are green at `940fee0`. These are unchanged:
+
+* the module shape;
+* the package map;
+* the boundary rules (rule 8 is refined below);
+* the decision that 1.0 talks to models only through go-llmprovider-sdk.
+
+#### go-llmprovider-sdk: facts as of `940fee0`
+
+* **All 10 provider ids implement `llmprovider.Provider`.**
+  * The ids are `openai`, `claude`, `gemini`, `grok`, `opencode-zen`, `opencode-go`, `kilo`, `huggingface`, `together` and `ollama`, in their own packages. 0015-PLAN S7 is finished.
+  * The Context's "four providers … the rest still old `Generate*`" was true at `3d4aff5` only.
+  * S7b (wire and transport extraction) is in flight: commit 1 is `940fee0`, and commit 2 is uncommitted and did not build at 15:11.
+* **No tag.** `LICENSE` (Apache-2.0) landed in `8150c35`.
+  * The SDK's own 0015-PLAN says: "Intermediate phases may break the API. No consumer imports this module before v1.0.0-rc.1."
+  * A `v0.0.0-…` pseudo-version also makes the ChatGPT backend send `client_version` 0.0.0, which hides some models (`discovery.go:21-41`).
+* **No wire decodes usage.** No non-test code sets `Response.Usage` or `Response.Model`, so `Usage` is always zero. That is S9 (not started).
+  * `Usage` has a single `CachedTokens` counter, with no read/write split.
+  * `FinishReason` is set only by Chat Completions.
+* **Content gaps.**
+  * Items are text, function call, function output and reasoning only (`item.go:15-55`).
+  * There is no image input and no `is_error` on tool output.
+  * There is no opaque reasoning payload: Claude's thinking `signature` and `redacted_thinking` are dropped (`messages.go:88-142`), and Responses drops `ReasoningItem` on input.
+  * Gemini's thought signature does round-trip (`FunctionCallItem.Signature`).
+* **No prompt caching.** The only cache field is ChatGPT's `prompt_cache_key`. Claude's system prompt is a single string.
+* **Errors.**
+  * A plain 429 returns `*RateLimitError`, not `*APIError` (`api_error.go:201-203,226`).
+  * A truncated response is `*IncompleteError`.
+  * Both fold into `APIError` at S8.
+  * `ErrQuotaExhausted` also matches `ErrRateLimited`, and `ErrContextOverflow` also matches `ErrInvalidRequest`.
+* **Retry.**
+  * `WithRetry` defaults to 3 attempts, a 1 s base and a 30 s cap, with up to +25% jitter. A `Retry-After` above the cap returns at once.
+  * **The wrapper hides any `Streamer`** (`retry.go:43`).
+* **Defaults pigo must override.**
+  * Billed model probes are **on** (up to 6 generations, `options.go:181-190`).
+  * `MaxTokens` is 8192.
+  * The default client has a 300 s `ResponseHeaderTimeout`.
+  * Non-streamed bodies are capped at 1 MiB.
+  * The SDK reads `CLAUDE_API_KEY`, not `ANTHROPIC_API_KEY` (`provider.go:180`). Its own 0016-MADR D12 chose the latter.
+* **Reasoning effort** accepts only `low|medium|high|xhigh` (`contract.go:52-71`). Explicit budgets are honoured only by Claude before 4.7 and by OpenCode's Google route.
+* **Auth.**
+  * Implemented:
+    * `OAuthSession`, `TokenStore` and `RefreshLocker` (a cross-process refresh lock);
+    * `FileTokenStore`;
+    * `LoginBrowserOAuth` (PKCE loopback) and `StartDeviceOAuth` (a `DeviceLogin` with `Wait`/`Cancel`);
+    * `RevokeOAuthSession`, `CommandToken`, `VendorCLISession`.
+  * Issuers are OpenAI/ChatGPT and xAI Grok, plus Kilo device login.
+  * Claude, Gemini and Together refuse OAuth sessions. SDK 0016-MADR D10 declines Anthropic and Gemini subscription OAuth, and treats Copilot as impersonation-only.
+  * **S8c moves these into `llmprovider/auth`.**
+* **Model metadata.** It exposes `ReasoningEfforts` only; context window, cost and modalities are not public. pigo's own catalog remains mandatory.
+* **Ids.**
+  * SDK ids differ from Pi's: `claude`↔`anthropic`, `gemini`↔`google`, `grok`↔`xai`. Codex is a credential mode of `openai`.
+  * `WithSessionID` is fixed per provider instance.
+
+#### Decisions changed by these facts
+
+1. **Pin policy.**
+   * pigo may *develop* against a recorded SDK commit.
+   * It **tags no release** on a pseudo-version of go-llmprovider-sdk. The first pigo tag requires an SDK `v1.0.0-rc.N` or later.
+   * The owner requests that tag from the SDK once S8c (final import paths) has landed, and preferably S9 (usage).
+   * Until then, 0002-PLAN Phase 3 and 0005-PLAN F4 record each commit they build against, with the API breaks still to come.
+2. **The `llm` facade is wider than the SDK, on purpose.** The sealed set becomes:
+   * `TextDelta`, `ThinkingDelta`;
+   * `ToolCallStart`, `ToolCallDelta`, `ToolCallDone`;
+   * `Usage`;
+   * `Done{StopReason}`.
+
+   Changes to the types:
+   * `llm.Usage` carries input, output, reasoning, cache-read and cache-write tokens, plus `Estimated bool`.
+   * `llm.Content` carries images.
+   * Thinking blocks and tool calls carry an opaque `ProviderData`. It is persisted as Pi's v3 fields `thinkingSignature`, `thoughtSignature`, `textSignature` and `redacted`, which those field names already reserve.
+
+   The adapter fills what the SDK provides. Until the SDK carries a feature, the facade's `Capabilities` says so, and pigo advertises nothing it cannot send. In particular, ACP `promptCapabilities.image` stays **false** until SDK image input exists.
+3. **Usage is estimated until S9.**
+   * `llm/provider` estimates input and output tokens (a byte-based estimator per model family, recorded in the catalog) and sets `Estimated`.
+   * The usage ledger, `usage_update`, auto-compaction and cost all consume the estimate.
+   * `/usage` labels it "estimated".
+   * When the SDK reports real usage, the adapter prefers it, with no API change.
+4. **Error mapping order.**
+   * Map `ErrQuotaExhausted` before `ErrRateLimited`, and `ErrContextOverflow` before `ErrInvalidRequest`.
+   * Handle `*RateLimitError` and `*IncompleteError` until S8.
+   * `llm` adds `ErrIncomplete`, `ErrNotPermitted`, `ErrUnavailable` and `ErrUnsupported`.
+5. **Retry.**
+   * While no provider streams natively, `llm/provider` wraps `WithRetry` with an explicit `RetryPolicy{MaxAttempts: 4, BaseDelay: 2 s, MaxDelay: 60 s}`, which is Pi's 3 retries and 60 s cap.
+   * Tests assert bounds, not exact steps, because of the jitter.
+   * When any provider gains a `Streamer`, retry moves into the adapter. It retries only before the first event, so `WithRetry` cannot hide the stream.
+6. **Adapter configuration.**
+   * Always `WithModelProbes(false)`.
+   * `MaxOutputTokens` per model from `llm/catalog`.
+   * One provider instance per ACP session, so `WithSessionID` (ChatGPT `prompt_cache_key`, OpenCode/Kilo session headers) is per session.
+   * pigo supplies its own `*http.Client`: `ProxyFromEnvironment`, and no response-header timeout shorter than the model's generation limit. A non-streamed long generation must not time out and be re-billed by retry.
+   * Credentials are passed explicitly (`WithAPIKey` / `WithTokenSource`). pigo never depends on the SDK reading environment variables, which S10 removes anyway. pigo reads Pi's names, such as `ANTHROPIC_API_KEY`.
+7. **Thinking-level map** (`llm/catalog`):
+
+   | pigo level | Effort sent | Note |
+   |---|---|---|
+   | `off` | no `Reasoning` | |
+   | `minimal` | `low` | recorded as a degradation |
+   | `low`, `medium`, `high`, `xhigh` | the same value | |
+   | `max` | `xhigh` | recorded as a degradation |
+
+   Budgets are sent only where the SDK honours them.
+8. **Provider-id map.**
+   * `llm/catalog` owns a Pi↔SDK id table: `anthropic`→`claude`, `google`→`gemini`, `xai`→`grok`, and `openai-codex`/`openai-chatgpt`→`openai` with the subscription credential.
+   * `models.json`, `config import --from-pi` and the bridge use it.
+   * An unmapped Pi provider fails closed with a clear error.
+9. **Token store.**
+   * `internal/auth` implements `TokenStore` **and** `RefreshLocker`, with a file lock in the state directory. The TUI, `pigo acp` children and the CLI share credentials, and a refresh token spent twice revokes the whole token family.
+   * The import path follows S8c (`llmprovider/auth`). Archtest rule 4 is unaffected.
+10. **Tool schemas.** `llm/provider` sanitizes tool JSON Schema for the Gemini wire, as Pi does. This is an inference from Pi's behaviour, not a probed Gemini rejection. The PLAN records a live probe before relying on it.
+
+#### acp-go-sdk fork: overflow policy (corrects the 2026-09-30 recommendation)
+
+* The fork's facts:
+  * It adds `ConnectionOption`, `WithMaxQueuedNotifications`, `WithNotificationOverflowPolicy`, `WithNotificationDropHandler` and `DroppedNotifications`, in 5 files (+570/−8).
+  * Its generated code and `extensions.go` are byte-identical to v0.13.5.
+  * The policy governs **inbound** notifications only, and defaults to `OverflowCloseConnection`.
+* pigo carries the `replace`, because pigo's in-process clients need the option API.
+* `acpserver` uses the default policy. Its inbound notifications are `session/cancel`, and dropping one would lose a cancel.
+* `acpclient` sets `OverflowDropNewest` with a drop handler that surfaces a notice. That client serves the CLI, the TUI, `task` subagents and `acptest`.
+* The exit plan stays magic-cli-remote `0167-MADR-the-acp-sdk-is-dormant-and-its-bounded-queue-is-an-availability-defect.md`.
+
+#### go-core-lib: facts as of `v1.2.0`
+
+* **Tags.** `v1.2.0` = `cfc95c883220b013c21705e1ebe3a268bdd63b56`, tagged 2026-10-01 10:24 -0500. It is additive:
+  * `RunWith` and `Start`/`Stream` (a non-blocking interaction stream suited to the TUI);
+  * `WithCredentials`.
+
+  The publish workflow is byte-identical to `v1.1.0`. `v1.1.0` remains valid.
+* **Prerelease channels are planned for `v1.3.0`.** The accepted MADR is go-core-lib `0005-MADR-opt-in-prerelease-channels.md`; Step 2 is uncommitted.
+* **Only `selfupdate` and `selfupdate/selfupdatetest` exist.** go-core-lib's 0004-MADR plans `buildinfo`, `selfupdate/cli` and `selfupdate.UserAgent`.
+* **The pin rule.**
+  * At 0005-PLAN F10, re-resolve to the newest `v1.x` tag.
+  * The `go.mod` require and the workflow `uses:` line carry the **same** tag's peeled SHA.
+  * "Current release `v1.1.0`" in the Context is that day's fact.
+* **`internal/buildinfo` follows go-core-lib's planned rule.** A build is `ReleaseBuild` only when it is stamped `buildKind=release` **and** its version is a strict `vX.Y.Z`. The `debug.ReadBuildInfo` fallback is display-only. A `go install …@vX` build is therefore a local build: `pigo update` needs `--force` to replace it, and `--check` reports it as replaceable.
+* **Archtest rule 8, refined.** Only `internal/cli` imports `github.com/maccavelli/go-core-lib` in non-test code. `_test.go` files in any package may import `selfupdate/selfupdatetest`.
+* **Supply chain.**
+  * The reusable workflow attests `staging/*` and waits for an immutable release.
+  * It does **not** generate or attest an SBOM.
+  * The client verifies `SHA256SUMS` and GitHub digests, not signatures or attestations.
+  * The standards table row "SPDX SBOM" is pigo's own job: 0004-PLAN Phase 4 names and pins the generator. The SBOM is an extra asset and is **not** listed in `SHA256SUMS`, because the verifier requires that file to list exactly the binaries.
+
+#### Corrections to wording
+
+* **go-llmprovider-sdk is the fleet's in-house SDK, not an official vendor SDK.** The README's "official SDK at each protocol boundary" applies to ACP and MCP.
+* **magic-cli-remote `0169-MADR-standardize-toolchains-on-current-supported-advisory-free-releases.md` is `proposed`.** "Fleet MADR 0169 policy" reads "magic-cli-remote 0169 (proposed)".
+* **`models.json` is JSONC in Pi.** `internal/config` strips comments before `encoding/json/v2` decodes it. `settings.json` and `mcp.json` stay strict JSON.

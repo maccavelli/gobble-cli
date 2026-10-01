@@ -358,3 +358,40 @@ directed Apache-2.0 for this repository, `go-llmprovider-sdk`, and
 `LICENSE` (fleet copy) and `NOTICE` are added in this change, so
 Phase 0 step 8 is struck. `go-llmprovider-sdk` is licensed by that
 repository's `0018-MADR-apache-2-license.md`; `NOTICE` names it.
+
+**2026-10-01 — shared libraries measured in code (MADR second amendment of this date).** No new phases. Changes to existing phases:
+
+* **Phase 0, step 3.**
+  * The `replace` stays.
+  * Add to the step: `acpserver` constructs `AgentSideConnection` with the default overflow policy; `acpclient` passes `WithNotificationOverflowPolicy(OverflowDropNewest)` and a drop handler.
+* **Phase 0, step 4.** The pins to record change:
+  * go-core-lib `v1.2.0` (`cfc95c883220b013c21705e1ebe3a268bdd63b56`) is the newest tag. F10 re-resolves to the newest `v1.x` and uses the same peeled SHA in `go.mod` and in the workflow `uses:`.
+  * go-llmprovider-sdk: development pin `940fee0`. No pigo tag ships on a pseudo-version (MADR decision 1).
+* **Phase 1, step 2.** The `llm` contract takes the wider shape from MADR decision 2:
+  * the `ToolCallStart` and `ToolCallDelta` events, and `Done{StopReason}`;
+  * `Usage` with cache read/write and `Estimated`;
+  * image `Content`;
+  * opaque `ProviderData`;
+  * the four extra sentinels.
+
+  The mapping comment in `llm/doc.go` also records:
+  * the error-mapping order;
+  * the `*RateLimitError` / `*IncompleteError` handling until S8;
+  * the thinking-level map.
+* **Phase 1, step 3.** In archtest rule 8, `_test.go` files may import `selfupdate/selfupdatetest`. The rule's table test proves that the exemption does not leak to non-test files: it is shown failing on a scratch file that imports it outside a test.
+* **Phase 2, step 2.** `internal/buildinfo` follows MADR "`internal/buildinfo` follows go-core-lib's planned rule": `ReleaseBuild` only for `buildKind=release` plus a strict tag. The date stamp is the commit time (`SOURCE_DATE_EPOCH`), not the wall clock, so builds are reproducible.
+* **Phase 2, step 6.** The exit-code table adds `10` for "update available" (`pigo update --check` only). Every other selfupdate error maps to `1`, except two:
+  * contradictory update flags are `2` (usage);
+  * a cancelled update is `4`, or `130` on SIGINT.
+* **Phase 4.** Read the original steps with these additions.
+  * **Precondition, recorded with evidence before the first tag** (an owner action, not this plan's): on `maccavelli/pi-go`,
+    * "immutable releases" is enabled;
+    * a tag ruleset restricts `v*` to the owner, with 2FA.
+
+    Without immutable releases the reusable workflow publishes, waits 120 s, fails, and leaves a mutable release that every client refuses (`ErrMutableRelease`).
+  * **The calling job declares `permissions: {contents: write, id-token: write, attestations: write}`**, which the snippet in step 2 omitted.
+  * **The SBOM generator is named, and pinned by version and checksum, in this PLAN before step 2 lands.** `pigo.spdx.json` is an extra asset. It is **not** in `SHA256SUMS`. Optionally it is attested with `actions/attest-sbom`.
+  * **Tags.** The build job runs on strict `vX.Y.Z` tags only, with no release-candidate tags until go-core-lib `v1.3.0` channels are adopted by a later amendment. `make verify-build-metadata` asserts `buildKind=release` on tag builds, and is shown failing on a scratch build stamped `local`.
+  * **`make release-dry-run` runs go-core-lib's `scripts/verify-selfupdate-release.sh`** fetched at the pinned SHA, instead of an inlined copy of the name rule. The planted-archive accept stays.
+  * **Actions in pigo's own workflows are pinned by commit SHA**, as go-core-lib's are.
+  * **Users verify releases** with `gh release verify` and `gh attestation verify`. `docs/guides/developing.md` (Phase 5) documents the commands.

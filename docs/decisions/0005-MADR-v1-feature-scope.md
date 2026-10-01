@@ -507,3 +507,145 @@ Retry classification stays typed errors. Background jobs (`/ps`,
 Subagent progress stays `tool_call_update` on the parent session:
 acpagent drops child-session ids on the same ACP connection
 (magic-cli-remote MADR 0051 D6).
+
+### Amendment (2026-10-01, second): cross-repository assessment against code
+
+Still `proposed`. Evidence was read in code:
+
+* Pi at `312184edb` (paths under `packages/`);
+* go-llmprovider-sdk at `940fee0`;
+* go-core-lib at `v1.2.0`;
+* magic-cli-remote at `772c041e`.
+
+The tier model and the honest-advertisement rule are unchanged. Rows below either correct a fact or change a row's tier or behaviour. Each change is marked **(changed)**.
+
+#### Pi facts corrected
+
+| Row | Was | Pi's code says |
+|---|---|---|
+| Retry | "Honours `Retry-After`" as Pi behaviour | Pi's agent-level retry (`coding-agent/src/core/agent-session.ts:3664-3700`) is pure exponential back-off. Only `ai/src/utils/provider-retry.ts:23-63` reads `retry-after`, and it fails fast over 60 s. pigo honours `Retry-After` by design, not for parity. The schedule (3 retries, 2 s base, 60 s cap) is Pi's. |
+| Auto-compaction | Summary sections "Goal, Constraints, Progress, Decisions, Next Steps, Critical Context" | Goal; Constraints & Preferences; Progress (Done / In Progress / Blocked); Key Decisions; Next Steps; Critical Context; then `<read-files>` and `<modified-files>` blocks. Branch summaries stop after Next Steps (`coding-agent/docs/compaction.md:236-273`). Tool results are cut to 2000 characters when serialised for the summary. |
+| Context files | `AGENTS.override.md`, `AGENTS.md`, `CLAUDE.md` | Also `AGENTS.MD` and `CLAUDE.MD` (`core/resource-loader.ts:185`). |
+| Sectioned system prompt | `preamble`, `tools`, `rules`, `project_context`, `skills`, `cwd`, custom | Also `docs` and `addendum`. `APPEND_SYSTEM.md` goes into `addendum`. Names match `^[a-z][a-z0-9_-]*$` (`core/system-prompt.ts:144-172`). |
+| Prompt templates | the grammar list | Also `${@:-default}`. A template without `description` uses its first non-empty line. |
+| Exposure modes | Pi values `codemode`, `codemode-deferred` | Pi's tool exposure set is `direct, model-only, codemode, deferred, hidden` (`core/extensions/types.ts:509`). Pi's **default MCP exposure is `codemode`** (`extensions/mcp/config.ts:109`), with a top-level `autoEnableCodemode`. **(changed)** pigo accepts `model-only` as `direct`. A bridged Pi server with no `exposure` key is `deferred` in pigo, and pigo then activates `tool_search` automatically (Pi warns instead). |
+| `grep`, `find` | (Pi implementation not stated) | Pi spawns ripgrep (`rg --json --hidden`) and fd (`--glob --hidden --no-require-git`), auto-downloaded into `<agent>/bin` (`utils/tools-manager.ts:22-60`). pigo stays pure Go. Two differences are documented and tested: Pi's patterns are Rust-regex syntax and pigo's are RE2; and "skips `node_modules`" holds in Pi only through `.gitignore`. 0001-REPORT F12 ("application code plus `ignore`/`minimatch`") is wrong. |
+| Default active tools | not stated | Pi activates `read, bash, edit, write`; grep, find and ls are off (`settings-manager.ts:213`; `cli/args.ts:455-457`), because they need the rg/fd download. **(changed)** pigo activates `read, bash, edit, write, grep, find, ls`, which are pure Go and need no download. `tool_search` is active when any tool is deferred. `defaultTools` patches apply as in Pi. |
+| `task` frontmatter | `name, description, model, thinking, tools, mode` | Pi's example reads `name, description, tools, model`, has single / parallel / chain modes (at most 8 tasks, concurrency 4), and spawns `pi --mode json -p --no-session`. `thinking`, `mode` and the depth limit are pigo additions. |
+| Provider server tools | presented beside Pi features | Pi's `Tool` type is function-only. This row is a pigo invention, and stays 1.x behind SDK support. |
+| Context paragraph | "Its docs say so" (permission prompts, background jobs, undo) | Pi's docs state only the permission point (`coding-agent/README.md:42`, `docs/security.md:3`). The other two are true in code. |
+| Model catalog | "Pi's generated catalog under MIT" (0005-PLAN F4.6) | `ai/src/providers/data/` is gitignored and absent at `312184edb`. It is generated from models.dev and OpenRouter. The snapshot's provenance is those sources, whose terms F4.6 must check. It is not Pi's MIT tree. |
+| Subscription OAuth | (Pi flows not listed) | Pi has 9 flows (`ai/src/auth/oauth/load.ts:14-24`): Anthropic, OpenAI ChatGPT, OpenAI Codex, GitHub Copilot, OpenRouter, Kimi, Meta, xAI, Radius. Pi's Anthropic OAuth presents as Claude Code. That is the "terms" problem the row names. |
+| Out list | "the Radius share gateway" | Radius is a model-routing **gateway provider** (the `pi-messages` API with OAuth). It also does share, `/bug` upload and an experimental session relay. All of it stays out. |
+| TUI-only commands | includes `/theme`, `/editor` | Neither is a Pi command: Pi picks themes in `/settings` and opens the editor with Ctrl+G. They stay as pigo TUI commands. Pi's `/scoped-models` is added at **1.x (TUI)**. |
+| Package count (0001-REPORT) | "fourteen packages plus a SQLite session backend" | 13 packages plus `session-backends/sqlite-node`. That backend serves harness format 4, which the shipping v3 `SessionManager` cannot use. |
+
+Further 0001-REPORT errata are kept here rather than in the report, which records 2026-09-29's observation:
+
+* F8's OAuth list: there is no Google OAuth.
+* F8's wire-API list omits `azure-openai-responses`.
+* F5's native clipboard: file paths are darwin-only; modifier state is darwin and win32 only.
+* F7 "Node SEA": no build script was found; unverified.
+* F12's built-in extensions are four: `llama.cpp`, `codemode`, `tool-search`, `mcp`.
+* The `Settings` interface has no keybindings or MCP keys; those are separate files.
+
+#### Sessions **(changed)**
+
+* **Malformed lines are skipped with a diagnostic**, as in Pi (`session-manager.ts:355-370`). They do not fail the load.
+  * A file whose header is unreadable fails closed with an ACP error.
+  * pigo never rewrites a file on load.
+  * 0005-PLAN F2's "corrupt line fails closed" accept is replaced.
+* **The leaf is the last entry in file order**, as in Pi. "Leaf pointer" in F2 means the in-memory index. Moving the leaf becomes durable when the next entry is appended with that `parentId`.
+* **Session files are created lazily**, at the first user or assistant message, as in Pi. `session/new` returns an id at once. `session/list` lists only sessions with a file, plus the live ones in this process.
+* **Golden fixtures come from real Pi output.** `docs/session-format.md`'s samples are not valid JSON (`"usage":{...}`; ids such as `d4e5f6g7` are not hex).
+
+#### Providers and models (from go-llmprovider-sdk `940fee0`) **(changed)**
+
+* **The named SDK providers are all 1.0 now.** `opencode-zen`, `opencode-go`, `huggingface`, `kilo`, `together` and `ollama` implement `llmprovider.Provider`. "On 2026-09-30 those five still use the old `Generate*` API" was that day's fact. It was six ids in five packages.
+* **Subscription OAuth.**
+  * ChatGPT/Codex stays 1.0.
+  * xAI Grok OAuth (browser and device) and Kilo device login exist in the SDK. They are **1.0 candidates**, each landing with a recorded terms check.
+  * Anthropic Max, Gemini and GitHub Copilot subscription logins are **out of the v1 line**. The SDK declines them by policy (its 0016-MADR D10), and pigo adds no vendor auth code of its own.
+* **Thinking levels.** The SDK accepts efforts `low…xhigh` only. pigo's `minimal` and `max` map as 0004-MADR's map states, and `/thinking` reports the degradation.
+* **Images.**
+  * `read` returns image content only when the model accepts images **and** the SDK can send them.
+  * Today the SDK cannot, so `read` always takes the text-note path.
+  * ACP `promptCapabilities.image` is `false` until SDK image input lands.
+* **Usage and cost are estimated until the SDK decodes usage** (its S9). The usage ledger, `/usage`, `usage_update`, the footer and auto-compaction use the estimate, labelled as such.
+* **Prompt-cache warming stays 1.x, and is blocked.**
+  * The SDK sends no cache hints, and has one cached-token counter with no read/write split.
+  * The row lands only once the SDK supports Claude `cache_control` and the split.
+  * Pi's modes `off | streaming | idle` (default `streaming`, global-only setting) are the target behaviour.
+* **`pigo doctor` and `pigo models list` never trigger billed model probes** (`WithModelProbes(false)`).
+
+#### Self-update and distribution (from go-core-lib `v1.2.0`) **(changed)**
+
+* **Surface.**
+  * The command is `pigo update [--check] [--yes|-y] [--force] [--dry-run] [--json] [--version vX.Y.Z]`, which is the surface go-core-lib's 0004-MADR plans for `selfupdate/cli`.
+  * These flags are local to `update`. The global `--yes` (permissions) never reaches `Request.Yes`.
+  * `--json` writes `Result.Document()` to stdout; reporter text goes to stderr.
+* **Paths through the library.**
+  * `--check` uses `Checker.Check`, so it resolves no target and takes no lock.
+  * Apply uses `RunWith`, with `NewVersionProber` on `pigo version --json` for the staged and post-install probes, and `NewImageVerifier`.
+  * The TUI uses `Start` / `Stream`.
+* **Pin.** The newest `v1.x` at F10, not "v1.1.0 current".
+* **Install locations.**
+  * selfupdate replaces only a regular, non-symlinked file under the home directory or an explicit allowed root, and it needs write access to that directory.
+  * A Homebrew-managed binary (a symlink) is detected, and `pigo update` prints `brew upgrade pigo` instead.
+  * On Windows, a known go-core-lib defect makes later updates fail with "Access is denied" while an old `pigo.exe` (for example a long-lived `pigo acp`) still runs (go-core-lib `0004-PLAN-h4-running-copy-end-to-end.md`). `pigo update` explains this, and `CleanupPending` at start-up treats it as benign.
+* **No phone-home is kept.**
+  * Update checks happen only on explicit `pigo update` or `pigo doctor`.
+  * `pigo acp`, print mode and the TUI never check on their own.
+  * `GH_TOKEN` / `GITHUB_TOKEN` are used when set, and a stale token fails with 401. Both behaviours are documented.
+* **Agent self-modification.**
+  * The default permission rule asks for `bash(pigo update*)`.
+  * `pigo update` refuses to apply when `AI_AGENT=pigo` is set, that is, when it runs inside pigo's own tool. `--check` is still allowed.
+* **Release assets.**
+  * The SPDX SBOM is generated by pigo's workflow. It is not in `SHA256SUMS`.
+  * Release candidates are not tagged until go-core-lib `v1.3.0` channels are adopted.
+
+#### Driven by mcremote (magic-cli-remote `0179-MADR-pigo-native-acp-provider.md`) **(changed)**
+
+| Capability | Tier | Behaviour |
+|---|---|---|
+| Commands before the first prompt | 1.0 | `session/new` and `session/load` send `available_commands_update`, `current_mode_update` and a first `usage_update` before they return (0002 fifth amendment). |
+| Prompt while busy | 1.0 | A `session/prompt` that arrives while a turn runs is queued as a follow-up (Pi's default `one-at-a-time`). With `_meta.pigo.streamingBehavior = "steer"` it is a steer. Each request is answered when its own turn ends, after retries, overflow compaction and the follow-ups it queued, which is Pi's `agent_settled`, not `agent_end`. |
+| Ask the user | 1.x | An `ask_user{question, options[]}` tool over `session/request_permission` with custom options, which is the only question path mcremote relays. Free-text answers need ACP elicitation (unstable): **exp**. Pi has this only as an example (`examples/extensions/question.ts`). |
+| Plan visible on the phone | 1.0 | Leaving plan mode also publishes the plan as an ACP `plan` update. mcremote cuts permission-card text to 400 runes until 0179 D5. |
+| Status notifications | 1.x | `_pigo/status{kind: retry\|compaction\|cache_warm, …}`, modelled on Pi's `auto_retry_*` and `compaction_*` events. mcremote shows them once its Spec subscribes. |
+| Readiness probe | 1.0 | `pigo auth check [--json]`, exit 0 (ready) / 1 (no credential) / 2 (error), as Pi does. `pigo doctor --json` is already 1.0. |
+| Quiet, offline start | 1.0 | `pigo acp` makes no network call before `session/new`. `--offline` / `PIGO_OFFLINE=1` also disables catalog refresh and `web_fetch`. |
+| Client terminal default | 1.0 | `tools.bash.useClientTerminal` defaults to `false`, because the phone shows only `"terminal <id>"`. |
+| `/deep-research` alias | 1.x | Advertised with the skill. mcremote's command-name rule rejects `/skill:…`. |
+| `bypass` on the phone | 1.0 | `permissions.allowBypass` defaults to `false`. mcremote marks `bypass` dangerous only after 0179 D7. |
+
+The companion table in this record stays the **target**. magic-cli-remote 0179 D9 is the form it takes there. The `KindNative` rows for `fork`, `undo`, `redo`, `diff`, `compact` and `thinking` are safe only once 0179 D3 (strict fallback) has landed. Until then the default-fallback hazard (0002 fifth amendment) applies. The count "19 of 30 at full 1.x" holds under 0179.
+
+#### CLI flags **(changed)**
+
+* **Flags at 1.0, matching Pi's meaning:**
+  * `--provider`, `--system-prompt`, `--append-system-prompt`;
+  * `--no-session`, `--session <path|id>`, `--session-dir`;
+  * `--no-tools`, `--exclude-tools`, `--offline`;
+  * `@file` arguments.
+* **Flags at 1.x:**
+  * `--models` (scoped models), `--skill`, `--prompt-template`, `--no-prompt-templates`;
+  * `-n/--name`, `--session-id <id>` (a caller-chosen id, which suits a daemon), `--verbose`.
+* `--resume` with no id opens the session picker in the TUI.
+* `--list-models` is an alias of `pigo models list`.
+* **`--mode` stays pigo's ACP mode id.** Pi's `--mode text|json|rpc` maps to `--output-format text`, `--output-format stream-json` and `pigo rpc`. Pi's `--mode json` event vocabulary (`docs/json.md`) is **out**, because pigo's stream is ACP's.
+* **Print mode is selected when a prompt is given and stdin or stdout is not a terminal**, as in Pi (`docs/cli.md:30`). The exit status is 1 on error or abort, 129 on SIGHUP, and 143 on SIGTERM (`modes/print-mode.ts:60,147`).
+
+#### Bridge
+
+The Pi bridge's additions (relocated installs, packages, JSONC `models.json`, tolerant session reads) are in 0003-MADR's amendment of this date.
+
+**Skill discovery order (changed)**, aligned with Pi's precedence, which is project before user:
+
+1. `.pigo/skills`;
+2. project `.agents/skills`, from `cwd` up to the repo root (trusted);
+3. config `skills/`;
+4. `~/.agents/skills`;
+5. the Pi bridge.
+
+Under first-wins, a name collision now resolves the way Pi resolves it (`core/package-manager.ts:2477-2560`).

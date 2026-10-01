@@ -372,3 +372,23 @@ amendment of the associated MADR. Companion checklist expands from a
 Compact hook to Spec-parameterized ops, `ConfigureSession` for model,
 `session_info_update` → title, and live probes that include
 MethodNotFound for `session/set_model`. No new phases in this tree.
+
+**2026-10-01 — cross-repository assessment (MADR fifth amendment).** No new phases. Changes to existing phases:
+
+* **Phase 0.** Superseded by 0004-PLAN, as before. The ACP `replace` stays. The agent side keeps the SDK's default overflow policy. `acpclient` sets `OverflowDropNewest` with a drop handler (0004-MADR amendment of this date).
+* **Phase 1.**
+  * `Initialize` always sends `agentInfo {name:"pigo", title:"pigo", version}`.
+  * `promptCapabilities.image` stays `false` until go-llmprovider-sdk carries image input (0004-MADR amendment of this date). `audio` is `false`.
+* **Phase 3.**
+  * The facade's `Usage` event is produced by the adapter. Until the SDK decodes usage (its 0015-PLAN S9), the adapter estimates tokens and marks the event `estimated`.
+  * The Phase 3 `usage_update` accept still holds. `size` comes from pigo's catalog.
+  * Step 1's pin follows 0004-MADR's amendment: develop against a recorded commit, and ship no tag on a pseudo-version.
+* **Phase 4.**
+  * Advertise `sessionCapabilities.list` and `close`.
+  * Persist `model_change` and `thinking_level_change` entries, and restore model and thinking on `session/load`. Accept: a load in a fresh process continues with the saved model, with no `set_config_option` call.
+* **Phase 6.**
+  * `NewSession` and `LoadSession` send `available_commands_update`, `current_mode_update` and a first `usage_update` **before** returning. Accept: a frame-order test, shown failing on a copy that sends the update after the response.
+  * The advertised set includes `/deep-research` once the skill exists (0005 X1).
+  * Unknown `_` methods return -32601.
+* **Verification.** The stdio script follows the corrected list in the MADR's fifth amendment (Confirmation changes).
+* **Companion work.** The checklist above is replaced by magic-cli-remote `docs/decisions/0179-MADR-pigo-native-acp-provider.md` D1–D10. This plan still does not mutate that repository.

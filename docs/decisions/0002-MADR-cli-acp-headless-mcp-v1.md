@@ -933,3 +933,86 @@ execute) is the same rule as ACP `available_commands_update`.
   produce a `fs/write_text_file` frame.
 * Companion `IDPi` work remains a magic-cli-remote MADR/PLAN pair. This
   record is the contract that pair must match.
+
+### Amendment (2026-10-01, fifth): cross-repository assessment against code
+
+Still `proposed`. The owner directed a cross-reference of every source:
+
+* magic-cli-remote at `64282e29` / `772c041e`;
+* the acp-go-sdk fork at tag `v0.13.6-mcr.1`;
+* go-llmprovider-sdk at `940fee0`;
+* go-core-lib at `v1.2.0` / `11c1c93`;
+* Pi at `312184edb`.
+
+All evidence was read in code, not in earlier records. These three are unchanged:
+
+* ACP as the command API;
+* the Cobra-is-an-ACP-client rule;
+* the honest-advertisement rule.
+
+The magic-cli-remote half of the contract is now a record in that repository: magic-cli-remote `docs/decisions/0179-MADR-pigo-native-acp-provider.md` (`proposed`). It **supersedes** the "Companion Spec" sections of this record as the contract there. The companion table below is replaced by that record's D9, and the companion checklist by its D1–D10. That record names the provider `provider.IDPigo`, with wire id `"pigo"`. Read `IDPi` in this record as that name.
+
+#### Corrections to facts this record asserted
+
+1. **`usage_update` is not standard ACP.** Schema 0.13.5 marks `UsageUpdate` **UNSTABLE** (acp-go-sdk `types_gen.go:9201-9206`). pigo still emits it: mcremote stores it, and `OpContext` depends on it. The Confirmation's "standard ACP `usage_update`" reads "the schema's unstable `usage_update`". Clients that do not know it ignore it.
+2. **Fourth amendment, "Events mcremote already maps", item 4, is partly false.** Today `acpagent` does the following:
+   * drops `session_info_update` (`session.go:1784`, the default branch);
+   * drops `usage_update.cost` (`:1757-1764`);
+   * ignores tool-call `locations`;
+   * reduces a `diff` to the text `"diff <path>"` (`:2556-2586`);
+   * forwards config options without their category (`:1940-1991`).
+
+   The "Further adapter facts" paragraph already said this for `session_info_update`; item 4 contradicted it. pigo emits all of them anyway. magic-cli-remote 0179 D5 maps them.
+3. **ACP `fs/*` on mcremote is disk I/O, not editor buffers.** mcremote answers `fs/read_text_file` and `fs/write_text_file` with `os.ReadFile` / `os.WriteFile` (mode 0644, optional `fs_roots`, an audit event per call; `session.go:2309-2382`). The "editor buffers" benefit holds for Zed-class clients only. Routing through the client is still right: every write becomes visible on the phone as a tool event.
+4. **`terminal/*` output is invisible on the phone.** The phone sees only `"terminal <id>"`. pigo's default for `tools.bash.useClientTerminal` is therefore **off**. Under mcremote the in-process `bash` tool streams its output as `tool_call_update` content, which the phone renders.
+5. **Codex's daemon transport is stdio by default** (`app-server --listen stdio://`, magic-cli-remote `internal/config/config.go:838`). In the fourth amendment's provider table, read "Codex app-server JSON-RPC (stdio by default; WebSocket, Unix socket or managed proxy optional)".
+6. **`DefaultArgs` is a function**, `func(cfg Config) []string` (`acpagent.go:51`). The sketch reads `func(acpagent.Config) []string { return []string{"acp"} }`.
+7. **`ConfigureSession` runs after `session/new` only, not after `session/load`** (`acpagent.go:57-60,878-892`). Resumed and forked sessions get their model only once 0179 D6 lands. Until then pigo **persists** the session's model and thinking level in the JSONL tree (`model_change`, `thinking_level_change`) and restores them on `session/load`. That is Pi's behaviour, and it makes load correct without the daemon's help.
+8. **The model picker reads grok `_meta` or `Spec.ListModels`, never `configOptions`** (`acpagent.go:310-401`). pigo's models appear on the phone only through 0179 D6. pigo publishes them as the `options` of its `model` config option, which is exactly what D6 reads.
+9. **The fork `replace` is not "required" on the agent side.** The fork's overflow policy governs a connection's *inbound* notification queue, and it applies only when passed as an option. On the agent side, the inbound notifications are `session/cancel`. Dropping one would lose a cancel (fork `connection.go:136-151`). The decision, recorded in 0004-MADR's amendment of this date:
+   * pigo carries the `replace`, because its API adds the options;
+   * the agent-side `AgentSideConnection` keeps the default `OverflowCloseConnection`;
+   * pigo's in-process clients (`acpclient`, used by the CLI, the TUI and `task`) set `OverflowDropNewest` with a drop handler that surfaces a notice, as mcremote does.
+10. **The magic-cli-remote record numbers are cited by full filename from now on.** magic-cli-remote `0175-MADR-conform-docs-tree-to-adopted-record-layout.md` moved its records into `docs/decisions/`. Citations: MADR 0023 is `0023-MADR-canonical-slash-commands.md`, 0137 is `0137-MADR-prompt-to-first-token-latency-regression.md`, 0167 is `0167-MADR-the-acp-sdk-is-dormant-and-its-bounded-queue-is-an-availability-defect.md`, 0068 is `0068-MADR-protocol-v2-reconnect-resilient-transport.md`, and 0051 is `0051-MADR-auto-approve-chat-noise.md`. magic-cli-remote 0169 is `status: proposed` there, so it is not "fleet policy".
+
+#### New finding that changes the companion plan: default fallback
+
+magic-cli-remote `command.Resolve` (`internal/command/command.go:235-263`) falls through to the vocabulary default whenever a declared mapping is unavailable. A `KindNative` row is unavailable until the agent advertises that name. `KindOp` availability is a static Go type assertion on `*acpagent.session` (`internal/session/commands.go:62-88`), and that session implements `CompactSession`, `ThinkingSession`, `UndoSession`, `ForkSession`, `RenameSession`, `ModelSession` and `RuntimeSession` with grok vendor bodies.
+
+So the plan in this record ("`KindNative` until Spec hooks exist") is **unsafe on its own**. In the window before pigo's first `available_commands_update`, `/compact` resolves to `_x.ai/compact_conversation`, `/thinking` to raw `session/set_model`, and `/undo` to `_x.ai/rewind/*`. The phone's Fork and Rename menus call `_x.ai/session/fork` and `x.ai/session/rename` directly.
+
+The fix is in magic-cli-remote 0179:
+
+* D1 makes session ops Spec fields;
+* D2 reports capability from the Spec;
+* D3 adds strict fallback;
+* D4 makes the phone menus follow the resolution.
+
+pigo's part:
+
+* `NewSession` and `LoadSession` send `available_commands_update` **before** they return their response. They then send `current_mode_update` and a first `usage_update` (`used` = the size of the system prompt plus history, `size` = the model window), so `/context` resolves at once. The SDK lets the agent send `session/update` during the request. acpagent keeps a frame that arrives before `session/new` returns, because its child-session filter compares against an empty live id at that point (magic-cli-remote `internal/provider/acpagent/session.go:1622-1627`).
+* An unknown `_`-prefixed method gets JSON-RPC -32601. mcremote maps that to "not implemented" rather than a raw error.
+
+#### Further contract facts (verified in magic-cli-remote)
+
+* **mcremote sends no `clientInfo`**, so pigo cannot detect mcremote. pigo's behaviour under mcremote is selected by capabilities alone, never by client name.
+* **`!cmd` never reaches pigo from the phone**: the daemon intercepts a leading `!` unless the session implements `ExecutionSession` (`manager.go:915-964`). pigo still handles `!cmd` for Cobra, the TUI and editors.
+* **`/skill:<name>` and `/mcp:<server>:<prompt>` reach pigo as plain prompt text.** Their names fail mcremote's `isCommandName` (`commands.go:345-358`), so they never appear in `remote_commands`. They execute, because pigo's router runs on all prompt text. For the canonical `deep-research`, pigo also advertises a `/deep-research` alias.
+* **mcremote sends only text, image and audio blocks**, never `resource_link`. pigo parses `@path` in prompt text as well as accepting resource blocks. pigo sets `promptCapabilities.audio` to `false`.
+* **A prompt sent while a turn is running is queued by the daemon** (a FIFO of 4). It is not sent as a steer. pigo defines `session/prompt`-while-busy in 0005's amendment of this date.
+* **The `bypass` mode gets no confirmation gate on the phone** until 0179 D7 (`DangerousModeIDs`).
+* **One pigo process runs per session**, plus an optional warm spare, with a 30 s start budget. `pigo acp` start-up does nothing slow before answering `initialize`:
+  * no update check;
+  * no catalog refresh;
+  * no MCP connect (MCP servers connect on `session/new`, inside the 10 s wait).
+* **The daemon's environment is inherited**, with no per-provider env. pigo resolves credentials from its own store (`internal/auth`), so a service-launched `pigo acp` works without API keys in the service environment.
+* **`agentInfo.version` is read for `KnownGoodVersion`.** pigo always sends it.
+* **mcremote calls these methods when they are advertised:** `session/list` (`sessionCapabilities.list`), `session/load` (`loadSession`) and unstable `session/delete`. pigo advertises `sessionCapabilities.list` and `close` from Phase 4. It does not advertise unstable `delete` (0005 keeps that under `acp.unstable`).
+
+#### Confirmation changes
+
+* The script in "Confirmation added by this amendment" (fourth) covers the methods acpagent actually sends: `initialize`, `authenticate` (when configured), `session/new`, `session/load`, `session/prompt` (including `/compact`), `session/cancel`, `session/set_mode`, `session/set_config_option` (with `configId`), `session/list` and `session/close`. It then asserts two failures:
+  * `session/set_model` gets MethodNotFound;
+  * an unknown `_x.ai/compact_conversation` gets -32601.
+* "`session/set_config_option` category `model`" reads: the request carries the `configId` of the option whose declared category is `model`. Category is a property of the option declaration, not of the request.
+* A test asserts that `available_commands_update` precedes the `session/new` response on the wire. It is shown failing on a copy that sends it after the response.

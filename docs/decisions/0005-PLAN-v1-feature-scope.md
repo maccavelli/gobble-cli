@@ -523,3 +523,74 @@ None. This plan is proposed and has not been approved.
 follows 0002-MADR's fourth amendment (Spec-parameterized ops, title
 mapping). X3 subagents stay `tool_call_update` on the parent: acpagent
 drops child-session ids. No new phases.
+
+**2026-10-01 — cross-repository assessment (MADR second amendment of this date).** No new phases. Changes to existing phases:
+
+* **F1.**
+  * Default active tools are `read, bash, edit, write, grep, find, ls`.
+  * Image content goes to the model only when the SDK can send images; until then the text-note path is always used.
+  * Add fixtures for the documented RE2-versus-ripgrep differences.
+* **F2.** Replace "A corrupt line fails closed with an ACP error" with three accepts:
+  * a malformed line is skipped with a diagnostic;
+  * an unreadable header fails closed;
+  * a truncated last line, written as Pi writes it, loads every complete entry.
+
+  Further changes:
+  * "Leaf pointer" is the in-memory index; the leaf is the last entry in file order.
+  * Files are created lazily.
+  * The golden fixtures are captured from real Pi output at `312184edb`, not copied from `docs/session-format.md`.
+  * `model_change` and `thinking_level_change` are restored on load.
+* **F3.**
+  * Add the context-file candidates `AGENTS.MD` and `CLAUDE.MD`.
+  * Add the `docs` and `addendum` sections, with `APPEND_SYSTEM.md` going into `addendum`.
+  * Add `${@:-default}`, and the first-line description fallback.
+  * Use the MADR's new skill discovery order.
+* **F4.**
+  1. **SDK pin.** Start from the development pin `940fee0`. Record each SDK commit built against. No pigo tag ships on a pseudo-version.
+  2. **Day-one ids.** All 10 SDK ids are 1.0 on day one (step 2's "four, then the rest as S7 lands" is done).
+  3. **Configuration.** The adapter sets:
+     * `WithModelProbes(false)`;
+     * `MaxOutputTokens` per model;
+     * one provider per ACP session (`WithSessionID`);
+     * its own `*http.Client`;
+     * credentials passed explicitly, reading `ANTHROPIC_API_KEY`.
+  4. **Error mapping.** Follow the MADR's mapping order. Handle `*RateLimitError` and `*IncompleteError` until S8.
+  5. **Usage.** A token estimator marks `Usage.Estimated`.
+  6. **Reference tables** in `llm/catalog`: the thinking-level map and the Pi↔SDK provider-id map.
+  7. **Token store.** `internal/auth` implements `RefreshLocker`.
+  8. **Catalog provenance.** Step 6 records the catalog snapshot's provenance as models.dev and/or OpenRouter, with their terms checked. It is not Pi's MIT tree.
+  9. **Accept changes.**
+     * Add a 429 case that arrives as `*RateLimitError`; it round-trips to `llm.ErrRateLimited` plus `RetryAfter`.
+     * Add a quota case: `ErrQuotaExhausted` maps to `llm.ErrQuota`, not `llm.ErrRateLimited`.
+     * Add a test that `doctor` and `models list` make no generate call.
+     * Remove the `ANTHROPIC`→`CLAUDE` env assumption.
+  10. **Live probe.** Run a Gemini tool-schema probe before the sanitizer is relied on.
+* **F5.**
+  * Provider retry is `WithRetry` with `RetryPolicy{MaxAttempts: 4, BaseDelay: 2s, MaxDelay: 60s}`.
+  * The `synctest` accept asserts each delay inside its jitter bound (2–2.5 s, 4–5 s, 8–10 s), the 60 s cap, and that a `Retry-After` above the cap fails fast. It no longer asserts the exact steps.
+  * Agent-level retry never wraps a streaming provider. When a `Streamer` exists, retry happens before the first event only.
+* **F6.**
+  * `permissions.allowBypass` defaults to `false`.
+  * Leaving plan mode also publishes a `plan` update.
+  * Add the default rule `bash(pigo update*)` → ask.
+* **F8.**
+  * Bridged Pi MCP servers with no `exposure` become `deferred`, and `tool_search` is activated.
+  * `.pi/mcp.json` is read only when the project is trusted.
+* **F10.**
+  1. **Pin.** Re-resolve go-core-lib to the newest `v1.x`, with the same SHA in `go.mod` and in `uses:`.
+  2. **Surface.** Bind the MADR's full update surface, with flags local to `update`. `--check` uses `Checker.Check`, apply uses `RunWith`, and the TUI uses `Start` / `Stream`.
+  3. **Probes.** Use `NewVersionProber` and `NewImageVerifier`.
+  4. **Install guards.** Add the Homebrew/symlink detection, and the refusal when `AI_AGENT=pigo` is set.
+  5. **Readiness.** Add `pigo auth check [--json]`, and `--offline` / `PIGO_OFFLINE`.
+  6. **Accept rewrite.** The update accept is rewritten as follows:
+     * `pigo update --check` runs against `selfupdatetest.GitHubServer`, with `Request.Platform` set to `linux/amd64` and a fixture named `pigo-linux-amd64`, through `Checker.Check`. It exits 10.
+     * Apply runs against a binary copied into a temp home with an explicit `TargetPolicy{ExecutablePath, AllowedRoots}`.
+     * A planted `pigo-linux-amd64.tar.gz` gives "no exact asset". It is not `ErrIntegrity`.
+     * A running-copy end-to-end test is modelled on go-core-lib `selfupdate/e2e_running_test.go`; that harness is unexported, so the pattern is copied, not imported.
+  7. **Step 5 (bridge).** Follows 0003-MADR's amendment of this date: relocated installs, packages, JSONC, tolerant reads, and `trust import`.
+  8. **Release gate.** The gate table adds the mcremote rows (MADR "Driven by mcremote") and the live probes from magic-cli-remote 0179 D10, run by the owner against the build that will be tagged, before the tag is pushed.
+* **X1.** `/deep-research` is advertised with the skill.
+* **X3.** `ask_user` and `_pigo/status` land here.
+* **X5, step 2.** Subscription OAuth candidates are xAI Grok and Kilo device login, each with a recorded terms check. Anthropic Max, Gemini and Copilot subscription logins are out of the v1 line.
+* **X5, step 6.** Cache warming stays blocked until the SDK supports cache hints and a cache read/write split. Record that as the skip reason if X5 runs first.
+* **Companion work.** Replaced by magic-cli-remote `docs/decisions/0179-MADR-pigo-native-acp-provider.md` (D1–D10). This plan still does not mutate that repository.

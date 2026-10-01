@@ -244,3 +244,62 @@ notice. It also names `github.com/maccavelli/go-core-lib` and
 * Pi facts come from Pi at `312184edb`: `docs/configuration.md`,
   `docs/environment-variables.md`, `docs/skills.md`, `docs/security.md`,
   and `core/resource-loader.ts`.
+
+### Amendment (2026-10-01, second): the bridge measured against Pi's code
+
+Still `proposed`. Pi was re-read in code at `312184edb`. Paths below are under `packages/coding-agent/` unless stated otherwise. These three are unchanged:
+
+* the names;
+* the directories;
+* the "never write to `~/.pi`" rule.
+
+**Corrections**
+
+1. **Environment variable names.** Pi's directory variables are `PI_CODING_AGENT_DIR` and `PI_CODING_AGENT_SESSION_DIR` (`src/config.ts:535-537`). They are not `PI_AGENT_DIR` or `PI_SESSION_DIR`. `PIGO_HOME` is the analogue of `PI_CODING_AGENT_DIR`. 0001-REPORT's configuration section has the same error.
+2. **User-Agent.** go-llmprovider-sdk fixes the User-Agent on provider requests as `<app>/<ver> (<os>; <arch>) go-llmprovider-sdk/<ver>` (`identification.go:89-92`). pigo passes `WithClientInfo("pigo", <semver>)`. Provider requests therefore carry that form. Every other HTTP request pigo makes uses this record's form: MCP, `web_fetch`, `pigo update`, and the catalog refresh. The Confirmation's `httptest` provider check asserts the SDK form with `pigo/<semver>` as the product token.
+
+**Decision change: relocated Pi installs (was "`PI_*` environment: ignored")**
+
+The bridge reads exactly two `PI_*` variables, and only to **locate** Pi's tree:
+
+* `PI_CODING_AGENT_DIR` (the agent directory; default `~/.pi/agent`);
+* `PI_CODING_AGENT_SESSION_DIR` (sessions).
+
+It also honours Pi's `sessionDir` setting from Pi's `settings.json`, but **as a location only**; no other Pi setting is merged. No other `PI_*` variable has any effect.
+
+Without this, users who relocated Pi get an empty bridge. Precedence follows Pi: `PI_CODING_AGENT_SESSION_DIR` > `sessionDir` > `<agent>/sessions`. A custom session directory is **flat**, and Pi filters it by the header's `cwd` (`src/core/session-manager.ts:1794-1795,1875-1876`). The default layout is grouped by cwd: `sessions/--<cwd>--/<ts>_<uuidv7>.jsonl`.
+
+**Bridge additions (rows added to the bridge table)**
+
+| Pi resource | pigo behaviour |
+|---|---|
+| Installed Pi packages: `<agent>/npm/node_modules/*/`, `<agent>/git/**/`, and project `.pi/npm`, `.pi/git` (trusted) | Their `package.json` `pi.{skills,prompts,themes}` entries are discovered at bridge precedence. `pi.extensions` are listed and skipped (TypeScript). |
+| `.pi/mcp.json`, `.pi/prompts/` | **Trusted projects only**. Pi gates both on trust, and stdio servers run commands. The original table omitted the qualifier. |
+| `.pi/SYSTEM.md`, `.pi/APPEND_SYSTEM.md` (trusted) | Used only when the project has no `.pigo/` file of that name. |
+| `AGENTS.MD`, `CLAUDE.MD` | Context-file candidates beside the `.md` spellings (`src/core/resource-loader.ts:185`). Applies to discovery in general, not only to the bridge. |
+| `<agent>/themes/`, `<agent>/keybindings.json` | Read by the TUI at bridge precedence (0005 X4). |
+| `<agent>/agents/*.md` | Read as subagent definitions (0005 X3). Pi's example reads `name`, `description`, `tools`, `model`. |
+| `<agent>/trust.json` (`Record<absPath, boolean\|null>`) | Not merged. `pigo trust import --from-pi` copies decisions once. |
+| `<agent>/mcp-auth.json` | Not read. `pigo mcp login` re-authenticates; `pigo auth import --from-pi --mcp` copies tokens per server on request. |
+
+**Format rules the bridge must follow**
+
+* **`models.json` is JSONC.** Pi parses it with `stripJsonComments` (`src/core/model-config.ts:297`). `encoding/json/v2` rejects comments, so the bridge strips them first. Values support `!cmd` (10 s, uncached), `$NAME` and `${NAME}`, with the `$$` and `$!` escapes. `mcp.json` carries `{mcpServers, autoEnableCodemode}`.
+* **Session reads are tolerant and in-memory.**
+  * Pi appends to session files with no lock (`appendFileSync`, `session-manager.ts:1175-1182`). A half-written last line is therefore normal. Pi skips malformed lines (`:355-370`), and the bridge does too, with a diagnostic.
+  * Pi **rewrites** a file after migrating it (`:1092-1093`). pigo migrates in memory only and never rewrites a Pi file.
+  * Only `version` ≤ 3 is read. Pi's agent package already defines a format 4 (`{"v":4,"kind":"header"}`); those files are skipped with a diagnostic.
+* **The leaf is the last entry in file order.** Pi persists no leaf pointer (`session-manager.ts:1103-1121`).
+* **`parentSession` paths are absolute paths into Pi's tree.** `pigo session import` rewrites them to the imported pigo copy when the parent was imported too. Otherwise it keeps the original path as `custom{pigo.import.parentSession}`.
+* **Pi's custom entry types are preserved verbatim on import.** These are `pi.virtual-model-state` and `codemode-store`.
+
+**Confirmation added**
+
+* The bridge test also covers:
+  * a relocated agent directory via `PI_CODING_AGENT_DIR`;
+  * a flat custom session directory;
+  * a `models.json` with comments;
+  * a session file whose last line is truncated (it lists, and imports the complete entries).
+
+  The `~/.pi` hash is unchanged afterwards.
+* The bridge test fails on a copy that rewrites a migrated v2 file.
