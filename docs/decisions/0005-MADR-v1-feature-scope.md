@@ -1,9 +1,9 @@
 ---
 status: proposed
-date: 2026-10-01
+date: 2026-10-02
 decision-makers: repository owner
 consulted: 0001-REPORT-go-port-feasibility.md, 0002-MADR-cli-acp-headless-mcp-v1.md, 0003-MADR-pigo-product-identity.md, 0004-MADR-go-module-architecture.md
-informed: magic-cli-remote (companion command table), go-llmprovider-sdk, go-core-lib
+informed: magic-cli-remote (companion command table), go-llmprovider-sdk, go-core-lib, go-tui-lib
 ---
 # The v1 line carries every portable Pi capability, plus the ones Pi left to example extensions, tiered into a v1.0.0 gate, a v1.x train, and `exp/`
 
@@ -649,3 +649,61 @@ The Pi bridge's additions (relocated installs, packages, JSONC `models.json`, to
 5. the Pi bridge.
 
 Under first-wins, a name collision now resolves the way Pi resolves it (`core/package-manager.ts:2477-2560`).
+
+### Amendment (2026-10-02): provider, update and TUI delivery against sibling source
+
+Still `proposed`. This follows the 2026-10-02 amendment of
+[0004-MADR-go-module-architecture.md](0004-MADR-go-module-architecture.md).
+Its source pins and paths are evidence for today's inventory, not dependency
+pins in pigo (which still has no `go.mod`). Earlier dated observations and
+the tier choices remain historical where this amendment supersedes a fact.
+
+* **F4, usage and errors.** `go-llmprovider-sdk` at `67fc56e` has completed
+  the S8 API removals, S8c auth extraction and S9 usage decoding in source.
+  `llm/provider` reads `Response.Usage` (including cache reads), treating
+  all-zero usage as unavailable and estimating that turn. A nonzero SDK
+  usage is reported as given, including any zero components. The usage
+  ledger, `usage_update`, `/usage`, footer, cost and auto-compaction
+  distinguish reported and estimated
+  values. Error mapping uses `*APIError` and the sentinels; the special
+  `*RateLimitError` and `*IncompleteError` compatibility cases are retired.
+  `llmprovider/auth` supplies OAuth and token-store contracts. This does
+  not unblock image input, cache-write accounting, prompt-cache warming or
+  native token streaming; the SDK still lacks those capabilities and a tag.
+* **F4, configuration.** The SDK now makes environment reads opt-in. pigo
+  resolves credentials (including `ANTHROPIC_API_KEY`) and catalog settings
+  itself, then passes options explicitly. It does not call
+  `ModelProbesFromEnv` or `catalog.OptionsFromEnv` by default. Billed model
+  probes stay disabled through `WithModelProbes(false)`.
+* **F10, self-update.** `go-core-lib v1.3.0` adds prerelease channels, but
+  pigo's 1.0 release and `pigo update` still select stable tags only. The
+  current usable library surface is `selfupdate` plus its test helper;
+  `selfupdate/cli`, `buildinfo` and `go-tui-lib/updatetea` are plans, not
+  imports. The F10 implementation re-resolves the latest suitable `v1.x`
+  tag. The `--check` path uses `Checker.Check`; apply uses `RunWith`, and a
+  TUI may drive `Start` / `Stream`. Adding a `--channel` option or publishing
+  pigo prereleases is deferred to a later explicit decision.
+* **F9, TUI.** The existing `go-tui-lib v0.1.0` packages cover reusable
+  workspace layout, pane hosting, glyphs, themes and golden rendering.
+  F9 uses a corrected tagged version of those packages after its known
+  `v0.1.0` defects are checked. Pigo owns its ACP transcript, tool cards,
+  permission dialog, editor and session controls. Proposed sibling
+  `stream`, `command`, `keymap`, `palette` and terminal-service plans do
+  not satisfy any F9 acceptance criterion until code and a tested tag
+  exist. F9 remains a 1.0 feature, but its go-tui-lib dependency and its
+  local components are stated separately in its plan.
+
+### Source correction (2026-10-02): go-core-lib after v1.3.0
+
+The F10 inventory above describes `v1.3.0`. `v1.3.1` is now the latest
+released tag observed (`351bd6a5ffbd4b352cacc5234f4a8c504c3c1b69`);
+it still exports `selfupdate` and `selfupdate/selfupdatetest`. A `buildinfo`
+package exists at later development commit `bf7221a5408984299a8511eb98f8f06eadd133bd`,
+after that tag. F10 does not presume the development package can be imported.
+It rechecks the released surface and the local `internal/buildinfo` boundary
+when selecting a tag. The stable-only pigo release decision is unchanged.
+
+The provider SDK's observed `efd9c61` commit adds catalog and setup-wizard
+work but leaves the F4-facing `Provider`, `Response`, `Usage`, `APIError` and
+auth contracts unchanged from the `67fc56e` inventory above. It still has
+no tag, so the F4 release gate is unchanged.

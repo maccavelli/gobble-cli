@@ -1,6 +1,6 @@
 ---
 status: proposed
-date: 2026-10-01
+date: 2026-10-02
 decision-makers: repository owner
 consulted: 0001-REPORT-go-port-feasibility.md, 0002-MADR-cli-acp-headless-mcp-v1.md, 0003-MADR-pigo-product-identity.md
 informed: go-llmprovider-sdk, go-core-lib, mcplib, go-tui-lib, magic-cli-remote
@@ -773,3 +773,104 @@ Still `proposed`. Three sibling trees were re-read and built in scratch copies:
 * **go-llmprovider-sdk is the fleet's in-house SDK, not an official vendor SDK.** The README's "official SDK at each protocol boundary" applies to ACP and MCP.
 * **magic-cli-remote `0169-MADR-standardize-toolchains-on-current-supported-advisory-free-releases.md` is `proposed`.** "Fleet MADR 0169 policy" reads "magic-cli-remote 0169 (proposed)".
 * **`models.json` is JSONC in Pi.** `internal/config` strips comments before `encoding/json/v2` decodes it. `settings.json` and `mcp.json` stay strict JSON.
+
+### Amendment (2026-10-02): current sibling source and a shared TUI workspace
+
+Still `proposed`. The observations below are from the local sibling source
+trees, not a claim that pigo imports them yet. `go-llmprovider-sdk` is at
+`67fc56e3df785e4113f664f39f398031c41b1275` (its PLAN has an uncommitted
+edit), `go-core-lib` has tag `v1.3.0` at
+`f97c6817ec9c902d1af690198ed0e2e2abb7750c`, and `go-tui-lib` has tag
+`v0.1.0` at `5c578065764f5fe569474819286f0d67e99ffdcd`. The latter's
+current HEAD changes documentation only; its released Go source is unchanged.
+
+#### Provider SDK
+
+* All ten built-in ids are registered by `llmprovider/providers.Default` and
+  constructed by `providers.New` (`providers/providers.go`). The old
+  `Generate*` API has been removed. `Provider.ID` returns `ProviderID`, a
+  named string type (`contract.go`), so the adapter converts ids explicitly.
+* S8c moved OAuth sessions, stores and login helpers to `llmprovider/auth`.
+  S9 now decodes `Response.Usage` in Responses, Messages, generateContent and
+  Chat Completions (`internal/wire/*`). The earlier assertion that usage is
+  always zero is obsolete. The public `Usage` has input, output, reasoning
+  and cached token counts, but no cache-write count or measured/estimated
+  flag; a zero count can still mean the service reported none. Because the
+  SDK does not expose presence bits, pigo treats an all-zero token usage as
+  unavailable and estimates the turn, marking its own `llm.Usage.Estimated`.
+  Any nonzero response usage is taken as reported; a zero component within
+  it is left at zero rather than invented. Cache-write remains unknown.
+* S8 unified structured failures as `*APIError` (`api_error.go`). The
+  adapter no longer needs branches for `*RateLimitError` or
+  `*IncompleteError`; it still tests sentinel precedence because quota
+  matches rate limit and overflow matches invalid request.
+* S10 made ambient configuration opt-in. Provider constructors do not read
+  API-key environment variables. `ProviderEnvVars` lists their names, and
+  `ModelProbesFromEnv`, `catalog.OptionsFromEnv` and auth's
+  `GrokFlowFromEnv` read environment only when the caller selects them.
+  pigo keeps explicit credential and catalog configuration and does not
+  pass those opt-in helpers implicitly.
+* `LICENSE` is Apache-2.0. There is still no git tag. The existing rule
+  remains: development may pin a recorded commit, while a pigo release
+  waits for an SDK `v1.0.0-rc.N` or later. `NativeStreaming` is still
+  `Unsupported` on all built-ins, and `Item` still has no image input,
+  tool-output error bit or opaque thinking payload. The adapter must keep
+  advertising those limits until the SDK code changes.
+
+#### Self-update library
+
+* `v1.3.0` adds opt-in prerelease channels: `Request.Channel`,
+  `CheckRequest.Channel`, `NewSemverPolicy` and a channel input in the
+  reusable publish workflow. The stable path remains the default; a
+  prerelease is not selected without a configured channel
+  (`selfupdate/types.go`, `checker.go`, `version.go`, and
+  `.github/workflows/publish-selfupdate-release.yml`).
+* `selfupdate` and `selfupdate/selfupdatetest` remain the only Go packages.
+  `buildinfo`, `selfupdate/cli` and `updatetea` are not present. pigo retains
+  `internal/buildinfo` and binds the update flags and TUI interactions
+  itself. The F10 pin rule selects the newest suitable `v1.x` tag when
+  implementation starts and pins the workflow to that tag's peeled commit.
+  The pigo stable-only release decision remains in force; adopting
+  prerelease channels would need a later decision and plan amendment.
+
+#### TUI library
+
+* `go-tui-lib v0.1.0` provides `layout`, `workspace`, `glyph`, `theme` and
+  `tuitest`. `layout.Solve` is a pure solver; `workspace.New` hosts caller
+  panes in Bubble Tea. It has no transcript renderer, picker, permission
+  dialog, editor or update component. Its module uses Charm v2 and Go
+  1.27.1; it does not yet require `go-core-lib` (`go.mod`).
+* The sibling's `0002-PLAN-harden-workspace-v0-1-1.md` and
+  `0004-PLAN-integrate-charm-v2-and-go-1-27.md` are proposed. Their fixes
+  and later `stream`, `command`, `keymap`, `palette`, `termcap` and `termsvc`
+  packages are not current API. The `v0.1.0` workspace has recorded
+  defects, so an F9 integration must be tested against a corrected tagged
+  version before depending on it.
+* **Decision:** `internal/tui` consumes `go-tui-lib` for released reusable
+  workspace, layout, glyph and theme behaviour after that validation. It
+  keeps pigo-specific ACP panes and flows locally. Only `internal/tui`
+  imports `go-tui-lib`, as it alone imports Charm; the core and public Go
+  SDK remain TUI-free. `tuitest` may be imported by `_test.go` files for
+  rendering checks. This extends import-boundary rule 5 without changing
+  the package map or making the TUI library a prerequisite for the module
+  scaffold.
+
+### Source correction (2026-10-02): go-core-lib release and development HEAD
+
+The inventory above was pinned to `go-core-lib v1.3.0`. Its newer `v1.3.1`
+tag peels to `351bd6a5ffbd4b352cacc5234f4a8c504c3c1b69` and still has
+only `selfupdate` and `selfupdate/selfupdatetest` as Go packages. At observed
+development commit `bf7221a5408984299a8511eb98f8f06eadd133bd`, a
+`buildinfo` package exists. It exposes `Identity` and `LDFlags`; it is
+not in `v1.3.1` and is not a pigo dependency. `selfupdate/cli` is still a
+plan. The local `internal/buildinfo` choice remains for the scaffold; its
+relationship to a released go-core-lib `buildinfo` must be checked when the
+first relevant dependency is selected. No pigo module or import exists yet.
+
+The provider SDK first advanced to `d4ca92575855c1ba9196422eeeb34df2ad5c9f6a`
+with a plan-only change. Observed commit
+`efd9c615c85f7a85d27e3c636b2fbb641adeab5e` then added catalog listing
+and setup-wizard handling for providers outside the built-in catalog, plus
+API enforcement tooling. Its `Provider`, `Response`, `Usage`, `APIError` and
+auth contracts assessed at `67fc56e3df785e4113f664f39f398031c41b1275`
+are unchanged. It still has no tag; these commits are not pigo dependencies.

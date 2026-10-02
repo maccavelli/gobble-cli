@@ -19,18 +19,19 @@
 | 0002 | MADR | [v1 native magic-cli-remote CLI: Cobra over ACP, ACP stdio, MCP client](decisions/0002-MADR-cli-acp-headless-mcp-v1.md) | proposed (amended four times) |
 | 0002 | PLAN | [Implement the ACP core](decisions/0002-PLAN-cli-acp-headless-mcp-v1.md) | proposed |
 | 0003 | MADR | [The product is `pigo`: binary, module path, directories, wire names, read-only Pi bridge](decisions/0003-MADR-pigo-product-identity.md) | proposed (amended 2026-10-01) |
-| 0004 | MADR | [One Go 1.27.1 module of contract-first packages, open standards at every boundary](decisions/0004-MADR-go-module-architecture.md) | proposed (amended 2026-09-30, 2026-10-01) |
-| 0004 | PLAN | [Scaffold: module, contracts, import boundaries, toolchain, release](decisions/0004-PLAN-go-module-architecture.md) | proposed |
-| 0005 | MADR | [The v1 line: every portable Pi capability, tiered 1.0 / 1.x / exp](decisions/0005-MADR-v1-feature-scope.md) | proposed (amended 2026-09-30, 2026-10-01) |
-| 0005 | PLAN | [Implement the v1.0.0 gate, the v1.x train, and `exp/`](decisions/0005-PLAN-v1-feature-scope.md) | proposed |
+| 0004 | MADR | [One Go 1.27.1 module of contract-first packages, open standards at every boundary](decisions/0004-MADR-go-module-architecture.md) | proposed (amended through 2026-10-02) |
+| 0004 | PLAN | [Scaffold: module, contracts, import boundaries, toolchain, release](decisions/0004-PLAN-go-module-architecture.md) | in progress (Phase D complete; Phases 0–5 proposed) |
+| 0005 | MADR | [The v1 line: every portable Pi capability, tiered 1.0 / 1.x / exp](decisions/0005-MADR-v1-feature-scope.md) | proposed (amended through 2026-10-02) |
+| 0005 | PLAN | [Implement the v1.0.0 gate, the v1.x train, and `exp/`](decisions/0005-PLAN-v1-feature-scope.md) | proposed (amended 2026-10-02) |
 
 0003-MADR has no PLAN of its own. 0004-PLAN Phase 2 and 0005-PLAN F10 implement it.
 
 ## Build order
 
-The three plans run in sequence:
+The three plans run in sequence. The documentation-only 0004-PLAN Phase D is
+complete; no Go module work has started:
 
-1. **[0004-PLAN](decisions/0004-PLAN-go-module-architecture.md)** — the scaffold. It replaces 0002-PLAN Phase 0.
+1. **[0004-PLAN](decisions/0004-PLAN-go-module-architecture.md)** — source documentation in Phase D, then the scaffold in Phases 0–5. It replaces 0002-PLAN Phase 0.
 2. **[0002-PLAN](decisions/0002-PLAN-cli-acp-headless-mcp-v1.md) Phases 1–8** — the ACP agent, Cobra as an ACP client, the first tools, sessions, MCP, and native slash commands.
 3. **[0005-PLAN](decisions/0005-PLAN-v1-feature-scope.md)** — F1–F10 form the v1.0.0 gate. X1–X6 are the v1.x train and `exp/`.
 
@@ -54,4 +55,5 @@ The three plans run in sequence:
 | start building | [0004-PLAN](decisions/0004-PLAN-go-module-architecture.md) |
 | know how pigo talks to models | [0004-MADR](decisions/0004-MADR-go-module-architecture.md) (D10: `llm` facade over go-llmprovider-sdk) |
 | know how `pigo update` and GitHub releases work | [0005-MADR](decisions/0005-MADR-v1-feature-scope.md) (self-update), [0004-PLAN](decisions/0004-PLAN-go-module-architecture.md) Phase 4 (assets) |
+| see which sibling libraries exist today and what pigo will use | [architecture.md](architecture.md#sibling-sources), [0004-MADR](decisions/0004-MADR-go-module-architecture.md) (2026-10-02 amendment), [0005-PLAN](decisions/0005-PLAN-v1-feature-scope.md) (F4, F9, F10 amendment) |
 | understand what this repository contains today | [architecture.md](architecture.md) |

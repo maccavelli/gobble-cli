@@ -4,11 +4,23 @@ How `pi-go` is put together, as it is now. This file carries no history and no r
 
 ## What it is
 
-A Git repository for a Go rewrite of the Pi coding-agent CLI and the libraries that CLI needs. The stated binary name is `pigo`. The stated command and configuration stack is Cobra and Viper. The stated terminal-UI stack is Charm (Lip Gloss and related packages).
+A Git repository for a planned Go rewrite of the Pi coding-agent CLI. The
+planned binary name is `pigo`. The proposed command and configuration stack
+is Cobra and Viper; the proposed terminal UI uses Charm v2.
 
 There is no Go module, no `cmd/` tree, and no binary. The working tree is documentation. The package map in [0004-MADR](decisions/0004-MADR-go-module-architecture.md) is proposed, not built. This file describes it only once the packages exist.
 
-The planned 1.0 provider library is `github.com/maccavelli/go-llmprovider-sdk`. The planned self-update library and release-publish workflow are `github.com/maccavelli/go-core-lib` `v1.1.0`. Neither is imported in this tree yet.
+## Sibling sources
+
+The three local sibling repositories are active source trees. The versions
+and commits below are observed source evidence, not requirements in this
+repository. No `go.mod` or pigo package imports them yet.
+
+| Sibling repository | Current observed surface | Planned pigo boundary |
+| :--- | :--- | :--- |
+| [go-llmprovider-sdk](https://github.com/maccavelli/go-llmprovider-sdk) | No tag; observed commit `efd9c61` adds catalog and setup-wizard work after `67fc56e` without changing the adapter-facing contract. `llmprovider` has ten built-in providers, `Response.Usage`, `*APIError` and opt-in environment helpers; `llmprovider/auth` holds OAuth and token-store code. Built-in native streaming is unsupported. | A planned `llm/provider` adapter under pigo's own `llm` facade. F4 in [0005-PLAN](decisions/0005-PLAN-v1-feature-scope.md) sets the usage, error and credential rules. |
+| [go-core-lib](https://github.com/maccavelli/go-core-lib) | Latest observed tag `v1.3.1` (`351bd6a`) exports `selfupdate` and `selfupdate/selfupdatetest`; `v1.3.0` introduced opt-in prerelease channels. Later development commit `bf7221a` has a `buildinfo` package that is absent from `v1.3.1`. | The planned `pigo update` and raw-binary release workflow use a rechecked stable `v1.x` tag. Pigo's scaffold has its own planned `internal/buildinfo`. F10 in [0005-PLAN](decisions/0005-PLAN-v1-feature-scope.md) selects the tag. |
+| [go-tui-lib](https://github.com/maccavelli/go-tui-lib) | Tag `v0.1.0` (`5c57806`) exports `layout`, `workspace`, `glyph`, `theme` and `tuitest` on Charm v2. Observed later commit `7907590` changes documentation only. The recorded workspace defects await a corrected tag; transcript, picker, permission dialog and editor packages are absent. | Planned `internal/tui` uses tested reusable workspace pieces. Pigo-specific ACP panes stay in pigo. F9 in [0005-PLAN](decisions/0005-PLAN-v1-feature-scope.md) sets the integration check. |
 
 ## Tree
 
@@ -28,4 +40,7 @@ The first record is [0001-REPORT-go-port-feasibility.md](reports/0001-REPORT-go-
 
 ## What is not here
 
-No package map, no CLI surface, no session format, and no provider list belong in this file until they exist in this tree. Those surfaces of the TypeScript product are inventoried in the report.
+No implemented package map, CLI surface, session format or provider list
+exists in this tree. The proposed package map and import rules are in
+[0004-MADR](decisions/0004-MADR-go-module-architecture.md); the TypeScript
+product's surfaces are inventoried in the [report](reports/0001-REPORT-go-port-feasibility.md).

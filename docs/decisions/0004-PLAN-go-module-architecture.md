@@ -1,6 +1,6 @@
 ---
-status: proposed
-date: 2026-10-01
+status: in-progress
+date: 2026-10-02
 associated-madr: "0004-MADR-go-module-architecture.md"
 ---
 # Implement the pigo module architecture: scaffold, contracts, boundaries, toolchain, release
@@ -47,6 +47,37 @@ Out:
 * Renaming the repository (0003-MADR, the option not chosen).
 
 ## Implementation Steps
+
+### Phase D — current sibling-source documentation (before Phase 0)
+
+This phase may be approved and committed separately from the Go scaffold.
+It changes documentation only. It does not add a module requirement or claim
+that pigo code exists.
+
+1. Reconcile `README.md`, `docs/README.md` and `docs/architecture.md` with
+   the 2026-10-02 amendments of this MADR and
+   [0005-MADR-v1-feature-scope.md](0005-MADR-v1-feature-scope.md).
+   `architecture.md` keeps describing the current documentation-only pigo
+   tree; it identifies sibling code as a planned dependency, with version
+   evidence and no invented package in pigo.
+   Refresh the 0004/0005 MADR and PLAN source inventories if sibling commits
+   or tags have changed since those amendments; keep released APIs separate
+   from development HEAD.
+2. Retain earlier MADR and PLAN paragraphs as dated history. Add clear
+   current-state pointers where a reader would otherwise mistake the old
+   `v1.1.0`, pre-S8 SDK or no-TUI-library assertions for today's API.
+   Use 0005-PLAN's 2026-10-02 F4, F9 and F10 amendment as the future
+   implementation boundary. Do not modify any sibling repository.
+3. Check the three sibling commit/tag ids and exported APIs against their
+   source, then check every newly added relative Markdown link resolves.
+   Search the updated docs for the old current-state claims and ensure each
+   is either labelled as a dated observation or superseded by a nearby
+   current-state pointer. Run `git diff --check`.
+
+**Accept:** the entry pages identify the three sibling repos and their
+actual present surfaces; none says pigo imports them yet; links resolve;
+`git diff --check` is clean. Commit this documentation phase after its
+checks. Phases 0–5 retain their separate approval and execution order.
 
 ### Phase 0 — module and toolchain
 
@@ -333,7 +364,19 @@ defect was planted (scratch copy or scratch clone) and the failure text.
 
 ## Execution record
 
-None. This plan is proposed and has not been approved.
+**Phase D, 2026-10-02 — complete.** The owner approved this documentation
+phase and then approved refreshing the records when sibling HEADs changed.
+The phase updated the four 0004/0005 records, `README.md`, `docs/README.md`
+and `docs/architecture.md`; it changed no Go source or sibling repository.
+Source checks observed SDK commit `efd9c61` (F4-facing contracts unchanged
+since `67fc56e`), go-core-lib tag `v1.3.1` at `351bd6a` and development
+commit `bf7221a`, and go-tui-lib tag `v0.1.0` at `5c57806` with later
+documentation-only commit `7907590`. A relative-link check resolved
+94 links in the seven edited files. Its deliberate bad input
+`[broken](missing.md)` failed with `broken relative link: missing.md`.
+`git diff --check` passed. Pigo has no `go.mod`, so no Go test was run.
+The documentation phase is committed with this record. Phases 0–5 remain
+proposed and require separate approval.
 
 ## Amendments
 
@@ -395,3 +438,26 @@ repository's `0018-MADR-apache-2-license.md`; `NOTICE` names it.
   * **`make release-dry-run` runs go-core-lib's `scripts/verify-selfupdate-release.sh`** fetched at the pinned SHA, instead of an inlined copy of the name rule. The planted-archive accept stays.
   * **Actions in pigo's own workflows are pinned by commit SHA**, as go-core-lib's are.
   * **Users verify releases** with `gh release verify` and `gh attestation verify`. `docs/guides/developing.md` (Phase 5) documents the commands.
+
+**2026-10-02 — sibling-source refresh and shared TUI workspace.** Adds
+documentation-only Phase D, available before Phase 0. The current evidence
+is go-llmprovider-sdk `67fc56e` (no tag, with an uncommitted PLAN edit),
+go-core-lib `v1.3.0` at `f97c681`, and go-tui-lib `v0.1.0` at `5c57806`.
+Phase 0 still imports none of them. At its later Phase 4, resolve the
+go-core-lib workflow to the then-selected tag's peeled commit; `v1.3.0`
+currently supplies channels, while pigo's release workflow remains
+stable-only. Phase 1's `llm` facade keeps `Estimated`, but its adapter later
+prefers the SDK's now-decoded `Response.Usage`. F9 in 0005-PLAN selects a
+corrected tested go-tui-lib tag for workspace use; Phase 1 does not import
+it. The old version pins and pre-S8 statements above remain dated history.
+
+**2026-10-02 — Phase D source-inventory deviation.** After Phase D approval,
+go-core-lib had gained a `v1.3.1` tag (`351bd6a`) and development HEAD
+`bf7221a` added `buildinfo`; the 2026-10-02 MADR inventory at `v1.3.0`
+therefore no longer described the current sibling tree. The provider SDK's
+`d4ca925` first changed only its `0015-PLAN`; later `efd9c61` added catalog
+and wizard work without changing the F4-facing contract. The TUI library's
+later `7907590` changed documentation only. The owner approved refreshing
+the 0004/0005 records and continuing Phase D. Phase D step 1 now includes
+those record corrections. No sibling repository or pigo source code is
+changed by this phase.

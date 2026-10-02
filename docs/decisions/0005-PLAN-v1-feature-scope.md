@@ -1,6 +1,6 @@
 ---
 status: proposed
-date: 2026-10-01
+date: 2026-10-02
 associated-madr: "0005-MADR-v1-feature-scope.md"
 ---
 # Implement the v1 line: the v1.0.0 gate, the v1.x train, and `exp/`
@@ -594,3 +594,60 @@ drops child-session ids. No new phases.
 * **X5, step 2.** Subscription OAuth candidates are xAI Grok and Kilo device login, each with a recorded terms check. Anthropic Max, Gemini and Copilot subscription logins are out of the v1 line.
 * **X5, step 6.** Cache warming stays blocked until the SDK supports cache hints and a cache read/write split. Record that as the skip reason if X5 runs first.
 * **Companion work.** Replaced by magic-cli-remote `docs/decisions/0179-MADR-pigo-native-acp-provider.md` (D1–D10). This plan still does not mutate that repository.
+
+**2026-10-02 — source-verified provider, update and TUI integration.** Follows
+the amendments of this date in 0004-MADR and 0005-MADR. The observations
+are go-llmprovider-sdk `67fc56e` (no tag), go-core-lib `v1.3.0`
+(`f97c681`) and go-tui-lib `v0.1.0` (`5c57806`). This PLAN remains
+`proposed`; no F phase has run.
+
+* **F4 replaces its earlier usage and error assumptions.** Use the SDK's
+  `Response.Usage` for reported input, output, reasoning and cached tokens.
+  If every returned count is zero, estimate the turn and mark it in
+  `llm.Usage` and the user-visible ledger. Otherwise treat the returned
+  counts as reported, including zero components. The SDK has no
+  cache-write count, so do not label one as reported. Match `*APIError`
+  and classify with sentinels
+  in the order from 0004-MADR. Remove the transitional
+  `*RateLimitError` / `*IncompleteError` cases. Use OAuth and
+  `RefreshLocker` from `llmprovider/auth`, not their pre-S8c path. Pass
+  credentials and catalog options explicitly; do not use the SDK's opt-in
+  environment helpers as pigo defaults. Keep `WithModelProbes(false)`.
+  **Accept:** fixture responses from each of the four wire families yield
+  reported counts, an all-zero response is marked estimated, and an `APIError`
+  429 preserves `RetryAfter`; quota and overflow retain their more specific
+  classification. The no-billed-probes accept remains.
+* **F9 uses the shared library only for implemented reusable pieces.**
+  Before adding `go-tui-lib` to `go.mod`, inspect its newest tag, check the
+  known `v0.1.0` defects from its proposed hardening PLAN, and choose a
+  corrected tag that passes an integration fixture at both F9 widths. Use
+  released `layout`, `workspace`, `glyph`, `theme` and `tuitest` for the
+  shell and goldens. Implement ACP transcript, tool cards, permission
+  dialog, editor and pickers in pigo until a sibling package actually ships
+  and is separately evaluated. `internal/tui` alone imports
+  `go-tui-lib`; `_test.go` files may use `tuitest`. **Accept:** a fixture
+  renders the ACP transcript and a permission dialog within a workspace
+  at 80×24 and 120×40, including resize and focus changes, with no
+  dependency on unimplemented sibling packages. Record the chosen tag and
+  the defect check before committing F9.
+* **F10 pin and release policy.** Re-resolve the newest suitable stable
+  `go-core-lib v1.x` tag when F10 starts; `v1.3.0` is today's tag, not a
+  permanent pin. The workflow `uses:` SHA must be the peeled commit of
+  the tag required in `go.mod`. Its channel API is available, but F10
+  passes no channel and publishes only strict stable pigo tags. No
+  `selfupdate/cli`, `buildinfo` or `updatetea` import is presumed. The
+  `Checker.Check`, `RunWith` and `Start`/`Stream` paths and existing
+  acceptance fixtures remain; record the selected tag and SHA in this
+  PLAN when the phase runs.
+
+**2026-10-02 — Phase D source-inventory correction.** The preceding F10
+inventory was pinned to `v1.3.0`. `go-core-lib v1.3.1` now peels to
+`351bd6a5ffbd4b352cacc5234f4a8c504c3c1b69`, and its released Go
+packages remain `selfupdate` and `selfupdate/selfupdatetest`. Development
+Commit `bf7221a5408984299a8511eb98f8f06eadd133bd` adds `buildinfo`,
+which is not in that tag. F10 still re-resolves a stable tag and checks the
+released API before importing it; its stable-only policy is unchanged.
+The SDK's later `efd9c61` commit changes catalog and setup-wizard code but
+does not change the F4-facing contract assessed at `67fc56e`. The TUI
+library's later `7907590` commit changes documentation only; its released
+source remains at `v0.1.0`.
