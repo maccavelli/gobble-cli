@@ -1,6 +1,6 @@
 ---
 status: proposed
-date: 2026-10-02
+date: 2026-10-03
 associated-madr: "0005-MADR-v1-feature-scope.md"
 ---
 # Implement the v1 line: the v1.0.0 gate, the v1.x train, and `exp/`
@@ -651,3 +651,17 @@ The SDK's later `efd9c61` commit changes catalog and setup-wizard code but
 does not change the F4-facing contract assessed at `67fc56e`. The TUI
 library's later `7907590` commit changes documentation only; its released
 source remains at `v0.1.0`.
+
+**2026-10-03 — go-core-lib renamed go-selfupdate-lib.** Follows the source
+corrections of this date in 0004-MADR and 0005-MADR. No new phases.
+Changes to F10:
+
+1. **Pin.** Re-resolve `github.com/maccavelli/go-selfupdate-lib` to its
+   newest `v1.x` (`v1.5.0` or later), with the same SHA in `go.mod` and in
+   `uses:`. The `uses:` line names `maccavelli/go-selfupdate-lib`.
+2. **Surface.** Before binding, compare the released `selfupdate/cli` and
+   `buildinfo` (since `v1.4.0`) with the MADR's update surface and with
+   pigo's `internal/buildinfo`. Record the choice in F10's execution
+   record.
+3. **Accept rewrite.** The running-copy end-to-end test is modelled on
+   go-selfupdate-lib `selfupdate/e2e_running_test.go`.

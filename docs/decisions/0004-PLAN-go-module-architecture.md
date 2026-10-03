@@ -1,6 +1,6 @@
 ---
 status: in-progress
-date: 2026-10-02
+date: 2026-10-03
 associated-madr: "0004-MADR-go-module-architecture.md"
 ---
 # Implement the pigo module architecture: scaffold, contracts, boundaries, toolchain, release
@@ -378,6 +378,25 @@ documentation-only commit `7907590`. A relative-link check resolved
 The documentation phase is committed with this record. Phases 0–5 remain
 proposed and require separate approval.
 
+**Phase D refresh, 2026-10-03 — complete.** The owner approved the
+2026-10-03 amendment below ("Update docs. Proceed"). The refresh added the
+source corrections of that date to 0004-MADR and 0005-MADR, and the
+amendments to this PLAN and 0005-PLAN. It updated `README.md`'s Self-update
+line, `docs/architecture.md`'s sibling row, `NOTICE`, and three status cells
+in `docs/README.md`. It changed no Go source and no sibling repository.
+Source checks: `git ls-remote` on `maccavelli/go-selfupdate-lib` peels
+`v1.4.0` to `4d7b053`, `v1.4.1` to `58411f1` and `v1.5.0` to `6deaa52`.
+The tag trees have no `buildinfo` or `selfupdate/cli` at `v1.3.1`, and have
+both at `v1.4.0` and `v1.5.0`. `selfupdate/e2e_running_test.go` exists at
+`v1.5.0`. A relative-link check, anchors included, resolved 95 links in the
+seven edited Markdown files. On a scratch copy, a planted
+`[broken](missing.md)` in `docs/README.md` failed with `broken relative
+link: missing.md`. Over `README.md`, `NOTICE` and `docs/architecture.md`,
+the go-core-lib scan found only the "formerly" and "the old path" mentions.
+A stray mention planted in a copy of `README.md` failed it. markdownlint-cli2,
+with its default configuration, reports the same 23 issues (22 MD013, one
+MD040) at the same lines before and after. `git diff --check` passed.
+
 ## Amendments
 
 **2026-09-30 — shared libraries as they exist.** 0004-MADR's amendment of
@@ -461,3 +480,28 @@ later `7907590` changed documentation only. The owner approved refreshing
 the 0004/0005 records and continuing Phase D. Phase D step 1 now includes
 those record corrections. No sibling repository or pigo source code is
 changed by this phase.
+
+**2026-10-03 — go-core-lib renamed go-selfupdate-lib; Phase D refresh
+(approved 2026-10-03).** The owner asked, after go-core-lib's rename: "update docs".
+The source corrections of this date in 0004-MADR and
+[0005-MADR-v1-feature-scope.md](0005-MADR-v1-feature-scope.md) record the
+rename and the released surface at `v1.5.0`. Phase D runs again for this
+one sibling, with documentation only, and no sibling repository changes:
+
+1. **Step 1, for go-selfupdate-lib.** `README.md`'s Self-update line and
+   `docs/architecture.md`'s sibling row name go-selfupdate-lib, formerly
+   go-core-lib, with its released surface at `v1.5.0`. `docs/README.md`'s
+   status cells say "amended through 2026-10-03". `NOTICE` names
+   `github.com/maccavelli/go-selfupdate-lib`.
+2. **Later phases** read go-core-lib as go-selfupdate-lib, at the tag F10
+   selects (`v1.5.0` or later). That covers Phase 0 step 4's
+   "do not `require`", Phase 4's `uses:` line, and `NOTICE`. Their
+   paragraphs stay as dated history.
+3. **Step 3's checks,** as written: the tag, commit and exported packages
+   against go-selfupdate-lib's source; every relative link in the changed
+   files, with the planted bad link seen failing; `git diff --check`. In
+   addition, `git grep go-core-lib` over `README.md`, `NOTICE` and
+   `docs/architecture.md` shows only "formerly" mentions.
+
+The execution record gains a dated Phase D entry. This PLAN stays
+`in-progress`, and Phases 0–5 keep their separate approval.

@@ -13,7 +13,7 @@ MIT License:
 Data files copied verbatim from that tree (for example theme JSON or
 prompt text) keep the upstream notice.
 
-This product uses github.com/maccavelli/go-core-lib, licensed under
+This product uses github.com/maccavelli/go-selfupdate-lib, licensed under
 the Apache License, Version 2.0.
 
 This product uses github.com/maccavelli/go-llmprovider-sdk, licensed

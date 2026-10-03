@@ -1,6 +1,6 @@
 ---
 status: proposed
-date: 2026-10-02
+date: 2026-10-03
 decision-makers: repository owner
 consulted: 0001-REPORT-go-port-feasibility.md, 0002-MADR-cli-acp-headless-mcp-v1.md, 0003-MADR-pigo-product-identity.md, 0004-MADR-go-module-architecture.md
 informed: magic-cli-remote (companion command table), go-llmprovider-sdk, go-core-lib, go-tui-lib
@@ -707,3 +707,35 @@ The provider SDK's observed `efd9c61` commit adds catalog and setup-wizard
 work but leaves the F4-facing `Provider`, `Response`, `Usage`, `APIError` and
 auth contracts unchanged from the `67fc56e` inventory above. It still has
 no tag, so the F4 release gate is unchanged.
+
+### Source correction (2026-10-03): go-core-lib is now go-selfupdate-lib
+
+* **The rename.** go-core-lib was renamed go-selfupdate-lib on 2026-10-02:
+  both the repository and the module path (go-selfupdate-lib
+  `docs/decisions/0009-MADR-rename-to-go-selfupdate-lib.md`).
+  * `github.com/maccavelli/go-core-lib` ends at `v1.4.1` (`58411f1`), which
+    `go` reports as deprecated. Its tags, `v1.1.0` included, still resolve
+    when pinned. `go get github.com/maccavelli/go-core-lib@latest` now
+    fails with a path mismatch.
+  * `github.com/maccavelli/go-selfupdate-lib` starts at `v1.5.0`
+    (`6deaa524cfb28aad90bea97a6d9162e5b4257204`), with `v1.4.1`'s API.
+    The older tags are not versions of the new path.
+  * The reusable release workflow is
+    `maccavelli/go-selfupdate-lib/.github/workflows/publish-selfupdate-release.yml`.
+* **The released surface has grown since `v1.3.1`.** `v1.4.0` (`4d7b053`)
+  added `buildinfo` and `selfupdate/cli`. `v1.5.0` exports both, with
+  `selfupdate` and `selfupdate/selfupdatetest`. `buildinfo` is therefore
+  released, no longer development-only as the 2026-10-02 correction
+  observed. Its `-X` symbols are
+  `github.com/maccavelli/go-selfupdate-lib/buildinfo.version` and `….kind`.
+* **What it means for F10.** `pigo update` binds
+  `github.com/maccavelli/go-selfupdate-lib/selfupdate`, at `v1.5.0` or
+  later, in place of `go-core-lib/selfupdate`. The update surface this
+  record plans is the one go-core-lib's 0004-MADR planned for
+  `selfupdate/cli`, and that package is now released. F10 checks the
+  released `selfupdate/cli` and `buildinfo` against this record's surface
+  and pigo's `internal/buildinfo` before it binds either. This correction
+  does not choose.
+* **What does not change.** The stable-only release decision, and the rest
+  of F10.
+* **The earlier text stays as written**, as dated history.
