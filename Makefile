@@ -9,9 +9,10 @@ SHELL := C:/PROGRA~1/Git/usr/bin/bash.exe
 # PowerShell. Recipes need grep, diff, cp, and mv.
 export PATH := C:/PROGRA~1/Git/usr/bin:$(PATH)
 
-# override + export: ambient CGO_ENABLED must not win for the make variable or recipe shells.
-override CGO_ENABLED := 0
-export CGO_ENABLED
+# Shipped builds are pure Go. override beats an ambient or command-line
+# CGO_ENABLED, but only on these targets. Do not export it: local race
+# testing keeps CGO_ENABLED=1, and the race target turns cgo on.
+build install check-cgo-off: override CGO_ENABLED := 0
 
 UNAME_S := $(shell uname -s 2>/dev/null || echo unknown)
 UNAME_M := $(shell uname -m 2>/dev/null || echo unknown)
@@ -83,7 +84,7 @@ test:
 	go test ./...
 
 race:
-	go test -race ./...
+	CGO_ENABLED=1 go test -race ./...
 
 vet:
 	go vet ./...
