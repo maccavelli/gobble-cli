@@ -22,7 +22,7 @@ and the native set in the MADR) over `session/prompt`, with
 
 In:
 
-* `go.mod`, Kong, Viper, `github.com/coder/acp-go-sdk v0.13.5`
+* `go.mod`, Kong, `github.com/coder/acp-go-sdk v0.13.5`. The config surface is undecided and will be either a native Kong facility or a Kong-optimized surface we write, not Viper.
 * Agent loop sufficient to complete `session/prompt` with built-in tools
   `read`, `bash`, `edit`, `write` (grep/find/ls may follow in the same
   phase if cheap)
@@ -77,7 +77,7 @@ choice.
    `github.com/maccavelli/gobble-cli` unless a MADR says otherwise).
 2. `cmd/` main → `internal/cli` Kong root. Subcommands: `acp` (stdio
    agent), `prompt`, `mcp`, `auth` (auth may stub).
-3. Viper reads JSON; file path is a constant until D11 is decided.
+3. JSON settings; file path is a constant until D11 is decided. The config surface is undecided and will be either a native Kong facility or a Kong-optimized surface we write, not Viper. Config implementation stays unspecified.
 4. Makefile / CI: `go test ./...`, `gofmt`, vet on three OS.
 5. Pin `github.com/coder/acp-go-sdk v0.13.5`. No Charm modules.
 
@@ -392,3 +392,5 @@ MethodNotFound for `session/set_model`. No new phases in this tree.
   * Unknown `_` methods return -32601.
 * **Verification.** The stdio script follows the corrected list in the MADR's fifth amendment (Confirmation changes).
 * **Companion work.** The checklist above is replaced by magic-cli-remote `docs/decisions/0179-MADR-gobble-native-acp-provider.md` D1–D10. This plan still does not mutate that repository.
+
+**2026-10-04 — configuration library rejected.** Viper is rejected and is not the config stack. Phase 0 no longer names it. The config surface is undecided and will be either a native Kong facility or a Kong-optimized surface we write, not Viper. Config implementation stays unspecified. No dependency is added for it.

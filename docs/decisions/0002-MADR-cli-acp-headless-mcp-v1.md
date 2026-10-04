@@ -67,7 +67,7 @@ honestly advertised and actually executed.
 * TypeScript Pi's MCP role is a **client** of stdio and streamable-HTTP
   servers (`mcp.json`, `pi mcp add|list|login|logout`). ACP already carries
   MCP server configs on `session/new` and advertises `mcpCapabilities`.
-* Kong and Viper are the CLI and configuration stack. gobble has two modes:
+* The CLI library is Kong. The config surface is undecided and will be either a native Kong facility or a Kong-optimized surface we write, not Viper. gobble has two modes:
   a native terminal CLI mode, which is the default, and an enhanced terminal
   TUI mode. Core TUI is go-tui-lib. gobble does not reimplement core TUI.
   Where a core behaviour is not in the library yet, gobble waits rather than
@@ -324,7 +324,7 @@ unchanged.
 
 | Surface | Role |
 |---|---|
-| Kong + Viper | Process entry, flags, `mcp` / `auth` / `config` subcommands, print-style `prompt` |
+| Kong | Process entry, flags, `mcp` / `auth` / `config` subcommands, print-style `prompt`. The config surface is undecided and will be either a native Kong facility or a Kong-optimized surface we write, not Viper. |
 | `acp.Agent` | The agent command API, including slash commands |
 | ACP stdio | Headless RPC; the process magic-cli-remote spawns |
 | MCP client | stdio and streamable HTTP; tools become ordinary agent tools |
@@ -1035,3 +1035,7 @@ gobble's part:
   * an unknown `_x.ai/compact_conversation` gets -32601.
 * "`session/set_config_option` category `model`" reads: the request carries the `configId` of the option whose declared category is `model`. Category is a property of the option declaration, not of the request.
 * A test asserts that `available_commands_update` precedes the `session/new` response on the wire. It is shown failing on a copy that sends it after the response.
+
+### Amendment (2026-10-04): configuration library rejected
+
+Viper is rejected and is not the config stack. The CLI library stays Kong. The config surface is undecided and will be either a native Kong facility or a Kong-optimized surface we write, not Viper. No dependency is added for it.

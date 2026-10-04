@@ -9,10 +9,10 @@ This report records findings. It decides nothing. Each finding names the
 decision it bears on; those decisions belong in a MADR in this repository
 (`docs/decisions/`), and the work in its PLAN.
 
-Stated constraints from the request that opened this repository: the rewrite
-uses **Viper** for configuration and **Charm** (Lip Gloss and the rest of
-that stack) for terminal UI. The command library that request named is the
-rejected option in 0002-MADR.
+Stated constraints from the request that opened this repository: **Charm**
+(Lip Gloss and the rest of that stack) for terminal UI. The command library
+that request named is the rejected option in 0002-MADR. The configuration
+library that request named is rejected and is not the config stack. The config surface is undecided and will be either a native Kong facility or a Kong-optimized surface we write, not Viper.
 
 ## Summary
 
@@ -66,10 +66,10 @@ Each finding carries an evidence level:
 - **R:** read in source or package documentation, not executed.
 
 No TypeScript test, build, or live provider request was run. No Go scratch
-module was compiled. Charm and Viper behaviour is taken from the
-in-house `ocp-login` tree (Viper 1.21.0, Charm v2
+module was compiled. Charm behaviour is taken from the
+in-house `ocp-login` tree (Charm v2
 `charm.land/{bubbletea,bubbles,lipgloss}/v2`) and from the libraries'
-public docs.
+public docs. That tree's configuration library is not gobble's config stack.
 
 ## What exists
 
@@ -143,7 +143,7 @@ reserved for extensions.
 A subcommand library maps onto this surface. Unknown extension flags are the part that
 needs a design (F14). The library the opening request named is the rejected option in 0002-MADR.
 
-### Configuration the Viper layer would have to match
+### Configuration the settings layer has to match
 
 Settings are JSON, not YAML. Locations (R, `docs/configuration.md`,
 `settings-manager.ts`):
@@ -154,8 +154,8 @@ Settings are JSON, not YAML. Locations (R, `docs/configuration.md`,
 
 The `Settings` interface is a large nested JSON object: model defaults,
 compaction, retry, tools, packages, extensions, skills, themes, terminal,
-images, keybindings, MCP servers, cache warming. Viper can read JSON and
-bind env. Compatibility with existing `~/.pi` files is a product decision
+images, keybindings, MCP servers, cache warming. The config surface is undecided and will be either a native Kong facility or a Kong-optimized surface we write, not Viper.
+Compatibility with existing `~/.pi` files is a product decision
 (F15).
 
 ## Findings
@@ -411,8 +411,8 @@ OpenShell patterns; those remain valid around a Go binary.
 | `go-llmprovider-sdk` | docs + accepted migration MADR; extraction in progress | providers, OAuth, catalogs — subset of `pi-ai` |
 | `go-tui-lib` | README only, no packages | intended Charm extraction target |
 | `mcplib` | mature MCP **server** library | Pi's `pi-mcp` is a **client** |
-| `ocp-login` | production command library + Viper + Charm v2 TUI | CLI/TUI patterns, not agent semantics |
-| `magic-cli-remote` | command library + Viper, ACP, MCP; no Charm in `go.mod` | remote-agent CLI experience |
+| `ocp-login` | production command library + Charm v2 TUI | CLI/TUI patterns, not agent semantics. Its config library is not gobble's config stack. |
+| `magic-cli-remote` | command library, ACP, MCP; no Charm in `go.mod` | remote-agent CLI experience. Its config library is not gobble's config stack. |
 | `go-core-lib` | README stub | none yet |
 
 Nothing in those repositories implements an agent loop, session tree,
@@ -434,18 +434,17 @@ user-facing CLI.
 
 **Bears on:** D15 (command layout). The library named in the opening request is the rejected option in 0002-MADR.
 
-### F15 — Viper can read the JSON settings; schema and merge rules are the work (R)
+### F15 — Schema and merge rules are the settings work (R)
 
-Viper supports JSON, env prefix, and nested keys. Pi's merge rules are
-specific: project overrides user; resource lists concatenate; `defaultTools`
-has `+name` / `-name` patch semantics; some keys are global-only
-(`defaultProjectTrust`, `deviceId`). Viper's default merge will not
-reproduce that without an explicit layer.
+Viper is rejected and is not the config stack. The config surface is undecided and will be either a native Kong facility or a Kong-optimized surface we write, not Viper.
+Pi's merge rules are specific: project overrides user; resource lists
+concatenate; `defaultTools` has `+name` / `-name` patch semantics; some
+keys are global-only (`defaultProjectTrust`, `deviceId`). A default object
+merge will not reproduce that without an explicit layer.
 
 Keybindings, themes, and MCP server blocks are structured JSON. Keeping
 the on-disk schema lets TypeScript Pi and Go Pi share a home directory
-(D11). Changing it to YAML because Viper prefers YAML splits the user
-base.
+(D11). Changing the on-disk format to YAML splits the user base.
 
 **Bears on:** D11, D16 (settings schema).
 
@@ -465,12 +464,14 @@ identity findings).
 **Bears on:** D17 (name, config dir, User-Agent), D18 (derived vs
 clean-room).
 
-## Charm / Viper mapping
+## Charm and settings mapping
+
+The config surface is undecided and will be either a native Kong facility or a Kong-optimized surface we write, not Viper.
 
 | Pi surface | Stated Go stack | Fit |
 |---|---|---|
 | `cli/args.ts`, package/auth/mcp subcommands | command library | Good. Subcommands already exist. |
-| `settings.json`, `PI_*` env | Viper | Good for load/bind; custom merge for patch lists. |
+| `settings.json`, `PI_*` env | undecided | Custom merge for patch lists. Not a chosen config library. |
 | Component tree, differential render, alt screen | Bubble Tea + Lip Gloss | Rewrite. Elm architecture replaces the component tree. |
 | Editor (kill ring, undo, autocomplete) | Bubbles textarea + custom | Large custom widget. |
 | Markdown + LaTeX | Glamour + extra | Markdown yes; LaTeX/mermaid extra. |
@@ -534,8 +535,9 @@ For orientation only; a PLAN owns the steps after a MADR chooses D1–D18.
 
 A CLI-first rewrite, given D1 = shipping `pi`, looks like:
 
-1. Seed this module: `go.mod`, a command root, Viper JSON settings, CI on
-   darwin/linux/windows, identity (D17).
+1. Seed this module: `go.mod`, a command root, JSON settings, CI on
+   darwin/linux/windows, identity (D17). The config surface is undecided and will be either a native Kong facility or a Kong-optimized surface we write, not Viper.
+   Config implementation stays unspecified.
 2. Agent loop + built-in tools + session JSONL (D5, D11, D13).
 3. Provider/auth via `go-llmprovider-sdk` or an in-tree layer (D10),
    starting with a small provider set and expanding.

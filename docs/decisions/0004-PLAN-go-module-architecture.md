@@ -206,6 +206,13 @@ checks. Phases 0–5 retain their separate approval and execution order.
 
 ### Phase 2 — process edge and identity
 
+Steps 7–13 were added on 2026-10-04 after
+[0006-MADR-goose-cli-port-candidates.md](0006-MADR-goose-cli-port-candidates.md)
+was accepted. They were not in this phase when it was first written.
+Config implementation stays unspecified. The config surface is undecided
+and will be either a native Kong facility or a Kong-optimized surface we
+write, not Viper.
+
 1. `cmd/gobble/main.go`: `signal.NotifyContext(ctx, os.Interrupt,
    syscall.SIGTERM)`, then `os.Exit(cli.Main(ctx, os.Args[1:], os.Stdin,
    os.Stdout, os.Stderr))`.
@@ -227,13 +234,51 @@ checks. Phases 0–5 retain their separate approval and execution order.
      is the protocol.
 5. `internal/cli` root through Kong. Subcommands:
    * `version [--json]`;
-   * `completion` (Kong);
+   * `completion` (Kong), which prints a script for bash, zsh, fish,
+     and powershell only. Not nu or elvish. Do not call clap_complete;
    * `config path`, which prints the four role directories;
    * `acp`, which returns "not yet implemented" and exit code 2 until
-     0002-PLAN Phase 1.
+     0002-PLAN Phase 1. This stub is not the product `acp` command;
+   * a session command and a one-shot command that share flags
+     (steps 8 and 9);
+   * session list, resume, and rename only (step 10);
+   * `configure`, only on a TTY (step 12);
+   * `info --check`, non-zero on provider failure (step 13).
 6. Exit-code table in `internal/cli/exit.go`: 0 ok, 1 runtime failure, 2
    usage, 3 authentication, 4 cancelled (130 for SIGINT is kept when a
    signal ended the process).
+7. In `cmd/gobble/main.go`, enable Windows virtual-terminal processing
+   once on stdout and stderr before any UI, in addition to step 1.
+   Use the standard library or an existing sibling. Do not depend on
+   the Rust console crate. Do not copy an 8 MiB stack workaround
+   (0006 D8).
+8. Shared flags on the session command and the one-shot command, on the
+   Kong definition in `internal/cli` (0006 D9).
+9. One-shot input is exclusive among text, file, and stdin. Output is
+   text or json only. Do not copy a stdin panic. Do not drop `--system`
+   when the input is a file path (0006 D10).
+10. Session subcommands are list, resume, and rename only (0006 D11).
+11. A Go line editor with history. Ctrl+C clears the line. A Windows
+   paste is not submitted once per line. Do not implement the editor
+   with go-tui-lib. TUI stays go-tui-lib (0006 D12).
+12. `configure` runs only on a TTY (0006 D13).
+13. `info --check` exits non-zero on provider failure (0006 D14).
+
+These commands are the Kong surface accepted in 0006. They do not
+add agent-loop behaviour. That stays out of this plan (Scope).
+
+Out of this phase, named by the 2026-10-04 acceptance in 0006 and not
+added here: bare session (goose-as-default-session); the skills
+command; a second parser (clap, Cobra, or fang), because this phase
+stays on Kong; term aliases; man pages; hidden commands; Sigstore
+update (self-update stays go-selfupdate-lib); a path-root override
+(keep step 3); date log folders and 14-day cleanup (keep step 4);
+product commands (real acp, serve, roam, mcp, gateway, schedule,
+recipe, review, local-models, plugin); and a slash registry (one
+registry outside the CLI binary, unknown slash is an error), which is
+not a Phase 2 command. The `acp` line in step 5 remains the
+not-yet-implemented stub. It is not the product command. Config
+implementation stays unspecified.
 
 **Accept:**
 
@@ -244,6 +289,21 @@ checks. Phases 0–5 retain their separate approval and execution order.
 * A test starts `gobble acp` with a closed stdin and asserts that nothing is
   written to stdout except JSON-RPC. It fails on a copy that logs a
   start-up banner to stdout.
+* `gobble completion bash` and `gobble completion powershell` print a
+  script on stdout and exit 0. nu and elvish are not required.
+* Before any UI, virtual-terminal processing is enabled on stdout and
+  stderr. The module graph does not depend on the Rust console crate,
+  and there is no 8 MiB stack workaround.
+* The session command and the one-shot command share one flag set.
+* One-shot input is exactly one of text, file, or stdin, and the output
+  is text or json. A file path keeps `--system`. A failed stdin read is
+  an error, not a panic.
+* Session offers list, resume, and rename, and no other session
+  subcommand.
+* The line editor keeps history, Ctrl+C clears the line, and a
+  multi-line Windows paste is not submitted line by line.
+* `configure` fails when stdin is not a terminal.
+* `info --check` exits non-zero when the provider check fails.
 
 ### Phase 3 — test harnesses
 
@@ -599,3 +659,23 @@ mingw32-make: *** [makefile:162: check-cgo-off] Error 1
 
 mingw32-make exited 2. The scratch file was deleted and was not
 committed.
+
+**2026-10-04 — Phase 2 terminal scope accepted from 0006.** The owner
+accepted a wider terminal scope than the narrow proposal recorded in
+`5353bdb897040723c63af69b24fe1ded3d1a743b`. This plan was already
+`in-progress`. It is not completed. Phase 2 steps 5 and 7–13, the
+out-of-phase list under Phase 2, and the Phase 2 accept checks are the
+change. Step 5's `completion` bullet now names bash, zsh, fish, and
+powershell only. It previously said only `` `completion` (Kong) ``.
+Steps 1–4 and 6 are unchanged. Still out of Phase 2: bare session
+(goose-as-default-session), the skills command, a second parser (clap,
+Cobra, or fang), term aliases, man pages, hidden commands, Sigstore
+update, a path-root override, date log folders and 14-day cleanup,
+product commands (real acp, serve, roam, mcp, gateway, schedule,
+recipe, review, local-models, plugin), and a slash registry, which is
+not a Phase 2 command. Config implementation stays unspecified. The
+config surface is undecided and will be either a native Kong facility
+or a Kong-optimized surface we write, not Viper. Viper is rejected and
+is not the config stack. The CLI library in Phase 2 remains Kong.
+Go 1.27.1. TUI stays go-tui-lib. Self-update stays go-selfupdate-lib.
+The Goal section is unchanged.

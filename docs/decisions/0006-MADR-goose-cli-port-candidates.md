@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 date: 2026-10-04
 decision-makers: repository owner
 consulted: none
@@ -256,3 +256,43 @@ Already decided, and not re-opened by this record: Kong is the CLI library; the 
 - Whether a token counter already exists (F10). **[unverified]**. `.agents/skills` is already named in `0003-MADR`. Porting goose `skills` is rejected (D6).
 - How `reply_with_state_machine` treats a slash line (F8). **[unverified]**.
 - Whether one-shot `json` is one document or a stream. Goose has both `json` and `stream-json` (F3). Undecided. Not a Phase 2 step.
+
+## Amendment — 2026-10-04: accepted Phase 2 terminal scope
+
+Commit `5353bdb897040723c63af69b24fe1ded3d1a743b` recorded a narrow proposed scope: Option F, with D1 and D2 proposed and not accepted, and with one-shot input, shared flags, session list/resume/rename, the line editor, TTY-only configure, and `info --check` left undecided. The owner has since accepted a wider set. This amendment records that acceptance. It does not rewrite the Decision Outcome above so that the wider scope looks like the original proposal. The Decision Outcome text, including "Option F is the proposed outcome. It is not accepted" and the undecided list, is superseded for scope by this amendment. Sentences above that say this file is only a proposal, or that status is proposed, described the record before this amendment. D1 through D6 keep their numbers. D3, D4, D5, and D6 stay rejections. This is not Option A: bare session and the skills command stay rejected.
+
+The accepted items below are commitments. They are in Phase 2 of `docs/decisions/0004-PLAN-go-module-architecture.md`. Config implementation stays unspecified. The config surface is undecided and will be either a native Kong facility or a Kong-optimized surface we write, not Viper. Viper is rejected and is not the config stack.
+
+D7. Accepted. Kong completion prints a script for bash, zsh, fish, and powershell only. Not nu or elvish. Do not call clap_complete. This is the shell set D1 proposed, now accepted. `0004-PLAN` Phase 2 already names a Kong `completion` subcommand. This decision does not add a second command. Which of those shells Kong emits was not re-checked and stays **[unverified]** (F5). A gap there is not a reason to call clap_complete or to add nu or elvish.
+
+D8. Accepted. Enable Windows virtual-terminal processing once on stdout and stderr in `cmd/gobble/main.go` before any UI. Use the Go standard library or an existing sibling. Do not depend on the Rust `console` crate. Do not copy the 8 MiB stack workaround (`stack_size(8 * 1024 * 1024)` in `crates/goose-cli/src/main.rs`, F15). This is the step D2 proposed, now accepted.
+
+D9. Accepted. Shared flags on the session command and the one-shot command. F2 measured that `Session` and `Run` both flatten `SessionOptions`, `ExtensionOptions`, and `ModelOptions` (`crates/goose-cli/src/cli.rs`). That sharing is now chosen work. It was not chosen when the Decision Outcome was written.
+
+D10. Accepted. Exclusive one-shot input among text, file, and stdin, with text or json output only. F3 measured that goose's `instructions`, `--text`, and `--recipe` conflict, that `output_format` includes `stream-json`, that a file path passed to `--instructions` sets `additional_system_prompt` to `None`, and that a stdin read failure panics via `.expect("Failed to read from stdin")` (`crates/goose-cli/src/cli.rs`, `parse_run_input`). The commitment is exclusivity of text, file, and stdin, and output of text or json only. Do not copy the stdin panic. Do not drop `--system` when the input is a file path. Do not add `stream-json`. Recipes stay out (D6).
+
+D11. Accepted. Session list, resume, and rename only. F4 measured a larger `SessionCommand` (list, remove, export, import, diagnostics, rename) and resume flags including fork and edit (`crates/goose-cli/src/cli.rs`). List, resume, and rename are now chosen work. Remove, export, import, diagnostics, fork, and edit stay out.
+
+D12. Accepted. A Go line editor with history, Ctrl+C clears the line, and no per-line Windows paste submit. F6 measured rustyline history and a clear of a non-empty line on Ctrl+C (`crates/goose-cli/src/session/input.rs`). F7 measured that Windows pastes must not submit each embedded newline (`crates/goose-cli/src/session/paste.rs`). Those behaviors are now chosen work. Do not port rustyline. Do not call go-tui-lib. TUI stays go-tui-lib. The chip UI is not a requirement. Which sibling, if any, supplies the editor was not re-checked and stays **[unverified]**; a missing library is not a reason to port `paste.rs`.
+
+D13. Accepted. Configure only on a TTY. F9 measured that `handle_configure` returns an error when stdin is not a terminal (`crates/goose-cli/src/commands/configure.rs`). That limit is now chosen work. The provider-search wizard, telemetry consent, and Tetrate signup in that file are not part of this commitment.
+
+D14. Accepted. `info --check` exits non-zero on provider failure. F13 measured that `handle_info`, when `check` is true, calls `check_provider` and returns an error if that check fails (`crates/goose-cli/src/commands/info.rs`). That exit is now chosen work. Do not copy doctor-as-slash-injection.
+
+Still out of Phase 2:
+
+- bare session (goose-as-default-session). D6 stands.
+- the skills command. D6 stands.
+- a second parser (clap, Cobra, or fang). Kong stays the command parser. Option E stands.
+- term aliases. D6 stands.
+- man pages. D6 stands.
+- hidden commands. D6 stands.
+- Sigstore update. D6 stands. Self-update stays go-selfupdate-lib.
+- a path-root override. D3 stands.
+- date log folders and 14-day cleanup. D4 stands.
+- product commands (real acp, serve, roam, mcp, gateway, schedule, recipe, review, local-models, plugin). D6 stands. A stub `acp` that is not yet implemented is a separate Phase 2 step already in `0004-PLAN`; it is not the product command.
+- slash registry (one registry outside the CLI binary, unknown slash is an error) is not a Phase 2 command. The F8 rule stays proposed and not accepted.
+
+D5 stands: keep the exit-code table. Do not copy `process::exit(1)` or the stdin `.expect` panic.
+
+Go 1.27.1. Kong. TUI stays go-tui-lib. Self-update stays go-selfupdate-lib. No `0006-PLAN` is created. `0004-PLAN` is the plan Phase 2 lives in, and this amendment does not mark that plan completed.
