@@ -1,8 +1,15 @@
 # gobble-cli
 
-**gobble** is a planned Go rewrite of the [Pi](https://github.com/earendil-works/pi) agent harness. The planned product is a coding agent with tool calling, sessions, providers, MCP, and a Charm TUI, with the [Agent Client Protocol](https://agentclientprotocol.com) as its command API. The planned runtime binary is `gobble`; the repository is `gobble-cli`, and the planned module path is `github.com/maccavelli/gobble-cli`.
+**gobble** is a planned Go rewrite of the [Pi](https://github.com/earendil-works/pi) agent harness.
+The planned product is a coding agent with tool calling, sessions, providers, MCP, and a Charm TUI,
+with the [Agent Client Protocol](https://agentclientprotocol.com) as its command API. The planned
+runtime binary is `gobble`; the repository is `gobble-cli`, and the planned module path is
+`github.com/maccavelli/gobble-cli`.
 
-This repository is a greenfield rewrite. It does not share history with the TypeScript monorepo. 0004-PLAN Phase 0 (`925ef0abf83e475c33b3ffae14685617b035639e`) and Phase 1 (`661b14e768407264a38687e2db99201cae2a04a1`) have run: the Go module and the compile-only package skeleton exist. There is no `gobble` process binary yet. Phase 2 has not run.
+This repository is a greenfield rewrite. It does not share history with the TypeScript monorepo.
+0004-PLAN Phase 0 (`925ef0abf83e475c33b3ffae14685617b035639e`) and Phase 1
+(`661b14e768407264a38687e2db99201cae2a04a1`) have run: the Go module and the compile-only package
+skeleton exist. There is no `gobble` process binary yet. Phase 2 has not run.
 
 **Documentation:** [docs/](docs/README.md)
 
@@ -41,9 +48,24 @@ Stack for v1:
 - **Modes:** gobble has two modes: a native terminal CLI mode, which is the default, and an enhanced terminal TUI mode.
 - **CLI:** Kong. The config surface is undecided and will be either a native Kong facility or a surface we write.
 - **Protocols:** [ACP Go SDK](https://github.com/coder/acp-go-sdk) v0.13.5 (with the fleet `replace` to `github.com/maccavelli/acp-go-sdk v0.13.6-mcr.1`) and the [MCP Go SDK](https://github.com/modelcontextprotocol/go-sdk).
-- **LLM providers:** [go-llmprovider-sdk](https://github.com/maccavelli/go-llmprovider-sdk) behind gobble's planned `llm` facade. It has no tag yet; observed commit `efd9c61` includes catalog and setup-wizard work, while its adapter-facing contract and usage decoding match the assessed `67fc56e` source. Native streaming is unsupported by its built-in providers. Official Anthropic / OpenAI / Google vendor SDKs are not planned 1.0 dependencies.
-- **Self-update:** [go-selfupdate-lib](https://github.com/maccavelli/go-selfupdate-lib) `selfupdate`, formerly go-core-lib, renamed at `v1.5.0` (`6deaa52`). `v1.5.0` exports `selfupdate`, `selfupdate/cli`, `selfupdate/selfupdatetest` and `buildinfo`; the old path `github.com/maccavelli/go-core-lib` ends at `v1.4.1`, deprecated. Opt-in prerelease channels arrived in `v1.3.0`; gobble's planned releases and update selection stay stable-only. F10 decides whether gobble uses the released `buildinfo` or its own planned `internal/buildinfo`. The release workflow publishes the raw binaries that `selfupdate` selects. gobble does not reimplement self-update.
-- **TUI:** [go-tui-lib](https://github.com/maccavelli/go-tui-lib). Core TUI is go-tui-lib. gobble does not reimplement core TUI. Where a core behaviour is not in the library yet, gobble waits rather than copying it. Tag `v0.1.0` (`5c57806`) exports `layout`, `workspace`, `glyph`, `theme` and `tuitest` on Charm v2; that list is that tag's surface, not the limit of core TUI. Its workspace has recorded defects; integration still waits for a corrected tested tag.
+- **LLM providers:** [go-llmprovider-sdk](https://github.com/maccavelli/go-llmprovider-sdk) behind
+  gobble's planned `llm` facade. It has no tag yet; observed commit `efd9c61` includes catalog and
+  setup-wizard work, while its adapter-facing contract and usage decoding match the assessed
+  `67fc56e` source. Native streaming is unsupported by its built-in providers. Official Anthropic /
+  OpenAI / Google vendor SDKs are not planned 1.0 dependencies.
+- **Self-update:** [go-selfupdate-lib](https://github.com/maccavelli/go-selfupdate-lib)
+  `selfupdate`, formerly go-core-lib, renamed at `v1.5.0` (`6deaa52`). `v1.5.0` exports
+  `selfupdate`, `selfupdate/cli`, `selfupdate/selfupdatetest` and `buildinfo`; the old path
+  `github.com/maccavelli/go-core-lib` ends at `v1.4.1`, deprecated. Opt-in prerelease channels
+  arrived in `v1.3.0`; gobble's planned releases and update selection stay stable-only. F10 decides
+  whether gobble uses the released `buildinfo` or its own planned `internal/buildinfo`. The release
+  workflow publishes the raw binaries that `selfupdate` selects. gobble does not reimplement
+  self-update.
+- **TUI:** [go-tui-lib](https://github.com/maccavelli/go-tui-lib). Core TUI is go-tui-lib. gobble
+  does not reimplement core TUI. Where a core behaviour is not in the library yet, gobble waits
+  rather than copying it. Tag `v0.1.0` (`5c57806`) exports `layout`, `workspace`, `glyph`, `theme`
+  and `tuitest` on Charm v2; that list is that tag's surface, not the limit of core TUI. Its
+  workspace has recorded defects; integration still waits for a corrected tested tag.
 
 These libraries are sibling source trees under active development. **This
 repository does not import any of them yet.** The dated source evidence and

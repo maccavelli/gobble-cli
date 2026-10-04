@@ -23,6 +23,8 @@ linters:
     - staticcheck
     - unconvert
     - unparam
+    - unused
+    - whitespace
   settings:
     errcheck:
       check-type-assertions: true
@@ -91,3 +93,13 @@ linters:
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

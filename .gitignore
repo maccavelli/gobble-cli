@@ -22,3 +22,16 @@ vendor/
 *~
 .idea/
 .vscode/
+
+# Python (scripts/check_records.py; 0007-MADR D4)
+__pycache__/
+*.py[cod]
+
+# Scratch and tool output (the fleet .gitignore)
+coverage_*.out
+*.log
+*.tmp
+tmp/
+temp/
+.cache/
+.worktrees/

@@ -126,7 +126,7 @@ outside this tree.
 
 From `packages/coding-agent/docs/cli.md` and `src/cli/args.ts` (R):
 
-```
+```text
 pi [options] [--] [@files...] [messages...]
 pi install | remove | uninstall | update | list
 pi config
@@ -175,11 +175,11 @@ workspace packages to extension code at runtime.
 A Go binary cannot load a `.ts` factory and honour that import graph.
 Options that preserve *some* extension story:
 
-* embed a JS runtime (goja, or wazero + the existing QuickJS WASM) and
+- embed a JS runtime (goja, or wazero + the existing QuickJS WASM) and
   keep the TypeScript API — the process is then a JS host written in Go;
-* replace the API with Go plugins (`plugin` build mode, cgo, poor Windows
+- replace the API with Go plugins (`plugin` build mode, cgo, poor Windows
   story) or a WASM/RPC extension host;
-* drop third-party TypeScript extensions and keep only skills / prompts /
+- drop third-party TypeScript extensions and keep only skills / prompts /
   themes, which are data.
 
 **Bears on:** D1 (what "complete" means), D2 (extension host).
@@ -232,15 +232,15 @@ clients if the record contract is kept (F11).
 
 `pi-tui` (19k source lines, 20k test lines) implements:
 
-* main-screen and alternate-screen renderers with differential updates and
+- main-screen and alternate-screen renderers with differential updates and
   CSI 2026 synchronized output;
-* a component tree (Editor, Markdown, Image, SelectList, SettingsList,
+- a component tree (Editor, Markdown, Image, SelectList, SettingsList,
   MouseRegion, stacks, ScrollView, Loader, …);
-* an emacs-style Editor: kill ring, undo, grapheme/word segmentation, paste
+- an emacs-style Editor: kill ring, undo, grapheme/word segmentation, paste
   markers, autocomplete;
-* OKLCH / OKHSL color math;
-* Kitty and iTerm2 inline images;
-* N-API native modules for clipboard (text, image, file paths) and
+- OKLCH / OKHSL color math;
+- Kitty and iTerm2 inline images;
+- N-API native modules for clipboard (text, image, file paths) and
   modifier-key state on Darwin, Win32, and Linux X11 (`native/`, 1,016
   lines of C/Obj-C).
 
@@ -280,12 +280,12 @@ Go replacements exist (`image`, `x/image`, `disintegration/imaging`,
 
 Today's install paths:
 
-* `npm i -g --ignore-scripts @earendil-works/pi-coding-agent` (Node ≥ 22.19);
-* `curl -fsSL https://pi.dev/install.sh | sh` (managed releases);
-* `bun build --compile` standalone binary, with native `.node` prebuilds
+- `npm i -g --ignore-scripts @earendil-works/pi-coding-agent` (Node ≥ 22.19);
+- `curl -fsSL https://pi.dev/install.sh | sh` (managed releases);
+- `bun build --compile` standalone binary, with native `.node` prebuilds
   and Photon WASM;
-* Node SEA;
-* `pi update --self`.
+- Node SEA;
+- `pi update --self`.
 
 A Go binary is one artifact per OS/arch. That removes Node, Bun, N-API
 prebuilds, and shrinkwrap/install-lock machinery. Self-update from GitHub
@@ -575,7 +575,7 @@ library rows in F13 and the "each is open" table above are that day's
 facts. On 2026-09-30 the sibling libraries were re-probed, and the
 decisions that this report left open were recorded in MADRs:
 
-* **`go-llmprovider-sdk`** is the module
+- **`go-llmprovider-sdk`** is the module
   `github.com/maccavelli/go-llmprovider-sdk` (Go 1.27.1, stdlib +
   `x/term`). It has a v1 contract (`Provider`, `Stream`, `APIError`,
   `providers.New`, `llmtest`) on `origin/main` at
@@ -584,10 +584,10 @@ decisions that this report left open were recorded in MADRs:
   `grok`); the rest still use the old `Generate*` API. There is no git
   tag and no LICENSE file. Native streaming is `Unsupported` on every
   moved provider; `Stream` synthesises events from `Generate`.
-* **`go-core-lib`** is tagged `v1.0.0` / `v1.0.1` / `v1.1.0`
+- **`go-core-lib`** is tagged `v1.0.0` / `v1.0.1` / `v1.1.0`
   (`v1.1.0` = `96b30961180671ab3697585951219001ecbb1c90`, Apache-2.0).
   The live package is `selfupdate`. It is not a README stub.
-* **D10, D9 (toolchain), D14** are decided in
+- **D10, D9 (toolchain), D14** are decided in
   [0004-MADR](../decisions/0004-MADR-go-module-architecture.md).
   **`gobble update`** is decided in
   [0005-MADR](../decisions/0005-MADR-v1-feature-scope.md).

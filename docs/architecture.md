@@ -1,13 +1,23 @@
 # Architecture
 
-How `gobble-cli` is put together, as it is now. This file carries no history and no rationale — when you want to know *why* something is this way, the decision records under [decisions/](decisions/) hold the argument, and [README.md](README.md) points at the ones people ask for most.
+How `gobble-cli` is put together, as it is now. This file carries no history and no rationale — when
+you want to know *why* something is this way, the decision records under [decisions/](decisions/)
+hold the argument, and [README.md](README.md) points at the ones people ask for most.
 
 ## What it is
 
 A Git repository for a planned Go rewrite of the Pi coding-agent CLI. The
-planned binary name is `gobble`. The command stack is Kong. The config surface is undecided and will be either a native Kong facility or a surface we write. gobble has two modes: a native terminal CLI mode, which is the default, and an enhanced terminal TUI mode. Core TUI is go-tui-lib on Charm v2. gobble does not reimplement core TUI. Where a core behaviour is not in the library yet, gobble waits rather than copying it. Self-update is go-selfupdate-lib. gobble does not reimplement self-update.
+planned binary name is `gobble`. The command stack is Kong. The config surface is undecided and will
+be either a native Kong facility or a surface we write. gobble has two modes: a native terminal CLI
+mode, which is the default, and an enhanced terminal TUI mode. Core TUI is go-tui-lib on Charm v2.
+gobble does not reimplement core TUI. Where a core behaviour is not in the library yet, gobble waits
+rather than copying it. Self-update is go-selfupdate-lib. gobble does not reimplement self-update.
 
-The Go module exists. 0004-PLAN Phase 0 (`925ef0abf83e475c33b3ffae14685617b035639e`) and Phase 1 (`661b14e768407264a38687e2db99201cae2a04a1`) have run. The tree has the compile-only package skeleton, including `cmd/gobble` as a package comment. There is no process binary: Phase 2 has not run. Agent behaviour is not in the tree. `git ls-remote origin refs/heads/main` on 2026-10-04 returned `c1f52a863d3fe2e19896ea4707b9115c915eb444`.
+The Go module exists. 0004-PLAN Phase 0 (`925ef0abf83e475c33b3ffae14685617b035639e`) and Phase 1
+(`661b14e768407264a38687e2db99201cae2a04a1`) have run. The tree has the compile-only package
+skeleton, including `cmd/gobble` as a package comment. There is no process binary: Phase 2 has not
+run. Agent behaviour is not in the tree. `git ls-remote origin refs/heads/main` on 2026-10-04
+returned `c1f52a863d3fe2e19896ea4707b9115c915eb444`.
 
 ## Sibling sources
 
@@ -23,19 +33,25 @@ repository. No `go.mod` or gobble package imports them yet.
 
 ## Tree
 
-```
+```text
 README.md                 repository entry; links here
 LICENSE                   Apache License 2.0
 NOTICE                    Pi MIT credit; sibling Apache-2.0 libraries
+AGENTS.md                 agent instructions
+.markdownlint-cli2.jsonc  fleet Markdown style
+.gitattributes            LF on every platform
+scripts/check_records.py  record numbering and link check
 docs/
   README.md               ToC and the "I want to…" matrix
   architecture.md         this file
   decisions/              MADR/PLAN pairs
   reports/                numbered observations
-  guides/                 unnumbered how-to documents (empty)
+  guides/                 unnumbered how-to documents (not created yet)
 ```
 
-The first record is [0001-REPORT-go-port-feasibility.md](reports/0001-REPORT-go-port-feasibility.md). It describes the TypeScript product that would be rewritten; it is not a description of code in this repository.
+The first record is
+[0001-REPORT-go-port-feasibility.md](reports/0001-REPORT-go-port-feasibility.md). It describes the
+TypeScript product that would be rewritten; it is not a description of code in this repository.
 
 ## What is not here
 

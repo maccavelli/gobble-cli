@@ -35,7 +35,7 @@ The module is Go 1.27.1, idiomatic, and modular.
 In:
 
 * `go.mod`, `tool` directives, Makefile, `scripts/go-precheck.sh`,
-  `.golangci.yml`, `.editorconfig`, `LICENSE`, `NOTICE`
+  `.golangci.yml`, ~~`.editorconfig`~~ *(struck 2026-10-04: no fleet repository has one; 0007-MADR D8)*, `LICENSE`, `NOTICE`
 * One `doc.go` per package in the 0004-MADR package map, stating the tier
 * Contract types and interfaces for `llm`, `tool`, `session`, `hook`,
   `permission` and `gobble` (compiling, documented, no behaviour)
@@ -135,7 +135,7 @@ checks. Phases 0–5 retain their separate approval and execution order.
 7. Write `.golangci.yml` (v2) with mcplib's linter set: bodyclose,
    errcheck, errorlint, gocognit, goconst, gocritic, gocyclo, gosec, govet,
    ineffassign, makezero, misspell, nakedret, nilerr, revive, staticcheck,
-   unconvert, unparam.
+   unconvert, unparam. *(2026-10-04: mcplib's set is these plus `unused` and `whitespace`, with the `gofmt` and `goimports` formatters; 0007-PLAN P5 adds them.)*
 8. ~~Add `LICENSE` (MIT) and `NOTICE`. `NOTICE` credits Pi's MIT copyright
    line (0003-MADR) and `go-core-lib` (Apache-2.0) for the self-update
    library and reusable workflow this plan will call. Do not invent a
@@ -349,6 +349,7 @@ publish through it).
    * steps `make preflight`, `make race` (not on windows arm), and
      `make archtest`;
    * golden-transcript artifacts are uploaded on failure.
+   * *(2026-10-04, 0007-MADR D8: see the amendment of that date for the CI hygiene this job also carries.)*
 2. A **build** job on tags matching `v*` produces the staged set into
    an artifact. A **publish** job runs only on a strict stable tag and
    calls the reusable workflow. Record the pin in the workflow file:
@@ -677,3 +678,18 @@ config surface is undecided and will be either a native Kong facility
 or a surface we write. The CLI library in Phase 2 remains Kong.
 Go 1.27.1. TUI stays go-tui-lib. Self-update stays go-selfupdate-lib.
 The Goal section is unchanged.
+
+**2026-10-04 — repository scaffold (0007-MADR D8).** [0007-MADR-repository-scaffolding-to-fleet-standard.md](0007-MADR-repository-scaffolding-to-fleet-standard.md) brought the repository up to the fleet scaffold. This PLAN changes as follows:
+
+* **Scope.** `.editorconfig` is struck. No fleet repository has one; gofmt, `.gitattributes` and markdownlint cover its job.
+* **Phase 0 step 7.** The linter set is mcplib's full set: the 18 listed plus `unused` and `whitespace`, with the `gofmt` and `goimports` formatters. 0007-PLAN P5 added them.
+* **Phase 4, CI hygiene,** in addition to the steps above:
+  * the workflow declares `permissions: contents: read` at the top level; the publish job keeps its own wider block;
+  * `concurrency: { group: ci-${{ github.ref }}, cancel-in-progress: true }`;
+  * `actions/checkout` runs with `persist-credentials: false`;
+  * on Linux, golangci-lint is installed at `v2.14.0`, and `go mod tidy -diff` runs;
+  * on Linux, shellcheck `v0.11.0` is downloaded with its SHA-256 checked, and runs over `scripts/*.sh`;
+  * on Linux, actionlint `v1.7.12` runs over `.github/workflows/`.
+
+  `make preflight` already runs markdownlint and the records check, so Phase 4 adds no separate step for them.
+* **Phase 4, Makefile.** `make preflight` runs on Linux and macOS since 0007-PLAN P2, which this phase's CI depends on.

@@ -3,11 +3,19 @@
 # (archtest, apidiff, verify-build-metadata) are present and no-op until
 # the tree those phases add exists.
 MODULE := github.com/maccavelli/gobble-cli
-SHELL := C:/PROGRA~1/Git/usr/bin/bash.exe
+# Recipes need bash (for pipefail) and grep, diff, cp and mv. On Windows
+# that is Git's bash, and Git's usr/bin goes on PATH because Git bash does
+# not put its coreutils there when make starts it from PowerShell. Set
+# GIT_BASH if Git is installed elsewhere. Every other host uses /bin/bash
+# (0007-MADR D5).
+ifeq ($(OS),Windows_NT)
+  GIT_BASH ?= C:/PROGRA~1/Git/usr/bin/bash.exe
+  SHELL := $(GIT_BASH)
+  export PATH := $(dir $(GIT_BASH)):$(PATH)
+else
+  SHELL := /bin/bash
+endif
 .SHELLFLAGS := -eu -o pipefail -c
-# Git bash does not put its coreutils on PATH when make starts it from
-# PowerShell. Recipes need grep, diff, cp, and mv.
-export PATH := C:/PROGRA~1/Git/usr/bin:$(PATH)
 
 # Shipped builds are pure Go. override beats an ambient or command-line
 # CGO_ENABLED, but only on these targets. Do not export it: local race
@@ -69,7 +77,8 @@ endif
 BIN := bin/gobble$(BIN_EXT)
 
 .PHONY: build install test race vet fmt lint staticcheck vulncheck tidy clean \
-	pre-add-check preflight check-cgo-off verify-build-metadata fix-check archtest apidiff
+	pre-add-check preflight check-cgo-off verify-build-metadata fix-check archtest apidiff \
+	check-records markdownlint
 
 # Shipped binaries are pure Go. check-cgo-off refuses CGO_ENABLED other than 0
 # and any `import "C"` in a .go file (0004-PLAN phase 0 accept).
@@ -92,7 +101,12 @@ vet:
 fmt:
 	gofmt -w .
 
+# golangci-lint v2.14.0 is the fleet pin (0007-MADR D5).
 lint:
+	@command -v golangci-lint >/dev/null 2>&1 || { \
+		echo "golangci-lint not found. Install: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0" >&2; \
+		exit 2; \
+	}
 	golangci-lint run ./...
 
 # staticcheck is pinned by the tool directive to the version magic-cli-remote
@@ -149,12 +163,14 @@ preflight: check-cgo-off
 	@echo "==> pre-add-check"; bash scripts/go-precheck.sh $(shell git ls-files '*.go'; git ls-files --others --exclude-standard '*.go')
 	@echo "==> go vet"; go vet ./...
 	@echo "==> staticcheck"; $(MAKE) --no-print-directory staticcheck
-	@echo "==> golangci-lint"; golangci-lint run ./...
+	@echo "==> golangci-lint"; $(MAKE) --no-print-directory lint
 	@echo "==> govulncheck"; go tool govulncheck ./...
 	@echo "==> fix-check"; $(MAKE) --no-print-directory fix-check
 	@echo "==> archtest"; $(MAKE) --no-print-directory archtest
 	@echo "==> apidiff"; $(MAKE) --no-print-directory apidiff
 	@echo "==> verify-build-metadata"; $(MAKE) --no-print-directory verify-build-metadata
+	@echo "==> check-records"; $(MAKE) --no-print-directory check-records
+	@echo "==> markdownlint"; $(MAKE) --no-print-directory markdownlint
 	@echo "preflight passed"
 
 check-cgo-off:
@@ -189,6 +205,15 @@ fix-check:
 		echo "fix-check: go fix -diff ./... is not empty" >&2; \
 		exit 1; \
 	fi
+
+# Records and docs links (0007-MADR D6).
+check-records:
+	python3 scripts/check_records.py --check-all
+
+# The fleet markdownlint config; records are excluded by its own globs
+# (0007-MADR D2).
+markdownlint:
+	npx --yes markdownlint-cli2@0.23.2
 
 # No-op until internal/archtest lands in phase 1.
 archtest:
