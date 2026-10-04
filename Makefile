@@ -171,14 +171,15 @@ check-cgo-off:
 		exit 1; \
 	fi
 
-# No-op until a cmd/gobble binary exists (phase 2) and release ldflags are
-# stamped (phase 4). The target name is part of the phase 0 Makefile.
+# No-op until cmd/gobble/main.go exists (phase 2). Phase 1 may add the
+# package directory without that file. Phase 4 owns the ldflags check.
+# The target name is part of the phase 0 Makefile.
 verify-build-metadata:
-	@if [ ! -d cmd/gobble ]; then \
-		echo "verify-build-metadata: no-op (cmd/gobble is not in this phase)"; \
+	@if [ ! -f cmd/gobble/main.go ]; then \
+		echo "verify-build-metadata: no-op (cmd/gobble/main.go is not in this phase)"; \
 		exit 0; \
 	fi; \
-	echo "verify-build-metadata: cmd/gobble exists; phase 4 owns the ldflags check" >&2; \
+	echo "verify-build-metadata: cmd/gobble/main.go exists; phase 4 owns the ldflags check" >&2; \
 	exit 1
 
 fix-check:
