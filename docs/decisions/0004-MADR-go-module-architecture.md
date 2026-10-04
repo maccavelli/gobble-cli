@@ -919,3 +919,7 @@ Still `proposed`. The owner directed the rules below. The sentences above stay a
 * **Canonical code.** As much code as possible is canonical: use the sibling libraries and the standard library rather than local copies. Here "canonical" means shared implementation, not the companion command names in 0005-MADR.
 
 Go 1.27.1, idiomatic Go, and a modular package tree are already the decision in this record (the title, the Decision Drivers, and `go 1.27.1`). This amendment does not change them.
+
+## Amendment — 2026-10-04: two terminal modes
+
+Still `proposed`. The owner directed that gobble has two modes: a native terminal CLI mode, which is the default, and an enhanced terminal TUI mode. Core TUI still comes from `go-tui-lib`; gobble does not reimplement core TUI. Where a core behaviour is not in the library yet, gobble waits rather than copying it. Self-update stays `github.com/maccavelli/go-selfupdate-lib`; gobble does not reimplement self-update. The CLI library remains Kong, not Cobra or fang. The sentences above stay as written. This supersedes any sentence that starts the TUI on a TTY with no prompt; that sentence remains as dated history.

@@ -585,3 +585,5 @@ committed.
 * **Self-update.** Self-update uses `go-selfupdate-lib`. gobble does not reimplement self-update. The 2026-10-03 reading of later phases already names that module.
 * **Canonical code.** As much code as possible is canonical: use the sibling libraries and the standard library rather than local copies.
 * **Already recorded.** The module stays Go 1.27.1, idiomatic, and modular (Goal; Phase 0 `go 1.27.1`). The CLI stays Kong, per the amendment above. This note does not restore Cobra or fang and does not edit those sentences.
+
+**2026-10-04 — two terminal modes.** The owner directed that gobble has two modes: a native terminal CLI mode, which is the default, and an enhanced terminal TUI mode. Core TUI still comes from `go-tui-lib`; gobble does not reimplement core TUI. Where a core behaviour is not in the library yet, gobble waits rather than copying it. Self-update stays `github.com/maccavelli/go-selfupdate-lib`; gobble does not reimplement self-update. The CLI library remains Kong, not Cobra or fang. No new phases. The sentences above stay as written, including any step that starts the TUI on a TTY with no prompt; this note is the default.
