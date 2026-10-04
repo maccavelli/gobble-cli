@@ -30,7 +30,7 @@ Prerequisites, not repeated here:
 * [0004-PLAN-go-module-architecture.md](0004-PLAN-go-module-architecture.md)
   (scaffold, harnesses, CI, release pipeline);
 * [0002-PLAN-cli-acp-headless-mcp-v1.md](0002-PLAN-cli-acp-headless-mcp-v1.md)
-  Phases 1–8 (ACP agent, Cobra as an ACP client, basic loop, the first
+  Phases 1–8 (ACP agent, Kong as an ACP client, basic loop, the first
   four tools, sessions, MCP, native slash commands, `_gobble/` extensions).
 
 Where a phase below extends a 0002-PLAN phase, it says so. It does not
@@ -617,19 +617,20 @@ are go-llmprovider-sdk `67fc56e` (no tag), go-core-lib `v1.3.0`
   reported counts, an all-zero response is marked estimated, and an `APIError`
   429 preserves `RetryAfter`; quota and overflow retain their more specific
   classification. The no-billed-probes accept remains.
-* **F9 uses the shared library only for implemented reusable pieces.**
-  Before adding `go-tui-lib` to `go.mod`, inspect its newest tag, check the
-  known `v0.1.0` defects from its proposed hardening PLAN, and choose a
-  corrected tag that passes an integration fixture at both F9 widths. Use
-  released `layout`, `workspace`, `glyph`, `theme` and `tuitest` for the
-  shell and goldens. Implement ACP transcript, tool cards, permission
-  dialog, editor and pickers in gobble until a sibling package actually ships
-  and is separately evaluated. `internal/tui` alone imports
-  `go-tui-lib`; `_test.go` files may use `tuitest`. **Accept:** a fixture
-  renders the ACP transcript and a permission dialog within a workspace
-  at 80×24 and 120×40, including resize and focus changes, with no
-  dependency on unimplemented sibling packages. Record the chosen tag and
-  the defect check before committing F9.
+* **F9 uses go-tui-lib for core TUI.** The enhanced terminal TUI is not
+  the default; the default is the native terminal CLI. Before adding
+  `go-tui-lib` to `go.mod`, inspect its newest tag, check the known
+  `v0.1.0` defects from its proposed hardening PLAN, and choose a
+  corrected tag. Core TUI is go-tui-lib. gobble does not reimplement core
+  TUI. Where that tag lacks a core behaviour (transcript, tool cards,
+  permission dialog, editor, pickers, or anything else that is core TUI),
+  F9 waits for the library rather than copying it. `internal/tui` alone
+  imports `go-tui-lib`; `_test.go` files may use `tuitest`. **Accept:**
+  record the chosen tag and the defect check before committing F9. A
+  fixture renders the ACP transcript and a permission dialog within a
+  workspace at 80×24 and 120×40 only when the selected tag provides that
+  behaviour. If it does not, F9 records the wait and does not land a
+  local copy.
 * **F10 pin and release policy.** Re-resolve the newest suitable stable
   `go-core-lib v1.x` tag when F10 starts; `v1.3.0` is today's tag, not a
   permanent pin. The workflow `uses:` SHA must be the peeled commit of
@@ -665,14 +666,3 @@ Changes to F10:
    record.
 3. **Accept rewrite.** The running-copy end-to-end test is modelled on
    go-selfupdate-lib `selfupdate/e2e_running_test.go`.
-
-**2026-10-04 — the CLI is Kong, not Cobra or fang.** The owner directed that gobble's CLI is Kong, not Cobra or fang. This supersedes the Cobra/fang CLI choice in this record. The sentences above stay as written.
-
-**2026-10-04 — go-tui-lib, go-selfupdate-lib, and canonical code.** Follows the amendment of this date in 0005-MADR and 0004-MADR. No new phases. The sentences above stay as written.
-
-* **F9.** The TUI uses `go-tui-lib` for all core TUI functionality. gobble does not reimplement core TUI. This supersedes the 2026-10-02 F9 instruction to implement the ACP transcript, tool cards, permission dialog, editor, and pickers in gobble as core TUI. F9 still selects a corrected tested tag before adding the module, and `internal/tui` alone imports `go-tui-lib`. Where that tag lacks a core behaviour, F9 waits for the library rather than copying it.
-* **F10.** Self-update uses `go-selfupdate-lib`. gobble does not reimplement self-update. The 2026-10-03 pin of `github.com/maccavelli/go-selfupdate-lib` already named the module.
-* **Canonical code.** As much code as possible is canonical: use the sibling libraries and the standard library rather than local copies.
-* **Already recorded.** Implementation stays Go 1.27.1, idiomatic, and modular under 0004-PLAN. The CLI stays Kong, per the amendment above. This note does not restore Cobra or fang and does not edit those sentences.
-
-**2026-10-04 — two terminal modes.** The owner directed that gobble has two modes: a native terminal CLI mode, which is the default, and an enhanced terminal TUI mode. Core TUI still comes from `go-tui-lib`; gobble does not reimplement core TUI. Where a core behaviour is not in the library yet, gobble waits rather than copying it. Self-update stays `github.com/maccavelli/go-selfupdate-lib`; gobble does not reimplement self-update. The CLI library remains Kong, not Cobra or fang. No new phases. The sentences above stay as written, including any step that starts the TUI on a TTY with no prompt; this note is the default.

@@ -5,7 +5,7 @@ decision-makers: repository owner
 consulted: 0001-REPORT-go-port-feasibility.md, magic-cli-remote (ACP stdio adapter, command tables, protocol-v1/v2), TypeScript Pi at 312184edb
 informed: go-llmprovider-sdk, go-core-lib, acp-go-sdk, magic-cli-remote
 ---
-# v1 is the native magic-cli-remote CLI: Cobra over ACP, ACP stdio, MCP client
+# v1 is the native magic-cli-remote CLI: Kong over ACP, ACP stdio, MCP client
 
 ## Context and Problem Statement
 
@@ -52,8 +52,8 @@ honestly advertised and actually executed.
 * Owner-stated integration target: native CLI of magic-cli-remote; other
   providers in that daemon keep working; gobble is the fully supported,
   fully optimized agent.
-* One agent command API, used by Cobra, by editors, and by mcremote, rather
-  than a Cobra vocabulary plus a private RPC dialect plus a TUI-only slash
+* One agent command API, used by Kong, by editors, and by mcremote, rather
+  than a Kong vocabulary plus a private RPC dialect plus a TUI-only slash
   catalog.
 * mcremote/mcrelay already define the phone/desktop hop (WebSocket
   protocol-v1 / v2). gobble belongs on the **ACP stdio** hop those daemons
@@ -67,29 +67,34 @@ honestly advertised and actually executed.
 * TypeScript Pi's MCP role is a **client** of stdio and streamable-HTTP
   servers (`mcp.json`, `pi mcp add|list|login|logout`). ACP already carries
   MCP server configs on `session/new` and advertises `mcpCapabilities`.
-* Cobra and Viper remain the CLI and configuration stack. Charm/Lip Gloss
-  apply when a TUI exists; v1 has none.
+* Kong and Viper are the CLI and configuration stack. gobble has two modes:
+  a native terminal CLI mode, which is the default, and an enhanced terminal
+  TUI mode. Core TUI is go-tui-lib. gobble does not reimplement core TUI.
+  Where a core behaviour is not in the library yet, gobble waits rather than
+  copying it. Self-update is go-selfupdate-lib. gobble does not reimplement
+  self-update.
 
 ## Considered Options
 
-* Native magic-cli-remote CLI: Cobra over one `acp.Agent`, ACP stdio
-  headless, MCP client, honest slash commands that execute
-* Cobra CLI plus a faithful port of TypeScript Pi JSONL RPC, ACP added later
-* Dual headless protocols in v1 (Pi JSONL RPC and ACP)
-* ACP-only stdio agent with no Cobra command surface beyond `acp`
-* gobble speaks mcremote WebSocket (protocol-v1/v2) in addition to ACP
+* Native magic-cli-remote CLI: Kong over one `acp.Agent`, ACP stdio
+  headless, MCP client, honest slash commands that execute (chosen)
+* Cobra v1.10.2, or fang (`charmbracelet/fang` v1.0.0) on Cobra, as the CLI library (rejected)
+* Cobra CLI plus a faithful port of TypeScript Pi JSONL RPC, ACP added later (rejected)
+* Dual headless protocols in v1 (Pi JSONL RPC and ACP) (rejected)
+* ACP-only stdio agent with no Cobra command surface beyond `acp` (rejected)
+* gobble speaks mcremote WebSocket (protocol-v1/v2) in addition to ACP (rejected)
 * Grok-shaped adapter: advertise a TUI catalog and rely on daemon
-  workarounds (`KindNone`, native-name aliases, vendor `_x.ai/*`)
+  workarounds (`KindNone`, native-name aliases, vendor `_x.ai/*`) (rejected)
 
 ## Decision Outcome
 
-Chosen option: "Native magic-cli-remote CLI: Cobra over one `acp.Agent`,
+Chosen option: "Native magic-cli-remote CLI: Kong over one `acp.Agent`,
 ACP stdio headless, MCP client, honest slash commands that execute",
 because the owner asked for those three surfaces, for ACP to expose the
 agent command API, and for gobble to be the native agent of
 magic-cli-remote.
 
-One `acp.Agent` implementation is the command API. The Cobra CLI is an ACP
+One `acp.Agent` implementation is the command API. The Kong CLI is an ACP
 **client** of that implementation. Headless RPC is ACP JSON-RPC 2.0 on
 stdio — the same process role mcremote already spawns. MCP is an agent
 capability (stdio and streamable HTTP), configured from `mcp.json` and from
@@ -116,7 +121,7 @@ The ACP-as-command-API decision above is unchanged.)*
 * Good, because editors that already speak ACP (Zed and anything using
   `acp-go-sdk`) can spawn this binary without a private protocol.
 * Good, because the CLI, an IDE, and mcremote execute the same methods; a
-  Cobra command cannot drift from what the phone can call.
+  Kong command cannot drift from what the phone can call.
 * Good, because ACP `session/new` already takes `mcpServers`, so MCP is not
   a side channel bolted onto a custom RPC.
 * Good, because v1 drops the 19k-line TUI, the jiti extension host, and the
@@ -154,7 +159,7 @@ The ACP-as-command-API decision above is unchanged.)*
   version: `Initialize`, `NewSession`, `Prompt`, `Cancel`, and
   `CloseSession` succeed with the SDK's example client or an equivalent
   in-tree test.
-* Every Cobra command that drives the agent is implemented as a call to
+* Every Kong command that drives the agent is implemented as a call to
   that same `acp.Agent` (in-process connection), asserted by a test that
   the CLI and a stdio client produce the same ACP method names for the
   same user action.
@@ -168,7 +173,7 @@ The ACP-as-command-API decision above is unchanged.)*
   5 and 6).
 * A mapping table in this record's More Information is kept honest: each
   TypeScript Pi RPC command is either an ACP baseline method, a `_gobble/`
-  extension, a Cobra config command, or explicitly out of v1.
+  extension, a Kong config command, or explicitly out of v1.
 * `available_commands_update` lists only commands `session/prompt` actually
   executes. A test sends `/compact`, `/usage`, and `/context` as
   `session/prompt` and observes `session/update` frames (not a zero-token
@@ -188,7 +193,7 @@ The ACP-as-command-API decision above is unchanged.)*
 
 ## Pros and Cons of the Options
 
-### Native magic-cli-remote CLI: Cobra over one `acp.Agent`, ACP stdio headless, MCP client, honest slash commands that execute
+### Native magic-cli-remote CLI: Kong over one `acp.Agent`, ACP stdio headless, MCP client, honest slash commands that execute (chosen)
 
 The CLI process always hosts (or is) an ACP agent. Headless mode is
 `AgentSideConnection` on stdin/stdout — the process mcremote spawns.
@@ -204,7 +209,16 @@ child transport; this record requires that the bytes are ACP.
   shape; the remaining work there is a Spec and an honest command table.
 * Bad, because TypeScript Pi RPC clients are not served in v1.
 
-### Cobra CLI plus a faithful port of TypeScript Pi JSONL RPC, ACP added later
+### The command library ocp-login already ships (rejected)
+
+Named in Considered Options. It supplies styled help, errors, version
+output, man pages, and completions. gobble does not use it.
+
+* Good, because that pair is already in production in ocp-login.
+* Bad, because the owner chose Kong. It is not gobble's command tree,
+  help path, or completion path.
+
+### Faithful TypeScript Pi JSONL RPC, with ACP added later (rejected)
 
 Reproduce `--mode rpc` record-for-record, then wrap it.
 
@@ -214,7 +228,7 @@ Reproduce `--mode rpc` record-for-record, then wrap it.
 * Bad, because JSONL `type: prompt` and JSON-RPC `session/prompt` would
   both exist and diverge.
 
-### Dual headless protocols in v1 (Pi JSONL RPC and ACP)
+### Dual headless protocols in v1 (Pi JSONL RPC and ACP) (rejected)
 
 Ship both from day one.
 
@@ -224,7 +238,7 @@ Ship both from day one.
 * Neutral, because a later shim can translate JSONL to ACP once the ACP
   API is stable.
 
-### ACP-only stdio agent with no Cobra command surface beyond `acp`
+### ACP-only stdio agent with no command surface beyond `acp` (rejected)
 
 A single `pi` that only speaks ACP on stdio. Users use an editor,
 mcremote, or `acp-go-sdk`'s example client.
@@ -233,7 +247,7 @@ mcremote, or `acp-go-sdk`'s example client.
 * Bad, because the owner asked for a CLI, including `pi mcp …`, `pi auth …`,
   and print-style prompting, which TypeScript Pi offers without an editor.
 
-### gobble speaks mcremote WebSocket (protocol-v1/v2) in addition to ACP
+### gobble speaks mcremote WebSocket (protocol-v1/v2) in addition to ACP (rejected)
 
 Put the daemon protocol inside the agent binary.
 
@@ -246,7 +260,7 @@ Put the daemon protocol inside the agent binary.
   WebSocket server on the agent does not use those protocols, it forks
   them.
 
-### Grok-shaped adapter: advertise a TUI catalog and rely on daemon workarounds
+### Grok-shaped adapter: advertise a TUI catalog and rely on daemon workarounds (rejected)
 
 Ship `available_commands` as a superset, mark the ones that do not work
 `KindNone` in the daemon table, and copy `_x.ai/*` extensions.
@@ -270,13 +284,13 @@ that execute over ACP (`/compact`, `/usage`, and the rest of the native
 set), integration with mcremote/mcrelay as they exist, and other providers
 left in place. The Decision Outcome, Confirmation, mapping tables, and
 companion Spec below replace that empty-list allowance. The ACP-as-command-API
-choice, the JSONL-RPC-out-of-v1 choice, and the Cobra-is-an-ACP-client
+choice, the JSONL-RPC-out-of-v1 choice, and the Kong-is-an-ACP-client
 choice are unchanged.
 
 ### Amendment (2026-09-29, second): `gobble` identity, SDK routing correction, wider v1 line
 
 Still `proposed`. Four changes; the ACP-as-command-API decision, the
-Cobra-is-an-ACP-client rule, and the honest-advertisement rule are
+Kong-is-an-ACP-client rule, and the honest-advertisement rule are
 unchanged.
 
 1. **Identity.** The owner named the runtime binary `gobble`. [0003-MADR](0003-MADR-gobble-product-identity.md) fixes
@@ -310,7 +324,7 @@ unchanged.
 
 | Surface | Role |
 |---|---|
-| Cobra + Viper | Process entry, flags, `mcp` / `auth` / `config` subcommands, print-style `prompt` |
+| Kong + Viper | Process entry, flags, `mcp` / `auth` / `config` subcommands, print-style `prompt` |
 | `acp.Agent` | The agent command API, including slash commands |
 | ACP stdio | Headless RPC; the process magic-cli-remote spawns |
 | MCP client | stdio and streamable HTTP; tools become ordinary agent tools |
@@ -411,7 +425,7 @@ Pi at the commit named in 0001-REPORT (`312184edb`).
    (`mcpCapabilities.http` / `sse`) and drops the rest. Stdio MCP is the
    ACP default untagged form; the daemon config type in that function does
    not forward it. gobble still accepts stdio and HTTP on `session/new`
-   (Zed, Cobra, `mcp.json`) and advertises `http = true`, `sse = false`,
+   (Zed, Kong, `mcp.json`) and advertises `http = true`, `sse = false`,
    `acp = false`.
 6. **Grok vendor extensions stay grok's.** `ExtensionNotifications` on the
    grok Spec subscribe to `_x.ai/models/update`, MCP status, session
@@ -451,7 +465,7 @@ Rules:
    either table mapping works.
 3. Daemon-owned commands (`/help`, `/clear`, `/new`, `/sessions`) work
    even if the agent is silent. gobble still handles native equivalents for
-   Cobra and for ACP clients that are not mcremote (`/new` → `session/new`
+   Kong and for ACP clients that are not mcremote (`/new` → `session/new`
    semantics in-process, `/help` lists advertised commands).
 4. Codex-only or provider-specific commands that gobble does not implement
    are omitted from `available_commands` and, in the companion table,
@@ -498,7 +512,7 @@ not implemented in this repository. Cite magic-cli-remote MADR 0023 and
 | `review` | KindNone | — | no inline review command |
 | `fork` | KindNative, Native `fork` | `/fork [turn-id]` copies/branches JSONL | ACP unstable fork out of v1 |
 | `archive` | KindNone | — | no native archive |
-| `delete` | KindNone | — | no native permanent-delete over ACP; Cobra may delete files |
+| `delete` | KindNone | — | no native permanent-delete over ACP; Kong may delete files |
 | `ps` | KindNone | — | no terminal registry |
 | `stop` | KindNone | — | no stoppable terminals |
 | `diff` | KindNone | — | no diff op in v1; user can ask the agent |
@@ -551,7 +565,7 @@ named in the report (`312184edb`).
 | `export_html` | out of this cut; `gobble session export --format html` and `/export` in [0005-MADR](0005-MADR-v1-feature-scope.md) (1.x) |
 | `set_steering_mode`, `set_follow_up_mode` | `_gobble/…` |
 
-Cobra `pi mcp add|remove|list|login|logout` and `pi auth …` are
+Kong `gobble mcp add|remove|list|login|logout` and `gobble auth …` are
 **configuration** commands. They edit files / credentials. They are not ACP
 methods. A running session sees MCP changes on the next `session/new` or
 via a `_gobble/mcp_reload` extension if v1 implements live reload — live reload
@@ -583,15 +597,20 @@ it pins in Phase 5.
 
 ### CLI as ACP client
 
-The binary has two process roles, selected by Cobra:
+The binary has two process roles, selected by Kong, and two terminal modes.
 
 1. **Agent** — stdio ACP server (headless). Editors and mcremote spawn
    `gobble acp` (binary named by [0003-MADR](0003-MADR-gobble-product-identity.md)).
-2. **Client** — Cobra command runs an in-process agent through
+2. **Client** — the native terminal CLI mode, which is the default. A Kong
+   command runs an in-process agent through
    `ClientSideConnection` / `AgentSideConnection` on an in-memory pipe, or
-   prints a one-shot `session/prompt`. No Charm views.
+   prints a one-shot `session/prompt`.
+3. **Enhanced terminal TUI** — selected explicitly. A TTY with no prompt
+   does not start it. It is an ACP client. Core TUI is go-tui-lib. gobble
+   does not reimplement core TUI. Where a core behaviour is not in the
+   library yet, gobble waits rather than copying it.
 
-A Cobra command must not call the agent loop except through ACP methods
+A Kong command must not call the agent loop except through ACP methods
 (baseline or `_gobble/` extension). That is the
 "extensive use" rule.
 
@@ -628,7 +647,7 @@ Still `proposed`. D10 is decided in [0004-MADR](0004-MADR-go-module-architecture
 as of that record's 2026-09-30 amendment: 1.0 providers are the
 `llm/provider` adapter over `go-llmprovider-sdk`; official vendor LLM
 SDKs are not 1.0 dependencies. D14 remains the official MCP go-sdk.
-The ACP-as-command-API decision, the Cobra-is-an-ACP-client rule, and
+The ACP-as-command-API decision, the Kong-is-an-ACP-client rule, and
 the honest-advertisement rule are unchanged. [0002-PLAN](0002-PLAN-cli-acp-headless-mcp-v1.md)
 Phase 3 and Phase 5 record the module versions they pin.
 
@@ -639,7 +658,7 @@ Still `proposed`. The owner directed a live assessment of magic-cli-remote
 of TypeScript Pi, so gobble can be built from the ground up as the
 **native agentic CLI of the magic-cli-remote platform**. Other providers
 there (grok, opencode, kilo, codex, fake) stay registered. The
-ACP-as-command-API decision, the Cobra-is-an-ACP-client rule, and the
+ACP-as-command-API decision, the Kong-is-an-ACP-client rule, and the
 honest-advertisement rule are unchanged. The Grok-shaped adapter option
 stays rejected, now with file-level evidence.
 
@@ -750,7 +769,7 @@ configured servers whose transport the agent advertised
 (`mcpCapabilities.http` / `sse`). Stdio MCP is the ACP default untagged
 form; the daemon config type has no stdio case, so those entries are
 dropped with "unknown transport". gobble still accepts stdio and HTTP on
-`session/new` from Zed, Cobra, and its own `mcp.json`, and advertises
+`session/new` from Zed, Kong, and its own `mcp.json`, and advertises
 `http = true`, `sse = false`, `acp = false` so mcremote can forward HTTP
 MCP from daemon config.
 
@@ -773,7 +792,7 @@ Further adapter facts that shape the native contract:
 * `session/update` `sessionInfoUpdate` is unhandled in acpagent, so a
   gobble `session_info_update` does not become phone `session_title` until
   that mapping lands in the companion pair. `/name` still executes for
-  Cobra and other ACP clients.
+  Kong and other ACP clients.
 * Child-session ids on the same ACP connection are dropped (MADR 0051
   D6). 0005 subagents relay progress as `tool_call_update` on the parent
   session, which is the path the adapter already forwards.
@@ -947,7 +966,7 @@ Still `proposed`. The owner directed a cross-reference of every source:
 All evidence was read in code, not in earlier records. These three are unchanged:
 
 * ACP as the command API;
-* the Cobra-is-an-ACP-client rule;
+* the Kong-is-an-ACP-client rule;
 * the honest-advertisement rule.
 
 The magic-cli-remote half of the contract is now a record in that repository: magic-cli-remote `docs/decisions/0179-MADR-gobble-native-acp-provider.md` (`proposed`). It **supersedes** the "Companion Spec" sections of this record as the contract there. The companion table below is replaced by that record's D9, and the companion checklist by its D1–D10. That record names the provider `provider.IDGobble`, with wire id `"gobble"`. Read `IDPi` in this record as that name.
@@ -996,7 +1015,7 @@ gobble's part:
 #### Further contract facts (verified in magic-cli-remote)
 
 * **mcremote sends no `clientInfo`**, so gobble cannot detect mcremote. gobble's behaviour under mcremote is selected by capabilities alone, never by client name.
-* **`!cmd` never reaches gobble from the phone**: the daemon intercepts a leading `!` unless the session implements `ExecutionSession` (`manager.go:915-964`). gobble still handles `!cmd` for Cobra, the TUI and editors.
+* **`!cmd` never reaches gobble from the phone**: the daemon intercepts a leading `!` unless the session implements `ExecutionSession` (`manager.go:915-964`). gobble still handles `!cmd` for Kong, the TUI and editors.
 * **`/skill:<name>` and `/mcp:<server>:<prompt>` reach gobble as plain prompt text.** Their names fail mcremote's `isCommandName` (`commands.go:345-358`), so they never appear in `remote_commands`. They execute, because gobble's router runs on all prompt text. For the canonical `deep-research`, gobble also advertises a `/deep-research` alias.
 * **mcremote sends only text, image and audio blocks**, never `resource_link`. gobble parses `@path` in prompt text as well as accepting resource blocks. gobble sets `promptCapabilities.audio` to `false`.
 * **A prompt sent while a turn is running is queued by the daemon** (a FIFO of 4). It is not sent as a steer. gobble defines `session/prompt`-while-busy in 0005's amendment of this date.
@@ -1016,7 +1035,3 @@ gobble's part:
   * an unknown `_x.ai/compact_conversation` gets -32601.
 * "`session/set_config_option` category `model`" reads: the request carries the `configId` of the option whose declared category is `model`. Category is a property of the option declaration, not of the request.
 * A test asserts that `available_commands_update` precedes the `session/new` response on the wire. It is shown failing on a copy that sends it after the response.
-
-## Amendment — 2026-10-04: the CLI is Kong, not Cobra or fang
-
-The owner directed that gobble's CLI is Kong, not Cobra or fang. This supersedes the Cobra/fang CLI choice in this record. The sentences above stay as written.

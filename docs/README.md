@@ -16,20 +16,20 @@
 | Number | Kind | Record | Status |
 | :--- | :--- | :--- | :--- |
 | 0001 | REPORT | [Go port feasibility of the Pi agent harness](reports/0001-REPORT-go-port-feasibility.md) | observation |
-| 0002 | MADR | [v1 native magic-cli-remote CLI: Cobra over ACP, ACP stdio, MCP client](decisions/0002-MADR-cli-acp-headless-mcp-v1.md) | proposed (amended four times) |
+| 0002 | MADR | [v1 native magic-cli-remote CLI: Kong over ACP, ACP stdio, MCP client](decisions/0002-MADR-cli-acp-headless-mcp-v1.md) | proposed |
 | 0002 | PLAN | [Implement the ACP core](decisions/0002-PLAN-cli-acp-headless-mcp-v1.md) | proposed |
 | 0003 | MADR | [The product is `gobble`: binary, module path, directories, wire names, read-only Pi bridge](decisions/0003-MADR-gobble-product-identity.md) | proposed (amended 2026-10-01) |
-| 0004 | MADR | [One Go 1.27.1 module of contract-first packages, open standards at every boundary](decisions/0004-MADR-go-module-architecture.md) | proposed (amended through 2026-10-04) |
-| 0004 | PLAN | [Scaffold: module, contracts, import boundaries, toolchain, release](decisions/0004-PLAN-go-module-architecture.md) | in progress (Phase D complete; Phases 0–5 proposed) |
-| 0005 | MADR | [The v1 line: every portable Pi capability, tiered 1.0 / 1.x / exp](decisions/0005-MADR-v1-feature-scope.md) | proposed (amended through 2026-10-04) |
-| 0005 | PLAN | [Implement the v1.0.0 gate, the v1.x train, and `exp/`](decisions/0005-PLAN-v1-feature-scope.md) | proposed (amended through 2026-10-04) |
+| 0004 | MADR | [One Go 1.27.1 module of contract-first packages, open standards at every boundary](decisions/0004-MADR-go-module-architecture.md) | proposed (decision text rewritten 2026-10-04) |
+| 0004 | PLAN | [Scaffold: module, contracts, import boundaries, toolchain, release](decisions/0004-PLAN-go-module-architecture.md) | in progress (Phase D, Phase 0, and Phase 1 complete; Phases 2–5 not started) |
+| 0005 | MADR | [The v1 line: every portable Pi capability, tiered 1.0 / 1.x / exp](decisions/0005-MADR-v1-feature-scope.md) | proposed (decision text rewritten 2026-10-04) |
+| 0005 | PLAN | [Implement the v1.0.0 gate, the v1.x train, and `exp/`](decisions/0005-PLAN-v1-feature-scope.md) | proposed (decision text rewritten 2026-10-04) |
+| 0006 | MADR | [Adopt goose's terminal-CLI mechanics, not its product command tree](decisions/0006-MADR-goose-cli-port-candidates.md) | proposed |
 
 0003-MADR has no PLAN of its own. 0004-PLAN Phase 2 and 0005-PLAN F10 implement it.
 
 ## Build order
 
-The three plans run in sequence. The documentation-only 0004-PLAN Phase D is
-complete; no Go module work has started:
+The three plans run in sequence. 0004-PLAN Phase D, Phase 0 (`925ef0abf83e475c33b3ffae14685617b035639e`), and Phase 1 (`661b14e768407264a38687e2db99201cae2a04a1`) have run. Phases 2–5 have not. `git ls-remote origin refs/heads/main` on 2026-10-04 returned `8e016ab53a5765b2c912fab338d873918b8eed36`:
 
 1. **[0004-PLAN](decisions/0004-PLAN-go-module-architecture.md)** — source documentation in Phase D, then the scaffold in Phases 0–5. It replaces 0002-PLAN Phase 0.
 2. **[0002-PLAN](decisions/0002-PLAN-cli-acp-headless-mcp-v1.md) Phases 1–8** — the ACP agent, Kong as an ACP client, the first tools, sessions, MCP, and native slash commands.

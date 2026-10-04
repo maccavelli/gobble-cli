@@ -10,7 +10,7 @@ informed: magic-cli-remote (companion command table), go-llmprovider-sdk, go-cor
 ## Context and Problem Statement
 
 [0002-MADR-cli-acp-headless-mcp-v1.md](0002-MADR-cli-acp-headless-mcp-v1.md)
-cut v1 narrowly. Its scope was the Cobra CLI, the ACP stdio agent, the MCP
+cut v1 narrowly. Its scope was the Kong CLI, the ACP stdio agent, the MCP
 client, and native slash commands. It put the Charm TUI, the package
 manager, HTML export, and "anything else" out of v1. The owner has since
 asked to include as much as possible in v1, to be creative, and to mine
@@ -198,11 +198,11 @@ Tier definitions:
 |---|---|---|
 | `gobble acp` | 1.0 | The headless ACP agent, per 0002. |
 | Print mode | 1.0 | `gobble -p "…"` or piped stdin. `--output-format text|json|stream-json`. `json` is one final object `{text, stopReason, usage, cost, sessionId}`. `stream-json` writes each ACP `session/update` params object as one JSONL line after a header line. The streaming vocabulary is ACP; there is no private event dialect. In non-interactive mode an `ask` decision resolves to deny unless `--yes` or mode `bypass` is set (Pi's "ask means skip"). |
-| Charm TUI | 1.0 | `gobble` on a TTY. An ACP client over `acpclient`, on Charm v2 with fang-styled help. Includes: <br>• streamed Markdown transcript; <br>• collapsible tool cards with diffs; <br>• permission dialog; <br>• model, thinking, and mode pickers; <br>• session picker; <br>• multi-line editor with history; <br>• slash and `@path` completion; <br>• `!cmd` and `!!cmd`; <br>• Esc to interrupt; <br>• steer and follow-up keys; <br>• Ctrl+G for the external editor; <br>• a footer with model, mode, context %, and cost. <br>This decides report D6: Charm v2, extracting shared widgets into go-tui-lib as they settle. |
+| Enhanced terminal TUI | 1.0 | Selected explicitly. It is not the default, and a TTY with no prompt does not start it. The default is the native terminal CLI. An ACP client over `acpclient`. Core TUI is go-tui-lib on Charm v2. gobble does not reimplement core TUI. Where a core behaviour is not in the library yet, gobble waits rather than copying it. The mode includes, when the library provides them: <br>• streamed Markdown transcript; <br>• collapsible tool cards with diffs; <br>• permission dialog; <br>• model, thinking, and mode pickers; <br>• session picker; <br>• multi-line editor with history; <br>• slash and `@path` completion; <br>• `!cmd` and `!!cmd`; <br>• Esc to interrupt; <br>• steer and follow-up keys; <br>• Ctrl+G for the external editor; <br>• a footer with model, mode, context %, and cost. <br>Help, errors, `--version`, man pages, and completions belong to Kong in the native CLI. |
 | TUI themes and keybindings | 1.x | Pi theme JSON and `keybindings.json` with Pi's action ids (`app.*`, `tui.*`) where the action exists. |
 | Tree navigator, inline images | 1.x / exp | The tree navigator is 1.x. Kitty and iTerm2 inline images are exp. |
 | Pi RPC shim | 1.x | `gobble rpc` speaks Pi's JSONL RPC (`docs/rpc-commands.md`) as an ACP client of an in-process agent. Existing Pi RPC clients work, and there is still one command API (0002's objection to dual protocols was two inventories; the shim is a translator with none of its own). Extension-UI records are out. |
-| Shell completions and man pages | 1.0 | Through fang and Cobra. |
+| Shell completions and man pages | 1.0 | Through Kong. |
 
 #### Safety and policy (`permission`, `checkpoint`)
 
@@ -265,16 +265,16 @@ Checkpoints:
 
 | Capability | Tier | Behaviour |
 |---|---|---|
-| GitHub releases | 1.0 | Six **raw binaries** named `gobble-<goos>-<goarch>[.exe]`, `SHA256SUMS`, SPDX SBOM extra asset, and provenance attestations, published by go-core-lib's reusable workflow (0004-PLAN Phase 4). Strict `vMAJOR.MINOR.PATCH` tags only. |
+| GitHub releases | 1.0 | Six **raw binaries** named `gobble-<goos>-<goarch>[.exe]`, `SHA256SUMS`, SPDX SBOM extra asset, and provenance attestations, published by go-selfupdate-lib's reusable workflow (0004-PLAN Phase 4). Strict `vMAJOR.MINOR.PATCH` tags only. |
 | `go install` | 1.0 | `go install github.com/maccavelli/gobble-cli/cmd/gobble@latest`. |
-| Self-update | 1.0 | `gobble update [--check]` through `github.com/maccavelli/go-core-lib/selfupdate` `v1.1.0`. Product `gobble`. `Request.CheckOnly` for `--check`. `NewStandaloneInstaller`, `NewExactAssetSelector` for the six platforms, `NewGitHubSource` with the 0003-MADR User-Agent, `NewTextReporter` on stderr, `NewTerminalConfirmer`, `ExitCode` mapped to process status (0 current/declined/applied, 10 update available, 1 error). `--force` is `Request.Force`; `--yes` is `Request.Yes`. |
+| Self-update | 1.0 | `gobble update [--check]` through `github.com/maccavelli/go-selfupdate-lib/selfupdate` at `v1.5.0` or later. gobble does not reimplement self-update. Product `gobble`. `Request.CheckOnly` for `--check`. `NewStandaloneInstaller`, `NewExactAssetSelector` for the six platforms, `NewGitHubSource` with the 0003-MADR User-Agent, `NewTextReporter` on stderr, `NewTerminalConfirmer`, `ExitCode` mapped to process status (0 current/declined/applied, 10 update available, 1 error). `--force` is `Request.Force`; `--yes` is `Request.Yes`. |
 | Homebrew tap, container image | 1.x | A tap formula, and a `ko`-built distroless image for CI agents. |
 | magic-cli-remote `KnownGoodVersion` | 1.0 | Published in the release notes for the companion Spec. |
 
 ### CLI surface
 
 ```
-gobble [prompt…]                      TUI on a TTY; print mode with -p or piped stdin
+gobble [prompt…]                      native terminal CLI, the default; print mode with -p or piped stdin
 gobble acp                            ACP agent on stdio
 gobble rpc                            Pi JSONL RPC shim (1.x)
 gobble session list|show|export|import|fork|rm|prune
@@ -675,23 +675,23 @@ the tier choices remain historical where this amendment supersedes a fact.
   itself, then passes options explicitly. It does not call
   `ModelProbesFromEnv` or `catalog.OptionsFromEnv` by default. Billed model
   probes stay disabled through `WithModelProbes(false)`.
-* **F10, self-update.** `go-core-lib v1.3.0` adds prerelease channels, but
-  gobble's 1.0 release and `gobble update` still select stable tags only. The
-  current usable library surface is `selfupdate` plus its test helper;
-  `selfupdate/cli`, `buildinfo` and `go-tui-lib/updatetea` are plans, not
-  imports. The F10 implementation re-resolves the latest suitable `v1.x`
-  tag. The `--check` path uses `Checker.Check`; apply uses `RunWith`, and a
-  TUI may drive `Start` / `Stream`. Adding a `--channel` option or publishing
+* **F10, self-update.** Self-update is `github.com/maccavelli/go-selfupdate-lib`.
+  gobble does not reimplement self-update. gobble's 1.0 release and
+  `gobble update` select stable tags only. F10 re-resolves a stable
+  `v1.5.0` or later tag and checks the released `selfupdate`,
+  `selfupdate/cli`, and `buildinfo` before binding them. `v1.3.0` added
+  prerelease channels; gobble does not pass a channel. The `--check` path
+  uses `Checker.Check`; apply uses `RunWith`, and a TUI may drive `Start`
+  / `Stream` from the library. Adding a `--channel` option or publishing
   gobble prereleases is deferred to a later explicit decision.
 * **F9, TUI.** The existing `go-tui-lib v0.1.0` packages cover reusable
   workspace layout, pane hosting, glyphs, themes and golden rendering.
   F9 uses a corrected tagged version of those packages after its known
-  `v0.1.0` defects are checked. Gobble owns its ACP transcript, tool cards,
-  permission dialog, editor and session controls. Proposed sibling
-  `stream`, `command`, `keymap`, `palette` and terminal-service plans do
-  not satisfy any F9 acceptance criterion until code and a tested tag
-  exist. F9 remains a 1.0 feature, but its go-tui-lib dependency and its
-  local components are stated separately in its plan.
+  `v0.1.0` defects are checked. Core TUI is go-tui-lib. gobble does not
+  reimplement core TUI. Where a core behaviour is not in the selected tag
+  yet, F9 waits rather than copying it. Proposed sibling packages do not
+  become a local copy. F9 remains a 1.0 feature. The enhanced terminal
+  TUI is not the default mode.
 
 ### Source correction (2026-10-02): go-core-lib after v1.3.0
 
@@ -738,21 +738,3 @@ no tag, so the F4 release gate is unchanged.
   does not choose.
 * **What does not change.** The stable-only release decision, and the rest
   of F10.
-* **The earlier text stays as written**, as dated history.
-
-## Amendment — 2026-10-04: the CLI is Kong, not Cobra or fang
-
-The owner directed that gobble's CLI is Kong, not Cobra or fang. This supersedes the Cobra/fang CLI choice in this record. The sentences above stay as written.
-
-## Amendment — 2026-10-04: go-tui-lib, go-selfupdate-lib, and canonical code
-
-Still `proposed`. The owner directed the rules below. The sentences above stay as written. The Kong amendment of this date is unchanged.
-
-* **TUI.** The TUI uses `go-tui-lib` for all core TUI functionality. gobble does not reimplement core TUI. This supersedes the Charm TUI row's "extracting shared widgets into go-tui-lib as they settle" and the 2026-10-02 F9 note that gobble owns the transcript, tool cards, permission dialog, editor, and session controls as local core TUI. Those sentences stay as dated history. Where `go-tui-lib` does not yet export a core behaviour, gobble waits for the library rather than reimplementing it. `internal/tui` remains an ACP client.
-* **Self-update.** Self-update uses `go-selfupdate-lib`. gobble does not reimplement self-update. The 2026-10-03 F10 binding of `github.com/maccavelli/go-selfupdate-lib/selfupdate` already chose the library; it did not say that gobble must not reimplement the updater.
-* **Canonical code.** As much code as possible is canonical: use the sibling libraries and the standard library rather than local copies. This does not change the meaning of "canonical" in the companion command table.
-* **Already recorded.** Code stays Go 1.27.1, idiomatic, and modular under 0004-MADR. This record does not change that. The CLI stays Kong.
-
-## Amendment — 2026-10-04: two terminal modes
-
-Still `proposed`. The owner directed that gobble has two modes: a native terminal CLI mode, which is the default, and an enhanced terminal TUI mode. Core TUI still comes from `go-tui-lib`; gobble does not reimplement core TUI. Where a core behaviour is not in the library yet, gobble waits rather than copying it. Self-update stays `github.com/maccavelli/go-selfupdate-lib`; gobble does not reimplement self-update. The CLI library remains Kong, not Cobra or fang. The sentences above stay as written. This supersedes any sentence that starts the TUI on a TTY with no prompt; that sentence remains as dated history.

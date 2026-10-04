@@ -3,7 +3,7 @@ status: proposed
 date: 2026-10-04
 associated-madr: "0002-MADR-cli-acp-headless-mcp-v1.md"
 ---
-# Implement v1 as the native magic-cli-remote CLI: Cobra over ACP, ACP stdio, MCP client
+# Implement v1 as the native magic-cli-remote CLI: Kong over ACP, ACP stdio, MCP client
 
 Associated MADR: [0002-MADR-cli-acp-headless-mcp-v1.md](0002-MADR-cli-acp-headless-mcp-v1.md)
 
@@ -12,7 +12,7 @@ Associated MADR: [0002-MADR-cli-acp-headless-mcp-v1.md](0002-MADR-cli-acp-headle
 A Go module in this repository that builds one binary. That binary (1)
 serves ACP protocol version 1 on stdio as the agent process magic-cli-remote
 already knows how to spawn, (2) exposes the same agent methods through
-Cobra, (3) connects to MCP servers over stdio and streamable HTTP so
+Kong, (3) connects to MCP servers over stdio and streamable HTTP so
 their tools are callable during a prompt, and (4) executes agent-owned
 slash commands (`/compact`, `/usage`, `/context`, `/model`, `/thinking`,
 and the native set in the MADR) over `session/prompt`, with
@@ -22,7 +22,7 @@ and the native set in the MADR) over `session/prompt`, with
 
 In:
 
-* `go.mod`, Cobra, Viper, `github.com/coder/acp-go-sdk v0.13.5`
+* `go.mod`, Kong, Viper, `github.com/coder/acp-go-sdk v0.13.5`
 * Agent loop sufficient to complete `session/prompt` with built-in tools
   `read`, `bash`, `edit`, `write` (grep/find/ls may follow in the same
   phase if cheap)
@@ -67,15 +67,15 @@ choice.
 
 ## Implementation Steps
 
-### Phase 0 — module and Cobra skeleton
+### Phase 0 — module and Kong skeleton
 
-> *Superseded (2026-09-29) by [0004-PLAN](0004-PLAN-go-module-architecture.md).* That plan builds the module, package
-> skeleton, Cobra root, CI, and release pipeline to [0004-MADR](0004-MADR-go-module-architecture.md). The steps below
-> are kept for history; Phase 1 starts from the tree 0004-PLAN leaves.
+> *Superseded (2026-09-29) by [0004-PLAN](0004-PLAN-go-module-architecture.md), whose Phase 0 and Phase 1 have run.* That plan builds the module, package
+> skeleton, Kong root, CI, and release pipeline to [0004-MADR](0004-MADR-go-module-architecture.md).
+> Phase 1 of this plan starts from the tree 0004-PLAN leaves. Do not run the steps below as a second scaffold.
 
 1. `go mod init` with the module path chosen for D17 (placeholder
    `github.com/maccavelli/gobble-cli` unless a MADR says otherwise).
-2. `cmd/` main → `internal/cmd` Cobra root. Subcommands: `acp` (stdio
+2. `cmd/` main → `internal/cli` Kong root. Subcommands: `acp` (stdio
    agent), `prompt`, `mcp`, `auth` (auth may stub).
 3. Viper reads JSON; file path is a constant until D11 is decided.
 4. Makefile / CI: `go test ./...`, `gofmt`, vet on three OS.
@@ -104,14 +104,14 @@ prints `v0.13.5`; `go list -deps` has no `charm.land` and no
 failure text is quoted in the phase handoff. `gobble acp` + SDK example
 client (or the in-tree client test) completes a prompt.
 
-### Phase 2 — Cobra is an ACP client
+### Phase 2 — Kong is an ACP client
 
 1. Shared constructor: agent + pair of connections over `io.Pipe` (or
-   equivalent), used by Cobra and by tests.
+   equivalent), used by Kong and by tests.
 2. `gobble prompt "…"` is `session/new` + `session/prompt` + print of
    agent text chunks to stdout, then `session/close`.
 3. A test that the same `Prompt` params are sent whether the caller is
-   the Cobra command or a stdio client (compare JSON-RPC method name
+   the Kong command or a stdio client (compare JSON-RPC method name
    `session/prompt`).
 
 **Accept:** `gobble prompt` does not import or call the agent loop type; it
@@ -238,7 +238,7 @@ deliberately advertised `/bogus` that has no handler fails a test that
 asserts advertisement ⊆ handlers. `go list` / grep of the module for
 `_x.ai/` is empty.
 
-### Phase 7 — `_gobble/` extensions and remaining Cobra
+### Phase 7 — `_gobble/` extensions and remaining Kong commands
 
 1. Implement `_gobble/compact` (optional instructions), `_gobble/usage`,
    `_gobble/steer`, `_gobble/follow_up`, `_gobble/clear_queue` against the agent
@@ -392,5 +392,3 @@ MethodNotFound for `session/set_model`. No new phases in this tree.
   * Unknown `_` methods return -32601.
 * **Verification.** The stdio script follows the corrected list in the MADR's fifth amendment (Confirmation changes).
 * **Companion work.** The checklist above is replaced by magic-cli-remote `docs/decisions/0179-MADR-gobble-native-acp-provider.md` D1–D10. This plan still does not mutate that repository.
-
-**2026-10-04 — the CLI is Kong, not Cobra or fang.** The owner directed that gobble's CLI is Kong, not Cobra or fang. This supersedes the Cobra/fang CLI choice in this record. The sentences above stay as written.

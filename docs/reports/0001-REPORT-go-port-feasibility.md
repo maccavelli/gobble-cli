@@ -10,8 +10,9 @@ decision it bears on; those decisions belong in a MADR in this repository
 (`docs/decisions/`), and the work in its PLAN.
 
 Stated constraints from the request that opened this repository: the rewrite
-uses **Cobra** and **Viper** for the command line and configuration, and
-**Charm** (Lip Gloss and the rest of that stack) for terminal UI.
+uses **Viper** for configuration and **Charm** (Lip Gloss and the rest of
+that stack) for terminal UI. The command library that request named is the
+rejected option in 0002-MADR.
 
 ## Summary
 
@@ -43,7 +44,7 @@ The evidence:
 - `pi-ai` ships 42 provider factories, a generated model catalog, OAuth, image
   generation, classifiers, and a browser-clean core. The in-house
   `go-llmprovider-sdk` is being extracted from `mcplib` with 9 provider ids
-  and no Charm/Cobra surface. (M, R, F8, F13)
+  and no Charm or command-library surface. (M, R, F8, F13)
 - Session files are versioned JSONL with a documented v3 tree. A Go binary can
   read and write that format. (R, F9)
 - Chord, `pi-durable`, `pi-protocol` / `pi-client` / `pi-server`, and the
@@ -65,8 +66,8 @@ Each finding carries an evidence level:
 - **R:** read in source or package documentation, not executed.
 
 No TypeScript test, build, or live provider request was run. No Go scratch
-module was compiled. Charm, Cobra, and Viper behaviour is taken from the
-in-house `ocp-login` tree (Cobra 1.10.2, Viper 1.21.0, Charm v2
+module was compiled. Charm and Viper behaviour is taken from the
+in-house `ocp-login` tree (Viper 1.21.0, Charm v2
 `charm.land/{bubbletea,bubbles,lipgloss}/v2`) and from the libraries'
 public docs.
 
@@ -139,8 +140,8 @@ Modes: interactive TUI, `--print`, `--mode json`, `--mode rpc`, `--export`
 tools, extensions, skills, themes, project trust, and **unknown flags**
 reserved for extensions.
 
-Cobra maps onto this surface. Unknown extension flags are the part that
-needs a Cobra design (F14).
+A subcommand library maps onto this surface. Unknown extension flags are the part that
+needs a design (F14). The library the opening request named is the rejected option in 0002-MADR.
 
 ### Configuration the Viper layer would have to match
 
@@ -410,8 +411,8 @@ OpenShell patterns; those remain valid around a Go binary.
 | `go-llmprovider-sdk` | docs + accepted migration MADR; extraction in progress | providers, OAuth, catalogs — subset of `pi-ai` |
 | `go-tui-lib` | README only, no packages | intended Charm extraction target |
 | `mcplib` | mature MCP **server** library | Pi's `pi-mcp` is a **client** |
-| `ocp-login` | production Cobra + Viper + Charm v2 TUI | CLI/TUI patterns, not agent semantics |
-| `magic-cli-remote` | Cobra + Viper, ACP, MCP; no Charm in `go.mod` | remote-agent CLI experience |
+| `ocp-login` | production command library + Viper + Charm v2 TUI | CLI/TUI patterns, not agent semantics |
+| `magic-cli-remote` | command library + Viper, ACP, MCP; no Charm in `go.mod` | remote-agent CLI experience |
 | `go-core-lib` | README stub | none yet |
 
 Nothing in those repositories implements an agent loop, session tree,
@@ -421,17 +422,17 @@ providers, CLI, and TUI scaffolding. They do not make the port small.
 **Bears on:** D6, D10, D14 (MCP client: write one, or adopt a Go MCP
 client SDK).
 
-### F14 — Cobra fits the subcommands; extension flags are the sharp edge (R)
+### F14 — Subcommands fit; extension flags are the sharp edge (R)
 
 Hand-rolled `parseArgs` in `cli/args.ts` collects unknown flags into
-`unknownFlags` for extensions. Cobra can `FSet.ParseErrorsWhitelist.UnknownFlags`
+`unknownFlags` for extensions. A command library can `FSet.ParseErrorsWhitelist.UnknownFlags`
 or use a passthrough, but the help text today includes extension-registered
 options. That interaction has to be designed; it is not a blocker.
 
 `pi-ai` also ships a small `cli.ts` (OAuth helper). Coding-agent is the
 user-facing CLI.
 
-**Bears on:** D15 (Cobra command layout).
+**Bears on:** D15 (command layout). The library named in the opening request is the rejected option in 0002-MADR.
 
 ### F15 — Viper can read the JSON settings; schema and merge rules are the work (R)
 
@@ -464,11 +465,11 @@ identity findings).
 **Bears on:** D17 (name, config dir, User-Agent), D18 (derived vs
 clean-room).
 
-## Charm / Cobra / Viper mapping
+## Charm / Viper mapping
 
 | Pi surface | Stated Go stack | Fit |
 |---|---|---|
-| `cli/args.ts`, package/auth/mcp subcommands | Cobra | Good. Subcommands already exist. |
+| `cli/args.ts`, package/auth/mcp subcommands | command library | Good. Subcommands already exist. |
 | `settings.json`, `PI_*` env | Viper | Good for load/bind; custom merge for patch lists. |
 | Component tree, differential render, alt screen | Bubble Tea + Lip Gloss | Rewrite. Elm architecture replaces the component tree. |
 | Editor (kill ring, undo, autocomplete) | Bubbles textarea + custom | Large custom widget. |
@@ -522,7 +523,7 @@ Each is open. The evidence column says which finding bears on it.
 | D12 | Experimental stack | out of v1; in a later tree; in this module from the start | F10 |
 | D13 | grep/find | pure Go; require `rg`/`fd` | F12 |
 | D14 | MCP client | write against the MCP spec; adopt a Go client SDK | F13 |
-| D15 | Cobra layout | one root command with modes as flags (Pi today); subcommands per mode | F14 |
+| D15 | command layout | one root command with modes as flags (Pi today); subcommands per mode | F14 |
 | D16 | Settings merge | reimplement Pi's JSON patch rules; simplify | F15 |
 | D17 | Product identity | binary name, config dir, User-Agent, module path | F16 |
 | D18 | Provenance | clean-room from docs; derived rewrite retaining MIT notice | F16 |
@@ -533,7 +534,7 @@ For orientation only; a PLAN owns the steps after a MADR chooses D1–D18.
 
 A CLI-first rewrite, given D1 = shipping `pi`, looks like:
 
-1. Seed this module: `go.mod`, Cobra root, Viper JSON settings, CI on
+1. Seed this module: `go.mod`, a command root, Viper JSON settings, CI on
    darwin/linux/windows, identity (D17).
 2. Agent loop + built-in tools + session JSONL (D5, D11, D13).
 3. Provider/auth via `go-llmprovider-sdk` or an in-tree layer (D10),
@@ -604,4 +605,4 @@ for that SDK is that day's fact.
 
 ## Later observation (2026-10-04)
 
-The owner directed that gobble's CLI is Kong, not Cobra or fang. The Cobra, fang, and Viper sentences above are what this study observed. They are not the current choice.
+0002-MADR and 0004-MADR record the CLI library. This report remains the 2026-09-29 measurement of the TypeScript tree and the reference Go trees.

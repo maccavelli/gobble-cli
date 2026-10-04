@@ -5,15 +5,15 @@ decision-makers: repository owner
 consulted: 0001-REPORT-go-port-feasibility.md, 0002-MADR-cli-acp-headless-mcp-v1.md, 0003-MADR-gobble-product-identity.md
 informed: go-llmprovider-sdk, go-core-lib, mcplib, go-tui-lib, magic-cli-remote
 ---
-# gobble is one Go 1.27.1 module of contract-first packages, with an open standard at every boundary and a thin Cobra edge
+# gobble is one Go 1.27.1 module of contract-first packages, with an open standard at every boundary and a thin Kong edge
 
 ## Context and Problem Statement
 
 [0002-MADR-cli-acp-headless-mcp-v1.md](0002-MADR-cli-acp-headless-mcp-v1.md)
-chose ACP as the agent command API. Its PLAN began with "`go mod init` and
-a Cobra skeleton" and left the shape of the module open. Several report
-decisions are still open and all bear on that shape: D4 (Go SDK), D10
-(providers), D14 (MCP client), D15 (Cobra layout), D16 (settings merge),
+chose ACP as the agent command API. Its PLAN begins with "`go mod init` and
+a Kong skeleton" and leaves the shape of the module to this record. Several report
+decisions bear on that shape: D4 (Go SDK), D10
+(providers), D14 (MCP client), D15 (Kong layout), D16 (settings merge),
 and D9 (distribution).
 
 The owner asked for gobble to be scaffolded in the most idiomatic Go 1.27.1
@@ -85,9 +85,16 @@ probed):
   `ollama`). Official vendor SDKs (`anthropic-sdk-go`, `openai-go/v3`,
   `google.golang.org/genai`) are **not** dependencies of that module
   and are **not** 1.0 dependencies of gobble.
-* **CLI and TUI.** Cobra v1.10.2, Viper v1.21.0, `charmbracelet/fang`
-  v1.0.0, and Charm v2 (`charm.land/bubbletea/v2` v2.0.9, `bubbles/v2`
-  v2.2.1, `lipgloss/v2` v2.0.6) are used in production by `ocp-login`.
+* **CLI and TUI.** The CLI library is Kong. Configuration is Viper
+  v1.21.0. gobble has two modes: a native terminal CLI mode, which is
+  the default, and an enhanced terminal TUI mode. Core TUI is
+  go-tui-lib on Charm v2 (`charm.land/bubbletea/v2` v2.0.9, `bubbles/v2`
+  v2.2.1, `lipgloss/v2` v2.0.6). gobble does not reimplement core TUI.
+  Where a core behaviour is not in the library yet, gobble waits rather
+  than copying it. Self-update is `github.com/maccavelli/go-selfupdate-lib`.
+  gobble does not reimplement self-update. As much code as possible is
+  canonical: sibling libraries and the standard library rather than
+  local copies. The module is Go 1.27.1, idiomatic, and modular.
 * **Fleet build conventions** (magic-cli-remote, mcplib, ocp-login):
   * Build: `CGO_ENABLED=0`, `-trimpath`, `-tags netgo,osusergo`, and
     `-ldflags -X main.version/commit/date`.
@@ -131,9 +138,9 @@ SDK leaking into the agent core.
   gobble CLI, the gobble TUI) and **MCP out** (tool servers). Each has an
   official Go SDK that gobble uses, rather than re-implementing the wire.
 * A public Go SDK (report D4) that embedders can import without pulling in
-  Cobra, Viper, or Charm.
-* Every third-party SDK (ACP, MCP, go-llmprovider-sdk, go-core-lib,
-  Charm, Cobra, OpenTelemetry) is imported by exactly one package or
+  Kong, Viper, or Charm.
+* Every third-party SDK (ACP, MCP, go-llmprovider-sdk, go-selfupdate-lib,
+  Charm, Kong, OpenTelemetry) is imported by exactly one package or
   package family, so a replacement or bump is local.
 * Future-proofing:
   * a JSON forward-compatibility story (unknown fields survive a
@@ -156,6 +163,7 @@ SDK leaking into the agent core.
 * `pkg/` + `internal/` + `cmd/` "standard project layout"
 * Build on an open-source Go agent framework (Google ADK for Go, CloudWeGo
   Eino, Genkit Go, LangChainGo)
+* Cobra v1.10.2, or fang (`charmbracelet/fang` v1.0.0) on Cobra, as the CLI library (rejected)
 
 ## Decision Outcome
 
@@ -232,8 +240,8 @@ acpserver/                beta    acp.Agent implementation over agent/ → githu
 acpclient/                beta    Client-side helpers (in-process pipe, update fan-out) used by CLI/TUI/tests
 acpclient/acptest/        stable  In-memory agent↔client pair and frame recorder for embedders' tests
 telemetry/                beta    OpenTelemetry wiring (GenAI semantic conventions); no-op by default
-internal/cli/                     Cobra/Viper/fang command tree; an ACP client, never imports agent/
-internal/tui/                     Charm v2 program; an ACP client over acpclient/
+internal/cli/                     Kong/Viper command tree; an ACP client, never imports agent/
+internal/tui/                     Enhanced terminal TUI. Core TUI is go-tui-lib; an ACP client over acpclient/. Does not reimplement core TUI.
 internal/config/                  Typed settings, layered load, Pi merge semantics, JSON Schema emit
 internal/appdirs/                 XDG/Known-Folder resolution (0003)
 internal/auth/                    Keyring + file credential store; implements llmprovider.TokenStore
@@ -373,17 +381,19 @@ ACP-native behaviour, beyond the method list in 0002:
   Keys gobble does not know, whether from a newer gobble or from Pi, then
   survive a read-modify-write round-trip.
 
-### Cobra layout (report D15)
+### Kong layout (report D15)
 
-* Root `gobble`: with a TTY and no prompt argument it starts the TUI.
-  `gobble -p "…"` (or piped stdin) runs print mode.
+* gobble has two modes. The default is the native terminal CLI. The
+  enhanced terminal TUI mode is selected explicitly. A TTY and no prompt
+  argument does not start the TUI. `gobble -p "…"` (or piped stdin) runs
+  print mode.
 * Verbs are subcommands (`acp`, `session`, `mcp`, `auth`, `models`,
   `config`, `pkg`, …). The full list is in
   [0005-MADR-v1-feature-scope.md](0005-MADR-v1-feature-scope.md).
-* `fang` supplies styled help, errors, `--version`, man pages, and
-  completions. `fang` is Charm-styled, so only `internal/cli` imports it.
+* Kong supplies the command tree, help, errors, `--version`, man pages,
+  and completions. Only `internal/cli` imports Kong and Viper.
 * Hook-registered and package-registered flags are declared from their
-  manifests before `Execute`, so they appear in `--help`. This answers
+  manifests before Kong parses arguments, so they appear in `--help`. This answers
   0001-REPORT F14 without swallowing unknown flags.
 
 ### Idiom list (Go 1.25–1.27 features used on purpose)
@@ -413,20 +423,22 @@ ACP-native behaviour, beyond the method list in 0002:
 1. `agent`, `llm`, `tool`, `session`, `skill`, `hook`, `compaction`,
    `prompt`, `command`, `permission`, `checkpoint`:
    * import no ACP SDK, MCP SDK, `go-llmprovider-sdk`, `go-core-lib`,
-     vendor LLM SDK, Cobra, Viper, fang, Charm, or OpenTelemetry SDK;
+     vendor LLM SDK, Kong, Viper, Charm, or OpenTelemetry SDK;
    * the OTel **API** is allowed only in `telemetry`.
 2. Only `acpserver` and `acpclient/...` import `github.com/coder/acp-go-sdk`.
 3. Only `mcpclient` imports `github.com/modelcontextprotocol/go-sdk`.
 4. Only `llm/provider` imports `github.com/maccavelli/go-llmprovider-sdk`.
    No package imports `github.com/anthropics/anthropic-sdk-go`,
    `github.com/openai/openai-go`, or `google.golang.org/genai`.
-5. Only `internal/tui` imports `charm.land/...`. Only `internal/cli`
-   imports Cobra, Viper, or fang.
+5. Only `internal/tui` imports `charm.land/...` and
+   `github.com/maccavelli/go-tui-lib`. Only `internal/cli`
+   imports Kong or Viper.
 6. `internal/cli` and `internal/tui` never import `agent`. They drive the
    agent through `acpclient` (0002's rule).
 7. No stable or beta package imports `exp/...`. Only `cmd/gobble` wires
    `exp` features, behind settings.
-8. Only `internal/cli` imports `github.com/maccavelli/go-core-lib`.
+8. Only `internal/cli` imports `github.com/maccavelli/go-selfupdate-lib`.
+   gobble does not reimplement self-update.
 
 The test runs `go list -deps -json ./...` and fails with the offending
 edge. It must be shown failing on a scratch copy with a planted edge
@@ -478,7 +490,7 @@ shown failing when those imports first exist (0002-PLAN Phase 3,
   `go list -m` does not name `anthropic-sdk-go`, `openai-go`, or
   `google.golang.org/genai`. After F4 it names
   `github.com/maccavelli/go-llmprovider-sdk`. After F10 it names
-  `github.com/maccavelli/go-core-lib`.
+  `github.com/maccavelli/go-selfupdate-lib`.
 * `internal/archtest` passes, and it has been shown failing on a scratch
   clone with a planted `internal/cli → agent` edge and a planted
   `agent → charm.land/…` edge.
@@ -494,7 +506,7 @@ shown failing when those imports first exist (0002-PLAN Phase 3,
 
 ## Pros and Cons of the Options
 
-### One module; contract-first public packages; adapters behind them; `internal/` edge; `exp/` for unstable work
+### One module; contract-first public packages; adapters behind them; `internal/` edge; `exp/` for unstable work (chosen)
 
 * Good, because it meets every driver with one `go.mod` and one release.
 * Good, because contract packages have no heavy dependencies, and
@@ -528,6 +540,16 @@ shown failing when those imports first exist (0002-PLAN Phase 3,
 * Bad, because `pkg/` adds a path element that carries no meaning. The Go
   project's module-layout guidance ("Organizing a Go module") does not use
   it, and neither do the fleet libraries.
+
+### The command library ocp-login already ships (rejected)
+
+Named in Considered Options. gobble does not use it.
+
+* Good, because that pair is already in production in ocp-login.
+* Bad, because the owner chose Kong. It is not the command tree, the
+  help path, or the completion path. Phase 2 of
+  [0004-PLAN](0004-PLAN-go-module-architecture.md) builds `internal/cli`
+  with Kong.
 
 ### Build on an open-source Go agent framework (Google ADK for Go, CloudWeGo Eino, Genkit Go, LangChainGo)
 
@@ -826,12 +848,13 @@ current HEAD changes documentation only; its released Go source is unchanged.
   (`selfupdate/types.go`, `checker.go`, `version.go`, and
   `.github/workflows/publish-selfupdate-release.yml`).
 * `selfupdate` and `selfupdate/selfupdatetest` remain the only Go packages.
-  `buildinfo`, `selfupdate/cli` and `updatetea` are not present. gobble retains
-  `internal/buildinfo` and binds the update flags and TUI interactions
-  itself. The F10 pin rule selects the newest suitable `v1.x` tag when
-  implementation starts and pins the workflow to that tag's peeled commit.
-  The gobble stable-only release decision remains in force; adopting
-  prerelease channels would need a later decision and plan amendment.
+  `buildinfo`, `selfupdate/cli` and `updatetea` are not present in that
+  tag. Self-update is `github.com/maccavelli/go-selfupdate-lib`. gobble
+  does not reimplement self-update. F10 selects a stable `v1.5.0` or
+  later tag and checks the released `selfupdate`, `selfupdate/cli`, and
+  `buildinfo` before binding them. The gobble stable-only release
+  decision remains in force; adopting prerelease channels would need a
+  later decision.
 
 #### TUI library
 
@@ -846,14 +869,15 @@ current HEAD changes documentation only; its released Go source is unchanged.
   packages are not current API. The `v0.1.0` workspace has recorded
   defects, so an F9 integration must be tested against a corrected tagged
   version before depending on it.
-* **Decision:** `internal/tui` consumes `go-tui-lib` for released reusable
-  workspace, layout, glyph and theme behaviour after that validation. It
-  keeps gobble-specific ACP panes and flows locally. Only `internal/tui`
-  imports `go-tui-lib`, as it alone imports Charm; the core and public Go
-  SDK remain TUI-free. `tuitest` may be imported by `_test.go` files for
-  rendering checks. This extends import-boundary rule 5 without changing
-  the package map or making the TUI library a prerequisite for the module
-  scaffold.
+* **Decision:** Core TUI is go-tui-lib. gobble does not reimplement core
+  TUI. Where a core behaviour is not in the library yet, gobble waits
+  rather than copying it. `internal/tui` is the enhanced terminal TUI
+  mode and an ACP client. The default mode is the native terminal CLI.
+  Only `internal/tui` imports `go-tui-lib`, as it alone imports Charm;
+  the core and public Go SDK remain TUI-free. `tuitest` may be imported
+  by `_test.go` files for rendering checks. This extends import-boundary
+  rule 5 without making the TUI library a prerequisite for the module
+  scaffold. F9 still selects a corrected tested tag before the import.
 
 ### Source correction (2026-10-02): go-core-lib release and development HEAD
 
@@ -865,7 +889,7 @@ development commit `bf7221a5408984299a8511eb98f8f06eadd133bd`, a
 not in `v1.3.1` and is not a gobble dependency. `selfupdate/cli` is still a
 plan. The local `internal/buildinfo` choice remains for the scaffold; its
 relationship to a released go-core-lib `buildinfo` must be checked when the
-first relevant dependency is selected. No gobble module or import exists yet.
+first relevant dependency is selected. On 2026-10-02 no gobble module existed. Phase 0 has since created the module (`925ef0abf83e475c33b3ffae14685617b035639e`); it still does not import go-selfupdate-lib.
 
 The provider SDK first advanced to `d4ca92575855c1ba9196422eeeb34df2ad5c9f6a`
 with a plan-only change. Observed commit
@@ -895,31 +919,11 @@ are unchanged. It still has no tag; these commits are not gobble dependencies.
   released, no longer development-only as the 2026-10-02 correction
   observed. Its `-X` symbols are
   `github.com/maccavelli/go-selfupdate-lib/buildinfo.version` and `….kind`.
-* **What it means for this record.** Where this MADR names
-  `github.com/maccavelli/go-core-lib` as a planned dependency, the module
-  gobble will require is `github.com/maccavelli/go-selfupdate-lib`, at
-  `v1.5.0` or later. That covers import-boundary rule 8, the pins, the
-  release workflow and `NOTICE`. The old path gets no further releases.
-  gobble requires neither module yet.
-* **Still open, as before.** F10 checks, when it selects a tag, whether
-  gobble keeps its own `internal/buildinfo` or uses the released `buildinfo`
-  (0005-PLAN F10). This correction does not decide it.
-* **The earlier text stays as written**, as dated history.
-
-## Amendment — 2026-10-04: the CLI is Kong, not Cobra or fang
-
-The owner directed that gobble's CLI is Kong, not Cobra or fang. This supersedes the Cobra/fang CLI choice in this record. The sentences above stay as written.
-
-## Amendment — 2026-10-04: go-tui-lib, go-selfupdate-lib, and canonical code
-
-Still `proposed`. The owner directed the rules below. The sentences above stay as written. The Kong amendment of this date is unchanged.
-
-* **TUI.** The TUI uses `go-tui-lib` for all core TUI functionality. gobble does not reimplement core TUI. This supersedes the 2026-10-02 decision that `internal/tui` keep transcript, tool-card, permission, editor, and picker behaviour as local core TUI. The 2026-10-02 inventory of what `go-tui-lib` `v0.1.0` exported stays that day's measurement. Where a core TUI behaviour is not in the library yet, gobble waits for it there rather than copying it locally. `internal/tui` remains the only importer of `go-tui-lib` and remains an ACP client.
-* **Self-update.** Self-update uses `go-selfupdate-lib`. gobble does not reimplement self-update. The 2026-10-03 path `github.com/maccavelli/go-selfupdate-lib` already named the module; this record was silent on not reimplementing the updater.
-* **Canonical code.** As much code as possible is canonical: use the sibling libraries and the standard library rather than local copies. Here "canonical" means shared implementation, not the companion command names in 0005-MADR.
-
-Go 1.27.1, idiomatic Go, and a modular package tree are already the decision in this record (the title, the Decision Drivers, and `go 1.27.1`). This amendment does not change them.
-
-## Amendment — 2026-10-04: two terminal modes
-
-Still `proposed`. The owner directed that gobble has two modes: a native terminal CLI mode, which is the default, and an enhanced terminal TUI mode. Core TUI still comes from `go-tui-lib`; gobble does not reimplement core TUI. Where a core behaviour is not in the library yet, gobble waits rather than copying it. Self-update stays `github.com/maccavelli/go-selfupdate-lib`; gobble does not reimplement self-update. The CLI library remains Kong, not Cobra or fang. The sentences above stay as written. This supersedes any sentence that starts the TUI on a TTY with no prompt; that sentence remains as dated history.
+* **What it means for this record.** The planned self-update module is
+  `github.com/maccavelli/go-selfupdate-lib`, at `v1.5.0` or later.
+  gobble does not reimplement self-update. That covers import-boundary
+  rule 8, the pins, the release workflow and `NOTICE`. The old path
+  gets no further releases. The module does not require it yet.
+  F10 checks, when it selects a tag, whether gobble keeps its own
+  `internal/buildinfo` or uses the released `buildinfo`
+  (0005-PLAN F10).

@@ -20,6 +20,16 @@ end it produces a `gobble` binary that answers `version`, `completion`, and
 [0002-PLAN-cli-acp-headless-mcp-v1.md](0002-PLAN-cli-acp-headless-mcp-v1.md)
 Phase 1 starts from this tree.
 
+The CLI library is Kong. Phase 2 builds `internal/cli` with Kong, not
+another command library. gobble has two modes: a native terminal CLI
+mode, which is the default, and an enhanced terminal TUI mode. Core TUI
+is go-tui-lib. This plan does not import it and does not reimplement
+core TUI. Where a core behaviour is not in the library yet, gobble waits
+rather than copying it. Self-update is go-selfupdate-lib. This plan does
+not reimplement self-update. As much code as possible is canonical:
+sibling libraries and the standard library rather than local copies.
+The module is Go 1.27.1, idiomatic, and modular.
+
 ## Scope
 
 In:
@@ -30,7 +40,7 @@ In:
 * Contract types and interfaces for `llm`, `tool`, `session`, `hook`,
   `permission` and `gobble` (compiling, documented, no behaviour)
 * `internal/archtest`, `internal/buildinfo`, `internal/appdirs`,
-  `internal/logging`, `internal/cli` root (fang)
+  `internal/logging`, `internal/cli` root (Kong)
 * Test harness packages `llm/llmtest` and `acpclient/acptest` (skeletons
   that later phases fill)
 * CI (three operating systems) and a tag-driven release workflow, dry-run
@@ -48,7 +58,7 @@ Out:
 
 ## Implementation Steps
 
-### Phase D — current sibling-source documentation (before Phase 0)
+### Phase D — current sibling-source documentation (before Phase 0) (complete)
 
 This phase may be approved and committed separately from the Go scaffold.
 It changes documentation only. It does not add a module requirement or claim
@@ -79,7 +89,7 @@ actual present surfaces; none says gobble imports them yet; links resolve;
 `git diff --check` is clean. Commit this documentation phase after its
 checks. Phases 0–5 retain their separate approval and execution order.
 
-### Phase 0 — module and toolchain
+### Phase 0 — module and toolchain (complete)
 
 1. `go mod init github.com/maccavelli/gobble-cli`. Set `go 1.27.1`.
 2. Add `tool` directives:
@@ -145,7 +155,7 @@ checks. Phases 0–5 retain their separate approval and execution order.
 * `make check-cgo-off` fails on a scratch copy that adds `import "C"`.
   Quote that failure in the handoff.
 
-### Phase 1 — package skeleton and contracts
+### Phase 1 — package skeleton and contracts (complete)
 
 1. Create each directory in the 0004-MADR package map. Each gets a
    `doc.go` with a package comment whose first line after the summary is
@@ -215,9 +225,9 @@ checks. Phases 0–5 retain their separate approval and execution order.
      `*secret`, and `authorization`;
    * **no stderr handler when the process is `gobble acp`**, because stdio
      is the protocol.
-5. `internal/cli` root through `fang.Execute`. Subcommands:
+5. `internal/cli` root through Kong. Subcommands:
    * `version [--json]`;
-   * `completion` (fang or Cobra);
+   * `completion` (Kong);
    * `config path`, which prints the four role directories;
    * `acp`, which returns "not yet implemented" and exit code 2 until
      0002-PLAN Phase 1.
@@ -364,6 +374,22 @@ defect was planted (scratch copy or scratch clone) and the failure text.
 
 ## Execution record
 
+**Where execution stands (2026-10-04).** Phase D, Phase 0, and Phase 1
+have run. Phase 0 is `925ef0abf83e475c33b3ffae14685617b035639e`
+(`build: scaffold the gobble module (0004-PLAN phase 0)`). The same-day
+commits `c4658ae2a64dd7787bbd1257865e4a760676701a`,
+`9bc93114ad15fa8231ade96a9381c3e450f7d425`, and
+`7ea8634daac4d1b73ef23a132cdd8aa65f5bffc3` keep ship builds CGO off and
+`make race` CGO on. Phase 1 is
+`661b14e768407264a38687e2db99201cae2a04a1`
+(`build: add phase 1 package map and compile-only contracts (0004-PLAN)`).
+Phases 2–5 have not run. There is no `cmd/gobble` process entry yet.
+`git ls-remote origin refs/heads/main` on this date returned
+`8e016ab53a5765b2c912fab338d873918b8eed36`. That tip's parent is
+`917d03d9bbbbf09b47e356ad02558e389258f8a2`, whose parent is
+`ddf7d97cfc21603224f583732820b1c95fb5a12d`. `ddf7d97` is an ancestor,
+not the current origin tip.
+
 **Phase D, 2026-10-02 — complete.** The owner approved this documentation
 phase and then approved refreshing the records when sibling HEADs changed.
 The phase updated the four 0004/0005 records, `README.md`, `docs/README.md`
@@ -374,9 +400,9 @@ commit `bf7221a`, and go-tui-lib tag `v0.1.0` at `5c57806` with later
 documentation-only commit `7907590`. A relative-link check resolved
 94 links in the seven edited files. Its deliberate bad input
 `[broken](missing.md)` failed with `broken relative link: missing.md`.
-`git diff --check` passed. Gobble has no `go.mod`, so no Go test was run.
-The documentation phase is committed with this record. Phases 0–5 remain
-proposed and require separate approval.
+`git diff --check` passed. On that date gobble had no `go.mod`, so no Go test was run.
+The documentation phase is committed with this record. On that date Phases 0–5
+had not been approved.
 
 **Phase D refresh, 2026-10-03 — complete.** The owner approved the
 2026-10-03 amendment below ("Update docs. Proceed"). The refresh added the
@@ -497,16 +523,15 @@ one sibling, with documentation only, and no sibling repository changes:
    `github.com/maccavelli/go-selfupdate-lib`.
 2. **Later phases** read go-core-lib as go-selfupdate-lib, at the tag F10
    selects (`v1.5.0` or later). That covers Phase 0 step 4's
-   "do not `require`", Phase 4's `uses:` line, and `NOTICE`. Their
-   paragraphs stay as dated history.
+   "do not `require`", Phase 4's `uses:` line, and `NOTICE`. Later phases require `github.com/maccavelli/go-selfupdate-lib` at the tag F10 selects (`v1.5.0` or later), not `go-core-lib`.
 3. **Step 3's checks,** as written: the tag, commit and exported packages
    against go-selfupdate-lib's source; every relative link in the changed
    files, with the planted bad link seen failing; `git diff --check`. In
    addition, `git grep go-core-lib` over `README.md`, `NOTICE` and
    `docs/architecture.md` shows only "formerly" mentions.
 
-The execution record gains a dated Phase D entry. This PLAN stays
-`in-progress`, and Phases 0–5 keep their separate approval.
+The execution record gains a dated Phase D entry. On 2026-10-03 this PLAN stayed
+`in-progress`. Phase 0 and Phase 1 have since run; see Where execution stands.
 
 **2026-10-04 — Phase 0 tool versions resolved.** `go` is `1.27.1`.
 `go mod tidy` recorded these tool modules:
@@ -574,16 +599,3 @@ mingw32-make: *** [makefile:162: check-cgo-off] Error 1
 
 mingw32-make exited 2. The scratch file was deleted and was not
 committed.
-
-**2026-10-04 — the CLI is Kong, not Cobra or fang.** The owner directed that gobble's CLI is Kong, not Cobra or fang. This supersedes the Cobra/fang CLI choice in this record. The sentences above stay as written.
-
-**2026-10-04 — Phase 1 wire fallback and verify-build-metadata.** Go 1.27.1 removed the `json:",unknown"` tag option and ignores it. A probe of that tag dropped the extra member and marshaled `"Unknown":null`. Session entries that must round-trip unknown members use a `jsontext.Value` field tagged `json:",embed"`. `verify-build-metadata` stays a no-op until `cmd/gobble/main.go` exists (Phase 2). Phase 1 creates the package directory without that file. The CGO rules are unchanged: ship targets stay off, and `make race` stays on.
-
-**2026-10-04 — go-tui-lib, go-selfupdate-lib, and canonical code.** Follows the amendment of this date in 0004-MADR. No new phases. The sentences above stay as written.
-
-* **TUI.** Later TUI work uses `go-tui-lib` for all core TUI functionality. gobble does not reimplement core TUI. This supersedes the 2026-10-02 line that F9 selects `go-tui-lib` only for workspace use. Phase 1 still does not import it; the import lands with the TUI phase in 0005-PLAN. Where a core behaviour is not in the selected tag yet, that phase waits for the library rather than copying it locally.
-* **Self-update.** Self-update uses `go-selfupdate-lib`. gobble does not reimplement self-update. The 2026-10-03 reading of later phases already names that module.
-* **Canonical code.** As much code as possible is canonical: use the sibling libraries and the standard library rather than local copies.
-* **Already recorded.** The module stays Go 1.27.1, idiomatic, and modular (Goal; Phase 0 `go 1.27.1`). The CLI stays Kong, per the amendment above. This note does not restore Cobra or fang and does not edit those sentences.
-
-**2026-10-04 — two terminal modes.** The owner directed that gobble has two modes: a native terminal CLI mode, which is the default, and an enhanced terminal TUI mode. Core TUI still comes from `go-tui-lib`; gobble does not reimplement core TUI. Where a core behaviour is not in the library yet, gobble waits rather than copying it. Self-update stays `github.com/maccavelli/go-selfupdate-lib`; gobble does not reimplement self-update. The CLI library remains Kong, not Cobra or fang. No new phases. The sentences above stay as written, including any step that starts the TUI on a TTY with no prompt; this note is the default.
