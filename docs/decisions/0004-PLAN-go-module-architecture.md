@@ -505,3 +505,32 @@ one sibling, with documentation only, and no sibling repository changes:
 
 The execution record gains a dated Phase D entry. This PLAN stays
 `in-progress`, and Phases 0–5 keep their separate approval.
+
+**2026-10-04 — Phase 0 tool versions resolved.** `go` is `1.27.1`.
+`go mod tidy` recorded these tool modules:
+
+* `honnef.co/go/tools v0.8.1` — staticcheck 2026.2.1 (0.8.1). This is the
+  magic-cli-remote pin (MADR 0170). Re-resolved on this date; the version
+  is unchanged.
+* `golang.org/x/vuln v1.8.0` — govulncheck@v1.8.0.
+* `golang.org/x/exp v0.0.0-20260908205506-85c1c2202aba` — `cmd/apidiff`.
+* `golang.org/x/lint v0.0.0-20241112194109-818c5a804067` — golint.
+
+The ACP require is `github.com/coder/acp-go-sdk v0.13.5`, replaced by
+`github.com/maccavelli/acp-go-sdk v0.13.6-mcr.1`. The replace is not
+relative. `go-llmprovider-sdk`, `go-core-lib`, and `go-selfupdate-lib`
+are not required. Root `tools.go` blank-imports the ACP module so
+`go mod tidy` keeps that requirement; it is not a package from the
+package map, and it adds no package directory.
+
+`make check-cgo-off` failed on an uncommitted scratch file
+`scratch_cgo_phase0.go` whose third line was `import "C"`:
+
+```text
+check-cgo-off: cgo import "C" is not allowed:
+./scratch_cgo_phase0.go:3:import "C"
+mingw32-make: *** [makefile:159: check-cgo-off] Error 1
+```
+
+The scratch file was deleted. On the restored tree, `make check-cgo-off`
+exited 0.
