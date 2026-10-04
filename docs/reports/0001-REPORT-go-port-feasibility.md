@@ -601,3 +601,7 @@ fleet copy; `NOTICE` credits Pi (MIT) and both sibling libraries.
 `go-llmprovider-sdk` records the same choice in
 `0018-MADR-apache-2-license.md`. The 2026-09-30 "no LICENSE file" line
 for that SDK is that day's fact.
+
+## Later observation (2026-10-04)
+
+The owner directed that gobble's CLI is Kong, not Cobra or fang. The Cobra, fang, and Viper sentences above are what this study observed. They are not the current choice.

@@ -5,8 +5,8 @@ How `gobble-cli` is put together, as it is now. This file carries no history and
 ## What it is
 
 A Git repository for a planned Go rewrite of the Pi coding-agent CLI. The
-planned binary name is `gobble`. The proposed command and configuration stack
-is Cobra and Viper; the proposed terminal UI uses Charm v2.
+planned binary name is `gobble`. The proposed command stack is Kong; the proposed configuration stack
+is Viper; the proposed terminal UI uses Charm v2.
 
 There is no Go module, no `cmd/` tree, and no binary. The working tree is documentation. The package map in [0004-MADR](decisions/0004-MADR-go-module-architecture.md) is proposed, not built. This file describes it only once the packages exist.
 

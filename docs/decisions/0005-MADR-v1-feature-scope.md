@@ -1,6 +1,6 @@
 ---
 status: proposed
-date: 2026-10-03
+date: 2026-10-04
 decision-makers: repository owner
 consulted: 0001-REPORT-go-port-feasibility.md, 0002-MADR-cli-acp-headless-mcp-v1.md, 0003-MADR-gobble-product-identity.md, 0004-MADR-go-module-architecture.md
 informed: magic-cli-remote (companion command table), go-llmprovider-sdk, go-core-lib, go-tui-lib
@@ -739,3 +739,7 @@ no tag, so the F4 release gate is unchanged.
 * **What does not change.** The stable-only release decision, and the rest
   of F10.
 * **The earlier text stays as written**, as dated history.
+
+## Amendment — 2026-10-04: the CLI is Kong, not Cobra or fang
+
+The owner directed that gobble's CLI is Kong, not Cobra or fang. This supersedes the Cobra/fang CLI choice in this record. The sentences above stay as written.

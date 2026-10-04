@@ -1,6 +1,6 @@
 ---
 status: proposed
-date: 2026-10-03
+date: 2026-10-04
 decision-makers: repository owner
 consulted: 0001-REPORT-go-port-feasibility.md, 0002-MADR-cli-acp-headless-mcp-v1.md, 0003-MADR-gobble-product-identity.md
 informed: go-llmprovider-sdk, go-core-lib, mcplib, go-tui-lib, magic-cli-remote
@@ -905,3 +905,7 @@ are unchanged. It still has no tag; these commits are not gobble dependencies.
   gobble keeps its own `internal/buildinfo` or uses the released `buildinfo`
   (0005-PLAN F10). This correction does not decide it.
 * **The earlier text stays as written**, as dated history.
+
+## Amendment — 2026-10-04: the CLI is Kong, not Cobra or fang
+
+The owner directed that gobble's CLI is Kong, not Cobra or fang. This supersedes the Cobra/fang CLI choice in this record. The sentences above stay as written.

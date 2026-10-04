@@ -1,6 +1,6 @@
 ---
 status: proposed
-date: 2026-10-03
+date: 2026-10-04
 associated-madr: "0005-MADR-v1-feature-scope.md"
 ---
 # Implement the v1 line: the v1.0.0 gate, the v1.x train, and `exp/`
@@ -665,3 +665,5 @@ Changes to F10:
    record.
 3. **Accept rewrite.** The running-copy end-to-end test is modelled on
    go-selfupdate-lib `selfupdate/e2e_running_test.go`.
+
+**2026-10-04 — the CLI is Kong, not Cobra or fang.** The owner directed that gobble's CLI is Kong, not Cobra or fang. This supersedes the Cobra/fang CLI choice in this record. The sentences above stay as written.

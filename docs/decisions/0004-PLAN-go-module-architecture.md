@@ -397,6 +397,8 @@ A stray mention planted in a copy of `README.md` failed it. markdownlint-cli2,
 with its default configuration, reports the same 23 issues (22 MD013, one
 MD040) at the same lines before and after. `git diff --check` passed.
 
+**Phase 1, 2026-10-04 — complete.** The package map and compile-only contracts are in the tree. No command library is imported. `make preflight` exited 0. `go test ./internal/archtest` was green (`ok github.com/maccavelli/gobble-cli/internal/archtest`). On a deleted scratch copy, planting `internal/cli` importing `agent` failed archtest with `rule 6: github.com/maccavelli/gobble-cli/internal/cli imports github.com/maccavelli/gobble-cli/agent`. Planting `agent` importing `charm.land/lipgloss/v2` failed with `rule 1: github.com/maccavelli/gobble-cli/agent imports charm.land/lipgloss/v2` and the same edge under rule 5. `session.Entry` keeps unknown JSON members with `json:",embed"` because Go 1.27.1 ignores `json:",unknown"`. Replacing that tag with `json:"unknown"` failed `TestEntryUnknownFieldRoundTrip`: unknown fields not preserved, got `{"type":"message","id":"abc","unknown":null}`.
+
 ## Amendments
 
 **2026-09-30 — shared libraries as they exist.** 0004-MADR's amendment of
@@ -572,3 +574,7 @@ mingw32-make: *** [makefile:162: check-cgo-off] Error 1
 
 mingw32-make exited 2. The scratch file was deleted and was not
 committed.
+
+**2026-10-04 — the CLI is Kong, not Cobra or fang.** The owner directed that gobble's CLI is Kong, not Cobra or fang. This supersedes the Cobra/fang CLI choice in this record. The sentences above stay as written.
+
+**2026-10-04 — Phase 1 wire fallback and verify-build-metadata.** Go 1.27.1 removed the `json:",unknown"` tag option and ignores it. A probe of that tag dropped the extra member and marshaled `"Unknown":null`. Session entries that must round-trip unknown members use a `jsontext.Value` field tagged `json:",embed"`. `verify-build-metadata` stays a no-op until `cmd/gobble/main.go` exists (Phase 2). Phase 1 creates the package directory without that file. The CGO rules are unchanged: ship targets stay off, and `make race` stays on.

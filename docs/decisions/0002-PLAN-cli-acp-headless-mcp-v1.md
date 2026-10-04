@@ -1,6 +1,6 @@
 ---
 status: proposed
-date: 2026-10-01
+date: 2026-10-04
 associated-madr: "0002-MADR-cli-acp-headless-mcp-v1.md"
 ---
 # Implement v1 as the native magic-cli-remote CLI: Cobra over ACP, ACP stdio, MCP client
@@ -392,3 +392,5 @@ MethodNotFound for `session/set_model`. No new phases in this tree.
   * Unknown `_` methods return -32601.
 * **Verification.** The stdio script follows the corrected list in the MADR's fifth amendment (Confirmation changes).
 * **Companion work.** The checklist above is replaced by magic-cli-remote `docs/decisions/0179-MADR-gobble-native-acp-provider.md` D1–D10. This plan still does not mutate that repository.
+
+**2026-10-04 — the CLI is Kong, not Cobra or fang.** The owner directed that gobble's CLI is Kong, not Cobra or fang. This supersedes the Cobra/fang CLI choice in this record. The sentences above stay as written.

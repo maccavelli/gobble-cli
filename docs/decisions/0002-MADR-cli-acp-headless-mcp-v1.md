@@ -1,6 +1,6 @@
 ---
 status: proposed
-date: 2026-10-01
+date: 2026-10-04
 decision-makers: repository owner
 consulted: 0001-REPORT-go-port-feasibility.md, magic-cli-remote (ACP stdio adapter, command tables, protocol-v1/v2), TypeScript Pi at 312184edb
 informed: go-llmprovider-sdk, go-core-lib, acp-go-sdk, magic-cli-remote
@@ -1016,3 +1016,7 @@ gobble's part:
   * an unknown `_x.ai/compact_conversation` gets -32601.
 * "`session/set_config_option` category `model`" reads: the request carries the `configId` of the option whose declared category is `model`. Category is a property of the option declaration, not of the request.
 * A test asserts that `available_commands_update` precedes the `session/new` response on the wire. It is shown failing on a copy that sends it after the response.
+
+## Amendment — 2026-10-04: the CLI is Kong, not Cobra or fang
+
+The owner directed that gobble's CLI is Kong, not Cobra or fang. This supersedes the Cobra/fang CLI choice in this record. The sentences above stay as written.

@@ -32,7 +32,7 @@ The three plans run in sequence. The documentation-only 0004-PLAN Phase D is
 complete; no Go module work has started:
 
 1. **[0004-PLAN](decisions/0004-PLAN-go-module-architecture.md)** — source documentation in Phase D, then the scaffold in Phases 0–5. It replaces 0002-PLAN Phase 0.
-2. **[0002-PLAN](decisions/0002-PLAN-cli-acp-headless-mcp-v1.md) Phases 1–8** — the ACP agent, Cobra as an ACP client, the first tools, sessions, MCP, and native slash commands.
+2. **[0002-PLAN](decisions/0002-PLAN-cli-acp-headless-mcp-v1.md) Phases 1–8** — the ACP agent, Kong as an ACP client, the first tools, sessions, MCP, and native slash commands.
 3. **[0005-PLAN](decisions/0005-PLAN-v1-feature-scope.md)** — F1–F10 form the v1.0.0 gate. X1–X6 are the v1.x train and `exp/`.
 
 ## I want to…
