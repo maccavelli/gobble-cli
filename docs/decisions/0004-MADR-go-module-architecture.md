@@ -85,7 +85,7 @@ probed):
   `ollama`). Official vendor SDKs (`anthropic-sdk-go`, `openai-go/v3`,
   `google.golang.org/genai`) are **not** dependencies of that module
   and are **not** 1.0 dependencies of gobble.
-* **CLI and TUI.** The CLI library is Kong. The config surface is undecided and will be either a native Kong facility or a Kong-optimized surface we write, not Viper.
+* **CLI and TUI.** The CLI library is Kong. The config surface is undecided and will be either a native Kong facility or a surface we write.
   gobble has two modes: a native terminal CLI mode, which is
   the default, and an enhanced terminal TUI mode. Core TUI is
   go-tui-lib on Charm v2 (`charm.land/bubbletea/v2` v2.0.9, `bubbles/v2`
@@ -138,7 +138,7 @@ SDK leaking into the agent core.
   gobble CLI, the gobble TUI) and **MCP out** (tool servers). Each has an
   official Go SDK that gobble uses, rather than re-implementing the wire.
 * A public Go SDK (report D4) that embedders can import without pulling in
-  Kong or Charm. The config surface is undecided and will be either a native Kong facility or a Kong-optimized surface we write, not Viper.
+  Kong or Charm. The config surface is undecided and will be either a native Kong facility or a surface we write.
 * Every third-party SDK (ACP, MCP, go-llmprovider-sdk, go-selfupdate-lib,
   Charm, Kong, OpenTelemetry) is imported by exactly one package or
   package family, so a replacement or bump is local.
@@ -240,7 +240,7 @@ acpserver/                beta    acp.Agent implementation over agent/ → githu
 acpclient/                beta    Client-side helpers (in-process pipe, update fan-out) used by CLI/TUI/tests
 acpclient/acptest/        stable  In-memory agent↔client pair and frame recorder for embedders' tests
 telemetry/                beta    OpenTelemetry wiring (GenAI semantic conventions); no-op by default
-internal/cli/                     Kong command tree; an ACP client, never imports agent/. The config surface is undecided and will be either a native Kong facility or a Kong-optimized surface we write, not Viper.
+internal/cli/                     Kong command tree; an ACP client, never imports agent/. The config surface is undecided and will be either a native Kong facility or a surface we write.
 internal/tui/                     Enhanced terminal TUI. Core TUI is go-tui-lib; an ACP client over acpclient/. Does not reimplement core TUI.
 internal/config/                  Typed settings, layered load, Pi merge semantics, JSON Schema emit
 internal/appdirs/                 XDG/Known-Folder resolution (0003)
@@ -372,7 +372,7 @@ ACP-native behaviour, beyond the method list in 0002:
   * global-only keys are ignored in project files;
   * project files load only for a trusted project.
 * How flags and `GOBBLE_*` environment variables bind on top of the
-  merged result is unspecified. The config surface is undecided and will be either a native Kong facility or a Kong-optimized surface we write, not Viper.
+  merged result is unspecified. The config surface is undecided and will be either a native Kong facility or a surface we write.
   That surface does not do the file merge itself. Config implementation
   stays unspecified.
 * Wire and file types use `encoding/json/v2`:
@@ -393,7 +393,7 @@ ACP-native behaviour, beyond the method list in 0002:
   `config`, `pkg`, …). The full list is in
   [0005-MADR-v1-feature-scope.md](0005-MADR-v1-feature-scope.md).
 * Kong supplies the command tree, help, errors, `--version`, man pages,
-  and completions. Only `internal/cli` imports Kong. The config surface is undecided and will be either a native Kong facility or a Kong-optimized surface we write, not Viper.
+  and completions. Only `internal/cli` imports Kong. The config surface is undecided and will be either a native Kong facility or a surface we write.
 * Hook-registered and package-registered flags are declared from their
   manifests before Kong parses arguments, so they appear in `--help`. This answers
   0001-REPORT F14 without swallowing unknown flags.
@@ -434,7 +434,7 @@ ACP-native behaviour, beyond the method list in 0002:
    `github.com/openai/openai-go`, or `google.golang.org/genai`.
 5. Only `internal/tui` imports `charm.land/...` and
    `github.com/maccavelli/go-tui-lib`. Only `internal/cli`
-   imports Kong. The config surface is undecided and will be either a native Kong facility or a Kong-optimized surface we write, not Viper. Config implementation stays unspecified.
+   imports Kong. The config surface is undecided and will be either a native Kong facility or a surface we write. Config implementation stays unspecified.
 6. `internal/cli` and `internal/tui` never import `agent`. They drive the
    agent through `acpclient` (0002's rule).
 7. No stable or beta package imports `exp/...`. Only `cmd/gobble` wires
@@ -930,8 +930,6 @@ are unchanged. It still has no tag; these commits are not gobble dependencies.
   `internal/buildinfo` or uses the released `buildinfo`
   (0005-PLAN F10).
 
-### Amendment (2026-10-04): configuration library rejected
+### Amendment (2026-10-04): configuration surface undecided
 
-Viper is rejected and is not the config stack. Earlier sentences that
-named it as the configuration stack are replaced. The config surface is undecided and will be either a native Kong facility or a Kong-optimized surface we write, not Viper. No
-dependency is added for it.
+The config surface is undecided and will be either a native Kong facility or a surface we write.

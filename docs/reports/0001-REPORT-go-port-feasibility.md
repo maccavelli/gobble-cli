@@ -11,8 +11,7 @@ decision it bears on; those decisions belong in a MADR in this repository
 
 Stated constraints from the request that opened this repository: **Charm**
 (Lip Gloss and the rest of that stack) for terminal UI. The command library
-that request named is the rejected option in 0002-MADR. The configuration
-library that request named is rejected and is not the config stack. The config surface is undecided and will be either a native Kong facility or a Kong-optimized surface we write, not Viper.
+that request named is the rejected option in 0002-MADR. The config surface is undecided and will be either a native Kong facility or a surface we write.
 
 ## Summary
 
@@ -69,7 +68,7 @@ No TypeScript test, build, or live provider request was run. No Go scratch
 module was compiled. Charm behaviour is taken from the
 in-house `ocp-login` tree (Charm v2
 `charm.land/{bubbletea,bubbles,lipgloss}/v2`) and from the libraries'
-public docs. That tree's configuration library is not gobble's config stack.
+public docs.
 
 ## What exists
 
@@ -154,7 +153,7 @@ Settings are JSON, not YAML. Locations (R, `docs/configuration.md`,
 
 The `Settings` interface is a large nested JSON object: model defaults,
 compaction, retry, tools, packages, extensions, skills, themes, terminal,
-images, keybindings, MCP servers, cache warming. The config surface is undecided and will be either a native Kong facility or a Kong-optimized surface we write, not Viper.
+images, keybindings, MCP servers, cache warming. The config surface is undecided and will be either a native Kong facility or a surface we write.
 Compatibility with existing `~/.pi` files is a product decision
 (F15).
 
@@ -411,8 +410,8 @@ OpenShell patterns; those remain valid around a Go binary.
 | `go-llmprovider-sdk` | docs + accepted migration MADR; extraction in progress | providers, OAuth, catalogs — subset of `pi-ai` |
 | `go-tui-lib` | README only, no packages | intended Charm extraction target |
 | `mcplib` | mature MCP **server** library | Pi's `pi-mcp` is a **client** |
-| `ocp-login` | production command library + Charm v2 TUI | CLI/TUI patterns, not agent semantics. Its config library is not gobble's config stack. |
-| `magic-cli-remote` | command library, ACP, MCP; no Charm in `go.mod` | remote-agent CLI experience. Its config library is not gobble's config stack. |
+| `ocp-login` | production command library + Charm v2 TUI | CLI/TUI patterns, not agent semantics. |
+| `magic-cli-remote` | command library, ACP, MCP; no Charm in `go.mod` | remote-agent CLI experience. |
 | `go-core-lib` | README stub | none yet |
 
 Nothing in those repositories implements an agent loop, session tree,
@@ -436,7 +435,7 @@ user-facing CLI.
 
 ### F15 — Schema and merge rules are the settings work (R)
 
-Viper is rejected and is not the config stack. The config surface is undecided and will be either a native Kong facility or a Kong-optimized surface we write, not Viper.
+The config surface is undecided and will be either a native Kong facility or a surface we write.
 Pi's merge rules are specific: project overrides user; resource lists
 concatenate; `defaultTools` has `+name` / `-name` patch semantics; some
 keys are global-only (`defaultProjectTrust`, `deviceId`). A default object
@@ -466,12 +465,12 @@ clean-room).
 
 ## Charm and settings mapping
 
-The config surface is undecided and will be either a native Kong facility or a Kong-optimized surface we write, not Viper.
+The config surface is undecided and will be either a native Kong facility or a surface we write.
 
 | Pi surface | Stated Go stack | Fit |
 |---|---|---|
 | `cli/args.ts`, package/auth/mcp subcommands | command library | Good. Subcommands already exist. |
-| `settings.json`, `PI_*` env | undecided | Custom merge for patch lists. Not a chosen config library. |
+| `settings.json`, `PI_*` env | undecided | Custom merge for patch lists. |
 | Component tree, differential render, alt screen | Bubble Tea + Lip Gloss | Rewrite. Elm architecture replaces the component tree. |
 | Editor (kill ring, undo, autocomplete) | Bubbles textarea + custom | Large custom widget. |
 | Markdown + LaTeX | Glamour + extra | Markdown yes; LaTeX/mermaid extra. |
@@ -535,8 +534,8 @@ For orientation only; a PLAN owns the steps after a MADR chooses D1–D18.
 
 A CLI-first rewrite, given D1 = shipping `pi`, looks like:
 
-1. Seed this module: `go.mod`, a command root, JSON settings, CI on
-   darwin/linux/windows, identity (D17). The config surface is undecided and will be either a native Kong facility or a Kong-optimized surface we write, not Viper.
+1. Seed this module: `go.mod`, a command root, CI on
+   darwin/linux/windows, identity (D17). The config surface is undecided and will be either a native Kong facility or a surface we write.
    Config implementation stays unspecified.
 2. Agent loop + built-in tools + session JSONL (D5, D11, D13).
 3. Provider/auth via `go-llmprovider-sdk` or an in-tree layer (D10),

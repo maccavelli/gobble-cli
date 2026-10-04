@@ -210,8 +210,7 @@ Steps 7–13 were added on 2026-10-04 after
 [0006-MADR-goose-cli-port-candidates.md](0006-MADR-goose-cli-port-candidates.md)
 was accepted. They were not in this phase when it was first written.
 Config implementation stays unspecified. The config surface is undecided
-and will be either a native Kong facility or a Kong-optimized surface we
-write, not Viper.
+and will be either a native Kong facility or a surface we write.
 
 1. `cmd/gobble/main.go`: `signal.NotifyContext(ctx, os.Interrupt,
    syscall.SIGTERM)`, then `os.Exit(cli.Main(ctx, os.Args[1:], os.Stdin,
@@ -675,7 +674,6 @@ product commands (real acp, serve, roam, mcp, gateway, schedule,
 recipe, review, local-models, plugin), and a slash registry, which is
 not a Phase 2 command. Config implementation stays unspecified. The
 config surface is undecided and will be either a native Kong facility
-or a Kong-optimized surface we write, not Viper. Viper is rejected and
-is not the config stack. The CLI library in Phase 2 remains Kong.
+or a surface we write. The CLI library in Phase 2 remains Kong.
 Go 1.27.1. TUI stays go-tui-lib. Self-update stays go-selfupdate-lib.
 The Goal section is unchanged.
