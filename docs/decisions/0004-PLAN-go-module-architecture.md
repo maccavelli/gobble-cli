@@ -1,6 +1,6 @@
 ---
 status: in-progress
-date: 2026-10-03
+date: 2026-10-04
 associated-madr: "0004-MADR-go-module-architecture.md"
 ---
 # Implement the gobble module architecture: scaffold, contracts, boundaries, toolchain, release
@@ -534,3 +534,41 @@ mingw32-make: *** [makefile:159: check-cgo-off] Error 1
 
 The scratch file was deleted. On the restored tree, `make check-cgo-off`
 exited 0.
+
+**2026-10-04 — ship builds stay CGO off; `make race` stays CGO on.**
+The owner approved this the same day. The shell on the build machine
+keeps `CGO_ENABLED=1` for local race testing. That ambient value must
+not turn cgo on for shipped builds, and a Makefile override must not
+force it off for `make race`.
+
+`CGO_ENABLED ?= 0` does not override a value already in the
+environment. At `925ef0ab`, exact `make preflight` exited 2:
+`check-cgo-off` refused on `CGO_ENABLED=1` before it looked for
+`import "C"`. A file-level `override` plus `export` then made
+preflight exit 0, and it also forced the race recipe off. The race
+detector needs cgo.
+
+`9bc93114` limits the override to `build`, `install`, and
+`check-cgo-off`. It is not exported. `race` runs
+`CGO_ENABLED=1 go test -race ./...`. `staticcheck` already passes
+`CGO_ENABLED=0` on its tool build and on each GOOS run. Other targets
+leave the ambient value alone. The phase 0 wording above is unchanged:
+shipped binaries stay pure Go, and `check-cgo-off` still fails on
+`import "C"`.
+
+With `CGO_ENABLED=1` in the environment, `make -n build` prints
+`CGO_ENABLED=0 go build ./...` and `make -n race` prints
+`CGO_ENABLED=1 go test -race ./...`. `make preflight` exited 0.
+`make check-cgo-off` exited 0. `make race` exited 0
+(`? github.com/maccavelli/gobble-cli [no test files]`). A scratch file
+`cgoscratch_test.go`, whose third line was `import "C"`, failed
+`make check-cgo-off`:
+
+```text
+check-cgo-off: cgo import "C" is not allowed:
+./cgoscratch_test.go:3:import "C"
+mingw32-make: *** [makefile:162: check-cgo-off] Error 1
+```
+
+mingw32-make exited 2. The scratch file was deleted and was not
+committed.
