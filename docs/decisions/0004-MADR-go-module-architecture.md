@@ -2,10 +2,10 @@
 status: proposed
 date: 2026-10-03
 decision-makers: repository owner
-consulted: 0001-REPORT-go-port-feasibility.md, 0002-MADR-cli-acp-headless-mcp-v1.md, 0003-MADR-pigo-product-identity.md
+consulted: 0001-REPORT-go-port-feasibility.md, 0002-MADR-cli-acp-headless-mcp-v1.md, 0003-MADR-gobble-product-identity.md
 informed: go-llmprovider-sdk, go-core-lib, mcplib, go-tui-lib, magic-cli-remote
 ---
-# pigo is one Go 1.27.1 module of contract-first packages, with an open standard at every boundary and a thin Cobra edge
+# gobble is one Go 1.27.1 module of contract-first packages, with an open standard at every boundary and a thin Cobra edge
 
 ## Context and Problem Statement
 
@@ -16,7 +16,7 @@ decisions are still open and all bear on that shape: D4 (Go SDK), D10
 (providers), D14 (MCP client), D15 (Cobra layout), D16 (settings merge),
 and D9 (distribution).
 
-The owner asked for pigo to be scaffolded in the most idiomatic Go 1.27.1
+The owner asked for gobble to be scaffolded in the most idiomatic Go 1.27.1
 way that is also modular, open to extension, adherent to the relevant
 SDKs, standard at the protocol level, and future-proof. The owner also
 asked for v1 to include as much as possible
@@ -63,7 +63,7 @@ probed):
   `grok` under `llmprovider/providers/<id>`). `huggingface`, `kilo`,
   `together`, `ollama`, and the OpenCode gateways still live as the old
   `Generate*` API in `llmprovider/` until S7 finishes. The v1 surface
-  pigo consumes:
+  gobble consumes:
   * `llmprovider.Provider` (`ID`, `Capabilities`, `Generate`);
   * `llmprovider.Stream(ctx, Provider, *Request) iter.Seq2[Event, error]`,
     which calls a `Streamer` when present and otherwise emits
@@ -84,7 +84,7 @@ probed):
   exists only as named providers (`huggingface`, `kilo`, `together`,
   `ollama`). Official vendor SDKs (`anthropic-sdk-go`, `openai-go/v3`,
   `google.golang.org/genai`) are **not** dependencies of that module
-  and are **not** 1.0 dependencies of pigo.
+  and are **not** 1.0 dependencies of gobble.
 * **CLI and TUI.** Cobra v1.10.2, Viper v1.21.0, `charmbracelet/fang`
   v1.0.0, and Charm v2 (`charm.land/bubbletea/v2` v2.0.9, `bubbles/v2`
   v2.2.1, `lipgloss/v2` v2.0.6) are used in production by `ocp-login`.
@@ -95,7 +95,7 @@ probed):
     govulncheck), golangci-lint v2 with the shared linter set, and a pinned
     staticcheck run for three GOOS values (magic-cli-remote MADR 0170).
   * CI: `setup-go` with `go-version-file: go.mod`. Dependabot is off by
-    policy, and no repository uses goreleaser. pigo publishes through
+    policy, and no repository uses goreleaser. gobble publishes through
     go-core-lib's reusable workflow (below), not by copying
     `softprops/action-gh-release` into this tree.
   * Logging: `log/slog` everywhere.
@@ -111,7 +111,7 @@ probed):
     `.github/workflows/publish-selfupdate-release.yml` pinned to that
     tag commit. That workflow accepts only a strict
     `vMAJOR.MINOR.PATCH` tag (release candidates do not pass). It does
-    not yet ship `appdirs` or `buildinfo`; those stay in pigo.
+    not yet ship `appdirs` or `buildinfo`; those stay in gobble.
 
 The problem: choose the module shape, the package boundaries, the
 contracts, the standards each boundary speaks, and the toolchain rules.
@@ -128,8 +128,8 @@ SDK leaking into the agent core.
   * errors that can be inspected by type;
   * `internal/` for anything not promised.
 * The protocol hierarchy is **ACP up** (clients: editors, mcremote, the
-  pigo CLI, the pigo TUI) and **MCP out** (tool servers). Each has an
-  official Go SDK that pigo uses, rather than re-implementing the wire.
+  gobble CLI, the gobble TUI) and **MCP out** (tool servers). Each has an
+  official Go SDK that gobble uses, rather than re-implementing the wire.
 * A public Go SDK (report D4) that embedders can import without pulling in
   Cobra, Viper, or Charm.
 * Every third-party SDK (ACP, MCP, go-llmprovider-sdk, go-core-lib,
@@ -168,7 +168,7 @@ single package that the import-boundary test can enforce.
 ### Module
 
 ```
-module github.com/maccavelli/pi-go
+module github.com/maccavelli/gobble-cli
 
 go 1.27.1
 
@@ -188,7 +188,7 @@ tool (
   pinned installer, not as a `tool` dependency, as that project advises.
 * ACP pin: `github.com/coder/acp-go-sdk v0.13.5`. The PLAN decides at
   Phase 0 whether to carry magic-cli-remote's `replace` to the fork
-  `v0.13.6-mcr.1`. A `replace` only affects pigo's own build, not
+  `v0.13.6-mcr.1`. A `replace` only affects gobble's own build, not
   embedders. Recommendation: carry it, so the agent side has the same
   overflow policy that its main client relies on, and use the exit plan
   from magic-cli-remote MADR 0167.
@@ -200,8 +200,8 @@ Stability tiers: **stable** packages are covered by `apidiff` from
 with a changelog entry. **internal** and **exp** carry no promise.
 
 ```
-cmd/pigo/                 main: signal.NotifyContext → cli.Main; nothing else
-pigo/                     stable  Embedding facade: New(ctx, ...Option) → *Runtime;
+cmd/gobble/                 main: signal.NotifyContext → cli.Main; nothing else
+gobble/                     stable  Embedding facade: New(ctx, ...Option) → *Runtime;
                                   Runtime.ServeACP(ctx, r, w), Runtime.Connect(ctx) (in-process ACP client)
 agent/                    stable  Turn loop, tool batches, steering/follow-up queues, events as iter.Seq
 llm/                      stable  Message/Content/Usage/Cost/Model types; Provider contract; typed errors.
@@ -285,7 +285,7 @@ type Hook interface {
 	Handle(ctx context.Context, ev Event) (Outcome, error) // Outcome: continue | block{reason} | modify{…}
 }
 
-// package pigo
+// package gobble
 func New(ctx context.Context, opts ...Option) (*Runtime, error)
 // Options: WithProviders, WithTools, WithHooks, WithSessionStore, WithPolicy, WithLogger, WithTracerProvider, WithDirs
 ```
@@ -312,7 +312,7 @@ func New(ctx context.Context, opts ...Option) (*Runtime, error)
   `done` plus `Response.Usage` → `Usage` then `Done`.
 * Provider construction and retry go through the SDK:
   `providers.New` and `llmprovider.WithRetry`. Context overflow is not
-  retried there; compaction-on-overflow is pigo's (`agent` / `compaction`).
+  retried there; compaction-on-overflow is gobble's (`agent` / `compaction`).
 
 ### Standards at every boundary
 
@@ -355,7 +355,7 @@ ACP-native behaviour, beyond the method list in 0002:
 * The file format stays JSON, with the same key names as Pi where the
   meaning is the same, so `config import --from-pi` is a mapping rather
   than a translation. Each file may name a `$schema`, and
-  `pigo config schema` prints the JSON Schema generated from the Go
+  `gobble config schema` prints the JSON Schema generated from the Go
   types. That gives editors completion and validation.
 * `internal/config` owns layering and Pi's merge rules (0001-REPORT F15):
   * nested objects merge deeply; arrays and scalars replace;
@@ -363,20 +363,20 @@ ACP-native behaviour, beyond the method list in 0002:
     `!glob` patches;
   * global-only keys are ignored in project files;
   * project files load only for a trusted project.
-* Viper binds flags and `PIGO_*` environment variables on top of the
+* Viper binds flags and `GOBBLE_*` environment variables on top of the
   merged result. Viper does not do the file merge itself.
 * Wire and file types use `encoding/json/v2`:
   * `omitzero` on optional fields;
   * a `jsontext.Value` field tagged `json:",unknown"` on every session
     entry and settings object.
 
-  Keys pigo does not know, whether from a newer pigo or from Pi, then
+  Keys gobble does not know, whether from a newer gobble or from Pi, then
   survive a read-modify-write round-trip.
 
 ### Cobra layout (report D15)
 
-* Root `pigo`: with a TTY and no prompt argument it starts the TUI.
-  `pigo -p "…"` (or piped stdin) runs print mode.
+* Root `gobble`: with a TTY and no prompt argument it starts the TUI.
+  `gobble -p "…"` (or piped stdin) runs print mode.
 * Verbs are subcommands (`acp`, `session`, `mcp`, `auth`, `models`,
   `config`, `pkg`, …). The full list is in
   [0005-MADR-v1-feature-scope.md](0005-MADR-v1-feature-scope.md).
@@ -400,13 +400,13 @@ ACP-native behaviour, beyond the method list in 0002:
 | `new(expr)` (1.26) | optional pointer fields in ACP and MCP structs without helper functions |
 | `os.Root` (1.24; wider API 1.25) | file tools confined to the workspace roots; blocks symlink and `..` escapes |
 | `sync.WaitGroup.Go` (1.25) | tool-batch fan-out where `errgroup` semantics are not wanted |
-| `runtime/trace.FlightRecorder` (1.25) | always-on ring buffer, dumped by `pigo debug trace` or on a slow-turn threshold |
+| `runtime/trace.FlightRecorder` (1.25) | always-on ring buffer, dumped by `gobble debug trace` or on a slow-turn threshold |
 | `http.CrossOriginProtection` (1.25) | guards every loopback HTTP listener (OAuth callback, `exp/acpws`) |
 | `iter`, range-over-func (1.23) | provider streams, session entry walks, `List` results |
 | `//go:embed` | built-in prompts, catalog snapshot, JSON Schemas, HTML export template |
 | `tool` directives (1.24) | pinned developer tools |
 | `go fix` modernizers | CI gate: `go fix -diff ./...` must print nothing |
-| PGO (`cmd/pigo/default.pgo`) | added once a representative benchmark profile exists (v1.x) |
+| PGO (`cmd/gobble/default.pgo`) | added once a representative benchmark profile exists (v1.x) |
 
 ### Import-boundary rules (enforced by `internal/archtest`)
 
@@ -424,7 +424,7 @@ ACP-native behaviour, beyond the method list in 0002:
    imports Cobra, Viper, or fang.
 6. `internal/cli` and `internal/tui` never import `agent`. They drive the
    agent through `acpclient` (0002's rule).
-7. No stable or beta package imports `exp/...`. Only `cmd/pigo` wires
+7. No stable or beta package imports `exp/...`. Only `cmd/gobble` wires
    `exp` features, behind settings.
 8. Only `internal/cli` imports `github.com/maccavelli/go-core-lib`.
 
@@ -437,7 +437,7 @@ shown failing when those imports first exist (0002-PLAN Phase 3,
 
 ### Consequences
 
-* Good, because embedders get a real Go SDK: `pigo.New` plus
+* Good, because embedders get a real Go SDK: `gobble.New` plus
   `tool.New[In, Out]` and a custom `llm.Provider` is a complete agent,
   with no CLI or TUI in their dependency graph.
 * Good, because every external protocol and SDK sits behind one package.
@@ -445,7 +445,7 @@ shown failing when those imports first exist (0002-PLAN Phase 3,
   `go-llmprovider-sdk`, each touch one directory (`acpserver`/`acpclient`
   and `llm/provider` respectively).
 * Good, because JSON `unknown` round-tripping makes the session and
-  settings files forward-compatible with newer pigo and with Pi.
+  settings files forward-compatible with newer gobble and with Pi.
 * Good, because the idioms above remove whole test classes of flakiness
   (`synctest`) and whole bug classes (`os.Root`, typed retry
   classification).
@@ -457,12 +457,12 @@ shown failing when those imports first exist (0002-PLAN Phase 3,
 * Good, because 1.0's provider dependency is `go-llmprovider-sdk`
   (stdlib + `x/term`). It does not pull `anthropic-sdk-go`,
   `openai-go/v3`, `google.golang.org/genai`, or `aws-sdk-go-v2`.
-* Neutral, because pigo then ships the SDK's provider set and its
+* Neutral, because gobble then ships the SDK's provider set and its
   current stream shape: `Stream` synthesises events from `Generate`
   until a provider sets `NativeStreaming`. Token-by-token ACP
   `session/update` chunks wait on that SDK capability.
 * Neutral, because `go-llmprovider-sdk` has no release tag and no
-  LICENSE file as of 2026-09-30. pigo pins a commit pseudo-version
+  LICENSE file as of 2026-09-30. gobble pins a commit pseudo-version
   and records the gap; a later tag replaces the pin.
 * Bad, because the public surface is large for a v0 codebase. Mistakes in
   stable contracts become permanent at `v1.0.0`. Mitigation: everything
@@ -487,7 +487,7 @@ shown failing when those imports first exist (0002-PLAN Phase 3,
 * `apidiff` runs in CI against the previous tag for packages marked
   stable (from `v1.0.0`).
 * Every public package has a `doc.go` stating its tier, and at least one
-  runnable `Example` exists for `pigo`, `tool`, and `llm/llmtest`.
+  runnable `Example` exists for `gobble`, `tool`, and `llm/llmtest`.
 * A round-trip test reads a session file with an unknown entry field and
   an unknown entry type, rewrites it, and asserts that both survive
   byte-equivalent after JSON normalisation.
@@ -536,7 +536,7 @@ assessment rests on their public documentation.
 
 * Good, because they come with ready-made agent loops, tool abstractions,
   and provider plugins.
-* Bad, because each owns the event model and the session model. pigo's
+* Bad, because each owns the event model and the session model. gobble's
   contract is ACP updates and Pi session v3, so the framework's types would
   be translated at every turn.
 * Bad, because their extension points (graphs, flows, callbacks) are not
@@ -551,7 +551,7 @@ assessment rests on their public documentation.
   official vendor LLM SDKs are not 1.0 dependencies), D14 (official MCP
   go-sdk), D15, D16, and the toolchain half of D9 (release assets and
   the publish workflow follow `go-core-lib` `v1.1.0`). 0005 decides
-  `pigo update` and the rest of D9.
+  `gobble update` and the rest of D9.
 * Scaffolded by [0004-PLAN-go-module-architecture.md](0004-PLAN-go-module-architecture.md).
   That plan replaces Phase 0 of
   [0002-PLAN-cli-acp-headless-mcp-v1.md](0002-PLAN-cli-acp-headless-mcp-v1.md).
@@ -586,7 +586,7 @@ import-boundary idea, and ACP-as-command-API are unchanged.
    provider that takes a base URL, or on those ids being added there;
    they are 1.x in 0005. Named SDK ids that have not yet implemented
    `llmprovider.Provider` (S7 remaining: OpenCode, HuggingFace, Kilo,
-   Together, Ollama) join 1.0 as that work lands in the SDK; pigo does
+   Together, Ollama) join 1.0 as that work lands in the SDK; gobble does
    not wrap the old `Generate*` API.
 2. **Streaming.** Call `llmprovider.Stream` so a later native
    `Streamer` is picked up without an API change. Do not claim
@@ -595,7 +595,7 @@ import-boundary idea, and ACP-as-command-API are unchanged.
 3. **D9 (toolchain half).** Release assets are the raw binaries
    `selfupdate.ExactAssetName` selects, plus `SHA256SUMS`. Publication
    is the go-core-lib reusable workflow pinned to `v1.1.0`
-   (`96b30961180671ab3697585951219001ecbb1c90`). `pigo update` is 0005.
+   (`96b30961180671ab3697585951219001ecbb1c90`). `gobble update` is 0005.
    `internal/appdirs` and `internal/buildinfo` stay in this module.
 4. **Pins.** `go-core-lib v1.1.0`. `go-llmprovider-sdk` has no tag:
    the first import (0002-PLAN Phase 3) records a commit
@@ -603,13 +603,13 @@ import-boundary idea, and ACP-as-command-API are unchanged.
    No relative `replace`. The ACP `replace` to
    `github.com/maccavelli/acp-go-sdk v0.13.6-mcr.1` is the Phase 0
    choice (this record already recommended it).
-5. **NOTICE.** `go-core-lib` is Apache-2.0; the pigo `NOTICE` names it.
+5. **NOTICE.** `go-core-lib` is Apache-2.0; the gobble `NOTICE` names it.
    `go-llmprovider-sdk` has no LICENSE in tree; do not invent one.
 
 ### Amendment (2026-10-01): Apache-2.0
 
 Still `proposed`. The owner directed Apache-2.0 for this repository,
-`go-llmprovider-sdk`, and `go-core-lib`. 0003-MADR records the pigo
+`go-llmprovider-sdk`, and `go-core-lib`. 0003-MADR records the gobble
 licence. `LICENSE` and `NOTICE` land ahead of 0004-PLAN Phase 0.
 `NOTICE` names Pi (MIT), `go-core-lib` (Apache-2.0), and
 `go-llmprovider-sdk` (Apache-2.0, that repository's
@@ -658,7 +658,7 @@ Still `proposed`. Three sibling trees were re-read and built in scratch copies:
 * **Retry.**
   * `WithRetry` defaults to 3 attempts, a 1 s base and a 30 s cap, with up to +25% jitter. A `Retry-After` above the cap returns at once.
   * **The wrapper hides any `Streamer`** (`retry.go:43`).
-* **Defaults pigo must override.**
+* **Defaults gobble must override.**
   * Billed model probes are **on** (up to 6 generations, `options.go:181-190`).
   * `MaxTokens` is 8192.
   * The default client has a 300 s `ResponseHeaderTimeout`.
@@ -674,7 +674,7 @@ Still `proposed`. Three sibling trees were re-read and built in scratch copies:
   * Issuers are OpenAI/ChatGPT and xAI Grok, plus Kilo device login.
   * Claude, Gemini and Together refuse OAuth sessions. SDK 0016-MADR D10 declines Anthropic and Gemini subscription OAuth, and treats Copilot as impersonation-only.
   * **S8c moves these into `llmprovider/auth`.**
-* **Model metadata.** It exposes `ReasoningEfforts` only; context window, cost and modalities are not public. pigo's own catalog remains mandatory.
+* **Model metadata.** It exposes `ReasoningEfforts` only; context window, cost and modalities are not public. gobble's own catalog remains mandatory.
 * **Ids.**
   * SDK ids differ from Pi's: `claude`↔`anthropic`, `gemini`↔`google`, `grok`↔`xai`. Codex is a credential mode of `openai`.
   * `WithSessionID` is fixed per provider instance.
@@ -682,8 +682,8 @@ Still `proposed`. Three sibling trees were re-read and built in scratch copies:
 #### Decisions changed by these facts
 
 1. **Pin policy.**
-   * pigo may *develop* against a recorded SDK commit.
-   * It **tags no release** on a pseudo-version of go-llmprovider-sdk. The first pigo tag requires an SDK `v1.0.0-rc.N` or later.
+   * gobble may *develop* against a recorded SDK commit.
+   * It **tags no release** on a pseudo-version of go-llmprovider-sdk. The first gobble tag requires an SDK `v1.0.0-rc.N` or later.
    * The owner requests that tag from the SDK once S8c (final import paths) has landed, and preferably S9 (usage).
    * Until then, 0002-PLAN Phase 3 and 0005-PLAN F4 record each commit they build against, with the API breaks still to come.
 2. **The `llm` facade is wider than the SDK, on purpose.** The sealed set becomes:
@@ -697,7 +697,7 @@ Still `proposed`. Three sibling trees were re-read and built in scratch copies:
    * `llm.Content` carries images.
    * Thinking blocks and tool calls carry an opaque `ProviderData`. It is persisted as Pi's v3 fields `thinkingSignature`, `thoughtSignature`, `textSignature` and `redacted`, which those field names already reserve.
 
-   The adapter fills what the SDK provides. Until the SDK carries a feature, the facade's `Capabilities` says so, and pigo advertises nothing it cannot send. In particular, ACP `promptCapabilities.image` stays **false** until SDK image input exists.
+   The adapter fills what the SDK provides. Until the SDK carries a feature, the facade's `Capabilities` says so, and gobble advertises nothing it cannot send. In particular, ACP `promptCapabilities.image` stays **false** until SDK image input exists.
 3. **Usage is estimated until S9.**
    * `llm/provider` estimates input and output tokens (a byte-based estimator per model family, recorded in the catalog) and sets `Estimated`.
    * The usage ledger, `usage_update`, auto-compaction and cost all consume the estimate.
@@ -715,11 +715,11 @@ Still `proposed`. Three sibling trees were re-read and built in scratch copies:
    * Always `WithModelProbes(false)`.
    * `MaxOutputTokens` per model from `llm/catalog`.
    * One provider instance per ACP session, so `WithSessionID` (ChatGPT `prompt_cache_key`, OpenCode/Kilo session headers) is per session.
-   * pigo supplies its own `*http.Client`: `ProxyFromEnvironment`, and no response-header timeout shorter than the model's generation limit. A non-streamed long generation must not time out and be re-billed by retry.
-   * Credentials are passed explicitly (`WithAPIKey` / `WithTokenSource`). pigo never depends on the SDK reading environment variables, which S10 removes anyway. pigo reads Pi's names, such as `ANTHROPIC_API_KEY`.
+   * gobble supplies its own `*http.Client`: `ProxyFromEnvironment`, and no response-header timeout shorter than the model's generation limit. A non-streamed long generation must not time out and be re-billed by retry.
+   * Credentials are passed explicitly (`WithAPIKey` / `WithTokenSource`). gobble never depends on the SDK reading environment variables, which S10 removes anyway. gobble reads Pi's names, such as `ANTHROPIC_API_KEY`.
 7. **Thinking-level map** (`llm/catalog`):
 
-   | pigo level | Effort sent | Note |
+   | gobble level | Effort sent | Note |
    |---|---|---|
    | `off` | no `Reasoning` | |
    | `minimal` | `low` | recorded as a degradation |
@@ -732,7 +732,7 @@ Still `proposed`. Three sibling trees were re-read and built in scratch copies:
    * `models.json`, `config import --from-pi` and the bridge use it.
    * An unmapped Pi provider fails closed with a clear error.
 9. **Token store.**
-   * `internal/auth` implements `TokenStore` **and** `RefreshLocker`, with a file lock in the state directory. The TUI, `pigo acp` children and the CLI share credentials, and a refresh token spent twice revokes the whole token family.
+   * `internal/auth` implements `TokenStore` **and** `RefreshLocker`, with a file lock in the state directory. The TUI, `gobble acp` children and the CLI share credentials, and a refresh token spent twice revokes the whole token family.
    * The import path follows S8c (`llmprovider/auth`). Archtest rule 4 is unaffected.
 10. **Tool schemas.** `llm/provider` sanitizes tool JSON Schema for the Gemini wire, as Pi does. This is an inference from Pi's behaviour, not a probed Gemini rejection. The PLAN records a live probe before relying on it.
 
@@ -742,7 +742,7 @@ Still `proposed`. Three sibling trees were re-read and built in scratch copies:
   * It adds `ConnectionOption`, `WithMaxQueuedNotifications`, `WithNotificationOverflowPolicy`, `WithNotificationDropHandler` and `DroppedNotifications`, in 5 files (+570/−8).
   * Its generated code and `extensions.go` are byte-identical to v0.13.5.
   * The policy governs **inbound** notifications only, and defaults to `OverflowCloseConnection`.
-* pigo carries the `replace`, because pigo's in-process clients need the option API.
+* gobble carries the `replace`, because gobble's in-process clients need the option API.
 * `acpserver` uses the default policy. Its inbound notifications are `session/cancel`, and dropping one would lose a cancel.
 * `acpclient` sets `OverflowDropNewest` with a drop handler that surfaces a notice. That client serves the CLI, the TUI, `task` subagents and `acptest`.
 * The exit plan stays magic-cli-remote `0167-MADR-the-acp-sdk-is-dormant-and-its-bounded-queue-is-an-availability-defect.md`.
@@ -760,13 +760,13 @@ Still `proposed`. Three sibling trees were re-read and built in scratch copies:
   * At 0005-PLAN F10, re-resolve to the newest `v1.x` tag.
   * The `go.mod` require and the workflow `uses:` line carry the **same** tag's peeled SHA.
   * "Current release `v1.1.0`" in the Context is that day's fact.
-* **`internal/buildinfo` follows go-core-lib's planned rule.** A build is `ReleaseBuild` only when it is stamped `buildKind=release` **and** its version is a strict `vX.Y.Z`. The `debug.ReadBuildInfo` fallback is display-only. A `go install …@vX` build is therefore a local build: `pigo update` needs `--force` to replace it, and `--check` reports it as replaceable.
+* **`internal/buildinfo` follows go-core-lib's planned rule.** A build is `ReleaseBuild` only when it is stamped `buildKind=release` **and** its version is a strict `vX.Y.Z`. The `debug.ReadBuildInfo` fallback is display-only. A `go install …@vX` build is therefore a local build: `gobble update` needs `--force` to replace it, and `--check` reports it as replaceable.
 * **Archtest rule 8, refined.** Only `internal/cli` imports `github.com/maccavelli/go-core-lib` in non-test code. `_test.go` files in any package may import `selfupdate/selfupdatetest`.
 * **Supply chain.**
   * The reusable workflow attests `staging/*` and waits for an immutable release.
   * It does **not** generate or attest an SBOM.
   * The client verifies `SHA256SUMS` and GitHub digests, not signatures or attestations.
-  * The standards table row "SPDX SBOM" is pigo's own job: 0004-PLAN Phase 4 names and pins the generator. The SBOM is an extra asset and is **not** listed in `SHA256SUMS`, because the verifier requires that file to list exactly the binaries.
+  * The standards table row "SPDX SBOM" is gobble's own job: 0004-PLAN Phase 4 names and pins the generator. The SBOM is an extra asset and is **not** listed in `SHA256SUMS`, because the verifier requires that file to list exactly the binaries.
 
 #### Corrections to wording
 
@@ -777,7 +777,7 @@ Still `proposed`. Three sibling trees were re-read and built in scratch copies:
 ### Amendment (2026-10-02): current sibling source and a shared TUI workspace
 
 Still `proposed`. The observations below are from the local sibling source
-trees, not a claim that pigo imports them yet. `go-llmprovider-sdk` is at
+trees, not a claim that gobble imports them yet. `go-llmprovider-sdk` is at
 `67fc56e3df785e4113f664f39f398031c41b1275` (its PLAN has an uncommitted
 edit), `go-core-lib` has tag `v1.3.0` at
 `f97c6817ec9c902d1af690198ed0e2e2abb7750c`, and `go-tui-lib` has tag
@@ -796,7 +796,7 @@ current HEAD changes documentation only; its released Go source is unchanged.
   always zero is obsolete. The public `Usage` has input, output, reasoning
   and cached token counts, but no cache-write count or measured/estimated
   flag; a zero count can still mean the service reported none. Because the
-  SDK does not expose presence bits, pigo treats an all-zero token usage as
+  SDK does not expose presence bits, gobble treats an all-zero token usage as
   unavailable and estimates the turn, marking its own `llm.Usage.Estimated`.
   Any nonzero response usage is taken as reported; a zero component within
   it is left at zero rather than invented. Cache-write remains unknown.
@@ -808,10 +808,10 @@ current HEAD changes documentation only; its released Go source is unchanged.
   API-key environment variables. `ProviderEnvVars` lists their names, and
   `ModelProbesFromEnv`, `catalog.OptionsFromEnv` and auth's
   `GrokFlowFromEnv` read environment only when the caller selects them.
-  pigo keeps explicit credential and catalog configuration and does not
+  gobble keeps explicit credential and catalog configuration and does not
   pass those opt-in helpers implicitly.
 * `LICENSE` is Apache-2.0. There is still no git tag. The existing rule
-  remains: development may pin a recorded commit, while a pigo release
+  remains: development may pin a recorded commit, while a gobble release
   waits for an SDK `v1.0.0-rc.N` or later. `NativeStreaming` is still
   `Unsupported` on all built-ins, and `Item` still has no image input,
   tool-output error bit or opaque thinking payload. The adapter must keep
@@ -826,11 +826,11 @@ current HEAD changes documentation only; its released Go source is unchanged.
   (`selfupdate/types.go`, `checker.go`, `version.go`, and
   `.github/workflows/publish-selfupdate-release.yml`).
 * `selfupdate` and `selfupdate/selfupdatetest` remain the only Go packages.
-  `buildinfo`, `selfupdate/cli` and `updatetea` are not present. pigo retains
+  `buildinfo`, `selfupdate/cli` and `updatetea` are not present. gobble retains
   `internal/buildinfo` and binds the update flags and TUI interactions
   itself. The F10 pin rule selects the newest suitable `v1.x` tag when
   implementation starts and pins the workflow to that tag's peeled commit.
-  The pigo stable-only release decision remains in force; adopting
+  The gobble stable-only release decision remains in force; adopting
   prerelease channels would need a later decision and plan amendment.
 
 #### TUI library
@@ -848,7 +848,7 @@ current HEAD changes documentation only; its released Go source is unchanged.
   version before depending on it.
 * **Decision:** `internal/tui` consumes `go-tui-lib` for released reusable
   workspace, layout, glyph and theme behaviour after that validation. It
-  keeps pigo-specific ACP panes and flows locally. Only `internal/tui`
+  keeps gobble-specific ACP panes and flows locally. Only `internal/tui`
   imports `go-tui-lib`, as it alone imports Charm; the core and public Go
   SDK remain TUI-free. `tuitest` may be imported by `_test.go` files for
   rendering checks. This extends import-boundary rule 5 without changing
@@ -862,10 +862,10 @@ tag peels to `351bd6a5ffbd4b352cacc5234f4a8c504c3c1b69` and still has
 only `selfupdate` and `selfupdate/selfupdatetest` as Go packages. At observed
 development commit `bf7221a5408984299a8511eb98f8f06eadd133bd`, a
 `buildinfo` package exists. It exposes `Identity` and `LDFlags`; it is
-not in `v1.3.1` and is not a pigo dependency. `selfupdate/cli` is still a
+not in `v1.3.1` and is not a gobble dependency. `selfupdate/cli` is still a
 plan. The local `internal/buildinfo` choice remains for the scaffold; its
 relationship to a released go-core-lib `buildinfo` must be checked when the
-first relevant dependency is selected. No pigo module or import exists yet.
+first relevant dependency is selected. No gobble module or import exists yet.
 
 The provider SDK first advanced to `d4ca92575855c1ba9196422eeeb34df2ad5c9f6a`
 with a plan-only change. Observed commit
@@ -873,7 +873,7 @@ with a plan-only change. Observed commit
 and setup-wizard handling for providers outside the built-in catalog, plus
 API enforcement tooling. Its `Provider`, `Response`, `Usage`, `APIError` and
 auth contracts assessed at `67fc56e3df785e4113f664f39f398031c41b1275`
-are unchanged. It still has no tag; these commits are not pigo dependencies.
+are unchanged. It still has no tag; these commits are not gobble dependencies.
 
 ### Source correction (2026-10-03): go-core-lib is now go-selfupdate-lib
 
@@ -897,11 +897,11 @@ are unchanged. It still has no tag; these commits are not pigo dependencies.
   `github.com/maccavelli/go-selfupdate-lib/buildinfo.version` and `….kind`.
 * **What it means for this record.** Where this MADR names
   `github.com/maccavelli/go-core-lib` as a planned dependency, the module
-  pigo will require is `github.com/maccavelli/go-selfupdate-lib`, at
+  gobble will require is `github.com/maccavelli/go-selfupdate-lib`, at
   `v1.5.0` or later. That covers import-boundary rule 8, the pins, the
   release workflow and `NOTICE`. The old path gets no further releases.
-  pigo requires neither module yet.
+  gobble requires neither module yet.
 * **Still open, as before.** F10 checks, when it selects a tag, whether
-  pigo keeps its own `internal/buildinfo` or uses the released `buildinfo`
+  gobble keeps its own `internal/buildinfo` or uses the released `buildinfo`
   (0005-PLAN F10). This correction does not decide it.
 * **The earlier text stays as written**, as dated history.

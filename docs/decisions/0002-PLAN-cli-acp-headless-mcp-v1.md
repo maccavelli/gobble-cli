@@ -34,10 +34,10 @@ In:
   MADR native set
 * Standard `usage_update` after prompts and after compact
 * Session modes `default` and `plan`
-* `_pigo/` extension methods listed in the MADR mapping table that the phase
-  claims (`_pigo/compact`, `_pigo/usage`, `_pigo/steer`, `_pigo/follow_up`,
-  `_pigo/clear_queue`, and the read/name helpers the phase freezes)
-* MCP client: stdio + streamable HTTP; `pigo mcp add|remove|list`
+* `_gobble/` extension methods listed in the MADR mapping table that the phase
+  claims (`_gobble/compact`, `_gobble/usage`, `_gobble/steer`, `_gobble/follow_up`,
+  `_gobble/clear_queue`, and the read/name helpers the phase freezes)
+* MCP client: stdio + streamable HTTP; `gobble mcp add|remove|list`
 * JSONL session persistence enough for `session/load` / `resume`
 * CI: `go test` on darwin, linux, windows
 
@@ -58,7 +58,7 @@ Chosen elsewhere, recorded here so a phase does not re-open them:
 * D10, D14, D15, D16 — [0004-MADR](0004-MADR-go-module-architecture.md)
   (2026-09-30: 1.0 providers are the `llm/provider` adapter over
   `go-llmprovider-sdk`; MCP client is the official go-sdk).
-* D11, D17 — [0003-MADR](0003-MADR-pigo-product-identity.md).
+* D11, D17 — [0003-MADR](0003-MADR-gobble-product-identity.md).
 
 The version of `go-llmprovider-sdk` and of
 `github.com/modelcontextprotocol/go-sdk` is recorded as a dated note in
@@ -74,7 +74,7 @@ choice.
 > are kept for history; Phase 1 starts from the tree 0004-PLAN leaves.
 
 1. `go mod init` with the module path chosen for D17 (placeholder
-   `github.com/maccavelli/pi-go` unless a MADR says otherwise).
+   `github.com/maccavelli/gobble-cli` unless a MADR says otherwise).
 2. `cmd/` main → `internal/cmd` Cobra root. Subcommands: `acp` (stdio
    agent), `prompt`, `mcp`, `auth` (auth may stub).
 3. Viper reads JSON; file path is a constant until D11 is decided.
@@ -94,27 +94,27 @@ prints `v0.13.5`; `go list -deps` has no `charm.land` and no
 2. `NewSession` returns a session id; `Prompt` echoes a single
    `session/update` agent message chunk and a stop reason; `Cancel` and
    `CloseSession` succeed.
-3. Wire `pigo acp` to
+3. Wire `gobble acp` to
    `acp.NewAgentSideConnection(agent, os.Stdout, os.Stdin)`.
 4. In-process test: `ClientSideConnection` over pipes, using the SDK,
    runs Initialize → NewSession → Prompt → CloseSession.
 
 **Accept:** that test is red on a deliberately broken `Initialize`
 (wrong protocol version) before it is green on the real agent. The
-failure text is quoted in the phase handoff. `pigo acp` + SDK example
+failure text is quoted in the phase handoff. `gobble acp` + SDK example
 client (or the in-tree client test) completes a prompt.
 
 ### Phase 2 — Cobra is an ACP client
 
 1. Shared constructor: agent + pair of connections over `io.Pipe` (or
    equivalent), used by Cobra and by tests.
-2. `pigo prompt "…"` is `session/new` + `session/prompt` + print of
+2. `gobble prompt "…"` is `session/new` + `session/prompt` + print of
    agent text chunks to stdout, then `session/close`.
 3. A test that the same `Prompt` params are sent whether the caller is
    the Cobra command or a stdio client (compare JSON-RPC method name
    `session/prompt`).
 
-**Accept:** `pigo prompt` does not import or call the agent loop type; it
+**Accept:** `gobble prompt` does not import or call the agent loop type; it
 calls ACP. A grep of `internal/cmd` for the agent-loop package fails
 (only `internal/acp` / the connection package is allowed). *(2026-09-29:
 per [0004-MADR](0004-MADR-go-module-architecture.md) the packages are
@@ -184,14 +184,14 @@ live (applies in this session).
    `sse = false`, `acp = false`.
 3. Union `session/new.mcpServers` with on-disk `mcp.json` (session name
    wins).
-4. `pigo mcp add|remove|list`. `list` connects and prints tools; exit 1 on
+4. `gobble mcp add|remove|list`. `list` connects and prints tools; exit 1 on
    failure, matching TypeScript Pi.
 5. Tool names `mcp__<server>__<tool>`.
 6. OAuth: implement if the client library supports it in this phase;
    otherwise record the gap here before merging.
 
 **Accept:** two fixtures — a stdio MCP server in-tree and an HTTP test
-server — appear as tools during `session/prompt`. `pigo mcp list` agrees.
+server — appear as tools during `session/prompt`. `gobble mcp list` agrees.
 An SSE-only config is rejected. The Phase 1 initialize test still
 passes (capabilities now include http).
 
@@ -238,19 +238,19 @@ deliberately advertised `/bogus` that has no handler fails a test that
 asserts advertisement ⊆ handlers. `go list` / grep of the module for
 `_x.ai/` is empty.
 
-### Phase 7 — `_pigo/` extensions and remaining Cobra
+### Phase 7 — `_gobble/` extensions and remaining Cobra
 
-1. Implement `_pigo/compact` (optional instructions), `_pigo/usage`,
-   `_pigo/steer`, `_pigo/follow_up`, `_pigo/clear_queue` against the agent
+1. Implement `_gobble/compact` (optional instructions), `_gobble/usage`,
+   `_gobble/steer`, `_gobble/follow_up`, `_gobble/clear_queue` against the agent
    queue. Compact via the extension is the same compaction as `/compact`.
-2. Implement the read extensions used by the CLI (`_pigo/get_state` or
+2. Implement the read extensions used by the CLI (`_gobble/get_state` or
    whatever names the mapping table freezes in this phase — freeze them
    in this PLAN when the handlers land).
-3. `_pigo/set_session_name` matches `/name`.
-4. `pigo auth` as far as the chosen provider requires (may be env-only).
+3. `_gobble/set_session_name` matches `/name`.
+4. `gobble auth` as far as the chosen provider requires (may be env-only).
 
-**Accept:** SDK `CallExtension` for `_pigo/steer` during a live faux prompt
-queues a steer; `_pigo/compact` shortens history the same way `/compact`
+**Accept:** SDK `CallExtension` for `_gobble/steer` during a live faux prompt
+queues a steer; `_gobble/compact` shortens history the same way `/compact`
 does; unknown `_nope` returns method-not-found. Stdio clients that never
 call extensions still complete Phase 3 and Phase 6 tests.
 
@@ -298,7 +298,7 @@ is the 2026-10-01 amendment of
 [0002-MADR-cli-acp-headless-mcp-v1.md](0002-MADR-cli-acp-headless-mcp-v1.md).
 Checklist:
 
-1. `acpagent.Spec` with `ID` a new `provider.IDPi`, `DefaultBin` `pigo`,
+1. `acpagent.Spec` with `ID` a new `provider.IDPi`, `DefaultBin` `gobble`,
    `DefaultArgs` `[]string{"acp"}`. `SessionMeta` nil.
    `SynthesizeAutoMode` false. `ExtensionNotifications` empty.
 2. Parameterize Compact / Fork / Rename / Usage / Status / SetModel /
@@ -317,12 +317,12 @@ Checklist:
 6. Probe, do not assume: live-tagged tests send `/compact`, `/usage`,
    `/context` and assert `session/update` frames. `/settings` is absent
    from `available_commands`. `session/set_model` is MethodNotFound.
-   `_x.ai/` is absent from pigo.
+   `_x.ai/` is absent from gobble.
 7. Empty `CommandCaveat` unless a real quirk appears.
-8. `KnownGoodVersion` once a pigo release exists; mismatch warns
+8. `KnownGoodVersion` once a gobble release exists; mismatch warns
    (MADR 0137).
 9. Every connection uses `OverflowDropNewest` (MADR 0167), matching
-   pigo's Phase 0 ACP `replace`.
+   gobble's Phase 0 ACP `replace`.
 
 Existing providers (grok, opencode, kilo, codex, fake) stay registered.
 
@@ -342,16 +342,16 @@ None. This plan is proposed and has not been approved.
 
 **2026-09-29 — native magic-cli-remote CLI.** The first draft of this
 plan allowed Phase 6 to ship with an empty slash-command list, mapped
-compact only as a `_pigo/` extension, and did not require `usage_update`,
+compact only as a `_gobble/` extension, and did not require `usage_update`,
 `session/set_mode`, or `session/set_model`. The associated MADR now
 requires honest executing slash commands and the ACP methods mcremote
 already consumes. Phase 6 is that contract; a former empty-list
-allowance is withdrawn. Phase 7 keeps `_pigo/` dual-path. Hardening moves
+allowance is withdrawn. Phase 7 keeps `_gobble/` dual-path. Hardening moves
 from Phase 7 to Phase 8. Companion `IDPi` work is documented and kept
 out of this tree.
 
-**2026-09-29 — `pigo` identity, SDK routing, wider v1 line.** The binary
-is `pigo` and extension methods are `_pigo/…` ([0003-MADR](0003-MADR-pigo-product-identity.md)). Phase 0 is
+**2026-09-29 — `gobble` identity, SDK routing, wider v1 line.** The binary
+is `gobble` and extension methods are `_gobble/…` ([0003-MADR](0003-MADR-gobble-product-identity.md)). Phase 0 is
 superseded by [0004-PLAN](0004-PLAN-go-module-architecture.md). Phase 4 step 4 (`session/set_model`) is withdrawn:
 `coder/acp-go-sdk` v0.13.5 answers MethodNotFound for non-schema methods
 that do not start with `_`, so model and thinking go through
@@ -377,11 +377,11 @@ MethodNotFound for `session/set_model`. No new phases in this tree.
 
 * **Phase 0.** Superseded by 0004-PLAN, as before. The ACP `replace` stays. The agent side keeps the SDK's default overflow policy. `acpclient` sets `OverflowDropNewest` with a drop handler (0004-MADR amendment of this date).
 * **Phase 1.**
-  * `Initialize` always sends `agentInfo {name:"pigo", title:"pigo", version}`.
+  * `Initialize` always sends `agentInfo {name:"gobble", title:"gobble", version}`.
   * `promptCapabilities.image` stays `false` until go-llmprovider-sdk carries image input (0004-MADR amendment of this date). `audio` is `false`.
 * **Phase 3.**
   * The facade's `Usage` event is produced by the adapter. Until the SDK decodes usage (its 0015-PLAN S9), the adapter estimates tokens and marks the event `estimated`.
-  * The Phase 3 `usage_update` accept still holds. `size` comes from pigo's catalog.
+  * The Phase 3 `usage_update` accept still holds. `size` comes from gobble's catalog.
   * Step 1's pin follows 0004-MADR's amendment: develop against a recorded commit, and ship no tag on a pseudo-version.
 * **Phase 4.**
   * Advertise `sessionCapabilities.list` and `close`.
@@ -391,4 +391,4 @@ MethodNotFound for `session/set_model`. No new phases in this tree.
   * The advertised set includes `/deep-research` once the skill exists (0005 X1).
   * Unknown `_` methods return -32601.
 * **Verification.** The stdio script follows the corrected list in the MADR's fifth amendment (Confirmation changes).
-* **Companion work.** The checklist above is replaced by magic-cli-remote `docs/decisions/0179-MADR-pigo-native-acp-provider.md` D1–D10. This plan still does not mutate that repository.
+* **Companion work.** The checklist above is replaced by magic-cli-remote `docs/decisions/0179-MADR-gobble-native-acp-provider.md` D1–D10. This plan still does not mutate that repository.

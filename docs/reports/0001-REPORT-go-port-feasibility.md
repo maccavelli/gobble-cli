@@ -587,7 +587,7 @@ decisions that this report left open were recorded in MADRs:
   The live package is `selfupdate`. It is not a README stub.
 * **D10, D9 (toolchain), D14** are decided in
   [0004-MADR](../decisions/0004-MADR-go-module-architecture.md).
-  **`pigo update`** is decided in
+  **`gobble update`** is decided in
   [0005-MADR](../decisions/0005-MADR-v1-feature-scope.md).
 
 The feasibility conclusions (source-faithful port is not achievable; a
@@ -596,7 +596,7 @@ product rewrite is) are unchanged.
 ## Later observation (2026-10-01)
 
 The owner directed Apache-2.0 for this repository, `go-llmprovider-sdk`,
-and `go-core-lib`. `go-core-lib` already was. pigo's `LICENSE` is the
+and `go-core-lib`. `go-core-lib` already was. gobble's `LICENSE` is the
 fleet copy; `NOTICE` credits Pi (MIT) and both sibling libraries.
 `go-llmprovider-sdk` records the same choice in
 `0018-MADR-apache-2-license.md`. The 2026-09-30 "no LICENSE file" line

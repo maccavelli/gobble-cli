@@ -3,19 +3,19 @@ status: in-progress
 date: 2026-10-03
 associated-madr: "0004-MADR-go-module-architecture.md"
 ---
-# Implement the pigo module architecture: scaffold, contracts, boundaries, toolchain, release
+# Implement the gobble module architecture: scaffold, contracts, boundaries, toolchain, release
 
 Associated MADR: [0004-MADR-go-module-architecture.md](0004-MADR-go-module-architecture.md)
 
 Also executes the identity decisions in
-[0003-MADR-pigo-product-identity.md](0003-MADR-pigo-product-identity.md)
+[0003-MADR-gobble-product-identity.md](0003-MADR-gobble-product-identity.md)
 (names, directories, build info). The Pi bridge is not built here.
 
 ## Goal
 
 A buildable, testable, releasable Go 1.27.1 module whose package tree,
 contracts, import boundaries, and toolchain gates match 0004-MADR. At the
-end it produces a `pigo` binary that answers `version`, `completion`, and
+end it produces a `gobble` binary that answers `version`, `completion`, and
 `config path`, and it contains no agent behaviour.
 [0002-PLAN-cli-acp-headless-mcp-v1.md](0002-PLAN-cli-acp-headless-mcp-v1.md)
 Phase 1 starts from this tree.
@@ -28,7 +28,7 @@ In:
   `.golangci.yml`, `.editorconfig`, `LICENSE`, `NOTICE`
 * One `doc.go` per package in the 0004-MADR package map, stating the tier
 * Contract types and interfaces for `llm`, `tool`, `session`, `hook`,
-  `permission` and `pigo` (compiling, documented, no behaviour)
+  `permission` and `gobble` (compiling, documented, no behaviour)
 * `internal/archtest`, `internal/buildinfo`, `internal/appdirs`,
   `internal/logging`, `internal/cli` root (fang)
 * Test harness packages `llm/llmtest` and `acpclient/acptest` (skeletons
@@ -52,14 +52,14 @@ Out:
 
 This phase may be approved and committed separately from the Go scaffold.
 It changes documentation only. It does not add a module requirement or claim
-that pigo code exists.
+that gobble code exists.
 
 1. Reconcile `README.md`, `docs/README.md` and `docs/architecture.md` with
    the 2026-10-02 amendments of this MADR and
    [0005-MADR-v1-feature-scope.md](0005-MADR-v1-feature-scope.md).
-   `architecture.md` keeps describing the current documentation-only pigo
+   `architecture.md` keeps describing the current documentation-only gobble
    tree; it identifies sibling code as a planned dependency, with version
-   evidence and no invented package in pigo.
+   evidence and no invented package in gobble.
    Refresh the 0004/0005 MADR and PLAN source inventories if sibling commits
    or tags have changed since those amendments; keep released APIs separate
    from development HEAD.
@@ -75,13 +75,13 @@ that pigo code exists.
    current-state pointer. Run `git diff --check`.
 
 **Accept:** the entry pages identify the three sibling repos and their
-actual present surfaces; none says pigo imports them yet; links resolve;
+actual present surfaces; none says gobble imports them yet; links resolve;
 `git diff --check` is clean. Commit this documentation phase after its
 checks. Phases 0–5 retain their separate approval and execution order.
 
 ### Phase 0 — module and toolchain
 
-1. `go mod init github.com/maccavelli/pi-go`. Set `go 1.27.1`.
+1. `go mod init github.com/maccavelli/gobble-cli`. Set `go 1.27.1`.
 2. Add `tool` directives:
    * `golang.org/x/vuln/cmd/govulncheck`
    * `honnef.co/go/tools/cmd/staticcheck`, pinned to the version
@@ -101,7 +101,7 @@ checks. Phases 0–5 retain their separate approval and execution order.
    phases will use (re-resolved when the first import lands):
    * `github.com/maccavelli/go-core-lib v1.1.0`
      (`96b30961180671ab3697585951219001ecbb1c90`) — first imported in
-     [0005-PLAN](0005-PLAN-v1-feature-scope.md) F10 (`pigo update`) and
+     [0005-PLAN](0005-PLAN-v1-feature-scope.md) F10 (`gobble update`) and
      used as a workflow pin in this plan's Phase 4;
    * `github.com/maccavelli/go-llmprovider-sdk` — no tag. First imported
      in [0002-PLAN](0002-PLAN-cli-acp-headless-mcp-v1.md) Phase 3 at a
@@ -170,7 +170,7 @@ checks. Phases 0–5 retain their separate approval and execution order.
    * `session`: `Store`, `Log`, `Entry` union, `Header`, `ID`;
    * `hook`: `Hook`, `Event`, `Outcome`;
    * `permission`: `Policy`, `Rule`, `Decision`, `Mode`;
-   * `pigo`: `New`, `Option`, `Runtime` (methods return
+   * `gobble`: `New`, `Option`, `Runtime` (methods return
      `errors.ErrUnsupported` until later phases).
 
    Every wire struct uses `encoding/json/v2` tags. It has `omitzero` where
@@ -181,7 +181,7 @@ checks. Phases 0–5 retain their separate approval and execution order.
    test per rule. Rules 4 and 8 have no edges to fail on until the
    first import of `go-llmprovider-sdk` (0002-PLAN Phase 3) and
    `go-core-lib` (0005-PLAN F10); the table still names them.
-4. Write the `Example` functions for `tool.New` and `pigo.New`. They
+4. Write the `Example` functions for `tool.New` and `gobble.New`. They
    compile, and their output is `// Output:`-checked where there is output.
 
 **Accept:**
@@ -196,7 +196,7 @@ checks. Phases 0–5 retain their separate approval and execution order.
 
 ### Phase 2 — process edge and identity
 
-1. `cmd/pigo/main.go`: `signal.NotifyContext(ctx, os.Interrupt,
+1. `cmd/gobble/main.go`: `signal.NotifyContext(ctx, os.Interrupt,
    syscall.SIGTERM)`, then `os.Exit(cli.Main(ctx, os.Args[1:], os.Stdin,
    os.Stdout, os.Stderr))`.
 2. `internal/buildinfo`:
@@ -204,7 +204,7 @@ checks. Phases 0–5 retain their separate approval and execution order.
    * a `debug.ReadBuildInfo` fallback (module version and `vcs.revision`)
      so that `go install …@vX` still reports a version;
    * a User-Agent builder that returns the 0003-MADR format.
-3. `internal/appdirs`: the 0003-MADR table, including `PIGO_HOME` and the
+3. `internal/appdirs`: the 0003-MADR table, including `GOBBLE_HOME` and the
    per-role overrides.
 4. `internal/logging`:
    * `slog` JSON or text output;
@@ -213,7 +213,7 @@ checks. Phases 0–5 retain their separate approval and execution order.
    * `slog.NewMultiHandler` fan-out;
    * a redacting `ReplaceAttr` for keys matching `*key`, `*token`,
      `*secret`, and `authorization`;
-   * **no stderr handler when the process is `pigo acp`**, because stdio
+   * **no stderr handler when the process is `gobble acp`**, because stdio
      is the protocol.
 5. `internal/cli` root through `fang.Execute`. Subcommands:
    * `version [--json]`;
@@ -227,11 +227,11 @@ checks. Phases 0–5 retain their separate approval and execution order.
 
 **Accept:**
 
-* `pigo version --json` prints `{name:"pigo", version, commit, date, go,
+* `gobble version --json` prints `{name:"gobble", version, commit, date, go,
   os, arch}`.
 * The `appdirs` table test passes for three GOOS values, with a fake
   `$HOME`, `$XDG_*`, and `%APPDATA%`.
-* A test starts `pigo acp` with a closed stdin and asserts that nothing is
+* A test starts `gobble acp` with a closed stdin and asserts that nothing is
   written to stdout except JSON-RPC. It fails on a copy that logs a
   start-up banner to stdout.
 
@@ -243,7 +243,7 @@ checks. Phases 0–5 retain their separate approval and execution order.
    * assertion helpers for requests (system prompt sections, tool list,
      message tail).
    * Do **not** import `llmprovider/llmtest` here. That package's `Run`
-     and `Fake` exercise the SDK contract; pigo's `Script` exercises the
+     and `Fake` exercise the SDK contract; gobble's `Script` exercises the
      facade. F4's adapter tests will sit between them.
 2. `acpclient/acptest`:
    * `Pair(t, agent acp.Agent)`, which returns a connected client and a
@@ -268,8 +268,8 @@ checks. Phases 0–5 retain their separate approval and execution order.
 Grounded in `go-core-lib` `v1.1.0` `selfupdate` and
 `.github/workflows/publish-selfupdate-release.yml` at
 `96b30961180671ab3697585951219001ecbb1c90`. That client selects **raw
-binaries** named `ExactAssetName("pigo", platform)` =
-`pigo-<goos>-<goarch>` with `.exe` on windows. It does not select
+binaries** named `ExactAssetName("gobble", platform)` =
+`gobble-<goos>-<goarch>` with `.exe` on windows. It does not select
 `.tar.gz` / `.zip` archives. The reusable workflow refuses any tag
 that is not a strict `vMAJOR.MINOR.PATCH` (so `v1.0.0-rc.1` cannot
 publish through it).
@@ -287,22 +287,22 @@ publish through it).
    ```yaml
    uses: maccavelli/go-core-lib/.github/workflows/publish-selfupdate-release.yml@96b30961180671ab3697585951219001ecbb1c90 # go-core-lib v1.1.0
    with:
-     artifact-name: pigo-release
-     products-json: '["pigo"]'
+     artifact-name: gobble-release
+     products-json: '["gobble"]'
      platforms-json: '[{"os":"darwin","arch":"amd64"},{"os":"darwin","arch":"arm64"},{"os":"linux","arch":"amd64"},{"os":"linux","arch":"arm64"},{"os":"windows","arch":"amd64"},{"os":"windows","arch":"arm64"}]'
-     extra-assets-json: '["pigo.spdx.json"]'
+     extra-assets-json: '["gobble.spdx.json"]'
    ```
 
    The staged artifact contains exactly:
-   * `pigo-darwin-amd64`, `pigo-darwin-arm64`, `pigo-linux-amd64`,
-     `pigo-linux-arm64`, `pigo-windows-amd64.exe`,
-     `pigo-windows-arm64.exe`;
+   * `gobble-darwin-amd64`, `gobble-darwin-arm64`, `gobble-linux-amd64`,
+     `gobble-linux-arm64`, `gobble-windows-amd64.exe`,
+     `gobble-windows-arm64.exe`;
    * `SHA256SUMS` (the same parser the client uses;
      `selfupdate/testdata/manifest-parity/` is the fixture set);
-   * `pigo.spdx.json` as the extra asset.
+   * `gobble.spdx.json` as the extra asset.
    Each binary is `CGO_ENABLED=0 -trimpath -tags netgo,osusergo` with
    the 0003-MADR ldflags. The reusable workflow attests and publishes;
-   pigo does not call `softprops/action-gh-release` itself.
+   gobble does not call `softprops/action-gh-release` itself.
 3. `make release-dry-run`: builds every target locally into `dist/`
    (git-ignored), writes `SHA256SUMS`, checks each name equals
    `ExactAssetName` (inline the name rule; do not import `go-core-lib`
@@ -317,7 +317,7 @@ publish through it).
   recorded here.
 * `make release-dry-run` produces the six named binaries plus
   `SHA256SUMS`, and `SHA256SUMS` verifies with `shasum -a 256 -c`. A
-  planted `pigo-linux-amd64.tar.gz` in a scratch `dist/` is **not**
+  planted `gobble-linux-amd64.tar.gz` in a scratch `dist/` is **not**
   listed in `SHA256SUMS` and is not accepted by the verifier script.
 * `make verify-build-metadata` fails on a scratch build without
   `-ldflags`, then passes on the real build.
@@ -345,7 +345,7 @@ make preflight            # gofmt, golint, vet, staticcheck×3, golangci-lint, g
 go test ./...
 go test -race ./...
 make release-dry-run
-./dist/pigo-$(go env GOOS)-$(go env GOARCH) version --json   # append .exe on windows
+./dist/gobble-$(go env GOOS)-$(go env GOARCH) version --json   # append .exe on windows
 ```
 
 Capture exit status before any filter (global rule). Each gate added in
@@ -374,7 +374,7 @@ commit `bf7221a`, and go-tui-lib tag `v0.1.0` at `5c57806` with later
 documentation-only commit `7907590`. A relative-link check resolved
 94 links in the seven edited files. Its deliberate bad input
 `[broken](missing.md)` failed with `broken relative link: missing.md`.
-`git diff --check` passed. Pigo has no `go.mod`, so no Go test was run.
+`git diff --check` passed. Gobble has no `go.mod`, so no Go test was run.
 The documentation phase is committed with this record. Phases 0–5 remain
 proposed and require separate approval.
 
@@ -411,8 +411,8 @@ this date changes D10 and the toolchain half of D9. This PLAN:
   `ExactAssetName` raw binaries and the go-core-lib reusable workflow;
 * names `go-core-lib` (Apache-2.0) in `NOTICE`.
 
-`pigo update` stays 0005-PLAN F10. Native token streaming stays an SDK
-capability pigo consumes when it exists.
+`gobble update` stays 0005-PLAN F10. Native token streaming stays an SDK
+capability gobble consumes when it exists.
 
 **2026-10-01 — Apache-2.0 licence, ahead of Phase 0.** The owner
 directed Apache-2.0 for this repository, `go-llmprovider-sdk`, and
@@ -428,7 +428,7 @@ repository's `0018-MADR-apache-2-license.md`; `NOTICE` names it.
   * Add to the step: `acpserver` constructs `AgentSideConnection` with the default overflow policy; `acpclient` passes `WithNotificationOverflowPolicy(OverflowDropNewest)` and a drop handler.
 * **Phase 0, step 4.** The pins to record change:
   * go-core-lib `v1.2.0` (`cfc95c883220b013c21705e1ebe3a268bdd63b56`) is the newest tag. F10 re-resolves to the newest `v1.x` and uses the same peeled SHA in `go.mod` and in the workflow `uses:`.
-  * go-llmprovider-sdk: development pin `940fee0`. No pigo tag ships on a pseudo-version (MADR decision 1).
+  * go-llmprovider-sdk: development pin `940fee0`. No gobble tag ships on a pseudo-version (MADR decision 1).
 * **Phase 1, step 2.** The `llm` contract takes the wider shape from MADR decision 2:
   * the `ToolCallStart` and `ToolCallDelta` events, and `Done{StopReason}`;
   * `Usage` with cache read/write and `Estimated`;
@@ -442,20 +442,20 @@ repository's `0018-MADR-apache-2-license.md`; `NOTICE` names it.
   * the thinking-level map.
 * **Phase 1, step 3.** In archtest rule 8, `_test.go` files may import `selfupdate/selfupdatetest`. The rule's table test proves that the exemption does not leak to non-test files: it is shown failing on a scratch file that imports it outside a test.
 * **Phase 2, step 2.** `internal/buildinfo` follows MADR "`internal/buildinfo` follows go-core-lib's planned rule": `ReleaseBuild` only for `buildKind=release` plus a strict tag. The date stamp is the commit time (`SOURCE_DATE_EPOCH`), not the wall clock, so builds are reproducible.
-* **Phase 2, step 6.** The exit-code table adds `10` for "update available" (`pigo update --check` only). Every other selfupdate error maps to `1`, except two:
+* **Phase 2, step 6.** The exit-code table adds `10` for "update available" (`gobble update --check` only). Every other selfupdate error maps to `1`, except two:
   * contradictory update flags are `2` (usage);
   * a cancelled update is `4`, or `130` on SIGINT.
 * **Phase 4.** Read the original steps with these additions.
-  * **Precondition, recorded with evidence before the first tag** (an owner action, not this plan's): on `maccavelli/pi-go`,
+  * **Precondition, recorded with evidence before the first tag** (an owner action, not this plan's): on `maccavelli/gobble-cli`,
     * "immutable releases" is enabled;
     * a tag ruleset restricts `v*` to the owner, with 2FA.
 
     Without immutable releases the reusable workflow publishes, waits 120 s, fails, and leaves a mutable release that every client refuses (`ErrMutableRelease`).
   * **The calling job declares `permissions: {contents: write, id-token: write, attestations: write}`**, which the snippet in step 2 omitted.
-  * **The SBOM generator is named, and pinned by version and checksum, in this PLAN before step 2 lands.** `pigo.spdx.json` is an extra asset. It is **not** in `SHA256SUMS`. Optionally it is attested with `actions/attest-sbom`.
+  * **The SBOM generator is named, and pinned by version and checksum, in this PLAN before step 2 lands.** `gobble.spdx.json` is an extra asset. It is **not** in `SHA256SUMS`. Optionally it is attested with `actions/attest-sbom`.
   * **Tags.** The build job runs on strict `vX.Y.Z` tags only, with no release-candidate tags until go-core-lib `v1.3.0` channels are adopted by a later amendment. `make verify-build-metadata` asserts `buildKind=release` on tag builds, and is shown failing on a scratch build stamped `local`.
   * **`make release-dry-run` runs go-core-lib's `scripts/verify-selfupdate-release.sh`** fetched at the pinned SHA, instead of an inlined copy of the name rule. The planted-archive accept stays.
-  * **Actions in pigo's own workflows are pinned by commit SHA**, as go-core-lib's are.
+  * **Actions in gobble's own workflows are pinned by commit SHA**, as go-core-lib's are.
   * **Users verify releases** with `gh release verify` and `gh attestation verify`. `docs/guides/developing.md` (Phase 5) documents the commands.
 
 **2026-10-02 — sibling-source refresh and shared TUI workspace.** Adds
@@ -464,7 +464,7 @@ is go-llmprovider-sdk `67fc56e` (no tag, with an uncommitted PLAN edit),
 go-core-lib `v1.3.0` at `f97c681`, and go-tui-lib `v0.1.0` at `5c57806`.
 Phase 0 still imports none of them. At its later Phase 4, resolve the
 go-core-lib workflow to the then-selected tag's peeled commit; `v1.3.0`
-currently supplies channels, while pigo's release workflow remains
+currently supplies channels, while gobble's release workflow remains
 stable-only. Phase 1's `llm` facade keeps `Estimated`, but its adapter later
 prefers the SDK's now-decoded `Response.Usage`. F9 in 0005-PLAN selects a
 corrected tested go-tui-lib tag for workspace use; Phase 1 does not import
@@ -478,7 +478,7 @@ therefore no longer described the current sibling tree. The provider SDK's
 and wizard work without changing the F4-facing contract. The TUI library's
 later `7907590` changed documentation only. The owner approved refreshing
 the 0004/0005 records and continuing Phase D. Phase D step 1 now includes
-those record corrections. No sibling repository or pigo source code is
+those record corrections. No sibling repository or gobble source code is
 changed by this phase.
 
 **2026-10-03 — go-core-lib renamed go-selfupdate-lib; Phase D refresh

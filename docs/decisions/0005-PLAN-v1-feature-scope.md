@@ -17,7 +17,7 @@ Every row of the 0005-MADR capability inventory is delivered at its tier:
 * **exp** rows live under `exp/`, off by default.
 
 The Pi bridge from
-[0003-MADR-pigo-product-identity.md](0003-MADR-pigo-product-identity.md)
+[0003-MADR-gobble-product-identity.md](0003-MADR-gobble-product-identity.md)
 is built here.
 
 ## Scope
@@ -31,7 +31,7 @@ Prerequisites, not repeated here:
   (scaffold, harnesses, CI, release pipeline);
 * [0002-PLAN-cli-acp-headless-mcp-v1.md](0002-PLAN-cli-acp-headless-mcp-v1.md)
   Phases 1–8 (ACP agent, Cobra as an ACP client, basic loop, the first
-  four tools, sessions, MCP, native slash commands, `_pigo/` extensions).
+  four tools, sessions, MCP, native slash commands, `_gobble/` extensions).
 
 Where a phase below extends a 0002-PLAN phase, it says so. It does not
 re-execute that phase.
@@ -87,7 +87,7 @@ They may start after F4 in any order.
 ### F2 — sessions v3 (1.0; extends 0002-PLAN Phase 4)
 
 1. Every v3 entry type, and v1/v2 migration on load.
-2. `custom{pigo.*}` for pigo-only data. Unknown fields round-trip through
+2. `custom{gobble.*}` for gobble-only data. Unknown fields round-trip through
    `jsontext.Value`.
 3. The tree: leaf pointer, reset leaf, fork, clone, names, and
    `parentSession`.
@@ -138,13 +138,13 @@ API.
    * wraps `llmprovider.WithRetry` for retryable kinds;
    * maps `llmprovider.Event` and `APIError` onto `llm`'s sealed events
      and sentinels as 0004-MADR specifies;
-   * passes `WithClientInfo` from 0003-MADR (`pigo`, semver).
+   * passes `WithClientInfo` from 0003-MADR (`gobble`, semver).
 2. 1.0 ids on day one of this phase: every id `providers.New` already
    implements (`openai`, `claude`, `gemini`, `grok` on the probed
    commit). As 0015-PLAN S7 moves `opencode-zen`, `opencode-go`,
    `huggingface`, `kilo`, `together`, and `ollama` onto the contract,
    add each id in a follow-up commit of this phase, recording the SDK
-   commit. Do not ship a pigo wrapper of the old API for those ids.
+   commit. Do not ship a gobble wrapper of the old API for those ids.
 3. Record the pinned `go-llmprovider-sdk` pseudo-version here.
 4. Typed error mapping is the 0004-MADR table. A 429 with `Retry-After`
    must round-trip through the adapter as `llm.ErrRateLimited` plus
@@ -157,10 +157,10 @@ API.
    `NOTICE` entry, or another public catalog) here before it lands.
 7. `internal/auth`: keyring with the 0600-file fallback; implements
    `llmprovider.TokenStore` so SDK `OAuthSession` rotations persist.
-   Credential precedence, `pigo auth login|logout|status|token`, and ACP
+   Credential precedence, `gobble auth login|logout|status|token`, and ACP
    `authMethods`, `authenticate`, and `logout`. ChatGPT/Codex login uses
-   the SDK `openai` backend; do not reimplement that loopback in pigo.
-8. `pigo models list|info`.
+   the SDK `openai` backend; do not reimplement that loopback in gobble.
+8. `gobble models list|info`.
 9. Config option category `model` (0002-PLAN Phase 4, amended).
 
 **Accept:**
@@ -190,7 +190,7 @@ API.
    retry loop.
 2. Auto-compaction trigger and cut-point rules. The iterative summary
    format. Split-turn merge. Overflow compacts and retries once.
-3. `/compact [instructions]` and `_pigo/compact` share one code path, and
+3. `/compact [instructions]` and `_gobble/compact` share one code path, and
    both emit `usage_update`.
 
 **Accept:**
@@ -211,7 +211,7 @@ API.
    `allow_always` persists a rule. `/permissions`.
 4. Non-interactive resolution: `ask` becomes deny unless `--yes` or
    `bypass` is set.
-5. Project trust (`trust.json`, the decision order, `pigo trust|untrust`,
+5. Project trust (`trust.json`, the decision order, `gobble trust|untrust`,
    `/trust`) and the built-in protected paths.
 
 **Accept:**
@@ -221,7 +221,7 @@ API.
   and no write.
 * A permission round-trip through `acptest.Pair` records the
   `session/request_permission` frame.
-* An untrusted project's `.pigo/settings.json` has no effect. A test
+* An untrusted project's `.gobble/settings.json` has no effect. A test
   fails on a copy that loads it anyway.
 
 ### F7 — hooks (1.0)
@@ -240,7 +240,7 @@ API.
 * A `tool_result` hook rewrites the output.
 * A hook that hangs is killed at its timeout, and the turn continues with
   a logged error.
-* A Go `hook.Hook` passed to `pigo.New` observes the same events. An
+* A Go `hook.Hook` passed to `gobble.New` observes the same events. An
   `Example` shows it.
 
 ### F8 — MCP completion (1.0; extends 0002-PLAN Phase 5)
@@ -254,7 +254,7 @@ API.
 4. OAuth: discovery, dynamic client registration, PKCE, a loopback
    callback with `CrossOriginProtection`, manual paste, and tokens kept in
    the secret store.
-5. `pigo mcp get|login|logout` and `/mcp [status|reconnect]`.
+5. `gobble mcp get|login|logout` and `/mcp [status|reconnect]`.
 
 **Accept:**
 
@@ -294,9 +294,9 @@ API.
 ### F10 — print mode, operations, release gate (1.0)
 
 1. Print mode `-p`, piped stdin, `--output-format text|json|stream-json`.
-2. The usage ledger, `/usage` (session plus today), and `pigo usage`.
-3. `pigo doctor [--json]`.
-4. `pigo update [--check]` through
+2. The usage ledger, `/usage` (session plus today), and `gobble usage`.
+3. `gobble doctor [--json]`.
+4. `gobble update [--check]` through
    `github.com/maccavelli/go-core-lib/selfupdate` `v1.1.0`
    (`96b30961180671ab3697585951219001ecbb1c90`). Bind it as
    `selfupdate/example_test.go` does for a standalone program:
@@ -306,7 +306,7 @@ API.
    `NewStandaloneInstaller`, `NewTextReporter(os.Stderr)`,
    `NewTerminalConfirmer(os.Stdin, os.Stderr)`. `--check` is
    `Request.CheckOnly`; `--force` is `Request.Force`; `--yes` is
-   `Request.Yes`. `Request.Product` is `pigo`. `Request.CurrentVersion`
+   `Request.Yes`. `Request.Product` is `gobble`. `Request.CurrentVersion`
    and `CurrentBuild` come from `internal/buildinfo`. Map `ExitCode` to
    process status (0, 10, 1). `internal/cli` is the only importer of
    `go-core-lib` (0004-MADR import-boundary rule 8).
@@ -322,10 +322,10 @@ API.
 
 * `stream-json` output of a fixture session equals the recorded ACP
   `session/update` params, line for line.
-* `pigo update --check` against `selfupdatetest.GitHubServer` with a
-  fixture named `pigo-linux-amd64` reports availability (exit 10) and
+* `gobble update --check` against `selfupdatetest.GitHubServer` with a
+  fixture named `gobble-linux-amd64` reports availability (exit 10) and
   writes nothing but reporter text to stderr. A planted archive name
-  (`pigo-linux-amd64.tar.gz`) is not selected (`ErrIntegrity` or
+  (`gobble-linux-amd64.tar.gz`) is not selected (`ErrIntegrity` or
   missing asset). `go list -m github.com/maccavelli/go-core-lib`
   prints `v1.1.0`.
 * The Pi-user smoke test from 0005-MADR Confirmation passes, and the
@@ -369,7 +369,7 @@ updated in the release notes.
 
 ### X3 — subagents, web, provider tools 1.x
 
-1. `agents/*.md` discovery (config, `.pigo/agents`, and packages).
+1. `agents/*.md` discovery (config, `.gobble/agents`, and packages).
 2. `task`: a child session through an in-process ACP connection,
    `parentSession` link, progress relayed as `tool_call_update`, parallel
    batches, and a depth limit.
@@ -384,38 +384,38 @@ exceeds the depth limit gets a tool error.
 
 ### X4 — clients and servers 1.x
 
-1. `pigo rpc`: the Pi JSONL RPC shim over an in-process ACP client.
+1. `gobble rpc`: the Pi JSONL RPC shim over an in-process ACP client.
    Commands follow the 0002-MADR mapping table.
-2. `pigo mcp serve` with the `pigo_run` and `pigo_session_prompt` tools.
+2. `gobble mcp serve` with the `gobble_run` and `gobble_session_prompt` tools.
 3. MCP sampling and elicitation.
 4. TUI themes (Pi theme JSON) and `keybindings.json` with Pi action ids.
 
 **Accept:**
 
 * A replay of the command sequences documented in Pi's
-  `docs/rpc-commands.md` through `pigo rpc` produces responses with the
+  `docs/rpc-commands.md` through `gobble rpc` produces responses with the
   documented shapes.
-* The official MCP go-sdk client calls `pigo_run` against a faux provider.
+* The official MCP go-sdk client calls `gobble_run` against a faux provider.
 
 ### X5 — providers, packages, operations 1.x
 
 1. Bedrock, Vertex, and Azure **only if** `go-llmprovider-sdk` has grown
    those ids or options. If it has not, this step is skipped and the
-   gap is recorded here; pigo does not add vendor LLM SDKs to close it.
+   gap is recorded here; gobble does not add vendor LLM SDKs to close it.
 2. Subscription OAuth beyond ChatGPT/Codex: one provider per step, each
    with a recorded check of the provider's terms, through the SDK's
    `OAuthSession`.
 3. Unnamed OpenAI-compatible presets (Groq, Cerebras, DeepSeek,
    OpenRouter, Fireworks, Mistral, LM Studio, llama.cpp, vLLM) **only
    if** the SDK exposes a Chat Completions provider that takes a base
-   URL, or adds those ids. pigo does not speak those wires itself.
-4. `pigo models refresh`.
-5. `pigo pkg install|remove|list|update`: git, path, and https-with-sha256
-   sources; `pigo-package.json`; Pi `package.json` manifests with their
+   URL, or adds those ids. gobble does not speak those wires itself.
+4. `gobble models refresh`.
+5. `gobble pkg install|remove|list|update`: git, path, and https-with-sha256
+   sources; `gobble-package.json`; Pi `package.json` manifests with their
    extensions skipped; `packages.lock.json`.
 6. Prompt-cache warming.
 7. OpenTelemetry (GenAI semantic conventions).
-8. The flight recorder and `pigo debug trace`.
+8. The flight recorder and `gobble debug trace`.
 9. `/bug`.
 10. The Homebrew tap and the `ko` image.
 11. `default.pgo` from a recorded benchmark profile.
@@ -488,16 +488,16 @@ needs its own MADR/PLAN pair. The contract is the 2026-10-01 amendment of
 and the target table in
 [0005-MADR-v1-feature-scope.md](0005-MADR-v1-feature-scope.md):
 
-1. `DefaultBin` `pigo`, `DefaultArgs` `[]string{"acp"}`.
+1. `DefaultBin` `gobble`, `DefaultArgs` `[]string{"acp"}`.
 2. The 0005-MADR target command table, registering only rows whose
-   commands the pinned pigo release advertises.
+   commands the pinned gobble release advertises.
 3. Parameterize Compact / Fork / Rename / Usage / SetModel / SetThinking /
    Undo on `acpagent.Spec`. Until then those rows are `KindNative`.
    Model and thinking never use `session/set_model`.
 4. `ConfigureSession` applies the start-up model through
    `SetConfigOption`. Map `session_info_update` to `session_title`.
 5. Live-tagged probes for every native row, and `/settings` absent.
-6. `KnownGoodVersion` from the pigo release notes.
+6. `KnownGoodVersion` from the gobble release notes.
 
 ## Execution record
 
@@ -512,8 +512,8 @@ None. This plan is proposed and has not been approved.
   (`providers.New`, `Stream`, `WithRetry`, `TokenStore`). Official
   vendor LLM SDKs are out. Native token streaming is not claimed.
 * F5 uses `llmprovider.WithRetry` for provider retries and keeps
-  compaction-on-overflow in pigo.
-* F10 `pigo update` binds `go-core-lib/selfupdate` `v1.1.0` as the
+  compaction-on-overflow in gobble.
+* F10 `gobble update` binds `go-core-lib/selfupdate` `v1.1.0` as the
   standalone example does.
 * X5 no longer waits for a `go.mod` and streaming. Bedrock / Vertex /
   Azure and the unnamed OpenAI-compatible long tail land only if the
@@ -546,7 +546,7 @@ drops child-session ids. No new phases.
   * Add `${@:-default}`, and the first-line description fallback.
   * Use the MADR's new skill discovery order.
 * **F4.**
-  1. **SDK pin.** Start from the development pin `940fee0`. Record each SDK commit built against. No pigo tag ships on a pseudo-version.
+  1. **SDK pin.** Start from the development pin `940fee0`. Record each SDK commit built against. No gobble tag ships on a pseudo-version.
   2. **Day-one ids.** All 10 SDK ids are 1.0 on day one (step 2's "four, then the rest as S7 lands" is done).
   3. **Configuration.** The adapter sets:
      * `WithModelProbes(false)`;
@@ -572,7 +572,7 @@ drops child-session ids. No new phases.
 * **F6.**
   * `permissions.allowBypass` defaults to `false`.
   * Leaving plan mode also publishes a `plan` update.
-  * Add the default rule `bash(pigo update*)` → ask.
+  * Add the default rule `bash(gobble update*)` → ask.
 * **F8.**
   * Bridged Pi MCP servers with no `exposure` become `deferred`, and `tool_search` is activated.
   * `.pi/mcp.json` is read only when the project is trusted.
@@ -580,20 +580,20 @@ drops child-session ids. No new phases.
   1. **Pin.** Re-resolve go-core-lib to the newest `v1.x`, with the same SHA in `go.mod` and in `uses:`.
   2. **Surface.** Bind the MADR's full update surface, with flags local to `update`. `--check` uses `Checker.Check`, apply uses `RunWith`, and the TUI uses `Start` / `Stream`.
   3. **Probes.** Use `NewVersionProber` and `NewImageVerifier`.
-  4. **Install guards.** Add the Homebrew/symlink detection, and the refusal when `AI_AGENT=pigo` is set.
-  5. **Readiness.** Add `pigo auth check [--json]`, and `--offline` / `PIGO_OFFLINE`.
+  4. **Install guards.** Add the Homebrew/symlink detection, and the refusal when `AI_AGENT=gobble` is set.
+  5. **Readiness.** Add `gobble auth check [--json]`, and `--offline` / `GOBBLE_OFFLINE`.
   6. **Accept rewrite.** The update accept is rewritten as follows:
-     * `pigo update --check` runs against `selfupdatetest.GitHubServer`, with `Request.Platform` set to `linux/amd64` and a fixture named `pigo-linux-amd64`, through `Checker.Check`. It exits 10.
+     * `gobble update --check` runs against `selfupdatetest.GitHubServer`, with `Request.Platform` set to `linux/amd64` and a fixture named `gobble-linux-amd64`, through `Checker.Check`. It exits 10.
      * Apply runs against a binary copied into a temp home with an explicit `TargetPolicy{ExecutablePath, AllowedRoots}`.
-     * A planted `pigo-linux-amd64.tar.gz` gives "no exact asset". It is not `ErrIntegrity`.
+     * A planted `gobble-linux-amd64.tar.gz` gives "no exact asset". It is not `ErrIntegrity`.
      * A running-copy end-to-end test is modelled on go-core-lib `selfupdate/e2e_running_test.go`; that harness is unexported, so the pattern is copied, not imported.
   7. **Step 5 (bridge).** Follows 0003-MADR's amendment of this date: relocated installs, packages, JSONC, tolerant reads, and `trust import`.
   8. **Release gate.** The gate table adds the mcremote rows (MADR "Driven by mcremote") and the live probes from magic-cli-remote 0179 D10, run by the owner against the build that will be tagged, before the tag is pushed.
 * **X1.** `/deep-research` is advertised with the skill.
-* **X3.** `ask_user` and `_pigo/status` land here.
+* **X3.** `ask_user` and `_gobble/status` land here.
 * **X5, step 2.** Subscription OAuth candidates are xAI Grok and Kilo device login, each with a recorded terms check. Anthropic Max, Gemini and Copilot subscription logins are out of the v1 line.
 * **X5, step 6.** Cache warming stays blocked until the SDK supports cache hints and a cache read/write split. Record that as the skip reason if X5 runs first.
-* **Companion work.** Replaced by magic-cli-remote `docs/decisions/0179-MADR-pigo-native-acp-provider.md` (D1–D10). This plan still does not mutate that repository.
+* **Companion work.** Replaced by magic-cli-remote `docs/decisions/0179-MADR-gobble-native-acp-provider.md` (D1–D10). This plan still does not mutate that repository.
 
 **2026-10-02 — source-verified provider, update and TUI integration.** Follows
 the amendments of this date in 0004-MADR and 0005-MADR. The observations
@@ -612,7 +612,7 @@ are go-llmprovider-sdk `67fc56e` (no tag), go-core-lib `v1.3.0`
   `*RateLimitError` / `*IncompleteError` cases. Use OAuth and
   `RefreshLocker` from `llmprovider/auth`, not their pre-S8c path. Pass
   credentials and catalog options explicitly; do not use the SDK's opt-in
-  environment helpers as pigo defaults. Keep `WithModelProbes(false)`.
+  environment helpers as gobble defaults. Keep `WithModelProbes(false)`.
   **Accept:** fixture responses from each of the four wire families yield
   reported counts, an all-zero response is marked estimated, and an `APIError`
   429 preserves `RetryAfter`; quota and overflow retain their more specific
@@ -623,7 +623,7 @@ are go-llmprovider-sdk `67fc56e` (no tag), go-core-lib `v1.3.0`
   corrected tag that passes an integration fixture at both F9 widths. Use
   released `layout`, `workspace`, `glyph`, `theme` and `tuitest` for the
   shell and goldens. Implement ACP transcript, tool cards, permission
-  dialog, editor and pickers in pigo until a sibling package actually ships
+  dialog, editor and pickers in gobble until a sibling package actually ships
   and is separately evaluated. `internal/tui` alone imports
   `go-tui-lib`; `_test.go` files may use `tuitest`. **Accept:** a fixture
   renders the ACP transcript and a permission dialog within a workspace
@@ -634,7 +634,7 @@ are go-llmprovider-sdk `67fc56e` (no tag), go-core-lib `v1.3.0`
   `go-core-lib v1.x` tag when F10 starts; `v1.3.0` is today's tag, not a
   permanent pin. The workflow `uses:` SHA must be the peeled commit of
   the tag required in `go.mod`. Its channel API is available, but F10
-  passes no channel and publishes only strict stable pigo tags. No
+  passes no channel and publishes only strict stable gobble tags. No
   `selfupdate/cli`, `buildinfo` or `updatetea` import is presumed. The
   `Checker.Check`, `RunWith` and `Start`/`Stream` paths and existing
   acceptance fixtures remain; record the selected tag and SHA in this
@@ -661,7 +661,7 @@ Changes to F10:
    `uses:`. The `uses:` line names `maccavelli/go-selfupdate-lib`.
 2. **Surface.** Before binding, compare the released `selfupdate/cli` and
    `buildinfo` (since `v1.4.0`) with the MADR's update surface and with
-   pigo's `internal/buildinfo`. Record the choice in F10's execution
+   gobble's `internal/buildinfo`. Record the choice in F10's execution
    record.
 3. **Accept rewrite.** The running-copy end-to-end test is modelled on
    go-selfupdate-lib `selfupdate/e2e_running_test.go`.
