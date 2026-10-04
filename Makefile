@@ -9,7 +9,9 @@ SHELL := C:/PROGRA~1/Git/usr/bin/bash.exe
 # PowerShell. Recipes need grep, diff, cp, and mv.
 export PATH := C:/PROGRA~1/Git/usr/bin:$(PATH)
 
-CGO_ENABLED ?= 0
+# override + export: ambient CGO_ENABLED must not win for the make variable or recipe shells.
+override CGO_ENABLED := 0
+export CGO_ENABLED
 
 UNAME_S := $(shell uname -s 2>/dev/null || echo unknown)
 UNAME_M := $(shell uname -m 2>/dev/null || echo unknown)
