@@ -743,3 +743,12 @@ no tag, so the F4 release gate is unchanged.
 ## Amendment — 2026-10-04: the CLI is Kong, not Cobra or fang
 
 The owner directed that gobble's CLI is Kong, not Cobra or fang. This supersedes the Cobra/fang CLI choice in this record. The sentences above stay as written.
+
+## Amendment — 2026-10-04: go-tui-lib, go-selfupdate-lib, and canonical code
+
+Still `proposed`. The owner directed the rules below. The sentences above stay as written. The Kong amendment of this date is unchanged.
+
+* **TUI.** The TUI uses `go-tui-lib` for all core TUI functionality. gobble does not reimplement core TUI. This supersedes the Charm TUI row's "extracting shared widgets into go-tui-lib as they settle" and the 2026-10-02 F9 note that gobble owns the transcript, tool cards, permission dialog, editor, and session controls as local core TUI. Those sentences stay as dated history. Where `go-tui-lib` does not yet export a core behaviour, gobble waits for the library rather than reimplementing it. `internal/tui` remains an ACP client.
+* **Self-update.** Self-update uses `go-selfupdate-lib`. gobble does not reimplement self-update. The 2026-10-03 F10 binding of `github.com/maccavelli/go-selfupdate-lib/selfupdate` already chose the library; it did not say that gobble must not reimplement the updater.
+* **Canonical code.** As much code as possible is canonical: use the sibling libraries and the standard library rather than local copies. This does not change the meaning of "canonical" in the companion command table.
+* **Already recorded.** Code stays Go 1.27.1, idiomatic, and modular under 0004-MADR. This record does not change that. The CLI stays Kong.

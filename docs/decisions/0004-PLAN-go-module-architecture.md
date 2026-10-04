@@ -578,3 +578,10 @@ committed.
 **2026-10-04 — the CLI is Kong, not Cobra or fang.** The owner directed that gobble's CLI is Kong, not Cobra or fang. This supersedes the Cobra/fang CLI choice in this record. The sentences above stay as written.
 
 **2026-10-04 — Phase 1 wire fallback and verify-build-metadata.** Go 1.27.1 removed the `json:",unknown"` tag option and ignores it. A probe of that tag dropped the extra member and marshaled `"Unknown":null`. Session entries that must round-trip unknown members use a `jsontext.Value` field tagged `json:",embed"`. `verify-build-metadata` stays a no-op until `cmd/gobble/main.go` exists (Phase 2). Phase 1 creates the package directory without that file. The CGO rules are unchanged: ship targets stay off, and `make race` stays on.
+
+**2026-10-04 — go-tui-lib, go-selfupdate-lib, and canonical code.** Follows the amendment of this date in 0004-MADR. No new phases. The sentences above stay as written.
+
+* **TUI.** Later TUI work uses `go-tui-lib` for all core TUI functionality. gobble does not reimplement core TUI. This supersedes the 2026-10-02 line that F9 selects `go-tui-lib` only for workspace use. Phase 1 still does not import it; the import lands with the TUI phase in 0005-PLAN. Where a core behaviour is not in the selected tag yet, that phase waits for the library rather than copying it locally.
+* **Self-update.** Self-update uses `go-selfupdate-lib`. gobble does not reimplement self-update. The 2026-10-03 reading of later phases already names that module.
+* **Canonical code.** As much code as possible is canonical: use the sibling libraries and the standard library rather than local copies.
+* **Already recorded.** The module stays Go 1.27.1, idiomatic, and modular (Goal; Phase 0 `go 1.27.1`). The CLI stays Kong, per the amendment above. This note does not restore Cobra or fang and does not edit those sentences.

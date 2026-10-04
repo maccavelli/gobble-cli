@@ -667,3 +667,10 @@ Changes to F10:
    go-selfupdate-lib `selfupdate/e2e_running_test.go`.
 
 **2026-10-04 — the CLI is Kong, not Cobra or fang.** The owner directed that gobble's CLI is Kong, not Cobra or fang. This supersedes the Cobra/fang CLI choice in this record. The sentences above stay as written.
+
+**2026-10-04 — go-tui-lib, go-selfupdate-lib, and canonical code.** Follows the amendment of this date in 0005-MADR and 0004-MADR. No new phases. The sentences above stay as written.
+
+* **F9.** The TUI uses `go-tui-lib` for all core TUI functionality. gobble does not reimplement core TUI. This supersedes the 2026-10-02 F9 instruction to implement the ACP transcript, tool cards, permission dialog, editor, and pickers in gobble as core TUI. F9 still selects a corrected tested tag before adding the module, and `internal/tui` alone imports `go-tui-lib`. Where that tag lacks a core behaviour, F9 waits for the library rather than copying it.
+* **F10.** Self-update uses `go-selfupdate-lib`. gobble does not reimplement self-update. The 2026-10-03 pin of `github.com/maccavelli/go-selfupdate-lib` already named the module.
+* **Canonical code.** As much code as possible is canonical: use the sibling libraries and the standard library rather than local copies.
+* **Already recorded.** Implementation stays Go 1.27.1, idiomatic, and modular under 0004-PLAN. The CLI stays Kong, per the amendment above. This note does not restore Cobra or fang and does not edit those sentences.
