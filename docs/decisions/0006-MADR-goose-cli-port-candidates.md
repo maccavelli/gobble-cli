@@ -42,172 +42,165 @@ The goose checkout on MAC420 was read, not executed.
 - `update` in `crates/goose-cli/src/commands/update.rs` bails when feature `disable-update` is set, bails on `riscv64` because no release artifacts are published, otherwise downloads `stable` or `canary` from `https://github.com/aaif-goose/goose/releases/download/{tag}/{asset}`, verifies SLSA provenance via Sigstore, extracts with path-traversal checks, replaces the current executable, copies DLLs on Windows, and if `reconfigure` is set runs the current executable with argument `configure`. `Cargo.toml` puts `update` in default features and defines an empty `disable-update` feature. The `update` feature pulls in `sigstore-verify` and `snap`.
 - `handle_doctor` in `crates/goose-cli/src/commands/doctor.rs` builds a session with `no_session: true` and `interactive: true`, then calls `session.interactive(Some("/doctor".to_string()))`.
 - `handle_info` in `crates/goose-cli/src/commands/info.rs`, when `check` is true, calls `check_provider` and returns an error if that check fails. The comment in that function says the non-zero status is so `goose info --check` can be a pre-flight verifier.
-- `main.rs` on Windows calls `console::Term` color detection before the Tokio runtime, with a comment that this sets `ENABLE_VIRTUAL_TERMINAL_PROCESSING` so spinners do not print as repeated lines. The CLI thread is started with an 8 MiB stack.
+- `main.rs` on Windows calls `enable_windows_vt_processing` before the Tokio runtime. That function calls `console::Term::stdout()` and `console::Term::stderr()` `colors_supported()`. The comment says this sets `ENABLE_VIRTUAL_TERMINAL_PROCESSING` so spinners do not print as repeated lines. The CLI thread is started with `stack_size(8 * 1024 * 1024)`, an 8 MiB stack.
+- `parse_run_input` in `cli.rs`: `--instructions` of `-` reads stdin with `.expect("Failed to read from stdin")` and keeps `input_opts.system`; any other path sets `additional_system_prompt` to `None` and calls `std::process::exit(1)` if the file cannot be read; `--text` keeps `system`.
+- `Paths::path_root` reads `GOOSE_PATH_ROOT` and `validated_path_root` keeps only an absolute path (`crates/goose/src/config/paths.rs`).
+- `setup_logging` in `crates/goose-cli/src/logging.rs` sets `console: false` and `json: true`. `prepare_log_directory(component, true)` joins a `%Y-%m-%d` directory, and `cleanup_old_logs` deletes directories older than `14 * 24 * 60 * 60` seconds (`crates/goose/src/logging.rs`). Neither file mentions redaction.
+- `Agent::reply` calls `execute_command` only when `use_state_machine` is false (`crates/goose/src/agents/agent.rs`). The match is in `crates/goose/src/agents/execute_commands.rs`.
+- `shutdown_signal` is defined twice under `cfg` in `crates/goose-cli/src/signal.rs`. A search for `shutdown_signal(` under `crates/` found no callers.
 - `crates/goose-cli/src/bin/generate_manpages.rs` returns immediately on `target_os = "windows"`. Otherwise it walks the clap command and writes ROFF man pages.
 - `crates/goose-cli/src/commands/term.rs` `Shell` is `Bash`, `Zsh`, `Fish`, `Nu`, `Powershell`. The bash and zsh templates export `AGENT_SESSION_ID`, alias `@goose` and `@g` to `term run`, and install a preexec hook that runs `term log` for other commands. Both have an optional command-not-found handler that sends the unknown command to `term run`. `TermCommand::Log` is `hide = true`.
 - `ServePlatform` is `Cli` (default) or `Desktop`, mapped to `GoosePlatform::GooseCli` or `GoosePlatform::GooseDesktop` (`cli.rs`). That is the only desktop coupling read on this surface.
 
-Inferences, separate from the measurements: gobble should copy the shape of a few of these commands and none of the Rust. Kong's completion shells, Kong man-page support, the go-selfupdate-lib channel API, and gobble's existing skill roots were not inspected. Those are marked **[unverified]** where a decision would depend on them.
+Inferences, separate from the measurements: this record proposes two mechanics and refuses several copies. It does not copy Rust. Kong's completion shells and Kong man-page support were not inspected and stay **[unverified]**. `docs/architecture.md` says go-selfupdate-lib gained opt-in prerelease channels in `v1.3.0`; that library's source was not opened. `docs/decisions/0003-MADR-gobble-product-identity.md` names `.agents/skills` and `~/.agents/skills`. A gobble token counter was not looked up **[unverified]**.
 
 ### Findings
 
-F1. No subcommand is the product. `cli()` sends `None` to `handle_default_session`, which either configures (no config file) or starts an interactive session (`crates/goose-cli/src/cli.rs`). Consequence: gobble's native CLI should do the same, and a missing config must not fall through into a session.
+F1. No subcommand is the product. `cli()` sends `None` to `handle_default_session`, which either configures (no config file) or starts an interactive session (`crates/goose-cli/src/cli.rs`). That default is a code fact. Copying it (bare goose-as-default-session) is rejected in D6. It is not proposed work.
 
-F2. Interactive and one-shot entry points share flag groups. `Session` and `Run` both flatten `SessionOptions`, `ExtensionOptions`, and `ModelOptions` (`crates/goose-cli/src/cli.rs`). Consequence: gobble should declare model, provider, and limit flags once and attach that set to both commands. Two hand-copied Kong flag lists will drift.
+F2. Interactive and one-shot entry points share flag groups. `Session` and `Run` both flatten `SessionOptions`, `ExtensionOptions`, and `ModelOptions` (`crates/goose-cli/src/cli.rs`). Shared flag groups are a code fact. They are not chosen work, and they are not a Phase 2 step.
 
-F3. One-shot input is exclusive and the output is machine-readable. `instructions` (help text: `-` means stdin), `--text`, and `--recipe` conflict. `output_format` is `text`, `json`, or `stream-json`. `--interactive` continues into the session; `--no-session` skips persistence (`crates/goose-cli/src/cli.rs`, `InputOptions`, `OutputOptions`, `RunBehavior`). Consequence: a one-shot command with text, file, and stdin, plus `text` and `json`, is worth having. Recipes, sub-recipes, and `--render-recipe` are a goose product, not a CLI mechanic.
+F3. One-shot input is exclusive, and a file path drops `--system`. `instructions`, `--text` (`input_text`), and `--recipe` conflict on `InputOptions` (`crates/goose-cli/src/cli.rs`). `parse_run_input` in that file: a path passed to `--instructions` sets `additional_system_prompt` to `None`; `"-"` and `--text` keep `input_opts.system` by cloning it. A stdin read failure panics via `.expect("Failed to read from stdin")`. A missing instruction file calls `std::process::exit(1)`. `output_format` is `text`, `json`, or `stream-json`. `--interactive` continues into the session; `--no-session` skips persistence (`OutputOptions`, `RunBehavior`). One-shot exclusivity is a code fact. It is not chosen work and not a Phase 2 step. Do not copy the `.expect` panic. Recipes, sub-recipes, and `--render-recipe` are a goose product, not a CLI mechanic.
 
-F4. Session bookkeeping is a real command family, and most of it is optional. `SessionCommand` covers list (text or json, working directory, limit, sort), remove, export (markdown, json, yaml, html), import of a goose export or a Claude Code, Codex, or Pi jsonl, diagnostics, and rename. `fork` and `edit` both require `resume` (`crates/goose-cli/src/cli.rs`). Consequence: list, resume, rename, and export to markdown and json are the part worth leveraging. Foreign-transcript import, html, yaml, diagnostics, fork, and edit-before-resume are not part of this proposal.
+F4. Session bookkeeping is a real command family, and most of it is optional. `SessionCommand` covers list (text or json, working directory, limit, sort), remove, export (markdown, json, yaml, html), import of a goose export or a Claude Code, Codex, or Pi jsonl, diagnostics, and rename. `fork` and `edit` both require `resume` (`crates/goose-cli/src/cli.rs`). List, resume, and rename are code facts. They are not chosen work and not a Phase 2 step. Export, foreign-transcript import, html, yaml, diagnostics, fork, and edit-before-resume are not part of this proposal.
 
-F5. Shell completion is a subcommand that prints a script. Shells are bash, zsh, fish, powershell (`pwsh`), nushell (`nu`), and elvish, with `--bin-name` defaulting to `goose` (`crates/goose-cli/src/cli.rs`, `CompletionShell`). Consequence: gobble should grow `completion` on Kong, not by embedding clap. Which of those shells Kong can emit is **[unverified]**.
+F5. Shell completion is a subcommand that prints a script. `CompletionShell` is bash, elvish, fish, powershell (alias `pwsh`), nu (alias `nushell`), and zsh. `CompletionShell::generate` writes the script through clap's generator, and `cli()` calls it for `Command::Completion`, writing stdout (`crates/goose-cli/src/cli.rs`). `--bin-name` defaults to `goose`. A unit test parses `completion nushell`. The proposed scope is a Kong subcommand that prints a script for bash, zsh, fish, and powershell only. Not nu or elvish until Kong is shown to emit them. Do not call clap_complete. Which of those shells Kong emits is **[unverified]**. `docs/decisions/0004-PLAN-go-module-architecture.md` Phase 2 already names a Kong `completion` subcommand; this finding does not add a second one.
 
-F6. The interactive prompt is a line editor, not a TUI. `get_input` uses rustyline, keeps history, completes slash commands and file names (`crates/goose-cli/src/session/completion.rs`, `GooseCompleter`), clears a non-empty line on Ctrl+C, and exits on a second Ctrl+C or on EOF. Ctrl+J inserts a newline unless `GOOSE_CLI_NEWLINE_KEY` sets another character, and `m` and `c` are rejected (`crates/goose-cli/src/session/input.rs`). `/edit` opens `$GOOSE_PROMPT_EDITOR`, then `$VISUAL`, then `$EDITOR`. Consequence: native CLI mode needs those behaviors. It must not get them by porting rustyline, and it must not get them by calling go-tui-lib.
+F6. The interactive prompt is a line editor, not a TUI. `get_input` uses rustyline, keeps history, completes slash commands and file names (`crates/goose-cli/src/session/completion.rs`, `GooseCompleter`), clears a non-empty line on Ctrl+C, and exits on a second Ctrl+C or on EOF. Ctrl+J inserts a newline unless `GOOSE_CLI_NEWLINE_KEY` sets another character, and `m` and `c` are rejected (`crates/goose-cli/src/session/input.rs`). `/edit` opens `$GOOSE_PROMPT_EDITOR`, then `$VISUAL`, then `$EDITOR`. The line editor is a code fact. It is not chosen work and not a Phase 2 step. Do not get it by porting rustyline, and do not get it by calling go-tui-lib. TUI stays go-tui-lib.
 
-F7. Windows paste is called out because bracketed paste is absent. `paste.rs` treats a queued key burst as a paste and does not submit each embedded newline (`crates/goose-cli/src/session/paste.rs`). Consequence: the line reader chosen for gobble has to make the same guarantee on Windows. The chip UI is not the requirement.
+F7. Windows paste is called out because bracketed paste is absent. `paste.rs` treats a queued key burst as a paste and does not submit each embedded newline (`crates/goose-cli/src/session/paste.rs`). Windows paste behavior is a code fact about goose. It is not chosen work and not a Phase 2 step. The chip UI is not a requirement.
 
-F8. Slash commands are two systems. The terminal parser is a match in `input.rs` and turns an unknown slash line into a user message. The library registry in `crates/goose/src/slash_commands/slash_command.rs` merges builtins, recipes, and skills with builtin, then recipe, then skill, and is what ACP lists. The names are not the same set (the library test includes `doctor`, `goal`, and `grind`; the CLI match does not). Consequence: gobble should have one registry owned outside the CLI binary. Goose's "unknown slash becomes a chat message" behavior is not worth copying.
+F8. Slash handling is two matches, and they are not the same set. In `crates/goose-cli/src/session/input.rs`, `get_input` sends a leading `/` to `handle_slash_command`. The `_` arm returns `None`, and `get_input` turns that `None` into `InputResult::Message`, so the slash text is kept. In `crates/goose/src/agents/agent.rs`, `Agent::reply` calls `execute_command` before the model turn when `use_state_machine` is false. When `use_state_machine` is true, `reply` returns `reply_with_state_machine` first and this call does not run. That other path was not traced **[unverified]**. `execute_command` in `crates/goose/src/agents/execute_commands.rs` matches `prompts`, `prompt`, `compact`, `clear`, `skills`, `doctor`, `status`, `goal`, and `grind`, then a recipe, then a skill. `Ok(None)` covers both text that is not a slash command (`parse_slash_command` returns none) and a name that misses recipe and skill. The `Ok(None)` arm in `reply` stores the user message and continues the turn. A recipe or skill error string becomes an assistant message, not a user message. `handle_slash_command` does not match `doctor`, `goal`, or `grind`. The ACP list in `crates/goose/src/slash_commands/slash_command.rs` is neither of these matches. Proposed rule, not accepted and not a Phase 2 command: one registry outside the CLI binary, and an unknown slash is an error. Do not copy either match.
 
-F9. `configure` is an interactive wizard with no non-interactive subcommand. It errors when stdin is not a terminal (`crates/goose-cli/src/commands/configure.rs`). `Command::Configure` takes no arguments (`crates/goose-cli/src/cli.rs`). The string `goose configure set` appears only in editor help (`input.rs`). Consequence: gobble's `configure` should refuse a non-TTY with a non-zero exit. Flags and files are how non-interactive config is set. The provider-search wizard, telemetry consent, and Tetrate signup in that file are not candidates.
+F9. `configure` is an interactive wizard with no non-interactive subcommand. It errors when stdin is not a terminal (`crates/goose-cli/src/commands/configure.rs`). `Command::Configure` takes no arguments (`crates/goose-cli/src/cli.rs`). The string `goose configure set` appears only in editor help (`input.rs`). TTY-only configure is a code fact. It is not chosen work and not a Phase 2 step. The provider-search wizard, telemetry consent, and Tetrate signup in that file are not candidates.
 
-F10. `skills list` is a presentation over filesystem discovery. The command prints name, a 50-character description, two token counts, and a path (`crates/goose-cli/src/commands/skills.rs`). Discovery walks `SKILL.md` under project `.agents/skills`, `.goose/skills`, `.claude/skills`, then home and config dirs including `.agents/skills` and `.claude/skills` (`crates/goose/src/skills/mod.rs`). `validate_skill_name` is the agentskills-shaped constraint (lowercase, digits, hyphens, length at most 64). Consequence: a `skills list` of name, description, and path is worth having. Token columns need a counter gobble already has; that counter was not looked up **[unverified]**. Adding `.goose/skills` only to match goose is not.
+F10. `skills list` is a presentation over filesystem discovery. The command prints name, a 50-character description, two token counts, and a path (`crates/goose-cli/src/commands/skills.rs`). Discovery walks `SKILL.md` under project `.agents/skills`, `.goose/skills`, `.claude/skills`, then home and config dirs including `.agents/skills` and `.claude/skills` (`crates/goose/src/skills/mod.rs`). `validate_skill_name` is the agentskills-shaped constraint (lowercase, digits, hyphens, length at most 64). A gobble token counter was not looked up **[unverified]**. `docs/decisions/0003-MADR-gobble-product-identity.md` already names `.agents/skills` and `~/.agents/skills`. Adding `.goose/skills` only to match goose is not proposed. Porting goose's `skills` command is rejected in D6.
 
-F11. `update` is a full installer, not a CLI wrapper. It selects a platform asset, downloads a GitHub release, checks Sigstore SLSA provenance, replaces the binary, and can re-exec `configure` (`crates/goose-cli/src/commands/update.rs`). The feature flag `disable-update` removes the capability (`crates/goose-cli/Cargo.toml`). Consequence: do not port any of that. The only idea to keep is a single `update` subcommand that a build can omit, implemented by go-selfupdate-lib. Whether that library has a canary or channel switch is **[unverified]**.
+F11. `update` is a full installer, not a CLI wrapper. It selects a platform asset, downloads a GitHub release, checks Sigstore SLSA provenance, replaces the binary, and can re-exec `configure` (`crates/goose-cli/src/commands/update.rs`). The feature flag `disable-update` removes the capability (`crates/goose-cli/Cargo.toml`). Goose's Sigstore updater is rejected (D6). Self-update stays go-selfupdate-lib. `docs/architecture.md` says that library gained opt-in prerelease channels in `v1.3.0`. This pass did not open the library source. Do not add a canary flag to match goose.
 
 F12. `term` is shell integration, not a subcommand of the REPL. Init scripts alias `@goose` and `@g`, log every other command via a hidden `term log`, and can send unknown commands to goose (`crates/goose-cli/src/commands/term.rs`). Consequence: do not adopt it for the native CLI. The strongest reason to want it, a per-terminal session without entering the REPL, does not outweigh logging every shell command.
 
-F13. `doctor` is not a diagnostic command. It injects the string `/doctor` into an interactive session (`crates/goose-cli/src/commands/doctor.rs`). `info --check` actually calls the provider and returns an error on failure (`crates/goose-cli/src/commands/info.rs`). Consequence: copy the `info --check` shape. Do not copy doctor-as-slash-injection.
+F13. `doctor` is not a diagnostic command. It injects the string `/doctor` into an interactive session (`crates/goose-cli/src/commands/doctor.rs`). `info --check` actually calls the provider and returns an error on failure (`crates/goose-cli/src/commands/info.rs`). `info --check` is a code fact. It is not chosen work and not a Phase 2 step. Do not copy doctor-as-slash-injection.
 
-F14. Help text is the source of man pages, and generation is skipped on Windows (`crates/goose-cli/src/bin/generate_manpages.rs`). Consequence: gobble's command help should stay on the Kong definitions. Emitting ROFF from Kong was not checked **[unverified]** and is not a commitment.
+F14. Help text is the source of man pages, and generation is skipped on Windows. `main` in `crates/goose-cli/src/bin/generate_manpages.rs` returns `Ok(())` immediately when `target_os` is `windows`. Man pages are rejected as chosen work (D6). Emitting ROFF from Kong was not checked **[unverified]**.
 
-F15. The process enables Windows virtual-terminal processing before any UI runs (`crates/goose-cli/src/main.rs`). Consequence: the native CLI should do the equivalent once at startup, using the standard library or an existing sibling, so ANSI status updates in place on Windows Console Host.
+F15. The process enables Windows virtual-terminal processing on stdout and stderr before any UI runs (`enable_windows_vt_processing` in `crates/goose-cli/src/main.rs`). The same `main` then starts the CLI thread with an 8 MiB stack. Enabling that processing once, in Go, is proposed in D2. Do not depend on the Rust `console` crate. Do not copy the 8 MiB stack workaround.
 
 F16. The same binary registers product and server commands that are not terminal-CLI mechanics: `acp`, `serve`, `roam`, `mcp`, `gateway`, `schedule`, `recipe`, `review`, `local-models`, and `plugin` (`crates/goose-cli/src/cli.rs`). `review` is a diff-review orchestrator. `serve` can label itself desktop via `ServePlatform`. Consequence: none of these are port candidates for native CLI mode.
 
-F17. Operator commands are hidden from default help. `validate-extensions` and `mcp-probe` set `hide = true`, as does `term log` (`crates/goose-cli/src/cli.rs`, `crates/goose-cli/src/commands/term.rs`). Consequence: the pattern is available if gobble later needs a debug command. It is not required to copy these three.
+F17. Operator commands are hidden from default help. `validate-extensions` and `mcp-probe` set `hide = true`, as does `term log` (`crates/goose-cli/src/cli.rs`, `crates/goose-cli/src/commands/term.rs`). Hidden commands are rejected as chosen work (D6). Do not copy `validate-extensions`, `mcp-probe`, or `term log`.
+
+F18. An absolute `GOOSE_PATH_ROOT` replaces goose's config, data, and state roots. `Paths::path_root` reads that variable and `validated_path_root` keeps only an absolute path (`crates/goose/src/config/paths.rs`). Otherwise `get_dir` uses the `etcetera` strategy with top-level domain `Block` and app name `goose`. Gobble's directory table is already specified: config, data, state, cache, and secrets, plus `GOBBLE_HOME` and the per-role overrides (`docs/decisions/0003-MADR-gobble-product-identity.md`, Directories). `docs/decisions/0004-PLAN-go-module-architecture.md` Phase 2 step 3 is `internal/appdirs` for that table, including `config path`. Do not add a `GOOSE_PATH_ROOT`-style override. Keep that table.
+
+F19. Goose CLI logging is a dated folder and a 14-day directory delete, with no redaction. `setup_logging` always sets `console: false` (`crates/goose-cli/src/logging.rs`). `build_logging_subscriber` calls `prepare_log_directory(component, true)`, which joins `%Y-%m-%d`, and `cleanup_old_logs` deletes subdirectories older than 14 days (`crates/goose/src/logging.rs`). A console layer is added only when `config.console` is true; the CLI call does not set that. Those two files do not redact. That `console: false` setting is not gobble's rule that `gobble acp` must not log to stderr. Phase 2 logging, already specified, is `slog`, a rolling file in the state directory, a redacting `ReplaceAttr`, and no stderr handler when the process is `gobble acp` (`docs/decisions/0004-PLAN-go-module-architecture.md` Phase 2 step 4). `docs/decisions/0005-MADR-v1-feature-scope.md` also says `slog` rolling files with redaction. Do not adopt date log folders or the 14-day cleanup. Keep that Phase 2 logging.
+
+F20. Goose has no exit-code table. `std::process::exit(1)` is used from `parse_run_input` and elsewhere in `crates/goose-cli/src/cli.rs`, and from `crates/goose-cli/src/session/builder.rs`. `shutdown_signal` in `crates/goose-cli/src/signal.rs` has no callers in a `crates/` search. Gobble's planned codes are 0 ok, 1 runtime failure, 2 usage, 3 authentication, 4 cancelled, and 130 when SIGINT ended the process (`docs/decisions/0004-PLAN-go-module-architecture.md` Phase 2 step 6). `gobble update --check` maps update-available to 10 (`docs/decisions/0005-MADR-v1-feature-scope.md`, Self-update). `internal/cli/exit.go` is not in the tree, so the table is a document, not an implementation found in this pass. Keep those codes. Do not copy `process::exit(1)`, the stdin `.expect` panic, or `shutdown_signal`.
 
 ## Decision Drivers
 
-- Native CLI mode is the default. Bare invocation has to do something a terminal user expects, which in goose is a session, not a help page.
 - Kong is already chosen. A second command parser is out of the question.
-- TUI mode already has a library. The native CLI must stay a line-oriented program.
-- Self-update already has a library. Goose's updater is the thing most likely to be copied under time pressure, because it looks finished, and it is the thing this record refuses.
-- One definition for a flag or a slash command. Goose currently has two slash lists; that is the defect, not the model.
-- Machine-readable output for the one-shot path, because scripts cannot scrape a REPL.
-- Windows is a first-class terminal (VT processing and paste), not a port to do later.
-- No local copy of goose, and no behavior whose only source is an unread gobble file. This pass did not open `gobble-cli`.
+- TUI mode already has a library (go-tui-lib). The native CLI must stay a line-oriented program.
+- Self-update already has a library (go-selfupdate-lib). Goose's Sigstore updater is refused.
+- Completion is already named as a Kong subcommand in `0004-PLAN` Phase 2. This record proposes the shell set and the print-a-script shape. It does not add a second command.
+- Windows virtual-terminal processing is a startup fact in goose. The Go equivalent is proposed here and was not a step in the Phase 2 list that was read.
+- One definition for a flag or a slash command, if those are ever accepted. Goose currently has two slash matches; that is the defect, not the model. The one-registry rule is not a Phase 2 command.
+- Later mechanics stay undecided and out of Phase 2: one-shot exclusivity, shared flag groups, session list/resume/rename, the line editor, TTY-only configure, and `info --check`.
+- No local copy of goose. A claim that was not re-opened in this pass is not restated as new fact.
 
 ## Considered Options
 
-- A — Adopt the terminal mechanics in D1–D16 and refuse the product command tree.
+- A — Adopt the wider terminal mechanics (bare session, shared flags, one-shot, session list/resume/rename, line editor, TTY configure, skills list, `info --check`) and refuse the product command tree.
 - B — Port the goose-cli command tree command for command, including `term`, `recipe`, `schedule`, `review`, and `update`.
 - C — Take nothing from goose. Design the native CLI only from Kong's defaults.
 - D — Ship shell integration (`term`) and a thin one-shot `run` first, and postpone the in-process session.
 - E — Add clap, Cobra, or fang as a second command parser (rejected)
+- F — Propose only a completion script (bash, zsh, fish, powershell) and Windows virtual-terminal processing. Leave the later mechanics undecided. Reject the path-root override, goose log layout, goose exit behavior, bare goose-as-default-session, man pages, hidden commands, term aliases, the Sigstore updater, and the product command tree.
 
 ## Decision Outcome
 
-Option A is the proposed outcome. D1–D16 are proposed commitments. They are not accepted. Mac has not approved them. A later PLAN implements only the ones that are accepted, by these numbers.
+Option F is the proposed outcome. It is not accepted. Mac did not pick it. D1 and D2 are the proposed scope. They are not accepted work. D3 through D6 are rejections, not work to build. The undecided list is not a phase and not a PLAN.
 
 ### The decisions
 
-D1. Keep Kong as the only command parser for the native CLI. Do not add a second command parser, and do not translate goose's derive macros into Go.
+D1. Proposed, not accepted. A completion subcommand prints a script, like `CompletionShell::generate` and `Command::Completion` in `crates/goose-cli/src/cli.rs`. Shells: bash, zsh, fish, and powershell only. Not nu or elvish until Kong is shown to emit them. Do not call clap_complete. Implement it with Kong. `docs/decisions/0004-PLAN-go-module-architecture.md` Phase 2 already names a Kong `completion` subcommand. This decision sets the shell set and the print-a-script shape. It does not add a second command.
 
-D2. With no subcommand, start an interactive session when configuration exists. When it does not, run configure and do not start a session.
+D2. Proposed, not accepted. Enable Windows virtual-terminal processing on stdout and stderr once in `cmd/gobble/main.go` before any UI, for the same reason as `enable_windows_vt_processing` in `crates/goose-cli/src/main.rs`: without it, spinners print as repeated lines on Windows Console Host. Use the Go standard library or an existing sibling library. Do not depend on the Rust `console` crate. Do not copy the 8 MiB stack workaround (`stack_size(8 * 1024 * 1024)` in that `main`). This step is not in the Phase 2 list read in `0004-PLAN`. It is still only proposed.
 
-D3. Define model, provider, and turn or tool limits once, and attach that flag set to both the interactive session command and the one-shot command.
+D3. Rejected. No `GOOSE_PATH_ROOT`-style override. Keep the appdirs table and `config path` already specified in `docs/decisions/0003-MADR-gobble-product-identity.md` and in `0004-PLAN` Phase 2 step 3.
 
-D4. The one-shot command accepts a prompt as text, a file, or stdin (`-`), and those three sources are mutually exclusive. It prints `text` or `json`. It may take a flag to continue in the interactive session after the first turn. It does not grow a recipe runner.
+D4. Rejected. No date log folders and no 14-day cleanup. Keep Phase 2 logging: `slog`, a rolling file, redaction, and no stderr handler when the process is `gobble acp`. Goose `setup_logging` has no redaction and always sets `console: false`. That is not the acp rule.
 
-D5. Session commands in this proposal are list, resume, rename, and export to markdown and json. Do not add foreign-transcript import, html or yaml export, diagnostics, fork, or edit-before-resume under this record.
+D5. Rejected as a copy. Keep gobble exit codes 0, 1, 2, 3, 4, 130 on SIGINT, and 10 for `update --check`. Goose has no such table. Do not copy `process::exit(1)`, the stdin `.expect` panic in `parse_run_input`, or `shutdown_signal` (`crates/goose-cli/src/signal.rs` has no callers).
 
-D6. Add `completion <shell>` that writes a script to stdout, implemented with Kong, for bash, zsh, fish, and powershell. Add nushell or elvish only after Kong is shown to emit them.
+D6. Rejected. Do not adopt bare goose-as-default-session, man pages, hidden commands, term aliases, goose's Sigstore update, or these product commands: `acp`, `serve`, `roam`, `mcp`, `gateway`, `schedule`, `recipe`, `review`, `local-models`, `plugin`, and `skills`.
 
-D7. Interactive input uses a Go line-editing library, not a port of rustyline and not go-tui-lib. It must keep persistent history, complete slash commands, clear a non-empty line on Ctrl+C, offer a configurable insert-newline chord, and on Windows must not submit a multi-line paste once per embedded newline.
+The F8 rule is proposed and not accepted: one registry outside the CLI binary, and an unknown slash is an error. That rule is not a Phase 2 command. Do not copy either goose match.
 
-D8. Slash commands live in one registry outside the CLI binary. The native CLI consumes that registry. An unknown slash command is an error, not a chat message.
-
-D9. `configure` requires a terminal. On a non-TTY it exits non-zero and says why. Non-interactive configuration is flags or a file, not a `configure` subcommand copied from goose. Do not port goose's provider wizard.
-
-D10. `skills list` prints name, description, and path for discovered `SKILL.md` skills. Do not add a `.goose/skills` root for goose compatibility. Do not add token columns unless a token counter already exists in a sibling library.
-
-D11. The `update` subcommand calls go-selfupdate-lib and nothing else. Do not port goose's asset table, Sigstore verification, archive extraction, or re-exec of configure. A build may omit the command. Do not add a canary flag until that library is shown to have a channel.
-
-D12. Do not implement `term`, shell init scripts, command-not-found hooks, or per-terminal session aliases.
-
-D13. Add a non-interactive `info` command with a check flag that talks to the configured provider and exits non-zero on failure. Do not implement `doctor` by injecting a slash string into a session.
-
-D14. Enable Windows virtual-terminal processing once at process start in the native CLI.
-
-D15. Do not port `acp`, `serve`, `roam`, `mcp`, `gateway`, `schedule`, `recipe`, `review`, `local-models`, or `plugin` as native CLI commands.
-
-D16. Command help stays on the Kong definitions. Do not commit to man-page generation until a sibling or Kong itself is shown to emit them.
+Undecided, not chosen work, and not Phase 2: one-shot exclusivity (F3), shared flag groups (F2), session list, resume, and rename (F4), the line editor (F6, F7), TTY-only configure (F9), and `info --check` (F13). Those sentences describe code that was read. They are not a commitment.
 
 ### Consequences
 
-- Good: the native CLI gets a session, a one-shot, completion, a single slash list, a TTY-safe configure, a skills table, and a health check, without a second TUI or a second updater.
-- Bad: users coming from goose will not find `term`, recipes, scheduled jobs, review, or `goose update`'s canary channel. That gap is intentional.
-- Bad: D8 rejects goose's habit of sending unknown slash text to the model. People who liked that will call it a regression. It is a different product choice, made so a typo cannot spend a model call.
-- Risk: D7 depends on a line-editing library this pass did not select. If none of the sibling libraries can do Windows paste and history, the plan has to say so and stop, not copy `paste.rs`.
-- The commitment most likely to be broken under time pressure is D11. Goose's updater is self-contained and verifies provenance. Reimplementing "just the download" inside gobble would violate both this record and the existing self-update decision. The next most likely is D8, by hardcoding a second slash match in the CLI the way `input.rs` does.
+- Good: the proposed scope is two mechanics that were read in goose, without clap_complete, without the Rust `console` crate, and without the 8 MiB stack.
+- Good: `0004-PLAN` Phase 2 already names Kong `completion`. D1 only narrows the shells.
+- Bad: users coming from goose will not find `term`, recipes, a Sigstore updater, or a bare session that matches goose. That gap is intentional.
+- Bad: the F8 rule, if it is later accepted, rejects sending an unknown slash line to the model. It is not part of D1 or D2, and it is not a Phase 2 command.
+- Risk: D2 is easy to "solve" by depending on a wrapper shaped like the Rust `console` crate, or by copying the 8 MiB stack. Both are refused.
+- The refusal most likely to be broken under time pressure is D6's updater line, by reimplementing goose's download inside gobble. That would also violate the existing self-update decision.
 
 ### Confirmation
 
-These commands were not run. They are the checks a later accepted plan would run against gobble. Kong completion coverage beyond bash, zsh, fish, and powershell stays **[unverified]** until the first command below is actually executed.
+These commands were not run. They are checks for D1 and D2 only, and only after this proposal is accepted. Kong completion coverage beyond bash, zsh, fish, and powershell stays **[unverified]**. The undecided mechanics have no check here.
 
 ```text
-gobble --help
-  expected: interactive session is the default; help is available via a help flag or help command, not by refusing to start
-
-gobble
-  expected: non-zero and a TTY error when stdin is not a terminal and no config exists; otherwise an interactive prompt
-
-gobble run --text "ping" --output-format json
-gobble run - --output-format json < prompt.txt
-  expected: one JSON document on stdout; combining --text and a file fails at parse time
-
 gobble completion bash
 gobble completion powershell
-  expected: a script on stdout, exit 0
+  expected: a script on stdout, exit 0; nu and elvish are not required
 
-gobble skills list
-  expected: columns name, description, path; no .goose/skills root created
-
-gobble info --check
-  expected: non-zero when the provider is missing or rejects the check
-
-gobble update
-  expected: delegates to go-selfupdate-lib; the module graph does not contain a Sigstore or goose release downloader
+Windows Console Host, before any UI
+  expected: virtual-terminal processing is enabled on stdout and stderr; the module graph does not depend on the Rust console crate; the 8 MiB stack workaround is absent
 ```
 
 ## Pros and Cons of the Options
 
-### A — Adopt the terminal mechanics and refuse the product surface (chosen)
+### F — Propose completion and Windows VT only (chosen, proposed, not accepted)
 
-- Plus: matches the decisions already made (Kong, go-tui-lib, go-selfupdate-lib) and still takes the parts of goose that are actually about being a terminal program.
-- Plus: each proposed commitment maps to a file that was opened, so a later plan can close findings by number.
-- Minus: the result will not feel like goose. `term`, recipes, and the configure wizard are the parts a goose user notices first, and A leaves them behind.
-- Minus: D6 and D16 stop at the point where Kong's capabilities were not measured.
+- Plus: the strongest argument is scope. Two mechanics were read end to end, and neither requires copying clap, the Rust `console` crate, or goose's product tree.
+- Plus: D1 fits the Kong `completion` subcommand `0004-PLAN` Phase 2 already names, and only pins the shells.
+- Minus: session shape, one-shot input, the line editor, configure, and `info --check` stay undecided. A later record has to pick them, or not.
+- Minus: Mac has not accepted F. Status stays `proposed`.
+
+### A — Adopt the wider terminal mechanics and refuse the product surface
+
+- Plus: it would take the parts of goose that are about being a terminal program and still leave Kong, go-tui-lib, and go-selfupdate-lib in place.
+- Plus: each of those mechanics maps to a file that was opened.
+- Minus: it is not the proposed outcome. It would commit one-shot exclusivity, shared flags, session list/resume/rename, the line editor, TTY-only configure, and `info --check`, which this record leaves undecided and out of Phase 2.
+- Minus: it would also copy bare goose-as-default-session, which D6 rejects.
 
 ### B — Port the goose-cli command tree command for command
 
 - Plus: the strongest argument is fidelity. A user who knows `goose session --resume --fork`, `goose term init zsh`, and `goose update --canary` would find the same words, and the clap tree is a finished design rather than a guess.
 - Plus: shared option groups, hidden commands, and man pages would arrive together because they fall out of one parser definition.
 - Minus: it throws away Kong, reimplements self-update, and pulls servers, schedulers, recipes, and a diff-review orchestrator into the default CLI. That is a different product.
-- Minus: goose's own slash story is split across `input.rs` and `slash_commands`. Copying the tree would copy that split.
+- Minus: goose's slash story is split across `input.rs` and `execute_command`. Copying the tree would copy that split.
 
 ### C — Take no goose CLI ideas
 
 - Plus: the strongest argument is focus. Gobble's CLI constraints are already decided, and a blank Kong app cannot accidentally inherit goose's recipes, telemetry dialog, or shell hooks.
-- Plus: it avoids a long proposed-decision list that the owner has not accepted.
-- Minus: it discards measured answers to questions the native CLI still has, including what bare invocation does, how one-shot output is shaped, and how Windows paste and VT processing behave.
-- Minus: those questions would be re-investigated later, against the same goose tree or against nothing.
+- Plus: it avoids a proposed-decision list that the owner has not accepted.
+- Minus: it discards measured answers this record does use, including how completion is printed and why Windows Console Host needs virtual-terminal processing before any UI.
+- Minus: D1 and D2 would have to be re-investigated later against the same tree.
 
 ### D — Shell integration first, in-process session later
 
 - Plus: the strongest argument is that a terminal-native tool should live in the shell the user already has. `term init` plus `term run` gives a persistent session, aliases, and a prompt badge without building a line editor.
 - Plus: it dodges the rustyline and Windows-paste problem entirely.
 - Minus: the hook logs every command the user types (`term.rs`). That is a privacy and safety default, not an optional extra.
-- Minus: it postpones the actual default mode. Gobble's native CLI is the program the user runs, not a set of shell functions.
+- Minus: it postpones the actual default mode. Gobble's native CLI is the program the user runs, not a set of shell functions. D6 rejects term aliases.
+
+### E — Add clap, Cobra, or fang as a second command parser (rejected)
+
+- Plus: none that survives contact with the existing Kong decision. A second parser would make D1 call clap_complete, which this record forbids.
+- Minus: Kong is already the command parser. Completion and help stay on that definition.
 
 ## More Information
 
@@ -215,14 +208,17 @@ gobble update
 
 | Claim | Source |
 | --- | --- |
-| Assessed tree is `591edd47cf2cfea4957d720c607cf2a4def8673d` on `main`, origin `https://github.com/aaif-goose/goose.git`, clean relative to `origin/main` | `git rev-parse HEAD`, `git rev-parse --abbrev-ref HEAD`, `git remote get-url origin`, `git status -sb` on MAC420, 2026-10-04 |
+| Assessed tree is `591edd47cf2cfea4957d720c607cf2a4def8673d` on `main`, origin `https://github.com/aaif-goose/goose.git`, clean relative to `origin/main` | `git rev-parse HEAD`, `git rev-parse --abbrev-ref HEAD`, `git remote get-url origin`, `git status -sb` in `gitrepos/goose`, 2026-10-04 |
 | Commit subject and time `2026-10-02 15:03:24 +0000` (10:03 CT) | `git log -1` |
 | Bin `goose` depends on clap, clap_complete, rustyline, cliclack; features `update` and empty `disable-update` | `crates/goose-cli/Cargo.toml` |
 | No subcommand starts configure or an interactive session | `crates/goose-cli/src/cli.rs` `handle_default_session`, `cli` match arm `None` |
 | `Session` and `Run` share flattened option groups; run input sources conflict; output formats are `text`, `json`, `stream-json` | `crates/goose-cli/src/cli.rs` `SessionOptions`, `ExtensionOptions`, `ModelOptions`, `InputOptions`, `OutputOptions`, `RunBehavior` |
+| A path to `--instructions` drops `--system`; `"-"` and `--text` keep it; stdin failure panics with `.expect` | `crates/goose-cli/src/cli.rs` `parse_run_input` |
 | Session subcommands and resume, fork, edit, history flags | `crates/goose-cli/src/cli.rs` `SessionCommand`, `Command::Session` |
-| Completion shells and stdout generation | `crates/goose-cli/src/cli.rs` `CompletionShell`, `cli` match arm `Command::Completion` |
-| Slash match list; unknown slash becomes a message; Ctrl+C and newline key | `crates/goose-cli/src/session/input.rs` `get_input`, `handle_slash_command` |
+| Completion shells and stdout generation | `crates/goose-cli/src/cli.rs` `CompletionShell::generate`, `cli` match arm `Command::Completion` |
+| CLI slash match returns `None` on `_`, and `get_input` turns that into `InputResult::Message` | `crates/goose-cli/src/session/input.rs` `get_input`, `handle_slash_command` |
+| `Agent::reply` calls `execute_command` only when `use_state_machine` is false; the match names prompts, prompt, compact, clear, skills, doctor, status, goal, grind, then recipe, then skill; `Ok(None)` continues the turn | `crates/goose/src/agents/agent.rs` `reply`; `crates/goose/src/agents/execute_commands.rs` `execute_command` |
+| State-machine slash path | **[unverified]** — `reply_with_state_machine` was not traced |
 | In-session completion of prompts, modes, skills, models | `crates/goose-cli/src/session/completion.rs` `GooseCompleter` |
 | Windows paste is a key-burst collapse, not bracketed paste | `crates/goose-cli/src/session/paste.rs` module comment |
 | Library slash registry precedence and builtin names | `crates/goose/src/slash_commands/slash_command.rs` `merge_command_sources` and `lists_acp_safe_builtin_commands` |
@@ -232,23 +228,31 @@ gobble update
 | Updater downloads `stable` or `canary`, verifies Sigstore SLSA, replaces the binary, optional reconfigure | `crates/goose-cli/src/commands/update.rs` `update` |
 | `doctor` sends the string `/doctor` into a session | `crates/goose-cli/src/commands/doctor.rs` `handle_doctor` |
 | `info --check` calls the provider and fails the process on error | `crates/goose-cli/src/commands/info.rs` `handle_info` |
-| Windows VT processing at startup | `crates/goose-cli/src/main.rs` `enable_windows_vt_processing` |
-| Man pages generated from the CLI definition, skipped on Windows | `crates/goose-cli/src/bin/generate_manpages.rs` |
+| Windows VT processing on stdout and stderr; 8 MiB stack | `crates/goose-cli/src/main.rs` `enable_windows_vt_processing`, `stack_size(8 * 1024 * 1024)` |
+| Man pages generated from the CLI definition, return immediately on Windows | `crates/goose-cli/src/bin/generate_manpages.rs` |
 | `term` aliases, preexec logging, command-not-found handler | `crates/goose-cli/src/commands/term.rs` `BASH_CONFIG`, `ZSH_CONFIG`, `TermCommand` |
 | Product commands registered beside the REPL, including hidden ones | `crates/goose-cli/src/cli.rs` `Command` |
-| Kong completion shells, Kong man pages, go-selfupdate-lib channels, gobble skill roots, gobble token counter | **[unverified]** — not read in this pass |
+| `GOOSE_PATH_ROOT` must be absolute | `crates/goose/src/config/paths.rs` `path_root`, `validated_path_root` |
+| Dated log directory, 14-day cleanup, CLI `console: false`, no redaction in these files | `crates/goose-cli/src/logging.rs` `setup_logging`; `crates/goose/src/logging.rs` `prepare_log_directory`, `cleanup_old_logs` |
+| `shutdown_signal` has no callers; `process::exit(1)` exists on the run path | `crates/goose-cli/src/signal.rs`; search under `crates/`; `crates/goose-cli/src/cli.rs` `parse_run_input`; `crates/goose-cli/src/session/builder.rs` |
+| Gobble directory table and `GOBBLE_HOME` | `docs/decisions/0003-MADR-gobble-product-identity.md`, Directories |
+| Phase 2 appdirs, logging, Kong `completion`, exit codes 0, 1, 2, 3, 4, 130 | `docs/decisions/0004-PLAN-go-module-architecture.md` Phase 2 |
+| `update --check` exit 10 | `docs/decisions/0005-MADR-v1-feature-scope.md`, Self-update |
+| `internal/cli/exit.go` not in the tree | directory listing, 2026-10-04 |
+| Kong completion shells, Kong man pages, gobble token counter, `reply_with_state_machine` slash handling, go-selfupdate-lib source | **[unverified]** — not read in this pass. `docs/architecture.md` states prerelease channels in `v1.3.0` without this pass opening the library |
 
 ### Related records
 
-No PLAN is part of this proposal. The house location for an accepted copy would be `docs/decisions/0006-MADR-goose-cli-port-candidates.md` inside gobble-cli. This draft is not that file. It was written only at `/workspace/0006-MADR-goose-cli-port-candidates.md` because another pass is rewriting the repository. No gobble-cli record was amended, and no relative link into that repository is used here.
+No PLAN is part of this proposal. Do not create a `0006-PLAN`. This file is `docs/decisions/0006-MADR-goose-cli-port-candidates.md` in the gobble-cli repository. Status is proposed. It is not accepted.
 
 Already decided, and not re-opened by this record: Kong is the CLI library; the default mode is the native terminal CLI and core TUI is go-tui-lib; self-update is go-selfupdate-lib; Go 1.27.1; sibling libraries and the standard library rather than local copies.
 
 ### Open questions for the plan
 
-- Which sibling Go library, if any, provides line editing with history, completion, and Windows multi-line paste (F6, F7, D7). Not selected here. If none does, the plan stops at that gap instead of porting `paste.rs`.
-- Which completion shells Kong emits, in particular nushell and elvish (F5, D6). **[unverified]**.
-- Whether Kong or a sibling emits man pages (F14, D16). **[unverified]**.
-- Whether go-selfupdate-lib has a channel distinct from "latest" (F11, D11). **[unverified]**. Do not invent a `--canary` flag to match goose.
-- Whether gobble already discovers `.agents/skills` and `.claude/skills`, and whether a token counter already exists (F10, D10). **[unverified]** because `gobble-cli` was not opened.
-- Whether one-shot `json` is one document or a stream. Goose has both `json` and `stream-json` (F3). This proposal commits only to `text` and `json`. Streamed events wait for a later record.
+- Which sibling Go library, if any, provides line editing with history, completion, and Windows multi-line paste (F6, F7). Undecided. Not a Phase 2 step. If none does, a later record stops at that gap instead of porting `paste.rs`.
+- Which completion shells Kong emits, in particular nushell and elvish (F5, D1). **[unverified]**. D1 does not add them until that is shown.
+- Whether Kong or a sibling emits man pages (F14). **[unverified]**. D6 rejects man pages as chosen work.
+- go-selfupdate-lib channels. `docs/architecture.md` says opt-in prerelease channels arrived in `v1.3.0`. This pass did not open that source. Do not invent a `--canary` flag to match goose.
+- Whether a token counter already exists (F10). **[unverified]**. `.agents/skills` is already named in `0003-MADR`. Porting goose `skills` is rejected (D6).
+- How `reply_with_state_machine` treats a slash line (F8). **[unverified]**.
+- Whether one-shot `json` is one document or a stream. Goose has both `json` and `stream-json` (F3). Undecided. Not a Phase 2 step.

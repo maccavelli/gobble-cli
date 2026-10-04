@@ -8,7 +8,7 @@ A Git repository for a planned Go rewrite of the Pi coding-agent CLI. The
 planned binary name is `gobble`. The command stack is Kong. The configuration stack
 is Viper. gobble has two modes: a native terminal CLI mode, which is the default, and an enhanced terminal TUI mode. Core TUI is go-tui-lib on Charm v2. gobble does not reimplement core TUI. Where a core behaviour is not in the library yet, gobble waits rather than copying it. Self-update is go-selfupdate-lib. gobble does not reimplement self-update.
 
-The Go module exists. 0004-PLAN Phase 0 (`925ef0abf83e475c33b3ffae14685617b035639e`) and Phase 1 (`661b14e768407264a38687e2db99201cae2a04a1`) have run. The tree has the compile-only package skeleton, including `cmd/gobble` as a package comment. There is no process binary: Phase 2 has not run. Agent behaviour is not in the tree. `git ls-remote origin refs/heads/main` on 2026-10-04 returned `8e016ab53a5765b2c912fab338d873918b8eed36`.
+The Go module exists. 0004-PLAN Phase 0 (`925ef0abf83e475c33b3ffae14685617b035639e`) and Phase 1 (`661b14e768407264a38687e2db99201cae2a04a1`) have run. The tree has the compile-only package skeleton, including `cmd/gobble` as a package comment. There is no process binary: Phase 2 has not run. Agent behaviour is not in the tree. `git ls-remote origin refs/heads/main` on 2026-10-04 returned `c1f52a863d3fe2e19896ea4707b9115c915eb444`.
 
 ## Sibling sources
 
