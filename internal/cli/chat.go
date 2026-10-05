@@ -11,7 +11,7 @@ import (
 // ChatCmd is the default command (0008-MADR D1).
 type ChatCmd struct {
 	SharedFlags
-	Prompt []string `arg:"" optional:"" help:"Prompt words; @path attaches a file."`
+	Prompt []string `arg:"" optional:"" complete:"none" help:"Prompt words; @path attaches a file."`
 }
 
 // Run validates the flags, resolves the mode and composes the input. The

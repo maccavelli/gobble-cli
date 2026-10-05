@@ -1,0 +1,43 @@
+# bash completion for {{.Name}}, from `{{.Name}} completion bash`.
+# Install: add this line to ~/.bashrc, so the script always matches the binary:
+#   source <({{.Name}} completion bash)
+# Works with bash 3.2 and later; no bash-completion package is needed.
+_{{.Name}}() {
+    # The line up to the cursor. COMP_POINT counts characters from bash 4.4
+    # on, and bytes in bash 3.2 (both measured), so bash 3 cuts in bytes.
+    local line
+    if (( BASH_VERSINFO[0] < 4 )); then
+        line=$(LC_ALL=C; printf '%s' "${COMP_LINE:0:COMP_POINT}")
+    else
+        line=${COMP_LINE:0:COMP_POINT}
+    fi
+    local cur=${COMP_WORDS[COMP_CWORD]}
+    local out
+    out=$(GOBBLE_COMPLETE=bash GOBBLE_COMPLETE_PROTOCOL={{.Protocol}} \
+        GOBBLE_COMPLETE_LINE="$line" GOBBLE_COMPLETE_POINT=-1 GOBBLE_COMPLETE_CUR="$cur" \
+        command {{.Name}} 2>/dev/null) || return
+    local l directive=0
+    local -a comps=()
+    while IFS= read -r l; do
+        case $l in
+            :*) directive=${l#:} ;;
+            *) comps+=("${l%%$'\t'*}") ;;
+        esac
+    done <<<"$out"
+    if (( directive & 1 )); then
+        return
+    fi
+    if type compopt >/dev/null 2>&1; then
+        (( directive & 2 )) && compopt -o nospace
+        (( directive & 32 )) && compopt -o nosort 2>/dev/null
+    fi
+    COMPREPLY=()
+    local c
+    for c in "${comps[@]}"; do
+        case $c in
+            *[[:space:]\'\"\\\$\`\(\)\&\;\|\<\>\*\?\!]*) COMPREPLY+=("$(printf '%q' "$c")") ;;
+            *) COMPREPLY+=("$c") ;;
+        esac
+    done
+}
+complete -F _{{.Name}} {{.Name}} {{.Name}}.exe

@@ -1,0 +1,29 @@
+# fish completion for {{.Name}}, from `{{.Name}} completion fish`.
+# Install: add this line to ~/.config/fish/config.fish, so the script always
+# matches the binary:
+#   {{.Name}} completion fish | source
+function __{{.Name}}_complete
+    # fish 4 has -x (tokens as arguments); fish 3 has only -o.
+    set -l tokens (commandline -xpc 2>/dev/null; or commandline -opc)
+    set -e tokens[1]
+    set -l cur (commandline -ct)
+    set -l out (env GOBBLE_COMPLETE=fish GOBBLE_COMPLETE_PROTOCOL={{.Protocol}} {{.Name}} -- $tokens "$cur" 2>/dev/null)
+    or return
+    test (count $out) -gt 0; or return
+    set -l directive (string replace -r '^:' '' -- $out[-1])
+    set -e out[-1]
+    if test (math "$directive % 2") -eq 1
+        return
+    end
+    # No space after a single candidate: give fish a second, longer one, so
+    # it inserts only the common prefix. Not needed after a character fish
+    # never follows with a space.
+    if test (math "floor($directive / 2) % 2") -eq 1; and test (count $out) -eq 1
+        set -l v (string split -m 1 \t -- $out[1])[1]
+        if not string match -q -r '[@=/:.,]$' -- $v
+            set out $out[1] "$v."
+        end
+    end
+    printf '%s\n' $out
+end
+complete -c {{.Name}} -f -k -a '(__{{.Name}}_complete)'

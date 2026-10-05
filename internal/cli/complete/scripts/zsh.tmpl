@@ -1,0 +1,38 @@
+#compdef {{.Name}}
+# zsh completion for {{.Name}}, from `{{.Name}} completion zsh`.
+# Install: add this line to ~/.zshrc after compinit, so the script always
+# matches the binary:
+#   source <({{.Name}} completion zsh)
+_{{.Name}}() {
+    local out l v desc directive=0
+    local -a comps opts
+    out=$(GOBBLE_COMPLETE=zsh GOBBLE_COMPLETE_PROTOCOL={{.Protocol}} \
+        command {{.Name}} -- "${(@)words[2,CURRENT-1]}" "$PREFIX" 2>/dev/null) || return 1
+    for l in "${(@f)out}"; do
+        if [[ $l == :* ]]; then
+            directive=${l#:}
+            continue
+        fi
+        v=${l%%$'\t'*}
+        desc=
+        [[ $l == *$'\t'* ]] && desc=${l#*$'\t'}
+        v=${v//:/\\:}
+        if [[ -n $desc ]]; then
+            comps+=("$v:$desc")
+        else
+            comps+=("$v")
+        fi
+    done
+    (( directive & 1 )) && return 1
+    (( directive & 2 )) && opts+=(-S '')
+    if (( directive & 32 )); then
+        _describe -V -t {{.Name}} '{{.Name}}' comps "${opts[@]}"
+    else
+        _describe -t {{.Name}} '{{.Name}}' comps "${opts[@]}"
+    fi
+}
+if [[ "$funcstack[1]" == "_{{.Name}}" ]]; then
+    _{{.Name}} "$@"
+else
+    compdef _{{.Name}} {{.Name}}
+fi

@@ -13,6 +13,7 @@ import (
 
 	"github.com/alecthomas/kong"
 
+	"github.com/maccavelli/gobble-cli/internal/cli/complete"
 	"github.com/maccavelli/gobble-cli/internal/cli/term"
 	"github.com/maccavelli/gobble-cli/internal/logging"
 )
@@ -23,29 +24,44 @@ const description = "gobble is a coding agent for the terminal and for ACP clien
 // writes only through stdout and stderr, and reads stdin only when it is
 // not a terminal. It never calls os.Exit; cmd/gobble does, with this code.
 func Main(ctx context.Context, args []string, stdin *os.File, stdout, stderr io.Writer) int {
+	var root Root
+	k, err := newParser(&root, stdout, stderr)
+	if err != nil {
+		(&Output{out: stdout, err: stderr}).Errorf("%v", err)
+		return ExitFailure
+	}
+	// Completion mode runs straight after the model is built, before
+	// parsing, terminal detection, signals, logging and any file but the
+	// ones it completes (0008-MADR D17).
+	if completionMode(os.Getenv) {
+		return complete.Run(ctx, k.Model, completionRegistry(), os.Getenv, args, stdout)
+	}
 	caps := term.Detect(os.Getenv, stdin, fileOf(stdout), fileOf(stderr))
 	out := &Output{out: stdout, err: stderr, caps: caps}
+	if err := clearCompletionEnv(); err != nil {
+		out.Warnf("clear completion environment: %v", err)
+	}
 	ctx, stop := watchSignals(ctx, term.ShutdownSignals(), signal.Notify)
 	defer stop()
-	code := run(ctx, args, stdin, out)
+	code := run(ctx, k, &root, args, stdin, out)
 	if c, ok := signalExit(ctx); ok {
 		return c
 	}
 	return code
 }
 
-func run(ctx context.Context, args []string, stdin *os.File, out *Output) int {
-	var root Root
-	k, err := kong.New(&root,
+// newParser builds gobble's Kong parser over root. Kong's Exit panics with
+// exitPanic, which parse recovers, so Kong never ends the process itself.
+func newParser(root *Root, stdout, stderr io.Writer) (*kong.Kong, error) {
+	return kong.New(root,
 		kong.Name("gobble"),
 		kong.Description(description),
-		kong.Writers(out.out, out.err),
+		kong.Writers(stdout, stderr),
 		kong.Exit(func(code int) { panic(exitPanic{code: code}) }),
 	)
-	if err != nil {
-		out.Errorf("%v", err)
-		return ExitFailure
-	}
+}
+
+func run(ctx context.Context, k *kong.Kong, root *Root, args []string, stdin *os.File, out *Output) int {
 	kctx, code, done := parse(k, args, out)
 	if done {
 		return code

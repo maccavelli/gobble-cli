@@ -72,7 +72,6 @@ func TestMainExitCodes(t *testing.T) {
 		{"bad enum", []string{"--output-format", "yaml", "x"}, ExitUsage, `--output-format must be one of "text","json","stream-json"`},
 		{"bad log level", []string{"--log-level", "loud", "version"}, ExitUsage, "--log-level must be one of"},
 		{"acp stub", []string{"acp"}, ExitUsage, "Error: gobble acp is not yet implemented (0002-PLAN Phase 1)\n"},
-		{"completion stub", []string{"completion", "bash"}, ExitUsage, "Error: gobble completion is not yet available (0008-PLAN P5)\n"},
 		{"completion needs a known shell", []string{"completion", "nu"}, ExitUsage, `<shell> must be one of "bash","zsh","fish","powershell"`},
 		{"version", []string{"version"}, ExitOK, ""},
 		{"config path", []string{"config", "path"}, ExitOK, ""},

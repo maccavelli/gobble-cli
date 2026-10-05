@@ -1,0 +1,72 @@
+# PowerShell completion for {{.Name}}, from `{{.Name}} completion powershell`.
+# Works in Windows PowerShell 5.1 and PowerShell 7. Install: add this line
+# to $PROFILE, so the script always matches the binary:
+#   {{.Name}} completion powershell | Out-String | Invoke-Expression
+Register-ArgumentCompleter -Native -CommandName '{{.Name}}', '{{.Name}}.exe' -ScriptBlock {
+    param($wordToComplete, $commandAst, $cursorPosition)
+    $exe = Get-Command -Name '{{.Name}}' -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $exe) { return }
+
+    # The words after the program name, the last one cut at the cursor.
+    $words = [System.Collections.Generic.List[string]]::new()
+    $cur = ''
+    foreach ($e in @($commandAst.CommandElements | Select-Object -Skip 1)) {
+        if ($e.Extent.StartOffset -gt $cursorPosition) { break }
+        if ($e.Extent.EndOffset -ge $cursorPosition) {
+            $cur = $e.Extent.Text.Substring(0, $cursorPosition - $e.Extent.StartOffset).TrimStart("'", '"')
+            break
+        }
+        if ($e -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
+            $words.Add($e.Value)
+        } else {
+            $words.Add($e.Extent.Text)
+        }
+    }
+    $words.Add($cur)
+
+    $names = 'GOBBLE_COMPLETE', 'GOBBLE_COMPLETE_PROTOCOL', 'GOBBLE_COMPLETE_WORDS'
+    $saved = @{}
+    foreach ($n in $names) { $saved[$n] = [Environment]::GetEnvironmentVariable($n) }
+    $savedExit = $global:LASTEXITCODE
+    $savedEncoding = $null
+    try {
+        try {
+            $savedEncoding = [Console]::OutputEncoding
+            [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+        } catch { $savedEncoding = $null }
+        [Environment]::SetEnvironmentVariable('GOBBLE_COMPLETE', 'powershell')
+        [Environment]::SetEnvironmentVariable('GOBBLE_COMPLETE_PROTOCOL', '{{.Protocol}}')
+        [Environment]::SetEnvironmentVariable('GOBBLE_COMPLETE_WORDS', ($words -join [char]0x1f))
+        $out = @(& $exe.Source 2>$null)
+    } finally {
+        if ($null -ne $savedEncoding) {
+            try { [Console]::OutputEncoding = $savedEncoding } catch { }
+        }
+        $global:LASTEXITCODE = $savedExit
+        foreach ($n in $names) { [Environment]::SetEnvironmentVariable($n, $saved[$n]) }
+    }
+
+    if ($out.Count -eq 0 -or -not $out[-1].StartsWith(':')) { return }
+    $directive = [int]$out[-1].Substring(1)
+    if ($directive -band 1) { return }
+    $full = $ExecutionContext.SessionState.LanguageMode -eq 'FullLanguage'
+    foreach ($line in @($out | Select-Object -SkipLast 1)) {
+        $f = $line -split "`t", 3
+        $value = $f[0]
+        $tip = if ($f.Count -gt 1 -and $f[1]) { $f[1] } else { $value }
+        $kind = if ($f.Count -gt 2) { $f[2] } else { 'value' }
+        $type = switch ($kind) {
+            'flag' { 'ParameterName' }
+            'file' { 'ProviderItem' }
+            'dir' { 'ProviderContainer' }
+            default { 'ParameterValue' }
+        }
+        $text = $value
+        if ($value -match "[\s'`"`$@&(){}<>;,|#``]") { $text = "'" + ($value -replace "'", "''") + "'" }
+        if ($full) {
+            [System.Management.Automation.CompletionResult]::new($text, $value, $type, $tip)
+        } else {
+            $text
+        }
+    }
+}

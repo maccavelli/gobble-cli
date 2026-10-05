@@ -570,6 +570,7 @@ Copies from Apache-2.0 siblings carry a provenance comment naming the source fil
 - **Output.**
   - UTF-8, exit 0, written once from a buffer.
   - One candidate per line, as `value` or `value<TAB>description`. Values replace the whole current token, including a `--flag=` prefix.
+    *(Amended 2026-10-05, owner's decision, 0008-PLAN P5 deviation 2: when `GOBBLE_COMPLETE=powershell`, a line is `value<TAB>description<TAB>kind`, with kind `command`, `flag`, `value`, `file` or `dir`, because PowerShell's typed results need the kind and two fields cannot carry it. Other shells keep two fields. Deviation 3: the 80-rune cap applies to descriptions; values are never cut.)*
   - The last line is `:<directive>`, using Cobra's bit values so the meaning is familiar: 1 error, 2 no space, 4 no file completion, 16 directories only, 32 keep order.
   - Control characters are stripped from values and descriptions (D8), and descriptions are one line of at most 80 runes.
   - Files and directories are completed by gobble itself, with directories ending in the OS separator and no space. The scripts never fall back to the shell's file completion, so behaviour is the same on every shell and platform.
@@ -581,6 +582,8 @@ Copies from Apache-2.0 siblings carry a provenance comment naming the source fil
   | zsh | `#compdef gobble` with the sourcing guard, `_describe` (with `-V` and `-S ''` per directive), and `:` escaped in values |
   | fish | `commandline -xpc`, falling back to `-opc` for fish 3, plus `commandline -ct`. Registered with `complete -c gobble -f [-k]`, plus the trick that avoids a trailing space |
   | PowerShell, one script for 5.1 and 7 | `Register-ArgumentCompleter -Native -CommandName gobble, gobble.exe`. Words come from `$commandAst.CommandElements`, cut at `$cursorPosition`. The executable is resolved with `Get-Command -CommandType Application`. It sets `[Console]::OutputEncoding` to UTF-8 and restores it, along with `$global:LASTEXITCODE` and the `GOBBLE_COMPLETE*` variables. Results are `CompletionResult` with typed kinds (`ParameterName`, `ParameterValue`, `ProviderItem`, `ProviderContainer`) and a non-empty tooltip, with single quotes doubled for values with spaces or special characters. Plain strings outside FullLanguage mode |
+
+  *(Amended 2026-10-05, owner's decision, 0008-PLAN P5 deviation 4: the bash script also runs under macOS's `/bin/bash` 3.2. It reads results with a `while IFS= read -r` loop in place of `mapfile`, and calls `compopt` only when it exists. Under 3.2 there is no nospace or nosort.)* *(Measured 2026-10-05 in an interactive bash in a pty, typing `gobble dé x` and Tab: `COMP_POINT` counts characters in bash 4.4.18, 5.0, 5.1, 5.2.21, 5.3.9 and 5.3.20, and bytes in 3.2.57. 4.0 and 4.2 did not build with a current compiler, so 4.0–4.3 are unmeasured. The script cuts `COMP_LINE` in bytes when `BASH_VERSINFO[0] < 4`, otherwise in characters.)*
 
 - **The Go side.** A package `internal/cli/complete`, standard library and Kong only:
 

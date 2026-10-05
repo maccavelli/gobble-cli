@@ -515,6 +515,19 @@ P0 records ─┬─ P1 lint + archtest ─ P2 terminal layer ─ P3 line editor
 
    fish 3.7.0 exercises the script's `commandline -opc` fallback; fish 4.2.1 exercises `-xpc`.
 
+**Deviations, 2026-10-05, the owner's decisions before P5 ran:**
+
+1. **`--provider`.** Step 4's "static provider registry" does not exist until 0005-PLAN F4, and only `llm/provider` may import the SDK (rule 4). `ProviderSource` is registered with a lister that returns no candidates, as step 4 already does for sessions, models and tools. F4 supplies the real list.
+2. **PowerShell result kinds.** D17's typed PowerShell results cannot be told apart from `value[\tdescription]` lines. When `GOBBLE_COMPLETE=powershell`, each line is `value\tdescription\tkind`, where kind is `command`, `flag`, `value`, `file` or `dir`. Other shells keep two fields. 0008-MADR D17 is amended.
+3. **The 80-rune cap applies to descriptions only.** Step 5 says "values and descriptions … are capped at 80 runes", but a cut value completes to a token that does not exist. Values are sanitised and never cut.
+4. **bash 3.2.** macOS's `/bin/bash` is 3.2, which has no `mapfile` and no `compopt`. The script reads results with a `while IFS= read -r` loop and calls `compopt` only when it exists. On 3.2, completing a directory therefore adds a trailing space, and the order may be re-sorted. The macOS shell test runs both `/bin/bash` (3.2) and Homebrew bash. 0008-MADR D17 is amended. *(Measured 2026-10-05 in an interactive bash in a pty, typing `gobble dé x` and Tab: `COMP_POINT` counts characters in bash 4.4.18, 5.0, 5.1, 5.2.21, 5.3.9 and 5.3.20, and bytes in 3.2.57. 4.0 and 4.2 did not build with a current compiler, so 4.0–4.3 are unmeasured. The script cuts `COMP_LINE` in bytes when `BASH_VERSINFO[0] < 4`, otherwise in characters.)*
+
+**Choices made within the steps' wording:**
+
+- `cli.Main` removes every `GOBBLE_COMPLETE*` variable from its own environment as soon as completion mode is ruled out, so no child it starts later can inherit one (step 7).
+- The registry of `complete:` sources is built in `internal/cli/completion.go`. The coverage test lives beside it, because `internal/cli/complete` cannot import `internal/cli`. Positional arguments are covered too: chat's prompt words carry `complete:"none"`.
+- Remote hosts are run from a copy of the working tree sent over SSH into a scratch directory there. No checkout and no commit are made on those hosts.
+
 1. **`internal/cli/complete/candidate.go`:** the types of 0008-MADR D17, namely `Candidate`, `Kind`, the `Directive` bits (`Error=1, NoSpace=2, NoFileComp=4, FilterDirs=16, KeepOrder=32`), `Completer` and `CompleterFunc`, plus `type Registry map[string]Completer`.
 2. **`internal/cli/complete/walk.go`:** `func Resolve(app *kong.Application, words []string) Target`, where `Target` names the command node, the flag awaiting a value or the positional index, and the prefix. It implements D17's state machine:
    - children and aliases, hidden ones skipped;
@@ -681,7 +694,7 @@ P7 writes the final record. This interim one keeps the evidence of the phases th
 | P3 | ran 2026-10-05; staged | `Makefile` (`probe-conhost`), `internal/cli/editor/*` (12 files) |
 | P6 | ran 2026-10-05; staged | `go.mod`, `go.sum` (`golang.org/x/text v0.42.0`), `internal/cli/render/*` (14 Go files, 4 testdata files) |
 | P4 | ~~**not run**~~ ran 2026-10-05 after 0004-PLAN Phase 2 steps 2–4 (`55f35ba`); staged | `go.mod`, `go.sum` (Kong `v1.16.1`), `Makefile`, `scripts/verify_build_metadata.py`, `cmd/gobble/main.go`, `cmd/gobble/doc.go`, `internal/cli/*` (19 Go files, 2 goldens), `internal/buildinfo` (the version fix) |
-| P5 | **not run** | ~~Needs P4's Kong root.~~ P4's root exists; P5 has not been approved to run. |
+| P5 | ran 2026-10-05; staged | `Makefile` (`completion-shells`), `internal/cli/complete/*` (11 Go files, 4 script templates, 4 goldens), `internal/cli/completion.go` and its test, `internal/cli/main.go`, `chat.go`, `main_test.go` |
 | P7 | **not run** | Needs P4 and P5. |
 
 After each of P1, P2, P3 and P6, `make preflight` printed `preflight passed` and exited 0 on Windows (Git Bash) and in WSL Ubuntu 24.04 on a copy of the tree. `git diff --check` and `git diff --cached --check` were clean. `go test -race ./internal/...` passed in WSL, and `go test ./...` passed on Windows. `go mod tidy -diff` was empty. No file under `internal/cli` names Charm, go-tui-lib, the ACP SDK or Kong.
@@ -764,3 +777,42 @@ After each of P1, P2, P3 and P6, `make preflight` printed `preflight passed` and
   - the logger opens lazily, so `version`, `config path` and `--help` create nothing (tested);
   - every "not yet available" message names its owning plan;
   - `version` without `--json` prints `gobble <version>` and then `commit:`, `date:` and `go:` lines.
+
+### P5, 2026-10-05
+
+- **Deviations.** Four were decided by the owner before P5 ran and are recorded in P5: an empty provider lister, a third field for PowerShell, the description-only cap, and bash 3.2 support. 0008-MADR D17 is amended for the second and fourth.
+- **Gates.**
+  - `make preflight` printed `preflight passed` on Windows and in WSL.
+  - `go test -race ./...` passed in WSL.
+  - `golangci-lint` reported `0 issues.` for linux, darwin and windows, and with `-tags shells`.
+  - The pre-add check was clean for all 36 files.
+- **`make completion-shells`**, on every host in the P5 table, with each shell's version as the suite logged it:
+
+  | Host | Shells, all passing |
+  |---|---|
+  | Windows | Git Bash 5.3.15, pwsh 7.6.6, Windows PowerShell 5.1.26100 |
+  | WSL Ubuntu 24.04 | bash 5.2.21, fish 3.7.0 (the `commandline -opc` fallback) |
+  | the Linux host | bash 5.3.9, fish 4.2.1 (`-xpc`) |
+  | the macOS host | zsh 5.9, Homebrew bash 5.3.20, `/bin/bash` 3.2.57 |
+
+  The macOS host has GNU Make 3.81, and the target ran there unchanged.
+- **The bash `COMP_POINT` unit (0008-MADR D17 [unverified]) is settled.** It counts characters from bash 4.4 on and bytes in 3.2, as measured in deviation 4. The suite's mid-line case (`gobble --file dé --verbose`, cursor after `dé`) passes on all four bash versions above.
+- **Baselines** on Windows:
+  - a `--session` completion request takes a median of 9.7 ms over 20 runs (min 9.2, max 13.5), against the 150 ms deadline;
+  - the stamped binary is 10,860,032 bytes (10.36 MiB), up from 9.76 MiB after P4.
+- **Negative tests**, each on a scratch copy, each failing as expected:
+  - a corrupted golden: `fish script differs from testdata\fish.golden`;
+  - `complete:"session"` removed: `chat session takes a value but has neither enum nor complete tag`;
+  - the protocol check removed: `protocol_mismatch: output = "chat\nrun\nshell\nversion\n:4\n", want ":1\n"`;
+  - a completer writing under `HOME`: `completion mode wrote under the home directory (C6): [… cache.json]`;
+  - the walker's withargs rule 2 removed: `Resolve reached "gobble", kong.Trace reached "chat"`;
+  - a single file kept NoSpace: `TestProtocolPathSpacing` failed on `notes.md`;
+  - bash 3.2 cutting in characters, on the macOS host: `"gobble --file dé --verbose": COMPREPLY = ["acp" "chat" "completion" "config" "version"], want ["dés.txt"]`. Only `bash_3.2` failed, and Homebrew bash 5.3 passed.
+- **What the plan predicted wrongly.**
+  1. **The `COMP_POINT` unit depends on the bash version.** The plan expected one unit to settle. The script has to branch on `BASH_VERSINFO`.
+  2. **Path completion's NoSpace is decided after collection.** A single file left takes a space and a single directory does not. The first fish run caught this: fish's no-space trick was offering a file twice, as `dés.txt` and `dés.txt.`. The fish script also skips the trick after `@=/:.,`, as Cobra's does.
+  3. **bash passes the whole line,** so the program name is dropped in Go. The first binary test caught it; the unit tests had passed only because the stray `gobble` word entered the withargs command.
+  4. **The PowerShell harness must not print through the console's code page.** The completer decodes gobble's UTF-8 itself, then restores the user's code page. Results are written to a UTF-8 file instead.
+  5. **The engine oracle needed care.** `kong.Trace` selects the default command when nothing is named. Accepting "root" in that case was right only when every earlier word is a flag. The first, looser comparison let the withargs-rule negative pass, and was tightened.
+  6. **The `TabExpansion2` cursor column** in step 8 is 24; for `'gobble --output-format '` it is that string's length, 23. The suite uses the length.
+  7. **`powershell.exe` on this host resolves through a scoop shim.** It reports Windows PowerShell 5.1.26100, so 5.1 is what ran.

@@ -85,7 +85,7 @@ LDFLAGS := -X $(BUILDINFO).version=$(VERSION) -X $(BUILDINFO).kind=$(BUILD_KIND)
 
 .PHONY: build install test race vet fmt lint staticcheck vulncheck tidy clean \
 	pre-add-check preflight check-cgo-off verify-build-metadata fix-check archtest apidiff \
-	check-records markdownlint probe-conhost $(BIN)
+	check-records markdownlint probe-conhost completion-shells $(BIN)
 
 # Shipped binaries are pure Go. check-cgo-off refuses CGO_ENABLED other than 0
 # and any `import "C"` in a .go file (0004-PLAN phase 0 accept).
@@ -226,6 +226,11 @@ markdownlint:
 # saves and restores. Not part of preflight.
 probe-conhost:
 	go test -tags conhost -run '^TestConhost$$' -count=1 -v ./internal/cli/editor/
+
+# Real-shell completion tests (0008-PLAN P5). Each host runs the shells the
+# plan assigns it, and a missing one fails. Not part of preflight.
+completion-shells:
+	go test -tags shells -run '^TestShells$$' -count=1 -v ./internal/cli/complete/
 
 # No-op until internal/archtest lands in phase 1.
 archtest:
