@@ -20,7 +20,7 @@
 | 0002 | PLAN | [Implement the ACP core](decisions/0002-PLAN-cli-acp-headless-mcp-v1.md) | proposed (amended 2026-10-04 (0008)) |
 | 0003 | MADR | [The product is `gobble`: binary, module path, directories, wire names, read-only Pi bridge](decisions/0003-MADR-gobble-product-identity.md) | proposed (amended 2026-10-01) |
 | 0004 | MADR | [One Go 1.27.1 module of contract-first packages, open standards at every boundary](decisions/0004-MADR-go-module-architecture.md) | proposed (decision text rewritten 2026-10-04; amended 2026-10-05) |
-| 0004 | PLAN | [Scaffold: module, contracts, import boundaries, toolchain, release](decisions/0004-PLAN-go-module-architecture.md) | in progress (Phase D, Phase 0, and Phase 1 complete; Phase 2 steps 2–4 complete 2026-10-05, and steps 1, 5 (in part), 6–9 and 11 through 0008-PLAN P2–P4; the rest of Phases 2–5 not started; amended 2026-10-04 (0007); amended 2026-10-04 (0008); Phase 2 steps 2–4 amended 2026-10-05) |
+| 0004 | PLAN | [Scaffold: module, contracts, import boundaries, toolchain, release](decisions/0004-PLAN-go-module-architecture.md) | in progress (Phase D, Phase 0, and Phase 1 complete; Phase 2 steps 2–4 complete 2026-10-05, and steps 1, 5 (in part), 6–9 and 11 through 0008-PLAN P2–P4; Phase 3 complete 2026-10-05; Phase 2 steps 10, 12, 13 and Phases 4–5 not started; amended 2026-10-04 (0007); amended 2026-10-04 (0008); Phase 2 steps 2–4 amended 2026-10-05) |
 | 0005 | MADR | [The v1 line: every portable Pi capability, tiered 1.0 / 1.x / exp](decisions/0005-MADR-v1-feature-scope.md) | proposed (decision text rewritten 2026-10-04) |
 | 0005 | PLAN | [Implement the v1.0.0 gate, the v1.x train, and `exp/`](decisions/0005-PLAN-v1-feature-scope.md) | proposed (decision text rewritten 2026-10-04) |
 | 0006 | MADR | [Adopt goose's terminal-CLI mechanics, not its product command tree](decisions/0006-MADR-goose-cli-port-candidates.md) | proposed (amended 2026-10-04 (0008)) |
@@ -34,10 +34,16 @@
 
 ## Build order
 
-The three plans run in sequence. 0004-PLAN Phase D, Phase 0
-(`925ef0abf83e475c33b3ffae14685617b035639e`), and Phase 1
-(`661b14e768407264a38687e2db99201cae2a04a1`) have run. Phases 2–5 have not. `git ls-remote origin
-refs/heads/main` on 2026-10-04 returned `8e016ab53a5765b2c912fab338d873918b8eed36`:
+The three plans run in sequence.
+
+- **0004-PLAN.**
+  - Run: Phase D, Phase 0 (`925ef0abf83e475c33b3ffae14685617b035639e`) and Phase 1 (`661b14e768407264a38687e2db99201cae2a04a1`).
+  - Run: Phase 2's steps 2–4, and its steps 1, 5 (in part), 6–9 and 11 through [0008-PLAN](decisions/0008-PLAN-native-cli-mode.md), which is completed.
+  - Run: Phase 3, on 2026-10-05.
+  - Not run: Phase 2's steps 10, 12 and 13, which wait on sessions and providers, and Phases 4 and 5.
+- `git ls-remote origin refs/heads/main` on 2026-10-05 returned `159da2c812ea9c65808e8367f9f844b9a8c91cd6`.
+
+The plans:
 
 1. **[0004-PLAN](decisions/0004-PLAN-go-module-architecture.md)** — source documentation in Phase D, then the scaffold in Phases 0–5. It replaces 0002-PLAN Phase 0.
 2. **[0002-PLAN](decisions/0002-PLAN-cli-acp-headless-mcp-v1.md) Phases 1–8** — the ACP agent, Kong as an ACP client, the first tools, sessions, MCP, and native slash commands.

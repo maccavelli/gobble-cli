@@ -1,0 +1,2 @@
+client→agent {"id":1,"jsonrpc":"2.0","method":"initialize","params":{"clientCapabilities":{"auth":{},"fs":{}},"clientInfo":{"name":"acptest","version":"0.0.0"},"protocolVersion":1}}
+agent→client {"id":1,"jsonrpc":"2.0","result":{"agentCapabilities":{"auth":{},"mcpCapabilities":{},"promptCapabilities":{},"sessionCapabilities":{}},"agentInfo":{"name":"stub","version":"1.0.0"},"authMethods":[],"protocolVersion":1}}

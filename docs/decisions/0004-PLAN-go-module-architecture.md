@@ -516,6 +516,32 @@ MD040) at the same lines before and after. `git diff --check` passed.
   3. **The copied magic-cli-remote tests skip on host state** ("the host created this file owner-only already", "this host cannot resolve the LA alias"). gobble keeps only the deterministic cases. The LA-alias case fails rather than skips, and it passed on this host.
   4. **gobble's lint set flagged the copied code.** `token.Close` was unchecked (errcheck), and a `for` loop could be an integer range (intrange). Both were changed in the copy, as its provenance comment says. gosec's G302 on `os.Chmod(dir, 0o700)` is a false positive for a directory, and is suppressed with that reason.
 
+**Phase 3, 2026-10-05 — complete (staged; the owner commits).** It ran as expanded in the amendment of 2026-10-05, with the owner's placement of the `synctest` example.
+
+* **Files.**
+  * `llm/llmtest`: `doc.go`, `script.go`, `assert.go`, `live.go` and their tests.
+  * `acpclient/acptest`: `doc.go`, `client.go`, `recorder.go`, `pair.go`, `pair_test.go` and `testdata/initialize.golden`.
+  * `llm/provider/retry_example_test.go`.
+* **Accept.**
+  * `TestPairInitialize` round-trips `initialize` with a stub agent and matches the golden: one request, then one response, in RFC 8785 key order.
+  * `TestGoldenWritesArtifact` shows a wrong golden failing and leaving the transcript as an artifact.
+  * The `synctest` back-off records waits of 2 s, 4 s and 8 s, 14 s of virtual time, in under 0.01 s of wall time.
+* **Gates.**
+  * `make preflight` printed `preflight passed` on Windows and in WSL.
+  * `go test -race ./...` passed in WSL, and the Phase 3 packages passed under `-race` on Windows.
+  * `golangci-lint` reported `0 issues.` for linux, darwin and windows.
+  * The pre-add check was clean for all 13 files.
+* **Negative tests**, each on a scratch copy, each failing as expected:
+  * events played in reverse: `turn 1 = []llm.Event{llm.Done{…}, llm.Usage{…}, llm.TextDelta{…}}`;
+  * a recorder that drops the agent's frames: `frames = [{Dir:client→agent …}]`, against the expected request and response;
+  * a back-off that ignores `Retry-After`: `waits = [2s], <nil>; want [5s] from Retry-After`;
+  * a wrong golden, run with `-artifacts -outputdir`: `transcript differs from testdata\initialize.golden at line 2`, leaving `_artifacts/acpclient/acptest/TestPairInitialize/…/initialize.golden.got`.
+* **What the plan predicted wrongly.**
+  1. **Step 3's "`internal/…`" named no package.** The owner placed the example in `llm/provider`, where retry will live.
+  2. **Golden updating cannot be a flag.** `acptest` is a stable non-test package, so it must not register flags. `ACPTEST_UPDATE=1` does the job.
+  3. **`llm.ToolCallDone` is not comparable,** because it holds a `jsontext.Value`. Tests compare its fields.
+  4. **The SDK frames each message as one line in a single `Write`, with request ids counting from 1 on each side.** That is what makes the transcript deterministic. The recorder still joins a line split across writes, which `TestRecorderJoinsSplitLines` covers.
+
 ## Amendments
 
 **2026-09-30 — shared libraries as they exist.** 0004-MADR's amendment of
@@ -790,3 +816,50 @@ Steps 2–4 as written name their sources but not their files, APIs or checks. T
     * the active file is owner-only (`appdirs.FileIsOwnerOnly`).
   * Negative tests on scratch copies: redaction removed, the stderr floor removed, and rotation disabled each fail a test.
 * **Verification for steps 2–4.** `go test ./internal/...` and `golangci-lint run ./...` for linux, darwin and windows. `make preflight` on Windows and in WSL. `make check-records` and `make markdownlint`. Every negative test above is seen to fail on a scratch copy. The agent stages; the owner commits (0008-PLAN Stability rule).
+
+**2026-10-05 — Phase 3 made executable (owner's decision of 2026-10-05).**
+Phase 3's steps name their packages but not their APIs or checks. They are expanded here before execution. The steps above are kept as written; where this text differs, this text is the step to follow.
+
+* **Step 1, `llm/llmtest`** (stable), standard library and `llm` only. go-llmprovider-sdk is never imported (step 1).
+  * `script.go`:
+    * `type Turn struct{ Events []llm.Event; Err error }` is one scripted answer to a `Stream` call.
+    * `NewScript(turns ...Turn) *Script` returns a `Script` that implements `llm.Provider`, with `ID()` = `"llmtest"`. Its `Capabilities` are set by `WithCapabilities`.
+    * `Stream` records a copy of the request, takes the next turn, and yields its events in order. It stops with `ctx.Err()` once the context is done, and ends with the turn's `Err` when it has one. With no turn left it yields `ErrExhausted`.
+    * `Requests()` returns what was asked, and `Remaining()` returns the turns not yet used.
+    * Builders: `Text(s)` (a delta, `Usage`, `Done{end_turn}`), `ToolCall(id, name, args)` (start, done, `Done{tool_use}`), and `RateLimited(retryAfter)` (an `*llm.APIError{Status: 429}` wrapping `llm.ErrRateLimited`).
+  * `assert.go`:
+    * `AssertSystem(t, req, sections...)`: every section appears in the system messages;
+    * `AssertTools(t, req, names...)`: the `name`s in `req.Tools`, in order;
+    * `AssertTail(t, req, roles...)`: the roles of the last messages.
+
+    Each reports through `t.Errorf` with what it found.
+  * `live.go`: `LiveCredential(t, env)` returns the credential, or skips the test when the variable is unset.
+* **Step 2, `acpclient/acptest`** (stable). Rule 2 allows its import of the ACP SDK, because it is under `acpclient`.
+  * `pair.go`:
+    * `Pair(t, agent) (*acp.ClientSideConnection, *Recorder)` uses the default client.
+    * `Connect(t, agent, client) *Conn`, where `Conn` holds `Client`, `Agent` and `Recorder`, lets a test pass its own `acp.Client` and wire the agent to its `AgentSideConnection`.
+    * Both run over two `io.Pipe`s and close them with `t.Cleanup`.
+  * `client.go`: the default `*Client`:
+    * it records `session/update` notifications (`Updates()`);
+    * it answers permission requests with the cancelled outcome;
+    * it answers file-system and terminal requests with JSON-RPC "method not found" (-32601).
+  * `recorder.go`:
+    * `Recorder` taps both pipe writers and records every frame in write order, as `Frame{Dir, Raw}`. Lines split across writes are joined.
+    * `Transcript()` is one line per frame, `client→agent ` or `agent→client ` followed by the RFC 8785 canonical JSON (`jsontext.Value.Canonicalize`), so key order cannot change a golden.
+    * `Golden(t, path)` compares the transcript with `path`. On a mismatch it writes the actual transcript to `t.ArtifactDir()` and names that file in the failure. `ACPTEST_UPDATE=1` rewrites the golden instead. It is an environment variable rather than a flag, because a stable non-test package must not register flags.
+* **Step 3, the `synctest` example — placed by the owner.** "`internal/…`" names no package. Retry belongs to `llm/provider`, which wraps `llmprovider.WithRetry` with a 2 s base (0004-MADR), so the example is the test-only `llm/provider/retry_example_test.go`. It runs a back-off loop of 2 s, 4 s and 8 s against an `llmtest.Script` that answers 429 three times and then text, under `synctest.Test`. It asserts the virtual delays and a wall time under 100 ms. It adds no package and changes nothing in the package map.
+* **Step 4, the live-test convention**, written in `llmtest`'s package comment:
+  * build tag `live_<provider>` (`live_anthropic`, `live_openai`, …);
+  * the credential comes from that provider's usual variable through `LiveCredential`;
+  * default CI never passes a `live_` tag.
+* **Accept, as checks:**
+  * `TestPairInitialize`: `Pair` round-trips `initialize` with a stub agent and matches `testdata/initialize.golden`.
+  * `TestGoldenWritesArtifact`: a deliberately wrong golden, through a `testing.TB` wrapper, fails and leaves the artifact file. The same failure is also run once on a scratch copy, as a negative test.
+  * The `synctest` example passes in under 100 ms of wall time.
+* **Verification.**
+  * `go test` for these packages;
+  * `golangci-lint` for linux, darwin and windows;
+  * `make preflight` on Windows and in WSL;
+  * negative tests on scratch copies: a reordered event script, a recorder that drops a direction, and a back-off that ignores `Retry-After`.
+
+  The agent stages; the owner commits.
