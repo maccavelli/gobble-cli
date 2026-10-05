@@ -342,3 +342,7 @@ These are execution questions. Every decision above is settled.
 - **Measurement 6 needs a qualification.** On this host the user-global `core.attributesFile` already forces `eol=lf`. That is why this host's checkout was LF regardless of the repository. The repository's `.gitattributes` matters for hosts and runners without that file, and that was proven with the global file isolated.
 - **Identifier scan.** The 0007 change set was scanned for the local account names, the organisation's mail and git-host domains, and user-profile path prefixes. It found none.
 - **Commit ownership.** The owner, not the agent, commits and pushes the staged change (0007-PLAN P0).
+
+## Amendment (2026-10-04): lint set beyond the fleet's
+
+[0008-MADR-native-cli-mode.md](0008-MADR-native-cli-mode.md) D18 adds sloglint, depguard, forbidigo, modernize, intrange, copyloopvar, usestdlibvars, perfsprint, usetesting, noctx, contextcheck and fatcontext to `.golangci.yml`. This record's D7 aligned the file to mcplib's set. The additions are a deliberate divergence. Proposing them fleet-wide is a separate record.

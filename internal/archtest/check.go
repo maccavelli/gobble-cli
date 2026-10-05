@@ -2,6 +2,7 @@ package archtest
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -36,8 +37,8 @@ type edge struct {
 	test bool
 }
 
-func loadGraph(dir string) ([]modPkg, error) {
-	cmd := exec.Command("go", "list", "-e", "-deps", "-json", "./...")
+func loadGraph(ctx context.Context, dir string) ([]modPkg, error) {
+	cmd := exec.CommandContext(ctx, "go", "list", "-e", "-deps", "-json", "./...")
 	cmd.Dir = dir
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -321,6 +322,21 @@ func checkRule8(pkgs []modPkg) []Violation {
 	return vs
 }
 
+// checkRule9: only internal/cli/... may import Kong (0008-MADR D14).
+func checkRule9(pkgs []modPkg) []Violation {
+	var vs []Violation
+	for _, e := range edges(pkgs) {
+		rel, ok := relOf(e.from)
+		if !ok || !pathUnder(e.to, "github.com/alecthomas/kong") {
+			continue
+		}
+		if !under(rel, "internal/cli") {
+			vs = add(vs, 9, e)
+		}
+	}
+	return vs
+}
+
 func checkRule(rule int, pkgs []modPkg) []Violation {
 	switch rule {
 	case 1:
@@ -339,6 +355,8 @@ func checkRule(rule int, pkgs []modPkg) []Violation {
 		return checkRule7(pkgs)
 	case 8:
 		return checkRule8(pkgs)
+	case 9:
+		return checkRule9(pkgs)
 	default:
 		return []Violation{{Rule: rule, From: "archtest", To: "unknown rule"}}
 	}

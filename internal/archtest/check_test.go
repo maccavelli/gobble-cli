@@ -104,6 +104,15 @@ func TestImportRules(t *testing.T) {
 			ImportPath: modulePath + "/agent",
 			Imports:    []string{"github.com/maccavelli/go-core-lib/selfupdate"},
 		}}},
+		{name: "rule 9 module", rule: 9},
+		{name: "rule 9 agent kong", rule: 9, want: "alecthomas/kong", pkgs: []modPkg{{
+			ImportPath: modulePath + "/agent",
+			Imports:    []string{"github.com/alecthomas/kong"},
+		}}},
+		{name: "rule 9 cli may import kong", rule: 9, pkgs: []modPkg{{
+			ImportPath: modulePath + "/internal/cli/complete",
+			Imports:    []string{"github.com/alecthomas/kong"},
+		}}},
 	}
 
 	for _, tc := range cases {
@@ -173,12 +182,12 @@ func pkgFromFile(t *testing.T, path, importPath string, testFile bool) modPkg {
 
 func loadReal(t *testing.T) []modPkg {
 	t.Helper()
-	cmd := exec.Command("go", "list", "-m", "-f", "{{.Dir}}")
+	cmd := exec.CommandContext(t.Context(), "go", "list", "-m", "-f", "{{.Dir}}")
 	out, err := cmd.Output()
 	if err != nil {
 		t.Fatalf("go list -m: %v", err)
 	}
-	pkgs, err := loadGraph(strings.TrimSpace(string(out)))
+	pkgs, err := loadGraph(t.Context(), strings.TrimSpace(string(out)))
 	if err != nil {
 		t.Fatal(err)
 	}

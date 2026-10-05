@@ -296,3 +296,12 @@ Still out of Phase 2:
 D5 stands: keep the exit-code table. Do not copy `process::exit(1)` or the stdin `.expect` panic.
 
 Go 1.27.1. Kong. TUI stays go-tui-lib. Self-update stays go-selfupdate-lib. No `0006-PLAN` is created. `0004-PLAN` is the plan Phase 2 lives in, and this amendment does not mark that plan completed.
+
+## Amendment — 2026-10-04: superseded in part by 0008-MADR
+
+[0008-MADR-native-cli-mode.md](0008-MADR-native-cli-mode.md) changes three positions of this record. The text above is kept as it was decided.
+
+* **D6, "bare session".** Replaced by 0008-MADR D1. Bare `gobble` on a terminal opens the line session and never runs the configure wizard. The goose coupling D6 measured (configure when no config exists) stays rejected.
+* **D10, "text or json only … Do not add `stream-json`".** Replaced by 0008-MADR D9. Print mode has `text`, `json` and `stream-json`, and `stream-json` speaks the ACP vocabulary, as 0005-MADR specifies.
+* **D7, "Kong completion".** Kong has no completion generator (0008-MADR F30, measurement 3). D7 is implemented by 0008-MADR D17: native dynamic completion for bash, zsh, fish and PowerShell, through an environment-variable mode and no hidden command.
+* D8, D12 and D13 are refined by 0008-MADR D2, D6 and D15. In particular, Console Host sends bracketed paste, so D12's Windows paste needs no burst detection (0008-MADR F19).

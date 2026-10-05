@@ -394,3 +394,29 @@ MethodNotFound for `session/set_model`. No new phases in this tree.
 * **Companion work.** The checklist above is replaced by magic-cli-remote `docs/decisions/0179-MADR-gobble-native-acp-provider.md` D1–D10. This plan still does not mutate that repository.
 
 **2026-10-04 — configuration surface undecided.** The config surface is undecided and will be either a native Kong facility or a surface we write. Config implementation stays unspecified.
+
+**2026-10-04 — native CLI mode and magic-cli-remote integration (0008-MADR).**
+
+* **Phase 2, step 2.** `gobble prompt "…"` is replaced by `gobble -p "…"` on the default `chat` command (0008-MADR D1). This phase also wires:
+  * the line session (D5);
+  * the renderer of `internal/cli/render` (D7);
+  * the print formats `text`, `json` and `stream-json` (D9);
+  * Ctrl+C during a turn as `session/cancel`.
+* **Phase 1.** `initialize` follows 0008-MADR D19 item 1:
+  * `agentInfo.version` is parseable semver on every build;
+  * capabilities are as listed there;
+  * no network call before `initialize` returns (item 6).
+* **Phase 3.** Agent output follows D19 items 2 and 3:
+  * snapshot-shaped updates;
+  * chunks coalesced at 50 ms or 4 KiB;
+  * terminal tool statuses sent alone;
+  * tool titles of at most 60 runes, with a self-contained summary of at most 400 bytes first.
+* **Phase 4.** Sessions follow D19 items 5 and 8:
+  * compact replay on `session/load`;
+  * an exclusive per-session writer lock (`flock` / `LockFileEx`), with a second writer failing with exit 1 and the owning pid;
+  * readers take no lock.
+* **Phase 6.**
+  * The line session's slash registry is the agent's `available_commands_update` united with `/help`, `/exit`, `/quit`, `/edit` and `/new`. An unknown name is a local error (D13).
+  * Advertised names match `[A-Za-z0-9][A-Za-z0-9_-]*` (D19 item 7).
+  * `model` and `thought_level` are ungrouped select config options with a category (D19 item 4).
+  * The permission prompt is D16's one-line prompt.

@@ -25,7 +25,55 @@ linters:
     - unparam
     - unused
     - whitespace
+    - contextcheck
+    - copyloopvar
+    - depguard
+    - fatcontext
+    - forbidigo
+    - intrange
+    - modernize
+    - noctx
+    - perfsprint
+    - sloglint
+    - usestdlibvars
+    - usetesting
   settings:
+    depguard:
+      rules:
+        logging:
+          list-mode: lax
+          files:
+            - $all
+          deny:
+            - pkg: log$
+              desc: use log/slog (0008-MADR D18)
+            - pkg: github.com/sirupsen/logrus
+              desc: use log/slog (0008-MADR D18)
+            - pkg: go.uber.org/zap
+              desc: use log/slog (0008-MADR D18)
+            - pkg: github.com/rs/zerolog
+              desc: use log/slog (0008-MADR D18)
+    forbidigo:
+      analyze-types: true
+      forbid:
+        - pattern: ^(fmt\.Print.*|print|println)$
+          msg: write through the injected writers or slog (0008-MADR D18)
+        - pattern: ^log\..*$
+          msg: use log/slog (0008-MADR D18)
+        - pattern: ^os\.(Stdout|Stderr|Exit)$
+          msg: use the writers and exit code passed to cli.Main (0008-MADR D18)
+    sloglint:
+      no-mixed-args: true
+      attr-only: true
+      no-global: all
+      context: scope
+      static-msg: true
+      key-naming-case: snake
+      forbidden-keys:
+        - time
+        - level
+        - msg
+        - source
     errcheck:
       check-type-assertions: true
       check-blank: true
@@ -86,6 +134,12 @@ linters:
           - gocritic
           - goconst
         path: _test\.go
+      - linters:
+          - forbidigo
+        path: _test\.go
+      - linters:
+          - forbidigo
+        path: cmd/gobble/main\.go
     paths:
       - third_party$
       - builtin$

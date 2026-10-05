@@ -693,3 +693,17 @@ The Goal section is unchanged.
 
   `make preflight` already runs markdownlint and the records check, so Phase 4 adds no separate step for them.
 * **Phase 4, Makefile.** `make preflight` runs on Linux and macOS since 0007-PLAN P2, which this phase's CI depends on.
+
+**2026-10-04 — Phase 2 split with 0008-PLAN (0008-MADR D14, D16).**
+[0008-PLAN-native-cli-mode.md](0008-PLAN-native-cli-mode.md) executes Phase 2 steps 1, 5 (the root and the `version`, `completion`, `config path`, `acp`-stub and default commands), 6, 7, 8, 9 and 11. Steps 2, 3 and 4 run here first, because they are 0008-PLAN P4's preconditions. Steps 10, 12 and 13 run here after 0008-PLAN P4 has created the root.
+
+Changes to the steps as written:
+
+* **Step 1.** `cmd/gobble/main.go` calls `cli.Main(context.Background(), …)`. `cli.Main` owns signal handling: `signal.Notify` with the per-OS list (Interrupt, SIGTERM and SIGHUP on Unix; Interrupt only on Windows), and `context.WithCancelCause` with a typed cause, so the exit code can be 128 plus the signal (0008-MADR D2, D10). SIGTERM is not registered on Windows, which never delivers it.
+* **Step 4.** The rolling file sink is written from magic-cli-remote 0157-MADR's design: 10 MiB per file, 5 backups, 28 days. That record has no code to copy (0008-MADR F17).
+* **Step 5.** The one-shot and session commands are one default command, `chat`, with Pi's mode resolution and `-p/--print` (0008-MADR D1). Kong is used with `kong.Name`, `kong.Writers` and an `Exit` that panics a sentinel. `kong.Parse` and `FatalIfErrorf` are never called (0008-MADR D14).
+* **Step 6.** The exit table adds 128 plus the signal: 130, 129 and 143 (0008-MADR D10).
+* **Step 11.** The editor is `golang.org/x/term` behind gobble's adapter (0008-MADR D6).
+* **Phase 4.** `make verify-build-metadata` is implemented by 0008-PLAN P4, because creating `cmd/gobble/main.go` trips the Phase 0 placeholder (`Makefile`, `verify-build-metadata`). Phase 4 keeps the CI wiring.
+* **Phase 0 step 7.** The lint set gains 0008-MADR D18's rules (sloglint, depguard, forbidigo, modernize, intrange, copyloopvar, usestdlibvars, perfsprint, usetesting, noctx, contextcheck, fatcontext).
+* **archtest rule 9.** Only `internal/cli/...` may import Kong. Added by 0008-PLAN P1.
