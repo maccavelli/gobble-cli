@@ -1,6 +1,6 @@
 ---
-status: proposed
-date: 2026-10-04
+status: in-progress
+date: 2026-10-05
 associated-madr: "0002-MADR-cli-acp-headless-mcp-v1.md"
 ---
 # Implement v1 as the native magic-cli-remote CLI: Kong over ACP, ACP stdio, MCP client
@@ -336,7 +336,36 @@ magic-cli-remote does not gain `IDPi` as a side effect of this plan.
 
 ## Execution record
 
-None. This plan is proposed and has not been approved.
+~~None. This plan is proposed and has not been approved.~~ *(Superseded 2026-10-05: the owner approved Phase 1.)*
+
+**Phase 1, 2026-10-05 — complete (staged; the owner commits).** It ran as expanded in the amendment of 2026-10-05, with capabilities advertised honestly per phase (owner's decision). Phases 2–8 have not run.
+
+* **Files.**
+  * `acpserver`: `doc.go`, `agent.go`, `serve.go`, `agent_test.go`, `binary_test.go` and `testdata/session.golden`.
+  * `internal/cli`: `acp.go`, the `root.go` help line for `acp`, and two `main_test.go` cases. `gobble acp` with an empty stdin now exits 0, still writing nothing.
+  * `gobble acp` now opens the log file (`<state>/logs/gobble.log`) at start. It hands the SDK connection the CLI's lazy logger, and the stub before it never logged. `TestGobbleACPBinary` points `GOBBLE_HOME` at a temporary directory for this reason.
+* **Accept.**
+  * The session test was red on a scratch copy whose `Initialize` answers protocol 2, failing with `agent_test.go:53: protocol version 2, want 1`. It is green on the real agent.
+  * `TestGobbleACPBinary` drives the built `gobble acp` with the SDK's client through Initialize → NewSession → Prompt → CloseSession. Every stdout line is JSON-RPC, stderr is empty, and closing stdin ends the process with 0 within 2 s.
+* **The handshake, as `testdata/session.golden` records it:**
+  * `agentInfo {"name":"gobble","title":"gobble","version":…}`;
+  * `sessionCapabilities {"close":{}}` and nothing else;
+  * the echo's `session/update` arrives before the prompt's `end_turn` response.
+* **Gates.**
+  * `make preflight` printed `preflight passed` on Windows and in WSL.
+  * `go test -race ./...` passed in WSL.
+  * `golangci-lint` reported `0 issues.` for linux, darwin and windows.
+  * The pre-add check was clean for all 8 files.
+* **Negative tests**, each on a scratch copy, each failing as expected:
+  * protocol 2, as quoted above;
+  * `loadSession` advertised: `loadSession advertised before 0002-PLAN Phase 4 implements it`;
+  * a start-up banner: `stdout line 1 is not a JSON-RPC message: "gobble acp ready"`;
+  * `Serve` ignoring end of file: `gobble acp did not exit within 2 s of stdin closing`.
+* **What the plan predicted wrongly.**
+  1. **Step 3's `acp.NewAgentSideConnection(agent, os.Stdout, os.Stdin)` cannot appear in `internal/cli`:** rule 2 keeps the SDK in `acpserver`. `acpserver.Serve` owns the connection, and `cli` passes it the writers `Main` received, so C3 holds.
+  2. **The 0008 amendment's D19 capability list conflicted with step 1.** The owner kept step 1's honest advertisement.
+  3. **The SDK interface has methods this phase does not implement** (`authenticate`, `logout`, `session/list`, `session/resume`, `session/set_mode`, `session/set_config_option`). Each answers -32601, matching what is advertised.
+  4. **The root `tools.go` still blank-imports the SDK,** though `acpserver` now imports it for real. Removing that pin, and archtest rule 2's exception for the module root, is left for a change that names both files.
 
 ## Amendments
 
@@ -420,3 +449,41 @@ MethodNotFound for `session/set_model`. No new phases in this tree.
   * Advertised names match `[A-Za-z0-9][A-Za-z0-9_-]*` (D19 item 7).
   * `model` and `thought_level` are ungrouped select config options with a category (D19 item 4).
   * The permission prompt is D16's one-line prompt.
+
+**2026-10-05 — Phase 1 made executable; capabilities stay honest per phase (owner's decision).**
+The 0008 amendment above says Phase 1's `initialize` follows 0008-MADR D19 item 1. That item lists the end state: `loadSession`, `sessionCapabilities.list`, MCP `http` and `embeddedContext`, all true. Step 1 of this phase says to advertise only what is implemented. The owner decided on 2026-10-05 that step 1 governs. Each phase advertises what it implements, and D19's list is reached as Phases 3–5 implement each item. The phase that turns a capability on carries a test of it. The 0008 amendment's other Phase 1 lines stand: the SemVer `agentInfo.version`, and no network before `initialize` returns.
+
+* **Step 1, `acpserver/agent.go`.** `type Agent struct` implements `acp.Agent`. `New(opts Options) *Agent` takes `Options{Version string; NewID func() string}`; `NewID` defaults to the standard library's `uuid.NewV7().String()`.
+  * `Initialize` returns:
+    * protocol `acp.ProtocolVersionNumber` (1);
+    * `agentInfo {name: "gobble", title: "gobble", version}`;
+    * `authMethods: []`;
+    * of the capabilities, only `sessionCapabilities.close`, because `CloseSession` works in this phase. `loadSession`, `list`, `resume`, MCP, image, audio and `embeddedContext` are false or absent.
+
+    It makes no network call.
+  * Methods this phase does not implement (`authenticate`, `logout`, `session/list`, `session/resume`, `session/set_mode`, `session/set_config_option`) answer -32601, matching what is advertised.
+* **Step 2.**
+  * `NewSession` records the session's `cwd` and returns a new id.
+  * `Prompt` on a known session sends one `session/update` `agent_message_chunk` holding the prompt's text blocks joined by blank lines, then returns `end_turn`. An unknown session is invalid params (-32602).
+  * `Cancel` succeeds. `CloseSession` forgets the session; an unknown one is invalid params.
+* **Step 3, `acpserver/serve.go` and `internal/cli/acp.go`.**
+  * `Serve(ctx, in, out, opts) error` runs the agent over `in` and `out` and sets the connection's logger.
+  * It returns `nil` when `in` reaches end of file, and `context.Cause(ctx)` when the context is done.
+  * `ACPCmd.Run` calls `Serve` with the process's stdin and stdout and the lazy logger. The logger has no stderr handler under `acp` (0004-PLAN Phase 2 step 4).
+  * `gobble acp` therefore exits 0 at stdin EOF, and 130 or 143 on a signal. Archtest rule 2 allows `acpserver`'s SDK import; `internal/cli` imports `acpserver`, never the SDK.
+* **Step 4, the tests.**
+  * `acpserver/agent_test.go` runs Initialize → NewSession → Prompt → CloseSession through `acptest.Pair`, with fixed ids, against `testdata/session.golden`.
+  * A capability test asserts the advertised set exactly, so a later phase's change is deliberate.
+  * A version test checks that `agentInfo.version` parses as SemVer.
+  * `acpserver/binary_test.go` builds `cmd/gobble` and drives `gobble acp` with the SDK's client over the child's stdin and stdout. It checks that every stdout line is a JSON-RPC message and stderr is empty, and that closing stdin ends the process with 0 within 2 s (0008-MADR D19 item 6).
+  * `internal/cli`'s P4 tests change: `gobble acp` with an empty stdin now exits 0 and still writes nothing to stdout.
+* **Accept**, as written: the session test is shown failing on a scratch copy whose `Initialize` returns protocol 2, and the failure is quoted in the handoff. Further negatives:
+  * a capability advertised early fails the capability test;
+  * a banner on stdout fails the binary test;
+  * `Serve` that ignores EOF fails the 2 s bound.
+* **Verification.**
+  * `go test` for `acpserver` and `internal/cli`;
+  * `golangci-lint` for linux, darwin and windows;
+  * `make preflight` on Windows and in WSL.
+
+  The agent stages; the owner commits.

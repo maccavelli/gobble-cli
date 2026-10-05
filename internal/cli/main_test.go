@@ -71,7 +71,7 @@ func TestMainExitCodes(t *testing.T) {
 		{"unknown flag", []string{"--bogus"}, ExitUsage, "Error: unknown flag --bogus\n"},
 		{"bad enum", []string{"--output-format", "yaml", "x"}, ExitUsage, `--output-format must be one of "text","json","stream-json"`},
 		{"bad log level", []string{"--log-level", "loud", "version"}, ExitUsage, "--log-level must be one of"},
-		{"acp stub", []string{"acp"}, ExitUsage, "Error: gobble acp is not yet implemented (0002-PLAN Phase 1)\n"},
+		{"acp serves until end of file", []string{"acp"}, ExitOK, ""},
 		{"completion needs a known shell", []string{"completion", "nu"}, ExitUsage, `<shell> must be one of "bash","zsh","fish","powershell"`},
 		{"version", []string{"version"}, ExitOK, ""},
 		{"config path", []string{"config", "path"}, ExitOK, ""},
@@ -150,15 +150,18 @@ func TestHelp(t *testing.T) {
 	}
 }
 
-// gobble acp writes nothing to stdout: stdout is the protocol (0004-PLAN
-// Phase 2 Accept).
+// gobble acp writes nothing to stdout but the protocol (0004-PLAN Phase 2
+// Accept): with a closed stdin it serves, reaches end of file and exits 0
+// without a byte on stdout or stderr (0002-PLAN Phase 1).
 func TestACPWritesNothingToStdout(t *testing.T) {
-	r := runMain(t, stdinFile(t, ""), "acp")
-	if r.stdout != "" {
-		t.Fatalf("gobble acp wrote to stdout: %q", r.stdout)
-	}
-	if r.code != ExitUsage {
-		t.Fatalf("exit %d", r.code)
+	for name, stdin := range map[string]*os.File{"empty stdin": stdinFile(t, ""), "no stdin": nil} {
+		r := runMain(t, stdin, "acp")
+		if r.stdout != "" || r.stderr != "" {
+			t.Fatalf("%s: gobble acp wrote stdout %q, stderr %q", name, r.stdout, r.stderr)
+		}
+		if r.code != ExitOK {
+			t.Fatalf("%s: exit %d, want 0 at end of file", name, r.code)
+		}
 	}
 }
 
