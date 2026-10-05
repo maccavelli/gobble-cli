@@ -104,6 +104,18 @@ func TestImportRules(t *testing.T) {
 			ImportPath: modulePath + "/agent",
 			Imports:    []string{"github.com/maccavelli/go-core-lib/selfupdate"},
 		}}},
+		{name: "rule 8 buildinfo may import the lib's buildinfo", rule: 8, pkgs: []modPkg{{
+			ImportPath: modulePath + "/internal/buildinfo",
+			Imports:    []string{libBuildinfo},
+		}}},
+		{name: "rule 8 buildinfo may not import selfupdate", rule: 8, want: "go-selfupdate-lib/selfupdate", pkgs: []modPkg{{
+			ImportPath: modulePath + "/internal/buildinfo",
+			Imports:    []string{"github.com/maccavelli/go-selfupdate-lib/selfupdate"},
+		}}},
+		{name: "rule 8 agent may not import the lib's buildinfo", rule: 8, want: "go-selfupdate-lib/buildinfo", pkgs: []modPkg{{
+			ImportPath: modulePath + "/agent",
+			Imports:    []string{libBuildinfo},
+		}}},
 		{name: "rule 9 module", rule: 9},
 		{name: "rule 9 agent kong", rule: 9, want: "alecthomas/kong", pkgs: []modPkg{{
 			ImportPath: modulePath + "/agent",

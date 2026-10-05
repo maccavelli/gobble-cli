@@ -1,0 +1,67 @@
+//go:build unix
+
+package appdirs
+
+import (
+	"fmt"
+	"os"
+	"syscall"
+)
+
+// Provenance: magic-cli-remote internal/appdirs/ensure_unix.go at 9778cbc1
+// (Apache-2.0). The path check uses absClean, as the Windows half does.
+
+// EnsurePrivateDir creates dir (and parents) as a user-owned directory mode 0700.
+//
+// Idempotent and converging. Creates the directory and any parents if absent;
+// if present, verifies owner and access and repairs access to the private
+// state; returns an error rather than repairing when the leaf is a symlink,
+// reparse point, or not owned by the current principal. A second call on a
+// converged directory performs no writes.
+//
+// It refuses to chmod through a final symlink: the leaf must be a real
+// directory owned by the current uid after creation.
+func EnsurePrivateDir(dir string) error {
+	dir, err := absClean(dir, "directory")
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return fmt.Errorf("mkdir %s: %w", dir, err)
+	}
+	return validatePrivateDir(dir)
+}
+
+func validatePrivateDir(dir string) error {
+	fi, err := os.Lstat(dir)
+	if err != nil {
+		return err
+	}
+	if fi.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("appdirs: %s is a symlink", dir)
+	}
+	if !fi.IsDir() {
+		return fmt.Errorf("appdirs: %s is not a directory", dir)
+	}
+	st, ok := fi.Sys().(*syscall.Stat_t)
+	if !ok {
+		return fmt.Errorf("appdirs: cannot inspect ownership of %s", dir)
+	}
+	if int(st.Uid) != os.Getuid() {
+		return fmt.Errorf("appdirs: %s not owned by current user", dir)
+	}
+	if fi.Mode().Perm()&0o077 != 0 {
+		if err := os.Chmod(dir, 0o700); err != nil { //nolint:gosec // G302: a directory needs its search bit; 0700 is owner-only
+			return fmt.Errorf("chmod %s: %w", dir, err)
+		}
+		// Re-check after chmod.
+		fi, err = os.Lstat(dir)
+		if err != nil {
+			return err
+		}
+		if fi.Mode().Perm()&0o077 != 0 {
+			return fmt.Errorf("appdirs: %s still group/other accessible after chmod", dir)
+		}
+	}
+	return nil
+}

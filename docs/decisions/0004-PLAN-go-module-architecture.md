@@ -485,6 +485,37 @@ MD040) at the same lines before and after. `git diff --check` passed.
 
 **Phase 1, 2026-10-04 — complete.** The package map and compile-only contracts are in the tree. No command library is imported. `make preflight` exited 0. `go test ./internal/archtest` was green (`ok github.com/maccavelli/gobble-cli/internal/archtest`). On a deleted scratch copy, planting `internal/cli` importing `agent` failed archtest with `rule 6: github.com/maccavelli/gobble-cli/internal/cli imports github.com/maccavelli/gobble-cli/agent`. Planting `agent` importing `charm.land/lipgloss/v2` failed with `rule 1: github.com/maccavelli/gobble-cli/agent imports charm.land/lipgloss/v2` and the same edge under rule 5. `session.Entry` keeps unknown JSON members with `json:",embed"` because Go 1.27.1 ignores `json:",unknown"`. Replacing that tag with `json:"unknown"` failed `TestEntryUnknownFieldRoundTrip`: unknown fields not preserved, got `{"type":"message","id":"abc","unknown":null}`.
 
+**Phase 2, steps 2–4, 2026-10-05 — complete (staged; the owner commits).** The owner approved running steps 2, 3 and 4, the preconditions of 0008-PLAN P4. They ran as expanded in the amendment of 2026-10-05, with the two owner decisions recorded there. The rest of Phase 2 has not run.
+
+* **Files.**
+  * `go.mod` and `go.sum`: `github.com/maccavelli/go-selfupdate-lib v1.7.0`, direct.
+  * `internal/buildinfo`: `doc.go`, `buildinfo.go` and its test.
+  * `internal/appdirs`:
+    * `doc.go`, `dirs.go`, `base_unix.go` and `base_windows.go`;
+    * from magic-cli-remote: `pathcheck.go`, `ensure_unix.go`, `ensure_windows.go`, `owneronly_unix.go` and `security_windows.go`;
+    * tests: `dirs_test.go`, `owneronly_test.go`, `ensure_unix_test.go` and `security_windows_test.go`.
+  * `internal/logging`: `doc.go`, `logging.go`, `redact.go`, `rolling.go` and their tests.
+  * `internal/archtest/check.go` and `check_test.go`: the rule-8 exception and its three cases.
+* **Gates.**
+  * `make preflight` printed `preflight passed` on Windows and in WSL Ubuntu 24.04, on a copy of the tree.
+  * `go test ./internal/...` passed on Windows. `go test -race ./internal/...` passed in WSL, which also ran the Unix-only symlink and mode-repair tests.
+  * `golangci-lint` reported `0 issues.` for linux, darwin and windows.
+  * The pre-add check was clean for all 25 files.
+* **Negative tests**, each on a scratch copy, each failing as expected:
+  * buildinfo with the `0.0.0-dev` normalisation dropped: `Version = "dev", want "0.0.0-dev"`.
+  * the rule-8 exception widened to the whole module: `rule_8_buildinfo_may_not_import_selfupdate` failed.
+  * appdirs with the per-role override ignored: `a_role_override_beats_GOBBLE_HOME` failed.
+  * appdirs honouring XDG on Windows: `windows_ignores_XDG` failed.
+  * redaction removed: `file leaks "sk-live-1"`, and the same for each of the five secrets in both sinks.
+  * the stderr floor removed: `stderr shows below-warning records`.
+  * rotation disabled: `backups = [], want 1`.
+  * the first-free collision suffix (below) reinstated: the run kept backups `-1` to `-5` and lost the three newest.
+* **What the plan predicted wrongly.**
+  1. **Step 2 as written duplicated a shipped library.** go-selfupdate-lib `v1.7.0` has `buildinfo` with the release rule. Owner decision: wrap it, with a narrow rule-8 exception (0004-MADR amendment of 2026-10-05).
+  2. **0157-MADR D6's collision rule loses the newest backup.** It says to append `-1`, `-2`, … "until the name is free". When rotations share one millisecond and pruning runs between them, the freed unsuffixed name is reused. The newest backup then sorts as the oldest and is pruned at once, which the negative test above reproduces. `backupName` numbers after the highest suffix already used for the timestamp instead. This is a finding for magic-cli-remote 0157, recorded here only: that repository is out of scope.
+  3. **The copied magic-cli-remote tests skip on host state** ("the host created this file owner-only already", "this host cannot resolve the LA alias"). gobble keeps only the deterministic cases. The LA-alias case fails rather than skips, and it passed on this host.
+  4. **gobble's lint set flagged the copied code.** `token.Close` was unchecked (errcheck), and a `for` loop could be an integer range (intrange). Both were changed in the copy, as its provenance comment says. gosec's G302 on `os.Chmod(dir, 0o700)` is a false positive for a directory, and is suppressed with that reason.
+
 ## Amendments
 
 **2026-09-30 — shared libraries as they exist.** 0004-MADR's amendment of
@@ -707,3 +738,53 @@ Changes to the steps as written:
 * **Phase 4.** `make verify-build-metadata` is implemented by 0008-PLAN P4, because creating `cmd/gobble/main.go` trips the Phase 0 placeholder (`Makefile`, `verify-build-metadata`). Phase 4 keeps the CI wiring.
 * **Phase 0 step 7.** The lint set gains 0008-MADR D18's rules (sloglint, depguard, forbidigo, modernize, intrange, copyloopvar, usestdlibvars, perfsprint, usetesting, noctx, contextcheck, fatcontext).
 * **archtest rule 9.** Only `internal/cli/...` may import Kong. Added by 0008-PLAN P1.
+
+**2026-10-05 — Phase 2 steps 2, 3 and 4 made executable (owner's decisions of 2026-10-05).**
+Steps 2–4 as written name their sources but not their files, APIs or checks. They are expanded here before execution, with two decisions the owner made on 2026-10-05. The steps above are kept as written; where this text differs, this text is the step to follow.
+
+* **Step 2, `internal/buildinfo` — changed by the owner.** ~~`-X` variables `version`, `commit`, `date`, `buildKind`~~ is withdrawn. go-selfupdate-lib `v1.7.0` (`e825cda`) ships `buildinfo`: a standard-library-only package with the release rule 0004-MADR describes, `debug.ReadBuildInfo` revision, time and dirty flag, and `LDFlags`. `selfupdate/cli` decides release-or-local from it. Two stamp sets would be two answers to one question, so gobble wraps that package and has no stamps of its own.
+  * `go get github.com/maccavelli/go-selfupdate-lib@v1.7.0`. The new direct requirement is that module alone. Its own requirements (`x/mod v0.40.0`, `x/sys v0.47.0`, `x/term v0.43.0`) are older than gobble's, so no version moves.
+  * `internal/buildinfo/buildinfo.go` imports `github.com/maccavelli/go-selfupdate-lib/buildinfo` and the standard library only. It defines `type Info struct{ Version, Commit, Date, Go, OS, Arch string; Modified, Release bool; Lib lib.Info }`, `func Identity() Info` (computed once with `sync.OnceValue`) and `func (Info) UserAgent() string`.
+  * **`Version`** is 0008-MADR D19 item 1's form. It is `lib.Info.Current()` without a leading `v` when that is a SemVer 2.0 version. Otherwise it is `0.0.0-dev`, plus `+<first 12 characters of vcs.revision>` when the revision is known, plus `.dirty` when the tree was modified. It is never `(devel)` or `dev`.
+  * **`Commit`** is `vcs.revision`. **`Date`** is `vcs.time`, the commit time, so builds stay reproducible (the 2026-10-01 amendment). **`Release`** is `lib.Kind == lib.KindRelease`. That rule accepts the prerelease form `vX.Y.Z-name.N` of go-selfupdate-lib's 0005-MADR, which supersedes 0004-MADR's "strict `vX.Y.Z`".
+  * **`UserAgent`** returns `gobble/<Version> (<GOOS>; <GOARCH>) go/<runtime.Version() without "go">` (0003-MADR).
+  * Tests: a table test of the pure `fromLib(lib.Info, goos, goarch, gover string) Info` covers a release stamp, a prerelease, a `go install …@vX` module version, an unparseable stamp, `(devel)` with and without a revision, and a dirty tree. Two more tests check the User-Agent format and that `Identity()` under `go test` is parseable SemVer.
+  * **Archtest rule 8** gains one exception: `internal/buildinfo` may import exactly `github.com/maccavelli/go-selfupdate-lib/buildinfo`. There are three new table cases: that edge is allowed; `internal/buildinfo` importing `…/selfupdate` is a violation; `agent` importing the lib's `buildinfo` is a violation.
+  * Negative tests on scratch copies: dropping the `0.0.0-dev` normalisation fails the table, and widening the exception to the whole module fails the `…/selfupdate` case.
+* **Step 3, `internal/appdirs`.**
+  * **Resolution**, in `dirs.go`: `type Dirs struct{ Config, Data, State, Cache string }`, `type Diagnostic struct{ Code, Message string }`, `type Base struct{ Home, AppData, LocalAppData string }`, the pure `func Resolve(env func(string) string, goos string, base Base) (Dirs, []Diagnostic, error)`, and `func System() (Dirs, []Diagnostic, error)`. `System` reads the process environment, `os.UserHomeDir` and, on Windows, the RoamingAppData and LocalAppData Known Folders (`base_unix.go`, `base_windows.go`).
+  * **Precedence per role**, highest first:
+    1. `GOBBLE_CONFIG_DIR`, `GOBBLE_DATA_DIR`, `GOBBLE_STATE_DIR` or `GOBBLE_CACHE_DIR`;
+    2. `GOBBLE_HOME`, which makes all four roles that one directory (0003-MADR: it "collapses all four roles into one directory");
+    3. the 0003-MADR platform table. On Unix and macOS this is `$XDG_<ROLE>_HOME/gobble`, defaulting to `~/.config`, `~/.local/share`, `~/.local/state` and `~/.cache`. On Windows it is `%APPDATA%\gobble` for config and `%LOCALAPPDATA%\gobble\data`, `\state` and `\cache` for the others; `XDG_*` is ignored there.
+
+    A relative `GOBBLE_*` value is an error, because an explicit setting that cannot work must not be ignored. A relative `XDG_*` value is ignored with a diagnostic, as the XDG specification requires.
+  * **Owner-only directories and files**, copied from magic-cli-remote `internal/appdirs` at `9778cbc1` (Apache-2.0, provenance comment in each file), as 0008-MADR D15 directs: `EnsurePrivateDir` and `FileIsOwnerOnly`, in `ensure_unix.go`, `ensure_windows.go`, `security_windows.go`, `owneronly_unix.go` and `pathcheck.go`. On Windows the private DACL grants only the owner and SYSTEM. The daemon-only parts are left out: runtime directories, socket paths, `ValidateRuntimeDir`, `foreignTrustees` and the operator messages.
+  * Tests:
+    * the role table for `linux`, `darwin` and `windows`, with a fake `$HOME`, `$XDG_*`, `%APPDATA%` and `%LOCALAPPDATA%` (Accept);
+    * each per-role override over `GOBBLE_HOME`;
+    * a relative override is an error, and a relative `XDG_*` value gives a diagnostic;
+    * the copied owner-only tests, without the source's conditional skips (0008-PLAN C5).
+  * Negative tests on scratch copies: ignoring the per-role override fails the table, and honouring `XDG_*` on Windows fails the table.
+* **Step 4, `internal/logging`.**
+  * **`logging.go`.** `type Options struct{ Level slog.Level; File string; Stderr, Warn io.Writer }` and `func Open(opts Options) (*slog.Logger, io.Closer, error)` (0157-MADR D13's closable opener). It never calls `slog.SetDefault` (0008-MADR D18, `no-global`).
+  * **Handlers**, joined with `slog.NewMultiHandler`, or `slog.DiscardHandler` when there are none:
+    * when `File` is set, a JSON handler at `Level` on the rolling sink;
+    * when `Stderr` is set, a text handler at **`max(Level, slog.LevelWarn)`** (owner's decision, 2026-10-05). The terminal shows warnings and errors only, and `--log-level debug` adds detail to the file alone. `gobble acp` passes a nil `Stderr`, so nothing is logged on stderr in ACP mode.
+  * **`rolling.go`** is written from magic-cli-remote 0157-MADR D6 and D7. It has no dependency and no code copied (0008-MADR D14, F17).
+    * The file is `File`, at mode 0600, inside a directory converged with `appdirs.EnsurePrivateDir`.
+    * Limits: 10 MiB per file, 5 backups, 28 days. There is no compression, because 0008-MADR D14 names none; the bound is about 60 MiB.
+    * The size is checked before each write, and the file rotates first if the write would exceed the cap. On open, a file already at the cap rotates. A single record larger than the cap goes to a fresh file.
+    * Backups are named `<base>-<UTC 2006-01-02T15-04-05.000>.log`. A `-1`, `-2`, … suffix avoids a collision, because `os.Rename` silently replaces an existing file on Windows (0157 F16).
+    * Pruning by count and by age runs after each rotation. One mutex serialises writes and rotation.
+    * Rotation never drops a line: on a rotation or pruning failure the sink keeps appending to the current file and reports the failure once to `Warn`.
+  * **`redact.go`.** A `ReplaceAttr` used by both handlers. It replaces with `[REDACTED]` the value of any key whose lower-case form ends in `key`, `token`, `secret` or `password`, or equals `authorization`. `password` is added to the step's list, to cover the organisation's secret-name suffixes (`_SECRET`, `_TOKEN`, `_PASSWORD`, `_KEY`).
+  * Tests:
+    * the file receives Info as JSON;
+    * stderr receives Warn but not Info at `Level` Info, and Debug reaches the file only;
+    * a nil `Stderr` writes nothing;
+    * redaction in both handlers, nested groups included;
+    * rotation at a small injected cap, the backup count, pruning by age through names, the collision suffix, the oversized record, rotation on open, and a failing rename that keeps appending and warns once;
+    * the active file is owner-only (`appdirs.FileIsOwnerOnly`).
+  * Negative tests on scratch copies: redaction removed, the stderr floor removed, and rotation disabled each fail a test.
+* **Verification for steps 2–4.** `go test ./internal/...` and `golangci-lint run ./...` for linux, darwin and windows. `make preflight` on Windows and in WSL. `make check-records` and `make markdownlint`. Every negative test above is seen to fail on a scratch copy. The agent stages; the owner commits (0008-PLAN Stability rule).

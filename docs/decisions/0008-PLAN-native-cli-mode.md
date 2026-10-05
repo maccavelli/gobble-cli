@@ -37,7 +37,7 @@ Every item below is an observable state when this plan is done:
 
 **Records**
 - `docs/decisions/0008-PLAN-native-cli-mode.md` (this file)
-- `docs/decisions/0008-MADR-native-cli-mode.md`: status and the Observed section only ~~*(2026-10-04: also the dated D18 amendment that records the P1 forbidigo deviation)*~~ *(Withdrawn 2026-10-04 with that deviation; the strike-through it leaves in D18 is the only MADR edit.)*
+- `docs/decisions/0008-MADR-native-cli-mode.md`: status and the Observed section only ~~*(2026-10-04: also the dated D18 amendment that records the P1 forbidigo deviation)*~~ *(Withdrawn 2026-10-04 with that deviation; the strike-through it leaves in D18 is the only MADR edit.)* *(2026-10-05: and the dated D15 note of the owner's buildinfo decision.)*
 - `docs/decisions/0002-MADR-cli-acp-headless-mcp-v1.md`, `docs/decisions/0002-PLAN-cli-acp-headless-mcp-v1.md`, `docs/decisions/0004-PLAN-go-module-architecture.md`, `docs/decisions/0006-MADR-goose-cli-port-candidates.md`, `docs/decisions/0007-MADR-repository-scaffolding-to-fleet-standard.md`: dated amendments only
 - `docs/README.md`: index rows and statuses
 - `docs/architecture.md`: the go-tui-lib version line only
@@ -454,7 +454,8 @@ P0 records ─┬─ P1 lint + archtest ─ P2 terminal layer ─ P3 line editor
 
     `cmd/gobble/doc.go`'s comment changes from "Phase 1 is a compile stub…" to "Package main is the gobble command. It prepares the console and runs cli.Main."
 13. **`Makefile`:**
-    - Add `VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo 0.0.0-dev)`, `COMMIT`, `DATE` (the commit time, per the 0004-PLAN 2026-10-01 amendment), `BUILD_KIND ?= local` and `LDFLAGS` with the four `-X` variables of `internal/buildinfo`.
+    - ~~Add `VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo 0.0.0-dev)`, `COMMIT`, `DATE` (the commit time, per the 0004-PLAN 2026-10-01 amendment), `BUILD_KIND ?= local` and `LDFLAGS` with the four `-X` variables of `internal/buildinfo`.~~
+      *(Changed 2026-10-05 by the owner's buildinfo decision, 0004-MADR amendment of that date.)* Add `VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo 0.0.0-dev)`, `BUILD_KIND ?= local` and `LDFLAGS` with the two `-X` variables of go-selfupdate-lib `buildinfo`, `VersionVar` and `KindVar`. Commit and date come from `vcs.revision` and `vcs.time`, which `go build` records in a checkout. The `verify-build-metadata` check below asserts them against `git rev-parse HEAD` and the commit time.
     - Add the target `bin/gobble$(BIN_EXT)`.
     - Replace the `verify-build-metadata` placeholder with a check. It builds with `LDFLAGS` into a temp directory, asserts that `version --json` reports the stamped `version`, `commit` and `date`, and asserts that a build without `-ldflags` reports a parseable `0.0.0-dev` version (D19 item 1).
 14. **Tests:**

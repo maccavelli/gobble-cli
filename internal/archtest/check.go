@@ -146,6 +146,10 @@ func isCoreLib(imp string) bool {
 		pathUnder(imp, "github.com/maccavelli/go-selfupdate-lib")
 }
 
+// libBuildinfo is the one go-selfupdate-lib package internal/buildinfo may
+// import.
+const libBuildinfo = "github.com/maccavelli/go-selfupdate-lib/buildinfo"
+
 func isSelfUpdateTest(imp string) bool {
 	return imp == "github.com/maccavelli/go-selfupdate-lib/selfupdate/selfupdatetest" ||
 		imp == "github.com/maccavelli/go-core-lib/selfupdate/selfupdatetest"
@@ -315,6 +319,11 @@ func checkRule8(pkgs []modPkg) []Violation {
 		}
 		rel, ok := relOf(e.from)
 		if !ok || under(rel, "internal/cli") {
+			continue
+		}
+		// internal/buildinfo wraps the library's stamps, and only those
+		// (0004-MADR amendment of 2026-10-05).
+		if rel == "internal/buildinfo" && e.to == libBuildinfo {
 			continue
 		}
 		vs = add(vs, 8, e)

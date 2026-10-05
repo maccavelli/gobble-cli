@@ -933,3 +933,11 @@ are unchanged. It still has no tag; these commits are not gobble dependencies.
 ### Amendment (2026-10-04): configuration surface undecided
 
 The config surface is undecided and will be either a native Kong facility or a surface we write.
+
+### Amendment (2026-10-05): build identity comes from go-selfupdate-lib `buildinfo`
+
+The "planned rule" above has shipped. go-selfupdate-lib `v1.7.0` (`e825cda`) contains `buildinfo`, which imports only the standard library and is meant to be read by any program. Its release rule is: stamped kind `release` and a release tag, where a tag is `vX.Y.Z` or the prerelease form `vX.Y.Z-name.N` of that library's 0005-MADR. That rule replaces "strict `vX.Y.Z`" here.
+
+The owner decided on 2026-10-05 that gobble keeps one source of build identity. `internal/buildinfo` wraps the library's `buildinfo` and adds only gobble's forms: the SemVer version of 0008-MADR D19 item 1, commit and date from `vcs.revision` and `vcs.time`, and the 0003-MADR User-Agent. gobble links no stamps of its own. This settles early the question the 2026-10-02 amendment left to 0005-PLAN F10 ("whether gobble keeps its own `internal/buildinfo` or uses the released `buildinfo`").
+
+**Import rule 8 gains one exception.** `internal/buildinfo` may import exactly `github.com/maccavelli/go-selfupdate-lib/buildinfo`. Every other non-test use of the module stays in `internal/cli`. The exception does not loosen the rule's purpose, which is to keep the self-update machinery at the process edge: the subpackage holds only stamps. archtest enforces the exception and the boundary around it (0004-PLAN amendment of 2026-10-05).

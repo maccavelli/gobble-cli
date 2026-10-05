@@ -526,7 +526,7 @@ Further rules:
 
 | Need | Source | How |
 |---|---|---|
-| `update`, `version` | go-selfupdate-lib `selfupdate/cli` (`Flags`, `Request`, `Run`), `buildinfo` | import in `internal/cli` (rule 8) |
+| `update`, `version` | go-selfupdate-lib `selfupdate/cli` (`Flags`, `Request`, `Run`), `buildinfo` | import in `internal/cli` (rule 8). *(Amended 2026-10-05, owner's decision: `buildinfo` is imported by `internal/buildinfo`, under a narrow rule-8 exception, so that the version reaches `acpserver`, MCP and the User-Agent; `selfupdate/cli` stays in `internal/cli`. See 0004-MADR, amendment of 2026-10-05.)* |
 | `configure`, login, model list, `info --check` | go-llmprovider-sdk `wizard`, `llmprovider/auth`, `llmprovider/catalog` | import through `llm/provider` (rule 4) |
 | URL opening for login | prepare-commit-msg `internal/ui/open.go` | copy, about 35 lines, without its stdout print |
 | Directory roots, owner-only files | magic-cli-remote `internal/appdirs` | copy into gobble's `internal/appdirs` on the 0003-MADR table |
