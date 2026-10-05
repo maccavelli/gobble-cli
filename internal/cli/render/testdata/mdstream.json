@@ -1,0 +1,335 @@
+{
+ "source": "goose crates/goose-cli/src/session/streaming_buffer.rs at 591edd4 (Apache-2.0), tests",
+ "cases": [
+  {
+   "name": "simple sentence streams through immediately",
+   "chunks": [
+    "I'll",
+    " help",
+    " you",
+    " with",
+    " that",
+    "!"
+   ],
+   "want": [
+    "I'll",
+    " help",
+    " you",
+    " with",
+    " that",
+    "!"
+   ]
+  },
+  {
+   "name": "bold split mid-word",
+   "chunks": [
+    "Here's the **important",
+    "** part."
+   ],
+   "want": [
+    "Here's the ",
+    "**important** part."
+   ]
+  },
+  {
+   "name": "inline code split",
+   "chunks": [
+    "Use the `println!",
+    "` macro."
+   ],
+   "want": [
+    "Use the ",
+    "`println!` macro."
+   ]
+  },
+  {
+   "name": "link url split",
+   "chunks": [
+    "Check [the docs](https://doc",
+    "s.rs) for more."
+   ],
+   "want": [
+    "Check ",
+    "[the docs](https://docs.rs) for more."
+   ]
+  },
+  {
+   "name": "code block streamed line by line",
+   "chunks": [
+    "```rust\n",
+    "fn main() {\n",
+    "    println!(\"hello\");\n",
+    "}\n",
+    "```\n"
+   ],
+   "want": [
+    "```rust\nfn main() {\n    println!(\"hello\");\n}\n```\n"
+   ]
+  },
+  {
+   "name": "fence split across chunks inside a string literal",
+   "chunks": [
+    "Here's an exa",
+    "mple:\n\n```python\nprint(\"``",
+    "`nested```\")\n```\n\nNice!"
+   ],
+   "want": [
+    "Here's an exa",
+    "mple:\n",
+    "\n```python\nprint(\"```nested```\")\n```\n\nNice!"
+   ]
+  },
+  {
+   "name": "nested fence with a longer outer fence",
+   "chunks": [
+    "````md\n",
+    "```\ninner\n```\n",
+    "````\n"
+   ],
+   "want": [
+    "````md\n```\ninner\n```\n````\n"
+   ]
+  },
+  {
+   "name": "tilde fence",
+   "chunks": [
+    "~~~bash\n",
+    "echo 'hello'\n",
+    "~",
+    "~~\n"
+   ],
+   "want": [
+    "~~~bash\necho 'hello'\n~~~\n"
+   ]
+  },
+  {
+   "name": "unclosed fence flushes at end",
+   "chunks": [
+    "```\ncode"
+   ],
+   "want": [
+    "```\ncode"
+   ]
+  },
+  {
+   "name": "heading split mid-word",
+   "chunks": [
+    "# Getting St",
+    "arted\n\nFirst, install..."
+   ],
+   "want": [
+    "# Getting Started\n\nFirst, install..."
+   ]
+  },
+  {
+   "name": "two headings in one chunk",
+   "chunks": [
+    "## API Reference\n\n###",
+    " Methods\n\n"
+   ],
+   "want": [
+    "## API Reference\n\n",
+    "### Methods\n\n"
+   ]
+  },
+  {
+   "name": "table arriving row by row",
+   "chunks": [
+    "| Name | Value |\n",
+    "|------|-------|\n",
+    "| foo  | 42    |\n",
+    "\nMore text"
+   ],
+   "want": [
+    "| Name | Value |\n|------|-------|\n| foo  | 42    |\n\nMore text"
+   ]
+  },
+  {
+   "name": "table followed by a blank line",
+   "chunks": [
+    "| A | B |\n|---|---|\n| 1 | 2 |\n\n"
+   ],
+   "want": [
+    "| A | B |\n|---|---|\n| 1 | 2 |\n\n"
+   ]
+  },
+  {
+   "name": "typical answer with list, code and emphasis",
+   "chunks": [
+    "Here's how to do it:\n\n",
+    "1. First, run `cargo",
+    " build`\n",
+    "2. Then check the **out",
+    "put**\n\n",
+    "```rust\n",
+    "fn main() {}\n",
+    "```\n"
+   ],
+   "want": [
+    "Here's how to do it:\n\n",
+    "1. First, run ",
+    "`cargo build`\n",
+    "2. Then check the ",
+    "**output**\n\n",
+    "```rust\nfn main() {}\n```\n"
+   ]
+  },
+  {
+   "name": "link with nested bold, then a list",
+   "chunks": [
+    "See the [**Rust Book**](https://doc.rust-l",
+    "ang.org/book/) for more info.\n\n",
+    "Key points:\n- Use `Result` for errors\n- Prefer `Option` over null"
+   ],
+   "want": [
+    "See the ",
+    "[**Rust Book**](https://doc.rust-lang.org/book/) for more info.\n\n",
+    "Key points:\n- Use `Result` for errors\n- Prefer `Option` over null"
+   ]
+  },
+  {
+   "name": "image with a split url",
+   "chunks": [
+    "![screenshot](./img/sc",
+    "reen.png)\n\nAs shown above..."
+   ],
+   "want": [
+    "![screenshot](./img/screen.png)\n\nAs shown above..."
+   ]
+  },
+  {
+   "name": "escaped markdown characters",
+   "chunks": [
+    "Use \\* for bullet points, not \\`code\\`"
+   ],
+   "want": [
+    "Use \\* for bullet points, not \\`code\\`"
+   ]
+  },
+  {
+   "name": "asterisk in arithmetic is an italic marker",
+   "chunks": [
+    "Price: $100 * 2 = $200"
+   ],
+   "want": [
+    "Price: $100 ",
+    "* 2 = $200"
+   ]
+  },
+  {
+   "name": "empty input releases nothing",
+   "chunks": [
+    ""
+   ],
+   "want": []
+  },
+  {
+   "name": "unicode content",
+   "chunks": [
+    "Hello 世界! Here's some **太字** text."
+   ],
+   "want": [
+    "Hello 世界! Here's some **太字** text."
+   ]
+  },
+  {
+   "name": "nested bold and italic",
+   "chunks": [
+    "**bold *and italic* together**"
+   ],
+   "want": [
+    "**bold *and italic* together**"
+   ]
+  },
+  {
+   "name": "combined bold italic marker",
+   "chunks": [
+    "***bold italic***"
+   ],
+   "want": [
+    "***bold italic***"
+   ]
+  },
+  {
+   "name": "strikethrough, then bold split across chunks",
+   "chunks": [
+    "~~stri",
+    "ke~~ and **bo",
+    "ld**"
+   ],
+   "want": [
+    "~~strike~~ and ",
+    "**bold**"
+   ]
+  },
+  {
+   "name": "unclosed bold flushes",
+   "chunks": [
+    "This is **incomplete bold"
+   ],
+   "want": [
+    "This is ",
+    "**incomplete bold"
+   ]
+  },
+  {
+   "name": "unclosed link flushes",
+   "chunks": [
+    "Check [broken link](http://"
+   ],
+   "want": [
+    "Check ",
+    "[broken link](http://"
+   ]
+  },
+  {
+   "name": "unclosed inline code flushes",
+   "chunks": [
+    "Start of `code"
+   ],
+   "want": [
+    "Start of ",
+    "`code"
+   ]
+  },
+  {
+   "name": "fence marker split across pushes",
+   "chunks": [
+    "``",
+    "`rust\n",
+    "fn main() {}\n",
+    "``",
+    "`\n"
+   ],
+   "want": [
+    "```rust\nfn main() {}\n```\n"
+   ]
+  },
+  {
+   "name": "blank line released before the fence arrives",
+   "chunks": [
+    "intro\n\n",
+    "```rust\n",
+    "code\n",
+    "```\n"
+   ],
+   "want": [
+    "intro\n\n",
+    "```rust\ncode\n```\n"
+   ]
+  },
+  {
+   "name": "consecutive split constructs release independently",
+   "chunks": [
+    "a **b",
+    "** c\nd `e",
+    "` f\n"
+   ],
+   "want": [
+    "a ",
+    "**b** c\nd ",
+    "`e` f\n"
+   ]
+  }
+ ]
+}

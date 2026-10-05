@@ -78,7 +78,7 @@ BIN := bin/gobble$(BIN_EXT)
 
 .PHONY: build install test race vet fmt lint staticcheck vulncheck tidy clean \
 	pre-add-check preflight check-cgo-off verify-build-metadata fix-check archtest apidiff \
-	check-records markdownlint
+	check-records markdownlint probe-conhost
 
 # Shipped binaries are pure Go. check-cgo-off refuses CGO_ENABLED other than 0
 # and any `import "C"` in a .go file (0004-PLAN phase 0 accept).
@@ -214,6 +214,12 @@ check-records:
 # (0007-MADR D2).
 markdownlint:
 	npx --yes markdownlint-cli2@0.23.2
+
+# The live Console Host suite (0008-PLAN P3). Windows only: it opens a
+# conhost.exe window for a few seconds and borrows the clipboard, which it
+# saves and restores. Not part of preflight.
+probe-conhost:
+	go test -tags conhost -run '^TestConhost$$' -count=1 -v ./internal/cli/editor/
 
 # No-op until internal/archtest lands in phase 1.
 archtest:

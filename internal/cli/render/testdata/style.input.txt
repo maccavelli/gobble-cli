@@ -1,0 +1,29 @@
+# Release notes
+
+Some text with `inline code` and a `` double `tick` `` span.
+
+## Steps
+
+1. Build with `make build`.
+2. Run the tests:
+   - unit tests
+   - the `conhost` suite
+* star item
++ plus item
+
+> A quoted line with `code`.
+
+```bash
+make preflight
+# a shell comment, not a heading
+```
+
+~~~
+tilde fence
+~~~
+
+| a | b |
+|---|---|
+| 1 | 2 |
+
+Plain closing line.

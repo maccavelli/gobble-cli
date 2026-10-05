@@ -1,0 +1,29 @@
+<ESC>[1m# Release notes<ESC>[0m
+
+Some text with <ESC>[2m`inline code`<ESC>[0m and a <ESC>[2m`` double `tick` ``<ESC>[0m span.
+
+<ESC>[1m## Steps<ESC>[0m
+
+<ESC>[36m1.<ESC>[0m Build with <ESC>[2m`make build`<ESC>[0m.
+<ESC>[36m2.<ESC>[0m Run the tests:
+   <ESC>[36m-<ESC>[0m unit tests
+   <ESC>[36m-<ESC>[0m the <ESC>[2m`conhost`<ESC>[0m suite
+<ESC>[36m*<ESC>[0m star item
+<ESC>[36m+<ESC>[0m plus item
+
+<ESC>[36m><ESC>[0m A quoted line with <ESC>[2m`code`<ESC>[0m.
+
+<ESC>[2m```<ESC>[0m<ESC>[36mbash<ESC>[0m
+make preflight
+# a shell comment, not a heading
+<ESC>[2m```<ESC>[0m
+
+<ESC>[2m~~~<ESC>[0m
+tilde fence
+<ESC>[2m~~~<ESC>[0m
+
+| a | b |
+|---|---|
+| 1 | 2 |
+
+Plain closing line.

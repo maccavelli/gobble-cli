@@ -643,3 +643,63 @@ The handshake, replay and session-lock rows of the MADR's Confirmation are check
 - **Windows Terminal (`wt.exe`) paste probe.** The conhost suite covers Console Host. Windows Terminal is documented to support bracketed paste, and probing it is a follow-up line in the Execution record if `make probe-conhost` is extended.
 - **CI wiring of `completion-shells` and `probe-conhost`.** 0004-PLAN Phase 4 owns `ci.yml`. A `conhost` window in a CI runner is **[unverified]**.
 - **Companion changes in magic-cli-remote (D20).** These are out of scope by the owner's direction.
+
+## Execution record (2026-10-05, interim)
+
+P7 writes the final record. This interim one keeps the evidence of the phases that have run.
+
+### Phases
+
+| Phase | State | Staged files |
+|---|---|---|
+| P0 | ran 2026-10-04; committed by the owner in `4499e89` | the eight record files, plus this PLAN |
+| P1 | ran; in `4499e89` | `.golangci.yml`, `internal/archtest/check.go`, `internal/archtest/check_test.go` |
+| P2 | ran; in `4499e89` | `go.mod`, `go.sum`, `internal/cli/term/*` (13 files) |
+| P3 | ran 2026-10-05; staged | `Makefile` (`probe-conhost`), `internal/cli/editor/*` (12 files) |
+| P6 | ran 2026-10-05; staged | `go.mod`, `go.sum` (`golang.org/x/text v0.42.0`), `internal/cli/render/*` (14 Go files, 4 testdata files) |
+| P4 | **not run** | Precondition unmet: `internal/buildinfo`, `internal/appdirs` and `internal/logging` are still the Phase 1 declarations (0004-PLAN Phase 2 steps 2–4). |
+| P5 | **not run** | Needs P4's Kong root. |
+| P7 | **not run** | Needs P4 and P5. |
+
+After each of P1, P2, P3 and P6, `make preflight` printed `preflight passed` and exited 0 on Windows (Git Bash) and in WSL Ubuntu 24.04 on a copy of the tree. `git diff --check` and `git diff --cached --check` were clean. `go test -race ./internal/...` passed in WSL, and `go test ./...` passed on Windows. `go mod tidy -diff` was empty. No file under `internal/cli` names Charm, go-tui-lib, the ACP SDK or Kong.
+
+### Negative tests (C4), each on a scratch copy
+
+- **P1, lint.** A planted `hook/zz_planted.go`, run with `--uniq-by-line=false`, failed with:
+  - `import 'log' is not allowed from list 'logging'` (depguard);
+  - `use of fmt.Println forbidden`, `use of log.Printf forbidden`, `use of os.Stderr forbidden`, `use of os.Stdout forbidden` and `use of os.Exit forbidden` (forbidigo);
+  - `default logger should not be used`, `key-value pairs and attributes should not be mixed`, `key-value pairs should not be used`, `message should be a string literal or a constant`, `keys should be written in snake_case`, `InfoContext should be used instead` and `the "msg" key is forbidden and should not be used` (sloglint);
+  - `for loop can be changed to use an integer range` (intrange) and `net/http.Get must not be called` (noctx).
+- **P1, archtest.** `agent/zz.go` importing Kong failed `TestImportRules/rule_9_module` with `rule 9: github.com/maccavelli/gobble-cli/agent imports github.com/alecthomas/kong`.
+- **P2.** A `Sanitize` that returns its input failed 14 subtests of `TestSanitize`, among them `Sanitize("a\x1b[2Jb") = "a\x1b[2Jb", want "ab"`.
+- **P3.**
+  - Coalescing removed: `submissions = ["line1" "line2" "line3"] (then err EOF), want ["line1\nline2\nline3"]`.
+  - Ctrl+C mapping removed: `submissions = [] (then err EOF), want ["xyz"]`, which is `io.EOF` on a non-empty line.
+  - Closing stdin in `reader.go`: `reader.go calls Close: stdin is never closed (0008-MADR F20)`.
+  - The live suite with coalescing removed: `child submissions = ["line1" "line2" "<nil>"], want ["line1\nline2\nline3" "xy" "<nil>"]`.
+- **P6.**
+  - A `Stream` that releases everything at once failed 21 of the 29 fixtures, among them `fence_split_across_chunks_inside_a_string_literal`, `table_arriving_row_by_row` and `bold_split_mid-word`.
+  - `warnAt = 85`: `75%_is_yellow` failed, with `StatusLine = "1s • <ESC>[32m…" want colour "<ESC>[33m"`.
+  - The 20-line bound removed: `tool_output_25 differs from testdata\tool_output_25.golden`.
+
+### The live Console Host suite
+
+`make probe-conhost` passed three times out of three, each run taking 0.11 s, with `console window class "ConsoleWindowClass"`. The child's `Editor` returned `line1\nline2\nline3` as one submission for a real conhost paste, and Ctrl+C cleared `abc` before `xy` was submitted. Console Host behaved as in measurement 10 under the real editor.
+
+### What the plan predicted wrongly
+
+1. **P1 step 2** says to "include 9 in the loop that runs every rule". There is no such loop: `TestImportRules`'s table is the loop, and the `rule 9 module` case runs rule 9 against the real graph.
+2. **A false alarm in P1, withdrawn.** A suspected forbidigo gap (see the struck note in P1) was golangci-lint's default one-issue-per-line reporting: errcheck's `check-blank` finding hid forbidigo's on the same line. Plants are now run with `--uniq-by-line=false`. Measurement 12's configuration stands unchanged.
+3. **P3 steps 2, 4 and 6** could not be built as written. They are recorded as dated deviations in place, with the owner's decisions.
+4. **`os/exec` cannot start `conhost.exe`.** It always sets `STARTF_USESTDHANDLES`, and conhost started that way exits at once without running its child. The suite calls `windows.CreateProcess` with a plain `STARTUPINFO` and `CREATE_NEW_CONSOLE`; measurement 10 had used `Start-Process`.
+5. **History cost.** 1,005 atomic rewrites took 5.1 s on this Windows host, so the cap test seeds the file once. One rewrite per submission is the production cost.
+6. **The authoring tool turned `\u` escapes of U+2000 and above into literal characters** in the Go sources, bidi controls included. The tests build those runes from code points, and every new file was searched for bidi and zero-width characters (none found).
+7. **`make preflight` runs no tests.** The Stability rule's preflight gates are not a test run, so `go test` was run separately on both hosts after every phase.
+8. **`golang.org/x/text`** was already in the module graph at v0.3.0 (indirect, through tooling). `go get` raised it to v0.42.0, and only the direct requirement line changed in `go.mod`.
+
+### Choices made inside the plan's wording
+
+- `Caps.Unicode` follows the plan's literal rule: any of `LC_ALL`, `LC_CTYPE` or `LANG` naming UTF-8 is enough. That is not POSIX precedence.
+- `PrepareConsole` sets only `ENABLE_VIRTUAL_TERMINAL_PROCESSING|ENABLE_PROCESSED_OUTPUT`, as the plan says. magictools also sets `ENABLE_WRAP_AT_EOL_OUTPUT`.
+- `render.Style` dims the fence lines and inline code, and leaves the code inside a fence unstyled. Syntax highlighting is deferred.
+- The `… N pasted lines` notice is printed once per submission, with N counting the line ended by Enter.
