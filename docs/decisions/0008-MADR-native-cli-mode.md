@@ -1,6 +1,6 @@
 ---
 status: accepted
-date: 2026-10-04
+date: 2026-10-05
 decision-makers: repository owner
 consulted: goose-cli source (aaif-goose/goose 591edd4); Pi coding-agent source (earendil-works/pi f5d2004 and the fork at 312184e); go-tui-lib, go-selfupdate-lib, go-llmprovider-sdk, magic-cli-remote, mcp-server-magictools and prepare-commit-msg sources; Kong v1.16.1; golang.org/x/term v0.46.0
 informed: none
@@ -895,3 +895,22 @@ These are execution details. Every decision above is settled.
 - **Latency baselines (D18):** `gobble --version` and a `--session` completion request, measured on this host.
 - **`go build` size** of `cmd/gobble` before and after Phase 2, recorded as the "lightweight" baseline.
 - **`docs/architecture.md:32` still cites go-tui-lib `v0.1.0`;** the current tag is `v0.2.0`. This is a documentation correction for the plan that next touches that file.
+
+## Observed — execution results (2026-10-05)
+
+0008-PLAN ran in full, in commits `4499e89` to `98073db`. These are what execution showed about this record's decisions and measurements.
+
+- **D17's 150 ms budget held with room to spare.** A `--session` request takes a median of 9.7 ms on Windows. The deadline path itself is tested under `testing/synctest`: it returns what was found, keeps the order, and raises no error.
+- **Console Host behaved under the real editor as in measurement 10.** The `conhost` suite pasted three lines through conhost's Paste command. The `Editor` returned one submission, `line1\nline2\nline3`. An injected Ctrl+C cleared a typed line, and the window class was `ConsoleWindowClass`. It passed in every run, and failed once paste coalescing was removed.
+- **bash's `COMP_POINT` unit, [unverified] in D17, is measured.** In an interactive bash in a pty, `COMP_POINT` counts characters in 4.4.18, 5.0, 5.1, 5.2.21, 5.3.9 and 5.3.20, and bytes in 3.2.57, macOS's `/bin/bash`. 4.0–4.3 are unmeasured. The bash script cuts the line in bytes when `BASH_VERSINFO[0] < 4`, as amended in D17's bash row.
+- **Decisions changed by dated amendments, at the owner's direction:**
+  - D15's `buildinfo` row: wrapped in `internal/buildinfo`, with a narrow rule-8 exception (0004-MADR, 2026-10-05);
+  - D17's output rule: a third `kind` field for PowerShell, and the 80-rune cap on descriptions only;
+  - D17's bash row: support for bash 3.2.
+- **D18's forbidigo note was a false alarm, withdrawn on the day.** golangci-lint's one-issue-per-line reporting hid forbidigo's finding behind errcheck's on the same line. Measurement 12's configuration stands. Plants are run with `--uniq-by-line=false`.
+- **D19 item 1 held, but only after a fix.** Since Go 1.24 an unstamped `go build` records a VCS pseudo-version, which the first `internal/buildinfo` reported. Every build that is not a clean tag now reports `0.0.0-dev+<revision>[.dirty]`, which `verify-build-metadata` checks. The comparison upstream that makes this matter is 0009-REPORT M7.
+- **D14's Kong rules:**
+  - an `Exit` that panics a sentinel is necessary: with an `Exit` that returns, `--help` went on to run `chat`;
+  - `kong.UsageOnError()` has no effect without `FatalIfErrorf`, so it is not used;
+  - Kong checks an enum even when the flag is empty, so `--thinking` lists `""`.
+- **Size.** The stamped binary is 10.36 MiB, and `gobble version` takes 10.2 ms.

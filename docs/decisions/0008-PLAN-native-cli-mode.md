@@ -1,6 +1,6 @@
 ---
-status: in-progress
-date: 2026-10-04
+status: completed
+date: 2026-10-05
 ---
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
 
@@ -816,3 +816,83 @@ After each of P1, P2, P3 and P6, `make preflight` printed `preflight passed` and
   5. **The engine oracle needed care.** `kong.Trace` selects the default command when nothing is named. Accepting "root" in that case was right only when every earlier word is a flag. The first, looser comparison let the withargs-rule negative pass, and was tightened.
   6. **The `TabExpansion2` cursor column** in step 8 is 24; for `'gobble --output-format '` it is that string's length, 23. The suite uses the length.
   7. **`powershell.exe` on this host resolves through a scoop shim.** It reports Windows PowerShell 5.1.26100, so 5.1 is what ran.
+
+## Execution record (2026-10-05, final)
+
+Every phase has run. This section closes the plan; the interim record above holds each phase's evidence and is kept as written.
+
+### Commits
+
+The agent staged each phase, and the owner committed and pushed:
+
+| Commit | Contents |
+|---|---|
+| `4499e89` | P0 records, P1 lint and archtest rule 9, P2 terminal layer |
+| `4e25c8a` | P3 line editor, P6 renderer |
+| `55f35ba` | 0004-PLAN Phase 2 steps 2–4 (`buildinfo`, `appdirs`, `logging`), P4's precondition |
+| `6e53d05` | P4 Kong root and process edge, with the step-2 version fix and 0009-REPORT |
+| `98073db` | P5 native completion |
+| (this change) | P7 close-out records |
+
+### Whole-plan verification, at `98073db`
+
+| Command | Result |
+|---|---|
+| `make preflight` | `preflight passed` on Windows and in WSL; `verify-build-metadata` passed all seven checks |
+| `make probe-conhost` | passed, `console window class "ConsoleWindowClass"` |
+| `make completion-shells` | passed on Windows: Git Bash 5.3.15, pwsh 7.6.6, Windows PowerShell 5.1. WSL, the Linux host and the macOS host were not re-run at this commit. Their last runs passed in P5 on the same code, which no later change touched: WSL bash 5.2.21 and fish 3.7.0; the Linux host bash 5.3.9 and fish 4.2.1; the macOS host zsh 5.9, bash 5.3.20 and `/bin/bash` 3.2.57 |
+| `go run ./cmd/gobble version --json` | `{"name":"gobble","version":"0.0.0-dev","commit":"","date":"","go":"1.27.1",…}`; `go run` records no VCS stamp |
+| `go run ./cmd/gobble -p "x"` | `Error: the agent is not available yet (0002-PLAN Phase 2)` and `exit status 2` |
+| `GOBBLE_COMPLETE=fish … -- --output-format ''` | `text`, `json`, `stream-json`, then `:36` |
+| `go mod tidy -diff` | empty |
+| the forbidden-import grep over `internal/cli` | no output |
+
+### Acceptance criteria
+
+| # | Criterion | Result and evidence |
+|---|---|---|
+| A1 | Line mode on a terminal; `-p` or piped input is print mode | met: `TestResolveMode` (all eight cases), `TestPipedInputIsComposed` (`"mode":"print"`) |
+| A2 | `hi` and `ask` compose to `hi\n\nask` | met: `TestComposeInput`; Pi's `join("")` mutation gave `"hiask"` |
+| A3 | Stdout carries no diagnostics; EPIPE exits 0 | met: `TestMainExitCodes`, `TestDiagnosticPrefixes`, `TestBrokenStdoutExitsZero` (real broken pipes, `ERROR_NO_DATA` on Windows) |
+| A4 | Exit 2 for `--fork` with `--session`; 130 for SIGINT | met: `TestMainExitCodes`, `TestWatchSignals` (130, 129, 143) |
+| A5 | Scripts for four shells; no completion module | met: `TestCompletionScriptsPrinted`; `go.mod` gained Kong, `x/term`, `x/text` and go-selfupdate-lib only |
+| A6 | A request answers within 150 ms, silent on stderr, creating nothing | met: median 9.7 ms; `TestBinaryCompletionMode` (C6 empty home, empty stderr); `TestProtocolDeadline` |
+| A7 | Real-shell completion in bash, zsh, fish, pwsh 7 and PowerShell 5.1 | met: on all four hosts, including bash 3.2 and fish 3 and 4 |
+| A8 | The coverage test fails when a `complete` tag is removed | met: `chat session takes a value but has neither enum nor complete tag` |
+| A9 | `NO_COLOR=1` yields no SGR; Windows VT still enabled | met: `TestColorOK`. `PrepareConsole` runs before `cli.Main` and never reads `NO_COLOR` |
+| A10 | The sanitiser neutralises `ESC[2J`, OSC 0 and U+202E, and fails on an unsanitised copy | met: `TestSanitize`, `TestEscapeBidi`; the mutation failed 14 subtests |
+| A11 | Ctrl+C clears a line; a 3-line paste submits once; conhost passes | met: `TestReadPrompt`, `TestConhost` |
+| A12 | sloglint, depguard and forbidigo plants fail; the tree is clean | met: P1 negatives; `0 issues.` for three GOOS |
+| A13 | No Charm or go-tui-lib under `internal/cli`; Kong only there | met: rules 5 and 9, the rule-9 negative, the grep above |
+| A14 | The status bar turns at 75% and 90% | met: `TestStatusLineThresholds`; the `warnAt = 85` mutation failed |
+| A15 | A dev build reports a parseable `0.0.0-dev` version | met: `verify-build-metadata`, after the step-2 pseudo-version fix (0009-REPORT M7) |
+| A16 | P0's amendments exist and keep what they supersede | met: P0; `bare session` occurs 5 times in 0006-MADR, up from 4 |
+
+A7 was named the criterion most likely to be dropped. It was not: it needed SSH runs on two more hosts, a bash 3.2 code path, and a measurement of `COMP_POINT` in interactive bash.
+
+### Baselines
+
+| Measure | Value |
+|---|---|
+| `cmd/gobble` before P4 | no binary |
+| stamped binary after P4 | 10,230,272 bytes (9.76 MiB) |
+| stamped binary after P5, final | 10,860,032 bytes (10.36 MiB) |
+| `gobble version`, median of 20 | 10.2 ms |
+| `--session` completion request, median of 20 | 9.7 ms |
+
+P6 ran before P4, so "after P6" in step 1 has no binary of its own. The final size is the one after P5.
+
+### What the plan predicted wrongly, in addition to the phase lists above
+
+1. **The whole-plan verification block.**
+   - It expected `:4` after the `--output-format` values. Enum sources keep their declared order, so the directive is `:36` (keep order and no file completion).
+   - It expected `go run …; echo $?` to show 2. `go run` exits 1 for any non-zero child and prints `exit status 2`, so the code is checked in that line, or with the built binary.
+2. **The delivery order.** It drew P6 after P5. P6 needed only P2's term layer and ran with P3, before P4. Nothing depended on the drawn order.
+3. **Scope.** Twelve deviations were taken to the owner, each before the affected code was written or fixed: one in P1 (withdrawn), three in P3, three in P4, four in P5, and the step-2 version defect found in P4. Each is recorded in place, with the files it added to the scope.
+
+### Deferred, unchanged
+
+The plan's Deferred list stands. Two items are added:
+
+- **bash 4.0–4.3's `COMP_POINT` unit** is unmeasured: those releases would not build with a current compiler. The script treats them as counting characters.
+- **The magic-cli-remote findings** M1–M7 wait in 0009-REPORT for the owner's review.
