@@ -59,8 +59,17 @@ func fromLib(li lib.Info, goos, goarch, gover string) Info {
 	}
 }
 
+// pseudoRE matches the tail of a Go pseudo-version, which go build records as
+// the module version of an unstamped build from a checkout (Go 1.24+), as
+// in v0.0.0-20261005150633-55f35bac850a or v1.2.4-0.20261005150633-55f35bac850a.
+var pseudoRE = regexp.MustCompile(`(^|[.-])\d{14}-[0-9a-f]{12}$`)
+
+// semver keeps the stamped or module version only when it is a clean tag:
+// valid SemVer, no build metadata, not a pseudo-version. A pseudo-version
+// after a tag would claim the next patch release (0009-REPORT M7), so every
+// other build is 0.0.0-dev+<revision>[.dirty] (0008-MADR D19 item 1).
 func semver(li lib.Info) string {
-	if v := strings.TrimPrefix(li.Current(), "v"); semverRE.MatchString(v) {
+	if v := strings.TrimPrefix(li.Current(), "v"); semverRE.MatchString(v) && !strings.Contains(v, "+") && !pseudoRE.MatchString(v) {
 		return v
 	}
 	if li.Revision == "" {

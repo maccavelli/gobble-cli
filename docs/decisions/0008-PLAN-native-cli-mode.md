@@ -45,6 +45,7 @@ Every item below is an observable state when this plan is done:
 **Build and gates**
 - `.golangci.yml`
 - `Makefile`
+- `scripts/verify_build_metadata.py` *(added 2026-10-05, P4 deviation)*
 - `go.mod`, `go.sum`
 - `internal/archtest/check.go`, `internal/archtest/check_test.go`
 
@@ -54,6 +55,7 @@ Every item below is an observable state when this plan is done:
 
 **`internal/cli`** (the package comment in `doc.go`, plus new files)
 - `doc.go`, `main.go`, `root.go`, `chat.go`, `mode.go`, `flags.go`, `input.go`, `exit.go`, `signal.go`, `output.go`, `version.go`, `configpath.go`, `acp.go`, `completion.go`
+- `brokenpipe_windows.go`, `brokenpipe_other.go` *(added 2026-10-05, P4 deviation)*
 - the tests beside each
 
 **`internal/cli/term`** (new)
@@ -383,6 +385,26 @@ P0 records ─┬─ P1 lint + archtest ─ P2 terminal layer ─ P3 line editor
 ### P4 — Kong root and process edge (D1, D3, D4, D10, D12, D14; closes F1–F4, F15–F17)
 
 **Precondition:** 0004-PLAN Phase 2 steps 2, 3 and 4 are done (`internal/buildinfo`, `internal/appdirs`, `internal/logging`). If they are not, P4 stops and reports.
+*(Met 2026-10-05: commit `55f35ba`.)*
+
+**Deviations, 2026-10-05, the owner's decisions before P4 ran:**
+
+1. **Broken pipe on Windows.** Step 4 checks `syscall.EPIPE`, but Windows reports a broken stdout pipe as `ERROR_BROKEN_PIPE` or `ERROR_NO_DATA`. The check moves to `isBrokenPipe(err) bool` in `brokenpipe_windows.go` and `brokenpipe_other.go`, both added to the scope, so D3's exit 0 holds on every OS.
+2. **`verify-build-metadata` in Python.** Step 13's check builds twice, parses `version --json`, and compares it with `git rev-parse HEAD` and the commit time. That logic goes in `scripts/verify_build_metadata.py` (standard library only, like `check_records.py`), added to the scope. The Makefile target calls it.
+3. **`completion` before P5.** Step 8's grammar has `Completion`, whose command is P5's. P4's `completion.go` holds a stub: `gobble completion <bash|zsh|fish|powershell>` parses its argument and exits 2 with `Error: gobble completion is not yet available (0008-PLAN P5)`. This is D12's "never silently ignored" rule. P5 replaces the stub.
+
+**Choices made within the steps' wording:**
+
+- **The logger is opened lazily,** on a command's first log call. `version`, `config path`, `--help` and the stubs never create the state directory or the log file; `chat` and `acp` open it when they log. `acp` gets no stderr handler.
+- **"Not yet available" names the owning plan for each flag:**
+  - `--output-format`, `--show-thinking`, `--stats`, `--verbose` and `--cwd`: 0002-PLAN Phase 2;
+  - `-t/--tools`, `--exclude-tools` and `--no-tools`: 0002-PLAN Phase 3;
+  - `-c/--continue`, `--session`, `--session-id`, `--fork`, `--no-session`, `--session-dir` and `-n/--name`: 0002-PLAN Phase 4;
+  - `--system-prompt`, `--append-system-prompt` and `--no-context-files`: 0005-PLAN F3;
+  - `--provider`, `--model`, `--thinking`, `--api-key` and `--offline`: 0005-PLAN F4;
+  - `--approve/--no-approve` and `--yes`: 0005-PLAN F6.
+
+  `-p/--print` and `--file` work in P4: mode resolution and input composition. `--log-level` is a root flag. Contradictions are checked first, so `--fork` with `--session` is still the D12 usage error, not "not yet available".
 
 1. **`go.mod`:** `go get github.com/alecthomas/kong@v1.16.1`, then `go mod tidy`.
 2. **`internal/cli/exit.go`:**
@@ -658,8 +680,8 @@ P7 writes the final record. This interim one keeps the evidence of the phases th
 | P2 | ran; in `4499e89` | `go.mod`, `go.sum`, `internal/cli/term/*` (13 files) |
 | P3 | ran 2026-10-05; staged | `Makefile` (`probe-conhost`), `internal/cli/editor/*` (12 files) |
 | P6 | ran 2026-10-05; staged | `go.mod`, `go.sum` (`golang.org/x/text v0.42.0`), `internal/cli/render/*` (14 Go files, 4 testdata files) |
-| P4 | **not run** | Precondition unmet: `internal/buildinfo`, `internal/appdirs` and `internal/logging` are still the Phase 1 declarations (0004-PLAN Phase 2 steps 2–4). |
-| P5 | **not run** | Needs P4's Kong root. |
+| P4 | ~~**not run**~~ ran 2026-10-05 after 0004-PLAN Phase 2 steps 2–4 (`55f35ba`); staged | `go.mod`, `go.sum` (Kong `v1.16.1`), `Makefile`, `scripts/verify_build_metadata.py`, `cmd/gobble/main.go`, `cmd/gobble/doc.go`, `internal/cli/*` (19 Go files, 2 goldens), `internal/buildinfo` (the version fix) |
+| P5 | **not run** | ~~Needs P4's Kong root.~~ P4's root exists; P5 has not been approved to run. |
 | P7 | **not run** | Needs P4 and P5. |
 
 After each of P1, P2, P3 and P6, `make preflight` printed `preflight passed` and exited 0 on Windows (Git Bash) and in WSL Ubuntu 24.04 on a copy of the tree. `git diff --check` and `git diff --cached --check` were clean. `go test -race ./internal/...` passed in WSL, and `go test ./...` passed on Windows. `go mod tidy -diff` was empty. No file under `internal/cli` names Charm, go-tui-lib, the ACP SDK or Kong.
@@ -704,3 +726,41 @@ After each of P1, P2, P3 and P6, `make preflight` printed `preflight passed` and
 - `PrepareConsole` sets only `ENABLE_VIRTUAL_TERMINAL_PROCESSING|ENABLE_PROCESSED_OUTPUT`, as the plan says. magictools also sets `ENABLE_WRAP_AT_EOL_OUTPUT`.
 - `render.Style` dims the fence lines and inline code, and leaves the code inside a fence unstyled. Syntax highlighting is deferred.
 - The `… N pasted lines` notice is printed once per submission, with N counting the line ended by Enter.
+
+### P4, 2026-10-05
+
+- **Deviations.** Three were decided by the owner before P4 ran and are recorded in P4: per-OS broken-pipe files, the build check in Python, and a `completion` stub. A fourth was found during the run: step 2's version kept Go's VCS pseudo-version. The owner chose to fix it now; it is recorded in 0004-PLAN's step-2 entry and in 0009-REPORT M7.
+- **Gates.**
+  - `make preflight` printed `preflight passed` on Windows and in WSL. `verify-build-metadata` is now real, and passed all seven checks on both hosts.
+  - `go test -race ./...` passed in WSL, and `go test ./...` on Windows.
+  - `golangci-lint` reported `0 issues.` for linux, darwin and windows.
+  - The pre-add check was clean for all 26 files.
+- **Goal item 1, by hand, with an isolated `GOBBLE_HOME`.**
+  - `version --json` printed `{"name":"gobble","version":"0.0.0-dev+55f35bac850a.dirty",…}`.
+  - `config path` printed the four roles.
+  - `acp` exited 2 and wrote nothing to stdout.
+  - `-p x`, piped `hi` with `ask`, and a bare run all exited 2 with `Error: the agent is not available yet (0002-PLAN Phase 2)`. With stdin at end of file, a bare run is print mode with no prompt, so it says that instead.
+  - `--fork a --session b` gave the D12 conflict, and `--model x` gave `is not yet available (0005-PLAN F4)`.
+- **Baselines** on this host:
+  - the stamped `bin/gobble.exe` is 10,230,272 bytes (9.76 MiB);
+  - `gobble version` takes a median of 10.2 ms over 20 runs (min 9.3, max 28.8).
+- **Negative tests**, each on a scratch copy, each failing as expected:
+  - the stamped build without `LDFLAGS`: `FAIL stamped version: got '0.0.0-dev+55f35bac850a.dirty', want '1.2.3'`;
+  - a Kong `Exit` that returns: `[--help]: exit 2, stderr "Error: expected one of \"chat\", …"`, because parsing went on after help (go-tui-lib 0006-MADR A1);
+  - cancelling without a cause: `signalExit = 0, false; want 130, true`, and the same for 129 and 143;
+  - an `acp` start-up banner: `gobble acp wrote to stdout: "gobble acp starting\n"` (0004-PLAN Phase 2 Accept);
+  - the broken-pipe check disabled: `exit 1, stderr "Error: write stdout: write |1: The pipe is being closed."`. That is Windows' `ERROR_NO_DATA`, and it confirms deviation 1;
+  - Pi's `join("")`: `Text = "hiask"`;
+  - an eager logger: `version created [d logs/]`;
+  - pseudo-versions kept: `Version = "1.2.4-0.20261005131429-e825cdafd332", want "0.0.0-dev+4e25c8a01234"`;
+  - Kong imported from `agent` (rule 9, now with the real module): `rule 9: github.com/maccavelli/gobble-cli/agent imports github.com/alecthomas/kong`.
+- **What the plan predicted wrongly.**
+  1. **`kong.UsageOnError()` does nothing here.** It affects only `FatalIfErrorf`, which gobble never calls (`options.go:391`). It was left out. `Main` prints `Error: <parse error>` and `Error: run 'gobble --help' for usage` itself.
+  2. **`cmd/gobble/doc.go` held Phase 1's stub `func main()`**, not only a comment. The stub was removed with the comment, because `main.go` now defines `main`.
+  3. **Go 1.24+ stamps a pseudo-version.** This is deviation 4 above.
+  4. **Kong checks an enum even when the flag is empty and not required** (`context.go:200`), so `--thinking` lists `""` among its values.
+  5. **Print mode reads piped stdin to the end, as D1 and Pi require.** A non-terminal stdin that never closes, such as an agent harness's shell, makes `gobble` or `gobble -p x` wait. Passing `</dev/null` avoids that. This is the behaviour the plan specifies, recorded because it surprised the first manual run.
+- **Choices within the steps' wording:**
+  - the logger opens lazily, so `version`, `config path` and `--help` create nothing (tested);
+  - every "not yet available" message names its owning plan;
+  - `version` without `--json` prints `gobble <version>` and then `commit:`, `date:` and `go:` lines.

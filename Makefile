@@ -1,7 +1,6 @@
 # gobble-cli toolchain (0004-PLAN phase 0).
-# Target names follow magic-cli-remote. Gates that need later phases
-# (archtest, apidiff, verify-build-metadata) are present and no-op until
-# the tree those phases add exists.
+# Target names follow magic-cli-remote. apidiff is present and a no-op
+# until the first tag.
 MODULE := github.com/maccavelli/gobble-cli
 # Recipes need bash (for pipefail) and grep, diff, cp and mv. On Windows
 # that is Git's bash, and Git's usr/bin goes on PATH because Git bash does
@@ -76,14 +75,28 @@ endif
 
 BIN := bin/gobble$(BIN_EXT)
 
+# Build identity is go-selfupdate-lib buildinfo's two stamps; commit and date
+# come from the checkout, which go build records (0004-MADR amendment of
+# 2026-10-05). A release build sets VERSION to its tag and BUILD_KIND=release.
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo 0.0.0-dev)
+BUILD_KIND ?= local
+BUILDINFO := github.com/maccavelli/go-selfupdate-lib/buildinfo
+LDFLAGS := -X $(BUILDINFO).version=$(VERSION) -X $(BUILDINFO).kind=$(BUILD_KIND)
+
 .PHONY: build install test race vet fmt lint staticcheck vulncheck tidy clean \
 	pre-add-check preflight check-cgo-off verify-build-metadata fix-check archtest apidiff \
-	check-records markdownlint probe-conhost
+	check-records markdownlint probe-conhost $(BIN)
 
 # Shipped binaries are pure Go. check-cgo-off refuses CGO_ENABLED other than 0
 # and any `import "C"` in a .go file (0004-PLAN phase 0 accept).
 build: check-cgo-off
 	CGO_ENABLED=$(CGO_ENABLED) go build ./...
+
+# The gobble binary, stamped.
+$(BIN): override CGO_ENABLED := 0
+$(BIN): check-cgo-off
+	@mkdir -p bin
+	CGO_ENABLED=$(CGO_ENABLED) go build -ldflags "$(LDFLAGS)" -o $(BIN) ./cmd/gobble
 
 install: check-cgo-off
 	@mkdir -p "$(USER_BIN_DIR)"
@@ -143,8 +156,7 @@ FILES ?=
 pre-add-check:
 	bash scripts/go-precheck.sh $(FILES)
 
-# All phase-0 gates. archtest, apidiff, and verify-build-metadata are no-ops
-# until the phases that give them something to check.
+# Every gate. apidiff is a no-op until the first tag.
 preflight: check-cgo-off
 	@echo "==> gofmt"; \
 	unformatted="$$(gofmt -l .)"; \
@@ -187,16 +199,10 @@ check-cgo-off:
 		exit 1; \
 	fi
 
-# No-op until cmd/gobble/main.go exists (phase 2). Phase 1 may add the
-# package directory without that file. Phase 4 owns the ldflags check.
-# The target name is part of the phase 0 Makefile.
+# Builds cmd/gobble stamped and unstamped and checks `version --json`
+# (0008-PLAN P4; the logic is in Python, deviation 2).
 verify-build-metadata:
-	@if [ ! -f cmd/gobble/main.go ]; then \
-		echo "verify-build-metadata: no-op (cmd/gobble/main.go is not in this phase)"; \
-		exit 0; \
-	fi; \
-	echo "verify-build-metadata: cmd/gobble/main.go exists; phase 4 owns the ldflags check" >&2; \
-	exit 1
+	python3 scripts/verify_build_metadata.py
 
 fix-check:
 	@out="$$(go fix -diff ./...)"; \

@@ -10,6 +10,7 @@ tool (
 )
 
 require (
+	github.com/alecthomas/kong v1.16.1
 	github.com/coder/acp-go-sdk v0.13.5
 	github.com/maccavelli/go-selfupdate-lib v1.7.0
 	golang.org/x/sys v0.48.0
