@@ -48,17 +48,19 @@ var thinkingLevels = []string{"off", "minimal", "low", "medium", "high", "xhigh"
 
 // completionRegistry names the source behind each complete:"<name>" tag.
 // Sessions come from the session store (0002-PLAN Phase 4) and tools from
-// the built-ins (0002-PLAN Phase 3, wired in Phase 4 Part B). Providers,
+// the built-ins (0002-PLAN Phase 3, wired in Phase 4 Part B), and MCP
+// servers from mcp.json (0002-PLAN Phase 5). Providers,
 // models and their catalog have no data until 0005-PLAN F4, which is the
 // true state, not a skip (0008-PLAN P5, step 4 and deviation 1).
 func completionRegistry() complete.Registry {
 	return complete.Registry{
-		"path":     complete.PathSource(false),
-		"dir":      complete.PathSource(true),
-		"provider": complete.ListSource(complete.NoCandidates, false),
-		"session":  complete.ListSource(sessionCandidates, true),
-		"model":    complete.ModelSource(complete.NoCandidates, thinkingLevels),
-		"tools":    complete.ListSource(toolCandidates, false),
+		"path":      complete.PathSource(false),
+		"dir":       complete.PathSource(true),
+		"provider":  complete.ListSource(complete.NoCandidates, false),
+		"session":   complete.ListSource(sessionCandidates, true),
+		"model":     complete.ModelSource(complete.NoCandidates, thinkingLevels),
+		"tools":     complete.ListSource(toolCandidates, false),
+		"mcpserver": complete.ListSource(mcpServerCandidates, true),
 	}
 }
 

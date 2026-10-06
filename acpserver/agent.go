@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strings"
 	"sync"
@@ -54,6 +55,11 @@ type Options struct {
 	Store session.Store
 	// Now is the clock entries are stamped with. Nil is time.Now.
 	Now func() time.Time
+	// MCP configures the MCP servers sessions connect to.
+	MCP MCPOptions
+	// Logger receives diagnostics, such as MCP servers that need attention.
+	// Nil discards them; Serve passes its own.
+	Logger *slog.Logger
 }
 
 // Agent is gobble's acp.Agent.
@@ -66,6 +72,8 @@ type Agent struct {
 	byName   map[string]tool.Tool
 	store    session.Store
 	now      func() time.Time
+	mcp      MCPOptions
+	logger   *slog.Logger
 
 	mu       sync.Mutex
 	conn     *acp.AgentSideConnection
@@ -85,6 +93,7 @@ type liveSession struct {
 	model   string
 	think   string
 	cancel  context.CancelFunc
+	mcp     *liveMCP
 }
 
 var (
@@ -96,7 +105,10 @@ var (
 // the first request, so it can send session updates.
 func New(opts Options) *Agent {
 	a := &Agent{version: opts.Version, newID: opts.NewID, provider: opts.Provider, models: opts.Models,
-		tools: opts.Tools, store: opts.Store, now: opts.Now, sessions: map[acp.SessionId]*liveSession{}}
+		tools: opts.Tools, store: opts.Store, now: opts.Now, mcp: opts.MCP, logger: opts.Logger, sessions: map[acp.SessionId]*liveSession{}}
+	if a.logger == nil {
+		a.logger = slog.New(slog.DiscardHandler)
+	}
 	if a.newID == nil {
 		a.newID = func() string { return uuid.NewV7().String() }
 	}
@@ -128,6 +140,7 @@ func (a *Agent) Close() error {
 	a.mu.Unlock()
 	var errs []error
 	for _, s := range sessions {
+		a.closeMCP(s.mcp)
 		errs = append(errs, s.log.Close())
 	}
 	return errors.Join(errs...)
@@ -141,11 +154,13 @@ func (a *Agent) SetConnection(c *acp.AgentSideConnection) {
 }
 
 // Capabilities is what is implemented, and nothing more: loading, listing,
-// resuming and closing sessions. MCP, images, audio and embedded context
-// are turned on by the phases that implement them.
+// resuming and closing sessions, and MCP servers over stdio and streamable
+// HTTP. Images, audio and embedded context are turned on by the phases
+// that implement them.
 func Capabilities() acp.AgentCapabilities {
 	return acp.AgentCapabilities{
-		LoadSession: true,
+		LoadSession:     true,
+		McpCapabilities: acp.McpCapabilities{Http: true},
 		SessionCapabilities: acp.SessionCapabilities{
 			Close:  &acp.SessionCloseCapabilities{},
 			List:   &acp.SessionListCapabilities{},
@@ -181,6 +196,10 @@ func (a *Agent) NewSession(ctx context.Context, p acp.NewSessionRequest) (acp.Ne
 		if !session.ValidID(id) {
 			return acp.NewSessionResponse{}, invalidParams(acp.SessionId(id), "a session id is letters, digits, '.', '_' and '-', starting and ending with a letter or digit")
 		}
+	}
+	servers, notes, err := a.mcpServers(acp.SessionId(id), p.McpServers)
+	if err != nil {
+		return acp.NewSessionResponse{}, err
 	}
 	var forked []session.Entry
 	h := session.Header{Type: session.TypeHeader, Version: session.Version, ID: id, Timestamp: session.Timestamp(a.now()), Cwd: p.Cwd}
@@ -222,6 +241,7 @@ func (a *Agent) NewSession(ctx context.Context, p acp.NewSessionRequest) (acp.Ne
 			return acp.NewSessionResponse{}, errors.Join(acp.NewInternalError(map[string]any{keyReason: err.Error()}), log.Close())
 		}
 	}
+	s.mcp = a.startMCP(ctx, s.cwd, servers, notes)
 	a.mu.Lock()
 	a.sessions[s.id] = s
 	a.mu.Unlock()
@@ -299,10 +319,11 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 	if w.err != nil {
 		return acp.PromptResponse{}, acp.NewInternalError(map[string]any{keyReason: w.err.Error()})
 	}
+	tools := append(slices.Clip(a.tools), a.mcpTools(turnCtx, s.mcp)...)
 	ag := agent.New(agent.Config{
 		Provider: model,
-		Tools:    a.tools,
-		System:   systemPrompt(s.cwd, a.tools),
+		Tools:    tools,
+		System:   systemPrompt(s.cwd, tools),
 		Model:    s.model,
 		Thinking: s.think,
 		Policy:   &acpPolicy{conn: conn, session: p.SessionId},
@@ -427,13 +448,18 @@ func (a *Agent) Cancel(_ context.Context, p acp.CancelNotification) error {
 	return nil
 }
 
-// open opens a stored session for writing and rebuilds it.
-func (a *Agent) open(ctx context.Context, id acp.SessionId, cwd string) (*liveSession, error) {
+// open opens a stored session for writing, rebuilds it, and starts its MCP
+// servers.
+func (a *Agent) open(ctx context.Context, id acp.SessionId, cwd string, req []acp.McpServer) (*liveSession, error) {
 	a.mu.Lock()
 	_, live := a.sessions[id]
 	a.mu.Unlock()
 	if live {
 		return nil, acp.NewInvalidRequest(map[string]any{keySessionID: id, keyReason: "the session is already open"})
+	}
+	servers, notes, err := a.mcpServers(id, req)
+	if err != nil {
+		return nil, err
 	}
 	log, err := a.store.Open(ctx, session.ID(id))
 	if err != nil {
@@ -447,6 +473,7 @@ func (a *Agent) open(ctx context.Context, id acp.SessionId, cwd string) (*liveSe
 	}
 	s := &liveSession{id: id, cwd: cwd, log: log, think: thinkingOff, model: a.models().Default}
 	a.restore(s, log.Entries())
+	s.mcp = a.startMCP(ctx, cwd, servers, notes)
 	a.mu.Lock()
 	a.sessions[id] = s
 	a.mu.Unlock()
@@ -456,7 +483,7 @@ func (a *Agent) open(ctx context.Context, id acp.SessionId, cwd string) (*liveSe
 // LoadSession opens a stored session and replays it compactly (0008-MADR
 // D19 item 5), then sends the usage snapshot, before answering.
 func (a *Agent) LoadSession(ctx context.Context, p acp.LoadSessionRequest) (acp.LoadSessionResponse, error) {
-	s, err := a.open(ctx, p.SessionId, p.Cwd)
+	s, err := a.open(ctx, p.SessionId, p.Cwd, p.McpServers)
 	if err != nil {
 		return acp.LoadSessionResponse{}, err
 	}
@@ -497,7 +524,7 @@ func resumedMeta(st state) map[string]any {
 
 // ResumeSession opens a stored session with no replay.
 func (a *Agent) ResumeSession(ctx context.Context, p acp.ResumeSessionRequest) (acp.ResumeSessionResponse, error) {
-	s, err := a.open(ctx, p.SessionId, p.Cwd)
+	s, err := a.open(ctx, p.SessionId, p.Cwd, p.McpServers)
 	if err != nil {
 		return acp.ResumeSessionResponse{}, err
 	}
@@ -559,6 +586,7 @@ func (a *Agent) CloseSession(_ context.Context, p acp.CloseSessionRequest) (acp.
 	if !ok {
 		return acp.CloseSessionResponse{}, invalidParams(p.SessionId, "unknown session")
 	}
+	a.closeMCP(s.mcp)
 	if err := s.log.Close(); err != nil {
 		return acp.CloseSessionResponse{}, acp.NewInternalError(map[string]any{keyReason: err.Error()})
 	}

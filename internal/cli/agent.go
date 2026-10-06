@@ -41,7 +41,20 @@ func (e *runEnv) agentOptions() acpserver.Options {
 		Models:   modelChoice,
 		Tools:    e.tools,
 		Store:    e.sessionStore(),
+		MCP: acpserver.MCPOptions{
+			Config: mcpConfigPath(), Off: e.mcpOff, Allow: e.mcpAllow, UserAgent: identity().UserAgent(),
+		},
 	}
+}
+
+// mcpConfigPath is <config>/mcp.json (0003-MADR), or "" when the config
+// directory cannot be resolved.
+func mcpConfigPath() string {
+	dirs, _, err := systemDirs()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(dirs.Config, "mcp.json")
 }
 
 // modelChoice is the ambient provider's curated models, its first the
@@ -97,22 +110,38 @@ func (e *runEnv) startAgent(ctx context.Context) (*acpclient.Conn, error) {
 	return conn, nil
 }
 
+// mcpPrefix starts every MCP tool's name.
+const mcpPrefix = "mcp__"
+
+// toolChoice is the tools the flags select: the built-ins (nil is all of
+// them), and the MCP tools. mcpOff connects no MCP server; mcpAllow, when
+// not nil, keeps only the MCP tools it accepts.
+type toolChoice struct {
+	builtins []tool.Tool
+	mcpOff   bool
+	mcpAllow func(name string) bool
+}
+
 // toolSet is the in-process agent's tools from -t/--tools, --exclude-tools
-// and --no-tools: nil (the built-ins) when none is given. An unknown name is
-// a usage error; the contradiction of --no-tools with the others is checked
-// in validate.
-func (f *SharedFlags) toolSet() ([]tool.Tool, error) {
+// and --no-tools, with Pi's rules (0002-PLAN Phase 5): -t is an allowlist
+// over every tool, MCP tools included; --exclude-tools removes names; and
+// --no-tools turns everything off. An MCP name is accepted unchecked, since
+// MCP tools exist only once their server connects; any other unknown name
+// is a usage error. When the flags leave no MCP name selectable, no server
+// connects. The contradiction of --no-tools with the others is checked in
+// validate.
+func (f *SharedFlags) toolSet() (toolChoice, error) {
 	known := builtin.Names()
 	for _, n := range append(slices.Clone(f.Tools), f.ExcludeTools...) {
-		if !slices.Contains(known, n) {
-			return nil, usageErrorf("unknown tool %q (the tools are %s)", n, strings.Join(known, ", "))
+		if !slices.Contains(known, n) && !strings.HasPrefix(n, mcpPrefix) {
+			return toolChoice{}, usageErrorf("unknown tool %q (the tools are %s)", n, strings.Join(known, ", "))
 		}
 	}
 	switch {
 	case f.NoTools:
-		return []tool.Tool{}, nil
+		return toolChoice{builtins: []tool.Tool{}, mcpOff: true}, nil
 	case len(f.Tools) == 0 && len(f.ExcludeTools) == 0:
-		return nil, nil
+		return toolChoice{}, nil
 	}
 	var out []tool.Tool
 	for _, t := range builtin.Tools() {
@@ -124,7 +153,16 @@ func (f *SharedFlags) toolSet() ([]tool.Tool, error) {
 	if out == nil {
 		out = []tool.Tool{}
 	}
-	return out, nil
+	listed := slices.DeleteFunc(slices.Clone(f.Tools), func(n string) bool { return !strings.HasPrefix(n, mcpPrefix) })
+	excluded := slices.Clone(f.ExcludeTools)
+	allowlist := len(f.Tools) > 0
+	return toolChoice{
+		builtins: out,
+		mcpOff:   allowlist && len(listed) == 0,
+		mcpAllow: func(name string) bool {
+			return (!allowlist || slices.Contains(listed, name)) && !slices.Contains(excluded, name)
+		},
+	}, nil
 }
 
 // noCredentialMessage names the variables the ambient provider reads.

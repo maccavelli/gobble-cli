@@ -138,6 +138,9 @@ type runEnv struct {
 	now func() time.Time
 	// tools are the in-process agent's tools; nil is the built-ins.
 	tools []tool.Tool
+	// mcpOff and mcpAllow are the MCP tools the tool flags select.
+	mcpOff   bool
+	mcpAllow func(name string) bool
 	// store is the agent's session store, opened on first use.
 	store session.Store
 }

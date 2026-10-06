@@ -91,7 +91,8 @@ func TestSession(t *testing.T) {
 
 // The advertised set is exactly what is implemented. A later phase that
 // turns a capability on changes this test on purpose (0002-PLAN amendment
-// of 2026-10-05). Phase 4 turned on loading, listing and resuming.
+// of 2026-10-05). Phase 4 turned on loading, listing and resuming; Phase 5
+// turned on MCP over streamable HTTP.
 func TestCapabilitiesAreHonest(t *testing.T) {
 	c, _ := connect(t)
 	got := initialize(t, c.Client).AgentCapabilities
@@ -104,8 +105,10 @@ func TestCapabilitiesAreHonest(t *testing.T) {
 		t.Error("session close is implemented and must be advertised")
 	case got.SessionCapabilities.Fork != nil, got.SessionCapabilities.Delete != nil:
 		t.Error("session fork or delete advertised; neither is implemented")
-	case got.McpCapabilities.Http, got.McpCapabilities.Sse:
-		t.Error("MCP transports advertised before Phase 5")
+	case !got.McpCapabilities.Http:
+		t.Error("MCP over streamable HTTP is implemented (Phase 5) and must be advertised")
+	case got.McpCapabilities.Sse, got.McpCapabilities.Acp:
+		t.Error("MCP over SSE or ACP advertised; neither is offered")
 	case got.PromptCapabilities.Image, got.PromptCapabilities.Audio, got.PromptCapabilities.EmbeddedContext:
 		t.Error("prompt capabilities advertised before Phase 3")
 	}

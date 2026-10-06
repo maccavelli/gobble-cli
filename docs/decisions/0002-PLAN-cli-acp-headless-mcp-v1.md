@@ -204,6 +204,8 @@ server — appear as tools during `session/prompt`. `gobble mcp list` agrees.
 An SSE-only config is rejected. The Phase 1 initialize test still
 passes (capabilities now include http).
 
+*(2026-10-06: made executable in the Amendments entry "Phase 5 made executable" of this date. Step 1's version is `github.com/modelcontextprotocol/go-sdk v1.8.0`, the newest release on the module proxy that day. Step 6: the go-sdk supports OAuth, but the owner decided on 2026-10-06 that MCP OAuth lands with 0005-PLAN F8, which owns it with the token store. This is the gap step 6 asks to record: in Phase 5, an HTTP server that answers 401 shows as needing sign-in.)*
+
 ### Phase 6 — native slash commands and session modes
 
 This phase is the magic-cli-remote-native contract. An empty
@@ -1123,3 +1125,291 @@ The agent stages; the owner commits.
 3. **`--tools` and `--exclude-tools` completion is wired to `builtin.Names()`.**
    * It still listed nothing: its comment named 0002-PLAN Phase 3, and Phase 3 did not wire it. That is a gap from Phase 3; `internal/cli/completion.go` is unchanged since 0008-PLAN P5.
    * It is fixed in Part B's `completion.go`, with a test.
+
+**2026-10-06 — Phase 5 made executable (owner's decisions: MCP OAuth in 0005-PLAN F8, `${NAME}` values now, background connections with a first-prompt wait, direct exposure, two items pulled from F8, Pi's tool-flag rules).**
+
+The facts come from Pi's source at `maccavelli/pi` `312184edb`, the commit Phase 4 read.
+
+Read in full:
+* `packages/coding-agent/docs/mcp.md`;
+* `packages/coding-agent/src/extensions/mcp/`: `config.ts`, `cli.ts`, `tools.ts`, `runtime.ts` and `index.ts`;
+* `packages/coding-agent/src/core/`: `mcp-servers.ts` and `resolve-config-value.ts`;
+* `packages/mcp/src/`: `client.ts`, `transports/stdio.ts` and `protocol/content.ts`.
+
+Read in part: `packages/coding-agent/docs/cli.md`, its Tools and MCP commands sections.
+
+Not read: `packages/mcp/src/transports/streamable-http.ts` (gobble uses the go-sdk's transport) and the OAuth files (F8).
+
+The facts:
+* **The schema** is checked one entry at a time (`mcp-servers.ts:152-196`).
+  * A name matches `^[A-Za-z0-9_-]+$`, and an entry is an object.
+  * `exposure` is one of `codemode`, `codemode-deferred`, `deferred`, `direct` or `hidden`. `toolExposure` maps names to those, `enabled` is a boolean, and `timeout` is a positive number of seconds.
+  * `type: "sse"` is rejected: `server "<name>": legacy SSE transport is not supported; use the streamable HTTP URL`.
+  * `url` (http or https) makes an HTTP server when `type` is absent, `http` or `streamable-http`. It takes a `headers` string map and a checked `oauth` object.
+  * Otherwise `command` makes a stdio server when `type` is absent or `stdio`. It takes an `args` string array, an `env` string map and a `cwd` string.
+  * Otherwise: `server "<name>" needs either "command" (stdio) or "url" (streamable HTTP)`.
+* **Errors are per entry.** An invalid entry is skipped and reported as `<path>: <message>`. A file that is not an object with an `mcpServers` object is one error. A missing file is no servers (`config.ts:68-92`).
+* **Values** (`resolve-config-value.ts`):
+  * A value that starts with `!` is a command.
+  * Otherwise `$NAME` and `${NAME}` interpolate, and `$$` and `$!` escape. `${` with no `}`, or with a name that is not `[A-Za-z_][A-Za-z0-9_]*`, stays literal.
+  * An unset or empty variable fails with `Failed to resolve MCP server "<name>" header "<key>" from environment variable: <VAR>` (`env "<key>"` for env values; `:229-251`).
+  * Values are resolved when the transport is built (`runtime.ts:96-120`), so a failure fails that server, not the file.
+* **Stdio** (`runtime.ts:87-120`, `stdio.ts:94`): `~` and `~/` expand in `command`, `args` and `cwd`; a relative `cwd` resolves against the session's directory; the environment is the process's own plus `env`.
+* **Tool names** (`tools.ts:80-89`): `mcp__<server>__<tool>`, with every character outside `[A-Za-z0-9_-]` made `_`. A name over 64 characters, or one another tool already has, is cut to 55 characters and given `_` and the first 8 hex digits of sha256(`<server>\0<tool>`).
+* **Tool definitions** (`tools.ts:232-305`, `runtime.ts:47,216`):
+  * The description is the trimmed description, else the title, else `MCP tool <tool> from server <server>`.
+  * The input schema gets `"type": "object"` and `"properties": {}` when either is missing.
+  * The four boolean annotations are copied.
+  * A call times out after `timeout` seconds, 60 by default.
+* **Results** (`content.ts:78-117`, `tools.ts:206-226`):
+  * text passes through, and an image goes to the model as an image;
+  * audio becomes `[audio <mime> omitted]`;
+  * a resource link becomes `[Resource <uri> "<title or name>" (<mime>, <size>): <description>]`;
+  * an embedded text resource becomes its text; another embedded resource becomes `[binary resource <uri> (<mime>) omitted]`;
+  * a result with no content but `structuredContent` becomes that JSON, indented two spaces;
+  * an `isError` result with no text gets `MCP tool <server>/<tool> returned an error`.
+* **Start-up** (`index.ts:791-848`):
+  * Connections start when the session starts.
+  * The first prompt waits until they finish or 10 s pass, once per session, counted from that prompt.
+  * A server that connects later adds its tools from then on.
+  * Problems are reported once, after start-up.
+* **`pi mcp`** (`cli.ts`):
+  * `add` writes `Added|Replaced <scope> MCP server "<name>" in <path>.`, then `Check it with: pi mcp list`. It rewrites the file keeping the rest of it, in the file's own indentation (`config.ts:168-182`).
+  * `remove` writes `Removed <scope> MCP server "<name>" from <path>.`, or exits 1 with `No <scope> MCP server named "<name>" in <path>.`.
+  * `list` connects every enabled server. For each it prints `<name>: connected, N tools (<exposure>, <scope>)`, the transport, `tools: a, b`, and the error with the server's stderr tail (2000 characters). Then come `config error: …` lines.
+  * `list` exits 1 when there is a config error, or an enabled server is not connected. `--json` prints `{servers, errors}`.
+* **Tool flags** (`cli.md:119-126`): `--tools` is an allowlist over all tools, MCP tools included; `--exclude-tools` removes names; `--no-tools` disables all.
+
+Measured on the go-sdk:
+* **Version.** `v1.8.0` is the newest release on the module proxy on 2026-10-06.
+* **What it adds to `go.mod`,** measured on a scratch copy by importing it and running `go mod tidy`:
+  * direct: `github.com/modelcontextprotocol/go-sdk v1.8.0`, which 0004-MADR D14 names;
+  * indirect, coming with it: `github.com/segmentio/asm v1.1.3`, `github.com/segmentio/encoding v0.5.4`, `github.com/yosida95/uritemplate/v3 v3.0.2`, `golang.org/x/oauth2 v0.35.0` and `golang.org/x/time v0.15.0`.
+* **401.** `StreamableClientTransport` takes an `OAuthHandler` (`mcp/streamable.go:1966-1997`). Without one, a 401 is an error whose text ends `Unauthorized` (`:2607-2609`). There is no typed error, so gobble's transport records the status itself.
+* **Stopping.** `CommandTransport.Close` closes stdin, waits `TerminateDuration` (5 s by default), then terminates the process (`mcp/cmd.go:15-30`).
+
+The owner decided six questions on 2026-10-06:
+
+1. **MCP OAuth lands with 0005-PLAN F8,** which owns it together with the keyring token store and `gobble mcp login|logout`. go-llmprovider-sdk's `llmprovider/auth` is provider-only (`oauth_loopback.go:184-204` accepts OpenAI and Grok only), and 0004-MADR already routes MCP OAuth to the go-sdk.
+   * In Phase 5, an HTTP server with no `Authorization` header that answers 401 shows as `needs sign-in`, with `MCP server "<name>" requires sign-in, which arrives with 0005-PLAN F8 (gobble mcp login)`.
+   * With an `Authorization` header, a 401 is a failure, `Unauthorized`.
+2. **`$NAME`, `${NAME}`, `$$` and `$!` work in Phase 5.** A `!command` value fails its server: `MCP server "<name>" header "<key>": command values (!…) arrive with 0005-PLAN F8`.
+3. **Connections run in the background.** They start on `session/new`, `session/load` and `session/resume`, which return at once.
+   * The session's first prompt waits up to 10 s for any still in progress, counted from that prompt as Pi counts it.
+   * A server that connects later is in the tools of the next prompt.
+   * Problems are logged once, at Warn, after that wait: on stderr in the CLI modes, and in the log file under `gobble acp`.
+4. **Every MCP tool is declared directly.** `exposure`, `toolExposure` and `oauth` are checked as Pi checks them, and kept when `gobble mcp add` or `remove` rewrites the file, but not applied. A server that sets `exposure` or `toolExposure` is logged once: `MCP server "<name>": exposure and toolExposure apply from 0005-PLAN F8; its tools are declared directly`. `enabled: false` is honoured.
+5. **Two items are pulled forward from F8:** Pi's tool-name sanitizing with the hash suffix, and the per-call `timeout`. Progress notifications resetting the timeout stay in F8.
+6. **The tool flags follow Pi.**
+   * `--no-tools` turns MCP off.
+   * `-t` keeps only the names listed, MCP names included.
+   * `--exclude-tools` removes the names listed.
+   * A name that starts `mcp__` is accepted unchecked, since MCP names exist only after connecting. Any other unknown name is still a usage error.
+   * When the flags leave no MCP name selectable, nothing connects.
+
+Choices made within the wording:
+* **Where the file is.** `<config>/mcp.json` (0003-MADR table). There is no project file until trust (0005-PLAN), and no Pi files until the bridge.
+* **The union.**
+  * The file's servers come first, in file order.
+  * A session server of the same name replaces it in place, and other session servers follow, in request order.
+  * Values from an ACP client are used as given, not interpolated: the client has already resolved them.
+* **Refused ACP entries.**
+  * An SSE entry is refused as invalid params, `MCP server "<name>": the SSE transport is not offered (mcpCapabilities.sse is false)`. An ACP-transport entry is refused the same way, naming `mcpCapabilities.acp`.
+  * An ACP server name that fails Pi's name rule is invalid params, with Pi's message.
+* **Capabilities.** `mcpCapabilities` is `{http: true, sse: false, acp: false}`.
+* **Identity.**
+  * MCP `clientInfo` is `{name: "gobble", version: <semver>}` (0003-MADR).
+  * HTTP requests carry `buildinfo`'s User-Agent and the configured headers, through a `RoundTripper` that also records a 401.
+  * The session's directory is offered as the one root, as Pi offers it.
+* **Bounds.**
+  * `initialize` and `tools/list` share the server's `timeout`, as Pi's request timeout covers `initialize` (`client.ts:418`).
+  * The last 64 KiB of a stdio server's stderr is kept, and an error shows its last 2000 characters.
+* **Stopping.** A stdio server stops through the go-sdk's `CommandTransport.Close`. The process-group stop is Phase 8 step 1 and F8 step 3.
+* **How a tool shows.** MCP tools are ACP kind `other`, titled `<server>/<tool>`. A call asks for approval unless its tool has `readOnlyHint`; the agent's rule is unchanged.
+* **Images.** gobble's tool results are text (`tool.Result`), so an image becomes `[image <mime> omitted]`. It reaches the model once 0005-PLAN F1 step 2 carries images.
+* **Exit codes** are 0008-MADR D10's: 2 for usage, 1 for failure.
+* **`gobble mcp add` flags.**
+  * The flags are `--url`, `--env KEY=VALUE` (repeatable), `--cwd`, `--header KEY=VALUE` (repeatable), `--bearer-token-env-var NAME` (writes `Authorization: Bearer ${NAME}`) and `--exposure`. The command and its arguments follow `--`.
+  * There is no `--local`, which needs trust. There are no `--oauth-*` flags: they arrive with F8's OAuth, and a literal secret on the command line is not allowed here.
+* **`gobble mcp list`** prints Pi's text without the scope, with the exposure in force: `<name>: connected, 2 tools (direct)`.
+
+**Files:**
+* `go.mod`, `go.sum`;
+* `mcpclient/`:
+  * `doc.go`;
+  * new `config.go`, `file.go`, `value.go`, `name.go`, `tool.go`, `conn.go` and `manager.go`;
+  * their tests;
+* new `mcpclient/mcptest/doc.go` and `mcptest.go`;
+* `acpserver/`:
+  * `agent.go`, `prompt.go`, `serve.go` and `agent_test.go`;
+  * new `mcp.go`, `mcp_test.go` and `testmain_test.go`;
+* `internal/cli/`:
+  * `root.go`, `agent.go`, `chat.go`, `flags.go`, `completion.go`, `completion_test.go` and `testmain_test.go`;
+  * new `mcp.go` and `mcp_test.go`;
+* `docs/decisions/0002-PLAN-cli-acp-headless-mcp-v1.md`;
+* `docs/decisions/0005-PLAN-v1-feature-scope.md`: an F8 note on what Phase 5 delivered;
+* `docs/README.md`.
+
+**Steps:**
+
+1. **`mcpclient/config.go`:**
+   * `Server{Name, Type, Command string; Args []string; Env map[string]string; Cwd, URL string; Headers map[string]string; Timeout time.Duration; Enabled bool; Exposure string; ToolExposure map[string]string; OAuth bool}`.
+   * `Validate(name string, raw jsontext.Value) (Server, error)` gives Pi's checks and messages, word for word. `Server.Transport()` is the URL, or the command and its arguments.
+   * `Config{Path string; Servers []Server; Errors []string}`, and `Load(path string) Config`. A missing file is empty, and a malformed one is a single error.
+2. **`mcpclient/file.go`:**
+   * `Add(path, name string, entry jsontext.Value) (replaced bool, err error)` and `Remove(path, name string) (bool, error)`.
+   * They read the file as ordered members, keeping every other member and the order of servers. An added server goes last, and a replaced one stays in place.
+   * They write in the file's first indentation, else two spaces, with a final newline. The write goes to a temporary file in the same directory, renamed over the old one, with mode 0600 in a directory made 0700.
+3. **`mcpclient/value.go`:** `Resolve(value, what string, getenv func(string) string) (string, error)` gives Pi's template rules and messages. A value starting `!` gives decision 2's error.
+4. **`mcpclient/name.go`:** `ToolName(server, tool string, taken func(string) bool) string`, Pi's algorithm.
+5. **`mcpclient/tool.go`:** an MCP tool as a `tool.Tool`, a `tool.Describer` that titles calls `<server>/<tool>`.
+   * Its `Spec` is the name, Pi's description fallback, the input schema with `type` and `properties` filled in, `KindOther`, and the annotations.
+   * `Run` calls `tools/call` within the server's timeout. A timeout gives the error result `MCP tool <server>/<tool> timed out after N s`.
+   * The result is converted as above, with `IsError` kept.
+6. **`mcpclient/conn.go`:**
+   * A stdio server is an `exec.Cmd` with `~` expanded, the `cwd` resolved, and the environment the process's plus the resolved `env`. Its stderr goes to a 64 KiB tail.
+   * An HTTP server uses `StreamableClientTransport` with an `http.Client` whose `RoundTripper` adds the resolved headers and the User-Agent, and records a 401.
+   * A connection runs `initialize` and lists the tools, following every page. Its state is `connecting`, `connected`, `needs sign-in`, `failed` or `closed`, with an error text.
+7. **`mcpclient/manager.go`:**
+   * `Start(servers []Server, o Options) *Manager` connects each enabled server in its own goroutine. `Options` holds `{Cwd, ClientName, ClientVersion, UserAgent; Getenv func(string) string; Home string}`.
+   * `Wait(ctx) error` waits until every connection has finished.
+   * `Tools(allow func(string) bool) []tool.Tool` gives the connected servers' tools, in server order, named across the whole set.
+   * `Statuses() []Status`, where `Status` is `{Name, Transport, State, Error; Tools []string; Exposure string}`. Also `Problems() []string` and `Close() error`.
+   * `mcpclient/doc.go` describes the package and drops "Phase 1 declares the package only".
+8. **`mcpclient/mcptest`:** fixtures for tests, built on the go-sdk server.
+   * `NewServer()` offers `echo {text}` (read-only), `add {a, b}`, `sleep {ms}`, and the tool `dotted.name`.
+   * `ServeStdioIfAsked()` serves the fixture on stdin and stdout when `GOBBLE_MCPTEST=stdio`, then exits. `GOBBLE_MCPTEST_DELAY` delays the start, and `GOBBLE_MCPTEST_FAIL` writes a line to stderr and exits 3.
+   * `StdioServer(t) (command string, env map[string]string)` is this test binary with the variable set.
+   * `HTTPServer(t, bearer string) string` serves the fixture over streamable HTTP. Given a bearer, it answers 401 to any request without it.
+9. **`acpserver`:**
+   * `Options` gains `Logger *slog.Logger`, and `MCP MCPOptions{Config string; Allow func(string) bool; UserAgent string; StartupWait time.Duration; Getenv func(string) string}`. `Serve` passes its logger when the agent has none.
+   * `Capabilities` sets `McpCapabilities{Http: true}`.
+   * New `mcp.go` converts ACP servers, builds the union and starts a session's `Manager`. `NewSession`, `LoadSession` and `ResumeSession` start it; `CloseSession` and `Close` close it.
+   * `Prompt` waits once (decision 3), logs the problems once, and runs the agent with the built-ins plus `Manager.Tools(Allow)`. The system prompt lists them all.
+10. **`internal/cli`:**
+    * `agentOptions` sets `MCP.Config` to `<config>/mcp.json`, `UserAgent`, and `Allow` from the tool flags (decision 6).
+    * `toolSet` accepts `mcp__` names, and turns MCP off for `--no-tools`, or for `-t` without an `mcp__` name.
+    * The `-t` and `--no-tools` help keeps its wording, which is now true of MCP tools too.
+    * New `mcp.go` adds `MCPCmd{Add, Remove, List}` to `Root`:
+      * `list --json` prints `{servers: [Status…], errors}`;
+      * `add` validates its entry with `Validate` before writing.
+    * `completion.go` registers `mcpserver`: the server names of `<config>/mcp.json`, read only. `mcp remove`'s argument uses it, and the coverage test covers the new flags.
+
+**Accept,** each through the real `acpserver`, or through `Main`, with `llmtest.Script` as the model and each over its own `GOBBLE_HOME`:
+* **Both fixtures appear as tools during `session/prompt`.** A stdio fixture in `mcp.json` and an HTTP fixture in `session/new`'s `mcpServers` give `mcp__fx__echo`, `mcp__fx__add`, `mcp__web__echo` and so on in the model's request (`llmtest.AssertTools`). A call of `mcp__fx__echo {"text": "hi"}` returns `hi` to the next request, and a call of `mcp__web__add` returns `5`.
+* **The session's name wins.** A file entry `web` pointing at a closed port, and a session `web` pointing at the fixture, give `web`'s tools.
+* **`gobble mcp list` agrees.**
+  * Over both fixtures it exits 0, with `fx: connected, 4 tools (direct)` and a `tools:` line naming the four, in the order the server lists them.
+  * With a server started with `GOBBLE_MCPTEST_FAIL` it exits 1, and prints that server's stderr line.
+  * `--json` decodes.
+* **An SSE-only config is rejected.** In `mcp.json`, `list` exits 1 with `config error: <path>: server "old": legacy SSE transport is not supported; use the streamable HTTP URL`. On `session/new`, it is invalid params.
+* **The Phase 1 initialize test still passes,** now asserting `http` true and `sse` and `acp` false.
+* **`${NAME}`.**
+  * The HTTP fixture with a bearer connects when `Authorization: Bearer ${FX_TOKEN}` has the variable set.
+  * Unset, it fails with `Failed to resolve MCP server "web" header "Authorization" from environment variable: FX_TOKEN`.
+  * With no header, it shows `needs sign-in` with decision 1's text, and `list` exits 1.
+* **Names.** `dotted.name` is `mcp__fx__dotted_name`. A 70-character tool name gives a 64-character name, whose suffix matches a vector computed with Python's `hashlib`.
+* **Timeout.** `sleep {ms: 2000}` with `"timeout": 0.5` gives the timeout error result, within 2 s.
+* **Start-up.**
+  * With `StartupWait` of 200 ms and `GOBBLE_MCPTEST_DELAY=1500ms`, the first prompt runs without `fx`'s tools, and one Warn names `fx`.
+  * A prompt after `fx` connects has them.
+* **Tool flags.**
+  * `-t read,mcp__fx__echo`: the request has exactly those two.
+  * `--exclude-tools mcp__fx__add`: the request lacks it.
+  * `--no-tools`: no request has an `mcp__` tool, and the fixture process is never started (its start writes a marker file).
+* **`add` and `remove`.**
+  * Both keep another top-level member, the servers' order and a four-space indentation.
+  * `add` prints `Replaced` the second time.
+  * `remove` of an unknown name exits 1.
+  * `mcp remove <TAB>` lists the file's servers and creates nothing.
+
+Each is shown failing first on a scratch copy, the failure quoted:
+* `http` false;
+* the file's entry winning the union;
+* SSE accepted;
+* `list` exiting 0 on a failed server;
+* names not sanitized;
+* `${NAME}` not expanded;
+* the timeout not applied;
+* `--no-tools` leaving MCP on.
+
+**Verification:**
+* `go test ./...`;
+* `golangci-lint` for linux, darwin and windows;
+* `make preflight` on Windows and in WSL, and WSL `go test -race ./...`;
+* the pre-add check on every changed Go file;
+* the identifier and hidden-character scans.
+
+The agent stages; the owner commits.
+
+**Deferred from Phase 5, named:**
+* to 0005-PLAN F8:
+  * OAuth, and `gobble mcp get|login|logout`;
+  * `!command` values;
+  * applying `exposure` and `toolExposure`;
+  * the 20 KB truncation with the full-output file;
+  * `list_changed`, reconnects and retries, and the progress-reset timeout;
+  * `mcp.log`, and `/mcp`;
+* to Phase 8 and F8: the process-group stop;
+* to 0005-PLAN (trust and the bridge): the project `mcp.json`, `--local`, and Pi's own files;
+* to 0005-PLAN F1 step 2: images in MCP results;
+* to 0005-PLAN F1 step 8: the MCP resource tools.
+
+**Deviations during Phase 5, 2026-10-06 (owner's decisions):**
+
+1. **`acpserver/testdata/session.golden` joins Phase 5's files.**
+   * It is Phase 1's golden transcript for `TestSession`, and records `initialize`'s capabilities. It was last changed in 97dc23e.
+   * Turning on `http` changes its line 2 only: `"mcpCapabilities":{}` becomes `"mcpCapabilities":{"http":true}`. TestSession's failure against the unmodified golden showed exactly that line.
+   * It is regenerated with `ACPTEST_UPDATE=1`, and a diff confirms line 2 is the only change.
+2. **`internal/cli/main.go` joins Phase 5's files.**
+   * `runEnv`, which Kong binds into every command, is defined there. The MCP tool choice from `-t`, `--exclude-tools` and `--no-tools` reaches `agentOptions` through it, as `tools` already does. The change is two fields, `mcpOff` and `mcpAllow`, beside `tools`.
+   * The edit was made before the deviation was raised; the owner kept it rather than routing the choice through `agentOptions`' parameters, which would have touched `internal/cli/acp.go` instead.
+3. **Two staticcheck findings are kept, with staticcheck's own `//lint:ignore`.** `make preflight`'s standalone staticcheck failed on Windows and in WSL, while `golangci-lint` passed, because `//nolint` silences only golangci.
+   * **SA1019** at `mcpclient/conn.go`: `mcp.Client.AddRoots` and `mcp.Root` are deprecated from MCP protocol 2026-07-28, and still served for at least twelve months. The amendment offers the session's directory as the one root, as Pi does, and servers on earlier protocols, such as the filesystem server, read roots.
+   * **ST1005** at `mcpclient/value.go`: Pi's messages begin `Failed to resolve`, with a capital, and the amendment quotes them word for word.
+   * Each line gets `//lint:ignore <check> <reason>`, the repository's first, and keeps its golangci `//nolint:staticcheck`: golangci-lint reads only `//nolint`, and staticcheck only `//lint:ignore`, as running both showed.
+
+**Phase 5, 2026-10-06 — complete (staged; the owner commits).** It ran as the amendment wrote it, with the three deviations above. Phases 6–8 have not run.
+
+* **Files.**
+  * `go.mod` and `go.sum`: `github.com/modelcontextprotocol/go-sdk v1.8.0`, with the five indirect modules the amendment measured, and no others.
+  * `mcpclient`: `doc.go`, and new `config.go`, `file.go`, `value.go`, `name.go`, `tool.go`, `conn.go` and `manager.go`, with `config_test.go`, `file_test.go`, `value_test.go` and `manager_test.go`.
+  * New `mcpclient/mcptest/doc.go` and `mcptest.go`.
+  * `acpserver`: `agent.go`, `serve.go`, `agent_test.go` and `testdata/session.golden` (deviation 1), and new `mcp.go`, `mcp_test.go` and `testmain_test.go`.
+  * `internal/cli`: `root.go`, `agent.go`, `chat.go`, `completion.go`, `main.go` (deviation 2) and `testmain_test.go`, and new `mcp.go` and `mcp_test.go`.
+  * Listed but unchanged: `acpserver/prompt.go` (its system prompt already lists every tool it is given), `internal/cli/flags.go` (the help is unchanged, as step 10 says) and `internal/cli/completion_test.go` (its coverage walk covers the new flags as written).
+* **Accept,** each through the real `acpserver` or through `Main`:
+  * `TestMCPToolsInPrompt`: a stdio fixture from `mcp.json` and an HTTP fixture from `session/new` both give their tools to the model's request. `mcp__fx__echo` returns `hi` and `mcp__web__add` returns `5` to the next request, and the system prompt lists them.
+  * `TestSessionServerWins`: a session's `web` replaces the file's, which points at a closed port.
+  * `TestMCPListAgrees`: `gobble mcp list` exits 0 with `fx: connected, 4 tools (direct)` and `web: connected, 4 tools (direct)`. With a server that fails at start, it exits 1 and prints that server's stderr line. `--json` decodes.
+  * `TestMCPListRejectsSSE`: `config error: <path>: server "old": legacy SSE transport is not supported; use the streamable HTTP URL`, exit 1. `TestUnofferedTransportsRefused`: SSE, ACP-transport and badly named servers on `session/new` are invalid params.
+  * `TestCapabilitiesAreHonest` asserts `http` true and `sse` and `acp` false, and `TestSession`'s golden changed in line 2 only.
+  * `TestBearerAndSignIn`: `Bearer ${FX_TOKEN}` connects with the variable set. Unset, it fails with `Failed to resolve MCP server "web" header "Authorization" from environment variable: FX_TOKEN`. With no header, a 401 is `needs-auth`, with decision 1's text, and `mcp list` exits 1 (`TestMCPListEmptyAndSignIn`).
+  * `TestToolName` matches four vectors computed with Python's `hashlib` the way Node computes them, including a 70-character name, a taken name, and a character outside the Basic Multilingual Plane.
+  * `TestCallTimeout`: `sleep {ms: 5000}` with a 0.5 s timeout gives `MCP tool fx/sleep timed out after 0.5 s`, well within 3 s.
+  * `TestStartupWait`: with a 200 ms wait and a 1500 ms server start, the first prompt runs without `fx`'s tools and logs `still connecting` with `server=fx`; the prompt after the server connects has them. `TestResumeConnects`: `session/resume` connects the servers it carries.
+  * `TestToolFlagsSelectMCPTools`: `-t read,mcp__fx__echo` gives exactly those two; `--exclude-tools mcp__fx__add` removes one; `--no-tools` and `-t read` start no server, by the fixture's marker file.
+  * `TestMCPAddRemove`: `add` with and without `--`, `Replaced` on the second, the HTTP entry with `Bearer ${DOCS_TOKEN}` and `exposure`, and `remove` keep another top-level member and the file's four-space indentation, matched byte for byte. Six misuses exit 2; removing an unknown name exits 1. `TestMCPServerCompletion`: `mcp remove <TAB>` offers `fx` and `web` and creates nothing.
+  * `mcpclient`'s own tests cover 21 cases of Pi's validation messages, `Load`'s per-entry errors, `Resolve`'s template rules, the result conversion, the User-Agent and headers on HTTP requests, the stderr tail, and a disabled server never started.
+* **Gates.**
+  * `make preflight` printed `preflight passed` on Windows and in WSL. WSL `go test -race ./...` exited 0.
+  * Windows `go test ./...` showed no `FAIL`.
+  * `golangci-lint` printed `0 issues.` for linux, darwin and windows.
+  * The pre-add check was clean for all 28 Go files.
+* **Negative tests,** each on a scratch copy, each failing at its own line:
+  * `http` not advertised: `agent_test.go:109: MCP over streamable HTTP is implemented (Phase 5) and must be advertised`;
+  * the file's entry winning the union: `mcp_test.go:179: request tools ["read" "write" "edit" "bash"], want the session's web`;
+  * SSE accepted: `mcp_test.go:90: exit 1, stdout "old: failed (direct)\n  https://example.com/sse\n  calling \"initialize\": sending \"initialize\": Method Not Allowed\n", want "config error: <tmp>/mcp.json: server \"old\": legacy SSE transport …"`;
+  * `list` exiting 0 on a failed server: `mcp_test.go:74: with a failed server: exit 0`;
+  * names not sanitized: `value_test.go:61: ToolName("fx", "dotted.name", taken=false) = "mcp__fx__dotted.name" (20), want "mcp__fx__dotted_name"`;
+  * `${NAME}` not expanded: `value_test.go:28: Resolve("Bearer ${TOKEN}") = "Bearer ${TOKEN}", <nil>; want "Bearer t0k"`, and the bearer server then failed with `Unauthorized`;
+  * the timeout not applied: `manager_test.go:130: sleep = {Output:"slept" IsError:false …}`;
+  * `--no-tools` leaving MCP on: `mcp_test.go:241: [--no-tools]: ["mcp__fx__add" "mcp__fx__dotted_name" "mcp__fx__echo" "mcp__fx__sleep"]`.
+* **What the plan predicted wrongly.**
+  1. **Three files outside the list** (deviations 1 and 2), and three listed files needing no change (above).
+  2. **`//nolint` is not enough for `make preflight`** (deviation 3): its standalone staticcheck reads only `//lint:ignore`, and golangci-lint reads only `//nolint`.
+  3. **`Start` takes a context.** contextcheck required one; the connections keep its values but not its cancellation, so a session's servers outlive the request that started them.
+  4. **Closing servers never fails a request.** A stdio server's exit status on close is logged at Debug, not returned from `session/close` or `Close`.
+  5. **The fixture's tools come back sorted by name** (`add`, `dotted.name`, `echo`, `sleep`): the go-sdk server lists them so, and gobble keeps the server's order.
+  6. **The "SSE accepted" negative needed two edits.** With the SSE check alone removed, `type: "sse"` still matches neither branch and fails with "needs either …", so the mutation also routed it to HTTP.
+  7. **Kong's `passthrough` on the command argument** takes the command with or without `--`, as Pi's parser does, so `gobble mcp add fs npx -y srv` works too.

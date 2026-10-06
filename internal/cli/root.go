@@ -9,5 +9,6 @@ type Root struct {
 	Completion CompletionCmd `cmd:"" help:"Print a shell completion script."`
 	Config     ConfigCmd     `cmd:"" help:"Inspect configuration."`
 	ACP        ACPCmd        `cmd:"" name:"acp" help:"Run the ACP agent on stdio."`
+	MCP        MCPCmd        `cmd:"" name:"mcp" help:"Add, remove and check MCP servers."`
 	LogLevel   string        `name:"log-level" enum:"debug,info,warn,error" default:"info" help:"Log level: ${enum}."`
 }

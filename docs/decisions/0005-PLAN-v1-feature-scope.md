@@ -1,6 +1,6 @@
 ---
 status: proposed
-date: 2026-10-04
+date: 2026-10-06
 associated-madr: "0005-MADR-v1-feature-scope.md"
 ---
 # Implement the v1 line: the v1.0.0 gate, the v1.x train, and `exp/`
@@ -255,6 +255,8 @@ API.
    callback with `CrossOriginProtection`, manual paste, and tokens kept in
    the secret store.
 5. `gobble mcp get|login|logout` and `/mcp [status|reconnect]`.
+
+*(2026-10-06: 0002-PLAN Phase 5 delivers part of this phase, by the owner's decision of that date: step 1's checks of the whole `mcp.json` schema and its `$NAME` / `${NAME}` values, with `!command` left here; step 2's 64-character names with the hash suffix; step 3's per-call `timeout`, with the progress reset left here. `exposure` and `toolExposure` are checked and kept there, and applied here. See that plan's Amendments entry "Phase 5 made executable".)*
 
 **Accept:**
 
