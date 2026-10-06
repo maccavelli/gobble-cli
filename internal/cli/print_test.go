@@ -124,7 +124,7 @@ func TestPrintStreamJSON(t *testing.T) {
 func TestPrintErrorResult(t *testing.T) {
 	for _, format := range []string{"text", "json", "stream-json"} {
 		t.Run(format, func(t *testing.T) {
-			withAgent(t, &acptest.ScriptAgent{Turns: []acptest.Turn{{Updates: []string{chunk("part")}, ErrCode: -32000, ErrMessage: "provider down"}}})
+			withAgent(t, &acptest.ScriptAgent{Turns: []acptest.Turn{{Updates: []string{chunk("part")}, ErrCode: -32603, ErrMessage: "provider down"}}})
 			r := runMain(t, nil, "-p", "--output-format", format, "x")
 			if r.code != ExitFailure || !strings.Contains(r.stderr, "Error: session/prompt:") || !strings.Contains(r.stderr, "provider down") {
 				t.Fatalf("exit %d, stderr %q; want 1 and the error", r.code, r.stderr)
@@ -142,6 +142,22 @@ func TestPrintErrorResult(t *testing.T) {
 			}
 			if res.StopReason != "error" || !strings.Contains(res.Error, "provider down") || res.Text != "part" || res.SessionID != "s1" {
 				t.Fatalf("result = %+v", res)
+			}
+		})
+	}
+}
+
+// auth_required exits 3 (D10) and still writes the JSON result.
+func TestPrintAuthRequired(t *testing.T) {
+	for _, format := range []string{"text", "json"} {
+		t.Run(format, func(t *testing.T) {
+			withAgent(t, &acptest.ScriptAgent{Turns: []acptest.Turn{{ErrCode: -32000, ErrMessage: "Authentication required"}}})
+			r := runMain(t, nil, "-p", "--output-format", format, "x")
+			if r.code != ExitAuth || !strings.Contains(r.stderr, "Error: no model credential: set one of ") {
+				t.Fatalf("exit %d, stderr %q; want 3", r.code, r.stderr)
+			}
+			if format == "json" && !strings.Contains(r.stdout, `"stopReason":"error"`) {
+				t.Fatalf("json stdout %q lacks the error result", r.stdout)
 			}
 		})
 	}

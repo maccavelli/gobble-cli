@@ -1,6 +1,9 @@
 package permission
 
-import "context"
+import (
+	"context"
+	"encoding/json/jsontext"
+)
 
 // Policy decides whether a rule allows an action.
 type Policy interface {
@@ -19,10 +22,14 @@ const (
 	ModeDeny Mode = "deny"
 )
 
-// Rule is one permission question.
+// Rule is one permission question: the tool, the posture, and the call it
+// is asked about, so a client can show what would run.
 type Rule struct {
-	Tool string `json:"tool"`
-	Mode Mode   `json:"mode,omitzero"`
+	Tool   string         `json:"tool"`
+	Mode   Mode           `json:"mode,omitzero"`
+	CallID string         `json:"callId,omitzero"`
+	Title  string         `json:"title,omitzero"`
+	Input  jsontext.Value `json:"input,omitzero"`
 }
 
 // Decision is a policy answer.

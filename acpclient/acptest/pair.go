@@ -2,6 +2,7 @@ package acptest
 
 import (
 	"io"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -35,9 +36,10 @@ func Connect(t testing.TB, agent acp.Agent, client acp.Client) *Conn {
 	rec := &Recorder{}
 	toAgentR, toAgentW := io.Pipe()
 	toClientR, toClientW := io.Pipe()
+	quiet := acp.WithLogger(slog.New(slog.DiscardHandler))
 	c := &Conn{
-		Agent:    acp.NewAgentSideConnection(agent, rec.tap(AgentToClient, toClientW), toAgentR),
-		Client:   acp.NewClientSideConnection(client, rec.tap(ClientToAgent, toAgentW), toClientR),
+		Agent:    acp.NewAgentSideConnection(agent, rec.tap(AgentToClient, toClientW), toAgentR, quiet),
+		Client:   acp.NewClientSideConnection(client, rec.tap(ClientToAgent, toAgentW), toClientR, quiet),
 		Recorder: rec,
 	}
 	t.Cleanup(func() {

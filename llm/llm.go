@@ -53,16 +53,34 @@ type Message struct {
 	Content []Content `json:"content,omitzero"`
 }
 
-// Content is one block inside a Message.
-// Type is "text", "image", "thinking", or "tool". Image fields are accepted
-// by the struct and are not sent anywhere in this phase.
+// Content is one block inside a Message. Type is one of the Content*
+// constants. Image fields are accepted by the struct and are not sent
+// anywhere yet.
+//
+// A tool call is a ContentToolCall block in an assistant message: ToolCallID,
+// ToolName and ToolArgs (the arguments as JSON text), with any provider
+// signature in ProviderData. Its result is a ContentToolResult block in a
+// RoleTool message: ToolCallID, the output in Text, and IsError.
 type Content struct {
 	Type         string         `json:"type"`
 	Text         string         `json:"text,omitzero"`
 	MediaType    string         `json:"mediaType,omitzero"`
 	Data         []byte         `json:"data,omitzero"`
 	ProviderData jsontext.Value `json:"providerData,omitzero"`
+	ToolCallID   string         `json:"toolCallId,omitzero"`
+	ToolName     string         `json:"toolName,omitzero"`
+	ToolArgs     string         `json:"toolArgs,omitzero"`
+	IsError      bool           `json:"isError,omitzero"`
 }
+
+// Content types.
+const (
+	ContentText       = "text"
+	ContentImage      = "image"
+	ContentThinking   = "thinking"
+	ContentToolCall   = "tool_call"
+	ContentToolResult = "tool_result"
+)
 
 // Model is a catalog row the facade can name.
 // The catalog package fills real rows later.

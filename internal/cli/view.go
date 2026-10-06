@@ -138,18 +138,22 @@ func (v *view) on(u acpclient.Update) {
 	}
 }
 
-// content draws a tool call's content blocks. Diffs are summarised until
-// 0002-PLAN Phase 3 draws them (owner's decision of 2026-10-05).
+// content draws a tool call's content blocks. A diff is a unified diff,
+// coloured (0002-PLAN Phase 3 step 6), bounded like other tool output.
 func (v *view) content(cs []acpclient.ToolContent) {
 	for _, c := range cs {
 		switch {
 		case c.Diff != nil:
-			old := 0
-			if c.Diff.OldText != nil {
-				old = countLines(*c.Diff.OldText)
-			}
 			path := render.ShortPath(term.Sanitize(c.Diff.Path), v.opts.home)
-			v.line(fmt.Sprintf("diff %s (+%d -%d lines)", path, countLines(c.Diff.NewText), old))
+			var old *string
+			if c.Diff.OldText != nil {
+				o := term.Sanitize(*c.Diff.OldText)
+				old = &o
+			}
+			diff := render.UnifiedDiff(path, old, term.Sanitize(c.Diff.NewText))
+			v.flush()
+			v.newline()
+			v.write(render.Diff(render.ToolOutput(diff, v.opts.verbose, v.glyphs), v.caps.Out))
 		case c.Terminal != "":
 			v.line("terminal " + term.Sanitize(c.Terminal))
 		default:
@@ -158,13 +162,6 @@ func (v *view) content(cs []acpclient.ToolContent) {
 			v.write(render.ToolOutput(c.Text, v.opts.verbose, v.glyphs))
 		}
 	}
-}
-
-func countLines(s string) int {
-	if s == "" {
-		return 0
-	}
-	return strings.Count(strings.TrimSuffix(s, "\n"), "\n") + 1
 }
 
 // text writes Markdown the stream released: styled when colour is on, raw

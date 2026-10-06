@@ -25,6 +25,11 @@ func (c *ChatCmd) Run(k *kong.Context, e *runEnv) error {
 		return err
 	}
 	mode := resolveMode(c.Print, e.out.caps.In, e.out.caps.Out.TTY)
+	tools, err := c.toolSet()
+	if err != nil {
+		return err
+	}
+	e.tools = tools
 	cwd, base, err := resolveCwd(c.Cwd)
 	if err != nil {
 		return err

@@ -14,6 +14,7 @@ import (
 	"github.com/maccavelli/gobble-cli/internal/appdirs"
 	"github.com/maccavelli/gobble-cli/internal/cli/editor"
 	"github.com/maccavelli/gobble-cli/internal/cli/render"
+	"github.com/maccavelli/gobble-cli/llm/provider"
 )
 
 // cancelWait bounds the session/cancel a Ctrl+C sends.
@@ -60,6 +61,12 @@ func (ls *lineSession) run(first Prompt) error {
 	}
 	ls.conn = conn
 	defer ls.close()
+	// The session opens without a credential; a turn then fails with the
+	// authentication error (0008-MADR D1). gobble configure arrives with
+	// 0005-PLAN F4, so the warning names the variables.
+	if _, err := provider.Choose(os.Getenv); err != nil {
+		e.out.Warnf("%s", noCredentialMessage())
+	}
 
 	var r editor.Reader
 	r.Start(e.ctx, ls.in)
@@ -181,6 +188,10 @@ func (ls *lineSession) turn(p Prompt) error {
 	case errors.Is(perr, acpclient.ErrImagesUnsupported):
 		v.quiet()
 		e.out.Errorf("the agent does not accept images (%s)", imageNames(p))
+		return nil
+	case errors.Is(perr, acpclient.ErrAuthRequired):
+		v.quiet()
+		e.out.Errorf("%s", noCredentialMessage())
 		return nil
 	case perr != nil:
 		if err := v.finish(res); err != nil {

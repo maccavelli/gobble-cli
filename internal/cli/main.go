@@ -17,6 +17,7 @@ import (
 	"github.com/maccavelli/gobble-cli/internal/cli/complete"
 	"github.com/maccavelli/gobble-cli/internal/cli/term"
 	"github.com/maccavelli/gobble-cli/internal/logging"
+	"github.com/maccavelli/gobble-cli/tool"
 )
 
 const description = "gobble is a coding agent for the terminal and for ACP clients."
@@ -134,6 +135,8 @@ type runEnv struct {
 	intr *interrupts
 	// now is the clock, for stream-json's session timestamp.
 	now func() time.Time
+	// tools are the in-process agent's tools; nil is the built-ins.
+	tools []tool.Tool
 }
 
 func (e *runEnv) log() *slog.Logger { return e.logs.get() }

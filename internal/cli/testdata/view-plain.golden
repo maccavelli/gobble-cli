@@ -31,8 +31,17 @@ line 28
 line 29
 line 30
 ▸ edit a.go ✓
-diff ~/src/a.go (+3 -2 lines)
-diff ~/new.go (+1 -0 lines)
+--- ~/src/a.go
++++ ~/src/a.go
+@@ -1,2 +1,3 @@
+ a
+-b
++B
++c
+--- /dev/null
++++ ~/new.go
+@@ -0,0 +1 @@
++x
 terminal term-1
   ✓ read
   ▸ fix

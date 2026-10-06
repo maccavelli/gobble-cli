@@ -18,10 +18,7 @@ func (*ACPCmd) Run(e *runEnv) error {
 	if r := e.stdinReader(); r != nil {
 		in = r
 	}
-	err := acpserver.Serve(e.ctx, in, e.out.out, acpserver.ServeOptions{
-		Agent:  acpserver.Options{Version: identity().Version},
-		Logger: e.log(),
-	})
+	err := acpserver.Serve(e.ctx, in, e.out.out, acpserver.ServeOptions{Agent: e.agentOptions(), Logger: e.log()})
 	if err != nil {
 		return failf("acp: %v", err)
 	}

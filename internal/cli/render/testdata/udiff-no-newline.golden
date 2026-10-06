@@ -1,0 +1,8 @@
+--- a/src/a.go
++++ b/src/a.go
+@@ -1,2 +1,2 @@
+ a
+-b
+\ No newline at end of file
++c
+\ No newline at end of file

@@ -22,6 +22,13 @@ const closeTimeout = 5 * time.Second
 // an image is never dropped silently (0008-MADR D19 item 1).
 var ErrImagesUnsupported = errors.New("the agent does not accept images")
 
+// ErrAuthRequired matches a prompt the agent refused with ACP's
+// auth_required error (-32000): it has no usable credential.
+var ErrAuthRequired = errors.New("the agent needs a model credential")
+
+// authRequiredCode is ACP's auth_required JSON-RPC error code.
+const authRequiredCode = -32000
+
 // ServeFunc runs an agent over in and out until in reaches end of file.
 // acpserver.Serve, wrapped in a closure, is one.
 type ServeFunc func(ctx context.Context, in io.Reader, out io.Writer) error
@@ -212,6 +219,9 @@ func (s *Session) Prompt(ctx context.Context, p Prompt) (Result, error) {
 		blocks = append(blocks, acp.ImageBlock(base64.StdEncoding.EncodeToString(img.Data), img.MIME))
 	}
 	resp, err := s.c.conn.Prompt(ctx, acp.PromptRequest{SessionId: s.id, Prompt: blocks})
+	if re, ok := errors.AsType[*acp.RequestError](err); ok && re.Code == authRequiredCode {
+		return Result{}, fmt.Errorf("session/prompt: %w: %w", ErrAuthRequired, err)
+	}
 	if err != nil {
 		return Result{}, fmt.Errorf("session/prompt: %w", err)
 	}
@@ -295,9 +305,17 @@ func (h *handler) SessionUpdate(_ context.Context, n acp.SessionNotification) er
 	return nil
 }
 
-// RequestPermission answers cancelled: the CLI's permission prompt arrives
-// in 0002-PLAN Phase 6.
-func (*handler) RequestPermission(context.Context, acp.RequestPermissionRequest) (acp.RequestPermissionResponse, error) {
+// RequestPermission declines: it selects the first reject_once option, else
+// reject_always, else answers cancelled. The CLI's permission prompt arrives
+// in 0002-PLAN Phase 6 (owner's decision of 2026-10-05).
+func (*handler) RequestPermission(_ context.Context, r acp.RequestPermissionRequest) (acp.RequestPermissionResponse, error) {
+	for _, kind := range []acp.PermissionOptionKind{acp.PermissionOptionKindRejectOnce, acp.PermissionOptionKindRejectAlways} {
+		for _, o := range r.Options {
+			if o.Kind == kind {
+				return acp.RequestPermissionResponse{Outcome: acp.NewRequestPermissionOutcomeSelected(o.OptionId)}, nil
+			}
+		}
+	}
 	return acp.RequestPermissionResponse{Outcome: acp.NewRequestPermissionOutcomeCancelled()}, nil
 }
 

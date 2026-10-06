@@ -289,6 +289,22 @@ func TestUpdatesBeforeNewSessionReturns(t *testing.T) {
 	}
 }
 
+// auth_required (-32000) is ErrAuthRequired; another error is not.
+func TestAuthRequired(t *testing.T) {
+	agent := &acptest.ScriptAgent{Turns: []acptest.Turn{{ErrCode: -32000, ErrMessage: "Authentication required"}, {ErrCode: -32603, ErrMessage: "boom"}}}
+	c := start(t, agent, acpclient.Options{})
+	s, err := c.NewSession(t.Context(), "/w", func(acpclient.Update) {})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Prompt(t.Context(), acpclient.Prompt{Text: "x"}); !errors.Is(err, acpclient.ErrAuthRequired) {
+		t.Fatalf("err = %v, want ErrAuthRequired", err)
+	}
+	if _, err := s.Prompt(t.Context(), acpclient.Prompt{Text: "x"}); err == nil || errors.Is(err, acpclient.ErrAuthRequired) {
+		t.Fatalf("err = %v, want a plain failure", err)
+	}
+}
+
 func TestAgentInfo(t *testing.T) {
 	c := start(t, &acptest.ScriptAgent{Image: true}, acpclient.Options{})
 	if a := c.Agent(); a.Name != "script" || a.Version != "0.0.0" || !a.Image || a.LoadSession {

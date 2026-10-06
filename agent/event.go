@@ -1,0 +1,63 @@
+package agent
+
+import (
+	"github.com/maccavelli/gobble-cli/llm"
+	"github.com/maccavelli/gobble-cli/tool"
+)
+
+// Event is one step of a turn. The set is sealed.
+type Event interface{ event() }
+
+// TextDelta is a piece of the model's reply.
+type TextDelta struct{ Text string }
+
+// ThinkingDelta is a piece of the model's reasoning.
+type ThinkingDelta struct{ Text string }
+
+// ToolStart is a tool call the model made, before it is approved. Title is
+// the tool's Describe of it.
+type ToolStart struct {
+	Call  tool.Call
+	Spec  tool.Spec
+	Title string
+}
+
+// ToolRun is a call that was approved and is running.
+type ToolRun struct{ Call tool.Call }
+
+// ToolEnd is a call's result. A declined or failed call has IsError set.
+type ToolEnd struct {
+	Call   tool.Call
+	Result tool.Result
+}
+
+// Usage is one model call's token count.
+type Usage struct{ llm.Usage }
+
+// End is the turn's last event. Messages are the turn's messages, the
+// prompt first, for the caller to append to the history; Usage sums the
+// turn's model calls.
+type End struct {
+	StopReason StopReason
+	Messages   []llm.Message
+	Usage      llm.Usage
+}
+
+func (TextDelta) event()     {}
+func (ThinkingDelta) event() {}
+func (ToolStart) event()     {}
+func (ToolRun) event()       {}
+func (ToolEnd) event()       {}
+func (Usage) event()         {}
+func (End) event()           {}
+
+// StopReason is why a turn ended. The values are ACP's stop reasons.
+type StopReason string
+
+// Stop reasons.
+const (
+	StopEndTurn         StopReason = "end_turn"
+	StopMaxTokens       StopReason = "max_tokens"
+	StopMaxTurnRequests StopReason = "max_turn_requests"
+	StopCancelled       StopReason = "cancelled"
+)

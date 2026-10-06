@@ -12,6 +12,8 @@ import (
 	acp "github.com/coder/acp-go-sdk"
 
 	"github.com/maccavelli/gobble-cli/acpclient/acptest"
+	"github.com/maccavelli/gobble-cli/llm"
+	"github.com/maccavelli/gobble-cli/llm/llmtest"
 )
 
 // counterIDs makes s1, s2, … so transcripts are deterministic.
@@ -25,8 +27,13 @@ func counterIDs() func() string {
 
 func connect(t *testing.T) (*acptest.Conn, *acptest.Client) {
 	t.Helper()
-	agent := New(Options{Version: "1.2.3", NewID: counterIDs()})
-	client := &acptest.Client{}
+	return connectWith(t, llmtest.NewScript(llmtest.Text("hello gobble")), &acptest.Client{})
+}
+
+// connectWith joins an agent on model p, with the built-in tools, to client.
+func connectWith(t *testing.T, p llm.Provider, client *acptest.Client) (*acptest.Conn, *acptest.Client) {
+	t.Helper()
+	agent := New(Options{Version: "1.2.3", NewID: counterIDs(), Provider: func() (llm.Provider, error) { return p, nil }})
 	c := acptest.Connect(t, agent, client)
 	agent.SetConnection(c.Agent)
 	return c, client
@@ -45,7 +52,8 @@ func initialize(t *testing.T, c *acp.ClientSideConnection) acp.InitializeRespons
 }
 
 // Initialize → NewSession → Prompt → CloseSession through the SDK's client,
-// against a golden transcript (0002-PLAN Phase 1 step 4).
+// against a golden transcript (0002-PLAN Phase 1 step 4; the scripted model
+// of Phase 3 replaced the echo).
 func TestSession(t *testing.T) {
 	c, client := connect(t)
 	resp := initialize(t, c.Client)
@@ -69,14 +77,14 @@ func TestSession(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
-	if err := c.Recorder.Wait(ctx, 9); err != nil {
+	if err := c.Recorder.Wait(ctx, 10); err != nil {
 		t.Fatal(err)
 	}
 	updates := client.Updates()
-	if len(updates) != 1 || updates[0].Update.AgentMessageChunk == nil ||
+	if len(updates) != 2 || updates[0].Update.AgentMessageChunk == nil ||
 		updates[0].Update.AgentMessageChunk.Content.Text == nil ||
-		updates[0].Update.AgentMessageChunk.Content.Text.Text != "hello\n\ngobble" {
-		t.Fatalf("updates = %+v, want one chunk echoing the prompt", updates)
+		updates[0].Update.AgentMessageChunk.Content.Text.Text != "hello gobble" || updates[1].Update.UsageUpdate == nil {
+		t.Fatalf("updates = %+v, want the reply's chunk, then usage_update", updates)
 	}
 	c.Recorder.Golden(t, filepath.Join("testdata", "session.golden"))
 }

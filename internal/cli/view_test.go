@@ -1,7 +1,9 @@
 package cli
 
 import (
+	"encoding/json/jsontext"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -9,6 +11,8 @@ import (
 
 	"github.com/maccavelli/gobble-cli/acpclient"
 	"github.com/maccavelli/gobble-cli/internal/cli/term"
+	"github.com/maccavelli/gobble-cli/tool"
+	"github.com/maccavelli/gobble-cli/tool/builtin"
 )
 
 // stepClock starts at a fixed instant and advances 100 ms per reading.
@@ -92,6 +96,32 @@ func TestViewGoldens(t *testing.T) {
 			stdout, stderr := renderTurn(t, tc.color, tc.opts, res)
 			golden(t, tc.name, stdout+"--- stderr\n"+stderr)
 		})
+	}
+}
+
+// The view draws the real edit tool's change as a unified diff (0002-PLAN
+// Phase 3 step 6).
+func TestViewDrawsARealEdit(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("one\ntwo\nthree\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	res, err := builtin.Edit().Run(t.Context(), tool.Call{Name: "edit", Args: jsontext.Value(`{"path":"a.txt","oldText":"two","newText":"2"}`)}, tool.Env{Cwd: dir})
+	if err != nil || len(res.Diffs) != 1 {
+		t.Fatalf("edit = %+v, %v", res, err)
+	}
+	d := res.Diffs[0]
+	var out, errw strings.Builder
+	s := term.Stream{Width: 80}
+	v := newView(&Output{out: &out, err: &errw, caps: term.Caps{Out: s, Err: s}}, display{home: dir}, stepClock())
+	v.on(acpclient.Update{Kind: acpclient.KindToolCall, Tool: acpclient.ToolCall{ID: "e1", Title: "edit a.txt", Status: "completed",
+		Content: []acpclient.ToolContent{{Diff: &acpclient.Diff{Path: d.Path, OldText: d.OldText, NewText: d.NewText}}}}})
+	if err := v.finish(acpclient.Result{StopReason: "end_turn"}); err != nil {
+		t.Fatal(err)
+	}
+	want := "--- ~/a.txt\n+++ ~/a.txt\n@@ -1,3 +1,3 @@\n one\n-two\n+2\n three\n"
+	if !strings.Contains(out.String(), want) {
+		t.Fatalf("view drew\n%s\nwant it to contain\n%s", out.String(), want)
 	}
 }
 

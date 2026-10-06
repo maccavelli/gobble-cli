@@ -193,6 +193,8 @@ func finishPrint(e *runEnv, c *ChatCmd, sink *printSink, id string, res acpclien
 		}
 	}
 	switch {
+	case errors.Is(perr, acpclient.ErrAuthRequired):
+		return &exitError{code: ExitAuth, msg: noCredentialMessage()}
 	case perr != nil:
 		return failf("%v", perr)
 	case res.StopReason == "cancelled":

@@ -31,8 +31,17 @@ line 28
 line 29
 line 30
 <ESC>[1m▸ <ESC>[0medit a.go <ESC>[32m✓<ESC>[0m
-diff ~/src/a.go (+3 -2 lines)
-diff ~/new.go (+1 -0 lines)
+<ESC>[1m--- ~/src/a.go<ESC>[0m
+<ESC>[1m+++ ~/src/a.go<ESC>[0m
+<ESC>[36m@@ -1,2 +1,3 @@<ESC>[0m
+ a
+<ESC>[31m-b<ESC>[0m
+<ESC>[32m+B<ESC>[0m
+<ESC>[32m+c<ESC>[0m
+<ESC>[1m--- /dev/null<ESC>[0m
+<ESC>[1m+++ ~/new.go<ESC>[0m
+<ESC>[36m@@ -0,0 +1 @@<ESC>[0m
+<ESC>[32m+x<ESC>[0m
 terminal term-1
   <ESC>[32m✓ read<ESC>[0m
   <ESC>[1m▸ fix<ESC>[0m

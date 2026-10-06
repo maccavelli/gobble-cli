@@ -41,7 +41,7 @@ func prompt(t *testing.T, c *acp.ClientSideConnection, id acp.SessionId) (acp.Pr
 func TestScriptAgentPlaysTurns(t *testing.T) {
 	agent := &acptest.ScriptAgent{Turns: []acptest.Turn{
 		{StopReason: "max_tokens", Usage: `{"inputTokens":3,"outputTokens":5,"totalTokens":8}`},
-		{ErrCode: -32000, ErrMessage: "provider down"},
+		{ErrCode: -32603, ErrMessage: "provider down"},
 		{Updates: []string{`{"sessionUpdate":"nope"`}},
 	}}
 	c, id := dial(t, agent)

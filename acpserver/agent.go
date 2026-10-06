@@ -2,12 +2,26 @@ package acpserver
 
 import (
 	"context"
-	"strings"
+	"errors"
 	"sync"
 	"uuid"
 
 	acp "github.com/coder/acp-go-sdk"
+
+	"github.com/maccavelli/gobble-cli/agent"
+	"github.com/maccavelli/gobble-cli/llm"
+	"github.com/maccavelli/gobble-cli/tool"
+	"github.com/maccavelli/gobble-cli/tool/builtin"
 )
+
+// keyReason and keySessionID are keys of an error's JSON-RPC data.
+const (
+	keyReason    = "reason"
+	keySessionID = "sessionId"
+)
+
+// ErrNoProvider is a prompt's error when Options.Provider is nil.
+var ErrNoProvider = errors.New("acpserver: no model provider configured")
 
 // Options configure an Agent.
 type Options struct {
@@ -16,20 +30,35 @@ type Options struct {
 	Version string
 	// NewID makes session ids. The default is a UUIDv7.
 	NewID func() string
+	// Provider builds the model provider. It is called on the first prompt,
+	// so initialize and session/new need no credential and make no network
+	// call (0008-MADR D19 item 6). An error matching llm.ErrAuth answers the
+	// prompt with auth_required.
+	Provider func() (llm.Provider, error)
+	// Tools are the agent's tools. Nil is builtin.Tools(); an empty, non-nil
+	// slice is none.
+	Tools []tool.Tool
 }
 
 // Agent is gobble's acp.Agent.
 type Agent struct {
-	version string
-	newID   func() string
+	version  string
+	newID    func() string
+	provider func() (llm.Provider, error)
+	tools    []tool.Tool
 
 	mu       sync.Mutex
 	conn     *acp.AgentSideConnection
-	sessions map[acp.SessionId]session
+	sessions map[acp.SessionId]*session
+	model    llm.Provider // built on the first prompt
 }
 
+// session is one session's state: its directory, its history in memory
+// (0002-PLAN Phase 4 persists it), and the cancel of its running turn.
 type session struct {
-	cwd string
+	cwd     string
+	history []llm.Message
+	cancel  context.CancelFunc
 }
 
 var _ acp.Agent = (*Agent)(nil)
@@ -37,9 +66,12 @@ var _ acp.Agent = (*Agent)(nil)
 // New returns an Agent. Bind it to its connection with SetConnection before
 // the first request, so it can send session updates.
 func New(opts Options) *Agent {
-	a := &Agent{version: opts.Version, newID: opts.NewID, sessions: map[acp.SessionId]session{}}
+	a := &Agent{version: opts.Version, newID: opts.NewID, provider: opts.Provider, tools: opts.Tools, sessions: map[acp.SessionId]*session{}}
 	if a.newID == nil {
 		a.newID = func() string { return uuid.NewV7().String() }
+	}
+	if a.tools == nil {
+		a.tools = builtin.Tools()
 	}
 	return a
 }
@@ -77,46 +109,115 @@ func (a *Agent) NewSession(_ context.Context, p acp.NewSessionRequest) (acp.NewS
 	id := acp.SessionId(a.newID())
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	a.sessions[id] = session{cwd: p.Cwd}
+	a.sessions[id] = &session{cwd: p.Cwd}
 	return acp.NewSessionResponse{SessionId: id}, nil
 }
 
-// Prompt echoes the prompt's text as one agent message chunk and ends the
-// turn. The model turn arrives in 0002-PLAN Phase 3.
+// Prompt runs one turn of the session: the model, and the tools it asks
+// for, streamed as session updates. One prompt runs at a time per session.
 func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResponse, error) {
 	a.mu.Lock()
-	_, ok := a.sessions[p.SessionId]
+	s, ok := a.sessions[p.SessionId]
 	conn := a.conn
+	busy := ok && s.cancel != nil
 	a.mu.Unlock()
-	if !ok {
-		return acp.PromptResponse{}, acp.NewInvalidParams(map[string]any{"sessionId": p.SessionId, "reason": "unknown session"})
+	switch {
+	case !ok:
+		return acp.PromptResponse{}, acp.NewInvalidParams(map[string]any{keySessionID: p.SessionId, keyReason: "unknown session"})
+	case busy:
+		return acp.PromptResponse{}, acp.NewInvalidRequest(map[string]any{keySessionID: p.SessionId, keyReason: "a prompt is already running"})
 	}
-	var parts []string
-	for _, b := range p.Prompt {
-		if b.Text != nil {
-			parts = append(parts, b.Text.Text)
+	model, err := a.modelProvider()
+	if err != nil {
+		return acp.PromptResponse{}, promptError(err)
+	}
+	turnCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	a.mu.Lock()
+	s.cancel = cancel
+	history := s.history
+	a.mu.Unlock()
+	defer func() {
+		a.mu.Lock()
+		s.cancel = nil
+		a.mu.Unlock()
+	}()
+
+	ag := agent.New(agent.Config{
+		Provider: model,
+		Tools:    a.tools,
+		System:   systemPrompt(s.cwd, a.tools),
+		Policy:   &acpPolicy{conn: conn, session: p.SessionId},
+	})
+	out := newUpdates(ctx, conn, p.SessionId)
+	var last llm.Usage
+	for ev, err := range ag.Run(turnCtx, tool.Env{Cwd: s.cwd}, history, userMessage(p.Prompt)) {
+		if err != nil {
+			out.flush()
+			return acp.PromptResponse{}, promptError(err)
+		}
+		out.event(ev, &last)
+		if end, ok := ev.(agent.End); ok {
+			a.mu.Lock()
+			s.history = append(s.history, end.Messages...)
+			a.mu.Unlock()
+			out.send(usageUpdate(last))
+			if out.err != nil {
+				return acp.PromptResponse{}, out.err
+			}
+			return acp.PromptResponse{StopReason: acp.StopReason(end.StopReason), Usage: acpUsage(end.Usage)}, nil
 		}
 	}
-	if conn != nil {
-		if err := conn.SessionUpdate(ctx, acp.SessionNotification{
-			SessionId: p.SessionId,
-			Update:    acp.UpdateAgentMessageText(strings.Join(parts, "\n\n")),
-		}); err != nil {
-			return acp.PromptResponse{}, err
-		}
-	}
-	return acp.PromptResponse{StopReason: acp.StopReasonEndTurn}, nil
+	return acp.PromptResponse{StopReason: acp.StopReasonCancelled}, nil
 }
 
-// Cancel has nothing to stop: a prompt finishes before it returns.
-func (*Agent) Cancel(context.Context, acp.CancelNotification) error { return nil }
+// modelProvider builds the provider on first use and keeps it.
+func (a *Agent) modelProvider() (llm.Provider, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.model != nil {
+		return a.model, nil
+	}
+	if a.provider == nil {
+		return nil, ErrNoProvider
+	}
+	p, err := a.provider()
+	if err != nil {
+		return nil, err
+	}
+	a.model = p
+	return p, nil
+}
+
+// userMessage is the prompt's text blocks as one user message. Images are
+// not advertised, so none arrive.
+func userMessage(blocks []acp.ContentBlock) llm.Message {
+	m := llm.Message{Role: llm.RoleUser}
+	for _, b := range blocks {
+		if b.Text != nil {
+			m.Content = append(m.Content, llm.Content{Type: llm.ContentText, Text: b.Text.Text})
+		}
+	}
+	return m
+}
+
+// Cancel stops the session's running turn. The SDK also cancels the
+// prompt's context; the turn then ends with the cancelled stop reason.
+func (a *Agent) Cancel(_ context.Context, p acp.CancelNotification) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if s, ok := a.sessions[p.SessionId]; ok && s.cancel != nil {
+		s.cancel()
+	}
+	return nil
+}
 
 // CloseSession forgets the session.
 func (a *Agent) CloseSession(_ context.Context, p acp.CloseSessionRequest) (acp.CloseSessionResponse, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if _, ok := a.sessions[p.SessionId]; !ok {
-		return acp.CloseSessionResponse{}, acp.NewInvalidParams(map[string]any{"sessionId": p.SessionId, "reason": "unknown session"})
+		return acp.CloseSessionResponse{}, acp.NewInvalidParams(map[string]any{keySessionID: p.SessionId, keyReason: "unknown session"})
 	}
 	delete(a.sessions, p.SessionId)
 	return acp.CloseSessionResponse{}, nil

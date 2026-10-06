@@ -3,11 +3,13 @@ package acpserver
 import (
 	"bytes"
 	"encoding/json/v2"
+	"errors"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -16,6 +18,7 @@ import (
 	acp "github.com/coder/acp-go-sdk"
 
 	"github.com/maccavelli/gobble-cli/acpclient/acptest"
+	"github.com/maccavelli/gobble-cli/llm/provider"
 )
 
 var buildGobble = sync.OnceValues(func() (string, error) {
@@ -39,6 +42,16 @@ var buildGobble = sync.OnceValues(func() (string, error) {
 	}
 	return bin, nil
 })
+
+// withoutCredentials is env with every model credential variable removed,
+// so the child cannot reach a real provider.
+func withoutCredentials(env []string) []string {
+	vars := provider.CredentialVars()
+	return slices.DeleteFunc(slices.Clone(env), func(kv string) bool {
+		name, _, _ := strings.Cut(kv, "=")
+		return slices.ContainsFunc(vars, func(v string) bool { return strings.EqualFold(v, name) })
+	})
+}
 
 type buildError struct {
 	out string
@@ -66,16 +79,18 @@ func (s *syncBuffer) String() string {
 	return s.b.String()
 }
 
-// `gobble acp` with the SDK's client over the child's stdio completes a
-// prompt; stdout carries only JSON-RPC; closing stdin ends the process with
-// 0 within 2 s (0002-PLAN Phase 1 Accept; 0008-MADR D19 item 6).
+// `gobble acp` with the SDK's client over the child's stdio, and no model
+// credential in its environment: initialize and session/new succeed, the
+// prompt fails with auth_required and no network call, stdout carries only
+// JSON-RPC, and closing stdin ends the process with 0 within 2 s (0002-PLAN
+// Phases 1 and 3; 0008-MADR D19 item 6).
 func TestGobbleACPBinary(t *testing.T) {
 	bin, err := buildGobble()
 	if err != nil {
 		t.Fatal(err)
 	}
 	cmd := exec.CommandContext(t.Context(), bin, "acp")
-	cmd.Env = append(os.Environ(), "GOBBLE_HOME="+t.TempDir())
+	cmd.Env = append(withoutCredentials(os.Environ()), "GOBBLE_HOME="+t.TempDir())
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		t.Fatal(err)
@@ -103,9 +118,9 @@ func TestGobbleACPBinary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pr, err := conn.Prompt(t.Context(), acp.PromptRequest{SessionId: sess.SessionId, Prompt: []acp.ContentBlock{acp.TextBlock("ping")}})
-	if err != nil || pr.StopReason != acp.StopReasonEndTurn {
-		t.Fatalf("prompt = %+v, %v", pr, err)
+	_, err = conn.Prompt(t.Context(), acp.PromptRequest{SessionId: sess.SessionId, Prompt: []acp.ContentBlock{acp.TextBlock("ping")}})
+	if re, ok := errors.AsType[*acp.RequestError](err); !ok || re.Code != -32000 {
+		t.Fatalf("prompt err = %v, want auth_required (-32000) without a credential", err)
 	}
 	if _, err := conn.CloseSession(t.Context(), acp.CloseSessionRequest{SessionId: sess.SessionId}); err != nil {
 		t.Fatal(err)
@@ -127,12 +142,9 @@ func TestGobbleACPBinary(t *testing.T) {
 	if s := stderr.String(); s != "" {
 		t.Fatalf("gobble acp wrote to stderr: %q", s)
 	}
-	if len(client.Updates()) != 1 {
-		t.Fatalf("updates = %+v, want the echo chunk", client.Updates())
-	}
 	lines := strings.Split(strings.TrimSuffix(wire.String(), "\n"), "\n")
-	if len(lines) < 5 {
-		t.Fatalf("stdout carried %d lines, want the four responses and one update", len(lines))
+	if len(lines) < 4 {
+		t.Fatalf("stdout carried %d lines, want the four responses", len(lines))
 	}
 	for i, l := range lines {
 		var msg struct {

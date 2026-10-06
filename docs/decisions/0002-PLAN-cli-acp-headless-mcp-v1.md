@@ -155,6 +155,8 @@ cancelled stop reason. A completed prompt produces a `usage_update`
 notification. A test that strips `usage_update` is shown red on a
 client that requires it, then green on the real agent.
 
+*(2026-10-05: steps 1–6 are expanded into executable steps in the Amendments entry "Phase 3 made executable" of this date. The owner's decisions there replace step 1's commit pin with a tag, and add ambient credential selection and ACP approval of mutating tools.)*
+
 ### Phase 4 — sessions
 
 1. JSONL persistence. Compatibility with TypeScript Pi v3 is **not**
@@ -424,6 +426,71 @@ Phases 3–8 have not run.
   8. **The clock is a package variable, `clock`,** so the `stream-json` golden is fixed. Step 3 named only a `runEnv.now` field.
   9. **The line session's typed lines after the first are not composed:** `@path` is D4's rule for the first prompt only. Later lines go as plain text, as D4 states.
 
+**Phase 3, 2026-10-05 — complete (staged; the owner commits).** It ran as expanded in the amendment "Phase 3 made executable", with the owner's three decisions: ambient credentials, ACP approval, and a tagged SDK. Phases 4–8 have not run.
+
+* **Pins.**
+  * `go list -m` prints `github.com/maccavelli/go-llmprovider-sdk v1.1.1`, the owner's tag of `e9083c3`, and `github.com/google/jsonschema-go v0.4.3`.
+  * No pseudo-version is required.
+* **Files.**
+  * New:
+    * `agent`: `agent.go`, `event.go` and `agent_test.go`;
+    * `llm/provider`: `provider.go`, `ambient.go` and `provider_test.go`;
+    * `tool/builtin`: `builtin.go`, `files.go`, `bash.go` and `builtin_test.go`;
+    * `tool/tool_test.go`;
+    * `acpserver`: `prompt.go`, `coalesce.go`, `prompt_test.go` and `coalesce_test.go`;
+    * `acpclient/handler_test.go`;
+    * `internal/cli`: `render/udiff.go`, `render/udiff_test.go` with four goldens, and `testmain_test.go`.
+  * Changed:
+    * `llm/llm.go`, `tool/tool.go` and `permission/permission.go`;
+    * the package docs of `llm`, `llm/provider`, `agent`, `tool`, `tool/builtin` and `acpserver`;
+    * `acpserver/agent.go`, `acpclient/conn.go`, `acpclient/acptest/client.go` and `pair.go`;
+    * `internal/cli/agent.go`, `acp.go`, `chat.go`, `flags.go`, `line.go`, `main.go`, `print.go` and `view.go`;
+    * their tests and goldens, and `go.mod` and `go.sum`.
+* **Accept.** Each item is through `acpserver` and `acptest.Connect`.
+  * `TestReadReachesTheReply`: a `read` of a temp file gives `tool_call` (`read notes.md`, pending, kind read), `in_progress`, then `completed` with the summary `read notes.md (1 lines)` first. The test provider's reply holds `the answer is 42`.
+  * `TestCancelBlockedBash`: `sleep 30`, cancelled, ends `cancelled` within 5 s.
+  * `TestUsageUpdateAfterEveryPrompt`: every prompt ends with `usage_update`, `used` > 0 and `size` 0.
+  * `TestWriteAsksPermission`: a refused write leaves no file and fails the call; an allowed one writes it, with the diff after the summary.
+  * `TestCoalesceByTime` and `TestCoalesceBySize` (`testing/synctest`): 200 deltas inside 10 ms give one chunk, and 10 KiB gives three chunks of at most 4 KiB.
+  * `TestPhoneLegibleBounds`: titles of at most 60 runes, first blocks of at most 400 bytes.
+* **Gates.**
+  * `make preflight` printed `preflight passed` on Windows and in WSL.
+  * Windows `go test ./...`: 19 packages `ok`, no `FAIL`. WSL `go test -race ./...` exited 0 with 0 race reports.
+  * `golangci-lint` printed `0 issues.` for linux, darwin and windows.
+  * The pre-add check was clean for all 48 Go files.
+* **A real binary.** In WSL, a built `gobble` with every credential variable removed exits 3 from `-p hi`, with `Error: no model credential: set one of GEMINI_API_KEY, OPENAI_API_KEY, …`.
+  * A pty line session prints the warning at start and the same error on a prompt, returns to the prompt, and exits 0 on Ctrl+D.
+  * `TestGobbleACPBinary` shows `gobble acp` answering a prompt with -32000 and no network call.
+* **Negative tests,** each on a scratch copy, each failing as expected:
+  * no `usage_update`: `prompt_test.go:156: prompt 1: last update {… AgentMessageChunk:0x… …} is not usage_update`;
+  * no permission request before `write`: `prompt_test.go:178: permission requests []`;
+  * the coalescer forwarding every delta: `coalesce_test.go:39: sent 200 chunks before the wait`;
+  * titles not cut, in both `acpserver` and `tool/builtin`: `prompt_test.go:253: title is 317 runes`;
+  * `Cancel` not cancelling: `prompt_test.go:234: the turn did not end within 5 s of session/cancel`;
+  * `UnifiedDiff` with no context: `udiff_test.go:34: udiff-two-hunks differs from testdata\udiff-two-hunks.golden`.
+* **What the plan predicted wrongly.**
+  1. **The tools are in three files.** `read`, `write` and `edit` are in `files.go`, and the shared bounds and title helpers in `builtin.go`. Step 5 named a file per tool.
+  2. **`tool` needed more than `Describer`.**
+     * `WithDescribe` lets a tool built with `New` title its calls.
+     * `TextResult`, `ErrorResult` and `Result.Text` give a result the model reads as text.
+     * An `Out` of type `Result` is passed through, so a tool sets its `Summary` and `Diffs`.
+  3. **The agent has a `ToolRun` event,** sent when an approved call starts, so the client sees `pending`, then `in_progress`. `Run` takes the `tool.Env`.
+  4. **The SDK cancels the prompt's context itself on `session/cancel`.** With gobble's own `Cancel` removed, `TestCancelBlockedBash` still passed. So `Cancel` is defensive, and the negative removes both paths.
+  5. **Phase 2's tests used -32000 for a generic failure.** It is ACP's `auth_required`, so three tests moved to -32603, and new tests cover -32000 as exit 3.
+  6. **`UnifiedDiff` names an absolute or `~` path as it is.** Step 11's `a/` and `b/` prefixes made `a/~/src/a.go`; they stay for relative paths.
+  7. **Ambient selection.**
+     * `provider.Ambient` returns the `Selection` with the provider.
+     * `Choose` makes the choice without building it, for the line session's warning.
+     * `internal/cli` clears the credential variables once, in a `TestMain`, not test by test.
+  8. **Smaller additions.**
+     * `acptest.Client` gains `Allow` and `Permissions()`.
+     * `acptest.Connect` sets a discarding logger, so its connections no longer print `connection closed` through the SDK's default logger in every test. That noise predates this phase.
+  9. **On Windows, the `bash` tool prefers Git for Windows' `bash.exe`, found beside `git`.** `System32\bash.exe` is the WSL launcher, and would run the command in another system.
+  10. **A line-session turn refused with `auth_required` prints the variables,** as print mode does, not the raw JSON-RPC error.
+* **Found, not this phase's:** `render.Style` does not style emphasis.
+  * 0008-MADR D7 requires it, but 0008-PLAN's step for `Style` (`0008-PLAN-native-cli-mode.md:590`) left it out. The file, committed in `4e25c8a`, is untouched here.
+  * The owner decided on 2026-10-05 to fix it as a dated 0008-PLAN follow-up, after this commit, as its own change.
+
 ## Amendments
 
 **2026-09-29 — native magic-cli-remote CLI.** The first draft of this
@@ -689,3 +756,140 @@ The agent stages; the owner commits.
   * The race regression is shown failing first: `go test -race -count=30` of the `acp` and print rows on a scratch copy that still calls `SetLogger`.
   * It then passes on the tree that uses the option.
 * **Report:** `0009-REPORT-magic-cli-remote-findings.md` M8, because magic-cli-remote pins the same fork.
+
+**2026-10-05 — Phase 3 made executable (owner's decisions: ambient credentials, ACP approval, a tagged SDK).**
+Phase 3 replaces the echo agent with the turn loop. Read-only investigation on this date found that the contracts the loop needs are Phase 1 stubs:
+* `llm.Content` has no field for a tool call's id, name or arguments, nor for a tool result;
+* `tool.New` neither derives a schema nor runs its function;
+* `tool.Env` is empty;
+* `agent` and `tool/builtin` declare nothing.
+
+The owner decided three questions on 2026-10-05:
+
+* **Provider selection: ambient environment, in a fixed order.**
+  * gobble reads the SDK's standard credential variables itself. They come from `llmprovider/providers.Default().Descriptors()`: `GEMINI_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `XAI_API_KEY`, `OPENCODE_API_KEY`, `HF_TOKEN`, `KILO_API_KEY` and `TOGETHER_API_KEY` on `v1.1.0`.
+  * The first descriptor, in registry order, that needs a key and has its variable set is used, with its first curated model (`StaticModels[0]`). `ollama` needs no key and is never chosen this way.
+  * There is no new `GOBBLE_` variable and no config file. 0005-PLAN F4 later puts `--provider`, `--model`, `--api-key` and the store in front of it.
+  * With no credential, `initialize` and `session/new` still succeed. A prompt fails with ACP `auth_required` (-32000), and print mode exits 3 (0008-MADR D10).
+* **Mutating tools ask through ACP, and the CLI declines.**
+  * Before a tool whose spec is not read-only (`write`, `edit`, `bash`), the agent sends `session/request_permission` with `allow_once` and `reject_once` options.
+  * An ACP client answers it. gobble's own CLI answers `reject_once` until Phase 6's prompt, so through the CLI the model can only read. It is told the user declined.
+* **The SDK is pinned at a tag the owner cuts from `origin/main`** (`e9083c3` on this date, 10 commits after `v1.1.0`). Phase 3's code waits for that tag. The tag replaces the commit pin of step 1, so no pseudo-version is ever required.
+
+Choices made within the wording, recorded so a later phase does not re-open them:
+
+* **The facade grows, without breaking anything.**
+  * `llm.Content` gains `ToolCallID`, `ToolName`, `ToolArgs` (JSON text) and `IsError`.
+  * The content types are `text`, `image`, `thinking`, `tool_call` (an assistant message) and `tool_result` (a `tool` message). Phase 1's unused `"tool"` is dropped from the comment.
+  * `tool.Env` gains `Cwd`.
+  * `tool.Result` gains `Title`, `Summary` and `Diffs []tool.Diff{Path; OldText *string; NewText}`. A tool may implement `tool.Describer` (`Describe(call Call, env Env) string`) to title a call before it runs.
+  * `permission.Rule` gains `CallID`, `Title` and `Input`.
+  * Each change only adds; apidiff stays clean.
+* **Package roles follow 0004-MADR.**
+  * `agent` runs the loop over `llm.Provider`, `[]tool.Tool` and a `permission.Policy`, and yields sealed events. It imports no ACP, SDK or Kong package (rule 1).
+  * `acpserver` turns the events into ACP updates, and implements the `Policy` with `session/request_permission`.
+  * `llm/provider` is the only importer of the SDK (rule 4).
+  * `internal/cli` passes `acpserver` a provider factory, and never imports `agent` (rule 6).
+* **Construction is lazy.** `acpserver.Options.Provider` is a `func() (llm.Provider, error)`, called on a session's first prompt. So `initialize` stays free of credentials and network (D19 item 6), and so does start-up (D5).
+* **Adapter options:**
+  * `WithAPIKey`, `WithModel`, `WithClientInfo("gobble", <SemVer>)`, `WithModelProbes(false)` (billed probes stay off, 0005-MADR) and `WithoutModelMetadata()`, so construction never reaches the network.
+  * The result is wrapped in `WithRetry(RetryPolicy{MaxAttempts: 4, BaseDelay: 2 s, MaxDelay: 60 s})` (0004-MADR).
+* **Tools are Phase 3's minimum.** 0005-PLAN F1 brings parity: offsets, fuzzy edit, process groups, `os.Root`, `grep`/`find`/`ls`.
+  * `read {path}` returns at most 2,000 lines or 50 KB, with a note when cut.
+  * `write {path, content}` creates parent directories.
+  * `edit {path, oldText, newText}` needs exactly one match.
+  * `bash {command, timeout?}` runs `bash -c` from `PATH` in the session `cwd`. Its combined output keeps the last 2,000 lines or 50 KB, with the exit status, and is killed on cancel through `exec.CommandContext` with `WaitDelay` 2 s.
+  * Paths are relative to the session `cwd`. Absolute paths are taken as given until F1's confinement.
+* **The system prompt is a short constant in `acpserver`:** gobble's identity, the `cwd`, the OS, and the tool list. 0005-PLAN F3 replaces it.
+* **Loop limits.**
+  * Tool calls run one after another; batching is a later phase.
+  * At most 100 model calls per prompt, after which the turn ends with `max_turn_requests`.
+  * A provider error ends the prompt with a JSON-RPC error: `auth_required` for `llm.ErrAuth`, or internal error with the message otherwise.
+* **Usage.**
+  * After each completed prompt the agent sends `usage_update` with `used` = the last model call's input plus output tokens, and `size` 0, because the catalog is F4. It sends no cost.
+  * The prompt response's `usage` sums the turn's model calls.
+  * An all-zero SDK report is replaced by an estimate (bytes ÷ 4) and marked `Estimated` (`llm` doc).
+* **D19 items 2 and 3.**
+  * Message and thought text are coalesced to at most one chunk per 50 ms or 4 KiB.
+  * A tool call starts as `pending` with a title of at most 60 runes (`read internal/cli/term.go`, `run go test ./...`), then goes to `in_progress`.
+  * It ends with its terminal status in an update of its own, whose first content block is a summary of at most 400 bytes. Diffs and output follow.
+* **The CLI.**
+  * `-t/--tools`, `--exclude-tools` and `--no-tools` leave `laterFlags`. They filter the in-process agent's tool set. An unknown tool name, or `--no-tools` with either of the others, is a usage error.
+  * The line session prints `Warning: no model credential: set one of <variables>` at start when none is set. D1's `gobble configure` does not exist until 0005-PLAN F4, so the warning names the variables instead.
+  * An `auth_required` turn exits 3 in print mode.
+* **Tests never reach a real provider.** Every test that starts gobble's real agent clears the credential variables (`provider.CredentialVars()`). The `live_*` tests are F4's.
+
+Steps:
+
+1. **`go.mod`:** `go get github.com/maccavelli/go-llmprovider-sdk@<owner's tag>` and `github.com/google/jsonschema-go@v0.4.3` (0004-MADR names both), then `go mod tidy`. Record the tag here.
+2. **`llm`** (`llm.go` and `doc.go`): the `Content` fields and types above.
+3. **`tool`** (`tool.go`, a new `tool_test.go`):
+   * `New` derives `InputSchema` with `jsonschema.For[In]`.
+   * `Run` decodes and validates `call.Args` against the resolved schema, calls `fn`, and encodes `Out`.
+   * An input that does not decode or validate is `Result{IsError: true}` with the reason. A context error is returned as an error.
+   * A string `Out` is the text the model sees.
+   * Plus `Env.Cwd`, the `Result` fields, `Diff` and `Describer`.
+4. **`permission`** (`permission.go`): the `Rule` fields.
+5. **`tool/builtin`** (new `builtin.go`, `read.go`, `write.go`, `edit.go`, `bash.go` and `builtin_test.go`):
+   * `Tools() []tool.Tool` returns the four tools above, each with its kind, its annotations (`read` read-only; `write`, `edit` and `bash` destructive), and a `Describe` title.
+6. **`agent`** (new `agent.go`, `event.go` and `agent_test.go`):
+   * `New(Config{Provider, Tools, System, Model, Policy, MaxCalls})`, and `(*Agent).Run(ctx, history []llm.Message, prompt llm.Message) iter.Seq2[Event, error]`.
+   * The sealed events are `TextDelta`, `ThinkingDelta`, `ToolStart{Call, Spec, Title}`, `ToolEnd{Call, Result}`, `UsageEvent` and `End{StopReason, Messages}`. `End.Messages` are the messages to append to the history.
+   * A cancelled context ends the turn with `End{StopReason: "cancelled"}`, and no error.
+7. **`llm/provider`** (new `provider.go`, `stream.go`, `ambient.go` and `provider_test.go`):
+   * `New(id string, o Options) (llm.Provider, error)`, and `Wrap(p llmprovider.Provider) llm.Provider` for tests. The request, event and error mapping follow `llm`'s doc.
+   * `Ambient(env func(string) string, o Options) (llm.Provider, error)`, with `ErrNoCredential` wrapping `llm.ErrAuth` and naming the variables. `CredentialVars() []string`.
+   * The tests run on the SDK's `llmtest.Fake`: text, a tool call, usage on `done`, an all-zero usage estimated, a 429 keeping `RetryAfter`, overflow not retried, and ambient order and absence.
+8. **`acpserver`** (`agent.go`, `serve.go`, new `prompt.go` and `coalesce.go`, and tests):
+   * `Options` gains `Provider func() (llm.Provider, error)` and `Tools []tool.Tool` (nil means `builtin.Tools()`).
+   * Each session keeps its history in memory; Phase 4 persists it.
+   * `Prompt` runs the agent and translates its events as above. `Cancel` cancels the session's running turn. The permission `Policy` uses `session/request_permission`.
+   * The capabilities do not change.
+9. **`acpclient`** (`conn.go`):
+   * `session/request_permission` is answered with the first `reject_once` option, else `reject_always`, else cancelled.
+   * `ErrAuthRequired` is returned when a prompt fails with -32000.
+10. **`internal/cli`:**
+    * `agent.go` and `acp.go` pass `Provider: provider.Ambient(os.Getenv, …)`, and the tool filter.
+    * `flags.go` handles the three tool flags.
+    * `print.go` maps `ErrAuthRequired` to exit 3.
+    * `line.go` prints the credential warning.
+    * `view.go` draws a diff through step 11's `render.UnifiedDiff`, and drops Phase 2's `diff <path> (+N -M lines)` line.
+11. **`internal/cli/render`** (new `udiff.go` and `udiff_test.go`; this is Phase 3 step 6):
+    * `UnifiedDiff(path string, old *string, new string) string` is a Myers line diff with 3 lines of context, `--- a/<path>` / `+++ b/<path>` headers (`/dev/null` for a new file), and `@@` hunks.
+    * It is tested on fixtures and on the real output of step 5's `edit`.
+12. **Tests that drove the echo agent move to `llmtest` or `acptest`.**
+    * `acpserver`'s `TestSession` golden is rebuilt on a scripted provider.
+    * `TestGobbleACPBinary` runs with the credential variables cleared. It asserts that the prompt fails with -32000, stdout carries only JSON-RPC, and the process exits 0 within 2 s of end of input.
+    * `internal/cli` tests clear the variables too.
+
+**Accept**, as the phase states it, through `acpserver` with `acptest.Connect` and a test provider:
+* A prompt that needs `read` of a temp file gives a `tool_call`, then a terminal `tool_call_update`. The test provider answers with the tool result it was sent, so the final agent message holds the file's contents.
+* A `bash` of `sleep 30`, cancelled, ends with `cancelled` within 5 s.
+* A completed prompt sends `usage_update`. That test is shown red on a scratch copy that does not send it.
+* A `write` asks permission. The CLI's rejecting client leaves the file unwritten, and an allowing test client writes it.
+* 200 deltas inside 10 ms become one chunk, and a 10 KiB delta becomes three. This uses `testing/synctest`.
+* Every title is at most 60 runes, and the first content block of every terminal update is at most 400 bytes.
+
+Each new check is shown failing first on a scratch copy:
+* no `usage_update`;
+* no permission request before `write`;
+* the coalescer forwarding every delta;
+* a title not cut to 60 runes;
+* `Cancel` not cancelling the turn;
+* `UnifiedDiff` without context lines.
+
+**Verification.**
+* `go test ./...`;
+* `golangci-lint` for linux, darwin and windows;
+* `make preflight` on Windows and in WSL, and `go test -race ./...` in WSL;
+* a pty-driven `gobble -p` and line session in WSL, with the credential variables cleared: exit 3 and the warning.
+* `go list -m github.com/maccavelli/go-llmprovider-sdk` prints the recorded tag.
+
+The agent stages; the owner commits.
+
+**Deferred from Phase 3, named:**
+* the catalog's context `size` and cost (0005-PLAN F4);
+* image input, which waits on the SDK's image support (0005-MADR);
+* `os.Root` confinement and full tool parity (F1);
+* the CLI's permission prompt (Phase 6);
+* parallel tool batches, steering and follow-up queues (Phase 7 and the `agent` road map).

@@ -11,6 +11,7 @@ import (
 
 	lib "github.com/maccavelli/go-selfupdate-lib/buildinfo"
 
+	"github.com/maccavelli/gobble-cli/acpclient/acptest"
 	"github.com/maccavelli/gobble-cli/internal/buildinfo"
 )
 
@@ -58,8 +59,10 @@ func TestMainExitCodes(t *testing.T) {
 		code   int
 		stderr string
 	}{
-		{"print mode runs a turn", []string{"-p", "x"}, ExitOK, ""},
-		{"words alone are the default command", []string{"fix", "the", "test"}, ExitOK, ""},
+		{"print mode without a credential exits 3", []string{"-p", "x"}, ExitAuth, "Error: no model credential: set one of "},
+		{"words alone are the default command", []string{"fix", "the", "test"}, ExitAuth, "no model credential"},
+		{"--no-tools with --tools", []string{"--no-tools", "--tools", "read", "x"}, ExitUsage, "Error: --no-tools cannot be combined with --tools\n"},
+		{"an unknown tool", []string{"--tools", "read,nope", "x"}, ExitUsage, `Error: unknown tool "nope" (the tools are read, write, edit, bash)`},
 		{"--cwd must be a directory", []string{"--cwd", "no-such-dir", "-p", "x"}, ExitUsage, "Error: --cwd no-such-dir: not a directory\n"},
 		{"no prompt in print mode", nil, ExitUsage, "Error: no prompt: give words, @path, --file or piped input\n"},
 		{"--fork with --session", []string{"--fork", "a", "--session", "b", "x"}, ExitUsage, "Error: --fork cannot be combined with --session\n"},
@@ -218,15 +221,17 @@ func TestConfigPathRelativeHomeFails(t *testing.T) {
 	}
 }
 
-// Piped stdin and words reach the composed prompt (D4): the echo agent
-// prints it back, and chat's debug record in the log file has its size.
+// Piped stdin and words reach the composed prompt (D4): the agent receives
+// it, and chat's debug record in the log file has its size.
 func TestPipedInputIsComposed(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("GOBBLE_HOME", home)
+	agent := &acptest.ScriptAgent{Turns: []acptest.Turn{{}}}
+	withAgent(t, agent)
 	var out, errw bytes.Buffer
 	code := Main(t.Context(), []string{"--log-level", "debug", "ask"}, stdinFile(t, "hi\n"), &out, &errw)
-	if code != ExitOK || out.String() != "hi\n\nask\n" {
-		t.Fatalf("exit %d, stdout %q, stderr %q; want 0 and the composed prompt echoed", code, out.String(), errw.String())
+	if p := agent.Prompts(); code != ExitOK || len(p) != 1 || !strings.Contains(p[0], `"text":"hi\n\nask"`) {
+		t.Fatalf("exit %d, prompts %q, stderr %q; want 0 and the composed prompt sent", code, agent.Prompts(), errw.String())
 	}
 	log, err := os.ReadFile(filepath.Join(home, "logs", "gobble.log"))
 	if err != nil {

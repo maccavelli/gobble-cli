@@ -119,6 +119,9 @@ func TestLineSessionNoSessionBeforePrompt(t *testing.T) {
 	if got := strings.Join(agent.Methods(), ","); got != "initialize" {
 		t.Fatalf("before any prompt the agent received %s; want only initialize", got)
 	}
+	if !strings.Contains(h.stderr.String(), "Warning: no model credential: set one of ") {
+		t.Fatalf("stderr %q lacks the credential warning (D1)", h.stderr.String())
+	}
 	h.press("\x04")
 	if err := h.wait(); err != nil {
 		t.Fatal(err)
@@ -169,9 +172,26 @@ func TestLineSessionCancel(t *testing.T) {
 	}
 }
 
+// A turn refused for want of a credential names the variables, and the
+// session goes on.
+func TestLineSessionNoCredential(t *testing.T) {
+	agent := &acptest.ScriptAgent{Turns: []acptest.Turn{{ErrCode: -32000, ErrMessage: "Authentication required"}}}
+	h := newLineHarness(t, agent)
+	h.start(Prompt{})
+	h.press("hi\r")
+	waitUntil(t, func() bool { return strings.Contains(h.stderr.String(), "Error: no model credential: set one of ") })
+	h.press("\x04")
+	if err := h.wait(); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(h.stderr.String(), "-32000") {
+		t.Fatalf("the raw JSON-RPC error reached the user: %q", h.stderr.String())
+	}
+}
+
 // A turn's error is printed and the session goes on.
 func TestLineSessionTurnError(t *testing.T) {
-	agent := &acptest.ScriptAgent{Turns: []acptest.Turn{{ErrCode: -32000, ErrMessage: "provider down"}, {Updates: []string{chunk("fine")}}}}
+	agent := &acptest.ScriptAgent{Turns: []acptest.Turn{{ErrCode: -32603, ErrMessage: "provider down"}, {Updates: []string{chunk("fine")}}}}
 	h := newLineHarness(t, agent)
 	h.start(Prompt{})
 	h.press("one\r")

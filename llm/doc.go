@@ -1,8 +1,8 @@
 // Package llm is the agent-facing model facade.
 // Stability: stable
 //
-// Phase 1 declares types only. It does not import
-// github.com/maccavelli/go-llmprovider-sdk and it does not call a model.
+// It does not import github.com/maccavelli/go-llmprovider-sdk and it does
+// not call a model; llm/provider adapts the SDK to it (0002-PLAN Phase 3).
 // Embedders program against this package so an SDK change does not reach them.
 //
 // Wire structs use encoding/json/v2. Optional fields are tagged omitzero.

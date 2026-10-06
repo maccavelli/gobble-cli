@@ -9,12 +9,18 @@ import (
 )
 
 // Client is the default test client. It records session/update
-// notifications, answers permission requests with the cancelled outcome, and
+// notifications and permission requests, answers a permission request with
+// the cancelled outcome (or its first allow option when Allow is set), and
 // answers file-system and terminal requests with "method not found", since a
 // test client has neither.
 type Client struct {
-	mu      sync.Mutex
-	updates []acp.SessionNotification
+	// Allow selects the first allow_once or allow_always option of every
+	// permission request.
+	Allow bool
+
+	mu          sync.Mutex
+	updates     []acp.SessionNotification
+	permissions []acp.RequestPermissionRequest
 }
 
 var _ acp.Client = (*Client)(nil)
@@ -34,8 +40,26 @@ func (c *Client) SessionUpdate(_ context.Context, n acp.SessionNotification) err
 	return nil
 }
 
-// RequestPermission answers with the cancelled outcome.
-func (*Client) RequestPermission(context.Context, acp.RequestPermissionRequest) (acp.RequestPermissionResponse, error) {
+// Permissions returns the permission requests received, in order.
+func (c *Client) Permissions() []acp.RequestPermissionRequest {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return slices.Clone(c.permissions)
+}
+
+// RequestPermission records the request and answers with the cancelled
+// outcome, or with its first allow option when Allow is set.
+func (c *Client) RequestPermission(_ context.Context, r acp.RequestPermissionRequest) (acp.RequestPermissionResponse, error) {
+	c.mu.Lock()
+	c.permissions = append(c.permissions, r)
+	c.mu.Unlock()
+	if c.Allow {
+		for _, o := range r.Options {
+			if o.Kind == acp.PermissionOptionKindAllowOnce || o.Kind == acp.PermissionOptionKindAllowAlways {
+				return acp.RequestPermissionResponse{Outcome: acp.NewRequestPermissionOutcomeSelected(o.OptionId)}, nil
+			}
+		}
+	}
 	return acp.RequestPermissionResponse{Outcome: acp.NewRequestPermissionOutcomeCancelled()}, nil
 }
 

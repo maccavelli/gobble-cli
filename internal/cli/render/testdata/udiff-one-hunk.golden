@@ -1,0 +1,16 @@
+--- a/src/a.go
++++ b/src/a.go
+@@ -2,11 +2,11 @@
+ line 2
+ line 3
+ line 4
+-line 5
++five
+ line 6
+ line 7
+ line 8
+-line 9
++nine
+ line 10
+ line 11
+ line 12
