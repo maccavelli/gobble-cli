@@ -121,6 +121,8 @@ per [0004-MADR](0004-MADR-go-module-architecture.md) the packages are
 `internal/cli` and `acpclient`, and the check is archtest rule 6 rather
 than a grep.)*
 
+*(2026-10-05: steps 1–3 are expanded into executable steps in the Amendments entry "Phase 2 made executable" of this date. Step 2's `gobble prompt` is `gobble -p`, per the 0008 amendment.)*
+
 ### Phase 3 — real prompt loop and built-in tools
 
 1. Agent loop: one provider through `llm/provider`, which is the
@@ -142,6 +144,9 @@ than a grep.)*
 4. `session/cancel` aborts the in-flight provider request and tool.
 5. After each completed prompt, emit `usage_update` with at least `used`
    and `size` (size may be 0 until the model catalog supplies a window).
+6. *(Added 2026-10-05, owner's decision; see Amendments.)* Draw ACP diff
+   content in the CLI as a unified diff: a Myers line diff in
+   `internal/cli/render`, tested on the edit tool's real output.
 
 **Accept:** a faux-provider test: prompt that requires `read` of a temp
 file produces a tool_call update and a final agent message containing
@@ -367,6 +372,58 @@ magic-cli-remote does not gain `IDPi` as a side effect of this plan.
   3. **The SDK interface has methods this phase does not implement** (`authenticate`, `logout`, `session/list`, `session/resume`, `session/set_mode`, `session/set_config_option`). Each answers -32601, matching what is advertised.
   4. **The root `tools.go` still blank-imports the SDK,** though `acpserver` now imports it for real. Removing that pin, and archtest rule 2's exception for the module root, is left for a change that names both files.
 
+**Phase 2, 2026-10-05 — complete (staged; the owner commits).** It ran as expanded in the amendment "Phase 2 made executable", with the owner's three decisions of that day:
+
+* diff content waits for Phase 3;
+* a failed turn still writes a result;
+* the `SetLogger` race is fixed in the SDK fork first.
+
+Phases 3–8 have not run.
+
+* **Files.**
+  * `acpclient`: `doc.go`, `conn.go`, `update.go` and `conn_test.go`.
+  * `acpclient/acptest`: `script.go` and `script_test.go`.
+  * `internal/cli`:
+    * new: `agent.go`, `print.go`, `line.go` and `view.go`, with `print_test.go`, `line_test.go`, `view_test.go` and five goldens;
+    * changed: `chat.go`, `input.go`, `flags.go`, `main.go` and `signal.go`, with their tests.
+  * `internal/cli/render`: `plan.go` and `plan_test.go` with two goldens, and `Stats` in `status.go`.
+  * From the deviation: `acpserver/serve.go`, `go.mod` and `go.sum` (`replace` to `v0.13.6-mcr.2`).
+  * Records: `0004-MADR-go-module-architecture.md` (the fork's facts), `0005-MADR-v1-feature-scope.md` (the error field), and `0009-REPORT-magic-cli-remote-findings.md` M8.
+* **Accept.**
+  * `gobble -p` reaches the agent only through `acpclient`. Archtest rule 6 passes in `make preflight`, and `internal/cli` imports no SDK package (rule 2).
+  * `TestPromptParamsMatchSDKClient` shows `acpclient` and the SDK's own client sending the same canonical params, `{"prompt":[{"text":"hi","type":"text"}],"sessionId":"s1"}`.
+  * `TestPrintSendsACP` shows `gobble -p hi` sending exactly that, in the order `initialize`, `session/new`, `session/prompt`, `session/close`.
+* **Gates.**
+  * `make preflight` printed `preflight passed` on Windows and in WSL.
+  * `go test ./...` on Windows: 17 packages `ok`, no `FAIL`.
+  * WSL `go test -race ./...` exited 0 with 0 race reports. A further `-race -count=30` of the CLI print, line, exit-code and `acp` tests exited 0 with 0 reports.
+  * `golangci-lint` printed `0 issues.` for linux, darwin and windows (with `CGO_ENABLED=0`).
+  * The pre-add check was clean for all 25 Go files.
+* **Negative tests,** each on a scratch copy, each failing as expected:
+  * `Prompt` sending the text twice: `conn_test.go:149: acpclient sent […{"text":"hi"…},{"text":"hi"…}…], the SDK client sent […]` and `print_test.go:70: prompts […], want {"prompt":[{"text":"hi","type":"text"}],"sessionId":"s1"}`;
+  * `session/new` sent at start: `line_test.go:120: before any prompt the agent received initialize,session/new; want only initialize`;
+  * an interrupt hook that is never called: `line_test.go:157: condition not met within 5 s`, then `the line session did not end`;
+  * the result object dropped on error: `print_test.go:141: last line "": jsontext: unexpected EOF`;
+  * a `stream-json` header without `cwd`: `print_test.go:118: print-stream-json differs from testdata\print-stream-json.golden`;
+  * the logger race, before the fix:
+    * against `mcr.1`, WSL `-race` reported 2 races in `TestMainExitCodes`;
+    * a clean clone of `13253a5` showed 1 race in 30 runs;
+    * the fork's new `TestSetLoggerWhileReading` reported 14 races on the `mcr.1` code and none on `mcr.2`.
+* **A real terminal.**
+  * In WSL, a built `gobble` driven through a pty passed 10 of 10 sessions. Each showed the prompt, the typed line, the spinner, the echo agent's reply, a `0s` status line and a fresh prompt, then Ctrl+D exited 0.
+  * The first, since-replaced harness reported a missing reply, although the history file showed the line was submitted. The harness's expected text left out the spinner frame. The rest of that failure was not isolated, and the rewritten harness has not reproduced it.
+  * **Not done by the agent:** a hand-typed session on a Windows console. `make probe-conhost` drives the editor's test child, not `gobble`, so this check is left to the owner.
+* **What the plan predicted wrongly.**
+  1. **Kind names.** The update kinds are `KindAgentText`, `KindThought`, `KindToolCall`, `KindToolCallUpdate`, `KindPlan`, `KindUsage` and `KindOther`. Step 1's bare names collide with the `ToolCall` and `Usage` types.
+  2. **`acpclient.Options.MaxQueued`** was added, so a test can see a drop with a queue of 1.
+  3. **Print mode sends no `session/cancel` of its own.** The SDK's `ClientSideConnection.Prompt` sends one when its context is cancelled (`client_gen.go:291-297`).
+  4. **Updates sent before the `session/new` answer were dropped,** because their session was not yet known. That is Phase 6's `available_commands_update` order. `NewSession` calls are now serialised, and such updates go to the session being created. `ScriptAgent.SessionUpdates` tests this.
+  5. **The SDK cancels the prompt's context on `session/cancel`** (`agent_gen.go:291-300`). `ScriptAgent` therefore answers `cancelled` and not with an error, and Phase 3's agent must do the same.
+  6. **A tool header is drawn again only when its rendered line changes.** `pending` and `in_progress` draw the same line, and printing it twice was noise.
+  7. **The SDK's `SetLogger` raced with its reader.** The deviation of this date resolved it: the fork's `v0.13.6-mcr.2` adds `WithLogger`. Every gobble connection sets its logger at construction, and `SetLogger` is called nowhere.
+  8. **The clock is a package variable, `clock`,** so the `stream-json` golden is fixed. Step 3 named only a `runEnv.now` field.
+  9. **The line session's typed lines after the first are not composed:** `@path` is D4's rule for the first prompt only. Later lines go as plain text, as D4 states.
+
 ## Amendments
 
 **2026-09-29 — native magic-cli-remote CLI.** The first draft of this
@@ -487,3 +544,148 @@ The 0008 amendment above says Phase 1's `initialize` follows 0008-MADR D19 item 
   * `make preflight` on Windows and in WSL.
 
   The agent stages; the owner commits.
+
+**2026-10-05 — Phase 2 made executable (owner's decisions on diff content and the failed-turn result).**
+Phase 2 wires 0008-MADR D1, D5, D7 and D9 to `acpclient` (0008-MADR D16), and delivers the flags 0008-PLAN P4 assigned to it: `--output-format`, `--show-thinking`, `--stats`, `--verbose` and `--cwd`. The agent is still Phase 1's echo agent, so the renderer for tool calls, thoughts, plans and usage is tested against a scripted agent. The owner decided two questions on 2026-10-05:
+
+* **Diff content waits for Phase 3.** ACP diff content is `{path, oldText, newText}`, and a coloured unified diff needs a line-diff algorithm that gobble does not have. No agent sends a diff until Phase 3's `edit` tool. Phase 3 gains step 6 below. Until then, a diff block prints `diff <path> (+N -M lines)`, never nothing.
+* **A failed turn still writes a result.** When `session/prompt` returns a JSON-RPC error, `json` and `stream-json` still write the result object, with `stopReason` `"error"` and an added `error` string, and the process exits 1. 0005-MADR's "Print mode" row gains a dated note of this field.
+
+Choices made within the wording, recorded so a later phase does not re-open them:
+
+* **`internal/cli` sees no SDK type.** Rule 2 keeps the SDK in `acpclient`, and a type alias would pass archtest while leaking the SDK's churn into `internal/cli`. So `acpclient` translates updates into its own types, and keeps each update's params object for `stream-json`.
+* **The agent runs in process,** over two `io.Pipe`s, through a `ServeFunc`. `internal/cli` passes a closure over `acpserver.Serve`, and `acpclient` imports neither `acpserver` nor `agent`.
+* **Ctrl+C during a turn is a signal.** The console leaves raw mode for the turn, because raw mode on Unix turns off output processing, so a bare `\n` would not return the carriage. The editor's raw mode is restored before the next prompt. The first interrupt during a turn goes to the turn and sends `session/cancel`; a second, before the turn ends, cancels the process with exit 130. TERM and HUP always end the process.
+* **`session/new` is sent with the first prompt,** not at start-up. D5 forbids a network call before the first prompt, and Phase 5 connects MCP servers on `session/new` (D19 item 6). `initialize` runs at start: it is in process and makes no network call.
+* **Exit codes for stop reasons (D10).** `end_turn`, `max_tokens`, `max_turn_requests` and `refusal` exit 0 and are reported in `stopReason`. `cancelled` that gobble did not request is the "provider-side abort" of D10, and exits 1. A JSON-RPC error exits 1. A signal exits 128 plus the signal.
+* **An image the agent does not accept** ends the run with exit 1 and `Error: the agent does not accept images (<path>)` before `session/prompt` is sent (D19 item 1: never dropped silently). The echo agent advertises `image: false`.
+* **`--cwd DIR`** is made absolute and must be a directory (otherwise exit 2). It is the session's `cwd`, and `@path` and `--file` resolve against it. gobble never calls `os.Chdir`.
+* **`--show-thinking` and `--verbose` act on the line session's display.** Print-mode `text` and `json` carry the final text only, and `stream-json` carries every update anyway. `--stats` adds time to first token, and tokens per second when the turn's `usage.outputTokens` is known. It applies in both modes: in print mode, the status line goes to stderr only when `--stats` is given.
+* **Print `text`** is the turn's agent text, sanitised (D8), with one trailing newline. `json` is `{"text","stopReason","usage","cost","sessionId"}`: `usage` is the `session/prompt` response's `usage` object or `null`, and `cost` is the last `usage_update` cost or `null`. `stream-json`'s header is `{"type":"session","id","cwd","timestamp"}`, with the timestamp in RFC 3339 UTC; then one line per `session/update` params object, as the SDK encodes it; then `{"type":"result",…}` of the `json` shape.
+
+Steps:
+
+1. **`acpclient`** (`doc.go` rewritten; new `conn.go`, `update.go`, `conn_test.go`):
+   * `type ServeFunc func(ctx context.Context, in io.Reader, out io.Writer) error`.
+   * `Start(ctx, serve ServeFunc, opts Options) (*Conn, error)`:
+     * runs `serve` over two pipes;
+     * makes the SDK client connection with `OverflowDropNewest` and a drop handler that calls `Options.OnDrop` (0004-MADR, amendment of 2026-10-01);
+     * sends `initialize` with protocol 1, `clientInfo {name, version}` and no file-system or terminal capability;
+     * fails on any protocol other than 1.
+
+     `Options{Name, Version string; Logger *slog.Logger; OnDrop func(method string, total uint64)}`.
+   * `(*Conn).Agent() AgentInfo` gives the name, title, version, and the `Image` and `LoadSession` capabilities. `(*Conn).Close() error` closes the client's pipe and waits for `serve` to return.
+   * `(*Conn).NewSession(ctx, cwd string, on func(Update)) (*Session, error)` sends `mcpServers: []`. `(*Session).ID()`, `Prompt(ctx, Prompt) (Result, error)`, `Cancel(ctx)` and `Close(ctx)` follow.
+     * `Prompt{Text string; Images []Image{MIME string; Data []byte}}` becomes a text block (when non-empty) and base64 image blocks.
+     * Images on an agent without `image` fail with `ErrImagesUnsupported` before anything is sent.
+     * `Result{StopReason string; Usage *Usage}` carries every field of the response's `usage`.
+   * `Update{Kind; Text; Block; Tool ToolCall; Plan []PlanEntry; Context ContextUsage; Params []byte}`. Its kinds are `AgentText`, `Thought`, `ToolCall`, `ToolCallUpdate`, `Plan`, `Usage` and `Other`.
+     * `Block` names a non-text content type.
+     * `ToolCall{ID, Title, Status string; Content []ToolContent}` has empty strings for fields an update left unchanged.
+     * `ToolContent{Text string; Diff *Diff{Path string; OldText *string; NewText string}; Terminal string}`.
+     * `Params` is the `session/update` params object, encoded by `encoding/json` as the SDK encodes it.
+   * Requests from the agent: `session/request_permission` is answered cancelled until Phase 6's prompt. File-system and terminal requests are method-not-found, matching the capabilities sent.
+   * Tests, through `acptest.ScriptAgent` (step 2):
+     * every update kind's translation, and that `Params` keeps the kind;
+     * a dropped notification reaches `OnDrop`, at queue size 1;
+     * `ErrImagesUnsupported`;
+     * the step-3 test of the original phase: `Session.Prompt(Prompt{Text: "hi"})` and the SDK's own `ClientSideConnection.Prompt` with `TextBlock("hi")` send canonically equal params, `{"prompt":[{"text":"hi","type":"text"}],"sessionId":…}`.
+2. **`acpclient/acptest/script.go`** (new, with `script_test.go`):
+   * `ScriptAgent{Turns []Turn; Image bool}` implements `acp.Agent`. `Serve(ctx, in, out) error` runs it with the same EOF rule as `acpserver.Serve`.
+   * `Turn{Updates []string; StopReason string; Usage string; ErrCode int; ErrMessage string; WaitCancel bool}`. Each update is the JSON of one ACP `SessionUpdate`, so a caller needs no SDK import.
+   * It records `Methods()`, `Prompts()` (each params object, canonical), `Cwds()` and `Cancels()`.
+   * A prompt past the last turn is a -32603 error naming the script.
+3. **`internal/cli`:**
+   * **`agent.go`** (new): `var agentServe = func(e *runEnv) acpclient.ServeFunc`, a closure over `acpserver.Serve` with the build's version and `e.log()`. Tests replace it. `(*runEnv).startAgent(ctx)` calls `acpclient.Start` with `Name: "gobble"`, the version, the logger, and an `OnDrop` that prints `Warning: dropped N ACP notifications (<method>)`.
+   * **`chat.go`:** `Run` resolves `--cwd`, composes the input against it, then calls `runPrint` or `runLine`. The "not available yet" stub goes.
+   * **`input.go`:** `composeInput` takes a base directory for `@path`.
+   * **`flags.go`:** the five Phase 2 flags leave `laterFlags`. `plan0002P2` goes once unused.
+   * **`print.go`** (new): the three formats and the exit rules above. Results are written through `Output.Result`, so a broken pipe exits 0 (D3). On a signal, it sends `session/cancel` under a 2 s context detached from the cancelled one, then returns.
+   * **`line.go`** (new): the D5 loop over `editor.New`.
+     * It owns stdin through `editor.Reader`, puts the console in `editor.Raw` mode, and keeps `<state>/history` (created with `appdirs.EnsurePrivateDir`; a failure is one `Warning:` and no history).
+     * Prompts are `> ` and `… `, or `... ` with ASCII glyphs. The first prompt is the composed input, when there is one.
+     * Each turn: leave raw mode; register the interrupt; spinner on stderr (`working`) until the first update; the view; the status line; back to raw mode.
+     * A turn's error prints `Error: …` and returns to the prompt.
+     * `io.EOF` and `editor.ErrExit` end the session with 0, after `session/close`, `Conn.Close`, `Editor.Restore` and the raw-mode restore.
+     * Raw mode and the interrupt hook are fields, so tests drive the loop over a pipe.
+   * **`view.go`** (new): the D7 display of updates, on stdout.
+     * Agent text is sanitised, passed through `render.Stream`, then `render.Tables` and `render.Style` when colour is on; it is raw when colour is off.
+     * Thoughts are hidden, or dimmed with `--show-thinking`.
+     * Tool calls print `render.ToolHeader`, and again whenever the status changes; text content goes through `render.ToolOutput` under `--verbose`. Diff content prints `diff <path> (+N -M lines)`, with the path under `render.ShortPath`. Terminal content prints `terminal <id>`.
+     * Plans print through `render.Plan`. A non-text block prints `[<type>]`.
+     * The stream is flushed before every non-text event and at the turn's end.
+     * The status line on stderr is `render.StatusLine` from the last `usage_update`, dimmed, plus `render.Stats` under `--stats`, plus the stop reason when it is not `end_turn`.
+   * **`signal.go`:** `watchSignals` takes an `*interrupts`. `(*interrupts).during(cancel func()) (release func())` lets a turn take the first `os.Interrupt`; any other signal, or an interrupt with no turn or a second one, cancels as before. `main.go` passes it to `runEnv`, beside a `now func() time.Time` for the timestamp.
+4. **`internal/cli/render`:**
+   * **`plan.go`** (new): `func Plan(entries []PlanItem, s term.Stream, g term.Glyphs) string`, with `PlanItem{Content, Status string}`. Completed is `g.Check` in green, in progress is `g.Arrow` in bold, pending is `g.Bullet` dimmed. Content is sanitised.
+   * **`status.go`:** `func Stats(ttft time.Duration, outputTokens int64, gen time.Duration, g term.Glyphs) string` gives `ttft 0.4s`, then `52 tok/s` when the tokens and the time are both known.
+5. **Tests:**
+   * `print_test.go`:
+     * `text`, `json` and `stream-json` against goldens, with a fixed clock;
+     * the method order `initialize`, `session/new`, `session/prompt`, `session/close`;
+     * the prompt params equal to step 1's canonical JSON;
+     * a JSON-RPC error giving exit 1 and the error result in both JSON formats;
+     * an unrequested `cancelled` giving exit 1;
+     * an image refused with exit 1;
+     * `--cwd` as the session's cwd and as the `@path` base, and a bad `--cwd` giving exit 2;
+     * a cancelled context sending `session/cancel`.
+   * `line_test.go`, over a pipe with raw mode stubbed:
+     * a prompt, the echo on stdout, and Ctrl+D exiting 0 after `session/close`;
+     * `session/new` not sent before the first prompt;
+     * an interrupt during a `WaitCancel` turn sending one `session/cancel` and returning to the prompt.
+   * `view_test.go` goldens, colour on and off: Markdown with a table, thoughts hidden and shown, a tool call with 30 lines of output with and without `--verbose`, diff and terminal content, a plan, an image block, and the status line with `--stats`.
+   * `signal_test.go`: one interrupt during a turn calls the hook and leaves the context alive; a second cancels with exit 130; TERM during a turn cancels at once.
+   * `main_test.go`: the stub rows become echo-agent rows (`-p x` prints `x`, exit 0), and the later-flag table loses the five flags.
+   * `plan_test.go` and the status tests cover step 4.
+   * `TestPipedInputIsComposed` checks the composed prompt in the agent's received params instead of the stub's exit.
+
+**Accept**, as the phase states it:
+* `gobble -p` calls ACP and never `agent`, which is archtest rule 6.
+* The same `session/prompt` params are sent from Kong and from a stdio SDK client (step 1's canonical-JSON test, and `print_test.go`'s).
+
+Each new check is shown failing on a scratch copy:
+* `Prompt` sending the text twice fails the params test;
+* `session/new` sent at start fails the line test;
+* an interrupt hook that is never called fails the cancel test;
+* the result object dropped on error fails the error test;
+* a `stream-json` header missing `cwd` fails its golden.
+
+Each failure is quoted in the handoff.
+
+**Verification.**
+* `go test ./acpclient/... ./internal/cli/...`;
+* `golangci-lint` for linux, darwin and windows;
+* `make preflight` on Windows and in WSL, and `go test -race ./...` in WSL;
+* a manual line session on a Windows console and in WSL: a prompt is echoed, and Ctrl+D exits 0. The echo agent answers at once, so a turn cannot be interrupted by hand; the cancel path is covered by `line_test.go` only.
+
+The agent stages; the owner commits.
+
+* **Phase 3, new step 6 (owner's decision of this date).** The edit tool's ACP diff content is drawn by a Myers line diff in `internal/cli/render` (`render.UnifiedDiff(path, old, new string) string`, fed to `render.Diff`), tested on the edit tool's real output. It replaces Phase 2's `diff <path> (+N -M lines)` line.
+* **Deferred from Phase 2, named:**
+  * slash and `@path` completion in the line editor wait for Phase 6, where D13's registry supplies the slash names;
+  * the "no usable credential" warning of D1 waits for the first provider (Phase 3 and 0005-PLAN F4);
+  * `/new`, `/help` and `/edit` wait for Phase 6 (D13). Until then they reach the agent as prompt text, which the echo agent repeats.
+
+**Deviation, 2026-10-05 — the SDK's `SetLogger` races with its own reader (owner's decision: fix the fork first).**
+
+* **Found:**
+  * Phase 2's first WSL `go test -race ./...` stopped on a data race in two `TestMainExitCodes` rows.
+  * The fork's `SetLogger` is a plain field write (`connection.go:236`). `loggerOrDefault` reads that field (`connection.go:239`) on the receive goroutine, reached from `shutdownReceive` at end of input (`connection.go:609`).
+  * `NewConnection` starts that goroutine (`connection.go:212`) before the caller can call `SetLogger`, and the fork has no construction-time logger option.
+* **It is pre-existing:**
+  * A scratch clone of the committed Phase 1 tree (`13253a5`, clean) showed 1 race in 30 runs of `go test -race -count=30 -run 'TestMainExitCodes/acp|TestACPWritesNothingToStdout' ./internal/cli/`.
+  * The site is `acpserver/serve.go:22–25`. Phase 1's single `-race` run did not hit it.
+  * Phase 2's `acpclient.Start` and `acptest.ScriptAgent.Serve` copied the same pattern.
+* **Decision (owner, 2026-10-05).**
+  * Fix the root cause in the fork: a `WithLogger` connection option applied before the goroutines start, and an atomic `SetLogger`, released as `v0.13.6-mcr.2`.
+  * Then gobble bumps its `replace` and sets the logger through the option at all three sites.
+  * The gobble-local alternative was rejected because it would depend on the fork's internals: gating the SDK's first read until `SetLogger` returns.
+  * Phase 2 waits until the tag exists.
+* **Added to this phase's scope:**
+  * `acpserver/serve.go`, Phase 1's file;
+  * `go.mod` and `go.sum`, for the `replace`;
+  * a dated amendment of the fork's facts in `0004-MADR-go-module-architecture.md`.
+* **Verification added:**
+  * The race regression is shown failing first: `go test -race -count=30` of the `acp` and print rows on a scratch copy that still calls `SetLogger`.
+  * It then passes on the tree that uses the option.
+* **Report:** `0009-REPORT-magic-cli-remote-findings.md` M8, because magic-cli-remote pins the same fork.

@@ -58,8 +58,9 @@ func TestMainExitCodes(t *testing.T) {
 		code   int
 		stderr string
 	}{
-		{"print mode reaches the agent boundary", []string{"-p", "x"}, ExitUsage, "Error: the agent is not available yet (0002-PLAN Phase 2)\n"},
-		{"words alone are the default command", []string{"fix", "the", "test"}, ExitUsage, "the agent is not available yet"},
+		{"print mode runs a turn", []string{"-p", "x"}, ExitOK, ""},
+		{"words alone are the default command", []string{"fix", "the", "test"}, ExitOK, ""},
+		{"--cwd must be a directory", []string{"--cwd", "no-such-dir", "-p", "x"}, ExitUsage, "Error: --cwd no-such-dir: not a directory\n"},
 		{"no prompt in print mode", nil, ExitUsage, "Error: no prompt: give words, @path, --file or piped input\n"},
 		{"--fork with --session", []string{"--fork", "a", "--session", "b", "x"}, ExitUsage, "Error: --fork cannot be combined with --session\n"},
 		{"--fork with -c", []string{"--fork", "a", "-c", "x"}, ExitUsage, "--fork cannot be combined with --continue"},
@@ -96,11 +97,11 @@ func TestMainExitCodes(t *testing.T) {
 // (0008-MADR D12: never silently ignored).
 func TestLaterFlagsAreRejected(t *testing.T) {
 	value := map[string]bool{
-		"output-format": true, "cwd": true, "tools": true, "exclude-tools": true, "session": true,
+		"tools": true, "exclude-tools": true, "session": true,
 		"session-id": true, "fork": true, "session-dir": true, "name": true, "system-prompt": true,
 		"append-system-prompt": true, "provider": true, "model": true, "thinking": true, "api-key": true,
 	}
-	sample := map[string]string{"output-format": "json", "thinking": "low"}
+	sample := map[string]string{"thinking": "low"}
 	names := make([]string, 0, len(laterFlags))
 	for n := range laterFlags {
 		names = append(names, n)
@@ -217,15 +218,15 @@ func TestConfigPathRelativeHomeFails(t *testing.T) {
 	}
 }
 
-// Piped stdin, an @path and words reach the composed prompt (D4), observed
-// through chat's debug record in the log file.
+// Piped stdin and words reach the composed prompt (D4): the echo agent
+// prints it back, and chat's debug record in the log file has its size.
 func TestPipedInputIsComposed(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("GOBBLE_HOME", home)
 	var out, errw bytes.Buffer
 	code := Main(t.Context(), []string{"--log-level", "debug", "ask"}, stdinFile(t, "hi\n"), &out, &errw)
-	if code != ExitUsage || !strings.Contains(errw.String(), "the agent is not available yet") {
-		t.Fatalf("exit %d, stderr %q", code, errw.String())
+	if code != ExitOK || out.String() != "hi\n\nask\n" {
+		t.Fatalf("exit %d, stdout %q, stderr %q; want 0 and the composed prompt echoed", code, out.String(), errw.String())
 	}
 	log, err := os.ReadFile(filepath.Join(home, "logs", "gobble.log"))
 	if err != nil {

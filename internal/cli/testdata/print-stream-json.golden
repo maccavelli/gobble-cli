@@ -1,0 +1,6 @@
+{"type":"session","id":"s1","cwd":"<cwd>","timestamp":"2026-10-05T12:00:00Z"}
+{"sessionId":"s1","update":{"availableCommands":[],"sessionUpdate":"available_commands_update"}}
+{"sessionId":"s1","update":{"content":{"text":"Hel","type":"text"},"sessionUpdate":"agent_message_chunk"}}
+{"sessionId":"s1","update":{"content":{"text":"lo","type":"text"},"sessionUpdate":"agent_message_chunk"}}
+{"sessionId":"s1","update":{"cost":{"amount":0.0123,"currency":"USD"},"sessionUpdate":"usage_update","size":200000,"used":1500}}
+{"type":"result","text":"Hello","stopReason":"end_turn","usage":{"inputTokens":10,"outputTokens":2,"totalTokens":12},"cost":{"amount":0.0123,"currency":"USD"},"sessionId":"s1"}

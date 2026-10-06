@@ -25,6 +25,7 @@ magic-cli-remote `main` was at `9778cbc1` (2026-10-04) for every finding below, 
 | M5 | 2026-10-05 | design defect | 0157-MADR D6's collision rule can delete the newest log backup | open |
 | M6 | 2026-10-05 | test quality | Two `appdirs` tests skip depending on host state | open |
 | M7 | 2026-10-05 | contract | The version pin ignores prerelease, so any prerelease or pseudo-version build matches a release pin | open |
+| M8 | 2026-10-05 | dependency defect | The pinned ACP SDK fork's `SetLogger` races with the connection's reader goroutine | open |
 
 ## Findings
 
@@ -104,3 +105,25 @@ magic-cli-remote `main` was at `9778cbc1` (2026-10-04) for every finding below, 
   - After a `v1.2.3` tag, a Go pseudo-version for a dev build is `1.2.4-0.<time>-<hash>`, and it matches a `1.2.4` pin it never was.
 - **What gobble does:** every build that is not a clean tag reports `0.0.0-dev+<revision>[.dirty]`, which matches no release pin (0004-PLAN Phase 2 step 2, deviation of 2026-10-05). A deliberate prerelease tag (`v1.3.0-rc.1`) is still reported as itself, and so still matches `1.3.0` upstream.
 - **Wanted upstream (suggestion):** compare the full SemVer, or treat a prerelease as below its release when checking a pin.
+
+### M8 — the pinned ACP SDK fork's `SetLogger` races with its reader (2026-10-05)
+
+- **Found by:** 0002-PLAN Phase 2, WSL `go test -race ./...` (deviation of 2026-10-05).
+- **Why it is here:**
+  - magic-cli-remote pins this fork: `go.mod:64-68`, `replace github.com/coder/acp-go-sdk => github.com/maccavelli/acp-go-sdk v0.13.6-mcr.1`, citing MADR 0167 D16–D20.
+  - gobble carries the same `replace`.
+- **Fact, in the fork at `v0.13.6-mcr.1`:**
+  - `SetLogger` is a plain field write (`connection.go:236`).
+  - `loggerOrDefault` reads that field (`connection.go:239`) on the receive goroutine, for example from `shutdownReceive` at end of input (`connection.go:609`).
+  - `NewConnection` starts that goroutine (`connection.go:212`) before a caller can call `SetLogger`. There is no option to set the logger at construction.
+- **Effect:**
+  - Any caller that sets a logger races with the reader. The race detector reports it when the input ends early: gobble saw 1 race in 30 runs on its Phase 1 tree.
+  - magic-cli-remote at `9778cbc1` calls `SetLogger` nowhere (0 matches), so it uses `slog.Default()` and is not exposed today. A future call would be.
+- **What gobble does:** the owner decided on 2026-10-05 to fix the fork first. gobble's 0002-PLAN Phase 2 waits for the fixed tag, then sets its logger through the option.
+  - *2026-10-05:* the fork's `v0.13.6-mcr.2` (`565efea`) carries the fix: `WithLogger` and an atomic `SetLogger`. gobble pins it.
+  - magic-cli-remote still pins `mcr.1`, so this stays open until its `replace` moves.
+- **Wanted in the fork (suggestion):**
+  - a `WithLogger(*slog.Logger)` `ConnectionOption` applied before the goroutines start;
+  - an atomic `SetLogger`, so existing callers are safe too.
+
+  Whether upstream `coder/acp-go-sdk` has the same defect after v0.13.5 is **[unverified]**.

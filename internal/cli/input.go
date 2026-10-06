@@ -35,8 +35,10 @@ var imageTypes = map[string]bool{"image/png": true, "image/jpeg": true, "image/g
 //     an image as an image part;
 //  3. the other words, joined by single spaces.
 //
-// A missing @path is a usage error. A failed stdin read is an error.
-func composeInput(ctx context.Context, stdin io.Reader, stdinTTY bool, words []string,
+// A relative @path resolves against base, the --cwd directory, or the
+// process's working directory when base is empty. A missing @path is a
+// usage error. A failed stdin read is an error.
+func composeInput(ctx context.Context, stdin io.Reader, stdinTTY bool, words []string, base string,
 	readFile func(string) ([]byte, error)) (Prompt, error) {
 	var parts []string
 	var p Prompt
@@ -55,7 +57,7 @@ func composeInput(ctx context.Context, stdin io.Reader, stdinTTY bool, words []s
 			plain = append(plain, w)
 			continue
 		}
-		abs, err := filepath.Abs(w[1:])
+		abs, err := resolvePath(base, w[1:])
 		if err != nil {
 			return Prompt{}, usageErrorf("%s: %v", w, err)
 		}
@@ -77,6 +79,15 @@ func composeInput(ctx context.Context, stdin io.Reader, stdinTTY bool, words []s
 	}
 	p.Text = strings.Join(parts, "\n\n")
 	return p, nil
+}
+
+// resolvePath makes p absolute against base, or against the working
+// directory when base is empty.
+func resolvePath(base, p string) (string, error) {
+	if base == "" || filepath.IsAbs(p) {
+		return filepath.Abs(p)
+	}
+	return filepath.Join(base, p), nil
 }
 
 // imageType is the MIME type of an image file, by content and then by

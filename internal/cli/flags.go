@@ -51,7 +51,6 @@ type SharedFlags struct {
 
 // The plans that deliver the default command's remaining flags.
 const (
-	plan0002P2 = "0002-PLAN Phase 2"
 	plan0002P3 = "0002-PLAN Phase 3"
 	plan0002P4 = "0002-PLAN Phase 4"
 	plan0005F3 = "0005-PLAN F3"
@@ -63,7 +62,6 @@ const (
 // plan. Such a flag is parsed and rejected with exit 2, never ignored
 // (0008-MADR D12).
 var laterFlags = map[string]string{
-	"output-format": plan0002P2, "show-thinking": plan0002P2, "stats": plan0002P2, "verbose": plan0002P2, "cwd": plan0002P2,
 	"tools": plan0002P3, "exclude-tools": plan0002P3, "no-tools": plan0002P3,
 	"continue": plan0002P4, "session": plan0002P4, "session-id": plan0002P4, "fork": plan0002P4,
 	"no-session": plan0002P4, "session-dir": plan0002P4, "name": plan0002P4,

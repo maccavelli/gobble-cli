@@ -14,8 +14,8 @@ github.com/google/renameio v0.1.0 h1:GOZbcHa3HfsPKPlmyPyN2KEohoMXOhdMbHrvbpl2QaA
 github.com/google/renameio v0.1.0/go.mod h1:KWCgfxg9yswjAJkECMjeO8J8rahYeXnNhOm40UhjYkI=
 github.com/hexops/gotextdiff v1.0.3 h1:gitA9+qJrrTCsiCl7+kh75nPqQt1cx4ZkudSTLoUqJM=
 github.com/hexops/gotextdiff v1.0.3/go.mod h1:pSWU5MAI3yDq+fZBTazCSJysOMbxWL1BSow5/V2vxeg=
-github.com/maccavelli/acp-go-sdk v0.13.6-mcr.1 h1:DcDs2eAHHSBj8498PSNGscpvJNu9KybVZND0JMr4U3M=
-github.com/maccavelli/acp-go-sdk v0.13.6-mcr.1/go.mod h1:yKzM/3R9uELp4+nBAwwtkS0aN1FOFjo11CNPy37yFko=
+github.com/maccavelli/acp-go-sdk v0.13.6-mcr.2 h1:48uHSOC/vrT187FHFdZTine1ioGK0YqeW1XzNvvcCmY=
+github.com/maccavelli/acp-go-sdk v0.13.6-mcr.2/go.mod h1:yKzM/3R9uELp4+nBAwwtkS0aN1FOFjo11CNPy37yFko=
 github.com/maccavelli/go-selfupdate-lib v1.7.0 h1:vN47gzyJEfnzOM2YT9n9g7jQOz08Yz2C/y5Mo+r/AIk=
 github.com/maccavelli/go-selfupdate-lib v1.7.0/go.mod h1:97bj31TQyZBWC3nDHARrx7vNOy8zNo2kZDoky881dno=
 golang.org/x/crypto v0.0.0-20190308221718-c2843e01d9a2/go.mod h1:djNgcEr1/C05ACkg1iLfiJU5Ep61QUkGW8qpdssI0+w=

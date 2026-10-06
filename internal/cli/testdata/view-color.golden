@@ -1,0 +1,42 @@
+<ESC>[1m# Plan<ESC>[0m
+
+Some **bold** text and <ESC>[2m`code`<ESC>[0m.
+
+| a   |   b |
+| --- | --: |
+| 1   |  22 |
+
+next
+<ESC>[1m▸ <ESC>[0mread notes.md <ESC>[2m…<ESC>[0m
+<ESC>[1m▸ <ESC>[0mread notes.md <ESC>[32m✓<ESC>[0m
+line 1
+line 2
+line 3
+line 4
+line 5
+line 6
+line 7
+line 8
+line 9
+line 10
+… 10 lines hidden (--verbose shows all)
+line 21
+line 22
+line 23
+line 24
+line 25
+line 26
+line 27
+line 28
+line 29
+line 30
+<ESC>[1m▸ <ESC>[0medit a.go <ESC>[32m✓<ESC>[0m
+diff ~/src/a.go (+3 -2 lines)
+diff ~/new.go (+1 -0 lines)
+terminal term-1
+  <ESC>[32m✓ read<ESC>[0m
+  <ESC>[1m▸ fix<ESC>[0m
+[image]
+Done.
+--- stderr
+<ESC>[2m1s • <ESC>[33m━━━━━━━━━━━━━━━╌╌╌╌╌<ESC>[0;2m 75% 150.0k/200.0k • $0.5000<ESC>[0m

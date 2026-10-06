@@ -1,6 +1,6 @@
 ---
 status: proposed
-date: 2026-10-04
+date: 2026-10-05
 decision-makers: repository owner
 consulted: 0001-REPORT-go-port-feasibility.md, 0002-MADR-cli-acp-headless-mcp-v1.md, 0003-MADR-gobble-product-identity.md
 informed: go-llmprovider-sdk, go-core-lib, mcplib, go-tui-lib, magic-cli-remote
@@ -626,7 +626,7 @@ import-boundary idea, and ACP-as-command-API are unchanged.
    pseudo-version of `origin/main` and is re-resolved at 0005-PLAN F4.
    No relative `replace`. The ACP `replace` to
    `github.com/maccavelli/acp-go-sdk v0.13.6-mcr.1` is the Phase 0
-   choice (this record already recommended it).
+   choice (this record already recommended it). *(Amended 2026-10-05: gobble now pins `v0.13.6-mcr.2`; see "acp-go-sdk fork: overflow policy".)*
 5. **NOTICE.** `go-core-lib` is Apache-2.0; the gobble `NOTICE` names it.
    `go-llmprovider-sdk` has no LICENSE in tree; do not invent one.
 
@@ -770,6 +770,13 @@ Still `proposed`. Three sibling trees were re-read and built in scratch copies:
 * `acpserver` uses the default policy. Its inbound notifications are `session/cancel`, and dropping one would lose a cancel.
 * `acpclient` sets `OverflowDropNewest` with a drop handler that surfaces a notice. That client serves the CLI, the TUI, `task` subagents and `acptest`.
 * The exit plan stays magic-cli-remote `0167-MADR-the-acp-sdk-is-dormant-and-its-bounded-queue-is-an-availability-defect.md`.
+* **2026-10-05, owner's decision (0002-PLAN Phase 2, deviation of this date): gobble pins `v0.13.6-mcr.2`.**
+  * `mcr.2` is `mcr.1` plus one commit (`565efea`, tag object `cb6914d`).
+  * It adds `WithLogger(*slog.Logger)`, a `ConnectionOption` applied before the connection's goroutines start, and makes `SetLogger` an atomic store.
+  * In `mcr.1`, `SetLogger` was a plain field write that raced with the reader goroutine `NewConnection` had already started. A clean clone of gobble's Phase 1 tree showed 1 race in 30 `-race` runs.
+  * The fork's new test shows the race on the `mcr.1` code (14 reports) and none on `mcr.2`.
+  * gobble sets every connection's logger with `WithLogger`, and calls `SetLogger` nowhere.
+  * magic-cli-remote still pins `mcr.1`. It calls `SetLogger` nowhere, so it is not exposed (`0009-REPORT-magic-cli-remote-findings.md` M8).
 
 #### go-core-lib: facts as of `v1.2.0`
 

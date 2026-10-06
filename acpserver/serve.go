@@ -19,13 +19,14 @@ type ServeOptions struct {
 // is done first. Nothing but JSON-RPC is written to out.
 func Serve(ctx context.Context, in io.Reader, out io.Writer, opts ServeOptions) error {
 	agent := New(opts.Agent)
-	conn := acp.NewAgentSideConnection(agent, out, in)
-	agent.SetConnection(conn)
-	if opts.Logger != nil {
-		conn.SetLogger(opts.Logger)
-	} else {
-		conn.SetLogger(slog.New(slog.DiscardHandler))
+	logger := opts.Logger
+	if logger == nil {
+		logger = slog.New(slog.DiscardHandler)
 	}
+	// The logger goes in at construction: the connection starts reading in
+	// inside the constructor, so a later SetLogger would race with it.
+	conn := acp.NewAgentSideConnection(agent, out, in, acp.WithLogger(logger))
+	agent.SetConnection(conn)
 	select {
 	case <-conn.Done():
 		return nil

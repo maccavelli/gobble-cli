@@ -22,6 +22,24 @@ func fakeFiles(files map[string][]byte) func(string) ([]byte, error) {
 	}
 }
 
+// A relative @path resolves against --cwd's directory; an absolute one
+// stays as it is.
+func TestComposeInputBase(t *testing.T) {
+	base := t.TempDir()
+	var asked []string
+	read := func(name string) ([]byte, error) {
+		asked = append(asked, name)
+		return []byte("x"), nil
+	}
+	other := filepath.Join(t.TempDir(), "b.md")
+	if _, err := composeInput(t.Context(), nil, true, []string{"@a.md", "@" + other}, base, read); err != nil {
+		t.Fatal(err)
+	}
+	if len(asked) != 2 || asked[0] != filepath.Join(base, "a.md") || asked[1] != other {
+		t.Fatalf("read %q; want %q then %q", asked, filepath.Join(base, "a.md"), other)
+	}
+}
+
 func TestComposeInput(t *testing.T) {
 	abs := func(n string) string {
 		p, err := filepath.Abs(n)
@@ -55,7 +73,7 @@ func TestComposeInput(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			p, err := composeInput(t.Context(), strings.NewReader(tc.stdin), tc.stdinTTY, tc.words, files)
+			p, err := composeInput(t.Context(), strings.NewReader(tc.stdin), tc.stdinTTY, tc.words, "", files)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -70,7 +88,7 @@ func TestComposeInput(t *testing.T) {
 }
 
 func TestComposeInputImage(t *testing.T) {
-	p, err := composeInput(t.Context(), nil, true, []string{"@shot.png"}, fakeFiles(map[string][]byte{"shot.png": png}))
+	p, err := composeInput(t.Context(), nil, true, []string{"@shot.png"}, "", fakeFiles(map[string][]byte{"shot.png": png}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,16 +98,16 @@ func TestComposeInputImage(t *testing.T) {
 }
 
 func TestComposeInputErrors(t *testing.T) {
-	_, err := composeInput(t.Context(), nil, true, []string{"@missing.md"}, fakeFiles(nil))
+	_, err := composeInput(t.Context(), nil, true, []string{"@missing.md"}, "", fakeFiles(nil))
 	if e, ok := errors.AsType[*exitError](err); !ok || e.code != ExitUsage || !strings.Contains(e.msg, "@missing.md: no such file") {
 		t.Fatalf("missing @path: %v", err)
 	}
-	_, err = composeInput(t.Context(), nil, true, []string{"@locked.md"},
+	_, err = composeInput(t.Context(), nil, true, []string{"@locked.md"}, "",
 		func(string) ([]byte, error) { return nil, fs.ErrPermission })
 	if e, ok := errors.AsType[*exitError](err); !ok || e.code != ExitFailure {
 		t.Fatalf("unreadable @path: %v", err)
 	}
-	_, err = composeInput(t.Context(), failingReader{}, false, nil, fakeFiles(nil))
+	_, err = composeInput(t.Context(), failingReader{}, false, nil, "", fakeFiles(nil))
 	if e, ok := errors.AsType[*exitError](err); !ok || e.code != ExitFailure || !strings.Contains(e.msg, "read stdin") {
 		t.Fatalf("failed stdin read must be an error, not a panic: %v", err)
 	}
@@ -104,7 +122,7 @@ func TestComposeInputCancelled(t *testing.T) {
 			t.Error(err)
 		}
 	})
-	if _, err := composeInput(ctx, pr, false, nil, fakeFiles(nil)); err == nil {
+	if _, err := composeInput(ctx, pr, false, nil, "", fakeFiles(nil)); err == nil {
 		t.Fatal("a cancelled read of stdin returned no error")
 	}
 }

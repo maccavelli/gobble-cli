@@ -31,4 +31,4 @@ require (
 	honnef.co/go/tools v0.8.1 // indirect
 )
 
-replace github.com/coder/acp-go-sdk => github.com/maccavelli/acp-go-sdk v0.13.6-mcr.1
+replace github.com/coder/acp-go-sdk => github.com/maccavelli/acp-go-sdk v0.13.6-mcr.2

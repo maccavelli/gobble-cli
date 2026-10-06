@@ -3,6 +3,7 @@ package cli
 import (
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/alecthomas/kong"
@@ -14,8 +15,9 @@ type ChatCmd struct {
 	Prompt []string `arg:"" optional:"" complete:"none" help:"Prompt words; @path attaches a file."`
 }
 
-// Run validates the flags, resolves the mode and composes the input. The
-// agent arrives in 0002-PLAN Phase 2; until then every run ends there.
+// Run validates the flags, resolves the mode and the working directory,
+// composes the input, then runs print mode or the line session over ACP
+// (0002-PLAN Phase 2).
 func (c *ChatCmd) Run(k *kong.Context, e *runEnv) error {
 	g := givenFlags(k)
 	stdinPiped := e.stdin != nil && !e.out.caps.In
@@ -23,15 +25,23 @@ func (c *ChatCmd) Run(k *kong.Context, e *runEnv) error {
 		return err
 	}
 	mode := resolveMode(c.Print, e.out.caps.In, e.out.caps.Out.TTY)
+	cwd, base, err := resolveCwd(c.Cwd)
+	if err != nil {
+		return err
+	}
 	stdin, stdinTTY := e.stdinReader(), e.out.caps.In
 	if c.File != "" {
-		b, err := os.ReadFile(c.File) //nolint:gosec // G304: the user names the file to read
+		path, err := resolvePath(base, c.File)
+		if err != nil {
+			return usageErrorf("--file %s: %v", c.File, err)
+		}
+		b, err := os.ReadFile(path) //nolint:gosec // G304: the user names the file to read
 		if err != nil {
 			return usageErrorf("--file %s: %v", c.File, err)
 		}
 		stdin, stdinTTY = strings.NewReader(string(b)), false
 	}
-	prompt, err := composeInput(e.ctx, stdin, stdinTTY, c.Prompt, os.ReadFile)
+	prompt, err := composeInput(e.ctx, stdin, stdinTTY, c.Prompt, base, os.ReadFile)
 	if err != nil {
 		return err
 	}
@@ -40,7 +50,32 @@ func (c *ChatCmd) Run(k *kong.Context, e *runEnv) error {
 	}
 	e.log().DebugContext(e.ctx, "chat",
 		slog.String("mode", mode.String()), slog.Int("prompt_bytes", len(prompt.Text)), slog.Int("images", len(prompt.Images)))
-	return usageErrorf("the agent is not available yet (0002-PLAN Phase 2)")
+	if mode == ModePrint {
+		return runPrint(e, c, prompt, cwd)
+	}
+	return runLine(e, c, prompt, cwd)
+}
+
+// resolveCwd is the session's working directory: --cwd made absolute, which
+// must be a directory, or the process's own. base is what relative @path
+// and --file resolve against: the --cwd directory, or "" for the process's
+// working directory. gobble never changes its own directory.
+func resolveCwd(dir string) (cwd, base string, err error) {
+	if dir == "" {
+		wd, err := os.Getwd()
+		if err != nil {
+			return "", "", failf("working directory: %v", err)
+		}
+		return wd, "", nil
+	}
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return "", "", usageErrorf("--cwd %s: %v", dir, err)
+	}
+	if fi, err := os.Stat(abs); err != nil || !fi.IsDir() {
+		return "", "", usageErrorf("--cwd %s: not a directory", dir)
+	}
+	return abs, abs, nil
 }
 
 // givenFlags is the set of flags named on the command line. Kong records

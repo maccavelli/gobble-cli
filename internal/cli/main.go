@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/alecthomas/kong"
 
@@ -41,9 +42,10 @@ func Main(ctx context.Context, args []string, stdin *os.File, stdout, stderr io.
 	if err := clearCompletionEnv(); err != nil {
 		out.Warnf("clear completion environment: %v", err)
 	}
-	ctx, stop := watchSignals(ctx, term.ShutdownSignals(), signal.Notify)
+	intr := &interrupts{}
+	ctx, stop := watchSignals(ctx, term.ShutdownSignals(), signal.Notify, intr)
 	defer stop()
-	code := run(ctx, k, &root, args, stdin, out)
+	code := run(ctx, k, &root, args, stdin, out, intr)
 	if c, ok := signalExit(ctx); ok {
 		return c
 	}
@@ -61,7 +63,7 @@ func newParser(root *Root, stdout, stderr io.Writer) (*kong.Kong, error) {
 	)
 }
 
-func run(ctx context.Context, k *kong.Kong, root *Root, args []string, stdin *os.File, out *Output) int {
+func run(ctx context.Context, k *kong.Kong, root *Root, args []string, stdin *os.File, out *Output, intr *interrupts) int {
 	kctx, code, done := parse(k, args, out)
 	if done {
 		return code
@@ -70,7 +72,7 @@ func run(ctx context.Context, k *kong.Kong, root *Root, args []string, stdin *os
 	if strings.HasPrefix(kctx.Command(), "acp") {
 		logs.stderr = nil // stdio is the protocol (0004-PLAN Phase 2 step 4)
 	}
-	e := &runEnv{ctx: ctx, out: out, stdin: stdin, logs: logs}
+	e := &runEnv{ctx: ctx, out: out, stdin: stdin, logs: logs, intr: intr, now: clock}
 	code = exitCode(ctx, out, kctx.Run(e))
 	if err := logs.close(); err != nil {
 		out.Warnf("close log file: %v", err)
@@ -119,12 +121,19 @@ func exitCode(ctx context.Context, out *Output, err error) int {
 	return ExitFailure
 }
 
+// clock is the time source; tests replace it.
+var clock = time.Now
+
 // runEnv is what Kong binds into every command's Run.
 type runEnv struct {
 	ctx   context.Context
 	out   *Output
 	stdin *os.File
 	logs  *lazyLog
+	// intr lets a line-session turn take the first Ctrl+C (0008-MADR D5).
+	intr *interrupts
+	// now is the clock, for stream-json's session timestamp.
+	now func() time.Time
 }
 
 func (e *runEnv) log() *slog.Logger { return e.logs.get() }

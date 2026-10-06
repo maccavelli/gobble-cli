@@ -1,6 +1,6 @@
 ---
 status: proposed
-date: 2026-10-04
+date: 2026-10-05
 decision-makers: repository owner
 consulted: 0001-REPORT-go-port-feasibility.md, 0002-MADR-cli-acp-headless-mcp-v1.md, 0003-MADR-gobble-product-identity.md, 0004-MADR-go-module-architecture.md
 informed: magic-cli-remote (companion command table), go-llmprovider-sdk, go-core-lib, go-tui-lib
@@ -197,7 +197,7 @@ Tier definitions:
 | Capability | Tier | Behaviour |
 |---|---|---|
 | `gobble acp` | 1.0 | The headless ACP agent, per 0002. |
-| Print mode | 1.0 | `gobble -p "…"` or piped stdin. `--output-format text|json|stream-json`. `json` is one final object `{text, stopReason, usage, cost, sessionId}`. `stream-json` writes each ACP `session/update` params object as one JSONL line after a header line. The streaming vocabulary is ACP; there is no private event dialect. In non-interactive mode an `ask` decision resolves to deny unless `--yes` or mode `bypass` is set (Pi's "ask means skip"). |
+| Print mode | 1.0 | `gobble -p "…"` or piped stdin. `--output-format text|json|stream-json`. `json` is one final object `{text, stopReason, usage, cost, sessionId}`. `stream-json` writes each ACP `session/update` params object as one JSONL line after a header line. The streaming vocabulary is ACP; there is no private event dialect. In non-interactive mode an `ask` decision resolves to deny unless `--yes` or mode `bypass` is set (Pi's "ask means skip"). *(2026-10-05, owner's decision, 0002-PLAN Phase 2: when `session/prompt` fails, `json` and `stream-json` still write the result object, with `stopReason` `"error"` and an added `error` string, and the process exits 1.)* |
 | Enhanced terminal TUI | 1.0 | Selected explicitly. It is not the default, and a TTY with no prompt does not start it. The default is the native terminal CLI. An ACP client over `acpclient`. Core TUI is go-tui-lib on Charm v2. gobble does not reimplement core TUI. Where a core behaviour is not in the library yet, gobble waits rather than copying it. The mode includes, when the library provides them: <br>• streamed Markdown transcript; <br>• collapsible tool cards with diffs; <br>• permission dialog; <br>• model, thinking, and mode pickers; <br>• session picker; <br>• multi-line editor with history; <br>• slash and `@path` completion; <br>• `!cmd` and `!!cmd`; <br>• Esc to interrupt; <br>• steer and follow-up keys; <br>• Ctrl+G for the external editor; <br>• a footer with model, mode, context %, and cost. <br>Help, errors, `--version`, man pages, and completions belong to Kong in the native CLI. |
 | TUI themes and keybindings | 1.x | Pi theme JSON and `keybindings.json` with Pi's action ids (`app.*`, `tui.*`) where the action exists. |
 | Tree navigator, inline images | 1.x / exp | The tree navigator is 1.x. Kitty and iTerm2 inline images are exp. |

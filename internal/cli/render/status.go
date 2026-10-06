@@ -35,6 +35,17 @@ func StatusLine(elapsed time.Duration, used, size int64, cost *float64, s term.S
 	return strings.Join(parts, " "+g.Bullet+" ")
 }
 
+// Stats is the --stats suffix of the status line: the time to the first
+// token, then tokens per second when both the output tokens and the time
+// spent generating them are known.
+func Stats(ttft time.Duration, outputTokens int64, gen time.Duration, g term.Glyphs) string {
+	s := "ttft " + ttft.Round(100*time.Millisecond).String()
+	if outputTokens > 0 && gen > 0 {
+		s += fmt.Sprintf(" %s %.0f tok/s", g.Bullet, float64(outputTokens)/gen.Seconds())
+	}
+	return s
+}
+
 func barStyle(pct float64) term.Style {
 	switch {
 	case pct >= alertAt:
