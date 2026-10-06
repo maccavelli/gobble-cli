@@ -537,6 +537,43 @@ Phases 3–8 have not run.
   5. **`session.Log.Entries` returns a slice, not Phase 1's iterator,** because a writer always holds its entries in memory. `Summarize`, `SortSummaries` and `HasConversation` are exported, so both stores list alike.
   6. **Every entry is written with `parentId`, `null` at a root,** as Pi writes it, including an entry read without one.
 
+**Phase 4 Part B, 2026-10-06 — complete (staged; the owner commits). Phase 4 is complete.** It ran as the amendment wrote it, with the three deviations decided before it began (the message count through `_meta`, `-n` for new sessions only, and `--tools` completion). Phases 5–8 have not run.
+
+* **Files.**
+  * `acpclient`: `conn.go`, and new `sessions.go` and `sessions_test.go`.
+  * From deviation 1: `acpserver/agent.go`, `config.go` and `session_test.go`.
+  * `internal/cli`: `chat.go`, `completion.go`, `flags.go`, `line.go` and `print.go`, and new `sessions.go` and `sessions_test.go`.
+* **Accept**, through `Main` against gobble's real agent with a scripted model, each over its own `GOBBLE_HOME`:
+  * `TestContinueResumesTheNewest`: `-c` sends `second,B1,third`. `TestContinueWithNoneStartsNew`: no session means a new one, as Pi's `continueRecent` does.
+  * `TestSessionValues`: an id prefix (`beta`), a title prefix in any case (`AVOC`) and a path each resume.
+    * `alpha` gives `matches 2 sessions`, and `zzz` gives `no session matches`.
+    * A file outside the store gives `session stranger is not in the session store`. Each of these exits 2.
+  * `TestSessionIDAndName`: the file `…_my.id.jsonl` holds the name. A taken id exits 2. `-n` with `-c` exits 2 with the Phase 7 message.
+  * `TestFork`: the request carries `original,one,forked`, and `parentSession` ends `_src.jsonl`. The source is unchanged.
+  * `TestNoSessionAndSessionDir`: `--no-session` writes nothing, and `--session-dir` writes one file in the directory given.
+  * `TestLockedSessionExits1`: exit 1, `Error: session held is open in another gobble process (pid N)`.
+  * `TestLineSessionResumedLine`: `resumed earlier question (2 messages)`, then the history reaches the model.
+  * `TestSessionAndToolCompletion`: `newer`, then `older` with `Old one · <date> · <cwd>`, then `:36`, with nothing on stderr and the store unchanged. `--tools` lists `read`, `write`, `edit` and `bash`.
+  * `acpclient`'s unit tests cover `_meta` building and the mapping of the agent's refusals.
+* **Gates.**
+  * `make preflight` printed `preflight passed` on Windows and in WSL. WSL `go test -race ./...` exited 0 with 0 race reports.
+  * Windows `go test ./...` showed no `FAIL`.
+  * `golangci-lint` printed `0 issues.` for linux, darwin and windows.
+  * The pre-add check was clean for all 13 Go files.
+* **Negative tests,** each on a scratch copy, each failing as expected:
+  * `-c` picking the oldest: `sessions_test.go:88: the continued request carries "first,A1,third", want the newest session's history`;
+  * a prefix matching two sessions accepted: `sessions_test.go:150: --session alpha: exit 1, … want 2 and "--session alpha matches 2 sessions: "`;
+  * `--no-session` writing a file: `sessions_test.go:208: --no-session wrote [….jsonl]`.
+* **What the plan predicted wrongly.**
+  1. **The `--session` directive is `:36`, not the `:32` of 0008-MADR's Confirmation.** The engine adds no-file completion to every value flag, as 0008-PLAN's record found for enum sources.
+  2. **Completion offers ids.** A name shows in the description, and a name prefix is resolved by `--session` itself, not offered as a candidate.
+  3. **The `--no-session` test first looked one directory too shallow.** The negative passed that assertion, and only a later one caught the file; it now looks in `sessions/` and fails at its own line.
+  4. **The ambiguous-prefix negative exits 1, not 0.** The mutated code accepts the prefix, then the scripted model has no reply left. The test asserts exit 2, so it fails either way.
+  5. **New files.** The session code is in new `acpclient/sessions.go` and `internal/cli/sessions.go`, not in `conn.go` and `chat.go`.
+  6. **How the line session opens a session.** It resumes at start, which reads the file and makes no network call. A new session is still created with the first prompt. The resumed line is written to stdout, dimmed.
+  7. **A refused `session/new` (a taken or invalid id, an unknown fork source) exits 2,** because it comes from a flag's value.
+  8. **One `gobble` constant in `acpserver`** names the agent and the `_meta` key, because lint counted three uses of the string.
+
 ## Amendments
 
 **2026-09-29 — native magic-cli-remote CLI.** The first draft of this
@@ -1073,3 +1110,16 @@ The agent stages; the owner commits.
 * replay in the CLI (owner's decision);
 * paging in `session/list` (until a list is long enough to need it);
 * `session_info_update` for names (Phase 6, with `/name`).
+
+**Deviations before Part B, 2026-10-06 (owner's decisions):**
+
+1. **The message count of `resumed … (N messages)` comes from the agent.**
+   * ACP's `SessionInfo` has no count.
+   * `session/resume` and `session/load` therefore answer with `_meta {"gobble": {"title", "messages"}}`, the channel `session/new` already uses. `messages` counts the path's user and assistant messages.
+   * This adds `acpserver/agent.go`, and a test in `acpserver/session_test.go`, to Part B's files.
+2. **`-n/--name` names a new session only.**
+   * With `-c` or `--session` it exits 2 with `--name with --continue or --session is not yet available (0002-PLAN Phase 7)`. Renaming an existing session waits for Phase 7's `_gobble/set_session_name`.
+   * This is D12's rule that a flag is never silently ignored.
+3. **`--tools` and `--exclude-tools` completion is wired to `builtin.Names()`.**
+   * It still listed nothing: its comment named 0002-PLAN Phase 3, and Phase 3 did not wire it. That is a gap from Phase 3; `internal/cli/completion.go` is unchanged since 0008-PLAN P5.
+   * It is fixed in Part B's `completion.go`, with a test.

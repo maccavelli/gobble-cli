@@ -62,7 +62,7 @@ type newSessionMeta struct {
 }
 
 func readNewSessionMeta(meta map[string]any) newSessionMeta {
-	g, _ := meta["gobble"].(map[string]any) //nolint:errcheck // absent or not an object is none
+	g, _ := meta[gobble].(map[string]any) //nolint:errcheck // absent or not an object is none
 	str := func(k string) string {
 		s, _ := g[k].(string) //nolint:errcheck // absent or not a string is none
 		return s

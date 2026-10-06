@@ -23,9 +23,11 @@ const cancelWait = 2 * time.Second
 // lineSession is the interactive session (0008-MADR D5): prompts from the
 // line editor, each sent as one turn to the in-process agent over ACP.
 type lineSession struct {
-	e    *runEnv
-	cwd  string
-	opts display
+	e      *runEnv
+	cwd    string
+	base   string
+	opts   display
+	choice sessionChoice
 	// in is the terminal's input, owned by one editor.Reader for the life
 	// of the process (0008-MADR D6).
 	in io.Reader
@@ -40,9 +42,9 @@ type lineSession struct {
 }
 
 // runLine opens the line session on the process's terminal.
-func runLine(e *runEnv, c *ChatCmd, first Prompt, cwd string) error {
+func runLine(e *runEnv, c *ChatCmd, first Prompt, cwd, base string) error {
 	ls := &lineSession{
-		e: e, cwd: cwd, opts: displayFor(c), in: e.stdin,
+		e: e, cwd: cwd, base: base, opts: displayFor(c), in: e.stdin, choice: c.sessionChoice(),
 		raw: func() (func() error, error) { return editor.Raw(e.stdin) },
 	}
 	return ls.run(first)
@@ -66,6 +68,18 @@ func (ls *lineSession) run(first Prompt) error {
 	// 0005-PLAN F4, so the warning names the variables.
 	if _, err := provider.Choose(os.Getenv); err != nil {
 		e.out.Warnf("%s", noCredentialMessage())
+	}
+	// A resumed session opens at once, from its file, and says so; a new one
+	// is created with the first prompt (D5).
+	if ls.choice.resumes() {
+		s, r, err := openSession(e.ctx, conn, ls.choice, ls.cwd, ls.base, ls.onUpdate)
+		if err != nil {
+			return err
+		}
+		ls.sess = s
+		if err := e.out.Resultf("%s\n", dimmed(resumedLine(*r), e.out.caps.Out.Color)); err != nil {
+			return err
+		}
 	}
 
 	var r editor.Reader
@@ -164,7 +178,7 @@ func (ls *lineSession) turn(p Prompt) error {
 		ls.mu.Unlock()
 	}()
 	if ls.sess == nil {
-		s, err := ls.conn.NewSession(e.ctx, ls.cwd, ls.onUpdate)
+		s, _, err := openSession(e.ctx, ls.conn, ls.choice, ls.cwd, ls.base, ls.onUpdate)
 		if err != nil {
 			v.quiet()
 			e.out.Errorf("%v", err)

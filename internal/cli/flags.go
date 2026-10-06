@@ -51,7 +51,6 @@ type SharedFlags struct {
 
 // The plans that deliver the default command's remaining flags.
 const (
-	plan0002P4 = "0002-PLAN Phase 4"
 	plan0005F3 = "0005-PLAN F3"
 	plan0005F4 = "0005-PLAN F4"
 	plan0005F6 = "0005-PLAN F6"
@@ -61,8 +60,6 @@ const (
 // plan. Such a flag is parsed and rejected with exit 2, never ignored
 // (0008-MADR D12).
 var laterFlags = map[string]string{
-	"continue": plan0002P4, "session": plan0002P4, "session-id": plan0002P4, "fork": plan0002P4,
-	"no-session": plan0002P4, "session-dir": plan0002P4, "name": plan0002P4,
 	"system-prompt": plan0005F3, "append-system-prompt": plan0005F3, "no-context-files": plan0005F3,
 	"provider": plan0005F4, "model": plan0005F4, "thinking": plan0005F4, "api-key": plan0005F4, "offline": plan0005F4,
 	"approve": plan0005F6, "yes": plan0005F6,
@@ -86,6 +83,8 @@ func (f *SharedFlags) validate(g given, stdinPiped, atPaths bool) error {
 		return usageErrorf("--file cannot be combined with piped input")
 	case g["file"] && atPaths:
 		return usageErrorf("--file cannot be combined with an @path argument")
+	case g["name"] && (g["continue"] || g["session"]):
+		return usageErrorf("--name with --continue or --session is not yet available (0002-PLAN Phase 7)")
 	case g["no-tools"] && (g["tools"] || g["exclude-tools"]):
 		return usageErrorf("--no-tools cannot be combined with %s", firstGiven(g, "tools", "exclude-tools"))
 	}

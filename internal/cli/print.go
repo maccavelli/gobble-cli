@@ -126,7 +126,7 @@ func (s *printSink) writeJSON(v any) {
 
 // runPrint runs one turn and prints it in the chosen format (0008-MADR D9),
 // mapping the outcome to D10's codes.
-func runPrint(e *runEnv, c *ChatCmd, p Prompt, cwd string) (err error) {
+func runPrint(e *runEnv, c *ChatCmd, p Prompt, cwd, base string) (err error) {
 	ctx := e.ctx
 	conn, err := e.startAgent(ctx)
 	if err != nil {
@@ -138,9 +138,9 @@ func runPrint(e *runEnv, c *ChatCmd, p Prompt, cwd string) (err error) {
 		}
 	}()
 	sink := &printSink{out: e.out, stream: c.OutputFormat == "stream-json", now: e.now}
-	sess, err := conn.NewSession(ctx, cwd, sink.on)
+	sess, _, err := openSession(ctx, conn, c.sessionChoice(), cwd, base, sink.on)
 	if err != nil {
-		return failf("%v", err)
+		return err
 	}
 	defer func() {
 		cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), closeWait)

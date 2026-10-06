@@ -1,10 +1,17 @@
 package cli
 
 import (
+	"context"
 	"errors"
+	"iter"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/maccavelli/gobble-cli/internal/cli/complete"
+	"github.com/maccavelli/gobble-cli/session"
+	"github.com/maccavelli/gobble-cli/session/jsonl"
+	"github.com/maccavelli/gobble-cli/tool/builtin"
 )
 
 // CompletionCmd prints a shell's registration script (0008-MADR D17).
@@ -40,18 +47,54 @@ func (c *CompletionCmd) Run(e *runEnv) error {
 var thinkingLevels = []string{"off", "minimal", "low", "medium", "high", "xhigh"}
 
 // completionRegistry names the source behind each complete:"<name>" tag.
-// The dynamic sources have no data yet, which is the true state, not a
-// skip: sessions arrive in 0002-PLAN Phase 4, providers, models and their
-// catalog in 0005-PLAN F4, and tools in 0002-PLAN Phase 3 (0008-PLAN P5,
-// step 4 and deviation 1).
+// Sessions come from the session store (0002-PLAN Phase 4) and tools from
+// the built-ins (0002-PLAN Phase 3, wired in Phase 4 Part B). Providers,
+// models and their catalog have no data until 0005-PLAN F4, which is the
+// true state, not a skip (0008-PLAN P5, step 4 and deviation 1).
 func completionRegistry() complete.Registry {
 	return complete.Registry{
 		"path":     complete.PathSource(false),
 		"dir":      complete.PathSource(true),
 		"provider": complete.ListSource(complete.NoCandidates, false),
-		"session":  complete.ListSource(complete.NoCandidates, true),
+		"session":  complete.ListSource(sessionCandidates, true),
 		"model":    complete.ModelSource(complete.NoCandidates, thinkingLevels),
-		"tools":    complete.ListSource(complete.NoCandidates, false),
+		"tools":    complete.ListSource(toolCandidates, false),
+	}
+}
+
+// sessionCandidates are the stored sessions' ids, newest first, each
+// described as "name · date · cwd" (0008-MADR D17). The store is only read:
+// completion creates nothing.
+func sessionCandidates(ctx context.Context) iter.Seq[complete.Candidate] {
+	return func(yield func(complete.Candidate) bool) {
+		dirs, _, err := systemDirs()
+		if err != nil {
+			return
+		}
+		for sum, err := range jsonl.New(filepath.Join(dirs.Data, "sessions"), jsonl.Options{}).List(ctx, session.Filter{}) {
+			if err != nil {
+				return
+			}
+			title := sum.Name
+			if title == "" {
+				title = sum.First
+			}
+			desc := strings.Join([]string{strings.Join(strings.Fields(title), " "), sum.Modified.Local().Format("2006-01-02 15:04"), sum.Cwd}, " · ")
+			if !yield(complete.Candidate{Value: string(sum.ID), Description: desc}) {
+				return
+			}
+		}
+	}
+}
+
+// toolCandidates are the built-in tools' names.
+func toolCandidates(context.Context) iter.Seq[complete.Candidate] {
+	return func(yield func(complete.Candidate) bool) {
+		for _, n := range builtin.Names() {
+			if !yield(complete.Candidate{Value: n}) {
+				return
+			}
+		}
 	}
 }
 

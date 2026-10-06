@@ -161,16 +161,7 @@ type Session struct {
 // as available_commands_update (0002-PLAN Phase 6), reach on too. Calls
 // are serialised, so such an update can only belong to this session.
 func (c *Conn) NewSession(ctx context.Context, cwd string, on func(Update)) (*Session, error) {
-	c.newMu.Lock()
-	defer c.newMu.Unlock()
-	c.handler.setPending(on)
-	defer c.handler.setPending(nil)
-	resp, err := c.conn.NewSession(ctx, acp.NewSessionRequest{Cwd: cwd, McpServers: []acp.McpServer{}})
-	if err != nil {
-		return nil, fmt.Errorf("session/new: %w", err)
-	}
-	c.handler.add(resp.SessionId, on)
-	return &Session{id: resp.SessionId, c: c}, nil
+	return c.NewSessionWith(ctx, cwd, NewSessionOptions{}, on)
 }
 
 // ID is the session id.

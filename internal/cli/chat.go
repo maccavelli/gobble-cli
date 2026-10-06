@@ -34,6 +34,9 @@ func (c *ChatCmd) Run(k *kong.Context, e *runEnv) error {
 	if err != nil {
 		return err
 	}
+	if err := c.configureStore(e, base); err != nil {
+		return err
+	}
 	stdin, stdinTTY := e.stdinReader(), e.out.caps.In
 	if c.File != "" {
 		path, err := resolvePath(base, c.File)
@@ -56,9 +59,9 @@ func (c *ChatCmd) Run(k *kong.Context, e *runEnv) error {
 	e.log().DebugContext(e.ctx, "chat",
 		slog.String("mode", mode.String()), slog.Int("prompt_bytes", len(prompt.Text)), slog.Int("images", len(prompt.Images)))
 	if mode == ModePrint {
-		return runPrint(e, c, prompt, cwd)
+		return runPrint(e, c, prompt, cwd, base)
 	}
-	return runLine(e, c, prompt, cwd)
+	return runLine(e, c, prompt, cwd, base)
 }
 
 // resolveCwd is the session's working directory: --cwd made absolute, which

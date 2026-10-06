@@ -132,6 +132,18 @@ func TestResumeWithoutReplay(t *testing.T) {
 	if n := len(client.Updates()); n != 0 {
 		t.Fatalf("resume sent %d updates", n)
 	}
+	// The count and title the CLI prints (deviation of 2026-10-06).
+	_, err := c2.Client.CloseSession(t.Context(), acp.CloseSessionRequest{SessionId: id})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resumed, err := c2.Client.ResumeSession(t.Context(), acp.ResumeSessionRequest{SessionId: id, Cwd: cwd})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if g, _ := resumed.Meta["gobble"].(map[string]any); g == nil || g["title"] != "first" || g["messages"] != float64(2) { //nolint:errcheck // checked by the nil test
+		t.Fatalf("resume _meta %v, want title first and 2 messages", resumed.Meta)
+	}
 	if _, err := prompt(t, c2, id, "second"); err != nil {
 		t.Fatal(err)
 	}

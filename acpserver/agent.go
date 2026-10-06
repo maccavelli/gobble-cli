@@ -20,6 +20,9 @@ import (
 	"github.com/maccavelli/gobble-cli/tool/builtin"
 )
 
+// gobble is the agent's name, and the _meta key of gobble's own members.
+const gobble = "gobble"
+
 // keyReason and keySessionID are keys of an error's JSON-RPC data.
 const (
 	keyReason    = "reason"
@@ -154,10 +157,10 @@ func Capabilities() acp.AgentCapabilities {
 // Initialize answers the handshake. It makes no network call (0008-MADR
 // D19 item 6).
 func (a *Agent) Initialize(context.Context, acp.InitializeRequest) (acp.InitializeResponse, error) {
-	title := "gobble"
+	title := gobble
 	return acp.InitializeResponse{
 		ProtocolVersion:   acp.ProtocolVersionNumber,
-		AgentInfo:         &acp.Implementation{Name: "gobble", Title: &title, Version: a.version},
+		AgentInfo:         &acp.Implementation{Name: gobble, Title: &title, Version: a.version},
 		AgentCapabilities: Capabilities(),
 		AuthMethods:       []acp.AuthMethod{},
 	}, nil
@@ -469,7 +472,27 @@ func (a *Agent) LoadSession(ctx context.Context, p acp.LoadSessionRequest) (acp.
 	if out.err != nil {
 		return acp.LoadSessionResponse{}, out.err
 	}
-	return acp.LoadSessionResponse{ConfigOptions: configOptions(a.models(), s.model, s.think)}, nil
+	return acp.LoadSessionResponse{ConfigOptions: configOptions(a.models(), s.model, s.think), Meta: resumedMeta(st)}, nil
+}
+
+// resumedMeta is a resumed session's _meta.gobble: its title (the name,
+// else the first prompt) and the number of user and assistant messages on
+// its path, which ACP's SessionInfo does not carry (0002-PLAN Phase 4,
+// deviation of 2026-10-06).
+func resumedMeta(st state) map[string]any {
+	title, n := st.name, 0
+	for _, e := range st.messages {
+		switch e.Message.Role {
+		case session.RoleUser:
+			n++
+			if title == "" {
+				title = e.Message.Text()
+			}
+		case session.RoleAssistant:
+			n++
+		}
+	}
+	return map[string]any{gobble: map[string]any{"title": cutTitle(title), "messages": n}}
 }
 
 // ResumeSession opens a stored session with no replay.
@@ -478,7 +501,7 @@ func (a *Agent) ResumeSession(ctx context.Context, p acp.ResumeSessionRequest) (
 	if err != nil {
 		return acp.ResumeSessionResponse{}, err
 	}
-	return acp.ResumeSessionResponse{ConfigOptions: configOptions(a.models(), s.model, s.think)}, nil
+	return acp.ResumeSessionResponse{ConfigOptions: configOptions(a.models(), s.model, s.think), Meta: resumedMeta(replayState(s.log.Entries()))}, nil
 }
 
 // ListSessions lists the sessions with a file, and the live ones of this
