@@ -26,4 +26,7 @@ tilde fence
 |---|---|
 | 1 | 2 |
 
+Emphasis: **bold**, *italic*, ***both***, ~~struck~~, and snake_case_name stays plain.
+- a list item with _italic_ and `*code*`
+
 Plain closing line.

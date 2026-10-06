@@ -1,6 +1,6 @@
 <ESC>[1m# Plan<ESC>[0m
 
-Some **bold** text and <ESC>[2m`code`<ESC>[0m.
+Some <ESC>[1m**bold**<ESC>[0m text and <ESC>[2m`code`<ESC>[0m.
 
 | a   |   b |
 | --- | --: |

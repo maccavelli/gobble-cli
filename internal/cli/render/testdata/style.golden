@@ -26,4 +26,7 @@ tilde fence
 |---|---|
 | 1 | 2 |
 
+Emphasis: <ESC>[1m**bold**<ESC>[0m, <ESC>[3m*italic*<ESC>[0m, <ESC>[1;3m***both***<ESC>[0m, <ESC>[2m~~struck~~<ESC>[0m, and snake_case_name stays plain.
+<ESC>[36m-<ESC>[0m a list item with <ESC>[3m_italic_<ESC>[0m and <ESC>[2m`*code*`<ESC>[0m
+
 Plain closing line.

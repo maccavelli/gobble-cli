@@ -27,7 +27,7 @@
 | 0007 | MADR | [Bring the repository up to the fleet scaffold: agent rules, lint and line-ending config, records tooling, portable Makefile](decisions/0007-MADR-repository-scaffolding-to-fleet-standard.md) | accepted (amended 2026-10-04 (0008)) |
 | 0007 | PLAN | [Bring gobble-cli up to the fleet repository scaffold](decisions/0007-PLAN-repository-scaffolding-to-fleet-standard.md) | completed (staged; the owner commits) |
 | 0008 | MADR | [The native CLI mode: a lightweight line client on Kong, x/term and the standard library, natively integrated with magic-cli-remote](decisions/0008-MADR-native-cli-mode.md) | accepted |
-| 0008 | PLAN | [Implement the native CLI mode](decisions/0008-PLAN-native-cli-mode.md) | completed (2026-10-05) |
+| 0008 | PLAN | [Implement the native CLI mode](decisions/0008-PLAN-native-cli-mode.md) | completed (2026-10-05; P8 emphasis follow-up 2026-10-05) |
 | 0009 | REPORT | [magic-cli-remote findings from gobble work](reports/0009-REPORT-magic-cli-remote-findings.md) | observation (running; updated 2026-10-05) |
 
 0003-MADR has no PLAN of its own. 0004-PLAN Phase 2 and 0005-PLAN F10 implement it.

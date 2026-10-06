@@ -588,6 +588,7 @@ P0 records ─┬─ P1 lint + archtest ─ P2 terminal layer ─ P3 line editor
 
 1. **`internal/cli/render/mdstream.go`:** `type Stream struct`, with `Push(chunk string) string` and `Flush() string`. It reimplements the behaviour of goose's `MarkdownBuffer`: it releases only text that cannot change meaning (no open fence, table, heading, inline code, emphasis, link or image), and keeps a resumable scan checkpoint. Its fixtures are recorded chunk sequences, including a fence split across chunks, a table arriving row by row, and `**` split across chunks.
 2. **`internal/cli/render/mdstyle.go`:** `func Style(lines string, s term.Stream) string` colours headings bold, inline code and fences dim, shows the fence language label, and colours list and quote markers. Markers are kept, and nothing is reflowed. When `!s.Color` the input is returned byte for byte.
+   *(Amended 2026-10-05: this step left out the emphasis 0008-MADR D7 requires, "emphasis, inline code and fences are dimmed or coloured". 0002-PLAN Phase 3 found it, and P8 adds it.)*
 3. **`internal/cli/render/table.go`:** GFM table re-layout with alignment from `:`, measured in display width.
    - First `go get golang.org/x/text@v0.42.0`.
    - `func displayWidth(s string) int` counts 2 for a rune whose `width.LookupRune(r).Kind()` is `width.EastAsianWide` or `width.EastAsianFullwidth`, 0 for a combining mark (`unicode.Mn`, `unicode.Me`) or a zero-width joiner, and 1 otherwise.
@@ -623,6 +624,40 @@ P0 records ─┬─ P1 lint + archtest ─ P2 terminal layer ─ P3 line editor
 3. In `docs/README.md`, set the 0008 PLAN row to `completed`.
 
 **Verification:** `make check-records` and `make markdownlint` exit 0. Then the Stability rule.
+
+### P8 — Emphasis (D7), a follow-up added 2026-10-05 (owner's decision)
+
+0002-PLAN Phase 3's view goldens showed `**bold**` unstyled with colour on. P6 step 2 had left out D7's emphasis. `render.Style` (`internal/cli/render/mdstyle.go`, committed in `4e25c8a`) styles headings, inline code, fences, the fence label and list and quote markers, and nothing else. The owner decided on 2026-10-05 to add it here, as its own change after 0002-PLAN Phase 3's commit.
+
+1. **`internal/cli/render/mdstyle.go`:**
+   * A line's list or quote marker is coloured on its own. Inline styling runs on the rest of the line, so a `*` marker is never read as emphasis.
+   * Outside inline code spans, a delimiter run is styled together with its markers, which are kept:
+     * `***x***` is bold italic;
+     * `**x**` and `__x__` are bold;
+     * `*x*` and `_x_` are italic;
+     * `~~x~~` is dim.
+   * The rules, a subset of CommonMark's flanking rules:
+     * an opener is followed by a character that is not a space;
+     * a closer of the same character and length is preceded by one that is not a space;
+     * `_` opens only after the start of the line or a character that is not a letter or digit, and closes only before the end or such a character, so `snake_case_name` stays plain;
+     * `\*` and the other backslash escapes stay literal;
+     * an unclosed run stays as it is.
+   * Emphasis is not nested: a span's inner markers stay plain inside its style, because a nested reset would end the outer style early.
+   * With colour off, the input is returned byte for byte, as before.
+2. **Tests:**
+   * `mdstyle_test.go` gains cases for each style:
+     * `snake_case`, `2 * 3 * 4`, an unclosed run, an escape, emphasis beside a code span, and a `*` list marker followed by `*x*`.
+   * `testdata/style.input.txt` gains an emphasis paragraph, so the golden test covers it.
+   * The invariants still hold: SGR removed gives the input back, and colour off returns it unchanged.
+   * `internal/cli`'s view goldens are regenerated, because their `**bold**` is now bold.
+3. **Negative test,** on a scratch copy: `styleInline` without the emphasis pass fails the new cases, and the failure is quoted.
+
+**Verification:**
+* `go test ./internal/cli/...`;
+* `golangci-lint` for linux, darwin and windows;
+* `make preflight` on Windows and in WSL.
+
+The agent stages; the owner commits.
 
 ## Verification (whole plan)
 
@@ -896,3 +931,31 @@ The plan's Deferred list stands. Two items are added:
 
 - **bash 4.0–4.3's `COMP_POINT` unit** is unmeasured: those releases would not build with a current compiler. The script treats them as counting characters.
 - **The magic-cli-remote findings** M1–M7 wait in 0009-REPORT for the owner's review.
+
+## Execution record (2026-10-05, P8 follow-up)
+
+**P8 — complete (staged; the owner commits).** It ran as written in P8, added on this date after 0002-PLAN Phase 3 found the gap.
+
+* **Files.**
+  * `internal/cli/render/mdstyle.go`, `mdstyle_test.go` and `testdata/style.input.txt`, with `style.golden`;
+  * `internal/cli/testdata/view-color.golden`, whose `**bold**` is now bold;
+  * this PLAN and `docs/README.md`.
+* **Tests.**
+  * `TestStyleCases` gains 15 cases:
+    * bold, `__` bold, italic, bold italic, strikethrough;
+    * `snake_case` and `2 * 3 * 4` staying plain, an unclosed run, an escape;
+    * no nesting, beside a code span, not across a code span;
+    * a `*` list marker followed by `*it*`, and a lone `*` marker.
+  * The golden input gains an emphasis paragraph. The byte-for-byte invariants (SGR removed, and colour off) still hold.
+* **Negative test,** on a scratch copy:
+  * `styleInline` without its emphasis pass failed `TestStyleGolden` (`mdstyle_test.go:14: style differs from testdata\style.golden`) and 9 cases, for example `mdstyle_test.go:69: Style("a **b c** d\n") = "a **b c** d\n", want "a \x1b[1m**b c**\x1b[0m d\n"`;
+  * the cases that stay plain passed, as they should.
+* **Gates.**
+  * `make preflight` printed `preflight passed` on Windows and in WSL.
+  * Windows `go test ./...` showed no `FAIL`. WSL `go test -race ./...` exited 0 with 0 race reports.
+  * `golangci-lint` printed `0 issues.` for linux, darwin and windows.
+  * The pre-add check was clean for both Go files.
+* **What the plan predicted wrongly.**
+  1. **Emphasis does not cross a code span.** P8's rules styled emphasis "outside inline code spans", which leaves `*a `b` c*` plain, where CommonMark would make it italic. The case pins that behaviour as part of the subset.
+  2. **`styleMarker` became `splitMarker`.** It returns the coloured marker apart from the rest of the line, so the emphasis pass never sees the marker.
+  3. **The styles come from a function, not a table.** A map keyed by `"***"`, `"__"` and so on repeated `mdstream.go`'s literals, and goconst failed the first preflight. `emphasisStyle(c, n)` takes the run's character and length instead.
