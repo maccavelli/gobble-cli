@@ -25,6 +25,9 @@ type Config struct {
 	System string
 	// Model overrides the provider's model; empty keeps it.
 	Model string
+	// Thinking is the thinking level each request asks for (llm's levels);
+	// empty asks for none.
+	Thinking string
 	// Policy approves calls to tools that are not read-only. Nil allows
 	// every call.
 	Policy permission.Policy
@@ -114,7 +117,11 @@ func (t *turn) run() {
 		if !ok {
 			return
 		}
-		t.added = append(t.added, reply.message())
+		msg := reply.message()
+		t.added = append(t.added, msg)
+		if !t.emit(Message{Message: msg, Usage: reply.usage, StopReason: reply.stop}) {
+			return
+		}
 		if t.ctx.Err() != nil {
 			t.added = append(t.added, cancelledResults(reply.calls)...)
 			t.end(StopCancelled)
@@ -147,6 +154,7 @@ type reply struct {
 	pending  strings.Builder // thinking text not yet in a block
 	calls    []llm.ToolCallDone
 	stop     llm.StopReason
+	usage    llm.Usage
 }
 
 func (r *reply) message() llm.Message {
@@ -172,7 +180,7 @@ func (t *turn) call() (*reply, bool) {
 		msgs = append(msgs, llm.Message{Role: llm.RoleSystem, Content: []llm.Content{{Type: llm.ContentText, Text: t.a.cfg.System}}})
 	}
 	msgs = append(append(msgs, t.history...), t.added...)
-	req := &llm.Request{Model: t.a.cfg.Model, Messages: msgs, Tools: t.a.specs}
+	req := &llm.Request{Model: t.a.cfg.Model, Messages: msgs, Tools: t.a.specs, Thinking: t.a.cfg.Thinking}
 	r := &reply{}
 	for ev, err := range t.a.cfg.Provider.Stream(t.ctx, req) {
 		if err != nil {
@@ -206,6 +214,7 @@ func (t *turn) call() (*reply, bool) {
 			r.calls = append(r.calls, ev)
 		case llm.Usage:
 			t.usage = addUsage(t.usage, ev)
+			r.usage = addUsage(r.usage, ev)
 			if !t.emit(Usage{Usage: ev}) {
 				return r, false
 			}
@@ -230,7 +239,7 @@ func (t *turn) runTools(calls []llm.ToolCallDone) (llm.Message, bool) {
 		if !ok {
 			return m, false
 		}
-		m.Content = append(m.Content, llm.Content{Type: llm.ContentToolResult, ToolCallID: c.ID, Text: res.Text(), IsError: res.IsError})
+		m.Content = append(m.Content, llm.Content{Type: llm.ContentToolResult, ToolCallID: c.ID, ToolName: c.Name, Text: res.Text(), IsError: res.IsError})
 	}
 	return m, true
 }
@@ -298,7 +307,7 @@ func cancelledResults(calls []llm.ToolCallDone) []llm.Message {
 	}
 	m := llm.Message{Role: llm.RoleTool}
 	for _, c := range calls {
-		m.Content = append(m.Content, llm.Content{Type: llm.ContentToolResult, ToolCallID: c.ID, Text: cancelledText, IsError: true})
+		m.Content = append(m.Content, llm.Content{Type: llm.ContentToolResult, ToolCallID: c.ID, ToolName: c.Name, Text: cancelledText, IsError: true})
 	}
 	return []llm.Message{m}
 }

@@ -1,7 +1,7 @@
 client→agent {"id":1,"jsonrpc":"2.0","method":"initialize","params":{"clientCapabilities":{"auth":{},"fs":{}},"clientInfo":{"name":"test","version":"0.0.0"},"protocolVersion":1}}
-agent→client {"id":1,"jsonrpc":"2.0","result":{"agentCapabilities":{"auth":{},"mcpCapabilities":{},"promptCapabilities":{},"sessionCapabilities":{"close":{}}},"agentInfo":{"name":"gobble","title":"gobble","version":"1.2.3"},"authMethods":[],"protocolVersion":1}}
+agent→client {"id":1,"jsonrpc":"2.0","result":{"agentCapabilities":{"auth":{},"loadSession":true,"mcpCapabilities":{},"promptCapabilities":{},"sessionCapabilities":{"close":{},"list":{},"resume":{}}},"agentInfo":{"name":"gobble","title":"gobble","version":"1.2.3"},"authMethods":[],"protocolVersion":1}}
 client→agent {"id":2,"jsonrpc":"2.0","method":"session/new","params":{"cwd":"/work","mcpServers":[]}}
-agent→client {"id":2,"jsonrpc":"2.0","result":{"sessionId":"s1"}}
+agent→client {"id":2,"jsonrpc":"2.0","result":{"configOptions":[{"category":"thought_level","currentValue":"off","id":"thought_level","name":"Thinking","options":[{"name":"off","value":"off"},{"name":"minimal","value":"minimal"},{"name":"low","value":"low"},{"name":"medium","value":"medium"},{"name":"high","value":"high"},{"name":"xhigh","value":"xhigh"}],"type":"select"}],"sessionId":"s1"}}
 client→agent {"id":3,"jsonrpc":"2.0","method":"session/prompt","params":{"prompt":[{"text":"hello","type":"text"},{"text":"gobble","type":"text"}],"sessionId":"s1"}}
 agent→client {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"s1","update":{"content":{"text":"hello gobble","type":"text"},"sessionUpdate":"agent_message_chunk"}}}
 agent→client {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"s1","update":{"sessionUpdate":"usage_update","size":0,"used":22}}}

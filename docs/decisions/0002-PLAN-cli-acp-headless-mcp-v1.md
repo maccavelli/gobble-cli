@@ -1,6 +1,6 @@
 ---
 status: in-progress
-date: 2026-10-05
+date: 2026-10-06
 associated-madr: "0002-MADR-cli-acp-headless-mcp-v1.md"
 ---
 # Implement v1 as the native magic-cli-remote CLI: Kong over ACP, ACP stdio, MCP client
@@ -182,6 +182,8 @@ closed with an ACP error, not a panic. set_config_option (category
 `session/set_model` request gets MethodNotFound, which is asserted, not
 tolerated. Thinking mutability is
 live (applies in this session).
+
+*(2026-10-06: expanded into two executable parts in the Amendments entry "Phase 4 made executable" of this date. "A corrupt JSONL file fails closed" is read as 0005-MADR "Sessions (changed)" amends it: an unreadable header fails closed, and a malformed line is skipped with a diagnostic.)*
 
 ### Phase 5 — MCP client
 
@@ -490,6 +492,50 @@ Phases 3–8 have not run.
 * **Found, not this phase's:** `render.Style` does not style emphasis.
   * 0008-MADR D7 requires it, but 0008-PLAN's step for `Style` (`0008-PLAN-native-cli-mode.md:590`) left it out. The file, committed in `4e25c8a`, is untouched here.
   * The owner decided on 2026-10-05 to fix it as a dated 0008-PLAN follow-up, after this commit, as its own change.
+
+**Phase 4 Part A, 2026-10-06 — complete (staged; the owner commits).** It ran as expanded in the amendment "Phase 4 made executable", with the owner's three decisions of that date. Part B (the CLI flags and `--session` completion) has not run.
+
+* **Files.**
+  * `session`: `session.go`, `doc.go`, `memory.go` and `session_test.go`.
+  * `session/jsonl`: `store.go`, `lock.go`, `lock_unix.go`, `lock_windows.go`, `lock_other.go`, `doc.go` and `store_test.go`.
+  * `agent`: `agent.go` and `event.go`.
+  * `acpserver`: `agent.go`, `history.go`, `config.go`, `serve.go`, `agent_test.go`, `session_test.go` and `testdata/session.golden`.
+  * `llm/provider/ambient.go`; `internal/cli/agent.go` and `main.go`.
+  * `go.mod`: `golang.org/x/sys` becomes a direct requirement, which 0008-MADR D19 item 8 names.
+* **Accept**, each through `acptest.Connect` over a real `jsonl` store in a temporary directory:
+  * `TestLoadReplaysInANewAgent`: the replay is `user:read the notes`, `tool:read notes.md:completed`, `agent:it says forty-two`, then `usage`. The next request ends user, assistant, tool, assistant, user.
+  * `TestResumeWithoutReplay`: no updates, and the history is carried.
+  * `TestListSessions`: the `cwd` filter, the first prompt as title, a `_meta` name as title (`named\nsession` stored as `named session`), and a live session without a file.
+  * `TestCorruptSessions`: a malformed line is skipped. A bad header gives -32602, `not a valid session`.
+  * `TestConfigOptionsPersist`: the next request has model `m2` and thinking `high`, and a new agent restores both with no `set_config_option` call.
+  * `TestSetModelIsMethodNotFound`: a raw `session/set_model` gets -32601.
+  * `TestSecondWriterIsRefused`: -32600, `session <id> is open in another gobble process (pid N)`.
+  * `TestResultWrittenBeforeItsUpdate`: the result line is on disk when the terminal update is written.
+  * `TestNoFileWithoutConversation`: no file after `session/new`, nor after a prompt refused for want of a credential.
+  * `TestNewSessionMeta`: a chosen id, a name, and a fork whose `parentSession` is the source's absolute path. A duplicate id, an invalid id and an unknown source each give -32602.
+  * The store's own tests cover Pi's layout and file name, the lock with its pid, torn and malformed lines, fail-closed headers and versions, flat stores, and an unwritten session leaving nothing.
+* **Gates.**
+  * `make preflight` printed `preflight passed` on Windows and in WSL. WSL `go test -race ./...` exited 0 with 0 race reports, so the `flock` path is exercised there.
+  * Windows `go test ./...` showed no `FAIL`.
+  * `golangci-lint` printed `0 issues.` for linux, darwin and windows.
+  * The pre-add check was clean for all 22 Go files.
+* **Negative tests,** each on a scratch copy, each failing as expected:
+  * replay without the tool call: `session_test.go:106: replay user:read the notes,agent:it says forty-two,usage`;
+  * the writer lock not taken: `session_test.go:313: second writer: <nil>; want invalid request with "session … is open in another gobble process (pid …)"`;
+  * the tool result written after its update: `terminal update written true, result on disk then false`;
+  * the file created before any message: `store_test.go:64: files before any message: [--srv-work-proj--/2024-12-03T14-00-00-000Z_….jsonl …]`;
+  * the model change not applied: `session_test.go:238: request model "" thinking "high", want m2 and high`.
+* **What the plan predicted wrongly.**
+  1. **The first ordering test could not fail.** It checked the file from the client's update handler, but notifications are asynchronous, so the write usually landed first. With the update sent before the write, the test still passed. It now checks the file in a writer between the agent and its pipe, when the agent writes the frame, and fails as quoted above.
+  2. **The "file created at `session/new`" negative targets the store's lazy guard** (`TestLazyCreationAndLayout`): an agent-level `session/new` appends nothing, so it cannot show the mutation.
+  3. **Open logs must be closed when a connection ends.** Locks and files would otherwise stay held, and on Windows an open file cannot be removed. `Agent.Close` closes them, and `Serve` calls it.
+  4. **Files beyond Part A's list.**
+     * `llm/provider` gains `Models(id)`, for the model option's list.
+     * `internal/cli/main.go` gains a `store` field on `runEnv`.
+     * The jsonl store gains `PathOf`, so a fork records the source's absolute path as Pi does.
+     * The platform-independent lock code is in `lock.go`, and `lock_other.go` is a no-op for the GOOS values gobble does not ship.
+  5. **`session.Log.Entries` returns a slice, not Phase 1's iterator,** because a writer always holds its entries in memory. `Summarize`, `SortSummaries` and `HasConversation` are exported, so both stores list alike.
+  6. **Every entry is written with `parentId`, `null` at a root,** as Pi writes it, including an entry read without one.
 
 ## Amendments
 
@@ -893,3 +939,137 @@ The agent stages; the owner commits.
 * `os.Root` confinement and full tool parity (F1);
 * the CLI's permission prompt (Phase 6);
 * parallel tool batches, steering and follow-up queues (Phase 7 and the `agent` road map).
+
+**2026-10-06 — Phase 4 made executable, in two parts (owner's decisions: `_meta` for the new-session flags, resume without replay in the CLI, two staged parts).**
+
+The facts come from Pi's own source, read in full at `maccavelli/pi` `312184edb`, the commit report 0001 examined (owner's choice of source, 2026-10-06):
+* `packages/coding-agent/docs/session-format.md`;
+* `packages/coding-agent/docs/message-types.md`;
+* `packages/coding-agent/src/core/session-manager.ts`.
+
+They are:
+* A file is a header line `{"type":"session","version":3,"id","timestamp","cwd","parentSession"?}`, then one entry per line: `{type, id, parentId, timestamp, …}`, where `id` is 8 hex characters, collision-checked (`:277-284`), and `parentId` is `null` at a root.
+* Session ids are UUIDv7 and must match `^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$` (`:264-274`).
+* Files are named `<timestamp with : and . made ->_<id>.jsonl` (`:1079-1080`), in `--<cwd without its leading separator, with / \ : made ->--/` (`:589-594`). A custom session directory is flat, and is filtered by the header's `cwd` (`:1906-1914`).
+* A file is created only once a user or assistant message exists. Until then the entries stay in memory (`:1160-1189`). After that, each entry is one appended line.
+* Messages are Pi's `AgentMessage`:
+  * `user {content: string | blocks, timestamp}`;
+  * `assistant {content: [text | thinking | toolCall], api, provider, model, usage, stopReason, timestamp}`;
+  * `toolResult {toolCallId, toolName, content, isError, timestamp}`.
+* The leaf is the last entry in file order (`:1103-1121`). Context is the path from the leaf to the root through `parentId`. Model and thinking come from `model_change` and `thinking_level_change` on the path, and from assistant messages' `provider` and `model`; thinking defaults to `off` (`:418-433`).
+* Pi skips malformed lines and rejects only a file whose first line is not a session header (`:616-670`).
+
+**Superseded by 0005-MADR "Sessions (changed)"**, recorded here so the accept below is read correctly:
+* Phase 4's "a corrupt JSONL file fails closed" now means a file whose header is unreadable.
+* A malformed line is skipped with a diagnostic, as in Pi, and gobble never rewrites a file on load.
+
+The owner decided three questions on 2026-10-06:
+
+* **`--session-id`, `--fork` and `-n/--name` ride on `session/new`'s `_meta`,** as `{"gobble": {"sessionId", "forkFrom", "name"}}`.
+  * `_meta` is ACP's own extensibility point: no new method, and any client may use it.
+  * An invalid or duplicate id, or an unknown fork source, is invalid params.
+* **The CLI resumes without replay.** `-c` and `--session` use `session/resume`. The line session prints one line, `resumed <name or first prompt> (N messages)`. `session/load`'s compact replay (D19 item 5) is built and tested for ACP clients.
+* **Two staged parts,** each with its own gates, negative tests and execution entry, each committed by the owner.
+
+Choices made within the wording:
+* **Version.** Phase 4 reads and writes v3 only. A header with another version fails closed with `unsupported session version N`; v1 and v2 migration is 0005-PLAN F2.
+* **Unknown entries.** Entry types other than `message`, `model_change`, `thinking_level_change` and `session_info` are kept verbatim. They take no part in context until F2 (`compaction`, `context_edit`, `branch_summary`, `custom_message`) and Phase 6 (compaction).
+* **Location.** Sessions live in the data directory's `sessions/` (0003-MADR), laid out as Pi lays them out, so F2's import copies files as they are.
+* **What is written.**
+  * gobble writes no system-message entry: Pi loads sessions without one (session-format.md), and F3 owns the prompt.
+  * Assistant messages carry `api: "go-llmprovider-sdk"`, the provider id and the model. Usage is in Pi's shape with zero cost until the catalog; an estimate adds `"estimated": true`, an extra member Pi ignores.
+  * Thinking blocks carry Pi's `thinkingSignature` (or the encrypted payload with `redacted: true`), and keep gobble's full provider data under an extra `gobble` member. Tool calls carry `arguments` as an object, and `thoughtSignature`.
+* **Durability (D19 item 6).**
+  * The user's message is written before the turn starts.
+  * Each assistant message is written when its model call ends, before its tool calls are reported.
+  * Each tool result is written before its terminal `tool_call_update` is sent.
+  * Each write is one unbuffered `write` of one line.
+* **The writer lock (D19 item 8).**
+  * The writer holds an exclusive lock on a sidecar `<file>.lock` that holds its pid: `flock` on Unix, and `LockFileEx` on a range past the data on Windows, so the pid stays readable. Both go through `golang.org/x/sys`, which 0008-MADR D19 names.
+  * Readers (`session/list`, a fork's source) take no lock.
+  * A second writer gets `ErrLocked{ID, PID}`, which ACP returns as invalid request, `session <id> is open in another gobble process (pid N)`. Part B makes it exit 1.
+* **Config options (D19 item 4).** `model` and `thought_level` are ungrouped `select` options with `category` set.
+  * `model` lists the ambient provider's curated models and appears only when a provider is chosen.
+  * `thought_level` lists `off, minimal, low, medium, high, xhigh`.
+  * A change writes `model_change` or `thinking_level_change`, and applies from the next prompt (the model through `llm.Request.Model`, thinking through `llm.Request.Thinking`).
+  * On load, the saved model is restored when its provider is the current one; otherwise the current provider's default is used and nothing is written.
+* **`session/list`** returns sessions that have a file, plus the live ones in this process, newest first. A title is the session name, else the first user prompt cut to 60 runes. There is no paging.
+
+**Part A** (files: `session/session.go`, `doc.go`, `memory.go`, `path.go` and tests; `session/jsonl/store.go`, `log.go`, `lock_unix.go`, `lock_windows.go`, `doc.go` and tests; `agent/agent.go` and `event.go`; `acpserver/agent.go`, `history.go`, `config.go` and tests; `internal/cli/agent.go`; `go.mod` and `go.sum`):
+
+1. **`session`:**
+   * `Header`, `Entry`, `Message`, `Block`, `Usage` and `Cost` in Pi's v3 shapes, each with a `json:",embed"` `Unknown` member, so unknown members round-trip.
+   * `NewEntryID`, `ValidID`, and `Path(entries) []Entry` (leaf to root, in order).
+   * The `Store` and `Log` contracts, with `Log.Close` releasing the writer, and `Store.Read` for a reader.
+   * `NewMemoryStore()` for `--no-session` and tests.
+2. **`session/jsonl`:** `New(dir string, o Options{Flat bool; Now func() time.Time; Logger *slog.Logger}) *Store`. It provides:
+   * lazy creation, opening with the lock, and listing with the `cwd` filter;
+   * a skip-and-warn reader;
+   * the fail-closed header and version check.
+3. **`agent`:**
+   * `Config.Thinking`, sent as `llm.Request.Thinking`.
+   * A `Message{Message, Usage, StopReason}` event after each model call, before its tools run.
+   * Tool results carry `ToolName`.
+4. **`acpserver`:**
+   * `Options` gains `Store session.Store` (nil is a memory store), `Models func() ModelChoice` and `Now func() time.Time`.
+   * Capabilities: `loadSession`, `sessionCapabilities.list`, `resume` and `close`.
+   * `NewSession` (with `_meta`), `Prompt` (writing as above), and `LoadSession` (compact replay, then a `usage_update` snapshot).
+   * `ResumeSession`, `ListSessions`, `CloseSession` (releasing the lock), and `SetSessionConfigOption`.
+5. **`internal/cli`:** the agent's store is `jsonl.New(<data>/sessions)` for `gobble acp` and the in-process agent, with the ambient provider's `ModelChoice`.
+
+**Part A accept,** through `acptest.Connect`, and over `gobble acp` where named:
+* `NewSession` → `Prompt` (with a tool call) → `CloseSession` → `LoadSession` in a **new** `Agent` over the same directory:
+  * the replay is one `user_message_chunk`, one `agent_message_chunk` per assistant message, one `tool_call` in its final state, then `usage_update`;
+  * a next prompt sends the whole history to the model.
+* `ResumeSession` continues with no replay. `ListSessions` includes the id, with its title, and filters by `cwd`.
+* A file whose header is unreadable fails closed with an ACP error. A malformed middle line is skipped, and the load succeeds.
+* `set_config_option` with `model` changes the model the next request names. A load in a new `Agent` continues with the saved model, with no `set_config_option` call. `thought_level` applies to the next prompt of the same session.
+* A raw `session/set_model` request gets -32601, asserted.
+* A second `Agent` loading a session the first holds gets the lock error, with the first's pid.
+* The terminal `tool_call_update` is sent only after its `toolResult` line is on disk: the test client reads the file when the update arrives.
+* No file exists after `session/new` alone, nor after a prompt refused for want of a credential.
+
+Each is shown failing first on a scratch copy, the failure quoted:
+* replay missing the tool call;
+* the lock not taken;
+* the tool result written after its update;
+* the file created at `session/new`;
+* the model change not applied.
+
+**Part B** (files: `acpclient/conn.go` and tests; `internal/cli/chat.go`, `flags.go`, `line.go`, `print.go`, `completion.go` and tests):
+
+1. **`acpclient`:**
+   * `ResumeSession`, `ListSessions` and `NewSession` options (`ID`, `ForkFrom`, `Name`) through `_meta`;
+   * `ErrSessionLocked`, carrying the agent's message.
+2. **`internal/cli`:** the seven flags leave `laterFlags`.
+   * `-c` resumes the newest session for the `cwd`.
+   * `--session` takes a path (its header's id, which must be in the store), an id, or a unique prefix of an id or name. It is ambiguous or not found → exit 2.
+   * `--session-id`, `--fork` and `-n` go through `_meta`.
+   * `--no-session` uses a memory store; `--session-dir` uses a flat `jsonl.New(dir, Flat)`.
+   * A locked session exits 1 with `Error: session <id> is open in another gobble process (pid N)`.
+   * The line session prints the `resumed …` line.
+3. **Completion:** `--session` and `--fork` complete from the store, newest first, keep-order, described as `name · date · cwd`. A test over `GOBBLE_COMPLETE` checks that nothing is created.
+
+**Part B accept:**
+* each flag through `Main` against a real `acpserver` with a scripted provider;
+* the D12 conflicts, unchanged;
+* exit 1 on a lock;
+* the 0008-MADR Confirmation line for `GOBBLE_COMPLETE=bash … --session`.
+
+Shown failing first:
+* `-c` picking the oldest;
+* a prefix matching two sessions accepted;
+* `--no-session` writing a file.
+
+**Verification, each part.**
+* `go test ./...`;
+* `golangci-lint` for linux, darwin and windows;
+* `make preflight` on Windows and in WSL, and WSL `go test -race ./...`.
+
+The agent stages; the owner commits.
+
+**Deferred from Phase 4, named:**
+* v1 and v2 migration, compaction, context edits, branches, labels, fork and clone over the tree, and Pi import (0005-PLAN F2, and Phase 6 for compaction);
+* replay in the CLI (owner's decision);
+* paging in `session/list` (until a list is long enough to need it);
+* `session_info_update` for names (Phase 6, with `/name`).

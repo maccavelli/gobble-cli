@@ -17,6 +17,7 @@ import (
 	"github.com/maccavelli/gobble-cli/internal/cli/complete"
 	"github.com/maccavelli/gobble-cli/internal/cli/term"
 	"github.com/maccavelli/gobble-cli/internal/logging"
+	"github.com/maccavelli/gobble-cli/session"
 	"github.com/maccavelli/gobble-cli/tool"
 )
 
@@ -137,6 +138,8 @@ type runEnv struct {
 	now func() time.Time
 	// tools are the in-process agent's tools; nil is the built-ins.
 	tools []tool.Tool
+	// store is the agent's session store, opened on first use.
+	store session.Store
 }
 
 func (e *runEnv) log() *slog.Logger { return e.logs.get() }

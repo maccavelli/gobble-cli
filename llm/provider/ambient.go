@@ -66,5 +66,16 @@ func CredentialVars() []string {
 	return vars
 }
 
+// Models are the curated models of the built-in provider id, in the SDK's
+// order, or none for an unknown id.
+func Models(id string) []string {
+	for _, d := range providers.Default().Descriptors() {
+		if string(d.ID) == id {
+			return slices.Clone(d.StaticModels)
+		}
+	}
+	return nil
+}
+
 // IsNoCredential reports whether err is Ambient's missing-credential error.
 func IsNoCredential(err error) bool { return errors.Is(err, ErrNoCredential) }

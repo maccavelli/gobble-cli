@@ -1,0 +1,148 @@
+package session
+
+import (
+	"encoding/json/jsontext"
+	"encoding/json/v2"
+	"errors"
+	"strings"
+	"testing"
+	"time"
+)
+
+// Lines in Pi's shapes (session-format.md, message-types.md at 312184edb,
+// with valid JSON) decode, and an unchanged re-encode is the same JSON.
+func TestPiShapesRoundTrip(t *testing.T) {
+	lines := []string{
+		`{"type":"session","version":3,"id":"019a1b2c-0000-7000-8000-000000000001","timestamp":"2024-12-03T14:00:00.000Z","cwd":"/path/to/project","parentSession":"/p/s.jsonl"}`,
+		`{"type":"message","id":"a1b2c3d4","parentId":null,"timestamp":"2024-12-03T14:00:01.000Z","message":{"role":"user","content":"Hello","timestamp":1733234401000}}`,
+		`{"type":"message","id":"b2c3d4e5","parentId":"a1b2c3d4","timestamp":"2024-12-03T14:00:02.000Z","message":{"role":"assistant","content":[{"type":"thinking","thinking":"hm","thinkingSignature":"sig"},{"type":"text","text":"Hi!"},{"type":"toolCall","id":"call_123","name":"bash","arguments":{"command":"ls"}}],"api":"anthropic-messages","provider":"anthropic","model":"claude-sonnet-4-5","usage":{"input":10,"output":5,"cacheRead":0,"cacheWrite":0,"totalTokens":15,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"toolUse","timestamp":1733234402000}}`,
+		`{"type":"message","id":"c3d4e5f6","parentId":"b2c3d4e5","timestamp":"2024-12-03T14:00:03.000Z","message":{"role":"toolResult","toolCallId":"call_123","toolName":"bash","content":[{"type":"text","text":"output"}],"isError":false,"timestamp":1733234403000}}`,
+		`{"type":"model_change","id":"d4e5f6a7","parentId":"c3d4e5f6","timestamp":"2024-12-03T14:05:00.000Z","provider":"openai","modelId":"gpt-4o"}`,
+		`{"type":"thinking_level_change","id":"e5f6a7b8","parentId":"d4e5f6a7","timestamp":"2024-12-03T14:06:00.000Z","thinkingLevel":"high"}`,
+		`{"type":"compaction","id":"f6a7b8c9","parentId":"e5f6a7b8","timestamp":"2024-12-03T14:10:00.000Z","summary":"User discussed X","firstKeptEntryId":"c3d4e5f6","tokensBefore":50000}`,
+		`{"type":"label","id":"a7b8c9d0","parentId":"f6a7b8c9","timestamp":"2024-12-03T14:30:00.000Z","targetId":"a1b2c3d4","label":"checkpoint-1"}`,
+		`{"type":"session_info","id":"b8c9d0e1","parentId":"a7b8c9d0","timestamp":"2024-12-03T14:35:00.000Z","name":"Refactor auth module"}`,
+		`{"type":"custom","id":"c9d0e1f2","parentId":"b8c9d0e1","timestamp":"2024-12-03T14:20:00.000Z","customType":"my-extension","data":{"count":42}}`,
+	}
+	for i, line := range lines {
+		var v any = &Entry{}
+		if i == 0 {
+			v = &Header{}
+		}
+		if err := json.Unmarshal([]byte(line), v); err != nil {
+			t.Fatalf("line %d: %v", i, err)
+		}
+		out, err := json.Marshal(v)
+		if err != nil {
+			t.Fatalf("line %d: %v", i, err)
+		}
+		want, got := jsontext.Value(line), jsontext.Value(out)
+		if err := want.Canonicalize(); err != nil {
+			t.Fatal(err)
+		}
+		if err := got.Canonicalize(); err != nil {
+			t.Fatal(err)
+		}
+		if string(got) != string(want) {
+			t.Errorf("line %d changed:\n got %s\nwant %s", i, got, want)
+		}
+	}
+}
+
+func TestBlocksAndText(t *testing.T) {
+	m := Message{Role: RoleUser, Content: jsontext.Value(`"hello there"`)}
+	if bs, err := m.Blocks(); err != nil || len(bs) != 1 || bs[0].Text != "hello there" || m.Text() != "hello there" {
+		t.Fatalf("string content: %+v, %v", bs, err)
+	}
+	if err := m.SetBlocks([]Block{{Type: BlockText, Text: "a"}, {Type: BlockImage, Data: "AA==", MimeType: "image/png"}, {Type: BlockText, Text: "b"}}); err != nil {
+		t.Fatal(err)
+	}
+	if m.Text() != "a b" {
+		t.Fatalf("text %q", m.Text())
+	}
+}
+
+func TestPath(t *testing.T) {
+	p := func(s string) *string { return &s }
+	entries := []Entry{
+		{Type: TypeMessage, ID: "a"},
+		{Type: TypeMessage, ID: "b", ParentID: p("a")},
+		{Type: TypeMessage, ID: "c", ParentID: p("b")},
+		{Type: TypeMessage, ID: "d", ParentID: p("a")}, // a branch from a: the leaf
+	}
+	var ids []string
+	for _, e := range Path(entries) {
+		ids = append(ids, e.ID)
+	}
+	if strings.Join(ids, ",") != "a,d" {
+		t.Fatalf("path %v, want a,d", ids)
+	}
+	if Path(nil) != nil {
+		t.Fatal("empty path")
+	}
+	// A missing parent ends the path; a cycle does not loop.
+	cyc := []Entry{{Type: TypeMessage, ID: "x", ParentID: p("y")}, {Type: TypeMessage, ID: "y", ParentID: p("x")}}
+	if got := Path(cyc); len(got) != 2 {
+		t.Fatalf("cycle path %+v", got)
+	}
+}
+
+func TestIDs(t *testing.T) {
+	for id, ok := range map[ID]bool{"019a-ok": true, "a": true, "a.b_c-1": true, "": false, "-a": false, "a-": false, "a/b": false} {
+		if ValidID(id) != ok {
+			t.Errorf("ValidID(%q) = %v", id, !ok)
+		}
+	}
+	taken := map[string]bool{}
+	for range 50 {
+		id := NewEntryID(func(s string) bool { return taken[s] })
+		if len(id) != 8 || taken[id] {
+			t.Fatalf("entry id %q", id)
+		}
+		taken[id] = true
+	}
+	if NewEntryID(func(string) bool { return true }) == "" {
+		t.Fatal("no fallback id")
+	}
+	if got := Timestamp(time.Date(2024, 12, 3, 14, 0, 1, 5e6, time.UTC)); got != "2024-12-03T14:00:01.005Z" {
+		t.Fatalf("timestamp %q", got)
+	}
+}
+
+func TestMemoryStore(t *testing.T) {
+	s := NewMemoryStore()
+	ctx := t.Context()
+	l, err := s.Create(ctx, Header{Type: TypeHeader, Version: Version, ID: "s1", Timestamp: "2024-12-03T14:00:00.000Z", Cwd: "/w"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Create(ctx, Header{ID: "s1"}); !errors.Is(err, ErrExists) {
+		t.Fatalf("duplicate create: %v", err)
+	}
+	if _, err := s.Open(ctx, "s1"); !errors.As(err, new(*ErrLocked)) {
+		t.Fatalf("second writer: %v", err)
+	}
+	user := &Message{Role: RoleUser, Content: jsontext.Value(`"hi"`), Timestamp: 1733234401000}
+	if err := l.Append(ctx, Entry{Type: TypeMessage, ID: "e1", Message: user}); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.Close(); err != nil {
+		t.Fatal(err)
+	}
+	var got []Summary
+	for sum, err := range s.List(ctx, Filter{Cwd: "/w"}) {
+		if err != nil {
+			t.Fatal(err)
+		}
+		got = append(got, sum)
+	}
+	if len(got) != 1 || got[0].First != "hi" || got[0].Messages != 1 {
+		t.Fatalf("list %+v", got)
+	}
+	if _, err := s.Open(ctx, "s1"); err != nil {
+		t.Fatalf("reopen after close: %v", err)
+	}
+	if _, _, _, err := s.Read(ctx, "nope"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("read unknown: %v", err)
+	}
+}

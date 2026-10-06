@@ -2,6 +2,7 @@ package acpserver
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 
@@ -29,8 +30,8 @@ func Serve(ctx context.Context, in io.Reader, out io.Writer, opts ServeOptions) 
 	agent.SetConnection(conn)
 	select {
 	case <-conn.Done():
-		return nil
+		return agent.Close()
 	case <-ctx.Done():
-		return context.Cause(ctx)
+		return errors.Join(context.Cause(ctx), agent.Close())
 	}
 }

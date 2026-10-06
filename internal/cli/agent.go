@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -11,6 +12,8 @@ import (
 	"github.com/maccavelli/gobble-cli/acpserver"
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/llm/provider"
+	"github.com/maccavelli/gobble-cli/session"
+	"github.com/maccavelli/gobble-cli/session/jsonl"
 	"github.com/maccavelli/gobble-cli/tool"
 	"github.com/maccavelli/gobble-cli/tool/builtin"
 )
@@ -29,9 +32,43 @@ var modelProvider = func(e *runEnv) func() (llm.Provider, error) {
 }
 
 // agentOptions are gobble's agent's options, for `gobble acp` and the
-// in-process agent alike.
+// in-process agent alike: the ambient provider and its model choice, and
+// the session store in the data directory.
 func (e *runEnv) agentOptions() acpserver.Options {
-	return acpserver.Options{Version: identity().Version, Provider: modelProvider(e), Tools: e.tools}
+	return acpserver.Options{
+		Version:  identity().Version,
+		Provider: modelProvider(e),
+		Models:   modelChoice,
+		Tools:    e.tools,
+		Store:    e.sessionStore(),
+	}
+}
+
+// modelChoice is the ambient provider's curated models, its first the
+// default; none without a credential.
+func modelChoice() acpserver.ModelChoice {
+	sel, err := provider.Choose(os.Getenv)
+	if err != nil {
+		return acpserver.ModelChoice{}
+	}
+	return acpserver.ModelChoice{Provider: sel.ID, Models: provider.Models(sel.ID), Default: sel.Model}
+}
+
+// sessionStore is the store sessions are kept in: <data>/sessions
+// (0003-MADR), laid out as Pi lays out its own. Without a data directory
+// sessions are kept in memory, with a warning.
+func (e *runEnv) sessionStore() session.Store {
+	if e.store != nil {
+		return e.store
+	}
+	dirs, _, err := systemDirs()
+	if err != nil {
+		e.out.Warnf("sessions are not saved: %v", err)
+		e.store = session.NewMemoryStore()
+		return e.store
+	}
+	e.store = jsonl.New(filepath.Join(dirs.Data, "sessions"), jsonl.Options{Logger: e.log()})
+	return e.store
 }
 
 // agentServe is the agent gobble's own modes drive: gobble's agent, in this

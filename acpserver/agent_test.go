@@ -89,19 +89,21 @@ func TestSession(t *testing.T) {
 	c.Recorder.Golden(t, filepath.Join("testdata", "session.golden"))
 }
 
-// The advertised set is exactly what this phase implements. A later phase
-// that turns a capability on changes this test on purpose (0002-PLAN
-// amendment of 2026-10-05).
+// The advertised set is exactly what is implemented. A later phase that
+// turns a capability on changes this test on purpose (0002-PLAN amendment
+// of 2026-10-05). Phase 4 turned on loading, listing and resuming.
 func TestCapabilitiesAreHonest(t *testing.T) {
 	c, _ := connect(t)
 	got := initialize(t, c.Client).AgentCapabilities
 	switch {
-	case got.LoadSession:
-		t.Error("loadSession advertised before 0002-PLAN Phase 4 implements it")
-	case got.SessionCapabilities.List != nil, got.SessionCapabilities.Resume != nil:
-		t.Error("session list or resume advertised before Phase 4")
+	case !got.LoadSession:
+		t.Error("loadSession is implemented (Phase 4) and must be advertised")
+	case got.SessionCapabilities.List == nil, got.SessionCapabilities.Resume == nil:
+		t.Error("session list and resume are implemented (Phase 4) and must be advertised")
 	case got.SessionCapabilities.Close == nil:
 		t.Error("session close is implemented and must be advertised")
+	case got.SessionCapabilities.Fork != nil, got.SessionCapabilities.Delete != nil:
+		t.Error("session fork or delete advertised; neither is implemented")
 	case got.McpCapabilities.Http, got.McpCapabilities.Sse:
 		t.Error("MCP transports advertised before Phase 5")
 	case got.PromptCapabilities.Image, got.PromptCapabilities.Audio, got.PromptCapabilities.EmbeddedContext:
@@ -141,9 +143,9 @@ func TestErrors(t *testing.T) {
 	if code := requestCode(t, err); code != -32602 {
 		t.Fatalf("close of an unknown session: code %d, want -32602", code)
 	}
-	_, err = c.Client.ListSessions(t.Context(), acp.ListSessionsRequest{})
+	_, err = c.Client.SetSessionMode(t.Context(), acp.SetSessionModeRequest{SessionId: "nope", ModeId: "plan"})
 	if code := requestCode(t, err); code != -32601 {
-		t.Fatalf("session/list: code %d, want -32601 (not advertised)", code)
+		t.Fatalf("session/set_mode: code %d, want -32601 (Phase 6)", code)
 	}
 	if _, err := c.Client.Authenticate(t.Context(), acp.AuthenticateRequest{MethodId: "x"}); requestCode(t, err) != -32601 {
 		t.Fatal("authenticate is not offered")

@@ -34,6 +34,15 @@ type ToolEnd struct {
 // Usage is one model call's token count.
 type Usage struct{ llm.Usage }
 
+// Message is the assistant message of one model call, complete, with that
+// call's usage and stop reason. It comes before the call's tools run, so a
+// caller can record it first (0008-MADR D19 item 6).
+type Message struct {
+	Message    llm.Message
+	Usage      llm.Usage
+	StopReason llm.StopReason
+}
+
 // End is the turn's last event. Messages are the turn's messages, the
 // prompt first, for the caller to append to the history; Usage sums the
 // turn's model calls.
@@ -49,6 +58,7 @@ func (ToolStart) event()     {}
 func (ToolRun) event()       {}
 func (ToolEnd) event()       {}
 func (Usage) event()         {}
+func (Message) event()       {}
 func (End) event()           {}
 
 // StopReason is why a turn ended. The values are ACP's stop reasons.
