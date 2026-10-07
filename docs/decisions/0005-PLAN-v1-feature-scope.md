@@ -333,6 +333,7 @@ API.
    of 0005-MADR with its test name and the last CI result. Mark each row
    stable or beta per 0004-MADR. Promote stable packages. Run `apidiff`
    against the last pre-release tag and record its output.
+   *(2026-10-07: the comparison is written here. Until it is, `make apidiff` is a no-op below `v1.0.0` and fails on a `v1.0.0` or later tag, naming it; 0004-PLAN Phase 5. It needs the previous tag, so CI then fetches tags, which its shallow checkout does not do today.)*
 
 **Accept:**
 

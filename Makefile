@@ -1,6 +1,6 @@
 # gobble-cli toolchain (0004-PLAN phase 0).
 # Target names follow magic-cli-remote. apidiff is present and a no-op
-# until the first tag.
+# below v1.0.0.
 MODULE := github.com/maccavelli/gobble-cli
 # Recipes need bash (for pipefail) and grep, diff, cp and mv. On Windows
 # that is Git's bash, and Git's usr/bin goes on PATH because Git bash does
@@ -160,7 +160,7 @@ FILES ?=
 pre-add-check:
 	bash scripts/go-precheck.sh $(FILES)
 
-# Every gate. apidiff is a no-op until the first tag.
+# Every gate. apidiff is a no-op below v1.0.0.
 preflight: check-cgo-off
 	@echo "==> gofmt"; \
 	unformatted="$$(gofmt -l .)"; \
@@ -244,10 +244,12 @@ archtest:
 		echo "archtest: no-op until phase 1"; \
 	fi
 
-# No-op until the first tag (0004-PLAN phase 0).
+# A no-op below v1.0.0: 0004-MADR covers stable packages from v1.0.0. From
+# then it fails until 0005-PLAN F10 step 6 writes the comparison.
 apidiff:
-	@if git describe --tags --exact-match >/dev/null 2>&1 || git tag -l 'v*' | grep -q .; then \
-		echo "apidiff: a tag exists; phase 0 leaves the comparison unimplemented" >&2; \
+	@stable="$$(git tag -l 'v*' | grep -E '^v[1-9][0-9]*\.[0-9]+\.[0-9]+$$' || true)"; \
+	if [ -n "$$stable" ]; then \
+		echo "apidiff: tags at or above v1.0.0 exist ($$(echo $$stable)); the comparison is not written yet (0005-PLAN F10 step 6)" >&2; \
 		exit 1; \
 	fi; \
-	echo "apidiff: no-op until the first tag"
+	echo "apidiff: no-op below v1.0.0"

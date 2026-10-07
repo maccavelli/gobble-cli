@@ -1,6 +1,6 @@
 ---
 status: accepted
-date: 2026-10-05
+date: 2026-10-07
 decision-makers: repository owner
 consulted: goose-cli source (aaif-goose/goose 591edd4); Pi coding-agent source (earendil-works/pi f5d2004 and the fork at 312184e); go-tui-lib, go-selfupdate-lib, go-llmprovider-sdk, magic-cli-remote, mcp-server-magictools and prepare-commit-msg sources; Kong v1.16.1; golang.org/x/term v0.46.0
 informed: none
@@ -64,7 +64,7 @@ All reading was read-only. Nothing was executed except the commands named here, 
 7. **gobble's import rules**, `internal/archtest/check.go`:
    - Rule 5 (`:253-275`) lets only `internal/tui` import `charm.land/…`, `github.com/charmbracelet/…` or any `github.com/maccavelli/go-tui-lib` package. The one exception is `tuitest` in tests.
    - Rule 6 (`:277-289`) forbids `internal/cli` from importing `agent`.
-   - Rule 2 (`:200-218`) keeps `github.com/coder/acp-go-sdk` in `acpserver`, `acpclient` and the root `tools.go`.
+   - Rule 2 (`:200-218`) keeps `github.com/coder/acp-go-sdk` in `acpserver`, `acpclient` and the root `tools.go`. *(2026-10-07: `tools.go` is deleted, and rule 2 no longer exempts the module root; 0004-PLAN Phase 5.)*
    - Rule 8 (`:306-322`) keeps go-selfupdate-lib in `internal/cli`.
    - No rule mentions `alecthomas/kong`.
 8. **go-tui-lib.** The local checkout's `main` is a one-file tree. The library is on `origin/main` at `45ead16` (2026-10-04), `v0.2.0-5-g45ead16`; the newest tag is `v0.2.0`.

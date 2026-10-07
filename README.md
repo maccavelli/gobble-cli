@@ -41,6 +41,7 @@ The decisions below are `proposed`. 0004-PLAN Phase D, Phase 0, and Phase 1 have
 | see everything that is in v1, and at which tier | [0005-MADR](docs/decisions/0005-MADR-v1-feature-scope.md) |
 | see the build order | [docs/README.md](docs/README.md#build-order) |
 | see what this repository contains today | [architecture.md](docs/architecture.md) |
+| build gobble, run the gates, or add a package | [developing.md](docs/guides/developing.md) |
 | see the current sibling-library inventory and integration boundary | [architecture.md](docs/architecture.md#sibling-sources), [0004-MADR](docs/decisions/0004-MADR-go-module-architecture.md), [0005-PLAN](docs/decisions/0005-PLAN-v1-feature-scope.md) |
 
 Stack for v1:

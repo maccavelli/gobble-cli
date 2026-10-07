@@ -34,7 +34,7 @@ func TestImportRules(t *testing.T) {
 			Imports:    []string{"github.com/maccavelli/go-llmprovider-sdk/llmprovider"},
 		}}},
 		{name: "rule 2 module", rule: 2},
-		{name: "rule 2 root pin", rule: 2, pkgs: []modPkg{{
+		{name: "rule 2 root", rule: 2, want: "acp-go-sdk", pkgs: []modPkg{{
 			ImportPath: modulePath,
 			Imports:    []string{"github.com/coder/acp-go-sdk"},
 		}}},

@@ -128,7 +128,7 @@ checks. Phases 0–5 retain their separate approval and execution order.
    * `verify-build-metadata`
    * `fix-check` (`go fix -diff ./...` must be empty)
    * `archtest`
-   * `apidiff` (no-op until the first tag)
+   * `apidiff` (no-op until the first tag) *(2026-10-07: no-op below `v1.0.0`, and failing from `v1.0.0` until 0005-PLAN F10 step 6 writes the comparison; see "Phase 5 made executable")*
 6. Write `scripts/go-precheck.sh`: gofmt (not gofumpt), per-file golint,
    and govulncheck (`GO_PRECHECK_SKIP_VULN=1` skips it). This is the same
    contract as the fleet script and the global pre-add hook.
@@ -408,6 +408,8 @@ by a throwaway script run in the scratchpad that diffs `go list ./...`
 against the document. The script is shown failing on a copy of the
 document with one package deleted.
 
+*(2026-10-07: made executable in the entry "Phase 5 made executable" of this date, which also carries the owner's two decisions of that date: the `apidiff` guard, and deleting `tools.go`.)*
+
 ## Verification
 
 After Phase 5, from a clean clone:
@@ -419,6 +421,8 @@ go test -race ./...
 make release-dry-run
 ./dist/gobble-$(go env GOOS)-$(go env GOARCH) version --json   # append .exe on windows
 ```
+
+*(2026-10-07: `make release-dry-run` was struck with Phase 4 step 3. Its two lines are replaced by the CI rehearsal of every push, recorded under Phase 4 steps 2–4.)*
 
 Capture exit status before any filter (global rule). Each gate added in
 this plan (check-cgo-off, archtest, the stdout-purity test, the round-trip
@@ -668,6 +672,7 @@ relative. `go-llmprovider-sdk`, `go-core-lib`, and `go-selfupdate-lib`
 are not required. Root `tools.go` blank-imports the ACP module so
 `go mod tidy` keeps that requirement; it is not a package from the
 package map, and it adds no package directory.
+*(2026-10-07: `tools.go` is deleted by Phase 5. `acpserver` and `acpclient` import the SDK, which keeps the requirement.)*
 
 `make check-cgo-off` failed on an uncommitted scratch file
 `scratch_cgo_phase0.go` whose third line was `import "C"`:
@@ -1045,7 +1050,7 @@ The agent stages; the owner commits and pushes.
 * to the owner: the first release tag;
 * to a later record: SBOM attestation, which the publish workflow does not make (0004-MADR:798).
 
-**Phase 4 steps 2–4, 2026-10-07 — built and staged; the CI rehearsal waits for the owner's push.** It ran as the entry above wrote it, with the owner's decision 5, five platforms, written into the entry before any code.
+**Phase 4 steps 2–4, 2026-10-07 — complete; the CI rehearsal passed (run 37677754325).** It ran as the entry above wrote it, with the owner's decision 5, five platforms, written into the entry before any code.
 
 * **Files.**
   * `.github/workflows/ci.yml`: the `sbom`, `build` and `release` jobs.
@@ -1068,9 +1073,181 @@ The agent stages; the owner commits and pushes.
   * darwin/amd64 put back: `release_test.go:39: targets [{darwin amd64} {darwin arm64} …], want [{darwin arm64} …]`;
   * `--identity` printing gobble's own version: `main_test.go:200: exit 0, stdout "1.2.3\n"`;
   * `build` needing an undefined job: `ci.yml:143:3: job "build" needs job "bom" which does not exist in this workflow [job-needs]`.
-* **Still open:** the CI run on the owner's push. It must show `validate` on three runners, `sbom`, and `build` as a rehearsal with its five identity jobs, and `release` skipped. It is recorded here when it exists.
+* ~~**Still open:** the CI run on the owner's push. It must show `validate` on three runners, `sbom`, and `build` as a rehearsal with its five identity jobs, and `release` skipped. It is recorded here when it exists.~~
+* **The CI rehearsal,** run 37677754325 on the owner's push of `2513638`, concluded `success`:
+  * `validate` passed on `ubuntu-24.04`, `macos-15` and `windows-2025`;
+  * `sbom` passed, printing `SPDX-2.3: 29 packages`;
+  * `build / build` set `rehearsal=true` and stamped `rehearsal-2513638e2cea`;
+  * the five `build / identity` jobs passed, each printing `reports "rehearsal-2513638e2cea (local) 2513638e2cea"` for its binary;
+  * `release` was skipped;
+  * the full log has no `##[error]` or `##[warning]` line.
 * **What the entry predicted wrongly.**
   1. **Four negatives, not three.** The darwin/amd64 one came with the owner's decision 5.
   2. **`--identity` and `--json` exclude each other through Kong's `xor`,** so the parser refuses the pair with exit 2. No check of its own in `Run`.
   3. **The dependency graph's package count moves** (28, then 27) as GitHub re-parses the repository. The job checks for go-selfupdate-lib by name, not for a count.
   4. **My negative harness assumed every edit removes its anchor.** An insertion keeps it, so the darwin case asserts that the new text landed instead.
+
+**2026-10-07 — Phase 5 made executable (owner's decisions of 2026-10-07: `apidiff` is a no-op below `v1.0.0`; `tools.go` is deleted in this phase).**
+
+Phase 5's three steps name their documents but not their content or checks. They are expanded here before execution. The steps above are kept as written; where this text differs, this text is the step to follow.
+
+The facts:
+* **architecture.md** was rewritten by 0002-PLAN Phase 8. Its package table names every package `go list ./...` prints except the module root, and it has no tier column. A scratchpad script found this, reading each `doc.go`.
+* **Every package's `doc.go` has a `Stability:` line,** one of `stable`, `beta`, `internal` or `experimental`. The 23 packages in 0004-MADR's package map that it tiers carry the same tier there. `mcpclient/mcptest` (`beta`) is not in the MADR's map. The root package `tools` has no `doc.go`.
+* **Root `tools.go` is obsolete.** It blank-imports `github.com/coder/acp-go-sdk` "so go mod tidy keeps the requirement" (Phase 0's resolved versions, above), but `acpserver`, `acpclient` and `acpclient/acptest` now import the SDK. It survives as the module-root package `tools`, which `go list ./...` prints. Archtest rule 2 exempts it with `rel == "."` (`internal/archtest/check.go:215-217`), ~~and nothing tests that exemption~~. *(Deviation 1, below: `check_test.go:37-40` tests it.)*
+* **`make apidiff` fails as soon as any `v*` tag exists.** On a scratch clone it printed `apidiff: no-op until the first tag` and exited 0, then after `git tag v0.1.0` printed `apidiff: a tag exists; phase 0 leaves the comparison unimplemented` and exited 2. `make preflight` runs it, and so does CI's `validate` job, which `build` needs. A tag push checks out the tag, so the first release would very likely stop in `validate`. That is inferred from `actions/checkout` fetching the pushed ref; no tag has been pushed. 0004-MADR covers stable packages with `apidiff` "from `v1.0.0`" (its package map), and 0005-PLAN F10 step 6 runs it at the `v1.0.0` gate.
+* **No `live_<provider>` test exists yet.** The convention is in `llm/llmtest`'s package comment and `LiveCredential` (Phase 3 step 4).
+* **`docs/guides/` does not exist.** `docs/README.md` says the first guide is `developing.md`, from this phase.
+
+The owner decided two questions on 2026-10-07:
+1. **`apidiff` is a no-op below `v1.0.0`.** The guard fires only on a tag of the form `vMAJOR.MINOR.PATCH` with `MAJOR` at least 1, which is where 0004-MADR starts the stable promise. A prerelease such as `v1.0.0-rc.1` precedes `v1.0.0`, so it stays below the guard. From `v1.0.0` the target still fails loudly, naming the tags, until 0005-PLAN F10 step 6 writes the comparison. So `v0.x` releases work at once, and the stable promise cannot pass unchecked.
+2. **`tools.go` is deleted in this phase.** Rule 2's root exemption goes with it.
+
+Choices made within the wording:
+* **Step 1, architecture.md.**
+  * The package table gains a **Tier** column, holding each `doc.go`'s `Stability:` value.
+  * A sentence above the table says what the tiers mean, in 0004-MADR's words: stable packages are covered by `apidiff` from `v1.0.0`; beta packages are public and may change in a minor release; internal and experimental packages carry no promise.
+  * "The module root holds only the tool requirements" becomes "The module root holds no package; `go.mod` carries the `tool` directives."
+  * The Checks section says that `make apidiff` is a no-op below `v1.0.0`.
+  * The Tree gains `guides/`.
+* **Step 2, `docs/guides/developing.md`.** It has these chapters:
+  * what you need;
+  * building and running, with `go build ./...`, the stamped `make bin/gobble`, and `gobble version`;
+  * testing: `make test`, `make race`, golden transcripts with `ACPTEST_UPDATE=1`, and the `conhost` and `shells` suites;
+  * the gates: `make pre-add-check`, `make preflight`, and what each gate is;
+  * adding a package: the directory, a `doc.go` with its package comment and `Stability:` line, an archtest rule when it crosses a boundary, and its architecture.md row;
+  * live tests: the `live_<provider>` tag and `LiveCredential`. It says that none exists yet;
+  * CI and the release rehearsal;
+  * the records: `check_records.py --next`, and amending a record.
+
+  Every command shown is run while writing the guide, on this host. The guide quotes only output that was observed.
+* **Step 3, the README rows.**
+  * `docs/README.md`:
+    * the guides line;
+    * an "I want to…" row, "build gobble, run the gates, or add a package", pointing at the guide;
+    * a row "see each package's tier and role", pointing at architecture.md;
+    * the 0004 rows.
+  * Root `README.md`: the same guide row in its "I want to…" table.
+* **The `apidiff` guard,** in the Makefile:
+
+  ```make
+  # A no-op below v1.0.0: 0004-MADR covers stable packages from v1.0.0. From
+  # then it fails until 0005-PLAN F10 step 6 writes the comparison.
+  apidiff:
+  	@stable="$$(git tag -l 'v*' | grep -E '^v[1-9][0-9]*\.[0-9]+\.[0-9]+$$' || true)"; \
+  	if [ -n "$$stable" ]; then \
+  		echo "apidiff: tags at or above v1.0.0 exist ($$(echo $$stable)); the comparison is not written yet (0005-PLAN F10 step 6)" >&2; \
+  		exit 1; \
+  	fi; \
+  	echo "apidiff: no-op below v1.0.0"
+  ```
+
+  The comments on the Makefile's first lines and on `preflight` say the same.
+* **`tools.go`.** Delete the file. Delete `rel == "." ||` and the two-line comment above it from rule 2 in `internal/archtest/check.go`.
+* **The Accept script** is `q88_archdoc.py`, in the scratchpad. For every package `go list ./...` prints, it requires an architecture.md row whose Tier equals that package's `Stability:` line. It also requires that no row names a directory that is not a package. It exits 1 on any difference.
+
+**Files:**
+* deleted: `tools.go`;
+* `internal/archtest/check.go`;
+* `internal/archtest/check_test.go` *(added by deviation 1)*;
+* `acpclient/acptest/pair_test.go` *(added by deviation 2)*;
+* `Makefile`;
+* `docs/architecture.md`;
+* new: `docs/guides/developing.md`;
+* `docs/README.md` and `README.md`;
+* this PLAN;
+* `0008-MADR-native-cli-mode.md`: a dated note at Context item 7, whose rule-2 fact names `tools.go`;
+* `0005-PLAN-v1-feature-scope.md`: a dated note at F10 step 6 that the comparison is written there, and that `make apidiff` fails on a `v1.0.0` tag until it is.
+
+**Steps:**
+1. **`tools.go` and rule 2,** as above. `go mod tidy` must leave `go.mod` and `go.sum` unchanged.
+2. **The `apidiff` guard,** as above.
+3. **architecture.md** (step 1).
+4. **The guide** (step 2), running each command it shows.
+5. **The README rows** (step 3), the notes in 0008-MADR and 0005-PLAN, and this entry's execution record.
+
+**Accept:**
+* `q88_archdoc.py` exits 0 against the tree.
+* On a scratch clone, `make apidiff` exits 0 with no tag, with `v0.1.0`, and with `v1.0.0-rc.1`. It exits non-zero with `v1.0.0`, naming the tag.
+* `make archtest` and `go mod tidy -diff` pass with `tools.go` gone.
+* `make check-records` and markdownlint pass, including over the new guide.
+
+Each is shown failing first, on a scratch copy or a scratch clone, with the failure quoted:
+* `q88_archdoc.py` on a copy of architecture.md with one package row deleted, and on another copy with one tier changed;
+* the guard with a `v1.0.0` tag (above);
+* archtest on a scratch copy with `tools.go` restored: rule 2 names the module root;
+* `check-records` on a copy of the guide with a broken relative link.
+
+**Verification:**
+* `go test ./...` on Windows;
+* `make preflight` on Windows and in WSL;
+* WSL `go test -race ./internal/archtest/`;
+* `golangci-lint` for linux, darwin and windows;
+* the pre-add check on `check.go`;
+* the identifier and hidden-character scans.
+
+The agent stages; the owner commits.
+
+**Deferred, named:**
+* to 0005-PLAN F10 step 6: the `apidiff` comparison itself. It needs the previous tag, so CI then needs the tags fetched as well, which today's shallow checkout does not do;
+* to a later docs pass: the rest of root `README.md`. Its "Stack for v1" and record summaries describe parts as planned that now exist (the `llm` facade, the import test), and give `v0.13.6-mcr.1` where `go.mod` has `mcr.2`. This phase changes only its "I want to…" table;
+* to 0004-PLAN Phase 2: steps 10, 12 and 13, which wait on sessions and providers (0005-PLAN F4). This PLAN stays `in-progress` until they run.
+
+**Deviation 1, 2026-10-07 — rule 2's root exemption has a test.** With `tools.go` deleted and `rel == "." ||` removed, `go test ./internal/archtest/` failed:
+
+```text
+--- FAIL: TestImportRules/rule_2_root_pin (0.00s)
+    check_test.go:139: unexpected edge:
+        rule 2: github.com/maccavelli/gobble-cli imports github.com/coder/acp-go-sdk
+```
+
+The case `rule 2 root pin` (`internal/archtest/check_test.go:37-40`) asserts the exemption the owner's decision 2 removes. The fact above, that nothing tests it, was wrong: the search matched `rel == "."` and missed a case written with `modulePath`. The owner decided on 2026-10-07 to invert the case: it becomes `rule 2 root`, with `want: "acp-go-sdk"`, so a module-root import of the SDK is now a rule-2 violation. `check_test.go` joins the phase's files.
+
+**Deviation 2, 2026-10-07 — the golden update fails package-wide.** Writing the guide's golden section, `ACPTEST_UPDATE=1 go test -count=1 ./acpclient/acptest/` failed:
+
+```text
+--- FAIL: TestGoldenWritesArtifact (0.00s)
+    pair_test.go:187: failures = [], want one mismatch
+```
+
+`TestGoldenWritesArtifact` hands `Golden` a deliberately wrong file in `t.TempDir()` and expects a mismatch. With the variable set, `Golden` rewrites that file instead, so any package-wide or repository-wide update run fails. It predates this phase: `pair_test.go` is unchanged since Phase 3, and the run changed nothing in the tree. The owner decided on 2026-10-07 to pin the test: its first line becomes `t.Setenv("ACPTEST_UPDATE", "")`, so it checks the mismatch path whatever the caller's environment. `pair_test.go` joins the phase's files, and the guide documents `ACPTEST_UPDATE=1 go test ./...`.
+
+**Phase 5, 2026-10-07 — complete (staged; the owner commits).** It ran as the entry above wrote it, with the owner's two decisions and deviations 1 and 2 written into the entry before their code.
+
+* **Files.**
+  * Deleted `tools.go`.
+  * `internal/archtest/check.go` and `check_test.go`: rule 2 without the root exemption, and the case `rule 2 root`.
+  * `acpclient/acptest/pair_test.go`: `TestGoldenWritesArtifact` pins `ACPTEST_UPDATE`.
+  * `Makefile`: the `apidiff` guard and its two comments.
+  * `docs/architecture.md`, new `docs/guides/developing.md`, `docs/README.md` and `README.md`.
+  * This PLAN, the 0008-MADR note, and the 0005-PLAN F10 step 6 note.
+* **Accept.**
+  * `q88_archdoc.py` printed `packages 43, problems 0`. Before step 1 it printed 43 problems, one per package, because the table had no Tier column.
+  * The `apidiff` guard on a scratch clone, with the working-tree Makefile:
+    * no tag, `v0.1.0`, and `v0.1.0` with `v1.0.0-rc.1` each printed `apidiff: no-op below v1.0.0` and exited 0;
+    * `v0.1.0` with `v1.0.0` printed `apidiff: tags at or above v1.0.0 exist (v1.0.0); the comparison is not written yet (0005-PLAN F10 step 6)` and exited 2;
+    * `v1.0.0` with `v1.2.3` named both tags and exited 2.
+  * `go mod tidy -diff` printed nothing with `tools.go` gone, and `make archtest` passed.
+  * `ACPTEST_UPDATE=1 go test -count=1 ./...` exited 0, and `git status --porcelain` was the same before and after it.
+  * The guide's commands were run on this host: `go version`, `go build ./...`, `make bin/gobble.exe`, `gobble version` and `version --json` (the guide quotes that output), `make pre-add-check` on the two archtest files, the golden update, `make completion-shells` (bash, pwsh and powershell.exe passed), and `check_records.py --next`. Its add-a-package example ran on a scratch copy: the new `beta` package passed `go vet` and archtest, and the same package importing Kong failed with the rule-9 text the guide quotes.
+* **Gates.**
+  * lint printed `0 issues.` for linux, darwin and windows.
+  * Windows `go test ./...` had no `FAIL` or `panic:`.
+  * `make preflight` printed `preflight passed` on Windows and in WSL, each with `apidiff: no-op below v1.0.0`.
+  * WSL `go test -race ./...` exited 0.
+  * The pre-add check was clean for the three Go files.
+  * After the last doc edits, `make check-records` and `make markdownlint` passed again.
+* **Negative tests,** each on its own scratch copy, each failing as expected:
+  * a package row deleted from architecture.md: `tool/toolsearch: not in architecture.md`;
+  * a tier changed: `session: architecture.md says beta, doc.go says stable`;
+  * `tools.go` restored: `rule 2: github.com/maccavelli/gobble-cli imports github.com/coder/acp-go-sdk`, from the module case;
+  * the root exemption restored in `check.go`: `TestImportRules/rule_2_root … missing "acp-go-sdk"`;
+  * a broken link in the guide: `broken relative link: docs/guides/developing.md:4: ../architecture-gone.md`;
+  * the guard with a `v1.0.0` tag (above);
+  * deviation 2's test before its fix: `pair_test.go:187: failures = [], want one mismatch`.
+* **What the entry predicted wrongly.**
+  1. **Rule 2's root exemption had a test** (deviation 1).
+  2. **The documented golden update failed package-wide** (deviation 2). It was found only because the guide's commands were run.
+  3. **architecture.md's import rule 7 was wrong.** It said no stable package imports `exp/...`; `checkRule7` lets only `cmd/gobble` import it. Step 1 asks for the rules "as they are enforced", so the line now says that, and so does the guide.
+  4. **"Every command shown is run" did not hold for `make probe-conhost`.** It opens a Console Host window and borrows the clipboard, so it was not run here. The guide names it in a table with what it needs and quotes no output from it.
+  5. **The module has 43 packages, not 44,** once `tools.go` is gone.

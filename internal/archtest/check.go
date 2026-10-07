@@ -212,9 +212,7 @@ func checkRule2(pkgs []modPkg) []Violation {
 		if !ok {
 			continue
 		}
-		// The module root blank-imports the SDK so go mod tidy keeps the
-		// Phase 0 require (0004-PLAN, 2026-10-04). No other package may.
-		if rel == "." || under(rel, "acpserver") || under(rel, "acpclient") {
+		if under(rel, "acpserver") || under(rel, "acpclient") {
 			continue
 		}
 		vs = add(vs, 2, e)

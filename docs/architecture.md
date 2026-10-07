@@ -25,53 +25,58 @@ under gobble's data directory.
 
 ## Packages
 
-`go list ./...` prints each of these. The module root holds only the tool requirements.
+`go list ./...` prints each of these. The module root holds no package; `go.mod` carries the `tool`
+directives.
 
-| Package | What it is |
-| :--- | :--- |
-| `cmd/gobble` | The `gobble` command: `main` calls `internal/cli`. |
-| `gobble` | The embedding facade. |
-| `agent` | The turn loop: model calls, tool calls, approval, and the steering and follow-up queues. |
-| `llm` | The model facade the agent sees. |
-| `llm/provider` | `llm` over go-llmprovider-sdk, with the ambient credential selection. |
-| `llm/catalog` | The model catalog (placeholder). |
-| `llm/llmtest` | A scripted `llm.Provider` and request assertions, for tests. |
-| `tool` | The tool contract. |
-| `tool/builtin` | The built-in tools: `read`, `write`, `edit`, `bash`. |
-| `tool/toolsearch` | Deferred tool exposure (placeholder). |
-| `permission` | The policy contract that approves tool calls. |
-| `session` | The session log contract, in Pi's JSONL v3 shapes. |
-| `session/jsonl` | Sessions as JSONL files, with a writer lock. |
-| `compaction` | Pi's manual compaction: the cut point, the summary and the entry. |
-| `command` | The slash-command vocabulary shared by the agent and its clients. |
-| `prompt` | System prompt assembly (placeholder). |
-| `skill` | Agent Skills parsing and discovery. |
-| `hook` | The lifecycle hook contract. |
-| `checkpoint` | File snapshots for undo (placeholder). |
-| `telemetry` | OpenTelemetry wiring (placeholder). |
-| `acpserver` | gobble's ACP agent: sessions, prompts, slash commands, modes, compaction, MCP servers and the `_gobble/` extension methods. |
-| `acpclient` | gobble's own ACP client, used by `internal/cli`. |
-| `acpclient/acptest` | An agent and a client over in-memory pipes, with a frame recorder and golden transcripts, for tests. |
-| `mcpclient` | MCP servers over stdio and streamable HTTP, through the go-sdk. Each stdio server runs in its own process group, or a Job object on Windows, and is stopped as Pi stops one. |
-| `mcpclient/mcptest` | An MCP server fixture for tests, over stdio and HTTP. |
-| `internal/cli` | The command edge: the Kong grammar, `chat` and its flags, the line session, print mode, the exit codes, signals and output. It holds `selfupdate-release.json`, the release spec. |
-| `internal/cli/complete` | Native shell completion for bash, zsh, fish and PowerShell. |
-| `internal/cli/editor` | The line editor: `golang.org/x/term` behind gobble's adapter, with history, paste and an external editor. |
-| `internal/cli/render` | Terminal output of the native CLI mode: streamed Markdown, tool output, a status line and a spinner. |
-| `internal/cli/term` | Terminal capabilities, styles, escape sanitising and Windows console setup. |
-| `internal/tui` | The enhanced TUI mode (placeholder). |
-| `internal/appdirs` | The config, data, state and cache directories, created owner-only. |
-| `internal/buildinfo` | The build's version, commit, toolchain, platform and User-Agent. |
-| `internal/logging` | The one slog logger: a rolling owner-only file, and warnings on stderr, both redacted. |
-| `internal/archtest` | The import rules below, as a test. |
-| `internal/auth` | The credential store (placeholder). |
-| `internal/config` | Layered settings (placeholder). |
-| `internal/fsx` | Workspace confinement for file tools (placeholder). |
-| `exp/a2a` | Agent2Agent endpoint (experimental placeholder). |
-| `exp/acpws` | ACP over WebSocket (experimental placeholder). |
-| `exp/codemode` | Code-mode sandbox (experimental placeholder). |
-| `exp/sandbox` | OS sandbox for shell tools (experimental placeholder). |
-| `exp/wasmtool` | WASM tool host (experimental placeholder). |
+The tier is each package's `Stability:` line in its `doc.go`. **stable** packages are covered by
+`apidiff` from `v1.0.0`. **beta** packages are public and may change in a minor release.
+**internal** and **experimental** packages carry no promise.
+
+| Package | Tier | What it is |
+| :--- | :--- | :--- |
+| `cmd/gobble` | internal | The `gobble` command: `main` calls `internal/cli`. |
+| `gobble` | stable | The embedding facade. |
+| `agent` | stable | The turn loop: model calls, tool calls, approval, and the steering and follow-up queues. |
+| `llm` | stable | The model facade the agent sees. |
+| `llm/provider` | beta | `llm` over go-llmprovider-sdk, with the ambient credential selection. |
+| `llm/catalog` | beta | The model catalog (placeholder). |
+| `llm/llmtest` | stable | A scripted `llm.Provider` and request assertions, for tests. |
+| `tool` | stable | The tool contract. |
+| `tool/builtin` | beta | The built-in tools: `read`, `write`, `edit`, `bash`. |
+| `tool/toolsearch` | beta | Deferred tool exposure (placeholder). |
+| `permission` | beta | The policy contract that approves tool calls. |
+| `session` | stable | The session log contract, in Pi's JSONL v3 shapes. |
+| `session/jsonl` | stable | Sessions as JSONL files, with a writer lock. |
+| `compaction` | beta | Pi's manual compaction: the cut point, the summary and the entry. |
+| `command` | beta | The slash-command vocabulary shared by the agent and its clients. |
+| `prompt` | beta | System prompt assembly (placeholder). |
+| `skill` | stable | Agent Skills parsing and discovery. |
+| `hook` | stable | The lifecycle hook contract. |
+| `checkpoint` | beta | File snapshots for undo (placeholder). |
+| `telemetry` | beta | OpenTelemetry wiring (placeholder). |
+| `acpserver` | beta | gobble's ACP agent: sessions, prompts, slash commands, modes, compaction, MCP servers and the `_gobble/` extension methods. |
+| `acpclient` | beta | gobble's own ACP client, used by `internal/cli`. |
+| `acpclient/acptest` | stable | An agent and a client over in-memory pipes, with a frame recorder and golden transcripts, for tests. |
+| `mcpclient` | beta | MCP servers over stdio and streamable HTTP, through the go-sdk. Each stdio server runs in its own process group, or a Job object on Windows, and is stopped as Pi stops one. |
+| `mcpclient/mcptest` | beta | An MCP server fixture for tests, over stdio and HTTP. |
+| `internal/cli` | internal | The command edge: the Kong grammar, `chat` and its flags, the line session, print mode, the exit codes, signals and output. It holds `selfupdate-release.json`, the release spec. |
+| `internal/cli/complete` | internal | Native shell completion for bash, zsh, fish and PowerShell. |
+| `internal/cli/editor` | internal | The line editor: `golang.org/x/term` behind gobble's adapter, with history, paste and an external editor. |
+| `internal/cli/render` | internal | Terminal output of the native CLI mode: streamed Markdown, tool output, a status line and a spinner. |
+| `internal/cli/term` | internal | Terminal capabilities, styles, escape sanitising and Windows console setup. |
+| `internal/tui` | internal | The enhanced TUI mode (placeholder). |
+| `internal/appdirs` | internal | The config, data, state and cache directories, created owner-only. |
+| `internal/buildinfo` | internal | The build's version, commit, toolchain, platform and User-Agent. |
+| `internal/logging` | internal | The one slog logger: a rolling owner-only file, and warnings on stderr, both redacted. |
+| `internal/archtest` | internal | The import rules below, as a test. |
+| `internal/auth` | internal | The credential store (placeholder). |
+| `internal/config` | internal | Layered settings (placeholder). |
+| `internal/fsx` | internal | Workspace confinement for file tools (placeholder). |
+| `exp/a2a` | experimental | Agent2Agent endpoint (experimental placeholder). |
+| `exp/acpws` | experimental | ACP over WebSocket (experimental placeholder). |
+| `exp/codemode` | experimental | Code-mode sandbox (experimental placeholder). |
+| `exp/sandbox` | experimental | OS sandbox for shell tools (experimental placeholder). |
+| `exp/wasmtool` | experimental | WASM tool host (experimental placeholder). |
 
 ## Import rules
 
@@ -84,7 +89,7 @@ under gobble's data directory.
 4. Only `llm/provider` imports go-llmprovider-sdk; no vendor LLM SDK is imported.
 5. Only `internal/tui` may import Charm and go-tui-lib.
 6. `internal/cli` and `internal/tui` never import `agent`; they go through `acpclient`.
-7. No stable package imports `exp/...`.
+7. Only `cmd/gobble` imports `exp/...`.
 8. Only `internal/cli` imports go-selfupdate-lib, and `internal/buildinfo` its `buildinfo`.
 9. Only `internal/cli/...` imports Kong.
 
@@ -111,6 +116,8 @@ The direct requirements in `go.mod`:
   golangci-lint, govulncheck, `go fix -diff`, archtest, apidiff, build metadata, the records check
   and markdownlint.
 - `make race`: the tests under the race detector, with cgo on.
+- `make apidiff`: a no-op below `v1.0.0`. From a `v1.0.0` tag it fails until the comparison is
+  written.
 - `.github/workflows/ci.yml`: on Linux, macOS and Windows, `go test`, `make preflight` and
   `make archtest`; `make race` on Linux and macOS; on Linux, `go mod tidy -diff`, shellcheck and
   actionlint.
@@ -139,6 +146,7 @@ cmd/ … exp/               the packages above
 docs/
   README.md               ToC and the "I want to…" matrix
   architecture.md         this file
+  guides/                 how-to guides: developing.md
   decisions/              MADR/PLAN pairs
   reports/                numbered observations
 ```

@@ -175,6 +175,7 @@ func (f *fakeTB) Errorf(format string, args ...any) {
 // A wrong golden fails and leaves the actual transcript as an artifact
 // (0004-PLAN Phase 3 Accept).
 func TestGoldenWritesArtifact(t *testing.T) {
+	t.Setenv("ACPTEST_UPDATE", "") // the mismatch path, even inside an update run
 	client, rec := Pair(t, &stubAgent{})
 	initialize(t, client)
 	wrong := filepath.Join(t.TempDir(), "wrong.golden")
