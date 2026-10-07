@@ -54,7 +54,7 @@ under gobble's data directory.
 | `acpclient/acptest` | An agent and a client over in-memory pipes, with a frame recorder and golden transcripts, for tests. |
 | `mcpclient` | MCP servers over stdio and streamable HTTP, through the go-sdk. Each stdio server runs in its own process group, or a Job object on Windows, and is stopped as Pi stops one. |
 | `mcpclient/mcptest` | An MCP server fixture for tests, over stdio and HTTP. |
-| `internal/cli` | The command edge: the Kong grammar, `chat` and its flags, the line session, print mode, the exit codes, signals and output. |
+| `internal/cli` | The command edge: the Kong grammar, `chat` and its flags, the line session, print mode, the exit codes, signals and output. It holds `selfupdate-release.json`, the release spec. |
 | `internal/cli/complete` | Native shell completion for bash, zsh, fish and PowerShell. |
 | `internal/cli/editor` | The line editor: `golang.org/x/term` behind gobble's adapter, with history, paste and an external editor. |
 | `internal/cli/render` | Terminal output of the native CLI mode: streamed Markdown, tool output, a status line and a spinner. |
@@ -114,6 +114,13 @@ The direct requirements in `go.mod`:
 - `.github/workflows/ci.yml`: on Linux, macOS and Windows, `go test`, `make preflight` and
   `make archtest`; `make race` on Linux and macOS; on Linux, `go mod tidy -diff`, shellcheck and
   actionlint.
+- The release, in the same workflow:
+  - `sbom` takes the dependency graph's SPDX SBOM as `gobble.spdx.json`;
+  - `build` is go-selfupdate-lib's build workflow over `internal/cli/selfupdate-release.json`. It
+    builds the five binaries (darwin/arm64, linux/amd64, linux/arm64, windows/amd64,
+    windows/arm64), checks them, writes `SHA256SUMS`, and runs `gobble version --identity` on each
+    platform. On every push and pull request this is a rehearsal;
+  - `release`, on a `v*` tag only, is the library's publish workflow, which releases and attests.
 
 ## Tree
 

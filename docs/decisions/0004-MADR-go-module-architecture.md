@@ -1,6 +1,6 @@
 ---
 status: proposed
-date: 2026-10-06
+date: 2026-10-07
 decision-makers: repository owner
 consulted: 0001-REPORT-go-port-feasibility.md, 0002-MADR-cli-acp-headless-mcp-v1.md, 0003-MADR-gobble-product-identity.md
 informed: go-llmprovider-sdk, go-core-lib, mcplib, go-tui-lib, magic-cli-remote
@@ -955,3 +955,19 @@ The "planned rule" above has shipped. go-selfupdate-lib `v1.7.0` (`e825cda`) con
 The owner decided on 2026-10-05 that gobble keeps one source of build identity. `internal/buildinfo` wraps the library's `buildinfo` and adds only gobble's forms: the SemVer version of 0008-MADR D19 item 1, commit and date from `vcs.revision` and `vcs.time`, and the 0003-MADR User-Agent. gobble links no stamps of its own. This settles early the question the 2026-10-02 amendment left to 0005-PLAN F10 ("whether gobble keeps its own `internal/buildinfo` or uses the released `buildinfo`").
 
 **Import rule 8 gains one exception.** `internal/buildinfo` may import exactly `github.com/maccavelli/go-selfupdate-lib/buildinfo`. Every other non-test use of the module stays in `internal/cli`. The exception does not loosen the rule's purpose, which is to keep the self-update machinery at the process edge: the subpackage holds only stamps. archtest enforces the exception and the boundary around it (0004-PLAN amendment of 2026-10-05).
+
+### Amendment (2026-10-07): the release pipeline on go-selfupdate-lib v1.9.0's two workflows
+
+D9 and the supply-chain note of the 2026-10-01 amendment had gobble build and stage its release, then publish through go-core-lib v1.1.0's reusable workflow, with an SBOM generator that 0004-PLAN Phase 4 would name.
+
+On 2026-10-07, before Phase 4 steps 2–4 ran, the owner decided:
+* **Building and publishing are go-selfupdate-lib v1.9.0's two reusable workflows,** pinned to the tag's commit `39b12945fad311174252038745f5a88f71c4c66c`.
+  * `build-selfupdate-release.yml` builds, checks, stages and rehearses from a `selfupdate-release.json` spec in `internal/cli`.
+  * `publish-selfupdate-release.yml` publishes and attests.
+  * gobble keeps no build recipe of its own, and `make release-dry-run` is not written.
+* **The identity line** the build workflow checks is `gobble version --identity`: the library's `buildinfo.Identity()` string.
+* **The SPDX SBOM is GitHub's dependency-graph SBOM,** as the extra asset `gobble.spdx.json`, outside `SHA256SUMS`. That names the generator the supply-chain note left to the plan. The repository's dependency graph was turned on for it on 2026-10-07; Dependabot stays off.
+
+* **darwin/amd64 is not a target.** macOS ships for Apple silicon only. The release is five raw binaries: darwin/arm64, linux/amd64, linux/arm64, windows/amd64 and windows/arm64.
+
+Raw binaries, stable tags only, and archtest rule 8 are unchanged. The details are in 0004-PLAN's entry "Phase 4 steps 2–4 made executable".

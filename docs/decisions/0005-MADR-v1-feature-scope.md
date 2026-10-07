@@ -1,6 +1,6 @@
 ---
 status: proposed
-date: 2026-10-05
+date: 2026-10-07
 decision-makers: repository owner
 consulted: 0001-REPORT-go-port-feasibility.md, 0002-MADR-cli-acp-headless-mcp-v1.md, 0003-MADR-gobble-product-identity.md, 0004-MADR-go-module-architecture.md
 informed: magic-cli-remote (companion command table), go-llmprovider-sdk, go-core-lib, go-tui-lib
@@ -267,7 +267,7 @@ Checkpoints:
 |---|---|---|
 | GitHub releases | 1.0 | Six **raw binaries** named `gobble-<goos>-<goarch>[.exe]`, `SHA256SUMS`, SPDX SBOM extra asset, and provenance attestations, published by go-selfupdate-lib's reusable workflow (0004-PLAN Phase 4). Strict `vMAJOR.MINOR.PATCH` tags only. |
 | `go install` | 1.0 | `go install github.com/maccavelli/gobble-cli/cmd/gobble@latest`. |
-| Self-update | 1.0 | `gobble update [--check]` through `github.com/maccavelli/go-selfupdate-lib/selfupdate` at `v1.5.0` or later. gobble does not reimplement self-update. Product `gobble`. `Request.CheckOnly` for `--check`. `NewStandaloneInstaller`, `NewExactAssetSelector` for the six platforms, `NewGitHubSource` with the 0003-MADR User-Agent, `NewTextReporter` on stderr, `NewTerminalConfirmer`, `ExitCode` mapped to process status (0 current/declined/applied, 10 update available, 1 error). `--force` is `Request.Force`; `--yes` is `Request.Yes`. |
+| Self-update | 1.0 | `gobble update [--check]` through `github.com/maccavelli/go-selfupdate-lib/selfupdate` at `v1.5.0` or later. gobble does not reimplement self-update. Product `gobble`. `Request.CheckOnly` for `--check`. `NewStandaloneInstaller`, `NewExactAssetSelector` for the six platforms *(five since 2026-10-07: darwin/amd64 is not a target, 0004-MADR amendment of that date)*, `NewGitHubSource` with the 0003-MADR User-Agent, `NewTextReporter` on stderr, `NewTerminalConfirmer`, `ExitCode` mapped to process status (0 current/declined/applied, 10 update available, 1 error). `--force` is `Request.Force`; `--yes` is `Request.Yes`. |
 | Homebrew tap, container image | 1.x | A tap formula, and a `ko`-built distroless image for CI agents. |
 | magic-cli-remote `KnownGoodVersion` | 1.0 | Published in the release notes for the companion Spec. |
 

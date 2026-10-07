@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "products": [
+    {"name": "gobble", "package": "./cmd/gobble", "identity_args": ["version", "--identity"]}
+  ],
+  "platforms": [
+    {"os": "darwin", "arch": "arm64"},
+    {"os": "linux", "arch": "amd64"},
+    {"os": "linux", "arch": "arm64"},
+    {"os": "windows", "arch": "amd64"},
+    {"os": "windows", "arch": "arm64"}
+  ],
+  "packaging": "binary",
+  "extras": [
+    {"name": "gobble.spdx.json"}
+  ]
+}

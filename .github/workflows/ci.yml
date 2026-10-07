@@ -18,7 +18,10 @@ concurrency:
 
 # 0004-PLAN Phase 4 step 1, written by
 # docs/decisions/0002-PLAN-cli-acp-headless-mcp-v1.md Phase 8 (owner's
-# decision of 2026-10-07). The release jobs are Phase 4's steps 2-4.
+# decision of 2026-10-07). The sbom, build and release jobs are Phase 4's
+# steps 2-4 (0004-PLAN amendment of 2026-10-07): go-selfupdate-lib's build
+# workflow rehearses on every push and pull request, and builds the release
+# on a v* tag, which the publish workflow then releases.
 jobs:
   validate:
     strategy:
@@ -97,3 +100,64 @@ jobs:
           shellcheck --version
           shellcheck scripts/*.sh
           go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+
+  # The SPDX SBOM is GitHub's dependency graph's, the extra asset
+  # gobble.spdx.json (0004-MADR amendment of 2026-10-07). The graph describes
+  # the default branch, so a tag must be main's head.
+  sbom:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: The dependency graph's SPDX SBOM
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          REF_TYPE: ${{ github.ref_type }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$REF_TYPE" = tag ]; then
+            head="$(gh api "repos/$REPO/commits/main" --jq .sha)"
+            if [ "$head" != "$SHA" ]; then
+              echo "the tag is at $SHA, but main's head is $head: the SBOM would describe another commit" >&2
+              exit 1
+            fi
+          fi
+          mkdir -p "$RUNNER_TEMP/extras"
+          gh api "repos/$REPO/dependency-graph/sbom" --jq .sbom >"$RUNNER_TEMP/extras/gobble.spdx.json"
+          python3 - "$RUNNER_TEMP/extras/gobble.spdx.json" <<'EOF'
+          import json, sys
+          doc = json.load(open(sys.argv[1], encoding="utf-8"))
+          assert doc["spdxVersion"].startswith("SPDX-2"), doc.get("spdxVersion")
+          names = [p.get("name", "") for p in doc.get("packages", [])]
+          assert "github.com/maccavelli/go-selfupdate-lib" in names, names
+          print(f'{doc["spdxVersion"]}: {len(names)} packages')
+          EOF
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: extras
+          path: ${{ runner.temp }}/extras/
+          if-no-files-found: error
+          retention-days: 7
+
+  build:
+    needs: [validate, sbom]
+    uses: maccavelli/go-selfupdate-lib/.github/workflows/build-selfupdate-release.yml@39b12945fad311174252038745f5a88f71c4c66c # v1.9.0
+    with:
+      spec-path: internal/cli/selfupdate-release.json
+      extras-artifact-name: extras
+
+  release:
+    needs: build
+    if: needs.build.outputs.rehearsal == 'false'
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    uses: maccavelli/go-selfupdate-lib/.github/workflows/publish-selfupdate-release.yml@39b12945fad311174252038745f5a88f71c4c66c # v1.9.0
+    with:
+      artifact-name: ${{ needs.build.outputs.artifact-name }}
+      products-json: ${{ needs.build.outputs.products-json }}
+      platforms-json: ${{ needs.build.outputs.platforms-json }}
+      extra-assets-json: ${{ needs.build.outputs.extra-assets-json }}
+      prerelease-channels-json: ${{ needs.build.outputs.prerelease-channels-json }}

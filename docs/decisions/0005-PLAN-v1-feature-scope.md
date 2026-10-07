@@ -316,7 +316,9 @@ API.
    `selfupdate/example_test.go` does for a standalone program:
    `NewGitHubSource` (User-Agent from 0003, repository owner/name of
    this module's GitHub), `NewStrictVersionPolicy`,
-   `NewExactAssetSelector` for the six Phase 4 platforms,
+   `NewExactAssetSelector` for the six Phase 4 platforms *(five since
+   2026-10-07: darwin/amd64 is not a target, 0004-MADR amendment of that
+   date; F10 reads them from the release spec)*,
    `NewStandaloneInstaller`, `NewTextReporter(os.Stderr)`,
    `NewTerminalConfirmer(os.Stdin, os.Stderr)`. `--check` is
    `Request.CheckOnly`; `--force` is `Request.Force`; `--yes` is

@@ -186,6 +186,24 @@ func TestVersionJSONGolden(t *testing.T) {
 	}
 }
 
+// --identity prints only the library's identity line, which the release
+// workflow requires first; with --json it is a usage error.
+func TestVersionIdentity(t *testing.T) {
+	old := identity
+	t.Cleanup(func() { identity = old })
+	identity = func() buildinfo.Info {
+		return buildinfo.Info{Version: "1.2.3", Release: true,
+			Lib: lib.Info{Version: "v1.2.3", Kind: lib.KindRelease, Revision: "4e25c8a0123456789abcdef0123456789abcdef0"}}
+	}
+	r := runMain(t, nil, "version", "--identity")
+	if r.code != ExitOK || r.stdout != "v1.2.3 (release) 4e25c8a01234\n" || r.stderr != "" {
+		t.Fatalf("exit %d, stdout %q, stderr %q", r.code, r.stdout, r.stderr)
+	}
+	if r := runMain(t, nil, "version", "--identity", "--json"); r.code != ExitUsage {
+		t.Fatalf("--identity --json: exit %d, want %d; stderr %q", r.code, ExitUsage, r.stderr)
+	}
+}
+
 func TestConfigPath(t *testing.T) {
 	home := t.TempDir()
 	var out, errw bytes.Buffer

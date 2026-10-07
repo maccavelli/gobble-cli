@@ -392,6 +392,8 @@ publish through it).
 * `make verify-build-metadata` fails on a scratch build without
   `-ldflags`, then passes on the real build.
 
+*(2026-10-07: step 1 was written by 0002-PLAN Phase 8. Steps 2–4 are made executable in the entry "Phase 4 steps 2–4 made executable" of this date, by the owner's decisions of that date. Step 2's own build job and go-core-lib v1.1.0 pin are replaced by go-selfupdate-lib v1.9.0's build and publish workflows. Step 3, `make release-dry-run`, and its Accept line are struck: the build workflow's rehearsal on every push and pull request replaces them.)*
+
 ### Phase 5 — documentation
 
 1. Rewrite [architecture.md](../architecture.md) to list every package
@@ -924,3 +926,151 @@ Step 1 as written, and as built:
 The Accept line "The CI run is green on all three operating systems on a pushed branch" is recorded in 0002-PLAN's Phase 8 entry.
 
 *(2026-10-07: that line holds. Run `37650274632`, on `main` at `e159a44`, succeeded on all three runners; 0002-PLAN's Phase 8 close-out has the detail. Steps 2–4 are still not started.)*
+
+**2026-10-07 — Phase 4 steps 2–4 made executable (owner's decisions: go-selfupdate-lib v1.9.0's two release workflows, a `version --identity` line, GitHub's dependency-graph SBOM, and the rehearsal in place of `make release-dry-run`).**
+
+Steps 2–4 were written for go-core-lib v1.1.0's single publish workflow (`96b30961…`), with gobble building and staging the binaries itself. The amendment of 2026-10-05 renamed the library to go-selfupdate-lib, and `go.mod` pins `v1.9.0`.
+
+The facts:
+* **go-selfupdate-lib `v1.9.0`** (tag commit `39b12945fad311174252038745f5a88f71c4c66c`, from `git ls-remote … 'refs/tags/v1.9.0^{}'`) ships two reusable workflows. They are described in its `docs/guides/building-releases.md` at that tag.
+* **`build-selfupdate-release.yml`** works from a release spec, `selfupdate-release.json`.
+  * It builds every product for every platform on one `ubuntu-24.04` runner. The recipe is fixed:
+    * `CGO_ENABLED=0`, `-trimpath`, `-buildvcs=true` and `-ldflags "-s -w -X …/buildinfo.version=<tag> -X …/buildinfo.kind=release"`;
+    * `GOTOOLCHAIN=local` and no Go cache;
+    * nothing else settable but build tags.
+  * It checks each binary's build information, writes `SHA256SUMS` over the binaries, copies the extras, and runs the publish workflow's verifier on the set.
+  * It runs each product's `identity_args` on its platform's own runner. The program's first line must be `<stamp> (<kind>)`, optionally followed by the commit.
+  * Off a tag it rehearses, stamped `rehearsal-<commit> (local)`. Its outputs are the publish workflow's inputs.
+  * It needs `contents: read`. An extra with no `path` comes from an artifact of the same run, named by `extras-artifact-name`.
+* **`publish-selfupdate-release.yml`** takes `artifact-name`, `products-json`, `platforms-json`, `extra-assets-json` and `prerelease-channels-json`. It needs `contents: write`, `id-token: write` and `attestations: write`, and attests what it uploads.
+* **The library's `buildinfo.Info.String()`** is `<Current> (<kind>)`, then the first 12 characters of the revision, and `-dirty` when modified. gobble's `internal/buildinfo.Info.Lib` holds that `Info`.
+  * `gobble version` prints `gobble <version>` first, with the `v` removed (0008-MADR D19 item 1), so it cannot be the identity command.
+* **The SBOM.**
+  * `gh api repos/maccavelli/gobble-cli/dependency-graph/sbom` returned 404 until the owner turned the repository's dependency graph on, on 2026-10-07.
+  * It then returned an SPDX-2.3 document (`dataLicense` CC0-1.0, creator `GitHub.com-Dependency-Graph`) of 28 packages, gobble's direct modules among them at the pinned versions: go-sdk 1.8.0, the acp-go-sdk fork 0.13.6-mcr.2, go-llmprovider-sdk 1.2.1, go-selfupdate-lib 1.9.0 and Kong 1.16.1.
+  * The endpoint describes the default branch.
+* **0005-MADR selects stable tags only for `gobble update`** (0005-MADR line 680). The spec therefore lists no prerelease channel.
+* **0004-MADR's supply-chain note** has the SBOM as an extra asset outside `SHA256SUMS` (`0004-MADR:796-800`). v1.9.0's stage step writes `SHA256SUMS` over the binaries and copies extras beside it.
+
+The owner decided five questions on 2026-10-07:
+1. **Both library workflows.** `ci.yml` gains a `build` job calling `build-selfupdate-release.yml` and a `release` job calling `publish-selfupdate-release.yml`, both pinned to `39b12945fad311174252038745f5a88f71c4c66c # v1.9.0`.
+   * `release` runs only when the build is not a rehearsal.
+   * The spec lives in `internal/cli`, where 0005-PLAN F10's updater will embed it.
+2. **`gobble version --identity`** prints only the library's `Identity()` line. The spec's `identity_args` is `["version", "--identity"]`. `gobble version` and `--json` are unchanged.
+3. **The SBOM is GitHub's dependency-graph SPDX document.** A `sbom` job writes it as `gobble.spdx.json` and uploads it as the extras artifact.
+4. **The rehearsal replaces `make release-dry-run`.** Step 3 and its Accept line are struck.
+5. **darwin/amd64 is not a target.** macOS ships for Apple silicon only, so the release is five binaries: darwin/arm64, linux/amd64, linux/arm64, windows/amd64 and windows/arm64.
+
+Choices made within the wording:
+* **The spec** is `internal/cli/selfupdate-release.json`:
+
+  ```json
+  {
+    "schema": 1,
+    "products": [
+      {"name": "gobble", "package": "./cmd/gobble", "identity_args": ["version", "--identity"]}
+    ],
+    "platforms": [
+      {"os": "darwin", "arch": "arm64"},
+      {"os": "linux", "arch": "amd64"},
+      {"os": "linux", "arch": "arm64"},
+      {"os": "windows", "arch": "amd64"},
+      {"os": "windows", "arch": "arm64"}
+    ],
+    "packaging": "binary",
+    "extras": [
+      {"name": "gobble.spdx.json"}
+    ]
+  }
+  ```
+
+  * The five platforms are step 2's list without darwin/amd64: macOS ships for Apple silicon only (owner's decision 5).
+  * Step 2's `-tags netgo,osusergo` is dropped: with cgo off they change nothing, and the recipe allows no other flag (building-releases.md §8).
+  * Until F10 embeds the spec, a test in `internal/cli` reads it with `releasespec.Parse` and checks:
+    * the product's name, package and identity arguments;
+    * the five targets, with no darwin/amd64;
+    * binary packaging;
+    * the one extra, with no path;
+    * no prerelease channel.
+* **`--identity`** prints `identity().Lib.String()` and a newline, and nothing else. `--identity` with `--json` is a usage error (exit 2).
+* **The `sbom` job** runs on `ubuntu-24.04` with `contents: read`.
+  * It runs `gh api "repos/$REPO/dependency-graph/sbom" --jq .sbom > "$RUNNER_TEMP/extras/gobble.spdx.json"`, with `GH_TOKEN` set to `github.token`.
+  * A Python check requires `spdxVersion` to start with `SPDX-2`, and the package list to name `github.com/maccavelli/go-selfupdate-lib`.
+  * It uploads the directory as the artifact `extras`, kept for 7 days.
+  * **On a tag,** it first requires the tag's commit to be `main`'s head (`gh api "repos/$REPO/commits/main" --jq .sha`), because the dependency graph describes the default branch. A tag elsewhere would carry another commit's SBOM, so it fails instead.
+* **The jobs' order:** `build` needs `validate` and `sbom`; `release` needs `build`. The workflow's top-level `permissions: contents: read` stays. `release` alone grants the three write permissions.
+* **No release happens in this phase.** Pushing a `v*` tag is the owner's act. Until then every push and pull request rehearses.
+
+**Files:**
+* `.github/workflows/ci.yml`;
+* new `internal/cli/selfupdate-release.json` and `internal/cli/release_test.go`;
+* `internal/cli/version.go`, and `main_test.go` for the identity test;
+* `docs/architecture.md`: the Checks section, and `internal/cli`'s row;
+* this PLAN;
+* `0004-MADR-go-module-architecture.md` (its amendment of 2026-10-07);
+* `docs/README.md`: the 0004 rows.
+
+**Steps:**
+1. **The spec and its test.** `TestReleaseSpec` reads `selfupdate-release.json`, calls `releasespec.Parse`, and asserts as above.
+2. **`--identity`.** `VersionCmd` gains `Identity bool` with `name:"identity" help:"Print only the build identity line the release workflow checks."`.
+   * `Run` prints `identity().Lib.String()`.
+   * `TestVersionIdentity` stubs the identity with a `lib.Info` and checks the line. It also checks that `--identity --json` exits 2.
+3. **`ci.yml`:** the `sbom`, `build` and `release` jobs as above.
+4. **Docs:** architecture.md, the 0004-MADR amendment, the README rows, and this entry's execution record.
+
+**Accept:**
+* `go test ./internal/cli/` passes `TestReleaseSpec` and `TestVersionIdentity`.
+* actionlint passes over `ci.yml`.
+* **On the owner's push,** the CI run is green: `validate` on three runners; `sbom`; and `build` as a rehearsal, with its identity jobs on linux/amd64, linux/arm64, darwin/arm64, windows/amd64 and windows/arm64. `release` is skipped.
+* **The first `v*` tag is the owner's,** and its release is recorded here when it happens. It is not this phase's Accept.
+
+Each is shown failing first on a scratch copy, the failure quoted:
+* the spec with a misspelled key: `releasespec.Parse` names it;
+* the spec with darwin/amd64 put back: `TestReleaseSpec`'s target check;
+* `--identity` printing gobble's own `Info.Version`;
+* `build` needing an undefined job: actionlint.
+
+**Verification:**
+* `go test ./...` on Windows and in WSL, and WSL `go test -race ./...`;
+* `golangci-lint` for linux, darwin and windows;
+* `make preflight` on Windows and in WSL;
+* actionlint and shellcheck in WSL;
+* the pre-add check on every changed Go file;
+* the identifier and hidden-character scans.
+
+The agent stages; the owner commits and pushes.
+
+**Deferred, named:**
+* to 0005-PLAN F10: `gobble update`, which embeds the spec and configures the updater from it (`spec.AssetSelector`, `spec.Unpacker`);
+* to the owner: the first release tag;
+* to a later record: SBOM attestation, which the publish workflow does not make (0004-MADR:798).
+
+**Phase 4 steps 2–4, 2026-10-07 — built and staged; the CI rehearsal waits for the owner's push.** It ran as the entry above wrote it, with the owner's decision 5, five platforms, written into the entry before any code.
+
+* **Files.**
+  * `.github/workflows/ci.yml`: the `sbom`, `build` and `release` jobs.
+  * New `internal/cli/selfupdate-release.json` and `internal/cli/release_test.go`.
+  * `internal/cli/version.go` and `main_test.go`.
+  * `docs/architecture.md`, this PLAN, the 0004-MADR amendment, the 0005-MADR and 0005-PLAN F10 notes on five platforms, and `docs/README.md`.
+* **Accept, so far.**
+  * `TestReleaseSpec` and `TestVersionIdentity` pass.
+  * A build stamped `v9.9.9` and `release` prints `v9.9.9 (release) f5d3874ebeb9-dirty` for `gobble version --identity`. That is the workflow's required shape; it was dirty only because the edits were uncommitted. `gobble version` still prints `gobble 9.9.9` first.
+  * actionlint passes, with shellcheck v0.11.0 checking the `run:` blocks.
+  * The `sbom` step's fetch and check, run locally against the live endpoint, give `SPDX-2.3: 27 packages`, with `github.com/maccavelli/go-selfupdate-lib` among them.
+* **Gates.**
+  * lint printed `0 issues.` for linux, darwin and windows.
+  * Windows `go test ./...` showed no `FAIL`.
+  * `make preflight` printed `preflight passed` on Windows and in WSL.
+  * WSL `go test -race ./...` exited 0.
+  * The pre-add check was clean for all three Go files.
+* **Negative tests,** each on its own scratch copy, each failing at its own line:
+  * a misspelled spec key: `release_test.go:24: releasespec: json: unknown field "packagin"`;
+  * darwin/amd64 put back: `release_test.go:39: targets [{darwin amd64} {darwin arm64} …], want [{darwin arm64} …]`;
+  * `--identity` printing gobble's own version: `main_test.go:200: exit 0, stdout "1.2.3\n"`;
+  * `build` needing an undefined job: `ci.yml:143:3: job "build" needs job "bom" which does not exist in this workflow [job-needs]`.
+* **Still open:** the CI run on the owner's push. It must show `validate` on three runners, `sbom`, and `build` as a rehearsal with its five identity jobs, and `release` skipped. It is recorded here when it exists.
+* **What the entry predicted wrongly.**
+  1. **Four negatives, not three.** The darwin/amd64 one came with the owner's decision 5.
+  2. **`--identity` and `--json` exclude each other through Kong's `xor`,** so the parser refuses the pair with exit 2. No check of its own in `Run`.
+  3. **The dependency graph's package count moves** (28, then 27) as GitHub re-parses the repository. The job checks for go-selfupdate-lib by name, not for a count.
+  4. **My negative harness assumed every edit removes its anchor.** An insertion keeps it, so the darwin case asserts that the new text landed instead.

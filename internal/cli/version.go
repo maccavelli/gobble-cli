@@ -12,7 +12,11 @@ var identity = buildinfo.Identity
 
 // VersionCmd prints the build identity.
 type VersionCmd struct {
-	JSON bool `name:"json" help:"Print JSON."`
+	JSON bool `name:"json" xor:"version-format" help:"Print JSON."`
+	// Identity is the line go-selfupdate-lib's build workflow checks on each
+	// platform's runner: buildinfo.Identity(), "<tag> (release) <commit>"
+	// (0004-PLAN Phase 4, amendment of 2026-10-07).
+	Identity bool `name:"identity" xor:"version-format" help:"Print only the build identity line the release workflow checks."`
 }
 
 type versionReport struct {
@@ -25,9 +29,13 @@ type versionReport struct {
 	Arch    string `json:"arch"`
 }
 
-// Run prints `gobble <version>` and the build details, or one JSON object.
+// Run prints `gobble <version>` and the build details, one JSON object, or
+// the identity line.
 func (c *VersionCmd) Run(e *runEnv) error {
 	i := identity()
+	if c.Identity {
+		return e.out.Result([]byte(i.Lib.String() + "\n"))
+	}
 	r := versionReport{Name: "gobble", Version: i.Version, Commit: i.Commit, Date: i.Date, Go: i.Go, OS: i.OS, Arch: i.Arch}
 	if c.JSON {
 		b, err := json.Marshal(r)
