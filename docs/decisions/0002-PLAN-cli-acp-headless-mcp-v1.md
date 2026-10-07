@@ -2304,3 +2304,16 @@ The agent stages; the owner commits and pushes. A green CI run is recorded here 
   4. **`go test -outputdir` needs its directory to exist.** `ci.yml` creates it.
   5. **A job-level `env` cannot read the `runner` context.** The Python choice reads `matrix.os`.
   6. **actionlint needs a Git repository to find the workflows.** The negative names the file.
+
+**Phase 8, 2026-10-07 — complete (committed by the owner as `e159a44`, with Phase 7). Every phase of this plan has run.** The three open items above are closed:
+
+1. **Deviation 1's verification.**
+   * Once the owner's Bitdefender exceptions were in place, a test process loaded 10 modules, down from 12, with neither `bdhkm64.dll` nor `atcuf64.dll`.
+   * The crashing subset, run 60 times through `go test` in the repository, crashed 0 times, and no run failed. The strongest trigger tree, also 60 times, crashed 0 times. Before the exceptions, these runs crashed 5–15 times in 60.
+2. **CI green on the three runners.** GitHub Actions run `37650274632`, on the push of `e159a44`, succeeded for `ubuntu-24.04`, `macos-15` and `windows-2025`.
+   * Both **[unverified]** runner facts held. `windows-2025` already had GNU Make 4.4.1, so the install step installed nothing. `make preflight` printed `preflight passed` there, through the Makefile's default Git bash path.
+3. **The full gates after the last edit,** on the committed tree:
+   * lint printed `0 issues.` for linux, darwin and windows;
+   * Windows `go test ./...` showed no `FAIL` and no runtime crash;
+   * `make preflight` printed `preflight passed` on Windows and in WSL;
+   * WSL `go test -race ./...` exited 0.

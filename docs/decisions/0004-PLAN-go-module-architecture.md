@@ -922,3 +922,5 @@ Step 1 as written, and as built:
 * the 0007 hygiene: `permissions: contents: read`, `concurrency`, `persist-credentials: false`, golangci-lint `v2.14.0`, `go mod tidy -diff`, and shellcheck `v0.11.0` and actionlint `v1.7.12` on Linux.
 
 The Accept line "The CI run is green on all three operating systems on a pushed branch" is recorded in 0002-PLAN's Phase 8 entry.
+
+*(2026-10-07: that line holds. Run `37650274632`, on `main` at `e159a44`, succeeded on all three runners; 0002-PLAN's Phase 8 close-out has the detail. Steps 2–4 are still not started.)*
