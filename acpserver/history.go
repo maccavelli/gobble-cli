@@ -3,11 +3,13 @@ package acpserver
 import (
 	"encoding/json/jsontext"
 	"encoding/json/v2"
+	"fmt"
 	"strings"
 
 	acp "github.com/coder/acp-go-sdk"
 
 	"github.com/maccavelli/gobble-cli/agent"
+	"github.com/maccavelli/gobble-cli/compaction"
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/session"
 	"github.com/maccavelli/gobble-cli/tool"
@@ -143,12 +145,17 @@ type state struct {
 	ids             map[string]bool
 	results         map[string]*session.Message // tool call id → its result
 	messages        []session.Entry             // the path's message entries
+	context         []session.Entry             // the entries the model sees
+	path            []session.Entry
 }
 
-// replayState reads entries: the active path's messages become the history,
-// and model_change, thinking_level_change and session_info set the rest, as
-// Pi's buildSessionContext reads them (session-manager.ts :418-433). Entry
-// types gobble does not act on yet take no part in context (0005-PLAN F2).
+// replayState reads entries: model_change, thinking_level_change,
+// session_info and the assistant messages along the active path set the
+// choices, as Pi's buildSessionContext reads them (session-manager.ts
+// :418-433), and the history is the path's model context, which starts at
+// the newest compaction's summary when there is one (compaction.Context).
+// Entry types gobble does not act on yet take no part in context
+// (0005-PLAN F2).
 func replayState(entries []session.Entry) state {
 	st := state{ids: map[string]bool{}, results: map[string]*session.Message{}, thinking: thinkingOff}
 	for _, e := range entries {
@@ -160,7 +167,8 @@ func replayState(entries []session.Entry) state {
 	if len(entries) > 0 {
 		st.leaf = entries[len(entries)-1].ID
 	}
-	for _, e := range session.Path(entries) {
+	st.path = session.Path(entries)
+	for _, e := range st.path {
 		switch e.Type {
 		case session.TypeModelChange:
 			st.provider, st.model = e.Provider, e.ModelID
@@ -171,6 +179,18 @@ func replayState(entries []session.Entry) state {
 				continue
 			}
 			st.messages = append(st.messages, e)
+			if e.Message.Role == session.RoleAssistant && e.Message.Provider != "" {
+				st.provider, st.model = e.Message.Provider, e.Message.Model
+			}
+		}
+	}
+	st.context = compaction.Context(st.path)
+	for i, e := range st.context {
+		switch {
+		case e.Type == session.TypeCompaction && i == 0:
+			st.history = append(st.history, llm.Message{Role: llm.RoleUser,
+				Content: []llm.Content{{Type: llm.ContentText, Text: compaction.SummaryText(e.Summary)}}})
+		case e.Type == session.TypeMessage && e.Message != nil:
 			st.addMessage(e.Message)
 		}
 	}
@@ -192,9 +212,6 @@ func (st *state) addMessage(m *session.Message) {
 		}
 		st.history = append(st.history, llm.Message{Role: llm.RoleUser, Content: c})
 	case session.RoleAssistant:
-		if m.Provider != "" {
-			st.provider, st.model = m.Provider, m.Model
-		}
 		if m.Usage != nil {
 			st.lastUsed = m.Usage.Input + m.Usage.Output
 		}
@@ -249,13 +266,22 @@ func assistantContent(blocks []session.Block) []llm.Content {
 	return out
 }
 
-// replayUpdates is session/load's compact replay (0008-MADR D19 item 5): one
-// user_message_chunk per user message, one agent_message_chunk per assistant
-// message with its whole text, and one tool_call per call in its final
-// state. The usage snapshot follows them, sent by the caller.
+// replayUpdates is session/load's compact replay (0008-MADR D19 item 5) of
+// what the model sees: a compaction as one agent_message_chunk with its
+// summary, one user_message_chunk per user message, one
+// agent_message_chunk per assistant message with its whole text, and one
+// tool_call per call in its final state. The session-start frames follow
+// them, sent by the caller.
 func replayUpdates(st state, tools map[string]tool.Tool, cwd string) []acp.SessionUpdate {
 	var out []acp.SessionUpdate
-	for _, e := range st.messages {
+	for i, e := range st.context {
+		if e.Type == session.TypeCompaction && i == 0 {
+			out = append(out, acp.UpdateAgentMessageText(compactedText(e)))
+			continue
+		}
+		if e.Type != session.TypeMessage || e.Message == nil {
+			continue
+		}
 		m := e.Message
 		blocks, err := m.Blocks()
 		if err != nil {
@@ -278,6 +304,15 @@ func replayUpdates(st state, tools map[string]tool.Tool, cwd string) []acp.Sessi
 		}
 	}
 	return out
+}
+
+// compactedText is a compaction as the client shows it.
+func compactedText(e session.Entry) string {
+	var before int64
+	if e.TokensBefore != nil {
+		before = *e.TokensBefore
+	}
+	return fmt.Sprintf("Compacted from %d tokens:\n\n%s", before, e.Summary)
 }
 
 func assistantText(blocks []session.Block) string {

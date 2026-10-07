@@ -20,6 +20,7 @@ func TestPiShapesRoundTrip(t *testing.T) {
 		`{"type":"model_change","id":"d4e5f6a7","parentId":"c3d4e5f6","timestamp":"2024-12-03T14:05:00.000Z","provider":"openai","modelId":"gpt-4o"}`,
 		`{"type":"thinking_level_change","id":"e5f6a7b8","parentId":"d4e5f6a7","timestamp":"2024-12-03T14:06:00.000Z","thinkingLevel":"high"}`,
 		`{"type":"compaction","id":"f6a7b8c9","parentId":"e5f6a7b8","timestamp":"2024-12-03T14:10:00.000Z","summary":"User discussed X","firstKeptEntryId":"c3d4e5f6","tokensBefore":50000}`,
+		`{"type":"compaction","id":"f6a7b8ca","parentId":"f6a7b8c9","timestamp":"2024-12-03T14:11:00.000Z","summary":"## Goal\nX","firstKeptEntryId":"f6a7b8ca","tokensBefore":0,"details":{"readFiles":["a.go"],"modifiedFiles":[]},"usage":{"input":10,"output":5,"cacheRead":0,"cacheWrite":0,"totalTokens":15,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"fromHook":false}`,
 		`{"type":"label","id":"a7b8c9d0","parentId":"f6a7b8c9","timestamp":"2024-12-03T14:30:00.000Z","targetId":"a1b2c3d4","label":"checkpoint-1"}`,
 		`{"type":"session_info","id":"b8c9d0e1","parentId":"a7b8c9d0","timestamp":"2024-12-03T14:35:00.000Z","name":"Refactor auth module"}`,
 		`{"type":"custom","id":"c9d0e1f2","parentId":"b8c9d0e1","timestamp":"2024-12-03T14:20:00.000Z","customType":"my-extension","data":{"count":42}}`,

@@ -77,14 +77,17 @@ func TestSession(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
-	if err := c.Recorder.Wait(ctx, 10); err != nil {
+	if err := c.Recorder.Wait(ctx, 13); err != nil {
 		t.Fatal(err)
 	}
+	// session/new's three frames (0002-PLAN Phase 6), then the reply's
+	// chunk and its usage_update.
 	updates := client.Updates()
-	if len(updates) != 2 || updates[0].Update.AgentMessageChunk == nil ||
-		updates[0].Update.AgentMessageChunk.Content.Text == nil ||
-		updates[0].Update.AgentMessageChunk.Content.Text.Text != "hello gobble" || updates[1].Update.UsageUpdate == nil {
-		t.Fatalf("updates = %+v, want the reply's chunk, then usage_update", updates)
+	if len(updates) != 5 || updates[0].Update.AvailableCommandsUpdate == nil || updates[1].Update.CurrentModeUpdate == nil ||
+		updates[2].Update.UsageUpdate == nil || updates[3].Update.AgentMessageChunk == nil ||
+		updates[3].Update.AgentMessageChunk.Content.Text == nil ||
+		updates[3].Update.AgentMessageChunk.Content.Text.Text != "hello gobble" || updates[4].Update.UsageUpdate == nil {
+		t.Fatalf("updates = %+v, want the session's frames, the reply's chunk, then usage_update", updates)
 	}
 	c.Recorder.Golden(t, filepath.Join("testdata", "session.golden"))
 }
@@ -147,8 +150,8 @@ func TestErrors(t *testing.T) {
 		t.Fatalf("close of an unknown session: code %d, want -32602", code)
 	}
 	_, err = c.Client.SetSessionMode(t.Context(), acp.SetSessionModeRequest{SessionId: "nope", ModeId: "plan"})
-	if code := requestCode(t, err); code != -32601 {
-		t.Fatalf("session/set_mode: code %d, want -32601 (Phase 6)", code)
+	if code := requestCode(t, err); code != -32602 {
+		t.Fatalf("session/set_mode on an unknown session: code %d, want -32602 (Phase 6 implements it)", code)
 	}
 	if _, err := c.Client.Authenticate(t.Context(), acp.AuthenticateRequest{MethodId: "x"}); requestCode(t, err) != -32601 {
 		t.Fatal("authenticate is not offered")

@@ -32,8 +32,11 @@ type Rule struct {
 	Input  jsontext.Value `json:"input,omitzero"`
 }
 
-// Decision is a policy answer.
+// Decision is a policy answer. Refusal, when set, is a refusal made
+// without asking anyone, such as plan mode's: it is the whole text the
+// model reads, in place of a declined call's.
 type Decision struct {
-	Allow  bool   `json:"allow"`
-	Reason string `json:"reason,omitzero"`
+	Allow   bool   `json:"allow"`
+	Reason  string `json:"reason,omitzero"`
+	Refusal string `json:"refusal,omitzero"`
 }

@@ -193,6 +193,8 @@ API.
 3. `/compact [instructions]` and `_gobble/compact` share one code path, and
    both emit `usage_update`.
 
+*(2026-10-06: 0002-PLAN Phase 6 delivers Pi's manual compaction, by the owner's decision of that date: step 2's cut-point rules, iterative summary format and split-turn merge, and step 3's `/compact`. This phase keeps step 1, step 2's automatic trigger and overflow compact-and-retry, and `_gobble/compact` (0002-PLAN Phase 7). See that plan's Amendments entry "Phase 6 made executable".)*
+
 **Accept:**
 
 * `synctest` tests prove the back-off schedule (2 s, 4 s, 8 s, with the
@@ -213,6 +215,8 @@ API.
    `bypass` is set.
 5. Project trust (`trust.json`, the decision order, `gobble trust|untrust`,
    `/trust`) and the built-in protected paths.
+
+*(2026-10-06: 0002-PLAN Phase 6 delivers modes `default` and `plan`, `/mode` and `/plan`, plan mode's refusal of non-read-only tools, and an `exit_plan_mode` tool that carries the plan through `session/request_permission` and publishes it as a `plan` update, by the owner's decision of that date. This phase keeps `accept-edits`, `bypass`, the rule engine and `allow_always`.)*
 
 **Accept:**
 

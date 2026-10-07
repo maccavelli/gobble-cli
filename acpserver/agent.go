@@ -15,6 +15,8 @@ import (
 	acp "github.com/coder/acp-go-sdk"
 
 	"github.com/maccavelli/gobble-cli/agent"
+	"github.com/maccavelli/gobble-cli/command"
+	"github.com/maccavelli/gobble-cli/compaction"
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/session"
 	"github.com/maccavelli/gobble-cli/tool"
@@ -57,6 +59,9 @@ type Options struct {
 	Now func() time.Time
 	// MCP configures the MCP servers sessions connect to.
 	MCP MCPOptions
+	// Compaction is /compact's settings. Zero is Pi's defaults
+	// (compaction.DefaultSettings).
+	Compaction compaction.Settings
 	// Logger receives diagnostics, such as MCP servers that need attention.
 	// Nil discards them; Serve passes its own.
 	Logger *slog.Logger
@@ -74,6 +79,8 @@ type Agent struct {
 	now      func() time.Time
 	mcp      MCPOptions
 	logger   *slog.Logger
+	// compaction is /compact's settings.
+	compaction compaction.Settings
 
 	mu       sync.Mutex
 	conn     *acp.AgentSideConnection
@@ -94,6 +101,8 @@ type liveSession struct {
 	think   string
 	cancel  context.CancelFunc
 	mcp     *liveMCP
+	mode    string
+	used    int // the context's tokens, as the last usage_update said
 }
 
 var (
@@ -108,6 +117,10 @@ func New(opts Options) *Agent {
 		tools: opts.Tools, store: opts.Store, now: opts.Now, mcp: opts.MCP, logger: opts.Logger, sessions: map[acp.SessionId]*liveSession{}}
 	if a.logger == nil {
 		a.logger = slog.New(slog.DiscardHandler)
+	}
+	a.compaction = opts.Compaction
+	if a.compaction == (compaction.Settings{}) {
+		a.compaction = compaction.DefaultSettings
 	}
 	if a.newID == nil {
 		a.newID = func() string { return uuid.NewV7().String() }
@@ -227,7 +240,7 @@ func (a *Agent) NewSession(ctx context.Context, p acp.NewSessionRequest) (acp.Ne
 	if err != nil {
 		return acp.NewSessionResponse{}, acp.NewInternalError(map[string]any{keyReason: err.Error()})
 	}
-	s := &liveSession{id: acp.SessionId(id), cwd: p.Cwd, log: log, ids: map[string]bool{}, think: thinkingOff, model: a.models().Default}
+	s := &liveSession{id: acp.SessionId(id), cwd: p.Cwd, log: log, ids: map[string]bool{}, think: thinkingOff, model: a.models().Default, mode: modeDefault}
 	if len(forked) > 0 {
 		for _, e := range forked {
 			if err := log.Append(ctx, e); err != nil {
@@ -245,7 +258,13 @@ func (a *Agent) NewSession(ctx context.Context, p acp.NewSessionRequest) (acp.Ne
 	a.mu.Lock()
 	a.sessions[s.id] = s
 	a.mu.Unlock()
-	return acp.NewSessionResponse{SessionId: s.id, ConfigOptions: configOptions(a.models(), s.model, s.think)}, nil
+	a.mu.Lock()
+	conn := a.conn
+	a.mu.Unlock()
+	if err := a.startFrames(ctx, conn, s); err != nil {
+		return acp.NewSessionResponse{}, err
+	}
+	return acp.NewSessionResponse{SessionId: s.id, ConfigOptions: configOptions(a.models(), s.model, s.think), Modes: modeState(s.mode)}, nil
 }
 
 // oneLine is a name on one line, trimmed, as Pi stores one
@@ -297,6 +316,9 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 	case busy:
 		return acp.PromptResponse{}, acp.NewInvalidRequest(map[string]any{keySessionID: p.SessionId, keyReason: "a prompt is already running"})
 	}
+	if name, args, isCommand := command.Parse(promptText(p.Prompt)); isCommand {
+		return a.runCommand(ctx, s, conn, name, args)
+	}
 	model, err := a.modelProvider()
 	if err != nil {
 		return acp.PromptResponse{}, promptError(err)
@@ -320,13 +342,16 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 		return acp.PromptResponse{}, acp.NewInternalError(map[string]any{keyReason: w.err.Error()})
 	}
 	tools := append(slices.Clip(a.tools), a.mcpTools(turnCtx, s.mcp)...)
+	if a.modeOf(s) == modePlan {
+		tools = append(tools, exitPlan{a: a, conn: conn, s: s})
+	}
 	ag := agent.New(agent.Config{
 		Provider: model,
 		Tools:    tools,
 		System:   systemPrompt(s.cwd, tools),
 		Model:    s.model,
 		Thinking: s.think,
-		Policy:   &acpPolicy{conn: conn, session: p.SessionId},
+		Policy:   planPolicy{a: a, s: s, inner: &acpPolicy{conn: conn, session: p.SessionId}},
 	})
 	out := newUpdates(ctx, conn, p.SessionId)
 	var last llm.Usage
@@ -348,6 +373,7 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 			a.mu.Lock()
 			s.history = append(s.history, end.Messages...)
 			a.mu.Unlock()
+			a.setUsed(s, int(last.InputTokens+last.OutputTokens))
 			out.send(usageUpdate(last))
 			if out.err != nil {
 				return acp.PromptResponse{}, out.err
@@ -437,6 +463,17 @@ func userMessage(blocks []acp.ContentBlock) llm.Message {
 	return m
 }
 
+// promptText is the prompt's text blocks, as its user message joins them.
+func promptText(blocks []acp.ContentBlock) string {
+	var parts []string
+	for _, b := range blocks {
+		if b.Text != nil {
+			parts = append(parts, b.Text.Text)
+		}
+	}
+	return strings.Join(parts, "\n\n")
+}
+
 // Cancel stops the session's running turn. The SDK also cancels the
 // prompt's context; the turn then ends with the cancelled stop reason.
 func (a *Agent) Cancel(_ context.Context, p acp.CancelNotification) error {
@@ -471,7 +508,7 @@ func (a *Agent) open(ctx context.Context, id acp.SessionId, cwd string, req []ac
 	if cwd == "" {
 		cwd = log.Header().Cwd
 	}
-	s := &liveSession{id: id, cwd: cwd, log: log, think: thinkingOff, model: a.models().Default}
+	s := &liveSession{id: id, cwd: cwd, log: log, think: thinkingOff, model: a.models().Default, mode: modeDefault}
 	a.restore(s, log.Entries())
 	s.mcp = a.startMCP(ctx, cwd, servers, notes)
 	a.mu.Lock()
@@ -495,11 +532,13 @@ func (a *Agent) LoadSession(ctx context.Context, p acp.LoadSessionRequest) (acp.
 	for _, u := range replayUpdates(st, a.byName, s.cwd) {
 		out.send(u)
 	}
-	out.send(usageUpdate(llm.Usage{InputTokens: st.lastUsed}))
 	if out.err != nil {
 		return acp.LoadSessionResponse{}, out.err
 	}
-	return acp.LoadSessionResponse{ConfigOptions: configOptions(a.models(), s.model, s.think), Meta: resumedMeta(st)}, nil
+	if err := a.startFrames(ctx, conn, s); err != nil {
+		return acp.LoadSessionResponse{}, err
+	}
+	return acp.LoadSessionResponse{ConfigOptions: configOptions(a.models(), s.model, s.think), Modes: modeState(s.mode), Meta: resumedMeta(st)}, nil
 }
 
 // resumedMeta is a resumed session's _meta.gobble: its title (the name,
@@ -528,7 +567,14 @@ func (a *Agent) ResumeSession(ctx context.Context, p acp.ResumeSessionRequest) (
 	if err != nil {
 		return acp.ResumeSessionResponse{}, err
 	}
-	return acp.ResumeSessionResponse{ConfigOptions: configOptions(a.models(), s.model, s.think), Meta: resumedMeta(replayState(s.log.Entries()))}, nil
+	a.mu.Lock()
+	conn := a.conn
+	a.mu.Unlock()
+	if err := a.startFrames(ctx, conn, s); err != nil {
+		return acp.ResumeSessionResponse{}, err
+	}
+	return acp.ResumeSessionResponse{ConfigOptions: configOptions(a.models(), s.model, s.think), Modes: modeState(s.mode),
+		Meta: resumedMeta(replayState(s.log.Entries()))}, nil
 }
 
 // ListSessions lists the sessions with a file, and the live ones of this
@@ -607,28 +653,11 @@ func (a *Agent) SetSessionConfigOption(ctx context.Context, p acp.SetSessionConf
 	if !ok {
 		return acp.SetSessionConfigOptionResponse{}, invalidParams(v.SessionId, "unknown session")
 	}
-	choice, value := a.models(), string(v.Value)
-	var e session.Entry
-	switch string(v.ConfigId) {
-	case configModel:
-		if !slices.Contains(choice.Models, value) {
-			return acp.SetSessionConfigOptionResponse{}, invalidParams(v.SessionId, fmt.Sprintf("unknown model %q", value))
-		}
-		s.model = value
-		e = session.Entry{Type: session.TypeModelChange, Provider: choice.Provider, ModelID: value}
-	case configThinking:
-		if !validThinking(value) {
-			return acp.SetSessionConfigOptionResponse{}, invalidParams(v.SessionId, fmt.Sprintf("unknown thinking level %q", value))
-		}
-		s.think = value
-		e = session.Entry{Type: session.TypeThinkingLevelChange, ThinkingLevel: value}
-	default:
-		return acp.SetSessionConfigOptionResponse{}, invalidParams(v.SessionId, fmt.Sprintf("unknown config option %q", v.ConfigId))
+	opts, err := a.setConfig(ctx, s, string(v.ConfigId), string(v.Value))
+	if err != nil {
+		return acp.SetSessionConfigOptionResponse{}, err
 	}
-	if err := s.append(ctx, a.now(), e); err != nil {
-		return acp.SetSessionConfigOptionResponse{}, acp.NewInternalError(map[string]any{keyReason: err.Error()})
-	}
-	return acp.SetSessionConfigOptionResponse{ConfigOptions: configOptions(choice, s.model, s.think)}, nil
+	return acp.SetSessionConfigOptionResponse{ConfigOptions: opts}, nil
 }
 
 // The methods below are not implemented in this phase and are not
@@ -642,9 +671,4 @@ func (*Agent) Authenticate(context.Context, acp.AuthenticateRequest) (acp.Authen
 // Logout is not offered.
 func (*Agent) Logout(context.Context, acp.LogoutRequest) (acp.LogoutResponse, error) {
 	return acp.LogoutResponse{}, acp.NewMethodNotFound(acp.AgentMethodLogout)
-}
-
-// SetSessionMode arrives with modes (0002-PLAN Phase 6).
-func (*Agent) SetSessionMode(context.Context, acp.SetSessionModeRequest) (acp.SetSessionModeResponse, error) {
-	return acp.SetSessionModeResponse{}, acp.NewMethodNotFound(acp.AgentMethodSessionSetMode)
 }

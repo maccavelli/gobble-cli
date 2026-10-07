@@ -129,8 +129,9 @@ func TestResumeWithoutReplay(t *testing.T) {
 	if _, err := c2.Client.ResumeSession(t.Context(), acp.ResumeSessionRequest{SessionId: id, Cwd: cwd}); err != nil {
 		t.Fatal(err)
 	}
-	if n := len(client.Updates()); n != 0 {
-		t.Fatalf("resume sent %d updates", n)
+	// No replay: only the session-start frames (0002-PLAN Phase 6).
+	if u := client.Updates(); len(u) != 3 || u[0].Update.AvailableCommandsUpdate == nil || u[1].Update.CurrentModeUpdate == nil || u[2].Update.UsageUpdate == nil {
+		t.Fatalf("resume sent %+v, want only the three session-start frames", u)
 	}
 	// The count and title the CLI prints (deviation of 2026-10-06).
 	_, err := c2.Client.CloseSession(t.Context(), acp.CloseSessionRequest{SessionId: id})

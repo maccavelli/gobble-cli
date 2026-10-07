@@ -287,6 +287,8 @@ func (t *turn) approve(call tool.Call, spec tool.Spec, title string) (tool.Resul
 		return tool.ErrorResult(cancelledText), true
 	case err != nil:
 		return tool.ErrorResult(fmt.Sprintf("the permission request failed, so %s did not run: %v", spec.Name, err)), true
+	case !d.Allow && d.Refusal != "":
+		return tool.ErrorResult(d.Refusal), true
 	case !d.Allow:
 		msg := "The user declined this call, so it did not run."
 		if d.Reason != "" {

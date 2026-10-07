@@ -284,8 +284,13 @@ func TestOnePromptAtATime(t *testing.T) {
 	c, client := connectWith(t, model, &acptest.Client{Allow: true})
 	id := openSession(t, c, t.TempDir())
 	go func() { _, _ = prompt(t, c, id, "first") }() //nolint:errcheck // cancelled below
+	// session/new's frames arrive first; the first prompt is running once
+	// its tool call is reported.
 	deadline := time.Now().Add(5 * time.Second)
-	for len(client.Updates()) == 0 && time.Now().Before(deadline) {
+	for time.Now().Before(deadline) {
+		if starts, _ := toolUpdates(client.Updates()); len(starts) > 0 {
+			break
+		}
 		time.Sleep(10 * time.Millisecond)
 	}
 	_, err := prompt(t, c, id, "second")

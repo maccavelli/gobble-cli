@@ -1,10 +1,14 @@
 package acpserver
 
 import (
+	"context"
+	"fmt"
 	"slices"
 	"time"
 
 	acp "github.com/coder/acp-go-sdk"
+
+	"github.com/maccavelli/gobble-cli/session"
 )
 
 // Config option ids, which are also their categories (0008-MADR D19 item 4).
@@ -53,6 +57,35 @@ func selectOption(id, name string, category acp.SessionConfigOptionCategory, cur
 }
 
 func validThinking(level string) bool { return slices.Contains(thinkingLevels, level) }
+
+// setConfig sets the model or the thinking level from the session's next
+// prompt and records the change (model_change, thinking_level_change)
+// before anything reports it. It is the one path of set_config_option,
+// /model and /thinking.
+func (a *Agent) setConfig(ctx context.Context, s *liveSession, id, value string) ([]acp.SessionConfigOption, error) {
+	choice := a.models()
+	var e session.Entry
+	switch id {
+	case configModel:
+		if !slices.Contains(choice.Models, value) {
+			return nil, invalidParams(s.id, fmt.Sprintf("unknown model %q", value))
+		}
+		s.model = value
+		e = session.Entry{Type: session.TypeModelChange, Provider: choice.Provider, ModelID: value}
+	case configThinking:
+		if !validThinking(value) {
+			return nil, invalidParams(s.id, fmt.Sprintf("unknown thinking level %q", value))
+		}
+		s.think = value
+		e = session.Entry{Type: session.TypeThinkingLevelChange, ThinkingLevel: value}
+	default:
+		return nil, invalidParams(s.id, fmt.Sprintf("unknown config option %q", id))
+	}
+	if err := s.append(ctx, a.now(), e); err != nil {
+		return nil, acp.NewInternalError(map[string]any{keyReason: err.Error()})
+	}
+	return configOptions(choice, s.model, s.think), nil
+}
 
 // newSessionMeta is session/new's _meta.gobble: a chosen session id, a
 // session to fork, and a name (0002-PLAN Phase 4, owner's decision of

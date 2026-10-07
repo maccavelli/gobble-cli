@@ -233,5 +233,10 @@ func acpUsage(u llm.Usage) *acp.Usage {
 // call's input and output. The size is 0 until the catalog gives one
 // (0005-PLAN F4).
 func usageUpdate(last llm.Usage) acp.SessionUpdate {
-	return acp.SessionUpdate{UsageUpdate: &acp.SessionUsageUpdate{SessionUpdate: "usage_update", Used: int(last.InputTokens + last.OutputTokens)}}
+	return usedUpdate(int(last.InputTokens + last.OutputTokens))
+}
+
+// usedUpdate is a usage_update of used tokens.
+func usedUpdate(used int) acp.SessionUpdate {
+	return acp.SessionUpdate{UsageUpdate: &acp.SessionUsageUpdate{SessionUpdate: "usage_update", Used: used}}
 }

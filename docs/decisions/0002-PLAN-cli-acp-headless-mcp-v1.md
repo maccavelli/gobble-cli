@@ -249,6 +249,8 @@ deliberately advertised `/bogus` that has no handler fails a test that
 asserts advertisement ⊆ handlers. `go list` / grep of the module for
 `_x.ai/` is empty.
 
+*(2026-10-06: made executable, in two parts, in the Amendments entry "Phase 6 made executable" of this date. Step 6's frozen list is there: `help`, `compact`, `usage`, `context`, `session`, `model`, `thinking`, `mode`, `plan`, `name`, `fork` and `clone`.)*
+
 ### Phase 7 — `_gobble/` extensions and remaining Kong commands
 
 1. Implement `_gobble/compact` (optional instructions), `_gobble/usage`,
@@ -1413,3 +1415,298 @@ The agent stages; the owner commits.
   5. **The fixture's tools come back sorted by name** (`add`, `dotted.name`, `echo`, `sleep`): the go-sdk server lists them so, and gobble keeps the server's order.
   6. **The "SSE accepted" negative needed two edits.** With the SSE check alone removed, `type: "sse"` still matches neither branch and fails with "needs either …", so the mutation also routed it to HTTP.
   7. **Kong's `passthrough` on the command argument** takes the command with or without `--`, as Pi's parser does, so `gobble mcp add fs npx -y srv` works too.
+
+**2026-10-06 — Phase 6 made executable, in two parts (owner's decisions: two staged parts, Pi's manual compaction now, fork and clone switch the CLI through `_meta`, an `exit_plan_mode` tool now).**
+
+Phase 6 carries the work five records assign to it:
+* its own steps 1–6;
+* the 2026-10-01 amendment: `available_commands_update`, `current_mode_update` and a first `usage_update` before `session/new` and `session/load` return; unknown `_` methods answer -32601;
+* the 0008 amendment: D13's registry union, D19 item 7's command names, and D16's permission prompt;
+* Phase 2's deferral of slash and `@path` completion and of `/new`, `/help` and `/edit`;
+* Phase 4's deferral of `session_info_update` for names.
+
+The facts come from Pi at `maccavelli/pi` `312184edb`.
+
+Read in full:
+* `packages/coding-agent/docs/compaction.md` and `docs/slash-commands.md`;
+* `packages/coding-agent/src/core/compaction/compaction.ts` and `compaction/utils.ts`;
+* `packages/coding-agent/src/core/messages.ts` and `core/slash-commands.ts`;
+* `packages/coding-agent/src/core/session-manager.ts` (read in full for Phase 4).
+
+Read in part:
+* `core/agent-session.ts`: `compact()` (`:2679-2824`), `setSessionName` (`:3844-3849`), `getUserMessagesForForking`, `getSessionStats` and `getContextUsage` (`:4063-4180`);
+* `modes/interactive/interactive-mode.ts`: the command dispatch (`:3100-3225`), and `handleThinkingCommand`, `handleCloneCommand`, `handleNameCommand`, `handleSessionCommand` and `handleCompactCommand`;
+* `packages/ai/src/utils/text.ts`: `contentText`.
+
+The facts:
+* **Manual `/compact` is automatic compaction's preparation** (`agent-session.ts:2679-2703`).
+  * `prepareCompaction(path, settings)` returns nothing when the path ends in a compaction, which fails `Already compacted`, or when there is nothing to summarise, which fails `Nothing to compact (session too small)`.
+  * The defaults are `reserveTokens` 16384 and `keepRecentTokens` 20000 (`compaction.ts:126-130`).
+* **Context with a compaction** (`session-manager.ts:461-512`). The newest compaction on the path becomes one user message, `The conversation history before this point was compacted into the following summary:\n\n<summary>\n` + summary + `\n</summary>` (`messages.ts:11-17,176-183`). It is followed by the path's entries from `firstKeptEntryId` up to the compaction, then every entry after it.
+* **Token estimate** (`compaction.ts:276-349`): characters / 4, rounded up. JavaScript characters are UTF-16 code units. An image counts 4800 characters, and a tool call counts its name plus its JSON arguments.
+  * `tokensBefore` is the last valid assistant usage after the latest compaction, `totalTokens || input + output + cacheRead + cacheWrite`, plus estimates of the messages after it. With no such usage, it is the sum of estimates (`:196-262`).
+* **Cut point** (`compaction.ts:802-870`).
+  * Walk back from the newest entry, adding estimates, until the total reaches `keepRecentTokens`. Then cut at the first valid point at or after that entry, else the last valid point. A valid point is an entry with a user, assistant, bash, custom, branch-summary or compaction-summary message, never a tool result. Without reaching the budget, the cut is the first valid point.
+  * Then step back over context-invisible entries.
+  * A cut at a non-turn-start entry is a split turn, whose turn start is the nearest turn-start entry before it.
+* **Summary** (`compaction.ts:507-579,645-766,942-1119`; `utils.ts`).
+  * The conversation is serialised as `[User]:`, `[Assistant thinking]:`, `[Assistant]:`, `[Assistant tool calls]: name(k=json, …); …` and `[Tool result]:` lines, joined by blank lines. Tool results are cut at 2000 characters with `\n\n[... N more characters truncated]`.
+  * It is wrapped as `<conversation>…</conversation>`, then `<previous-summary>…</previous-summary>` when one exists, then the first-summary or update prompt, with `\n\nAdditional focus: <instructions>`.
+  * The system prompt is `SUMMARIZATION_SYSTEM_PROMPT`.
+  * A split turn adds a turn-prefix summary, joined as `\n\n---\n\n**Turn Context (split turn):**\n\n`.
+  * `<read-files>` and `<modified-files>` lists are appended. They come from `read`, `write` and `edit` calls, merged with the previous compaction's `details`.
+  * Failures are `Summarization failed: <message>`, `… generation hit the token cap and the summary is incomplete`, and `Summarization attempted to call a tool`.
+* **The entry** (`session-manager.ts:91-104,1260-1284`): `{type:"compaction", id, parentId, timestamp, summary, firstKeptEntryId, tokensBefore, details:{readFiles, modifiedFiles}, usage, fromHook}`.
+* **Commands** (`interactive-mode.ts`):
+  * A command is the whole editor text `/name` or `/name <args>`.
+  * `/name` with no argument shows `Session name: <name>`, or warns `Usage: /name <name>`. With one, it appends `session_info` and shows `Session name set: <name>`.
+  * `/session` shows a Session Info block: Name, File, ID; then Messages (Total, User, Assistant, Tools `N calls, M results`); then Tokens (Input, Output, Total); then Cost.
+  * `/fork` forks before a chosen user message; the candidates are every user message entry with text.
+  * `/clone` duplicates at the leaf, or shows `Nothing to clone yet`.
+  * `/thinking <level>` rejects an unknown level with `Unknown thinking level "<x>". Available levels: …`.
+* **`contentText`** joins text blocks with `"\n"`, or the separator given. The serialiser passes `""` for user and tool-result content.
+
+The owner decided four questions on 2026-10-06:
+
+1. **Two parts,** each with its own gates, negative tests and execution entry, each committed by the owner.
+   * Part A is the agent.
+   * Part B is the CLI.
+2. **`/compact` is Pi's manual compaction, ported now.**
+   * It includes the cut point at 20000 recent tokens, the split turn, the iterative update prompt, the file lists, and Pi's prompts word for word.
+   * 0005-PLAN F5 keeps the automatic trigger, overflow compact-and-retry, and the agent-level retry.
+3. **`/fork` and `/clone` write a new stored session, report its id, and set `_meta.gobble.switchTo` on the prompt response.**
+   * gobble's line session then resumes the new session, as Pi's terminal switches to it.
+   * Other ACP clients ignore `_meta` and keep the current session.
+4. **Plan mode comes with an `exit_plan_mode` tool,** which carries the plan through `session/request_permission` and publishes it as an ACP `plan` update.
+   * 0005-PLAN F6 keeps `accept-edits`, `bypass` and the rule engine.
+
+Choices made within the wording:
+* **What counts as a command.** A command is the prompt's text, trimmed, beginning `/`, where everything up to the first whitespace matches D19 item 7's `[A-Za-z0-9][A-Za-z0-9_-]*`.
+  * `/usr/local/bin is wrong` and `/skill:review` are therefore prompt text for the model.
+  * A command that is not advertised gets `Unknown command /<name>. /help lists the commands.` It is not a model turn.
+  * A command writes no user message, and makes no model call except `/compact`'s summary.
+* **The advertised set,** frozen here (step 6): `help`, `compact`, `usage`, `context`, `session`, `model`, `thinking`, `mode`, `plan`, `name`, `fork` and `clone`.
+  * Step 3 asks for "at least" its list. `mode` and `plan` are added because modes land in this phase, and 0005-MADR lists both as 1.0.
+  * `/session` is `/context`'s non-canonical alias (0002-MADR).
+  * TUI chrome is never advertised.
+* **Frame order.** `session/new`, `session/load` and `session/resume` send `available_commands_update`, `current_mode_update` and a `usage_update` before they respond. `session/load` sends them after its replay. Resume is included because it starts a live session too.
+* **Usage.** `used` is the estimate of the system prompt plus the context. `size` stays 0 until the catalog (0005-PLAN F4).
+  * `/usage` sums the session's assistant and compaction usage, as Pi's `getSessionStats` does. It says the figures are estimated, and that account and rate-limit figures are not reported by the provider.
+  * Cost shows `$0.000` until the catalog.
+* **`/context`** is Pi's Session Info, as plain text, with `Mode` and `Model` lines, and a `Context:` line of the same `used` as the last `usage_update`.
+* **`/model`, `/thinking`, `/mode` and `/name`.** Each shares its path with the ACP method that does the same: `set_config_option`, `set_mode`, and the session-info entry.
+  * Each sends the update that reports the change (`config_option_update`, `current_mode_update`, `session_info_update`) after the entry is written (D19 item 6).
+  * With no argument, each shows the current value and the choices.
+* **`/fork` and `/clone`.**
+  * With no argument, `/fork` lists the user messages as `<entry id>  <first line, at most 60 runes>`, under `Send /fork <entry> to start a new session before one of these messages:`.
+  * `/fork <entry>` copies the path up to that message's parent. When the message is the first one, it answers `Nothing comes before that message; start a new session instead.`: files are created lazily, so an empty session cannot be switched to.
+  * `/clone` copies the whole path.
+  * The copy is written through `store.Create`, with `parentSession` set, then closed so its lock is free. The answer is `Forked to session <id>.` or `Cloned to session <id>.`.
+* **Compaction in gobble.**
+  * The summary request carries no output cap, because `llm.Request` has no `maxTokens` until 0005-PLAN F4. Pi caps it at 80 % of `reserveTokens`.
+  * `tokensBefore` counts no system message, because gobble writes none into the session.
+  * Pi's advance over `context_edit` omissions is not ported: gobble has no `context_edit` entries before 0005-MADR's 1.x context edits.
+  * Entry types gobble does not act on (`custom_message`, `branch_summary`) are context-invisible, as Phase 4 decided.
+* **The progress of `/compact`.**
+  * It streams `Compacting the conversation…`, then `Compacted from N tokens.` and the summary, then a `usage_update` with the new estimate.
+  * A failure is `Compaction failed: <message>`, or Pi's own `Already compacted` or `Nothing to compact (session too small)`.
+  * With no credential, the prompt fails with `auth_required`, as any prompt does.
+* **Replay of a compacted session.** `session/load` replays the compaction as one `agent_message_chunk`, `Compacted from N tokens:\n\n<summary>`, then the kept and later messages. The `resumed … (N messages)` count still counts the whole path.
+* **Modes.** `default` ("Ask before changing files or running commands.") and `plan` ("Read-only: explore and plan, then leave plan mode with an approved plan.") are advertised in every session response.
+  * The mode is not persisted: a loaded session starts in `default`. Pi has no mode entry.
+  * An unknown mode id is invalid params.
+* **Plan mode.**
+  * A non-read-only tool call is refused without asking, with `Plan mode is read-only, so <tool> did not run. Call exit_plan_mode with the plan to ask the user to leave plan mode.`
+  * `permission.Decision` gains `Refusal`, the text the model reads when a policy refuses without asking. `agent` uses it as the whole result.
+  * `exit_plan_mode {plan}` is offered only in plan mode, and is marked read-only because it asks for itself. It does three things:
+    * publishes the plan as a `plan` update: one pending, medium-priority entry per non-empty line, with list markers removed;
+    * sends `session/request_permission` for its own call, titled `Leave plan mode and carry out the plan`, with the plan cut to 400 bytes as the first content block, and options `Start implementing` (`allow_once`) and `Keep planning` (`reject_once`);
+    * on allow, sets the mode to `default` and sends `current_mode_update`.
+* **Unknown `_` methods.** The SDK already answers -32601. A test pins it.
+
+**Part A** (files):
+* `command/doc.go`, and new `command.go` and `command_test.go`;
+* `session/session.go` and `session_test.go`;
+* `compaction/doc.go`, and new `compaction.go`, `estimate.go`, `serialize.go` and `compaction_test.go`;
+* `permission/permission.go`;
+* `agent/agent.go` and `agent_test.go`;
+* `acpserver/`:
+  * `agent.go`, `history.go`, `config.go`, `prompt.go`, `agent_test.go`, `session_test.go` and `testdata/session.golden`;
+  * new `commands.go`, `modes.go`, `compact.go`, `commands_test.go`, `modes_test.go` and `compact_test.go`.
+
+1. **`command`:**
+   * `type Command struct{Name, Description, Hint string}`;
+   * `Parse(text string) (name, args string, ok bool)`, by the rule above;
+   * `ValidName(string) bool`.
+2. **`session`:**
+   * `TypeCompaction = "compaction"`.
+   * `Entry` gains `Summary`, `FirstKeptEntryID` (`firstKeptEntryId`), `TokensBefore *int64`, `Details jsontext.Value`, `Usage *Usage` and `FromHook *bool`, in Pi's names.
+   * A test round-trips a Pi-shaped compaction entry.
+3. **`compaction`:**
+   * `Settings{ReserveTokens, KeepRecentTokens int}` and `DefaultSettings`.
+   * `Context(path []session.Entry) []session.Entry`.
+   * `Estimate(m *session.Message) int`, and `EstimateEntries`.
+   * `Prepare(path, Settings) (*Preparation, error)`, with `ErrAlreadyCompacted` and `ErrNothingToCompact` carrying Pi's texts.
+   * `Compact(ctx, *Preparation, Model{Provider llm.Provider; Model, Thinking string}, instructions string) (Result, error)`. `Result` is `{Summary, FirstKeptEntryID string; TokensBefore int64; Usage llm.Usage; Details}`.
+   * `SummaryText(summary string) string`, the context message.
+   * Pi's prompts and serialisation, word for word.
+4. **`permission` and `agent`:** `Decision.Refusal`, used verbatim by `agent.approve`.
+5. **`acpserver/history.go`:**
+   * `replayState` builds the history from `compaction.Context`, with the compaction as a user message of `compaction.SummaryText`.
+   * `state` keeps the path's messages for the count, and the context for replay.
+   * `replayUpdates` renders a compaction as above.
+6. **`acpserver/modes.go`:**
+   * the two modes, and `liveSession.mode`;
+   * `SetSessionMode`;
+   * the plan-mode policy around `acpPolicy`;
+   * the `exit_plan_mode` tool, built per prompt.
+7. **`acpserver/commands.go`:**
+   * the frozen registry, `availableCommands()`, and the dispatch in `Prompt` before anything is written;
+   * the handlers above.
+   * The session-start frames come from one `startFrames` function, called by `NewSession`, `LoadSession` and `ResumeSession` before they respond. Each response carries `Modes`.
+8. **`acpserver/compact.go`:** the `/compact` handler. It sets `s.cancel` so `session/cancel` stops the summary, and writes the entry only on success.
+9. **`acpserver/config.go`:** `setConfig(ctx, s, id, value)` is shared by `SetSessionConfigOption`, `/model` and `/thinking`, and sends `config_option_update`.
+
+**Part A accept,** through `acptest.Connect` and a scripted model:
+* **The phase's own accept.**
+  * `/compact`, `/usage` and `/context` sent as `session/prompt` give non-empty `agent_message_chunk`s, and make no model request except the summary.
+  * After `/compact`, the next prompt's request starts with the summary message, then only the kept messages (with `KeepRecentTokens` set small in the test).
+  * `set_mode` to `plan` then `default` gives one `current_mode_update` each.
+* **Every advertised command executes.** A table built from `availableCommands()` itself sends each one and asserts a handled answer, never `Unknown command` and never a model turn.
+* **Plan mode.** The model's `write` is refused with the plan-mode text, and no file appears. `exit_plan_mode` publishes the `plan` update and asks; on allow, the mode is `default` and a later `write` asks as usual.
+* **Frame order.** `available_commands_update`, `current_mode_update` and `usage_update` precede the `session/new` response on the wire (the recorder's transcript), and likewise for `session/load`.
+* **The stdio script** of the fifth amendment's Confirmation completes without an unknown-method error: `initialize`, `session/new`, `session/prompt` `/compact`, `session/set_mode` `plan`, and `session/set_config_option` with the model's `configId`. Raw `session/set_model` and `_x.ai/compact_conversation` get -32601.
+* **No `_x.ai/` in the module.** A walk of the module's `.go` files finds no `_x.ai/` string. The test builds its needle from two parts, so it does not find itself.
+* **Compaction against Pi.**
+  * A property test over seeded random sessions never puts `firstKeptEntryId` on a tool result.
+  * A constructed session gives the expected cut, and a split turn.
+  * The serialisation matches a fixture written from Pi's code.
+  * A Pi-shaped compaction entry loads, and becomes the summary message in context.
+* **Sessions.**
+  * `/fork <entry>` and `/clone` write a new session with the expected entries and `parentSession`, and the response carries `_meta.gobble.switchTo`.
+  * `/name x` writes `session_info` and sends `session_info_update` with title `x`.
+  * The golden transcript changes by the new frames and `modes` only.
+
+Each is shown failing first on a scratch copy, the failure quoted:
+* `Prompt` ignoring a leading slash, the grok silence shape;
+* an advertised `/bogus` with no handler;
+* the session-start frames sent after the response;
+* a cut allowed on a tool result;
+* plan mode letting `write` run;
+* the compaction left out of the next prompt's context.
+
+**Part B** (files):
+* `acpclient/`: `conn.go`, `update.go`, `sessions.go`, and their tests;
+* `internal/cli/`: `line.go`, `sessions.go`, `chat.go` and `line_test.go`, and new `slash.go`, `permission.go`, `slash_test.go` and `permission_test.go`.
+
+1. **`acpclient`:**
+   * `Update` gains the kinds `Commands` (with `Commands []Command{Name, Description, Hint}`), `Mode` (`ModeID`) and `SessionInfo` (`Title`).
+   * `Session.Commands()` returns the latest list.
+   * `Result.SwitchTo` comes from the response's `_meta.gobble.switchTo`.
+   * `Options.Permission func(ctx, PermissionRequest) PermissionAnswer` answers `session/request_permission`. Without it, the client declines as it does today.
+2. **`internal/cli/slash.go`:** the D13 registry, the agent's commands united with the local `/help`, `/exit`, `/quit`, `/edit` and `/new`.
+   * `/help` prints both lists.
+   * `/new` closes the session and opens a new one in process.
+   * `/edit [text]` composes the prompt through `editor.Compose`.
+   * A valid name outside the registry prints `Error: unknown command /<name>; /help lists the commands` on stderr, and is never sent.
+   * Before the first session exists, a slash input opens the session first. `session/new` makes no model call, so D5 holds.
+3. **`internal/cli/line.go`:**
+   * completion through `editor.Options.Complete`: slash names from the registry (only local ones before a session exists, D19 item 9), and `@path` from `os.ReadDir`;
+   * after a result with `SwitchTo`, the session closes and resumes the new one, printing the `resumed …` line.
+4. **`internal/cli/permission.go`:** D16's prompt.
+   * One line on stderr, built from the options offered: `[y] allow once`, `[a] always`, `[n] deny`, `[N] never`, and `[c] cancel` always, each shown only when offered.
+   * The title is sanitised (D8).
+   * One key is read from the line session's reader. Ctrl+C means cancel.
+   * Print mode and a non-terminal stdin keep declining, until F6's `--yes`.
+
+**Part B accept,** through `Main` and the line session's scripted input:
+* `/help` lists both sets.
+* `/bogus` errors locally, and the agent receives no prompt.
+* `/new` starts a new session.
+* `/edit` returns the fake editor's text as the prompt.
+* `Tab` after `/co` completes from the registry.
+* `y` lets a `write` run, `n` refuses it, and Ctrl+C cancels.
+* `/clone` switches the line session to the clone, and the next prompt reaches it.
+
+Shown failing first:
+* an unknown slash sent to the agent;
+* `SwitchTo` ignored;
+* `n` treated as allow.
+
+**Verification, each part.**
+* `go test ./...`;
+* `golangci-lint` for linux, darwin and windows;
+* `make preflight` on Windows and in WSL, and WSL `go test -race ./...`;
+* the pre-add check on every changed Go file;
+* the identifier and hidden-character scans.
+
+The agent stages; the owner commits.
+
+**Deferred from Phase 6, named:**
+* to 0005-PLAN F5: automatic compaction (the threshold and its triggers), overflow compact-and-retry, and agent-level retry;
+* to F6: `accept-edits` and `bypass`, the rule engine, `allow_always` rules, `/permissions`, `/trust` and `--yes`;
+* to F4: the context window `size`, prices and the summary's output cap;
+* to Phase 7: `_gobble/compact`, `_gobble/usage`, `_gobble/set_session_name` and the read helpers (the dual path);
+* to 0005-PLAN X1: `/deep-research`;
+* to 1.x: `/status`, `/todos`, `/tree`, branch summaries and context edits.
+
+**Deviations during Phase 6, 2026-10-06 (owner's decisions):**
+
+1. **`acpserver/prompt_test.go` joins Part A's files.**
+   * `TestOnePromptAtATime` failed on this tree with `second prompt err = <nil>, want invalid request`.
+   * It waited for any update to know the first prompt was running. `session/new`'s three start frames now satisfy that wait at once, so the second prompt raced ahead of the first.
+   * Its wait now waits for the first prompt's tool call. The assertion, -32600 for a second prompt, is unchanged.
+
+**Phase 6 Part A, 2026-10-06 — complete (staged; the owner commits).** It ran as the amendment wrote it, with deviation 1 above. Part B and Phases 7–8 have not run.
+
+* **Files.**
+  * `command`: `doc.go`, and new `command.go` and `command_test.go`.
+  * `session`: `session.go` and `session_test.go`.
+  * `compaction`: `doc.go`, and new `compaction.go`, `estimate.go`, `serialize.go` and `compaction_test.go`.
+  * `permission/permission.go`, and `agent/agent.go` and `agent_test.go`.
+  * `acpserver`: `agent.go`, `history.go`, `config.go`, `prompt.go`, `agent_test.go`, `session_test.go`, `prompt_test.go` (deviation 1) and `testdata/session.golden`, and new `commands.go`, `modes.go`, `compact.go`, `commands_test.go`, `modes_test.go` and `compact_test.go`.
+* **Accept,** through `acptest.Connect` and a scripted model:
+  * `TestEveryAdvertisedCommandExecutes`: every name of the session's `available_commands_update`, read from the wire, sent as a prompt, is answered, never `Unknown command`, with no model request.
+  * `TestCommandsAnswer`: `/usage` (`Session usage`), `/context` (`Session Info`), `/session` (`Context: `), `/compact` on a small session (`Compaction failed: Nothing to compact (session too small)`), `/help` and `/bogus`. One model request in all. `/usr/local/bin is missing` reaches the model.
+  * `TestCompactShortensContext`: `/compact keep the API` streams `Compacting the conversation…`, then `Compacted from N tokens.` with the summary, then a `usage_update`. The summary request carries `Additional focus: keep the API`. The next request holds the summary message, then only the kept messages.
+  * `TestCompactionLoads`: a compaction in Pi's shape loads, replays as `Compacted from 42 tokens:`, and the next request starts from its summary and the kept entry.
+  * `TestSetModeUpdates`: `default` and `plan` are advertised. `set_mode` to `plan` then `default` gives `current_mode_update`s `default,plan,default`, the first from `session/new`. An unknown mode is -32602.
+  * `TestPlanModeRefusesWrite`: `/plan`, then the model's `write` is refused with the plan-mode text, nothing is asked, and no file appears. `exit_plan_mode` is offered.
+  * `TestExitPlanMode`: the plan becomes three `plan` entries with their markers removed. The permission request is for the tool's own call, carrying the plan. Allow returns to `default`, and the next `write` asks and runs.
+  * `TestStartFramesPrecedeTheResponse`: the three frames precede the `session/new` and `session/load` responses on the recorder's wire.
+  * `TestMcremoteScript`: the acpagent script over `Serve` has no error, and `session/set_model` and the x.ai method answer -32601. `TestNoXAIMethods` finds no x.ai string in the module's `.go` files.
+  * `TestNameCommand`, `TestModelAndThinkingCommands` and `TestForkAndClone`:
+    * `/name` writes the entry and sends `session_info_update`.
+    * `/thinking` and `/model` change the next request and send `config_option_update`.
+    * `/fork` lists the user messages, and `/fork <entry>` writes a session holding only `first`. `/clone` writes `first,second`. Each response's `_meta.gobble.switchTo` names the new session, and the fork resumes. Forking the first message is refused.
+  * `compaction`'s own tests:
+    * a cut at a turn, and a split turn;
+    * `Already compacted` and `Nothing to compact`;
+    * 500 seeded random sessions with no cut on a tool result;
+    * the context, and the serialisation, against a fixture written by hand from Pi's code;
+    * the request and the file lists, the iterative update, the split-turn merge, and the three summary failures.
+  * The golden transcript changed by the three frames before the `session/new` response, and `modes` in it, only.
+* **Gates.**
+  * `make preflight` printed `preflight passed` on Windows and in WSL. WSL `go test -race ./...` exited 0.
+  * Windows `go test ./...` showed no `FAIL`.
+  * `golangci-lint` printed `0 issues.` for linux, darwin and windows.
+  * The pre-add check was clean for all 26 Go files.
+* **Negative tests,** each on a scratch copy, each failing at its own line:
+  * `Prompt` ignoring a leading slash: `commands_test.go:67: /help: {"code":-32603,"message":"Internal error","data":{"error":"llmtest: script exhausted"}}`;
+  * an advertised `/bogus` with no handler: `commands_test.go:69: /bogus: stop end_turn, text "Unknown command /bogus. /help lists the commands."`;
+  * the frames after the response: `commands_test.go:123: "method":"session/new" answered after only map[]`;
+  * a cut on a tool result: `compaction_test.go:127: session 0: cut at tool result e0000024`;
+  * plan mode letting `write` run: `modes_test.go:66: plan mode let write run`;
+  * the compaction left out of the next context: `compact_test.go:93: context after compact: 5 messages, …`.
+* **What the plan predicted wrongly.**
+  1. **One test file outside the list** (deviation 1).
+  2. **A failed `/compact` always reads `Compaction failed: <message>`,** with Pi's own messages after the colon. That is how Pi's `compaction_end` reports them. The amendment had them bare.
+  3. **`exit_plan_mode` is its own `tool.Tool`.** `tool.New`'s function never sees the call, and the permission request must carry the call's id. Its spec still comes from `tool.New`.
+  4. **Phase 5's staticcheck resolution applies again.** `compaction`'s `ErrAlreadyCompacted` and `ErrNothingToCompact` carry Pi's capitalised texts, so each has `//lint:ignore ST1005` beside its `//nolint`, as deviation 3 of Phase 5 decided for its own two lines.
+  5. **A command's failure is its answer.** `cmdTurn.failed` says it and ends the turn normally, which is also how `nilerr` reads it.
+  6. **Model and provider come from the whole path, history from the context.** Before Phase 6, `addMessage` set both as it went. With a compaction in the path, the summarised messages still name the model.
+  7. **`session/load`'s usage frame is now the estimate** (system prompt plus context), as every session start sends it. Before, it was the last assistant's tokens.
+  8. **Three of my own test mistakes,** each caught before the gates:
+     * an iterative-update fixture whose cut fell on an assistant message, which Pi's rule splits;
+     * a raw-frame matcher that skipped the -32601 answer, because its error data names the method;
+     * `TestNoXAIMethods` finding the x.ai literal in its neighbour, now built from parts.

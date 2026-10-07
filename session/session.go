@@ -23,6 +23,7 @@ const (
 	TypeModelChange         = "model_change"
 	TypeThinkingLevelChange = "thinking_level_change"
 	TypeSessionInfo         = "session_info"
+	TypeCompaction          = "compaction"
 )
 
 // Message roles gobble writes.
@@ -57,16 +58,25 @@ type Header struct {
 // other member, and any other entry type's members, round-trip through
 // Unknown.
 type Entry struct {
-	Type          string         `json:"type"`
-	ID            string         `json:"id,omitzero"`
-	ParentID      *string        `json:"parentId"`
-	Timestamp     string         `json:"timestamp,omitzero"`
-	Message       *Message       `json:"message,omitzero"`
-	Provider      string         `json:"provider,omitzero"`
-	ModelID       string         `json:"modelId,omitzero"`
-	ThinkingLevel string         `json:"thinkingLevel,omitzero"`
-	Name          *string        `json:"name,omitzero"`
-	Unknown       jsontext.Value `json:",embed"`
+	Type          string   `json:"type"`
+	ID            string   `json:"id,omitzero"`
+	ParentID      *string  `json:"parentId"`
+	Timestamp     string   `json:"timestamp,omitzero"`
+	Message       *Message `json:"message,omitzero"`
+	Provider      string   `json:"provider,omitzero"`
+	ModelID       string   `json:"modelId,omitzero"`
+	ThinkingLevel string   `json:"thinkingLevel,omitzero"`
+	Name          *string  `json:"name,omitzero"`
+	// Summary, FirstKeptEntryID, TokensBefore, Details, Usage and FromHook
+	// are a compaction's members (Pi's CompactionEntry). A compaction that
+	// keeps nothing names itself as its first kept entry.
+	Summary          string         `json:"summary,omitzero"`
+	FirstKeptEntryID string         `json:"firstKeptEntryId,omitzero"`
+	TokensBefore     *int64         `json:"tokensBefore,omitzero"`
+	Details          jsontext.Value `json:"details,omitzero"`
+	Usage            *Usage         `json:"usage,omitzero"`
+	FromHook         *bool          `json:"fromHook,omitzero"`
+	Unknown          jsontext.Value `json:",embed"`
 }
 
 // Message is Pi's AgentMessage. Content is a JSON string or an array of

@@ -150,6 +150,29 @@ func TestPolicy(t *testing.T) {
 	}
 }
 
+type refuse struct{}
+
+func (refuse) Decide(context.Context, permission.Rule) (permission.Decision, error) {
+	return permission.Decision{Refusal: "Plan mode is read-only."}, nil
+}
+
+// A refusal made without asking is the whole result the model reads.
+func TestPolicyRefusal(t *testing.T) {
+	dir := t.TempDir()
+	s := llmtest.NewScript(llmtest.ToolCall("w1", "write", args(t, map[string]string{"path": "a.txt", "content": "x"})), llmtest.Text("ok"))
+	a := agent.New(agent.Config{Provider: s, Tools: builtin.Tools(), Policy: refuse{}})
+	if _, _, err := collect(t.Context(), t, a, tool.Env{Cwd: dir}, "write"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "a.txt")); err == nil {
+		t.Fatal("a refused write ran")
+	}
+	sent := s.Requests()[1].Messages
+	if r := sent[len(sent)-1].Content[0]; !r.IsError || r.Text != "Plan mode is read-only." {
+		t.Fatalf("result %+v", r)
+	}
+}
+
 func TestUnknownTool(t *testing.T) {
 	s := llmtest.NewScript(llmtest.ToolCall("x", "nope", "{}"), llmtest.Text("sorry"))
 	a := agent.New(agent.Config{Provider: s})
