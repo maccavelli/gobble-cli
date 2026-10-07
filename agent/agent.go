@@ -34,6 +34,19 @@ type Config struct {
 	// MaxCalls bounds the model calls of one prompt; zero is
 	// DefaultMaxCalls.
 	MaxCalls int
+	// Queue gives the turn the messages queued while it runs. Nil queues
+	// nothing.
+	Queue Queue
+}
+
+// Queue is Pi's steering and follow-up queues (agent.ts). Each call drains
+// by the queue's own mode: the first message, or all of them.
+type Queue interface {
+	// Steering is polled after the prompt, and after each model reply and
+	// its tool results. Its messages enter before the next model call.
+	Steering() []llm.Message
+	// FollowUps is polled only when the turn would otherwise end.
+	FollowUps() []llm.Message
 }
 
 // Agent runs turns: model calls and the tool calls they ask for, until the
@@ -107,7 +120,14 @@ func (t *turn) end(reason StopReason) {
 	t.emit(End{StopReason: reason, Messages: t.added, Usage: t.usage})
 }
 
+// run is Pi's run loop (agent-loop.ts:173-308): steering is polled after
+// the prompt and after each reply and its tool results, and the turn goes
+// on while the reply asked for tools or steering came; when it would end,
+// follow-ups are polled, and any keep it going.
 func (t *turn) run() {
+	if !t.inject(t.steering()) {
+		return
+	}
 	for calls := 0; ; calls++ {
 		if calls == t.a.cfg.MaxCalls {
 			t.end(StopMaxTurnRequests)
@@ -127,7 +147,22 @@ func (t *turn) run() {
 			t.end(StopCancelled)
 			return
 		}
-		if len(reply.calls) == 0 {
+		if len(reply.calls) > 0 {
+			results, ok := t.runTools(reply.calls)
+			if !ok {
+				return
+			}
+			t.added = append(t.added, results)
+			if t.ctx.Err() != nil {
+				t.end(StopCancelled)
+				return
+			}
+		}
+		pending := t.steering()
+		if len(reply.calls) == 0 && len(pending) == 0 {
+			pending = t.followUps()
+		}
+		if len(reply.calls) == 0 && len(pending) == 0 {
 			if reply.stop == llm.StopMaxTokens {
 				t.end(StopMaxTokens)
 			} else {
@@ -135,16 +170,36 @@ func (t *turn) run() {
 			}
 			return
 		}
-		results, ok := t.runTools(reply.calls)
-		if !ok {
-			return
-		}
-		t.added = append(t.added, results)
-		if t.ctx.Err() != nil {
-			t.end(StopCancelled)
+		if !t.inject(pending) {
 			return
 		}
 	}
+}
+
+func (t *turn) steering() []llm.Message {
+	if t.a.cfg.Queue == nil || t.ctx.Err() != nil {
+		return nil
+	}
+	return t.a.cfg.Queue.Steering()
+}
+
+func (t *turn) followUps() []llm.Message {
+	if t.a.cfg.Queue == nil || t.ctx.Err() != nil {
+		return nil
+	}
+	return t.a.cfg.Queue.FollowUps()
+}
+
+// inject adds queued messages to the turn, each reported before the model
+// call that reads it.
+func (t *turn) inject(msgs []llm.Message) bool {
+	for _, m := range msgs {
+		t.added = append(t.added, m)
+		if !t.emit(Queued{Message: m}) {
+			return false
+		}
+	}
+	return true
 }
 
 // reply is one model call's answer.

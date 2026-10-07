@@ -1,6 +1,6 @@
 ---
 status: in-progress
-date: 2026-10-06
+date: 2026-10-07
 associated-madr: "0004-MADR-go-module-architecture.md"
 ---
 # Implement the gobble module architecture: scaffold, contracts, boundaries, toolchain, release
@@ -911,3 +911,14 @@ The agent stages; the owner commits.
   * `golangci-lint` printed `0 issues.` for linux, darwin and windows.
 * **Negative test.** On a scratch copy, the bumped `go.mod` with `HEAD`'s `go.sum`. `make preflight` exited 2 with `go.mod/go.sum not tidy - commit the result of 'make tidy'`.
 * **What the entry predicted wrongly.** Nothing. No Go file changed, so the pre-add check had nothing to check.
+
+**2026-10-07 — Phase 4 step 1 written by 0002-PLAN Phase 8 (owner's decision of 2026-10-07).** [0002-PLAN-cli-acp-headless-mcp-v1.md](0002-PLAN-cli-acp-headless-mcp-v1.md) Phase 8 step 2 is "`go test` on the three OS in CI", and this phase owns `ci.yml`. The owner decided that 0002-PLAN Phase 8 writes step 1's `ci.yml`, with this plan's 0007 hygiene. Steps 2–4, the release build and publish jobs, `make release-dry-run` and the Dependabot rule, stay here.
+
+Step 1 as written, and as built:
+* the matrix is `ubuntu-24.04`, `macos-15` and `windows-2025`, with `actions/setup-go` and `go-version-file: go.mod`, the actions pinned by SHA as the fleet pins them;
+* **`make race` runs on Linux and macOS only,** not "not on windows arm". No fleet CI runs the race detector on a Windows runner; go-selfupdate-lib's `ci.yml` says "The race detector needs cgo, which the Linux and macOS runners have";
+* **`go test ./...` is added on every OS.** `make preflight` runs no tests besides archtest, so Windows would otherwise run none. It runs with `-artifacts -outputdir`, and the failing golden transcripts `acptest` writes to `t.ArtifactDir()` are uploaded on failure;
+* `make preflight` and `make archtest` run on every OS. The Makefile's `PYTHON ?= python3` lets the Windows leg pass `PYTHON=python`;
+* the 0007 hygiene: `permissions: contents: read`, `concurrency`, `persist-credentials: false`, golangci-lint `v2.14.0`, `go mod tidy -diff`, and shellcheck `v0.11.0` and actionlint `v1.7.12` on Linux.
+
+The Accept line "The CI run is green on all three operating systems on a pushed branch" is recorded in 0002-PLAN's Phase 8 entry.

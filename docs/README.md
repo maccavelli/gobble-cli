@@ -16,19 +16,19 @@
 | Number | Kind | Record | Status |
 | :--- | :--- | :--- | :--- |
 | 0001 | REPORT | [Go port feasibility of the Pi agent harness](reports/0001-REPORT-go-port-feasibility.md) | observation |
-| 0002 | MADR | [v1 native magic-cli-remote CLI: Kong over ACP, ACP stdio, MCP client](decisions/0002-MADR-cli-acp-headless-mcp-v1.md) | proposed (amended 2026-10-04 (0008)) |
-| 0002 | PLAN | [Implement the ACP core](decisions/0002-PLAN-cli-acp-headless-mcp-v1.md) | in progress (Phases 1–3 complete 2026-10-05, Phases 4–6 complete 2026-10-06; amended 2026-10-04 (0008), 2026-10-05, 2026-10-06) |
+| 0002 | MADR | [v1 native magic-cli-remote CLI: Kong over ACP, ACP stdio, MCP client](decisions/0002-MADR-cli-acp-headless-mcp-v1.md) | proposed (amended 2026-10-04 (0008); Phase 7's extension set 2026-10-07) |
+| 0002 | PLAN | [Implement the ACP core](decisions/0002-PLAN-cli-acp-headless-mcp-v1.md) | in progress (Phases 1–3 complete 2026-10-05, Phases 4–6 complete 2026-10-06, Phase 7 complete 2026-10-07, Phase 8 built 2026-10-07 with verification open; amended 2026-10-04 (0008), 2026-10-05, 2026-10-06, 2026-10-07 (Phases 7 and 8 made executable)) |
 | 0003 | MADR | [The product is `gobble`: binary, module path, directories, wire names, read-only Pi bridge](decisions/0003-MADR-gobble-product-identity.md) | proposed (amended 2026-10-01) |
 | 0004 | MADR | [One Go 1.27.1 module of contract-first packages, open standards at every boundary](decisions/0004-MADR-go-module-architecture.md) | proposed (decision text rewritten 2026-10-04; amended 2026-10-05; go-tui-lib note 2026-10-06) |
-| 0004 | PLAN | [Scaffold: module, contracts, import boundaries, toolchain, release](decisions/0004-PLAN-go-module-architecture.md) | in progress (Phase D, Phase 0, and Phase 1 complete; Phase 2 steps 2–4 complete 2026-10-05, and steps 1, 5 (in part), 6–9 and 11 through 0008-PLAN P2–P4; Phase 3 complete 2026-10-05; Phase 2 steps 10, 12, 13 and Phases 4–5 not started; amended 2026-10-04 (0007); amended 2026-10-04 (0008); Phase 2 steps 2–4 amended 2026-10-05; fleet library pins refreshed 2026-10-06) |
+| 0004 | PLAN | [Scaffold: module, contracts, import boundaries, toolchain, release](decisions/0004-PLAN-go-module-architecture.md) | in progress (Phase D, Phase 0, and Phase 1 complete; Phase 2 steps 2–4 complete 2026-10-05, and steps 1, 5 (in part), 6–9 and 11 through 0008-PLAN P2–P4; Phase 3 complete 2026-10-05; Phase 2 steps 10, 12, 13, Phase 4 steps 2–4 and Phase 5 not started; Phase 4 step 1 through 0002-PLAN Phase 8 2026-10-07; amended 2026-10-04 (0007); amended 2026-10-04 (0008); Phase 2 steps 2–4 amended 2026-10-05; fleet library pins refreshed 2026-10-06) |
 | 0005 | MADR | [The v1 line: every portable Pi capability, tiered 1.0 / 1.x / exp](decisions/0005-MADR-v1-feature-scope.md) | proposed (decision text rewritten 2026-10-04) |
-| 0005 | PLAN | [Implement the v1.0.0 gate, the v1.x train, and `exp/`](decisions/0005-PLAN-v1-feature-scope.md) | proposed (decision text rewritten 2026-10-04) |
+| 0005 | PLAN | [Implement the v1.0.0 gate, the v1.x train, and `exp/`](decisions/0005-PLAN-v1-feature-scope.md) | proposed (decision text rewritten 2026-10-04; F4, F5, F8 and F9 notes 2026-10-07) |
 | 0006 | MADR | [Adopt goose's terminal-CLI mechanics, not its product command tree](decisions/0006-MADR-goose-cli-port-candidates.md) | proposed (amended 2026-10-04 (0008)) |
 | 0007 | MADR | [Bring the repository up to the fleet scaffold: agent rules, lint and line-ending config, records tooling, portable Makefile](decisions/0007-MADR-repository-scaffolding-to-fleet-standard.md) | accepted (amended 2026-10-04 (0008)) |
 | 0007 | PLAN | [Bring gobble-cli up to the fleet repository scaffold](decisions/0007-PLAN-repository-scaffolding-to-fleet-standard.md) | completed (staged; the owner commits) |
 | 0008 | MADR | [The native CLI mode: a lightweight line client on Kong, x/term and the standard library, natively integrated with magic-cli-remote](decisions/0008-MADR-native-cli-mode.md) | accepted |
 | 0008 | PLAN | [Implement the native CLI mode](decisions/0008-PLAN-native-cli-mode.md) | completed (2026-10-05; P8 emphasis follow-up 2026-10-05) |
-| 0009 | REPORT | [magic-cli-remote findings from gobble work](reports/0009-REPORT-magic-cli-remote-findings.md) | observation (running; updated 2026-10-05) |
+| 0009 | REPORT | [magic-cli-remote findings from gobble work](reports/0009-REPORT-magic-cli-remote-findings.md) | observation (running; updated 2026-10-07) |
 
 0003-MADR has no PLAN of its own. 0004-PLAN Phase 2 and 0005-PLAN F10 implement it.
 

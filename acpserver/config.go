@@ -70,13 +70,17 @@ func (a *Agent) setConfig(ctx context.Context, s *liveSession, id, value string)
 		if !slices.Contains(choice.Models, value) {
 			return nil, invalidParams(s.id, fmt.Sprintf("unknown model %q", value))
 		}
+		a.mu.Lock()
 		s.model = value
+		a.mu.Unlock()
 		e = session.Entry{Type: session.TypeModelChange, Provider: choice.Provider, ModelID: value}
 	case configThinking:
 		if !validThinking(value) {
 			return nil, invalidParams(s.id, fmt.Sprintf("unknown thinking level %q", value))
 		}
+		a.mu.Lock()
 		s.think = value
+		a.mu.Unlock()
 		e = session.Entry{Type: session.TypeThinkingLevelChange, ThinkingLevel: value}
 	default:
 		return nil, invalidParams(s.id, fmt.Sprintf("unknown config option %q", id))
@@ -84,7 +88,17 @@ func (a *Agent) setConfig(ctx context.Context, s *liveSession, id, value string)
 	if err := s.append(ctx, a.now(), e); err != nil {
 		return nil, acp.NewInternalError(map[string]any{keyReason: err.Error()})
 	}
-	return configOptions(choice, s.model, s.think), nil
+	model, think := a.choices(s)
+	return configOptions(choice, model, think), nil
+}
+
+// choices is the session's model and thinking level. setConfig changes them
+// from any request's goroutine, so both are read under a.mu (0002-PLAN
+// Phase 7, deviation 1).
+func (a *Agent) choices(s *liveSession) (model, think string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return s.model, s.think
 }
 
 // newSessionMeta is session/new's _meta.gobble: a chosen session id, a

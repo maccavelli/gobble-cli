@@ -65,6 +65,14 @@ func openSession(ctx context.Context, conn *acpclient.Conn, ch sessionChoice, cw
 		case err != nil:
 			return nil, nil, failf("resume %s: %v", id, err)
 		}
+		// -n renames a resumed session before its first prompt, through
+		// _gobble/set_session_name (0002-PLAN Phase 7).
+		if ch.opts.Name != "" {
+			if err := s.SetName(ctx, ch.opts.Name); err != nil {
+				return nil, nil, failf("name %s: %v", id, err)
+			}
+			r.Title = ch.opts.Name
+		}
 		return s, &r, nil
 	}
 	opts := ch.opts

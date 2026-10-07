@@ -86,25 +86,16 @@ func (a *Agent) handlers() map[string]handler {
 
 // runCommand executes a slash command in place of a model turn: nothing
 // is written for the prompt itself, and only /compact calls the model. It
-// holds the session's turn, so session/cancel stops it.
-func (a *Agent) runCommand(ctx context.Context, s *liveSession, conn *acp.AgentSideConnection, name, args string) (acp.PromptResponse, error) {
-	turnCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	a.mu.Lock()
-	s.cancel = cancel
-	a.mu.Unlock()
-	defer func() {
-		a.mu.Lock()
-		s.cancel = nil
-		a.mu.Unlock()
-	}()
-	t := &cmdTurn{s: s, conn: conn, out: newUpdates(ctx, conn, s.id)}
+// runs in the turn Prompt claimed, so session/cancel stops it through
+// turnCtx.
+func (a *Agent) runCommand(turnCtx context.Context, s *liveSession, conn *acp.AgentSideConnection, name, args string) (acp.PromptResponse, error) {
+	t := &cmdTurn{s: s, conn: conn, out: newUpdates(turnCtx, conn, s.id)}
 	h, ok := a.handlers()[name]
 	if !ok {
 		t.say(fmt.Sprintf("Unknown command /%s. /help lists the commands.", name))
 	} else if err := h(turnCtx, t, args); err != nil {
 		if turnCtx.Err() != nil {
-			return acp.PromptResponse{StopReason: acp.StopReasonCancelled}, nil
+			return cancelled(s)
 		}
 		return acp.PromptResponse{}, err
 	}
@@ -112,6 +103,12 @@ func (a *Agent) runCommand(ctx context.Context, s *liveSession, conn *acp.AgentS
 		return acp.PromptResponse{}, t.out.err
 	}
 	return acp.PromptResponse{StopReason: acp.StopReasonEndTurn, Meta: t.meta}, nil
+}
+
+// cancelled is a cancelled command turn's answer: not an error, with the
+// session's queues emptied into _meta (clearedMeta).
+func cancelled(s *liveSession) (acp.PromptResponse, error) {
+	return acp.PromptResponse{StopReason: acp.StopReasonCancelled, Meta: clearedMeta(s)}, nil
 }
 
 func (*Agent) cmdHelp(_ context.Context, t *cmdTurn, _ string) error {
@@ -209,7 +206,13 @@ func (t totals) tokenLines(b *strings.Builder) {
 }
 
 func (a *Agent) cmdUsage(_ context.Context, t *cmdTurn, _ string) error {
-	tot := sessionTotals(t.s.log.Entries())
+	t.say(a.usageText(t.s.log.Entries()))
+	return nil
+}
+
+// usageText is /usage's answer, and _gobble/usage's text.
+func (a *Agent) usageText(entries []session.Entry) string {
+	tot := sessionTotals(entries)
 	var b strings.Builder
 	b.WriteString("Session usage\n\n")
 	tot.tokenLines(&b)
@@ -222,8 +225,7 @@ func (a *Agent) cmdUsage(_ context.Context, t *cmdTurn, _ string) error {
 		provider = "the provider"
 	}
 	fmt.Fprintf(&b, "Account and rate-limit figures are not reported by %s.\n", provider)
-	t.say(b.String())
-	return nil
+	return b.String()
 }
 
 // cmdContext is /context and /session: Pi's Session Info, with the mode,
@@ -244,7 +246,7 @@ func (a *Agent) cmdContext(_ context.Context, t *cmdTurn, _ string) error {
 			file = p
 		}
 	}
-	model := s.model
+	model, _ := a.choices(s)
 	if model == "" {
 		model = "none"
 	} else if p := a.models().Provider; p != "" {
@@ -267,7 +269,8 @@ func (a *Agent) cmdModel(ctx context.Context, t *cmdTurn, arg string) error {
 		return nil
 	}
 	if arg == "" {
-		t.say(fmt.Sprintf("Model: %s\nModels: %s", t.s.model, strings.Join(choice.Models, ", ")))
+		model, _ := a.choices(t.s)
+		t.say(fmt.Sprintf("Model: %s\nModels: %s", model, strings.Join(choice.Models, ", ")))
 		return nil
 	}
 	if !slices.Contains(choice.Models, arg) {
@@ -283,7 +286,8 @@ func (a *Agent) cmdModel(ctx context.Context, t *cmdTurn, arg string) error {
 
 func (a *Agent) cmdThinking(ctx context.Context, t *cmdTurn, arg string) error {
 	if arg == "" {
-		t.say(fmt.Sprintf("Thinking level: %s\nLevels: %s", t.s.think, strings.Join(thinkingLevels, ", ")))
+		_, think := a.choices(t.s)
+		t.say(fmt.Sprintf("Thinking level: %s\nLevels: %s", think, strings.Join(thinkingLevels, ", ")))
 		return nil
 	}
 	level := strings.ToLower(arg)
@@ -344,16 +348,26 @@ func (a *Agent) cmdName(ctx context.Context, t *cmdTurn, arg string) error {
 		}
 		return nil
 	}
-	name := oneLine(arg)
-	if err := t.s.append(ctx, a.now(), session.Entry{Type: session.TypeSessionInfo, Name: new(name)}); err != nil {
-		return acp.NewInternalError(map[string]any{keyReason: err.Error()})
+	name, err := a.setName(ctx, t.s, t.out, arg)
+	if err != nil {
+		return err
 	}
-	t.out.send(acp.SessionUpdate{SessionInfoUpdate: &acp.SessionSessionInfoUpdate{SessionUpdate: "session_info_update", Title: new(name)}})
 	if name != arg {
 		t.say(fmt.Sprintf("Session name was normalized from %q to %q.\n", arg, name))
 	}
 	t.say("Session name set: " + name)
 	return nil
+}
+
+// setName is /name's and _gobble/set_session_name's one path: the name on
+// one line, written as session_info, then reported as session_info_update.
+func (a *Agent) setName(ctx context.Context, s *liveSession, out *updates, arg string) (string, error) {
+	name := oneLine(arg)
+	if err := s.append(ctx, a.now(), session.Entry{Type: session.TypeSessionInfo, Name: new(name)}); err != nil {
+		return "", acp.NewInternalError(map[string]any{keyReason: err.Error()})
+	}
+	out.send(acp.SessionUpdate{SessionInfoUpdate: &acp.SessionSessionInfoUpdate{SessionUpdate: "session_info_update", Title: new(name)}})
+	return name, out.err
 }
 
 // cmdFork is /fork: with no argument, the user messages to fork before;
@@ -376,22 +390,38 @@ func (a *Agent) cmdFork(ctx context.Context, t *cmdTurn, arg string) error {
 		t.say("Send /fork <entry> to start a new session before one of these messages:\n" + b.String())
 		return nil
 	}
+	target, refusal := forkTarget(entries, arg)
+	if refusal != "" {
+		if refusal != nothingBefore {
+			refusal += " /fork lists them."
+		}
+		t.say(refusal)
+		return nil
+	}
+	return a.copyTo(ctx, t, pathTo(entries, *target.ParentID), "Forked")
+}
+
+// nothingBefore refuses a fork before a session's first message: files are
+// created lazily, so an empty session cannot be switched to.
+const nothingBefore = "Nothing comes before that message; start a new session instead."
+
+// forkTarget is the user message /fork <entry> and _gobble/fork fork
+// before, or why there is none.
+func forkTarget(entries []session.Entry, id string) (*session.Entry, string) {
 	var target *session.Entry
 	for i := range entries {
 		e := &entries[i]
-		if e.ID == arg && e.Type == session.TypeMessage && e.Message != nil && e.Message.Role == session.RoleUser {
+		if e.ID == id && e.Type == session.TypeMessage && e.Message != nil && e.Message.Role == session.RoleUser {
 			target = e
 		}
 	}
 	switch {
 	case target == nil:
-		t.say(fmt.Sprintf("No user message %q in this session. /fork lists them.", arg))
-		return nil
+		return nil, fmt.Sprintf("No user message %q in this session.", id)
 	case target.ParentID == nil:
-		t.say("Nothing comes before that message; start a new session instead.")
-		return nil
+		return nil, nothingBefore
 	}
-	return a.copyTo(ctx, t, pathTo(entries, *target.ParentID), "Forked")
+	return target, ""
 }
 
 // cmdClone is /clone: a new session holding the whole current path.
@@ -404,32 +434,42 @@ func (a *Agent) cmdClone(ctx context.Context, t *cmdTurn, _ string) error {
 	return a.copyTo(ctx, t, session.Path(entries), "Cloned")
 }
 
-// copyTo writes path into a new stored session whose parent is this one,
-// closes it so its lock is free, and names it: the response's
+// copyTo copies path into a new session and names it: the response's
 // _meta.gobble.switchTo lets gobble's CLI resume it, as Pi's terminal
 // switches to a fork (owner's decision of 2026-10-06).
 func (a *Agent) copyTo(ctx context.Context, t *cmdTurn, path []session.Entry, verb string) error {
-	id := session.ID(a.newID())
-	h := session.Header{Type: session.TypeHeader, Version: session.Version, ID: id, Timestamp: session.Timestamp(a.now()), Cwd: t.s.cwd,
-		ParentSession: string(t.s.id)}
-	if pf, ok := a.store.(interface{ PathOf(session.ID) string }); ok {
-		h.ParentSession = pf.PathOf(session.ID(t.s.id))
-	}
-	log, err := a.store.Create(ctx, h)
+	id, err := a.copySession(ctx, t.s, path)
 	if err != nil {
-		return acp.NewInternalError(map[string]any{keyReason: err.Error()})
-	}
-	for _, e := range path {
-		if err := log.Append(ctx, e); err != nil {
-			return acp.NewInternalError(map[string]any{keyReason: errors.Join(err, log.Close()).Error()})
-		}
-	}
-	if err := log.Close(); err != nil {
-		return acp.NewInternalError(map[string]any{keyReason: err.Error()})
+		return err
 	}
 	t.meta = map[string]any{gobble: map[string]any{"switchTo": string(id)}}
 	t.say(fmt.Sprintf("%s to session %s.", verb, id))
 	return nil
+}
+
+// copySession writes path into a new stored session whose parent is s, and
+// closes it so its lock is free. It is the one path of /fork, /clone,
+// _gobble/fork and _gobble/clone.
+func (a *Agent) copySession(ctx context.Context, s *liveSession, path []session.Entry) (session.ID, error) {
+	id := session.ID(a.newID())
+	h := session.Header{Type: session.TypeHeader, Version: session.Version, ID: id, Timestamp: session.Timestamp(a.now()), Cwd: s.cwd,
+		ParentSession: string(s.id)}
+	if pf, ok := a.store.(interface{ PathOf(session.ID) string }); ok {
+		h.ParentSession = pf.PathOf(session.ID(s.id))
+	}
+	log, err := a.store.Create(ctx, h)
+	if err != nil {
+		return "", acp.NewInternalError(map[string]any{keyReason: err.Error()})
+	}
+	for _, e := range path {
+		if err := log.Append(ctx, e); err != nil {
+			return "", acp.NewInternalError(map[string]any{keyReason: errors.Join(err, log.Close()).Error()})
+		}
+	}
+	if err := log.Close(); err != nil {
+		return "", acp.NewInternalError(map[string]any{keyReason: err.Error()})
+	}
+	return id, nil
 }
 
 // pathTo is the path from the root to the entry id, in order.

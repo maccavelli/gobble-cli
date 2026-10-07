@@ -6,7 +6,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
+	"os/signal"
 	"strconv"
+	"syscall"
 	"testing"
 	"time"
 
@@ -23,7 +26,21 @@ const (
 	EnvFail = "GOBBLE_MCPTEST_FAIL"
 	// EnvMarker is a file the server creates when it starts.
 	EnvMarker = "GOBBLE_MCPTEST_MARKER"
+	// EnvStubborn set to "1" makes the server, and the child it starts,
+	// ignore SIGTERM, and the server keep running after stdin ends
+	// (0002-PLAN Phase 8).
+	EnvStubborn = "GOBBLE_MCPTEST_STUBBORN"
+	// EnvOrphan set to "1" makes the server start a child and leave it
+	// running when it exits.
+	EnvOrphan = "GOBBLE_MCPTEST_ORPHAN"
+	// EnvPIDs is a file the server writes "<server pid> <child pid>" to, in
+	// the stubborn and orphan modes, before it serves.
+	EnvPIDs = "GOBBLE_MCPTEST_PIDS"
 )
+
+// childLife bounds a fixture child that nothing stops, so a failed test
+// leaks it for a while only.
+const childLife = 2 * time.Minute
 
 type echoIn struct {
 	Text string `json:"text"`
@@ -74,10 +91,31 @@ func NewServer() *mcp.Server {
 // when EnvServe is "stdio". Otherwise it returns at once. The process is
 // then the fixture, not a test, so it owns its exit code and stderr.
 func ServeStdioIfAsked() {
-	if os.Getenv(EnvServe) != "stdio" {
-		return
+	switch os.Getenv(EnvServe) {
+	case "stdio":
+		os.Exit(serveStdio()) //nolint:forbidigo // the fixture process's own exit
+	case "sleep":
+		if os.Getenv(EnvStubborn) == "1" {
+			signal.Ignore(syscall.SIGTERM)
+		}
+		time.Sleep(childLife)
+		os.Exit(0) //nolint:forbidigo // as above
 	}
-	os.Exit(serveStdio()) //nolint:forbidigo // the fixture process's own exit
+}
+
+// startChild starts this binary as a sleeping child, with no stdio, and
+// writes both pids to EnvPIDs.
+func startChild() error {
+	exe, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	child := exec.Command(exe) //nolint:gosec,noctx // G204: the test binary itself; the child outlives any context, which is the point
+	child.Env = append(os.Environ(), EnvServe+"=sleep")
+	if err := child.Start(); err != nil {
+		return err
+	}
+	return os.WriteFile(os.Getenv(EnvPIDs), fmt.Appendf(nil, "%d %d", os.Getpid(), child.Process.Pid), 0o600) //nolint:gosec // G703: the test names the pid file
 }
 
 func serveStdio() int {
@@ -93,7 +131,20 @@ func serveStdio() int {
 	if d, err := time.ParseDuration(os.Getenv(EnvDelay)); err == nil {
 		time.Sleep(d)
 	}
-	if err := NewServer().Run(context.Background(), &mcp.StdioTransport{}); err != nil {
+	stubborn := os.Getenv(EnvStubborn) == "1"
+	if stubborn {
+		signal.Ignore(syscall.SIGTERM)
+	}
+	if stubborn || os.Getenv(EnvOrphan) == "1" {
+		if err := startChild(); err != nil {
+			return 5
+		}
+	}
+	err := NewServer().Run(context.Background(), &mcp.StdioTransport{})
+	if stubborn {
+		time.Sleep(childLife) // stdin has ended; a stubborn server stays
+	}
+	if err != nil {
 		return 1
 	}
 	return 0

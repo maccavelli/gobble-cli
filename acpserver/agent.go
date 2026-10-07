@@ -26,9 +26,11 @@ import (
 // gobble is the agent's name, and the _meta key of gobble's own members.
 const gobble = "gobble"
 
-// keyReason and keySessionID are keys of an error's JSON-RPC data.
+// keyReason, keyError and keySessionID are keys of an error's JSON-RPC
+// data.
 const (
 	keyReason    = "reason"
+	keyError     = "error"
 	keySessionID = "sessionId"
 )
 
@@ -103,6 +105,13 @@ type liveSession struct {
 	mcp     *liveMCP
 	mode    string
 	used    int // the context's tokens, as the last usage_update said
+	queue   *queue
+	// streaming and compacting say what the running turn is: a model turn,
+	// or a compaction (_gobble/get_state).
+	streaming, compacting bool
+	// appendMu serialises append: session/set_config_option writes while a
+	// turn writes (0002-PLAN Phase 7, deviation 4).
+	appendMu sync.Mutex
 }
 
 var (
@@ -179,6 +188,9 @@ func Capabilities() acp.AgentCapabilities {
 			List:   &acp.SessionListCapabilities{},
 			Resume: &acp.SessionResumeCapabilities{},
 		},
+		// gobble's extension methods, as ACP's extensibility page has custom
+		// capabilities advertised (0002-PLAN Phase 7).
+		Meta: map[string]any{gobble: map[string]any{"extensions": extensionNames()}},
 	}
 }
 
@@ -240,7 +252,7 @@ func (a *Agent) NewSession(ctx context.Context, p acp.NewSessionRequest) (acp.Ne
 	if err != nil {
 		return acp.NewSessionResponse{}, acp.NewInternalError(map[string]any{keyReason: err.Error()})
 	}
-	s := &liveSession{id: acp.SessionId(id), cwd: p.Cwd, log: log, ids: map[string]bool{}, think: thinkingOff, model: a.models().Default, mode: modeDefault}
+	s := &liveSession{id: acp.SessionId(id), cwd: p.Cwd, log: log, ids: map[string]bool{}, think: thinkingOff, model: a.models().Default, mode: modeDefault, queue: newQueue()}
 	if len(forked) > 0 {
 		for _, e := range forked {
 			if err := log.Append(ctx, e); err != nil {
@@ -264,7 +276,8 @@ func (a *Agent) NewSession(ctx context.Context, p acp.NewSessionRequest) (acp.Ne
 	if err := a.startFrames(ctx, conn, s); err != nil {
 		return acp.NewSessionResponse{}, err
 	}
-	return acp.NewSessionResponse{SessionId: s.id, ConfigOptions: configOptions(a.models(), s.model, s.think), Modes: modeState(s.mode)}, nil
+	model, think := a.choices(s)
+	return acp.NewSessionResponse{SessionId: s.id, ConfigOptions: configOptions(a.models(), model, think), Modes: modeState(s.mode)}, nil
 }
 
 // oneLine is a name on one line, trimmed, as Pi stores one
@@ -285,8 +298,10 @@ func (a *Agent) restore(s *liveSession, entries []session.Entry) {
 }
 
 // append stamps an entry as a child of the leaf, records it, and makes it
-// the leaf.
+// the leaf, one append at a time.
 func (s *liveSession) append(ctx context.Context, now time.Time, e session.Entry) error {
+	s.appendMu.Lock()
+	defer s.appendMu.Unlock()
 	e.ID = session.NewEntryID(func(id string) bool { return s.ids[id] })
 	if s.leaf != "" {
 		e.ParentID = new(s.leaf)
@@ -308,35 +323,35 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 	a.mu.Lock()
 	s, ok := a.sessions[p.SessionId]
 	conn := a.conn
-	busy := ok && s.cancel != nil
 	a.mu.Unlock()
-	switch {
-	case !ok:
+	if !ok {
 		return acp.PromptResponse{}, invalidParams(p.SessionId, "unknown session")
-	case busy:
-		return acp.PromptResponse{}, acp.NewInvalidRequest(map[string]any{keySessionID: p.SessionId, keyReason: "a prompt is already running"})
 	}
+	turnCtx, release, err := a.claimTurn(ctx, s)
+	if err != nil {
+		return acp.PromptResponse{}, err
+	}
+	defer release()
 	if name, args, isCommand := command.Parse(promptText(p.Prompt)); isCommand {
-		return a.runCommand(ctx, s, conn, name, args)
+		return a.runCommand(turnCtx, s, conn, name, args)
 	}
 	model, err := a.modelProvider()
 	if err != nil {
 		return acp.PromptResponse{}, promptError(err)
 	}
-	turnCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
 	a.mu.Lock()
-	s.cancel = cancel
+	s.streaming = true
 	history := s.history
 	a.mu.Unlock()
 	defer func() {
 		a.mu.Lock()
-		s.cancel = nil
+		s.streaming = false
 		a.mu.Unlock()
 	}()
 
 	prompt := userMessage(p.Prompt)
-	w := writer{a: a, s: s, ctx: context.WithoutCancel(ctx), provider: a.providerID(model), model: s.model, written: map[string]bool{}}
+	chosen, think := a.choices(s)
+	w := writer{a: a, s: s, ctx: context.WithoutCancel(ctx), provider: a.providerID(model), model: chosen, written: map[string]bool{}}
 	w.add(session.Entry{Type: session.TypeMessage, Message: userEntryMessage(prompt, session.Timestamp(a.now()))})
 	if w.err != nil {
 		return acp.PromptResponse{}, acp.NewInternalError(map[string]any{keyReason: w.err.Error()})
@@ -349,9 +364,10 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 		Provider: model,
 		Tools:    tools,
 		System:   systemPrompt(s.cwd, tools),
-		Model:    s.model,
-		Thinking: s.think,
+		Model:    chosen,
+		Thinking: think,
 		Policy:   planPolicy{a: a, s: s, inner: &acpPolicy{conn: conn, session: p.SessionId}},
+		Queue:    s.queue,
 	})
 	out := newUpdates(ctx, conn, p.SessionId)
 	var last llm.Usage
@@ -378,10 +394,46 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 			if out.err != nil {
 				return acp.PromptResponse{}, out.err
 			}
-			return acp.PromptResponse{StopReason: acp.StopReason(end.StopReason), Usage: acpUsage(end.Usage)}, nil
+			resp := acp.PromptResponse{StopReason: acp.StopReason(end.StopReason), Usage: acpUsage(end.Usage)}
+			if end.StopReason == agent.StopCancelled {
+				resp.Meta = clearedMeta(s)
+			}
+			return resp, nil
 		}
 	}
-	return acp.PromptResponse{StopReason: acp.StopReasonCancelled}, nil
+	return acp.PromptResponse{StopReason: acp.StopReasonCancelled, Meta: clearedMeta(s)}, nil
+}
+
+// claimTurn makes the caller's work the session's one running turn, or
+// refuses it while another runs. The check and the claim are one section
+// of a.mu (0002-PLAN Phase 7, deviation 2). session/cancel cancels the
+// returned context; release frees the turn.
+func (a *Agent) claimTurn(ctx context.Context, s *liveSession) (context.Context, func(), error) {
+	turnCtx, cancel := context.WithCancel(ctx)
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if s.cancel != nil {
+		cancel()
+		return nil, nil, acp.NewInvalidRequest(map[string]any{keySessionID: s.id, keyReason: "a prompt is already running"})
+	}
+	s.cancel = cancel
+	return turnCtx, func() {
+		a.mu.Lock()
+		s.cancel = nil
+		a.mu.Unlock()
+		cancel()
+	}, nil
+}
+
+// clearedMeta empties a cancelled turn's queues into the response's
+// _meta.gobble.cleared, so a client can restore the text, as Pi's terminal
+// does (owner's decision of 2026-10-07). It is nil when both were empty.
+func clearedMeta(s *liveSession) map[string]any {
+	steering, followUp := s.queue.clear()
+	if len(steering) == 0 && len(followUp) == 0 {
+		return nil
+	}
+	return map[string]any{gobble: map[string]any{"cleared": map[string]any{"steering": steering, "followUp": followUp}}}
 }
 
 // providerID names the provider assistant messages record: the model
@@ -410,12 +462,14 @@ func (w *writer) add(e session.Entry) {
 	}
 }
 
-// event writes what ev completes: the assistant message of a model call,
-// each tool result before its terminal update, and at the end the results
-// of calls a cancel cut short.
+// event writes what ev completes: a queued user message as it enters, the
+// assistant message of a model call, each tool result before its terminal
+// update, and at the end the results of calls a cancel cut short.
 func (w *writer) event(ev agent.Event) {
 	ts := func() string { return session.Timestamp(w.a.now()) }
 	switch ev := ev.(type) {
+	case agent.Queued:
+		w.add(session.Entry{Type: session.TypeMessage, Message: userEntryMessage(ev.Message, ts())})
 	case agent.Message:
 		w.add(session.Entry{Type: session.TypeMessage, Message: assistantEntryMessage(ev, w.provider, w.model, ts())})
 	case agent.ToolEnd:
@@ -508,7 +562,7 @@ func (a *Agent) open(ctx context.Context, id acp.SessionId, cwd string, req []ac
 	if cwd == "" {
 		cwd = log.Header().Cwd
 	}
-	s := &liveSession{id: id, cwd: cwd, log: log, think: thinkingOff, model: a.models().Default, mode: modeDefault}
+	s := &liveSession{id: id, cwd: cwd, log: log, think: thinkingOff, model: a.models().Default, mode: modeDefault, queue: newQueue()}
 	a.restore(s, log.Entries())
 	s.mcp = a.startMCP(ctx, cwd, servers, notes)
 	a.mu.Lock()
@@ -538,7 +592,8 @@ func (a *Agent) LoadSession(ctx context.Context, p acp.LoadSessionRequest) (acp.
 	if err := a.startFrames(ctx, conn, s); err != nil {
 		return acp.LoadSessionResponse{}, err
 	}
-	return acp.LoadSessionResponse{ConfigOptions: configOptions(a.models(), s.model, s.think), Modes: modeState(s.mode), Meta: resumedMeta(st)}, nil
+	model, think := a.choices(s)
+	return acp.LoadSessionResponse{ConfigOptions: configOptions(a.models(), model, think), Modes: modeState(s.mode), Meta: resumedMeta(st)}, nil
 }
 
 // resumedMeta is a resumed session's _meta.gobble: its title (the name,
@@ -573,7 +628,8 @@ func (a *Agent) ResumeSession(ctx context.Context, p acp.ResumeSessionRequest) (
 	if err := a.startFrames(ctx, conn, s); err != nil {
 		return acp.ResumeSessionResponse{}, err
 	}
-	return acp.ResumeSessionResponse{ConfigOptions: configOptions(a.models(), s.model, s.think), Modes: modeState(s.mode),
+	model, think := a.choices(s)
+	return acp.ResumeSessionResponse{ConfigOptions: configOptions(a.models(), model, think), Modes: modeState(s.mode),
 		Meta: resumedMeta(replayState(s.log.Entries()))}, nil
 }
 

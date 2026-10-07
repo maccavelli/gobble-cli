@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -248,5 +249,170 @@ func TestThinkingBlocks(t *testing.T) {
 	c := end.Messages[1].Content
 	if len(c) != 2 || c[0].Type != llm.ContentThinking || c[0].Text != "let me think" || string(c[0].ProviderData) != `{"signature":"s"}` || c[1].Text != "done" {
 		t.Fatalf("assistant content %+v", c)
+	}
+}
+
+// fakeQueue drains everything at each poll and counts the polls. Run
+// yields on the caller's goroutine, so a test fills it from its event loop.
+type fakeQueue struct {
+	steering, followUps []llm.Message
+	polls               int
+}
+
+func (q *fakeQueue) Steering() []llm.Message {
+	q.polls++
+	out := q.steering
+	q.steering = nil
+	return out
+}
+
+func (q *fakeQueue) FollowUps() []llm.Message {
+	out := q.followUps
+	q.followUps = nil
+	return out
+}
+
+// lastText is the role and first text of a request's last message.
+func lastText(req *llm.Request) (llm.Role, string) {
+	m := req.Messages[len(req.Messages)-1]
+	if len(m.Content) == 0 {
+		return m.Role, ""
+	}
+	return m.Role, m.Content[0].Text
+}
+
+// runQueued runs a turn over q, calling during for each event first.
+func runQueued(ctx context.Context, t *testing.T, s *llmtest.Script, q agent.Queue, env tool.Env, during func(agent.Event)) ([]agent.Event, agent.End) {
+	t.Helper()
+	a := agent.New(agent.Config{Provider: s, Tools: builtin.Tools(), Queue: q})
+	var evs []agent.Event
+	var end agent.End
+	for ev, err := range a.Run(ctx, env, nil, user("go")) {
+		if err != nil {
+			t.Fatal(err)
+		}
+		evs = append(evs, ev)
+		if during != nil {
+			during(ev)
+		}
+		if e, ok := ev.(agent.End); ok {
+			end = e
+		}
+	}
+	return evs, end
+}
+
+func readEnv(t *testing.T) tool.Env {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "x"), []byte("x\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return tool.Env{Cwd: dir}
+}
+
+// A steer queued while a tool runs enters after its result, before the
+// next model call, and is reported as Queued first.
+func TestSteeringAfterTools(t *testing.T) {
+	s := llmtest.NewScript(llmtest.ToolCall("r1", "read", `{"path":"x"}`), llmtest.Text("after"))
+	q := &fakeQueue{}
+	evs, end := runQueued(t.Context(), t, s, q, readEnv(t), func(ev agent.Event) {
+		if _, ok := ev.(agent.ToolRun); ok {
+			q.steering = append(q.steering, user("s1"))
+		}
+	})
+	reqs := s.Requests()
+	llmtest.AssertTail(t, reqs[1], llm.RoleUser, llm.RoleAssistant, llm.RoleTool, llm.RoleUser)
+	if role, text := lastText(reqs[1]); role != llm.RoleUser || text != "s1" {
+		t.Fatalf("second request ends with %s %q", role, text)
+	}
+	var order []string
+	for _, ev := range evs {
+		switch ev := ev.(type) {
+		case agent.ToolEnd:
+			order = append(order, "tool end")
+		case agent.Queued:
+			order = append(order, "queued "+ev.Message.Content[0].Text)
+		case agent.Message:
+			order = append(order, "message")
+		}
+	}
+	if want := []string{"message", "tool end", "queued s1", "message"}; !slices.Equal(order, want) {
+		t.Fatalf("events %v, want %v", order, want)
+	}
+	if end.StopReason != agent.StopEndTurn || len(end.Messages) != 5 || end.Messages[3].Content[0].Text != "s1" {
+		t.Fatalf("end %+v", end)
+	}
+}
+
+// A steer that arrives during a reply with no tool calls keeps the turn
+// going.
+func TestSteeringWithoutTools(t *testing.T) {
+	s := llmtest.NewScript(llmtest.Text("one"), llmtest.Text("two"))
+	q := &fakeQueue{}
+	_, end := runQueued(t.Context(), t, s, q, tool.Env{}, func(ev agent.Event) {
+		if d, ok := ev.(agent.TextDelta); ok && d.Text == "one" {
+			q.steering = append(q.steering, user("more"))
+		}
+	})
+	reqs := s.Requests()
+	if len(reqs) != 2 {
+		t.Fatalf("%d requests, want 2", len(reqs))
+	}
+	llmtest.AssertTail(t, reqs[1], llm.RoleUser, llm.RoleAssistant, llm.RoleUser)
+	if end.StopReason != agent.StopEndTurn || len(end.Messages) != 4 {
+		t.Fatalf("end %+v", end)
+	}
+}
+
+// A follow-up waits until the turn would end: not after a tool result, but
+// after the reply that asks for nothing.
+func TestFollowUpWhenTurnEnds(t *testing.T) {
+	s := llmtest.NewScript(llmtest.ToolCall("r1", "read", `{"path":"x"}`), llmtest.Text("a"), llmtest.Text("b"))
+	q := &fakeQueue{followUps: []llm.Message{user("f")}}
+	_, end := runQueued(t.Context(), t, s, q, readEnv(t), nil)
+	reqs := s.Requests()
+	if len(reqs) != 3 {
+		t.Fatalf("%d requests, want 3", len(reqs))
+	}
+	if role, _ := lastText(reqs[1]); role != llm.RoleTool {
+		t.Fatalf("the follow-up entered after the tool result: second request ends with %s", role)
+	}
+	if role, text := lastText(reqs[2]); role != llm.RoleUser || text != "f" {
+		t.Fatalf("third request ends with %s %q", role, text)
+	}
+	if end.StopReason != agent.StopEndTurn || len(end.Messages) != 6 {
+		t.Fatalf("end %+v", end)
+	}
+}
+
+// A steer queued before the turn enters after the prompt, before the first
+// model call.
+func TestSteeringAtStart(t *testing.T) {
+	s := llmtest.NewScript(llmtest.Text("ok"))
+	q := &fakeQueue{steering: []llm.Message{user("early")}}
+	runQueued(t.Context(), t, s, q, tool.Env{}, nil)
+	req := s.Requests()[0]
+	llmtest.AssertTail(t, req, llm.RoleUser, llm.RoleUser)
+	if _, text := lastText(req); text != "early" {
+		t.Fatalf("first request ends with %q", text)
+	}
+}
+
+// Nothing is polled once the turn is cancelled.
+func TestNoPollAfterCancel(t *testing.T) {
+	s := llmtest.NewScript(llmtest.ToolCall("b1", "bash", `{"command":"sleep 30"}`))
+	q := &fakeQueue{}
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	_, end := runQueued(ctx, t, s, q, tool.Env{Cwd: t.TempDir()}, func(ev agent.Event) {
+		if _, ok := ev.(agent.ToolRun); ok {
+			q.steering = append(q.steering, user("late"))
+			q.followUps = append(q.followUps, user("later"))
+			time.AfterFunc(100*time.Millisecond, cancel)
+		}
+	})
+	if end.StopReason != agent.StopCancelled || q.polls != 1 || len(q.steering) != 1 || len(q.followUps) != 1 {
+		t.Fatalf("end %s, polls %d, left %d steering and %d follow-ups", end.StopReason, q.polls, len(q.steering), len(q.followUps))
 	}
 }

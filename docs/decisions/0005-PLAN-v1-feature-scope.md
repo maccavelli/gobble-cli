@@ -1,6 +1,6 @@
 ---
 status: proposed
-date: 2026-10-06
+date: 2026-10-07
 associated-madr: "0005-MADR-v1-feature-scope.md"
 ---
 # Implement the v1 line: the v1.0.0 gate, the v1.x train, and `exp/`
@@ -163,6 +163,8 @@ API.
 8. `gobble models list|info`.
 9. Config option category `model` (0002-PLAN Phase 4, amended).
 
+*(2026-10-07: 0002-PLAN Phase 7's step 4, `gobble auth` "as far as the chosen provider requires", is met by Phase 3's ambient credentials, by the owner's decision of that date. Step 7's `gobble auth login|logout|status|token` stays here. Until step 5's catalog, Phase 7's `_gobble/get_state` names the model as `{provider, id}`, and `_gobble/get_session_stats` reports `cost` 0 with no `contextUsage`. See that plan's Amendments entry "Phase 7 made executable".)*
+
 **Accept:**
 
 * For each 1.0 id, an adapter test against `httptest.NewTestServer`
@@ -194,6 +196,8 @@ API.
    both emit `usage_update`.
 
 *(2026-10-06: 0002-PLAN Phase 6 delivers Pi's manual compaction, by the owner's decision of that date: step 2's cut-point rules, iterative summary format and split-turn merge, and step 3's `/compact`. This phase keeps step 1, step 2's automatic trigger and overflow compact-and-retry, and `_gobble/compact` (0002-PLAN Phase 7). See that plan's Amendments entry "Phase 6 made executable".)*
+
+*(2026-10-07: 0002-PLAN Phase 7 delivers `_gobble/compact` on `/compact`'s code path (`compactSession`), with `usage_update`. Step 3 is complete. `_gobble/set_auto_compaction` and the retry methods wait for this phase's automatic compaction and retry.)*
 
 **Accept:**
 
@@ -262,6 +266,8 @@ API.
 
 *(2026-10-06: 0002-PLAN Phase 5 delivers part of this phase, by the owner's decision of that date: step 1's checks of the whole `mcp.json` schema and its `$NAME` / `${NAME}` values, with `!command` left here; step 2's 64-character names with the hash suffix; step 3's per-call `timeout`, with the progress reset left here. `exposure` and `toolExposure` are checked and kept there, and applied here. See that plan's Amendments entry "Phase 5 made executable".)*
 
+*(2026-10-07: 0002-PLAN Phase 8 delivers step 3's process-group stop, by the owner's decision of that date. A stdio server runs in its own process group, or a kill-on-close Job object on Windows, and is stopped with Pi's sequence and timings. This phase's Accept line "A stdio server that ignores SIGTERM is killed with SIGKILL, including its child process" is tested there. This phase keeps the retries, `list_changed`, reconnect, the truncation and OAuth. See that plan's Amendments entry "Phase 8 made executable".)*
+
 **Accept:**
 
 * Against the go-sdk's test server: a stdio fixture and an HTTP fixture;
@@ -288,6 +294,8 @@ API.
 2. TUI-only commands: `/settings`, `/hotkeys`, `/quit`, `/copy`, `/new`,
    `/resume`, `/login`, `/logout`, `/theme`, `/changelog`, `/editor`.
 3. Record the chosen Markdown renderer here.
+
+*(2026-10-07: 0002-PLAN Phase 7 delivers the steering and follow-up queues, in `agent` and over ACP: `_gobble/steer`, `_gobble/follow_up`, `_gobble/clear_queue` and the two queue modes. Step 1's Enter-steers and Alt+Enter-follows-up keys stay here, by the owner's decision of that date. A cancelled turn's response carries the cleared texts in `_meta.gobble.cleared`, for the editor to restore, as Pi's terminal does.)*
 
 **Accept:**
 

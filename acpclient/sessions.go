@@ -85,6 +85,22 @@ func (c *Conn) NewSessionWith(ctx context.Context, cwd string, opts NewSessionOp
 	return &Session{id: resp.SessionId, c: c}, nil
 }
 
+// setNameParams are _gobble/set_session_name's params (0002-PLAN Phase 7).
+type setNameParams struct {
+	SessionID acp.SessionId `json:"sessionId"`
+	Name      string        `json:"name"`
+}
+
+// SetName names the session through gobble's _gobble/set_session_name, as
+// /name does. A refusal, such as an empty name, is ErrInvalidSession with
+// the agent's reason as its text.
+func (s *Session) SetName(ctx context.Context, name string) error {
+	if _, err := s.c.conn.CallExtension(ctx, "_gobble/set_session_name", setNameParams{SessionID: s.id, Name: name}); err != nil {
+		return sessionError("_gobble/set_session_name", err)
+	}
+	return nil
+}
+
 // Commands are the slash commands the agent last advertised for the
 // session, or nil before any.
 func (s *Session) Commands() []Command { return s.c.handler.commandsOf(s.id) }

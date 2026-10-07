@@ -12,7 +12,7 @@ This is a running report. It decides nothing. It collects what work in this repo
 
 ## Baseline
 
-magic-cli-remote `main` was at `9778cbc1` (2026-10-04) for every finding below, unless a finding says otherwise. `git log 9778cbc1..HEAD` was empty on 2026-10-05.
+magic-cli-remote `main` was at `9778cbc1` (2026-10-04) for every finding below, unless a finding says otherwise. `git log 9778cbc1..HEAD` was empty on 2026-10-05, and again on 2026-10-07.
 
 ## Index
 
@@ -26,6 +26,8 @@ magic-cli-remote `main` was at `9778cbc1` (2026-10-04) for every finding below, 
 | M6 | 2026-10-05 | test quality | Two `appdirs` tests skip depending on host state | open |
 | M7 | 2026-10-05 | contract | The version pin ignores prerelease, so any prerelease or pseudo-version build matches a release pin | open |
 | M8 | 2026-10-05 | dependency defect | The pinned ACP SDK fork's `SetLogger` races with the connection's reader goroutine | open |
+| M9 | 2026-10-07 | contract | gobble froze its `_gobble/` methods; 0179 D8's `Compact` parameter differs | open |
+| M10 | 2026-10-07 | dependency | The SDK fork cancels a session's running prompt when a new `session/prompt` arrives | reference |
 
 ## Findings
 
@@ -127,3 +129,35 @@ magic-cli-remote `main` was at `9778cbc1` (2026-10-04) for every finding below, 
   - an atomic `SetLogger`, so existing callers are safe too.
 
   Whether upstream `coder/acp-go-sdk` has the same defect after v0.13.5 is **[unverified]**.
+
+### M9 — gobble froze its `_gobble/` methods; 0179 D8 differs in one parameter (2026-10-07)
+
+- **Found by:** [0002-PLAN](../decisions/0002-PLAN-cli-acp-headless-mcp-v1.md) Phase 7, Amendments entry "Phase 7 made executable".
+- **Fact, in magic-cli-remote at `9778cbc1`:** 0179 D8 (`docs/decisions/0179-MADR-pigo-native-acp-provider.md:264-271`) expects:
+  - `Compact` as `_pigo/compact {sessionId, instructions?}`;
+  - `RuntimeUsage` as `_pigo/usage`;
+  - `Rename` as `_pigo/set_session_name`;
+  - `Fork` as `_pigo/fork`, returning the new agent session id for `session/load`.
+
+  It says the names are "frozen by pi-go `0002-PLAN-cli-acp-headless-mcp-v1.md` Phase 7", which is gobble's plan under the old name (M1).
+- **What gobble froze:** sixteen methods. Every request carries `sessionId`; the other fields keep Pi's RPC names.
+  - `_gobble/compact {sessionId, customInstructions?}` returns Pi's `CompactionResult`: `summary`, `firstKeptEntryId`, `tokensBefore` and `details`. The parameter is Pi's `customInstructions`, not 0179's `instructions` (owner's decision of 2026-10-07).
+  - `_gobble/usage {sessionId}` returns `{text, stats}`. `text` is `/usage`'s message, ready for `RuntimeUsage`.
+  - `_gobble/set_session_name {sessionId, name}` returns `{}`.
+  - `_gobble/fork {sessionId, entryId}` returns `{sessionId, text}`, and `_gobble/clone {sessionId}` returns `{sessionId}`. The new session is written and closed, for `session/load`.
+  - The queue: `_gobble/steer` and `_gobble/follow_up {sessionId, message}`, `_gobble/clear_queue`, `_gobble/set_steering_mode` and `_gobble/set_follow_up_mode`.
+  - The reads: `get_state`, `get_messages`, `get_entries`, `get_last_assistant_text`, `get_session_stats` and `get_fork_messages`.
+  - Writers are refused with -32600 `a prompt is already running` during a turn.
+  - `initialize` lists all sixteen in `agentCapabilities._meta.gobble.extensions`.
+  - A cancelled prompt's response carries the cleared queue in `_meta.gobble.cleared {steering, followUp}`.
+- **Wanted upstream (with M3 item 1):**
+  - 0179 D8's `SessionOps` read gobble's table: `Compact` → `_gobble/compact` with `customInstructions`; `RuntimeUsage` → `_gobble/usage`'s `text`; `Rename` → `_gobble/set_session_name`; `Fork` → `_gobble/fork`.
+  - The live probe reads `agentCapabilities._meta.gobble.extensions` rather than calling each method.
+  - The steer path of M3 item 5 is `_gobble/steer`, in place of the daemon FIFO for mid-turn input.
+
+### M10 — the SDK fork cancels a running prompt when a new one arrives (2026-10-07)
+
+- **Found by:** 0002-PLAN Phase 7, deviation 3.
+- **Fact, in the fork at `v0.13.6-mcr.2`:** the agent side's `session/prompt` dispatch cancels the session's running prompt before it calls the agent: `if prev, ok := a.sessionCancels[...]; ok { prev() }` (`agent_gen.go:410-416`).
+- **Effect on gobble:** a second `session/prompt` mid-turn cancels the running turn. gobble then refuses the second with -32600 while the first is still releasing the turn, or runs it once the first has released. A client that sends a prompt mid-turn can lose the running turn either way. `_gobble/steer` and `_gobble/follow_up` are the way to send input mid-turn.
+- **Why it is here:** magic-cli-remote pins the same fork (M8). Its daemon queues mid-turn input in a FIFO (0179 "More Information", `:363`), so it does not send a second prompt today. A change that does would cancel the running turn.

@@ -1,6 +1,6 @@
 ---
 status: in-progress
-date: 2026-10-06
+date: 2026-10-07
 associated-madr: "0002-MADR-cli-acp-headless-mcp-v1.md"
 ---
 # Implement v1 as the native magic-cli-remote CLI: Kong over ACP, ACP stdio, MCP client
@@ -267,6 +267,8 @@ queues a steer; `_gobble/compact` shortens history the same way `/compact`
 does; unknown `_nope` returns method-not-found. Stdio clients that never
 call extensions still complete Phase 3 and Phase 6 tests.
 
+*(2026-10-07: made executable in the Amendments entry "Phase 7 made executable" of this date. Step 2's frozen names are there. By the owner's decisions of that date, the phase adds `_gobble/fork` and `_gobble/clone`, and step 4 is met by Phase 3's ambient credentials: `gobble auth` stays with 0005-PLAN F4.)*
+
 ### Phase 8 — hardening
 
 1. Windows stdio (ACP on pipes) and process-group kill for MCP stdio
@@ -279,6 +281,8 @@ call extensions still complete Phase 3 and Phase 6 tests.
 **Accept:** CI green on darwin, linux, windows. architecture.md names
 every package under `internal/`, and archtest shows Charm imported only
 by `internal/tui` ([0004-MADR](0004-MADR-go-module-architecture.md) rule 5).
+
+*(2026-10-07: made executable in the Amendments entry "Phase 8 made executable" of this date. By the owner's decisions of that date: step 1's process-group stop is a gobble-owned stdio transport with Pi's sequence and timings, and a Job object on Windows; step 2 is 0004-PLAN Phase 4 step 1's `ci.yml`, written here, with the release jobs left to that phase.)*
 
 ## Verification
 
@@ -1746,3 +1750,557 @@ The agent stages; the owner commits.
   2. **`/help` opens the session, as any agent command does.** Its list then includes the agent's commands, and `session/new` makes no model call.
   3. **The permission prompt answers with a key, not a line.** It reads from the editor's own reader in raw mode, which no one else reads during a turn. The answer is echoed after the line.
   4. **`/new` resets the session flags.** `--session-id` and `-n` named the first session only.
+
+**2026-10-07 — Phase 7 made executable (owner's decisions: `_gobble/fork` and `_gobble/clone` join the set, cancel clears and reports the queues, steering keys wait for the TUI, `gobble auth` waits for F4).**
+
+Phase 7 carries the work four records assign to it:
+* its own steps 1–4;
+* 0002-MADR D8, the dual path, and its mapping-table rows for the queue, the read models, the queue modes and `set_session_name`;
+* Phase 6's deferral of `_gobble/compact`, `_gobble/usage`, `_gobble/set_session_name` and the read helpers;
+* Phase 4's refusal of `-n` with `-c` or `--session` (`internal/cli/flags.go:86-87`), which waits for `_gobble/set_session_name`.
+
+The facts come from Pi at `maccavelli/pi` `312184edb`. Read in full:
+* `packages/coding-agent/docs/rpc.md`;
+* `packages/coding-agent/src/modes/rpc/rpc-types.ts`;
+* `packages/agent/src/agent.ts`.
+
+Read in part:
+* `packages/agent/src/agent-loop.ts:173-308`, the run loop;
+* `packages/coding-agent/src/modes/rpc/rpc-mode.ts:416-674`, the command handlers;
+* `core/agent-session.ts`: the queue (`:2088-2340`), `abort` (`:2349-2359`), `SessionStats` (`:321-338`), `getSessionStats` (`:4085-4137`) and `getLastAssistantText` (`:4248-4268`);
+* `modes/interactive/interactive-mode.ts`: `restoreQueuedMessagesToEditor` and its callers.
+
+The facts:
+* **Two queues, one mode each** (`agent.ts:143-174,247-248`).
+  * A mode is `one-at-a-time` (the default) or `all`.
+  * A drain takes the first message, or all of them.
+* **Where they enter the run** (`agent-loop.ts:173-308`).
+  * Steering is polled once at the start of a run, after the prompt messages. It is polled again after every model reply and its tool results.
+  * The run goes on while the reply asked for tools or steering is pending.
+  * When it would stop, follow-ups are polled. Any are delivered as the next pending messages, and the run goes on.
+  * A queued message enters the context as a user message, before the next model call.
+* **Steer and follow-up** (`agent-session.ts:2088-2178`).
+  * Each returns the disposition `queued`, or `handled` when an input handler consumed the text.
+  * Queuing a registered extension command throws `Extension command "/<name>" cannot be queued. Use prompt() or execute the command when not streaming.`
+  * A queue given while idle is delivered by the next run.
+* **`clear_queue`** returns `{steering, followUp}`, the texts removed (`:2317-2325`).
+  * The RPC `abort` leaves the queues alone (`:2349-2359`).
+  * The terminal's Esc clears them and puts their text back in the editor (`restoreQueuedMessagesToEditor`).
+* **The RPC shapes** (`rpc-types.ts`):
+  * `compact {customInstructions?}` returns `CompactionResult`: `summary`, `firstKeptEntryId`, `tokensBefore` and `details`.
+  * `fork {entryId}` returns `{text, cancelled}`, the forked-before message's text. `clone` fails with `Cannot clone session: no current entry selected` when there is no entry.
+  * `set_session_name {name}` fails with `Session name cannot be empty`.
+  * `get_entries {since?}` returns `{entries, leafId}`, and fails with `Entry not found: <id>`.
+  * `get_fork_messages` returns `{messages: [{entryId, text}]}`.
+  * `get_last_assistant_text` returns `{text: string | null}`, skipping an aborted assistant message with no content.
+  * `get_state` returns `RpcSessionState`: `model`, `thinkingLevel`, `isStreaming`, `isCompacting`, `steeringMode`, `followUpMode`, `sessionFile`, `sessionId`, `sessionName`, `autoCompactionEnabled`, `messageCount` and `pendingMessageCount`.
+  * `get_session_stats` returns `SessionStats`: `sessionFile`, `sessionId`, the message counts, `tokens {input, output, cacheRead, cacheWrite, total}`, `cost`, and `contextUsage` when the model's window is known.
+  * Compaction cancelled reads `Compaction cancelled` (`agent-session.ts:2720`).
+* **The companion.** magic-cli-remote's `0179-MADR-pigo-native-acp-provider.md` D8 (`:264-271`) expects:
+  * `Compact` as `{sessionId, instructions?}`;
+  * `RuntimeUsage` as human-readable text;
+  * `Rename`;
+  * `Fork`, returning the new agent session id for `session/load`.
+
+  It says the names are "frozen by pi-go `0002-PLAN-cli-acp-headless-mcp-v1.md` Phase 7", which is this PLAN under the old name (0009-REPORT M1).
+
+In gobble at `8e997fa`:
+* **The SDK routes every `_` method** to `ExtensionMethodHandler.HandleExtensionMethod`, else -32601 (`acp-go-sdk@v0.13.6-mcr.2 extensions.go:36-50`).
+  * `acp.AgentCapabilities` has `Meta`, ACP's place for custom capabilities.
+  * `acp.UpdateUserMessageText` exists (`helpers.go:87`).
+* **`agent.Run` runs one prompt.** Model calls and their tools alternate until a reply asks for none (`agent/agent.go:110-148`). Nothing can enter a running turn.
+* **The line session reads no input during a turn** (`internal/cli/line.go:111-127`).
+
+The owner decided four questions on 2026-10-07:
+1. **`_gobble/fork` and `_gobble/clone` join the set.**
+   * They share `/fork` and `/clone`'s `copyTo`, and return the new session's id for `session/load`.
+   * ACP's unstable `session/fork` stays unadvertised.
+2. **A cancelled turn clears both queues and reports them.**
+   * The cancelled prompt's response carries `_meta.gobble.cleared {steering, followUp}`, so a client can restore the text, as Pi's terminal does.
+   * A cancelled steer never slips into the next prompt.
+3. **The queue lands in `agent` and over ACP.**
+   * The line session is unchanged.
+   * The TUI's Enter-steers and Alt+Enter-follows-up keys come with 0005-PLAN F9 (0005-MADR "Steering and follow-up queues").
+4. **Step 4 is met by Phase 3's ambient credentials.**
+   * `gobble auth login|logout|status|token` stays with 0005-PLAN F4's credential store.
+   * `gobble auth check` stays with 0005-PLAN F10.
+
+Choices made within the wording:
+* **The names, frozen here (step 2).**
+  * Every request carries `sessionId`. Other fields keep Pi's RPC names.
+  * An unknown session is -32602, as for every session method.
+  * Any other `_` method is -32601.
+
+  | Method | Params | Result | While a prompt runs |
+  |---|---|---|---|
+  | `_gobble/steer` | `sessionId, message` | `{disposition: "queued"}` | queued |
+  | `_gobble/follow_up` | `sessionId, message` | `{disposition: "queued"}` | queued |
+  | `_gobble/clear_queue` | `sessionId` | `{steering: [], followUp: []}`, the texts removed | answered |
+  | `_gobble/set_steering_mode` | `sessionId, mode` (`all` or `one-at-a-time`) | `{}` | answered |
+  | `_gobble/set_follow_up_mode` | `sessionId, mode` | `{}` | answered |
+  | `_gobble/compact` | `sessionId, customInstructions?` | `{summary, firstKeptEntryId, tokensBefore, details}` | refused |
+  | `_gobble/usage` | `sessionId` | `{text, stats}`: `/usage`'s text and `get_session_stats`'s result | answered |
+  | `_gobble/set_session_name` | `sessionId, name` | `{}` | refused |
+  | `_gobble/fork` | `sessionId, entryId` | `{sessionId, text}`: the new session, and the forked-before message's text | refused |
+  | `_gobble/clone` | `sessionId` | `{sessionId}` | refused |
+  | `_gobble/get_state` | `sessionId` | below | answered |
+  | `_gobble/get_messages` | `sessionId` | `{messages}` | answered |
+  | `_gobble/get_entries` | `sessionId, since?` | `{entries, leafId}` | answered |
+  | `_gobble/get_last_assistant_text` | `sessionId` | `{text}`, null when none | answered |
+  | `_gobble/get_session_stats` | `sessionId` | Pi's `SessionStats` | answered |
+  | `_gobble/get_fork_messages` | `sessionId` | `{messages: [{entryId, text}]}` | answered |
+
+  * "Refused" is -32600 with `a prompt is already running`, as `session/prompt` answers. Each refused method writes the session, and one prompt at a time per session is how writes stay ordered.
+  * A refused method holds the session's turn while it runs, so a prompt meanwhile is refused too, and `session/cancel` stops `_gobble/compact`.
+* **Discovery.** `initialize` advertises the sixteen names, sorted, in `agentCapabilities._meta.gobble.extensions`, as ACP's extensibility page directs. A test sends each advertised name, read from the wire, and asserts it is not -32601.
+* **Not in the set:** `get_tree` waits for `/tree` (1.x, as Phase 6 deferred it). `set_auto_compaction` and the retry methods wait for 0005-PLAN F5's automatic compaction and retry. `bash` and `abort_bash` wait for the `!` gate (0009-REPORT M3 item 5). `get_commands` is ACP's `available_commands_update` (0002-MADR mapping table). `_gobble/status` stays with 0005-PLAN X3.
+* **The queue.**
+  * Each live session has one, with Pi's two modes, defaulting to `one-at-a-time`.
+  * The modes are the session's own, not persisted: no settings file is written until the configuration-surface record (amendment of 2026-10-04).
+  * A message is its text, trimmed. An empty one is -32602 `Message cannot be empty`.
+  * Text that `command.Parse` reads as one of gobble's commands is -32602 `Command "/<name>" cannot be queued. Send it as a prompt when the turn ends.`, Pi's rule for its agent-side commands. `/usr/local/bin is missing` is queued as text.
+  * A message queued while idle is delivered by the next prompt, as in Pi: steering after the prompt message, before the first model call; follow-ups when that prompt would end. ACP gives an agent no turn without a prompt.
+* **What a client sees.**
+  * A queued message that enters the turn is written as a user message entry, then sent as `user_message_chunk`, before the model call that reads it (D19 item 6).
+  * Follow-ups run inside the same `session/prompt`. Its response is the last reply's stop reason, with the usage of every call.
+* **The cancel.**
+  * When a model turn or a command turn ends cancelled, both queues are emptied. Their texts go in the response's `_meta.gobble.cleared`, in queue order. The key is absent when both queues were empty.
+  * A cancel while idle changes nothing.
+* **`_gobble/compact` is `/compact`'s code path,** one `compactSession` function. It writes the same entry and rebuilds the same context. It sends the same `usage_update`, but no `agent_message_chunk`, since it is no prompt turn.
+  * The result is Pi's `CompactionResult`.
+  * `Already compacted`, `Nothing to compact (session too small)` and a busy session are -32600, with Pi's text as `reason`.
+  * A summary failure is -32603, with `Summarization failed: …` as `error`.
+  * No credential is `auth_required`.
+  * A cancel is -32603 `Compaction cancelled`.
+  * The parameter is Pi's `customInstructions`, not 0179's draft `instructions`. The owner confirmed it on 2026-10-07: the table keeps one rule, Pi's RPC names plus `sessionId`, with no exception. 0009-REPORT gains this as a finding.
+* **`_gobble/set_session_name`** is `/name`'s code path: the `session_info` entry, then `session_info_update`. The name is trimmed to one line; an empty one is -32602 `Session name cannot be empty`.
+* **`_gobble/fork` and `_gobble/clone`** are `/fork <entry>` and `/clone`'s code path.
+  * The new session is written and closed, and its id is returned. No `_meta.gobble.switchTo`: the caller loads it.
+  * An entry that is not a user message is -32602 `No user message "<id>" in this session.`
+  * The first message is -32602 `Nothing comes before that message; start a new session instead.`
+  * An empty session's clone is -32602 `Cannot clone session: no current entry selected`.
+  * Pi's `cancelled` is left out: no hook can cancel before 0005-PLAN F7.
+* **The reads.** They are answered from the log and the live session, during a turn too. `session.Log.Entries` holds its mutex, and live-session fields are read under `Agent.mu`.
+  * `get_state` has Pi's keys, with these values:
+    * `model` is `{provider, id}` until 0005-PLAN F4's catalog gives Pi's `Model`;
+    * `isStreaming` is true while a model turn runs;
+    * `isCompacting` is true while `/compact` or `_gobble/compact` runs;
+    * `autoCompactionEnabled` is false until F5;
+    * `messageCount` is the context's messages;
+    * `sessionFile` and `sessionName` are absent when there is none.
+
+    Two keys are gobble's: `mode`, and `cwd`.
+  * `get_messages` is the context in Pi's message shapes. A compaction is `{role: "compactionSummary", summary, tokensBefore, timestamp}`, as Pi's `buildSessionContext` gives it.
+  * `get_entries` is every entry in file order, with `leafId` the leaf, or null.
+  * `get_session_stats` is `/usage`'s totals in Pi's names. `cost` is 0 until F4. `contextUsage` is absent until F4 gives a window.
+  * `_gobble/usage`'s `text` is `/usage`'s message, word for word. Both come from one function.
+* **The CLI.** `-n` with `-c` or `--session` renames the resumed session through `_gobble/set_session_name`, after `session/resume` and before the first prompt.
+  * The line session's `resumed …` line shows the new name.
+  * When `-c` finds no session, the new session takes the name through `session/new`'s `_meta`, as today.
+  * `acpclient.Session.SetName` is the one new client method.
+
+**Files:**
+* `agent/agent.go`, `agent/event.go` and `agent/agent_test.go`;
+* `acpserver/`:
+  * `agent.go`, `commands.go`, `compact.go`, `prompt.go`, `agent_test.go` and `testdata/session.golden`;
+  * new `extensions.go`, `queue.go`, `extensions_test.go` and `queue_test.go`;
+* `acpclient/sessions.go` and `sessions_test.go`;
+* `internal/cli/flags.go`, `sessions.go` and `sessions_test.go`;
+* docs:
+  * this PLAN;
+  * `0002-MADR-cli-acp-headless-mcp-v1.md` (its amendment of 2026-10-07);
+  * `0005-PLAN-v1-feature-scope.md`: dated notes in F4 (`gobble auth`), F5 (`_gobble/compact` delivered) and F9 (the steering keys);
+  * `docs/reports/0009-REPORT-magic-cli-remote-findings.md`: M9, the frozen table against 0179 D8;
+  * `docs/README.md`: the 0002, 0005-PLAN and 0009 rows.
+
+**Steps:**
+1. **`agent`:**
+   * `type Queue interface { Steering() []llm.Message; FollowUps() []llm.Message }`. Each call drains by the queue's own mode. `Config.Queue Queue`; nil queues nothing.
+   * A new event, `Queued{Message llm.Message}`: a queued message entering the turn, before the call that reads it.
+   * `turn.run` follows `agent-loop.ts:173-308`:
+     * after the prompt, poll `Steering`;
+     * after each reply and its tool results, poll `Steering`;
+     * go on while the reply asked for tools or steering came;
+     * otherwise poll `FollowUps`, and go on if any came;
+     * otherwise end, with `max_tokens` when the last reply stopped there, else `end_turn`.
+   * Each queued message is appended to `added`, so it is in `End.Messages` in order.
+   * No poll happens once `ctx` is done. `MaxCalls` counts every call of the turn.
+2. **`acpserver/queue.go`:** the session queue.
+   * Text in two slices, two modes, and one mutex of its own.
+   * `steer`, `followUp`, `clear() (steering, followUp []string)`, `setMode`, `pending()` and `modes()`.
+   * It implements `agent.Queue`, giving user messages.
+3. **`acpserver/agent.go` and `prompt.go`:**
+   * `liveSession` gains `queue *queue` and `compacting bool`.
+   * `Prompt` passes the queue. The writer records `agent.Queued` as a user entry, and `updates` sends it as `user_message_chunk`.
+   * On a cancelled end, `Prompt` and `runCommand` clear the queue into `_meta.gobble.cleared`.
+   * `Capabilities()` sets `Meta: {"gobble": {"extensions": [...]}}` from the dispatch table, so the two cannot differ.
+4. **`acpserver/commands.go` and `compact.go`:** each code path becomes one function, used by its slash command and its method.
+   * `compactSession`;
+   * `setName`;
+   * `forkAt` and `cloneOf`, over `copyTo`;
+   * `usageText`;
+   * `sessionStats`.
+5. **`acpserver/extensions.go`:**
+   * `HandleExtensionMethod`: a table of the sixteen methods to handlers, each decoding its params with `encoding/json/v2`;
+   * `withTurn`, which refuses or holds the session's turn for the refused four;
+   * the read models.
+6. **`acpclient/sessions.go`:** `func (s *Session) SetName(ctx context.Context, name string) error`, calling `_gobble/set_session_name`.
+7. **`internal/cli`:** drop the refusal from `flags.go` (`:86-87`). `openSession` calls `SetName` after a resume when `-n` is given, and sets `Resumed.Title`.
+8. **Docs:** the 0002-MADR amendment, the 0005-PLAN notes, 0009-REPORT M9, the README rows, and this phase's execution record.
+
+**Accept,** through `acptest.Connect`, a scripted model, and a test client whose permission answer waits on a channel so a turn can be held mid-tool:
+* **The phase's own accept.**
+  * `_gobble/steer` during a held `write` returns `{disposition: "queued"}`. Once allowed, the second model request ends with the tool result, then the steer.
+  * A `user_message_chunk` with its text comes before the reply to it, and the file has the user entry after the tool result.
+  * `_gobble/compact` shortens the context as `/compact` does: the next request starts with the summary message, then only the kept messages.
+  * `_gobble/nope` and `_nope` answer -32601.
+* **The queue.**
+  * A follow-up queued mid-turn runs after the reply with no tools, inside the same `session/prompt`.
+  * `one-at-a-time` delivers one steer per call, and `all` delivers both.
+  * `clear_queue` returns the texts, and they never reach the model.
+  * `/compact` as a steer is -32602 with the text above. `/usr/local/bin is missing` is queued.
+  * A steer queued while idle arrives after the next prompt's message.
+* **The cancel.** `session/cancel` during a held turn with one steer and one follow-up queued gives `cancelled` with `_meta.gobble.cleared {steering: ["s"], followUp: ["f"]}`. The next prompt's request holds neither.
+* **The writers.**
+  * `_gobble/compact` returns Pi's fields. On a small session it is -32600 `Nothing to compact (session too small)`, and during a held turn -32600 `a prompt is already running`.
+  * `_gobble/set_session_name` writes `session_info` and sends `session_info_update`. An empty name is -32602.
+  * `_gobble/fork` and `_gobble/clone` return a session id that `session/load` opens with the expected entries and `parentSession`.
+* **The reads.**
+  * `get_state` reports `isStreaming` true during a held turn, with `pendingMessageCount` 1 after one steer.
+  * After a compaction, `get_messages` starts with a `compactionSummary`.
+  * `get_entries` with `since` returns the later entries; an unknown id is -32602 `Entry not found: <id>`.
+  * `get_last_assistant_text` returns the last reply, and null on a new session.
+  * `get_session_stats`'s tokens equal `/usage`'s figures, and `_gobble/usage`'s `text` equals `/usage`'s message.
+  * `get_fork_messages` lists the user messages.
+* **Discovery.** Every name in `initialize`'s `agentCapabilities._meta.gobble.extensions`, read from the wire, answers something other than -32601. The golden transcript changes by that `_meta` only.
+* **`agent`'s own tests:** steering after tools, follow-ups only when the turn would end, steering at the start, both modes, and no poll after cancel.
+* **The CLI.** `gobble -c -n x -p y` exits 0. The newest session's file gains `session_info` `x`, and `gobble -c -p z` then resumes it under that name.
+* `acpclient`: `TestSetName` against `acptest.ScriptAgent`.
+
+Each is shown failing first on a scratch copy, the failure quoted:
+* `turn.run` never polling `Steering`;
+* follow-ups polled where steering is, so they enter mid-turn;
+* a cancel that leaves the queue;
+* an advertised extension with no handler;
+* `_gobble/compact` that does not rebuild the context;
+* `-n` with `-c` not renaming.
+
+**Verification:**
+* `go test ./...`;
+* `golangci-lint` for linux, darwin and windows;
+* `make preflight` on Windows and in WSL, and WSL `go test -race ./...`. The extension handlers run beside `Prompt`, so `-race` is this phase's main check;
+* the pre-add check on every changed Go file;
+* the identifier and hidden-character scans.
+
+The agent stages; the owner commits.
+
+**Deferred from Phase 7, named:**
+* to 0005-PLAN F9: the TUI's Enter-steers and Alt+Enter-follows-up keys (owner's decision 3);
+* to F4: `gobble auth login|logout|status|token`, Pi's `Model` in `get_state`, `cost` and `contextUsage`;
+* to F10: `gobble auth check`;
+* to F5: `_gobble/set_auto_compaction`, the retry methods, and `autoCompactionEnabled` true;
+* to F7: Pi's `handled` disposition and `cancelled` results, which need input and fork hooks;
+* to the configuration-surface record: persisting the queue modes;
+* to 1.x: `_gobble/get_tree` with `/tree`, `_gobble/bash` with the `!` gate, and `_gobble/status` (X3);
+* to magic-cli-remote, out of scope here (0009-REPORT M3, M9): renaming 0179's `_pigo/*` to this table, and its `Compact` parameter to `customInstructions`.
+
+**Deviation during Phase 7, 2026-10-07 (owner's decision):**
+
+1. **`acpserver/config.go` joins Phase 7's files.**
+   * `_gobble/get_state` reads the session's model and thinking level. `setConfig` writes `s.model` and `s.think` with no lock (`config.go:73,79`). `Prompt` reads them with none (`agent.go:339,352`), and so does `/compact`.
+   * The SDK runs each request in its own goroutine (`acp-go-sdk@v0.13.6-mcr.2 connection.go:543`). `session/set_config_option` during a prompt is therefore already an unsynchronised write against a read. This predates Phase 7: `config.go` is untouched by it. It was found by reading, not reproduced: it needs the two requests to overlap at the read.
+   * The fix: `setConfig` writes both under `Agent.mu`. `Prompt`, `compactSession` and `_gobble/get_state` take one snapshot of both under `Agent.mu`.
+   * A `-race` test runs `session/set_config_option` against a held prompt and `_gobble/get_state`. It is shown failing on a scratch copy without the lock.
+2. **The turn is claimed in one step.**
+   * `Prompt` reads `s.cancel` under `Agent.mu` (`agent.go:308-312`), unlocks, parses the text and builds the provider on first use, and only then sets `s.cancel` (`agent.go:330-332`). `runCommand` claims the turn the same way (`commands.go:91-95`).
+   * Two `session/prompt`s on one session can therefore both pass the check. This predates Phase 7. It was found by reading, not reproduced.
+   * Phase 7's four refused methods claim the turn too, so a racing prompt could run beside a compaction.
+   * The fix: one `claimTurn`, which checks and sets `s.cancel` in one `Agent.mu` section. It is used by `Prompt`, `runCommand` and the four methods. Busy stays -32600 `a prompt is already running`. No file is added: `agent.go` and `commands.go` are in the list.
+   * ~~A test fires two prompts at once, many times, and asserts that exactly one runs. It is shown failing on a scratch copy with the split check.~~ *(Replaced by deviation 3.)*
+3. **Deviation 2's test is wrong as written, and is replaced.**
+   * The SDK fork cancels a session's running prompt whenever a new `session/prompt` arrives for it (`acp-go-sdk@v0.13.6-mcr.2 agent_gen.go:410-416`: `if prev, ok := a.sessionCancels[...]; ok { prev() }`).
+   * The first of two prompts can therefore end `cancelled` and release the turn before the second claims it, and the second then runs legitimately. With the fix in place, "exactly one refused" failed 3 times in 100 runs, each time with the first prompt `cancelled` and the second `end_turn`.
+   * The test is now a unit test of `claimTurn`. 50 goroutines claim one session at once behind a barrier, and none releases until all have tried. Exactly one succeeds, and the rest get -32600 `a prompt is already running`.
+   * It is shown failing on a scratch copy whose claim is split like the old `Prompt`: check, unlock, yield, set.
+4. **`liveSession.append` takes a per-session write lock.**
+   * Deviation 1's `-race` test also reported `liveSession.append`. `session/set_config_option` during a prompt appends `model_change` or `thinking_level_change` (`config.go:84` at `8e997fa`), while the prompt's writer appends too. `append` reads and writes `s.ids`, a map, and `s.leaf` with no lock (`agent.go:299-310`).
+   * Reproduced on an unmodified `HEAD` export (`git archive HEAD`, plus one test that only sends `set_config_option` while prompts run), under WSL `go test -race`: 10 reports in 3 runs. It predates Phase 7.
+   * Two such appends can also give two entries the same parent, which forks the session tree.
+   * Phase 7's own writers claim the turn and are serialised with prompts; `set_config_option` does not, and keeps working mid-turn, as Pi's `set_model` does.
+   * The fix: `append` holds a per-session mutex around the id choice, the log append, and the `ids` and `leaf` update. File `agent.go`, already in the list.
+   * `TestModelChoiceUnderLock` covers it. It fails under `-race` without the lock, as the `HEAD` run shows.
+
+**Phase 7, 2026-10-07 — complete (staged; the owner commits).** It ran as the amendment wrote it, with deviations 1–4 above. Phase 8 has not run.
+
+* **Files.**
+  * `agent`: `agent.go`, `event.go` and `agent_test.go`.
+  * `acpserver`: `agent.go`, `commands.go`, `compact.go`, `config.go` (deviation 1), `prompt.go` and `testdata/session.golden`; new `extensions.go`, `queue.go`, `extensions_test.go` and `queue_test.go`.
+  * `acpclient`: `sessions.go` and `sessions_test.go`.
+  * `internal/cli`: `flags.go`, `sessions.go` and `sessions_test.go`.
+  * Docs: this PLAN, the 0002-MADR amendment, the 0005-PLAN F4, F5 and F9 notes, 0009-REPORT M9 and M10, and `docs/README.md`.
+  * Listed but unchanged: `acpserver/agent_test.go`. `TestCapabilitiesAreHonest` needed nothing; the advertised list is checked by `TestEveryAdvertisedExtensionAnswers`.
+* **Accept,** through `acptest.Connect`, a scripted model, and `holdClient`, whose permission answer waits so a turn can be held mid-`write`:
+  * `TestSteerDuringPrompt`: `_gobble/steer` during the held write answers `{"disposition":"queued"}`, and `get_state` reports `isStreaming` true with `pendingMessageCount` 1. The second request ends with the tool result, then `and then stop`. The chunks are `user and then stop`, then `agent ok`. The file's messages are `user: write it`, `assistant: `, `toolResult: wrote a.txt (1 lines)`, `user: and then stop`, `assistant: ok`.
+  * `TestFollowUpAndModes`: in `all` mode both steers enter after the tool result, and the follow-up enters after the reply with no tools: three requests, one `session/prompt`. `TestSteerOneAtATime`: one steer per call.
+  * `TestClearQueue`: `{"followUp":["f"],"steering":["s"]}`, and neither reaches the model.
+  * `TestCancelClearsQueue`: `cancelled` with `_meta` `{"gobble":{"cleared":{"followUp":["f"],"steering":["s"]}}}`, and the next request holds neither.
+  * `TestQueueRefusals`:
+    * `/compact now` gives -32602 `Command "/compact" cannot be queued. Send it as a prompt when the turn ends.`;
+    * blank text gives -32602 `Message cannot be empty`;
+    * an unknown mode and an unknown session give -32602;
+    * `/usr/local/bin is missing`, queued while idle, follows the next prompt's `go`.
+  * `TestExtensionCompact`:
+    * on an empty session: -32600 `Nothing to compact (session too small)`;
+    * then Pi's four fields, a lone `usage_update` with no message text, and `Additional focus: keep the API` in the summary request;
+    * `get_messages` then starts with a `compactionSummary`;
+    * a second compact gives -32600 `Already compacted`;
+    * the next request is the summary, then the kept messages.
+  * `TestWritersRefusedDuringTurn`: `compact`, `set_session_name`, `fork` and `clone` give -32600 `a prompt is already running` during a held turn.
+  * `TestExtensionNameForkClone`:
+    * `set_session_name` normalises `  My name\n` and sends `session_info_update`; an empty name gives -32602;
+    * `get_fork_messages` lists both user messages;
+    * fork before the first message gives -32602 with the nothing-before text, and fork of `zz` gives -32602 `No user message "zz" in this session.`;
+    * the fork's and the clone's ids load through `session/load`, with user messages `first`, and `first, second`.
+  * `TestExtensionReads`:
+    * `get_state`'s fields;
+    * `get_messages`' roles;
+    * `get_entries` with and without `since`, and `Entry not found: zz`;
+    * `get_last_assistant_text`: null, then `b`, trimmed;
+    * `get_session_stats`' counts;
+    * `_gobble/usage`'s `text` equal to `/usage`'s message.
+  * `TestEveryAdvertisedExtensionAnswers`: the sixteen names read from `initialize` equal the frozen table, none answers -32601, and `_gobble/nope` and `_nope` do.
+  * `TestClaimTurnAdmitsOne` (deviation 3): 1 of 50 simultaneous claims succeeds.
+  * `TestModelChoiceUnderLock` (deviations 1 and 4): `set_config_option`, `get_state` and prompts at once, clean under `-race`.
+  * `TestQueueModes`, `TestQueueClear`.
+  * `agent`'s own tests:
+    * `TestSteeringAfterTools`: events `message, tool end, queued s1, message`, and five messages;
+    * `TestSteeringWithoutTools`;
+    * `TestFollowUpWhenTurnEnds`: three requests, the second ending with the tool result;
+    * `TestSteeringAtStart`;
+    * `TestNoPollAfterCancel`: one poll, and both messages left queued.
+  * `TestSetName` (`acpclient`): params `{"sessionId":"s1","name":"x"}`, and an empty name is `ErrInvalidSession` with the agent's text.
+  * `TestSessionIDAndName` (`internal/cli`): `-c -n Renamed -p y` exits 0. The one file gains `"name":"Renamed"` after `"name":"My name"`, and holds `y`.
+  * The golden transcript changed by `agentCapabilities._meta` only: one line.
+* **Gates.**
+  * `make preflight` printed `preflight passed` on Windows and in WSL. WSL `go test -race ./...` exited 0, and so did `go test -race -count=5 ./acpserver/ ./agent/`.
+  * Windows `go test ./...` showed no `FAIL`.
+  * `golangci-lint` printed `0 issues.` for linux, darwin and windows.
+  * The pre-add check was clean for all 17 Go files.
+* **Negative tests,** each on its own scratch copy, each failing at its own line:
+  * `turn.run` never polling `Steering`: `extensions_test.go:192: second request ends with tool "wrote a.txt (1 lines)"`;
+  * follow-ups polled with steering: `agent_test.go:376: 2 requests, want 3`;
+  * a cancel that keeps the queue: `extensions_test.go:319: cancelled response _meta {}, <nil>`;
+  * `_gobble/usage` advertised with no handler: `extensions_test.go:572: _gobble/usage is advertised and answers method-not-found`;
+  * `compactSession` not rebuilding the context: `extensions_test.go:401: context after compact: 5 messages, …`;
+  * `-n` with `-c` not renaming: `sessions_test.go:180: -n with -c did not rename the resumed session: …`;
+  * the claim split as the old `Prompt` had it (deviation 3): `extensions_test.go:619: 50 of 50 claims succeeded, want 1`;
+  * `setConfig` writing `s.model` unlocked (deviation 1), in WSL under `-race`: `WARNING: DATA RACE` at `config.go:73` against the reads;
+  * `append` unlocked (deviation 4), in WSL under `-race`: 6 reports, `agent.go:303-312` against `config.go:88`.
+* **What the plan predicted wrongly.**
+  1. **Four deviations,** each decided by the owner before its code: `config.go` joined the files, the turn claim became one step, deviation 2's test was replaced, and `append` took a lock.
+  2. **The SDK cancels a running prompt when a new one arrives** (deviation 3). Two prompts at once is therefore not "exactly one refused". This is also 0009-REPORT M10.
+  3. **The guarded reads reach further than deviation 1 named.** The session responses and `/context`, `/model` and `/thinking` read the model and thinking level through `choices` too.
+  4. **Results are encoded here, not by the SDK.** The SDK encodes with `encoding/json`, which does not know `encoding/json/v2`'s `embed` and `inline` options, so a session entry's unknown members would not round-trip. `HandleExtensionMethod` encodes each result with v2 and returns `json.RawMessage`.
+  5. **`TestSetName` adds the extension in the test.** `acptest.ScriptAgent` has no `HandleExtensionMethod`, so the test wraps it, and `acptest` is unchanged.
+  6. **Lint shaped two lines.** A `keyError` constant replaces the `"error"` literal (goconst), and `cancelled(s)` gives `runCommand`'s cancelled answer (nilerr).
+  7. **The CLI's "resumes it under that name" is checked in the file.** Print mode prints no `resumed …` line. `openSession` sets `Resumed.Title`, which the line session prints.
+  8. **Linux lint needs `CGO_ENABLED=0` on this Windows host,** as the gate script sets it. A bare `GOOS=linux` run failed to type-check `os/user`.
+  9. **Three of my own test mistakes,** each caught before the gates: write's result text; `encoding/json/v2` map order, which is not sorted without `json.Deterministic(true)`; and the first form of the turn test (deviation 3).
+
+**2026-10-07 — Phase 8 made executable (owner's decisions: a gobble-owned stdio transport with Pi's stop sequence, a Job object on Windows, and 0004-PLAN Phase 4 step 1's `ci.yml` written here).**
+
+Phase 8 carries the work four records assign to it:
+* its own steps 1–3;
+* Phase 5's deferral of the process-group stop ("The process-group stop is Phase 8 step 1 and F8 step 3");
+* the 2026-09-29 amendment, which moved hardening here from Phase 7;
+* 0005-PLAN F8's Accept line "A stdio server that ignores SIGTERM is killed with SIGKILL, including its child process", which moves here with the stop.
+
+The facts:
+* **Pi's stop** (`maccavelli/pi` `312184edb`, the MCP stdio transport `pkg-stdio.ts:8-41,95-109,152-179`):
+  * Each server is spawned in its own process group (`detached` on every platform but Windows).
+  * `close()` ends stdin. After 500 ms it sends SIGTERM to the group; 2 s after that, SIGKILL to the group.
+  * Once the server exits, the timers are cleared and the group gets SIGTERM, so children that outlive it are stopped too.
+  * On Windows it runs `taskkill /pid <pid> /T /F`, and does nothing once the server has exited.
+  * An exit hook sends SIGTERM to every live group when the host exits.
+* **gobble today** (`mcpclient/conn.go:189-195`): a stdio server is the go-sdk's `CommandTransport`.
+  * Its `Close` (`go-sdk@v1.8.0 mcp/cmd.go:69-105`) closes stdin and waits 5 s. It then sends SIGTERM to the direct child, which fails on Windows and falls through, waits 5 s again, then kills the direct child only.
+  * A wrapper such as `npx` or `uvx` leaves the real server running.
+* **The go-sdk's `IOTransport`** (`mcp/transport.go:149-161`) carries JSON-RPC over a given reader and writer. Its connection's `Close` closes the reader, then the writer (`rwc.Close`). `CommandTransport` hands it `io.NopCloser(stdout)`, so closing the connection means closing stdin.
+* **`golang.org/x/sys` is a direct requirement already** (`go.mod:19`), used by `session/jsonl`, `internal/appdirs` and `internal/cli`. `x/sys/windows` has the Job object calls.
+* **Windows stdio for ACP is exercised already.** `TestGobbleACPBinary` (`acpserver/binary_test.go:87-157`) builds `gobble`, runs `gobble acp` over real pipes, and checks four things: JSON-RPC only on stdout, nothing on stderr, `auth_required` without a credential, and exit 0 within 2 s of stdin closing. It passed in Windows `go test ./...` on 2026-10-07. Step 1's Windows half therefore needs no new code: CI runs that test on all three runners.
+* **There is no CI.** `.github/workflows/` does not exist. `ci.yml` is 0004-PLAN Phase 4 step 1, with the CI hygiene of that plan's 0007 amendment (`0004-PLAN:346-352,743-752`).
+* **The fleet's single-module CI** is go-selfupdate-lib's `ci.yml` at `a1bf87f`. Its actions are pinned by SHA:
+  * `actions/checkout` `3d3c42e5aac5ba805825da76410c181273ba90b1` (v7.0.1);
+  * `actions/setup-go` `b7ad1dad31e06c5925ef5d2fc7ad053ef454303e` (v7.0.0);
+  * `actions/upload-artifact` `043fb46d1a93c77aae656e7c1c64a875d1fc6a0a` (v7.0.1).
+
+  It runs `-race` on Linux and macOS only, "The race detector needs cgo, which the Linux and macOS runners have". It notes that "the Windows runner names it python". It downloads shellcheck `v0.11.0`, SHA-256 `8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198`, and runs `go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12`.
+* **`make preflight` runs no `go test`** besides `archtest` (`Makefile:160-186`). `make race` is `CGO_ENABLED=1 go test -race ./...`. `verify-build-metadata` and `check-records` call `python3` (`Makefile:205,217`).
+* **`acptest.Recorder.Golden` writes a failing transcript to `t.ArtifactDir()`** (`acpclient/acptest/recorder.go:150`). The directory is kept only under `go test -artifacts -outputdir <dir>` (Go 1.26).
+* **`docs/architecture.md` is stale.** It says "There is no process binary: Phase 2 has not run", and "No implemented package map … exists" (`:16-20,56-61`). `go list ./...` lists 44 packages, 13 of them under `internal/`.
+
+The owner decided three questions on 2026-10-07:
+1. **The process-group stop is Phase 8's, and gobble owns the stdio transport.**
+   * gobble starts the server itself: on Unix in its own process group, on Windows in a Job object.
+   * It hands the pipes to the go-sdk's `IOTransport`.
+   * Closing the writer runs Pi's sequence with Pi's timings.
+   * 0005-PLAN F8 keeps retries, `list_changed` and reconnect. Its SIGTERM line moves here.
+2. **Windows uses a Job object with kill-on-close,** through `golang.org/x/sys/windows`. Closing the job kills the tree, and so does gobble's own exit, a crash included.
+   * A child the server spawns before it is assigned to the job escapes it. Assignment follows `Start` at once.
+3. **Phase 8 writes 0004-PLAN Phase 4 step 1's `ci.yml`,** with that plan's 0007 hygiene.
+   * Phase 4 keeps steps 2–4: the release build, the publish job, `make release-dry-run` and the Dependabot rule.
+   * Both plans record it.
+   * "Green" needs the owner to push the branch.
+
+Choices made within the wording:
+* **The sequence,** in `stopper.Close`:
+  1. Close stdin.
+  2. Wait up to 500 ms (`stdinGrace`).
+  3. If the server has not exited: on Unix, SIGTERM to the group; on Windows, `TerminateJobObject`, Windows having no graceful signal. Then wait up to 2 s (`closeTimeout`).
+  4. If it still has not exited, SIGKILL to the group, and wait.
+  5. Once it has exited, on whichever step: on Unix, SIGTERM to the group, for children that outlive it, as Pi does; on Windows, the job handle is closed, which kills what is left.
+
+  * `Close` returns stdin's close error only. An exit by signal is the asked-for outcome, not an error.
+  * `cmd.Wait` runs once, in a goroutine started by `Start`, so each wait is a select on its result.
+* **Pi's exit hook is already covered.** `gobble acp`, and the in-process agent of `chat`, close every session's MCP servers when their connection ends or their context is cancelled (`acpserver/serve.go:34-39`, `Agent.Close`). A crash is covered on Windows by kill-on-close. On Unix it is not covered, as in Pi.
+* **Unix** (`//go:build unix`): `SysProcAttr{Setpgid: true}`, and `syscall.Kill(-pgid, sig)`. ESRCH, a group already gone, is not an error.
+* **Windows** (`//go:build windows`):
+  * `CreateJobObject`;
+  * `SetInformationJobObject` with `JOBOBJECT_EXTENDED_LIMIT_INFORMATION` and `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`;
+  * `OpenProcess(PROCESS_SET_QUOTA|PROCESS_TERMINATE, …)` and `AssignProcessToJobObject` right after `Start`.
+
+  A failure there kills the process and fails the connection, rather than running a server gobble could not stop.
+* **The stdio fixture gains two modes,** read by `mcptest.ServeStdioIfAsked`:
+  * `GOBBLE_MCPTEST_STUBBORN=1`: ignore SIGTERM, ignore stdin's end, start one child that also ignores SIGTERM, and write both pids to `GOBBLE_MCPTEST_PIDS`;
+  * `GOBBLE_MCPTEST_ORPHAN=1`: start one child, serve normally, and exit on stdin's end, leaving the child running.
+
+  A child is the test binary again, with `GOBBLE_MCPTEST=sleep`.
+* **`ci.yml`,** from go-selfupdate-lib's single-module shape and the actions pins above:
+  * triggers on push to `main` and `v*` tags, and on pull requests;
+  * top-level `permissions: contents: read`, and `concurrency: { group: ci-${{ github.ref }}, cancel-in-progress: true }`;
+  * one `validate` job, matrix `[ubuntu-24.04, macos-15, windows-2025]`, `fail-fast: false`;
+  * `actions/checkout` with `persist-credentials: false`, and `actions/setup-go` with `go-version-file: go.mod`;
+  * on every OS:
+    * `go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0`, since preflight runs it;
+    * `go test -count=1 -artifacts -outputdir "$RUNNER_TEMP/test-artifacts" ./...`. This is step 2's "go test on the three OS", which preflight does not run;
+    * `make preflight`;
+    * `make archtest`;
+  * `make race` on Linux and macOS only, as the fleet runs it. This differs from 0004-PLAN's "not on windows arm": no fleet CI runs the race detector on a Windows runner;
+  * on Linux, `go mod tidy -diff`, then shellcheck and actionlint, both as the fleet runs them;
+  * on failure, `actions/upload-artifact` uploads `${{ runner.temp }}/test-artifacts/`, as `test-artifacts-${{ matrix.os }}`, for 14 days.
+* **Windows runner tools.**
+  * `make`: preinstalled on `windows-2025` **[unverified]**. A step installs it with `choco install make --no-progress` only when `Get-Command make` finds none.
+  * Python: the runner names it `python`. The Makefile gains `PYTHON ?= python3`, used by `verify-build-metadata` and `check-records`, and the Windows leg passes `PYTHON=python`.
+  * Git's bash: at `C:/PROGRA~1/Git/usr/bin/bash.exe`, the Makefile's default **[unverified]** on the runner. A wrong path fails the first `make` at once, and would be a deviation then.
+* **`docs/architecture.md` is rewritten** to describe what exists, with no rationale, as its own first paragraph requires. It names every package `go list ./...` prints, with one line each, and the import tiers as `internal/archtest` enforces them. It also names `ci.yml`, and states the binary's two terminal modes and the ACP agent. The sibling-sources table keeps only the pins `go.mod` holds.
+
+**Files:**
+* `mcpclient/conn.go`; new `proc.go`, `proc_unix.go`, `proc_windows.go`, `proc_test.go`, `proc_unix_test.go` and `proc_windows_test.go`. The two OS test files hold only "is this pid alive".
+* `mcpclient/mcptest/mcptest.go`.
+* new `.github/workflows/ci.yml`.
+* `Makefile`: `PYTHON ?= python3`, two lines.
+* `docs/architecture.md`.
+* docs: this PLAN; `0004-PLAN-go-module-architecture.md` (a dated entry on Phase 4 step 1); `0005-PLAN-v1-feature-scope.md` (a dated note in F8); `docs/README.md` (the 0002, 0004 and 0005 PLAN rows).
+
+**Steps:**
+1. **`mcpclient/proc.go`:** `stdioTransport{cmd *exec.Cmd}` implements `mcp.Transport`.
+   * `Connect` makes the pipes, calls `prepare(cmd)` (OS file), `Start`s it, calls `attach(cmd.Process)`, starts the waiter, and returns `(&mcp.IOTransport{Reader: io.NopCloser(stdout), Writer: &stopper{…}}).Connect(ctx)`.
+   * `stopper.Close` is the sequence above, with `stdinGrace = 500 * time.Millisecond` and `closeTimeout = 2 * time.Second`.
+2. **`proc_unix.go` / `proc_windows.go`:** `prepare`, `attach` (returning a `tree` with `terminate()`, `kill()`, `exited()` and `release()`), as above.
+3. **`mcpclient/conn.go`:** the stdio branch returns `&stdioTransport{cmd: cmd}` in place of `&mcp.CommandTransport{Command: cmd}`, and the comment says why.
+4. **`mcpclient/mcptest/mcptest.go`:** the two modes and `sleep`; `EnvStubborn`, `EnvOrphan` and `EnvPIDs` exported.
+5. **`.github/workflows/ci.yml` and `Makefile`:** as above.
+6. **`docs/architecture.md`:** as above.
+7. **Docs:** the 0004-PLAN entry, the 0005-PLAN F8 note, the README rows, and this phase's execution record.
+
+**Accept:**
+* **The phase's own accept.**
+  * CI green on darwin, linux and windows, once the owner pushes. Until then the evidence is the local gates below, and actionlint, shellcheck and `go mod tidy -diff` run in WSL as the Linux leg runs them. The gap is recorded.
+  * architecture.md names every package under `internal/`. A scratch check compares `go list ./...` with the backticked package paths in the file.
+  * archtest's rule 5 passes, with Charm imported nowhere outside `internal/tui`.
+* **The stop,** through `Start` and `Close` on the fixture, on Windows and in WSL:
+  * `TestStopStubbornServer`: the stubborn server and its child are both gone within 4 s of `Close`. On Unix that means after the SIGKILL at about 2.5 s; on Windows, after the job's termination at about 0.5 s.
+  * `TestStopLeavesNoOrphan`: the orphan server exits on stdin's end, and its child is gone within 1 s after `Close` returns.
+  * `TestStopPoliteServer`: the fixture as today exits within the 500 ms grace, and `Close` returns nil within 1 s.
+  * Every existing `mcpclient`, `acpserver` and `internal/cli` MCP test passes unchanged.
+* **`TestGobbleACPBinary`** runs on all three CI runners as step 1's Windows-stdio evidence.
+
+Each is shown failing first on a scratch copy, the failure quoted:
+* `prepare` doing nothing, so there is no group or job: the stubborn child survives;
+* no SIGKILL step: the stubborn server survives;
+* no signal to the group after exit: the orphan's child survives (Unix);
+* `ci.yml` with an undefined `matrix` key: actionlint fails;
+* architecture.md missing one `internal/` package: the scratch check fails.
+
+**Verification:**
+* `go test ./...` on Windows;
+* `golangci-lint` for linux, darwin and windows;
+* `make preflight` on Windows and in WSL, and WSL `go test -race ./...`;
+* actionlint and shellcheck in WSL;
+* the pre-add check on every changed Go file;
+* the identifier and hidden-character scans.
+
+The agent stages; the owner commits and pushes. A green CI run is recorded here when it exists.
+
+**Deferred from Phase 8, named:**
+* to 0004-PLAN Phase 4: the release build and publish jobs, `make release-dry-run`, and the Dependabot rule (steps 2–4);
+* to 0005-PLAN F8: retries, `list_changed`, reconnect, the 20 KB truncation, OAuth and `gobble mcp get|login|logout`;
+* to the configuration-surface record: the stop timings, which are fixed at Pi's until a setting exists.
+
+**Deviation during Phase 8, 2026-10-07 (owner's decision):**
+
+1. **A pre-existing Windows runtime crash in `internal/cli`'s tests is investigated before Phase 8 is staged.**
+   * Phase 8's second gate run had Windows `go test ./...` die in `internal/cli`, during the GC's stack scan. The messages were `runtime: g 4: unexpected return pc for runtime.gopark …` and `fatal error: unknown caller pc`; other runs gave `traceback did not unwind completely`.
+   * The overwritten stack is always a runtime goroutine's: the GC scavenger (g4) or force-GC (g2). It holds system-DLL return addresses.
+   * Rates of `go test -count=1 ./internal/cli/` on this Windows host:
+     * whole package: `8e997fa` 0/20; Phase 7 (the index) 6/20; Phase 8 3/20, and 2/20 again;
+     * the subset `TestCompletionEnvCleared`, the `TestComposeInput*` tests and `TestLineSessionTurn`: `8e997fa` 5/40, Phase 7 5/30;
+     * the same subset without `TestCompletionEnvCleared`: 0/30. Each other early test, paired with the rest of the subset: 0/30.
+   * `TestCompletionEnvCleared` is the package's first test whose `Main` reaches `term.Detect` and `watchSignals` (`signal.Notify`, the Windows console control handler).
+   * So it predates Phases 7 and 8. Linux and WSL `-race` are clean. Left alone, the Windows CI leg would fail about one run in four to seven, and Phase 8's "CI green" could not be relied on.
+   * The owner decided that Phase 8 waits:
+     * build a minimal reproducer outside gobble;
+     * bisect gobble's path, `term.Detect` against `watchSignals`;
+     * fix gobble's code if it is a misuse. If it is the Go runtime, prepare an upstream issue with the reproducer, and bring the next decision to the owner.
+   * Phase 7 does not cause it, and can be committed meanwhile.
+   * Also found while reading: `proc_windows.go` passed `uintptr(unsafe.Pointer(&info))` to x/sys's `SetInformationJobObject`, a Go wrapper taking a `uintptr`, so a stack copy before the syscall would leave the address stale. The struct is now heap-allocated and kept alive across the call. That code only reads the struct, so it does not explain this crash: Phase 8 with that fix still crashed 2/20.
+   * **Root cause: the host's antivirus, not gobble and not the Go runtime** (2026-10-07).
+     * Bitdefender injects two DLLs into every Go test process on this host: `bdhkm64.dll` (1.13.238.0), its API-hook module, and `atcuf64.dll` (1.86.445.0), Advanced Threat Control. They were listed from a live test process's module table.
+     * The foreign return addresses in the crash dumps map, within the same boot session, to `bdhkm64.dll` +0x15085, +0x180d2, +0x1a14a and +0xce9f0, to `atcuf64.dll` +0x1cfe48, and to `ntdll.dll` +0x178478. The hook code ran on memory Go uses as goroutine stacks.
+     * How it was narrowed: `Main` with `signal.Notify` made a no-op, 0/60 against 6/60. `watchSignals` alone 0/60; with Kong's `newParser` before it, 3/60. `term.Detect`, the environment changes, the completion-environment clear and the command run made no difference. Async preemption is not the mechanism: `GODEBUG=asyncpreemptoff=1` gave 13/80 against 6/80. Two standalone reproducers without gobble's binary did not crash (0/40, 0/60).
+     * GitHub's Windows runners and WSL carry no such hooks. gobble's part is only standard-library `signal.Notify` and `signal.Stop`.
+   * **The owner decided** to add Bitdefender exceptions for Go's build and test binaries on this host. The agent then reruns the crashing subset 60 times, expecting 0, and Phase 8 proceeds. No gobble code changes for it.
+
+**Phase 8, 2026-10-07 — built and staged, verification open.** The owner asked for everything to be committed and pushed so that work can resume on another host. Phase 8 is not complete.
+
+* **Files.**
+  * `mcpclient`: `conn.go`; new `proc.go`, `proc_unix.go`, `proc_windows.go`, `proc_test.go`, `proc_unix_test.go` and `proc_windows_test.go`; `mcptest/mcptest.go`.
+  * New `.github/workflows/ci.yml`.
+  * `Makefile`: `PYTHON ?= python3` and its two uses. That is six lines, not the planned two, counting the comment.
+  * `docs/architecture.md`, rewritten.
+  * Docs: this PLAN, the 0004-PLAN entry, the 0005-PLAN F8 note, and `docs/README.md`.
+* **What ran.**
+  * The stop tests pass on Windows and in WSL. In WSL, the stubborn server takes 2.50 s to stop, which is Pi's 500 ms plus 2 s; the polite and orphan cases take under 1 ms. WSL `-race` on `mcpclient` is clean.
+  * Lint for linux, darwin and windows, and `make preflight` on Windows and in WSL, passed on the second gate run, after a gosec fix to the fixture (G204). WSL `go test -race ./...` exited 0.
+  * shellcheck, actionlint and `go mod tidy -diff` are clean in WSL.
+  * The architecture check finds all 43 packages, plus the module root, named.
+  * The negatives each failed on their own scratch copy:
+    * no process group: `the child (pid …) is still running … after Close`;
+    * no job: `Close did not return within 4 s: the stubborn server was not stopped`;
+    * no SIGKILL: the same;
+    * no signal after exit: `the child (pid …) is still running 1s after Close`;
+    * an undefined `matrix.platform`: actionlint's `property "platform" is not defined in object type {os: string}`;
+    * a package removed from architecture.md: `missing from architecture.md: ['internal/fsx']`.
+
+    A broken golden transcript is written under `go test -artifacts -outputdir`, the path `ci.yml` uploads.
+* **Still open.**
+  1. **Deviation 1's verification.** It waits for the Bitdefender exceptions on the Windows host: the crashing subset must run 60 times with 0 crashes. Until then, local Windows `go test ./internal/cli/` crashes about one run in four to seven on that host only.
+  2. **CI green on the three runners.** The first push runs `ci.yml`. Its two **[unverified]** runner facts, `make` and the Git bash path on `windows-2025`, are settled by that run.
+  3. **The full gates once more after the last edit.** The `KeepAlive` fix in `proc_windows.go` followed the second gate run. It was checked with the pre-add check, Windows lint and the `mcpclient` tests before staging.
+* **What the plan predicted wrongly, so far.**
+  1. **The Windows crash** (deviation 1): a host antivirus, found only by the gates.
+  2. **A group signal can fail, and then the server itself is signalled,** as Pi falls back to the direct child. The plan named only the group.
+  3. **The stubborn test bounds `Close` itself,** so a stop that never ends fails with a message rather than the test timeout.
+  4. **`go test -outputdir` needs its directory to exist.** `ci.yml` creates it.
+  5. **A job-level `env` cannot read the `runner` context.** The Python choice reads `matrix.os`.
+  6. **actionlint needs a Git repository to find the workflows.** The negative names the file.

@@ -75,6 +75,10 @@ endif
 
 BIN := bin/gobble$(BIN_EXT)
 
+# The Python the records and build-metadata checks run with; the Windows CI
+# runner names it python (0002-PLAN Phase 8).
+PYTHON ?= python3
+
 # Build identity is go-selfupdate-lib buildinfo's two stamps; commit and date
 # come from the checkout, which go build records (0004-MADR amendment of
 # 2026-10-05). A release build sets VERSION to its tag and BUILD_KIND=release.
@@ -202,7 +206,7 @@ check-cgo-off:
 # Builds cmd/gobble stamped and unstamped and checks `version --json`
 # (0008-PLAN P4; the logic is in Python, deviation 2).
 verify-build-metadata:
-	python3 scripts/verify_build_metadata.py
+	$(PYTHON) scripts/verify_build_metadata.py
 
 fix-check:
 	@out="$$(go fix -diff ./...)"; \
@@ -214,7 +218,7 @@ fix-check:
 
 # Records and docs links (0007-MADR D6).
 check-records:
-	python3 scripts/check_records.py --check-all
+	$(PYTHON) scripts/check_records.py --check-all
 
 # The fleet markdownlint config; records are excluded by its own globs
 # (0007-MADR D2).

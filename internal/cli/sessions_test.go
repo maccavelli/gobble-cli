@@ -153,10 +153,10 @@ func TestSessionValues(t *testing.T) {
 }
 
 // --session-id and -n go through session/new's _meta; a taken id is a
-// usage error.
+// usage error; -n with -c renames the resumed session (0002-PLAN Phase 7).
 func TestSessionIDAndName(t *testing.T) {
 	home, cwd := t.TempDir(), t.TempDir()
-	withModel(t, llmtest.NewScript(llmtest.Text("a")))
+	withModel(t, llmtest.NewScript(llmtest.Text("a"), llmtest.Text("b")))
 	mustRun(t, home, "--cwd", cwd, "--session-id", "my.id", "-n", "My name", "-p", "x")
 	files := storeFiles(t, filepath.Join(home, "sessions"))
 	if len(files) != 1 || !strings.HasSuffix(files[0], "_my.id.jsonl") {
@@ -170,9 +170,14 @@ func TestSessionIDAndName(t *testing.T) {
 	if r.code != ExitUsage || !strings.Contains(r.stderr, "a session with this id exists") {
 		t.Fatalf("taken id: exit %d, stderr %q", r.code, r.stderr)
 	}
-	r = runIn(t, home, "--cwd", cwd, "-c", "-n", "x", "-p", "y")
-	if r.code != ExitUsage || !strings.Contains(r.stderr, "--name with --continue or --session is not yet available (0002-PLAN Phase 7)") {
-		t.Fatalf("-n with -c: exit %d, stderr %q", r.code, r.stderr)
+	mustRun(t, home, "--cwd", cwd, "-c", "-n", "Renamed", "-p", "y")
+	if after := storeFiles(t, filepath.Join(home, "sessions")); len(after) != 1 || after[0] != files[0] {
+		t.Fatalf("-n with -c: files %v, want only %s", after, files[0])
+	}
+	b, err = os.ReadFile(files[0])
+	s := string(b)
+	if err != nil || strings.Index(s, `"name":"Renamed"`) < strings.Index(s, `"name":"My name"`) || !strings.Contains(s, `"content":"y"`) {
+		t.Fatalf("-n with -c did not rename the resumed session: %s %v", b, err)
 	}
 }
 

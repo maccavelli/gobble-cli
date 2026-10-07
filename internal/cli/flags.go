@@ -83,8 +83,6 @@ func (f *SharedFlags) validate(g given, stdinPiped, atPaths bool) error {
 		return usageErrorf("--file cannot be combined with piped input")
 	case g["file"] && atPaths:
 		return usageErrorf("--file cannot be combined with an @path argument")
-	case g["name"] && (g["continue"] || g["session"]):
-		return usageErrorf("--name with --continue or --session is not yet available (0002-PLAN Phase 7)")
 	case g["no-tools"] && (g["tools"] || g["exclude-tools"]):
 		return usageErrorf("--no-tools cannot be combined with %s", firstGiven(g, "tools", "exclude-tools"))
 	}

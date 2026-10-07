@@ -186,13 +186,13 @@ func (c *conn) transport() (mcp.Transport, error) {
 	for i, a := range s.Args {
 		args[i] = c.expandHome(a)
 	}
-	// No context: the go-sdk's CommandTransport.Close stops the process,
-	// closing stdin first and terminating it only if it does not exit.
+	// No context: closing the connection stops the process tree as Pi
+	// does, stdin first (stdioTransport, 0002-PLAN Phase 8).
 	cmd := exec.Command(c.expandHome(s.Command), args...) //nolint:gosec,noctx // the user's configured MCP server
 	cmd.Dir = c.dir()
 	cmd.Env = env
 	cmd.Stderr = c.stderr
-	return &mcp.CommandTransport{Command: cmd}, nil
+	return &stdioTransport{cmd: cmd}, nil
 }
 
 // dir is a stdio server's working directory: its cwd, resolved against

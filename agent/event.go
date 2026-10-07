@@ -43,6 +43,10 @@ type Message struct {
 	StopReason llm.StopReason
 }
 
+// Queued is a queued user message entering the turn, before the model call
+// that reads it, so a caller can record it first.
+type Queued struct{ Message llm.Message }
+
 // End is the turn's last event. Messages are the turn's messages, the
 // prompt first, for the caller to append to the history; Usage sums the
 // turn's model calls.
@@ -59,6 +63,7 @@ func (ToolRun) event()       {}
 func (ToolEnd) event()       {}
 func (Usage) event()         {}
 func (Message) event()       {}
+func (Queued) event()        {}
 func (End) event()           {}
 
 // StopReason is why a turn ended. The values are ACP's stop reasons.

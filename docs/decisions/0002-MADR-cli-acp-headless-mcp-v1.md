@@ -1,6 +1,6 @@
 ---
 status: proposed
-date: 2026-10-04
+date: 2026-10-07
 decision-makers: repository owner
 consulted: 0001-REPORT-go-port-feasibility.md, magic-cli-remote (ACP stdio adapter, command tables, protocol-v1/v2), TypeScript Pi at 312184edb
 informed: go-llmprovider-sdk, go-core-lib, acp-go-sdk, magic-cli-remote
@@ -1043,3 +1043,14 @@ The CLI library stays Kong. The config surface is undecided and will be either a
 ### Amendment (2026-10-04): the magic-cli-remote record is named `pigo` there
 
 The fifth amendment says the magic-cli-remote half of the contract is `0179-MADR-gobble-native-acp-provider.md`, with `provider.IDGobble`. At magic-cli-remote `9778cbc1` the file is `docs/decisions/0179-MADR-pigo-native-acp-provider.md` (`status: proposed`), created as `pigo` in `72588004`. It names `provider.IDPigo`, wire id `"pigo"`, `DefaultBin: "pigo"` and `_pigo/*` methods, and "gobble" occurs nowhere in that repository (0008-MADR F22, measurement 13). The other facts of the fifth amendment hold at `9778cbc1`. Renaming 0179 to gobble, with `_gobble/*` methods, is a companion change in magic-cli-remote (0008-MADR D20). The rename is out of scope here.
+
+### Amendment (2026-10-07): Phase 7's extension set
+
+The owner decided on 2026-10-07, before 0002-PLAN Phase 7's code:
+
+* **D8's dual path gains `_gobble/fork` and `_gobble/clone`.** magic-cli-remote's `0179-MADR-pigo-native-acp-provider.md` D8 expects a fork method that returns the new agent session id for `session/load` (`:269`). This record's companion table already maps fork to `_gobble/fork` (Companion Spec table). The mapping-table row "`fork`, `clone`, `get_fork_messages`" therefore reads: slash `/fork` `/clone`; `_gobble/fork`, `_gobble/clone` and `_gobble/get_fork_messages`; still not ACP's unstable `session/fork`.
+* **A cancelled turn clears the steering and follow-up queues** and reports their text in the response's `_meta.gobble.cleared`. Pi's RPC `abort` keeps them; Pi's terminal clears them and restores the text, which this follows.
+* **The queue is agent-side and ACP-only in Phase 7.** The line CLI gets no steering input; the TUI's keys come with 0005-PLAN F9.
+* **`gobble auth` is not part of Phase 7.** The ambient credentials of 0002-PLAN Phase 3 are all the provider needs. The commands stay with 0005-PLAN F4 and F10.
+
+The frozen method table, its parameters and results, and the discovery list in `initialize`'s `agentCapabilities._meta.gobble.extensions` are in 0002-PLAN's Amendments entry "Phase 7 made executable". The other decisions are unchanged.

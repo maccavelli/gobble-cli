@@ -1,0 +1,99 @@
+name: CI
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+
+# The token is read-only: CI fetches and runs tools, and needs no write
+# access (docs/decisions/0004-PLAN-go-module-architecture.md, amendment of
+# 2026-10-04 (0007-MADR D8)).
+permissions:
+  contents: read
+
+# One run per ref: a newer push cancels the older run (as above).
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# 0004-PLAN Phase 4 step 1, written by
+# docs/decisions/0002-PLAN-cli-acp-headless-mcp-v1.md Phase 8 (owner's
+# decision of 2026-10-07). The release jobs are Phase 4's steps 2-4.
+jobs:
+  validate:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15, windows-2025]
+    runs-on: ${{ matrix.os }}
+    env:
+      # The Windows runner names Python `python` (Makefile PYTHON).
+      PYTHON: ${{ startsWith(matrix.os, 'windows') && 'python' || 'python3' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: make, if the runner has none
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (-not (Get-Command make -ErrorAction SilentlyContinue)) { choco install make --no-progress }
+          make --version
+      - run: go mod download
+      # make preflight runs golangci-lint, at the fleet pin.
+      - name: golangci-lint
+        shell: bash
+        run: |
+          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0
+          echo "$(go env GOPATH)/bin" >>"$GITHUB_PATH"
+      # The tests, which make preflight does not run. A failing golden
+      # transcript is written to the test's ArtifactDir (acpclient/acptest).
+      - name: go test
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/test-artifacts"
+          go test -count=1 -artifacts -outputdir "$RUNNER_TEMP/test-artifacts" ./...
+      - name: test artifacts
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: test-artifacts-${{ matrix.os }}
+          path: ${{ runner.temp }}/test-artifacts/
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: make preflight
+        shell: bash
+        run: make preflight PYTHON="$PYTHON"
+      - name: make archtest
+        shell: bash
+        run: make archtest
+      # The race detector needs cgo, which the Linux and macOS runners have,
+      # as the fleet runs it.
+      - name: make race
+        if: runner.os != 'Windows'
+        shell: bash
+        run: make race
+      - name: go mod tidy -diff
+        if: runner.os == 'Linux'
+        run: go mod tidy -diff
+      # shellcheck is pinned and checksum-verified, and first on PATH so
+      # actionlint's embedded checks use it too, as the fleet runs it.
+      - name: shellcheck, actionlint
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          SHELLCHECK_VERSION: v0.11.0
+          SHELLCHECK_SHA256: 8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198
+        run: |
+          archive="shellcheck-${SHELLCHECK_VERSION}.linux.x86_64.tar.xz"
+          curl -fsSL -o "$RUNNER_TEMP/$archive" \
+            "https://github.com/koalaman/shellcheck/releases/download/${SHELLCHECK_VERSION}/${archive}"
+          echo "${SHELLCHECK_SHA256}  $RUNNER_TEMP/$archive" | sha256sum -c -
+          tar -xJf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP"
+          export PATH="$RUNNER_TEMP/shellcheck-${SHELLCHECK_VERSION}:$PATH"
+          shellcheck --version
+          shellcheck scripts/*.sh
+          go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12

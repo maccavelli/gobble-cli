@@ -6,30 +6,114 @@ hold the argument, and [README.md](README.md) points at the ones people ask for 
 
 ## What it is
 
-A Git repository for a planned Go rewrite of the Pi coding-agent CLI. The
-planned binary name is `gobble`. The command stack is Kong. The config surface is undecided and will
-be either a native Kong facility or a surface we write. gobble has two modes: a native terminal CLI
-mode, which is the default, and an enhanced terminal TUI mode. Core TUI is go-tui-lib on Charm v2.
-gobble does not reimplement core TUI. Where a core behaviour is not in the library yet, gobble waits
-rather than copying it. Self-update is go-selfupdate-lib. gobble does not reimplement self-update.
+One Go module, `github.com/maccavelli/gobble-cli`, at Go 1.27.1. It builds one binary, `gobble`, a
+Go rewrite of the Pi coding agent, and it is also an embeddable Go SDK. Shipped binaries are pure Go
+(`CGO_ENABLED=0`).
 
-The Go module exists. 0004-PLAN Phase 0 (`925ef0abf83e475c33b3ffae14685617b035639e`) and Phase 1
-(`661b14e768407264a38687e2db99201cae2a04a1`) have run. The tree has the compile-only package
-skeleton, including `cmd/gobble` as a package comment. There is no process binary: Phase 2 has not
-run. Agent behaviour is not in the tree. `git ls-remote origin refs/heads/main` on 2026-10-04
-returned `c1f52a863d3fe2e19896ea4707b9115c915eb444`.
+The binary has these surfaces:
 
-## Sibling sources
+- **The native CLI mode, the default.** `gobble` with no command is `chat`: a line session in a
+  terminal, or one prompt with `-p` or piped input. It is an ACP client of gobble's own agent,
+  in process.
+- **The ACP agent.** `gobble acp` serves the agent on stdio, for editors and magic-cli-remote.
+- **Configuration commands.** `version`, `completion`, `config path`, and `mcp add|remove|list`.
+- **The enhanced TUI mode.** Not built yet: `internal/tui` is a placeholder, and go-tui-lib is not
+  required yet.
 
-The three local sibling repositories are active source trees. The versions
-and commits below are observed source evidence, not requirements in this
-repository. No `go.mod` or gobble package imports them yet.
+The command library is Kong, in `internal/cli` only. Sessions are stored as JSONL in Pi's v3 shapes,
+under gobble's data directory.
 
-| Sibling repository | Current observed surface | Planned gobble boundary |
-| :--- | :--- | :--- |
-| [go-llmprovider-sdk](https://github.com/maccavelli/go-llmprovider-sdk) | No tag; observed commit `efd9c61` adds catalog and setup-wizard work after `67fc56e` without changing the adapter-facing contract. `llmprovider` has ten built-in providers, `Response.Usage`, `*APIError` and opt-in environment helpers; `llmprovider/auth` holds OAuth and token-store code. Built-in native streaming is unsupported. | A planned `llm/provider` adapter under gobble's own `llm` facade. F4 in [0005-PLAN](decisions/0005-PLAN-v1-feature-scope.md) sets the usage, error and credential rules. |
-| [go-selfupdate-lib](https://github.com/maccavelli/go-selfupdate-lib), formerly go-core-lib | Latest tag `v1.5.0` (`6deaa52`), the first under `github.com/maccavelli/go-selfupdate-lib`, exports `selfupdate`, `selfupdate/cli`, `selfupdate/selfupdatetest` and `buildinfo`. `buildinfo` and `selfupdate/cli` arrived in `v1.4.0`, and opt-in prerelease channels in `v1.3.0`. The old path `github.com/maccavelli/go-core-lib` ends at `v1.4.1`, deprecated. | The planned `gobble update` and raw-binary release workflow use a rechecked stable `v1.x` tag of `github.com/maccavelli/go-selfupdate-lib`, `v1.5.0` or later. gobble does not reimplement self-update. Gobble's scaffold has its own planned `internal/buildinfo`. F10 in [0005-PLAN](decisions/0005-PLAN-v1-feature-scope.md) compares it with the released `buildinfo` and selects the tag. |
-| [go-tui-lib](https://github.com/maccavelli/go-tui-lib) | Tag `v0.1.0` (`5c57806`) exports `layout`, `workspace`, `glyph`, `theme` and `tuitest` on Charm v2. Observed later commit `7907590` changes documentation only. The recorded workspace defects await a corrected tag; transcript, picker, permission dialog and editor packages are absent from that tag. That export list is not the limit of core TUI. Newest tag at 2026-10-04: v0.2.0 (0224d0e). | Core TUI is go-tui-lib, used by the enhanced terminal TUI mode. gobble does not reimplement core TUI. Where a core behaviour is not in the library yet, gobble waits rather than copying it. The default mode is the native terminal CLI. F9 in [0005-PLAN](decisions/0005-PLAN-v1-feature-scope.md) still selects a corrected tested tag before the import. |
+## Packages
+
+`go list ./...` prints each of these. The module root holds only the tool requirements.
+
+| Package | What it is |
+| :--- | :--- |
+| `cmd/gobble` | The `gobble` command: `main` calls `internal/cli`. |
+| `gobble` | The embedding facade. |
+| `agent` | The turn loop: model calls, tool calls, approval, and the steering and follow-up queues. |
+| `llm` | The model facade the agent sees. |
+| `llm/provider` | `llm` over go-llmprovider-sdk, with the ambient credential selection. |
+| `llm/catalog` | The model catalog (placeholder). |
+| `llm/llmtest` | A scripted `llm.Provider` and request assertions, for tests. |
+| `tool` | The tool contract. |
+| `tool/builtin` | The built-in tools: `read`, `write`, `edit`, `bash`. |
+| `tool/toolsearch` | Deferred tool exposure (placeholder). |
+| `permission` | The policy contract that approves tool calls. |
+| `session` | The session log contract, in Pi's JSONL v3 shapes. |
+| `session/jsonl` | Sessions as JSONL files, with a writer lock. |
+| `compaction` | Pi's manual compaction: the cut point, the summary and the entry. |
+| `command` | The slash-command vocabulary shared by the agent and its clients. |
+| `prompt` | System prompt assembly (placeholder). |
+| `skill` | Agent Skills parsing and discovery. |
+| `hook` | The lifecycle hook contract. |
+| `checkpoint` | File snapshots for undo (placeholder). |
+| `telemetry` | OpenTelemetry wiring (placeholder). |
+| `acpserver` | gobble's ACP agent: sessions, prompts, slash commands, modes, compaction, MCP servers and the `_gobble/` extension methods. |
+| `acpclient` | gobble's own ACP client, used by `internal/cli`. |
+| `acpclient/acptest` | An agent and a client over in-memory pipes, with a frame recorder and golden transcripts, for tests. |
+| `mcpclient` | MCP servers over stdio and streamable HTTP, through the go-sdk. Each stdio server runs in its own process group, or a Job object on Windows, and is stopped as Pi stops one. |
+| `mcpclient/mcptest` | An MCP server fixture for tests, over stdio and HTTP. |
+| `internal/cli` | The command edge: the Kong grammar, `chat` and its flags, the line session, print mode, the exit codes, signals and output. |
+| `internal/cli/complete` | Native shell completion for bash, zsh, fish and PowerShell. |
+| `internal/cli/editor` | The line editor: `golang.org/x/term` behind gobble's adapter, with history, paste and an external editor. |
+| `internal/cli/render` | Terminal output of the native CLI mode: streamed Markdown, tool output, a status line and a spinner. |
+| `internal/cli/term` | Terminal capabilities, styles, escape sanitising and Windows console setup. |
+| `internal/tui` | The enhanced TUI mode (placeholder). |
+| `internal/appdirs` | The config, data, state and cache directories, created owner-only. |
+| `internal/buildinfo` | The build's version, commit, toolchain, platform and User-Agent. |
+| `internal/logging` | The one slog logger: a rolling owner-only file, and warnings on stderr, both redacted. |
+| `internal/archtest` | The import rules below, as a test. |
+| `internal/auth` | The credential store (placeholder). |
+| `internal/config` | Layered settings (placeholder). |
+| `internal/fsx` | Workspace confinement for file tools (placeholder). |
+| `exp/a2a` | Agent2Agent endpoint (experimental placeholder). |
+| `exp/acpws` | ACP over WebSocket (experimental placeholder). |
+| `exp/codemode` | Code-mode sandbox (experimental placeholder). |
+| `exp/sandbox` | OS sandbox for shell tools (experimental placeholder). |
+| `exp/wasmtool` | WASM tool host (experimental placeholder). |
+
+## Import rules
+
+`internal/archtest` (`make archtest`) checks these on `go list -deps -json ./...`:
+
+1. The core packages (`agent`, `llm`, `tool`, `session`, `skill`, `hook`, `compaction`, `prompt`,
+   `command`, `permission`, `checkpoint`) import no ACP, MCP or provider SDK, no Kong and no Charm.
+2. Only `acpserver` and `acpclient/...` import the ACP SDK.
+3. Only `mcpclient` imports the MCP go-sdk.
+4. Only `llm/provider` imports go-llmprovider-sdk; no vendor LLM SDK is imported.
+5. Only `internal/tui` may import Charm and go-tui-lib.
+6. `internal/cli` and `internal/tui` never import `agent`; they go through `acpclient`.
+7. No stable package imports `exp/...`.
+8. Only `internal/cli` imports go-selfupdate-lib, and `internal/buildinfo` its `buildinfo`.
+9. Only `internal/cli/...` imports Kong.
+
+## Dependencies
+
+The direct requirements in `go.mod`:
+
+| Module | Version |
+| :--- | :--- |
+| `github.com/alecthomas/kong` | `v1.16.1` |
+| `github.com/coder/acp-go-sdk` | `v0.13.5`, replaced by `github.com/maccavelli/acp-go-sdk` `v0.13.6-mcr.2` |
+| `github.com/modelcontextprotocol/go-sdk` | `v1.8.0` |
+| `github.com/maccavelli/go-llmprovider-sdk` | `v1.2.1` |
+| `github.com/maccavelli/go-selfupdate-lib` | `v1.9.0` |
+| `github.com/google/jsonschema-go` | `v0.4.3` |
+| `golang.org/x/sys`, `golang.org/x/term`, `golang.org/x/text` | `v0.48.0`, `v0.46.0`, `v0.42.0` |
+
+`golint`, `govulncheck` and `staticcheck` run from `tool` directives.
+
+## Checks
+
+- `make pre-add-check`: gofmt, golint and govulncheck on the named Go files.
+- `make preflight`: every gate — gofmt, `go mod tidy`, the pre-add check, `go vet`, staticcheck and
+  golangci-lint, govulncheck, `go fix -diff`, archtest, apidiff, build metadata, the records check
+  and markdownlint.
+- `make race`: the tests under the race detector, with cgo on.
+- `.github/workflows/ci.yml`: on Linux, macOS and Windows, `go test`, `make preflight` and
+  `make archtest`; `make race` on Linux and macOS; on Linux, `go mod tidy -diff`, shellcheck and
+  actionlint.
 
 ## Tree
 
@@ -38,24 +122,16 @@ README.md                 repository entry; links here
 LICENSE                   Apache License 2.0
 NOTICE                    Pi MIT credit; sibling Apache-2.0 libraries
 AGENTS.md                 agent instructions
+Makefile                  the gates above
+.github/workflows/ci.yml  CI
+.golangci.yml             the lint set
 .markdownlint-cli2.jsonc  fleet Markdown style
 .gitattributes            LF on every platform
-scripts/check_records.py  record numbering and link check
+scripts/                  the pre-add check, the records check, the build-metadata check
+cmd/ … exp/               the packages above
 docs/
   README.md               ToC and the "I want to…" matrix
   architecture.md         this file
   decisions/              MADR/PLAN pairs
   reports/                numbered observations
-  guides/                 unnumbered how-to documents (not created yet)
 ```
-
-The first record is
-[0001-REPORT-go-port-feasibility.md](reports/0001-REPORT-go-port-feasibility.md). It describes the
-TypeScript product that would be rewritten; it is not a description of code in this repository.
-
-## What is not here
-
-No implemented package map, CLI surface, session format or provider list
-exists in this tree. The proposed package map and import rules are in
-[0004-MADR](decisions/0004-MADR-go-module-architecture.md); the TypeScript
-product's surfaces are inventoried in the [report](reports/0001-REPORT-go-port-feasibility.md).

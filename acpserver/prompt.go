@@ -107,9 +107,24 @@ func (u *updates) event(ev agent.Event, last *llm.Usage) {
 			acp.WithUpdateStatus(status), acp.WithUpdateContent(resultContent(ev.Result))))
 	case agent.Usage:
 		*last = ev.Usage
+	case agent.Queued:
+		u.flush()
+		u.send(acp.UpdateUserMessageText(promptTextOf(ev.Message)))
 	case agent.End:
 		u.flush()
 	}
+}
+
+// promptTextOf is a user message's text blocks, joined as its entry joins
+// them (userEntryMessage).
+func promptTextOf(m llm.Message) string {
+	var texts []string
+	for _, c := range m.Content {
+		if c.Type == llm.ContentText {
+			texts = append(texts, c.Text)
+		}
+	}
+	return strings.Join(texts, "\n\n")
 }
 
 func toolKind(k tool.Kind) acp.ToolKind {
@@ -212,9 +227,9 @@ func jsonRaw(v jsontext.Value) any {
 // message.
 func promptError(err error) error {
 	if errors.Is(err, llm.ErrAuth) {
-		return acp.NewAuthRequired(map[string]any{"error": err.Error()})
+		return acp.NewAuthRequired(map[string]any{keyError: err.Error()})
 	}
-	return acp.NewInternalError(map[string]any{"error": err.Error()})
+	return acp.NewInternalError(map[string]any{keyError: err.Error()})
 }
 
 // acpUsage is the turn's usage for the prompt response.
