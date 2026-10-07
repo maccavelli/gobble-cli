@@ -46,6 +46,27 @@ type Options struct {
 	// MaxQueued is the inbound notification queue's size. Zero keeps the
 	// SDK's default.
 	MaxQueued int
+	// Permission answers the agent's session/request_permission. Nil
+	// declines every request, as a client with no one to ask must.
+	Permission func(ctx context.Context, r PermissionRequest) PermissionAnswer
+}
+
+// PermissionRequest is the agent asking to run a tool call.
+type PermissionRequest struct {
+	SessionID string
+	Tool      ToolCall
+	Options   []PermissionOption
+}
+
+// PermissionOption is one answer the agent offers. Kind is ACP's:
+// allow_once, allow_always, reject_once or reject_always.
+type PermissionOption struct {
+	ID, Name, Kind string
+}
+
+// PermissionAnswer is the option chosen; an empty OptionID cancels.
+type PermissionAnswer struct {
+	OptionID string
 }
 
 // AgentInfo is what the agent said about itself in initialize.
@@ -72,7 +93,8 @@ type Conn struct {
 func Start(ctx context.Context, serve ServeFunc, opts Options) (*Conn, error) {
 	toAgentR, toAgentW := io.Pipe()
 	toClientR, toClientW := io.Pipe()
-	c := &Conn{toAgent: toAgentW, served: make(chan error, 1), handler: &handler{sessions: map[acp.SessionId]func(Update){}}}
+	c := &Conn{toAgent: toAgentW, served: make(chan error, 1), handler: &handler{sessions: map[acp.SessionId]func(Update){},
+		commands: map[acp.SessionId][]Command{}, permission: opts.Permission}}
 	go func() {
 		err := serve(context.WithoutCancel(ctx), toAgentR, toClientW)
 		toClientW.CloseWithError(cmp.Or(err, io.EOF)) //nolint:errcheck,gosec // CloseWithError always returns nil
@@ -184,6 +206,10 @@ type Result struct {
 	StopReason string
 	// Usage is the response's token usage, when the agent reports it.
 	Usage *Usage
+	// SwitchTo names a session the agent wrote for this one to continue
+	// in, from the response's _meta.gobble.switchTo: gobble's /fork and
+	// /clone (0002-PLAN Phase 6).
+	SwitchTo string
 }
 
 // Usage is ACP's per-turn token usage.
@@ -217,6 +243,9 @@ func (s *Session) Prompt(ctx context.Context, p Prompt) (Result, error) {
 		return Result{}, fmt.Errorf("session/prompt: %w", err)
 	}
 	r := Result{StopReason: string(resp.StopReason)}
+	if g, ok := resp.Meta["gobble"].(map[string]any); ok {
+		r.SwitchTo, _ = g["switchTo"].(string) //nolint:errcheck // absent is none
+	}
 	if u := resp.Usage; u != nil {
 		r.Usage = &Usage{
 			InputTokens: u.InputTokens, OutputTokens: u.OutputTokens, TotalTokens: u.TotalTokens,
@@ -252,6 +281,9 @@ type handler struct {
 	// pending receives updates for an unknown session while a session/new
 	// is in flight.
 	pending func(Update)
+	// commands are each session's latest available_commands_update.
+	commands   map[acp.SessionId][]Command
+	permission func(context.Context, PermissionRequest) PermissionAnswer
 }
 
 var _ acp.Client = (*handler)(nil)
@@ -292,14 +324,41 @@ func (h *handler) SessionUpdate(_ context.Context, n acp.SessionNotification) er
 	if err != nil {
 		return err
 	}
+	if u.Kind == KindCommands {
+		h.mu.Lock()
+		h.commands[n.SessionId] = u.Commands
+		h.mu.Unlock()
+	}
 	on(u)
 	return nil
 }
 
-// RequestPermission declines: it selects the first reject_once option, else
-// reject_always, else answers cancelled. The CLI's permission prompt arrives
-// in 0002-PLAN Phase 6 (owner's decision of 2026-10-05).
-func (*handler) RequestPermission(_ context.Context, r acp.RequestPermissionRequest) (acp.RequestPermissionResponse, error) {
+func (h *handler) commandsOf(id acp.SessionId) []Command {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.commands[id]
+}
+
+// RequestPermission asks Options.Permission when it is set (the line
+// session's prompt, 0008-MADR D16). Otherwise it declines: it selects the
+// first reject_once option, else reject_always, else answers cancelled.
+func (h *handler) RequestPermission(ctx context.Context, r acp.RequestPermissionRequest) (acp.RequestPermissionResponse, error) {
+	if h.permission != nil {
+		req := PermissionRequest{SessionID: string(r.SessionId), Tool: ToolCall{ID: string(r.ToolCall.ToolCallId), Content: toolContent(r.ToolCall.Content)}}
+		if r.ToolCall.Title != nil {
+			req.Tool.Title = *r.ToolCall.Title
+		}
+		for _, o := range r.Options {
+			req.Options = append(req.Options, PermissionOption{ID: string(o.OptionId), Name: o.Name, Kind: string(o.Kind)})
+		}
+		a := h.permission(ctx, req)
+		for _, o := range r.Options {
+			if a.OptionID != "" && string(o.OptionId) == a.OptionID {
+				return acp.RequestPermissionResponse{Outcome: acp.NewRequestPermissionOutcomeSelected(o.OptionId)}, nil
+			}
+		}
+		return acp.RequestPermissionResponse{Outcome: acp.NewRequestPermissionOutcomeCancelled()}, nil
+	}
 	for _, kind := range []acp.PermissionOptionKind{acp.PermissionOptionKindRejectOnce, acp.PermissionOptionKindRejectAlways} {
 		for _, o := range r.Options {
 			if o.Kind == kind {

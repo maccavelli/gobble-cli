@@ -9,6 +9,7 @@ import (
 
 	"github.com/maccavelli/gobble-cli/acpclient/acptest"
 	"github.com/maccavelli/gobble-cli/internal/cli/term"
+	"github.com/maccavelli/gobble-cli/llm/llmtest"
 )
 
 // lineHarness runs a line session over a pipe, with raw mode stubbed and
@@ -18,6 +19,7 @@ type lineHarness struct {
 	agent          *acptest.ScriptAgent
 	e              *runEnv
 	keys           *io.PipeWriter
+	cwd            string
 	stdout, stderr *syncBuffer
 	done           chan error
 
@@ -41,11 +43,33 @@ func newLineHarness(t *testing.T, agent *acptest.ScriptAgent) *lineHarness {
 	return h
 }
 
+// newModelHarness is a line harness over gobble's own agent, on the
+// scripted model, in cwd.
+func newModelHarness(t *testing.T, s *llmtest.Script, cwd string) *lineHarness {
+	t.Helper()
+	t.Setenv("GOBBLE_HOME", t.TempDir())
+	withModel(t, s)
+	h := &lineHarness{t: t, cwd: cwd, stdout: &syncBuffer{}, stderr: &syncBuffer{}, done: make(chan error, 1)}
+	caps := term.Caps{In: true, Out: term.Stream{TTY: true, Width: 80}, Err: term.Stream{Width: 80}}
+	out := &Output{out: h.stdout, err: h.stderr, caps: caps}
+	h.e = &runEnv{ctx: t.Context(), out: out, logs: &lazyLog{out: out}, intr: &interrupts{}, now: time.Now}
+	t.Cleanup(func() {
+		if err := h.e.logs.close(); err != nil {
+			t.Error(err)
+		}
+	})
+	return h
+}
+
 // start runs the session with first as the composed first prompt.
 func (h *lineHarness) start(first Prompt) {
 	keysR, keysW := io.Pipe()
 	h.keys = keysW
-	ls := &lineSession{e: h.e, cwd: "/work", in: keysR, raw: h.raw}
+	cwd := h.cwd
+	if cwd == "" {
+		cwd = "/work"
+	}
+	ls := &lineSession{e: h.e, cwd: cwd, base: cwd, in: keysR, raw: h.raw}
 	go func() { h.done <- ls.run(first) }()
 	h.t.Cleanup(func() { keysW.Close() }) //nolint:errcheck,gosec // test cleanup
 }

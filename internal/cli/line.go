@@ -39,6 +39,9 @@ type lineSession struct {
 
 	mu   sync.Mutex
 	view *view
+	// keys is the editor's reader, which the permission prompt reads a
+	// key from while a turn runs.
+	keys *editor.Reader
 }
 
 // runLine opens the line session on the process's terminal.
@@ -57,7 +60,7 @@ func displayFor(c *ChatCmd) display {
 
 func (ls *lineSession) run(first Prompt) error {
 	e := ls.e
-	conn, err := e.startAgent(e.ctx)
+	conn, err := e.startAgentWith(e.ctx, ls.askPermission)
 	if err != nil {
 		return err
 	}
@@ -84,6 +87,9 @@ func (ls *lineSession) run(first Prompt) error {
 
 	var r editor.Reader
 	r.Start(e.ctx, ls.in)
+	ls.mu.Lock()
+	ls.keys = &r
+	ls.mu.Unlock()
 	restore, err := ls.raw()
 	if err != nil {
 		return failf("%v", err)
@@ -95,28 +101,30 @@ func (ls *lineSession) run(first Prompt) error {
 			}
 		}
 	}()
-	opts := editor.Options{History: ls.history()}
+	opts := editor.Options{History: ls.history(), Complete: ls.complete}
 	if !e.out.caps.Unicode {
 		opts.Continue = "... "
 	}
 	ed := editor.New(&r, e.out.out, e.out.err, opts)
 	defer ed.Restore()
 
-	turn := func(p Prompt) error {
-		// The turn runs with the terminal out of raw mode, so output keeps
-		// its line ends and Ctrl+C is a signal the turn takes.
+	// outOfRaw runs f with the terminal out of raw mode: a turn, so output
+	// keeps its line ends and Ctrl+C is a signal the turn takes, or the
+	// external editor.
+	outOfRaw := func(f func() error) error {
 		if rerr := restore(); rerr != nil {
 			return failf("restore the terminal: %v", rerr)
 		}
 		restore = nil
-		terr := ls.turn(p)
+		ferr := f()
 		next, rerr := ls.raw()
 		if rerr != nil {
-			return errors.Join(terr, failf("%v", rerr))
+			return errors.Join(ferr, failf("%v", rerr))
 		}
 		restore = next
-		return terr
+		return ferr
 	}
+	turn := func(p Prompt) error { return outOfRaw(func() error { return ls.turn(p) }) }
 	if first.Text != "" || len(first.Images) > 0 {
 		if err := turn(first); err != nil {
 			return err
@@ -131,6 +139,13 @@ func (ls *lineSession) run(first Prompt) error {
 			return context.Cause(e.ctx)
 		case err != nil:
 			return failf("%v", err)
+		}
+		handled, err := ls.slash(text, turn, outOfRaw)
+		if err != nil {
+			return err
+		}
+		if handled {
+			continue
 		}
 		if err := turn(Prompt{Text: text}); err != nil {
 			return err
@@ -177,14 +192,10 @@ func (ls *lineSession) turn(p Prompt) error {
 		ls.view = nil
 		ls.mu.Unlock()
 	}()
-	if ls.sess == nil {
-		s, _, err := openSession(e.ctx, ls.conn, ls.choice, ls.cwd, ls.base, ls.onUpdate)
-		if err != nil {
-			v.quiet()
-			e.out.Errorf("%v", err)
-			return e.ctx.Err()
-		}
-		ls.sess = s
+	if err := ls.ensureSession(); err != nil {
+		v.quiet()
+		e.out.Errorf("%v", err)
+		return e.ctx.Err()
 	}
 	release := e.intr.during(func() {
 		ctx, cancel := context.WithTimeout(context.WithoutCancel(e.ctx), cancelWait)
@@ -214,7 +225,13 @@ func (ls *lineSession) turn(p Prompt) error {
 		e.out.Errorf("%v", perr)
 		return nil
 	}
-	return v.finish(res)
+	if err := v.finish(res); err != nil {
+		return err
+	}
+	if res.SwitchTo != "" {
+		return ls.switchTo(res.SwitchTo)
+	}
+	return nil
 }
 
 // onUpdate hands the session's updates to the running turn's view.

@@ -85,6 +85,10 @@ func (c *Conn) NewSessionWith(ctx context.Context, cwd string, opts NewSessionOp
 	return &Session{id: resp.SessionId, c: c}, nil
 }
 
+// Commands are the slash commands the agent last advertised for the
+// session, or nil before any.
+func (s *Session) Commands() []Command { return s.c.handler.commandsOf(s.id) }
+
 // Resumed is what the agent says of a session it resumed: its title and
 // the number of user and assistant messages on its path, from
 // _meta.gobble.

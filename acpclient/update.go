@@ -11,7 +11,7 @@ import (
 type Kind int
 
 // The update kinds. KindOther covers every update a client keeps only as
-// state, such as available_commands_update; its Params still carry it.
+// state, such as config_option_update; its Params still carry it.
 const (
 	KindOther Kind = iota
 	KindAgentText
@@ -20,6 +20,9 @@ const (
 	KindToolCallUpdate
 	KindPlan
 	KindUsage
+	KindCommands
+	KindMode
+	KindSessionInfo
 )
 
 func (k Kind) String() string {
@@ -36,6 +39,12 @@ func (k Kind) String() string {
 		return "plan"
 	case KindUsage:
 		return "usage"
+	case KindCommands:
+		return "commands"
+	case KindMode:
+		return "mode"
+	case KindSessionInfo:
+		return "session_info"
 	}
 	return "other"
 }
@@ -55,6 +64,13 @@ type Update struct {
 	Plan []PlanEntry
 	// Context is the context window's use, for KindUsage.
 	Context ContextUsage
+	// Commands are the agent's slash commands, for KindCommands: the full
+	// list, which replaces the one before.
+	Commands []Command
+	// ModeID is the session's mode, for KindMode.
+	ModeID string
+	// Title is the session's title, for KindSessionInfo.
+	Title string
 	// Params is the session/update params object as the SDK encodes it,
 	// for clients that pass the ACP stream through (0008-MADR D9).
 	Params json.RawMessage
@@ -80,6 +96,11 @@ type Diff struct {
 	Path    string
 	OldText *string
 	NewText string
+}
+
+// Command is one slash command the agent executes.
+type Command struct {
+	Name, Description, Hint string
 }
 
 // PlanEntry is one step of the agent's plan.
@@ -141,6 +162,24 @@ func translate(n acp.SessionNotification) (Update, error) {
 		u.Context = ContextUsage{Used: int64(c.Used), Size: int64(c.Size)}
 		if c.Cost != nil {
 			u.Context.Cost = &Cost{Amount: c.Cost.Amount, Currency: c.Cost.Currency}
+		}
+	case s.AvailableCommandsUpdate != nil:
+		u.Kind = KindCommands
+		u.Commands = make([]Command, 0, len(s.AvailableCommandsUpdate.AvailableCommands))
+		for _, c := range s.AvailableCommandsUpdate.AvailableCommands {
+			cmd := Command{Name: c.Name, Description: c.Description}
+			if c.Input != nil && c.Input.Unstructured != nil {
+				cmd.Hint = c.Input.Unstructured.Hint
+			}
+			u.Commands = append(u.Commands, cmd)
+		}
+	case s.CurrentModeUpdate != nil:
+		u.Kind = KindMode
+		u.ModeID = string(s.CurrentModeUpdate.CurrentModeId)
+	case s.SessionInfoUpdate != nil:
+		u.Kind = KindSessionInfo
+		if t := s.SessionInfoUpdate.Title; t != nil {
+			u.Title = *t
 		}
 	}
 	return u, nil

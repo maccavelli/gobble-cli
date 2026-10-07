@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -62,7 +63,10 @@ func TestTranslate(t *testing.T) {
 			`{"type":"terminal","terminalId":"term-1"}]}`,
 		`{"sessionUpdate":"plan","entries":[{"content":"step","priority":"high","status":"in_progress"}]}`,
 		`{"sessionUpdate":"usage_update","used":1200,"size":200000,"cost":{"amount":0.25,"currency":"USD"}}`,
-		`{"sessionUpdate":"available_commands_update","availableCommands":[]}`,
+		`{"sessionUpdate":"available_commands_update","availableCommands":[{"name":"compact","description":"Compact","input":{"hint":"[instructions]"}},{"name":"usage","description":"Usage"}]}`,
+		`{"sessionUpdate":"current_mode_update","currentModeId":"plan"}`,
+		`{"sessionUpdate":"session_info_update","title":"my session"}`,
+		`{"sessionUpdate":"config_option_update","configOptions":[]}`,
 	}}}}
 	c := start(t, agent, acpclient.Options{Name: "test", Version: "0.0.0"})
 	var col collector
@@ -75,7 +79,8 @@ func TestTranslate(t *testing.T) {
 	}
 	got := col.all()
 	wantKinds := []acpclient.Kind{acpclient.KindAgentText, acpclient.KindThought, acpclient.KindAgentText, acpclient.KindToolCall,
-		acpclient.KindToolCallUpdate, acpclient.KindPlan, acpclient.KindUsage, acpclient.KindOther}
+		acpclient.KindToolCallUpdate, acpclient.KindPlan, acpclient.KindUsage, acpclient.KindCommands, acpclient.KindMode,
+		acpclient.KindSessionInfo, acpclient.KindOther}
 	if len(got) != len(wantKinds) {
 		t.Fatalf("got %d updates, want %d: %+v", len(got), len(wantKinds), got)
 	}
@@ -86,6 +91,13 @@ func TestTranslate(t *testing.T) {
 		if !strings.Contains(string(got[i].Params), `"sessionId":"s1"`) || !strings.Contains(string(got[i].Params), `"sessionUpdate":`) {
 			t.Errorf("update %d: params %s lack the session and the kind", i, got[i].Params)
 		}
+	}
+	if cmds := got[7].Commands; len(cmds) != 2 || cmds[0] != (acpclient.Command{Name: "compact", Description: "Compact", Hint: "[instructions]"}) ||
+		cmds[1].Name != "usage" || !slices.Equal(s.Commands(), cmds) {
+		t.Errorf("commands = %+v, session commands %+v", cmds, s.Commands())
+	}
+	if got[8].ModeID != "plan" || got[9].Title != "my session" {
+		t.Errorf("mode %q, title %q", got[8].ModeID, got[9].Title)
 	}
 	if got[0].Text != "hello" || got[1].Text != "hmm" || got[2].Block != "image" {
 		t.Errorf("chunks = %+v %+v %+v", got[0], got[1], got[2])

@@ -1710,3 +1710,39 @@ The agent stages; the owner commits.
      * an iterative-update fixture whose cut fell on an assistant message, which Pi's rule splits;
      * a raw-frame matcher that skipped the -32601 answer, because its error data names the method;
      * `TestNoXAIMethods` finding the x.ai literal in its neighbour, now built from parts.
+
+**Deviation before Part B's code, 2026-10-06 (owner's decision):**
+
+2. **`internal/cli/agent.go` joins Part B's files.**
+   * D16's prompt must reach `acpclient.Options.Permission`, which `startAgent` builds (`agent.go:98-111`). Print mode calls `startAgent` too (`print.go:131`), and keeps declining.
+   * `startAgent(ctx)` becomes `startAgentWith(ctx, permission)` and a one-line `startAgent` that passes nil, so `print.go` is unchanged. The line session calls `startAgentWith` with its prompt.
+
+**Phase 6 Part B, 2026-10-06 — complete (staged; the owner commits). Phase 6 is complete.** It ran as the amendment wrote it, with deviation 2 above. Phases 7–8 have not run.
+
+* **Files.**
+  * `acpclient`: `conn.go`, `update.go` and `sessions.go`, with `conn_test.go` and `sessions_test.go`.
+  * `internal/cli`: `agent.go` (deviation 2), `line.go` and `line_test.go`, and new `slash.go`, `permission.go`, `slash_test.go` and `permission_test.go`.
+  * Listed but unchanged: `internal/cli/sessions.go` and `chat.go`. The session code they hold already did what the line session needed (`openSession`, `resumedLine`).
+* **Accept,** through the line session's scripted input, over a scripted agent or over gobble's own agent on a scripted model:
+  * `TestSlashHelpUnion`: `/help` lists the local commands (`/new`, `/edit [text]`) and the agent's (`/compact [instructions]`), `/help` once, with no model call.
+  * `TestSlashUnknownStaysLocal`: `/bogus now` prints `Error: unknown command /bogus; /help lists the commands`, and the agent receives no prompt.
+  * `TestSlashNew`: `/new` closes the session, and the next prompt opens another: `initialize,session/new,session/prompt,session/close,session/new,session/prompt,session/close`.
+  * `TestSlashEdit`: `/edit draft it` starts the editor on `draft it`, and its text is the prompt.
+  * `TestComplete`: `/ne` completes to `/new `, `/e` stays at the common prefix, `@notes` to `@notes.md `, `@no` to `@not`, and `@s` to `@sub/`.
+  * `TestCloneSwitches`: `/cl` and Tab complete to the agent's `/clone`. The line session prints `resumed first (2 messages)` and the next prompt goes to the clone, which alone holds it, with its history.
+  * `TestPermissionPrompt`: the line reads `write a.txt?  [y] allow once  [n] deny  [c] cancel`. A key not shown (`z`) is ignored. Then `y` lets the write run, `n` refuses it, and Ctrl+C cancels it, each echoing its answer. `TestPermissionLine` checks the sanitised title and the keys of the options offered.
+  * `acpclient`: `TestTranslate` covers the three new kinds, and `Session.Commands`. `TestRequestPermission` covers the mapping, an answer naming no option cancelling, and the old declining without `Permission`.
+* **Gates.**
+  * `make preflight` printed `preflight passed` on Windows and in WSL. WSL `go test -race ./...` exited 0.
+  * Windows `go test ./...` showed no `FAIL`.
+  * `golangci-lint` printed `0 issues.` for linux, darwin and windows.
+  * The pre-add check was clean for all 12 Go files.
+* **Negative tests,** each on a scratch copy, each failing at its own line:
+  * an unknown slash sent to the agent: `slash_test.go:47: condition not met within 5 s`, then `slash_test.go:53: stderr "… Error: session/prompt: …"`;
+  * `SwitchTo` ignored: `slash_test.go:146: condition not met within 5 s`;
+  * `n` treated as allow: `permission_test.go:56: key "n": file written true`.
+* **What the plan predicted wrongly.**
+  1. **One file outside the list** (deviation 2), and two listed files needing no change.
+  2. **`/help` opens the session, as any agent command does.** Its list then includes the agent's commands, and `session/new` makes no model call.
+  3. **The permission prompt answers with a key, not a line.** It reads from the editor's own reader in raw mode, which no one else reads during a turn. The answer is echoed after the line.
+  4. **`/new` resets the session flags.** `--session-id` and `-n` named the first session only.

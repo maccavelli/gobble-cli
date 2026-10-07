@@ -93,9 +93,16 @@ var agentServe = func(e *runEnv) acpclient.ServeFunc {
 	}
 }
 
-// startAgent starts the agent and sends initialize. A dropped notification
-// is reported once per drop on stderr; the session goes on.
+// startAgent starts the agent and sends initialize, declining every
+// permission request (print mode). A dropped notification is reported
+// once per drop on stderr; the session goes on.
 func (e *runEnv) startAgent(ctx context.Context) (*acpclient.Conn, error) {
+	return e.startAgentWith(ctx, nil)
+}
+
+// startAgentWith is startAgent with permission requests answered by
+// permission: the line session's prompt (0008-MADR D16).
+func (e *runEnv) startAgentWith(ctx context.Context, permission func(context.Context, acpclient.PermissionRequest) acpclient.PermissionAnswer) (*acpclient.Conn, error) {
 	conn, err := acpclient.Start(ctx, agentServe(e), acpclient.Options{
 		Name:    appName,
 		Version: identity().Version,
@@ -103,6 +110,7 @@ func (e *runEnv) startAgent(ctx context.Context) (*acpclient.Conn, error) {
 		OnDrop: func(method string, total uint64) {
 			e.out.Warnf("dropped %d ACP notifications (%s)", total, method)
 		},
+		Permission: permission,
 	})
 	if err != nil {
 		return nil, failf("start the agent: %v", err)
