@@ -1,6 +1,6 @@
 ---
 status: proposed
-date: 2026-10-05
+date: 2026-10-06
 decision-makers: repository owner
 consulted: 0001-REPORT-go-port-feasibility.md, 0002-MADR-cli-acp-headless-mcp-v1.md, 0003-MADR-gobble-product-identity.md
 informed: go-llmprovider-sdk, go-core-lib, mcplib, go-tui-lib, magic-cli-remote
@@ -872,6 +872,13 @@ current HEAD changes documentation only; its released Go source is unchanged.
   panes in Bubble Tea. It has no transcript renderer, picker, permission
   dialog, editor or update component. Its module uses Charm v2 and Go
   1.27.1; it does not yet require `go-core-lib` (`go.mod`).
+* *(2026-10-06: go-tui-lib's current tag is `v0.5.0`, and gobble's current target for 0005-PLAN F9. Since `v0.1.0` it has added:*
+  * *`termcap` and `termsvc`, an interactive terminal probe and services;*
+  * *`when`, a context-expression evaluator;*
+  * *`command`, a command registry with slash parsing, ACP and MCP export, and Kong-semantics argument validation;*
+  * *a nested `command/cobracmd` module.*
+
+  *`command` (in `dispatch.go`, `handler.go`, `messages.go` and `registry.go`), `termcap` and `termsvc` import Bubble Tea. Rule 5 keeps them under `internal/tui`. Whether gobble's own `command` package and `internal/cli/term` should move onto them is the question of a separate proposed MADR. The decision text below is unchanged. 0004-PLAN entry "fleet library pins refreshed".)*
 * The sibling's `0002-PLAN-harden-workspace-v0-1-1.md` and
   `0004-PLAN-integrate-charm-v2-and-go-1-27.md` are proposed. Their fixes
   and later `stream`, `command`, `keymap`, `palette`, `termcap` and `termsvc`

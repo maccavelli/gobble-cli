@@ -1,6 +1,6 @@
 ---
 status: in-progress
-date: 2026-10-04
+date: 2026-10-06
 associated-madr: "0004-MADR-go-module-architecture.md"
 ---
 # Implement the gobble module architecture: scaffold, contracts, boundaries, toolchain, release
@@ -863,3 +863,51 @@ Phase 3's steps name their packages but not their APIs or checks. They are expan
   * negative tests on scratch copies: a reordered event script, a recorder that drops a direction, and a back-off that ignores `Retry-After`.
 
   The agent stages; the owner commits.
+
+**2026-10-06 — fleet library pins refreshed (owner's decisions of 2026-10-06).** The owner asked for go-llmprovider-sdk, go-selfupdate-lib and go-tui-lib to be pinned to their current releases. A pin is an execution fact, not an architectural choice (0002-PLAN Scope), so this PLAN records the refresh. The entries of the phases that first pinned them (0002-PLAN Phase 3, this plan's Phase 2) stay as they were.
+
+Measured on 2026-10-06, from the module proxy's `@latest` and GitHub's compare API:
+
+| Module | Pinned | Current | Between them |
+| :--- | :--- | :--- | :--- |
+| `github.com/maccavelli/go-llmprovider-sdk` | `v1.1.1` | `v1.2.1` (`64b82d5`) | six commits. The only source change is `llmprovider/providers/huggingface`, which omits tools for `ToolChoiceNone`. The rest is Gemini live tests and records. |
+| `github.com/maccavelli/go-selfupdate-lib` | `v1.7.0` | `v1.9.0` (`39b1294`) | sixteen commits: archive unpacking (`selfupdate/archive`), macOS signing (`codesign`), and a release build and staging tool. All are additions; gobble's `buildinfo`, `selfupdate` and `selfupdatetest` imports are unchanged in use. |
+| `github.com/maccavelli/go-tui-lib` | none in `go.mod` | `v0.5.0` (`d8b7ff7`) | twenty-nine commits: `termcap`, `termsvc`, `when`, and the `command` registry with its Kong-semantics validation. Nothing in gobble imports it before 0005-PLAN F9, so it gets no `go.mod` line. |
+
+On a scratch copy of the tree:
+* `go get` of the two current tags, then `go mod tidy`, changed exactly two `go.mod` lines, and added and removed no module.
+* `go build ./...`, `go vet ./...` and `go test ./...` passed.
+
+The owner decided:
+1. **The bump runs as its own staged change,** after 0002-PLAN Phase 6 Part B.
+2. **This PLAN records it, and 0004-MADR gets a dated note on go-tui-lib.** There is no new pair.
+3. **The overlap of go-tui-lib `v0.5.0`'s `command` and `termcap` with gobble's `command` package and `internal/cli/term` goes to its own proposed MADR,** written next. That MADR is investigation and a decision only, with no code until a PLAN is approved.
+
+**Files:** `go.mod`, `go.sum`, this PLAN, `docs/decisions/0004-MADR-go-module-architecture.md`, and `docs/README.md` (the 0004-PLAN row).
+
+**Steps:**
+1. Run `go get github.com/maccavelli/go-llmprovider-sdk@v1.2.1 github.com/maccavelli/go-selfupdate-lib@v1.9.0`, then `go mod tidy`. Expect the same two-line `go.mod` diff as the scratch copy.
+2. Write the dated 0004-MADR note in "TUI library": go-tui-lib's current tag is `v0.5.0`, and the overlap is referred to the coming MADR.
+3. Verify, then append this entry's execution record.
+
+**Verification:**
+* `go list -m` prints `v1.2.1` and `v1.9.0`;
+* `go test ./...`;
+* `golangci-lint` for linux, darwin and windows;
+* `make preflight` on Windows and in WSL, and WSL `go test -race ./...`;
+* the identifier and hidden-character scans.
+
+**Negative test:** on a scratch copy, `go.mod` is bumped by hand with `go.sum` left as it was. `make preflight` must fail, which shows the tidy gate catches a half-done bump.
+
+The agent stages; the owner commits.
+
+**Pin refresh, 2026-10-06 — complete (staged; the owner commits).** It ran as the entry above wrote it.
+
+* **Files.** `go.mod`, `go.sum`, this PLAN, 0004-MADR's "TUI library" note, and `docs/README.md`.
+* **Pins.** `go list -m` prints `github.com/maccavelli/go-llmprovider-sdk v1.2.1` and `github.com/maccavelli/go-selfupdate-lib v1.9.0`. `go.mod` changed by those two lines only, the same diff as the scratch copy; `go.sum` replaced each module's two hash lines, its module and its `go.mod` hash, and nothing else.
+* **Gates.**
+  * `make preflight` printed `preflight passed` on Windows and in WSL. WSL `go test -race ./...` exited 0.
+  * Windows `go test ./...` showed no `FAIL`.
+  * `golangci-lint` printed `0 issues.` for linux, darwin and windows.
+* **Negative test.** On a scratch copy, the bumped `go.mod` with `HEAD`'s `go.sum`. `make preflight` exited 2 with `go.mod/go.sum not tidy - commit the result of 'make tidy'`.
+* **What the entry predicted wrongly.** Nothing. No Go file changed, so the pre-add check had nothing to check.
