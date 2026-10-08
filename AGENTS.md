@@ -4,8 +4,11 @@ Instructions for AI coding agents working in this repository. All agents read
 this file. A repository-local `CLAUDE.md` / `.claude/rules/` / `.grok/rules/` /
 `.opencode/rules.md` wins only where it is more specific than this file.
 
-`gobble-cli` is the repository for **gobble**, a Go rewrite of the Pi coding-agent
-harness: one module, `github.com/maccavelli/gobble-cli`, holding the `gobble`
+`gobble-cli` is the repository for **gobble**, a coding agent written in Go. It
+takes the best of several agent harnesses (Pi, opencode, Kilo, goose, codex and
+grok-build) and makes each piece its own; Pi compatibility is kept only for the
+read-only bridge (`docs/decisions/0005-MADR-v1-feature-scope.md`, amendment of
+2026-10-07). It is one module, `github.com/maccavelli/gobble-cli`, holding the `gobble`
 binary (`cmd/gobble`) and a contract-first Go SDK. Requires Go 1.27.1. gobble has
 two terminal modes: a native CLI mode, the default, and an enhanced TUI mode. The
 command library is Kong. Core TUI is go-tui-lib and self-update is

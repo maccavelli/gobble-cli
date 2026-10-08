@@ -1,81 +1,80 @@
 # gobble-cli
 
-**gobble** is a planned Go rewrite of the [Pi](https://github.com/earendil-works/pi) agent harness.
-The planned product is a coding agent with tool calling, sessions, providers, MCP, and a Charm TUI,
-with the [Agent Client Protocol](https://agentclientprotocol.com) as its command API. The planned
-runtime binary is `gobble`; the repository is `gobble-cli`, and the planned module path is
-`github.com/maccavelli/gobble-cli`.
+**gobble** is a coding agent written in Go: a terminal CLI, an [Agent Client Protocol](https://agentclientprotocol.com)
+agent for editors, and an embeddable Go SDK, in one pure-Go binary. The repository is `gobble-cli`; the
+binary is `gobble`; the module is `github.com/maccavelli/gobble-cli`.
 
-This repository is a greenfield rewrite. It does not share history with the TypeScript monorepo.
-0004-PLAN Phase 0 (`925ef0abf83e475c33b3ffae14685617b035639e`) and Phase 1
-(`661b14e768407264a38687e2db99201cae2a04a1`) have run: the Go module and the compile-only package
-skeleton exist. There is no `gobble` process binary yet. Phase 2 has not run.
+gobble is its own design. It takes the best of what other agent harnesses have already worked out —
+[Pi](https://github.com/earendil-works/pi), [opencode](https://github.com/anomalyco/opencode),
+[Kilo](https://github.com/Kilo-Org/kilocode), [goose](https://github.com/aaif-goose/goose),
+[codex](https://github.com/openai/codex) and [grok-build](https://github.com/xai-org/grok-build) —
+and makes each piece gobble's own, in its own words and to its own rules. Nothing is copied for its
+own sake. Compatibility is kept only where it serves gobble's users: a Pi user's sessions, settings,
+skills and MCP servers carry over through a read-only bridge.
 
 **Documentation:** [docs/](docs/README.md)
 
+## What it draws from
+
+Each choice is argued, with source evidence, in the records:
+
+| From | What gobble takes | Where it is decided |
+| :--- | :--- | :--- |
+| Pi | The baseline capability list, the tool shapes, session JSONL compatibility, and the read-only bridge for `~/.pi` assets | [0003-MADR](docs/decisions/0003-MADR-gobble-product-identity.md), [0005-MADR](docs/decisions/0005-MADR-v1-feature-scope.md) |
+| opencode | Layered edit matching, numbered reads, last-match-wins permission rules, and the compaction template | [0010-REPORT](docs/reports/0010-REPORT-harness-design-survey.md); 0005-MADR, amendment of 2026-10-07 |
+| Kilo | Hard permission ceilings, protected paths, loop circuit breakers, and notebook and document handling | the same |
+| goose | Terminal-CLI mechanics, `tree`, and document extraction | [0006-MADR](docs/decisions/0006-MADR-goose-cli-port-candidates.md), [0011-REPORT](docs/reports/0011-REPORT-native-tools-survey.md) |
+| codex | `apply_patch`, process sessions, `request_permissions`, and deferred tools behind a BM25 `tool_search` | 0011-REPORT; 0005-MADR, amendment of 2026-10-08 |
+| grok-build | Gitignore-aware `tree` with an output budget, the `lsp` tool, `monitor`, and completion reminders | the same |
+
+What is gobble's own: one ACP agent as the command API for every client, native file operations that
+the permission rules and undo can see, a two-tier tool exposure that keeps the prompt cache stable, and
+error messages written in one style throughout
+([0012-MADR](docs/decisions/0012-MADR-tool-schemas-descriptions-and-loading.md), proposed).
+
 ## Status
 
-The decisions below are `proposed`. 0004-PLAN Phase D, Phase 0, and Phase 1 have run. Phases 2–5 have not. `git ls-remote origin refs/heads/main` on 2026-10-04 returned `8e016ab53a5765b2c912fab338d873918b8eed36`.
+Early, and built in the order [docs/README.md](docs/README.md#build-order) gives. What runs today:
 
-- **[0002-MADR](docs/decisions/0002-MADR-cli-acp-headless-mcp-v1.md)** makes one `acp.Agent` the command API.
-  - Kong, the TUI, editors and magic-cli-remote's `mcremote` daemon are all ACP clients of it.
-  - `gobble acp` is the headless stdio agent.
-- **[0003-MADR](docs/decisions/0003-MADR-gobble-product-identity.md)** fixes the identity.
-  - Names: `gobble`, `GOBBLE_*`, `_gobble/` extensions.
-  - Directories: XDG, plus a read-only bridge that imports a Pi user's `~/.pi` assets.
-- **[0004-MADR](docs/decisions/0004-MADR-go-module-architecture.md)** shapes the module: one Go 1.27.1 module of contract-first packages.
-  - The ACP and MCP boundaries use their Go SDKs. The provider boundary uses
-    the fleet's [go-llmprovider-sdk](https://github.com/maccavelli/go-llmprovider-sdk)
-    through gobble's planned `llm` facade.
-  - Import boundaries will be enforced by a test.
-  - A planned `exp/` tree holds unstable work.
-- **[0005-MADR](docs/decisions/0005-MADR-v1-feature-scope.md)** puts nearly every Pi capability in the v1 line, tiered into a v1.0.0 gate, a v1.x train, and `exp/`.
-  - Pi features that exist only as example extensions are built in: subagents, todo/plan, checkpoints with undo, permission gating, and background jobs.
+- **`gobble`**, the native CLI mode: a line session in a terminal, or one prompt with `-p` or piped input.
+- **`gobble acp`**: the ACP agent on stdio, for editors and magic-cli-remote. It has sessions, slash
+  commands, modes, manual compaction, MCP servers and gobble's `_gobble/` extension methods.
+- **Tools:** `read`, `write` and `edit`, confined to the workspace roots; `bash`, and `powershell` on
+  Windows, run as process trees that stop whole.
+- **Sessions** as JSONL files in Pi's v3 shapes.
+- **`gobble mcp add|remove|list`**, `gobble config path`, `gobble version` and `gobble completion`.
+
+Not built yet: grep, find, `tree` and the file operations (0005-PLAN F1c), `tool_search` and `todo`
+(F1d), the permission engine (F6), the enhanced TUI mode, and `gobble update`. The full v1 line, tiered into
+a v1.0.0 gate, a v1.x train and `exp/`, is in [0005-MADR](docs/decisions/0005-MADR-v1-feature-scope.md).
 
 | I want to… | Start here |
 | :--- | :--- |
-| know whether a complete Go port is feasible, and what would have to change | [0001-REPORT](docs/reports/0001-REPORT-go-port-feasibility.md) |
+| see what this repository contains today | [architecture.md](docs/architecture.md) |
+| see everything in the v1 line, and at which tier | [0005-MADR](docs/decisions/0005-MADR-v1-feature-scope.md) |
+| see how other harnesses design what gobble builds, and which design gobble chose | [0010-REPORT](docs/reports/0010-REPORT-harness-design-survey.md), [0011-REPORT](docs/reports/0011-REPORT-native-tools-survey.md) |
 | know how gobble talks to editors and magic-cli-remote | [0002-MADR](docs/decisions/0002-MADR-cli-acp-headless-mcp-v1.md) |
 | know what the binary, directories and wire names are | [0003-MADR](docs/decisions/0003-MADR-gobble-product-identity.md) |
-| see the package layout, SDK surface and Go 1.27 idioms | [0004-MADR](docs/decisions/0004-MADR-go-module-architecture.md) |
-| see everything that is in v1, and at which tier | [0005-MADR](docs/decisions/0005-MADR-v1-feature-scope.md) |
+| see the package layout, SDK surface and Go idioms | [0004-MADR](docs/decisions/0004-MADR-go-module-architecture.md) |
 | see the build order | [docs/README.md](docs/README.md#build-order) |
-| see what this repository contains today | [architecture.md](docs/architecture.md) |
 | build gobble, run the gates, or add a package | [developing.md](docs/guides/developing.md) |
-| see the current sibling-library inventory and integration boundary | [architecture.md](docs/architecture.md#sibling-sources), [0004-MADR](docs/decisions/0004-MADR-go-module-architecture.md), [0005-PLAN](docs/decisions/0005-PLAN-v1-feature-scope.md) |
+| know where the project started: the Go port feasibility study of Pi | [0001-REPORT](docs/reports/0001-REPORT-go-port-feasibility.md) |
 
-Stack for v1:
+## Stack
 
-- **Modes:** gobble has two modes: a native terminal CLI mode, which is the default, and an enhanced terminal TUI mode.
-- **CLI:** Kong. The config surface is undecided and will be either a native Kong facility or a surface we write.
-- **Protocols:** [ACP Go SDK](https://github.com/coder/acp-go-sdk) v0.13.5 (with the fleet `replace` to `github.com/maccavelli/acp-go-sdk v0.13.6-mcr.1`) and the [MCP Go SDK](https://github.com/modelcontextprotocol/go-sdk).
-- **LLM providers:** [go-llmprovider-sdk](https://github.com/maccavelli/go-llmprovider-sdk) behind
-  gobble's planned `llm` facade. It has no tag yet; observed commit `efd9c61` includes catalog and
-  setup-wizard work, while its adapter-facing contract and usage decoding match the assessed
-  `67fc56e` source. Native streaming is unsupported by its built-in providers. Official Anthropic /
-  OpenAI / Google vendor SDKs are not planned 1.0 dependencies.
-- **Self-update:** [go-selfupdate-lib](https://github.com/maccavelli/go-selfupdate-lib)
-  `selfupdate`, formerly go-core-lib, renamed at `v1.5.0` (`6deaa52`). `v1.5.0` exports
-  `selfupdate`, `selfupdate/cli`, `selfupdate/selfupdatetest` and `buildinfo`; the old path
-  `github.com/maccavelli/go-core-lib` ends at `v1.4.1`, deprecated. Opt-in prerelease channels
-  arrived in `v1.3.0`; gobble's planned releases and update selection stay stable-only. F10 decides
-  whether gobble uses the released `buildinfo` or its own planned `internal/buildinfo`. The release
-  workflow publishes the raw binaries that `selfupdate` selects. gobble does not reimplement
-  self-update.
-- **TUI:** [go-tui-lib](https://github.com/maccavelli/go-tui-lib). Core TUI is go-tui-lib. gobble
-  does not reimplement core TUI. Where a core behaviour is not in the library yet, gobble waits
-  rather than copying it. Tag `v0.1.0` (`5c57806`) exports `layout`, `workspace`, `glyph`, `theme`
-  and `tuitest` on Charm v2; that list is that tag's surface, not the limit of core TUI. Its
-  workspace has recorded defects; integration still waits for a corrected tested tag.
+- **Modes:** a native terminal CLI mode, the default, and an enhanced terminal TUI mode, not built yet.
+- **CLI:** [Kong](https://github.com/alecthomas/kong) `v1.16.1`.
+- **Protocols:** the [ACP Go SDK](https://github.com/coder/acp-go-sdk) `v0.13.5`, replaced by the
+  fleet's fork at `v0.13.6-mcr.2`, and the [MCP Go SDK](https://github.com/modelcontextprotocol/go-sdk) `v1.8.0`.
+- **Models:** [go-llmprovider-sdk](https://github.com/maccavelli/go-llmprovider-sdk) `v1.2.1`, behind
+  gobble's own `llm` facade. Only `llm/provider` imports it.
+- **Tool schemas:** JSON Schema 2020-12 from Go types, with [jsonschema-go](https://github.com/google/jsonschema-go) `v0.4.3`.
+- **Build identity and self-update:** [go-selfupdate-lib](https://github.com/maccavelli/go-selfupdate-lib)
+  `v1.9.0`. gobble does not reimplement self-update.
+- **TUI:** [go-tui-lib](https://github.com/maccavelli/go-tui-lib), not required yet. gobble does not
+  reimplement core TUI; where a behaviour is not in the library yet, gobble waits rather than copying it.
 
-These libraries are sibling source trees under active development. **This
-repository does not import any of them yet.** The dated source evidence and
-integration steps are in [0004-MADR](docs/decisions/0004-MADR-go-module-architecture.md)
-and [0005-PLAN](docs/decisions/0005-PLAN-v1-feature-scope.md).
-
-## Source
-
-The TypeScript product lives at [earendil-works/pi](https://github.com/earendil-works/pi). The report and the v1 scope were measured against a clone of that tree at commit `312184edb` (2026-09-29).
+Shipped binaries are pure Go (`CGO_ENABLED=0`).
 
 ## License
 

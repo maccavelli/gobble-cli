@@ -7,8 +7,7 @@ hold the argument, and [README.md](README.md) points at the ones people ask for 
 ## What it is
 
 One Go module, `github.com/maccavelli/gobble-cli`, at Go 1.27.1. It builds one binary, `gobble`, a
-Go rewrite of the Pi coding agent, and it is also an embeddable Go SDK. Shipped binaries are pure Go
-(`CGO_ENABLED=0`).
+coding agent, and it is also an embeddable Go SDK. Shipped binaries are pure Go (`CGO_ENABLED=0`).
 
 The binary has these surfaces:
 

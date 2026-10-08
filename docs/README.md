@@ -1,9 +1,9 @@
 # gobble-cli documentation
 
-`gobble-cli` is the repository for **gobble**, the Go rewrite of the Pi agent harness. This tree holds three kinds of document:
+`gobble-cli` is the repository for **gobble**, a coding agent written in Go that takes the best of several agent harnesses and makes it its own. This tree holds three kinds of document:
 
 - reports that measured something;
-- the decisions behind the rewrite;
+- the decisions behind gobble's design;
 - guides you follow to do a thing.
 
 - **[architecture.md](architecture.md)** — how the pieces fit together, as they are now.
@@ -31,12 +31,14 @@
 | 0009 | REPORT | [magic-cli-remote findings from gobble work](reports/0009-REPORT-magic-cli-remote-findings.md) | observation (running; updated 2026-10-07) |
 | 0010 | REPORT | [Harness design survey: Pi, opencode and Kilo across the v1 line](reports/0010-REPORT-harness-design-survey.md) | observation (2026-10-07) |
 | 0011 | REPORT | [Native tools across six harnesses: which operations gobble implements itself](reports/0011-REPORT-native-tools-survey.md) | observation (2026-10-08; 88 verified claims; schemas, descriptions, loading and BM25 evaluated 2026-10-08) |
+| 0012 | MADR | [Tool schemas, descriptions and loading: JSON Schema from Go types, sectioned Markdown descriptions, two exposure tiers, and an in-house BM25 `tool_search`](decisions/0012-MADR-tool-schemas-descriptions-and-loading.md) | proposed (2026-10-08; 38 verified claims) |
+| 0012 | PLAN | [Tool schemas and descriptions: the contract, the five built-in tools, and the strict probe](decisions/0012-PLAN-tool-schemas-descriptions-and-loading.md) | proposed (2026-10-08) |
 
 0003-MADR has no PLAN of its own. 0004-PLAN Phase 2 and 0005-PLAN F10 implement it.
 
 ## Build order
 
-The three plans run in sequence.
+The plans run in sequence.
 
 - **0004-PLAN.**
   - Run: Phase D, Phase 0 (`925ef0abf83e475c33b3ffae14685617b035639e`) and Phase 1 (`661b14e768407264a38687e2db99201cae2a04a1`).
@@ -45,19 +47,25 @@ The three plans run in sequence.
   - Run: Phase 4, step 1 through 0002-PLAN Phase 8 and steps 2–4 on 2026-10-07.
   - Run: Phase 5 on 2026-10-07.
   - Not run: Phase 2's steps 10, 12 and 13, which wait on sessions and providers.
-- `git ls-remote origin refs/heads/main` on 2026-10-05 returned `159da2c812ea9c65808e8367f9f844b9a8c91cd6`.
+- **0002-PLAN.** Run: Phases 1–8, completed on 2026-10-07.
+- **0005-PLAN.**
+  - Run: F1a, the file tools, and F1b, bash and powershell, on 2026-10-07.
+  - Next: F1c.
+- **0012-PLAN.** Proposed. Once approved, its P1–P4 run before F1c, whose new tools use the schema and description pieces P2–P4 build.
+- `git ls-remote origin refs/heads/main` on 2026-10-08 returned `740f7b71450238e747dba99b4fa1eccd488ad79e`.
 
 The plans:
 
 1. **[0004-PLAN](decisions/0004-PLAN-go-module-architecture.md)** — source documentation in Phase D, then the scaffold in Phases 0–5. It replaces 0002-PLAN Phase 0.
 2. **[0002-PLAN](decisions/0002-PLAN-cli-acp-headless-mcp-v1.md) Phases 1–8** — the ACP agent, Kong as an ACP client, the first tools, sessions, MCP, and native slash commands.
-3. **[0005-PLAN](decisions/0005-PLAN-v1-feature-scope.md)** — F1–F10 form the v1.0.0 gate. X1–X6 are the v1.x train and `exp/`.
+3. **[0005-PLAN](decisions/0005-PLAN-v1-feature-scope.md)** — F1–F10 form the v1.0.0 gate. X1–X8 are the v1.x train and `exp/`.
+4. **[0012-PLAN](decisions/0012-PLAN-tool-schemas-descriptions-and-loading.md)** — tool schemas and descriptions for the built-in tools, and the strict probe.
 
 ## I want to…
 
 | I want to… | Start here |
 | :--- | :--- |
-| know whether a complete Go port is feasible, and what would have to change | [0001-REPORT](reports/0001-REPORT-go-port-feasibility.md) |
+| know where the project started: whether a complete Go port of Pi was feasible | [0001-REPORT](reports/0001-REPORT-go-port-feasibility.md) |
 | know why ACP is the command API and how gobble sits under mcremote | [0002-MADR](decisions/0002-MADR-cli-acp-headless-mcp-v1.md) |
 | see how gobble maps onto mcremote slash commands (`/compact`, `/usage`, …) | [0005-MADR](decisions/0005-MADR-v1-feature-scope.md) (target table), [0002-MADR](decisions/0002-MADR-cli-acp-headless-mcp-v1.md) (floor) |
 | know why gobble cannot answer `session/set_model` | [0002-MADR](decisions/0002-MADR-cli-acp-headless-mcp-v1.md), second amendment |
@@ -78,6 +86,7 @@ The plans:
 | understand what this repository contains today | [architecture.md](architecture.md) |
 | build gobble, run the gates, or add a package | [guides/developing.md](guides/developing.md) |
 | see which operations gobble runs as native tools rather than shell commands, and why | [0011-REPORT](reports/0011-REPORT-native-tools-survey.md), [0005-MADR](decisions/0005-MADR-v1-feature-scope.md) (amendment of 2026-10-08) |
+| know how gobble's tools are described to a model, which are always loaded, and how `tool_search` finds the rest | [0012-MADR](decisions/0012-MADR-tool-schemas-descriptions-and-loading.md), [0011-REPORT](reports/0011-REPORT-native-tools-survey.md) (evaluation) |
 | see how other harnesses design what gobble builds, and which design gobble chose | [0010-REPORT](reports/0010-REPORT-harness-design-survey.md), [0005-MADR](decisions/0005-MADR-v1-feature-scope.md) (amendment of 2026-10-07) |
 | see each package's tier and role | [architecture.md](architecture.md#packages) |
 | review what gobble work found about magic-cli-remote, and the changes it needs there | [0009-REPORT](reports/0009-REPORT-magic-cli-remote-findings.md) |
