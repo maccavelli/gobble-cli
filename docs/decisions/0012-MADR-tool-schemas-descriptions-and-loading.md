@@ -155,6 +155,12 @@ What the probe also shows:
 
 **Descriptions**
 
+- **F18. The descriptions P4 shipped leave out what the vendors say matters most.** *(Added 2026-10-08.)*
+  - **Anthropic:** "Provide extremely detailed descriptions. This is by far the most important factor in tool performance." A description covers what the tool does, "When it should be used (and when it shouldn't)", what each parameter means, and its caveats; "Aim for at least 3–4 sentences for each tool description" (Doc 6). Describe a tool as "to a new hire on your team" (Doc 7).
+  - **OpenAI:** "Write clear and detailed function names, parameter descriptions, and instructions", "Include examples and edge cases", and "Pass the intern test" (Doc 5).
+  - **What P4 shipped.** None of the five templates (commit `f845761`) says what its tool returns, or when not to use it, and write's has two sentences.
+  - *Consequence:* D5 gains a required `## Returns` section, and a `## Use when` section with a "Not for" line (D5 item 6).
+
 - **F5. Every surveyed harness that writes descriptions uses Markdown.**
   - opencode writes each description as a Markdown file with headings (0011 D3), and codex keeps Markdown templates (0011 D4).
   - Pi's `tool_search` description has a Markdown heading (0011 D2), and Pi puts usage guidelines in the system prompt, apart from the description (0011 D1).
@@ -242,6 +248,7 @@ There are four questions, each with its own options. Within each, the letter `A`
   - **II-A:** sectioned Markdown: a standalone first sentence, then fixed optional sections, kept in embedded `.md` templates under a tested budget, with cross-tool guidance once in the system prompt (the owner's "hybrid markdown", given a shape).
   - **II-B:** plain prose in Go string constants, as now.
   - **II-C:** free-form Markdown with no shape and no budget.
+  - **II-D** *(added 2026-10-08)*: compressed hybrid Markdown: short labelled lines, symbols and abbreviations, no full sentences.
 - **III. Loading**
   - **III-A:** two tiers. The tools most tasks need are direct. The rest are deferred, and load by family, or on a named event, or at session start. Loads are append-only and recorded. The harness catches plain shell file commands.
   - **III-B:** defer everything except `tool_search`, with a system-prompt instruction to always consult `tool_search` before file or directory operations (the owner's proposal).
@@ -325,16 +332,30 @@ The owner's proposals stand where the evidence supports them:
 - **D5. One description shape, in embedded Markdown templates, under a budget.**
   1. Each native tool's description is a file, `tool/builtin/describe/<name>.md`, embedded with `go:embed`. It is rendered once at construction with `text/template`, from the tool's options: OS, shell, limits. This replaces the constants and the `fmt.Sprintf` (V7, V8).
   2. **The first paragraph is one sentence that stands alone,** at most 160 bytes. It says what the tool does, and is what `tool_search` shows (D9) and what a catalog shows.
-  3. **The sections that may follow,** each optional, in this order and no others:
-     - `## Use when`: when to pick this tool over another, or over the shell;
-     - `## Rules`: what the tool refuses or requires, with the limits;
-     - `## Example`: one call, only where the arguments are not obvious.
+  3. ~~**The sections that may follow,** each optional, in this order and no others:~~ *(Deprecated 2026-10-08 by item 6.)*
+     - ~~`## Use when`: when to pick this tool over another, or over the shell;~~
+     - ~~`## Rules`: what the tool refuses or requires, with the limits;~~
+     - ~~`## Example`: one call, only where the arguments are not obvious.~~
 
      Headings are level 2; the body is plain paragraphs and `-` lists. No tables, HTML, or emphasis inside headings.
   4. **The budget.** A rendered description is at most 1,200 bytes. A whole definition (description plus schema, Probe A's measure) is at most 2,000 bytes. The largest today are 461 and 1,194 (Probe A).
      - These numbers are ceilings chosen to leave room for the sections; they are not measured requirements.
      - A test renders every template, powershell's included, on every host, and fails over budget.
   5. A parameter's details go in its schema description, not the body (F6). The test fails when a property name appears as a heading.
+  6. *(Added 2026-10-08, by the owner's choice of agent-first descriptions; F18.)* **Descriptions are written for an agent reading them cold,** as Anthropic and OpenAI advise (Doc 6, Doc 7, Doc 5). This item replaces item 3.
+     - **The sections, in this order:**
+       - `## Use when` (required): when to pick the tool, and what it replaces. It has at least one `- Not for <case>: use <tool> …` bullet, whose `<tool>` is in the same tool set;
+       - `## Returns` (required): what a success looks like, and the errors to expect;
+       - `## Rules` (optional): limits, refusals and side effects;
+       - `## Example` (optional): one call, where the arguments are nested or not obvious. The SDK's `Tool` has no `input_examples` field (0011 S4), so an example lives here.
+     - **The wording:**
+       - one fact per bullet, in full, unambiguous phrases, with no filler;
+       - another gobble tool by its bare name, and a program, a parameter or a literal in backticks;
+       - numbers filled from the options.
+     - **Enough detail:** at least three bullets in all, against Anthropic's "at least 3–4 sentences for each tool description" (Doc 6).
+     - **Not compressed.** Telegraphic Markdown (option II-D) is rejected: neither provider recommends it, and Anthropic calls detail "by far the most important factor in tool performance".
+     - **Parameters** say what the value means and how it changes the behaviour, in their schema descriptions (Doc 6).
+     - **Item 4's budgets stand.** The drafted descriptions measure 516–858 bytes, and their definitions about 855–1,670 bytes.
 - **D6. Guidance that spans tools is written once, in the system prompt's `tools` section.**
   - The section is F3's (V18). It holds:
     - prefer the native file tools to shell commands for moving, deleting, copying and creating directories;
@@ -574,6 +595,12 @@ make preflight                                                     -> exit 0, Wi
 - Bad: every byte is sent on every request (F6), and nothing stops growth.
 - Bad: a search result has no reliable summary line to show.
 
+### II-D — compressed hybrid Markdown (added 2026-10-08)
+
+- Good: the fewest bytes per tool, on every request.
+- Bad: neither provider recommends it. Anthropic: detail is "by far the most important factor in tool performance" (Doc 6). OpenAI asks for "clear and detailed" descriptions, and "the intern test" (Doc 5).
+- Bad: abbreviations and symbols are a private notation that a model has to decode, which is what the intern test rules out.
+
 ### III-A — two tiers, family and event loads, append-only, shell interception (chosen)
 
 - Good: it matches both providers' advice and every surveyed harness (F8, F9). The tools most tasks need are always there, and the long tail stays out of the prompt.
@@ -700,6 +727,8 @@ make preflight                                                     -> exit 0, Wi
 | tool changes are prefix changes | Doc 3 |
 | `gpt-5.4` and later; cache preserved; changing the loaded set breaks it; keep "functions needed for most tasks" | Doc 4 |
 | Responses normalises to strict when possible, else falls back and reports `strict: false`; strict's requirements | Doc 5 |
+| detailed descriptions matter most; what a tool does, when (not) to use it, parameters, caveats; at least 3–4 sentences; `input_examples` | Doc 6 |
+| describe a tool as to a new hire; avoid ambiguity; no guidance for terse descriptions | Doc 7 |
 
 ### Related records
 
@@ -713,6 +742,8 @@ make preflight                                                     -> exit 0, Wi
 - Doc 3: `https://developers.openai.com/api/docs/guides/prompt-caching`
 - Doc 4: `https://developers.openai.com/api/docs/guides/tools-tool-search`
 - Doc 5: `https://developers.openai.com/api/docs/guides/function-calling`
+- Doc 6: `https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools` (fetched 2026-10-08)
+- Doc 7: `https://www.anthropic.com/engineering/writing-tools-for-agents` (fetched 2026-10-08)
 
 ### Open questions for the plan
 

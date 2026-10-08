@@ -32,7 +32,7 @@
 | 0010 | REPORT | [Harness design survey: Pi, opencode and Kilo across the v1 line](reports/0010-REPORT-harness-design-survey.md) | observation (2026-10-07) |
 | 0011 | REPORT | [Native tools across six harnesses: which operations gobble implements itself](reports/0011-REPORT-native-tools-survey.md) | observation (2026-10-08; 88 verified claims; schemas, descriptions, loading and BM25 evaluated 2026-10-08) |
 | 0012 | MADR | [Tool schemas, descriptions and loading: JSON Schema from Go types, sectioned Markdown descriptions, two exposure tiers, and an in-house BM25 `tool_search`](decisions/0012-MADR-tool-schemas-descriptions-and-loading.md) | accepted (2026-10-08; 38 verified claims) |
-| 0012 | PLAN | [Tool schemas and descriptions: the contract, the five built-in tools, and the strict probe](decisions/0012-PLAN-tool-schemas-descriptions-and-loading.md) | completed (2026-10-08; P7 waits on go-llmprovider-sdk's per-tool strict flag) |
+| 0012 | PLAN | [Tool schemas and descriptions: the contract, the five built-in tools, and the strict probe](decisions/0012-PLAN-tool-schemas-descriptions-and-loading.md) | in progress (P1–P6 complete 2026-10-08; P8, agent-first descriptions, added 2026-10-08; P7 waits on go-llmprovider-sdk's per-tool strict flag) |
 
 0003-MADR has no PLAN of its own. 0004-PLAN Phase 2 and 0005-PLAN F10 implement it.
 
@@ -51,7 +51,7 @@ The plans run in sequence.
 - **0005-PLAN.**
   - Run: F1a, the file tools, and F1b, bash and powershell, on 2026-10-07.
   - Next: F1c.
-- **0012-PLAN.** Run: P1–P5 on 2026-10-08. P7 waits on go-llmprovider-sdk's per-tool strict flag.
+- **0012-PLAN.** Run: P1–P6 on 2026-10-08. Next: P8, agent-first descriptions, once approved. P7 waits on go-llmprovider-sdk's per-tool strict flag.
 - `git ls-remote origin refs/heads/main` on 2026-10-08 returned `740f7b71450238e747dba99b4fa1eccd488ad79e`.
 
 The plans:

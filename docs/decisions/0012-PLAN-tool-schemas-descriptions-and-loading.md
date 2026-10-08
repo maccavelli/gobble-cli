@@ -1,5 +1,5 @@
 ---
-status: completed
+status: in-progress
 date: 2026-10-08
 ---
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
@@ -51,6 +51,7 @@ The plan is done when each of these holds:
 | P4 | `tool/builtin/describe.go` (new), `tool/builtin/describe_test.go` (new), `tool/builtin/describe/read.md`, `write.md`, `edit.md`, `bash.md`, `powershell.md` (new), `tool/builtin/read.go`, `tool/builtin/write.go`, `tool/builtin/edit.go`, `tool/builtin/bash.go`, `tool/builtin/powershell.go`, `docs/architecture.md` |
 | P5 | `llm/provider/strict_test.go` (new), `llm/provider/strict_live_test.go` (new) |
 | P6 | this PLAN (execution record), `docs/decisions/0012-MADR-tool-schemas-descriptions-and-loading.md` (Observed section), `docs/README.md` |
+| P8 *(added 2026-10-08)* | `tool/builtin/describe/read.md`, `write.md`, `edit.md`, `bash.md`, `powershell.md`, `tool/builtin/describe_test.go`, `tool/builtin/shell.go`; then this PLAN and `docs/README.md` for its record |
 
 ### Out of scope
 
@@ -736,6 +737,178 @@ Either way, the key never appears on a command line, in a file in the tree, or i
 
 **Verification.** `make check-records` exits 0, and `make preflight` prints `preflight passed`.
 
+### P8 — Agent-first descriptions (D5 item 6; closes F18)
+
+*(Added 2026-10-08, by the owner's choice of that date: "Ensure the tool markdown descriptions are written in a manner optimized for agents to read them." It runs after P6, and needs the owner's approval like any phase.)*
+
+**Deviation 1 (2026-10-08), found while executing P8.**
+
+- **What was found.** Two of the templates below conflict with P4's no-markup rule (`<` followed by a letter or `/`). `TestDescriptionShape` failed with `edit: markup: <` and `write: markup: <` (`describe_test.go:51`), on `wrote <path> (N lines)` and `edited <path>: N replacements`. Every other check passed.
+- **The owner's decision (2026-10-08):** give a concrete instance instead, which is also clearer for an agent. The rule and the test are unchanged.
+  - In `write.md`, the Returns line ~~`` - `wrote <path> (N lines)`. ``~~ becomes ``- A line such as `wrote main.go (12 lines)`.``
+  - In `edit.md`, the Returns line ~~`` - `edited <path>: N replacements`. ``~~ becomes ``- A line such as `edited main.go: 2 replacements`.``
+
+**Step 1. The templates.** Replace the five files under `tool/builtin/describe/` with these, each ending in one newline (two lines as deviation 1 changes them):
+
+- **`read.md`:**
+
+  ```markdown
+  Read a text file with numbered lines, or list a directory's entries.
+
+  ## Use when
+
+  - You need a file's content, or a directory's entries, before acting on them.
+  - Prefer it to `cat`, `head`, `tail` and `Get-Content` in a shell.
+  - Not for searching files for text: use bash with `grep`.
+
+  ## Returns
+
+  - Each line as `N: text`. The numbers are not part of the file: leave them out of an edit's `oldText`.
+  - For a directory, one entry per line, with a `/` after each directory.
+  - When the output is cut, a last line giving the `offset` to continue from.
+  - For a missing path, an error naming similar entries, when there are any.
+
+  ## Rules
+
+  - At most {{.MaxLines}} lines or {{.MaxKB}} KB per call; a line over {{.MaxLineChars}} characters is cut.
+  - Read a large file in a few big pieces, not many small ones.
+  - Binary files are refused. An image returns a note instead of its content, for now.
+  ```
+
+- **`write.md`:**
+
+  ```markdown
+  Write a whole file: create it with any missing parent directories, or replace all of its content.
+
+  ## Use when
+
+  - Creating a new file.
+  - Replacing a file whose content changes throughout.
+  - Not for changing part of an existing file: use edit, which sends less and leaves the rest of the file exactly as it was.
+
+  ## Returns
+
+  - `wrote <path> (N lines)`.
+
+  ## Rules
+
+  - The write is atomic: a reader sees the old file or the new one, never a mix.
+  - `content` is the whole file. Anything not in it is gone after the write.
+  ```
+
+- **`edit.md`:**
+
+  ```markdown
+  Edit one file by replacing exact pieces of its text.
+
+  ## Use when
+
+  - Changing part of an existing file.
+  - Not for creating a file, or rewriting most of one: use write.
+
+  ## Returns
+
+  - `edited <path>: N replacements`.
+
+  ## Rules
+
+  - Each `edits[].oldText` must occur exactly once in the file as it was before this call, and no two may overlap: put changes to nearby lines into one edit.
+  - Keep `oldText` short but unique, and copy it from the file without read's line numbers.
+  - Small differences in whitespace, indentation, quotes and escaping are forgiven, but a forgiving match far larger than `oldText` is refused.
+  - If another process changes the file during the edit, the edit fails: read the file again and resend it.
+
+  ## Example
+
+  - `{"path": "main.go", "edits": [{"oldText": "retries := 3", "newText": "retries := 5"}]}`
+  ```
+
+- **`bash.md`:**
+
+  ```markdown
+  Run a command with bash, in the working directory or in `workdir`.
+
+  ## Use when
+
+  - Building, testing, version control, and running other programs.
+  - Use `workdir` instead of `cd`.
+  - Not for reading, editing or writing files: use read, edit and write rather than `cat`, `sed` and `echo`.
+
+  ## Returns
+
+  - stdout and stderr together, as the last {{.MaxLines}} lines or {{.MaxKB}} KB, ending with `[exit status N]`.
+  - When the output is longer, the whole of it is saved to a file the output names, which read can open.
+
+  ## Rules
+
+  - `timeout` is in seconds: {{.DefaultTimeout}} when not given, at most {{.MaxTimeout}}. On timeout, the command and everything it started are stopped.
+  - Whatever the command leaves running is stopped when it ends, so it cannot start a server for later calls.
+  ```
+
+- **`powershell.md`:**
+
+  ```markdown
+  Run a command with PowerShell (pwsh when installed, else Windows PowerShell), in the working directory or in `workdir`.
+
+  ## Use when
+
+  - A command needs PowerShell: cmdlets, Windows paths, or the registry.
+  - Use `workdir` instead of `Set-Location`.
+  - Not for reading, editing or writing files: use read, edit and write rather than `Get-Content` and `Set-Content`.
+
+  ## Returns
+
+  - The output, as the last {{.MaxLines}} lines or {{.MaxKB}} KB, ending with `[exit status N]`.
+  - When the output is longer, the whole of it is saved to a file the output names, which read can open.
+
+  ## Rules
+
+  - `timeout` is in seconds: {{.DefaultTimeout}} when not given, at most {{.MaxTimeout}}. On timeout, the command and everything it started are stopped.
+  - Windows PowerShell 5.1 has no `&&` or `||`: separate commands with `;` and check `$LASTEXITCODE`.
+  ```
+
+**Step 2. `tool/builtin/describe_test.go`.**
+
+- `sections` becomes `[]string{"## Use when", "## Returns", "## Rules", "## Example"}`.
+- **New package variables:**
+
+  ```go
+  // required are the sections every description has (0012-MADR D5 item 6).
+  var required = []string{"## Use when", "## Returns"}
+
+  // notFor is a "Not for" bullet, and the tool it sends the reader to.
+  var notFor = regexp.MustCompile(`^- Not for [^:]+: use ([a-z_]+)`)
+  ```
+
+- **`descriptionShape(text string, tools []string) []string`** gains these checks, after its existing ones:
+  - each of `required` is a line of the text, else `no <heading> section`;
+  - the text has at least three bullet lines (a hyphen and a space at the start), else `fewer than 3 bullets`;
+  - it has at least one `notFor` line, else `no Not for line`;
+  - each `notFor` line's tool is in `tools`, else `a Not for line names <tool>, which is not a tool here`.
+- **`TestDescriptionShape`** passes the names of `ToolsWith(Options{})` as `tools`.
+
+**Step 3. Two parameter descriptions,** in `tool/builtin/shell.go`'s `shellIn` tags:
+
+- `Command`: from `the command to run` to `the command to run, in this shell's own syntax`;
+- `Timeout`: from `seconds before the command is stopped` to `seconds before the command, and everything it started, is stopped`.
+
+**Verification.**
+
+```text
+go test ./tool/builtin -count=1 -run 'TestDescription|TestSchemaConvention' -v   -> ok
+npx --no-install markdownlint-cli2 "tool/builtin/describe/*.md"                 -> "0 issues"
+Probe A (scratch module specsize)                                               -> every description at most 1,200 bytes, every definition at most 2,000
+make preflight                                                                  -> "preflight passed"
+```
+
+**Seen failing (C3), on scratch copies of the finished P8 tree:**
+
+- **copy 1:** `write.md` loses its `## Returns` section: `write: no ## Returns section`.
+- **copy 2:** `read.md`'s "use bash with `grep`" becomes "use grep": `read: a Not for line names grep, which is not a tool here`.
+- **copy 3:** `edit.md` loses its "Not for" bullet: `edit: no Not for line`.
+- **copy 4:** `write.md`'s body becomes two bullets: `write: fewer than 3 bullets`.
+
+**Commit.** One commit, made by the owner, after the Stability rule's gates.
+
 ## Verification (whole plan)
 
 ```text
@@ -760,6 +933,7 @@ git diff <the records commit>..HEAD -- go.mod go.sum              -> empty (C2)
 | A8 | The in-tree probe's `strict=` lines are recorded in 0012-MADR beside Probe D's, or the record says the run is pending | D3 (amended) |
 | A9 | `go.mod` and `go.sum` unchanged | Decision Drivers 6; C2 |
 | A10 | every gate in the Stability rule passes after each code phase | Confirmation, `make preflight` |
+| A11 *(added 2026-10-08)* | the five descriptions follow D5 item 6, and `TestDescriptionShape` failed on P8's four scratch copies | D5 item 6, F18 |
 
 **A8 is the criterion most likely to be dropped.** Probe D has already answered the question, so repeating it from the tree looks optional. It is not: the in-tree test is what P7 will turn into an assertion. A "pending" in the record is honest; a silently missing section is not.
 
