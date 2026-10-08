@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/google/jsonschema-go/jsonschema"
+
 	"github.com/maccavelli/gobble-cli/internal/fsx"
 	"github.com/maccavelli/gobble-cli/tool"
 )
@@ -80,6 +82,11 @@ func Edit() tool.Tool {
 		tool.WithAnnotations(tool.Annotations{DestructiveHint: true}),
 		tool.WithOutside(outsidePath),
 		tool.WithPrepare(prepareEdit),
+		tool.WithSchema(func(s *jsonschema.Schema) {
+			edits := property(s, "edits")
+			edits.MinItems = new(1)
+			nonEmpty(edits.Items, "oldText")
+		}),
 		tool.WithDescribe(func(c tool.Call, env tool.Env) string { return title("edit " + shown(env, titlePath(c))) }),
 	)
 }

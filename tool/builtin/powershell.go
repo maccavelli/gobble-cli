@@ -37,6 +37,7 @@ func powershellWith(o Options) tool.Tool {
 		tool.WithAnnotations(tool.Annotations{DestructiveHint: true, OpenWorldHint: true}),
 		tool.WithOutside(shellOutside),
 		tool.WithDescribe(shellDescribe),
+		shellSchema(o),
 	)
 }
 

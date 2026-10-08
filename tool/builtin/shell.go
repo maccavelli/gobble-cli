@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/jsonschema-go/jsonschema"
+
 	"github.com/maccavelli/gobble-cli/internal/proctree"
 	"github.com/maccavelli/gobble-cli/tool"
 )
@@ -31,7 +33,7 @@ const (
 // shellIn is what bash and powershell take.
 type shellIn struct {
 	Command string `json:"command" jsonschema:"the command to run"`
-	Timeout int    `json:"timeout,omitzero" jsonschema:"seconds before the command is stopped: 120 when not given, at most 600"`
+	Timeout int    `json:"timeout,omitzero" jsonschema:"seconds before the command is stopped"`
 	Workdir string `json:"workdir,omitzero" jsonschema:"the directory to run in, relative to the working directory or absolute; use this instead of cd"`
 }
 
@@ -47,11 +49,23 @@ type shell struct {
 	args func(command string) []string // its arguments
 }
 
+// shellSchema publishes a non-empty command and the timeout's bounds and
+// default, the maximum from o (0012-MADR D2 rules 6 and 8).
+func shellSchema(o Options) tool.Option {
+	return tool.WithSchema(func(s *jsonschema.Schema) {
+		nonEmpty(s, "command")
+		bound(s, "timeout", 1, int(o.MaxTimeout/time.Second), int(defaultTimeout/time.Second))
+	})
+}
+
 // runShell runs in.Command with sh as a process tree, in the working
 // directory or in.Workdir, with the call's markers in its environment. It
 // stops the tree on cancel and on the timeout: SIGTERM, then SIGKILL after
 // killGrace. A cancel is ctx's error, which the agent reports as such.
 func runShell(ctx context.Context, sh shell, o Options, in shellIn, env tool.Env) (tool.Result, error) {
+	if strings.TrimSpace(in.Command) == "" {
+		return tool.Result{}, fmt.Errorf("%s: the command is empty; send the command to run", sh.name)
+	}
 	program, err := sh.find()
 	if err != nil {
 		return tool.Result{}, err

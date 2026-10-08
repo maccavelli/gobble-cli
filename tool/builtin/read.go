@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/google/jsonschema-go/jsonschema"
+
 	"github.com/maccavelli/gobble-cli/internal/fsx"
 	"github.com/maccavelli/gobble-cli/tool"
 )
@@ -18,7 +20,7 @@ const maxLineChars = 2000
 type readIn struct {
 	Path   string `json:"path" jsonschema:"the file or directory to read, relative to the working directory or absolute"`
 	Offset int    `json:"offset,omitzero" jsonschema:"the first line (or entry) to show, counting from 1"`
-	Limit  int    `json:"limit,omitzero" jsonschema:"how many lines (or entries) to show, at most 2000"`
+	Limit  int    `json:"limit,omitzero" jsonschema:"how many lines (or entries) to show"`
 }
 
 var readDescription = fmt.Sprintf("Read a file, or list a directory. Lines come numbered as \"N: text\"; "+
@@ -73,6 +75,7 @@ func readWith(o Options) tool.Tool {
 			return r, nil
 		},
 		tool.WithKind(tool.KindRead),
+		tool.WithSchema(func(s *jsonschema.Schema) { bound(s, "offset", 1, 0, 1); bound(s, "limit", 1, maxLines, maxLines) }),
 		tool.WithAnnotations(tool.Annotations{ReadOnlyHint: true, IdempotentHint: true}),
 		tool.WithOutside(func(c tool.Call, env tool.Env) []string { return outsideOf(readWorkspace(env, o), env, argPath(c)) }),
 		tool.WithDescribe(func(c tool.Call, env tool.Env) string { return title("read " + shown(env, titlePath(c))) }),
