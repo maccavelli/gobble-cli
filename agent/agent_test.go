@@ -65,7 +65,7 @@ func TestTextTurn(t *testing.T) {
 	}
 	req := s.Requests()[0]
 	llmtest.AssertSystem(t, req, "be brief")
-	llmtest.AssertTools(t, req, "read", "write", "edit", "bash")
+	llmtest.AssertTools(t, req, builtin.Names()...)
 	llmtest.AssertTail(t, req, llm.RoleSystem, llm.RoleUser)
 }
 

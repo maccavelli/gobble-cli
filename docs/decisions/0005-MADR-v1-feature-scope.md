@@ -1,6 +1,6 @@
 ---
 status: accepted
-date: 2026-10-07
+date: 2026-10-08
 decision-makers: repository owner
 consulted: 0001-REPORT-go-port-feasibility.md, 0002-MADR-cli-acp-headless-mcp-v1.md, 0003-MADR-gobble-product-identity.md, 0004-MADR-go-module-architecture.md
 informed: magic-cli-remote (companion command table), go-llmprovider-sdk, go-core-lib, go-tui-lib
@@ -122,7 +122,7 @@ Tier definitions:
 | `powershell` | 1.0 (windows) | Same contract as `bash`, with a UTF-8 prefix. |
 | `grep` | 1.0 | `{pattern, path?, glob?, ignoreCase?, literal?, context?, limit?=100}`. Pure Go: `regexp`, a gitignore-aware walk, and `doublestar` globs. Lines are capped at 500 characters. No ripgrep download. This decides report D13. |
 | `find` | 1.0 | `{pattern, path?, limit?=1000}`. Pure Go, includes hidden files, respects `.gitignore`, and skips `.git` and `node_modules`. |
-| `ls` | 1.0 | `{path?, limit?=500}`. Sorted, with a `/` suffix on directories. |
+| `ls` | 1.0 | ~~`{path?, limit?=500}`. Sorted, with a `/` suffix on directories.~~ *(2026-10-08: replaced by `tree`; `read` lists one directory. See the amendment "native tools".)* |
 | `tool_search` | 1.0 | BM25 over names, descriptions, and schema properties. Loaded tools are recorded in the transcript so they survive resume and fork (`extensions/tool-search/tool.ts`). |
 | `todo` | 1.0 | `{todos:[{content,status,priority}]}`. Published as ACP `plan` updates and persisted as `custom{gobble.todo}`. `/todos`. Pi has this only as an example. |
 | `task` (subagents) | 1.x | `{agent, prompt, description}`. Runs a child gobble session in-process through ACP, linked by `parentSession`. Progress is relayed as `tool_call_update`. Batches may run in parallel. Depth limit 1 by default. Agents are `agents/*.md` (frontmatter `name`, `description`, `model`, `thinking`, `tools`, `mode`; the body is the system prompt). Pi has this only as an example. |
@@ -818,3 +818,81 @@ Earlier phases had set the precedent: 0002-PLAN copied Pi's MCP configuration me
 * The rows of this record keep their capabilities. Where a row names a Pi behaviour that a choice above replaces, the choice wins.
 * 0005-PLAN restructures F1 into five sub-phases, F1a–F1e. It reworks F1a before its commit, and notes the choices at F3, F4, F5, F6 and X2, and at the two new 1.x items.
 * The word-for-word copies already committed are revisited when their package is next changed. These are mcpclient's configuration messages, compaction's prompts (whose wording affects summary quality, and which choice 9 revisits), and `_gobble/usage`'s text.
+
+### Amendment (2026-10-08): native tools
+
+**Why.** The owner asked whether gobble should give the model native tools for operations it would otherwise run through a shell, or rely on shell commands, or both. The owner then chose `copy` and `mkdir`, asked for five more tools drawn from Kilo, opencode, codex, goose, Pi and grok-build, and decided on 2026-10-08: "Add all proposed tools." [0011-REPORT-native-tools-survey.md](../reports/0011-REPORT-native-tools-survey.md) holds the evidence. Its 62 claims were each checked against the sources by a script, and the checks were seen to fail first. Claim ids below (B1, G1, …) are that report's.
+
+**The rule (owner, 2026-10-08).** An operation is a native tool when at least one of these holds (0011-REPORT, "The rule"):
+1. its shell spelling differs by OS (K8);
+2. a permission check needs its exact paths;
+3. a client or undo needs a structured result, through ACP's `move` and `delete` kinds (B1, B2) or X2's journal;
+4. there is no shell equivalent.
+
+Otherwise it stays a shell command. File status, diffs, git, checksums and archives stay in the shell, as they do in all six harnesses (A1–A6).
+
+**The tools added.** Each is a gobble design. The sources say what it draws on.
+
+1. **`move {from, to, overwrite?=false}`** renames or moves a file or a directory.
+   * Both paths are `Confined`. Both are held under the per-path lock.
+   * An existing `to` is refused unless `overwrite`.
+   * A move across devices copies, then deletes.
+   * Kind `move`.
+   * Sources: no harness has it (A1–A6); ACP and gobble have the kind (B2).
+2. **`delete {path, recursive?=false}`** removes a file, or a directory.
+   * A non-empty directory needs `recursive`.
+   * It refuses a workspace root, and a path outside the roots unless approved.
+   * A delete always asks, under F6's rules, whatever an allow rule says.
+   * Kind `delete`.
+   * Sources: none has it (A1–A6); ACP and gobble have the kind (B1).
+3. **`copy {from, to, overwrite?=false}`** copies a file, or a directory recursively.
+   * It keeps permission bits.
+   * It writes through `fsx` atomically, file by file.
+   * An existing `to` is refused unless `overwrite`.
+   * Kind `edit`, since it creates content.
+4. **`mkdir {path}`** creates a directory and its parents. An existing directory is success. Kind `edit`.
+5. **`tree {path?, depth?=2}`** is the layout of a directory.
+   * It honours `.gitignore`, with F1c's in-house matcher.
+   * It lists every first-level entry before it goes deeper, within an output budget (grok-build, K1, K2).
+   * Each file shows its size from `stat`. goose counts lines, which means reading every file (G1–G3); that is left out.
+   * It replaces the planned `ls` (B3): `read` already lists one directory, as opencode's does (O1, A7).
+   * Read-only.
+6. **`lsp {operation, path, line?, column?, query?}`** navigates code by symbol.
+   * Operations: definition, references, hover, implementation, document symbols, workspace symbols (grok-build K3–K5; opencode O2).
+   * It runs the language servers X7's diagnostics need, through one client (B5; grok-build K15).
+   * Read-only, with deferred exposure.
+7. **Process sessions** (codex X1–X4, X9–X11; grok-build K6, K7, K14; Kilo L1).
+   * `bash` and `powershell` gain a yield window: a command still running when it ends returns a job id with its output so far.
+   * `job_output {id, wait?}` reads more output, waiting up to `wait`.
+   * `job_input {id, text}` writes to the job's input.
+   * `job_kill {id}` stops its tree.
+   * A finished job's result reaches the model as a notice, so it need not poll (K14).
+   * Jobs are capped per session, run in a plain environment (`PAGER=cat`, X11), and end with the session.
+   * This replaces 0005-PLAN X2 step 3's `bash{background:true}` plan (B4).
+8. **`monitor {command, timeout?}`** runs a command and gives each output line to the model as an event, rate-limited (grok-build K11, K12). It is built on the job machinery. Deferred exposure.
+9. **`notebook {path, operation, cell?, source?}`** reads a Jupyter notebook's cells and outputs, and edits, inserts or deletes a cell as JSON (Kilo L3, L6, L8).
+   * Running cells (Kilo L7) needs a kernel, and waits for its own decision.
+   * Deferred exposure.
+10. **Documents in `read`**: text from PDF, DOCX, XLSX and PPTX files, within bounded ranges: PDF pages, sheet ranges with a cell cap (goose G4–G6; grok-build K9, K10; Kilo L4, L5). No tool is added, as grok-build and Kilo fold documents into read.
+11. **`request_permissions {permissions, reason}`** asks the client for a scoped read, write or network grant, for the turn or the session, instead of failing (codex X5, X6).
+
+**Exposure.** These tools are direct: read, write, edit, `apply_patch` (for GPT-family models), grep, find, `tree`, move, delete, copy, mkdir, bash, powershell, the job tools and `request_permissions`. `lsp`, `monitor` and `notebook` are deferred, found through `tool_search` (B6; codex X7, X8, X12; grok-build K16), so the descriptions sent with every request stay few.
+
+**Libraries.** None is chosen here.
+* For the file operations, `tree`, the job tools without a terminal, `request_permissions` and DOCX and PPTX, the standard library is enough (`os`, `io/fs`, `archive/zip`, `encoding/xml`).
+* Each library that a later step needs is named in that step's MADR before it is required, as AGENTS.md demands:
+  * an LSP client (X7);
+  * a pseudo-terminal for interactive jobs (X2);
+  * a PDF text extractor and an XLSX reader (the document step).
+
+**Where each lands** (0005-PLAN, entry "native tools placed"):
+* **F1c:** move, delete, copy, mkdir and `tree`, with `ls` dropped;
+* **F6:** `request_permissions`;
+* **X2:** the process sessions and `monitor`, with its own MADR first;
+* **X7:** `lsp`;
+* **a new X8, "documents and notebooks":** `notebook` and documents in read.
+
+**Consequences.**
+* The line gains eleven tools or capabilities, and loses `ls`.
+* Plan mode and undo can recognise moves and deletes by their kind, without parsing shell text.
+* The direct list is the 17 names under Exposure. Most models see 16 of them, all but `apply_patch`. GPT-family models see 15: `apply_patch` in place of edit and write. Those counts are for Windows; elsewhere there is no `powershell`, so one fewer. (The 17 are 13 named tools, the three job tools and `request_permissions`.) `lsp`, `monitor` and `notebook` are deferred. The planned todo, `tool_search` and MCP resource tools (F1d) are unchanged by this amendment.

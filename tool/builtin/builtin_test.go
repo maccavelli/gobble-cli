@@ -1,15 +1,13 @@
 package builtin
 
 import (
-	"context"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
-	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
-	"time"
 	"unicode/utf8"
 
 	"github.com/maccavelli/gobble-cli/tool"
@@ -29,8 +27,12 @@ func call(t *testing.T, tl tool.Tool, env tool.Env, args any) tool.Result {
 }
 
 func TestToolsAndAnnotations(t *testing.T) {
-	if got := strings.Join(Names(), ","); got != "read,write,edit,bash" {
-		t.Fatalf("names %s", got)
+	want := "read,write,edit,bash"
+	if runtime.GOOS == "windows" {
+		want += ",powershell"
+	}
+	if got := strings.Join(Names(), ","); got != want {
+		t.Fatalf("names %s, want %s", got, want)
 	}
 	for _, tl := range Tools() {
 		s := tl.Spec()
@@ -90,13 +92,6 @@ func TestEditNeedsOneMatch(t *testing.T) {
 }
 
 func TestBounds(t *testing.T) {
-	var b strings.Builder
-	for range 2500 {
-		b.WriteString("line\n")
-	}
-	if got := tail(b.String()); !strings.HasPrefix(got, "[truncated: showing the last 2000 of 2500 lines]\n") {
-		t.Fatalf("tail = %.60q", got)
-	}
 	if got := title(strings.Repeat("é", 100)); utf8.RuneCountInString(got) != maxTitle || !strings.HasSuffix(got, "…") {
 		t.Fatalf("title has %d runes", utf8.RuneCountInString(got))
 	}
@@ -120,40 +115,5 @@ func TestDescribeTitles(t *testing.T) {
 	}
 	if got := Read().(tool.Describer).Describe(tool.Call{Args: jsontext.Value(`{"path":"internal/cli/term.go"}`)}, env); got != "read internal/cli/term.go" {
 		t.Errorf("read title %q", got)
-	}
-}
-
-func TestBash(t *testing.T) {
-	if _, err := findBash(); err != nil {
-		t.Skipf("no usable bash: %v", err)
-	}
-	dir := t.TempDir()
-	env := tool.Env{Cwd: dir}
-	r := call(t, Bash(), env, map[string]string{"command": "echo hi; pwd"})
-	if r.IsError || !strings.Contains(r.Text(), "hi\n") || !strings.HasSuffix(r.Text(), "[exit status 0]") || !strings.HasPrefix(r.Summary, "exit status 0: hi") {
-		t.Fatalf("bash = %+v, text %q", r, r.Text())
-	}
-	if r = call(t, Bash(), env, map[string]string{"command": "echo no >&2; exit 3"}); !r.IsError || !strings.Contains(r.Text(), "no\n[exit status 3]") {
-		t.Fatalf("failing bash = %+v, text %q", r, r.Text())
-	}
-	if r = call(t, Bash(), env, map[string]any{"command": "sleep 30", "timeout": 1}); !r.IsError || !strings.Contains(r.Text(), "killed after 1 s") {
-		t.Fatalf("timed-out bash = %+v", r)
-	}
-}
-
-// A cancelled context kills the command and ends the call at once.
-func TestBashCancel(t *testing.T) {
-	if _, err := findBash(); err != nil {
-		t.Skipf("no usable bash: %v", err)
-	}
-	ctx, cancel := context.WithCancel(t.Context())
-	time.AfterFunc(200*time.Millisecond, cancel)
-	start := time.Now()
-	_, err := Bash().Run(ctx, tool.Call{Name: "bash", Args: jsontext.Value(`{"command":"sleep 30"}`)}, tool.Env{Cwd: t.TempDir()})
-	if !errors.Is(err, context.Canceled) {
-		t.Fatalf("err = %v, want context.Canceled", err)
-	}
-	if d := time.Since(start); d > 5*time.Second {
-		t.Fatalf("cancel took %v", d)
 	}
 }

@@ -380,7 +380,9 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 	})
 	out := newUpdates(ctx, conn, p.SessionId)
 	var last llm.Usage
-	for ev, err := range ag.Run(turnCtx, s.env(), history, prompt) {
+	env := s.env()
+	env.Environ = markers(string(s.id), a.fileOf(s), w.provider, chosen, think)
+	for ev, err := range ag.Run(turnCtx, env, history, prompt) {
 		if err != nil {
 			out.flush()
 			a.mu.Lock()
@@ -693,6 +695,22 @@ func (s *liveSession) env() tool.Env {
 		roots = append(roots, s.cwd)
 	}
 	return tool.Env{Cwd: s.cwd, Roots: append(roots, s.dirs...)}
+}
+
+// markers are the 0003-MADR markers a session's commands see: AI_AGENT, and
+// the session, its file, the provider, the model and the thinking level.
+// An empty value is left out.
+func markers(id, file, provider, model, think string) []string {
+	out := []string{"AI_AGENT=gobble"}
+	for _, kv := range [][2]string{
+		{"GOBBLE_SESSION_ID", id}, {"GOBBLE_SESSION_FILE", file}, {"GOBBLE_PROVIDER", provider},
+		{"GOBBLE_MODEL", model}, {"GOBBLE_THINKING_LEVEL", think},
+	} {
+		if kv[1] != "" {
+			out = append(out, kv[0]+"="+kv[1])
+		}
+	}
+	return out
 }
 
 // sessionInfo is a list row: the name, else the first prompt cut to 60

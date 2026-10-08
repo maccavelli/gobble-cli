@@ -13,6 +13,7 @@ import (
 
 	"github.com/maccavelli/gobble-cli/acpclient/acptest"
 	"github.com/maccavelli/gobble-cli/internal/buildinfo"
+	"github.com/maccavelli/gobble-cli/tool/builtin"
 )
 
 var update = flag.Bool("update", false, "rewrite testdata/*.golden")
@@ -62,7 +63,7 @@ func TestMainExitCodes(t *testing.T) {
 		{"print mode without a credential exits 3", []string{"-p", "x"}, ExitAuth, "Error: no model credential: set one of "},
 		{"words alone are the default command", []string{"fix", "the", "test"}, ExitAuth, "no model credential"},
 		{"--no-tools with --tools", []string{"--no-tools", "--tools", "read", "x"}, ExitUsage, "Error: --no-tools cannot be combined with --tools\n"},
-		{"an unknown tool", []string{"--tools", "read,nope", "x"}, ExitUsage, `Error: unknown tool "nope" (the tools are read, write, edit, bash)`},
+		{"an unknown tool", []string{"--tools", "read,nope", "x"}, ExitUsage, `Error: unknown tool "nope" (the tools are ` + strings.Join(builtin.Names(), ", ") + `)`},
 		{"--cwd must be a directory", []string{"--cwd", "no-such-dir", "-p", "x"}, ExitUsage, "Error: --cwd no-such-dir: not a directory\n"},
 		{"no prompt in print mode", nil, ExitUsage, "Error: no prompt: give words, @path, --file or piped input\n"},
 		{"--fork with --session", []string{"--fork", "a", "--session", "b", "x"}, ExitUsage, "Error: --fork cannot be combined with --session\n"},

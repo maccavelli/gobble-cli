@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io/fs"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/maccavelli/gobble-cli/internal/fsx"
@@ -32,6 +33,29 @@ func roots(env tool.Env) []string {
 // workspace is the call's view of the file system.
 func workspace(env tool.Env) fsx.Workspace {
 	return fsx.Workspace{Roots: roots(env), AllowOutside: env.AllowOutside}
+}
+
+// readWorkspace is read's view: the call's workspace and, when it is
+// confined at all, o.OutputDir, where long command output is kept.
+func readWorkspace(env tool.Env, o Options) fsx.Workspace {
+	ws := workspace(env)
+	if len(ws.Roots) > 0 && o.OutputDir != "" {
+		ws.Roots = append(slices.Clone(ws.Roots), o.OutputDir)
+	}
+	return ws
+}
+
+// outsideOf is the Confined answer for one path a call names: that path,
+// resolved, when it is outside ws.
+func outsideOf(ws fsx.Workspace, env tool.Env, path string) []string {
+	if path == "" {
+		return nil
+	}
+	abs := resolve(env, path)
+	if ws.Outside(abs) {
+		return []string{abs}
+	}
+	return nil
 }
 
 // outsidePath is the Confined answer of a tool whose one path is its

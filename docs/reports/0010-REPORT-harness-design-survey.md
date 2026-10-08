@@ -44,7 +44,7 @@ Path prefixes:
 - **Kilo.**
   - A missing path is permission-checked, with its real parent, before "not found" is said, so a model cannot probe which files exist (KI `tool/read.ts:87-101`).
   - After approval, a directory's real path is re-resolved, and a changed path is refused (a symlink-swap race) (`:235-263`).
-  - docx, xlsx and ipynb are converted to text (`kilocode/tool/read-extract.ts`).
+  - DOCX and XLSX are converted to text (`kilocode/tool/read-extract.ts`). ~~ipynb~~ *(corrected 2026-10-08: `read-extract.ts` does not handle `.ipynb`; Kilo's notebook tools do, in `kilocode/tool/notebook.ts` and `notebook-host.ts`. [0011-REPORT](0011-REPORT-native-tools-survey.md) verified it.)*
   - Truncated output stays valid Unicode (`:421-424`).
 
 ### Edit, write and patches

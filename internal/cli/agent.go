@@ -149,10 +149,10 @@ func (f *SharedFlags) toolSet() (toolChoice, error) {
 	case f.NoTools:
 		return toolChoice{builtins: []tool.Tool{}, mcpOff: true}, nil
 	case len(f.Tools) == 0 && len(f.ExcludeTools) == 0:
-		return toolChoice{}, nil
+		return toolChoice{builtins: builtinTools()}, nil
 	}
 	var out []tool.Tool
-	for _, t := range builtin.Tools() {
+	for _, t := range builtinTools() {
 		name := t.Spec().Name
 		if (len(f.Tools) == 0 || slices.Contains(f.Tools, name)) && !slices.Contains(f.ExcludeTools, name) {
 			out = append(out, t)
@@ -171,6 +171,17 @@ func (f *SharedFlags) toolSet() (toolChoice, error) {
 			return (!allowlist || slices.Contains(listed, name)) && !slices.Contains(excluded, name)
 		},
 	}, nil
+}
+
+// builtinTools are the built-in tools with gobble's options: the whole
+// output of long commands is kept in <state>/output (0005-PLAN F1b), or in
+// the OS temp directory when the state directory cannot be resolved.
+func builtinTools() []tool.Tool {
+	var o builtin.Options
+	if dirs, _, err := systemDirs(); err == nil {
+		o.OutputDir = filepath.Join(dirs.State, "output")
+	}
+	return builtin.ToolsWith(o)
 }
 
 // noCredentialMessage names the variables the ambient provider reads.

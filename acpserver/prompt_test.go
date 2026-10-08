@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"iter"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -138,6 +139,33 @@ func TestReadReachesTheReply(t *testing.T) {
 	}
 	if resp.Usage == nil || resp.Usage.TotalTokens != 37 {
 		t.Fatalf("response usage %+v", resp.Usage)
+	}
+}
+
+// A session's commands see the 0003 markers for that session (0005-PLAN
+// F1b).
+func TestCommandsSeeTheMarkers(t *testing.T) {
+	model := &echoResult{call: llm.ToolCallDone{ID: "b1", Name: "bash", Args: toolArgs(t, map[string]string{
+		"command": `echo "[$AI_AGENT] [$GOBBLE_SESSION_ID] [$GOBBLE_THINKING_LEVEL]"`,
+	})}}
+	if _, err := exec.LookPath("bash"); err != nil {
+		t.Skip("no bash on PATH")
+	}
+	c, client := connectWith(t, model, &acptest.Client{Allow: true})
+	id := openSession(t, c, t.TempDir())
+	resp, err := prompt(t, c, id, "run it")
+	if err != nil || resp.StopReason != acp.StopReasonEndTurn {
+		t.Fatalf("prompt = %+v, %v", resp, err)
+	}
+	if got, want := agentText(client.Updates()), fmt.Sprintf("[gobble] [%s] [off]", id); !strings.Contains(got, want) {
+		t.Fatalf("reply %q lacks %q", got, want)
+	}
+}
+
+func TestMarkers(t *testing.T) {
+	got := strings.Join(markers("s1", "", "anthropic", "m", "off"), " ")
+	if want := "AI_AGENT=gobble GOBBLE_SESSION_ID=s1 GOBBLE_PROVIDER=anthropic GOBBLE_MODEL=m GOBBLE_THINKING_LEVEL=off"; got != want {
+		t.Fatalf("markers = %q, want %q (an empty file is left out)", got, want)
 	}
 }
 

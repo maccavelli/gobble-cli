@@ -70,11 +70,14 @@ type Call struct {
 // relative paths resolve against. Roots are the directories file tools may
 // use without asking: Cwd first, then the session's additional directories,
 // all absolute. AllowOutside is set on a call whose paths outside Roots were
-// approved (Confined).
+// approved (Confined). Environ is KEY=VALUE pairs a tool's child processes
+// get on top of gobble's own environment, such as the session markers
+// (0003-MADR).
 type Env struct {
 	Cwd          string   `json:"cwd,omitzero"`
 	Roots        []string `json:"roots,omitzero"`
 	AllowOutside bool     `json:"allowOutside,omitzero"`
+	Environ      []string `json:"environ,omitzero"`
 }
 
 // Result is the tool's reply. Output is what the model sees: a JSON string

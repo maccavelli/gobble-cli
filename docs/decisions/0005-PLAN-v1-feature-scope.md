@@ -1,6 +1,6 @@
 ---
 status: in-progress
-date: 2026-10-07
+date: 2026-10-08
 associated-madr: "0005-MADR-v1-feature-scope.md"
 ---
 # Implement the v1 line: the v1.0.0 gate, the v1.x train, and `exp/`
@@ -62,8 +62,9 @@ They may start after F4 in any order.
 4. Implement `bash` fully: tail truncation, the full-output file, process
    groups, kill on cancel and timeout, `shellPath`, `shellCommandPrefix`,
    and the 0003 environment markers. Implement `powershell` on windows.
-5. Implement `grep`, `find`, and `ls` in pure Go with a gitignore-aware
+5. Implement `grep`, `find`, and ~~`ls`~~ in pure Go with a gitignore-aware
    walk. Use the limits from 0005-MADR.
+   *(2026-10-08, 0005-MADR amendment "native tools": F1c also builds `move`, `delete`, `copy`, `mkdir` and `tree`; `tree` replaces `ls`.)*
 6. Add the per-real-path mutation queue and `os.Root` confinement over
    `cwd` plus the additional directories.
 7. When the client has the capability, route file I/O through ACP
@@ -217,6 +218,8 @@ API.
 * A forced overflow compacts once and then succeeds.
 
 ### F6 — permissions, modes, trust (1.0; extends 0002-PLAN Phase 6)
+
+*(2026-10-08, 0005-MADR amendment "native tools": `request_permissions` lands here. A delete always asks, whatever an allow rule says.)*
 
 *(2026-10-07, 0005-MADR amendment "the best of several harnesses": choice 5: bash parsed with `mvdan.cc/sh` for per-sub-command patterns, arity-prefix "always", inert-operator masking and fail-closed raw patterns. Choice 6: opencode's last-match-wins rules, hidden denied tools, feedback on rejection, session and per-project "always", and Kilo's hard ceilings, protected paths and provenance. Choice 10: the two modes stay; no custom agents yet.)*
 
@@ -381,6 +384,8 @@ updated in the release notes.
 
 ### X2 — checkpoints and background jobs 1.x
 
+*(2026-10-08, 0005-MADR amendment "native tools": step 3 is replaced by process sessions: a yield window on `bash` and `powershell`, `job_output`, `job_input` and `job_kill`, completion notices, and `monitor`. Its own MADR comes first, naming the pseudo-terminal library interactive jobs need.)*
+
 *(2026-10-07, 0005-MADR amendment "the best of several harnesses": choice 12: step 1's shadow repository borrows the real repository's objects through `alternates`, takes a tree per step with a patch, and follows Kilo's checks: validate before restore, honest reports of failed restores, and a timeout on large repositories.)*
 
 1. The file journal for `edit` and `write`. A shadow-index git snapshot
@@ -481,7 +486,13 @@ to promote it:
 
 ### X7 — feedback after edits 1.x
 
+*(2026-10-08, 0005-MADR amendment "native tools": the `lsp` navigation tool (definition, references, hover, implementation, symbols) shares X7's LSP client, and is deferred.)*
+
 *(2026-10-07, 0005-MADR amendment "the best of several harnesses": choice 4, a new item: formatters and LSP diagnostics after edit, write and `apply_patch`, with its own MADR first. It needs an LSP client, server discovery and per-language formatter settings (0010-REPORT §1).)*
+
+### X8 — documents and notebooks 1.x
+
+*(2026-10-08, 0005-MADR amendment "native tools": a new item, with its own MADR first, naming its PDF and XLSX libraries. It adds text from PDF, DOCX, XLSX and PPTX in `read`, within bounded ranges, and a deferred `notebook` tool that reads and edits cells. Running cells waits for a kernel decision (0011-REPORT).)*
 
 ## Verification
 
@@ -1072,3 +1083,183 @@ The agent stages; the owner commits.
   * `make preflight` printed `preflight passed` on Windows and in WSL.
   * WSL `go test -race ./...` exited 0.
   * `FuzzEditMatch`, `FuzzResolve` and `FuzzOutside` each ran 30 s on Windows with no failure.
+
+**2026-10-07 — F1b made executable (owner's decisions of 2026-10-07: two shell tools; a 2-minute default timeout capped at 10 minutes; SIGTERM, 3 s, then SIGKILL; the full output in the state directory for 7 days).**
+
+F1 step 4, under the rule of 0005-MADR's amendment "the best of several harnesses". The sources are 0010-REPORT §1 (Shell) and the F1 survey of Pi.
+
+The facts:
+* **`tool/builtin/bash.go` runs `bash -c` from `PATH`.** On Windows it prefers Git Bash and refuses System32's WSL launcher. A cancel kills the shell alone, through `exec.CommandContext`, with `WaitDelay` 2 s. Output collects in one unbounded buffer, and `tail` keeps the last 2000 lines or 50 KB. A timeout is optional, in seconds, with 0 for no limit. There is no `powershell` tool, no process group, no environment markers and no full-output file.
+* **`mcpclient` already owns process trees.**
+  * On Unix, `Setpgid` puts the server in its own group, which is signalled (`proc_unix.go`).
+  * On Windows, a Job object with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` holds it, and `TerminateJobObject` ends it (`proc_windows.go`).
+  * Windows has no graceful signal for a tree, so its "terminate" is that kill.
+* **The 0003 markers** are `AI_AGENT=gobble`, `GOBBLE_SESSION_ID`, `GOBBLE_SESSION_FILE`, `GOBBLE_PROVIDER`, `GOBBLE_MODEL` and `GOBBLE_THINKING_LEVEL` (0003-MADR, table). The temporary-file name is `gobble-bash-<id>.log`. `tool.Env` carries none of these.
+* **How the model chooses tools.** The CLI builds its tools from `builtin.Tools()` (`internal/cli/agent.go:155`). acpserver falls back to `builtin.Tools()` when `Options.Tools` is nil.
+
+The owner decided four questions on 2026-10-07:
+1. **Two tools.** `bash` runs everywhere, with Git Bash on Windows. `powershell` exists on Windows only, preferring `pwsh.exe` to `powershell.exe`. They share one runner, and each has a description written for its shell. This is 0005-MADR's row.
+2. **`timeout` is in seconds,** defaulting to 120 and capped at 600. The cap is a Go option.
+3. **Stopping.** SIGTERM goes to the process group, and SIGKILL follows after 3 s if anything is left. On Windows the Job object kills the tree. mcpclient's process-tree code moves to a shared internal package.
+4. **The full output** is `gobble-bash-<id>.log` in gobble's state directory, owner-only, and removed after 7 days. read may open files there without an outside-workspace question.
+
+Choices made within the wording:
+* **`internal/proctree`,** a new internal package, holds what mcpclient had:
+  * `Prepare(*exec.Cmd)`;
+  * `Attach(*os.Process) (*Tree, error)`;
+  * `(*Tree).Terminate`, `Kill`, `Exited` and `Release`.
+
+  mcpclient's `proc.go` calls it, and `proc_unix.go`, `proc_windows.go` and their tests move into it.
+* **`builtin.Options`** carries:
+  * `ShellPath`, which replaces the bash search;
+  * `ShellCommandPrefix`, put before the command on a line of its own, as in Pi's `${prefix}\n${command}`;
+  * `MaxTimeout`, default 600 s;
+  * `OutputDir`, the full-output directory; the CLI passes `<state>/output`, and empty means the OS temp directory.
+
+  `ToolsWith(Options)` builds the tools; `Tools()` is `ToolsWith(Options{})`. The CLI passes `OutputDir`. Settings stay Go options, by the owner's decision 2 of the entry "F1 made executable".
+* **`bash` and `powershell` take** `{command, timeout?, workdir?}`.
+  * `workdir` is opencode's: "use this instead of cd". It resolves against `cwd`. It is `Confined`, so a `workdir` outside the roots is asked about, and it must be an existing directory.
+  * `powershell` runs `-NoLogo -NoProfile -NonInteractive -Command`, with the UTF-8 output prefix that 0005-MADR's row names: `[Console]::OutputEncoding=[System.Text.Encoding]::UTF8;`.
+* **Environment.**
+  * `tool.Env` gains `Environ []string`. acpserver fills it with the six 0003 markers for the session.
+  * The child starts from `os.Environ()`. Inherited `GOBBLE_SESSION_*`, `GOBBLE_PROVIDER`, `GOBBLE_MODEL` and `GOBBLE_THINKING_LEVEL` are removed first, so a gobble run inside a gobble command sees its own session, not its parent's.
+* **Output.**
+  * stdout and stderr go to one writer. It holds the output in memory until it passes 2000 lines or 50 KB.
+  * From then on everything goes to the log file, and only a tail of at most 100 KB stays in memory.
+  * The model gets the last 2000 lines or 50 KB (`truncateTail`). When cut, the output begins `(output cut: the last N of M lines are shown; the whole output is in <path>)`.
+  * The status line stays gobble's: `[exit status N]`, or `[stopped after N s; give a larger timeout, at most 600]`.
+  * The first log written in a process sweeps that directory's `gobble-bash-*.log` files older than 7 days.
+* **The read root.** read built by `ToolsWith` adds `OutputDir` to its own roots for reading. write and edit do not, so a model cannot write there without asking.
+* **Stopping, in the runner.** When the context is done (a cancel or the timeout), the runner terminates the tree. After 3 s it kills it, and it waits at most `WaitDelay` 2 s more for pipes a grandchild still holds. A cancel stays an error from `Run`, which the agent turns into its cancelled text.
+
+**Files:**
+* new `internal/proctree`:
+  * `doc.go`, `tree_unix.go` and `tree_windows.go`;
+  * tests moved from mcpclient's;
+  * a new tree test that a grandchild dies;
+* `mcpclient/proc.go`; `proc_unix.go`, `proc_windows.go` ~~and their tests~~ deleted *(deviation 2: the two test files stay)*;
+* `tool/tool.go` (`Env.Environ`) and its test;
+* `tool/builtin`:
+  * `builtin.go` (`Options`, `ToolsWith`) and `bash.go`;
+  * new `shell.go` (the runner), `output.go` (the spilling writer and the sweep) and `powershell.go`;
+  * `read.go` (the extra read root);
+  * the tests;
+* `acpserver/agent.go`: the markers in `env()`;
+* `internal/cli/agent.go`: `ToolsWith` with `OutputDir`;
+* `agent/agent_test.go`, `internal/cli/main_test.go` and `acpserver/agent_test.go` *(added by deviation 1)*;
+* `docs/architecture.md`: the `internal/proctree`, `tool/builtin` and `mcpclient` rows;
+* this PLAN and `docs/README.md`.
+
+**Accept:**
+* bash:
+  * `echo` gives its output and `[exit status 0]`;
+  * a failing command is an error result with its status;
+  * `workdir` runs in that directory;
+  * `ShellCommandPrefix` runs first;
+  * the markers are in the child's environment, and an inherited `GOBBLE_SESSION_ID` is replaced.
+* timeouts: none given is 120 s; 9999 is capped at 600; a 1 s timeout stops `sleep 30` within about 4 s with the `stopped after` line.
+* process tree: a cancel ends a command's grandchild (`sleep 60 &` in a subshell). On Unix, a trapped SIGTERM handler runs before the kill.
+* output: 3000 lines give the last 2000 with the cut notice, and the log file holds all 3000; a log 8 days old is swept, and one 6 days old is kept.
+* read opens a file in `OutputDir` with no permission question. write to it still asks.
+* powershell, on Windows only: `Write-Output hi` gives `hi`, and its UTF-8 prefix keeps `é` intact.
+* mcpclient's stdio tests pass unchanged.
+
+Each is shown failing first, on a scratch copy:
+* the process group not set (`Prepare` a no-op): the grandchild test;
+* no SIGTERM before SIGKILL: the trap test, on Unix in WSL;
+* the default timeout dropped: its case;
+* the markers not set: its case;
+* the spill disabled: the log-file case;
+* the sweep's age comparison inverted: the sweep case.
+
+**Verification:**
+* `go test ./...` on Windows and in WSL, and WSL `go test -race ./...`;
+* `golangci-lint` for three GOOS;
+* `make preflight` on Windows and in WSL;
+* the pre-add check;
+* the identifier and hidden-character scans.
+
+The agent stages after the owner's commit of F1a; the owner commits.
+
+**Deferred, named:**
+* to F6: permission patterns from parsed commands (`mvdan.cc/sh`, choice 5);
+* to F1d: running a command in the client's terminal (`terminal/*`);
+* to X2: background commands;
+* to the config decision: user-facing `shellPath`, `shellCommandPrefix` and the timeout cap.
+
+**F1b deviations, 2026-10-07.** Both were decided by the owner on 2026-10-07.
+
+1. **The Windows-only `powershell` tool made three tests depend on the OS.**
+   * `agent/agent_test.go:68` hard-codes the four-tool list, and so does `internal/cli/main_test.go:90`.
+   * acpserver's `TestSession` golden records the usage estimate, which counts tool names in the system prompt: `"used":115` on Windows against 112 elsewhere.
+   * Decision: the two lists come from `builtin.Names()`. `TestSession` gives its agent an explicit tool set (read, write, edit, bash), so the golden is one file for every OS and stays at 112. The three test files join the phase.
+2. **mcpclient's `proc_unix_test.go` and `proc_windows_test.go` are not tests of the moved code.** They are the `alive(pid)` helpers mcpclient's own `proc_test.go` uses. Decision: they stay. proctree has its own copies, and the plan's "and their tests" is struck.
+
+**F1b, 2026-10-07 — complete (unstaged until the owner commits F1a, then staged; the owner commits).** It ran as the entry "F1b made executable" wrote it, with deviations 1 and 2.
+
+* **Files.**
+  * New `internal/proctree`: `doc.go`, `tree_unix.go`, `tree_windows.go`, `tree_test.go`, and the `alive` helpers.
+  * `mcpclient/proc.go`; `proc_unix.go` and `proc_windows.go` deleted.
+  * `tool/tool.go` (`Env.Environ`).
+  * `tool/builtin`:
+    * `builtin.go` (`Options`, `ToolsWith`, `goosWindows`);
+    * `bash.go`, with new `shell.go`, `output.go` and `powershell.go`;
+    * `read.go`, `readdir.go` and `paths.go` (the read root);
+    * `builtin_test.go` and new `shell_test.go`.
+  * `acpserver/agent.go` (`markers`) and its tests.
+  * `internal/cli/agent.go` (`builtinTools`) and `main_test.go`.
+  * `agent/agent_test.go`.
+  * `docs/architecture.md`, this PLAN and `docs/README.md`.
+* **Accept.**
+  * bash, on Windows: echo, a failing status, workdir, a missing workdir, the prefix, and the markers with an inherited `GOBBLE_SESSION_ID` replaced.
+  * The timeout rule: 0 is 120 s, 5 is 5 s, and 9999 is 600 s.
+  * A 1 s timeout stopped `(sleep 2; echo late > marker) & sleep 30`, and the marker was never written.
+  * The trap test ran in WSL: the TERM trap wrote its file before the kill.
+  * A cancel ended a call in 0.2 s.
+  * 3000 lines gave the last 2000 with the cut notice, and the log held all 3000.
+  * The sweep removed an 8-day-old log and kept a 6-day-old one and another file.
+  * read opens a file in the output directory without asking, and write still asks.
+  * PowerShell gave `hi`, and `é` came through intact.
+  * proctree's `Terminate` and `Kill` each ended a grandchild, on Windows and in WSL.
+  * mcpclient's stdio tests passed unchanged on proctree.
+  * acpserver: a session's bash saw `[gobble] [s1] [off]`.
+* **Negative tests,** each on its own scratch copy:
+  * `Prepare` a no-op, in WSL: `tree_test.go:90: grandchild … outlived Terminate`;
+  * SIGKILL before SIGTERM, in WSL: `shell_test.go:111: the TERM trap did not run`;
+  * the default timeout dropped: `commandTimeout(0) = 10m0s, want 2m0s`;
+  * the markers not set: `reply "The tool said: [] [] []…" lacks "[gobble] [s1] [off]"`;
+  * the spill disabled: `output starts "(output cut: … the whole output was not saved)"`;
+  * the sweep's comparison inverted: `gobble-bash-old.log: kept true, want false`.
+* **What the entry predicted wrongly.**
+  1. **The powershell tool made three tests depend on the OS** (deviation 1).
+  2. **mcpclient's two "tests" were helpers** (deviation 2).
+  3. **PowerShell writes CRLF.** The model now reads command output with LF line ends; the saved file keeps the bytes as written.
+  4. **A cut output with no saved file** printed an empty path. That cannot happen while the cut and the spill share one limit, but the notice now says "the whole output was not saved" rather than naming nothing. The spill negative found it.
+  5. **The spill negative's expected string was wrong twice,** because the test fails at a different assertion each time. The harness was corrected, not the test.
+  6. **Lint found four kinds of issue in the new code.**
+     * `noctx` on the runner's `exec.Command`. The runner deliberately does not use `CommandContext`, which on cancel kills only the leader, so the line says why. The tests use `CommandContext`.
+     * `goconst` for `windows`.
+     * `unparam` for `readDir`'s unused `env`.
+  7. **What a command leaves running ends with it.** On Unix, `Exited` sends SIGTERM to the group. On Windows, closing the Job object kills what is left. A model that starts `server &` loses it when the call returns. Background commands are X2's.
+* **Gates.**
+  * lint printed `0 issues.` for linux, darwin and windows.
+  * Windows `go test ./...` had no `FAIL` or `panic:`.
+  * `make preflight` printed `preflight passed` on Windows and in WSL. Its pre-add check covers every Go file.
+  * WSL `go test -race ./...` exited 0, with `internal/proctree` and the trap test passing there.
+
+**2026-10-08 — native tools placed (0005-MADR amendment "native tools"; owner's decision of 2026-10-08).**
+
+The owner added eleven native tools or capabilities. [0011-REPORT](../reports/0011-REPORT-native-tools-survey.md) holds their evidence, 62 claims each checked against the sources. The MADR amendment holds each tool's contract. They are placed as follows, and each is expanded into an executable entry when its phase starts:
+
+| Tool | Phase | Exposure |
+| :--- | :--- | :--- |
+| `move`, `delete`, `copy`, `mkdir` | F1c | direct |
+| `tree` (replaces `ls`) | F1c | direct |
+| `request_permissions` | F6 | direct |
+| `job_output`, `job_input`, `job_kill`; a yield window on `bash` and `powershell` | X2 | direct |
+| `monitor` | X2 | deferred |
+| `lsp` | X7 | deferred |
+| `notebook` | X8 (new) | deferred |
+| documents in `read` (PDF, DOCX, XLSX, PPTX) | X8 (new) | — |
+
+F1c, the next sub-phase, therefore builds grep, find, the four file operations and `tree`, with the in-house gitignore matcher. 0010-REPORT §1 is corrected on the same date: Kilo's `read-extract.ts` converts DOCX and XLSX, not `.ipynb`, as 0011-REPORT's verification found.

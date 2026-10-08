@@ -14,6 +14,8 @@ import (
 	"github.com/maccavelli/gobble-cli/acpclient/acptest"
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/llm/llmtest"
+	"github.com/maccavelli/gobble-cli/tool"
+	"github.com/maccavelli/gobble-cli/tool/builtin"
 )
 
 // counterIDs makes s1, s2, … so transcripts are deterministic.
@@ -55,7 +57,14 @@ func initialize(t *testing.T, c *acp.ClientSideConnection) acp.InitializeRespons
 // against a golden transcript (0002-PLAN Phase 1 step 4; the scripted model
 // of Phase 3 replaced the echo).
 func TestSession(t *testing.T) {
-	c, client := connect(t)
+	// A fixed tool set: the default adds powershell on Windows, which would
+	// change the usage estimate the golden records (0005-PLAN F1b,
+	// deviation 1).
+	agent := New(Options{Version: "1.2.3", NewID: counterIDs(), Tools: []tool.Tool{builtin.Read(), builtin.Write(), builtin.Edit(), builtin.Bash()},
+		Provider: func() (llm.Provider, error) { return llmtest.NewScript(llmtest.Text("hello gobble")), nil }})
+	client := &acptest.Client{}
+	c := acptest.Connect(t, agent, client)
+	agent.SetConnection(c.Agent)
 	resp := initialize(t, c.Client)
 	if resp.ProtocolVersion != 1 {
 		t.Fatalf("protocol version %d, want 1", resp.ProtocolVersion)

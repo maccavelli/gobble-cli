@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/maccavelli/gobble-cli/internal/proctree"
 )
 
 // Pi's stop timings (pkg-stdio.ts): the grace after stdin closes, and the
@@ -37,11 +39,11 @@ func (t *stdioTransport) Connect(ctx context.Context) (mcp.Connection, error) {
 	if err != nil {
 		return nil, err
 	}
-	prepare(t.cmd)
+	proctree.Prepare(t.cmd)
 	if err := t.cmd.Start(); err != nil {
 		return nil, err
 	}
-	tr, err := attach(t.cmd.Process)
+	tr, err := proctree.Attach(t.cmd.Process)
 	if err != nil {
 		// A server gobble could not stop does not run.
 		_ = t.cmd.Process.Kill() //nolint:errcheck // the connection fails with err
@@ -65,7 +67,7 @@ func (t *stdioTransport) Connect(ctx context.Context) (mcp.Connection, error) {
 // outlive it.
 type stopper struct {
 	stdin io.WriteCloser
-	tree  *tree
+	tree  *proctree.Tree
 	done  chan struct{} // closed when the server has exited
 	once  sync.Once
 	err   error
@@ -79,14 +81,14 @@ func (s *stopper) Close() error {
 	s.once.Do(func() {
 		s.err = s.stdin.Close()
 		if !s.exitedWithin(stdinGrace) {
-			s.tree.terminate()
+			s.tree.Terminate()
 			if !s.exitedWithin(closeTimeout) {
-				s.tree.kill()
+				s.tree.Kill()
 				<-s.done
 			}
 		}
-		s.tree.exited()
-		s.tree.release()
+		s.tree.Exited()
+		s.tree.Release()
 	})
 	return s.err
 }

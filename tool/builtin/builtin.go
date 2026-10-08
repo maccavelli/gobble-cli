@@ -1,9 +1,12 @@
 package builtin
 
 import (
-	"fmt"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/maccavelli/gobble-cli/tool"
@@ -11,7 +14,7 @@ import (
 
 const (
 	// maxLines and maxBytes bound what a read or a command's output gives
-	// the model, as Pi does (0005-MADR "Tools").
+	// the model (0005-MADR, Tools).
 	maxLines = 2000
 	maxBytes = 50 * 1024
 	// maxTitle is a title's length in runes, and maxSummary a summary's in
@@ -20,10 +23,54 @@ const (
 	maxSummary = 400
 )
 
-// Tools returns the built-in tools: read, write, edit and bash. 0005-PLAN
-// F1 brings them to Pi's parity and adds the rest.
+// Options configure the built-in tools. Until gobble has a settings file
+// they are set in Go by an embedder or by gobble's CLI (0005-PLAN F1,
+// owner's decision 2 of 2026-10-07).
+type Options struct {
+	// ShellPath is the bash to run. Empty finds one: on Windows Git's bash,
+	// elsewhere bash on PATH.
+	ShellPath string
+	// ShellCommandPrefix runs before every bash command, on a line of its
+	// own, such as "set -euo pipefail" or a source of an environment file.
+	ShellCommandPrefix string
+	// MaxTimeout caps a command's timeout. Zero is 10 minutes.
+	MaxTimeout time.Duration
+	// OutputDir holds the whole output of commands too long to show, as
+	// gobble-bash-<id>.log files kept 7 days. read may open files there
+	// without asking. Empty is gobble-output in the OS temp directory.
+	OutputDir string
+}
+
+// goosWindows is runtime.GOOS on Windows.
+const goosWindows = "windows"
+
+// defaultMaxTimeout is MaxTimeout's zero value.
+const defaultMaxTimeout = 10 * time.Minute
+
+func (o Options) withDefaults() Options {
+	if o.MaxTimeout <= 0 {
+		o.MaxTimeout = defaultMaxTimeout
+	}
+	if o.OutputDir == "" {
+		o.OutputDir = filepath.Join(os.TempDir(), "gobble-output")
+	}
+	return o
+}
+
+// ToolsWith returns the built-in tools configured by o: read, write, edit
+// and bash, and on Windows powershell.
+func ToolsWith(o Options) []tool.Tool {
+	o = o.withDefaults()
+	ts := []tool.Tool{readWith(o), Write(), Edit(), bashWith(o)}
+	if runtime.GOOS == goosWindows {
+		ts = append(ts, powershellWith(o))
+	}
+	return ts
+}
+
+// Tools is ToolsWith the default options.
 func Tools() []tool.Tool {
-	return []tool.Tool{Read(), Write(), Edit(), Bash()}
+	return ToolsWith(Options{})
 }
 
 // Names are the built-in tools' names, in Tools' order.
@@ -56,25 +103,6 @@ func summary(s string) string {
 		cut--
 	}
 	return s[:cut] + "…"
-}
-
-// tail keeps the last maxLines lines and maxBytes bytes of s, and says what
-// it cut. 0005-PLAN F1b replaces it with Pi's truncateTail and notices.
-func tail(s string) string {
-	lines := strings.SplitAfter(s, "\n")
-	if len(lines) > 0 && lines[len(lines)-1] == "" {
-		lines = lines[:len(lines)-1]
-	}
-	size, start := 0, len(lines)
-	for start > 0 && len(lines)-start < maxLines && size+len(lines[start-1]) <= maxBytes {
-		start--
-		size += len(lines[start])
-	}
-	out := strings.Join(lines[start:], "")
-	if start > 0 {
-		return fmt.Sprintf("[truncated: showing the last %d of %d lines]\n%s", len(lines)-start, len(lines), out)
-	}
-	return out
 }
 
 // count is n with its noun: "1 line", "3 lines".

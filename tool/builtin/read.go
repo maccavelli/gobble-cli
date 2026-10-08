@@ -32,22 +32,27 @@ var readDescription = fmt.Sprintf("Read a file, or list a directory. Lines come 
 // only (0005-PLAN F1, owner's decision 3 of 2026-10-07).
 const imageNotSent = "[The image was not sent: gobble cannot send images to models yet.]"
 
-// Read is the read tool (0005-MADR amendment of 2026-10-07, choice 3):
+// Read is the read tool with the default options.
+func Read() tool.Tool { return readWith(Options{}.withDefaults()) }
+
+// readWith is the read tool (0005-MADR amendment of 2026-10-07, choice 3):
 // numbered lines from an offset, bounded, with a footer saying how to go
 // on; a directory's entries; a note for an image; and a refusal for other
-// binary files.
-func Read() tool.Tool {
+// binary files. It may also read o.OutputDir, where long command output is
+// kept, without asking.
+func readWith(o Options) tool.Tool {
 	return tool.New("read", readDescription,
 		func(_ context.Context, in readIn, env tool.Env) (tool.Result, error) {
 			name := shown(env, in.Path)
-			abs, info, err := statFile(env, in.Path)
+			ws := readWorkspace(env, o)
+			abs, info, err := statFile(env, ws, in.Path)
 			if err != nil {
 				return tool.Result{}, err
 			}
 			if info.IsDir() {
-				return readDir(env, abs, name, in)
+				return readDir(ws, abs, name, in)
 			}
-			b, err := workspace(env).ReadFile(abs)
+			b, err := ws.ReadFile(abs)
 			if err != nil {
 				return tool.Result{}, fmt.Errorf("read %s: %w", name, unwrapPath(err))
 			}
@@ -69,7 +74,7 @@ func Read() tool.Tool {
 		},
 		tool.WithKind(tool.KindRead),
 		tool.WithAnnotations(tool.Annotations{ReadOnlyHint: true, IdempotentHint: true}),
-		tool.WithOutside(outsidePath),
+		tool.WithOutside(func(c tool.Call, env tool.Env) []string { return outsideOf(readWorkspace(env, o), env, argPath(c)) }),
 		tool.WithDescribe(func(c tool.Call, env tool.Env) string { return title("read " + shown(env, titlePath(c))) }),
 	)
 }
@@ -78,9 +83,8 @@ func Read() tool.Tool {
 // not exist is tried in the other spellings macOS gives pasted screenshot
 // names (fsx.ReadVariants), and then gets an error naming similar entries
 // of its directory.
-func statFile(env tool.Env, path string) (string, fs.FileInfo, error) {
+func statFile(env tool.Env, ws fsx.Workspace, path string) (string, fs.FileInfo, error) {
 	abs := resolve(env, path)
-	ws := workspace(env)
 	info, err := ws.Stat(abs)
 	if errors.Is(err, fs.ErrNotExist) {
 		for _, v := range fsx.ReadVariants(abs) {
@@ -88,7 +92,7 @@ func statFile(env tool.Env, path string) (string, fs.FileInfo, error) {
 				return v, vi, nil
 			}
 		}
-		return "", nil, fmt.Errorf("read %s: no such file%s", shown(env, path), didYouMean(env, abs))
+		return "", nil, fmt.Errorf("read %s: no such file%s", shown(env, path), didYouMean(env, ws, abs))
 	}
 	if err != nil {
 		return "", nil, fmt.Errorf("read %s: %w", shown(env, path), unwrapPath(err))

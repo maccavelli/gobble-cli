@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/maccavelli/gobble-cli/internal/fsx"
 	"github.com/maccavelli/gobble-cli/tool"
 )
 
@@ -16,8 +17,7 @@ const maxSuggestions = 3
 // readDir is read of a directory: its entries sorted without regard to
 // case, a "/" after each directory (a symlink counts as what it points
 // at), paged by offset and limit like a file's lines.
-func readDir(env tool.Env, abs, name string, in readIn) (tool.Result, error) {
-	ws := workspace(env)
+func readDir(ws fsx.Workspace, abs, name string, in readIn) (tool.Result, error) {
 	entries, err := ws.ReadDir(abs)
 	if err != nil {
 		return tool.Result{}, fmt.Errorf("read %s: %w", name, unwrapPath(err))
@@ -73,8 +73,7 @@ const maxEntries = 500
 // didYouMean is "; did you mean …?" naming up to maxSuggestions entries of
 // abs's directory whose names contain the name asked for, or are contained
 // in it, without regard to case; or "" when there are none.
-func didYouMean(env tool.Env, abs string) string {
-	ws := workspace(env)
+func didYouMean(env tool.Env, ws fsx.Workspace, abs string) string {
 	dir, want := filepath.Dir(abs), strings.ToLower(filepath.Base(abs))
 	entries, err := ws.ReadDir(dir)
 	if err != nil {
