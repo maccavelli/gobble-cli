@@ -127,7 +127,7 @@ func TestReadReachesTheReply(t *testing.T) {
 	if len(ups) != 2 || *ups[0].Status != acp.ToolCallStatusInProgress || *ups[1].Status != acp.ToolCallStatusCompleted {
 		t.Fatalf("tool_call_updates = %+v", ups)
 	}
-	if first := ups[1].Content[0].Content; first == nil || first.Content.Text == nil || first.Content.Text.Text != "read notes.md (1 lines)" {
+	if first := ups[1].Content[0].Content; first == nil || first.Content.Text == nil || first.Content.Text.Text != "read notes.md (1 line)" {
 		t.Fatalf("first content block %+v, want the summary", ups[1].Content)
 	}
 	if got := agentText(updates); !strings.Contains(got, "the answer is 42") {
@@ -138,6 +138,53 @@ func TestReadReachesTheReply(t *testing.T) {
 	}
 	if resp.Usage == nil || resp.Usage.TotalTokens != 37 {
 		t.Fatalf("response usage %+v", resp.Usage)
+	}
+}
+
+// A file in an additional directory is inside the workspace: read reads it
+// without a permission request. The same file without the directory is
+// outside, and the client is asked. A relative directory is refused
+// (0005-PLAN F1a).
+func TestAdditionalDirectories(t *testing.T) {
+	base := t.TempDir()
+	work, extra := filepath.Join(base, "work"), filepath.Join(base, "extra")
+	for _, d := range []string{work, extra} {
+		if err := os.MkdirAll(d, 0o750); err != nil {
+			t.Fatal(err)
+		}
+	}
+	notes := filepath.Join(extra, "notes.md")
+	if err := os.WriteFile(notes, []byte("the answer is 42\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	run := func(dirs []string) (*acptest.Client, string) {
+		t.Helper()
+		model := &echoResult{call: llm.ToolCallDone{ID: "r1", Name: "read", Args: toolArgs(t, map[string]string{"path": notes})}}
+		c, client := connectWith(t, model, &acptest.Client{})
+		initialize(t, c.Client)
+		s, err := c.Client.NewSession(t.Context(), acp.NewSessionRequest{Cwd: work, AdditionalDirectories: dirs, McpServers: []acp.McpServer{}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := prompt(t, c, s.SessionId, "what is the answer?"); err != nil {
+			t.Fatal(err)
+		}
+		return client, agentText(client.Updates())
+	}
+	client, reply := run([]string{extra})
+	if len(client.Permissions()) != 0 || !strings.Contains(reply, "the answer is 42") {
+		t.Fatalf("with the directory: %d permission requests, reply %q", len(client.Permissions()), reply)
+	}
+	client, reply = run(nil)
+	if len(client.Permissions()) != 1 || strings.Contains(reply, "the answer is 42") {
+		t.Fatalf("without the directory: %d permission requests, reply %q; want one, refused", len(client.Permissions()), reply)
+	}
+
+	c, _ := connect(t)
+	initialize(t, c.Client)
+	_, err := c.Client.NewSession(t.Context(), acp.NewSessionRequest{Cwd: work, AdditionalDirectories: []string{"relative/dir"}, McpServers: []acp.McpServer{}})
+	if err == nil || !strings.Contains(err.Error(), "not an absolute path") {
+		t.Fatalf("relative directory: err = %v, want invalid params", err)
 	}
 }
 

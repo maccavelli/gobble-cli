@@ -157,6 +157,53 @@ func (refuse) Decide(context.Context, permission.Rule) (permission.Decision, err
 	return permission.Decision{Refusal: "Plan mode is read-only."}, nil
 }
 
+// A read of a file outside the workspace roots is asked about although read
+// is read-only, with the title saying so, and runs only when allowed. With
+// no policy it is refused (0005-MADR "Confinement").
+func TestOutsideRoots(t *testing.T) {
+	base := t.TempDir()
+	work, elsewhere := filepath.Join(base, "work"), filepath.Join(base, "elsewhere")
+	for _, d := range []string{work, elsewhere} {
+		if err := os.MkdirAll(d, 0o750); err != nil {
+			t.Fatal(err)
+		}
+	}
+	secret := filepath.Join(elsewhere, "secret.txt")
+	if err := os.WriteFile(secret, []byte("the secret is 42\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	env := tool.Env{Cwd: work, Roots: []string{work}}
+	run := func(p permission.Policy) llm.Content {
+		t.Helper()
+		s := llmtest.NewScript(llmtest.ToolCall("r1", "read", args(t, map[string]string{"path": secret})), llmtest.Text("ok"))
+		a := agent.New(agent.Config{Provider: s, Tools: builtin.Tools(), Policy: p})
+		if _, _, err := collect(t.Context(), t, a, env, "read it"); err != nil {
+			t.Fatal(err)
+		}
+		sent := s.Requests()[1].Messages
+		return sent[len(sent)-1].Content[0]
+	}
+	for _, allow := range []bool{false, true} {
+		p := &policy{allow: allow}
+		r := run(p)
+		if len(p.rules) != 1 || p.rules[0].Tool != "read" || !strings.HasSuffix(p.rules[0].Title, " (outside the workspace)") {
+			t.Fatalf("allow %v: rules = %+v; want one question about the outside read", allow, p.rules)
+		}
+		if allow != strings.Contains(r.Text, "the secret is 42") || allow == r.IsError {
+			t.Fatalf("allow %v: result sent %+v", allow, r)
+		}
+	}
+	r := run(nil)
+	if !r.IsError || !strings.Contains(r.Text, "is outside the workspace") || strings.Contains(r.Text, "the secret is 42") {
+		t.Fatalf("no policy: result sent %+v; want a refusal", r)
+	}
+	// An additional root makes the same file inside: not asked, and read.
+	env.Roots = append(env.Roots, elsewhere)
+	if r := run(denyAll{t: t}); r.IsError || !strings.Contains(r.Text, "the secret is 42") {
+		t.Fatalf("inside an additional root: result sent %+v", r)
+	}
+}
+
 // A refusal made without asking is the whole result the model reads.
 func TestPolicyRefusal(t *testing.T) {
 	dir := t.TempDir()

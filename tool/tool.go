@@ -67,9 +67,14 @@ type Call struct {
 }
 
 // Env is the per-call context. Cwd is the session's working directory, which
-// relative paths resolve against.
+// relative paths resolve against. Roots are the directories file tools may
+// use without asking: Cwd first, then the session's additional directories,
+// all absolute. AllowOutside is set on a call whose paths outside Roots were
+// approved (Confined).
 type Env struct {
-	Cwd string `json:"cwd,omitzero"`
+	Cwd          string   `json:"cwd,omitzero"`
+	Roots        []string `json:"roots,omitzero"`
+	AllowOutside bool     `json:"allowOutside,omitzero"`
 }
 
 // Result is the tool's reply. Output is what the model sees: a JSON string
@@ -125,6 +130,14 @@ type Describer interface {
 	Describe(call Call, env Env) string
 }
 
+// Confined is implemented by a tool whose calls name files. Outside returns
+// the paths a call names that lie outside env.Roots. Such a call needs a
+// permission decision even when the tool is read-only, and runs with
+// env.AllowOutside set only when it is allowed (0005-MADR "Confinement").
+type Confined interface {
+	Outside(call Call, env Env) []string
+}
+
 // Option configures New.
 type Option func(*config)
 
@@ -133,6 +146,21 @@ type config struct {
 	exposure    Exposure
 	annotations Annotations
 	describe    func(Call, Env) string
+	outside     func(Call, Env) []string
+	prepare     func(jsontext.Value) (jsontext.Value, error)
+}
+
+// WithOutside sets how a call's paths outside the roots are found
+// (Confined). Without it a tool names no paths.
+func WithOutside(outside func(call Call, env Env) []string) Option {
+	return func(cfg *config) { cfg.outside = outside }
+}
+
+// WithPrepare sets a rewrite of a call's arguments that runs before they
+// are validated, for shapes a model sends that the schema does not accept,
+// such as Pi's edit repairs. An error's text is what the model reads.
+func WithPrepare(prepare func(args jsontext.Value) (jsontext.Value, error)) Option {
+	return func(cfg *config) { cfg.prepare = prepare }
 }
 
 // WithDescribe sets how a call is titled before it runs (Describer). Without
@@ -184,6 +212,14 @@ func (g *generic[In, Out]) Describe(call Call, env Env) string {
 	return g.name
 }
 
+// Outside is WithOutside's function, or no paths.
+func (g *generic[In, Out]) Outside(call Call, env Env) []string {
+	if g.cfg.outside != nil {
+		return g.cfg.outside(call, env)
+	}
+	return nil
+}
+
 // Run validates the arguments against the input schema, decodes them into
 // In and calls fn. Arguments the model got wrong, and an error fn returns,
 // are an error result the model reads; only a done ctx is an error.
@@ -191,6 +227,13 @@ func (g *generic[In, Out]) Run(ctx context.Context, call Call, env Env) (Result,
 	args := call.Args
 	if len(args) == 0 {
 		args = jsontext.Value("{}")
+	}
+	if g.cfg.prepare != nil {
+		prepared, err := g.cfg.prepare(args)
+		if err != nil {
+			return ErrorResult(err.Error()), nil
+		}
+		args = prepared
 	}
 	var instance any
 	if err := json.Unmarshal(args, &instance); err != nil {

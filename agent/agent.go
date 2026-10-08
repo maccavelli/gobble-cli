@@ -314,13 +314,19 @@ func (t *turn) runTool(c llm.ToolCallDone) (tool.Result, bool) {
 	if !t.emit(ToolStart{Call: call, Spec: spec, Title: title}) {
 		return tool.Result{}, false
 	}
-	if res, denied := t.approve(call, spec, title); denied {
+	env := t.env
+	var outside []string
+	if c, ok := tl.(tool.Confined); ok {
+		outside = c.Outside(call, env)
+	}
+	if res, denied := t.approve(call, spec, title, outside); denied {
 		return res, t.emit(ToolEnd{Call: call, Result: res})
 	}
+	env.AllowOutside = len(outside) > 0
 	if !t.emit(ToolRun{Call: call}) {
 		return tool.Result{}, false
 	}
-	res, err := tl.Run(t.ctx, call, t.env)
+	res, err := tl.Run(t.ctx, call, env)
 	if err != nil {
 		res = tool.ErrorResult(cancelledText)
 		if t.ctx.Err() == nil {
@@ -330,10 +336,17 @@ func (t *turn) runTool(c llm.ToolCallDone) (tool.Result, bool) {
 	return res, t.emit(ToolEnd{Call: call, Result: res})
 }
 
-// approve asks the policy about a call to a tool that is not read-only. It
-// returns the result to give the model when the call does not run.
-func (t *turn) approve(call tool.Call, spec tool.Spec, title string) (tool.Result, bool) {
-	if t.a.cfg.Policy == nil || spec.Annotations.ReadOnlyHint {
+// approve asks the policy about a call to a tool that is not read-only,
+// and about any call naming paths outside the workspace roots. It returns
+// the result to give the model when the call does not run. With no policy
+// an outside call is refused: there is no one to ask.
+func (t *turn) approve(call tool.Call, spec tool.Spec, title string, outside []string) (tool.Result, bool) {
+	if len(outside) > 0 {
+		if t.a.cfg.Policy == nil {
+			return tool.ErrorResult(outside[0] + " is outside the workspace (the working directory and the additional directories), and no permission policy can approve it."), true
+		}
+		title += " (outside the workspace)"
+	} else if t.a.cfg.Policy == nil || spec.Annotations.ReadOnlyHint {
 		return tool.Result{}, false
 	}
 	d, err := t.a.cfg.Policy.Decide(t.ctx, permission.Rule{Tool: spec.Name, Mode: permission.ModeAsk, CallID: call.ID, Title: title, Input: call.Args})

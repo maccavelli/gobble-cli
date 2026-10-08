@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -93,8 +94,11 @@ type Agent struct {
 // liveSession is one open session: its log, the context rebuilt from it, the
 // model and thinking chosen, and the cancel of its running turn.
 type liveSession struct {
-	id      acp.SessionId
-	cwd     string
+	id  acp.SessionId
+	cwd string
+	// dirs are the client's additional directories: workspace roots after
+	// cwd (0005-MADR "Confinement").
+	dirs    []string
 	log     session.Log
 	history []llm.Message
 	leaf    string
@@ -184,9 +188,10 @@ func Capabilities() acp.AgentCapabilities {
 		LoadSession:     true,
 		McpCapabilities: acp.McpCapabilities{Http: true},
 		SessionCapabilities: acp.SessionCapabilities{
-			Close:  &acp.SessionCloseCapabilities{},
-			List:   &acp.SessionListCapabilities{},
-			Resume: &acp.SessionResumeCapabilities{},
+			AdditionalDirectories: &acp.SessionAdditionalDirectoriesCapabilities{},
+			Close:                 &acp.SessionCloseCapabilities{},
+			List:                  &acp.SessionListCapabilities{},
+			Resume:                &acp.SessionResumeCapabilities{},
 		},
 		// gobble's extension methods, as ACP's extensibility page has custom
 		// capabilities advertised (0002-PLAN Phase 7).
@@ -222,6 +227,10 @@ func (a *Agent) NewSession(ctx context.Context, p acp.NewSessionRequest) (acp.Ne
 			return acp.NewSessionResponse{}, invalidParams(acp.SessionId(id), "a session id is letters, digits, '.', '_' and '-', starting and ending with a letter or digit")
 		}
 	}
+	dirs, err := additionalDirs(acp.SessionId(id), p.AdditionalDirectories)
+	if err != nil {
+		return acp.NewSessionResponse{}, err
+	}
 	servers, notes, err := a.mcpServers(acp.SessionId(id), p.McpServers)
 	if err != nil {
 		return acp.NewSessionResponse{}, err
@@ -252,7 +261,7 @@ func (a *Agent) NewSession(ctx context.Context, p acp.NewSessionRequest) (acp.Ne
 	if err != nil {
 		return acp.NewSessionResponse{}, acp.NewInternalError(map[string]any{keyReason: err.Error()})
 	}
-	s := &liveSession{id: acp.SessionId(id), cwd: p.Cwd, log: log, ids: map[string]bool{}, think: thinkingOff, model: a.models().Default, mode: modeDefault, queue: newQueue()}
+	s := &liveSession{id: acp.SessionId(id), cwd: p.Cwd, dirs: dirs, log: log, ids: map[string]bool{}, think: thinkingOff, model: a.models().Default, mode: modeDefault, queue: newQueue()}
 	if len(forked) > 0 {
 		for _, e := range forked {
 			if err := log.Append(ctx, e); err != nil {
@@ -371,7 +380,7 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 	})
 	out := newUpdates(ctx, conn, p.SessionId)
 	var last llm.Usage
-	for ev, err := range ag.Run(turnCtx, tool.Env{Cwd: s.cwd}, history, prompt) {
+	for ev, err := range ag.Run(turnCtx, s.env(), history, prompt) {
 		if err != nil {
 			out.flush()
 			a.mu.Lock()
@@ -541,7 +550,11 @@ func (a *Agent) Cancel(_ context.Context, p acp.CancelNotification) error {
 
 // open opens a stored session for writing, rebuilds it, and starts its MCP
 // servers.
-func (a *Agent) open(ctx context.Context, id acp.SessionId, cwd string, req []acp.McpServer) (*liveSession, error) {
+func (a *Agent) open(ctx context.Context, id acp.SessionId, cwd string, extra []string, req []acp.McpServer) (*liveSession, error) {
+	dirs, err := additionalDirs(id, extra)
+	if err != nil {
+		return nil, err
+	}
 	a.mu.Lock()
 	_, live := a.sessions[id]
 	a.mu.Unlock()
@@ -562,7 +575,7 @@ func (a *Agent) open(ctx context.Context, id acp.SessionId, cwd string, req []ac
 	if cwd == "" {
 		cwd = log.Header().Cwd
 	}
-	s := &liveSession{id: id, cwd: cwd, log: log, think: thinkingOff, model: a.models().Default, mode: modeDefault, queue: newQueue()}
+	s := &liveSession{id: id, cwd: cwd, dirs: dirs, log: log, think: thinkingOff, model: a.models().Default, mode: modeDefault, queue: newQueue()}
 	a.restore(s, log.Entries())
 	s.mcp = a.startMCP(ctx, cwd, servers, notes)
 	a.mu.Lock()
@@ -574,7 +587,7 @@ func (a *Agent) open(ctx context.Context, id acp.SessionId, cwd string, req []ac
 // LoadSession opens a stored session and replays it compactly (0008-MADR
 // D19 item 5), then sends the usage snapshot, before answering.
 func (a *Agent) LoadSession(ctx context.Context, p acp.LoadSessionRequest) (acp.LoadSessionResponse, error) {
-	s, err := a.open(ctx, p.SessionId, p.Cwd, p.McpServers)
+	s, err := a.open(ctx, p.SessionId, p.Cwd, p.AdditionalDirectories, p.McpServers)
 	if err != nil {
 		return acp.LoadSessionResponse{}, err
 	}
@@ -618,7 +631,7 @@ func resumedMeta(st state) map[string]any {
 
 // ResumeSession opens a stored session with no replay.
 func (a *Agent) ResumeSession(ctx context.Context, p acp.ResumeSessionRequest) (acp.ResumeSessionResponse, error) {
-	s, err := a.open(ctx, p.SessionId, p.Cwd, p.McpServers)
+	s, err := a.open(ctx, p.SessionId, p.Cwd, p.AdditionalDirectories, p.McpServers)
 	if err != nil {
 		return acp.ResumeSessionResponse{}, err
 	}
@@ -652,11 +665,34 @@ func (a *Agent) ListSessions(ctx context.Context, p acp.ListSessionsRequest) (ac
 	a.mu.Lock()
 	for id, s := range a.sessions {
 		if !seen[id] && (f.Cwd == "" || s.cwd == f.Cwd) {
-			out = append(out, acp.SessionInfo{SessionId: id, Cwd: s.cwd})
+			out = append(out, acp.SessionInfo{SessionId: id, Cwd: s.cwd, AdditionalDirectories: s.dirs})
 		}
 	}
 	a.mu.Unlock()
 	return acp.ListSessionsResponse{Sessions: out}, nil
+}
+
+// additionalDirs checks a client's additional directories: each must be
+// absolute, as the ACP schema requires. They are kept cleaned.
+func additionalDirs(id acp.SessionId, dirs []string) ([]string, error) {
+	out := make([]string, 0, len(dirs))
+	for _, d := range dirs {
+		if !filepath.IsAbs(d) {
+			return nil, invalidParams(id, fmt.Sprintf("additional directory %q is not an absolute path", d))
+		}
+		out = append(out, filepath.Clean(d))
+	}
+	return out, nil
+}
+
+// env is a call's context: the working directory, and the workspace roots,
+// cwd first and then the additional directories.
+func (s *liveSession) env() tool.Env {
+	var roots []string
+	if s.cwd != "" {
+		roots = append(roots, s.cwd)
+	}
+	return tool.Env{Cwd: s.cwd, Roots: append(roots, s.dirs...)}
 }
 
 // sessionInfo is a list row: the name, else the first prompt cut to 60

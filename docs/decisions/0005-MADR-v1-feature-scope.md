@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 date: 2026-10-07
 decision-makers: repository owner
 consulted: 0001-REPORT-go-port-feasibility.md, 0002-MADR-cli-acp-headless-mcp-v1.md, 0003-MADR-gobble-product-identity.md, 0004-MADR-go-module-architecture.md
@@ -738,3 +738,83 @@ no tag, so the F4 release gate is unchanged.
   does not choose.
 * **What does not change.** The stable-only release decision, and the rest
   of F10.
+
+### Amendment (2026-10-07): the best of several harnesses, made gobble's own
+
+**Why.** The owner asked why gobble was copying Pi, rather than using it as a baseline:
+
+> Pi is also not the only agent harness we need to be looking at. Goose has good stuff. Kilo and opencode have good stuff. I want to use the best of what is already designed, but make gobble uniquely gobble.
+
+F1a, as first built and staged, had copied Pi beyond what this record asked:
+* Pi's message texts word for word, in place of gobble's own;
+* Pi's quirks: an animated PNG read as text, a `sed` hint, JavaScript's `toFixed` rounding, line lengths counted in UTF-16 units, and a final newline counted as a line;
+* a helper whose only job was to get Pi's sentence-style errors past Go's lint rules.
+
+Earlier phases had set the precedent: 0002-PLAN copied Pi's MCP configuration messages and its compaction prompts word for word. This record's own Context leans the same way, with "the eight tools, with exact limits" and "golden tests against Pi's behaviour".
+
+[0010-REPORT-harness-design-survey.md](../reports/0010-REPORT-harness-design-survey.md) surveyed opencode (`ecc4916`) and Kilo (`9b17c7d522`) across this record's whole line, beside Pi (`312184edb`). goose's CLI is already assessed in 0006-MADR.
+
+**The rule (owner, 2026-10-07).**
+1. **Reference harnesses.** Pi, opencode, Kilo and goose are all references. For each capability gobble takes the design it judges best, whichever harness has it, and the PLAN names the source and the reason.
+2. **Compatibility only where something depends on it.**
+   * the session JSONL that the read-only Pi bridge imports (0003-MADR);
+   * the settings keys the bridge reads;
+   * the `_gobble/` names already chosen (0002-PLAN Phase 7).
+
+   Tool argument shapes are gobble's to choose (choice 1 below).
+3. **gobble owns how a feature works, and every message.**
+   * Messages follow gobble's style, `<tool> <path>: <what>; <how to fix>`, and keep what makes another harness's message useful, such as the offset to continue from.
+   * A harness's runtime or implementation quirk is not copied.
+   * Copying another harness's text needs a stated reason in the PLAN.
+4. **Golden tests check behaviour,** such as which lines, which file content and which error case. A message is checked as gobble's own text.
+5. **Exact behaviours and limits are defaults.** Where this record's rows give an exact source behaviour or limit (for example "Pi's normalisation order", "2000 lines or 50 KB"), they are defaults gobble keeps unless a choice below or a PLAN gives a reason to differ.
+
+**The owner's choices, 2026-10-07,** with 0010-REPORT's section for the evidence:
+1. **Tool shapes (§1).**
+   * Pi's argument shapes stay: `path`, `offset`, `limit`, and multi-edit `edits[{oldText, newText}]` matched against the original. bash gains opencode's `workdir`.
+   * `apply_patch`, the Codex-style envelope, is built in 1.0 (a fifth F1 sub-phase). Like opencode, gobble offers it to GPT-family models in place of edit and write.
+2. **Edit matching (§1).**
+   * The layers, in order: exact; then Pi's normalisation; then opencode's line-trimmed, indentation-flexible and escape-normalised strategies. Each needs a unique match.
+   * opencode's guard refuses a fuzzy match much larger than `oldText`. Block anchors and Levenshtein scoring are left out as too loose.
+   * opencode v2's compare-and-swap: the bytes read are checked again under the file's lock before the write.
+3. **Read (§1).**
+   * From opencode: line-numbered output (`N: text`), a 2000-character line cut, binary refusal, "did you mean" for a missing file, and directory reads.
+   * From Kilo: a missing path is permission-checked before its absence is reported.
+   * Nested `AGENTS.md` on read waits for F3.
+4. **Formatters and LSP diagnostics after edits (§1)** are a new 1.x item, with their own MADR, because they need an LSP client. F1's edit result leaves room for a diagnostics block.
+5. **Shell permissions (§1, §6).**
+   * bash commands are parsed with `mvdan.cc/sh`, which this amendment names as a dependency for F6.
+   * Each sub-command is its own pattern, and "always" is offered at a command-arity prefix.
+   * Kilo's inert-operator masking applies; anything unparsed is a raw pattern, so it fails closed.
+   * PowerShell, which has no Go parser, is one raw pattern.
+   * The path arguments of file commands are resolved for the outside-workspace check.
+6. **The permission model (§6).**
+   * opencode's rules: `{permission, pattern, allow|ask|deny}`, last match wins, no match asks. gobble's outside-root check becomes the `external_directory` rule.
+   * Wholesale-denied tools are hidden from the model, and a rejection can carry feedback.
+   * "Always" lasts the session, and later also applies as rules saved per project in gobble's configuration.
+   * Kilo's hard ceilings for read-only modes, its protected configuration paths that always ask (gobble's own configuration, `AGENTS.md`), and provenance on every decision.
+7. **Loop safety (§1, §2).**
+   * opencode's doom-loop question and its invalid-call repair path.
+   * Every Kilo circuit breaker:
+     * three malformed calls end the turn;
+     * three compactions per turn at most;
+     * empty or reasoning-only responses are retried twice;
+     * a missing finish reason ends the step.
+   * Offline detection that does not spend retries, and a first-byte deadline.
+8. **Prompt-cache stability (§5).** F3 builds a frozen per-session context baseline, appends changes as messages, and keeps per-turn state out of the system prompt. Later phases follow the same rule.
+9. **Compaction (§4).**
+   * Pi's cut-point machinery stays (0002-PLAN Phase 6).
+   * From opencode: its summary template with rolling updates, and its prune pass.
+   * From Kilo: its proactive threshold, from an estimate anchored to the provider's token count; its empty-summary guard; its recovery from a too-large request; and the per-turn cap.
+   * Chunked summarising waits for a real need.
+10. **Agents and modes (§6).** gobble keeps its two modes, default and plan. Custom agents, an ask mode and Kilo's plan follow-up are not adopted now.
+11. **Models (§9).** Provider-neutral reasoning variants, mapped for each provider and offered over ACP as `thought_level`. A small-model role runs titles and summaries. The catalog's data stays go-llmprovider-sdk's; gobble overlays limits or costs only where the SDK lacks them.
+12. **Extras (§12).**
+    * X2's checkpoints follow opencode's shadow git repository, which borrows the real repository's objects and keeps per-step trees and patches. Kilo's checks apply: validate before restore, report failed restores honestly, and time out on large repositories.
+    * Project memory joins the 1.x train as a new item with its own MADR, on Kilo's design: a capped injected index, a recall tool, and capture that refuses transient, personal, secret and policy-shaped items.
+    * Not chosen: a design for exp/sandbox, which stays as this record had it, and semantic code indexing, which is not in the line.
+
+**What changes.**
+* The rows of this record keep their capabilities. Where a row names a Pi behaviour that a choice above replaces, the choice wins.
+* 0005-PLAN restructures F1 into five sub-phases, F1a–F1e. It reworks F1a before its commit, and notes the choices at F3, F4, F5, F6 and X2, and at the two new 1.x items.
+* The word-for-word copies already committed are revisited when their package is next changed. These are mcpclient's configuration messages, compaction's prompts (whose wording affects summary quality, and which choice 9 revisits), and `_gobble/usage`'s text.

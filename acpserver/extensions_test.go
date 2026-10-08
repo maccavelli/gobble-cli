@@ -216,7 +216,7 @@ func toolResultText(t *testing.T, cwd string) string {
 	if err != nil || string(b) != "x" {
 		t.Fatalf("a.txt %q, %v", b, err)
 	}
-	return "wrote a.txt (1 lines)"
+	return "wrote a.txt (1 line)"
 }
 
 // A follow-up waits for the reply that asks for nothing, inside the same

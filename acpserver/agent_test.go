@@ -95,11 +95,14 @@ func TestSession(t *testing.T) {
 // The advertised set is exactly what is implemented. A later phase that
 // turns a capability on changes this test on purpose (0002-PLAN amendment
 // of 2026-10-05). Phase 4 turned on loading, listing and resuming; Phase 5
-// turned on MCP over streamable HTTP.
+// turned on MCP over streamable HTTP; 0005-PLAN F1a turned on additional
+// directories.
 func TestCapabilitiesAreHonest(t *testing.T) {
 	c, _ := connect(t)
 	got := initialize(t, c.Client).AgentCapabilities
 	switch {
+	case got.SessionCapabilities.AdditionalDirectories == nil:
+		t.Error("additional directories are implemented (0005-PLAN F1a) and must be advertised")
 	case !got.LoadSession:
 		t.Error("loadSession is implemented (Phase 4) and must be advertised")
 	case got.SessionCapabilities.List == nil, got.SessionCapabilities.Resume == nil:

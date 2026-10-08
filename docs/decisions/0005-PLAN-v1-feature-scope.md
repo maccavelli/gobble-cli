@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: in-progress
 date: 2026-10-07
 associated-madr: "0005-MADR-v1-feature-scope.md"
 ---
@@ -84,6 +84,9 @@ They may start after F4 in any order.
 * The `os.Root` escape test fails on a copy that uses `filepath.Join`.
   Quote the failure.
 
+*(2026-10-07: F1 runs as four sub-phases, F1a–F1d, by the owner's decisions of that date. Step 2's decode and resize wait for the provider SDK to carry images. See the Amendments entry "F1 made executable".)*
+*(2026-10-07, 0005-MADR amendment "the best of several harnesses": F1 is five sub-phases, F1a–F1e; F1e is `apply_patch`. F1a is reworked before its commit. See the Amendments entry "F1 restructured; F1a reworked".)*
+
 ### F2 — sessions v3 (1.0; extends 0002-PLAN Phase 4)
 
 1. Every v3 entry type, and v1/v2 migration on load.
@@ -103,6 +106,8 @@ They may start after F4 in any order.
 * The fuzz target for the JSONL decoder does not panic.
 
 ### F3 — context, prompts, skills, templates (1.0)
+
+*(2026-10-07, 0005-MADR amendment "the best of several harnesses": choice 8: a frozen per-session context baseline, with changes appended as messages and per-turn state kept out of the system prompt. Nested `AGENTS.md` on read (choice 3) lands here.)*
 
 1. Context-file walk (`AGENTS.override.md`, `AGENTS.md`, `CLAUDE.md`),
    worktree de-duplication, `SYSTEM.md`, and `APPEND_SYSTEM.md`.
@@ -124,6 +129,8 @@ They may start after F4 in any order.
 * A golden system prompt for a fixture project matches.
 
 ### F4 — providers, catalog, auth (1.0)
+
+*(2026-10-07, 0005-MADR amendment "the best of several harnesses": choice 11: provider-neutral reasoning variants offered over ACP as `thought_level`, and a small-model role for titles and summaries. The catalog's data stays the SDK's; gobble overlays only what it lacks.)*
 
 Grounded in `go-llmprovider-sdk` as probed on 2026-09-30
 (`origin/main` `3d4aff5f2be9363877aae0987755e6781f1cae98`; 0015-PLAN
@@ -184,6 +191,8 @@ API.
 
 ### F5 — compaction and retry (1.0; extends 0002-PLAN Phase 6)
 
+*(2026-10-07, 0005-MADR amendment "the best of several harnesses": choice 7: loop safety, meaning the doom-loop question, invalid-call repair, Kilo's circuit breakers, offline detection and a first-byte deadline. Choice 9: Pi's cut point stays; opencode's summary template, rolling updates and prune pass; Kilo's proactive threshold, empty-summary guard, too-large recovery and per-turn cap.)*
+
 1. Retry with typed classification and back-off, honouring `Retry-After`.
    The provider-level retries are `llmprovider.WithRetry` from F4.
    This phase adds the agent-level policy (compaction on
@@ -208,6 +217,8 @@ API.
 * A forced overflow compacts once and then succeeds.
 
 ### F6 — permissions, modes, trust (1.0; extends 0002-PLAN Phase 6)
+
+*(2026-10-07, 0005-MADR amendment "the best of several harnesses": choice 5: bash parsed with `mvdan.cc/sh` for per-sub-command patterns, arity-prefix "always", inert-operator masking and fail-closed raw patterns. Choice 6: opencode's last-match-wins rules, hidden denied tools, feedback on rejection, session and per-project "always", and Kilo's hard ceilings, protected paths and provenance. Choice 10: the two modes stay; no custom agents yet.)*
 
 1. The `permission` engine: `allow`, `ask`, `deny` rules and the matcher
    grammar. Defaults come from tool annotations.
@@ -353,6 +364,8 @@ API.
 
 ### X1 — sessions and context 1.x
 
+*(2026-10-07, 0005-MADR amendment "the best of several harnesses": choice 12: project memory joins X1 as a step with its own MADR first, on Kilo's design (0010-REPORT §12).)*
+
 1. Branch summaries, `/tree [id]`, `/label`, and `context_edit`.
 2. Automatic titles.
 3. Export `jsonl`, `md`, and self-contained `html`; `/export`; `/share`
@@ -367,6 +380,8 @@ contains its handler (the subset test). The companion-table rows are
 updated in the release notes.
 
 ### X2 — checkpoints and background jobs 1.x
+
+*(2026-10-07, 0005-MADR amendment "the best of several harnesses": choice 12: step 1's shadow repository borrows the real repository's objects through `alternates`, takes a tree per step with a patch, and follows Kilo's checks: validate before restore, honest reports of failed restores, and a timeout on large repositories.)*
 
 1. The file journal for `edit` and `write`. A shadow-index git snapshot
    when a git repository and `git` are present, using its own
@@ -464,6 +479,10 @@ to promote it:
 **Accept:** archtest rule 7 holds (no stable or beta package imports
 `exp/`). Each `exp` package has one end-to-end test behind its setting.
 
+### X7 — feedback after edits 1.x
+
+*(2026-10-07, 0005-MADR amendment "the best of several harnesses": choice 4, a new item: formatters and LSP diagnostics after edit, write and `apply_patch`, with its own MADR first. It needs an LSP client, server discovery and per-language formatter settings (0010-REPORT §1).)*
+
 ## Verification
 
 For each phase:
@@ -518,7 +537,68 @@ and the target table in
 
 ## Execution record
 
-None. This plan is proposed and has not been approved.
+~~None. This plan is proposed and has not been approved.~~
+
+**Approved, 2026-10-07.** The owner approved the 0005 pair ("approve 0005, do F1"). 0005-MADR is `accepted`, and this PLAN is `in-progress`. F1 runs first, in the plan's order, as the entry "F1 made executable" under Amendments expands it.
+
+**F1a, 2026-10-07 — complete (staged; the owner commits).** It ran as the entry "F1 made executable" wrote it, with deviations 1–3 decided by the owner. F1b, F1c and F1d have not run.
+
+* **Files.**
+  * `tool/tool.go` and its test: `Env.Roots`, `Env.AllowOutside`, `Confined`, `WithOutside` and `WithPrepare`.
+  * `internal/fsx`: `resolve.go`, `workspace.go`, `write.go`, `lock.go`, `rename_windows.go` and `rename_other.go`, their tests, `fuzz_test.go`, and the fuzz seed.
+  * `tool/builtin`:
+    * `files.go` deleted;
+    * new `read.go`, `write.go`, `edit.go`, `editmatch.go`, `truncate.go`, `sniff.go` and `paths.go`;
+    * `builtin.go`;
+    * tests: `builtin_test.go`, with new `read_test.go`, `edit_test.go`, `truncate_test.go` and `fuzz_test.go`.
+  * `agent/agent.go` and its test.
+  * acpserver:
+    * `agent.go`: the capability, `liveSession.dirs`, `additionalDirs` and `env`;
+    * `agent_test.go`, `prompt_test.go` and `extensions_test.go`;
+    * `testdata/session.golden`: one change, `"additionalDirectories":{}` in `sessionCapabilities`.
+  * `docs/architecture.md`, this PLAN, 0005-MADR's status, and `docs/README.md`.
+* **Accept.**
+  * Pi's read cases pass with its notices compared exactly:
+    * `[Showing lines 1-2000 of 2500. Use offset=2001 to continue.]`;
+    * `[Showing lines 1-243 of 500 (50.0KB limit). Use offset=244 to continue.]`, where line 243 was computed by hand in the test;
+    * `[90 more lines in file. Use offset=11 to continue.]`;
+    * `Offset 100 is beyond end of file (3 lines total)`;
+    * the long-line hint;
+    * each image kind's note.
+  * Pi's edit cases pass: 28 of them, covering the fuzzy and CRLF suites (`tools.test.ts` "edit tool fuzzy matching" and "edit tool CRLF handling"), the three argument repairs, and the empty list.
+  * Confinement:
+    * `TestReadConfined` and `TestOutside`: `../` and a symlink out of the root are outside, and an approved read through the link works;
+    * `TestRootRefusesEscape`: the `os.Root` refuses the link on its own;
+    * `TestOutsideRoots` (agent): a read-only outside call is asked about with ` (outside the workspace)`, runs only when allowed, and is refused with no policy;
+    * `TestAdditionalDirectories` (acpserver): a file in an advertised additional directory is read with no permission request; without the directory the client is asked; a relative directory is `invalid_params`.
+  * `TestWriteIsAtomic` passes, with a concurrent reader over 20 replacements of 1 MiB. `TestWriteKeepsMode` passes in WSL and skips on Windows, which has no Unix permission bits.
+  * `TestLockSerialises` passes.
+  * Each fuzz target ran 30 s on Windows with no failure: `FuzzResolve`, `FuzzEditMatch`, and `FuzzOutside` after deviation 2's fix.
+* **Gates.**
+  * lint printed `0 issues.` for linux, darwin and windows.
+  * Windows `go test ./...` had no `FAIL` or `panic:`.
+  * `make preflight` printed `preflight passed` on Windows and in WSL.
+  * WSL `go test -race ./...` exited 0.
+* **Negative tests,** each on its own scratch copy, each failing as expected, and run again on the final code:
+  * confinement through `filepath.Join` instead of `os.Root`, with lexical containment: `workspace_test.go:106: read …\work\link\secret.txt = "secret\n", <nil>; want ErrOutside`;
+  * edits matched progressively: `TestEditPi/against_the_original … Found 2 occurrences of edits[1] in f.txt.`, and 17 cases in all;
+  * CRLF not restored: `TestEditPi/CRLF_kept: file = "first\nREPLACED\nthird\n", want "first\r\nREPLACED\r\nthird\r\n"`;
+  * the smart single quote step removed: `TestEditPi/smart_single_quotes: edit failed: Could not find the exact text in f.txt.`;
+  * `fsx.Lock` a no-op: `lock_test.go:39: a acquired while a was held`;
+  * `agent` ignoring `Confined`: `agent_test.go:190: allow false: rules = []; want one question about the outside read`;
+  * the continuation offset off by one: `TestReadPi/line_limit: output lacks "…Use offset=2001 to continue.]"`.
+
+  Two more failed first in the working tree, before their fixes:
+  * `TestWriteIsAtomic` before the rename retry (deviation 1);
+  * the `FuzzOutside` seed before `relativeFold`'s `IsLocal` (deviation 2).
+* **What the entry predicted wrongly.**
+  1. **Windows renames** (deviation 1), and **a stream name counted inside** (deviation 2). Both were found by tests written for this phase.
+  2. **`acpserver/commands.go` did not change.** Fork writes a stored session that the client then opens with `session/load` or `resume`, and those carry `additionalDirectories`.
+  3. **A limit of 0 is no limit.** Pi tells `limit: 0` from no limit, and reads nothing for it. Here an `int` with `omitzero` cannot tell them apart, and reading nothing asks for nothing.
+  4. **Pi's messages break Go's error-string rules** (a capital, a final period). One documented helper, `piText`, carries them, instead of a lint exception at each of about a dozen sites.
+  5. **Lint found 18 issues in the new code on the first full run.** They included a `windows` constant that clashed with the `x/sys/windows` import, `real` shadowing the builtin, and character-class regexes rewritten as `\x{…}` in raw strings. The fixes changed no behaviour, and every test and negative was run again after them.
+  6. **A test's own assumption was wrong:** `TestOutsideRoots` first checked that the refusal did not contain `42`, and the temporary directory's name did. It now checks for the secret's whole sentence.
+  7. **The identifier scan flagged a test path,** a Windows user-profile path in `TestWindowsShellPath` whose user was `x`. It is `<user>` now, as the repository's placeholders are.
 
 ## Amendments
 
@@ -683,3 +763,312 @@ Changes to F10:
    record.
 3. **Accept rewrite.** The running-copy end-to-end test is modelled on
    go-selfupdate-lib `selfupdate/e2e_running_test.go`.
+
+**2026-10-07 — F1 made executable (owner's decisions of 2026-10-07: four sub-phases; settings as Go options; images detected now, decoded and resized later; an in-house gitignore matcher).**
+
+F1's eight steps name their tools but not their contracts. They are expanded here before execution. The steps above are kept as written; where this text differs, this text is the step to follow. F1a is expanded in full below. F1b, F1c and F1d are each expanded in an entry of their own when they start.
+
+The facts, from two read-only surveys of 2026-10-07: Pi at `312184edb`, and this tree at `f6253fc`.
+* **gobble's tools are 0002-PLAN Phase 3's minimum.** `tool/builtin` has `read {path}`, `write {path, content}`, `edit {path, oldText, newText}` and `bash {command, timeout?}` (`builtin.go:25-27`).
+  * Paths are `filepath.Join(env.Cwd, path)`, and absolute paths are taken as given (`builtin.go:40-45`).
+  * `tool.Env` holds only `Cwd` (`tool/tool.go:71-73`).
+  * `internal/fsx` and `tool/toolsearch` are placeholders.
+  * Nothing in the module uses `os.Root`, and there is no per-path lock.
+  * acpserver ignores the client's capabilities in `initialize` (`acpserver/agent.go:199-207`), never reads `additionalDirectories`, and does not advertise them.
+* **Pi's file tools** (`packages/coding-agent/src/core/tools/`):
+  * `read {path, offset?, limit?}`: 1-based offset, and head truncation at 2000 lines or 50 KB (`truncate.ts:11-12`), with these notices (`read.ts:143-178`):
+    * `[Showing lines s-e of N. Use offset=… to continue.]`
+    * the same with ` (50.0KB limit)`
+    * `[N more lines in file. …]`
+    * the single-long-line hint
+  * Images are found by magic bytes, not extension (`utils/mime.ts`).
+  * `edit {path, edits:[{oldText, newText}]}` (`edit.ts`, `edit-diff.ts`):
+    * each edit is matched against the original;
+    * uniqueness is counted in fuzzy-normalised space;
+    * overlaps are refused;
+    * BOM and CRLF are kept;
+    * the fuzzy fallback is NFKC, trailing whitespace, single quotes, double quotes, dashes, then special spaces, in that order (`edit-diff.ts:34-55`).
+  * `prepareEditArguments` repairs three shapes: `edits` sent as a JSON string, a single edit object, and the legacy top-level `oldText`/`newText` (`edit.ts:103-134`).
+  * `write` creates parent directories.
+  * Edit and write share a mutation queue keyed by real path (`file-mutation-queue.ts:16-61`).
+  * Pi has no confinement and no additional directories (`path-utils.ts`, `utils/paths.ts:76-107`).
+* **0005-MADR's rows** (`:118-134`) add two things Pi lacks:
+  * `os.Root` over `cwd` plus ACP `additionalDirectories`, where "a path outside those roots requires a permission decision";
+  * the client's `fs/*` methods when advertised.
+* **The pinned go-llmprovider-sdk `v1.2.1` carries text only.** `MessageItem` and `FunctionCallOutputItem` hold a `Text string` (`llmprovider/item.go:18-45`), and no image part exists. So no image can reach a model, which 0005-MADR's amendment of 2026-10-01 already says (`:570-573`).
+* **No settings mechanism exists.** `internal/config` is a placeholder, and the config surface is undecided (0008-MADR). `shellPath`, `shellCommandPrefix`, `tools.bash.useClientTerminal` and `images.autoResize` have no home.
+* **No MADR names a gitignore library.** 0005-MADR names `doublestar` for globs (`:123`) and asks only for "a gitignore-aware walk". `golang.org/x/text`, which holds `unicode/norm` for NFKC, is already a direct requirement.
+
+The owner decided four questions on 2026-10-07:
+1. **Four sub-phases, each one commit** with its own execution record:
+   * **F1a, the file tools:** steps 1 and 3, step 2's detection only, and step 6.
+   * **F1b, bash and powershell:** step 4.
+   * **F1c, grep, find and ls:** step 5.
+   * **F1d:** step 7 (ACP `fs/*` and `terminal/*` routing, and tool-call `locations`) and step 8 (`todo`, `tool_search`, the MCP resource tools).
+2. **Settings are Go options for now.**
+   * Typed fields on `builtin.Options` and `acpserver.Options`, which an embedder can set. The `gobble` binary uses the defaults.
+   * Additional directories come from ACP `additionalDirectories`, which gobble starts advertising in F1a.
+   * The user-facing settings wait for the config decision. They are named under Deferred.
+3. **Images are detected now, and decoded and resized later.**
+   * F1a sniffs the magic bytes by Pi's rules, and `read` answers an image with a text note.
+   * Step 2's decode, EXIF orientation and resize, and `golang.org/x/image`, wait for the provider SDK to carry image content. They are still in the 1.0 gate.
+4. **gitignore matching is in-house,** in `internal/fsx`, written to git's documented rules. It lands with F1c, which is the first phase to walk directories.
+
+**F1a — the file tools (steps 1, 2 in part, 3 and 6).**
+
+Choices made within the wording:
+* **The roots.**
+  * `tool.Env` gains `Roots []string` (the session `cwd` first, then the additional directories, all absolute) and `AllowOutside bool`.
+  * acpserver advertises `sessionCapabilities.additionalDirectories`. It reads `additionalDirectories` on `session/new`, `load`, `resume` and fork, keeps them on the live session, and returns them in `session/list`'s `SessionInfo`.
+  * A relative additional directory is refused with `invalid_params`, as the ACP schema requires absolute paths.
+* **`internal/fsx`** is the confinement and the queue (0004-MADR's package map, `:252`):
+  * `Resolve(cwd, path string) string` follows Pi's `resolvePath` order (`utils/paths.ts:76-107`):
+    1. Unicode spaces become a plain space;
+    2. a leading `@` is stripped;
+    3. on Windows, `/c/…`, `/mnt/c/…` and `/cygdrive/c/…` become `C:\…`;
+    4. `~` is expanded;
+    5. `file://` URLs become paths;
+    6. a relative path is joined to `cwd`, then cleaned.
+
+    Pi's read-only fallbacks for a missing path come after these: the macOS `AM`/`PM` narrow space, NFD, and U+2019 (`path-utils.ts:86-118`).
+  * `Workspace{Roots}` with `Outside(abs string) bool`. A path is inside when, after resolving the symlinks of its deepest existing ancestor, it is under some root.
+  * `ReadFile` and `WriteFile`. An inside path is opened through an `os.Root` for its root, so a symlink or `..` that escapes is refused by the runtime too. An outside path is opened directly, and only when the call allows it.
+  * `WriteFile` writes a temporary file beside the target and renames it into place (`Root.Rename`). It keeps an existing file's permission bits, and creates parent directories (`Root.MkdirAll`). A new file is `0o644`, as Pi's `writeFile` gives under the usual umask, rather than today's `0o600`.
+  * `Lock(path) (unlock func())` serialises calls on one real path (`EvalSymlinks`, else the absolute path), process-wide. Different paths do not wait for each other.
+* **`tool`, the contract:**
+  * an optional interface `Confined{ Outside(call Call, env Env) []string }` returns the paths outside `env.Roots` that a call names;
+  * `WithPrepare(func(jsontext.Value) (jsontext.Value, error))` rewrites a call's arguments before they are validated, for edit's repairs.
+* **`agent`, the approval:** when a tool is `Confined` and a call names paths outside the roots, the call needs a decision even if it is read-only.
+  * The rule's title gains ` (outside the workspace)`.
+  * Only an allowed call runs, with `AllowOutside` set on its `Env`.
+  * With no `Policy`, such a call is refused with `"<path> is outside the workspace (the working directory and the additional directories), and no permission policy can approve it."`. No policy means no one to ask, so the safe answer is no.
+* **`read`** is Pi's tool:
+  * the schema `{path, offset?, limit?}`, with Pi's descriptions;
+  * the notices quoted above, worded as Pi words them, with Pi's line count (`split("\n")`, so a trailing newline adds an empty line);
+  * CR and the BOM are kept;
+  * an offset beyond the end gives Pi's message.
+  * An image (JPEG, PNG that is not animated, GIF, WebP, BMP, by Pi's magic-byte rules) gives `Read image file [<mime>]` and `[The image was not sent: gobble cannot send images to models yet.]`. Pi's own note, "Current model does not support images", would be untrue here: the gap is the SDK's, not the model's.
+* **`edit`** is Pi's multi-edit, with Pi's error messages:
+  * `WithPrepare` makes the three repairs;
+  * the BOM is split off, and CRLF is detected from the first `\n`;
+  * matching is against the original: exact first, then the fuzzy chain in Pi's order (NFKC from `golang.org/x/text/unicode/norm`);
+  * uniqueness is counted in fuzzy-normalised space;
+  * overlaps are refused after sorting;
+  * edits are applied in reverse, and only the touched lines are rewritten in fuzzy mode;
+  * an edit that changes nothing gets Pi's no-change error.
+
+  The model reads `Successfully replaced N block(s) in <path>.`. The client keeps today's ACP `diff` content and summary.
+* **`write`:** `Successfully wrote to <path>` for the model, through `fsx.WriteFile` and `fsx.Lock`. Both mutating tools hold the lock from their read to their rename.
+* **`truncate.go`** ports Pi's `truncateHead`, `truncateTail`, `truncateLine` and `formatSize` (`truncate.ts`), so F1b and F1c reuse them. `bash` keeps today's `tail` until F1b replaces it.
+* **The display** is unchanged: the 0008-MADR D19 titles and summaries. The summaries follow the new texts.
+
+**Files:**
+* `tool/tool.go` and `tool/tool_test.go`;
+* `internal/fsx`:
+  * `doc.go`;
+  * new `resolve.go`, `workspace.go`, `write.go` and `lock.go`;
+  * new `rename_windows.go` and `rename_other.go` *(added by deviation 1)*;
+  * new `testdata/fuzz/FuzzOutside/82c2975c430ac608` *(added by deviation 2)*;
+  * their tests, and `fuzz_test.go`;
+* `tool/builtin`:
+  * `builtin.go`;
+  * `files.go`, split into new `read.go`, `write.go` and `edit.go`;
+  * new `editmatch.go`, `truncate.go` and `sniff.go`;
+  * new `paths.go` *(added by deviation 3)*;
+  * `builtin_test.go`, with new `read_test.go`, `edit_test.go`, `truncate_test.go` and `fuzz_test.go`;
+* `agent/agent.go` and its tests;
+* acpserver:
+  * `agent.go`, `commands.go` (fork) and `prompt.go` (the `Env`);
+  * their tests, and any golden whose bytes the new capability or texts change;
+* tests elsewhere that assert the old tool texts, found by `go test ./...` and listed in the record;
+* `docs/architecture.md`: the `internal/fsx`, `tool` and `tool/builtin` rows;
+* this PLAN, and `docs/README.md`.
+
+**Steps:**
+1. `tool`: `Env.Roots`, `Env.AllowOutside`, `Confined` and `WithPrepare`, with tests.
+2. `internal/fsx`, with table tests and two fuzz targets:
+   * `FuzzResolve`: no path that `Workspace` calls inside resolves outside every root;
+   * `FuzzOutside`: `Outside` agrees with a lexical check on paths without symlinks.
+3. `tool/builtin`: truncate, then read, write and edit, with Pi's cases as table tests, and a `FuzzEditMatch` target (no panic; any result it accepts contains each `newText`).
+4. `agent`: the outside-roots approval.
+5. acpserver: the capability, the directories, and `Env.Roots`.
+6. Docs and this entry's execution record.
+
+**Accept:**
+* `read`: an offset, a limit, the three notices, the long-line hint, an offset past the end, and each image kind's note. Pi's strings are compared exactly.
+* `edit`: one edit and several; ambiguous, not found, overlap, empty and no-change; CRLF kept; BOM kept; each fuzzy normalisation; and the three argument repairs.
+* `write`: parent directories, a kept mode, and an atomic replace (no partial file is ever observed by a concurrent reader in the test).
+* Confinement:
+  * a `../` path and a symlink out of `cwd` are outside;
+  * a read-only call to one asks the policy, and runs only when allowed;
+  * with no policy it is refused;
+  * a path in an additional directory is inside.
+* `fsx.Lock` serialises holders of one path, and does not block another path.
+* acpserver advertises `additionalDirectories`, and a session made with one can read a file in it without a permission request.
+* `FuzzResolve`, `FuzzOutside` and `FuzzEditMatch` each run for 30 s with no failure.
+
+Each is shown failing first, on a scratch copy, with the failure quoted:
+* the plan's own: confinement through `filepath.Join` instead of `os.Root` fails the symlink-escape test;
+* edits matched progressively instead of against the original: the overlap test;
+* CRLF not restored: the CRLF test;
+* the smart-quote step removed from the fuzzy chain: its case;
+* `fsx.Lock` made a no-op: the serialisation test;
+* `agent` ignoring `Confined`: the outside-read approval test;
+* `read`'s continuation offset off by one: its notice test.
+
+**Verification:**
+* `go test ./...` on Windows and in WSL, and WSL `go test -race ./...`;
+* the three fuzz targets for 30 s each, on Windows;
+* `golangci-lint` for linux, darwin and windows;
+* `make preflight` on Windows and in WSL;
+* the pre-add check on every changed Go file;
+* the identifier and hidden-character scans.
+
+The agent stages; the owner commits.
+
+**Deferred, named:**
+* to F1b, F1c and F1d: their steps, each expanded when it starts;
+* to the provider SDK's image support, still in the 1.0 gate: step 2's decode, EXIF orientation and resize, `golang.org/x/image`, and images in MCP results (0002-PLAN Phase 5's deferral). `read`'s note changes then;
+* to the config decision: user-facing `shellPath`, `shellCommandPrefix`, `tools.bash.useClientTerminal`, `images.autoResize`, and a CLI way to pass additional directories. Until then they are Go options, and additional directories come only from an ACP client;
+* to F6: remembering an outside-root approval. Today's ACP policy offers allow-once and reject-once only (`acpserver/prompt.go:194-213`).
+
+**F1a deviations, 2026-10-07.** Found while executing, each fixed before it was put to the owner, nothing staged until the owner decided. The owner kept all three on 2026-10-07.
+
+1. **Windows refuses to rename over a file another process holds open.**
+   * `TestWriteIsAtomic` failed: `renameat .big.txt.gobble-a00a09d243ca.tmp big.txt: Access is denied.` Its concurrent reader held the file, as an open editor would.
+   * Decision: on Windows, a rename failing with `ERROR_ACCESS_DENIED` or `ERROR_SHARING_VIOLATION` is retried for up to 2 s, with pauses doubling from 1 ms to at most 100 ms. Go's `cmd/go` robustio does the same.
+   * The write stays atomic. New files `internal/fsx/rename_windows.go` and `rename_other.go`.
+2. **`FuzzOutside` found a Windows path that `Outside` called inside and `os.Root` would refuse.**
+   * The failure: `":": inside = true, lexical check says false`, on its first run. The case-folding comparison (`relativeFold`) skipped the `filepath.IsLocal` check the Unix comparison makes, so a `:` element, which names a stream on Windows, counted as inside.
+   * It failed safe, because `os.Root` refuses the name, but the two disagreed.
+   * Decision: `relativeFold` checks `filepath.IsLocal` too. The fuzzer's saved input `internal/fsx/testdata/fuzz/FuzzOutside/82c2975c430ac608` is kept as a regression seed. It failed before the fix and passes after.
+3. **`tool/builtin/paths.go`** holds the path helpers that were in `builtin.go` and `files.go`: `resolve`, `roots`, `workspace`, `outsidePath`, `shown`, `argPath`, `titlePath` and `unwrapPath`. Decision: keep it as its own file, which F1c's tools share.
+
+**2026-10-07 — F1 restructured; F1a reworked to the reference rule (owner's choices of 2026-10-07; 0005-MADR amendment "the best of several harnesses, made gobble's own").**
+
+The owner asked why F1a copied Pi rather than using it as a baseline, and asked for the best of Pi, opencode, Kilo and goose, made gobble's own. [0010-REPORT](../reports/0010-REPORT-harness-design-survey.md) holds the survey, and the MADR amendment holds the rule and twelve choices. F1a was staged and not committed, so it is reworked before its commit. Its entry above and its record below stay as the history of the first build.
+
+**F1's sub-phases now.**
+* **F1a** — file tools. Rework before commit, as below.
+* **F1b** — bash and powershell, with opencode's `workdir` (choice 1). Its permission parsing is F6's (choice 5).
+* **F1c** — grep, find and ls.
+* **F1d** — todo, `tool_search`, the MCP resource tools, and ACP routing with `locations`.
+* **F1e** — `apply_patch` (choice 1), a new sub-phase. It is offered to GPT-family models in place of edit and write, and is expanded in an entry of its own when it starts.
+
+**F1a rework — what changes.**
+1. **Messages are gobble's** (rule 3). `piText` is deleted. Errors read `<tool> <path>: <what>; <how to fix>`; for example:
+   * `edit a.go: edits[1].oldText was not found; it must match the file exactly, or nearly (whitespace, quotes and indentation are forgiven)`
+   * `edit a.go: edits[0].oldText occurs 3 times; include more surrounding lines so it occurs once`
+   * `edit a.go: edits[0] and edits[1] overlap; merge them into one edit or choose separate regions`
+   * `edit a.go: the edits change nothing`
+   * `edit: edits needs at least one replacement`
+   * `read a.go: offset 100 is past the end of the file (3 lines)`
+
+   The model reads `edited a.go: 2 replacements` and `wrote a.go (12 lines)`. Tool descriptions are rewritten in gobble's words, with the same guidance.
+2. **read is opencode's design** (choice 3).
+   * Output is numbered, `N: text`, one line each. A CR at a line end and a leading BOM are not shown, since edit matches line-feed-normalised text.
+   * A line over 2000 characters is cut, ending `… (line cut at 2000 characters)`. This replaces Pi's single-long-line `sed` hint.
+   * Limits: 2000 lines and 50 KB. A final newline does not count as a line.
+   * Footers:
+     * `(lines 1-2000 of 2500; continue with offset=2001)`
+     * `(lines 1-243 of 500, 50 KB limit; continue with offset=244)`
+     * `(end of file, 500 lines)`
+   * A file with a NUL byte, or more than 30% unprintable bytes, in its first 4 KB is refused: `read x.bin: a binary file; read cannot show it`. Images keep their note, and an animated PNG counts as an image, unlike Pi.
+   * A missing file names up to three entries of its directory whose names contain, or are contained in, the name asked for, ignoring case: `read a.go: no such file; did you mean b/a_test.go?`.
+   * A directory is listed: sorted, a `/` on directories, and paged by `offset` and `limit`. Its footer reads `(entries 1-500 of 812; continue with offset=501)`.
+   * **Kilo's check already holds** in gobble's design. A path outside the roots is asked about (`Confined`) before `Run` reveals whether it exists, and inside the roots the workspace is the model's to see. No further check is added.
+3. **edit matching is layered** (choice 2).
+   * For each edit, in order: exact; then Pi's normalisation (which, as now, moves the call into normalised space with lines kept); then opencode's **line-trimmed**, **indentation-flexible** and **escape-normalised** strategies, run against the same base.
+   * Each layer needs one candidate. Two or more is the "occurs N times" error.
+   * Matching stays against the original, and overlaps are refused.
+   * **The oversize guard.** A match found by any layer other than exact fails when its region has at least `max(oldLines+3, 2×oldLines)` lines or more than `max(len+500, 4×len)` bytes: `edit a.go: edits[0] matched a region much larger than its oldText; read the file again and resend the edit`.
+4. **Compare-and-swap** (choice 2). Under the file's lock, the bytes edit read are compared with the file again just before the rename. A difference fails: `edit a.go: the file changed while the edit was being made; read it again and resend the edit`. That is a change by another process; gobble's own writers are already held off by the lock.
+5. **Quirks are dropped** (rule 3).
+   * `truncateLine` counts runes, not UTF-16 units.
+   * `formatSize` is Go's `%.1f`, with no `toFixed` emulation.
+   * There is no single-long-line hint (item 2 covers it).
+   * Pi's other-spelling fallbacks for a missing path stay, because they find files macOS users paste. That is a usability reason, recorded here.
+6. **Tests** check behaviour, and gobble's messages as gobble's own (rule 4). The ported Pi cases remain as behaviour cases. New cases:
+   * each opencode strategy;
+   * the oversize guard;
+   * compare-and-swap, where a test writes the file between the read and the rename through a test hook;
+   * binary refusal, "did you mean", directory reads, line numbering and the line cut.
+
+**Files** — the F1a set as staged, and:
+* `tool/builtin/editmatch.go`, with new `editstrategy.go`;
+* `read.go`, with new `readdir.go`;
+* `sniff.go` and `truncate.go`;
+* their tests;
+* the acpserver and agent tests that assert tool texts.
+
+**Accept,** in addition to F1a's own:
+* `go test ./tool/builtin/` covers every case in item 6.
+* `FuzzEditMatch` keeps its property: an edit it accepts contains each `newText` and changes the content. It runs 30 s again.
+
+Each is shown failing first, on a scratch copy:
+* the line-trimmed strategy removed: its case;
+* the oversize guard removed: its case;
+* compare-and-swap removed: its case;
+* line numbers off by one: the numbering case;
+* binary detection removed: its case.
+
+F1a's seven negatives are run again with their new expectations.
+
+**Verification:** F1a's, run again in full.
+
+The agent stages; the owner commits.
+
+**F1a rework, 2026-10-07 — complete (staged with F1a; the owner commits).** It ran as the entry "F1 restructured; F1a reworked" wrote it.
+
+* **Files.** The F1a set, and:
+  * new `tool/builtin/editstrategy.go` and `readdir.go`;
+  * `editmatch.go`, `edit.go`, `read.go`, `write.go`, `sniff.go`, `truncate.go` and `builtin.go` (`count`);
+  * `internal/fsx/workspace.go` (`ReadDir`);
+  * the builtin tests;
+  * `acpserver/extensions_test.go` and `prompt_test.go`, for the tool texts;
+  * the 0005 pair, [0010-REPORT](../reports/0010-REPORT-harness-design-survey.md), `docs/architecture.md` and `docs/README.md`.
+* **Accept.**
+  * `go test ./...` passed on Windows.
+  * Read:
+    * line numbering;
+    * the footers;
+    * the byte limit at line 238, computed by hand in the test;
+    * the line cut;
+    * BOM and CR hidden;
+    * binary refusal;
+    * "did you mean";
+    * directory listing and paging;
+    * every image kind, the animated PNG included.
+  * Edit:
+    * the 28 behaviour cases first written from Pi's suite, with gobble's messages;
+    * one case for each of opencode's three strategies, for the oversize guard, and for ambiguity at every layer;
+    * compare-and-swap through the `beforeWrite` test hook;
+    * the three argument repairs.
+  * `FuzzEditMatch`, `FuzzResolve` and `FuzzOutside` ran 30 s each (see Gates).
+* **Negative tests,** on scratch copies, each failing at its own test.
+  * F1a's seven, with their new expectations:
+    * the `filepath.Join` confinement;
+    * progressive matching;
+    * CRLF;
+    * smart quotes;
+    * the lock;
+    * `Confined`;
+    * the continuation offset.
+  * The rework's five:
+    * the line-trimmed strategy removed: `TestEditStrategies/line-trimmed … oldText was not found`;
+    * the oversize guard removed: `result = "edited f.txt: 1 replacement" (isError false)`;
+    * compare-and-swap removed: `result "edited f.txt: 1 replacement", want "edit f.txt: the file changed while …"`;
+    * numbering off by one: `output "50: Line 51\n…", want it to start with line 51`;
+    * binary refusal removed: `result "1: PK\x03\x04\x00\x00data\n(end of file, 1 line)" (isError false)`.
+* **What the entry predicted wrongly.**
+  1. **Counts needed singular forms.** The first run showed `(end of file, 1 lines)`, and then `3 entrys`. `count(n, one, many)` gives both forms, and a one-line test case now covers it.
+  2. **One negative's expected string was wrong.** Compare-and-swap's removal failed at the test's first assertion, before the line the harness looked for. The harness was corrected; the test was not.
+  3. **Exact matching now comes before the fuzzy count.** Pi counts uniqueness in normalised space even when `oldText` occurs exactly once. gobble takes an exact unique match as the answer, because it is unambiguous. The behaviour cases pass unchanged.
+  4. **Kilo's existence check needed no code.** gobble asks about an outside path before `Run`, and inside the roots the workspace is the model's to see.
+  5. **Lint found one issue in the rework.** `ineffassign` flagged an assignment to `out` in `applyEdits` whose value was always overwritten. The branch now assigns once on each path. The twelve negatives were run again afterwards, and all twelve failed as before.
+* **Gates.**
+  * lint printed `0 issues.` for linux, darwin and windows.
+  * Windows `go test ./...` had no `FAIL` or `panic:`.
+  * `make preflight` printed `preflight passed` on Windows and in WSL.
+  * WSL `go test -race ./...` exited 0.
+  * `FuzzEditMatch`, `FuzzResolve` and `FuzzOutside` each ran 30 s on Windows with no failure.

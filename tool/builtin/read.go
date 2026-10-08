@@ -1,0 +1,145 @@
+package builtin
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io/fs"
+	"strconv"
+	"strings"
+
+	"github.com/maccavelli/gobble-cli/internal/fsx"
+	"github.com/maccavelli/gobble-cli/tool"
+)
+
+// maxLineChars is where read cuts a long line (opencode's limit).
+const maxLineChars = 2000
+
+type readIn struct {
+	Path   string `json:"path" jsonschema:"the file or directory to read, relative to the working directory or absolute"`
+	Offset int    `json:"offset,omitzero" jsonschema:"the first line (or entry) to show, counting from 1"`
+	Limit  int    `json:"limit,omitzero" jsonschema:"how many lines (or entries) to show, at most 2000"`
+}
+
+var readDescription = fmt.Sprintf("Read a file, or list a directory. Lines come numbered as \"N: text\"; "+
+	"the numbers are not part of the file, so leave them out of an edit's oldText. "+
+	"At most %d lines or %d KB are shown, and a line longer than %d characters is cut; "+
+	"the last line of the output says the offset to continue from. "+
+	"Read a large file in a few big pieces rather than many small ones. "+
+	"Binary files are refused, and images are not sent to the model yet.", maxLines, maxBytes/1024, maxLineChars)
+
+// imageNotSent is read's note for an image: the provider SDK carries text
+// only (0005-PLAN F1, owner's decision 3 of 2026-10-07).
+const imageNotSent = "[The image was not sent: gobble cannot send images to models yet.]"
+
+// Read is the read tool (0005-MADR amendment of 2026-10-07, choice 3):
+// numbered lines from an offset, bounded, with a footer saying how to go
+// on; a directory's entries; a note for an image; and a refusal for other
+// binary files.
+func Read() tool.Tool {
+	return tool.New("read", readDescription,
+		func(_ context.Context, in readIn, env tool.Env) (tool.Result, error) {
+			name := shown(env, in.Path)
+			abs, info, err := statFile(env, in.Path)
+			if err != nil {
+				return tool.Result{}, err
+			}
+			if info.IsDir() {
+				return readDir(env, abs, name, in)
+			}
+			b, err := workspace(env).ReadFile(abs)
+			if err != nil {
+				return tool.Result{}, fmt.Errorf("read %s: %w", name, unwrapPath(err))
+			}
+			if mime := imageType(b); mime != "" {
+				r := tool.TextResult(fmt.Sprintf("Read image file [%s]\n%s", mime, imageNotSent))
+				r.Summary = summary(fmt.Sprintf("read %s (%s, not sent)", name, mime))
+				return r, nil
+			}
+			if binaryContent(b) {
+				return tool.Result{}, fmt.Errorf("read %s: a binary file; read cannot show it", name)
+			}
+			text, lines, err := numbered(string(b), in, name)
+			if err != nil {
+				return tool.Result{}, err
+			}
+			r := tool.TextResult(text)
+			r.Summary = summary(fmt.Sprintf("read %s (%s)", name, count(lines, "line", "lines")))
+			return r, nil
+		},
+		tool.WithKind(tool.KindRead),
+		tool.WithAnnotations(tool.Annotations{ReadOnlyHint: true, IdempotentHint: true}),
+		tool.WithOutside(outsidePath),
+		tool.WithDescribe(func(c tool.Call, env tool.Env) string { return title("read " + shown(env, titlePath(c))) }),
+	)
+}
+
+// statFile resolves the path a model named and stats it. A path that does
+// not exist is tried in the other spellings macOS gives pasted screenshot
+// names (fsx.ReadVariants), and then gets an error naming similar entries
+// of its directory.
+func statFile(env tool.Env, path string) (string, fs.FileInfo, error) {
+	abs := resolve(env, path)
+	ws := workspace(env)
+	info, err := ws.Stat(abs)
+	if errors.Is(err, fs.ErrNotExist) {
+		for _, v := range fsx.ReadVariants(abs) {
+			if vi, verr := ws.Stat(v); verr == nil {
+				return v, vi, nil
+			}
+		}
+		return "", nil, fmt.Errorf("read %s: no such file%s", shown(env, path), didYouMean(env, abs))
+	}
+	if err != nil {
+		return "", nil, fmt.Errorf("read %s: %w", shown(env, path), unwrapPath(err))
+	}
+	return abs, info, nil
+}
+
+// numbered is a text file's lines from in.Offset, each as "N: text", with a
+// footer. A BOM and the CR of a CRLF are not shown, and a final newline does
+// not count as a line. It also returns the file's line count.
+func numbered(s string, in readIn, name string) (string, int, error) {
+	lines := countingLines(strings.TrimPrefix(s, "\uFEFF"))
+	total := len(lines)
+	if total == 0 {
+		return "(empty file)", 0, nil
+	}
+	first := max(in.Offset, 1)
+	if first > total {
+		return "", total, fmt.Errorf("read %s: offset %d is past the end of the file (%s)", name, in.Offset, count(total, "line", "lines"))
+	}
+	limit := maxLines
+	if in.Limit > 0 {
+		limit = min(in.Limit, maxLines)
+	}
+	var b strings.Builder
+	last, byBytes := first-1, false
+	for n := first; n <= total && n < first+limit; n++ {
+		text, _ := truncateLine(strings.TrimSuffix(lines[n-1], "\r"), maxLineChars)
+		line := strconv.Itoa(n) + ": " + text + "\n"
+		if b.Len()+len(line) > maxBytes && n > first {
+			byBytes = true
+			break
+		}
+		b.WriteString(line)
+		last = n
+	}
+	b.WriteString(footer("lines", first, last, total, byBytes))
+	return b.String(), total, nil
+}
+
+// footer is the last line of a read: where the output stopped and the
+// offset to continue from, or that the end was reached.
+func footer(what string, first, last, total int, byBytes bool) string {
+	switch {
+	case last < total && byBytes:
+		return fmt.Sprintf("(%s %d-%d of %d, %d KB limit; continue with offset=%d)", what, first, last, total, maxBytes/1024, last+1)
+	case last < total:
+		return fmt.Sprintf("(%s %d-%d of %d; continue with offset=%d)", what, first, last, total, last+1)
+	case what == "lines":
+		return "(end of file, " + count(total, "line", "lines") + ")"
+	default:
+		return "(end of directory, " + count(total, "entry", "entries") + ")"
+	}
+}

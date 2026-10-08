@@ -2,7 +2,7 @@ package builtin
 
 import (
 	"fmt"
-	"path/filepath"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -36,25 +36,6 @@ func Names() []string {
 	return names
 }
 
-// resolve makes path absolute against the session's working directory.
-func resolve(env tool.Env, path string) string {
-	if filepath.IsAbs(path) {
-		return filepath.Clean(path)
-	}
-	return filepath.Join(env.Cwd, path)
-}
-
-// shown is path as a title shows it: relative to cwd when it lies under it.
-func shown(env tool.Env, path string) string {
-	abs := resolve(env, path)
-	if env.Cwd != "" {
-		if rel, err := filepath.Rel(env.Cwd, abs); err == nil && !strings.HasPrefix(rel, "..") {
-			return filepath.ToSlash(rel)
-		}
-	}
-	return filepath.ToSlash(abs)
-}
-
 // title is s on one line, cut to maxTitle runes.
 func title(s string) string {
 	s = strings.Join(strings.Fields(s), " ")
@@ -77,29 +58,8 @@ func summary(s string) string {
 	return s[:cut] + "…"
 }
 
-// head keeps the first maxLines lines and maxBytes bytes of s, and says
-// what it cut.
-func head(s string) string {
-	lines := strings.SplitAfter(s, "\n")
-	total := len(lines)
-	if total > 0 && lines[total-1] == "" {
-		total--
-	}
-	var b strings.Builder
-	n := 0
-	for _, l := range lines[:total] {
-		if n == maxLines || b.Len()+len(l) > maxBytes {
-			fmt.Fprintf(&b, "\n[truncated: showing the first %d of %d lines]\n", n, total)
-			return b.String()
-		}
-		b.WriteString(l)
-		n++
-	}
-	return b.String()
-}
-
 // tail keeps the last maxLines lines and maxBytes bytes of s, and says what
-// it cut.
+// it cut. 0005-PLAN F1b replaces it with Pi's truncateTail and notices.
 func tail(s string) string {
 	lines := strings.SplitAfter(s, "\n")
 	if len(lines) > 0 && lines[len(lines)-1] == "" {
@@ -115,6 +75,14 @@ func tail(s string) string {
 		return fmt.Sprintf("[truncated: showing the last %d of %d lines]\n%s", len(lines)-start, len(lines), out)
 	}
 	return out
+}
+
+// count is n with its noun: "1 line", "3 lines".
+func count(n int, one, many string) string {
+	if n == 1 {
+		return "1 " + one
+	}
+	return strconv.Itoa(n) + " " + many
 }
 
 func countLines(s string) int {

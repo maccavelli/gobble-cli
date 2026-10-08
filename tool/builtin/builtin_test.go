@@ -48,15 +48,15 @@ func TestReadWriteEdit(t *testing.T) {
 	dir := t.TempDir()
 	env := tool.Env{Cwd: dir}
 	r := call(t, Write(), env, map[string]string{"path": "sub/a.txt", "content": "one\ntwo\n"})
-	if r.IsError || len(r.Diffs) != 1 || r.Diffs[0].OldText != nil || r.Diffs[0].Path != filepath.Join(dir, "sub", "a.txt") {
-		t.Fatalf("write = %+v", r)
+	if r.IsError || r.Text() != "wrote sub/a.txt (2 lines)" || len(r.Diffs) != 1 || r.Diffs[0].OldText != nil || r.Diffs[0].Path != filepath.Join(dir, "sub", "a.txt") {
+		t.Fatalf("write = %+v, text %q", r, r.Text())
 	}
-	if r = call(t, Read(), env, map[string]string{"path": "sub/a.txt"}); r.Text() != "one\ntwo\n" || r.Summary != "read sub/a.txt (2 lines)" {
+	if r = call(t, Read(), env, map[string]string{"path": "sub/a.txt"}); r.Text() != "1: one\n2: two\n(end of file, 2 lines)" || r.Summary != "read sub/a.txt (2 lines)" {
 		t.Fatalf("read = %+v, text %q", r, r.Text())
 	}
-	r = call(t, Edit(), env, map[string]string{"path": "sub/a.txt", "oldText": "two", "newText": "2"})
-	if r.IsError || len(r.Diffs) != 1 || *r.Diffs[0].OldText != "one\ntwo\n" || r.Diffs[0].NewText != "one\n2\n" {
-		t.Fatalf("edit = %+v", r)
+	r = call(t, Edit(), env, map[string]any{"path": "sub/a.txt", "edits": []map[string]string{{"oldText": "two", "newText": "2"}}})
+	if r.IsError || r.Text() != "edited sub/a.txt: 1 replacement" || len(r.Diffs) != 1 || *r.Diffs[0].OldText != "one\ntwo\n" || r.Diffs[0].NewText != "one\n2\n" {
+		t.Fatalf("edit = %+v, text %q", r, r.Text())
 	}
 	b, err := os.ReadFile(filepath.Join(dir, "sub", "a.txt"))
 	if err != nil || string(b) != "one\n2\n" {
@@ -75,13 +75,13 @@ func TestEditNeedsOneMatch(t *testing.T) {
 	}
 	env := tool.Env{Cwd: dir}
 	for args, want := range map[[2]string]string{
-		{"x", "y"}: "occurs 2 times",
-		{"z", "y"}: "was not found",
-		{"", "y"}:  "oldText is empty",
+		{"x", "y"}: "edit a: oldText occurs 2 times; include more surrounding lines so it occurs once",
+		{"z", "y"}: "edit a: oldText was not found; it must match the file exactly, or nearly (whitespace, quotes and indentation are forgiven)",
+		{"", "y"}:  "edit a: oldText is empty",
 	} {
-		r := call(t, Edit(), env, map[string]string{"path": "a", "oldText": args[0], "newText": args[1]})
-		if !r.IsError || !strings.Contains(r.Text(), want) {
-			t.Errorf("edit %q: %+v, want an error with %q", args, r, want)
+		r := call(t, Edit(), env, map[string]any{"path": "a", "edits": []map[string]string{{"oldText": args[0], "newText": args[1]}}})
+		if !r.IsError || r.Text() != want {
+			t.Errorf("edit %q: %q, want the error %q", args, r.Text(), want)
 		}
 	}
 	if r := call(t, Read(), env, map[string]string{"path": "missing"}); !r.IsError || !strings.Contains(r.Text(), "read missing:") {
@@ -94,15 +94,8 @@ func TestBounds(t *testing.T) {
 	for range 2500 {
 		b.WriteString("line\n")
 	}
-	if got := head(b.String()); !strings.HasSuffix(got, "[truncated: showing the first 2000 of 2500 lines]\n") || strings.Count(got, "line\n") != 2000 {
-		t.Fatalf("head kept %d lines", strings.Count(got, "line\n"))
-	}
 	if got := tail(b.String()); !strings.HasPrefix(got, "[truncated: showing the last 2000 of 2500 lines]\n") {
 		t.Fatalf("tail = %.60q", got)
-	}
-	big := strings.Repeat(strings.Repeat("x", 99)+"\n", 1000) // 100 KB
-	if got := head(big); len(got) > maxBytes+100 {
-		t.Fatalf("head kept %d bytes", len(got))
 	}
 	if got := title(strings.Repeat("é", 100)); utf8.RuneCountInString(got) != maxTitle || !strings.HasSuffix(got, "…") {
 		t.Fatalf("title has %d runes", utf8.RuneCountInString(got))

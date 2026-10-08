@@ -97,6 +97,46 @@ func TestDescribe(t *testing.T) {
 	}
 }
 
+// Outside is WithOutside's function, and no paths without it.
+func TestOutside(t *testing.T) {
+	confined := tool.New("read", "", func(context.Context, struct{}, tool.Env) (string, error) { return "", nil },
+		tool.WithOutside(func(_ tool.Call, env tool.Env) []string { return env.Roots }))
+	got := confined.(tool.Confined).Outside(tool.Call{}, tool.Env{Roots: []string{"/elsewhere"}})
+	if len(got) != 1 || got[0] != "/elsewhere" {
+		t.Fatalf("Outside = %q, want WithOutside's answer", got)
+	}
+	plain := tool.New("noop", "", func(context.Context, struct{}, tool.Env) (string, error) { return "", nil })
+	if got := plain.(tool.Confined).Outside(tool.Call{}, tool.Env{Roots: []string{"/x"}}); got != nil {
+		t.Fatalf("default Outside = %q, want none", got)
+	}
+}
+
+// WithPrepare rewrites the arguments before validation, and its error is
+// the model's to read, word for word.
+func TestPrepare(t *testing.T) {
+	var seen readIn
+	tl := tool.New("read", "", func(_ context.Context, in readIn, _ tool.Env) (string, error) {
+		seen = in
+		return "ok", nil
+	}, tool.WithPrepare(func(args jsontext.Value) (jsontext.Value, error) {
+		if string(args) == `{"file":"a"}` {
+			return jsontext.Value(`{"path":"a"}`), nil
+		}
+		if string(args) == `{}` {
+			return nil, errors.New("read input is invalid")
+		}
+		return args, nil
+	}))
+	r, err := tl.Run(t.Context(), tool.Call{Args: jsontext.Value(`{"file":"a"}`)}, tool.Env{})
+	if err != nil || r.IsError || seen.Path != "a" {
+		t.Fatalf("result = %+v, %v, decoded %+v; want the rewritten arguments", r, err, seen)
+	}
+	r, err = tl.Run(t.Context(), tool.Call{}, tool.Env{})
+	if err != nil || !r.IsError || r.Text() != "read input is invalid" {
+		t.Fatalf("result = %+v (text %q), %v; want the prepare error verbatim", r, r.Text(), err)
+	}
+}
+
 // A Result output is used as it is, and a struct is its JSON.
 func TestOutputs(t *testing.T) {
 	res := tool.New("r", "", func(context.Context, struct{}, tool.Env) (tool.Result, error) {
