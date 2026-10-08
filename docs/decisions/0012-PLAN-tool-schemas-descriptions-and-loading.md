@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: completed
 date: 2026-10-08
 ---
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
@@ -1029,3 +1029,39 @@ P5's files passed the pre-add check, and `golangci-lint` with `--build-tags live
 6. **P5 had no gate run of its own.** P4's gates ran on a tree whose files were byte-for-byte P4's commit plus P5's two test files, so they were P5's gates too.
 7. **Before approval, Probe D corrected two of P5's assumptions:** the OpenAI provider has no default model, and the SDK returns one response object rather than an event stream. P5 was amended to match before it ran.
 8. **P1 missed this PLAN's own frontmatter** (deviation 2). P1 changed the index row to "in progress" but left `status: proposed` here. The build-order line would also have gone stale at P6. The owner added both to P6.
+
+## Execution record — P8 (2026-10-08)
+
+**P8 ran on 2026-10-08,** approved by the owner's "proceed" of that date, after the amendment that added it was committed (`c276658`). Commit: `bccf369`.
+
+- **Deviation 1,** recorded under P8 before it was fixed. The write and edit templates showed their results as `<path>` placeholders, which P4's no-markup rule rejects. The owner chose concrete instances: `wrote main.go (12 lines)` and `edited main.go: 2 replacements`.
+- **C3: each new rule, seen failing on a scratch copy** of the finished tree:
+  - without write's `## Returns`: `write: no ## Returns section`;
+  - read's "use bash with `grep`" changed to "use grep": `read: a Not for line names grep, which is not a tool here`;
+  - without edit's "Not for" bullet: `edit: no Not for line`;
+  - write cut to two bullets: `write: fewer than 3 bullets`.
+- **The gates:**
+  - lint printed `0 issues.` for linux, darwin and windows;
+  - Windows `go test ./...` had no `FAIL` or `panic:`;
+  - WSL `make preflight` printed `preflight passed`, and WSL `go test -race ./...` exited 0;
+  - Windows `make preflight` printed `preflight passed`.
+
+  The staged snapshot was then checked alone, with `go build ./...`, `go test ./tool/... ./llm/...`, the records check and the three scans.
+- **Probe A after P8** (Messages-shape bytes, on Windows):
+
+  | Tool | Description | Definition |
+  | :--- | ---: | ---: |
+  | read | 858 | 1,364 |
+  | write | 533 | 872 |
+  | edit | 840 | 1,686 |
+  | bash | 738 | 1,281 |
+  | powershell | 790 | 1,339 |
+  | **total** | | **6,542** (4,615 after P4) |
+
+  Every description is within 1,200 bytes, and every definition within 2,000.
+
+**What P8 predicted wrongly:**
+
+1. **The templates broke P4's rule** (deviation 1). The plan's own drafts were checked for size before they were written into it, but not against P4's shape rules.
+2. **The definition sizes.** The plan estimated them from the schemas as they were after P4. Step 3's longer parameter descriptions add 56 bytes to each shell schema (423 to 479), and deviation 1 adds 16–17 bytes each to write and edit.
+3. **Where the checks live.** The plan put them inline in `descriptionShape`. They are in a helper, `agentFirst`, which it calls; the behaviour is the same.
