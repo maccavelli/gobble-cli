@@ -18,8 +18,7 @@ type writeIn struct {
 // Write is the write tool: it replaces or creates a file, and its parent
 // directories. The write is atomic, and holds the file's mutation lock.
 func Write() tool.Tool {
-	return tool.New("write", "Write a whole file: create it, with any missing parent directories, or replace its content. "+
-		"To change part of an existing file, use edit.",
+	return tool.New("write", description("write", Options{}.withDefaults()),
 		func(_ context.Context, in writeIn, env tool.Env) (tool.Result, error) {
 			abs := resolve(env, in.Path)
 			unlock := fsx.Lock(abs)

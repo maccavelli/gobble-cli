@@ -41,7 +41,7 @@ The tier is each package's `Stability:` line in its `doc.go`. **stable** package
 | `llm/catalog` | beta | The model catalog (placeholder). |
 | `llm/llmtest` | stable | A scripted `llm.Provider` and request assertions, for tests. |
 | `tool` | stable | The tool contract, with the workspace roots each call gets. A tool publishes a schema with its bounds and defaults, and validates the Go type's own. |
-| `tool/builtin` | beta | The built-in tools: `read` (numbered lines, directory listings), `write`, `edit` (multi-edit with layered, guarded matching and a compare-and-swap), and `bash` and, on Windows, `powershell` (process trees, a default timeout, the whole output of long commands kept 7 days). |
+| `tool/builtin` | beta | The built-in tools: `read` (numbered lines, directory listings), `write`, `edit` (multi-edit with layered, guarded matching and a compare-and-swap), and `bash` and, on Windows, `powershell` (process trees, a default timeout, the whole output of long commands kept 7 days). Descriptions are Markdown templates in describe/, filled from the options. |
 | `tool/toolsearch` | beta | Deferred tool exposure (placeholder). |
 | `permission` | beta | The policy contract that approves tool calls. |
 | `session` | stable | The session log contract, in Pi's JSONL v3 shapes. |

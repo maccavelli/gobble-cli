@@ -20,11 +20,6 @@ type editIn struct {
 	Edits []edit `json:"edits" jsonschema:"one or more replacements, each matched against the file as it was before this call; they must not overlap, so merge changes to the same lines into one edit"`
 }
 
-const editDescription = "Edit one file by replacing text. Each edits[].oldText must occur once in the file as it was before " +
-	"this call, and no two may overlap: put changes to nearby lines into one edit. Keep oldText short but unique, " +
-	"and copy it from the file without read's line numbers. Small differences in whitespace, indentation, quotes and " +
-	"escaping are forgiven, but a forgiving match far larger than oldText is refused."
-
 // beforeWrite runs between an edit's computation and its compare-and-swap.
 // Only tests set it, to change the file underneath an edit.
 var beforeWrite func(abs string)
@@ -38,7 +33,7 @@ var errChanged = errors.New("the file changed while the edit was being made; rea
 // compared with the file again just before the write, so a change by
 // another process fails the edit instead of being overwritten.
 func Edit() tool.Tool {
-	return tool.New("edit", editDescription,
+	return tool.New("edit", description("edit", Options{}.withDefaults()),
 		func(_ context.Context, in editIn, env tool.Env) (tool.Result, error) {
 			name := shown(env, in.Path)
 			if len(in.Edits) == 0 {

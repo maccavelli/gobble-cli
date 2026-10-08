@@ -23,13 +23,6 @@ type readIn struct {
 	Limit  int    `json:"limit,omitzero" jsonschema:"how many lines (or entries) to show"`
 }
 
-var readDescription = fmt.Sprintf("Read a file, or list a directory. Lines come numbered as \"N: text\"; "+
-	"the numbers are not part of the file, so leave them out of an edit's oldText. "+
-	"At most %d lines or %d KB are shown, and a line longer than %d characters is cut; "+
-	"the last line of the output says the offset to continue from. "+
-	"Read a large file in a few big pieces rather than many small ones. "+
-	"Binary files are refused, and images are not sent to the model yet.", maxLines, maxBytes/1024, maxLineChars)
-
 // imageNotSent is read's note for an image: the provider SDK carries text
 // only (0005-PLAN F1, owner's decision 3 of 2026-10-07).
 const imageNotSent = "[The image was not sent: gobble cannot send images to models yet.]"
@@ -43,7 +36,7 @@ func Read() tool.Tool { return readWith(Options{}.withDefaults()) }
 // binary files. It may also read o.OutputDir, where long command output is
 // kept, without asking.
 func readWith(o Options) tool.Tool {
-	return tool.New("read", readDescription,
+	return tool.New("read", description("read", o),
 		func(_ context.Context, in readIn, env tool.Env) (tool.Result, error) {
 			name := shown(env, in.Path)
 			ws := readWorkspace(env, o)

@@ -11,12 +11,6 @@ import (
 	"github.com/maccavelli/gobble-cli/tool"
 )
 
-const bashDescription = "Run a command with bash, in the working directory or in workdir (use workdir instead of cd). " +
-	"stdout and stderr come back together, as the last 2000 lines or 50 KB, ending with the exit status; " +
-	"a longer output is saved whole to a file the output names, which read can open. " +
-	"timeout is in seconds: 120 when not given, at most 600. " +
-	"For files, prefer read, edit and write to cat, sed and echo."
-
 // Bash is the bash tool with the default options.
 func Bash() tool.Tool { return bashWith(Options{}.withDefaults()) }
 
@@ -39,7 +33,7 @@ func bashWith(o Options) tool.Tool {
 			return []string{"-c", command}
 		},
 	}
-	return tool.New("bash", bashDescription,
+	return tool.New("bash", description("bash", o),
 		func(ctx context.Context, in shellIn, env tool.Env) (tool.Result, error) {
 			return runShell(ctx, sh, o, in, env)
 		},

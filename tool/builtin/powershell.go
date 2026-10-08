@@ -12,13 +12,6 @@ import (
 // (0005-MADR, Tools, powershell row).
 const utf8Prefix = "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8;"
 
-const powershellDescription = "Run a command with PowerShell (pwsh when installed, else Windows PowerShell), " +
-	"in the working directory or in workdir (use workdir instead of Set-Location). " +
-	"Output comes back as the last 2000 lines or 50 KB, ending with the exit status; " +
-	"a longer output is saved whole to a file the output names, which read can open. " +
-	"timeout is in seconds: 120 when not given, at most 600. " +
-	"Windows PowerShell 5.1 has no && or ||; separate commands with ; and check $LASTEXITCODE."
-
 // powershellWith is the powershell tool, on Windows: pwsh.exe, else
 // powershell.exe, with no profile and no prompts, run by the shared runner.
 func powershellWith(o Options) tool.Tool {
@@ -29,7 +22,7 @@ func powershellWith(o Options) tool.Tool {
 			return []string{"-NoLogo", "-NoProfile", "-NonInteractive", "-Command", utf8Prefix + command}
 		},
 	}
-	return tool.New("powershell", powershellDescription,
+	return tool.New("powershell", description("powershell", o),
 		func(ctx context.Context, in shellIn, env tool.Env) (tool.Result, error) {
 			return runShell(ctx, sh, o, in, env)
 		},
