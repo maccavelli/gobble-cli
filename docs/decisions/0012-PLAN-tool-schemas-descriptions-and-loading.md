@@ -45,7 +45,7 @@ The plan is done when each of these holds:
 
 | Phase | Files |
 | :--- | :--- |
-| P1 | `docs/decisions/0012-MADR-tool-schemas-descriptions-and-loading.md`, `docs/decisions/0012-PLAN-tool-schemas-descriptions-and-loading.md`, `docs/decisions/0005-MADR-v1-feature-scope.md`, `docs/decisions/0005-PLAN-v1-feature-scope.md`, `docs/README.md` |
+| P1 | `docs/decisions/0012-MADR-tool-schemas-descriptions-and-loading.md`, `docs/decisions/0012-PLAN-tool-schemas-descriptions-and-loading.md`, `docs/decisions/0005-MADR-v1-feature-scope.md`, `docs/decisions/0005-PLAN-v1-feature-scope.md`, `docs/README.md`; *(2026-10-08, deviation 1:)* `README.md` |
 | P2 | `tool/tool.go`, `tool/tool_test.go`, `tool/doc.go`, `docs/architecture.md` |
 | P3 | `tool/builtin/schema.go` (new), `tool/builtin/schema_test.go` (new), `tool/builtin/read.go`, `tool/builtin/edit.go`, `tool/builtin/bash.go`, `tool/builtin/powershell.go`, `tool/builtin/shell.go` |
 | P4 | `tool/builtin/describe.go` (new), `tool/builtin/describe_test.go` (new), `tool/builtin/describe/read.md`, `write.md`, `edit.md`, `bash.md`, `powershell.md` (new), `tool/builtin/read.go`, `tool/builtin/write.go`, `tool/builtin/edit.go`, `tool/builtin/bash.go`, `tool/builtin/powershell.go`, `docs/architecture.md` |
@@ -120,6 +120,13 @@ F1b commit (the owner; staged 2026-10-08)
 Go code in this plan is indented with spaces, for the Markdown linter. `gofmt`, run by `make pre-add-check`, writes it with tabs.
 
 ### P1 — Records (accepts D1–D14; places D4, D6–D11 and D14; closes nothing by code)
+
+**Deviation 1 (2026-10-08), found before P1 ran.**
+
+- **What was found.** Accepting 0012-MADR makes two status lines false that no P1 step touched:
+  - the root `README.md` calls 0012-MADR "proposed", and `README.md` is not in P1's file list;
+  - `docs/README.md`'s build order says 0012-PLAN is "Proposed. Once approved…".
+- **The owner's decision (2026-10-08):** add both to P1. `README.md` joins P1's file list, and Step 4 gains steps (e) and (f).
 
 **Step 1. `docs/decisions/0012-MADR-tool-schemas-descriptions-and-loading.md`.**
 
@@ -211,6 +218,8 @@ Go code in this plan is indented with spaces, for the Markdown linter. `gofmt`, 
 - 0012 PLAN row status: `in progress (approved <date>)`.
 - 0005-MADR row status: append `; 0012 amendment 2026-10-08` before the closing `)`.
 - 0005-PLAN row status: append `; 0012 notes 2026-10-08` before the closing `)`.
+- *(Deviation 1.)* (e) The build order's 0012-PLAN line reads `**0012-PLAN.** Approved 2026-10-08, and in progress. Its P1–P4 run before F1c, whose new tools use the schema and description pieces P2–P4 build.`
+- *(Deviation 1.)* (f) `README.md`: the 0012-MADR link's `proposed` becomes `accepted`.
 
 **Verification.**
 

@@ -123,7 +123,7 @@ Tier definitions:
 | `grep` | 1.0 | `{pattern, path?, glob?, ignoreCase?, literal?, context?, limit?=100}`. Pure Go: `regexp`, a gitignore-aware walk, and `doublestar` globs. Lines are capped at 500 characters. No ripgrep download. This decides report D13. |
 | `find` | 1.0 | `{pattern, path?, limit?=1000}`. Pure Go, includes hidden files, respects `.gitignore`, and skips `.git` and `node_modules`. |
 | `ls` | 1.0 | ~~`{path?, limit?=500}`. Sorted, with a `/` suffix on directories.~~ *(2026-10-08: replaced by `tree`; `read` lists one directory. See the amendment "native tools".)* |
-| `tool_search` | 1.0 | BM25 over names, descriptions, and schema properties. Loaded tools are recorded in the transcript so they survive resume and fork (`extensions/tool-search/tool.ts`). |
+| `tool_search` | 1.0 | BM25 over names, descriptions, and schema properties. Loaded tools are recorded in the transcript so they survive resume and fork (`extensions/tool-search/tool.ts`). *(2026-10-08, 0012-MADR D9, D11: ranked by an in-house BM25 in `tool/toolsearch`; found tools load with their families, and loads are append-only.)* |
 | `todo` | 1.0 | `{todos:[{content,status,priority}]}`. Published as ACP `plan` updates and persisted as `custom{gobble.todo}`. `/todos`. Pi has this only as an example. |
 | `task` (subagents) | 1.x | `{agent, prompt, description}`. Runs a child gobble session in-process through ACP, linked by `parentSession`. Progress is relayed as `tool_call_update`. Batches may run in parallel. Depth limit 1 by default. Agents are `agents/*.md` (frontmatter `name`, `description`, `model`, `thinking`, `tools`, `mode`; the body is the system prompt). Pi has this only as an example. |
 | `web_fetch` | 1.x | `{url, format: markdown|text|html, maxBytes?}`. HTML is converted to Markdown. Open-world: asks by default. |
@@ -184,13 +184,13 @@ Tier definitions:
 | Capability | Tier | Behaviour |
 |---|---|---|
 | stdio and Streamable HTTP | 1.0 | Through the official go-sdk. SSE is rejected. Advertises `mcpCapabilities.http = true`, `sse = false`, `acp = false`. |
-| `mcp.json` | 1.0 | Pi-compatible schema (`command`, `args`, `env`, `cwd`, `url`, `headers`, `oauth`, `timeout`, `enabled`, `exposure`, `toolExposure` globs) with `${ENV}` and `!command` values. Unioned with `session/new.mcpServers`; the session's names win. |
+| `mcp.json` | 1.0 | Pi-compatible schema (`command`, `args`, `env`, `cwd`, `url`, `headers`, `oauth`, `timeout`, `enabled`, `exposure`, `toolExposure` globs) with `${ENV}` and `!command` values. Unioned with `session/new.mcpServers`; the session's names win. *(2026-10-08, 0012-MADR D7: a server with no `exposure` key is deferred.)* |
 | Tool naming and output | 1.0 | `mcp__<server>__<tool>`, at most 64 characters, with a hash suffix on overflow. Output over 20 KB is middle-truncated, with the full text in a file. |
 | Lifecycle | 1.0 | Start-up waits up to 10 s. HTTP 408, 429, and 5xx are retried twice; tool calls are never retried. `list_changed` is handled, and the server reconnects on its next use. For a stdio server, stop means close stdin, then SIGTERM, then SIGKILL to the process group. Roots are `cwd` plus the additional directories. Progress notifications reset the timeout. |
 | OAuth | 1.0 | Discovery, dynamic client registration, PKCE, a loopback callback guarded by `CrossOriginProtection`, and manual paste. Tokens are kept in the secret store. |
 | CLI | 1.0 | `gobble mcp add|remove|list|get|login|logout`. `/mcp [status|reconnect]`. |
 | Sampling and elicitation | 1.x | An MCP server's `sampling/createMessage` is served by the session's model after a permission request. Elicitation maps to ACP elicitation when the client advertises it (unstable), otherwise to `session/request_permission`. |
-| `gobble mcp serve` | 1.x | gobble as an MCP **server**. It exposes `gobble_run` (prompt to final text in a new session) and `gobble_session_prompt`, so any MCP host can delegate to gobble. |
+| `gobble mcp serve` | 1.x | gobble as an MCP **server**. It exposes `gobble_run` (prompt to final text in a new session) and `gobble_session_prompt`, so any MCP host can delegate to gobble. *(2026-10-08, 0012-MADR D4: it also serves the native file tools, with the same schemas and rules.)* |
 
 #### Clients and modes (`acpserver`, `acpclient`, `internal/cli`, `internal/tui`)
 
@@ -876,7 +876,9 @@ Otherwise it stays a shell command. File status, diffs, git, checksums and archi
 10. **Documents in `read`**: text from PDF, DOCX, XLSX and PPTX files, within bounded ranges: PDF pages, sheet ranges with a cell cap (goose G4–G6; grok-build K9, K10; Kilo L4, L5). No tool is added, as grok-build and Kilo fold documents into read.
 11. **`request_permissions {permissions, reason}`** asks the client for a scoped read, write or network grant, for the turn or the session, instead of failing (codex X5, X6).
 
-**Exposure.** These tools are direct: read, write, edit, `apply_patch` (for GPT-family models), grep, find, `tree`, move, delete, copy, mkdir, bash, powershell, the job tools and `request_permissions`. `lsp`, `monitor` and `notebook` are deferred, found through `tool_search` (B6; codex X7, X8, X12; grok-build K16), so the descriptions sent with every request stay few.
+~~**Exposure.** These tools are direct: read, write, edit, `apply_patch` (for GPT-family models), grep, find, `tree`, move, delete, copy, mkdir, bash, powershell, the job tools and `request_permissions`. `lsp`, `monitor` and `notebook` are deferred, found through `tool_search` (B6; codex X7, X8, X12; grok-build K16), so the descriptions sent with every request stay few.~~
+
+*(2026-10-08, superseded by [0012-MADR](0012-MADR-tool-schemas-descriptions-and-loading.md) D7.)* **Exposure.** Direct, on every request: read, write, edit (or `apply_patch` in place of write and edit for GPT-family models), grep, find, `tree`, move, delete, copy, mkdir, bash, powershell on Windows, `todo`, and `tool_search` whenever anything is deferred. The job tools join them when X2 builds them. Deferred, found through `tool_search`: `request_permissions` (also loaded when a call is refused for a permission), `lsp`, `monitor`, `notebook`, the three MCP resource tools, and every MCP server's tools unless `mcp.json` sets `exposure` to `direct`.
 
 **Libraries.** None is chosen here.
 * For the file operations, `tree`, the job tools without a terminal, `request_permissions` and DOCX and PPTX, the standard library is enough (`os`, `io/fs`, `archive/zip`, `encoding/xml`).
@@ -895,4 +897,16 @@ Otherwise it stays a shell command. File status, diffs, git, checksums and archi
 **Consequences.**
 * The line gains eleven tools or capabilities, and loses `ls`.
 * Plan mode and undo can recognise moves and deletes by their kind, without parsing shell text.
-* The direct list is the 17 names under Exposure. Most models see 16 of them, all but `apply_patch`. GPT-family models see 15: `apply_patch` in place of edit and write. Those counts are for Windows; elsewhere there is no `powershell`, so one fewer. (The 17 are 13 named tools, the three job tools and `request_permissions`.) `lsp`, `monitor` and `notebook` are deferred. The planned todo, `tool_search` and MCP resource tools (F1d) are unchanged by this amendment.
+* ~~The direct list is the 17 names under Exposure. Most models see 16 of them, all but `apply_patch`. GPT-family models see 15: `apply_patch` in place of edit and write. Those counts are for Windows; elsewhere there is no `powershell`, so one fewer. (The 17 are 13 named tools, the three job tools and `request_permissions`.) `lsp`, `monitor` and `notebook` are deferred. The planned todo, `tool_search` and MCP resource tools (F1d) are unchanged by this amendment.~~
+* *(2026-10-08, 0012-MADR D7.)* The direct list is 14 names on Windows for most models and 13 for GPT-family models; elsewhere, without powershell, 13 and 12. The job tools add three when X2 builds them.
+
+### Amendment (2026-10-08): tool schemas, descriptions and loading
+
+**Why.** The owner asked on 2026-10-08 for the native tools' schemas, proposed JSON-RPC 2.0, Markdown descriptions, deferring every tool but `tool_search`, and bleve for BM25. [0011-REPORT](../reports/0011-REPORT-native-tools-survey.md) evaluated the proposal, and [0012-MADR](0012-MADR-tool-schemas-descriptions-and-loading.md) decides it.
+
+**What changes here.**
+* The Exposure paragraph of the native-tools amendment, and its direct-list consequence, are replaced by 0012-MADR D7. `request_permissions` is deferred; `todo` and `tool_search` are named direct.
+* An MCP server with no `exposure` key is deferred (0012-MADR D7), extending the bridged-Pi rule of this record's Exposure modes notes.
+* `gobble mcp serve` also serves the native file tools (0012-MADR D4).
+* `tool_search` ranks with an in-house BM25 in `tool/toolsearch`, and bleve is not adopted for it (0012-MADR D11, D12).
+* Tool schemas and descriptions follow 0012-MADR D1–D3 and D5.

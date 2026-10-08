@@ -65,6 +65,7 @@ They may start after F4 in any order.
 5. Implement `grep`, `find`, and ~~`ls`~~ in pure Go with a gitignore-aware
    walk. Use the limits from 0005-MADR.
    *(2026-10-08, 0005-MADR amendment "native tools": F1c also builds `move`, `delete`, `copy`, `mkdir` and `tree`; `tree` replaces `ls`.)*
+   *(2026-10-08, 0012-MADR: F1c's tools follow D1, D2 and D5, through `tool.WithSchema` and `tool/builtin/describe/`, with the schemas 0012-MADR's table gives them.)*
 6. Add the per-real-path mutation queue and `os.Root` confinement over
    `cwd` plus the additional directories.
 7. When the client has the capability, route file I/O through ACP
@@ -72,6 +73,7 @@ They may start after F4 in any order.
    `terminal/*` when the setting is on.
 8. Implement `todo`, publishing ACP `plan` updates; `tool_search` (BM25);
    and the MCP resource tools.
+   *(2026-10-08, 0012-MADR: F1d builds D7's tiers, D8's families and D9's loading, D11's BM25 in `tool/toolsearch`, and D14's client data; the three resource tools take 0012-MADR's schemas.)*
 
 **Accept:**
 
@@ -109,6 +111,7 @@ They may start after F4 in any order.
 ### F3 — context, prompts, skills, templates (1.0)
 
 *(2026-10-07, 0005-MADR amendment "the best of several harnesses": choice 8: a frozen per-session context baseline, with changes appended as messages and per-turn state kept out of the system prompt. Nested `AGENTS.md` on read (choice 3) lands here.)*
+*(2026-10-08, 0012-MADR D6 and D9: the `tools` section carries the cross-tool guidance, moved out of bash's description, and the categories of deferred tools; the tools list is part of the frozen baseline and grows only by appending.)*
 
 1. Context-file walk (`AGENTS.override.md`, `AGENTS.md`, `CLAUDE.md`),
    worktree de-duplication, `SYSTEM.md`, and `APPEND_SYSTEM.md`.
@@ -220,6 +223,7 @@ API.
 ### F6 — permissions, modes, trust (1.0; extends 0002-PLAN Phase 6)
 
 *(2026-10-08, 0005-MADR amendment "native tools": `request_permissions` lands here. A delete always asks, whatever an allow rule says.)*
+*(2026-10-08, 0012-MADR D10: a bash command that is one plain `rm`, `rmdir`, `mv`, `cp` or `mkdir` with flags that map exactly runs as the native tool; anything else is permission-checked as a shell command. D7: `request_permissions` is deferred, and loads when a call is refused for a permission.)*
 
 *(2026-10-07, 0005-MADR amendment "the best of several harnesses": choice 5: bash parsed with `mvdan.cc/sh` for per-sub-command patterns, arity-prefix "always", inert-operator masking and fail-closed raw patterns. Choice 6: opencode's last-match-wins rules, hidden denied tools, feedback on rejection, session and per-project "always", and Kilo's hard ceilings, protected paths and provenance. Choice 10: the two modes stay; no custom agents yet.)*
 
@@ -266,6 +270,8 @@ API.
   `Example` shows it.
 
 ### F8 — MCP completion (1.0; extends 0002-PLAN Phase 5)
+
+*(2026-10-08, 0012-MADR D7: an MCP server with no `exposure` key is deferred.)*
 
 1. Pi's `mcp.json` schema, including `exposure` and the `toolExposure`
    globs, and the value interpolation.
@@ -420,6 +426,8 @@ results. The child sessions are listed with their parent. A task that
 exceeds the depth limit gets a tool error.
 
 ### X4 — clients and servers 1.x
+
+*(2026-10-08, 0012-MADR D4 and D14: `gobble mcp serve` also serves the native file tools with their schemas, and each gains an `outputSchema`.)*
 
 1. `gobble rpc`: the Pi JSONL RPC shim over an in-process ACP client.
    Commands follow the 0002-MADR mapping table.
@@ -1255,7 +1263,7 @@ The owner added eleven native tools or capabilities. [0011-REPORT](../reports/00
 | :--- | :--- | :--- |
 | `move`, `delete`, `copy`, `mkdir` | F1c | direct |
 | `tree` (replaces `ls`) | F1c | direct |
-| `request_permissions` | F6 | direct |
+| `request_permissions` | F6 | ~~direct~~ deferred (0012-MADR D7) |
 | `job_output`, `job_input`, `job_kill`; a yield window on `bash` and `powershell` | X2 | direct |
 | `monitor` | X2 | deferred |
 | `lsp` | X7 | deferred |
@@ -1263,3 +1271,5 @@ The owner added eleven native tools or capabilities. [0011-REPORT](../reports/00
 | documents in `read` (PDF, DOCX, XLSX, PPTX) | X8 (new) | — |
 
 F1c, the next sub-phase, therefore builds grep, find, the four file operations and `tree`, with the in-house gitignore matcher. 0010-REPORT §1 is corrected on the same date: Kilo's `read-extract.ts` converts DOCX and XLSX, not `.ipynb`, as 0011-REPORT's verification found.
+
+**2026-10-08 — 0012-MADR: tool schemas, descriptions and loading.** [0012-PLAN](0012-PLAN-tool-schemas-descriptions-and-loading.md) builds D1, D2, D3 and D5 for the five built-in tools. The rest land where their tools are built, by the notes of this date at F1 steps 5 and 8, F3, F6, F8 and X4. `request_permissions` is deferred.

@@ -30,7 +30,7 @@ Each choice is argued, with source evidence, in the records:
 What is gobble's own: one ACP agent as the command API for every client, native file operations that
 the permission rules and undo can see, a two-tier tool exposure that keeps the prompt cache stable, and
 error messages written in one style throughout
-([0012-MADR](docs/decisions/0012-MADR-tool-schemas-descriptions-and-loading.md), proposed).
+([0012-MADR](docs/decisions/0012-MADR-tool-schemas-descriptions-and-loading.md), accepted).
 
 ## Status
 
