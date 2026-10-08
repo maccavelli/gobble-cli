@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/jsonschema-go/jsonschema"
+
 	"github.com/maccavelli/gobble-cli/tool"
 )
 
@@ -38,6 +40,38 @@ func TestNewDerivesSchema(t *testing.T) {
 	}
 	if spec.Name != "read" || spec.Kind != tool.KindRead {
 		t.Errorf("spec = %+v", spec)
+	}
+}
+
+type listIn struct {
+	Items []string `json:"items" jsonschema:"the items"`
+	Limit int      `json:"limit,omitzero" jsonschema:"how many"`
+}
+
+// The published schema has no null types and carries WithSchema's bounds,
+// while Run validates against the Go type's schema alone, so the tool's
+// code sees the arguments it sees today (0012-MADR D2 rules 5 and 8).
+func TestPublishedSchema(t *testing.T) {
+	var seen listIn
+	tl := tool.New("list", "list", func(_ context.Context, in listIn, _ tool.Env) (string, error) {
+		seen = in
+		return "ok", nil
+	}, tool.WithSchema(func(s *jsonschema.Schema) {
+		s.Properties["items"].MinItems = new(1)
+		s.Properties["limit"].Maximum = new(float64(10))
+	}))
+	s := string(tl.Spec().InputSchema)
+	for _, want := range []string{`"items":{"type":"array"`, `"minItems":1`, `"maximum":10`} {
+		if !strings.Contains(s, want) {
+			t.Errorf("schema %s lacks %s", s, want)
+		}
+	}
+	if strings.Contains(s, `"null"`) {
+		t.Errorf("schema %s offers null", s)
+	}
+	r, err := tl.Run(t.Context(), tool.Call{Name: "list", Args: jsontext.Value(`{"items":[],"limit":50}`)}, tool.Env{})
+	if err != nil || r.IsError || seen.Limit != 50 {
+		t.Fatalf("run = %+v, %v, seen %+v; want the call to reach the tool, whose code enforces the published bounds", r, err, seen)
 	}
 }
 

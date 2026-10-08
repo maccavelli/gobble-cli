@@ -151,6 +151,7 @@ type config struct {
 	describe    func(Call, Env) string
 	outside     func(Call, Env) []string
 	prepare     func(jsontext.Value) (jsontext.Value, error)
+	schema      func(*jsonschema.Schema)
 }
 
 // WithOutside sets how a call's paths outside the roots are found
@@ -185,6 +186,14 @@ func WithExposure(exposure Exposure) Option {
 // WithAnnotations sets the MCP hints.
 func WithAnnotations(annotations Annotations) Option {
 	return func(cfg *config) { cfg.annotations = annotations }
+}
+
+// WithSchema adds what struct tags cannot say to the schema a model sees:
+// bounds, defaults, enums and minItems (0012-MADR D1, D2). Run does not
+// validate against them: the tool's own code enforces what WithSchema
+// publishes, in its own words (0012-MADR D2 rule 8).
+func WithSchema(adjust func(s *jsonschema.Schema)) Option {
+	return func(cfg *config) { cfg.schema = adjust }
 }
 
 type generic[In, Out any] struct {
@@ -280,7 +289,10 @@ func resultOf(out any) (Result, error) {
 // (0004-MADR), so fields tagged omitzero are optional and a jsonschema tag
 // is a description. An Out of type Result is returned as is, and a string
 // is text. New panics if In has no JSON Schema, which is a programming
-// error found by the first test that builds the tool.
+// error found by the first test that builds the tool. The schema a model
+// sees (Spec.InputSchema) has no null types and carries WithSchema's
+// additions; Run validates against the schema derived from In alone, so
+// those additions are the tool's own code to enforce.
 func New[In, Out any](name, description string, fn func(context.Context, In, Env) (Out, error), opts ...Option) Tool {
 	cfg := config{}
 	for _, opt := range opts {
@@ -296,7 +308,18 @@ func New[In, Out any](name, description string, fn func(context.Context, In, Env
 	if err != nil {
 		panic(fmt.Sprintf("tool: %s: resolve input schema: %v", name, err))
 	}
-	raw, err := json.Marshal(schema)
+	published, err := jsonschema.For[In](nil)
+	if err != nil {
+		panic(fmt.Sprintf("tool: %s: input schema: %v", name, err))
+	}
+	nonNull(published)
+	if cfg.schema != nil {
+		cfg.schema(published)
+	}
+	if _, err := published.Resolve(nil); err != nil {
+		panic(fmt.Sprintf("tool: %s: resolve published schema: %v", name, err))
+	}
+	raw, err := json.Marshal(published)
 	if err != nil {
 		panic(fmt.Sprintf("tool: %s: encode input schema: %v", name, err))
 	}
@@ -308,4 +331,20 @@ func New[In, Out any](name, description string, fn func(context.Context, In, Env
 		schema:      raw,
 		resolved:    resolved,
 	}
+}
+
+// nonNull drops the "null" that jsonschema-go adds to the type of a slice
+// or a pointer, here and in every nested property and item: a model is
+// never told an argument may be null (0012-MADR D2 rule 5).
+func nonNull(s *jsonschema.Schema) {
+	if s == nil {
+		return
+	}
+	if len(s.Types) == 2 && s.Types[0] == "null" {
+		s.Type, s.Types = s.Types[1], nil
+	}
+	for _, p := range s.Properties {
+		nonNull(p)
+	}
+	nonNull(s.Items)
 }
