@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: completed
 date: 2026-10-08
 ---
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
@@ -707,6 +707,13 @@ Either way, the key never appears on a command line, in a file in the tree, or i
 
 ### P6 — Record (all)
 
+**Deviation 2 (2026-10-08), found before P6 ran.**
+
+- **What was found.** No step covers two status lines:
+  - this PLAN's own frontmatter, which P1 left at `status: proposed`;
+  - `docs/README.md`'s build-order line, which says "Approved 2026-10-08, and in progress".
+- **The owner's decision (2026-10-08):** add both to P6. Step 3 gains the frontmatter, `status: completed`, and the build-order line.
+
 **Step 1.** Append `## Execution record (<date>)` to this PLAN:
 
 - which phases ran;
@@ -725,7 +732,7 @@ Either way, the key never appears on a command line, in a file in the tree, or i
   - **When they differ,** that is a deviation, put to the owner.
   - **When the live run has not happened,** the section says so, and P6 is re-opened when it has.
 
-**Step 3.** `docs/README.md`: the 0012-PLAN row reads `completed (<date>)`, or `in progress (P1–P5 complete; the live probe pending)`.
+**Step 3.** `docs/README.md`: the 0012-PLAN row reads `completed (<date>)`, or `in progress (P1–P5 complete; the live probe pending)`. *(Deviation 2:)* this PLAN's frontmatter reads `status: completed`, and the build-order line reads `**0012-PLAN.** Run: P1–P5 on 2026-10-08. P7 waits on go-llmprovider-sdk's per-tool strict flag.`
 
 **Verification.** `make check-records` exits 0, and `make preflight` prints `preflight passed`.
 
@@ -780,3 +787,71 @@ git diff <the records commit>..HEAD -- go.mod go.sum              -> empty (C2)
   - makes P5's live test assert `strict=false` for read, bash and powershell, and `strict=true` for write and edit;
   - adds a unit test, seen failing first, of the rule that sets the flag.
 - ~~**The per-provider schema adapter:** built only if P5's probe, or a provider's error, shows a failure (D3).~~ *(2026-10-08: rejected for now by the owner's D3 choice; Probe D showed it only partly works.)*
+
+## Execution record (2026-10-08)
+
+**P1–P5 ran, in order, each committed by the owner. P6 is this record.** Every phase ended with its Stability rule, and its staged snapshot was checked alone before the owner's commit:
+
+- `go build ./...`, and `go test ./tool/... ./llm/...`, on a checkout of the index;
+- the records check, and the identifier and hidden-character scans.
+
+| Phase | Commit | Result |
+| :--- | :--- | :--- |
+| P1 records | `451f863` | 0012-MADR accepted, 0005-MADR amended, eight 0012 notes in 0005-PLAN, with deviation 1 |
+| P2 tool contract | `a171e4a` | `tool.WithSchema`; a published schema with no `null`; validation unchanged |
+| P3 the five schemas | `a812f87` | bounds, defaults, `minItems` and `minLength` published; bash and powershell refuse an empty command |
+| P4 descriptions | `f845761` | five Markdown templates in `tool/builtin/describe/`; no Go description strings remain |
+| P5 strict probe | `dba822c` | `TestStrictOf`, and the live `TestStrictProbe`, run once |
+
+**C3: each new check, seen failing on a scratch copy.** Every mutation was asserted to land exactly once, and every log was read whole.
+
+- **P2:**
+  - without `nonNull(published)`: `TestPublishedSchema` failed, the schema having `"type":["null","array"]`, with `offers null`;
+  - with the hook applied to the validated schema: it failed with `list: invalid arguments: validating root: validating /properties/items: minItems: array length 0 is less than 1`, and `want the call to reach the tool`.
+- **P3:**
+  - steps 1 and 5 alone, on the P2 tree: `TestSchemaConvention` named all seven planned gaps. They were `edits` with no `minItems`, and read's `offset` and `limit` and the shells' `timeout` each with no `minimum` and no `default`. It also reported `timeout maximum <nil>, want 600` (and `1200` under the 20-minute options);
+  - without the empty-command refusal: `TestBoundsHold` failed, bash returning `[exit status 0]` for `{"command":"  "}`.
+- **P4:**
+  - a 200-byte first sentence: `read: the first paragraph is not one sentence of at most 160 bytes ending in a full stop`;
+  - a `## Notes` section: `edit: the heading ## Notes is not allowed, repeats, or is out of order`;
+  - 1,320 bytes added: `write: over 1200 bytes`;
+  - a hard-coded `600`: `TestDescriptionUsesOptions` failed, quoting the description's `at most 600.`
+- **P5:**
+  - `response.completed`'s tools taken instead of `response.created`'s: `stream: strictOf = map[other:true record:false]`;
+  - the response-object branch removed: `object: strictOf = map[], no tools in the reply`.
+
+**The gates.** After each of P2, P3 and P4, on the tree that phase commits onto:
+
+- lint printed `0 issues.` for linux, darwin and windows;
+- Windows `go test ./...` had no `FAIL` or `panic:`;
+- WSL `make preflight` printed `preflight passed`, and WSL `go test -race ./...` exited 0;
+- Windows `make preflight` printed `preflight passed`.
+
+P5's files passed the pre-add check, and `golangci-lint` with `--build-tags live_openai` printed `0 issues.` for all three GOOS.
+
+**Probe A after each phase** (Messages-shape definition bytes, on Windows):
+
+| After | Total | Notes |
+| :--- | ---: | :--- |
+| before 0012 | 4,276 | — |
+| P2 | 4,267 | `edits` is `"type":"array"`; no `null` anywhere |
+| P3 | 4,388 | read `offset` 1, default 1; `limit` 1–2000, default 2000; `edits` `minItems` 1, `oldText` `minLength` 1; shells' `command` `minLength` 1, `timeout` 1–600, default 120 |
+| P4 | 4,615 | largest description powershell's, 509 bytes (budget 1,200); largest definition edit's, 1,241 bytes (budget 2,000) |
+
+**The live probe (P5),** 2026-10-08:
+
+- **How it ran.** The agent ran `go test -tags live_openai -count=1 -run ^TestStrictProbe$ -v ./llm/provider` with the owner's permission, given in that turn. A runner in the scratchpad read the owner's key file into memory and passed it only in that process's environment. The output was checked for key material (the key, its last four characters, `sk-` shapes and OpenAI's masked echo) before it was read; it held none.
+- **The result:** `strict=true` for bash, edit, powershell, read and write, from `gpt-4.1-mini` at `/v1/responses`, in 2.7 s. This agrees with Probe D, now with P3's published schemas.
+
+**What this plan predicted wrongly:**
+
+1. **Two status lines** (deviation 1). Accepting 0012-MADR made the root README and the build order wrong, and no P1 step touched them. The owner added both to P1.
+2. **`make archtest` cannot confirm the live test's import.** P5 said it would confirm the test-only edge `llm/provider → tool/builtin`. `archtest` lists packages with default build tags, so it never loads `strict_live_test.go`. The edge breaks none of the nine rules: `llm/provider` is not among rule 1's core packages, and no other rule names `tool/builtin`. That is a reading of the rules, not a check.
+3. **The phases interleaved.**
+   - P3 and P5 were applied while the phase before them waited for its commit. Their files were separate, so each phase was still staged and committed alone.
+   - P4's gates ran with P5's two untracked test files in the tree. Its staged snapshot was then checked without them.
+4. **P1's lint of the 0005 records.** It counted 12 new markdownlint issues: `*` bullets, long lines, and one list without a blank line before it. All follow those records' own conventions. MADR and PLAN files are outside the repository's lint globs, and both 0012 records lint clean.
+5. **The staged hidden-character scan reads `.go` and `.golden` files only.** For the docs commits, its Markdown variant was run instead.
+6. **P5 had no gate run of its own.** P4's gates ran on a tree whose files were byte-for-byte P4's commit plus P5's two test files, so they were P5's gates too.
+7. **Before approval, Probe D corrected two of P5's assumptions:** the OpenAI provider has no default model, and the SDK returns one response object rather than an event stream. P5 was amended to match before it ran.
+8. **P1 missed this PLAN's own frontmatter** (deviation 2). P1 changed the index row to "in progress" but left `status: proposed` here. The build-order line would also have gone stale at P6. The owner added both to P6.

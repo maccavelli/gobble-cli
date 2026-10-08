@@ -729,3 +729,27 @@ The PLAN resolves these. None leaves a decision above open. *(2026-10-08: [0012-
 2. ~~**jsonschema-go v0.4.3 and `minProperties`.** Whether the library carries it (the table's note). This is checked by reading `jsonschema/schema.go` before the `request_permissions` row is built.~~ *(Resolved 2026-10-08: it does, V36.)*
 3. **The schema hook's shape on `tool.New`.** Either a `WithSchema(func(*jsonschema.Schema))` option, or `ForOptions.TypeSchemas` per input type. The PLAN picks one after reading `tool/tool.go`'s construction path, under D1's rule that constraints are set in Go.
 4. **The probe's model and credentials.** D3's live test reads its key from the environment, outside the tree, and is skipped without one. The PLAN names the model, among those Doc 4 and Doc 5 apply to.
+
+## Observed — execution results (2026-10-08)
+
+[0012-PLAN](0012-PLAN-tool-schemas-descriptions-and-loading.md) P1–P5 ran on 2026-10-08. Its execution record has the commits, the failures each check was seen to give, and the gates.
+
+**Borne out:**
+
+- **D1 and D2.**
+  - `tool.New` now derives a second schema, rewrites its `null` types away and applies `WithSchema`, and publishes it. `Run` still validates the Go type's own schema, so every existing test passed unedited.
+  - The five built-in tools publish their bounds, defaults, `minItems` and `minLength`, and `TestSchemaConvention` enforces the convention. F3 is closed.
+  - **D2 rule 8 held:** `TestBoundsHold` shows each published bound served within it, or refused in the tool's own words.
+- **D5.**
+  - The five descriptions are Markdown templates filled from the options, under `TestDescriptionShape`'s shape rules and budget. The largest description is 509 bytes, against a budget of 1,200; the largest definition is 1,241 bytes, against 2,000.
+  - The five definitions grew from 4,276 bytes to 4,615 (8%). F5 and F6 are closed.
+- **D3's probe.**
+  - The in-tree `TestStrictProbe` gave `strict=true` for all five tools (`gpt-4.1-mini`, `/v1/responses`), as Probe D did. OpenAI still makes every argument required.
+  - D3's opt-out, `strict: false` for read, bash and powershell, is still needed. It still waits on go-llmprovider-sdk's per-tool strict flag (D13), and lands as 0012-PLAN P7 when a release has one.
+
+**Contradicted:** nothing in the decisions. Two of the plan's predictions were wrong, and are recorded in its execution record:
+
+- `make archtest` cannot see a build-tagged test's imports;
+- accepting this record made two status lines stale.
+
+**Not yet exercised.** D4 and D6–D14 land in the 0005-PLAN sub-phases its notes name: F1c, F1d, F3, F6, F8 and X4. They are borne out or contradicted there.
