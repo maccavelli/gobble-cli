@@ -32,8 +32,8 @@ const (
 
 // shellIn is what bash and powershell take.
 type shellIn struct {
-	Command string `json:"command" jsonschema:"the command to run"`
-	Timeout int    `json:"timeout,omitzero" jsonschema:"seconds before the command is stopped"`
+	Command string `json:"command" jsonschema:"the command to run, in this shell's own syntax"`
+	Timeout int    `json:"timeout,omitzero" jsonschema:"seconds before the command, and everything it started, is stopped"`
 	Workdir string `json:"workdir,omitzero" jsonschema:"the directory to run in, relative to the working directory or absolute; use this instead of cd"`
 }
 

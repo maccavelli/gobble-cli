@@ -12,7 +12,13 @@ import (
 )
 
 // The section headings D5 allows, in their order.
-var sections = []string{"## Use when", "## Rules", "## Example"}
+var sections = []string{"## Use when", "## Returns", "## Rules", "## Example"}
+
+// required are the sections every description has (0012-MADR D5 item 6).
+var required = []string{"## Use when", "## Returns"}
+
+// notFor is a "Not for" bullet, and the tool it sends the reader to.
+var notFor = regexp.MustCompile(`^- Not for [^:]+: use ([a-z_]+)`)
 
 // html is markup D5 keeps out: "<" before a letter or "/".
 var html = regexp.MustCompile(`<[A-Za-z/]`)
@@ -32,12 +38,16 @@ func TestDescriptionShape(t *testing.T) {
 		t.Fatalf("templates %v, want %v", names, want)
 	}
 	d := describeDataFor(Options{}.withDefaults())
+	var tools []string
+	for _, tl := range ToolsWith(Options{}) {
+		tools = append(tools, tl.Spec().Name)
+	}
 	for _, name := range names {
 		text, err := renderDescription(name, d)
 		if err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}
-		for _, problem := range descriptionShape(text) {
+		for _, problem := range descriptionShape(text, tools) {
 			t.Errorf("%s: %s", name, problem)
 		}
 	}
@@ -56,8 +66,9 @@ func TestDescriptionShape(t *testing.T) {
 	}
 }
 
-// descriptionShape lists where a rendered description breaks D5's rules.
-func descriptionShape(text string) []string {
+// descriptionShape lists where a rendered description breaks D5's rules,
+// tools being the names of the tools a "Not for" line may send the reader to.
+func descriptionShape(text string, tools []string) []string {
 	var out []string
 	first, _, _ := strings.Cut(text, "\n\n")
 	if strings.Contains(first, "\n") || len(first) > 160 || strings.HasPrefix(first, "#") || !strings.HasSuffix(first, ".") {
@@ -82,6 +93,38 @@ func descriptionShape(text string) []string {
 	}
 	if len(text) > 1200 {
 		out = append(out, "over 1200 bytes")
+	}
+	return append(out, agentFirst(text, tools)...)
+}
+
+// agentFirst lists where a description breaks D5 item 6: its required
+// sections, three bullets at least, and a "Not for" line naming a tool that
+// exists.
+func agentFirst(text string, tools []string) []string {
+	var out []string
+	lines := strings.Split(text, "\n")
+	for _, h := range required {
+		if !slices.Contains(lines, h) {
+			out = append(out, "no "+h+" section")
+		}
+	}
+	bullets, nots := 0, 0
+	for _, line := range lines {
+		if strings.HasPrefix(line, "- ") {
+			bullets++
+		}
+		if m := notFor.FindStringSubmatch(line); m != nil {
+			nots++
+			if !slices.Contains(tools, m[1]) {
+				out = append(out, "a Not for line names "+m[1]+", which is not a tool here")
+			}
+		}
+	}
+	if bullets < 3 {
+		out = append(out, "fewer than 3 bullets")
+	}
+	if nots == 0 {
+		out = append(out, "no Not for line")
 	}
 	return out
 }
