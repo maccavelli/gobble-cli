@@ -42,7 +42,7 @@ That is for `go test -race -count=N -run '^TestSessionIDAndName$' ./internal/cli
 - **It is in the standard library.** It reproduces with no gobble code, and with no jsonschema-go: the standard library's own JSON packages race when one `Marshal` nests inside another through a `MarshalJSON` method.
 - **The toolchain bump did not cause it.** It reproduces on Go 1.27.1 as well as 1.27.2, so the move to 1.27.2 (0004-MADR, amendment of 2026-10-08) is not the cause.
 - **gobble's race gate has carried it all along.** `tool.New` has marshaled every tool's schema through jsonschema-go since commit `9826454`, which first derived schemas there (`git log -S"jsonschema.For[In]" -- tool/tool.go`). gobble's tests marshal few enough schemas that it shows about once in 200 to 600 runs. More tools mean more marshals, so F1c-1 and F1c-2 make it slightly more likely.
-- **It is the same in every case.** Every race reported is the same pair: a read in `getBufferedEncoder`, and a previous write in `WriteValue`, in one goroutine.
+- ~~**It is the same in every case.** Every race reported is the same pair: a read in `getBufferedEncoder`, and a previous write in `WriteValue`, in one goroutine.~~ *(Amended 2026-10-09: wrong; the pair varies. See the amendment.)*
 
 **Inferred, not measured.**
 
@@ -55,7 +55,7 @@ By the owner's decision of 2026-10-08:
 
 - **The race gate is unchanged.** It is not skipped, retried or narrowed, so it keeps reporting the defect whenever it shows.
 - **A gate record that meets it says so.** It names this report, and that the same failure reproduces on a clean `HEAD`.
-- **gobble keeps marshaling schemas through jsonschema-go.** Writing gobble's own schema encoder was considered and not chosen: it would not help other callers, such as the MCP SDK, and gobble would own a serializer that must track jsonschema-go's.
+- ~~**gobble keeps marshaling schemas through jsonschema-go.** Writing gobble's own schema encoder was considered and not chosen: it would not help other callers, such as the MCP SDK, and gobble would own a serializer that must track jsonschema-go's.~~ *(Superseded 2026-10-09 by the owner's decision in the amendment below: gobble removes its own nested marshal.)*
 - **The defect is reported upstream** with the standard-library-only reproducer below. When a Go release fixes it, the toolchain moves to that release with an amendment to 0004-MADR, and this report gains a dated note.
 
 ## The reproducer
@@ -110,10 +110,69 @@ For `golang/go`, to be filed by the owner, or by the agent with the owner's appr
 >
 > **What did you see?** `WARNING: DATA RACE`: a read in `jsontext.getBufferedEncoder` (`pools.go:46` or `:53`) and a previous write in `jsontext.(*encoderState).WriteValue`, both reported in the same goroutine. About 3 races in 20 runs of 20,000 marshals. `github.com/google/jsonschema-go`'s `Schema.MarshalJSON`, which nests marshals the same way, makes it far more frequent.
 >
+> The reported pair varies between runs: reads in `runtime.slicecopy`, `jsonwire.ConsumeSimpleString`, `json/v2.getStrings` and `reflect.Value` methods are reported as well, always against a previous write in the same goroutine.
+>
 > **What did you expect?** No race: there is one goroutine.
+
+## Amendment, 2026-10-09 — the signature varies, and gobble removes its own nested marshal
+
+0005-PLAN F1d-1's WSL race gate met this defect again, on 2026-10-08. The owner decided on 2026-10-09 how gobble answers it (0005-PLAN, F1d-1 deviation 6).
+
+### What was seen
+
+- **The test:** `internal/cli`'s `TestSessionValues`, with `race detected during execution of test`. Every other package passed.
+- **The stack:** `tool.New`'s `Marshal` of `tree`'s published schema, through `builtin.ToolsWith` and `toolSet`, as before. No F1d-1 code is in it.
+- **The pair was a new one.** It was not the pair this report records:
+  - **the read:** `runtime.slicecopy` in `bytes.growSlice`, from `bytes.(*Buffer).Write` in jsonschema-go's `orderedProperties.MarshalJSON` (`jsonschema/schema.go:345`);
+  - **the previous write:** `bytes.(*Buffer).WriteByte`, in the same function (`schema.go:338`);
+  - both in one goroutine, on a `bytes.Buffer` local to that call.
+
+### The evidence of 2026-10-08 and 2026-10-09
+
+Every run was in WSL, `CGO_ENABLED=1`, Go 1.27.2, with the race detector.
+
+| What ran | Tree | Runs | Races |
+| :--- | :--- | ---: | ---: |
+| `internal/cli`, `TestSessionValues` and `TestSessionIDAndName` | a clone of `c4ca6f5` | 20 | 0 |
+| the same | the F1d-1 working tree | 20 | 0 |
+| the whole `internal/cli` package | a clone of `8d681d9`: F1c-1, F1c-2 and the F1d records, no F1d-1 | 15 | 0 |
+| the same | the F1d-1 working tree | 15 | 0 |
+| the reproducer: `jsonschema.For[T]` then `json/v2` `Marshal`, as `tool.New` does | none of gobble's code | 20, then 60 | 0, then 15 |
+| the same, v1 `Marshal` at the top | none of gobble's code | 20, then 60 | 2, then 8 |
+| the standard library alone, v1 `Marshal` at the top | none of gobble's code | 20, then 60 | 14, then 0 |
+| the standard library alone, as in [The reproducer](#the-reproducer) | none of gobble's code | 60 | 0 |
+
+**What the evidence shows:**
+
+- **The reported pair varies.** Told apart by the first frame of the reported read, the reproducers gave eight kinds: this report's `getBufferedEncoder` pair; reads in `runtime.slicecopy` (from `bytes.Clone` in `json/v2.Marshal`), `jsonwire.ConsumeSimpleString`, `json/v2.getStrings`, `reflect.Value.MapRange`, `reflect.Value.IsNil` and `reflect.Value.lenNonSlice`; and jsonschema-go's `(*Schema).basicChecks`.
+  - The jsonschema-go reproducer, with no gobble code, raced in the `json.Marshal` calls that `orderedProperties.MarshalJSON` makes (`schema.go:332` and `:341`): the gate's function, with the read in `bytes.Clone` rather than in the function's own buffer.
+  - The gate's exact pair, on that local buffer at `schema.go:338` and `:345`, was not seen again.
+- **The rate comes in bursts.** One test gave 0 races in 20 runs, then 15 in 60. Another gave 14 in 20, then 0 in 60. So a single count is a sample, not a rate. This report's own counts of 2026-10-08 are samples in the same way.
+- **This gate's failure was not reproduced on gobble without F1d-1.** 15 runs of `internal/cli` without F1d-1, and 15 with it, raced 0 times each. At the rate of about once in a few hundred runs, that sample cannot tell the trees apart.
+- **The defect is the same.** The same mechanism, a `Marshal` nested inside another through `MarshalJSON`, is reported in one goroutine, in code that has no gobble in it.
+
+### Corrections to this report
+
+- *It is the same in every case* is wrong, and is struck through above.
+- The upstream draft's *What did you see* gains a sentence saying the pair varies.
+- [docs/README.md](../README.md) called this defect "reported upstream". It has not been filed. Filing still waits on the owner, or on the agent with the owner's approval.
+
+### What gobble does about it, from 2026-10-09
+
+The owner's decision of 2026-10-09 replaces the third bullet of *What gobble does about it*:
+
+- **gobble removes its own nested marshal.**
+  - `tool.New` is the only place gobble's code marshals a jsonschema-go `Schema`. It is also the only nested marshal in gobble's code: gobble defines no `MarshalJSON` method, and MCP tool schemas arrive as maps.
+  - `tool.New` will write the published schema itself, with no nested `Marshal`. The work is a new phase of 0012-PLAN, P9, under an amendment to [0012-MADR](../decisions/0012-MADR-tool-schemas-descriptions-and-loading.md). Both will be written and approved before any code.
+  - What it leaves:
+    - the standard library's defect, until Go fixes it;
+    - and nested marshals in code gobble does not own, such as the MCP SDK's `mcp.AddTool`, which `mcpclient/mcptest`'s fixture server uses in tests.
+- **The rest stands.** The race gate is unchanged, and a gate record that meets the defect names this report.
+- **"Reproduces on a clean `HEAD`" is not always possible.** At this rate, a gate record names the runs it made on the clean tree and what they showed, rather than claiming a reproduction it does not have.
 
 ## Sources
 
 - The race reports, from WSL `go test -race` logs of 2026-10-08, kept in the session scratchpad. Their file paths name a home directory, so the stacks above give only function names and source lines in the standard library and jsonschema-go.
 - `encoding/json/jsontext/pools.go`, Go 1.27.2: `getBufferedEncoder` at lines 44-55, read on 2026-10-08.
 - A search of `github.com`, `go.dev` and `groups.google.com` on 2026-10-08 found no existing report of this race.
+- The amendment's runs, from WSL `go test -race` logs of 2026-10-08 and 2026-10-09, kept in the session scratchpad. Their stacks are quoted by function name and source line only, for the same reason.

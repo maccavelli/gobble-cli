@@ -1861,6 +1861,8 @@ Choices made within the wording:
 
 *(2026-10-08, F1d-1 deviation 5: `acpserver/testdata/session.golden` (the advertised commands) joins the changed files.)*
 
+*(2026-10-09, F1d-1 deviation 6: `docs/reports/0013-REPORT-go-json-nested-marshal-race.md` (an amendment) and `docs/README.md` (its index rows) join the changed files.)*
+
 **F1d-1's tests,** each seen failing first on a scratch copy:
 
 - **`custom` entries:** written and read back, and an unknown `customType` still round-trips.
@@ -1876,7 +1878,7 @@ Choices made within the wording:
   - `session/load` sends that plan again after the history;
   - `/todos` prints it.
 
-**F1d-1's deviations, 2026-10-08,** found while reading its files before its code was written (1–3), while writing `todo` (4) and at its first acpserver test run (5), and decided by the owner:
+**F1d-1's deviations, 2026-10-08,** found while reading its files before its code was written (1–3), while writing `todo` (4), at its first acpserver test run (5) and at its gates (6), and decided by the owner:
 
 1. **The enum is not validated.**
    - **Found:** the test line said the validator enforces the `status` enum. It does not. `Run` validates against the schema derived from the Go type alone (`tool/tool.go:296-334`), and `WithSchema`'s enums are published only (`tool/tool.go:191-195`). jsonschema-go v0.4.3's `jsonschema` tag sets only a description (`infer.go:329-336`).
@@ -1893,6 +1895,9 @@ Choices made within the wording:
 5. **The golden transcript pins the advertised commands.**
    - **Found:** with `/todos` added, `TestSession` failed at line 4 of `acpserver/testdata/session.golden`, whose `available_commands_update` lists every command. The one difference was the new `todos` entry; the file was unchanged in git, and no other fixture holds the list.
    - **Decided:** `acpserver/testdata/session.golden` joins F1d-1's files, regenerated with `ACPTEST_UPDATE=1 go test ./acpserver -run TestSession`, its diff checked to be that one entry.
+6. **The race gate met 0013-REPORT's defect again, with a new signature.**
+   - **Found:** WSL `go test -race ./...` failed once, in `internal/cli`'s `TestSessionValues`, in jsonschema-go's `orderedProperties.MarshalJSON` under `tool.New`'s `Marshal` of `tree`'s schema. No F1d-1 code is in the stack. The pair, `bytes.growSlice` against `bytes.(*Buffer).WriteByte`, was not the one 0013-REPORT records. A reproducer with no gobble code gave eight kinds of pair, in bursts. 15 runs of `internal/cli` without F1d-1, and 15 with it, gave no race, which at this rate cannot tell the trees apart. The evidence is in 0013-REPORT's amendment of 2026-10-09.
+   - **Decided (2026-10-09):** F1d-1 lands with the failure recorded. 0013-REPORT is amended, correcting its claim that the pair never varies, and joins F1d-1's files with `docs/README.md`, whose index called the defect reported upstream. gobble's one nested marshal, in `tool.New`, is to be removed as 0012-PLAN P9, under a 0012-MADR amendment written and approved first. The race gate is unchanged.
 
 A choice within the wording: `todos` publishes `minItems: 0`, because the schema test requires every array to state `minItems` (`tool/builtin/schema_test.go:72`) and an empty list clears.
 
@@ -1991,3 +1996,75 @@ Choices made within the wording:
 - **`request_permissions`'s event load:** F6.
 - **MCP tools deferred by default:** F8. `tool_search` becomes live with them.
 - **A model-visible `cancelled` todo status:** ACP has no such status, so it is left out.
+
+**F1d-1, 2026-10-09 — complete.** Its code, tests and the `README.md` and `docs/architecture.md` lines were committed by the owner as `8c958e8`. This record, deviation 6, 0013-REPORT's amendment and the index follow in a records commit. It ran as the entry "F1d made executable" wrote it, approved by the owner's "Proceed to execute the plan" of 2026-10-08, with six deviations decided by the owner: 1 to 5 before the code each changed was written, 6 at its gates.
+
+- **The deviations** (recorded under F1d-1's tests above):
+  1. The status and priority enums are enforced by `todo`'s own code, not the validator, which checks only the type-derived schema.
+  2. The `gobble.todo` entry is written by `writer.event` in `acpserver/agent.go`, which joins the files.
+  3. `acpserver/commands_test.go` joins the files, for `todos` in its list of command names.
+  4. `todo.md`'s Not for line reads `use write for a file, or answer in text`, the order the description test reads.
+  5. `acpserver/testdata/session.golden` joins the files: regenerated, its diff exactly the one `todos` command.
+  6. The race gate met 0013-REPORT's defect with a new signature. F1d-1 lands with it recorded. 0013-REPORT is amended, and joins the files with `docs/README.md`. gobble's nested marshal in `tool.New` goes to 0012-PLAN P9.
+- **What was built:**
+  - **`session`:** `TypeCustom`, `CustomTodo` (`gobble.todo`), and `Entry.CustomType` and `Entry.Data`, in Pi's shape.
+  - **`tool`:** `Result.Plan`, `PlanItem`, and the plan's status and priority names. A nil `Plan` is no plan; an empty one clears.
+  - **`tool/builtin/todo.go`:** `todo`, kind `think`, read-only and idempotent, with its template. Its schema publishes `minItems: 0`, the enums, `minLength` 1 on `content` and the default priority; its code refuses each breach in its own words.
+  - **acpserver:**
+    - `prompt.go` sends a result's plan as a `plan` update, after the call's terminal update;
+    - `agent.go` records it as a `gobble.todo` entry, after the call's result;
+    - `history.go` reads the active path's last list, and `session/load` sends it after the history unless it is empty;
+    - `commands.go` adds `/todos`.
+  - **Updated:** `builtin.go` (`todo` before the shells), `builtin_test.go`, `docs/architecture.md` and `README.md`.
+  - **Records:** 0013-REPORT's amendment of 2026-10-09, and `docs/README.md`'s index. The index had called 0013's defect "reported upstream"; it has not been filed.
+- **Choices of mine, within the entry's wording:**
+  - `session/load` sends no plan for a cleared list, since a fresh client has none to clear.
+  - `todo` refuses `todos: null`, which the validator passes, rather than reading it as a clear: `[]` clears.
+  - The list is read along the active path, so a fork holds the list as it stood where it was forked. Fork and clone copy entries unchanged, so this follows from the code; no test drives it.
+  - `commands.go`'s comment now says the command set is 0002-PLAN's frozen set plus what 0005-MADR's command table adds as phases land. 0005-MADR lists `/todos` for 1.0 (`:312`).
+- **The acpserver tests,** through `acptest` with a JSONL store:
+  - `TestTodoPlan`: one plan update with the entries in order, after the call's completed update; one `gobble.todo` entry; `/todos` printing `[x]`, `[>]` and `[ ]`; and `session/load`, in a new agent, sending the plan once, after the last agent message.
+  - `TestTodoCleared`: a second, empty plan update; the empty list recorded; `/todos` saying `no todo list`; and no plan on load.
+- **C3: every new check, seen failing on a scratch copy.** There were 19 mutations, each asserted to land exactly once:
+  - **session:** the `customType` member renamed.
+  - **tool:** the `plan` member renamed.
+  - **todo:**
+    - the status check removed, and the priority check removed, each serving the bad value;
+    - the wrong default priority;
+    - the counts swapped;
+    - a cleared list returned with no plan;
+    - the status enum not published;
+    - `minItems` not published, which the schema convention test reported;
+    - `todo` not read-only.
+  - **acpserver:**
+    - no plan update;
+    - the plan sent before the terminal update;
+    - no entry written;
+    - no replay; the replay before the history; an empty list replayed;
+    - `/todos`' in-progress mark changed;
+    - `/todos` advertised with no handler;
+    - the custom entry ignored by `replayState`.
+  - Two cases first missed their expected text, though their tests failed: the log quotes the error with escaped quotes. They were re-pointed at the served plan, which is the defect, and both then passed.
+- **The gates:** on Go 1.27.2, in three runs:
+  - **The first run:**
+    - lint printed `0 issues.` for linux, darwin and windows;
+    - Windows `go test ./...` had no `FAIL` or `panic:`;
+    - Windows and WSL `make preflight` each printed `preflight passed`;
+    - **WSL `go test -race ./...` failed,** once, in `internal/cli`'s `TestSessionValues`, on the defect [0013-REPORT](../reports/0013-REPORT-go-json-nested-marshal-race.md) records (deviation 6).
+  - **The second run,** after deviation 6's records:
+    - lint, Windows `go test` and Windows `make preflight` passed as before;
+    - **the WSL gate did not run to a result.** WSL's Go was moved from go1.27.1's directory to go1.27.2's while the run was going, and the gate's shell lost `go` part way through. That is no verdict, and is not counted as a pass.
+  - **The third run,** of the WSL gate alone, with the same command, on an unchanged tree: WSL resolved `go1.27.2 linux/amd64`, `make preflight` printed `preflight passed`, and `go test -race ./...` exited 0 with no race reported.
+  - The race gate was not changed.
+- **Probe A** (Messages-shape bytes, on Windows):
+
+  | Tool | Description | Definition |
+  | :--- | ---: | ---: |
+  | todo | 625 | 1297 |
+
+**What the entry predicted wrongly:**
+
+1. **It said the validator enforces an enum.** It does not, and 0012-MADR D2 rule 8, which the entry cites, says so. The claim was written from the schema rather than from `tool.New`.
+2. **Its file list missed three files** that its own steps need: `acpserver/agent.go`, where entries are written, and two tests that pin the command list, `commands_test.go` and `session.golden`. The list was written from where updates are sent, not from where entries are written or from what pins the command set.
+3. **Its exact template broke the description test** it was meant to pass. The template was not run through that test before the entry fixed its text.
+4. **The race gate.** The entry expected F1d-1's gates to pass. The first race run met 0013-REPORT's defect with a signature that report said never varies (deviation 6). Separately, a WSL toolchain change during the second run left that run with no verdict.

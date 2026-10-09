@@ -22,7 +22,7 @@
 | 0004 | MADR | [One Go 1.27.1 module of contract-first packages, open standards at every boundary](decisions/0004-MADR-go-module-architecture.md) | proposed (decision text rewritten 2026-10-04; amended 2026-10-05; go-tui-lib note 2026-10-06; release pipeline amended 2026-10-07; toolchain go1.27.2 2026-10-08) |
 | 0004 | PLAN | [Scaffold: module, contracts, import boundaries, toolchain, release](decisions/0004-PLAN-go-module-architecture.md) | in progress (Phase D, Phase 0, and Phase 1 complete; Phase 2 steps 2–4 complete 2026-10-05, and steps 1, 5 (in part), 6–9 and 11 through 0008-PLAN P2–P4; Phase 3 complete 2026-10-05; Phase 2 steps 10, 12, 13 not started; Phase 5 made executable and complete 2026-10-07; Phase 4 step 1 through 0002-PLAN Phase 8 2026-10-07; Phase 4 steps 2–4 made executable 2026-10-07 and complete 2026-10-07 (CI rehearsal green, run 37677754325); amended 2026-10-04 (0007); amended 2026-10-04 (0008); Phase 2 steps 2–4 amended 2026-10-05; fleet library pins refreshed 2026-10-06) |
 | 0005 | MADR | [The v1 line: every portable Pi capability, tiered 1.0 / 1.x / exp](decisions/0005-MADR-v1-feature-scope.md) | accepted 2026-10-07 (decision text rewritten 2026-10-04; platform note 2026-10-07; reference-harness amendment 2026-10-07; native tools amendment 2026-10-08; 0012 amendment 2026-10-08; grep row's globs 2026-10-08) |
-| 0005 | PLAN | [Implement the v1.0.0 gate, the v1.x train, and `exp/`](decisions/0005-PLAN-v1-feature-scope.md) | in progress (approved 2026-10-07; decision text rewritten 2026-10-04; F4, F5, F8, F9 and F10 notes 2026-10-07; F10 step 6 `apidiff` note 2026-10-07; F1 made executable 2026-10-07; restructured into five sub-phases and F1a reworked 2026-10-07; F1a complete 2026-10-07; F1b complete 2026-10-07; native tools placed 2026-10-08; 0012 notes 2026-10-08; F1c made executable 2026-10-08; F1c-1 complete 2026-10-08; F1c-2 complete 2026-10-08; F1d made executable 2026-10-08) |
+| 0005 | PLAN | [Implement the v1.0.0 gate, the v1.x train, and `exp/`](decisions/0005-PLAN-v1-feature-scope.md) | in progress (approved 2026-10-07; decision text rewritten 2026-10-04; F4, F5, F8, F9 and F10 notes 2026-10-07; F10 step 6 `apidiff` note 2026-10-07; F1 made executable 2026-10-07; restructured into five sub-phases and F1a reworked 2026-10-07; F1a complete 2026-10-07; F1b complete 2026-10-07; native tools placed 2026-10-08; 0012 notes 2026-10-08; F1c made executable 2026-10-08; F1c-1 complete 2026-10-08; F1c-2 complete 2026-10-08; F1d made executable 2026-10-08; F1d-1 complete 2026-10-09) |
 | 0006 | MADR | [Adopt goose's terminal-CLI mechanics, not its product command tree](decisions/0006-MADR-goose-cli-port-candidates.md) | proposed (amended 2026-10-04 (0008)) |
 | 0007 | MADR | [Bring the repository up to the fleet scaffold: agent rules, lint and line-ending config, records tooling, portable Makefile](decisions/0007-MADR-repository-scaffolding-to-fleet-standard.md) | accepted (amended 2026-10-04 (0008)) |
 | 0007 | PLAN | [Bring gobble-cli up to the fleet repository scaffold](decisions/0007-PLAN-repository-scaffolding-to-fleet-standard.md) | completed (staged; the owner commits) |
@@ -33,7 +33,7 @@
 | 0011 | REPORT | [Native tools across six harnesses: which operations gobble implements itself](reports/0011-REPORT-native-tools-survey.md) | observation (2026-10-08; 88 verified claims; schemas, descriptions, loading and BM25 evaluated 2026-10-08) |
 | 0012 | MADR | [Tool schemas, descriptions and loading: JSON Schema from Go types, sectioned Markdown descriptions, two exposure tiers, and an in-house BM25 `tool_search`](decisions/0012-MADR-tool-schemas-descriptions-and-loading.md) | accepted (2026-10-08; 38 verified claims) |
 | 0012 | PLAN | [Tool schemas and descriptions: the contract, the five built-in tools, and the strict probe](decisions/0012-PLAN-tool-schemas-descriptions-and-loading.md) | completed (P1–P6 and P8, 2026-10-08; P7 waits on go-llmprovider-sdk's per-tool strict flag) |
-| 0013 | REPORT | [A data race in Go's encoding/json when one Marshal runs inside another](reports/0013-REPORT-go-json-nested-marshal-race.md) | observation (2026-10-08; reproduced with the standard library alone; reported upstream) |
+| 0013 | REPORT | [A data race in Go's encoding/json when one Marshal runs inside another](reports/0013-REPORT-go-json-nested-marshal-race.md) | observation (2026-10-08; reproduced with the standard library alone; drafted for upstream, not yet filed; amended 2026-10-09: the signature varies, and gobble removes its own nested marshal) |
 
 0003-MADR has no PLAN of its own. 0004-PLAN Phase 2 and 0005-PLAN F10 implement it.
 
@@ -51,8 +51,8 @@ The plans run in sequence.
 - **0002-PLAN.** Run: Phases 1–8, completed on 2026-10-07.
 - **0005-PLAN.**
   - Run: F1a, the file tools, and F1b, bash and powershell, on 2026-10-07.
-  - Run: F1c-1, search, and F1c-2, the file operations, on 2026-10-08.
-  - Next: F1d, as three sub-phases, F1d-1 to F1d-3.
+  - Run: F1c-1, search, and F1c-2, the file operations, on 2026-10-08; F1d-1, `todo`, on 2026-10-09.
+  - Next: F1d-2, `tool_search`, then F1d-3.
 - **0012-PLAN.** Run: P1–P6 and P8 on 2026-10-08. P7 waits on go-llmprovider-sdk's per-tool strict flag.
 - `git ls-remote origin refs/heads/main` on 2026-10-08 returned `740f7b71450238e747dba99b4fa1eccd488ad79e`.
 
