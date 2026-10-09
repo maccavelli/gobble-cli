@@ -66,6 +66,7 @@ They may start after F4 in any order.
    walk. Use the limits from 0005-MADR.
    *(2026-10-08, 0005-MADR amendment "native tools": F1c also builds `move`, `delete`, `copy`, `mkdir` and `tree`; `tree` replaces `ls`.)*
    *(2026-10-08, 0012-MADR: F1c's tools follow D1, D2 and D5, through `tool.WithSchema` and `tool/builtin/describe/`, with the schemas 0012-MADR's table gives them.)*
+   *(2026-10-08: F1c is made executable as two sub-phases, F1c-1 (the matcher, grep, find, `tree`) and F1c-2 (move, delete, copy, mkdir), with one in-house glob engine. See the Amendments entry "F1c made executable".)*
 6. Add the per-real-path mutation queue and `os.Root` confinement over
    `cwd` plus the additional directories.
 7. When the client has the capability, route file I/O through ACP
@@ -1273,3 +1274,357 @@ The owner added eleven native tools or capabilities. [0011-REPORT](../reports/00
 F1c, the next sub-phase, therefore builds grep, find, the four file operations and `tree`, with the in-house gitignore matcher. 0010-REPORT §1 is corrected on the same date: Kilo's `read-extract.ts` converts DOCX and XLSX, not `.ipynb`, as 0011-REPORT's verification found.
 
 **2026-10-08 — 0012-MADR: tool schemas, descriptions and loading.** [0012-PLAN](0012-PLAN-tool-schemas-descriptions-and-loading.md) builds D1, D2, D3 and D5 for the five built-in tools. The rest land where their tools are built, by the notes of this date at F1 steps 5 and 8, F3, F6, F8 and X4. `request_permissions` is deferred.
+
+**2026-10-08 — F1c made executable** (the owner's decisions of 2026-10-08: two sub-phases; one in-house glob engine; the repository's own ignore files; Pi's ripgrep output form).
+
+F1c is step 5, as the entry "native tools placed" widened it: grep, find, `tree`, move, delete, copy and mkdir, and the in-house gitignore matcher (decision 4 of the entry "F1 made executable"). It applies [0012-MADR](0012-MADR-tool-schemas-descriptions-and-loading.md) to every new tool: D1 and D2 schemas through `tool.WithSchema`, and D5 item 6 descriptions in `tool/builtin/describe/`.
+
+**The facts,** checked on 2026-10-08 by a script in the session scratchpad (`q220_claims_f1c.py`): 15 claims, all passing. With the check inverted, all 15 failed.
+
+- **Pi's grep:**
+  - prints a match as `path:N: text` and a context line as `path-N- text` (`grep.ts:211-212`);
+  - cuts a line at 500 characters (`truncate.ts:13`);
+  - runs ripgrep with `--hidden` and no ignore override (`grep.ts:162`), so ripgrep's own ignore rules apply;
+  - names the next limit when it hits one: "matches limit reached. Use limit=…" (`grep.ts:289`).
+- **Pi's find** runs fd with `--glob --hidden` (`find.ts:182`). Without fd, it excludes `**/node_modules/**` and `**/.git/**` (`find.ts:126`).
+- **Pi's ls** sorts by name (`ls.ts:109`).
+- **opencode** groups matches under each file, as `Line N:` (`grep.ts:96`).
+- **None of Pi, opencode or Kilo** sorts results, and none can turn ignore rules off. That is from a read-only survey of 2026-10-08; its citations C1–C9 are re-checked above.
+- **0005-MADR's rows:**
+  - grep names `doublestar` for globs (`:123`);
+  - find includes hidden files, respects `.gitignore`, and skips `.git` and `node_modules` (`:124`).
+- **A delete already always asks.**
+  - acpserver's policy offers only "Allow" (allow-once) and "Reject" (`acpserver/prompt.go:201-202`), so no answer can stand for later calls.
+  - A client with no prompt, such as print mode, rejects (`acpclient/conn.go:362`).
+  - So 0005-MADR's "a delete always asks" holds until F6 adds rules, and F6 has to keep it.
+- **read already lists one directory,** with a `/` after each directory (`tool/builtin/readdir.go:35`).
+- **git's rules,** from `git-scm.com/docs/gitignore`, fetched 2026-10-08:
+  - **Sources, highest precedence first:** a `.gitignore` in the path's directory or any parent up to the top of the working tree, with lower files overriding higher ones; then `$GIT_COMMON_DIR/info/exclude`; then `core.excludesFile`. "Within one level of precedence, the last matching pattern decides the outcome."
+  - **Format:** blank lines and `#` comments; trailing spaces are ignored unless escaped; `!` negates. A separator at the start or middle anchors a pattern to its file's directory. A trailing `/` matches directories only. `*` and `?` never match `/`, and `[…]` is a range. `\` escapes.
+  - **`**`:** leading `**/` matches in every directory, trailing `/**` everything inside, and `/**/` zero or more directories.
+  - **Re-inclusion:** "It is not possible to re-include a file if a parent directory of that file is excluded."
+
+**The owner's decisions, 2026-10-08:**
+
+1. **Two sub-phases,** each one commit with its own record and gates:
+   - **F1c-1, search:** the matcher, grep, find and `tree`;
+   - **F1c-2, file operations:** move, delete, copy and mkdir.
+2. **One in-house glob engine,** in `internal/fsx`. It is written to git's rules, and is also grep's and find's glob, with `{a,b}` alternatives added. 0005-MADR's `doublestar` is not required, and the grep row gains a note.
+3. **The repository's own ignore files.** That is every `.gitignore` from the repository's top level down to each directory walked, and `.git/info/exclude`, in git's precedence. `core.excludesFile` is not read, so gobble reads no git configuration. `.git` and `node_modules` are always skipped, and hidden files are included.
+4. **Pi's ripgrep output form** for grep, sorted by path and then by line, so the same search always gives the same output.
+
+**F1c-1 — the matcher, grep, find and `tree`.**
+
+Choices made within the wording:
+
+- **`internal/fsx/glob.go`:**
+  - `Glob`, compiled by `CompileGlob(pattern string) (Glob, error)` and matched by `(Glob) Match(rel string, dir bool) bool`. `rel` is slash-separated and relative.
+  - The syntax is git's: `*`, `?`, `[…]` with `!` or `^` negation, `\` escapes, and the three `**` forms. On top of git's rules, `{a,b,…}` alternatives are expanded before matching; they nest, and an unclosed `{` is a literal.
+  - A pattern that never matches, such as one ending in a lone `\`, compiles to a glob that matches nothing, as git says. A malformed `[` is an error, for tools to report.
+- **`internal/fsx/ignore.go`:**
+  - `Ignore` holds the rules of one walk. `(*Ignore) Ignored(rel string, dir bool) bool` applies them in git's precedence, with the last match winning within a file. A path under an ignored directory is ignored whatever a later `!` says.
+  - **Where the rules come from.** The repository's top level is the nearest ancestor of the walk's root that holds a `.git` entry, a directory or a file (a worktree).
+    - Each `.gitignore` from there down is read as the walk reaches its directory.
+    - `.git/info/exclude` is read at the top level. ~~Where `.git` is a file, it is the `info/exclude` under the directory that file names.~~ *(F1c-1 deviation 1, 2026-10-08, the owner's decision: git reads `$GIT_COMMON_DIR/info/exclude`, and for a worktree the directory `.git` names is `.git/worktrees/<name>`. So where `.git` is a file, gobble reads the directory it names. If that directory holds a `commondir` file, gobble resolves it, relative to that directory, and reads `info/exclude` under the result, as git does. A test builds a fake worktree layout.)*
+    - Without a repository, only the `.gitignore` files under the walk's root apply.
+  - **Above the roots.** Ignore files in ancestors of a workspace root, up to the top level, are read with `os.ReadFile`, read-only. Their text is used to filter, and never reaches the model. This is the one read outside the roots that needs no permission, and the test names it.
+- **`internal/fsx/walk.go`:**
+  - `(Workspace) Walk(root string, visit func(rel string, d fs.DirEntry) error) error` walks under `os.Root`, sorted by name with byte order, so the walk is the same on every OS.
+  - It skips `.git` and `node_modules` at every depth, and everything `Ignore` ignores. Hidden entries are included.
+  - It does not follow symbolic links to directories. A link to a file is visited as a file, and reading it goes through `os.Root`, which refuses a target outside the root.
+  - `visit` returning `fs.SkipDir` skips a directory. Any other error stops the walk.
+- **The tools,** each confined (`tool.Confined` on its `path`) and direct. Their schemas are 0012-MADR's table, through `tool.WithSchema`, and each published bound is served within it or refused in the tool's own words (0012-MADR D2 rule 8).
+
+  | Tool | Kind, annotations | Behaviour |
+  | :--- | :--- | :--- |
+  | `grep {pattern, path?, glob?, ignoreCase?, literal?, context?, limit?}` | search; read-only, idempotent | See the list below the table |
+  | `find {pattern, path?, limit?}` | search; read-only, idempotent | `pattern` is a glob, matched as grep's `glob` is. The output is one path per line, relative to the search root, with a `/` after each directory, in walk order. The `limit` is 1–5000, default 1000, and a larger value is served at 5000. Output is capped at 50 KB. "No match" is a plain result: `find <path>: nothing matches <pattern>` |
+  | `tree {path?, depth?, limit?}` | read; read-only, idempotent | The root's path and a `/`, then entries indented two spaces a level: directories first, then files, each group by name. A directory gets a trailing `/`, and a file its size from `stat` (`12 B`, `3.4 KB`, `1.2 MB`). See the list below the table |
+
+  **grep in detail:**
+  - **The pattern.** `pattern` is RE2 (Go's `regexp`), as 0005-MADR's report D13 notes. `literal` quotes it, and `ignoreCase` adds `(?i)`. An invalid pattern is refused with `grep: the pattern is not valid RE2 (<reason>); escape it, or set literal`.
+  - **Which files.** `glob` filters by file name. A glob without a `/` matches a file's base name at any depth, and one with a `/` matches the path relative to the search root. A `path` that names a file searches that file.
+  - **Skipped files:**
+    - files whose first 8,000 bytes hold a NUL, as git's binary test does;
+    - files over 8 MB. Their count is reported in a notice, so the model knows the search was partial.
+  - **Output:**
+    - a match line is `path:N: text`, and a context line `path-N- text` (Pi's form);
+    - paths are relative to the search root, with `/` separators;
+    - a line is cut at 500 characters, ending with `…`.
+  - **Bounds:**
+    - `context` is 0–10, and a larger value is served at 10;
+    - `limit` is 1–1000, default 100, and a larger value is served at 1000;
+    - output is capped at 50 KB.
+  - **No match** is a plain result, not an error: `grep <path>: no matches for <pattern>`.
+
+  **tree in detail:**
+  - `depth` is 1–10, default 2, and `limit` is 1–2000 entries, default 500; larger values are served at their maxima.
+  - **The budget is breadth-first** (grok-build, 0011 K2). Every entry of a level is counted before any entry of the next.
+  - A directory left unexpanded when the budget runs out has an ellipsis, `…`, after its name.
+- **The notices,** in gobble's form, `[<what>; <how to go on>]`, after a blank line:
+  - `[100 matches shown, the limit; use limit=200 for more, or narrow the pattern or path]` (and the same with `paths` for find, and `entries` for tree, which says `use limit=… or a deeper path`);
+  - `[output cut at 50 KB; narrow the pattern or path]`;
+  - `[some lines cut at 500 characters; read the file for the whole line]`;
+  - `[3 files over 8 MB were not searched]`;
+  - for tree: `[N directories not expanded; use a larger limit, or tree a subdirectory]`.
+- **A missing `path`** is an error naming similar entries, as read's is (`didYouMean`).
+- **The descriptions,** under `tool/builtin/describe/`, exactly, each ending in one newline:
+  - `grep.md`:
+
+    ```markdown
+    Search file contents for a regular expression, under a directory or in one file.
+
+    ## Use when
+
+    - Finding where a name, a string or a pattern appears across files.
+    - Prefer it to `grep`, `rg` and `Select-String` in a shell.
+    - Not for finding files by name: use find.
+
+    ## Returns
+
+    - One line per match, as `path:N: text`, and with `context` set, nearby lines as `path-N- text`.
+    - Paths relative to the search root, sorted by path, then by line.
+    - When nothing matches, a line saying so. That is not an error.
+
+    ## Rules
+
+    - `pattern` is RE2 syntax: no lookaround, and no backreferences. Set `literal` to search for the text as it is.
+    - `glob` without a `/` matches file names at any depth, such as `*.go` or `*.{ts,tsx}`; with a `/` it matches the path from the search root.
+    - Files in `.gitignore`, `.git`, `node_modules`, binary files, and files over 8 MB are skipped. Hidden files are searched.
+    - At most `limit` matches and 50 KB are shown; a line over 500 characters is cut.
+    ```
+
+  - `find.md`:
+
+    ```markdown
+    Find files and directories whose names match a glob, under a directory.
+
+    ## Use when
+
+    - Locating files by name or extension, such as `*_test.go` or `docs/**/*.md`.
+    - Prefer it to `find`, `fd`, `ls -R` and `Get-ChildItem -Recurse` in a shell.
+    - Not for searching inside files: use grep.
+
+    ## Returns
+
+    - One path per line, relative to the search root, with a `/` after each directory, sorted by path.
+    - When nothing matches, a line saying so. That is not an error.
+
+    ## Rules
+
+    - A glob without a `/` matches names at any depth; with a `/` it matches the path from the search root. `**` crosses directories, and `{a,b}` gives alternatives.
+    - Entries in `.gitignore`, `.git` and `node_modules` are skipped. Hidden entries are listed.
+    - At most `limit` paths and 50 KB are shown.
+    ```
+
+  - `tree.md`:
+
+    ```markdown
+    Show the layout of a directory as an indented tree, a few levels deep.
+
+    ## Use when
+
+    - Getting to know a project, or a directory, before reading or changing it.
+    - Prefer it to `tree`, `ls -R` and `Get-ChildItem -Recurse` in a shell.
+    - Not for one directory's entries: use read on the directory.
+
+    ## Returns
+
+    - The directory, then its entries indented two spaces a level: directories first, with a `/`, then files, with their sizes.
+    - When the entry budget runs out, each unexpanded directory ends in an ellipsis, `…`, and a last line says how many.
+
+    ## Rules
+
+    - `depth` levels are shown, {{.TreeDepth}} by default. Each level is listed in full before the next is started.
+    - Entries in `.gitignore`, `.git` and `node_modules` are skipped. Hidden entries are shown.
+    - At most `limit` entries are shown.
+    ```
+
+  - **`read.md`'s "Not for" line** becomes `- Not for searching files for text: use grep.`, now that grep exists.
+- **`describeData`** gains `TreeDepth` (the default `depth`, 2).
+- **The shape test's tool set** is `ToolsWith(Options{})`, which now includes grep, find and `tree`, so their "Not for" lines are checked against real tools.
+
+**F1c-1's files:**
+
+| | Files |
+| :--- | :--- |
+| new | `internal/fsx/glob.go`, `glob_test.go`, `ignore.go`, `ignore_test.go`, `walk.go`, `walk_test.go`; `tool/builtin/grep.go`, `find.go`, `tree.go`, `search_test.go`; `tool/builtin/describe/grep.md`, `find.md`, `tree.md` |
+| changed | `internal/fsx/fuzz_test.go` (adds `FuzzGlob`); `tool/builtin/builtin.go` (the three tools in `ToolsWith`); `tool/builtin/describe.go` (`TreeDepth`); `tool/builtin/describe/read.md`; `tool/builtin/builtin_test.go` (the tool list in `TestToolsAndAnnotations`: the names it expects grow by three, and grep, find and tree join read as read-only); `tool/builtin/schema_test.go` (`TestBoundsHold` gains the new bounds); `docs/architecture.md` (`internal/fsx` and `tool/builtin` rows); `README.md` (the Status list) |
+
+*(F1c-1 deviation 2, 2026-10-08, the owner's decision.)* `tool/builtin/describe_test.go` joins F1c-1's changed files. `TestDescriptionShape` hard-coded its template set (`bash, edit, powershell, read, write`), so the three new templates broke it. The set is now derived: every tool `ToolsWith` can build, plus powershell's template where it is not built. Every tool has exactly one template, and every template a tool, and no later phase edits a list.
+
+**F1c-1's tests,** each seen failing first on a scratch copy (0012-PLAN C3):
+
+- **`glob_test.go`:**
+  - every example in git's PATTERN FORMAT text: `doc/frotz/` against `doc/frotz` and `a/doc/frotz`; `frotz/` against `frotz` and `a/frotz`; `**/foo`; `**/foo/bar`; `abc/**`; `a/**/b` against `a/b`, `a/x/b` and `a/x/y/b`;
+  - `*` and `?` not crossing `/`; ranges; escapes `\#`, `\!` and `\*`; a trailing `\` matching nothing;
+  - braces, nested braces, and an unclosed `{`.
+- **`ignore_test.go`:**
+  - the last match winning; `!` re-including a file;
+  - a file under an ignored directory staying ignored after `!`;
+  - a lower `.gitignore` overriding a higher one;
+  - `.git/info/exclude`, and a `.git` file naming another directory;
+  - trailing spaces and their escape.
+- **`walk_test.go`:**
+  - byte-ordered names; `.git` and `node_modules` skipped; hidden entries included;
+  - a directory symlink not followed (on systems where a test can make one, else skipped with the reason logged);
+  - `fs.SkipDir`;
+  - the one read above a root, an ancestor `.gitignore`.
+- **`search_test.go`:**
+  - grep's format, sorting, `context`, `ignoreCase`, `literal`, `glob` with and without `/`, a file `path`, the RE2 refusal, binary and over-size skips with their notice, no matches;
+  - find's format and `/` suffix;
+  - tree's breadth-first budget and its ellipsis marks, its sizes, and its order;
+  - each tool's notices;
+  - a missing path naming similar entries;
+  - a `path` outside the roots reported by `Outside`.
+- **`TestBoundsHold`:** grep `context` 50 and `limit` 5000, find `limit` 9000, and tree `depth` 50 and `limit` 9000, each served at its maximum.
+- **`FuzzGlob`:** `CompileGlob` and `Match` never panic, and a pattern with no wildcard matches exactly itself.
+- **The existing tests,** including 0012's convention and description tests, pass with no assertion edited (0012-PLAN C1).
+
+**F1c-1's verification:**
+
+```text
+go test ./internal/fsx ./tool/builtin -count=1                  -> ok
+go test ./internal/fsx -run '^$' -fuzz FuzzGlob -fuzztime 60s   -> ok (no failure in 60 s)
+Probe A (scratch module specsize)                               -> eight tools; each description at most 1,200 bytes, each definition at most 2,000
+the Stability rule's gates (0012-PLAN): pre-add check; lint for linux, darwin, windows; Windows go test; WSL preflight and race; Windows preflight
+```
+
+**F1c-2 — move, delete, copy and mkdir.**
+
+Choices made within the wording of 0005-MADR's native-tools amendment:
+
+- **`internal/fsx`** gains `Rename`, `Remove`, `RemoveAll`, `MkdirAll`, `Lstat` and `CopyFile` on `Workspace`, each under the `os.Root` of the root that holds the path (Go 1.25's `Root.Rename`, `Root.RemoveAll` and `Root.MkdirAll`).
+- **Locks.** A move or a copy takes both paths' locks, in the order of their lock keys, so two operations can't deadlock.
+- **`move {from, to, overwrite?}`.**
+  - An existing `to` is refused unless `overwrite`.
+  - Within one root it is `Root.Rename`. Across roots, or across devices (the rename's error is `EXDEV`), it copies, then removes the source. If the copy fails, the source is untouched and the partial copy is removed.
+  - Kind `move`, destructive.
+- **`delete {path, recursive?}`.**
+  - A directory needs `recursive` unless it is empty.
+  - A workspace root, or an ancestor of one, is refused: `delete <path>: a workspace root cannot be deleted`.
+  - Kind `delete`, destructive. Every call asks (the fact above).
+- **`copy {from, to, overwrite?}`.**
+  - A file is written atomically through `fsx`, keeping its permission bits. A directory is copied entry by entry.
+  - A symbolic link is copied as a link, with its target text unchanged and not followed.
+  - An existing `to` is refused unless `overwrite`.
+  - Kind `edit`, destructive.
+- **`mkdir {path}`** creates the directory and its parents. An existing directory is success, and an existing file is refused. Kind `edit`.
+- **Confinement.** Both paths of move and copy are reported by `Outside`, so either outside the roots needs approval.
+- **Results,** in gobble's form:
+  - `moved <from> to <to>`;
+  - `deleted <path>` or `deleted <path> (N entries)`;
+  - `copied <from> to <to>` or `copied <from> to <to> (N entries)`;
+  - `created <path>` or `<path> already exists`.
+
+  Each result's `Summary` is the same line.
+- **Descriptions,** under `tool/builtin/describe/`, each ending in one newline:
+  - `move.md`:
+
+    ```markdown
+    Move or rename a file or a directory.
+
+    ## Use when
+
+    - Renaming, or moving something to another directory, including across the workspace's directories.
+    - Prefer it to `mv`, `Move-Item` and `ren` in a shell.
+    - Not for keeping the original as well: use copy.
+
+    ## Returns
+
+    - A line such as `moved old.go to new.go`.
+
+    ## Rules
+
+    - An existing `to` is refused unless `overwrite` is set.
+    - Across directories that are not on one device, it copies and then deletes, and a failed copy leaves the original as it was.
+    ```
+
+  - `delete.md`:
+
+    ```markdown
+    Delete a file, or a directory with everything in it.
+
+    ## Use when
+
+    - Removing files or directories that are no longer needed.
+    - Prefer it to `rm`, `rmdir`, `Remove-Item` and `del` in a shell.
+    - Not for emptying a file while keeping it: use write with empty `content`.
+
+    ## Returns
+
+    - A line such as `deleted build/ (42 entries)`.
+
+    ## Rules
+
+    - Every delete asks the user first.
+    - A directory that is not empty needs `recursive`.
+    - A workspace root is never deleted.
+    ```
+
+  - `copy.md`:
+
+    ```markdown
+    Copy a file, or a directory with everything in it.
+
+    ## Use when
+
+    - Duplicating a file or a directory, keeping the original.
+    - Prefer it to `cp`, `Copy-Item` and `copy` in a shell.
+    - Not for renaming or relocating: use move.
+
+    ## Returns
+
+    - A line such as `copied a.txt to b.txt`, with the entry count for a directory.
+
+    ## Rules
+
+    - An existing `to` is refused unless `overwrite` is set.
+    - Permission bits are kept. A symbolic link is copied as a link, and not followed.
+    ```
+
+  - `mkdir.md`:
+
+    ```markdown
+    Create a directory, with any missing parents.
+
+    ## Use when
+
+    - Preparing a directory before files are written into it, though write creates missing parents itself.
+    - Prefer it to `mkdir -p`, `New-Item -ItemType Directory` and `md` in a shell.
+    - Not for creating a file: use write.
+
+    ## Returns
+
+    - A line such as `created docs/guides`, or that it already exists.
+
+    ## Rules
+
+    - A directory that already exists is success; an existing file of that name is refused.
+    ```
+
+**F1c-2's files:**
+
+| | Files |
+| :--- | :--- |
+| new | `internal/fsx/ops.go`, `ops_test.go`; `tool/builtin/fileops.go`, `fileops_test.go`; `tool/builtin/describe/move.md`, `delete.md`, `copy.md`, `mkdir.md` |
+| changed | `tool/builtin/builtin.go`; `tool/builtin/builtin_test.go` (the tool list); `docs/architecture.md`; `README.md` (the Status list) |
+
+**F1c-2's tests,** each seen failing first on a scratch copy:
+
+- **move:** within a root; across roots; across devices, through a test seam on the rename that returns `EXDEV`; a failed cross-device copy leaving the source; `overwrite`.
+- **delete:** a file; an empty directory; a non-empty directory with and without `recursive`; the root refusal; an ancestor of a root refused.
+- **copy:** a file's mode kept; a directory tree; a symlink copied as a link (where a test can make one); `overwrite`.
+- **mkdir:** a new path, an existing directory, and an existing file.
+- **Two moves in opposite directions** run at once, and both finish: the lock order holds.
+- **`Outside`** reports both paths of move and copy.
+- **The agent asks:** through `acptest`, a delete call produces a `session/request_permission`, and with the reply "Reject" nothing is deleted.
+
+**F1c-2's verification** is F1c-1's, plus `go test ./acpserver -run 'TestDelete' -count=1 -> ok`.
+
+**Deferred, named:**
+
+- ACP `locations` for these tools: F1d.
+- The journal entries undo needs: X2.
+- `tool_search`'s families, and `request_permissions`: F1d and F6.
+- Reading `core.excludesFile`: not chosen (decision 3). It would need gobble to read git configuration.
