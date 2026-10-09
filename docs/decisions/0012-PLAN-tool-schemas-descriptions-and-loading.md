@@ -919,6 +919,18 @@ make preflight                                                                  
 
 *(Approved 2026-10-09 by the owner: "approve P9, proceed". The status is `in-progress` from then.)*
 
+**Deviation 1 (2026-10-09), found at step 7.**
+
+- **What was found.** The control's `go test -race -count=60` stopped at `go test`'s default 10-minute timeout, after about 24 passes of about 25 seconds each: `panic: test timed out after 10m0s`. Step 7's command sets no timeout.
+- **The owner's decision (2026-10-09):** add `-timeout 0`, and run the full 60 passes. Step 7's command is amended below. The runs deviation 2 lists used `-timeout 0`.
+
+**Deviation 2 (2026-10-09), found at step 7.**
+
+- **What was found.** Probe F's P9 tree raced, and crashed: 9, 2 and 25 race reports in three runs of 60 passes, two crashes on an interface with an empty type, and, in 300 passes with no race detector, a crash on an exhausted map iterator. Go 1.26.3 gave 9 reports in 120 passes. Every report pairs accesses a correct race detector cannot pair. So the defect is not the nested `Marshal`, and is not new in Go 1.27. The evidence is in 0013-REPORT's second amendment of 2026-10-09.
+- **What it contradicts.** 0012-MADR F19's consequence, that removing the nested `Marshal` takes gobble's code off the defect's path; D15's reason; and A14, which cannot pass.
+- **The owner's decision (2026-10-09):** P9 is paused. Steps 1–6 and 8 are done and stay uncommitted in the tree: the golden file, the writer, `tool.New`'s change and their tests, with step 6's seven copies seen failing. Probe F runs next on another machine, as 0013-REPORT's second amendment gives it. D15 is decided again from that result, before any step resumes.
+- **What still holds.** The writer's bytes equal jsonschema-go's for every built-in tool (step 5), and every new check was seen to fail (step 6). Under the race detector, the P9 tree built the tools faster, at 0.7 to 9 seconds a pass against the control's 25.
+
 **The contract most at risk here is C1, through the golden file.** When the writer's bytes differ, `SCHEMA_GOLDEN_UPDATE=1` turns the test green in one command. The file is written in step 1 only, from jsonschema-go's output, before the writer exists. A mismatch afterwards is a defect in the writer or a deviation, and is stopped and put to the owner.
 
 **Step 1. Capture today's bytes, before the writer exists.**
@@ -1280,7 +1292,8 @@ git diff <the commit before P9> -- go.mod go.sum               -> empty (C2)
   }
   ```
 
-- `CGO_ENABLED=1 go test -race -count=60 .` runs twice, in WSL:
+- ~~`CGO_ENABLED=1 go test -race -count=60 .` runs twice, in WSL:~~ *(Deviation 1, 2026-10-09: with `-timeout 0`.)*
+- `CGO_ENABLED=1 go test -race -timeout 0 -count=60 .` runs twice, in WSL:
   - **the control,** a clone of the commit before P9: expected to report at least one race, as 0013-REPORT's reproducer did (15 in 60 runs);
   - **the change,** the P9 tree: expected to report none.
 - Each reported race is sorted by its pair, as 0013-REPORT's amendment does.

@@ -169,7 +169,7 @@ What the probe also shows:
     - Plan mode's tool is built by `tool.New` too (V43).
   - The race gate met it at 0005-PLAN F1c-2's gates and again at F1d-1's, each time in `internal/cli`, under `tool.New`.
   - Whether it can corrupt output outside the race detector is **[unverified]**: no gobble test has seen a wrong schema.
-  - *Consequence:* writing the published schema with no nested `Marshal` takes gobble's own code off the defect's path. It does not fix the defect, and does not change code gobble does not own.
+  - ~~*Consequence:* writing the published schema with no nested `Marshal` takes gobble's own code off the defect's path. It does not fix the defect, and does not change code gobble does not own.~~ *(Contradicted 2026-10-09 by 0012-PLAN P9's Probe F: the race reports, and crashes, persist with no nested `Marshal` in gobble's code. See 0013-REPORT's second amendment.)*
 
 **Descriptions**
 
@@ -332,6 +332,7 @@ The owner's proposals stand where the evidence supports them:
 
   F3's defects are fixed by this test: edit's `edits` gains `"type":"array"` and `minItems: 1`; read's `limit` and bash's `timeout` gain their bounds.
 - **D15. gobble writes the published schema itself.** *(Proposed 2026-10-09, by the owner's choice of that day: 0005-PLAN F1d-1 deviation 6. It is accepted when the owner approves 0012-PLAN P9, and P9's commit marks it so.)*
+  - *(On hold from 2026-10-09: P9 is paused at step 7, deviation 2. Probe F contradicted F19's consequence, which is this decision's reason. D15 is decided again once Probe F has run on another machine.)*
   - **What changes.** `tool.New` still derives both schemas with `jsonschema.For[In]`, and applies the non-null rewrite and `WithSchema` (D1, D2 rule 8). It no longer calls `json.Marshal` on the published one. A writer in `tool` streams it through one `jsontext.Encoder`, with no nested `Marshal` (F19).
   - **Its output is today's, byte for byte** (Probe E):
     - members in jsonschema-go v0.4.3's order (V44): `type`, `properties`, `items`, then `description`, `default`, `enum`, `minimum`, `maximum`, `minLength`, `minItems`, `minProperties`, `required` and `additionalProperties`, each only when set;
