@@ -75,6 +75,7 @@ They may start after F4 in any order.
 8. Implement `todo`, publishing ACP `plan` updates; `tool_search` (BM25);
    and the MCP resource tools.
    *(2026-10-08, 0012-MADR: F1d builds D7's tiers, D8's families and D9's loading, D11's BM25 in `tool/toolsearch`, and D14's client data; the three resource tools take 0012-MADR's schemas.)*
+   *(2026-10-08: F1d is made executable as three sub-phases, F1d-1 (`todo`), F1d-2 (`tool_search`, loading and the MCP resource tools) and F1d-3 (routing and `locations`). See the Amendments entry "F1d made executable".)*
 
 **Accept:**
 
@@ -1772,3 +1773,221 @@ Choices made within the wording of 0005-MADR's native-tools amendment:
 2. **The approval test's file,** deviation 2.
 3. **The cross-device test seam.** The entry put it on the rename in `fsx`. The builtin move test also needs a copy that fails part way, so a second seam, `moveCopy`, was added in `tool/builtin`.
 4. **The race gate.** The entry expected F1c-2's gates to pass. One WSL race run met a defect in the standard library, deviation 3, which predates F1c; the evidence and the upstream report are 0013-REPORT.
+
+**2026-10-08 — F1d made executable** (the owner's decisions of 2026-10-08: three sub-phases; `tool_search` built now and dormant; found tools callable from the next model call).
+
+F1d is step 7, the ACP `fs/*` and `terminal/*` routing and tool-call `locations`, and step 8, `todo`, `tool_search` and the MCP resource tools. With them come [0012-MADR](0012-MADR-tool-schemas-descriptions-and-loading.md)'s D7–D9, D11 and D14. Every new tool applies 0012-MADR D1, D2 and D5 item 6.
+
+**The facts,** checked on 2026-10-08 by a script in the session scratchpad (`q239_claims_f1d.py`): 18 claims, all passing. With the check inverted, all 18 failed.
+
+- **gobble's agent fixes its tools when it is built.**
+  - The agent marshals its specs once (`agent/agent.go:78`), and every request sends them (`:238`).
+  - acpserver builds a new agent for every prompt, with that prompt's tools (`acpserver/agent.go:368`).
+  - So a tool list can change between prompts, never within one.
+- **acpserver ignores the client's capabilities.** `Initialize` takes its request unnamed (`acpserver/agent.go:204`), so `fs` and `terminal` support is never stored.
+- **Session entries.**
+  - An entry's unknown members round-trip (`session/session.go:53`).
+  - Pi writes extension state as `{"type":"custom", …, "customType", "data"}` (Pi `session-manager.ts:120-130`; gobble's round-trip fixture `session/session_test.go:26`).
+  - There is no `custom` entry type in gobble yet.
+- **acpserver already sends a plan update,** from plan mode's exit (`acpserver/modes.go:146`). The ACP SDK's plan statuses are pending, in_progress and completed (`types_gen.go:3399`).
+- **The ACP SDK** has `ToolCallLocation` (`types_gen.go:6541`), and agent-side `ReadTextFile` (`agent_gen.go:478`) and `CreateTerminal` (`:501`).
+- **mcpclient** lists a server's tools when it connects (`mcpclient/conn.go:138`), and never lists or reads resources: none of its 11 files does.
+- **The other harnesses:**
+  - Pi's `tool_search` sets BM25's `k1` (`tool-search/tool.ts:119`), and is off until something is deferred (`index.ts:14`).
+  - Pi's found tools are "available from your next call" (`tool.ts:263`); codex's are exposed for "the next model call" (`tool_search_spec.rs:94`).
+  - codex's `update_plan` answers "Plan updated" (`plan.rs:22`), and opencode's todo tool is `todowrite` (`todo.ts:3`). Both replace the whole list on every call: a read-only survey of 2026-10-08, whose citations above are re-checked.
+
+**The owner's decisions, 2026-10-08:**
+
+1. **Three sub-phases,** each one commit with its own record and gates:
+   - **F1d-1:** `todo`, the `custom` entry type, and `/todos`;
+   - **F1d-2:** `tool_search`, 0012-MADR's tiers, families and loading, and the MCP resource tools;
+   - **F1d-3:** the client's capabilities, ACP `fs/*` and `terminal/*` routing, and `locations`.
+2. **`tool_search` is built in F1d-2, dormant.** It is offered only while a tool is deferred (0005-MADR, `:533`), and nothing is deferred in 1.0 until F8 defers MCP tools and F6 adds `request_permissions`. It is tested with fixture tools.
+3. **Found tools are callable from the next model call,** in the same turn. The agent's tool list may grow within a turn, append-only.
+
+**F1d-1 — `todo`, the `custom` entry, and `/todos`.**
+
+Choices made within the wording:
+
+- **`session`** gains `TypeCustom = "custom"`, and `Entry` gains `CustomType string` and `Data jsontext.Value`, in Pi's shape. An unknown `customType` still round-trips.
+- **`tool.Result`** gains `Plan []PlanItem`, with `PlanItem{Content, Status, Priority string}`. It is client data, like `Diffs` (0012-MADR D14), so the tool stays pure: it never reaches the session or the connection.
+- **`todo {todos}`** (`tool/builtin/todo.go`):
+  - **The list:** an array of `{content` req `minLength` 1, `status` req enum `pending`, `in_progress`, `completed`; `priority` enum `high`, `medium`, `low`, default `medium``}` (0012-MADR's table).
+  - **Each call replaces the whole list,** as codex and opencode do. An empty array clears it.
+  - **The result:** `todo list updated: 2 completed, 1 in progress, 3 pending`, or `todo list cleared`, with `Result.Plan` set.
+  - **Kind and hints:** kind `think`; read-only and idempotent, since it changes no file and the user is never asked.
+- **acpserver, on a tool result with `Plan`:**
+  - it sends `session/update` `plan`, with the entries mapped one to one;
+  - ~~it appends `custom{customType: "gobble.todo", data: {todos}}`.~~ *(Deviation 2: `prompt.go` only sends updates; entries are written by `writer.event` in `acpserver/agent.go`.)*
+  - `writer.event` in `acpserver/agent.go` appends `custom{customType: "gobble.todo", data: {todos}}` right after the tool's result entry.
+- **Replay.**
+  - `session/load` sends the last `gobble.todo` entry's plan after the history.
+  - `resume` restores nothing to the client.
+  - Fork and clone copy the entry, as they copy every entry.
+- **`/todos`** prints the current list as text: `[x]`, `[>]` or `[ ]`, then the content, one per line; or `no todo list`.
+- **`todo.md`,** in `tool/builtin/describe/`, exactly:
+
+  ```markdown
+  Keep a short checklist of the steps of the current task, shown to the user as a plan.
+
+  ## Use when
+
+  - A task has three or more steps, or the user gave a list of things to do.
+  - Update it as steps start and finish, so the user can follow progress.
+  - Not for notes or results: answer in text, or use write for a file.
+
+  ## Returns
+
+  - A line counting the items, such as `todo list updated: 2 completed, 1 in progress, 3 pending`.
+
+  ## Rules
+
+  - Each call replaces the whole list: send every item, with its status.
+  - Keep one item `in_progress` at a time, and mark it `completed` when it is done.
+  - An empty `todos` clears the list.
+  ```
+
+  *(Deviation 4, 2026-10-08: the template is kept above as planned, but its third Use when bullet is written as `- Not for notes or results: use write for a file, or answer in text.`, because the description test reads a Not for line only when `use` and a tool's name follow the colon.)*
+
+**F1d-1's files:**
+
+| | Files |
+| :--- | :--- |
+| new | `tool/builtin/todo.go`, `todo_test.go`, `describe/todo.md`; `acpserver/todo_test.go` |
+| changed | `session/session.go`, `session/session_test.go`; `tool/tool.go` (`Result.Plan`), `tool/tool_test.go`; `tool/builtin/builtin.go`, `builtin_test.go`; `acpserver/prompt.go` (the plan update and the entry), `acpserver/history.go` (replay), `acpserver/commands.go` (`/todos`); `docs/architecture.md`; `README.md` |
+
+*(2026-10-08, F1d-1 deviations 2 and 3: `acpserver/agent.go` (the entry) and `acpserver/commands_test.go` (`todos` in its list of command names) join the changed files. `acpserver/prompt.go` carries the plan update only.)*
+
+*(2026-10-08, F1d-1 deviation 5: `acpserver/testdata/session.golden` (the advertised commands) joins the changed files.)*
+
+**F1d-1's tests,** each seen failing first on a scratch copy:
+
+- **`custom` entries:** written and read back, and an unknown `customType` still round-trips.
+- **`todo`:**
+  - the result line;
+  - `Plan` set;
+  - an empty list clears;
+  - ~~a bad status is refused by the schema's enum, which the validator enforces, as an enum is structural.~~ *(Deviation 1: the validator checks only the type-derived schema.)*
+  - a bad `status` or `priority` is refused by `todo`'s own code, in its own words (0012-MADR D2 rule 8).
+- **Through `acptest`:**
+  - a `todo` call produces one `session/update` `plan`, with the entries in order and their statuses and priorities;
+  - the session file holds a `gobble.todo` entry;
+  - `session/load` sends that plan again after the history;
+  - `/todos` prints it.
+
+**F1d-1's deviations, 2026-10-08,** found while reading its files before its code was written (1–3), while writing `todo` (4) and at its first acpserver test run (5), and decided by the owner:
+
+1. **The enum is not validated.**
+   - **Found:** the test line said the validator enforces the `status` enum. It does not. `Run` validates against the schema derived from the Go type alone (`tool/tool.go:296-334`), and `WithSchema`'s enums are published only (`tool/tool.go:191-195`). jsonschema-go v0.4.3's `jsonschema` tag sets only a description (`infer.go:329-336`).
+   - **Decided:** `todo`'s own code refuses a bad `status` or `priority` in its own words, as 0012-MADR D2 rule 8 says. The test is in `todo_test.go`. No file is added.
+2. **Entries are written in `acpserver/agent.go`.**
+   - **Found:** `acpserver/prompt.go` sends updates only. Session entries are written by `writer.event` (`acpserver/agent.go:479-499`).
+   - **Decided:** `acpserver/agent.go` joins F1d-1's files. Its `ToolEnd` case appends the `gobble.todo` entry right after the tool's result entry.
+3. **The command names are pinned.**
+   - **Found:** `acpserver/commands_test.go:76` lists every command name, so `/todos` fails it.
+   - **Decided:** `acpserver/commands_test.go` joins F1d-1's files, with `todos` added to that list.
+4. **The template's Not for line.**
+   - **Found:** `todo.md`'s planned bullet, `- Not for notes or results: answer in text, or use write for a file.`, fails the description test, whose Not for pattern needs `use` and a tool's name right after the colon (`tool/builtin/describe_test.go:21`).
+   - **Decided:** the bullet is `- Not for notes or results: use write for a file, or answer in text.` The meaning is unchanged, and the test is unchanged. No file is added.
+5. **The golden transcript pins the advertised commands.**
+   - **Found:** with `/todos` added, `TestSession` failed at line 4 of `acpserver/testdata/session.golden`, whose `available_commands_update` lists every command. The one difference was the new `todos` entry; the file was unchanged in git, and no other fixture holds the list.
+   - **Decided:** `acpserver/testdata/session.golden` joins F1d-1's files, regenerated with `ACPTEST_UPDATE=1 go test ./acpserver -run TestSession`, its diff checked to be that one entry.
+
+A choice within the wording: `todos` publishes `minItems: 0`, because the schema test requires every array to state `minItems` (`tool/builtin/schema_test.go:72`) and an empty list clears.
+
+**F1d-2 — `tool_search`, the tiers, and the MCP resource tools.**
+
+Choices made within the wording:
+
+- **`tool/toolsearch`** is the index (0012-MADR D11):
+  - `New(specs []tool.Spec) *Index`, and `(*Index).Search(query string, limit int) []tool.Spec`.
+  - **The fields and weights:** the name split on `_`, weight 3; the description's first sentence, weight 2; the rest of the description, 1; the schema's property names and descriptions, 1.
+  - **Tokens and BM25:** lower-cased words on Unicode letter and digit boundaries, with an English stop-word list; `k1` 1.2 and `b` 0.75, as Pi's.
+  - **An exact name** ranks first.
+- **`tool`:**
+  - `Spec` gains `Family string`, set by `WithFamily`;
+  - `Result` gains `Load []string`, the names of tools to load.
+- **`agent`** partitions its tools by `Spec.Exposure`:
+  - **direct** tools are sent;
+  - **deferred** tools are kept for loading;
+  - **hidden** tools are neither sent nor found.
+- **When a result carries `Load`,** the agent:
+  - appends those tools, with their families, after the tools already sent, and re-marshals the specs before the next request in the same turn;
+  - emits an event saying what it loaded.
+- **acpserver records each load** as `custom{customType: "gobble.tools", data: {loaded}}`. At the next prompt it builds the agent with every tool the session's entries have loaded as direct, in load order: 0012-MADR D9's start-of-session loads.
+- **`tool_search {query, limit?}`** (`tool/builtin/toolsearch.go`):
+  - **The arguments:** `query` req `minLength` 1; `limit` 1–20, default 5.
+  - **What it searches:** the agent gives it the deferred tools through `tool.Env.Deferred`, a new `[]tool.Spec`.
+  - **The result:** `loaded 2 tools, callable from your next call:`, then one line per tool, `- name: first sentence`, with `Load` set. When nothing matches, `no deferred tool matches <query>`.
+  - **When it is offered:** the agent adds it as a direct tool only when something is deferred.
+- **The MCP resource tools** (`mcpclient/resources.go`):
+  - **mcpclient learns resources:** `resources/list`, `resources/templates/list` and `resources/read`, through the go-sdk's client session.
+  - **The tools:** `list_mcp_resources {server?, cursor?}`, `list_mcp_resource_templates {server?, cursor?}` and `read_mcp_resource {server, uri}`, in family `mcp-resources`.
+  - **They exist only in a session with a connected server that advertises resources,** and are loaded at the start of its first prompt. So they are never left deferred, and `tool_search` stays dormant.
+- **Descriptions:** `tool_search.md` and the three resource tools' templates, in D5 item 6's shape. Their text is written with the code and reviewed in the commit, because their Returns lines depend on the go-sdk's result types, read when F1d-2 starts.
+
+**F1d-2's files:**
+
+| | Files |
+| :--- | :--- |
+| new | `tool/toolsearch/index.go`, `index_test.go`; `tool/builtin/toolsearch.go`, `toolsearch_test.go`, `describe/tool_search.md`; `mcpclient/resources.go`, `resources_test.go`, with templates for the three tools |
+| changed | `tool/tool.go` (`Family`, `Result.Load`, `Env.Deferred`), `tool/tool_test.go`; `agent/agent.go`, `agent/agent_test.go`; `acpserver/agent.go`, `acpserver/mcp.go`, `acpserver/prompt.go`; `mcpclient/manager.go`, `mcpclient/conn.go`; `mcpclient/mcptest/` (a fixture server with resources); `docs/architecture.md` |
+
+**F1d-2's tests,** each seen failing first on a scratch copy:
+
+- **The index:** the field weights; an exact name first; stop words dropped; `k1` and `b` changing scores as BM25 says.
+- **The agent:**
+  - deferred tools are not sent;
+  - a `Load` adds a tool to the next request of the same turn, after the tools already there;
+  - a family loads whole;
+  - hidden tools are never offered;
+  - `tool_search` is offered only while something is deferred.
+- **acpserver:**
+  - a load is recorded;
+  - the next prompt starts with the loaded tool;
+  - fork keeps it.
+- **mcpclient,** against `mcptest`'s fixture server: the three resource methods; the tools appear only when the server advertises resources.
+
+**F1d-3 — the client's capabilities, `fs/*` and `terminal/*` routing, and `locations`.**
+
+Choices made within the wording:
+
+- **acpserver stores** the client's `fs.readTextFile`, `fs.writeTextFile` and `terminal` capabilities from `initialize`.
+- **`tool.Env` gains `Files`,** an interface with `ReadTextFile(path) (string, error)` and `WriteTextFile(path, content) error`.
+  - acpserver sets it on a call when the client advertises the capability.
+  - read, write and edit then do their text I/O through it.
+  - **Confinement is unchanged:** every path is still resolved and checked by `fsx` before the client is asked.
+  - Binary files, images and directories stay local.
+- **`tool.Env` gains `Terminal`,** an interface over `CreateTerminal`, `TerminalOutput`, `WaitForTerminalExit`, `KillTerminal` and `ReleaseTerminal`.
+  - bash uses it when the client advertises `terminal` and `builtin.Options.UseClientTerminal` is set. That setting is a Go option, by decision 2 of the entry "F1 made executable".
+  - The tool call carries the terminal's reference, so the client shows it live.
+  - Timeouts and cancellation still stop it, through `KillTerminal`.
+- **`locations`:**
+  - `tool.Result` gains `Locations []Location{Path, Line}`, and a tool may name its locations before it runs, through `tool.Locator`, as `Describer` names its title.
+  - read, write, edit, move, delete, copy and mkdir name their paths. grep names its first 20 matches' files and lines.
+  - acpserver puts them on `tool_call` and `tool_call_update`.
+
+**F1d-3's files:**
+
+| | Files |
+| :--- | :--- |
+| new | `acpserver/clientfs.go`, `acpserver/clientterm.go`, `acpserver/routing_test.go` |
+| changed | `tool/tool.go` (`Env.Files`, `Env.Terminal`, `Result.Locations`, `Locator`), `tool/tool_test.go`; `tool/builtin/read.go`, `write.go`, `edit.go`, `shell.go`, `grep.go`, `fileops.go`, `builtin.go` (`UseClientTerminal`), and their tests; `acpserver/agent.go`, `acpserver/prompt.go`; `acpclient/acptest/client.go` (an optional file and terminal fake for tests); `docs/architecture.md` |
+
+**F1d-3's tests,** each seen failing first on a scratch copy:
+
+- **The file methods:**
+  - a read through an `acptest` client that advertises `fs.readTextFile` produces `fs/read_text_file` and no direct disk read (0005-PLAN F1's own acceptance line);
+  - a write produces `fs/write_text_file`;
+  - a path outside the roots is still refused before the client is asked.
+- **The terminal methods:**
+  - bash with `UseClientTerminal` and a terminal-capable client produces `terminal/create`, `terminal/wait_for_exit`, `terminal/output` and `terminal/release`;
+  - a timeout produces `terminal/kill`.
+- **Locations** on `tool_call` and `tool_call_update` for read, edit and grep.
+
+**Deferred, named:**
+
+- **`request_permissions`'s event load:** F6.
+- **MCP tools deferred by default:** F8. `tool_search` becomes live with them.
+- **A model-visible `cancelled` todo status:** ACP has no such status, so it is left out.
