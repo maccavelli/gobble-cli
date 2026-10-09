@@ -110,6 +110,42 @@ func TestIDs(t *testing.T) {
 	}
 }
 
+// A custom entry's members are typed: gobble's own reads back as written,
+// and another extension's, with a member gobble does not know, round-trips.
+func TestCustomEntry(t *testing.T) {
+	todo := Entry{Type: TypeCustom, ID: "c1", CustomType: CustomTodo, Data: jsontext.Value(`{"todos":[{"content":"a","status":"pending"}]}`)}
+	b, err := json.Marshal(todo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const want = `{"type":"custom","id":"c1","parentId":null,"customType":"gobble.todo","data":{"todos":[{"content":"a","status":"pending"}]}}`
+	if string(b) != want {
+		t.Fatalf("encoded\n got %s\nwant %s", b, want)
+	}
+	var back Entry
+	if err := json.Unmarshal(b, &back); err != nil {
+		t.Fatal(err)
+	}
+	if back.Type != TypeCustom || back.CustomType != CustomTodo || string(back.Data) != string(todo.Data) || len(back.Unknown) != 0 {
+		t.Fatalf("read back %+v", back)
+	}
+	const other = `{"type":"custom","id":"c2","parentId":"c1","customType":"my-extension","data":{"count":42},"extra":true}`
+	var e Entry
+	if err := json.Unmarshal([]byte(other), &e); err != nil {
+		t.Fatal(err)
+	}
+	if e.CustomType != "my-extension" || string(e.Data) != `{"count":42}` {
+		t.Fatalf("decoded %+v", e)
+	}
+	out, err := json.Marshal(e)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(out) != other {
+		t.Fatalf("round trip\n got %s\nwant %s", out, other)
+	}
+}
+
 func TestMemoryStore(t *testing.T) {
 	s := NewMemoryStore()
 	ctx := t.Context()

@@ -16,8 +16,10 @@ import (
 	"github.com/maccavelli/gobble-cli/session"
 )
 
-// commands are the slash commands Prompt executes, frozen by 0002-PLAN
-// Phase 6 step 6. Every one is advertised, and only these are: a test
+// commands are the slash commands Prompt executes: 0002-PLAN Phase 6 step
+// 6's frozen set, then the ones 0005-MADR's command table adds as their
+// phases land (/todos, 0005-PLAN F1d-1). Every one is advertised, and
+// only these are: a test
 // sends each and asserts it is handled (advertisement ⊆ handlers). TUI
 // chrome is never here.
 var commands = []command.Command{
@@ -33,6 +35,7 @@ var commands = []command.Command{
 	{Name: "name", Description: "Show or set the session name", Hint: "[name]"},
 	{Name: "fork", Description: "Start a new session from before an earlier message", Hint: "[entry]"},
 	{Name: "clone", Description: "Start a new session from a copy of this one"},
+	{Name: "todos", Description: "Show the todo list"},
 }
 
 // availableCommands is the commands as ACP lists them.
@@ -81,6 +84,7 @@ func (a *Agent) handlers() map[string]handler {
 		"name":     a.cmdName,
 		"fork":     a.cmdFork,
 		"clone":    a.cmdClone,
+		"todos":    a.cmdTodos,
 	}
 }
 
@@ -422,6 +426,12 @@ func forkTarget(entries []session.Entry, id string) (*session.Entry, string) {
 		return nil, nothingBefore
 	}
 	return target, ""
+}
+
+// cmdTodos is /todos: the active path's last todo list.
+func (a *Agent) cmdTodos(_ context.Context, t *cmdTurn, _ string) error {
+	t.say(todosText(replayState(t.s.log.Entries()).todos))
+	return nil
 }
 
 // cmdClone is /clone: a new session holding the whole current path.

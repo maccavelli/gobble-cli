@@ -3,7 +3,9 @@ package tool_test
 import (
 	"context"
 	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
@@ -187,5 +189,28 @@ func TestOutputs(t *testing.T) {
 	r, err = st.Run(t.Context(), tool.Call{}, tool.Env{})
 	if err != nil || r.Text() != `{"n":2}` {
 		t.Fatalf("result = %+v, %v", r, err)
+	}
+}
+
+// A result's plan reaches the caller as the tool left it: a list in order,
+// and an empty list, which clears, still set.
+func TestPlan(t *testing.T) {
+	for _, plan := range [][]tool.PlanItem{
+		{{Content: "a", Status: tool.PlanCompleted, Priority: tool.PriorityHigh}, {Content: "b", Status: tool.PlanPending, Priority: tool.PriorityMedium}},
+		{},
+	} {
+		tl := tool.New("p", "", func(context.Context, struct{}, tool.Env) (tool.Result, error) {
+			r := tool.TextResult("ok")
+			r.Plan = plan
+			return r, nil
+		})
+		r, err := tl.Run(t.Context(), tool.Call{}, tool.Env{})
+		if err != nil || r.Plan == nil || !slices.Equal(r.Plan, plan) {
+			t.Fatalf("plan %v = %+v, %v", plan, r.Plan, err)
+		}
+	}
+	b, err := json.Marshal(tool.Result{Plan: []tool.PlanItem{{Content: "a", Status: tool.PlanInProgress, Priority: tool.PriorityLow}}})
+	if err != nil || string(b) != `{"plan":[{"content":"a","status":"in_progress","priority":"low"}]}` {
+		t.Fatalf("encoded %s, %v", b, err)
 	}
 }

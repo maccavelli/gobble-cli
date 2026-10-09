@@ -147,6 +147,7 @@ type state struct {
 	messages        []session.Entry             // the path's message entries
 	context         []session.Entry             // the entries the model sees
 	path            []session.Entry
+	todos           []tool.PlanItem // the path's last todo list
 }
 
 // replayState reads entries: model_change, thinking_level_change,
@@ -174,6 +175,10 @@ func replayState(entries []session.Entry) state {
 			st.provider, st.model = e.Provider, e.ModelID
 		case session.TypeThinkingLevelChange:
 			st.thinking = e.ThinkingLevel
+		case session.TypeCustom:
+			if todos, ok := todosOf(e); ok {
+				st.todos = todos
+			}
 		case session.TypeMessage:
 			if e.Message == nil {
 				continue
@@ -270,9 +275,18 @@ func assistantContent(blocks []session.Block) []llm.Content {
 // what the model sees: a compaction as one agent_message_chunk with its
 // summary, one user_message_chunk per user message, one
 // agent_message_chunk per assistant message with its whole text, and one
-// tool_call per call in its final state. The session-start frames follow
-// them, sent by the caller.
+// tool_call per call in its final state; then the path's last todo list as
+// a plan, unless it is empty (0005-PLAN F1d-1). The session-start frames
+// follow them, sent by the caller.
 func replayUpdates(st state, tools map[string]tool.Tool, cwd string) []acp.SessionUpdate {
+	out := replayHistory(st, tools, cwd)
+	if len(st.todos) > 0 {
+		out = append(out, planUpdate(st.todos))
+	}
+	return out
+}
+
+func replayHistory(st state, tools map[string]tool.Tool, cwd string) []acp.SessionUpdate {
 	var out []acp.SessionUpdate
 	for i, e := range st.context {
 		if e.Type == session.TypeCompaction && i == 0 {
@@ -346,6 +360,49 @@ func replayToolCall(b session.Block, result *session.Message, tools map[string]t
 	return acp.StartToolCall(acp.ToolCallId(b.ID), cutTitle(title), acp.WithStartKind(kind), acp.WithStartStatus(status),
 		acp.WithStartRawInput(jsonRaw(b.Arguments)),
 		acp.WithStartContent([]acp.ToolCallContent{acp.ToolContent(acp.TextBlock(cutBytes(firstLine(text), maxSummary)))}))
+}
+
+// todoData is a gobble.todo entry's data: the list a todo call left.
+type todoData struct {
+	Todos []tool.PlanItem `json:"todos"`
+}
+
+// todoEntry records a call's plan, which is not nil (tool.Result.Plan). An
+// empty plan is written as [], so the entry says the list was cleared.
+func todoEntry(plan []tool.PlanItem) session.Entry {
+	return session.Entry{Type: session.TypeCustom, CustomType: session.CustomTodo, Data: mustJSON(todoData{Todos: plan})}
+}
+
+// todosOf is the list a gobble.todo entry holds, and whether it holds one.
+func todosOf(e session.Entry) ([]tool.PlanItem, bool) {
+	if e.Type != session.TypeCustom || e.CustomType != session.CustomTodo {
+		return nil, false
+	}
+	var d todoData
+	if err := json.Unmarshal(e.Data, &d); err != nil {
+		return nil, false
+	}
+	return d.Todos, true
+}
+
+// todosText is the todo list as /todos prints it: [x] completed, [>] in
+// progress and [ ] pending, one item per line.
+func todosText(plan []tool.PlanItem) string {
+	if len(plan) == 0 {
+		return "no todo list"
+	}
+	lines := make([]string, len(plan))
+	for i, it := range plan {
+		mark := "[ ]"
+		switch it.Status {
+		case tool.PlanCompleted:
+			mark = "[x]"
+		case tool.PlanInProgress:
+			mark = "[>]"
+		}
+		lines[i] = mark + " " + it.Content
+	}
+	return strings.Join(lines, "\n")
 }
 
 func firstLine(s string) string {

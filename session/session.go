@@ -24,6 +24,13 @@ const (
 	TypeThinkingLevelChange = "thinking_level_change"
 	TypeSessionInfo         = "session_info"
 	TypeCompaction          = "compaction"
+	TypeCustom              = "custom"
+)
+
+// Custom entry types gobble writes (Entry.CustomType).
+const (
+	// CustomTodo is the todo list after a todo call: data is {todos}.
+	CustomTodo = "gobble.todo"
 )
 
 // Message roles gobble writes.
@@ -76,7 +83,11 @@ type Entry struct {
 	Details          jsontext.Value `json:"details,omitzero"`
 	Usage            *Usage         `json:"usage,omitzero"`
 	FromHook         *bool          `json:"fromHook,omitzero"`
-	Unknown          jsontext.Value `json:",embed"`
+	// CustomType and Data are a custom entry's members (Pi's CustomEntry):
+	// an extension's state, which takes no part in the model's context.
+	CustomType string         `json:"customType,omitzero"`
+	Data       jsontext.Value `json:"data,omitzero"`
+	Unknown    jsontext.Value `json:",embed"`
 }
 
 // Message is Pi's AgentMessage. Content is a JSON string or an array of

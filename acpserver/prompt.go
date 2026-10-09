@@ -105,6 +105,9 @@ func (u *updates) event(ev agent.Event, last *llm.Usage) {
 		// (0008-MADR D19 item 2).
 		u.send(acp.UpdateToolCall(acp.ToolCallId(ev.Call.ID),
 			acp.WithUpdateStatus(status), acp.WithUpdateContent(resultContent(ev.Result))))
+		if ev.Result.Plan != nil {
+			u.send(planUpdate(ev.Result.Plan))
+		}
 	case agent.Usage:
 		*last = ev.Usage
 	case agent.Queued:
@@ -161,6 +164,17 @@ func resultContent(r tool.Result) []acp.ToolCallContent {
 		out = append(out, acp.ToolContent(acp.TextBlock(text)))
 	}
 	return out
+}
+
+// planUpdate is a tool's plan as ACP's plan update, one entry per item in
+// order. An empty plan is an update with no entries, which clears the
+// client's plan.
+func planUpdate(plan []tool.PlanItem) acp.SessionUpdate {
+	entries := make([]acp.PlanEntry, len(plan))
+	for i, it := range plan {
+		entries[i] = acp.PlanEntry{Content: it.Content, Status: acp.PlanEntryStatus(it.Status), Priority: acp.PlanEntryPriority(it.Priority)}
+	}
+	return acp.UpdatePlan(entries...)
 }
 
 // cutTitle is a title on one line, at most maxTitle runes.

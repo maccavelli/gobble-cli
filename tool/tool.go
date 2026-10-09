@@ -83,14 +83,35 @@ type Env struct {
 // Result is the tool's reply. Output is what the model sees: a JSON string
 // is given to it as text. Title, Summary and Diffs are for the client's
 // display: a short phrase, a self-contained summary of at most 400 bytes,
-// and the files the call changed (0008-MADR D19 item 3).
+// and the files the call changed (0008-MADR D19 item 3). Plan, when not
+// nil, is the task's checklist as the call left it, for the client to show
+// as its plan; an empty, non-nil Plan clears it (0005-PLAN F1d-1).
 type Result struct {
 	Output  jsontext.Value `json:"output,omitzero"`
 	IsError bool           `json:"isError,omitzero"`
 	Title   string         `json:"title,omitzero"`
 	Summary string         `json:"summary,omitzero"`
 	Diffs   []Diff         `json:"diffs,omitzero"`
+	Plan    []PlanItem     `json:"plan,omitzero"`
 }
+
+// PlanItem is one step of a plan. Status is pending, in_progress or
+// completed; Priority is high, medium or low. Both use ACP's plan names.
+type PlanItem struct {
+	Content  string `json:"content"`
+	Status   string `json:"status"`
+	Priority string `json:"priority"`
+}
+
+// Plan statuses and priorities.
+const (
+	PlanPending    = "pending"
+	PlanInProgress = "in_progress"
+	PlanCompleted  = "completed"
+	PriorityHigh   = "high"
+	PriorityMedium = "medium"
+	PriorityLow    = "low"
+)
 
 // Diff is one file a call changed. OldText is nil for a new file.
 type Diff struct {

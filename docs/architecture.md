@@ -41,10 +41,10 @@ The tier is each package's `Stability:` line in its `doc.go`. **stable** package
 | `llm/catalog` | beta | The model catalog (placeholder). |
 | `llm/llmtest` | stable | A scripted `llm.Provider` and request assertions, for tests. |
 | `tool` | stable | The tool contract, with the workspace roots each call gets. A tool publishes a schema with its bounds and defaults, and validates the Go type's own. |
-| `tool/builtin` | beta | The built-in tools: `read` (numbered lines, directory listings), `write`, `edit` (multi-edit with layered, guarded matching and a compare-and-swap), `grep` (RE2, `path:N: text`, sorted), `find` (globs), `tree` (a breadth-first entry budget), `move`, `delete`, `copy` and `mkdir` (confined, both paths locked in a fixed order, a cross-device move copied then deleted), and `bash` and, on Windows, `powershell` (process trees, a default timeout, the whole output of long commands kept 7 days). Descriptions are Markdown templates in describe/, filled from the options. |
+| `tool/builtin` | beta | The built-in tools: `read` (numbered lines, directory listings), `write`, `edit` (multi-edit with layered, guarded matching and a compare-and-swap), `grep` (RE2, `path:N: text`, sorted), `find` (globs), `tree` (a breadth-first entry budget), `move`, `delete`, `copy` and `mkdir` (confined, both paths locked in a fixed order, a cross-device move copied then deleted), `todo` (the task's checklist, replaced whole by each call and returned as the result's plan), and `bash` and, on Windows, `powershell` (process trees, a default timeout, the whole output of long commands kept 7 days). Descriptions are Markdown templates in describe/, filled from the options. |
 | `tool/toolsearch` | beta | Deferred tool exposure (placeholder). |
 | `permission` | beta | The policy contract that approves tool calls. |
-| `session` | stable | The session log contract, in Pi's JSONL v3 shapes. |
+| `session` | stable | The session log contract, in Pi's JSONL v3 shapes, with `custom` entries for extension state such as `gobble.todo`. |
 | `session/jsonl` | stable | Sessions as JSONL files, with a writer lock. |
 | `compaction` | beta | Pi's manual compaction: the cut point, the summary and the entry. |
 | `command` | beta | The slash-command vocabulary shared by the agent and its clients. |
@@ -53,7 +53,7 @@ The tier is each package's `Stability:` line in its `doc.go`. **stable** package
 | `hook` | stable | The lifecycle hook contract. |
 | `checkpoint` | beta | File snapshots for undo (placeholder). |
 | `telemetry` | beta | OpenTelemetry wiring (placeholder). |
-| `acpserver` | beta | gobble's ACP agent: sessions, prompts, slash commands, modes, compaction, MCP servers and the `_gobble/` extension methods. |
+| `acpserver` | beta | gobble's ACP agent: sessions, prompts, slash commands, modes, compaction, MCP servers and the `_gobble/` extension methods. A tool result's plan is sent as a `plan` update, recorded as a `gobble.todo` entry, replayed by `session/load` and shown by `/todos`. |
 | `acpclient` | beta | gobble's own ACP client, used by `internal/cli`. |
 | `acpclient/acptest` | stable | An agent and a client over in-memory pipes, with a frame recorder and golden transcripts, for tests. |
 | `mcpclient` | beta | MCP servers over stdio and streamable HTTP, through the go-sdk. Each stdio server runs as an `internal/proctree` tree and is stopped as Pi stops one. |

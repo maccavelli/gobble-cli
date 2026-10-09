@@ -475,7 +475,8 @@ func (w *writer) add(e session.Entry) {
 
 // event writes what ev completes: a queued user message as it enters, the
 // assistant message of a model call, each tool result before its terminal
-// update, and at the end the results of calls a cancel cut short.
+// update, followed by its plan as a gobble.todo entry when it has one, and
+// at the end the results of calls a cancel cut short.
 func (w *writer) event(ev agent.Event) {
 	ts := func() string { return session.Timestamp(w.a.now()) }
 	switch ev := ev.(type) {
@@ -486,6 +487,9 @@ func (w *writer) event(ev agent.Event) {
 	case agent.ToolEnd:
 		w.written[ev.Call.ID] = true
 		w.add(session.Entry{Type: session.TypeMessage, Message: toolResultMessage(ev.Call.ID, ev.Call.Name, ev.Result.Text(), ev.Result.IsError, ts())})
+		if ev.Result.Plan != nil {
+			w.add(todoEntry(ev.Result.Plan))
+		}
 	case agent.End:
 		for _, m := range ev.Messages {
 			for _, c := range m.Content {

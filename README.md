@@ -41,11 +41,12 @@ Early, and built in the order [docs/README.md](docs/README.md#build-order) gives
   commands, modes, manual compaction, MCP servers and gobble's `_gobble/` extension methods.
 - **Tools:** `read`, `write` and `edit`, confined to the workspace roots; `grep`, `find` and `tree`,
   which follow the repository's `.gitignore` rules; `move`, `delete`, `copy` and `mkdir`, where every
-  delete asks first; `bash`, and `powershell` on Windows, run as process trees that stop whole.
+  delete asks first; `todo`, a checklist the client shows as the plan; `bash`, and `powershell` on
+  Windows, run as process trees that stop whole.
 - **Sessions** as JSONL files in Pi's v3 shapes.
 - **`gobble mcp add|remove|list`**, `gobble config path`, `gobble version` and `gobble completion`.
 
-Not built yet: `tool_search` and `todo`
+Not built yet: `tool_search`, the MCP resource tools and the client's file and terminal methods
 (F1d), the permission engine (F6), the enhanced TUI mode, and `gobble update`. The full v1 line, tiered into
 a v1.0.0 gate, a v1.x train and `exp/`, is in [0005-MADR](docs/decisions/0005-MADR-v1-feature-scope.md).
 

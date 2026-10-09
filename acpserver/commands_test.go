@@ -73,7 +73,7 @@ func TestEveryAdvertisedCommandExecutes(t *testing.T) {
 		t.Fatalf("commands made %d model requests", n)
 	}
 	for _, name := range names {
-		if !strings.Contains(name, "/") && !slices.Contains([]string{"help", "compact", "usage", "context", "session", "model", "thinking", "mode", "plan", "name", "fork", "clone"}, name) {
+		if !strings.Contains(name, "/") && !slices.Contains([]string{"help", "compact", "usage", "context", "session", "model", "thinking", "mode", "plan", "name", "fork", "clone", "todos"}, name) {
 			t.Errorf("unexpected command %s", name)
 		}
 	}
