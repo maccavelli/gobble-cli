@@ -41,7 +41,7 @@ The tier is each package's `Stability:` line in its `doc.go`. **stable** package
 | `llm/catalog` | beta | The model catalog (placeholder). |
 | `llm/llmtest` | stable | A scripted `llm.Provider` and request assertions, for tests. |
 | `tool` | stable | The tool contract, with the workspace roots each call gets. A tool publishes a schema with its bounds and defaults, and validates the Go type's own. |
-| `tool/builtin` | beta | The built-in tools: `read` (numbered lines, directory listings), `write`, `edit` (multi-edit with layered, guarded matching and a compare-and-swap), and `bash` and, on Windows, `powershell` (process trees, a default timeout, the whole output of long commands kept 7 days). Descriptions are Markdown templates in describe/, filled from the options. |
+| `tool/builtin` | beta | The built-in tools: `read` (numbered lines, directory listings), `write`, `edit` (multi-edit with layered, guarded matching and a compare-and-swap), `grep` (RE2, `path:N: text`, sorted), `find` (globs), `tree` (a breadth-first entry budget), and `bash` and, on Windows, `powershell` (process trees, a default timeout, the whole output of long commands kept 7 days). Descriptions are Markdown templates in describe/, filled from the options. |
 | `tool/toolsearch` | beta | Deferred tool exposure (placeholder). |
 | `permission` | beta | The policy contract that approves tool calls. |
 | `session` | stable | The session log contract, in Pi's JSONL v3 shapes. |
@@ -71,7 +71,7 @@ The tier is each package's `Stability:` line in its `doc.go`. **stable** package
 | `internal/auth` | internal | The credential store (placeholder). |
 | `internal/config` | internal | Layered settings (placeholder). |
 | `internal/proctree` | internal | A command as a tree that stops whole: its own process group on Unix, a kill-on-close Job object on Windows. |
-| `internal/fsx` | internal | Workspace confinement for file tools: Pi's path resolution, `os.Root` over the working and additional directories, atomic writes, and a per-path lock. |
+| `internal/fsx` | internal | Workspace confinement for file tools: Pi's path resolution, `os.Root` over the working and additional directories, atomic writes, and a per-path lock. A glob engine written to git's rules, the repository's ignore rules, and a confined walker that applies them. |
 | `exp/a2a` | experimental | Agent2Agent endpoint (experimental placeholder). |
 | `exp/acpws` | experimental | ACP over WebSocket (experimental placeholder). |
 | `exp/codemode` | experimental | Code-mode sandbox (experimental placeholder). |

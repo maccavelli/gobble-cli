@@ -4,7 +4,7 @@ Read a text file with numbered lines, or list a directory's entries.
 
 - You need a file's content, or a directory's entries, before acting on them.
 - Prefer it to `cat`, `head`, `tail` and `Get-Content` in a shell.
-- Not for searching files for text: use bash with `grep`.
+- Not for searching files for text: use grep.
 
 ## Returns
 

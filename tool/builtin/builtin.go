@@ -57,11 +57,12 @@ func (o Options) withDefaults() Options {
 	return o
 }
 
-// ToolsWith returns the built-in tools configured by o: read, write, edit
-// and bash, and on Windows powershell.
+// ToolsWith returns the built-in tools configured by o, in 0012-MADR D7's
+// order: read, write, edit, grep, find, tree and bash, and on Windows
+// powershell.
 func ToolsWith(o Options) []tool.Tool {
 	o = o.withDefaults()
-	ts := []tool.Tool{readWith(o), Write(), Edit(), bashWith(o)}
+	ts := []tool.Tool{readWith(o), Write(), Edit(), Grep(), Find(), Tree(), bashWith(o)}
 	if runtime.GOOS == goosWindows {
 		ts = append(ts, powershellWith(o))
 	}

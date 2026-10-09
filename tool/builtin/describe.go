@@ -15,6 +15,7 @@ var describeFS embed.FS
 type describeData struct {
 	MaxLines, MaxKB, MaxLineChars int
 	DefaultTimeout, MaxTimeout    int // seconds
+	TreeDepth                     int // tree's default depth
 }
 
 // describeDataFor is o's limits for the templates.
@@ -22,6 +23,7 @@ func describeDataFor(o Options) describeData {
 	return describeData{
 		MaxLines: maxLines, MaxKB: maxBytes / 1024, MaxLineChars: maxLineChars,
 		DefaultTimeout: int(defaultTimeout / time.Second), MaxTimeout: int(o.MaxTimeout / time.Second),
+		TreeDepth: defaultTreeDepth,
 	}
 }
 

@@ -180,4 +180,42 @@ func TestBoundsHold(t *testing.T) {
 			}
 		}
 	})
+	// F1c-1's tools: each bound past its maximum is served at it.
+	var hits strings.Builder
+	for i := 1; i <= maxGrepLimit+1; i++ {
+		fmt.Fprintf(&hits, "hit %d\n", i)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "hits.txt"), []byte(hits.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Run("grep limit and context above their maximums", func(t *testing.T) {
+		r := run(t, Grep(), `{"pattern":"hit","glob":"hits.txt","limit":5000}`)
+		if r.IsError || !strings.Contains(r.Text(), "[1000 matches shown, the most there can be;") {
+			t.Fatalf("grep limit 5000 = %.200q…; want it served at 1000", r.Text())
+		}
+		r = run(t, Grep(), `{"pattern":"^hit 500$","glob":"hits.txt","context":50}`)
+		if lines := strings.Count(r.Text(), "\n") + 1; r.IsError || lines != 2*maxGrepContext+1 {
+			t.Fatalf("grep context 50 showed %d lines; want it served at %d either side", lines, maxGrepContext)
+		}
+	})
+	t.Run("find and tree limits and depth above their maximums", func(t *testing.T) {
+		for _, c := range []struct {
+			tl   tool.Tool
+			args string
+		}{{Find(), `{"pattern":"*.txt","limit":9000}`}, {Tree(), `{"depth":50,"limit":9000}`}} {
+			if r := run(t, c.tl, c.args); r.IsError {
+				t.Errorf("%s %s refused: %s", c.tl.Spec().Name, c.args, r.Text())
+			}
+		}
+		for _, c := range []struct{ v, lo, hi, def, want int }{
+			{9000, 1, maxFindLimit, defaultFindLimit, maxFindLimit},
+			{9000, 1, maxTreeLimit, defaultTreeLimit, maxTreeLimit},
+			{50, 1, maxTreeDepth, defaultTreeDepth, maxTreeDepth},
+			{0, 1, maxTreeDepth, defaultTreeDepth, defaultTreeDepth},
+		} {
+			if got := clampInt(c.v, c.lo, c.hi, c.def); got != c.want {
+				t.Errorf("clampInt(%d, %d, %d, %d) = %d, want %d", c.v, c.lo, c.hi, c.def, got, c.want)
+			}
+		}
+	})
 }

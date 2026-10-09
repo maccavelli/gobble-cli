@@ -27,7 +27,7 @@ func call(t *testing.T, tl tool.Tool, env tool.Env, args any) tool.Result {
 }
 
 func TestToolsAndAnnotations(t *testing.T) {
-	want := "read,write,edit,bash"
+	want := "read,write,edit,grep,find,tree,bash"
 	if runtime.GOOS == "windows" {
 		want += ",powershell"
 	}
@@ -36,9 +36,9 @@ func TestToolsAndAnnotations(t *testing.T) {
 	}
 	for _, tl := range Tools() {
 		s := tl.Spec()
-		readOnly := s.Name == "read"
+		readOnly := s.Name == "read" || s.Name == "grep" || s.Name == "find" || s.Name == "tree"
 		if s.Annotations.ReadOnlyHint != readOnly || s.Annotations.DestructiveHint == readOnly {
-			t.Errorf("%s annotations %+v: only read is read-only, the rest destructive", s.Name, s.Annotations)
+			t.Errorf("%s annotations %+v: only read, grep, find and tree are read-only, the rest destructive", s.Name, s.Annotations)
 		}
 		if len(s.InputSchema) == 0 || s.Kind == "" {
 			t.Errorf("%s spec %+v lacks a schema or a kind", s.Name, s)

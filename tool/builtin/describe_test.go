@@ -34,8 +34,16 @@ func TestDescriptionShape(t *testing.T) {
 	for _, f := range files {
 		names = append(names, strings.TrimSuffix(path.Base(f), ".md"))
 	}
-	if want := []string{"bash", "edit", "powershell", "read", "write"}; !slices.Equal(names, want) {
-		t.Fatalf("templates %v, want %v", names, want)
+	// Every tool ToolsWith can build has exactly one template, and every
+	// template a tool: powershell's is built on Windows only (F1c-1
+	// deviation 2).
+	want := Names()
+	if !slices.Contains(want, "powershell") {
+		want = append(want, "powershell")
+	}
+	slices.Sort(want)
+	if !slices.Equal(names, want) {
+		t.Fatalf("templates %v, want one for each tool, %v", names, want)
 	}
 	d := describeDataFor(Options{}.withDefaults())
 	var tools []string

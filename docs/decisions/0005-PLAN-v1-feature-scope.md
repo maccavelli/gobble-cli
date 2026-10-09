@@ -1453,6 +1453,14 @@ Choices made within the wording:
 
 *(F1c-1 deviation 2, 2026-10-08, the owner's decision.)* `tool/builtin/describe_test.go` joins F1c-1's changed files. `TestDescriptionShape` hard-coded its template set (`bash, edit, powershell, read, write`), so the three new templates broke it. The set is now derived: every tool `ToolsWith` can build, plus powershell's template where it is not built. Every tool has exactly one template, and every template a tool, and no later phase edits a list.
 
+*(F1c-1 deviation 3, 2026-10-08, found at F1c-1's pre-add check; the owner's decisions.)*
+
+- **What was found.** `govulncheck` fails every gate. Go 1.27.1's standard library has 10 reachable vulnerabilities, GO-2026-6603 to GO-2026-6617, in `net/http`, `net/http/internal/http2`, `net/textproto`, `crypto/tls` and `os`, all fixed in Go 1.27.2, released and stable. It is pre-existing: it reproduces on a clean export of `4504465`, which has none of F1c-1's changes.
+- **The decisions:**
+  - the toolchain moves to Go 1.27.2 in a commit of its own, before F1c-1's, with an amendment to 0004-MADR;
+  - the agent updates both hosts' `GOTOOLCHAIN` pin to `go1.27.2`.
+- **What follows.** F1c-1 is gated again on Go 1.27.2 before it is staged.
+
 **F1c-1's tests,** each seen failing first on a scratch copy (0012-PLAN C3):
 
 - **`glob_test.go`:**
@@ -1628,3 +1636,72 @@ Choices made within the wording of 0005-MADR's native-tools amendment:
 - The journal entries undo needs: X2.
 - `tool_search`'s families, and `request_permissions`: F1d and F6.
 - Reading `core.excludesFile`: not chosen (decision 3). It would need gobble to read git configuration.
+
+**F1c-1, 2026-10-08 — complete (staged; the owner commits).** It ran as the entry "F1c made executable" wrote it, approved by the owner's "proceed" of 2026-10-08, with deviations 1–3 decided by the owner. F1c-2 has not run.
+
+- **The deviations,** each recorded in the entry before it was fixed:
+  1. A worktree's `info/exclude` is read through `commondir`, as git reads it.
+  2. `TestDescriptionShape`'s template set is derived from the tools, not hard-coded.
+  3. The toolchain moved to Go 1.27.2, in a commit of its own (`c4ca6f5`), with 0004-MADR's amendment.
+     - **Why:** `govulncheck` had begun reporting 10 reachable standard-library vulnerabilities in Go 1.27.1. They reproduced on a clean export of `4504465`.
+     - **The machines:** both hosts' `GOTOOLCHAIN` pin was updated, with the owner's approval.
+     - **One slip:** this deviation's text was written into this PLAN after the records commit `6ef4ca9` had been staged for the last time, so it reaches the repository with F1c-1's commit instead.
+- **What was built:**
+  - **`internal/fsx`:** `glob.go`, `ignore.go` and `walk.go`, with their tests.
+  - **`tool/builtin`:** `grep.go`, which also holds the helpers the three tools share, as the entry's file list has no other place for them; `find.go`; `tree.go`; `search_test.go`; and the three templates.
+  - **Updated:** `builtin.go`, `describe.go`, `read.md`, `builtin_test.go`, `describe_test.go`, `schema_test.go` and `fuzz_test.go`; `docs/architecture.md` and `README.md`.
+- **The existing tests.** Two expectations changed, both named in advance: the tool list in `TestToolsAndAnnotations` (the entry), and the template set (deviation 2). No other assertion was edited.
+- **C3: every new check, seen failing on a scratch copy.** There were 14 mutations; each was asserted to land exactly once, and each log was read whole.
+  - **The glob engine:**
+    - a trailing `**` matching its own directory: `"abc/**" matching "abc" (dir true) = true, want false`;
+    - git's `[!…]` left unrewritten: the `file[!0-9].txt` cases fail.
+  - **The ignore rules:**
+    - re-inclusion under an ignored directory: `no re-include under an ignored directory`;
+    - the depth order removed: `Ignored("a.gen") = false, want true`;
+    - `commondir` not read: `a worktree's exclude file is …`.
+  - **The walker:**
+    - `node_modules` walked;
+    - the `.gitignore` above the root not read, so `a.log` is listed.
+  - **grep:**
+    - context lines repeated: `f.txt-4- 4` twice;
+    - `:` for context lines;
+    - `limit` unbounded: `want it served at 1000`.
+  - **tree and find:**
+    - tree's sort removed: `README.md` before `a/`;
+    - find's `/` dropped: `cmd/tool`.
+  - **The template set:** a missing template: `want one for each tool`.
+  - **`FuzzGlob`:** a broken `Match`: `does not match itself`.
+- **Fuzzing.** `FuzzGlob` ran 40,361,510 executions in 60 s with no failure.
+- **The gates,** on Go 1.27.2, on the tree this commit lands on:
+  - lint printed `0 issues.` for linux, darwin and windows;
+  - Windows `go test ./...` had no `FAIL` or `panic:`;
+  - WSL `make preflight` printed `preflight passed`, and WSL `go test -race ./...` exited 0;
+  - Windows `make preflight` printed `preflight passed`.
+- **Probe A** (Messages-shape definition bytes, on Windows):
+
+  | Tool | Description | Definition |
+  | :--- | ---: | ---: |
+  | read | 846 | 1,352 |
+  | grep | 975 | 1,910 |
+  | find | 772 | 1,345 |
+  | tree | 789 | 1,296 |
+  | **all eight** | | **11,081** |
+
+  Every description is within 1,200 bytes, and every definition within 2,000.
+
+**What the entry predicted wrongly:**
+
+1. **The worktree exclude file,** deviation 1.
+2. **The hard-coded template set,** deviation 2.
+3. **The toolchain,** deviation 3. Nothing in the entry could have foreseen it: the vulnerability database changed between F1c-1's start and its pre-add check.
+4. **grep's definition budget.** The first draft of grep's parameter descriptions made its definition 2,072 bytes, over the 2,000-byte budget. They were shortened, since the entry fixed the template's text but not theirs, and the definition is 1,910.
+5. **Lint.** The first full gate run failed golangci-lint with ten issues in the new code, the same on every GOOS:
+   - errcheck 2: an unchecked `path.Match` result, and an unchecked type assertion;
+   - nilerr 2: unreadable files skipped by returning nil with an error in scope, now in a helper, `candidate`, that has no error to return;
+   - gocritic 4: three needless wrapper functions, and one condition;
+   - modernize 1: `errors.AsType`;
+   - revive 1: `walk` beside `Walk`, now `walkDir`.
+
+   All ten were fixed, the 14 negatives were run again on the changed code (one anchor moved with the `path.Match` fix), and the gates were run again.
+6. **The RE2 refusal's wording.** `the pattern is not valid RE2 (<reason>)` doubles the parenthesis when the reason ends in one, as `missing closing )` does. It is kept as the entry wrote it.
+7. **The Write tool turned a byte order mark's Go escape into the character itself** in `ignore.go`, which `go build` refused. A script put the escape back.

@@ -3,6 +3,7 @@ package fsx
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -67,6 +68,37 @@ func FuzzOutside(f *testing.F) {
 		lexical := err == nil && (r == "." || filepath.IsLocal(r))
 		if got := !w.Outside(abs); got != lexical {
 			t.Fatalf("%q: inside = %v, lexical check says %v", rel, got, lexical)
+		}
+	})
+}
+
+// plainPath is a pattern with no glob syntax at all: plain names and
+// slashes, matched only by themselves.
+var plainPath = regexp.MustCompile(`^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$`)
+
+// FuzzGlob: compiling and matching any pattern against any path never
+// panics, and a pattern with no glob syntax matches exactly itself.
+func FuzzGlob(f *testing.F) {
+	for _, seed := range [][2]string{
+		{"*.go", "cmd/main.go"}, {"a/**/b", "a/x/y/b"}, {"{a,{b,c}}/*.{ts,tsx}", "b/x.tsx"},
+		{"[!a-z]?", "Zz"}, {"abc\\", "abc"}, {"**", ""}, {"a{", "a{"}, {"/x/", "x"}, {"docs/guide.md", "docs/guide.md"},
+	} {
+		f.Add(seed[0], seed[1])
+	}
+	f.Fuzz(func(t *testing.T, pattern, rel string) {
+		g, err := CompileGlob(pattern)
+		if err != nil {
+			return
+		}
+		g.Match(rel, false)
+		g.Match(rel, true)
+		if plainPath.MatchString(pattern) {
+			if !g.Match(pattern, false) {
+				t.Fatalf("%q does not match itself", pattern)
+			}
+			if g.Match(pattern+"x", false) {
+				t.Fatalf("%q matches %q", pattern, pattern+"x")
+			}
 		}
 	})
 }
