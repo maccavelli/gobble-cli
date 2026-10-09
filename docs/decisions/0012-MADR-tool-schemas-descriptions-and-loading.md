@@ -1,6 +1,6 @@
 ---
 status: accepted
-date: 2026-10-08
+date: 2026-10-09
 decision-makers: Project Owner
 consulted: none
 informed: none
@@ -122,6 +122,13 @@ What the probe also shows:
 - ~~**[unverified]** Whether OpenAI Responses normalises gobble's schemas to strict mode or falls back. Each has optional properties left out of `required`. The SDK's recorded ChatGPT-backend reply reports `"strict":true` for a tool sent without `strict` (V26), but that tool's only property was required. D3's probe settles this.~~ *(Settled 2026-10-08 by Probe D: it normalises them, by making every property required; F17.)*
 - **[unverified]** Whether a definition's bytes track its tokens closely enough to set the budget in bytes. D5 sets its budget in bytes because bytes can be tested offline, and treats the number as a ceiling, not a token count.
 
+**Probe E: the bytes `tool.New` publishes, and how strings are written** *(added 2026-10-09)*. A scratch program, `specsize`, printed every built-in tool's `Spec.InputSchema` on Windows. A second, `escprobe`, published one tool whose description held `<`, `>`, `&` and U+2028, with a string `default`, an `enum`, and two properties added after the derived ones.
+
+- **The member order** in all 13 schemas is `type`, `properties`, `items`, then `description`, `default`, `enum`, `minimum`, `maximum`, `minLength`, `minItems`, `required` and `additionalProperties`, each when set. `additionalProperties` is the literal `false`.
+- **Properties** come in declaration order, and the two added ones after them, sorted: `alpha` before `zeta`.
+- **Strings are not escaped.** `<`, `>`, `&` and U+2028 are written as themselves; U+2028 as its three UTF-8 bytes. A fractional `minimum` is written `0.5`.
+- **Why there is no escaping,** although jsonschema-go marshals with `encoding/json` v1, whose options escape for HTML and JavaScript (V40d, V48): `tool.New`'s outer `Marshal` is json/v2's (V39b), and it writes the method's output again under its own options.
+
 ### Findings
 
 **Schemas**
@@ -152,6 +159,17 @@ What the probe also shows:
     - both models sent bash a `timeout` and a `workdir`.
   - **The nullable form does not fix it.** In OpenAI's own strict form, models send `null` for `workdir`, which gobble's validator refuses today. `gpt-4.1-mini` still invented a `limit` of 50.
   - *Consequence:* this happens today, before any 0012 change. It contradicts D3's premise that strict normalisation is harmless. Fixing it means either opting out of strict mode per tool, which needs the SDK's per-tool `strict` flag (D13), or an adapter in `llm/provider`. That choice is the owner's.
+
+- **F19. gobble's one nested `Marshal` is `tool.New`'s, and the race gate keeps meeting it.** *(Added 2026-10-09, from [0013-REPORT](../reports/0013-REPORT-go-json-nested-marshal-race.md) and its amendment of that date.)*
+  - `tool.New` marshals each published `*jsonschema.Schema` with `json.Marshal` (V39). jsonschema-go's `Schema.MarshalJSON` calls `json.Marshal` again for the schema's struct and for each property's key and value (V40).
+  - The standard library's JSON packages race under the race detector when one `Marshal` nests inside another this way. It reproduces with no gobble code, and the pair it reports varies from run to run (0013-REPORT).
+  - **It is the only nested `Marshal` in gobble's code.**
+    - gobble defines no `MarshalJSON` method (V41).
+    - MCP tool schemas arrive as maps, and are marshaled as maps (V42).
+    - Plan mode's tool is built by `tool.New` too (V43).
+  - The race gate met it at 0005-PLAN F1c-2's gates and again at F1d-1's, each time in `internal/cli`, under `tool.New`.
+  - Whether it can corrupt output outside the race detector is **[unverified]**: no gobble test has seen a wrong schema.
+  - *Consequence:* writing the published schema with no nested `Marshal` takes gobble's own code off the defect's path. It does not fix the defect, and does not change code gobble does not own.
 
 **Descriptions**
 
@@ -258,6 +276,10 @@ There are four questions, each with its own options. Within each, the letter `A`
   - **IV-A:** an in-house BM25 over the tool catalog, with no dependency.
   - **IV-B:** bleve with its BM25 scoring (the owner's suggestion).
   - **IV-C:** substring and name matching, no ranking.
+- **V. Writing the published schema** *(added 2026-10-09)*
+  - **V-A:** gobble writes the published schema itself, through one `jsontext.Encoder`, over D2's subset, with no nested `Marshal`.
+  - **V-B:** keep jsonschema-go's `MarshalJSON`, as since commit `9826454`, and wait for Go to fix the defect.
+  - **V-C:** change jsonschema-go upstream so its `MarshalJSON` does not nest, and adopt the release that does.
 
 ## Decision Outcome
 
@@ -267,6 +289,7 @@ Chosen: **I-A, II-A, III-A and IV-A.**
 - **II-A** follows every surveyed harness (F5), and turns "hybrid" into a shape a test can enforce, so the cost stays bounded (F6).
 - **III-A** follows both providers' guidance and every surveyed harness (F8, F9). It keeps the cache stable as well as the SDK allows (F10, F11). It makes the safety of the native tools hold whichever spelling the model picks (F12).
 - **IV-A** matches what the three harnesses with search do (F14), and adds no module.
+- **V-A** *(proposed 2026-10-09)* takes gobble's own code off a standard-library defect's path at the one place it nests (F19), with a writer bounded by D2's subset and held to today's bytes.
 
 The owner's proposals stand where the evidence supports them:
 
@@ -308,6 +331,24 @@ The owner's proposals stand where the evidence supports them:
      - **A maximum that depends on options comes from those options.** bash's comes from `Options.MaxTimeout`, so the schema tells the truth when an operator raises it.
 
   F3's defects are fixed by this test: edit's `edits` gains `"type":"array"` and `minItems: 1`; read's `limit` and bash's `timeout` gain their bounds.
+- **D15. gobble writes the published schema itself.** *(Proposed 2026-10-09, by the owner's choice of that day: 0005-PLAN F1d-1 deviation 6. It is accepted when the owner approves 0012-PLAN P9, and P9's commit marks it so.)*
+  - **What changes.** `tool.New` still derives both schemas with `jsonschema.For[In]`, and applies the non-null rewrite and `WithSchema` (D1, D2 rule 8). It no longer calls `json.Marshal` on the published one. A writer in `tool` streams it through one `jsontext.Encoder`, with no nested `Marshal` (F19).
+  - **Its output is today's, byte for byte** (Probe E):
+    - members in jsonschema-go v0.4.3's order (V44): `type`, `properties`, `items`, then `description`, `default`, `enum`, `minimum`, `maximum`, `minLength`, `minItems`, `minProperties`, `required` and `additionalProperties`, each only when set;
+    - properties in `PropertyOrder`, then any others sorted (V45);
+    - an empty schema as `true`, and `{"not":{}}` as `false` (V46);
+    - strings as json/v2 writes them, with no HTML or JavaScript escaping.
+  - **It writes that subset and refuses the rest.**
+    - Any other field set, anywhere in a schema, makes `tool.New` panic, naming the field and where it is, so the first test that builds the tool finds it.
+    - That includes a type union left after the non-null rewrite (`Types`), any `Extra` member, and an `enum` value that is not a string, number, boolean or null.
+    - A new constraint is added to the writer and to this list together, by amendment. `minProperties` is in the list for F6's `request_permissions`, which publishes it.
+  - **A golden file holds the bytes.** Every built-in tool's published schema is captured from jsonschema-go's output before the writer replaces it, and compared byte for byte from then on. The file is written only then; a mismatch afterwards is a defect or a deviation, never a reason to rewrite it.
+  - **The validated schema is untouched.** It is resolved, never marshaled, so validation is exactly as today.
+  - **What it leaves:**
+    - the standard library's defect, until Go fixes it;
+    - nested marshals in code gobble does not own, such as the MCP SDK's `mcp.AddTool`, which `mcpclient/mcptest`'s fixture server uses in tests (V47).
+  - **The race gate is unchanged.**
+  - **V-C is not part of this decision.** If jsonschema-go stops nesting upstream, adopting that release is an amendment here.
 - ~~**D3. No strict flag in 1.0, and a probe that measures it.**~~ *(Deprecated 2026-10-08: Probe D measured it, and F17 contradicts the premise that normalisation is harmless. The owner chose the resolution on 2026-10-08. The new text follows this one.)*
   - ~~gobble does not ask any provider for strict mode in 1.0. The SDK has no way to (V25).~~
   - ~~D2's convention keeps every schema eligible for strict normalisation where a provider does that (Doc 5).~~
@@ -489,6 +530,7 @@ The 1.x tools keep 0011-REPORT §5's drafts until their own MADRs settle them: t
 - **The always-sent set stays small:** 14 on Windows, under Anthropic's "30–50" degradation range (Doc 2). Most file tasks take no search round trip.
 - Moves, deletes and copies keep their confinement, permissions and undo whether the model calls the tool or types `rm`, `mv` or `cp` (D10).
 - No new module for search (D11).
+- *(Added 2026-10-09, D15.)* gobble's own code no longer nests a `Marshal`, so the race gate meets the standard library's defect only through code gobble does not own (F19).
 - A session that resumes rebuilds the same tools list in the same order (D9).
 
 **Bad**
@@ -499,6 +541,8 @@ The 1.x tools keep 0011-REPORT §5's drafts until their own MADRs settle them: t
 - **D10 catches only exact simple commands.** `rm -f x` and `rm -r a && make` reach the shell, under F6's permission rules rather than the native tool's.
 - **Templated descriptions** add a file per tool and a rendering step. A template error is caught at construction and by the budget test, not at compile time.
 - **The in-house BM25 is code gobble maintains,** where bleve would be maintained upstream.
+- *(Added 2026-10-09, D15.)* **gobble owns a schema writer that must keep jsonschema-go's output.** An upgrade that changes that output, or a field gobble starts to set, fails the golden file or the writer's refusal instead of passing through. Each needs an edit to the writer.
+- *(Added 2026-10-09, D15.)* **D15 may only quiet the race detector.** Whether the defect can corrupt output is unverified (F19). If it cannot, the writer protects nothing at runtime, and buys a gate that fails only for real.
 
 **Changes to other records,** made when this record is accepted:
 
@@ -547,6 +591,11 @@ go list -m all > "$LOG"; grep -c blevesearch "$LOG"                -> 0
 go test -tags live_openai ./llm/provider -run TestStrictProbe -count=1 -v
     -> before the SDK's strict flag: one "strict=" line per tool (all true, as Probe D)
     -> after it: strict=false for read, bash, powershell; strict=true for write, edit
+
+# D15 (proposed 2026-10-09): the published bytes are today's, the writer refuses
+# what it does not write, and building the tools races no more in a WSL probe
+go test ./tool ./tool/builtin -run 'TestWriteSchema|TestPublishedBytes' -count=1   -> ok
+Probe F, WSL, -race, before and after 0012-PLAN P9    -> races before; none after
 
 # every gate
 make preflight                                                     -> exit 0, Windows and WSL
@@ -649,6 +698,28 @@ make preflight                                                     -> exit 0, Wi
 - Good: trivial, and predictable for exact names.
 - Bad: no ranking, so a query in the model's words ("rename a folder") finds nothing unless it shares a substring. 0005-MADR already chose BM25 (V12).
 
+### V-A — gobble writes the published schema (chosen, proposed 2026-10-09)
+
+- Good: gobble's own code leaves the defect's path, at the one place it nests (F19).
+- Good: it is bounded. D2's subset is 13 fields, and the writer refuses the rest, so nothing new passes silently.
+- Good: no module, and the golden file needs no marshaller to check it.
+- Bad: gobble owns a serializer that must track jsonschema-go's output. This was the reason 0013-REPORT gave on 2026-10-08 for not choosing it.
+- Bad: it does not help other callers of jsonschema-go, such as the MCP SDK, and it does not fix the standard library.
+- Bad: if the defect is only the detector's, it quiets a gate without protecting anything at runtime (F19, **[unverified]**).
+
+### V-B — keep jsonschema-go's `MarshalJSON`
+
+- Good: no code. jsonschema-go's output is followed automatically.
+- Good, and its strongest argument: the defect is in the standard library, and the fix belongs there. gobble's writer may outlive the need for it.
+- Bad: the race gate keeps failing at random, about once in a few hundred runs. Each failure costs a rerun and a record.
+- Bad: a gate that fails at random teaches its readers to rerun it, which is how a real race in gobble's code would get through.
+
+### V-C — change jsonschema-go upstream
+
+- Good: it fixes every caller of jsonschema-go, the MCP SDK included.
+- Bad: it is not in gobble's control or on its schedule, and the standard library's defect remains for every other nested `Marshal`.
+- Bad: proposing it is an outward action, which waits on the owner.
+
 ## More Information
 
 ### Evidence index
@@ -695,6 +766,16 @@ make preflight                                                     -> exit 0, Wi
 | V36 | jsonschema-go's `Schema` carries `minProperties` | jsonschema-go v0.4.3 `jsonschema/schema.go:100` |
 | V37 | edit refuses an empty `edits` in its own words | gobble-cli `tool/builtin/edit.go:43` |
 | V38 | edit refuses an empty `oldText` in its own words | gobble-cli `tool/builtin/editmatch.go:110` |
+| V39 | `tool.New` marshals the published schema with `json.Marshal`, and that `json` is json/v2 | gobble-cli `tool/tool.go:343` (and `:6`) |
+| V40 | jsonschema-go's `Schema.MarshalJSON` calls `json.Marshal` for its struct, and `orderedProperties` for each key and value; its `json` is v1 | jsonschema-go v0.4.3 `jsonschema/util.go:339` (and `:11`); `jsonschema/schema.go:332`, `:341` |
+| V41 | gobble defines no `MarshalJSON` method | gobble-cli, every non-test `.go` file searched on 2026-10-09: 194 files, no match |
+| V42 | mcpclient marshals an MCP tool's schema as a map | gobble-cli `mcpclient/tool.go:76` |
+| V43 | plan mode's tool is built by `tool.New` | gobble-cli `acpserver/modes.go:113` |
+| V44 | the output follows the `Schema` struct's field order, after `type`, `properties` and `items` | jsonschema-go v0.4.3 `jsonschema/schema.go:43`, and Probe E |
+| V45 | properties are written in `PropertyOrder`, then the rest sorted | jsonschema-go v0.4.3 `jsonschema/schema.go:350`, `:368` |
+| V46 | `{}` is written `true`, and `{"not":{}}` `false` | jsonschema-go v0.4.3 `jsonschema/schema.go:303`, `:305` |
+| V47 | `mcptest`'s fixture server adds tools through `mcp.AddTool` | gobble-cli `mcpclient/mcptest/mcptest.go:66` |
+| V48 | v1 `Marshal` is v2 `Marshal` with the v1 options, which include `EscapeForHTML` | Go 1.27.2 `encoding/json/v2_encode.go:186`; `encoding/json/v2_options.go:222` |
 
 **0011-REPORT's claims cited here.** Their file, line and matched text are in that report's evidence table, re-run on 2026-10-08 and passing:
 
@@ -718,6 +799,7 @@ make preflight                                                     -> exit 0, Wi
 | Claim | Source |
 | :--- | :--- |
 | definition sizes; `edits` nullable with no `minItems`; no bounds; no exposure set | Probe A, `specsize`, 2026-10-08, this record's table |
+| the member order, property order and string escaping of the published schemas | Probe E, `specsize` and `escprobe`, 2026-10-09, this record |
 | bleve's binary, requirement and package counts | Probe B, `bleveprobe`, 0011-REPORT §4 |
 | jsonschema-go's messages for `minItems`, `null`, `minLength`, `minimum` and `maximum` | Probe C, `valmsg`, 2026-10-08, this record |
 | OpenAI normalises every gobble tool to strict by making every property required; models then invent optional values; the nullable form gives `null`s that gobble refuses | Probe D, `strictprobe`, 2026-10-08, this record (one sample per model, variant and call) |
@@ -737,6 +819,7 @@ make preflight                                                     -> exit 0, Wi
 - [0004-MADR-go-module-architecture.md](0004-MADR-go-module-architecture.md): the package map, whose `tool/toolsearch` row D11 builds.
 - [0011-REPORT-native-tools-survey.md](../reports/0011-REPORT-native-tools-survey.md): the evaluation this record decides from.
 - [0010-REPORT-harness-design-survey.md](../reports/0010-REPORT-harness-design-survey.md): the harness survey, including `apply_patch`'s envelope.
+- [0013-REPORT-go-json-nested-marshal-race.md](../reports/0013-REPORT-go-json-nested-marshal-race.md): the standard library's nested-`Marshal` race, and the evidence behind F19 and D15.
 - Doc 1: `https://platform.claude.com/docs/en/docs/build-with-claude/prompt-caching`
 - Doc 2: `https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool`
 - Doc 3: `https://developers.openai.com/api/docs/guides/prompt-caching`

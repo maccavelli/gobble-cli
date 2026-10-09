@@ -1,6 +1,6 @@
 ---
-status: completed
-date: 2026-10-08
+status: in-progress
+date: 2026-10-09
 ---
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
 
@@ -9,6 +9,8 @@ date: 2026-10-08
 Implements [0012-MADR-tool-schemas-descriptions-and-loading.md](0012-MADR-tool-schemas-descriptions-and-loading.md) decisions D1, D2, D3's probe and D5, closing findings F2, F3, F5 and F6. F4 and F17 were measured by the MADR's Probe D before this plan's approval. It places D4 and D6–D14 in the 0005-PLAN sub-phases that build their tools, so findings F7–F16 close there, by the notes P1 writes.
 
 *(2026-10-08, before approval: D3 was amended by the owner's choice. Its opt-out, `strict: false` for tools with optional arguments, waits on go-llmprovider-sdk's per-tool strict flag. It is named under Deferred, with the phase that lands it.)*
+
+*(2026-10-09: P9 is added for 0012-MADR D15, proposed, closing F19. It needs the owner's approval like any phase.)*
 
 ## Goal
 
@@ -52,6 +54,7 @@ The plan is done when each of these holds:
 | P5 | `llm/provider/strict_test.go` (new), `llm/provider/strict_live_test.go` (new) |
 | P6 | this PLAN (execution record), `docs/decisions/0012-MADR-tool-schemas-descriptions-and-loading.md` (Observed section), `docs/README.md` |
 | P8 *(added 2026-10-08)* | `tool/builtin/describe/read.md`, `write.md`, `edit.md`, `bash.md`, `powershell.md`, `tool/builtin/describe_test.go`, `tool/builtin/shell.go`; then this PLAN and `docs/README.md` for its record |
+| P9 *(added 2026-10-09)* | `tool/schemajson.go` (new), `tool/schemajson_test.go` (new), `tool/tool.go`, `tool/builtin/published_test.go` (new), `tool/builtin/testdata/published.golden` (new), `docs/architecture.md`; then this PLAN, `docs/decisions/0012-MADR-tool-schemas-descriptions-and-loading.md` (D15's status and the Observed section), `docs/reports/0013-REPORT-go-json-nested-marshal-race.md` (a dated note) and `docs/README.md` for its record |
 
 ### Out of scope
 
@@ -114,6 +117,7 @@ F1b commit (the owner; staged 2026-10-08)
 - **P3 needs P2's `tool.WithSchema`.**
 - **P4 touches the same files as P3,** so it follows it.
 - **P5 needs P3's schemas,** because it probes what is published.
+- **P9 runs after P8, and after 0005-PLAN F1d-1's commits** *(added 2026-10-09)*. It needs nothing else, and nothing waits on it.
 - **P6 records the phases.** It also records the probe's result when the owner has run P5's live test with a key in the environment. This plan cannot supply the key: no secret is passed on a command line or written to a file in the tree.
 
 ## Implementation Steps
@@ -909,6 +913,407 @@ make preflight                                                                  
 
 **Commit.** One commit, made by the owner, after the Stability rule's gates.
 
+### P9 — gobble writes the published schema (D15; closes F19)
+
+*(Added 2026-10-09, by the owner's choice of that day, 0005-PLAN F1d-1 deviation 6: "F1d-1 now, fix as 0012 P9". It runs after F1d-1's commits, and needs the owner's approval like any phase. On approval, this plan's status moves to `in-progress`; with P9's record, back to `completed`.)*
+
+*(Approved 2026-10-09 by the owner: "approve P9, proceed". The status is `in-progress` from then.)*
+
+**The contract most at risk here is C1, through the golden file.** When the writer's bytes differ, `SCHEMA_GOLDEN_UPDATE=1` turns the test green in one command. The file is written in step 1 only, from jsonschema-go's output, before the writer exists. A mismatch afterwards is a defect in the writer or a deviation, and is stopped and put to the owner.
+
+**Step 1. Capture today's bytes, before the writer exists.**
+
+- New `tool/builtin/published_test.go`:
+
+  ```go
+  package builtin
+
+  import (
+      "fmt"
+      "os"
+      "path/filepath"
+      "runtime"
+      "strings"
+      "testing"
+  )
+
+  // goldenPublished holds every built-in tool's published schema, one line
+  // per tool: its name, a space, and the bytes.
+  var goldenPublished = filepath.Join("testdata", "published.golden")
+
+  // Every built-in tool publishes the bytes in goldenPublished, which were
+  // captured from jsonschema-go's MarshalJSON before tool.New wrote its
+  // schemas itself (0012-MADR D15). powershell is included on every host.
+  // SCHEMA_GOLDEN_UPDATE=1 rewrites the file; 0012-PLAN P9 runs it once.
+  func TestPublishedBytes(t *testing.T) {
+      tools := ToolsWith(Options{})
+      if runtime.GOOS != goosWindows {
+          tools = append(tools, powershellWith(Options{}.withDefaults()))
+      }
+      var b strings.Builder
+      for _, tl := range tools {
+          fmt.Fprintf(&b, "%s %s\n", tl.Spec().Name, tl.Spec().InputSchema)
+      }
+      got := b.String()
+      if os.Getenv("SCHEMA_GOLDEN_UPDATE") == "1" {
+          if err := os.MkdirAll(filepath.Dir(goldenPublished), 0o755); err != nil {
+              t.Fatal(err)
+          }
+          if err := os.WriteFile(goldenPublished, []byte(got), 0o644); err != nil {
+              t.Fatal(err)
+          }
+          return
+      }
+      want, err := os.ReadFile(goldenPublished)
+      if err != nil {
+          t.Fatalf("%v (SCHEMA_GOLDEN_UPDATE=1 creates it)", err)
+      }
+      gotLines, wantLines := strings.Split(got, "\n"), strings.Split(string(want), "\n")
+      for i := range max(len(gotLines), len(wantLines)) {
+          var g, w string
+          if i < len(gotLines) {
+              g = gotLines[i]
+          }
+          if i < len(wantLines) {
+              w = wantLines[i]
+          }
+          if g != w {
+              t.Fatalf("the published schemas differ from %s at line %d:\n got %s\nwant %s", goldenPublished, i+1, g, w)
+          }
+      }
+  }
+  ```
+
+- Run, on the tree before step 2:
+
+  ```text
+  SCHEMA_GOLDEN_UPDATE=1 go test ./tool/builtin -run '^TestPublishedBytes$' -count=1   -> ok
+  go test ./tool/builtin -run '^TestPublishedBytes$' -count=1                          -> ok
+  ```
+
+- **Check the capture.** `tool/builtin/testdata/published.golden` has 13 lines, `read` first and `powershell` last. A scratch script compares each line, byte for byte, with Probe E's `specsize` output for the same tool, and prints `13 of 13 equal`. The file is LF by `.gitattributes`' `eol=lf`.
+
+**Step 2. The writer.** New `tool/schemajson.go`:
+
+```go
+package tool
+
+import (
+    "bytes"
+    "encoding/json/jsontext"
+    "fmt"
+    "maps"
+    "reflect"
+    "slices"
+
+    "github.com/google/jsonschema-go/jsonschema"
+)
+
+// writtenFields are the Schema fields writeSchema writes (0012-MADR D15).
+// PropertyOrder is read, to order the properties, and is not written.
+var writtenFields = map[string]bool{
+    "Type": true, "Properties": true, "Items": true, "Description": true, "Default": true,
+    "Enum": true, "Minimum": true, "Maximum": true, "MinLength": true, "MinItems": true,
+    "MinProperties": true, "Required": true, "AdditionalProperties": true, "PropertyOrder": true,
+}
+
+// writeSchema is s as JSON, written through one encoder with no nested
+// Marshal, on which the standard library's JSON packages race under the
+// race detector (0013-REPORT). Its bytes are those json/v2's Marshal wrote
+// for s through jsonschema-go v0.4.3's MarshalJSON: the same members, in
+// the same order, with strings unescaped (0012-MADR D15). A field it does
+// not write, set anywhere in s, is an error naming the field.
+func writeSchema(s *jsonschema.Schema) (jsontext.Value, error) {
+    var buf bytes.Buffer
+    enc := jsontext.NewEncoder(&buf)
+    if err := encodeSchema(enc, s, "$"); err != nil {
+        return nil, err
+    }
+    return jsontext.Value(bytes.TrimSuffix(buf.Bytes(), []byte("\n"))), nil
+}
+
+// setFields are the names of s's exported fields that are not zero.
+func setFields(s *jsonschema.Schema) []string {
+    v := reflect.ValueOf(s).Elem()
+    var out []string
+    for f := range v.Type().Fields() {
+        if f.IsExported() && !v.FieldByIndex(f.Index).IsZero() {
+            out = append(out, f.Name)
+        }
+    }
+    return out
+}
+
+// encodeSchema writes s, found at the path at: true for an empty schema,
+// false for {"not":{}}, and otherwise an object of the fields it writes.
+func encodeSchema(enc *jsontext.Encoder, s *jsonschema.Schema, at string) error {
+    if s == nil {
+        return fmt.Errorf("the schema at %s is nil", at)
+    }
+    set := setFields(s)
+    switch {
+    case len(set) == 0:
+        return enc.WriteToken(jsontext.True)
+    case slices.Equal(set, []string{"Not"}) && len(setFields(s.Not)) == 0:
+        return enc.WriteToken(jsontext.False)
+    }
+    for _, name := range set {
+        if !writtenFields[name] {
+            return fmt.Errorf("the schema at %s sets %s, which tool.New does not publish (0012-MADR D15)", at, name)
+        }
+    }
+    w := &members{enc: enc}
+    w.token(jsontext.BeginObject)
+    w.str("type", s.Type)
+    if s.Properties != nil {
+        w.properties(s, at)
+    }
+    if s.Items != nil {
+        w.name("items")
+        w.schema(s.Items, at+"[]")
+    }
+    w.str("description", s.Description)
+    if len(s.Default) > 0 {
+        w.name("default")
+        w.value(s.Default)
+    }
+    if len(s.Enum) > 0 {
+        w.enum(s.Enum, at)
+    }
+    w.float("minimum", s.Minimum)
+    w.float("maximum", s.Maximum)
+    w.int("minLength", s.MinLength)
+    w.int("minItems", s.MinItems)
+    w.int("minProperties", s.MinProperties)
+    if len(s.Required) > 0 {
+        w.name("required")
+        w.token(jsontext.BeginArray)
+        for _, r := range s.Required {
+            w.token(jsontext.String(r))
+        }
+        w.token(jsontext.EndArray)
+    }
+    if s.AdditionalProperties != nil {
+        w.name("additionalProperties")
+        w.schema(s.AdditionalProperties, at+".additionalProperties")
+    }
+    w.token(jsontext.EndObject)
+    return w.err
+}
+
+// members writes one object's members, keeping the first error.
+type members struct {
+    enc *jsontext.Encoder
+    err error
+}
+
+func (w *members) token(t jsontext.Token) {
+    if w.err == nil {
+        w.err = w.enc.WriteToken(t)
+    }
+}
+
+func (w *members) value(v jsontext.Value) {
+    if w.err == nil {
+        w.err = w.enc.WriteValue(v)
+    }
+}
+
+func (w *members) name(n string) { w.token(jsontext.String(n)) }
+
+func (w *members) schema(s *jsonschema.Schema, at string) {
+    if w.err == nil {
+        w.err = encodeSchema(w.enc, s, at)
+    }
+}
+
+func (w *members) str(n, v string) {
+    if v != "" {
+        w.name(n)
+        w.token(jsontext.String(v))
+    }
+}
+
+func (w *members) float(n string, v *float64) {
+    if v != nil {
+        w.name(n)
+        w.token(jsontext.Float(*v))
+    }
+}
+
+func (w *members) int(n string, v *int) {
+    if v != nil {
+        w.name(n)
+        w.token(jsontext.Int(int64(*v)))
+    }
+}
+
+// properties writes s's properties in PropertyOrder, then the rest
+// sorted, as jsonschema-go does.
+func (w *members) properties(s *jsonschema.Schema, at string) {
+    w.name("properties")
+    w.token(jsontext.BeginObject)
+    done := map[string]bool{}
+    for _, name := range s.PropertyOrder {
+        if p, ok := s.Properties[name]; ok {
+            w.name(name)
+            w.schema(p, at+"."+name)
+            done[name] = true
+        }
+    }
+    for _, name := range slices.Sorted(maps.Keys(s.Properties)) {
+        if !done[name] {
+            w.name(name)
+            w.schema(s.Properties[name], at+"."+name)
+        }
+    }
+    w.token(jsontext.EndObject)
+}
+
+// enum writes an enum's values: strings, numbers, booleans or null.
+func (w *members) enum(values []any, at string) {
+    w.name("enum")
+    w.token(jsontext.BeginArray)
+    for _, v := range values {
+        switch v := v.(type) {
+        case string:
+            w.token(jsontext.String(v))
+        case bool:
+            w.token(jsontext.Bool(v))
+        case nil:
+            w.token(jsontext.Null)
+        case float64:
+            w.token(jsontext.Float(v))
+        case int:
+            w.token(jsontext.Int(int64(v)))
+        default:
+            if w.err == nil {
+                w.err = fmt.Errorf("the schema at %s has an enum value of type %T, which tool.New does not publish (0012-MADR D15)", at, v)
+            }
+        }
+    }
+    w.token(jsontext.EndArray)
+}
+```
+
+- `reflect.Type.Fields` is the standard library's iterator over a struct's fields (Go 1.27.2 `reflect/type.go:183`).
+- **This code was run before the plan was presented,** on a scratch copy of the tree: see "P9 dry run" below.
+
+**Step 3. `tool.New` uses it.** In `tool/tool.go`:
+
+- Replace lines 343–346:
+
+  ```go
+      raw, err := json.Marshal(published)
+      if err != nil {
+          panic(fmt.Sprintf("tool: %s: encode input schema: %v", name, err))
+      }
+  ```
+
+  with:
+
+  ```go
+      raw, err := writeSchema(published)
+      if err != nil {
+          panic(fmt.Sprintf("tool: %s: write published schema: %v", name, err))
+      }
+  ```
+
+- In `New`'s comment, after "those additions are the tool's own code to enforce.", add: `The published schema is written by writeSchema, with no nested Marshal (0012-MADR D15).`
+- `json` stays imported: `Run`, `Text` and `quote` use it.
+
+**Step 4. The writer's tests.** New `tool/schemajson_test.go`, in package `tool`, so it reaches `writeSchema`:
+
+- **`TestWriteSchema`**, one case per row; each builds the schema in Go and compares the whole output:
+
+  | Case | Schema | Output |
+  | :--- | :--- | :--- |
+  | an integer | `Type "integer"`, `Description "n"`, `Default 3`, `Minimum 1`, `Maximum 10` | `{"type":"integer","description":"n","default":3,"minimum":1,"maximum":10}` |
+  | a string | `Type "string"`, `Description "s"`, `Default "x"`, `Enum "x","y"`, `MinLength 1` | `{"type":"string","description":"s","default":"x","enum":["x","y"],"minLength":1}` |
+  | an array | `Type "array"`, `Items {Type "string"}`, `Description "l"`, `MinItems 0` | `{"type":"array","items":{"type":"string"},"description":"l","minItems":0}` |
+  | an object | `Type "object"`, `Properties {b: boolean}`, `Description "o"`, `MinProperties 1`, `Required ["b"]`, `AdditionalProperties false` | `{"type":"object","properties":{"b":{"type":"boolean"}},"description":"o","minProperties":1,"required":["b"],"additionalProperties":false}` |
+  | the property order | `Properties` `e`, `d`, `c`, `b`, `a` (strings), `PropertyOrder ["c", "a"]` | properties `c`, `a`, then `b`, `d`, `e` |
+  | true and false | `{}`; `{Not: {}}` | `true`; `false` |
+  | strings unescaped | `Description "a <b> & c \u2028 end"` | the description as written, U+2028 as its three bytes, no `\u` escape |
+  | enum kinds | `Enum "a", 1.5, 2, true, nil` | `"enum":["a",1.5,2,true,null]` |
+
+- **`TestWriteSchemaRefuses`**: each schema is an error whose text names the field and its path:
+  - `Pattern` set at the root: `the schema at $ sets Pattern`;
+  - `Format` set on property `x`: `the schema at $.x sets Format`;
+  - `AnyOf` set on an array's items: `the schema at $.l[] sets AnyOf`;
+  - `Extra` set: `sets Extra`;
+  - `Types ["string","integer"]`: `sets Types`;
+  - an enum value of type `map[string]any`: `has an enum value of type map[string]interface {}`;
+  - a nil property: `the schema at $.x is nil`.
+- **`TestNewRefusesUnpublished`**: `New` with a `WithSchema` that sets `Pattern` on a property panics, and the panic's text holds `write published schema` and `sets Pattern`.
+- Run: `go test ./tool -run 'TestWriteSchema|TestNewRefusesUnpublished' -count=1` -> ok.
+
+**Step 5. The golden file holds, and nothing else changes.**
+
+```text
+go test ./tool/builtin -run '^TestPublishedBytes$' -count=1     -> ok, the golden file unedited since step 1
+go test -count=1 ./tool/...                                    -> ok, no existing assertion edited (C1)
+git diff <the commit before P9> -- go.mod go.sum               -> empty (C2)
+```
+
+**Step 6. Every new check, seen failing first (C3).** Each mutation is made on a scratch copy of the finished tree, asserted to land exactly once, and its test's log read whole:
+
+| Copy | Mutation | Test | Expected failure |
+| :--- | :--- | :--- | :--- |
+| 1 | `default` written after `enum` | `TestPublishedBytes` | `differ` at the `todo` line, the only schema with both |
+| 2 | the `slices.Sorted` loop replaced by a range over the map | `TestWriteSchema`, the property order case | the order differs; the case has five keys, so a random order passes once in 120 runs |
+| 3 | `encodeSchema`'s refusal loop removed | `TestWriteSchemaRefuses` | the `Pattern` case returns no error |
+| 4 | the `false` case removed, so `{"not":{}}` reaches the refusal | `TestPublishedBytes` | a panic holding `sets Not`, at the first tool built |
+| 5 | `minItems` not written | `TestPublishedBytes` | `differ` at the `edit` line |
+| 6 | `jsontext.NewEncoder(&buf, jsontext.EscapeForHTML(true))` | `TestWriteSchema`, the strings case | `\u003c` in the output |
+| 7 | one byte of the golden file's `read` line changed | `TestPublishedBytes` | `differ` at line 1 |
+
+**Step 7. Probe F: the race, measured in WSL.** It is not a committed test, because a race that shows once in hundreds of runs cannot gate a commit.
+
+- A scratch module requires gobble through a `replace` to the tree under test, with one test:
+
+  ```go
+  func TestBuildTools(t *testing.T) {
+      for range 2000 {
+          _ = builtin.Tools()
+      }
+  }
+  ```
+
+- `CGO_ENABLED=1 go test -race -count=60 .` runs twice, in WSL:
+  - **the control,** a clone of the commit before P9: expected to report at least one race, as 0013-REPORT's reproducer did (15 in 60 runs);
+  - **the change,** the P9 tree: expected to report none.
+- Each reported race is sorted by its pair, as 0013-REPORT's amendment does.
+- **If the control reports none, the probe cannot fail,** and the record says it is inconclusive instead of claiming the fix. It is then run again with `-count=200`, once, and that result is recorded whatever it is.
+
+**Step 8. The architecture.** In `docs/architecture.md`, the `tool` row's description gains, after "and validates the Go type's own.": `It writes the published schema itself, with no nested Marshal (0012-MADR D15).`
+
+**Step 9. The record,** in the same commit:
+
+- **0012-MADR:**
+  - D15's marker becomes "*(Proposed 2026-10-09; accepted <the approval's date> by the owner's approval of 0012-PLAN P9.)*";
+  - V-A's "proposed" goes the same way;
+  - its Observed section gains a dated paragraph on D15: the golden file, the seven copies and Probe F.
+- **This PLAN:** an execution record for P9, with what it predicted wrongly.
+- **0013-REPORT:** a dated note naming P9's commit, and Probe F's counts.
+- **`docs/README.md`:** the 0012-MADR, 0012-PLAN and 0013-REPORT rows.
+
+**P9 dry run** *(2026-10-09, before this phase was presented)*. A script took steps 1–5's code from this text, applied it to a scratch copy of the tree at `8c958e8` with F1d-1's records, and ran it on Windows, Go 1.27.2:
+
+- **Step 1:** the golden file had 13 lines, `read` first and `powershell` last, and all 13 equalled Probe E's bytes.
+- **Steps 2–5:**
+  - with the writer, `TestPublishedBytes` passed against that file unedited;
+  - every row of step 4's two tables held, and `New` panicked as step 4 says;
+  - `go test ./tool/... ./acpserver/... ./internal/cli/...` passed;
+  - `gofmt`, `go vet` and `golint` were clean.
+- **Lint** found one issue, which this text now fixes: an unnecessary conversion of `s.Default`, which is already a `jsontext.Value`. After it, lint printed `0 issues.` for windows, linux and darwin.
+- **One error in the first draft** was found by reading the standard library before the run: `reflect.Type.Fields` yields `StructField` values, not indexes and fields, so the loop reads each field by its `Index`.
+- **Not run:** step 6's mutations and step 7's probe. They are execution, and run when P9 does.
+
+**Verification.** The Stability rule's P2–P5 block: lint for three GOOS, Windows `go test ./...`, and WSL `make preflight` with `go test -race ./...`; then the scans. A race in that run is reported as it falls, under 0013-REPORT, and the gate is not changed.
+
+**Commit.** One commit, staged by the agent and made by the owner, holding steps 1–9.
+
 ## Verification (whole plan)
 
 ```text
@@ -934,16 +1339,23 @@ git diff <the records commit>..HEAD -- go.mod go.sum              -> empty (C2)
 | A9 | `go.mod` and `go.sum` unchanged | Decision Drivers 6; C2 |
 | A10 | every gate in the Stability rule passes after each code phase | Confirmation, `make preflight` |
 | A11 *(added 2026-10-08)* | the five descriptions follow D5 item 6, and `TestDescriptionShape` failed on P8's four scratch copies | D5 item 6, F18 |
+| A12 *(added 2026-10-09)* | `TestPublishedBytes` passes with the writer, against a golden file captured from jsonschema-go's output in step 1 and not edited since; it failed on copies 1, 4, 5 and 7 | D15, Confirmation |
+| A13 *(added 2026-10-09)* | `TestWriteSchema`, `TestWriteSchemaRefuses` and `TestNewRefusesUnpublished` pass, and failed on copies 2, 3 and 6 | D15 |
+| A14 *(added 2026-10-09)* | Probe F reports no race on the P9 tree, against a control that raced; or the record says the probe was inconclusive | F19, D15 |
+| A15 *(added 2026-10-09)* | the existing `tool` tests pass unedited, and `go.mod` and `go.sum` are unchanged | C1, C2 |
 
 **A8 is the criterion most likely to be dropped.** Probe D has already answered the question, so repeating it from the tree looks optional. It is not: the in-tree test is what P7 will turn into an assertion. A "pending" in the record is honest; a silently missing section is not.
 
 **C1 is the contract most likely to be broken.** When P2 or P3 turns a test red, editing its assertion is the fastest route back to green.
+
+**A14's control is the criterion most likely to be dropped** *(added 2026-10-09)*. A run of the P9 tree alone that shows no race looks like the result. Without a control that raced in the same probe, it shows nothing, because the race is rare enough to miss in any one run.
 
 ## Rollout and Rollback
 
 - **Rollout.** One commit per phase, made by the owner, in order. Nothing changes at runtime until P3: a model then sees bounds, defaults and `minItems`, and bash refuses an empty command. P4 changes only the wording a model reads.
 - **Rollback.**
   - **P2–P5** each revert as one commit. P3 and P4 depend on P2, so they revert first.
+  - **P9** *(added 2026-10-09)* reverts as one commit. Its golden file and tests go with it, and `tool.New` marshals through jsonschema-go again.
   - **P1** is records. A revert of it puts 0005's Exposure paragraph back in force, so it is reverted only with 0012-MADR set back to `proposed`.
   - Reverting is the owner's command, not the agent's.
 
