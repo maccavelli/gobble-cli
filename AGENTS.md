@@ -9,7 +9,7 @@ takes the best of several agent harnesses (Pi, opencode, Kilo, goose, codex and
 grok-build) and makes each piece its own; Pi compatibility is kept only for the
 read-only bridge (`docs/decisions/0005-MADR-v1-feature-scope.md`, amendment of
 2026-10-07). It is one module, `github.com/maccavelli/gobble-cli`, holding the `gobble`
-binary (`cmd/gobble`) and a contract-first Go SDK. Requires Go 1.27.1. gobble has
+binary (`cmd/gobble`) and a contract-first Go SDK. Requires Go 1.27.2. gobble has
 two terminal modes: a native CLI mode, the default, and an enhanced TUI mode. The
 command library is Kong. Core TUI is go-tui-lib and self-update is
 go-selfupdate-lib; gobble reimplements neither, and where a behaviour is not in

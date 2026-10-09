@@ -6,7 +6,7 @@ they are that way is in the [decision records](../README.md).
 
 ## What you need
 
-- **Go 1.27.1.** `go.mod` names it, and `go version` should print `go version go1.27.1 …`.
+- **Go 1.27.2.** `go.mod` names it, and `go version` should print `go version go1.27.2 …`.
 - **GNU make and bash.** On Windows, run `make` from Git Bash or from PowerShell. The Makefile uses
   Git's bash either way. In PowerShell a bare `bash` is WSL, not Git Bash.
 - **Python 3**, for the records and build-metadata checks. The Makefile runs `python3`; set
@@ -33,7 +33,7 @@ $ ./bin/gobble.exe version
 gobble 0.0.0-dev+2513638e2cea.dirty
 commit: 2513638e2ceaedf58285bc692dc9e69038ebe310
 date:   2026-10-07T19:52:04Z
-go:     1.27.1 windows/amd64
+go:     1.27.2 windows/amd64
 ```
 
 A local build reports its version as `0.0.0-dev`, plus the commit. `version --json` prints the same

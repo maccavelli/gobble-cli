@@ -27,7 +27,7 @@ implementations and keeps every third-party SDK behind one package.
 What the fleet and toolchain provide on 2026-09-29 (read in source or
 probed):
 
-* **Toolchain.** `go1.27.1`. `$GOROOT/api/go1.27.txt` lists
+* **Toolchain.** `go1.27.1`. *(2026-10-08: `go1.27.2`; see the amendment of that date.)* `$GOROOT/api/go1.27.txt` lists
   `encoding/json/v2` and `encoding/json/jsontext` as public API, and the
   `jsonv2` experiment is on by default in `internal/buildcfg`. The same
   file lists a new standard-library `uuid` package (`New`, `NewV7`),
@@ -971,3 +971,23 @@ On 2026-10-07, before Phase 4 steps 2–4 ran, the owner decided:
 * **darwin/amd64 is not a target.** macOS ships for Apple silicon only. The release is five raw binaries: darwin/arm64, linux/amd64, linux/arm64, windows/amd64 and windows/arm64.
 
 Raw binaries, stable tags only, and archtest rule 8 are unchanged. The details are in 0004-PLAN's entry "Phase 4 steps 2–4 made executable".
+
+### Amendment (2026-10-08): the toolchain is Go 1.27.2
+
+**Why.** On 2026-10-08, `govulncheck` began failing every gate. Go 1.27.1's standard library has 10 reachable vulnerabilities, each fixed in Go 1.27.2:
+
+| Id | Package |
+| :--- | :--- |
+| GO-2026-6603, GO-2026-6610, GO-2026-6611, GO-2026-6612, GO-2026-6617 | `net/http/internal/http2` |
+| GO-2026-6605, GO-2026-6613 | `net/http` |
+| GO-2026-6607 | `crypto/tls` |
+| GO-2026-6608 | `net/textproto` |
+| GO-2026-6604 | `os` |
+
+It reproduced on a clean export of `4504465`, so no change of gobble's caused it. Go 1.27.2 is released and marked stable (`go.dev/dl/?mode=json`, read 2026-10-08). It was found at 0005-PLAN F1c-1's pre-add check, as its deviation 3, and the owner chose a commit of its own.
+
+**What changes.**
+* `go.mod`'s `go` line, and the toolchain this record's Toolchain line names, become `1.27.2`. CI reads `go.mod` (`go-version-file`), so it follows.
+* `AGENTS.md`, `docs/architecture.md` and `docs/guides/developing.md` name Go 1.27.2.
+* Both development hosts' `GOTOOLCHAIN` pin moves to `go1.27.2`, by the owner's decision.
+* This record's title keeps "Go 1.27.1", as written; the language features it lists are 1.27's, and unchanged.
