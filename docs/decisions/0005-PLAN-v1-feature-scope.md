@@ -1618,6 +1618,15 @@ Choices made within the wording of 0005-MADR's native-tools amendment:
 | new | `internal/fsx/ops.go`, `ops_test.go`; `tool/builtin/fileops.go`, `fileops_test.go`; `tool/builtin/describe/move.md`, `delete.md`, `copy.md`, `mkdir.md` |
 | changed | `tool/builtin/builtin.go`; `tool/builtin/builtin_test.go` (the tool list); `docs/architecture.md`; `README.md` (the Status list) |
 
+*(F1c-2 deviations, 2026-10-08, found while planning its code; the owner's decisions.)*
+
+1. **mkdir's MCP hint.** `TestToolsAndAnnotations` asserted that every tool that is not read-only is destructive. mkdir only adds, and MCP defines `destructiveHint: false` as "only additive updates". So mkdir sets `DestructiveHint` false, and the test's rule becomes three-way: read, grep, find and tree are read-only; mkdir is additive; every other tool is destructive.
+2. **The approval test's file.** `acpserver/fileops_test.go` joins F1c-2's new files. It drives a session through `acptest`'s client, calls delete, checks that a `session/request_permission` arrives, rejects it, and checks that the file is still there.
+3. **A race in Go's encoding/json** *(found at F1c-2's gates)*.
+   - **What was found.** The WSL `go test -race` run failed once, in `internal/cli`'s `TestSessionIDAndName`. The race is inside the standard library's `jsontext` encoder pool, where one `Marshal` runs inside another through a `MarshalJSON` method, as jsonschema-go's `Schema.MarshalJSON` does.
+   - **It is pre-existing and outside gobble.** It fails about once in 200 runs on a clean `c4ca6f5`, and a reproducer with only the standard library races on Go 1.27.2 and 1.27.1. The evidence is in [0013-REPORT](../reports/0013-REPORT-go-json-nested-marshal-race.md).
+   - **The owner's decision:** record it, report it upstream, and keep the race gate as it is. F1c-2's gate record says that its WSL race run failed on this defect.
+
 **F1c-2's tests,** each seen failing first on a scratch copy:
 
 - **move:** within a root; across roots; across devices, through a test seam on the rename that returns `EXDEV`; a failed cross-device copy leaving the source; `overwrite`.
@@ -1705,3 +1714,61 @@ Choices made within the wording of 0005-MADR's native-tools amendment:
    All ten were fixed, the 14 negatives were run again on the changed code (one anchor moved with the `path.Match` fix), and the gates were run again.
 6. **The RE2 refusal's wording.** `the pattern is not valid RE2 (<reason>)` doubles the parenthesis when the reason ends in one, as `missing closing )` does. It is kept as the entry wrote it.
 7. **The Write tool turned a byte order mark's Go escape into the character itself** in `ignore.go`, which `go build` refused. A script put the escape back.
+
+**F1c-2, 2026-10-08 — complete (staged; the owner commits).** It ran as the entry "F1c made executable" wrote it, approved by the owner's "proceed" of 2026-10-08, with its deviations decided by the owner: 1 and 2 before its code was written, 3 at its gates. F1c is complete.
+
+- **The deviations** (recorded under F1c-2's tests above):
+  1. mkdir's MCP hint is additive, not destructive, and `TestToolsAndAnnotations`' rule is three-way.
+  2. `acpserver/fileops_test.go` joins the files, for the end-to-end approval test.
+  3. A race in Go's `encoding/json`, outside gobble: recorded in 0013-REPORT and reported upstream, with the race gate unchanged.
+- **What was built:**
+  - **`internal/fsx/ops.go`:** `Lstat`, `MkdirAll`, `Remove`, `RemoveAll`, `Rename` (with `ErrCrossDevice` for different roots and for `EXDEV`), `CopyFile` (keeping permission bits), `CopyLink`, `IsRoot`, `LockPair` and `Inside`, each through the root that holds the path.
+  - **`tool/builtin/fileops.go`:** move, delete, copy and mkdir, each with a schema, a description template, and confinement of both paths for move and copy.
+  - **Updated:** `builtin.go` (`ToolsWith`, in 0012-MADR D7's order), `builtin_test.go`, `docs/architecture.md` and `README.md`.
+- **One addition of mine,** within the entry's wording: `moveCopy`, a package variable that only tests set. A builtin test cannot reach `fsx`'s rename seam, and it needs a cross-device copy that fails part way. It follows `edit.go`'s `beforeWrite`.
+- **The approval test.** `TestDeleteAsks` drives a session through `acptest`'s client:
+  - refused, the delete raises one `session/request_permission`, and the file stays;
+  - allowed, the file is deleted.
+- **C3: every new check, seen failing on a scratch copy.** There were 14 mutations, each asserted to land exactly once.
+  - **move:**
+    - no cross-device fallback;
+    - a partial copy left behind;
+    - `overwrite` ignored.
+  - **delete:**
+    - the root deletable;
+    - `recursive` ignored;
+    - delete marked read-only, so `TestDeleteAsks` saw `0 permission requests, want one`.
+  - **copy:**
+    - a link followed;
+    - permission bits not kept. This one was run in WSL, since Windows has no permission bits.
+  - **mkdir:** a file overwritten.
+  - **The fsx operations:**
+    - `LockPair` without its key order, which deadlocked;
+    - `EXDEV` not mapped to `ErrCrossDevice`;
+    - `IsRoot` without ancestors.
+  - **Confinement:** move's and copy's `Outside` reporting one path.
+  - **The annotations:** mkdir marked destructive.
+- **Lint.** golangci-lint first reported two modernize findings, both in the new tests: `WaitGroup.Go` in place of `Add` and `Done`. Both were fixed.
+- **The gates:** on Go 1.27.2:
+  - lint printed `0 issues.` for linux, darwin and windows;
+  - Windows `go test ./...` had no `FAIL` or `panic:`;
+  - Windows and WSL `make preflight` each printed `preflight passed`.
+  - **WSL `go test -race ./...` failed in its first run.** It failed once, in `internal/cli`'s `TestSessionIDAndName`, on the defect in Go's `encoding/json` that [0013-REPORT](../reports/0013-REPORT-go-json-nested-marshal-race.md) records (deviation 3). It reproduces on a clean `c4ca6f5`.
+  - **A second full run exited 0,** with no race reported.
+  - The race gate was not changed.
+- **Probe A** (Messages-shape bytes, on Windows):
+
+  | Tool | Description | Definition |
+  | :--- | ---: | ---: |
+  | move | 506 | 994 |
+  | delete | 463 | 867 |
+  | copy | 467 | 948 |
+  | mkdir | 458 | 754 |
+  | **all twelve** | | **14,644** |
+
+**What the entry predicted wrongly:**
+
+1. **mkdir's hint,** deviation 1: the existing test's rule did not fit an additive tool.
+2. **The approval test's file,** deviation 2.
+3. **The cross-device test seam.** The entry put it on the rename in `fsx`. The builtin move test also needs a copy that fails part way, so a second seam, `moveCopy`, was added in `tool/builtin`.
+4. **The race gate.** The entry expected F1c-2's gates to pass. One WSL race run met a defect in the standard library, deviation 3, which predates F1c; the evidence and the upstream report are 0013-REPORT.
