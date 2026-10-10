@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json/jsontext"
 	"errors"
-	"fmt"
-	"runtime"
 	"strings"
 	"unicode/utf8"
 
@@ -27,31 +25,6 @@ const (
 	allowOnce  acp.PermissionOptionId = "allow_once"
 	rejectOnce acp.PermissionOptionId = "reject_once"
 )
-
-// systemPrompt is the constant system prompt until 0005-PLAN F3 builds it
-// from sections and context files.
-func systemPrompt(cwd string, tools []tool.Tool) string {
-	names := make([]string, len(tools))
-	for i, t := range tools {
-		names[i] = t.Spec().Name
-	}
-	return systemPromptOf(cwd, names)
-}
-
-// systemPromptOf is systemPrompt naming the given tools: those a turn's
-// first request sends (agent.Agent.Offered), so a deferred tool is never
-// named as usable (0005-PLAN F1d-2).
-func systemPromptOf(cwd string, names []string) string {
-	var b strings.Builder
-	b.WriteString("You are gobble, a coding agent. You help the user with software engineering tasks in their project.\n")
-	fmt.Fprintf(&b, "The working directory is %s, on %s. Relative paths resolve against it.\n", cwd, runtime.GOOS)
-	if len(names) > 0 {
-		fmt.Fprintf(&b, "Use the tools (%s) to read and change files and run commands; do not guess at file contents.\n", strings.Join(names, ", "))
-	}
-	b.WriteString("A call to a tool that changes something may be declined by the user; then do not retry it, and say what you would have done.\n")
-	b.WriteString("Answer concisely, in Markdown.")
-	return b.String()
-}
 
 // updates sends one turn's session updates. Text and thoughts are
 // coalesced; anything else flushes both first, so the order on the wire is

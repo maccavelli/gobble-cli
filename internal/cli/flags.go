@@ -1,8 +1,11 @@
 package cli
 
 import (
+	"os"
 	"slices"
 	"strings"
+
+	"github.com/maccavelli/gobble-cli/acpserver"
 )
 
 // SharedFlags is the default command's flag set (0008-MADR D12). Every
@@ -60,7 +63,6 @@ const (
 // plan. Such a flag is parsed and rejected with exit 2, never ignored
 // (0008-MADR D12).
 var laterFlags = map[string]string{
-	"system-prompt": plan0005F3, "append-system-prompt": plan0005F3, "no-context-files": plan0005F3,
 	"provider": plan0005F4, "model": plan0005F4, "thinking": plan0005F4, "api-key": plan0005F4, "offline": plan0005F4,
 	"approve": plan0005F6, "yes": plan0005F6,
 }
@@ -97,6 +99,36 @@ func (f *SharedFlags) validate(g given, stdinPiped, atPaths bool) error {
 	}
 	slices.Sort(names)
 	return usageErrorf("--%s is not yet available (%s)", names[0], laterFlags[names[0]])
+}
+
+// promptOptions are the prompt flags' options. --system-prompt and
+// --append-system-prompt take text, or a path read when a file is there, as
+// Pi's resolvePromptInput does (resource-loader.ts:167-182); a relative path
+// resolves against base, as an @path does.
+func (f *SharedFlags) promptOptions(base string) (acpserver.PromptOptions, error) {
+	o := acpserver.PromptOptions{NoContextFiles: f.NoContextFiles}
+	for _, v := range []struct {
+		flag, value string
+		to          *string
+	}{{"--system-prompt", f.SystemPrompt, &o.System}, {"--append-system-prompt", f.AppendSystemPrompt, &o.Append}} {
+		if v.value == "" {
+			continue
+		}
+		*v.to = v.value
+		p, err := resolvePath(base, v.value)
+		if err != nil {
+			continue
+		}
+		if info, err := os.Stat(p); err != nil || !info.Mode().IsRegular() {
+			continue
+		}
+		b, err := os.ReadFile(p) //nolint:gosec // G304: the user names the file
+		if err != nil {
+			return o, usageErrorf("%s %s: %v", v.flag, v.value, err)
+		}
+		*v.to = strings.TrimPrefix(string(b), "\ufeff")
+	}
+	return o, nil
 }
 
 func firstGiven(g given, names ...string) string {

@@ -139,14 +139,24 @@ type Call struct {
 // (0003-MADR). Deferred is the turn's deferred tools that are not loaded
 // yet, for tool_search to rank (0005-PLAN F1d-2). Files and Terminal are
 // the client's, when it offers them; nil otherwise (0005-PLAN F1d-3).
+// Instructions gives the context files below Cwd that a read of path
+// brings in, those the session has not had yet; nil gives none (0005-PLAN
+// F3-1).
 type Env struct {
-	Cwd          string    `json:"cwd,omitzero"`
-	Roots        []string  `json:"roots,omitzero"`
-	AllowOutside bool      `json:"allowOutside,omitzero"`
-	Environ      []string  `json:"environ,omitzero"`
-	Deferred     []Spec    `json:"deferred,omitzero"`
-	Files        TextFiles `json:"-"`
-	Terminal     Terminal  `json:"-"`
+	Cwd          string                          `json:"cwd,omitzero"`
+	Roots        []string                        `json:"roots,omitzero"`
+	AllowOutside bool                            `json:"allowOutside,omitzero"`
+	Environ      []string                        `json:"environ,omitzero"`
+	Deferred     []Spec                          `json:"deferred,omitzero"`
+	Files        TextFiles                       `json:"-"`
+	Terminal     Terminal                        `json:"-"`
+	Instructions func(path string) []Instruction `json:"-"`
+}
+
+// Instruction is a context file a read brings in: its path, and its text as
+// the model reads it.
+type Instruction struct {
+	Path, Text string
 }
 
 // Result is the tool's reply. Output is what the model sees: a JSON string
@@ -167,6 +177,9 @@ type Result struct {
 	Plan      []PlanItem     `json:"plan,omitzero"`
 	Load      []string       `json:"load,omitzero"`
 	Locations []Location     `json:"locations,omitzero"`
+	// Instructions are the paths of the context files the result brought
+	// in (Env.Instructions).
+	Instructions []string `json:"instructions,omitzero"`
 }
 
 // PlanItem is one step of a plan. Status is pending, in_progress or

@@ -423,10 +423,14 @@ func forkTarget(entries []session.Entry, id string) (*session.Entry, string) {
 			target = e
 		}
 	}
+	// Nothing comes before it when the path to its parent holds no user or
+	// assistant message: the copy would have no file to switch to. Entries
+	// such as a prompt baseline are not a conversation (0005-PLAN F3-1
+	// deviation 3).
 	switch {
 	case target == nil:
 		return nil, fmt.Sprintf("No user message %q in this session.", id)
-	case target.ParentID == nil:
+	case target.ParentID == nil, !session.HasConversation(session.NewTree(entries).Branched(*target.ParentID)):
 		return nil, nothingBefore
 	}
 	return target, ""
@@ -491,7 +495,7 @@ func (a *Agent) copySession(ctx context.Context, s *liveSession, path []session.
 // a session response (2026-10-01 amendment): the commands, the mode, and
 // the context's estimated use, the system prompt and the context.
 func (a *Agent) startFrames(ctx context.Context, conn *acp.AgentSideConnection, s *liveSession) error {
-	used := compaction.EstimateText(systemPrompt(s.cwd, a.tools)) + compaction.EstimateEntries(s.tree.Path())
+	used := compaction.EstimateText(a.systemText(s)) + compaction.EstimateEntries(s.tree.Path())
 	a.setUsed(s, used)
 	out := newUpdates(ctx, conn, s.id)
 	out.send(acp.SessionUpdate{AvailableCommandsUpdate: &acp.SessionAvailableCommandsUpdate{SessionUpdate: "available_commands_update", AvailableCommands: availableCommands()}})

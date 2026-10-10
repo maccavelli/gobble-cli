@@ -60,8 +60,11 @@ func TestSession(t *testing.T) {
 	// A fixed tool set: the default adds powershell on Windows, which would
 	// change the usage estimate the golden records (0005-PLAN F1b,
 	// deviation 1).
+	// The prompt names linux on every host, so the size is too (0005-PLAN
+	// F3-1 deviation 5).
 	agent := New(Options{Version: "1.2.3", NewID: counterIDs(), Tools: []tool.Tool{builtin.Read(), builtin.Write(), builtin.Edit(), builtin.Bash()},
-		Provider: func() (llm.Provider, error) { return llmtest.NewScript(llmtest.Text("hello gobble")), nil }})
+		Provider: func() (llm.Provider, error) { return llmtest.NewScript(llmtest.Text("hello gobble")), nil },
+		Prompt:   PromptOptions{GOOS: "linux"}})
 	client := &acptest.Client{}
 	c := acptest.Connect(t, agent, client)
 	agent.SetConnection(c.Agent)

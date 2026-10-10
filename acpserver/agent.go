@@ -69,6 +69,8 @@ type Options struct {
 	// Logger receives diagnostics, such as MCP servers that need attention.
 	// Nil discards them; Serve passes its own.
 	Logger *slog.Logger
+	// Prompt configures the system prompt (0005-PLAN F3-1).
+	Prompt PromptOptions
 }
 
 // Agent is gobble's acp.Agent.
@@ -83,6 +85,7 @@ type Agent struct {
 	now      func() time.Time
 	mcp      MCPOptions
 	logger   *slog.Logger
+	prompt   PromptOptions
 	// compaction is /compact's settings.
 	compaction compaction.Settings
 
@@ -121,6 +124,8 @@ type liveSession struct {
 	// appendMu serialises append: session/set_config_option writes while a
 	// turn writes (0002-PLAN Phase 7, deviation 4).
 	appendMu sync.Mutex
+	// noted are the prompt diagnostics logged for the session, once each.
+	noted map[string]bool
 }
 
 var (
@@ -132,7 +137,8 @@ var (
 // the first request, so it can send session updates.
 func New(opts Options) *Agent {
 	a := &Agent{version: opts.Version, newID: opts.NewID, provider: opts.Provider, models: opts.Models,
-		tools: opts.Tools, store: opts.Store, now: opts.Now, mcp: opts.MCP, logger: opts.Logger, sessions: map[acp.SessionId]*liveSession{}}
+		tools: opts.Tools, store: opts.Store, now: opts.Now, mcp: opts.MCP, logger: opts.Logger, prompt: opts.Prompt,
+		sessions: map[acp.SessionId]*liveSession{}}
 	if a.logger == nil {
 		a.logger = slog.New(slog.DiscardHandler)
 	}
@@ -381,6 +387,18 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 	prompt := userMessage(p.Prompt)
 	chosen, think := a.choices(s)
 	w := writer{a: a, s: s, ctx: context.WithoutCancel(ctx), provider: a.providerID(model), model: chosen, written: map[string]bool{}}
+	// The system prompt's baseline or patch comes before the user's message,
+	// as Pi puts a system patch before it (0005-PLAN F3-1).
+	system, update := a.writePrompt(&w, s)
+	if w.err != nil {
+		return acp.PromptResponse{}, appendFailed(w.err)
+	}
+	if update != nil {
+		history = append(slices.Clip(history), *update)
+		a.mu.Lock()
+		s.history = append(s.history, *update)
+		a.mu.Unlock()
+	}
 	w.add(session.Entry{Type: session.TypeMessage, Message: userEntryMessage(prompt, session.Timestamp(a.now()))})
 	if w.err != nil {
 		return acp.PromptResponse{}, appendFailed(w.err)
@@ -406,13 +424,14 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 		Queue:    s.queue,
 		Search:   builtin.ToolSearch(),
 		Loaded:   loaded,
+		System:   system,
 	}
-	cfg.System = systemPromptOf(s.cwd, agent.New(cfg).Offered())
 	ag := agent.New(cfg)
 	out := newUpdates(ctx, conn, p.SessionId)
 	var last llm.Usage
 	env := s.env()
 	env.Environ = markers(string(s.id), a.fileOf(s), w.provider, chosen, think)
+	env.Instructions = a.instructions(s)
 	a.mu.Lock()
 	client := a.client
 	a.mu.Unlock()
@@ -583,6 +602,9 @@ func (w *writer) event(ev agent.Event) {
 		w.add(session.Entry{Type: session.TypeMessage, Message: toolResultMessage(ev.Call.ID, ev.Call.Name, ev.Result.Text(), ev.Result.IsError, ts())})
 		if ev.Result.Plan != nil {
 			w.add(todoEntry(ev.Result.Plan))
+		}
+		if len(ev.Result.Instructions) > 0 {
+			w.add(contextEntry(ev.Result.Instructions))
 		}
 	case agent.Loaded:
 		w.add(toolsEntry(ev.Names))

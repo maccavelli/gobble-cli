@@ -70,8 +70,21 @@ func readWith(o Options) tool.Tool {
 			if err != nil {
 				return tool.Result{}, err
 			}
+			// The context files below cwd this read reaches, and the
+			// session has not had (0005-PLAN F3-1).
+			var added []string
+			if env.Instructions != nil {
+				var b strings.Builder
+				b.WriteString(text)
+				for _, ins := range env.Instructions(abs) {
+					b.WriteString("\n\n" + ins.Text)
+					added = append(added, ins.Path)
+				}
+				text = b.String()
+			}
 			r := tool.TextResult(text)
 			r.Summary = summary(fmt.Sprintf("read %s (%s)", name, count(lines, "line", "lines")))
+			r.Instructions = added
 			return r, nil
 		},
 		tool.WithKind(tool.KindRead),

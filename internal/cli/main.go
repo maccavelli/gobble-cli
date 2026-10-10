@@ -14,6 +14,7 @@ import (
 
 	"github.com/alecthomas/kong"
 
+	"github.com/maccavelli/gobble-cli/acpserver"
 	"github.com/maccavelli/gobble-cli/internal/cli/complete"
 	"github.com/maccavelli/gobble-cli/internal/cli/term"
 	"github.com/maccavelli/gobble-cli/internal/logging"
@@ -143,6 +144,10 @@ type runEnv struct {
 	mcpAllow func(name string) bool
 	// store is the agent's session store, opened on first use.
 	store session.Store
+	// prompt is what the prompt flags set: the system prompt's replacement
+	// and addendum texts, and whether to read context files (0005-PLAN
+	// F3-1). agentOptions adds the config directory.
+	prompt acpserver.PromptOptions
 }
 
 func (e *runEnv) log() *slog.Logger { return e.logs.get() }

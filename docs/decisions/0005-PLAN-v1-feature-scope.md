@@ -2657,11 +2657,16 @@ Choices made within the wording:
     - `Build(Options) []Section` gives Pi's order, without `docs`: `preamble`, `tools`, `rules`, `addendum`, `project_context`, `skills`, `cwd`.
     - `Text([]Section) string` joins the sections with blank lines, as `getSystemMessageText` does.
   - **The preamble** is gobble's own sentence, `You are gobble, a coding agent. You help the user with software engineering tasks in their project.`, or the custom prompt. With a custom prompt, `tools` and `rules` are left out, as Pi leaves them out.
-  - **`tools`:**
-    - one line per tool, `- <name>: <the first sentence of its description>`;
-    - then 0012-MADR D6's three cross-tool rules: prefer move, delete, copy and mkdir to shell commands; read a file before you edit it; a delete always asks;
-    - when anything is deferred, the line `tool_search can find more tools for: <families, comma-separated>.`
-    - Plan mode's exit tool is not listed, so a mode switch does not patch the prompt.
+  - ~~**`tools`:**~~
+    - ~~one line per tool, `- <name>: <the first sentence of its description>`;~~
+    - ~~then 0012-MADR D6's three cross-tool rules: prefer move, delete, copy and mkdir to shell commands; read a file before you edit it; a delete always asks;~~
+    - ~~when anything is deferred, the line `tool_search can find more tools for: <families, comma-separated>.`~~
+    - ~~Plan mode's exit tool is not listed, so a mode switch does not patch the prompt.~~
+    - *(F3-1 deviation 2, 2026-10-10: no per-tool lines, so the sections need no MCP wait.)*
+  - **`tools`,** built from the agent's own tools, not the MCP servers':
+    - 0012-MADR D6's three cross-tool rules: prefer move, delete, copy and mkdir to shell commands; read a file before you edit it; a delete always asks;
+    - when anything is deferred, the line `tool_search can find more tools for: <families, comma-separated>.`;
+    - then Pi's closing line, worded for a list it no longer follows: `Each request describes the tools you can call; you may also have tools from MCP servers and the project.`
   - **`rules`:**
     - Pi's shell rule, when bash or powershell is offered and grep, find and `tree` are not (`system-prompt.ts:101-109`, with `tree` for `ls`);
     - then, in order: `A call to a tool that changes something may be declined by the user; then do not retry it, and say what you would have done.`; `Commands run on <GOOS>.`; Pi's `Be concise in your responses` and `Show file paths clearly when working with files`; and `Answer in Markdown.`
@@ -2693,7 +2698,9 @@ Choices made within the wording:
     - a session with no baseline on its path gets one, written before the user's message;
     - otherwise the current sections are the latest baseline with its later patches applied, and a difference is written as a patch before the user's message. Its update message joins this turn's history.
   - **The system prompt sent** is `prompt.Text` of the latest baseline. It replaces `systemPrompt` and `systemPromptOf`, and the estimates use it.
-  - **`/compact`** writes a baseline right after its compaction entry.
+  - ~~**`/compact`** writes a baseline right after its compaction entry.~~ *(F3-1 deviation 3, 2026-10-10: before it, so the compaction stays last.)*
+  - **`/compact`** writes a baseline right before its compaction entry, so the compaction stays the path's last entry, as `compaction.Prepare`'s "Already compacted" check reads it.
+  - **Fork before a session's first message** is refused when the path before the message holds no user or assistant message, the condition lazy files need, rather than when the message has no parent.
   - **A diagnostic** (an unreadable file, a file waiting for trust) is logged once per session through `Options.Logger`.
   - **`Env.Instructions`** returns the nested files not already added. An added file is one whose path a `gobble.context` entry names among the context entries of the session's path, so a compaction that drops the entry drops the file with it. The writer appends `custom{gobble.context, {paths}}` after a result that names any.
 - **internal/cli:**
@@ -2707,6 +2714,12 @@ Choices made within the wording:
 | :--- | :--- |
 | new | `prompt/sections.go`, `prompt/context.go`, `prompt/sections_test.go`, `prompt/context_test.go`, `prompt/testdata/` (a fixture project and `system.golden`); `acpserver/sysprompt.go`, `acpserver/sysprompt_test.go` |
 | changed | `prompt/doc.go`; `session/session.go`; `compaction/estimate.go`, `compaction/project_test.go`; `tool/tool.go`, `tool/tool_test.go`; `tool/builtin/read.go`, `tool/builtin/builtin_test.go`; `acpserver/agent.go`, `acpserver/prompt.go`, `acpserver/compact.go`, `acpserver/commands.go`, `acpserver/history.go`; `internal/cli/agent.go`, `internal/cli/flags.go`, and their tests; `docs/architecture.md`; `README.md` |
+
+*(2026-10-10, F3-1 deviation 1: `internal/cli/chat.go` and `internal/cli/main.go` join the changed files.)*
+
+*(2026-10-10, F3-1 deviation 4: `acpserver/mcp_test.go`, `acpserver/toolload_test.go`, `acpserver/tree_test.go`, `acpserver/testdata/session.golden` and `internal/cli/sessions_test.go` join the changed files.)*
+
+*(2026-10-10, F3-1 deviation 5: `acpserver/agent_test.go` joins the changed files.)*
 
 **F3-1's tests,** each seen failing first on a scratch copy:
 
@@ -2723,6 +2736,36 @@ Choices made within the wording:
   - `/compact` writes a new baseline holding the patch;
   - a read below the cwd adds its nested `AGENTS.md` once, a second read adds nothing, and a resumed session adds nothing either.
 - **internal/cli:** the three flags reach the agent, and a text value and a file value both work.
+
+**F3-1's deviations, 2026-10-10,** found by reading its files before any code was written (1, 2), at its first test run (3, 4) and at its first gate run (5), and decided by the owner:
+
+1. **The CLI flags reach the agent through two more files.**
+   - **Found:** `ChatCmd.Run` sets the run environment from the flags (`internal/cli/chat.go:32`), and the environment is declared in `internal/cli/main.go:130`. The files table names `agent.go` and `flags.go` only.
+   - **Decided:** `internal/cli/main.go` gains a field for the prompt options, and `chat.go` sets it beside the tool choice. Both join F3-1's files.
+2. **The `tools` section lists no tools.**
+   - **Found:** the plan writes the prompt entry before the user's message, as Pi does. Listing each tool needed the MCP servers' tools, and on a session's first prompt they wait up to the start-up limit (`acpserver/mcp.go:133-148`). That would move the wait before the user's message is recorded (`acpserver/agent.go:371`). Writing the entry after the message instead makes a live turn and its replay disagree: `agent.Run` takes the prompt as the turn's last message, so the live update would come before the prompt and the replayed one after it.
+   - **Decided:** the section holds D6's rules, the deferred categories and a closing line, built from the agent's own tools. The provider already receives every tool's spec. The sections need no MCP wait, so the prompt entry is written before the user's message, and the user's message is still recorded before the wait. No file is added.
+
+3. **Two defects of the new entries.**
+   - **Found:** at the first test run, after the code was written:
+     - a fork before a session's first message went ahead, because `forkTarget` refuses only a message with no parent (`acpserver/commands.go`), and the first message's parent is now the baseline. The fork would write a session holding only a baseline, which lazy files never create, then switch to it;
+     - a second `/compact` answered `Nothing to compact` instead of Pi's `Already compacted`, because `compaction.Prepare` checks whether the path's last entry is a compaction (`compaction/compaction.go:52`), and the plan wrote the new baseline after it.
+   - **Decided:** a fork is refused when the path before the message holds no user or assistant message. `/compact` writes its baseline just before the compaction entry. Both are in `acpserver/commands.go` and `acpserver/compact.go`, already in the files.
+4. **Five tests check what F3-1 changes on purpose.**
+   - **Found:** at the same run:
+     - `acpserver/mcp_test.go` and `acpserver/toolload_test.go`, in two tests, look for tool names in the system prompt, which deviation 2 removed;
+     - `acpserver/tree_test.go` expects the prompt's parent to be the moved leaf, which is now the baseline, itself the leaf's child;
+     - `internal/cli/sessions_test.go`'s `TestFork` expects the source to hold 2 entries, now 3 with the baseline;
+     - `acpserver/testdata/session.golden` holds the old prompt's size in its `usage_update`.
+   - **Decided:**
+     - the prompt tests keep their tool and loading checks, and drop the names from their system-prompt checks, keeping "the deferred tool is not named";
+     - the leaf test expects the baseline as the moved leaf's child, and the prompt as the baseline's;
+     - `TestFork` counts the source's entries before and after the fork, rather than fixing them at 2;
+     - the golden is regenerated with `ACPTEST_UPDATE=1`, its diff checked to be that one size.
+   - The five files join F3-1's.
+5. **The golden transcript depended on the host.**
+   - **Found:** at the first gate run, the Linux race run failed `TestSession`: its golden records the `usage_update` size, which counts the system prompt. The rule `Commands run on <GOOS>.` made it 151 on Windows and 150 on Linux. The old prompt named the OS too, but its rounding gave 112 on both.
+   - **Decided:** `PromptOptions` gains `GOOS`, the system the prompt names, where `""` is the host's. `TestSession`'s agent sets it to `linux`, so the golden is the same on every host and still checks the exact size. `acpserver/agent_test.go` joins the files.
 
 **F3-2 — skills.**
 
@@ -2867,3 +2910,65 @@ Choices made within the wording:
 - **`--skill`, `--prompt-template` and `--no-prompt-templates`:** 1.x (0005-MADR, CLI flags).
 - **`gobble skills list|show|new` and `gobble prompts list`:** not in F3's steps. They wait for an amendment that places them.
 - **MCP prompts as commands, and the built-in templates:** X1 steps 6 and 7.
+
+**F3-1, 2026-10-10 — complete (staged; the owner commits).** It ran as the entry "F3 made executable" wrote it, approved by the owner's "approved to proceed to F3-1" of 2026-10-10, with five deviations decided by the owner: 1 and 2 before any code was written, 3 and 4 at its first test run, 5 at its first gate run. F3-2, F3-3 and F3-4 have not run.
+
+- **The deviations** (recorded under F3-1's deviations above):
+  1. `internal/cli/chat.go` and `main.go` join the files, to carry the prompt flags.
+  2. The `tools` section lists no tools, so the sections need no MCP wait, and the prompt entry comes before the user's message.
+  3. A fork is refused when nothing before its message is a conversation, and `/compact`'s baseline goes just before its compaction entry.
+  4. Five tests that checked the old prompt or entry counts are updated to the new shape.
+  5. `PromptOptions.GOOS` names the system in the prompt, so `TestSession`'s golden holds on every host.
+- **What was built:**
+  - **`prompt`:**
+    - `Section`, `Patch` and `Options`; `Build`, in Pi's order without `docs`; `Text`, `Diff`, `Apply` and `Update`;
+    - `BaselineData`, `PatchData` and `ParseData`, the entry data, as arrays;
+    - `ContextFiles`, with Pi's five candidates, its walk and its worktree shadowing; `Nested`; `SystemFiles`, with a project's copies waiting for trust; `Instruction`, Pi's `<project_instructions>` block.
+  - **`session`:** `CustomPrompt` and `CustomContext`.
+  - **`compaction`:** a `gobble.prompt` patch projects as one user message, its update text.
+  - **`tool`:** `Env.Instructions`, `Instruction` and `Result.Instructions`. read appends what `Env.Instructions` gives after a text read, and names the files.
+  - **acpserver:**
+    - `PromptOptions`;
+    - `writePrompt` writes the baseline or patch before the user's message; its update message joins the history, live and on replay alike;
+    - the system prompt sent is the latest baseline's;
+    - `/compact` rebases;
+    - the estimates use `systemText`;
+    - diagnostics are logged once per session;
+    - `Env.Instructions` gives the nested files the path's context does not hold, and the writer records a `gobble.context` entry;
+    - the old constant prompt is gone.
+  - **internal/cli:** `--system-prompt`, `--append-system-prompt` and `--no-context-files` reach the agent, a value read as a file when one is there; the config directory goes with them, for `gobble acp` too.
+  - **Updated:** `docs/architecture.md`'s prompt and acpserver rows; `README.md`.
+- **Choices of mine, within the entry's wording:**
+  - **D6's three rules appear only for the tools there are:** the shell rule only with a file operation and a shell, read-before-edit only with both, the delete rule only with delete.
+  - **Pi's closing line is reworded** for a section that lists no tools: `Each request describes the tools you can call; you may also have tools from MCP servers and the project.`
+  - **The import is aliased `sysprompt` in `acpserver`,** where a test helper is named `prompt`.
+  - **A flag's relative path resolves against `--cwd`,** as an `@path` does.
+  - **The golden test copies the fixture into a temporary directory,** so the walk to the filesystem root meets no file of this repository. It writes the fixture's root as `<root>`, with `/` separators, so the golden holds on every system.
+- **The tests:**
+  - `prompt`: `TestGoldenSystemPrompt` (F3's accept line), `TestBuildCustomAndAppend`, `TestDiffApply`, `TestEntryData`, `TestUpdate`, `TestCandidates`, `TestWorktreeShadowing`, `TestConfigFirstAndUnreadable`, `TestNested` and `TestSystemFiles`.
+  - `compaction`: `TestProjectPromptEntries`. `tool/builtin`: `TestReadInstructions`.
+  - acpserver: `TestPromptBaselineAndPatch`, `TestCompactRebases`, `TestNestedInstructionsOnce` and `TestPromptOptionsAndTrust`.
+  - internal/cli: `TestPromptFlags`.
+  - `TestConfigFirstAndUnreadable`'s refusal had to match either spelling of `AGENTS.md`: on a case-insensitive file system `AGENTS.MD` is the same file, as it is for Pi.
+- **C3: every new check, seen failing on a scratch copy.** There were 26 mutations, each asserted to land exactly once, and all 26 failed as expected on the first run, none by a build failure:
+  - the walk: the override not first; cwd first; no config file; no shadowing; the byte-order mark kept;
+  - the sections: a custom prompt keeping the rules; backslashes in `cwd`; no delete rule;
+  - patches: no removals; a replaced section moved; Pi's wording changed; a removal's `null` dropped;
+  - acpserver: no patch; the system prompt following the patch; the update not in the live history; no rebase; the patch not projected; held files ignored; no `gobble.context` entry; context files forced; the trust note logged every time; the `System` option ignored; a fork refused only by its parent; the baseline after the compaction;
+  - read: no instructions appended; the CLI: a flag's file not read.
+- **The gates,** on Go 1.27.2, as F1d-2's deviation 4 sets them.
+  - **The first run failed** lint on all three systems, with four findings in the new code, and with it both preflights. The Linux race run failed `TestSession` (deviation 5). Windows `go test` and race passed.
+  - **The fixes:** a `gosec` G703 on reading the user's own `.git` file is excused with its reason; `strings.SplitSeq`; a `strings.Builder` for read's appended instructions; a constant log message, its reason an attribute. The negatives' read case moved to the builder's line, and all 26 were run again.
+  - **On the second run:**
+    - lint printed `0 issues.` for linux, darwin and windows;
+    - Windows `go test ./...` had no `FAIL` or `panic:`;
+    - `CGO_ENABLED=1 go test -race ./...` exited 0 with no race reported, natively on Windows and on a second amd64 Linux machine;
+    - Windows and WSL `make preflight` each printed `preflight passed`, WSL's without a race run.
+
+**What the entry predicted wrongly:**
+
+1. **Its files table left out `internal/cli/chat.go` and `main.go`,** through which the CLI's flags reach the agent.
+2. **Its `tools` section and its entry order could not both hold:** listing every tool needed the MCP wait before the user's message, and writing the entry after the message would have split a live turn from its replay.
+3. **It did not foresee that a new entry before the first message changes two rules** that read a session's shape: fork's "nothing comes before" and compaction's "already compacted".
+4. **It did not name the tests that checked the old prompt and entry counts.**
+5. **It put the host's system into the prompt** without seeing that a golden counts the prompt's size.

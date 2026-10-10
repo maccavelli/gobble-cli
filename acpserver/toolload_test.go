@@ -92,8 +92,10 @@ func TestToolLoadRecordedAndReplayed(t *testing.T) {
 	reqs := model.Requests()
 	llmtest.AssertTools(t, reqs[0], "read", builtin.ToolSearchName)
 	llmtest.AssertTools(t, reqs[1], "read", builtin.ToolSearchName, "widget_tool")
-	if !strings.Contains(systemOf(reqs[0]), "read, tool_search") || strings.Contains(systemOf(reqs[0]), "widget_tool") {
-		t.Fatalf("system prompt %q; want read and tool_search named, the deferred tool not", systemOf(reqs[0]))
+	// The system prompt names no tool (0005-PLAN F3-1 deviation 2), and so
+	// never names the deferred one as usable.
+	if strings.Contains(systemOf(reqs[0]), "widget_tool") {
+		t.Fatalf("system prompt %q names the deferred tool", systemOf(reqs[0]))
 	}
 	if got := loadsOf(t, dir, string(id)); len(got) != 1 || !slices.Equal(got[0], []string{"widget_tool"}) {
 		t.Fatalf("gobble.tools entries %v", got)
@@ -143,9 +145,6 @@ func TestResourceToolsLoadAtFirstPrompt(t *testing.T) {
 		}
 		if slices.Contains(names, builtin.ToolSearchName) || !slices.Contains(names, "mcp__docs__echo") {
 			t.Errorf("request %d tools %v; want the server's tools, and no tool_search", i, names)
-		}
-		if !strings.Contains(systemOf(req), builtin.ReadResourceName) {
-			t.Errorf("request %d's system prompt does not name %s", i, builtin.ReadResourceName)
 		}
 	}
 	a.mu.Lock()

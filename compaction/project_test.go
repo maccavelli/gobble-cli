@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/maccavelli/gobble-cli/prompt"
 	"github.com/maccavelli/gobble-cli/session"
 )
 
@@ -165,6 +166,25 @@ func TestEstimateAfterEdit(t *testing.T) {
 	p.add(session.Entry{Type: session.TypeContextEdit, TargetID: p.entries[0].ID, Replacement: jsontext.Value(`{"content":"abcd"}`)})
 	if got := EstimateEntries(p.entries); got != 101 {
 		t.Fatalf("after the edit %d, want 1 + 100 estimated", got)
+	}
+}
+
+// A gobble.prompt patch is one user message, its update text, at its
+// place; a baseline, the system prompt itself, gives nothing (0005-PLAN
+// F3-1).
+func TestProjectPromptEntries(t *testing.T) {
+	patch := []prompt.Patch{{Name: "rules", Text: new("<rules>\n- r\n</rules>")}}
+	p := (&path{}).
+		add(session.Entry{Type: session.TypeCustom, CustomType: session.CustomPrompt, Data: prompt.BaselineData([]prompt.Section{{Name: "preamble", Text: "p"}})}).
+		add(text(session.RoleUser, "hi")).
+		add(session.Entry{Type: session.TypeCustom, CustomType: session.CustomPrompt, Data: prompt.PatchData(patch)}).
+		add(session.Entry{Type: session.TypeCustom, CustomType: "other", Data: prompt.PatchData(patch)})
+	proj := Project(p.entries)
+	if len(proj[0].Messages) != 0 || len(proj[3].Messages) != 0 {
+		t.Fatalf("a baseline or another custom entry gave messages: %+v", proj)
+	}
+	if ms := proj[2].Messages; len(ms) != 1 || ms[0].Role != session.RoleUser || ms[0].Text() != prompt.Update(patch) {
+		t.Fatalf("the patch's messages %+v", ms)
 	}
 }
 

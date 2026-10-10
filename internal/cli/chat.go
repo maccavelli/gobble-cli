@@ -34,6 +34,9 @@ func (c *ChatCmd) Run(k *kong.Context, e *runEnv) error {
 	if err != nil {
 		return err
 	}
+	if e.prompt, err = c.promptOptions(base); err != nil {
+		return err
+	}
 	if err := c.configureStore(e, base); err != nil {
 		return err
 	}

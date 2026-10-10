@@ -188,18 +188,56 @@ func TestFork(t *testing.T) {
 	s := llmtest.NewScript(llmtest.Text("one"), llmtest.Text("two"))
 	withModel(t, s)
 	mustRun(t, home, "--cwd", cwd, "--session-id", "src", "-p", "original")
+	st := jsonl.New(filepath.Join(home, "sessions"), jsonl.Options{})
+	_, before, _, err := st.Read(t.Context(), "src")
+	if err != nil {
+		t.Fatal(err)
+	}
 	mustRun(t, home, "--cwd", cwd, "--session-id", "dst", "--fork", "src", "-p", "forked")
 	if got := strings.Join(texts(s.Requests()[1]), ","); got != "original,one,forked" {
 		t.Fatalf("fork request %q", got)
 	}
-	st := jsonl.New(filepath.Join(home, "sessions"), jsonl.Options{})
 	h, _, _, err := st.Read(t.Context(), "dst")
 	if err != nil || !strings.HasSuffix(h.ParentSession, "_src.jsonl") {
 		t.Fatalf("fork header %+v, %v", h, err)
 	}
+	// The source keeps the entries it had, its prompt baseline among them
+	// (0005-PLAN F3-1 deviation 4).
 	src, entries, _, err := st.Read(t.Context(), "src")
-	if err != nil || src.ID != "src" || len(entries) != 2 {
-		t.Fatalf("the source changed: %d entries, %v", len(entries), err)
+	if err != nil || src.ID != "src" || len(entries) != len(before) {
+		t.Fatalf("the source changed: %d entries, %d before, %v", len(entries), len(before), err)
+	}
+}
+
+// The prompt flags reach the agent (0005-PLAN F3-1): --system-prompt as
+// text, --append-system-prompt as a file relative to --cwd, and
+// --no-context-files leaving out the cwd's AGENTS.md.
+func TestPromptFlags(t *testing.T) {
+	home, cwd := t.TempDir(), t.TempDir()
+	if err := os.WriteFile(filepath.Join(cwd, "extra.md"), []byte("From the file."), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cwd, "AGENTS.md"), []byte("Project context."), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s := llmtest.NewScript(llmtest.Text("a"), llmtest.Text("b"))
+	withModel(t, s)
+	mustRun(t, home, "--cwd", cwd, "--no-session", "--system-prompt", "Custom text.", "--append-system-prompt", "extra.md", "-p", "x")
+	mustRun(t, home, "--cwd", cwd, "--no-session", "--no-context-files", "-p", "y")
+	system := func(i int) string {
+		for _, m := range s.Requests()[i].Messages {
+			if m.Role == llm.RoleSystem {
+				return m.Content[0].Text
+			}
+		}
+		return ""
+	}
+	if got := system(0); !strings.HasPrefix(got, "Custom text.") || !strings.Contains(got, "<addendum>\nFrom the file.\n</addendum>") ||
+		!strings.Contains(got, "Project context.") {
+		t.Fatalf("with the prompt flags: %q", got)
+	}
+	if got := system(1); strings.Contains(got, "Project context.") || !strings.HasPrefix(got, "You are gobble") {
+		t.Fatalf("with --no-context-files: %q", got)
 	}
 }
 

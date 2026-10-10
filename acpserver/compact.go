@@ -77,14 +77,21 @@ func (a *Agent) compactSession(ctx context.Context, s *liveSession, instructions
 	}
 	e := session.Entry{Type: session.TypeCompaction, Summary: res.Summary, FirstKeptEntryID: res.FirstKeptEntryID,
 		TokensBefore: new(res.TokensBefore), Details: details, Usage: piUsage(res.Usage), FromHook: new(false)}
-	if err := s.append(context.WithoutCancel(ctx), a.now(), e); err != nil {
+	// The new baseline goes just before the compaction, which stays the
+	// path's last entry, as Prepare's "Already compacted" reads it (0005-PLAN
+	// F3-1 deviation 3).
+	write := func(e session.Entry) error { return s.append(context.WithoutCancel(ctx), a.now(), e) }
+	if err := a.rebase(s, write); err != nil {
+		return compaction.Result{}, 0, appendFailed(err)
+	}
+	if err := write(e); err != nil {
 		return compaction.Result{}, 0, appendFailed(err)
 	}
 	st := s.state()
 	a.mu.Lock()
 	s.history = st.history
 	a.mu.Unlock()
-	used := compaction.EstimateText(systemPrompt(s.cwd, a.tools)) + compaction.EstimateEntries(s.tree.Path())
+	used := compaction.EstimateText(a.systemText(s)) + compaction.EstimateEntries(s.tree.Path())
 	a.setUsed(s, used)
 	return res, used, nil
 }

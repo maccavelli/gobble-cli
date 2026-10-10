@@ -169,25 +169,31 @@ func TestPromptFollowsTheLeaf(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var promptID string
+	// The session's first prompt writes a system prompt baseline, the moved
+	// leaf's child, and the prompt is the baseline's (0005-PLAN F3-1
+	// deviation 4).
+	var baselineID, promptID string
 	for _, e := range entries {
-		if e.Message == nil {
-			continue
-		}
-		switch e.Message.Text() {
-		case "again":
-			promptID = e.ID
+		switch {
+		case e.Type == session.TypeCustom && e.CustomType == session.CustomPrompt:
+			baselineID = e.ID
 			if e.ParentID == nil || *e.ParentID != "9ba47962" {
-				t.Fatalf("the prompt's parent %v, want the moved leaf", e.ParentID)
+				t.Fatalf("the baseline's parent %v, want the moved leaf", e.ParentID)
 			}
-		case "from here":
+		case e.Message == nil:
+		case e.Message.Text() == "again":
+			promptID = e.ID
+			if e.ParentID == nil || *e.ParentID != baselineID {
+				t.Fatalf("the prompt's parent %v, want the baseline %s", e.ParentID, baselineID)
+			}
+		case e.Message.Text() == "from here":
 			if e.ParentID == nil || *e.ParentID != promptID {
 				t.Fatalf("the answer's parent %v, want the prompt %s", e.ParentID, promptID)
 			}
 		}
 	}
-	if promptID == "" {
-		t.Fatal("the prompt was not written")
+	if baselineID == "" || promptID == "" {
+		t.Fatalf("baseline %q, prompt %q: one was not written", baselineID, promptID)
 	}
 	n := 0
 	for _, m := range model.Requests()[0].Messages {

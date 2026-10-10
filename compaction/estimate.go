@@ -6,6 +6,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/maccavelli/gobble-cli/prompt"
 	"github.com/maccavelli/gobble-cli/session"
 )
 
@@ -210,6 +211,17 @@ func entryMessages(e session.Entry) []*session.Message {
 		return []*session.Message{{Role: session.RoleBranchSummary, Summary: e.Summary, FromID: e.FromID, Timestamp: millis(e.Timestamp)}}
 	case session.TypeCompaction:
 		return []*session.Message{{Role: session.RoleCompactionSummary, Summary: e.Summary, TokensBefore: e.TokensBefore, Timestamp: millis(e.Timestamp)}}
+	case session.TypeCustom:
+		// A system prompt patch reaches the model as a message at its place;
+		// a baseline is the system prompt itself (0005-PLAN F3-1).
+		if e.CustomType != session.CustomPrompt {
+			return nil
+		}
+		if _, patch, err := prompt.ParseData(e.Data); err == nil && len(patch) > 0 {
+			m := &session.Message{Role: session.RoleUser, Timestamp: millis(e.Timestamp)}
+			_ = m.SetBlocks([]session.Block{{Type: session.BlockText, Text: prompt.Update(patch)}}) //nolint:errcheck // a text block always encodes
+			return []*session.Message{m}
+		}
 	}
 	return nil
 }

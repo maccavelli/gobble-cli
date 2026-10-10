@@ -44,7 +44,19 @@ func (e *runEnv) agentOptions() acpserver.Options {
 		MCP: acpserver.MCPOptions{
 			Config: mcpConfigPath(), Off: e.mcpOff, Allow: e.mcpAllow, UserAgent: identity().UserAgent(),
 		},
+		Prompt: e.promptOptions(),
 	}
+}
+
+// promptOptions are the prompt flags' options with the config directory,
+// which holds the user's AGENTS.md, SYSTEM.md and APPEND_SYSTEM.md; none
+// when it cannot be resolved (0005-PLAN F3-1).
+func (e *runEnv) promptOptions() acpserver.PromptOptions {
+	o := e.prompt
+	if dirs, _, err := systemDirs(); err == nil {
+		o.ConfigDir = dirs.Config
+	}
+	return o
 }
 
 // mcpConfigPath is <config>/mcp.json (0003-MADR), or "" when the config

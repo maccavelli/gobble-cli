@@ -163,7 +163,8 @@ func TestMCPToolsInPrompt(t *testing.T) {
 	if got := lastText(reqs[2]); got != "5" {
 		t.Fatalf("add result %q", got)
 	}
-	llmtest.AssertSystem(t, reqs[0], "mcp__fx__echo")
+	// The system prompt names no tool; the request carries their specs
+	// (0005-PLAN F3-1 deviation 2).
 }
 
 // A session server replaces the file's server of the same name.

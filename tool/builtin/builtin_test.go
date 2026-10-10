@@ -133,6 +133,31 @@ func TestClientFilesConfined(t *testing.T) {
 	}
 }
 
+// A text read appends the instructions Env.Instructions gives for its path
+// and names them in the result; an image or a directory asks for none
+// (0005-PLAN F3-1).
+func TestReadInstructions(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("one\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var asked []string
+	env := tool.Env{Cwd: dir, Instructions: func(p string) []tool.Instruction {
+		asked = append(asked, p)
+		return []tool.Instruction{{Path: "/x/AGENTS.md", Text: "<project_instructions>"}}
+	}}
+	r := call(t, Read(), env, map[string]string{"path": "a.txt"})
+	if !strings.HasSuffix(r.Text(), "\n\n<project_instructions>") || !slices.Equal(r.Instructions, []string{"/x/AGENTS.md"}) {
+		t.Fatalf("result %q, instructions %v", r.Text(), r.Instructions)
+	}
+	if !slices.Equal(asked, []string{filepath.Join(dir, "a.txt")}) {
+		t.Fatalf("asked for %v", asked)
+	}
+	if r := call(t, Read(), env, map[string]string{"path": "."}); len(r.Instructions) != 0 || len(asked) != 1 {
+		t.Fatalf("a directory read asked for instructions: %v", asked)
+	}
+}
+
 func TestReadWriteEdit(t *testing.T) {
 	dir := t.TempDir()
 	env := tool.Env{Cwd: dir}

@@ -40,6 +40,13 @@ const (
 const (
 	// CustomTodo is the todo list after a todo call: data is {todos}.
 	CustomTodo = "gobble.todo"
+	// CustomPrompt is the system prompt's state: data is a baseline,
+	// {"baseline":[{"name","text"}…]}, the sections in order, or a patch,
+	// {"patch":[{"name","text"|null}…]} (0005-PLAN F3-1).
+	CustomPrompt = "gobble.prompt"
+	// CustomContext names the nested context files a read added: data is
+	// {"paths":[…]} (0005-PLAN F3-1).
+	CustomContext = "gobble.context"
 )
 
 // Message roles gobble writes.
