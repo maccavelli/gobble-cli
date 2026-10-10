@@ -1,6 +1,6 @@
 ---
 status: accepted
-date: 2026-10-08
+date: 2026-10-10
 decision-makers: repository owner
 consulted: 0001-REPORT-go-port-feasibility.md, 0002-MADR-cli-acp-headless-mcp-v1.md, 0003-MADR-gobble-product-identity.md, 0004-MADR-go-module-architecture.md
 informed: magic-cli-remote (companion command table), go-llmprovider-sdk, go-core-lib, go-tui-lib
@@ -153,10 +153,10 @@ Tier definitions:
 |---|---|---|
 | Context files | 1.0 | Per directory the first match wins: `AGENTS.override.md`, `AGENTS.md`, `CLAUDE.md`. Loaded from the config directory, then from `cwd` and each ancestor, with nested git worktrees de-duplicated. No trust is needed. `--no-context-files` disables it (`resource-loader.ts`). |
 | `SYSTEM.md` and `APPEND_SYSTEM.md` | 1.0 | Replace or append to the default prompt. The trusted project copy wins over the user copy. |
-| Sectioned system prompt | 1.0 | Named sections (`preamble`, `tools`, `rules`, `project_context`, `skills`, `cwd`, custom). Section changes are stored as system-message patches, so the transcript replays exactly (`core/system-prompt.ts`). |
+| Sectioned system prompt | 1.0 | Named sections (`preamble`, `tools`, `rules`, `project_context`, `skills`, `cwd`, custom). ~~Section changes are stored as system-message patches, so the transcript replays exactly (`core/system-prompt.ts`).~~ *(Amendment of 2026-10-10, item 1: a baseline and its patches are kept in `custom{gobble.prompt}` entries, and a patch reaches the model as an appended message.)* |
 | Agent Skills | 1.0 | `SKILL.md` frontmatter follows the agentskills.io spec. Discovery order: `.gobble/skills`, config `skills/`, `.agents/skills` from `cwd` up to the repo root, `~/.agents/skills`, then the Pi bridge. Only name, description, and location go into the prompt. `/skill:<name> [args]`. |
 | Prompt templates | 1.0 | `prompts/*.md` with `description` and `argument-hint` frontmatter. Substitution supports `$1`, `$@`, `$ARGUMENTS`, `${1:-d}`, `${@:N}`, `${@:N:L}`, with shell-style quoting. Each template is a `/name` command. |
-| `@` mentions | 1.0 | `@path` in a prompt becomes an ACP `resource_link` or an embedded resource. Prompt capability `embeddedContext = true`, `image = true`. |
+| `@` mentions | 1.0 | ~~`@path` in a prompt becomes an ACP `resource_link` or an embedded resource. Prompt capability `embeddedContext = true`, `image = true`.~~ *(Amendment of 2026-10-10, item 2: the agent expands `@path` in prompt text into a `<file>` block, and accepts embedded resource and `resource_link` blocks. `embeddedContext = true`; `image = false` until `llm` carries images.)* |
 | MCP prompts as commands | 1.x | MCP `prompts/list` entries appear as `/mcp:<server>:<prompt>`. Pi does not do this. |
 | Built-in templates | 1.x | `/review` reviews the working-tree diff. `/init` drafts an `AGENTS.md`. The `deep-research` skill uses `task` and `web_fetch`. |
 
@@ -910,3 +910,42 @@ Otherwise it stays a shell command. File status, diffs, git, checksums and archi
 * `gobble mcp serve` also serves the native file tools (0012-MADR D4).
 * `tool_search` ranks with an in-house BM25 in `tool/toolsearch`, and bleve is not adopted for it (0012-MADR D11, D12).
 * Tool schemas and descriptions follow 0012-MADR D1–D3 and D5.
+
+### Amendment (2026-10-10): context, prompts, skills and templates, made executable
+
+**Why.** 0005-PLAN F3 had no executable entry. Reading Pi at `312184edb` for it, and gobble's own records, showed four of this record's F3 rows were not buildable as written. The owner decided each of them on 2026-10-10. The facts were checked by a script in the session scratchpad (`q319_claims_f3.py`): 41 claims, all passing, and all 41 failed with the check inverted. Paths below are under Pi's `packages/coding-agent/src/core/` unless named otherwise.
+
+**What changes here.**
+
+1. **Where the sectioned prompt is kept.**
+   - **Found:** Pi keeps a session's prompt in role-`system` message entries. The first carries the sections, and each later one is a patch of the changed sections, `null` removing one (`system-prompt.ts:204-216`; `ai/src/utils/transcript.ts:73-96`). gobble writes no system messages, and 0005-PLAN F2 decided that Pi's are kept and never sent.
+   - **Decided:** gobble keeps its prompt in `custom{gobble.prompt}` entries:
+     - a **baseline**, the sections in order, written at a session's first prompt;
+     - a **patch** whenever the sections change, with `null` removing a section, as Pi's patches work.
+   - The leading system prompt is the latest baseline on the path, and it stays fixed. A patch reaches the model as a message at its place in the history, framed as Pi frames a mid-conversation update (`ai/src/utils/text.ts:28-40`), so the cached prefix holds (choice 8 of the 2026-10-07 amendment).
+   - A compaction writes a new baseline, which folds the patches in.
+   - Pi's own system messages stay kept and unsent.
+2. **`@` mentions.**
+   - **Found:** magic-cli-remote sends only text, image and audio blocks, and gobble "parses `@path` in prompt text as well as accepting resource blocks" (0002-MADR, "Further contract facts"). `llm` sends no images until the SDK carries them (`llm/llm.go:20`). Advertising `image = true` would break this record's honest-advertisement rule.
+   - **Decided:**
+     - the agent expands `@path` in any prompt's text into Pi's `<file name="…">` block, through workspace confinement, for every client;
+     - it accepts embedded resource and `resource_link` blocks from editors;
+     - it advertises `embeddedContext = true`, and `image = false` until `llm` carries images;
+     - the CLI's `@path` arguments stay as 0008-MADR D4 has them.
+3. **Files that need trust, before F6.**
+   - **Found:** Pi loads a project's `SYSTEM.md` and `APPEND_SYSTEM.md`, its skills and its prompts only for a trusted project (`resource-loader.ts:1201-1227`; `package-manager.ts:2460-2521`). Context files need no trust. gobble's trust is F6.
+   - **Decided:** until F6, those project files are found but not loaded, and a note names each. Context files and the copies in gobble's config directory load now.
+4. **The `docs` section** is reserved, and gobble's default prompt has none until a release installs documentation beside the binary.
+5. **Nested `AGENTS.md` on read** (choice 3 of the 2026-10-07 amendment, opencode's design; Pi has none):
+   - each nested file is added once per session, to the first read that reaches it;
+   - it is recorded in a `custom{gobble.context}` entry, so a resumed session does not add it again;
+   - when a compaction drops that read, the file is added again at the next read that reaches it.
+6. **The Pi bridge** stays 0005-PLAN F10's. F3's discovery lists it as its last source, empty until then.
+7. **A library: `go.yaml.in/yaml/v3`,** v3.0.5, published 2026-07-26: the YAML organisation's continuation of `gopkg.in/yaml.v3`, pure Go. It parses `SKILL.md` and template frontmatter, as Pi parses frontmatter with YAML (`coding-agent/src/utils/frontmatter.ts`). It is required in the commit that first imports it (AGENTS.md, Dependencies).
+
+**Consequences.**
+
+- A Pi session read by gobble gets gobble's prompt, never Pi's, and a gobble session read by Pi gets Pi's. Neither tool sees the other's prompt entries as context.
+- A context-file edit during a session costs one appended message, not a cache break.
+- Until F6, a project's own skills, prompts and system-prompt files do nothing. The note says why.
+- `gobble skills list|show|new` and `gobble prompts list` (CLI surface) are not built by F3, whose steps do not name them.

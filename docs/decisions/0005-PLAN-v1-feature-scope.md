@@ -136,6 +136,8 @@ They may start after F4 in any order.
   found.
 * A golden system prompt for a fixture project matches.
 
+*(2026-10-10: F3 is made executable as four sub-phases, F3-1 (context files and the sectioned prompt), F3-2 (skills), F3-3 (prompt templates) and F3-4 (`@path` and the prompt capabilities). See the Amendments entry "F3 made executable", and 0005-MADR's amendment of this date.)*
+
 ### F4 — providers, catalog, auth (1.0)
 
 *(2026-10-07, 0005-MADR amendment "the best of several harnesses": choice 11: provider-neutral reasoning variants offered over ACP as `thought_level`, and a small-model role for titles and summaries. The catalog's data stays the SDK's; gobble overlays only what it lacks.)*
@@ -2593,3 +2595,275 @@ Choices made within the wording:
 2. **Its tree offered no entries in file order,** which the replay state needs, and no safety for concurrent readers.
 3. **Its files table left out `session/session.go`,** and named `acpserver/prompt.go`, which needed no change.
 4. **Its tests left three behaviours unpinned:** a moved leaf followed by a prompt, `get_entries`' leaf, and a label's place when set again. The tests are added or tightened above.
+
+**2026-10-10 — F3 made executable** (the owner's decisions of 2026-10-10: four sub-phases; the prompt kept in `custom{gobble.prompt}`; nothing that needs trust loaded before F6; `@path` expanded by the agent, with `image` false; the Pi bridge left to F10; nested `AGENTS.md` once per session; no `docs` section yet; `go.yaml.in/yaml/v3` for frontmatter).
+
+F3 is steps 1–5 and their accept list, with the 2026-10-01 amendment's F3 changes, choices 3 and 8 of the 2026-10-07 amendment, and 0012-MADR D6 and D9's notes. 0005-MADR's amendment of this date records the decisions that change its rows.
+
+**The facts,** checked on 2026-10-10 by a script in the session scratchpad (`q319_claims_f3.py`): 41 claims, all passing. With the check inverted, all 41 failed. Pi paths are under `packages/coding-agent/src/core/` unless named otherwise.
+
+- **gobble today:**
+  - The system prompt is one constant paragraph, built from the cwd and the tool names (`acpserver/prompt.go:44`), and rebuilt at every prompt (`acpserver/agent.go:410`).
+  - A prompt's user message keeps its text blocks only (`acpserver/agent.go:621`), and `initialize` advertises no prompt capabilities.
+  - The CLI rejects `--system-prompt`, `--append-system-prompt` and `--no-context-files` as not yet available (`internal/cli/flags.go:63`). It already inlines `@path` arguments as `<file>` blocks (`internal/cli/input.go:75`).
+  - `prompt` and `skill` are placeholders (`prompt/doc.go:4`, `skill/doc.go:4`). A command name is `[A-Za-z0-9][A-Za-z0-9_-]*` (`command/doc.go:6`), so `/skill:<name>` runs as prompt text (0008-MADR D19 item 7, `:707`).
+  - `go.mod` has no YAML module.
+- **Pi's context files:**
+  - five candidates, of which the first found in a directory wins (`resource-loader.ts:185`);
+  - the agent directory's file first, then each directory from the filesystem root down to the cwd (`:232-270`);
+  - a nested worktree shadows the main repository's file of the same name (`:214-230`);
+  - each file is rendered as `<project_instructions path="…">` (`system-prompt.ts:72-79`).
+- **Pi's `SYSTEM.md` and `APPEND_SYSTEM.md`:** the trusted project copy, else the agent directory's (`resource-loader.ts:1201-1227`). `SYSTEM.md` replaces the preamble and drops `tools`, `rules` and `docs`. `APPEND_SYSTEM.md` is the `addendum` section (`system-prompt.ts:143-163`).
+- **Pi's sections:**
+  - the order is `preamble`, `tools`, `rules`, `docs`, `addendum`, `project_context`, `skills`, `cwd`, then custom ones (`system-prompt.ts:121-180`);
+  - every section but the preamble is wrapped as `<name>…</name>` (`:177`), and names match `^[a-z][a-z0-9_-]*$` (`:52`);
+  - a patch holds the changed sections, `null` for a removed one (`:204-216`);
+  - a mid-conversation update is framed `Updated system prompt section "<name>":` or `Removed system prompt section "<name>".` (`ai/src/utils/text.ts:35-36`);
+  - a provider without mid-conversation system messages gets every patch folded into the leading prompt (`ai/src/utils/transcript.ts:108-120`).
+- **Pi's skills** (`skills.ts`):
+  - a name is at most 64 characters, and a description at most 1024;
+  - a collision is a diagnostic, and the first skill found wins;
+  - `disable-model-invocation` keeps a skill out of the prompt;
+  - the list is `<available_skills>`.
+  - `/skill:<name>` sends the body in a `<skill name="…" location="…">` block (`agent-session.ts:2062-2086`).
+  - Project `.agents/skills` is searched from the cwd up to the repository root (`package-manager.ts:468-487`).
+- **Pi's templates** (`prompt-templates.ts`):
+  - arguments split on whitespace, with `"` and `'` quotes and no escapes (`:25-56`);
+  - the substitution grammar is one regular expression (`:75`);
+  - a template without a description takes its first non-empty line, cut to 60 characters (`:131-140`).
+- **Pi has no ACP.** Its `resource_link` handling is for MCP tool results (`coding-agent/src/extensions/mcp/tools.ts:169`), and its `@file` is a CLI argument, inlined as a `<file>` block (`coding-agent/src/cli/file-processor.ts`).
+
+**The owner's decisions, 2026-10-10:**
+
+1. **Four sub-phases,** each one commit with its own record and gates:
+   - **F3-1:** context files, `SYSTEM.md` and `APPEND_SYSTEM.md`, the sectioned prompt with its frozen baseline and patches, the `tools` section, the three CLI flags, and nested `AGENTS.md` on read;
+   - **F3-2:** skills, `/skill:<name>`, and `go.yaml.in/yaml/v3`;
+   - **F3-3:** prompt templates, and the fuzz target;
+   - **F3-4:** `@path` in prompt text, resource blocks, and the prompt capabilities.
+2. **The prompt is kept in `custom{gobble.prompt}` entries,** a baseline and patches (0005-MADR, amendment of this date, item 1).
+3. **Nothing that needs trust loads before F6.** It is found, and a note names it.
+4. **The agent expands `@path`.** `embeddedContext` is true, and `image` false until `llm` carries images.
+5. **The Pi bridge is F10's.**
+6. **A nested `AGENTS.md` is added once per session.**
+7. **No `docs` section** until a release installs documentation.
+8. **`go.yaml.in/yaml/v3`** v3.0.5 parses frontmatter.
+
+**F3-1 — context files, the sectioned prompt, and its frozen baseline.**
+
+Choices made within the wording:
+
+- **`prompt`** (the package, beta):
+  - **Sections:** `Section{Name, Text string}`, with `Text` stored as Pi stores it: the preamble bare, every other section wrapped as `<name>\n…\n</name>`.
+    - `Build(Options) []Section` gives Pi's order, without `docs`: `preamble`, `tools`, `rules`, `addendum`, `project_context`, `skills`, `cwd`.
+    - `Text([]Section) string` joins the sections with blank lines, as `getSystemMessageText` does.
+  - **The preamble** is gobble's own sentence, `You are gobble, a coding agent. You help the user with software engineering tasks in their project.`, or the custom prompt. With a custom prompt, `tools` and `rules` are left out, as Pi leaves them out.
+  - **`tools`:**
+    - one line per tool, `- <name>: <the first sentence of its description>`;
+    - then 0012-MADR D6's three cross-tool rules: prefer move, delete, copy and mkdir to shell commands; read a file before you edit it; a delete always asks;
+    - when anything is deferred, the line `tool_search can find more tools for: <families, comma-separated>.`
+    - Plan mode's exit tool is not listed, so a mode switch does not patch the prompt.
+  - **`rules`:**
+    - Pi's shell rule, when bash or powershell is offered and grep, find and `tree` are not (`system-prompt.ts:101-109`, with `tree` for `ls`);
+    - then, in order: `A call to a tool that changes something may be declined by the user; then do not retry it, and say what you would have done.`; `Commands run on <GOOS>.`; Pi's `Be concise in your responses` and `Show file paths clearly when working with files`; and `Answer in Markdown.`
+  - **`addendum`** is the append text. **`project_context`** is Pi's rendering of the context files. **`skills`** is F3-2's, and empty until then. **`cwd`** is the working directory with `/` for `\`.
+  - **Patches:** `Patch{Name string; Text *string}`, where nil `Text` removes the section.
+    - `Diff(prev, cur []Section) []Patch` lists changed and new sections in `cur`'s order, then removed ones in `prev`'s.
+    - `Apply(base []Section, patches []Patch) []Section` replaces a section in its place, adds a new one at the end, and removes on nil, as Pi's replay does.
+    - `Update([]Patch) string` is Pi's framing.
+  - **Context files:** `ContextFiles(configDir, cwd string) ([]File, []Diagnostic)` follows Pi's walk:
+    - the five candidate names, first per directory;
+    - the config directory's file, then the filesystem root down to the cwd;
+    - duplicate paths dropped, and a nested worktree's shadowing applied;
+    - a byte-order mark stripped;
+    - an unreadable file a diagnostic, not an error.
+  - **System files:** `SystemFiles(configDir, cwd string) (system, appended string, waiting []string)` reads `SYSTEM.md` and `APPEND_SYSTEM.md` from the config directory. It names the project's `.gobble/SYSTEM.md` and `.gobble/APPEND_SYSTEM.md` in `waiting` when they exist.
+  - **Nested files:** `Nested(cwd, path string) []File` finds the context files in each directory below the cwd down to `path`'s, root-most first. The cwd's own files and its ancestors' are already in `project_context`.
+- **`session`** gains `CustomPrompt = "gobble.prompt"`, and `CustomContext = "gobble.context"`.
+  - A baseline's data is `{"baseline":[{"name","text"},…]}`. A patch's is `{"patch":[{"name","text"|null},…]}`. Arrays keep the order, which a JSON object would not.
+  - A context entry's data is `{"paths":[…]}`.
+- **`compaction`:** `Project` gives a `gobble.prompt` patch entry one user message, `prompt.Update` of its patch. A baseline entry gives nothing, since it is the system prompt.
+- **`tool`:**
+  - `Env` gains `Instructions func(path string) []Instruction`, with `Instruction{Path, Text string}`;
+  - `Result` gains `Instructions []string`, the paths added.
+  - read, after a text read inside the cwd, appends each instruction's text to its result and names them in `Result.Instructions`.
+- **acpserver:**
+  - **`Options` gains `Prompt PromptOptions{ConfigDir, System, Append string; NoContextFiles bool}`.** `System` and `Append` are the texts the CLI resolved; each, when set, replaces its file's text, as Pi's flags do (`resource-loader.ts:645-655`).
+  - **At each prompt:**
+    - the sections are built from the files read then;
+    - a session with no baseline on its path gets one, written before the user's message;
+    - otherwise the current sections are the latest baseline with its later patches applied, and a difference is written as a patch before the user's message. Its update message joins this turn's history.
+  - **The system prompt sent** is `prompt.Text` of the latest baseline. It replaces `systemPrompt` and `systemPromptOf`, and the estimates use it.
+  - **`/compact`** writes a baseline right after its compaction entry.
+  - **A diagnostic** (an unreadable file, a file waiting for trust) is logged once per session through `Options.Logger`.
+  - **`Env.Instructions`** returns the nested files not already added. An added file is one whose path a `gobble.context` entry names among the context entries of the session's path, so a compaction that drops the entry drops the file with it. The writer appends `custom{gobble.context, {paths}}` after a result that names any.
+- **internal/cli:**
+  - `--system-prompt` and `--append-system-prompt` take text or a path, read as a file when one exists there, as Pi's `resolvePromptInput` does (`resource-loader.ts:167-182`);
+  - `--no-context-files` sets `NoContextFiles`;
+  - the three leave `laterFlags`.
+
+**F3-1's files:**
+
+| | Files |
+| :--- | :--- |
+| new | `prompt/sections.go`, `prompt/context.go`, `prompt/sections_test.go`, `prompt/context_test.go`, `prompt/testdata/` (a fixture project and `system.golden`); `acpserver/sysprompt.go`, `acpserver/sysprompt_test.go` |
+| changed | `prompt/doc.go`; `session/session.go`; `compaction/estimate.go`, `compaction/project_test.go`; `tool/tool.go`, `tool/tool_test.go`; `tool/builtin/read.go`, `tool/builtin/builtin_test.go`; `acpserver/agent.go`, `acpserver/prompt.go`, `acpserver/compact.go`, `acpserver/commands.go`, `acpserver/history.go`; `internal/cli/agent.go`, `internal/cli/flags.go`, and their tests; `docs/architecture.md`; `README.md` |
+
+**F3-1's tests,** each seen failing first on a scratch copy:
+
+- **`prompt`:**
+  - **The golden prompt:** a fixture project, with a config directory's `AGENTS.md`, a root `AGENTS.override.md` beside an `AGENTS.md`, a `CLAUDE.md` in a subdirectory, and an empty directory between them, builds `testdata/system.golden`. This is F3's own accept line.
+  - **The walk:** a nested worktree's shadowing, and the five candidates' precedence.
+  - **`SYSTEM.md`** replaces the preamble and drops `tools` and `rules`; **`APPEND_SYSTEM.md`** is `addendum`; a project copy waits.
+  - **`Diff` and `Apply`:** a replaced section keeps its place, a new one goes last, a removed one is nil; Apply of Diff is the new sections.
+  - **`Update`** gives Pi's two framings.
+- **acpserver, through `acptest`:**
+  - a session's first prompt writes a baseline, and the request's system message is its text;
+  - after an `AGENTS.md` edit, the next prompt writes a patch, the system message is unchanged, and the history carries the update message;
+  - a resumed session sends the same system prompt;
+  - `/compact` writes a new baseline holding the patch;
+  - a read below the cwd adds its nested `AGENTS.md` once, a second read adds nothing, and a resumed session adds nothing either.
+- **internal/cli:** the three flags reach the agent, and a text value and a file value both work.
+
+**F3-2 — skills.**
+
+Choices made within the wording:
+
+- **`internal/frontmatter`:** `Parse(text) (map[string]any, string, error)`, through `go.yaml.in/yaml/v3`.
+  - The text must start with `---`, and the frontmatter ends at the first `\n---`. CRLF is normalised, and the body is trimmed, as Pi's `utils/frontmatter.ts` does.
+  - It is the only package that imports the module.
+- **`skill`:**
+  - `Skill{Name, Description, FilePath, BaseDir string; DisableModelInvocation bool}`;
+  - `Load(sources []Source) ([]Skill, []Diagnostic)` follows Pi's rules:
+    - a directory holding `SKILL.md` is a skill, and is not searched further;
+    - dotfiles and `node_modules` are skipped, and F1c's ignore matcher applies;
+    - a name falls back to the directory's;
+    - Pi's warnings, in Pi's words (`skills.ts:92-127`);
+    - a skill with no description is left out;
+    - a path seen twice by its real path is dropped;
+    - a name collision keeps the first, with Pi's diagnostic, `name "<name>" collision`.
+  - `Format([]Skill) string` is Pi's `formatSkillsForPrompt` with the read tool, leaving out `disable-model-invocation` skills.
+  - `Expand(text string, []Skill) (string, bool)` is Pi's `/skill:<name> [args]`: the name ends at the first space, and the body goes in Pi's `<skill>` block.
+- **The order of the sources** is the one 0005-MADR's "Skill discovery order (changed)" gives:
+  1. `.gobble/skills`, which waits for trust;
+  2. the project's `.agents/skills`, from the cwd up to the repository root, which waits for trust;
+  3. the config directory's `skills/`, loaded;
+  4. `~/.agents/skills`, loaded;
+  5. the Pi bridge, empty until F10.
+- **acpserver:**
+  - the `skills` section is `skill.Format` of the loaded skills, when read is offered;
+  - a prompt starting `/skill:` is expanded before the model turn, and the expansion is the user's message, as in Pi;
+  - a collision is logged once per session.
+- **`--no-skills`** (0005-MADR's global flags) sets no sources.
+- **`go.mod` and `go.sum`** gain `go.yaml.in/yaml/v3 v3.0.5`, in this commit.
+
+**F3-2's files:**
+
+| | Files |
+| :--- | :--- |
+| new | `internal/frontmatter/frontmatter.go`, `frontmatter_test.go`; `skill/skill.go`, `skill_test.go`, `skill/testdata/`; `acpserver/skills_test.go` |
+| changed | `skill/doc.go`; `go.mod`, `go.sum`; `acpserver/agent.go`, `acpserver/sysprompt.go`; `internal/cli/agent.go`, `internal/cli/flags.go`, and their tests; `docs/architecture.md`; `README.md` |
+
+**F3-2's tests,** each seen failing first on a scratch copy:
+
+- **`skill`:**
+  - a skills directory with a name collision warns and loads the first skill found (F3's own accept line);
+  - Pi's validation warnings, word for word;
+  - no description means not loaded;
+  - a duplicate real path is dropped;
+  - the scan rules: a `SKILL.md` root, dotfiles, `node_modules`;
+  - `Format` against Pi's text, and a hidden skill left out;
+  - `Expand` with and without arguments, and an unknown name left as typed.
+- **`internal/frontmatter`:** a block scalar, quoted strings, a nested map, CRLF, and no frontmatter.
+- **acpserver:**
+  - the `skills` section in the prompt;
+  - `/skill:<name> args` sends Pi's block;
+  - a project `.agents/skills` is not loaded, and its note is logged.
+
+**F3-3 — prompt templates.**
+
+Choices made within the wording:
+
+- **`prompt`:**
+  - `Template{Name, Description, ArgumentHint, Content, FilePath string}`;
+  - `LoadTemplates(dirs []string) ([]Template, []Diagnostic)` follows Pi's rules:
+    - each directory's direct `.md` children only, without dotfiles or `node_modules`;
+    - the name is the file name without `.md`;
+    - a frontmatter error skips the file, with a warning;
+    - a missing description takes the first non-empty line, cut to 60 characters with `...`;
+    - a name collision keeps the first, with `name "/<name>" collision`.
+  - `ParseArgs(s string) []string` is Pi's `parseCommandArgs`. Whitespace is Go's `unicode.IsSpace` and U+FEFF, which is JavaScript's `\s`.
+  - `Substitute(content string, args []string) string` is Pi's `substituteArgs`, with the same regular expression and no recursive substitution.
+  - `ExpandTemplate(text string, []Template) (string, bool)` is Pi's `expandPromptTemplate`.
+- **The directories:** `.gobble/prompts`, which waits for trust; the config directory's `prompts/`, loaded; the Pi bridge, empty until F10.
+- **acpserver:**
+  - a command that no built-in handles, and a template matches, is expanded and run as a model prompt, so a built-in wins over a template of its name, with Pi's collision message logged;
+  - `available_commands_update` adds each template whose name is a command name (`command/doc.go:6`), with its description, and its `argument-hint` as the input hint;
+  - the set is the one found when the session starts.
+
+**F3-3's files:**
+
+| | Files |
+| :--- | :--- |
+| new | `prompt/template.go`, `prompt/template_test.go`, `prompt/template_fuzz_test.go`, `prompt/testdata/prompts/`; `acpserver/templates_test.go` |
+| changed | `acpserver/agent.go`, `acpserver/commands.go`, `acpserver/sysprompt.go`; `docs/architecture.md`; `README.md` |
+
+**F3-3's tests,** each seen failing first on a scratch copy:
+
+- **The table tests** (F3's own accept line):
+  - `docs/prompt-templates.md`'s example, `/review`, `/review concurrency` and `/review "API compatibility"`, with the outputs Pi's code gives;
+  - every case of Pi's `test/prompt-templates.test.ts`, with its expected values, quoting and defaults among them.
+- **`FuzzTemplate`:** `ParseArgs` and `Substitute` never panic. Content without `$` is returned unchanged, and an argument's own `$1` is never substituted. Its gate is `go test -run '^$' -fuzz FuzzTemplate -fuzztime 60s ./prompt`.
+- **acpserver:**
+  - a template runs as a prompt, with its arguments;
+  - it is advertised with its hint;
+  - a built-in of the same name wins;
+  - a project template is not loaded.
+
+**F3-4 — `@path`, resource blocks, and the prompt capabilities.**
+
+Choices made within the wording:
+
+- **acpserver's user message** is built from all of a prompt's blocks, in the order Pi's CLI uses: the files, then the text.
+  - **`@path` in text:**
+    - an `@` at the start or after whitespace, followed by `"…"` or by non-space characters;
+    - trailing `.,;:!?)]}` is dropped when the name without it is a file and the name with it is not;
+    - resolved against the cwd, and confined by `fsx` to the roots;
+    - expanded only when it names an existing regular file of valid UTF-8 with no NUL byte; anything else is left as typed;
+    - each file once per prompt, as `<file name="<absolute path>">\n<text>\n</file>`.
+    - The text keeps the `@path` as typed.
+  - **An embedded text resource** is `<file name="<uri>">…</file>`. A blob is `[binary resource <uri> (<mime type>) omitted]`.
+  - **A `resource_link`** is `<name>: <uri>`, as Pi renders a link in MCP content (`packages/mcp/src/protocol/content.ts:78-102`), for the model to read with its tools.
+  - **An image block** is left out, as now.
+- **The user entry** holds the expanded message, so a resumed session gives the model what it had.
+- **`initialize`** advertises `promptCapabilities{embeddedContext: true, image: false, audio: false}`.
+
+**F3-4's files:**
+
+| | Files |
+| :--- | :--- |
+| new | `acpserver/mentions.go`, `acpserver/mentions_test.go` |
+| changed | `acpserver/agent.go`, `acpserver/agent_test.go`; `acpserver/testdata/session.golden` (the capabilities); `docs/architecture.md`; `README.md` |
+
+**F3-4's tests,** each seen failing first on a scratch copy:
+
+- `@path`, `@"a b.txt"` and `@path.` are expanded; an `@` inside a word, a missing file, a directory, a binary file, and a path outside the roots are left as typed; a file named twice is expanded once.
+- An embedded text resource, a blob and a `resource_link` give their texts.
+- `initialize`'s capabilities are as listed.
+
+**The gates, for each sub-phase,** as F1d-2's deviation 4 sets them: lint for linux, darwin and windows; Windows `go test ./...`; `CGO_ENABLED=1 go test -race ./...` natively on Windows and on the second amd64 Linux machine; Windows and WSL `make preflight`, WSL's without a race run. F3-3 adds its fuzz run.
+
+**How F3's accept list is met:**
+
+- **The examples in `docs/prompt-templates.md` as table tests, including quoting and defaults,** with Pi's own test cases: F3-3. The fuzz target is `FuzzTemplate`.
+- **A skills directory with a name collision warns and loads the first skill found:** F3-2.
+- **A golden system prompt for a fixture project matches:** F3-1's `system.golden`.
+
+**Deferred, named:**
+
+- **The project's own `SYSTEM.md`, `APPEND_SYSTEM.md`, skills and prompts:** F6, with trust. F3 finds them and says so.
+- **The Pi bridge's skills, prompts and context file:** F10 step 5.
+- **The `docs` section:** the release that installs documentation.
+- **Images in prompts:** `llm`'s image input, with the provider SDK.
+- **`--skill`, `--prompt-template` and `--no-prompt-templates`:** 1.x (0005-MADR, CLI flags).
+- **`gobble skills list|show|new` and `gobble prompts list`:** not in F3's steps. They wait for an amendment that places them.
+- **MCP prompts as commands, and the built-in templates:** X1 steps 6 and 7.
