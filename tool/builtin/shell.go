@@ -75,6 +75,9 @@ func runShell(ctx context.Context, sh shell, o Options, in shellIn, env tool.Env
 		return tool.Result{}, err
 	}
 	timeout := commandTimeout(in.Timeout, o.MaxTimeout)
+	if sh.name == "bash" && o.UseClientTerminal && env.Terminal != nil {
+		return runTerminal(ctx, env.Terminal, sh, o, program, dir, in, env, timeout)
+	}
 
 	out := &spill{dir: o.OutputDir}
 	// Not CommandContext: on cancel that kills only the leader, and the
@@ -153,6 +156,13 @@ func shellResult(name string, out *spill, runErr error, stopped bool, timeout, m
 	} else if runErr != nil && !stopped && !errors.Is(runErr, exec.ErrWaitDelay) {
 		return tool.Result{}, fmt.Errorf("%s: %w", name, runErr)
 	}
+	return outputResult(out, status, stopped, "", timeout, maxTimeout), nil
+}
+
+// outputResult is shellResult's text from the command's status: the
+// output's tail, a notice naming the whole output's file when it was cut,
+// note when there is one, and a status line.
+func outputResult(out *spill, status int, stopped bool, note string, timeout, maxTimeout time.Duration) tool.Result {
 	// Windows programs end lines with CRLF; the model reads them as LF. The
 	// saved file keeps the bytes as written.
 	t := truncateTail(strings.ReplaceAll(string(out.mem), "\r\n", "\n"), maxLines, maxBytes)
@@ -166,6 +176,9 @@ func shellResult(name string, out *spill, runErr error, stopped bool, timeout, m
 		}
 		fmt.Fprintf(&b, "(output cut: the last %s of %d are shown; %s)\n", count(t.outputLines, "line", "lines"), out.lines(), whole)
 	}
+	if note != "" {
+		b.WriteString(note + "\n")
+	}
 	b.WriteString(strings.TrimSuffix(t.content, "\n"))
 	if b.Len() > 0 {
 		b.WriteString("\n")
@@ -174,14 +187,86 @@ func shellResult(name string, out *spill, runErr error, stopped bool, timeout, m
 		fmt.Fprintf(&b, "[stopped after %d s; give a larger timeout, at most %d]", int(timeout.Seconds()), int(maxTimeout.Seconds()))
 		r := tool.ErrorResult(b.String())
 		r.Summary = summary(fmt.Sprintf("stopped after %d s", int(timeout.Seconds())))
-		return r, nil
+		return r
 	}
 	fmt.Fprintf(&b, "[exit status %d]", status)
 	r := tool.TextResult(b.String())
 	r.IsError = status != 0
 	first, _, _ := strings.Cut(strings.TrimSpace(t.content), "\n")
 	r.Summary = summary(strings.TrimSpace(fmt.Sprintf("exit status %d: %s", status, first)))
-	return r, nil
+	return r
+}
+
+// terminalOutputLimit is the output a client's terminal is asked to keep:
+// far more than the model is shown, so a long command's output is saved
+// whole, up to it, as a local run's is (0005-PLAN F1d-3).
+const terminalOutputLimit = 4 << 20
+
+// runTerminal runs bash in the client's terminal: it creates the terminal,
+// waits for the command to exit, and on cancel or the timeout kills it
+// (terminal/kill); then it reads the output and releases the terminal. The
+// result is a local run's: the same tail, file and status line.
+func runTerminal(ctx context.Context, term tool.Terminal, sh shell, o Options, program, dir string, in shellIn, env tool.Env, timeout time.Duration) (tool.Result, error) {
+	bg := context.WithoutCancel(ctx)
+	id, err := term.Create(ctx, tool.TerminalRequest{Command: program, Args: sh.args(in.Command), Cwd: dir, Env: env.Environ, OutputByteLimit: terminalOutputLimit})
+	if err != nil {
+		return tool.Result{}, fmt.Errorf("%s: the client's terminal: %w", sh.name, err)
+	}
+	defer term.Release(bg, id) //nolint:errcheck // the call's result stands; the client frees what it can
+	type exited struct {
+		exit tool.TerminalExit
+		err  error
+	}
+	done := make(chan exited, 1)
+	go func() {
+		e, err := term.WaitForExit(bg, id)
+		done <- exited{e, err}
+	}()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	var res exited
+	stopped := false
+	select {
+	case res = <-done:
+	case <-ctx.Done():
+		stopped = true
+	case <-timer.C:
+		stopped = true
+	}
+	if stopped {
+		if err := term.Kill(bg, id); err != nil {
+			return tool.Result{}, fmt.Errorf("%s: the client's terminal could not stop the command: %w", sh.name, err)
+		}
+		grace := time.NewTimer(killGrace)
+		defer grace.Stop()
+		select {
+		case res = <-done:
+		case <-grace.C:
+		}
+		if ctx.Err() != nil {
+			return tool.Result{}, context.Cause(ctx)
+		}
+	} else if res.err != nil {
+		return tool.Result{}, fmt.Errorf("%s: the client's terminal: %w", sh.name, res.err)
+	}
+	output, err := term.Output(bg, id)
+	if err != nil {
+		return tool.Result{}, fmt.Errorf("%s: the client's terminal: %w", sh.name, err)
+	}
+	out := &spill{dir: o.OutputDir}
+	_, _ = out.Write([]byte(output.Output)) //nolint:errcheck // spill records its own error
+	out.close()
+	status, note := 0, ""
+	switch {
+	case res.exit.Code != nil:
+		status = *res.exit.Code
+	case res.exit.Signal != "":
+		status, note = 1, "[ended by signal "+res.exit.Signal+"]"
+	}
+	if output.Truncated {
+		note = strings.TrimSpace(note + " (the client's terminal kept only the end of the output)")
+	}
+	return outputResult(out, status, stopped, note, timeout, o.MaxTimeout), nil
 }
 
 func errText(err error) string {

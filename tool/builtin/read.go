@@ -2,9 +2,12 @@ package builtin
 
 import (
 	"context"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io/fs"
+	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -37,7 +40,7 @@ func Read() tool.Tool { return readWith(Options{}.withDefaults()) }
 // kept, without asking.
 func readWith(o Options) tool.Tool {
 	return tool.New("read", description("read", o),
-		func(_ context.Context, in readIn, env tool.Env) (tool.Result, error) {
+		func(ctx context.Context, in readIn, env tool.Env) (tool.Result, error) {
 			name := shown(env, in.Path)
 			ws := readWorkspace(env, o)
 			abs, info, err := statFile(env, ws, in.Path)
@@ -47,7 +50,11 @@ func readWith(o Options) tool.Tool {
 			if info.IsDir() {
 				return readDir(ws, abs, name, in)
 			}
-			b, err := ws.ReadFile(abs)
+			io := textIO{ctx: ctx, ws: ws}
+			if !imagePath(abs) {
+				io = textIOFor(ctx, env, ws, abs)
+			}
+			b, err := io.read(abs)
 			if err != nil {
 				return tool.Result{}, fmt.Errorf("read %s: %w", name, unwrapPath(err))
 			}
@@ -72,7 +79,30 @@ func readWith(o Options) tool.Tool {
 		tool.WithAnnotations(tool.Annotations{ReadOnlyHint: true, IdempotentHint: true}),
 		tool.WithOutside(func(c tool.Call, env tool.Env) []string { return outsideOf(readWorkspace(env, o), env, argPath(c)) }),
 		tool.WithDescribe(func(c tool.Call, env tool.Env) string { return title("read " + shown(env, titlePath(c))) }),
+		tool.WithLocations(readLocations),
 	)
+}
+
+// imageExts are the extensions read takes as images without reading the
+// file, so an image stays local when the client offers files: the types
+// imageType sniffs (0005-PLAN F1d-3 deviation 1).
+var imageExts = []string{".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"}
+
+func imagePath(abs string) bool {
+	return slices.Contains(imageExts, strings.ToLower(filepath.Ext(abs)))
+}
+
+// readLocations is a read's file, at its offset when one is given.
+func readLocations(c tool.Call, env tool.Env) []tool.Location {
+	p := argPath(c)
+	if p == "" {
+		return nil
+	}
+	var a struct {
+		Offset int `json:"offset"`
+	}
+	_ = json.Unmarshal(c.Args, &a) //nolint:errcheck // no offset is line 0, none
+	return []tool.Location{{Path: resolve(env, p), Line: max(a.Offset, 0)}}
 }
 
 // statFile resolves the path a model named and stats it. A path that does

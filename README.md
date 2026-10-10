@@ -38,7 +38,9 @@ Early, and built in the order [docs/README.md](docs/README.md#build-order) gives
 
 - **`gobble`**, the native CLI mode: a line session in a terminal, or one prompt with `-p` or piped input.
 - **`gobble acp`**: the ACP agent on stdio, for editors and magic-cli-remote. It has sessions, slash
-  commands, modes, manual compaction, MCP servers and gobble's `_gobble/` extension methods.
+  commands, modes, manual compaction, MCP servers and gobble's `_gobble/` extension methods. A client
+  that offers files and terminals has file tools read and write its editor's text, and can run bash
+  in its terminal; each tool call names the files it touches.
 - **Tools:** `read`, `write` and `edit`, confined to the workspace roots; `grep`, `find` and `tree`,
   which follow the repository's `.gitignore` rules; `move`, `delete`, `copy` and `mkdir`, where every
   delete asks first; `todo`, a checklist the client shows as the plan; `tool_search`, which loads
@@ -47,8 +49,7 @@ Early, and built in the order [docs/README.md](docs/README.md#build-order) gives
 - **Sessions** as JSONL files in Pi's v3 shapes.
 - **`gobble mcp add|remove|list`**, `gobble config path`, `gobble version` and `gobble completion`.
 
-Not built yet: the client's file and terminal methods
-(F1d-3), the permission engine (F6), the enhanced TUI mode, and `gobble update`. The full v1 line, tiered into
+Not built yet: the permission engine (F6), the enhanced TUI mode, and `gobble update`. The full v1 line, tiered into
 a v1.0.0 gate, a v1.x train and `exp/`, is in [0005-MADR](docs/decisions/0005-MADR-v1-feature-scope.md).
 
 | I want to… | Start here |

@@ -19,16 +19,16 @@ type writeIn struct {
 // directories. The write is atomic, and holds the file's mutation lock.
 func Write() tool.Tool {
 	return tool.New("write", description("write", Options{}.withDefaults()),
-		func(_ context.Context, in writeIn, env tool.Env) (tool.Result, error) {
+		func(ctx context.Context, in writeIn, env tool.Env) (tool.Result, error) {
 			abs := resolve(env, in.Path)
 			unlock := fsx.Lock(abs)
 			defer unlock()
-			ws := workspace(env)
-			old, err := readOld(ws, abs)
+			io := textIOFor(ctx, env, workspace(env), abs)
+			old, err := readOld(io, abs)
 			if err != nil {
 				return tool.Result{}, fmt.Errorf("write %s: %w", shown(env, in.Path), unwrapPath(err))
 			}
-			if err := ws.WriteFile(abs, []byte(in.Content)); err != nil {
+			if err := io.write(abs, []byte(in.Content)); err != nil {
 				return tool.Result{}, fmt.Errorf("write %s: %w", shown(env, in.Path), unwrapPath(err))
 			}
 			msg := fmt.Sprintf("wrote %s (%s)", shown(env, in.Path), count(countLines(in.Content), "line", "lines"))
@@ -41,12 +41,13 @@ func Write() tool.Tool {
 		tool.WithAnnotations(tool.Annotations{DestructiveHint: true}),
 		tool.WithOutside(outsidePath),
 		tool.WithDescribe(func(c tool.Call, env tool.Env) string { return title("write " + shown(env, titlePath(c))) }),
+		tool.WithLocations(argLocations("path")),
 	)
 }
 
 // readOld is a file's content before a write, or nil when it does not exist.
-func readOld(ws fsx.Workspace, abs string) (*string, error) {
-	b, err := ws.ReadFile(abs)
+func readOld(io textIO, abs string) (*string, error) {
+	b, err := io.read(abs)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
 		return nil, nil

@@ -66,6 +66,63 @@ const (
 	ExposureHidden Exposure = "hidden"
 )
 
+// TextFiles is a client's text files, through ACP's fs/read_text_file and
+// fs/write_text_file, so a call reads and writes what the client's editor
+// holds, unsaved changes included. A path is absolute, and is resolved and
+// confined before it is asked for (0005-PLAN F1d-3).
+type TextFiles interface {
+	ReadTextFile(ctx context.Context, path string) (string, error)
+	WriteTextFile(ctx context.Context, path, content string) error
+}
+
+// Terminal is a client's terminals, through ACP's terminal/* methods, so a
+// command runs where the user can watch it (0005-PLAN F1d-3).
+type Terminal interface {
+	// Create starts a command and returns its terminal's id.
+	Create(ctx context.Context, r TerminalRequest) (string, error)
+	// Output is the terminal's output so far, and its exit once it has one.
+	Output(ctx context.Context, id string) (TerminalOutput, error)
+	// WaitForExit returns when the command exits.
+	WaitForExit(ctx context.Context, id string) (TerminalExit, error)
+	// Kill stops the command and keeps the terminal.
+	Kill(ctx context.Context, id string) error
+	// Release frees the terminal.
+	Release(ctx context.Context, id string) error
+}
+
+// TerminalRequest is a command for a client's terminal. Env is KEY=VALUE
+// pairs; OutputByteLimit bounds the output the client keeps, 0 for none.
+type TerminalRequest struct {
+	Command         string
+	Args            []string
+	Cwd             string
+	Env             []string
+	OutputByteLimit int
+}
+
+// TerminalOutput is a terminal's output, whether the client cut its start,
+// and its exit, nil while the command runs.
+type TerminalOutput struct {
+	Output    string
+	Truncated bool
+	Exit      *TerminalExit
+}
+
+// TerminalExit is how a command ended: its exit code, or the signal that
+// stopped it.
+type TerminalExit struct {
+	Code   *int
+	Signal string
+}
+
+// Location is a file a call reads or changes, with a line when one is
+// known (1-based; 0 for none), for the client to follow (ACP
+// ToolCallLocation).
+type Location struct {
+	Path string `json:"path"`
+	Line int    `json:"line,omitzero"`
+}
+
 // Call is one invocation.
 type Call struct {
 	ID   string         `json:"id,omitzero"`
@@ -80,13 +137,16 @@ type Call struct {
 // approved (Confined). Environ is KEY=VALUE pairs a tool's child processes
 // get on top of gobble's own environment, such as the session markers
 // (0003-MADR). Deferred is the turn's deferred tools that are not loaded
-// yet, for tool_search to rank (0005-PLAN F1d-2).
+// yet, for tool_search to rank (0005-PLAN F1d-2). Files and Terminal are
+// the client's, when it offers them; nil otherwise (0005-PLAN F1d-3).
 type Env struct {
-	Cwd          string   `json:"cwd,omitzero"`
-	Roots        []string `json:"roots,omitzero"`
-	AllowOutside bool     `json:"allowOutside,omitzero"`
-	Environ      []string `json:"environ,omitzero"`
-	Deferred     []Spec   `json:"deferred,omitzero"`
+	Cwd          string    `json:"cwd,omitzero"`
+	Roots        []string  `json:"roots,omitzero"`
+	AllowOutside bool      `json:"allowOutside,omitzero"`
+	Environ      []string  `json:"environ,omitzero"`
+	Deferred     []Spec    `json:"deferred,omitzero"`
+	Files        TextFiles `json:"-"`
+	Terminal     Terminal  `json:"-"`
 }
 
 // Result is the tool's reply. Output is what the model sees: a JSON string
@@ -96,15 +156,17 @@ type Env struct {
 // nil, is the task's checklist as the call left it, for the client to show
 // as its plan; an empty, non-nil Plan clears it (0005-PLAN F1d-1). Load
 // names deferred tools the agent loads before its next model call, with
-// their families (0005-PLAN F1d-2).
+// their families (0005-PLAN F1d-2). Locations are the files the call
+// touched, with lines where it found some (0005-PLAN F1d-3).
 type Result struct {
-	Output  jsontext.Value `json:"output,omitzero"`
-	IsError bool           `json:"isError,omitzero"`
-	Title   string         `json:"title,omitzero"`
-	Summary string         `json:"summary,omitzero"`
-	Diffs   []Diff         `json:"diffs,omitzero"`
-	Plan    []PlanItem     `json:"plan,omitzero"`
-	Load    []string       `json:"load,omitzero"`
+	Output    jsontext.Value `json:"output,omitzero"`
+	IsError   bool           `json:"isError,omitzero"`
+	Title     string         `json:"title,omitzero"`
+	Summary   string         `json:"summary,omitzero"`
+	Diffs     []Diff         `json:"diffs,omitzero"`
+	Plan      []PlanItem     `json:"plan,omitzero"`
+	Load      []string       `json:"load,omitzero"`
+	Locations []Location     `json:"locations,omitzero"`
 }
 
 // PlanItem is one step of a plan. Status is pending, in_progress or
@@ -166,6 +228,13 @@ type Describer interface {
 	Describe(call Call, env Env) string
 }
 
+// Locator is implemented by a tool that can name a call's locations
+// before it runs, as Describer names its title; the client shows them
+// with the call (0005-PLAN F1d-3).
+type Locator interface {
+	Locations(call Call, env Env) []Location
+}
+
 // Confined is implemented by a tool whose calls name files. Outside returns
 // the paths a call names that lie outside env.Roots. Such a call needs a
 // permission decision even when the tool is read-only, and runs with
@@ -184,6 +253,7 @@ type config struct {
 	annotations Annotations
 	describe    func(Call, Env) string
 	outside     func(Call, Env) []string
+	locate      func(Call, Env) []Location
 	prepare     func(jsontext.Value) (jsontext.Value, error)
 	schema      func(*jsonschema.Schema)
 }
@@ -192,6 +262,12 @@ type config struct {
 // (Confined). Without it a tool names no paths.
 func WithOutside(outside func(call Call, env Env) []string) Option {
 	return func(cfg *config) { cfg.outside = outside }
+}
+
+// WithLocations sets how a call's locations are named before it runs
+// (Locator). Without it a tool names none.
+func WithLocations(locate func(call Call, env Env) []Location) Option {
+	return func(cfg *config) { cfg.locate = locate }
 }
 
 // WithPrepare sets a rewrite of a call's arguments that runs before they
@@ -262,6 +338,14 @@ func (g *generic[In, Out]) Describe(call Call, env Env) string {
 		return g.cfg.describe(call, env)
 	}
 	return g.name
+}
+
+// Locations is WithLocations' function, or none.
+func (g *generic[In, Out]) Locations(call Call, env Env) []Location {
+	if g.cfg.locate != nil {
+		return g.cfg.locate(call, env)
+	}
+	return nil
 }
 
 // Outside is WithOutside's function, or no paths.

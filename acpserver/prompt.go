@@ -63,10 +63,17 @@ type updates struct {
 	text    *coalescer
 	thought *coalescer
 	err     error
+	// tools and env name a call's locations at tool_call (tool.Locator).
+	tools map[string]tool.Tool
+	env   tool.Env
+	// running is the call running now, and terms the client terminal each
+	// call created, which its updates carry (0005-PLAN F1d-3).
+	running acp.ToolCallId
+	terms   map[acp.ToolCallId]string
 }
 
 func newUpdates(ctx context.Context, conn *acp.AgentSideConnection, id acp.SessionId) *updates {
-	u := &updates{conn: conn, ctx: context.WithoutCancel(ctx), session: id}
+	u := &updates{conn: conn, ctx: context.WithoutCancel(ctx), session: id, terms: map[acp.ToolCallId]string{}}
 	u.text = newCoalescer(func(s string) { u.send(acp.UpdateAgentMessageText(s)) })
 	u.thought = newCoalescer(func(s string) { u.send(acp.UpdateAgentThoughtText(s)) })
 	return u
@@ -95,13 +102,18 @@ func (u *updates) event(ev agent.Event, last *llm.Usage) {
 		u.thought.add(ev.Text)
 	case agent.ToolStart:
 		u.flush()
-		u.send(acp.StartToolCall(acp.ToolCallId(ev.Call.ID), cutTitle(ev.Title),
-			acp.WithStartKind(toolKind(ev.Spec.Kind)),
-			acp.WithStartStatus(acp.ToolCallStatusPending),
-			acp.WithStartRawInput(rawInput(ev.Call))))
+		opts := []acp.ToolCallStartOpt{acp.WithStartKind(toolKind(ev.Spec.Kind)),
+			acp.WithStartStatus(acp.ToolCallStatusPending), acp.WithStartRawInput(rawInput(ev.Call))}
+		if l, ok := u.tools[ev.Call.Name].(tool.Locator); ok {
+			if locs := acpLocations(l.Locations(ev.Call, u.env)); len(locs) > 0 {
+				opts = append(opts, acp.WithStartLocations(locs))
+			}
+		}
+		u.send(acp.StartToolCall(acp.ToolCallId(ev.Call.ID), cutTitle(ev.Title), opts...))
 	case agent.ToolRun:
 		u.flush()
-		u.send(acp.UpdateToolCall(acp.ToolCallId(ev.Call.ID), acp.WithUpdateStatus(acp.ToolCallStatusInProgress)))
+		u.running = acp.ToolCallId(ev.Call.ID)
+		u.send(acp.UpdateToolCall(u.running, acp.WithUpdateStatus(acp.ToolCallStatusInProgress)))
 	case agent.ToolEnd:
 		u.flush()
 		status := acp.ToolCallStatusCompleted
@@ -110,8 +122,17 @@ func (u *updates) event(ev agent.Event, last *llm.Usage) {
 		}
 		// The terminal status goes alone in its update, with the content
 		// (0008-MADR D19 item 2).
-		u.send(acp.UpdateToolCall(acp.ToolCallId(ev.Call.ID),
-			acp.WithUpdateStatus(status), acp.WithUpdateContent(resultContent(ev.Result))))
+		id := acp.ToolCallId(ev.Call.ID)
+		content := resultContent(ev.Result)
+		if term := u.terms[id]; term != "" {
+			content = append([]acp.ToolCallContent{acp.ToolTerminalRef(term)}, content...)
+		}
+		opts := []acp.ToolCallUpdateOpt{acp.WithUpdateStatus(status), acp.WithUpdateContent(content)}
+		if locs := acpLocations(ev.Result.Locations); len(locs) > 0 {
+			opts = append(opts, acp.WithUpdateLocations(locs))
+		}
+		u.send(acp.UpdateToolCall(id, opts...))
+		u.running = ""
 		if ev.Result.Plan != nil {
 			u.send(planUpdate(ev.Result.Plan))
 		}
@@ -123,6 +144,39 @@ func (u *updates) event(ev agent.Event, last *llm.Usage) {
 	case agent.End:
 		u.flush()
 	}
+}
+
+// locate gives the updates the turn's tools and environment, so each
+// call's tool_call names its locations.
+func (u *updates) locate(tools []tool.Tool, env tool.Env) {
+	u.tools = make(map[string]tool.Tool, len(tools))
+	for _, t := range tools {
+		u.tools[t.Spec().Name] = t
+	}
+	u.env = env
+}
+
+// terminal attaches a client terminal to the running call, so the client
+// shows it live; the call's last update carries it too.
+func (u *updates) terminal(id string) {
+	if u.running == "" {
+		return
+	}
+	u.terms[u.running] = id
+	u.send(acp.UpdateToolCall(u.running, acp.WithUpdateContent([]acp.ToolCallContent{acp.ToolTerminalRef(id)})))
+}
+
+// acpLocations are locations as ACP's, a line of 0 left out.
+func acpLocations(locs []tool.Location) []acp.ToolCallLocation {
+	out := make([]acp.ToolCallLocation, 0, len(locs))
+	for _, l := range locs {
+		loc := acp.ToolCallLocation{Path: l.Path}
+		if l.Line > 0 {
+			loc.Line = new(l.Line)
+		}
+		out = append(out, loc)
+	}
+	return out
 }
 
 // promptTextOf is a user message's text blocks, joined as its entry joins

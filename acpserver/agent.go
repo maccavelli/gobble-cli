@@ -89,7 +89,10 @@ type Agent struct {
 	mu       sync.Mutex
 	conn     *acp.AgentSideConnection
 	sessions map[acp.SessionId]*liveSession
-	model    llm.Provider // built on the first prompt
+	// client is what the client offers, from initialize: its files and
+	// terminals (0005-PLAN F1d-3).
+	client acp.ClientCapabilities
+	model  llm.Provider // built on the first prompt
 }
 
 // liveSession is one open session: its log, the context rebuilt from it, the
@@ -202,7 +205,10 @@ func Capabilities() acp.AgentCapabilities {
 
 // Initialize answers the handshake. It makes no network call (0008-MADR
 // D19 item 6).
-func (a *Agent) Initialize(context.Context, acp.InitializeRequest) (acp.InitializeResponse, error) {
+func (a *Agent) Initialize(_ context.Context, p acp.InitializeRequest) (acp.InitializeResponse, error) {
+	a.mu.Lock()
+	a.client = p.ClientCapabilities
+	a.mu.Unlock()
 	title := gobble
 	return acp.InitializeResponse{
 		ProtocolVersion:   acp.ProtocolVersionNumber,
@@ -394,6 +400,16 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 	var last llm.Usage
 	env := s.env()
 	env.Environ = markers(string(s.id), a.fileOf(s), w.provider, chosen, think)
+	a.mu.Lock()
+	client := a.client
+	a.mu.Unlock()
+	if conn != nil && client.Fs.ReadTextFile && client.Fs.WriteTextFile {
+		env.Files = clientFiles{conn: conn, session: p.SessionId}
+	}
+	if conn != nil && client.Terminal {
+		env.Terminal = clientTerminal{conn: conn, session: p.SessionId, created: out.terminal}
+	}
+	out.locate(tools, env)
 	for ev, err := range ag.Run(turnCtx, env, history, prompt) {
 		if err != nil {
 			out.flush()

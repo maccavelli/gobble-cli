@@ -1,6 +1,7 @@
 package builtin
 
 import (
+	"context"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"os"
@@ -68,6 +69,67 @@ func TestToolsAndAnnotations(t *testing.T) {
 		if len(s.InputSchema) == 0 || s.Kind == "" {
 			t.Errorf("%s spec %+v lacks a schema or a kind", s.Name, s)
 		}
+	}
+}
+
+// askedFiles is a client's files that records each path it is asked for.
+type askedFiles struct{ asked []string }
+
+func (f *askedFiles) ReadTextFile(_ context.Context, p string) (string, error) {
+	f.asked = append(f.asked, p)
+	return "from the client\n", nil
+}
+
+func (f *askedFiles) WriteTextFile(_ context.Context, p, _ string) error {
+	f.asked = append(f.asked, p)
+	return nil
+}
+
+// A path is confined before the client is asked: a symbolic link inside
+// the roots that leads out of them is refused, for a read, a write and a
+// new file under a linked directory, and the client never hears of it; a
+// plain file inside the roots is asked (0005-PLAN F1d-3).
+func TestClientFilesConfined(t *testing.T) {
+	root, outside := t.TempDir(), t.TempDir()
+	secret := filepath.Join(outside, "secret.txt")
+	if err := os.WriteFile(secret, []byte("secret\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "in.txt"), []byte("on disk\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(secret, filepath.Join(root, "link")); err != nil {
+		t.Logf("no symlink test here: %v", err)
+		return
+	}
+	if err := os.Symlink(outside, filepath.Join(root, "dirlink")); err != nil {
+		t.Fatal(err)
+	}
+	files := &askedFiles{}
+	env := tool.Env{Cwd: root, Roots: []string{root}, Files: files}
+	for _, c := range []struct {
+		tl   tool.Tool
+		args map[string]string
+	}{
+		{Read(), map[string]string{"path": "link"}},
+		{Write(), map[string]string{"path": "link", "content": "x"}},
+		{Write(), map[string]string{"path": "dirlink/new.txt", "content": "x"}},
+	} {
+		if r := call(t, c.tl, env, c.args); !r.IsError {
+			t.Errorf("%s %v = %q; want it refused", c.tl.Spec().Name, c.args, r.Text())
+		}
+	}
+	if len(files.asked) != 0 {
+		t.Fatalf("the client was asked for %v", files.asked)
+	}
+	if r := call(t, Read(), env, map[string]string{"path": "in.txt"}); r.IsError || !strings.Contains(r.Text(), "1: from the client") {
+		t.Fatalf("read in.txt = %q", r.Text())
+	}
+	if want := []string{filepath.Join(root, "in.txt")}; !slices.Equal(files.asked, want) {
+		t.Fatalf("asked %v, want %v", files.asked, want)
+	}
+	if b, err := os.ReadFile(secret); err != nil || string(b) != "secret\n" {
+		t.Fatalf("the secret is now %q, %v", b, err)
 	}
 }
 

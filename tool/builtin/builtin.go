@@ -1,6 +1,9 @@
 package builtin
 
 import (
+	"context"
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -9,6 +12,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/maccavelli/gobble-cli/internal/fsx"
 	"github.com/maccavelli/gobble-cli/tool"
 )
 
@@ -39,6 +43,10 @@ type Options struct {
 	// gobble-bash-<id>.log files kept 7 days. read may open files there
 	// without asking. Empty is gobble-output in the OS temp directory.
 	OutputDir string
+	// UseClientTerminal runs bash in the client's terminal when the client
+	// offers terminals (tool.Env.Terminal), so the user can watch it
+	// (0005-PLAN F1d-3). Off, or with no client terminal, bash runs here.
+	UseClientTerminal bool
 }
 
 // goosWindows is runtime.GOOS on Windows.
@@ -119,4 +127,66 @@ func countLines(s string) int {
 		return 0
 	}
 	return strings.Count(strings.TrimSuffix(s, "\n"), "\n") + 1
+}
+
+// textIO reads and writes a call's text files: through the client
+// (tool.Env.Files) when it offers them and the path is inside the
+// workspace roots, so the call sees the client's unsaved changes; else
+// through the workspace (0005-PLAN F1d-3). Confinement is the workspace's
+// either way: a path is stat-ed through it, or its parent made through it,
+// before the client is asked, and that refuses a path that leaves the
+// roots, a symbolic link's included.
+type textIO struct {
+	ctx   context.Context
+	ws    fsx.Workspace
+	files tool.TextFiles
+}
+
+// textIOFor is abs's textIO for a call.
+func textIOFor(ctx context.Context, env tool.Env, ws fsx.Workspace, abs string) textIO {
+	t := textIO{ctx: ctx, ws: ws}
+	if env.Files != nil && !(fsx.Workspace{Roots: roots(env)}).Outside(abs) {
+		t.files = env.Files
+	}
+	return t
+}
+
+func (t textIO) read(abs string) ([]byte, error) {
+	if t.files == nil {
+		return t.ws.ReadFile(abs)
+	}
+	if _, err := t.ws.Stat(abs); err != nil {
+		return nil, err
+	}
+	s, err := t.files.ReadTextFile(t.ctx, abs)
+	return []byte(s), err
+}
+
+func (t textIO) write(abs string, data []byte) error {
+	if t.files == nil {
+		return t.ws.WriteFile(abs, data)
+	}
+	if _, err := t.ws.Stat(abs); err != nil {
+		if !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+		if err := t.ws.MkdirAll(filepath.Dir(abs)); err != nil {
+			return err
+		}
+	}
+	return t.files.WriteTextFile(t.ctx, abs, string(data))
+}
+
+// argLocations are a call's locations (tool.Locator): the absolute paths
+// its arguments under keys name, in that order, each with no line.
+func argLocations(keys ...string) func(tool.Call, tool.Env) []tool.Location {
+	return func(c tool.Call, env tool.Env) []tool.Location {
+		var out []tool.Location
+		for _, k := range keys {
+			if p := argString(c, k); p != "" {
+				out = append(out, tool.Location{Path: resolve(env, p)})
+			}
+		}
+		return out
+	}
 }

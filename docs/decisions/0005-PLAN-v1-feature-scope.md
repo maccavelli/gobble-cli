@@ -1991,7 +1991,7 @@ Choices made within the wording:
   - acpserver sets it on a call when the client advertises the capability.
   - read, write and edit then do their text I/O through it.
   - **Confinement is unchanged:** every path is still resolved and checked by `fsx` before the client is asked.
-  - Binary files, images and directories stay local.
+  - ~~Binary files, images and directories stay local.~~ *(Deviation 1, 2026-10-09: directories, by a stat, and images, by their extension, stay local. Every other file is read through the client, and its text is checked for binary content as bytes are now.)*
 - **`tool.Env` gains `Terminal`,** an interface over `CreateTerminal`, `TerminalOutput`, `WaitForTerminalExit`, `KillTerminal` and `ReleaseTerminal`.
   - bash uses it when the client advertises `terminal` and `builtin.Options.UseClientTerminal` is set. That setting is a Go option, by decision 2 of the entry "F1 made executable".
   - The tool call carries the terminal's reference, so the client shows it live.
@@ -2018,6 +2018,18 @@ Choices made within the wording:
   - bash with `UseClientTerminal` and a terminal-capable client produces `terminal/create`, `terminal/wait_for_exit`, `terminal/output` and `terminal/release`;
   - a timeout produces `terminal/kill`.
 - **Locations** on `tool_call` and `tool_call_update` for read, edit and grep.
+
+**F1d-3's deviations, 2026-10-09,** found by reading its files before any code was written (1) and while writing its docs (2), and decided by the owner:
+
+1. **read cannot both keep binary files local and make no direct disk read.**
+   - **Found:** read tells text from images and other binary files by sniffing a file's first bytes (`tool/builtin/sniff.go:17`, `:70`), after reading it (`read.go:50`). `fs/read_text_file` returns a string. The step says binary files stay local, and F1's acceptance line says a read through a capable client makes no direct disk read; the type cannot be known without reading.
+   - **Decided:** classify without reading the content:
+     - a directory, found by a stat, and an image, found by its extension, stay local, as today;
+     - every other file is read through the client, and its text is checked for binary content as bytes are now; a binary file is refused.
+   - **So:** a binary file with an unfamiliar extension is read by the client, then refused. No non-image file is read from disk.
+2. **README.md.**
+   - **Found:** its status line says the client's file and terminal methods are not built yet, and the files table leaves it out.
+   - **Decided:** `README.md` joins F1d-3's files. Its status line drops F1d, and `gobble acp`'s line describes the routing.
 
 **Deferred, named:**
 
@@ -2158,3 +2170,57 @@ Choices made within the wording:
 1. **Its file list missed six files, or groups,** that its own steps need: the event file, the placeholder package doc, a home for the resource tools that the D2/D5 tests reach, the CLI's tool flags, the acpserver tests' file, and `README.md`. The list was written from where the main code goes, not from what declares, documents, tests or names it.
 2. **It put the resource tools in `mcpclient`** without asking how D2 and D5 would reach them there.
 3. **Its gates named WSL's race run.** They were written before 0013-REPORT's third amendment showed that run cannot be trusted on this host, so this is a change of circumstance more than an error of the entry.
+
+**F1d-3, 2026-10-09 — complete (staged; the owner commits). With it, F1 is complete.** It ran as the entry "F1d made executable" wrote it, approved by the owner's "approved to proceed" of 2026-10-09, with two deviations decided by the owner: 1 before any code was written, 2 while its docs were written.
+
+- **The deviations** (recorded under F1d-3's tests above):
+  1. read classifies without reading: directories and images stay local, every other file is read through the client and then checked for binary content.
+  2. `README.md` joins the files.
+- **What was built:**
+  - **`tool`:** `TextFiles` and `Terminal`, carried as `Env.Files` and `Env.Terminal`; `Result.Locations` of `Location{Path, Line}`; the `Locator` interface, with `WithLocations`.
+  - **`tool/builtin`:**
+    - read, write and edit do their text I/O through `textIO`. That is the client, when it offers files and the path is inside the roots; otherwise the workspace;
+    - a path is stat-ed through the workspace before the client is asked, or for a new file its parent is made through it, so confinement is unchanged;
+    - edit's compare-and-swap reads the client's text twice;
+    - bash runs in the client's terminal when `Options.UseClientTerminal` is set and the client offers one: create, wait for exit, kill on cancel or timeout, read the output, release. The result has a local run's shape;
+    - read, write, edit, move, delete, copy and mkdir name their paths; grep names its first 20 matches' files and lines.
+  - **acpserver:**
+    - `initialize` keeps the client's capabilities;
+    - `clientFiles` and `clientTerminal` carry the calls over `fs/*` and `terminal/*`;
+    - `tool_call` carries a call's locations from its Locator, and `tool_call_update` those of its result;
+    - a running call carries the terminal it created, while it runs and in its last update.
+  - **`acpclient/acptest`:** the client can serve files (`Files`, with `FileCalls`) and scripted terminals (`Terminals`, with `Calls` and `Requests`). Left unset, it still answers "method not found".
+  - **Updated:** `docs/architecture.md`'s tool, tool/builtin, acpserver and acpclient/acptest rows; `README.md`.
+- **Choices of mine, within the entry's wording:**
+  - **`Env.Files` is set only when the client offers both reading and writing.** A client offering one would have edits read from its editor and written to disk.
+  - **The interfaces take a context,** so a cancel reaches the client.
+  - **A path outside the roots,** approved, and gobble's output directory are read and written here, not through the client.
+  - **Only bash uses the client's terminal,** as the step says; powershell runs here.
+  - **The client's terminal is asked to keep 4 MiB of output.** The model sees the same tail as a local run, and that output is saved as a local run's is.
+  - **acpserver finds a call's locations from the turn's own tools,** so `agent` is unchanged. The running call is the one whose `ToolRun` came last, since a turn runs its calls one at a time.
+- **The tests:**
+  - `acpserver/routing_test.go`, through acptest:
+    - a read through a client that offers files asks `fs/read_text_file` and shows the client's text, not the disk's;
+    - an image stays local; an approved path outside the roots is read here;
+    - a write asks `fs/write_text_file`; an edit reads twice, then writes, and the disk is unchanged;
+    - bash makes `create`, `wait_for_exit`, `output` and `release`, and its tool call carries the terminal;
+    - a timeout makes `kill`;
+    - read and edit name their files at `tool_call`, and grep its matches at `tool_call_update`.
+  - **`TestClientFilesConfined`,** in `tool/builtin`: a symbolic link inside the roots that leaves them is refused for a read, a write and a new file under a linked directory, and the client is never asked. The links were created on Windows, and the test ran whole.
+- **C3: every new check, seen failing on a scratch copy.** There were 15 mutations, each asserted to land exactly once, and all 15 failed as expected on the first run:
+  - no routing; images routed; an outside path routed;
+  - both confinement guards removed (the routing's link resolution and the stat before the ask: either alone refuses the link, so the copy removes both);
+  - write kept local; edit's second read taken from disk;
+  - the client terminal ignored; no kill on timeout; the terminal not carried;
+  - no `tool_call` locations; no grep locations; read's line dropped; the Locator answering nothing;
+  - `Env.Files` not set; `Env.Terminal` not set.
+- **The gates:** on Go 1.27.2, as F1d-2's deviation 4 sets them, all on the first run:
+  - lint printed `0 issues.` for linux, darwin and windows;
+  - Windows `go test ./...` had no `FAIL` or `panic:`;
+  - `CGO_ENABLED=1 go test -race ./...` exited 0 with no race reported, natively on Windows and on a second amd64 Linux machine;
+  - Windows and WSL `make preflight` each printed `preflight passed`, WSL's without a race run.
+
+**What the entry predicted wrongly:**
+
+1. **It asked read to keep binary files local and to read nothing from disk,** which together cannot be done. Its test line said "no direct disk read" without saying how read would know a file was binary.
+2. **Its file list left out `README.md`,** as F1d-2's did.

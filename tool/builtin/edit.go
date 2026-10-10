@@ -34,7 +34,7 @@ var errChanged = errors.New("the file changed while the edit was being made; rea
 // another process fails the edit instead of being overwritten.
 func Edit() tool.Tool {
 	return tool.New("edit", description("edit", Options{}.withDefaults()),
-		func(_ context.Context, in editIn, env tool.Env) (tool.Result, error) {
+		func(ctx context.Context, in editIn, env tool.Env) (tool.Result, error) {
 			name := shown(env, in.Path)
 			if len(in.Edits) == 0 {
 				return tool.Result{}, errors.New("edit: edits needs at least one replacement")
@@ -42,8 +42,8 @@ func Edit() tool.Tool {
 			abs := resolve(env, in.Path)
 			unlock := fsx.Lock(abs)
 			defer unlock()
-			ws := workspace(env)
-			b, err := ws.ReadFile(abs)
+			io := textIOFor(ctx, env, workspace(env), abs)
+			b, err := io.read(abs)
 			if err != nil {
 				return tool.Result{}, fmt.Errorf("edit %s: %w", name, unwrapPath(err))
 			}
@@ -61,10 +61,10 @@ func Edit() tool.Tool {
 			if beforeWrite != nil {
 				beforeWrite(abs)
 			}
-			if now, err := ws.ReadFile(abs); err != nil || !bytes.Equal(now, b) {
+			if now, err := io.read(abs); err != nil || !bytes.Equal(now, b) {
 				return tool.Result{}, fmt.Errorf("edit %s: %w", name, errChanged)
 			}
-			if err := ws.WriteFile(abs, []byte(final)); err != nil {
+			if err := io.write(abs, []byte(final)); err != nil {
 				return tool.Result{}, fmt.Errorf("edit %s: %w", name, unwrapPath(err))
 			}
 			msg := fmt.Sprintf("edited %s: %s", name, replacements(len(in.Edits)))
@@ -83,6 +83,7 @@ func Edit() tool.Tool {
 			nonEmpty(edits.Items, "oldText")
 		}),
 		tool.WithDescribe(func(c tool.Call, env tool.Env) string { return title("edit " + shown(env, titlePath(c))) }),
+		tool.WithLocations(argLocations("path")),
 	)
 }
 

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"path/filepath"
 	"regexp"
 	"regexp/syntax"
 	"strings"
@@ -78,6 +79,10 @@ func runGrep(ctx context.Context, in grepIn, env tool.Env) (tool.Result, error) 
 	}
 	defer s.close()
 	g := grepper{re: re, context: min(max(in.Context, 0), maxGrepContext), limit: clampInt(in.Limit, 1, maxGrepLimit, defaultGrepLimit)}
+	g.where = func(rel string) string { return filepath.Join(s.abs, filepath.FromSlash(rel)) }
+	if s.walker == nil {
+		g.where = func(string) string { return s.abs }
+	}
 	if s.walker == nil {
 		if s.size > maxGrepFileBytes {
 			g.big++
@@ -130,8 +135,13 @@ func grepPattern(in grepIn) (*regexp.Regexp, error) {
 }
 
 // grepper gathers a search's output lines.
+// maxGrepLocations is how many matches a grep names as locations.
+const maxGrepLocations = 20
+
 type grepper struct {
 	re       *regexp.Regexp
+	where    func(rel string) string // a file's absolute path, from its name in the output
+	locs     []tool.Location
 	context  int
 	limit    int
 	lines    []string
@@ -167,6 +177,9 @@ func (g *grepper) file(rel string, b []byte) {
 		hits[i] = true
 		order = append(order, i)
 		g.matches++
+		if len(g.locs) < maxGrepLocations && g.where != nil {
+			g.locs = append(g.locs, tool.Location{Path: g.where(rel), Line: i + 1})
+		}
 	}
 	if len(order) == 0 {
 		return
@@ -240,6 +253,7 @@ func (g *grepper) result(s search, pattern string) tool.Result {
 	}
 	r := tool.TextResult(joinNotes(body, notes))
 	r.Summary = summary(fmt.Sprintf("grep %s: %s in %s", s.shown, count(g.matches, "match", "matches"), count(g.files, "file", "files")))
+	r.Locations = g.locs
 	return r
 }
 

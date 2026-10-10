@@ -215,6 +215,26 @@ func TestPlan(t *testing.T) {
 	}
 }
 
+// WithLocations names a call's locations through Locator; a tool without
+// it names none; a result's locations are encoded with their lines, a
+// line of 0 left out (0005-PLAN F1d-3).
+func TestLocations(t *testing.T) {
+	tl := tool.New("l", "", func(context.Context, struct{}, tool.Env) (string, error) { return "", nil },
+		tool.WithLocations(func(c tool.Call, env tool.Env) []tool.Location {
+			return []tool.Location{{Path: env.Cwd + "/" + c.ID, Line: 3}}
+		}))
+	if got := tl.(tool.Locator).Locations(tool.Call{ID: "x"}, tool.Env{Cwd: "/w"}); len(got) != 1 || got[0] != (tool.Location{Path: "/w/x", Line: 3}) {
+		t.Fatalf("locations %+v", got)
+	}
+	if got := readTool(new(readIn)).(tool.Locator).Locations(tool.Call{}, tool.Env{}); got != nil {
+		t.Fatalf("a tool without WithLocations names %+v", got)
+	}
+	b, err := json.Marshal(tool.Result{Locations: []tool.Location{{Path: "/a", Line: 2}, {Path: "/b"}}})
+	if err != nil || string(b) != `{"locations":[{"path":"/a","line":2},{"path":"/b"}]}` {
+		t.Fatalf("encoded %s, %v", b, err)
+	}
+}
+
 // A tool's exposure and family reach its spec, and a result's loads and an
 // environment's deferred tools are encoded by those names (0005-PLAN F1d-2).
 func TestExposureAndFamily(t *testing.T) {
