@@ -241,7 +241,7 @@ func (a *Agent) usageText(entries []session.Entry) string {
 // usage_update.
 func (a *Agent) cmdContext(_ context.Context, t *cmdTurn, _ string) error {
 	s := t.s
-	st := replayState(s.log.Entries())
+	st := s.state()
 	tot := sessionTotals(s.log.Entries())
 	var b strings.Builder
 	b.WriteString("Session Info\n\n")
@@ -349,7 +349,7 @@ func (a *Agent) cmdMode(ctx context.Context, t *cmdTurn, arg string) error {
 // entry, reported as session_info_update.
 func (a *Agent) cmdName(ctx context.Context, t *cmdTurn, arg string) error {
 	if arg == "" {
-		if name := replayState(t.s.log.Entries()).name; name != "" {
+		if name := t.s.state().name; name != "" {
 			t.say("Session name: " + name)
 		} else {
 			t.say("Usage: /name <name>")
@@ -406,7 +406,7 @@ func (a *Agent) cmdFork(ctx context.Context, t *cmdTurn, arg string) error {
 		t.say(refusal)
 		return nil
 	}
-	return a.copyTo(ctx, t, pathTo(entries, *target.ParentID), "Forked")
+	return a.copyTo(ctx, t, t.s.tree.Branched(*target.ParentID), "Forked")
 }
 
 // nothingBefore refuses a fork before a session's first message: files are
@@ -434,18 +434,19 @@ func forkTarget(entries []session.Entry, id string) (*session.Entry, string) {
 
 // cmdTodos is /todos: the active path's last todo list.
 func (a *Agent) cmdTodos(_ context.Context, t *cmdTurn, _ string) error {
-	t.say(todosText(replayState(t.s.log.Entries()).todos))
+	t.say(todosText(t.s.state().todos))
 	return nil
 }
 
-// cmdClone is /clone: a new session holding the whole current path.
+// cmdClone is /clone: a new session holding the whole current path, as
+// Pi's createBranchedSession writes it (session.Tree.Branched).
 func (a *Agent) cmdClone(ctx context.Context, t *cmdTurn, _ string) error {
-	entries := t.s.log.Entries()
-	if len(entries) == 0 {
+	leaf := t.s.tree.Leaf()
+	if leaf == "" {
 		t.say("Nothing to clone yet")
 		return nil
 	}
-	return a.copyTo(ctx, t, session.Path(entries), "Cloned")
+	return a.copyTo(ctx, t, t.s.tree.Branched(leaf), "Cloned")
 }
 
 // copyTo copies path into a new session and names it: the response's
@@ -486,32 +487,11 @@ func (a *Agent) copySession(ctx context.Context, s *liveSession, path []session.
 	return id, nil
 }
 
-// pathTo is the path from the root to the entry id, in order.
-func pathTo(entries []session.Entry, id string) []session.Entry {
-	byID := make(map[string]session.Entry, len(entries))
-	for _, e := range entries {
-		byID[e.ID] = e
-	}
-	var rev []session.Entry
-	for cur, ok := byID[id]; ok; {
-		rev = append(rev, cur)
-		if cur.ParentID == nil {
-			break
-		}
-		cur, ok = byID[*cur.ParentID]
-	}
-	out := make([]session.Entry, len(rev))
-	for i, e := range rev {
-		out[len(rev)-1-i] = e
-	}
-	return out
-}
-
 // startFrames are what a client needs before its first prompt, sent before
 // a session response (2026-10-01 amendment): the commands, the mode, and
 // the context's estimated use, the system prompt and the context.
 func (a *Agent) startFrames(ctx context.Context, conn *acp.AgentSideConnection, s *liveSession) error {
-	used := compaction.EstimateText(systemPrompt(s.cwd, a.tools)) + compaction.EstimateEntries(session.Path(s.log.Entries()))
+	used := compaction.EstimateText(systemPrompt(s.cwd, a.tools)) + compaction.EstimateEntries(s.tree.Path())
 	a.setUsed(s, used)
 	out := newUpdates(ctx, conn, s.id)
 	out.send(acp.SessionUpdate{AvailableCommandsUpdate: &acp.SessionAvailableCommandsUpdate{SessionUpdate: "available_commands_update", AvailableCommands: availableCommands()}})

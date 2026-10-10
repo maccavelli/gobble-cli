@@ -62,7 +62,7 @@ func (a *Agent) compactSession(ctx context.Context, s *liveSession, instructions
 		s.compacting = false
 		a.mu.Unlock()
 	}()
-	prep, err := compaction.Prepare(session.Path(s.log.Entries()), a.compaction)
+	prep, err := compaction.Prepare(s.tree.Path(), a.compaction)
 	if err != nil {
 		return compaction.Result{}, 0, err
 	}
@@ -80,11 +80,11 @@ func (a *Agent) compactSession(ctx context.Context, s *liveSession, instructions
 	if err := s.append(context.WithoutCancel(ctx), a.now(), e); err != nil {
 		return compaction.Result{}, 0, appendFailed(err)
 	}
-	st := replayState(s.log.Entries())
+	st := s.state()
 	a.mu.Lock()
 	s.history = st.history
 	a.mu.Unlock()
-	used := compaction.EstimateText(systemPrompt(s.cwd, a.tools)) + compaction.EstimateEntries(session.Path(s.log.Entries()))
+	used := compaction.EstimateText(systemPrompt(s.cwd, a.tools)) + compaction.EstimateEntries(s.tree.Path())
 	a.setUsed(s, used)
 	return res, used, nil
 }

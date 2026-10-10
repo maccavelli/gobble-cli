@@ -301,7 +301,7 @@ func (a *Agent) extFork(ctx context.Context, params jsontext.Value) (any, error)
 	if refusal != "" {
 		return nil, invalidParams(s.id, refusal)
 	}
-	id, err := a.copySession(turnCtx, s, pathTo(entries, *target.ParentID))
+	id, err := a.copySession(turnCtx, s, s.tree.Branched(*target.ParentID))
 	if err != nil {
 		return nil, err
 	}
@@ -319,11 +319,11 @@ func (a *Agent) extClone(ctx context.Context, params jsontext.Value) (any, error
 		return nil, err
 	}
 	defer release()
-	entries := s.log.Entries()
-	if len(entries) == 0 {
+	leaf := s.tree.Leaf()
+	if leaf == "" {
 		return nil, invalidParams(s.id, "Cannot clone session: no current entry selected")
 	}
-	id, err := a.copySession(turnCtx, s, session.Path(entries))
+	id, err := a.copySession(turnCtx, s, s.tree.Branched(leaf))
 	if err != nil {
 		return nil, err
 	}
@@ -360,7 +360,7 @@ func (a *Agent) extGetState(_ context.Context, params jsontext.Value) (any, erro
 	if err != nil {
 		return nil, err
 	}
-	st := replayState(s.log.Entries())
+	st := s.state()
 	model, think := a.choices(s)
 	steering, followUp := s.queue.modes()
 	a.mu.Lock()
@@ -403,7 +403,7 @@ func (a *Agent) extGetMessages(_ context.Context, params jsontext.Value) (any, e
 	if err != nil {
 		return nil, err
 	}
-	return messagesResult{Messages: contextMessages(replayState(s.log.Entries()))}, nil
+	return messagesResult{Messages: contextMessages(s.state())}, nil
 }
 
 type entriesResult struct {
@@ -411,8 +411,8 @@ type entriesResult struct {
 	LeafID  *string         `json:"leafId"`
 }
 
-// extGetEntries is every entry in file order, or those after since; the
-// leaf is the last entry (session.Path).
+// extGetEntries is every entry in file order, or those after since, and
+// the tree's leaf (Pi's getLeafId), null when there is none.
 func (a *Agent) extGetEntries(_ context.Context, params jsontext.Value) (any, error) {
 	p, s, err := extSession[entriesParams](a, params)
 	if err != nil {
@@ -420,8 +420,8 @@ func (a *Agent) extGetEntries(_ context.Context, params jsontext.Value) (any, er
 	}
 	entries := s.log.Entries()
 	res := entriesResult{Entries: []session.Entry{}}
-	if n := len(entries); n > 0 {
-		res.LeafID = new(entries[n-1].ID)
+	if leaf := s.tree.Leaf(); leaf != "" {
+		res.LeafID = new(leaf)
 	}
 	if p.Since != nil {
 		i := slices.IndexFunc(entries, func(e session.Entry) bool { return e.ID == *p.Since })
@@ -446,7 +446,7 @@ func (a *Agent) extGetLastAssistantText(_ context.Context, params jsontext.Value
 	if err != nil {
 		return nil, err
 	}
-	for _, m := range slices.Backward(contextMessages(replayState(s.log.Entries()))) {
+	for _, m := range slices.Backward(contextMessages(s.state())) {
 		if m.Role != session.RoleAssistant {
 			continue
 		}

@@ -291,9 +291,19 @@ func Path(entries []Entry) []Entry {
 	for i, e := range entries {
 		byID[e.ID] = i
 	}
+	return pathFrom(entries, byID, len(entries)-1)
+}
+
+// pathFrom walks from entries[start] to its root through ParentID, returned
+// root first; a start below 0 is the empty path. A missing parent, or a
+// cycle, ends it.
+func pathFrom(entries []Entry, byID map[string]int, start int) []Entry {
+	if start < 0 {
+		return nil
+	}
 	var rev []Entry
 	seen := map[string]bool{}
-	for i, ok := len(entries)-1, true; ok && !seen[entries[i].ID]; {
+	for i, ok := start, true; ok && !seen[entries[i].ID]; {
 		e := entries[i]
 		seen[e.ID] = true
 		rev = append(rev, e)

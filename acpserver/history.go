@@ -141,8 +141,6 @@ type state struct {
 	provider, model string
 	thinking, name  string
 	lastUsed        int64
-	leaf            string
-	ids             map[string]bool
 	results         map[string]*session.Message // tool call id → its result
 	messages        []session.Entry             // the path's message entries
 	context         []compaction.Projected      // the entries the model sees, and their messages
@@ -157,16 +155,15 @@ type state struct {
 // starts at the newest compaction's summary when there is one, with every
 // entry type's messages and context edits applied as Pi applies them
 // (compaction.Project), converted as Pi converts them (compaction.Convert,
-// 0005-PLAN F2).
+// 0005-PLAN F2). The leaf is the last entry, as a load puts it.
 func replayState(entries []session.Entry) state {
-	st := state{ids: map[string]bool{}, results: map[string]*session.Message{}, thinking: thinkingOff, name: session.Name(entries)}
-	for _, e := range entries {
-		st.ids[e.ID] = true
-	}
-	if len(entries) > 0 {
-		st.leaf = entries[len(entries)-1].ID
-	}
-	st.path = session.Path(entries)
+	return replayPath(entries, session.Path(entries))
+}
+
+// replayPath is replayState along path, a live session's: its tree's path
+// from wherever its leaf is (0005-PLAN F2-2).
+func replayPath(entries, path []session.Entry) state {
+	st := state{results: map[string]*session.Message{}, thinking: thinkingOff, name: session.Name(entries), path: path}
 	for _, e := range st.path {
 		switch e.Type {
 		case session.TypeModelChange:

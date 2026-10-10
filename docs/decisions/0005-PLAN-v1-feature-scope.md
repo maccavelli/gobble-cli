@@ -2416,7 +2416,9 @@ Choices made within the wording:
   - `Leaf()`, and `Path()`: from the leaf to the root, or nothing when there is no leaf. A missing parent, or a cycle, ends the path, as now.
   - **`Next(e Entry) Entry`** stamps an entry as a child of the leaf, with a new id. **`Add(e Entry)`** records it and moves the leaf to it. They are separate so a failed write leaves the tree as it was.
   - **`Branch(id) error`** moves the leaf to an entry, and **`ResetLeaf()`** removes it, so the next entry is a root.
-  - **`BranchSummary(from, summary string, details jsontext.Value) Entry`** is Pi's `branchWithSummary`: a `branch_summary` whose parent is `from` (none for the root), whose `fromId` is the old leaf or `root`, and which becomes the leaf.
+  - ~~**`BranchSummary(from, summary string, details jsontext.Value) Entry`** is Pi's `branchWithSummary`: a `branch_summary` whose parent is `from` (none for the root), whose `fromId` is the old leaf or `root`, and which becomes the leaf.~~ *(F2-2 deviation 1, 2026-10-10: an unknown `from` is an error, and the leaf moves only through `Add`.)*
+  - **`BranchSummary(from, summary string, details jsontext.Value) (Entry, error)`** is Pi's `branchWithSummary`: it returns a stamped `branch_summary` whose parent is `from` (none for the root, `""`) and whose `fromId` is the old leaf or `root`. An unknown `from` is an error, as Pi throws. The summary becomes the leaf through `Add`, once its write has succeeded, as `Next`'s entries do.
+  - **`Entries()`** is every entry in file order. The tree holds a mutex, so the session's readers may call it, and `Path`, while an entry is added.
   - **`Labels() []Label`**, with `Label{TargetID, Label, Timestamp}`, resolves the label entries in file order, as Pi's map does:
     - the latest label of each target, with its timestamp;
     - an empty or absent label clears it;
@@ -2439,6 +2441,8 @@ Choices made within the wording:
 | new | `session/tree.go`, `tree_test.go`; `acpserver/tree_test.go` |
 | changed | `acpserver/agent.go`, `commands.go`, `compact.go`, `extensions.go`, `history.go`, `prompt.go`; `docs/architecture.md` |
 
+*(2026-10-10, F2-2 deviation 2: `session/session.go` joins the changed files.)*
+
 **F2-2's tests,** each seen failing first on a scratch copy:
 
 - **`session.Tree`:**
@@ -2453,6 +2457,18 @@ Choices made within the wording:
   - `/clone` of a labelled session writes its labels at the end, for targets on the path only;
   - `/fork` leaves out a label whose target is off the path;
   - a compaction whose first kept entry was a label keeps the entry after it.
+
+**F2-2's deviations, 2026-10-10,** found by reading its files before any code was written (1) and on checking the files touched against the entry (2), and decided by the owner:
+
+1. **The tree's API.**
+   - **Found:**
+     - `BranchSummary` returned an `Entry` with no error, but Pi's `branchWithSummary` throws on an unknown `from` (`session-manager.ts:1607-1609`). Its summary "becomes the leaf" before any write, unlike `Next` and `Add`.
+     - acpserver's replay state needs every entry in file order, for Pi's name, the labels and the ids taken, beside the path. The tree offered `Leaf` and `Path` only, and nothing made it safe for the session's readers during an append.
+   - **Decided:** `BranchSummary` returns `(Entry, error)`, and its summary becomes the leaf through `Add`. The tree gains `Entries()` and an internal mutex. No file is added.
+
+2. **`session/session.go`.**
+   - **Found:** `Path` and the tree must walk alike: a missing parent or a cycle ends the path, and a last entry with no id is still the leaf, as Pi's `leaf ??= entries[last]` makes it. The files table leaves `session/session.go` out.
+   - **Decided:** `session/session.go` joins F2-2's changed files. `Path`'s loop is an unexported `pathFrom(entries, byID, start)`, which `Path` and `Tree` both call. `Path`'s behaviour and API are unchanged.
 
 **The gates, for each sub-phase,** as F1d-2's deviation 4 sets them, with the fuzz run added:
 
@@ -2538,3 +2554,42 @@ Choices made within the wording:
 3. **Its files table left out `session/doc.go`.**
 4. **Two of its member types could not round-trip** Pi's `null` and `""`.
 5. **Three of its behaviours had no test that a mutation could fail;** the tests are added above.
+
+**F2-2, 2026-10-10 — complete (staged; the owner commits). With it, F2 is complete.** It ran as the entry "F2 made executable" wrote it, approved by the owner's "approved to proceed to F2-2" of 2026-10-10, with two deviations decided by the owner: 1 before any code was written, 2 on checking the files touched against the entry.
+
+- **The deviations** (recorded under F2-2's deviations above):
+  1. `BranchSummary` returns `(Entry, error)`, and its summary becomes the leaf through `Add`; the tree gains `Entries()` and a mutex.
+  2. `session/session.go` joins the files: `Path` and `Tree` share one walk, `pathFrom`.
+- **What was built:**
+  - **`session.Tree`:** `NewTree`, `Leaf`, `Entries`, `Path`, `Next`, `Add`, `Branch`, `ResetLeaf`, `BranchSummary`, `Labels` and `Branched`, with `Label`. The leaf is kept as an index, so a last entry with no id is still the leaf, as Pi's `leaf ??= entries[last]` makes it.
+  - **acpserver:**
+    - a live session holds a `Tree` in place of its leaf and id set; `append` stamps with `Next`, writes, then calls `Add`;
+    - every path is the tree's: the prompt's loaded tools, `/compact`, the estimates, `/todos`, `/context`, `/name`, `_gobble/get_state`, `get_messages`, `get_last_assistant_text`, the replay and `resumedMeta`, through `liveSession.state`;
+    - `/clone`, `_gobble/clone`, `/fork` and `_gobble/fork` write `Branched`; `pathTo` is gone;
+    - `_gobble/get_entries`' `leafId` is the tree's leaf, Pi's `getLeafId`.
+  - **Updated:** `docs/architecture.md`'s session and acpserver rows.
+- **Choices of mine, within the entry's wording:**
+  - **`replayState(entries)` stays,** the state of stored entries with the leaf on the last, and `replayPath(entries, path)` is a live session's. `acpserver/session_test.go` calls the first, and is not in the files.
+  - **A move of the leaf leaves the session's history to its caller to rebuild,** as Pi's `navigateTree` refreshes its context. The history is built at a load, a compaction and each turn. F2-2 moves the leaf from no command, and X1's `/tree` will rebuild it; `TestPromptFollowsTheLeaf` does what that caller will do.
+  - **`get_entries`' leaf** was not named by the entry. It is the tree's, so the leaf a client sees is the one the next entry follows.
+  - **Two tests were tightened** where a mutation found no check: a label set again keeps its place, and the entry after a written prompt is its child.
+- **The tests:**
+  - `session`: `TestTreeLeaf`, `TestBranchSummary`, `TestLabels`, `TestBranchedMatchesPi` (Pi's own `v3-branched.jsonl`, entry for entry), `TestV2BranchedPathEnds` and `TestBranchedMovesFirstKept`.
+  - `acpserver`: `TestCloneKeepsLabels`, `TestForkDropsOffPathLabels`, `TestCloneMovesFirstKeptPastLabel` and `TestPromptFollowsTheLeaf`.
+- **C3: every new check, seen failing on a scratch copy.** There were 20 mutations, each asserted to land exactly once. 19 failed as expected on the first run. One, the fork copying the leaf's path, was a broken experiment: it left a variable unused, and the copy did not build. It was rewritten to fork from the leaf and failed as expected; no run then failed by a build error.
+  - the tree: no parent stamped; `Branch` not moving; `ResetLeaf` a no-op; a load's leaf on the first entry; `Add` not moving; a summary always from `root`; an unknown `from` accepted;
+  - labels: an empty label kept; a label set again moved last;
+  - branching: no re-chaining; the first kept entry not moved; off-path labels kept; a label's timestamp lost;
+  - acpserver: `/clone` and `/fork` copying paths, not `Branched`; `append` ignoring the leaf; the state taken from the last entry; `get_entries`' leaf the last entry; no `Add`; `restore` with an empty tree.
+- **The gates:** on Go 1.27.2, as F1d-2's deviation 4 sets them, all on the first run:
+  - lint printed `0 issues.` for linux, darwin and windows;
+  - Windows `go test ./...` had no `FAIL` or `panic:`;
+  - `CGO_ENABLED=1 go test -race ./...` exited 0 with no race reported, natively on Windows and on a second amd64 Linux machine;
+  - Windows and WSL `make preflight` each printed `preflight passed`, WSL's without a race run.
+
+**What the entry predicted wrongly:**
+
+1. **Its `BranchSummary` could not refuse an unknown entry,** and moved the leaf before the write.
+2. **Its tree offered no entries in file order,** which the replay state needs, and no safety for concurrent readers.
+3. **Its files table left out `session/session.go`,** and named `acpserver/prompt.go`, which needed no change.
+4. **Its tests left three behaviours unpinned:** a moved leaf followed by a prompt, `get_entries`' leaf, and a label's place when set again. The tests are added or tightened above.

@@ -105,15 +105,16 @@ type liveSession struct {
 	dirs    []string
 	log     session.Log
 	history []llm.Message
-	leaf    string
-	ids     map[string]bool
-	model   string
-	think   string
-	cancel  context.CancelFunc
-	mcp     *liveMCP
-	mode    string
-	used    int // the context's tokens, as the last usage_update said
-	queue   *queue
+	// tree is the session's entries and its leaf, which the next entry
+	// follows (0005-PLAN F2-2).
+	tree   *session.Tree
+	model  string
+	think  string
+	cancel context.CancelFunc
+	mcp    *liveMCP
+	mode   string
+	used   int // the context's tokens, as the last usage_update said
+	queue  *queue
 	// streaming and compacting say what the running turn is: a model turn,
 	// or a compaction (_gobble/get_state).
 	streaming, compacting bool
@@ -268,7 +269,7 @@ func (a *Agent) NewSession(ctx context.Context, p acp.NewSessionRequest) (acp.Ne
 	if err != nil {
 		return acp.NewSessionResponse{}, acp.NewInternalError(map[string]any{keyReason: err.Error()})
 	}
-	s := &liveSession{id: acp.SessionId(id), cwd: p.Cwd, dirs: dirs, log: log, ids: map[string]bool{}, think: thinkingOff, model: a.models().Default, mode: modeDefault, queue: newQueue()}
+	s := &liveSession{id: acp.SessionId(id), cwd: p.Cwd, dirs: dirs, log: log, tree: session.NewTree(nil), think: thinkingOff, model: a.models().Default, mode: modeDefault, queue: newQueue()}
 	if len(forked) > 0 {
 		for _, e := range forked {
 			if err := log.Append(ctx, e); err != nil {
@@ -302,34 +303,35 @@ func oneLine(s string) string {
 	return strings.TrimSpace(strings.NewReplacer("\r\n", " ", "\r", " ", "\n", " ").Replace(s))
 }
 
-// restore rebuilds a session's context and choices from its entries. The
-// saved model is kept only when its provider is the current one.
+// restore rebuilds a session's tree, context and choices from its entries,
+// its leaf on the last of them. The saved model is kept only when its
+// provider is the current one.
 func (a *Agent) restore(s *liveSession, entries []session.Entry) {
-	st := replayState(entries)
-	s.history, s.leaf, s.ids, s.think = st.history, st.leaf, st.ids, st.thinking
+	s.tree = session.NewTree(entries)
+	st := replayPath(entries, s.tree.Path())
+	s.history, s.think = st.history, st.thinking
 	choice := a.models()
 	if st.model != "" && (choice.Provider == "" || st.provider == choice.Provider) {
 		s.model = st.model
 	}
 }
 
-// append stamps an entry as a child of the leaf, records it, and makes it
-// the leaf, one append at a time.
+// append stamps an entry as a child of the tree's leaf, writes it, and only
+// then adds it to the tree as the leaf, one append at a time.
 func (s *liveSession) append(ctx context.Context, now time.Time, e session.Entry) error {
 	s.appendMu.Lock()
 	defer s.appendMu.Unlock()
-	e.ID = session.NewEntryID(func(id string) bool { return s.ids[id] })
-	if s.leaf != "" {
-		e.ParentID = new(s.leaf)
-	}
+	e = s.tree.Next(e)
 	e.Timestamp = session.Timestamp(now)
 	if err := s.log.Append(ctx, e); err != nil {
 		return err
 	}
-	s.ids[e.ID] = true
-	s.leaf = e.ID
+	s.tree.Add(e)
 	return nil
 }
+
+// state is the session's replay state along its tree's path.
+func (s *liveSession) state() state { return replayPath(s.tree.Entries(), s.tree.Path()) }
 
 // appendFailed is a failed append as an ACP error: a session whose file
 // gobble does not rewrite, an older version's, is invalid request with
@@ -387,7 +389,7 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 	if a.modeOf(s) == modePlan {
 		tools = append(tools, exitPlan{a: a, conn: conn, s: s})
 	}
-	loaded := loadedTools(session.Path(s.log.Entries()))
+	loaded := loadedTools(s.tree.Path())
 	if fresh := startLoads(tools, loaded); len(fresh) > 0 {
 		w.add(toolsEntry(fresh))
 		if w.err != nil {
@@ -695,7 +697,7 @@ func (a *Agent) LoadSession(ctx context.Context, p acp.LoadSessionRequest) (acp.
 	conn := a.conn
 	a.mu.Unlock()
 	out := newUpdates(ctx, conn, s.id)
-	st := replayState(s.log.Entries())
+	st := s.state()
 	for _, u := range replayUpdates(st, a.byName, s.cwd) {
 		out.send(u)
 	}
@@ -743,7 +745,7 @@ func (a *Agent) ResumeSession(ctx context.Context, p acp.ResumeSessionRequest) (
 	}
 	model, think := a.choices(s)
 	return acp.ResumeSessionResponse{ConfigOptions: configOptions(a.models(), model, think), Modes: modeState(s.mode),
-		Meta: resumedMeta(replayState(s.log.Entries()))}, nil
+		Meta: resumedMeta(s.state())}, nil
 }
 
 // ListSessions lists the sessions with a file, and the live ones of this
