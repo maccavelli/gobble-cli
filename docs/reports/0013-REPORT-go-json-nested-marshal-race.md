@@ -226,6 +226,40 @@ CGO_ENABLED=1 go test -race -timeout 0 -count=24 .
 - **No report there:** this host is the cause. Its race gate cannot be trusted until the machine is fixed, and gobble's records stop attributing its failures to Go.
 - **The same kinds of report there:** a Go runtime defect, to be reported upstream with Probe F as the reproducer.
 
+## Amendment, 2026-10-09 (third) — the next test's result: this host's WSL
+
+The second amendment's next test ran on 2026-10-09, with three further runs on this host. Every run is Probe F's control: a tree that still marshals through jsonschema-go (`f5b69b6`, `327fc05` or `081fc90`, whose `tool.New` is the same), 24 passes, `go test -race -timeout 0`, Go 1.27.2.
+
+| Where | Passes | Race reports | Failing passes | Crashes |
+| :--- | ---: | ---: | ---: | :--- |
+| this host, in WSL, before a reboot (the second amendment's control) | about 24 | 20 | 9 | none in that run; three in the P9 tree's runs |
+| this host, in WSL, after a reboot | 24 | 8, every one in a single goroutine | 4 | none |
+| this host, natively on Windows (MinGW gcc for cgo) | 24 | 0 | 0 | none |
+| an Apple M1 Pro laptop, macOS, arm64 | 24 | 0 | 0 | none |
+| a second amd64 Linux machine, Ubuntu 26.04, 4 virtual processors | 24 | 0 | 0 | none |
+
+**What it shows:**
+
+- **The defect is in this host's WSL, not in Go, jsonschema-go or gobble.** The same probe, on the same Go release, is clean on two other machines, one of them amd64 Linux, and on this host's own Windows, while WSL on this host reported races in both of its runs.
+  - At WSL's rate of 4 to 9 failing passes in 24, a clean 24 by chance is about 1 in 100 or less, for each clean run.
+  - A reboot lowered the count and did not clear it.
+- **The hardware is not cleared, only less likely.**
+  - The same processor and memory are clean when the code runs outside the WSL virtual machine.
+  - A fault that shows only under virtualization is still possible. The processor is an Intel Core i9-14900HX, a 14th-generation part, running microcode 0x12B; whether this family's reported instability reaches mobile HX parts is **[unverified]**.
+  - The system log has no WHEA hardware error and no bugcheck. No memory test has been run, and non-ECC memory logs no errors of its own.
+- **What runs under WSL here:**
+  - WSL 2.6.3, kernel 6.6.87.2;
+  - no `.wslconfig`, so the virtual machine has all 32 logical processors and half the memory (31 GB);
+  - virtualization-based security, with memory integrity (HVCI), running on Windows.
+  None of these is shown to be the cause. The tests that would separate them change the machine's configuration and are the owner's: fewer virtual processors, a newer WSL, and memory integrity off for one test.
+
+**What follows for gobble:**
+
+- **A race-gate failure in WSL on this host is not evidence about gobble's code,** until a test of the WSL layer clears it. Race runs belong natively on Windows, on another machine, or in CI.
+- **gobble's records stop attributing these failures to Go or to `encoding/json`.** The title of this report keeps its original wording, which the second amendment already marks as not established.
+- **The upstream draft stays withdrawn.** No Go defect is shown.
+- **0012-MADR D15 has no defect to fix,** and stays on hold for the owner's decision; 0012-PLAN P9 stays paused.
+
 ## Sources
 
 - The race reports, from WSL `go test -race` logs of 2026-10-08, kept in the session scratchpad. Their file paths name a home directory, so the stacks above give only function names and source lines in the standard library and jsonschema-go.
