@@ -1,6 +1,6 @@
 ---
 status: in-progress
-date: 2026-10-08
+date: 2026-10-09
 associated-madr: "0005-MADR-v1-feature-scope.md"
 ---
 # Implement the v1 line: the v1.0.0 gate, the v1.x train, and `exp/`
@@ -109,6 +109,8 @@ They may start after F4 in any order.
 * A v1 file and a v2 file migrate.
 * A corrupt line fails closed with an ACP error.
 * The fuzz target for the JSONL decoder does not panic.
+
+*(2026-10-09: F2 is made executable as two sub-phases, F2-1 (migration, every entry type's context, the fixtures and the fuzz target) and F2-2 (the tree), with v1 and v2 migrated in memory only. See the Amendments entry "F2 made executable".)*
 
 ### F3 — context, prompts, skills, templates (1.0)
 
@@ -2224,3 +2226,234 @@ Choices made within the wording:
 
 1. **It asked read to keep binary files local and to read nothing from disk,** which together cannot be done. Its test line said "no direct disk read" without saying how read would know a file was binary.
 2. **Its file list left out `README.md`,** as F1d-2's did.
+
+**2026-10-09 — F2 made executable** (the owner's decisions of 2026-10-09: two sub-phases; v1 and v2 migrated in memory only; Pi's context rules for every entry type; fixtures written by Pi's own code).
+
+F2 is steps 1–4 and their accept list, as the cross-repository amendment of 2026-10-01 changed them. 0002-PLAN Phase 4 built most of steps 2–4: entries round-trip, lazy files, the leaf as the last entry, fork, clone, names, `parentSession`, and the four ACP session methods. F2 adds migration, the context of every entry type, labels across fork and clone, and the operations that move the leaf.
+
+**The facts,** checked on 2026-10-09 by a script in the session scratchpad (`q302_claims_f2.py`): 34 claims, all passing. With the check inverted, all 34 failed.
+
+- **gobble today:**
+  - It reads v3 only (`session/jsonl/store.go:198`). A malformed line is skipped and counted (`:208`), a torn last line is kept on its own line by the next write (`:178`, `:290`), and an unreadable header fails closed (`:194`).
+  - The model's context holds messages and the newest compaction only; every other type "takes no part in context" (`acpserver/history.go:158`). The projection knows three roles (`compaction/estimate.go:167`), and a turn starts only at a user message or a compaction (`:117`).
+  - `/session`'s totals add usage from compactions and assistant messages (`acpserver/commands.go:158`).
+  - A session's name is the latest `session_info` that has one (`session/memory.go:127`).
+  - Fork and clone copy the path's entries as they are (`acpserver/commands.go:474`), and `session/new`'s `forkFrom` copies the stored entries (`acpserver/agent.go:248`).
+  - `Entry` has no member for `context_edit`'s or `label`'s target (`session/session.go`).
+  - 0002-PLAN Phase 6 did not port Pi's advance over `context_edit` omissions, because gobble had no such entries (0002-PLAN `:1512`). Pi's files have them.
+- **Pi at `312184edb`** (paths under `packages/coding-agent/src/core/`):
+  - **Migration** (`session-manager.ts:287-347`):
+    - v1 to v2 gives each entry a random 8-hex id (`:297`) and the previous entry as its parent;
+    - a compaction's `firstKeptEntryIndex` counts the parsed lines, header included (`:305`), and becomes `firstKeptEntryId`;
+    - v2 to v3 renames the message role `hookMessage` to `custom` (`:327`);
+    - Pi then rewrites the file (`:1092`).
+  - **Context** (`buildSessionProjection`, `:543-574`, and `convertToLlm`, `messages.ts:148-196`):
+    - a `custom_message` becomes a user message of its content;
+    - a `branch_summary` with a summary becomes a user message, `BRANCH_SUMMARY_PREFIX` + summary + `BRANCH_SUMMARY_SUFFIX` (`messages.ts:19-24`);
+    - a `bashExecution` message becomes a user message in `bashExecutionToText`'s form, unless `excludeFromContext` (`messages.ts:82-98`, `:154`);
+    - a `context_edit` with a `null` replacement drops its target (`:523`); otherwise it replaces the content of a user, assistant, tool-result or custom message. The last edit of a target wins (`:553`).
+  - **Compaction** estimates, cuts and starts turns at the new roles (`compaction/compaction.ts:300-375`), and advances over an omitted recovery suffix (`:846`).
+  - **The tree:**
+    - the default leaf is the last entry (`:403`), and a `null` leaf is the empty path (`:397-399`);
+    - `resetLeaf` makes the next entry a root (`:1591`), and `branchWithSummary` names `root` when there is no leaf (`:1610`);
+    - `createBranchedSession` leaves labels out, re-chains the path, and appends the path's labels again (`:1632-1712`).
+  - **The name** is the latest `session_info` in file order, trimmed; an empty one clears it (`:1325`).
+  - **Session stats** count `usage` entries, branch summaries' and compactions' usage, and tool results' usage (`agent-session.ts:4093-4116`).
+  - **Writers of v1 and v2:** Pi wrote v1 until `c58d5f20a` (`c58d5f20a^` has no version constant, and stores compactions by index) and v2 until `c6fc08453` (`c6fc08453^` has `CURRENT_SESSION_VERSION = 2`). `312184edb` writes v3 only.
+  - **Pi's own fixtures** (`test/fixtures/*.jsonl`) are v1 files of real sessions, carrying their author's paths and conversations, so they are not copied.
+- **Two Pi defects, recorded and not followed:**
+  - `forkFrom` copies the source's entries without migrating them (`:1823`; `loadEntriesFromFile`, `:627-670`, does not migrate). A v1 source makes a v3 file of entries with no ids.
+  - agent-core's v3 importer lists the types it accepts and throws on any other (`packages/agent/src/harness/session/jsonl/legacy-v3.ts:204-216`). `usage` and `context_edit` are not in the list.
+- **The second amd64 Linux machine** has node v24.21.0 and npm 11.19.0. Its `/tmp` is a 512 MB tmpfs (`ssh … node --version; npm --version; df -h /tmp`, 2026-10-09).
+
+**The owner's decisions, 2026-10-09:**
+
+1. **Two sub-phases,** each one commit with its own record and gates:
+   - **F2-1, reading:** v1 and v2 migration, every entry type's context, the fixtures, and the fuzz target;
+   - **F2-2, the tree:** the leaf operations (move, reset, branch with a summary), and labels across fork and clone, as Pi keeps them.
+2. **Migration is in memory only.** gobble never rewrites a file on load (0005-MADR, "Sessions (changed)"). An older file is read and migrated each time it is loaded. Appending to it is refused; it can be forked or cloned to a new v3 file.
+3. **Pi's context rules apply to every entry type,** so the model sees what Pi's would.
+4. **The fixtures are written by Pi's own code,** at the commits that wrote each version, with synthetic content.
+
+**F2-1 — reading: migration, every entry type, fixtures and fuzzing.**
+
+Choices made within the wording:
+
+- **`session`:**
+  - **Types and roles:** `TypeUsage`, `TypeContextEdit`, `TypeBranchSummary`, `TypeCustomMessage` and `TypeLabel`; `RoleCustom`, `RoleBashExecution`, `RoleBranchSummary`, `RoleCompactionSummary` and `RoleSystem`.
+  - **`Entry` gains Pi's members** for the remaining types: `TargetID` (`targetId`), `Replacement jsontext.Value` (`replacement`, where `null` is kept and differs from absent), `FromID` (`fromId`), `Content jsontext.Value` (`content`), `Display *bool`, `Label *string`, and `usage`'s `Kind`, `Model` and `Note`.
+  - **`Message` gains the members of Pi's other roles:** `CustomType`, `Display *bool`, `Details`, `Summary`, `FromID`, `TokensBefore *int64`; and `bashExecution`'s `Command`, `Output`, `ExitCode *int`, `Cancelled *bool`, `Truncated *bool`, `FullOutputPath` and `ExcludeFromContext *bool`.
+  - **Pointers** are used wherever Pi writes `false` or `""`, so the value round-trips.
+  - **`Migrate(version int, entries []Entry) ([]Entry, error)`:**
+    - **v1:** entry n, counting from 1, gets the id `fmt.Sprintf("%08x", n)` and the previous entry as its parent. A compaction's `firstKeptEntryIndex`, counting the header as 0 as Pi does, becomes the `firstKeptEntryId` of that entry, and the index is removed. An index at the header, or past the end, leaves no id, as Pi leaves none.
+    - **v2, and v1 after it:** a message with the role `hookMessage` gets the role `custom`.
+    - **Above v3:** an error.
+    - **The ids are fixed, not random as Pi's are,** because the file is never rewritten: every load must give the same ids, since `/fork <entry>` and `_gobble/get_entries`' `since` name them.
+  - **`Name(entries) string`** is Pi's rule: the latest `session_info` in file order, trimmed; empty is no name.
+  - **`ErrOldVersion{ID, Version}`**, whose text is `session <id> is a version <n> file, which gobble reads but does not rewrite; /clone it to continue in a new session`.
+- **`session/jsonl`:**
+  - A header of version 1, 2 or 3 is read, an absent version being 1 as now. The entries are migrated in memory. Any other version fails closed as now.
+  - A log opened on an older file refuses `Append` with `ErrOldVersion` and writes nothing.
+  - `List` lists older files.
+- **`compaction`:**
+  - **The projection is exported** as `Project(ctx []session.Entry) []Projected`, with `Projected{Entry session.Entry; Messages []*session.Message}`. Each message is in Pi's `AgentMessage` shape:
+    - a message entry gives its message, with `null` content read as empty (`session-manager.ts:444-449`);
+    - a `custom_message` gives a `custom` message (`customType`, `content`, `display`, `details`, and its timestamp in milliseconds);
+    - a `branch_summary` with a summary gives a `branchSummary` message (`summary`, `fromId`);
+    - the leading compaction gives a `compactionSummary`, and an older compaction in the kept range gives nothing, both as now.
+  - **Context edits:** the last edit of each target among the context entries applies. A `null` replacement drops the target's messages. Any other replaces the content of a user, assistant, tool-result or custom message, a string becoming one text block for an assistant or tool result.
+  - **Estimates, cut points and turn starts** take Pi's roles (`compaction.ts:300-375`):
+    - a custom message and a tool result count their content; a bash execution, its command and output; a branch or compaction summary, its summary;
+    - cut points are user, assistant, bash execution, custom, branch summary and compaction summary messages;
+    - turn starts are the same, without assistant messages.
+  - **The omission advance is ported** (`compaction.ts:832-850`). This replaces 0002-PLAN Phase 6's choice of not porting it, and that line gets a dated note.
+  - **The summary prompt** serialises the converted messages, as Pi converts before it serialises (`compaction.ts:724`).
+- **`acpserver`:**
+  - **The model's history** is built from the projection, converted as `convertToLlm` converts:
+    - a `custom` message becomes a user message of its content;
+    - a `branchSummary`, a user message of Pi's prefixed text;
+    - a `compactionSummary`, as now;
+    - a `bashExecution`, a user message of `bashExecutionToText`'s text, unless it is excluded.
+    - Images are left out, as a user message's are today (step 2 of F1 waits for the provider SDK).
+  - **The name** is `session.Name`, in `replayState` and in `Summarize`.
+  - **`_gobble/get_messages`** returns the projection's messages, in Pi's shapes.
+  - **`session/load`'s replay:**
+    - a custom message whose `display` is true, as one `user_message_chunk` of its text;
+    - a branch summary, as one `agent_message_chunk`, `Branch summary:\n\n<summary>`;
+    - a bash execution the model sees, as one `user_message_chunk` of its text.
+    - A hidden custom message, and an excluded bash execution, are not replayed.
+  - **`/session`'s totals** count what Pi's stats count: `usage` entries, and the usage of branch summaries, compactions, assistant messages and tool results.
+  - **An append refused with `ErrOldVersion`** fails its request as ACP invalid request, with the error's text, through one helper in `acpserver/agent.go`. That covers a prompt (`agent.go:371`), `/name` (`commands.go:370`), `/compact` (`compact.go:75`), and a model or thinking change (`config.go:88`).
+  - **`/fork`, `/clone`, `_gobble/fork` and `_gobble/clone` still work** on an older file, writing v3 files of the migrated entries. So does `session/new`'s `forkFrom`, which copies the migrated entries, not the unmigrated ones Pi's `forkFrom` copies.
+- **A Pi system message is kept and not sent.** A `system` message entry and a compaction's `systemMessage` carry Pi's prompt and tool state. gobble writes neither, and F3 owns the prompt (0002-PLAN Phase 4). Both round-trip, take no part in gobble's history or estimate, and are not replayed. This is the one place F2 does not apply Pi's rule.
+- **The fixtures,** in `session/testdata/pi/`:
+  - **Where they are written:** on the second amd64 Linux machine, so every recorded path is under `/tmp` and names no account.
+    - Each Pi checkout is a `git archive` of the local Pi repository: `c58d5f20a^` for v1, `c6fc08453^` for v2, and `312184edb` for v3.
+    - Each is copied with `scp` into a directory under the home directory, as `/tmp` is too small, installed with `npm ci --ignore-scripts`, and removed afterwards.
+    - Sessions are written under `/tmp/gobble-f2/sessions`, with the cwd `/work/project`.
+  - **The generators** are three TypeScript files in the scratchpad's `f2/gen/`:
+    - `v1.ts` and `v2.ts`, run with their checkout's `tsx`;
+    - `v3.test.ts`, run with its checkout's `vitest`, since `312184edb` has no `tsx`.
+    - They call SessionManager's own methods, with invented prompts, answers and tool calls, and no real conversation.
+  - **The files:**
+    - **`v1.jsonl`:** model and thinking changes, a user message, an assistant message with text, thinking and a tool call, its result, a compaction whose index names a later message, then more messages. With it, `v1-branched.jsonl`, from `createBranchedSessionFromEntries`.
+    - **`v2.jsonl`:** a `hookMessage`, a bash execution, a `custom` entry, labels, a compaction, a custom message, `branch`, `branchWithSummary` and `resetLeaf`. With it, `v2-branched.jsonl`, from `createBranchedSession`.
+    - **`v3.jsonl`:** every type:
+      - messages: user, assistant, tool result, custom, and two bash executions, one excluded;
+      - `model_change`, `thinking_level_change`, `usage` and `compaction`;
+      - `context_edit` twice, once with a replacement and once with `null`;
+      - `branch_summary`, `custom`, and `custom_message` twice, once with `display` true and once false;
+      - `label`, set and cleared;
+      - `session_info`, set and cleared;
+      - `branch` and `resetLeaf`.
+    - With it, **`v3-branched.jsonl`,** from `createBranchedSession` of a labelled path.
+    - For each file, **`<name>.context.json`**, from Pi at `312184edb`: the messages of `SessionManager.open(copy).buildSessionContext()`, and `convertToLlm` of them.
+    - For v1 and v2, **`<name>.migrated.jsonl`:** the copy Pi rewrote when it opened it.
+  - **Before they are staged,** the identifier scan and the hidden-character scan run over them, and the record lists each file with its size.
+- **The fuzz target** is `FuzzParse` in `session/jsonl`, seeded with every fixture. It runs as a gate: `go test -run '^$' -fuzz FuzzParse -fuzztime 60s ./session/jsonl`.
+
+**F2-1's files:**
+
+| | Files |
+| :--- | :--- |
+| new | `session/migrate.go`, `migrate_test.go`; `session/testdata/pi/` (the fixtures above); `session/jsonl/fixtures_test.go`, `fuzz_test.go`; `compaction/project_test.go`; `acpserver/fixtures_test.go` |
+| changed | `session/session.go`, `session_test.go`, `memory.go`; `session/jsonl/store.go`, `store_test.go`; `compaction/estimate.go`, `compaction.go`, `serialize.go`, `compaction_test.go`; `acpserver/history.go`, `extensions.go`, `commands.go`, `agent.go`, `compact.go`, `config.go`; `docs/architecture.md`; `README.md`; `docs/decisions/0002-PLAN-cli-acp-headless-mcp-v1.md` (the dated note at `:1512`) |
+
+**F2-1's tests,** each seen failing first on a scratch copy:
+
+- **`session`:**
+  - `Migrate`: v1's ids and chain; an index to a later entry, to the header, and past the end; `hookMessage` to `custom`; version 4 refused.
+  - `Name`: the latest wins, it is trimmed, and an empty one clears.
+- **`session/jsonl`, against the fixtures:**
+  - each v3 file loads with no line skipped, and every entry, written again, equals its line after JSON normalisation (both decoded into `any` and compared);
+  - each v1 and v2 file loads, and its entries equal Pi's `.migrated.jsonl` with ids mapped by position. Its bytes are unchanged after loading and after `Close`;
+  - an `Append` to an older file returns `ErrOldVersion`, and the file is unchanged;
+  - on copies of `v3.jsonl`:
+    - a malformed line is skipped with a warning;
+    - an unreadable header fails closed;
+    - a last line cut short loads every complete entry.
+  - `FuzzParse` does not panic. Every entry it returns has a type and is not a header, and an older file's ids are unique.
+- **`compaction`:**
+  - `Project` of each fixture's path equals its `.context.json` messages after JSON normalisation;
+  - the estimate of each new role;
+  - the omission advance, and a suffix it must not advance over.
+- **`acpserver`, through `acptest`:**
+  - loading `v3.jsonl` gives a history whose roles and texts are those of `.context.json`'s converted messages, and `_gobble/get_messages` returns its messages;
+  - the replay's chunks for a custom message, a branch summary and a bash execution, and none for the hidden ones;
+  - the model and thinking level are restored from the file's changes;
+  - a prompt to the v1 session fails with `ErrOldVersion`'s text, and the file is unchanged;
+  - `/clone` of the v1 session, and `session/new`'s `forkFrom` of it, write v3 files of the migrated entries;
+  - `/session`'s totals count a `usage` entry.
+
+**F2-2 — the tree.**
+
+Choices made within the wording:
+
+- **`session.Tree`** is a session's entries with a leaf that can move, as Pi's SessionManager keeps them:
+  - `NewTree(entries)` puts the leaf on the last entry in file order, as a load does.
+  - `Leaf()`, and `Path()`: from the leaf to the root, or nothing when there is no leaf. A missing parent, or a cycle, ends the path, as now.
+  - **`Next(e Entry) Entry`** stamps an entry as a child of the leaf, with a new id. **`Add(e Entry)`** records it and moves the leaf to it. They are separate so a failed write leaves the tree as it was.
+  - **`Branch(id) error`** moves the leaf to an entry, and **`ResetLeaf()`** removes it, so the next entry is a root.
+  - **`BranchSummary(from, summary string, details jsontext.Value) Entry`** is Pi's `branchWithSummary`: a `branch_summary` whose parent is `from` (none for the root), whose `fromId` is the old leaf or `root`, and which becomes the leaf.
+  - **`Labels() []Label`**, with `Label{TargetID, Label, Timestamp}`, resolves the label entries in file order, as Pi's map does:
+    - the latest label of each target, with its timestamp;
+    - an empty or absent label clears it;
+    - targets in the order their label was first set since it was last cleared.
+  - **`Branched(leaf string) []Entry`** is Pi's `createBranchedSession` (`session-manager.ts:1632-1712`):
+    - the path to `leaf`, without its label entries, each entry's parent being the entry before it;
+    - a compaction's `firstKeptEntryId` that named a label moves to the next entry kept;
+    - then one label entry for each label whose target is in that path, chained, with the label's timestamp and a new id.
+- **acpserver:**
+  - **A live session holds a `Tree`.** It replaces the session's leaf and id set, and `append` is `Next`, the log's `Append`, then `Add`.
+  - **Every path is the tree's.** That covers the prompt's loaded tools, `/compact`, the estimates, `/todos`, `_gobble/get_state` and the replay. With nothing moving the leaf yet, these are the paths of today.
+  - **Fork and clone write `Branched`:** `/clone` and `_gobble/clone` of the leaf, and `/fork` and `_gobble/fork` of the parent of the message they name.
+  - **`session/load` and `session/resume`** restore the tree with its leaf on the last entry. `session/list` and `session/close` are unchanged.
+- **Nothing in F2-2 moves the leaf from a command.** `/tree <id>`, with its generated branch summary, and `/label` are X1 step 1 (0005-MADR, "Tree navigation and labels", 1.x). They will call `Branch`, `ResetLeaf`, `BranchSummary` and a label append.
+
+**F2-2's files:**
+
+| | Files |
+| :--- | :--- |
+| new | `session/tree.go`, `tree_test.go`; `acpserver/tree_test.go` |
+| changed | `acpserver/agent.go`, `commands.go`, `compact.go`, `extensions.go`, `history.go`, `prompt.go`; `docs/architecture.md` |
+
+**F2-2's tests,** each seen failing first on a scratch copy:
+
+- **`session.Tree`:**
+  - after `Branch`, the next entry starts a sibling branch, and `Path` follows the leaf;
+  - after `ResetLeaf`, `Path` is empty and the next entry is a root;
+  - `BranchSummary` from the root has no parent and `fromId` `root`; from an entry, that parent and the old leaf;
+  - `NewTree` of the entries puts the leaf on the last in file order, whatever moved it before;
+  - `Labels` over set, reset, clear and set again;
+  - `Branched` of `v2.jsonl`'s and `v3.jsonl`'s leaves equals Pi's `v2-branched.jsonl` and `v3-branched.jsonl`, with the new label entries' ids mapped by position.
+- **acpserver:**
+  - `/clone` of a labelled session writes its labels at the end, for targets on the path only;
+  - `/fork` leaves out a label whose target is off the path;
+  - a compaction whose first kept entry was a label keeps the entry after it.
+
+**The gates, for each sub-phase,** as F1d-2's deviation 4 sets them, with the fuzz run added:
+
+- lint for linux, darwin and windows;
+- Windows `go test ./...`;
+- `CGO_ENABLED=1 go test -race ./...`, natively on Windows and on the second amd64 Linux machine;
+- Windows and WSL `make preflight`, WSL's without a race run;
+- for F2-1, `FuzzParse` for 60 seconds.
+
+**How F2's accept list is met:**
+
+- **The samples in Pi's `docs/session-format.md`** are read as the generated fixtures. Those samples are not valid JSON (0005-MADR, "Sessions (changed)"), and the 2026-10-01 amendment moved the golden files to real Pi output.
+- **"Captured from real Pi output at `312184edb`"** holds for v3. v1 and v2 are captured at the last commits that wrote them, since `312184edb` writes v3 only.
+- **A v1 file and a v2 file migrate:** they equal Pi's own migration.
+- **A malformed line, an unreadable header and a cut-short last line:** the three `session/jsonl` tests.
+- **The fuzz target:** `FuzzParse`.
+- **The leaf is the last entry in file order:** `NewTree`'s test.
+- **Model and thinking changes restored on load:** the acpserver test of `v3.jsonl`.
+
+**Deferred, named:**
+
+- **`/tree`, `/tree <id>` with a branch summary, `/label`, `_gobble/get_tree` and the TUI's tree navigator:** X1 steps 1 and 5. They call the tree's operations.
+- **Writing `context_edit` entries:** X1 step 1.
+- **Pi import** (`gobble session list --pi`, `gobble session import`): 1.x, through the 0003-MADR bridge.
+- **Appending to a v1 or v2 file:** refused by decision 2. A clone continues it.
+- **Images in the model's history:** step 2 of F1, with the provider SDK.
+- **Pi's two defects** are recorded here only. Reporting them upstream is the owner's call.
