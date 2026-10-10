@@ -163,7 +163,7 @@ Every run was in WSL, `CGO_ENABLED=1`, Go 1.27.2, with the race detector.
 
 The owner's decision of 2026-10-09 replaces the third bullet of *What gobble does about it*:
 
-- **gobble removes its own nested marshal.** *(On hold from 2026-10-09, with 0012-PLAN P9: see the second amendment.)*
+- **gobble removes its own nested marshal.** *(On hold from 2026-10-09, with 0012-PLAN P9: see the second amendment.)* *(Withdrawn 2026-10-09: 0012-MADR D15 was rejected and 0012-PLAN P9 abandoned. gobble keeps jsonschema-go's marshaller.)*
   - `tool.New` is the only place gobble's code marshals a jsonschema-go `Schema`. It is also the only nested marshal in gobble's code: gobble defines no `MarshalJSON` method, and MCP tool schemas arrive as maps.
   - `tool.New` will write the published schema itself, with no nested `Marshal`. The work is a new phase of 0012-PLAN, P9, under an amendment to [0012-MADR](../decisions/0012-MADR-tool-schemas-descriptions-and-loading.md). Both will be written and approved before any code.
   - What it leaves:

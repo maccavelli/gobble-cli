@@ -289,7 +289,8 @@ Chosen: **I-A, II-A, III-A and IV-A.**
 - **II-A** follows every surveyed harness (F5), and turns "hybrid" into a shape a test can enforce, so the cost stays bounded (F6).
 - **III-A** follows both providers' guidance and every surveyed harness (F8, F9). It keeps the cache stable as well as the SDK allows (F10, F11). It makes the safety of the native tools hold whichever spelling the model picks (F12).
 - **IV-A** matches what the three harnesses with search do (F14), and adds no module.
-- **V-A** *(proposed 2026-10-09)* takes gobble's own code off a standard-library defect's path at the one place it nests (F19), with a writer bounded by D2's subset and held to today's bytes.
+- ~~**V-A** *(proposed 2026-10-09)* takes gobble's own code off a standard-library defect's path at the one place it nests (F19), with a writer bounded by D2's subset and held to today's bytes.~~ *(Rejected 2026-10-09: the defect it answered is this host's WSL, not code gobble runs (0013-REPORT, third amendment).)*
+- **V-B** *(chosen 2026-10-09)*: `tool.New` keeps jsonschema-go's `MarshalJSON`, since no defect on gobble's path needs it gone.
 
 The owner's proposals stand where the evidence supports them:
 
@@ -332,6 +333,7 @@ The owner's proposals stand where the evidence supports them:
 
   F3's defects are fixed by this test: edit's `edits` gains `"type":"array"` and `minItems: 1`; read's `limit` and bash's `timeout` gain their bounds.
 - **D15. gobble writes the published schema itself.** *(Proposed 2026-10-09, by the owner's choice of that day: 0005-PLAN F1d-1 deviation 6. It is accepted when the owner approves 0012-PLAN P9, and P9's commit marks it so.)*
+  - **Rejected 2026-10-09 by the owner ("abandon p9"):** the defect it answered is this host's WSL, not code gobble runs (0013-REPORT, third amendment). 0012-PLAN P9 is abandoned, and none of its code was committed. The text below is kept as the record of what was proposed.
   - *(On hold from 2026-10-09: P9 is paused at step 7, deviation 2. Probe F contradicted F19's consequence, which is this decision's reason. D15 is decided again once Probe F has run on another machine.)*
   - *(2026-10-09, later: Probe F ran on three other platforms and was clean on each: natively on this host's Windows, on an arm64 laptop, and on a second amd64 Linux machine. WSL on this host still reported races after a reboot. So the defect is this host's WSL, not code gobble runs; see 0013-REPORT's third amendment. D15 has no defect to fix, and waits on the owner's decision.)*
   - **What changes.** `tool.New` still derives both schemas with `jsonschema.For[In]`, and applies the non-null rewrite and `WithSchema` (D1, D2 rule 8). It no longer calls `json.Marshal` on the published one. A writer in `tool` streams it through one `jsontext.Encoder`, with no nested `Marshal` (F19).
@@ -532,7 +534,7 @@ The 1.x tools keep 0011-REPORT §5's drafts until their own MADRs settle them: t
 - **The always-sent set stays small:** 14 on Windows, under Anthropic's "30–50" degradation range (Doc 2). Most file tasks take no search round trip.
 - Moves, deletes and copies keep their confinement, permissions and undo whether the model calls the tool or types `rm`, `mv` or `cp` (D10).
 - No new module for search (D11).
-- *(Added 2026-10-09, D15.)* gobble's own code no longer nests a `Marshal`, so the race gate meets the standard library's defect only through code gobble does not own (F19).
+- *(Added 2026-10-09, D15; void: D15 was rejected the same day.)* gobble's own code no longer nests a `Marshal`, so the race gate meets the standard library's defect only through code gobble does not own (F19).
 - A session that resumes rebuilds the same tools list in the same order (D9).
 
 **Bad**
@@ -543,8 +545,8 @@ The 1.x tools keep 0011-REPORT §5's drafts until their own MADRs settle them: t
 - **D10 catches only exact simple commands.** `rm -f x` and `rm -r a && make` reach the shell, under F6's permission rules rather than the native tool's.
 - **Templated descriptions** add a file per tool and a rendering step. A template error is caught at construction and by the budget test, not at compile time.
 - **The in-house BM25 is code gobble maintains,** where bleve would be maintained upstream.
-- *(Added 2026-10-09, D15.)* **gobble owns a schema writer that must keep jsonschema-go's output.** An upgrade that changes that output, or a field gobble starts to set, fails the golden file or the writer's refusal instead of passing through. Each needs an edit to the writer.
-- *(Added 2026-10-09, D15.)* **D15 may only quiet the race detector.** Whether the defect can corrupt output is unverified (F19). If it cannot, the writer protects nothing at runtime, and buys a gate that fails only for real.
+- *(Added 2026-10-09, D15; void: D15 was rejected the same day.)* **gobble owns a schema writer that must keep jsonschema-go's output.** An upgrade that changes that output, or a field gobble starts to set, fails the golden file or the writer's refusal instead of passing through. Each needs an edit to the writer.
+- *(Added 2026-10-09, D15; void: D15 was rejected the same day.)* **D15 may only quiet the race detector.** Whether the defect can corrupt output is unverified (F19). If it cannot, the writer protects nothing at runtime, and buys a gate that fails only for real.
 
 **Changes to other records,** made when this record is accepted:
 
@@ -594,6 +596,7 @@ go test -tags live_openai ./llm/provider -run TestStrictProbe -count=1 -v
     -> before the SDK's strict flag: one "strict=" line per tool (all true, as Probe D)
     -> after it: strict=false for read, bash, powershell; strict=true for write, edit
 
+# (2026-10-09: D15 was rejected, and these two checks were never committed.)
 # D15 (proposed 2026-10-09): the published bytes are today's, the writer refuses
 # what it does not write, and building the tools races no more in a WSL probe
 go test ./tool ./tool/builtin -run 'TestWriteSchema|TestPublishedBytes' -count=1   -> ok
@@ -700,7 +703,7 @@ make preflight                                                     -> exit 0, Wi
 - Good: trivial, and predictable for exact names.
 - Bad: no ranking, so a query in the model's words ("rename a folder") finds nothing unless it shares a substring. 0005-MADR already chose BM25 (V12).
 
-### V-A — gobble writes the published schema (chosen, proposed 2026-10-09)
+### V-A — gobble writes the published schema (proposed 2026-10-09; rejected the same day)
 
 - Good: gobble's own code leaves the defect's path, at the one place it nests (F19).
 - Good: it is bounded. D2's subset is 13 fields, and the writer refuses the rest, so nothing new passes silently.
@@ -709,7 +712,7 @@ make preflight                                                     -> exit 0, Wi
 - Bad: it does not help other callers of jsonschema-go, such as the MCP SDK, and it does not fix the standard library.
 - Bad: if the defect is only the detector's, it quiets a gate without protecting anything at runtime (F19, **[unverified]**).
 
-### V-B — keep jsonschema-go's `MarshalJSON`
+### V-B — keep jsonschema-go's `MarshalJSON` (chosen 2026-10-09)
 
 - Good: no code. jsonschema-go's output is followed automatically.
 - Good, and its strongest argument: the defect is in the standard library, and the fix belongs there. gobble's writer may outlive the need for it.
@@ -869,3 +872,18 @@ The PLAN resolves these. None leaves a decision above open. *(2026-10-08: [0012-
 - accepting this record made two status lines stale.
 
 **Not yet exercised.** D4 and D6–D14 land in the 0005-PLAN sub-phases its notes name: F1c, F1d, F3, F6, F8 and X4. They are borne out or contradicted there.
+
+## Observed — execution results (2026-10-09)
+
+**D15 was contradicted before it was accepted, and is rejected.** 0012-PLAN P9 ran steps 1–6 and 8 on 2026-10-09, uncommitted. Its writer did what D15 asked:
+
+- the golden file captured from jsonschema-go matched the writer's bytes for all 13 built-in tools;
+- the writer's tests passed;
+- each of the seven mutated copies failed its test as planned.
+
+Step 7, Probe F, then contradicted D15's reason, F19's consequence:
+
+- the race reports and crashes persisted with no nested `Marshal` in gobble's code, on Go 1.26.3 as well as 1.27.2;
+- the same probe was clean natively on this host's Windows, on an arm64 laptop and on a second amd64 Linux machine.
+
+So the defect it answered is this host's WSL, not code gobble runs (0013-REPORT, third amendment). On 2026-10-09 the owner rejected D15 ("abandon p9"), and V-B stands: `tool.New` keeps jsonschema-go's `MarshalJSON`. None of P9's code was committed. A copy was kept outside the tree.

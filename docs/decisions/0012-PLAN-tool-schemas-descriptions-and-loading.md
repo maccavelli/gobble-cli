@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: completed
 date: 2026-10-09
 ---
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
@@ -54,7 +54,7 @@ The plan is done when each of these holds:
 | P5 | `llm/provider/strict_test.go` (new), `llm/provider/strict_live_test.go` (new) |
 | P6 | this PLAN (execution record), `docs/decisions/0012-MADR-tool-schemas-descriptions-and-loading.md` (Observed section), `docs/README.md` |
 | P8 *(added 2026-10-08)* | `tool/builtin/describe/read.md`, `write.md`, `edit.md`, `bash.md`, `powershell.md`, `tool/builtin/describe_test.go`, `tool/builtin/shell.go`; then this PLAN and `docs/README.md` for its record |
-| P9 *(added 2026-10-09)* | `tool/schemajson.go` (new), `tool/schemajson_test.go` (new), `tool/tool.go`, `tool/builtin/published_test.go` (new), `tool/builtin/testdata/published.golden` (new), `docs/architecture.md`; then this PLAN, `docs/decisions/0012-MADR-tool-schemas-descriptions-and-loading.md` (D15's status and the Observed section), `docs/reports/0013-REPORT-go-json-nested-marshal-race.md` (a dated note) and `docs/README.md` for its record |
+| P9 *(added 2026-10-09; abandoned the same day, with nothing committed)* | `tool/schemajson.go` (new), `tool/schemajson_test.go` (new), `tool/tool.go`, `tool/builtin/published_test.go` (new), `tool/builtin/testdata/published.golden` (new), `docs/architecture.md`; then this PLAN, `docs/decisions/0012-MADR-tool-schemas-descriptions-and-loading.md` (D15's status and the Observed section), `docs/reports/0013-REPORT-go-json-nested-marshal-race.md` (a dated note) and `docs/README.md` for its record |
 
 ### Out of scope
 
@@ -919,6 +919,8 @@ make preflight                                                                  
 
 *(Approved 2026-10-09 by the owner: "approve P9, proceed". The status is `in-progress` from then.)*
 
+*(Abandoned 2026-10-09 by the owner: "abandon p9". The defect it answered is this host's WSL, not code gobble runs (0013-REPORT, third amendment). None of P9's code was committed, and the plan's status is back to `completed`. See "Execution record — P9".)*
+
 **Deviation 1 (2026-10-09), found at step 7.**
 
 - **What was found.** The control's `go test -race -count=60` stopped at `go test`'s default 10-minute timeout, after about 24 passes of about 25 seconds each: `panic: test timed out after 10m0s`. Step 7's command sets no timeout.
@@ -1353,10 +1355,10 @@ git diff <the records commit>..HEAD -- go.mod go.sum              -> empty (C2)
 | A9 | `go.mod` and `go.sum` unchanged | Decision Drivers 6; C2 |
 | A10 | every gate in the Stability rule passes after each code phase | Confirmation, `make preflight` |
 | A11 *(added 2026-10-08)* | the five descriptions follow D5 item 6, and `TestDescriptionShape` failed on P8's four scratch copies | D5 item 6, F18 |
-| A12 *(added 2026-10-09)* | `TestPublishedBytes` passes with the writer, against a golden file captured from jsonschema-go's output in step 1 and not edited since; it failed on copies 1, 4, 5 and 7 | D15, Confirmation |
-| A13 *(added 2026-10-09)* | `TestWriteSchema`, `TestWriteSchemaRefuses` and `TestNewRefusesUnpublished` pass, and failed on copies 2, 3 and 6 | D15 |
-| A14 *(added 2026-10-09)* | Probe F reports no race on the P9 tree, against a control that raced; or the record says the probe was inconclusive | F19, D15 |
-| A15 *(added 2026-10-09)* | the existing `tool` tests pass unedited, and `go.mod` and `go.sum` are unchanged | C1, C2 |
+| A12 *(added 2026-10-09; void, P9 abandoned)* | `TestPublishedBytes` passes with the writer, against a golden file captured from jsonschema-go's output in step 1 and not edited since; it failed on copies 1, 4, 5 and 7 | D15, Confirmation |
+| A13 *(added 2026-10-09; void, P9 abandoned)* | `TestWriteSchema`, `TestWriteSchemaRefuses` and `TestNewRefusesUnpublished` pass, and failed on copies 2, 3 and 6 | D15 |
+| A14 *(added 2026-10-09; void, P9 abandoned)* | Probe F reports no race on the P9 tree, against a control that raced; or the record says the probe was inconclusive | F19, D15 |
+| A15 *(added 2026-10-09; void, P9 abandoned)* | the existing `tool` tests pass unedited, and `go.mod` and `go.sum` are unchanged | C1, C2 |
 
 **A8 is the criterion most likely to be dropped.** Probe D has already answered the question, so repeating it from the tree looks optional. It is not: the in-tree test is what P7 will turn into an assertion. A "pending" in the record is honest; a silently missing section is not.
 
@@ -1369,7 +1371,7 @@ git diff <the records commit>..HEAD -- go.mod go.sum              -> empty (C2)
 - **Rollout.** One commit per phase, made by the owner, in order. Nothing changes at runtime until P3: a model then sees bounds, defaults and `minItems`, and bash refuses an empty command. P4 changes only the wording a model reads.
 - **Rollback.**
   - **P2–P5** each revert as one commit. P3 and P4 depend on P2, so they revert first.
-  - **P9** *(added 2026-10-09)* reverts as one commit. Its golden file and tests go with it, and `tool.New` marshals through jsonschema-go again.
+  - **P9** *(added 2026-10-09)* reverts as one commit. Its golden file and tests go with it, and `tool.New` marshals through jsonschema-go again. *(Abandoned before any commit, so there is nothing to revert.)*
   - **P1** is records. A revert of it puts 0005's Exposure paragraph back in force, so it is reverted only with 0012-MADR set back to `proposed`.
   - Reverting is the owner's command, not the agent's.
 
@@ -1491,3 +1493,18 @@ P5's files passed the pre-add check, and `golangci-lint` with `--build-tags live
 1. **The templates broke P4's rule** (deviation 1). The plan's own drafts were checked for size before they were written into it, but not against P4's shape rules.
 2. **The definition sizes.** The plan estimated them from the schemas as they were after P4. Step 3's longer parameter descriptions add 56 bytes to each shell schema (423 to 479), and deviation 1 adds 16–17 bytes each to write and edit.
 3. **Where the checks live.** The plan put them inline in `descriptionShape`. They are in a helper, `agentFirst`, which it calls; the behaviour is the same.
+
+## Execution record — P9 (2026-10-09)
+
+**P9 was abandoned by the owner on 2026-10-09 ("abandon p9"), at step 7, before any of its code was committed.** Its files were removed and its two edits undone. The tree matched the commit before P9 afterwards, with `git status` empty. A copy of the work was kept outside the tree.
+
+- **What ran:**
+  - step 1, the golden capture, 13 of 13 equal to Probe E;
+  - steps 2–5, the writer, `tool.New`'s change and their tests, all passing, with the golden file unedited (C1 and C2 held);
+  - step 6, the seven copies, each failing as the table says;
+  - step 8, the architecture line.
+- **What did not:** step 7 contradicted the phase's premise (deviation 2). Step 9's record became this one.
+- **What the plan predicted wrongly:**
+  1. **Its premise.** P9 assumed the race was the nested `Marshal`, from 0013-REPORT's first amendment. Probe F showed impossible race reports and real crashes without it, so the defect it answered is this host's WSL, not code gobble runs (0013-REPORT, third amendment). The probe was the phase's own check, and it did its job. The premise should have been tested on another machine before a phase was written to remove it.
+  2. **Step 7's command** had no `-timeout`, and the control needed about 25 minutes (deviation 1).
+  3. **The dry run** caught two errors in the drafted code before approval: `reflect.Type.Fields` yields fields, not indexes, and one conversion was unnecessary. Running a drafted phase on a scratch copy before presenting it found them where reading did not.
