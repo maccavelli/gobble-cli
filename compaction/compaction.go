@@ -5,6 +5,7 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/maccavelli/gobble-cli/llm"
@@ -34,8 +35,8 @@ var (
 type Preparation struct {
 	// FirstKeptEntryID is where the kept context starts.
 	FirstKeptEntryID string
-	toSummarize      []msg
-	turnPrefix       []msg
+	toSummarize      []*session.Message
+	turnPrefix       []*session.Message
 	// SplitTurn reports a cut inside one turn, whose start is summarised
 	// separately.
 	SplitTurn bool
@@ -52,14 +53,14 @@ func Prepare(path []session.Entry, s Settings) (*Preparation, error) {
 	if n := len(path); n > 0 && path[n-1].Type == session.TypeCompaction {
 		return nil, ErrAlreadyCompacted
 	}
-	proj := project(Context(path))
+	proj := Project(Context(path))
 	start, previous := 0, ""
 	prev := -1
-	if len(proj) > 0 && proj[0].entry.Type == session.TypeCompaction && len(proj[0].msgs) > 0 {
-		prev, start, previous = 0, 1, proj[0].entry.Summary
+	if len(proj) > 0 && proj[0].Entry.Type == session.TypeCompaction && len(proj[0].Messages) > 0 {
+		prev, start, previous = 0, 1, proj[0].Entry.Summary
 	}
 	cut := findCut(proj, start, len(proj), s.KeepRecentTokens)
-	if cut.first >= len(proj) || proj[cut.first].entry.ID == "" {
+	if cut.first >= len(proj) || proj[cut.first].Entry.ID == "" {
 		return nil, ErrNothingToCompact
 	}
 	historyEnd := cut.first
@@ -67,7 +68,7 @@ func Prepare(path []session.Entry, s Settings) (*Preparation, error) {
 		historyEnd = cut.turnStart
 	}
 	p := &Preparation{
-		FirstKeptEntryID: proj[cut.first].entry.ID,
+		FirstKeptEntryID: proj[cut.first].Entry.ID,
 		toSummarize:      messages(proj[start:historyEnd]),
 		SplitTurn:        cut.split,
 		TokensBefore:     int64(EstimateEntries(path)),
@@ -81,13 +82,13 @@ func Prepare(path []session.Entry, s Settings) (*Preparation, error) {
 		return nil, ErrNothingToCompact
 	}
 	if prev >= 0 {
-		p.files.carry(proj[prev].entry)
+		p.files.carry(proj[prev].Entry)
 	}
-	for _, x := range p.toSummarize {
-		p.files.add(x)
+	for _, m := range p.toSummarize {
+		p.files.add(m)
 	}
-	for _, x := range p.turnPrefix {
-		p.files.add(x)
+	for _, m := range p.turnPrefix {
+		p.files.add(m)
 	}
 	return p, nil
 }
@@ -110,13 +111,13 @@ func (f fileOps) carry(c session.Entry) {
 }
 
 // messages are the entries' messages, without compaction summaries.
-func messages(ps []projected) []msg {
-	var out []msg
+func messages(ps []Projected) []*session.Message {
+	var out []*session.Message
 	for _, p := range ps {
-		if p.entry.Type == session.TypeCompaction {
+		if p.Entry.Type == session.TypeCompaction {
 			continue
 		}
-		out = append(out, p.msgs...)
+		out = append(out, p.Messages...)
 	}
 	return out
 }
@@ -126,35 +127,20 @@ type cutResult struct {
 	split            bool
 }
 
-func isCutEntry(p projected) bool {
-	if p.entry.Type == session.TypeCompaction {
-		return false
-	}
-	for _, x := range p.msgs {
-		if x.cutPoint() {
-			return true
-		}
-	}
-	return false
+func isCutEntry(p Projected) bool {
+	return p.Entry.Type != session.TypeCompaction && slices.ContainsFunc(p.Messages, cutPoint)
 }
 
-func isTurnStartEntry(p projected) bool {
-	if p.entry.Type == session.TypeCompaction {
-		return false
-	}
-	for _, x := range p.msgs {
-		if x.turnStart() {
-			return true
-		}
-	}
-	return false
+func isTurnStartEntry(p Projected) bool {
+	return p.Entry.Type != session.TypeCompaction && slices.ContainsFunc(p.Messages, turnStart)
 }
 
 // findCut is Pi's findProjectedCutPoint: walk back from the newest entry
 // until keep tokens are reached, then cut at the closest valid point at or
-// after it, never at a tool result; step back over context-invisible
-// entries; and say whether the cut splits a turn.
-func findCut(proj []projected, start, end, keep int) cutResult {
+// after it, never at a tool result; move past an omitted recovery suffix;
+// step back over context-invisible entries; and say whether the cut splits
+// a turn.
+func findCut(proj []Projected, start, end, keep int) cutResult {
 	var points []int
 	for i := start; i < end; i++ {
 		if isCutEntry(proj[i]) {
@@ -164,7 +150,7 @@ func findCut(proj []projected, start, end, keep int) cutResult {
 	if len(points) == 0 {
 		return cutResult{first: start, turnStart: -1}
 	}
-	cut, acc := points[0], 0
+	cut, acc, exceeded := points[0], 0, false
 	for i := end - 1; i >= start; i-- {
 		t := entryTokens(proj[i])
 		if t == 0 {
@@ -172,6 +158,7 @@ func findCut(proj []projected, start, end, keep int) cutResult {
 		}
 		acc += t
 		if acc >= keep {
+			exceeded = true
 			cut = points[len(points)-1]
 			for _, c := range points {
 				if c >= i {
@@ -182,9 +169,12 @@ func findCut(proj []projected, start, end, keep int) cutResult {
 			break
 		}
 	}
+	if exceeded && recoverySuffix(proj[cut+1:end]) {
+		cut++
+	}
 	for cut > start {
 		p := proj[cut-1]
-		if p.entry.Type == session.TypeCompaction || len(p.msgs) > 0 {
+		if p.Entry.Type == session.TypeCompaction || len(p.Messages) > 0 {
 			break
 		}
 		cut--
@@ -198,6 +188,38 @@ func findCut(proj []projected, start, end, keep int) cutResult {
 		}
 	}
 	return cutResult{first: cut, turnStart: -1}
+}
+
+// recoverySuffix reports the entries after a cut as a recovery attempt and
+// its omission edits, which are context-invisible after the last visible
+// input (Pi's isRecoveryOmissionSuffix, compaction.ts:832-850): an omitted
+// assistant message, no replacement of an entry that is not omitted, no
+// compaction, and every visible entry omitted. The cut then moves past it,
+// and never past input not yet sent.
+func recoverySuffix(suffix []Projected) bool {
+	visible := func(p Projected) bool {
+		return p.Entry.Type != session.TypeContextEdit && len(entryMessages(p.Entry)) > 0
+	}
+	omitted := func(p Projected) bool { return visible(p) && len(p.Messages) == 0 }
+	gone := map[string]bool{}
+	for _, p := range suffix {
+		if omitted(p) {
+			gone[p.Entry.ID] = true
+		}
+	}
+	assistant := false
+	for _, p := range suffix {
+		e := p.Entry
+		switch {
+		case e.Type == session.TypeContextEdit && !missing(e.Replacement) && !gone[e.TargetID]:
+			return false
+		case e.Type == session.TypeCompaction, visible(p) && !omitted(p):
+			return false
+		case e.Type == session.TypeMessage && e.Message != nil && e.Message.Role == session.RoleAssistant && omitted(p):
+			assistant = true
+		}
+	}
+	return assistant
 }
 
 // Model is the model a summary is asked of: the session's own.
@@ -257,7 +279,7 @@ func Compact(ctx context.Context, p *Preparation, m Model, instructions string) 
 // historyPrompt is Pi's summary request: the conversation, the previous
 // summary when there is one, then the first or the update prompt, and the
 // user's focus.
-func historyPrompt(msgs []msg, instructions, previous string) string {
+func historyPrompt(msgs []*session.Message, instructions, previous string) string {
 	base := summarizationPrompt
 	if previous != "" {
 		base = updatePrompt

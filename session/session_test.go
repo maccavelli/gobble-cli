@@ -24,6 +24,17 @@ func TestPiShapesRoundTrip(t *testing.T) {
 		`{"type":"label","id":"a7b8c9d0","parentId":"f6a7b8c9","timestamp":"2024-12-03T14:30:00.000Z","targetId":"a1b2c3d4","label":"checkpoint-1"}`,
 		`{"type":"session_info","id":"b8c9d0e1","parentId":"a7b8c9d0","timestamp":"2024-12-03T14:35:00.000Z","name":"Refactor auth module"}`,
 		`{"type":"custom","id":"c9d0e1f2","parentId":"b8c9d0e1","timestamp":"2024-12-03T14:20:00.000Z","customType":"my-extension","data":{"count":42}}`,
+		// 0005-PLAN F2: null, false and "" must survive as written.
+		`{"type":"context_edit","id":"d0e1f2a3","parentId":"c9d0e1f2","timestamp":"2024-12-03T14:21:00.000Z","targetId":"a1b2c3d4","replacement":null}`,
+		`{"type":"context_edit","id":"d0e1f2a4","parentId":"d0e1f2a3","timestamp":"2024-12-03T14:21:01.000Z","targetId":"b2c3d4e5","replacement":{"content":[{"type":"text","text":"x"}]}}`,
+		`{"type":"custom_message","customType":"ext","content":[{"type":"text","text":"hidden"}],"display":false,"details":{"k":1},"id":"e1f2a3b4","parentId":"d0e1f2a4","timestamp":"2024-12-03T14:22:00.000Z"}`,
+		`{"type":"usage","id":"f2a3b4c5","parentId":"e1f2a3b4","timestamp":"2024-12-03T14:23:00.000Z","kind":"cache_warm","provider":"anthropic","model":"m","usage":{"input":1,"output":0,"cacheRead":0,"cacheWrite":0,"totalTokens":1,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"note":"n"}`,
+		`{"type":"label","id":"a3b4c5d6","parentId":"f2a3b4c5","timestamp":"2024-12-03T14:24:00.000Z","targetId":"a1b2c3d4"}`,
+		`{"type":"label","id":"a3b4c5d7","parentId":"a3b4c5d6","timestamp":"2024-12-03T14:24:01.000Z","targetId":"a1b2c3d4","label":""}`,
+		`{"type":"branch_summary","id":"b4c5d6e7","parentId":null,"timestamp":"2024-12-03T14:25:00.000Z","fromId":"root","summary":"s"}`,
+		`{"type":"session_info","id":"c5d6e7f8","parentId":"b4c5d6e7","timestamp":"2024-12-03T14:26:00.000Z","name":""}`,
+		`{"type":"message","id":"d6e7f8a9","parentId":"c5d6e7f8","timestamp":"2024-12-03T14:27:00.000Z","message":{"role":"bashExecution","command":"sleep 9","output":"","exitCode":null,"cancelled":true,"truncated":false,"timestamp":1733235220000,"excludeFromContext":false}}`,
+		`{"type":"message","id":"e7f8a9b0","parentId":"d6e7f8a9","timestamp":"2024-12-03T14:28:00.000Z","message":{"role":"custom","customType":"ext","content":"c","display":false,"timestamp":1733235280000}}`,
 	}
 	for i, line := range lines {
 		var v any = &Entry{}

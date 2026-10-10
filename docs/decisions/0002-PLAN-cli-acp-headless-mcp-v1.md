@@ -1510,7 +1510,9 @@ Choices made within the wording:
   * The summary request carries no output cap, because `llm.Request` has no `maxTokens` until 0005-PLAN F4. Pi caps it at 80 % of `reserveTokens`.
   * `tokensBefore` counts no system message, because gobble writes none into the session.
   * Pi's advance over `context_edit` omissions is not ported: gobble has no `context_edit` entries before 0005-MADR's 1.x context edits.
+    *(2026-10-10, 0005-PLAN F2-1: ported. gobble reads Pi's files, which have `context_edit` entries, and applies them as Pi does.)*
   * Entry types gobble does not act on (`custom_message`, `branch_summary`) are context-invisible, as Phase 4 decided.
+    *(2026-10-10, 0005-PLAN F2-1: both now enter the context, and the cut points, as Pi's do.)*
 * **The progress of `/compact`.**
   * It streams `Compacting the conversation…`, then `Compacted from N tokens.` and the summary, then a `usage_update` with the new estimate.
   * A failure is `Compaction failed: <message>`, or Pi's own `Already compacted` or `Nothing to compact (session too small)`.

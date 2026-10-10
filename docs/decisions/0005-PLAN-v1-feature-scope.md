@@ -1,6 +1,6 @@
 ---
 status: in-progress
-date: 2026-10-09
+date: 2026-10-10
 associated-madr: "0005-MADR-v1-feature-scope.md"
 ---
 # Implement the v1 line: the v1.0.0 gate, the v1.x train, and `exp/`
@@ -2282,7 +2282,8 @@ Choices made within the wording:
 - **`session`:**
   - **Types and roles:** `TypeUsage`, `TypeContextEdit`, `TypeBranchSummary`, `TypeCustomMessage` and `TypeLabel`; `RoleCustom`, `RoleBashExecution`, `RoleBranchSummary`, `RoleCompactionSummary` and `RoleSystem`.
   - **`Entry` gains Pi's members** for the remaining types: `TargetID` (`targetId`), `Replacement jsontext.Value` (`replacement`, where `null` is kept and differs from absent), `FromID` (`fromId`), `Content jsontext.Value` (`content`), `Display *bool`, `Label *string`, and `usage`'s `Kind`, `Model` and `Note`.
-  - **`Message` gains the members of Pi's other roles:** `CustomType`, `Display *bool`, `Details`, `Summary`, `FromID`, `TokensBefore *int64`; and `bashExecution`'s `Command`, `Output`, `ExitCode *int`, `Cancelled *bool`, `Truncated *bool`, `FullOutputPath` and `ExcludeFromContext *bool`.
+  - ~~**`Message` gains the members of Pi's other roles:** `CustomType`, `Display *bool`, `Details`, `Summary`, `FromID`, `TokensBefore *int64`; and `bashExecution`'s `Command`, `Output`, `ExitCode *int`, `Cancelled *bool`, `Truncated *bool`, `FullOutputPath` and `ExcludeFromContext *bool`.~~ *(F2-1 deviation 4, 2026-10-10: Pi writes `null` and `""` for these two.)*
+  - **`Message` gains the members of Pi's other roles:** `CustomType`, `Display *bool`, `Details`, `Summary`, `FromID`, `TokensBefore *int64`; and `bashExecution`'s `Command`, `Output *string`, `ExitCode jsontext.Value`, `Cancelled *bool`, `Truncated *bool`, `FullOutputPath` and `ExcludeFromContext *bool`.
   - **Pointers** are used wherever Pi writes `false` or `""`, so the value round-trips.
   - **`Migrate(version int, entries []Entry) ([]Entry, error)`:**
     - **v1:** entry n, counting from 1, gets the id `fmt.Sprintf("%08x", n)` and the previous entry as its parent. A compaction's `firstKeptEntryIndex`, counting the header as 0 as Pi does, becomes the `firstKeptEntryId` of that entry, and the index is removed. An index at the header, or past the end, leaves no id, as Pi leaves none.
@@ -2359,6 +2360,8 @@ Choices made within the wording:
 | new | `session/migrate.go`, `migrate_test.go`; `session/testdata/pi/` (the fixtures above); `session/jsonl/fixtures_test.go`, `fuzz_test.go`; `compaction/project_test.go`; `acpserver/fixtures_test.go` |
 | changed | `session/session.go`, `session_test.go`, `memory.go`; `session/jsonl/store.go`, `store_test.go`; `compaction/estimate.go`, `compaction.go`, `serialize.go`, `compaction_test.go`; `acpserver/history.go`, `extensions.go`, `commands.go`, `agent.go`, `compact.go`, `config.go`; `docs/architecture.md`; `README.md`; `docs/decisions/0002-PLAN-cli-acp-headless-mcp-v1.md` (the dated note at `:1512`) |
 
+*(2026-10-10, F2-1 deviations 2 and 3: `session/jsonl/testdata/fuzz/FuzzParse/` (the seed) joins the new files, and `session/doc.go` the changed files.)*
+
 **F2-1's tests,** each seen failing first on a scratch copy:
 
 - **`session`:**
@@ -2372,7 +2375,8 @@ Choices made within the wording:
     - a malformed line is skipped with a warning;
     - an unreadable header fails closed;
     - a last line cut short loads every complete entry.
-  - `FuzzParse` does not panic. Every entry it returns has a type and is not a header, and an older file's ids are unique.
+  - ~~`FuzzParse` does not panic. Every entry it returns has a type and is not a header, and an older file's ids are unique.~~ *(F2-1 deviation 2, 2026-10-10: only v1's ids are assigned by migration.)*
+  - `FuzzParse` does not panic. Every entry it returns has a type and is not a header, and a v1 file's migrated ids are unique. Its first failing input is kept as a seed under `session/jsonl/testdata/fuzz/FuzzParse/`.
 - **`compaction`:**
   - `Project` of each fixture's path equals its `.context.json` messages after JSON normalisation;
   - the estimate of each new role;
@@ -2384,6 +2388,24 @@ Choices made within the wording:
   - a prompt to the v1 session fails with `ErrOldVersion`'s text, and the file is unchanged;
   - `/clone` of the v1 session, and `session/new`'s `forkFrom` of it, write v3 files of the migrated entries;
   - `/session`'s totals count a `usage` entry.
+
+**F2-1's deviations,** found by reading Pi's code for the fixture generators before any code was written (1, 2026-10-09) at the fuzz target's first run (2, 2026-10-10), and on checking the files touched against the entry (3 and 4, 2026-10-10), and decided by the owner:
+
+1. **Pi's v2 `createBranchedSession` is not v3's.**
+   - **Found:** at `c6fc08453^` (`session-manager.ts:918-1000`) it leaves the label entries out without re-chaining, so a kept entry can name a removed label as its parent, and it gives the labels it writes again new timestamps. At `312184edb` (`:1632-1712`) it re-chains, and keeps each label's timestamp. F2-2's test compared `Branched` with both, and `Branched` follows v3.
+   - **Decided:** F2-2 compares `Branched` with `v3-branched.jsonl` only. `v2-branched.jsonl` stays a v2 fixture, which F2-1's tests load, and its path ends at the entry whose parent was a label. No file is added.
+
+2. **Only v1's ids are migration's.**
+   - **Found:** `FuzzParse` failed within 3 seconds, on a v2 header followed by two entries with no id: `migrated id "" twice`. Migration gives v1's entries their ids. v2's entries keep the ids Pi wrote, and Pi's v2-to-v3 step assigns none (`session-manager.ts:316-330`), so the test line's "an older file's ids are unique" holds for v1 only.
+   - **Decided:** the property checks unique ids for v1 input only, and v2 data stays as Pi wrote it. The failing input is kept as a regression seed in `session/jsonl/testdata/fuzz/FuzzParse/`, Go's place for it, which joins F2-1's files.
+
+3. **`session/doc.go`.**
+   - **Found:** its package comment says entry types gobble "does not act on yet" round-trip through `Unknown`, and that the format read is v3. After F2-1 both are false, and the files table leaves it out.
+   - **Decided:** `session/doc.go` joins F2-1's changed files. Its comment says Pi's entry types are typed, and v1 and v2 are migrated in memory and never rewritten. No code changes.
+
+4. **Two `bashExecution` members cannot be `*int` and a plain string.**
+   - **Found:** Pi writes `"exitCode": null` for a command a signal ended, and `"output": ""` for one with no output. `*int` reads `null` as nil and leaves the member out when written, and an `omitzero` string leaves `""` out, so neither line round-trips.
+   - **Decided:** `ExitCode` is a `jsontext.Value`, kept raw, and `Output` is a `*string`. `session_test.go`'s round-trip lines include both values.
 
 **F2-2 — the tree.**
 
@@ -2425,7 +2447,8 @@ Choices made within the wording:
   - `BranchSummary` from the root has no parent and `fromId` `root`; from an entry, that parent and the old leaf;
   - `NewTree` of the entries puts the leaf on the last in file order, whatever moved it before;
   - `Labels` over set, reset, clear and set again;
-  - `Branched` of `v2.jsonl`'s and `v3.jsonl`'s leaves equals Pi's `v2-branched.jsonl` and `v3-branched.jsonl`, with the new label entries' ids mapped by position.
+  - ~~`Branched` of `v2.jsonl`'s and `v3.jsonl`'s leaves equals Pi's `v2-branched.jsonl` and `v3-branched.jsonl`, with the new label entries' ids mapped by position.~~ *(F2-1 deviation 1, 2026-10-09: v2's `createBranchedSession` does not re-chain, so only v3 is compared.)*
+  - `Branched` of `v3.jsonl`'s leaf equals Pi's `v3-branched.jsonl`, with the new label entries' ids mapped by position. `v2-branched.jsonl` loads as a v2 file, and its path ends at the entry whose parent was a label.
 - **acpserver:**
   - `/clone` of a labelled session writes its labels at the end, for targets on the path only;
   - `/fork` leaves out a label whose target is off the path;
@@ -2457,3 +2480,61 @@ Choices made within the wording:
 - **Appending to a v1 or v2 file:** refused by decision 2. A clone continues it.
 - **Images in the model's history:** step 2 of F1, with the provider SDK.
 - **Pi's two defects** are recorded here only. Reporting them upstream is the owner's call.
+
+**F2-1, 2026-10-10 — complete (staged; the owner commits).** It ran as the entry "F2 made executable" wrote it, approved by the owner's "approved to proceed to F2-1" of 2026-10-09, with four deviations decided by the owner: 1 before any code was written, 2 at the fuzz target's first run, 3 and 4 on checking the files touched against the entry. F2-2 has not run.
+
+- **The deviations** (recorded under F2-1's deviations above):
+  1. F2-2 compares `Branched` with `v3-branched.jsonl` only, since Pi's v2 `createBranchedSession` does not re-chain.
+  2. The fuzz property checks unique ids for v1 input only; its first failing input is kept as a seed.
+  3. `session/doc.go` joins the files, for its package comment.
+  4. `bashExecution`'s `ExitCode` is a `jsontext.Value` and its `Output` a `*string`, so `null` and `""` round-trip.
+- **The fixtures,** 16 files in `session/testdata/pi/`, were written on the second amd64 Linux machine by Pi's own SessionManager:
+  - **at `c58d5f20a^`** with its `tsx`: `v1.jsonl` (2563 bytes) and `v1-branched.jsonl` (1909);
+  - **at `c6fc08453^`** with its `tsx`: `v2.jsonl` (6550) and `v2-branched.jsonl` (5407);
+  - **at `312184edb`** with its `vitest`: `v3.jsonl` (8764) and `v3-branched.jsonl` (7372); then, for all six, `<name>.context.json` (v1 3425, v1-branched 4022, v2 7744, v2-branched 5719, v3 7977, v3-branched 7977), and, for the four older ones, Pi's own migration, `<name>.migrated.jsonl` (v1 2917, v1-branched 2143, v2 6545, v2-branched 5402).
+  - Each checkout was a `git archive` of the local Pi repository, installed with `npm ci --ignore-scripts` under the home directory there, and removed afterwards with `/tmp/gobble-f2`; a listing then found neither.
+  - The identifier scan and the hidden-character scan found nothing in them.
+- **What was built:**
+  - **`session`:** the types `usage`, `context_edit`, `branch_summary`, `custom_message` and `label`, and the roles `custom`, `bashExecution`, `branchSummary`, `compactionSummary` and `system`; their members on `Entry` and `Message`; `Migrate`; `Name`; `ErrOldVersion`. `Summarize` takes its name from `Name`.
+  - **`session/jsonl`:** versions 1 to 3 are read, and older entries migrated; a log on an older file refuses `Append`, and its `Writable` says so before any work.
+  - **`compaction`:** `Project` and `Projected`, the context in Pi's message shapes with context edits applied; `Convert`, Pi's `convertToLlm`; `BashText` and `BranchSummaryText`; the new roles in the estimate, the cut points and the turn starts; usage after a context edit untrusted; the omission advance; the summary prompt serialising converted messages.
+  - **`acpserver`:**
+    - the history, `_gobble/get_messages` and `_gobble/get_last_assistant_text` come from the projection;
+    - the replay shows a shown custom message, a branch summary and a bash execution the model sees, and nothing hidden;
+    - `/session`'s totals count Pi's;
+    - `appendFailed` answers an older file's refused append as invalid request, for a prompt, `/name`, `/compact` and a config change;
+    - `/compact` checks `Writable` before asking for a summary.
+  - **Updated:** `docs/architecture.md`'s session, session/jsonl, compaction and acpserver rows; `README.md`'s sessions line; and 0002-PLAN Phase 6's two context choices, each with a dated note.
+- **Choices of mine, within the entry's wording:**
+  - **`/compact` is refused before the summary is asked for,** so an older session's refusal costs no model call. `fileLog.Writable` is a method of an unexported type, found by an interface assertion, so the package's API is unchanged.
+  - **`_gobble/get_last_assistant_text` reads the projection,** so an edited answer is the edited text, as the model sees it.
+  - **A Pi `system` message takes no part in the cut point's omission check either:** an entry gobble does not project is invisible, not omitted.
+  - **0002-PLAN's note covers both superseded lines** of Phase 6's choices, the omission advance and the context-invisible types.
+  - **Three tests were added** where a mutation found no check: a custom message as a cut point and turn start; usage after a context edit untrusted; a hidden custom message not replayed. The fixture's only hidden message is also dropped by a null edit, so it could not show the last.
+- **The tests:**
+  - `session`: `TestMigrateV1`, `TestMigrateV2`, `TestName`, and `TestPiShapesRoundTrip`'s new lines of every type, with `null`, `false` and `""`.
+  - `session/jsonl`: `TestFixturesRoundTrip`, `TestFixturesMigrate`, `TestFixtureDamage` and `FuzzParse`; `TestBadHeaderFailsClosed` now names version 4.
+  - `compaction`: `TestProjectMatchesPi` (all six fixtures, Pi's messages and Pi's conversion), `TestEstimateNewRoles`, `TestProjectEdits`, `TestCutAtNewRoles`, `TestEstimateAfterEdit` and `TestOmissionAdvance`.
+  - `acpserver`: `TestPiFixtureContext`, `TestPiFixtureTotals`, `TestPiFixtureOlder` and `TestReplayHidesHidden`.
+- **C3: every new check, seen failing on a scratch copy.** There were 27 mutations, each asserted to land exactly once, and all 27 failed as expected on the first run, none by a build failure:
+  - migration: v1's ids shifted; the index counted without the header; no `hookMessage` rename; the append not refused; the entries not migrated; the name not trimmed; duplicate v1 ids, which `FuzzParse`'s seeds caught;
+  - the round trip: `replacement`'s `null` dropped by `omitempty`;
+  - the projection: edits ignored; no `custom_message`; no `branch_summary`; an excluded bash execution sent; `bashExecutionToText`'s wording; the branch summary's suffix;
+  - estimates and cuts: a custom message not estimated; a bash execution's output not estimated; no omission advance; an outside replacement ignored; unsent input ignored; a custom message not a turn start; usage trusted after an edit;
+  - acpserver: the history not converted; a hidden custom message replayed; `get_messages` empty; `usage` entries not counted; the refusal internal, not invalid request; `/compact` not refused before its summary.
+- **The gates:** on Go 1.27.2, as F1d-2's deviation 4 sets them, with the fuzz run added.
+  - **The first run failed lint** on all three systems, and with it both preflights: `goconst` found the new code comparing `"null"` four times (`compaction/compaction.go:214`, `compaction/estimate.go:192`). Every other gate passed. One helper, `missing`, now makes the four tests; the tests, the 27 negatives and every gate were run again on that tree.
+  - **On the second run:**
+    - lint printed `0 issues.` for linux, darwin and windows;
+    - Windows `go test ./...` had no `FAIL` or `panic:`;
+    - `CGO_ENABLED=1 go test -race ./...` exited 0 with no race reported, natively on Windows and on a second amd64 Linux machine;
+    - Windows and WSL `make preflight` each printed `preflight passed`, WSL's without a race run;
+    - `go test -run '^$' -fuzz FuzzParse -fuzztime 60s ./session/jsonl` passed.
+
+**What the entry predicted wrongly:**
+
+1. **Its F2-2 test assumed Pi's v2 and v3 branching agree.** They do not.
+2. **Its fuzz property assumed migration gives every older file its ids.** Only v1's.
+3. **Its files table left out `session/doc.go`.**
+4. **Two of its member types could not round-trip** Pi's `null` and `""`.
+5. **Three of its behaviours had no test that a mutation could fail;** the tests are added above.

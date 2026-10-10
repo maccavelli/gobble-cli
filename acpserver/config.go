@@ -86,7 +86,7 @@ func (a *Agent) setConfig(ctx context.Context, s *liveSession, id, value string)
 		return nil, invalidParams(s.id, fmt.Sprintf("unknown config option %q", id))
 	}
 	if err := s.append(ctx, a.now(), e); err != nil {
-		return nil, acp.NewInternalError(map[string]any{keyReason: err.Error()})
+		return nil, appendFailed(err)
 	}
 	model, think := a.choices(s)
 	return configOptions(choice, model, think), nil

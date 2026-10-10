@@ -383,36 +383,19 @@ func (a *Agent) fileOf(s *liveSession) string {
 	return ""
 }
 
-// compactionSummary is Pi's CompactionSummaryMessage, the message a
-// compaction is in context.
-type compactionSummary struct {
-	Role         string `json:"role"`
-	Summary      string `json:"summary"`
-	TokensBefore int64  `json:"tokensBefore"`
-	Timestamp    int64  `json:"timestamp"`
-}
-
-// contextMessages are the messages the model sees, in Pi's shapes: a
-// compaction leads as its summary message (buildSessionContext).
-func contextMessages(st state) []any {
-	out := []any{}
-	for i, e := range st.context {
-		switch {
-		case e.Type == session.TypeCompaction && i == 0:
-			var before int64
-			if e.TokensBefore != nil {
-				before = *e.TokensBefore
-			}
-			out = append(out, compactionSummary{Role: "compactionSummary", Summary: e.Summary, TokensBefore: before, Timestamp: ms(e.Timestamp)})
-		case e.Type == session.TypeMessage && e.Message != nil:
-			out = append(out, e.Message)
-		}
+// contextMessages are the messages the model sees, in Pi's shapes, as
+// buildSessionContext gives them: a compaction leads as its summary
+// message, and every entry type and context edit applies (0005-PLAN F2).
+func contextMessages(st state) []*session.Message {
+	out := []*session.Message{}
+	for _, p := range st.context {
+		out = append(out, p.Messages...)
 	}
 	return out
 }
 
 type messagesResult struct {
-	Messages []any `json:"messages"`
+	Messages []*session.Message `json:"messages"`
 }
 
 func (a *Agent) extGetMessages(_ context.Context, params jsontext.Value) (any, error) {
@@ -463,10 +446,8 @@ func (a *Agent) extGetLastAssistantText(_ context.Context, params jsontext.Value
 	if err != nil {
 		return nil, err
 	}
-	st := replayState(s.log.Entries())
-	for _, e := range slices.Backward(st.context) {
-		m := e.Message
-		if e.Type != session.TypeMessage || m == nil || m.Role != session.RoleAssistant {
+	for _, m := range slices.Backward(contextMessages(replayState(s.log.Entries()))) {
+		if m.Role != session.RoleAssistant {
 			continue
 		}
 		blocks, err := m.Blocks()

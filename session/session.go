@@ -10,13 +10,17 @@ import (
 	"fmt"
 	"iter"
 	"regexp"
+	"slices"
+	"strings"
 	"time"
 )
 
-// Version is the session format gobble reads and writes: Pi's v3.
+// Version is the session format gobble writes, Pi's v3, and the newest it
+// reads. v1 and v2 are migrated when read (Migrate).
 const Version = 3
 
-// Entry types gobble acts on. Every other type is kept verbatim.
+// Entry types: Pi's (session-manager.ts SessionEntry). Any other type is
+// kept verbatim.
 const (
 	TypeHeader              = "session"
 	TypeMessage             = "message"
@@ -25,6 +29,11 @@ const (
 	TypeSessionInfo         = "session_info"
 	TypeCompaction          = "compaction"
 	TypeCustom              = "custom"
+	TypeUsage               = "usage"
+	TypeContextEdit         = "context_edit"
+	TypeBranchSummary       = "branch_summary"
+	TypeCustomMessage       = "custom_message"
+	TypeLabel               = "label"
 )
 
 // Custom entry types gobble writes (Entry.CustomType).
@@ -38,6 +47,17 @@ const (
 	RoleUser       = "user"
 	RoleAssistant  = "assistant"
 	RoleToolResult = "toolResult"
+)
+
+// Pi's other message roles, which gobble reads (messages.ts). A
+// branchSummary or compactionSummary message is never stored: it is how a
+// branch_summary or compaction entry enters the context.
+const (
+	RoleCustom            = "custom"
+	RoleBashExecution     = "bashExecution"
+	RoleBranchSummary     = "branchSummary"
+	RoleCompactionSummary = "compactionSummary"
+	RoleSystem            = "system"
 )
 
 // ID identifies one session.
@@ -87,7 +107,25 @@ type Entry struct {
 	// an extension's state, which takes no part in the model's context.
 	CustomType string         `json:"customType,omitzero"`
 	Data       jsontext.Value `json:"data,omitzero"`
-	Unknown    jsontext.Value `json:",embed"`
+	// TargetID is the entry a context_edit or a label names.
+	TargetID string `json:"targetId,omitzero"`
+	// Replacement is a context_edit's {content}, or null, which leaves its
+	// target out of the context. A null is kept, and differs from absent.
+	Replacement jsontext.Value `json:"replacement,omitzero"`
+	// FromID is the leaf a branch_summary left, or "root".
+	FromID string `json:"fromId,omitzero"`
+	// Content and Display are a custom_message's (Pi's CustomMessageEntry),
+	// with CustomType and Details.
+	Content jsontext.Value `json:"content,omitzero"`
+	Display *bool          `json:"display,omitzero"`
+	// Label is a label entry's text; absent or empty clears its target's.
+	Label *string `json:"label,omitzero"`
+	// Kind, Model and Note are a usage entry's (Pi's UsageEntry), with
+	// Provider and Usage.
+	Kind    string         `json:"kind,omitzero"`
+	Model   string         `json:"model,omitzero"`
+	Note    string         `json:"note,omitzero"`
+	Unknown jsontext.Value `json:",embed"`
 }
 
 // Message is Pi's AgentMessage. Content is a JSON string or an array of
@@ -104,8 +142,28 @@ type Message struct {
 	ToolCallID   string         `json:"toolCallId,omitzero"`
 	ToolName     string         `json:"toolName,omitzero"`
 	IsError      *bool          `json:"isError,omitzero"`
-	Timestamp    int64          `json:"timestamp,omitzero"`
-	Unknown      jsontext.Value `json:",embed"`
+	// CustomType, Display and Details are a custom message's (Pi's
+	// CustomMessage); a tool result's details are Details too.
+	CustomType string         `json:"customType,omitzero"`
+	Display    *bool          `json:"display,omitzero"`
+	Details    jsontext.Value `json:"details,omitzero"`
+	// Summary, FromID and TokensBefore are a branchSummary's or a
+	// compactionSummary's.
+	Summary      string `json:"summary,omitzero"`
+	FromID       string `json:"fromId,omitzero"`
+	TokensBefore *int64 `json:"tokensBefore,omitzero"`
+	// Command to ExcludeFromContext are a bashExecution's (Pi's
+	// BashExecutionMessage). ExitCode is raw, as Pi writes null for a
+	// command a signal ended.
+	Command            string         `json:"command,omitzero"`
+	Output             *string        `json:"output,omitzero"`
+	ExitCode           jsontext.Value `json:"exitCode,omitzero"`
+	Cancelled          *bool          `json:"cancelled,omitzero"`
+	Truncated          *bool          `json:"truncated,omitzero"`
+	FullOutputPath     string         `json:"fullOutputPath,omitzero"`
+	ExcludeFromContext *bool          `json:"excludeFromContext,omitzero"`
+	Timestamp          int64          `json:"timestamp,omitzero"`
+	Unknown            jsontext.Value `json:",embed"`
 }
 
 // Block is one content block: text, image, thinking or toolCall.
@@ -276,9 +334,36 @@ var ErrNotFound = errors.New("session: not found")
 var ErrExists = errors.New("session: id already in use")
 
 // ErrCorrupt is returned for a session whose header cannot be read, or whose
-// version is not Version. A malformed line after the header is skipped, not
-// an error.
+// version is above Version. A malformed line after the header is skipped,
+// not an error.
 var ErrCorrupt = errors.New("session: not a valid session")
+
+// ErrOldVersion refuses an append to a session whose file is an older
+// version: gobble migrates it in memory each time it is read, and never
+// rewrites it (0005-PLAN F2).
+type ErrOldVersion struct {
+	ID      ID
+	Version int
+}
+
+func (e *ErrOldVersion) Error() string {
+	return fmt.Sprintf("session %s is a version %d file, which gobble reads but does not rewrite; /clone it to continue in a new session", e.ID, e.Version)
+}
+
+// Name is a session's name as Pi reads it (session-manager.ts
+// getSessionName): the latest session_info in file order, trimmed. An empty
+// or absent name clears it.
+func Name(entries []Entry) string {
+	for _, e := range slices.Backward(entries) {
+		if e.Type == TypeSessionInfo {
+			if e.Name == nil {
+				return ""
+			}
+			return strings.TrimSpace(*e.Name)
+		}
+	}
+	return ""
+}
 
 // ErrLocked is returned by Store.Open when another process writes the
 // session.

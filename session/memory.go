@@ -121,29 +121,23 @@ func Summarize(h Header, entries []Entry, path string) Summary {
 		sum.Created = t
 	}
 	sum.Modified = sum.Created
+	sum.Name = Name(entries)
 	for _, e := range entries {
-		switch e.Type {
-		case TypeSessionInfo:
-			if e.Name != nil {
-				sum.Name = *e.Name
+		if e.Type != TypeMessage || e.Message == nil {
+			continue
+		}
+		sum.Messages++
+		m := e.Message
+		if m.Role != RoleUser && m.Role != RoleAssistant {
+			continue
+		}
+		if m.Timestamp > 0 {
+			if t := time.UnixMilli(m.Timestamp).UTC(); t.After(sum.Modified) {
+				sum.Modified = t
 			}
-		case TypeMessage:
-			if e.Message == nil {
-				continue
-			}
-			sum.Messages++
-			m := e.Message
-			if m.Role != RoleUser && m.Role != RoleAssistant {
-				continue
-			}
-			if m.Timestamp > 0 {
-				if t := time.UnixMilli(m.Timestamp).UTC(); t.After(sum.Modified) {
-					sum.Modified = t
-				}
-			}
-			if sum.First == "" && m.Role == RoleUser {
-				sum.First = m.Text()
-			}
+		}
+		if sum.First == "" && m.Role == RoleUser {
+			sum.First = m.Text()
 		}
 	}
 	return sum

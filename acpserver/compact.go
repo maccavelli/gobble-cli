@@ -45,6 +45,11 @@ func (a *Agent) cmdCompact(ctx context.Context, t *cmdTurn, instructions string)
 // caller's usage_update. Pi's failures are returned as they are; a failed
 // write is an *acp.RequestError.
 func (a *Agent) compactSession(ctx context.Context, s *liveSession, instructions string) (compaction.Result, int, error) {
+	if w, ok := s.log.(interface{ Writable() error }); ok {
+		if err := w.Writable(); err != nil { // refused before the summary is asked for
+			return compaction.Result{}, 0, appendFailed(err)
+		}
+	}
 	model, err := a.modelProvider()
 	if err != nil {
 		return compaction.Result{}, 0, err
@@ -73,7 +78,7 @@ func (a *Agent) compactSession(ctx context.Context, s *liveSession, instructions
 	e := session.Entry{Type: session.TypeCompaction, Summary: res.Summary, FirstKeptEntryID: res.FirstKeptEntryID,
 		TokensBefore: new(res.TokensBefore), Details: details, Usage: piUsage(res.Usage), FromHook: new(false)}
 	if err := s.append(context.WithoutCancel(ctx), a.now(), e); err != nil {
-		return compaction.Result{}, 0, acp.NewInternalError(map[string]any{keyReason: err.Error()})
+		return compaction.Result{}, 0, appendFailed(err)
 	}
 	st := replayState(s.log.Entries())
 	a.mu.Lock()

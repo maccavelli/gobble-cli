@@ -143,7 +143,11 @@ func (s *Store) Open(_ context.Context, id session.ID) (session.Log, error) {
 	if err != nil {
 		return nil, errors.Join(err, release())
 	}
-	return &fileLog{s: s, header: h, entries: entries, path: path, written: true, torn: torn, release: release}, nil
+	l := &fileLog{s: s, header: h, entries: entries, path: path, written: true, torn: torn, release: release}
+	if v := max(h.Version, 1); v < session.Version {
+		l.old = v
+	}
+	return l, nil
 }
 
 // Read reads a session without its lock. It returns the number of lines
@@ -178,9 +182,11 @@ func (s *Store) readFile(path string) (h session.Header, entries []session.Entry
 	return h, entries, skipped, len(b) > 0 && b[len(b)-1] != '\n', nil
 }
 
-// parse reads a session file: the header, which must be a v3 session
-// header, then each entry. A malformed entry line is skipped and counted,
-// as Pi skips it (0005-MADR "Sessions (changed)").
+// parse reads a session file: the header, which must be a session header of
+// version 1 to 3, then each entry. A malformed entry line is skipped and
+// counted, as Pi skips it (0005-MADR "Sessions (changed)"). An older file's
+// entries are migrated in memory (session.Migrate); the header keeps its
+// version, so a log knows not to write the file.
 func parse(b []byte) (session.Header, []session.Entry, int, error) {
 	lines := bytes.Split(b, []byte("\n"))
 	var h session.Header
@@ -194,8 +200,9 @@ func parse(b []byte) (session.Header, []session.Entry, int, error) {
 	if err := json.Unmarshal(lines[i], &h); err != nil || h.Type != session.TypeHeader || h.ID == "" {
 		return h, nil, 0, errors.New("the first line is not a session header")
 	}
-	if v := max(h.Version, 1); v != session.Version {
-		return h, nil, 0, fmt.Errorf("unsupported session version %d (0005-PLAN F2 migrates v1 and v2)", v)
+	v := max(h.Version, 1)
+	if v > session.Version {
+		return h, nil, 0, fmt.Errorf("unsupported session version %d (gobble reads versions 1 to %d)", v, session.Version)
 	}
 	var entries []session.Entry
 	skipped := 0
@@ -209,6 +216,13 @@ func parse(b []byte) (session.Header, []session.Entry, int, error) {
 			continue
 		}
 		entries = append(entries, e)
+	}
+	if v < session.Version {
+		migrated, err := session.Migrate(v, entries)
+		if err != nil {
+			return h, nil, 0, err
+		}
+		entries = migrated
 	}
 	return h, entries, skipped, nil
 }
@@ -254,6 +268,7 @@ type fileLog struct {
 	file    *os.File
 	written bool // the file exists
 	torn    bool // its last line lacks a newline
+	old     int  // the file's version, when it is older than session.Version
 	release func() error
 }
 
@@ -269,13 +284,27 @@ func (l *fileLog) Entries() []session.Entry {
 	return append([]session.Entry(nil), l.entries...)
 }
 
+// Writable is nil when Append may write, and the session.ErrOldVersion
+// Append would return for an older file, so a caller can refuse before
+// work whose result would be appended.
+func (l *fileLog) Writable() error {
+	if l.old > 0 {
+		return &session.ErrOldVersion{ID: l.header.ID, Version: l.old}
+	}
+	return nil
+}
+
 // Append records an entry. Until the session has a user or assistant
 // message it stays in memory; that message writes the header and every
 // entry so far to a new file, and each later entry is one write of one line
-// (0008-MADR D19 item 6).
+// (0008-MADR D19 item 6). An older file is never written: its append is
+// refused with session.ErrOldVersion, and nothing is recorded.
 func (l *fileLog) Append(_ context.Context, e session.Entry) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if err := l.Writable(); err != nil {
+		return err
+	}
 	l.entries = append(l.entries, e)
 	if !l.written {
 		if !session.HasConversation(l.entries) {

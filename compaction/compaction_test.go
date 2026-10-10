@@ -162,11 +162,7 @@ func TestSerialize(t *testing.T) {
 		t.Fatal(err)
 	}
 	long := chars(2005)
-	msgs := []msg{
-		{role: session.RoleUser, m: text(session.RoleUser, "hi").Message},
-		{role: session.RoleAssistant, m: asst},
-		{role: session.RoleToolResult, m: text(session.RoleToolResult, long).Message},
-	}
+	msgs := []*session.Message{text(session.RoleUser, "hi").Message, asst, text(session.RoleToolResult, long).Message}
 	want := "[User]: hi\n\n[Assistant thinking]: hm\n\n[Assistant]: a\nb\n\n" +
 		`[Assistant tool calls]: edit(path="x.go", n=2); bash(command="ls")` +
 		"\n\n[Tool result]: " + chars(2000) + "\n\n[... 5 more characters truncated]"

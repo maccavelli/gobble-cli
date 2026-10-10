@@ -1,0 +1,180 @@
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "Read the README and summarise it.",
+      "timestamp": 1791603609130
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "thinking",
+          "thinking": "The user wants a summary of the README.",
+          "thinkingSignature": "sig-1"
+        },
+        {
+          "type": "text",
+          "text": "I will read it first."
+        },
+        {
+          "type": "toolCall",
+          "id": "toolu_01",
+          "name": "read",
+          "arguments": {
+            "path": "README.md"
+          }
+        }
+      ],
+      "api": "anthropic-messages",
+      "provider": "anthropic",
+      "model": "claude-sonnet-4-5",
+      "usage": {
+        "input": 120,
+        "output": 40,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "totalTokens": 160,
+        "cost": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0
+        }
+      },
+      "stopReason": "toolUse",
+      "timestamp": 1791603609130
+    },
+    {
+      "role": "toolResult",
+      "toolCallId": "toolu_01",
+      "toolName": "read",
+      "content": [
+        {
+          "type": "text",
+          "text": "# Project\n\nA small example project."
+        }
+      ],
+      "isError": false,
+      "timestamp": 1791603609130
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "The README describes a small example project."
+        }
+      ],
+      "api": "anthropic-messages",
+      "provider": "anthropic",
+      "model": "claude-sonnet-4-5",
+      "usage": {
+        "input": 180,
+        "output": 20,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "totalTokens": 200,
+        "cost": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0
+        }
+      },
+      "stopReason": "stop",
+      "timestamp": 1791603609130
+    }
+  ],
+  "llm": [
+    {
+      "role": "user",
+      "content": "Read the README and summarise it.",
+      "timestamp": 1791603609130
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "thinking",
+          "thinking": "The user wants a summary of the README.",
+          "thinkingSignature": "sig-1"
+        },
+        {
+          "type": "text",
+          "text": "I will read it first."
+        },
+        {
+          "type": "toolCall",
+          "id": "toolu_01",
+          "name": "read",
+          "arguments": {
+            "path": "README.md"
+          }
+        }
+      ],
+      "api": "anthropic-messages",
+      "provider": "anthropic",
+      "model": "claude-sonnet-4-5",
+      "usage": {
+        "input": 120,
+        "output": 40,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "totalTokens": 160,
+        "cost": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0
+        }
+      },
+      "stopReason": "toolUse",
+      "timestamp": 1791603609130
+    },
+    {
+      "role": "toolResult",
+      "toolCallId": "toolu_01",
+      "toolName": "read",
+      "content": [
+        {
+          "type": "text",
+          "text": "# Project\n\nA small example project."
+        }
+      ],
+      "isError": false,
+      "timestamp": 1791603609130
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "The README describes a small example project."
+        }
+      ],
+      "api": "anthropic-messages",
+      "provider": "anthropic",
+      "model": "claude-sonnet-4-5",
+      "usage": {
+        "input": 180,
+        "output": 20,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "totalTokens": 200,
+        "cost": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0
+        }
+      },
+      "stopReason": "stop",
+      "timestamp": 1791603609130
+    }
+  ]
+}

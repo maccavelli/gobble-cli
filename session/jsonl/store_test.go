@@ -180,7 +180,8 @@ func TestMalformedAndTornLines(t *testing.T) {
 	}
 }
 
-// A file whose header is unreadable, or of another version, fails closed.
+// A file whose header is unreadable, or of a version above 3, fails closed
+// (v1 and v2 are migrated: 0005-PLAN F2).
 func TestBadHeaderFailsClosed(t *testing.T) {
 	dir := t.TempDir()
 	sub := filepath.Join(dir, EncodeCwd("/w"))
@@ -190,21 +191,21 @@ func TestBadHeaderFailsClosed(t *testing.T) {
 	for name, body := range map[string]string{
 		"x_bad1.jsonl": `{"type":"message","id":"a"}` + "\n",
 		"x_bad2.jsonl": "garbage\n",
-		"x_v2.jsonl":   `{"type":"session","version":2,"id":"v2","timestamp":"t","cwd":"/w"}` + "\n",
+		"x_v4.jsonl":   `{"type":"session","version":4,"id":"v4","timestamp":"t","cwd":"/w"}` + "\n",
 	} {
 		if err := os.WriteFile(filepath.Join(sub, name), []byte(body), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
 	s := New(dir, Options{})
-	for _, id := range []session.ID{"bad1", "bad2", "v2"} {
+	for _, id := range []session.ID{"bad1", "bad2", "v4"} {
 		if _, err := s.Open(t.Context(), id); !errors.Is(err, session.ErrCorrupt) {
 			t.Errorf("open %s: %v, want ErrCorrupt", id, err)
 		}
 	}
-	_, err := s.Open(t.Context(), "v2")
-	if err == nil || !strings.Contains(err.Error(), "unsupported session version 2") {
-		t.Fatalf("v2: %v", err)
+	_, err := s.Open(t.Context(), "v4")
+	if err == nil || !strings.Contains(err.Error(), "unsupported session version 4") {
+		t.Fatalf("v4: %v", err)
 	}
 	if n := countList(t, s, session.Filter{}); n != 0 {
 		t.Fatalf("listed %d invalid sessions", n)

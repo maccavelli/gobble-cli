@@ -2,7 +2,9 @@ package compaction
 
 import (
 	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"slices"
+	"time"
 
 	"github.com/maccavelli/gobble-cli/session"
 )
@@ -10,10 +12,6 @@ import (
 // imageChars is what an image counts for, in characters (Pi's
 // ESTIMATED_IMAGE_CHARS).
 const imageChars = 4800
-
-// roleCompaction is the role of a compaction's summary in a projection,
-// Pi's compactionSummary.
-const roleCompaction = "compactionSummary"
 
 // utf16Len is a string's length as JavaScript counts it, in UTF-16 code
 // units, so estimates match Pi's.
@@ -37,11 +35,22 @@ func EstimateText(s string) int { return tokens(utf16Len(s)) }
 
 // Estimate is a message's tokens by Pi's chars/4 heuristic
 // (compaction.ts estimateTokens): text and thinking count their
-// characters, an image 4800, and a tool call its name and its JSON
-// arguments. A role gobble does not read counts nothing.
+// characters, an image 4800, a tool call its name and its JSON arguments,
+// a bash execution its command and output, and a branch or compaction
+// summary its summary. A role gobble does not read counts nothing.
 func Estimate(m *session.Message) int {
 	if m == nil {
 		return 0
+	}
+	switch m.Role {
+	case session.RoleBashExecution:
+		chars := utf16Len(m.Command)
+		if m.Output != nil {
+			chars += utf16Len(*m.Output)
+		}
+		return tokens(chars)
+	case session.RoleBranchSummary, session.RoleCompactionSummary:
+		return tokens(utf16Len(m.Summary))
 	}
 	blocks, err := m.Blocks()
 	if err != nil {
@@ -49,7 +58,7 @@ func Estimate(m *session.Message) int {
 	}
 	chars := 0
 	switch m.Role {
-	case session.RoleUser, session.RoleToolResult:
+	case session.RoleUser, session.RoleToolResult, session.RoleCustom:
 		for _, b := range blocks {
 			switch b.Type {
 			case session.BlockText:
@@ -87,40 +96,26 @@ func compactJSON(v jsontext.Value) string {
 	return string(c)
 }
 
-// msg is one message of a projection: a session message, or a
-// compaction's summary.
-type msg struct {
-	role    string
-	m       *session.Message
-	summary string
-}
-
-func (x msg) estimate() int {
-	if x.role == roleCompaction {
-		return tokens(utf16Len(x.summary))
-	}
-	return Estimate(x.m)
-}
-
 // cutPoint reports a message a cut may land on: never a tool result, which
 // must stay with its call (Pi's isCutPointMessage).
-func (x msg) cutPoint() bool {
-	switch x.role {
-	case session.RoleUser, session.RoleAssistant, roleCompaction:
+func cutPoint(m *session.Message) bool {
+	return m.Role == session.RoleAssistant || turnStart(m)
+}
+
+// turnStart reports a message that starts a turn (Pi's isTurnStartMessage).
+func turnStart(m *session.Message) bool {
+	switch m.Role {
+	case session.RoleUser, session.RoleBashExecution, session.RoleCustom, session.RoleBranchSummary, session.RoleCompactionSummary:
 		return true
 	}
 	return false
 }
 
-// turnStart reports a message that starts a turn (Pi's isTurnStartMessage).
-func (x msg) turnStart() bool {
-	return x.role == session.RoleUser || x.role == roleCompaction
-}
-
-// projected is one context entry and the messages it gives the model.
-type projected struct {
-	entry session.Entry
-	msgs  []msg
+// Projected is one context entry and the messages it gives the model, in
+// Pi's AgentMessage shapes (session-manager.ts ProjectedSessionEntry).
+type Projected struct {
+	Entry    session.Entry
+	Messages []*session.Message
 }
 
 // Context is a path's model context as Pi builds it (session-manager.ts
@@ -144,65 +139,163 @@ func Context(path []session.Entry) []session.Entry {
 		if e.ID == c.FirstKeptEntryID {
 			kept = true
 		}
-		system := e.Type == session.TypeMessage && e.Message != nil && e.Message.Role == "system"
-		if kept && !system {
+		if kept && !isSystem(e) {
 			out = append(out, e)
 		}
 	}
 	return append(out, path[at+1:]...)
 }
 
-// project gives each context entry its messages. Only the first entry's
-// compaction contributes a summary: an older one inside the kept range is
-// context-invisible, as in Pi's buildSessionProjection.
-func project(ctx []session.Entry) []projected {
-	out := make([]projected, len(ctx))
-	for i, e := range ctx {
-		out[i].entry = e
-		switch {
-		case e.Type == session.TypeCompaction && i == 0:
-			out[i].msgs = []msg{{role: roleCompaction, summary: e.Summary}}
-		case e.Type == session.TypeMessage && e.Message != nil:
-			switch e.Message.Role {
-			case session.RoleUser, session.RoleAssistant, session.RoleToolResult:
-				out[i].msgs = []msg{{role: e.Message.Role, m: e.Message}}
-			}
+func isSystem(e session.Entry) bool {
+	return e.Type == session.TypeMessage && e.Message != nil && e.Message.Role == session.RoleSystem
+}
+
+// Project gives each context entry its messages, as Pi's
+// buildSessionProjection does: the last context_edit of an entry among
+// ctx replaces its content, or, with a null replacement, leaves it out;
+// and only the first entry's compaction gives its summary, an older one in
+// the kept range giving nothing.
+//
+// A Pi system message, a system entry or a compaction's systemMessage,
+// carries Pi's prompt and tool state: it is kept in the file and not
+// projected, as gobble's model sees gobble's own prompt and tools
+// (0005-PLAN F2).
+func Project(ctx []session.Entry) []Projected {
+	edits := map[string]session.Entry{}
+	for _, e := range ctx {
+		if e.Type == session.TypeContextEdit {
+			edits[e.TargetID] = e
 		}
+	}
+	out := make([]Projected, len(ctx))
+	for i, e := range ctx {
+		out[i].Entry = e
+		if e.Type == session.TypeCompaction && i > 0 {
+			continue
+		}
+		out[i].Messages = edit(entryMessages(e), edits[e.ID])
 	}
 	return out
 }
 
-func entryTokens(p projected) int {
+// entryMessages is what one entry gives the model before edits (Pi's
+// sessionEntryToContextMessages), without system messages.
+func entryMessages(e session.Entry) []*session.Message {
+	switch e.Type {
+	case session.TypeMessage:
+		if e.Message == nil || e.Message.Role == session.RoleSystem {
+			return nil
+		}
+		m := e.Message
+		switch m.Role {
+		case session.RoleUser, session.RoleAssistant, session.RoleToolResult:
+			if missing(m.Content) {
+				c := *m
+				c.Content = jsontext.Value("[]")
+				m = &c
+			}
+		}
+		return []*session.Message{m}
+	case session.TypeCustomMessage:
+		content := e.Content
+		if missing(content) {
+			content = jsontext.Value("[]")
+		}
+		return []*session.Message{{Role: session.RoleCustom, CustomType: e.CustomType, Content: content, Display: e.Display,
+			Details: e.Details, Timestamp: millis(e.Timestamp)}}
+	case session.TypeBranchSummary:
+		if e.Summary == "" {
+			return nil
+		}
+		return []*session.Message{{Role: session.RoleBranchSummary, Summary: e.Summary, FromID: e.FromID, Timestamp: millis(e.Timestamp)}}
+	case session.TypeCompaction:
+		return []*session.Message{{Role: session.RoleCompactionSummary, Summary: e.Summary, TokensBefore: e.TokensBefore, Timestamp: millis(e.Timestamp)}}
+	}
+	return nil
+}
+
+// missing reports a JSON member that is absent or null, as Pi's
+// "== null" tests one.
+func missing(v jsontext.Value) bool { return len(v) == 0 || string(v) == "null" }
+
+// edit applies a context_edit to an entry's messages (Pi's
+// projectContextEntry). A replacement's string content is one text block
+// for an assistant or a tool result.
+func edit(msgs []*session.Message, e session.Entry) []*session.Message {
+	if e.Type != session.TypeContextEdit {
+		return msgs
+	}
+	if missing(e.Replacement) {
+		return nil
+	}
+	var r struct {
+		Content jsontext.Value `json:"content"`
+	}
+	if json.Unmarshal(e.Replacement, &r) != nil {
+		return msgs
+	}
+	out := make([]*session.Message, len(msgs))
+	for i, m := range msgs {
+		out[i] = m
+		switch m.Role {
+		case session.RoleUser, session.RoleAssistant, session.RoleToolResult, session.RoleCustom:
+		default:
+			continue
+		}
+		c := *m
+		c.Content = r.Content
+		if m.Role == session.RoleAssistant || m.Role == session.RoleToolResult {
+			var s string
+			if json.Unmarshal(r.Content, &s) == nil {
+				_ = c.SetBlocks([]session.Block{{Type: session.BlockText, Text: s}}) //nolint:errcheck // a text block always encodes
+			}
+		}
+		out[i] = &c
+	}
+	return out
+}
+
+// millis is an entry timestamp in milliseconds, as new Date(ts).getTime()
+// reads it, or 0.
+func millis(ts string) int64 {
+	t, err := time.Parse(time.RFC3339Nano, ts)
+	if err != nil {
+		return 0
+	}
+	return t.UnixMilli()
+}
+
+func entryTokens(p Projected) int {
 	n := 0
-	for _, x := range p.msgs {
-		n += x.estimate()
+	for _, m := range p.Messages {
+		n += Estimate(m)
 	}
 	return n
 }
 
 // EstimateEntries is the estimated context of a path: the last valid
-// assistant usage after the newest compaction, plus estimates of what
-// follows it; without one, the sum of estimates (Pi's
-// estimateProjectedContextTokens, with no system message, which gobble
-// does not write into a session).
+// assistant usage, plus estimates of what follows it, when no context_edit
+// or compaction comes after that usage; otherwise the sum of estimates
+// (Pi's estimateProjectedContextTokens, with no system message: gobble
+// writes none into a session, and projects none).
 func EstimateEntries(path []session.Entry) int {
-	proj := project(Context(path))
-	var flat []msg
+	proj := Project(Context(path))
+	var flat []*session.Message
 	var owner []string
 	for _, p := range proj {
-		for _, x := range p.msgs {
-			flat = append(flat, x)
-			owner = append(owner, p.entry.ID)
+		for _, m := range p.Messages {
+			flat = append(flat, m)
+			owner = append(owner, p.Entry.ID)
 		}
 	}
-	latestCompaction := -1
+	invalidating := -1
 	for i, e := range path {
-		if e.Type == session.TypeCompaction {
-			latestCompaction = i
+		if e.Type == session.TypeCompaction || e.Type == session.TypeContextEdit {
+			invalidating = i
 		}
 	}
-	for i, x := range slices.Backward(flat) {
-		used := assistantUsage(x)
+	for i, m := range slices.Backward(flat) {
+		used := assistantUsage(m)
 		if used == 0 {
 			continue
 		}
@@ -212,17 +305,17 @@ func EstimateEntries(path []session.Entry) int {
 				usageAt = j
 			}
 		}
-		if usageAt <= latestCompaction {
+		if usageAt <= invalidating {
 			break
 		}
-		for _, x := range flat[i+1:] {
-			used += x.estimate()
+		for _, m := range flat[i+1:] {
+			used += Estimate(m)
 		}
 		return used
 	}
 	total := 0
-	for _, x := range flat {
-		total += x.estimate()
+	for _, m := range flat {
+		total += Estimate(m)
 	}
 	return total
 }
@@ -230,14 +323,14 @@ func EstimateEntries(path []session.Entry) int {
 // assistantUsage is an assistant message's context tokens, or 0 when it
 // has none worth trusting: aborted, failed, or all zero (Pi's
 // getAssistantUsage).
-func assistantUsage(x msg) int {
-	if x.role != session.RoleAssistant || x.m.Usage == nil {
+func assistantUsage(m *session.Message) int {
+	if m.Role != session.RoleAssistant || m.Usage == nil {
 		return 0
 	}
-	if x.m.StopReason == "aborted" || x.m.StopReason == "error" {
+	if m.StopReason == "aborted" || m.StopReason == "error" {
 		return 0
 	}
-	u := x.m.Usage
+	u := m.Usage
 	if u.TotalTokens > 0 {
 		return int(u.TotalTokens)
 	}

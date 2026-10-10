@@ -46,7 +46,8 @@ Early, and built in the order [docs/README.md](docs/README.md#build-order) gives
   delete asks first; `todo`, a checklist the client shows as the plan; `tool_search`, which loads
   deferred tools; the MCP resource tools; `bash`, and `powershell` on Windows, run as process trees
   that stop whole.
-- **Sessions** as JSONL files in Pi's v3 shapes.
+- **Sessions** as JSONL files in Pi's v3 shapes, with every Pi entry type in the model's context as Pi puts it there. Pi's v1 and v2 files load,
+  migrated in memory and never rewritten; `/clone` continues one as a v3 session.
 - **`gobble mcp add|remove|list`**, `gobble config path`, `gobble version` and `gobble completion`.
 
 Not built yet: the permission engine (F6), the enhanced TUI mode, and `gobble update`. The full v1 line, tiered into

@@ -1,0 +1,154 @@
+{
+  "messages": [
+    {
+      "role": "compactionSummary",
+      "summary": "The user asked for a summary of the README; it was read.",
+      "tokensBefore": 360,
+      "timestamp": 1791603609130
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "The README describes a small example project."
+        }
+      ],
+      "api": "anthropic-messages",
+      "provider": "anthropic",
+      "model": "claude-sonnet-4-5",
+      "usage": {
+        "input": 180,
+        "output": 20,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "totalTokens": 200,
+        "cost": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0
+        }
+      },
+      "stopReason": "stop",
+      "timestamp": 1791603609130
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "List the files."
+        }
+      ],
+      "timestamp": 1791603609130
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "There is one file, README.md."
+        }
+      ],
+      "api": "anthropic-messages",
+      "provider": "anthropic",
+      "model": "claude-sonnet-4-5",
+      "usage": {
+        "input": 200,
+        "output": 12,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "totalTokens": 212,
+        "cost": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0
+        }
+      },
+      "stopReason": "stop",
+      "timestamp": 1791603609130
+    }
+  ],
+  "llm": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "The conversation history before this point was compacted into the following summary:\n\n<summary>\nThe user asked for a summary of the README; it was read.\n</summary>"
+        }
+      ],
+      "timestamp": 1791603609130
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "The README describes a small example project."
+        }
+      ],
+      "api": "anthropic-messages",
+      "provider": "anthropic",
+      "model": "claude-sonnet-4-5",
+      "usage": {
+        "input": 180,
+        "output": 20,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "totalTokens": 200,
+        "cost": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0
+        }
+      },
+      "stopReason": "stop",
+      "timestamp": 1791603609130
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "List the files."
+        }
+      ],
+      "timestamp": 1791603609130
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "There is one file, README.md."
+        }
+      ],
+      "api": "anthropic-messages",
+      "provider": "anthropic",
+      "model": "claude-sonnet-4-5",
+      "usage": {
+        "input": 200,
+        "output": 12,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "totalTokens": 212,
+        "cost": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0
+        }
+      },
+      "stopReason": "stop",
+      "timestamp": 1791603609130
+    }
+  ]
+}

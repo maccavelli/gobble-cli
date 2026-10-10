@@ -331,6 +331,17 @@ func (s *liveSession) append(ctx context.Context, now time.Time, e session.Entry
 	return nil
 }
 
+// appendFailed is a failed append as an ACP error: a session whose file
+// gobble does not rewrite, an older version's, is invalid request with
+// session.ErrOldVersion's text (0005-PLAN F2); any other failure is
+// internal.
+func appendFailed(err error) error {
+	if old, ok := errors.AsType[*session.ErrOldVersion](err); ok {
+		return acp.NewInvalidRequest(map[string]any{keyReason: old.Error()})
+	}
+	return acp.NewInternalError(map[string]any{keyReason: err.Error()})
+}
+
 // Prompt runs one turn of the session: the model, and the tools it asks
 // for, streamed as session updates. One prompt runs at a time per session.
 // Each message is written before the update that reports it is sent
@@ -370,7 +381,7 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 	w := writer{a: a, s: s, ctx: context.WithoutCancel(ctx), provider: a.providerID(model), model: chosen, written: map[string]bool{}}
 	w.add(session.Entry{Type: session.TypeMessage, Message: userEntryMessage(prompt, session.Timestamp(a.now()))})
 	if w.err != nil {
-		return acp.PromptResponse{}, acp.NewInternalError(map[string]any{keyReason: w.err.Error()})
+		return acp.PromptResponse{}, appendFailed(w.err)
 	}
 	tools := append(slices.Clip(a.tools), a.mcpTools(turnCtx, s.mcp)...)
 	if a.modeOf(s) == modePlan {
@@ -380,7 +391,7 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 	if fresh := startLoads(tools, loaded); len(fresh) > 0 {
 		w.add(toolsEntry(fresh))
 		if w.err != nil {
-			return acp.PromptResponse{}, acp.NewInternalError(map[string]any{keyReason: w.err.Error()})
+			return acp.PromptResponse{}, appendFailed(w.err)
 		}
 		loaded = append(loaded, fresh...)
 	}
@@ -421,7 +432,7 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 		w.event(ev)
 		if w.err != nil {
 			out.flush()
-			return acp.PromptResponse{}, acp.NewInternalError(map[string]any{keyReason: w.err.Error()})
+			return acp.PromptResponse{}, appendFailed(w.err)
 		}
 		out.event(ev, &last)
 		if end, ok := ev.(agent.End); ok {

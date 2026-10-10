@@ -5,6 +5,7 @@ import (
 	"encoding/json/v2"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/maccavelli/gobble-cli/session"
@@ -106,6 +107,9 @@ Only summarize information explicitly present above. Do not infer or recreate la
 
 	summaryPrefix = "The conversation history before this point was compacted into the following summary:\n\n<summary>\n"
 	summarySuffix = "\n</summary>"
+
+	branchSummaryPrefix = "The following is a summary of a branch that this conversation came back from:\n\n<summary>\n"
+	branchSummarySuffix = "</summary>"
 )
 
 // toolResultMaxChars is where a tool result is cut when serialised.
@@ -114,6 +118,69 @@ const toolResultMaxChars = 2000
 // SummaryText is a compaction's summary as the model reads it: Pi's
 // compactionSummary message, a user message (messages.ts convertToLlm).
 func SummaryText(summary string) string { return summaryPrefix + summary + summarySuffix }
+
+// BranchSummaryText is a branch summary as the model reads it, Pi's
+// branchSummary message as a user message.
+func BranchSummaryText(summary string) string {
+	return branchSummaryPrefix + summary + branchSummarySuffix
+}
+
+// Convert is one projected message as the model receives it, Pi's
+// convertToLlm (messages.ts:148-196): a user, assistant or tool-result
+// message is itself; a custom message is a user message of its content; a
+// branch or compaction summary is a user message of its prefixed text; a
+// bash execution is a user message of its text, or nil when it is excluded
+// from the context. Any other role is nil.
+func Convert(m *session.Message) *session.Message {
+	text := func(s string) *session.Message {
+		u := &session.Message{Role: session.RoleUser, Timestamp: m.Timestamp}
+		_ = u.SetBlocks([]session.Block{{Type: session.BlockText, Text: s}}) //nolint:errcheck // a text block always encodes
+		return u
+	}
+	switch m.Role {
+	case session.RoleUser, session.RoleAssistant, session.RoleToolResult:
+		return m
+	case session.RoleCustom:
+		u := &session.Message{Role: session.RoleUser, Content: m.Content, Timestamp: m.Timestamp}
+		if blocks, err := m.Blocks(); err == nil {
+			_ = u.SetBlocks(blocks) //nolint:errcheck // blocks just decoded encode
+		}
+		return u
+	case session.RoleBranchSummary:
+		return text(BranchSummaryText(m.Summary))
+	case session.RoleCompactionSummary:
+		return text(SummaryText(m.Summary))
+	case session.RoleBashExecution:
+		if m.ExcludeFromContext != nil && *m.ExcludeFromContext {
+			return nil
+		}
+		return text(BashText(m))
+	}
+	return nil
+}
+
+// BashText is a bash execution as the model reads it (Pi's
+// bashExecutionToText).
+func BashText(m *session.Message) string {
+	text := "Ran `" + m.Command + "`\n"
+	if m.Output != nil && *m.Output != "" {
+		text += "```\n" + *m.Output + "\n```"
+	} else {
+		text += "(no output)"
+	}
+	var code float64
+	exited := len(m.ExitCode) > 0 && json.Unmarshal(m.ExitCode, &code) == nil
+	switch {
+	case m.Cancelled != nil && *m.Cancelled:
+		text += "\n\n(command cancelled)"
+	case exited && code != 0:
+		text += "\n\nCommand exited with code " + strconv.FormatFloat(code, 'f', -1, 64)
+	}
+	if m.Truncated != nil && *m.Truncated && m.FullOutputPath != "" {
+		text += "\n\n[Output truncated. Full output: " + m.FullOutputPath + "]"
+	}
+	return text
+}
 
 // textOf joins a message's text blocks with sep, as pi-ai's contentText.
 func textOf(blocks []session.Block, sep string) string {
@@ -149,19 +216,21 @@ func truncate(s string, maxChars int) string {
 	return fmt.Sprintf("%s\n\n[... %d more characters truncated]", s[:cut], n-maxChars)
 }
 
-// serialize is Pi's serializeConversation: the messages as tagged text, so
-// the model summarises rather than continues them.
-func serialize(msgs []msg) string {
+// serialize is Pi's serializeConversation of convertToLlm's messages: the
+// messages as tagged text, so the model summarises rather than continues
+// them.
+func serialize(msgs []*session.Message) string {
 	var parts []string
-	for _, x := range msgs {
-		if x.m == nil {
+	for _, m := range msgs {
+		m = Convert(m)
+		if m == nil {
 			continue
 		}
-		blocks, err := x.m.Blocks()
+		blocks, err := m.Blocks()
 		if err != nil {
 			continue
 		}
-		switch x.role {
+		switch m.Role {
 		case session.RoleUser:
 			if t := textOf(blocks, ""); t != "" {
 				parts = append(parts, "[User]: "+t)
@@ -249,11 +318,11 @@ func newFileOps() fileOps {
 
 // add records the read, write and edit calls of an assistant message
 // (Pi's extractFileOpsFromMessage).
-func (f fileOps) add(x msg) {
-	if x.role != session.RoleAssistant || x.m == nil {
+func (f fileOps) add(m *session.Message) {
+	if m == nil || m.Role != session.RoleAssistant {
 		return
 	}
-	blocks, err := x.m.Blocks()
+	blocks, err := m.Blocks()
 	if err != nil {
 		return
 	}

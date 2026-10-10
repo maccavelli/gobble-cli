@@ -130,7 +130,9 @@ func (*Agent) cmdHelp(_ context.Context, t *cmdTurn, _ string) error {
 }
 
 // totals are a session's message counts and usage, over every entry, as
-// Pi's getSessionStats counts them: compacted history included.
+// Pi's getSessionStats counts them (agent-session.ts:4093-4116): compacted
+// history included, with the usage of usage entries, compactions, branch
+// summaries, tool results and assistant messages.
 type totals struct {
 	messages, user, assistant, toolCalls, toolResults int
 	input, output, cacheRead, cacheWrite              int64
@@ -155,7 +157,8 @@ func sessionTotals(entries []session.Entry) totals {
 		}
 	}
 	for _, e := range entries {
-		if e.Type == session.TypeCompaction {
+		switch e.Type {
+		case session.TypeUsage, session.TypeCompaction, session.TypeBranchSummary:
 			addUsage(e.Usage)
 		}
 		if e.Type != session.TypeMessage || e.Message == nil {
@@ -167,6 +170,7 @@ func sessionTotals(entries []session.Entry) totals {
 			t.user++
 		case session.RoleToolResult:
 			t.toolResults++
+			addUsage(e.Message.Usage)
 		case session.RoleAssistant:
 			t.assistant++
 			addUsage(e.Message.Usage)
@@ -368,7 +372,7 @@ func (a *Agent) cmdName(ctx context.Context, t *cmdTurn, arg string) error {
 func (a *Agent) setName(ctx context.Context, s *liveSession, out *updates, arg string) (string, error) {
 	name := oneLine(arg)
 	if err := s.append(ctx, a.now(), session.Entry{Type: session.TypeSessionInfo, Name: new(name)}); err != nil {
-		return "", acp.NewInternalError(map[string]any{keyReason: err.Error()})
+		return "", appendFailed(err)
 	}
 	out.send(acp.SessionUpdate{SessionInfoUpdate: &acp.SessionSessionInfoUpdate{SessionUpdate: "session_info_update", Title: new(name)}})
 	return name, out.err

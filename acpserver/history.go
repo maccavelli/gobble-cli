@@ -145,25 +145,23 @@ type state struct {
 	ids             map[string]bool
 	results         map[string]*session.Message // tool call id → its result
 	messages        []session.Entry             // the path's message entries
-	context         []session.Entry             // the entries the model sees
+	context         []compaction.Projected      // the entries the model sees, and their messages
 	path            []session.Entry
 	todos           []tool.PlanItem // the path's last todo list
 }
 
-// replayState reads entries: model_change, thinking_level_change,
-// session_info and the assistant messages along the active path set the
-// choices, as Pi's buildSessionContext reads them (session-manager.ts
-// :418-433), and the history is the path's model context, which starts at
-// the newest compaction's summary when there is one (compaction.Context).
-// Entry types gobble does not act on yet take no part in context
-// (0005-PLAN F2).
+// replayState reads entries: model_change, thinking_level_change and the
+// assistant messages along the active path set the choices, as Pi's
+// buildSessionContext reads them (session-manager.ts :418-433); the name is
+// Pi's (session.Name); and the history is the path's model context, which
+// starts at the newest compaction's summary when there is one, with every
+// entry type's messages and context edits applied as Pi applies them
+// (compaction.Project), converted as Pi converts them (compaction.Convert,
+// 0005-PLAN F2).
 func replayState(entries []session.Entry) state {
-	st := state{ids: map[string]bool{}, results: map[string]*session.Message{}, thinking: thinkingOff}
+	st := state{ids: map[string]bool{}, results: map[string]*session.Message{}, thinking: thinkingOff, name: session.Name(entries)}
 	for _, e := range entries {
 		st.ids[e.ID] = true
-		if e.Type == session.TypeSessionInfo && e.Name != nil {
-			st.name = *e.Name
-		}
 	}
 	if len(entries) > 0 {
 		st.leaf = entries[len(entries)-1].ID
@@ -189,14 +187,15 @@ func replayState(entries []session.Entry) state {
 			}
 		}
 	}
-	st.context = compaction.Context(st.path)
-	for i, e := range st.context {
-		switch {
-		case e.Type == session.TypeCompaction && i == 0:
-			st.history = append(st.history, llm.Message{Role: llm.RoleUser,
-				Content: []llm.Content{{Type: llm.ContentText, Text: compaction.SummaryText(e.Summary)}}})
-		case e.Type == session.TypeMessage && e.Message != nil:
-			st.addMessage(e.Message)
+	st.context = compaction.Project(compaction.Context(st.path))
+	for _, p := range st.context {
+		for _, m := range p.Messages {
+			if m.Role == session.RoleToolResult {
+				st.results[m.ToolCallID] = m
+			}
+			if c := compaction.Convert(m); c != nil {
+				st.addMessage(c)
+			}
 		}
 	}
 	return st
@@ -222,7 +221,6 @@ func (st *state) addMessage(m *session.Message) {
 		}
 		st.history = append(st.history, llm.Message{Role: llm.RoleAssistant, Content: assistantContent(blocks)})
 	case session.RoleToolResult:
-		st.results[m.ToolCallID] = m
 		c := llm.Content{Type: llm.ContentToolResult, ToolCallID: m.ToolCallID, ToolName: m.ToolName, Text: m.Text(), IsError: m.IsError != nil && *m.IsError}
 		// Consecutive results are one tool message, as the agent sends them.
 		if n := len(st.history); n > 0 && st.history[n-1].Role == llm.RoleTool {
@@ -275,9 +273,11 @@ func assistantContent(blocks []session.Block) []llm.Content {
 // what the model sees: a compaction as one agent_message_chunk with its
 // summary, one user_message_chunk per user message, one
 // agent_message_chunk per assistant message with its whole text, and one
-// tool_call per call in its final state; then the path's last todo list as
-// a plan, unless it is empty (0005-PLAN F1d-1). The session-start frames
-// follow them, sent by the caller.
+// tool_call per call in its final state; a shown custom message and a bash
+// execution the model sees as one user_message_chunk each, and a branch
+// summary as one agent_message_chunk (0005-PLAN F2); then the path's last
+// todo list as a plan, unless it is empty (0005-PLAN F1d-1). The
+// session-start frames follow them, sent by the caller.
 func replayUpdates(st state, tools map[string]tool.Tool, cwd string) []acp.SessionUpdate {
 	out := replayHistory(st, tools, cwd)
 	if len(st.todos) > 0 {
@@ -288,32 +288,50 @@ func replayUpdates(st state, tools map[string]tool.Tool, cwd string) []acp.Sessi
 
 func replayHistory(st state, tools map[string]tool.Tool, cwd string) []acp.SessionUpdate {
 	var out []acp.SessionUpdate
-	for i, e := range st.context {
-		if e.Type == session.TypeCompaction && i == 0 {
-			out = append(out, acp.UpdateAgentMessageText(compactedText(e)))
-			continue
+	for _, p := range st.context {
+		for _, m := range p.Messages {
+			out = append(out, replayMessage(p.Entry, m, st, tools, cwd)...)
 		}
-		if e.Type != session.TypeMessage || e.Message == nil {
-			continue
+	}
+	return out
+}
+
+// replayMessage is one projected message's replay. A custom message whose
+// display is not true, and a bash execution excluded from the context, are
+// not shown, as Pi hides them.
+func replayMessage(e session.Entry, m *session.Message, st state, tools map[string]tool.Tool, cwd string) []acp.SessionUpdate {
+	switch m.Role {
+	case session.RoleCompactionSummary:
+		return []acp.SessionUpdate{acp.UpdateAgentMessageText(compactedText(e))}
+	case session.RoleBranchSummary:
+		return []acp.SessionUpdate{acp.UpdateAgentMessageText("Branch summary:\n\n" + m.Summary)}
+	case session.RoleBashExecution:
+		if m.ExcludeFromContext != nil && *m.ExcludeFromContext {
+			return nil
 		}
-		m := e.Message
-		blocks, err := m.Blocks()
-		if err != nil {
-			continue
+		return []acp.SessionUpdate{acp.UpdateUserMessageText(compaction.BashText(m))}
+	case session.RoleCustom:
+		if m.Display == nil || !*m.Display {
+			return nil
 		}
-		switch m.Role {
-		case session.RoleUser:
-			if t := m.Text(); t != "" {
-				out = append(out, acp.UpdateUserMessageText(t))
-			}
-		case session.RoleAssistant:
-			if t := assistantText(blocks); t != "" {
-				out = append(out, acp.UpdateAgentMessageText(t))
-			}
-			for _, b := range blocks {
-				if b.Type == session.BlockToolCall {
-					out = append(out, replayToolCall(b, st.results[b.ID], tools, cwd))
-				}
+	}
+	blocks, err := m.Blocks()
+	if err != nil {
+		return nil
+	}
+	var out []acp.SessionUpdate
+	switch m.Role {
+	case session.RoleUser, session.RoleCustom:
+		if t := m.Text(); t != "" {
+			out = append(out, acp.UpdateUserMessageText(t))
+		}
+	case session.RoleAssistant:
+		if t := assistantText(blocks); t != "" {
+			out = append(out, acp.UpdateAgentMessageText(t))
+		}
+		for _, b := range blocks {
+			if b.Type == session.BlockToolCall {
+				out = append(out, replayToolCall(b, st.results[b.ID], tools, cwd))
 			}
 		}
 	}
