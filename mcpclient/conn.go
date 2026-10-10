@@ -235,6 +235,18 @@ func fileURL(dir string) string {
 	return (&url.URL{Scheme: "file", Path: p}).String()
 }
 
+// offersResources reports whether the connected server advertised
+// resources at initialize (0005-PLAN F1d-2).
+func (c *conn) offersResources() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.state != StateConnected || c.cs == nil {
+		return false
+	}
+	caps := c.cs.InitializeResult().Capabilities
+	return caps != nil && caps.Resources != nil
+}
+
 // session is the open session, or nil.
 func (c *conn) session() *mcp.ClientSession {
 	c.mu.Lock()

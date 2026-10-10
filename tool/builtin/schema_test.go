@@ -24,7 +24,7 @@ var unportable = []string{"$ref", "oneOf", "anyOf", "allOf", "not", "if", "then"
 // timeout maximum comes from the options.
 func TestSchemaConvention(t *testing.T) {
 	for _, o := range []Options{{}, {MaxTimeout: 20 * time.Minute}} {
-		for _, tl := range ToolsWith(o) {
+		for _, tl := range catalog(o) {
 			s := tl.Spec()
 			var root map[string]any
 			if err := json.Unmarshal(s.InputSchema, &root); err != nil {

@@ -35,6 +35,13 @@ func systemPrompt(cwd string, tools []tool.Tool) string {
 	for i, t := range tools {
 		names[i] = t.Spec().Name
 	}
+	return systemPromptOf(cwd, names)
+}
+
+// systemPromptOf is systemPrompt naming the given tools: those a turn's
+// first request sends (agent.Agent.Offered), so a deferred tool is never
+// named as usable (0005-PLAN F1d-2).
+func systemPromptOf(cwd string, names []string) string {
 	var b strings.Builder
 	b.WriteString("You are gobble, a coding agent. You help the user with software engineering tasks in their project.\n")
 	fmt.Fprintf(&b, "The working directory is %s, on %s. Relative paths resolve against it.\n", cwd, runtime.GOOS)

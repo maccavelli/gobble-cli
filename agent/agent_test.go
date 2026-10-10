@@ -463,3 +463,110 @@ func TestNoPollAfterCancel(t *testing.T) {
 		t.Fatalf("end %s, polls %d, left %d steering and %d follow-ups", end.StopReason, q.polls, len(q.steering), len(q.followUps))
 	}
 }
+
+// stub is a read-only tool named name with the given exposure and family,
+// returning a text result.
+func stub(name string, exposure tool.Exposure, family string) tool.Tool {
+	return tool.New(name, name+" does a thing.", func(context.Context, struct{}, tool.Env) (string, error) { return name + " ran", nil },
+		tool.WithExposure(exposure), tool.WithFamily(family), tool.WithAnnotations(tool.Annotations{ReadOnlyHint: true}))
+}
+
+// searchStub is a tool_search that loads load, and records the deferred
+// specs each call is given.
+func searchStub(load []string, seen *[][]string) tool.Tool {
+	return tool.New("tool_search", "Find deferred tools.", func(_ context.Context, _ struct{}, env tool.Env) (tool.Result, error) {
+		var names []string
+		for _, s := range env.Deferred {
+			names = append(names, s.Name)
+		}
+		*seen = append(*seen, names)
+		r := tool.TextResult("loaded")
+		r.Load = load
+		return r, nil
+	}, tool.WithAnnotations(tool.Annotations{ReadOnlyHint: true}))
+}
+
+func exposureTools() []tool.Tool {
+	return []tool.Tool{
+		stub("a", "", ""),
+		stub("b", tool.ExposureDeferred, "f"),
+		stub("c", tool.ExposureDeferred, "f"),
+		stub("d", tool.ExposureDeferred, ""),
+		stub("h", tool.ExposureHidden, ""),
+	}
+}
+
+// Deferred and hidden tools are not sent, and tool_search is offered only
+// while something is deferred (0012-MADR D7, D9).
+func TestExposureTiers(t *testing.T) {
+	var seen [][]string
+	s := llmtest.NewScript(llmtest.Text("ok"))
+	a := agent.New(agent.Config{Provider: s, Tools: exposureTools(), Search: searchStub(nil, &seen)})
+	if _, _, err := collect(t.Context(), t, a, tool.Env{}, "hi"); err != nil {
+		t.Fatal(err)
+	}
+	llmtest.AssertTools(t, s.Requests()[0], "a", "tool_search")
+
+	none := llmtest.NewScript(llmtest.Text("ok"))
+	b := agent.New(agent.Config{Provider: none, Tools: []tool.Tool{stub("a", "", ""), stub("h", tool.ExposureHidden, "")}, Search: searchStub(nil, &seen)})
+	if _, _, err := collect(t.Context(), t, b, tool.Env{}, "hi"); err != nil {
+		t.Fatal(err)
+	}
+	llmtest.AssertTools(t, none.Requests()[0], "a")
+}
+
+// A load adds the tool and its whole family to the next request of the
+// same turn, after the tools already sent; tool_search was given the
+// deferred tools, hidden ones not among them; a Loaded event follows the
+// call's ToolEnd; a later load appends again (0005-PLAN F1d-2).
+func TestLoadInTurn(t *testing.T) {
+	var seen [][]string
+	s := llmtest.NewScript(
+		llmtest.ToolCall("s1", "tool_search", `{}`),
+		llmtest.ToolCall("b1", "b", `{}`),
+		llmtest.Text("done"),
+	)
+	a := agent.New(agent.Config{Provider: s, Tools: exposureTools(), Search: searchStub([]string{"b", "nope"}, &seen)})
+	evs, end, err := collect(t.Context(), t, a, tool.Env{}, "find it")
+	if err != nil || end.StopReason != agent.StopEndTurn {
+		t.Fatalf("turn: %v, %s", err, end.StopReason)
+	}
+	reqs := s.Requests()
+	llmtest.AssertTools(t, reqs[0], "a", "tool_search")
+	llmtest.AssertTools(t, reqs[1], "a", "tool_search", "b", "c")
+	llmtest.AssertTools(t, reqs[2], "a", "tool_search", "b", "c")
+	if len(seen) != 1 || !slices.Equal(seen[0], []string{"b", "c", "d"}) {
+		t.Fatalf("tool_search saw %v; want the deferred b, c and d", seen)
+	}
+	var order []string
+	for _, ev := range evs {
+		switch ev := ev.(type) {
+		case agent.ToolEnd:
+			order = append(order, "end:"+ev.Call.Name)
+		case agent.Loaded:
+			order = append(order, "loaded:"+strings.Join(ev.Names, ","))
+		}
+	}
+	if got := strings.Join(order, " "); got != "end:tool_search loaded:b,c end:b" {
+		t.Fatalf("events %s", got)
+	}
+	if res := end.Messages[4].Content[0]; res.ToolName != "b" || res.IsError || res.Text != "b ran" {
+		t.Fatalf("the loaded tool's call = %+v", res)
+	}
+}
+
+// Tools loaded by an earlier prompt are sent as direct tools, after the
+// others, in load order; a hidden tool cannot be called (0012-MADR D9).
+func TestLoadedFromConfig(t *testing.T) {
+	var seen [][]string
+	s := llmtest.NewScript(llmtest.ToolCall("h1", "h", `{}`), llmtest.Text("ok"))
+	a := agent.New(agent.Config{Provider: s, Tools: exposureTools(), Search: searchStub(nil, &seen), Loaded: []string{"d", "b"}})
+	_, end, err := collect(t.Context(), t, a, tool.Env{}, "hi")
+	if err != nil {
+		t.Fatal(err)
+	}
+	llmtest.AssertTools(t, s.Requests()[0], "a", "d", "b", "tool_search")
+	if res := end.Messages[2].Content[0]; !res.IsError || !strings.Contains(res.Text, `no tool named "h"`) {
+		t.Fatalf("a call to the hidden tool = %+v", res)
+	}
+}

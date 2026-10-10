@@ -249,6 +249,30 @@ func TestToolFlagsSelectMCPTools(t *testing.T) {
 	}
 }
 
+// The MCP resource tools' names are tool names the flags accept: -t can
+// list one, which keeps the servers on and offers only it of the three,
+// and --exclude-tools can remove one (0005-PLAN F1d-2 deviation 3).
+func TestToolFlagsSelectResourceTools(t *testing.T) {
+	home := t.TempDir()
+	writeHomeMCP(t, home, "docs", httpEntry(mcptest.ResourceHTTPServer(t)))
+	run := func(args ...string) []string {
+		t.Helper()
+		s := llmtest.NewScript(llmtest.Text("ok"))
+		withModel(t, s)
+		mustRun(t, home, append([]string{"--no-session", "-p"}, append(args, "go")...)...)
+		return requestToolNames(t, s.Requests()[0])
+	}
+	if got := run("-t", "read,list_mcp_resources"); !slices.Equal(got, []string{"read", "list_mcp_resources"}) {
+		t.Fatalf("-t: %q", got)
+	}
+	if got := run("--exclude-tools", "read_mcp_resource"); slices.Contains(got, "read_mcp_resource") || !slices.Contains(got, "list_mcp_resources") {
+		t.Fatalf("--exclude-tools: %q", got)
+	}
+	if got := run(); !slices.Contains(got, "read_mcp_resource") || slices.Contains(got, "tool_search") {
+		t.Fatalf("no flags: %q", got)
+	}
+}
+
 // `mcp remove <TAB>` offers the file's servers and creates nothing.
 func TestMCPServerCompletion(t *testing.T) {
 	home := t.TempDir()

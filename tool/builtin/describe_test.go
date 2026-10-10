@@ -37,19 +37,13 @@ func TestDescriptionShape(t *testing.T) {
 	// Every tool ToolsWith can build has exactly one template, and every
 	// template a tool: powershell's is built on Windows only (F1c-1
 	// deviation 2).
-	want := Names()
-	if !slices.Contains(want, "powershell") {
-		want = append(want, "powershell")
-	}
+	want := catalogNames()
 	slices.Sort(want)
 	if !slices.Equal(names, want) {
 		t.Fatalf("templates %v, want one for each tool, %v", names, want)
 	}
 	d := describeDataFor(Options{}.withDefaults())
-	var tools []string
-	for _, tl := range ToolsWith(Options{}) {
-		tools = append(tools, tl.Spec().Name)
-	}
+	tools := catalogNames()
 	for _, name := range names {
 		text, err := renderDescription(name, d)
 		if err != nil {
@@ -59,7 +53,7 @@ func TestDescriptionShape(t *testing.T) {
 			t.Errorf("%s: %s", name, problem)
 		}
 	}
-	for _, tl := range ToolsWith(Options{}) {
+	for _, tl := range catalog(Options{}) {
 		s := tl.Spec()
 		if want := description(s.Name, Options{}.withDefaults()); s.Description != want {
 			t.Errorf("%s: the description is not its rendered template", s.Name)

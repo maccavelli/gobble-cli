@@ -214,3 +214,24 @@ func TestPlan(t *testing.T) {
 		t.Fatalf("encoded %s, %v", b, err)
 	}
 }
+
+// A tool's exposure and family reach its spec, and a result's loads and an
+// environment's deferred tools are encoded by those names (0005-PLAN F1d-2).
+func TestExposureAndFamily(t *testing.T) {
+	tl := tool.New("f", "", func(context.Context, struct{}, tool.Env) (string, error) { return "", nil },
+		tool.WithExposure(tool.ExposureDeferred), tool.WithFamily("files"))
+	if s := tl.Spec(); s.Exposure != tool.ExposureDeferred || s.Family != "files" {
+		t.Fatalf("spec exposure %q, family %q", s.Exposure, s.Family)
+	}
+	if s := readTool(new(readIn)).Spec(); s.Exposure != "" || s.Family != "" {
+		t.Fatalf("a tool without the options: exposure %q, family %q; want both empty, which is direct", s.Exposure, s.Family)
+	}
+	b, err := json.Marshal(tool.Result{Load: []string{"a", "b"}})
+	if err != nil || string(b) != `{"load":["a","b"]}` {
+		t.Fatalf("result encoded %s, %v", b, err)
+	}
+	b, err = json.Marshal(tool.Env{Deferred: []tool.Spec{{Name: "a", Exposure: tool.ExposureDeferred, Family: "x"}}})
+	if err != nil || string(b) != `{"deferred":[{"name":"a","exposure":"deferred","family":"x"}]}` {
+		t.Fatalf("env encoded %s, %v", b, err)
+	}
+}

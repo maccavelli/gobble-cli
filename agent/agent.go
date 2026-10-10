@@ -6,6 +6,8 @@ import (
 	"encoding/json/v2"
 	"fmt"
 	"iter"
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/maccavelli/gobble-cli/llm"
@@ -37,6 +39,12 @@ type Config struct {
 	// Queue gives the turn the messages queued while it runs. Nil queues
 	// nothing.
 	Queue Queue
+	// Search is tool_search, offered as a direct tool only while a tool is
+	// deferred (0012-MADR D9). Nil offers none.
+	Search tool.Tool
+	// Loaded names deferred tools an earlier prompt loaded, in load order.
+	// They are sent as direct tools, after the others (0012-MADR D9).
+	Loaded []string
 }
 
 // Queue is Pi's steering and follow-up queues (agent.ts). Each call drains
@@ -52,10 +60,16 @@ type Queue interface {
 // Agent runs turns: model calls and the tool calls they ask for, until the
 // model ends its reply. It is safe to run turns of different sessions at
 // once; one session's turns run one after another.
+//
+// Tools are offered by exposure (0012-MADR D7): direct ones are sent with
+// every request, deferred ones wait behind tool_search until a call loads
+// them, and hidden ones are neither sent nor found. A load is append-only
+// and lasts the turn; the caller records it, and passes it back as Loaded.
 type Agent struct {
-	cfg   Config
-	tools map[string]tool.Tool
-	specs jsontext.Value
+	cfg      Config
+	tools    map[string]tool.Tool // the tools a call may name
+	direct   []tool.Spec          // the specs sent, in order
+	deferred []tool.Tool          // the tools behind tool_search, in Config order
 }
 
 // New returns an Agent. It panics if two tools share a name, which is a
@@ -65,23 +79,59 @@ func New(cfg Config) *Agent {
 		cfg.MaxCalls = DefaultMaxCalls
 	}
 	a := &Agent{cfg: cfg, tools: map[string]tool.Tool{}}
-	specs := make([]tool.Spec, 0, len(cfg.Tools))
+	byName := map[string]tool.Tool{}
 	for _, t := range cfg.Tools {
-		s := t.Spec()
-		if _, dup := a.tools[s.Name]; dup {
-			panic("agent: two tools are named " + s.Name)
+		name := t.Spec().Name
+		if _, dup := byName[name]; dup {
+			panic("agent: two tools are named " + name)
 		}
-		a.tools[s.Name] = t
-		specs = append(specs, s)
+		byName[name] = t
 	}
-	if len(specs) > 0 {
-		b, err := json.Marshal(specs)
-		if err != nil {
-			panic(fmt.Sprintf("agent: encode tool specs: %v", err))
+	loaded := map[string]bool{}
+	for _, n := range cfg.Loaded {
+		loaded[n] = true
+	}
+	for _, t := range cfg.Tools {
+		switch s := t.Spec(); s.Exposure {
+		case tool.ExposureHidden:
+		case tool.ExposureDeferred:
+			if !loaded[s.Name] {
+				a.deferred = append(a.deferred, t)
+			}
+		default:
+			a.offer(t)
 		}
-		a.specs = b
+	}
+	for _, n := range cfg.Loaded {
+		if t, ok := byName[n]; ok && t.Spec().Exposure == tool.ExposureDeferred && a.tools[n] == nil {
+			a.offer(t)
+		}
+	}
+	if len(a.deferred) > 0 && cfg.Search != nil {
+		if _, dup := byName[cfg.Search.Spec().Name]; dup {
+			panic("agent: two tools are named " + cfg.Search.Spec().Name)
+		}
+		a.offer(cfg.Search)
 	}
 	return a
+}
+
+// Offered names the tools a turn's first request sends, in order: the
+// direct ones, then those Loaded names, then tool_search while a tool is
+// deferred. A caller names them in its system prompt.
+func (a *Agent) Offered() []string {
+	out := make([]string, len(a.direct))
+	for i, s := range a.direct {
+		out[i] = s.Name
+	}
+	return out
+}
+
+// offer makes t a tool the requests send.
+func (a *Agent) offer(t tool.Tool) {
+	s := t.Spec()
+	a.tools[s.Name] = t
+	a.direct = append(a.direct, s)
 }
 
 // Run runs one prompt over history and yields the turn's events, ending
@@ -89,21 +139,84 @@ func New(cfg Config) *Agent {
 // provider failure is yielded as an error and ends the stream.
 func (a *Agent) Run(ctx context.Context, env tool.Env, history []llm.Message, prompt llm.Message) iter.Seq2[Event, error] {
 	return func(yield func(Event, error) bool) {
-		t := &turn{a: a, ctx: ctx, env: env, yield: yield, history: history, added: []llm.Message{prompt}}
+		t := &turn{a: a, ctx: ctx, env: env, yield: yield, history: history, added: []llm.Message{prompt},
+			tools: maps.Clone(a.tools), sent: slices.Clone(a.direct), deferred: slices.Clone(a.deferred)}
+		t.specs = encodeSpecs(t.sent)
 		t.run()
 	}
 }
 
-// turn is one Run's state.
+// turn is one Run's state. Its tools start as the Agent's, and grow by the
+// loads its calls make.
 type turn struct {
-	a       *Agent
-	ctx     context.Context
-	env     tool.Env
-	yield   func(Event, error) bool
-	history []llm.Message
-	added   []llm.Message
-	usage   llm.Usage
-	stopped bool // the consumer stopped iterating
+	a        *Agent
+	ctx      context.Context
+	env      tool.Env
+	yield    func(Event, error) bool
+	history  []llm.Message
+	added    []llm.Message
+	usage    llm.Usage
+	stopped  bool // the consumer stopped iterating
+	tools    map[string]tool.Tool
+	sent     []tool.Spec
+	specs    jsontext.Value
+	deferred []tool.Tool
+}
+
+// encodeSpecs is specs as a request carries them, or nil for none.
+func encodeSpecs(specs []tool.Spec) jsontext.Value {
+	if len(specs) == 0 {
+		return nil
+	}
+	b, err := json.Marshal(specs)
+	if err != nil {
+		panic(fmt.Sprintf("agent: encode tool specs: %v", err))
+	}
+	return b
+}
+
+// load moves the named deferred tools, each with its whole family, into
+// the requests, after the tools already sent, and encodes the specs again
+// for the next model call. It returns the names loaded, in that order; a
+// name that is not deferred is ignored.
+func (t *turn) load(names []string) []string {
+	var out []string
+	for _, n := range names {
+		i := slices.IndexFunc(t.deferred, func(d tool.Tool) bool { return d.Spec().Name == n })
+		if i < 0 {
+			continue
+		}
+		family := t.deferred[i].Spec().Family
+		var keep []tool.Tool
+		for _, d := range t.deferred {
+			s := d.Spec()
+			if s.Name != n && (family == "" || s.Family != family) {
+				keep = append(keep, d)
+				continue
+			}
+			t.tools[s.Name] = d
+			t.sent = append(t.sent, s)
+			out = append(out, s.Name)
+		}
+		t.deferred = keep
+	}
+	if len(out) > 0 {
+		t.specs = encodeSpecs(t.sent)
+	}
+	return out
+}
+
+// deferredSpecs are the turn's deferred tools not loaded yet, for
+// tool_search (tool.Env.Deferred).
+func (t *turn) deferredSpecs() []tool.Spec {
+	if len(t.deferred) == 0 {
+		return nil
+	}
+	out := make([]tool.Spec, len(t.deferred))
+	for i, d := range t.deferred {
+		out[i] = d.Spec()
+	}
+	return out
 }
 
 func (t *turn) emit(ev Event) bool {
@@ -235,7 +348,7 @@ func (t *turn) call() (*reply, bool) {
 		msgs = append(msgs, llm.Message{Role: llm.RoleSystem, Content: []llm.Content{{Type: llm.ContentText, Text: t.a.cfg.System}}})
 	}
 	msgs = append(append(msgs, t.history...), t.added...)
-	req := &llm.Request{Model: t.a.cfg.Model, Messages: msgs, Tools: t.a.specs, Thinking: t.a.cfg.Thinking}
+	req := &llm.Request{Model: t.a.cfg.Model, Messages: msgs, Tools: t.specs, Thinking: t.a.cfg.Thinking}
 	r := &reply{}
 	for ev, err := range t.a.cfg.Provider.Stream(t.ctx, req) {
 		if err != nil {
@@ -295,13 +408,18 @@ func (t *turn) runTools(calls []llm.ToolCallDone) (llm.Message, bool) {
 			return m, false
 		}
 		m.Content = append(m.Content, llm.Content{Type: llm.ContentToolResult, ToolCallID: c.ID, ToolName: c.Name, Text: res.Text(), IsError: res.IsError})
+		if len(res.Load) > 0 && !res.IsError {
+			if names := t.load(res.Load); len(names) > 0 && !t.emit(Loaded{Names: names}) {
+				return m, false
+			}
+		}
 	}
 	return m, true
 }
 
 func (t *turn) runTool(c llm.ToolCallDone) (tool.Result, bool) {
 	call := tool.Call{ID: c.ID, Name: c.Name, Args: jsontext.Value(c.Args)}
-	tl, known := t.a.tools[c.Name]
+	tl, known := t.tools[c.Name]
 	if !known {
 		res := tool.ErrorResult(fmt.Sprintf("there is no tool named %q", c.Name))
 		return res, t.emit(ToolStart{Call: call, Title: c.Name}) && t.emit(ToolEnd{Call: call, Result: res})
@@ -315,6 +433,7 @@ func (t *turn) runTool(c llm.ToolCallDone) (tool.Result, bool) {
 		return tool.Result{}, false
 	}
 	env := t.env
+	env.Deferred = t.deferredSpecs()
 	var outside []string
 	if c, ok := tl.(tool.Confined); ok {
 		outside = c.Outside(call, env)

@@ -23,6 +23,9 @@ type Spec struct {
 	Annotations Annotations    `json:"annotations,omitzero"`
 	Kind        Kind           `json:"kind,omitzero"`
 	Exposure    Exposure       `json:"exposure,omitzero"`
+	// Family groups deferred tools that load together: loading one loads
+	// every tool of its family (0012-MADR D8).
+	Family string `json:"family,omitzero"`
 }
 
 // Annotations carries MCP tool-behavior hints.
@@ -49,14 +52,18 @@ const (
 	KindOther   Kind = "other"
 )
 
-// Exposure says whether the tool is offered immediately.
+// Exposure says whether the tool is offered immediately. The empty
+// Exposure is direct (0012-MADR D7).
 type Exposure string
 
 const (
 	// ExposureDirect offers the tool on every turn.
 	ExposureDirect Exposure = "direct"
-	// ExposureDeferred keeps the tool behind search.
+	// ExposureDeferred keeps the tool behind search, and out of the
+	// requests, until a call loads it.
 	ExposureDeferred Exposure = "deferred"
+	// ExposureHidden neither offers the tool nor lets search find it.
+	ExposureHidden Exposure = "hidden"
 )
 
 // Call is one invocation.
@@ -72,12 +79,14 @@ type Call struct {
 // all absolute. AllowOutside is set on a call whose paths outside Roots were
 // approved (Confined). Environ is KEY=VALUE pairs a tool's child processes
 // get on top of gobble's own environment, such as the session markers
-// (0003-MADR).
+// (0003-MADR). Deferred is the turn's deferred tools that are not loaded
+// yet, for tool_search to rank (0005-PLAN F1d-2).
 type Env struct {
 	Cwd          string   `json:"cwd,omitzero"`
 	Roots        []string `json:"roots,omitzero"`
 	AllowOutside bool     `json:"allowOutside,omitzero"`
 	Environ      []string `json:"environ,omitzero"`
+	Deferred     []Spec   `json:"deferred,omitzero"`
 }
 
 // Result is the tool's reply. Output is what the model sees: a JSON string
@@ -85,7 +94,9 @@ type Env struct {
 // display: a short phrase, a self-contained summary of at most 400 bytes,
 // and the files the call changed (0008-MADR D19 item 3). Plan, when not
 // nil, is the task's checklist as the call left it, for the client to show
-// as its plan; an empty, non-nil Plan clears it (0005-PLAN F1d-1).
+// as its plan; an empty, non-nil Plan clears it (0005-PLAN F1d-1). Load
+// names deferred tools the agent loads before its next model call, with
+// their families (0005-PLAN F1d-2).
 type Result struct {
 	Output  jsontext.Value `json:"output,omitzero"`
 	IsError bool           `json:"isError,omitzero"`
@@ -93,6 +104,7 @@ type Result struct {
 	Summary string         `json:"summary,omitzero"`
 	Diffs   []Diff         `json:"diffs,omitzero"`
 	Plan    []PlanItem     `json:"plan,omitzero"`
+	Load    []string       `json:"load,omitzero"`
 }
 
 // PlanItem is one step of a plan. Status is pending, in_progress or
@@ -168,6 +180,7 @@ type Option func(*config)
 type config struct {
 	kind        Kind
 	exposure    Exposure
+	family      string
 	annotations Annotations
 	describe    func(Call, Env) string
 	outside     func(Call, Env) []string
@@ -199,9 +212,14 @@ func WithKind(kind Kind) Option {
 	return func(cfg *config) { cfg.kind = kind }
 }
 
-// WithExposure sets direct or deferred exposure.
+// WithExposure sets direct, deferred or hidden exposure.
 func WithExposure(exposure Exposure) Option {
 	return func(cfg *config) { cfg.exposure = exposure }
+}
+
+// WithFamily sets the family a deferred tool loads with (0012-MADR D8).
+func WithFamily(family string) Option {
+	return func(cfg *config) { cfg.family = family }
 }
 
 // WithAnnotations sets the MCP hints.
@@ -234,6 +252,7 @@ func (g *generic[In, Out]) Spec() Spec {
 		Annotations: g.cfg.annotations,
 		Kind:        g.cfg.kind,
 		Exposure:    g.cfg.exposure,
+		Family:      g.cfg.family,
 	}
 }
 

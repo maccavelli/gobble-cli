@@ -47,6 +47,11 @@ type Message struct {
 // that reads it, so a caller can record it first.
 type Queued struct{ Message llm.Message }
 
+// Loaded is deferred tools a call's result loaded, with their families, in
+// the order they join the requests. It comes after that call's ToolEnd, and
+// they are sent from the next model call on (0012-MADR D9).
+type Loaded struct{ Names []string }
+
 // End is the turn's last event. Messages are the turn's messages, the
 // prompt first, for the caller to append to the history; Usage sums the
 // turn's model calls.
@@ -64,6 +69,7 @@ func (ToolEnd) event()       {}
 func (Usage) event()         {}
 func (Message) event()       {}
 func (Queued) event()        {}
+func (Loaded) event()        {}
 func (End) event()           {}
 
 // StopReason is why a turn ended. The values are ACP's stop reasons.

@@ -134,14 +134,15 @@ type toolChoice struct {
 // and --no-tools, with Pi's rules (0002-PLAN Phase 5): -t is an allowlist
 // over every tool, MCP tools included; --exclude-tools removes names; and
 // --no-tools turns everything off. An MCP name is accepted unchecked, since
-// MCP tools exist only once their server connects; any other unknown name
-// is a usage error. When the flags leave no MCP name selectable, no server
-// connects. The contradiction of --no-tools with the others is checked in
+// MCP tools exist only once their server connects; so is an MCP resource
+// tool's name, which is filtered as an MCP tool is (0005-PLAN F1d-2). Any
+// other unknown name is a usage error. When the flags leave no MCP name
+// selectable, no server connects. The contradiction of --no-tools with the others is checked in
 // validate.
 func (f *SharedFlags) toolSet() (toolChoice, error) {
 	known := builtin.Names()
 	for _, n := range append(slices.Clone(f.Tools), f.ExcludeTools...) {
-		if !slices.Contains(known, n) && !strings.HasPrefix(n, mcpPrefix) {
+		if !slices.Contains(known, n) && !isMCPName(n) {
 			return toolChoice{}, usageErrorf("unknown tool %q (the tools are %s)", n, strings.Join(known, ", "))
 		}
 	}
@@ -161,7 +162,7 @@ func (f *SharedFlags) toolSet() (toolChoice, error) {
 	if out == nil {
 		out = []tool.Tool{}
 	}
-	listed := slices.DeleteFunc(slices.Clone(f.Tools), func(n string) bool { return !strings.HasPrefix(n, mcpPrefix) })
+	listed := slices.DeleteFunc(slices.Clone(f.Tools), func(n string) bool { return !isMCPName(n) })
 	excluded := slices.Clone(f.ExcludeTools)
 	allowlist := len(f.Tools) > 0
 	return toolChoice{
@@ -171,6 +172,12 @@ func (f *SharedFlags) toolSet() (toolChoice, error) {
 			return (!allowlist || slices.Contains(listed, name)) && !slices.Contains(excluded, name)
 		},
 	}, nil
+}
+
+// isMCPName reports whether n names a tool an MCP server brings: an
+// mcp__ tool, or one of the MCP resource tools.
+func isMCPName(n string) bool {
+	return strings.HasPrefix(n, mcpPrefix) || slices.Contains(builtin.ResourceNames(), n)
 }
 
 // builtinTools are the built-in tools with gobble's options: the whole

@@ -1926,7 +1926,7 @@ Choices made within the wording:
   - **What it searches:** the agent gives it the deferred tools through `tool.Env.Deferred`, a new `[]tool.Spec`.
   - **The result:** `loaded 2 tools, callable from your next call:`, then one line per tool, `- name: first sentence`, with `Load` set. When nothing matches, `no deferred tool matches <query>`.
   - **When it is offered:** the agent adds it as a direct tool only when something is deferred.
-- **The MCP resource tools** (`mcpclient/resources.go`):
+- **The MCP resource tools** ~~(`mcpclient/resources.go`)~~ *(Deviation 2, 2026-10-09: built in `tool/builtin/resources.go` from a `ResourceSource` that `mcpclient` implements in `mcpclient/resources.go`, so D2's and D5's tests walk them.)*:
   - **mcpclient learns resources:** `resources/list`, `resources/templates/list` and `resources/read`, through the go-sdk's client session.
   - **The tools:** `list_mcp_resources {server?, cursor?}`, `list_mcp_resource_templates {server?, cursor?}` and `read_mcp_resource {server, uri}`, in family `mcp-resources`.
   - **They exist only in a session with a connected server that advertises resources,** and are loaded at the start of its first prompt. So they are never left deferred, and `tool_search` stays dormant.
@@ -1938,6 +1938,10 @@ Choices made within the wording:
 | :--- | :--- |
 | new | `tool/toolsearch/index.go`, `index_test.go`; `tool/builtin/toolsearch.go`, `toolsearch_test.go`, `describe/tool_search.md`; `mcpclient/resources.go`, `resources_test.go`, with templates for the three tools |
 | changed | `tool/tool.go` (`Family`, `Result.Load`, `Env.Deferred`), `tool/tool_test.go`; `agent/agent.go`, `agent/agent_test.go`; `acpserver/agent.go`, `acpserver/mcp.go`, `acpserver/prompt.go`; `mcpclient/manager.go`, `mcpclient/conn.go`; `mcpclient/mcptest/` (a fixture server with resources); `docs/architecture.md` |
+
+*(2026-10-09, F1d-2 deviations 1–3: `agent/event.go` and `tool/toolsearch/doc.go` join the changed files; `tool/builtin/resources.go`, `resources_test.go` and the three templates under `tool/builtin/describe/` join the new files, with `tool/builtin/builtin_test.go`, `describe_test.go` and `schema_test.go` changed; `mcpclient/resources.go` implements the source and has no templates; `internal/cli/agent.go` and its test join the changed files.)*
+
+*(2026-10-09, F1d-2 deviation 5: `acpserver/toolload_test.go` joins the new files. Deviation 6: `README.md` joins the changed files.)*
 
 **F1d-2's tests,** each seen failing first on a scratch copy:
 
@@ -1953,6 +1957,30 @@ Choices made within the wording:
   - the next prompt starts with the loaded tool;
   - fork keeps it.
 - **mcpclient,** against `mcptest`'s fixture server: the three resource methods; the tools appear only when the server advertises resources.
+
+**F1d-2's deviations, 2026-10-09,** found by reading its files before any code was written (1–4) and while writing its code (5, 6), and decided by the owner:
+
+1. **Two files the steps need.**
+   - **Found:** the agent's events are declared in `agent/event.go`, not `agent/agent.go`. `tool/toolsearch/doc.go` says the package "builds no index".
+   - **Decided:** both join F1d-2's files. The load event is declared beside the others, and the package documentation describes the index.
+2. **The resource tools' D2 and D5 checks.**
+   - **Found:** `TestSchemaConvention` and `TestDescriptionShape` walk only `tool/builtin`'s tools, and the template renderer is that package's own (`tool/builtin/describe.go`). Built in `mcpclient`, the three tools would have no check, though every new tool applies D1, D2 and D5 item 6.
+   - **Decided:** `tool/builtin` builds the three tools from a small `ResourceSource` interface, which `mcpclient`'s manager implements. Their templates are under `tool/builtin/describe/`. The existing tests walk them, and nothing is duplicated.
+3. **The CLI's tool flags.**
+   - **Found:** `internal/cli/agent.go`'s `toolSet` accepts only built-in names and names starting `mcp__`. So `-t` and `--exclude-tools` refuse `list_mcp_resources` and the other two as unknown tools.
+   - **Decided:** the CLI accepts the three names. They are filtered as MCP tools are, and listing one keeps the MCP servers on. `internal/cli/agent.go` and its test join the files.
+4. **The race gate.**
+   - **Found:** WSL's race detector on this host reports races that cannot happen, while the same probe is clean natively on Windows and on other machines (0013-REPORT, third amendment).
+   - **Decided:** from F1d-2 on, while that holds, the race step runs in two places:
+     - **for Windows,** `CGO_ENABLED=1 go test -race ./...` natively on this host, with MinGW's gcc;
+     - **for Linux,** the same command over SSH on a second amd64 Linux machine, on a copy of the tree made from a git bundle.
+   - WSL keeps `make preflight`, without its race run.
+5. **The acpserver tests' file.**
+   - **Found:** the steps require acpserver tests (a load recorded, the next prompt starting with it, fork keeping it), and the files table names no acpserver test file.
+   - **Decided:** a new `acpserver/toolload_test.go` holds them, with a test of the resource family loading at the first prompt.
+6. **README.md.**
+   - **Found:** its status line says `tool_search` and the MCP resource tools are not built yet, and the files table leaves it out.
+   - **Decided:** `README.md` joins the files. Its tools line gains them, and its status line keeps F1d-3's work only.
 
 **F1d-3 — the client's capabilities, `fs/*` and `terminal/*` routing, and `locations`.**
 
@@ -2068,3 +2096,65 @@ Choices made within the wording:
 2. **Its file list missed three files** that its own steps need: `acpserver/agent.go`, where entries are written, and two tests that pin the command list, `commands_test.go` and `session.golden`. The list was written from where updates are sent, not from where entries are written or from what pins the command set.
 3. **Its exact template broke the description test** it was meant to pass. The template was not run through that test before the entry fixed its text.
 4. **The race gate.** The entry expected F1d-1's gates to pass. The first race run met 0013-REPORT's defect with a signature that report said never varies (deviation 6). Separately, a WSL toolchain change during the second run left that run with no verdict.
+
+**F1d-2, 2026-10-09 — complete (staged; the owner commits).** It ran as the entry "F1d made executable" wrote it, approved by the owner's "proceed to F1d-2" of 2026-10-09, with six deviations decided by the owner: 1–4 before any code was written, 5 and 6 while it was written.
+
+- **The deviations** (recorded under F1d-2's tests above):
+  1. `agent/event.go` and `tool/toolsearch/doc.go` join the files.
+  2. The resource tools are built in `tool/builtin` from a `ResourceSource` that `mcpclient`'s manager implements, so D2's and D5's tests walk them.
+  3. The CLI's `-t` and `--exclude-tools` accept the resource tools' names, filtered as MCP tools are.
+  4. The race step runs natively on Windows and on a second amd64 Linux machine; WSL keeps `make preflight` alone.
+  5. `acpserver/toolload_test.go` holds the acpserver tests.
+  6. `README.md` joins the files.
+- **What was built:**
+  - **`tool`:** `ExposureHidden`; `Spec.Family` with `WithFamily`; `Env.Deferred`; `Result.Load`. The empty exposure stays direct.
+  - **`tool/toolsearch`:** the BM25 index, with the name, first sentence, rest of the description and properties weighted 3, 2, 1 and 1; lower-cased words split at letter and digit boundaries; Pi's stop words; `k1` 1.2 and `b` 0.75; an exact name first; hidden specs not indexed.
+  - **`agent`:**
+    - direct tools are sent, deferred ones kept, hidden ones neither sent nor callable;
+    - `tool_search` (`Config.Search`) is offered only while something is deferred;
+    - a result's `Load` adds the tools, with their families, to the next request of the same turn, after the tools already sent, and emits `Loaded`;
+    - `Config.Loaded` sends an earlier prompt's loads as direct, in load order;
+    - each turn has its own copy of the tools, so loads never reach another session's turn.
+  - **`tool/builtin`:** `tool_search` and the three resource tools, with their templates.
+  - **`mcpclient`:** a server that advertises resources at `initialize` is listed; the manager lists resources and templates and reads contents, each bounded by the server's timeout; `mcptest` has a resource server.
+  - **`acpserver`:**
+    - a load is recorded as `custom{customType: "gobble.tools", data: {loaded}}`, and the next prompt starts with every load along the session's path;
+    - the resource family loads at the first prompt that has it, and the load is recorded;
+    - the system prompt names only the tools the first request sends (`agent.Agent.Offered`), so a deferred tool is never named as usable.
+  - **`internal/cli`:** the resource tools' names are tool names.
+  - **Updated:** `docs/architecture.md`'s agent, tool, tool/builtin, tool/toolsearch, acpserver and mcpclient rows; `README.md`.
+- **Choices of mine, within the entry's wording:**
+  - **`tool_search` reaches the agent as `Config.Search`,** built by acpserver, so the agent does not import `tool/builtin`.
+  - **No camelCase split and no stemming** in the tokenizer. Pi has both, but the entry names only letter and digit boundaries, and Pi's stop words.
+  - **The resource tools' arguments follow codex:** no `server` lists every server's first page, and a cursor needs its server.
+  - **A resource read is cut at 50 KB,** the bound read and grep use.
+  - **The `gobble.tools` name and its reader are in `acpserver/agent.go`,** beside the writer, rather than in `session` or `history.go`, which F1d-2 does not list.
+- **The tests,** each seen failing on a scratch copy (C3): 22 mutations, each asserted to land exactly once:
+  - **the index:** equal weights; no exact-name rank; stop words kept; hidden specs indexed; no length normalization;
+  - **the agent:** deferred tools sent; `tool_search` always offered; a family not loaded whole; specs not encoded again after a load; hidden tools offered; no `Loaded` event; `Config.Loaded` ignored;
+  - **`tool/builtin`:** `tool_search` setting no `Load`; a cursor accepted without a server; a blob shown as text;
+  - **`mcpclient`:** every server treated as offering resources;
+  - **acpserver:** a load not recorded; loads not replayed; no session-start load; the system prompt naming every tool;
+  - **the CLI:** the resource names unknown; the resource tools unfiltered.
+  - **Four cases first missed their expected text.** Three tests caught their defect at an earlier assertion, or printed escaped quotes, and were re-pointed at the text they print. Case 08's mutation left a variable unused and did not build, so it was rewritten to keep it used. All 22 then failed as expected; case 08's log shows the request without `c`.
+- **Lint.** The first gate run's golangci-lint reported three findings, all in F1d-2's new code: `strings.EqualFold` in the index (gocritic), and a string built in a loop and a one-verb `Sprintf` in the resource tools (perfsprint). Both preflights failed on them alone. All three were fixed, and the gates and the 22 copies were run again.
+- **The gates:** on Go 1.27.2, as deviation 4 sets them, after the lint fixes:
+  - lint printed `0 issues.` for linux, darwin and windows;
+  - Windows `go test ./...` had no `FAIL` or `panic:`;
+  - **the race step:** `CGO_ENABLED=1 go test -race ./...` exited 0 with no race reported, natively on Windows and on a second amd64 Linux machine. The Windows run was the suite's first under the race detector there;
+  - Windows and WSL `make preflight` each printed `preflight passed`, WSL's without a race run;
+  - the 22 copies, run again, each failed as expected.
+- **Probe A** (Messages-shape bytes, on Windows):
+
+  | Tool | Description | Definition |
+  | :--- | ---: | ---: |
+  | tool_search | 685 | 1076 |
+  | list_mcp_resources | 736 | 1117 |
+  | list_mcp_resource_templates | 789 | 1179 |
+  | read_mcp_resource | 602 | 982 |
+
+**What the entry predicted wrongly:**
+
+1. **Its file list missed six files, or groups,** that its own steps need: the event file, the placeholder package doc, a home for the resource tools that the D2/D5 tests reach, the CLI's tool flags, the acpserver tests' file, and `README.md`. The list was written from where the main code goes, not from what declares, documents, tests or names it.
+2. **It put the resource tools in `mcpclient`** without asking how D2 and D5 would reach them there.
+3. **Its gates named WSL's race run.** They were written before 0013-REPORT's third amendment showed that run cannot be trusted on this host, so this is a change of circumstance more than an error of the entry.

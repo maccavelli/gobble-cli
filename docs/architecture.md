@@ -35,14 +35,14 @@ The tier is each package's `Stability:` line in its `doc.go`. **stable** package
 | :--- | :--- | :--- |
 | `cmd/gobble` | internal | The `gobble` command: `main` calls `internal/cli`. |
 | `gobble` | stable | The embedding facade. |
-| `agent` | stable | The turn loop: model calls, tool calls, approval, and the steering and follow-up queues. |
+| `agent` | stable | The turn loop: model calls, tool calls, approval, and the steering and follow-up queues. Tools are offered by tier: direct ones are sent, deferred ones wait behind `tool_search` until a call loads them with their family, and hidden ones are neither sent nor found. |
 | `llm` | stable | The model facade the agent sees. |
 | `llm/provider` | beta | `llm` over go-llmprovider-sdk, with the ambient credential selection. |
 | `llm/catalog` | beta | The model catalog (placeholder). |
 | `llm/llmtest` | stable | A scripted `llm.Provider` and request assertions, for tests. |
-| `tool` | stable | The tool contract, with the workspace roots each call gets. A tool publishes a schema with its bounds and defaults, and validates the Go type's own. |
-| `tool/builtin` | beta | The built-in tools: `read` (numbered lines, directory listings), `write`, `edit` (multi-edit with layered, guarded matching and a compare-and-swap), `grep` (RE2, `path:N: text`, sorted), `find` (globs), `tree` (a breadth-first entry budget), `move`, `delete`, `copy` and `mkdir` (confined, both paths locked in a fixed order, a cross-device move copied then deleted), `todo` (the task's checklist, replaced whole by each call and returned as the result's plan), and `bash` and, on Windows, `powershell` (process trees, a default timeout, the whole output of long commands kept 7 days). Descriptions are Markdown templates in describe/, filled from the options. |
-| `tool/toolsearch` | beta | Deferred tool exposure (placeholder). |
+| `tool` | stable | The tool contract, with the workspace roots each call gets. A tool publishes a schema with its bounds and defaults, and validates the Go type's own. A tool's spec carries its exposure and family, and a result can name tools to load. |
+| `tool/builtin` | beta | The built-in tools: `read` (numbered lines, directory listings), `write`, `edit` (multi-edit with layered, guarded matching and a compare-and-swap), `grep` (RE2, `path:N: text`, sorted), `find` (globs), `tree` (a breadth-first entry budget), `move`, `delete`, `copy` and `mkdir` (confined, both paths locked in a fixed order, a cross-device move copied then deleted), `todo` (the task's checklist, replaced whole by each call and returned as the result's plan), `tool_search` (ranks the deferred tools and loads the best, offered only while one is deferred), the three MCP resource tools (`list_mcp_resources`, `list_mcp_resource_templates` and `read_mcp_resource`, over a source `mcpclient` implements), and `bash` and, on Windows, `powershell` (process trees, a default timeout, the whole output of long commands kept 7 days). Descriptions are Markdown templates in describe/, filled from the options. |
+| `tool/toolsearch` | beta | An in-house BM25 over tool specs, with the name, the first sentence, the rest of the description and the schema's properties weighted 3, 2, 1 and 1. |
 | `permission` | beta | The policy contract that approves tool calls. |
 | `session` | stable | The session log contract, in Pi's JSONL v3 shapes, with `custom` entries for extension state such as `gobble.todo`. |
 | `session/jsonl` | stable | Sessions as JSONL files, with a writer lock. |
@@ -53,10 +53,10 @@ The tier is each package's `Stability:` line in its `doc.go`. **stable** package
 | `hook` | stable | The lifecycle hook contract. |
 | `checkpoint` | beta | File snapshots for undo (placeholder). |
 | `telemetry` | beta | OpenTelemetry wiring (placeholder). |
-| `acpserver` | beta | gobble's ACP agent: sessions, prompts, slash commands, modes, compaction, MCP servers and the `_gobble/` extension methods. A tool result's plan is sent as a `plan` update, recorded as a `gobble.todo` entry, replayed by `session/load` and shown by `/todos`. |
+| `acpserver` | beta | gobble's ACP agent: sessions, prompts, slash commands, modes, compaction, MCP servers and the `_gobble/` extension methods. A tool result's plan is sent as a `plan` update, recorded as a `gobble.todo` entry, replayed by `session/load` and shown by `/todos`. Each tool load is recorded as a `gobble.tools` entry, and a session's next prompt starts with every tool its path has loaded; the MCP resource tools load at the first prompt that has them. |
 | `acpclient` | beta | gobble's own ACP client, used by `internal/cli`. |
 | `acpclient/acptest` | stable | An agent and a client over in-memory pipes, with a frame recorder and golden transcripts, for tests. |
-| `mcpclient` | beta | MCP servers over stdio and streamable HTTP, through the go-sdk. Each stdio server runs as an `internal/proctree` tree and is stopped as Pi stops one. |
+| `mcpclient` | beta | MCP servers over stdio and streamable HTTP, through the go-sdk. Each stdio server runs as an `internal/proctree` tree and is stopped as Pi stops one. A server that advertises resources is listed, read and searched through the resource tools. |
 | `mcpclient/mcptest` | beta | An MCP server fixture for tests, over stdio and HTTP. |
 | `internal/cli` | internal | The command edge: the Kong grammar, `chat` and its flags, the line session, print mode, the exit codes, signals and output. It holds `selfupdate-release.json`, the release spec. |
 | `internal/cli/complete` | internal | Native shell completion for bash, zsh, fish and PowerShell. |

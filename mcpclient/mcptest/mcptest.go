@@ -87,6 +87,29 @@ func NewServer() *mcp.Server {
 	return s
 }
 
+// ResourceURI, ResourceText and TemplateURI are the resource fixture's
+// resource, its text, and its template's uri pattern.
+const (
+	ResourceURI  = "doc://readme"
+	ResourceText = "# Read me"
+	TemplateURI  = "doc://page/{n}"
+)
+
+// NewResourceServer is NewServer with resources: ResourceURI, read as
+// ResourceText, and the template TemplateURI. NewServer offers none.
+func NewResourceServer() *mcp.Server {
+	s := NewServer()
+	s.AddResource(&mcp.Resource{URI: ResourceURI, Name: "readme", MIMEType: "text/markdown", Description: "The project's readme."},
+		func(_ context.Context, r *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+			return &mcp.ReadResourceResult{Contents: []*mcp.ResourceContents{{URI: r.Params.URI, MIMEType: "text/markdown", Text: ResourceText}}}, nil
+		})
+	s.AddResourceTemplate(&mcp.ResourceTemplate{URITemplate: TemplateURI, Name: "page", Description: "A page, by number."},
+		func(_ context.Context, r *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+			return &mcp.ReadResourceResult{Contents: []*mcp.ResourceContents{{URI: r.Params.URI, Text: "page " + r.Params.URI}}}, nil
+		})
+	return s
+}
+
 // ServeStdioIfAsked serves the fixture on stdin and stdout, then exits,
 // when EnvServe is "stdio". Otherwise it returns at once. The process is
 // then the fixture, not a test, so it owns its exit code and stderr.
@@ -166,7 +189,18 @@ func StdioServer(t testing.TB) (command string, env map[string]string) {
 // Bearer <bearer>" gets 401.
 func HTTPServer(t testing.TB, bearer string) string {
 	t.Helper()
-	srv := NewServer()
+	return serveHTTP(t, NewServer(), bearer)
+}
+
+// ResourceHTTPServer serves NewResourceServer over streamable HTTP until
+// the test ends, and returns its URL.
+func ResourceHTTPServer(t testing.TB) string {
+	t.Helper()
+	return serveHTTP(t, NewResourceServer(), "")
+}
+
+func serveHTTP(t testing.TB, srv *mcp.Server, bearer string) string {
+	t.Helper()
 	var h http.Handler = mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return srv }, nil)
 	if bearer != "" {
 		next := h

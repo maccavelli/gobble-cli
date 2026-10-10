@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -24,6 +25,25 @@ func call(t *testing.T, tl tool.Tool, env tool.Env, args any) tool.Result {
 		t.Fatal(err)
 	}
 	return r
+}
+
+// catalog is every tool this package builds: ToolsWith's, tool_search, and
+// the MCP resource tools over a stub source, so the D2 and D5 tests walk
+// them all (0005-PLAN F1d-2 deviation 2).
+func catalog(o Options) []tool.Tool {
+	return append(append(ToolsWith(o), ToolSearch()), ResourceTools(stubSource{})...)
+}
+
+// catalogNames are catalog's tool names, with powershell's on every host.
+func catalogNames() []string {
+	var out []string
+	for _, tl := range catalog(Options{}) {
+		out = append(out, tl.Spec().Name)
+	}
+	if !slices.Contains(out, "powershell") {
+		out = append(out, "powershell")
+	}
+	return out
 }
 
 func TestToolsAndAnnotations(t *testing.T) {

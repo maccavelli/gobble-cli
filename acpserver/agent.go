@@ -2,6 +2,7 @@ package acpserver
 
 import (
 	"context"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -369,15 +370,26 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 	if a.modeOf(s) == modePlan {
 		tools = append(tools, exitPlan{a: a, conn: conn, s: s})
 	}
-	ag := agent.New(agent.Config{
+	loaded := loadedTools(session.Path(s.log.Entries()))
+	if fresh := startLoads(tools, loaded); len(fresh) > 0 {
+		w.add(toolsEntry(fresh))
+		if w.err != nil {
+			return acp.PromptResponse{}, acp.NewInternalError(map[string]any{keyReason: w.err.Error()})
+		}
+		loaded = append(loaded, fresh...)
+	}
+	cfg := agent.Config{
 		Provider: model,
 		Tools:    tools,
-		System:   systemPrompt(s.cwd, tools),
 		Model:    chosen,
 		Thinking: think,
 		Policy:   planPolicy{a: a, s: s, inner: &acpPolicy{conn: conn, session: p.SessionId}},
 		Queue:    s.queue,
-	})
+		Search:   builtin.ToolSearch(),
+		Loaded:   loaded,
+	}
+	cfg.System = systemPromptOf(s.cwd, agent.New(cfg).Offered())
+	ag := agent.New(cfg)
 	out := newUpdates(ctx, conn, p.SessionId)
 	var last llm.Usage
 	env := s.env()
@@ -456,6 +468,59 @@ func (a *Agent) providerID(p llm.Provider) string {
 	return p.ID()
 }
 
+// customTools is the custom entry recording tools a load added: a
+// tool_search call's, or the session's start. Its data is {loaded}, the
+// names in load order (0005-PLAN F1d-2).
+const customTools = "gobble.tools"
+
+// sessionStartFamilies are the deferred families loaded at the first prompt
+// that has them, rather than left behind tool_search (0012-MADR D9): the
+// MCP resource tools, which exist only while a server offers resources.
+var sessionStartFamilies = []string{builtin.ResourceFamily}
+
+type toolsData struct {
+	Loaded []string `json:"loaded"`
+}
+
+// toolsEntry records a load.
+func toolsEntry(names []string) session.Entry {
+	return session.Entry{Type: session.TypeCustom, CustomType: customTools, Data: mustJSON(toolsData{Loaded: names})}
+}
+
+// loadedTools are the tools path's gobble.tools entries loaded, in load
+// order, each once: the start of a prompt loads them again (0012-MADR D9).
+func loadedTools(path []session.Entry) []string {
+	var out []string
+	for _, e := range path {
+		if e.Type != session.TypeCustom || e.CustomType != customTools {
+			continue
+		}
+		var d toolsData
+		if json.Unmarshal(e.Data, &d) != nil {
+			continue
+		}
+		for _, n := range d.Loaded {
+			if !slices.Contains(out, n) {
+				out = append(out, n)
+			}
+		}
+	}
+	return out
+}
+
+// startLoads are the deferred tools of a session-start family that are not
+// loaded yet, in tools' order.
+func startLoads(tools []tool.Tool, loaded []string) []string {
+	var out []string
+	for _, t := range tools {
+		s := t.Spec()
+		if s.Exposure == tool.ExposureDeferred && slices.Contains(sessionStartFamilies, s.Family) && !slices.Contains(loaded, s.Name) {
+			out = append(out, s.Name)
+		}
+	}
+	return out
+}
+
 // writer records one turn's messages as they complete.
 type writer struct {
 	a        *Agent
@@ -490,6 +555,8 @@ func (w *writer) event(ev agent.Event) {
 		if ev.Result.Plan != nil {
 			w.add(todoEntry(ev.Result.Plan))
 		}
+	case agent.Loaded:
+		w.add(toolsEntry(ev.Names))
 	case agent.End:
 		for _, m := range ev.Messages {
 			for _, c := range m.Content {

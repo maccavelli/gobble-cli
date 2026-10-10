@@ -126,9 +126,10 @@ func (a *Agent) startMCP(ctx context.Context, cwd string, servers []mcpclient.Se
 	return &liveMCP{m: m, notes: notes, reported: map[string]bool{}}
 }
 
-// tools are the MCP tools for a prompt. The session's first prompt waits
-// for servers still connecting, up to the start-up wait; then each problem
-// is logged once, when first seen.
+// tools are the MCP tools for a prompt, then the MCP resource tools while
+// a connected server offers resources, each kept by the tool filter. The
+// session's first prompt waits for servers still connecting, up to the
+// start-up wait; then each problem is logged once, when first seen.
 func (a *Agent) mcpTools(ctx context.Context, l *liveMCP) []tool.Tool {
 	if l == nil {
 		return nil
@@ -168,7 +169,13 @@ func (a *Agent) mcpTools(ctx context.Context, l *liveMCP) []tool.Tool {
 			}
 		}
 	}
-	return l.m.Tools(a.mcp.Allow)
+	tools := l.m.Tools(a.mcp.Allow)
+	for _, t := range l.m.ResourceTools() {
+		if a.mcp.Allow == nil || a.mcp.Allow(t.Spec().Name) {
+			tools = append(tools, t)
+		}
+	}
+	return tools
 }
 
 // closeMCP closes a session's servers. A server's exit status is logged,
