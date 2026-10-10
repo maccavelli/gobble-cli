@@ -181,7 +181,7 @@ func loadFile(path string) (Skill, []Diagnostic, bool) {
 		return Skill{}, nil, false
 	}
 	desc, isString := fields["description"].(string)
-	has := isString && strings.TrimSpace(desc) != ""
+	has := isString && frontmatter.Trim(desc) != ""
 	if !declared && !has {
 		return Skill{}, nil, false
 	}
@@ -259,7 +259,7 @@ func Expand(text string, skills []Skill) (string, bool) {
 		return text, false
 	}
 	name, args, _ := strings.Cut(rest, " ")
-	args = strings.TrimSpace(args)
+	args = frontmatter.Trim(args)
 	for _, s := range skills {
 		if s.Name != name {
 			continue
@@ -273,7 +273,7 @@ func Expand(text string, skills []Skill) (string, bool) {
 			return text, false
 		}
 		block := `<skill name="` + s.Name + `" location="` + s.FilePath + `">` + "\nReferences are relative to " + s.BaseDir +
-			".\n\n" + strings.TrimSpace(body) + "\n</skill>"
+			".\n\n" + frontmatter.Trim(body) + "\n</skill>"
 		if args != "" {
 			block += "\n\n" + args
 		}

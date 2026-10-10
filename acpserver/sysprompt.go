@@ -103,11 +103,7 @@ func (a *Agent) skills(s *liveSession) []skill.Skill {
 	found, diags := skill.Load(sources)
 	notes := make([]sysprompt.Diagnostic, 0, len(diags))
 	for _, d := range diags {
-		msg := d.Message
-		if d.Winner != "" {
-			msg += " (" + d.Winner + " is loaded)"
-		}
-		notes = append(notes, sysprompt.Diagnostic{Path: d.Path, Message: msg})
+		notes = append(notes, sysprompt.Diagnostic{Path: d.Path, Message: d.Message, Winner: d.Winner})
 	}
 	// Home's own .agents/skills is the user's, never the project's, as Pi
 	// excludes it by the real home directory, whether or not it is read.
@@ -122,13 +118,60 @@ func (a *Agent) skills(s *liveSession) []skill.Skill {
 	return found
 }
 
+// templates are the session's prompt templates (0005-PLAN F3-3): the config
+// directory's prompts/; the project's .gobble/prompts waits for trust
+// (0005-PLAN F6), and the Pi bridge for F10. A template that has a
+// built-in command's name is left out, logged in Pi's collision wording
+// with the built-in as the winner (F3-3 deviation 1). Each diagnostic is
+// logged once per session.
+func (a *Agent) templates(s *liveSession) []sysprompt.Template {
+	o := a.prompt
+	var dirs []string
+	if o.ConfigDir != "" {
+		dirs = append(dirs, filepath.Join(o.ConfigDir, "prompts"))
+	}
+	found, diags := sysprompt.LoadTemplates(dirs)
+	builtins := a.handlers()
+	out := make([]sysprompt.Template, 0, len(found))
+	for _, t := range found {
+		if _, ok := builtins[t.Name]; ok {
+			diags = append(diags, sysprompt.Diagnostic{Path: t.FilePath, Message: `name "/` + t.Name + `" collision`, Winner: "the built-in command /" + t.Name})
+			continue
+		}
+		out = append(out, t)
+	}
+	if p := filepath.Join(s.cwd, ".gobble", "prompts"); isDir(p) {
+		diags = append(diags, sysprompt.Diagnostic{Path: p, Message: sysprompt.TrustNote})
+	}
+	a.note(s, diags)
+	return out
+}
+
+// templatesOf are the templates found when s started.
+func (a *Agent) templatesOf(s *liveSession) []sysprompt.Template {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return s.templates
+}
+
+// expand is Pi's expansion of a prompt's text (agent-session.ts:1922-1924):
+// /skill:<name> into Pi's <skill> block, then a template of the name after
+// "/" into its content (0005-PLAN F3-2, F3-3). ok is false when neither
+// matched.
+func (a *Agent) expand(s *liveSession, text string) (string, bool) {
+	text, skilled := skill.Expand(text, a.skills(s))
+	text, templated := sysprompt.ExpandTemplate(text, a.templatesOf(s))
+	return text, skilled || templated
+}
+
+func isDir(p string) bool { info, err := os.Stat(p); return err == nil && info.IsDir() }
+
 // projectSkillDirs are the project's own skill directories that exist: its
 // .gobble/skills, and each .agents/skills from cwd up to the repository
 // root, or the filesystem root outside one, but not home's, which is the
 // user's (Pi's collectAncestorAgentsSkillDirs, package-manager.ts:468-487).
 func projectSkillDirs(cwd, home string) []string {
 	var out []string
-	isDir := func(p string) bool { info, err := os.Stat(p); return err == nil && info.IsDir() }
 	if p := filepath.Join(cwd, ".gobble", "skills"); isDir(p) {
 		out = append(out, p)
 	}
@@ -160,6 +203,9 @@ func projectSkillDirs(cwd, home string) []string {
 // note logs each diagnostic once per session.
 func (a *Agent) note(s *liveSession, diags []sysprompt.Diagnostic) {
 	for _, d := range diags {
+		if d.Winner != "" {
+			d.Message += " (" + d.Winner + " is loaded)"
+		}
 		key := d.Path + "\x00" + d.Message
 		a.mu.Lock()
 		seen := s.noted[key]

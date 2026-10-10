@@ -95,6 +95,22 @@ func TestValidation(t *testing.T) {
 	}
 }
 
+// A description is blank by JavaScript's trim, as Pi tests it: U+FEFF
+// alone is blank, U+0085 alone is not (0005-PLAN F3-3 deviation 4).
+func TestBlankDescription(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "bom", "SKILL.md"), "---\ndescription: \"\\ufeff\"\n---\n")
+	writeFile(t, filepath.Join(dir, "nel", "SKILL.md"), "---\ndescription: \"\\u0085\"\n---\n")
+	skills, diags := Load([]Source{{Dir: dir}})
+	got := strings.Join(messages(diags), "\n")
+	if !strings.Contains(got, "bom: description is required") || strings.Contains(got, "nel:") {
+		t.Errorf("diagnostics:\n%s", got)
+	}
+	if n := names(skills); !slices.Equal(n, []string{"nel"}) {
+		t.Errorf("skills %v", n)
+	}
+}
+
 // The scan: a SKILL.md directory is not searched further; dotfiles and
 // node_modules are skipped; a loose .md file without a description is
 // skipped silently; in the .agents layout a loose file counts only below
@@ -168,6 +184,20 @@ func TestExpand(t *testing.T) {
 	}
 	if got, ok := Expand("/skill:deploy  to prod ", skills); !ok || got != block+"\n\nto prod" {
 		t.Fatalf("args: %q, %v", got, ok)
+	}
+	// JavaScript's trim: U+3000 goes, U+0085 stays (0005-PLAN F3-3
+	// deviation 4).
+	if got, ok := Expand("/skill:deploy \u3000to prod\u0085", skills); !ok || got != block+"\n\nto prod\u0085" {
+		t.Fatalf("JavaScript's trim: %q, %v", got, ok)
+	}
+	// A body without frontmatter is trimmed as JavaScript trims it: U+0085
+	// stays.
+	bare := filepath.Join(dir, "bare", "SKILL.md")
+	writeFile(t, bare, "\n\u0085Body\u0085\n")
+	bareSkill := []Skill{{Name: "bare", FilePath: bare, BaseDir: filepath.Dir(bare)}}
+	wantBare := `<skill name="bare" location="` + bare + `">` + "\nReferences are relative to " + filepath.Dir(bare) + ".\n\n\u0085Body\u0085\n</skill>"
+	if got, ok := Expand("/skill:bare", bareSkill); !ok || got != wantBare {
+		t.Fatalf("a bare body: %q, %v", got, ok)
 	}
 	for _, text := range []string{"/skill:nope x", "skill:deploy", "/deploy"} {
 		if got, ok := Expand(text, skills); ok || got != text {

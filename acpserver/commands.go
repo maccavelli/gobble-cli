@@ -13,6 +13,7 @@ import (
 
 	"github.com/maccavelli/gobble-cli/command"
 	"github.com/maccavelli/gobble-cli/compaction"
+	sysprompt "github.com/maccavelli/gobble-cli/prompt"
 	"github.com/maccavelli/gobble-cli/session"
 )
 
@@ -38,10 +39,19 @@ var commands = []command.Command{
 	{Name: "todos", Description: "Show the todo list"},
 }
 
-// availableCommands is the commands as ACP lists them.
-func availableCommands() []acp.AvailableCommand {
-	out := make([]acp.AvailableCommand, len(commands))
-	for i, c := range commands {
+// availableCommands is the commands as ACP lists them, then each template
+// whose name is a command name, with its description and its
+// argument-hint (0005-PLAN F3-3). A template a built-in shadows is not
+// among templates (Agent.templates).
+func availableCommands(templates []sysprompt.Template) []acp.AvailableCommand {
+	all := slices.Clone(commands)
+	for _, t := range templates {
+		if command.ValidName(t.Name) {
+			all = append(all, command.Command{Name: t.Name, Description: t.Description, Hint: t.ArgumentHint})
+		}
+	}
+	out := make([]acp.AvailableCommand, len(all))
+	for i, c := range all {
 		out[i] = acp.AvailableCommand{Name: c.Name, Description: c.Description}
 		if c.Hint != "" {
 			out[i].Input = &acp.AvailableCommandInput{Unstructured: &acp.UnstructuredCommandInput{Hint: c.Hint}}
@@ -493,12 +503,17 @@ func (a *Agent) copySession(ctx context.Context, s *liveSession, path []session.
 
 // startFrames are what a client needs before its first prompt, sent before
 // a session response (2026-10-01 amendment): the commands, the mode, and
-// the context's estimated use, the system prompt and the context.
+// the context's estimated use, the system prompt and the context. The
+// session's templates are found here, once (0005-PLAN F3-3).
 func (a *Agent) startFrames(ctx context.Context, conn *acp.AgentSideConnection, s *liveSession) error {
+	templates := a.templates(s)
+	a.mu.Lock()
+	s.templates = templates
+	a.mu.Unlock()
 	used := compaction.EstimateText(a.systemText(s)) + compaction.EstimateEntries(s.tree.Path())
 	a.setUsed(s, used)
 	out := newUpdates(ctx, conn, s.id)
-	out.send(acp.SessionUpdate{AvailableCommandsUpdate: &acp.SessionAvailableCommandsUpdate{SessionUpdate: "available_commands_update", AvailableCommands: availableCommands()}})
+	out.send(acp.SessionUpdate{AvailableCommandsUpdate: &acp.SessionAvailableCommandsUpdate{SessionUpdate: "available_commands_update", AvailableCommands: availableCommands(templates)}})
 	out.send(modeUpdate(a.modeOf(s)))
 	out.send(usedUpdate(used))
 	return out.err

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 	"unicode/utf8"
 	"uuid"
 
@@ -20,8 +21,8 @@ import (
 	"github.com/maccavelli/gobble-cli/command"
 	"github.com/maccavelli/gobble-cli/compaction"
 	"github.com/maccavelli/gobble-cli/llm"
+	sysprompt "github.com/maccavelli/gobble-cli/prompt"
 	"github.com/maccavelli/gobble-cli/session"
-	"github.com/maccavelli/gobble-cli/skill"
 	"github.com/maccavelli/gobble-cli/tool"
 	"github.com/maccavelli/gobble-cli/tool/builtin"
 )
@@ -127,6 +128,9 @@ type liveSession struct {
 	appendMu sync.Mutex
 	// noted are the prompt diagnostics logged for the session, once each.
 	noted map[string]bool
+	// templates are the prompt templates found when the session started
+	// (startFrames; 0005-PLAN F3-3).
+	templates []sysprompt.Template
 }
 
 var (
@@ -368,7 +372,18 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 		return acp.PromptResponse{}, err
 	}
 	defer release()
-	if name, args, isCommand := command.Parse(promptText(p.Prompt)); isCommand {
+	// A skill, or a template, is expanded into the user's message, as Pi
+	// expands them; any other command runs, a built-in or unknown. No
+	// template has a built-in's name (Agent.templates), so a built-in
+	// wins (0005-PLAN F3-2, F3-3).
+	text := promptText(p.Prompt)
+	name, args, isCommand := command.Parse(text)
+	if isCommand {
+		// The text as Parse reads it, from its "/".
+		text = strings.TrimLeftFunc(text, unicode.IsSpace)
+	}
+	expanded, isExpanded := a.expand(s, text)
+	if isCommand && !isExpanded {
 		return a.runCommand(turnCtx, s, conn, name, args)
 	}
 	model, err := a.modelProvider()
@@ -386,10 +401,8 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 	}()
 
 	prompt := userMessage(p.Prompt)
-	// /skill:<name> [args] becomes Pi's <skill> block, the user's message
-	// (0005-PLAN F3-2).
-	if text, ok := skill.Expand(promptText(p.Prompt), a.skills(s)); ok {
-		prompt = llm.Message{Role: llm.RoleUser, Content: []llm.Content{{Type: llm.ContentText, Text: text}}}
+	if isExpanded {
+		prompt = llm.Message{Role: llm.RoleUser, Content: []llm.Content{{Type: llm.ContentText, Text: expanded}}}
 	}
 	chosen, think := a.choices(s)
 	w := writer{a: a, s: s, ctx: context.WithoutCancel(ctx), provider: a.providerID(model), model: chosen, written: map[string]bool{}}

@@ -52,6 +52,8 @@ Early, and built in the order [docs/README.md](docs/README.md#build-order) gives
   and `--append-system-prompt`; it stays fixed for a session, and a change reaches the model as a message.
 - **Agent Skills** from the config directory's `skills/` and `~/.agents/skills`, listed in the prompt; `/skill:<name>` sends one, and
   `--no-skills` turns them off.
+- **Prompt templates** from the config directory's `prompts/`, as Pi writes them: `/review concurrency` sends `review.md` with
+  its arguments in place.
 - **`gobble mcp add|remove|list`**, `gobble config path`, `gobble version` and `gobble completion`.
 
 Not built yet: the permission engine (F6), the enhanced TUI mode, and `gobble update`. The full v1 line, tiered into

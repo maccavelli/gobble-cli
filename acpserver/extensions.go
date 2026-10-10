@@ -155,6 +155,9 @@ func (a *Agent) enqueue(params jsontext.Value, add func(*queue, string)) (any, e
 	if name, _, ok := command.Parse(text); ok && slices.ContainsFunc(commands, func(c command.Command) bool { return c.Name == name }) {
 		return nil, invalidParams(s.id, fmt.Sprintf("Command \"/%s\" cannot be queued. Send it as a prompt when the turn ends.", name))
 	}
+	// Queued as Pi queues it, expanded: a skill, then a template
+	// (agent-session.ts:2106-2107; 0005-PLAN F3-3 deviation 2).
+	text, _ = a.expand(s, text)
 	add(s.queue, text)
 	return queuedResult{Disposition: "queued"}, nil
 }

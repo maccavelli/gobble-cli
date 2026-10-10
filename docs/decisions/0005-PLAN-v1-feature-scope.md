@@ -2847,12 +2847,16 @@ Choices made within the wording:
     - a frontmatter error skips the file, with a warning;
     - a missing description takes the first non-empty line, cut to 60 characters with `...`;
     - a name collision keeps the first, with `name "/<name>" collision`.
+    - *(2026-10-10, F3-3 deviation 3: and each directory's `.gitignore`, `.ignore` and `.fdignore` apply, as Pi's `collectAutoPromptEntries` applies them.)*
   - `ParseArgs(s string) []string` is Pi's `parseCommandArgs`. Whitespace is Go's `unicode.IsSpace` and U+FEFF, which is JavaScript's `\s`.
+    *(2026-10-10, F3-3 deviation 4: ~~Go's `unicode.IsSpace` and U+FEFF~~ is not JavaScript's `\s`, which leaves out U+0085. Whitespace is JavaScript's own set, from `internal/frontmatter`.)*
   - `Substitute(content string, args []string) string` is Pi's `substituteArgs`, with the same regular expression and no recursive substitution.
   - `ExpandTemplate(text string, []Template) (string, bool)` is Pi's `expandPromptTemplate`.
 - **The directories:** `.gobble/prompts`, which waits for trust; the config directory's `prompts/`, loaded; the Pi bridge, empty until F10.
 - **acpserver:**
   - a command that no built-in handles, and a template matches, is expanded and run as a model prompt, so a built-in wins over a template of its name, with Pi's collision message logged;
+    *(2026-10-10, F3-3 deviation 1: Pi has ~~a collision message~~ none for this. gobble logs Pi's template-collision wording, `name "/<name>" collision`, naming the built-in as the winner, once per session, and does not advertise the template.)*
+  - *(2026-10-10, F3-3 deviation 2: a queued steering or follow-up message is expanded as it is queued, a skill and then a template, as Pi expands it.)*
   - `available_commands_update` adds each template whose name is a command name (`command/doc.go:6`), with its description, and its `argument-hint` as the input hint;
   - the set is the one found when the session starts.
 
@@ -2862,6 +2866,12 @@ Choices made within the wording:
 | :--- | :--- |
 | new | `prompt/template.go`, `prompt/template_test.go`, `prompt/template_fuzz_test.go`, `prompt/testdata/prompts/`; `acpserver/templates_test.go` |
 | changed | `acpserver/agent.go`, `acpserver/commands.go`, `acpserver/sysprompt.go`; `docs/architecture.md`; `README.md` |
+
+*(2026-10-10, F3-3 deviation 2: `acpserver/extensions.go` and `acpserver/extensions_test.go` join the changed files.)*
+
+*(2026-10-10, F3-3 deviation 4: `internal/frontmatter/frontmatter.go`, `frontmatter_test.go`, `skill/skill.go` and `skill/skill_test.go` join the changed files.)*
+
+*(2026-10-10, F3-3 deviation 6: `prompt/context.go` joins the changed files.)*
 
 **F3-3's tests,** each seen failing first on a scratch copy:
 
@@ -2874,6 +2884,29 @@ Choices made within the wording:
   - it is advertised with its hint;
   - a built-in of the same name wins;
   - a project template is not loaded.
+
+*(2026-10-10, F3-3 deviation 5: Pi's invalid-YAML case is ported with yaml.v3's own message in place of Pi's `line 1, column 14`.)*
+
+**F3-3's deviations, 2026-10-10,** found by reading its files and Pi's before any code was written (1 to 5) and while its code was written (6), and decided by the owner:
+
+1. **Pi has no message for a template a built-in shadows.**
+   - **Found:** Pi's one template collision is between two templates, `name "/<name>" collision` (`resource-loader.ts:1148-1170`). A template with a built-in's name is logged by nothing; Pi's autocomplete still lists it, filtering only extension commands (`interactive-mode.ts:750-761`), and the built-in runs.
+   - **Decided:** gobble logs Pi's template-collision wording, naming the built-in as the winner, once per session, and does not advertise the template, so the advertised commands stay ones that run. No files change.
+2. **A queued message was never expanded.**
+   - **Found:** Pi expands `/skill:` and templates in a message as it queues it (`agent-session.ts:1922-1924`, `:2106-2107`). gobble's `enqueue` queues the text as typed (`acpserver/extensions.go:146-158`), so a queued `/skill:<name>`, since F3-2, and a queued template reach the model unexpanded.
+   - **Decided:** `enqueue` expands the text as Pi does, a skill and then a template, before it queues it. `acpserver/extensions.go` and its test join the files.
+3. **The plan's scan rules left out Pi's ignore files.**
+   - **Found:** Pi's `collectAutoPromptEntries` applies the prompts directory's `.gitignore`, `.ignore` and `.fdignore` (`package-manager.ts:489-516`, `:261-279`).
+   - **Decided:** `LoadTemplates` applies them, through F3-2's `fsx.Ignore.Add`. No files change.
+4. **JavaScript's whitespace is not Go's.**
+   - **Found:** JavaScript's `\s` and `.trim()` include U+FEFF and leave out U+0085; Go's `unicode.IsSpace` and `strings.TrimSpace` do the reverse. The entry named Go's set with U+FEFF, which keeps U+0085. F3-2 trims with `strings.TrimSpace` where Pi trims with `.trim()` (`skill/skill.go:184`, `:262`, `:276`; `internal/frontmatter/frontmatter.go:35`), read in the committed files.
+   - **Decided:** `internal/frontmatter` exports JavaScript's whitespace, `IsSpace` and `Trim`, beside the parser that already serves both packages, and the template code and F3-2's four trims use it, each with a test. `internal/frontmatter/frontmatter.go`, `frontmatter_test.go`, `skill/skill.go` and `skill/skill_test.go` join the files.
+5. **Pi's invalid-YAML message is its library's.**
+   - **Found:** Pi's test expects `line 1, column 14` in the warning (`test/prompt-templates.test.ts:626-652`), the wording of JavaScript's `yaml`. `go.yaml.in/yaml/v3` v3.0.5, the library 0005-MADR's amendment of 2026-10-10 chose (item 7), gives `yaml: mapping values are not allowed in this context` for that frontmatter, with no position, as a probe outside the repository showed.
+   - **Decided:** the case asserts all else Pi's does, a warning with the file's path, the file skipped and the valid sibling loaded, and yaml.v3's message exactly. No files change.
+6. **A template collision's winner had nowhere to go.**
+   - **Found:** `LoadTemplates` returns `prompt.Diagnostic`, which holds a path and a message only (`prompt/context.go:18-20`). Pi's collision carries the winner's path beside its message (`resource-loader.ts:1155-1165`), and F3-2's skill diagnostics log theirs.
+   - **Decided:** `prompt.Diagnostic` gains `Winner`, the file or built-in a collision kept, a compatible change; the session log names it, for a template collision and a built-in's alike. `prompt/context.go` joins the files. The queued-message test lives in `acpserver/templates_test.go`, so `acpserver/extensions_test.go`, which deviation 2 named, does not change.
 
 **F3-4 — `@path`, resource blocks, and the prompt capabilities.**
 
@@ -3033,3 +3066,59 @@ Choices made within the wording:
 
 1. **It named F1c's matcher for a use its API did not offer,** and that walker reads `.gitignore` only. Exporting it as a second method then failed lint, and `walk.go` had to change too.
 2. **Its tests would not have caught two behaviours it asked for:** the real-path de-duplication, and the CRLF normalisation. The negatives showed it, and the tests are added.
+
+**F3-3, 2026-10-10 — complete (staged; the owner commits).** It ran as the entry "F3 made executable" wrote it, approved by the owner's "committed and pushed, proceed" of 2026-10-10, with six deviations decided by the owner: 1 to 5 before any code was written, 6 while it was written. F3-4 has not run.
+
+- **The deviations** (recorded under F3-3's deviations above):
+  1. A template a built-in shadows is logged in Pi's template-collision wording, with the built-in as the winner, and is not advertised.
+  2. A queued message is expanded as it is queued, a skill and then a template.
+  3. A prompts directory's `.gitignore`, `.ignore` and `.fdignore` apply.
+  4. `internal/frontmatter` exports JavaScript's whitespace, `IsSpace` and `Trim`, and F3-2's four trims use it.
+  5. Pi's invalid-YAML case is ported with yaml.v3's message.
+  6. `prompt.Diagnostic` gains `Winner`.
+- **What was built:**
+  - **`prompt`:** `Template`; `LoadTemplates`, with Pi's scan, its warnings and its first-wins collisions; `ParseArgs`; `Substitute`, one pass with Pi's pattern; `ExpandTemplate`; `Diagnostic.Winner`.
+  - **`internal/frontmatter`:** `IsSpace` and `Trim`, and the body trimmed by them. **`skill`:** a description's blankness, the arguments and the body trimmed by them.
+  - **acpserver:**
+    - the config directory's `prompts/` loaded when a session starts, and each template with a command name advertised after the built-ins, with its argument hint;
+    - a prompt expanded as Pi expands it, a skill and then a template, and any other command run as before;
+    - a queued message expanded the same way;
+    - a template with a built-in's name left out and logged;
+    - the project's `.gobble/prompts` noted as waiting for trust.
+  - **Updated:** `docs/architecture.md`'s `prompt` and `acpserver` rows; `README.md`.
+- **Choices of mine, within the entry's wording:**
+  - **Pi's cases were ported by a converter.** It read every literal `expect` of `substituteArgs` (80) and `parseCommandArgs` (16) from Pi's test file and wrote each as a table row, with its test's name and its line, and listed the nine whose arguments are computed, which were ported by hand. Its first run skipped two literal cases for a trailing comma it did not parse, which its listing showed, and both were then ported.
+  - **A template whose name is not a command name** (`a.b.md`) runs from `/a.b`, as Pi's `expandPromptTemplate` matches any name, and is not advertised.
+  - **Text before a command's `/` is dropped before expansion,** as `command.Parse` drops it, so `/review` after a space runs the template; Pi's requires the `/` first.
+  - **A body without frontmatter is not trimmed,** as Pi's `extractFrontmatter` returns it, so its trailing newline reaches the model.
+  - **A number too large for an int** is larger than any argument list, as JavaScript's `parseInt` makes it; a surrogate pair cut by the 60-unit description leaves U+FFFD; bytes that are not UTF-8 pass through `ParseArgs` as they came.
+  - **Three lines no test could fail were left out:** Pi's `node_modules` rule, since no `.md` file has that name; trimming the arguments' leading whitespace, which `ParseArgs` skips; and a branch running a built-in before expansion, since no template a built-in shadows is kept.
+  - **A shadowed template's log line** is `name "/<name>" collision (the built-in command /<name> is loaded)`; `/help` lists the built-ins only.
+- **The tests:**
+  - `prompt`: `TestSubstitute`, `TestSubstituteComputed`, `TestSubstituteLargeNumbers`, `TestParseArgs`, `TestParseArgsWhitespace`, `TestParseAndSubstitute`, `TestExpandTemplate`, `TestDocsExample` (F3's accept line, from `testdata/prompts/review.md`), `TestArgumentHint`, `TestInvalidFrontmatter`, `TestDescriptionFallback`, `TestTemplateScan`, `TestTemplateCollision`, and `FuzzTemplate`.
+  - `internal/frontmatter`: `TestIsSpace` and a `TestParse` case. `skill`: `TestBlankDescription` and two `TestExpand` cases.
+  - acpserver: `TestTemplateRuns`, `TestTemplateAdvertised`, `TestTemplatesFixedAtStart`, `TestProjectTemplatesWait` and `TestQueuedExpansion`.
+- **C3: every new check, seen failing on a scratch copy.** There were 47 mutations, each asserted to land exactly once.
+  - **46 failed as expected on the first run. One did not:** loading the project's `.gobble/prompts` did run its template, but the test's model had no reply to give, so the test stopped on the script's exhaustion before its own check. It was a broken experiment: the model now answers once, and the mutation then failed with the test's message.
+  - All 47 were run again, and all failed as expected, none by a build failure:
+    - the scan and the loader: the last of two names winning; dotfiles loaded; no ignore files; a directory read; a link not followed; the description not cut; cut in bytes; a blank line chosen; Go's trim of a line; the hint dropped; the description ignored; a file with bad YAML loaded;
+    - `ParseArgs`: quotes kept; an empty argument; Go's whitespace; bytes that are not UTF-8 replaced;
+    - `Substitute`: a second, recursive pass; a default ignored; `${@:0}` not read as `${@:1}`; a slice's length ignored; `$0` read as an argument; a large number read as 0; `$@` not every argument;
+    - `ExpandTemplate`: Go's whitespace ending the name; a prefix matching; a template with no name matching;
+    - `FuzzTemplate`'s own properties, on its seeds: an argument substituted in turn; text without `$` changed; an empty argument;
+    - acpserver: a shadowed template kept; its collision not logged; the winner not shown; no expansion; the space before `/` kept; templates not advertised; any name advertised; no hint; the project's templates loaded; no trust note; the queue unexpanded; templates reloaded at each prompt; templates not kept at the start;
+    - JavaScript's whitespace: Go's `IsSpace`; Go's trim of a body, of a skill's description, its arguments and its body.
+- **The gates,** on Go 1.27.2, as F1d-2's deviation 4 sets them, with F3-3's fuzz run. All passed on the first run:
+  - lint printed `0 issues.` for linux, darwin and windows;
+  - Windows `go test ./...` had no `FAIL` or `panic:`;
+  - `CGO_ENABLED=1 go test -race ./...` exited 0 with no race reported, natively on Windows and on a second amd64 Linux machine, 29 packages each, none cached;
+  - Windows and WSL `make preflight` each printed `preflight passed`, WSL's without a race run;
+  - `go test -run '^$' -fuzz FuzzTemplate -fuzztime 60s ./prompt` passed, 26,379,888 runs, and wrote no failing input.
+
+**What the entry predicted wrongly:**
+
+1. **It named a Pi message that does not exist,** for a template a built-in shadows.
+2. **Its whitespace rule was wrong,** keeping U+0085, and F3-2 had trimmed with Go's rule throughout.
+3. **Its scan rules left out Pi's ignore files,** and its acpserver steps the queue, which Pi expands too.
+4. **One of Pi's cases cannot be ported word for word:** its YAML message is its library's.
+5. **Its file list missed `prompt/context.go`,** where the diagnostic it returns is defined.

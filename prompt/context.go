@@ -17,6 +17,8 @@ type File struct {
 // Diagnostic is a file gobble found and did not use, and why.
 type Diagnostic struct {
 	Path, Message string
+	// Winner is what a name collision kept in the file's place, or "".
+	Winner string
 }
 
 // candidates are a directory's context-file names, the first found winning
