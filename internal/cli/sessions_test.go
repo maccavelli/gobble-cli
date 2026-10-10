@@ -241,6 +241,37 @@ func TestPromptFlags(t *testing.T) {
 	}
 }
 
+// The config directory's skills are in the prompt, and --no-skills leaves
+// them out (0005-PLAN F3-2).
+func TestNoSkillsFlag(t *testing.T) {
+	home, cwd := t.TempDir(), t.TempDir()
+	skill := filepath.Join(home, "skills", "review", "SKILL.md")
+	if err := os.MkdirAll(filepath.Dir(skill), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(skill, []byte("---\nname: review\ndescription: Review a change.\n---\nCheck.\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s := llmtest.NewScript(llmtest.Text("a"), llmtest.Text("b"))
+	withModel(t, s)
+	mustRun(t, home, "--cwd", cwd, "--no-session", "-p", "x")
+	mustRun(t, home, "--cwd", cwd, "--no-session", "--no-skills", "-p", "y")
+	system := func(i int) string {
+		for _, m := range s.Requests()[i].Messages {
+			if m.Role == llm.RoleSystem {
+				return m.Content[0].Text
+			}
+		}
+		return ""
+	}
+	if !strings.Contains(system(0), "<name>review</name>") {
+		t.Fatalf("without --no-skills: %q", system(0))
+	}
+	if strings.Contains(system(1), "<skills>") {
+		t.Fatalf("with --no-skills: %q", system(1))
+	}
+}
+
 // --no-session keeps the session in memory; --session-dir keeps it flat in
 // the directory given.
 func TestNoSessionAndSessionDir(t *testing.T) {

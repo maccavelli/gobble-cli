@@ -21,6 +21,7 @@ import (
 	"github.com/maccavelli/gobble-cli/compaction"
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/session"
+	"github.com/maccavelli/gobble-cli/skill"
 	"github.com/maccavelli/gobble-cli/tool"
 	"github.com/maccavelli/gobble-cli/tool/builtin"
 )
@@ -385,6 +386,11 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 	}()
 
 	prompt := userMessage(p.Prompt)
+	// /skill:<name> [args] becomes Pi's <skill> block, the user's message
+	// (0005-PLAN F3-2).
+	if text, ok := skill.Expand(promptText(p.Prompt), a.skills(s)); ok {
+		prompt = llm.Message{Role: llm.RoleUser, Content: []llm.Content{{Type: llm.ContentText, Text: text}}}
+	}
 	chosen, think := a.choices(s)
 	w := writer{a: a, s: s, ctx: context.WithoutCancel(ctx), provider: a.providerID(model), model: chosen, written: map[string]bool{}}
 	// The system prompt's baseline or patch comes before the user's message,

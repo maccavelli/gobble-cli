@@ -9,7 +9,7 @@ import (
 // ignoreOf is an Ignore of one .gitignore at the top level.
 func ignoreOf(text string) *Ignore {
 	ig := &Ignore{}
-	ig.add("", 0, text)
+	ig.Add("", 0, text)
 	return ig
 }
 
@@ -47,9 +47,9 @@ func TestIgnoreRules(t *testing.T) {
 // A lower .gitignore overrides a higher one, and info/exclude is below both.
 func TestIgnorePrecedence(t *testing.T) {
 	ig := &Ignore{}
-	ig.add("", 0, "*.gen\n")
-	ig.add("", -1, "!*.gen\nsecret.txt\n")
-	ig.add("sub", 1, "!*.gen\n")
+	ig.Add("", 0, "*.gen\n")
+	ig.Add("", -1, "!*.gen\nsecret.txt\n")
+	ig.Add("sub", 1, "!*.gen\n")
 	for _, c := range []struct {
 		rel  string
 		want bool
@@ -73,6 +73,20 @@ func TestIgnorePrecedence(t *testing.T) {
 
 // info/exclude is under .git; for a worktree, under the common directory
 // its git directory's commondir names (F1c-1 deviation 1).
+// Add, the exported add, scopes a file's rules to its base, and a deeper
+// file's rule wins over a shallower one's (0005-PLAN F3-2 deviation 1).
+func TestAdd(t *testing.T) {
+	ig := &Ignore{}
+	ig.Add("", 0, "*.tmp\nhidden/\n")
+	ig.Add("sub", 1, "!keep.tmp\n")
+	for rel, want := range map[string]bool{"a.tmp": true, "sub/a.tmp": true, "sub/keep.tmp": false, "keep.tmp": true, "x/hidden": true} {
+		dir := rel == "x/hidden"
+		if got := ig.Ignored(rel, dir); got != want {
+			t.Errorf("Ignored(%q) = %v, want %v", rel, got, want)
+		}
+	}
+}
+
 func TestExcludeFile(t *testing.T) {
 	base := t.TempDir()
 	plain := filepath.Join(base, "plain")

@@ -2806,6 +2806,10 @@ Choices made within the wording:
 | new | `internal/frontmatter/frontmatter.go`, `frontmatter_test.go`; `skill/skill.go`, `skill_test.go`, `skill/testdata/`; `acpserver/skills_test.go` |
 | changed | `skill/doc.go`; `go.mod`, `go.sum`; `acpserver/agent.go`, `acpserver/sysprompt.go`; `internal/cli/agent.go`, `internal/cli/flags.go`, and their tests; `docs/architecture.md`; `README.md` |
 
+*(2026-10-10, F3-2 deviation 1: `internal/fsx/ignore.go` and its test join the changed files.)*
+
+*(2026-10-10, F3-2 deviation 2: `internal/fsx/walk.go` joins the changed files.)*
+
 **F3-2's tests,** each seen failing first on a scratch copy:
 
 - **`skill`:**
@@ -2821,6 +2825,15 @@ Choices made within the wording:
   - the `skills` section in the prompt;
   - `/skill:<name> args` sends Pi's block;
   - a project `.agents/skills` is not loaded, and its note is logged.
+
+**F3-2's deviations, 2026-10-10,** found by reading its files before any code was written (1) and at its first gate run (2), and decided by the owner:
+
+1. **The ignore matcher could not be used from `skill`.**
+   - **Found:** Pi's skill scan reads `.gitignore`, `.ignore` and `.fdignore` in each directory it walks, each file's patterns prefixed with its directory (`skills.ts:16`, `:24-65`). `internal/fsx`'s `Ignore` takes rules only through an unexported `add` (`internal/fsx/ignore.go:60`), and its walker reads `.gitignore` in a repository only (`walk.go:48-55`).
+   - **Decided:** `internal/fsx` exports `Ignore.Add(base, depth, text)`, with the rules and precedence `add` has. The skill scan keeps one `Ignore` per source, and adds each directory's three files as it walks, as Pi does. `internal/fsx/ignore.go` and its test join the files.
+2. **`Add` beside `add` failed lint.**
+   - **Found:** at the first gate run, `revive`'s `confusing-naming` rejected the exported `Ignore.Add` beside the unexported `add` it wrapped (`internal/fsx/ignore.go:67`), as two methods differing only by case, on all three systems, and with it both preflights.
+   - **Decided:** the unexported `add` becomes `Add`, so there is one method, and its three callers in `internal/fsx/walk.go` and the test helper call it. `internal/fsx/walk.go` joins the files.
 
 **F3-3 — prompt templates.**
 
@@ -2972,3 +2985,51 @@ Choices made within the wording:
 3. **It did not foresee that a new entry before the first message changes two rules** that read a session's shape: fork's "nothing comes before" and compaction's "already compacted".
 4. **It did not name the tests that checked the old prompt and entry counts.**
 5. **It put the host's system into the prompt** without seeing that a golden counts the prompt's size.
+
+**F3-2, 2026-10-10 — complete (staged; the owner commits).** It ran as the entry "F3 made executable" wrote it, approved by the owner's "approved to proceed to F3-2" of 2026-10-10, with two deviations decided by the owner: 1 before any code was written, 2 at its first gate run. F3-3 and F3-4 have not run.
+
+- **The deviations** (recorded under F3-2's deviations above):
+  1. `internal/fsx` exports `Ignore.Add`, so the skill scan honours `.gitignore`, `.ignore` and `.fdignore` with the one matcher.
+  2. `add` became `Add`, one method, and `internal/fsx/walk.go`'s callers call it.
+- **What was built:**
+  - **`internal/frontmatter`:** `Parse`, Pi's `parseFrontmatter`, through `go.yaml.in/yaml/v3` v3.0.5, now a direct requirement in `go.mod`.
+  - **`skill`:** `Skill`, `Source`, `Diagnostic`; `Load`, with Pi's scan, its warnings word for word, its real-path de-duplication and its first-wins collisions; `Format`; `Expand`.
+  - **acpserver:** `PromptOptions.Home` and `NoSkills`; the skills from the config directory's `skills/` and `~/.agents/skills`; the `skills` section when read is offered; `/skill:` expanded into the user's message; the project's `.gobble/skills` and `.agents/skills` noted as waiting for trust.
+  - **internal/cli:** `--no-skills`, and the home directory passed on.
+  - **Updated:** `docs/architecture.md`'s skill row and a row for `internal/frontmatter`; `README.md`.
+- **Choices of mine, within the entry's wording:**
+  - **The layouts are Pi's:** `.gobble/skills` and the config directory's `skills/` scan as Pi's own directories do, a loose `.md` file a skill only at the top; both `.agents/skills` directories as Pi's `.agents` ones do, a loose file a skill only below the top (`package-manager.ts:369-448`).
+  - **A loose `.md` file with no name of its own is named after its directory,** as Pi names it (`skills.ts:310-321`).
+  - **A collision's diagnostic keeps Pi's words,** `name "<name>" collision`, and names the skill that won in its own field, which the log shows.
+  - **The home directory's own `.agents/skills` is never a project directory,** by the real home directory even when `Home` is unset, as Pi excludes it.
+  - **A directory reached twice through links is searched once,** so a link loop cannot hang the scan. Pi has no such guard.
+  - **A non-mapping YAML frontmatter reads as no fields,** as Pi's casts give none.
+- **The tests:**
+  - `skill`: `TestLoadCollision` (F3's accept line), `TestValidation`, `TestScan`, `TestFormat` and `TestExpand`.
+  - `internal/frontmatter`: `TestParse`. `internal/fsx`: `TestAdd`.
+  - acpserver: `TestSkillsSection`, `TestSkillCommand` and `TestProjectSkillsWait`. internal/cli: `TestNoSkillsFlag`.
+- **C3: every new check, seen failing on a scratch copy.** There were 24 mutations, each asserted to land exactly once.
+  - **21 failed as expected on the first run. Three did not:**
+    - one mutation, ignore files not read, left a variable unused, and the copy did not build. It was a broken experiment, rewritten to add empty rules, and then failed as expected;
+    - removing the real-path de-duplication failed nothing. The scan's own directory guard already stops a link inside one source, and no test reached the same file from two sources. `TestScan` gained that case;
+    - removing the CRLF normalisation failed nothing, because YAML tolerated the stray `\r`. `TestParse` gained a body with CRLF inside it, and lone CR line endings.
+  - All 24 were run again, and all failed as expected, none by a build failure:
+    - the scan: the last of two names winning; no real-path de-duplication; a skill's directory searched further; dotfiles searched; `node_modules` searched; one layout for both; no ignore files;
+    - the skill rules: a skill with no description loaded; consecutive hyphens allowed; lengths in bytes, not JavaScript's units; a loose file named after itself;
+    - output: no XML escaping; hidden skills listed; arguments untrimmed; the block's wording;
+    - frontmatter: the byte-order mark kept; CRLF kept; a scalar an error;
+    - acpserver: no skills section; `NoSkills` ignored; no expansion; the project's skills loaded;
+    - the CLI flag not passed; `Ignore.Add` a no-op.
+- **The gates,** on Go 1.27.2, as F1d-2's deviation 4 sets them.
+  - **The first run failed** lint on all three systems, and with it the preflights: `revive` rejected `Add` beside `add` (deviation 2), and `revive` and `gocritic` rejected a variable named `real`, the built-in's name, now `loaded`. Windows `go test` and race passed. The run was stopped there, before the Linux race step began, and nothing was left on that machine.
+  - **The fixes** moved two negatives' anchors, and all 24 were run again, failing as expected.
+  - **On the second run:**
+    - lint printed `0 issues.` for linux, darwin and windows;
+    - Windows `go test ./...` had no `FAIL` or `panic:`;
+    - `CGO_ENABLED=1 go test -race ./...` exited 0 with no race reported, natively on Windows and on a second amd64 Linux machine;
+    - Windows and WSL `make preflight` each printed `preflight passed`, WSL's without a race run.
+
+**What the entry predicted wrongly:**
+
+1. **It named F1c's matcher for a use its API did not offer,** and that walker reads `.gitignore` only. Exporting it as a second method then failed lint, and `walk.go` had to change too.
+2. **Its tests would not have caught two behaviours it asked for:** the real-path de-duplication, and the CRLF normalisation. The negatives showed it, and the tests are added.

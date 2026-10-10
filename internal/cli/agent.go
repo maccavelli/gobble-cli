@@ -49,12 +49,16 @@ func (e *runEnv) agentOptions() acpserver.Options {
 }
 
 // promptOptions are the prompt flags' options with the config directory,
-// which holds the user's AGENTS.md, SYSTEM.md and APPEND_SYSTEM.md; none
-// when it cannot be resolved (0005-PLAN F3-1).
+// which holds the user's AGENTS.md, SYSTEM.md, APPEND_SYSTEM.md and skills/,
+// and the home directory, which holds ~/.agents/skills; each none when it
+// cannot be resolved (0005-PLAN F3-1, F3-2).
 func (e *runEnv) promptOptions() acpserver.PromptOptions {
 	o := e.prompt
 	if dirs, _, err := systemDirs(); err == nil {
 		o.ConfigDir = dirs.Config
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		o.Home = home
 	}
 	return o
 }

@@ -50,6 +50,8 @@ Early, and built in the order [docs/README.md](docs/README.md#build-order) gives
   migrated in memory and never rewritten; `/clone` continues one as a v3 session.
 - **The system prompt** in Pi's sections, from `AGENTS.md` and `CLAUDE.md` files, `SYSTEM.md` and `APPEND_SYSTEM.md`, or `--system-prompt`
   and `--append-system-prompt`; it stays fixed for a session, and a change reaches the model as a message.
+- **Agent Skills** from the config directory's `skills/` and `~/.agents/skills`, listed in the prompt; `/skill:<name>` sends one, and
+  `--no-skills` turns them off.
 - **`gobble mcp add|remove|list`**, `gobble config path`, `gobble version` and `gobble completion`.
 
 Not built yet: the permission engine (F6), the enhanced TUI mode, and `gobble update`. The full v1 line, tiered into

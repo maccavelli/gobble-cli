@@ -56,8 +56,12 @@ func (ig *Ignore) match(rel string, dir bool) bool {
 	return ignored
 }
 
-// add adds the rules of an ignore file read at base.
-func (ig *Ignore) add(base string, depth int, text string) {
+// Add adds the rules of an ignore file read at base, slash-separated from
+// the walk's top ("" for the top itself). A deeper file's rules win over a
+// shallower one's, and files of the same depth keep the order they are
+// added in. It serves a walk outside a repository, such as the skill
+// scan's .gitignore, .ignore and .fdignore (0005-PLAN F3-2 deviation 1).
+func (ig *Ignore) Add(base string, depth int, text string) {
 	rules := parseIgnore(text)
 	if len(rules) == 0 {
 		return

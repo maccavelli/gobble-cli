@@ -3,6 +3,8 @@ package acpserver
 import (
 	"encoding/json/v2"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"runtime"
 	"slices"
 
@@ -10,6 +12,7 @@ import (
 	"github.com/maccavelli/gobble-cli/llm"
 	sysprompt "github.com/maccavelli/gobble-cli/prompt"
 	"github.com/maccavelli/gobble-cli/session"
+	"github.com/maccavelli/gobble-cli/skill"
 	"github.com/maccavelli/gobble-cli/tool"
 )
 
@@ -27,6 +30,10 @@ type PromptOptions struct {
 	// GOOS is the system the prompt says commands run on; "" is the host's
 	// (0005-PLAN F3-1 deviation 5).
 	GOOS string
+	// Home holds ~/.agents/skills; "" reads none there. NoSkills reads no
+	// skills at all (0005-PLAN F3-2).
+	Home     string
+	NoSkills bool
 }
 
 // sections are the session's system prompt sections as its files make
@@ -64,12 +71,90 @@ func (a *Agent) sections(s *liveSession) []sysprompt.Section {
 		}
 	}
 	slices.Sort(families)
+	var skills string
+	if slices.Contains(names, "read") {
+		skills = skill.Format(a.skills(s))
+	}
 	goos := o.GOOS
 	if goos == "" {
 		goos = runtime.GOOS
 	}
 	return sysprompt.Build(sysprompt.Options{Custom: system, Append: appended, Tools: names, Deferred: families,
-		ContextFiles: files, Cwd: s.cwd, GOOS: goos})
+		ContextFiles: files, Skills: skills, Cwd: s.cwd, GOOS: goos})
+}
+
+// skills are the session's skills, found in 0005-MADR's order (Skill
+// discovery order (changed)): the config directory's skills/, then
+// ~/.agents/skills; the project's .gobble/skills and its .agents/skills,
+// from the cwd up to the repository root, wait for trust (0005-PLAN F6),
+// and the Pi bridge for F10. Each diagnostic is logged once per session.
+func (a *Agent) skills(s *liveSession) []skill.Skill {
+	o := a.prompt
+	if o.NoSkills {
+		return nil
+	}
+	var sources []skill.Source
+	if o.ConfigDir != "" {
+		sources = append(sources, skill.Source{Dir: filepath.Join(o.ConfigDir, "skills")})
+	}
+	if o.Home != "" {
+		sources = append(sources, skill.Source{Dir: filepath.Join(o.Home, ".agents", "skills"), Agents: true})
+	}
+	found, diags := skill.Load(sources)
+	notes := make([]sysprompt.Diagnostic, 0, len(diags))
+	for _, d := range diags {
+		msg := d.Message
+		if d.Winner != "" {
+			msg += " (" + d.Winner + " is loaded)"
+		}
+		notes = append(notes, sysprompt.Diagnostic{Path: d.Path, Message: msg})
+	}
+	// Home's own .agents/skills is the user's, never the project's, as Pi
+	// excludes it by the real home directory, whether or not it is read.
+	home := o.Home
+	if home == "" {
+		home, _ = os.UserHomeDir() //nolint:errcheck // with no home, none is excluded
+	}
+	for _, dir := range projectSkillDirs(s.cwd, home) {
+		notes = append(notes, sysprompt.Diagnostic{Path: dir, Message: sysprompt.TrustNote})
+	}
+	a.note(s, notes)
+	return found
+}
+
+// projectSkillDirs are the project's own skill directories that exist: its
+// .gobble/skills, and each .agents/skills from cwd up to the repository
+// root, or the filesystem root outside one, but not home's, which is the
+// user's (Pi's collectAncestorAgentsSkillDirs, package-manager.ts:468-487).
+func projectSkillDirs(cwd, home string) []string {
+	var out []string
+	isDir := func(p string) bool { info, err := os.Stat(p); return err == nil && info.IsDir() }
+	if p := filepath.Join(cwd, ".gobble", "skills"); isDir(p) {
+		out = append(out, p)
+	}
+	stop := ""
+	for d := filepath.Clean(cwd); ; {
+		if _, err := os.Stat(filepath.Join(d, ".git")); err == nil {
+			stop = d
+			break
+		}
+		parent := filepath.Dir(d)
+		if parent == d {
+			break
+		}
+		d = parent
+	}
+	for d := filepath.Clean(cwd); ; {
+		if p := filepath.Join(d, ".agents", "skills"); isDir(p) && (home == "" || filepath.Clean(d) != filepath.Clean(home)) {
+			out = append(out, p)
+		}
+		parent := filepath.Dir(d)
+		if d == stop || parent == d {
+			break
+		}
+		d = parent
+	}
+	return out
 }
 
 // note logs each diagnostic once per session.

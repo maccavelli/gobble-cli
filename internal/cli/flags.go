@@ -44,6 +44,7 @@ type SharedFlags struct {
 	SystemPrompt       string `name:"system-prompt" complete:"path" placeholder:"TEXT|PATH" help:"Replace the system prompt."`
 	AppendSystemPrompt string `name:"append-system-prompt" complete:"path" placeholder:"TEXT|PATH" help:"Append to the system prompt."`
 	NoContextFiles     bool   `name:"no-context-files" help:"Do not load AGENTS.md and other context files."`
+	NoSkills           bool   `name:"no-skills" help:"Do not load skills."`
 
 	// Trust, approval and environment.
 	Approve bool   `negatable:"" help:"Approve tool calls without asking (--no-approve: always ask)."`
@@ -106,7 +107,7 @@ func (f *SharedFlags) validate(g given, stdinPiped, atPaths bool) error {
 // Pi's resolvePromptInput does (resource-loader.ts:167-182); a relative path
 // resolves against base, as an @path does.
 func (f *SharedFlags) promptOptions(base string) (acpserver.PromptOptions, error) {
-	o := acpserver.PromptOptions{NoContextFiles: f.NoContextFiles}
+	o := acpserver.PromptOptions{NoContextFiles: f.NoContextFiles, NoSkills: f.NoSkills}
 	for _, v := range []struct {
 		flag, value string
 		to          *string

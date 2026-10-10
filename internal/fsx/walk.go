@@ -45,14 +45,14 @@ func (w Workspace) Walker(dir string) (*Walker, error) {
 	}
 	if top := repoTop(dir); top != "" {
 		k.base = slash(top, dir)
-		k.ig.add("", -1, readIgnoreFile(excludeFile(top)))
+		k.ig.Add("", -1, readIgnoreFile(excludeFile(top)))
 		// The .gitignore files above dir, from the top level down, each at
 		// its depth; dir's own is read by load, at the next.
 		if k.base != "" {
 			parts := strings.Split(k.base, "/")
 			for i := range parts {
 				base := strings.Join(parts[:i], "/")
-				k.ig.add(base, i, readIgnoreFile(filepath.Join(top, filepath.FromSlash(base), ".gitignore")))
+				k.ig.Add(base, i, readIgnoreFile(filepath.Join(top, filepath.FromSlash(base), ".gitignore")))
 			}
 		}
 	}
@@ -176,7 +176,7 @@ func (k *Walker) load(rel string) {
 		if base != "" {
 			depth = strings.Count(base, "/") + 1
 		}
-		k.ig.add(base, depth, string(b))
+		k.ig.Add(base, depth, string(b))
 	}
 }
 

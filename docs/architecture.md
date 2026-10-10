@@ -49,7 +49,7 @@ The tier is each package's `Stability:` line in its `doc.go`. **stable** package
 | `compaction` | beta | Pi's manual compaction: the cut point, the summary and the entry. It owns the model's context as Pi projects it, with every entry type and context edit applied, and converts each message as Pi sends it. |
 | `command` | beta | The slash-command vocabulary shared by the agent and its clients. |
 | `prompt` | beta | The system prompt: Pi's sections, from the context files (`AGENTS.md` and its kin, from the config directory and every directory above the cwd), `SYSTEM.md` and `APPEND_SYSTEM.md`; the patches between two sets of sections; and the nested context files a read brings in. |
-| `skill` | stable | Agent Skills parsing and discovery. |
+| `skill` | stable | Agent Skills, found as Pi finds them: from the config directory's `skills/` and `~/.agents/skills`, the first of two with one name kept. The system prompt lists them, and `/skill:<name>` sends one's body. A project's own skill directories wait for trust. |
 | `hook` | stable | The lifecycle hook contract. |
 | `checkpoint` | beta | File snapshots for undo (placeholder). |
 | `telemetry` | beta | OpenTelemetry wiring (placeholder). |
@@ -71,6 +71,7 @@ The tier is each package's `Stability:` line in its `doc.go`. **stable** package
 | `internal/auth` | internal | The credential store (placeholder). |
 | `internal/config` | internal | Layered settings (placeholder). |
 | `internal/proctree` | internal | A command as a tree that stops whole: its own process group on Unix, a kill-on-close Job object on Windows. |
+| `internal/frontmatter` | internal | The YAML frontmatter of skills and templates, as Pi reads it, through `go.yaml.in/yaml/v3`. |
 | `internal/fsx` | internal | Workspace confinement for file tools: Pi's path resolution, `os.Root` over the working and additional directories, atomic writes, and a per-path lock. A glob engine written to git's rules, the repository's ignore rules, and a confined walker that applies them. Renames, removals, copies and directories through the roots. |
 | `exp/a2a` | experimental | Agent2Agent endpoint (experimental placeholder). |
 | `exp/acpws` | experimental | ACP over WebSocket (experimental placeholder). |
