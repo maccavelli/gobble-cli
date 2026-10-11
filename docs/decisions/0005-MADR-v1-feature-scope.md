@@ -929,6 +929,8 @@ Otherwise it stays a shell command. File status, diffs, git, checksums and archi
    - **Found:** magic-cli-remote sends only text, image and audio blocks, and gobble "parses `@path` in prompt text as well as accepting resource blocks" (0002-MADR, "Further contract facts"). `llm` sends no images until the SDK carries them (`llm/llm.go:20`). Advertising `image = true` would break this record's honest-advertisement rule.
    - **Decided:**
      - the agent expands `@path` in any prompt's text into Pi's `<file name="…">` block, through workspace confinement, for every client;
+       *(Amended 2026-10-10, 0005-PLAN F3-4 deviation 1: ~~any prompt's text~~ every prompt's text but the CLI's composed first prompt, whose `@path` words the CLI has already expanded (0008-MADR D4) and which says so with `_meta.gobble.mentions: false`, so the files it attached and its stdin are not scanned; a queued message is expanded too, F3-4 deviation 2.)*
+       *(Revisited the same day: ~~the CLI's composed first prompt~~ the text blocks the CLI marks `_meta.gobble.mentions: false`, its stdin and its attached files; its words are scanned, so a quoted `"explain @main.go"` is expanded.)*
      - it accepts embedded resource and `resource_link` blocks from editors;
      - it advertises `embeddedContext = true`, and `image = false` until `llm` carries images;
      - the CLI's `@path` arguments stay as 0008-MADR D4 has them.

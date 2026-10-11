@@ -2914,6 +2914,7 @@ Choices made within the wording:
 
 - **acpserver's user message** is built from all of a prompt's blocks, in the order Pi's CLI uses: the files, then the text.
   - **`@path` in text:**
+    - *(2026-10-10, F3-4 deviation 1: in ~~every prompt's text~~ ~~every prompt's text but the CLI's composed first prompt, which carries `_meta.gobble.mentions: false` because the CLI expanded its own `@path` words~~ every text block but one marked `_meta.gobble.mentions: false`, as the CLI marks the stdin and the files it attached; and in a queued message, deviation 2.)*
     - an `@` at the start or after whitespace, followed by `"…"` or by non-space characters;
     - trailing `.,;:!?)]}` is dropped when the name without it is a file and the name with it is not;
     - resolved against the cwd, and confined by `fsx` to the roots;
@@ -2933,11 +2934,28 @@ Choices made within the wording:
 | new | `acpserver/mentions.go`, `acpserver/mentions_test.go` |
 | changed | `acpserver/agent.go`, `acpserver/agent_test.go`; `acpserver/testdata/session.golden` (the capabilities); `docs/architecture.md`; `README.md` |
 
+*(2026-10-10, F3-4 deviation 1: `acpclient/conn.go`, `acpclient/conn_test.go`, `internal/cli/input.go`, `internal/cli/input_test.go` and `internal/cli/print.go` join the changed files.)*
+
+*(2026-10-10, F3-4 deviation 2: `acpserver/extensions.go` and `acpserver/extensions_test.go` join the changed files.)*
+
 **F3-4's tests,** each seen failing first on a scratch copy:
 
 - `@path`, `@"a b.txt"` and `@path.` are expanded; an `@` inside a word, a missing file, a directory, a binary file, and a path outside the roots are left as typed; a file named twice is expanded once.
 - An embedded text resource, a blob and a `resource_link` give their texts.
 - `initialize`'s capabilities are as listed.
+- *(2026-10-10, F3-4 deviations 1 and 2:)* ~~a prompt with `_meta.gobble.mentions: false` is not expanded, and the CLI's composed first prompt carries it~~ a text block marked `_meta.gobble.mentions: false` is not scanned, and the CLI marks its stdin and attached files but not its words, so a quoted `@path` among them is expanded; a queued message is expanded.
+
+**F3-4's deviations, 2026-10-10,** found by reading its files and Pi's before any code was written (1 and 2) and by its first test (3), and decided by the owner:
+
+1. **The CLI's own files would be scanned for `@path`.**
+   - **Found:** the CLI expands its first prompt's `@path` words itself (0008-MADR D4): after stdin, each text file is wrapped as `<file name="ABS">` inside the one text block (`internal/cli/input.go:31-80`). An agent pass over every prompt's text would scan those files' contents and stdin, so a decorator such as `@property`, or `see @README.md` in an attached document, would attach further workspace files no one named. Pi has no agent-side pass; its CLI expands only its arguments (`cli/file-processor.ts`).
+   - **Decided:** ~~the CLI's composed first prompt carries `_meta.gobble.mentions: false`, through a new `acpclient.Prompt.NoMentions`, and the agent does not expand `@path` in a prompt that carries it. The line session's typed lines, and every other client's prompts, are expanded as the entry says.~~ *(Revisited the same day, before code: the CLI counts a word as `@path` only when the whole argument starts with `@` (`internal/cli/flags.go:149`), so `gobble -p "explain @main.go"` is one plain word, and a per-prompt mark would leave it unexpanded by either side.)* The mark is per text block: the CLI sends its first prompt's stdin and attached files as text blocks before its words, in 0008-MADR D4's order, each marked `_meta.gobble.mentions: false` through a new `acpclient.Prompt.Context`, and the agent scans only the text blocks without the mark. The words, the line session's typed lines, and every other client's prompts are expanded as the entry says. Commands and expansions read the blocks joined by a blank line, as before; the model gets one text part per block, as it does for any client that sends several. 0005-MADR's amendment of 2026-10-10, item 2, is amended to match. `acpclient/conn.go`, `acpclient/conn_test.go`, `internal/cli/input.go`, `internal/cli/input_test.go` and `internal/cli/print.go` join the files.
+2. **A queued message had no `@path` pass.**
+   - **Found:** since F3-3's deviation 2, a queued steering or follow-up message is expanded as a prompt is, a skill and then a template (`acpserver/extensions.go`, `enqueue`); the entry expands `@path` in prompts only. Pi has no `@path` pass to follow.
+   - **Decided:** the queued text is given its `<file>` blocks as it is queued, as a prompt's text is. `acpserver/extensions.go` and `acpserver/extensions_test.go` join the files.
+3. **The ACP SDK cannot send a text block's `_meta`.**
+   - **Found:** writing deviation 1's per-block mark, a test sending a text block marked `_meta.gobble.mentions: false` through `acpclient` showed the agent receiving the block without it. The fork's `ContentBlock.MarshalJSON` rebuilds each variant from a fixed key list and never writes `_meta` or `annotations` (`acp-go-sdk@v0.13.6-mcr.2` `types_gen.go:1473-1600`).
+   - **Decided:** the owner directed that gobble move from the fork to their rewrite, `github.com/maccavelli/acp-go-sdk2` at `v0.14.0`, which keeps both. That move is its own record, [0014-MADR-move-to-acp-go-sdk2.md](0014-MADR-move-to-acp-go-sdk2.md), and F3-4 waits until [0014-PLAN-move-to-acp-go-sdk2.md](0014-PLAN-move-to-acp-go-sdk2.md) has run. F3-4's code written so far, `acpclient.Prompt.Context` and its test, is set aside by 0014-PLAN's P0 and re-applied when F3-4 resumes.
 
 **The gates, for each sub-phase,** as F1d-2's deviation 4 sets them: lint for linux, darwin and windows; Windows `go test ./...`; `CGO_ENABLED=1 go test -race ./...` natively on Windows and on the second amd64 Linux machine; Windows and WSL `make preflight`, WSL's without a race run. F3-3 adds its fuzz run.
 
