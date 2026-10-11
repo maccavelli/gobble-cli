@@ -427,7 +427,7 @@ ACP-native behaviour, beyond the method list in 0002:
    * import no ACP SDK, MCP SDK, `go-llmprovider-sdk`, `go-core-lib`,
      vendor LLM SDK, Kong, Charm, or OpenTelemetry SDK;
    * the OTel **API** is allowed only in `telemetry`.
-2. Only `acpserver` and `acpclient/...` import `github.com/coder/acp-go-sdk`.
+2. Only `acpserver` and `acpclient/...` import ~~`github.com/coder/acp-go-sdk`~~ `github.com/maccavelli/acp-go-sdk2`. *(Amended 2026-10-10: the SDK moved, [0014-MADR-move-to-acp-go-sdk2.md](0014-MADR-move-to-acp-go-sdk2.md) D6; `internal/archtest` names the new path.)*
 3. Only `mcpclient` imports `github.com/modelcontextprotocol/go-sdk`.
 4. Only `llm/provider` imports `github.com/maccavelli/go-llmprovider-sdk`.
    No package imports `github.com/anthropics/anthropic-sdk-go`,

@@ -18,8 +18,8 @@ github.com/google/renameio v0.1.0 h1:GOZbcHa3HfsPKPlmyPyN2KEohoMXOhdMbHrvbpl2QaA
 github.com/google/renameio v0.1.0/go.mod h1:KWCgfxg9yswjAJkECMjeO8J8rahYeXnNhOm40UhjYkI=
 github.com/hexops/gotextdiff v1.0.3 h1:gitA9+qJrrTCsiCl7+kh75nPqQt1cx4ZkudSTLoUqJM=
 github.com/hexops/gotextdiff v1.0.3/go.mod h1:pSWU5MAI3yDq+fZBTazCSJysOMbxWL1BSow5/V2vxeg=
-github.com/maccavelli/acp-go-sdk v0.13.6-mcr.2 h1:48uHSOC/vrT187FHFdZTine1ioGK0YqeW1XzNvvcCmY=
-github.com/maccavelli/acp-go-sdk v0.13.6-mcr.2/go.mod h1:yKzM/3R9uELp4+nBAwwtkS0aN1FOFjo11CNPy37yFko=
+github.com/maccavelli/acp-go-sdk2 v0.14.0 h1:Db0ojAcFSQH5KeEdfxHwJKxJbis+xLgtHMZaqz655Eg=
+github.com/maccavelli/acp-go-sdk2 v0.14.0/go.mod h1:KqDRvShTbZEOpKOQOyRUnbeFqlyH20LXi7k3UOsgv0I=
 github.com/maccavelli/go-llmprovider-sdk v1.2.1 h1:zwxJDG+92SXnrbHjZO5CFLRuxnSlK6XpDKGo5qz9rto=
 github.com/maccavelli/go-llmprovider-sdk v1.2.1/go.mod h1:WaQHHp2FPkKTvt05wUktcBbKk172rE/OSBhklOug51c=
 github.com/maccavelli/go-selfupdate-lib v1.9.0 h1:kP7ISSs+UAVaZeJ4hnk2Vk3bAzpbb0o4UbdUfEKa4LE=

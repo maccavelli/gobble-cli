@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	acp "github.com/coder/acp-go-sdk"
+	acp "github.com/maccavelli/acp-go-sdk2"
 
 	"github.com/maccavelli/gobble-cli/agent"
 	"github.com/maccavelli/gobble-cli/compaction"

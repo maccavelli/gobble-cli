@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	acp "github.com/coder/acp-go-sdk"
+	acp "github.com/maccavelli/acp-go-sdk2"
 )
 
 // stubAgent answers initialize, opens one session, and replies to a prompt
@@ -19,6 +19,12 @@ type stubAgent struct {
 }
 
 var _ acp.Agent = (*stubAgent)(nil)
+
+// DeleteSession answers "method not found", as an agent that advertises no
+// session deletion does (0014-MADR D3).
+func (*stubAgent) DeleteSession(context.Context, acp.DeleteSessionRequest) (acp.DeleteSessionResponse, error) {
+	return acp.DeleteSessionResponse{}, acp.NewMethodNotFound(acp.AgentMethodSessionDelete)
+}
 
 func (*stubAgent) Initialize(context.Context, acp.InitializeRequest) (acp.InitializeResponse, error) {
 	return acp.InitializeResponse{

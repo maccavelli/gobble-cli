@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	acp "github.com/coder/acp-go-sdk"
+	acp "github.com/maccavelli/acp-go-sdk2"
 )
 
 // closeTimeout bounds how long cleanup waits for both connections to stop.

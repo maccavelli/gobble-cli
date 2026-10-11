@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	acp "github.com/coder/acp-go-sdk"
+	acp "github.com/maccavelli/acp-go-sdk2"
 
 	"github.com/maccavelli/gobble-cli/acpclient/acptest"
 	"github.com/maccavelli/gobble-cli/llm"
@@ -188,7 +188,7 @@ func carriesTerminal(client *acptest.Client, call acp.ToolCallId, term string) b
 	for _, n := range client.Updates() {
 		if u := n.Update.ToolCallUpdate; u != nil && u.ToolCallId == call {
 			for _, ct := range u.Content {
-				if ct.Terminal != nil && ct.Terminal.TerminalId == term {
+				if ct.Terminal != nil && string(ct.Terminal.TerminalId) == term {
 					return true
 				}
 			}
@@ -226,7 +226,7 @@ func TestLocations(t *testing.T) {
 		if l.Line == nil {
 			return 0
 		}
-		return *l.Line
+		return int(*l.Line)
 	}
 	if l := starts["r1"]; len(l) != 1 || l[0].Path != a || line(l[0]) != 2 {
 		t.Errorf("read's locations %+v", l)

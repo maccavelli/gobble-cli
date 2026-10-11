@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	acp "github.com/coder/acp-go-sdk"
+	acp "github.com/maccavelli/acp-go-sdk2"
 
 	"github.com/maccavelli/gobble-cli/acpclient/acptest"
 	"github.com/maccavelli/gobble-cli/llm"
@@ -190,7 +190,7 @@ func TestUnofferedTransportsRefused(t *testing.T) {
 	c, _, _ := connectMCP(t, llmtest.NewScript(), MCPOptions{})
 	for _, s := range []acp.McpServer{
 		{Sse: &acp.McpServerSseInline{Name: "old", Type: "sse", Url: "https://example.com/sse", Headers: []acp.HttpHeader{}}},
-		{Acp: &acp.McpServerAcpInline{Name: "peer", Type: "acp", Id: "x"}},
+		{Acp: &acp.McpServerAcpInline{Name: "peer", Type: "acp", ServerId: "x"}},
 		{Stdio: &acp.McpServerStdio{Name: "bad name", Command: "x", Args: []string{}, Env: []acp.EnvVariable{}}},
 	} {
 		_, err := c.Client.NewSession(t.Context(), acp.NewSessionRequest{Cwd: t.TempDir(), McpServers: []acp.McpServer{s}})

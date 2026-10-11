@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	acp "github.com/coder/acp-go-sdk"
+	acp "github.com/maccavelli/acp-go-sdk2"
 )
 
 // ErrSessionLocked matches a session/resume or session/load the agent

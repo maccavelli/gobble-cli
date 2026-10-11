@@ -15,7 +15,7 @@ import (
 	"unicode/utf8"
 	"uuid"
 
-	acp "github.com/coder/acp-go-sdk"
+	acp "github.com/maccavelli/acp-go-sdk2"
 
 	"github.com/maccavelli/gobble-cli/agent"
 	"github.com/maccavelli/gobble-cli/command"
@@ -872,6 +872,12 @@ func sessionInfo(sum session.Summary) acp.SessionInfo {
 		info.UpdatedAt = new(sum.Modified.UTC().Format(time.RFC3339))
 	}
 	return info
+}
+
+// DeleteSession answers method-not-found: gobble does not delete sessions
+// over ACP, and advertises no sessionCapabilities.delete (0014-MADR D3).
+func (*Agent) DeleteSession(context.Context, acp.DeleteSessionRequest) (acp.DeleteSessionResponse, error) {
+	return acp.DeleteSessionResponse{}, acp.NewMethodNotFound(acp.AgentMethodSessionDelete)
 }
 
 // CloseSession closes the session's log, releasing its writer lock.

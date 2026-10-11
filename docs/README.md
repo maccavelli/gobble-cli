@@ -34,8 +34,8 @@
 | 0012 | MADR | [Tool schemas, descriptions and loading: JSON Schema from Go types, sectioned Markdown descriptions, two exposure tiers, and an in-house BM25 `tool_search`](decisions/0012-MADR-tool-schemas-descriptions-and-loading.md) | accepted (2026-10-08; 38 verified claims; D15 proposed 2026-10-09, with 17 verified claims; F19's consequence contradicted and D15 on hold, 2026-10-09; no defect for D15 to fix, and D15 rejected, the same day) |
 | 0012 | PLAN | [Tool schemas and descriptions: the contract, the five built-in tools, and the strict probe](decisions/0012-PLAN-tool-schemas-descriptions-and-loading.md) | completed (P1–P6 and P8 complete 2026-10-08; P7 waits on go-llmprovider-sdk's per-tool strict flag; P9 proposed, approved, paused and abandoned 2026-10-09, with nothing committed) |
 | 0013 | REPORT | [A data race in Go's encoding/json when one Marshal runs inside another](reports/0013-REPORT-go-json-nested-marshal-race.md) | observation (2026-10-08; reproduced with the standard library alone; drafted for upstream, not yet filed; amended 2026-10-09: the signature varies, and gobble removes its own nested marshal; amended again 2026-10-09: corrupted memory on this host or in the Go runtime, not `encoding/json`, and the upstream draft withdrawn; amended a third time 2026-10-09: the defect is this host's WSL; gobble keeps jsonschema-go's marshaller) |
-| 0014 | MADR | [Move the ACP SDK from the fork to acp-go-sdk2 v0.14.0](decisions/0014-MADR-move-to-acp-go-sdk2.md) | proposed (2026-10-10) |
-| 0014 | PLAN | [Move the ACP SDK from the fork to acp-go-sdk2 v0.14.0](decisions/0014-PLAN-move-to-acp-go-sdk2.md) | proposed (2026-10-10) |
+| 0014 | MADR | [Move the ACP SDK from the fork to acp-go-sdk2 v0.14.0](decisions/0014-MADR-move-to-acp-go-sdk2.md) | accepted (2026-10-10) |
+| 0014 | PLAN | [Move the ACP SDK from the fork to acp-go-sdk2 v0.14.0](decisions/0014-PLAN-move-to-acp-go-sdk2.md) | completed (P0 and P1, 2026-10-10) |
 
 0003-MADR has no PLAN of its own. 0004-PLAN Phase 2 and 0005-PLAN F10 implement it.
 
@@ -57,8 +57,8 @@ The plans run in sequence.
   - Run: F1d-1, `todo`, F1d-2, `tool_search` and the MCP resource tools, and F1d-3, the client's file and terminal methods, on 2026-10-09. F1 is complete.
   - Run: F2-1, reading Pi's sessions of every version and entry type, and F2-2, the tree, on 2026-10-10. F2 is complete.
   - Run: F3-1, context files and the sectioned prompt, F3-2, skills, and F3-3, prompt templates, on 2026-10-10.
-  - Next: F3-4, `@path`, resource blocks and the prompt capabilities, which waits on 0014-PLAN (F3-4 deviation 3).
-- **0014-PLAN.** Proposed 2026-10-10; not run.
+  - Next: F3-4, `@path`, resource blocks and the prompt capabilities, which waited on 0014-PLAN (F3-4 deviation 3) and resumes now.
+- **0014-PLAN.** Run: P0 and P1, the move to acp-go-sdk2 `v0.14.0`, on 2026-10-10. Complete.
 - **0012-PLAN.** Run: P1–P6 and P8 on 2026-10-08. P7 waits on go-llmprovider-sdk's per-tool strict flag.
 - `git ls-remote origin refs/heads/main` on 2026-10-08 returned `740f7b71450238e747dba99b4fa1eccd488ad79e`.
 

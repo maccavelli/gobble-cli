@@ -11,8 +11,8 @@ tool (
 
 require (
 	github.com/alecthomas/kong v1.16.1
-	github.com/coder/acp-go-sdk v0.13.5
 	github.com/google/jsonschema-go v0.4.3
+	github.com/maccavelli/acp-go-sdk2 v0.14.0
 	github.com/maccavelli/go-llmprovider-sdk v1.2.1
 	github.com/maccavelli/go-selfupdate-lib v1.9.0
 	github.com/modelcontextprotocol/go-sdk v1.8.0
@@ -39,5 +39,3 @@ require (
 	golang.org/x/vuln v1.8.0 // indirect
 	honnef.co/go/tools v0.8.1 // indirect
 )
-
-replace github.com/coder/acp-go-sdk => github.com/maccavelli/acp-go-sdk v0.13.6-mcr.2

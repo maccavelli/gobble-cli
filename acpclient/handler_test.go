@@ -3,7 +3,7 @@ package acpclient
 import (
 	"testing"
 
-	acp "github.com/coder/acp-go-sdk"
+	acp "github.com/maccavelli/acp-go-sdk2"
 )
 
 // The CLI declines every permission request until Phase 6's prompt: the

@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	acp "github.com/coder/acp-go-sdk"
+	acp "github.com/maccavelli/acp-go-sdk2"
 
 	"github.com/maccavelli/gobble-cli/command"
 	"github.com/maccavelli/gobble-cli/compaction"

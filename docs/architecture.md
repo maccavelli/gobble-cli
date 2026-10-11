@@ -101,7 +101,7 @@ The direct requirements in `go.mod`:
 | Module | Version |
 | :--- | :--- |
 | `github.com/alecthomas/kong` | `v1.16.1` |
-| `github.com/coder/acp-go-sdk` | `v0.13.5`, replaced by `github.com/maccavelli/acp-go-sdk` `v0.13.6-mcr.2` |
+| `github.com/maccavelli/acp-go-sdk2` | `v0.14.0` |
 | `github.com/modelcontextprotocol/go-sdk` | `v1.8.0` |
 | `github.com/maccavelli/go-llmprovider-sdk` | `v1.2.1` |
 | `github.com/maccavelli/go-selfupdate-lib` | `v1.9.0` |

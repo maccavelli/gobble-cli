@@ -2,12 +2,14 @@ package acpserver
 
 import (
 	"context"
+	stdjson "encoding/json"
 	"encoding/json/jsontext"
 	"errors"
+	"math"
 	"strings"
 	"unicode/utf8"
 
-	acp "github.com/coder/acp-go-sdk"
+	acp "github.com/maccavelli/acp-go-sdk2"
 
 	"github.com/maccavelli/gobble-cli/agent"
 	"github.com/maccavelli/gobble-cli/llm"
@@ -144,9 +146,7 @@ func acpLocations(locs []tool.Location) []acp.ToolCallLocation {
 	out := make([]acp.ToolCallLocation, 0, len(locs))
 	for _, l := range locs {
 		loc := acp.ToolCallLocation{Path: l.Path}
-		if l.Line > 0 {
-			loc.Line = new(l.Line)
-		}
+		loc.Line = line(l.Line)
 		out = append(out, loc)
 	}
 	return out
@@ -171,7 +171,7 @@ func toolKind(k tool.Kind) acp.ToolKind {
 	return acp.ToolKind(k)
 }
 
-func rawInput(c tool.Call) any {
+func rawInput(c tool.Call) stdjson.RawMessage {
 	if len(c.Args) == 0 {
 		return nil
 	}
@@ -260,10 +260,10 @@ func (p *acpPolicy) Decide(ctx context.Context, r permission.Rule) (permission.D
 	return permission.Decision{Allow: false}, nil
 }
 
-// jsonRaw passes JSON through the SDK's encoding/json as it is: a
-// jsontext.Value is a json.RawMessage, so it encodes verbatim. Empty is
-// none.
-func jsonRaw(v jsontext.Value) any {
+// jsonRaw passes JSON through the SDK's encoding/json as it is, as a
+// json.RawMessage, which encodes verbatim. Empty is none, which the
+// field's omitempty leaves out (0014-MADR D4).
+func jsonRaw(v jsontext.Value) stdjson.RawMessage {
 	if len(v) == 0 {
 		return nil
 	}
@@ -282,12 +282,12 @@ func promptError(err error) error {
 
 // acpUsage is the turn's usage for the prompt response.
 func acpUsage(u llm.Usage) *acp.Usage {
-	out := &acp.Usage{InputTokens: int(u.InputTokens), OutputTokens: int(u.OutputTokens), TotalTokens: int(u.InputTokens + u.OutputTokens)}
+	out := &acp.Usage{InputTokens: count(u.InputTokens), OutputTokens: count(u.OutputTokens), TotalTokens: count(u.InputTokens + u.OutputTokens)}
 	if u.ReasoningTokens > 0 {
-		out.ThoughtTokens = new(int(u.ReasoningTokens))
+		out.ThoughtTokens = new(count(u.ReasoningTokens))
 	}
 	if u.CacheReadTokens > 0 {
-		out.CachedReadTokens = new(int(u.CacheReadTokens))
+		out.CachedReadTokens = new(count(u.CacheReadTokens))
 	}
 	return out
 }
@@ -301,5 +301,23 @@ func usageUpdate(last llm.Usage) acp.SessionUpdate {
 
 // usedUpdate is a usage_update of used tokens.
 func usedUpdate(used int) acp.SessionUpdate {
-	return acp.SessionUpdate{UsageUpdate: &acp.SessionUsageUpdate{SessionUpdate: "usage_update", Used: used}}
+	return acp.SessionUpdate{UsageUpdate: &acp.SessionUsageUpdate{SessionUpdate: "usage_update", Used: count(int64(used))}}
+}
+
+// count is a token count as ACP's: a negative count, which no provider
+// should report, is 0 rather than wrapped (0014-PLAN C4).
+func count(n int64) uint64 {
+	if n < 0 {
+		return 0
+	}
+	return uint64(n)
+}
+
+// line is a location's line as ACP's: none for 0, a negative line or one
+// past ACP's range, rather than a wrapped one (0014-PLAN C4).
+func line(n int) *uint32 {
+	if n <= 0 || n > math.MaxUint32 {
+		return nil
+	}
+	return new(uint32(n))
 }

@@ -2,10 +2,11 @@ package acptest
 
 import (
 	"context"
+	"math"
 	"slices"
 	"sync"
 
-	acp "github.com/coder/acp-go-sdk"
+	acp "github.com/maccavelli/acp-go-sdk2"
 )
 
 // Client is the default test client. It records session/update
@@ -31,6 +32,18 @@ type Client struct {
 }
 
 var _ acp.Client = (*Client)(nil)
+
+// CreateElicitation answers "method not found": the client advertises no
+// elicitation (0014-MADR D3).
+func (*Client) CreateElicitation(context.Context, acp.CreateElicitationRequest) (acp.CreateElicitationResponse, error) {
+	return acp.CreateElicitationResponse{}, acp.NewMethodNotFound(acp.ClientMethodElicitationCreate)
+}
+
+// CompleteElicitation ignores the notification of an elicitation never
+// accepted.
+func (*Client) CompleteElicitation(context.Context, acp.CompleteElicitationNotification) error {
+	return nil
+}
 
 // Updates returns the session/update notifications received, in order.
 func (c *Client) Updates() []acp.SessionNotification {
@@ -142,11 +155,20 @@ func (t *Terminals) record(call string) {
 	t.calls = append(t.calls, call)
 }
 
-func (t *Terminals) exit() *int {
+func (t *Terminals) exit() (*uint32, error) {
 	if t.Hang {
-		return nil
+		return nil, nil
 	}
-	return &t.ExitCode
+	return exitCode(t.ExitCode)
+}
+
+// exitCode is ExitCode as ACP's: a code outside its range is a scripting
+// error, answered as an internal error rather than wrapped (0014-PLAN C4).
+func exitCode(n int) (*uint32, error) {
+	if n < 0 || n > math.MaxUint32 {
+		return nil, acp.NewInternalError(map[string]any{"exitCode": n, "reason": "outside ACP's range"})
+	}
+	return new(uint32(n)), nil
 }
 
 // CreateTerminal starts a scripted command, or answers "method not found"
@@ -187,7 +209,11 @@ func (c *Client) TerminalOutput(context.Context, acp.TerminalOutputRequest) (acp
 		return acp.TerminalOutputResponse{}, acp.NewMethodNotFound(acp.ClientMethodTerminalOutput)
 	}
 	t.record("output")
-	return acp.TerminalOutputResponse{Output: t.Output, ExitStatus: &acp.TerminalExitStatus{ExitCode: t.exit()}}, nil
+	code, err := t.exit()
+	if err != nil {
+		return acp.TerminalOutputResponse{}, err
+	}
+	return acp.TerminalOutputResponse{Output: t.Output, ExitStatus: &acp.TerminalExitStatus{ExitCode: code}}, nil
 }
 
 // ReleaseTerminal frees the terminal.
@@ -219,5 +245,9 @@ func (c *Client) WaitForTerminalExit(ctx context.Context, _ acp.WaitForTerminalE
 			return acp.WaitForTerminalExitResponse{}, context.Cause(ctx)
 		}
 	}
-	return acp.WaitForTerminalExitResponse{ExitCode: &t.ExitCode}, nil
+	code, err := exitCode(t.ExitCode)
+	if err != nil {
+		return acp.WaitForTerminalExitResponse{}, err
+	}
+	return acp.WaitForTerminalExitResponse{ExitCode: code}, nil
 }

@@ -366,6 +366,7 @@ phone / desktop  --WS protocol-v1/v2-->  mcrelay  -->  mcremote daemon
   requires the same version, then `replace`s it with the owner's fork
   `v0.13.6-mcr.1` (its MADR 0167). Whether gobble carries that replace is
   decided in [0004-PLAN](0004-PLAN-go-module-architecture.md) Phase 0.
+  *(Amended 2026-10-10: gobble no longer uses this module or the fork. It requires `github.com/maccavelli/acp-go-sdk2` `v0.14.0`, protocol version `1`; see [0014-MADR-move-to-acp-go-sdk2.md](0014-MADR-move-to-acp-go-sdk2.md).)*
 * `ProtocolVersionNumber = 1`.
 * Agent baseline on that SDK: `initialize`, `authenticate`, `logout`,
   `session/new`, `session/prompt`, `session/cancel`, `session/list`,

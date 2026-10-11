@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: completed
 date: 2026-10-10
 ---
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
@@ -27,6 +27,7 @@ Implements [0014-MADR-move-to-acp-go-sdk2.md](0014-MADR-move-to-acp-go-sdk2.md) 
 | imports only (D2) | every `.go` file importing `github.com/coder/acp-go-sdk`: 42 at `HEAD`, under `acpserver/`, `acpclient/` and `internal/archtest/` |
 | code (D3, D4) | `acpserver/agent.go`, `acpserver/clientterm.go`, `acpserver/prompt.go`; `acpclient/conn.go`, `acpclient/update.go`; `acpclient/acptest/client.go`, `acpclient/acptest/script.go`, `acpclient/acptest/pair_test.go` |
 | test files (F4) | any `_test.go` under `acpserver/` or `acpclient/` whose only change is a D3 method on a test double or a D4 conversion, each named in the execution record |
+| P1 deviation 1 | `acpserver/mcp_test.go` (one field renamed) |
 | new tests | `acpserver/delete_test.go`; `acpclient/elicitation_test.go`; `acpserver/convert_test.go` and `acpclient/convert_test.go` for the conversion helpers |
 | gates (D6) | `internal/archtest/check.go`, `internal/archtest/check_test.go` |
 | records and docs (D6, D7) | this pair; `docs/decisions/0002-MADR-cli-acp-headless-mcp-v1.md` and `docs/decisions/0004-MADR-go-module-architecture.md` (one dated note each); `docs/decisions/0005-PLAN-v1-feature-scope.md` (F3-4 deviation 3, written before this pair); `docs/architecture.md`; `README.md`; `docs/README.md` |
@@ -122,12 +123,21 @@ The tree holds F3-4's uncommitted edits to `acpclient/conn.go` and `acpclient/co
    - `DeleteSession` returning success fails `TestDeleteSessionNotFound`;
    - `CreateElicitation` returning a response fails `TestElicitationNotFound`;
    - each conversion helper wrapping instead of clamping fails its test;
-   - `jsonRaw` returning `[]byte("null")` for empty input fails `TestSession` on the golden;
+   - ~~`jsonRaw` returning `[]byte("null")` for empty input fails `TestSession` on the golden;~~ *(P1 deviation 2: it fails `TestRawInputOnTheWire` in `acpserver/convert_test.go`.)*
    - `internal/cli` importing sdk2 fails `make archtest` rule 2;
    - `Capabilities()` advertising `Delete` fails `TestDeleteSessionNotFound`.
 9. **Close:** the pre-add check on every changed `.go` file; the stability rule; `python3 scripts/check_records.py --check-all`; the identifier scan; stage.
 
 **Verification:** the Confirmation block of 0014-MADR, every line as it states.
+
+### P1's deviations, 2026-10-10, decided by the owner
+
+1. **A schema key rename broke a test.**
+   - **Found:** compiling the tests after step 3, `acpserver/mcp_test.go:193` builds `acp.McpServerAcpInline{…, Id: "x"}`, and sdk2 has no `Id`: the schema renamed the key `id` to `serverId` (the fork's `types_gen.go:2692`, sdk2's `:5379`). That is neither a D3 method nor a D4 conversion, so step 3 stopped. A diff of every struct's JSON keys between the two SDKs found four more changes in types gobble uses: `ClientCapabilities` loses `planCapabilities` and gains `plan`, `session` and `subagents`; `PromptRequest.messageId` and `PromptResponse.userMessageId` are gone; `ToolCallUpdate` gains `name`, and `Usage` `_meta`. No code in gobble or magic-cli-remote reads a removed key. gobble refuses the ACP transport whatever its id (`acpserver/mcp.go:112-113`).
+   - **Decided:** the test uses `ServerId: "x"`, and still proves the transport is refused. 0014-MADR gains finding F9, listing the five changes. D5's golden stays the arbiter of what gobble sends. `acpserver/mcp_test.go` joins the files.
+2. **No test covered an empty tool input on the wire.**
+   - **Found:** step 8's negative, `jsonRaw` sending `null` for empty input, passed `TestSession` and the whole of `go test ./acpserver` on its scratch copy: the golden has no tool call without arguments, and no test names `rawInput`. Reading both SDKs, the move keeps the key left out (the fork's `RawInput any`, nil; sdk2's `json.RawMessage` with `omitempty`, nil), but nothing checked it, before or after.
+   - **Decided:** `acpserver/convert_test.go` gains `TestRawInputOnTheWire`: a `tool_call` built through `jsonRaw` of empty input has no `rawInput` key, and one of `{"a":1}` carries it verbatim. The negative targets it. No files are added.
 
 ## Verification (whole plan)
 
@@ -157,3 +167,43 @@ A5 is the one most likely to be dropped under pressure: regenerating the golden 
 - **`session/delete`.** sdk2 makes it a stable `Agent` method; gobble's session deletion belongs to 0005-MADR's session features, not here.
 - **Elicitation.** A client-side feature for the TUI and the CLI, with its own record.
 - **magic-cli-remote's move off the fork.** That repository's decision.
+
+## Execution record (2026-10-10)
+
+P0 and P1 ran, approved by the owner's "approved to proceed with 0014 including P0" of 2026-10-10, with two deviations decided by the owner, both found during P1's step 3 and step 8. P1 is staged; the owner commits.
+
+- **P0:** F3-4's edits to `acpclient/conn.go` and `acpclient/conn_test.go` went to a scratchpad patch of 72 lines, which reverse-applied cleanly, with a backup copy, before `git restore` of the two files. The tree was then clean.
+- **P1, as built:**
+  - `go.mod` requires `github.com/maccavelli/acp-go-sdk2 v0.14.0`, with the sums F2 records; no fork, no coder module, no `replace`.
+  - 42 files' imports rewritten. The same rewrite changed `internal/archtest`'s two path strings and its test's two imports, since they are written in the import's quoted form, so step 4 needed no code edit there.
+  - The code of step 3, as listed. Two test files beyond step 3's list needed changes: `acpserver/routing_test.go` (a `TerminalId` comparison and a `uint32` line, both D4) and `acpserver/mcp_test.go` (deviation 1).
+  - New tests: `TestDeleteSessionNotFound`, `TestElicitationNotFound`, `TestConversions`, `TestRawInputOnTheWire` (deviation 2), `TestToInt` and `TestScriptedExitCode`. The last tests `acptest`'s exit-code check, which step 6 had not named; it lives in `acpclient/convert_test.go`, a file step 6 names.
+  - The notes in 0004-MADR and 0002-MADR, `docs/architecture.md`'s row, and `README.md`'s protocols line.
+- **The wire:** `TestSession` passed against the unchanged golden, `git diff --exit-code acpserver/testdata/session.golden` exited 0, and `TestPromptParamsMatchSDKClient` passed against sdk2's own client. `acptest.Recorder.Golden` writes the file only under `ACPTEST_UPDATE=1`, which was never set.
+- **C3: 12 negatives, each asserted to land once** (the twelfth added after the first gate run).
+  - 10 failed as expected on the first run. `jsonRaw` sending `null` did not fail `TestSession`, nor anything in `go test ./acpserver` (deviation 2). After the new test it failed `TestRawInputOnTheWire` with `"rawInput":null`.
+  - All were run again after each fix, last as 12, and all failed as expected, none by a build failure:
+    - `DeleteSession` succeeding, and deletion advertised;
+    - `elicitation/create` answered, and elicitation advertised;
+    - `count`, `line`, `exitCode`, `toInt` and `toInt64` wrapping;
+    - `acptest`'s exit code unchecked;
+    - `null` for an empty input;
+    - `internal/cli` importing sdk2, which `TestImportRules` reported as a rule 2 edge.
+- **The pre-add check** first failed `gofmt` on two one-line methods, `CompleteElicitation` in `acpclient/conn.go` and `acpclient/acptest/client.go`; `gofmt -w` split them, and all 46 Go files were then clean.
+- **The gates,** on Go 1.27.2, as 0005-PLAN F1d-2's deviation 4 sets them.
+  - **The first run failed** lint on all three systems, and with it both preflights; Windows `go test` and both race runs passed.
+    - `gosec` G115 flagged `acpclient/update.go:162`: `ContextUsage` took sdk2's `uint64` `Used` and `Size` through `int64(…)`, which compiled, so neither the probe nor step 3 had seen it. It now goes through `toInt64`, which clamps (C4), with `TestToInt` covering it and a twelfth negative.
+    - `unconvert` flagged `jsonRaw`'s `stdjson.RawMessage(v)` as unnecessary; it returns `v`, and negative 10's anchor moved with it.
+  - **On the second run:** all passed:
+    - lint printed `0 issues.` for linux, darwin and windows;
+    - Windows `go test ./...` had no `FAIL` or `panic:`;
+    - `CGO_ENABLED=1 go test -race ./...` exited 0 with no race reported, natively on Windows and on a second amd64 Linux machine, 29 packages each, none cached;
+    - Windows and WSL `make preflight` each printed `preflight passed`, WSL's without a race run.
+
+**What the plan predicted wrongly:**
+
+1. **It counted test-file errors as a floor and allowed only two kinds,** and a third kind arrived: a schema key rename (deviation 1). The key diff it prompted found four more key changes, which the MADR had not measured.
+2. **It named the golden as the negative for `jsonRaw`,** and the golden never sends an empty tool input; no test did (deviation 2).
+3. **Step 4 budgeted an edit the import rewrite had already made.**
+4. **Step 6 did not name a test for `acptest`'s exit-code check,** which step 3 added.
+5. **The compile delta missed a conversion that compiles:** `int64` of a `uint64` is legal Go, so only `gosec` found it. The probe measured what breaks the build, not every changed type.

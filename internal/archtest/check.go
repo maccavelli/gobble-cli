@@ -183,7 +183,7 @@ func checkRule1(pkgs []modPkg) []Violation {
 
 func rule1Forbidden(rel, imp string) bool {
 	switch {
-	case pathUnder(imp, "github.com/coder/acp-go-sdk"):
+	case pathUnder(imp, "github.com/maccavelli/acp-go-sdk2"):
 		return true
 	case pathUnder(imp, "github.com/modelcontextprotocol/go-sdk"):
 		return true
@@ -205,7 +205,7 @@ func rule1Forbidden(rel, imp string) bool {
 func checkRule2(pkgs []modPkg) []Violation {
 	var vs []Violation
 	for _, e := range edges(pkgs) {
-		if !pathUnder(e.to, "github.com/coder/acp-go-sdk") {
+		if !pathUnder(e.to, "github.com/maccavelli/acp-go-sdk2") {
 			continue
 		}
 		rel, ok := relOf(e.from)

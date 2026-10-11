@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	acp "github.com/coder/acp-go-sdk"
+	acp "github.com/maccavelli/acp-go-sdk2"
 
 	"github.com/maccavelli/gobble-cli/tool"
 )
@@ -30,46 +30,55 @@ func (t clientTerminal) Create(ctx context.Context, r tool.TerminalRequest) (str
 		req.Env = append(req.Env, acp.EnvVariable{Name: name, Value: value})
 	}
 	if r.OutputByteLimit > 0 {
-		req.OutputByteLimit = &r.OutputByteLimit
+		req.OutputByteLimit = new(uint64(r.OutputByteLimit))
 	}
 	resp, err := t.conn.CreateTerminal(ctx, req)
 	if err != nil {
 		return "", err
 	}
 	if t.created != nil {
-		t.created(resp.TerminalId)
+		t.created(string(resp.TerminalId))
 	}
-	return resp.TerminalId, nil
+	return string(resp.TerminalId), nil
 }
 
 func (t clientTerminal) Output(ctx context.Context, id string) (tool.TerminalOutput, error) {
-	r, err := t.conn.TerminalOutput(ctx, acp.TerminalOutputRequest{SessionId: t.session, TerminalId: id})
+	r, err := t.conn.TerminalOutput(ctx, acp.TerminalOutputRequest{SessionId: t.session, TerminalId: acp.TerminalId(id)})
 	if err != nil {
 		return tool.TerminalOutput{}, err
 	}
 	out := tool.TerminalOutput{Output: r.Output, Truncated: r.Truncated}
 	if r.ExitStatus != nil {
-		out.Exit = &tool.TerminalExit{Code: r.ExitStatus.ExitCode, Signal: deref(r.ExitStatus.Signal)}
+		out.Exit = &tool.TerminalExit{Code: exitCode(r.ExitStatus.ExitCode), Signal: deref(r.ExitStatus.Signal)}
 	}
 	return out, nil
 }
 
 func (t clientTerminal) WaitForExit(ctx context.Context, id string) (tool.TerminalExit, error) {
-	r, err := t.conn.WaitForTerminalExit(ctx, acp.WaitForTerminalExitRequest{SessionId: t.session, TerminalId: id})
+	r, err := t.conn.WaitForTerminalExit(ctx, acp.WaitForTerminalExitRequest{SessionId: t.session, TerminalId: acp.TerminalId(id)})
 	if err != nil {
 		return tool.TerminalExit{}, err
 	}
-	return tool.TerminalExit{Code: r.ExitCode, Signal: deref(r.Signal)}, nil
+	return tool.TerminalExit{Code: exitCode(r.ExitCode), Signal: deref(r.Signal)}, nil
 }
 
 func (t clientTerminal) Kill(ctx context.Context, id string) error {
-	_, err := t.conn.KillTerminal(ctx, acp.KillTerminalRequest{SessionId: t.session, TerminalId: id})
+	_, err := t.conn.KillTerminal(ctx, acp.KillTerminalRequest{SessionId: t.session, TerminalId: acp.TerminalId(id)})
 	return err
 }
 
 func (t clientTerminal) Release(ctx context.Context, id string) error {
-	_, err := t.conn.ReleaseTerminal(ctx, acp.ReleaseTerminalRequest{SessionId: t.session, TerminalId: id})
+	_, err := t.conn.ReleaseTerminal(ctx, acp.ReleaseTerminalRequest{SessionId: t.session, TerminalId: acp.TerminalId(id)})
 	return err
+}
+
+// exitCode is a client's exit code as gobble's. A uint32 always fits an
+// int on the 64-bit systems gobble ships for.
+func exitCode(c *uint32) *int {
+	if c == nil {
+		return nil
+	}
+	return new(int(*c))
 }
 
 func deref(s *string) string {

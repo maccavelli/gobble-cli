@@ -8,10 +8,11 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"sync"
 	"time"
 
-	acp "github.com/coder/acp-go-sdk"
+	acp "github.com/maccavelli/acp-go-sdk2"
 )
 
 // closeTimeout bounds how long Close waits for the agent to stop.
@@ -212,6 +213,30 @@ type Result struct {
 	SwitchTo string
 }
 
+// toInt is an ACP count as an int: a count past an int's range is its
+// maximum rather than wrapped (0014-PLAN C4).
+func toInt(n uint64) int {
+	if n > math.MaxInt {
+		return math.MaxInt
+	}
+	return int(n)
+}
+
+// toInt64 is toInt for an int64 (0014-PLAN C4).
+func toInt64(n uint64) int64 {
+	if n > math.MaxInt64 {
+		return math.MaxInt64
+	}
+	return int64(n)
+}
+
+func toIntPtr(n *uint64) *int {
+	if n == nil {
+		return nil
+	}
+	return new(toInt(*n))
+}
+
 // Usage is ACP's per-turn token usage.
 type Usage struct {
 	InputTokens       int  `json:"inputTokens"`
@@ -248,8 +273,8 @@ func (s *Session) Prompt(ctx context.Context, p Prompt) (Result, error) {
 	}
 	if u := resp.Usage; u != nil {
 		r.Usage = &Usage{
-			InputTokens: u.InputTokens, OutputTokens: u.OutputTokens, TotalTokens: u.TotalTokens,
-			ThoughtTokens: u.ThoughtTokens, CachedReadTokens: u.CachedReadTokens, CachedWriteTokens: u.CachedWriteTokens,
+			InputTokens: toInt(u.InputTokens), OutputTokens: toInt(u.OutputTokens), TotalTokens: toInt(u.TotalTokens),
+			ThoughtTokens: toIntPtr(u.ThoughtTokens), CachedReadTokens: toIntPtr(u.CachedReadTokens), CachedWriteTokens: toIntPtr(u.CachedWriteTokens),
 		}
 	}
 	return r, nil
@@ -405,4 +430,16 @@ func (*handler) ReleaseTerminal(context.Context, acp.ReleaseTerminalRequest) (ac
 // WaitForTerminalExit is not offered.
 func (*handler) WaitForTerminalExit(context.Context, acp.WaitForTerminalExitRequest) (acp.WaitForTerminalExitResponse, error) {
 	return acp.WaitForTerminalExitResponse{}, acp.NewMethodNotFound(acp.ClientMethodTerminalWaitForExit)
+}
+
+// CreateElicitation is not offered, and no elicitation capability is
+// advertised (0014-MADR D3).
+func (*handler) CreateElicitation(context.Context, acp.CreateElicitationRequest) (acp.CreateElicitationResponse, error) {
+	return acp.CreateElicitationResponse{}, acp.NewMethodNotFound(acp.ClientMethodElicitationCreate)
+}
+
+// CompleteElicitation is a notification of an elicitation this client
+// never accepted, so it is ignored.
+func (*handler) CompleteElicitation(context.Context, acp.CompleteElicitationNotification) error {
+	return nil
 }

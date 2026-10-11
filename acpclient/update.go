@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	acp "github.com/coder/acp-go-sdk"
+	acp "github.com/maccavelli/acp-go-sdk2"
 )
 
 // Kind is the kind of a session update, as gobble's clients act on it.
@@ -159,7 +159,7 @@ func translate(n acp.SessionNotification) (Update, error) {
 	case s.UsageUpdate != nil:
 		c := s.UsageUpdate
 		u.Kind = KindUsage
-		u.Context = ContextUsage{Used: int64(c.Used), Size: int64(c.Size)}
+		u.Context = ContextUsage{Used: toInt64(c.Used), Size: toInt64(c.Size)}
 		if c.Cost != nil {
 			u.Context.Cost = &Cost{Amount: c.Cost.Amount, Currency: c.Cost.Currency}
 		}
@@ -219,7 +219,7 @@ func toolContent(cs []acp.ToolCallContent) []ToolContent {
 		case c.Diff != nil:
 			out = append(out, ToolContent{Diff: &Diff{Path: c.Diff.Path, OldText: c.Diff.OldText, NewText: c.Diff.NewText}})
 		case c.Terminal != nil:
-			out = append(out, ToolContent{Terminal: c.Terminal.TerminalId})
+			out = append(out, ToolContent{Terminal: string(c.Terminal.TerminalId)})
 		}
 	}
 	return out

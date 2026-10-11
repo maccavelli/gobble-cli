@@ -36,11 +36,11 @@ func TestImportRules(t *testing.T) {
 		{name: "rule 2 module", rule: 2},
 		{name: "rule 2 root", rule: 2, want: "acp-go-sdk", pkgs: []modPkg{{
 			ImportPath: modulePath,
-			Imports:    []string{"github.com/coder/acp-go-sdk"},
+			Imports:    []string{"github.com/maccavelli/acp-go-sdk2"},
 		}}},
 		{name: "rule 2 cli acp", rule: 2, want: "acp-go-sdk", pkgs: []modPkg{{
 			ImportPath: modulePath + "/internal/cli",
-			Imports:    []string{"github.com/coder/acp-go-sdk"},
+			Imports:    []string{"github.com/maccavelli/acp-go-sdk2"},
 		}}},
 		{name: "rule 3 module", rule: 3},
 		{name: "rule 3 agent mcp", rule: 3, want: "go-sdk", pkgs: []modPkg{{

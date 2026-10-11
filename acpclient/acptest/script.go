@@ -11,7 +11,7 @@ import (
 	"slices"
 	"sync"
 
-	acp "github.com/coder/acp-go-sdk"
+	acp "github.com/maccavelli/acp-go-sdk2"
 )
 
 // Turn is a scripted answer to one session/prompt. Updates are ACP
@@ -58,6 +58,12 @@ type ScriptAgent struct {
 }
 
 var _ acp.Agent = (*ScriptAgent)(nil)
+
+// DeleteSession answers "method not found", as an agent that advertises no
+// session deletion does (0014-MADR D3).
+func (*ScriptAgent) DeleteSession(context.Context, acp.DeleteSessionRequest) (acp.DeleteSessionResponse, error) {
+	return acp.DeleteSessionResponse{}, acp.NewMethodNotFound(acp.AgentMethodSessionDelete)
+}
 
 // Serve runs the agent over in and out until in reaches end of file, when
 // it returns nil, or ctx is done, when it returns context.Cause(ctx).

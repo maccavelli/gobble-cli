@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 date: 2026-10-10
 decision-makers: repository owner
 consulted: none
@@ -47,6 +47,7 @@ Read-only, on 2026-10-10. The SDK was read from a shallow clone of the tag in a 
 - **F6.** sdk2 refuses a request missing a required key, which the fork accepted. A client built on the fork emits every required key, since the fork's required fields have no `omitempty`, so gobble's own CLI and magic-cli-remote should be unaffected **[unverified for magic-cli-remote; gobble's own client is checked by the golden in Confirmation]**.
 - **F7.** sdk2 is under active development by its owner; `v0.14.0` is its only tag. A later tag is a later decision.
 - **F8.** Two gates and one rule of 0004-MADR name the old module path, so they move with it, amended together.
+- **F9.** *(Amendment of 2026-10-10, 0014-PLAN P1 deviation 1.)* The schema moved JSON keys in five types gobble uses: `McpServerAcpInline`'s `id` is `serverId`; `ClientCapabilities` loses `planCapabilities` and gains `plan`, `session` and `subagents`; `PromptRequest.messageId` and `PromptResponse.userMessageId` are gone; `ToolCallUpdate` gains `name`, and `Usage` `_meta`. Neither gobble nor magic-cli-remote reads a removed key, and gobble refuses the ACP transport whatever its id. A fork client's old-shape ACP-transport entry now fails at sdk2's decode, still refused. The finding came from a key diff of every struct the two `types_gen.go` files share, run after the compile delta, which F4 had said was a floor.
 
 ## Decision Drivers
 
@@ -159,3 +160,15 @@ make preflight                                                           -> pref
 ### Open questions for the plan
 
 None. The plan budgets for F4's test files, and treats any wire difference as a deviation (D5).
+
+## Observed — execution results (2026-10-10)
+
+0014-PLAN ran on 2026-10-10, approved by the owner, and every decision held as written:
+
+- **D1, D2:** the module and 42 imports moved; `go list -m all` names sdk2 `v0.14.0` and neither old module.
+- **D3:** `session/delete` and `elicitation/create` answer -32601, and neither is advertised; `elicitation/complete` is ignored.
+- **D4:** every conversion clamps or leaves a value out. One, `ContextUsage`'s `int64` of a `uint64`, compiled and was found by `gosec`, not by the compile delta this record measured.
+- **D5:** `session.golden` stayed byte-identical, and `acpclient`'s request matched sdk2's own client.
+- **D6, D7:** the gates, the two notes and the docs name sdk2.
+
+F4 was right to call the test-file count a floor. Two more test files changed, one of them for a kind of change this record had not measured, which became F9. 0014-PLAN's execution record has the detail.
