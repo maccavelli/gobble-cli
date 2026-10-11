@@ -1,6 +1,6 @@
 ---
 status: accepted
-date: 2026-10-10
+date: 2026-10-11
 decision-makers: repository owner
 consulted: 0001-REPORT-go-port-feasibility.md, 0002-MADR-cli-acp-headless-mcp-v1.md, 0003-MADR-gobble-product-identity.md, 0004-MADR-go-module-architecture.md
 informed: magic-cli-remote (companion command table), go-llmprovider-sdk, go-core-lib, go-tui-lib
@@ -169,7 +169,7 @@ Tier definitions:
 | Google Gemini | 1.0 | SDK id `gemini` (`llmprovider/providers/gemini`, Interactions wire). |
 | Grok (xAI) | 1.0 | SDK id `grok` (`llmprovider/providers/grok`, Responses wire). |
 | Other named SDK providers | 1.0 as each implements `llmprovider.Provider` | Ids already in the SDK: `opencode-zen`, `opencode-go`, `huggingface`, `kilo`, `together`, `ollama`. On 2026-09-30 those five still use the old `Generate*` API (0015-PLAN S7). gobble does not wrap that old API; each id joins 1.0 when `providers.New` returns it. |
-| Stream shape | 1.0 | gobble calls `llmprovider.Stream`. Every moved provider sets `NativeStreaming` to `Unsupported`, so 1.0 ACP `session/update` text chunks are whole-message events synthesised from `Generate`, not token-by-token SSE. A later SDK `Streamer` is picked up with no gobble API change. |
+| Stream shape | 1.0 | gobble calls `llmprovider.Stream`. ~~Every moved provider sets `NativeStreaming` to `Unsupported`, so 1.0 ACP `session/update` text chunks are whole-message events synthesised from `Generate`, not token-by-token SSE.~~ A later SDK `Streamer` is picked up with no gobble API change. *(2026-10-11: every provider streams natively from SDK `v1.6.0`, so 1.0 text chunks arrive as the model writes them, through a retry the SDK applies before the first event. Amendment of 2026-10-11, item 3.)* |
 | Unnamed OpenAI-compatible endpoints | 1.x | Groq, Cerebras, DeepSeek, OpenRouter, Fireworks, Mistral, LM Studio, llama.cpp server, vLLM. The SDK has no generic Chat Completions constructor (`WithBaseURL` on `openai` would send the Responses wire). These land when the SDK adds a Chat Completions provider that takes a base URL, or adds those ids. gobble does not speak those wires itself. |
 | Bedrock, Vertex, Azure OpenAI | 1.x | Needs SDK support. gobble will not add `anthropic-sdk-go`, `openai-go/v3`, `google.golang.org/genai`, or `aws-sdk-go-v2` to speak them. |
 | Subscription OAuth | 1.0 for ChatGPT/Codex through the SDK `openai` backend; ~~1.x for any other provider~~ *(2026-10-10: 1.0 for xAI Grok and Kilo too, through the SDK's flows, each after its terms check; any other, 1.x. Second amendment of this date, item 4.)* | Only for providers whose terms permit third-party clients. Each extra provider is checked and recorded in the PLAN before it lands. |
@@ -959,7 +959,7 @@ Otherwise it stays a shell command. File status, diffs, git, checksums and archi
 
 **What changes here.**
 
-1. **The SDK pin is `v1.3.2`,** its latest tag; gobble builds and passes its tests on it unchanged.
+1. ~~**The SDK pin is `v1.3.2`,** its latest tag; gobble builds and passes its tests on it unchanged.~~ *(2026-10-11: `v1.3.2` was not the latest tag; `v1.4.0` was tagged the day before. The pin is `v1.7.0`. Amendment of 2026-10-11, item 1.)*
 2. **The catalog's data is a models.dev snapshot.**
    - **Found:** go-llmprovider-sdk has no context window, max output, cost or input modalities for any model at `v1.2.1` or `v1.3.2`. Its catalog is curated id lists and ranking, and its metadata carries reasoning efforts only. models.dev has all of them for every SDK provider but local Ollama, under the MIT licence.
    - **Decided:** an embedded, dated snapshot of models.dev's `api.json`, filtered to the SDK's providers and credited in `NOTICE`, in Pi's `Model` shape; `models.json` overlays it. Refresh stays 1.x. Choice 11's "the catalog's data stays go-llmprovider-sdk's" is replaced.
@@ -984,3 +984,27 @@ Otherwise it stays a shell command. File status, diffs, git, checksums and archi
 - `/usage`, cost and context use come from the snapshot, dated, so a newer model is unknown until a later snapshot or a `models.json` entry.
 - A credential is a file on disk, protected by its permissions, not by the OS keyring, until 1.x.
 - Scripts written for Pi's `--api-key KEY` must pipe the key instead.
+
+### Amendment (2026-10-11): go-llmprovider-sdk `v1.7.0`
+
+**Why.** The SDK released `v1.4.0` to `v1.7.0` between 2026-10-09 and 2026-10-11. The owner asked for them to be evaluated against F4, and decided each change on 2026-10-11. The facts are in 0005-PLAN's entry "F4-1 re-made for go-llmprovider-sdk `v1.7.0`", checked by a script there.
+
+**What changes here.**
+
+1. **The pin is `v1.7.0`, and each later F4 sub-phase takes the latest tag.**
+   - **Found:** the second amendment of 2026-10-10, item 1, calls `v1.3.2` the latest tag. `v1.4.0` was tagged on 2026-10-09 at 17:54 UTC, so that was false when written. gobble builds and passes its tests on `v1.7.0` unchanged.
+   - **Decided:** pin `v1.7.0`. Each later sub-phase pins the latest tag and re-checks F4's facts on it, and a fact that changed is a deviation.
+2. **A failed tool result reaches the model as one.**
+   - **Found:** `v1.7.0` adds `FunctionCallOutputItem.IsError`, sent where the wire has a field. gobble's adapter drops `llm`'s `IsError`.
+   - **Decided:** the adapter sends it (0005-PLAN F4-1a).
+3. **1.0 streams text as the model writes it, and the SDK retries before the first event.**
+   - **Found:** from `v1.6.0` every built-in provider streams natively. `WithRetry` buffers, so text arrives only when the reply is whole. Its rules for what to retry, and how long to wait, are not exported. gobble reports the unwrapped provider's `NativeStreaming`, so it claims a live stream it does not deliver.
+   - **Decided:** gobble reports the capabilities of the provider it calls (0005-PLAN F4-1a). It asks go-llmprovider-sdk for a `WithRetry` that streams: it retries a failure before the first event under its own rules, and passes every event through after it. gobble takes live text on the first release that has it (F4-1b). The stream-shape row is annotated to match.
+4. **0012-MADR D3's opt-out is unblocked.** `v1.7.0` has `Tool.Strict *bool`. 0012-PLAN P7 follows F4-1a.
+
+**Consequences.**
+
+- Text shows as it is written over ACP and in the CLI, once F4-1b lands. Text shown before a failure is not kept in the history; the turn ends with the error.
+- A retry can happen only before the first event. A failure after it ends the turn, since the text already shown cannot be withdrawn.
+- F4-1b waits on a release of another repository. Until then, F4-1a's honest `NativeStreaming` is false.
+- The SDK moves quickly. Taking its latest tag at each sub-phase keeps gobble on its fixes, at the cost of a re-check every time.

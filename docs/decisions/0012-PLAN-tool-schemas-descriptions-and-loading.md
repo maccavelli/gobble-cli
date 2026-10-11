@@ -1,6 +1,6 @@
 ---
 status: completed
-date: 2026-10-09
+date: 2026-10-11
 ---
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
 
@@ -1383,7 +1383,7 @@ git diff <the records commit>..HEAD -- go.mod go.sum              -> empty (C2)
 - **D10, the interception:** F6, with `mvdan.cc/sh`, which AGENTS.md lets in only with the code that imports it.
 - **D4 and D14's `outputSchema`:** X4, with `gobble mcp serve`.
 - **D13:** a request to go-llmprovider-sdk. It is recorded in 0012-MADR, and not made from this repository.
-- **D3's opt-out** *(added 2026-10-08)*. It waits on a go-llmprovider-sdk release whose `llmprovider.Tool` carries a per-tool strict flag; v1.2.1 has none (V25). When that release exists, this plan gains a phase P7, made executable as an amendment first, that:
+- **D3's opt-out** *(added 2026-10-08)*. It waits on a go-llmprovider-sdk release whose `llmprovider.Tool` carries a per-tool strict flag; v1.2.1 has none (V25). When that release exists, this plan gains a phase P7, made executable as an amendment first, that: *(2026-10-11: the release exists. go-llmprovider-sdk `v1.7.0` has `Tool.Strict *bool`. P7 is made executable after 0005-PLAN F4-1a, which pins that release; see 0005-PLAN's entry "F4-1 re-made for go-llmprovider-sdk `v1.7.0`".)*
   - requires that release, in the same commit as the code that uses the flag (AGENTS.md, Dependencies);
   - in `llm/provider`, where each `llmprovider.Tool` is built (`provider.go:234`), sets strict to false when the published schema has a property outside `required`, and true otherwise;
   - makes P5's live test assert `strict=false` for read, bash and powershell, and `strict=true` for write and edit;

@@ -1,6 +1,6 @@
 ---
 status: accepted
-date: 2026-10-09
+date: 2026-10-11
 decision-makers: Project Owner
 consulted: none
 informed: none
@@ -864,7 +864,7 @@ The PLAN resolves these. None leaves a decision above open. *(2026-10-08: [0012-
   - The five definitions grew from 4,276 bytes to 4,615 (8%). F5 and F6 are closed.
 - **D3's probe.**
   - The in-tree `TestStrictProbe` gave `strict=true` for all five tools (`gpt-4.1-mini`, `/v1/responses`), as Probe D did. OpenAI still makes every argument required.
-  - D3's opt-out, `strict: false` for read, bash and powershell, is still needed. It still waits on go-llmprovider-sdk's per-tool strict flag (D13), and lands as 0012-PLAN P7 when a release has one.
+  - D3's opt-out, `strict: false` for read, bash and powershell, is still needed. It still waits on go-llmprovider-sdk's per-tool strict flag (D13), and lands as 0012-PLAN P7 when a release has one. *(2026-10-11: `v1.7.0` has it, as `Tool.Strict *bool`. P7 follows 0005-PLAN F4-1a.)*
 
 **Contradicted:** nothing in the decisions. Two of the plan's predictions were wrong, and are recorded in its execution record:
 

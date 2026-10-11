@@ -1,6 +1,6 @@
 ---
 status: in-progress
-date: 2026-10-10
+date: 2026-10-11
 associated-madr: "0005-MADR-v1-feature-scope.md"
 ---
 # Implement the v1 line: the v1.0.0 gate, the v1.x train, and `exp/`
@@ -3210,10 +3210,10 @@ F4 is steps 1–9 and their accept list, with choice 11 of the 2026-10-07 amendm
   - `llm/catalog` and `internal/auth` are placeholders (`llm/catalog/doc.go:4`, `internal/auth/doc.go:4`). `initialize` lists no auth methods, and `authenticate` and `logout` answer method-not-found (`acpserver/agent.go:233`, `:934-941`).
   - The `model` and `thought_level` config options exist (`acpserver/config.go:36-45`). `usage_update`'s size is 0 until a catalog gives one (`acpserver/prompt.go:296`).
 - **go-llmprovider-sdk:** `go.mod` pins `v1.2.1` (`go.mod:16`). `v1.3.2` is tagged 2026-10-07, and gobble builds and passes its `llm`, `acpserver` and `internal/cli` tests on it unchanged, on a scratch copy.
-  - Ten provider ids (`constants.go`), none streaming natively and none taking images (`item.go:19-22`).
+  - Ten provider ids (`constants.go`), none streaming natively and none taking images (`item.go:19-22`). *(2026-10-11: from `v1.6.0` every one streams natively; see the Amendments entry "F4-1 re-made for go-llmprovider-sdk `v1.7.0`".)*
   - **No model has limits or cost:** the catalog package lists ids and ranks them (`catalog/models_catalog.go`), and its `Metadata` carries reasoning efforts only (`catalog/model_metadata.go`).
   - **Auth** (`auth/`): a `TokenStore` of `Load`, `Save` and `Delete` (`tokenstore.go`); `LoginBrowserOAuth` for `openai` and `grok` (`oauth_loopback.go`); `StartDeviceOAuth` for `openai`, `grok` and `kilo` (`oauth_device.go`); a file token store; no keyring. The flows' default client ids are the vendor CLIs' own (`auth/doc.go`).
-  - A tool has no strict flag (`provider.go:17-21`), so 0012-PLAN P7 still waits.
+  - ~~A tool has no strict flag (`provider.go:17-21`), so 0012-PLAN P7 still waits.~~ *(2026-10-11: `v1.7.0` has `Tool.Strict *bool`, and P7 follows F4-1a; see the Amendments entry "F4-1 re-made for go-llmprovider-sdk `v1.7.0`".)*
 - **Pi** (`312184edb`):
   - `models.json`: `providers` only at the top level, each with `baseUrl`, `apiKey`, `api`, `headers`, `models[]` and `modelOverrides` (`core/model-config.ts:229-244`); `//` comments and trailing commas stripped (`:297`, `utils/json.ts:2-6`); a bad file is ignored whole and a bad provider falls back to the built-in, each with a diagnostic (`core/model-config.ts:288-311`, `core/model-runtime.ts:308-314`).
   - Values: `!command` and `$NAME`/`${NAME}`, resolved at request time, a command uncached with a 10 s timeout (`core/resolve-config-value.ts`).
@@ -3225,7 +3225,7 @@ F4 is steps 1–9 and their accept list, with choice 11 of the 2026-10-07 amendm
 **The owner's decisions, 2026-10-10:**
 
 1. **Three sub-phases,** each one commit with its own record and gates: **F4-1**, the SDK and the adapters; **F4-2**, the catalog, `models.json` and choosing a model; **F4-3**, credentials.
-2. **go-llmprovider-sdk `v1.3.2`.**
+2. ~~**go-llmprovider-sdk `v1.3.2`.**~~ *(2026-10-11: `v1.7.0`, and the latest tag at each later sub-phase. `v1.3.2` was not the latest tag when this was written; see the Amendments entry "F4-1 re-made for go-llmprovider-sdk `v1.7.0`".)*
 3. **The catalog's data is a dated models.dev snapshot,** embedded and credited in `NOTICE`; `models.json` overlays it. Refresh stays 1.x.
 4. **Credentials live in a Pi-style `auth.json`.** The OS keyring is 1.x.
 5. **ChatGPT, Grok and Kilo logins at 1.0,** each landing only after a recorded check of the vendor's terms for third-party clients.
@@ -3235,11 +3235,11 @@ F4 is steps 1–9 and their accept list, with choice 11 of the 2026-10-07 amendm
 9. **`--offline` stays refused,** re-pointed to X3, which brings `web_fetch`, its first network consumer.
 10. **ACP logins are terminal auth methods,** running `gobble auth login <provider>`.
 
-**F4-1 — the SDK and the adapters.**
+**F4-1 — the SDK and the adapters.** *(2026-10-11: re-made as F4-1a and F4-1b, on `v1.7.0`; see the Amendments entry "F4-1 re-made for go-llmprovider-sdk `v1.7.0`". The text below stands where that entry does not change it.)*
 
 Choices made within the wording:
 
-- **`go.mod`** requires `go-llmprovider-sdk v1.3.2`; the record names its sums.
+- ~~**`go.mod`** requires `go-llmprovider-sdk v1.3.2`; the record names its sums.~~ *(2026-10-11: `v1.7.0`.)*
 - **The ten ids are 1.0:** `openai`, `claude`, `gemini`, `grok`, `opencode-zen`, `opencode-go`, `huggingface`, `kilo`, `together` and `ollama`, each as `providers.New` builds it.
 - **A wire test per id,** through `New(id, Options{HTTPClient})` against an `httptest` server for its wire. The client's transport sends every request to the test server, so `Options` gains nothing:
   - a text reply gives one text event and the usage the wire reported;
@@ -3325,7 +3325,7 @@ Choices made within the wording:
 
 **How F4's accept list is met:**
 
-- **A wire test for each 1.0 id,** text, a tool call, usage, a 429 with `Retry-After`, and an overflow: F4-1.
+- **A wire test for each 1.0 id,** text, a tool call, usage, a 429 with `Retry-After`, and an overflow: F4-1. *(2026-10-11: and the reset-header and error-flag cases, F4-1a; a stream case, F4-1b.)*
 - **The live tests,** run once by the owner, with the date and outcome recorded: F4-1, then the owner.
 - **The pin printed by `go list -m`,** and no vendor SDK: F4-1, and checked at each sub-phase.
 - **Nothing under `internal/cli` imports go-llmprovider-sdk:** archtest rule 4, unchanged.
@@ -3337,4 +3337,90 @@ Choices made within the wording:
 - **The small-model role:** F5.
 - **`--offline`:** X3.
 - **Reading the Codex and Grok CLIs' own credential files** (the SDK's vendor CLI sessions): not in F4's steps; it waits for an amendment that places it.
-- **Image input, native streaming, cache-write accounting and 0012-PLAN P7:** each waits for the SDK.
+- **Image input, ~~native streaming,~~ cache-write accounting ~~and 0012-PLAN P7~~:** each waits for the SDK. *(2026-10-11: native streaming is F4-1b, and P7 follows F4-1a; see the Amendments entry "F4-1 re-made for go-llmprovider-sdk `v1.7.0`".)*
+
+**2026-10-11 — F4-1 re-made for go-llmprovider-sdk `v1.7.0`** (the owner's decisions of 2026-10-11: pin `v1.7.0`, and take the latest tag at each later sub-phase; bring a tool result's error flag, a true `NativeStreaming` and live streaming into F4-1; the stream's retry lives in the SDK).
+
+**Why.** The SDK released four minor versions after the facts of "F4 made executable" were taken. The owner asked for them to be evaluated against F4. That entry's decision 2 and 0005-MADR's second amendment of 2026-10-10, item 1, call `v1.3.2` the latest tag. It was not: `v1.4.0` was tagged on 2026-10-09 at 17:54 UTC, the day before. The error is corrected here and in 0005-MADR's amendment of 2026-10-11.
+
+**The facts,** checked on 2026-10-11 by a script in the session scratchpad (`q388_claims_f41.py`): 38 claims, all passing. With the check inverted, all 38 failed. SDK paths are under `go-llmprovider-sdk@v1.7.0/llmprovider/`.
+
+- **The releases:** `v1.4.0` (2026-10-09), `v1.5.0` (2026-10-10), `v1.6.0` and `v1.7.0` (2026-10-11), each a minor release. `v1.7.0` requires Go 1.27.2, as gobble does.
+- **gobble on `v1.7.0`,** on a scratch clone: `go get` and `go mod tidy` change `go.mod` and `go.sum` only, and no other requirement moves; `go build ./...`, `go vet ./...` and `go test -count=1 ./...` (29 packages) pass with no code change.
+- **The F4 entry's twelve SDK claims,** re-run at `v1.7.0`: one changes, "a tool has no strict flag". The rest hold: no model has limits or cost, there is no keyring, the token store and the logins are as recorded, and no item carries an image. `Usage` is unchanged, so there is still no cache-write count.
+- **`v1.4.0`** (its 0028-MADR):
+  - an overflow message that states its split, with the completion alone at or past the limit, is `ErrInvalidRequest`, not `ErrContextOverflow` (`context_overflow.go:69`);
+  - with no `Retry-After`, a 429's `RetryAfter` comes from the reset headers: `x-ratelimit-reset-requests` and `-tokens` as Go durations (OpenAI, Hugging Face), and Claude's `anthropic-ratelimit-*-reset` as RFC 3339 times (`internal/transport/transport.go:236-246`);
+  - a wait past `MaxDelay` still returns at once (`retry.go:151-156`);
+  - a 403 that names no credential is `ErrNotPermitted`, which gobble already maps (`llm/provider/provider.go:261`).
+- **`v1.5.0` and `v1.6.0`** (its 0031-MADR): every built-in provider streams natively. Eight declare `NativeStreaming: Supported`, and OpenCode's two `BestEffort` (`providers/*/*.go`); at `v1.3.2` none did. `WithRetry` buffers, and reports `Unsupported` (`retry.go:95-99`). A caller that wants text as it is generated streams the provider itself, and handles a failure there (`retry.go:60-66`).
+- **`v1.7.0`** (its 0032-MADR): `Tool.Strict *bool` (`provider.go:26`) and `FunctionCallOutputItem.IsError` (`item.go:48`), each sent where 0032-MADR's measurement found the wire's field. `v1.3.2` had neither.
+- **gobble today:**
+  - `New` takes its capabilities from the provider it wraps, not from the `WithRetry` result (`llm/provider/provider.go:65`, `:81-83`). From `v1.6.0`, `Capabilities().NativeStreaming` is therefore true while `Stream` is buffered.
+  - The adapter drops a tool result's `IsError` (`provider.go:219`), which `llm` carries (`llm/llm.go:73`). A failed tool call reaches Claude and Gemini as a success.
+  - The agent loop shows each delta as it arrives (`agent/agent.go:365-369`), and a failed call ends the turn with nothing added to the history (`:249-252`). A script can yield events and then an error (`llm/llmtest/script.go:76-87`).
+  - `llm` has no `ErrInvalidRequest`: an invalid request is an `*llm.APIError` with its status (`llm/errors.go`).
+
+**The owner's decisions, 2026-10-11:**
+
+1. **Pin `v1.7.0`.** Each later sub-phase starts by pinning the SDK's latest tag. On it, it runs `go build ./...`, `go vet ./...`, `go test -count=1 ./...` and the F4 claims, and records any claim that changed as a deviation.
+2. **F4-1 is two commits.** F4-1a is the pin, the wire tests and two fixes. F4-1b is live streaming, on the SDK release of decision 3.
+3. **The stream's retry lives in the SDK.** gobble asks go-llmprovider-sdk for this, as a record of its own there:
+   - `WithRetry`'s result implements `Streamer`, and reports the inner provider's `NativeStreaming`;
+   - a failure before the first event is retried under the policy's rules: the same retryable test, waits and cap, and the once-only resend of a request that was written;
+   - after the first event, every event passes through, and a failure ends the stream with no `EventDone`, as 0031-MADR D4 has it.
+
+   F4-1b pins the first release that has it. Until then, `Stream` stays buffered and `NativeStreaming` says so.
+4. **0012-PLAN P7 follows F4-1a,** made executable as an amendment to 0012-PLAN first, as P7's own text requires.
+5. **F4-2 follows F4-1a.** It does not wait for F4-1b, which lands before F4's accept.
+
+**F4-1a — the pin, the wire, and two fixes.**
+
+- **`go.mod`** requires `go-llmprovider-sdk v1.7.0`; the record names its sums.
+- **A true `NativeStreaming`:** `New` keeps the capabilities of the `WithRetry` result, so `Capabilities().NativeStreaming` is false until F4-1b; `Wrap`, which adds no retry, keeps the provider's own. `llm/llm.go:21` reads "NativeStreaming is false while the provider's retry buffers the stream."
+- **A failed tool result is sent as one:** `toRequest` builds `llmprovider.FunctionCallOutputItem{CallID: c.ToolCallID, Output: c.Text, IsError: c.IsError}`.
+- **The wire tests of "F4 made executable",** with one change: the overflow case's message states no split, so `v1.4.0` still classifies it as overflow.
+- **The cases `v1.4.0` and `v1.7.0` add,** in the same `wire_test.go`:
+  - `openai` and `huggingface`: a 429 with no `Retry-After` and `x-ratelimit-reset-requests: 90s` returns at once as `llm.ErrRateLimited`, with `RetryAfter` 90 s, after one request;
+  - `claude`: the same, with `anthropic-ratelimit-requests-reset` 90 s ahead as an RFC 3339 time, and `RetryAfter` between 89 s and 90 s;
+  - `openai`: an overflow message stating `(N in the messages, M in the completion)` with M at the limit is an `*llm.APIError` with status 400, and not `llm.ErrContextOverflow`;
+  - `claude`: a tool result with `IsError` reaches the body as `tool_result` with `is_error: true`; `openai`: its output reaches the body unchanged.
+- **Unit tests** in `provider_test.go`: `New` over a fake that declares `Supported` reports `NativeStreaming` false; `toRequest` carries `IsError` onto the item.
+- **The live tests** of "F4 made executable", unchanged.
+
+**F4-1a's files:**
+
+| | Files |
+| :--- | :--- |
+| new | `llm/provider/wire_test.go`, `llm/provider/live_test.go`, `llm/provider/testdata/wire/` |
+| changed | `go.mod`, `go.sum`; `llm/provider/provider.go`, `llm/provider/provider_test.go`; `llm/llm.go`; `docs/architecture.md`; `README.md` |
+
+**F4-1b — live streaming.**
+
+- **`go.mod`** requires the SDK release of decision 3, or a later tag, by decision 1.
+- **`New`** keeps the `WithRetry` result's capabilities, which on that release report `Supported`; `llm/llm.go:21` reads "NativeStreaming is true when text arrives as the model writes it."
+- **`llm/doc.go:20-22`:** text and thinking arrive as deltas while the model writes; calls arrive whole, as `ToolCallDone`; `ToolCallStart` and `ToolCallDelta` stay unproduced.
+- **Wire cases, for each of the ten ids,** in `wire_test.go`, against a streamed reply:
+  - two or more text deltas arrive before `Done`, and their concatenation is the reply's text;
+  - a 503 before the first event is retried, and the stream then succeeds, after two requests;
+  - a failure after the first delta ends the stream with the mapped error, with no `Done`, after one request.
+- **`agent/agent_test.go`:** `TestMidStreamFailure`. A script yields `TextDelta{Text: "par"}`, then `llm.ErrUnavailable`. The collected events hold that delta, the error is `llm.ErrUnavailable`, and there is no `agent.Message` or `agent.End`.
+
+**F4-1b's files:**
+
+| | Files |
+| :--- | :--- |
+| new | `llm/provider/testdata/wire/` stream replies |
+| changed | `go.mod`, `go.sum`; `llm/provider/provider.go`, `llm/provider/wire_test.go`; `llm/llm.go`, `llm/doc.go`; `agent/agent_test.go`; `docs/architecture.md` |
+
+**Tests,** each seen failing first on a scratch copy: every case above.
+
+**How F4's accept list is met,** in addition to "F4 made executable":
+
+- **Live text over ACP and in the CLI:** F4-1b, through the agent loop's existing deltas.
+- **A failed tool result reaches the model as one:** F4-1a.
+
+**Deferred, named:**
+
+- **Image input and cache-write accounting:** each still waits for the SDK.
+- **Call-argument deltas** (`ToolCallStart`, `ToolCallDelta`): the SDK yields calls whole (0031-MADR D2), so they wait for an SDK release that streams them.
