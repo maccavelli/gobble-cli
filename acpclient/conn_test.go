@@ -162,6 +162,28 @@ func TestPromptParamsMatchSDKClient(t *testing.T) {
 	}
 }
 
+// Context goes first, each its own text block marked for gobble's agent not
+// to scan for @path; an empty one is left out; Text follows unmarked
+// (0005-PLAN F3-4 deviation 1).
+func TestPromptContext(t *testing.T) {
+	const want = `{"prompt":[{"_meta":{"gobble":{"mentions":false}},"text":"piped","type":"text"},` +
+		`{"_meta":{"gobble":{"mentions":false}},"text":"<file name=\"/w/a\">\nx\n</file>","type":"text"},` +
+		`{"text":"explain @a","type":"text"}],"sessionId":"s1"}`
+	agent := &acptest.ScriptAgent{Turns: []acptest.Turn{{}}}
+	c := start(t, agent, acpclient.Options{})
+	s, err := c.NewSession(t.Context(), "/w", func(acpclient.Update) {})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := acpclient.Prompt{Context: []string{"piped", "", "<file name=\"/w/a\">\nx\n</file>"}, Text: "explain @a"}
+	if _, err := s.Prompt(t.Context(), p); err != nil {
+		t.Fatal(err)
+	}
+	if got := agent.Prompts(); len(got) != 1 || got[0] != want {
+		t.Fatalf("sent %q\nwant %s", got, want)
+	}
+}
+
 func TestImagesUnsupported(t *testing.T) {
 	agent := &acptest.ScriptAgent{Turns: []acptest.Turn{{}}}
 	c := start(t, agent, acpclient.Options{})

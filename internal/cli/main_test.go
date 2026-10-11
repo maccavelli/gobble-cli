@@ -249,7 +249,10 @@ func TestPipedInputIsComposed(t *testing.T) {
 	withAgent(t, agent)
 	var out, errw bytes.Buffer
 	code := Main(t.Context(), []string{"--log-level", "debug", "ask"}, stdinFile(t, "hi\n"), &out, &errw)
-	if p := agent.Prompts(); code != ExitOK || len(p) != 1 || !strings.Contains(p[0], `"text":"hi\n\nask"`) {
+	// The stdin is marked for the agent not to scan for @path, then the
+	// words (0005-PLAN F3-4 deviations 1 and 5).
+	const blocks = `"prompt":[{"_meta":{"gobble":{"mentions":false}},"text":"hi","type":"text"},{"text":"ask","type":"text"}]`
+	if p := agent.Prompts(); code != ExitOK || len(p) != 1 || !strings.Contains(p[0], blocks) {
 		t.Fatalf("exit %d, prompts %q, stderr %q; want 0 and the composed prompt sent", code, agent.Prompts(), errw.String())
 	}
 	log, err := os.ReadFile(filepath.Join(home, "logs", "gobble.log"))

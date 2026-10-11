@@ -1,6 +1,7 @@
 package acpserver
 
 import (
+	"bytes"
 	"context"
 	"encoding/json/v2"
 	"errors"
@@ -663,4 +664,27 @@ func TestModelChoiceUnderLock(t *testing.T) {
 		}
 	})
 	wg.Wait()
+}
+
+// A queued message gets the files its @path words name ahead of its text,
+// as a prompt does, after its skill or template expansion (0005-PLAN F3-4
+// deviation 2).
+func TestQueuedMentions(t *testing.T) {
+	cwd := mentionDir(t)
+	var logs bytes.Buffer
+	c, _ := templateAgent(t, t.TempDir(), templateConfig(t), llmtest.NewScript(), &logs)
+	id := newSession(t, c, cwd, nil).SessionId
+	mustExt(t, c, "_gobble/steer", map[string]any{"sessionId": id, "message": "see @a.txt"})
+	mustExt(t, c, "_gobble/follow_up", map[string]any{"sessionId": id, "message": "/fix @end.txt now"})
+	mustExt(t, c, "_gobble/follow_up", map[string]any{"sessionId": id, "message": "no files here"})
+	got := mustExt(t, c, "_gobble/clear_queue", map[string]any{"sessionId": id})
+	want := map[string][]any{
+		"steering": {fileBlock(filepath.Join(cwd, "a.txt"), "A\n") + "see @a.txt"},
+		"followUp": {fileBlock(filepath.Join(cwd, "end.txt"), "E") + "Fix @end.txt then now\n", "no files here"},
+	}
+	for key, w := range want {
+		if q, _ := got[key].([]any); !slices.Equal(q, w) {
+			t.Errorf("%s: %q, want %q", key, got[key], w)
+		}
+	}
 }

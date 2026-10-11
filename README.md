@@ -54,6 +54,8 @@ Early, and built in the order [docs/README.md](docs/README.md#build-order) gives
   `--no-skills` turns them off.
 - **Prompt templates** from the config directory's `prompts/`, as Pi writes them: `/review concurrency` sends `review.md` with
   its arguments in place.
+- **`@path` in a prompt** attaches that file, read inside the workspace, ahead of the text; ACP clients can attach
+  resources and links as well.
 - **`gobble mcp add|remove|list`**, `gobble config path`, `gobble version` and `gobble completion`.
 
 Not built yet: the permission engine (F6), the enhanced TUI mode, and `gobble update`. The full v1 line, tiered into

@@ -2938,6 +2938,8 @@ Choices made within the wording:
 
 *(2026-10-10, F3-4 deviation 2: `acpserver/extensions.go` and `acpserver/extensions_test.go` join the changed files.)*
 
+*(2026-10-10, F3-4 deviation 5: `internal/cli/main_test.go` joins the changed files.)*
+
 **F3-4's tests,** each seen failing first on a scratch copy:
 
 - `@path`, `@"a b.txt"` and `@path.` are expanded; an `@` inside a word, a missing file, a directory, a binary file, and a path outside the roots are left as typed; a file named twice is expanded once.
@@ -2945,7 +2947,7 @@ Choices made within the wording:
 - `initialize`'s capabilities are as listed.
 - *(2026-10-10, F3-4 deviations 1 and 2:)* ~~a prompt with `_meta.gobble.mentions: false` is not expanded, and the CLI's composed first prompt carries it~~ a text block marked `_meta.gobble.mentions: false` is not scanned, and the CLI marks its stdin and attached files but not its words, so a quoted `@path` among them is expanded; a queued message is expanded.
 
-**F3-4's deviations, 2026-10-10,** found by reading its files and Pi's before any code was written (1 and 2) and by its first test (3), and decided by the owner:
+**F3-4's deviations, 2026-10-10,** found by reading its files and Pi's before any code was written (1 and 2), by its first test (3), while closing 0014-PLAN (4), and at its first test run after (5), and decided by the owner:
 
 1. **The CLI's own files would be scanned for `@path`.**
    - **Found:** the CLI expands its first prompt's `@path` words itself (0008-MADR D4): after stdin, each text file is wrapped as `<file name="ABS">` inside the one text block (`internal/cli/input.go:31-80`). An agent pass over every prompt's text would scan those files' contents and stdin, so a decorator such as `@property`, or `see @README.md` in an attached document, would attach further workspace files no one named. Pi has no agent-side pass; its CLI expands only its arguments (`cli/file-processor.ts`).
@@ -2956,6 +2958,12 @@ Choices made within the wording:
 3. **The ACP SDK cannot send a text block's `_meta`.**
    - **Found:** writing deviation 1's per-block mark, a test sending a text block marked `_meta.gobble.mentions: false` through `acpclient` showed the agent receiving the block without it. The fork's `ContentBlock.MarshalJSON` rebuilds each variant from a fixed key list and never writes `_meta` or `annotations` (`acp-go-sdk@v0.13.6-mcr.2` `types_gen.go:1473-1600`).
    - **Decided:** the owner directed that gobble move from the fork to their rewrite, `github.com/maccavelli/acp-go-sdk2` at `v0.14.0`, which keeps both. That move is its own record, [0014-MADR-move-to-acp-go-sdk2.md](0014-MADR-move-to-acp-go-sdk2.md), and F3-4 waits until [0014-PLAN-move-to-acp-go-sdk2.md](0014-PLAN-move-to-acp-go-sdk2.md) has run. F3-4's code written so far, `acpclient.Prompt.Context` and its test, is set aside by 0014-PLAN's P0 and re-applied when F3-4 resumes.
+4. **The dependency table missed a direct requirement.**
+   - **Found:** closing 0014-PLAN, `docs/architecture.md`'s table of `go.mod`'s direct requirements has no row for `go.yaml.in/yaml/v3`, which F3-2 made direct (`go.mod:19`, `v3.0.5`). It predates F3-4: F3-2's execution record lists the file as updated, with a row for `internal/frontmatter` but not for the module.
+   - **Decided,** by the owner on 2026-10-10: F3-4 adds the row. No files join: `docs/architecture.md` is already among F3-4's.
+5. **A CLI test asserted the old single block.**
+   - **Found:** at F3-4's first test run, `internal/cli/main_test.go:252`, `TestPipedInputIsComposed`, asserted one text block `"text":"hi\n\nask"`; the CLI now sends the stdin marked `_meta.gobble.mentions: false`, then the words, as deviation 1 decided. The test predates F3-4. Its log assertion, 7 bytes, still holds, since `Prompt.Text` keeps the whole input.
+   - **Decided:** the test asserts the two blocks exactly, the marked `hi` and the unmarked `ask`. `internal/cli/main_test.go` joins the files.
 
 **The gates, for each sub-phase,** as F1d-2's deviation 4 sets them: lint for linux, darwin and windows; Windows `go test ./...`; `CGO_ENABLED=1 go test -race ./...` natively on Windows and on the second amd64 Linux machine; Windows and WSL `make preflight`, WSL's without a race run. F3-3 adds its fuzz run.
 
@@ -3140,3 +3148,49 @@ Choices made within the wording:
 3. **Its scan rules left out Pi's ignore files,** and its acpserver steps the queue, which Pi expands too.
 4. **One of Pi's cases cannot be ported word for word:** its YAML message is its library's.
 5. **Its file list missed `prompt/context.go`,** where the diagnostic it returns is defined.
+
+**F3-4, 2026-10-10 — complete (staged; the owner commits), and with it F3.** It ran as the entry "F3 made executable" wrote it, approved by the owner's "approved to proceed to F3-4" of 2026-10-10, paused by deviation 3 for [0014-PLAN-move-to-acp-go-sdk2.md](0014-PLAN-move-to-acp-go-sdk2.md), and resumed by the owner's "approved to proceed with F3-4, apply the patch". Five deviations were decided by the owner.
+
+- **The deviations** (recorded under F3-4's deviations above):
+  1. The CLI marks its stdin and attached files as text blocks `_meta.gobble.mentions: false`, and the agent scans only unmarked text blocks; per block, not per prompt, so a quoted `"explain @main.go"` expands.
+  2. A queued message is given its files too.
+  3. The ACP SDK could not send a block's `_meta`; gobble moved to acp-go-sdk2 `v0.14.0` under 0014, and F3-4's first code waited in a scratchpad patch, re-applied cleanly on `a2e22d8`.
+  4. `docs/architecture.md` gains the `go.yaml.in/yaml/v3` row, at the owner's direction.
+  5. `TestPipedInputIsComposed` asserts the two blocks.
+- **What was built:**
+  - **`acpserver/mentions.go`:** `mentionsIn`, `mentionFiles`, `mentionPath`, `fileBlock` (Pi's CLI block), `unscanned`, `promptFiles` and `resourceText`.
+  - **acpserver:** the user message is the files, then the text, and the user entry holds both; a queued message gets its files ahead of its expansion; `initialize` advertises `promptCapabilities{embeddedContext: true}`.
+  - **acpclient:** `Prompt.Context`, each sent as a marked text block ahead of the text.
+  - **internal/cli:** `Prompt.Context` and `Prompt.Words` beside the whole `Text`, and `clientPrompt` sending them.
+  - **Updated:** `docs/architecture.md`'s `acpserver` and `acpclient` rows and the dependency row; `README.md`.
+- **Choices of mine, within the entry's wording:**
+  - **The @path words are read from the prompt's own text,** before any skill or template expansion, so a template's or skill's body never attaches files; `/fix @a.go` attaches `a.go`.
+  - **An empty file gives nothing, and a byte-order mark is dropped,** as Pi's CLI skips an empty file and strips a BOM. A file's text is kept whole, trailing newline included, as Pi's block has it.
+  - **A file is read from disk through `fsx`,** not through the client's `fs/read_text_file`, as the entry says; a file is named once per prompt by its resolved path.
+  - **Trailing punctuation goes one character at a time** while the name with it is no file, so `@a.txt).` finds `a.txt`; a quoted name keeps its punctuation.
+  - **A blob's missing MIME type reads `unknown type`,** Pi's words (`content.ts:96`). An audio block is left out with images, since neither is advertised.
+  - **The files are their own text part, ahead of the text's parts,** in Pi's order; the model gets one text part per block, as from any client that sends several.
+- **The tests:**
+  - acpserver: `TestMentionsIn`, `TestMentionFiles`, `TestPromptFiles`, `TestPromptCarriesFiles`, `TestQueuedMentions`, and `TestCapabilitiesAreHonest` updated; `session.golden`'s one changed line is `promptCapabilities`, `{}` to `{"embeddedContext":true}`, read on a scratch copy before the tree's golden was regenerated.
+  - acpclient: `TestPromptContext`. internal/cli: `TestComposeInputContext`, and `TestPipedInputIsComposed` updated.
+- **C3: every new check, seen failing on a scratch copy.** There were 25 mutations, each asserted to land once.
+  - **23 failed as expected on the first run. Two were broken experiments,** each leaving a variable unused so the copy did not build: `afterSpace` in the first, `ok` in the twelfth. Both were rewritten to keep the variable in use. The runner also stopped on a test's output holding the invalid-UTF-8 file's byte, and now decodes with replacement.
+  - All 25 were run again, and all failed as expected, none by a build failure:
+    - the scan: an `@` inside a word; an empty quote;
+    - the files: punctuation kept; a quoted name's punctuation dropped; no confinement; a file named twice; a binary file, one not UTF-8, an empty one, and a BOM kept;
+    - the blocks: a marked block scanned; the mark misread; resources dropped; a blob's type blank; a link unnamed;
+    - the message: files after the text; no files; the queue without files;
+    - the capabilities: `embeddedContext` unadvertised; an image advertised;
+    - the CLI and client: the context unsplit, unsent, and unmarked on the wire; a client block unmarked; an empty context sent.
+  - **One check could not be made to fail here:** `mentionPath`'s regular-file test. A directory fails at the read anyway, and the case it guards, a named pipe that would block the read, cannot be made on Windows. It stays, for Linux and macOS.
+- **The gates,** on Go 1.27.2, as F1d-2's deviation 4 sets them: all passed on the first run:
+  - lint printed `0 issues.` for linux, darwin and windows;
+  - Windows `go test ./...` had no `FAIL` or `panic:`;
+  - `CGO_ENABLED=1 go test -race ./...` exited 0 with no race reported, natively on Windows and on a second amd64 Linux machine, 29 packages each, none cached;
+  - Windows and WSL `make preflight` each printed `preflight passed`, WSL's without a race run.
+
+**What the entry predicted wrongly:**
+
+1. **It took the CLI's prompt as plain text,** and the CLI already attaches files inside its text, so a pass over every prompt would have scanned them (deviation 1).
+2. **It assumed the SDK could carry a block's mark,** which the fork could not; the SDK moved first (deviation 3, 0014).
+3. **Its files left out the queue, and a CLI test that pinned the old wire** (deviations 2 and 5).

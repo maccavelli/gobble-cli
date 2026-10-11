@@ -15,6 +15,7 @@ import (
 
 	"github.com/maccavelli/gobble-cli/command"
 	"github.com/maccavelli/gobble-cli/compaction"
+	"github.com/maccavelli/gobble-cli/internal/fsx"
 	"github.com/maccavelli/gobble-cli/session"
 )
 
@@ -156,8 +157,12 @@ func (a *Agent) enqueue(params jsontext.Value, add func(*queue, string)) (any, e
 		return nil, invalidParams(s.id, fmt.Sprintf("Command \"/%s\" cannot be queued. Send it as a prompt when the turn ends.", name))
 	}
 	// Queued as Pi queues it, expanded: a skill, then a template
-	// (agent-session.ts:2106-2107; 0005-PLAN F3-3 deviation 2).
+	// (agent-session.ts:2106-2107; 0005-PLAN F3-3 deviation 2), with
+	// the files its @path words name first, as a prompt has them
+	// (F3-4 deviation 2).
+	files := mentionFiles(text, s.cwd, fsx.Workspace{Roots: s.env().Roots}, map[string]bool{})
 	text, _ = a.expand(s, text)
+	text = files + text
 	add(s.queue, text)
 	return queuedResult{Disposition: "queued"}, nil
 }

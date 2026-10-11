@@ -203,9 +203,13 @@ func finishPrint(e *runEnv, c *ChatCmd, sink *printSink, id string, res acpclien
 	return nil
 }
 
-// clientPrompt is the composed input as ACP content.
+// clientPrompt is the composed input as ACP content: its stdin and files
+// as marked text blocks, then its words, or a typed line as it is.
 func clientPrompt(p Prompt) acpclient.Prompt {
 	cp := acpclient.Prompt{Text: p.Text}
+	if len(p.Context) > 0 {
+		cp = acpclient.Prompt{Context: p.Context, Text: p.Words}
+	}
 	for _, img := range p.Images {
 		cp.Images = append(cp.Images, acpclient.Image{MIME: img.MIME, Data: img.Data})
 	}

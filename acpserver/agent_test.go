@@ -127,8 +127,10 @@ func TestCapabilitiesAreHonest(t *testing.T) {
 		t.Error("MCP over streamable HTTP is implemented (Phase 5) and must be advertised")
 	case got.McpCapabilities.Sse, got.McpCapabilities.Acp:
 		t.Error("MCP over SSE or ACP advertised; neither is offered")
-	case got.PromptCapabilities.Image, got.PromptCapabilities.Audio, got.PromptCapabilities.EmbeddedContext:
-		t.Error("prompt capabilities advertised before Phase 3")
+	case !got.PromptCapabilities.EmbeddedContext:
+		t.Error("resource blocks are read (0005-PLAN F3-4) and embeddedContext must be advertised")
+	case got.PromptCapabilities.Image, got.PromptCapabilities.Audio:
+		t.Error("image or audio advertised; llm carries neither")
 	}
 }
 

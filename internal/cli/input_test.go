@@ -87,6 +87,35 @@ func TestComposeInput(t *testing.T) {
 	}
 }
 
+// The composed input keeps its stdin and attached files apart from its
+// words, and the client sends them first, marked so the agent does not
+// scan them for @path, then the words, an @ inside a quoted argument
+// included; a typed line goes as it is (0005-PLAN F3-4 deviation 1).
+func TestComposeInputContext(t *testing.T) {
+	files := fakeFiles(map[string][]byte{"notes.md": []byte("see @README.md\n")})
+	p, err := composeInput(t.Context(), strings.NewReader("piped @x\n"), false, []string{"explain @main.go", "@notes.md"}, "", files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Context) != 2 || p.Context[0] != "piped @x" || !strings.HasSuffix(p.Context[1], ">\nsee @README.md\n</file>") || p.Words != "explain @main.go" {
+		t.Fatalf("Context %q, Words %q", p.Context, p.Words)
+	}
+	if want := strings.Join(append(append([]string{}, p.Context...), p.Words), "\n\n"); p.Text != want {
+		t.Fatalf("Text = %q\nwant   %q", p.Text, want)
+	}
+	cp := clientPrompt(p)
+	if len(cp.Context) != 2 || cp.Context[1] != p.Context[1] || cp.Text != "explain @main.go" {
+		t.Fatalf("client prompt %+v", cp)
+	}
+	if typed := clientPrompt(Prompt{Text: "fix @a.go"}); typed.Context != nil || typed.Text != "fix @a.go" {
+		t.Fatalf("typed line %+v", typed)
+	}
+	if words, err := composeInput(t.Context(), nil, true, []string{"just", "words"}, "", files); err != nil ||
+		clientPrompt(words).Context != nil || clientPrompt(words).Text != "just words" {
+		t.Fatalf("words alone: %+v, %v", words, err)
+	}
+}
+
 func TestComposeInputImage(t *testing.T) {
 	p, err := composeInput(t.Context(), nil, true, []string{"@shot.png"}, "", fakeFiles(map[string][]byte{"shot.png": png}))
 	if err != nil {

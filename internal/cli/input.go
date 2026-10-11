@@ -9,13 +9,21 @@ import (
 	"mime"
 	"net/http"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
 // Prompt is the first turn's input: text, and any images given as @path.
 type Prompt struct {
-	Text   string
-	Images []Image
+	// Text is the whole input, as the agent reads it.
+	Text string
+	// Context is Text's parts before the words, stdin and the attached
+	// files, sent marked so the agent does not scan them for @path; Words
+	// is the rest. Both are empty for a typed line (0005-PLAN F3-4
+	// deviation 1).
+	Context []string
+	Words   string
+	Images  []Image
 }
 
 // Image is an image @path, sent as an ACP image content block.
@@ -74,8 +82,10 @@ func composeInput(ctx context.Context, stdin io.Reader, stdinTTY bool, words []s
 		}
 		parts = append(parts, fmt.Sprintf("<file name=%q>\n%s\n</file>", abs, strings.TrimSuffix(string(data), "\n")))
 	}
-	if len(plain) > 0 {
-		parts = append(parts, strings.Join(plain, " "))
+	p.Context = parts
+	p.Words = strings.Join(plain, " ")
+	if p.Words != "" {
+		parts = append(slices.Clip(parts), p.Words)
 	}
 	p.Text = strings.Join(parts, "\n\n")
 	return p, nil

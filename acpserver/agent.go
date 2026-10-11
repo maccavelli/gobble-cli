@@ -20,6 +20,7 @@ import (
 	"github.com/maccavelli/gobble-cli/agent"
 	"github.com/maccavelli/gobble-cli/command"
 	"github.com/maccavelli/gobble-cli/compaction"
+	"github.com/maccavelli/gobble-cli/internal/fsx"
 	"github.com/maccavelli/gobble-cli/llm"
 	sysprompt "github.com/maccavelli/gobble-cli/prompt"
 	"github.com/maccavelli/gobble-cli/session"
@@ -203,6 +204,9 @@ func Capabilities() acp.AgentCapabilities {
 	return acp.AgentCapabilities{
 		LoadSession:     true,
 		McpCapabilities: acp.McpCapabilities{Http: true},
+		// Resource blocks are read; images wait for llm to carry them
+		// (0005-MADR, amendment of 2026-10-10, item 2).
+		PromptCapabilities: acp.PromptCapabilities{EmbeddedContext: true},
 		SessionCapabilities: acp.SessionCapabilities{
 			AdditionalDirectories: &acp.SessionAdditionalDirectoriesCapabilities{},
 			Close:                 &acp.SessionCloseCapabilities{},
@@ -403,6 +407,12 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 	prompt := userMessage(p.Prompt)
 	if isExpanded {
 		prompt = llm.Message{Role: llm.RoleUser, Content: []llm.Content{{Type: llm.ContentText, Text: expanded}}}
+	}
+	// The files come first, then the text, as Pi's CLI orders them; the
+	// user entry holds them, so a resumed session gives the model what it
+	// had (0005-PLAN F3-4).
+	if files := promptFiles(p.Prompt, s.cwd, fsx.Workspace{Roots: s.env().Roots}); files != "" {
+		prompt.Content = append([]llm.Content{{Type: llm.ContentText, Text: files}}, prompt.Content...)
 	}
 	chosen, think := a.choices(s)
 	w := writer{a: a, s: s, ctx: context.WithoutCancel(ctx), provider: a.providerID(model), model: chosen, written: map[string]bool{}}

@@ -192,8 +192,20 @@ func (s *Session) ID() string { return string(s.id) }
 
 // Prompt is one user turn: text, and images as raw bytes.
 type Prompt struct {
-	Text   string
-	Images []Image
+	// Context is text sent before Text, each its own text block marked
+	// _meta.gobble.mentions false, which gobble's agent does not scan for
+	// @path: input such as piped stdin and the files the CLI attached
+	// (0005-PLAN F3-4 deviation 1).
+	Context []string
+	Text    string
+	Images  []Image
+}
+
+// unscanned is a text block marked for gobble's agent not to scan for @path.
+func unscanned(text string) acp.ContentBlock {
+	b := acp.TextBlock(text)
+	b.Text.Meta = map[string]any{"gobble": map[string]any{"mentions": false}}
+	return b
 }
 
 // Image is an image content block's data.
@@ -254,6 +266,11 @@ func (s *Session) Prompt(ctx context.Context, p Prompt) (Result, error) {
 		return Result{}, ErrImagesUnsupported
 	}
 	var blocks []acp.ContentBlock
+	for _, c := range p.Context {
+		if c != "" {
+			blocks = append(blocks, unscanned(c))
+		}
+	}
 	if p.Text != "" {
 		blocks = append(blocks, acp.TextBlock(p.Text))
 	}
