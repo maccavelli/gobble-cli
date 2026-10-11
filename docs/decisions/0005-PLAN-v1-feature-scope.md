@@ -140,6 +140,8 @@ They may start after F4 in any order.
 
 ### F4 — providers, catalog, auth (1.0)
 
+*(2026-10-10: F4 is made executable as three sub-phases, F4-1 (the SDK and the adapters), F4-2 (the catalog, `models.json` and choosing a model) and F4-3 (credentials). See the Amendments entry "F4 made executable", and 0005-MADR's second amendment of this date.)*
+
 *(2026-10-07, 0005-MADR amendment "the best of several harnesses": choice 11: provider-neutral reasoning variants offered over ACP as `thought_level`, and a small-model role for titles and summaries. The catalog's data stays the SDK's; gobble overlays only what it lacks.)*
 
 Grounded in `go-llmprovider-sdk` as probed on 2026-09-30
@@ -3194,3 +3196,145 @@ Choices made within the wording:
 1. **It took the CLI's prompt as plain text,** and the CLI already attaches files inside its text, so a pass over every prompt would have scanned them (deviation 1).
 2. **It assumed the SDK could carry a block's mark,** which the fork could not; the SDK moved first (deviation 3, 0014).
 3. **Its files left out the queue, and a CLI test that pinned the old wire** (deviations 2 and 5).
+
+**2026-10-10 — F4 made executable** (the owner's decisions of 2026-10-10: three sub-phases; go-llmprovider-sdk `v1.3.2`; a models.dev snapshot for the catalog; a Pi-style `auth.json`, the keyring left to 1.x; ChatGPT, Grok and Kilo logins, each behind a recorded terms check; the small-model role left to F5; Pi's `--model` rules; a one-run key read from stdin; `--offline` still refused; ACP logins as terminal auth methods).
+
+F4 is steps 1–9 and their accept list, with choice 11 of the 2026-10-07 amendment and the 2026-10-02 amendment's F4 notes. 0005-MADR's second amendment of this date, and a note in 0003-MADR, record the decisions that change their rows.
+
+**The facts,** checked on 2026-10-10 by a script in the session scratchpad (`q383_claims_f4.py`): 46 claims, all passing. With the check inverted, all 46 failed. SDK paths are under `go-llmprovider-sdk@v1.3.2/llmprovider/`; Pi paths under `packages/coding-agent/src/` unless named otherwise.
+
+- **gobble today:**
+  - `llm/provider` builds a provider with probes and the metadata fetch off, the client info set, and `WithRetry` around it (`llm/provider/provider.go:43-66`); errors map to `llm`'s sentinels with the status and `RetryAfter` kept (`:268-283`). Its tests use the SDK's fake, not a wire (`provider_test.go`).
+  - The only provider choice is ambient: the first whose standard variable is set (`llm/provider/ambient.go:24-37`), which the CLI uses for the agent and its model list (`internal/cli/agent.go:27-31`, `:78-84`).
+  - `--provider`, `--model`, `--thinking`, `--api-key` and `--offline` parse and are refused as not yet available (`internal/cli/flags.go:66-67`).
+  - `llm/catalog` and `internal/auth` are placeholders (`llm/catalog/doc.go:4`, `internal/auth/doc.go:4`). `initialize` lists no auth methods, and `authenticate` and `logout` answer method-not-found (`acpserver/agent.go:233`, `:934-941`).
+  - The `model` and `thought_level` config options exist (`acpserver/config.go:36-45`). `usage_update`'s size is 0 until a catalog gives one (`acpserver/prompt.go:296`).
+- **go-llmprovider-sdk:** `go.mod` pins `v1.2.1` (`go.mod:16`). `v1.3.2` is tagged 2026-10-07, and gobble builds and passes its `llm`, `acpserver` and `internal/cli` tests on it unchanged, on a scratch copy.
+  - Ten provider ids (`constants.go`), none streaming natively and none taking images (`item.go:19-22`).
+  - **No model has limits or cost:** the catalog package lists ids and ranks them (`catalog/models_catalog.go`), and its `Metadata` carries reasoning efforts only (`catalog/model_metadata.go`).
+  - **Auth** (`auth/`): a `TokenStore` of `Load`, `Save` and `Delete` (`tokenstore.go`); `LoginBrowserOAuth` for `openai` and `grok` (`oauth_loopback.go`); `StartDeviceOAuth` for `openai`, `grok` and `kilo` (`oauth_device.go`); a file token store; no keyring. The flows' default client ids are the vendor CLIs' own (`auth/doc.go`).
+  - A tool has no strict flag (`provider.go:17-21`), so 0012-PLAN P7 still waits.
+- **Pi** (`312184edb`):
+  - `models.json`: `providers` only at the top level, each with `baseUrl`, `apiKey`, `api`, `headers`, `models[]` and `modelOverrides` (`core/model-config.ts:229-244`); `//` comments and trailing commas stripped (`:297`, `utils/json.ts:2-6`); a bad file is ignored whole and a bad provider falls back to the built-in, each with a diagnostic (`core/model-config.ts:288-311`, `core/model-runtime.ts:308-314`).
+  - Values: `!command` and `$NAME`/`${NAME}`, resolved at request time, a command uncached with a 10 s timeout (`core/resolve-config-value.ts`).
+  - Credentials, in order: the run's `--api-key`, the `auth.json` entry (which owns its provider), the `models.json` key, then the environment (`ai/src/auth/resolve.ts:46-93`). `auth.json` is 0600, locked for every write (`core/auth-storage.ts:25`, `:449-471`).
+  - `--list-models [search]` prints `provider model context max-out thinking images` for providers with credentials (`cli/list-models.ts`). `--model` matches an exact id, then a substring, preferring an alias to a dated id; `:level` is split from the last colon; an unknown id under a known provider is a custom model (`core/model-resolver.ts:406-606`).
+  - `pi auth` has `print-api-key`, `print-bearer-token` and `check` (`cli/auth-command.ts:18-118`). There is no small-model setting.
+- **models.dev** (`https://models.dev/api.json`, fetched 2026-10-10, 5,377,832 bytes): 226 providers. Each model has `limit.context`, `limit.output`, `cost` (with `cache_read` and `cache_write`), `modalities.input`, `reasoning` and, for most, `reasoning_options`. It has every SDK provider but local Ollama, under the keys `openai`, `anthropic`, `google`, `xai`, `opencode`, `opencode-go`, `huggingface`, `kilo` and `togetherai`. The repository is `anomalyco/models.dev`, MIT, per GitHub's licence API on 2026-10-10.
+
+**The owner's decisions, 2026-10-10:**
+
+1. **Three sub-phases,** each one commit with its own record and gates: **F4-1**, the SDK and the adapters; **F4-2**, the catalog, `models.json` and choosing a model; **F4-3**, credentials.
+2. **go-llmprovider-sdk `v1.3.2`.**
+3. **The catalog's data is a dated models.dev snapshot,** embedded and credited in `NOTICE`; `models.json` overlays it. Refresh stays 1.x.
+4. **Credentials live in a Pi-style `auth.json`.** The OS keyring is 1.x.
+5. **ChatGPT, Grok and Kilo logins at 1.0,** each landing only after a recorded check of the vendor's terms for third-party clients.
+6. **The small-model role is F5's,** with its first consumers.
+7. **`--model` resolves by Pi's rules,** in Pi's words.
+8. **A one-run key is read from stdin:** `--api-key -`. A literal is refused, since a key in argv shows in process listings and shell history (the organisation's secrets rule).
+9. **`--offline` stays refused,** re-pointed to X3, which brings `web_fetch`, its first network consumer.
+10. **ACP logins are terminal auth methods,** running `gobble auth login <provider>`.
+
+**F4-1 — the SDK and the adapters.**
+
+Choices made within the wording:
+
+- **`go.mod`** requires `go-llmprovider-sdk v1.3.2`; the record names its sums.
+- **The ten ids are 1.0:** `openai`, `claude`, `gemini`, `grok`, `opencode-zen`, `opencode-go`, `huggingface`, `kilo`, `together` and `ollama`, each as `providers.New` builds it.
+- **A wire test per id,** through `New(id, Options{HTTPClient})` against an `httptest` server for its wire. The client's transport sends every request to the test server, so `Options` gains nothing:
+  - a text reply gives one text event and the usage the wire reported;
+  - a tool call gives its call;
+  - a 429 with `Retry-After: 120` returns at once as `llm.ErrRateLimited`, with `APIError.RetryAfter` 120 s, since the wait is past the policy's 60 s cap;
+  - a context overflow is `llm.ErrContextOverflow` after exactly one request.
+- **The live tests,** `TestLiveOpenAI`, `TestLiveClaude`, `TestLiveGemini` and `TestLiveGrok`, send one short prompt each, and run only with `GOBBLE_LIVE=1` and the provider's variable set. The owner runs them once; the record names the date and outcome, and F4's accept waits for that, not F4-1's commit.
+
+**F4-1's files:**
+
+| | Files |
+| :--- | :--- |
+| new | `llm/provider/wire_test.go`, `llm/provider/live_test.go`, `llm/provider/testdata/wire/` |
+| changed | `go.mod`, `go.sum`; `docs/architecture.md`; `README.md` |
+
+**F4-1's tests,** each seen failing first on a scratch copy: the four wire cases for each of the ten ids; the live tests' skip without `GOBBLE_LIVE`.
+
+**F4-2 — the catalog, `models.json`, and choosing a model.**
+
+Choices made within the wording:
+
+- **`llm/catalog`:**
+  - `Model{Provider, ID, Name, ContextWindow, MaxTokens, Input []string, Reasoning bool, Levels []string, Cost{Input, Output, CacheRead, CacheWrite}}`, Pi's `Model` shape for what gobble uses, cost in dollars per million tokens.
+  - `data/models.json`, embedded, made by `scripts/gen_catalog.py` from a models.dev `api.json`: the nine keys above mapped to the SDK's ids (`anthropic` to `claude`, `google` to `gemini`, `xai` to `grok`, `opencode` to `opencode-zen`, `togetherai` to `together`, the rest by name), with the snapshot's date and source in the file. The script checks its input and output, and nothing fetches at run time.
+  - A model's `Levels` follow Pi's rule (`ai/src/models.ts:1215-1247`): `off` only without reasoning; otherwise the levels models.dev's `reasoning_options` give, as Pi's generator reads them (`scripts/models-dev-reasoning-options.ts`); a level not offered clamps to the next higher, then the next lower, as Pi clamps.
+  - Ollama has no snapshot entry: its models are the SDK's list, with Pi's defaults for a custom model (128000 context, 16384 out, no cost).
+- **`models.json`**, `<config>/models.json`, in Pi's schema:
+  - a provider key must be an SDK id, and `api`, when given, must be that id's own; anything else fails closed for that provider, with a diagnostic naming the SDK version;
+  - `baseUrl` goes to the SDK's `WithBaseURL`; `headers` are added by a transport on the provider's client; `models[]` add or replace models with Pi's defaults; `modelOverrides` merge as Pi merges them (`core/model-config.ts:163-190`);
+  - `apiKey` and header values resolve at request time as Pi resolves them, `!command` through the bash tool's shell with a 10 s timeout, uncached;
+  - `//` comments and trailing commas are accepted as Pi accepts them; a bad file or a bad provider is ignored with a diagnostic, as in Pi.
+- **Choosing a model:** `--provider`, `--model` and `--thinking` are accepted. `--model` resolves by Pi's rules and words; `--thinking` beats a `:level` suffix.
+- **`gobble models list [search]`**, and `--list-models` as its alias, print Pi's columns for providers with a credential. **`gobble models info <model>`** prints one model's fields.
+- **acpserver:** the `model` option lists the catalog's models for the session's provider; `thought_level` offers that model's levels; `usage_update` carries the context window as `size`; `_gobble/get_session_stats` reports `cost` from the catalog, and `contextUsage`.
+- **`--offline`** stays refused, now naming X3.
+
+**F4-2's files:**
+
+| | Files |
+| :--- | :--- |
+| new | `llm/catalog/catalog.go`, `catalog_test.go`, `llm/catalog/data/models.json`, `llm/catalog/modelsjson.go`, `modelsjson_test.go`, `llm/catalog/resolve.go`, `resolve_test.go`; `scripts/gen_catalog.py`; `internal/cli/models.go`, `models_test.go` |
+| changed | `llm/catalog/doc.go`; `llm/provider/provider.go` (base URL, headers); `acpserver/config.go`, `acpserver/prompt.go`, `acpserver/extensions.go` and their tests; `internal/cli/flags.go`, `internal/cli/agent.go`, `internal/cli/root.go` and their tests; `NOTICE`; `docs/architecture.md`; `README.md` |
+
+**F4-2's tests,** each seen failing first on a scratch copy:
+
+- **The catalog:** a known model's fields from the snapshot; Pi's level rule and clamping; Ollama's defaults; the generator refusing input without the expected keys.
+- **`models.json`:** Pi's merge for each field kind; an unknown provider or `api` failing closed; `$NAME`, `${NAME}`, `$$` and `!command` resolved at request time, and a missing variable or a failing command an error; comments; a bad file and a bad provider each a diagnostic.
+- **`--model`:** each of Pi's resolution steps and errors, with Pi's words; `:level` from the last colon; `--thinking` winning.
+- **`gobble models list`** with a search and with none, and **`info`**; the ACP options, `size` and `cost`.
+
+**F4-3 — credentials.**
+
+Choices made within the wording:
+
+- **`internal/auth`:** `<config>/auth.json` in Pi's shape, `{"<provider>": {"type": "api_key", "key": …} | {"type": "oauth", "access", "refresh", "expires", …}}`, the SDK session's own fields (`issuer`, `clientId`, `accountId`, `tokenUrl`) kept beside Pi's. It is created 0600 in a 0700 directory, and on Windows with a DACL for the user alone, through `golang.org/x/sys/windows`, already a requirement. Every write takes a lock file, re-reads, merges and renames into place, as Pi's `modify` does. It implements the SDK's `TokenStore`, so a rotated OAuth token is saved.
+- **The order** is Pi's: `--api-key -`, then the `auth.json` entry, which owns its provider, then the `models.json` key, then the provider's variable.
+- **`gobble auth`:**
+  - `login <provider>`: for `openai`, `grok` and `kilo` the SDK's browser flow, or its device flow with `--device`, each only after its terms check below; for any provider, `--api-key -` stores a key read from stdin;
+  - `logout <provider>` removes its entry; `status` lists each provider's credential source and expiry, never a secret;
+  - `token <provider> [--min-expiry D]` prints a usable bearer token, refreshing it first, as Pi's `print-bearer-token`;
+  - `check [--json]` exits 0 with a credential, 1 without, 2 on error, as Pi's;
+  - `import --from-pi` copies Pi's `auth.json` entries for SDK ids, asking for each (0003-MADR).
+- **The terms checks:** before each login lands, the record names the vendor's current terms for third-party clients, their URL and date, and whether a client may use the vendor CLI's public client id. A login the terms do not allow stays out, 1.x, and goes to the owner.
+- **ACP:** `initialize` lists a terminal auth method for each login, running `gobble auth login <provider>`; `authenticate` answers once that provider has a credential, else `auth_required`; `logout` removes the stored credential of the provider the agent uses.
+- **`--api-key`:** `-` reads the key from stdin, or a prompt on a terminal; a literal value is refused with the reason.
+
+**F4-3's files:**
+
+| | Files |
+| :--- | :--- |
+| new | `internal/auth/store.go`, `store_test.go`, `store_windows.go`, `store_other.go`, `internal/auth/lock.go`, `lock_test.go`, `internal/auth/resolve.go`, `resolve_test.go`; `internal/cli/auth.go`, `auth_test.go` |
+| changed | `internal/auth/doc.go`; `llm/provider/provider.go` (token source); `acpserver/agent.go` and its test; `acpserver/testdata/session.golden` (the auth methods); `internal/cli/flags.go`, `internal/cli/agent.go`, `internal/cli/root.go` and their tests; `docs/architecture.md`; `README.md` |
+
+**F4-3's tests,** each seen failing first on a scratch copy:
+
+- **The store:** the file's mode on Unix and its DACL on Windows; two processes writing at once both kept; an OAuth rotation saved through `TokenStore`; a missing file is no credential.
+- **The order:** each source winning over the ones after it, and an `auth.json` entry owning its provider.
+- **`gobble auth`** with a scripted SDK flow: `login` by browser and device, `--api-key -`, `logout`, `status` never printing a secret, `token`, `check`'s three exits, `import --from-pi` asking per provider.
+- **ACP:** the auth methods; `authenticate` with and without a credential; `logout`.
+- **`--api-key`:** `-` read from stdin; a literal refused.
+
+**The gates, for each sub-phase,** as F1d-2's deviation 4 sets them: lint for linux, darwin and windows; Windows `go test ./...`; `CGO_ENABLED=1 go test -race ./...` natively on Windows and on the second amd64 Linux machine; Windows and WSL `make preflight`, WSL's without a race run.
+
+**How F4's accept list is met:**
+
+- **A wire test for each 1.0 id,** text, a tool call, usage, a 429 with `Retry-After`, and an overflow: F4-1.
+- **The live tests,** run once by the owner, with the date and outcome recorded: F4-1, then the owner.
+- **The pin printed by `go list -m`,** and no vendor SDK: F4-1, and checked at each sub-phase.
+- **Nothing under `internal/cli` imports go-llmprovider-sdk:** archtest rule 4, unchanged.
+
+**Deferred, named:**
+
+- **The OS keyring:** 1.x, the owner's decision 4.
+- **Catalog refresh, and `gobble models refresh`:** 1.x (0005-MADR's row).
+- **The small-model role:** F5.
+- **`--offline`:** X3.
+- **Reading the Codex and Grok CLIs' own credential files** (the SDK's vendor CLI sessions): not in F4's steps; it waits for an amendment that places it.
+- **Image input, native streaming, cache-write accounting and 0012-PLAN P7:** each waits for the SDK.

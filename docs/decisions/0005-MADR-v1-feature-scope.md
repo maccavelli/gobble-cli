@@ -172,12 +172,12 @@ Tier definitions:
 | Stream shape | 1.0 | gobble calls `llmprovider.Stream`. Every moved provider sets `NativeStreaming` to `Unsupported`, so 1.0 ACP `session/update` text chunks are whole-message events synthesised from `Generate`, not token-by-token SSE. A later SDK `Streamer` is picked up with no gobble API change. |
 | Unnamed OpenAI-compatible endpoints | 1.x | Groq, Cerebras, DeepSeek, OpenRouter, Fireworks, Mistral, LM Studio, llama.cpp server, vLLM. The SDK has no generic Chat Completions constructor (`WithBaseURL` on `openai` would send the Responses wire). These land when the SDK adds a Chat Completions provider that takes a base URL, or adds those ids. gobble does not speak those wires itself. |
 | Bedrock, Vertex, Azure OpenAI | 1.x | Needs SDK support. gobble will not add `anthropic-sdk-go`, `openai-go/v3`, `google.golang.org/genai`, or `aws-sdk-go-v2` to speak them. |
-| Subscription OAuth | 1.0 for ChatGPT/Codex through the SDK `openai` backend; 1.x for any other provider | Only for providers whose terms permit third-party clients. Each extra provider is checked and recorded in the PLAN before it lands. |
+| Subscription OAuth | 1.0 for ChatGPT/Codex through the SDK `openai` backend; ~~1.x for any other provider~~ *(2026-10-10: 1.0 for xAI Grok and Kilo too, through the SDK's flows, each after its terms check; any other, 1.x. Second amendment of this date, item 4.)* | Only for providers whose terms permit third-party clients. Each extra provider is checked and recorded in the PLAN before it lands. |
 | go-llmprovider-sdk adapter | 1.0 | The only 1.0 provider implementation, in `llm/provider`. The "once it has a `go.mod` and public streaming" gate is withdrawn: the module exists, `Stream` exists, native per-token streaming does not. |
-| Model catalog | 1.0 | Embedded snapshot in Pi's `Model` shape (context window, max tokens, cost tiers, input modalities, reasoning, thinking map, image input limits). `gobble models list|info`. The source is recorded in `NOTICE` if copied. |
+| Model catalog | 1.0 | Embedded snapshot in Pi's `Model` shape (context window, max tokens, cost tiers, input modalities, reasoning, thinking map, image input limits). `gobble models list|info`. The source is recorded in `NOTICE` if copied. *(2026-10-10: the snapshot is models.dev's, MIT, credited in `NOTICE`; second amendment of this date, item 2.)* |
 | Catalog refresh | 1.x | `gobble models refresh` into the cache directory. |
 | `models.json` | 1.0 | Pi-compatible custom providers and models, with `modelOverrides`. `$ENV`, `${ENV}`, and `!command` values are resolved at request time. |
-| Credential store | 1.0 | Precedence: `--api-key`, then keyring (or the 0600 file), then `models.json`, then environment or ambient credentials. `gobble auth login|logout|status|token|import --from-pi`. ACP `authMethods` and `authenticate`/`logout`. |
+| Credential store | 1.0 | Precedence: `--api-key`, then ~~keyring (or the 0600 file)~~ *(2026-10-10: a Pi-style `auth.json`, 0600; the keyring is 1.x. Second amendment of this date, item 3.)*, then `models.json`, then environment or ambient credentials. `gobble auth login|logout|status|token|import --from-pi`. ACP `authMethods` and `authenticate`/`logout`. |
 
 #### MCP (`mcpclient`)
 
@@ -300,6 +300,7 @@ Global flags: `--model`, `--thinking`, `--mode`, `--cwd`, `--continue`,
 `--resume <id>`, `--fork <id>`, `--tools`, `--no-context-files`,
 `--no-skills`, `--no-pi-bridge`, `--approve`/`--no-approve` (project
 trust), `--yes`, `--output-format`, `--api-key`, `--log-level`.
+*(2026-10-10: `--api-key` takes `-`, reading the key from stdin; a literal is refused. Second amendment of this date, item 5.)*
 
 ### Slash commands over ACP
 
@@ -564,7 +565,7 @@ Further 0001-REPORT errata are kept here rather than in the report, which record
 * **The named SDK providers are all 1.0 now.** `opencode-zen`, `opencode-go`, `huggingface`, `kilo`, `together` and `ollama` implement `llmprovider.Provider`. "On 2026-09-30 those five still use the old `Generate*` API" was that day's fact. It was six ids in five packages.
 * **Subscription OAuth.**
   * ChatGPT/Codex stays 1.0.
-  * xAI Grok OAuth (browser and device) and Kilo device login exist in the SDK. They are **1.0 candidates**, each landing with a recorded terms check.
+  * xAI Grok OAuth (browser and device) and Kilo device login exist in the SDK. They are **1.0 candidates**, each landing with a recorded terms check. *(2026-10-10: both are 1.0, after their terms checks. Second amendment of this date, item 4.)*
   * Anthropic Max, Gemini and GitHub Copilot subscription logins are **out of the v1 line**. The SDK declines them by policy (its 0016-MADR D10), and gobble adds no vendor auth code of its own.
 * **Thinking levels.** The SDK accepts efforts `low…xhigh` only. gobble's `minimal` and `max` map as 0004-MADR's map states, and `/thinking` reports the degradation.
 * **Images.**
@@ -808,7 +809,7 @@ Earlier phases had set the precedent: 0002-PLAN copied Pi's MCP configuration me
    * From Kilo: its proactive threshold, from an estimate anchored to the provider's token count; its empty-summary guard; its recovery from a too-large request; and the per-turn cap.
    * Chunked summarising waits for a real need.
 10. **Agents and modes (§6).** gobble keeps its two modes, default and plan. Custom agents, an ask mode and Kilo's plan follow-up are not adopted now.
-11. **Models (§9).** Provider-neutral reasoning variants, mapped for each provider and offered over ACP as `thought_level`. A small-model role runs titles and summaries. The catalog's data stays go-llmprovider-sdk's; gobble overlays limits or costs only where the SDK lacks them.
+11. **Models (§9).** Provider-neutral reasoning variants, mapped for each provider and offered over ACP as `thought_level`. A small-model role runs titles and summaries. The catalog's data stays go-llmprovider-sdk's; gobble overlays limits or costs only where the SDK lacks them. *(2026-10-10: ~~the catalog's data stays go-llmprovider-sdk's~~ the SDK has no limits or costs, so the catalog is a models.dev snapshot; the small-model role is F5's. Second amendment of this date, items 2 and 6.)*
 12. **Extras (§12).**
     * X2's checkpoints follow opencode's shadow git repository, which borrows the real repository's objects and keeps per-step trees and patches. Kilo's checks apply: validate before restore, report failed restores honestly, and time out on large repositories.
     * Project memory joins the 1.x train as a new item with its own MADR, on Kilo's design: a capped injected index, a recall tool, and capture that refuses transient, personal, secret and policy-shaped items.
@@ -951,3 +952,35 @@ Otherwise it stays a shell command. File status, diffs, git, checksums and archi
 - A context-file edit during a session costs one appended message, not a cache break.
 - Until F6, a project's own skills, prompts and system-prompt files do nothing. The note says why.
 - `gobble skills list|show|new` and `gobble prompts list` (CLI surface) are not built by F3, whose steps do not name them.
+
+### Amendment (2026-10-10, second): providers, catalog and auth, made executable
+
+**Why.** 0005-PLAN F4 had no executable entry. Reading go-llmprovider-sdk at `v1.3.2`, Pi at `312184edb` and models.dev for it showed that several of this record's F4 rows could not be built as written. The owner decided each of them on 2026-10-10. The facts are in 0005-PLAN's entry "F4 made executable", checked by a script there.
+
+**What changes here.**
+
+1. **The SDK pin is `v1.3.2`,** its latest tag; gobble builds and passes its tests on it unchanged.
+2. **The catalog's data is a models.dev snapshot.**
+   - **Found:** go-llmprovider-sdk has no context window, max output, cost or input modalities for any model at `v1.2.1` or `v1.3.2`. Its catalog is curated id lists and ranking, and its metadata carries reasoning efforts only. models.dev has all of them for every SDK provider but local Ollama, under the MIT licence.
+   - **Decided:** an embedded, dated snapshot of models.dev's `api.json`, filtered to the SDK's providers and credited in `NOTICE`, in Pi's `Model` shape; `models.json` overlays it. Refresh stays 1.x. Choice 11's "the catalog's data stays go-llmprovider-sdk's" is replaced.
+3. **Credentials live in a Pi-style `auth.json`.**
+   - **Found:** the SDK has no keyring. It has a file token store and the `TokenStore` contract. Pi keeps every credential in one 0600 `auth.json`.
+   - **Decided:** `<config>/auth.json` in Pi's shape, 0600, with a DACL on Windows, locked for every write, implementing the SDK's `TokenStore`. The OS keyring is 1.x. 0003-MADR's secrets row is amended to match.
+4. **ChatGPT, Grok and Kilo logins are 1.0.**
+   - **Found:** the SDK has browser and device flows for `openai` and `grok`, and a device flow for `kilo`. Their default client ids are the vendor CLIs' own.
+   - **Decided:** all three are 1.0, each landing only after a recorded check of the vendor's terms for third-party clients. One the terms do not allow stays 1.x.
+5. **A one-run key is read from stdin.**
+   - **Found:** Pi's `--api-key KEY` puts the key in argv, where process listings and shell history show it. The organisation's secrets rule forbids secrets in CLI arguments.
+   - **Decided:** `--api-key -` reads the key from stdin, or a prompt on a terminal. A literal value is refused with the reason. `gobble auth login <provider> --api-key -` stores one the same way.
+6. **The small-model role is F5's.**
+   - **Found:** Pi has no small-model setting; its compaction and branch summaries use the session's model. gobble's first consumers of the role, summaries, are F5's.
+   - **Decided:** F5 adds the role with them. F4 builds nothing for it.
+7. **`--model` resolves by Pi's rules,** in Pi's words: an exact id, then a substring preferring an alias to a dated id, `:level` split from the last colon, and an unknown id under a known provider taken as a custom model.
+8. **`--offline` waits for its first network consumer,** `web_fetch` in 0005-PLAN X3; at 1.0 gobble makes no catalog network call to switch off.
+9. **ACP logins are terminal auth methods,** running `gobble auth login <provider>` in the client's terminal, where both browser and device flows work.
+
+**Consequences.**
+
+- `/usage`, cost and context use come from the snapshot, dated, so a newer model is unknown until a later snapshot or a `models.json` entry.
+- A credential is a file on disk, protected by its permissions, not by the OS keyring, until 1.x.
+- Scripts written for Pi's `--api-key KEY` must pipe the key instead.

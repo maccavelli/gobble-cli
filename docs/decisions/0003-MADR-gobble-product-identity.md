@@ -99,6 +99,8 @@ Windows uses Known Folders.
 | cache | `$XDG_CACHE_HOME/gobble` (default `~/.cache/gobble`) | `%LOCALAPPDATA%\gobble\cache` | model-catalog refresh, package downloads, large tool outputs |
 | secrets | OS keyring (service `gobble`); fallback `<config>/auth.json` at mode 0600 | Windows Credential Manager; fallback DPAPI file | provider keys, OAuth tokens, `mcp-auth` |
 
+*(Amended 2026-10-10: at 1.0, ~~OS keyring (service `gobble`); fallback~~ `<config>/auth.json` alone, in Pi's shape, at mode 0600, and on Windows ~~Windows Credential Manager; fallback DPAPI file~~ the same file with a DACL for the user alone. The keyring is 1.x. See [0005-MADR-v1-feature-scope.md](0005-MADR-v1-feature-scope.md), second amendment of 2026-10-10, item 3.)*
+
 `GOBBLE_HOME=<dir>` collapses all four roles into one directory, for
 portable installs and tests. It is the analogue of Pi's `PI_AGENT_DIR`.
 `GOBBLE_CONFIG_DIR`, `GOBBLE_DATA_DIR`, `GOBBLE_STATE_DIR` and `GOBBLE_CACHE_DIR`
