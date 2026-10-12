@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -48,6 +49,12 @@ type Options struct {
 	Getenv func(string) string
 	// Home is the directory ~ names; "" is os.UserHomeDir.
 	Home string
+	// StopGrace is how long a stdio server has to exit once its stdin
+	// closes, before its tree is terminated; zero is Pi's 500 ms.
+	StopGrace time.Duration
+	// StopTimeout is how long after the terminate before the tree is
+	// killed; zero is Pi's 2 s (0018-MADR D17).
+	StopTimeout time.Duration
 }
 
 // conn is one server's connection.
@@ -192,7 +199,7 @@ func (c *conn) transport() (mcp.Transport, error) {
 	cmd.Dir = c.dir()
 	cmd.Env = env
 	cmd.Stderr = c.stderr
-	return &stdioTransport{cmd: cmd}, nil
+	return &stdioTransport{cmd: cmd, grace: c.opts.StopGrace, timeout: c.opts.StopTimeout}, nil
 }
 
 // dir is a stdio server's working directory: its cwd, resolved against

@@ -342,7 +342,7 @@ Chosen: **A**. In the probe it kept the file exactly apart from the edited value
   **The write:**
   1. take `<file>.lock` through `internal/filelock` (D18);
   2. re-read the file, apply the edit, and check it;
-  3. write through `internal/fsx`'s atomic writer, `fsx.Workspace{}.WriteFile`, which has no roots and so confines nothing. It writes a temp file beside the file, fsyncs it, keeps an existing file's mode (a new file is 0644), renames it into place, and retries a rename Windows refuses while another process holds the file (`internal/fsx/write.go:39-123`).
+  3. write through `internal/fsx`'s atomic writer, `fsx.Workspace{}.WriteFile`, which has no roots and so confines nothing. It writes a temp file beside the file, fsyncs it, keeps an existing file's mode (a new file is 0644), renames it into place, and retries a rename Windows refuses while another process holds the file (`internal/fsx/write.go:39-123`). *(2026-10-12, 0018-PLAN P1 deviation 1: through `fsx.WriteFileMode(path, data, 0o644)`, the same writer with the new-file mode as a parameter.)*
 
   A file that does not parse is refused with its diagnostic and never replaced.
 - **D9. The template is the documentation, and it grows with the keys.**
@@ -553,7 +553,7 @@ Chosen: **A**. In the probe it kept the file exactly apart from the edited value
   - **`internal/filelock`** holds the lock files moved from `session/jsonl` (`lock.go`, `lock_unix.go`, `lock_windows.go`, `lock_other.go`), with:
     - `TryLock`, today's behaviour, which `session/jsonl` keeps using;
     - `Lock`, which retries 10 times, 20 ms apart, as Pi does, for settings and for `mcp.json`.
-  - **`mcpclient/file.go`** keeps its JSON editor, takes `Lock`, and writes through `fsx.Workspace{}.WriteFile` in place of its own temp-and-rename (`mcpclient/file.go:177-198`), gaining the fsync and the Windows rename retry.
+  - **`mcpclient/file.go`** keeps its JSON editor, takes `Lock`, and writes through `fsx.Workspace{}.WriteFile` in place of its own temp-and-rename (`mcpclient/file.go:177-198`), gaining the fsync and the Windows rename retry. *(2026-10-12, 0018-PLAN P1 deviation 1: through `fsx.WriteFileMode(path, data, 0o600)`, since `WriteFile` creates a new file 0644 and a new `mcp.json`, which can hold literal tokens, has always been 0600.)*
   - **`internal/fsx`** gains `GitRepo`, the repository finder moved from `prompt/context.go:121-160` (`gitPaths` and `absUnder`), which `prompt` then calls. `internal/config` uses it for D2's project root.
   - No package outside `internal/cli` imports Kong, and none imports a new module.
 - **D19. Later phases add their keys,** each in its own change, with the Go types, the schema, its drift test and the template block:

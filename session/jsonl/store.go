@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/maccavelli/gobble-cli/internal/filelock"
 	"github.com/maccavelli/gobble-cli/session"
 )
 
@@ -132,12 +133,12 @@ func (s *Store) Open(_ context.Context, id session.ID) (session.Log, error) {
 	if path == "" {
 		return nil, session.ErrNotFound
 	}
-	release, err := lock(path + ".lock")
+	release, err := filelock.TryLock(path + ".lock")
 	if err != nil {
-		if held, ok := errors.AsType[*lockHeld](err); ok {
-			return nil, &session.ErrLocked{ID: id, PID: held.pid}
+		if held, ok := errors.AsType[*filelock.HeldError](err); ok {
+			return nil, &session.ErrLocked{ID: id, PID: held.PID}
 		}
-		return nil, err
+		return nil, fmt.Errorf("session: lock: %w", err)
 	}
 	h, entries, _, torn, err := s.readFile(path)
 	if err != nil {
@@ -329,12 +330,12 @@ func (l *fileLog) create() error {
 	if err := os.MkdirAll(filepath.Dir(l.path), 0o700); err != nil {
 		return fmt.Errorf("session: %w", err)
 	}
-	release, err := lock(l.path + ".lock")
+	release, err := filelock.TryLock(l.path + ".lock")
 	if err != nil {
-		if held, ok := errors.AsType[*lockHeld](err); ok {
-			return &session.ErrLocked{ID: l.header.ID, PID: held.pid}
+		if held, ok := errors.AsType[*filelock.HeldError](err); ok {
+			return &session.ErrLocked{ID: l.header.ID, PID: held.PID}
 		}
-		return err
+		return fmt.Errorf("session: lock: %w", err)
 	}
 	var buf bytes.Buffer
 	for _, v := range append([]any{l.header}, entriesAny(l.entries)...) {

@@ -16,12 +16,18 @@ import (
 // set to "1", or none) and returns the manager and the pid file.
 func startFixture(t *testing.T, mode string) (*Manager, string) {
 	t.Helper()
+	return startFixtureWith(t, mode, Options{})
+}
+
+// startFixtureWith is startFixture with the manager's options.
+func startFixtureWith(t *testing.T, mode string, o Options) (*Manager, string) {
+	t.Helper()
 	pids := filepath.Join(t.TempDir(), "pids")
 	extra := []Pair{{Name: mcptest.EnvPIDs, Value: pids}}
 	if mode != "" {
 		extra = append(extra, Pair{Name: mode, Value: "1"})
 	}
-	m := Start(t.Context(), []Server{stdioFixture(t, "fx", extra...)}, Options{})
+	m := Start(t.Context(), []Server{stdioFixture(t, "fx", extra...)}, o)
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 	if err := m.Wait(ctx); err != nil {
@@ -87,6 +93,24 @@ func TestStopStubbornServer(t *testing.T) {
 	}
 	t.Logf("Close took %v", time.Since(start))
 	goneWithin(t, 4*time.Second-time.Since(start), map[string]int{"server": server, "child": child})
+}
+
+// The stop timings are options: a stubborn server, which ignores stdin's
+// end and SIGTERM, is stopped after StopGrace (and on Unix StopTimeout),
+// not after Pi's 500 ms grace (0018-MADR D17). On Windows the terminate
+// closes the job, so the grace alone decides; the bound is under Pi's
+// grace on both.
+func TestStopGraceOption(t *testing.T) {
+	m, pids := startFixtureWith(t, mcptest.EnvStubborn, Options{StopGrace: 10 * time.Millisecond, StopTimeout: 10 * time.Millisecond})
+	server, child := readPIDs(t, pids)
+	start := time.Now()
+	if err := m.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if bound := stdinGrace - 100*time.Millisecond; time.Since(start) > bound {
+		t.Fatalf("Close took %v, want under %v with 10 ms options (Pi's grace is %v)", time.Since(start), bound, stdinGrace)
+	}
+	goneWithin(t, 2*time.Second, map[string]int{"server": server, "child": child})
 }
 
 // A server that exits on stdin's end leaves no child running: the group is

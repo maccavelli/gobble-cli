@@ -3,6 +3,7 @@ package mcpclient
 import (
 	"bytes"
 	"encoding/json/jsontext"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -93,6 +94,29 @@ func TestAddCreatesTheFile(t *testing.T) {
 		if fi, err := os.Stat(p); err != nil || fi.Mode().Perm() != 0o600 {
 			t.Fatalf("mode %v, %v", fi.Mode(), err)
 		}
+	}
+}
+
+// Adds that race each other all land: the edit lock serialises the
+// read-modify-write, so no add overwrites another's (0018-MADR D18).
+func TestAddConcurrent(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "config", "mcp.json")
+	const n = 8
+	errs := make(chan error, n)
+	for i := range n {
+		go func() {
+			_, err := Add(p, fmt.Sprintf("s%d", i), jsontext.Value(`{"command":"x"}`))
+			errs <- err
+		}()
+	}
+	for range n {
+		if err := <-errs; err != nil {
+			t.Fatal(err)
+		}
+	}
+	cfg := Load(p)
+	if len(cfg.Servers) != n || len(cfg.Errors) != 0 {
+		t.Fatalf("%d servers, errors %v; want %d and none", len(cfg.Servers), cfg.Errors, n)
 	}
 }
 

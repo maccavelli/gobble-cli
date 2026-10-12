@@ -46,19 +46,27 @@ func (w Workspace) WriteFile(abs string, data []byte) error {
 		return err
 	}
 	if root == nil {
-		return writeAtomic(osFS{}, abs, data)
+		return writeAtomic(osFS{}, abs, data, newFileMode)
 	}
 	defer root.Close() //nolint:errcheck // the rename has happened or failed by now
-	return writeAtomic(root, rel, data)
+	return writeAtomic(root, rel, data, newFileMode)
 }
 
-func writeAtomic(fsys fileSystem, name string, data []byte) error {
+// WriteFileMode replaces or creates abs with data, as WriteFile does, for a
+// file outside any workspace, such as a settings file or mcp.json: written
+// beside abs, synced, and renamed into place. An existing file keeps its
+// permission bits; a new one gets newMode (0018-PLAN P1 deviation 1).
+func WriteFileMode(abs string, data []byte, newMode fs.FileMode) error {
+	return writeAtomic(osFS{}, abs, data, newMode)
+}
+
+func writeAtomic(fsys fileSystem, name string, data []byte, newMode fs.FileMode) error {
 	if dir := filepath.Dir(name); dir != "." {
 		if err := fsys.MkdirAll(dir, 0o750); err != nil {
 			return err
 		}
 	}
-	mode := newFileMode
+	mode := newMode
 	switch info, err := fsys.Stat(name); {
 	case err == nil:
 		mode = info.Mode().Perm()

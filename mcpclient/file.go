@@ -2,6 +2,7 @@ package mcpclient
 
 import (
 	"bytes"
+	"context"
 	"encoding/json/jsontext"
 	"errors"
 	"fmt"
@@ -11,6 +12,10 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"time"
+
+	"github.com/maccavelli/gobble-cli/internal/filelock"
+	"github.com/maccavelli/gobble-cli/internal/fsx"
 )
 
 // member is one name and value of a JSON object, in document order.
@@ -96,6 +101,11 @@ func object(ms []member) (jsontext.Value, error) {
 // replaced in place, and a new one goes last. The rest of the file is kept.
 // replaced reports that an entry was replaced.
 func Add(path, name string, entry jsontext.Value) (replaced bool, err error) {
+	release, err := lockForEdit(path)
+	if err != nil {
+		return false, err
+	}
+	defer func() { err = errors.Join(err, release()) }()
 	text, top, servers, err := readForEdit(path)
 	if err != nil {
 		return false, err
@@ -114,10 +124,15 @@ func Add(path, name string, entry jsontext.Value) (replaced bool, err error) {
 // Remove removes a server entry from an mcp.json, keeping the rest of the
 // file. It reports false, and writes nothing, when the file does not
 // define the server.
-func Remove(path, name string) (bool, error) {
+func Remove(path, name string) (removed bool, err error) {
 	if _, err := os.Stat(path); errors.Is(err, fs.ErrNotExist) {
 		return false, nil
 	}
+	release, err := lockForEdit(path)
+	if err != nil {
+		return false, err
+	}
+	defer func() { err = errors.Join(err, release()) }()
 	text, top, servers, err := readForEdit(path)
 	if err != nil {
 		return false, err
@@ -127,6 +142,26 @@ func Remove(path, name string) (bool, error) {
 		return false, nil
 	}
 	return true, writeEdit(path, text, top, slices.Delete(servers, i, i+1))
+}
+
+// Edits of mcp.json lock <path>.lock, as Pi's settings writes do: up to 10
+// tries 20 ms apart while another process holds it (0018-MADR D18).
+const (
+	lockAttempts = 10
+	lockWait     = 20 * time.Millisecond
+)
+
+// lockForEdit takes mcp.json's edit lock, creating its directory first, so
+// a concurrent Add or Remove waits rather than losing an entry.
+func lockForEdit(path string) (release func() error, err error) {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return nil, err
+	}
+	release, err = filelock.Lock(context.Background(), path+".lock", lockAttempts, lockWait)
+	if err != nil {
+		return nil, fmt.Errorf("lock %s: %w", path, err)
+	}
+	return release, nil
 }
 
 // readForEdit reads an mcp.json for an edit; a missing file is empty.
@@ -147,9 +182,9 @@ func readForEdit(path string) (text []byte, top, servers []member, err error) {
 var indentation = regexp.MustCompile(`(?m)^([ \t]+)\S`)
 
 // writeEdit writes the file back with servers as its mcpServers, in the
-// file's own indentation and with a final newline. The new file is written
-// beside the old one and renamed over it, so a failed write leaves the old
-// one whole.
+// file's own indentation and with a final newline, through fsx's atomic
+// writer: beside the old file, synced, and renamed over it, so a failed
+// write leaves the old one whole (0018-MADR D18).
 func writeEdit(path string, text []byte, top, servers []member) error {
 	obj, err := object(servers)
 	if err != nil {
@@ -171,28 +206,9 @@ func writeEdit(path string, text []byte, top, servers []member) error {
 	if err := doc.Indent(jsontext.WithIndent(indent)); err != nil {
 		return err
 	}
-	return writeFile(path, append(doc, '\n'))
-}
-
-func writeFile(path string, data []byte) error {
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return err
-	}
-	f, err := os.CreateTemp(dir, ".mcp.json.*")
-	if err != nil {
-		return err
-	}
-	tmp := f.Name()
-	_, err = f.Write(data)
-	if cerr := f.Close(); err == nil {
-		err = cerr
-	}
-	if err == nil {
-		err = os.Rename(tmp, path)
-	}
-	if err != nil {
-		return errors.Join(fmt.Errorf("write %s: %w", path, err), os.Remove(tmp))
+	// A new mcp.json is 0600: it can hold literal header and env values.
+	if err := fsx.WriteFileMode(path, append(doc, '\n'), 0o600); err != nil {
+		return fmt.Errorf("write %s: %w", path, err)
 	}
 	return nil
 }

@@ -174,6 +174,34 @@ func TestWriteKeepsMode(t *testing.T) {
 	}
 }
 
+// WriteFileMode gives a new file the mode asked for, and keeps an existing
+// file's own (0018-PLAN P1 deviation 1).
+func TestWriteFileModeNewAndExisting(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows has no Unix permission bits to set or keep")
+	}
+	dir := t.TempDir()
+	fresh := filepath.Join(dir, "sub", "mcp.json")
+	if err := WriteFileMode(fresh, []byte("{}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if info, err := os.Stat(fresh); err != nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("new file: %v %v, want 0600", info.Mode(), err)
+	}
+	if b, err := os.ReadFile(fresh); err != nil || string(b) != "{}\n" {
+		t.Fatalf("content %q %v", b, err)
+	}
+	if err := os.Chmod(fresh, 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteFileMode(fresh, []byte("{\"a\":1}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if info, _ := os.Stat(fresh); info.Mode().Perm() != 0o640 {
+		t.Fatalf("existing file: mode %v, want 0640 kept", info.Mode().Perm())
+	}
+}
+
 // A reader racing the writer sees the old content or the new, never a
 // mixture or an empty file.
 func TestWriteIsAtomic(t *testing.T) {

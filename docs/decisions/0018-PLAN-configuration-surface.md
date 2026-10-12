@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: in-progress
 date: 2026-10-12
 ---
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
@@ -27,7 +27,7 @@ When this plan is done, these hold, and each is shown by a command in its phase:
 
 | Phase | New | Changed |
 | :--- | :--- | :--- |
-| P1 | `internal/filelock/doc.go`, `lock.go`, `lock_unix.go`, `lock_windows.go`, `lock_other.go`, `lock_test.go`; `internal/fsx/git.go`, `git_test.go` | `session/jsonl/store.go`; `session/jsonl/lock.go`, `lock_unix.go`, `lock_windows.go`, `lock_other.go` (deleted); `prompt/context.go`; `mcpclient/file.go`, `mcpclient/file_test.go`; `mcpclient/conn.go`, `mcpclient/proc.go`, `mcpclient/proc_test.go` |
+| P1 | `internal/filelock/doc.go`, `lock.go`, `lock_unix.go`, `lock_windows.go`, `lock_other.go`, `lock_test.go`; `internal/fsx/git.go`, `git_test.go` | *(deviation 1: `internal/fsx/write.go`, `internal/fsx/workspace_test.go`)* `session/jsonl/store.go`; `session/jsonl/lock.go`, `lock_unix.go`, `lock_windows.go`, `lock_other.go` (deleted); `prompt/context.go`; `mcpclient/file.go`, `mcpclient/file_test.go`; `mcpclient/conn.go`, `mcpclient/proc.go`, `mcpclient/proc_test.go` |
 | P2 | `internal/config/keys.go`, `settings.go`, `read.go`, `merge.go`, `resolve.go`, `diag.go`, `secret.go`, `override.go`, `schema.go`, `settings.yaml`, `template.go`, `genschema/main.go`, `testdata/settings.schema.json`, `testdata/*.yaml` fixtures, `read_test.go`, `resolve_test.go`, `override_test.go`, `schema_test.go`, `template_test.go` | `internal/config/doc.go`; `internal/frontmatter/frontmatter.go` (package comment only) |
 | P3 | `internal/config/edit.go`, `update.go`, `edit_test.go`, `update_test.go`, `testdata/edit/*` | — |
 | P4 | `internal/cli/config.go`, `internal/cli/config_test.go`, `internal/cli/settings.go`; `internal/config/render.go`, `render_test.go` | `internal/cli/root.go`, `internal/cli/configpath.go`, `internal/cli/main.go`, `internal/cli/main_test.go`, `internal/cli/chat.go`, `internal/cli/acp.go`, `internal/cli/mcp.go`, `internal/cli/flags.go`, `internal/cli/completion.go` |
@@ -134,7 +134,7 @@ Each phase builds and passes on its own.
    `prompt`'s existing `TestWorktreeShadowing` and the other `context_test.go` tests pass unchanged.
 6. **`mcpclient/file.go`:**
    - `Add` and `Remove` take `filelock.Lock(ctx, path+".lock", 10, 20*time.Millisecond)` around read-edit-write. `Add` and `Remove` gain no context parameter: they pass `context.Background()`, since the CLI command's context is not needed for a 200 ms bound.
-   - `writeFile` (`:177-198`) is replaced by `fsx.Workspace{}.WriteFile(path, data)`.
+   - ~~`writeFile` (`:177-198`) is replaced by `fsx.Workspace{}.WriteFile(path, data)`.~~ *(Deviation 1: `writeFile` is replaced by `fsx.WriteFileMode(path, data, 0o600)`, which keeps a new `mcp.json` at 0600.)*
    - The file's own temp-name pattern goes.
 7. **`mcpclient/file_test.go`:** `TestAddRemoveKeepTheFile`, `TestAddCreatesTheFile` and `TestAddRefusesAMalformedFile` pass unchanged. A new `TestAddConcurrent` runs 8 goroutines each adding one server, and finds all 8 in the file.
 8. **`mcpclient/conn.go`'s `Options`** gains:
@@ -164,6 +164,17 @@ go vet ./...                                                                    
 - `fsx.GitRepo` ignoring `commondir` fails `TestGitRepo`'s worktree case;
 - `Add` without the lock fails `TestAddConcurrent` in at least one of 20 runs (`-count=20`);
 - `stopper.Close` using the constant fails `TestStopGraceOption`.
+
+### P1's deviations, 2026-10-12, decided by the owner
+
+1. **`fsx`'s writer would loosen `mcp.json`'s mode.**
+   - **Found:** step 6 would swap `mcpclient`'s writer for `fsx.Workspace{}.WriteFile`, which creates a new file 0644 (`internal/fsx/write.go:13-15`, `:61`). The old writer's `os.CreateTemp` creates it 0600, and `mcpclient/file_test.go:93-94` pins that. `mcp.json` can hold literal header and environment values, such as tokens. The step as written would loosen a new file's mode, and fail a test that pins a default (C1). Both the test and the modes are unchanged in HEAD; the conflict is the step's.
+   - **Decided** ("fsx gains a mode"):
+     - `internal/fsx/write.go` gains `WriteFileMode(abs string, data []byte, newMode fs.FileMode) error`, a write outside any workspace through `writeAtomic` with the new-file mode as a parameter. `Workspace.WriteFile` keeps 0644, so file tools are unchanged.
+     - `mcpclient` writes `mcp.json` with 0600, and keeps today's mode while gaining the fsync and the Windows rename retry. P3's settings writes use the same function with 0644 (MADR D8).
+     - `internal/fsx/workspace_test.go` gains `TestWriteFileModeNewAndExisting`: a new file takes the given mode, and an existing one keeps its own.
+     - 0018-MADR D8 and D18 get a dated note naming the function.
+     - Files added: `internal/fsx/write.go`, `internal/fsx/workspace_test.go`.
 
 ### P2 — `internal/config`: keys, reading, merging, trust, diagnostics, overrides, schema and template (D2–D7, D9's template, D10's parsing, D13–D15, D19's mechanism; closes F1–F4, F6–F11)
 
