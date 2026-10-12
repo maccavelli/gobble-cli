@@ -140,6 +140,10 @@ linters:
       - linters:
           - forbidigo
         path: cmd/gobble/main\.go
+      # A generator a developer runs, never shipped (0018-PLAN P2 deviation 2).
+      - linters:
+          - forbidigo
+        path: internal/config/genschema/main\.go
     paths:
       - third_party$
       - builtin$

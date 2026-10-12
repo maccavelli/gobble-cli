@@ -282,3 +282,12 @@ func TestConfigErrorsLogged(t *testing.T) {
 		t.Fatalf("logged %d times:\n%s", n, logs)
 	}
 }
+
+// The start-up wait's default is internal/config's mcp.startupWaitMs
+// (10000): a change here, or there, fails one of the two tests (0018-PLAN
+// P2 deviation 5).
+func TestDefaultStartupWait(t *testing.T) {
+	if DefaultStartupWait != 10*time.Second {
+		t.Fatalf("DefaultStartupWait %v; internal/config's mcp.startupWaitMs says 10s", DefaultStartupWait)
+	}
+}

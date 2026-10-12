@@ -1,0 +1,122 @@
+{
+  "type": "object",
+  "properties": {
+    "defaultThinkingLevel": {
+      "type": "string",
+      "description": "The thinking level a new session starts with.",
+      "default": "off",
+      "enum": [
+        "off",
+        "minimal",
+        "low",
+        "medium",
+        "high",
+        "xhigh"
+      ]
+    },
+    "steeringMode": {
+      "type": "string",
+      "description": "How steering messages queued while a turn runs reach the model: one before each model call, or all at once.",
+      "default": "one-at-a-time",
+      "enum": [
+        "one-at-a-time",
+        "all"
+      ]
+    },
+    "followUpMode": {
+      "type": "string",
+      "description": "How follow-up messages queued while a turn runs reach the model: one at a time, or all at once.",
+      "default": "one-at-a-time",
+      "enum": [
+        "one-at-a-time",
+        "all"
+      ]
+    },
+    "sessionDir": {
+      "type": "string",
+      "description": "The directory session files are kept in, flat, as --session-dir keeps them. Empty keeps them in gobble's data directory, by working directory.",
+      "default": "",
+      "x-gobble-global-only": true
+    },
+    "compaction": {
+      "type": "object",
+      "properties": {
+        "keepRecentTokens": {
+          "type": "integer",
+          "description": "The recent conversation, in tokens, that /compact keeps word for word.",
+          "default": 20000,
+          "minimum": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "shellPath": {
+      "type": "string",
+      "description": "The bash the bash tool runs. Empty finds one: Git's bash on Windows, bash on PATH elsewhere.",
+      "default": "",
+      "x-gobble-global-only": true
+    },
+    "shellCommandPrefix": {
+      "type": "string",
+      "description": "A line run before every bash command, such as \"set -euo pipefail\".",
+      "default": "",
+      "x-gobble-global-only": true
+    },
+    "tools": {
+      "type": "object",
+      "properties": {
+        "bash": {
+          "type": "object",
+          "properties": {
+            "useClientTerminal": {
+              "type": "boolean",
+              "description": "Whether bash runs in the ACP client's terminal when the client offers one.",
+              "default": false
+            },
+            "maxTimeoutMs": {
+              "type": "integer",
+              "description": "The longest timeout, in milliseconds, a bash command may ask for.",
+              "default": 600000,
+              "minimum": 1
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "mcp": {
+      "type": "object",
+      "properties": {
+        "startupWaitMs": {
+          "type": "integer",
+          "description": "How long, in milliseconds, the first prompt waits for MCP servers to connect.",
+          "default": 10000,
+          "minimum": 0
+        },
+        "stopGraceMs": {
+          "type": "integer",
+          "description": "How long, in milliseconds, a stdio MCP server has to exit once its input closes.",
+          "default": 500,
+          "minimum": 0
+        },
+        "stopTimeoutMs": {
+          "type": "integer",
+          "description": "How long, in milliseconds, after the grace before a stdio MCP server is killed.",
+          "default": 2000,
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "externalEditor": {
+      "type": "string",
+      "description": "The editor /edit and gobble config edit open. GOBBLE_EDITOR wins over it; it wins over VISUAL and EDITOR.",
+      "default": ""
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "gobble settings.yaml",
+  "description": "gobble's settings. Every key is optional; a key left out takes its default.",
+  "additionalProperties": false
+}

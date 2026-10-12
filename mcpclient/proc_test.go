@@ -139,3 +139,12 @@ func TestStopPoliteServer(t *testing.T) {
 		t.Fatalf("Close took %v, want the server to stop within the %v grace", d, stdinGrace)
 	}
 }
+
+// The stop timings' defaults are internal/config's mcp.stopGraceMs (500)
+// and mcp.stopTimeoutMs (2000): a change here, or there, fails one of the
+// two tests (0018-PLAN P2 deviation 5).
+func TestStopDefaults(t *testing.T) {
+	if stdinGrace != 500*time.Millisecond || closeTimeout != 2*time.Second {
+		t.Fatalf("stdinGrace %v, closeTimeout %v; internal/config's mcp.stopGraceMs and mcp.stopTimeoutMs say 500ms and 2s", stdinGrace, closeTimeout)
+	}
+}

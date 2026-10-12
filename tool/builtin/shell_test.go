@@ -212,3 +212,12 @@ func quoteJSON(s string) string {
 	}
 	return string(b)
 }
+
+// The timeout cap's default is internal/config's tools.bash.maxTimeoutMs
+// (600000): a change here, or there, fails one of the two tests (0018-PLAN
+// P2 deviation 5).
+func TestDefaultMaxTimeout(t *testing.T) {
+	if defaultMaxTimeout != 10*time.Minute {
+		t.Fatalf("defaultMaxTimeout %v; internal/config's tools.bash.maxTimeoutMs says 10m", defaultMaxTimeout)
+	}
+}

@@ -1,8 +1,9 @@
 // Package frontmatter reads the YAML frontmatter of skills and prompt
 // templates, as Pi reads it (coding-agent/src/utils/frontmatter.ts). It is
-// the one package that imports go.yaml.in/yaml/v3 (0005-MADR, amendment of
-// 2026-10-10, item 7). IsSpace and Trim are JavaScript's whitespace, for
-// the rest of what Pi reads in those files.
+// one of two packages that import go.yaml.in/yaml/v3, with internal/config
+// (0005-MADR, amendment of 2026-10-10, item 7; 0018-MADR D3). IsSpace and
+// Trim are JavaScript's whitespace, for the rest of what Pi reads in those
+// files.
 package frontmatter
 
 import (

@@ -19,7 +19,7 @@ When this plan is done, these hold, and each is shown by a command in its phase:
 5. `gobble config update` adds the template blocks a file lacks, and changes no existing line.
 6. The committed schema matches the generated one. The template matches the key table, by D9's six tests.
 7. `--add-dir` sends additional directories on `session/new` and `session/resume`.
-8. Every gate of the stability rule passes on Windows, on WSL and on the second Linux machine, and each new test has been seen failing on a scratch copy.
+8. Every gate of the stability rule passes on Windows, ~~on WSL~~ *(not WSL, by the owner's direction of 2026-10-12 in the stability rule)* and on the second Linux machine, and each new test has been seen failing on a scratch copy.
 
 ## Scope
 
@@ -28,7 +28,7 @@ When this plan is done, these hold, and each is shown by a command in its phase:
 | Phase | New | Changed |
 | :--- | :--- | :--- |
 | P1 | `internal/filelock/doc.go`, `lock.go`, `lock_unix.go`, `lock_windows.go`, `lock_other.go`, `lock_test.go`; `internal/fsx/git.go`, `git_test.go` | *(deviation 1: `internal/fsx/write.go`, `internal/fsx/workspace_test.go`)* `session/jsonl/store.go`; `session/jsonl/lock.go`, `lock_unix.go`, `lock_windows.go`, `lock_other.go` (deleted); `prompt/context.go`; `mcpclient/file.go`, `mcpclient/file_test.go`; `mcpclient/conn.go`, `mcpclient/proc.go`, `mcpclient/proc_test.go` |
-| P2 | `internal/config/keys.go`, `settings.go`, `read.go`, `merge.go`, `resolve.go`, `diag.go`, `secret.go`, `override.go`, `schema.go`, `settings.yaml`, `template.go`, `genschema/main.go`, `testdata/settings.schema.json`, `testdata/*.yaml` fixtures, `read_test.go`, `resolve_test.go`, `override_test.go`, `schema_test.go`, `template_test.go` | `internal/config/doc.go`; `internal/frontmatter/frontmatter.go` (package comment only) |
+| P2 | `internal/config/keys.go`, `settings.go`, `read.go`, `merge.go`, `resolve.go`, `diag.go`, `secret.go`, `override.go`, `schema.go`, `settings.yaml`, `template.go`, `genschema/main.go`, `testdata/settings.schema.json`, ~~`testdata/*.yaml` fixtures~~ *(deviation 4: none; the fixtures are built in the tests)*, `read_test.go`, `resolve_test.go`, `override_test.go`, `schema_test.go`, `template_test.go` | `internal/config/doc.go`; `internal/frontmatter/frontmatter.go` (package comment only); *(deviation 2: `.golangci.yml`; deviation 5: `mcpclient/proc_test.go`, `tool/builtin/shell_test.go`, `acpserver/mcp_test.go`)* |
 | P3 | `internal/config/edit.go`, `update.go`, `edit_test.go`, `update_test.go`, `testdata/edit/*` | — |
 | P4 | `internal/cli/config.go`, `internal/cli/config_test.go`, `internal/cli/settings.go`; `internal/config/render.go`, `render_test.go` | `internal/cli/root.go`, `internal/cli/configpath.go`, `internal/cli/main.go`, `internal/cli/main_test.go`, `internal/cli/chat.go`, `internal/cli/acp.go`, `internal/cli/mcp.go`, `internal/cli/flags.go`, `internal/cli/completion.go` |
 | P5 | `acpserver/settings_test.go`, `internal/cli/settings_test.go` | `acpserver/agent.go`, `acpserver/queue.go`, `acpserver/mcp.go`, `acpserver/config.go`; `internal/cli/agent.go`, `internal/cli/sessions.go`, `internal/cli/slash.go`, `internal/cli/editor/external.go`, `internal/cli/editor/external_test.go`; `acpclient/sessions.go`, `acpclient/sessions_test.go`; `internal/cli/flags.go` |
@@ -61,7 +61,7 @@ and with 0005-PLAN F1d-2's deviation 4 gates:
 - lint for linux, darwin and windows;
 - Windows `go test ./...`;
 - `CGO_ENABLED=1 go test -race ./...` natively on Windows with MinGW's gcc, and over SSH on the second amd64 Linux machine, on a copy made from a git bundle;
-- Windows and WSL `make preflight`, WSL's without its race run.
+- ~~Windows and WSL `make preflight`, WSL's without its race run.~~ *(2026-10-12, during P2, the owner directed: "run linux race gates via ssh on [the second Linux machine] not on the WSL it is flaky". From P2 on, `make preflight` runs on Windows only, and no gate runs in WSL. Linux coverage is the race run over SSH, which also runs every test on Linux, and lint and staticcheck for `GOOS=linux`, which preflight already runs.)*
 
 A crash in `internal/cli`'s tests on Windows is checked for Bitdefender's injected DLLs before it is debugged (the host's known cause). A race report in WSL is not a gobble defect while 0013-REPORT's third amendment holds.
 
@@ -202,7 +202,7 @@ go vet ./...                                                                    
    - `Settings`, with nested structs, `yaml` tags (camelCase) and `json` tags of the same names;
    - `Defaults() Settings`, equal to today's code defaults: thinking `off`, queues `one-at-a-time`, `keepRecentTokens` 20000, bash `MaxTimeout` 600000 ms, `useClientTerminal` false, MCP 10000, 500 and 2000 ms, empty strings for the rest;
    - helper methods converting milliseconds to `time.Duration` (`MaxTimeout()`, `MCPStartupWait()`, `MCPStopGrace()`, `MCPStopTimeout()`).
-3. **`read.go`:** `Read(file string, data []byte) (*yaml.Node, []Diagnostic)`:
+3. **`read.go`:** ~~`Read(file string, data []byte) (*yaml.Node, []Diagnostic)`~~ *(Deviation 3: `Parse(file string, data []byte) (*yaml.Node, []Diagnostic)`, since step 1's type `Read` takes the name)*:
    - decodes with `yaml.NewDecoder`, reading the first document;
    - a second `Decode` that does not return `io.EOF` gives D7's second-document diagnostic at that document's line;
    - a decode error gives `<file>:<line>: <message>`, the line parsed from `yaml.v3`'s `line N:` prefix;
@@ -211,7 +211,7 @@ go vet ./...                                                                    
    - CRLF input is accepted;
    - a file that fails yields a nil node, and the caller treats the layer as empty.
 4. **`diag.go`:** `Diagnostic{File string; Line int; Path string; Severity Severity; Text string}`, and `String()` giving each D7 form exactly. `Severity` is `Error` or `Warning`. Unknown keys and global-only keys in a project are warnings; the rest are errors.
-5. **`merge.go`:** `validate(node, layer)` walks the mapping against `Keys`:
+5. **`merge.go`:** ~~`validate(node, layer)`~~ *(Deviation 3: `leaves(file, root, layer)`)* walks the mapping against `Keys`:
    - wrong kind: D7's type diagnostic;
    - out of range or not in the enum: D7's rule diagnostic;
    - unknown path: D7's unknown diagnostic, and kept in the file;
@@ -219,7 +219,7 @@ go vet ./...                                                                    
    - a credential-shaped path (`secret.go`, D15): D7's error;
    - aliases resolved by `yaml.v3`.
 
-   It returns the valid leaves with `Source{Layer, File, Line}`. `merge(layers...)` applies D4: mappings deep, scalars replace, `null` clears to the layer below. The merged leaves decode into `Settings` over `Defaults()`.
+   It returns the valid leaves with `Source{Layer, File, Line}`. ~~`merge(layers...)` applies D4~~ *(Deviation 3: `Resolve` applies each layer's leaves in turn, which is D4)*: mappings deep, scalars replace, `null` clears to the layer below. The merged leaves decode into `Settings` over `Defaults()`.
 6. **`secret.go`:** `isCredentialPath(path string) bool`, true when the last segment, lowercased with `_` and `-` removed, ends in `key`, `token`, `secret` or `password`.
 7. **`resolve.go`:**
 
@@ -242,7 +242,7 @@ go vet ./...                                                                    
    ```
 
    - **Layers:** defaults, then global, then project (when `Trusted(root)`; otherwise read, validated and listed in `Disabled` with D7's reason), then overrides.
-   - **Read filtering.** Only keys whose `Read` matches `o.Read` are applied. For `Read == Process` under `gobble acp`, the caller passes `Cwd == ""`, so no project file is read (MADR D16).
+   - **Read filtering.** Only keys whose `Read` matches `o.Read` are applied. *(Deviation 3: the constants are `ReadSession` and `ReadProcess`, and a zero `Read` applies both, for P4's `config get` and `config validate`.)* For `Read == Process` under `gobble acp`, the caller passes `Cwd == ""`, so no project file is read (MADR D16).
 8. **`override.go`:** `ParseOverride(s string) (Override, error)` splits at the first `=`.
    - The path must be in `Keys`, else `unknown setting "<path>"`.
    - The value is decoded as one YAML flow node, then checked like a file value. A failure gives `--set <path>: <rule>`.
@@ -255,16 +255,16 @@ go vet ./...                                                                    
 11. **`settings.yaml`** is the MADR D9 template text, byte for byte, with LF endings and the two-space indentation removed. **`template.go`:** `//go:embed settings.yaml` as `Template() []byte`.
 12. **`doc.go`** replaces the placeholder text with the package's job (MADR D18). `internal/frontmatter/frontmatter.go`'s package comment reads "one of two packages that import `go.yaml.in/yaml/v3`, with `internal/config`".
 13. **Tests.**
-    - **`read_test.go`**, over `testdata/`:
+    - **`read_test.go`**, ~~over `testdata/`~~ *(deviation 4: over fixtures built in the test code)*:
       - `TestReadEmptyAndComments`;
-      - `TestReadSecondDocument` (`two-docs.yaml`, line 3);
+      - `TestReadSecondDocument` ~~(`two-docs.yaml`, line 3)~~ *(deviation 4: at line 2, the `---` line where the second document starts)*;
       - `TestReadDuplicateKey`;
       - `TestReadTab`;
       - `TestReadSyntax`;
       - `TestReadNonMapping`;
       - `TestReadCRLF`.
     - **`resolve_test.go`:**
-      - `TestDefaultsEqualCode`: `Resolve` with no files equals `Defaults()`, and each default equals its consumer's constant: `compaction.DefaultSettings.KeepRecentTokens`, `acpserver`'s `DefaultStartupWait` through a literal, the `mcpclient` constants, and `builtin`'s 10 minutes;
+      - `TestDefaultsEqualCode`: `Resolve` with no files equals `Defaults()`, and each default equals its consumer's constant: `compaction.DefaultSettings.KeepRecentTokens`, `acpserver`'s `DefaultStartupWait` through a literal, the `mcpclient` constants, and `builtin`'s 10 minutes; *(deviation 5: the last three through literals too, being unexported, and each consumer's own test pins its constant to the same literal: `TestStopDefaults` in `mcpclient/proc_test.go`, `TestDefaultMaxTimeout` in `tool/builtin/shell_test.go`, `TestDefaultStartupWait` in `acpserver/mcp_test.go`)*
       - `TestLayersAndPrecedence`;
       - `TestNullClears`;
       - `TestProjectDisabledUntilTrusted` (exact reason text);
@@ -307,6 +307,21 @@ go mod tidy && git diff --exit-code go.mod go.sum -> no diff
 - a template default changed to `20001`;
 - a prose line reworded as `name: value`.
 
+### P2's deviations, 2026-10-12, decided by the owner
+
+2. **`genschema` is a second `main`, and lint forbids its streams.**
+   - **Found:** step 10's `genschema/main.go` reports a failure on `os.Stderr` and exits with `os.Exit`. `.golangci.yml:63-64` forbids both through forbidigo (0008-MADR D18) and exempts only `cmd/gobble/main.go` (`:140-142`), so lint fails on linux, darwin and windows with four findings. The rule exists so the shipped binary writes only through `cli.Main`'s injected writers; `genschema` is a generator a developer runs, never shipped. The conflict is the step's: the lint configuration is unchanged in HEAD.
+   - **Decided** ("exempt it in lint"): `.golangci.yml` gains a forbidigo exclusion for `internal/config/genschema/main\.go`, beside `cmd/gobble/main.go`'s. `genschema` keeps its command and its message. File added: `.golangci.yml`.
+3. **The plan's names collide, or name helpers the code does not have.**
+   - **Found:** step 1 defines the type `Read`, and step 3 the function `Read`, in one package, which does not compile. Step 5 names `validate` and `merge`; the walk is `leaves`, and the layering is `Resolve`'s, with the same behaviour. P4 (step 2) writes `config.Session` and `config.Process`, and `config get` and `config validate` need every key, which neither value gives.
+   - **Decided** ("amend the plan to the code"): the function is `Parse`, the walk `leaves`, the constants `ReadSession` and `ReadProcess`, and a zero `Read` applies every key. Steps 3, 5 and 7, P3's step 1 and P4's step 2 are annotated. No file added.
+4. **The read fixtures are built in the tests.**
+   - **Found:** step 13 reads its cases from `testdata/` files. `.gitattributes` (`* text=auto eol=lf`, 0007-MADR D3) makes a committed CRLF fixture impossible, and the other cases are a line or two each. `two-docs.yaml` "line 3" assumed a fixture with a line before the document; the diagnostic names the `---` line, where D7 says "a second one starts here".
+   - **Decided** ("inline, amend the plan"): every fixture is built in the test code, and `testdata/*.yaml` leaves P2's scope. `TestReadSecondDocument` expects line 2 of `steeringMode: all\n---\nfollowUpMode: all\n`. No file added.
+5. **Three of the four defaults were pinned on one side only.**
+   - **Found:** `TestDefaultsEqualCode` is to compare with "the `mcpclient` constants, and `builtin`'s 10 minutes". They are unexported (`mcpclient/proc.go:20-21`, `tool/builtin/builtin.go:56`), so `internal/config` can hold only literals. No test pins their values; they are used only as bounds (`mcpclient/proc_test.go:110`, `:139`) and as an argument (`tool/builtin/shell_test.go:77`). Nor is `acpserver.DefaultStartupWait` pinned by any test. A change to any one would leave `config.Defaults()` disagreeing with the code, with every test passing, against C1.
+   - **Decided** ("pin both sides"): each consumer's test pins its constant to the literal `internal/config` holds, and names the key: `TestStopDefaults` (`stdinGrace` 500 ms, `closeTimeout` 2 s), `TestDefaultMaxTimeout` (10 minutes) and `TestDefaultStartupWait` (10 s). A change on either side then fails a test that names the other. Files added: `mcpclient/proc_test.go`, `tool/builtin/shell_test.go`, `acpserver/mcp_test.go`.
+
 ### P3 — The editor and `update` (D8, D9's growth; closes F2, F3, F5)
 
 1. **`edit.go`:**
@@ -343,7 +358,7 @@ go mod tidy && git diff --exit-code go.mod go.sum -> no diff
    - `render(v)` writes a scalar plain only when `yaml.v3` re-reads the plain text as the same tag and value; otherwise double-quoted.
    - An aliased value, or a path through an alias, is refused with D7's alias diagnostic.
 
-   **The check.** After `Apply`, the result is passed to `Read`. It must parse as one mapping document, the path must re-read as the value (or as absent), and every other leaf path must re-read equal, compared by tag and value. Anything else returns D7's "could not be applied safely" error, and the file is untouched.
+   **The check.** After `Apply`, the result is passed to ~~`Read`~~ `Parse` *(P2 deviation 3)*. It must parse as one mapping document, the path must re-read as the value (or as absent), and every other leaf path must re-read equal, compared by tag and value. Anything else returns D7's "could not be applied safely" error, and the file is untouched.
 2. **`update.go`:**
 
    ```go
@@ -406,8 +421,8 @@ go test ./internal/config/...                                                   
    and `Config ConfigCmd` keeps its place.
 2. **`internal/cli/settings.go`** (new):
    - `runEnv` gains `overrides []config.Override`, parsed in `main.go`'s `run` from `root.Set` before the command runs. A parse error is a usage error, exit 2, with `ParseOverride`'s text.
-   - `runEnv.processSettings(cwd string) config.Resolved` is resolved once with `Read: config.Process`, cached, and its diagnostics printed through `e.out.Warnf` once. Under `gobble acp` it goes to the log through `e.log()` (MADR D7).
-   - `runEnv.sessionSettings(cwd string) config.Resolved` resolves with `Read: config.Session` on every call. Its diagnostics go to the log.
+   - `runEnv.processSettings(cwd string) config.Resolved` is resolved once with ~~`Read: config.Process`~~ `Read: config.ReadProcess` *(P2 deviation 3)*, cached, and its diagnostics printed through `e.out.Warnf` once. Under `gobble acp` it goes to the log through `e.log()` (MADR D7).
+   - `runEnv.sessionSettings(cwd string) config.Resolved` resolves with ~~`Read: config.Session`~~ `Read: config.ReadSession` *(P2 deviation 3)* on every call. Its diagnostics go to the log.
    - `runEnv.ensureSettingsFile()` writes `config.Template()` to `config.GlobalFile(dirs.Config)` when the file is missing, through `config.Init`. A failure is a warning, and the run continues.
 3. **`chat.go`, `acp.go` and `mcp.go`'s command `Run`s** call `e.ensureSettingsFile()` first: the chat command, `ACPCmd`, and each `MCP…Cmd`. `VersionCmd`, `CompletionCmd` and `ConfigPathCmd` do not. Completion mode returns before `run` already (`internal/cli/main.go:37-42`).
 4. **`internal/cli/config.go`** (new) holds `ConfigCmd`'s subcommands, D12's:
@@ -554,7 +569,7 @@ After P6:
 ```text
 go test ./...                                     -> ok
 CGO_ENABLED=1 go test -race ./...                 -> ok, natively on Windows and on the second Linux machine
-make preflight                                    -> preflight passed (Windows and WSL)
+make preflight                                    -> preflight passed (Windows ~~and WSL~~; WSL dropped 2026-10-12, see the stability rule)
 git diff --exit-code acpserver/testdata/session.golden go.mod go.sum -> no diff
 go list -deps ./internal/config | grep -c alecthomas/kong -> 0
 python -I q421_claims_0018.py                     -> 133/133 claims hold (0018-MADR's citations, re-run in case code moved)

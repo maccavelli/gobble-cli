@@ -1,0 +1,96 @@
+# gobble settings
+#
+# This file is optional, and so is every key in it. A key that stays
+# commented out takes the default shown, and a later gobble may change
+# that default. Remove the "# " in front of a key, and of the lines
+# it sits under, to set it.
+#
+# Where settings come from, lowest first:
+#   1. gobble's defaults
+#   2. this file
+#   3. a trusted project's .gobble/settings.yaml
+#   4. --set path=value on the command line, for one run
+#   5. command-line flags
+#
+# gobble config get --origin   shows what applies, and where it came from
+# gobble config validate       checks this file
+# gobble config update         adds the settings a newer gobble knows, as comments
+# gobble config schema         prints a JSON Schema for editors
+#
+# Credentials never go here. They belong in auth.json.
+
+# ---------------------------------------------------------------------
+# Sessions
+# ---------------------------------------------------------------------
+
+# The thinking level a new session starts with: off, minimal, low,
+# medium, high or xhigh. A resumed session keeps its own, and /thinking
+# changes it in a session.
+# defaultThinkingLevel: off
+
+# How messages queued while a turn runs reach the model.
+#   one-at-a-time   one queued message before each model call
+#   all             every queued message at once
+# Steering messages arrive mid-turn; follow-ups wait until the turn
+# would end. A client can change either for one session.
+# steeringMode: one-at-a-time
+# followUpMode: one-at-a-time
+
+# The directory session files are kept in, flat, as --session-dir
+# keeps them. An absolute path, and ~ is your home. Empty keeps them in
+# gobble's data directory, by working directory. Only this file can set
+# it, never a project's.
+# sessionDir: ""
+
+# ---------------------------------------------------------------------
+# Compaction
+# ---------------------------------------------------------------------
+
+# The recent conversation, in tokens, that /compact keeps word for
+# word. What comes before it is summarised.
+# compaction:
+#   keepRecentTokens: 20000
+
+# ---------------------------------------------------------------------
+# Tools
+# ---------------------------------------------------------------------
+
+# The bash the bash tool runs. Empty finds one: Git's bash on Windows,
+# bash on PATH elsewhere. ~ is your home. Only this file can set it.
+# shellPath: ""
+
+# A line run before every bash command, such as "set -euo pipefail".
+# Only this file can set it.
+# shellCommandPrefix: ""
+
+# Whether bash runs in the ACP client's terminal when the client offers
+# one, so the user can watch it there. Off, because a phone client
+# shows only "terminal <id>". And the longest timeout, in milliseconds,
+# a bash command may ask for: 600000 is 10 minutes. Under gobble acp,
+# a project's settings cannot set these; this file and --set can.
+# tools:
+#   bash:
+#     useClientTerminal: false
+#     maxTimeoutMs: 600000
+
+# ---------------------------------------------------------------------
+# MCP servers (the servers themselves are listed in mcp.json)
+# ---------------------------------------------------------------------
+
+# In milliseconds: how long the first prompt waits for servers to
+# connect, after which a server still connecting joins a later prompt;
+# how long a stdio server has to exit once its input closes; and how
+# long after that before it is killed.
+# mcp:
+#   startupWaitMs: 10000
+#   stopGraceMs: 500
+#   stopTimeoutMs: 2000
+
+# ---------------------------------------------------------------------
+# Editor
+# ---------------------------------------------------------------------
+
+# The editor /edit and gobble config edit open. GOBBLE_EDITOR wins over
+# it, and it wins over VISUAL and EDITOR. Empty uses VISUAL, then
+# EDITOR, then notepad on Windows or vi elsewhere.
+# externalEditor: ""
