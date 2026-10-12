@@ -39,7 +39,8 @@
 | 0015 | REPORT | [The three sibling libraries: current state, pins, order, and whether to adopt them now](reports/0015-REPORT-sibling-library-pins-and-order.md) | observation (2026-10-11; 293 verified claims; go-llmprovider-sdk `v1.7.1`, go-selfupdate-lib `v1.15.1`, acp-go-sdk2 `v0.14.0`; recommends adopting now) |
 | 0016 | MADR | [Take acp-go-sdk2 v0.15.0, close the gap it opens, and adopt the stable ACP surface gobble can honour](decisions/0016-MADR-acp-go-sdk2-v0.15.0-and-stable-surface.md) | proposed (2026-10-12; no PLAN yet) |
 | 0017 | MADR | [A todo list that keeps the agent working in order, stays live through the session, and works natively with magic-cli-remote](decisions/0017-MADR-todo-list-ordered-live-and-mcremote-native.md) | proposed (2026-10-12; no PLAN yet) |
-| 0018 | MADR | [The configuration surface: a commented `settings.yaml` from a shipped template, edited in place so comments and layout survive, layered and trust-gated, with Kong binding flags on top](decisions/0018-MADR-configuration-surface.md) | proposed (2026-10-12; revised before review to YAML and with `config import` dropped, at the owner's direction; 124 verified claims; no PLAN yet; the owner put it ahead of 0017) |
+| 0018 | MADR | [The configuration surface: a commented `settings.yaml` from a shipped template, edited in place so comments and layout survive, layered and trust-gated, with Kong binding flags on top](decisions/0018-MADR-configuration-surface.md) | accepted (2026-10-12, by the owner; revised before review to YAML and with `config import` dropped, at the owner's direction; six statements corrected at acceptance; 133 verified claims) |
+| 0018 | PLAN | [The configuration surface: a commented `settings.yaml`, edited in place, layered and trust-gated](decisions/0018-PLAN-configuration-surface.md) | proposed (2026-10-12; P1–P6) |
 
 0003-MADR has no PLAN of its own. 0004-PLAN Phase 2 and 0005-PLAN F10 implement it.
 
@@ -63,6 +64,7 @@ The plans run in sequence.
   - Run: F3-1, context files and the sectioned prompt, F3-2, skills, F3-3, prompt templates, and F3-4, `@path`, resource blocks and the prompt capabilities, on 2026-10-10. F3 is complete.
   - Next: F4-1a, the SDK pin, the wire tests and two fixes (F4-1 re-made for SDK `v1.7.0` 2026-10-11). Then 0012-PLAN P7, and F4-2. F4-1b, live streaming, waits on an SDK release that retries a stream.
 - **0014-PLAN.** Run: P0 and P1, the move to acp-go-sdk2 `v0.14.0`, on 2026-10-10. Complete.
+- **0018-PLAN.** Proposed 2026-10-12: P1–P6, the configuration surface. Put ahead of 0017 by the owner; waits for approval.
 - **0012-PLAN.** Run: P1–P6 and P8 on 2026-10-08. P7 ~~waits on go-llmprovider-sdk's per-tool strict flag~~ follows 0005-PLAN F4-1a, which pins go-llmprovider-sdk `v1.7.0` and its strict flag (2026-10-11).
 - `git ls-remote origin refs/heads/main` on 2026-10-08 returned `740f7b71450238e747dba99b4fa1eccd488ad79e`.
 

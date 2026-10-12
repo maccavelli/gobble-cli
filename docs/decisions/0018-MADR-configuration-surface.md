@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 date: 2026-10-12
 decision-makers: repository owner
 consulted: none
@@ -15,6 +15,15 @@ informed: magic-cli-remote
 2. *The second revision kept `gobble config import --from-pi` in 0005-PLAN F10. The owner then directed: "drop the config import from pi".*
 
 *Neither earlier draft was committed, so they are not kept here. Every claim below was checked at its cited line by a script (`q421_claims_0018.py`, "Confirmation").)*
+
+*(Accepted 2026-10-12 by the owner: "accept the madr". Writing the plan read the code more closely than the MADR had, and six statements were corrected before acceptance, each where it stands:*
+
+1. *D8 writes through `internal/fsx`'s existing atomic writer, rather than a copy of magictools'. It already fsyncs, keeps a file's mode, and retries a rename that Windows refuses while another process holds the file open (`internal/fsx/write.go:55-123`). Settings hold no secrets (D15), so the 0600 mode, the DACL and the directory sync are dropped.*
+2. *D11: `GOBBLE_EDITOR` has no flag. The editor chain reads it, as it does today; it is not a Kong tag.*
+3. *D14 and D16: each key is read either per session or per process, because `gobble acp` serves sessions with different working directories (`internal/cli/acp.go`).*
+4. *D17: `acpserver` takes a per-session settings function instead of fixed option fields.*
+5. *D14: `acpclient` gains `ResumeSessionWith`, beside `ResumeSession`, instead of changing that method's signature.*
+6. *D18: the git-root finder moves from `prompt/context.go` into `internal/fsx`, so the project layer and the context files find the same root.)*
 
 ## Context and Problem Statement
 
@@ -333,10 +342,9 @@ Chosen: **A**. In the probe it kept the file exactly apart from the edited value
   **The write:**
   1. take `<file>.lock` through `internal/filelock` (D18);
   2. re-read the file, apply the edit, and check it;
-  3. write a temp file beside it, mode 0600, or the owner-only DACL on Windows through `internal/appdirs`'s helpers;
-  4. fsync it, close it, rename it over the file, and sync the directory (magictools' `atomicWriteFile`).
+  3. write through `internal/fsx`'s atomic writer, `fsx.Workspace{}.WriteFile`, which has no roots and so confines nothing. It writes a temp file beside the file, fsyncs it, keeps an existing file's mode (a new file is 0644), renames it into place, and retries a rename Windows refuses while another process holds the file (`internal/fsx/write.go:39-123`).
 
-  A file that does not parse is refused with its diagnostic and never replaced. A missing config directory is created with mode 0700. An existing one is used as it is.
+  A file that does not parse is refused with its diagnostic and never replaced.
 - **D9. The template is the documentation, and it grows with the keys.**
   - **It is embedded.** `internal/config/settings.yaml` is embedded with `//go:embed`, and is exactly the text below.
   - **Creation.**
@@ -422,7 +430,8 @@ Chosen: **A**. In the probe it kept the file exactly apart from the edited value
   # Whether bash runs in the ACP client's terminal when the client offers
   # one, so the user can watch it there. Off, because a phone client
   # shows only "terminal <id>". And the longest timeout, in milliseconds,
-  # a bash command may ask for: 600000 is 10 minutes.
+  # a bash command may ask for: 600000 is 10 minutes. Under gobble acp,
+  # a project's settings cannot set these; this file and --set can.
   # tools:
   #   bash:
   #     useClientTerminal: false
@@ -467,7 +476,9 @@ Chosen: **A**. In the probe it kept the file exactly apart from the edited value
   - `-c` stays `--continue`.
 - **D11. Flags and environment.**
   - A flag beats every file; its environment variable sits just below the flag.
-  - Only variables records name are bound, as Kong `env:` tags: `GOBBLE_EDITOR` (`externalEditor`'s place in D9's chain), and `GOBBLE_OFFLINE` with `--offline` when that flag lands.
+  - Only variables records name are read, and no new one is added here:
+    - `GOBBLE_EDITOR` has no flag, and the editor chain reads it, ahead of `externalEditor` (D17);
+    - `GOBBLE_OFFLINE` becomes `--offline`'s Kong `env:` tag when that flag lands, in X3.
   - The directory variables are resolved before settings, by `internal/appdirs`.
   - No setting maps to an environment variable by default (F9). `--set` covers the rest.
   - `--session-dir` beats `sessionDir`. `PI_CODING_AGENT_SESSION_DIR` does not touch gobble's sessions: 0003-MADR has the read-only Pi bridge read it only to locate Pi's own sessions (`:270-278`), and no code reads it today.
@@ -493,37 +504,47 @@ Chosen: **A**. In the probe it kept the file exactly apart from the edited value
   `auth import --from-pi` and `trust import --from-pi` are other records' decisions and stay.
 - **D14. The keys this record lands.** Each has a consumer in the code today, and its default is today's:
 
-  | Key | Type | Default | Consumer | Scope |
-  | :--- | :--- | :--- | :--- | :--- |
-  | `defaultThinkingLevel` | `off` \| `minimal` \| `low` \| `medium` \| `high` \| `xhigh` | `off` | a new session's thinking (`acpserver/agent.go:287`) | any |
-  | `steeringMode` | `one-at-a-time` \| `all` | `one-at-a-time` | a new or opened session's queue (`acpserver/queue.go:26-28`) | any |
-  | `followUpMode` | `one-at-a-time` \| `all` | `one-at-a-time` | the same | any |
-  | `sessionDir` | absolute path, `~` expanded; "" unset | unset: `<data>/sessions`, by working directory | the store, flat as with `--session-dir` (`internal/cli/sessions.go:39-47`) | global-only |
-  | `compaction.keepRecentTokens` | integer ≥ 1 | 20000 | `compaction.Prepare` (`acpserver/compact.go:65`) | any |
-  | `shellPath` | path, `~` expanded; "" unset | unset: today's detection | `builtin.Options.ShellPath` | global-only |
-  | `shellCommandPrefix` | string; "" none | none | `builtin.Options.ShellCommandPrefix` | global-only |
-  | `tools.bash.useClientTerminal` | boolean | `false` | `builtin.Options.UseClientTerminal` | any |
-  | `tools.bash.maxTimeoutMs` | integer ≥ 1 | 600000 | `builtin.Options.MaxTimeout` | any |
-  | `mcp.startupWaitMs` | integer ≥ 0 | 10000 | `acpserver.MCPOptions.StartupWait` | any |
-  | `mcp.stopGraceMs` | integer ≥ 0 | 500 | a stdio server's stdin grace (`mcpclient/proc.go:83`) | any |
-  | `mcp.stopTimeoutMs` | integer ≥ 0 | 2000 | a stdio server's close timeout (`mcpclient/proc.go:85`) | any |
-  | `externalEditor` | command line; "" unset | unset | the editor chain, after `GOBBLE_EDITOR` | any |
+  | Key | Type | Default | Consumer | Scope | Read |
+  | :--- | :--- | :--- | :--- | :--- | :--- |
+  | `defaultThinkingLevel` | `off` \| `minimal` \| `low` \| `medium` \| `high` \| `xhigh` | `off` | a new session's thinking (`acpserver/agent.go:287`) | any | session |
+  | `steeringMode` | `one-at-a-time` \| `all` | `one-at-a-time` | a new or opened session's queue (`acpserver/queue.go:26-28`) | any | session |
+  | `followUpMode` | `one-at-a-time` \| `all` | `one-at-a-time` | the same | any | session |
+  | `sessionDir` | absolute path, `~` expanded; "" unset | unset: `<data>/sessions`, by working directory | the store, flat as with `--session-dir` (`internal/cli/sessions.go:39-47`) | global-only | process |
+  | `compaction.keepRecentTokens` | integer ≥ 1 | 20000 | `compaction.Prepare` (`acpserver/compact.go:65`) | any | session |
+  | `shellPath` | path, `~` expanded; "" unset | unset: today's detection | `builtin.Options.ShellPath` | global-only | process |
+  | `shellCommandPrefix` | string; "" none | none | `builtin.Options.ShellCommandPrefix` | global-only | process |
+  | `tools.bash.useClientTerminal` | boolean | `false` | `builtin.Options.UseClientTerminal` | any | process |
+  | `tools.bash.maxTimeoutMs` | integer ≥ 1 | 600000 | `builtin.Options.MaxTimeout` | any | process |
+  | `mcp.startupWaitMs` | integer ≥ 0 | 10000 | `acpserver.MCPOptions.StartupWait` | any | session |
+  | `mcp.stopGraceMs` | integer ≥ 0 | 500 | a stdio server's stdin grace (`mcpclient/proc.go:83`) | any | session |
+  | `mcp.stopTimeoutMs` | integer ≥ 0 | 2000 | a stdio server's close timeout (`mcpclient/proc.go:85`) | any | session |
+  | `externalEditor` | command line; "" unset | unset | the editor chain, after `GOBBLE_EDITOR` | any | process |
 
   - **Names** are lower camelCase, gobble's own. Several match Pi's, which is convenient but no longer a constraint.
+  - **Read** is D16's: a session key comes from that session's project, and a process key from the process's. Under `gobble acp` a project's process keys do not apply, and the template says so.
   - **Queue modes** are per-session defaults. `_gobble/set_steering_mode` and `_gobble/set_follow_up_mode` still change one session and persist nothing; their frozen shapes stay (0002-PLAN Phase 7).
-  - **`--add-dir <path>`** is the CLI's way to pass additional directories (0005-PLAN `:959`). It is a repeatable flag, not a key, since a directory list belongs to one run. Each path is made absolute against the working directory. `acpclient.NewSessionOptions` gains `AdditionalDirectories`, which `NewSessionWith` sends. `Conn.ResumeSession` gains a parameter carrying them, which its two callers pass (`internal/cli/sessions.go:61`; `internal/cli/slash.go:160`).
+  - **`--add-dir <path>`** is the CLI's way to pass additional directories (0005-PLAN `:959`). It is a repeatable flag, not a key, since a directory list belongs to one run. Each path is made absolute against the working directory. `acpclient.NewSessionOptions` gains `AdditionalDirectories`, which `NewSessionWith` sends. A new `Conn.ResumeSessionWith(ctx, id, cwd, ResumeSessionOptions{AdditionalDirectories}, on)` sends them on resume, and `ResumeSession` stays as its wrapper, so no public signature changes. Its two callers move to it (`internal/cli/sessions.go:61`; `internal/cli/slash.go:160`).
 - **D15. No secrets.**
   - The schema has no credential key.
   - A key in any layer whose last path segment ends in `key`, `token`, `secret` or `password`, ignoring case and an `_` or `-` before the suffix, is D7's error.
   - `--set` and `config set` refuse such a path before anything is written.
-- **D16. Settings are read at process start, and when a session starts** (`session/new`, `load`, `resume`). There is no file watcher. `/reload` (0005-MADR `:315`, 1.0, with no plan step yet) is not built here; when it is, it re-reads through this mechanism.
+- **D16. When settings are read.** Each key is read per session or per process (D14's "Read" column):
+  - **A session key** is resolved when a session starts (`session/new`, `load`, `resume`), from the global file, the project file of that session's working directory, and `--set`. So a running `gobble acp` gives each new session the current settings of its own project.
+  - **A process key** is resolved once, at process start:
+    - for the default chat, from the global file, the project file of `--cwd` or the working directory, and `--set`;
+    - for `gobble acp`, which has no single project, from the global file and `--set` only.
+
+  There is no file watcher. `/reload` (0005-MADR `:315`, 1.0, with no plan step yet) is not built here; when it is, it re-reads through this mechanism.
 - **D17. How the settings reach the code.** `internal/cli` builds each consumer's value from the effective settings, with the code's default for every unset key:
-  - **`agentOptions`** (`internal/cli/agent.go:37-49`) sets:
-    - `Compaction` to a complete `compaction.Settings`: `keepRecentTokens`, and `compaction.DefaultSettings.ReserveTokens`, so the all-zero check at `acpserver/agent.go:151-153` never mixes defaults;
-    - `MCP.StartupWait`;
-    - new `acpserver.Options` fields: `SteeringMode`, `FollowUpMode` and `Thinking`, read where `newQueue` and `thinkingOff` are today (`acpserver/agent.go:287`, `:731`; `acpserver/queue.go:26-28`). A loaded or resumed session keeps its history's thinking.
+  - **`agentOptions`** (`internal/cli/agent.go:37-49`) sets a new `acpserver.Options.Settings func(cwd string) acpserver.SessionSettings`, which `acpserver` calls when a session starts (`NewSession` and `open`, `acpserver/agent.go:244`, `:706`). `SessionSettings` holds:
+    - `SteeringMode` and `FollowUpMode`, given to the session's queue where `newQueue` is called today (`acpserver/agent.go:287`, `:731`; `acpserver/queue.go:26-28`);
+    - `Thinking`, a new session's level in place of `thinkingOff` at `:287`. A loaded or resumed session keeps its history's thinking;
+    - `Compaction`, a complete `compaction.Settings`: `keepRecentTokens`, with `compaction.DefaultSettings.ReserveTokens`, so the all-zero check at `acpserver/agent.go:151-153` never mixes defaults;
+    - `MCPStartupWait`, `MCPStopGrace` and `MCPStopTimeout`, for the session's MCP servers.
+
+    A nil `Settings`, as the tests and the public SDK use, gives today's defaults.
   - **`builtinTools`** (`internal/cli/agent.go:200-207`) sets `ShellPath`, `ShellCommandPrefix`, `MaxTimeout` and `UseClientTerminal` on `builtin.Options`, beside `OutputDir`.
-  - **`mcpclient.Options`** (`mcpclient/conn.go:39-51`) gains `StopGrace` and `StopTimeout`, whose zero values are today's constants (`mcpclient/proc.go:18-19`). `acpserver.MCPOptions` carries them to `mcpclient.Start` (`acpserver/mcp.go:123`).
+  - **`mcpclient.Options`** (`mcpclient/conn.go:39-51`) gains `StopGrace` and `StopTimeout`, whose zero values are today's constants (`mcpclient/proc.go:18-19`). `acpserver` passes the session's values to `mcpclient.Start` (`acpserver/mcp.go:123`), and `gobble mcp list` passes the process's (`internal/cli/mcp.go:231`).
   - **The store** (`internal/cli/agent.go:89-102`; `internal/cli/sessions.go:39-47`): `sessionDir` gives the flat store `--session-dir` gives, and the flag wins.
   - **The editor**: `editorCommand` (`internal/cli/editor/external.go:48`) takes the `externalEditor` value and tries it after `GOBBLE_EDITOR`.
 - **D18. Packages.**
@@ -532,7 +553,8 @@ Chosen: **A**. In the probe it kept the file exactly apart from the edited value
   - **`internal/filelock`** holds the lock files moved from `session/jsonl` (`lock.go`, `lock_unix.go`, `lock_windows.go`, `lock_other.go`), with:
     - `TryLock`, today's behaviour, which `session/jsonl` keeps using;
     - `Lock`, which retries 10 times, 20 ms apart, as Pi does, for settings and for `mcp.json`.
-  - **`mcpclient/file.go`** keeps its JSON editor, and takes `Lock` and an fsync before its rename.
+  - **`mcpclient/file.go`** keeps its JSON editor, takes `Lock`, and writes through `fsx.Workspace{}.WriteFile` in place of its own temp-and-rename (`mcpclient/file.go:177-198`), gaining the fsync and the Windows rename retry.
+  - **`internal/fsx`** gains `GitRepo`, the repository finder moved from `prompt/context.go:121-160` (`gitPaths` and `absUnder`), which `prompt` then calls. `internal/config` uses it for D2's project root.
   - No package outside `internal/cli` imports Kong, and none imports a new module.
 - **D19. Later phases add their keys,** each in its own change, with the Go types, the schema, its drift test and the template block:
   - F4: `defaultProvider`, `defaultModel` and the model scope;
