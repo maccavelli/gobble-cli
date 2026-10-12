@@ -357,7 +357,7 @@ Chosen: **A**. In the probe it kept the file exactly apart from the edited value
       - `gobble config init`;
       - any `gobble config` command that writes.
     - These never create it, being read-only: `version`, `completion`, `config path`, `config get`, `config validate` and `config schema`. That keeps 0008-MADR's read-only rule for completion.
-    - A project file is created only by `gobble config init --project`.
+    - A project file is created only by `gobble config init --project`. *(2026-10-12, 0018-PLAN P4 deviation 10: and by `gobble config edit --project`, as D12 has it; both are explicit. `set`, `unset` and `update` with `--project` on a missing project file exit 1, naming `config init --project`.)*
   - **Growth.** `gobble config update [--project] [--dry-run]` adds the template block of each template key the file lacks, active or commented-out:
     - after the block of the nearest earlier template key the file has, or after its section heading;
     - without changing any existing line, and printing what it added;

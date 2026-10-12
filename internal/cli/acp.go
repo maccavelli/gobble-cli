@@ -14,6 +14,7 @@ type ACPCmd struct{}
 
 // Run serves the agent until stdin closes or a signal arrives.
 func (*ACPCmd) Run(e *runEnv) error {
+	e.ensureSettingsFile()
 	var in io.Reader = strings.NewReader("") // no stdin: end of file at once
 	if r := e.stdinReader(); r != nil {
 		in = r

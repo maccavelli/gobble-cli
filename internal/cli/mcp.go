@@ -38,6 +38,7 @@ type MCPAddCmd struct {
 
 // Run validates the entry, then writes it.
 func (c *MCPAddCmd) Run(e *runEnv) error {
+	e.ensureSettingsFile()
 	const usage = "usage: gobble mcp add <server> [flags] (--url <url> | -- <command> [args...])"
 	if (c.URL == "") == (len(c.Command) == 0) {
 		return usageErrorf("%s", usage)
@@ -194,6 +195,7 @@ type MCPRemoveCmd struct {
 
 // Run removes the entry, or fails when the file does not define it.
 func (c *MCPRemoveCmd) Run(e *runEnv) error {
+	e.ensureSettingsFile()
 	path := mcpConfigPath()
 	if path == "" {
 		return failf("the config directory cannot be resolved")
@@ -222,6 +224,7 @@ type listReport struct {
 // file's config errors. It exits 1 when a config error exists or an
 // enabled server is not connected.
 func (c *MCPListCmd) Run(e *runEnv) error {
+	e.ensureSettingsFile()
 	path := mcpConfigPath()
 	cfg := mcpclient.Load(path)
 	cwd, err := os.Getwd()

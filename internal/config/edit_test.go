@@ -202,8 +202,8 @@ func TestEditQuotesAmbiguous(t *testing.T) {
 	runCases(t, []editCase{{"strings", "ambiguous.in.yaml", "ambiguous.want.yaml",
 		[]Edit{setEdit(t, "externalEditor", "1.10"), setEdit(t, "shellCommandPrefix", "yes")}}})
 	for text, want := range map[string]string{"all": "all", "": `""`, "a: b": `"a: b"`, "x #y": `"x #y"`, "on": `"on"`, "~": `"~"`, "-1": `"-1"`, "007": `"007"`} {
-		if got, _ := render(scalarNode(text)); got != want {
-			t.Errorf("render(%q) = %s, want %s", text, got, want)
+		if got, _ := renderScalar(scalarNode(text)); got != want {
+			t.Errorf("renderScalar(%q) = %s, want %s", text, got, want)
 		}
 	}
 }
@@ -232,6 +232,36 @@ func TestEditCRLFKept(t *testing.T) {
 	}
 	// A file without a final newline gains one before an insertion.
 	wantBytes(t, applyAll(t, []byte("a: 1\r\nb: 2"), setEdit(t, "steeringMode", "all")), []byte("a: 1\r\nb: 2\r\nsteeringMode: all\r\n"))
+}
+
+// Check refuses, in D7's words, what config set must exit 2 on; a
+// global-only key only for a project's file.
+func TestCheck(t *testing.T) {
+	bad := []struct {
+		path, value string
+		layer       Layer
+		want        string
+	}{
+		{"theme", "dark", LayerGlobal, `unknown setting "theme"`},
+		{"apiKey", "x", LayerGlobal, "apiKey: credentials go in auth.json, not settings.yaml"},
+		{"steeringMode", "some", LayerGlobal, "steeringMode: must be one of one-at-a-time, all"},
+		{"mcp.stopGraceMs", "-1", LayerProject, "mcp.stopGraceMs: must be at least 0"},
+		{"shellPath", "/bin/bash", LayerProject, "shellPath: only the global settings file can set this"},
+		{"sessionDir", "rel", LayerGlobal, "sessionDir: must be an absolute path, or start with ~"},
+	}
+	for _, b := range bad {
+		if err := Check(b.path, b.value, b.layer); err == nil || err.Error() != b.want {
+			t.Errorf("Check(%s, %s, %v) = %v, want %q", b.path, b.value, b.layer, err, b.want)
+		}
+	}
+	for _, g := range []struct {
+		path, value string
+		layer       Layer
+	}{{"shellPath", "/bin/bash", LayerGlobal}, {"steeringMode", "all", LayerProject}, {"externalEditor", "", LayerProject}} {
+		if err := Check(g.path, g.value, g.layer); err != nil {
+			t.Errorf("Check(%s, %s, %v) = %v", g.path, g.value, g.layer, err)
+		}
+	}
 }
 
 // A parent the user set to an explicit null, which clears the layer below

@@ -33,6 +33,10 @@ func (d Diagnostic) String() string {
 	return loc + ": " + d.Text
 }
 
+// Unknown reports whether d is an unknown key, which `gobble config validate
+// --strict` fails on (0018-MADR D7).
+func (d Diagnostic) Unknown() bool { return d.Text == textUnknown }
+
 // D7's texts.
 const (
 	textSecondDocument = "settings are one YAML document; a second one starts here"

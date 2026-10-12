@@ -19,6 +19,7 @@ type ChatCmd struct {
 // composes the input, then runs print mode or the line session over ACP
 // (0002-PLAN Phase 2).
 func (c *ChatCmd) Run(k *kong.Context, e *runEnv) error {
+	e.ensureSettingsFile()
 	g := givenFlags(k)
 	stdinPiped := e.stdin != nil && !e.out.caps.In
 	if err := c.validate(g, stdinPiped, hasAtPath(c.Prompt)); err != nil {

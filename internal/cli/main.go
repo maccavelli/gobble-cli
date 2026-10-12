@@ -17,6 +17,7 @@ import (
 	"github.com/maccavelli/gobble-cli/acpserver"
 	"github.com/maccavelli/gobble-cli/internal/cli/complete"
 	"github.com/maccavelli/gobble-cli/internal/cli/term"
+	"github.com/maccavelli/gobble-cli/internal/config"
 	"github.com/maccavelli/gobble-cli/internal/logging"
 	"github.com/maccavelli/gobble-cli/session"
 	"github.com/maccavelli/gobble-cli/tool"
@@ -71,11 +72,15 @@ func run(ctx context.Context, k *kong.Kong, root *Root, args []string, stdin *os
 	if done {
 		return code
 	}
+	overrides, err := parseOverrides(root.Set)
+	if err != nil {
+		return exitCode(ctx, out, err)
+	}
 	logs := &lazyLog{level: levelOf(root.LogLevel), out: out, stderr: out.err}
 	if strings.HasPrefix(kctx.Command(), "acp") {
 		logs.stderr = nil // stdio is the protocol (0004-PLAN Phase 2 step 4)
 	}
-	e := &runEnv{ctx: ctx, out: out, stdin: stdin, logs: logs, intr: intr, now: clock}
+	e := &runEnv{ctx: ctx, out: out, stdin: stdin, logs: logs, intr: intr, now: clock, overrides: overrides}
 	code = exitCode(ctx, out, kctx.Run(e))
 	if err := logs.close(); err != nil {
 		out.Warnf("close log file: %v", err)
@@ -148,6 +153,8 @@ type runEnv struct {
 	// and addendum texts, and whether to read context files (0005-PLAN
 	// F3-1). agentOptions adds the config directory.
 	prompt acpserver.PromptOptions
+	// overrides are --set's, the settings' session layer (0018-MADR D10).
+	overrides []config.Override
 }
 
 func (e *runEnv) log() *slog.Logger { return e.logs.get() }

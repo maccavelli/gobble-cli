@@ -13,6 +13,7 @@ import (
 
 	"github.com/maccavelli/gobble-cli/acpclient/acptest"
 	"github.com/maccavelli/gobble-cli/internal/buildinfo"
+	"github.com/maccavelli/gobble-cli/internal/config"
 	"github.com/maccavelli/gobble-cli/tool/builtin"
 )
 
@@ -106,6 +107,11 @@ func TestLaterFlagsAreRejected(t *testing.T) {
 		"append-system-prompt": true, "provider": true, "model": true, "thinking": true, "api-key": true,
 	}
 	sample := map[string]string{"thinking": "low"}
+	// --offline arrives with 0005-PLAN X3, not F4 (0018-MADR D20); the loop
+	// below reads laterFlags, so this pins the map itself.
+	if laterFlags["offline"] != "0005-PLAN X3" {
+		t.Fatalf("--offline is mapped to %q, want 0005-PLAN X3", laterFlags["offline"])
+	}
 	names := make([]string, 0, len(laterFlags))
 	for n := range laterFlags {
 		names = append(names, n)
@@ -212,7 +218,13 @@ func TestConfigPath(t *testing.T) {
 	if code := Main(t.Context(), []string{"config", "path"}, nil, &out, &errw); code != ExitOK {
 		t.Fatalf("exit %d: %s", code, errw.String())
 	}
-	want := "config: " + home + "\ndata:   " + home + "\nstate:  " + home + "\ncache:  " + home + "\n"
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	project, _ := config.ProjectFile(cwd)
+	want := "config: " + home + "\ndata:   " + home + "\nstate:  " + home + "\ncache:  " + home + "\n" +
+		"settings: " + filepath.Join(home, "settings.yaml") + "\nproject:  " + project + "\n"
 	if out.String() != want {
 		t.Fatalf("stdout = %q, want %q", out.String(), want)
 	}
@@ -220,7 +232,7 @@ func TestConfigPath(t *testing.T) {
 	if code := Main(t.Context(), []string{"config", "path", "--json"}, nil, &out, &errw); code != ExitOK {
 		t.Fatalf("--json: exit %d", code)
 	}
-	for _, key := range []string{`"config":`, `"data":`, `"state":`, `"cache":`} {
+	for _, key := range []string{`"config":`, `"data":`, `"state":`, `"cache":`, `"settings":`, `"project":`} {
 		if !strings.Contains(out.String(), key) {
 			t.Fatalf("JSON lacks %s: %s", key, out.String())
 		}

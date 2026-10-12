@@ -30,8 +30,8 @@ When this plan is done, these hold, and each is shown by a command in its phase:
 | P1 | `internal/filelock/doc.go`, `lock.go`, `lock_unix.go`, `lock_windows.go`, `lock_other.go`, `lock_test.go`; `internal/fsx/git.go`, `git_test.go` | *(deviation 1: `internal/fsx/write.go`, `internal/fsx/workspace_test.go`)* `session/jsonl/store.go`; `session/jsonl/lock.go`, `lock_unix.go`, `lock_windows.go`, `lock_other.go` (deleted); `prompt/context.go`; `mcpclient/file.go`, `mcpclient/file_test.go`; `mcpclient/conn.go`, `mcpclient/proc.go`, `mcpclient/proc_test.go` |
 | P2 | `internal/config/keys.go`, `settings.go`, `read.go`, `merge.go`, `resolve.go`, `diag.go`, `secret.go`, `override.go`, `schema.go`, `settings.yaml`, `template.go`, `genschema/main.go`, `testdata/settings.schema.json`, ~~`testdata/*.yaml` fixtures~~ *(deviation 4: none; the fixtures are built in the tests)*, `read_test.go`, `resolve_test.go`, `override_test.go`, `schema_test.go`, `template_test.go` | `internal/config/doc.go`; `internal/frontmatter/frontmatter.go` (package comment only); *(deviation 2: `.golangci.yml`; deviation 5: `mcpclient/proc_test.go`, `tool/builtin/shell_test.go`, `acpserver/mcp_test.go`)* |
 | P3 | `internal/config/edit.go`, `update.go`, `edit_test.go`, `update_test.go`, `testdata/edit/*` | — |
-| P4 | `internal/cli/config.go`, `internal/cli/config_test.go`, `internal/cli/settings.go`; `internal/config/render.go`, `render_test.go` | `internal/cli/root.go`, `internal/cli/configpath.go`, `internal/cli/main.go`, `internal/cli/main_test.go`, `internal/cli/chat.go`, `internal/cli/acp.go`, `internal/cli/mcp.go`, `internal/cli/flags.go`, `internal/cli/completion.go` |
-| P5 | `acpserver/settings_test.go`, `internal/cli/settings_test.go` | `acpserver/agent.go`, `acpserver/queue.go`, `acpserver/mcp.go`, `acpserver/config.go`; `internal/cli/agent.go`, `internal/cli/sessions.go`, `internal/cli/slash.go`, `internal/cli/editor/external.go`, `internal/cli/editor/external_test.go`; `acpclient/sessions.go`, `acpclient/sessions_test.go`; `internal/cli/flags.go` |
+| P4 | `internal/cli/config.go`, `internal/cli/config_test.go`, `internal/cli/settings.go`; `internal/config/render.go`, `render_test.go` | `internal/cli/root.go`, `internal/cli/configpath.go`, `internal/cli/main.go`, `internal/cli/main_test.go`, `internal/cli/chat.go`, `internal/cli/acp.go`, `internal/cli/mcp.go`, `internal/cli/flags.go`, `internal/cli/completion.go`; *(deviation 9: `internal/cli/editor/external.go`, `internal/cli/editor/external_test.go`; deviation 13: `internal/config/edit.go`, `internal/config/diag.go`, `internal/config/edit_test.go`, `internal/config/resolve_test.go`)* |
+| P5 | `acpserver/settings_test.go`, `internal/cli/settings_test.go` | `acpserver/agent.go`, `acpserver/queue.go`, `acpserver/mcp.go`, `acpserver/config.go`; `internal/cli/agent.go`, `internal/cli/sessions.go`, `internal/cli/slash.go`, `internal/cli/editor/external.go`, `internal/cli/editor/external_test.go`; `acpclient/sessions.go`, `acpclient/sessions_test.go`; `internal/cli/flags.go`; *(P4 deviation 12: `internal/cli/settings.go`)* |
 | P6 | — | `docs/architecture.md`, `README.md`, this plan (its execution record), `docs/README.md` |
 
 A phase that needs a file not listed here stops, and the file is raised as a deviation.
@@ -357,7 +357,7 @@ go mod tidy && git diff --exit-code go.mod go.sum -> no diff
 
    The helpers:
    - `lastLine(n)` is the largest line among `n` and its descendants, plus the line count of any multi-line scalar.
-   - `render(v)` writes a scalar plain only when `yaml.v3` re-reads the plain text as the same tag and value; otherwise double-quoted.
+   - `render(v)` writes a scalar plain only when `yaml.v3` re-reads the plain text as the same tag and value; otherwise double-quoted. *(Named `renderScalar` since P4, where revive's confusing-naming rule refuses it beside P4's exported `Render`.)*
    - An aliased value, or a path through an alias, is refused with D7's alias diagnostic.
 
    **The check.** After `Apply`, the result is passed to ~~`Read`~~ `Parse` *(P2 deviation 3)*. It must parse as one mapping document, the path must re-read as the value (or as absent), and every other leaf path must re-read equal, compared by tag and value. *(Deviation 8: except an ancestor of the path that was `key:` with nothing after it, which may become the mapping that holds the path, as case 3 makes it. An explicit `~` or `null` stays a value the check protects.)* Anything else returns D7's "could not be applied safely" error, and the file is untouched.
@@ -436,6 +436,7 @@ go test ./internal/config/...                                                   
    and `Config ConfigCmd` keeps its place.
 2. **`internal/cli/settings.go`** (new):
    - `runEnv` gains `overrides []config.Override`, parsed in `main.go`'s `run` from `root.Set` before the command runs. A parse error is a usage error, exit 2, with `ParseOverride`'s text.
+   - *(Deviation 12: the next two methods are written in P5, step 4, with their callers; in P4 they would have none, and the `unused` linter fails them.)*
    - `runEnv.processSettings(cwd string) config.Resolved` is resolved once with ~~`Read: config.Process`~~ `Read: config.ReadProcess` *(P2 deviation 3)*, cached, and its diagnostics printed through `e.out.Warnf` once. Under `gobble acp` it goes to the log through `e.log()` (MADR D7).
    - `runEnv.sessionSettings(cwd string) config.Resolved` resolves with ~~`Read: config.Session`~~ `Read: config.ReadSession` *(P2 deviation 3)* on every call. Its diagnostics go to the log.
    - `runEnv.ensureSettingsFile()` writes `config.Template()` to `config.GlobalFile(dirs.Config)` when the file is missing, through `config.Init`. A failure is a warning, and the run continues.
@@ -451,9 +452,11 @@ go test ./internal/config/...                                                   
    - `Schema{}`.
 
    Every value-taking argument has a `complete:` tag (0008-MADR D17): `complete:"setting"` names a new completion source. It is registered in `internal/cli/completion.go`'s `completionRegistry` and lists `config.Keys`' paths. The exits are D12's: usage errors 2, write failures 1.
+   - **`get --json`** *(deviation 11)*: without `--origin`, the effective `Settings` object, or the one path's value. With `--origin`, `{"settings": …}` or `{"value": …}`, beside `"origins": {path: {layer, file, line}}` and `"disabled": [{file, reason, keys}]`.
+   - **A write to a missing file** *(deviation 10)*: the global file is created from the template first (D9). A missing project file is created by `init --project` and `edit --project` only; `set`, `unset` and `update` with `--project` exit 1, naming `gobble config init --project`.
    - **`get`:** without `--json`, output is YAML, from a new `config.Render(r Resolved, path string, origin bool) []byte` in `internal/config/render.go`. `internal/cli` must not import `yaml.v3` (C4). `render_test.go` checks the YAML and the `--origin` annotations, written as `# from <file>:<line> (<layer>)` comments.
    - **`--project`** uses `config.ProjectFile(cwd)` from the working directory. Outside a repository, the project root is the working directory.
-   - **`edit`** runs D17's editor chain on the file, then prints `Validate`'s diagnostics.
+   - **`edit`** runs D17's editor chain on the file, then prints `Validate`'s diagnostics. *(Deviation 9: through a new `editor.Open(ctx, env, file, run) error` in `internal/cli/editor/external.go`, called through a package variable the test stubs, as `/edit` stubs `compose`.)*
 5. **`internal/cli/configpath.go`:**
    - `ConfigCmd`'s comment cites 0018-MADR, and it gains the subcommands of step 4.
    - `ConfigPathCmd` prints today's four lines unchanged, then `settings: <config>/settings.yaml` and `project:  <path>`, or `project:  none` when the working directory gives none.
@@ -489,6 +492,27 @@ go run ./cmd/gobble config path; go run ./cmd/gobble config validate            
 - `--project` writing a global-only key fails `TestConfigSetGlobalOnlyProjectRefused`;
 - `validate --strict` exiting 0 on an unknown key fails `TestConfigValidateExits`.
 
+### P4's deviations, 2026-10-12, decided by the owner
+
+9. **The editor chain could not open a named file.**
+   - **Found:** `internal/cli/editor` exports only `Compose` (`external.go:19`), which writes a temp `gobble-prompt-*.md`, runs the editor and returns the text with its trailing newline trimmed; `editorCommand` (`:48`) is unexported. MADR D12 has `config edit` open the settings file itself. `external.go` is in P5's file list, not P4's.
+   - **Decided** ("add editor.Open"): `external.go` gains `Open(ctx, env, file, run) error`, which runs `editorCommand`'s editor on the named file without a shell. `config edit` calls it through a package variable, which `TestConfigEdit` stubs. `external_test.go` gains `TestOpenRunsEditorOnFile`. Files added: `internal/cli/editor/external.go`, `internal/cli/editor/external_test.go`. P5 still adds `externalEditor` to the same chain.
+10. **MADR D9 and D12 disagreed on who creates a project file.**
+    - **Found:** D9 says a project file is created only by `gobble config init --project`; D12 says `gobble config edit [--project]` creates the file from the template if missing.
+    - **Decided** ("edit --project creates too"): `init --project` and `edit --project` create a missing project file, both explicit requests. `set`, `unset` and `update` with `--project` on a missing project file exit 1, naming `gobble config init --project`. MADR D9 gets a dated note. No file added.
+11. **`config get --json` had no defined shape with `--origin`.**
+    - **Found:** D12 says `--origin` adds each value's file, line and layer, and the disabled layers, without a JSON form.
+    - **Decided** ("object, wrapped with --origin"): step 4's `get --json` form. `TestConfigGetJSON` checks both. No file added.
+12. **Step 2's two resolvers had no caller in P4.**
+    - **Found:** `runEnv.processSettings` and `runEnv.sessionSettings` are called only by P5's consumers. The `unused` linter (`.golangci.yml:25`) fails an unexported method with no caller, so P4's lint gate could not pass as written.
+    - **Decided** ("move both to P5"): P4's `settings.go` holds `overrides` and `ensureSettingsFile`; the two resolvers are written in P5's step 4, with their callers. P4 has no settings consumer, as planned. File added to P5: `internal/cli/settings.go`.
+13. **`internal/config` gave the CLI no way to check a value, or to recognise an unknown key.**
+    - **Found:** D12 has a bad value exit 2 and a write failure 1, checked before anything is written. `config.Set` returns one plain error for both; `valueNode` is unexported (`internal/config/edit.go`). `validate --strict` must fail on an unknown key, whose text is an unexported constant (`internal/config/diag.go:40`), as is the global-only text (`:41`) that `--project` must refuse with.
+    - **Decided** ("in edit.go and diag.go"): `edit.go` gains `Check(path, value string, layer Layer) error`: an unknown path, a credential path, a global-only key for `LayerProject`, or a bad value, in D7's words. `Set` keeps its own checks. `diag.go` gains `Diagnostic.Unknown() bool`. Tests: `TestCheck` in `edit_test.go`, `TestDiagnosticUnknown` in `resolve_test.go`. Files added: `internal/config/edit.go`, `internal/config/diag.go`, `internal/config/edit_test.go`, `internal/config/resolve_test.go`.
+14. **`config edit`'s exit status was not defined.**
+    - **Found:** D12 has `config edit` validate the file after the editor exits and print the diagnostics, without an exit status.
+    - **Decided** ("1 on an error, as validate"): `config edit` exits 1 when the edited file has an error diagnostic, and 0 otherwise; the file stays as the user saved it. `TestConfigEdit` checks both. No file added.
+
 ### P5 — The consumers and `--add-dir` (D14, D16, D17; closes F11)
 
 1. **`acpserver/config.go`** gains:
@@ -514,6 +538,7 @@ go run ./cmd/gobble config path; go run ./cmd/gobble config validate            
    - `TestNilSettingsIsToday`: a nil function gives today's defaults.
    - `TestResumedKeepsHistoryThinking`.
 4. **`internal/cli/agent.go`:**
+   - *(P4 deviation 12: `internal/cli/settings.go` gains `runEnv.processSettings` and `runEnv.sessionSettings` here, as P4's step 2 describes them.)*
    - `agentOptions` sets `Settings: func(cwd string) acpserver.SessionSettings { return toSession(e.sessionSettings(cwd)) }`.
    - `builtinTools` (`:200-207`) sets `ShellPath` (with `~` expanded), `ShellCommandPrefix`, `MaxTimeout` and `UseClientTerminal` from `e.processSettings(cwd)`, beside `OutputDir`.
    - `internal/cli/mcp.go`'s `list` (`:231`) passes the process settings' `StopGrace` and `StopTimeout`.

@@ -45,6 +45,21 @@ func Compose(ctx context.Context, env func(string) string, dir, initial string, 
 	return strings.TrimRight(string(b), "\r\n"), nil
 }
 
+// Open opens file in the user's editor, chosen as Compose chooses it, and
+// waits for it to exit (0018-PLAN P4 deviation 9). It runs without a
+// shell, through run.
+func Open(ctx context.Context, env func(string) string, file string, run func(*exec.Cmd) error) error {
+	argv, err := editorCommand(env, runtime.GOOS)
+	if err != nil {
+		return err
+	}
+	cmd := exec.CommandContext(ctx, argv[0], append(argv[1:], file)...) //nolint:gosec // the user's own editor, run without a shell
+	if err := run(cmd); err != nil {
+		return fmt.Errorf("editor %s: %w", argv[0], err)
+	}
+	return nil
+}
+
 func editorCommand(env func(string) string, goos string) ([]string, error) {
 	for _, name := range []string{"GOBBLE_EDITOR", "VISUAL", "EDITOR"} {
 		if v := strings.TrimSpace(env(name)); v != "" {

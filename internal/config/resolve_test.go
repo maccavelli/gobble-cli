@@ -234,6 +234,21 @@ func TestUnknownKeyReported(t *testing.T) {
 	}
 }
 
+// Unknown picks out the unknown-key warning, and nothing else.
+func TestDiagnosticUnknown(t *testing.T) {
+	l := newLayout(t, "theme: dark\nsteeringMode: some\nmcp: 3\n", "")
+	_, ds := Resolve(Options{ConfigDir: l.config})
+	var unknown []string
+	for _, d := range ds {
+		if d.Unknown() {
+			unknown = append(unknown, d.Path)
+		}
+	}
+	if len(ds) != 3 || !slices.Equal(unknown, []string{"theme"}) {
+		t.Fatalf("diagnostics %v, unknown %v", ds, unknown)
+	}
+}
+
 // A credential-shaped key is an error, wherever it is, and its value is
 // never printed.
 func TestCredentialPathRefused(t *testing.T) {

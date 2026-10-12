@@ -58,13 +58,14 @@ const (
 	plan0005F3 = "0005-PLAN F3"
 	plan0005F4 = "0005-PLAN F4"
 	plan0005F6 = "0005-PLAN F6"
+	plan0005X3 = "0005-PLAN X3" // --offline (0018-MADR D20)
 )
 
 // laterFlags maps each flag whose behaviour a later plan delivers to that
 // plan. Such a flag is parsed and rejected with exit 2, never ignored
 // (0008-MADR D12).
 var laterFlags = map[string]string{
-	"provider": plan0005F4, "model": plan0005F4, "thinking": plan0005F4, "api-key": plan0005F4, "offline": plan0005F4,
+	"provider": plan0005F4, "model": plan0005F4, "thinking": plan0005F4, "api-key": plan0005F4, "offline": plan0005X3,
 	"approve": plan0005F6, "yes": plan0005F6,
 }
 

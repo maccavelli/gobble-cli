@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/maccavelli/gobble-cli/internal/cli/complete"
+	"github.com/maccavelli/gobble-cli/internal/config"
 	"github.com/maccavelli/gobble-cli/session"
 	"github.com/maccavelli/gobble-cli/session/jsonl"
 	"github.com/maccavelli/gobble-cli/tool/builtin"
@@ -61,6 +62,19 @@ func completionRegistry() complete.Registry {
 		"model":     complete.ModelSource(complete.NoCandidates, thinkingLevels),
 		"tools":     complete.ListSource(toolCandidates, false),
 		"mcpserver": complete.ListSource(mcpServerCandidates, true),
+		"setting":   complete.ListSource(settingCandidates, true),
+	}
+}
+
+// settingCandidates are the settings' paths, in the template's order, each
+// described by its documentation (0018-MADR D12).
+func settingCandidates(context.Context) iter.Seq[complete.Candidate] {
+	return func(yield func(complete.Candidate) bool) {
+		for _, k := range config.Keys {
+			if !yield(complete.Candidate{Value: k.Path, Description: k.Doc}) {
+				return
+			}
+		}
 	}
 }
 

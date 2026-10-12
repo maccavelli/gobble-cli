@@ -119,6 +119,21 @@ func diagnosticsError(ds []Diagnostic) error {
 	return errors.Join(errs...)
 }
 
+// Check reports, in D7's words, why path=value cannot be written to a file
+// of layer, or nil: an unknown path, a credential path, a global-only key in
+// a project's file, or a bad value. `gobble config set` checks before it
+// writes, so these exit 2 and a write failure 1 (0018-MADR D12; 0018-PLAN
+// P4 deviation 13).
+func Check(path, value string, layer Layer) error {
+	if _, err := valueNode(path, value); err != nil {
+		return err
+	}
+	if k, _ := KeyOf(path); layer == LayerProject && k.Scope == ScopeGlobalOnly {
+		return fmt.Errorf("%s: %s", path, textGlobalOnly)
+	}
+	return nil
+}
+
 // valueNode parses and checks a value for path, as --set's are, and returns
 // it as a scalar node of the key's type.
 func valueNode(path, text string) (*yaml.Node, error) {
@@ -301,7 +316,7 @@ func setActive(file string, l *lines, s step, e Edit) ([]byte, error) {
 	}
 	v := s.value
 	if v.Kind == yaml.ScalarNode && e.Value.Kind == yaml.ScalarNode && v.Style&(yaml.LiteralStyle|yaml.FoldedStyle) == 0 {
-		text, err := render(e.Value)
+		text, err := renderScalar(e.Value)
 		if err != nil {
 			return nil, err
 		}
@@ -417,7 +432,7 @@ func keyHead(l *lines, key *yaml.Node) (string, bool) {
 // value in block style two spaces deeper than the key (D8 case 4).
 func valueLines(head string, v *yaml.Node, indent int) ([]string, error) {
 	if v.Kind == yaml.ScalarNode {
-		text, err := render(v)
+		text, err := renderScalar(v)
 		if err != nil {
 			return nil, err
 		}
@@ -702,12 +717,12 @@ func byteOffset(line string, column int) int {
 // probe), so a string with one of these values is quoted.
 var yaml11Words = strings.Fields("y n yes no on off")
 
-// render writes a scalar plain when yaml.v3 reads the plain text back as
+// renderScalar writes a scalar plain when yaml.v3 reads the plain text back as
 // the same tag and value, and double-quoted otherwise (D8): a string 1.10
 // is written "1.10".
-func render(v *yaml.Node) (string, error) {
+func renderScalar(v *yaml.Node) (string, error) {
 	if v.Kind != yaml.ScalarNode {
-		return "", errors.New("config: render: not a scalar")
+		return "", errors.New("config: renderScalar: not a scalar")
 	}
 	if plainReadsBack(v.Value, v.ShortTag()) {
 		return v.Value, nil

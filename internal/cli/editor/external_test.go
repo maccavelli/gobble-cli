@@ -93,6 +93,30 @@ func TestCompose(t *testing.T) {
 	}
 }
 
+// Open runs the chosen editor on the named file itself, and passes on the
+// editor's failure.
+func TestOpenRunsEditorOnFile(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "settings.yaml")
+	env := func(k string) string {
+		if k == "VISUAL" {
+			return `"my editor" -w`
+		}
+		return ""
+	}
+	var args []string
+	run := func(cmd *exec.Cmd) error { args = cmd.Args; return nil }
+	if err := Open(t.Context(), env, file, run); err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"my editor", "-w", file}; !slices.Equal(args, want) {
+		t.Fatalf("args = %q, want %q", args, want)
+	}
+	boom := errors.New("exit status 2")
+	if err := Open(t.Context(), env, file, func(*exec.Cmd) error { return boom }); !errors.Is(err, boom) {
+		t.Fatalf("err = %v, want the editor's error", err)
+	}
+}
+
 func TestComposeEditorFails(t *testing.T) {
 	dir := t.TempDir()
 	boom := errors.New("exit status 1")
