@@ -334,6 +334,7 @@ go mod tidy && git diff --exit-code go.mod go.sum -> no diff
    // Apply returns data with e applied, or an error naming why it could not be applied safely. It never touches a file.
    func Apply(file string, data []byte, e Edit) ([]byte, error)
    // Set and Unset lock <file>.lock, read, Apply, check, and write through fsx.Workspace{}.WriteFile.
+   // (P1 deviation 1: through fsx.WriteFileMode(file, data, 0o644).)
    func Set(file, path, value string) error
    func Unset(file, path string) error
    ```
@@ -350,6 +351,7 @@ go mod tidy && git diff --exit-code go.mod go.sum -> no diff
    5. **A removal.**
       - A key in `Keys`: replace its lines with the template's commented form, taken from the embedded template at the key's indentation.
       - Otherwise: delete its lines.
+      - *(Deviation 7: a parent left with no active key is then commented too, in the same form, and so on upward, so that unsetting and setting a key again round-trips through case 2. A parent that is not a template group, and is left empty, is deleted.)*
 
       The comment lines above it stay.
 
@@ -358,7 +360,7 @@ go mod tidy && git diff --exit-code go.mod go.sum -> no diff
    - `render(v)` writes a scalar plain only when `yaml.v3` re-reads the plain text as the same tag and value; otherwise double-quoted.
    - An aliased value, or a path through an alias, is refused with D7's alias diagnostic.
 
-   **The check.** After `Apply`, the result is passed to ~~`Read`~~ `Parse` *(P2 deviation 3)*. It must parse as one mapping document, the path must re-read as the value (or as absent), and every other leaf path must re-read equal, compared by tag and value. Anything else returns D7's "could not be applied safely" error, and the file is untouched.
+   **The check.** After `Apply`, the result is passed to ~~`Read`~~ `Parse` *(P2 deviation 3)*. It must parse as one mapping document, the path must re-read as the value (or as absent), and every other leaf path must re-read equal, compared by tag and value. *(Deviation 8: except an ancestor of the path that was `key:` with nothing after it, which may become the mapping that holds the path, as case 3 makes it. An explicit `~` or `null` stays a value the check protects.)* Anything else returns D7's "could not be applied safely" error, and the file is untouched.
 2. **`update.go`:**
 
    ```go
@@ -382,7 +384,8 @@ go mod tidy && git diff --exit-code go.mod go.sum -> no diff
    - `TestUnsetTemplateKey`;
    - `TestUnsetUnknownKey`;
    - `TestEditQuotesAmbiguous` (`1.10` and `yes` into a string key become `"1.10"` and `"yes"`);
-   - `TestEditCRLFKept`;
+   - `TestEditCRLFKept` *(deviation 6: its CRLF input and expected bytes are built in the test from an LF fixture)*;
+   - *(deviation 7: `TestUnsetLastChildCommentsParent`, and an unset-then-set round trip back to the original bytes)*;
    - `TestEditAliasRefused`;
    - `TestEditUnparsableRefused` (the file is unchanged, by bytes and by modification time);
    - `TestEditCheckRefusesBadSplice`, through a test-only hook that corrupts the splice, so the check returns its error;
@@ -409,6 +412,18 @@ go test ./internal/config/...                                                   
 - the check skipped makes `TestEditCheckRefusesBadSplice` write the corrupt file and fail;
 - `Update` changing an existing line fails `TestUpdateKeepsEveryLine`;
 - line endings normalised to LF fail `TestEditCRLFKept`.
+
+### P3's deviations, 2026-10-12, decided by the owner
+
+6. **A CRLF fixture cannot be a committed file.**
+   - **Found:** step 3 makes each edit test a byte-diff against a file in `testdata/edit/`. `.gitattributes` (`* text=auto eol=lf`, 0007-MADR D3) turns a CRLF fixture and its expected file into LF on checkout, so `TestEditCRLFKept` would pass while testing LF. This is the cause of P2's deviation 4.
+   - **Decided** ("CRLF case in code"): `TestEditCRLFKept` builds its input and expected bytes from an LF fixture, with each `\n` made `\r\n`. Every other edit test keeps its `testdata/edit/` files. No file added.
+7. **Unsetting a parent's last active key left a parent the editor could not reuse.**
+   - **Found:** case 5 as written turns only the key's line back into its template form. Unsetting `mcp.stopGraceMs` from `mcp:\n  stopGraceMs: 100\n` leaves `mcp:\n#   stopGraceMs: 500\n`. The empty `mcp:` is null, which D4 reads as absent, so the meaning is safe, but case 2 then cannot use the commented line: a null parent has no extent for it to sit inside. A later set falls to case 3 and inserts a second, active line beside the stale commented one, and a later case-2 search finds two candidates.
+   - **Decided** ("comment the parent too"): after a removal, a parent left with no active key is commented in the template's form too, and so on upward. A parent that is not a template group, and is left empty, is deleted. Unsetting and then setting a key restores the file's bytes. Tests added: `TestUnsetLastChildCommentsParent`, and the round trip in `TestUnsetTemplateKey`. No file added.
+8. **D8's check refused the insertion D8's case 3 describes.**
+   - **Found:** case 3 inserts a key "two spaces deeper than the parent when it has none". In block YAML a parent with no children is `mcp:` with nothing after it, which reads as null; the insertion makes it a mapping. The check requires every other path to read back unchanged, so `set mcp.stopGraceMs 5` on `mcp:` was refused (`testdata/edit/empty.in.yaml`, found by the test added for case 1's empty value). The code is new; the conflict is between two sentences of MADR D8.
+   - **Decided** ("empty parent only"): the check treats an ancestor of the edited path that was `key:` with nothing after it as part of the edit; it may become the mapping that holds the path. An explicit `~` or `null`, which D4 reads as clearing the layer below, is a value the user wrote, and the check still refuses to replace it. Tests: the `empty` case of `TestEditActiveScalar`, and `TestEditExplicitNullParentRefused`. No file added.
 
 ### P4 — The CLI: loading, first-run creation, `--set` and the `config` commands (D1, D9's creation, D10–D12, D20's code comment; closes F1, F9, F12)
 

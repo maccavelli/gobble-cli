@@ -1,0 +1,5 @@
+tools:
+  bash:
+    useClientTerminal: true
+    maxTimeoutMs: 5
+other: [1, 2]

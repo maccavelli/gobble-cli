@@ -1,0 +1,5 @@
+theme: dark  # not ours
+# mcp:
+steeringMode: all
+custom:
+  a: 1

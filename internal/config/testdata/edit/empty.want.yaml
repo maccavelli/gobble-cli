@@ -1,0 +1,4 @@
+steeringMode: all   # set me
+mcp:
+  stopGraceMs: 5
+followUpMode: all

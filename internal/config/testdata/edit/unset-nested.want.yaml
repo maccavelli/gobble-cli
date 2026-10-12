@@ -1,0 +1,6 @@
+# prose for steering
+steeringMode: all
+mcp:
+  # grace prose
+#   stopGraceMs: 500
+  stopTimeoutMs: 9

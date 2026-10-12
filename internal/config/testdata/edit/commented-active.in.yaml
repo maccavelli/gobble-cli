@@ -1,0 +1,4 @@
+mcp:
+  startupWaitMs: 1
+#   stopGraceMs: 500
+#   stopTimeoutMs: 2000

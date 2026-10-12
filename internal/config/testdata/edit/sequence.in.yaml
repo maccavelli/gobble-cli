@@ -1,0 +1,7 @@
+tools:
+  bash:
+    useClientTerminal:   # was a list
+      - a
+      - b
+    maxTimeoutMs: 5
+other: [1, 2]

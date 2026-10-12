@@ -1,0 +1,6 @@
+# gobble settings
+steeringMode: all   # how queued messages arrive
+externalEditor: 'vim'  # the editor
+mcp:
+  stopGraceMs: 250 # ms
+  stopTimeoutMs: &t 2000

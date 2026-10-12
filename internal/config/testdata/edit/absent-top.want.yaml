@@ -1,0 +1,7 @@
+# only prose
+steeringMode: all
+mcp:
+  stopGraceMs: 1
+followUpMode: all
+
+# trailing comment

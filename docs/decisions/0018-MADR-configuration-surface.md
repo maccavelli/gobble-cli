@@ -329,6 +329,8 @@ Chosen: **A**. In the probe it kept the file exactly apart from the edited value
 
      The comments above it stay either way.
 
+     *(2026-10-12, 0018-PLAN P3 deviation 7: a parent left with no active key is then commented too, in the template's form, and so on upward; a parent that is not a template group, and is left empty, is deleted. Otherwise the empty parent reads as null, and case 2 cannot reach the commented key below it, so a later set would leave two lines for one key.)*
+
   Two rules apply to every case:
 
   - **Scalars are written plain** only when the plain text reads back as the same type and value. Otherwise they are double-quoted, so a string `1.10` is written `"1.10"`.
@@ -336,6 +338,8 @@ Chosen: **A**. In the probe it kept the file exactly apart from the edited value
     - it parses as one mapping document;
     - the edited path reads back as the value set, or as absent after a removal;
     - every other path in the file reads back unchanged.
+
+      *(2026-10-12, 0018-PLAN P3 deviation 8: except an ancestor of the edited path that was `key:` with nothing after it, which case 3 turns into the mapping holding the path. An explicit `~` or `null` is still protected.)*
 
     Otherwise the edit is refused with D7's diagnostic, and the file is untouched.
 

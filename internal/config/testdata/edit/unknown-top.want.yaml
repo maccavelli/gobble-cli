@@ -1,0 +1,5 @@
+mcp:
+  retries: 3
+steeringMode: all
+custom:
+  a: 1

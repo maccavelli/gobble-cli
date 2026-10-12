@@ -1,0 +1,4 @@
+shellCommandPrefix: |
+  set -e
+  set -u
+externalEditor: vim

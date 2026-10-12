@@ -1,0 +1,6 @@
+steeringMode: all
+mcp:
+  stopGraceMs: 100
+# tools:
+#   bash:
+#     maxTimeoutMs: 600000

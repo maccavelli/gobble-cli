@@ -1,0 +1,9 @@
+# How messages queued while a turn runs reach the model.
+# steeringMode: one-at-a-time
+# followUpMode: one-at-a-time
+
+# MCP timings, in milliseconds.
+# mcp:
+#   startupWaitMs: 10000
+#   stopGraceMs: 500
+#   stopTimeoutMs: 2000

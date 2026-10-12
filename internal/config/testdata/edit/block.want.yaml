@@ -1,0 +1,2 @@
+shellCommandPrefix: set -euo pipefail
+externalEditor: vim

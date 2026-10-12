@@ -1,0 +1,9 @@
+# only prose
+steeringMode: all
+mcp:
+  stopGraceMs: 1
+tools:
+  bash:
+    maxTimeoutMs: 1000
+
+# trailing comment

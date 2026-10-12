@@ -1,0 +1,6 @@
+theme: dark  # not ours
+mcp:
+  retries: 3
+steeringMode: all
+custom:
+  a: 1
