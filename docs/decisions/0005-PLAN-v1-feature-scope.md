@@ -255,8 +255,8 @@ API.
   and no write.
 * A permission round-trip through `acptest.Pair` records the
   `session/request_permission` frame.
-* An untrusted project's `.gobble/settings.json` has no effect. A test
-  fails on a copy that loads it anyway.
+* An untrusted project's ~~`.gobble/settings.json`~~ `.gobble/settings.yaml` has no effect. A test
+  fails on a copy that loads it anyway. *(2026-10-12: the file is YAML, per [0018-MADR-configuration-surface.md](0018-MADR-configuration-surface.md). Its D5 reads the project layer but applies it only when F6's trust says so.)*
 
 ### F7 — hooks (1.0)
 
@@ -355,7 +355,7 @@ API.
    process status (0, 10, 1). `internal/cli` is the only importer of
    `go-core-lib` (0004-MADR import-boundary rule 8).
 5. The Pi bridge (0003): discovery sources, `session list --pi`,
-   `session import`, `config import --from-pi`, `auth import --from-pi`,
+   `session import`, ~~`config import --from-pi`~~ *(dropped 2026-10-12 by the owner; 0018-MADR D13)*, `auth import --from-pi`,
    and `--no-pi-bridge`.
 6. The **release gate**. Build a table in this PLAN listing every 1.0 row
    of 0005-MADR with its test name and the last CI result. Mark each row
@@ -705,7 +705,7 @@ drops child-session ids. No new phases.
   2. **Surface.** Bind the MADR's full update surface, with flags local to `update`. `--check` uses `Checker.Check`, apply uses `RunWith`, and the TUI uses `Start` / `Stream`.
   3. **Probes.** Use `NewVersionProber` and `NewImageVerifier`.
   4. **Install guards.** Add the Homebrew/symlink detection, and the refusal when `AI_AGENT=gobble` is set.
-  5. **Readiness.** Add `gobble auth check [--json]`, and `--offline` / `GOBBLE_OFFLINE`.
+  5. **Readiness.** Add `gobble auth check [--json]`, and `--offline` / `GOBBLE_OFFLINE`. *(2026-10-12: `--offline`'s phase is X3, by the later entry "F4 made executable" of 2026-10-10; 0018-MADR D20.)*
   6. **Accept rewrite.** The update accept is rewritten as follows:
      * `gobble update --check` runs against `selfupdatetest.GitHubServer`, with `Request.Platform` set to `linux/amd64` and a fixture named `gobble-linux-amd64`, through `Checker.Check`. It exits 10.
      * Apply runs against a binary copied into a temp home with an explicit `TargetPolicy{ExecutablePath, AllowedRoots}`.
@@ -823,7 +823,7 @@ The facts, from two read-only surveys of 2026-10-07: Pi at `312184edb`, and this
   * `os.Root` over `cwd` plus ACP `additionalDirectories`, where "a path outside those roots requires a permission decision";
   * the client's `fs/*` methods when advertised.
 * **The pinned go-llmprovider-sdk `v1.2.1` carries text only.** `MessageItem` and `FunctionCallOutputItem` hold a `Text string` (`llmprovider/item.go:18-45`), and no image part exists. So no image can reach a model, which 0005-MADR's amendment of 2026-10-01 already says (`:570-573`).
-* **No settings mechanism exists.** `internal/config` is a placeholder, and the config surface is undecided (0008-MADR). `shellPath`, `shellCommandPrefix`, `tools.bash.useClientTerminal` and `images.autoResize` have no home.
+* **No settings mechanism exists.** `internal/config` is a placeholder, and the config surface is undecided (~~0008-MADR~~ 0002-MADR and 0004-MADR, amendments of 2026-10-04; corrected 2026-10-12, 0018-MADR D20). `shellPath`, `shellCommandPrefix`, `tools.bash.useClientTerminal` and `images.autoResize` have no home.
 * **No MADR names a gitignore library.** 0005-MADR names `doublestar` for globs (`:123`) and asks only for "a gitignore-aware walk". `golang.org/x/text`, which holds `unicode/norm` for NFKC, is already a direct requirement.
 
 The owner decided four questions on 2026-10-07:

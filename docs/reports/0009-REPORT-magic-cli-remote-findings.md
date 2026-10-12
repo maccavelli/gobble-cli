@@ -28,6 +28,10 @@ magic-cli-remote `main` was at `9778cbc1` (2026-10-04) for every finding below, 
 | M8 | 2026-10-05 | dependency defect | The pinned ACP SDK fork's `SetLogger` races with the connection's reader goroutine | open |
 | M9 | 2026-10-07 | contract | gobble froze its `_gobble/` methods; 0179 D8's `Compact` parameter differs | open |
 | M10 | 2026-10-07 | dependency | The SDK fork cancels a session's running prompt when a new `session/prompt` arrives | reference |
+| M11 | 2026-10-12 | defect | The replay duplicate check drops a replayed plan whatever its entries | open |
+| M12 | 2026-10-12 | defect | A cold-started phone loses the session's plan | open |
+| M13 | 2026-10-12 | defect | grok's cancelled todos show as done | open |
+| M14 | 2026-10-12 | contract | ACP providers have no todo resync; gobble will offer `_gobble/get_todos` | open |
 
 ## Findings
 
@@ -161,3 +165,45 @@ magic-cli-remote `main` was at `9778cbc1` (2026-10-04) for every finding below, 
 - **Fact, in the fork at `v0.13.6-mcr.2`:** the agent side's `session/prompt` dispatch cancels the session's running prompt before it calls the agent: `if prev, ok := a.sessionCancels[...]; ok { prev() }` (`agent_gen.go:410-416`).
 - **Effect on gobble:** a second `session/prompt` mid-turn cancels the running turn. gobble then refuses the second with -32600 while the first is still releasing the turn, or runs it once the first has released. A client that sends a prompt mid-turn can lose the running turn either way. `_gobble/steer` and `_gobble/follow_up` are the way to send input mid-turn.
 - **Why it is here:** magic-cli-remote pins the same fork (M8). Its daemon queues mid-turn input in a FIFO (0179 "More Information", `:363`), so it does not send a second prompt today. A change that does would cancel the running turn.
+
+### M11 — the replay duplicate check drops a replayed plan whatever its entries (2026-10-12)
+
+- **Found by:** [0017-MADR](../decisions/0017-MADR-todo-list-ordered-live-and-mcremote-native.md), "What was measured, not assumed". magic-cli-remote at `9b75e5f3`.
+- **Fact:**
+  - Events re-emitted by `session/load` are marked `Replay`. They go into history but are not broadcast live (`internal/session/manager.go:1479-1484`).
+  - Before such an event is stored, `hasReplayDuplicateLocked` drops it if the ring already holds an event with the same type, text, tool id and agent session id (`:270`, `:369-379`, `:388-399`).
+  - A `plan` event has no text and no tool id, so any replayed plan matches any plan already in the ring, whatever its entries.
+- **Effect:** after a `session/load`, the session's history keeps the plan it already had, and drops the one the agent replayed. A phone that reads that history shows a stale list.
+- **Wanted upstream:** for `TypePlan`, either:
+  - fold the entries into the duplicate key; or
+  - treat a replayed plan as the session's current plan state, which replaces rather than duplicates.
+
+### M12 — a cold-started phone loses the session's plan (2026-10-12)
+
+- **Found by:** 0017-MADR. magic-cli-remote at `9b75e5f3`.
+- **Fact:**
+  - In retention a plan is `ClassProgress`, among the first classes evicted when the session's ring is over budget (`internal/event/retention.go:24-28`, `:82-86`).
+  - Nothing keeps the latest plan for a client that reconnects; history pages are cut from the ring.
+  - The app's transcript cache leaves the plan out: `hasControlState` does not count it (`apps/mobile/lib/data/chat/chat_models.dart:577-582`), and the cache writes items and modes only (`lib/data/chat/transcript_cache.dart:320-331`).
+- **Effect:** after a cold start, the "Todos" panel is empty until the agent sends its list again, unless the last plan event happens to be in the history page the app fetches.
+- **Wanted upstream:**
+  - keep the session's latest plan as control state;
+  - send it to a reconnecting client with its first history page;
+  - cache it in the app beside the modes.
+- **gobble's side:** 0017-MADR D8 re-sends the list at every turn's end, which makes a missed list less likely but does not prevent it.
+
+### M13 — grok's cancelled todos show as done (2026-10-12)
+
+- **Found by:** 0017-MADR. magic-cli-remote at `9b75e5f3`, grok-build at `2bdd1d6`.
+- **Fact:**
+  - grok sends a cancelled todo as ACP `completed`, with `_meta.cancelled: true` (grok-build `crates/codegen/xai-grok-shell/src/tools/todo.rs:48-73`).
+  - `acpcommon.PlanEntries` copies content, status and priority only, and drops `_meta` (`internal/provider/acpcommon/plan.go:10-48`).
+- **Effect:** the phone counts a cancelled grok item as done. Its rule for opencode and Kilo is the opposite, `pending` with a "(cancelled) " prefix, "not `completed` — false 'done' misleads multi-step UX" (0020-MADR KD5, `:247`; `internal/provider/opencode/todo.go:55-57`).
+- **Wanted upstream:** apply KD5 to ACP entries whose `_meta.cancelled` is true. gobble sends its cancelled items in KD5's form already, with `_meta.gobble.status: "cancelled"` (0017-MADR D6).
+
+### M14 — ACP providers have no todo resync (2026-10-12)
+
+- **Found by:** 0017-MADR. magic-cli-remote at `9b75e5f3`.
+- **Fact:** opencode and Kilo sessions recover their todo list through `GET /session/{id}/todo`, even while a turn is busy (`internal/provider/opencode/todo.go:81-92`; `resync.go:21-37`). The reason given is that "SSE can lose mid-turn `todo.updated` frames" (0020-MADR, `:1027`). The generic ACP provider has nothing equivalent.
+- **gobble's side:** once 0017-MADR is built, gobble answers `_gobble/get_todos {sessionId}` with `{todos: [{content, status, priority}]}`, its own statuses with `cancelled` included, and answers it while a prompt runs (D13). It is listed in `agentCapabilities._meta.gobble.extensions`.
+- **Wanted upstream:** gobble's provider (0179) calls it on reconnect, as the opencode provider calls its REST read, and maps `cancelled` by KD5.

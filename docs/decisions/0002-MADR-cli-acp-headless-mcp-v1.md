@@ -1041,6 +1041,8 @@ gobble's part:
 
 The CLI library stays Kong. The config surface is undecided and will be either a native Kong facility or a surface we write.
 
+*(2026-10-12: decided in [0018-MADR-configuration-surface.md](0018-MADR-configuration-surface.md), D1: a surface gobble writes, `internal/config`, reading a commented `settings.yaml`, with Kong in `internal/cli` binding flags and their environment variables on top.)*
+
 ### Amendment (2026-10-04): the magic-cli-remote record is named `pigo` there
 
 The fifth amendment says the magic-cli-remote half of the contract is `0179-MADR-gobble-native-acp-provider.md`, with `provider.IDGobble`. At magic-cli-remote `9778cbc1` the file is `docs/decisions/0179-MADR-pigo-native-acp-provider.md` (`status: proposed`), created as `pigo` in `72588004`. It names `provider.IDPigo`, wire id `"pigo"`, `DefaultBin: "pigo"` and `_pigo/*` methods, and "gobble" occurs nowhere in that repository (0008-MADR F22, measurement 13). The other facts of the fifth amendment hold at `9778cbc1`. Renaming 0179 to gobble, with `_gobble/*` methods, is a companion change in magic-cli-remote (0008-MADR D20). The rename is out of scope here.

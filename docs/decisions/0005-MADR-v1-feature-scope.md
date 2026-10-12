@@ -259,7 +259,7 @@ Checkpoints:
 | Flight recorder | 1.x | `runtime/trace.FlightRecorder` ring. `gobble debug trace` and slow-turn automatic dumps. |
 | `gobble doctor` | 1.0 | Checks directories, settings against the schema, provider credentials (a models list call), MCP start-up, `git` and shell presence, bridge sources, and terminal capabilities. `--json` output. |
 | `/bug` | 1.x | A redacted diagnostic bundle (version, settings with secrets removed, the last N log lines, the session file on request). |
-| No phone-home | 1.0 | gobble has no install telemetry, analytics, device id, or tracking id. Pi's `enableInstallTelemetry`, `enableAnalytics`, `trackingId`, and `deviceId` are dropped on `config import`. |
+| No phone-home | 1.0 | gobble has no install telemetry, analytics, device id, or tracking id. Pi's `enableInstallTelemetry`, `enableAnalytics`, `trackingId`, and `deviceId` are ~~dropped on `config import`~~ never read: there is no `config import` *(2026-10-12, 0018-MADR D13)*. |
 
 #### Distribution (report D9)
 
@@ -295,6 +295,8 @@ gobble version
 gobble debug trace                              (1.x)
 gobble completion bash|zsh|fish|powershell
 ```
+
+*(2026-10-12, [0018-MADR-configuration-surface.md](0018-MADR-configuration-surface.md) D12: `gobble config` also gains `unset`, `init` and `update`, for the YAML `settings.yaml` and its template, and `import` is dropped, by the owner (D13).)*
 
 Global flags: `--model`, `--thinking`, `--mode`, `--cwd`, `--continue`,
 `--resume <id>`, `--fork <id>`, `--tools`, `--no-context-files`,
@@ -944,7 +946,7 @@ Otherwise it stays a shell command. File status, diffs, git, checksums and archi
    - it is recorded in a `custom{gobble.context}` entry, so a resumed session does not add it again;
    - when a compaction drops that read, the file is added again at the next read that reaches it.
 6. **The Pi bridge** stays 0005-PLAN F10's. F3's discovery lists it as its last source, empty until then.
-7. **A library: `go.yaml.in/yaml/v3`,** v3.0.5, published 2026-07-26: the YAML organisation's continuation of `gopkg.in/yaml.v3`, pure Go. It parses `SKILL.md` and template frontmatter, as Pi parses frontmatter with YAML (`coding-agent/src/utils/frontmatter.ts`). It is required in the commit that first imports it (AGENTS.md, Dependencies).
+7. **A library: `go.yaml.in/yaml/v3`,** v3.0.5, published 2026-07-26: the YAML organisation's continuation of `gopkg.in/yaml.v3`, pure Go. It parses `SKILL.md` and template frontmatter, as Pi parses frontmatter with YAML (`coding-agent/src/utils/frontmatter.ts`). It is required in the commit that first imports it (AGENTS.md, Dependencies). *(2026-10-12: [0018-MADR-configuration-surface.md](0018-MADR-configuration-surface.md) D3 also uses it for `settings.yaml`, through `internal/config`, so `internal/frontmatter` is no longer its one importer.)*
 
 **Consequences.**
 

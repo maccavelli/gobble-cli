@@ -365,6 +365,14 @@ ACP-native behaviour, beyond the method list in 0002:
   than a translation. Each file may name a `$schema`, and
   `gobble config schema` prints the JSON Schema generated from the Go
   types. That gives editors completion and validation.
+
+  *(2026-10-12, the owner's decision, recorded in [0018-MADR-configuration-surface.md](0018-MADR-configuration-surface.md). The JSON format and the Pi-names constraint above are superseded:*
+  - *settings are YAML, `settings.yaml`, shipped as a commented template and edited in place, so comments and layout survive;*
+  - *key names are gobble's own lower camelCase;*
+  - *`config import --from-pi` is dropped (0018-MADR D13), so the "mapping rather than a translation" above no longer applies;*
+  - *the JSON Schema stays, read by YAML editors.*
+
+  *The merge rules, global-only keys and trust gate below stand. For settings, unknown keys survive because an edit touches only its own bytes, not through the `json:",unknown"` field, which stays the rule for session entries. `mcp.json` and `models.json` stay JSON.)*
 * `internal/config` owns layering and Pi's merge rules (0001-REPORT F15):
   * nested objects merge deeply; arrays and scalars replace;
   * `defaultTools` and resource arrays apply `+name`, `-name`, and
@@ -374,7 +382,7 @@ ACP-native behaviour, beyond the method list in 0002:
 * How flags and `GOBBLE_*` environment variables bind on top of the
   merged result is unspecified. The config surface is undecided and will be either a native Kong facility or a surface we write.
   That surface does not do the file merge itself. Config implementation
-  stays unspecified.
+  stays unspecified. *(2026-10-12: specified in 0018-MADR D1, D10 and D11: flags beat every file, each flag's named variable sits just below it, `--set path=value` is a one-run layer, and no setting maps to a variable by default.)*
 * Wire and file types use `encoding/json/v2`:
   * `omitzero` on optional fields;
   * a `jsontext.Value` field tagged `json:",unknown"` on every session
@@ -753,7 +761,7 @@ Still `proposed`. Three sibling trees were re-read and built in scratch copies:
    Budgets are sent only where the SDK honours them.
 8. **Provider-id map.**
    * `llm/catalog` owns a Pi↔SDK id table: `anthropic`→`claude`, `google`→`gemini`, `xai`→`grok`, and `openai-codex`/`openai-chatgpt`→`openai` with the subscription credential.
-   * `models.json`, `config import --from-pi` and the bridge use it.
+   * `models.json`, ~~`config import --from-pi`~~ and the bridge use it. *(2026-10-12: the import is dropped; 0018-MADR D13.)*
    * An unmapped Pi provider fails closed with a clear error.
 9. **Token store.**
    * `internal/auth` implements `TokenStore` **and** `RefreshLocker`, with a file lock in the state directory. The TUI, `gobble acp` children and the CLI share credentials, and a refresh token spent twice revokes the whole token family.
@@ -803,7 +811,7 @@ Still `proposed`. Three sibling trees were re-read and built in scratch copies:
 
 * **go-llmprovider-sdk is the fleet's in-house SDK, not an official vendor SDK.** The README's "official SDK at each protocol boundary" applies to ACP and MCP.
 * **magic-cli-remote `0169-MADR-standardize-toolchains-on-current-supported-advisory-free-releases.md` is `proposed`.** "Fleet MADR 0169 policy" reads "magic-cli-remote 0169 (proposed)".
-* **`models.json` is JSONC in Pi.** `internal/config` strips comments before `encoding/json/v2` decodes it. `settings.json` and `mcp.json` stay strict JSON.
+* **`models.json` is JSONC in Pi.** `internal/config` strips comments before `encoding/json/v2` decodes it. `settings.json` and `mcp.json` stay strict JSON. *(2026-10-12: settings are `settings.yaml`, YAML, per [0018-MADR-configuration-surface.md](0018-MADR-configuration-surface.md). `mcp.json` stays strict JSON, and `models.json` JSONC.)*
 
 ### Amendment (2026-10-02): current sibling source and a shared TUI workspace
 
@@ -947,6 +955,8 @@ are unchanged. It still has no tag; these commits are not gobble dependencies.
 ### Amendment (2026-10-04): configuration surface undecided
 
 The config surface is undecided and will be either a native Kong facility or a surface we write.
+
+*(2026-10-12: decided in [0018-MADR-configuration-surface.md](0018-MADR-configuration-surface.md), D1: a surface gobble writes, `internal/config`, reading a commented `settings.yaml`, with Kong in `internal/cli` binding flags and their environment variables on top. Kong's `Configuration` resolver is not used.)*
 
 ### Amendment (2026-10-05): build identity comes from go-selfupdate-lib `buildinfo`
 

@@ -101,8 +101,14 @@ Windows uses Known Folders.
 
 *(Amended 2026-10-10: at 1.0, ~~OS keyring (service `gobble`); fallback~~ `<config>/auth.json` alone, in Pi's shape, at mode 0600, and on Windows ~~Windows Credential Manager; fallback DPAPI file~~ the same file with a DACL for the user alone. The keyring is 1.x. See [0005-MADR-v1-feature-scope.md](0005-MADR-v1-feature-scope.md), second amendment of 2026-10-10, item 3.)*
 
+*(Amended 2026-10-12, by the owner's decision in [0018-MADR-configuration-surface.md](0018-MADR-configuration-surface.md):*
+
+- *the config row's ~~`settings.json`~~ is `settings.yaml`, a commented YAML file created from a shipped template, and `.gobble/settings.yaml` in a project;*
+- *~~`keybindings.json`~~ will be `keybindings.yaml` when F9 builds it;*
+- *`mcp.json`, `models.json`, `trust.json` and `auth.json` stay JSON.)*
+
 `GOBBLE_HOME=<dir>` collapses all four roles into one directory, for
-portable installs and tests. It is the analogue of Pi's `PI_AGENT_DIR`.
+portable installs and tests. It is the analogue of Pi's ~~`PI_AGENT_DIR`~~ `PI_CODING_AGENT_DIR` *(2026-10-12, as this record's erratum "Environment variable names" says; 0018-MADR D20)*.
 `GOBBLE_CONFIG_DIR`, `GOBBLE_DATA_DIR`, `GOBBLE_STATE_DIR` and `GOBBLE_CACHE_DIR`
 override one role each.
 
@@ -125,7 +131,7 @@ avoids contention with Pi's `proper-lockfile` locks.
 | `~/.pi/agent/mcp.json`, `.pi/mcp.json` | merged under gobble's `mcp.json`; a server that gobble also names comes from gobble |
 | `~/.pi/agent/models.json` | merged under gobble's `models.json` |
 | `~/.pi/agent/sessions/**.jsonl` | listed by `gobble session list --pi`; copied with `gobble session import`; never modified in place |
-| `~/.pi/agent/settings.json` | not merged automatically. `gobble config import --from-pi` writes a gobble `settings.json` from it once, reporting every key it dropped. |
+| `~/.pi/agent/settings.json` | not merged automatically. ~~`gobble config import --from-pi` writes a gobble `settings.json` from it once, reporting every key it dropped.~~ *(2026-10-12: the import is dropped by the owner, per [0018-MADR-configuration-surface.md](0018-MADR-configuration-surface.md) D13. The bridge reads only Pi's `sessionDir` from it, to locate Pi's sessions.)* |
 | `~/.pi/agent/auth.json` | not read. Credentials are copied only by an explicit `gobble auth import --from-pi`, which asks per provider. |
 | `PI_*` environment | ignored |
 
@@ -165,7 +171,7 @@ notice. It also names `github.com/maccavelli/go-core-lib` and
   will find gobble under `~/.config`, the convention of Go CLI peers such as
   `gh`.
 * Bad, because two copies of settings can drift for a user who runs both
-  products. `config import` is a one-time copy, not a sync.
+  products. ~~`config import` is a one-time copy, not a sync.~~ *(2026-10-12: there is no `config import`; 0018-MADR D13.)*
 * Bad, because the licence position (D18) has had no legal review.
   Apache-2.0 and the Pi MIT notice in `NOTICE` state the grant; it is
   unreviewed.
