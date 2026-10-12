@@ -36,6 +36,8 @@
 | 0013 | REPORT | [A data race in Go's encoding/json when one Marshal runs inside another](reports/0013-REPORT-go-json-nested-marshal-race.md) | observation (2026-10-08; reproduced with the standard library alone; drafted for upstream, not yet filed; amended 2026-10-09: the signature varies, and gobble removes its own nested marshal; amended again 2026-10-09: corrupted memory on this host or in the Go runtime, not `encoding/json`, and the upstream draft withdrawn; amended a third time 2026-10-09: the defect is this host's WSL; gobble keeps jsonschema-go's marshaller) |
 | 0014 | MADR | [Move the ACP SDK from the fork to acp-go-sdk2 v0.14.0](decisions/0014-MADR-move-to-acp-go-sdk2.md) | accepted (2026-10-10) |
 | 0014 | PLAN | [Move the ACP SDK from the fork to acp-go-sdk2 v0.14.0](decisions/0014-PLAN-move-to-acp-go-sdk2.md) | completed (P0 and P1, 2026-10-10) |
+| 0015 | REPORT | [The three sibling libraries: current state, pins, order, and whether to adopt them now](reports/0015-REPORT-sibling-library-pins-and-order.md) | observation (2026-10-11; 293 verified claims; go-llmprovider-sdk `v1.7.1`, go-selfupdate-lib `v1.15.1`, acp-go-sdk2 `v0.14.0`; recommends adopting now) |
+| 0016 | MADR | [Take acp-go-sdk2 v0.15.0, close the gap it opens, and adopt the stable ACP surface gobble can honour](decisions/0016-MADR-acp-go-sdk2-v0.15.0-and-stable-surface.md) | proposed (2026-10-12; no PLAN yet) |
 
 0003-MADR has no PLAN of its own. 0004-PLAN Phase 2 and 0005-PLAN F10 implement it.
 
@@ -95,6 +97,8 @@ The plans:
 | build gobble, run the gates, or add a package | [guides/developing.md](guides/developing.md) |
 | see which operations gobble runs as native tools rather than shell commands, and why | [0011-REPORT](reports/0011-REPORT-native-tools-survey.md), [0005-MADR](decisions/0005-MADR-v1-feature-scope.md) (amendment of 2026-10-08) |
 | know why the race gate can fail in `internal/cli` once in a few hundred runs, and what gobble does about it | [0013-REPORT](reports/0013-REPORT-go-json-nested-marshal-race.md) |
+| know which go-llmprovider-sdk, go-selfupdate-lib and acp-go-sdk2 releases gobble pins, what each next release changes, in what order gobble takes them, and whether to adopt them now | [0015-REPORT](reports/0015-REPORT-sibling-library-pins-and-order.md) |
+| know which parts of ACP and acp-go-sdk2 gobble uses, which it leaves, and why | [0016-MADR](decisions/0016-MADR-acp-go-sdk2-v0.15.0-and-stable-surface.md), [0014-MADR](decisions/0014-MADR-move-to-acp-go-sdk2.md) (the move to sdk2) |
 | know how gobble's tools are described to a model, which are always loaded, and how `tool_search` finds the rest | [0012-MADR](decisions/0012-MADR-tool-schemas-descriptions-and-loading.md), [0011-REPORT](reports/0011-REPORT-native-tools-survey.md) (evaluation) |
 | see how other harnesses design what gobble builds, and which design gobble chose | [0010-REPORT](reports/0010-REPORT-harness-design-survey.md), [0005-MADR](decisions/0005-MADR-v1-feature-scope.md) (amendment of 2026-10-07) |
 | see each package's tier and role | [architecture.md](architecture.md#packages) |
