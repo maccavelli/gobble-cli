@@ -423,6 +423,8 @@ updated in the release notes.
 
 ### X3 — subagents, web, provider tools 1.x
 
+*(2026-10-13, 0020-MADR D8: `--offline` also turns off 0020-MADR's model listing, which then offers the static models.)*
+
 1. `agents/*.md` discovery (config, `.gobble/agents`, and packages).
 2. `task`: a child session through an in-process ACP connection,
    `parentSession` link, progress relayed as `tool_call_update`, parallel
@@ -3282,6 +3284,8 @@ Choices made within the wording:
   F4-2 adds `defaultModel` and the model scope beside it, and `--provider` wins over it for its run.)*
 - **`gobble models list [search]`**, and `--list-models` as its alias, print Pi's columns for providers with a credential. **`gobble models info <model>`** prints one model's fields.
 - **acpserver:** the `model` option lists the catalog's models for the session's provider; `thought_level` offers that model's levels; `usage_update` carries the context window as `size`; `_gobble/get_session_stats` reports `cost` from the catalog, and `contextUsage`.
+  *(2026-10-13, 0020-MADR D5: the option's models are the SDK's listing from 0020-MADR (0020-PLAN P2, `a45dad6`);
+  F4-2 adds `models.json`'s models and the metadata on top.)*
 - **`--offline`** stays refused, now naming X3.
 
 **F4-2's files:**

@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: completed
 date: 2026-10-13
 ---
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
@@ -493,3 +493,36 @@ A live check, by hand, with the owner's test key in the child's environment only
 - **A shorter `/model` listing:** the owner chose every model; a search over `Usable` waits for a caller.
 - **Request-side prompt caching** *(P1 deviation 3)*: go-llmprovider-sdk `v1.12.0`'s `Request.Cache`. gobble's 0005-MADR plans prompt-cache warming and its 0012-MADR D13 asked the SDK for `cache_control`; whether and how gobble sets it, and its cost, is its own record.
 - **The SDK's own debug log of a listing:** `List` passes no logger (C2); if the SDK's logging is shown to redact, a later record may pass one.
+
+## Execution record (2026-10-13)
+
+Every phase ran, in order, after 0019-PLAN P5 (`1d52ed1`). The agent staged each; the owner committed each with `git commit --no-edit`.
+
+| Phase | Commit | Landed |
+| :--- | :--- | :--- |
+| The records | `a0dd0e7` | this plan and its MADR, approved |
+| P1 | `1625013` | go-llmprovider-sdk `v1.12.0` (D1, deviation 3) and `provider.List` (D2) |
+| P2 | `a45dad6` | the model choice from the listing (D3–D7) |
+| P3 | the commit of these records | D8's notes and this record |
+
+**Gates.** Each phase's run of `q428_gates_0019.py`: lint for linux, darwin and windows, 0 issues; Windows `go test` and `-race`, the second Linux machine's `-race` and the macOS laptop's `go test`, 31 packages ok each, with no failure and no race report; Windows preflight passed. P2's first run failed lint on all three and preflight on sloglint (deviation 5); its rerun is the green one. Each staged index passed `q252_check_index.py`.
+
+**Negatives,** each on a scratch copy after a control run passed: P1 5 of 5, each failing only its own test once deviations 1 and 2 were in; P2 8 of 8 (7 of 8 at first, below). P1's five list tests also passed 250 of 250 runs under `-count=50`, and P2's model tests 10 times under `-race`.
+
+**The live check:** `gobble acp`, built from P2's tree, with the owner's test key in the child's environment only and a scratch client (`i1live`): `session/new`'s `model` option offered 73 OpenAI models, `gpt-6-luna` current, in 2.0 s, the listing included; the key was in no output and no file. **The whole plan:** `v1.12.0`; `check_libs.py` every library at its latest tag, exit 0; `acpserver` unchanged since `17cd497`.
+
+**Issue 1** was closed on 2026-10-13, at the owner's request, after P2's commit.
+
+**Deviations:** 5, each the owner's decision, recorded under its phase: 1–3 (P1), 4–5 (P2).
+
+**What this plan predicted wrongly:**
+
+1. That the metadata request follows the listing's: the SDK fetches it concurrently and waits for it only when the listing answers (deviation 1).
+2. That the clock makes a unique URL: on Windows it did not move across 10 000 calls (deviation 2).
+3. That `v1.11.0` stays the latest tag until P1: `v1.12.0` was tagged the same afternoon (deviation 3), the second SDK tag in a day to arrive mid-plan, after 0019-PLAN's deviation 13.
+4. That a test in `internal/cli` may import the SDK: archtest rule 2 forbids it, tests included (deviation 4).
+5. The warning's logging style: the repository's sloglint refuses key-value pairs (deviation 5).
+
+**The agent's own error, found and fixed before staging:** P2's `TestModelListingRetries` first checked the fetch count straight after `get()`, before a retry's goroutine could run, so negative 5 (a retry on every read) passed it. The test now waits 200 ms for a retry that should not start; it then caught negative 5, and passed 20 of 20 runs.
+
+**Left open:** `Request.Cache` (Deferred); `--offline` turning the listing off (0005-PLAN X3); a persistent catalog and `gobble models list` (0005-PLAN F4-2).

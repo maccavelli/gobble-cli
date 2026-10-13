@@ -322,6 +322,7 @@ Same pin as C below, plus F4:
   hands sessions to `auth.LoginBrowserOAuth` / `StartDeviceOAuth`.
 - Configure and `gobble models` go through `wizard` and `catalog` via
   `llm/provider` (rule 4).
+  *(2026-10-13, 0020-MADR D2, D5: the ACP model option lists through `catalog` from 0020-MADR (0020-PLAN P2, `a45dad6`).)*
 - `llm` stays the type `agent`, `compaction`, and embedders see.
 - Tools become `[]llmprovider.Tool` at the adapter boundary without a
   JSON round-trip.

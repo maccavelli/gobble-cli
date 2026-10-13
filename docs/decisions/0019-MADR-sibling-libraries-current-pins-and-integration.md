@@ -189,7 +189,7 @@ Chosen option: **A**. It is the only option that leaves gobble on releases with 
 - **D1. Require `github.com/maccavelli/go-selfupdate-lib v1.15.2`,** with the sums above, in its own commit, with no Go change:
   - `go.mod:17`, and both reusable-workflow `uses:` lines at `436a7f5976a6815491c7384527fef90869574a1b # v1.15.2` (`.github/workflows/ci.yml:145`, `:157`), in the same commit, since the workflows and the module are one library;
   - `docs/architecture.md:111` and `README.md:87-88` name `v1.15.2`.
-- **D2. Require `github.com/maccavelli/go-llmprovider-sdk v1.10.2`,** with the sums above, in its own commit. In that commit:
+- **D2. Require `github.com/maccavelli/go-llmprovider-sdk v1.10.2`,** with the sums above, in its own commit. In that commit: *(2026-10-13: go-llmprovider-sdk `v1.12.0` is pinned by 0020-MADR D1 (0020-PLAN P1, `1625013`, deviation 3).)*
   - **the streaming flag is honest:** `llm/provider`'s `New` reports the capabilities of the provider it calls, the `WithRetry` wrapper, not the inner provider's, so `NativeStreaming` is `Unsupported` until F4-1b (F8);
   - **cache writes are reported:** the adapter maps `Usage.CacheWriteTokens` into `llm.Usage.CacheWriteTokens`, and `llm/doc.go:50` and `llm/llm.go:21` say what the SDK now reports;
   - **Pi's `input` is Pi's (F13):** `llm.Usage` keeps the SDK's meaning, every input token, and the session history converts at Pi's boundary, writing `input` as `InputTokens - CacheReadTokens - CacheWriteTokens`, floored at 0, and `totalTokens` as `InputTokens + OutputTokens`, as Pi writes them. A test records a turn with cache reads and writes and checks the stored `input`, `cacheRead`, `cacheWrite` and `totalTokens` against Pi's arithmetic;
