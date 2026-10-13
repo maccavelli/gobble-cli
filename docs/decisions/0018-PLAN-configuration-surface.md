@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: completed
 date: 2026-10-12
 ---
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
@@ -167,14 +167,14 @@ go vet ./...                                                                    
 
 ### P1's deviations, 2026-10-12, decided by the owner
 
-1. **`fsx`'s writer would loosen `mcp.json`'s mode.**
-   - **Found:** step 6 would swap `mcpclient`'s writer for `fsx.Workspace{}.WriteFile`, which creates a new file 0644 (`internal/fsx/write.go:13-15`, `:61`). The old writer's `os.CreateTemp` creates it 0600, and `mcpclient/file_test.go:93-94` pins that. `mcp.json` can hold literal header and environment values, such as tokens. The step as written would loosen a new file's mode, and fail a test that pins a default (C1). Both the test and the modes are unchanged in HEAD; the conflict is the step's.
-   - **Decided** ("fsx gains a mode"):
-     - `internal/fsx/write.go` gains `WriteFileMode(abs string, data []byte, newMode fs.FileMode) error`, a write outside any workspace through `writeAtomic` with the new-file mode as a parameter. `Workspace.WriteFile` keeps 0644, so file tools are unchanged.
-     - `mcpclient` writes `mcp.json` with 0600, and keeps today's mode while gaining the fsync and the Windows rename retry. P3's settings writes use the same function with 0644 (MADR D8).
-     - `internal/fsx/workspace_test.go` gains `TestWriteFileModeNewAndExisting`: a new file takes the given mode, and an existing one keeps its own.
-     - 0018-MADR D8 and D18 get a dated note naming the function.
-     - Files added: `internal/fsx/write.go`, `internal/fsx/workspace_test.go`.
+- **Deviation 1. `fsx`'s writer would loosen `mcp.json`'s mode.**
+  - **Found:** step 6 would swap `mcpclient`'s writer for `fsx.Workspace{}.WriteFile`, which creates a new file 0644 (`internal/fsx/write.go:13-15`, `:61`). The old writer's `os.CreateTemp` creates it 0600, and `mcpclient/file_test.go:93-94` pins that. `mcp.json` can hold literal header and environment values, such as tokens. The step as written would loosen a new file's mode, and fail a test that pins a default (C1). Both the test and the modes are unchanged in HEAD; the conflict is the step's.
+  - **Decided** ("fsx gains a mode"):
+    - `internal/fsx/write.go` gains `WriteFileMode(abs string, data []byte, newMode fs.FileMode) error`, a write outside any workspace through `writeAtomic` with the new-file mode as a parameter. `Workspace.WriteFile` keeps 0644, so file tools are unchanged.
+    - `mcpclient` writes `mcp.json` with 0600, and keeps today's mode while gaining the fsync and the Windows rename retry. P3's settings writes use the same function with 0644 (MADR D8).
+    - `internal/fsx/workspace_test.go` gains `TestWriteFileModeNewAndExisting`: a new file takes the given mode, and an existing one keeps its own.
+    - 0018-MADR D8 and D18 get a dated note naming the function.
+    - Files added: `internal/fsx/write.go`, `internal/fsx/workspace_test.go`.
 
 ### P2 — `internal/config`: keys, reading, merging, trust, diagnostics, overrides, schema and template (D2–D7, D9's template, D10's parsing, D13–D15, D19's mechanism; closes F1–F4, F6–F11)
 
@@ -309,18 +309,18 @@ go mod tidy && git diff --exit-code go.mod go.sum -> no diff
 
 ### P2's deviations, 2026-10-12, decided by the owner
 
-2. **`genschema` is a second `main`, and lint forbids its streams.**
-   - **Found:** step 10's `genschema/main.go` reports a failure on `os.Stderr` and exits with `os.Exit`. `.golangci.yml:63-64` forbids both through forbidigo (0008-MADR D18) and exempts only `cmd/gobble/main.go` (`:140-142`), so lint fails on linux, darwin and windows with four findings. The rule exists so the shipped binary writes only through `cli.Main`'s injected writers; `genschema` is a generator a developer runs, never shipped. The conflict is the step's: the lint configuration is unchanged in HEAD.
-   - **Decided** ("exempt it in lint"): `.golangci.yml` gains a forbidigo exclusion for `internal/config/genschema/main\.go`, beside `cmd/gobble/main.go`'s. `genschema` keeps its command and its message. File added: `.golangci.yml`.
-3. **The plan's names collide, or name helpers the code does not have.**
-   - **Found:** step 1 defines the type `Read`, and step 3 the function `Read`, in one package, which does not compile. Step 5 names `validate` and `merge`; the walk is `leaves`, and the layering is `Resolve`'s, with the same behaviour. P4 (step 2) writes `config.Session` and `config.Process`, and `config get` and `config validate` need every key, which neither value gives.
-   - **Decided** ("amend the plan to the code"): the function is `Parse`, the walk `leaves`, the constants `ReadSession` and `ReadProcess`, and a zero `Read` applies every key. Steps 3, 5 and 7, P3's step 1 and P4's step 2 are annotated. No file added.
-4. **The read fixtures are built in the tests.**
-   - **Found:** step 13 reads its cases from `testdata/` files. `.gitattributes` (`* text=auto eol=lf`, 0007-MADR D3) makes a committed CRLF fixture impossible, and the other cases are a line or two each. `two-docs.yaml` "line 3" assumed a fixture with a line before the document; the diagnostic names the `---` line, where D7 says "a second one starts here".
-   - **Decided** ("inline, amend the plan"): every fixture is built in the test code, and `testdata/*.yaml` leaves P2's scope. `TestReadSecondDocument` expects line 2 of `steeringMode: all\n---\nfollowUpMode: all\n`. No file added.
-5. **Three of the four defaults were pinned on one side only.**
-   - **Found:** `TestDefaultsEqualCode` is to compare with "the `mcpclient` constants, and `builtin`'s 10 minutes". They are unexported (`mcpclient/proc.go:20-21`, `tool/builtin/builtin.go:56`), so `internal/config` can hold only literals. No test pins their values; they are used only as bounds (`mcpclient/proc_test.go:110`, `:139`) and as an argument (`tool/builtin/shell_test.go:77`). Nor is `acpserver.DefaultStartupWait` pinned by any test. A change to any one would leave `config.Defaults()` disagreeing with the code, with every test passing, against C1.
-   - **Decided** ("pin both sides"): each consumer's test pins its constant to the literal `internal/config` holds, and names the key: `TestStopDefaults` (`stdinGrace` 500 ms, `closeTimeout` 2 s), `TestDefaultMaxTimeout` (10 minutes) and `TestDefaultStartupWait` (10 s). A change on either side then fails a test that names the other. Files added: `mcpclient/proc_test.go`, `tool/builtin/shell_test.go`, `acpserver/mcp_test.go`.
+- **Deviation 2. `genschema` is a second `main`, and lint forbids its streams.**
+  - **Found:** step 10's `genschema/main.go` reports a failure on `os.Stderr` and exits with `os.Exit`. `.golangci.yml:63-64` forbids both through forbidigo (0008-MADR D18) and exempts only `cmd/gobble/main.go` (`:140-142`), so lint fails on linux, darwin and windows with four findings. The rule exists so the shipped binary writes only through `cli.Main`'s injected writers; `genschema` is a generator a developer runs, never shipped. The conflict is the step's: the lint configuration is unchanged in HEAD.
+  - **Decided** ("exempt it in lint"): `.golangci.yml` gains a forbidigo exclusion for `internal/config/genschema/main\.go`, beside `cmd/gobble/main.go`'s. `genschema` keeps its command and its message. File added: `.golangci.yml`.
+- **Deviation 3. The plan's names collide, or name helpers the code does not have.**
+  - **Found:** step 1 defines the type `Read`, and step 3 the function `Read`, in one package, which does not compile. Step 5 names `validate` and `merge`; the walk is `leaves`, and the layering is `Resolve`'s, with the same behaviour. P4 (step 2) writes `config.Session` and `config.Process`, and `config get` and `config validate` need every key, which neither value gives.
+  - **Decided** ("amend the plan to the code"): the function is `Parse`, the walk `leaves`, the constants `ReadSession` and `ReadProcess`, and a zero `Read` applies every key. Steps 3, 5 and 7, P3's step 1 and P4's step 2 are annotated. No file added.
+- **Deviation 4. The read fixtures are built in the tests.**
+  - **Found:** step 13 reads its cases from `testdata/` files. `.gitattributes` (`* text=auto eol=lf`, 0007-MADR D3) makes a committed CRLF fixture impossible, and the other cases are a line or two each. `two-docs.yaml` "line 3" assumed a fixture with a line before the document; the diagnostic names the `---` line, where D7 says "a second one starts here".
+  - **Decided** ("inline, amend the plan"): every fixture is built in the test code, and `testdata/*.yaml` leaves P2's scope. `TestReadSecondDocument` expects line 2 of `steeringMode: all\n---\nfollowUpMode: all\n`. No file added.
+- **Deviation 5. Three of the four defaults were pinned on one side only.**
+  - **Found:** `TestDefaultsEqualCode` is to compare with "the `mcpclient` constants, and `builtin`'s 10 minutes". They are unexported (`mcpclient/proc.go:20-21`, `tool/builtin/builtin.go:56`), so `internal/config` can hold only literals. No test pins their values; they are used only as bounds (`mcpclient/proc_test.go:110`, `:139`) and as an argument (`tool/builtin/shell_test.go:77`). Nor is `acpserver.DefaultStartupWait` pinned by any test. A change to any one would leave `config.Defaults()` disagreeing with the code, with every test passing, against C1.
+  - **Decided** ("pin both sides"): each consumer's test pins its constant to the literal `internal/config` holds, and names the key: `TestStopDefaults` (`stdinGrace` 500 ms, `closeTimeout` 2 s), `TestDefaultMaxTimeout` (10 minutes) and `TestDefaultStartupWait` (10 s). A change on either side then fails a test that names the other. Files added: `mcpclient/proc_test.go`, `tool/builtin/shell_test.go`, `acpserver/mcp_test.go`.
 
 ### P3 — The editor and `update` (D8, D9's growth; closes F2, F3, F5)
 
@@ -415,15 +415,15 @@ go test ./internal/config/...                                                   
 
 ### P3's deviations, 2026-10-12, decided by the owner
 
-6. **A CRLF fixture cannot be a committed file.**
-   - **Found:** step 3 makes each edit test a byte-diff against a file in `testdata/edit/`. `.gitattributes` (`* text=auto eol=lf`, 0007-MADR D3) turns a CRLF fixture and its expected file into LF on checkout, so `TestEditCRLFKept` would pass while testing LF. This is the cause of P2's deviation 4.
-   - **Decided** ("CRLF case in code"): `TestEditCRLFKept` builds its input and expected bytes from an LF fixture, with each `\n` made `\r\n`. Every other edit test keeps its `testdata/edit/` files. No file added.
-7. **Unsetting a parent's last active key left a parent the editor could not reuse.**
-   - **Found:** case 5 as written turns only the key's line back into its template form. Unsetting `mcp.stopGraceMs` from `mcp:\n  stopGraceMs: 100\n` leaves `mcp:\n#   stopGraceMs: 500\n`. The empty `mcp:` is null, which D4 reads as absent, so the meaning is safe, but case 2 then cannot use the commented line: a null parent has no extent for it to sit inside. A later set falls to case 3 and inserts a second, active line beside the stale commented one, and a later case-2 search finds two candidates.
-   - **Decided** ("comment the parent too"): after a removal, a parent left with no active key is commented in the template's form too, and so on upward. A parent that is not a template group, and is left empty, is deleted. Unsetting and then setting a key restores the file's bytes. Tests added: `TestUnsetLastChildCommentsParent`, and the round trip in `TestUnsetTemplateKey`. No file added.
-8. **D8's check refused the insertion D8's case 3 describes.**
-   - **Found:** case 3 inserts a key "two spaces deeper than the parent when it has none". In block YAML a parent with no children is `mcp:` with nothing after it, which reads as null; the insertion makes it a mapping. The check requires every other path to read back unchanged, so `set mcp.stopGraceMs 5` on `mcp:` was refused (`testdata/edit/empty.in.yaml`, found by the test added for case 1's empty value). The code is new; the conflict is between two sentences of MADR D8.
-   - **Decided** ("empty parent only"): the check treats an ancestor of the edited path that was `key:` with nothing after it as part of the edit; it may become the mapping that holds the path. An explicit `~` or `null`, which D4 reads as clearing the layer below, is a value the user wrote, and the check still refuses to replace it. Tests: the `empty` case of `TestEditActiveScalar`, and `TestEditExplicitNullParentRefused`. No file added.
+- **Deviation 6. A CRLF fixture cannot be a committed file.**
+  - **Found:** step 3 makes each edit test a byte-diff against a file in `testdata/edit/`. `.gitattributes` (`* text=auto eol=lf`, 0007-MADR D3) turns a CRLF fixture and its expected file into LF on checkout, so `TestEditCRLFKept` would pass while testing LF. This is the cause of P2's deviation 4.
+  - **Decided** ("CRLF case in code"): `TestEditCRLFKept` builds its input and expected bytes from an LF fixture, with each `\n` made `\r\n`. Every other edit test keeps its `testdata/edit/` files. No file added.
+- **Deviation 7. Unsetting a parent's last active key left a parent the editor could not reuse.**
+  - **Found:** case 5 as written turns only the key's line back into its template form. Unsetting `mcp.stopGraceMs` from `mcp:\n  stopGraceMs: 100\n` leaves `mcp:\n#   stopGraceMs: 500\n`. The empty `mcp:` is null, which D4 reads as absent, so the meaning is safe, but case 2 then cannot use the commented line: a null parent has no extent for it to sit inside. A later set falls to case 3 and inserts a second, active line beside the stale commented one, and a later case-2 search finds two candidates.
+  - **Decided** ("comment the parent too"): after a removal, a parent left with no active key is commented in the template's form too, and so on upward. A parent that is not a template group, and is left empty, is deleted. Unsetting and then setting a key restores the file's bytes. Tests added: `TestUnsetLastChildCommentsParent`, and the round trip in `TestUnsetTemplateKey`. No file added.
+- **Deviation 8. D8's check refused the insertion D8's case 3 describes.**
+  - **Found:** case 3 inserts a key "two spaces deeper than the parent when it has none". In block YAML a parent with no children is `mcp:` with nothing after it, which reads as null; the insertion makes it a mapping. The check requires every other path to read back unchanged, so `set mcp.stopGraceMs 5` on `mcp:` was refused (`testdata/edit/empty.in.yaml`, found by the test added for case 1's empty value). The code is new; the conflict is between two sentences of MADR D8.
+  - **Decided** ("empty parent only"): the check treats an ancestor of the edited path that was `key:` with nothing after it as part of the edit; it may become the mapping that holds the path. An explicit `~` or `null`, which D4 reads as clearing the layer below, is a value the user wrote, and the check still refuses to replace it. Tests: the `empty` case of `TestEditActiveScalar`, and `TestEditExplicitNullParentRefused`. No file added.
 
 ### P4 — The CLI: loading, first-run creation, `--set` and the `config` commands (D1, D9's creation, D10–D12, D20's code comment; closes F1, F9, F12)
 
@@ -494,24 +494,24 @@ go run ./cmd/gobble config path; go run ./cmd/gobble config validate            
 
 ### P4's deviations, 2026-10-12, decided by the owner
 
-9. **The editor chain could not open a named file.**
-   - **Found:** `internal/cli/editor` exports only `Compose` (`external.go:19`), which writes a temp `gobble-prompt-*.md`, runs the editor and returns the text with its trailing newline trimmed; `editorCommand` (`:48`) is unexported. MADR D12 has `config edit` open the settings file itself. `external.go` is in P5's file list, not P4's.
-   - **Decided** ("add editor.Open"): `external.go` gains `Open(ctx, env, file, run) error`, which runs `editorCommand`'s editor on the named file without a shell. `config edit` calls it through a package variable, which `TestConfigEdit` stubs. `external_test.go` gains `TestOpenRunsEditorOnFile`. Files added: `internal/cli/editor/external.go`, `internal/cli/editor/external_test.go`. P5 still adds `externalEditor` to the same chain.
-10. **MADR D9 and D12 disagreed on who creates a project file.**
-    - **Found:** D9 says a project file is created only by `gobble config init --project`; D12 says `gobble config edit [--project]` creates the file from the template if missing.
-    - **Decided** ("edit --project creates too"): `init --project` and `edit --project` create a missing project file, both explicit requests. `set`, `unset` and `update` with `--project` on a missing project file exit 1, naming `gobble config init --project`. MADR D9 gets a dated note. No file added.
-11. **`config get --json` had no defined shape with `--origin`.**
-    - **Found:** D12 says `--origin` adds each value's file, line and layer, and the disabled layers, without a JSON form.
-    - **Decided** ("object, wrapped with --origin"): step 4's `get --json` form. `TestConfigGetJSON` checks both. No file added.
-12. **Step 2's two resolvers had no caller in P4.**
-    - **Found:** `runEnv.processSettings` and `runEnv.sessionSettings` are called only by P5's consumers. The `unused` linter (`.golangci.yml:25`) fails an unexported method with no caller, so P4's lint gate could not pass as written.
-    - **Decided** ("move both to P5"): P4's `settings.go` holds `overrides` and `ensureSettingsFile`; the two resolvers are written in P5's step 4, with their callers. P4 has no settings consumer, as planned. File added to P5: `internal/cli/settings.go`.
-13. **`internal/config` gave the CLI no way to check a value, or to recognise an unknown key.**
-    - **Found:** D12 has a bad value exit 2 and a write failure 1, checked before anything is written. `config.Set` returns one plain error for both; `valueNode` is unexported (`internal/config/edit.go`). `validate --strict` must fail on an unknown key, whose text is an unexported constant (`internal/config/diag.go:40`), as is the global-only text (`:41`) that `--project` must refuse with.
-    - **Decided** ("in edit.go and diag.go"): `edit.go` gains `Check(path, value string, layer Layer) error`: an unknown path, a credential path, a global-only key for `LayerProject`, or a bad value, in D7's words. `Set` keeps its own checks. `diag.go` gains `Diagnostic.Unknown() bool`. Tests: `TestCheck` in `edit_test.go`, `TestDiagnosticUnknown` in `resolve_test.go`. Files added: `internal/config/edit.go`, `internal/config/diag.go`, `internal/config/edit_test.go`, `internal/config/resolve_test.go`.
-14. **`config edit`'s exit status was not defined.**
-    - **Found:** D12 has `config edit` validate the file after the editor exits and print the diagnostics, without an exit status.
-    - **Decided** ("1 on an error, as validate"): `config edit` exits 1 when the edited file has an error diagnostic, and 0 otherwise; the file stays as the user saved it. `TestConfigEdit` checks both. No file added.
+- **Deviation 9. The editor chain could not open a named file.**
+  - **Found:** `internal/cli/editor` exports only `Compose` (`external.go:19`), which writes a temp `gobble-prompt-*.md`, runs the editor and returns the text with its trailing newline trimmed; `editorCommand` (`:48`) is unexported. MADR D12 has `config edit` open the settings file itself. `external.go` is in P5's file list, not P4's.
+  - **Decided** ("add editor.Open"): `external.go` gains `Open(ctx, env, file, run) error`, which runs `editorCommand`'s editor on the named file without a shell. `config edit` calls it through a package variable, which `TestConfigEdit` stubs. `external_test.go` gains `TestOpenRunsEditorOnFile`. Files added: `internal/cli/editor/external.go`, `internal/cli/editor/external_test.go`. P5 still adds `externalEditor` to the same chain.
+- **Deviation 10. MADR D9 and D12 disagreed on who creates a project file.**
+  - **Found:** D9 says a project file is created only by `gobble config init --project`; D12 says `gobble config edit [--project]` creates the file from the template if missing.
+  - **Decided** ("edit --project creates too"): `init --project` and `edit --project` create a missing project file, both explicit requests. `set`, `unset` and `update` with `--project` on a missing project file exit 1, naming `gobble config init --project`. MADR D9 gets a dated note. No file added.
+- **Deviation 11. `config get --json` had no defined shape with `--origin`.**
+  - **Found:** D12 says `--origin` adds each value's file, line and layer, and the disabled layers, without a JSON form.
+  - **Decided** ("object, wrapped with --origin"): step 4's `get --json` form. `TestConfigGetJSON` checks both. No file added.
+- **Deviation 12. Step 2's two resolvers had no caller in P4.**
+  - **Found:** `runEnv.processSettings` and `runEnv.sessionSettings` are called only by P5's consumers. The `unused` linter (`.golangci.yml:25`) fails an unexported method with no caller, so P4's lint gate could not pass as written.
+  - **Decided** ("move both to P5"): P4's `settings.go` holds `overrides` and `ensureSettingsFile`; the two resolvers are written in P5's step 4, with their callers. P4 has no settings consumer, as planned. File added to P5: `internal/cli/settings.go`.
+- **Deviation 13. `internal/config` gave the CLI no way to check a value, or to recognise an unknown key.**
+  - **Found:** D12 has a bad value exit 2 and a write failure 1, checked before anything is written. `config.Set` returns one plain error for both; `valueNode` is unexported (`internal/config/edit.go`). `validate --strict` must fail on an unknown key, whose text is an unexported constant (`internal/config/diag.go:40`), as is the global-only text (`:41`) that `--project` must refuse with.
+  - **Decided** ("in edit.go and diag.go"): `edit.go` gains `Check(path, value string, layer Layer) error`: an unknown path, a credential path, a global-only key for `LayerProject`, or a bad value, in D7's words. `Set` keeps its own checks. `diag.go` gains `Diagnostic.Unknown() bool`. Tests: `TestCheck` in `edit_test.go`, `TestDiagnosticUnknown` in `resolve_test.go`. Files added: `internal/config/edit.go`, `internal/config/diag.go`, `internal/config/edit_test.go`, `internal/config/resolve_test.go`.
+- **Deviation 14. `config edit`'s exit status was not defined.**
+  - **Found:** D12 has `config edit` validate the file after the editor exits and print the diagnostics, without an exit status.
+  - **Decided** ("1 on an error, as validate"): `config edit` exits 1 when the edited file has an error diagnostic, and 0 otherwise; the file stays as the user saved it. `TestConfigEdit` checks both. No file added.
 
 ### P5 — The consumers and `--add-dir` (D14, D16, D17; closes F11)
 
@@ -583,30 +583,30 @@ go test ./...                                                              -> ok
 
 ### P5's deviations, 2026-10-12, decided by the owner
 
-15. **P5's steps change six files its list leaves out.**
-    - **Found:** step 2 has `compactSession` (`acpserver/compact.go:65`) take the session's compaction settings; step 4 has `mcp list` (`internal/cli/mcp.go:234`) pass the stop timings. `builtinTools` takes no settings, and its only callers are `SharedFlags.toolSet` (`internal/cli/agent.go:169`, `:172`), which `chat.go` calls before it resolves the working directory (`:28-32`). `gobble acp` never calls it: `acpserver` falls back to `builtin.Tools()` with zero options, so its sessions would ignore the bash keys, which `TestACPIgnoresProjectProcessKeys` presumes apply. Deviation 17 needs `config.go` and `config_test.go`.
-    - **Decided** ("add all six"): `toolSet` takes the built-in tools as an argument; `chat.go` resolves the working directory before the tool flags; `acp.go` sets the agent's tools (deviation 16). Files added: `acpserver/compact.go`, `internal/cli/mcp.go`, `internal/cli/chat.go`, `internal/cli/acp.go`, `internal/cli/config.go`, `internal/cli/config_test.go`.
-16. **Building acp's tools through `builtinTools` would move its output directory.**
-    - **Found:** `builtinTools` sets `OutputDir` to `<state>/output`; `gobble acp` uses `builtin`'s default, the OS temp directory's `gobble-output` (`tool/builtin/builtin.go:62-63`). Moving it changes acp without a settings file, against C1.
-    - **Decided** ("keep acp's output dir"): acp's tools take the process settings and keep `builtin`'s own `OutputDir` default. Aligning the two directories is its own change, not this record's. No file added.
-17. **`externalEditor` did not reach `config edit`.**
-    - **Found:** the template (MADR D9) says `externalEditor` is the editor `/edit` and `gobble config edit` open; step 6 threads it into `Compose` only, not P4's `editor.Open` (deviation 9).
-    - **Decided** ("Open takes it too"): `Open` gains `configured`, as `Compose` does, and `config edit` passes the process settings' `externalEditor`. `TestOpenRunsEditorOnFile` and `TestConfigEdit`'s stub follow. Files: in deviation 15.
-18. **`newQueue`'s new signature broke tests outside the list.**
-    - **Found:** step 2 gives `newQueue` the two modes; `acpserver/extensions_test.go:588` and `acpserver/queue_test.go:21`, `:51` call `newQueue()`. The queue already has `setSteeringMode` and `setFollowUpMode` (`acpserver/queue.go:60-70`), which `_gobble/set_queue_mode` uses.
-    - **Decided** ("keep newQueue(), set modes"): `newQueue()` is unchanged; `NewSession` and `open` build the session's queue through `sessionQueue(ss)`, which sets both modes with the existing setters. No file added.
-19. **Three keys accepted a value that could not take effect.**
-    - **Found:** MADR D14 makes `mcp.startupWaitMs`, `mcp.stopGraceMs` and `mcp.stopTimeoutMs` integers ≥ 0. A zero duration means "the default" in `acpserver`'s `sessionSettings` (D17's "any zero field is filled") and in `mcpclient` (`cmp.Or(t.grace, stdinGrace)`, `mcpclient/proc.go:57`, from P1), so a user's 0 would silently become 10 s, 500 ms or 2 s.
-    - **Decided** ("minimum 1 ms"): the three keys' least value is 1; MADR D14 gets a dated note. Expectations of "must be at least 0" become "at least 1". Files added: `internal/config/keys.go`, `internal/config/testdata/settings.schema.json` (regenerated), `internal/config/resolve_test.go`, `internal/config/edit_test.go`, `internal/cli/config_test.go`.
-20. **Two more files had to change.**
-    - **Found:** "resolved once, cached" (P4 step 2) needs a field on `runEnv`, which `internal/cli/main.go` declares. Step 6 changes `Compose`'s signature, which `internal/cli/slash_test.go:87` stubs.
-    - **Decided** ("add both"): `runEnv` gains `process`, the once-resolved process settings; the stub takes the new parameter, with no assertion changed. Files added: `internal/cli/main.go`, `internal/cli/slash_test.go`.
-21. **`sessionDir` belongs to the store, in both modes.**
-    - **Found:** step 5 applies `sessionDir` in `configureStore`, which only the chat command runs; MADR D17 cites `sessionStore` (`internal/cli/agent.go:89-102`) as well, which `gobble acp` uses.
-    - **Decided** ("sessionStore, both modes"): `sessionStore` gives the flat store for `sessionDir`; `configureStore` still sets `--session-dir`'s and `--no-session`'s first, so the flags win. `TestSessionDirSetting` covers both modes. No file added.
-22. **`acptest`'s recorder cannot tap `acpclient`.**
-    - **Found:** the recorder taps only `acptest.Connect`'s pair, which hands back a raw SDK client, not an `acpclient.Conn`.
-    - **Decided** ("record at the agent"): `TestAdditionalDirectoriesSent`'s agent, embedding `acptest.ScriptAgent`, records each request's `additionalDirectories`; the assertions are the step's. No file added.
+- **Deviation 15. P5's steps change six files its list leaves out.**
+  - **Found:** step 2 has `compactSession` (`acpserver/compact.go:65`) take the session's compaction settings; step 4 has `mcp list` (`internal/cli/mcp.go:234`) pass the stop timings. `builtinTools` takes no settings, and its only callers are `SharedFlags.toolSet` (`internal/cli/agent.go:169`, `:172`), which `chat.go` calls before it resolves the working directory (`:28-32`). `gobble acp` never calls it: `acpserver` falls back to `builtin.Tools()` with zero options, so its sessions would ignore the bash keys, which `TestACPIgnoresProjectProcessKeys` presumes apply. Deviation 17 needs `config.go` and `config_test.go`.
+  - **Decided** ("add all six"): `toolSet` takes the built-in tools as an argument; `chat.go` resolves the working directory before the tool flags; `acp.go` sets the agent's tools (deviation 16). Files added: `acpserver/compact.go`, `internal/cli/mcp.go`, `internal/cli/chat.go`, `internal/cli/acp.go`, `internal/cli/config.go`, `internal/cli/config_test.go`.
+- **Deviation 16. Building acp's tools through `builtinTools` would move its output directory.**
+  - **Found:** `builtinTools` sets `OutputDir` to `<state>/output`; `gobble acp` uses `builtin`'s default, the OS temp directory's `gobble-output` (`tool/builtin/builtin.go:62-63`). Moving it changes acp without a settings file, against C1.
+  - **Decided** ("keep acp's output dir"): acp's tools take the process settings and keep `builtin`'s own `OutputDir` default. Aligning the two directories is its own change, not this record's. No file added.
+- **Deviation 17. `externalEditor` did not reach `config edit`.**
+  - **Found:** the template (MADR D9) says `externalEditor` is the editor `/edit` and `gobble config edit` open; step 6 threads it into `Compose` only, not P4's `editor.Open` (deviation 9).
+  - **Decided** ("Open takes it too"): `Open` gains `configured`, as `Compose` does, and `config edit` passes the process settings' `externalEditor`. `TestOpenRunsEditorOnFile` and `TestConfigEdit`'s stub follow. Files: in deviation 15.
+- **Deviation 18. `newQueue`'s new signature broke tests outside the list.**
+  - **Found:** step 2 gives `newQueue` the two modes; `acpserver/extensions_test.go:588` and `acpserver/queue_test.go:21`, `:51` call `newQueue()`. The queue already has `setSteeringMode` and `setFollowUpMode` (`acpserver/queue.go:60-70`), which `_gobble/set_queue_mode` uses.
+  - **Decided** ("keep newQueue(), set modes"): `newQueue()` is unchanged; `NewSession` and `open` build the session's queue through `sessionQueue(ss)`, which sets both modes with the existing setters. No file added.
+- **Deviation 19. Three keys accepted a value that could not take effect.**
+  - **Found:** MADR D14 makes `mcp.startupWaitMs`, `mcp.stopGraceMs` and `mcp.stopTimeoutMs` integers ≥ 0. A zero duration means "the default" in `acpserver`'s `sessionSettings` (D17's "any zero field is filled") and in `mcpclient` (`cmp.Or(t.grace, stdinGrace)`, `mcpclient/proc.go:57`, from P1), so a user's 0 would silently become 10 s, 500 ms or 2 s.
+  - **Decided** ("minimum 1 ms"): the three keys' least value is 1; MADR D14 gets a dated note. Expectations of "must be at least 0" become "at least 1". Files added: `internal/config/keys.go`, `internal/config/testdata/settings.schema.json` (regenerated), `internal/config/resolve_test.go`, `internal/config/edit_test.go`, `internal/cli/config_test.go`.
+- **Deviation 20. Two more files had to change.**
+  - **Found:** "resolved once, cached" (P4 step 2) needs a field on `runEnv`, which `internal/cli/main.go` declares. Step 6 changes `Compose`'s signature, which `internal/cli/slash_test.go:87` stubs.
+  - **Decided** ("add both"): `runEnv` gains `process`, the once-resolved process settings; the stub takes the new parameter, with no assertion changed. Files added: `internal/cli/main.go`, `internal/cli/slash_test.go`.
+- **Deviation 21. `sessionDir` belongs to the store, in both modes.**
+  - **Found:** step 5 applies `sessionDir` in `configureStore`, which only the chat command runs; MADR D17 cites `sessionStore` (`internal/cli/agent.go:89-102`) as well, which `gobble acp` uses.
+  - **Decided** ("sessionStore, both modes"): `sessionStore` gives the flat store for `sessionDir`; `configureStore` still sets `--session-dir`'s and `--no-session`'s first, so the flags win. `TestSessionDirSetting` covers both modes. No file added.
+- **Deviation 22. `acptest`'s recorder cannot tap `acpclient`.**
+  - **Found:** the recorder taps only `acptest.Connect`'s pair, which hands back a raw SDK client, not an `acpclient.Conn`.
+  - **Decided** ("record at the agent"): `TestAdditionalDirectoriesSent`'s agent, embedding `acptest.ScriptAgent`, records each request's `additionalDirectories`; the assertions are the step's. No file added.
 
 ### P6 — Docs and the execution record (D2, D9)
 
@@ -629,6 +629,12 @@ make check-records && make markdownlint -> ok, 0 issues
 
 The records' own lint runs through the scratchpad's `q261_lint_records.py`, since `markdownlint` excludes MADR and PLAN files.
 
+### P6's deviations, 2026-10-12, decided by the owner
+
+- **Deviation 23. The deviation lists failed MD029, from P2 on.**
+  - **Found:** the records' own lint (`q261_lint_records.py`, which copies the records beside a config that does not exclude them, and was seen failing on a planted MD012) reported 21 MD029 errors in this plan: each phase's deviation entries were an ordered list numbered from the plan-wide count, 2 to 22, and MD029 wants a list to start at 1. This plan as committed at P2 (`1ac178c`) already had four, and P5's commit had all 21; `make markdownlint` excludes records, and no earlier phase ran the records' own lint, so none saw them. 0018-MADR was clean.
+  - **Decided** ("bulleted, numbers kept"): each entry is a bullet, `- **Deviation N. …**`, with its nested lines moved left to the bullet's indentation; the numbers, and so every "deviation N" in the records, code and tests, are unchanged. No file added.
+
 ## Verification (whole plan)
 
 After P6:
@@ -639,7 +645,7 @@ CGO_ENABLED=1 go test -race ./...                 -> ok, natively on Windows and
 make preflight                                    -> preflight passed (Windows ~~and WSL~~; WSL dropped 2026-10-12, see the stability rule)
 git diff --exit-code acpserver/testdata/session.golden go.mod go.sum -> no diff
 go list -deps ./internal/config | grep -c alecthomas/kong -> 0
-python -I q421_claims_0018.py                     -> 133/133 claims hold (0018-MADR's citations, re-run in case code moved)
+python -I q421_claims_0018.py                     -> 133/133 claims hold (0018-MADR's citations, ~~re-run in case code moved~~ read from 81f52fd, the tree they were measured on; see the execution record)
 ```
 
 ### Acceptance criteria (mapped to MADR Confirmation)
@@ -687,3 +693,53 @@ A1 is the criterion most likely to be dropped under pressure. When P5 wires a de
 - **`GOBBLE_OFFLINE`:** bound with `--offline` in X3.
 - **A user guide for settings:** the template is the documentation (MADR D9). A separate `docs/guides/` page waits for the owner to ask for one.
 - **A system or managed layer, profiles and a file watcher** (MADR D21).
+
+## Execution record (2026-10-12)
+
+All six phases ran, in order, each committed by the owner before the next began: P1 `3547163`, P2 `1ac178c`, P3 `c42dd45`, P4 `0611155`, P5 `f9850cf`, and P6 with this record. Twenty-three deviations were raised, each with its evidence and a choice of real fixes; the owner chose each time, the PLAN carries each as a dated entry under its phase, and the original steps are struck through or annotated in place. The MADR carries notes for deviations 1, 7, 8, 10 and 19.
+
+### The gates, phase by phase
+
+Every phase ended with lint for linux, darwin and windows, Windows `go test ./...`, `CGO_ENABLED=1 go test -race ./...` natively on Windows and over SSH on the second Linux machine, Windows `make preflight`, the pre-add check on the phase's Go files, and a check of the staged index alone (gofmt, vet, test, `check-records` on an export of what was staged).
+
+| Phase | Lint ×3 | Windows test | Race, Windows / Linux | Preflight | Pre-add | Index check |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| P1 | 0 issues (second run) | ok | 30 ok / 30 ok, no race | passed (Windows and WSL) | 17 files clean | exit 0 |
+| P2 | 0 issues (third run) | 31 ok | 31 ok / 31 ok, no race | passed | 21 files clean | exit 0 |
+| P3 | 0 issues (second run) | 31 ok | 31 ok / 31 ok, no race | passed | 4 files clean | exit 0 |
+| P4 | 0 issues (second run) | 31 ok | 31 ok / 31 ok, no race | passed | 20 files clean | exit 0 |
+| P5 | 0 issues (second run) | 31 ok | 31 ok / 31 ok, no race | passed; `apidiff` accepts the `acpclient` and `acpserver` additions | 25 files clean | exit 0 |
+| P6 | 0 issues | 31 ok | 31 ok / 31 ok, no race | passed | no Go file | exit 0; both records pass their own lint |
+
+From P2 on, no gate ran in WSL, by the owner's direction recorded in the stability rule.
+
+### The negatives
+
+Every negative ran on a scratch copy of the tree, never the working tree, after control runs on the unmutated copy had passed, and each mutation was asserted to have landed exactly once. A negative counted only when it failed the tests named for it; one that failed to build was rewritten, since a build failure proves nothing.
+
+- **P1, 6 of 6:** `Lock` trying once fails `TestLockRetries` ("locked by pid"); `TryLock` without the flock fails `TestTryLockHeld`; `GitRepo` ignoring `commondir` fails `TestGitRepo`'s worktree case; `Add` without the lock fails `TestAddConcurrent` (at `-count=20`, one run kept 1 of 8 servers); the stopper's constant grace fails `TestStopGraceOption` (`Close` took 502 ms against a 400 ms bound); `WriteFileMode` ignoring its mode fails `TestWriteFileModeNewAndExisting` (a new file at 0644).
+- **P2, 13 of 13:** the plan's eight (the second-document check removed, the trust gate inverted, a global-only key let through, the credential check removed, one byte of the committed schema changed, a template block deleted, a template default changed to 20001, a prose line reworded as `name: value`), a capitalised prose line that only the looser pattern catches, and each side of deviation 5's pins: `mcpclient`'s grace, `builtin`'s cap, `acpserver`'s start-up wait, and `internal/config`'s own default.
+- **P3, 14 of 14:** the plan's five (case 1 replacing the whole line, `render` always plain, the check skipped, `Update` changing a line, line endings normalised to LF), `Update` overwriting a line with its own check left on (refused by `Update` itself, not by the test's line check), inserted lines always LF, deviation 7's rule off, case 2 off, the alias refusal off, `Set` without the lock, deviation 8's ancestor rule off, case 3 and the check both accepting any null parent, and `Init` overwriting.
+- **P4, 12 of 12:** the plan's four (`config path` creating the settings file, `--set` errors ignored, `--project` letting a global-only key through, `validate --strict` exiting 0 on an unknown key), `set` writing before it checks, acp not creating the file, `set --project` creating a project file, `edit` exiting 0 on an error, `--offline` left on F4, `editor.Open` dropping the file, `Check` ignoring the layer, and `Diagnostic.Unknown` matching every error. Run twice, before and after the lint fixes.
+- **P5, 15 of 15:** the plan's five (the session's queue modes not set, `Settings` called at each prompt, `sessionDir` beating `--session-dir`, `editorCommand` ignoring `configured`, `--add-dir` not sent on resume), `/compact` ignoring the session's settings, the MCP wait ignoring them, a new session ignoring `Settings`' thinking, a loaded session taking it, `sessionDir` not applied, acp's tools ignoring the settings, acp reading the project's process keys, `toSession` dropping `keepRecentTokens`, `--add-dir` unchecked, and a zero MCP timing accepted.
+
+### What this plan predicted wrongly
+
+- **The file lists.** P5's list left out eight files its own steps change (deviations 15 and 20), and its decisions added four more (19); P4's left out `internal/cli/editor/external.go` and its test (9), and `internal/config`'s `edit.go`, `diag.go` and two tests (13); P2's needed `.golangci.yml` (2) and three consumer tests (5). A file list written before the code is read for every caller is a guess.
+- **Names and signatures.** Steps 1 and 3 of P2 both named `Read` in one package (3). P5 changed `newQueue`'s signature without counting its test callers (18). P4 defined two methods whose only callers were in P5, which the `unused` linter refuses (12).
+- **Contradictions inside the records.** D8's case 3 and D8's check disagreed (8); D9 and D12 disagreed on who creates a project file (10); D14 allowed a zero that D17's fill rule and `mcpclient` turn into the default (19).
+- **The fixtures.** Byte-exact CRLF fixtures cannot be committed under `.gitattributes`' `eol=lf` (4, 6).
+- **The tests that could not fail.** `TestLaterFlagsAreRejected` reads its expectation from the map it checks, so it could not catch the `offline` mapping; P4 added an explicit assertion, seen failing. P2's `git diff --exit-code` on the generated schema cannot fail while the file is untracked; it was run after staging, and the regeneration was also checked by hash. P1's `TestStopGraceOption` bound of 1 s would not have caught the constant grace on Windows, where the job's terminate kills at the grace; it was tightened to 10 ms options and a 400 ms bound.
+- **This plan's own verification line.** "Re-run q421 in case code moved" cannot hold: the citations describe the tree as measured, and P1 moves the cited code by design. The checkers now read gobble's files from `81f52fd`, the measured tree; 133 of 133 and 35 of 35 claims hold, and 0 when inverted.
+- **Lint.** Every phase's first lint run found findings in the new code: 2 in P1, 11 in P2, then one more after a fix, and a handful in each later phase. Each was fixed in the code, with two exceptions: `genschema`'s streams, by the exclusion the owner chose (deviation 2), and one `os.ReadFile`, by the justified `//nolint:gosec // G304` the repository already uses.
+- **The editor's details.** A bare `key:` is a decoded null with its tag filled in, so a branch keyed on an empty tag never ran; the `empty` fixture now covers it. yaml.v3 tags `yes`, `on` and `off` as strings but decodes them into a boolean, so a string with one of those values is written quoted, as the plan's `TestEditQuotesAmbiguous` expects.
+- **The records' lint.** The stability rule runs `make markdownlint`, which excludes MADR and PLAN files by design, so no phase before P6 linted this plan; the deviation lists had failed MD029 since P2 (deviation 23). The records' own lint is now run on both records, with a planted violation seen failing.
+- **What the plan's tests left uncovered.** The CLI's mapping of settings into `acpserver.SessionSettings` had no test; P5 added `TestSessionSettingsReachAgent`, seen failing.
+
+### C1, checked over the whole plan
+
+Against `81f52fd`, the existing tests that changed are: `TestConfigPath` (its two new lines) and `TestLaterFlagsAreRejected` (an assertion added), C1's two named exceptions; the call sites of `Compose`, `editorCommand` and `Open`, and `/edit`'s `compose` stub, which deviations 9, 17 and 20 changed; `mcpclient`'s `startFixture` helper, which P1 gave an options parameter; and the four "must be at least 0" texts that deviation 19's rule replaced. No assertion was loosened, and no test that pins a default was edited. `acpserver/testdata/session.golden`, `go.mod` and `go.sum` are byte-identical to `81f52fd`. The real settings file of the host the tests ran on was absent before and after every phase's suites, so no test wrote outside its temporary directories.
+
+### Acceptance
+
+A1 to A13 hold, by the gates and tests above. A1, the criterion this plan named as the one most likely to be dropped, held: every default is pinned on both sides (deviation 5), and none of those tests was edited.

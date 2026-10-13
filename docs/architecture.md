@@ -15,7 +15,10 @@ The binary has these surfaces:
   terminal, or one prompt with `-p` or piped input. It is an ACP client of gobble's own agent,
   in process.
 - **The ACP agent.** `gobble acp` serves the agent on stdio, for editors and magic-cli-remote.
-- **Configuration commands.** `version`, `completion`, `config path`, and `mcp add|remove|list`.
+- **Configuration commands.** `version`, `completion`, `config path|get|set|unset|edit|init|update|validate|schema`,
+  and `mcp add|remove|list`. Settings are a commented `settings.yaml` in the config directory, created from an
+  embedded template on the first run; a trusted project's `.gobble/settings.yaml` and `--set path=value` layer
+  over it, and flags over all of them.
 - **The enhanced TUI mode.** Not built yet: `internal/tui` is a placeholder, and go-tui-lib is not
   required yet.
 
@@ -69,10 +72,11 @@ The tier is each package's `Stability:` line in its `doc.go`. **stable** package
 | `internal/logging` | internal | The one slog logger: a rolling owner-only file, and warnings on stderr, both redacted. |
 | `internal/archtest` | internal | The import rules below, as a test. |
 | `internal/auth` | internal | The credential store (placeholder). |
-| `internal/config` | internal | Layered settings (placeholder). |
+| `internal/config` | internal | Settings: a commented `settings.yaml` from an embedded template, layered global, project (trusted) and `--set`, edited in place; the JSON Schema. |
+| `internal/filelock` | internal | An exclusive lock file between processes, for session files, `mcp.json` and settings. |
 | `internal/proctree` | internal | A command as a tree that stops whole: its own process group on Unix, a kill-on-close Job object on Windows. |
 | `internal/frontmatter` | internal | The YAML frontmatter of skills and templates, as Pi reads it, through `go.yaml.in/yaml/v3`. |
-| `internal/fsx` | internal | Workspace confinement for file tools: Pi's path resolution, `os.Root` over the working and additional directories, atomic writes, and a per-path lock. A glob engine written to git's rules, the repository's ignore rules, and a confined walker that applies them. Renames, removals, copies and directories through the roots. |
+| `internal/fsx` | internal | Workspace confinement for file tools: Pi's path resolution, `os.Root` over the working and additional directories, atomic writes, and a per-path lock. A glob engine written to git's rules, the repository's ignore rules, and a confined walker that applies them. Renames, removals, copies and directories through the roots. The repository finder. |
 | `exp/a2a` | experimental | Agent2Agent endpoint (experimental placeholder). |
 | `exp/acpws` | experimental | ACP over WebSocket (experimental placeholder). |
 | `exp/codemode` | experimental | Code-mode sandbox (experimental placeholder). |

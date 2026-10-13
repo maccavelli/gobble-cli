@@ -718,3 +718,24 @@ Every row is checked by `q421_claims_0018.py`, which reads a quoted substring at
 ### Open questions for the plan
 
 None. Every package, key, diagnostic, command, exit code and the template's text is decided above. The plan orders the work into phases and names their tests.
+
+## Observed — execution results (2026-10-12)
+
+[0018-PLAN-configuration-surface.md](0018-PLAN-configuration-surface.md) ran all six phases (its execution record has the gates and every negative). What execution showed of these decisions:
+
+- **Contradicted, and amended in place.**
+  - **D8**, twice. Case 5 left a parent with no active key as `key:`, which case 2 could not reach, so a later set left two lines for one key (P3 deviation 7: the parent is commented too). D8's check refused the insertion case 3 describes, since a parent written `key:` turns from null into a mapping (P3 deviation 8: the check allows exactly that, and still refuses an explicit `~`, `null` or `!!null`).
+  - **D9 and D12** disagreed on who creates a project file (P4 deviation 10: `init --project` and `edit --project` both do).
+  - **D14** allowed 0 for the three MCP timings, which D17's fill rule and `mcpclient`'s options read as "the default" (P5 deviation 19: their least value is 1).
+  - **D8's write** through `fsx.Workspace{}.WriteFile` would have created a new `mcp.json` at 0644 (P1 deviation 1: `fsx.WriteFileMode`).
+- **Borne out, with what the code needed.**
+  - **D3.** `yaml.v3` reports neither a second document nor, when decoding into a node, a repeated key; `Parse` checks both itself, at their lines. A float such as `1.10` decodes into an integer as 1 with no error, so an integer key requires the `!!int` tag. A file of comments only is `io.EOF`, read as an empty mapping.
+  - **D5 and D6.** Until 0005-PLAN F6 supplies trust, a project file is read, validated and reported with D7's reason, and applies nothing; a global-only key from it is ignored even when trusted.
+  - **D7.** Every diagnostic has the table's form and names a path and a line, never a value; `validate --strict` fails on an unknown key, through `Diagnostic.Unknown`.
+  - **D9.** The template is the documentation: six tests hold it to the key table, and `update` restores any deleted block, or a deleted key line of a block with several keys, byte for byte.
+  - **D12.** `config get --json` gives the settings object, or a key's value, wrapped with `--origin` beside the origins and the layers not applied (P4 deviation 11); `config edit` exits 1 when the edited file has an error (P4 deviation 14). A bad value or an unknown path exits 2 before anything is written, through `config.Check` (P4 deviation 13).
+  - **D14 and D17.** Each key reaches its consumer, and each default is today's, pinned on both sides: `internal/config` against literals, and each consumer's own test against the same literal (P2 deviation 5). `mcp list` reads every key for its directory, since its stop timings are session keys and it has no session. `sessionDir` applies in `sessionStore`, which this record cites, so `gobble acp` honours it too (P5 deviation 21).
+  - **D16.** Under `gobble acp` no project file is read for the process keys; `TestACPIgnoresProjectProcessKeys` shows chat in the same directory reporting the project file and acp's log not mentioning it. acp's built-in tools take the process settings and keep their own output directory (P5 deviation 16).
+  - **D18.** The packages are as listed; `go.yaml.in/yaml/v3` is imported only by `internal/config` and `internal/frontmatter`, Kong by none outside `internal/cli`, and `go.mod` and `go.sum` did not change.
+  - **D20.** `--offline` names 0005-PLAN X3.
+- **The Confirmation.** The evidence checkers read gobble's files from `81f52fd`, the tree the claims were measured on, since P1 moved cited code by design: 133 of 133 claims hold, and 0 when inverted.
