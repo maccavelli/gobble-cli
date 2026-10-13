@@ -85,7 +85,7 @@ a v1.0.0 gate, a v1.x train and `exp/`, is in [0005-MADR](docs/decisions/0005-MA
   gobble's own `llm` facade. Only `llm/provider` imports it.
 - **Tool schemas:** JSON Schema 2020-12 from Go types, with [jsonschema-go](https://github.com/google/jsonschema-go) `v0.4.3`.
 - **Build identity and self-update:** [go-selfupdate-lib](https://github.com/maccavelli/go-selfupdate-lib)
-  `v1.9.0`. gobble does not reimplement self-update.
+  `v1.15.2`. gobble does not reimplement self-update.
 - **TUI:** [go-tui-lib](https://github.com/maccavelli/go-tui-lib), not required yet. gobble does not
   reimplement core TUI; where a behaviour is not in the library yet, gobble waits rather than copying it.
 
