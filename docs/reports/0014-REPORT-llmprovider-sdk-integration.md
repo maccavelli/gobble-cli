@@ -1,6 +1,6 @@
 ---
 status: observation
-date: 2026-10-10
+date: 2026-10-13
 subject: integrating go-llmprovider-sdk as gobble's provider and model layer
 examines: "gobble-cli at 051fead (main, clean); go-llmprovider-sdk at 4e81764 (main, v1.4.0-10, 0031-PLAN in-progress); gobble pin github.com/maccavelli/go-llmprovider-sdk v1.2.1"
 ---
@@ -286,6 +286,8 @@ Recorded in gobble, still true of SDK `4e81764`:
 | Cache-write token count | 0004-MADR 2026-10-02 | Folded into `InputTokens` on the Messages wire; public `Usage` has no write field. |
 | Generic Chat Completions constructor | 0005-MADR unnamed OpenAI-compatible row | Named ids only. `WithBaseURL` on `openai` speaks Responses. |
 | Native streaming on Messages, Chat Completions, Gemini | 0031-MADR D8, out of scope | Responses only. Claude, Gemini, Hugging Face, Kilo, Together, Ollama stay `Unsupported`. |
+
+*(2026-10-13, 0019-MADR F9: the strict flag and the tool-output error bit shipped at `v1.7.0`, native streaming at `v1.6.0`, and cache writes at `v1.10.0`. Still open: deferral, `cache_control`, image input and a generic Chat Completions constructor.)*
 
 The first row is a **blocker** for a gobble decision already taken:
 tools with optional arguments (read, bash, powershell) are to be sent

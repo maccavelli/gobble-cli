@@ -1,6 +1,6 @@
 ---
 status: observation
-date: 2026-10-11
+date: 2026-10-13
 subject: the current state of go-llmprovider-sdk, go-selfupdate-lib and acp-go-sdk2, when and in what order gobble takes each pinned to its current release, and whether to adopt them and start compatibility and integration work now
 examines: "gobble-cli at 6a8b9d8 (main); go-llmprovider-sdk v1.7.1 (0adc791) and its main at f9834e0; go-selfupdate-lib v1.15.1 (fa74db4) and its main at d396052; acp-go-sdk2 v0.14.0 (3588f8a) and its main at 41b8840"
 ---
@@ -164,6 +164,7 @@ The scripts named here live in the session scratchpad and are not committed.
   - Claude `claude-haiku-4-5` → `claude-haiku-5-5`;
   - Gemini `gemini-3.7-flash` → `gemini-3.6-flash`;
   - Grok `grok-3-mini-fast` → `grok-4.7`.
+  - *(2026-10-13, 0019-MADR F11, D13: measured by running the SDK's `providers.Default().Descriptors()`, three of these are wrong. At `v1.7.1` OpenAI's is `gpt-6-luna`, Gemini's `gemini-3.5-flash-lite`, and Grok's `grok-4.6`, unchanged from `v1.2.1`; Claude's is right. 0019-MADR's table has each provider at `v1.2.1`, `v1.7.1` and `v1.10.2`.)*
 
   It also removes ids gobble lists today, among them OpenAI's `gpt-4.1-nano` and `o4-mini`. 0033-MADR records those two as shut down on 2026-10-23, so on `v1.7.0` or earlier gobble's model list offers two ids that stop answering on that date.
   - The other five providers' first ids do not change.
@@ -175,6 +176,7 @@ The scripts named here live in the session scratchpad and are not committed.
   - D5: `v1.7.1` for the refresh, and `v1.8.0` for the metadata, additions only.
 
   Its metadata PLAN is `proposed`, so `v1.8.0` is not near.
+  *(2026-10-13, 0019-MADR F11: the metadata, `catalog.ModelInfo`, shipped in `v1.9.0`, not `v1.8.0`.)*
 - **What that means for F4-2.** 0005-MADR's amendment of 2026-10-10 chose a gobble-side models.dev snapshot in Pi's `Model` shape, with `models.json` overlaid by gobble. 0033's design keeps the embedded copy and the `NOTICE` credit, and moves the merging into the SDK, with `models.json` as one caller layer.
   - Built before `v1.8.0`, F4-2 writes a resolver that `v1.8.0` replaces.
   - Built after it, F4-2 is a seed file, a `models.json` layer, and the Pi-shaped view over `ModelInfo`.
@@ -277,7 +279,7 @@ Each seam was read for code that duplicates a library, or that leaves a library 
 | 3 | Records: F4-3's two corrections, F4-2 on `v1.8.0` | none | now, with F4-1a's records or before | nothing |
 | 4 | 0012-PLAN P7, made executable first | go-llmprovider-sdk, the latest tag | after F4-1a | F4-1a's pin |
 | 5 | F4-3, credentials | go-llmprovider-sdk, the latest tag | after P7 | nothing outside gobble |
-| 6 | F4-2, re-made on `ModelInfo` | go-llmprovider-sdk `v1.8.0` | when tagged | the SDK's tag |
+| 6 | F4-2, re-made on `ModelInfo` | go-llmprovider-sdk `v1.8.0` *(2026-10-13: `v1.9.0`, 0019-MADR F11)* | when tagged | the SDK's tag |
 | 7 | F4-1b, live streaming | the first tag with a streaming `WithRetry` | when tagged | the SDK |
 | 8 | acp-go-sdk2's next minor | that tag | when tagged | the SDK; the elicitation test; an interoperability check |
 | 9 | F10 `gobble update` | go-selfupdate-lib, the latest tag at F10 | F10, after F5 to F9 | F6's permission rule; the first gobble release |

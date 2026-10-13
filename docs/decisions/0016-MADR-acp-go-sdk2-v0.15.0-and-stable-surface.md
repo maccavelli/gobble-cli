@@ -1,6 +1,6 @@
 ---
 status: proposed
-date: 2026-10-12
+date: 2026-10-13
 decision-makers: repository owner
 consulted: none
 informed: magic-cli-remote
@@ -8,6 +8,8 @@ informed: magic-cli-remote
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
 
 # Take acp-go-sdk2 v0.15.0, close the gap it opens, and adopt the stable ACP surface gobble can honour
+
+*(2026-10-13, [0019-MADR-sibling-libraries-current-pins-and-integration.md](0019-MADR-sibling-libraries-current-pins-and-integration.md) D10: this record is re-based, not duplicated. 0019-PLAN P4 (`17cd497`) pins acp-go-sdk2 `v0.17.1`. D1 is superseded by 0019-MADR D3; D2 by the SDK's own `cwd` check, from `v0.16.0` (0019-MADR F5), and 0019-MADR D7 removed D2's empty-`cwd` fallback; D3 is superseded by 0019-MADR D8; D7's accessors are written over the SDK's `Negotiated()`. D4 to D6 and D8 to D13 stay this record's, `proposed`, and are re-checked against `v0.17.1` before its PLAN is written, since the SDK's gates make an ungated update fail a turn (0019-MADR F6).)*
 
 ## Context and Problem Statement
 
@@ -188,9 +190,9 @@ Chosen: **A**, because it is the largest change that stays honest and decided.
 
 ### The decisions
 
-- **D1. Require `github.com/maccavelli/acp-go-sdk2 v0.15.0`, exactly,** with the sums F1 records. [0014-MADR-move-to-acp-go-sdk2.md](0014-MADR-move-to-acp-go-sdk2.md) gets a dated note that its D1 pin is superseded here. Its PLAN's Deferred item "each move is an amendment of 0014-MADR" is annotated: this move, which changes behaviour beyond the pin, is decided here instead. A later tag is an amendment of this record.
-- **D2. gobble checks `cwd` itself, in the same commit as D1.** A `session/new`, `session/load` or `session/resume` whose `cwd` is not absolute is refused with -32602, through the same `invalidParams` as `additionalDirs` (`acpserver/agent.go:237-239`, `:830-839`), with the reason "cwd %q is not an absolute path". On load and resume only, an empty `cwd` keeps the designed fallback, the stored header's `cwd` (`:728-730`), which must itself be absolute or the request is refused the same way. Every accepted `cwd` is kept `filepath.Clean`ed, as the additional directories are. D1 never lands without D2.
-- **D3. `TestElicitationNotFound`'s request carries `Session: &acp.ElicitationSessionScope{SessionId: "s0"}`.** Its -32601 and no-advertisement assertions stay unchanged. The SDK made the same fix to its own tests in `0e32255` (SDK `0011-PLAN-engine-tests.md`).
+- **D1. Require `github.com/maccavelli/acp-go-sdk2 v0.15.0`, exactly,** with the sums F1 records. [0014-MADR-move-to-acp-go-sdk2.md](0014-MADR-move-to-acp-go-sdk2.md) gets a dated note that its D1 pin is superseded here. Its PLAN's Deferred item "each move is an amendment of 0014-MADR" is annotated: this move, which changes behaviour beyond the pin, is decided here instead. A later tag is an amendment of this record. *(2026-10-13: superseded by 0019-MADR D3, which pins `v0.17.1` (0019-PLAN P4, `17cd497`).)*
+- **D2. gobble checks `cwd` itself, in the same commit as D1.** A `session/new`, `session/load` or `session/resume` whose `cwd` is not absolute is refused with -32602, through the same `invalidParams` as `additionalDirs` (`acpserver/agent.go:237-239`, `:830-839`), with the reason "cwd %q is not an absolute path". On load and resume only, an empty `cwd` keeps the designed fallback, the stored header's `cwd` (`:728-730`), which must itself be absolute or the request is refused the same way. Every accepted `cwd` is kept `filepath.Clean`ed, as the additional directories are. D1 never lands without D2. *(2026-10-13: superseded. The SDK checks `cwd` itself from `v0.16.0` (0019-MADR F5), and 0019-MADR D7 removed the empty-`cwd` fallback (0019-PLAN P4, `17cd497`).)*
+- **D3. `TestElicitationNotFound`'s request carries `Session: &acp.ElicitationSessionScope{SessionId: "s0"}`.** Its -32601 and no-advertisement assertions stay unchanged. The SDK made the same fix to its own tests in `0e32255` (SDK `0011-PLAN-engine-tests.md`). *(2026-10-13: superseded by 0019-MADR D8. The SDK refuses first from `v0.17.0`: the test asserts its `CapabilityError` for `elicitation.url`, and -32602 on a raw send (0019-PLAN P4, `17cd497`).)*
 - **D4. Non-test code names JSON-RPC codes by the SDK's constants:**
   - `acpclient/conn.go`'s `authRequiredCode` goes, and the comparison is `re.Code == int(acp.ErrorCodeAuthenticationRequired)`;
   - `acpclient/sessions.go:47` and `:49` compare against `int(acp.ErrorCodeInvalidRequest)` and `int(acp.ErrorCodeInvalidParams)`.
@@ -198,7 +200,7 @@ Chosen: **A**, because it is the largest change that stays honest and decided.
   Tests keep their numeric literals, deliberately: they assert the wire value, and must fail if a constant ever changed (F9).
 - **D5. The five hand-written discriminator strings are removed** (`acpserver/commands.go:330`, `:387`, `:516`; `acpserver/modes.go:50`; `acpserver/prompt.go:304`). The variant's `SessionUpdate` field is left empty, as the SDK's helpers leave it. `session.golden` staying byte-identical is the proof (F8). Helpers for these five variants, and for `notice` and the compaction updates, are a request to acp-go-sdk2, not local wrappers (D13).
 - **D6. A conformance test runs under every golden.** `acptest` gains `ValidateGolden(t, path)`. It decodes each recorded frame into the SDK type of its method (a response by its request's method), and fails on a decode error, a `Validate` error, or a method it has no type for. Every test that compares a transcript with a golden calls it. The type table lives in `acptest`, inside rule 2. The probe of F10 is its prototype: 15 of 15 frames pass today, and both broken copies fail.
-- **D7. The agent keeps the client's capabilities as a typed view.** `a.client` already holds them (`acpserver/agent.go:100`, `:226`). It gains small accessors, `offersNotices()` and `offersCompaction()`, each reading `Session != nil && Session.Notices != nil` (or `Compaction`). Every capability-gated update is sent only behind them.
+- **D7. The agent keeps the client's capabilities as a typed view.** `a.client` already holds them (`acpserver/agent.go:100`, `:226`). It gains small accessors, `offersNotices()` and `offersCompaction()`, each reading `Session != nil && Session.Notices != nil` (or `Compaction`). Every capability-gated update is sent only behind them. *(2026-10-13, 0019-MADR D10: the accessors are written over the SDK's `Negotiated()`.)*
 - **D8. Notices.** When the client offers notices, each of the five diagnostics of F6 is also sent to its session as a `notice` update, with these severities:
 
   | Diagnostic | Severity |

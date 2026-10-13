@@ -354,6 +354,8 @@ API.
    and `CurrentBuild` come from `internal/buildinfo`. Map `ExitCode` to
    process status (0, 10, 1). `internal/cli` is the only importer of
    `go-core-lib` (0004-MADR import-boundary rule 8).
+   *(2026-10-13, 0019-MADR D12: go-core-lib is go-selfupdate-lib, renamed 2026-10-02 in `v1.5.0`. F10 binds the newest go-selfupdate-lib at F10,
+   `v1.15.2` today (0019-PLAN P2, `e8181b5`), whose Windows "Access is denied" defect is fixed from `v1.5.1`. The five binaries are noted above.)*
 5. The Pi bridge (0003): discovery sources, `session list --pi`,
    `session import`, ~~`config import --from-pi`~~ *(dropped 2026-10-12 by the owner; 0018-MADR D13)*, `auth import --from-pi`,
    and `--no-pi-bridge`.
@@ -373,6 +375,7 @@ API.
   (`gobble-linux-amd64.tar.gz`) is not selected (`ErrIntegrity` or
   missing asset). `go list -m github.com/maccavelli/go-core-lib`
   prints `v1.1.0`.
+  *(2026-10-13, 0019-MADR D12: `go list -m github.com/maccavelli/go-selfupdate-lib` prints the newest tag at F10.)*
 * The Pi-user smoke test from 0005-MADR Confirmation passes, and the
   `~/.pi` fixture hash is unchanged.
 * The gate table has no empty row.
@@ -639,6 +642,7 @@ and the target table in
   compaction-on-overflow in gobble.
 * F10 `gobble update` binds `go-core-lib/selfupdate` `v1.1.0` as the
   standalone example does.
+  *(2026-10-13, 0019-MADR D12: go-selfupdate-lib, renamed from go-core-lib, at its newest tag at F10.)*
 * X5 no longer waits for a `go.mod` and streaming. Bedrock / Vertex /
   Azure and the unnamed OpenAI-compatible long tail land only if the
   SDK grows them.
@@ -3258,6 +3262,8 @@ Choices made within the wording:
 **F4-1's tests,** each seen failing first on a scratch copy: the four wire cases for each of the ten ids; the live tests' skip without `GOBBLE_LIVE`.
 
 **F4-2 — the catalog, `models.json`, and choosing a model.**
+*(2026-10-13, 0019-MADR D11: re-made on go-llmprovider-sdk `v1.9.0`'s `catalog.ModelInfo`, `LookupModel` and `WithModelLayer`,
+with gobble's snapshot passed as a layer, in place of a gobble-side resolver.)*
 
 Choices made within the wording:
 
@@ -3293,6 +3299,8 @@ Choices made within the wording:
 - **`gobble models list`** with a search and with none, and **`info`**; the ACP options, `size` and `cost`.
 
 **F4-3 — credentials.**
+*(2026-10-13, 0019-MADR D11, F6: F4-3 uses the SDK's `TokenStore`, `RefreshLocker` and logins, and advertises terminal auth
+before it offers one, since acp-go-sdk2's gates otherwise fail `initialize`.)*
 
 Choices made within the wording:
 
@@ -3347,6 +3355,8 @@ Choices made within the wording:
 - **Image input, ~~native streaming,~~ cache-write accounting ~~and 0012-PLAN P7~~:** each waits for the SDK. *(2026-10-11: native streaming is F4-1b, and P7 follows F4-1a; see the Amendments entry "F4-1 re-made for go-llmprovider-sdk `v1.7.0`".)*
 
 **2026-10-11 — F4-1 re-made for go-llmprovider-sdk `v1.7.0`** (the owner's decisions of 2026-10-11: pin `v1.7.0`, and take the latest tag at each later sub-phase; bring a tool result's error flag, a true `NativeStreaming` and live streaming into F4-1; the stream's retry lives in the SDK).
+*(2026-10-13, 0019-MADR D2: re-based on `v1.10.2`. The pin and a truthful `NativeStreaming`, the retry wrapper's, landed in 0019-PLAN P3 (`a7de4a8`);
+F4-1a keeps the tool result's error flag and the wire tests.)*
 
 **Why.** The SDK released four minor versions after the facts of "F4 made executable" were taken. The owner asked for them to be evaluated against F4. That entry's decision 2 and 0005-MADR's second amendment of 2026-10-10, item 1, call `v1.3.2` the latest tag. It was not: `v1.4.0` was tagged on 2026-10-09 at 17:54 UTC, the day before. The error is corrected here and in 0005-MADR's amendment of 2026-10-11.
 

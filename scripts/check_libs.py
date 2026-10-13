@@ -11,7 +11,8 @@ repository outside the working tree:
      packages that import the library;
   3. apidiff from the pinned version, failing on an incompatible change of a
      v1 module (a module below v1 is reported, not failed); apidiff's exit
-     status is not its verdict, so its text is read;
+     status is not its verdict, so its text is read; a library pinned at
+     the tag has nothing to compare;
   4. govulncheck, and the library's GitHub security advisories, which
      govulncheck does not see.
 
@@ -29,6 +30,8 @@ Exit status is 1 when any check fails.
 from __future__ import annotations
 
 import argparse
+import contextlib
+import io
 import json
 import os
 import re
@@ -189,6 +192,43 @@ def export_api(apidiff: Path, lib: Library, version: str, work: Path, logs: Path
     return out
 
 
+def check_api(report: Report, lib: Library, base: str, tag: str, work: Path, logs: Path) -> None:
+    """apidiff from base to tag. A library pinned at the tag has nothing to
+    compare, and exporting one version twice would collide (0019-PLAN P5
+    deviation 15)."""
+    if base == tag:
+        report.note("api", f"pinned at {tag}; nothing to compare")
+        return
+    apidiff = work / ("apidiff.exe" if os.name == "nt" else "apidiff")
+    if not apidiff.exists():
+        run(["go", "build", "-o", str(apidiff), "golang.org/x/exp/cmd/apidiff"], REPO, logs / "apidiff-build.log")
+    try:
+        old, new = export_api(apidiff, lib, base, work, logs), export_api(apidiff, lib, tag, work, logs)
+        diff_log = logs / f"{lib.repo}-apidiff.log"
+        run([str(apidiff), "-m", str(old), str(new)], work, diff_log)
+        breaks = incompatible(diff_log.read_text(encoding="utf-8", errors="replace"))
+        if version_key(tag)[0] == 0:
+            report.note("api", f"{len(breaks)} incompatible changes {base}->{tag}, reported only below v1; see {diff_log}")
+        else:
+            report.check("api", not breaks, f"{len(breaks)} incompatible: {breaks[0]}" if breaks else "")
+    except RuntimeError as err:
+        report.check("api", False, str(err))
+
+
+def pinned_at_tag_not_compared() -> bool:
+    """check_api with the base the tag exports nothing: its work and log
+    directories do not exist, so any export or build would fail the case."""
+    report = Report("self-test")
+    missing = Path(tempfile.gettempdir()) / "gobble-check-libs-self-test-missing"
+    out = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(out):
+            check_api(report, LIBRARIES[0], "v1.0.0", "v1.0.0", missing, missing / "logs")
+    except Exception:  # noqa: BLE001 - any failure of the call fails the case
+        return False
+    return not report.failures and "nothing to compare" in out.getvalue() and not missing.exists()
+
+
 def check_library(lib: Library, tag: str, base: str, work: Path) -> Report:
     report = Report(lib.repo)
     logs = work / "logs"
@@ -216,20 +256,7 @@ def check_library(lib: Library, tag: str, base: str, work: Path) -> Report:
         report.check(f"vet {goos}", run(["go", "vet", "./..."], clone, logs / f"{lib.repo}-vet-{goos}.log", GOOS=goos) == 0)
     tested = run(["go", "test", "-count=1", *lib.packages], clone, logs / f"{lib.repo}-test.log") == 0
     report.check("test", tested, "" if tested else f"see {logs / (lib.repo + '-test.log')}")
-    apidiff = work / ("apidiff.exe" if os.name == "nt" else "apidiff")
-    if not apidiff.exists():
-        run(["go", "build", "-o", str(apidiff), "golang.org/x/exp/cmd/apidiff"], REPO, logs / "apidiff-build.log")
-    try:
-        old, new = export_api(apidiff, lib, base, work, logs), export_api(apidiff, lib, tag, work, logs)
-        diff_log = logs / f"{lib.repo}-apidiff.log"
-        run([str(apidiff), "-m", str(old), str(new)], work, diff_log)
-        breaks = incompatible(diff_log.read_text(encoding="utf-8", errors="replace"))
-        if version_key(tag)[0] == 0:
-            report.note("api", f"{len(breaks)} incompatible changes {base}->{tag}, reported only below v1; see {diff_log}")
-        else:
-            report.check("api", not breaks, f"{len(breaks)} incompatible: {breaks[0]}" if breaks else "")
-    except RuntimeError as err:
-        report.check("api", False, str(err))
+    check_api(report, lib, base, tag, work, logs)
     report.check("govulncheck", run(["go", "tool", "govulncheck", "./..."], clone, logs / f"{lib.repo}-vuln.log") == 0)
     try:
         hits = [f"advisory {a.get('ghsa_id')} covers {tag}" for a in advisories(lib)
@@ -254,7 +281,8 @@ def remove_tree(path: Path) -> bool:
 
 
 def self_test() -> int:
-    """The parsers on fixed inputs; each case must give its expected answer."""
+    """The parsers on fixed inputs, and the API step for a library pinned at
+    the tag; each case must give its expected answer."""
     mod_a = "module m\n\nrequire (\n\tgithub.com/maccavelli/acp-go-sdk2 v0.14.0\n\tgolang.org/x/sys v0.48.0 // indirect\n)\n"
     mod_b = mod_a.replace("v0.14.0", "v0.17.0")
     mod_c = mod_b.replace("golang.org/x/sys v0.48.0 // indirect\n", "golang.org/x/sys v0.48.0 // indirect\n\texample.com/x v1.0.0\n")
@@ -269,6 +297,7 @@ def self_test() -> int:
         ("= 0.15.0 does not cover v0.16.0", not covers("= 0.15.0", "v0.16.0")),
         ("< 1.2.0, >= 1.0.0 covers v1.1.0", covers("< 1.2.0, >= 1.0.0", "v1.1.0")),
         ("< 1.2.0, >= 1.0.0 does not cover v1.2.0", not covers("< 1.2.0, >= 1.0.0", "v1.2.0")),
+        ("a library pinned at the tag is not compared", pinned_at_tag_not_compared()),
     ]
     for name, ok in cases:
         print(f"self-test {name}: {'ok' if ok else 'FAIL'}")
@@ -281,7 +310,7 @@ def main() -> int:
     ap.add_argument("--tag", help="the version to check; default the latest semver tag")
     ap.add_argument("--from", dest="base", help="the version to diff from; default the pinned one")
     ap.add_argument("--keep", action="store_true", help="keep the scratch directory")
-    ap.add_argument("--self-test", action="store_true", help="test the parsers and exit")
+    ap.add_argument("--self-test", action="store_true", help="run the offline self-test and exit")
     args = ap.parse_args()
     if args.self_test:
         return self_test()

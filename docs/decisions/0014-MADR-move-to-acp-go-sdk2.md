@@ -1,6 +1,6 @@
 ---
 status: accepted
-date: 2026-10-10
+date: 2026-10-13
 decision-makers: repository owner
 consulted: none
 informed: magic-cli-remote
@@ -45,7 +45,7 @@ Read-only, on 2026-10-10. The SDK was read from a shallow clone of the tag in a 
 - **F4.** The compile delta of the test files is a floor, not a count: `acpserver`'s tests could not compile while `acptest` did not, so their own errors were not reached **[unverified]**.
 - **F5.** Every fork behaviour gobble's records rely on is present in sdk2.
 - **F6.** sdk2 refuses a request missing a required key, which the fork accepted. A client built on the fork emits every required key, since the fork's required fields have no `omitempty`, so gobble's own CLI and magic-cli-remote should be unaffected **[unverified for magic-cli-remote; gobble's own client is checked by the golden in Confirmation]**.
-- **F7.** sdk2 is under active development by its owner; `v0.14.0` is its only tag. A later tag is a later decision.
+- **F7.** sdk2 is under active development by its owner; `v0.14.0` is its only tag. A later tag is a later decision. *(2026-10-13: acp-go-sdk2 has five tags, `v0.14.0` to `v0.17.1`; `v0.17.1` is pinned by 0019-MADR D3 (0019-PLAN P4, `17cd497`).)*
 - **F8.** Two gates and one rule of 0004-MADR name the old module path, so they move with it, amended together.
 - **F9.** *(Amendment of 2026-10-10, 0014-PLAN P1 deviation 1.)* The schema moved JSON keys in five types gobble uses: `McpServerAcpInline`'s `id` is `serverId`; `ClientCapabilities` loses `planCapabilities` and gains `plan`, `session` and `subagents`; `PromptRequest.messageId` and `PromptResponse.userMessageId` are gone; `ToolCallUpdate` gains `name`, and `Usage` `_meta`. Neither gobble nor magic-cli-remote reads a removed key, and gobble refuses the ACP transport whatever its id. A fork client's old-shape ACP-transport entry now fails at sdk2's decode, still refused. The finding came from a key diff of every struct the two `types_gen.go` files share, run after the compile delta, which F4 had said was a floor.
 
@@ -102,8 +102,8 @@ go list -m github.com/maccavelli/acp-go-sdk2                            -> githu
 grep -rn 'github.com/coder/acp-go-sdk"' --include=*.go .                -> nothing
 go test ./acpserver -run '^TestSession$'                                -> ok; session.golden unchanged (git diff --exit-code)
 go test ./acpclient -run TestPromptParamsMatchSDKClient                  -> ok
-go test ./acpserver -run TestDeleteSessionNotFound                       -> ok: -32601
-go test ./acpclient -run TestElicitationNotFound                         -> ok: -32601
+go test ./acpserver -run TestDeleteSessionNotFound                       -> ok: -32601   (2026-10-13: the SDK's CapabilityError, then -32601 on a raw send; asserted through the SDK's gates, 0019-PLAN P4 step 8)
+go test ./acpclient -run TestElicitationNotFound                         -> ok: -32601   (2026-10-13: the SDK's CapabilityError, then -32602 on a raw send; asserted through the SDK's gates, 0019-PLAN P4 step 8)
 make archtest                                                            -> ok; a scratch copy importing sdk2 from internal/cli fails rule 2
 make preflight                                                           -> preflight passed (Windows and WSL)
 ```

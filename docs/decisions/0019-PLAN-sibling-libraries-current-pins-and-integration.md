@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: completed
 date: 2026-10-13
 ---
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
@@ -30,7 +30,7 @@ When every phase is committed:
 | P2 | — | `go.mod`, `go.sum`, `.github/workflows/ci.yml`, `docs/architecture.md`, `README.md` |
 | P3 | `llm/provider/ambient_test.go`, `acpserver/usage_test.go` | `go.mod`, `go.sum`, `llm/provider/provider.go`, `llm/provider/provider_test.go`, `llm/doc.go`, `llm/llm.go`, `acpserver/history.go`, `docs/architecture.md`, `README.md`; *(deviation 2:)* `llm/provider/ambient.go`; `internal/config/keys.go`, `internal/config/settings.go`, `internal/config/settings.yaml`, `internal/config/merge.go`, `internal/config/testdata/settings.schema.json`, `internal/config/resolve_test.go`, `internal/config/render_test.go`; `internal/cli/agent.go`, `internal/cli/line.go`, `internal/cli/print.go`, `internal/cli/settings_test.go`; `docs/decisions/0018-MADR-configuration-surface.md`, `docs/decisions/0005-PLAN-v1-feature-scope.md`, `docs/README.md`, this plan and its MADR |
 | P4 | `acpclient/acptest/abs.go`, `acpclient/acptest/abs_test.go`, `acpserver/rewrite.go`, `acpserver/rewrite_test.go`, `acpserver/list_test.go` | `go.mod`, `go.sum`; `acpclient/conn.go`, `acpclient/sessions.go`, `acpclient/conn_test.go`, `acpclient/sessions_test.go`, `acpclient/elicitation_test.go`; `acpclient/acptest/recorder.go`, `acpclient/acptest/script.go`, `acpclient/acptest/pair_test.go`, `acpclient/acptest/script_test.go`; `acpserver/serve.go`, `acpserver/agent.go`, `acpserver/mcp.go`, `acpserver/agent_test.go`, `acpserver/commands_test.go`, `acpserver/fixtures_test.go`, `acpserver/tree_test.go`, `acpserver/delete_test.go`, `acpserver/mcp_test.go`; `internal/cli/line_test.go`; `docs/architecture.md`, `README.md`; *(deviation 4:)* `acpserver/sysprompt.go`; *(deviation 7:)* `docs/decisions/0005-PLAN-v1-feature-scope.md`; *(deviation 10:)* `docs/README.md`; *(deviations 3 to 10:)* this plan and its MADR |
-| P5 | — | `docs/decisions/0016-MADR-acp-go-sdk2-v0.15.0-and-stable-surface.md`, `docs/decisions/0014-MADR-move-to-acp-go-sdk2.md`, `docs/decisions/0005-MADR-v1-feature-scope.md`, `docs/decisions/0005-PLAN-v1-feature-scope.md`, `docs/decisions/0012-PLAN-tool-schemas-descriptions-and-loading.md`, `docs/reports/0014-REPORT-llmprovider-sdk-integration.md`, `docs/reports/0015-REPORT-sibling-library-pins-and-order.md`, `docs/README.md`, this plan (its execution record) |
+| P5 | — | *(deviation 15:)* `scripts/check_libs.py`; `docs/decisions/0016-MADR-acp-go-sdk2-v0.15.0-and-stable-surface.md`, `docs/decisions/0014-MADR-move-to-acp-go-sdk2.md`, `docs/decisions/0005-MADR-v1-feature-scope.md`, `docs/decisions/0005-PLAN-v1-feature-scope.md`, `docs/decisions/0012-PLAN-tool-schemas-descriptions-and-loading.md`, `docs/reports/0014-REPORT-llmprovider-sdk-integration.md`, `docs/reports/0015-REPORT-sibling-library-pins-and-order.md`, `docs/README.md`, this plan (its execution record) |
 
 A phase that needs a file not listed here stops, and the file is raised as a deviation.
 
@@ -332,12 +332,12 @@ Each note is dated 2026-10-12 (or the day P5 runs), cites 0019-MADR's decision a
 
 1. **`docs/decisions/0016-MADR-acp-go-sdk2-v0.15.0-and-stable-surface.md`:** the note of D10, under its frontmatter's first heading and at D1, D2, D3 and D7.
 2. **`docs/decisions/0014-MADR-move-to-acp-go-sdk2.md`:** at F7 (`:48`), "`v0.17.0` is pinned by 0019-MADR D3"; at its Confirmation's -32601 lines for the delete and elicitation tests, "now asserted through the SDK's gates (0019-PLAN P4 step 8)". *(P4 deviation 11: the note names `v0.17.1`.)*
-3. **`docs/decisions/0005-MADR-v1-feature-scope.md`:** at `:268`, "five raw binaries"; at `:587` and `:608`, "go-core-lib is go-selfupdate-lib, renamed 2026-10-03"; at `:598`, "fixed in go-selfupdate-lib `v1.5.1` (its 0010-MADR B5, B6)"; at `:966`, "superseded at go-llmprovider-sdk `v1.9.0`: `catalog.ModelInfo` (0019-MADR F9)".
+3. **`docs/decisions/0005-MADR-v1-feature-scope.md`:** at `:268`, "five raw binaries"; at `:587` and `:608`, "go-core-lib is go-selfupdate-lib, renamed 2026-10-03"; at `:598`, "fixed in go-selfupdate-lib `v1.5.1` (its 0010-MADR B5, B6)"; at `:966`, "superseded at go-llmprovider-sdk `v1.9.0`: `catalog.ModelInfo` (0019-MADR F9)". *(Deviation 12: "renamed 2026-10-02 in `v1.5.0`".)*
 4. **`docs/decisions/0005-PLAN-v1-feature-scope.md`:** at the F4-1 amendment entry (`:3342`), "re-based on `v1.10.2` by 0019-MADR D2; the pin and a true `NativeStreaming` landed in 0019-PLAN P3, and F4-1a keeps the tool result's error flag and the wire tests"; at F4-2's entry, "re-made on `v1.9.0`'s `catalog.ModelInfo` (0019-MADR D11)"; at F4-3's, "the SDK's `TokenStore`, `RefreshLocker` and logins; terminal auth advertised before offered (0019-MADR D11, F6)"; at F10's (`:342`, `:374`, `:640`), D12's three corrections and "the newest go-selfupdate-lib at F10".
 5. **`docs/decisions/0012-PLAN-tool-schemas-descriptions-and-loading.md`:** at `:1386`, D11's amendment of P7: `Strict` stays `nil` except for providers whose live test has shown `true` is accepted.
 6. **`docs/reports/0014-REPORT-llmprovider-sdk-integration.md`:** at the gap table (`:279-288`), "strict and the error bit at `v1.7.0`, native streaming at `v1.6.0`, cache writes at `v1.10.0`; still open: deferral, `cache_control`, images, a generic Chat Completions provider (0019-MADR F9)".
 7. **`docs/reports/0015-REPORT-sibling-library-pins-and-order.md`:** at `:163-166`, the three corrected defaults, measured by running the SDK (0019-MADR's table); at F2's and F6's `v1.8.0` metadata, "`v1.9.0`".
-8. **`docs/README.md`:** the 0019 rows read `accepted` and `completed (<date>)`; the build-order list gains `**0019-PLAN.** Run: P1–P5 on <date>.`
+8. **`docs/README.md`:** the 0019 rows read `accepted` and `completed (<date>)`; the build-order list gains `**0019-PLAN.** Run: P1–P5 on <date>.` *(Deviation 14: and 0014-REPORT's missing row.)*
 9. **This plan:** `status: completed`, and its `## Execution record (<date>)`: each phase's commit, gates and negatives, and what this plan predicted wrongly.
 
 **P5's verification:**
@@ -348,6 +348,22 @@ python -I <scratch>/q261_lint_records.py --negative <every record P5 touches> ->
 grep -c '0019-MADR' <each record of steps 1-7>                              -> at least 1 each
 ```
 
+### P5's deviations, 2026-10-13
+
+- **Deviation 12. Step 3's rename date is wrong.**
+  - **Found:** go-selfupdate-lib's history has the module rename as `6deaa52`, "chore(module): rename go-core-lib to go-selfupdate-lib", dated 2026-10-02 and first released in `v1.5.0`, tagged 2026-10-02; `v1.4.1` is the last tag before it. Step 3's note text says 2026-10-03, the date of `v1.5.1`.
+  - **Decided** ("Correct date and tag"): the notes read "renamed 2026-10-02 in `v1.5.0`". Step 3 is annotated. No file added.
+- **Deviation 13. go-llmprovider-sdk `v1.11.0` was tagged after P3.**
+  - **Found:** `v1.11.0` (`d1fbad55`) was tagged 2026-10-13 at 09:54 (UTC-5), after P3 pinned `v1.10.2`, so the whole-plan check "every library at its latest tag" cannot hold. `check_libs.py --lib go-llmprovider-sdk` passes at `v1.11.0`, every check ok; apidiff reports two additions, `catalog.WithLimit` and `wizard.Options.ModelLimit`. Its changed default, a listing's full curated catalog, reaches no gobble code, since gobble lists no models (gobble-cli issue 1).
+  - **Decided** ("Record it; 0020 pins"): 0019 closes at `v1.10.2`, and the next record pins `v1.11.0` with issue 1's listing. The whole-plan verification line is annotated. No file added.
+- **Deviation 14. 0014-REPORT has no row in the index.**
+  - **Found:** `docs/reports/0014-REPORT-llmprovider-sdk-integration.md` is the only record `docs/README.md` does not link, since its commit `ad6ea57` (2026-10-11); `make check-records` does not check the index. P5 adds a note to it.
+  - **Decided** ("Add its row in P5"): the index gains its row. No file added; the index is step 8's.
+- **Deviation 15. `check_libs.py` crashes when a library is pinned at its latest tag (pre-existing).**
+  - **Found:** the whole-plan `python scripts/check_libs.py` aborts at acp-go-sdk2, pinned at `v0.17.1`, its latest tag: `check_library` exports the API of the base and of the tag, both `v0.17.1`, and the second `mkdir` of `api-v0.17.1` raises `FileExistsError` (`scripts/check_libs.py:182`, called at `:223`). That is not the `RuntimeError` the step catches, so the run ends and the other two libraries are never checked. The script is unchanged since P1's `8b0bd54`; every earlier run had a newer tag. Unfixed, every full run crashes whenever any library is at its latest tag, the normal state after a pin.
+  - **Decided** ("Skip API diff when pinned = tag"): the API step moves into `check_api`, which reports `api: pinned at <tag>; nothing to compare` and exports nothing when the base is the tag. A `--self-test` case runs that branch offline, seen failing on a scratch copy without it, and `--lib acp-go-sdk2` is run before and after. `scripts/check_libs.py` is added to P5's scope.
+  - **Done** (2026-10-13): `--self-test` 9 of 9 ok; on a scratch copy without the branch the new case alone fails (8 ok, 1 FAIL), creating nothing. The full run, which crashed before, exits 0: acp-go-sdk2 and go-selfupdate-lib report `pinned at` their tags, and go-llmprovider-sdk passes every check at `v1.11.0`. The run checked the full set where `--lib acp-go-sdk2` alone was planned, since go-selfupdate-lib is pinned at its tag too.
+
 ## Verification (whole plan)
 
 After P5:
@@ -357,7 +373,7 @@ go list -m github.com/maccavelli/acp-go-sdk2 github.com/maccavelli/go-llmprovide
                                                    -> v0.17.0, v1.10.2, v1.15.2   (deviation 11: v0.17.1)
 git diff 108d9f0 -- go.mod | grep -c '^[-+]\s'     -> 6
 git diff --exit-code 108d9f0 -- acpserver/testdata/session.golden -> no diff
-python scripts/check_libs.py                       -> every library at its latest tag; exit 0
+python scripts/check_libs.py                       -> every library at its latest tag; exit 0   (deviation 13: go-llmprovider-sdk v1.11.0, tagged after P3, is the next record's)
 the gates                                          -> lint ×3, tests on three systems, -race on two, preflight
 ```
 
@@ -394,3 +410,45 @@ the gates                                          -> lint ×3, tests on three s
 - **0016-MADR's remaining decisions:** re-checked against `v0.17.0` before 0016's own PLAN is written. *(P4 deviation 11: against `v0.17.1`.)*
 - **A streaming `WithRetry`:** a request to go-llmprovider-sdk, the owner's, in that repository.
 - **`check_libs.py` in CI:** it needs the network and the libraries' advisories; whether it runs on a schedule is the owner's choice, after it has run by hand on a few tags.
+
+## Execution record (2026-10-13)
+
+Every phase ran, in order, with 0018-PLAN P7 between P1 and P2. The agent staged each phase; the owner committed each with `git commit --no-edit`.
+
+| Phase | Commit | Landed |
+| :--- | :--- | :--- |
+| P1 | `8b0bd54` | `scripts/check_libs.py` and `make check-libs` (D14) |
+| 0018-PLAN P7 | `ca314b8` | the edit lock's deadline, run before P2 at the owner's direction (0018-PLAN deviation 24) |
+| P2 | `e8181b5` | go-selfupdate-lib `v1.15.2` and the two workflow `uses:` lines (D1) |
+| P3 | `a7de4a8` | go-llmprovider-sdk `v1.10.2` (D2) and the `defaultProvider` setting (D15) |
+| P4 | `17cd497` | acp-go-sdk2 `v0.17.1` (D3) and D4–D9 |
+| P5 | the commit of these records | D10–D13's notes, deviations 12–15, `check_libs.py`'s pinned-at-the-tag fix, and this record |
+
+**Gates.** Each phase's run of `q428_gates_0019.py`: lint for linux, darwin and windows, 0 issues; Windows `go test` and `-race`, the second Linux machine's `-race` and the macOS laptop's `go test`, 31 packages ok each, with no failure and no race report; Windows preflight passed. P4's first run failed `-race` on Windows and on Linux, 29 of 31 each, on the SDK's constructor race (deviation 11); its rerun on `v0.17.1` is the green one. Each staged index passed `q252_check_index.py` (gofmt, vet, test and check-records on the index alone); P1's first index run failed on `mcpclient`'s `TestAddConcurrent`, which 0018-PLAN P7 fixed.
+
+**Negatives,** each on a scratch copy after a control run passed: P1 4 of 4 (3 of 4 before deviation 1); 0018-PLAN P7 3 of 3; P3 12 of 12; P4 15 of 15 (13 of 15 before deviations 8 and 9), and magic-cli-remote's session test failed with a key the provider rejects; P5's self-test case failed on a copy without its branch. P2 adds no check.
+
+**magic-cli-remote** (step 12, A11): its ACP client ran `initialize`, `session/new`, `/session`, a model turn answered "ok", and close, against P4's agent on `v0.17.1`, with no capability, validation or -32602 error.
+
+**Deviations:** 15, each the owner's decision, recorded under its phase: 1 (P1), 2 (P3), 3–11 (P4), 12–15 (P5).
+
+**What this plan predicted wrongly:**
+
+1. P1's negative 3: `go get` of go-selfupdate-lib `v1.5.0` and `go mod tidy` moved it back to `v1.15.2`, since `v1.5.0` lacks a package gobble's tests import, so the check tested another version until it checked the version after `tidy` (deviation 1).
+2. The research's `vet` failure at `v1.5.0` came from running no `tidy`, not from the library.
+3. P3 step 8 assumed `Choose` can reach all nine key-taking providers; opencode-go shares `OPENCODE_API_KEY` with opencode-zen and comes after it (deviation 2).
+4. P4's inventory of POSIX paths missed `tree_test.go:49` (deviation 3).
+5. That the path rewrite alone keeps the golden: its first usage estimate counts the prompt, whose `cwd` is longer on Windows (deviation 4).
+6. That `elicitation/complete` is ungated (deviation 5).
+7. Negatives 5 and 7 as worded: `LookPath` refuses a relative result by default, and the SDK answers an unadvertised method before gobble's handler (deviations 8, 9).
+8. Negative 1's count: 32 tests fail with `Abs` off on Windows, not 22; the plan counted the table's path set only.
+9. That the race gates pass on `v0.17.0`: neither P1's script nor the research ran `-race`, and `v0.17.0` races its own constructor (deviation 11, MADR F15).
+10. The line numbers P5 cites drifted with P3's and P4's notes (0005-PLAN's F4-1 entry was no longer at `:3342`); each note is placed by the text it annotates.
+11. Step 3's rename date (deviation 12).
+12. That the latest tags hold until P5: go-llmprovider-sdk `v1.11.0` was tagged 74 minutes after P3 was committed (deviation 13).
+13. That the index lists every record: 0014-REPORT had no row (deviation 14, pre-existing).
+14. That `check_libs.py` runs with a library at its latest tag: P1's tests always had a newer tag, so the double export was never reached (deviation 15).
+
+**The agent's own errors, found and fixed before staging:** P1's script printed failure text on success, and its scratch cleanup left read-only files on Windows while reporting them removed; step 12's harness first passed a turn that ended in error, and then sent the key file's whole `NAME=value` line as the key, which made deviation 6's premise wrong (its correction is recorded with it).
+
+**Left open:** deviation 7's defect, a rejected key reported as no key, is 0005-PLAN F4-3's; `check_libs.py` runs no `-race`, which would have found deviation 11 before P4, and adding it is the owner's choice; and the Deferred items above.
