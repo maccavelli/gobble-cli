@@ -36,6 +36,10 @@ type Options struct {
 	// ModelMetadataURL replaces List's model metadata document, for
 	// tests; New never fetches it.
 	ModelMetadataURL string
+	// SessionID names the conversation: the routing key a cached request
+	// carries, and OpenCode's and Kilo's session headers (0021-MADR D4).
+	// Empty keeps the SDK's random id, fixed for the provider.
+	SessionID string
 }
 
 // New builds the SDK provider id with o, wrapped in the SDK's retry, as an
@@ -58,6 +62,9 @@ func New(id string, o Options) (llm.Provider, error) {
 	}
 	if o.HTTPClient != nil {
 		opts = append(opts, llmprovider.WithHTTPClient(o.HTTPClient))
+	}
+	if o.SessionID != "" {
+		opts = append(opts, llmprovider.WithSessionID(o.SessionID))
 	}
 	p, err := providers.New(llmprovider.ProviderID(id), opts...)
 	if err != nil {
@@ -194,7 +201,7 @@ func usageOf(r *llmprovider.Response, req *llmprovider.Request, output string) l
 
 // toRequest maps llm's request onto the SDK's.
 func toRequest(req *llm.Request) (*llmprovider.Request, error) {
-	out := &llmprovider.Request{Model: req.Model, Reasoning: reasoningFor(req.Thinking)}
+	out := &llmprovider.Request{Model: req.Model, Reasoning: reasoningFor(req.Thinking), Cache: llmprovider.CacheRetention(req.Cache)}
 	var system []string
 	for _, m := range req.Messages {
 		for _, c := range m.Content {

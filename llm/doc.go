@@ -48,4 +48,7 @@
 // plus Estimated. When the SDK reports any non-zero count, the adapter uses
 // that report and leaves a zero component at zero. An all-zero report is
 // estimated. Cache-write is the SDK's count, from go-llmprovider-sdk `v1.10.0`.
+//
+// Request.Cache asks the service to cache the prompt; an agent turn sets it
+// and a compaction does not (0021-MADR D2).
 package llm

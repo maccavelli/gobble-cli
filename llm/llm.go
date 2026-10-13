@@ -24,6 +24,20 @@ type Capabilities struct {
 	NativeStreaming bool `json:"nativeStreaming,omitzero"`
 }
 
+// CacheRetention asks the model service to cache a request's prompt, and
+// for how long (0021-MADR D1). CacheNone asks for nothing; CacheShort is
+// the service's short lifetime, five minutes on Anthropic; CacheLong its
+// longest, an hour on Anthropic, and CacheShort's where it has one. The
+// values are go-llmprovider-sdk's.
+type CacheRetention string
+
+// The retentions.
+const (
+	CacheNone  CacheRetention = ""
+	CacheShort CacheRetention = "short"
+	CacheLong  CacheRetention = "long"
+)
+
 // Request is one model call.
 // Tools is a JSON array of tool specs. This package does not interpret it.
 type Request struct {
@@ -31,6 +45,8 @@ type Request struct {
 	Messages []Message      `json:"messages,omitzero"`
 	Tools    jsontext.Value `json:"tools,omitzero"`
 	Thinking string         `json:"thinking,omitzero"`
+	// Cache asks the service to cache the prompt; CacheNone asks for nothing.
+	Cache CacheRetention `json:"cache,omitzero"`
 }
 
 // Role is the author of a message.
