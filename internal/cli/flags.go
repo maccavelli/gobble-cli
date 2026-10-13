@@ -47,10 +47,11 @@ type SharedFlags struct {
 	NoSkills           bool   `name:"no-skills" help:"Do not load skills."`
 
 	// Trust, approval and environment.
-	Approve bool   `negatable:"" help:"Approve tool calls without asking (--no-approve: always ask)."`
-	Yes     bool   `help:"Answer yes to confirmations."`
-	Offline bool   `help:"Make no network calls except to the model."`
-	Cwd     string `complete:"dir" placeholder:"DIR" help:"Run as if started in DIR."`
+	Approve bool     `negatable:"" help:"Approve tool calls without asking (--no-approve: always ask)."`
+	Yes     bool     `help:"Answer yes to confirmations."`
+	Offline bool     `help:"Make no network calls except to the model."`
+	Cwd     string   `complete:"dir" placeholder:"DIR" help:"Run as if started in DIR."`
+	AddDir  []string `name:"add-dir" sep:"none" complete:"dir" placeholder:"DIR" help:"Another workspace directory for this run; repeatable."`
 }
 
 // The plans that deliver the default command's remaining flags.

@@ -92,19 +92,19 @@
           "type": "integer",
           "description": "How long, in milliseconds, the first prompt waits for MCP servers to connect.",
           "default": 10000,
-          "minimum": 0
+          "minimum": 1
         },
         "stopGraceMs": {
           "type": "integer",
           "description": "How long, in milliseconds, a stdio MCP server has to exit once its input closes.",
           "default": 500,
-          "minimum": 0
+          "minimum": 1
         },
         "stopTimeoutMs": {
           "type": "integer",
           "description": "How long, in milliseconds, after the grace before a stdio MCP server is killed.",
           "default": 2000,
-          "minimum": 0
+          "minimum": 1
         }
       },
       "additionalProperties": false

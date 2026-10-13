@@ -522,6 +522,8 @@ Chosen: **A**. In the probe it kept the file exactly apart from the edited value
   | `mcp.startupWaitMs` | integer ≥ 0 | 10000 | `acpserver.MCPOptions.StartupWait` | any | session |
   | `mcp.stopGraceMs` | integer ≥ 0 | 500 | a stdio server's stdin grace (`mcpclient/proc.go:83`) | any | session |
   | `mcp.stopTimeoutMs` | integer ≥ 0 | 2000 | a stdio server's close timeout (`mcpclient/proc.go:85`) | any | session |
+
+  *(2026-10-12, 0018-PLAN P5 deviation 19: `mcp.startupWaitMs`, `mcp.stopGraceMs` and `mcp.stopTimeoutMs` are integers ≥ 1, not ≥ 0. A zero duration means "the default" in `acpserver`'s session settings (D17) and in `mcpclient`'s options, so a 0 would silently become 10 s, 500 ms or 2 s. 1 ms is in effect no wait.)*
   | `externalEditor` | command line; "" unset | unset | the editor chain, after `GOBBLE_EDITOR` | any | process |
 
   - **Names** are lower camelCase, gobble's own. Several match Pi's, which is convenient but no longer a constraint.

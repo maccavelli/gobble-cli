@@ -56,6 +56,9 @@ func sessionError(method string, err error) error {
 // agent: a chosen id, a session to fork, and a name (0002-PLAN Phase 4).
 type NewSessionOptions struct {
 	ID, ForkFrom, Name string
+	// AdditionalDirectories are workspace roots after cwd, each absolute
+	// (--add-dir; 0018-MADR D14).
+	AdditionalDirectories []string
 }
 
 func (o NewSessionOptions) meta() map[string]any {
@@ -77,7 +80,8 @@ func (c *Conn) NewSessionWith(ctx context.Context, cwd string, opts NewSessionOp
 	defer c.newMu.Unlock()
 	c.handler.setPending(on)
 	defer c.handler.setPending(nil)
-	resp, err := c.conn.NewSession(ctx, acp.NewSessionRequest{Cwd: cwd, McpServers: []acp.McpServer{}, Meta: opts.meta()})
+	resp, err := c.conn.NewSession(ctx, acp.NewSessionRequest{Cwd: cwd, McpServers: []acp.McpServer{}, Meta: opts.meta(),
+		AdditionalDirectories: opts.AdditionalDirectories})
 	if err != nil {
 		return nil, sessionError("session/new", err)
 	}
@@ -113,12 +117,25 @@ type Resumed struct {
 	Messages int
 }
 
+// ResumeSessionOptions are a resume's options.
+type ResumeSessionOptions struct {
+	// AdditionalDirectories are workspace roots after cwd, each absolute
+	// (--add-dir; 0018-MADR D14).
+	AdditionalDirectories []string
+}
+
 // ResumeSession continues a stored session, with no replay. on receives its
-// updates from then on.
+// updates from then on. It is ResumeSessionWith with no options.
 func (c *Conn) ResumeSession(ctx context.Context, id, cwd string, on func(Update)) (*Session, Resumed, error) {
+	return c.ResumeSessionWith(ctx, id, cwd, ResumeSessionOptions{}, on)
+}
+
+// ResumeSessionWith continues a stored session with opts, with no replay.
+// on receives its updates from then on.
+func (c *Conn) ResumeSessionWith(ctx context.Context, id, cwd string, opts ResumeSessionOptions, on func(Update)) (*Session, Resumed, error) {
 	sid := acp.SessionId(id)
 	c.handler.add(sid, on)
-	resp, err := c.conn.ResumeSession(ctx, acp.ResumeSessionRequest{SessionId: sid, Cwd: cwd})
+	resp, err := c.conn.ResumeSession(ctx, acp.ResumeSessionRequest{SessionId: sid, Cwd: cwd, AdditionalDirectories: opts.AdditionalDirectories})
 	if err != nil {
 		c.handler.remove(sid)
 		return nil, Resumed{}, sessionError("session/resume", err)

@@ -53,7 +53,7 @@ func TestEditorCommand(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := editorCommand(func(k string) string { return tc.env[k] }, tc.goos)
+			got, err := editorCommand(func(k string) string { return tc.env[k] }, tc.goos, "")
 			if err != nil || !slices.Equal(got, tc.want) {
 				t.Fatalf("editorCommand = %q, %v; want %q", got, err, tc.want)
 			}
@@ -84,7 +84,7 @@ func TestCompose(t *testing.T) {
 		}
 		return os.WriteFile(file, []byte("edited\nprompt\n"), 0o600)
 	}
-	got, err := Compose(t.Context(), env, dir, "draft", run)
+	got, err := Compose(t.Context(), env, "", dir, "draft", run)
 	if err != nil || got != "edited\nprompt" {
 		t.Fatalf("Compose = %q, %v; want \"edited\\nprompt\"", got, err)
 	}
@@ -105,22 +105,56 @@ func TestOpenRunsEditorOnFile(t *testing.T) {
 	}
 	var args []string
 	run := func(cmd *exec.Cmd) error { args = cmd.Args; return nil }
-	if err := Open(t.Context(), env, file, run); err != nil {
+	if err := Open(t.Context(), env, "", file, run); err != nil {
 		t.Fatal(err)
 	}
 	if want := []string{"my editor", "-w", file}; !slices.Equal(args, want) {
 		t.Fatalf("args = %q, want %q", args, want)
 	}
 	boom := errors.New("exit status 2")
-	if err := Open(t.Context(), env, file, func(*exec.Cmd) error { return boom }); !errors.Is(err, boom) {
+	if err := Open(t.Context(), env, "", file, func(*exec.Cmd) error { return boom }); !errors.Is(err, boom) {
 		t.Fatalf("err = %v, want the editor's error", err)
+	}
+}
+
+// The configured editor, externalEditor, comes after GOBBLE_EDITOR and
+// before VISUAL and EDITOR, for Compose and Open alike (0018-MADR D17).
+func TestEditorChainConfigured(t *testing.T) {
+	cases := []struct {
+		name       string
+		env        map[string]string
+		configured string
+		want       []string
+	}{
+		{"GOBBLE_EDITOR wins", map[string]string{"GOBBLE_EDITOR": "g", "VISUAL": "v"}, "code --wait", []string{"g"}},
+		{"configured over VISUAL and EDITOR", map[string]string{"VISUAL": "v", "EDITOR": "e"}, "code --wait", []string{"code", "--wait"}},
+		{"blank configured falls through", map[string]string{"VISUAL": "v"}, "  ", []string{"v"}},
+		{"configured over the platform's", nil, `"C:\Program Files\ed.exe" -n`, []string{`C:\Program Files\ed.exe`, "-n"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			env := func(k string) string { return tc.env[k] }
+			got, err := editorCommand(env, "linux", tc.configured)
+			if err != nil || !slices.Equal(got, tc.want) {
+				t.Fatalf("editorCommand = %q, %v; want %q", got, err, tc.want)
+			}
+			var opened []string
+			run := func(cmd *exec.Cmd) error { opened = cmd.Args; return nil }
+			if err := Open(t.Context(), env, tc.configured, "f", run); err != nil || !slices.Equal(opened[:len(opened)-1], tc.want) {
+				t.Fatalf("Open ran %q, %v", opened, err)
+			}
+			run = func(cmd *exec.Cmd) error { opened = cmd.Args; return nil }
+			if _, err := Compose(t.Context(), env, tc.configured, t.TempDir(), "", run); err != nil || !slices.Equal(opened[:len(opened)-1], tc.want) {
+				t.Fatalf("Compose ran %q, %v", opened, err)
+			}
+		})
 	}
 }
 
 func TestComposeEditorFails(t *testing.T) {
 	dir := t.TempDir()
 	boom := errors.New("exit status 1")
-	_, err := Compose(t.Context(), func(string) string { return "" }, dir, "x", func(*exec.Cmd) error { return boom })
+	_, err := Compose(t.Context(), func(string) string { return "" }, "", dir, "x", func(*exec.Cmd) error { return boom })
 	if !errors.Is(err, boom) {
 		t.Fatalf("err = %v, want the editor's error", err)
 	}

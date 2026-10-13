@@ -22,12 +22,19 @@ type sessionChoice struct {
 	resume       string // --session: a path, an id or a prefix
 	fork         string // --fork: a path or an id
 	opts         acpclient.NewSessionOptions
+	// dirs are --add-dir's, made absolute; they belong to the run, so every
+	// session it opens, new or resumed, gets them (0018-MADR D14).
+	dirs []string
 }
 
 func (f *SharedFlags) sessionChoice() sessionChoice {
 	return sessionChoice{continueLast: f.Continue, resume: f.Session, fork: f.Fork,
-		opts: acpclient.NewSessionOptions{ID: f.SessionID, Name: f.Name}}
+		opts: acpclient.NewSessionOptions{ID: f.SessionID, Name: f.Name}, dirs: f.AddDir}
 }
+
+// next is the choice for the run's next session: a new one, with the run's
+// directories.
+func (ch sessionChoice) next() sessionChoice { return sessionChoice{dirs: ch.dirs} }
 
 // resumes reports whether the run continues a stored session.
 func (ch sessionChoice) resumes() bool { return ch.continueLast || ch.resume != "" }
@@ -58,7 +65,7 @@ func openSession(ctx context.Context, conn *acpclient.Conn, ch sessionChoice, cw
 		return nil, nil, err
 	}
 	if id != "" {
-		s, r, err := conn.ResumeSession(ctx, id, cwd, on)
+		s, r, err := conn.ResumeSessionWith(ctx, id, cwd, acpclient.ResumeSessionOptions{AdditionalDirectories: ch.dirs}, on)
 		switch {
 		case errors.Is(err, acpclient.ErrSessionLocked):
 			return nil, nil, failf("%v", err)
@@ -76,6 +83,7 @@ func openSession(ctx context.Context, conn *acpclient.Conn, ch sessionChoice, cw
 		return s, &r, nil
 	}
 	opts := ch.opts
+	opts.AdditionalDirectories = ch.dirs
 	if ch.fork != "" {
 		if opts.ForkFrom, err = resolveSession(ctx, conn, ch.fork, base, "--fork"); err != nil {
 			return nil, nil, err

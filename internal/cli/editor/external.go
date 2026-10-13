@@ -12,12 +12,13 @@ import (
 
 // Compose writes initial to a new temp file in dir, opens it in the user's
 // editor and returns what the file holds afterwards, without the trailing
-// newline. The editor is GOBBLE_EDITOR, VISUAL or EDITOR, else notepad on
-// Windows and vi elsewhere. It runs without a shell, through run, which
+// newline. The editor is GOBBLE_EDITOR, configured (the externalEditor
+// setting), VISUAL or EDITOR, else notepad on Windows and vi elsewhere
+// (0018-MADR D17). It runs without a shell, through run, which
 // attaches the terminal (exec.Cmd.Run with the process's streams, in
 // production). The temp file has an unpredictable name and is removed.
-func Compose(ctx context.Context, env func(string) string, dir, initial string, run func(*exec.Cmd) error) (text string, err error) {
-	argv, err := editorCommand(env, runtime.GOOS)
+func Compose(ctx context.Context, env func(string) string, configured, dir, initial string, run func(*exec.Cmd) error) (text string, err error) {
+	argv, err := editorCommand(env, runtime.GOOS, configured)
 	if err != nil {
 		return "", err
 	}
@@ -48,8 +49,8 @@ func Compose(ctx context.Context, env func(string) string, dir, initial string, 
 // Open opens file in the user's editor, chosen as Compose chooses it, and
 // waits for it to exit (0018-PLAN P4 deviation 9). It runs without a
 // shell, through run.
-func Open(ctx context.Context, env func(string) string, file string, run func(*exec.Cmd) error) error {
-	argv, err := editorCommand(env, runtime.GOOS)
+func Open(ctx context.Context, env func(string) string, configured, file string, run func(*exec.Cmd) error) error {
+	argv, err := editorCommand(env, runtime.GOOS, configured)
 	if err != nil {
 		return err
 	}
@@ -60,9 +61,11 @@ func Open(ctx context.Context, env func(string) string, file string, run func(*e
 	return nil
 }
 
-func editorCommand(env func(string) string, goos string) ([]string, error) {
-	for _, name := range []string{"GOBBLE_EDITOR", "VISUAL", "EDITOR"} {
-		if v := strings.TrimSpace(env(name)); v != "" {
+// editorCommand is the editor chain: GOBBLE_EDITOR, then configured, then
+// VISUAL and EDITOR, then the platform's.
+func editorCommand(env func(string) string, goos, configured string) ([]string, error) {
+	for _, v := range []string{env("GOBBLE_EDITOR"), configured, env("VISUAL"), env("EDITOR")} {
+		if v := strings.TrimSpace(v); v != "" {
 			return splitCommand(v)
 		}
 	}

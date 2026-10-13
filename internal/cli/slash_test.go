@@ -84,7 +84,7 @@ func TestSlashEdit(t *testing.T) {
 	h := newLineHarness(t, agent)
 	var initial string
 	old := compose
-	compose = func(_ context.Context, _ func(string) string, _, init string, _ func(*exec.Cmd) error) (string, error) {
+	compose = func(_ context.Context, _ func(string) string, _, _, init string, _ func(*exec.Cmd) error) (string, error) {
 		initial = init
 		return "composed text", nil
 	}

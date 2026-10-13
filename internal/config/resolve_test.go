@@ -205,7 +205,7 @@ func TestTypeAndRangeErrorsFallBack(t *testing.T) {
 	want := []string{
 		"settings.yaml:1: steeringMode: must be one of one-at-a-time, all",
 		"settings.yaml:3: mcp.stopGraceMs: want an integer, have a string",
-		"settings.yaml:4: mcp.stopTimeoutMs: must be at least 0",
+		"settings.yaml:4: mcp.stopTimeoutMs: must be at least 1",
 		"settings.yaml:7: tools.bash.useClientTerminal: want a boolean, have a sequence",
 		"settings.yaml:8: tools.bash.maxTimeoutMs: want an integer, have a number",
 		"settings.yaml:9: compaction: want a mapping, have an integer",

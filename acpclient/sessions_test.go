@@ -78,6 +78,70 @@ func TestSetName(t *testing.T) {
 	}
 }
 
+// dirsAgent is a script agent that records the additional directories of
+// session/new and session/resume, and resumes any session.
+type dirsAgent struct {
+	*acptest.ScriptAgent
+	mu  sync.Mutex
+	got [][]string
+}
+
+func (a *dirsAgent) NewSession(ctx context.Context, p acp.NewSessionRequest) (acp.NewSessionResponse, error) {
+	a.mu.Lock()
+	a.got = append(a.got, append([]string{"new"}, p.AdditionalDirectories...))
+	a.mu.Unlock()
+	return a.ScriptAgent.NewSession(ctx, p)
+}
+
+func (a *dirsAgent) ResumeSession(_ context.Context, p acp.ResumeSessionRequest) (acp.ResumeSessionResponse, error) {
+	a.mu.Lock()
+	a.got = append(a.got, append([]string{"resume"}, p.AdditionalDirectories...))
+	a.mu.Unlock()
+	return acp.ResumeSessionResponse{}, nil
+}
+
+func (a *dirsAgent) serve(ctx context.Context, in io.Reader, out io.Writer) error {
+	conn := acp.NewAgentSideConnection(a, out, in, acp.WithLogger(slog.New(slog.DiscardHandler)))
+	select {
+	case <-conn.Done():
+		return nil
+	case <-ctx.Done():
+		return context.Cause(ctx)
+	}
+}
+
+// --add-dir's directories reach the agent on session/new and on
+// session/resume; ResumeSession sends none (0018-MADR D14). acptest's
+// recorder taps only acptest.Connect's pair, so the agent records them.
+func TestAdditionalDirectoriesSent(t *testing.T) {
+	a := &dirsAgent{ScriptAgent: &acptest.ScriptAgent{}}
+	c, err := Start(t.Context(), a.serve, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := c.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	dirs := []string{"/w/a", "/w/b"}
+	if _, err := c.NewSessionWith(t.Context(), "/w", NewSessionOptions{AdditionalDirectories: dirs}, func(Update) {}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := c.ResumeSessionWith(t.Context(), "s9", "/w", ResumeSessionOptions{AdditionalDirectories: dirs}, func(Update) {}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := c.ResumeSession(t.Context(), "s8", "/w", func(Update) {}); err != nil {
+		t.Fatal(err)
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	want := [][]string{{"new", "/w/a", "/w/b"}, {"resume", "/w/a", "/w/b"}, {"resume"}}
+	if !slices.EqualFunc(a.got, want, slices.Equal) {
+		t.Fatalf("got %q, want %q", a.got, want)
+	}
+}
+
 // NewSessionOptions travel as _meta.gobble, holding only what is set.
 func TestNewSessionMeta(t *testing.T) {
 	if (NewSessionOptions{}).meta() != nil {

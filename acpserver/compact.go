@@ -62,7 +62,7 @@ func (a *Agent) compactSession(ctx context.Context, s *liveSession, instructions
 		s.compacting = false
 		a.mu.Unlock()
 	}()
-	prep, err := compaction.Prepare(s.tree.Path(), a.compaction)
+	prep, err := compaction.Prepare(s.tree.Path(), s.compaction)
 	if err != nil {
 		return compaction.Result{}, 0, err
 	}

@@ -26,13 +26,18 @@ func (c *ChatCmd) Run(k *kong.Context, e *runEnv) error {
 		return err
 	}
 	mode := resolveMode(c.Print, e.out.caps.In, e.out.caps.Out.TTY)
-	choice, err := c.toolSet()
+	// The working directory comes first: the process settings, and so the
+	// built-in tools' options, are its (0018-PLAN P5 deviation 15).
+	cwd, base, err := resolveCwd(c.Cwd)
+	if err != nil {
+		return err
+	}
+	choice, err := c.toolSet(builtinTools(e.processSettings(cwd).Settings))
 	if err != nil {
 		return err
 	}
 	e.tools, e.mcpOff, e.mcpAllow = choice.builtins, choice.mcpOff, choice.mcpAllow
-	cwd, base, err := resolveCwd(c.Cwd)
-	if err != nil {
+	if c.AddDir, err = resolveAddDirs(base, c.AddDir); err != nil {
 		return err
 	}
 	if e.prompt, err = c.promptOptions(base); err != nil {

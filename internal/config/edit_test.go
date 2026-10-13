@@ -245,7 +245,9 @@ func TestCheck(t *testing.T) {
 		{"theme", "dark", LayerGlobal, `unknown setting "theme"`},
 		{"apiKey", "x", LayerGlobal, "apiKey: credentials go in auth.json, not settings.yaml"},
 		{"steeringMode", "some", LayerGlobal, "steeringMode: must be one of one-at-a-time, all"},
-		{"mcp.stopGraceMs", "-1", LayerProject, "mcp.stopGraceMs: must be at least 0"},
+		{"mcp.stopGraceMs", "-1", LayerProject, "mcp.stopGraceMs: must be at least 1"},
+		// zero would mean "the default" downstream (0018-PLAN P5 deviation 19)
+		{"mcp.startupWaitMs", "0", LayerGlobal, "mcp.startupWaitMs: must be at least 1"},
 		{"shellPath", "/bin/bash", LayerProject, "shellPath: only the global settings file can set this"},
 		{"sessionDir", "rel", LayerGlobal, "sessionDir: must be an absolute path, or start with ~"},
 	}
@@ -385,7 +387,7 @@ func TestSetLocksAndWrites(t *testing.T) {
 		"theme=dark":         `unknown setting "theme"`,
 		"apiKey=x":           "apiKey: credentials go in auth.json, not settings.yaml",
 		"mcp.stopGraceMs=":   "mcp.stopGraceMs: want an integer, have an empty value",
-		"mcp.stopGraceMs=-1": "mcp.stopGraceMs: must be at least 0",
+		"mcp.stopGraceMs=-1": "mcp.stopGraceMs: must be at least 1",
 	} {
 		p, v, _ := strings.Cut(path, "=")
 		if err := Set(file, p, v); err == nil || err.Error() != want {

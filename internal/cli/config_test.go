@@ -220,7 +220,7 @@ func TestConfigSetBadValueExit2(t *testing.T) {
 func stubEditor(t *testing.T, text string, opened *string) {
 	t.Helper()
 	old := openEditor
-	openEditor = func(_ context.Context, _ func(string) string, file string, _ func(*exec.Cmd) error) error {
+	openEditor = func(_ context.Context, _ func(string) string, _, file string, _ func(*exec.Cmd) error) error {
 		b, err := os.ReadFile(file) //nolint:gosec // G304: the test's own file
 		if err != nil {
 			return err
@@ -250,7 +250,7 @@ func TestConfigEdit(t *testing.T) {
 		t.Fatal("edit --project did not create the project file from the template")
 	}
 	old := openEditor
-	openEditor = func(context.Context, func(string) string, string, func(*exec.Cmd) error) error {
+	openEditor = func(context.Context, func(string) string, string, string, func(*exec.Cmd) error) error {
 		return errors.New("editor vi: exit status 1")
 	}
 	t.Cleanup(func() { openEditor = old })
@@ -307,7 +307,7 @@ func TestConfigValidateExits(t *testing.T) {
 	c.want(c.run("config", "validate", "--strict"), ExitFailure, "theme: not used by this gobble", "")
 	c.write(c.global(), "mcp:\n  stopGraceMs: -1\nsteeringMode: some\n")
 	r := c.run("config", "validate")
-	c.want(r, ExitFailure, c.global()+":2: mcp.stopGraceMs: must be at least 0\n"+c.global()+":3: steeringMode: must be one of one-at-a-time, all\n", "")
+	c.want(r, ExitFailure, c.global()+":2: mcp.stopGraceMs: must be at least 1\n"+c.global()+":3: steeringMode: must be one of one-at-a-time, all\n", "")
 	c.write(c.project(), "shellPath: /x\n")
 	c.want(c.run("config", "validate"), ExitFailure, c.project()+":1: shellPath: only the global settings file can set this", "")
 }

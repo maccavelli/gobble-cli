@@ -258,7 +258,12 @@ func (c *ConfigEditCmd) Run(e *runEnv) error {
 	if err := prepare(file, layer, true); err != nil {
 		return err
 	}
-	if err := openEditor(e.ctx, os.Getenv, file, e.runAttached); err != nil {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return failf("working directory: %v", err)
+	}
+	configured := e.processSettings(cwd).Settings.ExternalEditor // 0018-PLAN P5 deviation 17
+	if err := openEditor(e.ctx, os.Getenv, configured, file, e.runAttached); err != nil {
 		return failf("%v", err)
 	}
 	_, ds, err := e.resolveHere()

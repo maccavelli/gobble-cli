@@ -1,6 +1,7 @@
 package acpserver
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"slices"
@@ -8,6 +9,7 @@ import (
 
 	acp "github.com/maccavelli/acp-go-sdk2"
 
+	"github.com/maccavelli/gobble-cli/compaction"
 	"github.com/maccavelli/gobble-cli/session"
 )
 
@@ -23,6 +25,51 @@ const thinkingOff = "off"
 // thinkingLevels are the levels thought_level offers, gobble's --thinking
 // levels with off first.
 var thinkingLevels = []string{thinkingOff, "minimal", "low", "medium", "high", "xhigh"}
+
+// SessionSettings are the settings a session takes when it starts
+// (0018-MADR D16, D17). A zero field takes the agent's default.
+type SessionSettings struct {
+	// SteeringMode and FollowUpMode are the queue modes: one-at-a-time or
+	// all.
+	SteeringMode, FollowUpMode string
+	// Thinking is a new session's level; a loaded or resumed session keeps
+	// its history's.
+	Thinking string
+	// Compaction is /compact's settings.
+	Compaction compaction.Settings
+	// MCPStartupWait bounds the first prompt's wait for MCP servers.
+	MCPStartupWait time.Duration
+	// MCPStopGrace and MCPStopTimeout are a stdio server's stop timings;
+	// zero leaves mcpclient's own.
+	MCPStopGrace, MCPStopTimeout time.Duration
+}
+
+// sessionSettings are the settings for a session in cwd: Options.Settings',
+// each zero field filled from today's defaults, Options.Compaction and
+// MCPOptions.StartupWait among them, so a partial value never mixes
+// defaults. A nil Options.Settings is today's defaults.
+func (a *Agent) sessionSettings(cwd string) SessionSettings {
+	var s SessionSettings
+	if a.settings != nil {
+		s = a.settings(cwd)
+	}
+	s.SteeringMode = cmp.Or(s.SteeringMode, queueOneAtATime)
+	s.FollowUpMode = cmp.Or(s.FollowUpMode, queueOneAtATime)
+	s.Thinking = cmp.Or(s.Thinking, thinkingOff)
+	s.Compaction.ReserveTokens = cmp.Or(s.Compaction.ReserveTokens, a.compaction.ReserveTokens)
+	s.Compaction.KeepRecentTokens = cmp.Or(s.Compaction.KeepRecentTokens, a.compaction.KeepRecentTokens)
+	s.MCPStartupWait = cmp.Or(s.MCPStartupWait, a.mcp.StartupWait, DefaultStartupWait)
+	return s
+}
+
+// sessionQueue is a session's queues in its settings' modes (0018-PLAN P5
+// deviation 18).
+func sessionQueue(ss SessionSettings) *queue {
+	q := newQueue()
+	q.setSteeringMode(ss.SteeringMode)
+	q.setFollowUpMode(ss.FollowUpMode)
+	return q
+}
 
 // ModelChoice is the models a session may choose from: the provider's id,
 // its curated models, and the default. A zero ModelChoice offers no model

@@ -79,13 +79,14 @@ func (ls *lineSession) slash(text string, turn func(Prompt) error, outOfRaw func
 		return true, e.out.Result([]byte(ls.helpText()))
 	case "new":
 		ls.closeSession()
-		ls.choice = sessionChoice{}
+		ls.choice = ls.choice.next()
 		return true, e.out.Resultf("%s\n", dimmed("new session", e.out.caps.Out.Color))
 	case "edit":
 		var composed string
 		err := outOfRaw(func() error {
 			var cerr error
-			composed, cerr = compose(e.ctx, os.Getenv, ls.stateDir(), args, ls.runEditor)
+			configured := e.processSettings(ls.cwd).Settings.ExternalEditor // 0018-MADR D17
+			composed, cerr = compose(e.ctx, os.Getenv, configured, ls.stateDir(), args, ls.runEditor)
 			return cerr
 		})
 		if err != nil {
@@ -157,13 +158,13 @@ func (ls *lineSession) closeSession() {
 // 2026-10-06).
 func (ls *lineSession) switchTo(id string) error {
 	ls.closeSession()
-	s, r, err := ls.conn.ResumeSession(ls.e.ctx, id, ls.cwd, ls.onUpdate)
+	s, r, err := ls.conn.ResumeSessionWith(ls.e.ctx, id, ls.cwd, acpclient.ResumeSessionOptions{AdditionalDirectories: ls.choice.dirs}, ls.onUpdate)
 	if err != nil {
 		ls.e.out.Errorf("resume %s: %v", id, err)
 		return nil
 	}
 	ls.sess = s
-	ls.choice = sessionChoice{}
+	ls.choice = ls.choice.next()
 	return ls.e.out.Resultf("%s\n", dimmed(resumedLine(r), ls.e.out.caps.Out.Color))
 }
 

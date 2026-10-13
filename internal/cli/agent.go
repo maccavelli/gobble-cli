@@ -10,6 +10,7 @@ import (
 
 	"github.com/maccavelli/gobble-cli/acpclient"
 	"github.com/maccavelli/gobble-cli/acpserver"
+	"github.com/maccavelli/gobble-cli/internal/config"
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/llm/provider"
 	"github.com/maccavelli/gobble-cli/session"
@@ -45,6 +46,8 @@ func (e *runEnv) agentOptions() acpserver.Options {
 			Config: mcpConfigPath(), Off: e.mcpOff, Allow: e.mcpAllow, UserAgent: identity().UserAgent(),
 		},
 		Prompt: e.promptOptions(),
+		// Each session's settings, when it starts (0018-MADR D17).
+		Settings: func(cwd string) acpserver.SessionSettings { return toSession(e.sessionSettings(cwd).Settings) },
 	}
 }
 
@@ -88,6 +91,13 @@ func modelChoice() acpserver.ModelChoice {
 // sessions are kept in memory, with a warning.
 func (e *runEnv) sessionStore() session.Store {
 	if e.store != nil {
+		return e.store
+	}
+	// sessionDir gives the flat store --session-dir gives; the flag, set in
+	// configureStore, wins (0018-MADR D17). The process settings are
+	// resolved by now, for the run's cwd.
+	if dir := e.processSettings("").Settings.SessionDir; dir != "" {
+		e.store = jsonl.New(expandHome(dir), jsonl.Options{Flat: true, Logger: e.log()})
 		return e.store
 	}
 	dirs, _, err := systemDirs()
@@ -154,8 +164,9 @@ type toolChoice struct {
 // tool's name, which is filtered as an MCP tool is (0005-PLAN F1d-2). Any
 // other unknown name is a usage error. When the flags leave no MCP name
 // selectable, no server connects. The contradiction of --no-tools with the others is checked in
-// validate.
-func (f *SharedFlags) toolSet() (toolChoice, error) {
+// validate. builtins are the built-in tools to choose from, with the
+// process settings' options (0018-PLAN P5 deviation 15).
+func (f *SharedFlags) toolSet(builtins []tool.Tool) (toolChoice, error) {
 	known := builtin.Names()
 	for _, n := range append(slices.Clone(f.Tools), f.ExcludeTools...) {
 		if !slices.Contains(known, n) && !isMCPName(n) {
@@ -166,10 +177,10 @@ func (f *SharedFlags) toolSet() (toolChoice, error) {
 	case f.NoTools:
 		return toolChoice{builtins: []tool.Tool{}, mcpOff: true}, nil
 	case len(f.Tools) == 0 && len(f.ExcludeTools) == 0:
-		return toolChoice{builtins: builtinTools()}, nil
+		return toolChoice{builtins: builtins}, nil
 	}
 	var out []tool.Tool
-	for _, t := range builtinTools() {
+	for _, t := range builtins {
 		name := t.Spec().Name
 		if (len(f.Tools) == 0 || slices.Contains(f.Tools, name)) && !slices.Contains(f.ExcludeTools, name) {
 			out = append(out, t)
@@ -196,15 +207,27 @@ func isMCPName(n string) bool {
 	return strings.HasPrefix(n, mcpPrefix) || slices.Contains(builtin.ResourceNames(), n)
 }
 
-// builtinTools are the built-in tools with gobble's options: the whole
-// output of long commands is kept in <state>/output (0005-PLAN F1b), or in
-// the OS temp directory when the state directory cannot be resolved.
-func builtinTools() []tool.Tool {
-	var o builtin.Options
+// toolsWith is builtin.ToolsWith; tests replace it to see the options.
+var toolsWith = builtin.ToolsWith
+
+// builtinTools are the built-in tools with gobble's options: the bash keys
+// of the process settings (0018-MADR D17), and the whole output of long
+// commands kept in <state>/output (0005-PLAN F1b), or in the OS temp
+// directory when the state directory cannot be resolved.
+func builtinTools(s config.Settings) []tool.Tool {
+	o := builtinOptions(s)
 	if dirs, _, err := systemDirs(); err == nil {
 		o.OutputDir = filepath.Join(dirs.State, "output")
 	}
-	return builtin.ToolsWith(o)
+	return toolsWith(o)
+}
+
+// builtinOptions are the bash keys' options, ~ expanded in shellPath.
+func builtinOptions(s config.Settings) builtin.Options {
+	return builtin.Options{
+		ShellPath: expandHome(s.ShellPath), ShellCommandPrefix: s.ShellCommandPrefix,
+		MaxTimeout: s.MaxTimeout(), UseClientTerminal: s.Tools.Bash.UseClientTerminal,
+	}
 }
 
 // noCredentialMessage names the variables the ambient provider reads.

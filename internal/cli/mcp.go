@@ -231,8 +231,12 @@ func (c *MCPListCmd) Run(e *runEnv) error {
 	if err != nil {
 		return failf("%v", err)
 	}
+	// The stop timings are session keys; list has no session, so it reads
+	// every key for its cwd (0018-MADR D17).
+	s := e.resolveSettings(cwd, 0, e.warnf).Settings
 	m := mcpclient.Start(e.ctx, cfg.Servers, mcpclient.Options{
 		Cwd: cwd, ClientName: appName, ClientVersion: identity().Version, UserAgent: identity().UserAgent(),
+		StopGrace: s.MCPStopGrace(), StopTimeout: s.MCPStopTimeout(), // 0018-MADR D17
 	})
 	waitErr := m.Wait(e.ctx)
 	r := listReport{Servers: m.Statuses(), Errors: cfg.Errors}

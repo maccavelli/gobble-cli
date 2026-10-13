@@ -31,7 +31,7 @@ When this plan is done, these hold, and each is shown by a command in its phase:
 | P2 | `internal/config/keys.go`, `settings.go`, `read.go`, `merge.go`, `resolve.go`, `diag.go`, `secret.go`, `override.go`, `schema.go`, `settings.yaml`, `template.go`, `genschema/main.go`, `testdata/settings.schema.json`, ~~`testdata/*.yaml` fixtures~~ *(deviation 4: none; the fixtures are built in the tests)*, `read_test.go`, `resolve_test.go`, `override_test.go`, `schema_test.go`, `template_test.go` | `internal/config/doc.go`; `internal/frontmatter/frontmatter.go` (package comment only); *(deviation 2: `.golangci.yml`; deviation 5: `mcpclient/proc_test.go`, `tool/builtin/shell_test.go`, `acpserver/mcp_test.go`)* |
 | P3 | `internal/config/edit.go`, `update.go`, `edit_test.go`, `update_test.go`, `testdata/edit/*` | — |
 | P4 | `internal/cli/config.go`, `internal/cli/config_test.go`, `internal/cli/settings.go`; `internal/config/render.go`, `render_test.go` | `internal/cli/root.go`, `internal/cli/configpath.go`, `internal/cli/main.go`, `internal/cli/main_test.go`, `internal/cli/chat.go`, `internal/cli/acp.go`, `internal/cli/mcp.go`, `internal/cli/flags.go`, `internal/cli/completion.go`; *(deviation 9: `internal/cli/editor/external.go`, `internal/cli/editor/external_test.go`; deviation 13: `internal/config/edit.go`, `internal/config/diag.go`, `internal/config/edit_test.go`, `internal/config/resolve_test.go`)* |
-| P5 | `acpserver/settings_test.go`, `internal/cli/settings_test.go` | `acpserver/agent.go`, `acpserver/queue.go`, `acpserver/mcp.go`, `acpserver/config.go`; `internal/cli/agent.go`, `internal/cli/sessions.go`, `internal/cli/slash.go`, `internal/cli/editor/external.go`, `internal/cli/editor/external_test.go`; `acpclient/sessions.go`, `acpclient/sessions_test.go`; `internal/cli/flags.go`; *(P4 deviation 12: `internal/cli/settings.go`)* |
+| P5 | `acpserver/settings_test.go`, `internal/cli/settings_test.go` | `acpserver/agent.go`, `acpserver/queue.go`, `acpserver/mcp.go`, `acpserver/config.go`; `internal/cli/agent.go`, `internal/cli/sessions.go`, `internal/cli/slash.go`, `internal/cli/editor/external.go`, `internal/cli/editor/external_test.go`; `acpclient/sessions.go`, `acpclient/sessions_test.go`; `internal/cli/flags.go`; *(P4 deviation 12: `internal/cli/settings.go`; deviation 15: `acpserver/compact.go`, `internal/cli/mcp.go`, `internal/cli/chat.go`, `internal/cli/acp.go`, `internal/cli/config.go`, `internal/cli/config_test.go`; deviation 19: `internal/config/keys.go`, `internal/config/testdata/settings.schema.json`, `internal/config/resolve_test.go`, `internal/config/edit_test.go`; deviation 20: `internal/cli/main.go`, `internal/cli/slash_test.go`)* |
 | P6 | — | `docs/architecture.md`, `README.md`, this plan (its execution record), `docs/README.md` |
 
 A phase that needs a file not listed here stops, and the file is raised as a deviation.
@@ -530,7 +530,7 @@ go run ./cmd/gobble config path; go run ./cmd/gobble config validate            
    `acpserver.Options` gains `Settings func(cwd string) SessionSettings`. Nil gives `defaultSessionSettings()`, equal to today's values. Any zero field of a returned value is filled from that default, so a partial value never mixes defaults (D17).
 2. **`acpserver/agent.go`:**
    - `NewSession` (`:244`) and `open` (`:706`) call `a.sessionSettings(cwd)` once.
-   - `newQueue` takes `SteeringMode` and `FollowUpMode` (`acpserver/queue.go:26-28`).
+   - ~~`newQueue` takes `SteeringMode` and `FollowUpMode` (`acpserver/queue.go:26-28`).~~ *(Deviation 18: `newQueue()` is unchanged; the session's queue takes `SteeringMode` and `FollowUpMode` through the queue's own `setSteeringMode` and `setFollowUpMode`.)*
    - `NewSession`'s `think:` takes `Thinking` (`:287`). `open` keeps `thinkingOff` before `restore`, which sets the history's level (`:731`).
    - `liveSession` keeps its `compaction.Settings` and MCP durations, used by `compactSession` (`acpserver/compact.go:65`) and by `startMCP` and `mcpTools` (`acpserver/mcp.go:123`, `:133-146`), in place of `a.compaction` and `a.mcp.StartupWait`. `Options.Compaction` and `MCPOptions.StartupWait` stay as the fallbacks, so the SDK's callers see no change.
 3. **`acpserver/settings_test.go`** (new):
@@ -540,10 +540,10 @@ go run ./cmd/gobble config path; go run ./cmd/gobble config validate            
 4. **`internal/cli/agent.go`:**
    - *(P4 deviation 12: `internal/cli/settings.go` gains `runEnv.processSettings` and `runEnv.sessionSettings` here, as P4's step 2 describes them.)*
    - `agentOptions` sets `Settings: func(cwd string) acpserver.SessionSettings { return toSession(e.sessionSettings(cwd)) }`.
-   - `builtinTools` (`:200-207`) sets `ShellPath` (with `~` expanded), `ShellCommandPrefix`, `MaxTimeout` and `UseClientTerminal` from `e.processSettings(cwd)`, beside `OutputDir`.
+   - `builtinTools` (`:200-207`) sets `ShellPath` (with `~` expanded), `ShellCommandPrefix`, `MaxTimeout` and `UseClientTerminal` from `e.processSettings(cwd)`, beside `OutputDir`. *(Deviation 15: `toolSet` takes the built-in tools as an argument, and `chat.go` resolves the working directory before the tool flags, so they can take `processSettings(cwd)`. Deviation 16: `acp.go` sets the agent's tools from the process settings with no project file (D16), keeping `builtin`'s own `OutputDir` default, so `gobble acp` without a settings file behaves as today.)*
    - `internal/cli/mcp.go`'s `list` (`:231`) passes the process settings' `StopGrace` and `StopTimeout`.
-5. **`internal/cli/sessions.go`'s `configureStore`** (`:39-47`): `sessionDir`, when set and `--session-dir` is not, gives the same flat `jsonl.New(dir, jsonl.Options{Flat: true, …})`. `--session-dir` wins. `--no-session` still wins over both.
-6. **`internal/cli/editor/external.go`:** `editorCommand(env, goos, configured string)` tries `GOBBLE_EDITOR`, then `configured`, then `VISUAL` and `EDITOR`, then `notepad` or `vi`. `Compose` gains a `configured string` parameter. `internal/cli/slash.go:28`'s `compose` and its call at `:88` pass `e.processSettings(cwd).Settings.ExternalEditor`. `external_test.go` adds `TestEditorChainConfigured`.
+5. **`internal/cli/sessions.go`'s `configureStore`** (`:39-47`): `sessionDir`, when set and `--session-dir` is not, gives the same flat `jsonl.New(dir, jsonl.Options{Flat: true, …})`. `--session-dir` wins. `--no-session` still wins over both. *(Deviation 21: in `internal/cli/agent.go`'s `sessionStore`, which MADR D17 also cites, so `gobble acp` honours it too; `configureStore` still sets the flag's store first, so the flag wins.)*
+6. **`internal/cli/editor/external.go`:** `editorCommand(env, goos, configured string)` tries `GOBBLE_EDITOR`, then `configured`, then `VISUAL` and `EDITOR`, then `notepad` or `vi`. `Compose` gains a `configured string` parameter. `internal/cli/slash.go:28`'s `compose` and its call at `:88` pass `e.processSettings(cwd).Settings.ExternalEditor`. `external_test.go` adds `TestEditorChainConfigured`. *(Deviation 17: P4's `editor.Open` gains the same `configured` parameter, and `config edit` passes the process settings' `externalEditor`, as the template says it does.)*
 7. **`--add-dir`:**
    - `SharedFlags` gains
 
@@ -556,7 +556,7 @@ go run ./cmd/gobble config path; go run ./cmd/gobble config validate            
    - `acpclient` gains `ResumeSessionOptions{AdditionalDirectories []string}` and `Conn.ResumeSessionWith(ctx, id, cwd string, opts ResumeSessionOptions, on func(Update))`. `ResumeSession` calls it with zero options.
    - `internal/cli/sessions.go:61`, `:84` and `internal/cli/slash.go:160` pass the directories.
    - Tests:
-     - `acpclient/sessions_test.go` adds `TestAdditionalDirectoriesSent`, over `acptest`'s recorder, for new and resume;
+     - `acpclient/sessions_test.go` adds `TestAdditionalDirectoriesSent`, ~~over `acptest`'s recorder~~ *(deviation 22: recorded by a test agent)*, for new and resume;
      - `internal/cli/settings_test.go` adds `TestAddDirAbsoluteAndChecked`.
 8. **`internal/cli/settings_test.go`** (new):
    - `TestProcessSettingsReachTools`: `shellCommandPrefix` and `tools.bash.maxTimeoutMs` in a temp global file reach `builtin.Options`, through a test hook on `builtinTools`.
@@ -575,11 +575,38 @@ go test ./...                                                              -> ok
 
 **P5's negatives,** on scratch copies:
 
-- `newQueue` ignoring its arguments fails `TestSessionSettingsApplied`;
+- ~~`newQueue` ignoring its arguments~~ *(deviation 18: the session's queue modes not set)* fails `TestSessionSettingsApplied`;
 - `Settings` called at each prompt rather than at session start fails it too, by a counting stub;
 - `sessionDir` beating `--session-dir` fails `TestFlagBeatsSet`;
 - `editorCommand` ignoring `configured` fails `TestEditorChainConfigured`;
 - `--add-dir` not sent on resume fails `TestAdditionalDirectoriesSent`.
+
+### P5's deviations, 2026-10-12, decided by the owner
+
+15. **P5's steps change six files its list leaves out.**
+    - **Found:** step 2 has `compactSession` (`acpserver/compact.go:65`) take the session's compaction settings; step 4 has `mcp list` (`internal/cli/mcp.go:234`) pass the stop timings. `builtinTools` takes no settings, and its only callers are `SharedFlags.toolSet` (`internal/cli/agent.go:169`, `:172`), which `chat.go` calls before it resolves the working directory (`:28-32`). `gobble acp` never calls it: `acpserver` falls back to `builtin.Tools()` with zero options, so its sessions would ignore the bash keys, which `TestACPIgnoresProjectProcessKeys` presumes apply. Deviation 17 needs `config.go` and `config_test.go`.
+    - **Decided** ("add all six"): `toolSet` takes the built-in tools as an argument; `chat.go` resolves the working directory before the tool flags; `acp.go` sets the agent's tools (deviation 16). Files added: `acpserver/compact.go`, `internal/cli/mcp.go`, `internal/cli/chat.go`, `internal/cli/acp.go`, `internal/cli/config.go`, `internal/cli/config_test.go`.
+16. **Building acp's tools through `builtinTools` would move its output directory.**
+    - **Found:** `builtinTools` sets `OutputDir` to `<state>/output`; `gobble acp` uses `builtin`'s default, the OS temp directory's `gobble-output` (`tool/builtin/builtin.go:62-63`). Moving it changes acp without a settings file, against C1.
+    - **Decided** ("keep acp's output dir"): acp's tools take the process settings and keep `builtin`'s own `OutputDir` default. Aligning the two directories is its own change, not this record's. No file added.
+17. **`externalEditor` did not reach `config edit`.**
+    - **Found:** the template (MADR D9) says `externalEditor` is the editor `/edit` and `gobble config edit` open; step 6 threads it into `Compose` only, not P4's `editor.Open` (deviation 9).
+    - **Decided** ("Open takes it too"): `Open` gains `configured`, as `Compose` does, and `config edit` passes the process settings' `externalEditor`. `TestOpenRunsEditorOnFile` and `TestConfigEdit`'s stub follow. Files: in deviation 15.
+18. **`newQueue`'s new signature broke tests outside the list.**
+    - **Found:** step 2 gives `newQueue` the two modes; `acpserver/extensions_test.go:588` and `acpserver/queue_test.go:21`, `:51` call `newQueue()`. The queue already has `setSteeringMode` and `setFollowUpMode` (`acpserver/queue.go:60-70`), which `_gobble/set_queue_mode` uses.
+    - **Decided** ("keep newQueue(), set modes"): `newQueue()` is unchanged; `NewSession` and `open` build the session's queue through `sessionQueue(ss)`, which sets both modes with the existing setters. No file added.
+19. **Three keys accepted a value that could not take effect.**
+    - **Found:** MADR D14 makes `mcp.startupWaitMs`, `mcp.stopGraceMs` and `mcp.stopTimeoutMs` integers ≥ 0. A zero duration means "the default" in `acpserver`'s `sessionSettings` (D17's "any zero field is filled") and in `mcpclient` (`cmp.Or(t.grace, stdinGrace)`, `mcpclient/proc.go:57`, from P1), so a user's 0 would silently become 10 s, 500 ms or 2 s.
+    - **Decided** ("minimum 1 ms"): the three keys' least value is 1; MADR D14 gets a dated note. Expectations of "must be at least 0" become "at least 1". Files added: `internal/config/keys.go`, `internal/config/testdata/settings.schema.json` (regenerated), `internal/config/resolve_test.go`, `internal/config/edit_test.go`, `internal/cli/config_test.go`.
+20. **Two more files had to change.**
+    - **Found:** "resolved once, cached" (P4 step 2) needs a field on `runEnv`, which `internal/cli/main.go` declares. Step 6 changes `Compose`'s signature, which `internal/cli/slash_test.go:87` stubs.
+    - **Decided** ("add both"): `runEnv` gains `process`, the once-resolved process settings; the stub takes the new parameter, with no assertion changed. Files added: `internal/cli/main.go`, `internal/cli/slash_test.go`.
+21. **`sessionDir` belongs to the store, in both modes.**
+    - **Found:** step 5 applies `sessionDir` in `configureStore`, which only the chat command runs; MADR D17 cites `sessionStore` (`internal/cli/agent.go:89-102`) as well, which `gobble acp` uses.
+    - **Decided** ("sessionStore, both modes"): `sessionStore` gives the flat store for `sessionDir`; `configureStore` still sets `--session-dir`'s and `--no-session`'s first, so the flags win. `TestSessionDirSetting` covers both modes. No file added.
+22. **`acptest`'s recorder cannot tap `acpclient`.**
+    - **Found:** the recorder taps only `acptest.Connect`'s pair, which hands back a raw SDK client, not an `acpclient.Conn`.
+    - **Decided** ("record at the agent"): `TestAdditionalDirectoriesSent`'s agent, embedding `acptest.ScriptAgent`, records each request's `additionalDirectories`; the assertions are the step's. No file added.
 
 ### P6 — Docs and the execution record (D2, D9)
 

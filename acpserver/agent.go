@@ -74,6 +74,9 @@ type Options struct {
 	Logger *slog.Logger
 	// Prompt configures the system prompt (0005-PLAN F3-1).
 	Prompt PromptOptions
+	// Settings gives a session's settings when it starts, by its working
+	// directory (0018-MADR D17). Nil is today's defaults.
+	Settings func(cwd string) SessionSettings
 }
 
 // Agent is gobble's acp.Agent.
@@ -89,8 +92,9 @@ type Agent struct {
 	mcp      MCPOptions
 	logger   *slog.Logger
 	prompt   PromptOptions
-	// compaction is /compact's settings.
+	// compaction is /compact's settings, the fallback of each session's.
 	compaction compaction.Settings
+	settings   func(cwd string) SessionSettings
 
 	mu       sync.Mutex
 	conn     *acp.AgentSideConnection
@@ -121,6 +125,8 @@ type liveSession struct {
 	mode   string
 	used   int // the context's tokens, as the last usage_update said
 	queue  *queue
+	// compaction is /compact's settings, from the session's settings.
+	compaction compaction.Settings
 	// streaming and compacting say what the running turn is: a model turn,
 	// or a compaction (_gobble/get_state).
 	streaming, compacting bool
@@ -144,7 +150,7 @@ var (
 func New(opts Options) *Agent {
 	a := &Agent{version: opts.Version, newID: opts.NewID, provider: opts.Provider, models: opts.Models,
 		tools: opts.Tools, store: opts.Store, now: opts.Now, mcp: opts.MCP, logger: opts.Logger, prompt: opts.Prompt,
-		sessions: map[acp.SessionId]*liveSession{}}
+		settings: opts.Settings, sessions: map[acp.SessionId]*liveSession{}}
 	if a.logger == nil {
 		a.logger = slog.New(slog.DiscardHandler)
 	}
@@ -284,7 +290,9 @@ func (a *Agent) NewSession(ctx context.Context, p acp.NewSessionRequest) (acp.Ne
 	if err != nil {
 		return acp.NewSessionResponse{}, acp.NewInternalError(map[string]any{keyReason: err.Error()})
 	}
-	s := &liveSession{id: acp.SessionId(id), cwd: p.Cwd, dirs: dirs, log: log, tree: session.NewTree(nil), think: thinkingOff, model: a.models().Default, mode: modeDefault, queue: newQueue()}
+	ss := a.sessionSettings(p.Cwd)
+	s := &liveSession{id: acp.SessionId(id), cwd: p.Cwd, dirs: dirs, log: log, tree: session.NewTree(nil), think: ss.Thinking, model: a.models().Default, mode: modeDefault,
+		queue: sessionQueue(ss), compaction: ss.Compaction}
 	if len(forked) > 0 {
 		for _, e := range forked {
 			if err := log.Append(ctx, e); err != nil {
@@ -298,7 +306,7 @@ func (a *Agent) NewSession(ctx context.Context, p acp.NewSessionRequest) (acp.Ne
 			return acp.NewSessionResponse{}, errors.Join(acp.NewInternalError(map[string]any{keyReason: err.Error()}), log.Close())
 		}
 	}
-	s.mcp = a.startMCP(ctx, s.cwd, servers, notes)
+	s.mcp = a.startMCP(ctx, s.cwd, servers, notes, ss)
 	a.mu.Lock()
 	a.sessions[s.id] = s
 	a.mu.Unlock()
@@ -728,9 +736,12 @@ func (a *Agent) open(ctx context.Context, id acp.SessionId, cwd string, extra []
 	if cwd == "" {
 		cwd = log.Header().Cwd
 	}
-	s := &liveSession{id: id, cwd: cwd, dirs: dirs, log: log, think: thinkingOff, model: a.models().Default, mode: modeDefault, queue: newQueue()}
+	ss := a.sessionSettings(cwd)
+	// The history's thinking level wins: restore sets it (0018-MADR D17).
+	s := &liveSession{id: id, cwd: cwd, dirs: dirs, log: log, think: thinkingOff, model: a.models().Default, mode: modeDefault,
+		queue: sessionQueue(ss), compaction: ss.Compaction}
 	a.restore(s, log.Entries())
-	s.mcp = a.startMCP(ctx, cwd, servers, notes)
+	s.mcp = a.startMCP(ctx, cwd, servers, notes, ss)
 	a.mu.Lock()
 	a.sessions[id] = s
 	a.mu.Unlock()

@@ -6,9 +6,20 @@ import (
 	"io/fs"
 	"log/slog"
 	"os"
+	"path/filepath"
+	"strings"
+	"sync"
 
+	"github.com/maccavelli/gobble-cli/acpserver"
+	"github.com/maccavelli/gobble-cli/compaction"
 	"github.com/maccavelli/gobble-cli/internal/config"
 )
+
+// processOnce holds the process settings, resolved once a run.
+type processOnce struct {
+	once sync.Once
+	r    config.Resolved
+}
 
 // parseOverrides parses each --set PATH=VALUE (0018-MADR D10). An error is
 // a usage error, in ParseOverride's words.
@@ -32,6 +43,84 @@ func (e *runEnv) settingsOptions(cwd string) (config.Options, error) {
 		return config.Options{}, failf("%v", err)
 	}
 	return config.Options{ConfigDir: d.Config, Cwd: cwd, Overrides: e.overrides}, nil
+}
+
+// processSettings are the process keys' settings (0018-MADR D16): resolved
+// once, for the first cwd asked, and cached, so their diagnostics print
+// once a run. `gobble acp` asks with "", which reads no project file.
+func (e *runEnv) processSettings(cwd string) config.Resolved {
+	e.process.once.Do(func() {
+		e.process.r = e.resolveSettings(cwd, config.ReadProcess, e.warnf)
+	})
+	return e.process.r
+}
+
+// sessionSettings are the session keys' settings for a session in cwd,
+// resolved each time a session starts; their diagnostics go to the log.
+func (e *runEnv) sessionSettings(cwd string) config.Resolved {
+	return e.resolveSettings(cwd, config.ReadSession, func(format string, args ...any) {
+		e.log().Warn("settings", slog.String("message", fmt.Sprintf(format, args...)))
+	})
+}
+
+// resolveSettings resolves read's keys for cwd, reporting each diagnostic;
+// without a config directory it is the defaults.
+func (e *runEnv) resolveSettings(cwd string, read config.Read, report func(string, ...any)) config.Resolved {
+	opts, err := e.settingsOptions(cwd)
+	if err != nil {
+		return config.Resolved{Settings: config.Defaults()}
+	}
+	opts.Read = read
+	r, ds := config.Resolve(opts)
+	for _, d := range ds {
+		report("%s", d)
+	}
+	return r
+}
+
+// toSession is a session's settings as acpserver takes them (0018-MADR
+// D17): compaction is complete, with Pi's reserve, so it never mixes
+// defaults.
+func toSession(s config.Settings) acpserver.SessionSettings {
+	return acpserver.SessionSettings{
+		SteeringMode: s.SteeringMode, FollowUpMode: s.FollowUpMode, Thinking: s.DefaultThinkingLevel,
+		Compaction: compaction.Settings{
+			ReserveTokens: compaction.DefaultSettings.ReserveTokens, KeepRecentTokens: int(s.Compaction.KeepRecentTokens),
+		},
+		MCPStartupWait: s.MCPStartupWait(), MCPStopGrace: s.MCPStopGrace(), MCPStopTimeout: s.MCPStopTimeout(),
+	}
+}
+
+// expandHome expands a leading ~ to the home directory, as the path keys
+// allow (0018-MADR D14); without a home directory the path is unchanged.
+func expandHome(p string) string {
+	rest, ok := strings.CutPrefix(p, "~")
+	if !ok || (rest != "" && rest[0] != '/' && rest[0] != '\\') {
+		return p
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return p
+	}
+	return filepath.Join(home, rest)
+}
+
+// resolveAddDirs makes each --add-dir absolute against base (the --cwd
+// directory, or the working directory for ""), and checks it is a
+// directory (0018-MADR D14).
+func resolveAddDirs(base string, dirs []string) ([]string, error) {
+	out := make([]string, 0, len(dirs))
+	for _, d := range dirs {
+		abs, err := resolvePath(base, d)
+		if err != nil {
+			return nil, usageErrorf("--add-dir %s: %v", d, err)
+		}
+		if fi, err := os.Stat(abs); err != nil || !fi.IsDir() {
+			return nil, usageErrorf("--add-dir %s: not a directory", d)
+		}
+		out = append(out, abs)
+	}
+	return out, nil
 }
 
 // ensureSettingsFile creates <config>/settings.yaml from the template when

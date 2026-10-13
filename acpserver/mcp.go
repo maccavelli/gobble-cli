@@ -44,6 +44,7 @@ type liveMCP struct {
 	notes    []note // config errors and exposure notes, logged once
 	waited   bool
 	reported map[string]bool
+	wait     time.Duration // the first prompt's start-up wait
 }
 
 // note is one start-up diagnostic: a config error, or a server whose
@@ -115,15 +116,17 @@ func sessionServer(r acp.McpServer) (mcpclient.Server, error) {
 	return mcpclient.Server{}, errors.New("an MCP server has no transport")
 }
 
-// startMCP starts a session's servers in the background.
-func (a *Agent) startMCP(ctx context.Context, cwd string, servers []mcpclient.Server, notes []note) *liveMCP {
+// startMCP starts a session's servers in the background, with the
+// session's start-up wait and stop timings (0018-MADR D17).
+func (a *Agent) startMCP(ctx context.Context, cwd string, servers []mcpclient.Server, notes []note, ss SessionSettings) *liveMCP {
 	if len(servers) == 0 && len(notes) == 0 {
 		return nil
 	}
 	m := mcpclient.Start(ctx, servers, mcpclient.Options{
 		Cwd: cwd, ClientName: gobble, ClientVersion: a.version, UserAgent: a.mcp.UserAgent, Getenv: a.mcp.Getenv,
+		StopGrace: ss.MCPStopGrace, StopTimeout: ss.MCPStopTimeout,
 	})
-	return &liveMCP{m: m, notes: notes, reported: map[string]bool{}}
+	return &liveMCP{m: m, notes: notes, reported: map[string]bool{}, wait: ss.MCPStartupWait}
 }
 
 // tools are the MCP tools for a prompt, then the MCP resource tools while
@@ -137,11 +140,7 @@ func (a *Agent) mcpTools(ctx context.Context, l *liveMCP) []tool.Tool {
 	first := !l.waited
 	if first {
 		l.waited = true
-		wait := a.mcp.StartupWait
-		if wait <= 0 {
-			wait = DefaultStartupWait
-		}
-		wctx, cancel := context.WithTimeout(ctx, wait)
+		wctx, cancel := context.WithTimeout(ctx, l.wait)
 		if err := l.m.Wait(wctx); err != nil {
 			a.logger.DebugContext(ctx, "mcp: start-up wait ended", slog.String("reason", err.Error()))
 		}

@@ -155,6 +155,8 @@ type runEnv struct {
 	prompt acpserver.PromptOptions
 	// overrides are --set's, the settings' session layer (0018-MADR D10).
 	overrides []config.Override
+	// process are the process keys' settings, resolved once.
+	process processOnce
 }
 
 func (e *runEnv) log() *slog.Logger { return e.logs.get() }
