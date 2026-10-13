@@ -39,7 +39,7 @@ The issue names its evidence at an older commit (`ad6ea57`, SDK `v1.2.1`); every
   - an OpenAI listing of the static six, `gpt-5-mini`, `gpt-5-nano`, `text-embedding-4-large` and `tts-2` gives `Live` true and `Recommended` = the six, then `gpt-5-nano`, `gpt-5-mini`; the embedding and speech ids are left out, and an id the SDK does not know (`gpt-7-nova`) is left out too. The only request is `GET api.openai.com/v1/models`;
   - a 401 gives `Live` false and the static six; a listing that hangs past a 300 ms context gives the same, in 301 ms;
   - a Kilo listing of `kilo-auto/efficient` and `deepseek/deepseek-v4.1-flash` (`GET api.kilo.ai/api/gateway/models`) recommends only the second under the utility profile, and both, `kilo-auto/efficient` first, under the capable profile;
-  - an OpenCode Zen listing requests `GET opencode.ai/zen/v1/models` and then `GET models.opencode.ai/api.json` with model metadata on, and only the first with it off. OpenAI and Kilo request no metadata either way.
+  - an OpenCode Zen listing requests `GET opencode.ai/zen/v1/models` and then `GET models.opencode.ai/api.json` with model metadata on, and only the first with it off. OpenAI and Kilo request no metadata either way. *(2026-10-13, 0020-PLAN P1 deviation 1: not "then". The SDK fetches the document concurrently with the listing and waits for it only when the listing answers; after a failed listing the request was made before `List` returned in 14 of 50 runs, and after an answering one in 50 of 50.)*
 - **The metadata document** `https://models.opencode.ai/api.json`: 200, 394 571 bytes, 0.47 s (`curl --compressed`). The SDK caches it in the process (`llmprovider/catalog/model_metadata.go:23-27`).
 - **gobble's code** at `17cd497`:
   - `llm/provider/ambient.go:117-126`: `Models` returns `slices.Clone(d.StaticModels)`; `:62-67`: `selection` takes `d.StaticModels[0]` as the model.
@@ -66,6 +66,7 @@ The issue names its evidence at an older commit (`ad6ea57`, SDK `v1.2.1`); every
 - **F9. The default model can come from the listing without changing the provider.** The session's chosen model is what each request names.
 - **F10. One test would reach the network.** `TestDefaultProviderSetting` sets a credential and builds the model choice, so a real lister would list OpenCode Go with `test-only`.
 - **F11. The records plan this, in pieces.** 0005-PLAN F4-2 owns the catalog, `models.json`, `gobble models list` and the model option's source; this record takes the option's source now, from the SDK, and leaves F4-2 the rest. `--offline` is X3's, and must turn the listing off when it lands.
+- **F12. go-llmprovider-sdk `v1.12.0` was tagged after this record, and changes nothing gobble sends** *(2026-10-13, 0020-PLAN P1 deviation 3)*. `v1.12.0` (`57cbd79e0790`, 2026-10-13 14:32 UTC-5) adds request-side prompt caching (SDK `0039-MADR-request-side-prompt-caching.md`): a `Request.Cache` field, `CacheShort` or `CacheLong`, whose zero value sends every request as before, byte for byte (its D1, R45). gobble sets no such field. `check_libs.py --lib go-llmprovider-sdk --tag v1.12.0 --from v1.11.0`: every check ok; apidiff reports only `Request.Cache`, `CacheRetention`, `CacheShort` and `CacheLong` added; `llmprovider/catalog` is unchanged between the tags. `go.sum`: `h1:3nbuUj/BF/mRaXIEF2r1y+oSKB7KdZ6+T2arJZtmLv0=`, and the same `go.mod` sum.
 
 ## Decision Drivers
 
@@ -90,7 +91,7 @@ Chosen option: "A", because it offers the full catalog now, through the one pack
 
 ### The decisions
 
-- **D1. Require `github.com/maccavelli/go-llmprovider-sdk v1.11.0`,** with the sums measured above, in the commit that adds D2's listing, never `WithLimit`.
+- **D1. Require `github.com/maccavelli/go-llmprovider-sdk v1.11.0`,** with the sums measured above, in the commit that adds D2's listing, never `WithLimit`. *(2026-10-13, 0020-PLAN P1 deviation 3: `v1.12.0`, the latest tag, with F12's sums; gobble sets no `Request.Cache`, so its requests do not change. Setting it is a later record's.)*
 - **D2. `llm/provider` gains `List(ctx, id, apiKey, o) (Listing, error)`.**
   - It calls `catalog.List` with `llmprovider.NewStaticToken(apiKey)`, `catalog.WithProfile(catalog.ProfileCapable)`, `Options`' client info and HTTP client, and model metadata on; no limit and no probe. It passes no logger, so the SDK logs nothing of a listing, and D6's line is the only one.
   - `Listing` is `{Models []string; Live bool; Err error}`: the listing's `Recommended` when it is live and not empty; otherwise the static models, `Live` false, and the reason in `Err`, wrapped as `New`'s errors are (`mapError`).
@@ -121,7 +122,7 @@ Chosen option: "A", because it offers the full catalog now, through the one pack
 ### Confirmation
 
 ```text
-go list -m github.com/maccavelli/go-llmprovider-sdk                       -> v1.11.0
+go list -m github.com/maccavelli/go-llmprovider-sdk                       -> v1.11.0   (P1 deviation 3: v1.12.0)
 git diff -U0 HEAD~ -- go.mod | grep -c '^[-+]\s'                           -> 2 (P1's commit)
 grep -rn 'WithLimit' --include=*.go .                                      -> no match
 go test ./llm/provider -run 'TestList'                                     -> ok: the full canned list, the capable profile, metadata on, the static fallback, FailureKind

@@ -44,8 +44,8 @@
 | 0018 | PLAN | [The configuration surface: a commented `settings.yaml`, edited in place, layered and trust-gated](decisions/0018-PLAN-configuration-surface.md) | completed (2026-10-12; P1–P7, 24 deviations, each the owner's; execution record; P7, the deadline lock, an amendment) |
 | 0019 | MADR | [Pin acp-go-sdk2 v0.17.0, go-llmprovider-sdk v1.10.2 and go-selfupdate-lib v1.15.2, and integrate each where the library now does the work](decisions/0019-MADR-sibling-libraries-current-pins-and-integration.md) | accepted (2026-10-12, by the owner, with the three open questions answered; F14 and D15, `defaultProvider`, 2026-10-13, P3 deviation 2; D4 note 2026-10-13, P4 deviation 4; F15 and D3's `v0.17.1` note, P4 deviation 11) |
 | 0019 | PLAN | [Pin the three sibling libraries at their latest tags, and integrate each](decisions/0019-PLAN-sibling-libraries-current-pins-and-integration.md) | completed (2026-10-13; P1–P5; P3 deviation 2, `defaultProvider`, 2026-10-13; P4 deviations 3–11, 2026-10-13; P5 deviations 12–14, 2026-10-13) |
-| 0020 | MADR | [Pin go-llmprovider-sdk v1.11.0 and offer each provider's full curated catalog from a live listing](decisions/0020-MADR-full-model-catalog-listing.md) | accepted (2026-10-13, by the owner; gobble-cli issue 1) |
-| 0020 | PLAN | [Pin go-llmprovider-sdk v1.11.0 and offer each provider's full curated catalog from a live listing](decisions/0020-PLAN-full-model-catalog-listing.md) | in progress (approved 2026-10-13; P1–P3) |
+| 0020 | MADR | [Pin go-llmprovider-sdk v1.11.0 and offer each provider's full curated catalog from a live listing](decisions/0020-MADR-full-model-catalog-listing.md) | accepted (2026-10-13, by the owner; gobble-cli issue 1; F12 and D1's `v1.12.0` note, P1 deviation 3) |
+| 0020 | PLAN | [Pin go-llmprovider-sdk v1.11.0 and offer each provider's full curated catalog from a live listing](decisions/0020-PLAN-full-model-catalog-listing.md) | in progress (approved 2026-10-13; P1–P3; P1 deviations 1–3, 2026-10-13) |
 
 0003-MADR has no PLAN of its own. 0004-PLAN Phase 2 and 0005-PLAN F10 implement it.
 

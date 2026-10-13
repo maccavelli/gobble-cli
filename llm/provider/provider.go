@@ -33,6 +33,9 @@ type Options struct {
 	Logger                    *slog.Logger
 	// HTTPClient replaces the provider's client, for tests.
 	HTTPClient *http.Client
+	// ModelMetadataURL replaces List's model metadata document, for
+	// tests; New never fetches it.
+	ModelMetadataURL string
 }
 
 // New builds the SDK provider id with o, wrapped in the SDK's retry, as an

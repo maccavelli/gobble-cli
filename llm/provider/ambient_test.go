@@ -10,7 +10,7 @@ import (
 )
 
 // The nine providers that take a key, each with its variable and its
-// default model at go-llmprovider-sdk v1.10.2, read from the SDK's
+// default model at go-llmprovider-sdk v1.10.2 to v1.12.0, read from the SDK's
 // descriptors (0019-MADR's table) and its provider.go:62-74.
 var keyDefaults = []struct{ id, envVar, model string }{
 	{"gemini", "GEMINI_API_KEY", "gemini-3.5-flash-lite"},

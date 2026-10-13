@@ -10,7 +10,7 @@ Implements [0020-MADR-full-model-catalog-listing.md](0020-MADR-full-model-catalo
 
 ## Goal
 
-1. `go list -m github.com/maccavelli/go-llmprovider-sdk` reports `v1.11.0`; `go.mod` changes in that one requirement; `go.sum` holds `h1:oCZmUe6hGMCZBS9lYqogTyndueF2CyWowJE6xxUqHoE=` and `h1:en9k+ZhlMT41q/+FtXQrLE/3qDaBrWFr8TeLyZw2+Jg=`.
+1. `go list -m github.com/maccavelli/go-llmprovider-sdk` reports `v1.11.0`; `go.mod` changes in that one requirement; `go.sum` holds `h1:oCZmUe6hGMCZBS9lYqogTyndueF2CyWowJE6xxUqHoE=` and `h1:en9k+ZhlMT41q/+FtXQrLE/3qDaBrWFr8TeLyZw2+Jg=`. *(P1 deviation 3: `v1.12.0`, with `h1:3nbuUj/BF/mRaXIEF2r1y+oSKB7KdZ6+T2arJZtmLv0=` and the same `go.mod` sum.)*
 2. With a credential set and a listing that answers, the ACP `model` option offers the listing's models, the listing's first selected; `set_config_option` and `/model` accept any of them, and the next request names it. A test shows each over a canned listing, and fails with today's `provider.Models` as the source.
 3. With the listing failing, the option offers the static models and `StaticModels[0]`, a session starts, and the warning names the provider and the failure's kind, never its text.
 4. One listing per process: started when the agent starts, waited for by the first model choice, kept when live, retried at most once a minute when it failed. No generation is sent, and no test lists over the network.
@@ -76,8 +76,8 @@ python -I <scratch>/q261_lint_records.py --negative <each record the phase touch
 
 ### P1 — The pin and `List` (D1, D2; closes F1, F2, F5, F6, F7)
 
-1. `python scripts/check_libs.py --lib go-llmprovider-sdk` reports `v1.11.0` and every check ok, `api: ok`, exit 0.
-2. `go get github.com/maccavelli/go-llmprovider-sdk@v1.11.0`, `go mod tidy`; `go.mod` changes in one line; `go.sum` holds the two sums of Goal 1, and `v1.10.2`'s module sum `h1:llPpBo+EKnQE4ksae+ZBK9xFOQ6z5NpK18H4cosmyJY=` is gone.
+1. `python scripts/check_libs.py --lib go-llmprovider-sdk` reports `v1.11.0` and every check ok, `api: ok`, exit 0. *(2026-10-13, P1 deviation 3: `v1.12.0`.)*
+2. `go get github.com/maccavelli/go-llmprovider-sdk@v1.11.0`, `go mod tidy`; `go.mod` changes in one line; `go.sum` holds the two sums of Goal 1, and `v1.10.2`'s module sum `h1:llPpBo+EKnQE4ksae+ZBK9xFOQ6z5NpK18H4cosmyJY=` is gone. *(2026-10-13, P1 deviation 3: `v1.12.0`.)*
 3. **`llm/provider/provider.go`, `Options`:** after `HTTPClient`, add
 
    ```go
@@ -181,11 +181,11 @@ python -I <scratch>/q261_lint_records.py --negative <each record the phase touch
    - a `canned` `http.RoundTripper` that records `METHOD host/path` and each request's `Authorization` header, answers its routes with their status and JSON body, and every other request 404 `{}`; a `hang` route blocks until the request's context ends;
    - **`TestListFullCatalog`:** an OpenAI listing (`GET api.openai.com/v1/models`, 200) of `gpt-6-luna`, `gpt-5.6-luna`, `gpt-4.1-mini`, `gpt-5.6-terra`, `gpt-6.1-sol`, `gpt-6-astra`, `gpt-5-mini`, `gpt-5-nano`, `text-embedding-4-large` and `tts-2`. `List(ctx, "openai", "sk-test", Options{HTTPClient: c})` gives `Live` true, `Err` nil, and `Models` exactly the six, then `gpt-5-nano`, `gpt-5-mini`. The requests are exactly `["GET api.openai.com/v1/models"]`, with `Authorization: Bearer sk-test`, so no generation and no metadata request;
    - **`TestListCapableProfile`:** a Kilo listing (`GET api.kilo.ai/api/gateway/models`, 200) of `kilo-auto/efficient` and `deepseek/deepseek-v4.1-flash`, in the shape `i1kilo/canned` used (MADR's evidence) gives `Models` exactly `["kilo-auto/efficient", "deepseek/deepseek-v4.1-flash"]`; the utility profile gives only the second;
-   - **`TestListFetchesMetadata`:** an OpenCode Zen listing, with `ModelMetadataURL` `https://metadata.test/<the test's name>-<time.Now().UnixNano()>.json` so the SDK's in-process cache never holds it, records a request `GET metadata.test/<that path>` after `GET opencode.ai/zen/v1/models`;
+   - **`TestListFetchesMetadata`:** an OpenCode Zen listing, with `ModelMetadataURL` `https://metadata.test/<the test's name>-<time.Now().UnixNano()>.json` so the SDK's in-process cache never holds it, records a request `GET metadata.test/<that path>` after `GET opencode.ai/zen/v1/models`; *(deviation 1: the Zen listing answers 200 with two models, and the test asserts `Live` and both requests, in any order; deviation 2: the path is `/<the test's name>-<pid>-<n>.json`, `n` a process-wide counter)*;
    - **`TestListFallsBack`:** the OpenAI listing answering 401 `{"error":{"message":"Incorrect API key provided: sk-pl***nt","code":"invalid_api_key"}}` gives `Live` false, `Models` equal to `Models("openai")`, `errors.Is(Err, llm.ErrAuth)` and `FailureKind(Err) == "auth"`; a hanging listing under a 300 ms context gives `Live` false, `FailureKind(Err) == "timeout"`, and returns within 2 s; `List(ctx, "nope", "k", Options{})` is an error;
    - **`TestFailureKind`:** each sentinel, wrapped with `fmt.Errorf("x: %w", ...)`, gives its kind; `errors.New("sk-pl***nt")` gives `other`, and no kind contains the error's text.
-6. **`llm/provider/ambient_test.go:13`:** "default model at go-llmprovider-sdk v1.10.2" becomes "default model at go-llmprovider-sdk v1.10.2 and v1.11.0", since `v1.11.0` changes no static list (SDK 0038-MADR D3) and the test passed on it (step 1).
-7. **Docs:** `docs/architecture.md:110` and `README.md:84` name `v1.10.2`; each becomes `v1.11.0`.
+6. **`llm/provider/ambient_test.go:13`:** "default model at go-llmprovider-sdk v1.10.2" becomes "default model at go-llmprovider-sdk v1.10.2 and v1.11.0", since `v1.11.0` changes no static list (SDK 0038-MADR D3) and the test passed on it (step 1). *(P1 deviation 3: "v1.10.2 to v1.12.0"; the test passed at `v1.12.0` in its check too.)*
+7. **Docs:** `docs/architecture.md:110` and `README.md:84` name `v1.10.2`; each becomes `v1.11.0`. *(2026-10-13, P1 deviation 3: `v1.12.0`.)*
 
 **P1's negatives** (`q498_0020_p1_negatives.py`, a scratch copy, control first):
 
@@ -198,14 +198,27 @@ python -I <scratch>/q261_lint_records.py --negative <each record the phase touch
 **P1's verification:**
 
 ```text
-go list -m github.com/maccavelli/go-llmprovider-sdk                         -> v1.11.0
+go list -m github.com/maccavelli/go-llmprovider-sdk                         -> v1.11.0   (deviation 3: v1.12.0)
 git diff -U0 HEAD -- go.mod | grep -c '^[-+]\s'                              -> 2
-grep -c 'go-llmprovider-sdk v1.11.0' go.sum                                  -> 2
+grep -c 'go-llmprovider-sdk v1.11.0' go.sum                                  -> 2   (deviation 3: v1.12.0)
 grep -rn 'WithLimit\|WithLogger' llm/provider/list.go                        -> no match
 go test -count=1 ./llm/provider                                              -> ok
 make archtest                                                                -> ok
 git diff --exit-code HEAD -- acpserver                                       -> no diff
 ```
+
+### P1's deviations, 2026-10-13
+
+- **Deviation 1. Step 5's `TestListFetchesMetadata` is flaky as written.**
+  - **Found:** the plan's test lists OpenCode Zen with a failing listing and expects the metadata request after the listing's. The SDK starts the metadata fetch concurrently with the listing (`llmprovider/catalog/model_metadata.go`, `startModelMetadata`) and waits for it only when the listing answers, so after a failed listing `List` can return before the request is made. Measured (`i1kilo/zenwait`, 50 runs each, a metadata URL of its own per run): with the failing listing the request was made before `List` returned in 14 of 50; with a listing that answers 200, in 50 of 50. P1's negatives run saw it fail once, in negative 5, which does not touch it.
+  - **Decided** ("Live Zen listing"): the canned Zen listing answers 200 with two models, so `List` waits for the metadata; the test asserts `Live` and both requests, in any order. Step 5 is annotated. No file added.
+- **Deviation 2. Step 5's metadata URL is not unique on Windows.**
+  - **Found:** the URL `<the test's name>-<time.Now().UnixNano()>` repeats: on the Windows host 10 000 consecutive `time.Now().UnixNano()` calls gave one distinct value (`i1clock`). Under `go test -count=50`, a run that reuses a URL is answered from the SDK's remembered failure, which is not retried for a minute, with no request: 44 of 50 runs failed. One `-count=1` run, as the gates use, passes.
+  - **Decided** ("Process-wide counter"): the path is `/<the test's name>-<pid>-<n>.json`, `n` from an atomic counter, unique within the process by construction and across processes by the pid; shown with `-count=50`. Step 5 is annotated. No file added.
+
+- **Deviation 3. go-llmprovider-sdk `v1.12.0` was tagged after this plan (MADR F12).**
+  - **Found:** checking the pin before staging P1, `v1.12.0` (`57cbd79e0790`, 2026-10-13 14:32 UTC-5) is the latest tag. It adds `Request.Cache` for request-side prompt caching, whose zero value leaves every request unchanged (SDK 0039-MADR D1, R45); gobble sets no such field. `check_libs.py --lib go-llmprovider-sdk --tag v1.12.0 --from v1.11.0`: every check ok; apidiff: four additions only; `llmprovider/catalog` unchanged.
+  - **Decided** ("v1.12.0 in P1"): P1 pins `v1.12.0`, with no other code change; `go.sum` holds `h1:3nbuUj/BF/mRaXIEF2r1y+oSKB7KdZ6+T2arJZtmLv0=` and `h1:en9k+ZhlMT41q/+FtXQrLE/3qDaBrWFr8TeLyZw2+Jg=`. Goal 1, steps 1, 2, 6 and 7, P1's and the whole plan's verification and P3 step 1 are annotated; P1's tests, the 50-run check, the negatives and the gates are rerun. Setting `Request.Cache` is deferred to its own record. No file added.
 
 ### P2 — The model choice (D3–D7; closes F3, F4, F8, F9, F10)
 
@@ -414,7 +427,7 @@ git diff --exit-code HEAD -- acpserver                                       -> 
 
 Each note is dated the day P3 runs, cites 0020-MADR's decision and the commit of the phase that carried it, and is added beside the text it corrects, which stays.
 
-1. **`docs/decisions/0019-MADR-sibling-libraries-current-pins-and-integration.md`, D2:** "go-llmprovider-sdk `v1.11.0` is pinned by 0020-MADR D1 (0020-PLAN P1, `<P1's commit>`)".
+1. **`docs/decisions/0019-MADR-sibling-libraries-current-pins-and-integration.md`, D2:** "go-llmprovider-sdk `v1.11.0` is pinned by 0020-MADR D1 (0020-PLAN P1, `<P1's commit>`)". *(P1 deviation 3: `v1.12.0`.)*
 2. **`docs/decisions/0005-PLAN-v1-feature-scope.md`:** at F4-2's `acpserver` bullet ("the `model` option lists the catalog's models for the session's provider"): "the option's models are the SDK's listing from 0020-MADR (0020-PLAN P2, `<P2's commit>`); F4-2 adds `models.json`'s models and the metadata on top". At X3's entry: "`--offline` also turns off 0020-MADR's model listing, which then offers the static models".
 3. **`docs/reports/0014-REPORT-llmprovider-sdk-integration.md`:** at the lines saying configuring and `gobble models` "go through `wizard` and `catalog` via `llm/provider`": "the ACP model option lists through `catalog` from 0020-MADR".
 4. **`docs/README.md`:** the 0020 rows read `accepted` and `completed (<date>)`; the 0019-MADR, 0005-PLAN and 0014-REPORT rows note their 0020 notes; the build-order list gains `**0020-PLAN.** Run: P1–P3 on <date>.`
@@ -434,7 +447,7 @@ grep -c '0020-MADR' <each record of steps 1-3>                              -> a
 After P3:
 
 ```text
-go list -m github.com/maccavelli/go-llmprovider-sdk                         -> v1.11.0
+go list -m github.com/maccavelli/go-llmprovider-sdk                         -> v1.11.0   (deviation 3: v1.12.0)
 python scripts/check_libs.py                                                 -> every library at its latest tag; exit 0
 git diff --exit-code 17cd497 -- acpserver                                    -> no diff
 the gates                                                                    -> lint ×3, tests on three systems, -race on two, preflight
@@ -468,4 +481,5 @@ A live check, by hand, with the owner's test key in the child's environment only
 - **A persistent catalog, `gobble models list` and per-model metadata:** 0005-PLAN F4-2, on this listing.
 - **`--offline`:** 0005-PLAN X3; P3 notes that it turns the listing off.
 - **A shorter `/model` listing:** the owner chose every model; a search over `Usable` waits for a caller.
+- **Request-side prompt caching** *(P1 deviation 3)*: go-llmprovider-sdk `v1.12.0`'s `Request.Cache`. gobble's 0005-MADR plans prompt-cache warming and its 0012-MADR D13 asked the SDK for `cache_control`; whether and how gobble sets it, and its cost, is its own record.
 - **The SDK's own debug log of a listing:** `List` passes no logger (C2); if the SDK's logging is shown to redact, a later record may pass one.
