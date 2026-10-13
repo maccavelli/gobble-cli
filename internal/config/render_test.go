@@ -22,7 +22,8 @@ func renderLayout(t *testing.T) (Resolved, string, string) {
 // The whole document is YAML in the template's order, every key present.
 func TestRenderDocument(t *testing.T) {
 	r, _, _ := renderLayout(t)
-	want := `defaultThinkingLevel: off
+	want := `defaultProvider: ""
+defaultThinkingLevel: off
 steeringMode: all
 followUpMode: all
 sessionDir: ""

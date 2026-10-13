@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -14,6 +15,7 @@ import (
 	"github.com/maccavelli/gobble-cli/compaction"
 	"github.com/maccavelli/gobble-cli/internal/config"
 	"github.com/maccavelli/gobble-cli/llm/llmtest"
+	"github.com/maccavelli/gobble-cli/llm/provider"
 	"github.com/maccavelli/gobble-cli/session"
 	"github.com/maccavelli/gobble-cli/session/jsonl"
 	"github.com/maccavelli/gobble-cli/tool"
@@ -236,5 +238,40 @@ func TestAddDirAbsoluteAndChecked(t *testing.T) {
 	withAgent(t, &acptest.ScriptAgent{Turns: []acptest.Turn{{Updates: []string{chunk("ok")}}}})
 	if r := runMain(t, nil, "--add-dir", filepath.Join(base, "missing"), "-p", "hi"); r.code != ExitUsage || !strings.Contains(r.stderr, "not a directory") {
 		t.Fatalf("a missing --add-dir: %+v", r)
+	}
+}
+
+// defaultProvider's values are the SDK's providers that take a key, in
+// order; the setting reaches the agent's provider and model list as gobble
+// acp reads it, and -p names the preferred provider's variable when it is
+// unset, never choosing another (0019-MADR D15).
+func TestDefaultProviderSetting(t *testing.T) {
+	k, ok := config.KeyOf("defaultProvider")
+	if want := append([]string{""}, provider.KeyProviders()...); !ok || !slices.Equal(k.Enum, want) {
+		t.Fatalf("defaultProvider's enum %q, want %q", k.Enum, want)
+	}
+	home := t.TempDir()
+	t.Chdir(t.TempDir())
+	t.Setenv("GOBBLE_HOME", home)
+	t.Setenv("OPENCODE_API_KEY", "test-only")
+	writeFile(t, filepath.Join(home, "settings.yaml"), "defaultProvider: opencode-go\n")
+	out := &Output{out: &bytes.Buffer{}, err: &bytes.Buffer{}}
+	e := &runEnv{ctx: t.Context(), out: out, logs: &lazyLog{out: out}}
+	t.Cleanup(func() {
+		if err := e.logs.close(); err != nil {
+			t.Error(err)
+		}
+	})
+	e.processSettings("") // as acp does
+	if c := e.modelChoice(); c.Provider != "opencode-go" || c.Default != "claude-haiku-5-5" || !slices.Equal(c.Models, provider.Models("opencode-go")) {
+		t.Fatalf("model choice %+v, want opencode-go's", c)
+	}
+	if p, err := modelProvider(e)(); err != nil || p.ID() != "opencode-go" {
+		t.Fatalf("provider %v, %v; want opencode-go", p, err)
+	}
+	writeFile(t, filepath.Join(home, "settings.yaml"), "defaultProvider: openai\n")
+	r := runIn(t, home, "-p", "x")
+	if r.code != ExitAuth || !strings.Contains(r.stderr, "Error: no model credential: defaultProvider is openai; set OPENAI_API_KEY") {
+		t.Fatalf("openai without its key: %+v", r)
 	}
 }

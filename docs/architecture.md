@@ -40,7 +40,7 @@ The tier is each package's `Stability:` line in its `doc.go`. **stable** package
 | `gobble` | stable | The embedding facade. |
 | `agent` | stable | The turn loop: model calls, tool calls, approval, and the steering and follow-up queues. Tools are offered by tier: direct ones are sent, deferred ones wait behind `tool_search` until a call loads them with their family, and hidden ones are neither sent nor found. |
 | `llm` | stable | The model facade the agent sees. |
-| `llm/provider` | beta | `llm` over go-llmprovider-sdk, with the ambient credential selection. |
+| `llm/provider` | beta | `llm` over go-llmprovider-sdk, with the ambient credential selection and the `defaultProvider` setting. |
 | `llm/catalog` | beta | The model catalog (placeholder). |
 | `llm/llmtest` | stable | A scripted `llm.Provider` and request assertions, for tests. |
 | `tool` | stable | The tool contract, with the workspace roots each call gets. A tool publishes a schema with its bounds and defaults, and validates the Go type's own. A tool's spec carries its exposure and family, and a result can name tools to load. A call's environment carries the client's files and terminals when it offers them, and a tool names its locations before it runs and in its result. |
@@ -107,7 +107,7 @@ The direct requirements in `go.mod`:
 | `github.com/alecthomas/kong` | `v1.16.1` |
 | `github.com/maccavelli/acp-go-sdk2` | `v0.14.0` |
 | `github.com/modelcontextprotocol/go-sdk` | `v1.8.0` |
-| `github.com/maccavelli/go-llmprovider-sdk` | `v1.2.1` |
+| `github.com/maccavelli/go-llmprovider-sdk` | `v1.10.2` |
 | `github.com/maccavelli/go-selfupdate-lib` | `v1.15.2` |
 | `github.com/google/jsonschema-go` | `v0.4.3` |
 | `go.yaml.in/yaml/v3` | `v3.0.5` |

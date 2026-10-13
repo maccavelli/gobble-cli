@@ -1,6 +1,7 @@
 package config
 
 import (
+	"cmp"
 	"fmt"
 	"path/filepath"
 	"slices"
@@ -150,11 +151,20 @@ func convert(k Key, n *yaml.Node) (any, string) {
 	s := n.Value
 	switch {
 	case k.Kind == KindEnum && !slices.Contains(k.Enum, s):
-		return nil, "must be one of " + strings.Join(k.Enum, ", ")
+		return nil, "must be one of " + enumList(k.Enum)
 	case k.Path == pathSessionDir && s != "" && !isAbsOrHome(s):
 		return nil, "must be an absolute path, or start with ~"
 	}
 	return s, ""
+}
+
+// enumList is an enum's values for a message, the empty one as "".
+func enumList(values []string) string {
+	shown := make([]string, len(values))
+	for i, v := range values {
+		shown[i] = cmp.Or(v, `""`)
+	}
+	return strings.Join(shown, ", ")
 }
 
 // isAbsOrHome reports whether p is absolute, or starts with ~ for the home

@@ -1,12 +1,12 @@
 ---
 status: proposed
-date: 2026-10-12
+date: 2026-10-13
 ---
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
 
 # PLAN 0019 — Pin acp-go-sdk2 v0.17.0, go-llmprovider-sdk v1.10.2 and go-selfupdate-lib v1.15.2, and integrate each where the library now does the work
 
-Implements [0019-MADR-sibling-libraries-current-pins-and-integration.md](0019-MADR-sibling-libraries-current-pins-and-integration.md) decisions D1–D14, closing findings F1–F13.
+Implements [0019-MADR-sibling-libraries-current-pins-and-integration.md](0019-MADR-sibling-libraries-current-pins-and-integration.md) decisions D1–D14, closing findings F1–F13. *(2026-10-13, P3 deviation 2: and D15, closing F14.)*
 
 ## Goal
 
@@ -28,7 +28,7 @@ When every phase is committed:
 | :--- | :--- | :--- |
 | P1 | `scripts/check_libs.py` | `Makefile` |
 | P2 | — | `go.mod`, `go.sum`, `.github/workflows/ci.yml`, `docs/architecture.md`, `README.md` |
-| P3 | `llm/provider/ambient_test.go`, `acpserver/usage_test.go` | `go.mod`, `go.sum`, `llm/provider/provider.go`, `llm/provider/provider_test.go`, `llm/doc.go`, `llm/llm.go`, `acpserver/history.go`, `docs/architecture.md`, `README.md` |
+| P3 | `llm/provider/ambient_test.go`, `acpserver/usage_test.go` | `go.mod`, `go.sum`, `llm/provider/provider.go`, `llm/provider/provider_test.go`, `llm/doc.go`, `llm/llm.go`, `acpserver/history.go`, `docs/architecture.md`, `README.md`; *(deviation 2:)* `llm/provider/ambient.go`; `internal/config/keys.go`, `internal/config/settings.go`, `internal/config/settings.yaml`, `internal/config/merge.go`, `internal/config/testdata/settings.schema.json`, `internal/config/resolve_test.go`, `internal/config/render_test.go`; `internal/cli/agent.go`, `internal/cli/line.go`, `internal/cli/print.go`, `internal/cli/settings_test.go`; `docs/decisions/0018-MADR-configuration-surface.md`, `docs/decisions/0005-PLAN-v1-feature-scope.md`, `docs/README.md`, this plan and its MADR |
 | P4 | `acpclient/acptest/abs.go`, `acpclient/acptest/abs_test.go`, `acpserver/rewrite.go`, `acpserver/rewrite_test.go`, `acpserver/list_test.go` | `go.mod`, `go.sum`; `acpclient/conn.go`, `acpclient/sessions.go`, `acpclient/conn_test.go`, `acpclient/sessions_test.go`, `acpclient/elicitation_test.go`; `acpclient/acptest/recorder.go`, `acpclient/acptest/script.go`, `acpclient/acptest/pair_test.go`, `acpclient/acptest/script_test.go`; `acpserver/serve.go`, `acpserver/agent.go`, `acpserver/mcp.go`, `acpserver/agent_test.go`, `acpserver/commands_test.go`, `acpserver/fixtures_test.go`, `acpserver/tree_test.go`, `acpserver/delete_test.go`, `acpserver/mcp_test.go`; `internal/cli/line_test.go`; `docs/architecture.md`, `README.md` |
 | P5 | — | `docs/decisions/0016-MADR-acp-go-sdk2-v0.15.0-and-stable-surface.md`, `docs/decisions/0014-MADR-move-to-acp-go-sdk2.md`, `docs/decisions/0005-MADR-v1-feature-scope.md`, `docs/decisions/0005-PLAN-v1-feature-scope.md`, `docs/decisions/0012-PLAN-tool-schemas-descriptions-and-loading.md`, `docs/reports/0014-REPORT-llmprovider-sdk-integration.md`, `docs/reports/0015-REPORT-sibling-library-pins-and-order.md`, `docs/README.md`, this plan (its execution record) |
 
@@ -169,9 +169,41 @@ go test -count=1 ./internal/buildinfo/... ./internal/cli/... ./internal/archtest
 
 7. **Docs:** `docs/architecture.md:110` and `README.md:84` name go-llmprovider-sdk `v1.2.1`; each becomes `v1.10.2`.
 8. **Tests:**
-   - `llm/provider/ambient_test.go` (new), `TestAmbientDefaultModels`: for each of the nine key-taking providers, `Choose` with only that provider's `EnvVar` set returns its id and the model of MADR's `v1.10.2` column, as literals (gemini `gemini-3.5-flash-lite`, openai `gpt-6-luna`, claude `claude-haiku-5-5`, grok `grok-4.6`, opencode-zen and opencode-go `claude-haiku-5-5`, huggingface `deepseek-ai/DeepSeek-V4-Flash-0731`, kilo `deepseek/deepseek-v4.1-flash`, together `zai-org/GLM-5.3-Flash`), and a test fails naming the provider whose default moved. The values are read from the probe of MADR's table, never copied from the test's own output.
+   - ~~`llm/provider/ambient_test.go` (new), `TestAmbientDefaultModels`: for each of the nine key-taking providers, `Choose` with only that provider's `EnvVar` set returns its id and the model of MADR's `v1.10.2` column, as literals (gemini `gemini-3.5-flash-lite`, openai `gpt-6-luna`, claude `claude-haiku-5-5`, grok `grok-4.6`, opencode-zen and opencode-go `claude-haiku-5-5`, huggingface `deepseek-ai/DeepSeek-V4-Flash-0731`, kilo `deepseek/deepseek-v4.1-flash`, together `zai-org/GLM-5.3-Flash`), and a test fails naming the provider whose default moved. The values are read from the probe of MADR's table, never copied from the test's own output.~~ *(Deviation 2: impossible for opencode-go, which shares `OPENCODE_API_KEY` with opencode-zen and comes after it, so `Choose` never returns it (MADR F14).)*
+   - *(Deviation 2, in its place:)* `llm/provider/ambient_test.go` (new):
+     - `TestAmbientDefaultModels`: a table of the nine, each `{id, variable, model}` as literals (gemini `GEMINI_API_KEY` `gemini-3.5-flash-lite`, openai `OPENAI_API_KEY` `gpt-6-luna`, claude `ANTHROPIC_API_KEY` `claude-haiku-5-5`, grok `XAI_API_KEY` `grok-4.6`, opencode-zen and opencode-go `OPENCODE_API_KEY` `claude-haiku-5-5`, huggingface `HF_TOKEN` `deepseek-ai/DeepSeek-V4-Flash-0731`, kilo `KILO_API_KEY` `deepseek/deepseek-v4.1-flash`, together `TOGETHER_API_KEY` `zai-org/GLM-5.3-Flash`), read from the probe of MADR's table and from SDK `llmprovider/provider.go:62-74`, never from the test's own output. The table's ids must equal `KeyProviders()`, in order. For each, `Choose(env, id)` with only its variable set returns exactly `Selection{ID: id, Model: model, EnvVar: variable}`, else `t.Errorf` names the id. Then `Choose(env, "")` with only `OPENCODE_API_KEY` set returns opencode-zen (the registry order, F14).
+     - `TestChoosePreferred`: `Choose(env, "openai")` with only `OPENCODE_API_KEY` set returns a zero `Selection` and an error for which `IsNoCredential` and `errors.Is(err, llm.ErrAuth)` hold and whose text contains `defaultProvider is openai; set OPENAI_API_KEY`; `Choose(env, "ollama")` and `Choose(env, "nope")`, with every variable set, each return an error naming the value, for which `IsNoCredential` is false.
    - `llm/provider/provider_test.go`: `TestNewReportsRetryCapabilities`: `New("openai", Options{APIKey: "test-only"})` reports `NativeStreaming` false, and `Wrap` of a stub reporting `Supported` reports true. `TestUsageCacheWrite`: a response with `InputTokens 100, CachedTokens 30, CacheWriteTokens 10` gives `CacheReadTokens 30, CacheWriteTokens 10`, and one with only `CacheWriteTokens 5` is not estimated.
    - `acpserver/usage_test.go` (new), `TestPiUsageExcludesCache`: `piUsage(llm.Usage{InputTokens: 100, OutputTokens: 20, CacheReadTokens: 30, CacheWriteTokens: 10})` stores `Input 60, CacheRead 30, CacheWrite 10, TotalTokens 120`, Pi's arithmetic (`openai-completions.ts:1544-1546` at Pi `312184e`); `InputTokens 5, CacheReadTokens 10` stores `Input 0`; an estimated usage still carries `{"estimated":true}`.
+9. *(Deviation 2, MADR D15.)* **The `defaultProvider` key:**
+   - **`llm/provider/ambient.go`:**
+     - `Choose(env func(string) string, preferred string) (Selection, error)`. With `preferred` `""`, today's loop, unchanged. Otherwise the descriptor whose `ID` is `preferred`, `RequiresAPIKey` and a non-empty `EnvVar`: if `env(EnvVar)` is set, `Selection{ID, EnvVar, Model: StaticModels[0]}` (none when the list is empty); if not, `fmt.Errorf("%w: defaultProvider is %s; set %s", ErrNoCredential, preferred, EnvVar)`. No such descriptor: `fmt.Errorf("provider: defaultProvider %q is not a built-in provider that takes a key", preferred)`. The doc comment names 0019-MADR D15 and says it never falls back.
+     - `Ambient(env func(string) string, preferred string, o Options)` passes `preferred` to `Choose`.
+     - New `KeyProviders() []string`: the ids of the descriptors with `RequiresAPIKey` and an `EnvVar`, in registry order. New `CredentialVar(id string) string`: that id's `EnvVar` when it takes a key, else `""`.
+     - `llm/provider/provider_test.go`'s `TestChoose` and `TestAmbientBuilds` call `Choose(…, "")` and `Ambient(…, "", …)`; their assertions are unchanged.
+   - **`internal/config`:**
+     - `keys.go`: first in `Keys`, `{Path: "defaultProvider", Kind: KindEnum, Enum: []string{"", "gemini", "openai", "claude", "grok", "opencode-zen", "opencode-go", "huggingface", "kilo", "together"}, Read: ReadProcess, Doc: "The provider gobble uses, with its first model; its credential variable must be set. Empty takes the first provider whose credential variable is set."}`; the comment above `Keys` becomes "0018-MADR D14's thirteen and 0019-MADR D15's defaultProvider, in the template's order."
+     - `settings.go`: `DefaultProvider string` with `yaml:"defaultProvider" json:"defaultProvider,omitempty"`, first in `Settings`, and its `case` in `field`.
+     - `settings.yaml`: a `Model` section ahead of `Sessions`, its banner as the others', holding:
+
+       ```yaml
+       # The provider gobble uses: gemini, openai, claude, grok, opencode-zen,
+       # opencode-go, huggingface, kilo or together, with its first model.
+       # Its credential variable must be set. Empty takes the first of them,
+       # in that order, whose variable is set; opencode-zen and opencode-go
+       # share OPENCODE_API_KEY, so only this setting reaches opencode-go.
+       # defaultProvider: ""
+       ```
+
+     - `merge.go`: the enum message writes an empty value as `""` (a helper, `enumList`), so the message reads `must be one of "", gemini, …`, not `must be one of , gemini, …`.
+     - `testdata/settings.schema.json`: regenerated with `go run ./internal/config/genschema`, never edited by hand.
+     - Tests: `TestKeysMatchSettings` expects 14 keys, its message naming D14's 13 and D15's `defaultProvider`; `TestRenderDocument`'s document gains `defaultProvider: ""` as its first line; `TestDefaultsEqualCode` gains `{"defaultProvider", s.DefaultProvider, ""}`; `TestTypeAndRangeErrorsFallBack`'s file gains line 11, `defaultProvider: ollama`, and its list `settings.yaml:11: defaultProvider: must be one of "", gemini, openai, claude, grok, opencode-zen, opencode-go, huggingface, kilo, together`. The probe found no other test that the key changes.
+   - **`internal/cli`:**
+     - `agent.go`: `func (e *runEnv) defaultProvider() string`, the process settings' `DefaultProvider`, as `sessionStore` reads `SessionDir`; `modelProvider` calls `provider.Ambient(os.Getenv, e.defaultProvider(), …)`; `modelChoice` becomes a method, `e.modelChoice`, calling `provider.Choose(os.Getenv, e.defaultProvider())`, and `agentOptions` passes `Models: e.modelChoice`; `noCredentialMessage(preferred string)` returns `no model credential: defaultProvider is <id>; set <variable>` when `provider.CredentialVar(preferred)` is not empty, else today's text.
+     - `line.go:72`, `:219` and `print.go:197` pass `e.defaultProvider()`.
+     - `settings_test.go`, `TestDefaultProviderSetting`: the key's `Enum` equals `""` followed by `provider.KeyProviders()`; with `GOBBLE_HOME` holding `defaultProvider: opencode-go` and only `OPENCODE_API_KEY` set, after `e.processSettings("")` (as `gobble acp` does) `e.modelChoice()` is `{Provider: "opencode-go", Default: "claude-haiku-5-5", Models: provider.Models("opencode-go")}` and `modelProvider(e)()` builds a provider whose `ID()` is `opencode-go`; with `defaultProvider: openai` and only `OPENCODE_API_KEY` set, `-p x` exits `ExitAuth` with `Error: no model credential: defaultProvider is openai; set OPENAI_API_KEY` on stderr.
+   - **Docs:** `docs/architecture.md:43`, `llm/provider`'s row, "with the ambient credential selection" becomes "with the ambient credential selection and the `defaultProvider` setting".
+   - **Records:** 0018-MADR D19's F4 line (`:566`) gets a dated note that `defaultProvider` came forward in this phase and `defaultModel` and the model scope stay F4's; 0005-PLAN F4-2's "Choosing a model" (`:3274`) gets a dated note that F4-2 adds `defaultModel` and the model scope beside `defaultProvider`, and that `--provider` wins over it for its run; `docs/README.md`'s rows for 0005-PLAN, 0018-MADR, 0019-MADR and this plan name the amendment.
 
 **P3's verification:**
 
@@ -182,9 +214,19 @@ go test -count=1 ./llm/... ./acpserver/... ./internal/cli/...               -> o
 go test -count=1 ./llm/provider -run 'TestAmbientDefaultModels|TestNewReportsRetryCapabilities|TestUsageCacheWrite' -v -> each PASS
 go test -count=1 ./acpserver -run TestPiUsageExcludesCache -v               -> PASS
 git diff --exit-code acpserver/testdata/session.golden                      -> no diff
+go test -count=1 ./llm/provider -run 'TestAmbientDefaultModels|TestChoosePreferred' -v   -> each PASS   (deviation 2)
+go test -count=1 ./internal/config/... ./internal/cli/...                   -> ok                  (deviation 2)
+go test -count=1 ./internal/cli -run TestDefaultProviderSetting -v          -> PASS                (deviation 2)
+go run ./internal/config/genschema && git diff --exit-code internal/config/testdata/settings.schema.json -> no diff after staging
 ```
 
-**P3's negatives,** on scratch copies: `New` reporting `p.Capabilities()` fails `TestNewReportsRetryCapabilities`; `usageOf` dropping `CacheWriteTokens` fails `TestUsageCacheWrite`; `piUsage` writing `Input: u.InputTokens` fails `TestPiUsageExcludesCache`; one literal of `TestAmbientDefaultModels` changed to `v1.2.1`'s value fails it, naming the provider.
+**P3's negatives,** on scratch copies: `New` reporting `p.Capabilities()` fails `TestNewReportsRetryCapabilities`; `usageOf` dropping `CacheWriteTokens` fails `TestUsageCacheWrite`; `piUsage` writing `Input: u.InputTokens` fails `TestPiUsageExcludesCache`; one literal of `TestAmbientDefaultModels` changed to `v1.2.1`'s value fails it, naming the provider. *(Deviation 2, also:)* `Choose` ignoring `preferred` fails `TestAmbientDefaultModels` on opencode-go and `TestChoosePreferred`; `Choose` falling back to the ambient loop when the preferred variable is unset fails `TestChoosePreferred`; `modelChoice` calling `Choose(os.Getenv, "")` fails `TestDefaultProviderSetting`; `"ollama"` added to the enum fails `TestDefaultProviderSetting`'s enum check; `enumList` dropped (the old `strings.Join`) fails `TestTypeAndRangeErrorsFallBack`.
+
+### P3's deviations, 2026-10-13, decided by the owner
+
+- **Deviation 2. The ambient choice cannot reach opencode-go, so step 8's default-model test was impossible as written.**
+  - **Found:** writing `TestAmbientDefaultModels`. In go-llmprovider-sdk, opencode-zen and opencode-go share `OPENCODE_API_KEY` (`llmprovider/provider.go:69-70` at `v1.10.2`; `:63-64` at `v1.2.1`, the current pin, so it predates this phase), and opencode-zen comes first in the registry (`providers/providers.go:34-35`), so `Choose` with that variable set always returns opencode-zen (`llm/provider/ambient.go:27-37`). `Ambient` and `Choose` are gobble's only provider choosers (`internal/cli/agent.go:30`, `:82`; `internal/cli/line.go:72`), and `--provider` is refused until 0005-PLAN F4 (`internal/cli/flags.go:33`, `:69`). Read from both tags' sources in the module cache; MADR F14.
+  - **Decided** ("make opencode-go selectable", then "defaultProvider setting"): the owner chose a real fix over pinning opencode-go's default through its descriptor alone, and the `defaultProvider` setting over the `--provider` and `--model` flags, since the setting reaches `gobble acp` too. MADR D15; step 8's first bullet is replaced, step 9 added, and the files in the scope table's P3 row marked "deviation 2" added. A scratch clone of `e8181b5` with the key added (`q461_defaultprovider_probe.py`) found exactly two tests the key changes, `TestRenderDocument` and `TestKeysMatchSettings`, both extended in step 9, never loosened (C3).
 
 ### P4 — acp-go-sdk2 `v0.17.0` (D3–D9; closes F2–F7)
 
@@ -297,6 +339,7 @@ the gates                                          -> lint ×3, tests on three s
 | A11 | magic-cli-remote's session against P4's agent | D3 |
 | A12 | The records carry D10–D13's notes | D10–D13 |
 | A13 | `check_libs.py` passes, and each of its negatives fails | D14 |
+| A14 | *(2026-10-13, P3 deviation 2)* `defaultProvider` chooses each of the nine, opencode-go included, in every mode, and a set preference without its variable is an error naming it, never another provider | D15, F14 |
 
 **A9 is the criterion most likely to be dropped.** Each rewritten test would also go green with a bare `err != nil`, and under time pressure that is the shortest path; C2 and P4 step 8 name what each must assert instead.
 

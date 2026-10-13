@@ -18,7 +18,7 @@ type Provider interface {
 
 // Capabilities says what this process can actually send.
 // ImageInput stays false until the SDK accepts image input.
-// NativeStreaming stays false while the SDK reports streaming unsupported.
+// NativeStreaming stays false while the SDK's retry wrapper buffers the stream (0005-PLAN F4-1b).
 type Capabilities struct {
 	ImageInput      bool `json:"imageInput,omitzero"`
 	NativeStreaming bool `json:"nativeStreaming,omitzero"`

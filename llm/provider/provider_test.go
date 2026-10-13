@@ -82,6 +82,54 @@ func TestToolCallAndReportedUsage(t *testing.T) {
 	}
 }
 
+// Cache writes are reported, and a report of cache writes alone is a report,
+// not estimated (0019-MADR D2).
+func TestUsageCacheWrite(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		sdk  llmprovider.Usage
+		want llm.Usage
+	}{
+		{"with reads", llmprovider.Usage{InputTokens: 100, CachedTokens: 30, CacheWriteTokens: 10},
+			llm.Usage{InputTokens: 100, CacheReadTokens: 30, CacheWriteTokens: 10}},
+		{"writes alone", llmprovider.Usage{CacheWriteTokens: 5}, llm.Usage{CacheWriteTokens: 5}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := sdktest.NewFake("fake", toolCaps).Reply(&llmprovider.Response{Usage: tc.sdk})
+			evs, err := drain(t, Wrap(f), &llm.Request{Messages: []llm.Message{text(llm.RoleUser, "x")}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			var got []llm.Usage
+			for _, ev := range evs {
+				if u, ok := ev.(llm.Usage); ok {
+					got = append(got, u)
+				}
+			}
+			if len(got) != 1 || got[0] != tc.want {
+				t.Fatalf("usage %+v, want %+v", got, tc.want)
+			}
+		})
+	}
+}
+
+// New reports the retry wrapper's capabilities, which buffer the stream,
+// not the inner provider's; Wrap, with no retry, keeps the provider's
+// (0019-MADR D2).
+func TestNewReportsRetryCapabilities(t *testing.T) {
+	p, err := New("openai", Options{APIKey: "test-only"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Capabilities().NativeStreaming {
+		t.Fatal("New reports native streaming through the buffering retry wrapper")
+	}
+	f := sdktest.NewFake("fake", llmprovider.Capabilities{NativeStreaming: llmprovider.Supported})
+	if !Wrap(f).Capabilities().NativeStreaming {
+		t.Fatal("Wrap lost the provider's native streaming")
+	}
+}
+
 // A history with reasoning, a call and its result maps item for item, with
 // the signatures kept for replay.
 func TestHistoryRoundTrip(t *testing.T) {
@@ -196,10 +244,10 @@ func TestReasoningLevels(t *testing.T) {
 func envOf(m map[string]string) func(string) string { return func(k string) string { return m[k] } }
 
 func TestChoose(t *testing.T) {
-	if _, err := Choose(envOf(nil)); !IsNoCredential(err) || !errors.Is(err, llm.ErrAuth) || !strings.Contains(err.Error(), "OPENAI_API_KEY") {
+	if _, err := Choose(envOf(nil), ""); !IsNoCredential(err) || !errors.Is(err, llm.ErrAuth) || !strings.Contains(err.Error(), "OPENAI_API_KEY") {
 		t.Fatalf("no credential: %v", err)
 	}
-	s, err := Choose(envOf(map[string]string{"OPENAI_API_KEY": "k"}))
+	s, err := Choose(envOf(map[string]string{"OPENAI_API_KEY": "k"}), "")
 	if err != nil || s.ID != "openai" || s.EnvVar != "OPENAI_API_KEY" || s.Model == "" {
 		t.Fatalf("openai only: %+v, %v", s, err)
 	}
@@ -208,7 +256,7 @@ func TestChoose(t *testing.T) {
 		t.Fatalf("credential vars %q", vars)
 	}
 	// Two set: the earlier in registry order wins.
-	s, err = Choose(envOf(map[string]string{vars[1]: "k", vars[0]: "k"}))
+	s, err = Choose(envOf(map[string]string{vars[1]: "k", vars[0]: "k"}), "")
 	if err != nil || s.EnvVar != vars[0] {
 		t.Fatalf("both set: %+v, want %s", s, vars[0])
 	}
@@ -216,7 +264,7 @@ func TestChoose(t *testing.T) {
 
 // Ambient builds the provider without a network call.
 func TestAmbientBuilds(t *testing.T) {
-	p, s, err := Ambient(envOf(map[string]string{"OPENAI_API_KEY": "test-key-not-real"}), Options{ClientName: "gobble", ClientVersion: "0.0.0"})
+	p, s, err := Ambient(envOf(map[string]string{"OPENAI_API_KEY": "test-key-not-real"}), "", Options{ClientName: "gobble", ClientVersion: "0.0.0"})
 	if err != nil || p.ID() != "openai" || s.ID != "openai" {
 		t.Fatalf("ambient: %v, %+v, %v", p, s, err)
 	}

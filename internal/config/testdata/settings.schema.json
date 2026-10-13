@@ -1,6 +1,23 @@
 {
   "type": "object",
   "properties": {
+    "defaultProvider": {
+      "type": "string",
+      "description": "The provider gobble uses, with its first model; its credential variable must be set. Empty takes the first provider whose credential variable is set.",
+      "default": "",
+      "enum": [
+        "",
+        "gemini",
+        "openai",
+        "claude",
+        "grok",
+        "opencode-zen",
+        "opencode-go",
+        "huggingface",
+        "kilo",
+        "together"
+      ]
+    },
     "defaultThinkingLevel": {
       "type": "string",
       "description": "The thinking level a new session starts with.",

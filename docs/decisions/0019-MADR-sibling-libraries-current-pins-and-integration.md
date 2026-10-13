@@ -1,6 +1,6 @@
 ---
 status: accepted
-date: 2026-10-12
+date: 2026-10-13
 decision-makers: repository owner
 consulted: none
 informed: magic-cli-remote
@@ -160,6 +160,7 @@ Measured read-only on 2026-10-12, against gobble at `108d9f0` (`main`, clean bef
   - gobble's comments: `llm/doc.go:50` (cache writes unknown) and `llm/llm.go:21` (streaming).
 - **F12. The checks that found these facts are cheap and have caught defects each time,** but live only in session scratchpads. apidiff's exit status is not a verdict; `go build` alone misses a test-only import; `govulncheck` misses a GitHub-only advisory; and the libraries tag several times a day.
 - **F13. gobble's sessions already store a larger `input` than Pi's,** whenever a provider reports cache reads: the SDK's `InputTokens` includes them, Pi's `input` does not, and `acpserver/history.go:116` copies one into the other. The defect is in the current pin, not introduced by the bump; `v1.10.2`'s cache-write count widens it once D2 maps that count.
+- **F14. gobble's ambient choice can never reach opencode-go** *(2026-10-13, found in 0019-PLAN P3; deviation 2)*. opencode-zen and opencode-go share `OPENCODE_API_KEY` (SDK `llmprovider/provider.go:69-70` at `v1.10.2`, `:63-64` at `v1.2.1`), and opencode-zen comes first in the registry (`providers/providers.go:34-35`), so `Choose` with that variable set always takes opencode-zen (`llm/provider/ambient.go:27-37`). Nothing else in gobble chooses a provider: `Ambient` and `Choose` are the only callers (`internal/cli/agent.go:30`, `:82`; `internal/cli/line.go:72`), and `--provider` is refused until 0005-PLAN F4 (`internal/cli/flags.go:33`, `:69`). So one of the ten providers is unreachable on the current pin and on `v1.10.2`, and D2's default-model test cannot reach it through `Choose` as written.
 
 ## Decision Drivers
 
@@ -191,7 +192,7 @@ Chosen option: **A**. It is the only option that leaves gobble on releases with 
   - **the streaming flag is honest:** `llm/provider`'s `New` reports the capabilities of the provider it calls, the `WithRetry` wrapper, not the inner provider's, so `NativeStreaming` is `Unsupported` until F4-1b (F8);
   - **cache writes are reported:** the adapter maps `Usage.CacheWriteTokens` into `llm.Usage.CacheWriteTokens`, and `llm/doc.go:50` and `llm/llm.go:21` say what the SDK now reports;
   - **Pi's `input` is Pi's (F13):** `llm.Usage` keeps the SDK's meaning, every input token, and the session history converts at Pi's boundary, writing `input` as `InputTokens - CacheReadTokens - CacheWriteTokens`, floored at 0, and `totalTokens` as `InputTokens + OutputTokens`, as Pi writes them. A test records a turn with cache reads and writes and checks the stored `input`, `cacheRead`, `cacheWrite` and `totalTokens` against Pi's arithmetic;
-  - **the default models are the SDK's:** gobble keeps taking `StaticModels[0]` (0002-PLAN Phase 3), and a test pins the ambient choice's model for each provider to the SDK's list, so a later bump that changes a default fails a test that names it;
+  - **the default models are the SDK's:** gobble keeps taking `StaticModels[0]` (0002-PLAN Phase 3), and a test pins the ambient choice's model for each provider to the SDK's list, so a later bump that changes a default fails a test that names it; *(2026-10-13, P3 deviation 2: the ambient choice cannot reach opencode-go (F14), so the test chooses each provider through D15's `defaultProvider`, and checks the ambient choice's registry order separately;)*
   - **0005-PLAN F4-1a is annotated:** it is re-based on `v1.10.2`, which already carries its error flag, and its other steps keep their text.
   - The commit lands before 2026-10-23, when two ids gobble lists today stop answering.
 - **D3. Require `github.com/maccavelli/acp-go-sdk2 v0.17.0`,** with the sums above, in its own commit, never `v0.15.0`. The same commit carries D4 to D9; D3 never lands without them. Before that commit is staged, magic-cli-remote's ACP session runs against the bumped agent, since `v0.17.0`'s gates refuse what a peer did not advertise and no editor has run against it.
@@ -232,6 +233,11 @@ Chosen option: **A**. It is the only option that leaves gobble on releases with 
   - reports the `go.mod` and `go.sum` diff, and fails on a new module.
 
   It needs the network, so it stays out of `make preflight`, which must run offline.
+- **D15. A `defaultProvider` setting names the provider** *(2026-10-13, 0019-PLAN P3 deviation 2, the owner's decision: "make opencode-go selectable", by the setting rather than the flags)*. 0018-MADR D19 reserved the key for 0005-PLAN F4; it comes forward alone, in D2's commit, added as D19 says a key is added: its Go type, schema, drift test and template block.
+  - **The key:** `defaultProvider`, an enum of `""` and the nine providers that take a key, in the SDK's registry order. `""`, the default, keeps today's ambient choice. It is a process key (0018-MADR D16), read once at start, from any file; under `gobble acp`, as for every process key, from the global file and `--set` only.
+  - **The choice:** `llm/provider`'s `Choose(env, preferred)` takes the setting. With `preferred` set, it is that provider with its first curated model when its credential variable is set; otherwise `ErrNoCredential` naming that variable, never another provider, since a silent fall-back would send the work to a provider the user did not choose. The no-credential message gobble prints names the same variable.
+  - **The enum is the SDK's:** a test fails when the SDK's key-taking ids, in order, differ from the enum, so a bump that adds or reorders a provider fails a test that names it.
+  - **What stays F4's:** Ollama is not in the enum, since it takes no key and has no curated model, so choosing it needs `defaultModel`; `defaultModel` and the model scope stay 0005-PLAN F4-2's, with `--provider` and `--model`, which win over the key for their run when F4-2 lands.
 
 ### Consequences
 
@@ -241,6 +247,7 @@ Chosen option: **A**. It is the only option that leaves gobble on releases with 
   - Fixtures and goldens hold on every system, so Windows CI tests the same protocol as POSIX.
   - Users see current models, an honest streaming flag, and which value a refusal was about.
   - The checks that found this record's facts run on demand, from the repository.
+  - *(2026-10-13, D15)* Every provider that takes a key can be chosen, opencode-go included, in every mode.
 - **Bad:**
   - acp-go-sdk2's bump is a real change: about 27 tests, the golden recorder, and four production edits, in one commit.
   - acp-go-sdk2 is below v1 and broke something in each of its last three minors; the next minor will likely need the same work again, which D14 makes cheap to see but not free.
@@ -265,6 +272,10 @@ go test ./llm/provider -run Default                -> each provider's ambient mo
 go test ./acpserver -run List                      -> a stored session with a relative cwd is left out, and the rest list
 go test ./acpserver -run Bare                      -> a resolvable bare stdio command connects; an unresolvable one is -32602
 python scripts/check_libs.py                       -> every library: latest tag, 0 incompatible, no new module, no advisory
+go test ./llm/provider -run 'Default|Choose'       -> (2026-10-13, D15) each of the nine is chosen by defaultProvider with its model;
+                                                      a set preference without its variable is ErrNoCredential naming it
+go test ./internal/cli -run DefaultProvider        -> (2026-10-13, D15) the enum is the SDK's key-taking ids; the setting reaches
+                                                      the agent's provider and model list; -p names the preferred variable
 ```
 
 Every new test is seen failing on a scratch copy before it is trusted, as the repository's rule requires.
@@ -342,6 +353,10 @@ Every new test is seen failing on a scratch copy before it is trusted, as the re
 | The workflow pins | `.github/workflows/ci.yml:145`, `:157` |
 | 0015-REPORT's default models | `docs/reports/0015-REPORT-sibling-library-pins-and-order.md:163-166` |
 | 0016-MADR's decisions | `docs/decisions/0016-MADR-acp-go-sdk2-v0.15.0-and-stable-surface.md:191-233` |
+| The shared OpenCode variable (F14) | SDK `llmprovider/provider.go:69-70` at `v1.10.2`, `:63-64` at `v1.2.1`; registry order `providers/providers.go:34-35` |
+| gobble's only provider choosers (F14) | `internal/cli/agent.go:30`, `:82`; `internal/cli/line.go:72`; `--provider` refused at `internal/cli/flags.go:33`, `:69` |
+| `defaultProvider` reserved for F4 (D15) | `docs/decisions/0018-MADR-configuration-surface.md:566` (D19) |
+| What a new key touches (D15) | a scratch clone of `e8181b5` with the key added and the schema regenerated (`q461_defaultprovider_probe.py`): `TestRenderDocument` and `TestKeysMatchSettings` fail, every other `internal/config`, `internal/cli` and `acpserver` test passes |
 
 ### Related records
 
@@ -350,6 +365,7 @@ Every new test is seen failing on a scratch copy before it is trusted, as the re
 - [0012-MADR-tool-schemas-descriptions-and-loading.md](0012-MADR-tool-schemas-descriptions-and-loading.md) and its PLAN: P7, the strict flag, amended by D11.
 - [0014-MADR-move-to-acp-go-sdk2.md](0014-MADR-move-to-acp-go-sdk2.md): the move to the SDK; its pin is superseded by D3.
 - [0016-MADR-acp-go-sdk2-v0.15.0-and-stable-surface.md](0016-MADR-acp-go-sdk2-v0.15.0-and-stable-surface.md): re-based by D10.
+- [0018-MADR-configuration-surface.md](0018-MADR-configuration-surface.md): D19 reserved `defaultProvider` for F4; D15 brings it forward (2026-10-13).
 - [0014-REPORT-llmprovider-sdk-integration.md](../reports/0014-REPORT-llmprovider-sdk-integration.md) and [0015-REPORT-sibling-library-pins-and-order.md](../reports/0015-REPORT-sibling-library-pins-and-order.md): the earlier surveys, corrected by D13.
 
 ### Open questions for the plan

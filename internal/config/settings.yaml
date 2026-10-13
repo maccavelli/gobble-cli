@@ -20,6 +20,17 @@
 # Credentials never go here. They belong in auth.json.
 
 # ---------------------------------------------------------------------
+# Model
+# ---------------------------------------------------------------------
+
+# The provider gobble uses: gemini, openai, claude, grok, opencode-zen,
+# opencode-go, huggingface, kilo or together, with its first model.
+# Its credential variable must be set. Empty takes the first of them,
+# in that order, whose variable is set; opencode-zen and opencode-go
+# share OPENCODE_API_KEY, so only this setting reaches opencode-go.
+# defaultProvider: ""
+
+# ---------------------------------------------------------------------
 # Sessions
 # ---------------------------------------------------------------------
 

@@ -57,6 +57,7 @@ func TestDefaultsEqualCode(t *testing.T) {
 		name      string
 		got, want any
 	}{
+		{"defaultProvider", s.DefaultProvider, ""},
 		{"defaultThinkingLevel", s.DefaultThinkingLevel, "off"},
 		{"steeringMode", s.SteeringMode, "one-at-a-time"},
 		{"followUpMode", s.FollowUpMode, "one-at-a-time"},
@@ -94,8 +95,8 @@ func TestKeysMatchSettings(t *testing.T) {
 			t.Errorf("%s: Value = %v %v, want %v", k.Path, v, ok, defaultValue(k))
 		}
 	}
-	if len(Keys) != 13 {
-		t.Errorf("%d keys, want 0018-MADR D14's 13", len(Keys))
+	if len(Keys) != 14 {
+		t.Errorf("%d keys, want 0018-MADR D14's 13 and 0019-MADR D15's defaultProvider", len(Keys))
 	}
 }
 
@@ -197,7 +198,7 @@ func TestGlobalOnlyIgnoredFromProject(t *testing.T) {
 // A wrong type or rule is an error at its line, and the key falls back to
 // the layer below.
 func TestTypeAndRangeErrorsFallBack(t *testing.T) {
-	l := newLayout(t, "steeringMode: some\nmcp:\n  stopGraceMs: \"5\"\n  stopTimeoutMs: -1\ntools:\n  bash:\n    useClientTerminal: [x]\n    maxTimeoutMs: 1.10\ncompaction: 3\nsessionDir: relative/dir\n", "")
+	l := newLayout(t, "steeringMode: some\nmcp:\n  stopGraceMs: \"5\"\n  stopTimeoutMs: -1\ntools:\n  bash:\n    useClientTerminal: [x]\n    maxTimeoutMs: 1.10\ncompaction: 3\nsessionDir: relative/dir\ndefaultProvider: ollama\n", "")
 	r, ds := Resolve(Options{ConfigDir: l.config})
 	if r.Settings != Defaults() {
 		t.Fatalf("settings %+v, want every key at its default", r.Settings)
@@ -210,6 +211,7 @@ func TestTypeAndRangeErrorsFallBack(t *testing.T) {
 		"settings.yaml:8: tools.bash.maxTimeoutMs: want an integer, have a number",
 		"settings.yaml:9: compaction: want a mapping, have an integer",
 		"settings.yaml:10: sessionDir: must be an absolute path, or start with ~",
+		`settings.yaml:11: defaultProvider: must be one of "", gemini, openai, claude, grok, opencode-zen, opencode-go, huggingface, kilo, together`,
 	}
 	if len(ds) != len(want) {
 		t.Fatalf("%d diagnostics %v, want %d", len(ds), ds, len(want))

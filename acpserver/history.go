@@ -113,7 +113,10 @@ func toolResultMessage(id, name, text string, isError bool, ts string) *session.
 }
 
 func piUsage(u llm.Usage) *session.Usage {
-	out := &session.Usage{Input: u.InputTokens, Output: u.OutputTokens, CacheRead: u.CacheReadTokens, CacheWrite: u.CacheWriteTokens,
+	// Pi's input is the uncached input; llm's InputTokens, as the SDK's,
+	// includes cache reads and writes (0019-MADR D2, F13).
+	in := max(0, u.InputTokens-u.CacheReadTokens-u.CacheWriteTokens)
+	out := &session.Usage{Input: in, Output: u.OutputTokens, CacheRead: u.CacheReadTokens, CacheWrite: u.CacheWriteTokens,
 		Reasoning: u.ReasoningTokens, TotalTokens: u.InputTokens + u.OutputTokens}
 	if u.Estimated {
 		out.Unknown = jsontext.Value(`{"estimated":true}`)

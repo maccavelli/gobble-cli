@@ -1,6 +1,6 @@
 ---
 status: accepted
-date: 2026-10-12
+date: 2026-10-13
 decision-makers: repository owner
 consulted: none
 informed: magic-cli-remote
@@ -563,7 +563,7 @@ Chosen: **A**. In the probe it kept the file exactly apart from the edited value
   - **`internal/fsx`** gains `GitRepo`, the repository finder moved from `prompt/context.go:121-160` (`gitPaths` and `absUnder`), which `prompt` then calls. `internal/config` uses it for D2's project root.
   - No package outside `internal/cli` imports Kong, and none imports a new module.
 - **D19. Later phases add their keys,** each in its own change, with the Go types, the schema, its drift test and the template block:
-  - F4: `defaultProvider`, `defaultModel` and the model scope;
+  - F4: `defaultProvider`, `defaultModel` and the model scope; *(2026-10-13: `defaultProvider` came forward in 0019-PLAN P3, deviation 2 (0019-MADR D15), since gobble's ambient choice can never reach opencode-go, which shares `OPENCODE_API_KEY` with opencode-zen (0019-MADR F14). It was added as this decision says a key is added. `defaultModel` and the model scope stay F4's.)*
   - F5: `retry.*`, `compaction.enabled` and `compaction.reserveTokens`;
   - F6: `permissions.*` and `defaultProjectTrust`, and D5's trust function;
   - F7: `hooks`;

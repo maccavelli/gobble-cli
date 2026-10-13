@@ -69,8 +69,8 @@ func (ls *lineSession) run(first Prompt) error {
 	// The session opens without a credential; a turn then fails with the
 	// authentication error (0008-MADR D1). gobble configure arrives with
 	// 0005-PLAN F4, so the warning names the variables.
-	if _, err := provider.Choose(os.Getenv); err != nil {
-		e.out.Warnf("%s", noCredentialMessage())
+	if _, err := provider.Choose(os.Getenv, e.defaultProvider()); err != nil {
+		e.out.Warnf("%s", noCredentialMessage(e.defaultProvider()))
 	}
 	// A resumed session opens at once, from its file, and says so; a new one
 	// is created with the first prompt (D5).
@@ -216,7 +216,7 @@ func (ls *lineSession) turn(p Prompt) error {
 		return nil
 	case errors.Is(perr, acpclient.ErrAuthRequired):
 		v.quiet()
-		e.out.Errorf("%s", noCredentialMessage())
+		e.out.Errorf("%s", noCredentialMessage(e.defaultProvider()))
 		return nil
 	case perr != nil:
 		if err := v.finish(res); err != nil {

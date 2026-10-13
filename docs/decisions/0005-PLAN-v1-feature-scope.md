@@ -1,6 +1,6 @@
 ---
 status: in-progress
-date: 2026-10-11
+date: 2026-10-13
 associated-madr: "0005-MADR-v1-feature-scope.md"
 ---
 # Implement the v1 line: the v1.0.0 gate, the v1.x train, and `exp/`
@@ -3272,6 +3272,8 @@ Choices made within the wording:
   - `apiKey` and header values resolve at request time as Pi resolves them, `!command` through the bash tool's shell with a 10 s timeout, uncached;
   - `//` comments and trailing commas are accepted as Pi accepts them; a bad file or a bad provider is ignored with a diagnostic, as in Pi.
 - **Choosing a model:** `--provider`, `--model` and `--thinking` are accepted. `--model` resolves by Pi's rules and words; `--thinking` beats a `:level` suffix.
+  *(2026-10-13: the `defaultProvider` setting came forward in 0019-PLAN P3 (0019-MADR D15), and `Choose` takes it.
+  F4-2 adds `defaultModel` and the model scope beside it, and `--provider` wins over it for its run.)*
 - **`gobble models list [search]`**, and `--list-models` as its alias, print Pi's columns for providers with a credential. **`gobble models info <model>`** prints one model's fields.
 - **acpserver:** the `model` option lists the catalog's models for the session's provider; `thought_level` offers that model's levels; `usage_update` carries the context window as `size`; `_gobble/get_session_stats` reports `cost` from the catalog, and `contextUsage`.
 - **`--offline`** stays refused, now naming X3.

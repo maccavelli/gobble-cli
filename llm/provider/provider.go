@@ -60,9 +60,10 @@ func New(id string, o Options) (llm.Provider, error) {
 	if err != nil {
 		return nil, fmt.Errorf("provider %s: %w", id, mapError(err))
 	}
-	// The retry wrapper streams through Generate; ID and capabilities stay
-	// the provider's own.
-	return &adapter{p: llmprovider.WithRetry(p, retryPolicy), id: p.ID(), caps: p.Capabilities()}, nil
+	// The retry wrapper buffers the stream, so its capabilities, not the
+	// inner provider's, are what gobble can deliver (0019-MADR D2).
+	w := llmprovider.WithRetry(p, retryPolicy)
+	return &adapter{p: w, id: p.ID(), caps: w.Capabilities()}, nil
 }
 
 // Wrap adapts an SDK provider to llm.Provider, with no retry of its own.
@@ -164,10 +165,11 @@ func stopOf(r *llmprovider.Response, calls bool) llm.StopReason {
 func usageOf(r *llmprovider.Response, req *llmprovider.Request, output string) llm.Usage {
 	if r != nil {
 		u := r.Usage
-		if u.InputTokens != 0 || u.OutputTokens != 0 || u.ReasoningTokens != 0 || u.CachedTokens != 0 {
+		if u.InputTokens != 0 || u.OutputTokens != 0 || u.ReasoningTokens != 0 || u.CachedTokens != 0 || u.CacheWriteTokens != 0 {
 			return llm.Usage{
 				InputTokens: int64(u.InputTokens), OutputTokens: int64(u.OutputTokens),
 				ReasoningTokens: int64(u.ReasoningTokens), CacheReadTokens: int64(u.CachedTokens),
+				CacheWriteTokens: int64(u.CacheWriteTokens),
 			}
 		}
 	}

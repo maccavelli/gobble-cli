@@ -9,6 +9,7 @@ import (
 // Settings are the effective settings. The yaml and json names are the
 // keys' paths; every field is optional in a file.
 type Settings struct {
+	DefaultProvider      string     `yaml:"defaultProvider" json:"defaultProvider,omitempty"`
 	DefaultThinkingLevel string     `yaml:"defaultThinkingLevel" json:"defaultThinkingLevel,omitempty"`
 	SteeringMode         string     `yaml:"steeringMode" json:"steeringMode,omitempty"`
 	FollowUpMode         string     `yaml:"followUpMode" json:"followUpMode,omitempty"`
@@ -99,6 +100,8 @@ func (s *Settings) field(path string) any {
 		return &s.MCP.StopGraceMs
 	case "mcp.stopTimeoutMs":
 		return &s.MCP.StopTimeoutMs
+	case "defaultProvider":
+		return &s.DefaultProvider
 	case "externalEditor":
 		return &s.ExternalEditor
 	}

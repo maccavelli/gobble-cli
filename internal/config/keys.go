@@ -55,10 +55,13 @@ const pathSessionDir = "sessionDir"
 // first.
 var queueModes = []string{"one-at-a-time", "all"}
 
-// Keys are 0018-MADR D14's thirteen, in the template's order. Every other
-// part of the package reads them; a key added here without its template
-// block, schema or Settings field fails the package's tests.
+// Keys are 0018-MADR D14's thirteen and 0019-MADR D15's defaultProvider,
+// in the template's order. Every other part of the package reads them; a
+// key added here without its template block, schema or Settings field fails
+// the package's tests.
 var Keys = []Key{
+	{Path: "defaultProvider", Kind: KindEnum, Enum: []string{"", "gemini", "openai", "claude", "grok", "opencode-zen", "opencode-go", "huggingface", "kilo", "together"},
+		Read: ReadProcess, Doc: "The provider gobble uses, with its first model; its credential variable must be set. Empty takes the first provider whose credential variable is set."},
 	{Path: "defaultThinkingLevel", Kind: KindEnum, Default: "off", Enum: []string{"off", "minimal", "low", "medium", "high", "xhigh"},
 		Read: ReadSession, Doc: "The thinking level a new session starts with."},
 	{Path: "steeringMode", Kind: KindEnum, Default: queueModes[0], Enum: queueModes,

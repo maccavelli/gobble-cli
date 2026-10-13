@@ -47,5 +47,5 @@
 // Usage carries input, output, reasoning, cache-read, and cache-write counts
 // plus Estimated. When the SDK reports any non-zero count, the adapter uses
 // that report and leaves a zero component at zero. An all-zero report is
-// estimated. Cache-write stays unknown until the SDK has a count for it.
+// estimated. Cache-write is the SDK's count, from go-llmprovider-sdk `v1.10.0`.
 package llm

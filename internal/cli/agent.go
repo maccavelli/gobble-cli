@@ -22,12 +22,13 @@ import (
 // appName is the client name gobble gives providers and agents (0003-MADR).
 const appName = "gobble"
 
-// modelProvider is the model the agent builds on its first prompt: the first
-// provider whose standard credential variable is set (0002-PLAN Phase 3,
-// owner's decision of 2026-10-05). Tests replace it.
+// modelProvider is the model the agent builds on its first prompt: the
+// defaultProvider setting's, or else the first provider whose standard
+// credential variable is set (0002-PLAN Phase 3, owner's decision of
+// 2026-10-05; 0019-MADR D15). Tests replace it.
 var modelProvider = func(e *runEnv) func() (llm.Provider, error) {
 	return func() (llm.Provider, error) {
-		p, _, err := provider.Ambient(os.Getenv, provider.Options{ClientName: appName, ClientVersion: identity().Version, Logger: e.log()})
+		p, _, err := provider.Ambient(os.Getenv, e.defaultProvider(), provider.Options{ClientName: appName, ClientVersion: identity().Version, Logger: e.log()})
 		return p, err
 	}
 }
@@ -39,7 +40,7 @@ func (e *runEnv) agentOptions() acpserver.Options {
 	return acpserver.Options{
 		Version:  identity().Version,
 		Provider: modelProvider(e),
-		Models:   modelChoice,
+		Models:   e.modelChoice,
 		Tools:    e.tools,
 		Store:    e.sessionStore(),
 		MCP: acpserver.MCPOptions{
@@ -76,10 +77,10 @@ func mcpConfigPath() string {
 	return filepath.Join(dirs.Config, "mcp.json")
 }
 
-// modelChoice is the ambient provider's curated models, its first the
+// modelChoice is the chosen provider's curated models, its first the
 // default; none without a credential.
-func modelChoice() acpserver.ModelChoice {
-	sel, err := provider.Choose(os.Getenv)
+func (e *runEnv) modelChoice() acpserver.ModelChoice {
+	sel, err := provider.Choose(os.Getenv, e.defaultProvider())
 	if err != nil {
 		return acpserver.ModelChoice{}
 	}
@@ -230,7 +231,17 @@ func builtinOptions(s config.Settings) builtin.Options {
 	}
 }
 
-// noCredentialMessage names the variables the ambient provider reads.
-func noCredentialMessage() string {
+// defaultProvider is the defaultProvider setting, a process key
+// (0019-MADR D15); the process settings are resolved by now, for the run's
+// cwd, as sessionStore reads them.
+func (e *runEnv) defaultProvider() string { return e.processSettings("").Settings.DefaultProvider }
+
+// noCredentialMessage names the variable the defaultProvider setting
+// preferred needs, or, with none set, the variables the ambient provider
+// reads.
+func noCredentialMessage(preferred string) string {
+	if v := provider.CredentialVar(preferred); v != "" {
+		return "no model credential: defaultProvider is " + preferred + "; set " + v
+	}
 	return "no model credential: set one of " + strings.Join(provider.CredentialVars(), ", ")
 }
