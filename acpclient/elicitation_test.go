@@ -38,9 +38,10 @@ func (a *elicitAgent) serve(ctx context.Context, in io.Reader, out io.Writer) er
 	}
 }
 
-// The client advertises no elicitation, answers elicitation/create with
-// method-not-found, and ignores elicitation/complete: the SDK made both
-// Client methods, and gobble's client offers neither (0014-MADR D3).
+// The client advertises no elicitation, so the agent's SDK refuses to send
+// elicitation/create, and a raw one is answered -32602 by the client's SDK
+// before gobble's client sees it; elicitation/complete is ignored (0014-MADR
+// D3; 0019-MADR D8).
 func TestElicitationNotFound(t *testing.T) {
 	agent := &elicitAgent{ScriptAgent: &acptest.ScriptAgent{}, conn: make(chan *acp.AgentSideConnection, 1), caps: make(chan acp.ClientCapabilities, 1)}
 	c, err := acpclient.Start(t.Context(), agent.serve, acpclient.Options{})
@@ -68,16 +69,28 @@ func TestElicitationNotFound(t *testing.T) {
 	case <-ctx.Done():
 		t.Fatal("no initialize")
 	}
-	_, err = conn.CreateElicitation(ctx, acp.CreateElicitationRequest{Url: &acp.CreateElicitationUrl{
-		ElicitationId: "e1", Message: "Sign in", Mode: "url", Url: "https://example.com/login"}})
-	re, ok := errors.AsType[*acp.RequestError](err)
-	if !ok || re.Code != -32601 {
-		t.Fatalf("elicitation/create: %v, want method not found", err)
+	// Scoped to a session, as the SDK requires of a well-formed request, so
+	// only the client's advertisement refuses it.
+	req := acp.CreateElicitationRequest{Url: &acp.CreateElicitationUrl{
+		ElicitationId: "e1", Message: "Sign in", Mode: "url", Url: "https://example.com/login",
+		Session: &acp.ElicitationSessionScope{SessionId: "s1"}}}
+	_, err = conn.CreateElicitation(ctx, req)
+	if ce, ok := errors.AsType[*acp.CapabilityError](err); !ok || ce.Method != acp.ClientMethodElicitationCreate || ce.Capability != "elicitation.url" {
+		t.Fatalf("elicitation/create: %v, want the SDK's capability error for elicitation.url", err)
 	}
-	if err := conn.CompleteElicitation(ctx, acp.CompleteElicitationNotification{ElicitationId: "e1"}); err != nil {
-		t.Fatalf("elicitation/complete: %v", err)
+	_, err = acp.SendRequest[acp.CreateElicitationResponse](conn.Connection(), ctx, acp.ClientMethodElicitationCreate, req)
+	if re, ok := errors.AsType[*acp.RequestError](err); !ok || re.Code != -32602 {
+		t.Fatalf("raw elicitation/create: %v, want -32602 from the client's SDK", err)
 	}
-	if _, err := c.NewSession(ctx, "/w", func(acpclient.Update) {}); err != nil {
+	done := acp.CompleteElicitationNotification{ElicitationId: "e1"}
+	err = conn.CompleteElicitation(ctx, done)
+	if ce, ok := errors.AsType[*acp.CapabilityError](err); !ok || ce.Method != acp.ClientMethodElicitationComplete || ce.Capability != "elicitation.url" {
+		t.Fatalf("elicitation/complete: %v, want the SDK's capability error for elicitation.url", err)
+	}
+	if err := conn.Connection().SendNotification(ctx, acp.ClientMethodElicitationComplete, done); err != nil {
+		t.Fatalf("raw elicitation/complete: %v", err)
+	}
+	if _, err := c.NewSession(ctx, acptest.Abs("/w"), func(acpclient.Update) {}); err != nil {
 		t.Fatalf("the connection after elicitation/complete: %v", err)
 	}
 }

@@ -21,11 +21,11 @@ import (
 )
 
 // piFixtures are sessions written by Pi's own code, with Pi's context of
-// each (0005-PLAN "F2 made executable"). Their cwd is /work/project.
-const (
-	piFixtures = "../session/testdata/pi"
-	piCwd      = "/work/project"
-)
+// each (0005-PLAN "F2 made executable"). Their cwd is /work/project, which
+// piCwd is on the host (0019-MADR D4).
+const piFixtures = "../session/testdata/pi"
+
+var piCwd = acptest.Abs("/work/project")
 
 // piModels choose the provider and model the fixtures were written with, so
 // a load restores them.

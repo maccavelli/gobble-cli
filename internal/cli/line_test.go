@@ -67,7 +67,7 @@ func (h *lineHarness) start(first Prompt) {
 	h.keys = keysW
 	cwd := h.cwd
 	if cwd == "" {
-		cwd = "/work"
+		cwd = acptest.Abs("/work")
 	}
 	ls := &lineSession{e: h.e, cwd: cwd, base: cwd, in: keysR, raw: h.raw}
 	go func() { h.done <- ls.run(first) }()
@@ -161,6 +161,9 @@ func TestLineSessionFirstPrompt(t *testing.T) {
 	h := newLineHarness(t, agent)
 	h.start(Prompt{Text: "fix the test"})
 	waitUntil(t, func() bool { return len(agent.Prompts()) == 1 })
+	if t.Failed() { // waitUntil reports; stop before indexing no prompt (0019-MADR D8)
+		t.FailNow()
+	}
 	h.press("\x04")
 	if err := h.wait(); err != nil {
 		t.Fatal(err)

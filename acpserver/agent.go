@@ -103,6 +103,9 @@ type Agent struct {
 	// terminals (0005-PLAN F1d-3).
 	client acp.ClientCapabilities
 	model  llm.Provider // built on the first prompt
+	// unlisted are the stored sessions session/list leaves out, each
+	// logged once (0019-MADR D5).
+	unlisted map[acp.SessionId]bool
 }
 
 // liveSession is one open session: its log, the context rebuilt from it, the
@@ -733,9 +736,6 @@ func (a *Agent) open(ctx context.Context, id acp.SessionId, cwd string, extra []
 		}
 		return nil, invalidParams(id, err.Error())
 	}
-	if cwd == "" {
-		cwd = log.Header().Cwd
-	}
 	ss := a.sessionSettings(cwd)
 	// The history's thinking level wins: restore sets it (0018-MADR D17).
 	s := &liveSession{id: id, cwd: cwd, dirs: dirs, log: log, think: thinkingOff, model: a.models().Default, mode: modeDefault,
@@ -811,7 +811,10 @@ func (a *Agent) ResumeSession(ctx context.Context, p acp.ResumeSessionRequest) (
 }
 
 // ListSessions lists the sessions with a file, and the live ones of this
-// process without one yet, newest first.
+// process without one yet, newest first. A stored session the SDK's rule
+// refuses, a cwd not absolute on this host, is left out and logged once,
+// so the rest still list (0019-MADR D5); a live session's cwd came through
+// the SDK, so it is always absolute.
 func (a *Agent) ListSessions(ctx context.Context, p acp.ListSessionsRequest) (acp.ListSessionsResponse, error) {
 	f := session.Filter{}
 	if p.Cwd != nil {
@@ -823,8 +826,13 @@ func (a *Agent) ListSessions(ctx context.Context, p acp.ListSessionsRequest) (ac
 		if err != nil {
 			return acp.ListSessionsResponse{}, acp.NewInternalError(map[string]any{keyReason: err.Error()})
 		}
-		seen[acp.SessionId(sum.ID)] = true
-		out = append(out, sessionInfo(sum))
+		info := sessionInfo(sum)
+		if err := info.Validate(); err != nil {
+			a.notListed(ctx, info, err)
+			continue
+		}
+		seen[info.SessionId] = true
+		out = append(out, info)
 	}
 	a.mu.Lock()
 	for id, s := range a.sessions {
@@ -834,6 +842,22 @@ func (a *Agent) ListSessions(ctx context.Context, p acp.ListSessionsRequest) (ac
 	}
 	a.mu.Unlock()
 	return acp.ListSessionsResponse{Sessions: out}, nil
+}
+
+// notListed logs, once per session, a stored session session/list leaves
+// out.
+func (a *Agent) notListed(ctx context.Context, info acp.SessionInfo, err error) {
+	a.mu.Lock()
+	logged := a.unlisted[info.SessionId]
+	if a.unlisted == nil {
+		a.unlisted = map[acp.SessionId]bool{}
+	}
+	a.unlisted[info.SessionId] = true
+	a.mu.Unlock()
+	if !logged {
+		a.logger.WarnContext(ctx, "session: not listed: its cwd is not absolute on this host",
+			slog.String("session", string(info.SessionId)), slog.String("cwd", info.Cwd), slog.String("reason", err.Error()))
+	}
 }
 
 // additionalDirs checks a client's additional directories: each must be

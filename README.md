@@ -79,7 +79,7 @@ a v1.0.0 gate, a v1.x train and `exp/`, is in [0005-MADR](docs/decisions/0005-MA
 
 - **Modes:** a native terminal CLI mode, the default, and an enhanced terminal TUI mode, not built yet.
 - **CLI:** [Kong](https://github.com/alecthomas/kong) `v1.16.1`.
-- **Protocols:** the [ACP Go SDK](https://github.com/maccavelli/acp-go-sdk2) `acp-go-sdk2` `v0.14.0`, and the
+- **Protocols:** the [ACP Go SDK](https://github.com/maccavelli/acp-go-sdk2) `acp-go-sdk2` `v0.17.1`, and the
   [MCP Go SDK](https://github.com/modelcontextprotocol/go-sdk) `v1.8.0`.
 - **Models:** [go-llmprovider-sdk](https://github.com/maccavelli/go-llmprovider-sdk) `v1.10.2`, behind
   gobble's own `llm` facade. Only `llm/provider` imports it.

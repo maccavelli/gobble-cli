@@ -3,6 +3,7 @@ package acpclient_test
 import (
 	"bufio"
 	"context"
+	"encoding/json/v2"
 	"errors"
 	"io"
 	"log/slog"
@@ -59,7 +60,7 @@ func TestTranslate(t *testing.T) {
 		`{"sessionUpdate":"tool_call","toolCallId":"t1","title":"read a.go","status":"pending"}`,
 		`{"sessionUpdate":"tool_call_update","toolCallId":"t1","status":"completed","content":[` +
 			`{"type":"content","content":{"type":"text","text":"package a"}},` +
-			`{"type":"diff","path":"/w/a.go","oldText":"x","newText":"y"},` +
+			`{"type":"diff","path":` + jsonString(acptest.Abs("/w/a.go")) + `,"oldText":"x","newText":"y"},` +
 			`{"type":"terminal","terminalId":"term-1"}]}`,
 		`{"sessionUpdate":"plan","entries":[{"content":"step","priority":"high","status":"in_progress"}]}`,
 		`{"sessionUpdate":"usage_update","used":1200,"size":200000,"cost":{"amount":0.25,"currency":"USD"}}`,
@@ -70,7 +71,7 @@ func TestTranslate(t *testing.T) {
 	}}}}
 	c := start(t, agent, acpclient.Options{Name: "test", Version: "0.0.0"})
 	var col collector
-	s, err := c.NewSession(t.Context(), "/w", col.on)
+	s, err := c.NewSession(t.Context(), acptest.Abs("/w"), col.on)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +129,7 @@ func TestPromptParamsMatchSDKClient(t *testing.T) {
 
 	ours := &acptest.ScriptAgent{Turns: []acptest.Turn{{}}}
 	c := start(t, ours, acpclient.Options{})
-	s, err := c.NewSession(t.Context(), "/w", func(acpclient.Update) {})
+	s, err := c.NewSession(t.Context(), acptest.Abs("/w"), func(acpclient.Update) {})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,7 +149,7 @@ func TestPromptParamsMatchSDKClient(t *testing.T) {
 	if _, err := sdk.Initialize(t.Context(), acp.InitializeRequest{ProtocolVersion: acp.ProtocolVersionNumber}); err != nil {
 		t.Fatal(err)
 	}
-	sess, err := sdk.NewSession(t.Context(), acp.NewSessionRequest{Cwd: "/w", McpServers: []acp.McpServer{}})
+	sess, err := sdk.NewSession(t.Context(), acp.NewSessionRequest{Cwd: acptest.Abs("/w"), McpServers: []acp.McpServer{}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -166,16 +167,17 @@ func TestPromptParamsMatchSDKClient(t *testing.T) {
 // to scan for @path; an empty one is left out; Text follows unmarked
 // (0005-PLAN F3-4 deviation 1).
 func TestPromptContext(t *testing.T) {
-	const want = `{"prompt":[{"_meta":{"gobble":{"mentions":false}},"text":"piped","type":"text"},` +
-		`{"_meta":{"gobble":{"mentions":false}},"text":"<file name=\"/w/a\">\nx\n</file>","type":"text"},` +
+	file := "<file name=\"" + acptest.Abs("/w/a") + "\">\nx\n</file>"
+	want := `{"prompt":[{"_meta":{"gobble":{"mentions":false}},"text":"piped","type":"text"},` +
+		`{"_meta":{"gobble":{"mentions":false}},"text":` + jsonString(file) + `,"type":"text"},` +
 		`{"text":"explain @a","type":"text"}],"sessionId":"s1"}`
 	agent := &acptest.ScriptAgent{Turns: []acptest.Turn{{}}}
 	c := start(t, agent, acpclient.Options{})
-	s, err := c.NewSession(t.Context(), "/w", func(acpclient.Update) {})
+	s, err := c.NewSession(t.Context(), acptest.Abs("/w"), func(acpclient.Update) {})
 	if err != nil {
 		t.Fatal(err)
 	}
-	p := acpclient.Prompt{Context: []string{"piped", "", "<file name=\"/w/a\">\nx\n</file>"}, Text: "explain @a"}
+	p := acpclient.Prompt{Context: []string{"piped", "", file}, Text: "explain @a"}
 	if _, err := s.Prompt(t.Context(), p); err != nil {
 		t.Fatal(err)
 	}
@@ -187,7 +189,7 @@ func TestPromptContext(t *testing.T) {
 func TestImagesUnsupported(t *testing.T) {
 	agent := &acptest.ScriptAgent{Turns: []acptest.Turn{{}}}
 	c := start(t, agent, acpclient.Options{})
-	s, err := c.NewSession(t.Context(), "/w", func(acpclient.Update) {})
+	s, err := c.NewSession(t.Context(), acptest.Abs("/w"), func(acpclient.Update) {})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -201,7 +203,7 @@ func TestImagesUnsupported(t *testing.T) {
 
 	withImages := &acptest.ScriptAgent{Image: true, Turns: []acptest.Turn{{}}}
 	c2 := start(t, withImages, acpclient.Options{})
-	s2, err := c2.NewSession(t.Context(), "/w", func(acpclient.Update) {})
+	s2, err := c2.NewSession(t.Context(), acptest.Abs("/w"), func(acpclient.Update) {})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -216,7 +218,7 @@ func TestImagesUnsupported(t *testing.T) {
 func TestCancel(t *testing.T) {
 	agent := &acptest.ScriptAgent{Turns: []acptest.Turn{{WaitCancel: true}}}
 	c := start(t, agent, acpclient.Options{})
-	s, err := c.NewSession(t.Context(), "/w", func(acpclient.Update) {})
+	s, err := c.NewSession(t.Context(), acptest.Abs("/w"), func(acpclient.Update) {})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -261,7 +263,7 @@ func TestDropReported(t *testing.T) {
 	c := start(t, agent, acpclient.Options{MaxQueued: 1, OnDrop: func(_ string, total uint64) { dropped <- total }})
 	release := make(chan struct{})
 	var once sync.Once
-	s, err := c.NewSession(t.Context(), "/w", func(acpclient.Update) { <-release })
+	s, err := c.NewSession(t.Context(), acptest.Abs("/w"), func(acpclient.Update) { <-release })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -315,7 +317,7 @@ func TestUpdatesBeforeNewSessionReturns(t *testing.T) {
 	agent := &acptest.ScriptAgent{SessionUpdates: []string{`{"sessionUpdate":"available_commands_update","availableCommands":[]}`}}
 	c := start(t, agent, acpclient.Options{})
 	var col collector
-	if _, err := c.NewSession(t.Context(), "/w", col.on); err != nil {
+	if _, err := c.NewSession(t.Context(), acptest.Abs("/w"), col.on); err != nil {
 		t.Fatal(err)
 	}
 	if got := col.all(); len(got) != 1 || !strings.Contains(string(got[0].Params), "available_commands_update") {
@@ -327,7 +329,7 @@ func TestUpdatesBeforeNewSessionReturns(t *testing.T) {
 func TestAuthRequired(t *testing.T) {
 	agent := &acptest.ScriptAgent{Turns: []acptest.Turn{{ErrCode: -32000, ErrMessage: "Authentication required"}, {ErrCode: -32603, ErrMessage: "boom"}}}
 	c := start(t, agent, acpclient.Options{})
-	s, err := c.NewSession(t.Context(), "/w", func(acpclient.Update) {})
+	s, err := c.NewSession(t.Context(), acptest.Abs("/w"), func(acpclient.Update) {})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -355,4 +357,50 @@ func waitFor(t *testing.T, cond func() bool) {
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
+}
+
+// refusingAgent answers session/new as the SDK refuses an invalid value:
+// -32602, with the detail in data.error.
+type refusingAgent struct{ *acptest.ScriptAgent }
+
+func (refusingAgent) NewSession(context.Context, acp.NewSessionRequest) (acp.NewSessionResponse, error) {
+	return acp.NewSessionResponse{}, acp.NewInvalidParams(map[string]any{"error": `NewSessionRequest: cwd: "x" is not an absolute path`})
+}
+
+func (a refusingAgent) serve(ctx context.Context, in io.Reader, out io.Writer) error {
+	conn := acp.NewAgentSideConnection(a, out, in, acp.WithLogger(slog.New(slog.DiscardHandler)))
+	select {
+	case <-conn.Done():
+		return nil
+	case <-ctx.Done():
+		return context.Cause(ctx)
+	}
+}
+
+// A -32602 the SDK writes carries its reason in data.error, and gobble's
+// error says which value was refused, not "Invalid params" (0019-MADR D9).
+func TestInvalidParamsCarriesReason(t *testing.T) {
+	a := refusingAgent{&acptest.ScriptAgent{}}
+	c, err := acpclient.Start(t.Context(), a.serve, acpclient.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := c.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	_, err = c.NewSession(t.Context(), acptest.Abs("/w"), func(acpclient.Update) {})
+	if !errors.Is(err, acpclient.ErrInvalidSession) || !strings.Contains(err.Error(), `cwd: "x" is not an absolute path`) {
+		t.Fatalf("err = %v, want ErrInvalidSession naming the refused cwd", err)
+	}
+}
+
+// jsonString is s as a JSON string literal, for a path inside raw JSON.
+func jsonString(s string) string {
+	b, err := json.Marshal(s)
+	if err != nil { // a string always encodes
+		panic(err)
+	}
+	return string(b)
 }

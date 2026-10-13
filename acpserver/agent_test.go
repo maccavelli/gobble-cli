@@ -60,11 +60,11 @@ func TestSession(t *testing.T) {
 	// A fixed tool set: the default adds powershell on Windows, which would
 	// change the usage estimate the golden records (0005-PLAN F1b,
 	// deviation 1).
-	// The prompt names linux on every host, so the size is too (0005-PLAN
-	// F3-1 deviation 5).
+	// The prompt names linux and /work on every host, so the size is too
+	// (0005-PLAN F3-1 deviation 5; 0019-PLAN P4 deviation 4).
 	agent := New(Options{Version: "1.2.3", NewID: counterIDs(), Tools: []tool.Tool{builtin.Read(), builtin.Write(), builtin.Edit(), builtin.Bash()},
 		Provider: func() (llm.Provider, error) { return llmtest.NewScript(llmtest.Text("hello gobble")), nil },
-		Prompt:   PromptOptions{GOOS: "linux"}})
+		Prompt:   PromptOptions{GOOS: "linux", cwd: "/work"}})
 	client := &acptest.Client{}
 	c := acptest.Connect(t, agent, client)
 	agent.SetConnection(c.Agent)
@@ -75,7 +75,7 @@ func TestSession(t *testing.T) {
 	if resp.AgentInfo == nil || resp.AgentInfo.Name != "gobble" || resp.AgentInfo.Title == nil || *resp.AgentInfo.Title != "gobble" {
 		t.Fatalf("agentInfo = %+v, want gobble/gobble", resp.AgentInfo)
 	}
-	sess, err := c.Client.NewSession(t.Context(), acp.NewSessionRequest{Cwd: "/work", McpServers: []acp.McpServer{}})
+	sess, err := c.Client.NewSession(t.Context(), acp.NewSessionRequest{Cwd: acptest.Abs("/work"), McpServers: []acp.McpServer{}})
 	if err != nil || sess.SessionId != "s1" {
 		t.Fatalf("new session = %+v, %v", sess, err)
 	}

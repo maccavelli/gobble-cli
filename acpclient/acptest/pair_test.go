@@ -111,7 +111,7 @@ func TestConnectRecordsNotifications(t *testing.T) {
 	c := Connect(t, agent, client)
 	agent.conn = c.Agent
 	initialize(t, c.Client)
-	if _, err := c.Client.NewSession(t.Context(), acp.NewSessionRequest{Cwd: "/work", McpServers: []acp.McpServer{}}); err != nil {
+	if _, err := c.Client.NewSession(t.Context(), acp.NewSessionRequest{Cwd: Abs("/work"), McpServers: []acp.McpServer{}}); err != nil {
 		t.Fatal(err)
 	}
 	resp, err := c.Client.Prompt(t.Context(), acp.PromptRequest{SessionId: "s1", Prompt: []acp.ContentBlock{acp.TextBlock("hi")}})

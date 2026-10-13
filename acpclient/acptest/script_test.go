@@ -26,7 +26,7 @@ func dial(t *testing.T, agent *acptest.ScriptAgent) (*acp.ClientSideConnection, 
 	if _, err := c.Initialize(t.Context(), acp.InitializeRequest{ProtocolVersion: acp.ProtocolVersionNumber}); err != nil {
 		t.Fatal(err)
 	}
-	s, err := c.NewSession(t.Context(), acp.NewSessionRequest{Cwd: "/w", McpServers: []acp.McpServer{}})
+	s, err := c.NewSession(t.Context(), acp.NewSessionRequest{Cwd: acptest.Abs("/w"), McpServers: []acp.McpServer{}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +58,7 @@ func TestScriptAgentPlaysTurns(t *testing.T) {
 	if _, err := prompt(t, c, id); err == nil || !strings.Contains(err.Error(), "script exhausted after 3 turns") {
 		t.Fatalf("turn 4 err = %v, want the script exhausted", err)
 	}
-	if got := agent.Cwds(); len(got) != 1 || got[0] != "/w" {
+	if got := agent.Cwds(); len(got) != 1 || got[0] != acptest.Abs("/w") {
 		t.Fatalf("cwds = %q", got)
 	}
 	if n := len(agent.Prompts()); n != 4 {

@@ -1,6 +1,7 @@
 package acpserver
 
 import (
+	"cmp"
 	"encoding/json/v2"
 	"log/slog"
 	"os"
@@ -34,6 +35,10 @@ type PromptOptions struct {
 	// skills at all (0005-PLAN F3-2).
 	Home     string
 	NoSkills bool
+	// cwd, when set, is the cwd the prompt names in place of the
+	// session's, so a golden's size is the same on every host; tests only
+	// (0019-PLAN P4 deviation 4).
+	cwd string
 }
 
 // sections are the session's system prompt sections as its files make
@@ -80,7 +85,7 @@ func (a *Agent) sections(s *liveSession) []sysprompt.Section {
 		goos = runtime.GOOS
 	}
 	return sysprompt.Build(sysprompt.Options{Custom: system, Append: appended, Tools: names, Deferred: families,
-		ContextFiles: files, Skills: skills, Cwd: s.cwd, GOOS: goos})
+		ContextFiles: files, Skills: skills, Cwd: cmp.Or(o.cwd, s.cwd), GOOS: goos})
 }
 
 // skills are the session's skills, found in 0005-MADR's order (Skill

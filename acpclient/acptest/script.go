@@ -45,6 +45,10 @@ type ScriptAgent struct {
 	// SessionUpdates are sent, as JSON SessionUpdate objects, before each
 	// session/new answer, as an agent sends available_commands_update.
 	SessionUpdates []string
+	// Capabilities, when not nil, are advertised in place of the default:
+	// session close, and Image. acp-go-sdk2 refuses to send what an agent
+	// did not advertise (0019-MADR D8).
+	Capabilities *acp.AgentCapabilities
 
 	mu       sync.Mutex
 	conn     *acp.AgentSideConnection
@@ -114,17 +118,22 @@ func (a *ScriptAgent) record(method string) {
 	a.methods = append(a.methods, method)
 }
 
-// Initialize advertises protocol 1, session close, and Image.
+// Initialize advertises protocol 1 and Capabilities, or by default session
+// close and Image.
 func (a *ScriptAgent) Initialize(context.Context, acp.InitializeRequest) (acp.InitializeResponse, error) {
 	a.record(acp.AgentMethodInitialize)
+	caps := acp.AgentCapabilities{
+		PromptCapabilities:  acp.PromptCapabilities{Image: a.Image},
+		SessionCapabilities: acp.SessionCapabilities{Close: &acp.SessionCloseCapabilities{}},
+	}
+	if a.Capabilities != nil {
+		caps = *a.Capabilities
+	}
 	return acp.InitializeResponse{
-		ProtocolVersion: acp.ProtocolVersionNumber,
-		AgentInfo:       &acp.Implementation{Name: "script", Version: "0.0.0"},
-		AgentCapabilities: acp.AgentCapabilities{
-			PromptCapabilities:  acp.PromptCapabilities{Image: a.Image},
-			SessionCapabilities: acp.SessionCapabilities{Close: &acp.SessionCloseCapabilities{}},
-		},
-		AuthMethods: []acp.AuthMethod{},
+		ProtocolVersion:   acp.ProtocolVersionNumber,
+		AgentInfo:         &acp.Implementation{Name: "script", Version: "0.0.0"},
+		AgentCapabilities: caps,
+		AuthMethods:       []acp.AuthMethod{},
 	}, nil
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json/v2"
 	"errors"
+	"fmt"
 	"log/slog"
 	"maps"
 	"os"
@@ -188,22 +189,36 @@ func TestSessionServerWins(t *testing.T) {
 // not offer them.
 func TestUnofferedTransportsRefused(t *testing.T) {
 	c, _, _ := connectMCP(t, llmtest.NewScript(), MCPOptions{})
-	for _, s := range []acp.McpServer{
-		{Sse: &acp.McpServerSseInline{Name: "old", Type: "sse", Url: "https://example.com/sse", Headers: []acp.HttpHeader{}}},
-		{Acp: &acp.McpServerAcpInline{Name: "peer", Type: "acp", ServerId: "x"}},
-		{Stdio: &acp.McpServerStdio{Name: "bad name", Command: "x", Args: []string{}, Env: []acp.EnvVariable{}}},
+	// SSE and ACP are sent raw, since the client's SDK refuses to send a
+	// transport the agent did not advertise; the agent's SDK refuses them
+	// (0019-MADR D7, D8).
+	for _, tc := range []struct {
+		s          acp.McpServer
+		capability string
+	}{
+		{acp.McpServer{Sse: &acp.McpServerSseInline{Name: "old", Type: "sse", Url: "https://example.com/sse", Headers: []acp.HttpHeader{}}}, "mcpCapabilities.sse"},
+		{acp.McpServer{Acp: &acp.McpServerAcpInline{Name: "peer", Type: "acp", ServerId: "x"}}, "mcpCapabilities.acp"},
 	} {
-		_, err := c.Client.NewSession(t.Context(), acp.NewSessionRequest{Cwd: t.TempDir(), McpServers: []acp.McpServer{s}})
+		_, err := acp.SendRequest[acp.NewSessionResponse](c.Client.Connection(), t.Context(), acp.AgentMethodSessionNew,
+			acp.NewSessionRequest{Cwd: t.TempDir(), McpServers: []acp.McpServer{tc.s}})
 		re, ok := errors.AsType[*acp.RequestError](err)
-		if !ok || re.Code != -32602 {
-			t.Errorf("%+v: err %v, want invalid params", s, err)
+		if !ok || re.Code != -32602 || !strings.Contains(fmt.Sprint(re.Data), tc.capability) {
+			t.Errorf("%s: err %v, want invalid params naming it", tc.capability, err)
 		}
 	}
+	// gobble's own check refuses a stdio server's bad name.
 	_, err := c.Client.NewSession(t.Context(), acp.NewSessionRequest{Cwd: t.TempDir(), McpServers: []acp.McpServer{
-		{Sse: &acp.McpServerSseInline{Name: "old", Type: "sse", Url: "https://example.com/sse", Headers: []acp.HttpHeader{}}},
+		{Stdio: &acp.McpServerStdio{Name: "bad name", Command: acptest.Abs("/bin/x"), Args: []string{}, Env: []acp.EnvVariable{}}},
 	}})
-	if err == nil || !strings.Contains(err.Error(), "the SSE transport is not offered (mcpCapabilities.sse is false)") {
-		t.Fatalf("SSE: %v", err)
+	if re, ok := errors.AsType[*acp.RequestError](err); !ok || re.Code != -32602 {
+		t.Errorf("bad name: err %v, want invalid params", err)
+	}
+	_, err = acp.SendRequest[acp.NewSessionResponse](c.Client.Connection(), t.Context(), acp.AgentMethodSessionNew,
+		acp.NewSessionRequest{Cwd: t.TempDir(), McpServers: []acp.McpServer{
+			{Sse: &acp.McpServerSseInline{Name: "old", Type: "sse", Url: "https://example.com/sse", Headers: []acp.HttpHeader{}}},
+		}})
+	if re, ok := errors.AsType[*acp.RequestError](err); !ok || !strings.Contains(fmt.Sprint(re.Data), "mcpCapabilities.sse") {
+		t.Fatalf("SSE: %v, want the SDK's mcpCapabilities.sse reason", err)
 	}
 }
 

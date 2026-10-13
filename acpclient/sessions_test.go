@@ -60,7 +60,7 @@ func TestSetName(t *testing.T) {
 			t.Error(err)
 		}
 	})
-	s, err := c.NewSession(t.Context(), "/w", func(Update) {})
+	s, err := c.NewSession(t.Context(), acptest.Abs("/w"), func(Update) {})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,10 +110,46 @@ func (a *dirsAgent) serve(ctx context.Context, in io.Reader, out io.Writer) erro
 	}
 }
 
-// --add-dir's directories reach the agent on session/new and on
-// session/resume; ResumeSession sends none (0018-MADR D14). acptest's
-// recorder taps only acptest.Connect's pair, so the agent records them.
+// --add-dir's directories reach an agent that advertises them on
+// session/new and on session/resume; ResumeSession sends none (0018-MADR
+// D14). acptest's recorder taps only acptest.Connect's pair, so the agent
+// records them.
 func TestAdditionalDirectoriesSent(t *testing.T) {
+	a := &dirsAgent{ScriptAgent: &acptest.ScriptAgent{Capabilities: &acp.AgentCapabilities{SessionCapabilities: acp.SessionCapabilities{
+		AdditionalDirectories: &acp.SessionAdditionalDirectoriesCapabilities{}, Resume: &acp.SessionResumeCapabilities{},
+		Close: &acp.SessionCloseCapabilities{},
+	}}}}
+	c, err := Start(t.Context(), a.serve, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := c.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	w, a1, b1 := acptest.Abs("/w"), acptest.Abs("/w/a"), acptest.Abs("/w/b")
+	dirs := []string{a1, b1}
+	if _, err := c.NewSessionWith(t.Context(), w, NewSessionOptions{AdditionalDirectories: dirs}, func(Update) {}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := c.ResumeSessionWith(t.Context(), "s9", w, ResumeSessionOptions{AdditionalDirectories: dirs}, func(Update) {}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := c.ResumeSession(t.Context(), "s8", w, func(Update) {}); err != nil {
+		t.Fatal(err)
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	want := [][]string{{"new", a1, b1}, {"resume", a1, b1}, {"resume"}}
+	if !slices.EqualFunc(a.got, want, slices.Equal) {
+		t.Fatalf("got %q, want %q", a.got, want)
+	}
+}
+
+// Toward an agent that does not advertise additional directories, the SDK
+// refuses to send them, and the agent sees no request (0019-MADR D8).
+func TestAdditionalDirectoriesNotAdvertised(t *testing.T) {
 	a := &dirsAgent{ScriptAgent: &acptest.ScriptAgent{}}
 	c, err := Start(t.Context(), a.serve, Options{})
 	if err != nil {
@@ -124,21 +160,15 @@ func TestAdditionalDirectoriesSent(t *testing.T) {
 			t.Error(err)
 		}
 	})
-	dirs := []string{"/w/a", "/w/b"}
-	if _, err := c.NewSessionWith(t.Context(), "/w", NewSessionOptions{AdditionalDirectories: dirs}, func(Update) {}); err != nil {
-		t.Fatal(err)
-	}
-	if _, _, err := c.ResumeSessionWith(t.Context(), "s9", "/w", ResumeSessionOptions{AdditionalDirectories: dirs}, func(Update) {}); err != nil {
-		t.Fatal(err)
-	}
-	if _, _, err := c.ResumeSession(t.Context(), "s8", "/w", func(Update) {}); err != nil {
-		t.Fatal(err)
+	_, err = c.NewSessionWith(t.Context(), acptest.Abs("/w"), NewSessionOptions{AdditionalDirectories: []string{acptest.Abs("/w/a")}}, func(Update) {})
+	want := acp.CapabilityError{Method: "session/new", Capability: "sessionCapabilities.additionalDirectories", Field: "additionalDirectories"}
+	if ce, ok := errors.AsType[*acp.CapabilityError](err); !ok || *ce != want {
+		t.Fatalf("err = %v, want the SDK's %+v", err, want)
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	want := [][]string{{"new", "/w/a", "/w/b"}, {"resume", "/w/a", "/w/b"}, {"resume"}}
-	if !slices.EqualFunc(a.got, want, slices.Equal) {
-		t.Fatalf("got %q, want %q", a.got, want)
+	if len(a.got) != 0 {
+		t.Fatalf("the agent saw %q, want no request", a.got)
 	}
 }
 

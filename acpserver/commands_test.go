@@ -182,17 +182,42 @@ func (n *jsontextNumber) UnmarshalJSON(b []byte) error { *n = jsontextNumber(b);
 // unknown-method error, and set_model and an x.ai method answer -32601
 // (0002-MADR fifth amendment, Confirmation changes).
 func TestMcremoteScript(t *testing.T) {
+	model := llmtest.NewScript()
+	call, stop := rawServe(t, Options{Version: "1.2.3", NewID: counterIDs(),
+		Provider: func() (llm.Provider, error) { return model, nil }, Models: func() ModelChoice { return testModels }})
+	for i, step := range []struct{ method, params string }{
+		{"initialize", `{"protocolVersion":1,"clientCapabilities":{}}`},
+		{"session/new", `{"cwd":` + jsonString(acptest.Abs("/w")) + `,"mcpServers":[]}`},
+		{"session/prompt", `{"sessionId":"s1","prompt":[{"type":"text","text":"/compact"}]}`},
+		{"session/set_mode", `{"sessionId":"s1","modeId":"plan"}`},
+		{"session/set_config_option", `{"sessionId":"s1","configId":"model","value":"m2"}`},
+	} {
+		if line := call(i+1, step.method, step.params); strings.Contains(line, `"error"`) {
+			t.Fatalf("%s: %s", step.method, line)
+		}
+	}
+	for i, method := range []string{"session/set_model", "_x" + ".ai/compact_conversation"} {
+		if line := call(10+i, method, `{"sessionId":"s1"}`); !strings.Contains(line, `"code":-32601`) {
+			t.Fatalf("%s: %s, want -32601", method, line)
+		}
+	}
+	stop()
+}
+
+// rawServe runs Serve with opts over pipes, as a client that writes raw
+// JSON-RPC would. call sends one request and returns the line answering
+// it; stop closes the input and waits for Serve to return nil.
+func rawServe(t *testing.T, opts Options) (call func(id int, method, params string) string, stop func()) {
+	t.Helper()
 	inR, inW := io.Pipe()
 	outR, outW := io.Pipe()
 	done := make(chan error, 1)
-	model := llmtest.NewScript()
 	go func() {
-		done <- Serve(t.Context(), inR, outW, ServeOptions{Agent: Options{Version: "1.2.3", NewID: counterIDs(),
-			Provider: func() (llm.Provider, error) { return model, nil }, Models: func() ModelChoice { return testModels }}})
+		done <- Serve(t.Context(), inR, outW, ServeOptions{Agent: opts})
 		outW.Close() //nolint:errcheck,gosec // test pipe
 	}()
 	r := bufio.NewReader(outR)
-	call := func(id int, method, params string) string {
+	call = func(id int, method, params string) string {
 		t.Helper()
 		if _, err := io.WriteString(inW, `{"jsonrpc":"2.0","id":`+itoa(id)+`,"method":"`+method+`","params":`+params+"}\n"); err != nil {
 			t.Fatal(err)
@@ -211,28 +236,16 @@ func TestMcremoteScript(t *testing.T) {
 			}
 		}
 	}
-	for i, step := range []struct{ method, params string }{
-		{"initialize", `{"protocolVersion":1,"clientCapabilities":{}}`},
-		{"session/new", `{"cwd":"/w","mcpServers":[]}`},
-		{"session/prompt", `{"sessionId":"s1","prompt":[{"type":"text","text":"/compact"}]}`},
-		{"session/set_mode", `{"sessionId":"s1","modeId":"plan"}`},
-		{"session/set_config_option", `{"sessionId":"s1","configId":"model","value":"m2"}`},
-	} {
-		if line := call(i+1, step.method, step.params); strings.Contains(line, `"error"`) {
-			t.Fatalf("%s: %s", step.method, line)
+	stop = func() {
+		t.Helper()
+		if err := inW.Close(); err != nil {
+			t.Fatal(err)
+		}
+		if err := <-done; err != nil {
+			t.Fatal(err)
 		}
 	}
-	for i, method := range []string{"session/set_model", "_x" + ".ai/compact_conversation"} {
-		if line := call(10+i, method, `{"sessionId":"s1"}`); !strings.Contains(line, `"code":-32601`) {
-			t.Fatalf("%s: %s, want -32601", method, line)
-		}
-	}
-	if err := inW.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if err := <-done; err != nil {
-		t.Fatal(err)
-	}
+	return call, stop
 }
 
 func itoa(n int) string {

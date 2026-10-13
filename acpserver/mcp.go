@@ -3,7 +3,6 @@ package acpserver
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"slices"
 	"time"
@@ -108,11 +107,9 @@ func sessionServer(r acp.McpServer) (mcpclient.Server, error) {
 			headers[i] = mcpclient.Pair{Name: h.Name, Value: h.Value}
 		}
 		return mcpclient.SessionHTTP(r.Http.Name, r.Http.Url, headers)
-	case r.Sse != nil:
-		return mcpclient.Server{}, fmt.Errorf("MCP server %q: the SSE transport is not offered (mcpCapabilities.sse is false)", r.Sse.Name)
-	case r.Acp != nil:
-		return mcpclient.Server{}, fmt.Errorf("MCP server %q: the ACP transport is not offered (mcpCapabilities.acp is false)", r.Acp.Name)
 	}
+	// SSE and ACP servers never arrive: gobble does not advertise them, and
+	// the SDK refuses an unadvertised transport first (0019-MADR D7).
 	return mcpclient.Server{}, errors.New("an MCP server has no transport")
 }
 

@@ -28,8 +28,10 @@ func Serve(ctx context.Context, in io.Reader, out io.Writer, opts ServeOptions) 
 	}
 	agent := New(opts.Agent)
 	// The logger goes in at construction: the connection starts reading in
-	// inside the constructor, so a later SetLogger would race with it.
-	conn := acp.NewAgentSideConnection(agent, out, in, acp.WithLogger(logger))
+	// inside the constructor, so a later SetLogger would race with it. A
+	// client's bare stdio MCP command is resolved before the SDK checks it
+	// (0019-MADR D6).
+	conn := acp.NewAgentSideConnection(agent, out, in, acp.WithLogger(logger), acp.WithInboundRewrite(resolveBareCommands))
 	agent.SetConnection(conn)
 	select {
 	case <-conn.Done():

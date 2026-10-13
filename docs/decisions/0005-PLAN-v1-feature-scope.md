@@ -3307,6 +3307,11 @@ Choices made within the wording:
 - **The terms checks:** before each login lands, the record names the vendor's current terms for third-party clients, their URL and date, and whether a client may use the vendor CLI's public client id. A login the terms do not allow stays out, 1.x, and goes to the owner.
 - **ACP:** `initialize` lists a terminal auth method for each login, running `gobble auth login <provider>`; `authenticate` answers once that provider has a credential, else `auth_required`; `logout` removes the stored credential of the provider the agent uses.
 - **`--api-key`:** `-` reads the key from stdin, or a prompt on a terminal; a literal value is refused with the reason.
+- *(2026-10-13, 0019-PLAN P4 deviation 7.)* **A rejected key is not reported as no key.** Today a key the provider
+  refuses (401) and no key both reach the CLI as `acpclient.ErrAuthRequired`, and `-p` and the line session print
+  "no model credential: set one of …" (`internal/cli/print.go:197`, `line.go:219`). F4-3's `auth_required` says
+  whether a credential was found and from which source, and the CLI then says the provider rejected it, naming the
+  source; a test covers each case.
 
 **F4-3's files:**
 

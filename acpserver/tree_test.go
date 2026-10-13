@@ -46,7 +46,7 @@ func treeAgent(t *testing.T, body []byte, p llm.Provider) (*acptest.Conn, *Agent
 		}
 	})
 	initialize(t, c.Client)
-	if _, err := c.Client.ResumeSession(t.Context(), acp.ResumeSessionRequest{SessionId: acp.SessionId(h.ID), Cwd: h.Cwd}); err != nil {
+	if _, err := c.Client.ResumeSession(t.Context(), acp.ResumeSessionRequest{SessionId: acp.SessionId(h.ID), Cwd: piCwd}); err != nil {
 		t.Fatal(err)
 	}
 	return c, ag, store, acp.SessionId(h.ID)
@@ -116,7 +116,7 @@ func TestForkDropsOffPathLabels(t *testing.T) {
 // entry after that label.
 func TestCloneMovesFirstKeptPastLabel(t *testing.T) {
 	lines := []string{
-		`{"type":"session","version":3,"id":"lbl-1","timestamp":"2026-10-10T00:00:00.000Z","cwd":"/work/project"}`,
+		`{"type":"session","version":3,"id":"lbl-1","timestamp":"2026-10-10T00:00:00.000Z","cwd":` + jsonString(piCwd) + `}`,
 		`{"type":"message","id":"u1","parentId":null,"timestamp":"2026-10-10T00:00:01.000Z","message":{"role":"user","content":"first","timestamp":1791590401000}}`,
 		`{"type":"label","id":"l1","parentId":"u1","timestamp":"2026-10-10T00:00:02.000Z","targetId":"u1","label":"start"}`,
 		`{"type":"message","id":"a1","parentId":"l1","timestamp":"2026-10-10T00:00:03.000Z","message":{"role":"assistant","content":[{"type":"text","text":"ok"}],"stopReason":"stop","timestamp":1791590403000}}`,
@@ -204,4 +204,13 @@ func TestPromptFollowsTheLeaf(t *testing.T) {
 	if n != 5 { // the first prompt, the call, its result, the answer, and "again"
 		t.Fatalf("the request has %d messages, want the path to the leaf's 4 and the prompt", n)
 	}
+}
+
+// jsonString is s as a JSON string literal, for a path inside raw JSON.
+func jsonString(s string) string {
+	b, err := json.Marshal(s)
+	if err != nil { // a string always encodes
+		panic(err)
+	}
+	return string(b)
 }

@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -136,7 +138,7 @@ func (r *Recorder) Transcript() string {
 // instead.
 func (r *Recorder) Golden(t testing.TB, path string) {
 	t.Helper()
-	got := r.Transcript()
+	got := hostIndependent(r.Transcript())
 	if os.Getenv("ACPTEST_UPDATE") == "1" {
 		if err := os.WriteFile(path, []byte(got), 0o644); err != nil { //nolint:gosec // G306: a golden file is meant to be read
 			t.Errorf("acptest: update golden %s: %v", path, err)
@@ -157,6 +159,35 @@ func (r *Recorder) Golden(t testing.TB, path string) {
 	}
 	line, g, w := firstDiff(got, strings.ReplaceAll(string(want), "\r\n", "\n"))
 	t.Errorf("acptest: transcript differs from %s at line %d\n got: %s\nwant: %s\nfull transcript: %s", path, line, g, w, out)
+}
+
+// jsonString matches a JSON string literal in a canonical transcript.
+var jsonString = regexp.MustCompile(`"(?:[^"\\]|\\.)*"`)
+
+// hostIndependent is a transcript with every JSON string that is a path
+// under Abs("/") written in slash form, as the fixture wrote it: on
+// Windows "C:\\work\\a.go" becomes "/work/a.go". Off Windows Abs("/") is
+// "/" and the transcript is unchanged (0019-MADR D4).
+func hostIndependent(transcript string) string {
+	root := Abs("/")
+	if root == "/" {
+		return transcript
+	}
+	return jsonString.ReplaceAllStringFunc(transcript, func(lit string) string {
+		var s string
+		if json.Unmarshal([]byte(lit), &s) != nil {
+			return lit
+		}
+		rest, ok := strings.CutPrefix(s, root)
+		if !ok {
+			return lit
+		}
+		b, err := jsontext.AppendQuote(nil, "/"+filepath.ToSlash(rest))
+		if err != nil {
+			return lit
+		}
+		return string(b)
+	})
 }
 
 func firstDiff(got, want string) (line int, g, w string) {

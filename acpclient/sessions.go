@@ -31,7 +31,9 @@ func (e *agentError) Is(target error) bool { return target == e.kind }
 
 // sessionError maps a session request's JSON-RPC error: invalid params to
 // ErrInvalidSession, and an invalid request naming another gobble process to
-// ErrSessionLocked, each with the agent's reason as its text.
+// ErrSessionLocked, each with the agent's reason as its text: gobble's
+// data.reason, else the SDK's data.error, which names the refused value
+// (0019-MADR D9), else the message.
 func sessionError(method string, err error) error {
 	re, ok := errors.AsType[*acp.RequestError](err)
 	if !ok {
@@ -39,8 +41,11 @@ func sessionError(method string, err error) error {
 	}
 	reason := re.Message
 	if d, ok := re.Data.(map[string]any); ok {
-		if r, ok := d["reason"].(string); ok && r != "" {
-			reason = r
+		for _, key := range []string{"reason", "error"} {
+			if r, ok := d[key].(string); ok && r != "" {
+				reason = r
+				break
+			}
 		}
 	}
 	switch {

@@ -122,8 +122,10 @@ func Start(ctx context.Context, serve ServeFunc, opts Options) (*Conn, error) {
 		ProtocolVersion: acp.ProtocolVersionNumber,
 		ClientInfo:      &acp.Implementation{Name: opts.Name, Version: opts.Version},
 	})
-	if err == nil && resp.ProtocolVersion != acp.ProtocolVersionNumber {
-		err = fmt.Errorf("agent speaks ACP protocol %d, want %d", resp.ProtocolVersion, acp.ProtocolVersionNumber)
+	// The SDK negotiates the version; its refusal keeps gobble's words
+	// (0019-MADR D7).
+	if pve, ok := errors.AsType[*acp.ProtocolVersionError](err); ok {
+		err = fmt.Errorf("agent speaks ACP protocol %d, want %d", pve.Answered, pve.Requested)
 	}
 	if err != nil {
 		return nil, errors.Join(fmt.Errorf("initialize: %w", err), c.Close())
