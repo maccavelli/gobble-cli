@@ -33,6 +33,7 @@ When this plan is done, these hold, and each is shown by a command in its phase:
 | P4 | `internal/cli/config.go`, `internal/cli/config_test.go`, `internal/cli/settings.go`; `internal/config/render.go`, `render_test.go` | `internal/cli/root.go`, `internal/cli/configpath.go`, `internal/cli/main.go`, `internal/cli/main_test.go`, `internal/cli/chat.go`, `internal/cli/acp.go`, `internal/cli/mcp.go`, `internal/cli/flags.go`, `internal/cli/completion.go`; *(deviation 9: `internal/cli/editor/external.go`, `internal/cli/editor/external_test.go`; deviation 13: `internal/config/edit.go`, `internal/config/diag.go`, `internal/config/edit_test.go`, `internal/config/resolve_test.go`)* |
 | P5 | `acpserver/settings_test.go`, `internal/cli/settings_test.go` | `acpserver/agent.go`, `acpserver/queue.go`, `acpserver/mcp.go`, `acpserver/config.go`; `internal/cli/agent.go`, `internal/cli/sessions.go`, `internal/cli/slash.go`, `internal/cli/editor/external.go`, `internal/cli/editor/external_test.go`; `acpclient/sessions.go`, `acpclient/sessions_test.go`; `internal/cli/flags.go`; *(P4 deviation 12: `internal/cli/settings.go`; deviation 15: `acpserver/compact.go`, `internal/cli/mcp.go`, `internal/cli/chat.go`, `internal/cli/acp.go`, `internal/cli/config.go`, `internal/cli/config_test.go`; deviation 19: `internal/config/keys.go`, `internal/config/testdata/settings.schema.json`, `internal/config/resolve_test.go`, `internal/config/edit_test.go`; deviation 20: `internal/cli/main.go`, `internal/cli/slash_test.go`)* |
 | P6 | — | `docs/architecture.md`, `README.md`, this plan (its execution record), `docs/README.md` |
+| P7 (amendment of 2026-10-12) | — | `internal/filelock/lock.go`, `internal/filelock/lock_test.go`, `mcpclient/file.go`, `internal/config/edit.go`, this plan, `docs/decisions/0018-MADR-configuration-surface.md`, `docs/README.md` |
 
 A phase that needs a file not listed here stops, and the file is raised as a deviation.
 
@@ -635,6 +636,54 @@ The records' own lint runs through the scratchpad's `q261_lint_records.py`, sinc
   - **Found:** the records' own lint (`q261_lint_records.py`, which copies the records beside a config that does not exclude them, and was seen failing on a planted MD012) reported 21 MD029 errors in this plan: each phase's deviation entries were an ordered list numbered from the plan-wide count, 2 to 22, and MD029 wants a list to start at 1. This plan as committed at P2 (`1ac178c`) already had four, and P5's commit had all 21; `make markdownlint` excludes records, and no earlier phase ran the records' own lint, so none saw them. 0018-MADR was clean.
   - **Decided** ("bulleted, numbers kept"): each entry is a bullet, `- **Deviation N. …**`, with its nested lines moved left to the bullet's indentation; the numbers, and so every "deviation N" in the records, code and tests, are unchanged. No file added.
 
+### P7 — The edit lock waits up to a deadline (amendment of 2026-10-12; D18)
+
+*Added after this plan completed, at the owner's direction ("deadline lock, now"), before 0019-PLAN P2.*
+
+**Found.** `mcpclient`'s `TestAddConcurrent` (P1) failed once in 0019-PLAN P1's staged-index check, with `file_test.go:114: lock …\mcp.json: locked by pid 29244`, in a test that took 0.24 s; it passed in every other full-suite run of this session, in 100 of 100 runs alone, and in 50 of 50 beside a full suite. Its eight racing `Add`s each hold the edit lock for a read, an fsynced write and a rename, and `filelock.Lock` gives up after 10 tries 20 ms apart (`internal/filelock/lock.go:43-62`), about 200 ms in all, which seven holders ahead of the last can outlast under load on Windows. `internal/config`'s settings writes take the same lock with the same numbers (`internal/config/edit.go:32-33`, `:99`). P7 touches no file 0019-PLAN P1 changed.
+
+1. **`internal/filelock/lock.go`:**
+
+   ```go
+   // Policy is how Lock waits for a lock another process holds: it tries
+   // First apart, doubling the gap up to Max, until Deadline has passed
+   // since its first try. A First of zero or less is one try.
+   type Policy struct{ First, Max, Deadline time.Duration }
+
+   // EditPolicy is for an edit of a settings file or mcp.json: Pi's first
+   // tries, 20 ms apart, backing off to 100 ms, for up to 2 s (0018-MADR
+   // D18, amended 2026-10-12).
+   var EditPolicy = Policy{First: 20 * time.Millisecond, Max: 100 * time.Millisecond, Deadline: 2 * time.Second}
+
+   func Lock(ctx context.Context, path string, p Policy) (release func() error, err error)
+   ```
+
+   ~~`Lock` tries; on a `*HeldError` it returns that error when the next wait would end past `Deadline` from the first try, else it waits (or returns `ctx.Err()` when `ctx` ends first) and tries again with the gap doubled, at most `Max`.~~ *(Deviation 24: `Lock` tries; on a `*HeldError` it returns that error once `Deadline` has passed since the first try; otherwise it waits the gap, cut to end at the deadline, or returns `ctx.Err()` when `ctx` ends first, and tries again with the gap doubled, at most `Max`. So it gives up no sooner than `Deadline`.)*
+2. **`mcpclient/file.go:147-161`** and **`internal/config/edit.go:30-34`, `:99`:** the `lockAttempts` and `lockWait` constants are removed, and each call is `filelock.Lock(context.Background(), <path>+".lock", filelock.EditPolicy)`; each comment cites this amendment.
+3. **`internal/filelock/lock_test.go`:**
+   - `TestLockRetries` and `TestLockContext` keep their cases, written with policies: `EditPolicy` for the holder that lets go after 30 ms; `Policy{First: time.Millisecond, Max: time.Millisecond, Deadline: 3 * time.Millisecond}` for the holder that keeps it; `Policy{First: time.Hour, Max: time.Hour, Deadline: 2 * time.Hour}` for the cancelled context.
+   - `TestLockOutlastsPiBudget` (new): a holder that keeps the lock 300 ms, past Pi's 10 tries 20 ms apart, then lets go; `Lock` with `EditPolicy` gets the lock. This is the failure the flake showed, made deterministic.
+   - `TestLockDeadline` (new): a holder that keeps the lock; `Lock` with `Policy{First: 10 * time.Millisecond, Max: 40 * time.Millisecond, Deadline: 150 * time.Millisecond}` returns a `*HeldError` no sooner than 150 ms and no later than 150 ms + 40 ms + 500 ms of scheduling slack.
+4. **`TestAddConcurrent`** is unchanged: eight racing adds, all landing.
+
+**P7's verification:**
+
+```text
+go test -count=1 ./internal/filelock/... ./mcpclient/... ./internal/config/... -> ok
+go test -count=20 -run 'TestAddConcurrent$' ./mcpclient                       -> ok
+grep -rn 'lockAttempts\|lockWait' --include=*.go .                           -> no match
+```
+
+**P7's negatives,** on scratch copies: `EditPolicy` set to Pi's old budget (`Policy{First: 20ms, Max: 20ms, Deadline: 200ms}`) fails `TestLockOutlastsPiBudget`; `Lock` ignoring `Deadline` (trying once) fails `TestLockRetries`; `Lock` never giving up fails `TestLockDeadline` by its upper bound; `Lock` not doubling the gap is not observable by these tests, which bound time only, and is not claimed.
+
+P7 ends with the stability rule of 0019-PLAN (its gates, the staged-index check and the records' lint), and its own commit.
+
+**P7's deviation, 2026-10-12, decided by the owner:**
+
+- **Deviation 24. Step 1's rule and `TestLockDeadline` disagreed.**
+  - **Found:** step 1 has `Lock` give up when the next wait would end past `Deadline`, so it can give up as early as `Deadline - Max` (110 ms with the test's policy); step 3's `TestLockDeadline` requires it to give up no sooner than `Deadline`. Found while writing the test, before any run.
+  - **Decided** ("use the whole budget"): the last wait is cut to end at the deadline and `Lock` tries once more there, so it gives up no sooner than `Deadline`, as 0018-MADR D18's note says ("for up to 2 s"). Step 1 is annotated; the test's bounds are step 3's. No file added.
+
 ## Verification (whole plan)
 
 After P6:
@@ -743,3 +792,15 @@ Against `81f52fd`, the existing tests that changed are: `TestConfigPath` (its tw
 ### Acceptance
 
 A1 to A13 hold, by the gates and tests above. A1, the criterion this plan named as the one most likely to be dropped, held: every default is pinned on both sides (deviation 5), and none of those tests was edited.
+
+### P7, the deadline lock (amendment of 2026-10-12)
+
+Added after P1-P6 completed, at the owner's direction, before 0019-PLAN P2.
+
+- **Why:** `TestAddConcurrent` failed once in 0019-PLAN P1's staged-index check ("locked by pid"), and passed in every other full-suite run, in 100 of 100 runs alone and in 50 of 50 beside a full suite. Its eight racing adds outlasted Pi's 10 tries 20 ms apart under load on Windows.
+- **Built:** `filelock.Policy` and `filelock.EditPolicy` (20 ms gaps doubling to at most 100 ms, for up to 2 s); `Lock(ctx, path, policy)`, whose last wait is cut to end at the deadline (deviation 24); `mcpclient` and `internal/config` take `EditPolicy`, and their `lockAttempts` and `lockWait` constants are gone. `TestAddConcurrent` is unchanged.
+- **Deviation 24:** step 1's rule could give up one gap before the deadline, against step 3's test; decided "use the whole budget".
+- **Tests:** `TestLockOutlastsPiBudget` (a holder keeping the lock 300 ms, past Pi's budget) and `TestLockDeadline` (gives up no sooner than the deadline, and within one gap and 500 ms of slack after it) are new; `TestLockRetries` and `TestLockContext` keep their cases, written with policies; `TestAddConcurrent` passed 20 of 20 runs in a row.
+- **Negatives,** 3 of 3, after a passing control: `EditPolicy` at Pi's old budget fails `TestLockOutlastsPiBudget`; `Lock` trying once fails `TestLockRetries`; a deadline ten times too long fails `TestLockDeadline` at its upper bound (1.50 s). The gap's doubling is not observable by these tests, which bound time only, and is not claimed.
+- **Gates:** lint for linux, darwin and windows, 0 issues; Windows `go test` 31 ok; `-race` 31 ok natively on Windows and on the second Linux machine; `go test` 31 ok on the macOS laptop; Windows `make preflight` passed; pre-add 4 files clean.
+- **What the amendment predicted wrongly:** its step 1 and step 3 disagreed on when `Lock` gives up (deviation 24).

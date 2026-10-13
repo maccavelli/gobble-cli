@@ -54,11 +54,11 @@ func TestLockRetries(t *testing.T) {
 		time.Sleep(30 * time.Millisecond)
 		_ = release() //nolint:errcheck // the test's assertion is Lock's success
 	}()
-	got, err := Lock(t.Context(), path, 10, 20*time.Millisecond)
+	got, err := Lock(t.Context(), path, EditPolicy)
 	if err != nil {
 		t.Fatalf("Lock after the holder let go: %v", err)
 	}
-	if _, err := Lock(t.Context(), path, 3, time.Millisecond); err == nil {
+	if _, err := Lock(t.Context(), path, Policy{First: time.Millisecond, Max: time.Millisecond, Deadline: 3 * time.Millisecond}); err == nil {
 		t.Fatal("Lock while held: want *HeldError")
 	} else if held := new(HeldError); !errors.As(err, &held) {
 		t.Fatalf("Lock while held: %v, want *HeldError", err)
@@ -78,7 +78,52 @@ func TestLockContext(t *testing.T) {
 	defer release() //nolint:errcheck // cleanup
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	if _, err := Lock(ctx, path, 10, time.Hour); !errors.Is(err, context.Canceled) {
+	if _, err := Lock(ctx, path, Policy{First: time.Hour, Max: time.Hour, Deadline: 2 * time.Hour}); !errors.Is(err, context.Canceled) {
 		t.Fatalf("Lock with a cancelled context: %v, want context.Canceled", err)
+	}
+}
+
+// EditPolicy outlasts a holder that keeps the lock past Pi's budget of 10
+// tries 20 ms apart, about 200 ms: the failure TestAddConcurrent showed
+// once under load, made deterministic (0018-PLAN P7).
+func TestLockOutlastsPiBudget(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "x.lock")
+	release, err := TryLock(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	go func() {
+		time.Sleep(300 * time.Millisecond)
+		_ = release() //nolint:errcheck // the test's assertion is Lock's success
+	}()
+	got, err := Lock(t.Context(), path, EditPolicy)
+	if err != nil {
+		t.Fatalf("Lock with EditPolicy while held for 300 ms: %v", err)
+	}
+	if err := got(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Lock gives up with *HeldError once its deadline has passed, and not
+// before it.
+func TestLockDeadline(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "x.lock")
+	release, err := TryLock(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release() //nolint:errcheck // cleanup
+	p := Policy{First: 10 * time.Millisecond, Max: 40 * time.Millisecond, Deadline: 150 * time.Millisecond}
+	start := time.Now()
+	_, err = Lock(t.Context(), path, p)
+	took := time.Since(start)
+	if held := new(HeldError); !errors.As(err, &held) {
+		t.Fatalf("Lock while held: %v, want *HeldError", err)
+	}
+	// The last wait is cut to end at Deadline, where Lock tries once more;
+	// the upper bound adds one gap at Max and scheduling slack.
+	if lo, hi := p.Deadline, p.Deadline+p.Max+500*time.Millisecond; took < lo || took > hi {
+		t.Fatalf("Lock gave up after %v, want between %v and %v", took, lo, hi)
 	}
 }

@@ -558,7 +558,7 @@ Chosen: **A**. In the probe it kept the file exactly apart from the edited value
   - **`internal/config/genschema`** is the generator `go run` uses.
   - **`internal/filelock`** holds the lock files moved from `session/jsonl` (`lock.go`, `lock_unix.go`, `lock_windows.go`, `lock_other.go`), with:
     - `TryLock`, today's behaviour, which `session/jsonl` keeps using;
-    - `Lock`, which retries 10 times, 20 ms apart, as Pi does, for settings and for `mcp.json`.
+    - `Lock`, which retries 10 times, 20 ms apart, as Pi does, for settings and for `mcp.json`. *(2026-10-12, 0018-PLAN P7: `Lock` takes a `Policy` and waits up to a deadline: `filelock.EditPolicy` tries 20 ms apart at first, as Pi does, doubling the gap to at most 100 ms, for up to 2 s. Pi's 10 tries, about 200 ms in all, were outlasted under load on Windows: `TestAddConcurrent`'s eight racing adds, each holding the lock for a read, an fsynced write and a rename, failed once in 0019-PLAN P1's index check with "locked by pid", and passed in every other run.)*
   - **`mcpclient/file.go`** keeps its JSON editor, takes `Lock`, and writes through `fsx.Workspace{}.WriteFile` in place of its own temp-and-rename (`mcpclient/file.go:177-198`), gaining the fsync and the Windows rename retry. *(2026-10-12, 0018-PLAN P1 deviation 1: through `fsx.WriteFileMode(path, data, 0o600)`, since `WriteFile` creates a new file 0644 and a new `mcp.json`, which can hold literal tokens, has always been 0600.)*
   - **`internal/fsx`** gains `GitRepo`, the repository finder moved from `prompt/context.go:121-160` (`gitPaths` and `absUnder`), which `prompt` then calls. `internal/config` uses it for D2's project root.
   - No package outside `internal/cli` imports Kong, and none imports a new module.

@@ -40,25 +40,39 @@ func TryLock(path string) (release func() error, err error) {
 	return func() error { return errors.Join(unlockFile(f), f.Close()) }, nil
 }
 
-// Lock is TryLock tried up to attempts times, wait apart, while another
-// process holds the lock: Pi's 10 tries 20 ms apart, for an edit of a
-// settings file (0018-MADR D18). After the last try it returns that try's
-// *HeldError; when ctx ends first, ctx's error. Fewer than one attempt is
-// one.
-func Lock(ctx context.Context, path string, attempts int, wait time.Duration) (release func() error, err error) {
-	for i := 1; ; i++ {
+// Policy is how Lock waits for a lock another process holds: it tries
+// First apart, doubling the gap up to Max, until Deadline has passed since
+// its first try. A First of zero or less is one try.
+type Policy struct{ First, Max, Deadline time.Duration }
+
+// EditPolicy is for an edit of a settings file or mcp.json: Pi's first
+// tries, 20 ms apart, backing off to 100 ms, for up to 2 s (0018-MADR D18,
+// amended 2026-10-12: Pi's 10 tries, about 200 ms, were outlasted under
+// load).
+var EditPolicy = Policy{First: 20 * time.Millisecond, Max: 100 * time.Millisecond, Deadline: 2 * time.Second}
+
+// Lock is TryLock, tried again under p while another process holds the
+// lock. Its last wait is cut to end at p.Deadline from the first try, where
+// it tries once more, so it returns the last try's *HeldError no sooner
+// than p.Deadline (0018-PLAN P7, deviation 24); it returns ctx's error when
+// ctx ends first.
+func Lock(ctx context.Context, path string, p Policy) (release func() error, err error) {
+	start, wait := time.Now(), p.First
+	for {
 		release, err := TryLock(path)
 		var held *HeldError
-		if !errors.As(err, &held) || i >= attempts {
+		left := p.Deadline - time.Since(start)
+		if !errors.As(err, &held) || wait <= 0 || left <= 0 {
 			return release, err
 		}
-		t := time.NewTimer(wait)
+		t := time.NewTimer(min(wait, left))
 		select {
 		case <-ctx.Done():
 			t.Stop()
 			return nil, ctx.Err()
 		case <-t.C:
 		}
+		wait = min(2*wait, max(p.Max, p.First))
 	}
 }
 

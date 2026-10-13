@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
-	"time"
 
 	"github.com/maccavelli/gobble-cli/internal/filelock"
 	"github.com/maccavelli/gobble-cli/internal/fsx"
@@ -144,20 +143,15 @@ func Remove(path, name string) (removed bool, err error) {
 	return true, writeEdit(path, text, top, slices.Delete(servers, i, i+1))
 }
 
-// Edits of mcp.json lock <path>.lock, as Pi's settings writes do: up to 10
-// tries 20 ms apart while another process holds it (0018-MADR D18).
-const (
-	lockAttempts = 10
-	lockWait     = 20 * time.Millisecond
-)
-
-// lockForEdit takes mcp.json's edit lock, creating its directory first, so
-// a concurrent Add or Remove waits rather than losing an entry.
+// lockForEdit takes mcp.json's edit lock, <path>.lock, creating its
+// directory first, so a concurrent Add or Remove waits rather than losing an
+// entry. It waits as filelock.EditPolicy says while another process holds
+// it (0018-MADR D18; 0018-PLAN P7).
 func lockForEdit(path string) (release func() error, err error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, err
 	}
-	release, err = filelock.Lock(context.Background(), path+".lock", lockAttempts, lockWait)
+	release, err = filelock.Lock(context.Background(), path+".lock", filelock.EditPolicy)
 	if err != nil {
 		return nil, fmt.Errorf("lock %s: %w", path, err)
 	}

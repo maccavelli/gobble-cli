@@ -10,7 +10,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"time"
 	"unicode/utf8"
 
 	"go.yaml.in/yaml/v3"
@@ -25,13 +24,6 @@ type Edit struct {
 	Path  string
 	Value *yaml.Node
 }
-
-// Edits lock <file>.lock as mcp.json's do: up to 10 tries 20 ms apart
-// while another process holds it (0018-MADR D18).
-const (
-	lockAttempts = 10
-	lockWait     = 20 * time.Millisecond
-)
 
 // spliceHook, when set by a test, changes a splice before it is checked.
 var spliceHook func([]byte) []byte
@@ -91,12 +83,14 @@ func edit(file string, e Edit) (err error) {
 	return fsx.WriteFileMode(file, out, 0o644)
 }
 
-// lockSettings takes file's edit lock, creating its directory first.
+// lockSettings takes file's edit lock, <file>.lock, creating its directory
+// first. It waits as filelock.EditPolicy says while another process holds
+// it, as mcp.json's edits do (0018-MADR D18; 0018-PLAN P7).
 func lockSettings(file string) (release func() error, err error) {
 	if err := os.MkdirAll(filepath.Dir(file), 0o750); err != nil {
 		return nil, err
 	}
-	release, err = filelock.Lock(context.Background(), file+".lock", lockAttempts, lockWait)
+	release, err = filelock.Lock(context.Background(), file+".lock", filelock.EditPolicy)
 	if err != nil {
 		return nil, fmt.Errorf("lock %s: %w", file, err)
 	}
