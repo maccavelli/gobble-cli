@@ -89,7 +89,7 @@ python -I <scratch>/q261_lint_records.py --negative <each record the phase touch
    - **For each library, in a fresh `tempfile.mkdtemp()` directory outside the working tree:**
      1. `git clone --quiet <repo root> <tmp>/clone`;
      2. `go get <module>@<tag>`, `go mod tidy`;
-     3. the `go.mod` diff: parse `go.mod` before and after (`require` lines) and fail when any module other than `<module>` is added, removed or changed (`new or changed module: <path>`);
+     3. the `go.mod` diff: parse `go.mod` before and after (`require` lines) and fail when any module other than `<module>` is added, removed or changed (`new or changed module: <path>`); *(deviation 1: and `go list -m <module>` must report `<tag>` after `tidy`, else the library fails with `tidy moved it to <version>: <tag> lacks a package gobble imports`, and its other checks are not run, since they would test another version;)*
      4. `go build ./...`; `go vet ./...` with `GOOS` linux, darwin and windows; `go test -count=1 <packages>`;
      5. apidiff: `go build -o <tmp>/apidiff golang.org/x/exp/cmd/apidiff` from the repository; `go mod download -json <module>@<from>` and `@<tag>`; `apidiff -m -w <tmp>/<v>.exp <module>` run in each version's module directory; `apidiff -m <from>.exp <tag>.exp`; parse the text before `Compatible changes:` and fail on any line there that starts with a hyphen (`incompatible: <line>`), since apidiff's exit status is not a verdict. For a module below v1 the incompatible changes are reported and do not fail, as 0004-MADR expects breaks there; the report says so;
      6. `go run golang.org/x/vuln/cmd/govulncheck ./...` in the clone (the repository's tool pin);
@@ -114,8 +114,14 @@ python scripts/check_libs.py --lib go-selfupdate-lib                        -> e
 
 - `--lib acp-go-sdk2 --tag v0.15.0` fails with `advisory GHSA-579q-9j9v-7w8w covers v0.15.0`;
 - `--lib go-llmprovider-sdk --from v1.10.2 --tag v1.2.1` fails with incompatible changes, reported as such (a downgrade removes API), so a v1 break fails the run;
-- `--lib go-selfupdate-lib --tag v1.5.0` fails at `go vet` (`release_test.go:9:2: no required module provides package …/selfupdate/releasespec`), which `go build` alone passes;
+- ~~`--lib go-selfupdate-lib --tag v1.5.0` fails at `go vet` (`release_test.go:9:2: no required module provides package …/selfupdate/releasespec`), which `go build` alone passes;~~ *(Deviation 1: `go mod tidy` repairs that import by moving the library to its newest tag before `go vet` runs, so the run fails on the version check instead: `go-selfupdate-lib version: FAIL tidy moved it to v1.15.2: v1.5.0 lacks a package gobble imports`.)*
 - a copy of the script whose `go.mod` parser is replaced with one that ignores other modules makes the `--self-test` case "adding `example.com/x`" pass, which `--self-test` reports as a failed case.
+
+### P1's deviations, 2026-10-12, decided by the owner
+
+- **Deviation 1. `go mod tidy` could change the version being checked.**
+  - **Found:** negative 3 (`--lib go-selfupdate-lib --tag v1.5.0`) did not fail at `go vet`. `go get` downgraded the clone to `v1.5.0` (its log: "downgraded github.com/maccavelli/go-selfupdate-lib v1.9.0 => v1.5.0"), but `v1.5.0` has no `selfupdate/releasespec`, which `internal/cli/release_test.go:9` imports, so `go mod tidy` moved the library to `v1.15.2`, the newest tag providing it; the clone's `go.mod:17` read `v1.15.2`. Every later step tested `v1.15.2` while the report said `v1.5.0`; only the API step, in its own scratch module, was at `v1.5.0`. The research run had seen `vet` fail because it ran no `tidy`. The defect is in the new script, and the step as written could not catch it.
+  - **Decided** ("check the version after tidy"): after `get` and `tidy`, `go list -m <module>` must report the tag, else that library fails with `tidy moved it to <version>: <tag> lacks a package gobble imports` and its other checks are skipped. Negative 3 expects that line. No file added.
 
 ### P2 — go-selfupdate-lib `v1.15.2` (D1; closes F10)
 

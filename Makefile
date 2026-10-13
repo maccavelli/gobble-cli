@@ -89,7 +89,7 @@ LDFLAGS := -X $(BUILDINFO).version=$(VERSION) -X $(BUILDINFO).kind=$(BUILD_KIND)
 
 .PHONY: build install test race vet fmt lint staticcheck vulncheck tidy clean \
 	pre-add-check preflight check-cgo-off verify-build-metadata fix-check archtest apidiff \
-	check-records markdownlint probe-conhost completion-shells $(BIN)
+	check-records check-libs markdownlint probe-conhost completion-shells $(BIN)
 
 # Shipped binaries are pure Go. check-cgo-off refuses CGO_ENABLED other than 0
 # and any `import "C"` in a .go file (0004-PLAN phase 0 accept).
@@ -219,6 +219,10 @@ fix-check:
 # Records and docs links (0007-MADR D6).
 check-records:
 	$(PYTHON) scripts/check_records.py --check-all
+
+# The sibling libraries against their latest tags (0019-MADR D14); needs the network, so not in preflight.
+check-libs:
+	$(PYTHON) scripts/check_libs.py
 
 # The fleet markdownlint config; records are excluded by its own globs
 # (0007-MADR D2).
