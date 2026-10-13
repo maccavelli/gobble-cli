@@ -46,6 +46,8 @@
 | 0019 | PLAN | [Pin the three sibling libraries at their latest tags, and integrate each](decisions/0019-PLAN-sibling-libraries-current-pins-and-integration.md) | completed (2026-10-13; P1–P5; P3 deviation 2, `defaultProvider`, 2026-10-13; P4 deviations 3–11, 2026-10-13; P5 deviations 12–14, 2026-10-13) |
 | 0020 | MADR | [Pin go-llmprovider-sdk v1.11.0 and offer each provider's full curated catalog from a live listing](decisions/0020-MADR-full-model-catalog-listing.md) | accepted (2026-10-13, by the owner; gobble-cli issue 1; F12 and D1's `v1.12.0` note, P1 deviation 3) |
 | 0020 | PLAN | [Pin go-llmprovider-sdk v1.11.0 and offer each provider's full curated catalog from a live listing](decisions/0020-PLAN-full-model-catalog-listing.md) | completed (2026-10-13; P1–P3; P1 deviations 1–3; P2 deviations 4–5) |
+| 0021 | MADR | [Ask for prompt caching on agent turns, with one provider and session id per ACP session](decisions/0021-MADR-prompt-caching-per-session.md) | accepted (2026-10-13, by the owner; gobble-cli issue 2) |
+| 0021 | PLAN | [Ask for prompt caching on agent turns, with one provider and session id per ACP session](decisions/0021-PLAN-prompt-caching-per-session.md) | in progress (approved 2026-10-13; P1–P4) |
 
 0003-MADR has no PLAN of its own. 0004-PLAN Phase 2 and 0005-PLAN F10 implement it.
 
