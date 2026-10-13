@@ -266,7 +266,7 @@ func TestDefaultProviderSetting(t *testing.T) {
 	if c := e.modelChoice(); c.Provider != "opencode-go" || c.Default != "claude-haiku-5-5" || !slices.Equal(c.Models, provider.Models("opencode-go")) {
 		t.Fatalf("model choice %+v, want opencode-go's", c)
 	}
-	if p, err := modelProvider(e)(); err != nil || p.ID() != "opencode-go" {
+	if p, err := modelProvider(e)("s1"); err != nil || p.ID() != "opencode-go" {
 		t.Fatalf("provider %v, %v; want opencode-go", p, err)
 	}
 	writeFile(t, filepath.Join(home, "settings.yaml"), "defaultProvider: openai\n")

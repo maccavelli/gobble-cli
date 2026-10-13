@@ -35,7 +35,7 @@ func connect(t *testing.T) (*acptest.Conn, *acptest.Client) {
 // connectWith joins an agent on model p, with the built-in tools, to client.
 func connectWith(t *testing.T, p llm.Provider, client *acptest.Client) (*acptest.Conn, *acptest.Client) {
 	t.Helper()
-	agent := New(Options{Version: "1.2.3", NewID: counterIDs(), Provider: func() (llm.Provider, error) { return p, nil }})
+	agent := New(Options{Version: "1.2.3", NewID: counterIDs(), Provider: func(string) (llm.Provider, error) { return p, nil }})
 	c := acptest.Connect(t, agent, client)
 	agent.SetConnection(c.Agent)
 	return c, client
@@ -63,7 +63,7 @@ func TestSession(t *testing.T) {
 	// The prompt names linux and /work on every host, so the size is too
 	// (0005-PLAN F3-1 deviation 5; 0019-PLAN P4 deviation 4).
 	agent := New(Options{Version: "1.2.3", NewID: counterIDs(), Tools: []tool.Tool{builtin.Read(), builtin.Write(), builtin.Edit(), builtin.Bash()},
-		Provider: func() (llm.Provider, error) { return llmtest.NewScript(llmtest.Text("hello gobble")), nil },
+		Provider: func(string) (llm.Provider, error) { return llmtest.NewScript(llmtest.Text("hello gobble")), nil },
 		Prompt:   PromptOptions{GOOS: "linux", cwd: "/work"}})
 	client := &acptest.Client{}
 	c := acptest.Connect(t, agent, client)

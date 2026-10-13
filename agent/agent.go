@@ -30,6 +30,9 @@ type Config struct {
 	// Thinking is the thinking level each request asks for (llm's levels);
 	// empty asks for none.
 	Thinking string
+	// Cache asks the service to cache each model call's prompt
+	// (0021-MADR D2); CacheNone asks for nothing.
+	Cache llm.CacheRetention
 	// Policy approves calls to tools that are not read-only. Nil allows
 	// every call.
 	Policy permission.Policy
@@ -348,7 +351,7 @@ func (t *turn) call() (*reply, bool) {
 		msgs = append(msgs, llm.Message{Role: llm.RoleSystem, Content: []llm.Content{{Type: llm.ContentText, Text: t.a.cfg.System}}})
 	}
 	msgs = append(append(msgs, t.history...), t.added...)
-	req := &llm.Request{Model: t.a.cfg.Model, Messages: msgs, Tools: t.specs, Thinking: t.a.cfg.Thinking}
+	req := &llm.Request{Model: t.a.cfg.Model, Messages: msgs, Tools: t.specs, Thinking: t.a.cfg.Thinking, Cache: t.a.cfg.Cache}
 	r := &reply{}
 	for ev, err := range t.a.cfg.Provider.Stream(t.ctx, req) {
 		if err != nil {

@@ -44,7 +44,7 @@ func settingsAgent(t *testing.T, store session.Store, p llm.Provider, settings f
 	t.Helper()
 	logs := &syncBuffer{}
 	a := New(Options{
-		Version: "1.2.3", NewID: counterIDs(), Provider: func() (llm.Provider, error) { return p, nil },
+		Version: "1.2.3", NewID: counterIDs(), Provider: func(string) (llm.Provider, error) { return p, nil },
 		Store: store, Settings: settings, MCP: mo, Logger: slog.New(slog.NewTextHandler(logs, nil)),
 	})
 	client := &acptest.Client{Allow: true}
@@ -106,7 +106,7 @@ func TestSessionSettingsApplied(t *testing.T) {
 // them, Options.Compaction and MCPOptions.StartupWait among them.
 func TestNilSettingsIsToday(t *testing.T) {
 	today := SessionSettings{
-		SteeringMode: queueOneAtATime, FollowUpMode: queueOneAtATime, Thinking: thinkingOff,
+		SteeringMode: queueOneAtATime, FollowUpMode: queueOneAtATime, Thinking: thinkingOff, CacheRetention: "short",
 		Compaction: compaction.DefaultSettings, MCPStartupWait: DefaultStartupWait,
 	}
 	if got := New(Options{}).sessionSettings("/x"); got != today {
@@ -118,7 +118,7 @@ func TestNilSettingsIsToday(t *testing.T) {
 			return SessionSettings{FollowUpMode: queueAll, Compaction: compaction.Settings{KeepRecentTokens: 7}}
 		}})
 	want := SessionSettings{
-		SteeringMode: queueOneAtATime, FollowUpMode: queueAll, Thinking: thinkingOff,
+		SteeringMode: queueOneAtATime, FollowUpMode: queueAll, Thinking: thinkingOff, CacheRetention: "short",
 		Compaction: compaction.Settings{ReserveTokens: 1, KeepRecentTokens: 7}, MCPStartupWait: time.Second,
 	}
 	if got := a.sessionSettings("/x"); got != want {

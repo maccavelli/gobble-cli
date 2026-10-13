@@ -18,7 +18,7 @@ import (
 // writes Pi's compaction entry only when the summary succeeded, rebuilds
 // the context from it, and sends the new estimate as usage_update.
 func (a *Agent) cmdCompact(ctx context.Context, t *cmdTurn, instructions string) error {
-	if _, err := a.modelProvider(); err != nil {
+	if _, err := a.sessionProvider(t.s); err != nil {
 		return promptError(err)
 	}
 	t.say("Compacting the conversation…\n\n")
@@ -50,7 +50,7 @@ func (a *Agent) compactSession(ctx context.Context, s *liveSession, instructions
 			return compaction.Result{}, 0, appendFailed(err)
 		}
 	}
-	model, err := a.modelProvider()
+	model, err := a.sessionProvider(s)
 	if err != nil {
 		return compaction.Result{}, 0, err
 	}

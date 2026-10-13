@@ -10,6 +10,7 @@ import (
 	acp "github.com/maccavelli/acp-go-sdk2"
 
 	"github.com/maccavelli/gobble-cli/compaction"
+	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/session"
 )
 
@@ -21,6 +22,20 @@ const (
 
 // thinkingOff is the level of a session that asks for no reasoning.
 const thinkingOff = "off"
+
+// cacheShort is a session's cacheRetention when its settings name none
+// (0021-MADR D3).
+const cacheShort = "short"
+
+// cacheOf is a cacheRetention setting's hint: none asks for nothing; short
+// and long are llm's values, as any other is, for the SDK to refuse
+// (0021-MADR D1, D3).
+func cacheOf(setting string) llm.CacheRetention {
+	if setting == "none" {
+		return llm.CacheNone
+	}
+	return llm.CacheRetention(setting)
+}
 
 // thinkingLevels are the levels thought_level offers, gobble's --thinking
 // levels with off first.
@@ -35,6 +50,9 @@ type SessionSettings struct {
 	// Thinking is a new session's level; a loaded or resumed session keeps
 	// its history's.
 	Thinking string
+	// CacheRetention is the prompt cache the session's turns ask for:
+	// none, short or long (0021-MADR D3).
+	CacheRetention string
 	// Compaction is /compact's settings.
 	Compaction compaction.Settings
 	// MCPStartupWait bounds the first prompt's wait for MCP servers.
@@ -56,6 +74,7 @@ func (a *Agent) sessionSettings(cwd string) SessionSettings {
 	s.SteeringMode = cmp.Or(s.SteeringMode, queueOneAtATime)
 	s.FollowUpMode = cmp.Or(s.FollowUpMode, queueOneAtATime)
 	s.Thinking = cmp.Or(s.Thinking, thinkingOff)
+	s.CacheRetention = cmp.Or(s.CacheRetention, cacheShort)
 	s.Compaction.ReserveTokens = cmp.Or(s.Compaction.ReserveTokens, a.compaction.ReserveTokens)
 	s.Compaction.KeepRecentTokens = cmp.Or(s.Compaction.KeepRecentTokens, a.compaction.KeepRecentTokens)
 	s.MCPStartupWait = cmp.Or(s.MCPStartupWait, a.mcp.StartupWait, DefaultStartupWait)

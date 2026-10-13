@@ -26,7 +26,7 @@ import (
 // go to logs.
 func promptAgent(t *testing.T, dir string, p llm.Provider, o PromptOptions, logs *bytes.Buffer, change ...func(*Options)) *acptest.Conn {
 	t.Helper()
-	opts := Options{Version: "1.2.3", Provider: func() (llm.Provider, error) { return p, nil }, Models: func() ModelChoice { return testModels },
+	opts := Options{Version: "1.2.3", Provider: func(string) (llm.Provider, error) { return p, nil }, Models: func() ModelChoice { return testModels },
 		Store: jsonl.New(dir, jsonl.Options{}), Tools: []tool.Tool{builtin.Read()}, Prompt: o,
 		Logger: slog.New(slog.NewTextHandler(logs, nil))}
 	for _, f := range change {

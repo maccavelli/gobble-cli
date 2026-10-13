@@ -22,7 +22,7 @@ func big(n int) string { return strings.Repeat("x", 4*n) }
 // test session can be compacted.
 func compactAgent(t *testing.T, store session.Store, p llm.Provider, client *acptest.Client) *acptest.Conn {
 	t.Helper()
-	a := New(Options{Version: "1.2.3", NewID: counterIDs(), Provider: func() (llm.Provider, error) { return p, nil },
+	a := New(Options{Version: "1.2.3", NewID: counterIDs(), Provider: func(string) (llm.Provider, error) { return p, nil },
 		Store: store, Compaction: compaction.Settings{ReserveTokens: 16384, KeepRecentTokens: 150}})
 	c := acptest.Connect(t, a, client)
 	a.SetConnection(c.Agent)

@@ -32,7 +32,7 @@ func sessionAgent(t *testing.T, dir string, p llm.Provider, client acp.Client) (
 	t.Helper()
 	ag := New(Options{
 		Version:  "1.2.3",
-		Provider: func() (llm.Provider, error) { return p, nil },
+		Provider: func(string) (llm.Provider, error) { return p, nil },
 		Models:   func() ModelChoice { return testModels },
 		Store:    jsonl.New(dir, jsonl.Options{}),
 	})
@@ -384,7 +384,7 @@ func TestResultWrittenBeforeItsUpdate(t *testing.T) {
 		t.Fatal(err)
 	}
 	model := llmtest.NewScript(llmtest.ToolCall("t1", "read", `{"path":"a.txt"}`), llmtest.Text("ok"))
-	ag := New(Options{Version: "1.2.3", Provider: func() (llm.Provider, error) { return model, nil }, Store: jsonl.New(dir, jsonl.Options{})})
+	ag := New(Options{Version: "1.2.3", Provider: func(string) (llm.Provider, error) { return model, nil }, Store: jsonl.New(dir, jsonl.Options{})})
 	toAgentR, toAgentW := io.Pipe()
 	toClientR, toClientW := io.Pipe()
 	check := &checkingWriter{w: toClientW, dir: dir, checked: map[string]bool{}}
@@ -418,7 +418,7 @@ func TestResultWrittenBeforeItsUpdate(t *testing.T) {
 func TestNoFileWithoutConversation(t *testing.T) {
 	dir, cwd := t.TempDir(), t.TempDir()
 	ag := New(Options{Version: "1.2.3", Store: jsonl.New(dir, jsonl.Options{}),
-		Provider: func() (llm.Provider, error) { return nil, fmt.Errorf("%w: no model credential", llm.ErrAuth) }})
+		Provider: func(string) (llm.Provider, error) { return nil, fmt.Errorf("%w: no model credential", llm.ErrAuth) }})
 	c := acptest.Connect(t, ag, &acptest.Client{})
 	ag.SetConnection(c.Agent)
 	t.Cleanup(func() { ag.Close() }) //nolint:errcheck,gosec // test cleanup

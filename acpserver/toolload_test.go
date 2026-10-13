@@ -31,7 +31,7 @@ func widgetTool() tool.Tool {
 // joined to an approving client, which it returns too.
 func loadAgent(t *testing.T, dir string, p llm.Provider, tools []tool.Tool) (*acptest.Conn, *acptest.Client) {
 	t.Helper()
-	ag := New(Options{Version: "1.2.3", Provider: func() (llm.Provider, error) { return p, nil }, Models: func() ModelChoice { return testModels },
+	ag := New(Options{Version: "1.2.3", Provider: func(string) (llm.Provider, error) { return p, nil }, Models: func() ModelChoice { return testModels },
 		Store: jsonl.New(dir, jsonl.Options{}), Tools: tools})
 	client := &acptest.Client{Allow: true}
 	c := acptest.Connect(t, ag, client)

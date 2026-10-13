@@ -25,13 +25,19 @@ const appName = "gobble"
 // modelProvider is the model the agent builds on its first prompt: the
 // defaultProvider setting's, or else the first provider whose standard
 // credential variable is set (0002-PLAN Phase 3, owner's decision of
-// 2026-10-05; 0019-MADR D15). Tests replace it.
-var modelProvider = func(e *runEnv) func() (llm.Provider, error) {
-	return func() (llm.Provider, error) {
-		p, _, err := provider.Ambient(os.Getenv, e.defaultProvider(), provider.Options{ClientName: appName, ClientVersion: identity().Version, Logger: e.log()})
+// 2026-10-05; 0019-MADR D15). Each session's provider names the session
+// (0021-MADR D4). Tests replace it.
+var modelProvider = func(e *runEnv) func(sessionID string) (llm.Provider, error) {
+	return func(sessionID string) (llm.Provider, error) {
+		p, _, err := ambientProvider(os.Getenv, e.defaultProvider(), provider.Options{ClientName: appName, ClientVersion: identity().Version,
+			Logger: e.log(), SessionID: sessionID})
 		return p, err
 	}
 }
+
+// ambientProvider builds the ambient provider; a test replaces it to see
+// the options it is given.
+var ambientProvider = provider.Ambient
 
 // agentOptions are gobble's agent's options, for `gobble acp` and the
 // in-process agent alike: the ambient provider and its model choice, and

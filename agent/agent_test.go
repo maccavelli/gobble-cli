@@ -570,3 +570,23 @@ func TestLoadedFromConfig(t *testing.T) {
 		t.Fatalf("a call to the hidden tool = %+v", res)
 	}
 }
+
+// Every model call of a turn carries the config's cache hint, the tool
+// loop's later calls included; with none set, none asks (0021-MADR D2).
+func TestCacheOnEveryCall(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "notes.md"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, cache := range []llm.CacheRetention{llm.CacheLong, llm.CacheNone} {
+		s := llmtest.NewScript(llmtest.ToolCall("c1", "read", args(t, map[string]string{"path": "notes.md"})), llmtest.Text("done"))
+		a := agent.New(agent.Config{Provider: s, Tools: builtin.Tools(), Policy: denyAll{t: t}, Cache: cache})
+		if _, _, err := collect(t.Context(), t, a, tool.Env{Cwd: dir}, "read it"); err != nil {
+			t.Fatal(err)
+		}
+		reqs := s.Requests()
+		if len(reqs) != 2 || reqs[0].Cache != cache || reqs[1].Cache != cache {
+			t.Fatalf("cache %q: %d requests, want 2 each asking %q", cache, len(reqs), cache)
+		}
+	}
+}

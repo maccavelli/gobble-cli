@@ -52,8 +52,10 @@ type Options struct {
 	// Provider builds the model provider. It is called on the first prompt,
 	// so initialize and session/new need no credential and make no network
 	// call (0008-MADR D19 item 6). An error matching llm.ErrAuth answers the
-	// prompt with auth_required.
-	Provider func() (llm.Provider, error)
+	// prompt with auth_required. It is called once per session, with the
+	// session's ACP id, so each session has its own provider and session id
+	// (0021-MADR D4).
+	Provider func(sessionID string) (llm.Provider, error)
 	// Models is the model choice offered as the model config option. Nil
 	// offers none.
 	Models func() ModelChoice
@@ -83,7 +85,7 @@ type Options struct {
 type Agent struct {
 	version  string
 	newID    func() string
-	provider func() (llm.Provider, error)
+	provider func(sessionID string) (llm.Provider, error)
 	models   func() ModelChoice
 	tools    []tool.Tool
 	byName   map[string]tool.Tool
@@ -102,7 +104,6 @@ type Agent struct {
 	// client is what the client offers, from initialize: its files and
 	// terminals (0005-PLAN F1d-3).
 	client acp.ClientCapabilities
-	model  llm.Provider // built on the first prompt
 	// unlisted are the stored sessions session/list leaves out, each
 	// logged once (0019-MADR D5).
 	unlisted map[acp.SessionId]bool
@@ -120,14 +121,19 @@ type liveSession struct {
 	history []llm.Message
 	// tree is the session's entries and its leaf, which the next entry
 	// follows (0005-PLAN F2-2).
-	tree   *session.Tree
-	model  string
-	think  string
-	cancel context.CancelFunc
-	mcp    *liveMCP
-	mode   string
-	used   int // the context's tokens, as the last usage_update said
-	queue  *queue
+	tree  *session.Tree
+	model string
+	// provider is the session's own model provider, built on its first
+	// use with the session's id; cache is the hint its turns send
+	// (0021-MADR D3, D4).
+	provider llm.Provider
+	cache    llm.CacheRetention
+	think    string
+	cancel   context.CancelFunc
+	mcp      *liveMCP
+	mode     string
+	used     int // the context's tokens, as the last usage_update said
+	queue    *queue
 	// compaction is /compact's settings, from the session's settings.
 	compaction compaction.Settings
 	// streaming and compacting say what the running turn is: a model turn,
@@ -295,7 +301,7 @@ func (a *Agent) NewSession(ctx context.Context, p acp.NewSessionRequest) (acp.Ne
 	}
 	ss := a.sessionSettings(p.Cwd)
 	s := &liveSession{id: acp.SessionId(id), cwd: p.Cwd, dirs: dirs, log: log, tree: session.NewTree(nil), think: ss.Thinking, model: a.models().Default, mode: modeDefault,
-		queue: sessionQueue(ss), compaction: ss.Compaction}
+		queue: sessionQueue(ss), compaction: ss.Compaction, cache: cacheOf(ss.CacheRetention)}
 	if len(forked) > 0 {
 		for _, e := range forked {
 			if err := log.Append(ctx, e); err != nil {
@@ -401,7 +407,7 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 	if isCommand && !isExpanded {
 		return a.runCommand(turnCtx, s, conn, name, args)
 	}
-	model, err := a.modelProvider()
+	model, err := a.sessionProvider(s)
 	if err != nil {
 		return acp.PromptResponse{}, promptError(err)
 	}
@@ -465,6 +471,7 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 		Search:   builtin.ToolSearch(),
 		Loaded:   loaded,
 		System:   system,
+		Cache:    s.cache,
 	}
 	ag := agent.New(cfg)
 	out := newUpdates(ctx, conn, p.SessionId)
@@ -660,21 +667,22 @@ func (w *writer) event(ev agent.Event) {
 	}
 }
 
-// modelProvider builds the provider on first use and keeps it.
-func (a *Agent) modelProvider() (llm.Provider, error) {
+// sessionProvider builds s's provider on first use, with s's id, and keeps
+// it for the session (0021-MADR D4). A failed build is not kept.
+func (a *Agent) sessionProvider(s *liveSession) (llm.Provider, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if a.model != nil {
-		return a.model, nil
+	if s.provider != nil {
+		return s.provider, nil
 	}
 	if a.provider == nil {
 		return nil, ErrNoProvider
 	}
-	p, err := a.provider()
+	p, err := a.provider(string(s.id))
 	if err != nil {
 		return nil, err
 	}
-	a.model = p
+	s.provider = p
 	return p, nil
 }
 
@@ -739,7 +747,7 @@ func (a *Agent) open(ctx context.Context, id acp.SessionId, cwd string, extra []
 	ss := a.sessionSettings(cwd)
 	// The history's thinking level wins: restore sets it (0018-MADR D17).
 	s := &liveSession{id: id, cwd: cwd, dirs: dirs, log: log, think: thinkingOff, model: a.models().Default, mode: modeDefault,
-		queue: sessionQueue(ss), compaction: ss.Compaction}
+		queue: sessionQueue(ss), compaction: ss.Compaction, cache: cacheOf(ss.CacheRetention)}
 	a.restore(s, log.Entries())
 	s.mcp = a.startMCP(ctx, cwd, servers, notes, ss)
 	a.mu.Lock()

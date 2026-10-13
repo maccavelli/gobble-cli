@@ -289,6 +289,9 @@ func acpUsage(u llm.Usage) *acp.Usage {
 	if u.CacheReadTokens > 0 {
 		out.CachedReadTokens = new(count(u.CacheReadTokens))
 	}
+	if u.CacheWriteTokens > 0 {
+		out.CachedWriteTokens = new(count(u.CacheWriteTokens))
+	}
 	return out
 }
 

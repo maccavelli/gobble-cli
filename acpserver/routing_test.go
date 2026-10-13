@@ -23,7 +23,7 @@ var fsAndTerminal = acp.ClientCapabilities{Fs: acp.FileSystemCapabilities{ReadTe
 // caps at initialize, in a new working directory it returns.
 func routingSession(t *testing.T, p llm.Provider, client *acptest.Client, caps acp.ClientCapabilities, tools []tool.Tool) (*acptest.Conn, acp.SessionId, string) {
 	t.Helper()
-	ag := New(Options{Version: "1.2.3", Provider: func() (llm.Provider, error) { return p, nil }, Tools: tools})
+	ag := New(Options{Version: "1.2.3", Provider: func(string) (llm.Provider, error) { return p, nil }, Tools: tools})
 	c := acptest.Connect(t, ag, client)
 	ag.SetConnection(c.Agent)
 	t.Cleanup(func() {

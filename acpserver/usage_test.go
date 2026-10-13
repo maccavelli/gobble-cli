@@ -35,3 +35,15 @@ func TestPiUsageExcludesCache(t *testing.T) {
 		t.Fatalf("estimated usage %+v", *got)
 	}
 }
+
+// The prompt response reports a turn's cache writes beside its reads, and
+// leaves the write out when there is none (0021-MADR D5).
+func TestACPUsageCacheWrites(t *testing.T) {
+	u := acpUsage(llm.Usage{InputTokens: 100, OutputTokens: 5, CacheReadTokens: 30, CacheWriteTokens: 10})
+	if u.CachedReadTokens == nil || *u.CachedReadTokens != 30 || u.CachedWriteTokens == nil || *u.CachedWriteTokens != 10 {
+		t.Fatalf("usage %+v, want 30 read and 10 written", u)
+	}
+	if u := acpUsage(llm.Usage{InputTokens: 100, CacheReadTokens: 30}); u.CachedWriteTokens != nil {
+		t.Fatalf("no write reported as %d", *u.CachedWriteTokens)
+	}
+}

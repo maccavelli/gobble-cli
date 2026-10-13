@@ -105,7 +105,7 @@ func TestResolveBareCommandsKeepsRelative(t *testing.T) {
 func TestServeResolvesBareCommand(t *testing.T) {
 	fakeMCPOnPath(t)
 	call, stop := rawServe(t, Options{Version: "1.2.3", NewID: counterIDs(),
-		Provider: func() (llm.Provider, error) { return llmtest.NewScript(), nil }, Models: func() ModelChoice { return testModels }})
+		Provider: func(string) (llm.Provider, error) { return llmtest.NewScript(), nil }, Models: func() ModelChoice { return testModels }})
 	defer stop()
 	if line := call(1, "initialize", `{"protocolVersion":1,"clientCapabilities":{}}`); strings.Contains(line, `"error"`) {
 		t.Fatalf("initialize: %s", line)
