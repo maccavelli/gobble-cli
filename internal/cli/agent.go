@@ -37,6 +37,7 @@ var modelProvider = func(e *runEnv) func() (llm.Provider, error) {
 // in-process agent alike: the ambient provider and its model choice, and
 // the session store in the data directory.
 func (e *runEnv) agentOptions() acpserver.Options {
+	e.startModelListing()
 	return acpserver.Options{
 		Version:  identity().Version,
 		Provider: modelProvider(e),
@@ -77,14 +78,16 @@ func mcpConfigPath() string {
 	return filepath.Join(dirs.Config, "mcp.json")
 }
 
-// modelChoice is the chosen provider's curated models, its first the
-// default; none without a credential.
+// modelChoice is the chosen provider's listed models, the listing's first
+// the default, or its static models and StaticModels[0] when the listing
+// failed; none without a credential (0020-MADR D3, D4).
 func (e *runEnv) modelChoice() acpserver.ModelChoice {
 	sel, err := provider.Choose(os.Getenv, e.defaultProvider())
 	if err != nil {
 		return acpserver.ModelChoice{}
 	}
-	return acpserver.ModelChoice{Provider: sel.ID, Models: provider.Models(sel.ID), Default: sel.Model}
+	ids, def := models(sel, e.modelListing(sel).get())
+	return acpserver.ModelChoice{Provider: sel.ID, Models: ids, Default: def}
 }
 
 // sessionStore is the store sessions are kept in: <data>/sessions

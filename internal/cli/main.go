@@ -142,6 +142,10 @@ type runEnv struct {
 	intr *interrupts
 	// now is the clock, for stream-json's session timestamp.
 	now func() time.Time
+	// listingsMu guards listings, the process's model listings by
+	// provider (0020-MADR D3).
+	listingsMu sync.Mutex
+	listings   map[string]*modelListing
 	// tools are the in-process agent's tools; nil is the built-ins.
 	tools []tool.Tool
 	// mcpOff and mcpAllow are the MCP tools the tool flags select.

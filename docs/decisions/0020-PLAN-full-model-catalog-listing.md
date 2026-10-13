@@ -222,7 +222,7 @@ git diff --exit-code HEAD -- acpserver                                       -> 
 
 ### P2 — The model choice (D3–D7; closes F3, F4, F8, F9, F10)
 
-1. **`internal/cli/models.go` (new):**
+1. **`internal/cli/models.go` (new):** *(deviation 5: the warning logs typed attributes, `slog.String`, with `e.ctx`, as `line.go:183` does)*
 
    ```go
    package cli
@@ -402,11 +402,12 @@ git diff --exit-code HEAD -- acpserver                                       -> 
      - `set_config_option` `model` = `gpt-5-mini` succeeds;
      - a prompt `/model gpt-5-nano` answers `Model: gpt-5-nano`;
      - a prompt `x` sends a request whose model is `gpt-5-nano`.
+     *(Deviation 4: through `e.startAgent` and `acpclient`, not `acptest.Connect`: `/model gpt-5-nano`'s `config_option_update` offers the eight with `gpt-5-nano` current; `session/new`'s current value is `TestModelChoiceFromListing`'s default; `set_config_option` is `acpserver`'s `TestConfigOptionsPersist`.)*
 6. `TestDefaultProviderSetting` (`internal/cli/settings_test.go:255-266`) passes unchanged: under the offline lister its choice is the static models, as it asserts (C4).
 
 **P2's negatives** (`q499_0020_p2_negatives.py`, a scratch copy, control first):
 
-1. `modelChoice` takes `provider.Models(sel.ID)` and `sel.Model` (today's source): `TestModelOptionOffersListedModels` fails (`gpt-5-mini` is -32602 "unknown model") and `TestModelChoiceFromListing` fails.
+1. `modelChoice` takes `provider.Models(sel.ID)` and `sel.Model` (today's source): `TestModelOptionOffersListedModels` fails (`gpt-5-mini` is -32602 "unknown model") and `TestModelChoiceFromListing` fails. *(Deviation 4: `/model gpt-5-nano` answers "Unknown model".)*
 2. `models` returns `sel.Model` as the default when live: `TestModelChoiceFromListing` fails.
 3. `get` lists on every call (no `once`, no kept result): `TestModelChoiceListsOnce` fails.
 4. `get` never retries: `TestModelListingRetries` fails.
@@ -422,6 +423,15 @@ go test -count=1 ./internal/cli -run 'TestModel|TestListerIsOffline|TestNoCreden
 go test -count=1 -race ./internal/cli -run 'TestModel'                       -> ok (on Windows; the gates run -race everywhere)
 git diff --exit-code HEAD -- acpserver                                       -> no diff
 ```
+
+### P2's deviations, 2026-10-13
+
+- **Deviation 4. Step 5's `TestModelOptionOffersListedModels` cannot import the SDK in `internal/cli`.**
+  - **Found:** the planned test drives the agent over raw ACP through `acptest.Connect`, so `internal/cli`'s tests import `acp-go-sdk2`, and `go test ./...` fails `internal/archtest`'s `TestImportRules/rule_2_module`: "rule 2: github.com/maccavelli/gobble-cli/internal/cli imports github.com/maccavelli/acp-go-sdk2" (`internal/archtest/check.go:204-219`; only `acpserver` and `acpclient` may import it, tests included). The other six P2 tests passed, and 10 times under `-race`.
+  - **Decided** ("Through gobble's acpclient"): the test runs the real in-process agent, `e.startAgent` (so `agentServe` and `e.agentOptions`), with the scripted model. `/model gpt-5-nano` answers `Model: gpt-5-nano`; the `config_option_update` it sends, whose params `acpclient` passes through, offers the eight listed models with `gpt-5-nano` current; the next request names `gpt-5-nano`. `set_config_option` reaches the same `setConfig`, which `acpserver`'s `TestConfigOptionsPersist` covers. C5 holds. Step 5 and negative 1 are annotated. No file added.
+- **Deviation 5. Step 1's warning fails sloglint.**
+  - **Found:** P2's gates: `golangci-lint` on linux, darwin and windows, and so Windows preflight, report "internal/cli/models.go:92:75: key-value pairs should not be used (sloglint)" (`.golangci.yml`, `sloglint`). Every test gate passed, 31 of 31 on each system with no race report. The repository logs with typed attributes (`internal/cli/line.go:183`).
+  - **Decided** ("Typed attrs, house style"): `e.log().WarnContext(e.ctx, "model listing failed; offering the curated static list", slog.String("provider", sel.ID), slog.String("kind", provider.FailureKind(r.Err)))`. The output is the same, so `TestModelChoiceFallsBack` and negative 6 stand; P2's gates are rerun. Step 1 is annotated. No file added.
 
 ### P3 — The records (D8; closes F11)
 
