@@ -99,11 +99,44 @@ const (
 )
 
 // Model is a catalog row the facade can name.
-// The catalog package fills real rows later.
+// llm/provider fills it from the catalog (0005-PLAN F4-2a).
 type Model struct {
 	Provider string `json:"provider,omitzero"`
 	ID       string `json:"id"`
 	Name     string `json:"name,omitzero"`
+	// ContextWindow and MaxTokens are the model's window and output cap, in
+	// tokens; 0 is unknown.
+	ContextWindow int `json:"contextWindow,omitzero"`
+	MaxTokens     int `json:"maxTokens,omitzero"`
+	// Input are the modalities the model reads, such as text and image.
+	Input []string `json:"input,omitzero"`
+	// Reasoning reports whether the model reasons, when ReasoningKnown;
+	// Efforts are the effort levels its source lists, in the source's names.
+	Reasoning      bool     `json:"reasoning,omitzero"`
+	ReasoningKnown bool     `json:"-"`
+	Efforts        []string `json:"efforts,omitzero"`
+	// Cost is the model's price, when Priced.
+	Cost   ModelCost `json:"cost,omitzero"`
+	Priced bool      `json:"-"`
+}
+
+// ModelCost is a model's price, in USD per million tokens: its base rates,
+// and the rates for longer inputs, ascending by Above.
+type ModelCost struct {
+	Input      float64    `json:"input"`
+	Output     float64    `json:"output"`
+	CacheRead  float64    `json:"cacheRead"`
+	CacheWrite float64    `json:"cacheWrite"`
+	Tiers      []CostTier `json:"tiers,omitzero"`
+}
+
+// CostTier is the price of an input of more than Above tokens.
+type CostTier struct {
+	Above      int     `json:"above"`
+	Input      float64 `json:"input"`
+	Output     float64 `json:"output"`
+	CacheRead  float64 `json:"cacheRead"`
+	CacheWrite float64 `json:"cacheWrite"`
 }
 
 // Cost is a currency amount for a turn.

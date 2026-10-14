@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
@@ -44,12 +45,20 @@ var ambientProvider = provider.Ambient
 // the session store in the data directory.
 func (e *runEnv) agentOptions() acpserver.Options {
 	e.startModelListing()
+	if err := provider.SnapshotErr(); err != nil { // models are then unknown, never refused (0005-PLAN F4-2a deviation 1)
+		e.log().Warn("model catalog", slog.Any("error", err))
+	}
 	return acpserver.Options{
 		Version:  identity().Version,
 		Provider: modelProvider(e),
 		Models:   e.modelChoice,
-		Tools:    e.tools,
-		Store:    e.sessionStore(),
+		// What the catalog knows of a model, with the provider's key, read as
+		// modelProvider reads it, for its listing (0005-PLAN F4-2a).
+		ModelInfo: func(id, model string) llm.Model {
+			return provider.ModelInfo(id, os.Getenv(provider.CredentialVar(id)), model)
+		},
+		Tools: e.tools,
+		Store: e.sessionStore(),
 		MCP: acpserver.MCPOptions{
 			Config: mcpConfigPath(), Off: e.mcpOff, Allow: e.mcpAllow, UserAgent: identity().UserAgent(),
 		},

@@ -3678,7 +3678,8 @@ passed as a layer, offline. That text was never made executable. F4-2 is also on
    "llm/provider fills it from the catalog (0005-PLAN F4-2a)."
 5. **`llm/provider/model.go` (new):**
    - the snapshot parsed once (`sync.OnceValues` over `catalog.ParseMetadata(bytes.NewReader(gcatalog.Snapshot()))`);
-     a parse error leaves every model unknown and is logged once;
+     ~~a parse error leaves every model unknown and is logged once;~~ *(F4-2a deviation 1: a parse error leaves every
+     model unknown, and `SnapshotErr() error` reports it for the CLI to log; the unexported helper is `lookupModel`)*;
    - `ModelInfo(id, apiKey, model string) llm.Model`: `catalog.CachedModel(context.Background(), id, src, model,
      llmprovider.WithoutModelMetadata(), catalog.WithModelLayer(meta))`, `src` the key as a static token when not empty;
    - each `llm.Model` field set only where `Has` says the field is known; `Priced` when input and output prices are.
@@ -3696,7 +3697,8 @@ passed as a layer, offline. That text was never made executable. F4-2 is also on
    - `extensions.go`: the stats' `cost` is that total, and `contextUsage` is `{tokens, contextWindow, percent}` with the
      window known, else absent.
 7. **`internal/cli/agent.go`:** `agentOptions` sets `ModelInfo` to `provider.ModelInfo` with the chosen provider's key,
-   read from its variable as `modelProvider` reads it.
+   read from its variable as `modelProvider` reads it. *(F4-2a deviation 1:)* when `provider.SnapshotErr()` is set,
+   `agentOptions` logs it once through `e.log()`, as an `slog.Any` attribute.
 8. **Records:** `NOTICE` credits models.dev's data with its licence; `docs/architecture.md`'s `llm/catalog` row reads
    "The embedded models.dev snapshot and the level and price rules (0005-PLAN F4-2a)."; this plan; `docs/README.md`.
 
@@ -3733,6 +3735,18 @@ the gates                                                 -> lint ×3, tests on 
 | changed, acpserver | `agent.go`, `config.go`, `prompt.go`, `history.go`, `compact.go`, `commands.go`, `extensions.go` |
 | changed, records | `NOTICE`; `docs/architecture.md`; this plan; `docs/README.md` |
 
+**F4-2a deviation 1 (2026-10-13), found by the gates' lint.**
+
+- **What was found.** `golangci-lint` printed 4 issues, the same for linux, darwin and windows, in lines F4-2a added,
+  and `make preflight` failed on them:
+  - `llm/catalog/catalog.go:43:27`: ``string `off` has 3 occurrences, make it a constant (goconst)``;
+  - `llm/provider/model.go:45:6`: `Method 'modelInfo' differs only by capitalization to function 'ModelInfo' (revive)`;
+  - `llm/provider/model.go:21:3` and `:21:88`: `default logger should not be used` and `key-value pairs should not
+    be used (sloglint)`, for step 5's "logged once".
+- **The owner's decision (2026-10-13):** `"off"` becomes a constant; the helper is renamed `lookupModel`; a snapshot the
+  SDK cannot parse leaves models unknown, `provider.SnapshotErr()` reports it, and `internal/cli`'s `agentOptions` logs
+  it once through its own logger. Steps 5 and 7 are annotated above; no file is added to the phase's scope.
+
 **F4-2b — `models.json`.** As the 2026-10-10 text, re-based: `models.json` is a second caller layer, added after the
 snapshot, so it outranks it; `models[]` adds models to the choice; `baseUrl` and `headers` reach the provider. Made
 executable as an amendment before it runs.
@@ -3747,3 +3761,33 @@ executable as an amendment before it runs.
 - **1-hour cache writes at twice the input rate:** needs llm's usage to split the two kinds of write, which needs the SDK's.
 - **Refreshing the snapshot, and writing back a copy the SDK fetched:** 1.x, as decision 3 of 2026-10-10 says.
 - **Pi's per-vendor level overrides:** not copied; a model whose levels are wrong is corrected by `models.json` (F4-2b).
+
+**F4-2a's execution record (2026-10-13).**
+
+- **Ran on go-llmprovider-sdk `v1.12.0`,** still the latest tag, with one deviation, the owner's decision (F4-2a deviation 1).
+- **The snapshot:** `gen_catalog.py --fetch` at 2026-10-14 02:22 UTC wrote the nine sections, 782 models (anthropic 17,
+  google 40, huggingface 81, kilo 390, openai 53, opencode 122, opencode-go 37, togetherai 29, xai 13).
+- **Tests:**
+  - `llm/catalog`: `TestSnapshot`, `TestLevels`, `TestClamp` and `TestPrice` pass;
+  - `llm/provider`: `TestSnapshotParses` and `TestModelInfo` pass;
+  - `acpserver`: `TestCatalogThinkingLevels`, `TestCatalogPriced` and `TestCatalogUnknown` pass;
+  - every existing test, the session golden file's included, passes unedited.
+- **Negatives,** 15 of 15 caught on a scratch copy after control runs, each with its named tests and text, each built:
+  - Levels offering `off` without `none`; Clamp without its upward search; a tier at its threshold; Price ignoring `Priced`;
+    `Snapshot` returning the embedded bytes; the snapshot without kilo (`TestSnapshot` and `TestSnapshotParses`);
+  - `modelOf` dropping reasoning, or the tiers;
+  - a model change without the clamp's entry; levels ignoring the catalog; `usage_update` without the window; an
+    unpriced message; the stats without `contextUsage`; `/usage` pricing an unpriced model;
+  - the generator on a document without kilo: exit 1, "the document has no 'kilo' section with models", data unchanged.
+  - All 15 ran again after deviation 1's fix, and were caught again.
+- **Gates,** on deviation 1's tree: the pre-add check, 15 files clean; lint for linux, darwin and windows, `0 issues.`;
+  Windows `go test ./...` and `-race`, the second Linux machine's `-race` and the macOS laptop's `go test`, 32 packages ok
+  each, no race report; Windows `make preflight`, `preflight passed`.
+- **What the plan predicted wrongly, or left unsaid:**
+  - Deviation 1: step 5's "logged once" needed the default slog logger, which the lint configuration bans, and the
+    first draft failed goconst and revive. A plan's Go is not lint-checked until it is code.
+  - `TestClamp` as first written had no gap in its levels, so a Clamp that never searched upward passed it. The agent
+    added the gap case before running the negatives; the plan's "up, then down" now has a case that tells them apart.
+  - `/thinking` lists and accepts the model's levels too: it is a path of `setConfig`, as step 6's refusal implies.
+  - `configOptions` became an `Agent` method, since its levels need the catalog.
+- **Next:** F4-2b, made executable as an amendment first.

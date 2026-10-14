@@ -13,6 +13,7 @@ import (
 
 	"github.com/maccavelli/gobble-cli/command"
 	"github.com/maccavelli/gobble-cli/compaction"
+	"github.com/maccavelli/gobble-cli/llm/catalog"
 	sysprompt "github.com/maccavelli/gobble-cli/prompt"
 	"github.com/maccavelli/gobble-cli/session"
 )
@@ -147,6 +148,8 @@ type totals struct {
 	messages, user, assistant, toolCalls, toolResults int
 	input, output, cacheRead, cacheWrite              int64
 	estimated                                         bool
+	// cost is the sum of each usage's cost, in USD (0005-PLAN F4-2a).
+	cost float64
 }
 
 func sessionTotals(entries []session.Entry) totals {
@@ -159,6 +162,7 @@ func sessionTotals(entries []session.Entry) totals {
 		t.output += u.Output
 		t.cacheRead += u.CacheRead
 		t.cacheWrite += u.CacheWrite
+		t.cost += u.Cost.Total
 		var x struct {
 			Estimated bool `json:"estimated"`
 		}
@@ -224,17 +228,27 @@ func (t totals) tokenLines(b *strings.Builder) {
 }
 
 func (a *Agent) cmdUsage(_ context.Context, t *cmdTurn, _ string) error {
-	t.say(a.usageText(t.s.log.Entries()))
+	t.say(a.usageText(t.s, t.s.log.Entries()))
 	return nil
 }
 
-// usageText is /usage's answer, and _gobble/usage's text.
-func (a *Agent) usageText(entries []session.Entry) string {
+// usageText is /usage's answer, and _gobble/usage's text: the cost is the
+// session's when its model is priced (0005-PLAN F4-2a).
+func (a *Agent) usageText(s *liveSession, entries []session.Entry) string {
 	tot := sessionTotals(entries)
 	var b strings.Builder
 	b.WriteString("Session usage\n\n")
 	tot.tokenLines(&b)
-	b.WriteString("Cost: $0.000 (prices arrive with the model catalog, 0005-PLAN F4)\n")
+	model, _ := a.choices(s)
+	if info := a.modelOf(model); info.Priced {
+		fmt.Fprintf(&b, "Cost: $%.3f\n", tot.cost)
+	} else {
+		name := "no model"
+		if model != "" {
+			name = a.qualified(model)
+		}
+		fmt.Fprintf(&b, "Cost: unknown (no price for %s in the catalog)\n", name)
+	}
 	if tot.estimated {
 		b.WriteString("\nThese counts are estimated: the provider did not report usage.\n")
 	}
@@ -265,20 +279,36 @@ func (a *Agent) cmdContext(_ context.Context, t *cmdTurn, _ string) error {
 		}
 	}
 	model, _ := a.choices(s)
-	if model == "" {
-		model = "none"
-	} else if p := a.models().Provider; p != "" {
-		model = p + "/" + model
+	shown := "none"
+	if model != "" {
+		shown = a.qualified(model)
 	}
-	fmt.Fprintf(&b, "File: %s\nID: %s\nMode: %s\nModel: %s\n\n", file, s.id, a.modeOf(s), model)
+	fmt.Fprintf(&b, "File: %s\nID: %s\nMode: %s\nModel: %s\n\n", file, s.id, a.modeOf(s), shown)
 	fmt.Fprintf(&b, "Messages\nTotal: %d\nUser: %d\nAssistant: %d\nTools: %d calls, %d results\n\n",
 		tot.messages, tot.user, tot.assistant, tot.toolCalls, tot.toolResults)
 	b.WriteString("Tokens\n")
 	tot.tokenLines(&b)
-	fmt.Fprintf(&b, "\nContext: %s tokens (estimated) of an unknown window (the model catalog arrives with 0005-PLAN F4)\n", thousands(int64(a.usedOf(s))))
+	used := a.usedOf(s)
+	if window := a.modelOf(model).ContextWindow; window > 0 {
+		fmt.Fprintf(&b, "\nContext: %s of %s tokens (%.1f%%)\n", thousands(int64(used)), thousands(int64(window)), percentOf(used, window))
+	} else {
+		fmt.Fprintf(&b, "\nContext: %s tokens (estimated) of an unknown window\n", thousands(int64(used)))
+	}
 	t.say(b.String())
 	return nil
 }
+
+// qualified is model with the session provider's id before it, as
+// provider/model, or model alone when there is no provider.
+func (a *Agent) qualified(model string) string {
+	if p := a.models().Provider; p != "" {
+		return p + "/" + model
+	}
+	return model
+}
+
+// percentOf is used as a percentage of window.
+func percentOf(used, window int) float64 { return float64(used) / float64(window) * 100 }
 
 func (a *Agent) cmdModel(ctx context.Context, t *cmdTurn, arg string) error {
 	choice := a.models()
@@ -302,15 +332,18 @@ func (a *Agent) cmdModel(ctx context.Context, t *cmdTurn, arg string) error {
 	return nil
 }
 
+// cmdThinking is /thinking: the session model's levels, as thought_level
+// offers them (0005-PLAN F4-2a).
 func (a *Agent) cmdThinking(ctx context.Context, t *cmdTurn, arg string) error {
+	model, think := a.choices(t.s)
+	levels := a.levelsOf(model)
 	if arg == "" {
-		_, think := a.choices(t.s)
-		t.say(fmt.Sprintf("Thinking level: %s\nLevels: %s", think, strings.Join(thinkingLevels, ", ")))
+		t.say(fmt.Sprintf("Thinking level: %s\nLevels: %s", catalog.Clamp(levels, think), strings.Join(levels, ", ")))
 		return nil
 	}
 	level := strings.ToLower(arg)
-	if !validThinking(level) {
-		t.say(fmt.Sprintf("Unknown thinking level %q. Available levels: %s.", arg, strings.Join(thinkingLevels, ", ")))
+	if !slices.Contains(levels, level) {
+		t.say(fmt.Sprintf("Unknown thinking level %q. Available levels: %s.", arg, strings.Join(levels, ", ")))
 		return nil
 	}
 	if err := a.setConfigUpdate(ctx, t, configThinking, level); err != nil {
@@ -515,7 +548,7 @@ func (a *Agent) startFrames(ctx context.Context, conn *acp.AgentSideConnection, 
 	out := newUpdates(ctx, conn, s.id)
 	out.send(acp.SessionUpdate{AvailableCommandsUpdate: &acp.SessionAvailableCommandsUpdate{SessionUpdate: "available_commands_update", AvailableCommands: availableCommands(templates)}})
 	out.send(modeUpdate(a.modeOf(s)))
-	out.send(usedUpdate(used))
+	out.send(a.contextUpdate(s, used))
 	return out.err
 }
 

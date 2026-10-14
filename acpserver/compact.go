@@ -35,7 +35,7 @@ func (a *Agent) cmdCompact(ctx context.Context, t *cmdTurn, instructions string)
 		return t.failed("Compaction failed: ", err)
 	}
 	t.say(fmt.Sprintf("Compacted from %d tokens.\n\n%s", res.TokensBefore, res.Summary))
-	t.out.send(usedUpdate(used))
+	t.out.send(a.contextUpdate(t.s, used))
 	return nil
 }
 
@@ -76,7 +76,7 @@ func (a *Agent) compactSession(ctx context.Context, s *liveSession, instructions
 		return compaction.Result{}, 0, acp.NewInternalError(map[string]any{keyReason: err.Error()})
 	}
 	e := session.Entry{Type: session.TypeCompaction, Summary: res.Summary, FirstKeptEntryID: res.FirstKeptEntryID,
-		TokensBefore: new(res.TokensBefore), Details: details, Usage: piUsage(res.Usage), FromHook: new(false)}
+		TokensBefore: new(res.TokensBefore), Details: details, Usage: pricedUsage(res.Usage, a.modelOf(chosen)), FromHook: new(false)}
 	// The new baseline goes just before the compaction, which stays the
 	// path's last entry, as Prepare's "Already compacted" reads it (0005-PLAN
 	// F3-1 deviation 3).

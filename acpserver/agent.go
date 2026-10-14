@@ -22,6 +22,7 @@ import (
 	"github.com/maccavelli/gobble-cli/compaction"
 	"github.com/maccavelli/gobble-cli/internal/fsx"
 	"github.com/maccavelli/gobble-cli/llm"
+	"github.com/maccavelli/gobble-cli/llm/catalog"
 	sysprompt "github.com/maccavelli/gobble-cli/prompt"
 	"github.com/maccavelli/gobble-cli/session"
 	"github.com/maccavelli/gobble-cli/tool"
@@ -59,6 +60,10 @@ type Options struct {
 	// Models is the model choice offered as the model config option. Nil
 	// offers none.
 	Models func() ModelChoice
+	// ModelInfo is what the catalog knows of a provider's model: its levels,
+	// window and price (0005-PLAN F4-2a). Nil knows nothing, so every model
+	// offers off to xhigh, with no window and no price.
+	ModelInfo func(provider, model string) llm.Model
 	// Tools are the agent's tools. Nil is builtin.Tools(); an empty, non-nil
 	// slice is none.
 	Tools []tool.Tool
@@ -87,6 +92,7 @@ type Agent struct {
 	newID    func() string
 	provider func(sessionID string) (llm.Provider, error)
 	models   func() ModelChoice
+	info     func(provider, model string) llm.Model
 	tools    []tool.Tool
 	byName   map[string]tool.Tool
 	store    session.Store
@@ -157,7 +163,7 @@ var (
 // New returns an Agent. Bind it to its connection with SetConnection before
 // the first request, so it can send session updates.
 func New(opts Options) *Agent {
-	a := &Agent{version: opts.Version, newID: opts.NewID, provider: opts.Provider, models: opts.Models,
+	a := &Agent{version: opts.Version, newID: opts.NewID, provider: opts.Provider, models: opts.Models, info: opts.ModelInfo,
 		tools: opts.Tools, store: opts.Store, now: opts.Now, mcp: opts.MCP, logger: opts.Logger, prompt: opts.Prompt,
 		settings: opts.Settings, sessions: map[acp.SessionId]*liveSession{}}
 	if a.logger == nil {
@@ -181,6 +187,9 @@ func New(opts Options) *Agent {
 	}
 	if a.models == nil {
 		a.models = func() ModelChoice { return ModelChoice{} }
+	}
+	if a.info == nil {
+		a.info = func(provider, model string) llm.Model { return llm.Model{Provider: provider, ID: model} }
 	}
 	a.byName = map[string]tool.Tool{}
 	for _, t := range a.tools {
@@ -326,7 +335,7 @@ func (a *Agent) NewSession(ctx context.Context, p acp.NewSessionRequest) (acp.Ne
 		return acp.NewSessionResponse{}, err
 	}
 	model, think := a.choices(s)
-	return acp.NewSessionResponse{SessionId: s.id, ConfigOptions: configOptions(a.models(), model, think), Modes: modeState(s.mode)}, nil
+	return acp.NewSessionResponse{SessionId: s.id, ConfigOptions: a.configOptions(model, think), Modes: modeState(s.mode)}, nil
 }
 
 // oneLine is a name on one line, trimmed, as Pi stores one
@@ -432,6 +441,7 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 		prompt.Content = append([]llm.Content{{Type: llm.ContentText, Text: files}}, prompt.Content...)
 	}
 	chosen, think := a.choices(s)
+	think = catalog.Clamp(a.levelsOf(chosen), think) // as thought_level shows it
 	w := writer{a: a, s: s, ctx: context.WithoutCancel(ctx), provider: a.providerID(model), model: chosen, written: map[string]bool{}}
 	// The system prompt's baseline or patch comes before the user's message,
 	// as Pi puts a system patch before it (0005-PLAN F3-1).
@@ -507,8 +517,9 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 			a.mu.Lock()
 			s.history = append(s.history, end.Messages...)
 			a.mu.Unlock()
-			a.setUsed(s, int(last.InputTokens+last.OutputTokens))
-			out.send(usageUpdate(last))
+			used := int(last.InputTokens + last.OutputTokens)
+			a.setUsed(s, used)
+			out.send(a.contextUpdate(s, used))
 			if out.err != nil {
 				return acp.PromptResponse{}, out.err
 			}
@@ -643,7 +654,7 @@ func (w *writer) event(ev agent.Event) {
 	case agent.Queued:
 		w.add(session.Entry{Type: session.TypeMessage, Message: userEntryMessage(ev.Message, ts())})
 	case agent.Message:
-		w.add(session.Entry{Type: session.TypeMessage, Message: assistantEntryMessage(ev, w.provider, w.model, ts())})
+		w.add(session.Entry{Type: session.TypeMessage, Message: assistantEntryMessage(ev, w.provider, w.model, w.a.modelOf(w.model), ts())})
 	case agent.ToolEnd:
 		w.written[ev.Call.ID] = true
 		w.add(session.Entry{Type: session.TypeMessage, Message: toolResultMessage(ev.Call.ID, ev.Call.Name, ev.Result.Text(), ev.Result.IsError, ts())})
@@ -778,7 +789,7 @@ func (a *Agent) LoadSession(ctx context.Context, p acp.LoadSessionRequest) (acp.
 		return acp.LoadSessionResponse{}, err
 	}
 	model, think := a.choices(s)
-	return acp.LoadSessionResponse{ConfigOptions: configOptions(a.models(), model, think), Modes: modeState(s.mode), Meta: resumedMeta(st)}, nil
+	return acp.LoadSessionResponse{ConfigOptions: a.configOptions(model, think), Modes: modeState(s.mode), Meta: resumedMeta(st)}, nil
 }
 
 // resumedMeta is a resumed session's _meta.gobble: its title (the name,
@@ -814,7 +825,7 @@ func (a *Agent) ResumeSession(ctx context.Context, p acp.ResumeSessionRequest) (
 		return acp.ResumeSessionResponse{}, err
 	}
 	model, think := a.choices(s)
-	return acp.ResumeSessionResponse{ConfigOptions: configOptions(a.models(), model, think), Modes: modeState(s.mode),
+	return acp.ResumeSessionResponse{ConfigOptions: a.configOptions(model, think), Modes: modeState(s.mode),
 		Meta: resumedMeta(s.state())}, nil
 }
 

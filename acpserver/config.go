@@ -11,6 +11,7 @@ import (
 
 	"github.com/maccavelli/gobble-cli/compaction"
 	"github.com/maccavelli/gobble-cli/llm"
+	"github.com/maccavelli/gobble-cli/llm/catalog"
 	"github.com/maccavelli/gobble-cli/session"
 )
 
@@ -37,9 +38,12 @@ func cacheOf(setting string) llm.CacheRetention {
 	return llm.CacheRetention(setting)
 }
 
-// thinkingLevels are the levels thought_level offers, gobble's --thinking
-// levels with off first.
-var thinkingLevels = []string{thinkingOff, "minimal", "low", "medium", "high", "xhigh"}
+// modelOf is what the catalog knows of the session provider's model.
+func (a *Agent) modelOf(model string) llm.Model { return a.info(a.models().Provider, model) }
+
+// levelsOf are the thinking levels model offers, by Pi's rule
+// (catalog.Levels); a model the catalog does not know offers off to xhigh.
+func (a *Agent) levelsOf(model string) []string { return catalog.Levels(a.modelOf(model)) }
 
 // SessionSettings are the settings a session takes when it starts
 // (0018-MADR D16, D17). A zero field takes the agent's default.
@@ -100,14 +104,18 @@ type ModelChoice struct {
 }
 
 // configOptions are a session's config options: model, when there are
-// models to choose, and thought_level. Both are ungrouped selects with a
-// category (D19 item 4).
-func configOptions(choice ModelChoice, model, thinking string) []acp.SessionConfigOption {
+// models to choose, and thought_level, the model's levels with the
+// session's clamped to them. Both are ungrouped selects with a category
+// (D19 item 4).
+func (a *Agent) configOptions(model, thinking string) []acp.SessionConfigOption {
+	choice := a.models()
 	var out []acp.SessionConfigOption
 	if len(choice.Models) > 0 {
 		out = append(out, selectOption(configModel, "Model", acp.SessionConfigOptionCategoryModel, model, choice.Models))
 	}
-	return append(out, selectOption(configThinking, "Thinking", acp.SessionConfigOptionCategoryThoughtLevel, thinking, thinkingLevels))
+	levels := a.levelsOf(model)
+	return append(out, selectOption(configThinking, "Thinking", acp.SessionConfigOptionCategoryThoughtLevel,
+		catalog.Clamp(levels, thinking), levels))
 }
 
 func selectOption(id, name string, category acp.SessionConfigOptionCategory, current string, values []string) acp.SessionConfigOption {
@@ -122,40 +130,46 @@ func selectOption(id, name string, category acp.SessionConfigOptionCategory, cur
 	}}
 }
 
-func validThinking(level string) bool { return slices.Contains(thinkingLevels, level) }
-
 // setConfig sets the model or the thinking level from the session's next
 // prompt and records the change (model_change, thinking_level_change)
-// before anything reports it. It is the one path of set_config_option,
-// /model and /thinking.
+// before anything reports it. A new model clamps the session's level to its
+// own, recorded only when that changes it, as Pi does (0005-PLAN F4-2a). It
+// is the one path of set_config_option, /model and /thinking.
 func (a *Agent) setConfig(ctx context.Context, s *liveSession, id, value string) ([]acp.SessionConfigOption, error) {
 	choice := a.models()
-	var e session.Entry
+	model, think := a.choices(s)
+	var entries []session.Entry
 	switch id {
 	case configModel:
 		if !slices.Contains(choice.Models, value) {
 			return nil, invalidParams(s.id, fmt.Sprintf("unknown model %q", value))
 		}
+		clamped := catalog.Clamp(a.levelsOf(value), think)
 		a.mu.Lock()
-		s.model = value
+		s.model, s.think = value, clamped
 		a.mu.Unlock()
-		e = session.Entry{Type: session.TypeModelChange, Provider: choice.Provider, ModelID: value}
+		entries = append(entries, session.Entry{Type: session.TypeModelChange, Provider: choice.Provider, ModelID: value})
+		if clamped != think {
+			entries = append(entries, session.Entry{Type: session.TypeThinkingLevelChange, ThinkingLevel: clamped})
+		}
 	case configThinking:
-		if !validThinking(value) {
+		if !slices.Contains(a.levelsOf(model), value) {
 			return nil, invalidParams(s.id, fmt.Sprintf("unknown thinking level %q", value))
 		}
 		a.mu.Lock()
 		s.think = value
 		a.mu.Unlock()
-		e = session.Entry{Type: session.TypeThinkingLevelChange, ThinkingLevel: value}
+		entries = append(entries, session.Entry{Type: session.TypeThinkingLevelChange, ThinkingLevel: value})
 	default:
 		return nil, invalidParams(s.id, fmt.Sprintf("unknown config option %q", id))
 	}
-	if err := s.append(ctx, a.now(), e); err != nil {
-		return nil, appendFailed(err)
+	for _, e := range entries {
+		if err := s.append(ctx, a.now(), e); err != nil {
+			return nil, appendFailed(err)
+		}
 	}
-	model, think := a.choices(s)
-	return configOptions(choice, model, think), nil
+	model, think = a.choices(s)
+	return a.configOptions(model, think), nil
 }
 
 // choices is the session's model and thinking level. setConfig changes them

@@ -1,0 +1,16 @@
+{
+  "source": "https://models.dev/api.json",
+  "fetched": "2026-10-14T02:22Z",
+  "sha256": "4677e699f9ea48538ad8f387a1da2feda1f9a577b565a5a87ca36d6ded1a0e6f",
+  "providers": {
+    "anthropic": 17,
+    "google": 40,
+    "huggingface": 81,
+    "kilo": 390,
+    "openai": 53,
+    "opencode": 122,
+    "opencode-go": 37,
+    "togetherai": 29,
+    "xai": 13
+  }
+}

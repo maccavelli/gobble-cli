@@ -238,7 +238,7 @@ func (a *Agent) extCompact(ctx context.Context, params jsontext.Value) (any, err
 		return nil, promptError(err)
 	}
 	out := newUpdates(ctx, a.connection(), s.id)
-	out.send(usedUpdate(used))
+	out.send(a.contextUpdate(s, used))
 	if out.err != nil {
 		return nil, out.err
 	}
@@ -263,7 +263,7 @@ func (a *Agent) extUsage(_ context.Context, params jsontext.Value) (any, error) 
 		return nil, err
 	}
 	entries := s.log.Entries()
-	return usageResult{Text: a.usageText(entries), Stats: a.statsOf(s, entries)}, nil
+	return usageResult{Text: a.usageText(s, entries), Stats: a.statsOf(s, entries)}, nil
 }
 
 // extSetSessionName is /name's path (setName), for a name that is given.
@@ -476,8 +476,9 @@ func (a *Agent) extGetLastAssistantText(_ context.Context, params jsontext.Value
 	return textResult{}, nil
 }
 
-// sessionStats is Pi's SessionStats. cost is 0 and contextUsage absent
-// until 0005-PLAN F4's catalog gives prices and a window.
+// sessionStats is Pi's SessionStats: cost is the sum of each usage's cost,
+// and contextUsage is present when the model's window is known (0005-PLAN
+// F4-2a).
 type sessionStats struct {
 	SessionFile       string        `json:"sessionFile,omitzero"`
 	SessionID         acp.SessionId `json:"sessionId"`
@@ -488,6 +489,15 @@ type sessionStats struct {
 	TotalMessages     int           `json:"totalMessages"`
 	Tokens            statsTokens   `json:"tokens"`
 	Cost              float64       `json:"cost"`
+	ContextUsage      *contextUsage `json:"contextUsage,omitzero"`
+}
+
+// contextUsage is Pi's ContextUsage: the context's tokens, as the last
+// usage_update said, of the model's window.
+type contextUsage struct {
+	Tokens        int     `json:"tokens"`
+	ContextWindow int     `json:"contextWindow"`
+	Percent       float64 `json:"percent"`
 }
 
 type statsTokens struct {
@@ -501,10 +511,16 @@ type statsTokens struct {
 // statsOf is /usage's totals in Pi's names.
 func (a *Agent) statsOf(s *liveSession, entries []session.Entry) sessionStats {
 	t := sessionTotals(entries)
-	return sessionStats{SessionFile: a.fileOf(s), SessionID: s.id, UserMessages: t.user, AssistantMessages: t.assistant,
+	st := sessionStats{SessionFile: a.fileOf(s), SessionID: s.id, UserMessages: t.user, AssistantMessages: t.assistant,
 		ToolCalls: t.toolCalls, ToolResults: t.toolResults, TotalMessages: t.messages,
 		Tokens: statsTokens{Input: t.input, Output: t.output, CacheRead: t.cacheRead, CacheWrite: t.cacheWrite,
-			Total: t.input + t.output + t.cacheRead + t.cacheWrite}}
+			Total: t.input + t.output + t.cacheRead + t.cacheWrite}, Cost: t.cost}
+	model, _ := a.choices(s)
+	if window := a.modelOf(model).ContextWindow; window > 0 {
+		used := a.usedOf(s)
+		st.ContextUsage = &contextUsage{Tokens: used, ContextWindow: window, Percent: percentOf(used, window)}
+	}
+	return st
 }
 
 func (a *Agent) extGetSessionStats(_ context.Context, params jsontext.Value) (any, error) {

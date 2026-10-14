@@ -11,6 +11,7 @@ import (
 	"github.com/maccavelli/gobble-cli/agent"
 	"github.com/maccavelli/gobble-cli/compaction"
 	"github.com/maccavelli/gobble-cli/llm"
+	"github.com/maccavelli/gobble-cli/llm/catalog"
 	"github.com/maccavelli/gobble-cli/session"
 	"github.com/maccavelli/gobble-cli/tool"
 )
@@ -65,8 +66,9 @@ func userEntryMessage(m llm.Message, ts string) *session.Message {
 	return &session.Message{Role: session.RoleUser, Content: mustJSON(strings.Join(texts, "\n\n")), Timestamp: ms(ts)}
 }
 
-// assistantEntryMessage is an assistant message in Pi's shape.
-func assistantEntryMessage(ev agent.Message, provider, model, ts string) *session.Message {
+// assistantEntryMessage is an assistant message in Pi's shape, its usage
+// priced as info's (0005-PLAN F4-2a).
+func assistantEntryMessage(ev agent.Message, provider, model string, info llm.Model, ts string) *session.Message {
 	var blocks []session.Block
 	for _, c := range ev.Message.Content {
 		switch c.Type {
@@ -100,9 +102,18 @@ func assistantEntryMessage(ev agent.Message, provider, model, ts string) *sessio
 		}
 	}
 	m := &session.Message{Role: session.RoleAssistant, API: sdkAPI, Provider: provider, Model: model,
-		Usage: piUsage(ev.Usage), StopReason: piStop(ev.StopReason), Timestamp: ms(ts)}
+		Usage: pricedUsage(ev.Usage, info), StopReason: piStop(ev.StopReason), Timestamp: ms(ts)}
 	_ = m.SetBlocks(blocks) //nolint:errcheck // blocks of plain fields always encode
 	return m
+}
+
+// pricedUsage is piUsage with its cost by Pi's rule at m's price; zero when
+// m has none (catalog.Price).
+func pricedUsage(u llm.Usage, m llm.Model) *session.Usage {
+	out := piUsage(u)
+	c := catalog.Price(m, out.Input, out.Output, out.CacheRead, out.CacheWrite)
+	out.Cost = session.Cost{Input: c.Input, Output: c.Output, CacheRead: c.CacheRead, CacheWrite: c.CacheWrite, Total: c.Total}
+	return out
 }
 
 // toolResultMessage is one tool call's result in Pi's shape.

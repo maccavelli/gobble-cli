@@ -295,16 +295,17 @@ func acpUsage(u llm.Usage) *acp.Usage {
 	return out
 }
 
-// usageUpdate is the context window's use after a turn: the last model
-// call's input and output. The size is 0 until the catalog gives one
-// (0005-PLAN F4).
-func usageUpdate(last llm.Usage) acp.SessionUpdate {
-	return usedUpdate(int(last.InputTokens + last.OutputTokens))
-}
-
-// usedUpdate is a usage_update of used tokens.
-func usedUpdate(used int) acp.SessionUpdate {
-	return acp.SessionUpdate{UsageUpdate: &acp.SessionUsageUpdate{SessionUpdate: "usage_update", Used: count(int64(used))}}
+// contextUpdate is a usage_update of used tokens: the session model's
+// window as its size, 0 when unknown, and the session's cost in USD when the
+// model is priced (0005-PLAN F4-2a).
+func (a *Agent) contextUpdate(s *liveSession, used int) acp.SessionUpdate {
+	model, _ := a.choices(s)
+	info := a.modelOf(model)
+	u := &acp.SessionUsageUpdate{SessionUpdate: "usage_update", Used: count(int64(used)), Size: count(int64(info.ContextWindow))}
+	if info.Priced {
+		u.Cost = &acp.Cost{Amount: sessionTotals(s.log.Entries()).cost, Currency: "USD"}
+	}
+	return acp.SessionUpdate{UsageUpdate: u}
 }
 
 // count is a token count as ACP's: a negative count, which no provider
