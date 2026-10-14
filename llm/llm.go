@@ -115,6 +115,9 @@ type Model struct {
 	Reasoning      bool     `json:"reasoning,omitzero"`
 	ReasoningKnown bool     `json:"-"`
 	Efforts        []string `json:"efforts,omitzero"`
+	// LevelMap are the thinking levels models.json turns on (true) or off
+	// (false) over Efforts' (0005-PLAN F4-2b).
+	LevelMap map[string]bool `json:"levelMap,omitzero"`
 	// Cost is the model's price, when Priced.
 	Cost   ModelCost `json:"cost,omitzero"`
 	Priced bool      `json:"-"`

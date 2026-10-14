@@ -3853,7 +3853,7 @@ the bash tool's shell).
 4. **Reported, not used:** `compat`, `oauth`, `authHeader`, `inputLimits`, `promptCache` and `samplingParams` each get one
    diagnostic per provider. `apiKey` is parsed and validated, and its diagnostic says it takes effect with F4-3.
 5. **Values:** header values resolve at request time by Pi's grammar, uncached. A `!command` runs through the bash
-   tool's shell (`builtin.FindBash`), `-c`, 10 s, its stdout trimmed and stderr discarded. A missing variable, a failed
+   tool's shell (~~`builtin.FindBash`~~ `builtin.BashPath`, deviation 2), `-c`, 10 s, its stdout trimmed and stderr discarded. A missing variable, a failed
    or empty command, or a timeout fails that request, naming the header and the variable or command, never a value.
 6. **The facts are a second caller layer,** after the snapshot, so `models.json` outranks it; `models[]` ids join the
    model choice after the listing's.
@@ -3880,13 +3880,17 @@ the bash tool's shell).
 5. **`llm/provider/provider.go`:** `Options` gains `BaseURL string`, sent as `WithBaseURL`, and `Headers func(ctx
    context.Context) (map[string]string, error)`. `New` and `List` wrap the client's transport (`o.HTTPClient`'s, else
    `http.DefaultTransport`) so that each request takes `Headers(req.Context())`; an error ends that request, unsent.
-6. **`tool/builtin/bash.go`:** `FindBash(o Options) (string, error)`, `o.ShellPath` or `findBash()`, exported for
+   *(F4-2b deviation 1: ~~`Headers func(ctx context.Context)`~~ is `Headers func(ctx context.Context, model string)`.
+   The adapter's `Stream` puts `req.Model` in the request's context, and the transport passes it; a listing passes "".
+   An unresolvable header is wrapped in the SDK's `ErrInvalidRequest`, so `WithRetry` does not resend it.)*
+6. *(F4-2b deviation 2: the export is `BashPath`, since revive refuses a `FindBash` beside the private `findBash`.)*
+   **`tool/builtin/bash.go`:** ~~`FindBash(o Options) (string, error)`~~ `BashPath(o Options) (string, error)`, `o.ShellPath` or `findBash()`, exported for
    `models.json`'s commands.
 7. **`internal/cli/modelsjson.go` (new):**
    - `(e *runEnv) modelsJSON() *catalog.ModelsJSON`: reads `<config>/models.json` once. No file gives nil, quietly; a
      whole-file error gives nil and one warning; each diagnostic is one warning, `e.log().Warn("models.json",
      slog.String("message", d))`;
-   - `runCommand(ctx, command)`: `builtin.FindBash(e.builtinOptions())`, `exec.CommandContext` with a 10 s timeout,
+   - `runCommand(ctx, command)`: ~~`builtin.FindBash`~~ `builtin.BashPath(e.builtinOptions())` (deviation 2), `exec.CommandContext` with a 10 s timeout,
      stdin closed and stderr discarded; a non-zero exit or empty stdout is an error naming the command;
    - `headersFor(id, model)`: the provider's `Headers` func over `catalog.ResolveValue` with `os.LookupEnv` and `runCommand`.
 8. **`internal/cli/agent.go` and `models.go`:** `modelProvider` and the listing pass `BaseURL` and `Headers` for their id.
@@ -3895,6 +3899,24 @@ the bash tool's shell).
 9. **Records:** `docs/guides/models-json.md` (new), the user's page, with an example run against a scratch config;
    `README.md`'s feature list gains `models.json`; `docs/architecture.md`'s `llm/catalog` row names it; this plan;
    `docs/README.md`.
+
+**F4-2b deviation 1 (2026-10-13), found writing step 5.**
+
+- **What was found.** A provider is built once per session with its first model, and `/model` changes the model its
+  requests carry. A `Headers func(ctx)` cannot tell which model a request is for, so the per-model headers decision 3
+  honours would be the first model's after a change.
+- **The owner's decision (2026-10-13):** `Headers` takes the request's model, which `Stream` puts in the request's
+  context. Step 5 is annotated above; no file is added to the phase's scope.
+
+**F4-2b deviation 2 (2026-10-13), found by the gates' lint.**
+
+- **What was found.** `golangci-lint` printed 6 issues, the same for linux, darwin and windows, in lines F4-2b added,
+  and `make preflight` failed on them:
+  - `llm/catalog/modelsjson.go:78-82`: goconst, for Pi's four `api` names, repeated in the wire table;
+  - `llm/provider/model.go:140`: `embedlit: embedded field type can be removed from struct literal (modernize)`;
+  - `tool/builtin/bash.go:56`: `Method 'findBash' differs only by capitalization to function 'FindBash' (revive)`.
+- **The owner's decision (2026-10-13):** the four names become constants; the tier literal sets its rates directly;
+  step 6's export is `BashPath`. Step 6 is annotated above; no file is added to the phase's scope.
 
 **F4-2b's tests,** each seen failing first on a scratch copy:
 
@@ -3940,3 +3962,43 @@ the gates                                                           -> lint ×3,
 - **Pi's `opencode` key, and custom providers:** not aliased. `opencode` is `opencode-zen` here, and a provider the SDK
   does not build has no wire.
 - **Reloading `models.json` in a running process:** Pi's `/reload` has no gobble counterpart yet.
+
+**F4-2b's execution record (2026-10-13).**
+
+- **Ran on go-llmprovider-sdk `v1.12.0`,** with two deviations, each the owner's decision: the request's model reaches
+  `Headers` through the context (deviation 1), and lint's six issues were fixed, the export named `BashPath`
+  (deviation 2).
+- **Tests:**
+  - `llm/catalog`: `TestParseModelsJSON`, `TestFacts`, `TestModelsJSONHeaders` and `TestResolveValue` pass, and
+    `TestLevels` passes with its two level-map cases;
+  - `llm/provider`: `TestModelInfoModelsJSON`, `TestWireBaseURL` (openai, claude, huggingface) and `TestWireHeaders` pass.
+    `TestModelsJSONIDs` also passes: it holds `llm/catalog`'s ten ids to the SDK's built-in providers;
+  - `internal/cli`: `TestModelsJSONLoad` (no file, a bad file, a skipped provider), `TestRunCommand` (run, not skipped:
+    Git for Windows' bash was found), `TestHeadersFor` and `TestModelChoiceModelsJSON` pass;
+  - every existing test passes unedited.
+- **Negatives,** 18 of 18 caught on a scratch copy after control runs, each built, each failing its named test with its text:
+  - trailing commas kept; no Pi aliases; any `api` accepted; no Pi defaults; an override's rates dropped; headers in the
+    wrong order; `$$` not an escape; a command's output in its error; the level map ignored;
+  - the layer dropping the window; no level map on the model; no base URL; a header failure retried; no model in the
+    context;
+  - `models.json`'s models not offered; read on every call; a failed command's exit ignored; a header's name missing
+    from its error.
+  - All 18 ran again after deviation 2's fix, and were caught again.
+- **The guide's example** ran against a scratch `GOBBLE_HOME` with every credential variable cleared, on the final tree.
+  It printed the two warnings and the missing-credential error the guide shows, and no request left the machine.
+- **Gates,** on deviation 2's tree: the pre-add check, 17 files clean; lint for linux, darwin and windows, `0 issues.`;
+  Windows `go test ./...` and `-race`, the second Linux machine's `-race` and the macOS laptop's `go test`, 32 packages ok
+  each, no race report; Windows `make preflight`, `preflight passed`.
+- **What the plan predicted wrongly, or left unsaid:**
+  - Deviation 1: a provider outlives its first model, so step 5's `Headers func(ctx)` could not give per-model headers.
+  - Deviation 2: the plan's code failed lint again (goconst, modernize, revive), as F4-2a's did.
+  - An unresolvable header is wrapped in the SDK's `ErrInvalidRequest`. Without it, `WithRetry` resent the request
+    after waiting (negative 13); the plan's "an error ends that request" needed this to hold.
+  - The parsed file is cached per path, not on `runEnv`, so `main.go` stays out of the phase, and each test's config
+    directory has its own read.
+  - `provider.SDKVersion` reads the SDK's version from the build information, for the diagnostics decision 2 names.
+  - A model's own `baseUrl` and the provider's `name` are reported as unused, with the fields decision 4 lists.
+  - Two of the agent's own test errors were fixed before the commit. A literal BOM in a Go string, which gofmt refuses,
+    became `\uFEFF`. `TestFacts` dereferenced its facts unchecked, so negatives 4 and 5 failed by panic, not by its
+    message; it now checks each pointer.
+- **Next:** F4-2c, made executable as an amendment first.

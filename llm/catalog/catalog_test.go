@@ -65,6 +65,9 @@ func TestLevels(t *testing.T) {
 			[]string{"low", "medium", "high", "xhigh", "max"}},
 		{"no level Pi names", llm.Model{ReasoningKnown: true, Reasoning: true, Efforts: []string{"default"}},
 			[]string{"off", "minimal", "low", "medium", "high"}},
+		{"a level map", llm.Model{ReasoningKnown: true, Reasoning: true, Efforts: []string{"none", "low", "high"},
+			LevelMap: map[string]bool{"max": true, "low": false}}, []string{"off", "high", "max"}},
+		{"a level map without reasoning", llm.Model{ReasoningKnown: true, LevelMap: map[string]bool{"high": true}}, []string{"off"}},
 	} {
 		if got := Levels(c.m); !slices.Equal(got, c.want) {
 			t.Errorf("%s: Levels = %q, want %q", c.name, got, c.want)

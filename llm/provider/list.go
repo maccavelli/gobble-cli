@@ -37,9 +37,7 @@ func List(ctx context.Context, id, apiKey string, o Options) (Listing, error) {
 		catalog.WithProfile(catalog.ProfileCapable),
 		llmprovider.WithClientInfo(o.ClientName, o.ClientVersion),
 	}
-	if o.HTTPClient != nil {
-		opts = append(opts, llmprovider.WithHTTPClient(o.HTTPClient))
-	}
+	opts = append(opts, o.sdkOptions()...)
 	if o.ModelMetadataURL != "" {
 		opts = append(opts, llmprovider.WithModelMetadataURL(o.ModelMetadataURL))
 	}

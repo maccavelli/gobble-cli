@@ -8,6 +8,7 @@ import (
 
 	"github.com/maccavelli/go-llmprovider-sdk/llmprovider"
 	"github.com/maccavelli/go-llmprovider-sdk/llmprovider/catalog"
+	"github.com/maccavelli/go-llmprovider-sdk/llmprovider/providers"
 
 	"github.com/maccavelli/gobble-cli/llm"
 	gcatalog "github.com/maccavelli/gobble-cli/llm/catalog"
@@ -39,6 +40,46 @@ const cannedDoc = `{"openai":{"id":"openai","models":{
   "tiers":[{"tier":{"type":"context","size":272000},"input":2.5,"output":15}]}},
 "bare":{"name":"Bare"}}}}`
 
+// models.json is a layer above the snapshot: an override's facts win field
+// by field, a models[] model has Pi's defaults, and its level map reaches
+// the model (0005-PLAN F4-2b).
+func TestModelInfoModelsJSON(t *testing.T) {
+	meta, err := catalog.ParseMetadata(strings.NewReader(cannedDoc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	mj, _, err := gcatalog.ParseModelsJSON([]byte(`{"providers": {"openai": {
+  "modelOverrides": {"full": {"contextWindow": 999, "cost": {"input": 9}}},
+  "models": [{"id": "mine", "reasoning": true, "thinkingLevelMap": {"max": "max", "minimal": null}}]}}}`), SDKVersion())
+	if err != nil {
+		t.Fatal(err)
+	}
+	full := lookupModel("openai", nil, "full", meta, modelsJSONLayer{mj})
+	if full.Name != "Full" || full.ContextWindow != 999 || full.MaxTokens != 128000 || full.Cost.Input != 9 || full.Cost.Output != 10 || !full.Priced {
+		t.Errorf("full: %+v, want the override's window and input price over the snapshot's", full)
+	}
+	mine := ModelInfo("openai", "", "mine", mj)
+	if mine.Name != "mine" || mine.ContextWindow != 128000 || mine.MaxTokens != 16384 || !mine.Priced || mine.Cost.Input != 0 ||
+		!mine.ReasoningKnown || !mine.Reasoning || !mine.LevelMap["max"] || mine.LevelMap["minimal"] {
+		t.Errorf("mine: %+v, want Pi's defaults and the level map", mine)
+	}
+	if plain := ModelInfo("openai", "", "mine", nil); plain.ReasoningKnown || plain.LevelMap != nil {
+		t.Errorf("without models.json: %+v, want nothing known", plain)
+	}
+}
+
+// The providers models.json may name are the SDK's built-in ids.
+func TestModelsJSONIDs(t *testing.T) {
+	var ids []string
+	for _, d := range providers.Default().Descriptors() {
+		ids = append(ids, string(d.ID))
+	}
+	slices.Sort(ids)
+	if got := gcatalog.ProviderIDs(); !slices.Equal(got, ids) {
+		t.Errorf("llm/catalog's ids %q, the SDK's %q", got, ids)
+	}
+}
+
 // ModelInfo's fields are the document's where it gives them, unknown where
 // it does not, and a model it lacks has its provider and id alone.
 func TestModelInfo(t *testing.T) {
@@ -46,7 +87,7 @@ func TestModelInfo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := lookupModel(meta, "openai", nil, "full")
+	m := lookupModel("openai", nil, "full", meta)
 	if m.Name != "Full" || m.ContextWindow != 400000 || m.MaxTokens != 128000 || !slices.Equal(m.Input, []string{"text", "image"}) ||
 		!m.ReasoningKnown || !m.Reasoning || !slices.Equal(m.Efforts, []string{"none", "low", "high"}) {
 		t.Errorf("full: %+v", m)
@@ -57,10 +98,10 @@ func TestModelInfo(t *testing.T) {
 		m.Cost.CacheWrite != want.CacheWrite || !slices.Equal(m.Cost.Tiers, want.Tiers) {
 		t.Errorf("full: cost %+v priced %v, want %+v", m.Cost, m.Priced, want)
 	}
-	if b := lookupModel(meta, "openai", nil, "bare"); b.Name != "Bare" || b.ContextWindow != 0 || b.Priced || b.ReasoningKnown {
+	if b := lookupModel("openai", nil, "bare", meta); b.Name != "Bare" || b.ContextWindow != 0 || b.Priced || b.ReasoningKnown {
 		t.Errorf("bare: %+v, want its name alone", b)
 	}
-	if u := lookupModel(meta, "openai", nil, "absent"); u.Provider != "openai" || u.ID != "absent" || u.Name != "" || u.Priced {
+	if u := lookupModel("openai", nil, "absent", meta); u.Provider != "openai" || u.ID != "absent" || u.Name != "" || u.Priced {
 		t.Errorf("absent: %+v, want its provider and id alone", u)
 	}
 }

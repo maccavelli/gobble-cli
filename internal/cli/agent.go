@@ -30,8 +30,11 @@ const appName = "gobble"
 // (0021-MADR D4). Tests replace it.
 var modelProvider = func(e *runEnv) func(sessionID string) (llm.Provider, error) {
 	return func(sessionID string) (llm.Provider, error) {
-		p, _, err := ambientProvider(os.Getenv, e.defaultProvider(), provider.Options{ClientName: appName, ClientVersion: identity().Version,
-			Logger: e.log(), SessionID: sessionID})
+		o := provider.Options{ClientName: appName, ClientVersion: identity().Version, Logger: e.log(), SessionID: sessionID}
+		if sel, err := provider.Choose(os.Getenv, e.defaultProvider()); err == nil {
+			o = e.providerOptions(sel.ID, o) // models.json's base URL and headers (0005-PLAN F4-2b)
+		}
+		p, _, err := ambientProvider(os.Getenv, e.defaultProvider(), o)
 		return p, err
 	}
 }
@@ -55,7 +58,7 @@ func (e *runEnv) agentOptions() acpserver.Options {
 		// What the catalog knows of a model, with the provider's key, read as
 		// modelProvider reads it, for its listing (0005-PLAN F4-2a).
 		ModelInfo: func(id, model string) llm.Model {
-			return provider.ModelInfo(id, os.Getenv(provider.CredentialVar(id)), model)
+			return provider.ModelInfo(id, os.Getenv(provider.CredentialVar(id)), model, e.modelsJSON())
 		},
 		Tools: e.tools,
 		Store: e.sessionStore(),
@@ -102,7 +105,7 @@ func (e *runEnv) modelChoice() acpserver.ModelChoice {
 		return acpserver.ModelChoice{}
 	}
 	ids, def := models(sel, e.modelListing(sel).get())
-	return acpserver.ModelChoice{Provider: sel.ID, Models: ids, Default: def}
+	return acpserver.ModelChoice{Provider: sel.ID, Models: withModelsJSON(ids, e.modelsJSON(), sel.ID), Default: def}
 }
 
 // sessionStore is the store sessions are kept in: <data>/sessions

@@ -20,12 +20,7 @@ func Bash() tool.Tool { return bashWith(Options{}.withDefaults()) }
 func bashWith(o Options) tool.Tool {
 	sh := shell{
 		name: "bash",
-		find: func() (string, error) {
-			if o.ShellPath != "" {
-				return o.ShellPath, nil
-			}
-			return findBash()
-		},
+		find: func() (string, error) { return BashPath(o) },
 		args: func(command string) []string {
 			if o.ShellCommandPrefix != "" {
 				command = o.ShellCommandPrefix + "\n" + command
@@ -43,6 +38,16 @@ func bashWith(o Options) tool.Tool {
 		tool.WithDescribe(shellDescribe),
 		shellSchema(o),
 	)
+}
+
+// BashPath is the bash the bash tool runs: o.ShellPath, or bash on PATH as
+// findBash finds it. models.json's commands run through it too (0005-PLAN
+// F4-2b).
+func BashPath(o Options) (string, error) {
+	if o.ShellPath != "" {
+		return o.ShellPath, nil
+	}
+	return findBash()
 }
 
 // findBash is bash on PATH. On Windows, System32's bash.exe is the WSL

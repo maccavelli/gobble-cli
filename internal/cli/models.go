@@ -83,7 +83,7 @@ func (e *runEnv) modelListing(sel provider.Selection) *modelListing {
 		return l
 	}
 	key := os.Getenv(sel.EnvVar)
-	o := provider.Options{ClientName: appName, ClientVersion: identity().Version}
+	o := e.providerOptions(sel.ID, provider.Options{ClientName: appName, ClientVersion: identity().Version})
 	l := newModelListing(func() provider.Listing {
 		r, err := listModels(e.ctx, sel.ID, key, o)
 		if err != nil {

@@ -52,7 +52,8 @@ var unknownLevels = levelOrder[:6]
 // Levels are the thinking levels m offers, by Pi's rule: off alone when it
 // does not reason; off to high when it reasons with no effort list; with
 // one, off when "none" is in it and each other level it lists. A model whose
-// reasoning is unknown offers off to xhigh.
+// reasoning is unknown offers off to xhigh. When it reasons, m.LevelMap then
+// turns levels on or off, in Pi's order (0005-PLAN F4-2b).
 func Levels(m llm.Model) []string {
 	switch {
 	case !m.ReasoningKnown:
@@ -60,6 +61,21 @@ func Levels(m llm.Model) []string {
 	case !m.Reasoning:
 		return []string{levelOff}
 	}
+	levels := ruleLevels(m)
+	if len(m.LevelMap) == 0 {
+		return levels
+	}
+	var out []string
+	for _, level := range levelOrder {
+		if on, set := m.LevelMap[level]; (set && on) || (!set && slices.Contains(levels, level)) {
+			out = append(out, level)
+		}
+	}
+	return out
+}
+
+// ruleLevels are a reasoning model's levels by Pi's rule over its efforts.
+func ruleLevels(m llm.Model) []string {
 	listed := func(level string) bool { return slices.Contains(m.Efforts, level) }
 	if !listed("none") && !slices.ContainsFunc(levelOrder[1:], listed) {
 		return slices.Clone(levelOrder[:5])

@@ -41,6 +41,79 @@ type Options struct {
 	// carries, and OpenCode's and Kilo's session headers (0021-MADR D4).
 	// Empty keeps the SDK's random id, fixed for the provider.
 	SessionID string
+	// BaseURL replaces the provider's base URL, as the SDK's WithBaseURL
+	// takes it; empty keeps the provider's (0005-PLAN F4-2b).
+	BaseURL string
+	// Headers, when set, gives the headers each request adds, resolved for
+	// that request and its model, "" for a listing; an error ends the
+	// request unsent (0005-PLAN F4-2b, deviation 1).
+	Headers func(ctx context.Context, model string) (map[string]string, error)
+}
+
+// modelKey is the context key of a request's model, which Stream sets for
+// the header transport.
+type modelKey struct{}
+
+// requestModel is the model Stream put in ctx, or "".
+func requestModel(ctx context.Context) string {
+	m, _ := ctx.Value(modelKey{}).(string) //nolint:errcheck // absent is a listing's request, which has no model
+	return m
+}
+
+// sdkOptions are o's transport options for the SDK: its client, wrapped to
+// add o.Headers, and its base URL.
+func (o Options) sdkOptions() []llmprovider.Option {
+	var opts []llmprovider.Option
+	client := o.HTTPClient
+	if o.Headers != nil {
+		client = withHeaders(client, o.Headers)
+	}
+	if client != nil {
+		opts = append(opts, llmprovider.WithHTTPClient(client))
+	}
+	if o.BaseURL != "" {
+		opts = append(opts, llmprovider.WithBaseURL(o.BaseURL))
+	}
+	return opts
+}
+
+// headerTransport adds each request's headers, resolved for it, before base
+// sends it.
+type headerTransport struct {
+	base    http.RoundTripper
+	headers func(ctx context.Context, model string) (map[string]string, error)
+}
+
+func (t headerTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	h, err := t.headers(r.Context(), requestModel(r.Context()))
+	if err != nil {
+		if r.Body != nil {
+			_ = r.Body.Close() //nolint:errcheck // the request is not sent; its error is the one returned
+		}
+		// A header that cannot be resolved is a request that cannot be built
+		// as given: the SDK's retry does not resend it.
+		return nil, fmt.Errorf("%w: %w", llmprovider.ErrInvalidRequest, err)
+	}
+	r = r.Clone(r.Context())
+	for k, v := range h {
+		r.Header.Set(k, v)
+	}
+	return t.base.RoundTrip(r)
+}
+
+// withHeaders is a copy of c, or of a default client, whose transport adds
+// headers.
+func withHeaders(c *http.Client, headers func(ctx context.Context, model string) (map[string]string, error)) *http.Client {
+	out := &http.Client{}
+	base := http.DefaultTransport
+	if c != nil {
+		*out = *c
+		if c.Transport != nil {
+			base = c.Transport
+		}
+	}
+	out.Transport = headerTransport{base: base, headers: headers}
+	return out
 }
 
 // New builds the SDK provider id with o, wrapped in the SDK's retry, as an
@@ -61,9 +134,7 @@ func New(id string, o Options) (llm.Provider, error) {
 	if o.Logger != nil {
 		opts = append(opts, llmprovider.WithLogger(o.Logger))
 	}
-	if o.HTTPClient != nil {
-		opts = append(opts, llmprovider.WithHTTPClient(o.HTTPClient))
-	}
+	opts = append(opts, o.sdkOptions()...)
 	if o.SessionID != "" {
 		opts = append(opts, llmprovider.WithSessionID(o.SessionID))
 	}
@@ -105,6 +176,7 @@ func (a *adapter) Stream(ctx context.Context, req *llm.Request) iter.Seq2[llm.Ev
 		}
 		var out strings.Builder
 		calls := false
+		ctx := context.WithValue(ctx, modelKey{}, req.Model) // for the header transport (0005-PLAN F4-2b)
 		for ev, err := range llmprovider.Stream(ctx, a.p, sreq) {
 			if err != nil {
 				yield(nil, mapError(err))

@@ -1,12 +1,14 @@
 package provider
 
 import (
+	"context"
 	"encoding/json/v2"
 	"errors"
 	"io"
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -49,9 +51,10 @@ type cannedWire struct {
 	body   string
 	tool   bool
 
-	mu     sync.Mutex
-	paths  []string
-	bodies []string
+	mu      sync.Mutex
+	paths   []string
+	bodies  []string
+	headers []http.Header
 }
 
 func (c *cannedWire) RoundTrip(r *http.Request) (*http.Response, error) {
@@ -65,6 +68,7 @@ func (c *cannedWire) RoundTrip(r *http.Request) (*http.Response, error) {
 	c.mu.Lock()
 	c.paths = append(c.paths, r.URL.Path)
 	c.bodies = append(c.bodies, string(body))
+	c.headers = append(c.headers, r.Header.Clone())
 	c.mu.Unlock()
 	reply := func(status int, h http.Header, b string) (*http.Response, error) {
 		out := http.Header{"Content-Type": {"application/json"}}
@@ -258,6 +262,77 @@ func TestWireToolResultError(t *testing.T) {
 				t.Fatalf("body flags the failure %v (want %v), or lacks the output:\n%s", got, c.flagged, bodies[0])
 			}
 		})
+	}
+}
+
+// models.json's baseUrl replaces the provider's base, the wire's path after
+// it (0005-PLAN F4-2b).
+func TestWireBaseURL(t *testing.T) {
+	for _, c := range []struct{ id, model, base, path string }{
+		{"openai", "gpt-6-luna", "https://proxy.example/custom/v1/", "/custom/v1/responses"},
+		{"claude", "claude-haiku-5-5", "https://proxy.example/anthropic/v1", "/anthropic/v1/messages"},
+		{"huggingface", "deepseek-ai/DeepSeek-V4-Flash-0731", "https://proxy.example/hf", "/hf/chat/completions"},
+	} {
+		t.Run(c.id, func(t *testing.T) {
+			w := &cannedWire{}
+			p, err := New(c.id, Options{APIKey: "k", Model: c.model, HTTPClient: &http.Client{Transport: w}, BaseURL: c.base})
+			if err != nil {
+				t.Fatal(err)
+			}
+			req := wireRequest()
+			req.Model = c.model
+			for _, err := range p.Stream(t.Context(), req) {
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			if paths, _ := w.requests(); len(paths) != 1 || paths[0] != c.path {
+				t.Errorf("paths %q, want %q", paths, c.path)
+			}
+		})
+	}
+}
+
+// models.json's headers reach each request, resolved for the request's
+// model; a header that cannot be resolved ends the request unsent, and is
+// not retried (0005-PLAN F4-2b, deviation 1).
+func TestWireHeaders(t *testing.T) {
+	var calls atomic.Int32
+	headers := func(_ context.Context, model string) (map[string]string, error) {
+		calls.Add(1)
+		if model == "bad" {
+			return nil, errors.New("the environment variable TOKEN is not set")
+		}
+		return map[string]string{"X-Gobble-Test": "for " + model}, nil
+	}
+	w := &cannedWire{}
+	p, err := New("openai", Options{APIKey: "k", Model: "gpt-6-luna", HTTPClient: &http.Client{Transport: w}, Headers: headers})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stream := func(model string) error {
+		req := wireRequest()
+		req.Model = model
+		for _, err := range p.Stream(t.Context(), req) {
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	if err := stream("other-model"); err != nil {
+		t.Fatal(err)
+	}
+	if w.headers[0].Get("X-Gobble-Test") != "for other-model" {
+		t.Errorf("header %q, want the request's model's", w.headers[0].Get("X-Gobble-Test"))
+	}
+	calls.Store(0)
+	err = stream("bad")
+	if err == nil || !strings.Contains(err.Error(), "TOKEN is not set") {
+		t.Fatalf("err %v, want the header's failure", err)
+	}
+	if paths, _ := w.requests(); len(paths) != 1 || calls.Load() != 1 {
+		t.Errorf("%d requests reached the wire and Headers ran %d times; want none sent and no retry", len(paths)-1, calls.Load())
 	}
 }
 
