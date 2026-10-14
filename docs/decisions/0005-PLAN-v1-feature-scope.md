@@ -3750,6 +3750,7 @@ the gates                                                 -> lint ×3, tests on 
 **F4-2b — `models.json`.** As the 2026-10-10 text, re-based: `models.json` is a second caller layer, added after the
 snapshot, so it outranks it; `models[]` adds models to the choice; `baseUrl` and `headers` reach the provider. Made
 executable as an amendment before it runs.
+*(2026-10-13: made executable; see the Amendments entry "F4-2b made executable".)*
 
 **F4-2c — choosing a model.** As the 2026-10-10 text: `--provider`, `--model` and `--thinking` by Pi's rules,
 `defaultModel` beside `defaultProvider`, `gobble models list` and `info`, `--list-models`, completion, and `max` in the
@@ -3791,3 +3792,151 @@ executable as an amendment before it runs.
   - `/thinking` lists and accepts the model's levels too: it is a path of `setConfig`, as step 6's refusal implies.
   - `configOptions` became an `Agent` method, since its levels need the catalog.
 - **Next:** F4-2b, made executable as an amendment first.
+
+**2026-10-13 — F4-2b made executable** (the owner's choices of 2026-10-13: `apiKey` is read but waits for F4-3, with a
+notice; the ten SDK ids and 0004-MADR's Pi aliases; the model facts honoured and the rest reported; a `!command` run by
+the bash tool's shell).
+
+**The facts,** measured on 2026-10-13 against `main` after F4-2a, go-llmprovider-sdk `v1.12.0`, and Pi `312184edb`:
+
+- **Pi's `models.json`** (paths under `packages/coding-agent/src/`):
+  - **the schema** is `{"providers": {<id>: provider}}`. A provider has `name`, `baseUrl`, `apiKey`, `api`, `oauth`,
+    `headers`, `compat`, `authHeader`, `models[]` and `modelOverrides` (`core/model-config.ts:229-244`).
+  - **A model definition** has `id`, `name`, `api`, `baseUrl`, `reasoning`, `thinkingLevelMap`, `input`, `inputLimits`,
+    `cost` (with `tiers` of `inputTokensAbove` and four rates), `promptCache`, `contextWindow`, `maxTokens`, `samplingParams`,
+    `headers` and `compat`. An override has the same fields but `id`, `api` and `baseUrl`, its cost rates each optional (`:188-227`).
+  - **Loading:** no file is no config. A file that cannot be read, parsed or validated is ignored whole, with an error
+    naming the file (`:281-320`). Comments and trailing commas are stripped first (`utils/json.ts:2-6`), and a BOM.
+  - **Merging** (`core/provider-composer.ts`):
+    - a provider entry with none of `baseUrl`, `headers`, `compat`, `modelOverrides`, `models`, `apiKey`, `oauth` or
+      `authHeader` is an error (`:290-304`);
+    - `baseUrl` applies to the provider's models (`:306-311`);
+    - each `models[]` entry replaces a model of its id or is added, with defaults: name the id, reasoning false, input
+      text, cost zero, window 128000, output 16384 (`:192-230`, `:312-318`). A window or output of 0 or less is an error.
+    - `modelOverrides` apply last, field by field. A cost's rates merge one by one, its tiers replace, and a
+      `thinkingLevelMap` merges over the model's (`:163-190`, `:534-554`).
+  - **Headers:** the provider's, then the override's, then the definition's, a later one winning (`:376-382`, `:489-508`).
+  - **Values** (`core/resolve-config-value.ts`):
+    - `!` runs the rest as a shell command and takes its trimmed stdout. Pi uses its configured shell on Windows, else
+      `execSync`, with a 10 s timeout (`:153-206`);
+    - otherwise `$NAME` and `${NAME}` are environment variables, and `$$` and `$!` are a literal `$` and `!` (`:28-78`);
+    - headers and keys resolve at request time, uncached, and a missing variable or a failed command is an error naming
+      it (`:221-251`, `:271-282`).
+  - **Pi's `api` names:** openai and xai `openai-responses`; anthropic `anthropic-messages`; google `google-generative-ai`;
+    huggingface and together `openai-completions`; opencode and opencode-go several (`ai/src/providers/*.ts`).
+  - **Pi's base URLs:** the same as the SDK's but Anthropic's, which is `https://api.anthropic.com`
+    (`ai/src/providers/anthropic.ts:47`), where the SDK's is `https://api.anthropic.com/v1` (SDK `providers/claude/claude.go:95`).
+- **The SDK:** `WithBaseURL` replaces a provider's base, and drops a trailing slash (`llmprovider/options.go:57-59`).
+  There is no header option: `WithHTTPClient` is the way in (`:41-43`). A caller layer is a `catalog.Layer`. A later
+  `WithModelLayer` ranks above an earlier one, and a value the layer marks with `Known` is its own (`catalog/lookup.go:13-31`).
+- **gobble today:**
+  - nothing reads `models.json`, and no JSON reader strips comments;
+  - `provider.Options` has no base URL or header field (`llm/provider/provider.go:25-43`);
+  - the listing is built in `internal/cli/models.go:79-103` and the choice in `internal/cli/agent.go` (`modelChoice`);
+  - the bash tool's shell is `findBash`, or the `shellPath` setting, unexported (`tool/builtin/bash.go:20-69`).
+
+**The decisions:**
+
+1. **`<config>/models.json`, read once per process** by `internal/cli`, in Pi's schema. Its whole-file and per-provider
+   diagnostics are logged through the CLI's logger, as the settings' are.
+2. **Keys:** the ten SDK ids, and `anthropic`, `google` and `xai` as `claude`, `gemini` and `grok` (0004-MADR's table).
+   Any other key, or an `api` other than the id's own, fails closed for that provider: it is skipped, with a diagnostic
+   naming the SDK version. An id's own `api` is Pi's name for its wire: `openai-responses` for openai and grok;
+   `anthropic-messages` for claude; `google-generative-ai` for gemini; `openai-completions` for huggingface, kilo,
+   together and ollama; any of the four for opencode-zen and opencode-go.
+3. **Honoured:**
+   - `baseUrl` is the SDK's base for that provider (`WithBaseURL`), for its turns and its listing. Claude's includes
+     `/v1`, which a Pi file's does not; the guide says so;
+   - `headers`, provider and model, Pi's order;
+   - `models[]` and `modelOverrides` with `name`, `reasoning`, `thinkingLevelMap`, `input`, `cost` with tiers,
+     `contextWindow`, `maxTokens` and `headers`, merged as Pi merges them, and Pi's defaults for a defined model.
+4. **Reported, not used:** `compat`, `oauth`, `authHeader`, `inputLimits`, `promptCache` and `samplingParams` each get one
+   diagnostic per provider. `apiKey` is parsed and validated, and its diagnostic says it takes effect with F4-3.
+5. **Values:** header values resolve at request time by Pi's grammar, uncached. A `!command` runs through the bash
+   tool's shell (`builtin.FindBash`), `-c`, 10 s, its stdout trimmed and stderr discarded. A missing variable, a failed
+   or empty command, or a timeout fails that request, naming the header and the variable or command, never a value.
+6. **The facts are a second caller layer,** after the snapshot, so `models.json` outranks it; `models[]` ids join the
+   model choice after the listing's.
+
+**F4-2b's steps:**
+
+1. **`llm/catalog/modelsjson.go` (new),** no SDK import:
+   - `ParseModelsJSON(data []byte) (*ModelsJSON, []string, error)`: strips a BOM, then `//` comments and trailing commas
+     with Pi's two expressions (Go's `regexp` takes both); decodes into typed structs with `encoding/json/v2`; returns a
+     whole-file error for bad JSON, a missing or non-object `providers`, or a field of the wrong type. It returns one
+     diagnostic per skipped provider or reported field, as decisions 2 and 4 say;
+   - `(*ModelsJSON).BaseURL(id) string`, `Headers(id, model string) map[string]string` (the raw values, Pi's order),
+     `Models(id) []string` (the `models[]` ids, in order), and `Facts(id, model string) (Facts, bool)`;
+   - `Facts` holds each honoured field as a pointer, or `nil` where the file says nothing. A `models[]` entry fills
+     every field, Pi's defaults included, and its override is applied over it. `LevelMap map[string]*string` is the
+     merged `thinkingLevelMap`.
+2. **`llm/catalog/value.go` (new):** `ResolveValue(v string, lookup func(string) (string, bool), run func(string) (string,
+   error)) (string, error)`, Pi's grammar above. Its errors name the variables or the command, and never a value.
+3. **`llm/llm.go`:** `Model` gains `LevelMap map[string]bool`, the levels `models.json` turns on (true) or off (false).
+   **`llm/catalog/catalog.go`:** `Levels` applies it after Pi's rule, when the model reasons, keeping Pi's order.
+4. **`llm/provider/model.go`:** `ModelInfo(id, apiKey, model string, mj *gcatalog.ModelsJSON) llm.Model`. A nil `mj` is
+   today's lookup. Otherwise a `modelsJSONLayer` (`Name` "models.json"; `Model` converts `Facts` to a `catalog.ModelInfo`
+   marked `Known` field by field) is added after the snapshot, and `LevelMap` is set from `Facts`.
+5. **`llm/provider/provider.go`:** `Options` gains `BaseURL string`, sent as `WithBaseURL`, and `Headers func(ctx
+   context.Context) (map[string]string, error)`. `New` and `List` wrap the client's transport (`o.HTTPClient`'s, else
+   `http.DefaultTransport`) so that each request takes `Headers(req.Context())`; an error ends that request, unsent.
+6. **`tool/builtin/bash.go`:** `FindBash(o Options) (string, error)`, `o.ShellPath` or `findBash()`, exported for
+   `models.json`'s commands.
+7. **`internal/cli/modelsjson.go` (new):**
+   - `(e *runEnv) modelsJSON() *catalog.ModelsJSON`: reads `<config>/models.json` once. No file gives nil, quietly; a
+     whole-file error gives nil and one warning; each diagnostic is one warning, `e.log().Warn("models.json",
+     slog.String("message", d))`;
+   - `runCommand(ctx, command)`: `builtin.FindBash(e.builtinOptions())`, `exec.CommandContext` with a 10 s timeout,
+     stdin closed and stderr discarded; a non-zero exit or empty stdout is an error naming the command;
+   - `headersFor(id, model)`: the provider's `Headers` func over `catalog.ResolveValue` with `os.LookupEnv` and `runCommand`.
+8. **`internal/cli/agent.go` and `models.go`:** `modelProvider` and the listing pass `BaseURL` and `Headers` for their id.
+   `agentOptions`' `ModelInfo` passes `e.modelsJSON()`. `modelChoice` appends `Models(sel.ID)` after the listing's ids,
+   each once.
+9. **Records:** `docs/guides/models-json.md` (new), the user's page, with an example run against a scratch config;
+   `README.md`'s feature list gains `models.json`; `docs/architecture.md`'s `llm/catalog` row names it; this plan;
+   `docs/README.md`.
+
+**F4-2b's tests,** each seen failing first on a scratch copy:
+
+- `llm/catalog`:
+  - `TestParseModelsJSON`: comments, trailing commas and a BOM; a whole-file error for bad JSON and for a wrong type;
+    an unknown key, a wrong `api`, an empty entry and a window of 0 each skip their provider with a diagnostic; each
+    reported field, and `apiKey`, a diagnostic;
+  - `TestFacts`: a `models[]` entry with Pi's defaults; an override over the snapshot's fields, with a cost merged rate by
+    rate and tiers replaced; an override over a `models[]` entry; `LevelMap` merged;
+  - `TestModelsJSONHeaders`: Pi's order; `TestResolveValue`: `$NAME`, `${NAME}`, `$$`, `$!`, a literal, a missing
+    variable, a command and a failed one, and no error text holding a resolved value;
+  - `TestLevels` gains a `LevelMap` case each way.
+- `llm/provider`: `TestModelInfoModelsJSON` over a canned snapshot (`models.json` wins; a `models[]` model has Pi's
+  defaults); `TestWireBaseURL` and `TestWireHeaders` over `cannedWire` (the request's host and path; the header sent;
+  a failing `Headers` sends nothing).
+- `internal/cli`: `TestModelsJSONLoad` (no file; a bad file warned once; diagnostics warned); `TestRunCommand` with the
+  bash it finds, skipped with its reason where there is none; `TestModelChoiceModelsJSON` (`models[]` ids after the
+  listing's, once each).
+- Every existing test passes unedited.
+
+**F4-2b's verification:**
+
+```text
+go test -count=1 ./llm/... ./internal/cli/... ./tool/builtin/...   -> ok
+the guide's example, against a scratch config directory            -> the output the guide shows
+the gates                                                           -> lint ×3, tests on three systems, -race on two, preflight
+```
+
+**F4-2b's files:**
+
+| | Files |
+| :--- | :--- |
+| new, code | `llm/catalog/modelsjson.go`, `modelsjson_test.go`, `value.go`, `value_test.go`; `internal/cli/modelsjson.go`, `modelsjson_test.go` |
+| changed, code | `llm/llm.go`; `llm/catalog/catalog.go`, `catalog_test.go`; `llm/provider/model.go`, `model_test.go`, `provider.go`, `list.go`, `wire_test.go` |
+| changed, cli and tools | `internal/cli/agent.go`, `models.go`; `tool/builtin/bash.go` |
+| new and changed, records | `docs/guides/models-json.md`; `README.md`; `docs/architecture.md`; this plan; `docs/README.md` |
+
+**Deferred, named:**
+
+- **`apiKey`:** F4-3, in Pi's order (decision 4).
+- **`compat`, `oauth`, `authHeader`, `inputLimits`, `promptCache`, `samplingParams`:** each waits for an SDK option or a
+  gobble feature that uses it; the diagnostic names it.
+- **Pi's `opencode` key, and custom providers:** not aliased. `opencode` is `opencode-zen` here, and a provider the SDK
+  does not build has no wire.
+- **Reloading `models.json` in a running process:** Pi's `/reload` has no gobble counterpart yet.

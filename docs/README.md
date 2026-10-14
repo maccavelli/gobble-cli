@@ -72,7 +72,7 @@ The plans run in sequence.
   - Run: F4-1a, the tool result's error flag, the wire tests and the live tests, on 2026-10-13
     (re-made at SDK `v1.12.0`; the pin and `NativeStreaming` done in 0019-PLAN P3).
   - Run: F4-2a, the models.dev snapshot and what it feeds, on 2026-10-13 (one deviation).
-  - Next: F4-2b, then F4-2c, each made executable as an amendment first. F4-1b, live streaming, waits on an SDK release that retries a stream.
+  - Next: F4-2b, `models.json` (made executable 2026-10-13); then F4-2c, made executable as an amendment first. F4-1b, live streaming, waits on an SDK release that retries a stream.
 - **0014-PLAN.** Run: P0 and P1, the move to acp-go-sdk2 `v0.14.0`, on 2026-10-10. Complete.
 - **0018-PLAN.** Run: P1–P6, the configuration surface, on 2026-10-12. Complete. Put ahead of 0017 by the owner.
 - **0019-PLAN.** Run: P1–P5 on 2026-10-12 and 2026-10-13. Complete. go-llmprovider-sdk `v1.11.0`, tagged after P3, is the next record's (its deviation 13).
