@@ -71,7 +71,7 @@ The plans run in sequence.
   - Run: F3-1, context files and the sectioned prompt, F3-2, skills, F3-3, prompt templates, and F3-4, `@path`, resource blocks and the prompt capabilities, on 2026-10-10. F3 is complete.
   - Run: F4-1a, the tool result's error flag, the wire tests and the live tests, on 2026-10-13
     (re-made at SDK `v1.12.0`; the pin and `NativeStreaming` done in 0019-PLAN P3).
-  - Next: F4-2 (0012-PLAN P7 ran on 2026-10-13). F4-1b, live streaming, waits on an SDK release that retries a stream.
+  - Next: F4-2a, the snapshot and what it feeds (F4-2 re-made as three sub-phases on 2026-10-13); then F4-2b and F4-2c. F4-1b, live streaming, waits on an SDK release that retries a stream.
 - **0014-PLAN.** Run: P0 and P1, the move to acp-go-sdk2 `v0.14.0`, on 2026-10-10. Complete.
 - **0018-PLAN.** Run: P1–P6, the configuration surface, on 2026-10-12. Complete. Put ahead of 0017 by the owner.
 - **0019-PLAN.** Run: P1–P5 on 2026-10-12 and 2026-10-13. Complete. go-llmprovider-sdk `v1.11.0`, tagged after P3, is the next record's (its deviation 13).

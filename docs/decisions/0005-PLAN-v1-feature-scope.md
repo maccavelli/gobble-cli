@@ -3267,6 +3267,8 @@ Choices made within the wording:
 **F4-2 — the catalog, `models.json`, and choosing a model.**
 *(2026-10-13, 0019-MADR D11: re-made on go-llmprovider-sdk `v1.9.0`'s `catalog.ModelInfo`, `LookupModel` and `WithModelLayer`,
 with gobble's snapshot passed as a layer, in place of a gobble-side resolver.)*
+*(2026-10-13: made executable as F4-2a, F4-2b and F4-2c; see the Amendments entry "F4-2 re-made on go-llmprovider-sdk
+`v1.12.0`'s model metadata, as three sub-phases". The text below stands where that entry does not change it.)*
 
 Choices made within the wording:
 
@@ -3572,3 +3574,176 @@ F4-1a is one commit, with its own record of what ran. F4-1b is unchanged: it wai
   written, so `http.Header.Get` missed the lowercase reset headers and the SDK retried four times; it now canonicalises them,
   as a server's headers arrive.
 - **Next:** 0012-PLAN P7, then F4-2 (decisions 4 and 5 of 2026-10-11).
+
+**2026-10-13 — F4-2 re-made on go-llmprovider-sdk `v1.12.0`'s model metadata, as three sub-phases**
+(the owner's choices of 2026-10-13: F4-2a, F4-2b and F4-2c, each one commit; the snapshot made by a Python script and
+checked by the SDK's own parser; the snapshot passed as a caller layer, its ranking above the listing asked of the SDK).
+
+**Why.** F4-2's text of 2026-10-10 designs a gobble-side resolver over a models.dev snapshot. 0019-MADR D11 re-bases it
+on the SDK's model metadata, which the SDK's 0033-MADR D3 designed for gobble: an embedded models.dev copy, parsed and
+passed as a layer, offline. That text was never made executable. F4-2 is also one commit for five pieces of work.
+
+**The facts,** measured on 2026-10-13 against `main` `f7c6d60` and go-llmprovider-sdk `v1.12.0`, still the latest tag
+(`git ls-remote --tags`; decision 1 of 2026-10-11 needs no pin change):
+
+- **gobble today:**
+  - `llm/catalog` is a declared package only (`llm/catalog/doc.go:1-5`); nothing embeds model data, and no
+    `models.json` is read.
+  - `llm.Model` holds `Provider`, `ID` and `Name`, filled by nothing (`llm/llm.go:101-107`).
+  - Only `catalog.List` and `catalog.WithProfile` of the SDK's catalog are used (`llm/provider/list.go:35-58`);
+    `New` sets `WithoutModelMetadata` (`provider.go:51-52`).
+  - ACP's `thought_level` offers one fixed list, off to xhigh, whatever the model (`acpserver/config.go:42`, `:105-111`).
+  - `usage_update` sends `used` alone, `size` 0 (`acpserver/prompt.go:298-308`), from four places
+    (`agent.go:511`, `commands.go:518`, `compact.go:38`, `extensions.go:241`).
+  - An assistant message's `usage.cost` is all zero (`acpserver/history.go:102-125`).
+  - `_gobble/get_session_stats` reports `cost` 0 and no `contextUsage` (`acpserver/extensions.go:479-508`);
+    `/usage` and `/context` print that prices and the window wait for F4 (`acpserver/commands.go:237`, `:278`).
+  - `--provider`, `--model` and `--thinking` are refused (`internal/cli/flags.go:68-71`); there is no `--list-models`,
+    no `gobble models` and no `defaultModel` setting (`internal/config/keys.go:62-68`).
+- **The SDK's model metadata** (paths under `go-llmprovider-sdk@v1.12.0/llmprovider/catalog/`):
+  - `ModelInfo` has the window, input and output caps, modalities, reasoning (support, toggle, efforts, budget),
+    prices in USD per million tokens with tiers, release date and status; `Has` tells a known zero from an unknown
+    (`model_info.go:17-60`, `:199`).
+  - `ParseMetadata` reads a models.dev-format document and makes no request; `Metadata` is a `Layer`
+    (`metadata_document.go:22-31`, `:67-78`).
+  - `LookupModel` and `CachedModel` merge models.dev, then the provider's listing (when given a credential), then each
+    caller layer, a later one winning field by field (`lookup.go:50-157`). `CachedModel` never waits.
+  - So a caller layer outranks the listing: the dated snapshot's window and prices beat a fresher listing's. The
+    listing fills only what the snapshot lacks.
+  - `catalog` cannot be imported outside `llm/provider` (`internal/archtest/check.go:238-254`, rule 4).
+- **models.dev,** `https://models.dev/api.json`, fetched 2026-10-14 02:10 UTC: 5,621,182 bytes, 228 providers.
+  - The nine sections the SDK reads (`openai`, `anthropic`, `google`, `xai`, `opencode`, `opencode-go`, `huggingface`,
+    `kilo`, `togetherai`) are 515,687 bytes compact; kilo's 390 models are half of it.
+  - The SDK's `Encode` of the parsed document is 515,649 bytes.
+  - Licence: MIT, "Copyright (c) 2025 models.dev" (GitHub's licence API for `anomalyco/models.dev`, 2026-10-13).
+- **Coverage,** through the SDK's parser and `CachedModel` with the document as a layer and no network (scratch module
+  `f42probe`): all 49 curated models of the nine key providers have a window and a price. Ollama has no section.
+  For example `gpt-6-luna`: window 1,050,000, output 128,000, efforts none, low, medium, high, xhigh and max,
+  $0.10 in and $0.50 out, one tier.
+- **Pi** (`312184edb`):
+  - **levels:** a model that does not reason has `off` alone. One that reasons, with no effort list, has off to high.
+    With efforts, `off` when `none` is among them, and each of minimal to max that is listed
+    (`ai/src/models.ts:1215-1226`, `ai/scripts/models-dev-reasoning-options.ts:18-30`). Pi's generator then overrides
+    some vendors by hand (`ai/scripts/generate-models.ts`), which gobble does not copy.
+  - **clamping:** an unoffered level goes to the next higher offered, else the next lower (`ai/src/models.ts:1228-1247`).
+    On a model change the session's level is clamped, and saved to the transcript only when it changes
+    (`coding-agent/src/core/agent-session.ts:2527-2533`).
+  - **cost:** per category, `rate / 1e6 × tokens`, the tier chosen by input plus cache reads and writes
+    (`ai/src/models.ts:1193-1213`). A 1-hour cache write costs twice the input rate; llm's usage does not split the
+    two kinds of write, so gobble prices every write at the cache-write rate.
+  - **stats:** `cost` is the sum of each message's `usage.cost.total`. `contextUsage` is
+    `{tokens, contextWindow, percent}`, omitted without a window (`agent-session.ts:4119-4180`).
+- **A difference recorded, not fixed:** models.dev's `null` effort is `none` in the SDK (`metadata_document.go:188-190`),
+  which Pi drops. A model listing `null` therefore offers `off` in gobble and not in Pi.
+
+**The decisions:**
+
+1. **Three sub-phases, each one commit with its own record and gates.** F4-2a is executable below. F4-2b and F4-2c keep
+   the 2026-10-10 text where this entry does not change it, and each is made executable as an amendment before it runs.
+2. **The snapshot is data in `llm/catalog`, parsed in `llm/provider`.** `scripts/gen_catalog.py` writes
+   `llm/catalog/data/models.json`, the nine sections, and `llm/catalog/data/source.json`, its source and time;
+   models.dev's licence is kept beside them and credited in `NOTICE`. `llm/provider` parses it once with
+   `catalog.ParseMetadata`, and a test there is the format's judge.
+3. **One lookup, never waiting:** `provider.ModelInfo` is `catalog.CachedModel` with `WithoutModelMetadata`, the
+   snapshot as `WithModelLayer`, and the session's credential as the listing's token source when there is one.
+4. **The pure rules are `llm/catalog`'s:** Pi's level rule and clamp, and Pi's per-category cost, over `llm.Model`.
+5. **F4-2a feeds what exists:** `thought_level` per model, with Pi's clamp; `usage_update`'s `size` and `cost`;
+   each assistant message's and compaction's `usage.cost`; the stats' `cost` and `contextUsage`; `/usage` and `/context`.
+6. **The ranking is asked of the SDK.** The owner files a request against go-llmprovider-sdk for a caller layer that
+   ranks below the provider's listing; until a release has one, the snapshot outranks the listing.
+
+**F4-2a — the snapshot, the lookup, and what they feed.**
+
+1. **`scripts/gen_catalog.py` (new).** `python3 scripts/gen_catalog.py --input <api.json>` or `--fetch`:
+   - reads the document (`--fetch`: `https://models.dev/api.json`, 60 s timeout); refuses, exit 1 naming the key, a
+     document missing any of the nine sections or a section without `models`;
+   - writes `llm/catalog/data/models.json`: those nine sections alone, `json.dumps(..., sort_keys=True,
+     separators=(",", ":"))`, LF, one final newline;
+   - writes `llm/catalog/data/source.json`: `{"source": <url or "file">, "fetched": <UTC, RFC 3339 to the minute>,
+     "sha256": <the input's>, "providers": {<key>: <model count>}}`, indented 2;
+   - prints one line per section, and nothing fetches at run time.
+2. **`llm/catalog/data/LICENSE.models.dev` (new):** models.dev's MIT licence, verbatim.
+3. **`llm/catalog/catalog.go` (new),** no SDK import:
+   - `//go:embed data/models.json data/source.json`;
+   - `Snapshot() []byte`, a copy of the document; `Source() (url string, fetched time.Time)`, from `source.json`;
+   - `Levels(m llm.Model) []string`: Pi's rule above over `m.Reasoning` and `m.Efforts`; with `m.ReasoningKnown` false,
+     today's list, off to xhigh, so a model the snapshot lacks offers what it offers now;
+   - `Clamp(levels []string, level string) string`: Pi's clamp, over the order off, minimal, low, medium, high, xhigh, max;
+   - `Price(m llm.Model, input, output, cacheRead, cacheWrite int64) Charge`, with `Charge{Input, Output, CacheRead,
+     CacheWrite, Total float64}`: Pi's formula, the tier by `input + cacheRead + cacheWrite`; zero when `m.Priced` is false.
+4. **`llm/llm.go`:** `Model` gains, after `Name`, `ContextWindow`, `MaxTokens int` (0 unknown); `Input []string`;
+   `Reasoning`, `ReasoningKnown bool`; `Efforts []string`; `Cost ModelCost`; `Priced bool`. `ModelCost{Input, Output,
+   CacheRead, CacheWrite float64; Tiers []CostTier}` and `CostTier{Above int; Input, Output, CacheRead, CacheWrite float64}`
+   are new, in USD per million tokens. Its comment "The catalog package fills real rows later." becomes
+   "llm/provider fills it from the catalog (0005-PLAN F4-2a)."
+5. **`llm/provider/model.go` (new):**
+   - the snapshot parsed once (`sync.OnceValues` over `catalog.ParseMetadata(bytes.NewReader(gcatalog.Snapshot()))`);
+     a parse error leaves every model unknown and is logged once;
+   - `ModelInfo(id, apiKey, model string) llm.Model`: `catalog.CachedModel(context.Background(), id, src, model,
+     llmprovider.WithoutModelMetadata(), catalog.WithModelLayer(meta))`, `src` the key as a static token when not empty;
+   - each `llm.Model` field set only where `Has` says the field is known; `Priced` when input and output prices are.
+6. **`acpserver`:**
+   - `Options.ModelInfo func(provider, model string) llm.Model`; nil gives the zero `Model`, so today's behaviour holds;
+   - `config.go`: `thought_level`'s values are `catalog.Levels` of the session's model, its current value clamped.
+     A model change clamps the session's level and, when it changes, appends a `thinking_level_change` after the
+     `model_change`, as Pi does. A level the model does not offer is refused, as an unknown level is today;
+   - `prompt.go`: `usedUpdate` becomes `(a *Agent) contextUpdate(s, used)`, with `size` the window when known and `cost`
+     the session's total in USD when the model is priced. The four call sites take it; `usageUpdate` goes;
+   - `history.go` and `compact.go`: an assistant message's and a compaction's `usage.cost` is `catalog.Price` of its model;
+   - `commands.go`: `sessionTotals` sums `usage.cost.total`. `/usage` prints `Cost: $<total, 3 places>`, or
+     `Cost: unknown (no price for <provider>/<model> in the catalog)`. `/context` prints `Context: <used> of <window>
+     tokens (<pct>%)`, or today's line without the F4 parenthesis when the window is unknown;
+   - `extensions.go`: the stats' `cost` is that total, and `contextUsage` is `{tokens, contextWindow, percent}` with the
+     window known, else absent.
+7. **`internal/cli/agent.go`:** `agentOptions` sets `ModelInfo` to `provider.ModelInfo` with the chosen provider's key,
+   read from its variable as `modelProvider` reads it.
+8. **Records:** `NOTICE` credits models.dev's data with its licence; `docs/architecture.md`'s `llm/catalog` row reads
+   "The embedded models.dev snapshot and the level and price rules (0005-PLAN F4-2a)."; this plan; `docs/README.md`.
+
+**F4-2a's tests,** each seen failing first on a scratch copy:
+
+- `llm/catalog`: `TestSnapshot` (the nine keys; `source.json`'s fields and counts match the document); `TestLevels`
+  (no reasoning; reasoning with no efforts; efforts with and without `none`; with `max`; reasoning unknown);
+  `TestClamp` (up, then down; unknown level); `TestPrice` (each category; a tier crossed and not; unpriced is zero).
+- `llm/provider`: `TestSnapshotParses` (`ParseMetadata` accepts the embedded document, each of the nine ids lists
+  models); `TestModelInfo` over a canned two-model document (fields known and unknown, `Priced`, efforts, tiers;
+  an unknown model is zero).
+- `acpserver`, with a `ModelInfo` of two canned models: `thought_level`'s values per model and the clamp's two entries;
+  `usage_update`'s `size` and `cost`; an assistant message's `usage.cost`; the stats' `cost` and `contextUsage`;
+  `/usage` and `/context`, priced and unknown. The existing tests pass unedited, since they pass no `ModelInfo`.
+- `scripts/gen_catalog.py` on a scratch copy of the document without `kilo` exits 1 naming it.
+
+**F4-2a's verification:**
+
+```text
+python3 scripts/gen_catalog.py --fetch                   -> nine lines; data/models.json and data/source.json written
+go test -count=1 ./llm/... ./acpserver/...                -> ok
+make archtest                                             -> ok (no SDK import outside llm/provider)
+go test -count=1 ./acpserver -run 'TestSession|TestGolden' -> ok, unedited
+the gates                                                 -> lint ×3, tests on three systems, -race on two, preflight
+```
+
+**F4-2a's files:**
+
+| | Files |
+| :--- | :--- |
+| new, data | `scripts/gen_catalog.py`; `llm/catalog/data/models.json`, `data/source.json`, `data/LICENSE.models.dev` |
+| new, code | `llm/catalog/catalog.go`, `catalog_test.go`; `llm/provider/model.go`, `model_test.go`; `acpserver/catalog_test.go` |
+| changed, code | `llm/llm.go`; `llm/catalog/doc.go`; `internal/cli/agent.go` |
+| changed, acpserver | `agent.go`, `config.go`, `prompt.go`, `history.go`, `compact.go`, `commands.go`, `extensions.go` |
+| changed, records | `NOTICE`; `docs/architecture.md`; this plan; `docs/README.md` |
+
+**F4-2b — `models.json`.** As the 2026-10-10 text, re-based: `models.json` is a second caller layer, added after the
+snapshot, so it outranks it; `models[]` adds models to the choice; `baseUrl` and `headers` reach the provider. Made
+executable as an amendment before it runs.
+
+**F4-2c — choosing a model.** As the 2026-10-10 text: `--provider`, `--model` and `--thinking` by Pi's rules,
+`defaultModel` beside `defaultProvider`, `gobble models list` and `info`, `--list-models`, completion, and `max` in the
+`--thinking` and `defaultThinkingLevel` enums. Made executable as an amendment before it runs.
+
+**Deferred, named:**
+
+- **A caller layer ranked below the listing:** the owner's request to go-llmprovider-sdk (decision 6).
+- **1-hour cache writes at twice the input rate:** needs llm's usage to split the two kinds of write, which needs the SDK's.
+- **Refreshing the snapshot, and writing back a copy the SDK fetched:** 1.x, as decision 3 of 2026-10-10 says.
+- **Pi's per-vendor level overrides:** not copied; a model whose levels are wrong is corrected by `models.json` (F4-2b).
