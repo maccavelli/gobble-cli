@@ -579,6 +579,8 @@ Further 0001-REPORT errata are kept here rather than in the report, which record
   * The SDK sends no cache hints, and has one cached-token counter with no read/write split.
   * The row lands only once the SDK supports Claude `cache_control` and the split.
   * Pi's modes `off | streaming | idle` (default `streaming`, global-only setting) are the target behaviour.
+    *(2026-10-13, 0021-MADR D2, D7: go-llmprovider-sdk `v1.12.0` sends cache hints and splits reads from writes, and gobble asks on every turn
+    (0021-PLAN P2, `e385ca0`); warming now waits for 0005-PLAN F4-2's per-model cache TTL and prices.)*
 * **`gobble doctor` and `gobble models list` never trigger billed model probes** (`WithModelProbes(false)`).
 
 #### Self-update and distribution (from go-core-lib `v1.2.0`) **(changed)**

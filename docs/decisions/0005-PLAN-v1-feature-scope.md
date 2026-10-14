@@ -723,6 +723,7 @@ drops child-session ids. No new phases.
 * **X3.** `ask_user` and `_gobble/status` land here.
 * **X5, step 2.** Subscription OAuth candidates are xAI Grok and Kilo device login, each with a recorded terms check. Anthropic Max, Gemini and Copilot subscription logins are out of the v1 line.
 * **X5, step 6.** Cache warming stays blocked until the SDK supports cache hints and a cache read/write split. Record that as the skip reason if X5 runs first.
+  *(2026-10-13, 0021-MADR D7: the SDK's block is lifted at `v1.12.0`; the skip reason becomes F4-2's per-model cache TTL and prices.)*
 * **Companion work.** Replaced by magic-cli-remote `docs/decisions/0179-MADR-gobble-native-acp-provider.md` (D1–D10). This plan still does not mutate that repository.
 
 **2026-10-02 — source-verified provider, update and TUI integration.** Follows

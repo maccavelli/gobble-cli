@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: completed
 date: 2026-10-13
 ---
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
@@ -381,3 +381,40 @@ the live check                                                               -> 
 - **`CacheWrite1hTokens`:** F4-2's cost work, which can price a one-hour write.
 - **Native deferral:** the SDK's, 0012-MADR D13; until then each mid-session load breaks the cache once.
 - **A per-session retention chosen from the client:** no ACP config option is added; a later record may add one.
+
+## Execution record (2026-10-13)
+
+Every phase ran, in order. The agent staged each; the owner committed each with `git commit --no-edit`.
+
+| Phase | Commit | Landed |
+| :--- | :--- | :--- |
+| The records | `e363a93` | this plan and its MADR, approved |
+| P1 | `c522a7b` | `llm.Request.Cache` and `Options.SessionID` (D1, D4's option) |
+| P2 | `e385ca0` | the hint on every call of a turn, one provider per session, cache writes in the prompt response (D2, D4–D6) |
+| P3 | `615c7ee` | the `cacheRetention` key (D3) |
+| P4 | the commit of these records | D8's notes, the live check, this record |
+
+**Gates.** Each phase's run of `q428_gates_0019.py`: lint for linux, darwin and windows, 0 issues; Windows `go test` and `-race`, the second Linux machine's `-race` and the macOS laptop's `go test`, 31 packages ok each, with no failure and no race report; Windows preflight passed. P3's first run failed `go test` on all four systems on one existing test (deviation 1); its rerun is the green one. Each staged index passed `q252_check_index.py`.
+
+**Negatives,** each on a scratch copy after a control run passed: P1 4 of 4; P2 8 of 8; P3 4 of 4, negative 1 widened by deviation 1 to require `TestSessionSettingsReachAgent` too.
+
+**The live check** (D9, `q514_0021_live.py`, four billed requests to OpenAI `gpt-6-luna` through `gobble acp`, the owner's test key in each child's environment only):
+
+| Session | Prompt 1 | Prompt 2 |
+| :--- | :--- | :--- |
+| A, no settings (`short`) | input 5,664; wrote 5,661 | input 5,683; read 5,661, wrote 19 |
+| B, `cacheRetention: none` | input 5,664; wrote 5,661 | input 5,683; read 5,661, wrote 19 |
+
+A wrote, then read, as required. B is recorded, not asserted: OpenAI caches on its own, with or without the routing key, so `none` sends nothing new and OpenAI still caches. B's first prompt wrote rather than reading A's entry, so the two prefixes, each with its own working directory in the system prompt, were distinct. The key was in no output and in no file under either home. gobble's prefix, its system prompt and 13 built-in tools, is 5,661 tokens on `gpt-6-luna`.
+
+**The whole plan:** go-llmprovider-sdk `v1.12.0`, `go.mod` and `go.sum` unchanged since `007b63f`; `compaction` unchanged; `check_libs.py` every library at its latest tag.
+
+**Deviations:** 1, the owner's decision, recorded under P3.
+
+**What this plan predicted wrongly:**
+
+1. P3's file list: `internal/cli/settings_test.go`'s `TestSessionSettingsReachAgent` compares every session key's arrival as one struct, so a new session key changes it (deviation 1).
+
+**The agent's own error, found and fixed before any test ran:** appending P2's `TestCacheOnEveryCall` through a shell-quoted Python one-liner turned a `\n` escape into a newline inside a Go string; it was fixed with the editor, and test code since was written with the file tools only.
+
+**Left open:** warming (0005-PLAN X5, after F4-2's TTLs and prices); `CacheWrite1hTokens` (F4-2's cost work); native deferral (0012-MADR D13); a retention chosen from the client. The owner closes issue 2.

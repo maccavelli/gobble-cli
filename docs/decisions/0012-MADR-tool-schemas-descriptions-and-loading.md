@@ -1,6 +1,6 @@
 ---
 status: accepted
-date: 2026-10-11
+date: 2026-10-13
 decision-makers: Project Owner
 consulted: none
 informed: none
@@ -209,7 +209,7 @@ What the probe also shows:
   - **Only provider-native deferral keeps the cache.**
     - Anthropic: "prompt caching is preserved" (Doc 2).
     - OpenAI: "designed to preserve the model's cache", but "changing the loaded tool set will break the model's cache from that point forward" (Doc 4).
-- **F10. gobble cannot use provider-native deferral or cache control today.**
+- **F10. gobble cannot use provider-native deferral or cache control today.** *(2026-10-13: cache control: gobble asks from 0021-PLAN P2 (`e385ca0`, 0021-MADR D2); deferral is still missing.)*
   - go-llmprovider-sdk v1.2.1 has no `defer_loading`, `tool_reference` or `cache_control` (0011 T6).
   - 0005-MADR already records that "The SDK sends no cache hints" (V20).
   - *Consequence:* a tool loaded mid-session can only be added to the `tools` list, which changes the prefix and breaks the cache from that request on.
@@ -482,7 +482,7 @@ The owner's proposals stand where the evidence supports them:
 - **D12. bleve is not adopted for `tool_search`.** It stays the named candidate for a feature that needs a persistent full-text index over a large corpus: X1's session search and project-memory recall, and X8's documents. That feature's MADR names it, as AGENTS.md requires, and weighs Probe B's cost (F14).
 - **D13. A request to go-llmprovider-sdk, recorded here and not made in that repository.** gobble needs:
   - native deferral: Anthropic's `defer_loading` with tool references, and OpenAI's `tool_search` with `defer_loading`;
-  - cache control: Anthropic `cache_control`;
+  - cache control: Anthropic `cache_control`; *(2026-10-13: met at go-llmprovider-sdk `v1.12.0` (0021-MADR D1, D2).)*
   - a per-tool strict flag. *(2026-10-08: this item is now a blocker for D3's opt-out, by the owner's choice. The other two remain requests.)*
 
   When the SDK has native deferral, gobble's deferred tools use it, and D9's mid-session cache break goes away on those providers (Doc 2, Doc 4). Each adoption is an amendment here.

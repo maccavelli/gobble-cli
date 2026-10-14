@@ -1,6 +1,6 @@
 ---
 status: proposed
-date: 2026-10-07
+date: 2026-10-13
 decision-makers: repository owner
 consulted: 0001-REPORT-go-port-feasibility.md, 0002-MADR-cli-acp-headless-mcp-v1.md, 0003-MADR-gobble-product-identity.md
 informed: go-llmprovider-sdk, go-core-lib, mcplib, go-tui-lib, magic-cli-remote
@@ -747,6 +747,7 @@ Still `proposed`. Three sibling trees were re-read and built in scratch copies:
    * Always `WithModelProbes(false)`.
    * `MaxOutputTokens` per model from `llm/catalog`.
    * One provider instance per ACP session, so `WithSessionID` (ChatGPT `prompt_cache_key`, OpenCode/Kilo session headers) is per session.
+     *(2026-10-13: built in 0021-PLAN P2 (`e385ca0`, 0021-MADR D4).)*
    * gobble supplies its own `*http.Client`: `ProxyFromEnvironment`, and no response-header timeout shorter than the model's generation limit. A non-streamed long generation must not time out and be re-billed by retry.
    * Credentials are passed explicitly (`WithAPIKey` / `WithTokenSource`). gobble never depends on the SDK reading environment variables, which S10 removes anyway. gobble reads Pi's names, such as `ANTHROPIC_API_KEY`.
 7. **Thinking-level map** (`llm/catalog`):
