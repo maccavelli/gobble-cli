@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"runtime/debug"
+	"slices"
 	"sync"
 
 	"github.com/maccavelli/go-llmprovider-sdk/llmprovider"
@@ -59,6 +60,12 @@ func SnapshotErr() error {
 // models.json: a layer above the snapshot, and its thinkingLevelMap
 // (0005-PLAN F4-2b).
 func ModelInfo(id, apiKey, model string, mj *gcatalog.ModelsJSON) llm.Model {
+	return ModelInfoContext(context.Background(), id, apiKey, model, mj)
+}
+
+// ModelInfoContext is ModelInfo for a caller with a context, which bounds
+// the SDK's lookup (0005-PLAN F4-2c deviation 1).
+func ModelInfoContext(ctx context.Context, id, apiKey, model string, mj *gcatalog.ModelsJSON) llm.Model {
 	var layers []catalog.Layer
 	if meta, err := snapshot(); err == nil {
 		layers = append(layers, *meta)
@@ -68,9 +75,9 @@ func ModelInfo(id, apiKey, model string, mj *gcatalog.ModelsJSON) llm.Model {
 		src = llmprovider.NewStaticToken(apiKey)
 	}
 	if mj == nil {
-		return lookupModel(id, src, model, layers...)
+		return lookupModel(ctx, id, src, model, layers...)
 	}
-	m := lookupModel(id, src, model, append(layers, modelsJSONLayer{mj})...)
+	m := lookupModel(ctx, id, src, model, append(layers, modelsJSONLayer{mj})...)
 	if f, ok := mj.Facts(id, model); ok && len(f.LevelMap) > 0 {
 		m.LevelMap = map[string]bool{}
 		for level, v := range f.LevelMap {
@@ -80,13 +87,39 @@ func ModelInfo(id, apiKey, model string, mj *gcatalog.ModelsJSON) llm.Model {
 	return m
 }
 
-// lookupModel is ModelInfo over layers, the later ranking above the earlier.
-func lookupModel(id string, src llmprovider.TokenSource, model string, layers ...catalog.Layer) llm.Model {
+// KnownModels are the models gobble knows of provider id with no request:
+// its curated models, then the snapshot's models for it that take tools, by
+// id, each once (0005-PLAN F4-2c), as Pi's generator keeps only those.
+func KnownModels(id string) []string {
+	meta, err := snapshot()
+	if err != nil { // the curated models alone; SnapshotErr reports it
+		return Models(id)
+	}
+	return toolModels(id, meta)
+}
+
+// toolModels is KnownModels over meta; nil holds no models.
+func toolModels(id string, meta *catalog.Metadata) []string {
+	ids := Models(id)
+	if meta == nil {
+		return ids
+	}
+	for _, m := range meta.Models(llmprovider.ProviderID(id)) {
+		if m.Has(catalog.FieldTools) && m.Tools && !slices.Contains(ids, m.ID) {
+			ids = append(ids, m.ID)
+		}
+	}
+	return ids
+}
+
+// lookupModel is ModelInfo over layers, the later ranking above the earlier,
+// bounded by ctx.
+func lookupModel(ctx context.Context, id string, src llmprovider.TokenSource, model string, layers ...catalog.Layer) llm.Model {
 	opts := []llmprovider.Option{llmprovider.WithoutModelMetadata()}
 	for _, l := range layers {
 		opts = append(opts, catalog.WithModelLayer(l))
 	}
-	info, _ := catalog.CachedModel(context.Background(), llmprovider.ProviderID(id), src, model, opts...)
+	info, _ := catalog.CachedModel(ctx, llmprovider.ProviderID(id), src, model, opts...)
 	return modelOf(id, model, info)
 }
 

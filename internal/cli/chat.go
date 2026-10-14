@@ -25,11 +25,19 @@ func (c *ChatCmd) Run(k *kong.Context, e *runEnv) error {
 	if err := c.validate(g, stdinPiped, hasAtPath(c.Prompt)); err != nil {
 		return err
 	}
+	// --list-models is gobble models list, the prompt words its search, as
+	// Pi's --list-models [search] (0005-MADR; 0005-PLAN F4-2c).
+	if c.ListModels {
+		return e.printModels(strings.Join(c.Prompt, " "))
+	}
 	mode := resolveMode(c.Print, e.out.caps.In, e.out.caps.Out.TTY)
 	// The working directory comes first: the process settings, and so the
 	// built-in tools' options, are its (0018-PLAN P5 deviation 15).
 	cwd, base, err := resolveCwd(c.Cwd)
 	if err != nil {
+		return err
+	}
+	if e.pick, err = e.pickModel(&c.SharedFlags); err != nil {
 		return err
 	}
 	choice, err := c.toolSet(builtinTools(e.processSettings(cwd).Settings))

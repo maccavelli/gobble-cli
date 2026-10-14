@@ -61,6 +61,8 @@ Early, and built in the order [docs/README.md](docs/README.md#build-order) gives
   shows where.
 - **`models.json`** in the config directory, in Pi's schema: a provider's base URL and headers, added models, and
   corrections to a model's window, price and thinking levels ([guide](docs/guides/models-json.md)).
+- **Choosing a model:** `--model` and `--provider` by Pi's rules, `--thinking` up to `max`, the
+  `defaultModel` setting, and `gobble models list|info` ([guide](docs/guides/choosing-a-model.md)).
 
 Not built yet: the permission engine (F6), the enhanced TUI mode, and `gobble update`. The full v1 line, tiered into
 a v1.0.0 gate, a v1.x train and `exp/`, is in [0005-MADR](docs/decisions/0005-MADR-v1-feature-scope.md).

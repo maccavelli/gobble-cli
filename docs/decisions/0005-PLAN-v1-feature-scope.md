@@ -4121,7 +4121,9 @@ session's choice, and recorded; the model scope left to 1.x).
      error)`: the facts' steps 1–9 in order, with Pi's words in its errors and warning. `Level` is a `:level`
      suffix's, and a custom model has only `Provider` and `ID`.
 3. **`llm/provider/model.go`:** `KnownModels(id string) []string` is `Models(id)`, then the snapshot's models for id
-   that set `Tools`, sorted, each once. Its body is `knownModels(id string, meta *catalog.Metadata)`, for the test.
+   that set `Tools`, sorted, each once. Its body is ~~`knownModels(id string, meta *catalog.Metadata)`~~
+   `toolModels(id string, meta *catalog.Metadata)`, for the test. *(F4-2c deviation 1: revive refuses `knownModels`
+   beside `KnownModels`; `ModelInfoContext(ctx, id, apiKey, model, mj)` is added, and `lookupModel` takes the ctx.)*
 4. **`acpserver`:**
    - `config.go`: `type Override struct { Provider, Model, Thinking string }`, the run's choice, each field empty when
      not given. `(a *Agent) applyOverride(ctx context.Context, s *liveSession) error` does nothing for a zero
@@ -4149,8 +4151,9 @@ session's choice, and recorded; the model scope left to 1.x).
    - `modelflags.go` (new): `type modelPick struct { Provider, Model, Thinking string }`.
      `(e *runEnv) pickModel(f *SharedFlags) (modelPick, error)` is `catalog.ResolveModel` over
      `offlineModels(e.modelsJSON())` with `hasCredential`; its warning goes through `e.out.Warnf`, its error is a
-     usage error, and its `Thinking` is `cmp.Or(f.Thinking, Level)`. `offlineModels(mj *catalog.ModelsJSON)
-     []llm.Model` is decision 2's set, each through `provider.ModelInfo` with no key. `(e *runEnv) chosenProvider()
+     usage error, and its `Thinking` is `cmp.Or(f.Thinking, Level)`. ~~`offlineModels(mj *catalog.ModelsJSON)
+     []llm.Model`~~ `offlineModels(ctx context.Context, mj *catalog.ModelsJSON) []llm.Model` is decision 2's set,
+     each through ~~`provider.ModelInfo`~~ `provider.ModelInfoContext` with no key *(F4-2c deviation 1)*. `(e *runEnv) chosenProvider()
      string` is the pick's provider, else `defaultProvider`'s. `(e *runEnv) defaultModel(id string, ids []string)
      string` is decision 7, its warning given once. `(e *runEnv) noCredentialMessage() string` is `no model
      credential: --model is <provider>/<model>; set <VAR>` for a pick, and today's two texts otherwise;
@@ -4172,6 +4175,34 @@ session's choice, and recorded; the model scope left to 1.x).
    forms, resuming, `defaultModel`, `gobble models` and completion, each example run against a scratch config;
    `README.md`'s features gain choosing a model; `docs/architecture.md`'s `llm/catalog` row gains "and Pi's model
    resolution (F4-2c)"; this plan; `docs/README.md`.
+
+**F4-2c deviation 1 (2026-10-14), found by the gates' lint.**
+
+- **What was found.** `golangci-lint` printed 11 issues, the same for linux, darwin and windows, all in lines F4-2c added,
+  so `make preflight` would fail on them:
+  - `internal/cli/completion.go:124:34`: ``Function `offlineModels->ModelInfo->lookupModel` should pass the context
+    parameter (contextcheck)``: completion's 150 ms context never reached the SDK's lookup, which used
+    `context.Background()`;
+  - goconst, `provider` and `model` 3 times each in `internal/cli` (`completion.go:61`, `:63`, `modelscmd.go:105`);
+  - gocritic regexpSimplify twice (`modelscmd.go:180-181`, `[0-9]` as `\d`) and equalFold four times
+    (`llm/catalog/resolve.go:249`, `:261`, `:272`, `:291`);
+  - revive, `llm/provider/model.go:96`: `Method 'knownModels' differs only by capitalization to function 'KnownModels'`.
+- **The owner's decision (2026-10-14):** `provider.ModelInfoContext(ctx, id, apiKey, model, mj)` is added, and
+  `lookupModel` takes the context; `ModelInfo` keeps its signature and passes `context.Background()`, so
+  `acpserver`'s option is unchanged. `lookupModel`'s four calls in F4-2a's and F4-2b's tests (`model_test.go`) pass
+  `t.Context()`, edited for the new parameter alone: a wrapper keeping the old signature had only those calls, and
+  unparam refused it. `offlineModels(ctx, mj)` takes `e.ctx` in `pickModel`, `gobble models list` and
+  `info`, and completion's context in `modelCandidates`. The column labels become constants; `\d`; `strings.EqualFold`;
+  the helper is `toolModels`. Steps 3 and 6 are annotated above; no file is added to the phase's scope.
+
+**F4-2c deviation 2 (2026-10-14), found re-running F4-2b's guide example after step 1.**
+
+- **What was found.** `docs/guides/models-json.md:38` shows the example's output as `not a provider go-llmprovider-sdk
+  v1.12.0 builds`. The example re-run on F4-2c's tree, against a scratch `GOBBLE_HOME` with every credential cleared,
+  prints `v1.13.0`: the diagnostic names the version gobble was built with (`provider.SDKVersion`), so step 1 staled it.
+- **The owner's decision (2026-10-14):** the guide writes the version as `<sdk-version>`, as it writes `<config>` for the
+  path, with one sentence saying gobble names the go-llmprovider-sdk version it was built with, so a later pin move
+  cannot stale it. `docs/guides/models-json.md` is added to F4-2c's scope.
 
 **F4-2c's tests,** each seen failing first on a scratch copy:
 
@@ -4231,3 +4262,54 @@ no request leaves it.
 - **`/model` by Pi's rules, and a choice saved to the settings:** Pi's picker and its `persist` belong to the TUI (F9).
 - **`gobble models list --json`:** no consumer yet.
 - **`--api-key`:** F4-3.
+
+**F4-2c's execution record (2026-10-14).**
+
+- **Ran on go-llmprovider-sdk `v1.13.0`** (step 1), with two deviations, each the owner's decision: lint's 11 issues
+  fixed, the context passed through `ModelInfoContext` (deviation 1); the `models.json` guide's SDK version written as
+  `<sdk-version>` (deviation 2).
+- **Tests:**
+  - `llm/catalog`: `TestResolveModel` (22 cases, one per step and word), `TestResolveModelEmpty` and `TestProviderID`;
+  - `llm/provider`: `TestKnownModels`;
+  - `acpserver`: `TestOverrideNew`, `TestOverrideResume`, `TestOverrideFork` and `TestOverrideClamp`;
+  - `internal/cli`: `TestPickModel`, `TestNoCredentialMessagePick`, `TestDefaultModel`, `TestThinkingLevelsMatchTheSetting`,
+    `TestModelsList`, `TestListModelsFlag`, `TestModelsInfo`, `TestFuzzyMatch`, `TestTokenCount`, `TestModelCandidates`
+    and `TestProviderCandidates`;
+  - all 19 pass, each seen by name in a `-v` run. `TestRenderDocument` and `TestKeysMatchSettings` were edited for the
+    sixteenth key, as planned, and `lookupModel`'s four calls in `model_test.go` for its context (deviation 1). Every
+    other existing test passes unedited.
+- **Negatives,** 30 of 30 caught on a scratch copy after control runs, each built, each failing its named tests with its
+  text:
+  - `llm/catalog`: no Pi names; no credentialed tie-break; no prefix stripped; no alias preferred; no level split; a
+    taken provider never giving way; a custom id ignoring `--thinking`; names not searched; Pi's hint reworded;
+  - `llm/provider`: models without tools kept; curated models twice;
+  - `acpserver`: no `model_change`; the override's level unclamped; no clamp on a model change; not applied on resume;
+    not applied to a new session; a level recorded unchanged;
+  - `internal/cli`: the pick not offered; no override; `defaultModel` used without `defaultProvider`, and warned each
+    time; the credential message ignoring `--model`; the live listing left out; rows unsorted; an unknown count as 0;
+    no letters and digits swapped; `--list-models` without its search; info without tiers; completion without
+    `models.json`; the setting without max.
+  - The first run caught 26. Three misses were the harness's (an expected text another case caught, and a mutation
+    that left an import unused, so the copy did not build), and were corrected. One was the test's:
+    `TestOverrideClamp` read only `thought_level`, which clamps for display, so an unclamped recorded level passed it.
+    It, and `TestOverrideResume`, now check the recorded level; all 30 ran again and were caught.
+- **The guides' examples** ran against a scratch `GOBBLE_HOME` with every credential variable cleared, on the final
+  code; the listing examples set `OPENAI_API_KEY=test-only` with openai's base URL at `http://127.0.0.1:9/v1`, so the
+  listing failed on the machine and no request left it. `choosing-a-model.md` shows their output, without timestamps.
+  F4-2b's example, re-run, printed `v1.13.0`, which deviation 2 addresses.
+- **Gates:** the pre-add check, 24 files clean; lint for linux, darwin and windows, `0 issues.`; Windows `go test ./...`
+  and `-race`, the second Linux machine's `-race` and the macOS laptop's `go test`, 32 packages ok each, no race report;
+  Windows `make preflight`, `preflight passed`.
+- **What the plan predicted wrongly, or left unsaid:**
+  - Deviation 1: the plan's code failed lint a fourth time, and contextcheck found a real gap: completion's 150 ms
+    deadline never reached the SDK's lookup.
+  - Deviation 2: moving the pin staled a guide that quotes a diagnostic naming the SDK's version.
+  - `gpt-6-luna` is held by openai, opencode-go and opencode-zen, so the bare id is Pi's ambiguity error without a
+    credential; the guide shows it.
+  - Pi's errors are capitalised sentences, which revive's `error-strings` refuses from `errors.New`; they are a
+    `catalog.ResolutionError`, so the words stay Pi's.
+  - `--provider` also strips its own spelling as a prefix, so `--provider anthropic --model anthropic/x` works; Pi's
+    strips only its canonical name, which for these providers is the same word.
+  - `catalog.CompareIDs`, the case-folded order standing for Pi's `localeCompare`, is exported for `gobble models
+    list`'s sort.
+- **Next:** F4-3, credentials, made executable as an amendment first.

@@ -13,7 +13,7 @@ require (
 	github.com/alecthomas/kong v1.16.1
 	github.com/google/jsonschema-go v0.4.3
 	github.com/maccavelli/acp-go-sdk2 v0.17.1
-	github.com/maccavelli/go-llmprovider-sdk v1.12.0
+	github.com/maccavelli/go-llmprovider-sdk v1.13.0
 	github.com/maccavelli/go-selfupdate-lib v1.15.2
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	go.yaml.in/yaml/v3 v3.0.5

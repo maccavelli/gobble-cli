@@ -102,10 +102,10 @@ func (e *runEnv) modelListing(sel provider.Selection) *modelListing {
 	return l
 }
 
-// startModelListing starts the chosen provider's listing when a credential
+// startModelListing starts the run's provider's listing when a credential
 // is set, so the first session rarely waits for it (0020-MADR D3).
 func (e *runEnv) startModelListing() {
-	if sel, err := provider.Choose(os.Getenv, e.defaultProvider()); err == nil {
+	if sel, err := provider.Choose(os.Getenv, e.chosenProvider()); err == nil {
 		e.modelListing(sel).start()
 	}
 }

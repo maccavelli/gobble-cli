@@ -172,6 +172,52 @@ func (a *Agent) setConfig(ctx context.Context, s *liveSession, id, value string)
 	return a.configOptions(model, think), nil
 }
 
+// Override is a run's own model and thinking level, --model's and
+// --thinking's, which win over every session the agent opens (0005-PLAN
+// F4-2c). Provider is the model's provider; an empty field is not given.
+type Override struct {
+	Provider, Model, Thinking string
+}
+
+// applyOverride sets a session its history restored to the agent's
+// Override, and records each change as /model and /thinking record one. A
+// model that differs is set; then the level is Thinking clamped to the
+// model's, or, with no Thinking, the session's own clamped when the model
+// changed, as Pi clamps it (agent-session.ts:2527-2549). A zero Override
+// does nothing.
+func (a *Agent) applyOverride(ctx context.Context, s *liveSession) error {
+	o := a.override
+	if o == (Override{}) {
+		return nil
+	}
+	model, think := a.choices(s)
+	var entries []session.Entry
+	changed := o.Model != "" && o.Model != model
+	if changed {
+		model = o.Model
+		entries = append(entries, session.Entry{Type: session.TypeModelChange, Provider: o.Provider, ModelID: model})
+	}
+	level := think
+	switch {
+	case o.Thinking != "":
+		level = catalog.Clamp(a.levelsOf(model), o.Thinking)
+	case changed:
+		level = catalog.Clamp(a.levelsOf(model), think)
+	}
+	if level != think {
+		entries = append(entries, session.Entry{Type: session.TypeThinkingLevelChange, ThinkingLevel: level})
+	}
+	a.mu.Lock()
+	s.model, s.think = model, level
+	a.mu.Unlock()
+	for _, e := range entries {
+		if err := s.append(ctx, a.now(), e); err != nil {
+			return appendFailed(err)
+		}
+	}
+	return nil
+}
+
 // choices is the session's model and thinking level. setConfig changes them
 // from any request's goroutine, so both are read under a.mu (0002-PLAN
 // Phase 7, deviation 1).

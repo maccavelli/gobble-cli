@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"cmp"
 	"context"
 	"io"
 	"log/slog"
@@ -24,17 +25,18 @@ import (
 const appName = "gobble"
 
 // modelProvider is the model the agent builds on its first prompt: the
-// defaultProvider setting's, or else the first provider whose standard
-// credential variable is set (0002-PLAN Phase 3, owner's decision of
-// 2026-10-05; 0019-MADR D15). Each session's provider names the session
-// (0021-MADR D4). Tests replace it.
+// run's provider, --model's or the defaultProvider setting's, or else the
+// first provider whose standard credential variable is set (0002-PLAN
+// Phase 3, owner's decision of 2026-10-05; 0019-MADR D15; 0005-PLAN F4-2c).
+// Each session's provider names the session (0021-MADR D4). Tests replace
+// it.
 var modelProvider = func(e *runEnv) func(sessionID string) (llm.Provider, error) {
 	return func(sessionID string) (llm.Provider, error) {
 		o := provider.Options{ClientName: appName, ClientVersion: identity().Version, Logger: e.log(), SessionID: sessionID}
-		if sel, err := provider.Choose(os.Getenv, e.defaultProvider()); err == nil {
+		if sel, err := provider.Choose(os.Getenv, e.chosenProvider()); err == nil {
 			o = e.providerOptions(sel.ID, o) // models.json's base URL and headers (0005-PLAN F4-2b)
 		}
-		p, _, err := ambientProvider(os.Getenv, e.defaultProvider(), o)
+		p, _, err := ambientProvider(os.Getenv, e.chosenProvider(), o)
 		return p, err
 	}
 }
@@ -60,8 +62,10 @@ func (e *runEnv) agentOptions() acpserver.Options {
 		ModelInfo: func(id, model string) llm.Model {
 			return provider.ModelInfo(id, os.Getenv(provider.CredentialVar(id)), model, e.modelsJSON())
 		},
-		Tools: e.tools,
-		Store: e.sessionStore(),
+		// --model and --thinking win over every session's own (0005-PLAN F4-2c).
+		Override: acpserver.Override{Provider: e.pick.Provider, Model: e.pick.Model, Thinking: e.pick.Thinking},
+		Tools:    e.tools,
+		Store:    e.sessionStore(),
 		MCP: acpserver.MCPOptions{
 			Config: mcpConfigPath(), Off: e.mcpOff, Allow: e.mcpAllow, UserAgent: identity().UserAgent(),
 		},
@@ -96,16 +100,26 @@ func mcpConfigPath() string {
 	return filepath.Join(dirs.Config, "mcp.json")
 }
 
-// modelChoice is the chosen provider's listed models, the listing's first
-// the default, or its static models and StaticModels[0] when the listing
-// failed; none without a credential (0020-MADR D3, D4).
+// modelChoice is the run's provider's listed models, then models.json's,
+// the listing's first the default, or its static models and
+// StaticModels[0] when the listing failed; none without a credential
+// (0020-MADR D3, D4). The defaultModel setting may name the default, and
+// --model's model and the default join the models when the listing lacks
+// them (0005-PLAN F4-2c).
 func (e *runEnv) modelChoice() acpserver.ModelChoice {
-	sel, err := provider.Choose(os.Getenv, e.defaultProvider())
+	sel, err := provider.Choose(os.Getenv, e.chosenProvider())
 	if err != nil {
 		return acpserver.ModelChoice{}
 	}
 	ids, def := models(sel, e.modelListing(sel).get())
-	return acpserver.ModelChoice{Provider: sel.ID, Models: withModelsJSON(ids, e.modelsJSON(), sel.ID), Default: def}
+	ids = withModelsJSON(ids, e.modelsJSON(), sel.ID)
+	def = cmp.Or(e.defaultModel(sel.ID, ids), def)
+	for _, m := range []string{e.pick.Model, def} {
+		if m != "" && !slices.Contains(ids, m) {
+			ids = append(ids, m)
+		}
+	}
+	return acpserver.ModelChoice{Provider: sel.ID, Models: ids, Default: def}
 }
 
 // sessionStore is the store sessions are kept in: <data>/sessions
@@ -256,13 +270,3 @@ func builtinOptions(s config.Settings) builtin.Options {
 // (0019-MADR D15); the process settings are resolved by now, for the run's
 // cwd, as sessionStore reads them.
 func (e *runEnv) defaultProvider() string { return e.processSettings("").Settings.DefaultProvider }
-
-// noCredentialMessage names the variable the defaultProvider setting
-// preferred needs, or, with none set, the variables the ambient provider
-// reads.
-func noCredentialMessage(preferred string) string {
-	if v := provider.CredentialVar(preferred); v != "" {
-		return "no model credential: defaultProvider is " + preferred + "; set " + v
-	}
-	return "no model credential: set one of " + strings.Join(provider.CredentialVars(), ", ")
-}

@@ -10,6 +10,7 @@ import (
 // keys' paths; every field is optional in a file.
 type Settings struct {
 	DefaultProvider      string     `yaml:"defaultProvider" json:"defaultProvider,omitempty"`
+	DefaultModel         string     `yaml:"defaultModel" json:"defaultModel,omitempty"`
 	CacheRetention       string     `yaml:"cacheRetention" json:"cacheRetention,omitempty"`
 	DefaultThinkingLevel string     `yaml:"defaultThinkingLevel" json:"defaultThinkingLevel,omitempty"`
 	SteeringMode         string     `yaml:"steeringMode" json:"steeringMode,omitempty"`
@@ -103,6 +104,8 @@ func (s *Settings) field(path string) any {
 		return &s.MCP.StopTimeoutMs
 	case "defaultProvider":
 		return &s.DefaultProvider
+	case "defaultModel":
+		return &s.DefaultModel
 	case "cacheRetention":
 		return &s.CacheRetention
 	case "externalEditor":

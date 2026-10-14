@@ -55,16 +55,19 @@ const pathSessionDir = "sessionDir"
 // first.
 var queueModes = []string{"one-at-a-time", "all"}
 
-// Keys are 0018-MADR D14's thirteen, 0019-MADR D15's defaultProvider and
-// 0021-MADR D3's cacheRetention, in the template's order. Every other part
+// Keys are 0018-MADR D14's thirteen, 0019-MADR D15's defaultProvider,
+// 0021-MADR D3's cacheRetention and 0005-PLAN F4-2c's defaultModel, in the
+// template's order. Every other part
 // of the package reads them; a key added here without its template block,
 // schema or Settings field fails the package's tests.
 var Keys = []Key{
 	{Path: "defaultProvider", Kind: KindEnum, Enum: []string{"", "gemini", "openai", "claude", "grok", "opencode-zen", "opencode-go", "huggingface", "kilo", "together"},
 		Read: ReadProcess, Doc: "The provider gobble uses, with its first model; its credential variable must be set. Empty takes the first provider whose credential variable is set."},
+	{Path: "defaultModel", Kind: KindString, Read: ReadProcess,
+		Doc: "The model a new session starts with, of defaultProvider's, its id exactly. Empty takes the provider's first listed model; without defaultProvider it is ignored."},
 	{Path: "cacheRetention", Kind: KindEnum, Default: "short", Enum: []string{"none", "short", "long"},
 		Read: ReadSession, Doc: "How long the model service keeps a session's prompt cached: none, short (five minutes on Anthropic's models) or long (an hour)."},
-	{Path: "defaultThinkingLevel", Kind: KindEnum, Default: "off", Enum: []string{"off", "minimal", "low", "medium", "high", "xhigh"},
+	{Path: "defaultThinkingLevel", Kind: KindEnum, Default: "off", Enum: []string{"off", "minimal", "low", "medium", "high", "xhigh", "max"},
 		Read: ReadSession, Doc: "The thinking level a new session starts with."},
 	{Path: "steeringMode", Kind: KindEnum, Default: queueModes[0], Enum: queueModes,
 		Read: ReadSession, Doc: "How steering messages queued while a turn runs reach the model: one before each model call, or all at once."},

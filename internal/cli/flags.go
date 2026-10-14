@@ -30,10 +30,11 @@ type SharedFlags struct {
 	Name       string `short:"n" complete:"none" help:"Name the session."`
 
 	// Models.
-	Provider string `complete:"provider" help:"Provider; requires --model."`
-	Model    string `complete:"model" placeholder:"PROVIDER/ID[:THINKING]" help:"Model to use."`
-	Thinking string `enum:",off,minimal,low,medium,high,xhigh" default:"" help:"Thinking level: off, minimal, low, medium, high or xhigh."`
-	APIKey   string `name:"api-key" complete:"none" placeholder:"KEY" help:"API key for this run."`
+	Provider   string `complete:"provider" help:"Provider; requires --model."`
+	Model      string `complete:"model" placeholder:"PROVIDER/ID[:THINKING]" help:"Model to use."`
+	Thinking   string `enum:",off,minimal,low,medium,high,xhigh,max" default:"" help:"Thinking level: off, minimal, low, medium, high, xhigh or max."`
+	APIKey     string `name:"api-key" complete:"none" placeholder:"KEY" help:"API key for this run."`
+	ListModels bool   `name:"list-models" help:"List models, as gobble models list; the prompt words are its search."`
 
 	// Tools.
 	Tools        []string `short:"t" sep:"," complete:"tools" placeholder:"NAME,…" help:"Enable only these tools."`
@@ -66,7 +67,7 @@ const (
 // plan. Such a flag is parsed and rejected with exit 2, never ignored
 // (0008-MADR D12).
 var laterFlags = map[string]string{
-	"provider": plan0005F4, "model": plan0005F4, "thinking": plan0005F4, "api-key": plan0005F4, "offline": plan0005X3,
+	"api-key": plan0005F4, "offline": plan0005X3,
 	"approve": plan0005F6, "yes": plan0005F6,
 }
 

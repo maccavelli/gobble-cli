@@ -23,6 +23,7 @@ func renderLayout(t *testing.T) (Resolved, string, string) {
 func TestRenderDocument(t *testing.T) {
 	r, _, _ := renderLayout(t)
 	want := `defaultProvider: ""
+defaultModel: ""
 cacheRetention: short
 defaultThinkingLevel: off
 steeringMode: all

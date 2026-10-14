@@ -30,6 +30,12 @@
 # share OPENCODE_API_KEY, so only this setting reaches opencode-go.
 # defaultProvider: ""
 
+# The model a new session starts with, of defaultProvider's,
+# its id exactly, as gobble models list shows it. Empty takes the
+# provider's first listed model; without defaultProvider it is
+# ignored. --model wins over it for a run.
+# defaultModel: ""
+
 # How long the model service keeps this session's prompt cached, so
 # the next request reads it back: none, short or long. On Anthropic's
 # models short is five minutes and long an hour; elsewhere both ask
@@ -42,8 +48,8 @@
 # ---------------------------------------------------------------------
 
 # The thinking level a new session starts with: off, minimal, low,
-# medium, high or xhigh. A resumed session keeps its own, and /thinking
-# changes it in a session.
+# medium, high, xhigh or max. A resumed session keeps its own, and
+# /thinking changes it in a session.
 # defaultThinkingLevel: off
 
 # How messages queued while a turn runs reach the model.

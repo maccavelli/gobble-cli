@@ -54,7 +54,7 @@ func TestModelInfoModelsJSON(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	full := lookupModel("openai", nil, "full", meta, modelsJSONLayer{mj})
+	full := lookupModel(t.Context(), "openai", nil, "full", meta, modelsJSONLayer{mj})
 	if full.Name != "Full" || full.ContextWindow != 999 || full.MaxTokens != 128000 || full.Cost.Input != 9 || full.Cost.Output != 10 || !full.Priced {
 		t.Errorf("full: %+v, want the override's window and input price over the snapshot's", full)
 	}
@@ -65,6 +65,29 @@ func TestModelInfoModelsJSON(t *testing.T) {
 	}
 	if plain := ModelInfo("openai", "", "mine", nil); plain.ReasoningKnown || plain.LevelMap != nil {
 		t.Errorf("without models.json: %+v, want nothing known", plain)
+	}
+}
+
+// The known models are the curated ones, then the document's that take
+// tools, sorted, each once; one without tools is left out (0005-PLAN F4-2c).
+func TestKnownModels(t *testing.T) {
+	curated := Models("openai")
+	if len(curated) == 0 {
+		t.Fatal("openai has no curated models")
+	}
+	doc := `{"openai":{"id":"openai","models":{
+"zeta-tool":{"name":"Z","tool_call":true},"alpha-tool":{"name":"A","tool_call":true},
+"no-tools":{"name":"N","tool_call":false},"` + curated[0] + `":{"name":"C","tool_call":true}}}}`
+	meta, err := catalog.ParseMetadata(strings.NewReader(doc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := append(slices.Clone(curated), "alpha-tool", "zeta-tool")
+	if got := toolModels("openai", &meta); !slices.Equal(got, want) {
+		t.Errorf("known models %q, want %q", got, want)
+	}
+	if got := toolModels("openai", nil); !slices.Equal(got, curated) {
+		t.Errorf("with no document %q, want the curated %q", got, curated)
 	}
 }
 
@@ -87,7 +110,7 @@ func TestModelInfo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := lookupModel("openai", nil, "full", meta)
+	m := lookupModel(t.Context(), "openai", nil, "full", meta)
 	if m.Name != "Full" || m.ContextWindow != 400000 || m.MaxTokens != 128000 || !slices.Equal(m.Input, []string{"text", "image"}) ||
 		!m.ReasoningKnown || !m.Reasoning || !slices.Equal(m.Efforts, []string{"none", "low", "high"}) {
 		t.Errorf("full: %+v", m)
@@ -98,10 +121,10 @@ func TestModelInfo(t *testing.T) {
 		m.Cost.CacheWrite != want.CacheWrite || !slices.Equal(m.Cost.Tiers, want.Tiers) {
 		t.Errorf("full: cost %+v priced %v, want %+v", m.Cost, m.Priced, want)
 	}
-	if b := lookupModel("openai", nil, "bare", meta); b.Name != "Bare" || b.ContextWindow != 0 || b.Priced || b.ReasoningKnown {
+	if b := lookupModel(t.Context(), "openai", nil, "bare", meta); b.Name != "Bare" || b.ContextWindow != 0 || b.Priced || b.ReasoningKnown {
 		t.Errorf("bare: %+v, want its name alone", b)
 	}
-	if u := lookupModel("openai", nil, "absent", meta); u.Provider != "openai" || u.ID != "absent" || u.Name != "" || u.Priced {
+	if u := lookupModel(t.Context(), "openai", nil, "absent", meta); u.Provider != "openai" || u.ID != "absent" || u.Name != "" || u.Priced {
 		t.Errorf("absent: %+v, want its provider and id alone", u)
 	}
 }

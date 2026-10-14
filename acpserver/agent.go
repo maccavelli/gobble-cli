@@ -1,6 +1,7 @@
 package acpserver
 
 import (
+	"cmp"
 	"context"
 	"encoding/json/v2"
 	"errors"
@@ -64,6 +65,10 @@ type Options struct {
 	// window and price (0005-PLAN F4-2a). Nil knows nothing, so every model
 	// offers off to xhigh, with no window and no price.
 	ModelInfo func(provider, model string) llm.Model
+	// Override is the run's own model and thinking level, which win over
+	// every session's, new, forked, loaded or resumed (0005-PLAN F4-2c).
+	// Zero leaves each session its own.
+	Override Override
 	// Tools are the agent's tools. Nil is builtin.Tools(); an empty, non-nil
 	// slice is none.
 	Tools []tool.Tool
@@ -93,6 +98,7 @@ type Agent struct {
 	provider func(sessionID string) (llm.Provider, error)
 	models   func() ModelChoice
 	info     func(provider, model string) llm.Model
+	override Override
 	tools    []tool.Tool
 	byName   map[string]tool.Tool
 	store    session.Store
@@ -164,7 +170,7 @@ var (
 // the first request, so it can send session updates.
 func New(opts Options) *Agent {
 	a := &Agent{version: opts.Version, newID: opts.NewID, provider: opts.Provider, models: opts.Models, info: opts.ModelInfo,
-		tools: opts.Tools, store: opts.Store, now: opts.Now, mcp: opts.MCP, logger: opts.Logger, prompt: opts.Prompt,
+		override: opts.Override, tools: opts.Tools, store: opts.Store, now: opts.Now, mcp: opts.MCP, logger: opts.Logger, prompt: opts.Prompt,
 		settings: opts.Settings, sessions: map[acp.SessionId]*liveSession{}}
 	if a.logger == nil {
 		a.logger = slog.New(slog.DiscardHandler)
@@ -309,7 +315,10 @@ func (a *Agent) NewSession(ctx context.Context, p acp.NewSessionRequest) (acp.Ne
 		return acp.NewSessionResponse{}, acp.NewInternalError(map[string]any{keyReason: err.Error()})
 	}
 	ss := a.sessionSettings(p.Cwd)
-	s := &liveSession{id: acp.SessionId(id), cwd: p.Cwd, dirs: dirs, log: log, tree: session.NewTree(nil), think: ss.Thinking, model: a.models().Default, mode: modeDefault,
+	// The run's override starts a new session, as defaultThinkingLevel does;
+	// a fork's history is set to it after its restore (0005-PLAN F4-2c).
+	s := &liveSession{id: acp.SessionId(id), cwd: p.Cwd, dirs: dirs, log: log, tree: session.NewTree(nil),
+		think: cmp.Or(a.override.Thinking, ss.Thinking), model: cmp.Or(a.override.Model, a.models().Default), mode: modeDefault,
 		queue: sessionQueue(ss), compaction: ss.Compaction, cache: cacheOf(ss.CacheRetention)}
 	if len(forked) > 0 {
 		for _, e := range forked {
@@ -318,6 +327,9 @@ func (a *Agent) NewSession(ctx context.Context, p acp.NewSessionRequest) (acp.Ne
 			}
 		}
 		a.restore(s, forked)
+		if err := a.applyOverride(ctx, s); err != nil {
+			return acp.NewSessionResponse{}, errors.Join(err, log.Close())
+		}
 	}
 	if meta.Name != "" {
 		if err := s.append(ctx, a.now(), session.Entry{Type: session.TypeSessionInfo, Name: new(oneLine(meta.Name))}); err != nil {
@@ -760,6 +772,10 @@ func (a *Agent) open(ctx context.Context, id acp.SessionId, cwd string, extra []
 	s := &liveSession{id: id, cwd: cwd, dirs: dirs, log: log, think: thinkingOff, model: a.models().Default, mode: modeDefault,
 		queue: sessionQueue(ss), compaction: ss.Compaction, cache: cacheOf(ss.CacheRetention)}
 	a.restore(s, log.Entries())
+	// The run's override wins over the history's choice (0005-PLAN F4-2c).
+	if err := a.applyOverride(ctx, s); err != nil {
+		return nil, errors.Join(err, log.Close())
+	}
 	s.mcp = a.startMCP(ctx, cwd, servers, notes, ss)
 	a.mu.Lock()
 	a.sessions[id] = s

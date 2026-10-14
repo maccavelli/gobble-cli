@@ -10,6 +10,8 @@ import (
 
 	"github.com/maccavelli/gobble-cli/internal/cli/complete"
 	"github.com/maccavelli/gobble-cli/internal/config"
+	"github.com/maccavelli/gobble-cli/llm/catalog"
+	"github.com/maccavelli/gobble-cli/llm/provider"
 	"github.com/maccavelli/gobble-cli/session"
 	"github.com/maccavelli/gobble-cli/session/jsonl"
 	"github.com/maccavelli/gobble-cli/tool/builtin"
@@ -45,21 +47,20 @@ func (c *CompletionCmd) Run(e *runEnv) error {
 }
 
 // thinkingLevels are --thinking's values, offered after "provider/id:".
-var thinkingLevels = []string{"off", "minimal", "low", "medium", "high", "xhigh"}
+var thinkingLevels = []string{"off", "minimal", "low", "medium", "high", "xhigh", "max"}
 
 // completionRegistry names the source behind each complete:"<name>" tag.
 // Sessions come from the session store (0002-PLAN Phase 4) and tools from
 // the built-ins (0002-PLAN Phase 3, wired in Phase 4 Part B), and MCP
-// servers from mcp.json (0002-PLAN Phase 5). Providers,
-// models and their catalog have no data until 0005-PLAN F4, which is the
-// true state, not a skip (0008-PLAN P5, step 4 and deviation 1).
+// servers from mcp.json (0002-PLAN Phase 5). Providers are the key
+// providers, and models the offline model set (0005-PLAN F4-2c).
 func completionRegistry() complete.Registry {
 	return complete.Registry{
 		"path":      complete.PathSource(false),
 		"dir":       complete.PathSource(true),
-		"provider":  complete.ListSource(complete.NoCandidates, false),
+		"provider":  complete.ListSource(providerCandidates, true),
 		"session":   complete.ListSource(sessionCandidates, true),
-		"model":     complete.ModelSource(complete.NoCandidates, thinkingLevels),
+		"model":     complete.ModelSource(modelCandidates, thinkingLevels),
 		"tools":     complete.ListSource(toolCandidates, false),
 		"mcpserver": complete.ListSource(mcpServerCandidates, true),
 		"setting":   complete.ListSource(settingCandidates, true),
@@ -101,6 +102,49 @@ func sessionCandidates(ctx context.Context) iter.Seq[complete.Candidate] {
 			}
 		}
 	}
+}
+
+// providerCandidates are the providers --provider takes, in registry order,
+// each described by its credential variable.
+func providerCandidates(context.Context) iter.Seq[complete.Candidate] {
+	return func(yield func(complete.Candidate) bool) {
+		for _, p := range provider.KeyProviders() {
+			if !yield(complete.Candidate{Value: p, Description: provider.CredentialVar(p)}) {
+				return
+			}
+		}
+	}
+}
+
+// modelCandidates are the offline model set as provider/id, each described
+// by its name, with models.json read and its diagnostics dropped, since
+// completion prints nothing else (0005-PLAN F4-2c decision 10).
+func modelCandidates(ctx context.Context) iter.Seq[complete.Candidate] {
+	return func(yield func(complete.Candidate) bool) {
+		for _, m := range offlineModels(ctx, completionModelsJSON()) {
+			if ctx.Err() != nil || !yield(complete.Candidate{Value: m.Provider + "/" + m.ID, Description: m.Name}) {
+				return
+			}
+		}
+	}
+}
+
+// completionModelsJSON is <config>/models.json, or nil when there is none
+// or it cannot be read.
+func completionModelsJSON() *catalog.ModelsJSON {
+	dirs, _, err := systemDirs()
+	if err != nil {
+		return nil
+	}
+	data, err := os.ReadFile(filepath.Join(dirs.Config, "models.json")) //nolint:gosec // G304: the config directory's own models.json
+	if err != nil {
+		return nil
+	}
+	mj, _, err := catalog.ParseModelsJSON(data, provider.SDKVersion())
+	if err != nil {
+		return nil
+	}
+	return mj
 }
 
 // toolCandidates are the built-in tools' names.

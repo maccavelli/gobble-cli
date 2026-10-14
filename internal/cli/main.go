@@ -161,6 +161,10 @@ type runEnv struct {
 	overrides []config.Override
 	// process are the process keys' settings, resolved once.
 	process processOnce
+	// pick is what --provider, --model and --thinking chose; defaultModelOnce
+	// gives defaultModel's warning once (0005-PLAN F4-2c).
+	pick             modelPick
+	defaultModelOnce sync.Once
 }
 
 func (e *runEnv) log() *slog.Logger { return e.logs.get() }

@@ -30,12 +30,13 @@ starts, so restart gobble after you edit it.
 
 `//` comments and trailing commas are accepted, as in Pi. Run with no credential set, gobble
 reports the two entries it cannot use yet, then stops at the missing key (each line's timestamp is
-left out here):
+left out here, and `<sdk-version>` is the go-llmprovider-sdk version gobble was built with, which
+the warning names):
 
 ```text
 $ gobble -p hello
 level=WARN msg=models.json message="provider \"openai\": apiKey takes effect with gobble's credentials (0005-PLAN F4-3); until then the provider's variable is used" file=<config>/models.json
-level=WARN msg=models.json message="provider \"openrouter\": not a provider go-llmprovider-sdk v1.12.0 builds (one of claude, gemini, grok, huggingface, kilo, ollama, openai, opencode-go, opencode-zen, together); skipped" file=<config>/models.json
+level=WARN msg=models.json message="provider \"openrouter\": not a provider go-llmprovider-sdk <sdk-version> builds (one of claude, gemini, grok, huggingface, kilo, ollama, openai, opencode-go, opencode-zen, together); skipped" file=<config>/models.json
 Error: no model credential: set one of GEMINI_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY, XAI_API_KEY, OPENCODE_API_KEY, HF_TOKEN, KILO_API_KEY, TOGETHER_API_KEY
 ```
 
