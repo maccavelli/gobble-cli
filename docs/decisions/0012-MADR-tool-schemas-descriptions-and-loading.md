@@ -905,3 +905,12 @@ Step 7, Probe F, then contradicted D15's reason, F19's consequence:
 - the same probe was clean natively on this host's Windows, on an arm64 laptop and on a second amd64 Linux machine.
 
 So the defect it answered is this host's WSL, not code gobble runs (0013-REPORT, third amendment). On 2026-10-09 the owner rejected D15 ("abandon p9"), and V-B stands: `tool.New` keeps jsonschema-go's `MarshalJSON`. None of P9's code was committed. A copy was kept outside the tree.
+
+## Observed — execution results (2026-10-13)
+
+**D3's opt-out, as amended on 2026-10-13, is borne out on OpenAI.** 0012-PLAN P7 ran on go-llmprovider-sdk `v1.12.0`:
+
+- **OpenAI applies it.** The in-tree `TestStrictProbe` (`gpt-4.1-mini`, `/v1/responses`) reported `strict=false` for the ten tools sent with `false`: bash, copy, delete, find, grep, move, powershell, read, todo and tree. It reported `strict=true` for edit, mkdir and write, sent with no flag. P5's run gave `strict=true` for all five tools of 2026-10-08, so F17 is closed on OpenAI's Responses API.
+- **F20's nested case held:** todo is opted out by `priority`, below the top level.
+- **On every other wire that carries it,** `false` reaches the body once per tool, and `true` never does (`TestWireStrict`).
+- **Not yet exercised.** Whether Claude's Messages wire, Grok's and Gemini's services accept gobble's tools with these flags waits on the owner's `TestLiveClaude`, `TestLiveGrok` and `TestLiveGemini`. Until then, Messages' acceptance of `strict: false` stays **[unverified]** (V53).

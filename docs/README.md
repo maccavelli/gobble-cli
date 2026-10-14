@@ -31,8 +31,8 @@
 | 0009 | REPORT | [magic-cli-remote findings from gobble work](reports/0009-REPORT-magic-cli-remote-findings.md) | observation (running; updated 2026-10-12, M11–M14) |
 | 0010 | REPORT | [Harness design survey: Pi, opencode and Kilo across the v1 line](reports/0010-REPORT-harness-design-survey.md) | observation (2026-10-07) |
 | 0011 | REPORT | [Native tools across six harnesses: which operations gobble implements itself](reports/0011-REPORT-native-tools-survey.md) | observation (2026-10-08; 88 verified claims; schemas, descriptions, loading and BM25 evaluated 2026-10-08) |
-| 0012 | MADR | [Tool schemas, descriptions and loading: JSON Schema from Go types, sectioned Markdown descriptions, two exposure tiers, and an in-house BM25 `tool_search`](decisions/0012-MADR-tool-schemas-descriptions-and-loading.md) | accepted (2026-10-08; 38 verified claims; D15 proposed 2026-10-09, with 17 verified claims; F19's consequence contradicted and D15 on hold, 2026-10-09; no defect for D15 to fix, and D15 rejected, the same day; 0021 notes 2026-10-13; D3 amended and F20 added for P7, 2026-10-13) |
-| 0012 | PLAN | [Tool schemas and descriptions: the contract, the five built-in tools, and the strict probe](decisions/0012-PLAN-tool-schemas-descriptions-and-loading.md) | in progress (P1–P6 and P8 complete 2026-10-08; P7 waits on go-llmprovider-sdk's per-tool strict flag, which `v1.7.0` has (2026-10-11), and follows 0005-PLAN F4-1a; P9 proposed, approved, paused and abandoned 2026-10-09, with nothing committed; P7's strict note from 0019-MADR D11, 2026-10-13; P7 written 2026-10-13, by the owner's choice) |
+| 0012 | MADR | [Tool schemas, descriptions and loading: JSON Schema from Go types, sectioned Markdown descriptions, two exposure tiers, and an in-house BM25 `tool_search`](decisions/0012-MADR-tool-schemas-descriptions-and-loading.md) | accepted (2026-10-08; 38 verified claims; D15 proposed 2026-10-09, with 17 verified claims; F19's consequence contradicted and D15 on hold, 2026-10-09; no defect for D15 to fix, and D15 rejected, the same day; 0021 notes 2026-10-13; D3 amended and F20 added for P7, 2026-10-13; P7's Observed section, 2026-10-13) |
+| 0012 | PLAN | [Tool schemas and descriptions: the contract, the five built-in tools, and the strict probe](decisions/0012-PLAN-tool-schemas-descriptions-and-loading.md) | completed (P1–P6 and P8 complete 2026-10-08; P7 waits on go-llmprovider-sdk's per-tool strict flag, which `v1.7.0` has (2026-10-11), and follows 0005-PLAN F4-1a; P9 proposed, approved, paused and abandoned 2026-10-09, with nothing committed; P7's strict note from 0019-MADR D11, 2026-10-13; P7 written 2026-10-13, by the owner's choice, and complete 2026-10-13, with deviations 1–2) |
 | 0013 | REPORT | [A data race in Go's encoding/json when one Marshal runs inside another](reports/0013-REPORT-go-json-nested-marshal-race.md) | observation (2026-10-08; reproduced with the standard library alone; drafted for upstream, not yet filed; amended 2026-10-09: the signature varies, and gobble removes its own nested marshal; amended again 2026-10-09: corrupted memory on this host or in the Go runtime, not `encoding/json`, and the upstream draft withdrawn; amended a third time 2026-10-09: the defect is this host's WSL; gobble keeps jsonschema-go's marshaller) |
 | 0014 | MADR | [Move the ACP SDK from the fork to acp-go-sdk2 v0.14.0](decisions/0014-MADR-move-to-acp-go-sdk2.md) | accepted (2026-10-10; 0019 notes 2026-10-13) |
 | 0014 | PLAN | [Move the ACP SDK from the fork to acp-go-sdk2 v0.14.0](decisions/0014-PLAN-move-to-acp-go-sdk2.md) | completed (P0 and P1, 2026-10-10) |
@@ -71,14 +71,14 @@ The plans run in sequence.
   - Run: F3-1, context files and the sectioned prompt, F3-2, skills, F3-3, prompt templates, and F3-4, `@path`, resource blocks and the prompt capabilities, on 2026-10-10. F3 is complete.
   - Run: F4-1a, the tool result's error flag, the wire tests and the live tests, on 2026-10-13
     (re-made at SDK `v1.12.0`; the pin and `NativeStreaming` done in 0019-PLAN P3).
-  - Next: 0012-PLAN P7, and F4-2. F4-1b, live streaming, waits on an SDK release that retries a stream.
+  - Next: F4-2 (0012-PLAN P7 ran on 2026-10-13). F4-1b, live streaming, waits on an SDK release that retries a stream.
 - **0014-PLAN.** Run: P0 and P1, the move to acp-go-sdk2 `v0.14.0`, on 2026-10-10. Complete.
 - **0018-PLAN.** Run: P1–P6, the configuration surface, on 2026-10-12. Complete. Put ahead of 0017 by the owner.
 - **0019-PLAN.** Run: P1–P5 on 2026-10-12 and 2026-10-13. Complete. go-llmprovider-sdk `v1.11.0`, tagged after P3, is the next record's (its deviation 13).
 - **0020-PLAN.** Run: P1–P3 on 2026-10-13. Complete; gobble-cli issue 1 closed.
 - **0021-PLAN.** Run: P1–P4 on 2026-10-13. Complete.
 - **0012-PLAN.** Run: P1–P6 and P8 on 2026-10-08. P7 ~~waits on go-llmprovider-sdk's per-tool strict flag~~ follows 0005-PLAN F4-1a, which pins go-llmprovider-sdk `v1.7.0` and its strict flag (2026-10-11).
-  - P7 written 2026-10-13: `strict: false` where a call may leave an argument out, no flag otherwise. Awaiting approval.
+  - Run: P7 on 2026-10-13: `strict: false` where a call may leave an argument out, no flag otherwise. Complete; the Claude, Gemini and Grok live tests are the owner's.
 - `git ls-remote origin refs/heads/main` on 2026-10-08 returned `740f7b71450238e747dba99b4fa1eccd488ad79e`.
 
 The plans:

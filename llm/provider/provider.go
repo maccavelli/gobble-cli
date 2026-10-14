@@ -9,6 +9,7 @@ import (
 	"iter"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -243,10 +244,39 @@ func toRequest(req *llm.Request) (*llmprovider.Request, error) {
 			return nil, fmt.Errorf("provider: request tools: %w", err)
 		}
 		for _, s := range specs {
-			out.Tools = append(out.Tools, llmprovider.Tool{Name: s.Name, Description: s.Description, Schema: s.InputSchema})
+			out.Tools = append(out.Tools, llmprovider.Tool{Name: s.Name, Description: s.Description, Schema: s.InputSchema, Strict: strictFor(s.InputSchema)})
 		}
 	}
 	return out, nil
+}
+
+// strictFor is a tool's strict flag (0012-MADR D3): false when its schema
+// has a property a call may leave out, at any depth, so that strict mode
+// does not make the model fill it in; unset otherwise, the service's own
+// default. It is never true (0019-MADR D11).
+func strictFor(schema any) *bool {
+	if hasOptional(schema) {
+		return new(false)
+	}
+	return nil
+}
+
+// hasOptional reports whether schema, a decoded JSON Schema, or an object
+// schema in its properties or items, has a property outside its required.
+func hasOptional(schema any) bool {
+	s, ok := schema.(map[string]any)
+	if !ok {
+		return false
+	}
+	if props, ok := s["properties"].(map[string]any); ok {
+		required, listed := s["required"].([]any)
+		for name, sub := range props {
+			if !listed || !slices.Contains(required, any(name)) || hasOptional(sub) {
+				return true
+			}
+		}
+	}
+	return hasOptional(s["items"])
 }
 
 // reasoningFor maps gobble's thinking levels onto the SDK's efforts (llm's

@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"encoding/json/v2"
 	"errors"
 	"io"
 	"net/http"
@@ -10,6 +11,8 @@ import (
 	"time"
 
 	"github.com/maccavelli/gobble-cli/llm"
+	"github.com/maccavelli/gobble-cli/tool"
+	"github.com/maccavelli/gobble-cli/tool/builtin"
 )
 
 // Canned replies in each wire's shape: "hello", or a get_weather call. Every
@@ -253,6 +256,58 @@ func TestWireToolResultError(t *testing.T) {
 			}
 			if got := strings.Contains(bodies[0], `"is_error":true`); got != c.flagged || !strings.Contains(bodies[0], "no such city") {
 				t.Fatalf("body flags the failure %v (want %v), or lacks the output:\n%s", got, c.flagged, bodies[0])
+			}
+		})
+	}
+}
+
+// Each built-in tool's strict flag reaches every wire that carries one, and
+// none reaches Gemini's or Ollama's; true is never sent (0012-PLAN P7).
+func TestWireStrict(t *testing.T) {
+	var specs []tool.Spec
+	for _, tl := range builtin.Tools() {
+		specs = append(specs, tl.Spec())
+	}
+	tools, err := json.Marshal(specs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := func() *llm.Request {
+		r := wireRequest()
+		r.Tools = tools
+		return r
+	}
+	sreq, err := toRequest(req())
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := 0
+	for _, tl := range sreq.Tools {
+		if tl.Strict != nil && !*tl.Strict {
+			n++
+		}
+	}
+	if n == 0 {
+		t.Fatal("no built-in tool is sent with strict false")
+	}
+	for _, w := range wireIDs {
+		t.Run(w.id, func(t *testing.T) {
+			c := &cannedWire{}
+			if o := wireStream(t, w.id, w.model, c, req()); o.err != nil {
+				t.Fatal(o.err)
+			}
+			oneRequest(t, c)
+			_, bodies := c.requests()
+			want := n
+			if w.id == "gemini" || w.id == "ollama" {
+				want = 0
+			}
+			body := bodies[0]
+			if got := strings.Count(body, `"strict":false`); got != want || !strings.Contains(body, `"name":"read"`) {
+				t.Errorf(`%d "strict":false, want %d, or no read tool, in:\n%.400s`, got, want, body)
+			}
+			if strings.Contains(body, `"strict":true`) {
+				t.Errorf(`a "strict":true reached the wire:\n%.400s`, body)
 			}
 		})
 	}

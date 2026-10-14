@@ -2,7 +2,9 @@ package provider
 
 import (
 	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -79,6 +81,34 @@ func TestToolCallAndReportedUsage(t *testing.T) {
 	tools := f.Requests()[0].Tools
 	if len(tools) != 1 || tools[0].Name != "read" || tools[0].Description != "read a file" || tools[0].Schema == nil {
 		t.Fatalf("SDK tools %+v", tools)
+	}
+}
+
+// A tool is sent with strict false when a call may leave a property out, at
+// any depth, and with no flag otherwise (0012-PLAN P7).
+func TestStrictFor(t *testing.T) {
+	for _, c := range []struct {
+		name, schema, want string
+	}{
+		{"optional", `{"type":"object","properties":{"a":{},"b":{}},"required":["a"]}`, "false"},
+		{"all required", `{"type":"object","properties":{"a":{},"b":{}},"required":["a","b"]}`, "unset"},
+		{"no properties", `{"type":"object"}`, "unset"},
+		{"optional in items", `{"type":"object","properties":{"list":{"type":"array","items":{"type":"object",` +
+			`"properties":{"c":{},"p":{}},"required":["c"]}}},"required":["list"]}`, "false"},
+		{"optional in a property", `{"type":"object","properties":{"o":{"type":"object","properties":{"p":{}}}},"required":["o"]}`, "false"},
+		{"null", `null`, "unset"},
+	} {
+		var schema any
+		if err := json.Unmarshal([]byte(c.schema), &schema); err != nil {
+			t.Fatalf("%s: %v", c.name, err)
+		}
+		got := "unset"
+		if p := strictFor(schema); p != nil {
+			got = strconv.FormatBool(*p)
+		}
+		if got != c.want {
+			t.Errorf("%s: strictFor = %s, want %s", c.name, got, c.want)
+		}
 	}
 }
 

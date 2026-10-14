@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: completed
 date: 2026-10-13
 ---
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
@@ -801,6 +801,22 @@ Either way, the key never appears on a command line, in a file in the tree, or i
   }
   ```
 
+- *(P7 deviation 2, 2026-10-13: the `hasOptional` above is superseded. Its two unchecked type assertions fail errcheck.)* `hasOptional`'s body after its first `if` is:
+
+  ```go
+      if props, ok := s["properties"].(map[string]any); ok {
+          required, listed := s["required"].([]any)
+          for name, sub := range props {
+              if !listed || !slices.Contains(required, any(name)) || hasOptional(sub) {
+                  return true
+              }
+          }
+      }
+      return hasOptional(s["items"])
+  ```
+
+  It decides as before: with no `required` list, every property is optional.
+
 - The rule reads the schema `toRequest` already decodes, so it applies to every tool gobble sends, MCP tools included.
 - `new(false)` is Go 1.26's `new` of an expression; `go.mod` says `go 1.27.2`.
 
@@ -863,11 +879,24 @@ Either way, the key never appears on a command line, in a file in the tree, or i
 **Step 6. Seen failing (C3),** on scratch copies, after a control run of the same tests passes on an unmodified copy:
 
 - **copy 1:** `Strict: strictFor(s.InputSchema)` removed from the loop. `TestStrictBuiltins` (ten tools: want false, got unset) and `TestWireStrict` (`n > 0`) fail.
-- **copy 2:** `|| hasOptional(sub)` and the `items` call removed, leaving the top level only. `TestStrictFor`'s two nested cases, and `TestStrictBuiltins` for todo, fail.
+- ~~**copy 2:** `|| hasOptional(sub)` and the `items` call removed, leaving the top level only. `TestStrictFor`'s two nested cases, and `TestStrictBuiltins` for todo, fail.~~ *(P7 deviation 1, 2026-10-13: as written it does not build.)*
+- **copy 2** *(P7 deviation 1)*: `for name, sub := range props` becomes `for name := range props`, `|| hasOptional(sub)` is removed, and the `items` call becomes `return false`, leaving the top level only. `TestStrictFor`'s two nested cases, and `TestStrictBuiltins` for todo, fail.
 - **copy 3:** `strictFor`'s `return nil` becomes `return new(true)`. `TestStrictFor`'s unset cases, `TestStrictBuiltins` for write, edit and mkdir, and `TestWireStrict` (a `"strict":true`) fail.
 - **copy 4:** `checkStrict` expects `false` for an unset tool instead of `true`. `TestCheckStrict`'s first case fails.
 
 Each mutation is asserted to land once, every log is read whole, and credential variables are cleared, so no negative reaches a service.
+
+**P7 deviation 1 (2026-10-13), found in step 6.**
+
+- **What was found.** Copy 2, as first written, does not build: with `|| hasOptional(sub)` gone, the loop variable is unused, and the run ended `provider.go:273:12: declared and not used: sub` and `[build failed]`, with no test run. The step was wrong, not the code under test.
+- **The owner's decision (2026-10-13):** record it, and keep the corrected mutation, which also drops `sub` from the range clause. Run on the scratch copy, it failed `TestStrictFor` and `TestStrictBuiltins` as planned. No file is added to the phase's scope.
+
+**P7 deviation 2 (2026-10-13), found by the tagged lint after step 7.**
+
+- **What was found.** `golangci-lint` printed 4 issues, the same for linux, darwin and windows, all in lines P7 added:
+  - `provider.go:271:9` and `:272:12`: `Error return value is not checked (errcheck)`, for step 1's `props, _ :=` and `required, _ :=` type assertions;
+  - `strict_test.go:66:26` and `:73:26`: `fmt.Sprintf can be replaced with string concatenation (perfsprint)`, in `checkStrict`.
+- **The owner's decision (2026-10-13):** fix them in the same two files. Step 1's `hasOptional` checks both assertions, with the same decisions, and `checkStrict` concatenates its two fixed-text lines. The P7 tests, the four negatives and the gates run again on the fixed tree. The live run stands, since the rule's output is unchanged. No file is added to the phase's scope.
 
 **Step 7. The live run.** `TestStrictProbe` runs once, as P5's live run says: one billed request to `gpt-4.1-mini`, with the key loaded from the owner's key file into that one process, on the owner's permission given in that turn, and every output checked for the key before it is read.
 
@@ -1667,3 +1696,33 @@ P5's files passed the pre-add check, and `golangci-lint` with `--build-tags live
   1. **Its premise.** P9 assumed the race was the nested `Marshal`, from 0013-REPORT's first amendment. Probe F showed impossible race reports and real crashes without it, so the defect it answered is this host's WSL, not code gobble runs (0013-REPORT, third amendment). The probe was the phase's own check, and it did its job. The premise should have been tested on another machine before a phase was written to remove it.
   2. **Step 7's command** had no `-timeout`, and the control needed about 25 minutes (deviation 1).
   3. **The dry run** caught two errors in the drafted code before approval: `reflect.Type.Fields` yields fields, not indexes, and one conversion was unnecessary. Running a drafted phase on a scratch copy before presenting it found them where reading did not.
+
+## Execution record — P7 (2026-10-13)
+
+**P7 ran on 2026-10-13, on go-llmprovider-sdk `v1.12.0`, with two deviations, each the owner's decision.** Steps 1–5 are one commit, with this record and step 8's.
+
+- **Tests.** `TestStrictFor`, `TestStrictBuiltins`, `TestCheckStrict` and `TestWireStrict` with its ten subtests: 14 passes.
+  - `"strict":false` reached the body once per tool sent with it, 10 on Windows, on each of the eight wires that carry it, and never on Gemini's or Ollama's.
+  - No body held `"strict":true`.
+- **Without a key,** `TestStrictProbe` skipped, naming `OPENAI_API_KEY`. `go vet` with the four live tags exited 0.
+- **Seen failing (C3),** on a scratch copy, after a control run passed, 4 of 4, each with its named tests and text:
+  - copy 1: `TestStrictBuiltins` (`read: strict unset, want false`) and `TestWireStrict` (`no built-in tool is sent with strict false`);
+  - copy 2 (deviation 1's form): `TestStrictFor` (`optional in items: strictFor = unset, want false`, `optional in a property: strictFor = unset, want false`) and `TestStrictBuiltins` (`todo: strict unset, want false`);
+  - copy 3: `TestStrictFor` (`all required: strictFor = true, want unset`), `TestStrictBuiltins` (`write: strict true, want unset`, `mkdir: strict true, want unset`) and `TestWireStrict`'s eight carrying subtests (`a "strict":true reached the wire`);
+  - copy 4: `TestCheckStrict` (`match: checkStrict =`, then the mismatch it returned).
+  - The four ran again on deviation 2's tree, with copy 2's anchor moved to the new loop, and were caught again.
+- **The live run,** approved by the owner in that turn: one process, two billed requests, and the key in none of the output.
+  - `TestStrictProbe` (`gpt-4.1-mini`) passed. It reported `strict=false` for bash, copy, delete, find, grep, move, powershell, read, todo and tree, and `strict=true` for edit, mkdir and write, as step 7 predicted.
+  - `TestLiveOpenAI` (`gpt-6-luna`) passed with the tools: `"ok"`, no call, 3,508 tokens in and 5 out.
+  - `TestLiveClaude`, `TestLiveGemini` and `TestLiveGrok` are pending: there is no key for them here, and they are the owner's to run. Until `TestLiveClaude` runs, Messages' acceptance of `strict: false` stays **[unverified]**.
+- **Gates,** on deviation 2's tree:
+  - the pre-add check: 6 files clean;
+  - lint for linux, darwin and windows: `0 issues.`, with and without the four live tags;
+  - Windows `go test ./...` and `-race`, the second Linux machine's `-race` and the macOS laptop's `go test`: 31 packages ok each, no race report;
+  - Windows `make preflight`: `preflight passed`.
+
+**What P7 predicted wrongly.**
+
+- Deviation 1: step 6's copy 2 did not build as written, since the loop variable it left was unused.
+- Deviation 2: step 1's code failed errcheck, which checks type assertions here, and step 2's failed perfsprint. A plan's Go is not lint-checked until it is code, so a step's code block is a draft, and the lint gate is its first reader.
+- The rest held: the counts per wire, the live `strict=` values and the 14 passes were as written.
