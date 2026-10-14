@@ -20,7 +20,7 @@ func TestModelProviderSessionID(t *testing.T) {
 	t.Setenv("GOBBLE_HOME", t.TempDir())
 	var got string
 	old := ambientProvider
-	ambientProvider = func(_ func(string) string, _ string, o provider.Options) (llm.Provider, provider.Selection, error) {
+	ambientProvider = func(_ func(string) (string, bool), _ string, o provider.Options) (llm.Provider, provider.Selection, error) {
 		got = o.SessionID
 		return nil, provider.Selection{}, errors.New("recorded")
 	}

@@ -29,18 +29,25 @@ type Selection struct {
 // naming that variable, never another provider (0019-MADR D15). Either way
 // with its first curated model. env reads the environment.
 func Choose(env func(string) string, preferred string) (Selection, error) {
+	return ChooseWith(func(id string) bool { return env(CredentialVar(id)) != "" }, preferred)
+}
+
+// ChooseWith is Choose over a credential lookup: has reports whether the
+// built-in provider id has a credential from any source, such as auth.json
+// (0005-PLAN F4-3a).
+func ChooseWith(has func(id string) bool, preferred string) (Selection, error) {
 	if preferred != "" {
 		d, ok := keyProvider(preferred)
 		switch {
 		case !ok:
 			return Selection{}, fmt.Errorf("provider: defaultProvider %q is not a built-in provider that takes a key", preferred)
-		case env(d.EnvVar) == "":
+		case !has(preferred):
 			return Selection{}, fmt.Errorf("%w: defaultProvider is %s; set %s", ErrNoCredential, preferred, d.EnvVar)
 		}
 		return selection(d), nil
 	}
 	for _, d := range providers.Default().Descriptors() {
-		if takesKey(d) && env(d.EnvVar) != "" {
+		if takesKey(d) && has(string(d.ID)) {
 			return selection(d), nil
 		}
 	}
@@ -89,11 +96,25 @@ func CredentialVar(id string) string {
 // Ambient builds the provider Choose picks for preferred, with the
 // credential its variable holds. o's APIKey and Model are ignored.
 func Ambient(env func(string) string, preferred string, o Options) (llm.Provider, Selection, error) {
-	s, err := Choose(env, preferred)
+	return AmbientWith(func(id string) (string, bool) {
+		v := env(CredentialVar(id))
+		return v, v != ""
+	}, preferred, o)
+}
+
+// AmbientWith is Ambient over a credential lookup: key is the built-in
+// provider id's credential, from any source (0005-PLAN F4-3a). o's
+// CredentialSource is kept; its APIKey and Model are not.
+func AmbientWith(key func(id string) (string, bool), preferred string, o Options) (llm.Provider, Selection, error) {
+	s, err := ChooseWith(func(id string) bool {
+		_, ok := key(id)
+		return ok
+	}, preferred)
 	if err != nil {
 		return nil, Selection{}, err
 	}
-	o.APIKey, o.Model = env(s.EnvVar), s.Model
+	o.APIKey, _ = key(s.ID)
+	o.Model = s.Model
 	p, err := New(s.ID, o)
 	if err != nil {
 		return nil, s, err

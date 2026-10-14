@@ -26,24 +26,27 @@ const appName = "gobble"
 
 // modelProvider is the model the agent builds on its first prompt: the
 // run's provider, --model's or the defaultProvider setting's, or else the
-// first provider whose standard credential variable is set (0002-PLAN
-// Phase 3, owner's decision of 2026-10-05; 0019-MADR D15; 0005-PLAN F4-2c).
-// Each session's provider names the session (0021-MADR D4). Tests replace
-// it.
+// first provider with a credential (0002-PLAN Phase 3, owner's decision of
+// 2026-10-05; 0019-MADR D15; 0005-PLAN F4-2c), its key found in Pi's order
+// and resolved now (0005-PLAN F4-3a). Each session's provider names the
+// session (0021-MADR D4). Tests replace it.
 var modelProvider = func(e *runEnv) func(sessionID string) (llm.Provider, error) {
 	return func(sessionID string) (llm.Provider, error) {
 		o := provider.Options{ClientName: appName, ClientVersion: identity().Version, Logger: e.log(), SessionID: sessionID}
-		if sel, err := provider.Choose(os.Getenv, e.chosenProvider()); err == nil {
+		if sel, err := provider.ChooseWith(e.hasCredential, e.chosenProvider()); err == nil {
 			o = e.providerOptions(sel.ID, o) // models.json's base URL and headers (0005-PLAN F4-2b)
+			if src, ok := e.credentials().Has(sel.ID); ok {
+				o.CredentialSource = string(src) // a rejected key names it (0005-PLAN F4-3a)
+			}
 		}
-		p, _, err := ambientProvider(os.Getenv, e.chosenProvider(), o)
+		p, _, err := ambientProvider(e.credentialKey, e.chosenProvider(), o)
 		return p, err
 	}
 }
 
 // ambientProvider builds the ambient provider; a test replaces it to see
 // the options it is given.
-var ambientProvider = provider.Ambient
+var ambientProvider = provider.AmbientWith
 
 // agentOptions are gobble's agent's options, for `gobble acp` and the
 // in-process agent alike: the ambient provider and its model choice, and
@@ -57,10 +60,10 @@ func (e *runEnv) agentOptions() acpserver.Options {
 		Version:  identity().Version,
 		Provider: modelProvider(e),
 		Models:   e.modelChoice,
-		// What the catalog knows of a model, with the provider's key, read as
-		// modelProvider reads it, for its listing (0005-PLAN F4-2a).
+		// What the catalog knows of a model, with the provider's key, found as
+		// modelProvider finds it, for its listing (0005-PLAN F4-2a, F4-3a).
 		ModelInfo: func(id, model string) llm.Model {
-			return provider.ModelInfo(id, os.Getenv(provider.CredentialVar(id)), model, e.modelsJSON())
+			return provider.ModelInfo(id, e.knownKey(id), model, e.modelsJSON())
 		},
 		// --model and --thinking win over every session's own (0005-PLAN F4-2c).
 		Override: acpserver.Override{Provider: e.pick.Provider, Model: e.pick.Model, Thinking: e.pick.Thinking},
@@ -107,7 +110,7 @@ func mcpConfigPath() string {
 // --model's model and the default join the models when the listing lacks
 // them (0005-PLAN F4-2c).
 func (e *runEnv) modelChoice() acpserver.ModelChoice {
-	sel, err := provider.Choose(os.Getenv, e.chosenProvider())
+	sel, err := provider.ChooseWith(e.hasCredential, e.chosenProvider())
 	if err != nil {
 		return acpserver.ModelChoice{}
 	}

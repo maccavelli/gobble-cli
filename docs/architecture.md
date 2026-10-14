@@ -71,7 +71,7 @@ The tier is each package's `Stability:` line in its `doc.go`. **stable** package
 | `internal/buildinfo` | internal | The build's version, commit, toolchain, platform and User-Agent. |
 | `internal/logging` | internal | The one slog logger: a rolling owner-only file, and warnings on stderr, both redacted. |
 | `internal/archtest` | internal | The import rules below, as a test. |
-| `internal/auth` | internal | The credential store (placeholder). |
+| `internal/auth` | internal | `<config>/auth.json` in Pi's shape, owner-only and locked for every change, and Pi's credential order (0005-PLAN F4-3a). |
 | `internal/config` | internal | Settings: a commented `settings.yaml` from an embedded template, layered global, project (trusted) and `--set`, edited in place; the JSON Schema. |
 | `internal/filelock` | internal | An exclusive lock file between processes, for session files, `mcp.json` and settings. |
 | `internal/proctree` | internal | A command as a tree that stops whole: its own process group on Unix, a kill-on-close Job object on Windows. |

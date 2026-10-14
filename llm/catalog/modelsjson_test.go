@@ -63,11 +63,14 @@ func TestParseModelsJSON(t *testing.T) {
 		{"empty entry", []string{`"grok"`, "must specify", "skipped"}},
 		{"window of 0", []string{`"kilo"`, "invalid contextWindow", "skipped"}},
 		{"unused fields", []string{`"together"`, "compat, promptCache not used by gobble"}},
-		{"apiKey", []string{`"gemini"`, "apiKey takes effect", "F4-3"}},
 	} {
 		if !hasDiag(diags, c.parts...) {
 			t.Errorf("%s: no diagnostic with %q in %q", c.name, c.parts, diags)
 		}
+	}
+	// apiKey is used, as written, so it is not reported (0005-PLAN F4-3a).
+	if hasDiag(diags, `"gemini"`) || mj.APIKey("gemini") != "$GEMINI_KEY" {
+		t.Errorf("apiKey: diagnostics %q, APIKey %q; want none and the value as written", diags, mj.APIKey("gemini"))
 	}
 	for _, skipped := range []string{"openai", "grok", "kilo"} {
 		if mj.BaseURL(skipped) != "" || mj.Models(skipped) != nil {

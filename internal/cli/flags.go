@@ -33,7 +33,7 @@ type SharedFlags struct {
 	Provider   string `complete:"provider" help:"Provider; requires --model."`
 	Model      string `complete:"model" placeholder:"PROVIDER/ID[:THINKING]" help:"Model to use."`
 	Thinking   string `enum:",off,minimal,low,medium,high,xhigh,max" default:"" help:"Thinking level: off, minimal, low, medium, high, xhigh or max."`
-	APIKey     string `name:"api-key" complete:"none" placeholder:"KEY" help:"API key for this run."`
+	APIKey     string `name:"api-key" complete:"none" placeholder:"-" help:"Read this run's API key from stdin, or ask for it: -. Needs --model."`
 	ListModels bool   `name:"list-models" help:"List models, as gobble models list; the prompt words are its search."`
 
 	// Tools.
@@ -58,16 +58,21 @@ type SharedFlags struct {
 // The plans that deliver the default command's remaining flags.
 const (
 	plan0005F3 = "0005-PLAN F3"
-	plan0005F4 = "0005-PLAN F4"
 	plan0005F6 = "0005-PLAN F6"
 	plan0005X3 = "0005-PLAN X3" // --offline (0018-MADR D20)
 )
+
+// apiKeyLiteral refuses a key given on the command line, which process
+// listings and shell history show (0005-MADR, second amendment of
+// 2026-10-10, item 5; the organisation's secrets rule).
+const apiKeyLiteral = "--api-key takes -: a key on the command line shows in process listings and shell history; " +
+	"pipe it, or type it when asked"
 
 // laterFlags maps each flag whose behaviour a later plan delivers to that
 // plan. Such a flag is parsed and rejected with exit 2, never ignored
 // (0008-MADR D12).
 var laterFlags = map[string]string{
-	"api-key": plan0005F4, "offline": plan0005X3,
+	"offline": plan0005X3,
 	"approve": plan0005F6, "yes": plan0005F6,
 }
 
@@ -81,6 +86,10 @@ func (f *SharedFlags) validate(g given, stdinPiped, atPaths bool) error {
 	switch {
 	case g["provider"] && !g["model"]:
 		return usageErrorf("--provider requires --model")
+	case g["api-key"] && f.APIKey != "-":
+		return usageErrorf("%s", apiKeyLiteral)
+	case g["api-key"] && !g["model"]:
+		return usageErrorf("--api-key requires a model to be specified via --model or --provider/--model")
 	case g["fork"] && (g["session"] || g["continue"] || g["no-session"]):
 		return usageErrorf("--fork cannot be combined with %s", firstGiven(g, "session", "continue", "no-session"))
 	case g["session-id"] && (g["session"] || g["continue"]):

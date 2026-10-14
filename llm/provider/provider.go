@@ -27,6 +27,10 @@ type Options struct {
 	// APIKey is the credential. Empty leaves the provider to fail with an
 	// authentication error.
 	APIKey string
+	// CredentialSource is where APIKey came from, such as "auth.json" or
+	// "OPENAI_API_KEY". With it, a key the provider's response refuses is
+	// an error naming the provider and the source (0005-PLAN F4-3a).
+	CredentialSource string
 	// Model is the model id. Empty keeps the provider's own.
 	Model string
 	// ClientName and ClientVersion lead the User-Agent (0003-MADR).
@@ -145,7 +149,7 @@ func New(id string, o Options) (llm.Provider, error) {
 	// The retry wrapper buffers the stream, so its capabilities, not the
 	// inner provider's, are what gobble can deliver (0019-MADR D2).
 	w := llmprovider.WithRetry(p, retryPolicy)
-	return &adapter{p: w, id: p.ID(), caps: w.Capabilities()}, nil
+	return &adapter{p: w, id: p.ID(), caps: w.Capabilities(), source: o.CredentialSource}, nil
 }
 
 // Wrap adapts an SDK provider to llm.Provider, with no retry of its own.
@@ -157,6 +161,22 @@ type adapter struct {
 	p    llmprovider.Provider
 	id   llmprovider.ProviderID
 	caps llmprovider.Capabilities
+	// source is where the key came from, or "" (0005-PLAN F4-3a).
+	source string
+}
+
+// rejected is mapped, err's llm form, led by "<provider> rejected the API
+// key from <source>" when the provider's response refused the key: an
+// APIError of ErrAuthFailure that is not ErrNotPermitted, as the SDK's
+// wizard tells a rejected key (wizard/configure.go). Anything else, or no
+// source, is mapped alone.
+func (a *adapter) rejected(mapped, err error) error {
+	var ae *llmprovider.APIError
+	response := errors.As(err, &ae)
+	if a.source == "" || !response || !errors.Is(err, llmprovider.ErrAuthFailure) || errors.Is(err, llmprovider.ErrNotPermitted) {
+		return mapped
+	}
+	return fmt.Errorf("%s rejected the API key from %s: %w", a.id, a.source, mapped)
 }
 
 func (a *adapter) ID() string { return string(a.id) }
@@ -179,7 +199,7 @@ func (a *adapter) Stream(ctx context.Context, req *llm.Request) iter.Seq2[llm.Ev
 		ctx := context.WithValue(ctx, modelKey{}, req.Model) // for the header transport (0005-PLAN F4-2b)
 		for ev, err := range llmprovider.Stream(ctx, a.p, sreq) {
 			if err != nil {
-				yield(nil, mapError(err))
+				yield(nil, a.rejected(mapError(err), err))
 				return
 			}
 			var e llm.Event

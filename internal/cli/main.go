@@ -15,6 +15,7 @@ import (
 	"github.com/alecthomas/kong"
 
 	"github.com/maccavelli/gobble-cli/acpserver"
+	"github.com/maccavelli/gobble-cli/internal/auth"
 	"github.com/maccavelli/gobble-cli/internal/cli/complete"
 	"github.com/maccavelli/gobble-cli/internal/cli/term"
 	"github.com/maccavelli/gobble-cli/internal/config"
@@ -165,6 +166,14 @@ type runEnv struct {
 	// gives defaultModel's warning once (0005-PLAN F4-2c).
 	pick             modelPick
 	defaultModelOnce sync.Once
+	// creds is the run's credential resolver, built once; credsMu guards
+	// credWarned, the providers whose resolution error was warned, and
+	// knownKeys, the keys resolved once for lookups (0005-PLAN F4-3a).
+	credsOnce  sync.Once
+	creds      *auth.Resolver
+	credsMu    sync.Mutex
+	credWarned map[string]bool
+	knownKeys  map[string]string
 }
 
 func (e *runEnv) log() *slog.Logger { return e.logs.get() }

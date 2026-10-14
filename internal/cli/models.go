@@ -1,8 +1,8 @@
 package cli
 
 import (
+	"errors"
 	"log/slog"
-	"os"
 	"slices"
 	"sync"
 	"time"
@@ -17,6 +17,10 @@ var listModels = provider.List
 // listRetry is the least time between a failed listing and its retry
 // (0020-MADR D3).
 const listRetry = time.Minute
+
+// errNoListingKey is a listing not made, because the provider's key did not
+// resolve (0005-PLAN F4-3a deviation 3).
+var errNoListingKey = errors.New("the provider's key did not resolve, so its models were not listed")
 
 // modelListing is the process's listing of one provider's models
 // (0020-MADR D3): started once, waited for by the first reader, kept when
@@ -82,9 +86,14 @@ func (e *runEnv) modelListing(sel provider.Selection) *modelListing {
 	if l, ok := e.listings[sel.ID]; ok {
 		return l
 	}
-	key := os.Getenv(sel.EnvVar)
+	key := e.knownKey(sel.ID) // in Pi's order (0005-PLAN F4-3a)
 	o := e.providerOptions(sel.ID, provider.Options{ClientName: appName, ClientVersion: identity().Version})
 	l := newModelListing(func() provider.Listing {
+		if key == "" {
+			// A key that did not resolve, already warned of, lists nothing: no
+			// request goes without one (0005-PLAN F4-3a deviation 3).
+			return provider.Listing{Models: provider.Models(sel.ID), Err: errNoListingKey}
+		}
 		r, err := listModels(e.ctx, sel.ID, key, o)
 		if err != nil {
 			r = provider.Listing{Models: provider.Models(sel.ID), Err: err}
@@ -105,7 +114,7 @@ func (e *runEnv) modelListing(sel provider.Selection) *modelListing {
 // startModelListing starts the run's provider's listing when a credential
 // is set, so the first session rarely waits for it (0020-MADR D3).
 func (e *runEnv) startModelListing() {
-	if sel, err := provider.Choose(os.Getenv, e.chosenProvider()); err == nil {
+	if sel, err := provider.ChooseWith(e.hasCredential, e.chosenProvider()); err == nil {
 		e.modelListing(sel).start()
 	}
 }

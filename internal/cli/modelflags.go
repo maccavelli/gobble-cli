@@ -3,7 +3,6 @@ package cli
 import (
 	"cmp"
 	"context"
-	"os"
 	"slices"
 	"strings"
 
@@ -26,7 +25,7 @@ func (e *runEnv) pickModel(f *SharedFlags) (modelPick, error) {
 	if f.Model == "" {
 		return modelPick{Thinking: f.Thinking}, nil
 	}
-	res, err := catalog.ResolveModel(f.Provider, f.Model, f.Thinking, offlineModels(e.ctx, e.modelsJSON()), hasCredential)
+	res, err := catalog.ResolveModel(f.Provider, f.Model, f.Thinking, offlineModels(e.ctx, e.modelsJSON()), e.hasCredential)
 	if err != nil {
 		return modelPick{}, usageErrorf("%v", err)
 	}
@@ -34,12 +33,6 @@ func (e *runEnv) pickModel(f *SharedFlags) (modelPick, error) {
 		e.out.Warnf("%s", res.Warning)
 	}
 	return modelPick{Provider: res.Model.Provider, Model: res.Model.ID, Thinking: cmp.Or(f.Thinking, res.Level)}, nil
-}
-
-// hasCredential reports whether provider id's credential variable is set.
-func hasCredential(id string) bool {
-	v := provider.CredentialVar(id)
-	return v != "" && os.Getenv(v) != ""
 }
 
 // offlineModels is the offline model set (0005-PLAN F4-2c decision 2): each

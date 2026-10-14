@@ -11,6 +11,7 @@ type Root struct {
 	ACP        ACPCmd        `cmd:"" name:"acp" help:"Run the ACP agent on stdio."`
 	MCP        MCPCmd        `cmd:"" name:"mcp" help:"Add, remove and check MCP servers."`
 	Models     ModelsCmd     `cmd:"" help:"List the models gobble knows, or show one."`
+	Auth       AuthCmd       `cmd:"" help:"Store, remove and check model credentials."`
 	LogLevel   string        `name:"log-level" enum:"debug,info,warn,error" default:"info" help:"Log level: ${enum}."`
 	Set        []string      `name:"set" sep:"none" complete:"none" placeholder:"PATH=VALUE" help:"Override a setting for this run; repeatable."`
 }

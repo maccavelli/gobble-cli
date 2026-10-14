@@ -336,6 +336,36 @@ func TestWireHeaders(t *testing.T) {
 	}
 }
 
+// A key the provider's response refuses is llm.ErrAuth naming the provider
+// and where the key came from; with no source, or for a permission refusal
+// (403), nothing is added (0005-PLAN F4-3a decision 9).
+func TestWireRejectedKey(t *testing.T) {
+	const rejected = `{"error":{"message":"Incorrect API key provided.","type":"invalid_request_error","code":"invalid_api_key"}}`
+	stream := func(source string, status int) error {
+		w := &cannedWire{status: status, body: rejected}
+		p, err := New("openai", Options{APIKey: "k", CredentialSource: source, Model: "gpt-6-luna", HTTPClient: &http.Client{Transport: w}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, err := range p.Stream(t.Context(), wireRequest()) {
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	if err := stream("auth.json", http.StatusUnauthorized); !errors.Is(err, llm.ErrAuth) ||
+		!strings.HasPrefix(err.Error(), "openai rejected the API key from auth.json: ") {
+		t.Errorf("401 with a source: %v, want llm.ErrAuth naming openai and auth.json", err)
+	}
+	if err := stream("", http.StatusUnauthorized); !errors.Is(err, llm.ErrAuth) || strings.Contains(err.Error(), "rejected the API key") {
+		t.Errorf("401 with no source: %v, want llm.ErrAuth alone", err)
+	}
+	if err := stream("auth.json", http.StatusForbidden); err == nil || strings.Contains(err.Error(), "rejected the API key") {
+		t.Errorf("403: %v, want a refusal that does not say the key was rejected", err)
+	}
+}
+
 // Each built-in tool's strict flag reaches every wire that carries one, and
 // none reaches Gemini's or Ollama's; true is never sent (0012-PLAN P7).
 func TestWireStrict(t *testing.T) {

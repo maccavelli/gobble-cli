@@ -3,7 +3,6 @@ package cli
 import (
 	"cmp"
 	"fmt"
-	"os"
 	"regexp"
 	"slices"
 	"strconv"
@@ -42,7 +41,7 @@ type ModelsInfoCmd struct {
 func (c *ModelsInfoCmd) Run(e *runEnv) error {
 	e.ensureSettingsFile()
 	mj := e.modelsJSON()
-	res, err := catalog.ResolveModel("", c.Model, "", offlineModels(e.ctx, mj), hasCredential)
+	res, err := catalog.ResolveModel("", c.Model, "", offlineModels(e.ctx, mj), e.hasCredential)
 	if err != nil {
 		return usageErrorf("%v", err)
 	}
@@ -59,10 +58,10 @@ func (c *ModelsInfoCmd) Run(e *runEnv) error {
 func (e *runEnv) printModels(search string) error {
 	var sels []provider.Selection
 	for _, p := range provider.KeyProviders() {
-		if !hasCredential(p) {
+		if !e.hasCredential(p) {
 			continue
 		}
-		if sel, err := provider.Choose(os.Getenv, p); err == nil {
+		if sel, err := provider.ChooseWith(e.hasCredential, p); err == nil {
 			sels = append(sels, sel)
 		}
 	}

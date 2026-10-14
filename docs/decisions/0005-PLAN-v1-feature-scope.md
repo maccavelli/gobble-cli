@@ -4459,8 +4459,8 @@ printing a stored key; a stored key in Pi's value grammar).
      the command line shows in process listings and shell history; pipe it, or type it when asked`) and `--api-key`
      without `--model` (`--api-key requires a model to be specified via --model or --provider/--model`);
    - `chat.go`: after `validate`, `--api-key -` reads the key before the input is composed, and stdin then carries none;
-   - `line.go`, `print.go`: on `ErrAuthRequired`, the agent's message when the run's provider had a key, else
-     `noCredentialMessage`;
+   - `line.go`, `print.go`: on `ErrAuthRequired`, ~~the agent's message~~ the CLI's own `<provider> rejected the API key
+     from <source>` when the run's provider had a key, else `noCredentialMessage` *(F4-3a deviation 1)*;
    - `auth.go` (new): `AuthCmd` with `Login`, `Logout`, `Status` and `Check`, as decision 8; `root.go` gains
      `Auth AuthCmd` (`cmd:""`, `help:"Store, remove and check model credentials."`); `main.go`'s `runEnv` gains the
      resolver and its once.
@@ -4468,6 +4468,40 @@ printing a stored key; a stored key in Pi's value grammar).
    `gobble auth`, and what a rejected key says, each example run against a scratch config; `docs/guides/models-json.md`:
    `apiKey` takes effect, and the example's output loses its `apiKey` line; `README.md`'s features gain credentials;
    `docs/architecture.md`'s `internal/auth` row; this plan; `docs/README.md`.
+
+**F4-3a deviation 1 (2026-10-14), found writing step 5.**
+
+- **What was found.** Step 6 has the CLI print the agent's message for a rejected key. That message wraps the SDK's error,
+  whose text holds the provider's response, and a provider may echo part of the key there (0020-MADR F5, why a failed
+  listing's warning prints only its kind, `internal/cli/models.go:93-94`).
+- **The owner's decision (2026-10-14):** the CLI prints its own `<provider> rejected the API key from <source>`, from
+  the provider and the source its resolver found, and nothing of the provider's text. The agent's `auth_required` error
+  still leads with that sentence, for ACP clients, as decision 9 says. Step 6 is annotated above; no file is added.
+
+**F4-3a deviation 2 (2026-10-14), found by the gates' lint.**
+
+- **What was found.** `golangci-lint` printed 4 issues, the same for linux, darwin and windows, all in lines F4-3a added:
+  - `llm/provider/provider.go:174:2`: ``Error return value of `errors.AsType` is not checked (errcheck)``, for
+    `_, response := errors.AsType[*llmprovider.APIError](err)`;
+  - `internal/cli/auth.go:194:7`: ``string `not_ready` has 4 occurrences, make it a constant (goconst)``;
+  - `internal/cli/auth.go:184:9`: `appendAssign: append result not assigned to the same slice (gocritic)`;
+  - `internal/cli/auth.go:202:2`: `ineffectual assignment to id (ineffassign)`.
+- **The owner's decision (2026-10-14):** `rejected` tests the response with `errors.As` into a named `*APIError`, its
+  rule unchanged; `check`'s three statuses become constants; the JSON's newline is appended to its own slice; `id` is
+  assigned only in `check`'s branches. No step changes, and no file is added.
+
+**F4-3a deviation 3 (2026-10-14), found re-running F4-2b's guide example on F4-3a's tree.**
+
+- **What was found.** That example gives openai `"apiKey": "!pass show openai"`, and the command fails here. The run's
+  provider is chosen by `auth.Resolver.Has`, which counts a command key as configured without running it, as Pi's check
+  does (`core/provider-composer.ts:426-433`). So openai is chosen; its key then fails to resolve; the model listing went
+  to the provider with no key (`model listing failed ... provider=openai kind=auth`); and the CLI said `openai rejected
+  the API key from models.json`, though no key was sent. Pi lists no models at start, so the keyless listing is gobble's.
+- **The owner's decision (2026-10-14):** the provider is still chosen by `Has`. Its listing is fetched only with a
+  resolved key; with none, it is the curated models, and no request is made. The CLI's message resolves the key: a
+  rejection only when it resolved; when it could not, `<provider>'s API key from <source> could not be resolved:
+  <error>`, the error naming the command or variable, never a value. A test covers each. No file is added: the fix is
+  in `internal/cli/models.go` and `credentials.go`, its test in `auth_test.go`.
 
 **F4-3a's tests,** each seen failing first on a scratch copy:
 
@@ -4514,3 +4548,58 @@ the gates                                                     -> lint ×3, tests
 - **Pi's `api_key` `env` field** (provider-scoped values, such as Cloudflare's ids): kept as written, unused; no SDK
   provider takes one.
 - **The OS keyring:** 1.x, as decision 4 of 2026-10-10 says.
+
+**F4-3a's execution record (2026-10-14).**
+
+- **Ran on go-llmprovider-sdk `v1.13.0`,** still the latest tag, with three deviations, each the owner's decision: the
+  CLI builds the rejected-key sentence (deviation 1); lint's four issues fixed (deviation 2); no listing without a
+  resolved key, and an unresolved key said as one (deviation 3).
+- **Tests:**
+  - `internal/auth`: `TestStoreRoundTrip`, `TestStoreConcurrent`, `TestStoreMode`, `TestStoreBadFile`,
+    `TestResolveOrder` and `TestResolveModelsJSON`;
+  - `llm/provider`: `TestChooseWith` and `TestWireRejectedKey`;
+  - `internal/cli`: `TestAPIKeyFlag`, `TestAuthLogin`, `TestAuthLogout`, `TestAuthStatus`, `TestAuthCheck`,
+    `TestRejectedKeyMessage` and `TestUnresolvedKey` (deviation 3's; run, not skipped: Git for Windows' bash was found);
+  - all pass, each seen by name in a `-v` run, with the edited `TestParseModelsJSON` and `TestModelProviderSessionID`
+    (`cache_test.go`), and `TestLaterFlagsAreRejected`, `TestAmbientDefaultModels` and `TestChoosePreferred` unedited.
+    Every other existing test passes unedited.
+- **Negatives,** 26 of 26 caught on a scratch copy after control runs, each built, each failing its named tests with its
+  text:
+  - `internal/auth`: an oauth entry not owning its provider; `--api-key` ignored; a stored command run each time; an
+    unset `models.json` variable an error; kept fields dropped; no lock; not owner-only; a bad file overwritten; no type
+    required;
+  - `llm/provider`: `ChooseWith` reading the variable; a rejection named with no source, for a 403, and with the source
+    not kept;
+  - `llm/catalog`: `models.json`'s `apiKey` not given;
+  - `internal/cli`: `--api-key`'s key not used, a literal accepted, `--api-key` without `--model`, the source not given
+    the provider; `login` storing nothing; an OAuth logout said as a key's; `status` printing the key; an unusable entry
+    not `invalid`; a rejected key said as no key; the provider's text printed; a keyless listing; an unresolved key said
+    as rejected.
+  - Earlier runs caught 22 of 24 and 22 of 26 (deviation 3's two added). Every miss was the harness's: a mutation that
+    left a variable unused, so the copy did not build; anchors moved by deviation 3's fix; and expected texts that a
+    `Fatalf` earlier in the test, or the CLI's other message, replaced. The tests themselves failed each time.
+- **The guides' examples** ran against a scratch `GOBBLE_HOME` with every credential variable cleared, on the final
+  code. The rejected-key example set `OPENAI_API_KEY=test-only` and pointed openai, through `models.json`, at a local
+  server answering 401, so no request left the machine; the CLI printed `Error: openai rejected the API key from
+  OPENAI_API_KEY`, exit 3, and nothing of the server's reply. F4-2b's `models.json` example, re-run, printed the failed
+  command and no listing, and its guide shows that output.
+- **Gates:** the pre-add check, 27 files clean; lint for linux, darwin and windows, `0 issues.`; Windows `go test ./...`
+  and `-race`, the second Linux machine's `-race` and the macOS laptop's `go test`, 33 packages ok each (`internal/auth`
+  now has tests), no race report; Windows `make preflight`, `preflight passed`.
+- **What the plan predicted wrongly, or left unsaid:**
+  - Deviation 1: step 6 would have printed the agent's message, whose SDK text holds the provider's reply.
+  - Deviation 2: the plan's code failed lint a fifth time (errcheck, goconst, gocritic, ineffassign).
+  - Deviation 3: choosing a provider by Pi's `Has`, which runs no command, left a provider chosen whose key then failed;
+    the plan did not foresee the listing that follows a choice, which Pi does not make.
+  - `auth.Resolver.Has` was added beside `Credential`: Pi's check counts a key without running a command, and the CLI
+    asks it wherever it only needs to know, as `ChooseWith` does.
+  - `knownKey` resolves a provider's key once for what only informs (a model's facts, the listing), so a `models.json`
+    command does not run for every lookup; a provider is still built with a key resolved then.
+  - A kept entry already in Pi's layout is kept byte for byte; a one-line entry is laid out as Pi lays every entry out,
+    since Pi rewrites the whole file with `JSON.stringify(…, null, 2)`.
+  - Each write replaces the file, so a mode an administrator set does not survive one, where Pi's create-only mode
+    leaves it: the file is the user's alone after every write.
+  - A 403 that the SDK counts as `ErrAuthFailure` reaches the CLI as `auth_required` too, so the CLI says the key was
+    rejected; the agent's own error, `rejected` in `llm/provider`, leaves a 403 out.
+  - F4-2c's records call `TestLaterFlagsAreRejected` `TestLaterFlags`.
+- **Next:** F4-3b, OAuth logins, made executable as an amendment first, its terms checks its first step.

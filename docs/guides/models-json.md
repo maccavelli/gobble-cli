@@ -28,16 +28,16 @@ starts, so restart gobble after you edit it.
 }
 ```
 
-`//` comments and trailing commas are accepted, as in Pi. Run with no credential set, gobble
-reports the two entries it cannot use yet, then stops at the missing key (each line's timestamp is
-left out here, and `<sdk-version>` is the go-llmprovider-sdk version gobble was built with, which
-the warning names):
+`//` comments and trailing commas are accepted, as in Pi. Run with no credential set and no `pass`
+installed, gobble reports the entry it cannot use, then tries openai's `apiKey` command, and stops
+when it fails, sending nothing (each line's timestamp is left out here, and `<sdk-version>` is the
+go-llmprovider-sdk version gobble was built with, which the warning names):
 
 ```text
 $ gobble -p hello
-level=WARN msg=models.json message="provider \"openai\": apiKey takes effect with gobble's credentials (0005-PLAN F4-3); until then the provider's variable is used" file=<config>/models.json
 level=WARN msg=models.json message="provider \"openrouter\": not a provider go-llmprovider-sdk <sdk-version> builds (one of claude, gemini, grok, huggingface, kilo, ollama, openai, opencode-go, opencode-zen, together); skipped" file=<config>/models.json
-Error: no model credential: set one of GEMINI_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY, XAI_API_KEY, OPENCODE_API_KEY, HF_TOKEN, KILO_API_KEY, TOGETHER_API_KEY
+level=WARN msg=credentials message="models.json: provider openai: apiKey: the command \"pass show openai\" failed: exit status 127"
+Error: openai's API key from models.json could not be resolved: models.json: provider openai: apiKey: the command "pass show openai" failed: exit status 127
 ```
 
 Each warning names the provider and why. A file gobble cannot parse is ignored whole, with one
@@ -70,23 +70,24 @@ opencode-zen and opencode-go. Anything else skips the provider.
   `headers`. A cost's rates are each optional, and `tiers`, when given, replace the model's.
 - **`thinkingLevelMap`** turns thinking levels on or off: a string turns a level on, and `null`
   turns it off. gobble uses the level's own name with the provider; the string is not used.
+- **`apiKey`** is the provider's key when `auth.json` has none for it, ahead of the provider's
+  variable ([credentials](credentials.md)). It takes the values below; a command runs each time the
+  provider is built, and a value whose variables are unset counts as no key.
 
 ## Values
 
-A header value can name a variable or run a command, as in Pi:
+A header value, or `apiKey`, can name a variable or run a command, as in Pi:
 
 - `$NAME` and `${NAME}` are environment variables, and `$$` and `$!` are a literal `$` and `!`.
 - A value starting with `!` runs the rest as a command, through the same bash the bash tool uses,
   for at most 10 seconds, and uses what it prints.
 
-Values are resolved for each request and not cached. A variable that is not set, or a command that
+Header values are resolved for each request and not cached. A variable that is not set, or a command that
 fails or prints nothing, stops that request with an error naming the header and the variable or
 command, never the value.
 
 ## What is not used
 
-- **`apiKey`** is read and checked, and takes effect with gobble's credentials (0005-PLAN F4-3).
-  Until then the provider's standard variable is the key, and gobble warns once.
 - **`compat`, `oauth`, `authHeader`, `name`, `inputLimits`, `promptCache`, `samplingParams`** and a
   model's own **`baseUrl`** are reported once per provider, and ignored.
 - Providers other than gobble's ten, Pi's `opencode` among them (gobble's is `opencode-zen`), are

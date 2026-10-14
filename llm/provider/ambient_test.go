@@ -49,6 +49,27 @@ func TestAmbientDefaultModels(t *testing.T) {
 	}
 }
 
+// ChooseWith chooses by a credential from any source: a stored key chooses
+// a provider whose variable is unset, and one for opencode-go alone chooses
+// it, which the variable the two share cannot (0005-PLAN F4-3a).
+func TestChooseWith(t *testing.T) {
+	only := func(ids ...string) func(string) bool {
+		return func(id string) bool { return slices.Contains(ids, id) }
+	}
+	if s, err := ChooseWith(only("claude"), ""); err != nil || s.ID != "claude" {
+		t.Errorf("a stored claude key: %+v, %v; want claude", s, err)
+	}
+	if s, err := ChooseWith(only("opencode-go"), ""); err != nil || s.ID != "opencode-go" {
+		t.Errorf("an opencode-go key alone: %+v, %v; want opencode-go", s, err)
+	}
+	if _, err := ChooseWith(only("claude"), "openai"); !IsNoCredential(err) {
+		t.Errorf("openai preferred, no credential: %v, want the missing-credential error", err)
+	}
+	if _, err := ChooseWith(only(), ""); !IsNoCredential(err) {
+		t.Errorf("no credential at all: %v, want the missing-credential error", err)
+	}
+}
+
 // A preference whose variable is unset is the missing-credential error
 // naming that variable, never another provider; a value that is not a
 // provider taking a key is an error naming it (0019-MADR D15).

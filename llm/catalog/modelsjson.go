@@ -166,10 +166,6 @@ func ParseModelsJSON(data []byte, sdk string) (*ModelsJSON, []string, error) {
 		if unused := unusedFields(p); len(unused) > 0 {
 			diags = append(diags, fmt.Sprintf("provider %q: %s not used by gobble; ignored", key, strings.Join(unused, ", ")))
 		}
-		if p.APIKey != nil {
-			diags = append(diags, fmt.Sprintf("provider %q: apiKey takes effect with gobble's credentials (0005-PLAN F4-3); "+
-				"until then the provider's variable is used", key))
-		}
 		mj.providers[id] = p
 	}
 	return mj, diags, nil
@@ -250,6 +246,15 @@ func (mj *ModelsJSON) BaseURL(id string) string {
 		return ""
 	}
 	return mj.providers[id].BaseURL
+}
+
+// APIKey is provider id's apiKey as written, in Pi's value grammar, or ""
+// (0005-PLAN F4-3a).
+func (mj *ModelsJSON) APIKey(id string) string {
+	if mj == nil || mj.providers[id].APIKey == nil {
+		return ""
+	}
+	return *mj.providers[id].APIKey
 }
 
 // Models are the ids of the models provider id defines, in order, each once.

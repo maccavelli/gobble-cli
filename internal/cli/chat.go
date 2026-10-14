@@ -21,7 +21,8 @@ type ChatCmd struct {
 func (c *ChatCmd) Run(k *kong.Context, e *runEnv) error {
 	e.ensureSettingsFile()
 	g := givenFlags(k)
-	stdinPiped := e.stdin != nil && !e.out.caps.In
+	// With --api-key -, piped stdin is the key, never the input (0005-PLAN F4-3a).
+	stdinPiped := e.stdin != nil && !e.out.caps.In && !g["api-key"]
 	if err := c.validate(g, stdinPiped, hasAtPath(c.Prompt)); err != nil {
 		return err
 	}
@@ -40,6 +41,17 @@ func (c *ChatCmd) Run(k *kong.Context, e *runEnv) error {
 	if e.pick, err = e.pickModel(&c.SharedFlags); err != nil {
 		return err
 	}
+	// --api-key -'s key is the run's, for --model's provider, and is never
+	// written; read from stdin, it leaves stdin no input (0005-PLAN F4-3a).
+	keyFromStdin := false
+	if g["api-key"] {
+		key, err := e.readAPIKey(e.pick.Provider)
+		if err != nil {
+			return err
+		}
+		e.setRuntimeKey(e.pick.Provider, key)
+		keyFromStdin = !e.out.caps.In
+	}
 	choice, err := c.toolSet(builtinTools(e.processSettings(cwd).Settings))
 	if err != nil {
 		return err
@@ -55,6 +67,9 @@ func (c *ChatCmd) Run(k *kong.Context, e *runEnv) error {
 		return err
 	}
 	stdin, stdinTTY := e.stdinReader(), e.out.caps.In
+	if keyFromStdin {
+		stdin = nil
+	}
 	if c.File != "" {
 		path, err := resolvePath(base, c.File)
 		if err != nil {
