@@ -3310,6 +3310,8 @@ Choices made within the wording:
 **F4-3 — credentials.**
 *(2026-10-13, 0019-MADR D11, F6: F4-3 uses the SDK's `TokenStore`, `RefreshLocker` and logins, and advertises terminal auth
 before it offers one, since acp-go-sdk2's gates otherwise fail `initialize`.)*
+*(2026-10-14: re-made as F4-3a, F4-3b and F4-3c; see the Amendments entry "F4-3 re-made as three sub-phases, F4-3a
+made executable". The text below stands where that entry does not change it.)*
 
 Choices made within the wording:
 
@@ -4313,3 +4315,202 @@ no request leaves it.
   - `catalog.CompareIDs`, the case-folded order standing for Pi's `localeCompare`, is exported for `gobble models
     list`'s sort.
 - **Next:** F4-3, credentials, made executable as an amendment first.
+
+**2026-10-14 — F4-3 re-made as three sub-phases, F4-3a made executable** (the owner's choices of 2026-10-14: three
+sub-phases; the vendors' terms checked when F4-3b is made executable; `gobble auth token` for OAuth alone, and no command
+printing a stored key; a stored key in Pi's value grammar).
+
+**The facts,** measured on 2026-10-14 against `main` `dce2a97`, go-llmprovider-sdk `v1.13.0` (still the latest tag,
+`git ls-remote --tags`), acp-go-sdk2 `v0.17.1` and Pi `312184edb`:
+
+- **gobble today:**
+  - `internal/auth` is a declared package only (`internal/auth/doc.go:1-5`), imported by nothing.
+  - A key is read only from the provider's variable: `provider.Choose` and `Ambient` take `os.Getenv`
+    (`llm/provider/ambient.go:31-48`, `:91-102`), at `internal/cli/agent.go:36`, `:39`, `:63`, `:110`, `models.go:85`,
+    `:108`, `modelflags.go:40-42`, `modelscmd.go:65` and `line.go:72`. `provider.Options.APIKey` is the only credential
+    field (`llm/provider/provider.go:26-29`), sent as `WithAPIKey` (`:128-130`).
+  - `--api-key` is parsed and refused (`internal/cli/flags.go:66-72`). A rejected key and no key both reach the CLI as
+    `acpclient.ErrAuthRequired` (`acpclient/conn.go:283-284`) and print `noCredentialMessage` (`line.go:217-220`,
+    `print.go:196-197`), the defect 0019-PLAN P4 deviation 7 noted.
+  - `models.json`'s `apiKey` is parsed and reported as waiting for F4-3 (`llm/catalog/modelsjson.go:169-170`), which
+    `TestParseModelsJSON` pins (`modelsjson_test.go:66`) and the guide shows (`docs/guides/models-json.md:37-38`, `:88`).
+  - **0015-REPORT's lock correction is already met:** `3547163` moved `session/jsonl`'s lock to `internal/filelock`
+    (`Lock(ctx, path, Policy)`, `TryLock`, `EditPolicy`, `internal/filelock/lock.go:24-59`), which `internal/config` and
+    `mcpclient` use for their edits. `internal/appdirs` has `EnsurePrivateDir`, `FileIsOwnerOnly`, and on Windows
+    `SecurePrivateFile` (`ensure_unix.go:24`, `ensure_windows.go:26`, `security_windows.go:279`, `:300`).
+  - archtest rule 4 lets only `llm/provider` import go-llmprovider-sdk (`internal/archtest/check.go:238-254`), so
+    `internal/auth` cannot implement the SDK's `TokenStore`; an adapter in `llm/provider` must.
+- **go-llmprovider-sdk `v1.13.0`** (paths under `llmprovider/`):
+  - `auth.TokenStore` is `Load`, `Save` and `Delete` of `*OAuthSession` by provider, and `RefreshLocker` an optional
+    `LockRefresh`, so a refresh token is never spent twice (`auth/tokenstore.go:132-145`). `OAuthSession` has `Issuer`,
+    `ClientID`, `AccountID`, `FedRAMP` and `TokenURL` besides the tokens (`:21-64`); its JSON redacts the tokens, so it
+    is no file format (`:92-110`).
+  - Browser logins exist for openai and grok, device logins for openai, grok and kilo (`auth/oauth_loopback.go:91`,
+    `:184-204`; `auth/oauth_device.go:106-117`). The default client ids are the Codex and Grok CLIs' (`oauth_constants.go:5-13`),
+    which the SDK's own doc calls "borrowed" (`auth/doc.go:8-11`). Kilo's device login gives a key (`kilo_device.go:119-122`).
+  - Only openai, grok and kilo take an OAuth session; claude, gemini, huggingface, opencode-zen, opencode-go and together
+    take a key alone (e.g. `providers/claude/claude.go:149-151`).
+  - A 401 or 403 is `ErrAuthFailure` on an `*APIError` (`api_error.go:183-184`); a missing key is `ErrInvalidRequest` at
+    `New` (`providers/openai/openai.go:148`). There is no "no credential" sentinel.
+- **Pi** (paths under `packages/coding-agent/src/` unless named):
+  - **`auth.json`** is one object keyed by provider (`core/auth-storage.ts:17`): `{"type": "api_key", "key", "env"?}` or
+    `{"type": "oauth", "access", "refresh", "expires", ...}`, each provider's extra fields kept (`ai/src/auth/types.ts:17-34`).
+    The file is created `0o600`, the mode "only on creation so administrator-managed modes and ACLs remain intact", in a
+    directory made `0o700` (`core/auth-storage.ts:24-25`, `:59`, `:65`). Every change takes `auth.json`'s lock, re-reads,
+    merges the one provider and writes the whole file (`:449-482`); the async lock waits up to 30 s (`:116-155`).
+  - **The order** (`ai/src/auth/resolve.ts:28-92`, `core/runtime-credentials.ts:24-28`, `core/provider-composer.ts:426-451`):
+    the run's `--api-key`, kept in memory, never written; then the stored entry, which "owns the provider: ambient/env is
+    consulted only when nothing is stored"; then `models.json`'s `apiKey`, a value whose variables are unset counting as
+    none; then the provider's variable.
+  - **Values:** a stored key goes through `resolveConfigValue`, a `!command` run once and cached; `models.json`'s key
+    through `resolveConfigValueOrThrow`, uncached (`core/resolve-config-value.ts:145-151`, `:208-230`).
+  - **`--api-key <key>`** is a literal from argv (`cli/args.ts:118-119`), and needs a model: "--api-key requires a model
+    to be specified via --model, --provider/--model, or --models" (`main.ts:821-829`).
+  - **`pi auth`** has `check`, `print-api-key` and `print-bearer-token` (`cli/auth-command.ts:51-58`); login and logout
+    are the TUI's `/login` and `/logout`, saying `Saved API key for <name>`, `Removed stored API key for <name>.
+    Environment variables and models.json config are unchanged.` and, with none, `No stored credentials to remove. ...`
+    (`modes/interactive/interactive-mode.ts:5873`, `:5898`, `:5924`). `check` reports `ready`, `not_ready` or `invalid`,
+    with a reason, and exits 0, 1 or 2 (`cli/auth-check.ts:8-51`, `main.ts:188-202`).
+  - Pi has no Google login, and imports no other tool's credentials.
+- **acp-go-sdk2 `v0.17.1`:** a terminal auth method listed without the client's `auth.terminal` fails `initialize` on both
+  sides (`types_gen.go:19956-19968`); `authenticate` refuses a terminal method (`:19920-19927`); `logout` needs
+  `agentCapabilities.auth.logout` (`:19805-19810`). gobble's client sends no capabilities (`acpclient/conn.go:121-124`).
+  This is F4-3c's, as 0016-MADR D11 amends it.
+
+**The decisions:**
+
+1. **Three sub-phases,** each one commit with its own record and gates, each made executable as an amendment first:
+   - **F4-3a — keys:** `auth.json`, the order, `--api-key -`, `models.json`'s `apiKey`, `gobble auth login --api-key -`,
+     `logout`, `status` and `check`, and a rejected key reported as one;
+   - **F4-3b — OAuth logins:** the terms checks, recorded before any login is built (decision 2); the browser and device
+     logins; `gobble auth token`; an `oauth` entry used, through an `llm/provider` adapter that implements the SDK's
+     `TokenStore` and `RefreshLocker` over `auth.json`, keeping `FedRAMP` (0015-REPORT F5);
+   - **F4-3c — ACP and import:** ACP auth as 0016-MADR D11 amends it, and `gobble auth import --from-pi`.
+2. **The terms checks** are F4-3b's first step: OpenAI's, xAI's and Kilo's current terms for third-party clients, each
+   URL, its date and what it says. A login they do not allow goes to 1.x and back to the owner.
+3. **`gobble auth token <provider> [--min-expiry D]`** prints an OAuth bearer token, as Pi's `print-bearer-token`, and
+   lands with F4-3b. No command prints a stored key, and `check` has no `--credentials`.
+4. **`auth.json`** is `<config>/auth.json`, in Pi's shape. Each entry, and each field gobble does not read, is kept as
+   written. It is created owner-only (0600; on Windows the user's DACL, `appdirs.SecurePrivateFile`), in a directory
+   made 0700 only when it is created, so an existing directory's mode stays as it is, as Pi's does. Every change takes
+   `auth.json.lock` through `internal/filelock` (30 s, as Pi's), re-reads, sets or removes the one provider, and renames a
+   temporary file into place. A file that cannot be parsed is an error naming it, and is never overwritten.
+5. **The order is Pi's:** `--api-key -`, for the run only and never written; then `auth.json`'s entry, which owns its
+   provider; then `models.json`'s `apiKey`; then the provider's variable. In F4-3a an `oauth` entry owns its provider
+   and fails closed, naming F4-3b. One lookup replaces each place a variable is read today.
+6. **Values:** a stored key takes Pi's grammar through `catalog.ResolveValue` and the bash tool's shell, a command's
+   result cached for the process; `models.json`'s key the same grammar, uncached, resolved when the provider is built.
+   A `models.json` key whose variables are unset is no key. An error names the provider and the variable or command,
+   never a value.
+7. **`--api-key -`** needs a model, in Pi's words without `--models` (1.x). It reads the key from stdin, all of it,
+   trimmed, when stdin is not a terminal, so the prompt must then come from words, `--file` or `@path`; on a terminal it
+   asks, without echo. A literal is refused with the reason.
+8. **`gobble auth`:**
+   - `login <provider> --api-key -` stores a key, saying Pi's `Saved API key for <provider>`. Without `--api-key` it is
+     refused, naming F4-3b, until the OAuth logins land;
+   - `logout <provider>` removes the entry, in Pi's two messages, `/logout` read as `gobble auth logout`;
+   - `status` lists each key provider's source (`auth.json`, `models.json`, its variable, or none) and an OAuth entry's
+     expiry, never a value;
+   - `check (--provider P | --model M) [--json]` is Pi's `check`: `ready`, `not_ready` or `invalid`, a reason, exit 0, 1
+     or 2.
+9. **A rejected key is reported as one:** `provider.Options.CredentialSource` names the key's source, and an
+   `ErrAuthFailure` from the provider's response is `llm.ErrAuth` saying `<provider> rejected the API key from <source>`.
+   The CLI prints that when the run's provider had a key, and today's message when it had none.
+
+**F4-3a's steps:**
+
+1. **`internal/auth/store.go` (new):**
+   - `type Entry struct { Type, Key string; raw map[string]jsontext.Value }`: an entry's `type` and, for an `api_key`,
+     its `key`; `raw` keeps every field, read or not, so a write gives back what it read;
+   - `type File struct` and `Load(path string) (*File, error)`: no file is an empty `File`; bad JSON, a top level that is
+     not an object, or an entry without a string `type` is an error naming the file, as Pi's
+     ``Invalid auth.json credential for provider "<p>"``;
+   - `(*File) Entry(provider string) (Entry, bool)` and `Providers() []string`;
+   - `Set(ctx, path, provider string, e Entry) error` and `Delete(ctx, path, provider string) (bool, error)`: under
+     `filelock.Lock(ctx, path+".lock", authPolicy)`, `authPolicy` 20 ms first, 2 s most, 30 s in all; re-read; change the
+     one provider; write a temporary file in the same directory, owner-only before its first byte, and rename it over
+     `path`. The directory is made 0700 when absent.
+2. **`internal/auth/secure_windows.go`, `secure_other.go` (new):** `securePrivate(path string) error`, the file's owner-only
+   protection: `appdirs.SecurePrivateFile` on Windows; elsewhere the 0600 the file was opened with, so nothing more.
+3. **`internal/auth/resolve.go` (new):**
+   - `type Source string` with `SourceFlag` ("--api-key"), `SourceFile` ("auth.json"), `SourceModelsJSON` ("models.json"),
+     and a variable's name for one from the environment;
+   - `type Credential struct { Key string; Source Source }`;
+   - `type Resolver struct { Runtime map[string]string; File *File; ModelsJSONKey func(id string) string; Var func(id
+     string) string; LookupEnv func(string) (string, bool); Run func(string) (string, error) }`;
+   - `(*Resolver) Credential(id string) (Credential, bool, error)`: decision 5's order and decision 6's values; an `oauth`
+     entry is the error `provider <id> has an OAuth login in auth.json; gobble uses OAuth logins from 0005-PLAN F4-3b`;
+     a stored key's command result cached in the `Resolver`.
+4. **`llm/catalog/modelsjson.go`:** `(*ModelsJSON) APIKey(id string) string`, the raw value; the `apiKey` diagnostic goes.
+5. **`llm/provider`:**
+   - `ambient.go`: `ChooseWith(has func(id string) bool, preferred string) (Selection, error)` and `AmbientWith(key func(id
+     string) (string, bool), preferred string, o Options)`, the same rules over a credential lookup; `Choose` and `Ambient`
+     become them over the variables, so their tests stand;
+   - `provider.go`: `Options.CredentialSource string`; `mapError` wraps an `*APIError` whose kind is `ErrAuthFailure` as
+     `fmt.Errorf("%w: %s rejected the API key from %s", llm.ErrAuth, id, source)` when the source is set.
+6. **`internal/cli`:**
+   - `credentials.go` (new): `(e *runEnv) credentials() *auth.Resolver`, built once: `auth.json` read once, `--api-key`'s
+     key, `models.json`'s keys, the variables, and `runCommand`; `(e *runEnv) credential(id string) (auth.Credential, bool)`,
+     a resolution error warned once; `readAPIKey(stdin, tty)` for `--api-key -`;
+   - `agent.go`, `models.go`, `modelflags.go`, `modelscmd.go`, `line.go`: each variable read takes `e.credential`; the
+     provider is built with `AmbientWith` and `CredentialSource`, so `ambientProvider` is `provider.AmbientWith`;
+     `hasCredential` becomes `e.hasCredential`;
+   - `flags.go`: `api-key` leaves `laterFlags`; `validate` refuses `--api-key` other than `-` (`--api-key takes -: a key on
+     the command line shows in process listings and shell history; pipe it, or type it when asked`) and `--api-key`
+     without `--model` (`--api-key requires a model to be specified via --model or --provider/--model`);
+   - `chat.go`: after `validate`, `--api-key -` reads the key before the input is composed, and stdin then carries none;
+   - `line.go`, `print.go`: on `ErrAuthRequired`, the agent's message when the run's provider had a key, else
+     `noCredentialMessage`;
+   - `auth.go` (new): `AuthCmd` with `Login`, `Logout`, `Status` and `Check`, as decision 8; `root.go` gains
+     `Auth AuthCmd` (`cmd:""`, `help:"Store, remove and check model credentials."`); `main.go`'s `runEnv` gains the
+     resolver and its once.
+7. **Records:** `docs/guides/credentials.md` (new): where keys come from, in order, `auth.json`, `--api-key -`,
+   `gobble auth`, and what a rejected key says, each example run against a scratch config; `docs/guides/models-json.md`:
+   `apiKey` takes effect, and the example's output loses its `apiKey` line; `README.md`'s features gain credentials;
+   `docs/architecture.md`'s `internal/auth` row; this plan; `docs/README.md`.
+
+**F4-3a's tests,** each seen failing first on a scratch copy:
+
+- `internal/auth`: `TestStoreRoundTrip` (an unread provider and an unread field kept byte for byte through a `Set`);
+  `TestStoreConcurrent` (two writers, of different providers, both kept); `TestStoreMode` (0600 on Unix, owner-only on
+  Windows, through `appdirs.FileIsOwnerOnly`); `TestStoreBadFile` (an error naming the file; the file untouched);
+  `TestResolveOrder` (each source winning over the ones after it; an `auth.json` entry owning its provider over a set
+  variable; an `oauth` entry failing closed; a `models.json` key with an unset variable as none; a stored `!command` run
+  once).
+- `llm/provider`: `TestChooseWith` (a stored key chooses a provider whose variable is unset); `TestWireRejectedKey` (a 401
+  through `cannedWire` names the provider and the source, and is `llm.ErrAuth`).
+- `llm/catalog`: `TestParseModelsJSON`'s `apiKey` case edited, now that the field is used: no diagnostic, and `APIKey`
+  gives the value.
+- `internal/cli`: `TestAPIKeyFlag` (`-` from stdin; a literal refused; without `--model` refused; never written);
+  `TestAuthLogin`, `TestAuthLogout` (Pi's messages; the file's other entries kept); `TestAuthStatus` (each source, and no
+  value in the output); `TestAuthCheck` (the three statuses, exits and `--json`); `TestRejectedKeyMessage` (the agent's
+  message with a key, the old one without).
+- `internal/cli`'s `cache_test.go` is edited for `ambientProvider`'s new type alone: its replacement
+  (`cache_test.go:22-27`) takes `AmbientWith`'s signature, and checks what it checked.
+- Every other existing test passes unedited.
+
+**F4-3a's verification:**
+
+```text
+go test -count=1 ./internal/... ./llm/... ./acpserver/...    -> ok
+the guides' examples, against a scratch GOBBLE_HOME           -> the output they show, no request leaving the machine
+the gates                                                     -> lint ×3, tests on three systems, -race on two, preflight
+```
+
+**F4-3a's files:**
+
+| | Files |
+| :--- | :--- |
+| new, code | `internal/auth/store.go`, `store_test.go`, `secure_windows.go`, `secure_other.go`, `resolve.go`, `resolve_test.go`; `internal/cli/credentials.go`, `auth.go`, `auth_test.go` |
+| changed, code | `internal/auth/doc.go`; `llm/catalog/modelsjson.go`, `modelsjson_test.go`; `llm/provider/ambient.go`, `ambient_test.go`, `provider.go`, `wire_test.go` |
+| changed, cli | `internal/cli/flags.go`, `main.go`, `chat.go`, `agent.go`, `models.go`, `modelflags.go`, `modelscmd.go`, `line.go`, `print.go`, `root.go`, `cache_test.go` |
+| new and changed, records | `docs/guides/credentials.md`; `docs/guides/models-json.md`; `README.md`; `docs/architecture.md`; this plan; `docs/README.md` |
+
+**Deferred, named:**
+
+- **OAuth logins, `token`, and an `oauth` entry used:** F4-3b, after its terms checks (decisions 1-3).
+- **ACP auth and `gobble auth import --from-pi`:** F4-3c (decision 1).
+- **`--models`:** 1.x, so `--api-key`'s message leaves it out.
+- **Pi's `api_key` `env` field** (provider-scoped values, such as Cloudflare's ids): kept as written, unused; no SDK
+  provider takes one.
+- **The OS keyring:** 1.x, as decision 4 of 2026-10-10 says.

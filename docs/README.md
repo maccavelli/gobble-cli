@@ -76,7 +76,8 @@ The plans run in sequence.
   - Run: F4-2a, the models.dev snapshot and what it feeds, on 2026-10-13 (one deviation).
   - Run: F4-2b, `models.json`, on 2026-10-13 (two deviations).
   - Run: F4-2c, choosing a model, on 2026-10-14 at SDK `v1.13.0` (two deviations).
-  - Next: F4-3, credentials, made executable as an amendment first. F4-1b, live streaming, waits on an SDK release that retries a stream.
+  - Next: F4-3a, keys (made executable 2026-10-14); then F4-3b, OAuth logins, and F4-3c, ACP auth and import, each made
+    executable as an amendment first. F4-1b, live streaming, waits on an SDK release that retries a stream.
 - **0014-PLAN.** Run: P0 and P1, the move to acp-go-sdk2 `v0.14.0`, on 2026-10-10. Complete.
 - **0018-PLAN.** Run: P1–P6, the configuration surface, on 2026-10-12. Complete. Put ahead of 0017 by the owner.
 - **0019-PLAN.** Run: P1–P5 on 2026-10-12 and 2026-10-13. Complete. go-llmprovider-sdk `v1.11.0`, tagged after P3, is the next record's (its deviation 13).
