@@ -3397,6 +3397,8 @@ F4-1a keeps the tool result's error flag and the wire tests.)*
 5. **F4-2 follows F4-1a.** It does not wait for F4-1b, which lands before F4's accept.
 
 **F4-1a — the pin, the wire, and two fixes.**
+*(2026-10-13: re-made at go-llmprovider-sdk `v1.12.0`; see the Amendments entry "F4-1a re-made at go-llmprovider-sdk `v1.12.0`".
+The pin and the truthful `NativeStreaming` are done (0019-PLAN P3); the rest is planned there.)*
 
 - **`go.mod`** requires `go-llmprovider-sdk v1.7.0`; the record names its sums.
 - **A true `NativeStreaming`:** `New` keeps the capabilities of the `WithRetry` result, so `Capabilities().NativeStreaming` is false until F4-1b; `Wrap`, which adds no retry, keeps the provider's own. `llm/llm.go:21` reads "NativeStreaming is false while the provider's retry buffers the stream."
@@ -3446,3 +3448,109 @@ F4-1a keeps the tool result's error flag and the wire tests.)*
 
 - **Image input and cache-write accounting:** each still waits for the SDK.
 - **Call-argument deltas** (`ToolCallStart`, `ToolCallDelta`): the SDK yields calls whole (0031-MADR D2), so they wait for an SDK release that streams them.
+
+**2026-10-13 — F4-1a re-made at go-llmprovider-sdk `v1.12.0`** (the owner's choices of 2026-10-13: re-plan F4-1a to what remains;
+the live tests take the repository's `live_<provider>` build tags, and the agent runs `TestLiveOpenAI` once).
+
+**Why.** The build order's next step, "F4-1a, the SDK pin, the wire tests and two fixes", is half done:
+0019-PLAN P3 (`a7de4a8`) pinned the SDK and made `NativeStreaming` the retry wrapper's,
+and 0020-PLAN P1 (`1625013`) and 0021-PLAN P1 (`c522a7b`) moved the pin to `v1.12.0`, the latest tag.
+The error flag, the wire tests and the live tests remain.
+
+**The facts,** measured on 2026-10-13 against `main` `8ff38dd` and go-llmprovider-sdk `v1.12.0`
+(scratch probes `i2probe/f41a` and `i2probe/iserror`, offline, over an in-process transport that answers by path):
+
+- **Pins:** acp-go-sdk2 `v0.17.1`, go-llmprovider-sdk `v1.12.0`, go-selfupdate-lib `v1.15.2`, each the latest tag;
+  decision 1 of 2026-10-11 needs no pin change.
+- **Done:** `New` keeps the `WithRetry` result's capabilities (`llm/provider/provider.go:75-76`),
+  `TestNewReportsRetryCapabilities` holds it (`provider_test.go:119-131`), and `llm/llm.go:21` says why.
+- **Not done:** `toRequest` drops a tool result's `IsError`: it builds `FunctionCallOutputItem{CallID, Output}`
+  (`llm/provider/provider.go:231`), though `llm.Content.IsError` exists (`llm/llm.go:89`).
+  No `wire_test.go` or live test of a provider's reply exists; `strict_live_test.go` (0012-PLAN P5) is the only live test.
+- **The F4 claims at `v1.12.0`:** the ten ids hold (`constants.go`); no item carries an image; there is no keyring;
+  `TokenStore` is `Load`, `Save` and `Delete`, with `RefreshLocker` beside it; the browser and device logins hold.
+  The claims that changed are 0019-MADR's F9 and F11: native streaming, the strict flag, model limits and cost, cache writes.
+- **Each id's wire,** as gobble's `New` builds it: `openai` and `grok` `/v1/responses`; `claude` `/v1/messages`;
+  `gemini` `/v1beta/interactions`; `opencode-zen` with a Claude model `/zen/v1/messages`;
+  `opencode-go` `/zen/go/v1/chat/completions`; `huggingface`, `together` and `ollama` `/v1/chat/completions`;
+  `kilo` `/api/gateway/chat/completions`.
+- **The cases, through gobble's `llm/provider` today, for all ten ids,** one request each:
+  - a text reply gives its text and the usage the wire reported; a tool reply gives its call;
+  - a 429 with `Retry-After: 120` is `llm.ErrRateLimited` with `RetryAfter` 120 s, returned at once (the policy's cap is 60 s);
+  - an overflow (`prompt is too long`, code `context_length_exceeded`) is `llm.ErrContextOverflow`;
+  - a 429 with a reset header 90 s ahead and no `Retry-After` gives `RetryAfter` 90 s;
+  - an overflow message stating its split (`100 in the messages, 1000 in the completion`) is an `*llm.APIError`
+    with status 400, and not `llm.ErrContextOverflow`.
+- **The error flag on the wire** (the SDK alone, a failed `FunctionCallOutputItem`): `claude`, `gemini` and
+  `opencode-zen`'s messages route send `"is_error":true`; the other seven send the output text unchanged and no flag,
+  as their package docs say.
+- **The live-test convention:** a `live_<provider>` build tag, and `llmtest.LiveCredential`, which skips when the
+  provider's variable is unset (`llm/llmtest/live.go:8-19`; `strict_live_test.go:1`). `GOBBLE_LIVE`, which the
+  2026-10-10 entry names, is read by no test.
+
+**The decisions:**
+
+1. **No pin change.** F4-1a runs on `v1.12.0`; if a newer tag exists when it starts, decision 1 of 2026-10-11 applies.
+2. **A failed tool result is sent as one:** `toRequest` builds
+   `llmprovider.FunctionCallOutputItem{CallID: c.ToolCallID, Output: c.Text, IsError: c.IsError}`.
+3. **The wire tests run in process.** A transport on `Options.HTTPClient` answers each request by its path with a canned
+   reply in the wire's shape, as the SDK's own `wirecase` does; no `httptest` server and no `testdata/wire/` directory.
+   The replies are constants in the test file.
+4. **The live tests take the repository's convention:** one file per provider, tagged `live_openai`, `live_claude`,
+   `live_gemini` and `live_grok`, each skipping without its variable. The agent runs `TestLiveOpenAI` once, one billed
+   request with the owner's test key in the child's environment only; the record names which ran, when, and the outcome.
+5. **0012-PLAN P7 and F4-2 follow F4-1a,** as decisions 4 and 5 of 2026-10-11 say.
+
+**F4-1a's steps:**
+
+1. **`llm/provider/provider.go:231`:** `FunctionCallOutputItem{CallID: c.ToolCallID, Output: c.Text, IsError: c.IsError}`.
+2. **`llm/provider/provider_test.go`, `TestToolResultError`:** a history whose tool result has `IsError` maps to an item
+   with `IsError` true, and one without to false.
+3. **`llm/provider/wire_test.go` (new),** package `provider`:
+   - `cannedWire`, an `http.RoundTripper` that records each request's method, path, headers and body, and answers by
+     the path's suffix: `/responses`, `/messages`, `/interactions` and `/chat/completions`, each with a text reply or a
+     `get_weather` call, and a 404 for any other path;
+   - **`TestWireCases`,** for each of the ten ids with its model above, one subtest per case, each after exactly one request:
+     text (`hello`, usage 12 in and 3 out); a tool call (`get_weather`, arguments `{"city":"Paris"}`);
+     `Retry-After: 120` (`llm.ErrRateLimited`, `RetryAfter` 120 s); overflow (`llm.ErrContextOverflow`);
+   - **`TestWireRateLimitResets`:** `openai` and `huggingface` with `x-ratelimit-reset-requests: 90s`, and `claude` with
+     `anthropic-ratelimit-requests-reset` 90 s ahead as an RFC 3339 time, each alone: `llm.ErrRateLimited`, `RetryAfter`
+     90 s (between 89 s and 90 s for the RFC 3339 form), one request;
+   - **`TestWireOverflowSplit`:** `openai` with the split message is an `*llm.APIError` of status 400, not `llm.ErrContextOverflow`;
+   - **`TestWireToolResultError`:** a conversation ending in a failed `get_weather` result: `claude`, `gemini` and
+     `opencode-zen` (`claude-haiku-5-5`) send `"is_error":true`; `openai` and `huggingface` send `no such city` and no flag.
+4. **The live tests (new):** `live_openai_test.go` (`//go:build live_openai`, `TestLiveOpenAI`, `gpt-6-luna`),
+   `live_claude_test.go` (`claude-haiku-5-5`), `live_gemini_test.go` (`gemini-3.5-flash-lite`) and `live_grok_test.go`
+   (`grok-4.6`), each in package `provider_test`, each sending "Reply with the single word: ok." through `provider.New`
+   with `llmtest.LiveCredential`'s key, and asserting a non-empty reply and non-zero usage; the shared `liveTurn` helper is
+   in `live_test.go`, tagged `live_openai || live_claude || live_gemini || live_grok`. Errors are reported with the key redacted.
+5. **The live run:** `go test -tags live_openai -count=1 -run '^TestLiveOpenAI$' -v ./llm/provider`, once, with
+   `OPENAI_API_KEY` from the owner's test file in the child's environment only, every output checked not to contain it.
+
+**F4-1a's negatives,** each on a scratch copy after a control run passes:
+
+1. `toRequest` without `IsError`: `TestToolResultError` and `TestWireToolResultError`'s three flagged rows fail.
+2. `mapError` without the `ErrRateLimited` sentinel: `TestWireCases`' ten `Retry-After` subtests and `TestWireRateLimitResets` fail.
+3. `mapError` without the `ErrContextOverflow` sentinel: the ten overflow subtests fail.
+4. `mapError` dropping `RetryAfter`: the `Retry-After` and reset subtests fail on the wait.
+5. A live test without its build tag: `go vet ./llm/provider` then compiles it, and its `LiveCredential` skip is shown
+   by `go test -tags live_openai -run TestLiveOpenAI -v ./llm/provider` with `OPENAI_API_KEY` unset: `--- SKIP`.
+
+**F4-1a's verification:**
+
+```text
+go test -count=1 ./llm/provider -run 'TestWire|TestToolResultError'           -> ok
+go vet -tags 'live_openai live_claude live_gemini live_grok' ./llm/provider    -> exit 0
+go test -tags live_claude -count=1 -run TestLiveClaude -v ./llm/provider       -> --- SKIP: set ANTHROPIC_API_KEY to run it
+the gates                                                                      -> lint ×3, tests on three systems, -race on two, preflight
+the live run                                                                   -> --- PASS: TestLiveOpenAI; the key in no output
+```
+
+**F4-1a's files:**
+
+| | Files |
+| :--- | :--- |
+| new | `llm/provider/wire_test.go`, `llm/provider/live_test.go`, `live_openai_test.go`, `live_claude_test.go`, `live_gemini_test.go`, `live_grok_test.go` |
+| changed | `llm/provider/provider.go`, `llm/provider/provider_test.go`; this plan; `docs/README.md` |
+
+F4-1a is one commit, with its own record of what ran. F4-1b is unchanged: it waits for a streaming `WithRetry`.
