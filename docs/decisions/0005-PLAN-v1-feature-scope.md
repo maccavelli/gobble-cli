@@ -3284,7 +3284,9 @@ Choices made within the wording:
   - `//` comments and trailing commas are accepted as Pi accepts them; a bad file or a bad provider is ignored with a diagnostic, as in Pi.
 - **Choosing a model:** `--provider`, `--model` and `--thinking` are accepted. `--model` resolves by Pi's rules and words; `--thinking` beats a `:level` suffix.
   *(2026-10-13: the `defaultProvider` setting came forward in 0019-PLAN P3 (0019-MADR D15), and `Choose` takes it.
-  F4-2 adds `defaultModel` and the model scope beside it, and `--provider` wins over it for its run.)*
+  F4-2 adds `defaultModel` ~~and the model scope beside it~~, and `--provider` wins over it for its run.)*
+  *(2026-10-14: the model scope, Pi's `enabledModels`, waits for `--models` at 1.x, as 0005-MADR's flag table says;
+  see the Amendments entry "F4-2c made executable", decision 11.)*
 - **`gobble models list [search]`**, and `--list-models` as its alias, print Pi's columns for providers with a credential. **`gobble models info <model>`** prints one model's fields.
 - **acpserver:** the `model` option lists the catalog's models for the session's provider; `thought_level` offers that model's levels; `usage_update` carries the context window as `size`; `_gobble/get_session_stats` reports `cost` from the catalog, and `contextUsage`.
   *(2026-10-13, 0020-MADR D5: the option's models are the SDK's listing from 0020-MADR (0020-PLAN P2, `a45dad6`);
@@ -3755,6 +3757,7 @@ executable as an amendment before it runs.
 **F4-2c — choosing a model.** As the 2026-10-10 text: `--provider`, `--model` and `--thinking` by Pi's rules,
 `defaultModel` beside `defaultProvider`, `gobble models list` and `info`, `--list-models`, completion, and `max` in the
 `--thinking` and `defaultThinkingLevel` enums. Made executable as an amendment before it runs.
+*(2026-10-14: made executable; see the Amendments entry "F4-2c made executable".)*
 
 **Deferred, named:**
 
@@ -4002,3 +4005,229 @@ the gates                                                           -> lint ×3,
     became `\uFEFF`. `TestFacts` dereferenced its facts unchecked, so negatives 4 and 5 failed by panic, not by its
     message; it now checks each pointer.
 - **Next:** F4-2c, made executable as an amendment first.
+
+**2026-10-14 — F4-2c made executable** (the owner's choices of 2026-10-14: the offline model set, with the live
+listing added to `gobble models list`; Pi's custom id for an id the set lacks; the flags winning over a resumed
+session's choice, and recorded; the model scope left to 1.x).
+
+**The facts,** measured on 2026-10-14 against `main` `2792461`, go-llmprovider-sdk `v1.12.0` and `v1.13.0`, and Pi
+`312184edb`:
+
+- **Pi's choice of a model** (paths under `packages/coding-agent/src/` unless named otherwise):
+  - **`resolveCliModel`** (`core/model-resolver.ts:406-606`) resolves `--model` over every model, credential or not
+    (`:418-420`), in this order:
+    1. no `--model` is no choice; no models at all is `No models available. Check your installation or add models to
+       models.json.` (`:414-427`);
+    2. `--provider`, without case, must name a provider, else `Unknown provider "<p>". Use --list-models to see
+       available providers/models.` (`:429-442`);
+    3. without `--provider`, a prefix before the first `/` that names a provider is taken as one (`:449-463`);
+    4. still without one, an exact id or `provider/id` across every provider: one match wins; of several, the sole one
+       whose provider has a credential, else `Model "<m>" is ambiguous across providers: <list>. <hint> Use --provider
+       or provider/model.` (`:470-504`);
+    5. with `--provider`, a `<provider>/` prefix on the model is dropped (`:506-512`);
+    6. `parseModelPattern` over that provider's models, or all of them (`:514-517`): an exact match, unique and without
+       case, as `provider/id`, as provider and id, then as a bare id (`:88-130`); else the models whose id or name holds
+       the pattern, an alias (no `-YYYYMMDD` suffix, or `-latest`) before a dated id, the highest id by `localeCompare`
+       (`:74-81`, `:136-166`); else, at the last `:`, a level from off to max splits off and the rest is tried again,
+       and any other suffix is no match (`:204-257`);
+    7. a provider taken from the prefix gives way to the sole credentialed provider holding the whole input as an id,
+       when its own has no credential (`:525-540`); with no match in it, the whole input is tried across every provider
+       (`:548-568`);
+    8. with a provider and still no match, a custom model: the id, with a `:level` split off unless `--thinking` is
+       given, and `Model "<id>" not found for provider "<p>". Using custom model id.` (`:570-597`). Pi copies the
+       provider's default model's facts onto it (`:175-189`);
+    9. otherwise `Model "<m>" not found. Use --list-models to see available models.` (`:599-605`).
+  - **`--thinking` wins over a `:level` suffix** (`main.ts:484-489`, `:515-518`). The levels are off, minimal, low,
+    medium, high, xhigh and max (`cli/args.ts:60`).
+  - **A resumed session:** `--model` wins over the session's model (`core/sdk.ts:198-216`), and `--thinking` over its
+    level, clamped to the model's and recorded only when it changes (`main.ts:844-847`,
+    `core/agent-session.ts:2527-2549`). Pi records no `model_change` for it (`core/sdk.ts:424-435`).
+  - **The settings:** `defaultModel` is used only with `defaultProvider`, as an exact id, and only when that provider
+    has a credential; a miss falls through, silently, to the providers' defaults (`core/model-resolver.ts:675-705`).
+    `enabledModels`, the scope `--models` also sets, narrows the choice (`main.ts:803-807`).
+  - **`--list-models [search]`** (`cli/list-models.ts`) lists the models of the providers with a credential. Each of
+    the search's words, split at spaces and `/`, must match `<provider> <id>` as a subsequence, without case, or with
+    its letters and digits swapped (`tui/src/fuzzy.ts:12-94`, `:100-138`). The rows are sorted by provider, then id
+    (`:57-62`), in the columns `provider model context max-out thinking images`, two spaces apart, the counts as `200K`
+    and `1M` (`:14-24`, `:64-114`). No match prints `No models matching "<search>"`.
+  - **Pi's generator keeps only the models that call tools** (`ai/scripts/generate-models.ts:1441`, and each
+    provider's loop after it).
+- **The snapshot,** through the SDK's parser (scratch module `f42cprobe`, three runs): 677 of its 782 models call tools.
+  The nine key providers' tool-calling models and their 49 curated ones make 726 candidates, each with a name.
+  Parsing, enumerating and one `ModelInfo` each took 8.8 ms warm on Windows (3.6 ms, 1.0 ms and 4.2 ms), inside
+  completion's 150 ms (`internal/cli/complete/protocol.go:26`).
+- **gobble today:**
+  - `--provider`, `--model` and `--thinking` are refused (`internal/cli/flags.go:68-71`), and `--provider` without
+    `--model` is a usage error (`:81-82`). `--thinking`'s enum stops at xhigh (`:35`), as `defaultThinkingLevel`'s
+    does (`internal/config/keys.go:67`), and completion's levels (`internal/cli/completion.go:48`).
+  - The provider is `defaultProvider`'s, or the first with a credential, at five places (`internal/cli/agent.go:34`,
+    `:37`, `:103`, `models.go:108`, `line.go:72`). `noCredentialMessage` names `defaultProvider` (`agent.go:263-268`),
+    at three places (`line.go:73`, `:219`, `print.go:197`).
+  - A new session starts with the model choice's default and `defaultThinkingLevel` (`acpserver/agent.go:311-313`);
+    a forked, loaded or resumed one with its history's (`:314-321`, `:350-358`, `:758-762`). `setConfig` refuses a
+    model outside the choice (`acpserver/config.go:144-146`). A turn clamps the level to the model's (`agent.go:444`).
+  - Completion's provider and model sources list nothing (`internal/cli/completion.go:60-62`). There is no
+    `gobble models` (`internal/cli/root.go:6-15`).
+  - `max` reaches the SDK as xhigh (`llm/provider/provider.go:357-360`, `llm/doc.go:45`): the SDK has four efforts
+    (SDK `llmprovider/contract.go:61-83`).
+  - `runEnv` is declared in `internal/cli/main.go:136-164`, so a run's choice puts that file in scope.
+  - Adding a key edits two config tests that pin the key list: `TestRenderDocument` (`render_test.go:23-54`) and
+    `TestKeysMatchSettings` (`resolve_test.go:89-102`). Every other test that names a key matches part of a line.
+- **go-llmprovider-sdk `v1.13.0`** is the latest tag (`git ls-remote --tags`, 2026-10-14), nine commits after
+  `v1.12.0`, all native tool deferral (the SDK's 0040-MADR): `Tool.Deferred` and `Tool.Search`, `ToolLoadItem` and
+  `WarningDeferralEmulated`, each additive (GitHub's compare API). On a scratch copy of the tree with the pin moved,
+  `go build`, `go vet` and `go test ./...` pass, 32 packages ok, nothing edited.
+
+**The decisions:**
+
+1. **The pin moves to `v1.13.0`,** as decision 2 of 2026-10-10, amended 2026-10-11, asks of each sub-phase. Its tool
+   deferral is 0012-MADR's to adopt, not F4-2c's.
+2. **The offline model set** is each key provider's curated models, then the snapshot's models that call tools, then
+   `models.json`'s `models[]`, each once. `--model`, `defaultModel`, `gobble models info` and completion resolve
+   against it, with no request. `gobble models list` adds each credentialed provider's live listing.
+3. **`--provider` and `--model` resolve by `resolveCliModel`'s steps and words,** over the offline set. 0004-MADR's Pi
+   names (`anthropic`, `google`, `xai`) are gobble's ids, and "a credential" is its variable set (F4-3 adds
+   `auth.json`). An id the set lacks, under a known provider, is Pi's custom id with Pi's warning. gobble does not copy
+   another model's facts onto it, so the catalog does not know it unless `models.json` describes it. A resolution
+   error is a usage error, exit 2.
+4. **The chosen provider is the run's:** the agent's, the model choice's, the listing's and the credential message's,
+   in place of `defaultProvider`'s. The chosen model joins the model choice when the listing lacks it.
+5. **The flags win over every session the run opens.** A new session starts with them. A forked, loaded or resumed one
+   is set to them after its history, and each change is recorded as a `model_change` or a `thinking_level_change`, as
+   `/model` and `/thinking` record one. The level is clamped to the model's, Pi's way. Pi records the level only;
+   gobble records both, so a later resume keeps what the run chose.
+6. **`--thinking` wins over a `:level` suffix,** and max joins `--thinking`, `defaultThinkingLevel` and completion. It
+   reaches the SDK as xhigh until the SDK has a max effort.
+7. **`defaultModel`** is a process setting beside `defaultProvider`. With `defaultProvider` set, it is a new
+   session's model when the model choice or the offline set holds it. Without `defaultProvider`, or naming a model
+   neither holds, it is ignored with one warning; Pi ignores it silently.
+8. **`gobble models list [search]`, and `--list-models` as its alias with the prompt words as the search,** print Pi's
+   rows and columns; a fact the catalog does not know prints `-`. With no credential set, `No models available. Set
+   one of <variables>.`, exit 0, as Pi exits.
+9. **`gobble models info <model>`** resolves its argument as `--model` does, and prints that model's facts from the
+   offline set.
+10. **Completion:** `--provider` offers the key providers, and `--model` the offline set as `provider/id`, with
+    `models.json` read and its diagnostics dropped. The levels after `:` include max.
+11. **The model scope waits.** Pi's `enabledModels` comes with `--models`, at 1.x (0005-MADR's flag table); the
+    2026-10-13 note on choosing a model is annotated.
+
+**F4-2c's steps:**
+
+1. **`go.mod`, `go.sum`:** `go get github.com/maccavelli/go-llmprovider-sdk@v1.13.0`, then `go mod tidy`.
+2. **`llm/catalog/resolve.go` (new),** no SDK import:
+   - `ProviderID(name string) (string, bool)`: an SDK id or a Pi name, without case, as gobble's id;
+   - `type Resolution struct { Model llm.Model; Level string; Custom bool; Warning string }`;
+   - `ResolveModel(provider, model, thinking string, models []llm.Model, authed func(string) bool) (Resolution,
+     error)`: the facts' steps 1–9 in order, with Pi's words in its errors and warning. `Level` is a `:level`
+     suffix's, and a custom model has only `Provider` and `ID`.
+3. **`llm/provider/model.go`:** `KnownModels(id string) []string` is `Models(id)`, then the snapshot's models for id
+   that set `Tools`, sorted, each once. Its body is `knownModels(id string, meta *catalog.Metadata)`, for the test.
+4. **`acpserver`:**
+   - `config.go`: `type Override struct { Provider, Model, Thinking string }`, the run's choice, each field empty when
+     not given. `(a *Agent) applyOverride(ctx context.Context, s *liveSession) error` does nothing for a zero
+     `Override`. A model that differs from the session's is set, and a `model_change` naming `Override.Provider` is
+     appended. Then the level: `catalog.Clamp(a.levelsOf(model), Thinking)` when `Thinking` is set, else the current
+     level clamped when the model changed; a level that differs is set and appended as a `thinking_level_change`;
+   - `agent.go`: `Options.Override`. `NewSession` starts a session with `cmp.Or(Override.Model, Default)` and
+     `cmp.Or(Override.Thinking, ss.Thinking)`, as `defaultThinkingLevel` starts one today, and calls `applyOverride`
+     after a fork's `restore`. `open`, for load and resume, calls it after `restore`.
+5. **`internal/config`:**
+   - `keys.go`: after `defaultProvider`, `{Path: "defaultModel", Kind: KindString, Read: ReadProcess, Doc: "The model a
+     new session starts with, of defaultProvider's, its id exactly. Empty takes the provider's first listed model;
+     without defaultProvider it is ignored."}`; max ends `defaultThinkingLevel`'s enum;
+   - `settings.go`: `DefaultModel`, after `DefaultProvider`, and its `field` case;
+   - `settings.yaml`: after `defaultProvider`'s block, `# The model a new session starts with, of defaultProvider's,`,
+     `# its id exactly, as gobble models list shows it. Empty takes the`, `# provider's first listed model; without`,
+     `# defaultProvider it is ignored. --model wins over it for a run.` and `# defaultModel: ""`.
+     `defaultThinkingLevel`'s first line ends `off, minimal, low,`, and its second `medium, high, xhigh or max. A
+     resumed session keeps its own, and`, the rest rewrapped;
+   - `testdata/settings.schema.json`: regenerated, `go run ./internal/config/genschema`.
+6. **`internal/cli`:**
+   - `flags.go`: max ends `--thinking`'s enum and help. `ListModels bool` with `name:"list-models"` and `help:"List
+     models, as gobble models list; the prompt words are its search."`. `provider`, `model` and `thinking` leave
+     `laterFlags`;
+   - `modelflags.go` (new): `type modelPick struct { Provider, Model, Thinking string }`.
+     `(e *runEnv) pickModel(f *SharedFlags) (modelPick, error)` is `catalog.ResolveModel` over
+     `offlineModels(e.modelsJSON())` with `hasCredential`; its warning goes through `e.out.Warnf`, its error is a
+     usage error, and its `Thinking` is `cmp.Or(f.Thinking, Level)`. `offlineModels(mj *catalog.ModelsJSON)
+     []llm.Model` is decision 2's set, each through `provider.ModelInfo` with no key. `(e *runEnv) chosenProvider()
+     string` is the pick's provider, else `defaultProvider`'s. `(e *runEnv) defaultModel(id string, ids []string)
+     string` is decision 7, its warning given once. `(e *runEnv) noCredentialMessage() string` is `no model
+     credential: --model is <provider>/<model>; set <VAR>` for a pick, and today's two texts otherwise;
+   - `main.go`: `runEnv` gains `pick modelPick` and `defaultModelOnce sync.Once`;
+   - `chat.go`: after `validate`, `--list-models` runs the list with `strings.Join(c.Prompt, " ")` and returns. After
+     `resolveCwd`, `e.pick, err = e.pickModel(&c.SharedFlags)`;
+   - `agent.go`, `models.go`, `line.go`, `print.go`: the five places take `e.chosenProvider()`, and the three messages
+     are `e.noCredentialMessage()`. `agentOptions` sets `Override` from `e.pick`. `modelChoice` takes
+     `defaultModel`'s default, and appends the pick's model and the default when its ids lack them;
+   - `modelscmd.go` (new): `ModelsCmd` with `List` and `Info`. `list`'s rows are each credentialed key provider's
+     offline set and live listing (`e.modelListing`, every listing started before the first is read), each once, the
+     facts from `provider.ModelInfo` with no key; Pi's search, sort, columns and counts, trailing spaces trimmed.
+     `info` prints `provider`, `model`, `name`, `context`, `max-out`, `input`, `thinking` (`catalog.Levels`), `cost`,
+     and a `tier` line for each tier, aligned, `unknown` for what the catalog does not know;
+   - `root.go`: `Models ModelsCmd` with `cmd:""` and `help:"List the models gobble knows, or show one."`;
+   - `completion.go`: max ends `thinkingLevels`. `provider` lists `providerCandidates`, each key provider described by
+     its variable; `model` lists `modelCandidates`, decision 10's.
+7. **Records:** `docs/guides/choosing-a-model.md` (new): how a run's provider, model and level are chosen, `--model`'s
+   forms, resuming, `defaultModel`, `gobble models` and completion, each example run against a scratch config;
+   `README.md`'s features gain choosing a model; `docs/architecture.md`'s `llm/catalog` row gains "and Pi's model
+   resolution (F4-2c)"; this plan; `docs/README.md`.
+
+**F4-2c's tests,** each seen failing first on a scratch copy:
+
+- `llm/catalog`: `TestResolveModel`, a case for each step and its words: an exact `provider/id`, without case; a bare
+  id held by one provider, and by several with one, none and two credentialed; an unknown `--provider`; `--provider`
+  with a `provider/` prefix on the model; a substring of an id, and of a name; an alias before a dated id, and the
+  latest dated id; a `:level` suffix, and an unknown suffix; a Pi name as the prefix; a taken provider giving way to a
+  credentialed raw id, and the whole input across providers; a custom id, its level split off, and kept in the id
+  with `--thinking`; not found; no models. `TestProviderID`.
+- `llm/provider`: `TestKnownModels` over a canned document: the curated models first, then the tool-calling ones
+  sorted, a model without tools left out, each once.
+- `acpserver`: `TestOverrideNew` (the first config options carry the override, and no entry is written);
+  `TestOverrideResume` (one `model_change` and one `thinking_level_change`; a second resume with the same override
+  writes none); `TestOverrideFork`; `TestOverrideClamp` (max, on a model without it, gives its highest level).
+- `internal/config`: `TestRenderDocument` and `TestKeysMatchSettings` take the sixteenth key, edited because they pin
+  the key list; `TestSchemaCommitted` passes on the regenerated schema.
+- `internal/cli`: `TestPickModel` (a pick reaches `Override` and the model choice; the custom id's warning; Pi's
+  errors, exit 2); `TestNoCredentialMessagePick`; `TestDefaultModel` (used; ignored without `defaultProvider`, warned
+  once; unknown, warned once); `TestModelsList` (no credential; a canned listing, offline and live rows sorted, `-`
+  for an unknown fact; a search; no match); `TestListModelsFlag` (`models list`'s output); `TestModelsInfo` (a
+  `models.json` model's facts; an unknown model, exit 2); `TestFuzzyMatch`; `TestTokenCount`; `TestModelCandidates`;
+  `TestProviderCandidates`; `TestThinkingLevelsMatchTheSetting` (`defaultThinkingLevel`'s enum is `thinkingLevels`).
+- Every other existing test passes unedited. `TestLaterFlags` reads `laterFlags`, and `TestThinkingLevelsMatchTheFlag`
+  the enum, so both hold as written.
+
+**F4-2c's verification:**
+
+```text
+go test -count=1 ./llm/... ./acpserver/... ./internal/...   -> ok
+the guide's examples, against a scratch GOBBLE_HOME          -> the output the guide shows
+the gates                                                    -> lint ×3, tests on three systems, -race on two, preflight
+```
+
+The guide's examples run with every credential variable cleared, except `OPENAI_API_KEY=test-only` where a listing is
+shown, and a scratch `models.json` pointing openai at `http://127.0.0.1:9/v1`, so the listing fails on the machine and
+no request leaves it.
+
+**F4-2c's files:**
+
+| | Files |
+| :--- | :--- |
+| new, code | `llm/catalog/resolve.go`, `resolve_test.go`; `acpserver/override_test.go`; `internal/cli/modelflags.go`, `modelflags_test.go`, `modelscmd.go`, `modelscmd_test.go` |
+| changed, code | `go.mod`, `go.sum`; `llm/provider/model.go`, `model_test.go`; `acpserver/agent.go`, `config.go` |
+| changed, config | `internal/config/keys.go`, `settings.go`, `settings.yaml`, `testdata/settings.schema.json`, `render_test.go`, `resolve_test.go` |
+| changed, cli | `internal/cli/flags.go`, `main.go`, `chat.go`, `agent.go`, `models.go`, `line.go`, `print.go`, `root.go`, `completion.go` |
+| new and changed, records | `docs/guides/choosing-a-model.md`; `README.md`; `docs/architecture.md`; this plan; `docs/README.md` |
+
+**Deferred, named:**
+
+- **`enabledModels` and `--models`:** 1.x (decision 11).
+- **Ollama:** `--provider` and `defaultProvider` take the providers with a key (0019-MADR D15). Ollama waits for a
+  keyless choice, and is an unknown provider until then.
+- **max as its own effort:** it needs an SDK effort above xhigh (decision 6), a request for the owner to file with the
+  ranking request of 2026-10-13.
+- **The SDK's native tool deferral:** 0012-MADR's, whose `tool_search` it would carry (decision 1).
+- **A custom id with another model's facts:** Pi's, not copied (decision 3); `models.json` describes a model instead.
+- **`/model` by Pi's rules, and a choice saved to the settings:** Pi's picker and its `persist` belong to the TUI (F9).
+- **`gobble models list --json`:** no consumer yet.
+- **`--api-key`:** F4-3.
