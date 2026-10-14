@@ -160,6 +160,12 @@ What the probe also shows:
   - **The nullable form does not fix it.** In OpenAI's own strict form, models send `null` for `workdir`, which gobble's validator refuses today. `gpt-4.1-mini` still invented a `limit` of 50.
   - *Consequence:* this happens today, before any 0012 change. It contradicts D3's premise that strict normalisation is harmless. Fixing it means either opting out of strict mode per tool, which needs the SDK's per-tool `strict` flag (D13), or an adapter in `llm/provider`. That choice is the owner's.
 
+- **F20. Ten of gobble's thirteen built-in tools take an argument a call may leave out, and for one of them it is below the top level.** *(Added 2026-10-13, for 0012-PLAN P7.)*
+  - `builtin.Tools()` returns read, write, edit, grep, find, tree, move, delete, copy, mkdir, todo and bash, and powershell on Windows (V51).
+  - write, edit and mkdir require every property. Each of the other ten has one a call may leave out, an `omitzero` field.
+  - todo's top-level `todos` is required, but each item's `priority` is not (V54). A rule over the top level alone would leave todo strict, and OpenAI would make `priority` required.
+  - *Consequence:* D3's opt-out looks for an optional property at any depth, and the probe's expectations are a table of the thirteen.
+
 - **F19. gobble's one nested `Marshal` is `tool.New`'s, and the race gate keeps meeting it.** *(Added 2026-10-09, from [0013-REPORT](../reports/0013-REPORT-go-json-nested-marshal-race.md) and its amendment of that date.)*
   - `tool.New` marshals each published `*jsonschema.Schema` with `json.Marshal` (V39). jsonschema-go's `Schema.MarshalJSON` calls `json.Marshal` again for the schema's struct and for each property's key and value (V40).
   - The standard library's JSON packages race under the race detector when one `Marshal` nests inside another this way. It reproduces with no gobble code, and the pair it reports varies from run to run (0013-REPORT).
@@ -361,11 +367,15 @@ The owner's proposals stand where the evidence supports them:
   - ~~A per-provider schema adapter, as opencode has (0011 S10), is built only if that probe, or a provider's error, shows a schema gobble writes failing on a provider gobble supports. It then gets its own decision here.~~
 - **D3 (amended 2026-10-08, the owner's choice). gobble opts out of strict mode for tools that have optional arguments, through the SDK.**
   - **The fix.** A tool whose published schema has a property outside `required` is sent with `strict: false`, OpenAI's documented opt-out (Doc 5: "To opt out of strict mode in Responses and keep non-strict, best-effort function calling, explicitly set `strict: false`"). A model can then leave optional arguments out, as gobble intends.
-  - **Tools with only required properties keep strict mode,** and with it OpenAI's guarantee that arguments match the schema. Today these are write and edit; read, bash and powershell are opted out.
+  - ~~**Tools with only required properties keep strict mode,** and with it OpenAI's guarantee that arguments match the schema. Today these are write and edit; read, bash and powershell are opted out.~~ *(Amended 2026-10-13, the owner's choice, for 0012-PLAN P7.)*
+  - **Tools with only required properties are sent with no flag** *(2026-10-13)*. On OpenAI's Responses API that keeps them strict, as Probe D measured, with its guarantee; elsewhere each service's own default holds. gobble never sends `strict: true`: on Claude's Messages wire it would ask strict mode of schemas no live test has shown it accepts (0019-MADR D11). On 2026-10-13 the tools with no optional argument are write, edit and mkdir; the other ten are opted out.
+  - **Optional at any depth** *(2026-10-13, F20)*. A property outside `required` counts in the tool's top-level object, and in any object schema under its `properties` or `items`, so todo's `priority` opts todo out.
+  - **On every provider** *(2026-10-13)*. The flag is set the same way for every id, and the SDK sends it only where the wire has the field (V50). `false` asks for what every service except OpenAI's Responses API does by default. That Messages accepts it is **[unverified]** (V53), and 0012-PLAN P7's live runs settle it.
   - **Rejected for now:** the adapter in `llm/provider`, which publishes OpenAI's nullable form and drops `null` arguments. Probe D showed it only partly works: `gpt-4.1-mini` still invented `limit: 50`.
   - **It needs the SDK.** v1.2.1 sends no `strict` key (V25), so gobble cannot opt out until go-llmprovider-sdk carries a per-tool strict flag. D13's item is therefore a blocker for this decision. Until a release has the flag, behaviour stays as Probe D measured it: calls work, and models fill in optional arguments.
   - **When the flag ships,** `llm/provider` sets it from the published schema, at the point where it builds each `llmprovider.Tool` (0011 S3). gobble's go-llmprovider-sdk requirement moves to the release with the flag, in the same commit.
-  - **The live-tagged probe stays,** as 0012-PLAN P5 builds it. Once the opt-out is in, it asserts what it now records: `strict=false` for read, bash and powershell, and `strict=true` for write and edit.
+  - ~~**The live-tagged probe stays,** as 0012-PLAN P5 builds it. Once the opt-out is in, it asserts what it now records: `strict=false` for read, bash and powershell, and `strict=true` for write and edit.~~ *(2026-10-13: the tool set has grown.)*
+  - **The live-tagged probe stays,** as 0012-PLAN P5 builds it *(amended 2026-10-13)*. Once the opt-out is in, it asserts `strict=false` for each tool with an optional argument and `strict=true` for each without, against the table 0012-PLAN P7 writes.
   - D2's convention is unchanged. Strict-eligible schemas still matter for the tools that keep strict mode, and for any provider that applies its own.
 - **D4. JSON-RPC 2.0 is the transport, and the native tools are served over it in 1.x.**
   - ACP and MCP stay gobble's JSON-RPC boundaries (F1, F16).
@@ -594,7 +604,9 @@ go list -m all > "$LOG"; grep -c blevesearch "$LOG"                -> 0
 # D3: the strict probe (live; the key from the environment, never the tree)
 go test -tags live_openai ./llm/provider -run TestStrictProbe -count=1 -v
     -> before the SDK's strict flag: one "strict=" line per tool (all true, as Probe D)
-    -> after it: strict=false for read, bash, powershell; strict=true for write, edit
+    -> after it (as written 2026-10-08, superseded): strict=false for read, bash, powershell; strict=true for write, edit
+    -> after it (2026-10-13, 0012-PLAN P7): strict=false for the ten tools with an optional argument;
+       strict=true for write, edit, mkdir; the test fails otherwise
 
 # (2026-10-09: D15 was rejected, and these two checks were never committed.)
 # D15 (proposed 2026-10-09): the published bytes are today's, the writer refuses
@@ -781,6 +793,12 @@ make preflight                                                     -> exit 0, Wi
 | V46 | `{}` is written `true`, and `{"not":{}}` `false` | jsonschema-go v0.4.3 `jsonschema/schema.go:303`, `:305` |
 | V47 | `mcptest`'s fixture server adds tools through `mcp.AddTool` | gobble-cli `mcpclient/mcptest/mcptest.go:66` |
 | V48 | v1 `Marshal` is v2 `Marshal` with the v1 options, which include `EscapeForHTML` | Go 1.27.2 `encoding/json/v2_encode.go:186`; `encoding/json/v2_options.go:222` |
+| V49 | `Tool.Strict *bool`: unset sends nothing; `true` or `false` is sent where the wire has the field | go-llmprovider-sdk v1.12.0 `llmprovider/provider.go:21` |
+| V50 | the SDK sends `strict` on Responses, Messages and the Chat gateways, and not on Gemini or Ollama | go-llmprovider-sdk v1.12.0 `llmprovider/internal/wire/tools.go:58`, `:87`; `llmprovider/internal/wire/chatcompletions/chatcompletions.go:325`; `llmprovider/providers/gemini/gemini.go:21`; `llmprovider/providers/ollama/ollama.go:24` |
+| V51 | the built-in tools are read, write, edit, grep, find, tree, move, delete, copy, mkdir, todo and bash, and powershell on Windows | gobble-cli `tool/builtin/builtin.go:73` |
+| V52 | `strict: false` was accepted live on the three Responses targets and echoed as applied, and answered 200 on the four Chat gateways | go-llmprovider-sdk v1.12.0 `docs/decisions/0032-MADR-tool-strict-and-result-error-flags.md:143` |
+| V53 | Messages accepted `strict: true` live, and a schema without `additionalProperties: false` answered 400; `false` was not measured | go-llmprovider-sdk v1.12.0 `docs/decisions/0034-MADR-degrade-forced-tool-choice-per-model.md:478` |
+| V54 | todo's item `priority` is `omitzero` | gobble-cli `tool/builtin/todo.go:23` |
 
 **0011-REPORT's claims cited here.** Their file, line and matched text are in that report's evidence table, re-run on 2026-10-08 and passing:
 

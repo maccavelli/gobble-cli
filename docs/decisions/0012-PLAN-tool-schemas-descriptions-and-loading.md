@@ -1,5 +1,5 @@
 ---
-status: completed
+status: in-progress
 date: 2026-10-13
 ---
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
@@ -11,6 +11,8 @@ Implements [0012-MADR-tool-schemas-descriptions-and-loading.md](0012-MADR-tool-s
 *(2026-10-08, before approval: D3 was amended by the owner's choice. Its opt-out, `strict: false` for tools with optional arguments, waits on go-llmprovider-sdk's per-tool strict flag. It is named under Deferred, with the phase that lands it.)*
 
 *(2026-10-09: P9 is added for 0012-MADR D15, proposed, closing F19. It needs the owner's approval like any phase.)*
+
+*(2026-10-13: P7 is written, as Deferred asked, for D3's opt-out, by the owner's choice of that date. It needs the owner's approval like any phase.)*
 
 ## Goal
 
@@ -40,6 +42,10 @@ The plan is done when each of these holds:
    - `make preflight` prints `preflight passed` on Windows and in WSL.
    - WSL `go test -race ./...` exits 0.
    - `golangci-lint run ./...` prints `0 issues.` for GOOS linux, darwin and windows.
+7. **D3's opt-out** *(added 2026-10-13, P7)*.
+   - Each tool gobble sends carries `Strict: false` when its schema has a property a call may leave out, at any depth, and no flag otherwise. `true` is never set.
+   - `go test ./llm/provider -run 'TestStrictFor|TestStrictBuiltins|TestCheckStrict|TestWireStrict' -count=1` passes, and each test was seen failing on a scratch copy.
+   - `TestStrictProbe` asserts. On its live run OpenAI reports `strict=false` for the ten built-in tools with an optional argument, and `strict=true` for write, edit and mkdir.
 
 ## Scope
 
@@ -53,6 +59,7 @@ The plan is done when each of these holds:
 | P4 | `tool/builtin/describe.go` (new), `tool/builtin/describe_test.go` (new), `tool/builtin/describe/read.md`, `write.md`, `edit.md`, `bash.md`, `powershell.md` (new), `tool/builtin/read.go`, `tool/builtin/write.go`, `tool/builtin/edit.go`, `tool/builtin/bash.go`, `tool/builtin/powershell.go`, `docs/architecture.md` |
 | P5 | `llm/provider/strict_test.go` (new), `llm/provider/strict_live_test.go` (new) |
 | P6 | this PLAN (execution record), `docs/decisions/0012-MADR-tool-schemas-descriptions-and-loading.md` (Observed section), `docs/README.md` |
+| P7 *(added 2026-10-13)* | `llm/provider/provider.go`, `llm/provider/provider_test.go`, `llm/provider/wire_test.go`, `llm/provider/strict_test.go`, `llm/provider/strict_live_test.go`, `llm/provider/live_test.go`; then this PLAN, `docs/decisions/0012-MADR-tool-schemas-descriptions-and-loading.md` (the Observed section) and `docs/README.md` for its record |
 | P8 *(added 2026-10-08)* | `tool/builtin/describe/read.md`, `write.md`, `edit.md`, `bash.md`, `powershell.md`, `tool/builtin/describe_test.go`, `tool/builtin/shell.go`; then this PLAN and `docs/README.md` for its record |
 | P9 *(added 2026-10-09; abandoned the same day, with nothing committed)* | `tool/schemajson.go` (new), `tool/schemajson_test.go` (new), `tool/tool.go`, `tool/builtin/published_test.go` (new), `tool/builtin/testdata/published.golden` (new), `docs/architecture.md`; then this PLAN, `docs/decisions/0012-MADR-tool-schemas-descriptions-and-loading.md` (D15's status and the Observed section), `docs/reports/0013-REPORT-go-json-nested-marshal-race.md` (a dated note) and `docs/README.md` for its record |
 
@@ -118,6 +125,7 @@ F1b commit (the owner; staged 2026-10-08)
 - **P4 touches the same files as P3,** so it follows it.
 - **P5 needs P3's schemas,** because it probes what is published.
 - **P9 runs after P8, and after 0005-PLAN F1d-1's commits** *(added 2026-10-09)*. It needs nothing else, and nothing waits on it.
+- **P7 runs after 0005-PLAN F4-1a** *(added 2026-10-13)*, which pinned go-llmprovider-sdk `v1.12.0` and wrote the live helper P7 extends (`e21b8bf`). Nothing else waits on it; 0005-PLAN F4-2 follows it.
 - **P6 records the phases.** It also records the probe's result when the owner has run P5's live test with a key in the environment. This plan cannot supply the key: no secret is passed on a command line or written to a file in the tree.
 
 ## Implementation Steps
@@ -741,6 +749,152 @@ Either way, the key never appears on a command line, in a file in the tree, or i
 
 **Verification.** `make check-records` exits 0, and `make preflight` prints `preflight passed`.
 
+### P7 — D3's opt-out: `strict: false` where a call may leave an argument out (D3, amended 2026-10-13; closes F17 and F20)
+
+*(Added 2026-10-13, as Deferred asked, before it runs. The owner's choice of that date: `false` where the schema has an optional property at any depth, no flag otherwise, on every provider, and `true` never. It supersedes Deferred's "and true otherwise", and applies 0019-MADR D11.)*
+
+**What it starts from.**
+
+- go-llmprovider-sdk `v1.12.0` is already required (0005-PLAN F4-1a, `e21b8bf`), so `go.mod` and `go.sum` do not change (C2).
+- `Tool.Strict` is a `*bool`. Unset sends nothing, the service's default; `false` or `true` is sent where the wire has the field (0012-MADR V49).
+- The SDK sends it on Responses (openai, grok, OpenCode's responses route), Messages (claude, OpenCode's messages route) and Chat Completions (huggingface, kilo, together, OpenCode's chat route). It does not send it to Gemini or Ollama (V50).
+- `false` was accepted live on the Responses targets, and echoed as applied, and on the Chat gateways (V52). On Messages only `true` was measured (V53). Messages' acceptance of `false` is **[unverified]**; step 7's live runs settle it.
+- `builtin.Tools()` holds 13 tools on Windows and 12 elsewhere (V51). Ten take an argument a call may leave out; write, edit and mkdir take none. todo's is nested: `priority`, in each item of `todos` (F20).
+
+**Step 1. `llm/provider/provider.go`.**
+
+- In `toRequest`'s tools loop, each tool gains its flag:
+
+  ```go
+  out.Tools = append(out.Tools, llmprovider.Tool{Name: s.Name, Description: s.Description, Schema: s.InputSchema, Strict: strictFor(s.InputSchema)})
+  ```
+
+- After `toRequest`, two functions, with `"slices"` added to the imports:
+
+  ```go
+  // strictFor is a tool's strict flag (0012-MADR D3): false when its schema
+  // has a property a call may leave out, at any depth, so that strict mode
+  // does not make the model fill it in; unset otherwise, the service's own
+  // default. It is never true (0019-MADR D11).
+  func strictFor(schema any) *bool {
+      if hasOptional(schema) {
+          return new(false)
+      }
+      return nil
+  }
+
+  // hasOptional reports whether schema, a decoded JSON Schema, or an object
+  // schema in its properties or items, has a property outside its required.
+  func hasOptional(schema any) bool {
+      s, ok := schema.(map[string]any)
+      if !ok {
+          return false
+      }
+      props, _ := s["properties"].(map[string]any)
+      required, _ := s["required"].([]any)
+      for name, sub := range props {
+          if !slices.Contains(required, any(name)) || hasOptional(sub) {
+              return true
+          }
+      }
+      return hasOptional(s["items"])
+  }
+  ```
+
+- The rule reads the schema `toRequest` already decodes, so it applies to every tool gobble sends, MCP tools included.
+- `new(false)` is Go 1.26's `new` of an expression; `go.mod` says `go 1.27.2`.
+
+**Step 2. `llm/provider/strict_test.go`** (package `provider_test`, no build tag) gains:
+
+  ```go
+  // wantStrict is each built-in tool's strict flag (0012-PLAN P7): "false"
+  // where a call may leave an argument out, "unset" where it may not.
+  var wantStrict = map[string]string{
+      "read": "false", "write": "unset", "edit": "unset", "grep": "false", "find": "false",
+      "tree": "false", "move": "false", "delete": "false", "copy": "false", "mkdir": "unset",
+      "todo": "false", "bash": "false", "powershell": "false",
+  }
+
+  // flag names a Strict value: "unset", "false" or "true".
+  func flag(p *bool) string
+
+  // builtinSpecs is the JSON of builtin.Tools()' specs, as the agent sends
+  // them; it fails t when they do not encode.
+  func builtinSpecs(t *testing.T) jsontext.Value
+
+  // checkStrict compares the strict values a Responses reply reports for the
+  // tools named in sent with wantStrict: false where false was sent, and
+  // true where none was, since OpenAI then makes the tool strict (Probe D).
+  // It returns one line per mismatch, and per tool missing or unexpected.
+  func checkStrict(got map[string]bool, sent []string) []string
+  ```
+
+- **`TestStrictBuiltins`** streams one request, with `builtinSpecs` as its tools, through `provider.Wrap` over `sdktest.NewFake("fake", llmprovider.Capabilities{Tools: llmprovider.Supported}).ReplyText("ok")`. For each tool of the fake's one recorded request, it fails when `wantStrict` has no entry for the name, or when `flag(tool.Strict)` differs from the entry. It also fails unless the request holds as many tools as `builtin.Tools()`.
+- **`TestCheckStrict`** has three cases, each with `sent` = read and write:
+  - `{read: false, write: true}` gives no line;
+  - `{read: false, write: false}` gives one, naming write;
+  - `{write: true}` gives one, naming read as missing.
+
+**Step 3. `llm/provider/provider_test.go`** (package `provider`). **`TestStrictFor`** is a table over `strictFor`, each schema decoded with `json.Unmarshal` into `any` first:
+
+| Schema | Want |
+| :--- | :--- |
+| `{"type":"object","properties":{"a":{},"b":{}},"required":["a"]}` | `false` |
+| `{"type":"object","properties":{"a":{},"b":{}},"required":["a","b"]}` | unset |
+| `{"type":"object"}` | unset |
+| a required array `list` whose `items` object requires `c` and not `p` | `false` |
+| a required object property `o` whose own `p` is not required | `false` |
+| `null` | unset |
+
+**Step 4. `llm/provider/wire_test.go`** (package `provider`). **`TestWireStrict`**, over the ten `wireIDs`:
+
+- the request is `wireRequest()` with the specs of `builtin.Tools()` as its tools, marshaled in the test;
+- `n` is the number of tools `toRequest` gives `Strict` false for that request, and the test fails at once unless `n > 0`;
+- each id streams it over a `cannedWire{}`, with one request. Its body must hold `"name":"read"`, and hold `"strict":false` exactly `n` times for the eight ids whose wire carries the flag, and 0 times for gemini and ollama;
+- no body holds `"strict":true`.
+
+**Step 5. The live tests.**
+
+- **`llm/provider/strict_live_test.go`.** `TestStrictProbe` takes its tools from `builtinSpecs(t)` and logs its `strict=` lines as now. It then fails with each line `checkStrict(strict, names)` returns, `names` being the names it sent. Its doc comment's "It records; it does not judge." becomes "It records, then judges against wantStrict (0012-PLAN P7)."
+- **`llm/provider/live_test.go`.** `liveTurn` sends `builtinSpecs(t)` as the request's tools, so each live test shows its service accepting gobble's tools with their flags.
+  - The prompt becomes `Reply with the single word: ok. Do not call a tool.`
+  - It passes on non-zero usage with either text or a tool call, since a call also shows the tools were accepted. Its log line names the call when there is one.
+
+**Step 6. Seen failing (C3),** on scratch copies, after a control run of the same tests passes on an unmodified copy:
+
+- **copy 1:** `Strict: strictFor(s.InputSchema)` removed from the loop. `TestStrictBuiltins` (ten tools: want false, got unset) and `TestWireStrict` (`n > 0`) fail.
+- **copy 2:** `|| hasOptional(sub)` and the `items` call removed, leaving the top level only. `TestStrictFor`'s two nested cases, and `TestStrictBuiltins` for todo, fail.
+- **copy 3:** `strictFor`'s `return nil` becomes `return new(true)`. `TestStrictFor`'s unset cases, `TestStrictBuiltins` for write, edit and mkdir, and `TestWireStrict` (a `"strict":true`) fail.
+- **copy 4:** `checkStrict` expects `false` for an unset tool instead of `true`. `TestCheckStrict`'s first case fails.
+
+Each mutation is asserted to land once, every log is read whole, and credential variables are cleared, so no negative reaches a service.
+
+**Step 7. The live run.** `TestStrictProbe` runs once, as P5's live run says: one billed request to `gpt-4.1-mini`, with the key loaded from the owner's key file into that one process, on the owner's permission given in that turn, and every output checked for the key before it is read.
+
+- **Expected:** `strict=false` for read, grep, find, tree, move, delete, copy, todo, bash and powershell; `strict=true` for write, edit and mkdir; the test passes.
+- `TestLiveOpenAI` runs in the same process, a second billed request, now with the tools.
+- `TestLiveClaude`, `TestLiveGemini` and `TestLiveGrok` are the owner's to run, with their keys. Until they have run, the record says they are pending.
+
+**Verification.**
+
+```text
+go test ./llm/provider -count=1 -run 'TestStrictFor|TestStrictBuiltins|TestCheckStrict|TestWireStrict' -v   -> ok
+go vet -tags live_openai,live_claude,live_gemini,live_grok ./llm/provider                               -> exit 0
+golangci-lint run --build-tags live_openai,live_claude,live_gemini,live_grok ./llm/provider             -> "0 issues." (linux, darwin, windows)
+go test -tags live_openai -count=1 -run TestStrictProbe -v ./llm/provider                               -> "--- SKIP" (no key)
+make pre-add-check FILES="<the six Go files>"                                                            -> exit 0
+```
+
+Then the gates as 0005-PLAN F4-1a ran them, in place of the Stability rule's WSL lines, which no phase has run since 2026-10-09 (0013-REPORT): lint for linux, darwin and windows; Windows `go test ./...` and `go test -race ./...`; the second Linux machine's `-race`; the macOS laptop's `go test`; Windows `make preflight`.
+
+**Step 8. The record.**
+
+- This PLAN gains `## Execution record — P7 (<date>)`: the negatives' failures, quoted; the live lines; the gates; and what P7 predicted wrongly.
+- 0012-MADR gains `## Observed — execution results (<date>)`, with the live `strict=` lines beside P5's.
+- `docs/README.md`'s 0012-PLAN row and build-order line say P7 ran, and this PLAN's status returns to `completed`.
+
+**Commit.** One commit, staged by the agent and made by the owner, holding steps 1–5 and 8.
+
 ### P8 — Agent-first descriptions (D5 item 6; closes F18)
 
 *(Added 2026-10-08, by the owner's choice of that date: "Ensure the tool markdown descriptions are written in a manner optimized for agents to read them." It runs after P6, and needs the owner's approval like any phase.)*
@@ -1359,10 +1513,14 @@ git diff <the records commit>..HEAD -- go.mod go.sum              -> empty (C2)
 | A13 *(added 2026-10-09; void, P9 abandoned)* | `TestWriteSchema`, `TestWriteSchemaRefuses` and `TestNewRefusesUnpublished` pass, and failed on copies 2, 3 and 6 | D15 |
 | A14 *(added 2026-10-09; void, P9 abandoned)* | Probe F reports no race on the P9 tree, against a control that raced; or the record says the probe was inconclusive | F19, D15 |
 | A15 *(added 2026-10-09; void, P9 abandoned)* | the existing `tool` tests pass unedited, and `go.mod` and `go.sum` are unchanged | C1, C2 |
+| A16 *(added 2026-10-13)* | `TestStrictFor`, `TestStrictBuiltins`, `TestCheckStrict` and `TestWireStrict` pass, and failed on P7's copies 1–4 | D3 (amended 2026-10-13), F20 |
+| A17 *(added 2026-10-13)* | the live `TestStrictProbe` passes, asserting `strict=false` for the ten tools with an optional argument and `strict=true` for write, edit and mkdir; or the record says the run is pending | D3 (amended 2026-10-13), Confirmation |
 
 **A8 is the criterion most likely to be dropped.** Probe D has already answered the question, so repeating it from the tree looks optional. It is not: the in-tree test is what P7 will turn into an assertion. A "pending" in the record is honest; a silently missing section is not.
 
 **C1 is the contract most likely to be broken.** When P2 or P3 turns a test red, editing its assertion is the fastest route back to green.
+
+**A17 is the criterion most likely to be dropped** *(added 2026-10-13)*. Its offline half, `TestCheckStrict`, passes without a key and looks like the proof. Only the live run shows OpenAI applying the flag.
 
 **A14's control is the criterion most likely to be dropped** *(added 2026-10-09)*. A run of the P9 tree alone that shows no race looks like the result. Without a control that raced in the same probe, it shows nothing, because the race is rare enough to miss in any one run.
 
@@ -1372,6 +1530,7 @@ git diff <the records commit>..HEAD -- go.mod go.sum              -> empty (C2)
 - **Rollback.**
   - **P2–P5** each revert as one commit. P3 and P4 depend on P2, so they revert first.
   - **P9** *(added 2026-10-09)* reverts as one commit. Its golden file and tests go with it, and `tool.New` marshals through jsonschema-go again. *(Abandoned before any commit, so there is nothing to revert.)*
+  - **P7** *(added 2026-10-13)* reverts as one commit. Requests then carry no strict flag, as before it.
   - **P1** is records. A revert of it puts 0005's Exposure paragraph back in force, so it is reverted only with 0012-MADR set back to `proposed`.
   - Reverting is the owner's command, not the agent's.
 
@@ -1383,10 +1542,10 @@ git diff <the records commit>..HEAD -- go.mod go.sum              -> empty (C2)
 - **D10, the interception:** F6, with `mvdan.cc/sh`, which AGENTS.md lets in only with the code that imports it.
 - **D4 and D14's `outputSchema`:** X4, with `gobble mcp serve`.
 - **D13:** a request to go-llmprovider-sdk. It is recorded in 0012-MADR, and not made from this repository.
-- **D3's opt-out** *(added 2026-10-08)*. It waits on a go-llmprovider-sdk release whose `llmprovider.Tool` carries a per-tool strict flag; v1.2.1 has none (V25). When that release exists, this plan gains a phase P7, made executable as an amendment first, that: *(2026-10-11: the release exists. go-llmprovider-sdk `v1.7.0` has `Tool.Strict *bool`. P7 is made executable after 0005-PLAN F4-1a, which pins that release; see 0005-PLAN's entry "F4-1 re-made for go-llmprovider-sdk `v1.7.0`".)* *(2026-10-13, 0019-MADR D11: P7 is amended before it runs. `Strict` stays `nil`, the service default, except for providers whose live test has shown `true` is accepted, since from go-llmprovider-sdk `v1.8.0` `true` also reaches Claude (0019-MADR F8).)*
+- **D3's opt-out** *(added 2026-10-08)*. It waits on a go-llmprovider-sdk release whose `llmprovider.Tool` carries a per-tool strict flag; v1.2.1 has none (V25). When that release exists, this plan gains a phase P7, made executable as an amendment first, that: *(2026-10-11: the release exists. go-llmprovider-sdk `v1.7.0` has `Tool.Strict *bool`. P7 is made executable after 0005-PLAN F4-1a, which pins that release; see 0005-PLAN's entry "F4-1 re-made for go-llmprovider-sdk `v1.7.0`".)* *(2026-10-13, 0019-MADR D11: P7 is amended before it runs. `Strict` stays `nil`, the service default, except for providers whose live test has shown `true` is accepted, since from go-llmprovider-sdk `v1.8.0` `true` also reaches Claude (0019-MADR F8).)* *(2026-10-13: made executable as P7, under Implementation Steps, by the owner's choice. The second bullet's "and true otherwise" is superseded there.)*
   - requires that release, in the same commit as the code that uses the flag (AGENTS.md, Dependencies);
-  - in `llm/provider`, where each `llmprovider.Tool` is built (`provider.go:234`), sets strict to false when the published schema has a property outside `required`, and true otherwise;
-  - makes P5's live test assert `strict=false` for read, bash and powershell, and `strict=true` for write and edit;
+  - in `llm/provider`, where each `llmprovider.Tool` is built (`provider.go:234`), sets strict to false when the published schema has a property outside `required`, ~~and true otherwise~~ *(2026-10-13, P7: at any depth, and leaves it unset otherwise)*;
+  - makes P5's live test assert `strict=false` for read, bash and powershell, and `strict=true` for write and edit; *(2026-10-13, P7: for the 13 tools of that date, `false` for ten and `true` for write, edit and mkdir)*
   - adds a unit test, seen failing first, of the rule that sets the flag.
 - ~~**The per-provider schema adapter:** built only if P5's probe, or a provider's error, shows a failure (D3).~~ *(2026-10-08: rejected for now by the owner's D3 choice; Probe D showed it only partly works.)*
 
