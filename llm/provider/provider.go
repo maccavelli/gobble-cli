@@ -228,7 +228,7 @@ func toRequest(req *llm.Request) (*llmprovider.Request, error) {
 				}
 				out.Input = append(out.Input, llmprovider.FunctionCallItem{CallID: c.ToolCallID, Name: c.ToolName, Arguments: c.ToolArgs, Signature: r.Signature})
 			case c.Type == llm.ContentToolResult:
-				out.Input = append(out.Input, llmprovider.FunctionCallOutputItem{CallID: c.ToolCallID, Output: c.Text})
+				out.Input = append(out.Input, llmprovider.FunctionCallOutputItem{CallID: c.ToolCallID, Output: c.Text, IsError: c.IsError})
 			}
 		}
 	}

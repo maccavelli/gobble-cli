@@ -164,6 +164,26 @@ func TestHistoryRoundTrip(t *testing.T) {
 	}
 }
 
+// A failed tool result reaches the SDK as one, and a good one as a success
+// (0005-PLAN F4-1a).
+func TestToolResultError(t *testing.T) {
+	for _, failed := range []bool{true, false} {
+		f := sdktest.NewFake("fake", llmprovider.Capabilities{Tools: llmprovider.Supported}).ReplyText("ok")
+		msgs := []llm.Message{
+			text(llm.RoleUser, "go"),
+			{Role: llm.RoleAssistant, Content: []llm.Content{{Type: llm.ContentToolCall, ToolCallID: "c1", ToolName: "read", ToolArgs: `{}`}}},
+			{Role: llm.RoleTool, Content: []llm.Content{{Type: llm.ContentToolResult, ToolCallID: "c1", Text: "no such file", IsError: failed}}},
+		}
+		if _, err := drain(t, Wrap(f), &llm.Request{Messages: msgs}); err != nil {
+			t.Fatal(err)
+		}
+		got, ok := f.Requests()[0].Input[2].(llmprovider.FunctionCallOutputItem)
+		if want := (llmprovider.FunctionCallOutputItem{CallID: "c1", Output: "no such file", IsError: failed}); !ok || got != want {
+			t.Errorf("failed=%v: tool result %+v, want %+v", failed, got, want)
+		}
+	}
+}
+
 func TestReasoningItemCarriesData(t *testing.T) {
 	f := sdktest.NewFake("fake", llmprovider.Capabilities{Reasoning: llmprovider.Supported}).Reply(&llmprovider.Response{
 		Output:       []llmprovider.Item{llmprovider.ReasoningItem{Text: "think", Signature: "s"}, llmprovider.MessageItem{Role: llmprovider.RoleAssistant, Text: "x"}},

@@ -3554,3 +3554,21 @@ the live run                                                                   -
 | changed | `llm/provider/provider.go`, `llm/provider/provider_test.go`; this plan; `docs/README.md` |
 
 F4-1a is one commit, with its own record of what ran. F4-1b is unchanged: it waits for a streaming `WithRetry`.
+
+**F4-1a's execution record (2026-10-13).**
+
+- **Ran as planned,** on go-llmprovider-sdk `v1.12.0`, still the latest tag when it started; no deviation.
+- **Tests:** `TestToolResultError`; `TestWireCases`, 40 subtests (the ten ids, each text, a tool call, `Retry-After: 120`
+  and an overflow); `TestWireRateLimitResets` (3); `TestWireOverflowSplit`; `TestWireToolResultError` (5). All pass, each
+  case after one request.
+- **The live tests,** without their keys, each skip naming the variable; `go vet` and `golangci-lint` with the four tags: 0 issues.
+- **Negatives,** 5 of 5 caught after control runs: `toRequest` without `IsError`; `mapError` without the rate-limit sentinel;
+  without the overflow sentinel; dropping `RetryAfter`; the live helper without `LiveCredential`'s skip, which then fails.
+- **The live run:** `TestLiveOpenAI` passed on 2026-10-13, one billed request to `gpt-6-luna`; the key was in no output.
+  `TestLiveClaude`, `TestLiveGemini` and `TestLiveGrok` have not run: no key for them here; the owner runs them.
+- **Gates:** lint for linux, darwin and windows, 0 issues; Windows `go test` and `-race`, the second Linux machine's `-race` and
+  the macOS laptop's `go test`, 31 packages ok each, no race report; Windows preflight passed.
+- **The agent's own error, fixed before the commit:** the canned transport first copied its reply headers with their keys as
+  written, so `http.Header.Get` missed the lowercase reset headers and the SDK retried four times; it now canonicalises them,
+  as a server's headers arrive.
+- **Next:** 0012-PLAN P7, then F4-2 (decisions 4 and 5 of 2026-10-11).
