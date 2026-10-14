@@ -30,6 +30,13 @@
 # share OPENCODE_API_KEY, so only this setting reaches opencode-go.
 # defaultProvider: ""
 
+# How long the model service keeps this session's prompt cached, so
+# the next request reads it back: none, short or long. On Anthropic's
+# models short is five minutes and long an hour; elsewhere both ask
+# the same. A write costs more than plain input there (1.25 times, or
+# 2 times for long), and a read a tenth. none asks for nothing.
+# cacheRetention: short
+
 # ---------------------------------------------------------------------
 # Sessions
 # ---------------------------------------------------------------------

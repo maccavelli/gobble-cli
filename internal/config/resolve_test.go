@@ -58,6 +58,7 @@ func TestDefaultsEqualCode(t *testing.T) {
 		got, want any
 	}{
 		{"defaultProvider", s.DefaultProvider, ""},
+		{"cacheRetention", s.CacheRetention, "short"},
 		{"defaultThinkingLevel", s.DefaultThinkingLevel, "off"},
 		{"steeringMode", s.SteeringMode, "one-at-a-time"},
 		{"followUpMode", s.FollowUpMode, "one-at-a-time"},
@@ -95,8 +96,8 @@ func TestKeysMatchSettings(t *testing.T) {
 			t.Errorf("%s: Value = %v %v, want %v", k.Path, v, ok, defaultValue(k))
 		}
 	}
-	if len(Keys) != 14 {
-		t.Errorf("%d keys, want 0018-MADR D14's 13 and 0019-MADR D15's defaultProvider", len(Keys))
+	if len(Keys) != 15 {
+		t.Errorf("%d keys, want 0018-MADR D14's 13, 0019-MADR D15's defaultProvider and 0021-MADR D3's cacheRetention", len(Keys))
 	}
 }
 

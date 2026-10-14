@@ -18,6 +18,16 @@
         "together"
       ]
     },
+    "cacheRetention": {
+      "type": "string",
+      "description": "How long the model service keeps a session's prompt cached: none, short (five minutes on Anthropic's models) or long (an hour).",
+      "default": "short",
+      "enum": [
+        "none",
+        "short",
+        "long"
+      ]
+    },
     "defaultThinkingLevel": {
       "type": "string",
       "description": "The thinking level a new session starts with.",

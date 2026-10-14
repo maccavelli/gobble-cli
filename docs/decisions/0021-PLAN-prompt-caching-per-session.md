@@ -25,7 +25,7 @@ Implements [0021-MADR-prompt-caching-per-session.md](0021-MADR-prompt-caching-pe
 | :--- | :--- | :--- |
 | P1 | D1, D4 (the option) | `llm/llm.go`; `llm/doc.go`; `llm/provider/provider.go`; `llm/provider/cache_test.go` (new) |
 | P2 | D2, D4, D5, D6 | `agent/agent.go`, `agent/agent_test.go`; `acpserver/agent.go`, `acpserver/compact.go`, `acpserver/config.go`, `acpserver/prompt.go`; `acpserver/cache_test.go` (new), `acpserver/usage_test.go`, `acpserver/settings_test.go`, and the 15 `acpserver` test files that build an `Options.Provider` (`agent_test.go`, `commands_test.go`, `compact_test.go`, `fixtures_test.go`, `list_test.go`, `mcp_test.go`, `prompt_test.go`, `rewrite_test.go`, `routing_test.go`, `session_test.go`, `settings_test.go`, `sysprompt_test.go`, `templates_test.go`, `toolload_test.go`, `tree_test.go`); `internal/cli/agent.go`, `internal/cli/sessions_test.go`, `internal/cli/settings_test.go`, `internal/cli/cache_test.go` (new) |
-| P3 | D3 | `internal/config/keys.go`, `internal/config/settings.go`, `internal/config/settings.yaml`, `internal/config/testdata/settings.schema.json`, `internal/config/resolve_test.go`, `internal/config/render_test.go`; `internal/cli/settings.go`, `internal/cli/cache_test.go` |
+| P3 | D3 | `internal/config/keys.go`, `internal/config/settings.go`, `internal/config/settings.yaml`, `internal/config/testdata/settings.schema.json`, `internal/config/resolve_test.go`, `internal/config/render_test.go`; `internal/cli/settings.go`, `internal/cli/cache_test.go`; *(deviation 1:)* `internal/cli/settings_test.go` |
 | P4 | D7, D8, D9 | `docs/decisions/0004-MADR-go-module-architecture.md`, `docs/decisions/0005-MADR-v1-feature-scope.md`, `docs/decisions/0005-PLAN-v1-feature-scope.md`, `docs/decisions/0012-MADR-tool-schemas-descriptions-and-loading.md`, `docs/decisions/0018-MADR-configuration-surface.md`; `docs/README.md`; this plan and its MADR |
 
 ### Out of scope
@@ -308,6 +308,12 @@ go test -count=1 ./internal/config ./internal/cli -run 'TestKeys|TestRender|Test
 go run ./internal/config/genschema && git diff --exit-code internal/config/testdata/settings.schema.json  -> no diff after staging
 gobble config get cacheRetention                                                        -> short
 ```
+
+### P3's deviations, 2026-10-13
+
+- **Deviation 1. An existing test pins every session key's arrival, and P3's file list leaves it out.**
+  - **Found:** the gates failed on all four systems on `internal/cli/settings_test.go:149`, `TestSessionSettingsReachAgent`: it compares `e.agentOptions().Settings`'s whole `SessionSettings` with a want that predates the key, "got `CacheRetention:short` … want `CacheRetention:`", and its second assertion (`:154-160`) compares `toSession(config.Defaults())` the same way. Every other check was green: the config tests, `TestCacheRetentionSetting`, the negatives (4 of 4), lint ×3 and preflight. The file is in P2's scope, not P3's.
+  - **Decided** ("Extend its want, add file to P3"): `internal/cli/settings_test.go` is added to P3's scope. The test's settings file sets `cacheRetention: long` and its want has `CacheRetention: "long"`, so the new key is shown reaching the agent as the others are; `today` gains `CacheRetention: "short"`. The gates are rerun.
 
 ### P4 — The records and the live check (D7, D8, D9; closes F12, F13)
 

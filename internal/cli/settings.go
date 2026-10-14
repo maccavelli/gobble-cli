@@ -84,6 +84,7 @@ func (e *runEnv) resolveSettings(cwd string, read config.Read, report func(strin
 func toSession(s config.Settings) acpserver.SessionSettings {
 	return acpserver.SessionSettings{
 		SteeringMode: s.SteeringMode, FollowUpMode: s.FollowUpMode, Thinking: s.DefaultThinkingLevel,
+		CacheRetention: s.CacheRetention,
 		Compaction: compaction.Settings{
 			ReserveTokens: compaction.DefaultSettings.ReserveTokens, KeepRecentTokens: int(s.Compaction.KeepRecentTokens),
 		},

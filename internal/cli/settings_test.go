@@ -130,7 +130,7 @@ func TestSessionSettingsReachAgent(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("GOBBLE_HOME", home)
 	writeFile(t, filepath.Join(home, "settings.yaml"),
-		"defaultThinkingLevel: low\nsteeringMode: all\nfollowUpMode: all\ncompaction:\n  keepRecentTokens: 100\n"+
+		"defaultThinkingLevel: low\ncacheRetention: long\nsteeringMode: all\nfollowUpMode: all\ncompaction:\n  keepRecentTokens: 100\n"+
 			"mcp:\n  startupWaitMs: 7\n  stopGraceMs: 8\n  stopTimeoutMs: 9\nshellCommandPrefix: set -e\n")
 	out := &Output{out: &bytes.Buffer{}, err: &bytes.Buffer{}}
 	e := &runEnv{ctx: t.Context(), out: out, logs: &lazyLog{out: out}, store: session.NewMemoryStore()}
@@ -141,7 +141,7 @@ func TestSessionSettingsReachAgent(t *testing.T) {
 	})
 	got := e.agentOptions().Settings(t.TempDir())
 	want := acpserver.SessionSettings{
-		SteeringMode: "all", FollowUpMode: "all", Thinking: "low",
+		SteeringMode: "all", FollowUpMode: "all", Thinking: "low", CacheRetention: "long",
 		Compaction:     compaction.Settings{ReserveTokens: compaction.DefaultSettings.ReserveTokens, KeepRecentTokens: 100},
 		MCPStartupWait: 7 * time.Millisecond, MCPStopGrace: 8 * time.Millisecond, MCPStopTimeout: 9 * time.Millisecond,
 	}
@@ -152,7 +152,7 @@ func TestSessionSettingsReachAgent(t *testing.T) {
 		t.Fatal("a process key reached the session settings")
 	}
 	today := acpserver.SessionSettings{
-		SteeringMode: "one-at-a-time", FollowUpMode: "one-at-a-time", Thinking: "off", Compaction: compaction.DefaultSettings,
+		SteeringMode: "one-at-a-time", FollowUpMode: "one-at-a-time", Thinking: "off", CacheRetention: "short", Compaction: compaction.DefaultSettings,
 		MCPStartupWait: 10 * time.Second, MCPStopGrace: 500 * time.Millisecond, MCPStopTimeout: 2 * time.Second,
 	}
 	if got := toSession(config.Defaults()); got != today {
