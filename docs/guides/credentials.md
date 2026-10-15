@@ -161,6 +161,29 @@ Saved API key for claude
 
 gobble does not sign out over ACP; use `gobble auth logout <provider>`.
 
+A program that drives a login, as magic-cli-remote's phone flow does, runs
+`gobble auth login <provider> --json`. gobble then prints what the login shows as JSON lines on
+stdout, and nothing on stderr; the exit code is the same as without `--json`. Each line is one
+event, naming its `provider`:
+
+- `device_code`: the `url` to open, the `code` to enter there, and `expires`, in UTC, when the
+  provider gives one;
+- `browser_url`: the `url` of a browser login. gobble still opens it, and asks for no pasted URL;
+- `saved`: the credential is stored, its `type` `api_key` or `oauth`;
+- `error`: the login failed. `kind` is its class: `auth`, `timeout`, `canceled`, `unavailable`,
+  `quota`, `rate-limited`, `not-permitted`, or `other`. `message` is what gobble prints without
+  `--json`.
+
+With `--api-key -` on a terminal, the key is still read without echo, but with no `API key for`
+prompt:
+
+```text
+$ echo sk-test-only | gobble auth login anthropic --api-key - --json
+{"event":"saved","provider":"claude","type":"api_key"}
+$ gobble auth login anthropic --json
+{"event":"error","provider":"claude","kind":"other","message":"claude has no login; use --api-key -"}
+```
+
 ## When a key is refused
 
 When the provider refuses the key, gobble says which key it sent, and nothing of the provider's

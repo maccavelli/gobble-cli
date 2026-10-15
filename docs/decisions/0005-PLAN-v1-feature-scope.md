@@ -5400,3 +5400,54 @@ the gates                                                             -> lint ×
   - `Has` resolves the credential, so a stored `!command` runs, as `gobble auth check` runs it;
   - `Logout` keeps its -32601 handler: the SDK refuses `logout` first, since no `auth.logout` is advertised.
 - **Next:** F4-3c-3, `gobble auth login --json`.
+
+**F4-3c-3's execution record (2026-10-15).**
+
+- **Ran as written,** with no deviation, in the files the table names: `internal/cli/auth.go`, `auth_test.go` and
+  `docs/guides/credentials.md`.
+- **What `--json` does:**
+  - `AuthLoginCmd` gains `--json`. Its events go through one `loginEvents` writer, passed to the login paths as a
+    parameter. `login` stays as the text form, so `gobble acp --login` is unchanged.
+  - With `--json`, stderr's diagnostics are dropped and the logger has no stderr handler, as under `gobble acp`; the
+    log file keeps its records.
+  - A failure is the `error` event. The command then exits with the code it would have, and prints nothing more.
+- **Tests:**
+  - `TestAuthLoginJSON` (new):
+    - Grok's device and browser logins, Kilo's, and `--api-key -`, each with its exact lines;
+    - a login with no provider, and an unknown provider, as `error` with exit 2;
+    - a refused login as `error` with kind `auth`, exit 1, and the message gobble prints without `--json`;
+    - stderr empty throughout, with `--log-level debug`, a log file that cannot be opened, and a settings file that
+      cannot be created, whose warning reaches the log file;
+    - on a terminal, a browser login offers a paste only without `--json`.
+  - `TestAuthLogin`, `TestAuthLoginGrok`, `TestAuthLoginKilo` and every other existing test pass unedited.
+- **Negatives,** 13 of 13 caught on a scratch copy after a control run, each failing its named tests with its text:
+  - stderr not dropped: `Warning: no log file` reached it;
+  - the logger's stderr handler kept: the settings warning missed the log file;
+  - the kind, the exit code, or the unknown provider's name lost from the `error` event;
+  - a paste offered with `--json`;
+  - `expires` not in UTC, or given when the SDK gives none;
+  - the `device_code`, `browser_url` or `saved` event replaced by text;
+  - a login's error wrapped as text, so its kind is `other`;
+  - events written without `--json`, failing `TestAuthLogin`, `TestAuthLoginGrok` and `TestAuthLoginKilo`.
+- **The guide's examples** ran against a scratch `GOBBLE_HOME`, with `HTTP_PROXY` and `HTTPS_PROXY` at a dead local port:
+  - `echo sk-test-only | gobble auth login anthropic --api-key - --json` printed the `saved` line, with exit 0 and
+    nothing on stderr, and `auth.json` held the key;
+  - `gobble auth login anthropic --json` printed the `error` line, with exit 2 and nothing on stderr.
+- **Gates:**
+  - the pre-add check, 2 files clean;
+  - lint for linux, darwin and windows, `0 issues.` each with `CGO_ENABLED=0`;
+  - the macOS laptop's `CGO_ENABLED=1 go test -race ./...`, 33 packages ok, no race report;
+  - `make preflight` on macOS, `preflight passed`;
+  - **not run:** Windows `go test ./...` and `-race`, the second Linux machine's `-race`, and Windows and WSL
+    `make preflight`, on the owner's machines.
+- **What the plan predicted wrongly, or left unsaid:**
+  - A login's own error was wrapped as text (`failf("%v", err)`), which lost its class: the first run's `error` event
+    had kind `other`. It is now returned as is. Main prints it the same way and exits 1, as before.
+  - `expires` is RFC 3339 in UTC, and is left out when the SDK gives no expiry.
+  - With `--api-key -` on a terminal, the key is read without echo and with no prompt, since nothing goes to stderr.
+  - A browser login still opens the browser with `--json`.
+  - An unknown provider's `error` event names the provider as given.
+  - A parse error, before the command runs, is still Kong's text on stderr, with exit 2.
+  - The test makes the settings file fail by putting a directory where its lock file goes. That this fails on Windows
+    too is not checked here; the owner's Windows run shows it.
+- **Next:** F4-3c-4, `gobble auth import --from-pi`.

@@ -7,14 +7,17 @@ import (
 	"errors"
 	"fmt"
 	"iter"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/maccavelli/gobble-cli/internal/auth"
+	"github.com/maccavelli/gobble-cli/internal/cli/term"
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/llm/catalog"
 	"github.com/maccavelli/gobble-cli/llm/provider"
@@ -302,6 +305,125 @@ func TestAuthLoginKilo(t *testing.T) {
 	c.write(c.authFile(), `{}`)
 	if r := c.run("auth", "login", "kilo"); r.code != ExitFailure || c.read(c.authFile()) != "{}" {
 		t.Errorf("a failed login: exit %d, auth.json %q", r.code, c.read(c.authFile()))
+	}
+}
+
+// gobble auth login --json prints decision 6's events, one JSON object a
+// line on stdout, and nothing on stderr: the device and browser events,
+// then saved; a failure is the error event, with its kind, the message
+// gobble prints without --json, and the exit unchanged; a browser login
+// offers no paste (0005-PLAN F4-3c decision 6).
+func TestAuthLoginJSON(t *testing.T) {
+	c := newCfgEnv(t)
+	replace(t, &openURL, func(context.Context, string) error { return errors.New("no browser") })
+	const authorize = "https://auth.x.ai/oauth2/authorize?state=s"
+	var pasted []bool
+	replace(t, &browserLogin, func(ctx context.Context, id string, o provider.LoginOptions, store provider.LoginStore) error {
+		pasted = append(pasted, o.InputCode != nil)
+		if err := o.OpenURL(authorize); err != nil {
+			return err
+		}
+		return store.Save(ctx, id, &provider.Login{Access: "a-browser", Refresh: "r"})
+	})
+	replace(t, &deviceLogin, func(ctx context.Context, id string, _ provider.LoginOptions, show func(provider.DeviceCode) error,
+		store provider.LoginStore) error {
+		d := provider.DeviceCode{URL: "https://accounts.x.ai/device", Code: "ABCD-1234", Expires: time.Date(2026, 10, 15, 13, 0, 0, 0, time.FixedZone("", 3600))}
+		if err := show(d); err != nil {
+			return err
+		}
+		return store.Save(ctx, id, &provider.Login{Access: "a-device", Refresh: "r"})
+	})
+	replace(t, &keyLogin, func(_ context.Context, _ string, _ provider.LoginOptions, show func(provider.DeviceCode) error) (string, error) {
+		return "k", show(provider.DeviceCode{URL: "https://app.kilo.ai/device", Code: "KILO-1"})
+	})
+	// A state directory that is a file fails the log file, whose warning
+	// would reach stderr.
+	c.write(filepath.Join(c.dir, "state-file"), "")
+	t.Setenv("GOBBLE_STATE_DIR", filepath.Join(c.dir, "state-file"))
+	for _, tc := range []struct {
+		args  []string
+		stdin string
+		code  int
+		lines []string
+	}{
+		{[]string{"grok", "--device"}, "", ExitOK, []string{
+			`{"event":"device_code","provider":"grok","url":"https://accounts.x.ai/device","code":"ABCD-1234","expires":"2026-10-15T12:00:00Z"}`,
+			`{"event":"saved","provider":"grok","type":"oauth"}`}},
+		{[]string{"grok"}, "", ExitOK, []string{
+			`{"event":"browser_url","provider":"grok","url":"` + authorize + `"}`,
+			`{"event":"saved","provider":"grok","type":"oauth"}`}},
+		{[]string{"kilo"}, "", ExitOK, []string{
+			`{"event":"device_code","provider":"kilo","url":"https://app.kilo.ai/device","code":"KILO-1"}`,
+			`{"event":"saved","provider":"kilo","type":"api_key"}`}},
+		{[]string{"anthropic", "--api-key", "-"}, "sk-test-only\n", ExitOK, []string{`{"event":"saved","provider":"claude","type":"api_key"}`}},
+		{[]string{"anthropic"}, "", ExitUsage, []string{`{"event":"error","provider":"claude","kind":"other","message":"claude has no login; use --api-key -"}`}},
+		{[]string{"ollama"}, "", ExitUsage, []string{`{"event":"error","provider":"ollama","kind":"other","message":"unknown provider \"ollama\": one of ` +
+			strings.Join(provider.KeyProviders(), ", ") + `"}`}},
+	} {
+		args := append([]string{"--log-level", "debug", "auth", "login", "--json"}, tc.args...)
+		r := c.runStdin(stdinFile(t, tc.stdin), args...)
+		if want := strings.Join(tc.lines, "\n") + "\n"; r.code != tc.code || r.stdout != want || r.stderr != "" {
+			t.Errorf("%q: exit %d, stdout %q, stderr %q; want %d, %q, nothing", tc.args, r.code, r.stdout, r.stderr, tc.code, want)
+		}
+	}
+	if got := c.read(c.authFile()); !strings.Contains(got, `"access": "a-browser"`) || !strings.Contains(got, `"key": "sk-test-only"`) {
+		t.Errorf("auth.json:\n%s", got)
+	}
+
+	// A failed login's message is what gobble prints without --json.
+	replace(t, &browserLogin, func(context.Context, string, provider.LoginOptions, provider.LoginStore) error {
+		return fmt.Errorf("grok login: %w", llm.ErrAuth)
+	})
+	text := c.run("auth", "login", "grok")
+	msg, ok := strings.CutPrefix(strings.TrimSuffix(text.stderr, "\n"), "Error: ")
+	if text.code != ExitFailure || !ok {
+		t.Fatalf("without --json: exit %d, stderr %q", text.code, text.stderr)
+	}
+	want, err := json.Marshal(map[string]string{"event": "error", "provider": "grok", "kind": "auth", "message": msg})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := c.run("auth", "login", "grok", "--json")
+	var got, wantMap map[string]string
+	if r.code != ExitFailure || r.stderr != "" || strings.Count(r.stdout, "\n") != 1 ||
+		json.Unmarshal([]byte(r.stdout), &got) != nil || json.Unmarshal(want, &wantMap) != nil || !maps.Equal(got, wantMap) {
+		t.Errorf("a failed login: exit %d, stdout %q, stderr %q; want 1 and %s", r.code, r.stdout, r.stderr, want)
+	}
+
+	// A settings warning goes to the log file, never stderr.
+	t.Setenv("GOBBLE_STATE_DIR", filepath.Join(c.dir, "state"))
+	if err := os.Remove(c.global()); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(c.global() + ".lock"); err != nil && !errors.Is(err, os.ErrNotExist) {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(c.global()+".lock", 0o700); err != nil {
+		t.Fatal(err)
+	}
+	r = c.runStdin(stdinFile(t, "k"), "auth", "login", "openai", "--api-key", "-", "--json")
+	log, _ := os.ReadFile(filepath.Join(c.dir, "state", "logs", "gobble.log")) //nolint:errcheck // an unread log fails below
+	if r.code != ExitOK || r.stderr != "" || !strings.Contains(string(log), "settings.yaml") {
+		t.Errorf("a settings warning: exit %d, stderr %q, log %q", r.code, r.stderr, log)
+	}
+
+	// On a terminal, the browser login offers a paste only without --json.
+	for _, j := range []bool{false, true} {
+		var out, errw bytes.Buffer
+		o := &Output{out: &out, err: &errw, caps: term.Caps{In: true}}
+		e := &runEnv{ctx: t.Context(), out: o, stdin: stdinFile(t, ""), logs: &lazyLog{out: o, stderr: &errw}}
+		pasted = nil
+		replace(t, &browserLogin, func(ctx context.Context, id string, o provider.LoginOptions, store provider.LoginStore) error {
+			pasted = append(pasted, o.InputCode != nil)
+			return store.Save(ctx, id, &provider.Login{Access: "a", Refresh: "r"})
+		})
+		err := (&AuthLoginCmd{Provider: "grok", JSON: j}).Run(e)
+		if cerr := e.logs.close(); cerr != nil {
+			t.Error(cerr)
+		}
+		if err != nil || !slices.Equal(pasted, []bool{!j}) {
+			t.Errorf("--json %t on a terminal: %v, paste offered %v", j, err, pasted)
+		}
 	}
 }
 

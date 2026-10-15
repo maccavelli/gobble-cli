@@ -6,7 +6,9 @@ import (
 	"context"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
+	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"strings"
 	"time"
@@ -41,6 +43,7 @@ type AuthLoginCmd struct {
 	Provider string `arg:"" complete:"provider" help:"The provider."`
 	APIKey   string `name:"api-key" complete:"none" placeholder:"-" help:"Read the key from stdin, or ask for it: -."`
 	Device   bool   `name:"device" help:"Sign in with a device code, on a machine without a browser."`
+	JSON     bool   `name:"json" help:"Print the login's events as JSON lines on stdout, and nothing on stderr."`
 }
 
 // The logins, which a test replaces (0005-PLAN F4-3b).
@@ -52,8 +55,37 @@ var (
 )
 
 // Run stores the key read for --api-key - as the provider's api_key entry,
-// or, without --api-key, signs in to the provider (0005-PLAN F4-3b).
+// or, without --api-key, signs in to the provider (0005-PLAN F4-3b). With
+// --json, its output is loginEvents' events alone: stderr's diagnostics and
+// log lines are dropped, the log file keeps the latter, and a failure is an
+// error event with the exit code unchanged (0005-PLAN F4-3c decision 6).
 func (c *AuthLoginCmd) Run(e *runEnv) error {
+	if !c.JSON {
+		return c.runWith(e, nil)
+	}
+	e.out.err = io.Discard
+	e.logs.stderr = nil
+	ev := &loginEvents{out: e.out}
+	err := c.runWith(e, ev)
+	if err == nil || errors.Is(err, errBrokenPipe) {
+		return err
+	}
+	id, ierr := keyProvider(c.Provider)
+	if ierr != nil {
+		id = c.Provider
+	}
+	code := ExitFailure
+	if ee, ok := errors.AsType[*exitError](err); ok {
+		code = ee.code
+	}
+	if werr := ev.emit(loginEvent{Event: "error", Provider: id, Kind: provider.FailureKind(err), Message: err.Error()}); werr != nil {
+		return werr
+	}
+	return &exitError{code: code}
+}
+
+// runWith is Run, showing what it shows through ev when ev is not nil.
+func (c *AuthLoginCmd) runWith(e *runEnv, ev *loginEvents) error {
 	e.ensureSettingsFile()
 	id, err := keyProvider(c.Provider)
 	if err != nil {
@@ -61,7 +93,7 @@ func (c *AuthLoginCmd) Run(e *runEnv) error {
 	}
 	switch c.APIKey {
 	case "":
-		return e.login(id, c.Device)
+		return e.loginWith(id, c.Device, ev)
 	case "-":
 		if c.Device {
 			return usageErrorf("--device is for a login; --api-key - stores a key")
@@ -80,68 +112,132 @@ func (c *AuthLoginCmd) Run(e *runEnv) error {
 	if err := auth.Set(e.ctx, path, id, auth.Entry{Type: auth.TypeAPIKey, Key: key}); err != nil {
 		return failf("%v", err)
 	}
+	return e.saved(ev, id, auth.TypeAPIKey)
+}
+
+// loginEvents writes gobble auth login --json's events to stdout, one JSON
+// object a line (0005-PLAN F4-3c decision 6). A nil *loginEvents is text.
+type loginEvents struct{ out *Output }
+
+// loginEvent is one event: device_code, browser_url, saved or error.
+// Expires is RFC 3339, in UTC; Kind is provider.FailureKind's, and Message
+// the error gobble prints without --json, which holds no credential.
+type loginEvent struct {
+	Event    string `json:"event"`
+	Provider string `json:"provider"`
+	URL      string `json:"url,omitempty"`
+	Code     string `json:"code,omitempty"`
+	Expires  string `json:"expires,omitempty"`
+	Type     string `json:"type,omitempty"`
+	Kind     string `json:"kind,omitempty"`
+	Message  string `json:"message,omitempty"`
+}
+
+func (l *loginEvents) emit(e loginEvent) error {
+	b, err := json.Marshal(e)
+	if err != nil {
+		return fmt.Errorf("login event: %w", err)
+	}
+	return l.out.Result(append(b, '\n'))
+}
+
+// saved says provider id's credential, of type typ, is stored: in Pi's
+// words, or the saved event.
+func (e *runEnv) saved(ev *loginEvents, id, typ string) error {
+	switch {
+	case ev != nil:
+		return ev.emit(loginEvent{Event: "saved", Provider: id, Type: typ})
+	case typ == auth.TypeOAuth:
+		return e.out.Resultf("Logged in to %s\n", id)
+	}
 	return e.out.Resultf("Saved API key for %s\n", id)
 }
 
-// login signs in to provider id (0005-PLAN F4-3b decision 6): Grok's
+// login is loginWith in text.
+func (e *runEnv) login(id string, device bool) error { return e.loginWith(id, device, nil) }
+
+// loginWith signs in to provider id (0005-PLAN F4-3b decision 6): Grok's
 // browser login, or its device login with device; Kilo's device login,
 // whose key is stored escaped, so Pi's grammar gives it back unchanged. Any
-// other provider has none.
-func (e *runEnv) login(id string, device bool) error {
+// other provider has none. ev, when not nil, takes what it shows. A login's
+// own error is returned as is: Main prints it and exits 1, as failf would,
+// and --json's error event names its kind.
+func (e *runEnv) loginWith(id string, device bool, ev *loginEvents) error {
+	show := func(d provider.DeviceCode) error { return e.showDeviceCode(ev, id, d) }
 	path := authPath()
 	switch {
 	case path == "":
 		return failf("auth.json: the config directory cannot be resolved")
 	case provider.HasKeyLogin(id):
-		key, err := keyLogin(e.ctx, id, provider.LoginOptions{}, e.showDeviceCode)
+		key, err := keyLogin(e.ctx, id, provider.LoginOptions{}, show)
 		if err != nil {
-			return failf("%v", err)
+			return err
 		}
 		if err := auth.Set(e.ctx, path, id, auth.Entry{Type: auth.TypeAPIKey, Key: catalog.QuoteValue(key)}); err != nil {
 			return failf("%v", err)
 		}
-		return e.out.Resultf("Saved API key for %s\n", id)
+		return e.saved(ev, id, auth.TypeAPIKey)
 	case provider.HasLogin(id):
 		store := auth.Logins{Path: path}
 		var err error
 		if device {
-			err = deviceLogin(e.ctx, id, provider.LoginOptions{}, e.showDeviceCode, store)
+			err = deviceLogin(e.ctx, id, provider.LoginOptions{}, show, store)
 		} else {
-			o := provider.LoginOptions{OpenURL: func(u string) error { return e.showLoginURL(id, u) }}
-			if e.out.caps.In && e.stdin != nil {
+			o := provider.LoginOptions{OpenURL: func(u string) error { return e.showLoginURL(ev, id, u) }}
+			if e.offersPaste(ev) {
 				o.InputCode = e.pastedRedirect
 			}
 			err = browserLogin(e.ctx, id, o, store)
 		}
 		if err != nil {
-			return failf("%v", err)
+			return err
 		}
-		return e.out.Resultf("Logged in to %s\n", id)
+		return e.saved(ev, id, auth.TypeOAuth)
 	case id == "openai":
 		return usageErrorf("openai's login waits for go-llmprovider-sdk's Sign in with ChatGPT for agents (0005-PLAN F4-3d); use --api-key -")
 	}
 	return usageErrorf("%s has no login; use --api-key -", id)
 }
 
-// showDeviceCode tells the user where to enter a device login's code.
-func (e *runEnv) showDeviceCode(d provider.DeviceCode) error {
+// offersPaste reports whether a browser login takes a pasted redirect URL:
+// on a terminal, and never with --json (0005-PLAN F4-3c decision 6).
+func (e *runEnv) offersPaste(ev *loginEvents) bool {
+	return ev == nil && e.out.caps.In && e.stdin != nil
+}
+
+// showDeviceCode tells the user where to enter provider id's device code,
+// or emits the device_code event.
+func (e *runEnv) showDeviceCode(ev *loginEvents, id string, d provider.DeviceCode) error {
+	if ev != nil {
+		c := loginEvent{Event: "device_code", Provider: id, URL: d.URL, Code: d.Code}
+		if !d.Expires.IsZero() {
+			c.Expires = d.Expires.UTC().Format(time.RFC3339)
+		}
+		return ev.emit(c)
+	}
 	if _, err := fmt.Fprintf(e.out.err, "Open %s and enter the code %s\n", d.URL, d.Code); err != nil {
 		return fmt.Errorf("write stderr: %w", err)
 	}
 	return nil
 }
 
-// showLoginURL prints a browser login's URL, then opens it: the SDK gives
-// the URL nowhere else, so a machine whose browser does not open still
-// shows it (0005-PLAN F4-3b decision 6). A browser that does not open is
-// not an error.
-func (e *runEnv) showLoginURL(id, u string) error {
-	msg := "Open this URL to sign in to %s:\n  %s\n"
-	if e.out.caps.In && e.stdin != nil {
-		msg += "If the browser cannot reach this machine, paste the URL it ends on here.\n"
-	}
-	if _, err := fmt.Fprintf(e.out.err, msg, id, u); err != nil {
-		return fmt.Errorf("write stderr: %w", err)
+// showLoginURL prints a browser login's URL, or emits the browser_url
+// event, then opens it: the SDK gives the URL nowhere else, so a machine
+// whose browser does not open still shows it (0005-PLAN F4-3b decision 6).
+// A browser that does not open is not an error.
+func (e *runEnv) showLoginURL(ev *loginEvents, id, u string) error {
+	if ev != nil {
+		if err := ev.emit(loginEvent{Event: "browser_url", Provider: id, URL: u}); err != nil {
+			return err
+		}
+	} else {
+		msg := "Open this URL to sign in to %s:\n  %s\n"
+		if e.offersPaste(ev) {
+			msg += "If the browser cannot reach this machine, paste the URL it ends on here.\n"
+		}
+		if _, err := fmt.Fprintf(e.out.err, msg, id, u); err != nil {
+			return fmt.Errorf("write stderr: %w", err)
+		}
 	}
 	if err := openURL(e.ctx, u); err != nil {
 		e.log().Debug("open browser", slog.String("error", err.Error()))
