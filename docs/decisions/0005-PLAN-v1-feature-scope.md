@@ -4385,11 +4385,15 @@ printing a stored key; a stored key in Pi's value grammar).
    - **F4-3b — OAuth logins:** the terms checks, recorded before any login is built (decision 2); the browser and device
      logins; `gobble auth token`; an `oauth` entry used, through an `llm/provider` adapter that implements the SDK's
      `TokenStore` and `RefreshLocker` over `auth.json`, keeping `FedRAMP` (0015-REPORT F5);
+     *(2026-10-14: after the terms checks, F4-3b is Kilo's device login alone; the ChatGPT login, the adapter and an
+     `oauth` entry used wait for the SDK, Grok is 1.x, and there is no `token`. See "F4-3b made executable".)*
    - **F4-3c — ACP and import:** ACP auth as 0016-MADR D11 amends it, and `gobble auth import --from-pi`.
 2. **The terms checks** are F4-3b's first step: OpenAI's, xAI's and Kilo's current terms for third-party clients, each
    URL, its date and what it says. A login they do not allow goes to 1.x and back to the owner.
-3. **`gobble auth token <provider> [--min-expiry D]`** prints an OAuth bearer token, as Pi's `print-bearer-token`, and
-   lands with F4-3b. No command prints a stored key, and `check` has no `--credentials`.
+3. ~~**`gobble auth token <provider> [--min-expiry D]`** prints an OAuth bearer token, as Pi's `print-bearer-token`, and
+   lands with F4-3b.~~ No command prints a stored key, and `check` has no `--credentials`.
+   *(2026-10-14: no `token` either; OpenAI's terms forbid "general-purpose API access for other tools". See "F4-3b
+   made executable", decision 4.)*
 4. **`auth.json`** is `<config>/auth.json`, in Pi's shape. Each entry, and each field gobble does not read, is kept as
    written. It is created owner-only (0600; on Windows the user's DACL, `appdirs.SecurePrivateFile`), in a directory
    made 0700 only when it is created, so an existing directory's mode stays as it is, as Pi's does. Every change takes
@@ -4543,6 +4547,7 @@ the gates                                                     -> lint ×3, tests
 **Deferred, named:**
 
 - **OAuth logins, `token`, and an `oauth` entry used:** F4-3b, after its terms checks (decisions 1-3).
+  *(2026-10-14: see "F4-3b made executable" for where each went.)*
 - **ACP auth and `gobble auth import --from-pi`:** F4-3c (decision 1).
 - **`--models`:** 1.x, so `--api-key`'s message leaves it out.
 - **Pi's `api_key` `env` field** (provider-scoped values, such as Cloudflare's ids): kept as written, unused; no SDK
@@ -4603,3 +4608,186 @@ the gates                                                     -> lint ×3, tests
     rejected; the agent's own error, `rejected` in `llm/provider`, leaves a 403 out.
   - F4-2c's records call `TestLaterFlagsAreRejected` `TestLaterFlags`.
 - **Next:** F4-3b, OAuth logins, made executable as an amendment first, its terms checks its first step.
+
+**2026-10-14 — F4-3b made executable: the terms checks, and Kilo's device login** (the owner's choices of 2026-10-14:
+the ChatGPT login waits for go-llmprovider-sdk's sign-in for agents and never uses Codex's client id; xAI Grok's login
+is 1.x; no `gobble auth token`; Kilo's token stored as an escaped `api_key` entry). *Proposed: not approved for
+execution.*
+
+**The facts,** measured on 2026-10-14 against `main` `e8d3fb7`, go-llmprovider-sdk `v1.13.0` (still the latest tag,
+`git ls-remote --tags`; its five later commits are catalog work), and Pi `312184edb`:
+
+- **gobble today:**
+  - Every credential path takes a key string: `provider.AmbientWith`'s lookup (`llm/provider/ambient.go:108-123`),
+    `List(ctx, id, apiKey, o)` (`list.go:35`), `ModelInfo`, `runEnv.knownKey` and `auth.Credential.Key`
+    (`internal/auth/resolve.go:23-26`).
+  - An `oauth` entry owns its provider and fails closed, naming F4-3b (`internal/auth/resolve.go:117-119`, pinned by
+    `resolve_test.go:61-63`). `Resolver.Has` counts it as no credential (`:94-96`).
+  - `gobble auth login` without `--api-key` is refused, naming F4-3b (`internal/cli/auth.go:50-51`, pinned by
+    `auth_test.go:43`); `status` shows an `oauth` entry as `used from 0005-PLAN F4-3b` (`auth.go:136`).
+  - `llm/provider` is a beta public package (`llm/provider/doc.go:2`), so its exported API takes neither SDK nor
+    `internal/auth` types.
+- **go-llmprovider-sdk `v1.13.0`** (paths under `llmprovider/`):
+  - Kilo's device login posts to `{origin}/api/device-auth/codes` and polls every 3 s; approval returns an
+    `OAuthSession` with `Access` alone, "No refresh token and no expiry … applied as Kilo's API key"
+    (`auth/kilo_device.go:25-58`, `:119-122`). `OAuthFlowOptions.Issuer` replaces the origin and `HTTPClient` the
+    client; a verification URL must be `https`, or `http` on `localhost` or `127.0.0.1` (`auth/oauth_device.go:387-404`),
+    so a test server can stand in. A denial is `ErrAuthFailure` (`kilo_device.go:105-106`).
+  - `StartDeviceOAuth` returns a `DeviceLogin` with `UserCode`, `VerificationURI` and `Expiry`; `Wait` polls until
+    approval, expiry or cancellation; `Cancel` stops it (`auth/oauth_device.go:106-170`).
+  - An `OAuthSession` calls `Save` while it holds `LockRefresh` (`auth/oauth_session.go:740-768`). A future adapter's
+    refresh lock therefore cannot be `auth.json.lock`, which `Save` takes; the SDK's file store locks
+    `<provider>.oslock` (`auth/tokenstore_file.go:218-235`). Recorded for the ChatGPT login; F4-3b builds no adapter.
+  - The ChatGPT logins use the Codex CLI's client id (`auth/oauth_constants.go:5-13`). OpenAI's flow for agents
+    exists only as a live probe, `live_openai_signin_probe_test.go`, under the SDK's 0017-MADR D4 and 0017-PLAN U4.
+- **Pi:** `openai-chatgpt.ts` (`02eed88fd`, 2026-09-29) signs in with `client_id=dynamic_agent_client`,
+  `agent_name_hint` "Pi", resource `https://api.openai.com/v1` and scope `chatgpt.tokens.use.direct`
+  (`packages/ai/src/auth/oauth/openai-chatgpt.ts:15-27`); `openai-codex.ts` and `xai.ts` use the vendor CLIs' client
+  ids (`openai-codex.ts:22`, `xai.ts:8`). Pi has no Kilo login.
+
+**The terms checks,** read on 2026-10-14. openai.com and x.ai answer 403 to a direct fetch; their pages were read as
+Wayback Machine snapshots, each dated below. developers.openai.com and kilo.ai were fetched directly, and each quote
+from them was matched against the raw page text.
+
+- **OpenAI, the Codex CLI's client id** (`app_EMoamEEZ73f0CkXaXp7hrann`):
+  - Sign in with ChatGPT Terms, <https://openai.com/policies/sign-in-with-chatgpt-terms/>, dated 29 September 2026,
+    snapshot of 2026-10-07: "Use your app's own name during sign-in and activation. Do not impersonate OpenAI, another
+    application, or another open-source project." and "Obtain and use SIWC access and refresh tokens ('Authentication
+    Tokens') only through OpenAI's supported sign-in flow".
+  - Terms of Use, <https://openai.com/policies/terms-of-use/>, effective 1 January 2026, snapshot of 2026-10-12: "You
+    may not share your account credentials or make your account available to anyone else". The Service Terms they
+    include could not be read (403, live and archived).
+  - The openai/codex repository is Apache-2.0 and holds the id (`codex-rs/login/src/auth/manager.rs`); nothing there
+    or in the Codex auth docs addresses another client using it.
+  - **Reading:** not allowed. No source names the id, but a client signing in with it signs in as Codex.
+- **OpenAI, Sign in with ChatGPT for open-source agents:**
+  - The same terms: "Requests must originate from the user's local runtime or a remote runtime only that user
+    controls."; "Connected application only. Use the user's plan only for the application they connected. Do not
+    provide general-purpose API access for other tools or unrelated requests."; "No charge."; "Any persistent storage
+    of Authentication Tokens must be local and under the user's control, not in a remote or managed environment."
+  - <https://developers.openai.com/siwc/quickstart>, no date shown: "ChatGPT plan usage is available to all
+    open-source partners and selected private clients."
+  - <https://developers.openai.com/siwc/token-sharing-open-source>, no date shown: "These docs explain ChatGPT plan
+    usage for open-source and locally hosted apps."
+  - <https://developers.openai.com/siwc/token-sharing-open-source/sign-in>, no date shown: set `agent_name_hint` "to
+    your app's actual name, used consistently across installations"; "dynamic_agent_client is the first-time
+    registration entrypoint, not the client ID to save or use for token exchange"; the issued `client_id` and a
+    persisted `ext_agent_host_id` are saved per ChatGPT account.
+  - <https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations>, no date shown: "Set store:
+    false and stream: true."
+  - **Reading:** allowed for gobble, an open-source, local, free client signing in under its own name. It is not in
+    the SDK.
+- **xAI Grok, the Grok CLI's client id** (`b1a00492-073a-47ea-816f-4c329264a828`):
+  - Terms of Service, <https://x.ai/legal/terms-of-service>, last updated 12 October 2026, snapshot of 2026-10-13:
+    "You may not share your account credentials or make your account available to anyone else".
+  - Acceptable Use Policy, <https://x.ai/legal/acceptable-use-policy>, effective 14 August 2026, snapshot of
+    2026-10-12: prohibits "Accessing the Services through unauthorized automated or non-human means, whether through a
+    bot, script, or otherwise".
+  - "Use Grok in OpenCode", <https://x.ai/news/grok-opencode>, 21 May 2026, snapshot of 2026-09-10: "Use your
+    SuperGrok or X Premium subscription inside OpenCode." It names no client id and no registration.
+  - The xai-org/grok-build repository is Apache-2.0; its client id is wrapped in `obfstr::obfstr!`
+    (`crates/codegen/xai-grok-login/src/config.rs`).
+  - **Reading:** not addressed. No terms or registration exist for other clients.
+- **Kilo, the device login:**
+  - Terms of Service, <https://kilo.ai/terms>, last updated 30 September 2026, read directly: §1(A), "The Services
+    include an API and associated provider endpoints offered by Kilo to enable programmatic access to the Services
+    ('Kilo Gateway API')"; §5(C)(i), "you may use our Software, including our API, to make the Services available to
+    your end users subject to these Terms".
+  - The kilocode repository is MIT and holds the flow (`packages/kilo-gateway/src/auth/device.ts`). No public
+    document describes the endpoint for other clients; the flow borrows no client id.
+  - **Reading:** allowed.
+
+**The client-id probe,** run by the owner on 2026-10-14: each issuer's discovery document, then the SDK's device and
+browser requests with a client id gobble chose in the vendor's shape (OpenAI `app_` and 24 characters; xAI a UUIDv5 of the
+repository's URL), and with `not-a-registered-client` as a control. No vendor CLI's id was sent and no user signed in.
+
+- **OpenAI:** both ids, on both requests, `400` `invalid_client`, "This app is unavailable. Contact the app owner and try
+  again later." Discovery lists no `registration_endpoint`; its `authorization_endpoint` is
+  `https://auth.openai.com/api/accounts/authorize`, the sign-in for agents' endpoint.
+- **xAI:** the control fails validation ("client_id is required"; "Missing or invalid client_id."); gobble's UUID passes
+  it and is refused as unregistered ("Unknown or disabled client"; "The client_id is not recognized."). Discovery lists
+  no `registration_endpoint`.
+- **Reading:** a client id is a registration, not a format. Neither issuer lets a client register one, so gobble's own
+  id comes only from OpenAI's sign-in for agents, or from xAI.
+
+**The decisions:**
+
+1. **The ChatGPT login waits** for a go-llmprovider-sdk release with OpenAI's sign-in for agents. It never uses the
+   Codex CLI's client id. With it come the `TokenStore` and `RefreshLocker` adapter, an `oauth` entry used, and the
+   ChatGPT backend's models; each is planned when the release exists.
+2. **xAI Grok's login is 1.x,** until xAI publishes terms for third-party clients.
+3. **Kilo's device login is F4-3b's one login.** Its token is stored as Kilo's `api_key` entry, escaped for Pi's value
+   grammar, so F4-3a's order, `status` and `check` take it unchanged.
+4. **No `gobble auth token`.** F4-3a decision 3 is amended to match.
+5. **What gobble says** for a login it does not offer names the reason and the record, and points to `--api-key -`.
+
+**F4-3b's steps:**
+
+1. **`llm/catalog/value.go`:** `QuoteValue(s string) string`, the value Pi's grammar gives back as `s`: each `$` as
+   `$$`, and a leading `!` as `$!`. `ResolveValue(QuoteValue(s), …)` is `s`, with no lookup and no command.
+2. **`llm/provider/login.go` (new):**
+   - `type DeviceCode struct { URL, Code string; Expires time.Time }`;
+   - `type LoginOptions struct { HTTPClient *http.Client; Origin string }`, `Origin` replacing the vendor's, for tests;
+   - `KeyLogin(ctx context.Context, id string, o LoginOptions, show func(DeviceCode) error) (string, error)`: for
+     `kilo` alone, the SDK's `StartDeviceOAuth`, then `show`, then `Wait`, giving the session's `Access`. An error from
+     `show`, or `ctx` ending, cancels the login. A denial or an expired code is `llm.ErrAuth` through `mapError`. Any
+     other id is an error naming it;
+   - `HasKeyLogin(id string) bool`, true for `kilo`.
+3. **`internal/auth/resolve.go`:** an `oauth` entry's error reads `provider <id> has an OAuth login in auth.json, which
+   gobble does not use (0005-PLAN F4-3b)`. It still owns its provider.
+4. **`internal/cli/auth.go`:**
+   - `login <provider>` without `--api-key`:
+     - `kilo`: `KeyLogin`, through a package variable a test replaces. `show` writes `Open <url> and enter the code
+       <code>` to stderr. The token is stored with `auth.Set` as `{type: api_key, key: catalog.QuoteValue(token)}`,
+       and gobble says `Saved API key for kilo`. Nothing is stored on failure or interruption;
+     - `openai`: refused, `openai's login waits for go-llmprovider-sdk's Sign in with ChatGPT for agents (0005-PLAN
+       F4-3b); use --api-key -`;
+     - `grok`: refused, `grok's login is 1.x: xAI publishes no terms for third-party clients (0005-PLAN F4-3b); use
+       --api-key -`;
+     - any other provider: refused, `<provider> has no login; use --api-key -`;
+   - `Login`'s help: `Store a provider's API key in auth.json, or sign in to Kilo.`;
+   - `status` shows an `oauth` entry as `auth.json, an OAuth login<expiry>, not used (0005-PLAN F4-3b)`.
+5. **Records:** `docs/guides/credentials.md` gains Kilo's login, its example run against a local server, and its
+   OAuth paragraph says what this entry decides; `README.md`'s credentials line; `docs/architecture.md`'s
+   `internal/auth` row; this plan; `docs/README.md`.
+
+**F4-3b's tests,** each seen failing first on a scratch copy:
+
+- `llm/catalog`: `TestQuoteValue`, a round trip through `ResolveValue` for `$`, `$$`, `${X}`, `$X`, `!cmd`, `a!b`, a
+  plain value and an empty one, with a lookup and a runner that fail the test if called.
+- `llm/provider`: `TestKeyLogin`, against an `httptest` Kilo server: the code and URL shown; a pending poll, then
+  approval, giving the token; a denial, `llm.ErrAuth`; `show`'s error ending the login with no further poll; `openai`
+  refused. Each case waits for the SDK's 3 s poll.
+- `internal/cli`: `TestAuthLoginKilo`, with `KeyLogin` replaced: the code shown on stderr; a token `!x$y` stored as
+  `$!x$$y` and resolved back to `!x$y`; the file's other entries kept; a failed login storing nothing.
+  `TestAuthLogin` edited: `openai`, `grok` and `claude` without `--api-key`, each refused with its reason.
+  `TestAuthStatus` edited: the `oauth` row's new text.
+- `internal/auth`'s `TestResolveOrder` passes unedited; its `oauth` case checks that the error names F4-3b.
+- Every other existing test passes unedited.
+
+**F4-3b's verification:**
+
+```text
+go test -count=1 ./internal/... ./llm/... ./acpserver/...    -> ok
+the guide's example, against a scratch GOBBLE_HOME and a local server -> the output it shows, no request leaving the machine
+the gates                                                     -> lint ×3, tests on three systems, -race on two, preflight
+```
+
+**F4-3b's files:**
+
+| | Files |
+| :--- | :--- |
+| new, code | `llm/provider/login.go`, `login_test.go` |
+| changed, code | `llm/catalog/value.go`, `value_test.go`; `internal/auth/resolve.go`; `internal/cli/auth.go`, `auth_test.go` |
+| changed, records | `docs/guides/credentials.md`; `README.md`; `docs/architecture.md`; this plan; `docs/README.md` |
+
+**Deferred, named:**
+
+- **The ChatGPT login,** with the `TokenStore` and `RefreshLocker` adapter, its own refresh lock, and an `oauth` entry
+  used: a later F4-3 sub-phase, made executable when go-llmprovider-sdk releases OpenAI's sign-in for agents
+  (decision 1). Its request limits (`store: false`, `stream: true`) are re-checked then against gobble's retry and
+  0021's cache retention.
+- **The xAI Grok login:** 1.x (decision 2).
+- **Kilo's organizations** (the SDK's `KiloProfile`) and `KILO_API_BASE` as the login's origin: not placed.
+- **ACP auth and `gobble auth import --from-pi`:** F4-3c. With no OAuth login used, F4-3c decides what an imported
+  Pi `oauth` entry becomes.
