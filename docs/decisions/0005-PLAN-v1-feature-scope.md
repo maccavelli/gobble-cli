@@ -3325,6 +3325,7 @@ Choices made within the wording:
   - `import --from-pi` copies Pi's `auth.json` entries for SDK ids, asking for each (0003-MADR).
 - **The terms checks:** before each login lands, the record names the vendor's current terms for third-party clients, their URL and date, and whether a client may use the vendor CLI's public client id. A login the terms do not allow stays out, 1.x, and goes to the owner.
 - **ACP:** `initialize` lists a terminal auth method for each login, running `gobble auth login <provider>`; `authenticate` answers once that provider has a credential, else `auth_required`; `logout` removes the stored credential of the provider the agent uses.
+  *(2026-10-15: replaced; see "F4-3c made executable", decisions 3 and 4, and 0016-MADR's amendment of 2026-10-15, A2: `agent` methods always, `terminal` ones only when offered, and no ACP `logout`.)*
 - **`--api-key`:** `-` reads the key from stdin, or a prompt on a terminal; a literal value is refused with the reason.
 - *(2026-10-13, 0019-PLAN P4 deviation 7.)* **A rejected key is not reported as no key.** Today a key the provider
   refuses (401) and no key both reach the CLI as `acpclient.ErrAuthRequired`, and `-p` and the line session print
@@ -4388,6 +4389,8 @@ printing a stored key; a stored key in Pi's value grammar).
      *(2026-10-14: after the terms checks, F4-3b is Kilo's device login alone; the ChatGPT login, the adapter and an
      `oauth` entry used wait for the SDK, Grok is 1.x, and there is no `token`. See "F4-3b made executable".)*
    - **F4-3c — ACP and import:** ACP auth as 0016-MADR D11 amends it, and `gobble auth import --from-pi`.
+     *(2026-10-15: made executable as four sub-phases, with acp-go-sdk2 `v1.14.0` and `--json` logins; see "F4-3c made
+     executable".)*
 2. **The terms checks** are F4-3b's first step: OpenAI's, xAI's and Kilo's current terms for third-party clients, each
    URL, its date and what it says. A login they do not allow goes to 1.x and back to the owner.
 3. ~~**`gobble auth token <provider> [--min-expiry D]`** prints an OAuth bearer token, as Pi's `print-bearer-token`, and
@@ -5034,3 +5037,238 @@ the gates                                                     -> lint ×3, tests
   - `LoginRejected` names `auth.json` in `llm/provider`; gobble's logins are always there.
 - **Next:** F4-3c, ACP auth and import, made executable as an amendment first. F4-3d, the ChatGPT login, waits for
   go-llmprovider-sdk.
+
+**2026-10-15 — F4-3c made executable: acp-go-sdk2 `v1.14.0`, ACP authentication, `--json` logins, and the Pi import**
+(the owner's choices of 2026-10-15:
+- pin acp-go-sdk2 `v1.14.0` and adopt what it now does for gobble;
+- the `PromptOverlapConcurrent` policy, with gobble's own refusal;
+- an `agent` method per provider, plus `terminal` methods when a client offers them;
+- no ACP `logout`;
+- the import copies keys and xAI's login, asks per provider and keeps existing entries;
+- `gobble auth login --json`.
+
+0016-MADR's amendment of 2026-10-15 records the decisions A1 to A3.) *Proposed: not approved for execution.*
+
+**The facts,** measured on 2026-10-15 against `main` `b9b6e27`, acp-go-sdk2 `v1.14.0` (`e24efbb`, its latest tag),
+go-llmprovider-sdk `v1.13.0` (still its latest tag), magic-cli-remote `c1d29a9d` and Pi `312184edb`:
+
+- **gobble's ACP auth today:**
+  - `initialize` answers `authMethods: []` (`acpserver/agent.go:263`);
+  - `Authenticate` and `Logout` answer -32601 (`:1003-1010`);
+  - a credential failure is `auth_required` with the error as data (`acpserver/prompt.go:273-280`);
+  - gobble's client sends no capabilities (`acpclient/conn.go:121-124`);
+  - both goldens record `"authMethods":[]` (`acpserver/testdata/session.golden`,
+    `acpclient/acptest/testdata/initialize.golden`, the latter the test agent's, `acpclient/acptest/script.go:249-256`).
+- **acp-go-sdk2 `v1.14.0`:** 0016-MADR's amendment of 2026-10-15, "What was found". In short:
+  - one break, `SessionSessionInfoUpdate.Title`, at four gobble sites;
+  - `AgentConnAware`, `Close()`, `WithPromptOverlapPolicy`, and `session/close` cancelling a running turn;
+  - the auth surface unchanged.
+- **magic-cli-remote** takes only `agent` methods, never offers `auth.terminal`, and calls `authenticate` with an id
+  alone. Its phone flow runs the agent CLI's login and parses its output. Its 0186-MADR Q4 needs gobble to advertise
+  an auth method (0016-MADR amendment, "What was found").
+- **Pi's `auth.json`:**
+  - **Location:** `$PI_CODING_AGENT_DIR`, a leading `~` expanded, or `~/.pi/agent`, then `auth.json`
+    (`packages/coding-agent/src/config.ts:535-537`, `:556-562`, `:574-577`).
+  - **Format:** gobble's own shape (`packages/ai/src/auth/types.ts:17-37`).
+  - **Writes:** Pi takes `proper-lockfile` for its writes (`core/auth-storage.ts:76`, `:128`). A plain read takes no
+    lock (`:497-506`).
+  - **Keys** are Pi's provider ids. `anthropic`, `google` and `xai` map to gobble's `claude`, `gemini` and `grok`
+    (`llm/catalog/modelsjson.go:98-99`), and `openai`, `together`, `huggingface`, `opencode-go` keep their names.
+  - **No gobble provider:** `openai-codex`, `github-copilot`, `openrouter`, `kimi-coding`, `meta` and the others.
+  - **OAuth logins gobble does not use:** `anthropic`'s, and `openai`'s ChatGPT login.
+  - **`xai`'s login** is `{type: "oauth", access, refresh, expires}`, `expires` in ms less 5 min, with no client id,
+    issuer or token URL (`packages/ai/src/auth/oauth/xai.ts:126-143`). Its client id is the SDK's Grok default
+    (`xai.ts:8`; go-llmprovider-sdk `llmprovider/auth/oauth_constants.go:13`).
+- **An imported Grok login needs the SDK's client id.**
+  - A refresh sends the session's `client_id` (go-llmprovider-sdk `auth/oauth_session.go:606`).
+  - With no issuer, it derives Grok's token URL itself (`:798-802`).
+  - So the import sets the SDK's Grok issuer and client id, which are Pi's.
+- **gobble has no code that locates Pi's tree** (a search of every `.go` file). 0003-MADR has the import ask per
+  provider, and gobble never write or lock Pi's files (`0003-MADR-gobble-product-identity.md:122-124`, `:135`).
+- **`auth.Set` writes `type` and `key` alone** (`internal/auth/store.go:144`), so Pi's `api_key` `env` field is not
+  copied. F4-3a left it unused.
+
+**The decisions:**
+
+1. **Four sub-phases,** each one commit with its own record and gates:
+   - **F4-3c-1 — acp-go-sdk2 `v1.14.0`:** the pin and its adoptions (0016-MADR A1);
+   - **F4-3c-2 — ACP authentication:** `agent` and `terminal` methods, `authenticate`, and `gobble acp --login`
+     (0016-MADR A2);
+   - **F4-3c-3 — `gobble auth login --json`** (0016-MADR A3);
+   - **F4-3c-4 — `gobble auth import --from-pi`.**
+2. **The overlap policy is `PromptOverlapConcurrent`.**
+   - A second `session/prompt` during a turn is refused by gobble's `claimTurn`, -32600 "a prompt is already running",
+     as today, and the running turn is no longer cancelled.
+   - `session/cancel` and `session/close` still cancel it, now through the SDK.
+3. **ACP methods.**
+   - **`agent` methods,** always: one per provider that takes a credential (`provider.KeyProviders()`, registry order),
+     with id the provider's id and name the SDK's label. The description is `Uses the credential gobble has for
+     <label>; store one with <command>`, where `<command>` is:
+     - `gobble auth login <id>` for a provider with a login;
+     - `gobble auth login <id> --api-key -` otherwise.
+   - **`terminal` methods,** only for a client that sent `auth.terminal: true`, one per such provider: id `<id>-login`,
+     name `Sign in to <label>` or `Store a <label> API key`, args `["--login", "<id>"]`.
+4. **`authenticate`.**
+   - An `agent` id answers `{}` when gobble finds that provider's credential, as `gobble auth check` would.
+   - Without one it is `auth_required`, its data `{"provider": <id>, "reason": "no credential", "command": <command>}`.
+   - An unknown id is -32602. A terminal id is refused by the SDK first.
+5. **`gobble acp --login <provider> [--device]`** runs, in the terminal the client opened, what `gobble auth login`
+   does: a login for `grok` or `kilo`, else the key asked for without echo and stored. Then it exits without serving
+   ACP.
+6. **`--json` events** are JSON lines on stdout. With `--json`, nothing else goes to stdout or stderr, and the browser
+   login offers no paste. Exit codes are unchanged. The events:
+   - `{"event":"device_code","provider","url","code","expires"}`;
+   - `{"event":"browser_url","provider","url"}`;
+   - `{"event":"saved","provider","type":"api_key"|"oauth"}`;
+   - on failure, `{"event":"error","provider","kind","message"}`. `kind` is `provider.FailureKind`'s, and `message` is
+     the error gobble prints today, which holds no credential.
+7. **The import.**
+   - **Location:** it reads Pi's `auth.json` from decision 4's location once, with no lock, and never writes there.
+   - **Each entry, in the file's order:**
+     - an `api_key` with a key, of a provider gobble has, is copied with its key as written;
+     - `xai`'s `oauth` login becomes gobble's `grok` login, with the SDK's Grok issuer and client id;
+     - every other entry is skipped, saying why: `gobble has no provider <pi-id>`, `an OAuth login gobble does not
+       use`, or `no key`.
+   - **On a terminal,** each copy is asked `Import Pi's <pi-id> as <id>? [y/N]`. An entry gobble already has is kept
+     unless `auth.json already has <id>; replace it? [y/N]` is answered yes.
+   - **Without a terminal,** it copies only the providers `--provider` names (repeatable, gobble's or Pi's names), and
+     replaces an existing entry only with `--replace`.
+   - **Its report:** one line per entry, `Imported <id> from Pi's <pi-id>` or `Skipped <pi-id>: <reason>`. A missing
+     file is `Pi has no auth.json at <path>` and exit 1.
+
+**F4-3c-1's steps:**
+
+1. **`go.mod`, `go.sum`:** `go get github.com/maccavelli/acp-go-sdk2@v1.14.0`, `go mod tidy`.
+2. **`Patch[string]`:**
+   - `acpserver/commands.go:420`: `Title: acp.PatchValue(name)`;
+   - `acpclient/update.go:181-182`: `if t, ok := s.SessionInfoUpdate.Title.Value(); ok`;
+   - the two tests that build or read it, `acpserver/commands_test.go:301-302` and `extensions_test.go:443`.
+3. **`acpserver/agent.go`:**
+   - `SetConnection` becomes `SetAgentConnection`, with `var _ acp.AgentConnAware = (*Agent)(nil)`;
+   - `liveSession` gains `idle chan struct{}`. `claimTurn` makes it, and its release closes it. `CloseSession` waits on
+     it, at most `closeWait` (5 s), before closing the log, and logs a turn that did not release in time.
+4. **`acpserver/serve.go`:**
+   - the constructor takes `acp.WithPromptOverlapPolicy(acp.PromptOverlapConcurrent)`;
+   - the `agent.SetConnection(conn)` call goes;
+   - on `ctx.Done()`, `conn.Close()` is joined with `agent.Close()`.
+5. **`acpclient/conn.go`:** `Close` calls `c.conn.Close()` once the agent has stopped, in place of waiting on `Done()`.
+6. **Records:** this plan; `docs/README.md`; `docs/architecture.md`'s pin line.
+
+**F4-3c-1's tests,** each seen failing first on a scratch copy:
+
+- `acpserver`:
+  - `TestOverlapRefusesSecond`: a second prompt during a turn is -32600, and the first turn completes with its own
+    stop reason, not cancelled;
+  - `TestCloseWaitsForTurn`: `session/close` during a turn returns after the turn's last entry is written, and
+    nothing is appended to a closed log;
+  - `TestConnAware`: a request sent with no pause after `initialize` is answered;
+  - `TestServeClosesConnection`: when `Serve`'s context ends, the connection's `Done` is closed and `Serve` returns.
+- The existing -32600 tests (`acpserver/extensions_test.go:421`, `:623`; `acpclient/sessions_test.go:230`) pass
+  unedited, and `session.golden` is byte-identical.
+
+**F4-3c-2's steps:**
+
+1. **`llm/provider/ambient.go`:** `Label(id string) string`, the SDK descriptor's label, or `id`.
+2. **`acpserver/auth.go` (new):**
+   - `type AuthProvider struct { ID, Name, Command string; Login bool }`;
+   - `type AuthOptions struct { Providers func() []AuthProvider; Has func(id string) bool }`, and `Options.Auth`;
+   - `(a *Agent) authMethods(terminal bool) []acp.AuthMethod`, by decision 3;
+   - `Authenticate`, by decision 4.
+3. **`acpserver/agent.go`:**
+   - `Initialize` answers `a.authMethods(p.ClientCapabilities.Auth.Terminal)`;
+   - the `Authenticate` stub goes;
+   - `Logout` keeps its -32601, which the SDK answers first, since no `auth.logout` is advertised.
+4. **`internal/cli/agent.go`:** `agentOptions` sets `Auth`:
+   - `Providers` from `provider.KeyProviders()`, `provider.Label`, and decision 3's command;
+   - `Has` from `e.hasCredential`.
+5. **`internal/cli/acp.go`:** `ACPCmd` gains `Login string` (`--login`, `complete:"provider"`) and `Device bool`
+   (`--device`, only with `--login`). With `--login`, `Run` calls `e.acpLogin(id, device)` and returns:
+   - `e.login` for a provider with a login;
+   - otherwise `readAPIKey`, then `auth.Set`, saying `Saved API key for <id>`.
+6. **`acpserver/testdata/session.golden`:** regenerated. Its `initialize` result lists the nine `agent` methods and no
+   `terminal` one.
+7. **Records:** `docs/guides/credentials.md` gains "Signing in from an editor or magic-cli-remote"; this plan;
+   `docs/README.md`.
+
+**F4-3c-2's tests,** each seen failing first on a scratch copy:
+
+- `acpserver`:
+  - `TestAuthMethods`: without `auth.terminal`, one `agent` method per provider, with its label and command, and no
+    `terminal`; with it, a `terminal` method per provider, `args` `["--login", <id>]`;
+  - `TestAuthenticate`: a provider with a credential `{}`; one without, -32000 with `provider` and `command`; an
+    unknown id -32602; a terminal id refused before gobble's handler;
+  - `TestNoACPLogout`: no `auth.logout` advertised, and `logout` -32601;
+  - `TestSession` against the regenerated golden.
+- `internal/cli`:
+  - `TestACPLogin`: `gobble acp --login grok` runs the login, replaced, and serves nothing;
+    `gobble acp --login claude` stores stdin's key; `--device` without `--login` is refused;
+  - `TestAgentAuthOptions`: the agent's providers and `Has` follow gobble's credentials.
+
+**F4-3c-3's steps:**
+
+1. **`internal/cli/auth.go`:** `AuthLoginCmd` gains `JSON bool` (`--json`). The login paths emit decision 6's events
+   through one `loginEvents` writer. Without `--json`, today's text is unchanged.
+2. **Records:** `docs/guides/credentials.md`'s `--json` paragraph; this plan; `docs/README.md`.
+
+**F4-3c-3's tests,** each seen failing first on a scratch copy:
+
+- `internal/cli`:
+  - `TestAuthLoginJSON`: the device and browser events, then `saved`; `--api-key -` gives `saved`; a failure gives
+    `error` with its kind and the exit unchanged; nothing on stderr; each line one JSON object;
+  - `TestAuthLoginGrok` and `TestAuthLoginKilo` pass unedited.
+
+**F4-3c-4's steps:**
+
+1. **`llm/provider/login.go`:** `PiLogin(id, access, refresh string, expires time.Time) (*Login, bool)`. For `grok` it
+   sets the SDK's `DefaultGrokOAuthIssuer` and `DefaultGrokOAuthClientID`. Any other id is false.
+2. **`internal/cli/piimport.go` (new):**
+   - `piAuthPath() (string, error)`, from decision 7's location;
+   - `AuthImportCmd { FromPi bool (required); Provider []string; Replace bool }`;
+   - the classification, questions and report of decision 7.
+
+   The questions go through `confirm`, a package variable a test replaces. They are asked only when stdin and stderr
+   are terminals.
+3. **`internal/cli/auth.go`:** `AuthCmd` gains `Import AuthImportCmd` (`help:"Copy credentials from Pi's auth.json."`).
+4. **Records:** `docs/guides/credentials.md` gains "Importing Pi's credentials", each example run against scratch
+   copies of Pi's and gobble's directories; this plan; `docs/README.md`.
+
+**F4-3c-4's tests,** each seen failing first on a scratch copy:
+
+- `llm/provider`: `TestPiLogin`: grok's login carries the SDK's issuer and client id; another id is false.
+- `internal/cli`:
+  - `TestImportFromPi`: with the questions answered:
+    - a key and xAI's login copied, the login with the SDK's client id;
+    - `openai-codex`, `anthropic`'s login and an unknown id skipped, each with its reason;
+    - a no kept; an existing entry kept unless replace is answered yes;
+  - `TestImportNoTerminal`: only `--provider`'s, by gobble's or Pi's name; `--replace` needed to replace;
+  - `TestImportPiUntouched`: Pi's `auth.json` keeps its bytes and mode, and no lock file appears in Pi's directory;
+  - `TestImportLocation`: `PI_CODING_AGENT_DIR`, with `~`, then `~/.pi/agent`; a missing file says so, exit 1.
+
+**F4-3c's verification,** for each sub-phase:
+
+```text
+go list -m github.com/maccavelli/acp-go-sdk2                         -> v1.14.0 (F4-3c-1 on)
+go test -count=1 ./internal/... ./llm/... ./acpserver/... ./acpclient/...  -> ok
+the guides' examples, against scratch GOBBLE_HOME and Pi directories      -> the output they show, no request leaving the machine
+the gates                                                             -> lint ×3, tests on three systems, -race on two, preflight
+```
+
+**F4-3c's files:**
+
+| | Files |
+| :--- | :--- |
+| F4-3c-1 | `go.mod`, `go.sum`; `acpserver/agent.go`, `serve.go`, `commands.go`, `commands_test.go`, `extensions_test.go`, `agent_test.go`; `acpclient/conn.go`, `update.go`; `docs/architecture.md` |
+| F4-3c-2 | new `acpserver/auth.go`, `auth_test.go`; changed `acpserver/agent.go`, `testdata/session.golden`; `llm/provider/ambient.go`, `ambient_test.go`; `internal/cli/agent.go`, `acp.go`, `acp_test.go`; `docs/guides/credentials.md` |
+| F4-3c-3 | `internal/cli/auth.go`, `auth_test.go`; `docs/guides/credentials.md` |
+| F4-3c-4 | new `internal/cli/piimport.go`, `piimport_test.go`; changed `internal/cli/auth.go`; `llm/provider/login.go`, `login_test.go`; `docs/guides/credentials.md` |
+| each | this plan; `docs/README.md` |
+
+**Deferred, named:**
+
+- **0016-MADR D4 to D10 and D12 to D13** (notices, compaction updates, constants, the golden check): `proposed`, not
+  F4-3c's.
+- **ACP `logout`:** not advertised (0016-MADR A2); signing out is `gobble auth logout`.
+- **F4-3d, the ChatGPT login:** go-llmprovider-sdk issue 2.
+- **Pi's `api_key` `env` field,** and `gobble auth import --from-pi --mcp` (0003-MADR `:291`): not placed.
+- **magic-cli-remote's side:** its gobble `Spec`, which method id it pins, and reading `--json`. These are
+  magic-cli-remote's work, under its 0179 and 0186 records; gobble writes nothing there.

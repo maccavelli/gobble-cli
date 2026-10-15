@@ -177,7 +177,7 @@ Tier definitions:
 | Model catalog | 1.0 | Embedded snapshot in Pi's `Model` shape (context window, max tokens, cost tiers, input modalities, reasoning, thinking map, image input limits). `gobble models list|info`. The source is recorded in `NOTICE` if copied. *(2026-10-10: the snapshot is models.dev's, MIT, credited in `NOTICE`; second amendment of this date, item 2.)* |
 | Catalog refresh | 1.x | `gobble models refresh` into the cache directory. |
 | `models.json` | 1.0 | Pi-compatible custom providers and models, with `modelOverrides`. `$ENV`, `${ENV}`, and `!command` values are resolved at request time. |
-| Credential store | 1.0 | Precedence: `--api-key`, then ~~keyring (or the 0600 file)~~ *(2026-10-10: a Pi-style `auth.json`, 0600; the keyring is 1.x. Second amendment of this date, item 3.)*, then `models.json`, then environment or ambient credentials. `gobble auth login|logout|status|~~token~~|import --from-pi` *(2026-10-14: no `token`; amendment of 2026-10-14, item 4)*. ACP `authMethods` and `authenticate`/`logout`. |
+| Credential store | 1.0 | Precedence: `--api-key`, then ~~keyring (or the 0600 file)~~ *(2026-10-10: a Pi-style `auth.json`, 0600; the keyring is 1.x. Second amendment of this date, item 3.)*, then `models.json`, then environment or ambient credentials. `gobble auth login|logout|status|~~token~~|import --from-pi` *(2026-10-14: no `token`; amendment of 2026-10-14, item 4)*. ACP `authMethods` and `authenticate`/~~`logout`~~. *(2026-10-15, 0016-MADR amendment of 2026-10-15, A2: an `agent` method per provider, a `terminal` method when the client offers one, and no ACP `logout`.)* |
 
 #### MCP (`mcpclient`)
 

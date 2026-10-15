@@ -132,7 +132,7 @@ avoids contention with Pi's `proper-lockfile` locks.
 | `~/.pi/agent/models.json` | merged under gobble's `models.json` |
 | `~/.pi/agent/sessions/**.jsonl` | listed by `gobble session list --pi`; copied with `gobble session import`; never modified in place |
 | `~/.pi/agent/settings.json` | not merged automatically. ~~`gobble config import --from-pi` writes a gobble `settings.json` from it once, reporting every key it dropped.~~ *(2026-10-12: the import is dropped by the owner, per [0018-MADR-configuration-surface.md](0018-MADR-configuration-surface.md) D13. The bridge reads only Pi's `sessionDir` from it, to locate Pi's sessions.)* |
-| `~/.pi/agent/auth.json` | not read. Credentials are copied only by an explicit `gobble auth import --from-pi`, which asks per provider. |
+| `~/.pi/agent/auth.json` | not read. Credentials are copied only by an explicit `gobble auth import --from-pi`, which asks per provider. *(2026-10-15, 0005-PLAN F4-3c: it reads the file once, without a lock; without a terminal it copies only the providers `--provider` names.)* |
 | `PI_*` environment | ignored |
 
 `bridge.pi = false` in settings (or `--no-pi-bridge`) turns the bridge off.

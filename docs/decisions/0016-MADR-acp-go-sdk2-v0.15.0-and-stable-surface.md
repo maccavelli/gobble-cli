@@ -1,6 +1,6 @@
 ---
 status: proposed
-date: 2026-10-13
+date: 2026-10-15
 decision-makers: repository owner
 consulted: none
 informed: magic-cli-remote
@@ -10,6 +10,8 @@ informed: magic-cli-remote
 # Take acp-go-sdk2 v0.15.0, close the gap it opens, and adopt the stable ACP surface gobble can honour
 
 *(2026-10-13, [0019-MADR-sibling-libraries-current-pins-and-integration.md](0019-MADR-sibling-libraries-current-pins-and-integration.md) D10: this record is re-based, not duplicated. 0019-PLAN P4 (`17cd497`) pins acp-go-sdk2 `v0.17.1`. D1 is superseded by 0019-MADR D3; D2 by the SDK's own `cwd` check, from `v0.16.0` (0019-MADR F5), and 0019-MADR D7 removed D2's empty-`cwd` fallback; D3 is superseded by 0019-MADR D8; D7's accessors are written over the SDK's `Negotiated()`. D4 to D6 and D8 to D13 stay this record's, `proposed`, and are re-checked against `v0.17.1` before its PLAN is written, since the SDK's gates make an ungated update fail a turn (0019-MADR F6).)*
+
+*(2026-10-15: amended; see "Amendment (2026-10-15)". acp-go-sdk2 `v1.14.0` is pinned and partly adopted (A1), and D11's auth bullets are replaced by A2, decided by the owner. The rest of this record stays `proposed`.)*
 
 ## Context and Problem Statement
 
@@ -229,8 +231,10 @@ Chosen: **A**, because it is the largest change that stays honest and decided.
   - 0005-PLAN's F4-3 ACP bullet (`:3306`) and its files row (`:3314`) get a dated amendment, for the owner to approve with this record (F5):
     - terminal auth methods are listed only when the client sent `auth.terminal: true`;
     - a terminal method is never answered through `authenticate`;
-    - `logout` is advertised through `agentCapabilities.auth.logout`;
-    - `session.golden`'s client, which offers no terminal auth, sees no auth methods, so that golden does not change for F4-3.
+    - ~~`logout` is advertised through `agentCapabilities.auth.logout`;~~
+    - ~~`session.golden`'s client, which offers no terminal auth, sees no auth methods, so that golden does not change for F4-3.~~
+
+    *(2026-10-15: the first two hold. The last two are replaced by A2 of the amendment of 2026-10-15: `agent` methods are always listed, so `session.golden` changes, and `logout` is not advertised.)*
 - **D12. Unstable surfaces are neither implemented nor advertised.** gobble declares no `AgentExperimental` or `ClientExperimental` method (F11). Its `_gobble/fork` and `_gobble/clone` stay the fork path (0002-MADR), and `McpCapabilities.acp` stays refused (`acpserver/mcp.go:112-113`). A future unstable feature lives under `exp/`, as 0004-MADR requires.
 - **D13. These stable surfaces stay with their owners, and this record does not build them** (F12):
   - **`session/delete`:** 0005-MADR "Archive and delete", now on a stable method. It needs a `session.Store.Delete`, which the store lacks today, and the permission request that row describes. Until then, the -32601 answer and the absent capability stay (0014-MADR D3).
@@ -367,3 +371,121 @@ None that is a decision. The plan settles, by reading the code:
 
 - where `mcpTools` gets the session id D8's notices need (today it takes only `ctx` and the session's `liveMCP`);
 - the exact words of D10's line-view rendering, which must match `/compact`'s current text.
+
+## Amendment (2026-10-15): acp-go-sdk2 `v1.14.0`, and ACP authentication that magic-cli-remote can use
+
+**Why.** 0005-PLAN F4-3c builds ACP authentication on D11 of this record. Grounding F4-3c on 2026-10-15 found two
+facts D11 did not have:
+
+- acp-go-sdk2 has tagged `v1.14.0`;
+- magic-cli-remote, gobble's first ACP host, cannot use the terminal methods D11 allows, and needs another kind.
+
+The owner decided each point on 2026-10-15. The facts were read at acp-go-sdk2 `v0.17.1` (`c77f25a`) and `v1.14.0`
+(`e24efbb`), at magic-cli-remote `c1d29a9d`, at go-llmprovider-sdk `v1.13.0`, and at gobble-cli `main` after F4-3b.
+
+### What was found
+
+**acp-go-sdk2 `v1.14.0`.**
+
+- **The release.**
+  - Tagged 2026-10-14 (`e24efbb`), the first v1 release. Its module path is unchanged, with no `/v2`, `go 1.27.2`,
+    and no requirements.
+  - It retracts an accidental `v1.13.0` (`go.mod`: `retract v1.13.0 // Published accidentally from an unfinished
+    commit.`). `v0.18.0` was drafted, never tagged, and renamed `v1.14.0` (SDK
+    `docs/reports/0019-REPORT-release-notes-v0-18-0.md:3-8`).
+  - The schema is still ACP 1.25.0, and `git diff v0.17.1 v1.14.0 -- schema/ version` is empty.
+- **One break reaches gobble.** `SessionSessionInfoUpdate.Title` changes from `*string` (`types_gen.go:12649` at
+  `v0.17.1`) to `Patch[string]` (`:12600` at `v1.14.0`). gobble names it at four sites: `acpclient/update.go:181-182`,
+  `acpserver/commands.go:420`, `acpserver/commands_test.go:301-302` and `acpserver/extensions_test.go:443`.
+- **The rest compiles and passes.** Every other one of the 203 SDK identifiers gobble uses compiles unchanged at
+  `v1.14.0`. With those four sites patched on a scratch copy, the tests of `acpserver`, `acpclient`, `internal/cli` and
+  `cmd` pass against `v1.14.0`.
+- **What `v1.14.0` adds that gobble does by hand** (release notes, lines 18-151):
+  - **`AgentConnAware`.** The constructor calls `SetAgentConnection` on a handler that has it (`connection.go:575-585`).
+    gobble's method is `SetConnection`, called after the constructor (`acpserver/serve.go:34-35`). The constructor
+    starts reading at once, so a request can arrive before `a.conn` is set.
+  - **`(*Connection).Close()`** (`connection.go:693`). `Serve` returns on `ctx.Done()` without closing the
+    connection (`acpserver/serve.go:39-40`).
+  - **`WithPromptOverlapPolicy`** (`connection.go:424`). The default, `PromptOverlapSupersede`, is unchanged from
+    `v0.17.1`: the SDK cancels a running turn, then calls `Prompt`. gobble's `claimTurn` refuses a prompt while the
+    turn's `cancel` is set (`acpserver/agent.go:552-567`), so a second prompt can cancel the first and then be refused
+    -32600 before the first releases. `PromptOverlapConcurrent` passes every prompt to the agent
+    (`connection.go:406-417`).
+  - **`session/close`** now cancels a running turn before `CloseSession` runs. gobble's `CloseSession` closes the
+    session's log without waiting for the turn to unwind (`acpserver/agent.go:964-977`).
+- **The auth surface is unchanged,** apart from line numbers:
+  - `AuthMethod` has two variants, `Terminal *AuthMethodTerminalInline` and `Agent *AuthMethodAgent`, and "When no
+    'type' is present, the method is treated as 'agent'" (`types_gen.go:623-631`).
+  - `AuthMethodAgent` has `id`, `name`, `description` and `_meta` (`:750-763`).
+  - `AuthMethodTerminalInline` adds `args`, "to append to the configured agent invocation for terminal auth", and
+    `env` (`:577-596`).
+  - Schema 1.25.0 has no env-var method.
+  - The SDK refuses an `initialize` response that lists a terminal method unless the client sent `auth.terminal`
+    (`:20012-20019`). It refuses `authenticate` with a terminal id (`ErrTerminalAuthMethod`, `:19969-19972`). It
+    answers `logout` with -32601 unless the agent advertises `agentCapabilities.auth.logout` (`:19852-19858`).
+  - `NewAuthRequired(data)` is code -32000 with free-form data (`errors.go:216`).
+
+**magic-cli-remote cannot use terminal methods.**
+
+- Its default client capabilities never set `auth` (`internal/provider/acpagent/acpagent.go:1092-1105`), so it sends
+  `auth.terminal: false`.
+- It keeps only `agent` methods' ids from `initialize` (`acpagent.go:1392-1398`), so a terminal method is dropped
+  silently.
+- It calls `authenticate` with a method id only (`acpagent.go:557-586`, `authselect.go:24-41`). It obtains credentials
+  outside ACP, through its phone flow, which runs the agent CLI's own login (`codex login --with-api-key`, `codex
+  login --device-auth`, `grok login --device-auth`) and parses the URL and code it prints
+  (magic-cli-remote `docs/decisions/0107-MADR-grok-phone-api-key-and-device-code-auth.md`).
+- Its accepted magic-cli-remote `docs/decisions/0186-MADR-integrate-current-library-releases-and-prepare-gobble.md`,
+  Q4 (`:495-502`): "gobble advertises an ACP auth method and implements `authenticate` … on `go-llmprovider-sdk`'s
+  `TokenStore` and logins … Magic adds no per-provider environment for gobble's keys … gobble is not registered until
+  it advertises an auth method."
+
+**Credentials are go-llmprovider-sdk's.**
+
+- The SDK declares auth methods for `grok`, `kilo` and `openai` (`llmprovider/providers/*/descriptor.go`), each with
+  `Interactive` and `HeadlessOK` flags. Every other provider has a key alone (`RequiresAPIKey`, `EnvVar`).
+- gobble's logins and keys use them since 0005-PLAN F4-3a and F4-3b: `gobble auth login <provider> --api-key -`,
+  `gobble auth login grok [--device]` and `gobble auth login kilo`.
+- gobble's agent advertises `authMethods: []` today, and answers `authenticate` and `logout` with -32601
+  (`acpserver/agent.go:263`, `:1003-1010`). `acpserver/testdata/session.golden` records `"authMethods":[]`.
+
+### The decisions (the owner's, 2026-10-15)
+
+- **A1. Require acp-go-sdk2 `v1.14.0`, and adopt what it now does for gobble.**
+  - The four `Title` sites use `Patch[string]`.
+  - The agent implements `SetAgentConnection`, and `Serve` drops its own `SetConnection` call.
+  - `Serve` closes the connection with `Close()` when its context ends.
+  - The agent's connection takes `WithPromptOverlapPolicy(PromptOverlapConcurrent)`. gobble's `claimTurn` stays the
+    rule: a second prompt is refused -32600 "a prompt is already running", and the running turn is not cancelled. The
+    wire stays as gobble's tests and `acpclient/sessions.go` pin it.
+  - `CloseSession` waits for a cancelled turn to release before it closes the session's log.
+  - This supersedes 0019-MADR D3's pin, as an amendment of this record (D1).
+- **A2. gobble advertises ACP authentication, replacing D11's auth bullets.**
+  - **An `agent` method for each provider that takes a credential,** always. Its id is gobble's provider id (`openai`,
+    `grok`, `claude`, …), its name the SDK descriptor's label, and its description names the gobble command that
+    stores one.
+  - **`authenticate`** with such an id answers `{}` when that provider has a credential from any source in gobble's
+    order (0005-PLAN F4-3a decision 5). Otherwise it is `auth_required`, its data naming the provider and the command.
+    No secret crosses ACP.
+  - **A `terminal` method for each such provider, only when the client sent `auth.terminal: true`.** Its id is
+    `<provider>-login` and its `args` are `["--login", "<provider>"]`, which the client appends to its `gobble acp`
+    invocation. `gobble acp --login <provider>` then runs the provider's login, or asks for its key, in that terminal,
+    and exits.
+  - **No `logout` over ACP.** `agentCapabilities.auth` stays without `logout`, and signing out stays `gobble auth logout
+    <provider>`.
+  - **`session.golden` changes,** since its `initialize` response now lists the `agent` methods. This is a wire change
+    named here, as 0014-MADR D5 asks. Its client offers no `auth.terminal`, so no terminal method appears.
+- **A3. `gobble auth login … --json`** prints the login's events as JSON lines, for magic-cli-remote's phone flow to
+  read instead of prose (0005-PLAN F4-3c).
+
+### Consequences
+
+- Good: magic-cli-remote can register gobble. It advertises auth methods, `authenticate` answers, and the phone flow
+  drives gobble's own login commands, as it drives Codex's and Grok's.
+- Good: a client that can run a terminal, such as an editor, can offer a sign-in that needs no other tool.
+- Good: gobble moves to the SDK's first v1 release, with a race at connection start closed and a turn no longer
+  cancelled by a refused prompt.
+- Bad: `session.golden` changes, and every client now sees one method per provider in `initialize`.
+- Bad: `authenticate` only checks that a credential exists. A credential the provider would refuse still answers `{}`,
+  and fails at the first prompt with `auth_required`, as today.
+- Neutral: D4 to D10 and D12 to D13 stay `proposed`. F4-3c builds A1 to A3 only.
