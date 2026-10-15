@@ -184,6 +184,42 @@ $ gobble auth login anthropic --json
 {"event":"error","provider":"claude","kind":"other","message":"claude has no login; use --api-key -"}
 ```
 
+## Importing Pi's credentials
+
+`gobble auth import --from-pi` copies Pi's keys, and its Grok login, into gobble's `auth.json`. It
+reads Pi's `auth.json` from `$PI_CODING_AGENT_DIR`, or `~/.pi/agent`, once, without locking it, and
+never writes there. On a terminal it asks before each copy, and before replacing an entry gobble's
+`auth.json` already has:
+
+```text
+$ gobble auth import --from-pi
+Import Pi's anthropic as claude? [y/N] y
+Imported claude from Pi's anthropic
+Import Pi's xai as grok? [y/N] y
+Imported grok from Pi's xai
+Skipped openai-codex: gobble has no provider openai-codex
+```
+
+A key is copied as Pi wrote it, so a `$VAR` or `!command` key stays one. Pi's Grok login is copied
+with the client id Pi signs in with, the Grok CLI's, which Pi does not store. Pi's other logins,
+such as its Claude or ChatGPT login, are skipped: gobble does not use them.
+
+Without a terminal, name each provider to copy with `--provider`, by gobble's name or Pi's, and add
+`--replace` to replace an entry gobble already has:
+
+```text
+$ gobble auth import --from-pi --provider claude < /dev/null
+Skipped anthropic: auth.json already has claude; --replace replaces it
+Skipped xai: not named by --provider
+Skipped openai-codex: gobble has no provider openai-codex
+$ gobble auth import --from-pi --provider claude --replace < /dev/null
+Imported claude from Pi's anthropic
+Skipped xai: not named by --provider
+Skipped openai-codex: gobble has no provider openai-codex
+```
+
+If Pi has no `auth.json`, gobble says where it looked, and exits 1.
+
 ## When a key is refused
 
 When the provider refuses the key, gobble says which key it sent, and nothing of the provider's

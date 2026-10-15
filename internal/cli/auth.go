@@ -26,6 +26,7 @@ type AuthCmd struct {
 	Logout AuthLogoutCmd `cmd:"" help:"Remove a provider's credential from auth.json."`
 	Status AuthStatusCmd `cmd:"" help:"List where each provider's credential comes from, never the credential."`
 	Check  AuthCheckCmd  `cmd:"" help:"Report whether a provider has a usable credential: exit 0, 1 without one, 2 on error."`
+	Import AuthImportCmd `cmd:"" help:"Copy credentials from Pi's auth.json."`
 }
 
 // keyProvider is a provider argument as gobble's id: an SDK id or Pi's name

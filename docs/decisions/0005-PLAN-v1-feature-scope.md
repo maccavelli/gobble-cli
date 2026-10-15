@@ -5451,3 +5451,62 @@ the gates                                                             -> lint ×
   - The test makes the settings file fail by putting a directory where its lock file goes. That this fails on Windows
     too is not checked here; the owner's Windows run shows it.
 - **Next:** F4-3c-4, `gobble auth import --from-pi`.
+
+**F4-3c-4's execution record (2026-10-15).**
+
+- **Ran as written,** with no deviation, in the files the table names. With it, F4-3c is complete.
+- **What the import does:**
+  - `gobble auth import --from-pi` reads Pi's `auth.json` with `auth.Load`, which takes no lock, since Pi's file has
+    gobble's shape. A missing file is `Pi has no auth.json at <path>`, exit 1.
+  - `PI_CODING_AGENT_DIR`'s `~` is expanded by gobble's own `expandHome`, which the path settings use.
+  - A key is stored with `auth.Set`, as written. xAI's login is stored through `auth.Logins`, from
+    `provider.PiLogin`, with the SDK's Grok issuer and client id.
+  - The questions go through `confirm`. It reads its answer a byte at a time, so one question never takes the next
+    one's line.
+- **Tests:**
+  - `llm/provider`: `TestPiLogin`;
+  - `internal/cli/piimport_test.go` (new): `TestImportFromPi`, `TestImportNoTerminal`, `TestImportPiUntouched`,
+    `TestImportLocation`. `TestImportFromPi` also runs the real `confirm` over a file of answers. Every existing test
+    passes unedited.
+  - `TestImportFromPi` takes the issuer and client id it expects from `provider.PiLogin`. `internal/archtest` refuses an
+    `internal/cli` import of the SDK, and `TestPiLogin` checks them against the SDK's constants.
+- **Negatives,** 18 of 18 caught on a scratch copy after control runs, each failing its named tests with its text:
+  - `PiLogin` without the issuer, without the client id, or giving a login for any id;
+  - `~` not expanded; `~/.pi` without `agent`; a missing file not reported;
+  - another provider's OAuth login copied; a key-less entry copied;
+  - the replace question asked of a new entry; a no to it replacing anyway; `--replace` not needed; `--provider`
+    ignored; `--provider` matched by the name given rather than gobble's id;
+  - a key not copied as written;
+  - `y` not taken for yes; a line not ending at its newline;
+  - Pi's `auth.json` locked, leaving `auth.json.lock` beside it; Pi's `auth.json` written.
+  - The first run caught 17 of 18. The control run failed `TestImportLocation`: it set `PI_CODING_AGENT_DIR` in a map's
+    loop, so the missing-file case ran with whichever value came last. It now clears it first, and passed 20 runs in
+    a row. The miss was the harness's own: the mutation left a variable unused, so the copy did not build.
+- **The guide's examples** ran against scratch Pi and gobble directories, with `HTTP_PROXY` and `HTTPS_PROXY` at a dead
+  local port:
+  - the terminal example ran under a pseudo-terminal, each `y` typed after its question appeared;
+  - the two `--provider` examples ran with stdin from `/dev/null`, with nothing on stderr;
+  - afterwards Pi's `auth.json` had its bytes, and Pi's directory held it alone.
+- **Gates:**
+  - the pre-add check, 5 files clean;
+  - lint for linux, darwin and windows, `0 issues.` each with `CGO_ENABLED=0`;
+  - the macOS laptop's `CGO_ENABLED=1 go test -race ./...`, 33 packages ok, no race report;
+  - `make preflight` on macOS, `preflight passed`;
+  - **not run:** Windows `go test ./...` and `-race`, the second Linux machine's `-race`, and Windows and WSL
+    `make preflight`, on the owner's machines.
+- **What the plan predicted wrongly, or left unsaid:**
+  - **The reasons for an entry not copied,** which decision 7 does not word:
+    - `not chosen`, when the import question is answered no;
+    - `auth.json already has <id>`, when the replace question is;
+    - without a terminal, `not named by --provider`, and `auth.json already has <id>; --replace replaces it`.
+  - **`--provider` and `--replace` on a terminal.** On a terminal, `--provider` narrows which entries are asked about.
+    `--replace` does nothing there, since the replace question is asked.
+  - Without a terminal and without `--provider`, every entry is skipped as not named, with exit 0.
+  - An unknown `--provider` is exit 2, and `--from-pi` is required.
+  - An entry of a type Pi does not write is skipped as `no key`.
+  - **A provider gobble has that takes no key** is skipped as `gobble has no provider <pi-id>`, which is not true of
+    it. Pi writes no such entry: `ollama` is the only one. The wording is left as decision 7 has it, and is not
+    tested.
+  - An imported Grok login over an existing entry keeps that entry's other fields, as `gobble auth login grok` does.
+- **Next:** F4-3d, the ChatGPT login, waits for go-llmprovider-sdk issue 2. F4-1b, live streaming, waits on an SDK
+  release that retries a stream.

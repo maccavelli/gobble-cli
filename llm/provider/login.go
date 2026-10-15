@@ -74,6 +74,20 @@ func HasLogin(id string) bool { return id == string(llmprovider.ProviderGrok) }
 // API key: Kilo's (0005-PLAN F4-3b).
 func HasKeyLogin(id string) bool { return id == string(llmprovider.ProviderKilo) }
 
+// PiLogin is Pi's stored login for provider id as gobble's. Pi keeps no
+// issuer or client id, so Grok's takes the SDK's, which are the ones Pi
+// signs in with; a refresh sends them (0005-PLAN F4-3c decision 7). Any
+// other id is false: gobble imports no other login.
+func PiLogin(id, access, refresh string, expires time.Time) (*Login, bool) {
+	if !HasLogin(id) {
+		return nil, false
+	}
+	return &Login{
+		Access: access, Refresh: refresh, Expires: expires,
+		Issuer: auth.DefaultGrokOAuthIssuer, ClientID: auth.DefaultGrokOAuthClientID,
+	}, true
+}
+
 // LoginRejected is what gobble says when provider id refuses its stored
 // login, or the login cannot be refreshed: nothing of the provider's text
 // (0005-PLAN F4-3b decision 8).

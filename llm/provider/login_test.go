@@ -387,3 +387,20 @@ func TestListLogin(t *testing.T) {
 		t.Errorf("listing with a key: authorization %q, want the key's", auth[n:])
 	}
 }
+
+// Pi's Grok login becomes gobble's with the SDK's issuer and client id, which
+// Pi signs in with and does not store; no other provider's login is
+// imported (0005-PLAN F4-3c decision 7).
+func TestPiLogin(t *testing.T) {
+	exp := time.UnixMilli(1781000000000)
+	l, ok := PiLogin("grok", "a", "r", exp)
+	if !ok || l.Access != "a" || l.Refresh != "r" || !l.Expires.Equal(exp) ||
+		l.Issuer != auth.DefaultGrokOAuthIssuer || l.ClientID != auth.DefaultGrokOAuthClientID || l.TokenURL != "" {
+		t.Errorf("grok: %v, %t", l, ok)
+	}
+	for _, id := range []string{"xai", "kilo", "claude", "openai"} {
+		if l, ok := PiLogin(id, "a", "r", exp); ok || l != nil {
+			t.Errorf("%s: %v, %t; want none", id, l, ok)
+		}
+	}
+}
