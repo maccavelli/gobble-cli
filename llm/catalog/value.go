@@ -77,6 +77,17 @@ func ResolveValue(v string, lookup func(string) (string, bool), run func(string)
 	return "", fmt.Errorf("the environment variables %s are not set", strings.Join(missing, ", "))
 }
 
+// QuoteValue is the value Pi's grammar gives back as s: each $ written $$,
+// and a leading ! written $!, so ResolveValue returns s with no lookup and
+// no command (0005-PLAN F4-3b).
+func QuoteValue(s string) string {
+	q := strings.ReplaceAll(s, "$", "$$")
+	if strings.HasPrefix(q, "!") {
+		q = "$" + q
+	}
+	return q
+}
+
 // appendValue writes variable name's value to b, or adds name to missing,
 // once, when lookup has none; Pi treats an empty value as missing.
 func appendValue(b *strings.Builder, lookup func(string) (string, bool), name string, missing []string) []string {

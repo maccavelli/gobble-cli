@@ -1,8 +1,9 @@
 # Credentials
 
-gobble needs a key for the provider it talks to. This page says where gobble looks for one, how to
-store one, and what gobble says when a key is missing or refused. gobble keeps keys the way Pi does,
-in an `auth.json` of Pi's shape, so a Pi `auth.json` mostly works unchanged.
+gobble needs a key, or a login, for the provider it talks to. This page says where gobble looks for
+one, how to store one or sign in, and what gobble says when a credential is missing or refused.
+gobble keeps keys the way Pi does, in an `auth.json` of Pi's shape, so a Pi `auth.json` mostly
+works unchanged.
 
 ## Where a key comes from
 
@@ -80,9 +81,66 @@ $ gobble auth logout openai
 Removed stored API key for openai. Environment variables and models.json config are unchanged.
 ```
 
-Pi's `anthropic`, `google` and `xai` name gobble's `claude`, `gemini` and `grok` here too. Signing in
-with an account, rather than a key, comes later (0005-PLAN F4-3b); an OAuth entry in `auth.json` is
-kept, and gobble says it does not use it yet.
+Pi's `anthropic`, `google` and `xai` name gobble's `claude`, `gemini` and `grok` here too.
+
+## Signing in
+
+Two providers let you sign in with your account instead of pasting a key:
+
+- **Grok.** `gobble auth login grok` signs in with your SuperGrok or X Premium subscription. gobble
+  prints the sign-in URL, then opens it in your browser; on a machine whose browser cannot reach
+  gobble, paste the URL the browser ends on when asked. `gobble auth login grok --device` shows a
+  code to enter at xAI instead, for a machine with no browser at all. Either way gobble says
+  `Logged in to grok`, keeps the login in `auth.json`, and refreshes it as it runs. gobble signs in
+  with the Grok CLI's public client id: xAI offers third-party tools no id of their own, so if xAI
+  restricts that id, the login stops working, and a key still works.
+- **Kilo.** `gobble auth login kilo` shows a code to enter at Kilo. Kilo answers with a key, which
+  gobble stores as Kilo's API key and says `Saved API key for kilo`.
+
+A login owns its provider in `auth.json`, as a stored key does; `--api-key -` still wins for one
+run. `gobble auth status` shows when a login's access expires, and `gobble auth check` reports it as
+`oauth`:
+
+```text
+$ gobble auth status
+provider      credential
+gemini        none
+openai        none
+claude        none
+grok          auth.json, an OAuth login, expires 2026-06-09 05:13
+opencode-zen  none
+opencode-go   none
+huggingface   none
+kilo          none
+together      none
+$ gobble auth check --provider grok --json
+{
+  "status": "ready",
+  "provider": "grok",
+  "authType": "oauth"
+}
+```
+
+`gobble auth logout grok` revokes the login at xAI, then removes it. If xAI cannot be reached, gobble
+warns that the login was not revoked, and removes it anyway:
+
+```text
+$ gobble auth logout grok
+Logged out of grok
+```
+
+Signing in to ChatGPT comes later, through OpenAI's sign-in for third-party agents (0005-PLAN
+F4-3d); until then, use an OpenAI API key. Any other provider takes a key:
+
+```text
+$ gobble auth login openai
+Error: openai's login waits for go-llmprovider-sdk's Sign in with ChatGPT for agents (0005-PLAN F4-3d); use --api-key -
+$ gobble auth login anthropic
+Error: claude has no login; use --api-key -
+```
+
+An OAuth entry for any other provider, such as one copied from Pi, is kept, and gobble says it does
+not use it.
 
 ## When a key is refused
 
@@ -93,6 +151,14 @@ every key (the log's warnings are left out):
 ```text
 $ OPENAI_API_KEY=test-only gobble -p hello
 Error: openai rejected the API key from OPENAI_API_KEY
+```
+
+A refused login, or one that can no longer be refreshed, says so, and how to sign in again. Here a
+local server stands in for xAI and refuses both the token and its refresh:
+
+```text
+$ gobble -p hello
+Error: grok rejected the OAuth login in auth.json; sign in again with gobble auth login grok
 ```
 
 With no key at all, gobble names the variables to set. When a key's command fails, gobble says so,

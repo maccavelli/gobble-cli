@@ -1,10 +1,13 @@
 package cli
 
 import (
+	"bufio"
 	"cmp"
+	"context"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -17,7 +20,7 @@ import (
 // AuthCmd stores, removes and checks model credentials (0005-MADR's CLI
 // surface; 0005-PLAN F4-3a).
 type AuthCmd struct {
-	Login  AuthLoginCmd  `cmd:"" help:"Store a provider's API key in auth.json."`
+	Login  AuthLoginCmd  `cmd:"" help:"Store a provider's API key in auth.json, or sign in to Grok or Kilo."`
 	Logout AuthLogoutCmd `cmd:"" help:"Remove a provider's credential from auth.json."`
 	Status AuthStatusCmd `cmd:"" help:"List where each provider's credential comes from, never the credential."`
 	Check  AuthCheckCmd  `cmd:"" help:"Report whether a provider has a usable credential: exit 0, 1 without one, 2 on error."`
@@ -37,9 +40,19 @@ func keyProvider(name string) (string, error) {
 type AuthLoginCmd struct {
 	Provider string `arg:"" complete:"provider" help:"The provider."`
 	APIKey   string `name:"api-key" complete:"none" placeholder:"-" help:"Read the key from stdin, or ask for it: -."`
+	Device   bool   `name:"device" help:"Sign in with a device code, on a machine without a browser."`
 }
 
-// Run stores the key read for --api-key - as the provider's api_key entry.
+// The logins, which a test replaces (0005-PLAN F4-3b).
+var (
+	browserLogin = provider.BrowserLogin
+	deviceLogin  = provider.DeviceLogin
+	keyLogin     = provider.KeyLogin
+	logoutLogin  = provider.Logout
+)
+
+// Run stores the key read for --api-key - as the provider's api_key entry,
+// or, without --api-key, signs in to the provider (0005-PLAN F4-3b).
 func (c *AuthLoginCmd) Run(e *runEnv) error {
 	e.ensureSettingsFile()
 	id, err := keyProvider(c.Provider)
@@ -48,8 +61,11 @@ func (c *AuthLoginCmd) Run(e *runEnv) error {
 	}
 	switch c.APIKey {
 	case "":
-		return usageErrorf("gobble auth login takes --api-key - until OAuth logins arrive (0005-PLAN F4-3b)")
+		return e.login(id, c.Device)
 	case "-":
+		if c.Device {
+			return usageErrorf("--device is for a login; --api-key - stores a key")
+		}
 	default:
 		return usageErrorf("%s", apiKeyLiteral)
 	}
@@ -65,6 +81,92 @@ func (c *AuthLoginCmd) Run(e *runEnv) error {
 		return failf("%v", err)
 	}
 	return e.out.Resultf("Saved API key for %s\n", id)
+}
+
+// login signs in to provider id (0005-PLAN F4-3b decision 6): Grok's
+// browser login, or its device login with device; Kilo's device login,
+// whose key is stored escaped, so Pi's grammar gives it back unchanged. Any
+// other provider has none.
+func (e *runEnv) login(id string, device bool) error {
+	path := authPath()
+	switch {
+	case path == "":
+		return failf("auth.json: the config directory cannot be resolved")
+	case provider.HasKeyLogin(id):
+		key, err := keyLogin(e.ctx, id, provider.LoginOptions{}, e.showDeviceCode)
+		if err != nil {
+			return failf("%v", err)
+		}
+		if err := auth.Set(e.ctx, path, id, auth.Entry{Type: auth.TypeAPIKey, Key: catalog.QuoteValue(key)}); err != nil {
+			return failf("%v", err)
+		}
+		return e.out.Resultf("Saved API key for %s\n", id)
+	case provider.HasLogin(id):
+		store := auth.Logins{Path: path}
+		var err error
+		if device {
+			err = deviceLogin(e.ctx, id, provider.LoginOptions{}, e.showDeviceCode, store)
+		} else {
+			o := provider.LoginOptions{OpenURL: func(u string) error { return e.showLoginURL(id, u) }}
+			if e.out.caps.In && e.stdin != nil {
+				o.InputCode = e.pastedRedirect
+			}
+			err = browserLogin(e.ctx, id, o, store)
+		}
+		if err != nil {
+			return failf("%v", err)
+		}
+		return e.out.Resultf("Logged in to %s\n", id)
+	case id == "openai":
+		return usageErrorf("openai's login waits for go-llmprovider-sdk's Sign in with ChatGPT for agents (0005-PLAN F4-3d); use --api-key -")
+	}
+	return usageErrorf("%s has no login; use --api-key -", id)
+}
+
+// showDeviceCode tells the user where to enter a device login's code.
+func (e *runEnv) showDeviceCode(d provider.DeviceCode) error {
+	if _, err := fmt.Fprintf(e.out.err, "Open %s and enter the code %s\n", d.URL, d.Code); err != nil {
+		return fmt.Errorf("write stderr: %w", err)
+	}
+	return nil
+}
+
+// showLoginURL prints a browser login's URL, then opens it: the SDK gives
+// the URL nowhere else, so a machine whose browser does not open still
+// shows it (0005-PLAN F4-3b decision 6). A browser that does not open is
+// not an error.
+func (e *runEnv) showLoginURL(id, u string) error {
+	msg := "Open this URL to sign in to %s:\n  %s\n"
+	if e.out.caps.In && e.stdin != nil {
+		msg += "If the browser cannot reach this machine, paste the URL it ends on here.\n"
+	}
+	if _, err := fmt.Fprintf(e.out.err, msg, id, u); err != nil {
+		return fmt.Errorf("write stderr: %w", err)
+	}
+	if err := openURL(e.ctx, u); err != nil {
+		e.log().Debug("open browser", slog.String("error", err.Error()))
+	}
+	return nil
+}
+
+// pastedRedirect is the redirect URL the user pastes on a terminal, read
+// as one line; ctx ending gives up waiting for it.
+func (e *runEnv) pastedRedirect(ctx context.Context) (string, error) {
+	line := make(chan string, 1)
+	go func() {
+		s, _ := bufio.NewReader(e.stdin).ReadString('\n') //nolint:errcheck // an unread line is no paste
+		line <- strings.TrimSpace(s)
+	}()
+	select {
+	case s := <-line:
+		if s == "" {
+			<-ctx.Done() // nothing pasted: the browser's callback may still arrive
+			return "", ctx.Err()
+		}
+		return s, nil
+	case <-ctx.Done():
+		return "", ctx.Err()
+	}
 }
 
 // AuthLogoutCmd is gobble auth logout.
@@ -88,6 +190,18 @@ func (c *AuthLogoutCmd) Run(e *runEnv) error {
 		return failf("%v", err)
 	}
 	was, _ := f.Entry(id)
+	if was.Type == auth.TypeOAuth && provider.HasLogin(id) {
+		// Revoked, then removed whether or not revocation succeeded
+		// (0005-PLAN F4-3b decision 7).
+		revoke, err := logoutLogin(e.ctx, id, provider.LoginOptions{}, auth.Logins{Path: path})
+		if err != nil {
+			return failf("%v", err)
+		}
+		if revoke != nil {
+			e.out.Warnf("%s's session could not be revoked (%s); it was removed from auth.json", id, provider.FailureKind(revoke))
+		}
+		return e.out.Resultf("Logged out of %s\n", id)
+	}
 	removed, err := auth.Delete(e.ctx, path, id)
 	switch {
 	case err != nil:
@@ -133,7 +247,10 @@ func (e *runEnv) credentialSource(id string) string {
 			case auth.TypeAPIKey:
 				return "auth.json"
 			case auth.TypeOAuth:
-				return "auth.json, an OAuth login" + expiry(entry.Expires) + ", used from 0005-PLAN F4-3b"
+				if provider.HasLogin(id) {
+					return "auth.json, an OAuth login" + expiry(entry.Expires)
+				}
+				return "auth.json, an OAuth login" + expiry(entry.Expires) + ", not used (0005-PLAN F4-3b)"
 			}
 			return fmt.Sprintf("auth.json, a %q entry gobble does not use", entry.Type)
 		}
@@ -219,12 +336,14 @@ func (e *runEnv) check(name, model string) checkResult {
 	} else {
 		return checkResult{Status: checkNotReady, Provider: name, Reason: "provider_not_found"}
 	}
-	_, ok, err := e.credentials().Credential(id)
+	c, ok, err := e.credentials().Credential(id)
 	switch {
 	case err != nil:
 		return checkResult{Status: checkInvalid, Provider: id, Reason: "invalid_state"}
 	case !ok:
 		return checkResult{Status: checkNotReady, Provider: id, Reason: "credentials_not_configured"}
+	case c.Login:
+		return checkResult{Status: checkReady, Provider: id, AuthType: auth.TypeOAuth}
 	}
 	return checkResult{Status: checkReady, Provider: id, AuthType: auth.TypeAPIKey}
 }

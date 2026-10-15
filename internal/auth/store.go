@@ -28,11 +28,18 @@ var authPolicy = filelock.Policy{First: 20 * time.Millisecond, Max: 2 * time.Sec
 
 // Entry is one provider's credential, in Pi's shape: its type; for an
 // api_key, its key as written, in Pi's value grammar; for an oauth login,
-// when its access token expires, in milliseconds since the epoch, as Pi
-// writes it.
+// its tokens, when its access token expires, in milliseconds since the
+// epoch, as Pi writes it, and the SDK session's own fields (0005-PLAN F4-3b
+// decision 3).
 type Entry struct {
-	Type, Key string
-	Expires   int64
+	Type, Key       string
+	Expires         int64
+	Access, Refresh string
+	// Issuer, ClientID, AccountID, TokenURL and FedRAMP are an oauth
+	// login's issuer, client id, account, token endpoint, and
+	// whether it sends X-OpenAI-Fedramp (0015-REPORT F5).
+	Issuer, ClientID, AccountID, TokenURL string
+	FedRAMP                               bool
 }
 
 // member is one provider's entry as the file holds it: its bytes are kept,
@@ -86,14 +93,22 @@ func parse(data []byte) (*File, error) {
 			return nil, fmt.Errorf("invalid auth.json: %w", err)
 		}
 		var e struct {
-			Type    *string `json:"type"`
-			Key     string  `json:"key"`
-			Expires int64   `json:"expires"`
+			Type      *string `json:"type"`
+			Key       string  `json:"key"`
+			Expires   int64   `json:"expires"`
+			Access    string  `json:"access"`
+			Refresh   string  `json:"refresh"`
+			Issuer    string  `json:"issuer"`
+			ClientID  string  `json:"clientId"`
+			AccountID string  `json:"accountId"`
+			TokenURL  string  `json:"tokenUrl"`
+			FedRAMP   bool    `json:"fedramp"`
 		}
 		if value.Kind() != '{' || json.Unmarshal(value, &e) != nil || e.Type == nil {
 			return nil, fmt.Errorf("invalid auth.json credential for provider %q", provider)
 		}
-		entry := Entry{Type: *e.Type, Key: e.Key, Expires: e.Expires}
+		entry := Entry{Type: *e.Type, Key: e.Key, Expires: e.Expires, Access: e.Access, Refresh: e.Refresh,
+			Issuer: e.Issuer, ClientID: e.ClientID, AccountID: e.AccountID, TokenURL: e.TokenURL, FedRAMP: e.FedRAMP}
 		f.members = append(f.members, member{provider: provider, value: value.Clone(), entry: entry})
 	}
 	if _, err := d.ReadToken(); err != nil {
@@ -143,6 +158,129 @@ func Set(ctx context.Context, path, provider string, e Entry) error {
 		}
 		return true
 	})
+}
+
+// SetOAuth stores e as provider's oauth entry: under auth.json's lock it
+// re-reads the file and sets an oauth login's fields in the provider's
+// entry, keeping every other field as written, or adds the entry. fedramp
+// is written only when true, and an SDK field only when set (0005-PLAN
+// F4-3b decision 3).
+func SetOAuth(ctx context.Context, path, provider string, e Entry) error {
+	e.Type = TypeOAuth
+	set, remove, err := oauthFields(e)
+	if err != nil {
+		return fmt.Errorf("auth.json: %w", err)
+	}
+	var mergeErr error
+	err = modify(ctx, path, func(f *File) bool {
+		var old jsontext.Value
+		i := f.index(provider)
+		if i >= 0 {
+			old = f.members[i].value
+		}
+		value, err := merge(old, set, remove)
+		if err != nil {
+			mergeErr = fmt.Errorf("auth.json: provider %s: %w", provider, err)
+			return false
+		}
+		m := member{provider: provider, value: value, entry: e}
+		if i >= 0 {
+			f.members[i] = m
+		} else {
+			f.members = append(f.members, m)
+		}
+		return true
+	})
+	return errors.Join(err, mergeErr)
+}
+
+// field is one member of an entry's object.
+type field struct {
+	name  string
+	value jsontext.Value
+}
+
+// oauthFields are the fields SetOAuth writes for e, in Pi's order then the
+// SDK session's, and the fields it removes: an SDK field e leaves unset, and
+// fedramp when false.
+func oauthFields(e Entry) (set []field, remove []string, err error) {
+	add := func(name string, v any) {
+		b, merr := json.Marshal(v)
+		err = errors.Join(err, merr)
+		set = append(set, field{name, b})
+	}
+	add("type", e.Type)
+	add("access", e.Access)
+	add("refresh", e.Refresh)
+	add("expires", e.Expires)
+	for _, f := range []struct{ name, v string }{
+		{"issuer", e.Issuer}, {"clientId", e.ClientID}, {"accountId", e.AccountID}, {"tokenUrl", e.TokenURL},
+	} {
+		if f.v == "" {
+			remove = append(remove, f.name)
+		} else {
+			add(f.name, f.v)
+		}
+	}
+	if e.FedRAMP {
+		add("fedramp", true)
+	} else {
+		remove = append(remove, "fedramp")
+	}
+	return set, remove, err
+}
+
+// merge is the object old with set's fields replacing or following its own,
+// and remove's left out; every other field keeps its value. A nil old is an
+// empty object. The result is compact, for encode to lay out.
+func merge(old jsontext.Value, set []field, remove []string) (jsontext.Value, error) {
+	var b bytes.Buffer
+	b.WriteByte('{')
+	put := func(name string, v jsontext.Value) {
+		if b.Len() > 1 {
+			b.WriteByte(',')
+		}
+		q, _ := jsontext.AppendQuote(nil, name) //nolint:errcheck // a name read from JSON, or given by gobble, quotes
+		b.Write(q)
+		b.WriteByte(':')
+		b.Write(v)
+	}
+	done := map[string]bool{}
+	if len(old) > 0 {
+		d := jsontext.NewDecoder(bytes.NewReader(old))
+		if _, err := d.ReadToken(); err != nil {
+			return nil, err
+		}
+		for d.PeekKind() != '}' {
+			tok, err := d.ReadToken()
+			if err != nil {
+				return nil, err
+			}
+			name := tok.String()
+			v, err := d.ReadValue()
+			if err != nil {
+				return nil, err
+			}
+			switch i := slices.IndexFunc(set, func(f field) bool { return f.name == name }); {
+			case i >= 0:
+				put(name, set[i].value)
+				done[name] = true
+			case !slices.Contains(remove, name):
+				put(name, v)
+			}
+		}
+	}
+	for _, f := range set {
+		if !done[f.name] {
+			put(f.name, f.value)
+		}
+	}
+	b.WriteByte('}')
+	out := jsontext.Value(b.Bytes())
+	if err := out.Compact(); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 // Delete removes provider's entry, reporting whether there was one.

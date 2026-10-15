@@ -172,7 +172,7 @@ Tier definitions:
 | Stream shape | 1.0 | gobble calls `llmprovider.Stream`. ~~Every moved provider sets `NativeStreaming` to `Unsupported`, so 1.0 ACP `session/update` text chunks are whole-message events synthesised from `Generate`, not token-by-token SSE.~~ A later SDK `Streamer` is picked up with no gobble API change. *(2026-10-11: every provider streams natively from SDK `v1.6.0`, so 1.0 text chunks arrive as the model writes them, through a retry the SDK applies before the first event. Amendment of 2026-10-11, item 3.)* |
 | Unnamed OpenAI-compatible endpoints | 1.x | Groq, Cerebras, DeepSeek, OpenRouter, Fireworks, Mistral, LM Studio, llama.cpp server, vLLM. The SDK has no generic Chat Completions constructor (`WithBaseURL` on `openai` would send the Responses wire). These land when the SDK adds a Chat Completions provider that takes a base URL, or adds those ids. gobble does not speak those wires itself. |
 | Bedrock, Vertex, Azure OpenAI | 1.x | Needs SDK support. gobble will not add `anthropic-sdk-go`, `openai-go/v3`, `google.golang.org/genai`, or `aws-sdk-go-v2` to speak them. |
-| Subscription OAuth | 1.0 for ChatGPT/Codex through the SDK `openai` backend; ~~1.x for any other provider~~ *(2026-10-10: 1.0 for xAI Grok and Kilo too, through the SDK's flows, each after its terms check; any other, 1.x. Second amendment of this date, item 4.)* *(2026-10-14, the terms checks: ChatGPT stays 1.0, through OpenAI's Sign in with ChatGPT for open-source agents once go-llmprovider-sdk ships it, never Codex's client id; xAI Grok is 1.x; Kilo's device login is 1.0. Amendment of 2026-10-14.)* | Only for providers whose terms permit third-party clients. Each extra provider is checked and recorded in the PLAN before it lands. |
+| Subscription OAuth | 1.0 for ChatGPT/Codex through the SDK `openai` backend; ~~1.x for any other provider~~ *(2026-10-10: 1.0 for xAI Grok and Kilo too, through the SDK's flows, each after its terms check; any other, 1.x. Second amendment of this date, item 4.)* *(2026-10-14, the terms checks: ChatGPT stays 1.0, through OpenAI's Sign in with ChatGPT for open-source agents once go-llmprovider-sdk ships it, never Codex's client id; ~~xAI Grok is 1.x~~; Kilo's device login is 1.0. Amendment of 2026-10-14.)* *(2026-10-14, second: xAI Grok is 1.0 again, through the SDK's flows and the Grok CLI's client id, the owner's accepted risk. Second amendment of 2026-10-14.)* | Only for providers whose terms permit third-party clients. Each extra provider is checked and recorded in the PLAN before it lands. |
 | go-llmprovider-sdk adapter | 1.0 | The only 1.0 provider implementation, in `llm/provider`. The "once it has a `go.mod` and public streaming" gate is withdrawn: the module exists, `Stream` exists, native per-token streaming does not. |
 | Model catalog | 1.0 | Embedded snapshot in Pi's `Model` shape (context window, max tokens, cost tiers, input modalities, reasoning, thinking map, image input limits). `gobble models list|info`. The source is recorded in `NOTICE` if copied. *(2026-10-10: the snapshot is models.dev's, MIT, credited in `NOTICE`; second amendment of this date, item 2.)* |
 | Catalog refresh | 1.x | `gobble models refresh` into the cache directory. |
@@ -567,7 +567,7 @@ Further 0001-REPORT errata are kept here rather than in the report, which record
 * **The named SDK providers are all 1.0 now.** `opencode-zen`, `opencode-go`, `huggingface`, `kilo`, `together` and `ollama` implement `llmprovider.Provider`. "On 2026-09-30 those five still use the old `Generate*` API" was that day's fact. It was six ids in five packages.
 * **Subscription OAuth.**
   * ChatGPT/Codex stays 1.0.
-  * xAI Grok OAuth (browser and device) and Kilo device login exist in the SDK. They are **1.0 candidates**, each landing with a recorded terms check. *(2026-10-10: both are 1.0, after their terms checks. Second amendment of this date, item 4.)* *(2026-10-14: Grok is 1.x, Kilo 1.0, after the checks. Amendment of 2026-10-14.)*
+  * xAI Grok OAuth (browser and device) and Kilo device login exist in the SDK. They are **1.0 candidates**, each landing with a recorded terms check. *(2026-10-10: both are 1.0, after their terms checks. Second amendment of this date, item 4.)* *(2026-10-14: Grok is 1.x, Kilo 1.0, after the checks. Amendment of 2026-10-14.)* *(2026-10-14, second: Grok is 1.0 again. Second amendment of 2026-10-14.)*
   * Anthropic Max, Gemini and GitHub Copilot subscription logins are **out of the v1 line**. The SDK declines them by policy (its 0016-MADR D10), and gobble adds no vendor auth code of its own.
 * **Thinking levels.** The SDK accepts efforts `low…xhigh` only. gobble's `minimal` and `max` map as 0004-MADR's map states, and `/thinking` reports the degradation.
 * **Images.**
@@ -977,7 +977,7 @@ Otherwise it stays a shell command. File status, diffs, git, checksums and archi
 4. **ChatGPT, Grok and Kilo logins are 1.0.**
    - **Found:** the SDK has browser and device flows for `openai` and `grok`, and a device flow for `kilo`. Their default client ids are the vendor CLIs' own.
    - **Decided:** all three are 1.0, each landing only after a recorded check of the vendor's terms for third-party clients. One the terms do not allow stays 1.x.
-     *(2026-10-14: the checks are recorded; ChatGPT waits for the SDK's sign-in for agents, Grok is 1.x, Kilo is 1.0. Amendment of 2026-10-14.)*
+     *(2026-10-14: the checks are recorded; ChatGPT waits for the SDK's sign-in for agents, Grok is 1.x, Kilo is 1.0. Amendment of 2026-10-14.)* *(2026-10-14, second: Grok is 1.0. Second amendment of 2026-10-14.)*
 5. **A one-run key is read from stdin.**
    - **Found:** Pi's `--api-key KEY` puts the key in argv, where process listings and shell history show it. The organisation's secrets rule forbids secrets in CLI arguments.
    - **Decided:** `--api-key -` reads the key from stdin, or a prompt on a terminal. A literal value is refused with the reason. `gobble auth login <provider> --api-key -` stores one the same way.
@@ -1035,7 +1035,7 @@ the vendor's terms for third-party clients. 0005-PLAN F4-3b made the checks its 
      2026-09-29. go-llmprovider-sdk has a live probe of it (its 0017-MADR D4) and no login.
    - **Decided:** ChatGPT stays 1.0, signed in through that flow alone, after go-llmprovider-sdk releases it. gobble
      does not use Codex's client id, and writes no OAuth code of its own.
-2. **xAI Grok's login is 1.x.**
+2. ~~**xAI Grok's login is 1.x.**~~ *(2026-10-14, second: reversed by the owner; second amendment of 2026-10-14, item 1.)*
    - **Found:** xAI publishes no terms or registration for third-party clients of its subscription login. Its
      Acceptable Use Policy forbids "unauthorized automated or non-human means". It endorses one named agent,
      OpenCode. The Grok CLI obfuscates its client id in its binary.
@@ -1058,3 +1058,43 @@ the vendor's terms for third-party clients. 0005-PLAN F4-3b made the checks its 
   ChatGPT login.
 - An `oauth` entry in `auth.json` still owns its provider and fails closed.
 - The ChatGPT login depends on another repository's release, as F4-1b does.
+
+### Amendment (2026-10-14, second): Grok's login kept, ChatGPT's through OpenAI's path for third-party clients
+
+**Why.** After the terms checks and the client-id probe of the amendment above, the owner decided on 2026-10-14
+to keep subscription logins for both xAI Grok and ChatGPT. The facts are in 0005-PLAN's entries "F4-3b made
+executable" and "F4-3b re-made: Grok's login kept".
+
+**What changes here.**
+
+1. **xAI Grok's login is 1.0, with the SDK's flows and the Grok CLI's client id.**
+   - **Found:**
+     - xAI publishes no terms for third-party clients of its subscription login, and none forbidding one. It
+       endorses open-source agents: "Use your SuperGrok or X Premium subscription inside OpenCode", and "More
+       open-source agents and integrations are coming soon" (x.ai, 21 May 2026).
+     - The probe shows that a client id gobble chooses is refused as unregistered ("Unknown or disabled client"),
+       and that `auth.x.ai` offers no registration endpoint. So the Grok CLI's id is the only one a third-party
+       client can sign in with today.
+   - **Decided:** the owner keeps the login. It uses go-llmprovider-sdk's browser and device flows with their
+     default client id, the Grok CLI's.
+   - **The accepted risk:**
+     - xAI's Acceptable Use Policy forbids "unauthorized automated or non-human means", which it does not define.
+     - The Grok CLI obfuscates its client id in its binary.
+     - xAI may restrict the id at any time.
+     - gobble moves to an id of its own once xAI offers registration.
+2. **ChatGPT's login uses OpenAI's published path for third-party clients, and nothing else.**
+   - **Unchanged from the amendment above, item 1:** Sign in with ChatGPT for open-source agents, registered under
+     gobble's own name, and never Codex's client id.
+   - **Found:** go-llmprovider-sdk has a probe of the flow and no login. The flow, its terms and the SDK's gaps are
+     filed as go-llmprovider-sdk issue 2 and that repository's
+     `docs/reports/0017-REPORT-openai-sign-in-for-agents.md`.
+   - **Decided:** the ChatGPT login is its own sub-phase, F4-3d, made executable once the SDK releases the flow.
+
+**Consequences.**
+
+- At F4-3b, gobble stores, refreshes and uses OAuth sessions, for Grok. The SDK's `TokenStore` and
+  `RefreshLocker` adapter is built there, not with the ChatGPT login.
+- A Grok login can stop working without notice if xAI restricts the Grok CLI's client id. An API key still works
+  then.
+- The two subscription logins rest on different grounds. ChatGPT's follows OpenAI's terms for third-party clients.
+  Grok's rests on xAI's silence and its endorsement of open-source agents.

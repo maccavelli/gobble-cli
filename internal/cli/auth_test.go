@@ -9,10 +9,14 @@ import (
 	"iter"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 
+	"github.com/maccavelli/gobble-cli/internal/auth"
 	"github.com/maccavelli/gobble-cli/llm"
+	"github.com/maccavelli/gobble-cli/llm/catalog"
 	"github.com/maccavelli/gobble-cli/llm/provider"
 	"github.com/maccavelli/gobble-cli/tool/builtin"
 )
@@ -28,8 +32,8 @@ func (c *cfgEnv) runStdin(stdin *os.File, args ...string) result {
 func (c *cfgEnv) authFile() string { return filepath.Join(c.home, "auth.json") }
 
 // gobble auth login stores a key read from stdin, in Pi's words, keeping the
-// file's other entries; without --api-key -, it waits for F4-3b
-// (0005-PLAN F4-3a decision 8).
+// file's other entries; without --api-key -, a provider with no login is
+// refused with its reason (0005-PLAN F4-3a decision 8, F4-3b decision 6).
 func TestAuthLogin(t *testing.T) {
 	c := newCfgEnv(t)
 	c.write(c.authFile(), `{"custom": {"type": "api_key", "key": "keep"}}`)
@@ -40,7 +44,9 @@ func TestAuthLogin(t *testing.T) {
 		t.Errorf("auth.json:\n%s", got)
 	}
 	c.want(c.runStdin(stdinFile(t, "k2"), "auth", "login", "anthropic", "--api-key", "-"), ExitOK, "Saved API key for claude\n", "")
-	c.want(c.run("auth", "login", "openai"), ExitUsage, "", "until OAuth logins arrive (0005-PLAN F4-3b)")
+	c.want(c.run("auth", "login", "openai"), ExitUsage, "", "openai's login waits for go-llmprovider-sdk's Sign in with ChatGPT for agents (0005-PLAN F4-3d); use --api-key -")
+	c.want(c.run("auth", "login", "anthropic"), ExitUsage, "", "claude has no login; use --api-key -")
+	c.want(c.runStdin(stdinFile(t, "k"), "auth", "login", "grok", "--api-key", "-", "--device"), ExitUsage, "", "--device is for a login")
 	if r := c.run("auth", "login", "openai", "--api-key", "sk-literal"); r.code != ExitUsage ||
 		!strings.Contains(r.stderr, apiKeyLiteral) || strings.Contains(r.stderr, "sk-literal") {
 		t.Errorf("a literal: exit %d, stderr %q", r.code, r.stderr)
@@ -83,13 +89,34 @@ func TestAuthStatus(t *testing.T) {
 	if strings.Contains(r.stdout+r.stderr, "secret") {
 		t.Errorf("status printed a credential:\n%s%s", r.stdout, r.stderr)
 	}
+	// A login is shown with its expiry; another provider's oauth entry says
+	// gobble does not use it (0005-PLAN F4-3b decision 8).
+	c.write(c.authFile(), `{"grok": {"type": "oauth", "access": "a-secret", "refresh": "r-secret", "expires": 1781000000000},
+  "claude": {"type": "oauth", "access": "a-secret", "refresh": "r-secret", "expires": 1781000000000}}`)
+	r = c.run("auth", "status")
+	grok, claude := rowOf(r.stdout, "grok"), rowOf(r.stdout, "claude")
+	if !strings.HasPrefix(grok, "grok          auth.json, an OAuth login, expires ") || strings.Contains(grok, "not used") ||
+		!strings.HasSuffix(claude, ", not used (0005-PLAN F4-3b)") || strings.Contains(r.stdout+r.stderr, "secret") {
+		t.Errorf("status with logins:\n%s%s", r.stdout, r.stderr)
+	}
+}
+
+// rowOf is out's line for provider id, or "".
+func rowOf(out, id string) string {
+	for line := range strings.Lines(out) {
+		if strings.HasPrefix(line, id+" ") {
+			return strings.TrimSuffix(line, "\n")
+		}
+	}
+	return ""
 }
 
 // gobble auth check is Pi's: ready, not_ready or invalid, with a reason,
 // exiting 0, 1 or 2.
 func TestAuthCheck(t *testing.T) {
 	c := newCfgEnv(t)
-	c.write(c.authFile(), `{"openai": {"type": "api_key", "key": "k"}, "claude": {"type": "oauth", "access": "a", "refresh": "r", "expires": 1}}`)
+	c.write(c.authFile(), `{"openai": {"type": "api_key", "key": "k"}, "claude": {"type": "oauth", "access": "a", "refresh": "r", "expires": 1},
+  "grok": {"type": "oauth", "access": "a", "refresh": "r", "expires": 1}}`)
 	c.want(c.run("auth", "check", "--provider", "openai"), ExitOK, "ready\n", "")
 	c.want(c.run("auth", "check", "--provider", "kilo"), ExitFailure, "not_ready\n", "")
 	c.want(c.run("auth", "check", "--model", "anthropic/claude-haiku-5-5"), ExitUsage, "invalid\n", "")
@@ -99,6 +126,7 @@ func TestAuthCheck(t *testing.T) {
 		"--provider kilo":   {Status: "not_ready", Provider: "kilo", Reason: "credentials_not_configured"},
 		"--provider nope":   {Status: "not_ready", Provider: "nope", Reason: "provider_not_found"},
 		"--provider claude": {Status: "invalid", Provider: "claude", Reason: "invalid_state"},
+		"--provider grok":   {Status: "ready", Provider: "grok", AuthType: "oauth"},
 	} {
 		r := c.run(append([]string{"auth", "check", "--json"}, strings.Fields(args)...)...)
 		var got checkResult
@@ -188,5 +216,156 @@ func TestRejectedKeyMessage(t *testing.T) {
 	t.Setenv("OPENAI_API_KEY", "")
 	if r := c.run("-p", "hello"); r.code != ExitAuth || !strings.Contains(r.stderr, "no model credential: set one of") {
 		t.Errorf("no key: exit %d, stderr %q", r.code, r.stderr)
+	}
+}
+
+// replace sets *v to fake for the test.
+func replace[T any](t *testing.T, v *T, fake T) {
+	old := *v
+	*v = fake
+	t.Cleanup(func() { *v = old })
+}
+
+// gobble auth login grok runs the browser login, printing its URL before
+// opening it, or with --device the device login, showing its code; either
+// saves the login (0005-PLAN F4-3b decision 6).
+func TestAuthLoginGrok(t *testing.T) {
+	c := newCfgEnv(t)
+	var opened []string
+	replace(t, &openURL, func(_ context.Context, u string) error { opened = append(opened, u); return nil })
+	const authorize = "https://auth.x.ai/oauth2/authorize?state=s"
+	replace(t, &browserLogin, func(ctx context.Context, id string, o provider.LoginOptions, store provider.LoginStore) error {
+		if err := o.OpenURL(authorize); err != nil {
+			return err
+		}
+		return store.Save(ctx, id, &provider.Login{Access: "a-browser", Refresh: "r", Issuer: "https://auth.x.ai"})
+	})
+	replace(t, &deviceLogin, func(ctx context.Context, id string, _ provider.LoginOptions, show func(provider.DeviceCode) error,
+		store provider.LoginStore) error {
+		if err := show(provider.DeviceCode{URL: "https://accounts.x.ai/device", Code: "ABCD-1234"}); err != nil {
+			return err
+		}
+		return store.Save(ctx, id, &provider.Login{Access: "a-device", Refresh: "r"})
+	})
+	c.write(c.authFile(), `{"openai": {"type": "api_key", "key": "keep"}}`)
+
+	c.want(c.run("auth", "login", "grok"), ExitOK, "Logged in to grok\n", "Open this URL to sign in to grok:\n  "+authorize+"\n")
+	if len(opened) != 1 || opened[0] != authorize {
+		t.Errorf("opened %q, want the authorize URL once", opened)
+	}
+	if got := c.read(c.authFile()); !strings.Contains(got, `"access": "a-browser"`) || !strings.Contains(got, `"key": "keep"`) {
+		t.Errorf("auth.json after the browser login:\n%s", got)
+	}
+	c.want(c.run("auth", "login", "grok", "--device"), ExitOK, "Logged in to grok\n",
+		"Open https://accounts.x.ai/device and enter the code ABCD-1234\n")
+	if got := c.read(c.authFile()); !strings.Contains(got, `"access": "a-device"`) || len(opened) != 1 {
+		t.Errorf("auth.json after the device login, %d opened:\n%s", len(opened), got)
+	}
+	replace(t, &browserLogin, func(context.Context, string, provider.LoginOptions, provider.LoginStore) error {
+		return fmt.Errorf("grok login: %w", llm.ErrAuth)
+	})
+	if r := c.run("auth", "login", "grok"); r.code != ExitFailure || !strings.Contains(r.stderr, "grok login:") {
+		t.Errorf("a failed login: exit %d, stderr %q", r.code, r.stderr)
+	}
+}
+
+// gobble auth login kilo shows the device code and stores the key it gives,
+// escaped, so Pi's grammar gives it back unchanged; a failed login stores
+// nothing (0005-PLAN F4-3b decision 3 of the first entry).
+func TestAuthLoginKilo(t *testing.T) {
+	c := newCfgEnv(t)
+	token := "!x$y"
+	replace(t, &keyLogin, func(_ context.Context, _ string, _ provider.LoginOptions, show func(provider.DeviceCode) error) (string, error) {
+		if err := show(provider.DeviceCode{URL: "https://app.kilo.ai/device", Code: "KILO-1"}); err != nil {
+			return "", err
+		}
+		return token, nil
+	})
+	c.write(c.authFile(), `{"openai": {"type": "api_key", "key": "keep"}}`)
+	c.want(c.run("auth", "login", "kilo"), ExitOK, "Saved API key for kilo\n", "Open https://app.kilo.ai/device and enter the code KILO-1\n")
+	f, err := auth.Load(c.authFile())
+	if err != nil {
+		t.Fatal(err)
+	}
+	e, _ := f.Entry("kilo")
+	got, err := catalog.ResolveValue(e.Key, func(string) (string, bool) { return "", false },
+		func(string) (string, error) { return "", errors.New("ran a command") })
+	if e.Type != auth.TypeAPIKey || e.Key != "$!x$$y" || got != token || err != nil {
+		t.Errorf("kilo's entry %+v resolves to %q, %v; want %q stored escaped", e, got, err, token)
+	}
+	if o, _ := f.Entry("openai"); o.Key != "keep" {
+		t.Errorf("openai's entry: %+v", o)
+	}
+	replace(t, &keyLogin, func(context.Context, string, provider.LoginOptions, func(provider.DeviceCode) error) (string, error) {
+		return "", fmt.Errorf("kilo login: %w", llm.ErrAuth)
+	})
+	c.write(c.authFile(), `{}`)
+	if r := c.run("auth", "login", "kilo"); r.code != ExitFailure || c.read(c.authFile()) != "{}" {
+		t.Errorf("a failed login: exit %d, auth.json %q", r.code, c.read(c.authFile()))
+	}
+}
+
+// gobble auth logout grok revokes, then removes the login; a failed
+// revocation is warned by its kind, and the login still removed (0005-PLAN
+// F4-3b decision 7).
+func TestAuthLogoutGrok(t *testing.T) {
+	c := newCfgEnv(t)
+	var revoke error
+	logouts := 0
+	replace(t, &logoutLogin, func(ctx context.Context, id string, _ provider.LoginOptions, store provider.LoginStore) (error, error) {
+		logouts++
+		return revoke, store.Delete(ctx, id)
+	})
+	login := `{"grok": {"type": "oauth", "access": "a", "refresh": "r-secret", "expires": 1}, "openai": {"type": "api_key", "key": "k"}}`
+	c.write(c.authFile(), login)
+	c.want(c.run("auth", "logout", "grok"), ExitOK, "Logged out of grok\n", "")
+	if got := c.read(c.authFile()); strings.Contains(got, "grok") || !strings.Contains(got, "openai") || logouts != 1 {
+		t.Errorf("after logout, %d revocations:\n%s", logouts, got)
+	}
+	revoke = fmt.Errorf("revoke: %w: 503 r-secret", llm.ErrUnavailable)
+	c.write(c.authFile(), login)
+	r := c.run("auth", "logout", "grok")
+	c.want(r, ExitOK, "Logged out of grok\n", "Warning: grok's session could not be revoked (unavailable); it was removed from auth.json\n")
+	if strings.Contains(r.stderr, "r-secret") || strings.Contains(c.read(c.authFile()), "grok") {
+		t.Errorf("a failed revocation: stderr %q, auth.json %q", r.stderr, c.read(c.authFile()))
+	}
+}
+
+// A login lists models as a key does: the listing is asked for with no key
+// and the login store (0005-PLAN F4-3b decision 9).
+func TestLoginListing(t *testing.T) {
+	e, _ := modelEnv(t)
+	if err := auth.SetOAuth(t.Context(), authPath(), "grok", auth.Entry{Access: "a", Refresh: "r", Expires: 1}); err != nil {
+		t.Fatal(err)
+	}
+	var mu sync.Mutex
+	var got []string
+	withLister(t, func(_ context.Context, id, key string, o provider.Options) (provider.Listing, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		got = append(got, fmt.Sprintf("%s key=%q logins=%t", id, key, o.Logins != nil))
+		return provider.Listing{Live: true, Models: []string{"grok-4.6"}}, nil
+	})
+	if c := e.modelChoice(); c.Provider != "grok" || !slices.Equal(c.Models, []string{"grok-4.6"}) {
+		t.Fatalf("model choice %+v, want grok's listing", c)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if !slices.Equal(got, []string{`grok key="" logins=true`}) {
+		t.Errorf("listed %q, want grok with its login", got)
+	}
+}
+
+// A refused login says LoginRejected's sentence, and nothing of the
+// provider's text (0005-PLAN F4-3b decision 8).
+func TestLoginMessage(t *testing.T) {
+	replace(t, &modelProvider, func(*runEnv) func(string) (llm.Provider, error) {
+		return func(string) (llm.Provider, error) { return rejecting{}, nil }
+	})
+	c := newCfgEnv(t)
+	c.write(c.authFile(), `{"grok": {"type": "oauth", "access": "a", "refresh": "r", "expires": 1}}`)
+	r := c.run("-p", "hello")
+	if r.code != ExitAuth || !strings.Contains(r.stderr, provider.LoginRejected("grok")) || strings.Contains(r.stderr, "sk-ech") {
+		t.Errorf("a refused login: exit %d, stderr %q", r.code, r.stderr)
 	}
 }

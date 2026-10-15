@@ -4715,8 +4715,9 @@ repository's URL), and with `not-a-registered-client` as a control. No vendor CL
 1. **The ChatGPT login waits** for a go-llmprovider-sdk release with OpenAI's sign-in for agents. It never uses the
    Codex CLI's client id. With it come the `TokenStore` and `RefreshLocker` adapter, an `oauth` entry used, and the
    ChatGPT backend's models; each is planned when the release exists.
-2. **xAI Grok's login is 1.x,** until xAI publishes terms for third-party clients.
-3. **Kilo's device login is F4-3b's one login.** Its token is stored as Kilo's `api_key` entry, escaped for Pi's value
+2. ~~**xAI Grok's login is 1.x,** until xAI publishes terms for third-party clients.~~ *(2026-10-14: reversed by
+   the owner; see "F4-3b re-made: Grok's login kept", decision 1.)*
+3. **Kilo's device login is F4-3b's ~~one~~ login.** *(2026-10-14: beside Grok's; see "F4-3b re-made".)* Its token is stored as Kilo's `api_key` entry, escaped for Pi's value
    grammar, so F4-3a's order, `status` and `check` take it unchanged.
 4. **No `gobble auth token`.** F4-3a decision 3 is amended to match.
 5. **What gobble says** for a login it does not offer names the reason and the record, and points to `--api-key -`.
@@ -4787,7 +4788,249 @@ the gates                                                     -> lint ×3, tests
   used: a later F4-3 sub-phase, made executable when go-llmprovider-sdk releases OpenAI's sign-in for agents
   (decision 1). Its request limits (`store: false`, `stream: true`) are re-checked then against gobble's retry and
   0021's cache retention.
-- **The xAI Grok login:** 1.x (decision 2).
+- ~~**The xAI Grok login:** 1.x (decision 2).~~ *(2026-10-14: F4-3b's; see "F4-3b re-made".)*
 - **Kilo's organizations** (the SDK's `KiloProfile`) and `KILO_API_BASE` as the login's origin: not placed.
 - **ACP auth and `gobble auth import --from-pi`:** F4-3c. With no OAuth login used, F4-3c decides what an imported
   Pi `oauth` entry becomes.
+
+**2026-10-14 — F4-3b re-made: Grok's login kept** (the owner's decisions of 2026-10-14, after the entry above: keep
+xAI Grok's OAuth login, since xAI publishes no terms against it and embraces open-source agents; keep ChatGPT's,
+through OpenAI's published path for third-party clients alone). This entry changes the one above where it says so;
+the rest of that entry stands. *Proposed: not approved for execution.*
+
+**The facts,** measured on 2026-10-14 against `main` `533cbc7`, go-llmprovider-sdk `v1.13.0` (still the latest tag)
+and Pi `312184edb`:
+
+- **go-llmprovider-sdk `v1.13.0`** (paths under `llmprovider/`):
+  - The `grok` provider takes "an OAuthSession from the Grok login" through `WithTokenSource`, and retries a 401 once
+    with a refreshed token (`providers/grok/grok.go:1-9`, `:129-137`).
+  - `LoginBrowserOAuth` gives the authorize URL only to `OAuthFlowOptions.OpenURL`, and takes a pasted redirect through
+    `InputCode`, racing the loopback callback; it times out after 10 minutes (`auth/oauth_loopback.go:25`, `:135-155`).
+    So a caller that only opens a browser leaves a headless user no URL.
+  - The browser login verifies the ID token against the issuer's JWKS (`auth/oauth_loopback.go:641-651`). A test
+    issuer therefore serves discovery, a JWKS and a signed ID token.
+  - `RevokeOAuthSession` "does not touch any TokenStore: the caller deletes its copy whether or not revocation
+    succeeds"; Grok's goes to the discovery document's `revocation_endpoint` (`auth/oauth_revoke.go:20-28`).
+  - The SDK's own store waits up to 40 s for a refresh lock (`auth/tokenstore_file.go:218-226`). `OAuthSession` saves
+    while it holds the lock (`auth/oauth_session.go:740-768`), as the entry above records.
+  - Both grok logins send `referrer=go-llmprovider-sdk` (`auth/oauth_device.go:276-280`,
+    `auth/oauth_loopback.go:452`); no option changes it.
+- **gobble:**
+  - `provider.List` and `ModelInfoContext` already hand the SDK a token source, a static one built from the key
+    (`llm/provider/list.go:44`, `model.go:74-75`), so a login's session can take its place.
+  - The CLI lists a provider's models only with a resolved key (`internal/cli/models.go:89-101`, F4-3a deviation 3),
+    and builds the provider from `credentialKey` (`internal/cli/agent.go:35-44`).
+  - gobble has no code that opens a browser.
+- **Pi** stores an xAI login as `{type: "oauth", access, refresh, expires}`, `expires` less a refresh skew, and keeps the
+  old refresh token when a refresh returns none (`packages/ai/src/auth/oauth/xai.ts:128-143`). It sends
+  `referrer: "pi"` (`:151`).
+
+**The decisions:**
+
+1. **Grok's browser and device logins are F4-3b's,** beside Kilo's device login. They use the SDK's flows and its
+   default client id, the Grok CLI's, as 0005-MADR's second amendment of 2026-10-14 records the owner's accepted risk.
+   The entry above's decision 2, "xAI Grok's login is 1.x", is reversed.
+2. **The ChatGPT login is F4-3d,** through OpenAI's Sign in with ChatGPT for open-source agents alone, made executable
+   once go-llmprovider-sdk releases it (go-llmprovider-sdk issue 2). F4-3c stays ACP auth and import.
+3. **A login is an `oauth` entry in `auth.json`,** in Pi's shape, `{type: "oauth", access, refresh, expires}`,
+   `expires` in milliseconds, with the SDK session's `issuer`, `clientId`, `accountId`, `tokenUrl`, and `fedramp`
+   when true (0015-REPORT F5). A save re-reads the entry under `auth.json.lock`, sets these fields and keeps every
+   other field as written.
+4. **The seam.**
+   - `llm/provider` defines a `LoginStore` in gobble's terms, with no SDK type in it.
+   - `internal/auth` implements it over `auth.json`.
+   - `llm/provider` adapts it to the SDK's `TokenStore` and `RefreshLocker`.
+   - The refresh lock is its own file per provider, `auth.json.<provider>.refresh.lock`, through `internal/filelock`,
+     waiting up to 40 s as the SDK's store does. It is never `auth.json.lock`, which the save inside a refresh takes.
+5. **The order is unchanged.**
+   - The run's `--api-key -` still wins.
+   - An `oauth` entry owns its provider. For Grok it is used. For any other provider it fails closed, as today.
+6. **`gobble auth login grok`:**
+   - **Browser login.** It prints the authorize URL to stderr, then tries to open it: `open` on macOS,
+     `rundll32 url.dll,FileProtocolHandler` on Windows, `xdg-open` elsewhere, run without a shell and only for an
+     `https` URL. On a terminal, a pasted redirect URL completes the login.
+   - **`--device`** is the device login: `Open <url> and enter the code <code>`.
+   - Either saves the session and says `Logged in to grok`.
+   - `login kilo` is the entry above's. `login openai` without `--api-key` is refused, naming F4-3d.
+7. **`gobble auth logout grok`** revokes the session, then removes the entry, whether or not revocation succeeded.
+   A failed revocation is reported by its kind, never its text, with the entry still removed.
+8. **What gobble says:**
+   - `status` shows a login as `auth.json, an OAuth login, expires <time>`;
+   - `check` reports `authType: "oauth"`;
+   - a rejected login, or a refresh that cannot succeed, is `grok rejected the OAuth login in auth.json; sign in again
+     with gobble auth login grok`, with nothing of the provider's text.
+9. **A login lists models** and informs a model's facts as a key does. With neither a key nor a login, nothing is
+   listed, as F4-3a deviation 3 decided.
+10. **No `gobble auth token`,** as the entry above decided.
+
+**F4-3b's steps,** replacing the entry above's step 2 and extending its steps 3 and 4; its steps 1 and 5 stand:
+
+1. **`llm/provider/login.go` (new):**
+   - `type Login struct { Access, Refresh string; Expires time.Time; Issuer, ClientID, AccountID, TokenURL string;
+     FedRAMP bool }`, whose `String` and `LogValue` never show a token;
+   - `type LoginStore interface { Load(ctx context.Context, id string) (*Login, error); Save(ctx context.Context,
+     id string, l *Login) error; Delete(ctx context.Context, id string) error; LockRefresh(ctx context.Context,
+     id string) (unlock func(), err error) }`;
+   - `type LoginOptions struct { HTTPClient *http.Client; Origin string; OpenURL func(string) error;
+     InputCode func(context.Context) (string, error) }`, `Origin` replacing the vendor's issuer, for tests;
+   - `HasLogin(id string) bool` (`grok`) and `HasKeyLogin(id string) bool` (`kilo`);
+   - `BrowserLogin(ctx, id, o, store)` and `DeviceLogin(ctx, id, o, show func(DeviceCode) error, store)`: the SDK's
+     `LoginBrowserOAuth` and `StartDeviceOAuth`, the session saved through `store`;
+   - `KeyLogin(ctx, id, o, show)`: the entry above's step 2, for `kilo`;
+   - `Logout(ctx, id, store) (revoke error, err error)`: `RevokeOAuthSession` on the stored session, then `Delete`;
+   - `sdkStore`, unexported: `LoginStore` as the SDK's `TokenStore` and `RefreshLocker`, mapping `Login` to and from
+     `*auth.OAuthSession`.
+2. **`llm/provider/provider.go`, `list.go`, `model.go`:**
+   - `Options.Logins LoginStore`;
+   - `New`, with no `APIKey`, a provider with `HasLogin` and a stored session: `WithTokenSource` of that session,
+     its `Store` the adapter;
+   - `rejected` says decision 8's sentence for a login;
+   - `List` and `ModelInfoContext` take the same session when there is no key, `ModelInfo` and `ModelInfoContext`
+     gaining a `logins LoginStore` argument.
+3. **`internal/auth`:**
+   - `store.go`: `Entry` gains `Access`, `Refresh`, `Issuer`, `ClientID`, `AccountID`, `TokenURL` and `FedRAMP`;
+     `SetOAuth(ctx, path, provider, Entry)` merges decision 3's fields into the existing object;
+   - `logins.go` (new): `Logins{Path string}`, a `provider.LoginStore` over `auth.json`, its refresh lock decision 4's
+     file;
+   - `resolve.go`: `Credential` gains `Login bool`; `Resolver.HasLogin func(id string) bool`; an `oauth` entry of a
+     provider with a login is `Credential{Source: SourceFile, Login: true}`, and `Has` counts it. Any other `oauth`
+     entry keeps its error.
+4. **`internal/cli`:**
+   - `credentials.go`: the resolver takes `provider.HasLogin`; `providerOptions` sets `Logins`; `credentialKey` is
+     `("", true)` for a login; the listing and `knownKey` treat a login as a key (decision 9);
+   - `auth.go`: decisions 6 to 8, `AuthLoginCmd` gaining `Device bool` (`--device`), the logins through package
+     variables a test replaces;
+   - `browser.go` (new): `openURL(u string) error`, decision 6's commands through `exec.CommandContext`, refusing a URL
+     that is not `https`;
+   - `line.go`, `print.go`: `authMessage` says decision 8's sentence for a login.
+5. **Records:** `docs/guides/credentials.md` gains Grok's logins and logout, besides Kilo's; `README.md`;
+   `docs/architecture.md`'s `internal/auth` and `llm/provider` rows; this plan; `docs/README.md`.
+
+**F4-3b's tests,** besides the entry above's, each seen failing first on a scratch copy:
+
+- `internal/auth`:
+  - `TestStoreOAuthRoundTrip`: decision 3's fields written and read; an unread field kept through a save; `fedramp`
+    kept;
+  - `TestRefreshLockSeparate`: a `Save` while `LockRefresh` is held returns at once;
+  - `TestResolveLogin`: a grok `oauth` entry is a login and owns grok over `XAI_API_KEY`; `--api-key -` wins over it;
+    an openai `oauth` entry still fails closed.
+- `llm/provider`:
+  - `TestLoginStoreAdapter`: a session's fields through `sdkStore` and back; `LockRefresh` passed through;
+  - `TestGrokDeviceLogin` and `TestGrokBrowserLogin`, against an `httptest` issuer serving discovery, a JWKS and an
+    ES256 ID token: the session saved; the authorize URL given to `OpenURL`; a pasted redirect completing the login;
+  - `TestWireLogin`: a provider built from a stored login sends its access token; a 401 refreshes once, saves the
+    rotation and retries; a refused refresh is decision 8's error;
+  - `TestLogout`: revocation, then deletion; deletion when revocation fails.
+- `internal/cli`:
+  - `TestAuthLoginGrok`: the browser login by default and `--device`, with the logins replaced; the URL on stderr;
+    the entry saved;
+  - `TestAuthLogoutGrok`: `Logged out of grok`; a failed revocation reported by kind, the entry removed;
+  - `TestAuthStatus` and `TestAuthCheck` edited for a login's row and `authType`;
+  - `TestOpenURL`: an `http` URL refused; the command chosen per OS;
+  - `TestLoginMessage`: decision 8's sentence, without the provider's text.
+- **Live, by the owner, once:** `gobble auth login grok`, then a prompt answered, then `gobble auth logout grok`.
+  Its date and outcome are recorded here.
+
+**F4-3b's verification:**
+
+```text
+go test -count=1 ./internal/... ./llm/... ./acpserver/...    -> ok
+the guide's examples, against a scratch GOBBLE_HOME and local servers -> the output they show, no request leaving the machine
+the owner's live Grok login                                   -> recorded
+the gates                                                     -> lint ×3, tests on three systems, -race on two, preflight
+```
+
+**F4-3b's files,** replacing the entry above's table:
+
+| | Files |
+| :--- | :--- |
+| new, code | `llm/provider/login.go`, `login_test.go`; `internal/auth/logins.go`, `logins_test.go`; `internal/cli/browser.go`, `browser_test.go` |
+| changed, code | `llm/catalog/value.go`, `value_test.go`; `llm/provider/provider.go`, `list.go`, `model.go`, `wire_test.go`; `internal/auth/store.go`, `store_test.go`, `resolve.go`, `resolve_test.go` |
+| changed, cli | `internal/cli/credentials.go`, `auth.go`, `auth_test.go`, `agent.go`, `models.go`, `line.go`, `print.go` |
+| changed, records | `docs/guides/credentials.md`; `README.md`; `docs/architecture.md`; this plan; `docs/README.md` |
+
+**Deferred, named,** replacing the entry above's list:
+
+- **The ChatGPT login:** F4-3d, once go-llmprovider-sdk releases OpenAI's sign-in for agents (decision 2). Its
+  request limits (`store: false`, `stream: true`, no `prompt_cache_retention`) are checked then against gobble's
+  retry and 0021's cache retention.
+- **A gobble client id for Grok:** when xAI offers registration.
+- **Kilo's organizations** and `KILO_API_BASE` as the login's origin: not placed.
+- **ACP auth and `gobble auth import --from-pi`:** F4-3c. It decides what an imported Pi `xai` entry becomes, since
+  gobble's id is `grok`.
+
+**F4-3b deviation 1 (2026-10-14), found reading the callers before step 2.**
+
+- **What was found.** Step 2 gives `ModelInfo` and `ModelInfoContext` a `logins` argument. `ModelInfoContext`'s three
+  callers pass no key (`internal/cli/modelscmd.go:51`, `:88`, `modelflags.go:45`), so they would only gain `nil`, in
+  files the table does not list. `ModelInfo`'s one caller with a credential is `internal/cli/agent.go:66`.
+- **The owner's decision (2026-10-14):** only `ModelInfo` gains `logins`; `ModelInfoContext` is unchanged.
+  `llm/provider/model_test.go` is added to the files, its two `ModelInfo` calls given `nil`.
+
+**F4-3b deviation 2 (2026-10-14), found running the existing tests after step 3.**
+
+- **What was found.** `TestStoreRoundTrip` (`internal/auth/store_test.go:72`) expects Pi's oauth fixture to parse as
+  `Entry{Type: oauth, Expires: 1781000000000}`. Under decision 3, `Entry` reads that fixture's `access`, `refresh` and
+  `accountId` too, so the parse is right and the expected value is short.
+- **The owner's decision (2026-10-14):** the expected `Entry` gains the fixture's `Access`, `Refresh` and `AccountID`,
+  so the test also shows decision 3's fields parse from Pi's shape. No file is added.
+
+**F4-3b's execution record (2026-10-14).**
+
+- **Ran on go-llmprovider-sdk `v1.13.0`,** still the latest tag, with two deviations, each the owner's decision:
+  `ModelInfo` alone gains `logins` (deviation 1); `TestStoreRoundTrip`'s expected entry gains the fields it now
+  parses (deviation 2).
+- **Tests:**
+  - `llm/catalog`: `TestQuoteValue`;
+  - `internal/auth`: `TestStoreOAuthRoundTrip`, `TestRefreshLockSeparate`, `TestResolveLogin`, and
+    `TestLoginsLoadSave`;
+  - `llm/provider`: `TestLoginStoreAdapter`, `TestGrokDeviceLogin`, `TestGrokBrowserLogin`, `TestKeyLogin`,
+    `TestLogout`, `TestWireLogin`, and `TestListLogin`;
+  - `internal/cli`: `TestAuthLoginGrok`, `TestAuthLoginKilo`, `TestAuthLogoutGrok`, `TestOpenURL` (in
+    `browser_test.go`), `TestLoginMessage`, and `TestLoginListing`;
+  - edited as planned: `TestAuthLogin`, `TestAuthStatus`, `TestAuthCheck`; edited by the deviations:
+    `TestStoreRoundTrip`, and `model_test.go`'s two `ModelInfo` calls. Every other existing test passes unedited.
+  - `TestLoginsLoadSave`, `TestListLogin` and `TestLoginListing` are beyond the named tests, in the plan's files:
+    decision 9, a login listing models, had no named test.
+- **Negatives,** 28 of 28 caught on a scratch copy after control runs, each built, each failing its named tests with
+  its text:
+  - `llm/catalog`: a leading `!` left unescaped;
+  - `internal/auth`: `fedramp` always written; an unread field dropped; the refresh lock taken on `auth.json.lock`; an
+    `api_key` entry loaded as a login; a grok `oauth` entry not a login; every `oauth` entry counted;
+  - `llm/provider`: `FedRAMP` dropped; `show`'s error ignored; a failed revocation keeping the login; the refresh
+    token given as Kilo's key; a browser login not saved; a login used over a key; rotations not saved; a refused
+    refresh not said as a rejected login; a listing without the login;
+  - `internal/cli`: the URL not printed; `--device` ignored; Kilo's key stored unescaped; a failed revocation not
+    warned, and warned with its text; an `http` URL opened; a rejected login said as a key; `check` without
+    `oauth`; `status` saying a login is not used; a login listing nothing, and listing without the store; openai's
+    refusal without its reason.
+  - The first run caught 25 of 28. The three misses were the harness's: each mutation left a variable unused, so the
+    copy did not build. One caught mutation failed `TestAuthLoginKilo` by a panic, since the test gave
+    `ResolveValue` no command runner; it now gives one that errors, and fails with its text.
+- **The guide's examples** ran against a scratch `GOBBLE_HOME`, a local server standing in for xAI's issuer and API,
+  and `HTTP_PROXY` and `HTTPS_PROXY` at a dead local port, so no request could leave the machine. The server saw the
+  listing, the prompt, one refused refresh, discovery and the revocation. The logins themselves are described in
+  prose, not shown run: gobble cannot point its logins at a local issuer.
+- **Gates:**
+  - the pre-add check, 22 files clean;
+  - lint for linux, darwin and windows, `0 issues.` each with `CGO_ENABLED=0`; without it, the linux lint on this
+    macOS host fails typecheck on Kong's `os/user` cgo import, as it does on `533cbc7`, so it is the host's;
+  - the macOS laptop's `go test ./...` and `CGO_ENABLED=1 go test -race ./...`, 33 packages ok, no race report;
+  - `make preflight` on macOS, `preflight passed`;
+  - **not run:** Windows `go test ./...` and `-race`, the second Linux machine's `-race`, and Windows and WSL
+    `make preflight`. They are the owner's machines.
+- **The owner's live Grok login (2026-10-14):** `gobble auth login grok`, a prompt with `--model grok/grok-4.6`,
+  `gobble auth status` and `gobble auth logout grok`, against xAI, each worked, as the owner reported; their output is
+  not recorded. prepare-commit-msg's Grok login, on go-llmprovider-sdk `v1.12.0`, also works, as the owner reported.
+- **What the plan predicted wrongly, or left unsaid:**
+  - `line.go` and `print.go` are unchanged: `authMessage`, which both call, lives in `credentials.go`.
+  - `modelsjson.go`'s `providerOptions` is unchanged: `Logins` is set in `agent.go` and `models.go`.
+  - `main.go` is unchanged: `knownLogin` asks the resolver, so `runEnv` gains no field.
+  - A session gobble builds from its own store cannot mark the refresh token that store holds; the SDK's file store
+    sets an unexported field (`auth/tokenstore_file.go:85`). It starts unknown, a state the SDK supports, and is known
+    after the first refresh.
+  - The helper `modelInfo` is `modelInfoFrom`, for revive's confusing-naming rule.
+  - Under a login, a failed listing's warning names kind `other`, where a refused key's names `auth`.
+  - `LoginRejected` names `auth.json` in `llm/provider`; gobble's logins are always there.
+- **Next:** F4-3c, ACP auth and import, made executable as an amendment first. F4-3d, the ChatGPT login, waits for
+  go-llmprovider-sdk.

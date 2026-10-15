@@ -28,11 +28,13 @@ const appName = "gobble"
 // run's provider, --model's or the defaultProvider setting's, or else the
 // first provider with a credential (0002-PLAN Phase 3, owner's decision of
 // 2026-10-05; 0019-MADR D15; 0005-PLAN F4-2c), its key found in Pi's order
-// and resolved now (0005-PLAN F4-3a). Each session's provider names the
-// session (0021-MADR D4). Tests replace it.
+// and resolved now (0005-PLAN F4-3a), or its stored OAuth login (0005-PLAN
+// F4-3b). Each session's provider names the session (0021-MADR D4). Tests
+// replace it.
 var modelProvider = func(e *runEnv) func(sessionID string) (llm.Provider, error) {
 	return func(sessionID string) (llm.Provider, error) {
-		o := provider.Options{ClientName: appName, ClientVersion: identity().Version, Logger: e.log(), SessionID: sessionID}
+		o := provider.Options{ClientName: appName, ClientVersion: identity().Version, Logger: e.log(), SessionID: sessionID,
+			Logins: e.logins()}
 		if sel, err := provider.ChooseWith(e.hasCredential, e.chosenProvider()); err == nil {
 			o = e.providerOptions(sel.ID, o) // models.json's base URL and headers (0005-PLAN F4-2b)
 			if src, ok := e.credentials().Has(sel.ID); ok {
@@ -60,10 +62,15 @@ func (e *runEnv) agentOptions() acpserver.Options {
 		Version:  identity().Version,
 		Provider: modelProvider(e),
 		Models:   e.modelChoice,
-		// What the catalog knows of a model, with the provider's key, found as
-		// modelProvider finds it, for its listing (0005-PLAN F4-2a, F4-3a).
+		// What the catalog knows of a model, with the provider's key or login,
+		// found as modelProvider finds it, for its listing (0005-PLAN F4-2a,
+		// F4-3a, F4-3b).
 		ModelInfo: func(id, model string) llm.Model {
-			return provider.ModelInfo(id, e.knownKey(id), model, e.modelsJSON())
+			var logins provider.LoginStore
+			if e.knownLogin(id) {
+				logins = e.logins()
+			}
+			return provider.ModelInfo(id, e.knownKey(id), logins, model, e.modelsJSON())
 		},
 		// --model and --thinking win over every session's own (0005-PLAN F4-2c).
 		Override: acpserver.Override{Provider: e.pick.Provider, Model: e.pick.Model, Thinking: e.pick.Thinking},

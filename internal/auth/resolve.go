@@ -19,10 +19,12 @@ const (
 	SourceModelsJSON Source = "models.json"
 )
 
-// Credential is a provider's key and where it came from.
+// Credential is a provider's key and where it came from; or, with Login, a
+// stored OAuth login, which the provider loads itself (0005-PLAN F4-3b).
 type Credential struct {
 	Key    string
 	Source Source
+	Login  bool
 }
 
 // Resolver finds a provider's credential in Pi's order (ai/src/auth/
@@ -42,6 +44,9 @@ type Resolver struct {
 	LookupEnv func(string) (string, bool)
 	// Run runs a value's !command and returns its output.
 	Run func(string) (string, error)
+	// HasLogin reports whether a provider uses an oauth entry as its login;
+	// nil uses none (0005-PLAN F4-3b).
+	HasLogin func(id string) bool
 
 	mu       sync.Mutex
 	commands map[string]commandResult // a stored key's !command, run once
@@ -83,7 +88,8 @@ func (r *Resolver) Credential(id string) (Credential, bool, error) {
 
 // Has is where provider id's credential would come from, without running a
 // command, as Pi's check counts one configured (provider-composer.ts): the
-// run's key; an auth.json api_key with a key, which owns its provider; a
+// run's key; an auth.json api_key with a key, or the oauth login of a
+// provider that has one, which owns its provider; a
 // models.json key that is a command or whose variables are set; the
 // provider's variable.
 func (r *Resolver) Has(id string) (Source, bool) {
@@ -91,7 +97,7 @@ func (r *Resolver) Has(id string) (Source, bool) {
 		return SourceFlag, true
 	}
 	if e, ok := r.entry(id); ok {
-		return SourceFile, e.Type == TypeAPIKey && e.Key != ""
+		return SourceFile, (e.Type == TypeAPIKey && e.Key != "") || (e.Type == TypeOAuth && r.hasLogin(id))
 	}
 	if raw := r.modelsJSONKey(id); raw != "" {
 		if strings.HasPrefix(raw, "!") {
@@ -111,12 +117,14 @@ func (r *Resolver) Has(id string) (Source, bool) {
 
 // stored is an auth.json entry's credential. An api_key's key takes Pi's
 // grammar, a command run once for the process, as Pi's resolveConfigValue
-// caches one; an oauth entry waits for F4-3b; any other type, or an empty
-// key, is none.
+// caches one; an oauth entry is the login of a provider that has one, and an
+// error for any other; any other type, or an empty key, is none.
 func (r *Resolver) stored(id string, e Entry) (Credential, bool, error) {
 	switch {
+	case e.Type == TypeOAuth && r.hasLogin(id):
+		return Credential{Source: SourceFile, Login: true}, true, nil
 	case e.Type == TypeOAuth:
-		return Credential{}, false, fmt.Errorf("provider %s has an OAuth login in auth.json; gobble uses OAuth logins from 0005-PLAN F4-3b", id)
+		return Credential{}, false, fmt.Errorf("provider %s has an OAuth login in auth.json, which gobble does not use (0005-PLAN F4-3b)", id)
 	case e.Type != TypeAPIKey || e.Key == "":
 		return Credential{}, false, nil
 	}
@@ -140,6 +148,8 @@ func (r *Resolver) cachedRun(command string) (string, error) {
 	r.commands[command] = commandResult{out: out, err: err}
 	return out, err
 }
+
+func (r *Resolver) hasLogin(id string) bool { return r.HasLogin != nil && r.HasLogin(id) }
 
 func (r *Resolver) entry(id string) (Entry, bool) {
 	if r.File == nil {

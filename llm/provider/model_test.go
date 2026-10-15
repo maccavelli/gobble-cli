@@ -58,12 +58,12 @@ func TestModelInfoModelsJSON(t *testing.T) {
 	if full.Name != "Full" || full.ContextWindow != 999 || full.MaxTokens != 128000 || full.Cost.Input != 9 || full.Cost.Output != 10 || !full.Priced {
 		t.Errorf("full: %+v, want the override's window and input price over the snapshot's", full)
 	}
-	mine := ModelInfo("openai", "", "mine", mj)
+	mine := ModelInfo("openai", "", nil, "mine", mj)
 	if mine.Name != "mine" || mine.ContextWindow != 128000 || mine.MaxTokens != 16384 || !mine.Priced || mine.Cost.Input != 0 ||
 		!mine.ReasoningKnown || !mine.Reasoning || !mine.LevelMap["max"] || mine.LevelMap["minimal"] {
 		t.Errorf("mine: %+v, want Pi's defaults and the level map", mine)
 	}
-	if plain := ModelInfo("openai", "", "mine", nil); plain.ReasoningKnown || plain.LevelMap != nil {
+	if plain := ModelInfo("openai", "", nil, "mine", nil); plain.ReasoningKnown || plain.LevelMap != nil {
 		t.Errorf("without models.json: %+v, want nothing known", plain)
 	}
 }

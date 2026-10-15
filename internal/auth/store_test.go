@@ -68,7 +68,7 @@ func TestStoreRoundTrip(t *testing.T) {
 	if !slices.Equal(f.Providers(), []string{"anthropic", "cloudflare", "openai"}) {
 		t.Errorf("providers %q, want the file's order", f.Providers())
 	}
-	if e, _ := f.Entry("anthropic"); e != (Entry{Type: TypeOAuth, Expires: 1781000000000}) {
+	if e, _ := f.Entry("anthropic"); e != (Entry{Type: TypeOAuth, Expires: 1781000000000, Access: "a-not-real", Refresh: "r-not-real", AccountID: "acct"}) {
 		t.Errorf("anthropic: %+v", e)
 	}
 	if e, _ := f.Entry("cloudflare"); e != (Entry{Type: TypeAPIKey, Key: "$CF_KEY"}) {
@@ -113,6 +113,63 @@ func TestStoreConcurrent(t *testing.T) {
 	}
 	if n := len(f.Providers()); n != 20 {
 		t.Errorf("%d entries, want all 20: %q", n, f.Providers())
+	}
+}
+
+// SetOAuth writes an oauth login's fields into the provider's entry and
+// keeps every field it does not read; fedramp is there only when true, and
+// another entry is untouched (0005-PLAN F4-3b decision 3).
+func TestStoreOAuthRoundTrip(t *testing.T) {
+	path := writeAuth(t, `{
+  "grok": {
+    "type": "oauth",
+    "access": "a1",
+    "refresh": "r1",
+    "expires": 1,
+    "note": "keep me"
+  },
+  "openai": {
+    "type": "api_key",
+    "key": "k"
+  }
+}
+`)
+	e := Entry{Access: "a2", Refresh: "r2", Expires: 1781000000000, Issuer: "https://auth.x.ai", ClientID: "cid",
+		AccountID: "acct", TokenURL: "https://auth.x.ai/oauth2/token", FedRAMP: true}
+	if err := SetOAuth(t.Context(), path, "grok", e); err != nil {
+		t.Fatal(err)
+	}
+	f, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := e
+	want.Type = TypeOAuth
+	if got, _ := f.Entry("grok"); got != want {
+		t.Errorf("grok after SetOAuth: %+v, want %+v", got, want)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range []string{`"note": "keep me"`, `"fedramp": true`, `"clientId": "cid"`, "  \"openai\": {\n    \"type\": \"api_key\",\n    \"key\": \"k\"\n  }\n"} {
+		if !strings.Contains(string(raw), s) {
+			t.Errorf("no %q in:\n%s", s, raw)
+		}
+	}
+	e.FedRAMP, e.AccountID = false, ""
+	if err := SetOAuth(t.Context(), path, "grok", e); err != nil {
+		t.Fatal(err)
+	}
+	if raw, _ := os.ReadFile(path); strings.Contains(string(raw), "fedramp") || strings.Contains(string(raw), "accountId") ||
+		!strings.Contains(string(raw), `"note": "keep me"`) {
+		t.Errorf("after a save without fedramp or an account:\n%s", raw)
+	}
+	if err := SetOAuth(t.Context(), path, "new", Entry{Access: "a", Refresh: "r", Expires: 2}); err != nil {
+		t.Fatal(err)
+	}
+	if f, _ := Load(path); !slices.Equal(f.Providers(), []string{"grok", "openai", "new"}) {
+		t.Errorf("providers %q, want new last", f.Providers())
 	}
 }
 

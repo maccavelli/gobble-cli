@@ -40,7 +40,7 @@ The tier is each package's `Stability:` line in its `doc.go`. **stable** package
 | `gobble` | stable | The embedding facade. |
 | `agent` | stable | The turn loop: model calls, tool calls, approval, and the steering and follow-up queues. Tools are offered by tier: direct ones are sent, deferred ones wait behind `tool_search` until a call loads them with their family, and hidden ones are neither sent nor found. |
 | `llm` | stable | The model facade the agent sees. |
-| `llm/provider` | beta | `llm` over go-llmprovider-sdk, with the ambient credential selection and the `defaultProvider` setting. |
+| `llm/provider` | beta | `llm` over go-llmprovider-sdk, with the ambient credential selection and the `defaultProvider` setting; the Grok and Kilo logins, and a `LoginStore` adapted to the SDK's token store (0005-PLAN F4-3b). |
 | `llm/catalog` | beta | The embedded models.dev snapshot, the level and price rules (0005-PLAN F4-2a), `models.json` (F4-2b), and Pi's model resolution (F4-2c). |
 | `llm/llmtest` | stable | A scripted `llm.Provider` and request assertions, for tests. |
 | `tool` | stable | The tool contract, with the workspace roots each call gets. A tool publishes a schema with its bounds and defaults, and validates the Go type's own. A tool's spec carries its exposure and family, and a result can name tools to load. A call's environment carries the client's files and terminals when it offers them, and a tool names its locations before it runs and in its result. |
@@ -71,7 +71,7 @@ The tier is each package's `Stability:` line in its `doc.go`. **stable** package
 | `internal/buildinfo` | internal | The build's version, commit, toolchain, platform and User-Agent. |
 | `internal/logging` | internal | The one slog logger: a rolling owner-only file, and warnings on stderr, both redacted. |
 | `internal/archtest` | internal | The import rules below, as a test. |
-| `internal/auth` | internal | `<config>/auth.json` in Pi's shape, owner-only and locked for every change, and Pi's credential order (0005-PLAN F4-3a). |
+| `internal/auth` | internal | `<config>/auth.json` in Pi's shape, owner-only and locked for every change, and Pi's credential order (0005-PLAN F4-3a); its OAuth logins as `provider.LoginStore`, each provider's refreshes under their own lock (0005-PLAN F4-3b). |
 | `internal/config` | internal | Settings: a commented `settings.yaml` from an embedded template, layered global, project (trusted) and `--set`, edited in place; the JSON Schema. |
 | `internal/filelock` | internal | An exclusive lock file between processes, for session files, `mcp.json` and settings. |
 | `internal/proctree` | internal | A command as a tree that stops whole: its own process group on Unix, a kill-on-close Job object on Windows. |

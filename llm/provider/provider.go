@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/maccavelli/go-llmprovider-sdk/llmprovider"
+	"github.com/maccavelli/go-llmprovider-sdk/llmprovider/auth"
 	"github.com/maccavelli/go-llmprovider-sdk/llmprovider/providers"
 
 	"github.com/maccavelli/gobble-cli/llm"
@@ -52,6 +53,23 @@ type Options struct {
 	// that request and its model, "" for a listing; an error ends the
 	// request unsent (0005-PLAN F4-2b, deviation 1).
 	Headers func(ctx context.Context, model string) (map[string]string, error)
+	// Logins keeps OAuth logins. With no APIKey, a provider with an OAuth
+	// login (HasLogin) uses its stored login, and saves each rotation here
+	// (0005-PLAN F4-3b).
+	Logins LoginStore
+}
+
+// login is provider id's stored login, as the SDK's session, when o has no
+// key and id has an OAuth login; nil otherwise.
+func (o Options) login(ctx context.Context, id string) (*auth.OAuthSession, error) {
+	if o.APIKey != "" || o.Logins == nil || !HasLogin(id) {
+		return nil, nil
+	}
+	l, err := o.Logins.Load(ctx, id)
+	if err != nil || l == nil {
+		return nil, err
+	}
+	return l.session(id, o.Logins, nil, o.Logger), nil
 }
 
 // modelKey is the context key of a request's model, which Stream sets for
@@ -132,6 +150,13 @@ func New(id string, o Options) (llm.Provider, error) {
 	if o.APIKey != "" {
 		opts = append(opts, llmprovider.WithAPIKey(o.APIKey))
 	}
+	login, err := o.login(context.Background(), id)
+	if err != nil {
+		return nil, fmt.Errorf("provider %s: %w", id, err)
+	}
+	if login != nil {
+		opts = append(opts, llmprovider.WithTokenSource(login))
+	}
 	if o.Model != "" {
 		opts = append(opts, llmprovider.WithModel(o.Model))
 	}
@@ -149,7 +174,7 @@ func New(id string, o Options) (llm.Provider, error) {
 	// The retry wrapper buffers the stream, so its capabilities, not the
 	// inner provider's, are what gobble can deliver (0019-MADR D2).
 	w := llmprovider.WithRetry(p, retryPolicy)
-	return &adapter{p: w, id: p.ID(), caps: w.Capabilities(), source: o.CredentialSource}, nil
+	return &adapter{p: w, id: p.ID(), caps: w.Capabilities(), source: o.CredentialSource, login: login != nil}, nil
 }
 
 // Wrap adapts an SDK provider to llm.Provider, with no retry of its own.
@@ -163,14 +188,22 @@ type adapter struct {
 	caps llmprovider.Capabilities
 	// source is where the key came from, or "" (0005-PLAN F4-3a).
 	source string
+	// login reports that the credential is a stored OAuth login (0005-PLAN
+	// F4-3b).
+	login bool
 }
 
 // rejected is mapped, err's llm form, led by "<provider> rejected the API
 // key from <source>" when the provider's response refused the key: an
 // APIError of ErrAuthFailure that is not ErrNotPermitted, as the SDK's
-// wizard tells a rejected key (wizard/configure.go). Anything else, or no
-// source, is mapped alone.
+// wizard tells a rejected key (wizard/configure.go). For a login, any
+// ErrAuthFailure, a refused refresh too, is led by LoginRejected's sentence
+// (0005-PLAN F4-3b decision 8). Anything else, or no source, is mapped
+// alone.
 func (a *adapter) rejected(mapped, err error) error {
+	if a.login && errors.Is(err, llmprovider.ErrAuthFailure) && !errors.Is(err, llmprovider.ErrNotPermitted) {
+		return fmt.Errorf("%s: %w", LoginRejected(string(a.id)), mapped)
+	}
 	var ae *llmprovider.APIError
 	response := errors.As(err, &ae)
 	if a.source == "" || !response || !errors.Is(err, llmprovider.ErrAuthFailure) || errors.Is(err, llmprovider.ErrNotPermitted) {

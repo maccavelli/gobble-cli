@@ -31,7 +31,8 @@ type Listing struct {
 // passes no logger, so the SDK logs nothing of it. A listing that fails or
 // recommends nothing gives the static models, Live false and the reason in
 // Err; only an unknown id or a refused option is an error. o's APIKey,
-// Model and Logger are ignored.
+// Model and Logger are ignored. With no apiKey, a provider with an OAuth
+// login lists with o.Logins' stored login (0005-PLAN F4-3b).
 func List(ctx context.Context, id, apiKey string, o Options) (Listing, error) {
 	opts := []llmprovider.Option{
 		catalog.WithProfile(catalog.ProfileCapable),
@@ -41,7 +42,16 @@ func List(ctx context.Context, id, apiKey string, o Options) (Listing, error) {
 	if o.ModelMetadataURL != "" {
 		opts = append(opts, llmprovider.WithModelMetadataURL(o.ModelMetadataURL))
 	}
-	cat, err := catalog.List(ctx, llmprovider.ProviderID(id), llmprovider.NewStaticToken(apiKey), opts...)
+	var src llmprovider.TokenSource = llmprovider.NewStaticToken(apiKey)
+	o.APIKey, o.Logger = apiKey, nil
+	login, err := o.login(ctx, id) // with no key, id's stored login (0005-PLAN F4-3b decision 9)
+	if err != nil {
+		return Listing{}, fmt.Errorf("provider %s: list models: %w", id, err)
+	}
+	if login != nil {
+		src = login
+	}
+	cat, err := catalog.List(ctx, llmprovider.ProviderID(id), src, opts...)
 	if err != nil {
 		return Listing{}, fmt.Errorf("provider %s: list models: %w", id, mapError(err))
 	}

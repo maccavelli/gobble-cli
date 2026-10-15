@@ -44,3 +44,22 @@ func TestResolveValue(t *testing.T) {
 		}
 	}
 }
+
+// QuoteValue's value resolves to itself, with no lookup and no command, so a
+// token stored in auth.json is used as given (0005-PLAN F4-3b).
+func TestQuoteValue(t *testing.T) {
+	lookup := func(name string) (string, bool) {
+		t.Errorf("looked up %s", name)
+		return "", false
+	}
+	run := func(command string) (string, error) {
+		t.Errorf("ran %q", command)
+		return "", nil
+	}
+	for _, s := range []string{"$", "$$", "${X}", "$X", "!cmd", "a!b", "!x$y", "plain", ""} {
+		got, err := ResolveValue(QuoteValue(s), lookup, run)
+		if err != nil || got != s {
+			t.Errorf("%q quoted as %q resolves to %q, %v", s, QuoteValue(s), got, err)
+		}
+	}
+}

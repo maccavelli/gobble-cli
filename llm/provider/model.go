@@ -58,21 +58,33 @@ func SnapshotErr() error {
 // yet cached is fetched in the background for a later call (0005-PLAN F4-2a).
 // A model nothing knows has only its provider and id. mj, when not nil, is
 // models.json: a layer above the snapshot, and its thinkingLevelMap
-// (0005-PLAN F4-2b).
-func ModelInfo(id, apiKey, model string, mj *gcatalog.ModelsJSON) llm.Model {
-	return ModelInfoContext(context.Background(), id, apiKey, model, mj)
+// (0005-PLAN F4-2b). With no apiKey, a provider with an OAuth login uses
+// logins' stored login, when logins is not nil (0005-PLAN F4-3b).
+func ModelInfo(id, apiKey string, logins LoginStore, model string, mj *gcatalog.ModelsJSON) llm.Model {
+	ctx := context.Background()
+	login, err := Options{Logins: logins}.login(ctx, id)
+	if err == nil && login != nil && apiKey == "" {
+		return modelInfoFrom(ctx, id, login, model, mj)
+	}
+	return ModelInfoContext(ctx, id, apiKey, model, mj)
 }
 
 // ModelInfoContext is ModelInfo for a caller with a context, which bounds
-// the SDK's lookup (0005-PLAN F4-2c deviation 1).
+// the SDK's lookup (0005-PLAN F4-2c deviation 1), and no login.
 func ModelInfoContext(ctx context.Context, id, apiKey, model string, mj *gcatalog.ModelsJSON) llm.Model {
-	var layers []catalog.Layer
-	if meta, err := snapshot(); err == nil {
-		layers = append(layers, *meta)
-	}
 	var src llmprovider.TokenSource
 	if apiKey != "" {
 		src = llmprovider.NewStaticToken(apiKey)
+	}
+	return modelInfoFrom(ctx, id, src, model, mj)
+}
+
+// modelInfoFrom is ModelInfoContext with src, the credential's token source, or
+// nil for none.
+func modelInfoFrom(ctx context.Context, id string, src llmprovider.TokenSource, model string, mj *gcatalog.ModelsJSON) llm.Model {
+	var layers []catalog.Layer
+	if meta, err := snapshot(); err == nil {
+		layers = append(layers, *meta)
 	}
 	if mj == nil {
 		return lookupModel(ctx, id, src, model, layers...)

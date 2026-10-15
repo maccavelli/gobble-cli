@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -363,6 +364,98 @@ func TestWireRejectedKey(t *testing.T) {
 	}
 	if err := stream("auth.json", http.StatusForbidden); err == nil || strings.Contains(err.Error(), "rejected the API key") {
 		t.Errorf("403: %v, want a refusal that does not say the key was rejected", err)
+	}
+}
+
+// loginWire answers a refresh at /oauth2/token with refresh, or with
+// invalid_grant when refresh is "", the first API request with a 401, and
+// every later one through c. It records each API request's bearer.
+type loginWire struct {
+	c       *cannedWire
+	refresh string
+
+	mu        sync.Mutex
+	bearers   []string
+	refreshes int
+}
+
+func (w *loginWire) RoundTrip(r *http.Request) (*http.Response, error) {
+	reply := func(status int, body string) (*http.Response, error) {
+		if r.Body != nil {
+			_ = r.Body.Close() //nolint:errcheck // a canned reply reads nothing of the request
+		}
+		return &http.Response{StatusCode: status, Header: http.Header{"Content-Type": {"application/json"}},
+			Body: io.NopCloser(strings.NewReader(body)), Request: r}, nil
+	}
+	w.mu.Lock()
+	if r.URL.Path == "/oauth2/token" {
+		w.refreshes++
+		w.mu.Unlock()
+		if w.refresh == "" {
+			return reply(http.StatusBadRequest, `{"error":"invalid_grant"}`)
+		}
+		return reply(http.StatusOK, w.refresh)
+	}
+	w.bearers = append(w.bearers, r.Header.Get("Authorization"))
+	first := len(w.bearers) == 1
+	w.mu.Unlock()
+	if first {
+		return reply(http.StatusUnauthorized, `{"error":{"message":"token expired","type":"invalid_request_error"}}`)
+	}
+	return w.c.RoundTrip(r)
+}
+
+// A provider built from a stored login sends its access token; a 401
+// refreshes it once under the refresh lock, saves the rotation and retries;
+// a refused refresh is LoginRejected's error; a key wins over the login
+// (0005-PLAN F4-3b decisions 4, 5 and 8).
+func TestWireLogin(t *testing.T) {
+	stream := func(w *loginWire, store *memLogins, key string) wireOutcome {
+		t.Helper()
+		p, err := New("grok", Options{APIKey: key, Model: "grok-4.6", Logins: store, CredentialSource: "auth.json",
+			HTTPClient: &http.Client{Transport: w}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var o wireOutcome
+		for ev, err := range p.Stream(t.Context(), wireRequest()) {
+			if err != nil {
+				o.err = err
+				break
+			}
+			if ev, ok := ev.(llm.TextDelta); ok {
+				o.text += ev.Text
+			}
+		}
+		return o
+	}
+	login := func() *memLogins {
+		return &memLogins{logins: map[string]*Login{"grok": {Access: "access-0", Refresh: "refresh-0",
+			Expires: time.Now().Add(time.Hour), Issuer: "https://auth.x.ai", ClientID: "cid", TokenURL: "https://auth.test/oauth2/token"}}}
+	}
+
+	store := login()
+	w := &loginWire{c: &cannedWire{}, refresh: `{"access_token":"access-1","refresh_token":"refresh-1","expires_in":3600}`}
+	if o := stream(w, store, ""); o.err != nil || o.text != "hello" {
+		t.Fatalf("stream: %q, %v", o.text, o.err)
+	}
+	if !slices.Equal(w.bearers, []string{"Bearer access-0", "Bearer access-1"}) || w.refreshes != 1 {
+		t.Errorf("bearers %q after %d refreshes; want the stored token, then the refreshed one", w.bearers, w.refreshes)
+	}
+	if l := store.logins["grok"]; l == nil || l.Access != "access-1" || l.Refresh != "refresh-1" || store.locks == 0 {
+		t.Errorf("saved %v under %d refresh locks; want the rotation, under the lock", l, store.locks)
+	}
+
+	refused := &loginWire{c: &cannedWire{}}
+	o := stream(refused, login(), "")
+	if !errors.Is(o.err, llm.ErrAuth) || !strings.HasPrefix(o.err.Error(), LoginRejected("grok")+": ") {
+		t.Errorf("a refused refresh: %v, want llm.ErrAuth led by %q", o.err, LoginRejected("grok"))
+	}
+
+	keyed := &loginWire{c: &cannedWire{}, refresh: `{"access_token":"never"}`}
+	stream(keyed, login(), "k")
+	if len(keyed.bearers) == 0 || keyed.bearers[0] != "Bearer k" {
+		t.Errorf("with a key: bearers %q, want the key's", keyed.bearers)
 	}
 }
 

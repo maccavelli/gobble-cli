@@ -37,6 +37,7 @@ func (e *runEnv) credentials() *auth.Resolver {
 			Var:           provider.CredentialVar,
 			LookupEnv:     os.LookupEnv,
 			Run:           func(command string) (string, error) { return e.runCommand(e.ctx, command) },
+			HasLogin:      provider.HasLogin,
 		}
 		if path := authPath(); path != "" {
 			f, err := auth.Load(path)
@@ -93,8 +94,25 @@ func (e *runEnv) knownKey(id string) string {
 	return c.Key
 }
 
+// knownLogin reports whether provider id's credential is a stored OAuth
+// login, which the provider loads from logins itself: no command runs to
+// find one (0005-PLAN F4-3b).
+func (e *runEnv) knownLogin(id string) bool {
+	c, ok, err := e.credentials().Credential(id)
+	return err == nil && ok && c.Login
+}
+
+// logins is auth.json's OAuth logins, or nil when the config directory
+// cannot be resolved (0005-PLAN F4-3b).
+func (e *runEnv) logins() provider.LoginStore {
+	if path := authPath(); path != "" {
+		return auth.Logins{Path: path}
+	}
+	return nil
+}
+
 // credentialKey is the provider's key for building it, resolved now, as
-// provider.AmbientWith takes one.
+// provider.AmbientWith takes one; "" and true for a login.
 func (e *runEnv) credentialKey(id string) (string, bool) {
 	c, ok := e.credential(id)
 	return c.Key, ok
@@ -144,15 +162,18 @@ func (e *runEnv) readAPIKey(id string) (string, error) {
 // that the run's provider rejected its key, naming where the key came from,
 // and nothing of the provider's text, which may hold part of the key; that
 // the key could not be resolved, naming the command or variable; or, with
-// no key, noCredentialMessage (0005-PLAN F4-3a deviations 1 and 3).
+// no key, noCredentialMessage (0005-PLAN F4-3a deviations 1 and 3). A
+// login has its own sentence (0005-PLAN F4-3b decision 8).
 func (e *runEnv) authMessage() string {
 	sel, err := provider.ChooseWith(e.hasCredential, e.chosenProvider())
 	if err != nil {
 		return e.noCredentialMessage()
 	}
 	src, _ := e.credentials().Has(sel.ID)
-	_, ok, err := e.credentials().Credential(sel.ID)
+	c, ok, err := e.credentials().Credential(sel.ID)
 	switch {
+	case ok && c.Login:
+		return provider.LoginRejected(sel.ID)
 	case err != nil:
 		return fmt.Sprintf("%s's API key from %s could not be resolved: %v", sel.ID, src, err)
 	case ok:

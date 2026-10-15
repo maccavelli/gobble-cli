@@ -100,3 +100,34 @@ func TestResolveModelsJSON(t *testing.T) {
 		t.Error("Has(gemini) with no source")
 	}
 }
+
+// A grok oauth entry is its login, owning grok over XAI_API_KEY; the run's
+// --api-key still wins; an oauth entry of a provider with no login still
+// fails closed (0005-PLAN F4-3b decision 5).
+func TestResolveLogin(t *testing.T) {
+	r, ran := resolverFor(t, `{
+  "grok": {"type": "oauth", "access": "a", "refresh": "r", "expires": 1},
+  "openai": {"type": "oauth", "access": "a", "refresh": "r", "expires": 1}
+}`, nil, map[string]string{"XAI_API_KEY": "env-grok", "OPENAI_API_KEY": "env-openai"})
+	r.HasLogin = func(id string) bool { return id == "grok" }
+
+	if got, ok, err := r.Credential("grok"); err != nil || !ok || got != (Credential{Source: SourceFile, Login: true}) {
+		t.Errorf("grok: %+v, %v, %v; want its login from auth.json", got, ok, err)
+	}
+	if src, ok := r.Has("grok"); !ok || src != SourceFile {
+		t.Errorf("Has(grok): %q, %v; want auth.json", src, ok)
+	}
+	r.Runtime["grok"] = "flag"
+	if got, ok, err := r.Credential("grok"); err != nil || !ok || got != (Credential{Key: "flag", Source: SourceFlag}) {
+		t.Errorf("grok with --api-key: %+v, %v, %v; want the flag's key", got, ok, err)
+	}
+	if _, ok, err := r.Credential("openai"); ok || err == nil || !strings.Contains(err.Error(), "F4-3b") {
+		t.Errorf("openai's oauth entry: %v, %v; want an error naming F4-3b, and no fallback to OPENAI_API_KEY", ok, err)
+	}
+	if _, ok := r.Has("openai"); ok {
+		t.Error("Has(openai) counts an oauth entry gobble does not use")
+	}
+	if *ran != 0 {
+		t.Errorf("ran %d commands", *ran)
+	}
+}
