@@ -142,6 +142,25 @@ Error: claude has no login; use --api-key -
 An OAuth entry for any other provider, such as one copied from Pi, is kept, and gobble says it does
 not use it.
 
+## Signing in from an editor or magic-cli-remote
+
+An ACP client, such as an editor or magic-cli-remote, runs gobble as `gobble acp`. gobble tells it,
+when they connect, which credentials it can use: one method per provider that takes a key, named
+after the provider, with the gobble command that stores its credential. Asked to authenticate with
+one, gobble answers from the credentials it already has, in the order above; it says which command
+to run when it has none. No key or token crosses ACP.
+
+A client that can open a terminal also sees a sign-in for each provider, which runs
+`gobble acp --login <provider>` there: a login for Grok and Kilo, a key typed for any other. Run it
+yourself the same way:
+
+```text
+$ echo sk-test-only | gobble acp --login anthropic
+Saved API key for claude
+```
+
+gobble does not sign out over ACP; use `gobble auth logout <provider>`.
+
 ## When a key is refused
 
 When the provider refuses the key, gobble says which key it sent, and nothing of the provider's

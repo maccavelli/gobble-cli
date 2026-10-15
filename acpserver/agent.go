@@ -93,6 +93,9 @@ type Options struct {
 	// Settings gives a session's settings when it starts, by its working
 	// directory (0018-MADR D17). Nil is today's defaults.
 	Settings func(cwd string) SessionSettings
+	// Auth is what ACP authentication offers (0016-MADR A2). Zero offers
+	// nothing.
+	Auth AuthOptions
 }
 
 // Agent is gobble's acp.Agent.
@@ -113,6 +116,7 @@ type Agent struct {
 	// compaction is /compact's settings, the fallback of each session's.
 	compaction compaction.Settings
 	settings   func(cwd string) SessionSettings
+	auth       AuthOptions
 
 	mu       sync.Mutex
 	conn     *acp.AgentSideConnection
@@ -178,7 +182,7 @@ var (
 func New(opts Options) *Agent {
 	a := &Agent{version: opts.Version, newID: opts.NewID, provider: opts.Provider, models: opts.Models, info: opts.ModelInfo,
 		override: opts.Override, tools: opts.Tools, store: opts.Store, now: opts.Now, mcp: opts.MCP, logger: opts.Logger, prompt: opts.Prompt,
-		settings: opts.Settings, sessions: map[acp.SessionId]*liveSession{}}
+		settings: opts.Settings, auth: opts.Auth, sessions: map[acp.SessionId]*liveSession{}}
 	if a.logger == nil {
 		a.logger = slog.New(slog.DiscardHandler)
 	}
@@ -275,7 +279,7 @@ func (a *Agent) Initialize(_ context.Context, p acp.InitializeRequest) (acp.Init
 		ProtocolVersion:   acp.ProtocolVersionNumber,
 		AgentInfo:         &acp.Implementation{Name: gobble, Title: &title, Version: a.version},
 		AgentCapabilities: Capabilities(),
-		AuthMethods:       []acp.AuthMethod{},
+		AuthMethods:       a.authMethods(p.ClientCapabilities.Auth.Terminal),
 	}, nil
 }
 
@@ -1033,12 +1037,8 @@ func (a *Agent) SetSessionConfigOption(ctx context.Context, p acp.SetSessionConf
 // The methods below are not implemented in this phase and are not
 // advertised; each answers "method not found".
 
-// Authenticate is not offered: authMethods is empty.
-func (*Agent) Authenticate(context.Context, acp.AuthenticateRequest) (acp.AuthenticateResponse, error) {
-	return acp.AuthenticateResponse{}, acp.NewMethodNotFound(acp.AgentMethodAuthenticate)
-}
-
-// Logout is not offered.
+// Logout is not offered: agentCapabilities.auth has no logout, so the SDK
+// answers -32601 before this runs (0016-MADR A2).
 func (*Agent) Logout(context.Context, acp.LogoutRequest) (acp.LogoutResponse, error) {
 	return acp.LogoutResponse{}, acp.NewMethodNotFound(acp.AgentMethodLogout)
 }

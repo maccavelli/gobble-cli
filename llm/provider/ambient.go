@@ -86,6 +86,18 @@ func KeyProviders() []string {
 	return ids
 }
 
+// Label is the built-in provider id's label, such as "Grok (xAI)", from
+// its SDK descriptor, or id itself for one the SDK does not know
+// (0005-PLAN F4-3c).
+func Label(id string) string {
+	for _, d := range providers.Default().Descriptors() {
+		if string(d.ID) == id && d.Label != "" {
+			return d.Label
+		}
+	}
+	return id
+}
+
 // CredentialVar is the standard credential variable of the built-in
 // provider id, or "" for one that takes no key or is unknown.
 func CredentialVar(id string) string {

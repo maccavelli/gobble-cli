@@ -29,6 +29,16 @@ var keyDefaults = []struct{ id, envVar, model string }{
 // fails here, naming the provider (0019-MADR D2, D15). With no preference
 // the registry order decides, so OPENCODE_API_KEY alone is opencode-zen
 // (F14).
+// Label is the SDK descriptor's label, or the id for an unknown provider
+// (0005-PLAN F4-3c).
+func TestLabel(t *testing.T) {
+	for id, want := range map[string]string{"grok": "Grok (xAI)", "kilo": "Kilo Gateway", "openai": "OpenAI", "nope": "nope"} {
+		if got := Label(id); got != want {
+			t.Errorf("Label(%q) = %q, want %q", id, got, want)
+		}
+	}
+}
+
 func TestAmbientDefaultModels(t *testing.T) {
 	ids := make([]string, len(keyDefaults))
 	for i, w := range keyDefaults {

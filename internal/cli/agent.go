@@ -82,6 +82,12 @@ func (e *runEnv) agentOptions() acpserver.Options {
 		Prompt: e.promptOptions(),
 		// Each session's settings, when it starts (0018-MADR D17).
 		Settings: func(cwd string) acpserver.SessionSettings { return toSession(e.sessionSettings(cwd).Settings) },
+		// An agent method per provider that takes a credential, answered from
+		// gobble's credentials as gobble auth check finds them (0016-MADR A2).
+		Auth: acpserver.AuthOptions{Providers: authProviders, Has: func(id string) bool {
+			_, ok := e.credential(id)
+			return ok
+		}},
 	}
 }
 
@@ -280,3 +286,19 @@ func builtinOptions(s config.Settings) builtin.Options {
 // (0019-MADR D15); the process settings are resolved by now, for the run's
 // cwd, as sessionStore reads them.
 func (e *runEnv) defaultProvider() string { return e.processSettings("").Settings.DefaultProvider }
+
+// authProviders are ACP authentication's providers: each that takes a
+// credential, in the SDK's order, with its label and the gobble command
+// that stores one (0016-MADR A2).
+func authProviders() []acpserver.AuthProvider {
+	var out []acpserver.AuthProvider
+	for _, id := range provider.KeyProviders() {
+		login := provider.HasLogin(id) || provider.HasKeyLogin(id)
+		command := "gobble auth login " + id + " --api-key -"
+		if login {
+			command = "gobble auth login " + id
+		}
+		out = append(out, acpserver.AuthProvider{ID: id, Name: provider.Label(id), Command: command, Login: login})
+	}
+	return out
+}

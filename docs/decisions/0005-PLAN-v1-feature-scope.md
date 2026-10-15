@@ -5107,7 +5107,8 @@ go-llmprovider-sdk `v1.13.0` (still its latest tag), magic-cli-remote `c1d29a9d`
      - `gobble auth login <id>` for a provider with a login;
      - `gobble auth login <id> --api-key -` otherwise.
    - **`terminal` methods,** only for a client that sent `auth.terminal: true`, one per such provider: id `<id>-login`,
-     name `Sign in to <label>` or `Store a <label> API key`, args `["--login", "<id>"]`.
+     name `Sign in to <label>` or ~~`Store a <label> API key`~~ `Store an API key for <label>` *(F4-3c-2 deviation 3)*,
+     args `["--login", "<id>"]`.
 4. **`authenticate`.**
    - An `agent` id answers `{}` when gobble finds that provider's credential, as `gobble auth check` would.
    - Without one it is `auth_required`, its data `{"provider": <id>, "reason": "no credential", "command": <command>}`.
@@ -5329,3 +5330,73 @@ the gates                                                             -> lint ×
   - `CloseSession` waits only for a turn the SDK cancelled, or one that ends alone. An extension method's turn, such
     as `_gobble/compact`, is not cancelled by `session/close`; after `closeWait` the log closes and a warning is logged.
 - **Next:** F4-3c-2, ACP authentication.
+
+**F4-3c-2 deviation 1 (2026-10-15), found before step 2.**
+
+- **What was found.** Step 6 and 0016-MADR A2 have `session.golden` list the `agent` methods. The golden is recorded by
+  `acpserver`'s own test agent (`connectWith`, `acpserver/agent_test.go:38`), which has no credential wiring; providers
+  come from `internal/cli`. With no providers, gobble answers `authMethods: []` and the golden would not change.
+- **The owner's decision (2026-10-15):** ~~`connectWith`~~ `TestSession` gives the agent a fixed `Auth` of two
+  providers, one with a login and one with a key alone, so `session.golden` records real `agent` methods.
+  *(2026-10-15, at execution: the golden's agent is `TestSession`'s own, not `connectWith`'s, which the finding
+  named wrongly; the file and the decision are unchanged.)* `acpserver/agent_test.go` is added to
+  F4-3c-2's files. The nine real providers are checked by `internal/cli`'s `TestAgentAuthOptions`.
+
+**F4-3c-2 deviation 2 (2026-10-15), found running the full suite after step 6.**
+
+- **What was found.** `TestErrors` (`acpserver/agent_test.go:191-193`) asserts `authenticate` is -32601, "authenticate is
+  not offered". Decision 4 makes an unknown method id -32602.
+- **The owner's decision (2026-10-15):** `TestErrors` asserts -32602 for an unknown method id, decision 4's answer. No
+  file is added.
+
+**F4-3c-2 deviation 3 (2026-10-15), found running step 7's examples.**
+
+- **What was found.** Decision 3's terminal-method name `Store a <label> API key` reads "Store a OpenAI API key" before a
+  vowel.
+- **The owner's decision (2026-10-15):** a key-only provider's terminal method is `Store an API key for <label>`;
+  decision 3 is annotated above. No file is added.
+
+**F4-3c-2's execution record (2026-10-15).**
+
+- **Ran on acp-go-sdk2 `v1.14.0`,** with three deviations, each the owner's decision:
+  - `TestSession` gives its agent two test providers, so `session.golden` records `agent` methods (deviation 1). The
+    finding named `connectWith` wrongly, and the entry is corrected in place.
+  - `TestErrors` asserts -32602 for an unknown method (deviation 2).
+  - A key-only provider's terminal method is `Store an API key for <label>` (deviation 3).
+- **`session.golden`** changed in one line, its `initialize` result, and only in `authMethods`: a script compared the two
+  lines with that array blanked, and they were equal.
+- **Tests:**
+  - `acpserver/auth_test.go` (new): `TestAuthMethods`, `TestAuthenticate`, `TestNoACPLogout`;
+  - `llm/provider`: `TestLabel`;
+  - `internal/cli/acp_test.go`, new rather than changed as the table has it: `TestACPLogin`, `TestAgentAuthOptions`;
+  - edited by the deviations: `TestSession`'s agent, and `TestErrors`. Every other existing test passes unedited.
+- **Negatives,** 14 of 14 caught on a scratch copy after control runs, each failing its named tests with its text:
+  - terminal methods sent to a client without `auth.terminal`. The SDK refused the `initialize` answer itself:
+    "capability auth.terminal not advertised";
+  - `authenticate` answering `{}` with no credential; its data without the command; an unknown id answered;
+  - the description dropped; `--login` misspelled in `args`; the client's `auth.terminal` ignored; `Options.Auth` not
+    kept;
+  - `Has` always false; Kilo's login not counted;
+  - `gobble acp --login` serving instead; the wrong key stored; `--device` without `--login` accepted;
+  - `Label` giving the id.
+  - The first run caught 13 of 14. The miss was the harness's: the mutation left a variable unused, so the copy did not
+    build. One caught mutation failed `TestAuthenticate` by a nil dereference, since the test read the error's data
+    before checking there was one. It now stops first, and fails with its text.
+- **The guide's examples** ran against a scratch `GOBBLE_HOME`, with `HTTP_PROXY` and `HTTPS_PROXY` at a dead local port:
+  - an `initialize` with `auth.terminal` listed nine `agent` methods and nine `terminal` ones;
+  - `echo sk-test-only | gobble acp --login anthropic` printed `Saved API key for claude`, and `auth.json` held the key.
+- **Found, not changed:** `gobble acp` answers nothing to a request whose input closes straight after it. The `v0.17.1`
+  build of `bef3938` does the same, so this is not new; an ACP client keeps its input open. The guide's example keeps
+  its input open until it has read the answer.
+- **Gates:**
+  - the pre-add check, 9 files clean;
+  - lint for linux, darwin and windows, `0 issues.` each with `CGO_ENABLED=0`;
+  - the macOS laptop's `CGO_ENABLED=1 go test -race ./...`, 33 packages ok, no race report;
+  - `make preflight` on macOS, `preflight passed`;
+  - **not run:** Windows `go test ./...` and `-race`, the second Linux machine's `-race`, and Windows and WSL
+    `make preflight`, on the owner's machines.
+- **What the plan predicted wrongly, or left unsaid:**
+  - deviations 1 to 3;
+  - `Has` resolves the credential, so a stored `!command` runs, as `gobble auth check` runs it;
+  - `Logout` keeps its -32601 handler: the SDK refuses `logout` first, since no `auth.logout` is advertised.
+- **Next:** F4-3c-3, `gobble auth login --json`.

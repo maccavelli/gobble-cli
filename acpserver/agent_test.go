@@ -46,6 +46,19 @@ func connectWith(t *testing.T, p llm.Provider, client *acptest.Client) (*acptest
 	return c, client
 }
 
+// testAuth is ACP authentication over two test providers, one with a
+// login and one with a key alone; only "keyed" has a credential (0005-PLAN
+// F4-3c-2 deviation 1).
+var testAuth = AuthOptions{
+	Providers: func() []AuthProvider {
+		return []AuthProvider{
+			{ID: "grok", Name: "Grok (xAI)", Command: "gobble auth login grok", Login: true},
+			{ID: "keyed", Name: "Keyed", Command: "gobble auth login keyed --api-key -"},
+		}
+	},
+	Has: func(id string) bool { return id == "keyed" },
+}
+
 func initialize(t *testing.T, c *acp.ClientSideConnection) acp.InitializeResponse {
 	t.Helper()
 	resp, err := c.Initialize(t.Context(), acp.InitializeRequest{
@@ -69,7 +82,7 @@ func TestSession(t *testing.T) {
 	// (0005-PLAN F3-1 deviation 5; 0019-PLAN P4 deviation 4).
 	agent := New(Options{Version: "1.2.3", NewID: counterIDs(), Tools: []tool.Tool{builtin.Read(), builtin.Write(), builtin.Edit(), builtin.Bash()},
 		Provider: func(string) (llm.Provider, error) { return llmtest.NewScript(llmtest.Text("hello gobble")), nil },
-		Prompt:   PromptOptions{GOOS: "linux", cwd: "/work"}})
+		Prompt:   PromptOptions{GOOS: "linux", cwd: "/work"}, Auth: testAuth})
 	client := &acptest.Client{}
 	c := acptest.Connect(t, agent, client)
 	agent.SetConnection(c.Agent)
@@ -175,8 +188,8 @@ func TestErrors(t *testing.T) {
 	if code := requestCode(t, err); code != -32602 {
 		t.Fatalf("session/set_mode on an unknown session: code %d, want -32602 (Phase 6 implements it)", code)
 	}
-	if _, err := c.Client.Authenticate(t.Context(), acp.AuthenticateRequest{MethodId: "x"}); requestCode(t, err) != -32601 {
-		t.Fatal("authenticate is not offered")
+	if _, err := c.Client.Authenticate(t.Context(), acp.AuthenticateRequest{MethodId: "x"}); requestCode(t, err) != -32602 {
+		t.Fatal("authenticate with an unknown method: want -32602 (0005-PLAN F4-3c decision 4)")
 	}
 }
 
