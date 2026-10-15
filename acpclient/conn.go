@@ -149,8 +149,9 @@ func (c *Conn) Agent() AgentInfo { return c.agent }
 // Dropped is the number of inbound notifications dropped so far.
 func (c *Conn) Dropped() uint64 { return c.conn.DroppedNotifications() }
 
-// Close ends the agent's input and waits for the agent to stop, then for
-// the connection. It returns the agent's error, if any.
+// Close ends the agent's input and waits for the agent to stop, then
+// closes the connection (0016-MADR A1). It returns the agent's error, if
+// any, then the connection's.
 func (c *Conn) Close() error {
 	if err := c.toAgent.Close(); err != nil {
 		return fmt.Errorf("close agent input: %w", err)
@@ -163,13 +164,11 @@ func (c *Conn) Close() error {
 	case <-deadline.C:
 		return fmt.Errorf("the agent did not stop within %v of its input closing", closeTimeout)
 	}
-	select {
-	case <-c.conn.Done():
-	case <-deadline.C:
-		return fmt.Errorf("the connection did not stop within %v", closeTimeout)
-	}
 	if served != nil {
-		return fmt.Errorf("agent: %w", served)
+		return errors.Join(fmt.Errorf("agent: %w", served), c.conn.Close())
+	}
+	if err := c.conn.Close(); err != nil {
+		return fmt.Errorf("close connection: %w", err)
 	}
 	return nil
 }

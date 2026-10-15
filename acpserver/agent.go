@@ -33,6 +33,10 @@ import (
 // gobble is the agent's name, and the _meta key of gobble's own members.
 const gobble = "gobble"
 
+// closeWait is how long session/close waits for a cancelled turn to
+// release before it closes the session's log (0005-PLAN F4-3c-1).
+var closeWait = 5 * time.Second
+
 // keyReason, keyError and keySessionID are keys of an error's JSON-RPC
 // data.
 const (
@@ -142,10 +146,13 @@ type liveSession struct {
 	cache    llm.CacheRetention
 	think    string
 	cancel   context.CancelFunc
-	mcp      *liveMCP
-	mode     string
-	used     int // the context's tokens, as the last usage_update said
-	queue    *queue
+	// idle is closed when the running turn releases; nil with no turn
+	// (0005-PLAN F4-3c-1).
+	idle  chan struct{}
+	mcp   *liveMCP
+	mode  string
+	used  int // the context's tokens, as the last usage_update said
+	queue *queue
 	// compaction is /compact's settings, from the session's settings.
 	compaction compaction.Settings
 	// streaming and compacting say what the running turn is: a model turn,
@@ -219,12 +226,20 @@ func (a *Agent) Close() error {
 	return errors.Join(errs...)
 }
 
-// SetConnection binds the agent to the connection it answers on.
+// SetConnection binds the agent to the connection it answers on, for a
+// connection built without SetAgentConnection's call.
 func (a *Agent) SetConnection(c *acp.AgentSideConnection) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.conn = c
 }
+
+// SetAgentConnection is SetConnection, which the SDK's constructor calls
+// before it starts reading, so no request finds the agent unbound
+// (0016-MADR A1).
+func (a *Agent) SetAgentConnection(c *acp.AgentSideConnection) { a.SetConnection(c) }
+
+var _ acp.AgentConnAware = (*Agent)(nil)
 
 // Capabilities is what is implemented, and nothing more: loading, listing,
 // resuming and closing sessions, and MCP servers over stdio and streamable
@@ -557,12 +572,14 @@ func (a *Agent) claimTurn(ctx context.Context, s *liveSession) (context.Context,
 		cancel()
 		return nil, nil, acp.NewInvalidRequest(map[string]any{keySessionID: s.id, keyReason: "a prompt is already running"})
 	}
-	s.cancel = cancel
+	idle := make(chan struct{})
+	s.cancel, s.idle = cancel, idle
 	return turnCtx, func() {
 		a.mu.Lock()
-		s.cancel = nil
+		s.cancel, s.idle = nil, nil
 		a.mu.Unlock()
 		cancel()
+		close(idle)
 	}, nil
 }
 
@@ -961,13 +978,29 @@ func (*Agent) DeleteSession(context.Context, acp.DeleteSessionRequest) (acp.Dele
 }
 
 // CloseSession closes the session's log, releasing its writer lock.
-func (a *Agent) CloseSession(_ context.Context, p acp.CloseSessionRequest) (acp.CloseSessionResponse, error) {
+func (a *Agent) CloseSession(ctx context.Context, p acp.CloseSessionRequest) (acp.CloseSessionResponse, error) {
 	a.mu.Lock()
 	s, ok := a.sessions[p.SessionId]
 	delete(a.sessions, p.SessionId)
+	var idle chan struct{}
+	if ok {
+		idle = s.idle
+	}
 	a.mu.Unlock()
 	if !ok {
 		return acp.CloseSessionResponse{}, invalidParams(p.SessionId, "unknown session")
+	}
+	// The SDK has cancelled a running prompt; its last entries are written
+	// before the log closes (0016-MADR A1).
+	if idle != nil {
+		t := time.NewTimer(closeWait)
+		select {
+		case <-idle:
+		case <-t.C:
+			a.logger.WarnContext(ctx, "session/close: the running turn did not release in time; closing its log",
+				slog.String("session", string(p.SessionId)), slog.Duration("waited", closeWait))
+		}
+		t.Stop()
 	}
 	a.closeMCP(s.mcp)
 	if err := s.log.Close(); err != nil {

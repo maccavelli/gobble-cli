@@ -178,8 +178,8 @@ func translate(n acp.SessionNotification) (Update, error) {
 		u.ModeID = string(s.CurrentModeUpdate.CurrentModeId)
 	case s.SessionInfoUpdate != nil:
 		u.Kind = KindSessionInfo
-		if t := s.SessionInfoUpdate.Title; t != nil {
-			u.Title = *t
+		if t, ok := s.SessionInfoUpdate.Title.Value(); ok {
+			u.Title = t
 		}
 	}
 	return u, nil

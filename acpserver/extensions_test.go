@@ -440,7 +440,7 @@ func TestExtensionNameForkClone(t *testing.T) {
 	}
 	mustExt(t, c, "_gobble/set_session_name", map[string]any{"sessionId": id, "name": "  My name\n"})
 	ups := client.Updates()
-	if u := ups[len(ups)-1].Update.SessionInfoUpdate; u == nil || u.Title == nil || *u.Title != "My name" {
+	if u := ups[len(ups)-1].Update.SessionInfoUpdate; u == nil || u.Title != acp.PatchValue("My name") {
 		t.Fatalf("last update %+v", ups[len(ups)-1].Update)
 	}
 	_, err := ext(t, c, "_gobble/set_session_name", map[string]any{"sessionId": id, "name": " "})

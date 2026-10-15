@@ -5272,3 +5272,60 @@ the gates                                                             -> lint ×
 - **Pi's `api_key` `env` field,** and `gobble auth import --from-pi --mcp` (0003-MADR `:291`): not placed.
 - **magic-cli-remote's side:** its gobble `Spec`, which method id it pins, and reading `--json`. These are
   magic-cli-remote's work, under its 0179 and 0186 records; gobble writes nothing there.
+
+**F4-3c-1 deviation 1 (2026-10-15), found before step 3.**
+
+- **What was found.** Step 3 renames `SetConnection` to `SetAgentConnection`. Eighteen `acpserver` test files call
+  `SetConnection` 20 times to bind a connection they build by hand (`acpserver/agent_test.go:40`, `:70`,
+  `session_test.go:392`, and others), and only three of them are in the table.
+- **The owner's decision (2026-10-15):** the agent gains `SetAgentConnection`, which the SDK's constructor calls, and
+  `Serve` drops its own call. `SetConnection` stays, for the tests; both set the same field. No file is added.
+
+**F4-3c-1 deviation 2 (2026-10-15), found at step 6.**
+
+- **What was found.** The root `README.md` names the acp-go-sdk2 pin, `v0.17.1` (`README.md:89`), and the table lists only
+  `docs/architecture.md`.
+- **The owner's decision (2026-10-15):** `README.md:89` names `v1.14.0`. `README.md` is added to F4-3c-1's files.
+
+**F4-3c-1's execution record (2026-10-15).**
+
+- **Ran on acp-go-sdk2 `v1.14.0`,** with two deviations, each the owner's decision: `SetAgentConnection` added beside
+  `SetConnection` (deviation 1); `README.md`'s pin (deviation 2).
+  - `go.sum` holds `h1:/EKOZ2YSPo/mV6prh/6vgChTHbCGQfpNzSGlftWF6K4=` and
+    `h1:9dFn0BZXzNRoQwU4X9crSIhePbsFx8MbqAwdbWX8E+g=` (its `go.mod`).
+  - `go build ./...` failed only at the four `Title` sites, as 0016-MADR's amendment found. With them fixed, and
+    before any adoption, every `acpserver`, `acpclient` and `internal/cli` test passed.
+- **Tests:** `TestOverlapRefusesSecond`, `TestCloseWaitsForTurn`, `TestConnAware` and `TestServeClosesConnection`, in
+  `acpserver/agent_test.go`.
+  - `TestOverlapRefusesSecond` runs through `Serve`, over pipes, since only `Serve` sets the overlap policy.
+  - `TestCloseWaitsForTurn` uses a model that stops 300 ms after its context ends. A client that delays its cancelled
+    permission answer did not slow the turn, which unwinds without waiting for that answer. It asserts the cancelled
+    turn's `aborted` assistant message is the log's last entry, and that `session/close` returns within 2 s.
+  - `TestNameCommand`, `TestExtensionNameForkClone` and `commands_test.go`'s title reader were edited for
+    `Patch[string]`, as step 2 planned. Every other existing test passes unedited, the -32600 tests and `session.golden`
+    among them.
+- **Negatives,** 7 of 7 caught on a scratch copy after control runs, each failing its named tests with its text, the
+  first run and again on the final tree:
+  - `PromptOverlapSupersede` in place of `PromptOverlapConcurrent`: `the first turn stopped "cancelled", want end_turn`;
+  - `CloseSession` not waiting: the log's last entry was the user's message, not the aborted reply;
+  - `SetAgentConnection` binding nothing;
+  - `Serve` not closing the connection: a write to its input succeeded;
+  - the release not closing `idle`: `session/close took 5.0s`;
+  - an empty title sent; a title not read.
+- **Not covered by a test:** step 5. `acpclient.Conn.Close` now calls the SDK's `Close`, and the existing `acpclient`
+  tests, which close every connection, pass with and without it. The plan named no test for it.
+- **Gates:**
+  - the pre-add check, 8 files clean;
+  - lint for linux, darwin and windows, `0 issues.` each with `CGO_ENABLED=0`;
+  - the macOS laptop's `CGO_ENABLED=1 go test -race ./...`, 33 packages ok, no race report;
+  - `make preflight` on macOS, `preflight passed`;
+  - **not run:** Windows `go test ./...` and `-race`, the second Linux machine's `-race`, and Windows and WSL
+    `make preflight`, on the owner's machines.
+- **What the plan predicted wrongly, or left unsaid:**
+  - Deviation 1: renaming `SetConnection` reached 18 test files.
+  - Deviation 2: the root `README.md` names the pin too.
+  - The first lint run found three issues in the new code: `gofmt` alignment, `WarnContext` over `Warn`, and a log key.
+    The key is now `session`, as `acpserver`'s other log line has it.
+  - `CloseSession` waits only for a turn the SDK cancelled, or one that ends alone. An extension method's turn, such
+    as `_gobble/compact`, is not cancelled by `session/close`; after `closeWait` the log closes and a warning is logged.
+- **Next:** F4-3c-2, ACP authentication.

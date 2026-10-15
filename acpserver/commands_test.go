@@ -298,8 +298,10 @@ func TestNameCommand(t *testing.T) {
 	}
 	var title string
 	for _, u := range client.Updates()[n:] {
-		if si := u.Update.SessionInfoUpdate; si != nil && si.Title != nil {
-			title = *si.Title
+		if si := u.Update.SessionInfoUpdate; si != nil {
+			if v, ok := si.Title.Value(); ok {
+				title = v
+			}
 		}
 	}
 	if title != "my session" {

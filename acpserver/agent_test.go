@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"iter"
+	"log/slog"
 	"path/filepath"
 	"regexp"
 	"testing"
@@ -14,6 +17,8 @@ import (
 	"github.com/maccavelli/gobble-cli/acpclient/acptest"
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/llm/llmtest"
+	"github.com/maccavelli/gobble-cli/session"
+	"github.com/maccavelli/gobble-cli/session/jsonl"
 	"github.com/maccavelli/gobble-cli/tool"
 	"github.com/maccavelli/gobble-cli/tool/builtin"
 )
@@ -180,5 +185,137 @@ func TestDefaultIDsAreUUIDv7(t *testing.T) {
 	resp, err := a.NewSession(t.Context(), acp.NewSessionRequest{Cwd: "/w"})
 	if err != nil || !regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`).MatchString(string(resp.SessionId)) {
 		t.Fatalf("session id %q, %v; want a UUIDv7", resp.SessionId, err)
+	}
+}
+
+// served runs Serve with opts over pipes, with client on the other end, as
+// `gobble acp` serves a client; the connection is initialized.
+func served(t *testing.T, opts Options, client acp.Client) *acptest.Conn {
+	t.Helper()
+	toAgentR, toAgentW := io.Pipe()
+	toClientR, toClientW := io.Pipe()
+	done := make(chan error, 1)
+	go func() {
+		done <- Serve(context.WithoutCancel(t.Context()), toAgentR, toClientW, ServeOptions{Agent: opts})
+		_ = toClientW.Close() //nolint:errcheck // test pipe
+	}()
+	cc := acp.NewClientSideConnection(client, toAgentW, toClientR, acp.WithLogger(slog.New(slog.DiscardHandler)))
+	t.Cleanup(func() {
+		if err := toAgentW.Close(); err != nil {
+			t.Error(err)
+		}
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Error("Serve did not return within 5 s of its input closing")
+		}
+	})
+	initialize(t, cc)
+	return &acptest.Conn{Client: cc}
+}
+
+// A second prompt during a turn is refused -32600 by gobble, and the first
+// turn is not cancelled: Serve passes every prompt to the agent (0016-MADR
+// A1).
+func TestOverlapRefusesSecond(t *testing.T) {
+	model := llmtest.NewScript(writeCall(t), llmtest.Text("a"))
+	client := newHoldClient()
+	c := served(t, Options{Version: "1.2.3", Provider: func(string) (llm.Provider, error) { return model, nil },
+		Models: func() ModelChoice { return testModels }, Store: jsonl.New(t.TempDir(), jsonl.Options{})}, client)
+	id := newSession(t, c, t.TempDir(), nil).SessionId
+	done := startPrompt(t, c, id, "go")
+	client.waitAsked(t)
+	_, err := c.Client.Prompt(t.Context(), acp.PromptRequest{SessionId: id, Prompt: []acp.ContentBlock{acp.TextBlock("again")}})
+	if code, text := errText(t, err); code != -32600 || text != "a prompt is already running" {
+		t.Errorf("a second prompt: %d %q, want -32600 a prompt is already running", code, text)
+	}
+	client.answer <- true
+	if resp := waitPrompt(t, done); resp.StopReason != acp.StopReasonEndTurn {
+		t.Errorf("the first turn stopped %q, want end_turn: the second prompt must not cancel it", resp.StopReason)
+	}
+}
+
+// slowStop is a model whose stream starts, then blocks until its context
+// ends, then takes 300 ms to stop: a turn still unwinding when
+// session/close arrives.
+type slowStop struct{ started chan struct{} }
+
+func (slowStop) ID() string                     { return "slow" }
+func (slowStop) Capabilities() llm.Capabilities { return llm.Capabilities{} }
+func (s slowStop) Stream(ctx context.Context, _ *llm.Request) iter.Seq2[llm.Event, error] {
+	return func(yield func(llm.Event, error) bool) {
+		s.started <- struct{}{}
+		<-ctx.Done()
+		time.Sleep(300 * time.Millisecond)
+		yield(nil, ctx.Err())
+	}
+}
+
+// session/close during a turn returns after the turn's last entry is
+// written: the SDK cancels the turn, and CloseSession waits for it before
+// closing the log (0016-MADR A1).
+func TestCloseWaitsForTurn(t *testing.T) {
+	dir := t.TempDir()
+	store := jsonl.New(dir, jsonl.Options{})
+	model := slowStop{started: make(chan struct{}, 1)}
+	c, _ := sessionAgent(t, dir, model, &acptest.Client{})
+	id := newSession(t, c, t.TempDir(), nil).SessionId
+	done := startPrompt(t, c, id, "go")
+	<-model.started
+	start := time.Now()
+	if _, err := c.Client.CloseSession(t.Context(), acp.CloseSessionRequest{SessionId: id}); err != nil {
+		t.Fatalf("session/close: %v", err)
+	}
+	if took := time.Since(start); took > 2*time.Second {
+		t.Errorf("session/close took %v: it waits for the turn's release, not for closeWait", took)
+	}
+	_, entries, _, err := store.Read(t.Context(), session.ID(id))
+	if err != nil {
+		t.Fatal(err)
+	}
+	last := entries[len(entries)-1]
+	if last.Message == nil || last.Message.Role != "assistant" || last.Message.StopReason != "aborted" {
+		t.Fatalf("the session's last entry after close: %s %+v, want the cancelled turn's aborted assistant message", last.Type, last.Message)
+	}
+	<-done
+}
+
+// The SDK's constructor binds the agent before it reads: no request finds
+// it unbound (0016-MADR A1).
+func TestConnAware(t *testing.T) {
+	ag := New(Options{Version: "1.2.3"})
+	in, _ := io.Pipe()
+	conn := acp.NewAgentSideConnection(ag, io.Discard, in, acp.WithLogger(slog.New(slog.DiscardHandler)))
+	t.Cleanup(func() { _ = conn.Close() }) //nolint:errcheck // test connection
+	ag.mu.Lock()
+	got := ag.conn
+	ag.mu.Unlock()
+	if got != conn {
+		t.Fatalf("the agent's connection after the constructor: %p, want %p", got, conn)
+	}
+}
+
+// When Serve's context ends it closes the connection, so its input is no
+// longer read and its output ends (0016-MADR A1).
+func TestServeClosesConnection(t *testing.T) {
+	inR, inW := io.Pipe()
+	outR, outW := io.Pipe()
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan error, 1)
+	go func() { done <- Serve(ctx, inR, outW, ServeOptions{Agent: Options{Version: "1.2.3"}}) }()
+	cancel()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("Serve: %v, want context.Canceled", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Serve did not return within 5 s of its context ending")
+	}
+	if _, err := inW.Write([]byte("{}\n")); !errors.Is(err, io.ErrClosedPipe) {
+		t.Errorf("a write to Serve's input after it returned: %v, want io.ErrClosedPipe", err)
+	}
+	if _, err := outR.Read(make([]byte, 1)); err == nil {
+		t.Error("Serve's output still open after it returned")
 	}
 }

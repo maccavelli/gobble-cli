@@ -417,7 +417,7 @@ func (a *Agent) setName(ctx context.Context, s *liveSession, out *updates, arg s
 	if err := s.append(ctx, a.now(), session.Entry{Type: session.TypeSessionInfo, Name: new(name)}); err != nil {
 		return "", appendFailed(err)
 	}
-	out.send(acp.SessionUpdate{SessionInfoUpdate: &acp.SessionSessionInfoUpdate{SessionUpdate: "session_info_update", Title: new(name)}})
+	out.send(acp.SessionUpdate{SessionInfoUpdate: &acp.SessionSessionInfoUpdate{SessionUpdate: "session_info_update", Title: acp.PatchValue(name)}})
 	return name, out.err
 }
 
