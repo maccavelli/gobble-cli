@@ -809,11 +809,13 @@ Earlier phases had set the precedent: 0002-PLAN copied Pi's MCP configuration me
      * empty or reasoning-only responses are retried twice;
      * a missing finish reason ends the step.
    * Offline detection that does not spend retries, and a first-byte deadline.
+   * *(2026-10-16, 0005-PLAN "F5 re-made as five sub-phases, F5-1 made executable": offline detection probes only the provider's own host, never Kilo's public ones. The first-byte deadline waits for F4-1b's live stream, since a buffered stream's first byte is its whole reply. The repeated-call question counts a turn's model calls together, where opencode's sees one reply. Retry's schedule stays the SDK's.)*
 8. **Prompt-cache stability (§5).** F3 builds a frozen per-session context baseline, appends changes as messages, and keeps per-turn state out of the system prompt. Later phases follow the same rule.
 9. **Compaction (§4).**
    * Pi's cut-point machinery stays (0002-PLAN Phase 6).
    * From opencode: its summary template with rolling updates, and its prune pass.
    * From Kilo: its proactive threshold, from an estimate anchored to the provider's token count; its empty-summary guard; its recovery from a too-large request; and the per-turn cap.
+   * *(2026-10-16, the owner's choice, 0005-PLAN "F5 re-made as five sub-phases, F5-1 made executable": the threshold is Pi's, `window - reserveTokens`, on gobble's estimate, which is already anchored to the provider's count. Kilo's percentage is an option, off by default. The prune pass is behind a setting, off by default, as in opencode.)*
    * Chunked summarising waits for a real need.
 10. **Agents and modes (§6).** gobble keeps its two modes, default and plan. Custom agents, an ask mode and Kilo's plan follow-up are not adopted now.
 11. **Models (§9).** Provider-neutral reasoning variants, mapped for each provider and offered over ACP as `thought_level`. A small-model role runs titles and summaries. The catalog's data stays go-llmprovider-sdk's; gobble overlays limits or costs only where the SDK lacks them. *(2026-10-10: ~~the catalog's data stays go-llmprovider-sdk's~~ the SDK has no limits or costs, so the catalog is a models.dev snapshot; the small-model role is F5's. Second amendment of this date, items 2 and 6.)*

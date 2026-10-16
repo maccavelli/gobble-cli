@@ -220,6 +220,8 @@ API.
 
 *(2026-10-07: 0002-PLAN Phase 7 delivers `_gobble/compact` on `/compact`'s code path (`compactSession`), with `usage_update`. Step 3 is complete. `_gobble/set_auto_compaction` and the retry methods wait for this phase's automatic compaction and retry.)*
 
+*(2026-10-16: re-made as five sub-phases, F5-1 to F5-5, and started before F4 is complete, by the owner's choices of that date; see "F5 re-made as five sub-phases, F5-1 made executable". Step 1's agent-level schedule is the SDK's, not a second one of gobble's.)*
+
 **Accept:**
 
 * `synctest` tests prove the back-off schedule (2 s, 4 s, 8 s, with the
@@ -698,6 +700,7 @@ drops child-session ids. No new phases.
 * **F5.**
   * Provider retry is `WithRetry` with `RetryPolicy{MaxAttempts: 4, BaseDelay: 2s, MaxDelay: 60s}`.
   * The `synctest` accept asserts each delay inside its jitter bound (2–2.5 s, 4–5 s, 8–10 s), the 60 s cap, and that a `Retry-After` above the cap fails fast. It no longer asserts the exact steps.
+    *(2026-10-16: the bounds are wrong. go-llmprovider-sdk `v1.13.0` waits between half and all of each step, 1–2 s, 2–4 s and 4–8 s (`llmprovider/retry.go:156-164`); see "F5 re-made as five sub-phases, F5-1 made executable", decision 2.)*
   * Agent-level retry never wraps a streaming provider. When a `Streamer` exists, retry happens before the first event only.
 * **F6.**
   * `permissions.allowBypass` defaults to `false`.
@@ -5504,9 +5507,271 @@ the gates                                                             -> lint ×
   - Without a terminal and without `--provider`, every entry is skipped as not named, with exit 0.
   - An unknown `--provider` is exit 2, and `--from-pi` is required.
   - An entry of a type Pi does not write is skipped as `no key`.
-  - **A provider gobble has that takes no key** is skipped as `gobble has no provider <pi-id>`, which is not true of
-    it. Pi writes no such entry: `ollama` is the only one. The wording is left as decision 7 has it, and is not
+  - **A provider gobble has that takes no key** is skipped as `gobble has no provider <pi-id>`, ~~which is not true of
+    it~~. Pi writes no such entry: `ollama` is the only one. The wording is left as decision 7 has it, and is not
     tested.
+    *(2026-10-16, corrected: the wording is true. F4-2c's "Deferred, named" keeps Ollama an unknown provider until a
+    keyless choice exists, and 0019-MADR D15 gives `--provider` and `defaultProvider` only the providers with a key.
+    `gobble auth login`, `logout` and `check`, `gobble acp --login`, and the import's `--provider` each treat `ollama`
+    as unknown; `gobble auth status` leaves it out; and `gobble --model ollama/<id>` finds no model, even one
+    `models.json` defines. An amendment
+    giving it its own reason, `<id> takes no key`, was drafted that day and withdrawn uncommitted, by the owner's
+    choice: it would have said gobble has a provider it cannot run. The reason waits for the keyless choice.)*
   - An imported Grok login over an existing entry keeps that entry's other fields, as `gobble auth login grok` does.
 - **Next:** F4-3d, the ChatGPT login, waits for go-llmprovider-sdk issue 2. F4-1b, live streaming, waits on an SDK
   release that retries a stream.
+
+**2026-10-16 — F5 re-made as five sub-phases, F5-1 made executable: what the agent adds to the SDK's retry** (the
+owner's choices of 2026-10-16:
+- start F5 while F4-1b and F4-3d wait on SDK releases ("start f5");
+- the SDK keeps the retry schedule, gobble adds what the SDK lacks, and gobble asks the SDK for a retry callback;
+- automatic compaction on Pi's threshold, with Kilo's percentage as an option, off by default;
+- opencode's summary template with rolling updates, and its prune pass behind a setting, off by default;
+- the small-model role as F5's last sub-phase.
+
+0005-MADR's notes of 2026-10-16 on choices 7 and 9 record what changes there.) *Proposed: not approved for execution.*
+
+**The order.** F1 to F10 run in order (this plan's "Order"), and F4 is not complete: F4-1b, live streaming, and F4-3d,
+the ChatGPT login, wait on go-llmprovider-sdk releases. By the owner's choice F5 starts now. F5-1 to F5-5 need neither.
+The two pieces that need F4-1b's live stream wait with it, named in decisions 5 and 7.
+
+**The facts,** measured on 2026-10-16 against `main` `e5ab039`, go-llmprovider-sdk `v1.13.0` (still its latest tag;
+its `origin/main` changes no retry or stream file since), acp-go-sdk2 `v1.14.0`, Pi `312184edb`, opencode `907b3bc518`
+and Kilo `4a7c4e883f`. 0010-REPORT's opencode `ecc4916` and Kilo `9b17c7d522` are in neither clone, whose upstream
+histories were rewritten; the report's line numbers match these heads within a few lines.
+
+- **Retry is the SDK's, and is already Pi's schedule.**
+  - gobble wraps each provider `provider.New` builds in `llmprovider.WithRetry(p, {MaxAttempts: 4, BaseDelay: 2s,
+    MaxDelay: 60s})` (`llm/provider/provider.go:24`, `:176`). `Wrap` adds none (`:180-183`).
+  - **What it retries:** a rate limit that is not exhausted quota, an unavailable service (5xx, 408, overloaded), and a
+    request that could not be sent. Never quota, auth, context overflow or an incomplete reply (SDK
+    `llmprovider/retry.go:174-192`, `api_error.go:151-163`). A failure after the reply began is retried once per call
+    (`retry.go:111-117`).
+  - **Its wait:** `BaseDelay << (n-1)`, capped at `MaxDelay`, then between half and all of it: 1–2 s, 2–4 s, 4–8 s
+    (`retry.go:156-164`). A `Retry-After`, or a reset header, is waited for plus up to 10 %; one above `MaxDelay` fails
+    at once (`retry.go:152-154`). A wait that would outlast the context's deadline is not begun (`retry.go:125-128`).
+  - **It buffers the stream,** so gobble's `NativeStreaming` is false for every provider (`retry.go:93-99`;
+    `provider.go:174-177`).
+  - **The 2026-10-01 F5 note's jitter bounds are wrong:** 2–2.5 s, 4–5 s and 8–10 s, where the SDK's are 1–2 s, 2–4 s
+    and 4–8 s.
+  - **`RetryPolicy` has no callback** (`retry.go:15-27`): the caller sees no retry until `Generate` returns. Filed on
+    2026-10-16 as go-llmprovider-sdk issue 3, "WithRetry retries out of its caller's sight: a consumer cannot tell its
+    user it is waiting to retry (v1.13.0)".
+  - **A request that could not be sent** comes back as the raw `*url.Error`, with no sentinel (SDK
+    `internal/wire/post.go:144-159`), and gobble's `mapError` adds none (`provider.go:439-449`).
+  - **An empty answer** is `*APIError{Kind: ErrIncomplete, Reason: <finish reason>, Message: "<wire>: the answer has
+    no content"}` (SDK `internal/wire/finish.go:32-35`). A reasoning-only answer whose finish is `stop` is a success
+    (`internal/wire/chatcompletions/chatcompletions.go:479-512`). The SDK retries neither.
+  - **No first-byte or idle option:** the header and idle timeouts are fixed at 300 s (SDK
+    `internal/transport/transport.go:33-40`, `:70-76`). While gobble's stream is buffered, its first byte is the whole
+    reply.
+- **Pi's retry** is the agent's, around a provider retry that is off by default:
+  - `retry.enabled` true, `retry.maxRetries` 3, `retry.baseDelayMs` 2000, `retry.maxAgentDelayMs` 60000
+    (`packages/coding-agent/src/core/settings-manager.ts:986-1003`). `retry.maxDelayMs`, its earlier name, is moved to
+    `retry.provider.maxRetryDelayMs` on load (`:536-557`).
+  - `baseDelayMs * 2^(n-1)`, capped, with no jitter and no `Retry-After` at that level
+    (`packages/ai/src/utils/retry.ts:122-126`); the classifier matches the error's text (`:7-101`).
+  - Events `auto_retry_start {attempt, maxAttempts, delayMs, errorMessage}` and `auto_retry_end {success, attempt,
+    finalError?}` (`core/agent-session.ts:215-216`, `:3680-3686`, `:1134-1141`); RPC `set_auto_retry {enabled}`, which
+    writes the global setting (`:3726-3728`), and `abort_retry`, which ends the wait with `Retry cancelled`
+    (`modes/rpc/rpc-types.ts:46-52`; `agent-session.ts:3648-3658`).
+  - A failed attempt is written, then left out of the model's view by a `context_edit` (`agent-session.ts:1195-1211`).
+- **Pi's compaction:**
+  - `compaction.enabled` true, `reserveTokens` 16384, `keepRecentTokens` 20000 (`settings-manager.ts:23-26`, `:913`).
+  - It compacts when `contextTokens > contextWindow - reserveTokens` (`compaction/compaction.ts:267-270`). That is
+    checked after each run, before a user prompt, and before each model call within a run (`agent-session.ts:1799`,
+    `:1968-1972`, `:735-744`).
+  - An overflow compacts and resends once, guarded; a second gives up (`:2892-2962`).
+  - Events `compaction_start {reason: manual|threshold|overflow}` and `compaction_end {reason, result?, aborted,
+    willRetry, errorMessage?}` (`:203-214`).
+  - The summary's output is `min(0.8 × reserveTokens, model.maxTokens)` (`compaction.ts:712-715`).
+  - There is no empty-summary check and no per-turn cap on threshold compaction.
+- **Kilo** (paths under `packages/opencode/src/`):
+  - a percentage threshold, `compaction.threshold_percent`, 1 to 100, unset by default
+    (`kilocode/session/overflow.ts:127-133`);
+  - at most 3 compactions in one loop, then "Compaction exhausted: context still exceeds model limits after 3
+    attempts" (`kilocode/session/prompt.ts:591-617`);
+  - an empty summary is refused, and the session left as it was (`kilocode/session/compaction-chunks.ts:28`;
+    `session/compaction.ts:548-579`);
+  - 3 consecutive invalid-argument failures, of any tool, end the turn; an unknown tool does not count
+    (`kilocode/session/processor.ts:380-428`);
+  - an empty or reasoning-only reply with no finish reason is run again twice, after about 2 s and 4 s
+    (`kilocode/session/processor.ts:28`, `:445-487`);
+  - a missing finish reason is saved as `unknown`, and the loop ends when the reply has no calls
+    (`session/prompt.ts:1968-1981`);
+  - offline detection by error code, then a probe every 3 s, 5 s each, after which the call is resent without
+    counting an attempt (`session/network.ts:22-39`, `:154-301`; `session/retry.ts:160-177`). Its probe reaches
+    `kilo.ai`, `example.com` or Cloudflare (`network.ts:208-227`).
+- **opencode** (paths under `packages/opencode/src/` unless named):
+  - the doom-loop check, 3 identical calls (`session/processor.ts:29`, `:353-380`), compares the parts of one assistant
+    message. It fires on three identical calls within one reply, not across a turn's model calls. It asks the
+    `doom_loop` permission, `ask` by default (`agent/agent.ts:121`);
+  - the repair renames a call whose lower-cased name is a tool, and routes the rest to an `invalid` tool
+    (`session/llm.ts:296-311`). Kilo keeps only the rename, since `invalid` is not an active tool (Kilo
+    `session/llm.ts:384-395`);
+  - the summary template's sections are Objective, Important Details, Work State (Completed, Active, Blocked), Next Move
+    and Relevant Files, each update made from the prior summary (`packages/core/src/session/compaction.ts:16-55`,
+    `:160-174`); tool output in its input is cut at 2,000 characters (`:30`);
+  - the prune pass keeps the newest 40,000 tokens of tool output beyond the last two user turns, and clears older ones
+    only when that frees more than 20,000; it is off by default (`session/compaction.ts:28-31`, `:273-317`;
+    `packages/core/src/v1/config/config.ts:154-156`).
+- **gobble today:**
+  - the loop (`agent/agent.go:243-293`, its model call `:348-397`) checks no error type. Any stream error ends the turn
+    (`:357-365`), and acpserver tells only `llm.ErrAuth` apart (`acpserver/prompt.go:276-281`);
+  - a reply with no finish reason is `StopEndTurn` (`llm/provider/provider.go:289-297`), and a reply with no text and no
+    calls ends the turn as `end_turn` (`agent/agent.go:281-287`);
+  - an unknown tool's result is `there is no tool named %q` (`:425-429`); bad arguments give `<tool>: the arguments
+    are not JSON` or `invalid arguments` (`tool/tool.go:386-395`). Nothing counts them;
+  - manual compaction is `compactSession` (`acpserver/compact.go:47-97`), on Pi's prompts word for word
+    (`compaction/serialize.go:14-110`). `Settings.ReserveTokens` exists and nothing reads it
+    (`compaction/compaction.go:15-24`). No output cap is sent for the summary, since `llm.Request` has no `MaxTokens`
+    (`llm/llm.go:43-50`). `_gobble/get_state`'s `autoCompactionEnabled` is always false (`acpserver/extensions.go:359`);
+  - `compaction.EstimateEntries` is the last reported usage plus an estimate of what follows it
+    (`compaction/estimate.go:293-333`): already anchored to the provider's count, as choice 9 asks;
+  - a `context_edit`'s `replacement` is a `{content}` or null (`session/session.go:119-121`);
+  - the only compaction key is `compaction.keepRecentTokens` (`internal/config/keys.go:78-79`). 0018-MADR D19 leaves
+    `retry.*`, `compaction.enabled` and `compaction.reserveTokens` to F5;
+  - 0002-PLAN leaves `_gobble/set_auto_compaction` and "the retry methods", never named, to F5
+    (`0002-PLAN-cli-acp-headless-mcp-v1.md:1858`, `:2003`);
+  - the provider's options are built per session (`internal/cli/agent.go:34-46`), with models.json's base URL
+    (`internal/cli/modelsjson.go:117-122`); the SDK's descriptor has `DefaultBaseURL` (SDK `llmprovider/registry.go:21-22`);
+  - an agent may send an extension notification (acp-go-sdk2 `extensions.go:91-97`), and a client ignores one it does
+    not know (`connection.go:1487`). gobble sends none today; its own CLI is an ACP client (`acpclient/conn.go:355`);
+  - no title is generated, and there is no small-model role.
+
+**The decisions:**
+
+1. **Five sub-phases,** each one commit with its own record and gates, in this order:
+   - **F5-1 — what the agent adds to the SDK's retry:** the retry settings, the offline wait, empty-reply retries,
+     their status, and `_gobble/set_auto_retry` and `_gobble/abort_retry`;
+   - **F5-2 — automatic compaction:** the threshold, overflow recovery, the per-turn cap, the empty-summary guard, the
+     summary's output cap, the settings, `_gobble/set_auto_compaction` and compaction status;
+   - **F5-3 — loop safety:** the repeated-call question, call-name repair, the malformed-call breaker and the missing
+     finish reason;
+   - **F5-4 — the summary:** opencode's template with rolling updates, the prune pass, and recovery from a summary
+     request that is too large;
+   - **F5-5 — the small model:** `smallModel`, for summaries and session titles.
+
+   F5-2 to F5-5 are each made executable in turn, with their facts measured then. Decisions 8 to 11 are the owner's
+   choices of today and what this entry proposes for them, to be reviewed when each is made executable.
+2. **Retry stays the SDK's** (the amendment of 2026-09-30). gobble adds no second schedule. Four settings feed the
+   SDK's policy where the provider is built:
+   - `retry.enabled` (bool, true): false builds the provider without `WithRetry`, and turns off decisions 3 and 4;
+   - `retry.maxRetries` (int, 3, at least 0): `MaxAttempts` is it plus one;
+   - `retry.baseDelayMs` (int, 2000, at least 1): `BaseDelay`;
+   - `retry.maxDelayMs` (int, 60000, at least 1): `MaxDelay`, the cap on a wait and on a server's ask. It is Pi's
+     earlier name. Pi has since split it into `maxAgentDelayMs` and `provider.maxRetryDelayMs`, which the SDK's one
+     cap serves together.
+
+   The 2026-10-01 note's jitter bounds are replaced by the SDK's. Pi's agent-level classifier, which matches error
+   text, is not copied: the SDK's typed classification is used.
+3. **The offline wait spends no retry** (Kilo's design, with its probe changed).
+   - `llm/provider` maps a request that could not be sent for want of a network to a new `llm.ErrOffline`, after the
+     SDK's retries: a `*url.Error` whose chain holds a `*net.DNSError`, or a `*net.OpError` of op `dial` whose error is
+     a timeout, `ECONNREFUSED`, `ENETUNREACH`, `EHOSTUNREACH` or `ENETDOWN`.
+   - On `llm.ErrOffline` the agent waits. Every 3 s it dials the provider's own host (models.json's base URL, or the
+     SDK's default; the port from the scheme), 5 s at most, and resends the call when a dial connects. gobble probes no
+     other host: Kilo's probe would tell `kilo.ai`, `example.com` or Cloudflare that gobble is running.
+   - The wait ends when a dial connects, when the turn is cancelled, on `_gobble/abort_retry`, or after
+     `retry.offlineWaitMs` (int, 300000, at least 0; 0 does not wait). It then ends the turn with the offline error.
+     Kilo waits with no limit; a limit lets `gobble -p` in a script end.
+   - The resend is a new SDK call, with its own retries.
+4. **An empty reply is run again twice** (Kilo's breaker), after 2 s and then 4 s:
+   - a reply with no text and no tool calls, with or without reasoning, whose stop is not max tokens;
+   - an SDK empty answer, mapped to a new `llm.ErrEmptyReply`: an `*APIError` of kind `ErrIncomplete` whose message
+     ends `the answer has no content` and whose `Reason` is empty or `stop`. A refusal or a safety stop, which the SDK
+     puts in `Reason`, is not run again. A wire test on each of the SDK's four wires pins the message, so an SDK change
+     fails a gobble test.
+   - A third empty reply ends the turn with `the provider gave no usable reply 3 times`.
+   - An empty reply is not emitted as a message, so neither the session file nor the model sees it. Its usage is still
+     counted.
+5. **Retry status** is a notification, `_gobble/retry`, of `{sessionId, phase, cause, attempt, maxAttempts, delayMs,
+   error}`:
+   - `phase` is `start`, sent before each wait, or `end`, when the call after it succeeds, the wait is aborted, or the
+     retries run out;
+   - `cause` is `offline` or `empty_reply`; an offline wait sends one `start` and one `end`, with no `attempt`;
+   - gobble's own CLI shows it on stderr: `retrying: <cause> (attempt <n> of <m>)`, or `waiting for the network`.
+     Another client may ignore it.
+
+   The SDK's own retries get the same notification, `cause` `provider`, once the SDK offers a callback (issue 3), in a
+   sub-phase made executable then.
+6. **The retry methods are Pi's two.**
+   - `_gobble/set_auto_retry {sessionId, enabled}` writes `retry.enabled` to the global settings, as Pi's does. Within
+     the session, decisions 3 and 4 follow it at once; the SDK's retry follows it from the next provider built.
+   - `_gobble/abort_retry {sessionId}` ends a pending wait. The turn ends with the error that caused the wait, and
+     `_gobble/retry`'s `end` carries `error: "retry cancelled"`.
+7. **The first-byte deadline waits for F4-1b.** While the stream is buffered, a first-byte deadline would be a
+   deadline on the whole reply. It is made with F4-1b's live stream.
+8. **F5-2, automatic compaction (proposed):**
+   - settings `compaction.enabled` (bool, true), `compaction.reserveTokens` (int, 16384, at least 1) and
+     `compaction.thresholdPercent` (int, 0 to 100; 0, the default, is off);
+   - compaction runs when the estimate passes `window - reserveTokens`, or, with `thresholdPercent` set, when it reaches
+     `floor(window × thresholdPercent / 100)`, if that is lower. The estimate is `compaction.EstimateEntries`. A window
+     of 0, unknown, never triggers;
+   - it is checked before each model call in a turn and after the turn;
+   - `llm.ErrContextOverflow` compacts and resends once; a second ends the turn;
+   - at most 3 compactions in one turn (Kilo). A fourth would end the turn with `compaction did not bring the context
+     under the model's window after 3 attempts`;
+   - an empty summary is refused, and nothing is written;
+   - the summary request's output is capped at `min(0.8 × reserveTokens, the model's max output)` (Pi), through a new
+     `llm.Request.MaxTokens`;
+   - a notification `_gobble/compaction {sessionId, phase, reason, tokensBefore, error}`, `reason` `manual`,
+     `threshold` or `overflow`; `_gobble/set_auto_compaction {sessionId, enabled}`, writing `compaction.enabled` as
+     `_gobble/set_auto_retry` writes its key; and `get_state`'s `autoCompactionEnabled` from the setting.
+9. **F5-3, loop safety (proposed):**
+   - three identical calls in a row in one turn, across its model calls (the same tool and the same arguments), ask the
+     user through the session's permission request whether to go on; no ends the turn. This is wider than opencode's
+     check, which sees one reply;
+   - a call to an unknown tool whose name, trimmed and lower-cased, names exactly one tool runs that tool (Kilo's
+     repair); opencode's `invalid` tool is not adopted;
+   - three consecutive calls whose arguments fail (not JSON, or not the schema), of any tool, end the turn (Kilo);
+   - a reply with no finish reason reports a new stop, so the agent can tell it apart; with no calls it ends the turn.
+     How the session file and ACP record it is decided when F5-3 is made executable.
+10. **F5-4, the summary (proposed):**
+    - opencode's template, with its rolling update from the prior summary, replaces Pi's prompts (choice 9 revisits
+      them, and 0005-MADR's rule 3 needs the reason for copying another harness's text recorded then). Pi's cut point
+      and split-turn merge stay;
+    - tool output in the summary's input is cut at 2,000 characters (opencode);
+    - `compaction.prune` (bool, false) turns on opencode's prune pass, with its 40,000 and 20,000 tokens. Each cleared
+      output is a `context_edit` whose replacement is `[Old tool result content cleared]`;
+    - a summary request that is itself too large (`llm.ErrContextOverflow`) prunes the cut-off part's tool outputs and
+      tries once more (Kilo).
+11. **F5-5, the small model (proposed):** `smallModel` (string, `provider/id`, empty). When set, it writes compaction
+    summaries and a session title after the first turn, as a `session_info` name unless one is already set. Unset,
+    summaries use the session's model, and no title is made.
+
+**F5-1's steps:**
+
+1. **`internal/config`:** the five `retry.*` keys of decisions 2 and 3 in `keys.go`; the `Retry` type in `settings.go`
+   and its accessor cases; the template block in `settings.yaml`; `testdata/settings.schema.json` from `genschema`.
+2. **`llm/errors.go`:** `ErrOffline` and `ErrEmptyReply`.
+3. **`llm/provider/provider.go`:**
+   - `Options.Retry`, the policy and whether it is on, replaces the fixed `retryPolicy`; `New` wraps only when it is on;
+   - `mapError` gives decision 3's `ErrOffline` and decision 4's `ErrEmptyReply`;
+   - the adapter gains `Probe(ctx) error`, decision 3's dial, through a new optional interface `llm.Prober`.
+4. **`internal/cli/agent.go`:** the settings become `Options.Retry`, and reach the agent's offline wait.
+5. **`agent/agent.go`, `agent/event.go`:** in `call`, decision 3's wait and decision 4's runs, each reported as a new
+   `Retry` event; `Config.Retry` holds whether they are on and the offline wait's limit; an abort ends a wait.
+6. **`acpserver`:** the `Retry` event becomes `_gobble/retry`; `_gobble/set_auto_retry` and `_gobble/abort_retry` in
+   `extensions.go`, through the settings writer `gobble config` uses.
+7. **`acpclient`, `internal/cli`:** the client takes `_gobble/retry`, and the CLI shows decision 5's line on stderr.
+8. **Records:** this plan's execution record; `docs/README.md`.
+
+**F5-1's tests,** each seen failing on a scratch copy:
+
+- under `synctest`: the offline wait dials every 3 s, resends when a dial connects, and ends at `retry.offlineWaitMs`,
+  on cancel and on `_gobble/abort_retry`; a dial recorder shows no host other than the provider's;
+- under `synctest`: an empty reply runs again after 2 s and 4 s, and a third ends the turn with decision 4's text; a
+  refusal is not run again; no empty reply reaches the session file or the next request;
+- wire tests: a refused connection and an unknown host give `llm.ErrOffline`; each of the four wires' empty answer gives
+  `llm.ErrEmptyReply`, and a safety stop does not;
+- the settings: `retry.enabled: false` builds a provider with no retry; `maxRetries`, `baseDelayMs` and `maxDelayMs`
+  reach the SDK's policy, counted against a test server that answers 429;
+- ACP: `_gobble/retry`'s `start` and `end` for each cause; `_gobble/set_auto_retry` writes the setting;
+  `_gobble/abort_retry` ends the wait; the CLI's line on stderr.
+
+**F5-1's gates:** the pre-add check on the changed `.go` files; lint for linux, darwin and windows with
+`CGO_ENABLED=0`; `CGO_ENABLED=1 go test -race -count=1 ./...`; `make preflight`. Windows `go test` and `-race`, the
+second Linux machine's `-race`, and Windows and WSL `make preflight` are the owner's.
+
+**Waiting, named:** the SDK retries' status (go-llmprovider-sdk issue 3); the first-byte deadline (F4-1b).
