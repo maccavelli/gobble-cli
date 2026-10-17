@@ -76,6 +76,24 @@
 #   keepRecentTokens: 20000
 
 # ---------------------------------------------------------------------
+# Retry
+# ---------------------------------------------------------------------
+
+# Whether a failed model call is retried. The provider retries a rate
+# limit, an unavailable service or a dropped connection maxRetries
+# times, waiting baseDelayMs, then twice as long each time, up to
+# maxDelayMs; a service that asks for a longer wait is not retried, and
+# exhausted quota never is. With the network down, a turn waits up to
+# offlineWaitMs for it to come back, and 0 does not wait. An empty reply
+# is run twice more. Times are in milliseconds.
+# retry:
+#   enabled: true
+#   maxRetries: 3
+#   baseDelayMs: 2000
+#   maxDelayMs: 60000
+#   offlineWaitMs: 300000
+
+# ---------------------------------------------------------------------
 # Tools
 # ---------------------------------------------------------------------
 

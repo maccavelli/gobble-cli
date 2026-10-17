@@ -44,7 +44,7 @@ func settingsAgent(t *testing.T, store session.Store, p llm.Provider, settings f
 	t.Helper()
 	logs := &syncBuffer{}
 	a := New(Options{
-		Version: "1.2.3", NewID: counterIDs(), Provider: func(string) (llm.Provider, error) { return p, nil },
+		Version: "1.2.3", NewID: counterIDs(), Provider: func(string, llm.Retry) (llm.Provider, error) { return p, nil },
 		Store: store, Settings: settings, MCP: mo, Logger: slog.New(slog.NewTextHandler(logs, nil)),
 	})
 	client := &acptest.Client{Allow: true}
@@ -107,7 +107,7 @@ func TestSessionSettingsApplied(t *testing.T) {
 func TestNilSettingsIsToday(t *testing.T) {
 	today := SessionSettings{
 		SteeringMode: queueOneAtATime, FollowUpMode: queueOneAtATime, Thinking: thinkingOff, CacheRetention: "short",
-		Compaction: compaction.DefaultSettings, MCPStartupWait: DefaultStartupWait,
+		Compaction: compaction.DefaultSettings, MCPStartupWait: DefaultStartupWait, Retry: llm.DefaultRetry,
 	}
 	if got := New(Options{}).sessionSettings("/x"); got != today {
 		t.Fatalf("nil Settings = %+v, want %+v", got, today)
@@ -120,6 +120,7 @@ func TestNilSettingsIsToday(t *testing.T) {
 	want := SessionSettings{
 		SteeringMode: queueOneAtATime, FollowUpMode: queueAll, Thinking: thinkingOff, CacheRetention: "short",
 		Compaction: compaction.Settings{ReserveTokens: 1, KeepRecentTokens: 7}, MCPStartupWait: time.Second,
+		Retry: llm.DefaultRetry,
 	}
 	if got := a.sessionSettings("/x"); got != want {
 		t.Fatalf("partial Settings = %+v, want %+v", got, want)

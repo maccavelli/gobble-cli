@@ -14,6 +14,7 @@ import (
 	"github.com/maccavelli/gobble-cli/acpserver"
 	"github.com/maccavelli/gobble-cli/compaction"
 	"github.com/maccavelli/gobble-cli/internal/config"
+	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/llm/llmtest"
 	"github.com/maccavelli/gobble-cli/llm/provider"
 	"github.com/maccavelli/gobble-cli/session"
@@ -144,6 +145,7 @@ func TestSessionSettingsReachAgent(t *testing.T) {
 		SteeringMode: "all", FollowUpMode: "all", Thinking: "low", CacheRetention: "long",
 		Compaction:     compaction.Settings{ReserveTokens: compaction.DefaultSettings.ReserveTokens, KeepRecentTokens: 100},
 		MCPStartupWait: 7 * time.Millisecond, MCPStopGrace: 8 * time.Millisecond, MCPStopTimeout: 9 * time.Millisecond,
+		Retry: llm.DefaultRetry,
 	}
 	if got != want {
 		t.Fatalf("Settings = %+v, want %+v", got, want)
@@ -154,6 +156,7 @@ func TestSessionSettingsReachAgent(t *testing.T) {
 	today := acpserver.SessionSettings{
 		SteeringMode: "one-at-a-time", FollowUpMode: "one-at-a-time", Thinking: "off", CacheRetention: "short", Compaction: compaction.DefaultSettings,
 		MCPStartupWait: 10 * time.Second, MCPStopGrace: 500 * time.Millisecond, MCPStopTimeout: 2 * time.Second,
+		Retry: llm.DefaultRetry,
 	}
 	if got := toSession(config.Defaults()); got != today {
 		t.Fatalf("toSession(Defaults()) = %+v, want %+v", got, today)
@@ -266,7 +269,7 @@ func TestDefaultProviderSetting(t *testing.T) {
 	if c := e.modelChoice(); c.Provider != "opencode-go" || c.Default != "claude-haiku-5-5" || !slices.Equal(c.Models, provider.Models("opencode-go")) {
 		t.Fatalf("model choice %+v, want opencode-go's", c)
 	}
-	if p, err := modelProvider(e)("s1"); err != nil || p.ID() != "opencode-go" {
+	if p, err := modelProvider(e)("s1", llm.DefaultRetry); err != nil || p.ID() != "opencode-go" {
 		t.Fatalf("provider %v, %v; want opencode-go", p, err)
 	}
 	writeFile(t, filepath.Join(home, "settings.yaml"), "defaultProvider: openai\n")

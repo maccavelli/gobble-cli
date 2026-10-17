@@ -23,6 +23,13 @@ var (
 	ErrUnavailable = errors.New("llm: unavailable")
 	// ErrUnsupported means this facade cannot perform the operation.
 	ErrUnsupported = errors.New("llm: unsupported")
+	// ErrOffline means the request could not be sent for want of a
+	// network: the host's name did not resolve, or nothing answered
+	// (0005-PLAN F5-1).
+	ErrOffline = errors.New("llm: offline")
+	// ErrEmptyReply means the provider's answer had nothing usable in it,
+	// and was not a refusal or a safety stop (0005-PLAN F5-1).
+	ErrEmptyReply = errors.New("llm: empty reply")
 )
 
 // APIError is a provider HTTP failure.

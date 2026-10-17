@@ -9,10 +9,12 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/maccavelli/gobble-cli/acpserver"
 	"github.com/maccavelli/gobble-cli/compaction"
 	"github.com/maccavelli/gobble-cli/internal/config"
+	"github.com/maccavelli/gobble-cli/llm"
 )
 
 // processOnce holds the process settings, resolved once a run.
@@ -89,7 +91,15 @@ func toSession(s config.Settings) acpserver.SessionSettings {
 			ReserveTokens: compaction.DefaultSettings.ReserveTokens, KeepRecentTokens: int(s.Compaction.KeepRecentTokens),
 		},
 		MCPStartupWait: s.MCPStartupWait(), MCPStopGrace: s.MCPStopGrace(), MCPStopTimeout: s.MCPStopTimeout(),
+		Retry: retryOf(s.Retry),
 	}
+}
+
+// retryOf is the retry settings as a session takes them (0005-PLAN F5-1).
+func retryOf(r config.Retry) llm.Retry {
+	ms := func(n int64) time.Duration { return time.Duration(n) * time.Millisecond }
+	return llm.Retry{Off: !r.Enabled, MaxRetries: int(r.MaxRetries), BaseDelay: ms(r.BaseDelayMs), MaxDelay: ms(r.MaxDelayMs),
+		OfflineWait: ms(r.OfflineWaitMs)}
 }
 
 // expandHome expands a leading ~ to the home directory, as the path keys

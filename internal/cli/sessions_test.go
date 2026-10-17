@@ -21,8 +21,8 @@ import (
 func withModel(t *testing.T, s *llmtest.Script) {
 	t.Helper()
 	old := modelProvider
-	modelProvider = func(*runEnv) func(string) (llm.Provider, error) {
-		return func(string) (llm.Provider, error) { return s, nil }
+	modelProvider = func(*runEnv) func(string, llm.Retry) (llm.Provider, error) {
+		return func(string, llm.Retry) (llm.Provider, error) { return s, nil }
 	}
 	t.Cleanup(func() { modelProvider = old })
 }

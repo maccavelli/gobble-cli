@@ -206,8 +206,8 @@ func (rejecting) Stream(context.Context, *llm.Request) iter.Seq2[llm.Event, erro
 // stays (0005-PLAN F4-3a decision 9, deviation 1).
 func TestRejectedKeyMessage(t *testing.T) {
 	old := modelProvider
-	modelProvider = func(*runEnv) func(string) (llm.Provider, error) {
-		return func(string) (llm.Provider, error) { return rejecting{}, nil }
+	modelProvider = func(*runEnv) func(string, llm.Retry) (llm.Provider, error) {
+		return func(string, llm.Retry) (llm.Provider, error) { return rejecting{}, nil }
 	}
 	t.Cleanup(func() { modelProvider = old })
 	c := newCfgEnv(t)
@@ -481,8 +481,8 @@ func TestLoginListing(t *testing.T) {
 // A refused login says LoginRejected's sentence, and nothing of the
 // provider's text (0005-PLAN F4-3b decision 8).
 func TestLoginMessage(t *testing.T) {
-	replace(t, &modelProvider, func(*runEnv) func(string) (llm.Provider, error) {
-		return func(string) (llm.Provider, error) { return rejecting{}, nil }
+	replace(t, &modelProvider, func(*runEnv) func(string, llm.Retry) (llm.Provider, error) {
+		return func(string, llm.Retry) (llm.Provider, error) { return rejecting{}, nil }
 	})
 	c := newCfgEnv(t)
 	c.write(c.authFile(), `{"grok": {"type": "oauth", "access": "a", "refresh": "r", "expires": 1}}`)

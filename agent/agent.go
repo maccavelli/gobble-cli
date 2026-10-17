@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
+	"errors"
 	"fmt"
 	"iter"
 	"maps"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/permission"
@@ -48,6 +50,13 @@ type Config struct {
 	// Loaded names deferred tools an earlier prompt loaded, in load order.
 	// They are sent as direct tools, after the others (0012-MADR D9).
 	Loaded []string
+	// Retry is the session's retry settings, of which the turn reads Off
+	// and OfflineWait: the provider's own retries are the provider's. Nil
+	// takes no wait (0005-PLAN F5-1).
+	Retry *llm.Retry
+	// RetryAbort, once closed, ends a wait the turn is taking, and the turn
+	// with the error that caused it (_gobble/abort_retry). Nil never does.
+	RetryAbort <-chan struct{}
 }
 
 // Queue is Pi's steering and follow-up queues (agent.ts). Each call drains
@@ -249,7 +258,7 @@ func (t *turn) run() {
 			t.end(StopMaxTurnRequests)
 			return
 		}
-		reply, ok := t.call()
+		reply, ok := t.next()
 		if !ok {
 			return
 		}
@@ -343,9 +352,202 @@ func (r *reply) message() llm.Message {
 	return m
 }
 
-// call makes one model call, yielding its deltas. ok is false when the
-// stream failed or the consumer stopped; a failure has been yielded.
-func (t *turn) call() (*reply, bool) {
+// The turn's own waits (0005-PLAN F5-1): an empty reply runs again after
+// each of emptyDelays, as Kilo's does; the network is probed every
+// probeEvery, as Kilo's is.
+var (
+	emptyDelays = []time.Duration{2 * time.Second, 4 * time.Second}
+	probeEvery  = 3 * time.Second
+)
+
+var (
+	// errEmpty ends a turn whose empty reply's wait was cut short.
+	errEmpty = fmt.Errorf("the provider gave an empty reply: %w", llm.ErrEmptyReply)
+	// errNoUsableReply ends a turn whose replies were all empty.
+	errNoUsableReply = fmt.Errorf("the provider gave no usable reply %d times: %w", len(emptyDelays)+1, llm.ErrEmptyReply)
+)
+
+// What a wait's End says when it was cut short.
+const (
+	retryCancelled = "retry cancelled" // _gobble/abort_retry
+	turnCancelled  = "cancelled"       // the turn
+)
+
+// waited is how a wait ended.
+type waited int
+
+const (
+	waitDone waited = iota
+	waitCancelled
+	waitAborted
+	waitExpired
+)
+
+// next is call with the waits of 0005-PLAN F5-1 decisions 3 and 4: an
+// offline call waits for the provider's host and is sent again, and an
+// empty reply runs again twice, neither reaching the history. Each wait is
+// reported as Retry events. ok is false when the turn is over: a failure
+// yielded, the consumer stopped, or the turn cancelled in a wait.
+func (t *turn) next() (*reply, bool) {
+	rt := t.a.cfg.Retry
+	var cause RetryCause // the wait under way, or none
+	var deadline time.Time
+	empties := 0
+	for {
+		r, err := t.call()
+		switch {
+		case t.stopped:
+			return r, false
+		case err == nil && t.ctx.Err() != nil:
+			t.endWait(cause, turnCancelled)
+			return r, !t.stopped
+		case rt == nil || rt.Off:
+		case errors.Is(err, llm.ErrOffline) && t.prober() != nil && rt.OfflineWait > 0:
+			if cause != RetryOffline {
+				t.endWait(cause, "")
+				cause, deadline = RetryOffline, time.Now().Add(rt.OfflineWait)
+				if !t.emit(Retry{Phase: RetryStart, Cause: RetryOffline}) {
+					return r, false
+				}
+			}
+			w := t.waitOnline(deadline)
+			if w == waitDone {
+				continue
+			}
+			if !t.cutShort(w, &cause) {
+				return nil, false
+			}
+		case t.empty(r, err) && empties < len(emptyDelays):
+			if cause == RetryOffline {
+				t.endWait(cause, "") // the network is back
+			}
+			cause = RetryEmptyReply
+			d := emptyDelays[empties]
+			empties++
+			if !t.emit(Retry{Phase: RetryStart, Cause: RetryEmptyReply, Attempt: empties, MaxAttempts: len(emptyDelays), Delay: d}) {
+				return r, false
+			}
+			w := t.sleep(d)
+			if w == waitDone {
+				continue
+			}
+			if !t.cutShort(w, &cause) {
+				return nil, false
+			}
+			if err == nil {
+				err = errEmpty
+			}
+		case t.empty(r, err):
+			err = errNoUsableReply
+		}
+		if err != nil {
+			t.endWait(cause, err.Error())
+			t.yield(nil, err)
+			t.stopped = true
+			return r, false
+		}
+		t.endWait(cause, "")
+		return r, true
+	}
+}
+
+// cutShort ends a wait that w cut short. A cancel ends the turn as
+// cancelled, and it returns false. An abort reports the wait's end as
+// cancelled and clears *cause; an expiry leaves the end for the caller to
+// report with the wait's error. Either returns true for the caller to end
+// the turn with that error.
+func (t *turn) cutShort(w waited, cause *RetryCause) bool {
+	switch w {
+	case waitCancelled:
+		t.endWait(*cause, turnCancelled)
+		t.end(StopCancelled)
+		return false
+	case waitAborted:
+		t.endWait(*cause, retryCancelled)
+		*cause = ""
+	}
+	return true
+}
+
+// endWait reports the end of the wait under way, if any: a success when
+// why is "".
+func (t *turn) endWait(cause RetryCause, why string) {
+	if cause != "" {
+		t.emit(Retry{Phase: RetryEnd, Cause: cause, Err: why})
+	}
+}
+
+// empty reports whether a call's answer had nothing usable: the SDK's
+// empty answer, or a reply with no text and no tool calls, reasoning or
+// not, that did not stop at max tokens (0005-PLAN F5-1 decision 4).
+func (t *turn) empty(r *reply, err error) bool {
+	if err != nil {
+		return errors.Is(err, llm.ErrEmptyReply)
+	}
+	return r.text.Len() == 0 && len(r.calls) == 0 && r.stop != llm.StopMaxTokens
+}
+
+// prober is the provider as an llm.Prober, or nil.
+func (t *turn) prober() llm.Prober {
+	if p, ok := t.a.cfg.Provider.(llm.Prober); ok {
+		return p
+	}
+	return nil
+}
+
+// waitOnline probes the provider's host every probeEvery until it
+// answers, the turn is cancelled, the wait is aborted, or deadline passes;
+// a probe that would come after deadline is not made.
+func (t *turn) waitOnline(deadline time.Time) waited {
+	for {
+		left := time.Until(deadline)
+		if left < probeEvery {
+			if w := t.sleep(left); w != waitDone {
+				return w
+			}
+			return waitExpired
+		}
+		if w := t.sleep(probeEvery); w != waitDone {
+			return w
+		}
+		if probe(t.ctx, t.prober(), t.a.cfg.RetryAbort) == nil {
+			return waitDone
+		}
+	}
+}
+
+// probe is one of p's probes, cut short when ctx is done or abort closes.
+func probe(ctx context.Context, p llm.Prober, abort <-chan struct{}) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	go func() {
+		select {
+		case <-abort:
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
+	return p.Probe(ctx)
+}
+
+// sleep waits d, or until the turn is cancelled or the wait aborted.
+func (t *turn) sleep(d time.Duration) waited {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-t.ctx.Done():
+		return waitCancelled
+	case <-t.a.cfg.RetryAbort:
+		return waitAborted
+	case <-timer.C:
+		return waitDone
+	}
+}
+
+// call makes one model call, yielding its deltas. err is the stream's
+// failure, not yet yielded, or nil when the turn was cancelled; a consumer
+// that stopped sets t.stopped.
+func (t *turn) call() (*reply, error) {
 	msgs := make([]llm.Message, 0, len(t.history)+len(t.added)+1)
 	if t.a.cfg.System != "" {
 		msgs = append(msgs, llm.Message{Role: llm.RoleSystem, Content: []llm.Content{{Type: llm.ContentText, Text: t.a.cfg.System}}})
@@ -356,19 +558,15 @@ func (t *turn) call() (*reply, bool) {
 	for ev, err := range t.a.cfg.Provider.Stream(t.ctx, req) {
 		if err != nil {
 			if t.ctx.Err() != nil {
-				return r, !t.stopped
+				return r, nil
 			}
-			if !t.stopped {
-				t.yield(nil, err)
-				t.stopped = true
-			}
-			return r, false
+			return r, err
 		}
 		switch ev := ev.(type) {
 		case llm.TextDelta:
 			r.text.WriteString(ev.Text)
 			if ev.Text != "" && !t.emit(TextDelta{Text: ev.Text}) {
-				return r, false
+				return r, nil
 			}
 		case llm.ThinkingDelta:
 			r.pending.WriteString(ev.Text)
@@ -379,7 +577,7 @@ func (t *turn) call() (*reply, bool) {
 				r.pending.Reset()
 			}
 			if ev.Text != "" && !t.emit(ThinkingDelta{Text: ev.Text}) {
-				return r, false
+				return r, nil
 			}
 		case llm.ToolCallDone:
 			r.calls = append(r.calls, ev)
@@ -387,13 +585,13 @@ func (t *turn) call() (*reply, bool) {
 			t.usage = addUsage(t.usage, ev)
 			r.usage = addUsage(r.usage, ev)
 			if !t.emit(Usage{Usage: ev}) {
-				return r, false
+				return r, nil
 			}
 		case llm.Done:
 			r.stop = ev.StopReason
 		}
 	}
-	return r, !t.stopped
+	return r, nil
 }
 
 // runTools runs the calls one after another and returns their results as

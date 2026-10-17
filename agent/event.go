@@ -1,6 +1,8 @@
 package agent
 
 import (
+	"time"
+
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/tool"
 )
@@ -52,6 +54,39 @@ type Queued struct{ Message llm.Message }
 // they are sent from the next model call on (0012-MADR D9).
 type Loaded struct{ Names []string }
 
+// Retry is a wait the turn takes before it calls the model again
+// (0005-PLAN F5-1 decision 5): a Start before each wait, and one End when
+// the call after it succeeds, the wait is cut short, or the retries run
+// out. Cause is RetryOffline or RetryEmptyReply. An offline wait has one
+// Start and one End, and no Attempt. Delay is the wait about to start, for
+// an empty reply; Err is why the End is not a success, or "".
+type Retry struct {
+	Phase       RetryPhase
+	Cause       RetryCause
+	Attempt     int
+	MaxAttempts int
+	Delay       time.Duration
+	Err         string
+}
+
+// RetryPhase is a Retry's place in its wait.
+type RetryPhase string
+
+// The phases.
+const (
+	RetryStart RetryPhase = "start"
+	RetryEnd   RetryPhase = "end"
+)
+
+// RetryCause is why the turn waits.
+type RetryCause string
+
+// The causes.
+const (
+	RetryOffline    RetryCause = "offline"
+	RetryEmptyReply RetryCause = "empty_reply"
+)
+
 // End is the turn's last event. Messages are the turn's messages, the
 // prompt first, for the caller to append to the history; Usage sums the
 // turn's model calls.
@@ -70,6 +105,7 @@ func (Usage) event()         {}
 func (Message) event()       {}
 func (Queued) event()        {}
 func (Loaded) event()        {}
+func (Retry) event()         {}
 func (End) event()           {}
 
 // StopReason is why a turn ended. The values are ACP's stop reasons.

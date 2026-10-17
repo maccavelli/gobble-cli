@@ -2,6 +2,7 @@ package acptest
 
 import (
 	"context"
+	"encoding/json"
 	"math"
 	"slices"
 	"sync"
@@ -27,6 +28,7 @@ type Client struct {
 
 	mu          sync.Mutex
 	updates     []acp.SessionNotification
+	notices     []Notice
 	permissions []acp.RequestPermissionRequest
 	fileCalls   []string
 }
@@ -58,6 +60,30 @@ func (c *Client) SessionUpdate(_ context.Context, n acp.SessionNotification) err
 	defer c.mu.Unlock()
 	c.updates = append(c.updates, n)
 	return nil
+}
+
+// Notice is an extension message the agent sent: its method and params.
+type Notice struct {
+	Method string
+	Params json.RawMessage
+}
+
+var _ acp.ExtensionMethodHandler = (*Client)(nil)
+
+// HandleExtensionMethod records an extension message from the agent, such
+// as _gobble/retry, and answers it with nothing.
+func (c *Client) HandleExtensionMethod(_ context.Context, method string, params json.RawMessage) (any, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.notices = append(c.notices, Notice{Method: method, Params: slices.Clone(params)})
+	return nil, nil
+}
+
+// Notices returns the extension messages received, in order.
+func (c *Client) Notices() []Notice {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return slices.Clone(c.notices)
 }
 
 // Permissions returns the permission requests received, in order.

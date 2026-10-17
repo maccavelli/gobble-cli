@@ -78,6 +78,13 @@ func (s *printSink) on(u acpclient.Update) {
 		if c.Cost != nil {
 			s.cost = c.Cost
 		}
+	case acpclient.KindRetry:
+		// On stderr, and never in stream-json, whose lines are session/update
+		// params (0005-PLAN F5-1 decision 5).
+		if line, ok := retryLine(u.Retry); ok {
+			s.out.Notef("%s", line)
+		}
+		return
 	}
 	if !s.stream {
 		return

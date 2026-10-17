@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
 
 	acp "github.com/maccavelli/acp-go-sdk2"
@@ -42,7 +43,13 @@ var extensions = map[string]extension{
 	"_gobble/get_last_assistant_text": (*Agent).extGetLastAssistantText,
 	"_gobble/get_session_stats":       (*Agent).extGetSessionStats,
 	"_gobble/get_fork_messages":       (*Agent).extGetForkMessages,
+	"_gobble/set_auto_retry":          (*Agent).extSetAutoRetry,
+	"_gobble/abort_retry":             (*Agent).extAbortRetry,
 }
+
+// methodRetry is the notification of a turn's retry wait (0005-PLAN F5-1
+// decision 5).
+const methodRetry = "_gobble/retry"
 
 // extensionNames are the methods initialize advertises, sorted.
 func extensionNames() []string { return slices.Sorted(maps.Keys(extensions)) }
@@ -88,6 +95,11 @@ type modeParams struct {
 type compactParams struct {
 	sessionParams      `json:",inline"`
 	CustomInstructions string `json:"customInstructions"`
+}
+
+type enabledParams struct {
+	sessionParams `json:",inline"`
+	Enabled       *bool `json:"enabled"`
 }
 
 type nameParams struct {
@@ -284,6 +296,59 @@ func (a *Agent) extSetSessionName(ctx context.Context, params jsontext.Value) (a
 		return nil, err
 	}
 	return empty{}, nil
+}
+
+// extSetAutoRetry is Pi's set_auto_retry: it writes retry.enabled to the
+// global settings, as Pi writes its own, and sets the session's. Turned
+// off, it also ends any wait of the running turn, and every later one, at
+// once; turned on, it takes effect from the session's next turn, and the
+// SDK's own retries from the next session's provider (0005-PLAN F5-1
+// decision 6).
+func (a *Agent) extSetAutoRetry(_ context.Context, params jsontext.Value) (any, error) {
+	p, s, err := extSession[enabledParams](a, params)
+	if err != nil {
+		return nil, err
+	}
+	if p.Enabled == nil {
+		return nil, invalidParams(s.id, "enabled must be true or false")
+	}
+	if a.save != nil {
+		if err := a.save("retry.enabled", strconv.FormatBool(*p.Enabled)); err != nil {
+			return nil, acp.NewInternalError(map[string]any{keyReason: err.Error()})
+		}
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	s.retry.Off = !*p.Enabled
+	if s.retry.Off {
+		a.abortRetry(s)
+	}
+	return empty{}, nil
+}
+
+// extAbortRetry is Pi's abort_retry: it ends the running turn's wait, if
+// one is under way; the turn then ends with the error that caused it
+// (0005-PLAN F5-1 decision 6).
+func (a *Agent) extAbortRetry(_ context.Context, params jsontext.Value) (any, error) {
+	_, s, err := extSession[sessionParams](a, params)
+	if err != nil {
+		return nil, err
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if s.waiting {
+		a.abortRetry(s)
+	}
+	return empty{}, nil
+}
+
+// abortRetry closes the running turn's abort channel, once. The caller
+// holds a.mu.
+func (a *Agent) abortRetry(s *liveSession) {
+	if s.retryAbort != nil {
+		close(s.retryAbort)
+		s.retryAbort = nil
+	}
 }
 
 type forkResult struct {

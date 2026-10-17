@@ -340,7 +340,7 @@ func TestPhoneLegibleBounds(t *testing.T) {
 // With no credential, initialize and session/new succeed and a prompt
 // fails with auth_required.
 func TestNoCredentialIsAuthRequired(t *testing.T) {
-	agent := New(Options{Version: "1.2.3", NewID: counterIDs(), Provider: func(string) (llm.Provider, error) {
+	agent := New(Options{Version: "1.2.3", NewID: counterIDs(), Provider: func(string, llm.Retry) (llm.Provider, error) {
 		return nil, fmt.Errorf("%w: no model credential", llm.ErrAuth)
 	}})
 	c := acptest.Connect(t, agent, &acptest.Client{})

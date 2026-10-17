@@ -42,7 +42,7 @@ func TestListSkipsNonAbsoluteCwd(t *testing.T) {
 		}
 	}
 	var logs bytes.Buffer
-	ag := New(Options{Version: "1.2.3", Provider: func(string) (llm.Provider, error) { return llmtest.NewScript(), nil },
+	ag := New(Options{Version: "1.2.3", Provider: func(string, llm.Retry) (llm.Provider, error) { return llmtest.NewScript(), nil },
 		Models: func() ModelChoice { return testModels }, Store: store, Logger: slog.New(slog.NewTextHandler(&logs, nil))})
 	c := acptest.Connect(t, ag, &acptest.Client{})
 	ag.SetConnection(c.Agent)

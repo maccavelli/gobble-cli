@@ -5635,6 +5635,7 @@ histories were rewritten; the report's line numbers match these heads within a f
     (`0002-PLAN-cli-acp-headless-mcp-v1.md:1858`, `:2003`);
   - the provider's options are built per session (`internal/cli/agent.go:34-46`), with models.json's base URL
     (`internal/cli/modelsjson.go:117-122`); the SDK's descriptor has `DefaultBaseURL` (SDK `llmprovider/registry.go:21-22`);
+    *(2026-10-16, F5-1's deviation 1: empty for openai, claude, gemini and grok.)*
   - an agent may send an extension notification (acp-go-sdk2 `extensions.go:91-97`), and a client ignores one it does
     not know (`connection.go:1487`). gobble sends none today; its own CLI is an ACP client (`acpclient/conn.go:355`);
   - no title is generated, and there is no small-model role.
@@ -5669,8 +5670,9 @@ histories were rewritten; the report's line numbers match these heads within a f
    - `llm/provider` maps a request that could not be sent for want of a network to a new `llm.ErrOffline`, after the
      SDK's retries: a `*url.Error` whose chain holds a `*net.DNSError`, or a `*net.OpError` of op `dial` whose error is
      a timeout, `ECONNREFUSED`, `ENETUNREACH`, `EHOSTUNREACH` or `ENETDOWN`.
-   - On `llm.ErrOffline` the agent waits. Every 3 s it dials the provider's own host (models.json's base URL, or the
-     SDK's default; the port from the scheme), 5 s at most, and resends the call when a dial connects. gobble probes no
+   - On `llm.ErrOffline` the agent waits. Every 3 s it dials the provider's own host (~~models.json's base URL, or the
+     SDK's default~~ *the host the failed request went to, through the environment's proxy if it names one; 2026-10-16,
+     F5-1's deviation 1*; the port from the scheme), 5 s at most, and resends the call when a dial connects. gobble probes no
      other host: Kilo's probe would tell `kilo.ai`, `example.com` or Cloudflare that gobble is running.
    - The wait ends when a dial connects, when the turn is cancelled, on `_gobble/abort_retry`, or after
      `retry.offlineWaitMs` (int, 300000, at least 0; 0 does not wait). It then ends the turn with the offline error.
@@ -5775,3 +5777,98 @@ histories were rewritten; the report's line numbers match these heads within a f
 second Linux machine's `-race`, and Windows and WSL `make preflight` are the owner's.
 
 **Waiting, named:** the SDK retries' status (go-llmprovider-sdk issue 3); the first-byte deadline (F4-1b).
+
+**F5-1's deviations, 2026-10-16, decided by the owner:**
+
+1. **The probe's address.** Found while building decision 3: go-llmprovider-sdk `v1.13.0`'s descriptors leave
+   `DefaultBaseURL` empty for openai, claude, gemini and grok (`providers/openai/descriptor.go:13-17`,
+   `providers/claude/descriptor.go:13-19`; it is set only for kilo, together, huggingface, ollama and the two opencode
+   ids). Their defaults are constants in each provider's package, Claude's (`providers/claude/claude.go:104`) and
+   Gemini's (`providers/gemini/gemini.go:69`) unexported. With no models.json base URL, those four would have had no
+   host to probe, and every outage would have waited the whole of `retry.offlineWaitMs`. The plan's fact was wrong; no
+   code had shipped on it.
+   - **Chosen (option 1, "option 1"):** the probe dials the host the failed request went to. A request the network
+     could not carry fails with Go's `*url.Error`, which holds its URL, and the SDK returns it as it is (SDK
+     `internal/wire/post.go:144-159`). The adapter keeps that URL when it reports `llm.ErrOffline`, and `Probe` dials
+     its host, or the proxy the environment names for it. That is the provider's own host for all ten ids, a
+     models.json base URL included. Decision 3 is struck through and annotated.
+   - **Not chosen:** asking the SDK to fill `DefaultBaseURL` for the four, which would have left their offline wait
+     useless until a release; copying the four URLs into gobble, a copy that can drift.
+   - No file is added to the step's scope; the change is in `llm/provider/provider.go`.
+
+**F5-1's execution record (2026-10-16).**
+
+- **Ran as the entry wrote it,** with deviation 1 above. F5-2 is next, made executable when the owner asks.
+- **What was built:**
+  - `internal/config`: the five `retry.*` keys, read per session, so a project's settings may set them; the `Retry`
+    type; the template's "Retry" block; the schema from `genschema`.
+  - `llm`: `ErrOffline`, `ErrEmptyReply`, the optional `Prober`, and `Retry` with `DefaultRetry` (Pi's three retries
+    from 2 s, capped at 60 s, and a five-minute wait for the network).
+  - `llm/provider`: `Options.Retry`, nil being `DefaultRetry`, from which `policyOf` makes the SDK's policy; `Off` builds
+    no `WithRetry`. `mapError` gives `ErrEmptyReply`, still `ErrIncomplete`, for the SDK's empty answer whose reason is
+    none or `stop`, and `ErrOffline` for decision 3's `*url.Error`, after the SDK's retries. Windows' refusals are
+    Winsock's codes, which `unreachable` names. `Probe` is deviation 1's.
+  - `agent`: `Config.Retry` and `Config.RetryAbort`; `next` wraps `call`, which now returns its error for `next` to yield;
+    the `Retry` event. A nil `Retry` takes no wait, so every caller that sets none is as before.
+  - `acpserver`: `Options.Provider` takes the session's `llm.Retry`; `SessionSettings.Retry`, zero being `DefaultRetry`
+    (settings never give a zero one, its base delay being at least 1 ms); each turn's copy of the session's settings and
+    its abort channel; `_gobble/retry`; `_gobble/set_auto_retry` and `_gobble/abort_retry`; `Options.SaveSetting`.
+  - `acpclient`: `KindRetry`, from `HandleExtensionMethod`; `acptest.Client` records extension messages as `Notices`.
+  - `internal/cli`: the settings reach `toSession` and the provider; `saveGlobalSetting`, `gobble config set`'s path
+    for the global file; `Output.Notef`; decision 5's line in the line view and in print mode, never in stream-json.
+- **Tests,** new: `llm/provider/offline_test.go` (`TestWireOffline`, `TestProbePort`, `TestWireEmptyAnswer`,
+  `TestRetrySettings`), `agent/retry_test.go` (`TestOfflineWait`, `TestEmptyReplyRunsAgain`, under `synctest`),
+  `acpserver/retry_test.go` (`TestRetryNotice`, `TestRetrySettingsReachSession`, `TestSetAutoRetry`, `TestAbortRetry`,
+  under `synctest`), `acpclient/retry_test.go` (`TestRetryNotification`), `internal/cli/retry_test.go`
+  (`TestRetryLines`, `TestRetrySettingsReachSession`, `TestSaveGlobalSetting`).
+- **Existing tests changed,** each to say what the change adds, none loosened:
+  - the provider factory's new parameter at its 22 test sites in `acpserver` and 5 in `internal/cli`;
+  - the tests that list a whole set: `TestKeysMatchSettings` (16 keys to 21), `TestRenderDocument` (the retry block),
+    `TestEveryAdvertisedExtensionAnswers` (0002-PLAN Phase 7's sixteen names and F5-1's two),
+    `TestNilSettingsIsToday` and `TestSessionSettingsReachAgent` (today's settings gain `Retry: llm.DefaultRetry`),
+    and `acpserver/testdata/session.golden`, whose one changed line is `initialize`'s list of names;
+  - `internal/config`'s `sample`, "a valid value for k other than its default", gave `true` for every bool:
+    `retry.enabled` is the first whose default is `true`, so it now gives the other value.
+- **Negatives,** 33 of 33 caught on a scratch copy after control runs, each failing its named tests:
+  - `llm/provider`: a refusal taken as empty; the SDK's message reworded; an unresolved host or a refused port not
+    offline; the failed request's URL not kept; the scheme's port ignored; `Off` ignored; one retry fewer; the base
+    delay not passed;
+  - `agent`: the second wait 2 s; a probe every 2 s; a max-tokens reply taken as empty; a refusal taken as empty;
+    a wait with no `OfflineWait`; an abort's end reported twice; a probe at the deadline; a success's end not reported;
+  - `acpserver`: `SaveSetting` not called; set_auto_retry off not ending the wait; abort_retry ending no wait; the
+    turn given no retry settings; the provider built with the defaults; the turn's wait not tracked; no notification;
+    no default for a zero `Retry`;
+  - `acpclient`: `_gobble/retry` refused; its delay not in milliseconds;
+  - `internal/cli`: the cause's underscore kept; stream-json given the notification; `Off` inverted; no
+    `SaveSetting`; `retry.offlineWaitMs`'s default 0; `retry.maxRetries` read from another field.
+  - The first run caught 31: the other two were the harness's own, whose mutations left an import or a variable
+    unused, so the copy did not build. Rewritten to build, both were caught, and the whole set was run again on the
+    final code: 33 of 33.
+- **Gates:**
+  - the pre-add check, 50 files clean;
+  - lint for linux, darwin and windows, `0 issues.` each with `CGO_ENABLED=0`, after seven findings fixed in the code:
+    the probe takes its context as a parameter (`contextcheck`); a checked type assertion; `errors.AsType` with
+    errcheck's reason where only the type's presence matters, as `provider.go`'s model-key line has it; a flag in place
+    of comparing errors with `==`; `maps.Copy`; `net.ListenConfig`;
+  - the macOS laptop's `CGO_ENABLED=1 go test -race -count=1 ./...`, 33 packages ok, no race report;
+  - `make preflight` on macOS, `preflight passed`; its `apidiff` is a no-op below `v1.0.0`;
+  - **not run:** Windows `go test ./...` and `-race`, the second Linux machine's `-race`, and Windows and WSL
+    `make preflight`, on the owner's machines.
+- **What the entry predicted wrongly, or left unsaid:**
+  - deviation 1, the probe's address;
+  - **the retry keys are read per session,** with the session's project, as `compaction.keepRecentTokens` is;
+  - **`_gobble/set_auto_retry` on** takes effect from the session's next turn; **off** ends the running turn's wait,
+    and any later one in it, at once, the turn ending with the wait's error;
+  - **a probe that would come after the deadline is not made:** the wait ends at `retry.offlineWaitMs` without it;
+  - **the CLI's line spells the cause with spaces:** `retrying: empty reply (attempt 1 of 2)`;
+  - **with `retry.enabled: false` the provider is not wrapped,** so its capabilities are its own: a provider that
+    streams natively then streams live, as F4-1b's would. Not tested, and not run against a service;
+  - **Probe's proxy is not tested:** `http.ProxyFromEnvironment` reads the environment once per process, so a test
+    cannot set it. `TestProbePort` skips if the environment names a proxy for its URLs;
+  - the unknown-host case relies on the resolver answering that `gobble-offline.invalid` does not exist, as a
+    `.invalid` name never does;
+  - Windows' Winsock codes are compiled and linted for windows, and not run there;
+  - **`acpserver.Options.Provider`'s signature changes,** a break of `acpserver`'s API for any caller outside the
+    module, which `apidiff` does not check before `v1.0.0`.
+- **Next:** F5-2, automatic compaction, made executable on the owner's word; the SDK retries' status waits for
+  go-llmprovider-sdk issue 3; the first-byte deadline for F4-1b.

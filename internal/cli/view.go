@@ -134,8 +134,26 @@ func (v *view) on(u acpclient.Update) {
 	case acpclient.KindUsage:
 		c := u.Context
 		v.usage = &c
+	case acpclient.KindRetry:
+		if line, ok := retryLine(u.Retry); ok {
+			v.out.Notef("%s", line)
+		}
 	case acpclient.KindOther:
 	}
+}
+
+// retryLine is what the CLI shows on stderr for a retry wait's start:
+// "waiting for the network", or "retrying: <cause> (attempt <n> of <m>)";
+// an end shows nothing, since a failure ends the turn with its error
+// (0005-PLAN F5-1 decision 5).
+func retryLine(r acpclient.Retry) (string, bool) {
+	switch {
+	case r.Phase != "start":
+		return "", false
+	case r.Cause == "offline":
+		return "waiting for the network", true
+	}
+	return fmt.Sprintf("retrying: %s (attempt %d of %d)", strings.ReplaceAll(r.Cause, "_", " "), r.Attempt, r.MaxAttempts), true
 }
 
 // content draws a tool call's content blocks. A diff is a unified diff,

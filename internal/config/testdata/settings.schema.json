@@ -83,6 +83,41 @@
       },
       "additionalProperties": false
     },
+    "retry": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Whether a failed model call is retried: the provider's retries, the wait for the network, and an empty reply's two more runs.",
+          "default": true
+        },
+        "maxRetries": {
+          "type": "integer",
+          "description": "How many times the provider retries a failed call.",
+          "default": 3,
+          "minimum": 0
+        },
+        "baseDelayMs": {
+          "type": "integer",
+          "description": "The provider's first wait before a retry, in milliseconds; each later wait doubles.",
+          "default": 2000,
+          "minimum": 1
+        },
+        "maxDelayMs": {
+          "type": "integer",
+          "description": "The longest wait before a retry, in milliseconds; a service asking for longer is not retried.",
+          "default": 60000,
+          "minimum": 1
+        },
+        "offlineWaitMs": {
+          "type": "integer",
+          "description": "How long, in milliseconds, a turn waits for the network to come back; 0 does not wait.",
+          "default": 300000,
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
     "shellPath": {
       "type": "string",
       "description": "The bash the bash tool runs. Empty finds one: Git's bash on Windows, bash on PATH elsewhere.",

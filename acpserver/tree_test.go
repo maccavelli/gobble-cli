@@ -36,7 +36,7 @@ func treeAgent(t *testing.T, body []byte, p llm.Provider) (*acptest.Conn, *Agent
 		t.Fatal(err)
 	}
 	store := jsonl.New(dir, jsonl.Options{})
-	ag := New(Options{Version: "1.2.3", Provider: func(string) (llm.Provider, error) { return p, nil },
+	ag := New(Options{Version: "1.2.3", Provider: func(string, llm.Retry) (llm.Provider, error) { return p, nil },
 		Models: func() ModelChoice { return piModels }, Store: store})
 	c := acptest.Connect(t, ag, &acptest.Client{})
 	ag.SetConnection(c.Agent)

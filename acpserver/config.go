@@ -64,6 +64,9 @@ type SessionSettings struct {
 	// MCPStopGrace and MCPStopTimeout are a stdio server's stop timings;
 	// zero leaves mcpclient's own.
 	MCPStopGrace, MCPStopTimeout time.Duration
+	// Retry is the session's retry settings (0005-PLAN F5-1). Settings never
+	// give a zero one, whose base delay is none.
+	Retry llm.Retry
 }
 
 // sessionSettings are the settings for a session in cwd: Options.Settings',
@@ -82,6 +85,9 @@ func (a *Agent) sessionSettings(cwd string) SessionSettings {
 	s.Compaction.ReserveTokens = cmp.Or(s.Compaction.ReserveTokens, a.compaction.ReserveTokens)
 	s.Compaction.KeepRecentTokens = cmp.Or(s.Compaction.KeepRecentTokens, a.compaction.KeepRecentTokens)
 	s.MCPStartupWait = cmp.Or(s.MCPStartupWait, a.mcp.StartupWait, DefaultStartupWait)
+	if s.Retry == (llm.Retry{}) {
+		s.Retry = llm.DefaultRetry
+	}
 	return s
 }
 

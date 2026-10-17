@@ -17,6 +17,7 @@ type Settings struct {
 	FollowUpMode         string     `yaml:"followUpMode" json:"followUpMode,omitempty"`
 	SessionDir           string     `yaml:"sessionDir" json:"sessionDir,omitempty"`
 	Compaction           Compaction `yaml:"compaction" json:"compaction,omitzero"`
+	Retry                Retry      `yaml:"retry" json:"retry,omitzero"`
 	ShellPath            string     `yaml:"shellPath" json:"shellPath,omitempty"`
 	ShellCommandPrefix   string     `yaml:"shellCommandPrefix" json:"shellCommandPrefix,omitempty"`
 	Tools                Tools      `yaml:"tools" json:"tools,omitzero"`
@@ -27,6 +28,15 @@ type Settings struct {
 // Compaction is the compaction settings.
 type Compaction struct {
 	KeepRecentTokens int64 `yaml:"keepRecentTokens" json:"keepRecentTokens,omitempty"`
+}
+
+// Retry is the retry settings (0005-PLAN F5-1).
+type Retry struct {
+	Enabled       bool  `yaml:"enabled" json:"enabled,omitempty"`
+	MaxRetries    int64 `yaml:"maxRetries" json:"maxRetries,omitempty"`
+	BaseDelayMs   int64 `yaml:"baseDelayMs" json:"baseDelayMs,omitempty"`
+	MaxDelayMs    int64 `yaml:"maxDelayMs" json:"maxDelayMs,omitempty"`
+	OfflineWaitMs int64 `yaml:"offlineWaitMs" json:"offlineWaitMs,omitempty"`
 }
 
 // Tools is the tool settings.
@@ -88,6 +98,16 @@ func (s *Settings) field(path string) any {
 		return &s.SessionDir
 	case "compaction.keepRecentTokens":
 		return &s.Compaction.KeepRecentTokens
+	case "retry.enabled":
+		return &s.Retry.Enabled
+	case "retry.maxRetries":
+		return &s.Retry.MaxRetries
+	case "retry.baseDelayMs":
+		return &s.Retry.BaseDelayMs
+	case "retry.maxDelayMs":
+		return &s.Retry.MaxDelayMs
+	case "retry.offlineWaitMs":
+		return &s.Retry.OfflineWaitMs
 	case "shellPath":
 		return &s.ShellPath
 	case "shellCommandPrefix":

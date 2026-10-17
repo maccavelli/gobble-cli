@@ -44,6 +44,9 @@ func (o *Output) Errorf(format string, args ...any) { o.diag("Error: ", format, 
 // Warnf prints "Warning: …" on stderr.
 func (o *Output) Warnf(format string, args ...any) { o.diag("Warning: ", format, args...) }
 
+// Notef writes a status line to stderr, unprefixed, such as a retry's.
+func (o *Output) Notef(format string, args ...any) { o.diag("", format, args...) }
+
 func (o *Output) diag(prefix, format string, args ...any) {
 	if _, err := fmt.Fprintf(o.err, prefix+format+"\n", args...); err != nil && o.errWrite == nil {
 		o.errWrite = err

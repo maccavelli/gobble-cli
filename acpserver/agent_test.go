@@ -40,7 +40,7 @@ func connect(t *testing.T) (*acptest.Conn, *acptest.Client) {
 // connectWith joins an agent on model p, with the built-in tools, to client.
 func connectWith(t *testing.T, p llm.Provider, client *acptest.Client) (*acptest.Conn, *acptest.Client) {
 	t.Helper()
-	agent := New(Options{Version: "1.2.3", NewID: counterIDs(), Provider: func(string) (llm.Provider, error) { return p, nil }})
+	agent := New(Options{Version: "1.2.3", NewID: counterIDs(), Provider: func(string, llm.Retry) (llm.Provider, error) { return p, nil }})
 	c := acptest.Connect(t, agent, client)
 	agent.SetConnection(c.Agent)
 	return c, client
@@ -81,8 +81,10 @@ func TestSession(t *testing.T) {
 	// The prompt names linux and /work on every host, so the size is too
 	// (0005-PLAN F3-1 deviation 5; 0019-PLAN P4 deviation 4).
 	agent := New(Options{Version: "1.2.3", NewID: counterIDs(), Tools: []tool.Tool{builtin.Read(), builtin.Write(), builtin.Edit(), builtin.Bash()},
-		Provider: func(string) (llm.Provider, error) { return llmtest.NewScript(llmtest.Text("hello gobble")), nil },
-		Prompt:   PromptOptions{GOOS: "linux", cwd: "/work"}, Auth: testAuth})
+		Provider: func(string, llm.Retry) (llm.Provider, error) {
+			return llmtest.NewScript(llmtest.Text("hello gobble")), nil
+		},
+		Prompt: PromptOptions{GOOS: "linux", cwd: "/work"}, Auth: testAuth})
 	client := &acptest.Client{}
 	c := acptest.Connect(t, agent, client)
 	agent.SetConnection(c.Agent)
@@ -233,7 +235,7 @@ func served(t *testing.T, opts Options, client acp.Client) *acptest.Conn {
 func TestOverlapRefusesSecond(t *testing.T) {
 	model := llmtest.NewScript(writeCall(t), llmtest.Text("a"))
 	client := newHoldClient()
-	c := served(t, Options{Version: "1.2.3", Provider: func(string) (llm.Provider, error) { return model, nil },
+	c := served(t, Options{Version: "1.2.3", Provider: func(string, llm.Retry) (llm.Provider, error) { return model, nil },
 		Models: func() ModelChoice { return testModels }, Store: jsonl.New(t.TempDir(), jsonl.Options{})}, client)
 	id := newSession(t, c, t.TempDir(), nil).SessionId
 	done := startPrompt(t, c, id, "go")

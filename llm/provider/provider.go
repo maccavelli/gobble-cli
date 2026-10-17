@@ -8,9 +8,14 @@ import (
 	"fmt"
 	"iter"
 	"log/slog"
+	"net"
 	"net/http"
+	"net/url"
+	"runtime"
 	"slices"
 	"strings"
+	"sync"
+	"syscall"
 	"time"
 
 	"github.com/maccavelli/go-llmprovider-sdk/llmprovider"
@@ -20,8 +25,15 @@ import (
 	"github.com/maccavelli/gobble-cli/llm"
 )
 
-// retryPolicy is Pi's 3 retries with a 60 s cap (0004-MADR, F4 notes).
-var retryPolicy = llmprovider.RetryPolicy{MaxAttempts: 4, BaseDelay: 2 * time.Second, MaxDelay: 60 * time.Second}
+// retryPolicy is Pi's 3 retries with a 60 s cap (0004-MADR, F4 notes), a
+// session's when its settings change nothing (0005-PLAN F5-1).
+var retryPolicy = policyOf(llm.DefaultRetry)
+
+// policyOf is r as the SDK's retry takes it: MaxAttempts counts the first
+// try.
+func policyOf(r llm.Retry) llmprovider.RetryPolicy {
+	return llmprovider.RetryPolicy{MaxAttempts: r.MaxRetries + 1, BaseDelay: r.BaseDelay, MaxDelay: r.MaxDelay}
+}
 
 // Options configure New.
 type Options struct {
@@ -57,6 +69,9 @@ type Options struct {
 	// login (HasLogin) uses its stored login, and saves each rotation here
 	// (0005-PLAN F4-3b).
 	Logins LoginStore
+	// Retry is the session's retry settings; nil is llm.DefaultRetry. Off
+	// builds the provider without the SDK's retry (0005-PLAN F5-1).
+	Retry *llm.Retry
 }
 
 // login is provider id's stored login, as the SDK's session, when o has no
@@ -173,7 +188,14 @@ func New(id string, o Options) (llm.Provider, error) {
 	}
 	// The retry wrapper buffers the stream, so its capabilities, not the
 	// inner provider's, are what gobble can deliver (0019-MADR D2).
-	w := llmprovider.WithRetry(p, retryPolicy)
+	r := llm.DefaultRetry
+	if o.Retry != nil {
+		r = *o.Retry
+	}
+	w := p
+	if !r.Off {
+		w = llmprovider.WithRetry(p, policyOf(r))
+	}
 	return &adapter{p: w, id: p.ID(), caps: w.Capabilities(), source: o.CredentialSource, login: login != nil}, nil
 }
 
@@ -191,6 +213,10 @@ type adapter struct {
 	// login reports that the credential is a stored OAuth login (0005-PLAN
 	// F4-3b).
 	login bool
+	// mu guards offlineURL: the URL of the last request the network could
+	// not carry, whose host Probe dials (0005-PLAN F5-1, deviation 1).
+	mu         sync.Mutex
+	offlineURL string
 }
 
 // rejected is mapped, err's llm form, led by "<provider> rejected the API
@@ -232,6 +258,11 @@ func (a *adapter) Stream(ctx context.Context, req *llm.Request) iter.Seq2[llm.Ev
 		ctx := context.WithValue(ctx, modelKey{}, req.Model) // for the header transport (0005-PLAN F4-2b)
 		for ev, err := range llmprovider.Stream(ctx, a.p, sreq) {
 			if err != nil {
+				if ue, ok := errors.AsType[*url.Error](err); ok && offline(err) {
+					a.mu.Lock()
+					a.offlineURL = ue.URL
+					a.mu.Unlock()
+				}
 				yield(nil, a.rejected(mapError(err), err))
 				return
 			}
@@ -430,18 +461,111 @@ var sentinels = []struct{ sdk, llm error }{
 	{llmprovider.ErrUnsupported, llm.ErrUnsupported},
 }
 
+// sdkEmptyAnswer ends the message of the SDK's answer with no content
+// (go-llmprovider-sdk internal/wire/finish.go, EmptyAnswer). The wire tests
+// pin it, so an SDK that words it otherwise fails them.
+const sdkEmptyAnswer = ": the answer has no content"
+
+// emptyAnswer reports whether err is the SDK's answer with nothing in it
+// that is not a refusal or a safety stop, which the SDK puts in Reason: an
+// APIError of ErrIncomplete with the SDK's message and no reason, or stop
+// (0005-PLAN F5-1 decision 4).
+func emptyAnswer(err error) bool {
+	ae, ok := errors.AsType[*llmprovider.APIError](err)
+	return ok && errors.Is(ae.Kind, llmprovider.ErrIncomplete) && strings.HasSuffix(ae.Message, sdkEmptyAnswer) &&
+		(ae.Reason == "" || ae.Reason == string(llmprovider.FinishStop))
+}
+
+// offline reports whether err is a request that could not be sent for want
+// of a network: a *url.Error whose host's name did not resolve, or whose
+// dial timed out or found the network or host unreachable or the port
+// refused (0005-PLAN F5-1 decision 3).
+func offline(err error) bool {
+	if _, ok := errors.AsType[*url.Error](err); !ok { //nolint:errcheck // only whether the chain holds one matters
+		return false
+	}
+	if _, ok := errors.AsType[*net.DNSError](err); ok { //nolint:errcheck // only whether the chain holds one matters
+		return true
+	}
+	op, ok := errors.AsType[*net.OpError](err)
+	if !ok || op.Op != "dial" {
+		return false
+	}
+	if op.Timeout() {
+		return true
+	}
+	return slices.ContainsFunc(unreachable(), func(e syscall.Errno) bool { return errors.Is(err, e) })
+}
+
+// unreachable are the dial errors offline counts: refused, network down
+// or unreachable, host unreachable. Windows reports them as Winsock's
+// codes, which syscall names for no other system.
+func unreachable() []syscall.Errno {
+	if runtime.GOOS == "windows" {
+		const wsaENETDOWN, wsaENETUNREACH, wsaECONNREFUSED, wsaEHOSTUNREACH = 10050, 10051, 10061, 10065
+		return []syscall.Errno{wsaECONNREFUSED, wsaENETDOWN, wsaENETUNREACH, wsaEHOSTUNREACH}
+	}
+	return []syscall.Errno{syscall.ECONNREFUSED, syscall.ENETDOWN, syscall.ENETUNREACH, syscall.EHOSTUNREACH}
+}
+
+// probeTimeout bounds one Probe's dial (Kilo's PROBE_MS, 0005-PLAN F5-1
+// decision 3).
+const probeTimeout = 5 * time.Second
+
+// dialProbe is Probe's dial. Tests replace it.
+var dialProbe = (&net.Dialer{}).DialContext
+
+// Probe dials the host the last request the network could not carry went
+// to: the proxy the environment names for its URL, or else its own host.
+// It sends nothing (0005-PLAN F5-1 decision 3, deviation 1).
+func (a *adapter) Probe(ctx context.Context) error {
+	a.mu.Lock()
+	target := a.offlineURL
+	a.mu.Unlock()
+	if target == "" {
+		return fmt.Errorf("provider %s: no failed request to probe for", a.id)
+	}
+	u, err := url.Parse(target)
+	if err != nil {
+		return fmt.Errorf("provider %s: %w", a.id, err)
+	}
+	if proxy, err := http.ProxyFromEnvironment(&http.Request{URL: u}); err == nil && proxy != nil {
+		u = proxy
+	}
+	port := u.Port()
+	if port == "" {
+		port = "443"
+		if u.Scheme == "http" {
+			port = "80"
+		}
+	}
+	ctx, cancel := context.WithTimeout(ctx, probeTimeout)
+	defer cancel()
+	c, err := dialProbe(ctx, "tcp", net.JoinHostPort(u.Hostname(), port))
+	if err != nil {
+		return err
+	}
+	return c.Close()
+}
+
 // mapError wraps an SDK error so llm's sentinel matches and the SDK's still
 // does. An APIError becomes an *llm.APIError with its status and RetryAfter.
 func mapError(err error) error {
 	if err == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return err
 	}
-	wrapped := err
+	wrapped, kind := err, false
 	for _, s := range sentinels {
 		if errors.Is(err, s.sdk) {
-			wrapped = fmt.Errorf("%w: %w", s.llm, err)
+			wrapped, kind = fmt.Errorf("%w: %w", s.llm, err), true
 			break
 		}
+	}
+	switch {
+	case emptyAnswer(err):
+		wrapped = fmt.Errorf("%w: %w", llm.ErrEmptyReply, wrapped)
+	case !kind && offline(err):
+		wrapped = fmt.Errorf("%w: %w", llm.ErrOffline, err)
 	}
 	if ae, ok := errors.AsType[*llmprovider.APIError](err); ok {
 		return &llm.APIError{Status: ae.Status, RetryAfter: ae.RetryAfter, Err: wrapped}

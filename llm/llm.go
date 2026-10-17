@@ -3,6 +3,7 @@ package llm
 import (
 	"context"
 	"iter"
+	"time"
 
 	"encoding/json/jsontext"
 )
@@ -15,6 +16,30 @@ type Provider interface {
 	Capabilities() Capabilities
 	Stream(ctx context.Context, req *Request) iter.Seq2[Event, error]
 }
+
+// Prober is a Provider that can tell whether its service is reachable
+// again: Probe connects to the service's host, and returns nil when it
+// answers. It sends no request (0005-PLAN F5-1).
+type Prober interface {
+	Probe(ctx context.Context) error
+}
+
+// Retry is a session's retry settings (0005-PLAN F5-1): the provider's
+// retries, the wait for the network and an empty reply's further runs.
+// Off turns all of them off.
+type Retry struct {
+	Off bool
+	// MaxRetries, BaseDelay and MaxDelay are the provider's retries:
+	// how many, the first wait, which doubles, and the longest wait.
+	MaxRetries          int
+	BaseDelay, MaxDelay time.Duration
+	// OfflineWait bounds a turn's wait for the network; zero does not wait.
+	OfflineWait time.Duration
+}
+
+// DefaultRetry is Pi's three retries from two seconds, capped at a minute,
+// and a five-minute wait for the network.
+var DefaultRetry = Retry{MaxRetries: 3, BaseDelay: 2 * time.Second, MaxDelay: 60 * time.Second, OfflineWait: 5 * time.Minute}
 
 // Capabilities says what this process can actually send.
 // ImageInput stays false until the SDK accepts image input.

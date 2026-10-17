@@ -75,7 +75,7 @@ func connectMCP(t *testing.T, p llm.Provider, mo MCPOptions) (*acptest.Conn, *Ag
 	t.Helper()
 	logs := &syncBuffer{}
 	a := New(Options{
-		Version: "1.2.3", NewID: counterIDs(), Provider: func(string) (llm.Provider, error) { return p, nil },
+		Version: "1.2.3", NewID: counterIDs(), Provider: func(string, llm.Retry) (llm.Provider, error) { return p, nil },
 		MCP: mo, Logger: slog.New(slog.NewTextHandler(logs, nil)),
 	})
 	c := acptest.Connect(t, a, &acptest.Client{Allow: true})

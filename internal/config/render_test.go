@@ -31,6 +31,12 @@ followUpMode: all
 sessionDir: ""
 compaction:
   keepRecentTokens: 20000
+retry:
+  enabled: true
+  maxRetries: 3
+  baseDelayMs: 2000
+  maxDelayMs: 60000
+  offlineWaitMs: 300000
 shellPath: ""
 shellCommandPrefix: ""
 tools:

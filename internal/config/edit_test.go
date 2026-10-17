@@ -124,6 +124,9 @@ func TestEditEveryTemplateKey(t *testing.T) {
 func sample(k Key) string {
 	switch k.Kind {
 	case KindBool:
+		if k.Default == "true" {
+			return "false"
+		}
 		return "true"
 	case KindInt:
 		return "4242"

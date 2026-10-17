@@ -60,8 +60,8 @@ type Options struct {
 	// call (0008-MADR D19 item 6). An error matching llm.ErrAuth answers the
 	// prompt with auth_required. It is called once per session, with the
 	// session's ACP id, so each session has its own provider and session id
-	// (0021-MADR D4).
-	Provider func(sessionID string) (llm.Provider, error)
+	// (0021-MADR D4), and with the session's retry settings (0005-PLAN F5-1).
+	Provider func(sessionID string, retry llm.Retry) (llm.Provider, error)
 	// Models is the model choice offered as the model config option. Nil
 	// offers none.
 	Models func() ModelChoice
@@ -96,13 +96,17 @@ type Options struct {
 	// Auth is what ACP authentication offers (0016-MADR A2). Zero offers
 	// nothing.
 	Auth AuthOptions
+	// SaveSetting writes a key's value to the global settings, as gobble
+	// config set does, for _gobble/set_auto_retry (0005-PLAN F5-1 decision
+	// 6). Nil writes nothing.
+	SaveSetting func(path, value string) error
 }
 
 // Agent is gobble's acp.Agent.
 type Agent struct {
 	version  string
 	newID    func() string
-	provider func(sessionID string) (llm.Provider, error)
+	provider func(sessionID string, retry llm.Retry) (llm.Provider, error)
 	models   func() ModelChoice
 	info     func(provider, model string) llm.Model
 	override Override
@@ -117,6 +121,7 @@ type Agent struct {
 	compaction compaction.Settings
 	settings   func(cwd string) SessionSettings
 	auth       AuthOptions
+	save       func(path, value string) error
 
 	mu       sync.Mutex
 	conn     *acp.AgentSideConnection
@@ -159,6 +164,12 @@ type liveSession struct {
 	queue *queue
 	// compaction is /compact's settings, from the session's settings.
 	compaction compaction.Settings
+	// retry is the session's retry settings; retryAbort, while a turn
+	// runs, ends its waits when closed, and is nil once closed or with no
+	// turn; waiting says a wait is under way (0005-PLAN F5-1).
+	retry      llm.Retry
+	retryAbort chan struct{}
+	waiting    bool
 	// streaming and compacting say what the running turn is: a model turn,
 	// or a compaction (_gobble/get_state).
 	streaming, compacting bool
@@ -182,7 +193,7 @@ var (
 func New(opts Options) *Agent {
 	a := &Agent{version: opts.Version, newID: opts.NewID, provider: opts.Provider, models: opts.Models, info: opts.ModelInfo,
 		override: opts.Override, tools: opts.Tools, store: opts.Store, now: opts.Now, mcp: opts.MCP, logger: opts.Logger, prompt: opts.Prompt,
-		settings: opts.Settings, auth: opts.Auth, sessions: map[acp.SessionId]*liveSession{}}
+		settings: opts.Settings, auth: opts.Auth, save: opts.SaveSetting, sessions: map[acp.SessionId]*liveSession{}}
 	if a.logger == nil {
 		a.logger = slog.New(slog.DiscardHandler)
 	}
@@ -338,7 +349,7 @@ func (a *Agent) NewSession(ctx context.Context, p acp.NewSessionRequest) (acp.Ne
 	// a fork's history is set to it after its restore (0005-PLAN F4-2c).
 	s := &liveSession{id: acp.SessionId(id), cwd: p.Cwd, dirs: dirs, log: log, tree: session.NewTree(nil),
 		think: cmp.Or(a.override.Thinking, ss.Thinking), model: cmp.Or(a.override.Model, a.models().Default), mode: modeDefault,
-		queue: sessionQueue(ss), compaction: ss.Compaction, cache: cacheOf(ss.CacheRetention)}
+		queue: sessionQueue(ss), compaction: ss.Compaction, cache: cacheOf(ss.CacheRetention), retry: ss.Retry}
 	if len(forked) > 0 {
 		for _, e := range forked {
 			if err := log.Append(ctx, e); err != nil {
@@ -451,13 +462,17 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 	if err != nil {
 		return acp.PromptResponse{}, promptError(err)
 	}
+	abort := make(chan struct{})
 	a.mu.Lock()
 	s.streaming = true
 	history := s.history
+	retry := s.retry
+	s.retryAbort, s.waiting = abort, false
 	a.mu.Unlock()
 	defer func() {
 		a.mu.Lock()
 		s.streaming = false
+		s.retryAbort, s.waiting = nil, false
 		a.mu.Unlock()
 	}()
 
@@ -513,6 +528,9 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 		Loaded:   loaded,
 		System:   system,
 		Cache:    s.cache,
+		// The session's retry settings, as the turn starts (0005-PLAN F5-1).
+		Retry:      &retry,
+		RetryAbort: abort,
 	}
 	ag := agent.New(cfg)
 	out := newUpdates(ctx, conn, p.SessionId)
@@ -542,6 +560,11 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 		if w.err != nil {
 			out.flush()
 			return acp.PromptResponse{}, appendFailed(w.err)
+		}
+		if r, ok := ev.(agent.Retry); ok {
+			a.mu.Lock()
+			s.waiting = r.Phase == agent.RetryStart
+			a.mu.Unlock()
 		}
 		out.event(ev, &last)
 		if end, ok := ev.(agent.End); ok {
@@ -722,7 +745,7 @@ func (a *Agent) sessionProvider(s *liveSession) (llm.Provider, error) {
 	if a.provider == nil {
 		return nil, ErrNoProvider
 	}
-	p, err := a.provider(string(s.id))
+	p, err := a.provider(string(s.id), s.retry)
 	if err != nil {
 		return nil, err
 	}
@@ -791,7 +814,7 @@ func (a *Agent) open(ctx context.Context, id acp.SessionId, cwd string, extra []
 	ss := a.sessionSettings(cwd)
 	// The history's thinking level wins: restore sets it (0018-MADR D17).
 	s := &liveSession{id: id, cwd: cwd, dirs: dirs, log: log, think: thinkingOff, model: a.models().Default, mode: modeDefault,
-		queue: sessionQueue(ss), compaction: ss.Compaction, cache: cacheOf(ss.CacheRetention)}
+		queue: sessionQueue(ss), compaction: ss.Compaction, cache: cacheOf(ss.CacheRetention), retry: ss.Retry}
 	a.restore(s, log.Entries())
 	// The run's override wins over the history's choice (0005-PLAN F4-2c).
 	if err := a.applyOverride(ctx, s); err != nil {

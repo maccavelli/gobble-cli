@@ -29,7 +29,7 @@ func catalogAgent(t *testing.T, p llm.Provider, client *acptest.Client) *acptest
 	t.Helper()
 	ag := New(Options{
 		Version:  "1.2.3",
-		Provider: func(string) (llm.Provider, error) { return p, nil },
+		Provider: func(string, llm.Retry) (llm.Provider, error) { return p, nil },
 		Models:   func() ModelChoice { return testModels },
 		ModelInfo: func(provider, model string) llm.Model {
 			m := catalogModels[model]

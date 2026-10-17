@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -374,6 +375,28 @@ func (h *handler) SessionUpdate(_ context.Context, n acp.SessionNotification) er
 	}
 	on(u)
 	return nil
+}
+
+var _ acp.ExtensionMethodHandler = (*handler)(nil)
+
+// HandleExtensionMethod delivers gobble's _gobble/retry notification to
+// its session's callback as KindRetry, and answers any other extension
+// method with -32601, which the SDK drops for a notification.
+func (h *handler) HandleExtensionMethod(_ context.Context, method string, params json.RawMessage) (any, error) {
+	if method != methodRetry {
+		return nil, acp.NewMethodNotFound(method)
+	}
+	id, r, err := retryOf(params)
+	if err != nil {
+		return nil, acp.NewInvalidParams(map[string]any{"reason": err.Error()})
+	}
+	h.mu.Lock()
+	on := h.sessions[id]
+	h.mu.Unlock()
+	if on != nil {
+		on(Update{Kind: KindRetry, Retry: r, Params: params})
+	}
+	return nil, nil
 }
 
 func (h *handler) commandsOf(id acp.SessionId) []Command {

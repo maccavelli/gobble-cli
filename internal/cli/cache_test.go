@@ -32,7 +32,7 @@ func TestModelProviderSessionID(t *testing.T) {
 			t.Error(err)
 		}
 	})
-	if _, err := modelProvider(e)("sess-9"); err == nil || got != "sess-9" {
+	if _, err := modelProvider(e)("sess-9", llm.DefaultRetry); err == nil || got != "sess-9" {
 		t.Fatalf("built with session %q (err %v), want sess-9", got, err)
 	}
 }

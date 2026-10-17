@@ -52,7 +52,7 @@ func piAgent(t *testing.T, name string, p llm.Provider) (*acptest.Conn, *acptest
 	if err := os.WriteFile(file, body, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	ag := New(Options{Version: "1.2.3", Provider: func(string) (llm.Provider, error) { return p, nil },
+	ag := New(Options{Version: "1.2.3", Provider: func(string, llm.Retry) (llm.Provider, error) { return p, nil },
 		Models: func() ModelChoice { return piModels }, Store: jsonl.New(dir, jsonl.Options{})})
 	client := &acptest.Client{}
 	c := acptest.Connect(t, ag, client)

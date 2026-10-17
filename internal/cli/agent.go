@@ -29,12 +29,12 @@ const appName = "gobble"
 // first provider with a credential (0002-PLAN Phase 3, owner's decision of
 // 2026-10-05; 0019-MADR D15; 0005-PLAN F4-2c), its key found in Pi's order
 // and resolved now (0005-PLAN F4-3a), or its stored OAuth login (0005-PLAN
-// F4-3b). Each session's provider names the session (0021-MADR D4). Tests
-// replace it.
-var modelProvider = func(e *runEnv) func(sessionID string) (llm.Provider, error) {
-	return func(sessionID string) (llm.Provider, error) {
+// F4-3b). Each session's provider names the session (0021-MADR D4), and
+// retries as its settings say (0005-PLAN F5-1). Tests replace it.
+var modelProvider = func(e *runEnv) func(sessionID string, retry llm.Retry) (llm.Provider, error) {
+	return func(sessionID string, retry llm.Retry) (llm.Provider, error) {
 		o := provider.Options{ClientName: appName, ClientVersion: identity().Version, Logger: e.log(), SessionID: sessionID,
-			Logins: e.logins()}
+			Logins: e.logins(), Retry: &retry}
 		if sel, err := provider.ChooseWith(e.hasCredential, e.chosenProvider()); err == nil {
 			o = e.providerOptions(sel.ID, o) // models.json's base URL and headers (0005-PLAN F4-2b)
 			if src, ok := e.credentials().Has(sel.ID); ok {
@@ -88,7 +88,25 @@ func (e *runEnv) agentOptions() acpserver.Options {
 			_, ok := e.credential(id)
 			return ok
 		}},
+		SaveSetting: saveGlobalSetting,
 	}
+}
+
+// saveGlobalSetting writes path's value to the global settings file, as
+// gobble config set does, creating the file from the template if it is
+// missing (0005-PLAN F5-1 decision 6).
+func saveGlobalSetting(path, value string) error {
+	file, layer, err := settingsFile(false)
+	if err != nil {
+		return err
+	}
+	if err := config.Check(path, value, layer); err != nil {
+		return err
+	}
+	if err := prepare(file, layer, false); err != nil {
+		return err
+	}
+	return config.Set(file, path, value)
 }
 
 // promptOptions are the prompt flags' options with the config directory,

@@ -56,8 +56,8 @@ const pathSessionDir = "sessionDir"
 var queueModes = []string{"one-at-a-time", "all"}
 
 // Keys are 0018-MADR D14's thirteen, 0019-MADR D15's defaultProvider,
-// 0021-MADR D3's cacheRetention and 0005-PLAN F4-2c's defaultModel, in the
-// template's order. Every other part
+// 0021-MADR D3's cacheRetention, 0005-PLAN F4-2c's defaultModel and
+// F5-1's retry keys, in the template's order. Every other part
 // of the package reads them; a key added here without its template block,
 // schema or Settings field fails the package's tests.
 var Keys = []Key{
@@ -77,6 +77,16 @@ var Keys = []Key{
 		Doc: "The directory session files are kept in, flat, as --session-dir keeps them. Empty keeps them in gobble's data directory, by working directory."},
 	{Path: "compaction.keepRecentTokens", Kind: KindInt, Default: "20000", Min: 1, Read: ReadSession,
 		Doc: "The recent conversation, in tokens, that /compact keeps word for word."},
+	{Path: "retry.enabled", Kind: KindBool, Default: "true", Read: ReadSession,
+		Doc: "Whether a failed model call is retried: the provider's retries, the wait for the network, and an empty reply's two more runs."},
+	{Path: "retry.maxRetries", Kind: KindInt, Default: "3", Min: 0, Read: ReadSession,
+		Doc: "How many times the provider retries a failed call."},
+	{Path: "retry.baseDelayMs", Kind: KindInt, Default: "2000", Min: 1, Read: ReadSession,
+		Doc: "The provider's first wait before a retry, in milliseconds; each later wait doubles."},
+	{Path: "retry.maxDelayMs", Kind: KindInt, Default: "60000", Min: 1, Read: ReadSession,
+		Doc: "The longest wait before a retry, in milliseconds; a service asking for longer is not retried."},
+	{Path: "retry.offlineWaitMs", Kind: KindInt, Default: "300000", Min: 0, Read: ReadSession,
+		Doc: "How long, in milliseconds, a turn waits for the network to come back; 0 does not wait."},
 	{Path: "shellPath", Kind: KindPath, Scope: ScopeGlobalOnly, Read: ReadProcess,
 		Doc: "The bash the bash tool runs. Empty finds one: Git's bash on Windows, bash on PATH elsewhere."},
 	{Path: "shellCommandPrefix", Kind: KindString, Scope: ScopeGlobalOnly, Read: ReadProcess,

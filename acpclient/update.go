@@ -3,6 +3,7 @@ package acpclient
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 
 	acp "github.com/maccavelli/acp-go-sdk2"
 )
@@ -23,6 +24,10 @@ const (
 	KindCommands
 	KindMode
 	KindSessionInfo
+	// KindRetry is gobble's _gobble/retry notification, not a
+	// session/update: Params holds the notification's params (0005-PLAN
+	// F5-1 decision 5).
+	KindRetry
 )
 
 func (k Kind) String() string {
@@ -45,6 +50,8 @@ func (k Kind) String() string {
 		return "mode"
 	case KindSessionInfo:
 		return "session_info"
+	case KindRetry:
+		return "retry"
 	}
 	return "other"
 }
@@ -71,9 +78,43 @@ type Update struct {
 	ModeID string
 	// Title is the session's title, for KindSessionInfo.
 	Title string
+	// Retry is the turn's wait, for KindRetry.
+	Retry Retry
 	// Params is the session/update params object as the SDK encodes it,
 	// for clients that pass the ACP stream through (0008-MADR D9).
 	Params json.RawMessage
+}
+
+// Retry is a wait the agent's turn takes before calling the model again,
+// as _gobble/retry reports it: Phase start or end, Cause offline or
+// empty_reply. Attempt, MaxAttempts and Delay are an empty reply's; Error
+// is why an End is not a success, or "".
+type Retry struct {
+	Phase, Cause         string
+	Attempt, MaxAttempts int
+	Delay                time.Duration
+	Error                string
+}
+
+// methodRetry is gobble's retry notification (0005-PLAN F5-1).
+const methodRetry = "_gobble/retry"
+
+// retryOf decodes _gobble/retry's params, with the session they name.
+func retryOf(params json.RawMessage) (acp.SessionId, Retry, error) {
+	var n struct {
+		SessionID   acp.SessionId `json:"sessionId"`
+		Phase       string        `json:"phase"`
+		Cause       string        `json:"cause"`
+		Attempt     int           `json:"attempt"`
+		MaxAttempts int           `json:"maxAttempts"`
+		DelayMs     int64         `json:"delayMs"`
+		Error       string        `json:"error"`
+	}
+	if err := json.Unmarshal(params, &n); err != nil {
+		return "", Retry{}, fmt.Errorf("%s: %w", methodRetry, err)
+	}
+	return n.SessionID, Retry{Phase: n.Phase, Cause: n.Cause, Attempt: n.Attempt, MaxAttempts: n.MaxAttempts,
+		Delay: time.Duration(n.DelayMs) * time.Millisecond, Error: n.Error}, nil
 }
 
 // ToolCall is a tool call or an update to one. In an update, an empty
