@@ -5704,7 +5704,7 @@ histories were rewritten; the report's line numbers match these heads within a f
      `_gobble/retry`'s `end` carries `error: "retry cancelled"`.
 7. **The first-byte deadline waits for F4-1b.** While the stream is buffered, a first-byte deadline would be a
    deadline on the whole reply. It is made with F4-1b's live stream.
-8. **F5-2, automatic compaction (proposed):**
+8. **F5-2, automatic compaction (proposed):** *(2026-10-17: made executable, refined; see "F5-2 made executable: automatic compaction".)*
    - settings `compaction.enabled` (bool, true), `compaction.reserveTokens` (int, 16384, at least 1) and
      `compaction.thresholdPercent` (int, 0 to 100; 0, the default, is off);
    - compaction runs when the estimate passes `window - reserveTokens`, or, with `thresholdPercent` set, when it reaches
@@ -5729,7 +5729,7 @@ histories were rewritten; the report's line numbers match these heads within a f
    - three consecutive calls whose arguments fail (not JSON, or not the schema), of any tool, end the turn (Kilo);
    - a reply with no finish reason reports a new stop, so the agent can tell it apart; with no calls it ends the turn.
      How the session file and ACP record it is decided when F5-3 is made executable.
-10. **F5-4, the summary (proposed):**
+10. **F5-4, the summary (proposed):** *(2026-10-18: refined; see "Compaction from six harnesses: F5-2 amended, F5-4 refined".)*
     - opencode's template, with its rolling update from the prior summary, replaces Pi's prompts (choice 9 revisits
       them, and 0005-MADR's rule 3 needs the reason for copying another harness's text recorded then). Pi's cut point
       and split-turn merge stay;
@@ -5872,3 +5872,236 @@ second Linux machine's `-race`, and Windows and WSL `make preflight` are the own
     module, which `apidiff` does not check before `v1.0.0`.
 - **Next:** F5-2, automatic compaction, made executable on the owner's word; the SDK retries' status waits for
   go-llmprovider-sdk issue 3; the first-byte deadline for F4-1b.
+
+**2026-10-17 — F5-2 made executable: automatic compaction** (the owner's word of 2026-10-17, "committed, proceed",
+after F5-1's commit `ce012b8`; decision 8 of "F5 re-made as five sub-phases, F5-1 made executable", refined below.
+Amended before approval on 2026-10-18, by the owner's word "proceed to implement recommendations": decisions 1, 2, 5, 6,
+8 and 9 refined, and decisions 11 and 12 added, from [0005-REPORT](../reports/0005-REPORT-compaction-across-six-harnesses.md); see "Compaction from six harnesses: F5-2 amended, F5-4 refined".)
+*Proposed: not approved for execution.*
+
+**The facts,** measured on 2026-10-17 against `main` `ce012b8`, go-llmprovider-sdk `v1.13.0` and Pi `312184edb`:
+
+- **gobble's compaction today:**
+  - `compactSession` (`acpserver/compact.go:47-97`) is `/compact`'s and `_gobble/compact`'s one path: `Prepare`,
+    `Compact` with the session's model and thinking level, the prompt rebase, the compaction entry, the history rebuilt
+    from the tree, and the new estimate, `EstimateText(system) + EstimateEntries(path)`, for the caller's `usage_update`.
+  - `Prepare` refuses with `Already compacted` or `Nothing to compact (session too small)`
+    (`compaction/compaction.go:26-32`, `:52-94`).
+  - `summarise` sends no output cap (`compaction.go:301-305`), and refuses a summary cut at max tokens or one that calls a
+    tool (`:327-332`); an empty one is taken (Pi's too, `compaction.ts:965-1069`).
+  - `Settings` holds `ReserveTokens`, read by nothing, and `KeepRecentTokens` (`compaction.go:15-24`); `toSession`
+    fixes `ReserveTokens` at Pi's 16384 (`internal/cli/settings.go:91`).
+  - `_gobble/get_state`'s `autoCompactionEnabled` is never set (`acpserver/extensions.go:424`).
+- **A turn and its session file:** a turn's messages are written as their events arrive, the assistant's at `Message`,
+  a tool's result at `ToolEnd`, a queued message at `Queued` (`acpserver/agent.go:707-735`), each through `append`,
+  which adds it to the tree (`:404-414`). Before a turn's next model call, the tree holds the whole turn so far. The
+  agent keeps its own `history` and `added` (`agent/agent.go`, `turn`); `End.Messages` is `added`, which acpserver
+  appends to the session's history (`acpserver/agent.go`, `Prompt`); a failed turn appends its prompt instead (`:555`).
+- **The model's limits:** `llm.Model` has `ContextWindow` and `MaxTokens`, 0 unknown (`llm/llm.go`), from
+  `a.modelOf` (`acpserver/config.go:42`). `llm.Request` has no output cap (`llm/llm.go`); the SDK's
+  `Request.MaxOutputTokens` is "Zero is the provider's default" (SDK `contract.go:206-207`), and each provider fits a
+  thinking budget within it (Claude's `addReasoning`, `providers/claude/claude.go:292-353`).
+- **The settings:** `config.Key` has `Min` and no greatest value (`internal/config/keys.go:40`, `merge.go:143`).
+- **Pi** (`packages/coding-agent/src/core/`): compaction off turns off overflow recovery too, since
+  `_checkCompaction` returns first when `settings.enabled` is false (`agent-session.ts`, `_checkCompaction`); the
+  summary's cap is `min(floor(0.8 × reserveTokens), model.maxTokens)`, a split turn's prefix
+  `min(floor(0.5 × reserveTokens), model.maxTokens)` (`compaction/compaction.ts:712-715`, `:1090-1093`). The rest is
+  in "F5 re-made as five sub-phases, F5-1 made executable", "The facts".
+- **A model change** (2026-10-18): `/model` and `session/set_config_option` write a `model_change` entry and set the
+  session's model (`acpserver/config.go:144-171`); an assistant message carries its `provider` and `model`
+  (`session/session.go:143-145`). One provider serves a session (`acpserver/compact.go`, `a.sessionProvider`), wrapped
+  by F5-1's retry.
+- **A failure's class** (2026-10-18): a provider's failures are `llm`'s sentinels (`llm/errors.go`); `summarise`'s
+  refusals are plain `fmt.Errorf` values (`compaction/compaction.go:301-334`), so nothing tells them apart from a
+  provider's failure today.
+- **The other harnesses,** surveyed on 2026-10-17, with the lines behind each adopted item read again on 2026-10-18:
+  [0005-REPORT](../reports/0005-REPORT-compaction-across-six-harnesses.md).
+
+**The decisions** (decision 8, refined):
+
+1. **The trigger.** Before each model call of a turn, the first call included, acpserver estimates the context as
+   `compactSession` does, and compacts when `compaction.enabled` and any of
+   - the estimate is over `window - compaction.reserveTokens` (Pi);
+   - `compaction.thresholdPercent` is set and the estimate reaches `floor(window × thresholdPercent / 100)` (Kilo);
+   - `compaction.thresholdTokens` is set and the estimate reaches it (goose's `GOOSE_AUTO_COMPACT_TOKEN_LIMIT`, Codex's
+     `model_auto_compact_token_limit`; *added 2026-10-18*).
+
+   A window of 0, unknown, never triggers the first two; `thresholdTokens` needs no window. Decision 11 can pause the
+   trigger. *Refined:* decision 8's check "after the turn" is dropped: the next turn's
+   first call makes the same check, and one after the turn would hold the prompt's response for a compaction the user
+   did not wait for.
+2. **Overflow.** A call that fails with `llm.ErrContextOverflow` compacts, and is sent again once. A second overflow of
+   the same call ends the turn with its error. *Refined:* as in Pi, `compaction.enabled: false` turns this off too, and so does decision 11's pause for the
+   session (2026-10-18).
+3. **Mid-turn.** The agent takes a hook, `Config.Compact(ctx, overflow) (history, compacted, error)`. When it
+   compacted, the turn goes on from the session's rebuilt history: `history` is replaced and `added` emptied, so
+   `End.Messages` holds what came after the compaction, which acpserver appends to the rebuilt history. A turn that
+   fails after a compaction rebuilds the session's history from the tree in place of appending its prompt.
+4. **At most 3 compactions in one turn** (Kilo), threshold and overflow together. A fourth needed ends the turn with
+   `compaction did not bring the context under the model's window after 3 attempts`.
+5. **What is not compacted:**
+   - at the threshold, a session `Prepare` refuses (`Already compacted`, `Nothing to compact`) is left as it is, with no
+     notification, and the call goes ahead;
+   - a threshold compaction that fails is reported (decision 9), pauses the trigger (decision 11), and the call goes
+     ahead;
+   - an overflow that cannot be compacted, or whose compaction fails, ends the turn with
+     `the context is over the model's window, and compacting it failed: <error>`; a failed compaction pauses the
+     trigger (decision 11).
+6. **An empty or short summary.** *(Refined 2026-10-18 with grok-build's floor.)* A summary is refused when, trimmed
+   of whitespace, it is empty, or it is shorter than 500 characters while the text it summarises is 5,000 characters or
+   more. grok-build retries any summary under 500 characters (`MIN_SUMMARY_SEED_CHARS`); the second condition is
+   gobble's, so a short history's short summary stands. A refused summary is asked for once more. A second refusal fails
+   with `<label> failed: the summary is empty` or `<label> failed: the summary is too short (<n> characters)`, and
+   nothing is written. A split turn's prefix is held to the empty check alone.
+7. **The summary's output cap** (Pi): `min(floor(0.8 × reserveTokens), the model's MaxTokens)` for the summary, and
+   `min(floor(0.5 × reserveTokens), MaxTokens)` for a split turn's prefix, an unknown `MaxTokens` capping nothing. A new
+   `llm.Request.MaxTokens` carries it to the SDK's `MaxOutputTokens`; `/compact` takes it too.
+8. **The settings:**
+   - `compaction.enabled` (bool, true);
+   - `compaction.reserveTokens` (int, 16384, at least 1), now read;
+   - `compaction.thresholdPercent` (int, 0, 0 to 100; 0 is off). `config.Key` gains `Max`, 0 meaning none, checked as
+     `Min` is and written to the schema;
+   - `compaction.thresholdTokens` (int, 0, at least 0; 0 is off; *added 2026-10-18*). It is off by default, as
+     `thresholdPercent` is: goose's default of 225,000 is set below OpenAI's long-context price tier, a choice gobble
+     does not make for every provider.
+
+   Read per session, as `compaction.keepRecentTokens` is.
+9. **Status:**
+   - a notification `_gobble/compaction {sessionId, phase, reason, tokensBefore, error, paused}`: `phase` `start` or
+     `end`; `reason` `manual`, `threshold` or `overflow`; `tokensBefore` on a successful end; `error` on a failed one,
+     with `paused`, `turn` or `session`, when decision 11 paused the trigger.
+     `/compact` and `_gobble/compact` send it with `manual`;
+   - `usage_update` after each compaction, as `/compact` sends it;
+   - gobble's CLI shows on stderr `compacting the conversation (<reason>)` at an automatic start, and
+     `compaction failed: <error>` at a failed end, followed by ` (automatic compaction paused for this turn)` or
+     ` (automatic compaction paused until a compaction succeeds or the model changes)` as `paused` says; never in
+     stream-json. `/compact`'s own reply already says so, and gets no line.
+10. **The method:** `_gobble/set_auto_compaction {sessionId, enabled}` writes `compaction.enabled` to the global
+    settings, as `_gobble/set_auto_retry` writes its key, and sets the session's at once; `get_state`'s
+    `autoCompactionEnabled` reports it.
+11. **A failed automatic compaction pauses the trigger** (grok-build's suppression states, two of its four; *added
+    2026-10-18*). A threshold or overflow compaction that fails, other than by cancellation, pauses decision 1's trigger:
+    - **for the session,** when retrying cannot fix it with the same history and model: the summary request overflowed
+      (`llm.ErrContextOverflow`), or the summary was refused (decision 6, a cut at max tokens, a tool call). While the
+      session is paused, decision 2 does not compact either: an overflow ends the turn with `the context is over the
+      model's window, and automatic compaction is paused after it failed: <error>; run /compact, or change the model`.
+      The pause ends when a compaction succeeds (`/compact` and `_gobble/compact` included), when the session's model
+      changes, or on `_gobble/set_auto_compaction` with `enabled` true;
+    - **for the rest of the turn,** for any other failure (offline, rate limited, unavailable, quota, auth, an
+      incomplete reply). The next turn tries again.
+
+    The pause is held in memory: a session loaded again starts with none. `/compact` and `_gobble/compact` ignore it.
+    grok-build's other two states, until a successful call for exhausted credits and until login for expired auth,
+    become the turn's pause here: gobble cannot see credits, and a turn whose auth fails ends anyway.
+12. **After a model switch, the previous model writes the summary** (Codex's `maybe_run_previous_model_inline_compact`;
+    grok-build compacts on a switch to a smaller window; *added 2026-10-18*). When an automatic compaction runs while the
+    last assistant message in the session's context was written by another model of the session's provider, and the
+    provider still offers that model (`ModelChoice.Models`), that model writes the summary. It runs at the session's
+    thinking level clamped to its own levels, with its own `MaxTokens` for decision 7's caps. The old model can still
+    read the context the new one cannot. Otherwise the session's model writes it. A failure is decision 11's, with no
+    second attempt on the new model: Codex's fallback would pay for the same summary twice.
+
+**F5-2's steps:**
+
+1. **`internal/config`:** `Key.Max`, checked in `merge.go` and written as the schema's maximum; the keys
+   `compaction.enabled`, `compaction.reserveTokens`, `compaction.thresholdPercent` and `compaction.thresholdTokens`; their `Compaction` fields and
+   accessor cases; the template's compaction block; the schema.
+2. **`llm`:** `Request.MaxTokens`. **`llm/provider`:** `toRequest` sends it as `MaxOutputTokens`.
+3. **`compaction`:** `Settings.ThresholdPercent` and `Settings.ThresholdTokens`; `Over(used, window int, s Settings)
+   bool`, decision 1's test; decision 6's guard and its one retry in `summarise`; `ErrSummaryRefused`, which decision 6's
+   and `summarise`'s other refusals wrap, for decision 11; decision 7's caps, from a `Model.MaxTokens`.
+4. **`agent`:** `Config.Compact`; the check before each call in `run`, and the overflow's one resend in `next`;
+   decision 3's history; `End`'s documentation.
+5. **`acpserver`:** `SessionSettings.AutoCompactionOff`, zero being on, and the reserve and threshold through
+   `Compaction`; the turn's hook, with decisions 1, 2, 4, 5 and 12; decision 11's pause on the live session, ended by a
+   compaction, `setConfig`'s model change and `_gobble/set_auto_compaction`; decision 3's history on a failed turn;
+   `_gobble/compaction` from the hook, `cmdCompact` and `extCompact`; `_gobble/set_auto_compaction`; `get_state`.
+6. **`acpclient`, `internal/cli`:** `KindCompaction` from `_gobble/compaction`; decision 9's lines; `toSession`'s
+   settings.
+7. **Records:** this plan's execution record; `docs/README.md`.
+
+**F5-2's tests,** each seen failing on a scratch copy:
+
+- `compaction`: `Over` at, below and above the three thresholds, and with an unknown window, where only
+  `thresholdTokens` triggers; an empty summary and a short one asked for again, then refused, and a short history's
+  short summary taken; the refusals wrapping `ErrSummaryRefused`; the two caps sent, and none when `MaxTokens` is
+  unknown;
+- `agent`: the hook before every call; a compaction replacing the history, with `End.Messages` after it alone; an
+  overflow compacted and sent once more, a second ending the turn; a hook error ending the turn;
+- `acpserver`: a session over its window compacting before the call, its entry written, `_gobble/compaction` start
+  and end, and `usage_update`; an overflow compacting and resending; a fourth compaction ending the turn; compaction
+  off, neither; `Nothing to compact` at the threshold leaving the call to go ahead; a failed turn's history after a
+  compaction; `/compact`'s `manual` notification; `_gobble/set_auto_compaction` and `get_state`;
+- `acpserver`, decisions 11 and 12: a threshold compaction that fails offline pausing the trigger for its turn alone;
+  one whose summary request overflows pausing it for the session, the next overflow ending the turn with the paused
+  error and no summary asked for, and `/compact`, a model change and `_gobble/set_auto_compaction` each ending the
+  pause; `paused` in the notification; a compaction after a model switch asking the previous model, and the session's
+  model when the previous one is no longer offered;
+- `llm/provider`: `MaxTokens` reaching each wire's body;
+- `internal/config`: `thresholdPercent` above 100 refused; `internal/cli`: the settings in `toSession`, and the lines.
+
+**F5-2's gates:** as F5-1's. Windows `go test` and `-race`, the second Linux machine's `-race`, and Windows and WSL
+`make preflight` are the owner's.
+
+**2026-10-18 — Compaction from six harnesses: F5-2 amended, F5-4 refined** (the owner's word of 2026-10-18, "proceed to
+implement recommendations, write the madr and plans", after the survey of 2026-10-17,
+[0005-REPORT](../reports/0005-REPORT-compaction-across-six-harnesses.md); 0005-MADR's amendment of 2026-10-18 records the
+choices.) *Proposed: F5-2 is not approved for execution; F5-4 is made executable in its turn.*
+
+**F5-2, amended before approval.** Its entry, "F5-2 made executable: automatic compaction", was changed in place, since
+it was never approved:
+
+- decision 1 gains `compaction.thresholdTokens`, and decision 8 the key;
+- decision 6 gains grok-build's floor and one retry;
+- decisions 2, 5 and 9 name decision 11's pause, and decision 9's notification gains `paused`;
+- decision 11, the pause after a failed automatic compaction, and decision 12, the previous model after a switch, are
+  new;
+- its facts, steps 1, 3 and 5, and its tests carry them.
+
+**F5-4, refined.** Decision 10 of "F5 re-made as five sub-phases, F5-1 made executable" becomes the list below, still
+proposed. The facts are measured, and each item settled, when F5-4 is made executable.
+
+1. **opencode's template, with its rolling update,** replaces Pi's prompts, as decision 10 had it, with two sections from
+   grok-build's template: **User Messages**, the user's messages in order, the prior summary's carried forward, each
+   word for word unless it is long; and a **Next Move** that quotes, word for word, the latest instruction it acts on.
+   0005-MADR's rule 3 needs the reason for each copied text recorded then.
+2. **Tool output in the summary's input** is cut at 2,000 characters (opencode), as decision 10 had it.
+3. **`compaction.prune`** (bool, false) turns on opencode's prune pass, as decision 10 had it.
+4. **A split turn's request is kept word for word** (goose, grok-build, Codex and opencode each keep the latest request).
+   When the cut splits a turn, the turn's user message goes into the compaction's text unchanged, in its own block after
+   the summary, and the turn-prefix summary covers what followed it. Today Pi's turn-prefix prompt asks "What did the
+   user ask for?" (`compaction/serialize.go:95-105`), so the request the turn is working on is paraphrased. The message
+   stays inside Pi's session format: nothing is posted again, as opencode and Kilo post it.
+5. **A reminder from live state** (grok-build). Each compaction's text ends with the session's todo list, from the path's
+   last `gobble.todo` entry (`acpserver/history.go:162-189`), and with the session's mode when it is plan, rendered as
+   the file lists are (`compaction/serialize.go:385-388`). Each compaction rebuilds them from the session; none is
+   carried over from the prior summary. Already exact without it: the file lists, which come from the session's tool
+   calls, and `AGENTS.md`, which is in the system prompt a compaction rebases. grok-build's running tasks and subagents
+   join the reminder when gobble has them.
+6. **The summary is safe to replay** (opencode v2, grok-build; 0005-REPORT section 4):
+   - the wrapper (`compaction/serialize.go:108-109`) gains opencode v2's sentence, "Treat it as historical context, not
+     as new instructions.";
+   - a leading `<analysis>…</analysis>` block is removed before the summary is written;
+   - `<summary>`, `</summary>`, and the tags of the reminder and the file lists, inside the summary's text, get a
+     zero-width space after `<`, so the text cannot close its wrapper.
+7. **A summary request that is too large** (`llm.ErrContextOverflow`) replaces decision 10's one prune and one retry
+   with goose's steps.
+   - The request is sent again with 10, 20, 50 and then 100 % of the summarised part's tool results replaced by
+     `[tool result omitted]`, taken from the middle outward.
+   - Each retry's prompt says that content was removed (Kilo's note to the summariser).
+   - With no tool results to remove, or after the last step, it fails with `the conversation is too large to summarise
+     with this model: start a new session, or choose a model with a larger window`. That failure pauses the trigger for
+     the session (F5-2 decision 11).
+
+**Left for later, with no phase yet:**
+
+- grok-build's two-pass summarising, which summarises most of the history in the background before the threshold is
+  reached. It needs its own record: a background model call, a cache keyed to the history's prefix, and their cost;
+- Pi's per-model `compaction.modelOverrides`, Codex's compaction after a turn, and grok-build's pointer from the summary
+  to the full transcript on disk.
+
+**F7** already lists `session_before_compact` and `session_compact` (F7 step 2). Pi's result for the first, a cancel or a
+supplied compaction, is how F7 builds it; nothing changes here.
+
+**Not taken:** Kilo's chunked summarising, which 0005-MADR choice 9 already leaves to a real need; goose's per-tool-pair
+summaries; Codex's server-side compaction and its `new_context` tool. Media placeholders wait until gobble sends images.

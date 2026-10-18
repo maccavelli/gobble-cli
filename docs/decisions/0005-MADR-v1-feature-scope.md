@@ -1,6 +1,6 @@
 ---
 status: accepted
-date: 2026-10-14
+date: 2026-10-18
 decision-makers: repository owner
 consulted: 0001-REPORT-go-port-feasibility.md, 0002-MADR-cli-acp-headless-mcp-v1.md, 0003-MADR-gobble-product-identity.md, 0004-MADR-go-module-architecture.md
 informed: magic-cli-remote (companion command table), go-llmprovider-sdk, go-core-lib, go-tui-lib
@@ -816,6 +816,7 @@ Earlier phases had set the precedent: 0002-PLAN copied Pi's MCP configuration me
    * From opencode: its summary template with rolling updates, and its prune pass.
    * From Kilo: its proactive threshold, from an estimate anchored to the provider's token count; its empty-summary guard; its recovery from a too-large request; and the per-turn cap.
    * *(2026-10-16, the owner's choice, 0005-PLAN "F5 re-made as five sub-phases, F5-1 made executable": the threshold is Pi's, `window - reserveTokens`, on gobble's estimate, which is already anchored to the provider's count. Kilo's percentage is an option, off by default. The prune pass is behind a setting, off by default, as in opencode.)*
+   * *(2026-10-18, the owner's choice, amendment "compaction, from six harnesses": four additions for F5-2 and five for F5-4; the recovery from a too-large request becomes goose's removal of tool results in steps.)*
    * Chunked summarising waits for a real need.
 10. **Agents and modes (§6).** gobble keeps its two modes, default and plan. Custom agents, an ask mode and Kilo's plan follow-up are not adopted now.
 11. **Models (§9).** Provider-neutral reasoning variants, mapped for each provider and offered over ACP as `thought_level`. A small-model role runs titles and summaries. The catalog's data stays go-llmprovider-sdk's; gobble overlays limits or costs only where the SDK lacks them. *(2026-10-10: ~~the catalog's data stays go-llmprovider-sdk's~~ the SDK has no limits or costs, so the catalog is a models.dev snapshot; the small-model role is F5's. Second amendment of this date, items 2 and 6.)*
@@ -1100,3 +1101,55 @@ executable" and "F4-3b re-made: Grok's login kept".
   then.
 - The two subscription logins rest on different grounds. ChatGPT's follows OpenAI's terms for third-party clients.
   Grok's rests on xAI's silence and its endorsement of open-source agents.
+
+### Amendment (2026-10-18): compaction, from six harnesses
+
+**Why.** On 2026-10-17 the owner asked for gobble's proposed compaction to be assessed against Codex, grok-build, goose,
+Pi, Kilo and opencode, and for what gobble could borrow from them. The survey is
+[0005-REPORT-compaction-across-six-harnesses.md](../reports/0005-REPORT-compaction-across-six-harnesses.md). On 2026-10-18 the owner adopted its
+recommendations ("proceed to implement recommendations, write the madr and plans").
+
+**What changes here.** Choice 9, compaction, gains:
+
+1. **From grok-build:** a failed automatic compaction pauses the automatic trigger. The pause lasts the rest of the turn
+   when the cause may clear, and the session when retrying cannot fix it, until a compaction succeeds, the model
+   changes, or automatic compaction is set on again. No other harness carries a failure across turns.
+2. **From goose and Codex:** a threshold in tokens beside the percentage, off by default.
+3. **From grok-build:** a summary far shorter than the history it summarises is refused and asked for once more, as an
+   empty one is.
+4. **From Codex and grok-build:** after a model switch, the previous model writes the summary, since it can still read
+   the context the new one cannot.
+5. **From goose, grok-build, Codex and opencode:** the request a split turn is working on is kept word for word, not
+   paraphrased.
+6. **From grok-build:** what gobble knows exactly, the todo list and plan mode, is rebuilt from the session after each
+   compaction, not left to the summariser.
+7. **From opencode v2 and grok-build:** the summary is framed as historical context and not instructions, a scratchpad
+   is removed from it, and tags it echoes cannot close its wrapper.
+8. **From goose and Kilo:** a summary request that is too large is sent again with tool results removed in steps, and
+   the summariser is told that content was removed. This replaces Kilo's prune-and-retry as choice 9's "recovery from a
+   too-large request".
+9. **From grok-build:** the summary template gains a section for the user's messages, and a next step that quotes the
+   latest instruction.
+
+Items 1 to 4 are F5-2's, items 5 to 9 F5-4's (0005-PLAN, "Compaction from six harnesses: F5-2 amended, F5-4 refined").
+
+**Left for later.** grok-build's two-pass summarising before the threshold, which needs its own record; Pi's per-model
+compaction settings; Codex's compaction after a turn; grok-build's pointer from the summary to the full transcript.
+Pi's cancel-or-replace hook before a compaction is how F7 builds the `session_before_compact` event it already lists.
+
+**Not adopted.** Kilo's chunked summarising stays where choice 9 left it, waiting for a real need. goose's per-tool-pair
+summaries cost a model call per pair, and are off by default in goose. Codex's server-side compaction serves OpenAI and
+Azure only, and go-llmprovider-sdk has no such request. Codex's tool that lets the model reset its own context is not
+taken. Media placeholders wait until gobble sends images.
+
+**Consequences.**
+
+- Good, because a session whose compaction cannot succeed stops paying for a summary at every call and every turn.
+- Good, because the summary keeps the user's own words where they matter most: the request in progress, and the list of
+  what was asked.
+- Good, because text from old tool output that reaches a summary is replayed as history, not as an instruction.
+- Bad, because F5-2 grows by two decisions and a setting, and F5-4 by four items, each with its tests.
+- Bad, because a session paused for the session ends an overflowing turn without trying to compact, until the user acts.
+  The turn's error says what to do.
+- Neutral, because grok-build's 500-character floor and goose's removal steps are taken as their sources set them, not
+  tuned for gobble's models.
