@@ -30,7 +30,11 @@ steeringMode: all
 followUpMode: all
 sessionDir: ""
 compaction:
+  enabled: true
+  reserveTokens: 16384
   keepRecentTokens: 20000
+  thresholdPercent: 0
+  thresholdTokens: 0
 retry:
   enabled: true
   maxRetries: 3

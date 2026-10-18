@@ -358,7 +358,8 @@ func usageOf(r *llmprovider.Response, req *llmprovider.Request, output string) l
 
 // toRequest maps llm's request onto the SDK's.
 func toRequest(req *llm.Request) (*llmprovider.Request, error) {
-	out := &llmprovider.Request{Model: req.Model, Reasoning: reasoningFor(req.Thinking), Cache: llmprovider.CacheRetention(req.Cache)}
+	out := &llmprovider.Request{Model: req.Model, Reasoning: reasoningFor(req.Thinking), Cache: llmprovider.CacheRetention(req.Cache),
+		MaxOutputTokens: req.MaxTokens}
 	var system []string
 	for _, m := range req.Messages {
 		for _, c := range m.Content {

@@ -22,7 +22,9 @@ func (a *Agent) cmdCompact(ctx context.Context, t *cmdTurn, instructions string)
 		return promptError(err)
 	}
 	t.say("Compacting the conversation…\n\n")
+	t.out.notify(methodCompaction, compactionNotice{SessionID: t.s.id, Phase: phaseStart, Reason: reasonManual})
 	res, used, err := a.compactSession(ctx, t.s, instructions)
+	t.out.notify(methodCompaction, manualEnd(ctx, t.s.id, res, err))
 	var reqErr *acp.RequestError
 	switch {
 	case ctx.Err() != nil:
@@ -39,21 +41,60 @@ func (a *Agent) cmdCompact(ctx context.Context, t *cmdTurn, instructions string)
 	return nil
 }
 
-// compactSession is the one compaction of /compact and _gobble/compact
-// (0002-PLAN Phase 7). It writes the entry only when the summary succeeded,
-// rebuilds the context from it, and returns the new estimate for the
-// caller's usage_update. Pi's failures are returned as they are; a failed
-// write is an *acp.RequestError.
+// manualEnd is a manual compaction's _gobble/compaction end (0005-PLAN F5-2
+// decision 9): its tokens before, or its error.
+func manualEnd(ctx context.Context, id acp.SessionId, res compaction.Result, err error) compactionNotice {
+	n := compactionNotice{SessionID: id, Phase: phaseEnd, Reason: reasonManual}
+	switch {
+	case ctx.Err() != nil:
+		n.Error = "cancelled"
+	case err != nil:
+		n.Error = err.Error()
+	default:
+		n.TokensBefore = res.TokensBefore
+	}
+	return n
+}
+
+// compactSession is /compact's and _gobble/compact's compaction (0002-PLAN
+// Phase 7), with the session's model: prepareCompaction, then
+// runCompaction. Pi's failures are returned as they are; a failed write
+// is an *acp.RequestError.
 func (a *Agent) compactSession(ctx context.Context, s *liveSession, instructions string) (compaction.Result, int, error) {
+	prep, model, err := a.prepareCompaction(s)
+	if err != nil {
+		return compaction.Result{}, 0, err
+	}
+	chosen, think := a.choices(s)
+	m := compaction.Model{Provider: model, Model: chosen, Thinking: think, MaxTokens: a.modelOf(chosen).MaxTokens}
+	return a.runCompaction(ctx, s, prep, m, instructions)
+}
+
+// prepareCompaction finds what a compaction of s summarises, once its file
+// can be written and its provider is built.
+func (a *Agent) prepareCompaction(s *liveSession) (*compaction.Preparation, llm.Provider, error) {
 	if w, ok := s.log.(interface{ Writable() error }); ok {
 		if err := w.Writable(); err != nil { // refused before the summary is asked for
-			return compaction.Result{}, 0, appendFailed(err)
+			return nil, nil, appendFailed(err)
 		}
 	}
 	model, err := a.sessionProvider(s)
 	if err != nil {
-		return compaction.Result{}, 0, err
+		return nil, nil, err
 	}
+	prep, err := compaction.Prepare(s.tree.Path(), s.compaction)
+	if err != nil {
+		return nil, nil, err
+	}
+	return prep, model, nil
+}
+
+// runCompaction asks m for prep's summary and records it: Pi's compaction
+// entry only when the summary succeeded, after a new system prompt
+// baseline; the context rebuilt from it; and the new estimate, returned
+// for the caller's usage_update. A success ends any pause of the automatic
+// trigger (0005-PLAN F5-2 decision 11).
+func (a *Agent) runCompaction(ctx context.Context, s *liveSession, prep *compaction.Preparation, m compaction.Model, instructions string) (compaction.Result, int, error) {
 	a.mu.Lock()
 	s.compacting = true
 	a.mu.Unlock()
@@ -62,12 +103,7 @@ func (a *Agent) compactSession(ctx context.Context, s *liveSession, instructions
 		s.compacting = false
 		a.mu.Unlock()
 	}()
-	prep, err := compaction.Prepare(s.tree.Path(), s.compaction)
-	if err != nil {
-		return compaction.Result{}, 0, err
-	}
-	chosen, think := a.choices(s)
-	res, err := compaction.Compact(ctx, prep, compaction.Model{Provider: model, Model: chosen, Thinking: think}, instructions)
+	res, err := compaction.Compact(ctx, prep, m, instructions)
 	if err != nil {
 		return compaction.Result{}, 0, err
 	}
@@ -76,7 +112,7 @@ func (a *Agent) compactSession(ctx context.Context, s *liveSession, instructions
 		return compaction.Result{}, 0, acp.NewInternalError(map[string]any{keyReason: err.Error()})
 	}
 	e := session.Entry{Type: session.TypeCompaction, Summary: res.Summary, FirstKeptEntryID: res.FirstKeptEntryID,
-		TokensBefore: new(res.TokensBefore), Details: details, Usage: pricedUsage(res.Usage, a.modelOf(chosen)), FromHook: new(false)}
+		TokensBefore: new(res.TokensBefore), Details: details, Usage: pricedUsage(res.Usage, a.modelOf(m.Model)), FromHook: new(false)}
 	// The new baseline goes just before the compaction, which stays the
 	// path's last entry, as Prepare's "Already compacted" reads it (0005-PLAN
 	// F3-1 deviation 3).
@@ -90,6 +126,7 @@ func (a *Agent) compactSession(ctx context.Context, s *liveSession, instructions
 	st := s.state()
 	a.mu.Lock()
 	s.history = st.history
+	s.pause, s.pauseErr = pauseNone, ""
 	a.mu.Unlock()
 	used := compaction.EstimateText(a.systemText(s)) + compaction.EstimateEntries(s.tree.Path())
 	a.setUsed(s, used)

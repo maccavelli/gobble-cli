@@ -85,6 +85,12 @@ func (s *printSink) on(u acpclient.Update) {
 			s.out.Notef("%s", line)
 		}
 		return
+	case acpclient.KindCompaction:
+		// As a retry's (0005-PLAN F5-2 decision 9).
+		if line, ok := compactionLine(u.Compaction); ok {
+			s.out.Notef("%s", line)
+		}
+		return
 	}
 	if !s.stream {
 		return

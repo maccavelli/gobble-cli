@@ -170,6 +170,12 @@ type liveSession struct {
 	retry      llm.Retry
 	retryAbort chan struct{}
 	waiting    bool
+	// autoCompactOff turns the automatic compaction off; pause, while it is
+	// not pauseNone, pauses its trigger after a failure, which pauseErr
+	// gives (0005-PLAN F5-2 decisions 10 and 11). The pause is not saved.
+	autoCompactOff bool
+	pause          compactPause
+	pauseErr       string
 	// streaming and compacting say what the running turn is: a model turn,
 	// or a compaction (_gobble/get_state).
 	streaming, compacting bool
@@ -349,7 +355,8 @@ func (a *Agent) NewSession(ctx context.Context, p acp.NewSessionRequest) (acp.Ne
 	// a fork's history is set to it after its restore (0005-PLAN F4-2c).
 	s := &liveSession{id: acp.SessionId(id), cwd: p.Cwd, dirs: dirs, log: log, tree: session.NewTree(nil),
 		think: cmp.Or(a.override.Thinking, ss.Thinking), model: cmp.Or(a.override.Model, a.models().Default), mode: modeDefault,
-		queue: sessionQueue(ss), compaction: ss.Compaction, cache: cacheOf(ss.CacheRetention), retry: ss.Retry}
+		queue: sessionQueue(ss), compaction: ss.Compaction, cache: cacheOf(ss.CacheRetention), retry: ss.Retry,
+		autoCompactOff: ss.AutoCompactionOff}
 	if len(forked) > 0 {
 		for _, e := range forked {
 			if err := log.Append(ctx, e); err != nil {
@@ -468,6 +475,9 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 	history := s.history
 	retry := s.retry
 	s.retryAbort, s.waiting = abort, false
+	if s.pause == pauseTurn { // a turn's pause ends with it (0005-PLAN F5-2 decision 11)
+		s.pause, s.pauseErr = pauseNone, ""
+	}
 	a.mu.Unlock()
 	defer func() {
 		a.mu.Lock()
@@ -517,6 +527,7 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 		}
 		loaded = append(loaded, fresh...)
 	}
+	auto := &autoCompaction{a: a, s: s, provider: model, providerID: w.provider}
 	cfg := agent.Config{
 		Provider: model,
 		Tools:    tools,
@@ -531,9 +542,11 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 		// The session's retry settings, as the turn starts (0005-PLAN F5-1).
 		Retry:      &retry,
 		RetryAbort: abort,
+		Compact:    auto.compact,
 	}
 	ag := agent.New(cfg)
 	out := newUpdates(ctx, conn, p.SessionId)
+	auto.out = out
 	var last llm.Usage
 	env := s.env()
 	env.Environ = markers(string(s.id), a.fileOf(s), w.provider, chosen, think)
@@ -551,9 +564,18 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 	for ev, err := range ag.Run(turnCtx, env, history, prompt) {
 		if err != nil {
 			out.flush()
-			a.mu.Lock()
-			s.history = append(s.history, prompt) // the file keeps the prompt too
-			a.mu.Unlock()
+			if auto.compacted {
+				// The rebuilt history already holds the prompt, and the turn
+				// before its failure: the file's (0005-PLAN F5-2 decision 3).
+				st := s.state()
+				a.mu.Lock()
+				s.history = st.history
+				a.mu.Unlock()
+			} else {
+				a.mu.Lock()
+				s.history = append(s.history, prompt) // the file keeps the prompt too
+				a.mu.Unlock()
+			}
 			return acp.PromptResponse{}, promptError(err)
 		}
 		w.event(ev)
@@ -814,7 +836,8 @@ func (a *Agent) open(ctx context.Context, id acp.SessionId, cwd string, extra []
 	ss := a.sessionSettings(cwd)
 	// The history's thinking level wins: restore sets it (0018-MADR D17).
 	s := &liveSession{id: id, cwd: cwd, dirs: dirs, log: log, think: thinkingOff, model: a.models().Default, mode: modeDefault,
-		queue: sessionQueue(ss), compaction: ss.Compaction, cache: cacheOf(ss.CacheRetention), retry: ss.Retry}
+		queue: sessionQueue(ss), compaction: ss.Compaction, cache: cacheOf(ss.CacheRetention), retry: ss.Retry,
+		autoCompactOff: ss.AutoCompactionOff}
 	a.restore(s, log.Entries())
 	// The run's override wins over the history's choice (0005-PLAN F4-2c).
 	if err := a.applyOverride(ctx, s); err != nil {

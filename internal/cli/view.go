@@ -138,6 +138,10 @@ func (v *view) on(u acpclient.Update) {
 		if line, ok := retryLine(u.Retry); ok {
 			v.out.Notef("%s", line)
 		}
+	case acpclient.KindCompaction:
+		if line, ok := compactionLine(u.Compaction); ok {
+			v.out.Notef("%s", line)
+		}
 	case acpclient.KindOther:
 	}
 }
@@ -154,6 +158,30 @@ func retryLine(r acpclient.Retry) (string, bool) {
 		return "waiting for the network", true
 	}
 	return fmt.Sprintf("retrying: %s (attempt %d of %d)", strings.ReplaceAll(r.Cause, "_", " "), r.Attempt, r.MaxAttempts), true
+}
+
+// compactionLine is what the CLI shows on stderr for an automatic
+// compaction: "compacting the conversation (<reason>)" at its start, and
+// "compaction failed: <error>" at a failed end, with what it paused. A
+// manual one shows nothing, since /compact's reply says so (0005-PLAN F5-2
+// decision 9).
+func compactionLine(c acpclient.Compaction) (string, bool) {
+	switch {
+	case c.Reason == "manual":
+		return "", false
+	case c.Phase == "start":
+		return "compacting the conversation (" + c.Reason + ")", true
+	case c.Error == "":
+		return "", false
+	}
+	line := "compaction failed: " + c.Error
+	switch c.Paused {
+	case "turn":
+		line += " (automatic compaction paused for this turn)"
+	case "session":
+		line += " (automatic compaction paused until a compaction succeeds or the model changes)"
+	}
+	return line, true
 }
 
 // content draws a tool call's content blocks. A diff is a unified diff,

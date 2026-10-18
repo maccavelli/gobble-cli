@@ -57,6 +57,24 @@ type Config struct {
 	// RetryAbort, once closed, ends a wait the turn is taking, and the turn
 	// with the error that caused it (_gobble/abort_retry). Nil never does.
 	RetryAbort <-chan struct{}
+	// Compact is asked before each model call whether to compact the
+	// session, and, with overflow true, once when a call fails with
+	// llm.ErrContextOverflow (0005-PLAN F5-2 decisions 1 to 3). When it
+	// compacted, it returns the session after the compaction, and the turn
+	// goes on from it; the call after an overflow is sent again once. It
+	// returns nil when it did not compact; an overflow it did not compact,
+	// with no error, ends the turn with the overflow. Its error ends the
+	// turn; a cancelled compaction returns ctx's. Nil never compacts.
+	Compact func(ctx context.Context, overflow bool) (*Compacted, error)
+}
+
+// Compacted is the session after a compaction (Config.Compact): its
+// history, which holds the turn so far, and the system prompt a compaction
+// rebuilds, which the turn sends from then on (0005-PLAN F5-2 decision 3,
+// deviation 1).
+type Compacted struct {
+	History []llm.Message
+	System  string
 }
 
 // Queue is Pi's steering and follow-up queues (agent.ts). Each call drains
@@ -151,7 +169,7 @@ func (a *Agent) offer(t tool.Tool) {
 // provider failure is yielded as an error and ends the stream.
 func (a *Agent) Run(ctx context.Context, env tool.Env, history []llm.Message, prompt llm.Message) iter.Seq2[Event, error] {
 	return func(yield func(Event, error) bool) {
-		t := &turn{a: a, ctx: ctx, env: env, yield: yield, history: history, added: []llm.Message{prompt},
+		t := &turn{a: a, ctx: ctx, env: env, yield: yield, history: history, added: []llm.Message{prompt}, system: a.cfg.System,
 			tools: maps.Clone(a.tools), sent: slices.Clone(a.direct), deferred: slices.Clone(a.deferred)}
 		t.specs = encodeSpecs(t.sent)
 		t.run()
@@ -167,6 +185,7 @@ type turn struct {
 	yield    func(Event, error) bool
 	history  []llm.Message
 	added    []llm.Message
+	system   string // Config.System, until a compaction rebuilds it
 	usage    llm.Usage
 	stopped  bool // the consumer stopped iterating
 	tools    map[string]tool.Tool
@@ -256,6 +275,10 @@ func (t *turn) run() {
 	for calls := 0; ; calls++ {
 		if calls == t.a.cfg.MaxCalls {
 			t.end(StopMaxTurnRequests)
+			return
+		}
+		if _, err := t.compact(false); err != nil {
+			t.fail(err)
 			return
 		}
 		reply, ok := t.next()
@@ -383,16 +406,46 @@ const (
 	waitExpired
 )
 
+// compact asks Config.Compact to compact the session (0005-PLAN F5-2
+// decisions 1 to 3). When it did, the turn goes on from the history and
+// the system prompt it returns; the history holds the turn so far, so
+// added is emptied, and End's Messages are what came after the compaction.
+func (t *turn) compact(overflow bool) (bool, error) {
+	if t.a.cfg.Compact == nil {
+		return false, nil
+	}
+	c, err := t.a.cfg.Compact(t.ctx, overflow)
+	if err != nil || c == nil {
+		return false, err
+	}
+	t.history, t.system, t.added = c.History, c.System, nil
+	return true, nil
+}
+
+// fail ends the turn on err: as cancelled when the turn was, or with err
+// yielded.
+func (t *turn) fail(err error) {
+	if t.ctx.Err() != nil {
+		t.end(StopCancelled)
+		return
+	}
+	t.yield(nil, err)
+	t.stopped = true
+}
+
 // next is call with the waits of 0005-PLAN F5-1 decisions 3 and 4: an
 // offline call waits for the provider's host and is sent again, and an
 // empty reply runs again twice, neither reaching the history. Each wait is
-// reported as Retry events. ok is false when the turn is over: a failure
-// yielded, the consumer stopped, or the turn cancelled in a wait.
+// reported as Retry events. A call over the model's window is compacted
+// and sent once more (0005-PLAN F5-2 decision 2). ok is false when the
+// turn is over: a failure yielded, the consumer stopped, or the turn
+// cancelled in a wait or a compaction.
 func (t *turn) next() (*reply, bool) {
 	rt := t.a.cfg.Retry
 	var cause RetryCause // the wait under way, or none
 	var deadline time.Time
 	empties := 0
+	resent := false // the call was sent again after an overflow
 	for {
 		r, err := t.call()
 		switch {
@@ -401,6 +454,20 @@ func (t *turn) next() (*reply, bool) {
 		case err == nil && t.ctx.Err() != nil:
 			t.endWait(cause, turnCancelled)
 			return r, !t.stopped
+		case errors.Is(err, llm.ErrContextOverflow) && !resent && t.a.cfg.Compact != nil:
+			resent = true
+			done, cerr := t.compact(true)
+			if cerr != nil && t.ctx.Err() != nil {
+				t.endWait(cause, turnCancelled)
+				t.end(StopCancelled)
+				return nil, false
+			}
+			if done {
+				continue
+			}
+			if cerr != nil {
+				err = cerr
+			}
 		case rt == nil || rt.Off:
 		case errors.Is(err, llm.ErrOffline) && t.prober() != nil && rt.OfflineWait > 0:
 			if cause != RetryOffline {
@@ -549,8 +616,8 @@ func (t *turn) sleep(d time.Duration) waited {
 // that stopped sets t.stopped.
 func (t *turn) call() (*reply, error) {
 	msgs := make([]llm.Message, 0, len(t.history)+len(t.added)+1)
-	if t.a.cfg.System != "" {
-		msgs = append(msgs, llm.Message{Role: llm.RoleSystem, Content: []llm.Content{{Type: llm.ContentText, Text: t.a.cfg.System}}})
+	if t.system != "" {
+		msgs = append(msgs, llm.Message{Role: llm.RoleSystem, Content: []llm.Content{{Type: llm.ContentText, Text: t.system}}})
 	}
 	msgs = append(append(msgs, t.history...), t.added...)
 	req := &llm.Request{Model: t.a.cfg.Model, Messages: msgs, Tools: t.specs, Thinking: t.a.cfg.Thinking, Cache: t.a.cfg.Cache}

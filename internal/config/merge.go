@@ -143,6 +143,9 @@ func convert(k Key, n *yaml.Node) (any, string) {
 		if v < k.Min {
 			return nil, fmt.Sprintf("must be at least %d", k.Min)
 		}
+		if k.Max != 0 && v > k.Max {
+			return nil, fmt.Sprintf("must be at most %d", k.Max)
+		}
 		return v, ""
 	}
 	if n.Kind != yaml.ScalarNode {

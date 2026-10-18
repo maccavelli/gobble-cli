@@ -28,6 +28,10 @@ const (
 	// session/update: Params holds the notification's params (0005-PLAN
 	// F5-1 decision 5).
 	KindRetry
+	// KindCompaction is gobble's _gobble/compaction notification, not a
+	// session/update: Params holds the notification's params (0005-PLAN
+	// F5-2 decision 9).
+	KindCompaction
 )
 
 func (k Kind) String() string {
@@ -52,6 +56,8 @@ func (k Kind) String() string {
 		return "session_info"
 	case KindRetry:
 		return "retry"
+	case KindCompaction:
+		return "compaction"
 	}
 	return "other"
 }
@@ -80,6 +86,8 @@ type Update struct {
 	Title string
 	// Retry is the turn's wait, for KindRetry.
 	Retry Retry
+	// Compaction is a compaction's start or end, for KindCompaction.
+	Compaction Compaction
 	// Params is the session/update params object as the SDK encodes it,
 	// for clients that pass the ACP stream through (0008-MADR D9).
 	Params json.RawMessage
@@ -115,6 +123,37 @@ func retryOf(params json.RawMessage) (acp.SessionId, Retry, error) {
 	}
 	return n.SessionID, Retry{Phase: n.Phase, Cause: n.Cause, Attempt: n.Attempt, MaxAttempts: n.MaxAttempts,
 		Delay: time.Duration(n.DelayMs) * time.Millisecond, Error: n.Error}, nil
+}
+
+// Compaction is a compaction's start or end, as _gobble/compaction
+// reports it: Phase start or end; Reason manual, threshold or overflow;
+// TokensBefore a successful end's; Error why an end is not a success, or
+// ""; Paused "turn" or "session" when the failure paused automatic
+// compaction (0005-PLAN F5-2 decisions 9 and 11).
+type Compaction struct {
+	Phase, Reason string
+	TokensBefore  int64
+	Error, Paused string
+}
+
+// methodCompaction is gobble's compaction notification (0005-PLAN F5-2).
+const methodCompaction = "_gobble/compaction"
+
+// compactionOf decodes _gobble/compaction's params, with the session they
+// name.
+func compactionOf(params json.RawMessage) (acp.SessionId, Compaction, error) {
+	var n struct {
+		SessionID    acp.SessionId `json:"sessionId"`
+		Phase        string        `json:"phase"`
+		Reason       string        `json:"reason"`
+		TokensBefore int64         `json:"tokensBefore"`
+		Error        string        `json:"error"`
+		Paused       string        `json:"paused"`
+	}
+	if err := json.Unmarshal(params, &n); err != nil {
+		return "", Compaction{}, fmt.Errorf("%s: %w", methodCompaction, err)
+	}
+	return n.SessionID, Compaction{Phase: n.Phase, Reason: n.Reason, TokensBefore: n.TokensBefore, Error: n.Error, Paused: n.Paused}, nil
 }
 
 // ToolCall is a tool call or an update to one. In an update, an empty

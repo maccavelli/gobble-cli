@@ -7,17 +7,40 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/session"
 )
 
-// Settings are Pi's compaction settings. ReserveTokens leaves room for the
-// reply in the automatic trigger (0005-PLAN F5); KeepRecentTokens is the
-// recent context a compaction keeps.
+// Settings are Pi's compaction settings, and the two thresholds gobble
+// adds (0005-PLAN F5-2 decision 1). ReserveTokens leaves room for the
+// reply in the automatic trigger, and sets a summary's output cap;
+// KeepRecentTokens is the recent context a compaction keeps;
+// ThresholdPercent, a percentage of the window, and ThresholdTokens, a
+// count of tokens, compact sooner, each 0 being off.
 type Settings struct {
 	ReserveTokens    int
 	KeepRecentTokens int
+	ThresholdPercent int
+	ThresholdTokens  int
+}
+
+// Over reports whether a context of used tokens is to be compacted before
+// a model call (0005-PLAN F5-2 decision 1): over the window less
+// ReserveTokens (Pi), at ThresholdPercent of the window (Kilo), or at
+// ThresholdTokens (goose, Codex). A window of 0, unknown, triggers only
+// ThresholdTokens.
+func Over(used, window int, s Settings) bool {
+	if window > 0 {
+		if used > window-s.ReserveTokens {
+			return true
+		}
+		if s.ThresholdPercent > 0 && used >= window*s.ThresholdPercent/100 {
+			return true
+		}
+	}
+	return s.ThresholdTokens > 0 && used >= s.ThresholdTokens
 }
 
 // DefaultSettings are Pi's defaults (compaction.ts DEFAULT_COMPACTION_SETTINGS).
@@ -29,6 +52,26 @@ var (
 	ErrAlreadyCompacted = errors.New("Already compacted") //nolint:staticcheck // as the lint:ignore above
 	//lint:ignore ST1005 Pi's message, word for word (0002-PLAN Phase 5, deviation 3, applied again in Phase 6)
 	ErrNothingToCompact = errors.New("Nothing to compact (session too small)") //nolint:staticcheck // as the lint:ignore above
+)
+
+// ErrSummaryRefused is wrapped by every summary the model gave that is not
+// taken: cut at the output limit, calling a tool, empty, or too short.
+// Asking again with the same history and model cannot be expected to do
+// better (0005-PLAN F5-2 decision 11).
+var ErrSummaryRefused = errors.New("compaction: summary refused")
+
+// refused is a summary's refusal: its message, wrapping ErrSummaryRefused.
+type refused string
+
+func (r refused) Error() string { return string(r) }
+func (refused) Unwrap() error   { return ErrSummaryRefused }
+
+// The summary floor (0005-PLAN F5-2 decision 6): grok-build's
+// MIN_SUMMARY_SEED_CHARS, applied only to a summary of floorSource
+// characters or more, so a short history's short summary stands.
+const (
+	floorChars  = 500
+	floorSource = 5000
 )
 
 // Preparation is what a compaction summarises and keeps.
@@ -44,6 +87,7 @@ type Preparation struct {
 	TokensBefore    int64
 	previousSummary string
 	files           fileOps
+	reserve         int
 }
 
 // Prepare finds what a compaction of path summarises (Pi's
@@ -74,6 +118,7 @@ func Prepare(path []session.Entry, s Settings) (*Preparation, error) {
 		TokensBefore:     int64(EstimateEntries(path)),
 		previousSummary:  previous,
 		files:            newFileOps(),
+		reserve:          s.ReserveTokens,
 	}
 	if cut.split {
 		p.turnPrefix = messages(proj[cut.turnStart:cut.first])
@@ -222,11 +267,14 @@ func recoverySuffix(suffix []Projected) bool {
 	return assistant
 }
 
-// Model is the model a summary is asked of: the session's own.
+// Model is the model a summary is asked of: the session's own, or the one
+// before a model switch (0005-PLAN F5-2 decision 12). MaxTokens is its
+// output limit, 0 unknown.
 type Model struct {
-	Provider llm.Provider
-	Model    string
-	Thinking string
+	Provider  llm.Provider
+	Model     string
+	Thinking  string
+	MaxTokens int
 }
 
 // Result is a compaction to record.
@@ -252,21 +300,25 @@ func Compact(ctx context.Context, p *Preparation, m Model, instructions string) 
 			history = "No prior history."
 		}
 		if len(p.toSummarize) > 0 {
-			text, u, err := summarise(ctx, m, historyPrompt(p.toSummarize, instructions, p.previousSummary), "Summarization")
+			conv := serialize(p.toSummarize)
+			text, u, err := summarise(ctx, m, historyPrompt(conv, instructions, p.previousSummary), "Summarization",
+				replyCap(p.reserve*4/5, m.MaxTokens), utf8.RuneCountInString(conv))
 			if err != nil {
 				return Result{}, err
 			}
 			history, usage = text, u
 		}
 		prefixPrompt := "# Conversation\n" + serialize(p.turnPrefix) + "\n\n# Instructions\n" + turnPrefixPrompt
-		text, u, err := summarise(ctx, m, prefixPrompt, "Turn prefix summarization")
+		text, u, err := summarise(ctx, m, prefixPrompt, "Turn prefix summarization", replyCap(p.reserve/2, m.MaxTokens), 0)
 		if err != nil {
 			return Result{}, err
 		}
 		summary = history + "\n\n---\n\n**Turn Context (split turn):**\n\n" + text
 		usage = addUsage(usage, u)
 	} else {
-		text, u, err := summarise(ctx, m, historyPrompt(p.toSummarize, instructions, p.previousSummary), "Summarization")
+		conv := serialize(p.toSummarize)
+		text, u, err := summarise(ctx, m, historyPrompt(conv, instructions, p.previousSummary), "Summarization",
+			replyCap(p.reserve*4/5, m.MaxTokens), utf8.RuneCountInString(conv))
 		if err != nil {
 			return Result{}, err
 		}
@@ -276,10 +328,10 @@ func Compact(ctx context.Context, p *Preparation, m Model, instructions string) 
 	return Result{Summary: summary + d.format(), FirstKeptEntryID: p.FirstKeptEntryID, TokensBefore: p.TokensBefore, Usage: usage, Details: d}, nil
 }
 
-// historyPrompt is Pi's summary request: the conversation, the previous
-// summary when there is one, then the first or the update prompt, and the
-// user's focus.
-func historyPrompt(msgs []*session.Message, instructions, previous string) string {
+// historyPrompt is Pi's summary request: the serialised conversation, the
+// previous summary when there is one, then the first or the update prompt,
+// and the user's focus.
+func historyPrompt(conv, instructions, previous string) string {
 	base := summarizationPrompt
 	if previous != "" {
 		base = updatePrompt
@@ -288,7 +340,7 @@ func historyPrompt(msgs []*session.Message, instructions, previous string) strin
 		base += "\n\nAdditional focus: " + instructions
 	}
 	var b strings.Builder
-	b.WriteString("<conversation>\n" + serialize(msgs) + "\n</conversation>\n\n")
+	b.WriteString("<conversation>\n" + conv + "\n</conversation>\n\n")
 	if previous != "" {
 		b.WriteString("<previous-summary>\n" + previous + "\n</previous-summary>\n\n")
 	}
@@ -296,10 +348,46 @@ func historyPrompt(msgs []*session.Message, instructions, previous string) strin
 	return b.String()
 }
 
-// summarise sends one summary request and reads the whole reply. A reply
-// cut at the output limit, or one that calls a tool, is not a summary.
-func summarise(ctx context.Context, m Model, prompt, label string) (string, llm.Usage, error) {
-	req := &llm.Request{Model: m.Model, Thinking: m.Thinking, Messages: []llm.Message{
+// replyCap is a summary's output cap (Pi's, 0005-PLAN F5-2 decision 7):
+// share, a part of the reserve, no more than the model's maxTokens. An
+// unknown maxTokens, or no reserve, caps nothing.
+func replyCap(share, maxTokens int) int {
+	if maxTokens <= 0 || share <= 0 {
+		return 0
+	}
+	return min(share, maxTokens)
+}
+
+// summarise asks for a summary, capped at maxTokens, of source characters
+// of history, and reads the whole reply. A reply cut at the output limit,
+// or one that calls a tool, is not a summary. An empty one, or, of
+// floorSource characters or more, one shorter than floorChars, is asked for
+// once more, then refused (0005-PLAN F5-2 decision 6). The usage is every
+// attempt's.
+func summarise(ctx context.Context, m Model, prompt, label string, maxTokens, source int) (string, llm.Usage, error) {
+	var usage llm.Usage
+	for attempt := 1; ; attempt++ {
+		text, u, err := summariseOnce(ctx, m, prompt, label, maxTokens)
+		usage = addUsage(usage, u)
+		if err != nil {
+			return "", usage, err
+		}
+		n := utf8.RuneCountInString(strings.TrimSpace(text))
+		switch {
+		case n == 0 && attempt == 2:
+			return "", usage, refused(label + " failed: the summary is empty")
+		case n > 0 && n < floorChars && source >= floorSource && attempt == 2:
+			return "", usage, refused(fmt.Sprintf("%s failed: the summary is too short (%d characters)", label, n))
+		case n == 0, n < floorChars && source >= floorSource:
+			continue
+		}
+		return text, usage, nil
+	}
+}
+
+// summariseOnce sends one summary request and reads the whole reply.
+func summariseOnce(ctx context.Context, m Model, prompt, label string, maxTokens int) (string, llm.Usage, error) {
+	req := &llm.Request{Model: m.Model, Thinking: m.Thinking, MaxTokens: maxTokens, Messages: []llm.Message{
 		{Role: llm.RoleSystem, Content: []llm.Content{{Type: llm.ContentText, Text: systemPrompt}}},
 		{Role: llm.RoleUser, Content: []llm.Content{{Type: llm.ContentText, Text: prompt}}},
 	}}
@@ -326,9 +414,9 @@ func summarise(ctx context.Context, m Model, prompt, label string) (string, llm.
 	}
 	switch {
 	case stop == llm.StopMaxTokens:
-		return "", usage, fmt.Errorf("%s failed: generation hit the token cap and the summary is incomplete", label)
+		return "", usage, refused(label + " failed: generation hit the token cap and the summary is incomplete")
 	case calls:
-		return "", usage, fmt.Errorf("%s attempted to call a tool", label)
+		return "", usage, refused(label + " attempted to call a tool")
 	}
 	return text.String(), usage, nil
 }

@@ -45,6 +45,7 @@ var extensions = map[string]extension{
 	"_gobble/get_fork_messages":       (*Agent).extGetForkMessages,
 	"_gobble/set_auto_retry":          (*Agent).extSetAutoRetry,
 	"_gobble/abort_retry":             (*Agent).extAbortRetry,
+	"_gobble/set_auto_compaction":     (*Agent).extSetAutoCompaction,
 }
 
 // methodRetry is the notification of a turn's retry wait (0005-PLAN F5-1
@@ -237,7 +238,10 @@ func (a *Agent) extCompact(ctx context.Context, params jsontext.Value) (any, err
 		return nil, err
 	}
 	defer release()
+	out := newUpdates(ctx, a.connection(), s.id)
+	out.notify(methodCompaction, compactionNotice{SessionID: s.id, Phase: phaseStart, Reason: reasonManual})
 	res, used, err := a.compactSession(turnCtx, s, p.CustomInstructions)
+	out.notify(methodCompaction, manualEnd(turnCtx, s.id, res, err))
 	var reqErr *acp.RequestError
 	switch {
 	case turnCtx.Err() != nil:
@@ -249,7 +253,6 @@ func (a *Agent) extCompact(ctx context.Context, params jsontext.Value) (any, err
 	case err != nil:
 		return nil, promptError(err)
 	}
-	out := newUpdates(ctx, a.connection(), s.id)
 	out.send(a.contextUpdate(s, used))
 	if out.err != nil {
 		return nil, out.err
@@ -322,6 +325,33 @@ func (a *Agent) extSetAutoRetry(_ context.Context, params jsontext.Value) (any, 
 	s.retry.Off = !*p.Enabled
 	if s.retry.Off {
 		a.abortRetry(s)
+	}
+	return empty{}, nil
+}
+
+// extSetAutoCompaction is Pi's set_auto_compaction: it writes
+// compaction.enabled to the global settings, as Pi writes its own, and sets
+// the session's at once, the running turn's next check included. Turned
+// on, it also ends a pause of the trigger (0005-PLAN F5-2 decisions 10 and
+// 11).
+func (a *Agent) extSetAutoCompaction(_ context.Context, params jsontext.Value) (any, error) {
+	p, s, err := extSession[enabledParams](a, params)
+	if err != nil {
+		return nil, err
+	}
+	if p.Enabled == nil {
+		return nil, invalidParams(s.id, "enabled must be true or false")
+	}
+	if a.save != nil {
+		if err := a.save("compaction.enabled", strconv.FormatBool(*p.Enabled)); err != nil {
+			return nil, acp.NewInternalError(map[string]any{keyReason: err.Error()})
+		}
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	s.autoCompactOff = !*p.Enabled
+	if *p.Enabled {
+		s.pause, s.pauseErr = pauseNone, ""
 	}
 	return empty{}, nil
 }
@@ -437,11 +467,11 @@ func (a *Agent) extGetState(_ context.Context, params jsontext.Value) (any, erro
 	model, think := a.choices(s)
 	steering, followUp := s.queue.modes()
 	a.mu.Lock()
-	streaming, compacting := s.streaming, s.compacting
+	streaming, compacting, auto := s.streaming, s.compacting, !s.autoCompactOff
 	a.mu.Unlock()
 	res := stateResult{ThinkingLevel: think, IsStreaming: streaming, IsCompacting: compacting, SteeringMode: steering, FollowUpMode: followUp,
 		SessionFile: a.fileOf(s), SessionID: s.id, SessionName: st.name, MessageCount: len(contextMessages(st)),
-		PendingMessageCount: s.queue.pending(), Mode: a.modeOf(s), Cwd: s.cwd}
+		PendingMessageCount: s.queue.pending(), Mode: a.modeOf(s), Cwd: s.cwd, AutoCompactionEnabled: auto}
 	if model != "" {
 		res.Model = &modelRef{Provider: a.models().Provider, ID: model}
 	}

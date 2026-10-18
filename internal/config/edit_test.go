@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -129,6 +130,9 @@ func sample(k Key) string {
 		}
 		return "true"
 	case KindInt:
+		if k.Max != 0 { // within the range: compaction.thresholdPercent's is 0 to 100
+			return strconv.FormatInt(k.Max/2, 10)
+		}
 		return "4242"
 	case KindEnum:
 		return k.Enum[len(k.Enum)-1]

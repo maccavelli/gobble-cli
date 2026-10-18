@@ -502,7 +502,7 @@ func TestExtensionReads(t *testing.T) {
 		t.Errorf("state %v", state)
 	case state["sessionName"] != "named", state["messageCount"] != float64(4), state["mode"] != modeDefault, state["cwd"] != cwd:
 		t.Errorf("state %v", state)
-	case !strings.HasSuffix(state["sessionFile"].(string), "_"+string(id)+".jsonl"), state["autoCompactionEnabled"] != false:
+	case !strings.HasSuffix(state["sessionFile"].(string), "_"+string(id)+".jsonl"), state["autoCompactionEnabled"] != true:
 		t.Errorf("state %v", state)
 	}
 	var roles []string
@@ -557,11 +557,11 @@ func TestEveryAdvertisedExtensionAnswers(t *testing.T) {
 	for _, n := range raw {
 		names = append(names, n.(string))
 	}
-	// 0002-PLAN Phase 7's frozen sixteen, and 0005-PLAN F5-1's two.
+	// 0002-PLAN Phase 7's frozen sixteen, 0005-PLAN F5-1's two, and F5-2's one.
 	frozen := []string{
 		"_gobble/abort_retry", "_gobble/clear_queue", "_gobble/clone", "_gobble/compact", "_gobble/follow_up", "_gobble/fork",
 		"_gobble/get_entries", "_gobble/get_fork_messages", "_gobble/get_last_assistant_text", "_gobble/get_messages",
-		"_gobble/get_session_stats", "_gobble/get_state", "_gobble/set_auto_retry", "_gobble/set_follow_up_mode",
+		"_gobble/get_session_stats", "_gobble/get_state", "_gobble/set_auto_compaction", "_gobble/set_auto_retry", "_gobble/set_follow_up_mode",
 		"_gobble/set_session_name", "_gobble/set_steering_mode", "_gobble/steer", "_gobble/usage",
 	}
 	if !slices.Equal(names, frozen) {

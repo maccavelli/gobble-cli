@@ -35,18 +35,22 @@ const (
 )
 
 // Key is one setting: its dotted path, kind, default as the template shows
-// it, allowed values, least value, scope, read, and the schema's
-// description.
+// it, allowed values, least and greatest value, scope, read, and the
+// schema's description. A Max of 0 is no greatest value.
 type Key struct {
 	Path    string
 	Kind    Kind
 	Default string
 	Enum    []string
 	Min     int64
+	Max     int64
 	Scope   Scope
 	Read    Read
 	Doc     string
 }
+
+// boolTrue is a bool key's true, as the template writes it.
+const boolTrue = "true"
 
 // pathSessionDir is the one path key that must be absolute.
 const pathSessionDir = "sessionDir"
@@ -56,8 +60,8 @@ const pathSessionDir = "sessionDir"
 var queueModes = []string{"one-at-a-time", "all"}
 
 // Keys are 0018-MADR D14's thirteen, 0019-MADR D15's defaultProvider,
-// 0021-MADR D3's cacheRetention, 0005-PLAN F4-2c's defaultModel and
-// F5-1's retry keys, in the template's order. Every other part
+// 0021-MADR D3's cacheRetention, 0005-PLAN F4-2c's defaultModel, F5-1's
+// retry keys and F5-2's compaction keys, in the template's order. Every other part
 // of the package reads them; a key added here without its template block,
 // schema or Settings field fails the package's tests.
 var Keys = []Key{
@@ -75,9 +79,17 @@ var Keys = []Key{
 		Read: ReadSession, Doc: "How follow-up messages queued while a turn runs reach the model: one at a time, or all at once."},
 	{Path: pathSessionDir, Kind: KindPath, Scope: ScopeGlobalOnly, Read: ReadProcess,
 		Doc: "The directory session files are kept in, flat, as --session-dir keeps them. Empty keeps them in gobble's data directory, by working directory."},
+	{Path: "compaction.enabled", Kind: KindBool, Default: boolTrue, Read: ReadSession,
+		Doc: "Whether gobble compacts the conversation on its own: before a model call once it nears the model's window, and once when the model says it is over it."},
+	{Path: "compaction.reserveTokens", Kind: KindInt, Default: "16384", Min: 1, Read: ReadSession,
+		Doc: "The room, in tokens, kept free in the model's window: the conversation is compacted once it is over the window less this. A summary's reply is capped at 80 percent of it."},
 	{Path: "compaction.keepRecentTokens", Kind: KindInt, Default: "20000", Min: 1, Read: ReadSession,
-		Doc: "The recent conversation, in tokens, that /compact keeps word for word."},
-	{Path: "retry.enabled", Kind: KindBool, Default: "true", Read: ReadSession,
+		Doc: "The recent conversation, in tokens, that a compaction keeps word for word."},
+	{Path: "compaction.thresholdPercent", Kind: KindInt, Default: "0", Min: 0, Max: 100, Read: ReadSession,
+		Doc: "Compacts sooner, once the conversation reaches this percentage of the model's window; 0 is off."},
+	{Path: "compaction.thresholdTokens", Kind: KindInt, Default: "0", Min: 0, Read: ReadSession,
+		Doc: "Compacts sooner, once the conversation reaches this many tokens, whatever the model's window; 0 is off."},
+	{Path: "retry.enabled", Kind: KindBool, Default: boolTrue, Read: ReadSession,
 		Doc: "Whether a failed model call is retried: the provider's retries, the wait for the network, and an empty reply's two more runs."},
 	{Path: "retry.maxRetries", Kind: KindInt, Default: "3", Min: 0, Read: ReadSession,
 		Doc: "How many times the provider retries a failed call."},

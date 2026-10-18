@@ -158,7 +158,7 @@ func TestPromptBaselineAndPatch(t *testing.T) {
 func TestCompactRebases(t *testing.T) {
 	dir, cwd := t.TempDir(), t.TempDir()
 	writeFile(t, filepath.Join(cwd, "AGENTS.md"), "Old rule.")
-	model := llmtest.NewScript(llmtest.Text(strings.Repeat("x", 4000)), llmtest.Text("y"), llmtest.Text("## Goal\nS"), llmtest.Text("z"))
+	model := llmtest.NewScript(llmtest.Text(strings.Repeat("x", 4000)), llmtest.Text("y"), llmtest.Text("## Goal\nS"+strings.Repeat(" detail", 80)), llmtest.Text("z"))
 	var logs bytes.Buffer
 	c := promptAgent(t, dir, model, PromptOptions{}, &logs, func(o *Options) { o.Compaction = compaction.Settings{KeepRecentTokens: 50} })
 	id := newSession(t, c, cwd, nil).SessionId

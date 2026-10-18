@@ -64,6 +64,10 @@ func TestDefaultsEqualCode(t *testing.T) {
 		{"steeringMode", s.SteeringMode, "one-at-a-time"},
 		{"followUpMode", s.FollowUpMode, "one-at-a-time"},
 		{"keepRecentTokens", s.Compaction.KeepRecentTokens, int64(compaction.DefaultSettings.KeepRecentTokens)},
+		{"compaction.enabled", s.Compaction.Enabled, true},
+		{"reserveTokens", s.Compaction.ReserveTokens, int64(compaction.DefaultSettings.ReserveTokens)},
+		{"thresholdPercent", s.Compaction.ThresholdPercent, int64(0)},
+		{"thresholdTokens", s.Compaction.ThresholdTokens, int64(0)},
 		{"useClientTerminal", s.Tools.Bash.UseClientTerminal, false},
 		{"maxTimeout", s.MaxTimeout().String(), "10m0s"},
 		{"startupWait", s.MCPStartupWait().String(), "10s"},
@@ -97,8 +101,8 @@ func TestKeysMatchSettings(t *testing.T) {
 			t.Errorf("%s: Value = %v %v, want %v", k.Path, v, ok, defaultValue(k))
 		}
 	}
-	if len(Keys) != 21 {
-		t.Errorf("%d keys, want 0018-MADR D14's 13, 0019-MADR D15's defaultProvider, 0021-MADR D3's cacheRetention, 0005-PLAN F4-2c's defaultModel and F5-1's five retry keys", len(Keys))
+	if len(Keys) != 25 {
+		t.Errorf("%d keys, want 0018-MADR D14's 13, 0019-MADR D15's defaultProvider, 0021-MADR D3's cacheRetention, 0005-PLAN F4-2c's defaultModel, F5-1's five retry keys and F5-2's four compaction keys", len(Keys))
 	}
 }
 
@@ -201,6 +205,13 @@ func TestGlobalOnlyIgnoredFromProject(t *testing.T) {
 // the layer below.
 func TestTypeAndRangeErrorsFallBack(t *testing.T) {
 	l := newLayout(t, "steeringMode: some\nmcp:\n  stopGraceMs: \"5\"\n  stopTimeoutMs: -1\ntools:\n  bash:\n    useClientTerminal: [x]\n    maxTimeoutMs: 1.10\ncompaction: 3\nsessionDir: relative/dir\ndefaultProvider: ollama\n", "")
+	l2 := newLayout(t, "compaction:\n  thresholdPercent: 101\n  thresholdTokens: -1\n", "")
+	r2, ds2 := Resolve(Options{ConfigDir: l2.config})
+	if r2.Settings != Defaults() || len(ds2) != 2 ||
+		!strings.HasSuffix(ds2[0].String(), "settings.yaml:2: compaction.thresholdPercent: must be at most 100") ||
+		!strings.HasSuffix(ds2[1].String(), "settings.yaml:3: compaction.thresholdTokens: must be at least 0") {
+		t.Fatalf("settings %+v, diagnostics %v; want the defaults, thresholdPercent above its greatest and thresholdTokens below its least", r2.Settings, ds2)
+	}
 	r, ds := Resolve(Options{ConfigDir: l.config})
 	if r.Settings != Defaults() {
 		t.Fatalf("settings %+v, want every key at its default", r.Settings)

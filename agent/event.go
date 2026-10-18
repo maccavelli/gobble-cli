@@ -88,8 +88,10 @@ const (
 )
 
 // End is the turn's last event. Messages are the turn's messages, the
-// prompt first, for the caller to append to the history; Usage sums the
-// turn's model calls.
+// prompt first, for the caller to append to the history; after a
+// compaction (Config.Compact), they are only those that came after the
+// latest one, for the caller to append to the history it compacted to.
+// Usage sums the turn's model calls.
 type End struct {
 	StopReason StopReason
 	Messages   []llm.Message

@@ -44,6 +44,9 @@ func Schema() ([]byte, error) {
 		}
 		if k.Kind == KindInt {
 			p.Minimum = new(float64(k.Min))
+			if k.Max != 0 {
+				p.Maximum = new(float64(k.Max))
+			}
 		}
 		if k.Scope == ScopeGlobalOnly {
 			if p.Extra == nil {

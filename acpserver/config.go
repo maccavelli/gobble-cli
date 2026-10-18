@@ -57,8 +57,12 @@ type SessionSettings struct {
 	// CacheRetention is the prompt cache the session's turns ask for:
 	// none, short or long (0021-MADR D3).
 	CacheRetention string
-	// Compaction is /compact's settings.
+	// Compaction is the compaction settings, /compact's and the automatic
+	// trigger's (0005-PLAN F5-2).
 	Compaction compaction.Settings
+	// AutoCompactionOff turns automatic compaction off, the trigger and the
+	// overflow's recovery; zero is on (0005-PLAN F5-2 decision 8).
+	AutoCompactionOff bool
 	// MCPStartupWait bounds the first prompt's wait for MCP servers.
 	MCPStartupWait time.Duration
 	// MCPStopGrace and MCPStopTimeout are a stdio server's stop timings;
@@ -152,6 +156,9 @@ func (a *Agent) setConfig(ctx context.Context, s *liveSession, id, value string)
 		}
 		clamped := catalog.Clamp(a.levelsOf(value), think)
 		a.mu.Lock()
+		if value != s.model { // a new model's window may fit (0005-PLAN F5-2 decision 11)
+			s.pause, s.pauseErr = pauseNone, ""
+		}
 		s.model, s.think = value, clamped
 		a.mu.Unlock()
 		entries = append(entries, session.Entry{Type: session.TypeModelChange, Provider: choice.Provider, ModelID: value})

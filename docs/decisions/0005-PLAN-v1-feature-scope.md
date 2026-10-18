@@ -5933,8 +5933,10 @@ Amended before approval on 2026-10-18, by the owner's word "proceed to implement
 2. **Overflow.** A call that fails with `llm.ErrContextOverflow` compacts, and is sent again once. A second overflow of
    the same call ends the turn with its error. *Refined:* as in Pi, `compaction.enabled: false` turns this off too, and so does decision 11's pause for the
    session (2026-10-18).
-3. **Mid-turn.** The agent takes a hook, `Config.Compact(ctx, overflow) (history, compacted, error)`. When it
-   compacted, the turn goes on from the session's rebuilt history: `history` is replaced and `added` emptied, so
+3. **Mid-turn.** The agent takes a hook, ~~`Config.Compact(ctx, overflow) (history, compacted, error)`~~
+   `Config.Compact(ctx, overflow) (*Compacted, error)`, a `Compacted` holding the history and the system prompt, nil when
+   nothing was compacted *(2026-10-18, F5-2's deviation 1)*. When it compacted, the turn goes on from the session's
+   rebuilt history and its new system prompt: `history` is replaced and `added` emptied, so
    `End.Messages` holds what came after the compaction, which acpserver appends to the rebuilt history. A turn that
    fails after a compaction rebuilds the session's history from the tree in place of appending its prompt.
 4. **At most 3 compactions in one turn** (Kilo), threshold and overflow together. A fourth needed ends the turn with
@@ -6011,7 +6013,7 @@ Amended before approval on 2026-10-18, by the owner's word "proceed to implement
    bool`, decision 1's test; decision 6's guard and its one retry in `summarise`; `ErrSummaryRefused`, which decision 6's
    and `summarise`'s other refusals wrap, for decision 11; decision 7's caps, from a `Model.MaxTokens`.
 4. **`agent`:** `Config.Compact`; the check before each call in `run`, and the overflow's one resend in `next`;
-   decision 3's history; `End`'s documentation.
+   decision 3's history, and its system prompt *(F5-2's deviation 1)*; `End`'s documentation.
 5. **`acpserver`:** `SessionSettings.AutoCompactionOff`, zero being on, and the reserve and threshold through
    `Compaction`; the turn's hook, with decisions 1, 2, 4, 5 and 12; decision 11's pause on the live session, ended by a
    compaction, `setConfig`'s model change and `_gobble/set_auto_compaction`; decision 3's history on a failed turn;
@@ -6042,6 +6044,25 @@ Amended before approval on 2026-10-18, by the owner's word "proceed to implement
 
 **F5-2's gates:** as F5-1's. Windows `go test` and `-race`, the second Linux machine's `-race`, and Windows and WSL
 `make preflight` are the owner's.
+
+**F5-2's deviations, 2026-10-18, decided by the owner:**
+
+1. **A compaction within a turn changes the system prompt.** Found while building step 5, with steps 1 to 4 built and
+   tested. A turn's system prompt is fixed when it starts: the session's latest baseline, while each later change is a
+   patch that reaches the model as a message at its place (`acpserver/sysprompt.go:256-269`,
+   `compaction/estimate.go:214-223`). A compaction writes a new baseline, every patch folded in, just before its entry
+   (`acpserver/sysprompt.go:281-286`), and the patches before its cut are summarised. `/compact` runs between turns, so
+   the next turn sends the new baseline. Under decision 3's hook as written, the rest of a turn that compacted would have
+   sent the old baseline, and a summarised patch would have reached the model only as the summary's paraphrase until
+   the next turn. The plan had not looked at the system prompt.
+   - **Chosen (option 1, "option 1"):** the hook returns the system prompt with the history, as
+     `Config.Compact(ctx, overflow) (*agent.Compacted, error)`, `Compacted{History, System}`, nil when nothing was
+     compacted; the turn sends that system prompt from then on. Decision 3 and step 4 are struck through or annotated.
+     An agent test and an acpserver test pin it.
+   - **Not chosen:** keeping the signature and putting a message that restates the summarised patches at the start of
+     the returned history. The message would be in no session file, so the rest of the turn and the next one would see
+     different context.
+   - No file is added to the step's scope.
 
 **2026-10-18 — Compaction from six harnesses: F5-2 amended, F5-4 refined** (the owner's word of 2026-10-18, "proceed to
 implement recommendations, write the madr and plans", after the survey of 2026-10-17,
@@ -6105,3 +6126,97 @@ supplied compaction, is how F7 builds it; nothing changes here.
 
 **Not taken:** Kilo's chunked summarising, which 0005-MADR choice 9 already leaves to a real need; goose's per-tool-pair
 summaries; Codex's server-side compaction and its `new_context` tool. Media placeholders wait until gobble sends images.
+
+**F5-2's execution record (2026-10-18).**
+
+- **Ran as the entry wrote it,** amended on 2026-10-18, with deviation 1 above, on the owner's word "committed, proceed"
+  after `19dba01`. F5-3 is next, made executable when the owner asks.
+- **What was built:**
+  - `internal/config`: `Key.Max`, checked as `Min` is (`must be at most <n>`) and written as the schema's `maximum`;
+    `compaction.enabled`, `compaction.reserveTokens`, `compaction.thresholdPercent` and `compaction.thresholdTokens`,
+    read per session; their `Compaction` fields; the template's compaction block; the schema from `genschema`.
+    `compaction.keepRecentTokens`' description no longer names `/compact` alone.
+  - `llm`: `Request.MaxTokens`. `llm/provider`: `toRequest` sends it as the SDK's `MaxOutputTokens`.
+  - `compaction`: `Settings.ThresholdPercent` and `ThresholdTokens`; `Over`; `Model.MaxTokens`; decision 7's caps, from
+    the preparation's reserve; decision 6's guard, a summary asked for once more when empty or short, then refused;
+    `ErrSummaryRefused`, which the guard's refusals and `summarise`'s two others wrap. `summarise` is split, its one
+    request now `summariseOnce`; `historyPrompt` takes the serialised conversation, whose length is the floor's source.
+  - `agent`: `Config.Compact` and `Compacted{History, System}`; the check before each call in `run`; the overflow's one
+    resend in `next`; the turn's own system prompt, which a compaction replaces; `End`'s documentation.
+  - `acpserver`: `autocompact.go`, the turn's hook, with decisions 1, 2, 4, 5, 11 and 12, and `_gobble/compaction`;
+    `compactSession` split into `prepareCompaction` and `runCompaction`, which the hook shares, `runCompaction` ending
+    any pause on success; `SessionSettings.AutoCompactionOff`; the live session's `autoCompactOff`, `pause` and
+    `pauseErr`; a turn's pause ended at the next turn's start; a failed turn after a compaction taking the file's
+    history; `setConfig`'s model change ending a pause; `_gobble/set_auto_compaction`; `get_state`'s
+    `autoCompactionEnabled`; the manual notification from `cmdCompact` and `extCompact`.
+  - `acpclient`: `KindCompaction` and `Compaction`, from `HandleExtensionMethod`, which now switches on the method.
+  - `internal/cli`: `toSession` takes the four keys; `compactionLine`, shown on stderr by the line view and print mode,
+    never in stream-json.
+- **Tests,** new: `internal/config` (the range test's second layout), `llm/provider/maxtokens_test.go`
+  (`TestMaxTokensWire`), `compaction/auto_test.go` (`TestOver`, `TestSummaryGuard`, `TestRefusalsWrap`,
+  `TestSummaryCaps`), `agent/compact_test.go` (`TestCompactBeforeEachCall`, `TestOverflowCompactsOnce`,
+  `TestCompactError`), `acpserver/autocompact_test.go` (`TestAutoCompactAtThreshold`, `TestAutoCompactOverflow`,
+  `TestAutoCompactNotRun`, `TestAutoCompactLimit`, `TestAutoCompactFailedTurn`, `TestAutoCompactSystemPrompt`,
+  `TestManualCompactionNotice`, `TestSetAutoCompaction`, `TestAutoCompactPauseTurn`, `TestAutoCompactPauseSession`,
+  `TestAutoCompactPreviousModel`), `acpclient/compaction_test.go` (`TestCompactionNotification`),
+  `internal/cli/compaction_test.go` (`TestCompactionLines`, `TestCompactionSettingsReachSession`).
+- **Existing tests changed,** each to say what the change adds, none loosened:
+  - the tests that list a whole set: `TestKeysMatchSettings` (21 keys to 25), `TestRenderDocument` (the compaction
+    block), `TestDefaultsEqualCode` (the four new defaults), `TestEveryAdvertisedExtensionAnswers` (F5-2's one name),
+    and `acpserver/testdata/session.golden`, whose one changed line is `initialize`'s list of names;
+  - `TestExtensionReads`: `autoCompactionEnabled` is now `true`, which F5-2 sets;
+  - `internal/config`'s `sample`, "a valid value for k other than its default", gave 4242 for every integer;
+    `compaction.thresholdPercent` is the first with a greatest value, so it now gives half of it;
+  - `TestCompactRebases`' scripted summary, 9 characters of a history over 5,000, is now over 500 characters: decision
+    6's floor refuses the old one. What the test asserts is unchanged.
+- **Negatives,** 53 of 53 caught on a scratch copy after control runs, each failing its named tests:
+  - `internal/config`: the greatest value unchecked; the schema's `maximum` not written; `compaction.enabled`'s default
+    false; `compaction.reserveTokens` read from another field;
+  - `llm/provider`: `MaxOutputTokens` not sent;
+  - `compaction`: the reserve's test at the boundary; the percentage's; the window's guard dropped; the floor at 499;
+    an empty summary refused at once; the refusals unwrapped; the cap not the least of the two; the prefix's cap the
+    summary's; the reserve not kept by `Prepare`;
+  - `agent`: no check before the call; the turn's messages not emptied; the system prompt not replaced; the overflow
+    resent more than once; the hook's error dropped after an overflow; a cancelled compaction, after an overflow or
+    before a call, not ending the turn as cancelled; the request sending the turn's first system prompt;
+  - `acpserver`: the threshold never met; compaction off ignored; the cap one later; the count not kept; no start
+    notification; no `usage_update`; every failure the turn's pause; the turn's pause not ended at the next turn; a
+    paused trigger firing; a session's pause not ending the overflow's recovery; `set_auto_compaction`, a model change,
+    or a compaction not ending the pause; a failed turn appending its prompt after a compaction; no system prompt
+    returned; the previous model never used; used when no longer offered; with the session model's limit; no manual
+    end from `/compact` or from `_gobble/compact`; `get_state` always on; the wrong key saved; sessions not taking
+    `AutoCompactionOff`;
+  - `acpclient`: `_gobble/compaction` refused; its `tokensBefore` dropped;
+  - `internal/cli`: a manual compaction shown; the turn's pause not named; stream-json given the notification;
+    `enabled` inverted; `thresholdTokens` or `reserveTokens` not passed.
+  - The first run caught 50: the other three were the harness's own, whose mutations left a variable or an import
+    unused, so the copy did not build. Rewritten to build, all three were caught, and the whole set was run again on
+    the final code: 53 of 53.
+- **Gates:**
+  - the pre-add check, 30 files clean;
+  - lint for linux, darwin and windows, `0 issues.` each with `CGO_ENABLED=0`, after four findings fixed in the code:
+    a constant for the template's `true`, which a third use made `goconst` count; `maps.Copy` in a test; and, where
+    `nilerr` saw an error dropped, the reason as its `nolint`: at the threshold a session `Prepare` refuses is left as it
+    is, and the call goes ahead (decision 5);
+  - the macOS laptop's `CGO_ENABLED=1 go test -race -count=1 ./...`, 33 packages ok, no race report;
+  - `make preflight` on macOS: passed;
+  - **not run:** Windows `go test ./...` and `-race`, the second Linux machine's `-race`, and Windows and WSL
+    `make preflight`, on the owner's machines; and no compaction against a service.
+- **What the entry predicted wrongly, or left unsaid:**
+  - deviation 1, the system prompt;
+  - **the floor's source** is the serialised conversation the summary is asked of, in characters, not the whole
+    prompt, so the template's own text does not count;
+  - **at the threshold, any failure to prepare** lets the call go ahead with no notification, not only `Prepare`'s two
+    refusals: a file that cannot be written, or a provider that cannot be built, fails the call itself;
+  - **an overflow that cannot be prepared** ends the turn with decision 5's error and no notification, since nothing
+    started, and takes no pause;
+  - **a cancelled automatic compaction** sends its end with `error` `cancelled`, takes no pause, and ends the turn as
+    cancelled;
+  - **a manual compaction** sends both notifications even when `Prepare` refuses, its end carrying the refusal; it
+    never pauses the trigger, and its success ends a pause;
+  - **`isCompacting`** is set from the summary request on, not during `Prepare`;
+  - **the session's model writes a summary at the session's thinking level, unclamped,** as `/compact` always has; the
+    previous model's is clamped to its own levels (decision 12);
+  - **a turn's pause ends at the next turn's start;** the pause is not in `get_state`.
+- **Next:** F5-3, loop safety, made executable on the owner's word; the SDK retries' status waits for go-llmprovider-sdk
+  issue 3; the first-byte deadline for F4-1b.

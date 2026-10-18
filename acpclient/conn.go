@@ -379,14 +379,26 @@ func (h *handler) SessionUpdate(_ context.Context, n acp.SessionNotification) er
 
 var _ acp.ExtensionMethodHandler = (*handler)(nil)
 
-// HandleExtensionMethod delivers gobble's _gobble/retry notification to
-// its session's callback as KindRetry, and answers any other extension
-// method with -32601, which the SDK drops for a notification.
+// HandleExtensionMethod delivers gobble's _gobble/retry and
+// _gobble/compaction notifications to their session's callback, as
+// KindRetry and KindCompaction, and answers any other extension method
+// with -32601, which the SDK drops for a notification.
 func (h *handler) HandleExtensionMethod(_ context.Context, method string, params json.RawMessage) (any, error) {
-	if method != methodRetry {
+	var (
+		id  acp.SessionId
+		u   = Update{Params: params}
+		err error
+	)
+	switch method {
+	case methodRetry:
+		u.Kind = KindRetry
+		id, u.Retry, err = retryOf(params)
+	case methodCompaction:
+		u.Kind = KindCompaction
+		id, u.Compaction, err = compactionOf(params)
+	default:
 		return nil, acp.NewMethodNotFound(method)
 	}
-	id, r, err := retryOf(params)
 	if err != nil {
 		return nil, acp.NewInvalidParams(map[string]any{"reason": err.Error()})
 	}
@@ -394,7 +406,7 @@ func (h *handler) HandleExtensionMethod(_ context.Context, method string, params
 	on := h.sessions[id]
 	h.mu.Unlock()
 	if on != nil {
-		on(Update{Kind: KindRetry, Retry: r, Params: params})
+		on(u)
 	}
 	return nil, nil
 }

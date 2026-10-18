@@ -70,10 +70,20 @@
 # Compaction
 # ---------------------------------------------------------------------
 
-# The recent conversation, in tokens, that /compact keeps word for
-# word. What comes before it is summarised.
+# Whether gobble compacts the conversation on its own. It does before
+# a model call once the conversation is over the model's window less
+# reserveTokens, or reaches thresholdPercent of the window, or reaches
+# thresholdTokens, whichever comes first; 0 turns either threshold
+# off. When the model says the conversation is over its window, it is
+# compacted and the call is sent once more. keepRecentTokens is the
+# recent conversation, in tokens, that a compaction or /compact keeps
+# word for word; what comes before it is summarised.
 # compaction:
+#   enabled: true
+#   reserveTokens: 16384
 #   keepRecentTokens: 20000
+#   thresholdPercent: 0
+#   thresholdTokens: 0
 
 # ---------------------------------------------------------------------
 # Retry

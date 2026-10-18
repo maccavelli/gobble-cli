@@ -72,6 +72,9 @@ type Request struct {
 	Thinking string         `json:"thinking,omitzero"`
 	// Cache asks the service to cache the prompt; CacheNone asks for nothing.
 	Cache CacheRetention `json:"cache,omitzero"`
+	// MaxTokens caps the reply's tokens; zero is the provider's default
+	// (0005-PLAN F5-2).
+	MaxTokens int `json:"maxTokens,omitzero"`
 }
 
 // Role is the author of a message.

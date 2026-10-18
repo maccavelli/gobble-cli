@@ -25,9 +25,13 @@ type Settings struct {
 	ExternalEditor       string     `yaml:"externalEditor" json:"externalEditor,omitempty"`
 }
 
-// Compaction is the compaction settings.
+// Compaction is the compaction settings (0005-PLAN F5-2).
 type Compaction struct {
+	Enabled          bool  `yaml:"enabled" json:"enabled,omitempty"`
+	ReserveTokens    int64 `yaml:"reserveTokens" json:"reserveTokens,omitempty"`
 	KeepRecentTokens int64 `yaml:"keepRecentTokens" json:"keepRecentTokens,omitempty"`
+	ThresholdPercent int64 `yaml:"thresholdPercent" json:"thresholdPercent,omitempty"`
+	ThresholdTokens  int64 `yaml:"thresholdTokens" json:"thresholdTokens,omitempty"`
 }
 
 // Retry is the retry settings (0005-PLAN F5-1).
@@ -73,7 +77,7 @@ func Defaults() Settings {
 func defaultValue(k Key) any {
 	switch k.Kind {
 	case KindBool:
-		return k.Default == "true"
+		return k.Default == boolTrue
 	case KindInt:
 		n, err := strconv.ParseInt(k.Default, 10, 64)
 		if err != nil {
@@ -96,8 +100,16 @@ func (s *Settings) field(path string) any {
 		return &s.FollowUpMode
 	case pathSessionDir:
 		return &s.SessionDir
+	case "compaction.enabled":
+		return &s.Compaction.Enabled
+	case "compaction.reserveTokens":
+		return &s.Compaction.ReserveTokens
 	case "compaction.keepRecentTokens":
 		return &s.Compaction.KeepRecentTokens
+	case "compaction.thresholdPercent":
+		return &s.Compaction.ThresholdPercent
+	case "compaction.thresholdTokens":
+		return &s.Compaction.ThresholdTokens
 	case "retry.enabled":
 		return &s.Retry.Enabled
 	case "retry.maxRetries":

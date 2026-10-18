@@ -81,17 +81,18 @@ func (e *runEnv) resolveSettings(cwd string, read config.Read, report func(strin
 }
 
 // toSession is a session's settings as acpserver takes them (0018-MADR
-// D17): compaction is complete, with Pi's reserve, so it never mixes
-// defaults.
+// D17): compaction is complete, so it never mixes defaults (0005-PLAN F5-2
+// decision 8).
 func toSession(s config.Settings) acpserver.SessionSettings {
 	return acpserver.SessionSettings{
 		SteeringMode: s.SteeringMode, FollowUpMode: s.FollowUpMode, Thinking: s.DefaultThinkingLevel,
 		CacheRetention: s.CacheRetention,
 		Compaction: compaction.Settings{
-			ReserveTokens: compaction.DefaultSettings.ReserveTokens, KeepRecentTokens: int(s.Compaction.KeepRecentTokens),
+			ReserveTokens: int(s.Compaction.ReserveTokens), KeepRecentTokens: int(s.Compaction.KeepRecentTokens),
+			ThresholdPercent: int(s.Compaction.ThresholdPercent), ThresholdTokens: int(s.Compaction.ThresholdTokens),
 		},
 		MCPStartupWait: s.MCPStartupWait(), MCPStopGrace: s.MCPStopGrace(), MCPStopTimeout: s.MCPStopTimeout(),
-		Retry: retryOf(s.Retry),
+		Retry: retryOf(s.Retry), AutoCompactionOff: !s.Compaction.Enabled,
 	}
 }
 

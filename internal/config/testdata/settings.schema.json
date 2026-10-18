@@ -74,11 +74,35 @@
     "compaction": {
       "type": "object",
       "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Whether gobble compacts the conversation on its own: before a model call once it nears the model's window, and once when the model says it is over it.",
+          "default": true
+        },
+        "reserveTokens": {
+          "type": "integer",
+          "description": "The room, in tokens, kept free in the model's window: the conversation is compacted once it is over the window less this. A summary's reply is capped at 80 percent of it.",
+          "default": 16384,
+          "minimum": 1
+        },
         "keepRecentTokens": {
           "type": "integer",
-          "description": "The recent conversation, in tokens, that /compact keeps word for word.",
+          "description": "The recent conversation, in tokens, that a compaction keeps word for word.",
           "default": 20000,
           "minimum": 1
+        },
+        "thresholdPercent": {
+          "type": "integer",
+          "description": "Compacts sooner, once the conversation reaches this percentage of the model's window; 0 is off.",
+          "default": 0,
+          "minimum": 0,
+          "maximum": 100
+        },
+        "thresholdTokens": {
+          "type": "integer",
+          "description": "Compacts sooner, once the conversation reaches this many tokens, whatever the model's window; 0 is off.",
+          "default": 0,
+          "minimum": 0
         }
       },
       "additionalProperties": false
