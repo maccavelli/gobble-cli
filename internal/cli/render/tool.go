@@ -1,11 +1,12 @@
 package render
 
 import (
-	"fmt"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/maccavelli/gobble-cli/internal/cli/term"
+	"github.com/maccavelli/gobble-cli/personality"
 )
 
 // Tool-call statuses, as ACP names them.
@@ -50,8 +51,9 @@ func statusSuffix(status string, g term.Glyphs) (string, term.Style) {
 }
 
 // ToolOutput sanitises out and, unless verbose, shows only the first and
-// last ten lines of output longer than twenty, with a count of the rest.
-func ToolOutput(out string, verbose bool, g term.Glyphs) string {
+// last ten lines of output longer than twenty, with a count of the rest in
+// voice's words (a nil voice is boring's, 0022-PLAN P1).
+func ToolOutput(out string, verbose bool, g term.Glyphs, voice *personality.Voice) string {
 	out = strings.TrimSuffix(term.Sanitize(out), "\n")
 	if out == "" {
 		return ""
@@ -65,7 +67,7 @@ func ToolOutput(out string, verbose bool, g term.Glyphs) string {
 	for _, l := range lines[:keepToolLines] {
 		b.WriteString(l + "\n")
 	}
-	fmt.Fprintf(&b, "%s %d lines hidden (--verbose shows all)\n", g.Ellipsis, hidden)
+	b.WriteString(g.Ellipsis + " " + voice.Text(personality.LinesHidden, personality.Args{"n": strconv.Itoa(hidden)}) + "\n")
 	for _, l := range lines[len(lines)-keepToolLines:] {
 		b.WriteString(l + "\n")
 	}

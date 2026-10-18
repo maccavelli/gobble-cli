@@ -14,6 +14,7 @@ import (
 	"github.com/maccavelli/gobble-cli/command"
 	"github.com/maccavelli/gobble-cli/compaction"
 	"github.com/maccavelli/gobble-cli/llm/catalog"
+	"github.com/maccavelli/gobble-cli/personality"
 	sysprompt "github.com/maccavelli/gobble-cli/prompt"
 	"github.com/maccavelli/gobble-cli/session"
 )
@@ -71,12 +72,27 @@ type cmdTurn struct {
 
 func (t *cmdTurn) say(text string) { t.out.send(acp.UpdateAgentMessageText(text)) }
 
-// failed tells the user what failed. A command's failure is its answer,
-// not a JSON-RPC error: the turn ends normally, as Pi shows the failure
-// and goes on.
-func (t *cmdTurn) failed(what string, err error) error {
-	t.say(what + err.Error())
-	return nil
+// The placeholders the replies fill, by the boring catalog's names
+// (0022-PLAN P1).
+const (
+	argModel    = "model"
+	argModels   = "models"
+	argLevel    = "level"
+	argLevels   = "levels"
+	argMode     = "mode"
+	argModes    = "modes"
+	argName     = "name"
+	argFrom     = "from"
+	argTo       = "to"
+	argID       = "id"
+	argError    = "error"
+	argTokens   = "tokens"
+	argProvider = "provider"
+)
+
+// text is key's message in the session's voice (0022-PLAN P1).
+func (t *cmdTurn) text(key personality.Key, args personality.Args) string {
+	return t.s.voice.Text(key, args)
 }
 
 type handler func(ctx context.Context, t *cmdTurn, args string) error
@@ -107,7 +123,7 @@ func (a *Agent) runCommand(turnCtx context.Context, s *liveSession, conn *acp.Ag
 	t := &cmdTurn{s: s, conn: conn, out: newUpdates(turnCtx, conn, s.id)}
 	h, ok := a.handlers()[name]
 	if !ok {
-		t.say(fmt.Sprintf("Unknown command /%s. /help lists the commands.", name))
+		t.say(t.text(personality.CommandUnknown, personality.Args{argName: name}))
 	} else if err := h(turnCtx, t, args); err != nil {
 		if turnCtx.Err() != nil {
 			return cancelled(s)
@@ -128,7 +144,7 @@ func cancelled(s *liveSession) (acp.PromptResponse, error) {
 
 func (*Agent) cmdHelp(_ context.Context, t *cmdTurn, _ string) error {
 	var b strings.Builder
-	b.WriteString("Commands:\n")
+	b.WriteString(t.text(personality.HelpHeading, nil) + "\n")
 	for _, c := range commands {
 		name := "/" + c.Name
 		if c.Hint != "" {
@@ -228,16 +244,17 @@ func (t totals) tokenLines(b *strings.Builder) {
 }
 
 func (a *Agent) cmdUsage(_ context.Context, t *cmdTurn, _ string) error {
-	t.say(a.usageText(t.s, t.s.log.Entries()))
+	t.say(a.usageText(t.s, t.s.voice, t.s.log.Entries()))
 	return nil
 }
 
-// usageText is /usage's answer, and _gobble/usage's text: the cost is the
-// session's when its model is priced (0005-PLAN F4-2a).
-func (a *Agent) usageText(s *liveSession, entries []session.Entry) string {
+// usageText is /usage's answer, in voice, and _gobble/usage's text, in
+// boring's: the cost is the session's when its model is priced (0005-PLAN
+// F4-2a).
+func (a *Agent) usageText(s *liveSession, voice *personality.Voice, entries []session.Entry) string {
 	tot := sessionTotals(entries)
 	var b strings.Builder
-	b.WriteString("Session usage\n\n")
+	b.WriteString(voice.Text(personality.UsageHeading, nil) + "\n\n")
 	tot.tokenLines(&b)
 	model, _ := a.choices(s)
 	if info := a.modelOf(model); info.Priced {
@@ -247,16 +264,16 @@ func (a *Agent) usageText(s *liveSession, entries []session.Entry) string {
 		if model != "" {
 			name = a.qualified(model)
 		}
-		fmt.Fprintf(&b, "Cost: unknown (no price for %s in the catalog)\n", name)
+		b.WriteString(voice.Text(personality.UsageCostUnknown, personality.Args{argModel: name}) + "\n")
 	}
 	if tot.estimated {
-		b.WriteString("\nThese counts are estimated: the provider did not report usage.\n")
+		b.WriteString("\n" + voice.Text(personality.UsageEstimated, nil) + "\n")
 	}
 	provider := a.models().Provider
 	if provider == "" {
 		provider = "the provider"
 	}
-	fmt.Fprintf(&b, "Account and rate-limit figures are not reported by %s.\n", provider)
+	b.WriteString(voice.Text(personality.UsageNoAccount, personality.Args{argProvider: provider}) + "\n")
 	return b.String()
 }
 
@@ -268,7 +285,7 @@ func (a *Agent) cmdContext(_ context.Context, t *cmdTurn, _ string) error {
 	st := s.state()
 	tot := sessionTotals(s.log.Entries())
 	var b strings.Builder
-	b.WriteString("Session Info\n\n")
+	b.WriteString(t.text(personality.SessionHeading, nil) + "\n\n")
 	if st.name != "" {
 		fmt.Fprintf(&b, "Name: %s\n", st.name)
 	}
@@ -313,22 +330,23 @@ func percentOf(used, window int) float64 { return float64(used) / float64(window
 func (a *Agent) cmdModel(ctx context.Context, t *cmdTurn, arg string) error {
 	choice := a.models()
 	if len(choice.Models) == 0 {
-		t.say("No models are offered: no model provider is configured.")
+		t.say(t.text(personality.ModelNone, nil))
 		return nil
 	}
 	if arg == "" {
 		model, _ := a.choices(t.s)
-		t.say(fmt.Sprintf("Model: %s\nModels: %s", model, strings.Join(choice.Models, ", ")))
+		t.say(t.text(personality.ModelCurrent, personality.Args{argModel: model}) + "\n" +
+			t.text(personality.ModelList, personality.Args{argModels: strings.Join(choice.Models, ", ")}))
 		return nil
 	}
 	if !slices.Contains(choice.Models, arg) {
-		t.say(fmt.Sprintf("Unknown model %q. Available models: %s.", arg, strings.Join(choice.Models, ", ")))
+		t.say(t.text(personality.ModelUnknown, personality.Args{argModel: strconv.Quote(arg), argModels: strings.Join(choice.Models, ", ")}))
 		return nil
 	}
 	if err := a.setConfigUpdate(ctx, t, configModel, arg); err != nil {
 		return err
 	}
-	t.say("Model: " + arg)
+	t.say(t.text(personality.ModelSet, personality.Args{argModel: arg}))
 	return nil
 }
 
@@ -338,18 +356,19 @@ func (a *Agent) cmdThinking(ctx context.Context, t *cmdTurn, arg string) error {
 	model, think := a.choices(t.s)
 	levels := a.levelsOf(model)
 	if arg == "" {
-		t.say(fmt.Sprintf("Thinking level: %s\nLevels: %s", catalog.Clamp(levels, think), strings.Join(levels, ", ")))
+		t.say(t.text(personality.ThinkingCurrent, personality.Args{argLevel: catalog.Clamp(levels, think)}) + "\n" +
+			t.text(personality.ThinkingList, personality.Args{argLevels: strings.Join(levels, ", ")}))
 		return nil
 	}
 	level := strings.ToLower(arg)
 	if !slices.Contains(levels, level) {
-		t.say(fmt.Sprintf("Unknown thinking level %q. Available levels: %s.", arg, strings.Join(levels, ", ")))
+		t.say(t.text(personality.ThinkingUnknown, personality.Args{argLevel: strconv.Quote(arg), argLevels: strings.Join(levels, ", ")}))
 		return nil
 	}
 	if err := a.setConfigUpdate(ctx, t, configThinking, level); err != nil {
 		return err
 	}
-	t.say("Thinking level: " + level)
+	t.say(t.text(personality.ThinkingSet, personality.Args{argLevel: level}))
 	return nil
 }
 
@@ -368,23 +387,24 @@ func (a *Agent) cmdMode(ctx context.Context, t *cmdTurn, arg string) error {
 	current := a.modeOf(t.s)
 	switch {
 	case arg == "":
-		t.say(fmt.Sprintf("Mode: %s\nModes: %s, %s", current, modeDefault, modePlan))
+		t.say(t.text(personality.ModeCurrent, personality.Args{argMode: current}) + "\n" +
+			t.text(personality.ModeList, personality.Args{argModes: modeDefault + ", " + modePlan}))
 		return nil
 	case !validMode(arg):
-		t.say(fmt.Sprintf("Unknown mode %q. The modes are %s and %s.", arg, modeDefault, modePlan))
+		t.say(t.text(personality.ModeUnknown, personality.Args{argMode: strconv.Quote(arg), argModes: modeDefault + " and " + modePlan}))
 		return nil
 	case arg == modePlan && current == modePlan:
-		t.say("Already in plan mode.")
+		t.say(t.text(personality.ModeAlreadyPlan, nil))
 		return nil
 	}
 	if err := a.setMode(ctx, t.s, arg); err != nil {
 		return err
 	}
 	if arg == modePlan {
-		t.say("Mode: plan. Files cannot change and commands cannot run until the user approves a plan.")
+		t.say(t.text(personality.ModePlanOn, nil))
 		return nil
 	}
-	t.say("Mode: " + arg)
+	t.say(t.text(personality.ModeSet, personality.Args{argMode: arg}))
 	return nil
 }
 
@@ -393,9 +413,9 @@ func (a *Agent) cmdMode(ctx context.Context, t *cmdTurn, arg string) error {
 func (a *Agent) cmdName(ctx context.Context, t *cmdTurn, arg string) error {
 	if arg == "" {
 		if name := t.s.state().name; name != "" {
-			t.say("Session name: " + name)
+			t.say(t.text(personality.NameCurrent, personality.Args{argName: name}))
 		} else {
-			t.say("Usage: /name <name>")
+			t.say(t.text(personality.NameUsage, nil))
 		}
 		return nil
 	}
@@ -404,9 +424,9 @@ func (a *Agent) cmdName(ctx context.Context, t *cmdTurn, arg string) error {
 		return err
 	}
 	if name != arg {
-		t.say(fmt.Sprintf("Session name was normalized from %q to %q.\n", arg, name))
+		t.say(t.text(personality.NameNormalized, personality.Args{argFrom: strconv.Quote(arg), argTo: strconv.Quote(name)}) + "\n")
 	}
-	t.say("Session name set: " + name)
+	t.say(t.text(personality.NameSet, personality.Args{argName: name}))
 	return nil
 }
 
@@ -435,21 +455,22 @@ func (a *Agent) cmdFork(ctx context.Context, t *cmdTurn, arg string) error {
 			}
 		}
 		if b.Len() == 0 {
-			t.say("No messages to fork from yet.")
+			t.say(t.text(personality.ForkNone, nil))
 			return nil
 		}
-		t.say("Send /fork <entry> to start a new session before one of these messages:\n" + b.String())
+		t.say(t.text(personality.ForkList, nil) + "\n" + b.String())
 		return nil
 	}
 	target, refusal := forkTarget(entries, arg)
-	if refusal != "" {
-		if refusal != nothingBefore {
-			refusal += " /fork lists them."
-		}
-		t.say(refusal)
+	switch {
+	case refusal == nothingBefore:
+		t.say(t.text(personality.ForkNothingBefore, nil))
+		return nil
+	case refusal != "":
+		t.say(t.text(personality.ForkNoMessage, personality.Args{argID: strconv.Quote(arg)}))
 		return nil
 	}
-	return a.copyTo(ctx, t, t.s.tree.Branched(*target.ParentID), "Forked")
+	return a.copyTo(ctx, t, t.s.tree.Branched(*target.ParentID), personality.ForkDone)
 }
 
 // nothingBefore refuses a fork before a session's first message: files are
@@ -481,7 +502,7 @@ func forkTarget(entries []session.Entry, id string) (*session.Entry, string) {
 
 // cmdTodos is /todos: the active path's last todo list.
 func (a *Agent) cmdTodos(_ context.Context, t *cmdTurn, _ string) error {
-	t.say(todosText(t.s.state().todos))
+	t.say(todosText(t.s.state().todos, t.text(personality.TodosNone, nil)))
 	return nil
 }
 
@@ -490,22 +511,22 @@ func (a *Agent) cmdTodos(_ context.Context, t *cmdTurn, _ string) error {
 func (a *Agent) cmdClone(ctx context.Context, t *cmdTurn, _ string) error {
 	leaf := t.s.tree.Leaf()
 	if leaf == "" {
-		t.say("Nothing to clone yet")
+		t.say(t.text(personality.CloneNone, nil))
 		return nil
 	}
-	return a.copyTo(ctx, t, t.s.tree.Branched(leaf), "Cloned")
+	return a.copyTo(ctx, t, t.s.tree.Branched(leaf), personality.CloneDone)
 }
 
 // copyTo copies path into a new session and names it: the response's
 // _meta.gobble.switchTo lets gobble's CLI resume it, as Pi's terminal
 // switches to a fork (owner's decision of 2026-10-06).
-func (a *Agent) copyTo(ctx context.Context, t *cmdTurn, path []session.Entry, verb string) error {
+func (a *Agent) copyTo(ctx context.Context, t *cmdTurn, path []session.Entry, done personality.Key) error {
 	id, err := a.copySession(ctx, t.s, path)
 	if err != nil {
 		return err
 	}
 	t.meta = map[string]any{gobble: map[string]any{"switchTo": string(id)}}
-	t.say(fmt.Sprintf("%s to session %s.", verb, id))
+	t.say(t.text(done, personality.Args{argID: string(id)}))
 	return nil
 }
 

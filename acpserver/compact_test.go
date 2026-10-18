@@ -2,6 +2,7 @@ package acpserver
 
 import (
 	"encoding/json/v2"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -76,7 +77,7 @@ func TestCompactShortensContext(t *testing.T) {
 	}
 	after := client.Updates()[n:]
 	text := agentText(after)
-	if !strings.HasPrefix(text, "Compacting the conversation…") || !strings.Contains(text, "Compacted from ") || !strings.Contains(text, "## Goal\nSUMMARY") {
+	if !strings.HasPrefix(text, "Compacting the conversation…\n\n") || !regexp.MustCompile(`Compacted from [0-9]+ tokens\.\n\n## Goal\nSUMMARY$`).MatchString(text) {
 		t.Fatalf("compact text %q", text)
 	}
 	if last := after[len(after)-1].Update.UsageUpdate; last == nil || last.Used <= 0 {

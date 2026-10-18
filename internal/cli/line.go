@@ -15,6 +15,7 @@ import (
 	"github.com/maccavelli/gobble-cli/internal/cli/editor"
 	"github.com/maccavelli/gobble-cli/internal/cli/render"
 	"github.com/maccavelli/gobble-cli/llm/provider"
+	"github.com/maccavelli/gobble-cli/personality"
 )
 
 // cancelWait bounds the session/cancel a Ctrl+C sends.
@@ -177,7 +178,7 @@ func (ls *lineSession) history() editor.History {
 func (ls *lineSession) turn(p Prompt) error {
 	e := ls.e
 	v := newView(e.out, ls.opts, e.now)
-	sp := render.StartSpinner(e.ctx, e.out.err, e.out.caps.Err, e.out.caps.Unicode, "working")
+	sp := render.StartSpinner(e.ctx, e.out.err, e.out.caps.Err, e.out.caps.Unicode, ls.opts.voice.Text(personality.TurnWorking, nil))
 	v.beforeWrite = func() {
 		if err := sp.Stop(); err != nil {
 			e.log().WarnContext(e.ctx, "spinner", slog.String("error", err.Error()))

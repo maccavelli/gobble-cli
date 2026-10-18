@@ -431,7 +431,8 @@ ACP-native behaviour, beyond the method list in 0002:
 ### Import-boundary rules (enforced by `internal/archtest`)
 
 1. `agent`, `llm`, `tool`, `session`, `skill`, `hook`, `compaction`,
-   `prompt`, `command`, `permission`, `checkpoint`:
+   `prompt`, `command`, `permission`, `checkpoint`, `personality`:
+   *(2026-10-18: `personality` joins the list, [0022-MADR-gobble-voice-and-personalities.md](0022-MADR-gobble-voice-and-personalities.md) D16; `internal/archtest` names it, 0022-PLAN P1.)*
    * import no ACP SDK, MCP SDK, `go-llmprovider-sdk`, `go-core-lib`,
      vendor LLM SDK, Kong, Charm, or OpenTelemetry SDK;
    * the OTel **API** is allowed only in `telemetry`.

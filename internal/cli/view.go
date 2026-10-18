@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -10,12 +11,15 @@ import (
 	"github.com/maccavelli/gobble-cli/acpclient"
 	"github.com/maccavelli/gobble-cli/internal/cli/render"
 	"github.com/maccavelli/gobble-cli/internal/cli/term"
+	"github.com/maccavelli/gobble-cli/personality"
 )
 
 // display is how the line session shows a turn (0008-MADR D7).
 type display struct {
 	showThinking, verbose, stats bool
 	home                         string
+	// voice speaks the view's own lines; nil is boring (0022-PLAN P1).
+	voice *personality.Voice
 }
 
 // turnClock times a turn: the start, the first token and the end.
@@ -135,29 +139,43 @@ func (v *view) on(u acpclient.Update) {
 		c := u.Context
 		v.usage = &c
 	case acpclient.KindRetry:
-		if line, ok := retryLine(u.Retry); ok {
+		if line, ok := retryLine(v.opts.voice, u.Retry); ok {
 			v.out.Notef("%s", line)
 		}
 	case acpclient.KindCompaction:
-		if line, ok := compactionLine(u.Compaction); ok {
+		if line, ok := compactionLine(v.opts.voice, u.Compaction); ok {
 			v.out.Notef("%s", line)
 		}
 	case acpclient.KindOther:
 	}
 }
 
-// retryLine is what the CLI shows on stderr for a retry wait's start:
-// "waiting for the network", or "retrying: <cause> (attempt <n> of <m>)";
-// an end shows nothing, since a failure ends the turn with its error
-// (0005-PLAN F5-1 decision 5).
-func retryLine(r acpclient.Retry) (string, bool) {
+// The placeholders the view's lines fill, by the boring catalog's names
+// (0022-PLAN P1).
+const (
+	argAttempt = "attempt"
+	argMax     = "max"
+	argCause   = "cause"
+	argReason  = "reason"
+	argError   = "error"
+)
+
+// retryLine is what the CLI shows on stderr for a retry wait's start, in
+// voice's words: "waiting for the network", or "retrying: <cause> (attempt
+// <n> of <m>)"; an end shows nothing, since a failure ends the turn with
+// its error (0005-PLAN F5-1 decision 5).
+func retryLine(voice *personality.Voice, r acpclient.Retry) (string, bool) {
+	attempts := personality.Args{argAttempt: strconv.Itoa(r.Attempt), argMax: strconv.Itoa(r.MaxAttempts)}
 	switch {
 	case r.Phase != "start":
 		return "", false
 	case r.Cause == "offline":
-		return "waiting for the network", true
+		return voice.Text(personality.RetryOffline, nil), true
+	case r.Cause == "empty_reply":
+		return voice.Text(personality.RetryEmptyReply, attempts), true
 	}
-	return fmt.Sprintf("retrying: %s (attempt %d of %d)", strings.ReplaceAll(r.Cause, "_", " "), r.Attempt, r.MaxAttempts), true
+	attempts[argCause] = strings.ReplaceAll(r.Cause, "_", " ")
+	return voice.Text(personality.RetryAttempt, attempts), true
 }
 
 // compactionLine is what the CLI shows on stderr for an automatic
@@ -165,23 +183,23 @@ func retryLine(r acpclient.Retry) (string, bool) {
 // "compaction failed: <error>" at a failed end, with what it paused. A
 // manual one shows nothing, since /compact's reply says so (0005-PLAN F5-2
 // decision 9).
-func compactionLine(c acpclient.Compaction) (string, bool) {
+func compactionLine(voice *personality.Voice, c acpclient.Compaction) (string, bool) {
 	switch {
 	case c.Reason == "manual":
 		return "", false
 	case c.Phase == "start":
-		return "compacting the conversation (" + c.Reason + ")", true
+		return voice.Text(personality.CompactionStart, personality.Args{argReason: c.Reason}), true
 	case c.Error == "":
 		return "", false
 	}
-	line := "compaction failed: " + c.Error
+	key := personality.CompactionFailed
 	switch c.Paused {
 	case "turn":
-		line += " (automatic compaction paused for this turn)"
+		key = personality.CompactionFailedTurn
 	case "session":
-		line += " (automatic compaction paused until a compaction succeeds or the model changes)"
+		key = personality.CompactionFailedSession
 	}
-	return line, true
+	return voice.Text(key, personality.Args{argError: c.Error}), true
 }
 
 // content draws a tool call's content blocks. A diff is a unified diff,
@@ -199,13 +217,13 @@ func (v *view) content(cs []acpclient.ToolContent) {
 			diff := render.UnifiedDiff(path, old, term.Sanitize(c.Diff.NewText))
 			v.flush()
 			v.newline()
-			v.write(render.Diff(render.ToolOutput(diff, v.opts.verbose, v.glyphs), v.caps.Out))
+			v.write(render.Diff(render.ToolOutput(diff, v.opts.verbose, v.glyphs, v.opts.voice), v.caps.Out))
 		case c.Terminal != "":
 			v.line("terminal " + term.Sanitize(c.Terminal))
 		default:
 			v.flush()
 			v.newline()
-			v.write(render.ToolOutput(c.Text, v.opts.verbose, v.glyphs))
+			v.write(render.ToolOutput(c.Text, v.opts.verbose, v.glyphs, v.opts.voice))
 		}
 	}
 }
@@ -274,7 +292,7 @@ func (v *view) finish(res acpclient.Result) error {
 	v.newline()
 	v.clock.end = v.now()
 	v.stopSpinner()
-	line := statusLine(v.clock, v.usage, res, v.opts.stats, v.caps.Err, v.glyphs)
+	line := statusLine(v.clock, v.usage, res, v.opts.stats, v.caps.Err, v.glyphs, v.opts.voice)
 	if _, err := io.WriteString(v.out.err, dimmed(line, v.caps.Err.Color)+"\n"); err != nil && v.err == nil {
 		v.err = fmt.Errorf("write stderr: %w", err)
 	}
@@ -282,9 +300,10 @@ func (v *view) finish(res acpclient.Result) error {
 }
 
 // statusLine is the line after a turn: render.StatusLine from the last
-// usage_update, the --stats figures, and the stop reason unless the turn
-// simply ended.
-func statusLine(c turnClock, u *acpclient.ContextUsage, res acpclient.Result, stats bool, s term.Stream, g term.Glyphs) string {
+// usage_update, the --stats figures, and the stop reason, in voice's
+// words, unless the turn simply ended.
+func statusLine(c turnClock, u *acpclient.ContextUsage, res acpclient.Result, stats bool, s term.Stream, g term.Glyphs,
+	voice *personality.Voice) string {
 	var used, size int64
 	var cost *float64
 	if u != nil {
@@ -302,9 +321,25 @@ func statusLine(c turnClock, u *acpclient.ContextUsage, res acpclient.Result, st
 		line += " " + g.Bullet + " " + render.Stats(c.first.Sub(c.start), out, c.end.Sub(c.first), g)
 	}
 	if res.StopReason != "" && res.StopReason != "end_turn" {
-		line += " " + g.Bullet + " " + res.StopReason
+		line += " " + g.Bullet + " " + stopText(voice, res.StopReason)
 	}
 	return line
+}
+
+// stopKeys are the stop reasons the turn's last line names, by key; any
+// other is shown as the agent gave it.
+var stopKeys = map[string]personality.Key{
+	"max_tokens":        personality.TurnStopMaxTokens,
+	"max_turn_requests": personality.TurnStopMaxRequests,
+	"refusal":           personality.TurnStopRefusal,
+	"cancelled":         personality.TurnStopCancelled,
+}
+
+func stopText(voice *personality.Voice, reason string) string {
+	if key, ok := stopKeys[reason]; ok {
+		return voice.Text(key, nil)
+	}
+	return reason
 }
 
 // dimmed dims a line that may already hold SGR sequences, re-entering dim

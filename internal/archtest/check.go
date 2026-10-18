@@ -124,6 +124,7 @@ func add(vs []Violation, rule int, e edge) []Violation {
 var rule1Roots = []string{
 	"agent", "llm", "tool", "session", "skill", "hook",
 	"compaction", "prompt", "command", "permission", "checkpoint",
+	"personality", // 0022-MADR D16
 }
 
 func inRule1(rel string) bool {

@@ -278,7 +278,7 @@ func (a *Agent) extUsage(_ context.Context, params jsontext.Value) (any, error) 
 		return nil, err
 	}
 	entries := s.log.Entries()
-	return usageResult{Text: a.usageText(s, entries), Stats: a.statsOf(s, entries)}, nil
+	return usageResult{Text: a.usageText(s, nil, entries), Stats: a.statsOf(s, entries)}, nil // boring: a client's text (0022-MADR D2)
 }
 
 // extSetSessionName is /name's path (setName), for a name that is given.

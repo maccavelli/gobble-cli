@@ -12,6 +12,7 @@ import (
 
 	"github.com/maccavelli/gobble-cli/acpclient"
 	"github.com/maccavelli/gobble-cli/internal/cli/term"
+	"github.com/maccavelli/gobble-cli/personality"
 )
 
 // closeWait bounds session/close and the agent's shutdown after a turn.
@@ -52,6 +53,8 @@ type printSink struct {
 	out    *Output
 	stream bool
 	now    func() time.Time
+	// voice speaks the sink's own lines; nil is boring (0022-PLAN P1).
+	voice *personality.Voice
 
 	mu      sync.Mutex
 	text    strings.Builder
@@ -81,13 +84,13 @@ func (s *printSink) on(u acpclient.Update) {
 	case acpclient.KindRetry:
 		// On stderr, and never in stream-json, whose lines are session/update
 		// params (0005-PLAN F5-1 decision 5).
-		if line, ok := retryLine(u.Retry); ok {
+		if line, ok := retryLine(s.voice, u.Retry); ok {
 			s.out.Notef("%s", line)
 		}
 		return
 	case acpclient.KindCompaction:
 		// As a retry's (0005-PLAN F5-2 decision 9).
-		if line, ok := compactionLine(u.Compaction); ok {
+		if line, ok := compactionLine(s.voice, u.Compaction); ok {
 			s.out.Notef("%s", line)
 		}
 		return
@@ -200,7 +203,7 @@ func finishPrint(e *runEnv, c *ChatCmd, sink *printSink, id string, res acpclien
 		return sink.err
 	}
 	if c.Stats {
-		line := statusLine(sink.clock, sink.usage, res, true, e.out.caps.Err, glyphsFor(e.out.caps))
+		line := statusLine(sink.clock, sink.usage, res, true, e.out.caps.Err, glyphsFor(e.out.caps), sink.voice)
 		if _, err := io.WriteString(e.out.err, dimmed(line, e.out.caps.Err.Color)+"\n"); err != nil {
 			return fmt.Errorf("write stderr: %w", err)
 		}

@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: in-progress
 date: 2026-10-18
 associated-madr: "0022-MADR-gobble-voice-and-personalities.md"
 ---
@@ -9,7 +9,7 @@ associated-madr: "0022-MADR-gobble-voice-and-personalities.md"
 
 Associated MADR: [0022-MADR-gobble-voice-and-personalities.md](0022-MADR-gobble-voice-and-personalities.md)
 
-*Proposed: not approved for execution. Each phase is made executable on the owner's word, with its facts measured then, as 0005-PLAN's sub-phases are.*
+*Approved 2026-10-18 ("committed, approved, proceed"); P1 complete 2026-10-18. Each later phase is made executable on the owner's word, with its facts measured then, as 0005-PLAN's sub-phases are.*
 
 ## Goal
 
@@ -134,4 +134,47 @@ Six phases, each one commit with its own execution record and gates, in this ord
 
 ## Execution record
 
-None yet.
+**P1 — the catalog, with `boring` only (2026-10-18).**
+
+- **Ran as the plan wrote it,** with no deviation, on the owner's word "committed, approved, proceed" after `ac5d4e0`. P2 is next, made executable when the owner asks.
+- **What was built:**
+  - `personality` (new, rule 1 of 0004-MADR's map, `internal/archtest`'s `rule1Roots`):
+    - `ParseCatalog`, the Markdown shape of 0022-MADR D5;
+    - `Placeholders` and `CheckPlaceholders`, the facts rule;
+    - `ParseBrief`, the front matter and prose of D4, unused until P2;
+    - `Voice` and `Options{Name, Seed}`: `New` takes `boring`, `plain`, `normal` or none, and refuses any other name until P2 adds them; `Text` fills placeholders, varies among a key's variants without repeating one twice running, and falls back to `boring`'s; a nil `*Voice` is `boring`;
+    - `Keys`, the 50 message keys, as constants;
+    - `builtin/boring/messages.md`, today's text, embedded.
+  - `acpserver`: every slash reply below from the session's voice (`liveSession.voice`, nil until P2), through `cmdTurn.text`; placeholder names as constants; `usageText` takes its voice, `_gobble/usage` passing none (boring, a client's text, D2); `todosText` takes its empty text; `copyTo` takes its key. The generic `cmdTurn.failed`, whose one caller was `/compact`, is gone.
+  - `internal/cli`: the retry and compaction status lines, the turn line's stop reason (`stopText`), and the spinner's label, from `display.voice` and `printSink.voice`; `render.ToolOutput` takes a voice for its hidden-lines note.
+- **The keys, measured from 0022-MADR F1's inventory:**
+  - CLI: `retry.offline`, `retry.empty_reply`, `retry.attempt`, `compaction.start`, `compaction.failed` and its two paused forms, `turn.working`, four `turn.stop.*`, `lines.hidden`;
+  - the slash commands: `command.unknown`, `help.heading`, `usage.*` (4), `session.heading`, `model.*` (5), `thinking.*` (4), `mode.*` (6), `name.*` (4), `fork.*` (5), `clone.*` (2), `todos.none`, `compact.*` (3).
+- **Left in code on purpose,** each by 0022-MADR D2:
+  - `/usage`'s and `/session`'s figure lines (`Input:`, `Cached:`, `Output:`, `Total:`, `Cost: $…`, `File:`, `ID:`, `Mode:`, `Model:`, the message counts, `Context:`): data, which a joke would blur. Their headings and sentences are keys;
+  - `/help`'s command list: reference text. Its heading is a key;
+  - the CLI's own slash errors (`unknown command /%s; /help lists the commands`), print mode's failures, and every `Error:` and `Warning:` line: errors keep their text, and gain a lead in P2 (D13);
+  - `forkTarget`'s refusals as `_gobble/fork` returns them: JSON-RPC errors. `/fork` says them from the catalog;
+  - the permission prompt and the repeated-call question's title: questions stay plain.
+- **Tests,** new: `personality/personality_test.go` (`TestParseCatalog`, `TestParseCatalogErrors`, `TestCheckPlaceholders`, `TestFill`, `TestBoringCatalog`, `TestNew`, `TestVariety`, `TestParseBrief`), `personality/boring_test.go` (`TestBoringIsTodaysText`, every key's text pinned), `acpserver/replies_test.go` (`TestRepliesFromTheCatalog`: every slash command answered with its placeholders filled, and the replies no other test read at their text), `internal/cli/personality_test.go` (`TestStopText`).
+- **Existing tests changed,** none loosened:
+  - `render`'s `ToolOutput` tests pass a nil voice, the new parameter (6 calls);
+  - `TestCompactShortensContext` now requires `/compact`'s reply to give a number of tokens and then the summary, where it read only "Compacted from ": the negative run showed the count unchecked;
+  - every other test and golden file passes unchanged, which is P1's proof that `boring` is today's text.
+- **Negatives,** 30 of 30 caught on a scratch copy after control runs:
+  - `personality`: a bullet's continuation dropped; a key twice taken; a key with no variant taken before a heading, and at the end; front matter not skipped; the facts rule blind to a missing placeholder, and to an extra one; doubled braces read as a placeholder; a missing value dropped; doubled braces not made single; a variant repeated; the seed ignored; `normal` refused; a nil voice speaking nothing; an unknown key shown as nothing; a level of 6 taken; an empty brief taken; two catalog lines reworded;
+  - `acpserver`: two placeholder names wrong; the plan-mode reply, the fork reply and `/clone`'s success from the wrong keys; the estimated-usage line dropped; `/compact`'s token count unfilled;
+  - `internal/cli`: the retry line's attempt unfilled; the turn's pause not named; a stop from the wrong key; the hidden-lines count unfilled.
+  - The first run caught 28. `/clone`'s success came from no test, so `TestRepliesFromTheCatalog` reads it now; and `/compact`'s count was unchecked, so its test is tightened as above. Both were caught on the rerun, and the whole set was run again on the final code: 30 of 30.
+- **Gates:**
+  - the pre-add check on the changed `.go` files, clean;
+  - lint for linux, darwin and windows, `0 issues.` each with `CGO_ENABLED=0`, after ten findings fixed in the code: placeholder names as constants (`goconst`, seven); `math/rand/v2` for variety, with the reason as its `nolint` (`gosec`, two: wording, not security); `/compact`'s failure returned as its answer, with the reason as its `nolint` (`nilerr`), where the removed helper had hidden it;
+  - the macOS laptop's `CGO_ENABLED=1 go test -race -count=1 ./...`, 34 packages ok, no race report;
+  - `make preflight` on macOS: passed;
+  - **not run:** Windows `go test ./...` and `-race`, the second Linux machine's `-race`, and Windows and WSL `make preflight`, on the owner's machines.
+- **What the plan left unsaid:**
+  - **the catalog is linted:** the repository's markdownlint reads every `.md`, so a key's heading has a blank line under it, which the parser allows; 0022-MADR D5's example omits it;
+  - **a value quoted before is given quoted** (`strconv.Quote`), so `Unknown model "x".` keeps its quotes and a variant cannot drop them;
+  - **a multi-line reply is two keys** joined in code (`model.current` and `model.list`), so a variant is always one line;
+  - **the spinner's label is not read by any test:** it draws only on a terminal. Its text is pinned by `TestBoringIsTodaysText`; its call site is one line.
+- **Next:** P2, Dry and the default, made executable on the owner's word.

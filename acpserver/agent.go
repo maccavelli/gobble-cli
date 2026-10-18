@@ -24,6 +24,7 @@ import (
 	"github.com/maccavelli/gobble-cli/internal/fsx"
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/llm/catalog"
+	"github.com/maccavelli/gobble-cli/personality"
 	sysprompt "github.com/maccavelli/gobble-cli/prompt"
 	"github.com/maccavelli/gobble-cli/session"
 	"github.com/maccavelli/gobble-cli/tool"
@@ -187,6 +188,8 @@ type liveSession struct {
 	// templates are the prompt templates found when the session started
 	// (startFrames; 0005-PLAN F3-3).
 	templates []sysprompt.Template
+	// voice speaks the session's messages; nil is boring (0022-PLAN P1).
+	voice *personality.Voice
 }
 
 var (

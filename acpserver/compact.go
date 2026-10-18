@@ -4,12 +4,13 @@ import (
 	"context"
 	"encoding/json/v2"
 	"errors"
-	"fmt"
+	"strconv"
 
 	acp "github.com/maccavelli/acp-go-sdk2"
 
 	"github.com/maccavelli/gobble-cli/compaction"
 	"github.com/maccavelli/gobble-cli/llm"
+	"github.com/maccavelli/gobble-cli/personality"
 	"github.com/maccavelli/gobble-cli/session"
 )
 
@@ -21,7 +22,7 @@ func (a *Agent) cmdCompact(ctx context.Context, t *cmdTurn, instructions string)
 	if _, err := a.sessionProvider(t.s); err != nil {
 		return promptError(err)
 	}
-	t.say("Compacting the conversation…\n\n")
+	t.say(t.text(personality.CompactStart, nil) + "\n\n")
 	t.out.notify(methodCompaction, compactionNotice{SessionID: t.s.id, Phase: phaseStart, Reason: reasonManual})
 	res, used, err := a.compactSession(ctx, t.s, instructions)
 	t.out.notify(methodCompaction, manualEnd(ctx, t.s.id, res, err))
@@ -34,9 +35,12 @@ func (a *Agent) cmdCompact(ctx context.Context, t *cmdTurn, instructions string)
 	case errors.As(err, &reqErr):
 		return err
 	case err != nil:
-		return t.failed("Compaction failed: ", err)
+		// A command's failure is its answer, not a JSON-RPC error: the turn
+		// ends normally, as Pi shows the failure and goes on.
+		t.say(t.text(personality.CompactFailed, personality.Args{argError: err.Error()}))
+		return nil //nolint:nilerr // the failure is the command's answer (above)
 	}
-	t.say(fmt.Sprintf("Compacted from %d tokens.\n\n%s", res.TokensBefore, res.Summary))
+	t.say(t.text(personality.CompactDone, personality.Args{argTokens: strconv.FormatInt(res.TokensBefore, 10)}) + "\n\n" + res.Summary)
 	t.out.send(a.contextUpdate(t.s, used))
 	return nil
 }

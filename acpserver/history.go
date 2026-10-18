@@ -416,9 +416,9 @@ func todosOf(e session.Entry) ([]tool.PlanItem, bool) {
 
 // todosText is the todo list as /todos prints it: [x] completed, [>] in
 // progress and [ ] pending, one item per line.
-func todosText(plan []tool.PlanItem) string {
+func todosText(plan []tool.PlanItem, none string) string {
 	if len(plan) == 0 {
-		return "no todo list"
+		return none
 	}
 	lines := make([]string, len(plan))
 	for i, it := range plan {

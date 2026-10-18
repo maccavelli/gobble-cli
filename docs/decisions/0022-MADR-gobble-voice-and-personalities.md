@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 date: 2026-10-18
 decision-makers: repository owner
 consulted: 0005-MADR-v1-feature-scope.md, 0008-MADR-native-cli-mode.md, 0012-MADR-tool-schemas-descriptions-and-loading.md, 0005-REPORT-compaction-across-six-harnesses.md
