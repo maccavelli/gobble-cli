@@ -6338,3 +6338,60 @@ Kilo `4a7c4e883f`:
 
 **F5-3's gates:** as F5-1's. Windows `go test` and `-race`, the second Linux machine's `-race`, and Windows and WSL
 `make preflight` are the owner's.
+
+**F5-3's execution record (2026-10-18).**
+
+- **Ran as the entry wrote it,** with no deviation, on the owner's word "committed, proceed" after `0980174`. F5-4 is
+  next, made executable when the owner asks.
+- **What was built:**
+  - `permission`: `Rule.Repeated`. `tool`: `Result.BadArguments` and `BadArgumentsResult`, given by `generic.Run`'s four
+    argument failures. `mcpclient`: given when the arguments are not an object.
+  - `llm`: `StopRefusal`. `llm/provider`: `stopOf` gives it for `content_filter`; `refusedAnswer`, the SDK's empty answer
+    whose `Reason` is `content_filter`, becomes `Done{StopRefusal}`, with no text and no usage.
+  - `agent`: the turn's run of identical calls, `repeated` and `stopRepeat`; `repair`, applied to each call in `call`;
+    the breaker's count in `runTools`, checked in `run` once a reply's calls have run; `halted`, which ends the turn after
+    a stopped call; `StopRefusal`, and `empty` leaving it out.
+  - `acpserver`: `ruleTitle`, the question's title within `maxTitle`, through a new `cutTo`; `planPolicy` passing a
+    `Repeated` rule to its inner policy.
+- **Tests,** new: `tool/badargs_test.go` (`TestBadArguments`), `mcpclient/badargs_test.go` (`TestBadArguments`),
+  `llm/provider/refusal_test.go` (`TestWireRefusal`), `agent/loop_test.go` (`TestRepeatedCallAsks`,
+  `TestRepeatedCallStopped`, `TestRepeatedCallCounting`, `TestCallNameRepair`, `TestMalformedCallBreaker`,
+  `TestRefusalStop`), `acpserver/loop_test.go` (`TestRepeatedCallQuestion`, `TestRepeatedCallTitle`,
+  `TestRefusalStopReason`).
+- **Existing tests changed,** none loosened:
+  - `TestWireEmptyAnswer`'s refusal, which F5-1 pinned as an `ErrIncomplete` error, now asserts the refusal reply that
+    decision 5 makes of it; its helper `wireStream` records the reply's stop;
+  - F5-2's `fullCall` gives each call id its own `limit`: `TestAutoCompactLimit` made four identical `read` calls in one
+    turn, which decision 1 now asks about, and its test client answers Reject. What it asserts is unchanged.
+- **Negatives,** 29 of 29 caught on a scratch copy after control runs, each failing its named tests:
+  - `tool`: each of the four argument failures unmarked; `BadArgumentsResult` not marking; `mcpclient`: a non-object
+    unmarked;
+  - `llm/provider`: `content_filter` as `end_turn`; the empty refused answer left an error;
+  - `agent`: the run's limit 4; arguments not canonicalised; the run not started again after a question; a nil policy
+    asked; Allow not running the call; a refusal not halting the turn; the later calls not cancelled; the halt not
+    ending the turn; the repair's case-sensitive match; two matches repaired; no repair; the breaker's count not
+    adding; not cleared; its limit 5; a refusal stop as `end_turn`; an empty refusal run again;
+  - `acpserver`: plan mode refusing the question; the question's title the call's alone; not cut to leave it room;
+    `acpPolicy` not using it; a refusal reaching ACP as `end_turn`.
+  - The first run stopped at one mutation whose anchor the harness had mis-indented; corrected, the whole set ran on the
+    final code: 29 of 29.
+- **Gates:**
+  - the pre-add check, 17 files clean;
+  - lint for linux, darwin and windows, `0 issues.` each with `CGO_ENABLED=0`, after one finding fixed in the code: the
+    repair compares with `strings.EqualFold`, as `gocritic` asks, not by lower-casing both;
+  - the macOS laptop's `CGO_ENABLED=1 go test -race -count=1 ./...`, 33 packages ok, no race report, on the final code;
+  - `make preflight` on macOS: passed;
+  - **not run:** Windows `go test ./...` and `-race`, the second Linux machine's `-race`, and Windows and WSL
+    `make preflight`, on the owner's machines; and no refusal from a service.
+- **What the entry predicted wrongly, or left unsaid:**
+  - **the repair matches by Unicode case folding,** `strings.EqualFold`, not by lower-casing: the same for every name
+    gobble's tools have, and wider only for the few runes whose folds differ from their lower case;
+  - **an unknown tool's call is counted in a run,** and asked about, its title its name;
+  - **a question the turn's cancel cuts short** gives the call the cancelled result, and the turn ends as cancelled,
+    not halted;
+  - **a stopped call's result is an error result;** the question's Allow leaves a call that is not read-only to its own
+    approval, which plan mode still refuses;
+  - **the breaker's error names the count it reached,** more than 3 when a reply's own calls take it past;
+  - **the empty refused answer has no usage,** since the SDK gives the error no response.
+- **Next:** F5-4, the summary, made executable on the owner's word; the SDK retries' status waits for
+  go-llmprovider-sdk issue 3; the first-byte deadline for F4-1b.

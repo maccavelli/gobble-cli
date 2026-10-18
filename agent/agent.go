@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"cmp"
 	"context"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
@@ -192,6 +193,16 @@ type turn struct {
 	sent     []tool.Spec
 	specs    jsontext.Value
 	deferred []tool.Tool
+	// repeat is the run of identical calls the turn's last call ended, and
+	// last that call's key (0005-PLAN F5-3 decision 1); bad counts the
+	// turn's consecutive results whose arguments were refused, badTool the
+	// last one's tool (decision 3); halted says a call was stopped, which
+	// ends the turn.
+	repeat  int
+	last    string
+	bad     int
+	badTool string
+	halted  bool
 }
 
 // encodeSpecs is specs as a request carries them, or nil for none.
@@ -301,8 +312,15 @@ func (t *turn) run() {
 				return
 			}
 			t.added = append(t.added, results)
-			if t.ctx.Err() != nil {
+			switch {
+			case t.ctx.Err() != nil:
 				t.end(StopCancelled)
+				return
+			case t.halted:
+				t.end(StopEndTurn)
+				return
+			case t.bad >= badLimit:
+				t.fail(fmt.Errorf("the model sent invalid tool arguments %d times in a row, the last for %s", t.bad, t.badTool))
 				return
 			}
 		}
@@ -311,9 +329,12 @@ func (t *turn) run() {
 			pending = t.followUps()
 		}
 		if len(reply.calls) == 0 && len(pending) == 0 {
-			if reply.stop == llm.StopMaxTokens {
+			switch reply.stop {
+			case llm.StopMaxTokens:
 				t.end(StopMaxTokens)
-			} else {
+			case llm.StopRefusal:
+				t.end(StopRefusal)
+			default:
 				t.end(StopEndTurn)
 			}
 			return
@@ -546,12 +567,13 @@ func (t *turn) endWait(cause RetryCause, why string) {
 
 // empty reports whether a call's answer had nothing usable: the SDK's
 // empty answer, or a reply with no text and no tool calls, reasoning or
-// not, that did not stop at max tokens (0005-PLAN F5-1 decision 4).
+// not, that did not stop at max tokens (0005-PLAN F5-1 decision 4), nor as
+// a refusal (F5-3 decision 5).
 func (t *turn) empty(r *reply, err error) bool {
 	if err != nil {
 		return errors.Is(err, llm.ErrEmptyReply)
 	}
-	return r.text.Len() == 0 && len(r.calls) == 0 && r.stop != llm.StopMaxTokens
+	return r.text.Len() == 0 && len(r.calls) == 0 && r.stop != llm.StopMaxTokens && r.stop != llm.StopRefusal
 }
 
 // prober is the provider as an llm.Prober, or nil.
@@ -647,6 +669,7 @@ func (t *turn) call() (*reply, error) {
 				return r, nil
 			}
 		case llm.ToolCallDone:
+			ev.Name = t.repair(ev.Name)
 			r.calls = append(r.calls, ev)
 		case llm.Usage:
 			t.usage = addUsage(t.usage, ev)
@@ -671,9 +694,29 @@ func (t *turn) runTools(calls []llm.ToolCallDone) (llm.Message, bool) {
 			m.Content = append(m.Content, cancelledResults(calls[i:])[0].Content...)
 			break
 		}
-		res, ok := t.runTool(c)
+		var (
+			res tool.Result
+			ok  bool
+		)
+		if t.repeated(c) {
+			res, ok = t.stopRepeat(c)
+		} else {
+			res, ok = t.runTool(c)
+		}
 		if !ok {
 			return m, false
+		}
+		if res.BadArguments {
+			t.bad, t.badTool = t.bad+1, c.Name
+		} else {
+			t.bad = 0
+		}
+		if t.halted {
+			m.Content = append(m.Content, llm.Content{Type: llm.ContentToolResult, ToolCallID: c.ID, ToolName: c.Name, Text: res.Text(), IsError: true})
+			if rest := cancelledResults(calls[i+1:]); len(rest) > 0 {
+				m.Content = append(m.Content, rest[0].Content...)
+			}
+			break
 		}
 		m.Content = append(m.Content, llm.Content{Type: llm.ContentToolResult, ToolCallID: c.ID, ToolName: c.Name, Text: res.Text(), IsError: res.IsError})
 		if len(res.Load) > 0 && !res.IsError {
@@ -755,6 +798,88 @@ func (t *turn) approve(call tool.Call, spec tool.Spec, title string, outside []s
 }
 
 const cancelledText = "The user cancelled the turn, so this call did not finish."
+
+// The loop's limits (0005-PLAN F5-3): the run of identical calls that asks
+// whether the turn may go on (opencode's DOOM_LOOP_THRESHOLD), and the
+// consecutive refused arguments that end it (Kilo's
+// REPEATED_TOOL_FAILURE_LIMIT).
+const (
+	repeatLimit = 3
+	badLimit    = 3
+)
+
+// stoppedText is the result of a repeated call the user stopped.
+const stoppedText = "The user stopped this call: the model made the same call 3 times in a row."
+
+// repair is name, or the one tool the turn offers whose name it is but for
+// case and surrounding space (Kilo's repair; 0005-PLAN F5-3 decision 2). A
+// name that is a tool, or that two tools or none match, is kept.
+func (t *turn) repair(name string) string {
+	if _, ok := t.tools[name]; ok {
+		return name
+	}
+	want := strings.TrimSpace(name)
+	found := ""
+	for n := range t.tools {
+		if !strings.EqualFold(n, want) {
+			continue
+		}
+		if found != "" {
+			return name
+		}
+		found = n
+	}
+	return cmp.Or(found, name)
+}
+
+// repeated counts c into the turn's run of identical calls, its name and
+// arguments, compared as canonical JSON or else as text, equal to the one
+// before it; it reports whether the run reached repeatLimit (0005-PLAN
+// F5-3 decision 1).
+func (t *turn) repeated(c llm.ToolCallDone) bool {
+	args := jsontext.Value(c.Args).Clone()
+	if args.Canonicalize() != nil {
+		args = jsontext.Value(c.Args)
+	}
+	key := c.Name + "\x00" + string(args)
+	if key == t.last {
+		t.repeat++
+	} else {
+		t.last, t.repeat = key, 1
+	}
+	return t.repeat >= repeatLimit
+}
+
+// stopRepeat asks the policy whether a call that ends a run of repeatLimit
+// identical calls may go on. Allowed, or with no policy to ask, it runs as
+// any call does, and the run starts again. Refused, or when the question
+// fails, it does not run, and the turn ends after it (halted).
+func (t *turn) stopRepeat(c llm.ToolCallDone) (tool.Result, bool) {
+	n := t.repeat
+	t.repeat = 0
+	if t.a.cfg.Policy == nil {
+		return t.runTool(c)
+	}
+	call := tool.Call{ID: c.ID, Name: c.Name, Args: jsontext.Value(c.Args)}
+	title := c.Name
+	if tl, ok := t.tools[c.Name]; ok {
+		if d, ok := tl.(tool.Describer); ok {
+			title = d.Describe(call, t.env)
+		}
+	}
+	d, err := t.a.cfg.Policy.Decide(t.ctx, permission.Rule{Tool: c.Name, Mode: permission.ModeAsk, CallID: c.ID, Title: title,
+		Input: call.Args, Repeated: n})
+	switch {
+	case t.ctx.Err() != nil:
+		res := tool.ErrorResult(cancelledText)
+		return res, t.emit(ToolStart{Call: call, Title: title}) && t.emit(ToolEnd{Call: call, Result: res})
+	case err == nil && d.Allow:
+		return t.runTool(c)
+	}
+	t.halted = true
+	res := tool.ErrorResult(stoppedText)
+	return res, t.emit(ToolStart{Call: call, Title: title}) && t.emit(ToolEnd{Call: call, Result: res})
+}
 
 // cancelledResults is a tool message answering each call with the
 // cancelled result, or nothing when there are no calls.

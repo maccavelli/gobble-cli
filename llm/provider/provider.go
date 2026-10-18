@@ -263,6 +263,10 @@ func (a *adapter) Stream(ctx context.Context, req *llm.Request) iter.Seq2[llm.Ev
 					a.offlineURL = ue.URL
 					a.mu.Unlock()
 				}
+				if refusedAnswer(err) { // a refusal, as one with text is (0005-PLAN F5-3 decision 5)
+					yield(llm.Done{StopReason: llm.StopRefusal}, nil)
+					return
+				}
 				yield(nil, a.rejected(mapError(err), err))
 				return
 			}
@@ -323,6 +327,8 @@ func stopOf(r *llmprovider.Response, calls bool) llm.StopReason {
 		return llm.StopToolUse
 	case r != nil && r.FinishReason == llmprovider.FinishLength:
 		return llm.StopMaxTokens
+	case r != nil && r.FinishReason == llmprovider.FinishContentFilter:
+		return llm.StopRefusal // every wire's safety and refusal stops (0005-PLAN F5-3 decision 5)
 	}
 	return llm.StopEndTurn
 }
@@ -475,6 +481,15 @@ func emptyAnswer(err error) bool {
 	ae, ok := errors.AsType[*llmprovider.APIError](err)
 	return ok && errors.Is(ae.Kind, llmprovider.ErrIncomplete) && strings.HasSuffix(ae.Message, sdkEmptyAnswer) &&
 		(ae.Reason == "" || ae.Reason == string(llmprovider.FinishStop))
+}
+
+// refusedAnswer reports whether err is the SDK's answer with nothing in it
+// that the service stopped for safety, or the model refused: its Reason is
+// content_filter (0005-PLAN F5-3 decision 5).
+func refusedAnswer(err error) bool {
+	ae, ok := errors.AsType[*llmprovider.APIError](err)
+	return ok && errors.Is(ae.Kind, llmprovider.ErrIncomplete) && strings.HasSuffix(ae.Message, sdkEmptyAnswer) &&
+		ae.Reason == string(llmprovider.FinishContentFilter)
 }
 
 // offline reports whether err is a request that could not be sent for want

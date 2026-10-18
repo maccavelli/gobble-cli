@@ -23,13 +23,16 @@ const (
 )
 
 // Rule is one permission question: the tool, the posture, and the call it
-// is asked about, so a client can show what would run.
+// is asked about, so a client can show what would run. Repeated, when not
+// 0, is the run of identical calls the call ends: the question is whether
+// the turn may go on, which approves no write (0005-PLAN F5-3 decision 1).
 type Rule struct {
-	Tool   string         `json:"tool"`
-	Mode   Mode           `json:"mode,omitzero"`
-	CallID string         `json:"callId,omitzero"`
-	Title  string         `json:"title,omitzero"`
-	Input  jsontext.Value `json:"input,omitzero"`
+	Tool     string         `json:"tool"`
+	Mode     Mode           `json:"mode,omitzero"`
+	CallID   string         `json:"callId,omitzero"`
+	Title    string         `json:"title,omitzero"`
+	Input    jsontext.Value `json:"input,omitzero"`
+	Repeated int            `json:"repeated,omitzero"`
 }
 
 // Decision is a policy answer. Refusal, when set, is a refusal made

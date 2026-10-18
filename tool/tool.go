@@ -167,7 +167,9 @@ type Instruction struct {
 // as its plan; an empty, non-nil Plan clears it (0005-PLAN F1d-1). Load
 // names deferred tools the agent loads before its next model call, with
 // their families (0005-PLAN F1d-2). Locations are the files the call
-// touched, with lines where it found some (0005-PLAN F1d-3).
+// touched, with lines where it found some (0005-PLAN F1d-3). BadArguments
+// says the call's arguments were refused before the tool ran, which the
+// agent counts (0005-PLAN F5-3 decision 3).
 type Result struct {
 	Output    jsontext.Value `json:"output,omitzero"`
 	IsError   bool           `json:"isError,omitzero"`
@@ -180,6 +182,7 @@ type Result struct {
 	// Instructions are the paths of the context files the result brought
 	// in (Env.Instructions).
 	Instructions []string `json:"instructions,omitzero"`
+	BadArguments bool     `json:"badArguments,omitzero"`
 }
 
 // PlanItem is one step of a plan. Status is pending, in_progress or
@@ -225,6 +228,14 @@ func TextResult(text string) Result {
 // ErrorResult is a failed result the model reads as text.
 func ErrorResult(text string) Result {
 	return Result{Output: quote(text), IsError: true}
+}
+
+// BadArgumentsResult is the error result of a call whose arguments were
+// refused before the tool ran (0005-PLAN F5-3 decision 3).
+func BadArgumentsResult(text string) Result {
+	r := ErrorResult(text)
+	r.BadArguments = true
+	return r
 }
 
 func quote(s string) jsontext.Value {
@@ -380,20 +391,20 @@ func (g *generic[In, Out]) Run(ctx context.Context, call Call, env Env) (Result,
 	if g.cfg.prepare != nil {
 		prepared, err := g.cfg.prepare(args)
 		if err != nil {
-			return ErrorResult(err.Error()), nil
+			return BadArgumentsResult(err.Error()), nil
 		}
 		args = prepared
 	}
 	var instance any
 	if err := json.Unmarshal(args, &instance); err != nil {
-		return ErrorResult(fmt.Sprintf("%s: the arguments are not JSON: %v", g.name, err)), nil
+		return BadArgumentsResult(fmt.Sprintf("%s: the arguments are not JSON: %v", g.name, err)), nil
 	}
 	if err := g.resolved.Validate(instance); err != nil {
-		return ErrorResult(fmt.Sprintf("%s: invalid arguments: %v", g.name, err)), nil
+		return BadArgumentsResult(fmt.Sprintf("%s: invalid arguments: %v", g.name, err)), nil
 	}
 	var in In
 	if err := json.Unmarshal(args, &in); err != nil {
-		return ErrorResult(fmt.Sprintf("%s: invalid arguments: %v", g.name, err)), nil
+		return BadArgumentsResult(fmt.Sprintf("%s: invalid arguments: %v", g.name, err)), nil
 	}
 	out, err := g.fn(ctx, in, env)
 	if ctx.Err() != nil {

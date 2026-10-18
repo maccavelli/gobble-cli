@@ -88,8 +88,9 @@ func (a *Agent) SetSessionMode(ctx context.Context, p acp.SetSessionModeRequest)
 }
 
 // planPolicy refuses every call that asks for approval while the session
-// is in plan mode, without asking: plan mode is read-only. Otherwise the
-// inner policy decides.
+// is in plan mode, without asking: plan mode is read-only. Otherwise, and
+// for a repeated call's question, which approves no write (0005-PLAN F5-3
+// decision 1), the inner policy decides.
 type planPolicy struct {
 	a     *Agent
 	s     *liveSession
@@ -97,7 +98,7 @@ type planPolicy struct {
 }
 
 func (p planPolicy) Decide(ctx context.Context, r permission.Rule) (permission.Decision, error) {
-	if p.a.modeOf(p.s) == modePlan {
+	if p.a.modeOf(p.s) == modePlan && r.Repeated == 0 {
 		return permission.Decision{Refusal: fmt.Sprintf(
 			"Plan mode is read-only, so %s did not run. Call %s with the plan to ask the user to leave plan mode.", r.Tool, exitPlanTool)}, nil
 	}

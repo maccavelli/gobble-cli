@@ -111,6 +111,7 @@ type wireOutcome struct {
 	text  string
 	calls []string
 	usage llm.Usage
+	stop  llm.StopReason
 	err   error
 }
 
@@ -135,6 +136,8 @@ func wireStream(t *testing.T, id, model string, c *cannedWire, req *llm.Request)
 			o.calls = append(o.calls, ev.Name+" "+ev.Args)
 		case llm.Usage:
 			o.usage = ev
+		case llm.Done:
+			o.stop = ev.StopReason
 		}
 	}
 	return o

@@ -119,4 +119,7 @@ const (
 	StopMaxTokens       StopReason = "max_tokens"
 	StopMaxTurnRequests StopReason = "max_turn_requests"
 	StopCancelled       StopReason = "cancelled"
+	// StopRefusal ends a turn whose reply the service stopped for safety,
+	// or the model refused (0005-PLAN F5-3 decision 5).
+	StopRefusal StopReason = "refusal"
 )

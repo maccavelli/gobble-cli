@@ -97,7 +97,7 @@ func (t *mcpTool) Run(ctx context.Context, call tool.Call, _ tool.Env) (tool.Res
 		args = jsontext.Value("{}")
 	}
 	if args.Kind() != '{' {
-		return tool.ErrorResult(fmt.Sprintf("MCP tool %s: the arguments must be a JSON object", label)), nil
+		return tool.BadArgumentsResult(fmt.Sprintf("MCP tool %s: the arguments must be a JSON object", label)), nil
 	}
 	cs := t.conn.session()
 	if cs == nil {

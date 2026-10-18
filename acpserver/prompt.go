@@ -5,6 +5,7 @@ import (
 	stdjson "encoding/json"
 	"encoding/json/jsontext"
 	"errors"
+	"fmt"
 	"math"
 	"strings"
 	"unicode/utf8"
@@ -236,12 +237,26 @@ func planUpdate(plan []tool.PlanItem) acp.SessionUpdate {
 }
 
 // cutTitle is a title on one line, at most maxTitle runes.
-func cutTitle(s string) string {
+func cutTitle(s string) string { return cutTo(s, maxTitle) }
+
+// cutTo is s on one line, cut to n runes.
+func cutTo(s string, n int) string {
 	s = strings.Join(strings.Fields(s), " ")
-	if utf8.RuneCountInString(s) <= maxTitle {
+	if utf8.RuneCountInString(s) <= n {
 		return s
 	}
-	return string([]rune(s)[:maxTitle-1]) + "…"
+	return string([]rune(s)[:n-1]) + "…"
+}
+
+// ruleTitle is a permission request's title: the call's, and for a
+// repeated call's question what it asks about, the call's cut to leave it
+// room (0005-PLAN F5-3 decision 1).
+func ruleTitle(r permission.Rule) string {
+	if r.Repeated == 0 {
+		return cutTitle(r.Title)
+	}
+	suffix := fmt.Sprintf(" (the same call %d times in a row)", r.Repeated)
+	return cutTo(r.Title, maxTitle-utf8.RuneCountInString(suffix)) + suffix
 }
 
 // cutBytes is s cut to n bytes on a rune boundary.
@@ -269,7 +284,7 @@ func (p *acpPolicy) Decide(ctx context.Context, r permission.Rule) (permission.D
 	}
 	resp, err := p.conn.RequestPermission(ctx, acp.RequestPermissionRequest{
 		SessionId: p.session,
-		ToolCall:  acp.ToolCallUpdate{ToolCallId: acp.ToolCallId(r.CallID), Title: new(cutTitle(r.Title)), RawInput: jsonRaw(r.Input)},
+		ToolCall:  acp.ToolCallUpdate{ToolCallId: acp.ToolCallId(r.CallID), Title: new(ruleTitle(r)), RawInput: jsonRaw(r.Input)},
 		Options: []acp.PermissionOption{
 			{OptionId: allowOnce, Name: "Allow", Kind: acp.PermissionOptionKindAllowOnce},
 			{OptionId: rejectOnce, Name: "Reject", Kind: acp.PermissionOptionKindRejectOnce},

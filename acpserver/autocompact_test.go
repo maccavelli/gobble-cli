@@ -3,6 +3,7 @@ package acpserver
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
@@ -164,8 +165,11 @@ func full(text string, used int64) llmtest.Turn {
 }
 
 // fullCall is a read call whose usage reports the context at used tokens.
+// Its limit is the id's last byte, so calls whose ids end differently are
+// not one call repeated (0005-PLAN F5-3 decision 1).
 func fullCall(id string, used int64) llmtest.Turn {
-	return llmtest.Turn{Events: []llm.Event{llm.ToolCallStart{ID: id, Name: "read"}, llm.ToolCallDone{ID: id, Name: "read", Args: `{"path":"f.txt"}`},
+	args := fmt.Sprintf(`{"path":"f.txt","limit":%d}`, id[len(id)-1])
+	return llmtest.Turn{Events: []llm.Event{llm.ToolCallStart{ID: id, Name: "read"}, llm.ToolCallDone{ID: id, Name: "read", Args: args},
 		llm.Usage{InputTokens: used}, llm.Done{StopReason: llm.StopToolUse}}}
 }
 

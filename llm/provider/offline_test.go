@@ -117,8 +117,9 @@ func TestProbePort(t *testing.T) {
 
 // Each of the four wires' answer with nothing in it is llm.ErrEmptyReply,
 // still llm.ErrIncomplete, after one request; a refusal with nothing in it
-// is not llm.ErrEmptyReply. These pin the SDK's message (sdkEmptyAnswer)
-// (0005-PLAN F5-1 decision 4).
+// is no error but a reply that stops as a refusal (0005-PLAN F5-3 decision
+// 5). These pin the SDK's message (sdkEmptyAnswer) (0005-PLAN F5-1
+// decision 4).
 func TestWireEmptyAnswer(t *testing.T) {
 	for _, c := range []struct{ wire, id, model, body string }{
 		{"responses", "openai", "gpt-6-luna", `{"id":"r","status":"completed","output":[],"usage":{"input_tokens":12,"output_tokens":0,"total_tokens":12}}`},
@@ -138,8 +139,8 @@ func TestWireEmptyAnswer(t *testing.T) {
 	refusal := &cannedWire{status: http.StatusOK,
 		body: `{"id":"m","type":"message","role":"assistant","stop_reason":"refusal","content":[],"usage":{"input_tokens":12,"output_tokens":0}}`}
 	o := wireStream(t, "claude", "claude-haiku-5-5", refusal, wireRequest())
-	if !errors.Is(o.err, llm.ErrIncomplete) || errors.Is(o.err, llm.ErrEmptyReply) {
-		t.Fatalf("refusal: err %v, want llm.ErrIncomplete that is not llm.ErrEmptyReply", o.err)
+	if o.err != nil || o.stop != llm.StopRefusal || o.text != "" {
+		t.Fatalf("refusal: err %v, stop %q, text %q; want a reply that stops as a refusal, with nothing in it", o.err, o.stop, o.text)
 	}
 }
 

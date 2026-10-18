@@ -72,6 +72,9 @@ const (
 	StopToolUse StopReason = "tool_use"
 	// StopMaxTokens means the output limit was hit.
 	StopMaxTokens StopReason = "max_tokens"
+	// StopRefusal means the service stopped the reply for safety, or the
+	// model refused (0005-PLAN F5-3 decision 5).
+	StopRefusal StopReason = "refusal"
 )
 
 // Done ends a stream.
