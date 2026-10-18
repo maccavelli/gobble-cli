@@ -810,6 +810,7 @@ Earlier phases had set the precedent: 0002-PLAN copied Pi's MCP configuration me
      * a missing finish reason ends the step.
    * Offline detection that does not spend retries, and a first-byte deadline.
    * *(2026-10-16, 0005-PLAN "F5 re-made as five sub-phases, F5-1 made executable": offline detection probes only the provider's own host, never Kilo's public ones. The first-byte deadline waits for F4-1b's live stream, since a buffered stream's first byte is its whole reply. The repeated-call question counts a turn's model calls together, where opencode's sees one reply. Retry's schedule stays the SDK's.)*
+   * *(2026-10-18, the owner's choices, 0005-PLAN "F5-3 made executable: loop safety": the missing finish reason is not adopted, since gobble's loop ends a reply with no calls whatever its reason, and Kilo's breaker guards a loop that waited for "stop". A reply the service stops for safety or as a refusal ends the turn as ACP's refusal, an addition.)*
 8. **Prompt-cache stability (§5).** F3 builds a frozen per-session context baseline, appends changes as messages, and keeps per-turn state out of the system prompt. Later phases follow the same rule.
 9. **Compaction (§4).**
    * Pi's cut-point machinery stays (0002-PLAN Phase 6).

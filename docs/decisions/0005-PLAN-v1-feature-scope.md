@@ -5720,7 +5720,7 @@ histories were rewritten; the report's line numbers match these heads within a f
    - a notification `_gobble/compaction {sessionId, phase, reason, tokensBefore, error}`, `reason` `manual`,
      `threshold` or `overflow`; `_gobble/set_auto_compaction {sessionId, enabled}`, writing `compaction.enabled` as
      `_gobble/set_auto_retry` writes its key; and `get_state`'s `autoCompactionEnabled` from the setting.
-9. **F5-3, loop safety (proposed):**
+9. **F5-3, loop safety (proposed):** *(2026-10-18: made executable, refined; see "F5-3 made executable: loop safety".)*
    - three identical calls in a row in one turn, across its model calls (the same tool and the same arguments), ask the
      user through the session's permission request whether to go on; no ends the turn. This is wider than opencode's
      check, which sees one reply;
@@ -6220,3 +6220,121 @@ summaries; Codex's server-side compaction and its `new_context` tool. Media plac
   - **a turn's pause ends at the next turn's start;** the pause is not in `get_state`.
 - **Next:** F5-3, loop safety, made executable on the owner's word; the SDK retries' status waits for go-llmprovider-sdk
   issue 3; the first-byte deadline for F4-1b.
+
+**2026-10-18 — F5-3 made executable: loop safety** (the owner's word of 2026-10-18, "proceed", after F5-2's commit
+`fe0e819`, and the owner's choices of that date: the missing finish reason dropped, with the reason recorded; a safety or
+refusal stop added; decision 9 of "F5 re-made as five sub-phases, F5-1 made executable", refined below.) *Proposed: not
+approved for execution.*
+
+**The facts,** measured on 2026-10-18 against `main` `fe0e819`, go-llmprovider-sdk `v1.13.0`, opencode `907b3bc518` and
+Kilo `4a7c4e883f`:
+
+- **A turn's tool calls:**
+  - a reply's calls are emitted with its `Message`, which acpserver writes before any call runs; each call then runs in
+    order, and its result is written at `ToolEnd` (`agent/agent.go`, `run`, `runTools`; `acpserver/agent.go`, `writer`);
+  - `runTool` looks the call up by name among the turn's tools; an unknown name's result is `there is no tool named %q`
+    (`agent/agent.go:688-694`);
+  - a call that is not read-only is put to `Config.Policy` before it runs; a nil `Policy` allows every call (`approve`).
+- **Arguments:** a built-in tool's `Run` gives an error result when its arguments fail its `prepare`, are not JSON, fail
+  its schema, or do not decode (`tool/tool.go:375-397`). An MCP tool checks only that its arguments are a JSON object
+  (`mcpclient/tool.go:99-101`); the server's own check comes back as an ordinary error result. `tool.Result` has
+  `IsError` alone, so nothing tells an argument failure from any other.
+- **Names:** the built-in tools' names are lower case; an MCP tool's is `mcp__<server>__<tool>`, the tool's case kept
+  (`mcpclient/name.go:20-25`).
+- **Permission:** `permission.Rule` is `{Tool, Mode, CallID, Title, Input}`. acpserver's `acpPolicy` asks
+  `session/request_permission` with Allow and Reject (`acpserver/prompt.go:261-285`); `planPolicy` refuses every ask in
+  plan mode without asking (`acpserver/modes.go:88-104`). gobble's CLI asks in its interactive mode
+  (`internal/cli/agent.go:209`); with no handler, as in print mode, `acpclient` answers Reject
+  (`acpclient/conn.go:423-447`).
+- **Stops:**
+  - the SDK keeps an absent finish reason as `""`, or `tool_calls` when the reply has a call (SDK
+    `llmprovider/internal/wire/finish.go`, `Finish`); gobble's `stopOf` maps every reason but `length` and a reply with
+    calls to `end_turn` (`llm/provider/provider.go:320-327`);
+  - every wire maps a safety or refusal stop to `content_filter`: Gemini's `SAFETY`, `RECITATION`, `BLOCKLIST`,
+    `PROHIBITED_CONTENT`, `SPII` and `IMAGE_SAFETY`, Anthropic's `refusal`, and the refusal of Chat Completions and of
+    Responses (SDK `internal/wire/generatecontent/generatecontent.go:375-380`, `messages/messages.go:43`,
+    `chatcompletions/chatcompletions.go:468`, `responses/responses.go:360`);
+  - the SDK's empty answer whose `Reason` is `content_filter` is `ErrIncomplete`, not F5-1's `ErrEmptyReply`
+    (`llm/provider/provider.go`, `emptyAnswer`), and fails the turn with an error; a reply with no text and no calls that
+    did not stop at max tokens is F5-1's empty reply, run again twice (`agent/agent.go:547-555`);
+  - the turn's stop reaches ACP as it is (`acpserver/agent.go:602`), and ACP has `refusal`; the session file writes
+    `stop` for every stop but tool use, length and none (`acpserver/history.go:138-149`), Pi's values being `stop`,
+    `length`, `toolUse`, `error`, `aborted`, `pending` and `deferred` (Pi `packages/ai/src/types.ts:450`);
+  - gobble's CLI shows a stop other than `end_turn` in the turn's last line (`internal/cli/view.go:304-305`), and print
+    mode's JSON carries it (`internal/cli/print.go:184`).
+- **The loop ends a reply with no calls, whatever its stop** (`agent/agent.go`, `run`). Kilo saves a missing finish
+  reason as `unknown` and ends its loop on a reply with no calls (`session/prompt.ts:1968-1981`), because that loop went
+  on until it saw `stop`.
+- **opencode's doom loop:** the last three parts of one assistant message, each the same tool with the same
+  `JSON.stringify` of its input, ask the `doom_loop` permission, `ask` by default (`session/processor.ts:353-380`;
+  `agent/agent.ts:121`).
+- **Kilo's breaker:** three consecutive invalid-argument failures, of any tool, end the turn with "Stopped after 3
+  consecutive invalid-argument failures for the "<tool>" tool. The model kept re-issuing malformed input, so the turn
+  was aborted to avoid burning tokens."; a completed call, or any other failure, clears the count
+  (`kilocode/session/processor.ts:375-428`). Its repair renames a call whose lower-cased name is a tool
+  (`session/llm.ts:384-395`).
+
+**The decisions** (decision 9, refined):
+
+1. **The repeated call** (opencode's doom loop, across the turn's model calls). The agent keeps the run of identical
+   calls in the turn, in order: a call whose name and arguments equal the one before it extends the run, and any other
+   starts a run of 1. Arguments are compared as canonical JSON, or as text when they are not JSON.
+   - When a run reaches 3, before its third call runs, the agent asks `Config.Policy` with the call's rule and a new
+     `Rule.Repeated`, 3. acpserver's title is the call's, with ` (the same call 3 times in a row)`.
+   - **Allow:** the call goes on to its own approval, as any call does, and the run starts again, so the question comes
+     again after 3 more.
+   - **Reject, or a failed request:** the call does not run. Its result is `The user stopped this call: the model made
+     the same call 3 times in a row.`, the reply's later calls get the cancelled result, and the turn ends as
+     `end_turn`.
+   - A nil `Policy` goes on without asking. `planPolicy` passes a `Repeated` rule to its inner policy, since the question
+     approves no write. Print mode, which has no one to ask, answers Reject, so its turn ends.
+2. **Call-name repair** (Kilo's). A call that names no tool the turn offers is renamed when its name, trimmed and lower
+   cased, equals the lower-cased name of exactly one offered tool. The rename is made in the reply, before its `Message`,
+   so the session file, the history and every later request carry the tool's name, and a wire that pairs a result with
+   its call by name sees one name. Deferred tools not yet loaded are not matched. opencode's `invalid` tool is not
+   adopted.
+3. **The malformed-call breaker** (Kilo's).
+   - `tool.Result` gains `BadArguments`. The built-in tools set it on each of their four argument failures, and an MCP
+     tool when its arguments are not an object. An MCP server's own refusal cannot be told apart, and does not count.
+   - The agent counts the turn's consecutive results with `BadArguments`, in call order, across its replies. Any other
+     result clears the count, an unknown tool's included, as Kilo's does.
+   - Once a reply's calls have all run, so each has its result, a count of 3 or more ends the turn with
+     `the model sent invalid tool arguments 3 times in a row, the last for <tool>`.
+4. **The missing finish reason is not adopted** (the owner's choice). gobble's loop ends a reply with no calls whatever
+   its stop, so it cannot spin as Kilo's could, and a notice would fire on gateways that leave the reason out of every
+   reply.
+5. **A safety or refusal stop ends the turn as ACP's `refusal`** (an addition, the owner's choice).
+   - `llm` gains `StopRefusal`, which `stopOf` gives for `content_filter`, and `agent` gains `StopRefusal`, `refusal`,
+     ACP's.
+   - A reply with that stop and no calls ends the turn as `refusal`. F5-1's empty reply leaves it out, so it is not run
+     again.
+   - The SDK's empty answer with `Reason` `content_filter` becomes a reply with that stop and no text, so it ends as
+     `refusal` too, not with an error.
+   - The session file writes `stop`, Pi having no refusal; the CLI's turn line already shows the stop.
+
+**F5-3's steps:**
+
+1. **`permission`:** `Rule.Repeated`. **`tool`:** `Result.BadArguments`, set in `generic.Run`'s four argument failures.
+   **`mcpclient`:** set when the arguments are not an object.
+2. **`llm`:** `StopRefusal`. **`llm/provider`:** `stopOf`'s `content_filter`; the empty answer with that reason as a
+   reply.
+3. **`agent`:** the run of identical calls and its question (decision 1); the rename in `call` (decision 2); the
+   breaker (decision 3); `StopRefusal`, and F5-1's `empty` leaving it out (decision 5).
+4. **`acpserver`:** `acpPolicy`'s title for a `Repeated` rule; `planPolicy` passing it on.
+5. **Records:** this plan's execution record; `docs/README.md`.
+
+**F5-3's tests,** each seen failing on a scratch copy:
+
+- `agent`: three identical calls across two replies asking once, before the third runs; Allow running it and asking
+  again after three more; Reject ending the turn with the stopped result and the later calls cancelled; a nil policy
+  going on; different arguments, or arguments in another key order (equal as JSON), counted rightly; a case-wrong name
+  run as its tool, the recorded message carrying the right name; two tools equal in lower case not repaired; a deferred
+  tool not matched; three bad-argument results in a row ending the turn after the reply's calls, a good call between
+  them clearing the count; a refusal stop ending the turn as `refusal`, and not run again when empty;
+- `tool`: `BadArguments` on each of the four failures, and not on a tool's own error; `mcpclient`: on a non-object;
+- `llm/provider`: `content_filter` as `StopRefusal`, on a wire, and the empty refused answer as a refusal reply;
+- `acpserver`: the repeated-call question's title over `session/request_permission`; plan mode asking it, not refusing;
+  a refusal reaching the prompt's response as `refusal`.
+
+**F5-3's gates:** as F5-1's. Windows `go test` and `-race`, the second Linux machine's `-race`, and Windows and WSL
+`make preflight` are the owner's.
