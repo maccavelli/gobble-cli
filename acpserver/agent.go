@@ -104,6 +104,9 @@ type Options struct {
 	// Personalities are the personalities a session may take, the
 	// built-ins and the user's (0022-PLAN P3). Nil is the built-ins.
 	Personalities *personality.Set
+	// CompactionPrompts are the user's compaction prompts; empty ones are
+	// gobble's (0005-PLAN F5-4 decision 8).
+	CompactionPrompts compaction.Prompts
 }
 
 // Agent is gobble's acp.Agent.
@@ -128,6 +131,8 @@ type Agent struct {
 	save       func(path, value string) error
 	// personalities are the personalities sessions may take.
 	personalities *personality.Set
+	// compactionPrompts are the user's compaction prompts.
+	compactionPrompts compaction.Prompts
 
 	mu       sync.Mutex
 	conn     *acp.AgentSideConnection
@@ -214,7 +219,7 @@ var (
 func New(opts Options) *Agent {
 	a := &Agent{version: opts.Version, newID: opts.NewID, provider: opts.Provider, models: opts.Models, info: opts.ModelInfo,
 		override: opts.Override, tools: opts.Tools, store: opts.Store, now: opts.Now, mcp: opts.MCP, logger: opts.Logger, prompt: opts.Prompt,
-		settings: opts.Settings, auth: opts.Auth, save: opts.SaveSetting, personalities: opts.Personalities,
+		settings: opts.Settings, auth: opts.Auth, save: opts.SaveSetting, personalities: opts.Personalities, compactionPrompts: opts.CompactionPrompts,
 		sessions: map[acp.SessionId]*liveSession{}}
 	if a.logger == nil {
 		a.logger = slog.New(slog.DiscardHandler)

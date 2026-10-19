@@ -71,7 +71,7 @@ func TestSummaryGuard(t *testing.T) {
 		{"short of a short history", floorSource - 1000, []llmtest.Turn{short}, strings.Repeat("s", floorChars-1), false},
 	} {
 		s := llmtest.NewScript(c.turns...)
-		res, err := Compact(t.Context(), guardPrep(t, c.size), Model{Provider: s}, "")
+		res, err := Compact(t.Context(), guardPrep(t, c.size), Model{Provider: s}, Request{})
 		if c.refused {
 			if err == nil || err.Error() != c.want || !errors.Is(err, ErrSummaryRefused) {
 				t.Errorf("%s: err %v, want %q wrapping ErrSummaryRefused", c.name, err, c.want)
@@ -97,7 +97,7 @@ func TestRefusalsWrap(t *testing.T) {
 		{llmtest.Turn{Err: llm.ErrContextOverflow}, false},
 	} {
 		s := llmtest.NewScript(c.turn, llmtest.Text("never"))
-		_, err := Compact(t.Context(), guardPrep(t, 400), Model{Provider: s}, "")
+		_, err := Compact(t.Context(), guardPrep(t, 400), Model{Provider: s}, Request{})
 		if err == nil || errors.Is(err, ErrSummaryRefused) != c.refused || len(s.Requests()) != 1 {
 			t.Errorf("%v: err %v, %d requests; want refused %v after one", c.turn, err, len(s.Requests()), c.refused)
 		}
@@ -131,7 +131,7 @@ func TestSummaryCaps(t *testing.T) {
 			t.Fatalf("%s: a split turn with history, %+v, %v", c.name, prep, err)
 		}
 		s := llmtest.NewScript(llmtest.Text("H"), llmtest.Text("P"))
-		if _, err := Compact(t.Context(), prep, Model{Provider: s, MaxTokens: c.max}, ""); err != nil {
+		if _, err := Compact(t.Context(), prep, Model{Provider: s, MaxTokens: c.max}, Request{}); err != nil {
 			t.Fatal(err)
 		}
 		reqs := s.Requests()

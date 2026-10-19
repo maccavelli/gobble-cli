@@ -24,11 +24,10 @@ const readDescription = `Read a text file's lines, a page at a time.
 - At most {{.MaxLines}} numbered lines a call.
 `
 
-// The user's prompt files: the tools and rules sections and a tool's
-// description, each checked; one with an id gobble does not have, or one
-// that fails its check, is refused, naming the file and the rule; a
-// compaction prompt is not among the ids until 0005-PLAN F5-4 (0022-MADR
-// D15; 0022-PLAN P5's deviation 1).
+// The user's prompt files: the tools and rules sections, a tool's
+// description and a compaction prompt, each checked; one with an id gobble
+// does not have, or one that fails its check, is refused, naming the file
+// and the rule (0022-MADR D15; 0005-PLAN F5-4 decision 8).
 func TestLoadPrompts(t *testing.T) {
 	dir := t.TempDir()
 	files := map[string]string{
@@ -36,22 +35,26 @@ func TestLoadPrompts(t *testing.T) {
 		"rules.md":              "Be careful.\n",
 		"tool.read.md":          readDescription,
 		"tool.grep.md":          "Search.\n",
-		"compaction.summary.md": "Summarise.\n",
+		"compaction.summary.md": "Summarise it.\n",
+		"compaction.update.md":  "Update it.\n",
+		"compaction.nope.md":    "x",
 		"notes.txt":             "x",
 	}
 	for name, text := range files {
 		writeFile(t, filepath.Join(dir, name), text)
 	}
 	got, errs := loadPrompts(dir, builtin.Options{})
-	if got.sections[promptTools] != "Use the tools well." || got.sections[promptRules] != "Be careful." || got.descriptions["read"] != readDescription {
+	if got.sections[promptTools] != "Use the tools well." || got.sections[promptRules] != "Be careful." || got.descriptions["read"] != readDescription ||
+		got.compaction.Summary != "Summarise it." || got.compaction.Update != "" || got.count != 4 {
 		t.Fatalf("overrides %+v", got)
 	}
-	if len(errs) != 3 {
-		t.Fatalf("errors %v, want grep's, the compaction prompt's and notes.txt's", errs)
+	if len(errs) != 4 {
+		t.Fatalf("errors %v, want grep's, the update's, compaction.nope's and notes.txt's", errs)
 	}
 	for _, want := range []string{
 		"prompt " + filepath.Join(dir, "tool.grep.md") + ": 0012-MADR D5: ",
-		"prompt " + filepath.Join(dir, "compaction.summary.md") + ": no prompt has this name",
+		"prompt " + filepath.Join(dir, "compaction.update.md") + ": an update's prompt names the <previous-summary> block",
+		"prompt " + filepath.Join(dir, "compaction.nope.md") + ": no prompt has this name",
 		"prompt " + filepath.Join(dir, "notes.txt") + ": no prompt has this name",
 	} {
 		if !strings.Contains(joinErrs(errs), want) {
@@ -210,7 +213,7 @@ func TestPersonalityReset(t *testing.T) {
 	if r := runIn(t, home, "personality", "reset", "snarky"); r.code != ExitFailure || !strings.Contains(r.stderr, "nothing to reset") {
 		t.Fatalf("reset snarky: %+v", r)
 	}
-	for _, target := range []string{"prompts/compaction.summary", "../x", "prompts"} {
+	for _, target := range []string{"prompts/compaction.nope", "../x", "prompts"} {
 		if r := runIn(t, home, "personality", "reset", target); r.code != ExitUsage {
 			t.Errorf("reset %s: %+v", target, r)
 		}
@@ -218,4 +221,26 @@ func TestPersonalityReset(t *testing.T) {
 	if len(asked) != 3 {
 		t.Fatalf("a refused reset asked: %q", asked)
 	}
+}
+
+// A compaction prompt of the user's reaches the model through /compact in
+// the line view (0005-PLAN F5-4 decision 8).
+func TestCompactionPromptReachesModel(t *testing.T) {
+	model := llmtest.NewScript(llmtest.Text("r1"), llmtest.Text("r2"), llmtest.Text("SUMMARY"))
+	h := newModelHarness(t, model, t.TempDir())
+	home := os.Getenv("GOBBLE_HOME")
+	writeFile(t, filepath.Join(home, "settings.yaml"), "compaction:\n  keepRecentTokens: 10\n")
+	writeFile(t, filepath.Join(home, "personalities", "prompts", "compaction.system.md"), "MY SYSTEM\n")
+	h.start(Prompt{})
+	h.press("one " + strings.Repeat("x", 400) + "\r")
+	waitUntil(t, func() bool { return strings.Contains(h.stdout.String(), "r1") })
+	h.press("two " + strings.Repeat("x", 400) + "\r")
+	waitUntil(t, func() bool { return strings.Contains(h.stdout.String(), "r2") })
+	h.press("/compact\r")
+	waitUntil(t, func() bool { return len(model.Requests()) == 3 })
+	h.press("\x04")
+	if err := h.wait(); err != nil {
+		t.Fatal(err)
+	}
+	llmtest.AssertSystem(t, model.Requests()[2], "MY SYSTEM")
 }

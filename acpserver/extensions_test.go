@@ -16,6 +16,7 @@ import (
 	acp "github.com/maccavelli/acp-go-sdk2"
 
 	"github.com/maccavelli/gobble-cli/acpclient/acptest"
+	"github.com/maccavelli/gobble-cli/compaction"
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/llm/llmtest"
 	"github.com/maccavelli/gobble-cli/session"
@@ -398,7 +399,7 @@ func TestExtensionCompact(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := requestTexts(model.Requests()[3])
-	if len(got) != 4 || got[0] != "The conversation history before this point was compacted into the following summary:\n\n<summary>\n## Goal\nSUMMARY\n</summary>" || got[1] != u2 || got[3] != "three" {
+	if len(got) != 4 || got[0] != compaction.SummaryText("## Goal\nSUMMARY") || got[1] != u2 || got[3] != "three" {
 		t.Fatalf("context after compact: %d messages, %.80q", len(got), got)
 	}
 }

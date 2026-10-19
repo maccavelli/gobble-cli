@@ -6405,7 +6405,8 @@ Kilo `4a7c4e883f`:
 
 **2026-10-18 — F5-4 made executable: the summary** (the owner's word of 2026-10-18, "committed, proceed", after
 0022-PLAN P6's prepared record, and the owner's choices of that date: opencode v2's template, with grok-build's two
-additions; the prune pass dropped, with the reason recorded.) *Proposed: not approved for execution.*
+additions; the prune pass dropped, with the reason recorded.) *Approved and run on the owner's word "committed,
+proceed" after `8cad165`; see "F5-4's execution record".*
 
 **The facts,** measured on 2026-10-18 against `main` after 0022-PLAN P6's commit; opencode `501b15af26`, and its last
 v1 at `907b3bc518`; Kilo `2a1903f291`; grok-build `2bdd1d6a63`; goose as 0005-REPORT read it at `bfcc6ee`:
@@ -6540,3 +6541,79 @@ Kilo's chunked summarising, as before.
   `acpserver/extensions_test.go` (`TestExtensionCompact`), `acpserver/autocompact_test.go`
   (`TestAutoCompactPauseSession`), `internal/cli/personalitycmd_test.go` (`TestLoadPrompts`): each changed to the
   new text, none loosened.
+
+**F5-4's execution record (2026-10-18).**
+
+- **Ran as the entry wrote it,** with no deviation, on the owner's word "committed, proceed" after `8cad165`. F5-5 is
+  next, made executable when the owner asks.
+- **What was built:**
+  - `compaction`:
+    - `prompts.go`: opencode v2's first-summary and update prompts, fitted to gobble's request (decision 1), with
+      grok-build's `## User Messages` and the quoted latest instruction under `## Next Move`, in gobble's words; the
+      legacy sentence for a previous summary in Pi's format; `Prompts`, `PromptIDs`, `CheckPrompt` and `Request`; the
+      tags made inert (`neutralize`) and the scratchpad removed (`cleanSummary`); the todo list and the reminder;
+    - `serialize.go`: Pi's two summary prompts gone; the turn prefix's prompt without `## Original Request`; the replay
+      wrapper with opencode's sentence; `serializeOmitting`;
+    - `compaction.go`: `Compact` takes a `Request`; the split turn's `<turn-request>`; the reminder after the file
+      lists; `summariseFitting`, the ladder, and `errTooLarge`, wrapping `llm.ErrContextOverflow`; `summarise` cleans
+      every reply;
+    - `LICENSE.opencode`, opencode's licence word for word; `NOTICE` gains opencode's entry.
+  - `acpserver`: `Options.CompactionPrompts`; `runCompaction` passes the session's mode and the prompts, so `/compact`,
+    `_gobble/compact` and the automatic compaction each take them.
+  - `internal/cli`: the four ids in `promptIDs`, set through `compaction.Prompts.Set`, which checks them; the agent
+    given them; `gobble personality check` counts every file taken.
+- **Decisions made inside the entry:**
+  - **an outer `<summary>` block around a reply is unwrapped** with the scratchpad's removal, as grok-build's
+    `format_compact_summary` does: a model that answers in the tags its own training asks for would otherwise have them
+    escaped into the summary as text;
+  - **the ladder's shares round up,** so each step leaves out at least one more result than the last; a step that
+    would leave out no more is skipped, and with no tool result every step is, so the request fails at once;
+  - **the reminder's todo list is rendered by `compaction`,** as `/todos` renders it, since `compaction` is a rule-1
+    package and does not import `acpserver`;
+  - **an override replaces its whole text:** the legacy sentence is gobble's update prompt's, not added to a user's.
+- **Tests,** new:
+  - `compaction/summary_test.go`: `TestSummaryPrompts` (the first prompt's sections in order, the two additions, the
+    update's block and the legacy sentence for a Pi summary only, the system prompt); `TestTurnRequest`;
+    `TestReminder` (both, neither, an emptied list, plan only; the last list wins; a todo's tag made inert);
+    `TestCleanSummary` (the scratchpad, two of them, an outer block, a later scratchpad kept, an unclosed one asked for
+    again; each tag, from the test's own list); `TestSummaryLadder` (the omissions 1, 2, 5, 10 of ten, from the middle
+    outward, the note on retries only, too large still, no tool result, one, three rounded up, and another error not
+    retried); `TestPromptOverrides` (each prompt replaced, `CheckPrompt`'s five refusals);
+  - `acpserver/compaction_summary_test.go`: `TestCompactionModeAndPrompts`, plan mode's reminder and the user's
+    prompts in a live session;
+  - `internal/cli`: `TestCompactionPromptReachesModel`, a `compaction.system.md` reaching the model through
+    `/compact` in the line view.
+- **Existing tests changed,** none loosened: `TestContext`, `TestCompactRequestAndFiles`, `TestIterativeUpdate` and
+  `TestSplitTurnMerge`, to the new texts, the request tests now requiring the whole prompt in its place;
+  `TestProjectMatchesPi`, and `TestPiFixtureContext` in `acpserver`, which the entry did not list and which reads the
+  same goldens, each with Pi's wrapper given as gobble's; `TestExtensionCompact` through `compaction.SummaryText`;
+  `TestAutoCompactPauseSession`, to the ladder's error; `TestLoadPrompts`, taking a compaction prompt and refusing an
+  update with no `<previous-summary>`; `TestPersonalityReset`, refusing `prompts/compaction.nope`; the compaction tests'
+  calls to `Compact`, a `Request`.
+- **Negatives,** 47 of 47 caught on a scratch copy after control runs: the legacy sentence dropped or given to every
+  previous summary; either addition renamed; the wrapper-tag sentence dropped; the first sentence dropped; an override
+  stored at the wrong id, untrimmed, or unchecked for its update block, its closing tags or its id; the user's summary,
+  system and turn-prefix prompts ignored; the update always as for a new summary; a tag missing from the inert list,
+  its closing form not made inert; one scratchpad removed only, an unclosed one kept, an outer block kept; a todo status
+  misread, the first list taken, its tags left live; plan mode only with a list; Pi's wrapper restored; the Original
+  Request section back; omissions not written; the todo list not read; the turn request left live or dropped; the
+  reminder dropped; a share of the ladder dropped; rounding down; a repeated share not skipped; the note dropped; the
+  final error not an overflow; any error retried; the order not from the middle, or the later first; replies not
+  cleaned; the system prompt not the request's; plan mode or the prompts not passed by `acpserver`, or not kept by
+  `New`; the ids not offered, unchecked, or not given to the agent.
+  - The first run stopped at a mutation whose anchor did not match: `prompts.go` held two literal zero-width spaces
+    where the escape was meant, now written `\u200b`. The next caught 44 of 48: two mutations did not build and were
+    rewritten; `TestCleanSummary` read the code's own tag list, so a tag dropped from it went unseen, and it now has
+    its own; rounding down was unseen at one and ten results, and a case of three now sees it; and the ladder's check
+    for no tool results never decided anything, the skip of a repeated share covering it, so it was removed rather
+    than tested. The whole set was run on the final code: 47 of 47.
+- **Gates:**
+  - the pre-add check on the 16 changed `.go` files, clean;
+  - lint for linux, darwin and windows, `0 issues.` each with `CGO_ENABLED=0`;
+  - the macOS laptop's `CGO_ENABLED=1 go test -race -count=1 ./...`, 34 packages ok, no race report;
+  - `make preflight` on macOS: passed;
+  - **not run:** Windows `go test ./...` and `-race`, the second Linux machine's `-race`, and Windows and WSL `make
+    preflight`, on the owner's machines; and a compaction against a live model, whose summaries the owner's use will
+    show.
+- **Next:** F5-5, the small model, made executable on the owner's word; the SDK retries' status waits for
+  go-llmprovider-sdk issue 3; the first-byte deadline for F4-1b.

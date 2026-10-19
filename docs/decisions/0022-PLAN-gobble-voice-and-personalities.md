@@ -347,6 +347,8 @@ Six phases, each one commit with its own execution record and gates, in this ord
    - **Chosen ("Defer them to F5-4"):** P5 makes the system prompt's `tools` and `rules` sections and each built-in tool's description overridable; F5-4 adds the compaction prompts' ids and checks when it writes the new template. Step 2 is annotated; D15 is amended in place, dated; 0005-PLAN's "F5-4, refined" gains item 8.
    - **Not chosen:** ids for today's four prompts now, checked as not empty, with no placeholder, and the update prompt keeping its `<previous-summary>` mention; F5-4 would then keep, map or retire them, and users' files with them.
    - No file is added to the phase's scope; `compaction` leaves it.
+   - *Settled 2026-10-18 by 0005-PLAN F5-4 decision 8: the four compaction prompt ids join `promptIDs`, checked by
+     `compaction.CheckPrompt`.*
 
 **P5 — C: every text overridable (2026-10-18).**
 

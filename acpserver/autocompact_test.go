@@ -484,7 +484,7 @@ func TestAutoCompactPauseSession(t *testing.T) {
 	}
 	err := h.prompt(id, "three")
 	_, text := errText(t, err)
-	if !strings.HasPrefix(text, "the context is over the model's window, and automatic compaction is paused after it failed: Summarization failed: llm: context overflow") ||
+	if !strings.HasPrefix(text, "the context is over the model's window, and automatic compaction is paused after it failed: the conversation is too large to summarise with this model: start a new session, or choose a model with a larger window") ||
 		len(h.summaries()) != 1 {
 		t.Fatalf("paused overflow: %q, %d summaries; want the paused error and no summary asked", text, len(h.summaries()))
 	}

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"github.com/maccavelli/gobble-cli/compaction"
 	"github.com/maccavelli/gobble-cli/personality"
 	sysprompt "github.com/maccavelli/gobble-cli/prompt"
 	"github.com/maccavelli/gobble-cli/tool/builtin"
@@ -64,11 +65,11 @@ const (
 )
 
 // promptIDs are every prompt a file under personalities/prompts may
-// replace: the tools and rules sections, and each built-in tool's
-// description as tool.<name>, powershell's on every host. Compaction's
-// prompts join with 0005-PLAN F5-4 (0022-PLAN P5's deviation 1).
+// replace: the tools and rules sections, compaction's prompts (0005-PLAN
+// F5-4 decision 8), and each built-in tool's description as tool.<name>,
+// powershell's on every host.
 func promptIDs() []string {
-	ids := []string{promptTools, promptRules}
+	ids := append([]string{promptTools, promptRules}, compaction.PromptIDs()...)
 	names := builtin.Names()
 	if !slices.Contains(names, "powershell") {
 		names = append(names, "powershell")
@@ -80,11 +81,14 @@ func promptIDs() []string {
 }
 
 // promptOverrides are the user's model-facing texts, by prompt id, each
-// checked: a section by prompt.CheckSection, a description by
-// builtin.CheckDescription with o's limits.
+// checked: a section by prompt.CheckSection, a compaction prompt by
+// compaction.CheckPrompt, a description by builtin.CheckDescription with
+// o's limits.
 type promptOverrides struct {
 	sections     map[string]string
 	descriptions map[string]string // by tool name, the template
+	compaction   compaction.Prompts
+	count        int // the files taken
 }
 
 // loadPrompts reads dir's <id>.md files. A file with an id gobble does not
@@ -123,6 +127,15 @@ func loadPrompts(dir string, o builtin.Options) (promptOverrides, []error) {
 				continue
 			}
 			out.descriptions[name] = text
+			out.count++
+			continue
+		}
+		if slices.Contains(compaction.PromptIDs(), id) {
+			if err := out.compaction.Set(id, text); err != nil {
+				errs = append(errs, fmt.Errorf("prompt %s: %w", path, err))
+				continue
+			}
+			out.count++
 			continue
 		}
 		if err := sysprompt.CheckSection(id, text); err != nil {
@@ -130,6 +143,7 @@ func loadPrompts(dir string, o builtin.Options) (promptOverrides, []error) {
 			continue
 		}
 		out.sections[id] = strings.TrimSpace(text)
+		out.count++
 	}
 	return out, errs
 }
@@ -248,7 +262,7 @@ func (*PersonalityCheckCmd) Run(e *runEnv) error {
 			changed++
 		}
 	}
-	fmt.Fprintf(&b, "%d problems; %d personalities yours or changed, %d prompts\n", len(errs), changed, len(prompts.sections)+len(prompts.descriptions))
+	fmt.Fprintf(&b, "%d problems; %d personalities yours or changed, %d prompts\n", len(errs), changed, prompts.count)
 	if err := e.out.Result([]byte(b.String())); err != nil {
 		return err
 	}

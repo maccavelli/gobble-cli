@@ -88,6 +88,9 @@ type Preparation struct {
 	previousSummary string
 	files           fileOps
 	reserve         int
+	// todos is the path's last todo list, for the reminder (0005-PLAN F5-4
+	// decision 5).
+	todos string
 }
 
 // Prepare finds what a compaction of path summarises (Pi's
@@ -119,6 +122,7 @@ func Prepare(path []session.Entry, s Settings) (*Preparation, error) {
 		previousSummary:  previous,
 		files:            newFileOps(),
 		reserve:          s.ReserveTokens,
+		todos:            todoList(path),
 	}
 	if cut.split {
 		p.turnPrefix = messages(proj[cut.turnStart:cut.first])
@@ -287,57 +291,172 @@ type Result struct {
 }
 
 // Compact asks the model for the summary (Pi's compact): one summary of
-// the history, updating the previous one; for a split turn, a second
-// summary of the turn's start, merged; then the file lists.
-func Compact(ctx context.Context, p *Preparation, m Model, instructions string) (Result, error) {
+// the history, updating the previous one; for a split turn, the turn's
+// request word for word and a second summary of the turn's start, merged;
+// then the file lists and the reminder (0005-PLAN F5-4).
+func Compact(ctx context.Context, p *Preparation, m Model, r Request) (Result, error) {
 	var (
 		summary string
 		usage   llm.Usage
 	)
+	history := func(conv string) string { return historyPrompt(conv, r, p.previousSummary) }
 	if p.SplitTurn && len(p.turnPrefix) > 0 {
-		history := p.previousSummary
-		if history == "" {
-			history = "No prior history."
+		before := p.previousSummary
+		if before == "" {
+			before = "No prior history."
 		}
 		if len(p.toSummarize) > 0 {
-			conv := serialize(p.toSummarize)
-			text, u, err := summarise(ctx, m, historyPrompt(conv, instructions, p.previousSummary), "Summarization",
-				replyCap(p.reserve*4/5, m.MaxTokens), utf8.RuneCountInString(conv))
+			text, u, err := summariseFitting(ctx, m, r.system(), p.toSummarize, history, "Summarization", replyCap(p.reserve*4/5, m.MaxTokens), true)
 			if err != nil {
 				return Result{}, err
 			}
-			history, usage = text, u
+			before, usage = text, u
 		}
-		prefixPrompt := "# Conversation\n" + serialize(p.turnPrefix) + "\n\n# Instructions\n" + turnPrefixPrompt
-		text, u, err := summarise(ctx, m, prefixPrompt, "Turn prefix summarization", replyCap(p.reserve/2, m.MaxTokens), 0)
+		prefix := func(conv string) string { return "# Conversation\n" + conv + "\n\n# Instructions\n" + r.turnPrefix() }
+		text, u, err := summariseFitting(ctx, m, r.system(), p.turnPrefix, prefix, "Turn prefix summarization", replyCap(p.reserve/2, m.MaxTokens), false)
 		if err != nil {
 			return Result{}, err
 		}
-		summary = history + "\n\n---\n\n**Turn Context (split turn):**\n\n" + text
+		summary = before + turnRequest(p.turnPrefix) + "\n\n---\n\n**Turn Context (split turn):**\n\n" + text
 		usage = addUsage(usage, u)
 	} else {
-		conv := serialize(p.toSummarize)
-		text, u, err := summarise(ctx, m, historyPrompt(conv, instructions, p.previousSummary), "Summarization",
-			replyCap(p.reserve*4/5, m.MaxTokens), utf8.RuneCountInString(conv))
+		text, u, err := summariseFitting(ctx, m, r.system(), p.toSummarize, history, "Summarization", replyCap(p.reserve*4/5, m.MaxTokens), true)
 		if err != nil {
 			return Result{}, err
 		}
 		summary, usage = text, u
 	}
 	d := p.files.lists()
-	return Result{Summary: summary + d.format(), FirstKeptEntryID: p.FirstKeptEntryID, TokensBefore: p.TokensBefore, Usage: usage, Details: d}, nil
+	return Result{Summary: summary + d.format() + reminder(p.todos, r.PlanMode), FirstKeptEntryID: p.FirstKeptEntryID,
+		TokensBefore: p.TokensBefore, Usage: usage, Details: d}, nil
 }
 
-// historyPrompt is Pi's summary request: the serialised conversation, the
+// turnRequest is a split turn's request, its first message, word for word
+// in a block of its own (0005-PLAN F5-4 decision 4), or nothing when it
+// has no text.
+func turnRequest(prefix []*session.Message) string {
+	if len(prefix) == 0 {
+		return ""
+	}
+	m := Convert(prefix[0])
+	if m == nil {
+		return ""
+	}
+	blocks, err := m.Blocks()
+	if err != nil {
+		return ""
+	}
+	t := textOf(blocks, "")
+	if t == "" {
+		return ""
+	}
+	return "\n\n<turn-request>\n" + neutralize(t) + "\n</turn-request>"
+}
+
+// The ladder of a summary request too large for the model's window
+// (0005-PLAN F5-4 decision 7): the shares, in percent, of its tool results
+// left out in turn (goose), and the note each retry's prompt starts with
+// (Kilo's idea, in gobble's words).
+var omitShares = []int{10, 20, 50, 100}
+
+const omittedNote = "Some older tool results were removed from this request to fit the model's window."
+
+// errTooLarge is a summary request still over the model's window with
+// every tool result left out, or none to leave out. It wraps
+// llm.ErrContextOverflow, so the automatic trigger pauses for the session
+// (0005-PLAN F5-2 decision 11).
+type errTooLarge struct{}
+
+func (errTooLarge) Error() string {
+	return "the conversation is too large to summarise with this model: start a new session, or choose a model with a larger window"
+}
+func (errTooLarge) Unwrap() error { return llm.ErrContextOverflow }
+
+// summariseFitting asks for the summary of msgs, prompt being the request
+// for their serialised text. Over the model's window, it asks again with
+// more of their tool results left out, taken from the middle outward, each
+// time its prompt led by omittedNote. floor applies F5-2's summary floor.
+func summariseFitting(ctx context.Context, m Model, system string, msgs []*session.Message, prompt func(string) string,
+	label string, maxTokens int, floor bool) (string, llm.Usage, error) {
+	order := middleOut(toolResults(msgs))
+	var usage llm.Usage
+	last := -1
+	for step := -1; step < len(omitShares); step++ {
+		k := 0
+		// A share that leaves out no more than the last request did is
+		// skipped: with no tool results, every one is.
+		if step >= 0 {
+			if k = (len(order)*omitShares[step] + 99) / 100; k == last {
+				continue
+			}
+		}
+		omit := map[int]bool{}
+		for _, i := range order[:k] {
+			omit[i] = true
+		}
+		conv := serializeOmitting(msgs, omit)
+		text := prompt(conv)
+		if step >= 0 {
+			text = omittedNote + "\n\n" + text
+		}
+		source := 0
+		if floor {
+			source = utf8.RuneCountInString(conv)
+		}
+		summary, u, err := summarise(ctx, m, system, text, label, maxTokens, source)
+		usage = addUsage(usage, u)
+		if !errors.Is(err, llm.ErrContextOverflow) {
+			return summary, usage, err
+		}
+		last = k
+	}
+	return "", usage, errTooLarge{}
+}
+
+// toolResults are the indexes of msgs' tool results.
+func toolResults(msgs []*session.Message) []int {
+	var out []int
+	for i, m := range msgs {
+		if m.Role == session.RoleToolResult {
+			out = append(out, i)
+		}
+	}
+	return out
+}
+
+// middleOut is idx in the order they are left out: the middle first, then
+// outward, the earlier first at an equal distance (goose).
+func middleOut(idx []int) []int {
+	out := slices.Clone(idx)
+	n := len(out)
+	pos := map[int]int{}
+	for p, i := range out {
+		pos[i] = p
+	}
+	slices.SortStableFunc(out, func(a, b int) int {
+		da, db := abs(2*pos[a]-(n-1)), abs(2*pos[b]-(n-1))
+		if da != db {
+			return da - db
+		}
+		return pos[a] - pos[b]
+	})
+	return out
+}
+
+func abs(x int) int {
+	if x < 0 {
+		return -x
+	}
+	return x
+}
+
+// historyPrompt is the summary request: the serialised conversation, the
 // previous summary when there is one, then the first or the update prompt,
 // and the user's focus.
-func historyPrompt(conv, instructions, previous string) string {
-	base := summarizationPrompt
-	if previous != "" {
-		base = updatePrompt
-	}
-	if instructions != "" {
-		base += "\n\nAdditional focus: " + instructions
+func historyPrompt(conv string, r Request, previous string) string {
+	base := r.base(previous)
+	if r.Instructions != "" {
+		base += "\n\nAdditional focus: " + r.Instructions
 	}
 	var b strings.Builder
 	b.WriteString("<conversation>\n" + conv + "\n</conversation>\n\n")
@@ -359,19 +478,21 @@ func replyCap(share, maxTokens int) int {
 }
 
 // summarise asks for a summary, capped at maxTokens, of source characters
-// of history, and reads the whole reply. A reply cut at the output limit,
-// or one that calls a tool, is not a summary. An empty one, or, of
-// floorSource characters or more, one shorter than floorChars, is asked for
-// once more, then refused (0005-PLAN F5-2 decision 6). The usage is every
-// attempt's.
-func summarise(ctx context.Context, m Model, prompt, label string, maxTokens, source int) (string, llm.Usage, error) {
+// of history, and reads the whole reply, without a leading scratchpad and
+// with gobble's tags made inert (0005-PLAN F5-4 decision 6). A reply cut
+// at the output limit, or one that calls a tool, is not a summary. An
+// empty one, or, of floorSource characters or more, one shorter than
+// floorChars, is asked for once more, then refused (0005-PLAN F5-2
+// decision 6). The usage is every attempt's.
+func summarise(ctx context.Context, m Model, system, prompt, label string, maxTokens, source int) (string, llm.Usage, error) {
 	var usage llm.Usage
 	for attempt := 1; ; attempt++ {
-		text, u, err := summariseOnce(ctx, m, prompt, label, maxTokens)
+		text, u, err := summariseOnce(ctx, m, system, prompt, label, maxTokens)
 		usage = addUsage(usage, u)
 		if err != nil {
 			return "", usage, err
 		}
+		text = neutralize(cleanSummary(text))
 		n := utf8.RuneCountInString(strings.TrimSpace(text))
 		switch {
 		case n == 0 && attempt == 2:
@@ -386,9 +507,9 @@ func summarise(ctx context.Context, m Model, prompt, label string, maxTokens, so
 }
 
 // summariseOnce sends one summary request and reads the whole reply.
-func summariseOnce(ctx context.Context, m Model, prompt, label string, maxTokens int) (string, llm.Usage, error) {
+func summariseOnce(ctx context.Context, m Model, system, prompt, label string, maxTokens int) (string, llm.Usage, error) {
 	req := &llm.Request{Model: m.Model, Thinking: m.Thinking, MaxTokens: maxTokens, Messages: []llm.Message{
-		{Role: llm.RoleSystem, Content: []llm.Content{{Type: llm.ContentText, Text: systemPrompt}}},
+		{Role: llm.RoleSystem, Content: []llm.Content{{Type: llm.ContentText, Text: system}}},
 		{Role: llm.RoleUser, Content: []llm.Content{{Type: llm.ContentText, Text: prompt}}},
 	}}
 	var (
