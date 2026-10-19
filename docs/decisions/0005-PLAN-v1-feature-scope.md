@@ -7502,3 +7502,126 @@ step went on:
 - **Not done, and why:** the eight options, the three stores, `/permissions`, a rejection's feedback and the
   question's provenance are F6-2b's; the 0008-MADR note on `[f]` stays proposed until then. The log carries a shell
   call's whole command, as decision 12 says, as the session file already does.
+
+**2026-10-19 — F6-2b made executable: the questions and the stores** (the owner's word of 2026-10-19, "committed,
+proceed", after F6-2a's commit `6a7e9da`). *Approved as written on the owner's word of 2026-10-19 ("Approve as
+written"), with A1 and B1, the owner's choices of the same day.* It carries out decisions 9 to 13 of the F6-2 entry
+above, as written there, and adds what they leave open: decisions A to H below.
+
+**The facts,** measured on 2026-10-19 against `main` `6a7e9da` and acp-go-sdk2 `v1.16.0`:
+
+- **The question** offers `allow_once` and `reject_once` (`acpserver/prompt.go`, `acpPolicy.ask`), with
+  `_meta.gobble.limit` or `_meta.gobble.repeated` when one applies. A decline is "The user declined this call, so it
+  did not run." with the decision's `Reason` after it (`agent/agent.go:804-809`).
+- **The answer:** `RequestPermissionResponse` is `{_meta, outcome}` (acp-go-sdk2 `v1.16.0` `types_gen.go:11376-11385`).
+  acpclient maps `PermissionAnswer{OptionID}` to the selected option and sends no `_meta`
+  (`acpclient/conn.go:78`, `:441-466`).
+- **The line view** shows ACP kinds as `[y] [a] [n] [N]`, or, when two options share a kind, each option by its name
+  as `[1]` to `[9]`, then `[c] cancel`, and reads one key in raw mode (`internal/cli/permission.go:42-72`, `:88-100`,
+  `:112-137`). Eight options with four kinds repeated take the numbered form.
+- **The session's engine** is one layer, the settings' rules, built when the session starts and never changed
+  (`acpserver/rules.go:33-36`; `acpserver/agent.go:411`, `:923`); `permission` already names the `project store` and
+  `session` layers (`permission/rules.go:33-38`).
+- **The stores to mirror:** `permission.TrustStore` keeps `trust.json` by real path, locked with
+  `filelock.EditPolicy` for every change, sorted, `0600` (`permission/trust.go:130-250`).
+- **The settings editor** sets, uncomments and removes a scalar key in place by line operations
+  (`internal/config/edit.go:283-625`); it has no way to append to a list or remove one item, and refuses the rules key
+  as a value (`:133-166`). The template carries the key commented, `# permissions:` / `#   rules: []`.
+- **Commands** are a name-to-handler table and an advertised list with hints (`acpserver/commands.go:28-44`,
+  `:110-130`); every reply a person reads is a catalog key, and `/trust`'s six are left to boring by the other
+  built-ins (`personality/keys.go:73-79`, 0022-MADR D17).
+- **Matching an exact subject:** a path pattern goes through `filepath.ToSlash`, which on Windows turns an escaping
+  `\` into `/`, and its leading `/` is stripped before `fsx.CompileGlob` (`permission/rules.go:211-218`, `:97`), so
+  `/README.md` matches a `README.md` at any depth, not the root's alone, although gitignore's leading `/` anchors.
+  opencode's wildcard has no escape: a `\` in a pattern becomes `/` (`permission/rules.go:107-114`). A subject
+  holding `*`, `?`, `[` or `{` cannot be written as a rule that matches it alone.
+
+**The decisions:**
+
+A. **A subject a rule cannot match exactly** (*the owner's choice of 2026-10-19: A1, "Once only"*). An "always" saves the call's subjects as they were
+   matched (decision 9), but a command such as `find . -name '*.go'`, or a path holding `*`, `?`, `[` or `{`, read as
+   a pattern, would cover more than the call:
+   - **A1, recommended:** for such a call, the question offers the two "once" options alone, as a limit's does, and
+     the line view says why. No grammar changes; F6-3, which splits a command into sub-commands, revisits commands.
+     Cost: no "always" for a command with a glob in it; a rule can still be added by hand.
+   - **A2:** a `\` escapes `*`, `?`, `[`, `{` and `\` in both matchers, and the saved rule escapes them. Cost: a
+     grammar change to F6-2a's matchers, and on Windows a pattern written with `\` before one of those characters
+     (`src\*.go`) changes meaning.
+   - Not offered: saving the subject as a pattern, which would make `rm -rf *` allow every `rm -rf`.
+B. **The project store and trust** (*the owner's choice of 2026-10-19: B1, "Always applies"*):
+   - **B1, recommended:** `permissions.json` applies whether or not the project is trusted. The user wrote it, in the
+     user's config directory; trust gates the project's own files (F6-1 decision 1).
+   - **B2:** it applies only to a trusted project, as the project's `settings.yaml` does. Cost: an untrusted
+     project's "always for this project" answers are saved and then ignored.
+C. **A saved rule's form.** A path inside the project root is written from the root with a leading `/`
+   (`allow: edit(/src/a.go)`, `/README.md`), outside it absolute; a command is written whole; a tool with no subject
+   by its name. To make the leading `/` anchor as gitignore's does, the matcher keeps a pattern's leading `/`
+   (F6-2a's matcher stripped it; the fix is in step 1, with its test). An "always" for a call with paths outside the
+   roots also saves an `external_directory` rule for each, since that rule asked; a "never" saves the tool's rule
+   alone, since denying the directory would deny every tool there. A "never" for a tool with no subject is
+   `deny: <tool>`, which hides the tool from the next request on (decision 6); the question's option name says so.
+D. **The options,** each its own id and name, in this order: `allow_once` "Allow once"; `allow_session` "Allow for
+   this session"; `allow_project` "Allow for this project"; `allow_always` "Allow everywhere"; `reject_once` "Reject";
+   `reject_session` "Reject for this session"; `reject_project` "Reject for this project"; `reject_always` "Reject
+   everywhere". The kinds are ACP's (`allow_always` and `reject_always` for the three scopes each). A limit's
+   question, a repeated call's, and decision A's offer `allow_once` and `reject_once` alone. `AllowOnceID` is
+   unchanged, so `--yes` is unchanged.
+E. **Where a rule goes, and when it applies:**
+   - **session:** a rule in the session's own layer, in memory, applied from the next call on, gone when the session
+     ends (decision 10);
+   - **project:** appended to `<config>/permissions.json` under the root's real path, an exact match (no parent
+     lookup, unlike trust), and to the running session's store layer; another running session of the project sees
+     it when it next starts;
+   - **everywhere:** appended to the global `settings.yaml`'s `permissions.rules` in place, uncommenting the template's
+     block when the key is absent, and inserted at the end of the running session's global rules (the F6-2 entry's
+     decision 4 refinement). A failed save is told to the person, the call runs or not as answered, and the rule
+     stays in the session's layer.
+   The session's engine becomes four layers, the settings' rules split at their source (global, project, `--set`),
+   the store's and the session's, read under the agent's lock at each call.
+F. **Feedback** (decision 11): the answer's `_meta.gobble.feedback`, a string cut to 2 KiB, follows the decline as
+   "The user declined this call, so it did not run. The user said: <feedback>". It is read on a reject option only.
+   The line view's `[f] deny and say why` restores the terminal, reads one line, and answers `reject_once` with it;
+   an empty line is a plain reject. acpclient's `PermissionAnswer` gains `Feedback`.
+G. **Provenance** (decision 12): the question's `_meta.gobble.rule` is `{"rule": "<effect>: <rule>", "from":
+   "<source>"}`, the deciding rule and its source as the log writes them. The line view does not show it.
+H. **`/permissions`** (decision 13), its replies catalog keys (`permissions.*`) that the built-ins other than boring
+   leave to boring, as `/trust`'s are:
+   - `/permissions` lists every rule in force, numbered from 1 in evaluation order, each with its source, after a
+     line naming the defaults, then gobble's limits, which no rule lifts;
+   - `/permissions remove N` removes a session rule, a store rule (rewriting `permissions.json` under its lock) or a
+     global-file rule (removing its item in place, keeping comments), and refuses a trusted project's, `--set`'s and
+     the defaults', naming where each is set;
+   - `/permissions allow|ask|deny <rule> [session|project|global]` adds one, the session by default, checked by
+     `permission.ParseSpec`, with the reply naming where it went.
+
+**F6-2b's steps:**
+
+1. **`permission`:** the leading `/` kept (decision C), with its test; `ExactPattern` for a path and a command, and
+   whether a subject can be written exactly (decision A); `PermissionStore` over `permissions.json` (`Load`,
+   `Rules(root)`, `Add`, `Remove`), locked, sorted, `0600`, refusing nothing but an unreadable file.
+2. **`internal/config`:** `AppendRule` and `RemoveRule(file, index)`, editing the global file in place, uncommenting
+   the template block when the key is absent; their tests over the shipped template and over a hand-written list.
+3. **`acpserver`:** the four-layer engine under the lock; the options of decision D and their saves (decision E);
+   feedback (F); `_meta.gobble.rule` (G); `/permissions` (H) and its catalog keys; `SessionSettings` and `Options`
+   gain the store and the global-file save, as `TrustOptions` does.
+4. **`acpclient`:** `PermissionAnswer.Feedback`, sent as `_meta.gobble.feedback`.
+5. **`internal/cli`:** the line view's `[f]`; the store and the global save given to the agent; print mode
+   unchanged.
+6. **`personality`:** the `permissions.*` keys in boring's catalog, left to boring by the others.
+7. **Records:** this plan's execution record; the 0005-MADR rows and 0008-MADR's note on `[f]` marked built;
+   `docs/README.md`; `docs/architecture.md`; the root README.
+
+**F6-2b's tests,** each seen failing on a scratch copy: each option's save, the rule's form and where it lands, and
+its effect on the next call of the same turn; the "once" pair for a limit, a repeated call and decision A's subjects;
+`external_directory` saved with an "always"; a "never" hiding a subject-less tool; `permissions.json`'s shape, mode,
+lock and exact-root lookup; the global file appended and an item removed with the comments intact, from the template
+and from a hand-written list; feedback reaching the model, cut, and ignored on an allow; `_meta.gobble.rule`;
+`/permissions` listing, removing each removable kind and refusing the rest, and adding to each scope; the line view's
+eight numbered options and `[f]`; decision B as chosen.
+
+**F6-2b's gates:** as F6-2a's: the pre-add check, lint for three platforms, `go test` and the race gate and `make
+preflight` on macOS, the Linux machine and the Windows laptop, the identifier scan.
+
+**Not taken:** opencode's per-tool "always" patterns (an arity prefix for a command), which F6-3 weighs with its
+sub-commands; a parent lookup for the store, which would let one answer cover every project below a directory;
+showing `_meta.gobble.rule` in the line view, which F6-4's modes may want.
