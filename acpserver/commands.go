@@ -39,6 +39,7 @@ var commands = []command.Command{
 	{Name: "fork", Description: "Start a new session from before an earlier message", Hint: "[entry]"},
 	{Name: "clone", Description: "Start a new session from a copy of this one"},
 	{Name: "todos", Description: "Show the todo list"},
+	{Name: cmdPersonality, Description: "Show or set the personality", Hint: "[boring|dry|snarky|bombastic]"},
 }
 
 // availableCommands is the commands as ACP lists them, then each template
@@ -63,11 +64,14 @@ func availableCommands(templates []sysprompt.Template) []acp.AvailableCommand {
 }
 
 // cmdTurn is one command's answer: its updates, and the response's _meta.
+// voice is the session's as the command runs, and after a switch it makes
+// (0022-PLAN P3).
 type cmdTurn struct {
-	s    *liveSession
-	conn *acp.AgentSideConnection
-	out  *updates
-	meta map[string]any
+	s     *liveSession
+	conn  *acp.AgentSideConnection
+	out   *updates
+	meta  map[string]any
+	voice *personality.Voice
 }
 
 func (t *cmdTurn) say(text string) { t.out.send(acp.UpdateAgentMessageText(text)) }
@@ -88,11 +92,12 @@ const (
 	argError    = "error"
 	argTokens   = "tokens"
 	argProvider = "provider"
+	argNames    = "names"
 )
 
 // text is key's message in the session's voice (0022-PLAN P1).
 func (t *cmdTurn) text(key personality.Key, args personality.Args) string {
-	return t.s.voice.Text(key, args)
+	return t.voice.Text(key, args)
 }
 
 type handler func(ctx context.Context, t *cmdTurn, args string) error
@@ -112,6 +117,9 @@ func (a *Agent) handlers() map[string]handler {
 		"fork":     a.cmdFork,
 		"clone":    a.cmdClone,
 		"todos":    a.cmdTodos,
+		// /humor is hidden: not in commands (0022-PLAN P3).
+		cmdPersonality: a.cmdPersonality,
+		cmdHumor:       a.cmdHumor,
 	}
 }
 
@@ -120,7 +128,7 @@ func (a *Agent) handlers() map[string]handler {
 // runs in the turn Prompt claimed, so session/cancel stops it through
 // turnCtx.
 func (a *Agent) runCommand(turnCtx context.Context, s *liveSession, conn *acp.AgentSideConnection, name, args string) (acp.PromptResponse, error) {
-	t := &cmdTurn{s: s, conn: conn, out: newUpdates(turnCtx, conn, s.id)}
+	t := &cmdTurn{s: s, conn: conn, out: newUpdates(turnCtx, conn, s.id), voice: a.voice(s)}
 	h, ok := a.handlers()[name]
 	if !ok {
 		t.say(t.text(personality.CommandUnknown, personality.Args{argName: name}))
@@ -244,7 +252,7 @@ func (t totals) tokenLines(b *strings.Builder) {
 }
 
 func (a *Agent) cmdUsage(_ context.Context, t *cmdTurn, _ string) error {
-	t.say(a.usageText(t.s, t.s.voice, t.s.log.Entries()))
+	t.say(a.usageText(t.s, t.voice, t.s.log.Entries()))
 	return nil
 }
 
@@ -556,8 +564,9 @@ func (a *Agent) copySession(ctx context.Context, s *liveSession, path []session.
 }
 
 // startFrames are what a client needs before its first prompt, sent before
-// a session response (2026-10-01 amendment): the commands, the mode, and
-// the context's estimated use, the system prompt and the context. The
+// a session response (2026-10-01 amendment): the commands, the mode, the
+// context's estimated use, the system prompt and the context, and the
+// personality (0022-MADR D6). The
 // session's templates are found here, once (0005-PLAN F3-3).
 func (a *Agent) startFrames(ctx context.Context, conn *acp.AgentSideConnection, s *liveSession) error {
 	templates := a.templates(s)
@@ -570,6 +579,7 @@ func (a *Agent) startFrames(ctx context.Context, conn *acp.AgentSideConnection, 
 	out.send(acp.SessionUpdate{AvailableCommandsUpdate: &acp.SessionAvailableCommandsUpdate{SessionUpdate: "available_commands_update", AvailableCommands: availableCommands(templates)}})
 	out.send(modeUpdate(a.modeOf(s)))
 	out.send(a.contextUpdate(s, used))
+	out.notify(methodPersonality, a.personalityNotice(s))
 	return out.err
 }
 

@@ -101,6 +101,9 @@ type Options struct {
 	// config set does, for _gobble/set_auto_retry (0005-PLAN F5-1 decision
 	// 6). Nil writes nothing.
 	SaveSetting func(path, value string) error
+	// Personalities are the personalities a session may take, the
+	// built-ins and the user's (0022-PLAN P3). Nil is the built-ins.
+	Personalities *personality.Set
 }
 
 // Agent is gobble's acp.Agent.
@@ -123,6 +126,8 @@ type Agent struct {
 	settings   func(cwd string) SessionSettings
 	auth       AuthOptions
 	save       func(path, value string) error
+	// personalities are the personalities sessions may take.
+	personalities *personality.Set
 
 	mu       sync.Mutex
 	conn     *acp.AgentSideConnection
@@ -133,6 +138,9 @@ type Agent struct {
 	// unlisted are the stored sessions session/list leaves out, each
 	// logged once (0019-MADR D5).
 	unlisted map[acp.SessionId]bool
+	// insultsAccepted says the user agreed to a level-5 personality in this
+	// process (0022-MADR D10).
+	insultsAccepted bool
 }
 
 // liveSession is one open session: its log, the context rebuilt from it, the
@@ -188,8 +196,12 @@ type liveSession struct {
 	// templates are the prompt templates found when the session started
 	// (startFrames; 0005-PLAN F3-3).
 	templates []sysprompt.Template
-	// voice speaks the session's messages; nil is boring (0022-PLAN P1).
+	// voice speaks the session's messages; nil is boring (0022-PLAN P1). A
+	// switch changes it under Agent.mu (0022-PLAN P3).
 	voice *personality.Voice
+	// insultsAccepted is the bombasticAccepted setting the session started
+	// with (0022-MADR D10).
+	insultsAccepted bool
 }
 
 var (
@@ -202,7 +214,8 @@ var (
 func New(opts Options) *Agent {
 	a := &Agent{version: opts.Version, newID: opts.NewID, provider: opts.Provider, models: opts.Models, info: opts.ModelInfo,
 		override: opts.Override, tools: opts.Tools, store: opts.Store, now: opts.Now, mcp: opts.MCP, logger: opts.Logger, prompt: opts.Prompt,
-		settings: opts.Settings, auth: opts.Auth, save: opts.SaveSetting, sessions: map[acp.SessionId]*liveSession{}}
+		settings: opts.Settings, auth: opts.Auth, save: opts.SaveSetting, personalities: opts.Personalities,
+		sessions: map[acp.SessionId]*liveSession{}}
 	if a.logger == nil {
 		a.logger = slog.New(slog.DiscardHandler)
 	}
@@ -359,7 +372,7 @@ func (a *Agent) NewSession(ctx context.Context, p acp.NewSessionRequest) (acp.Ne
 	s := &liveSession{id: acp.SessionId(id), cwd: p.Cwd, dirs: dirs, log: log, tree: session.NewTree(nil),
 		think: cmp.Or(a.override.Thinking, ss.Thinking), model: cmp.Or(a.override.Model, a.models().Default), mode: modeDefault,
 		queue: sessionQueue(ss), compaction: ss.Compaction, cache: cacheOf(ss.CacheRetention), retry: ss.Retry,
-		autoCompactOff: ss.AutoCompactionOff, voice: a.voiceOf(ss)}
+		autoCompactOff: ss.AutoCompactionOff, voice: a.voiceOf(ss), insultsAccepted: ss.BombasticAccepted}
 	if len(forked) > 0 {
 		for _, e := range forked {
 			if err := log.Append(ctx, e); err != nil {
@@ -398,7 +411,8 @@ func oneLine(s string) string {
 
 // restore rebuilds a session's tree, context and choices from its entries,
 // its leaf on the last of them. The saved model is kept only when its
-// provider is the current one.
+// provider is the current one; the saved personality, when one has its
+// name (0022-MADR D6).
 func (a *Agent) restore(s *liveSession, entries []session.Entry) {
 	s.tree = session.NewTree(entries)
 	st := replayPath(entries, s.tree.Path())
@@ -406,6 +420,14 @@ func (a *Agent) restore(s *liveSession, entries []session.Entry) {
 	choice := a.models()
 	if st.model != "" && (choice.Provider == "" || st.provider == choice.Provider) {
 		s.model = st.model
+	}
+	if st.personality != "" {
+		v, err := a.newVoice(st.personality)
+		if err != nil {
+			a.logger.Warn("personality: the session's is not kept", slog.String("error", err.Error()))
+			return
+		}
+		s.voice = v
 	}
 }
 
@@ -465,6 +487,16 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 		text = strings.TrimLeftFunc(text, unicode.IsSpace)
 	}
 	expanded, isExpanded := a.expand(s, text)
+	// A session at level 5 asks first, unless the prompt chooses the voice
+	// (0022-MADR D10).
+	if !isCommand || isExpanded || (name != cmdPersonality && name != cmdHumor) {
+		if err := a.settleVoice(turnCtx, conn, s); err != nil {
+			if turnCtx.Err() != nil {
+				return cancelled(s)
+			}
+			return acp.PromptResponse{}, err
+		}
+	}
 	if isCommand && !isExpanded {
 		return a.runCommand(turnCtx, s, conn, name, args)
 	}
@@ -840,7 +872,7 @@ func (a *Agent) open(ctx context.Context, id acp.SessionId, cwd string, extra []
 	// The history's thinking level wins: restore sets it (0018-MADR D17).
 	s := &liveSession{id: id, cwd: cwd, dirs: dirs, log: log, think: thinkingOff, model: a.models().Default, mode: modeDefault,
 		queue: sessionQueue(ss), compaction: ss.Compaction, cache: cacheOf(ss.CacheRetention), retry: ss.Retry,
-		autoCompactOff: ss.AutoCompactionOff, voice: a.voiceOf(ss)}
+		autoCompactOff: ss.AutoCompactionOff, voice: a.voiceOf(ss), insultsAccepted: ss.BombasticAccepted}
 	a.restore(s, log.Entries())
 	// The run's override wins over the history's choice (0005-PLAN F4-2c).
 	if err := a.applyOverride(ctx, s); err != nil {

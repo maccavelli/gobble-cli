@@ -379,10 +379,13 @@ func (h *handler) SessionUpdate(_ context.Context, n acp.SessionNotification) er
 
 var _ acp.ExtensionMethodHandler = (*handler)(nil)
 
-// HandleExtensionMethod delivers gobble's _gobble/retry and
-// _gobble/compaction notifications to their session's callback, as
-// KindRetry and KindCompaction, and answers any other extension method
-// with -32601, which the SDK drops for a notification.
+// HandleExtensionMethod delivers gobble's _gobble/retry,
+// _gobble/compaction and _gobble/personality notifications to their
+// session's callback, as KindRetry, KindCompaction and KindPersonality,
+// and answers any other extension method with -32601, which the SDK drops
+// for a notification. A notification for an unknown session goes to the
+// session being created, as an update does: _gobble/personality comes
+// before session/new's response (0022-MADR D6).
 func (h *handler) HandleExtensionMethod(_ context.Context, method string, params json.RawMessage) (any, error) {
 	var (
 		id  acp.SessionId
@@ -396,6 +399,9 @@ func (h *handler) HandleExtensionMethod(_ context.Context, method string, params
 	case methodCompaction:
 		u.Kind = KindCompaction
 		id, u.Compaction, err = compactionOf(params)
+	case methodPersonality:
+		u.Kind = KindPersonality
+		id, u.Personality, err = personalityOf(params)
 	default:
 		return nil, acp.NewMethodNotFound(method)
 	}
@@ -404,6 +410,10 @@ func (h *handler) HandleExtensionMethod(_ context.Context, method string, params
 	}
 	h.mu.Lock()
 	on := h.sessions[id]
+	if on == nil && h.pending != nil {
+		on = h.pending
+		h.sessions[id] = on
+	}
 	h.mu.Unlock()
 	if on != nil {
 		on(u)

@@ -71,7 +71,7 @@ func (h *lineHarness) start(first Prompt) {
 	if cwd == "" {
 		cwd = acptest.Abs("/work")
 	}
-	ls := &lineSession{e: h.e, cwd: cwd, base: cwd, in: keysR, raw: h.raw, opts: display{voice: h.voice}}
+	ls := &lineSession{e: h.e, cwd: cwd, base: cwd, in: keysR, raw: h.raw, voice: h.voice}
 	go func() { h.done <- ls.run(first) }()
 	h.t.Cleanup(func() { keysW.Close() }) //nolint:errcheck,gosec // test cleanup
 }

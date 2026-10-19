@@ -57,6 +57,14 @@ var todaysText = map[Key]string{
 	CompactStart:            "Compacting the conversation…",
 	CompactFailed:           "Compaction failed: {error}",
 	CompactDone:             "Compacted from {tokens} tokens.",
+	// New with 0022-PLAN P3: boring's text is gobble's plainest.
+	PersonalityCurrent:  "Personality: {name}",
+	PersonalityList:     "Personalities:",
+	PersonalitySet:      "Personality: {name}",
+	PersonalityUnknown:  "Unknown personality {name}. The personalities are {names}.",
+	PersonalityDeclined: "Bombastic was not chosen; the personality stays {name}.",
+	HumorTwo:            "There is no humor level 2. The levels are 1, 3, 4 and 5.",
+	HumorUnknown:        "Unknown humor level {level}. The levels are 1, 3, 4 and 5.",
 }
 
 // The boring catalog holds today's text, word for word, for every key.

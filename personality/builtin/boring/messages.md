@@ -204,3 +204,31 @@ Compaction failed: {error}
 ## compact.done
 
 Compacted from {tokens} tokens.
+
+## personality.current
+
+Personality: {name}
+
+## personality.list
+
+Personalities:
+
+## personality.set
+
+Personality: {name}
+
+## personality.unknown
+
+Unknown personality {name}. The personalities are {names}.
+
+## personality.declined
+
+Bombastic was not chosen; the personality stays {name}.
+
+## humor.two
+
+There is no humor level 2. The levels are 1, 3, 4 and 5.
+
+## humor.unknown
+
+Unknown humor level {level}. The levels are 1, 3, 4 and 5.

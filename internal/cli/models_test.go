@@ -253,7 +253,11 @@ func TestModelOptionOffersListedModels(t *testing.T) {
 	said, offered, current := replies(&mu, updates)
 	// gobble's sessions speak dry (0022-PLAN P2): the reply is one of its
 	// variants, whole.
-	if want := cliVoice().Variants(personality.ModelSet, personality.Args{"model": "gpt-5-nano"}); !slices.Contains(want, said) {
+	dry, err := personality.New(personality.Options{Name: personality.Dry})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := dry.Variants(personality.ModelSet, personality.Args{"model": "gpt-5-nano"}); !slices.Contains(want, said) {
 		t.Fatalf("/model gpt-5-nano answered %q, want one of %q", said, want)
 	}
 	if !slices.Equal(offered, listed) || current != "gpt-5-nano" {

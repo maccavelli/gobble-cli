@@ -29,6 +29,8 @@ defaultThinkingLevel: off
 steeringMode: all
 followUpMode: all
 sessionDir: ""
+personality: dry
+bombasticAccepted: false
 compaction:
   enabled: true
   reserveTokens: 16384

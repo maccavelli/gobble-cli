@@ -68,6 +68,8 @@ func TestDefaultsEqualCode(t *testing.T) {
 		{"reserveTokens", s.Compaction.ReserveTokens, int64(compaction.DefaultSettings.ReserveTokens)},
 		{"thresholdPercent", s.Compaction.ThresholdPercent, int64(0)},
 		{"thresholdTokens", s.Compaction.ThresholdTokens, int64(0)},
+		{"personality", s.Personality, "dry"},
+		{"bombasticAccepted", s.BombasticAccepted, false},
 		{"useClientTerminal", s.Tools.Bash.UseClientTerminal, false},
 		{"maxTimeout", s.MaxTimeout().String(), "10m0s"},
 		{"startupWait", s.MCPStartupWait().String(), "10s"},
@@ -101,8 +103,8 @@ func TestKeysMatchSettings(t *testing.T) {
 			t.Errorf("%s: Value = %v %v, want %v", k.Path, v, ok, defaultValue(k))
 		}
 	}
-	if len(Keys) != 25 {
-		t.Errorf("%d keys, want 0018-MADR D14's 13, 0019-MADR D15's defaultProvider, 0021-MADR D3's cacheRetention, 0005-PLAN F4-2c's defaultModel, F5-1's five retry keys and F5-2's four compaction keys", len(Keys))
+	if len(Keys) != 27 {
+		t.Errorf("%d keys, want 0018-MADR D14's 13, 0019-MADR D15's defaultProvider, 0021-MADR D3's cacheRetention, 0005-PLAN F4-2c's defaultModel, F5-1's five retry keys, F5-2's four compaction keys and 0022-PLAN P3's two personality keys", len(Keys))
 	}
 }
 
@@ -198,6 +200,29 @@ func TestGlobalOnlyIgnoredFromProject(t *testing.T) {
 	want := []string{"shellCommandPrefix: " + textGlobalOnly, "shellPath: " + textGlobalOnly}
 	if !slices.Equal(got, want) {
 		t.Fatalf("diagnostics %q, want %q", got, want)
+	}
+}
+
+// A trusted project cannot choose the personality, nor agree to bombastic,
+// for whoever opens it; the global file can (0022-MADR D6, D10).
+func TestPersonalityGlobalOnly(t *testing.T) {
+	l := newLayout(t, "personality: snarky\n", "personality: bombastic\nbombasticAccepted: true\n")
+	r, ds := Resolve(Options{ConfigDir: l.config, Cwd: l.project, Trusted: trustAll})
+	if r.Settings.Personality != "snarky" || r.Settings.BombasticAccepted {
+		t.Fatalf("settings %+v", r.Settings)
+	}
+	var got []string
+	for _, d := range ds {
+		got = append(got, d.Path+": "+d.Text)
+	}
+	want := []string{"personality: " + textGlobalOnly, "bombasticAccepted: " + textGlobalOnly}
+	if !slices.Equal(got, want) {
+		t.Fatalf("diagnostics %q, want %q", got, want)
+	}
+	for _, key := range []string{"personality", "bombasticAccepted"} {
+		if err := Check(key, "true", LayerProject); err == nil || !strings.Contains(err.Error(), "only the global settings file can set this") {
+			t.Errorf("%s from a project: %v", key, err)
+		}
 	}
 }
 

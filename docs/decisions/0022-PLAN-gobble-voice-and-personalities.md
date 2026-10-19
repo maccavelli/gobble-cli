@@ -9,7 +9,7 @@ associated-madr: "0022-MADR-gobble-voice-and-personalities.md"
 
 Associated MADR: [0022-MADR-gobble-voice-and-personalities.md](0022-MADR-gobble-voice-and-personalities.md)
 
-*Approved 2026-10-18 ("committed, approved, proceed"); P1 complete 2026-10-18; P2 complete 2026-10-18, with deviation 1. Each later phase is made executable on the owner's word, with its facts measured then, as 0005-PLAN's sub-phases are.*
+*Approved 2026-10-18 ("committed, approved, proceed"); P1 complete 2026-10-18; P2 complete 2026-10-18, with deviation 1; P3 complete 2026-10-18. Each later phase is made executable on the owner's word, with its facts measured then, as 0005-PLAN's sub-phases are.*
 
 ## Goal
 
@@ -80,7 +80,7 @@ Six phases, each one commit with its own execution record and gates, in this ord
    - the `gobble.personality` entry, written at a switch and read on restore (D6);
    - the level-5 question as a permission request, when the client has not accepted it.
 5. **magic-cli-remote:** confirm on the phone app that `/personality` is offered with its hint, switches, and that the level-5 question arrives as a permission request; a gap is recorded in [0009-REPORT](../reports/0009-REPORT-magic-cli-remote-findings.md) for that repository, not worked around here.
-6. **User-made personalities:** `<config>/personalities/<name>/personality.md` and `messages.md`, validated as P5's overrides are; listed by `/attsonality`.
+6. **User-made personalities:** `<config>/personalities/<name>/personality.md` and `messages.md`, validated as P5's overrides are; listed by ~~`/attsonality`~~ `/personality` *(a slip of the 2026-10-18 rename, corrected in P3's record)*.
 7. **`acpclient`:** `KindPersonality` from `_gobble/personality`, so the CLI renders its own lines in the session's voice.
 8. **Records:** this plan's P3 record; `docs/README.md`.
 
@@ -224,3 +224,66 @@ Six phases, each one commit with its own execution record and gates, in this ord
   - **two lead call sites have no test:** the session failing to open and images refused. Each is one line, as the three tested ones are;
   - **the spinner's label comes from the session's voice in the line view;** under `boring`, `working`, as before.
 - **Next:** P3, choosing, and Snarky and Bombastic, made executable on the owner's word.
+
+**P3 — B: choosing, and Snarky and Bombastic (2026-10-18).**
+
+- **Ran as the plan wrote it,** with no deviation, on the owner's word "committed, proceed" after `9da7138`. Step 5, confirming on the phone app over magic-cli-remote, is the owner's and has not been run. P4 is next, made executable when the owner asks.
+- **What was built:**
+  - `personality`:
+    - `builtin/snarky/` and `builtin/bombastic/`: briefs from 0022-MADR's drafts, every key, 43 and 42 spinner lines; mild profanity for snarky, strong allowed for bombastic (the owner's answer 2);
+    - seven keys for the new commands, in every built-in: `personality.current`, `.list`, `.set`, `.unknown`, `.declined`, `humor.two`, `humor.unknown`;
+    - `Set` and `LoadSet`, the built-ins and the user's personalities (`Canonical`, `Names`, `Level`, `Infos`, `New`), with `CheckCatalog`; `Builtins` the four; `InsultLevel`, 5.
+  - `internal/config`: `personality` (string, `dry`) and `bombasticAccepted` (bool, false), both global-only and read when a session starts; the template's "Personality" section; the schema.
+  - `session`: `CustomPersonality`, the `gobble.personality` entry, its data `{"name"}`.
+  - `acpserver`:
+    - `/personality [name]`, advertised with the hint `[boring|dry|snarky|bombastic]`: with no name, each personality with its level and summary; with one, a switch. `/humor N`, hidden: handled, not advertised, not in `/help`;
+    - `_gobble/set_personality {sessionId, name}`, its result `{name, level}`: an unknown or empty name is -32602; a declined question is no error, and the result names the personality that stays;
+    - `get_state`'s `personality`;
+    - `_gobble/personality {sessionId, name, level}` with the start frames of `session/new`, `session/load` and `session/resume`, and at each switch;
+    - a switch is written as a `gobble.personality` entry; `restore` takes the path's last one when a personality still has that name, and otherwise logs it and keeps the settings'. The voice is a prompt section, so a switch reaches the model as a prompt patch at the next prompt;
+    - the level-5 question, D10's sentence, as a permission request with the tool call id `gobble-personality` (`InsultsCallID`) and two options, `Switch to <name>` (allow_always) and `No` (reject_once). It is asked by a switch to level 5, and before the first prompt of a session that starts or resumes at level 5, unless that prompt is `/personality` or `/humor`. A yes saves `bombasticAccepted: true` through `SaveSetting` and holds for the process's other sessions; a no, or no answer, leaves a switch unmade, and gives a session that started at level 5 `dry`, written and reported;
+    - `Options.Personalities` and `SessionSettings.BombasticAccepted`; the session's voice read and switched under the agent's lock, since a method may switch it while a turn reads it.
+  - `acpclient`: `KindPersonality`, with `Update.Personality{Name, Level}`; an extension notification for a session not yet known goes to the session being created, as a session update does, since `_gobble/personality` comes before `session/new`'s response.
+  - `internal/cli`:
+    - `--personality NAME`, completed from the personalities with their level and summary; a name no personality has is a usage error, exit 2;
+    - a session's personality: the flag's for the run, else the setting's, resolved against the personalities; a setting no personality has is a warning, and gives `dry`;
+    - `<config>/personalities/`, loaded once, a warning for each directory that is no personality, and given to the agent;
+    - the line view and print mode speak the voice the session starts with (`newLineSession`, `newPrintSink`), then follow `_gobble/personality`;
+    - the line view's question is its permission prompt, `[a] always  [n] deny`, the yes saved through `saveGlobalSetting`, which is the agent's `SaveSetting`;
+    - print mode answers the question no, with a warning on stderr.
+- **Decisions made inside the plan:**
+  - **One question, one mechanism.** Step 3's line-view question and print mode's fallback are step 4's permission request as each client answers it. The line view shows its permission prompt, so the question reads `… Switch to it?  [a] always  [n] deny  [c] cancel`, not D10's `[y/N]`, as every permission question in the line view reads (0008-MADR D16). Print mode answers no and warns. This also covers a session resumed at level 5 in print mode, which a check before the session opened could not see.
+  - **A declined start says nothing in the reply.** A session that started at level 5 and was declined goes on in `dry`, with nothing added to the reply: the client showed the question and the answer, and print mode's stdout is the model's reply alone. A declined `/personality bombastic` answers with `personality.declined`.
+  - **`--personality` is the setting for one run.** A new session takes it; a resumed session keeps its last `gobble.personality`, as D6 has a resumed session keep its voice. `--model` wins over a resumed session's model, but a personality switch is the user's own choice inside that session, so the flag does not undo it.
+  - **Names:** `/personality` and the method take a name as typed, or in lower case; the entry and the notification carry the canonical name, so `plain` and `normal` are written as `boring`.
+  - **`/humor` with no level** names the current personality.
+  - **A user's directory named for a built-in** (`personalities/dry/`) is refused, with a warning; P5 makes it that built-in's override (D15).
+  - **Step 6's `/attsonality`** was a slip of the 2026-10-18 rename, for `/personality`; it is struck through and corrected in step 6.
+- **Tests,** new:
+  - `personality/set_test.go` (`TestLoadSet`);
+  - `internal/config`: `TestPersonalityGlobalOnly`;
+  - `acpserver/personality_switch_test.go`: `TestPersonalitySwitch` (the list, the hint, every built-in to and from, boring's other names, each reply, entry, notice, `get_state` and prompt patch, the question once and its yes saved); `TestSetPersonalityResumed` (the method, its -32602, a resumed session's voice); `TestInsultsQuestion` (declined, accepted, the setting's yes, a choosing command first, another command first, a declined `/personality bombastic`); `TestHumor`;
+  - `acpclient/personality_test.go` (`TestPersonalityNotification`);
+  - `internal/cli/personality_run_test.go`: `TestPersonalityChosen` (the default, the setting, the flag, `plain`, an unknown setting, a user's personality, a bad directory's warning, an unknown flag); `TestPersonalityCandidates`; `TestPrintPersonalityFallback`; `TestLinePersonalityQuestion`; `TestCLIVoiceFollows`.
+  - The built-ins' tests cover snarky and bombastic: levels 4 and 5, every key's placeholders, the widths, mild profanity for snarky and strong too for bombastic, and the insult-word guard for every built-in but bombastic.
+- **Existing tests changed,** none loosened:
+  - `TestEveryAdvertisedExtensionAnswers`: the frozen list gains `_gobble/set_personality`; `TestEveryAdvertisedCommandExecutes`: the known commands gain `personality`;
+  - `session.golden`: the extension and command lists, and the `_gobble/personality` notice after the start frames, `boring` being the server's unset value;
+  - the retry tests' notice reader skips `_gobble/personality`, which every session's start now sends, and still fails on any other method;
+  - `TestBoringIsTodaysText`: the seven keys' text; `TestDefaultsEqualCode` and `TestRenderDocument`: the two keys, 27 in all;
+  - `TestCLIVoice` reads the voice through `newLineSession` and `newPrintSink`, for the default and for a setting; `TestModelOptionOffersListedModels` builds `dry` itself, `cliVoice` being gone; the line harness sets the line session's voice.
+- **Negatives,** 63 of 63 caught on a scratch copy after control runs:
+  - `personality`: a misnamed brief, a built-in's name, or a user's name not refused or not found; a user's personality not listed; snarky's or bombastic's level wrong; snarky insulting the user, or swearing strongly; bombastic borrowing a character's name; a bombastic variant losing a placeholder; a snarky line too long;
+  - `internal/config`: either key settable by a project; the default not `dry`;
+  - `acpserver`: the question asked every time, or its yes not remembered, saved or read; no entry written or read on restore; no notice at a switch or at the start; the reply in the old voice; a declined switch answered as a success; names not taken in lower case; `/humor`'s levels, its 2, and its hiding; the list without levels; the hint; `/personality` handled as `/humor`; the method unregistered, or taking an empty name; `get_state` without the personality; the prompt without the brief; the question skipped, or asked before a choosing command, or not before another command; the setting's yes ignored; the user's personalities unknown to the agent;
+  - `acpclient`: the notice unhandled, without its level, or lost while `session/new` is in flight;
+  - `internal/cli`: the setting, the yes, the flag, the resolution or the user's personalities not reaching the agent; the flag not winning over the setting; a bad directory unwarned; print mode's warning not a warning, given for every permission, or not given because its permission handler is not installed; the line view or print mode not following the notice, or not starting in the session's voice; the completion's source or its descriptions wrong; the yes not saved from the line view; the question's yes offered as allow once.
+  - The first run caught 57 of 60. Two mutations did not build and were rewritten. Taking every command out of the question passed, because no test showed an ordinary command (`/mode plan`) at an unaccepted level-5 start asking first: `TestInsultsQuestion` gained that case, and the choosing commands' exception got a mutation of its own. Two mutations for the line view's question were added. The whole set was run on the final code: 63 of 63.
+- **Measured** (the plan's Rollout and Rollback): this build wrote a session in `dry`, prompted, switched to `snarky` with `_gobble/set_personality`, and prompted again: 8 entries, one `gobble.personality` and one prompt patch. That file was loaded and prompted by `9da7138` (P2) and by `806e262` (before 0022), each exported with `git archive` into the scratchpad. Both loaded it and answered. Each skipped the entry as an unknown custom entry and replayed the patch as an ordinary one, so the model was sent snarky's brief in the history's prompt update, and each then patched the sections to its own voice at its next prompt (P2's agent, given no settings, removed them). Reverting P3 leaves such sessions readable.
+- **Gates:**
+  - the pre-add check on the 38 changed `.go` files, clean;
+  - lint for linux, darwin and windows, `0 issues.` each with `CGO_ENABLED=0`, after three findings fixed in the code: `strings.Cut` in a test (`modernize`); `/personality`'s unknown name returned as its answer, with the reason as its `nolint` (`nilerr`), as `/compact`'s failure is; `WarnContext` for the unanswered question (`sloglint`);
+  - the macOS laptop's `CGO_ENABLED=1 go test -race -count=1 ./...`, 34 packages ok, no race report;
+  - `make preflight` on macOS: passed;
+  - **not run:** Windows `go test ./...` and `-race`, the second Linux machine's `-race`, and Windows and WSL `make preflight`, on the owner's machines; the phone app over magic-cli-remote (step 5), the owner's; and no session against a model, which P6's evaluation is.
+- **Next:** P4, ambient text and easter eggs, made executable on the owner's word.

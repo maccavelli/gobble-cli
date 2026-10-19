@@ -46,6 +46,7 @@ var extensions = map[string]extension{
 	"_gobble/set_auto_retry":          (*Agent).extSetAutoRetry,
 	"_gobble/abort_retry":             (*Agent).extAbortRetry,
 	"_gobble/set_auto_compaction":     (*Agent).extSetAutoCompaction,
+	"_gobble/set_personality":         (*Agent).extSetPersonality,
 }
 
 // methodRetry is the notification of a turn's retry wait (0005-PLAN F5-1
@@ -456,6 +457,8 @@ type stateResult struct {
 	PendingMessageCount   int           `json:"pendingMessageCount"`
 	Mode                  string        `json:"mode"`
 	Cwd                   string        `json:"cwd"`
+	// Personality is the session's personality (0022-MADR D6).
+	Personality string `json:"personality"`
 }
 
 func (a *Agent) extGetState(_ context.Context, params jsontext.Value) (any, error) {
@@ -471,7 +474,8 @@ func (a *Agent) extGetState(_ context.Context, params jsontext.Value) (any, erro
 	a.mu.Unlock()
 	res := stateResult{ThinkingLevel: think, IsStreaming: streaming, IsCompacting: compacting, SteeringMode: steering, FollowUpMode: followUp,
 		SessionFile: a.fileOf(s), SessionID: s.id, SessionName: st.name, MessageCount: len(contextMessages(st)),
-		PendingMessageCount: s.queue.pending(), Mode: a.modeOf(s), Cwd: s.cwd, AutoCompactionEnabled: auto}
+		PendingMessageCount: s.queue.pending(), Mode: a.modeOf(s), Cwd: s.cwd, AutoCompactionEnabled: auto,
+		Personality: a.voice(s).Name()}
 	if model != "" {
 		res.Model = &modelRef{Provider: a.models().Provider, ID: model}
 	}

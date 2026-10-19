@@ -32,6 +32,10 @@ const (
 	// session/update: Params holds the notification's params (0005-PLAN
 	// F5-2 decision 9).
 	KindCompaction
+	// KindPersonality is gobble's _gobble/personality notification, not a
+	// session/update: Params holds the notification's params (0022-MADR
+	// D6).
+	KindPersonality
 )
 
 func (k Kind) String() string {
@@ -58,6 +62,8 @@ func (k Kind) String() string {
 		return "retry"
 	case KindCompaction:
 		return "compaction"
+	case KindPersonality:
+		return "personality"
 	}
 	return "other"
 }
@@ -88,6 +94,8 @@ type Update struct {
 	Retry Retry
 	// Compaction is a compaction's start or end, for KindCompaction.
 	Compaction Compaction
+	// Personality is the session's personality, for KindPersonality.
+	Personality Personality
 	// Params is the session/update params object as the SDK encodes it,
 	// for clients that pass the ACP stream through (0008-MADR D9).
 	Params json.RawMessage
@@ -154,6 +162,30 @@ func compactionOf(params json.RawMessage) (acp.SessionId, Compaction, error) {
 		return "", Compaction{}, fmt.Errorf("%s: %w", methodCompaction, err)
 	}
 	return n.SessionID, Compaction{Phase: n.Phase, Reason: n.Reason, TokensBefore: n.TokensBefore, Error: n.Error, Paused: n.Paused}, nil
+}
+
+// Personality is a session's personality, as _gobble/personality reports
+// it: its name and its level, 1 to 5 (0022-MADR D1, D6).
+type Personality struct {
+	Name  string
+	Level int
+}
+
+// methodPersonality is gobble's personality notification (0022-PLAN P3).
+const methodPersonality = "_gobble/personality"
+
+// personalityOf decodes _gobble/personality's params, with the session
+// they name.
+func personalityOf(params json.RawMessage) (acp.SessionId, Personality, error) {
+	var n struct {
+		SessionID acp.SessionId `json:"sessionId"`
+		Name      string        `json:"name"`
+		Level     int           `json:"level"`
+	}
+	if err := json.Unmarshal(params, &n); err != nil {
+		return "", Personality{}, fmt.Errorf("%s: %w", methodPersonality, err)
+	}
+	return n.SessionID, Personality{Name: n.Name, Level: n.Level}, nil
 }
 
 // ToolCall is a tool call or an update to one. In an update, an empty

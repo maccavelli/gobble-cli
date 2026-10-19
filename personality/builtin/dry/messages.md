@@ -278,6 +278,38 @@ precision (0022-MADR D7). Every variant keeps boring's placeholders.
 - Compacted from {tokens} tokens. Considerably tidier.
 - Compacted from {tokens} tokens. One feels lighter already.
 
+## personality.current
+
+- You are speaking with gobble's {name} personality.
+- The personality at present: {name}.
+
+## personality.list
+
+- The personalities at your disposal:
+
+## personality.set
+
+- Very good. {name} it is.
+- As you wish: {name}.
+- Certainly. I shall be {name} from now on.
+
+## personality.unknown
+
+- I'm not acquainted with a personality called {name}. The ones on offer: {names}.
+
+## personality.declined
+
+- Very wise, if I may say so. We remain {name}.
+- Perfectly understandable. I shall stay {name}.
+
+## humor.two
+
+- There is no level two, I'm afraid. The levels are 1, 3, 4 and 5; one does not ask why.
+
+## humor.unknown
+
+- There is no humor level {level}, I'm afraid. The levels are 1, 3, 4 and 5.
+
 ## error.no_credential.lead
 
 - I'm afraid I cannot think without a credential.

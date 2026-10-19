@@ -40,6 +40,9 @@ type lineSession struct {
 
 	mu   sync.Mutex
 	view *view
+	// voice is the session's, as _gobble/personality last said; the CLI's
+	// own lines speak it (0022-PLAN P3).
+	voice *personality.Voice
 	// keys is the editor's reader, which the permission prompt reads a
 	// key from while a turn runs.
 	keys *editor.Reader
@@ -47,16 +50,28 @@ type lineSession struct {
 
 // runLine opens the line session on the process's terminal.
 func runLine(e *runEnv, c *ChatCmd, first Prompt, cwd, base string) error {
-	ls := &lineSession{
-		e: e, cwd: cwd, base: base, opts: displayFor(c), in: e.stdin, choice: c.sessionChoice(),
+	return newLineSession(e, c, cwd, base).run(first)
+}
+
+// newLineSession is the line session for a session in cwd, speaking the
+// voice it starts with (0022-PLAN P3).
+func newLineSession(e *runEnv, c *ChatCmd, cwd, base string) *lineSession {
+	return &lineSession{
+		e: e, cwd: cwd, base: base, opts: displayFor(c), voice: e.runVoice(cwd), in: e.stdin, choice: c.sessionChoice(),
 		raw: func() (func() error, error) { return editor.Raw(e.stdin) },
 	}
-	return ls.run(first)
 }
 
 func displayFor(c *ChatCmd) display {
 	home, _ := os.UserHomeDir() //nolint:errcheck // no home only means paths are not shortened
-	return display{showThinking: c.ShowThinking, verbose: c.Verbose, stats: c.Stats, home: home, voice: cliVoice()}
+	return display{showThinking: c.ShowThinking, verbose: c.Verbose, stats: c.Stats, home: home}
+}
+
+// spoken is the session's voice now.
+func (ls *lineSession) spoken() *personality.Voice {
+	ls.mu.Lock()
+	defer ls.mu.Unlock()
+	return ls.voice
 }
 
 func (ls *lineSession) run(first Prompt) error {
@@ -71,7 +86,7 @@ func (ls *lineSession) run(first Prompt) error {
 	// authentication error (0008-MADR D1). gobble configure arrives with
 	// 0005-PLAN F4, so the warning names the variables.
 	if _, err := provider.ChooseWith(e.hasCredential, e.chosenProvider()); err != nil {
-		e.out.Lead(ls.opts.voice, personality.LeadNoCredential)
+		e.out.Lead(ls.spoken(), personality.LeadNoCredential)
 		e.out.Warnf("%s", e.noCredentialMessage())
 	}
 	// A resumed session opens at once, from its file, and says so; a new one
@@ -178,9 +193,11 @@ func (ls *lineSession) history() editor.History {
 // ends it.
 func (ls *lineSession) turn(p Prompt) error {
 	e := ls.e
-	v := newView(e.out, ls.opts, e.now)
+	opts := ls.opts
+	opts.voice = ls.spoken()
+	v := newView(e.out, opts, e.now)
 	sp := render.StartSpinner(e.ctx, e.out.err, e.out.caps.Err, e.out.caps.Unicode, func() string {
-		return ls.opts.voice.Text(personality.TurnWorking, nil)
+		return ls.spoken().Text(personality.TurnWorking, nil)
 	})
 	v.beforeWrite = func() {
 		if err := sp.Stop(); err != nil {
@@ -198,7 +215,7 @@ func (ls *lineSession) turn(p Prompt) error {
 	}()
 	if err := ls.ensureSession(); err != nil {
 		v.quiet()
-		e.out.Lead(ls.opts.voice, personality.LeadSessionFailed)
+		e.out.Lead(ls.spoken(), personality.LeadSessionFailed)
 		e.out.Errorf("%v", err)
 		return e.ctx.Err()
 	}
@@ -217,19 +234,19 @@ func (ls *lineSession) turn(p Prompt) error {
 	switch {
 	case errors.Is(perr, acpclient.ErrImagesUnsupported):
 		v.quiet()
-		e.out.Lead(ls.opts.voice, personality.LeadImages)
+		e.out.Lead(ls.spoken(), personality.LeadImages)
 		e.out.Errorf("the agent does not accept images (%s)", imageNames(p))
 		return nil
 	case errors.Is(perr, acpclient.ErrAuthRequired):
 		v.quiet()
-		e.out.Lead(ls.opts.voice, personality.LeadAuth)
+		e.out.Lead(ls.spoken(), personality.LeadAuth)
 		e.out.Errorf("%s", e.authMessage())
 		return nil
 	case perr != nil:
 		if err := v.finish(res); err != nil {
 			return err
 		}
-		e.out.Lead(ls.opts.voice, personality.LeadTurnFailed)
+		e.out.Lead(ls.spoken(), personality.LeadTurnFailed)
 		e.out.Errorf("%v", perr)
 		return nil
 	}
@@ -244,6 +261,17 @@ func (ls *lineSession) turn(p Prompt) error {
 
 // onUpdate hands the session's updates to the running turn's view.
 func (ls *lineSession) onUpdate(u acpclient.Update) {
+	if u.Kind == acpclient.KindPersonality {
+		voice := ls.e.voiceNamed(u.Personality.Name)
+		ls.mu.Lock()
+		ls.voice = voice
+		v := ls.view
+		ls.mu.Unlock()
+		if v != nil {
+			v.setVoice(voice)
+		}
+		return
+	}
 	ls.mu.Lock()
 	v := ls.view
 	ls.mu.Unlock()

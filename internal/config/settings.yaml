@@ -67,6 +67,19 @@
 # sessionDir: ""
 
 # ---------------------------------------------------------------------
+# Personality
+# ---------------------------------------------------------------------
+
+# The personality gobble speaks in: boring (also plain or normal), dry,
+# snarky or bombastic, or one of your own, a directory under
+# personalities/ beside this file. Dry is the default. Bombastic insults
+# you, so gobble asks once before it starts, and sets bombasticAccepted
+# when you agree. /personality changes a session's. Only this file can
+# set either, never a project's.
+# personality: dry
+# bombasticAccepted: false
+
+# ---------------------------------------------------------------------
 # Compaction
 # ---------------------------------------------------------------------
 

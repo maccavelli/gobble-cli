@@ -16,6 +16,8 @@ type Settings struct {
 	SteeringMode         string     `yaml:"steeringMode" json:"steeringMode,omitempty"`
 	FollowUpMode         string     `yaml:"followUpMode" json:"followUpMode,omitempty"`
 	SessionDir           string     `yaml:"sessionDir" json:"sessionDir,omitempty"`
+	Personality          string     `yaml:"personality" json:"personality,omitempty"`
+	BombasticAccepted    bool       `yaml:"bombasticAccepted" json:"bombasticAccepted,omitempty"`
 	Compaction           Compaction `yaml:"compaction" json:"compaction,omitzero"`
 	Retry                Retry      `yaml:"retry" json:"retry,omitzero"`
 	ShellPath            string     `yaml:"shellPath" json:"shellPath,omitempty"`
@@ -100,6 +102,10 @@ func (s *Settings) field(path string) any {
 		return &s.FollowUpMode
 	case pathSessionDir:
 		return &s.SessionDir
+	case "personality":
+		return &s.Personality
+	case "bombasticAccepted":
+		return &s.BombasticAccepted
 	case "compaction.enabled":
 		return &s.Compaction.Enabled
 	case "compaction.reserveTokens":

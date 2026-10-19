@@ -47,6 +47,9 @@ const (
 	// CustomContext names the nested context files a read added: data is
 	// {"paths":[…]} (0005-PLAN F3-1).
 	CustomContext = "gobble.context"
+	// CustomPersonality is a personality switch: data is {"name"}, the
+	// personality's canonical name (0022-MADR D6).
+	CustomPersonality = "gobble.personality"
 )
 
 // Message roles gobble writes.

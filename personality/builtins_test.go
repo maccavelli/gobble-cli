@@ -54,7 +54,7 @@ func texts(t *testing.T, name string) []string {
 
 // Every built-in loads, with its level; boring has no brief.
 func TestBuiltinsLoad(t *testing.T) {
-	levels := map[string]int{Boring: 0, Dry: 3}
+	levels := map[string]int{Boring: 0, Dry: 3, Snarky: 4, Bombastic: 5}
 	for _, name := range Builtins {
 		v, err := New(Options{Name: name})
 		if err != nil {
@@ -131,10 +131,10 @@ func TestBuiltinsWidths(t *testing.T) {
 // no built-in borrows a character's name or catchphrase (0022-MADR D7 to
 // D9, D19).
 func TestBuiltinsGuards(t *testing.T) {
-	allowed := map[string][]string{Boring: nil, Dry: nil}
+	allowed := map[string][]string{Boring: nil, Dry: nil, Snarky: mild, Bombastic: append(slices.Clone(mild), strong...)}
 	for _, name := range Builtins {
 		for _, line := range texts(t, name) {
-			if name != "bombastic" {
+			if name != Bombastic {
 				if m := wordsOnly(insults).FindString(line); m != "" {
 					t.Errorf("%s: %q insults (%s)", name, line, m)
 				}

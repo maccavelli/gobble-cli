@@ -36,6 +36,9 @@ type SharedFlags struct {
 	APIKey     string `name:"api-key" complete:"none" placeholder:"-" help:"Read this run's API key from stdin, or ask for it: -. Needs --model."`
 	ListModels bool   `name:"list-models" help:"List models, as gobble models list; the prompt words are its search."`
 
+	// Personality.
+	Personality string `complete:"personality" placeholder:"NAME" help:"Personality for this run's sessions: boring, dry, snarky, bombastic, or your own."`
+
 	// Tools.
 	Tools        []string `short:"t" sep:"," complete:"tools" placeholder:"NAME,…" help:"Enable only these tools."`
 	ExcludeTools []string `name:"exclude-tools" sep:"," complete:"tools" placeholder:"NAME,…" help:"Disable these tools."`

@@ -86,7 +86,7 @@ func (a *Agent) sections(s *liveSession) []sysprompt.Section {
 	}
 	return sysprompt.Build(sysprompt.Options{Custom: system, Append: appended, Tools: names, Deferred: families,
 		ContextFiles: files, Skills: skills, Cwd: cmp.Or(o.cwd, s.cwd), GOOS: goos,
-		Personality: s.voice.Brief(), PersonalityRules: s.voice.Rules()})
+		Personality: a.voice(s).Brief(), PersonalityRules: a.voice(s).Rules()})
 }
 
 // skills are the session's skills, found in 0005-MADR's order (Skill

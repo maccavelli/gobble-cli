@@ -160,6 +160,7 @@ type state struct {
 	context         []compaction.Projected      // the entries the model sees, and their messages
 	path            []session.Entry
 	todos           []tool.PlanItem // the path's last todo list
+	personality     string          // the path's last gobble.personality, or ""
 }
 
 // replayState reads entries: model_change, thinking_level_change and the
@@ -187,6 +188,9 @@ func replayPath(entries, path []session.Entry) state {
 		case session.TypeCustom:
 			if todos, ok := todosOf(e); ok {
 				st.todos = todos
+			}
+			if name, ok := personalityOf(e); ok {
+				st.personality = name
 			}
 		case session.TypeMessage:
 			if e.Message == nil {

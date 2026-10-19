@@ -61,7 +61,8 @@ var queueModes = []string{"one-at-a-time", "all"}
 
 // Keys are 0018-MADR D14's thirteen, 0019-MADR D15's defaultProvider,
 // 0021-MADR D3's cacheRetention, 0005-PLAN F4-2c's defaultModel, F5-1's
-// retry keys and F5-2's compaction keys, in the template's order. Every other part
+// retry keys, F5-2's compaction keys and 0022-PLAN P3's personality keys,
+// in the template's order. Every other part
 // of the package reads them; a key added here without its template block,
 // schema or Settings field fails the package's tests.
 var Keys = []Key{
@@ -79,6 +80,10 @@ var Keys = []Key{
 		Read: ReadSession, Doc: "How follow-up messages queued while a turn runs reach the model: one at a time, or all at once."},
 	{Path: pathSessionDir, Kind: KindPath, Scope: ScopeGlobalOnly, Read: ReadProcess,
 		Doc: "The directory session files are kept in, flat, as --session-dir keeps them. Empty keeps them in gobble's data directory, by working directory."},
+	{Path: "personality", Kind: KindString, Default: "dry", Scope: ScopeGlobalOnly, Read: ReadSession,
+		Doc: "The personality gobble speaks in: boring (also plain or normal), dry, snarky, bombastic, or one of your own under personalities/ in this directory."},
+	{Path: "bombasticAccepted", Kind: KindBool, Default: "false", Scope: ScopeGlobalOnly, Read: ReadSession,
+		Doc: "Whether you have agreed to bombastic, which insults you; gobble asks once, and sets this when you agree."},
 	{Path: "compaction.enabled", Kind: KindBool, Default: boolTrue, Read: ReadSession,
 		Doc: "Whether gobble compacts the conversation on its own: before a model call once it nears the model's window, and once when the model says it is over it."},
 	{Path: "compaction.reserveTokens", Kind: KindInt, Default: "16384", Min: 1, Read: ReadSession,

@@ -84,6 +84,14 @@ func glyphsFor(c term.Caps) term.Glyphs {
 	return term.ASCII
 }
 
+// setVoice is the session's new voice, for the rest of the turn
+// (0022-PLAN P3).
+func (v *view) setVoice(voice *personality.Voice) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	v.opts.voice = voice
+}
+
 // on draws one update.
 func (v *view) on(u acpclient.Update) {
 	v.mu.Lock()

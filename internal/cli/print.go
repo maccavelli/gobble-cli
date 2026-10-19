@@ -54,7 +54,9 @@ type printSink struct {
 	stream bool
 	now    func() time.Time
 	// voice speaks the sink's own lines; nil is boring (0022-PLAN P1).
-	voice *personality.Voice
+	// voiceNamed makes the voice _gobble/personality names (0022-PLAN P3).
+	voice      *personality.Voice
+	voiceNamed func(string) *personality.Voice
 
 	mu      sync.Mutex
 	text    strings.Builder
@@ -66,9 +68,10 @@ type printSink struct {
 	err     error
 }
 
-// newPrintSink is print mode's sink, in the sessions' voice (0022-PLAN P2).
-func newPrintSink(e *runEnv, c *ChatCmd) *printSink {
-	return &printSink{out: e.out, stream: c.OutputFormat == "stream-json", now: e.now, voice: cliVoice()}
+// newPrintSink is print mode's sink, in the session's voice (0022-PLAN P2,
+// P3).
+func newPrintSink(e *runEnv, c *ChatCmd, cwd string) *printSink {
+	return &printSink{out: e.out, stream: c.OutputFormat == "stream-json", now: e.now, voice: e.runVoice(cwd), voiceNamed: e.voiceNamed}
 }
 
 func (s *printSink) on(u acpclient.Update) {
@@ -98,6 +101,10 @@ func (s *printSink) on(u acpclient.Update) {
 		if line, ok := compactionLine(s.voice, u.Compaction); ok {
 			s.out.Notef("%s", line)
 		}
+		return
+	case acpclient.KindPersonality:
+		// Never in stream-json, as a retry's.
+		s.voice = s.voiceNamed(u.Personality.Name)
 		return
 	}
 	if !s.stream {
@@ -149,7 +156,9 @@ func (s *printSink) writeJSON(v any) {
 // mapping the outcome to D10's codes.
 func runPrint(e *runEnv, c *ChatCmd, p Prompt, cwd, base string) (err error) {
 	ctx := e.ctx
-	conn, err := e.startAgent(ctx)
+	// Nobody can answer a question: tool calls are declined, and the
+	// level-5 personality's question too (0022-MADR D10).
+	conn, err := e.startAgentWith(ctx, e.printPermission)
 	if err != nil {
 		return err
 	}
@@ -158,7 +167,7 @@ func runPrint(e *runEnv, c *ChatCmd, p Prompt, cwd, base string) (err error) {
 			e.out.Warnf("%v", cerr)
 		}
 	}()
-	sink := newPrintSink(e, c)
+	sink := newPrintSink(e, c, cwd)
 	sess, _, err := openSession(ctx, conn, c.sessionChoice(), cwd, base, sink.on)
 	if err != nil {
 		return err

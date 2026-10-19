@@ -71,6 +71,18 @@
       "default": "",
       "x-gobble-global-only": true
     },
+    "personality": {
+      "type": "string",
+      "description": "The personality gobble speaks in: boring (also plain or normal), dry, snarky, bombastic, or one of your own under personalities/ in this directory.",
+      "default": "dry",
+      "x-gobble-global-only": true
+    },
+    "bombasticAccepted": {
+      "type": "boolean",
+      "description": "Whether you have agreed to bombastic, which insults you; gobble asks once, and sets this when you agree.",
+      "default": false,
+      "x-gobble-global-only": true
+    },
     "compaction": {
       "type": "object",
       "properties": {

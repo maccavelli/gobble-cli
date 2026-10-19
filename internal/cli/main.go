@@ -20,6 +20,7 @@ import (
 	"github.com/maccavelli/gobble-cli/internal/cli/term"
 	"github.com/maccavelli/gobble-cli/internal/config"
 	"github.com/maccavelli/gobble-cli/internal/logging"
+	"github.com/maccavelli/gobble-cli/personality"
 	"github.com/maccavelli/gobble-cli/session"
 	"github.com/maccavelli/gobble-cli/tool"
 )
@@ -174,6 +175,12 @@ type runEnv struct {
 	credsMu    sync.Mutex
 	credWarned map[string]bool
 	knownKeys  map[string]string
+	// personality is --personality's, by its canonical name, which the
+	// run's sessions start with; "" leaves the setting's (0022-PLAN P3).
+	// personalitySet are the personalities, loaded once.
+	personality       string
+	personalitiesOnce sync.Once
+	personalitySet    *personality.Set
 }
 
 func (e *runEnv) log() *slog.Logger { return e.logs.get() }

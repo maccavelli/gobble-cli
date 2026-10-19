@@ -60,6 +60,15 @@ const (
 	CompactStart      Key = "compact.start"
 	CompactFailed     Key = "compact.failed"
 	CompactDone       Key = "compact.done"
+
+	// /personality and /humor (0022-PLAN P3).
+	PersonalityCurrent  Key = "personality.current"
+	PersonalityList     Key = "personality.list"
+	PersonalitySet      Key = "personality.set"
+	PersonalityUnknown  Key = "personality.unknown"
+	PersonalityDeclined Key = "personality.declined"
+	HumorTwo            Key = "humor.two"
+	HumorUnknown        Key = "humor.unknown"
 )
 
 // Keys are every key, in the order above.
@@ -72,6 +81,7 @@ var Keys = []Key{
 	ThinkingSet, ModeCurrent, ModeList, ModeUnknown, ModeAlreadyPlan, ModePlanOn, ModeSet, NameCurrent, NameUsage,
 	NameNormalized, NameSet, ForkNone, ForkList, ForkNothingBefore, ForkNoMessage, ForkDone, CloneNone, CloneDone,
 	TodosNone, CompactStart, CompactFailed, CompactDone,
+	PersonalityCurrent, PersonalityList, PersonalitySet, PersonalityUnknown, PersonalityDeclined, HumorTwo, HumorUnknown,
 }
 
 // The lines a personality may put before an error or a warning in gobble's

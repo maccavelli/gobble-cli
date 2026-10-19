@@ -64,6 +64,8 @@ func completionRegistry() complete.Registry {
 		"tools":     complete.ListSource(toolCandidates, false),
 		"mcpserver": complete.ListSource(mcpServerCandidates, true),
 		"setting":   complete.ListSource(settingCandidates, true),
+		// The personalities, built-in and the user's (0022-PLAN P3).
+		"personality": complete.ListSource(personalityCandidates, true),
 	}
 }
 

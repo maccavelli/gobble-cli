@@ -80,15 +80,21 @@ func (e *runEnv) agentOptions() acpserver.Options {
 			Config: mcpConfigPath(), Off: e.mcpOff, Allow: e.mcpAllow, UserAgent: identity().UserAgent(),
 		},
 		Prompt: e.promptOptions(),
-		// Each session's settings, when it starts (0018-MADR D17).
-		Settings: func(cwd string) acpserver.SessionSettings { return toSession(e.sessionSettings(cwd).Settings) },
+		// Each session's settings, when it starts (0018-MADR D17), its
+		// personality resolved (0022-PLAN P3).
+		Settings: func(cwd string) acpserver.SessionSettings {
+			ss := toSession(e.sessionSettings(cwd).Settings)
+			ss.Personality = e.personalityName(ss.Personality)
+			return ss
+		},
 		// An agent method per provider that takes a credential, answered from
 		// gobble's credentials as gobble auth check finds them (0016-MADR A2).
 		Auth: acpserver.AuthOptions{Providers: authProviders, Has: func(id string) bool {
 			_, ok := e.credential(id)
 			return ok
 		}},
-		SaveSetting: saveGlobalSetting,
+		SaveSetting:   saveGlobalSetting,
+		Personalities: e.personalities(),
 	}
 }
 

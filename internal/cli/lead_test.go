@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -85,13 +86,21 @@ func TestOutputLead(t *testing.T) {
 	}
 }
 
-// gobble's CLI speaks dry, the sessions' default, in its line view and in
-// print mode (0022-PLAN P2, deviation 1).
+// gobble's CLI speaks the voice its sessions start with, in its line view
+// and in print mode: dry by default (0022-PLAN P2, deviation 1), or the
+// setting's (P3).
 func TestCLIVoice(t *testing.T) {
-	if got := displayFor(&ChatCmd{}).voice.Name(); got != personality.Dry {
-		t.Fatalf("the line view speaks %s, want dry", got)
-	}
-	if got := newPrintSink(&runEnv{out: &Output{}}, &ChatCmd{}).voice.Name(); got != personality.Dry {
-		t.Fatalf("print mode speaks %s, want dry", got)
+	home := t.TempDir()
+	t.Setenv("GOBBLE_HOME", home)
+	for _, c := range []struct{ setting, want string }{{"", personality.Dry}, {"personality: snarky\n", personality.Snarky}} {
+		writeFile(t, filepath.Join(home, "settings.yaml"), c.setting)
+		out := &Output{}
+		e := &runEnv{out: out, logs: &lazyLog{out: out}}
+		if got := newLineSession(e, &ChatCmd{}, t.TempDir(), "").spoken().Name(); got != c.want {
+			t.Fatalf("%q: the line view speaks %s, want %s", c.setting, got, c.want)
+		}
+		if got := newPrintSink(e, &ChatCmd{}, t.TempDir()).voice.Name(); got != c.want {
+			t.Fatalf("%q: print mode speaks %s, want %s", c.setting, got, c.want)
+		}
 	}
 }

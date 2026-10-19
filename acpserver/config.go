@@ -73,9 +73,13 @@ type SessionSettings struct {
 	// Retry is the session's retry settings (0005-PLAN F5-1). Settings never
 	// give a zero one, whose base delay is none.
 	Retry llm.Retry
-	// Personality is the session's personality, by name: a built-in one, or
-	// one of boring's names; empty is boring (0022-MADR D1, D17).
+	// Personality is the session's personality, by name: one of
+	// Options.Personalities, or one of boring's names; empty is boring
+	// (0022-MADR D1, D17).
 	Personality string
+	// BombasticAccepted says the user has agreed to a level-5 personality,
+	// so it is not asked (0022-MADR D10).
+	BombasticAccepted bool
 }
 
 // sessionSettings are the settings for a session in cwd: Options.Settings',
@@ -103,7 +107,7 @@ func (a *Agent) sessionSettings(cwd string) SessionSettings {
 // voiceOf is the session's voice: its settings' personality, or boring,
 // with a log line, for a name no personality has (0022-PLAN P2).
 func (a *Agent) voiceOf(ss SessionSettings) *personality.Voice {
-	v, err := personality.New(personality.Options{Name: ss.Personality})
+	v, err := a.newVoice(ss.Personality)
 	if err != nil {
 		a.logger.Warn("personality", slog.String("error", err.Error()))
 		return nil

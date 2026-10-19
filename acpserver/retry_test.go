@@ -77,6 +77,9 @@ func (r *retryAgent) notices(t *testing.T) []map[string]any {
 	t.Helper()
 	var out []map[string]any
 	for _, n := range r.client.Notices() {
+		if n.Method == methodPersonality { // each session's start (0022-MADR D6)
+			continue
+		}
 		if n.Method != methodRetry {
 			t.Fatalf("notice %s, want only %s", n.Method, methodRetry)
 		}
