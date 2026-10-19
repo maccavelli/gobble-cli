@@ -31,6 +31,8 @@ steeringMode: all
 followUpMode: all
 sessionDir: ""
 defaultProjectTrust: ask
+permissions:
+  rules: []
 personality: dry
 bombasticAccepted: false
 compaction:

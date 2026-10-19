@@ -87,22 +87,38 @@ func (a *Agent) SetSessionMode(ctx context.Context, p acp.SetSessionModeRequest)
 	return acp.SetSessionModeResponse{}, nil
 }
 
-// planPolicy refuses every call that asks for approval while the session
-// is in plan mode, without asking: plan mode is read-only. Otherwise, and
-// for a repeated call's question, which approves no write (0005-PLAN F5-3
-// decision 1), the inner policy decides.
+// planPolicy decides a call by the session's rules and gobble's limits
+// (0005-PLAN F6-2 decisions 4 and 5), logging each verdict: a deny refuses
+// without asking, an allow runs, and an ask asks the client, marking a
+// limit's question. While the session is in plan mode, a call that is not
+// read-only, or that would ask, is refused without asking: plan mode is
+// read-only. A repeated call's question, which approves no write
+// (0005-PLAN F5-3 decision 1), is the client's alone.
 type planPolicy struct {
 	a     *Agent
 	s     *liveSession
-	inner permission.Policy
+	rules permission.Engine
+	inner *acpPolicy
 }
 
 func (p planPolicy) Decide(ctx context.Context, r permission.Rule) (permission.Decision, error) {
-	if p.a.modeOf(p.s) == modePlan && r.Repeated == 0 {
+	if r.Repeated != 0 {
+		return p.inner.Decide(ctx, r)
+	}
+	v := p.rules.Evaluate(r)
+	p.a.logDecision(ctx, p.s, r, v)
+	switch {
+	case v.Effect == permission.ModeDeny:
+		return permission.Decision{Refusal: refusalOf(r, v), By: v.By}, nil
+	case p.a.modeOf(p.s) == modePlan && (v.Effect == permission.ModeAsk || !r.ReadOnly):
 		return permission.Decision{Refusal: fmt.Sprintf(
 			"Plan mode is read-only, so %s did not run. Call %s with the plan to ask the user to leave plan mode.", r.Tool, exitPlanTool)}, nil
+	case v.Effect == permission.ModeAllow:
+		return permission.Decision{Allow: true, By: v.By}, nil
 	}
-	return p.inner.Decide(ctx, r)
+	d, err := p.inner.ask(ctx, r, v.Limit)
+	d.By = v.By
+	return d, err
 }
 
 type exitPlanInput struct {

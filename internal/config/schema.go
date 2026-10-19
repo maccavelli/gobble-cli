@@ -36,6 +36,12 @@ func Schema() ([]byte, error) {
 			return nil, err
 		}
 		p.Default = def
+		if k.Kind == KindRules {
+			p.Default = []byte("[]")
+			if p.Items != nil {
+				p.Items.MinProperties, p.Items.MaxProperties = new(1), new(1)
+			}
+		}
 		if k.Kind == KindEnum {
 			p.Enum = make([]any, len(k.Enum))
 			for i, e := range k.Enum {

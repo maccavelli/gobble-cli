@@ -321,6 +321,16 @@ func shellDescribe(c tool.Call, _ tool.Env) string {
 
 // shellOutside is the Confined answer of a shell tool: its workdir, when it
 // is outside the roots.
+// shellSubject is a shell call's command line, the whole of it, which the
+// rules match until 0005-PLAN F6-3 splits it (F6-2 decision 3).
+func shellSubject(c tool.Call, _ tool.Env) tool.Subject {
+	var a shellIn
+	if err := json.Unmarshal(c.Args, &a); err != nil {
+		return tool.Subject{}
+	}
+	return tool.Subject{Command: a.Command}
+}
+
 func shellOutside(c tool.Call, env tool.Env) []string {
 	var a shellIn
 	if err := json.Unmarshal(c.Args, &a); err != nil {

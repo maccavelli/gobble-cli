@@ -61,7 +61,6 @@ type SharedFlags struct {
 // The plans that deliver the default command's remaining flags.
 const (
 	plan0005F3 = "0005-PLAN F3"
-	plan0005F6 = "0005-PLAN F6"
 	plan0005X3 = "0005-PLAN X3" // --offline (0018-MADR D20)
 )
 
@@ -76,7 +75,6 @@ const apiKeyLiteral = "--api-key takes -: a key on the command line shows in pro
 // (0008-MADR D12).
 var laterFlags = map[string]string{
 	"offline": plan0005X3,
-	"yes":     plan0005F6,
 }
 
 // given is the set of flags named on the command line, by long name.

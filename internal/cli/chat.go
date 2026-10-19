@@ -42,6 +42,7 @@ func (c *ChatCmd) Run(k *kong.Context, e *runEnv) error {
 	// or the question, which only gobble's terminal can ask (0005-PLAN F6-1
 	// decisions 2 and 5).
 	e.trust.flag = trustFlag(g, c.Approve)
+	e.yes = c.Yes
 	if mode == ModeLine && e.out.caps.In && e.out.caps.Err.TTY && e.stdin != nil {
 		e.decideTrustHere(cwd)
 	}

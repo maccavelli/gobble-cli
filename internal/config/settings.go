@@ -9,24 +9,32 @@ import (
 // Settings are the effective settings. The yaml and json names are the
 // keys' paths; every field is optional in a file.
 type Settings struct {
-	DefaultProvider      string     `yaml:"defaultProvider" json:"defaultProvider,omitempty"`
-	DefaultModel         string     `yaml:"defaultModel" json:"defaultModel,omitempty"`
-	SmallModel           string     `yaml:"smallModel" json:"smallModel,omitempty"`
-	CacheRetention       string     `yaml:"cacheRetention" json:"cacheRetention,omitempty"`
-	DefaultThinkingLevel string     `yaml:"defaultThinkingLevel" json:"defaultThinkingLevel,omitempty"`
-	SteeringMode         string     `yaml:"steeringMode" json:"steeringMode,omitempty"`
-	FollowUpMode         string     `yaml:"followUpMode" json:"followUpMode,omitempty"`
-	SessionDir           string     `yaml:"sessionDir" json:"sessionDir,omitempty"`
-	DefaultProjectTrust  string     `yaml:"defaultProjectTrust" json:"defaultProjectTrust,omitempty"`
-	Personality          string     `yaml:"personality" json:"personality,omitempty"`
-	BombasticAccepted    bool       `yaml:"bombasticAccepted" json:"bombasticAccepted,omitempty"`
-	Compaction           Compaction `yaml:"compaction" json:"compaction,omitzero"`
-	Retry                Retry      `yaml:"retry" json:"retry,omitzero"`
-	ShellPath            string     `yaml:"shellPath" json:"shellPath,omitempty"`
-	ShellCommandPrefix   string     `yaml:"shellCommandPrefix" json:"shellCommandPrefix,omitempty"`
-	Tools                Tools      `yaml:"tools" json:"tools,omitzero"`
-	MCP                  MCP        `yaml:"mcp" json:"mcp,omitzero"`
-	ExternalEditor       string     `yaml:"externalEditor" json:"externalEditor,omitempty"`
+	DefaultProvider      string      `yaml:"defaultProvider" json:"defaultProvider,omitempty"`
+	DefaultModel         string      `yaml:"defaultModel" json:"defaultModel,omitempty"`
+	SmallModel           string      `yaml:"smallModel" json:"smallModel,omitempty"`
+	CacheRetention       string      `yaml:"cacheRetention" json:"cacheRetention,omitempty"`
+	DefaultThinkingLevel string      `yaml:"defaultThinkingLevel" json:"defaultThinkingLevel,omitempty"`
+	SteeringMode         string      `yaml:"steeringMode" json:"steeringMode,omitempty"`
+	FollowUpMode         string      `yaml:"followUpMode" json:"followUpMode,omitempty"`
+	SessionDir           string      `yaml:"sessionDir" json:"sessionDir,omitempty"`
+	DefaultProjectTrust  string      `yaml:"defaultProjectTrust" json:"defaultProjectTrust,omitempty"`
+	Permissions          Permissions `yaml:"permissions" json:"permissions,omitzero"`
+	Personality          string      `yaml:"personality" json:"personality,omitempty"`
+	BombasticAccepted    bool        `yaml:"bombasticAccepted" json:"bombasticAccepted,omitempty"`
+	Compaction           Compaction  `yaml:"compaction" json:"compaction,omitzero"`
+	Retry                Retry       `yaml:"retry" json:"retry,omitzero"`
+	ShellPath            string      `yaml:"shellPath" json:"shellPath,omitempty"`
+	ShellCommandPrefix   string      `yaml:"shellCommandPrefix" json:"shellCommandPrefix,omitempty"`
+	Tools                Tools       `yaml:"tools" json:"tools,omitzero"`
+	MCP                  MCP         `yaml:"mcp" json:"mcp,omitzero"`
+	ExternalEditor       string      `yaml:"externalEditor" json:"externalEditor,omitempty"`
+}
+
+// Permissions is the permission settings (0005-PLAN F6-2).
+type Permissions struct {
+	// Rules are every layer's, joined: the global file's, then a trusted
+	// project's, then --set's.
+	Rules []PermissionRule `yaml:"rules" json:"rules,omitempty"`
 }
 
 // Compaction is the compaction settings (0005-PLAN F5-2).
@@ -82,6 +90,8 @@ func defaultValue(k Key) any {
 	switch k.Kind {
 	case KindBool:
 		return k.Default == boolTrue
+	case KindRules:
+		return []PermissionRule(nil)
 	case KindInt:
 		n, err := strconv.ParseInt(k.Default, 10, 64)
 		if err != nil {
@@ -106,6 +116,8 @@ func (s *Settings) field(path string) any {
 		return &s.SessionDir
 	case "defaultProjectTrust":
 		return &s.DefaultProjectTrust
+	case pathPermissionRules:
+		return &s.Permissions.Rules
 	case "personality":
 		return &s.Personality
 	case "bombasticAccepted":
@@ -168,6 +180,8 @@ func (s *Settings) set(path string, v any) error {
 		*p, ok = v.(bool)
 	case *int64:
 		*p, ok = v.(int64)
+	case *[]PermissionRule:
+		*p, ok = v.([]PermissionRule)
 	case nil:
 		return fmt.Errorf("config: no setting %s", path)
 	}
@@ -177,7 +191,8 @@ func (s *Settings) set(path string, v any) error {
 	return nil
 }
 
-// Value is the value at path, of the key's Go type: string, bool or int64.
+// Value is the value at path, of the key's Go type: string, bool, int64 or
+// []PermissionRule.
 func (s Settings) Value(path string) (any, bool) {
 	switch p := s.field(path).(type) {
 	case *string:
@@ -185,6 +200,8 @@ func (s Settings) Value(path string) (any, bool) {
 	case *bool:
 		return *p, true
 	case *int64:
+		return *p, true
+	case *[]PermissionRule:
 		return *p, true
 	}
 	return nil, false

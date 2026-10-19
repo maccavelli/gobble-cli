@@ -184,6 +184,24 @@ func (t textIO) write(abs string, data []byte) error {
 
 // argLocations are a call's locations (tool.Locator): the absolute paths
 // its arguments under keys name, in that order, each with no line.
+// pathSubject is the rules' subject of a tool whose paths are its keys'
+// arguments, resolved; with none given, the working directory, as grep,
+// find and tree default to it (0005-PLAN F6-2 decision 3).
+func pathSubject(keys ...string) func(tool.Call, tool.Env) tool.Subject {
+	return func(c tool.Call, env tool.Env) tool.Subject {
+		var paths []string
+		for _, k := range keys {
+			if p := argString(c, k); p != "" {
+				paths = append(paths, resolve(env, p))
+			}
+		}
+		if len(paths) == 0 && env.Cwd != "" {
+			paths = []string{env.Cwd}
+		}
+		return tool.Subject{Paths: paths}
+	}
+}
+
 func argLocations(keys ...string) func(tool.Call, tool.Env) []tool.Location {
 	return func(c tool.Call, env tool.Env) []tool.Location {
 		var out []tool.Location

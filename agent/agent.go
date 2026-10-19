@@ -749,7 +749,11 @@ func (t *turn) runTool(c llm.ToolCallDone) (tool.Result, bool) {
 	if c, ok := tl.(tool.Confined); ok {
 		outside = c.Outside(call, env)
 	}
-	if res, denied := t.approve(call, spec, title, outside); denied {
+	var subject tool.Subject
+	if sj, ok := tl.(tool.Subjecter); ok {
+		subject = sj.Subject(call, env)
+	}
+	if res, denied := t.approve(call, spec, title, outside, subject); denied {
 		return res, t.emit(ToolEnd{Call: call, Result: res})
 	}
 	env.AllowOutside = len(outside) > 0
@@ -766,20 +770,30 @@ func (t *turn) runTool(c llm.ToolCallDone) (tool.Result, bool) {
 	return res, t.emit(ToolEnd{Call: call, Result: res})
 }
 
-// approve asks the policy about a call to a tool that is not read-only,
-// and about any call naming paths outside the workspace roots. It returns
+// approve asks the policy about every call, with what its rules match: its
+// paths or its command, its paths outside the workspace roots, and whether
+// its tool is read-only (0005-PLAN F6-2 decisions 3, 4 and 7). It returns
 // the result to give the model when the call does not run. With no policy
-// an outside call is refused: there is no one to ask.
-func (t *turn) approve(call tool.Call, spec tool.Spec, title string, outside []string) (tool.Result, bool) {
-	if len(outside) > 0 {
-		if t.a.cfg.Policy == nil {
+// a call runs, and an outside call is refused: there is no one to ask.
+func (t *turn) approve(call tool.Call, spec tool.Spec, title string, outside []string, subject tool.Subject) (tool.Result, bool) {
+	if t.a.cfg.Policy == nil {
+		if len(outside) > 0 {
 			return tool.ErrorResult(outside[0] + " is outside the workspace (the working directory and the additional directories), and no permission policy can approve it."), true
 		}
-		title += " (outside the workspace)"
-	} else if t.a.cfg.Policy == nil || spec.Annotations.ReadOnlyHint {
 		return tool.Result{}, false
 	}
-	d, err := t.a.cfg.Policy.Decide(t.ctx, permission.Rule{Tool: spec.Name, Mode: permission.ModeAsk, CallID: call.ID, Title: title, Input: call.Args})
+	if len(outside) > 0 {
+		title += " (outside the workspace)"
+	}
+	rule := permission.Rule{Tool: spec.Name, Mode: permission.ModeAsk, CallID: call.ID, Title: title, Input: call.Args,
+		Outside: outside, ReadOnly: spec.Annotations.ReadOnlyHint}
+	switch {
+	case len(subject.Paths) > 0:
+		rule.Kind, rule.Subjects = permission.SubjectPath, subject.Paths
+	case subject.Command != "":
+		rule.Kind, rule.Subjects = permission.SubjectCommand, []string{subject.Command}
+	}
+	d, err := t.a.cfg.Policy.Decide(t.ctx, rule)
 	switch {
 	case t.ctx.Err() != nil:
 		return tool.ErrorResult(cancelledText), true

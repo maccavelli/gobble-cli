@@ -76,7 +76,7 @@ func (a *Agent) sections(s *liveSession) []sysprompt.Section {
 	for _, t := range a.tools {
 		sp := t.Spec()
 		switch {
-		case sp.Exposure == tool.ExposureHidden:
+		case sp.Exposure == tool.ExposureHidden, s.rules.Hidden(sp.Name):
 		case sp.Exposure == tool.ExposureDeferred && !slices.Contains(loaded, sp.Name):
 			if sp.Family != "" && !slices.Contains(families, sp.Family) {
 				families = append(families, sp.Family)

@@ -93,6 +93,7 @@ func readWith(o Options) tool.Tool {
 		tool.WithOutside(func(c tool.Call, env tool.Env) []string { return outsideOf(readWorkspace(env, o), env, argPath(c)) }),
 		tool.WithDescribe(func(c tool.Call, env tool.Env) string { return title("read " + shown(env, titlePath(c))) }),
 		tool.WithLocations(readLocations),
+		tool.WithSubject(pathSubject("path")),
 	)
 }
 

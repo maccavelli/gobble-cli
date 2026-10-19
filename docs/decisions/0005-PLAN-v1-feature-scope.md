@@ -7397,3 +7397,108 @@ grok-build's prefix matching for shell commands, which F6-3 replaces with parsed
   `TMP` and `TEMP` outside the user's home; `make preflight`, every step through `apidiff` passed on each, and
   `check-records` and `markdownlint` after it; `verify-build-metadata` needs a commit the copy does not have, and passed
   on macOS.
+
+**F6-2a's deviations (2026-10-19),** found at step 6 and resolved by the owner's choices of the same day, before the
+step went on:
+
+1. **acpclient carries the limit mark.** `acpclient.PermissionRequest` had no `_meta`, and its `RequestPermission` left
+   the request's `_meta` behind (`acpclient/conn.go:57-61`, `:433-449`), so print mode could not tell a limit's
+   question from a rule's, and decision 8's `--yes` would have approved a limit or could not ship. *Resolution (the
+   owner's choice, "Add Limit to acpclient"):* `PermissionRequest` gains `Limit`, read from `_meta.gobble.limit`, with
+   its test. `acpclient/conn.go` and its test join step 6's files.
+2. **The repeated-call question is marked.** Decision 8 has `--yes` answer the questions a rule or the mode asked, and
+   decision 14 keeps the repeated-call question unchanged, but only its title's suffix, "(the same call N times in a
+   row)", set it apart (`acpserver/prompt.go`, `ruleTitle`). *Resolution (the owner's choice, "Mark it, --yes
+   rejects"):* the question carries `_meta.gobble.repeated`, the run's length, which acpclient passes as
+   `PermissionRequest.Repeated`, and print mode rejects it with `--yes` as without it. `exit_plan_mode`'s, the level-5
+   personality's and `/trust`'s questions need no mark: only a tool call's question offers the option id `allow_once`
+   (`acpserver.AllowOnceID`), which is the one `--yes` chooses, so it leaves those three as they were.
+3. **The outside title stays.** Decision 7 puts the `external_directory` rule in place of `" (outside the
+   workspace)"` in the question's title. *Resolution (the owner's choice, "Keep the suffix"):* the rule decides, and
+   the title keeps the suffix, so the person asked still sees why.
+
+**F6-2a's execution record (2026-10-19).**
+
+- **Ran as the entry wrote it,** on the owner's word "Approve as written", after 0023-PLAN's commit, with deviations 1
+  to 3 above, each the owner's choice. F6-2b is next, made executable on the owner's word after F6-2a's commit.
+- **What was built:**
+  - `permission`: `Rule` gains `Kind`, `Subjects`, `Outside` and `ReadOnly`, and `Decision` gains `By`; `rules.go`
+    holds `ParseSpec`, `Spec` and `RuleSource` with the layer names, opencode's wildcard, and `Engine`, whose `Evaluate`
+    gives a `Verdict` (the effect, the deciding rule, and a limit's reason) and whose `Hidden` names a tool denied
+    whole;
+  - `tool`: `Subject`, `Subjecter` and `WithSubject`; `tool/builtin`: each file tool's paths (`pathSubject`, the
+    working directory when grep, find or tree names none) and bash's and powershell's command (`shellSubject`);
+  - `internal/config`: `permissions.rules` (`KindRules`), `PermissionRule`, each rule checked by `permission.ParseSpec`
+    with its file and line, the join across layers, `get --origin`'s rendering, `config set`'s refusal of a list, the
+    template's "Permissions" block, the schema;
+  - `agent`: every call asks the policy, with its subjects, its paths outside the roots and its tool's read-only mark;
+    with no policy, a call inside the roots runs and one outside is refused, as before;
+  - `acpserver`: `SessionSettings.Rules`, `Home` and `ConfigDir`; the session's engine, fixed when it starts
+    (`engineOf`); the turn's defaults, the MCP tools named from the turn's own (`withDefaults`); hidden tools left out
+    of the request, `tool_search` and the system prompt (`visible`, `sections`); `planPolicy` deciding by the engine
+    and logging each verdict (`logDecision`); `_meta.gobble.limit` and `_meta.gobble.repeated` on the question;
+    `AllowOnceID`;
+  - `acpclient`: `PermissionRequest.Limit` and `Repeated`, from the question's `_meta.gobble` (deviations 1 and 2);
+  - `internal/cli`: `--yes` out of `laterFlags`, print mode's answer, and each session's rules (`rulesOf`).
+- **What the entry left unsaid, decided inside it:**
+  - **a configuration path and a delete are the limit's question whenever the rules do not deny them,** not only
+    when a rule allows them, as step 1 first built it. Under the default's ask the question carried no mark, so
+    `--yes` would have approved a delete, which F6 decision 4 refuses ("a delete and a protected path are still
+    refused without a person"). Found writing `TestPrintYes`'s delete case. A deny stays a deny;
+  - **an outside path's `external_directory` rule decides a tie** with the call's own subjects, so the log names the
+    rule that let the path through; a stricter verdict for a subject still wins;
+  - **the refusal texts:** a rule's is `<tool> did not run: the permission rule "<rule>" (<source>) denies it.`, and
+    a limit's is `<tool> did not run: <reason>.`, the reason the limit's own words;
+  - **plan mode** refuses, after the rules, a call that is not read-only or that would ask; a deny is the rule's
+    refusal, and an allowed write is still refused;
+  - **the log line** is `permission: decided` at info, to the log file alone (stderr shows warnings and above), with
+    `session`, `tool`, `subjects`, `effect`, `rule` and `from`, and `outside` and `limit` when set. `from` is the
+    source: the linter reserves the key `source`;
+  - **an MCP tool** is told by the turn's MCP tools, not by its name's `mcp__` prefix;
+  - **`--yes` in the line view** is accepted and changes nothing, since a person answers there; decision 8 names print
+    mode alone;
+  - **the template's examples** are rule lines to put in place of `[]`; the block as step 3 first wrote it put them
+    above the key. The block also names the configuration paths, `external_directory` and `--yes`.
+- **Tests,** each new assertion seen failing on a scratch copy:
+  - `permission`: `TestParseSpec`, `TestWildcard`, `TestEvaluateLayers` (the last match over four layers, a row a
+    layer; the strictest of two subjects in either order), `TestEvaluateSubjects`, `TestEvaluateExternalDirectory`,
+    `TestEvaluateLimits` (each limit over an allow-everything rule, a deny kept, the default's question marked),
+    `TestHidden`;
+  - `tool/builtin`: `TestSubjects`, every built-in tool's subject, a move's and a copy's two paths;
+  - `internal/config`: `TestRulesJoinAcrossLayers` (global, project and `--set` joined with file and line, two bad
+    rules reported and left out, a non-list refused) and `TestRulesRenderAndSet`; `TestEditEveryTemplateKey`
+    asserts `config set`'s refusal;
+  - `agent`: `TestPolicySubjects` (a command's subject, a search's working directory, no policy running a write);
+    `TestToolRoundTrip`, `TestPolicy`, `TestOutsideRoots` and `TestCacheOnEveryCall` assert the subjects and the
+    read-only mark;
+  - `acpserver`: `TestRulesDecide`, twelve cases (a read unasked, a deny reaching a read at any depth, a write asked,
+    allowed, and denied by a later rule, `AGENTS.md` and a delete asking with the limit mark though allowed, `.git`
+    and `~/.ssh` refused though allowed, an outside read asked and allowed by a rule, plan mode over an allow), each
+    with its log line; `TestHiddenTools`; `TestSessionLimitsPlaced`; `TestRepeatedCallQuestion` asserts the
+    repeated mark; `TestNilSettingsIsToday` the home;
+  - `acpclient`: `TestRequestPermission` asserts both marks, and none when mistyped;
+  - `internal/cli`: `TestPrintYes` (a write declined without `--yes` and allowed with it; `AGENTS.md`, a deny rule and
+    an allowed delete left), `TestPrintYesRepeated`, `TestProjectRulesNeedTrust`; `TestChatUsesMCPTools` asserts that
+    a read-only MCP tool asks, and runs under an allow rule; `TestSessionSettingsReachAgent` the rules with their file
+    and line.
+- **The negatives:** 68 mutations over the engine, the agent, acpserver, acpclient, the CLI, the settings and the
+  tools, each applied alone to a scratch copy, after control runs of the named tests passed unmutated. The first run
+  caught 63; the other five did not build (unused names the mutations left) and were rewritten. One of them, "the last
+  subject decides", then passed `TestEvaluateLayers`, whose two-subject case put the deny last: the test gained the
+  reverse order, and the mutation fails it. The final run: 68 of 68 caught.
+- **The gates:**
+  - the pre-add check on the 54 changed `.go` files, clean;
+  - lint for linux, darwin and windows with `CGO_ENABLED=0`, `0 issues.` each, after nine findings in the new code
+    were fixed in it (three unchecked type assertions and an unchecked `os.UserHomeDir`, a repeated `"!!str"` made
+    `tagStr`, three `modernize` simplifications, the `source` log key);
+  - macOS: `CGO_ENABLED=1 go test -race -count=1 ./...`, 35 packages ok, and `make preflight`, `preflight passed`;
+  - the Linux machine and the Windows laptop, over ssh on a copy of the working tree (701 files) in a fresh temporary
+    directory: `go test -count=1 ./...` and `CGO_ENABLED=1 go test -race -count=1 ./...`, 35 packages ok on each,
+    Windows with `TMP` and `TEMP` outside the user's home; `make preflight`, every step through `apidiff` passed on
+    each, and `check-records` and `markdownlint` after it; `verify-build-metadata` needs a commit the copy does not
+    have, and passed on macOS. `TestRulesDecide`'s `external_directory` rule over a drive-letter path passed on
+    Windows;
+  - the identifier scan over the change: no account name, hostname or real-machine path.
+- **Not done, and why:** the eight options, the three stores, `/permissions`, a rejection's feedback and the
+  question's provenance are F6-2b's; the 0008-MADR note on `[f]` stays proposed until then. The log carries a shell
+  call's whole command, as decision 12 says, as the session file already does.

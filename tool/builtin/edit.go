@@ -76,6 +76,7 @@ func Edit() tool.Tool {
 		tool.WithKind(tool.KindEdit),
 		tool.WithAnnotations(tool.Annotations{DestructiveHint: true}),
 		tool.WithOutside(outsidePath),
+		tool.WithSubject(pathSubject("path")),
 		tool.WithPrepare(prepareEdit),
 		tool.WithSchema(func(s *jsonschema.Schema) {
 			edits := property(s, "edits")

@@ -88,6 +88,37 @@
       ],
       "x-gobble-global-only": true
     },
+    "permissions": {
+      "type": "object",
+      "properties": {
+        "rules": {
+          "type": [
+            "null",
+            "array"
+          ],
+          "items": {
+            "type": "object",
+            "properties": {
+              "allow": {
+                "type": "string"
+              },
+              "ask": {
+                "type": "string"
+              },
+              "deny": {
+                "type": "string"
+              }
+            },
+            "minProperties": 1,
+            "maxProperties": 1,
+            "additionalProperties": false
+          },
+          "description": "The permission rules, in order: each allow, ask or deny of a tool, or of a tool and a pattern in parentheses. The last that matches a call decides; with none, a read-only built-in tool runs and every other call asks.",
+          "default": []
+        }
+      },
+      "additionalProperties": false
+    },
     "personality": {
       "type": "string",
       "description": "The personality gobble speaks in: boring (also plain or normal), dry, snarky, bombastic, or one of your own under personalities/ in this directory.",

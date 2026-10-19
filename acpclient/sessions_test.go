@@ -218,6 +218,19 @@ func TestRequestPermission(t *testing.T) {
 	if got := selected(&handler{}); got != "n" {
 		t.Fatalf("no Permission selected %q, want reject_once", got)
 	}
+	if asked.Limit != "" || asked.Repeated != 0 {
+		t.Fatalf("no _meta: asked %+v, want no marks", asked)
+	}
+	// gobble's marks, as JSON decodes them (gobble-cli 0005-PLAN F6-2a's
+	// deviations 1 and 2); a mistyped one is none.
+	req.Meta = map[string]any{"gobble": map[string]any{"limit": "a delete always asks", "repeated": float64(3)}}
+	if selected(pick("n")); asked.Limit != "a delete always asks" || asked.Repeated != 3 {
+		t.Fatalf("marks: asked %+v", asked)
+	}
+	req.Meta = map[string]any{"gobble": map[string]any{"limit": 7, "repeated": "3"}}
+	if selected(pick("n")); asked.Limit != "" || asked.Repeated != 0 {
+		t.Fatalf("mistyped marks: asked %+v", asked)
+	}
 }
 
 // The agent's refusals become ErrSessionLocked and ErrInvalidSession, with

@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strconv"
 	"strings"
@@ -97,9 +98,16 @@ func TestEditCommentedKey(t *testing.T) {
 }
 
 // Every key of the shipped template is set through case 2, and only its
-// lines change.
+// lines change; the rules, a list, are refused, since config set takes one
+// value (0005-PLAN F6-2).
 func TestEditEveryTemplateKey(t *testing.T) {
 	for _, k := range Keys {
+		if k.Kind == KindRules {
+			if err := Check(k.Path, "[]", LayerGlobal); err == nil || !strings.Contains(err.Error(), "is a list of rules") {
+				t.Errorf("%s: Check = %v, want the list refused", k.Path, err)
+			}
+			continue
+		}
 		out := applyAll(t, Template(), setEdit(t, k.Path, sample(k)))
 		old, got := strings.Split(string(Template()), "\n"), strings.Split(string(out), "\n")
 		if len(old) != len(got) {
@@ -115,7 +123,7 @@ func TestEditEveryTemplateKey(t *testing.T) {
 			t.Errorf("%s: %d lines changed, want %d", k.Path, changed, want)
 		}
 		r, ds := resolveText(t, out)
-		if v, _ := r.Settings.Value(k.Path); len(ds) != 0 || r.Origins[k.Path].Layer != LayerGlobal || v == defaultValue(k) {
+		if v, _ := r.Settings.Value(k.Path); len(ds) != 0 || r.Origins[k.Path].Layer != LayerGlobal || reflect.DeepEqual(v, defaultValue(k)) {
 			t.Errorf("%s: read back %v from %v, %v", k.Path, v, r.Origins[k.Path], ds)
 		}
 	}

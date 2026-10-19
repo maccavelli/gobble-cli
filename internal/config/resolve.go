@@ -81,6 +81,13 @@ func Resolve(o Options) (Resolved, []Diagnostic) {
 			if l.null {
 				continue // a null clears to the layer below: that layer's value stays
 			}
+			if rules, ok := l.value.([]PermissionRule); ok {
+				// The rules of every layer are joined, not replaced: the
+				// last that matches decides (0005-PLAN F6-2 decision 4).
+				r.Settings.Permissions.Rules = append(r.Settings.Permissions.Rules, rules...)
+				r.Origins[path] = l.src
+				continue
+			}
 			if err := r.Settings.set(path, l.value); err == nil {
 				r.Origins[path] = l.src
 			}

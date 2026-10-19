@@ -143,7 +143,8 @@ func TestSessionSettingsReachAgent(t *testing.T) {
 	t.Setenv("GOBBLE_HOME", home)
 	writeFile(t, filepath.Join(home, "settings.yaml"),
 		"defaultThinkingLevel: low\ncacheRetention: long\nsteeringMode: all\nfollowUpMode: all\ncompaction:\n  keepRecentTokens: 100\n"+
-			"mcp:\n  startupWaitMs: 7\n  stopGraceMs: 8\n  stopTimeoutMs: 9\nshellCommandPrefix: set -e\n")
+			"mcp:\n  startupWaitMs: 7\n  stopGraceMs: 8\n  stopTimeoutMs: 9\nshellCommandPrefix: set -e\n"+
+			"permissions:\n  rules:\n    - deny: read(.env)\n")
 	out := &Output{out: &bytes.Buffer{}, err: &bytes.Buffer{}}
 	e := &runEnv{ctx: t.Context(), out: out, logs: &lazyLog{out: out}, store: session.NewMemoryStore()}
 	t.Cleanup(func() {
@@ -160,8 +161,11 @@ func TestSessionSettingsReachAgent(t *testing.T) {
 		Retry: llm.DefaultRetry, Personality: personality.Default,
 		// A project with no files that need trust is trusted (0005-PLAN F6-1).
 		ProjectRoot: cwd, Trust: permission.TrustDecision{Trusted: true, Source: permission.SourceNothing},
+		// The rules, each with its file and line (0005-PLAN F6-2).
+		Rules: []permission.Spec{{Effect: permission.ModeDeny, Tool: "read", Pattern: ".env",
+			Source: permission.RuleSource{Layer: permission.LayerGlobal, File: filepath.Join(home, "settings.yaml"), Line: 14}}},
 	}
-	if got != want {
+	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("Settings = %+v, want %+v", got, want)
 	}
 	if e.sessionSettings("").Settings.ShellCommandPrefix != "" {
@@ -172,7 +176,7 @@ func TestSessionSettingsReachAgent(t *testing.T) {
 		MCPStartupWait: 10 * time.Second, MCPStopGrace: 500 * time.Millisecond, MCPStopTimeout: 2 * time.Second,
 		Retry: llm.DefaultRetry, Personality: personality.Default,
 	}
-	if got := toSession(config.Defaults()); got != today {
+	if got := toSession(config.Defaults()); !reflect.DeepEqual(got, today) {
 		t.Fatalf("toSession(Defaults()) = %+v, want %+v", got, today)
 	}
 }

@@ -51,6 +51,9 @@ func child(m *yaml.Node, key string) *yaml.Node {
 // valueOf is k's effective value as a node, with its origin as a comment.
 func valueOf(r Resolved, k Key, origin bool) *yaml.Node {
 	v, _ := r.Settings.Value(k.Path)
+	if rules, ok := v.([]PermissionRule); ok {
+		return rulesNode(rules, origin)
+	}
 	n := scalarNode(v)
 	if origin {
 		n.LineComment = Origin(r.Origins[k.Path])

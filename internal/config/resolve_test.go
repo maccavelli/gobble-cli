@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -50,7 +51,7 @@ func TestDefaultsEqualCode(t *testing.T) {
 		t.Fatalf("diagnostics with no file: %v", ds)
 	}
 	s := r.Settings
-	if s != Defaults() {
+	if !reflect.DeepEqual(s, Defaults()) {
 		t.Fatalf("Resolve with no file = %+v, want Defaults()", s)
 	}
 	checks := []struct {
@@ -100,12 +101,12 @@ func TestKeysMatchSettings(t *testing.T) {
 		if err := s.set(k.Path, defaultValue(k)); err != nil {
 			t.Errorf("%s: %v", k.Path, err)
 		}
-		if v, ok := s.Value(k.Path); !ok || v != defaultValue(k) {
+		if v, ok := s.Value(k.Path); !ok || !reflect.DeepEqual(v, defaultValue(k)) {
 			t.Errorf("%s: Value = %v %v, want %v", k.Path, v, ok, defaultValue(k))
 		}
 	}
-	if len(Keys) != 29 {
-		t.Errorf("%d keys, want 0018-MADR D14's 13, 0019-MADR D15's defaultProvider, 0021-MADR D3's cacheRetention, 0005-PLAN F4-2c's defaultModel, F5-1's five retry keys, F5-2's four compaction keys, F5-5's smallModel, F6-1's defaultProjectTrust and 0022-PLAN P3's two personality keys", len(Keys))
+	if len(Keys) != 30 {
+		t.Errorf("%d keys, want 0018-MADR D14's 13, 0019-MADR D15's defaultProvider, 0021-MADR D3's cacheRetention, 0005-PLAN F4-2c's defaultModel, F5-1's five retry keys, F5-2's four compaction keys, F5-5's smallModel, F6-1's defaultProjectTrust, F6-2's permissions.rules and 0022-PLAN P3's two personality keys", len(Keys))
 	}
 }
 
@@ -233,13 +234,13 @@ func TestTypeAndRangeErrorsFallBack(t *testing.T) {
 	l := newLayout(t, "steeringMode: some\nmcp:\n  stopGraceMs: \"5\"\n  stopTimeoutMs: -1\ntools:\n  bash:\n    useClientTerminal: [x]\n    maxTimeoutMs: 1.10\ncompaction: 3\nsessionDir: relative/dir\ndefaultProvider: ollama\n", "")
 	l2 := newLayout(t, "compaction:\n  thresholdPercent: 101\n  thresholdTokens: -1\n", "")
 	r2, ds2 := Resolve(Options{ConfigDir: l2.config})
-	if r2.Settings != Defaults() || len(ds2) != 2 ||
+	if !reflect.DeepEqual(r2.Settings, Defaults()) || len(ds2) != 2 ||
 		!strings.HasSuffix(ds2[0].String(), "settings.yaml:2: compaction.thresholdPercent: must be at most 100") ||
 		!strings.HasSuffix(ds2[1].String(), "settings.yaml:3: compaction.thresholdTokens: must be at least 0") {
 		t.Fatalf("settings %+v, diagnostics %v; want the defaults, thresholdPercent above its greatest and thresholdTokens below its least", r2.Settings, ds2)
 	}
 	r, ds := Resolve(Options{ConfigDir: l.config})
-	if r.Settings != Defaults() {
+	if !reflect.DeepEqual(r.Settings, Defaults()) {
 		t.Fatalf("settings %+v, want every key at its default", r.Settings)
 	}
 	want := []string{
@@ -266,7 +267,7 @@ func TestTypeAndRangeErrorsFallBack(t *testing.T) {
 func TestUnknownKeyReported(t *testing.T) {
 	l := newLayout(t, "theme: dark\nmcp:\n  retries: 3\n", "")
 	r, ds := Resolve(Options{ConfigDir: l.config})
-	if r.Settings != Defaults() || len(ds) != 2 {
+	if !reflect.DeepEqual(r.Settings, Defaults()) || len(ds) != 2 {
 		t.Fatalf("%+v %v", r.Settings, ds)
 	}
 	if ds[0].Path != "theme" || ds[0].Line != 1 || ds[0].Text != textUnknown || ds[0].Severity != SeverityWarning ||

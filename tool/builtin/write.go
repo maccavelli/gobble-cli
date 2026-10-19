@@ -40,6 +40,7 @@ func Write() tool.Tool {
 		tool.WithKind(tool.KindEdit),
 		tool.WithAnnotations(tool.Annotations{DestructiveHint: true}),
 		tool.WithOutside(outsidePath),
+		tool.WithSubject(pathSubject("path")),
 		tool.WithDescribe(func(c tool.Call, env tool.Env) string { return title("write " + shown(env, titlePath(c))) }),
 		tool.WithLocations(argLocations("path")),
 	)

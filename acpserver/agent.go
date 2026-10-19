@@ -233,6 +233,9 @@ type liveSession struct {
 	trust      permission.TrustDecision
 	project    ProjectOverrides
 	trustNoted bool
+	// rules is the session's rule engine, fixed when it starts, as its
+	// settings are (0005-PLAN F6-2).
+	rules permission.Engine
 }
 
 var (
@@ -405,7 +408,7 @@ func (a *Agent) NewSession(ctx context.Context, p acp.NewSessionRequest) (acp.Ne
 		think: cmp.Or(a.override.Thinking, ss.Thinking), model: cmp.Or(a.override.Model, a.models().Default), mode: modeDefault,
 		queue: sessionQueue(ss), compaction: ss.Compaction, cache: cacheOf(ss.CacheRetention), retry: ss.Retry,
 		autoCompactOff: ss.AutoCompactionOff, voice: a.voiceOf(ss), insultsAccepted: ss.BombasticAccepted,
-		root: ss.ProjectRoot, trust: ss.Trust, project: projectOf(ss.Project)}
+		root: ss.ProjectRoot, trust: ss.Trust, project: projectOf(ss.Project), rules: engineOf(ss, p.Cwd)}
 	if len(forked) > 0 {
 		for _, e := range forked {
 			if err := log.Append(ctx, e); err != nil {
@@ -589,10 +592,15 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 	if w.err != nil {
 		return acp.PromptResponse{}, appendFailed(w.err)
 	}
-	tools := append(a.toolsOf(s), a.mcpTools(turnCtx, s.mcp)...)
+	mcpTools := a.mcpTools(turnCtx, s.mcp)
+	tools := append(a.toolsOf(s), mcpTools...)
 	if a.modeOf(s) == modePlan {
 		tools = append(tools, exitPlan{a: a, conn: conn, s: s})
 	}
+	// The rules' hidden tools are neither sent nor found by tool_search
+	// (0005-PLAN F6-2 decision 6).
+	rules := withDefaults(s.rules, mcpTools)
+	tools = visible(rules, tools)
 	loaded := loadedTools(s.tree.Path())
 	if fresh := startLoads(tools, loaded); len(fresh) > 0 {
 		w.add(toolsEntry(fresh))
@@ -607,7 +615,7 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 		Tools:    tools,
 		Model:    chosen,
 		Thinking: think,
-		Policy:   planPolicy{a: a, s: s, inner: &acpPolicy{conn: conn, session: p.SessionId}},
+		Policy:   planPolicy{a: a, s: s, rules: rules, inner: &acpPolicy{conn: conn, session: p.SessionId}},
 		Queue:    s.queue,
 		Search:   builtin.ToolSearch(),
 		Loaded:   loaded,
@@ -912,7 +920,7 @@ func (a *Agent) open(ctx context.Context, id acp.SessionId, cwd string, extra []
 	s := &liveSession{id: id, cwd: cwd, dirs: dirs, log: log, think: thinkingOff, model: a.models().Default, mode: modeDefault,
 		queue: sessionQueue(ss), compaction: ss.Compaction, cache: cacheOf(ss.CacheRetention), retry: ss.Retry,
 		autoCompactOff: ss.AutoCompactionOff, voice: a.voiceOf(ss), insultsAccepted: ss.BombasticAccepted,
-		root: ss.ProjectRoot, trust: ss.Trust, project: projectOf(ss.Project)}
+		root: ss.ProjectRoot, trust: ss.Trust, project: projectOf(ss.Project), rules: engineOf(ss, cwd)}
 	a.restore(s, log.Entries())
 	// The run's override wins over the history's choice (0005-PLAN F4-2c).
 	if err := a.applyOverride(ctx, s); err != nil {

@@ -89,6 +89,33 @@
 # defaultProjectTrust: ask
 
 # ---------------------------------------------------------------------
+# Permissions
+# ---------------------------------------------------------------------
+
+# The rules that decide whether a tool call runs, asks first, or is
+# refused. Each is allow, ask or deny, then a tool, or a tool and a
+# pattern in parentheses. A file tool's pattern matches each path the
+# call names, relative to the project, * staying in one directory and
+# ** crossing them; a pattern with no slash matches a name anywhere.
+# bash's matches the whole command, * matching any text. Any other
+# tool, an MCP tool among them, is matched by its name alone, and *
+# in a name matches any text. The last rule that matches a call
+# decides, a trusted project's rules coming after these; with none, a
+# read-only built-in tool runs and every other call asks. Whatever the
+# rules say, a write under .git or ~/.ssh, or to gobble's credentials,
+# is refused; a write to gobble's or the project's configuration, an
+# AGENTS.md or the project's skills asks, as a delete does; and a path
+# outside the project asks unless an external_directory rule allows
+# it. In print mode, --yes allows once what a rule asks, never these.
+# For example, in place of [] below, one rule a line:
+#     - ask: bash(*)
+#     - allow: bash(git status*)
+#     - deny: read(.env)
+#     - allow: external_directory(/tmp/**)
+# permissions:
+#   rules: []
+
+# ---------------------------------------------------------------------
 # Personality
 # ---------------------------------------------------------------------
 

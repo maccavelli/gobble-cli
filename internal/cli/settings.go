@@ -15,6 +15,7 @@ import (
 	"github.com/maccavelli/gobble-cli/compaction"
 	"github.com/maccavelli/gobble-cli/internal/config"
 	"github.com/maccavelli/gobble-cli/llm"
+	"github.com/maccavelli/gobble-cli/permission"
 )
 
 // processOnce holds the process settings, resolved once a run.
@@ -99,8 +100,25 @@ func toSession(s config.Settings) acpserver.SessionSettings {
 		},
 		MCPStartupWait: s.MCPStartupWait(), MCPStopGrace: s.MCPStopGrace(), MCPStopTimeout: s.MCPStopTimeout(),
 		Retry: retryOf(s.Retry), AutoCompactionOff: !s.Compaction.Enabled, Personality: s.Personality,
-		BombasticAccepted: s.BombasticAccepted,
+		BombasticAccepted: s.BombasticAccepted, Rules: rulesOf(s.Permissions.Rules),
 	}
+}
+
+// rulesOf are the settings' permission rules as the engine takes them, each
+// with its file, line and layer (0005-PLAN F6-2 decisions 2 and 12).
+// Resolve has checked each, so one that does not parse is a bug, left out.
+func rulesOf(rules []config.PermissionRule) []permission.Spec {
+	var out []permission.Spec
+	for _, r := range rules {
+		effect, text := r.Effect()
+		s, err := permission.ParseSpec(permission.Mode(effect), text)
+		if err != nil {
+			continue
+		}
+		s.Source = permission.RuleSource{Layer: r.Source.Layer.String(), File: r.Source.File, Line: r.Source.Line}
+		out = append(out, s)
+	}
+	return out
 }
 
 // retryOf is the retry settings as a session takes them (0005-PLAN F5-1).

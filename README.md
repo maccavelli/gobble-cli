@@ -64,6 +64,11 @@ Early, and built in the order [docs/README.md](docs/README.md#build-order) gives
 - **Project trust:** a project's own `.gobble/settings.yaml`, `SYSTEM.md`, `APPEND_SYSTEM.md`, skills, prompt templates and
   personality files load only once it is trusted: by `gobble trust`, `/trust`, the question gobble's terminal asks,
   `--approve` for one run, or `defaultProjectTrust: always`. `gobble untrust` and `--no-approve` refuse it.
+- **Permission rules:** `permissions.rules` in `settings.yaml`, a trusted project's after it: `allow`, `ask` or
+  `deny` of a tool, or of a tool and a pattern over its paths or its command, such as `deny: read(.env)` or
+  `allow: bash(git status*)`; the last that matches decides. With none, a read-only built-in tool runs and every other
+  call asks. A write under `.git` or `~/.ssh` is always refused, and a delete always asks. In print mode, `--yes`
+  allows once what a rule asks.
 - **Personalities:** gobble speaks as `boring`, `dry` (the default), `snarky` or `bombastic`, or one of your own;
   `/personality`, `--personality` and `gobble personality list|show|check|path|reset`. The messages in its catalog, and
   the system prompt's tools and rules sections, compaction's prompts and the built-in tools' descriptions, can be
@@ -81,8 +86,8 @@ Early, and built in the order [docs/README.md](docs/README.md#build-order) gives
   provider's variable; `gobble auth login --api-key -|logout|status|check`, signing in to Grok or Kilo with
   `gobble auth login grok|kilo`, and `gobble auth import --from-pi` ([guide](docs/guides/credentials.md)).
 
-Not built yet: permission rules and requests, shell-command patterns, the accept-edits and bypass modes and
-`request_permissions` (0005-PLAN F6-2 to F6-5); `--yes` and `--offline`, which are refused until then; the enhanced TUI
+Not built yet: the "always" answers and `/permissions` (0005-PLAN F6-2b), shell-command patterns, the accept-edits and
+bypass modes and `request_permissions` (F6-3 to F6-5); `--offline`, which is refused until then; the enhanced TUI
 mode; and `gobble update`. The full v1 line, tiered into
 a v1.0.0 gate, a v1.x train and `exp/`, is in [0005-MADR](docs/decisions/0005-MADR-v1-feature-scope.md).
 

@@ -196,20 +196,27 @@ func hasMCP(names []string) bool {
 	return slices.ContainsFunc(names, func(n string) bool { return strings.HasPrefix(n, mcpPrefix) })
 }
 
-// The in-process agent connects mcp.json's servers, and their tools run.
+// The in-process agent connects mcp.json's servers, and their tools run
+// when a rule allows them. With none, an MCP tool asks, though echo is
+// read-only, and print mode declines (0005-PLAN F6-2 decision 4).
 func TestChatUsesMCPTools(t *testing.T) {
 	home := t.TempDir()
 	writeHomeMCP(t, home, "fx", fixture(t, nil))
-	s := llmtest.NewScript(llmtest.ToolCall("c1", "mcp__fx__echo", `{"text":"hi"}`), llmtest.Text("done"))
-	withModel(t, s)
-	mustRun(t, home, "--no-session", "-p", "go")
-	reqs := s.Requests()
-	if len(reqs) != 2 || !slices.Contains(requestToolNames(t, reqs[0]), "mcp__fx__echo") {
-		t.Fatalf("%d requests; tools %q", len(reqs), requestToolNames(t, reqs[0]))
-	}
-	last := reqs[1].Messages[len(reqs[1].Messages)-1]
-	if last.Content[0].Text != "hi" {
-		t.Fatalf("tool result %q", last.Content[0].Text)
+	for _, allowed := range []bool{false, true} {
+		if allowed {
+			writeFile(t, filepath.Join(home, "settings.yaml"), "permissions:\n  rules:\n    - allow: mcp__fx__*\n")
+		}
+		s := llmtest.NewScript(llmtest.ToolCall("c1", "mcp__fx__echo", `{"text":"hi"}`), llmtest.Text("done"))
+		withModel(t, s)
+		mustRun(t, home, "--no-session", "-p", "go")
+		reqs := s.Requests()
+		if len(reqs) != 2 || !slices.Contains(requestToolNames(t, reqs[0]), "mcp__fx__echo") {
+			t.Fatalf("allowed %v: %d requests; tools %q", allowed, len(reqs), requestToolNames(t, reqs[0]))
+		}
+		last := reqs[1].Messages[len(reqs[1].Messages)-1]
+		if got := last.Content[0].Text; allowed != (got == "hi") || !allowed && !strings.Contains(got, "declined") {
+			t.Fatalf("allowed %v: tool result %q", allowed, got)
+		}
 	}
 }
 

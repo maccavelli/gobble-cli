@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -124,7 +125,7 @@ func TestUpdateMissingSection(t *testing.T) {
 	r, ds := resolveText(t, out)
 	want := Defaults()
 	want.SteeringMode = "all"
-	if len(ds) != 0 || r.Settings != want {
+	if len(ds) != 0 || !reflect.DeepEqual(r.Settings, want) {
 		t.Fatalf("%+v %v", r.Settings, ds)
 	}
 	again, more := runUpdate(t, out)

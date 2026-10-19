@@ -54,10 +54,18 @@ type Options struct {
 }
 
 // PermissionRequest is the agent asking to run a tool call.
+//
+// Limit and Repeated are gobble's marks, from the request's _meta.gobble:
+// the limit that asked, which no "always" and no --yes may approve, and a
+// repeated call's run, whose question asks whether the turn may go on
+// (gobble-cli 0005-PLAN F6-2 decisions 5 and 8, and F6-2a's deviations 1
+// and 2). Another agent sends neither.
 type PermissionRequest struct {
 	SessionID string
 	Tool      ToolCall
 	Options   []PermissionOption
+	Limit     string
+	Repeated  int
 }
 
 // PermissionOption is one answer the agent offers. Kind is ACP's:
@@ -433,6 +441,7 @@ func (h *handler) commandsOf(id acp.SessionId) []Command {
 func (h *handler) RequestPermission(ctx context.Context, r acp.RequestPermissionRequest) (acp.RequestPermissionResponse, error) {
 	if h.permission != nil {
 		req := PermissionRequest{SessionID: string(r.SessionId), Tool: ToolCall{ID: string(r.ToolCall.ToolCallId), Content: toolContent(r.ToolCall.Content)}}
+		req.Limit, req.Repeated = gobbleMarks(r.Meta)
 		if r.ToolCall.Title != nil {
 			req.Tool.Title = *r.ToolCall.Title
 		}
@@ -455,6 +464,25 @@ func (h *handler) RequestPermission(ctx context.Context, r acp.RequestPermission
 		}
 	}
 	return acp.RequestPermissionResponse{Outcome: acp.NewRequestPermissionOutcomeCancelled()}, nil
+}
+
+// gobbleMarks are a permission request's _meta.gobble limit and repeated
+// marks; a missing or mistyped one is none.
+func gobbleMarks(meta map[string]any) (limit string, repeated int) {
+	g, ok := meta["gobble"].(map[string]any)
+	if !ok {
+		return "", 0
+	}
+	if s, ok := g["limit"].(string); ok {
+		limit = s
+	}
+	switch n := g["repeated"].(type) {
+	case float64:
+		repeated = int(n)
+	case int:
+		repeated = n
+	}
+	return limit, repeated
 }
 
 // The client advertises no file-system or terminal capability, so these

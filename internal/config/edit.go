@@ -138,6 +138,9 @@ func valueNode(path, text string) (*yaml.Node, error) {
 	if !known {
 		return nil, fmt.Errorf("unknown setting %q", path)
 	}
+	if k.Kind == KindRules {
+		return nil, fmt.Errorf("%s %s", path, textList)
+	}
 	if text == "" {
 		if k.Kind == KindInt || k.Kind == KindBool {
 			return nil, fmt.Errorf("%s: want %s, have an empty value", path, want(k))
@@ -170,7 +173,7 @@ func scalarNode(v any) *yaml.Node {
 	case int64:
 		n.Value = strconv.FormatInt(v, 10)
 	case string:
-		n.Tag, n.Value = "!!str", v
+		n.Tag, n.Value = tagStr, v
 	}
 	return n
 }
@@ -726,7 +729,7 @@ func renderScalar(v *yaml.Node) (string, error) {
 
 func plainReadsBack(text, tag string) bool {
 	if text == "" || strings.ContainsAny(text, "\r\n") ||
-		(tag == "!!str" && slices.Contains(yaml11Words, strings.ToLower(text))) {
+		(tag == tagStr && slices.Contains(yaml11Words, strings.ToLower(text))) {
 		return false
 	}
 	var doc yaml.Node

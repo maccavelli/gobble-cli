@@ -40,6 +40,7 @@ func Tree() tool.Tool {
 			bound(s, "limit", 1, maxTreeLimit, defaultTreeLimit)
 		}),
 		tool.WithOutside(outsidePath),
+		tool.WithSubject(pathSubject("path")),
 		tool.WithDescribe(func(c tool.Call, env tool.Env) string { return title("tree " + shown(env, orDot(argPath(c)))) }),
 	)
 }

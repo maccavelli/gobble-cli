@@ -72,6 +72,12 @@ func leaves(file string, root *yaml.Node, layer Layer) (map[string]leaf, []Diagn
 					out[path] = leaf{null: true, src: src}
 					continue
 				}
+				if key.Kind == KindRules {
+					rules, rds := convertRules(file, v, layer)
+					ds = append(ds, rds...)
+					out[path] = leaf{value: rules, src: src}
+					continue
+				}
 				val, d := convert(key, v)
 				if d != "" {
 					ds = append(ds, errorAt(file, v.Line, path, d))
@@ -127,6 +133,12 @@ func kindOf(n *yaml.Node) string {
 // or D7's text for why it cannot be used.
 func convert(k Key, n *yaml.Node) (any, string) {
 	switch k.Kind {
+	case KindRules:
+		rules, ds := convertRules("", n, LayerSession)
+		if len(ds) > 0 {
+			return nil, ds[0].Text
+		}
+		return rules, ""
 	case KindBool:
 		var b bool
 		if n.Kind != yaml.ScalarNode || n.Decode(&b) != nil {

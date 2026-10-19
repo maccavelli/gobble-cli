@@ -186,6 +186,9 @@ type runEnv struct {
 	promptSet   promptOverrides
 	// trust is the run's project trust (0005-PLAN F6-1).
 	trust trustState
+	// yes is --yes: print mode allows once what a rule or the mode asks
+	// (0005-PLAN F6-2 decision 8).
+	yes bool
 }
 
 func (e *runEnv) log() *slog.Logger { return e.logs.get() }

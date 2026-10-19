@@ -50,6 +50,7 @@ func Move() tool.Tool {
 			property(s, "overwrite").Default = []byte("false")
 		}),
 		tool.WithOutside(twoPaths),
+		tool.WithSubject(pathSubject("from", "to")),
 		tool.WithLocations(argLocations("from", "to")),
 		tool.WithDescribe(func(c tool.Call, env tool.Env) string {
 			return title("move " + shown(env, argString(c, "from")) + " to " + shown(env, argString(c, "to")))
@@ -68,6 +69,7 @@ func Delete() tool.Tool {
 			property(s, "recursive").Default = []byte("false")
 		}),
 		tool.WithOutside(outsidePath),
+		tool.WithSubject(pathSubject("path")),
 		tool.WithDescribe(func(c tool.Call, env tool.Env) string { return title("delete " + shown(env, titlePath(c))) }),
 		tool.WithLocations(argLocations("path")),
 	)
@@ -84,6 +86,7 @@ func Copy() tool.Tool {
 			property(s, "overwrite").Default = []byte("false")
 		}),
 		tool.WithOutside(twoPaths),
+		tool.WithSubject(pathSubject("from", "to")),
 		tool.WithLocations(argLocations("from", "to")),
 		tool.WithDescribe(func(c tool.Call, env tool.Env) string {
 			return title("copy " + shown(env, argString(c, "from")) + " to " + shown(env, argString(c, "to")))
@@ -99,6 +102,7 @@ func Mkdir() tool.Tool {
 		tool.WithAnnotations(tool.Annotations{IdempotentHint: true}),
 		tool.WithSchema(func(s *jsonschema.Schema) { nonEmpty(s, "path") }),
 		tool.WithOutside(outsidePath),
+		tool.WithSubject(pathSubject("path")),
 		tool.WithDescribe(func(c tool.Call, env tool.Env) string { return title("mkdir " + shown(env, titlePath(c))) }),
 		tool.WithLocations(argLocations("path")),
 	)

@@ -36,6 +36,7 @@ func Find() tool.Tool {
 			bound(s, "limit", 1, maxFindLimit, defaultFindLimit)
 		}),
 		tool.WithOutside(outsidePath),
+		tool.WithSubject(pathSubject("path")),
 		tool.WithDescribe(func(c tool.Call, env tool.Env) string {
 			return title("find " + argString(c, "pattern") + " in " + shown(env, orDot(argPath(c))))
 		}),

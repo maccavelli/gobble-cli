@@ -85,12 +85,22 @@ func (e *runEnv) choosePersonality(flag string) error {
 
 // printPermission answers print mode's permission requests as the client
 // answers with no one to ask: the first reject_once option, else
-// reject_always, else cancelled. The level-5 question is answered no, and
-// the session falls back to dry, which stderr says (0022-MADR D10).
+// reject_always, else cancelled. With --yes, a tool call's question that a
+// rule or the mode asked is allowed once; one a limit asked, and a repeated
+// call's, are not (0005-PLAN F6-2 decision 8, F6-2a's deviations 1 and 2).
+// The level-5 question is answered no, and the session falls back to dry,
+// which stderr says (0022-MADR D10).
 func (e *runEnv) printPermission(_ context.Context, r acpclient.PermissionRequest) acpclient.PermissionAnswer {
 	if r.Tool.ID == acpserver.InsultsCallID {
 		e.out.Warnf("a level-5 personality asks first, and print mode cannot ask; this run uses %s. "+
 			"Choose it once in a session to agree.", personality.Default)
+	}
+	if e.yes && r.Limit == "" && r.Repeated == 0 {
+		for _, o := range r.Options {
+			if o.ID == acpserver.AllowOnceID {
+				return acpclient.PermissionAnswer{OptionID: o.ID}
+			}
+		}
 	}
 	for _, kind := range []string{kindRejectOnce, kindRejectAlways} {
 		for _, o := range r.Options {

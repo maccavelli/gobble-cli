@@ -39,6 +39,11 @@ func TestRepeatedCallQuestion(t *testing.T) {
 			*perms[0].ToolCall.Title != "read f.txt (the same call 3 times in a row)" {
 			t.Fatalf("%s: permission requests %+v, want one about c, titled for the repeated call", mode, perms)
 		}
+		// The question is marked, so --yes leaves it (0005-PLAN F6-2a's
+		// deviation 2).
+		if n, _ := perms[0].Meta[gobble].(map[string]any)[keyRepeated].(float64); n != 3 {
+			t.Fatalf("%s: _meta %v, want gobble.repeated 3", mode, perms[0].Meta)
+		}
 	}
 }
 

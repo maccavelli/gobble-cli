@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"slices"
 	"time"
 
@@ -89,6 +90,14 @@ type SessionSettings struct {
 	// Project is a trusted project's own overrides; nil is none
 	// (decision 8).
 	Project *ProjectOverrides
+	// Rules are the permission rules of the global settings file, a
+	// trusted project's and --set, in that order, each with its source
+	// (0005-PLAN F6-2 decisions 2 and 4).
+	Rules []permission.Spec
+	// Home and ConfigDir place gobble's protected paths, ~/.ssh and the
+	// config directory's files (decision 5); "" is the user's home and
+	// PromptOptions.ConfigDir.
+	Home, ConfigDir string
 }
 
 // sessionSettings are the settings for a session in cwd: Options.Settings',
@@ -110,6 +119,10 @@ func (a *Agent) sessionSettings(cwd string) SessionSettings {
 	if s.Retry == (llm.Retry{}) {
 		s.Retry = llm.DefaultRetry
 	}
+	if home, err := os.UserHomeDir(); s.Home == "" && err == nil { // none places no ~/.ssh
+		s.Home = home
+	}
+	s.ConfigDir = cmp.Or(s.ConfigDir, a.prompt.ConfigDir)
 	return s
 }
 

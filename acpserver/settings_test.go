@@ -2,6 +2,8 @@ package acpserver
 
 import (
 	"log/slog"
+	"os"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -103,13 +105,15 @@ func TestSessionSettingsApplied(t *testing.T) {
 }
 
 // A nil Settings is today's defaults, and a partial value is completed from
-// them, Options.Compaction and MCPOptions.StartupWait among them.
+// them, Options.Compaction and MCPOptions.StartupWait among them, and the
+// user's home, which places ~/.ssh (0005-PLAN F6-2 decision 5).
 func TestNilSettingsIsToday(t *testing.T) {
+	home, _ := os.UserHomeDir()
 	today := SessionSettings{
 		SteeringMode: queueOneAtATime, FollowUpMode: queueOneAtATime, Thinking: thinkingOff, CacheRetention: "short",
-		Compaction: compaction.DefaultSettings, MCPStartupWait: DefaultStartupWait, Retry: llm.DefaultRetry,
+		Compaction: compaction.DefaultSettings, MCPStartupWait: DefaultStartupWait, Retry: llm.DefaultRetry, Home: home,
 	}
-	if got := New(Options{}).sessionSettings("/x"); got != today {
+	if got := New(Options{}).sessionSettings("/x"); !reflect.DeepEqual(got, today) {
 		t.Fatalf("nil Settings = %+v, want %+v", got, today)
 	}
 	custom := compaction.Settings{ReserveTokens: 1, KeepRecentTokens: 2}
@@ -120,9 +124,9 @@ func TestNilSettingsIsToday(t *testing.T) {
 	want := SessionSettings{
 		SteeringMode: queueOneAtATime, FollowUpMode: queueAll, Thinking: thinkingOff, CacheRetention: "short",
 		Compaction: compaction.Settings{ReserveTokens: 1, KeepRecentTokens: 7}, MCPStartupWait: time.Second,
-		Retry: llm.DefaultRetry,
+		Retry: llm.DefaultRetry, Home: home,
 	}
-	if got := a.sessionSettings("/x"); got != want {
+	if got := a.sessionSettings("/x"); !reflect.DeepEqual(got, want) {
 		t.Fatalf("partial Settings = %+v, want %+v", got, want)
 	}
 	c, _ := sessionAgent(t, t.TempDir(), llmtest.NewScript(), &acptest.Client{})

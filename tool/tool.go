@@ -259,6 +259,20 @@ type Locator interface {
 	Locations(call Call, env Env) []Location
 }
 
+// Subject is what the permission rules match on a call besides its tool's
+// name (0005-PLAN F6-2 decision 3): the absolute paths a file tool names, or
+// a shell tool's command line. The zero Subject is the name alone.
+type Subject struct {
+	Paths   []string
+	Command string
+}
+
+// Subjecter is implemented by a tool whose calls the rules match by their
+// paths or their command.
+type Subjecter interface {
+	Subject(call Call, env Env) Subject
+}
+
 // Confined is implemented by a tool whose calls name files. Outside returns
 // the paths a call names that lie outside env.Roots. Such a call needs a
 // permission decision even when the tool is read-only, and runs with
@@ -278,6 +292,7 @@ type config struct {
 	describe    func(Call, Env) string
 	outside     func(Call, Env) []string
 	locate      func(Call, Env) []Location
+	subject     func(Call, Env) Subject
 	prepare     func(jsontext.Value) (jsontext.Value, error)
 	schema      func(*jsonschema.Schema)
 }
@@ -292,6 +307,12 @@ func WithOutside(outside func(call Call, env Env) []string) Option {
 // (Locator). Without it a tool names none.
 func WithLocations(locate func(call Call, env Env) []Location) Option {
 	return func(cfg *config) { cfg.locate = locate }
+}
+
+// WithSubject sets what the permission rules match on a call (Subjecter).
+// Without it a tool is matched by its name alone.
+func WithSubject(subject func(call Call, env Env) Subject) Option {
+	return func(cfg *config) { cfg.subject = subject }
 }
 
 // WithPrepare sets a rewrite of a call's arguments that runs before they
@@ -388,6 +409,14 @@ func (g *generic[In, Out]) Locations(call Call, env Env) []Location {
 		return g.cfg.locate(call, env)
 	}
 	return nil
+}
+
+// Subject is WithSubject's function, or the zero Subject.
+func (g *generic[In, Out]) Subject(call Call, env Env) Subject {
+	if g.cfg.subject != nil {
+		return g.cfg.subject(call, env)
+	}
+	return Subject{}
 }
 
 // Outside is WithOutside's function, or no paths.

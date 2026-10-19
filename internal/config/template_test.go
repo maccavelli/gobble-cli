@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"slices"
 	"strings"
@@ -118,7 +119,7 @@ func TestTemplateDefaultsMatch(t *testing.T) {
 // With every key line uncommented, the file sets every key, to its default.
 func TestTemplateUncommentedIsDefaults(t *testing.T) {
 	r, _ := resolveText(t, uncommented(Template()))
-	if r.Settings != Defaults() {
+	if !reflect.DeepEqual(r.Settings, Defaults()) {
 		t.Fatalf("uncommented template = %+v, want Defaults()", r.Settings)
 	}
 	for _, k := range Keys {

@@ -76,7 +76,7 @@ func TestToolRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := llmtest.NewScript(llmtest.ToolCall("c1", "read", args(t, map[string]string{"path": "notes.md"})), llmtest.Text("it is 42"))
-	a := agent.New(agent.Config{Provider: s, Tools: builtin.Tools(), Policy: denyAll{t: t}})
+	a := agent.New(agent.Config{Provider: s, Tools: builtin.Tools(), Policy: readOnly{t: t}})
 	evs, end, err := collect(t.Context(), t, a, tool.Env{Cwd: dir}, "what is the secret?")
 	if err != nil {
 		t.Fatal(err)
@@ -109,12 +109,18 @@ func TestToolRoundTrip(t *testing.T) {
 	}
 }
 
-// denyAll fails the test if asked: read is read-only and is never asked.
-type denyAll struct{ t *testing.T }
+// readOnly allows a call to a read-only tool naming paths only inside the
+// workspace, and fails the test if asked about any other: the policy is
+// asked about every call, and is told which are read-only (0005-PLAN F6-2
+// decision 7).
+type readOnly struct{ t *testing.T }
 
-func (d denyAll) Decide(_ context.Context, r permission.Rule) (permission.Decision, error) {
-	d.t.Errorf("asked about %s; read-only tools are not asked", r.Tool)
-	return permission.Decision{}, nil
+func (d readOnly) Decide(_ context.Context, r permission.Rule) (permission.Decision, error) {
+	if !r.ReadOnly || len(r.Outside) != 0 || r.Kind != permission.SubjectPath || len(r.Subjects) == 0 {
+		d.t.Errorf("asked about %+v; want a read-only call inside the workspace, with its paths", r)
+		return permission.Decision{}, nil
+	}
+	return permission.Decision{Allow: true}, nil
 }
 
 type policy struct {
@@ -140,7 +146,8 @@ func TestPolicy(t *testing.T) {
 		if allow == (statErr != nil) {
 			t.Fatalf("allow %v: file exists %v", allow, statErr == nil)
 		}
-		if len(p.rules) != 1 || p.rules[0].Tool != "write" || p.rules[0].CallID != "w1" || p.rules[0].Title != "write a.txt" {
+		if len(p.rules) != 1 || p.rules[0].Tool != "write" || p.rules[0].CallID != "w1" || p.rules[0].Title != "write a.txt" ||
+			p.rules[0].ReadOnly || p.rules[0].Kind != permission.SubjectPath || !slices.Equal(p.rules[0].Subjects, []string{filepath.Join(dir, "a.txt")}) {
 			t.Fatalf("rules = %+v", p.rules)
 		}
 		sent := s.Requests()[1].Messages
@@ -186,7 +193,8 @@ func TestOutsideRoots(t *testing.T) {
 	for _, allow := range []bool{false, true} {
 		p := &policy{allow: allow}
 		r := run(p)
-		if len(p.rules) != 1 || p.rules[0].Tool != "read" || !strings.HasSuffix(p.rules[0].Title, " (outside the workspace)") {
+		if len(p.rules) != 1 || p.rules[0].Tool != "read" || !strings.HasSuffix(p.rules[0].Title, " (outside the workspace)") ||
+			!slices.Equal(p.rules[0].Outside, []string{secret}) || !slices.Equal(p.rules[0].Subjects, []string{secret}) {
 			t.Fatalf("allow %v: rules = %+v; want one question about the outside read", allow, p.rules)
 		}
 		if allow != strings.Contains(r.Text, "the secret is 42") || allow == r.IsError {
@@ -197,10 +205,43 @@ func TestOutsideRoots(t *testing.T) {
 	if !r.IsError || !strings.Contains(r.Text, "is outside the workspace") || strings.Contains(r.Text, "the secret is 42") {
 		t.Fatalf("no policy: result sent %+v; want a refusal", r)
 	}
-	// An additional root makes the same file inside: not asked, and read.
+	// An additional root makes the same file inside: asked as a read-only
+	// call inside the workspace, and read.
 	env.Roots = append(env.Roots, elsewhere)
-	if r := run(denyAll{t: t}); r.IsError || !strings.Contains(r.Text, "the secret is 42") {
+	if r := run(readOnly{t: t}); r.IsError || !strings.Contains(r.Text, "the secret is 42") {
 		t.Fatalf("inside an additional root: result sent %+v", r)
+	}
+}
+
+// A shell call's subject is its whole command; a read-only call with no
+// path names the working directory; with no policy every inside call runs
+// (0005-PLAN F6-2 decision 3).
+func TestPolicySubjects(t *testing.T) {
+	dir := t.TempDir()
+	s := llmtest.NewScript(
+		llmtest.ToolCall("b1", "bash", args(t, map[string]string{"command": "echo hi && git status"})),
+		llmtest.ToolCall("f1", "find", args(t, map[string]string{"pattern": "*.go"})),
+		llmtest.Text("ok"))
+	p := &policy{}
+	a := agent.New(agent.Config{Provider: s, Tools: builtin.Tools(), Policy: p})
+	if _, _, err := collect(t.Context(), t, a, tool.Env{Cwd: dir}, "go"); err != nil {
+		t.Fatal(err)
+	}
+	if len(p.rules) != 2 {
+		t.Fatalf("rules = %+v", p.rules)
+	}
+	if b := p.rules[0]; b.Tool != "bash" || b.Kind != permission.SubjectCommand || !slices.Equal(b.Subjects, []string{"echo hi && git status"}) || b.ReadOnly {
+		t.Errorf("bash rule = %+v", b)
+	}
+	if f := p.rules[1]; f.Tool != "find" || f.Kind != permission.SubjectPath || !slices.Equal(f.Subjects, []string{dir}) || !f.ReadOnly {
+		t.Errorf("find rule = %+v", f)
+	}
+	s = llmtest.NewScript(llmtest.ToolCall("w1", "write", args(t, map[string]string{"path": "a.txt", "content": "x"})), llmtest.Text("ok"))
+	if _, _, err := collect(t.Context(), t, agent.New(agent.Config{Provider: s, Tools: builtin.Tools()}), tool.Env{Cwd: dir}, "write"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "a.txt")); err != nil {
+		t.Fatalf("no policy: the write did not run: %v", err)
 	}
 }
 
@@ -580,7 +621,7 @@ func TestCacheOnEveryCall(t *testing.T) {
 	}
 	for _, cache := range []llm.CacheRetention{llm.CacheLong, llm.CacheNone} {
 		s := llmtest.NewScript(llmtest.ToolCall("c1", "read", args(t, map[string]string{"path": "notes.md"})), llmtest.Text("done"))
-		a := agent.New(agent.Config{Provider: s, Tools: builtin.Tools(), Policy: denyAll{t: t}, Cache: cache})
+		a := agent.New(agent.Config{Provider: s, Tools: builtin.Tools(), Policy: readOnly{t: t}, Cache: cache})
 		if _, _, err := collect(t.Context(), t, a, tool.Env{Cwd: dir}, "read it"); err != nil {
 			t.Fatal(err)
 		}

@@ -3,8 +3,9 @@
 //
 // An Agent sends the history and a prompt to its llm.Provider, runs the tool
 // calls the model asks for, and calls the model again until it ends its
-// reply. Calls to tools that are not read-only, and calls naming paths
-// outside the workspace, are asked of a permission.Policy first. Run yields
+// reply. Every call is asked of a permission.Policy first, with its paths
+// or its command, its paths outside the workspace, and whether its tool is
+// read-only; with no policy, a call inside the workspace runs. Run yields
 // the turn as events and ends with End, whose messages the caller appends to
 // its history. Tool calls run one at a time. A Queue gives the turn steering
 // messages after each model reply and follow-ups when it would end. Retry,

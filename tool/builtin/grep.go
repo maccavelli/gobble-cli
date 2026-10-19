@@ -54,6 +54,7 @@ func Grep() tool.Tool {
 			property(s, "literal").Default = []byte("false")
 		}),
 		tool.WithOutside(outsidePath),
+		tool.WithSubject(pathSubject("path")),
 		tool.WithDescribe(func(c tool.Call, env tool.Env) string {
 			return title("grep " + argString(c, "pattern") + " in " + shown(env, orDot(argPath(c))))
 		}),
