@@ -410,6 +410,8 @@ Further rules:
   - A spinner on stderr while waiting, terminal only. It writes `\r` and `ESC[K` from one goroutine. *(2026-10-18, [0022-MADR-gobble-voice-and-personalities.md](0022-MADR-gobble-voice-and-personalities.md) D12, 0022-PLAN P2: its label is a line from the session's personality, a new one every 4 seconds; under `boring`, `working`.)*
   - Then the D7 stream.
   - Then the D7 status line.
+  - *(2026-10-18, [0022-MADR-gobble-voice-and-personalities.md](0022-MADR-gobble-voice-and-personalities.md) D12, 0022-PLAN P4: before a turn's first output, the spinner's label becomes the personality's slow-turn line after 30 seconds, and its very-slow line after 3 minutes; after the status line, a milestone line may follow: the first compaction, a turn past 10 minutes, a cost past a dollar, the hundredth tool call. One such line a turn; none under `boring`, and none when stderr is not a terminal.)*
+- **Welcome and goodbye.** *(2026-10-18, 0022-MADR D12, 0022-PLAN P4: on a terminal, the session's personality says a welcome on stderr when the line session opens, by the hour and the day, and a goodbye on every way out; under `boring`, neither. The hidden `/gobble` draws a turkey on stdout, with a line in the personality.)*
 - **Start-up.** No network call before the first prompt.
 
 **D6. The line editor: `x/term` `Terminal` plus a thin adapter (F7, F14).** This meets 0006 D12.

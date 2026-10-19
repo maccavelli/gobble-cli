@@ -218,6 +218,12 @@ func CheckCatalog(c *Catalog) error {
 					return fmt.Errorf("%s: a lead has no placeholders, and %q has %v", k, v, ps)
 				}
 			}
+		case slices.Contains(AmbientKeys, k):
+			for _, v := range c.Variants(k) {
+				if err := CheckPlaceholders(ambientFacts[k], v); err != nil {
+					return fmt.Errorf("%s: %w", k, err)
+				}
+			}
 		case slices.Contains(Keys, k):
 			for _, v := range c.Variants(k) {
 				if err := CheckPlaceholders(boringCat().Variants(k)[0], v); err != nil {
@@ -386,6 +392,49 @@ func (v *Voice) Lead(key Key) (string, bool) {
 		return "", false
 	}
 	return v.pick(key, variants), true
+}
+
+// Deck deals a session's ambient lines (0022-MADR D12's budget): each of
+// a key's variants in a voice once, in a random order, before any comes
+// round again. The zero Deck is ready.
+type Deck struct {
+	mu    sync.Mutex
+	dealt map[string][]bool
+}
+
+// Deal is one of v's own variants of key, with args in its placeholders,
+// that d has not dealt for v's personality since it last dealt them all.
+// ok is false when the personality has none, as boring has none.
+func (d *Deck) Deal(v *Voice, key Key, args Args) (string, bool) {
+	if v == nil || v.own == nil {
+		return "", false
+	}
+	variants := v.own.Variants(key)
+	if len(variants) == 0 {
+		return "", false
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.dealt == nil {
+		d.dealt = map[string][]bool{}
+	}
+	id := v.name + "\x00" + string(key)
+	used := d.dealt[id]
+	if len(used) != len(variants) || !slices.Contains(used, false) {
+		used = make([]bool, len(variants))
+	}
+	var free []int
+	for i, u := range used {
+		if !u {
+			free = append(free, i)
+		}
+	}
+	v.mu.Lock()
+	i := free[v.rng.IntN(len(free))]
+	v.mu.Unlock()
+	used[i] = true
+	d.dealt[id] = used
+	return fill(variants[i], args), true
 }
 
 // pick is one of variants, never the one key gave last while there are

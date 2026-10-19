@@ -96,3 +96,32 @@ const (
 
 // LeadKeys are every lead key.
 var LeadKeys = []Key{LeadNoCredential, LeadSessionFailed, LeadImages, LeadAuth, LeadTurnFailed}
+
+// The ambient lines of gobble's line view, and /gobble's (0022-MADR D12).
+// boring has none, so under boring the view is as it was.
+const (
+	SessionWelcome             Key = "session.welcome"
+	SessionWelcomeLateNight    Key = "session.welcome.late_night"
+	SessionWelcomeMonday       Key = "session.welcome.monday"
+	SessionWelcomeWeekend      Key = "session.welcome.weekend"
+	SessionWelcomeThanksgiving Key = "session.welcome.thanksgiving"
+	SessionGoodbye             Key = "session.goodbye"
+	TurnSlow                   Key = "turn.slow"
+	TurnVerySlow               Key = "turn.very_slow"
+	MilestoneFirstCompaction   Key = "milestone.first_compaction"
+	MilestoneLongTurn          Key = "milestone.long_turn"
+	MilestoneCost              Key = "milestone.cost"
+	MilestoneHundredthCall     Key = "milestone.hundredth_call"
+	EasterGobble               Key = "easter.gobble"
+)
+
+// AmbientKeys are every ambient key.
+var AmbientKeys = []Key{
+	SessionWelcome, SessionWelcomeLateNight, SessionWelcomeMonday, SessionWelcomeWeekend, SessionWelcomeThanksgiving,
+	SessionGoodbye, TurnSlow, TurnVerySlow, MilestoneFirstCompaction, MilestoneLongTurn, MilestoneCost,
+	MilestoneHundredthCall, EasterGobble,
+}
+
+// ambientFacts are the placeholders each ambient key's variants keep, as
+// boring's text would hold them had it any (the facts rule, 0022-MADR D5).
+var ambientFacts = map[Key]string{MilestoneCost: "{cost}"}

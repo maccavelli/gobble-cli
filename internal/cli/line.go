@@ -43,6 +43,8 @@ type lineSession struct {
 	// voice is the session's, as _gobble/personality last said; the CLI's
 	// own lines speak it (0022-PLAN P3).
 	voice *personality.Voice
+	// amb is the ambient text, made when the session runs (0022-PLAN P4).
+	amb *ambient
 	// keys is the editor's reader, which the permission prompt reads a
 	// key from while a turn runs.
 	keys *editor.Reader
@@ -67,6 +69,12 @@ func displayFor(c *ChatCmd) display {
 	return display{showThinking: c.ShowThinking, verbose: c.Verbose, stats: c.Stats, home: home}
 }
 
+// spinnerLabel is the spinner's label for a turn that started at start: a
+// working line, or the slow turn's (0022-MADR D12).
+func (ls *lineSession) spinnerLabel(start time.Time) func() string {
+	return func() string { return ls.amb.label(ls.spoken(), ls.e.now().Sub(start)) }
+}
+
 // spoken is the session's voice now.
 func (ls *lineSession) spoken() *personality.Voice {
 	ls.mu.Lock()
@@ -76,6 +84,9 @@ func (ls *lineSession) spoken() *personality.Voice {
 
 func (ls *lineSession) run(first Prompt) error {
 	e := ls.e
+	if ls.amb == nil {
+		ls.amb = newAmbient(e.out.caps.Err.TTY)
+	}
 	conn, err := e.startAgentWith(e.ctx, ls.askPermission)
 	if err != nil {
 		return err
@@ -100,6 +111,10 @@ func (ls *lineSession) run(first Prompt) error {
 		if err := e.out.Resultf("%s\n", dimmed(resumedLine(*r), e.out.caps.Out.Color)); err != nil {
 			return err
 		}
+	}
+
+	if line, ok := ls.amb.welcome(ls.spoken(), e.now()); ok {
+		e.out.Notef("%s", line)
 	}
 
 	var r editor.Reader
@@ -151,6 +166,10 @@ func (ls *lineSession) run(first Prompt) error {
 		text, err := ed.ReadPrompt(e.ctx)
 		switch {
 		case errors.Is(err, io.EOF), errors.Is(err, editor.ErrExit):
+			// /exit, /quit, Ctrl+D and a second Ctrl+C all end the read.
+			if line, ok := ls.amb.goodbye(ls.spoken()); ok {
+				e.out.Notef("%s", line)
+			}
 			return nil
 		case e.ctx.Err() != nil:
 			return context.Cause(e.ctx)
@@ -196,9 +215,9 @@ func (ls *lineSession) turn(p Prompt) error {
 	opts := ls.opts
 	opts.voice = ls.spoken()
 	v := newView(e.out, opts, e.now)
-	sp := render.StartSpinner(e.ctx, e.out.err, e.out.caps.Err, e.out.caps.Unicode, func() string {
-		return ls.spoken().Text(personality.TurnWorking, nil)
-	})
+	ls.amb.startTurn()
+	start := e.now()
+	sp := render.StartSpinner(e.ctx, e.out.err, e.out.caps.Err, e.out.caps.Unicode, ls.spinnerLabel(start))
 	v.beforeWrite = func() {
 		if err := sp.Stop(); err != nil {
 			e.log().WarnContext(e.ctx, "spinner", slog.String("error", err.Error()))
@@ -253,6 +272,9 @@ func (ls *lineSession) turn(p Prompt) error {
 	if err := v.finish(res); err != nil {
 		return err
 	}
+	if line, ok := ls.amb.endTurn(ls.spoken(), e.now().Sub(start)); ok {
+		e.out.Notef("%s", line)
+	}
 	if res.SwitchTo != "" {
 		return ls.switchTo(res.SwitchTo)
 	}
@@ -261,6 +283,9 @@ func (ls *lineSession) turn(p Prompt) error {
 
 // onUpdate hands the session's updates to the running turn's view.
 func (ls *lineSession) onUpdate(u acpclient.Update) {
+	if ls.amb != nil {
+		ls.amb.note(u)
+	}
 	if u.Kind == acpclient.KindPersonality {
 		voice := ls.e.voiceNamed(u.Personality.Name)
 		ls.mu.Lock()

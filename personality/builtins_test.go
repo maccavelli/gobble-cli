@@ -12,7 +12,7 @@ import (
 // shows in an ordinary session.
 var typical = Args{
 	"attempt": "1", "max": "2", "cause": "rate limited", "reason": "threshold", "error": "Summarization failed: llm: offline",
-	"n": "42",
+	"n": "42", "cost": "$1.00",
 }
 
 // statusKeys are the lines gobble's CLI draws on one terminal line
@@ -22,7 +22,13 @@ var statusKeys = []Key{
 	RetryOffline, RetryEmptyReply, RetryAttempt, CompactionStart, CompactionFailed, CompactionFailedTurn,
 	CompactionFailedSession, TurnWorking, TurnStopMaxTokens, TurnStopMaxRequests, TurnStopRefusal, TurnStopCancelled,
 	LinesHidden,
+	SessionWelcome, SessionWelcomeLateNight, SessionWelcomeMonday, SessionWelcomeWeekend, SessionWelcomeThanksgiving,
+	SessionGoodbye, TurnSlow, TurnVerySlow, MilestoneFirstCompaction, MilestoneLongTurn, MilestoneCost,
+	MilestoneHundredthCall, EasterGobble,
 }
+
+// spinnerKeys are the lines the spinner draws after its frame.
+var spinnerKeys = []Key{TurnWorking, TurnSlow, TurnVerySlow}
 
 // leftBoring are the keys a built-in personality leaves to boring on
 // purpose, by personality (0022-MADR D17). Today none.
@@ -73,8 +79,10 @@ func TestBuiltinsLoad(t *testing.T) {
 }
 
 // Every variant of a built-in personality keeps boring's placeholders;
-// its keys are boring's or leads, and a lead has none; it covers every key
-// but those left to boring on purpose (0022-MADR D5, D17).
+// its keys are boring's, leads or ambient, a lead has none, and an ambient
+// line keeps its own; it covers every key but those left to boring on
+// purpose, and every ambient key with at least three lines, which boring
+// has none of (0022-MADR D5, D12, D17).
 func TestBuiltinsFactsRule(t *testing.T) {
 	for _, name := range Builtins[1:] {
 		c := builtins()[name].catalog
@@ -92,8 +100,19 @@ func TestBuiltinsFactsRule(t *testing.T) {
 						t.Errorf("%s %s: %v", name, k, err)
 					}
 				}
+			case slices.Contains(AmbientKeys, k):
+				for _, v := range c.Variants(k) {
+					if err := CheckPlaceholders(ambientFacts[k], v); err != nil {
+						t.Errorf("%s %s: %v", name, k, err)
+					}
+				}
 			default:
 				t.Errorf("%s: unknown key %s", name, k)
+			}
+		}
+		for _, k := range AmbientKeys {
+			if n := len(c.Variants(k)); n < 3 {
+				t.Errorf("%s: %d %s lines, want at least 3", name, n, k)
 			}
 		}
 		for _, k := range Keys {
@@ -105,6 +124,11 @@ func TestBuiltinsFactsRule(t *testing.T) {
 			t.Errorf("%s: %d spinner lines, want at least 40", name, n)
 		}
 	}
+	for _, k := range AmbientKeys {
+		if vs := boringCat().Variants(k); len(vs) > 0 {
+			t.Errorf("boring has %s: %q", k, vs)
+		}
+	}
 }
 
 // A status line fits 80 columns at typical widths, or boring's own width
@@ -114,8 +138,11 @@ func TestBuiltinsWidths(t *testing.T) {
 	for _, name := range Builtins[1:] {
 		c := builtins()[name].catalog
 		for _, k := range statusKeys {
-			limit := max(80, utf8.RuneCountInString(fill(boringCat().Variants(k)[0], typical)))
-			if k == TurnWorking {
+			limit := 80
+			if b := boringCat().Variants(k); len(b) > 0 {
+				limit = max(limit, utf8.RuneCountInString(fill(b[0], typical)))
+			}
+			if slices.Contains(spinnerKeys, k) {
 				limit = 60
 			}
 			for _, v := range c.Variants(k) {

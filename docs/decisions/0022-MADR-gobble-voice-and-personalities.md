@@ -273,12 +273,12 @@ Chosen option: "A, B and C as three layers over a fixed set of house rules", bec
 **D12. More to read: interface text gobble does not have yet.**
 
 - **The spinner** shows a rotating line from `turn.working`, a new one every 4 seconds, instead of `working`. Each built-in personality has at least 40.
-- **Welcome and goodbye** lines in the line view: `session.welcome` when a session starts, `session.goodbye` on `/exit`. Variants may depend on the hour and the day (`session.welcome.late_night`, `.monday`, `.weekend`, `.thanksgiving` on the fourth Thursday of November).
-- **Slow turns:** `turn.slow` after 30 seconds without output, `turn.very_slow` after 3 minutes.
+- **Welcome and goodbye** lines in the line view: `session.welcome` when a session starts, `session.goodbye` on ~~`/exit`~~ *every way out of the line view: `/exit`, `/quit`, Ctrl+D and a second Ctrl+C, which gobble's editor does not tell apart (amended 2026-10-18 by the owner, 0022-PLAN P4's deviation 2)*. Variants may depend on the hour and the day (`session.welcome.late_night`, `.monday`, `.weekend`, `.thanksgiving` on the fourth Thursday of November).
+- **Slow turns:** `turn.slow` after 30 seconds without output, `turn.very_slow` after 3 minutes. *(Amended 2026-10-18 by the owner, 0022-PLAN P4's deviation 1: they are the spinner's label, which runs before a turn's first output only, so a quiet stretch after output shows none; `turn.very_slow` takes `turn.slow`'s place.)*
 - **Milestones**, once each per session: the first compaction, a turn past 10 minutes, a session cost passing a dollar, a hundredth tool call.
 - **The new stops and loops** of F5-2 and F5-3: compaction pauses, the refusal stop, the malformed-call breaker's end, rendered in the voice where a person reads them.
 - **Easter eggs:** a hidden `/gobble`, which draws a small turkey and says something in character; a hidden `/humor N`, a nod to the dial in F14, an alias of `/personality` by level: 1 `boring`, 3 `dry`, 4 `snarky`, 5 `bombastic`, and an answer for 2, which has none built in.
-- **A budget, so it stays fun:** at most one ambient line (welcome, slow, milestone) per turn; none while a question waits for the user; none in print mode, `stream-json`, or when stderr is not a terminal; no variant repeated within a session while unused ones remain.
+- **A budget, so it stays fun:** at most one ambient line (welcome, slow, milestone) per turn, the welcome sharing the first turn's (0022-PLAN P4); none while a question waits for the user; none in print mode, `stream-json`, or when stderr is not a terminal; no variant repeated within a session while unused ones remain.
 
 **D13. Errors keep their facts, and may gain a lead.**
 

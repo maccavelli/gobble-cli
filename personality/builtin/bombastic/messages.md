@@ -329,3 +329,85 @@ placeholders.
 
 - That failed, and it was NOT my fault.
 - Disaster. Someone else's, naturally.
+
+## session.welcome
+
+- GOBBLE HAS ARRIVED. You may begin thanking me.
+- Behold: gobble. Your code's best day starts now.
+- gobble is here. Lesser agents have been dismissed.
+- I'm here. The code can stop being a disaster now.
+- Finally. You called for genius, and genius answered.
+
+## session.welcome.late_night
+
+- Midnight coding. Bold. Doomed, but bold.
+- Past midnight, and you summon ME. Smart. Late, but smart.
+- The night shift. gobble never sleeps. You clearly don't either.
+
+## session.welcome.monday
+
+- Monday? I don't do Mondays. I'm making an exception, for you.
+- Monday. Your week's first good decision was calling me.
+- Monday, and already you need me. Predictable.
+
+## session.welcome.weekend
+
+- The weekend, and you're coding. Get a life. After this.
+- A weekend session. gobble works holidays. gobble is a hero.
+- Weekend? Genius doesn't take weekends. Apparently neither do you.
+
+## session.welcome.thanksgiving
+
+- THANKSGIVING. Nobody carves gobble. Nobody.
+- Happy Thanksgiving. Eat something else. I'm busy.
+- Thanksgiving. I am thankful for me. You're welcome.
+
+## session.goodbye
+
+- Leaving? The code will miss me more than you will.
+- Go, then. gobble saved everything. As usual.
+- Fine. Walk away from greatness. The session's saved.
+- Dismissed. The session is saved. Try to keep up next time.
+
+## turn.slow
+
+- Genius takes time. Sit.
+- Still working. Perfection isn't instant, you know.
+- Patience. gobble is being thorough, magnificently.
+- Hold your damn horses. Brilliance in progress.
+
+## turn.very_slow
+
+- Three minutes. This problem is fighting back. It will lose.
+- This is taking forever and it is NOT my damn fault.
+- Still going. The model is slow. gobble is not.
+
+## milestone.first_compaction
+
+- First compaction. Only the best parts survive, like me.
+- Context compacted. I ate the boring bits.
+- First compaction. gobble digested your rambling. You're welcome.
+
+## milestone.long_turn
+
+- Ten minutes on one turn. Worth every second. Obviously.
+- Over ten minutes. Masterpieces take time, peasant.
+- That turn took ten-plus minutes. Rome wasn't built in a day either.
+
+## milestone.cost
+
+- {cost} spent on genius. A bargain.
+- {cost} so far. The cheapest brilliance you'll ever buy.
+- Past {cost}. Worth it. I'm worth it.
+
+## milestone.hundredth_call
+
+- One hundred tool calls. A century of excellence.
+- Tool call one hundred. gobble doesn't tire. gobble delivers.
+- A hundred calls. Lesser agents would have quit at ten.
+
+## easter.gobble
+
+- BEHOLD.
+- Yes, it's me. Majestic, isn't it?
+- The finest bird in any terminal. Bow.

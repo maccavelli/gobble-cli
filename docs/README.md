@@ -30,7 +30,7 @@
 | 0006 | MADR | [Adopt goose's terminal-CLI mechanics, not its product command tree](decisions/0006-MADR-goose-cli-port-candidates.md) | proposed (amended 2026-10-04 (0008)) |
 | 0007 | MADR | [Bring the repository up to the fleet scaffold: agent rules, lint and line-ending config, records tooling, portable Makefile](decisions/0007-MADR-repository-scaffolding-to-fleet-standard.md) | accepted (amended 2026-10-04 (0008)) |
 | 0007 | PLAN | [Bring gobble-cli up to the fleet repository scaffold](decisions/0007-PLAN-repository-scaffolding-to-fleet-standard.md) | completed (staged; the owner commits) |
-| 0008 | MADR | [The native CLI mode: a lightweight line client on Kong, x/term and the standard library, natively integrated with magic-cli-remote](decisions/0008-MADR-native-cli-mode.md) | accepted (`tools.go` note 2026-10-07; spinner label from the personality, 2026-10-18 (0022)) |
+| 0008 | MADR | [The native CLI mode: a lightweight line client on Kong, x/term and the standard library, natively integrated with magic-cli-remote](decisions/0008-MADR-native-cli-mode.md) | accepted (`tools.go` note 2026-10-07; spinner label from the personality, 2026-10-18 (0022); welcome, goodbye and ambient lines, 2026-10-18 (0022)) |
 | 0008 | PLAN | [Implement the native CLI mode](decisions/0008-PLAN-native-cli-mode.md) | completed (2026-10-05; P8 emphasis follow-up 2026-10-05) |
 | 0009 | REPORT | [magic-cli-remote findings from gobble work](reports/0009-REPORT-magic-cli-remote-findings.md) | observation (running; updated 2026-10-12, M11–M14) |
 | 0010 | REPORT | [Harness design survey: Pi, opencode and Kilo across the v1 line](reports/0010-REPORT-harness-design-survey.md) | observation (2026-10-07) |
@@ -52,8 +52,8 @@
 | 0020 | PLAN | [Pin go-llmprovider-sdk v1.11.0 and offer each provider's full curated catalog from a live listing](decisions/0020-PLAN-full-model-catalog-listing.md) | completed (2026-10-13; P1–P3; P1 deviations 1–3; P2 deviations 4–5) |
 | 0021 | MADR | [Ask for prompt caching on agent turns, with one provider and session id per ACP session](decisions/0021-MADR-prompt-caching-per-session.md) | accepted (2026-10-13, by the owner; gobble-cli issue 2) |
 | 0021 | PLAN | [Ask for prompt caching on agent turns, with one provider and session id per ACP session](decisions/0021-PLAN-prompt-caching-per-session.md) | completed (2026-10-13; P1–P4; P3 deviation 1) |
-| 0022 | MADR | [gobble speaks in its own voice: four personalities on a sarcasm scale, written in natural-language files, with every text overridable](decisions/0022-MADR-gobble-voice-and-personalities.md) | accepted 2026-10-18 (the owner's design and answers of that date: four personalities, `/personality`, Dry by default) |
-| 0022 | PLAN | [Implement gobble's voice: four personalities, a natural-language catalog, and overrides for every text](decisions/0022-PLAN-gobble-voice-and-personalities.md) | in progress (approved 2026-10-18; P1 complete 2026-10-18, the catalog with `boring` only; P2 complete 2026-10-18, Dry the default, deviation 1; P3 complete 2026-10-18, choosing, Snarky and Bombastic) |
+| 0022 | MADR | [gobble speaks in its own voice: four personalities on a sarcasm scale, written in natural-language files, with every text overridable](decisions/0022-MADR-gobble-voice-and-personalities.md) | accepted 2026-10-18 (the owner's design and answers of that date: four personalities, `/personality`, Dry by default; D12 amended 2026-10-18, P4's slow lines and goodbye) |
+| 0022 | PLAN | [Implement gobble's voice: four personalities, a natural-language catalog, and overrides for every text](decisions/0022-PLAN-gobble-voice-and-personalities.md) | in progress (approved 2026-10-18; P1 complete 2026-10-18, the catalog with `boring` only; P2 complete 2026-10-18, Dry the default, deviation 1; P3 complete 2026-10-18, choosing, Snarky and Bombastic; P4 complete 2026-10-18, ambient text, deviations 1 and 2) |
 
 0003-MADR has no PLAN of its own. 0004-PLAN Phase 2 and 0005-PLAN F10 implement it.
 
@@ -102,7 +102,8 @@ The plans run in sequence.
   - Run: P1, the catalog with `boring` only, on 2026-10-18 (no deviation).
   - Run: P2, Dry the default, on 2026-10-18 (one deviation).
   - Run: P3, choosing, and Snarky and Bombastic, on 2026-10-18 (no deviation; the phone check is the owner's).
-  - Next: P4, ambient text and easter eggs, on the owner's word.
+  - Run: P4, ambient text and easter eggs, on 2026-10-18 (two deviations, D12 amended).
+  - Next: P5, every text overridable, on the owner's word.
 - **0012-PLAN.** Run: P1–P6 and P8 on 2026-10-08. P7 ~~waits on go-llmprovider-sdk's per-tool strict flag~~ follows 0005-PLAN F4-1a, which pins go-llmprovider-sdk `v1.7.0` and its strict flag (2026-10-11).
   - Run: P7 on 2026-10-13: `strict: false` where a call may leave an argument out, no flag otherwise. Complete; the Claude, Gemini and Grok live tests are the owner's.
 - `git ls-remote origin refs/heads/main` on 2026-10-08 returned `740f7b71450238e747dba99b4fa1eccd488ad79e`.

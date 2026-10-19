@@ -9,7 +9,7 @@ associated-madr: "0022-MADR-gobble-voice-and-personalities.md"
 
 Associated MADR: [0022-MADR-gobble-voice-and-personalities.md](0022-MADR-gobble-voice-and-personalities.md)
 
-*Approved 2026-10-18 ("committed, approved, proceed"); P1 complete 2026-10-18; P2 complete 2026-10-18, with deviation 1; P3 complete 2026-10-18. Each later phase is made executable on the owner's word, with its facts measured then, as 0005-PLAN's sub-phases are.*
+*Approved 2026-10-18 ("committed, approved, proceed"); P1 complete 2026-10-18; P2 complete 2026-10-18, with deviation 1; P3 complete 2026-10-18; P4 complete 2026-10-18, with deviations 1 and 2. Each later phase is made executable on the owner's word, with its facts measured then, as 0005-PLAN's sub-phases are.*
 
 ## Goal
 
@@ -89,7 +89,7 @@ Six phases, each one commit with its own execution record and gates, in this ord
 ### P4 — more to read: ambient text and easter eggs
 
 1. **Keys and lines:** `session.welcome` (with `.late_night`, `.monday`, `.weekend`, `.thanksgiving`), `session.goodbye`, `turn.slow`, `turn.very_slow`, `milestone.first_compaction`, `milestone.long_turn`, `milestone.cost`, `milestone.hundredth_call`, `easter.gobble`, in every built-in voice, `boring` having none (D12).
-2. **`internal/cli`:** the welcome at a session's start, the goodbye at `/exit`; the slow-turn timers; milestones from the events the client sees (`_gobble/compaction`, usage and cost, tool calls).
+2. **`internal/cli`:** the welcome at a session's start, the goodbye at ~~`/exit`~~ *every way out (P4's deviation 2)*; the slow-turn timers *(the spinner's label, before a turn's first output: P4's deviation 1)*; milestones from the events the client sees (`_gobble/compaction`, usage and cost, tool calls).
 3. **The budget** of D12: one ambient line a turn; none while a question waits; none in print mode, `stream-json`, or without a terminal; no repeat while unused variants remain.
 4. **`/gobble`:** hidden, a small turkey in the terminal's glyph set (ASCII when the terminal is not Unicode), and its line.
 5. **Records:** 0008-MADR's amendment for the welcome and goodbye lines; this plan's P4 record.
@@ -287,3 +287,56 @@ Six phases, each one commit with its own execution record and gates, in this ord
   - `make preflight` on macOS: passed;
   - **not run:** Windows `go test ./...` and `-race`, the second Linux machine's `-race`, and Windows and WSL `make preflight`, on the owner's machines; the phone app over magic-cli-remote (step 5), the owner's; and no session against a model, which P6's evaluation is.
 - **Next:** P4, ambient text and easter eggs, made executable on the owner's word.
+
+**P4's deviations, 2026-10-18, decided by the owner:**
+
+1. **When the slow-turn lines show.** Found with steps 1 to 4 built and their tests passing. 0022-MADR D12 says `turn.slow` after 30 seconds without output. They were built as the spinner's label, and the spinner stops at a turn's first output (`internal/cli/line.go`, the view's `beforeWrite`) and does not start again, so a quiet stretch after output, a long tool run say, shows none.
+   - **Chosen ("Keep, amend D12"):** the slow lines are the spinner's label before a turn's first output; `turn.very_slow` takes `turn.slow`'s place. D12 is amended in place, dated.
+   - **Not chosen:** starting the spinner again after 30 seconds of silence mid-turn, which changes how the line view draws (0008-MADR D5); or a stderr line for a quiet stretch after output, a second mechanism beside the label.
+   - No file is added to the phase's scope.
+2. **When the goodbye shows.** D12 says on `/exit`. gobble's editor gives `/exit`, `/quit` and Ctrl+D the same `io.EOF` (`internal/cli/editor/editor.go`, `ReadPrompt`), and a second Ctrl+C `ErrExit`.
+   - **Chosen ("Every way out, amend D12"):** the goodbye shows on each of them. D12 is amended in place, dated.
+   - **Not chosen:** a distinct return from the editor for `/exit` and `/quit`, so the others leave silently.
+   - No file is added to the phase's scope.
+
+**P4 — more to read: ambient text and easter eggs (2026-10-18).**
+
+- **Ran as the plan wrote it,** with deviations 1 and 2 above, on the owner's word "pushed, proceed" after `ea509b6`. P5 is next, made executable when the owner asks.
+- **What was built:**
+  - `personality`:
+    - thirteen ambient keys (`AmbientKeys`): `session.welcome` and its `.late_night`, `.monday`, `.weekend` and `.thanksgiving`; `session.goodbye`; `turn.slow`, `turn.very_slow`; `milestone.first_compaction`, `.long_turn`, `.cost`, `.hundredth_call`; `easter.gobble`;
+    - their lines in `dry`, `snarky` and `bombastic`, three to five a key, each voice in its own register, the eating theme of D11 among them; `boring` has none, so its line view is as it was;
+    - the facts rule for them: `milestone.cost` keeps `{cost}`, the rest have none, in the built-ins and in a user's personality (`CheckCatalog`);
+    - `Deck`, which deals a key's lines in a voice each once, in a random order, before any comes round again.
+  - `internal/cli`:
+    - `ambient`, the line view's ambient text and its budget: one line a turn, the welcome sharing the first turn's; none when stderr is not a terminal; none under `boring`;
+    - the welcome on stderr when the line session opens, by the hour and the day: Thanksgiving on the fourth Thursday of November, late at night from midnight to 5 a.m., Monday, the weekend, else the plain one, which a voice without the day's line gives;
+    - the goodbye on every way out (deviation 2);
+    - the spinner's label (`spinnerLabel`): a working line, then `turn.slow` after 30 seconds and `turn.very_slow` in its place after 3 minutes (deviation 1);
+    - milestones after a turn's status line, each once a session, in the order first compaction, a turn past 10 minutes, a cost past a dollar (`{cost}` as `$1.25`, or the amount and currency), the hundredth tool call; one the budget holds back is said at a later turn's end; `/new` and a switch to another session start them again;
+    - `/gobble`, hidden: a turkey on stdout, Unicode or ASCII as the terminal is, and an `easter.gobble` line; the turkey alone under `boring`;
+    - the hidden `/humor` sent to the agent (`hiddenAgentCommands`).
+- **Found:** P3 left the line view refusing `/humor` as an unknown command, since the line view sends only the commands it knows and the agent does not advertise `/humor`; it worked from the phone app and any other ACP client. The fix is the last item above, inside this phase's step 4 and its test ("`/gobble` and `/humor` hidden from `/help` and completion"), which needs both to work.
+- **Decisions made inside the plan:**
+  - **The welcome shares the first turn's budget,** so the first turn has no slow line or milestone; a held-back milestone is said later.
+  - **"Late night" is midnight to 5 a.m.**
+  - **The ambient lines are status lines** (`Output.Notef`, on stderr), as the retry and compaction lines are; the turkey and its line go to stdout, as a reply does.
+  - **A milestone is once a session even when the voice has no line for it,** so a session that switches from `boring` to `dry` does not announce what came before.
+  - **The welcome and goodbye are the line view's;** print mode, `stream-json` and `gobble acp`'s clients get none, as D12 has it.
+- **Tests,** new:
+  - `personality/set_test.go`: `TestDeck` (each line once a round, per voice; the cost filled; boring and a personality without the key have none; a user's catalog losing `{cost}` refused);
+  - `internal/cli/ambient_test.go`: `TestWelcomeKey` (the calendar, the fourth Thursday not the last, from a fixed clock); `TestAmbientBudget` (the welcome's budget, the slow labels and their steadiness, each milestone in order and once, a held-back one later, no terminal, boring, the goodbye not repeated, the cost's currency); `TestSpinnerLabel` (the spinner's label from a fake clock); `TestLineAmbient` (on a terminal, a scripted agent: the welcome, a hundred tool calls and a priced usage reaching their milestones at later turns' ends, `/gobble`'s turkey and line, `/help` without `/gobble` or `/humor`, `/humor 4` sent, `/gob` not completed, the goodbye); `TestNoAmbientOffTerminal`; `TestNoAmbientInPrint`.
+  - The built-ins' tests cover the ambient keys: their placeholders, at least three lines a key in each voice but boring, none in boring, 80 columns for a line and 60 for a spinner label, and the insult, profanity and name guards.
+  - The plan asked for each line in its place "under `synctest`": the label is tested through a fake clock instead, the spinner's own timing being `TestSpinnerLabelRotates`'s, under `synctest` since P2.
+- **Existing tests changed,** none loosened: `TestBuiltinsWidths` takes the limit from boring's line only where boring has one, and 60 columns for each spinner label.
+- **Negatives,** 42 of 42 caught on a scratch copy after control runs:
+  - `personality`: the deck repeating a line, never marking one dealt, or not filling the cost; the ambient facts rule not checked, or not knowing `{cost}`; a dry cost line losing its cost; a snarky key short of three lines; a bombastic spinner label too long; a snarky line insulting the user; a dry line swearing;
+  - `internal/cli`: Thanksgiving on the last Thursday, or after late night; late night ending at 4; Sunday not the weekend; the welcome not spending the budget; the first turn not sharing it; the thresholds of 30 seconds and 3 minutes moved; slow lines off a terminal; `turn.very_slow` not taking `turn.slow`'s place, or the label not steady; tool calls not counted; a compaction's start taken for its end; the long turn's threshold moved; milestones past the budget, repeated, or out of order; the cost to one decimal, or always in dollars; a goodbye off a terminal; `/gobble`'s line from the wrong key, or the wrong turkey; the ambient text on whatever the terminal; no welcome, goodbye, milestone, update counting or turn start in the line view; the spinner's label without the slow lines; `/humor` refused; `/gobble` listed, or not handled.
+  - The first run caught 41 of 43. One mutation did not build and was rewritten. The other, the deck falling back to boring's catalog, changes nothing, since boring has no ambient keys (`TestBuiltinsFactsRule`), and was dropped. The whole set was run on the final code: 42 of 42.
+- **Gates:**
+  - the pre-add check on the 8 changed `.go` files, clean;
+  - lint for linux, darwin and windows, `0 issues.` each with `CGO_ENABLED=0`;
+  - the macOS laptop's `CGO_ENABLED=1 go test -race -count=1 ./...`, 34 packages ok, no race report;
+  - `make preflight` on macOS: passed;
+  - **not run:** Windows `go test ./...` and `-race`, the second Linux machine's `-race`, and Windows and WSL `make preflight`, on the owner's machines; and the lines' tone in a real session, which P6's evaluation is.
+- **Next:** P5, every text overridable, made executable on the owner's word.

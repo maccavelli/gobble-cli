@@ -24,6 +24,10 @@ var localCommands = []acpclient.Command{
 	{Name: "new", Description: "Start a new session"},
 }
 
+// hiddenAgentCommands are the agent's commands it does not advertise,
+// which the line session sends all the same (0022-PLAN P3, P4).
+var hiddenAgentCommands = []string{"humor"}
+
 // compose is editor.Compose; tests replace it.
 var compose = editor.Compose
 
@@ -77,8 +81,11 @@ func (ls *lineSession) slash(text string, turn func(Prompt) error, outOfRaw func
 			e.out.Errorf("%v", err)
 		}
 		return true, e.out.Result([]byte(ls.helpText()))
+	case "gobble": // hidden: in no list, and not completed (0022-MADR D12)
+		return true, e.out.Result([]byte(ls.amb.gobbleText(ls.spoken(), e.out.caps.Unicode)))
 	case "new":
 		ls.closeSession()
+		ls.amb.newSession()
 		ls.choice = ls.choice.next()
 		return true, e.out.Resultf("%s\n", dimmed("new session", e.out.caps.Out.Color))
 	case "edit":
@@ -102,7 +109,7 @@ func (ls *lineSession) slash(text string, turn func(Prompt) error, outOfRaw func
 		e.out.Errorf("%v", err)
 		return true, nil
 	}
-	if !slices.Contains(ls.registry(), name) {
+	if !slices.Contains(ls.registry(), name) && !slices.Contains(hiddenAgentCommands, name) {
 		e.out.Errorf("unknown command /%s; /help lists the commands", name)
 		return true, nil
 	}
@@ -158,6 +165,7 @@ func (ls *lineSession) closeSession() {
 // 2026-10-06).
 func (ls *lineSession) switchTo(id string) error {
 	ls.closeSession()
+	ls.amb.newSession()
 	s, r, err := ls.conn.ResumeSessionWith(ls.e.ctx, id, ls.cwd, acpclient.ResumeSessionOptions{AdditionalDirectories: ls.choice.dirs}, ls.onUpdate)
 	if err != nil {
 		ls.e.out.Errorf("resume %s: %v", id, err)

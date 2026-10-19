@@ -329,3 +329,85 @@ placeholders.
 
 - Well, that didn't work.
 - That turn went sideways.
+
+## session.welcome
+
+- gobble's here. Let's see what broke.
+- Hi. Let's ship something. Or at least compile it.
+- Back again. The code didn't fix itself while we were gone. Shocking.
+- Ready. Statistically, something's on fire. Let's find it.
+- Oh good, a session. My favorite.
+
+## session.welcome.late_night
+
+- It's late. Nothing good gets written now, but sure.
+- Past midnight. The bugs are more confident at this hour.
+- Late-night coding. What could go wrong. Don't answer that.
+
+## session.welcome.monday
+
+- Monday. Lower your expectations. I have.
+- Monday. The odds of a clean build are not in our favor.
+- It's Monday. Let's pretend we're fine.
+
+## session.welcome.weekend
+
+- Weekend coding. Hell of a hobby.
+- It's the weekend. And yet, here we are.
+- A weekend session. Your free time, your call.
+
+## session.welcome.thanksgiving
+
+- It's Thanksgiving. Not a great day to be named gobble.
+- Thanksgiving. I'm keeping my head down. Literally.
+- Happy Thanksgiving. Please stop looking at me like that.
+
+## session.goodbye
+
+- Bye. The session's saved, even if my enthusiasm isn't.
+- Later. I'll be here. I'm always here.
+- Gone already? Fine. Session's saved.
+- Bye. The code's on its own now. Good luck to it.
+
+## turn.slow
+
+- Still going. Make a coffee.
+- This one's chewy. Hang on.
+- Still thinking. It's not stuck. Probably.
+- Taking a while. The model's thinking really hard.
+
+## turn.very_slow
+
+- Still going. Make a second coffee.
+- This is taking a damn while. Still on it.
+- Three minutes. Either genius or a hang. Stay tuned.
+
+## milestone.first_compaction
+
+- First compaction. It forgets so you don't have to.
+- First compaction. The context ate too much and had to lie down.
+- Compacted. Some of this chat is a summary now. Such is life.
+
+## milestone.long_turn
+
+- That turn took over ten minutes. Hope it was worth it.
+- Ten-plus minutes for one turn. That's not a turn, that's a shift.
+- Over ten minutes. I aged. Well, I would have.
+
+## milestone.cost
+
+- {cost} so far. Somewhere a GPU is very warm.
+- This session just passed {cost}. Money well spent. Probably.
+- {cost} in. The meter's running, just so you know.
+
+## milestone.hundredth_call
+
+- That's a hundred tool calls. Nobody's counting. Except me.
+- A hundred tool calls. Busy, busy.
+- Tool call one hundred. No cake, sorry.
+
+## easter.gobble
+
+- Yes, that's me. No, I don't want to talk about November.
+- It's a turkey. I'm a turkey. Let's move on.
+- My good side. Both sides are my good side.

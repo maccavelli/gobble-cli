@@ -331,3 +331,86 @@ precision (0022-MADR D7). Every variant keeps boring's placeholders.
 
 - I'm sorry to report that the turn did not go to plan.
 - A small difficulty, I'm afraid.
+
+## session.welcome
+
+- Good day. I have taken the liberty of reading the repository.
+- Good day. The kettle is on, figuratively speaking. What shall we do?
+- Ready when you are. I have tidied the context in anticipation.
+- At your service. I trust the code is no worse than we left it.
+- Good day. Do tell me what we are building, or mending.
+
+## session.welcome.late_night
+
+- It is past midnight. I shan't ask.
+- The small hours. I shall keep my voice down.
+- A late one, I see. Bugs grow bolder after midnight, I find.
+- Working at this hour shows dedication, or a deadline. I shan't enquire.
+
+## session.welcome.monday
+
+- Monday. I have prepared myself accordingly.
+- Monday again. It does come round with remarkable regularity.
+- Good morning. It is Monday, which I mention purely for the record.
+
+## session.welcome.weekend
+
+- A weekend session. I admire the commitment, if not the timing.
+- It is the weekend. I shall assume this is for pleasure.
+- Working at the weekend. I shall be discreet about it.
+
+## session.welcome.thanksgiving
+
+- Happy Thanksgiving. I feel I should keep a low profile today.
+- Thanksgiving. Given my name, I am working from a secure location.
+- Happy Thanksgiving. I trust nothing named gobble is being carved.
+
+## session.goodbye
+
+- Very good. I shall be here, tidying the context.
+- Goodbye. The session is saved, should you need it.
+- Until next time. I shall leave everything exactly where it is.
+- A pleasure, as always. The session is saved.
+
+## turn.slow
+
+- Taking a little while. Thoroughness, not dawdling.
+- Still at it. Good work is seldom hurried.
+- A moment longer, if you would be so kind.
+- Still digesting. One does not rush a good meal.
+
+## turn.very_slow
+
+- This is taking longer than I would like, I confess.
+- Still at it. I have not forgotten you, I assure you.
+- A lengthy one. Perhaps a cup of tea is in order.
+
+## milestone.first_compaction
+
+- Our first compaction. I shall treasure the summary.
+- The first compaction. A light meal, neatly digested.
+- The context has been compacted for the first time. Most refreshing.
+
+## milestone.long_turn
+
+- That turn ran past ten minutes. I hope it was worth the wait.
+- Over ten minutes for one turn. Thorough, if not brisk.
+- A turn of more than ten minutes. I took the liberty of being thorough.
+
+## milestone.cost
+
+- This session has now cost more than a respectable sandwich ({cost}).
+- The session has passed {cost}. I mention it only as a courtesy.
+- {cost} so far. A modest sum, as these things go.
+
+## milestone.hundredth_call
+
+- One hundred tool calls. I have kept count, naturally.
+- That was the hundredth tool call. A round number, and a busy session.
+- The hundredth tool call. I believe that merits a small note.
+
+## easter.gobble
+
+- At your service, though I would prefer you didn't mention the date.
+- A self-portrait. I am told it captures my better side.
+- Yes, the name. No, I would rather not discuss November.
