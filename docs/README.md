@@ -108,7 +108,10 @@ The plans run in sequence.
     question is marked, the outside title stays).
   - Made executable: F6-2b, the questions and the stores, on 2026-10-19; approved as written, with "once only" for a
     subject no rule can match exactly and the project store applying untrusted.
-  - Run: F6-2b on 2026-10-19 (no deviation). F6-2 is complete; F6-3, shell commands, is next on the owner's word.
+  - Run: F6-2b on 2026-10-19 (no deviation). F6-2 is complete.
+  - Made executable: F6-3, shell commands, on 2026-10-19; approved as written, an "always" saving the arity prefix,
+    shown in the question. No release is tagged
+    before F6-5, by the owner's choice of that date.
   - The SDKs: [0023-PLAN](decisions/0023-PLAN-pin-current-releases.md) pinned go-llmprovider-sdk `v1.15.0` and
     acp-go-sdk2 `v1.16.0` on 2026-10-19, so `gobble acp` answers a request piped before the end of its input. A
     provider's default model, the first of its live listing, may change with the SDK's ranking from `v1.14.0`, and every

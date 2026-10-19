@@ -7711,3 +7711,130 @@ showing `_meta.gobble.rule` in the line view, which F6-4's modes may want.
   - the identifier scan over the change: no account name, hostname or real-machine path.
 - **Not done, and why:** F6-3's shell-command patterns, F6-4's modes and F6-5's `request_permissions`; the line view
   shows no `_meta.gobble.rule` (not taken above).
+
+**2026-10-19 — F6-3 made executable: shell commands** (the owner's word of 2026-10-19, "committed, proceed", after
+F6-2b's commit `b61f75d`). *Approved as written on the owner's word of 2026-10-19 ("Approve as written"), with 4a,
+the owner's choice of the same day.* It carries out F6 decision 1's F6-3, 0005-MADR's choice 5 (the owner's choices of
+2026-10-07, item 5) and 0012-MADR D10, and adds what they leave open: decisions 1 to 12 below. The owner's choice of 2026-10-19 to tag no release before F6-5 is unchanged by it.
+
+**The facts,** measured on 2026-10-19 against `main` `b61f75d`, opencode `501b15af26`, Kilo `2a1903f291`, grok-build
+`2bdd1d6a`, codex `8c076942cb` and `mvdan.cc/sh/v3` `v3.14.1`:
+
+- **gobble today:** a shell call's subject is its whole command, "which the rules match until 0005-PLAN F6-3 splits it"
+  (`tool/builtin/shell.go:326-332`); its outside paths are its `workdir`'s alone (`:334-340`). bash runs `bash -c
+  <command>`, not a login shell, after `shellCommandPrefix` (`tool/builtin/bash.go:24-29`); PowerShell runs `-NoLogo
+  -NoProfile -NonInteractive -Command` (`tool/builtin/powershell.go:24-26`). An "always" saves the exact command, and
+  none when it holds `*` or `?` (`permission/rules.go:335`, `:345-380`; F6-2b decision A).
+- **0005-MADR choice 5** (`0005-MADR-v1-feature-scope.md:794-799`): bash parsed with `mvdan.cc/sh`, which it names as
+  a dependency; each sub-command its own pattern; "always" at a command-arity prefix; Kilo's inert-operator masking;
+  anything unparsed a raw pattern that fails closed; PowerShell one raw pattern; file commands' path arguments
+  resolved for the outside check. `:608`: the default rule asks for `bash(gobble update*)`; `:609`: `gobble update`
+  refuses to apply under `AI_AGENT=gobble`.
+- **0012-MADR D10** (`0012-MADR-tool-schemas-descriptions-and-loading.md:463-477`): a bash command that parses to
+  exactly one simple command, `rm`, `rmdir`, `mv`, `cp` or `mkdir`, with only the flags it lists, runs as the native
+  tool, with that tool's confinement, rules, kind and journal entry, its result first naming the tool; anything else
+  goes through F6's rules. Its test gate is `TestShellIntercept` (`0012-PLAN`, `:595-596`).
+- **`mvdan.cc/sh/v3`:** `v3.14.1` (2026-09-06, `go 1.26.0`) is the latest; 0012-MADR's V27 measured `v3.13.1`.
+  `syntax.CallExpr` is `{Assigns, Args}` (`syntax/nodes.go:362-365`); `NewParser` and `Parse` (`syntax/parser.go:227`,
+  `:243`), `Walk` (`syntax/walk.go:17`). Not yet in `go.mod`.
+- **opencode:** every `command` node at any depth is a pattern, its text with its redirections; an "always" saves
+  `<prefix> *`, the prefix the longest entry of an `ARITY` table (`git` 2, `git stash` 3, `rm` 1, …), else the first
+  word (`packages/core/src/shell/parse.ts:23-162`, `:185-199`, `:375-381`); a trailing `" *"` matches nothing after
+  the prefix too (`packages/core/src/util/wildcard.ts:11`); `cd`, `pushd` and kin give no pattern, their directories
+  checked as external (`parse.ts:14`, `:192-195`); a tree with no `command` node asks nothing (`tool/plugin/shell.ts:137`).
+- **Kilo:** operator characters `<>|&;$\``, and a newline, are masked with `_` only where the parser proves them inert
+  (inside a literal or a string, a heredoc body, a redirection to `/dev/null`, an fd duplication), every other byte
+  verbatim, and a tree with errors falls back to the raw text (`packages/opencode/src/kilocode/tool/shell-pattern.ts:4-71`);
+  a parse that recovers no command fails closed with the raw text (`kilocode/tool/shell-unparsed.ts:3-22`); PowerShell's
+  pattern is its raw text (`shell-pattern.ts:69`). Its arity table is opencode's (`permission/arity.ts`).
+- **grok-build:** a command is split on `&&`, `||`, `;` and `|` over an allowlist of node kinds, anything else asking
+  "fail closed" (`crates/codegen/xai-grok-permission-rules/src/bash_command_splitting.rs:51-138`;
+  `policy/bash_commands.rs:29-56`); wrappers (`env`, `command`, `exec`, `builtin`) are checked as written and
+  stripped, and `bash -c '<literal>'` is recursed to depth 8, a non-literal script failing closed (`policy.rs:155-212`;
+  `bash_command_splitting.rs:566`); file readers and writers by program, redirections the catch-all
+  (`shell_access.rs:636-650`); environment keys that change what runs (`LD_PRELOAD`, `BASH_ENV`, `PATH`, `IFS`,
+  `DYLD_*`, `GIT_CONFIG*` …) flagged (`env_risk.rs:4-38`).
+- **codex** splits a `bash -lc` script into plain commands over an allowlist of node kinds, with no redirections or
+  substitutions (`codex-rs/shell-command/src/bash.rs:29-160`), and documents that form as "must not be used to prove
+  that a command is safe" (`:129-160`).
+- **opencode's licence** is MIT (`LICENSE`); `NOTICE` already credits it for prompt text (`NOTICE:30-34`).
+
+**The decisions:**
+
+1. **The parser:** `mvdan.cc/sh/v3` `v3.14.1`'s `syntax` package, bash's dialect, required in the commit that first
+   imports it (`tool/builtin`). PowerShell is not parsed (choice 5).
+2. **A pattern per sub-command:** every simple command at any depth (in a pipeline, a list, a subshell, a group, a
+   command or process substitution, a function body, a loop or a condition) is a subject, in source order. Its text
+   runs from its program to its last word, with its own redirections; leading `NAME=value` assignments are left out,
+   so `deny: bash(rm *)` reaches `X=1 rm -rf build`. Matching is unchanged (F6-2 decision 3), and the strictest
+   subject decides.
+3. **Fail closed:** the whole command is one raw subject, matched only by a rule that matches its text, when it does
+   not parse, when it holds no simple command (`FOO=1`, `(( n++ ))`), or when a sub-command's program is not a plain
+   word (`$CMD x`, `$(which rm) x`). A sub-command whose assignments set a key grok-build lists as changing what runs
+   (`LD_PRELOAD`, `LD_AUDIT`, `BASH_ENV`, `ENV`, `IFS`, `PATH`, `PROMPT_COMMAND`, `GIT_EXTERNAL_DIFF`,
+   `GIT_PROXY_COMMAND`, or one beginning `DYLD_` or `GIT_CONFIG`) is also a subject as written.
+4. **What a shell "always" saves** (*the owner's choice of 2026-10-19: 4a, "Arity prefix, shown"*). Choice 5 says "at a command-arity prefix"; F6-2's choice was the
+   exact command "until F6-3":
+   - **4a, recommended:** opencode's arity prefix, `<prefix> *` per sub-command (`git status -s` saves `git status *`,
+     `make test` saves `make test *`, `rm build/x` saves `rm *`), and the option names show what is saved: "Allow
+     `git status *` for this session". The person sees the reach before choosing it. Cost: one answer can cover more
+     than the call, `rm *` every `rm`.
+   - **4b:** the exact sub-command, as now, per sub-command. Cost: "always" for `go test ./pkg/a` does not cover
+     `go test ./pkg/b`.
+   - **4c:** the arity prefix, but the exact sub-command for programs that destroy or escalate (`rm`, `rmdir`, `mv`,
+     `cp`, `dd`, `chmod`, `chown`, `ln`, `truncate`, `sudo`, `doas`). Cost: a list gobble keeps.
+   A prefix token holding `*`, `?`, `[` or `{` keeps the call to "once" (F6-2b decision A). The arity table is
+   opencode's, credited in `NOTICE`.
+5. **Kilo's masking:** in a subject's text, `<`, `>`, `|`, `&`, `;`, `$`, `` ` `` and a newline become `_` only inside
+   a literal word, a quoted string, a heredoc body, a redirection to `/dev/null`, `/dev/stdout` or `/dev/stderr`, or an
+   fd duplication (`2>&1`, `>&-`); every other byte is as written. Kilo's own cases are the tests: `grep "a|b" f
+   2>/dev/null` is `grep "a_b" f 2_/dev/null`, `cat f 2>&1` is `cat f 2__1`, and `echo test > output.txt` is as
+   written (`packages/opencode/test/kilocode/tool/shell-pattern.test.ts:173-187`).
+6. **Wrappers and inline shells:** a sub-command run through `env`, `command`, `exec`, `builtin`, `nohup`, `time`,
+   `nice`, `timeout`, `sudo` or `doas` is a subject as written and, when the wrapper's own options can be told apart,
+   as the command it runs (grok-build's two checks). `bash`, `sh` or `zsh` with `-c` and a literal script is parsed
+   in turn, to a depth of 8, each inner sub-command a subject beside the outer call; a script that is not literal is
+   raw (decision 3).
+7. **Directories and paths outside the workspace** (choice 5's last line): `cd` and `pushd` give no subject; a
+   literal operand is resolved against the call's `workdir`, and one outside the roots joins the call's outside paths
+   (`external_directory`, F6-2 decision 7), a non-literal one making the call raw. The literal operands of a file
+   program, grok-build's readers and writers with `rm`, `rmdir`, `mv`, `cp`, `mkdir`, `touch`, `ln`, `chmod` and
+   `chown`, and every redirection's literal target other than decision 5's sinks, are resolved the same way. Later
+   relative operands are resolved against the `workdir`, not the `cd` (opencode's).
+8. **PowerShell:** one raw subject, its whole command, as now; an "always" saves it exactly (F6-2b decision A).
+9. **0012-MADR D10's interception,** as that record writes it: a bash call that parses to one simple command of D10's
+   forms runs as `delete`, `move`, `copy` or `mkdir`, through that tool's confinement, rules and limits (a delete asks;
+   `.git` is refused), its result's first line naming the tool. The agent rewrites the call before it asks the
+   policy; a command D10 does not list runs as bash, through decisions 2 to 7.
+10. **The default rule** `ask: bash(gobble update*)`, and `ask: powershell(gobble update*)`, in a defaults layer before
+    the global file's rules, listed by `/permissions` as `default` and not removable there; a later rule may change it.
+11. **The engine:** `Rule.Saves` holds each subject's "always" pattern beside `Subjects`; `Remember` uses it for a
+    command, and a raw subject saves its exact text (F6-2b decision A).
+12. **Unchanged:** the rules' grammar and matching, the limits, the stores and `/permissions`.
+
+**F6-3's steps:**
+
+1. **`go.mod`:** `mvdan.cc/sh/v3 v3.14.1`, with its first import; `NOTICE` credits opencode's arity table.
+2. **`tool/builtin`:** `shellparse.go`, the sub-commands, their texts (decisions 2, 3 and 5), their "always" prefixes
+   (decision 4), wrappers and inline shells (6), and the directories and paths (7); `shellSubject` and `shellOutside`
+   over it for bash; `intercept.go`, D10's forms (decision 9). `tool.Subject` gains `Saves`.
+3. **`permission`:** `Rule.Saves`; `Remember` for commands (decision 11).
+4. **`agent`:** the interception's rewrite before the policy is asked, and the result's first line.
+5. **`acpserver`:** the defaults layer (decision 10); the option names showing what an "always" saves (decision 4).
+6. **Records:** this plan's execution record; 0005-MADR's choice-5 and self-update notes; 0012-MADR D10 and
+   0012-PLAN marked built; `docs/README.md`; `docs/architecture.md`; the root README; the `permissions` template block.
+
+**F6-3's tests,** each seen failing on a scratch copy: the sub-commands of pipelines, lists, subshells, substitutions,
+functions and loops, each its own subject; assignments left out, and an exec-affecting one kept; each fail-closed case
+raw; masking, Kilo's examples among them; wrappers and `bash -c` to depth 8, and a non-literal script raw; `cd` and file
+operands outside the roots asked as `external_directory`; the "always" pattern for each form, and the once pair for a
+glob in a prefix; PowerShell raw; `TestShellIntercept` over every D10 form and every near miss (`rm -f`, two operands,
+a pipe, a glob, a variable), with a delete still asking and `.git` refused; the default `gobble update` rule; a deny on
+a sub-command reaching it inside a pipeline, a subshell and `bash -c`.
+
+**F6-3's gates:** as F6-2's, and `go mod tidy` clean with the new requirement (`make preflight`), and `govulncheck`.
+
+**Not taken:** tree-sitter, opencode's and Kilo's parser, which needs cgo or WebAssembly (gobble's binaries are pure
+Go); opencode's portable scanner's refusals of every substitution and compound command, which decision 2 parses
+instead; grok-build's prefix matching, which the arity table replaces; re-basing operands after a `cd`, which grok-build
+does by making them ask, and which decision 7 leaves to `external_directory` on the `cd` itself.
