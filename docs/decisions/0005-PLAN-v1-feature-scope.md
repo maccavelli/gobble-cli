@@ -5738,9 +5738,11 @@ histories were rewritten; the report's line numbers match these heads within a f
       output is a `context_edit` whose replacement is `[Old tool result content cleared]`;
     - a summary request that is itself too large (`llm.ErrContextOverflow`) prunes the cut-off part's tool outputs and
       tries once more (Kilo).
-11. **F5-5, the small model (proposed):** `smallModel` (string, `provider/id`, empty). When set, it writes compaction
-    summaries and a session title after the first turn, as a `session_info` name unless one is already set. Unset,
-    summaries use the session's model, and no title is made.
+11. **F5-5, the small model (proposed):** *(2026-10-18: made executable; see "F5-5 made executable: the small
+    model".)* `smallModel` (string, `provider/id`, empty). When set, it writes ~~compaction summaries and~~ a session
+    title ~~after the first turn~~ *(at the first prompt, in the background: the owner's choice of 2026-10-18)*, as a
+    `session_info` name unless one is already set. Unset, summaries use the session's model, and no title is made.
+    *(Summaries use the session's model whether or not it is set: the owner's choice of 2026-10-18.)*
 
 **F5-1's steps:**
 
@@ -6617,3 +6619,115 @@ Kilo's chunked summarising, as before.
     show.
 - **Next:** F5-5, the small model, made executable on the owner's word; the SDK retries' status waits for
   go-llmprovider-sdk issue 3; the first-byte deadline for F4-1b.
+
+**2026-10-18 — F5-5 made executable: the small model** (the owner's word of 2026-10-18, "committed, proceed", after
+F5-4's commit, and the owner's choices of that date: the small model writes titles only; no titles while it is
+unset; a title made at the first prompt, in the background.) *Proposed: not approved for execution.*
+
+**The facts,** measured on 2026-10-18 against `main` after F5-4's commit; opencode `501b15af26` and its v1 at
+`907b3bc518`; Kilo `2a1903f291`; Codex `8c076942`; grok-build `2bdd1d6a`; Pi `1402973a`:
+
+- **No surveyed harness gives compaction summaries to a small model.** opencode v1 and v2 and Kilo take the
+  compaction agent's model, else the session's (opencode `packages/core/src/session/compaction.ts:213-220`; Kilo
+  `packages/opencode/src/session/compaction.ts:424-427`); Codex, grok-build and Pi the session's (Codex
+  `core/src/compact.rs:834-845`, the previous model first after a switch; grok-build `xai-grok-shell/src/session/
+  compaction.rs:1069-1098`; Pi `agent-session.ts:2802`). goose as 0005-REPORT read it. F5-5's own text gave summaries
+  to the small model.
+- **Titles:**
+  - **opencode v2** starts a title in the background as the first input is admitted, from the first user message
+    alone, with a title agent's prompt; the model is the title agent's, else a small model of the session's provider
+    by a family list, else the session's (`session/runner/llm.ts:54-55`, `:177-180`; `session/context.ts:95-119`;
+    `model.ts:271-282`). It keeps the first non-empty line, cut to 100 characters, and writes it only if the title is
+    still the placeholder (`session/title.ts:32`, `:93-97`, `:135-147`). v2 has no `small_model` setting: v1's value
+    becomes the title agent's model (`config/normalize.ts:137-150`);
+  - **opencode v1 and Kilo** have `small_model` (`provider/model`), else a family list in the session's provider
+    (v1 `provider/provider.ts:1961-2027`); v1 titles at the first step, Kilo at the end of a turn
+    (`packages/opencode/src/session/prompt.ts:1993-1995`); the title prompt asks for one line of at most 50
+    characters (`agent/prompt/title.txt`);
+  - **Codex** titles in its TUI only, at the first user message, in the background, with a fixed cheap model of its
+    own provider, else the session's; at most 36 characters, written only if the thread is still unnamed, failures
+    silent (`tui/src/app/thread_title.rs:29-32`, `:89-101`; `tui/src/app/event_dispatch.rs:3036-3053`);
+  - **grok-build** titles from the first prompt in the background with `[models] session_summary`, which defaults to
+    the main model, and refreshes the title at turns 3 and 6 (`xai-grok-shell/src/session/summary.rs:44-83`;
+    `xai-grok-models/default_models.json:2-5`; `helpers/session_summary.rs:16-19`);
+  - **Pi** has no titles and no small model; a side call's usage is a `usage` entry of its own kind
+    (`session-manager.ts:1244`).
+- **gobble today:**
+  - the CLI builds the session's provider from one choice (`internal/cli/agent.go:34-47`); `provider.New` builds any
+    provider by its id (`llm/provider/provider.go:159-200`), and the credential, login and models.json helpers take a
+    provider id (`internal/cli/credentials.go:60-126`; `internal/cli/modelsjson.go:117-122`); a request carries its
+    model (`llm/llm.go:69`). `ModelInfo(provider, model)` knows any provider's model;
+  - acpserver starts no goroutine of its own; a session's name is the path's last `session_info`
+    (`session/session.go:376-386`), written by `setName`, which sends `session_info_update`
+    (`acpserver/commands.go:441-450`); `--name` and `_meta.gobble.name` name a session at its start
+    (`acpserver/agent.go:392-396`); `append` is serialised by `appendMu`, outside a turn too; `CloseSession` waits up
+    to 5 s for a running turn (`acpserver/agent.go:1071-1100`); print mode closes its session within 2 s of the turn
+    (`internal/cli/print.go:19`);
+  - a `usage` entry is counted in `/usage` and `/session` (`acpserver/commands.go`, `sessionTotals`); a session list's
+    title is cut at 60 characters (`maxTitle`, `acpserver/prompt.go:25`);
+  - `defaultProvider`'s list is the providers gobble builds (`internal/config/keys.go:69`); a key's own check sits in
+    `internal/config/merge.go` (`sessionDir`'s at `:158-159`);
+  - 0005-MADR's table has "Automatic titles" at 1.x (`0005-MADR-v1-feature-scope.md:144`), and its choice 11 gives the
+    small model titles and summaries (`:824`).
+
+**The decisions** (decision 11, settled):
+
+1. **`smallModel`** (string, `provider/id`, empty), global-only and read once per run: the provider is one of
+   `defaultProvider`'s and the id is not empty, checked as the key's own rule (`must be provider/id, with one of
+   gemini, openai, …`). Global-only, since the title call sends the user's first prompt to the provider it names, and
+   a project must not choose where that goes.
+2. **It writes session titles only** (the owner's choice). Compaction summaries stay the session's model, or the
+   previous one after a switch (F5-2 decision 12), as every surveyed harness keeps them. Decision 11's "writes
+   compaction summaries" is struck through; 0005-MADR's choice 11 gets a dated note.
+3. **Unset, no title is made** (the owner's choice): no extra call and no cost; an unnamed session is listed by its
+   first prompt, as today.
+4. **When** (the owner's choice): at the first prompt of a session that has no name and no conversation yet, in the
+   background, from that prompt's text alone; the turn is not delayed. One attempt a session: a failure is logged as
+   a warning and the session stays unnamed.
+5. **The request:** gobble's own prompt (0005-MADR rule 3: the harnesses' title prompts are each a few sentences of
+   the same advice, which gobble writes in its own words) asking for one line, at most 50 characters, in the language
+   of the user's message, naming the task, without quotes, markdown or a trailing full stop, and without answering
+   it; the message's first 2,000 characters in a `<user_message>` block (opencode's cut); the lowest thinking level the
+   model offers; at most 128 output tokens.
+6. **The reply:** a leading `<think>` block removed; the first non-empty line; wrapping quotes and a trailing `.`,
+   `?` or `!` removed; spaces collapsed; cut to 60 characters, `maxTitle`. An empty result writes nothing.
+7. **Written only if still unnamed:** a name given meanwhile, by `/name`, `_gobble/set_session_name` or the start's
+   `--name`, wins, checked just before the title is written. The title is a `session_info` name, written through
+   `setName`'s path, so it sends `session_info_update`, and the phone app's list shows it. A title written after the
+   next prompt began lands later on the path; the name is still the path's last.
+8. **Its usage is a `usage` entry** of kind `title`, with the small model's provider and id, priced by that model's
+   catalog entry, and counted in `/usage` and `/session` (Pi's side-call entry).
+9. **The call's life:** acpserver's first goroutine of its own, one per session at most; `CloseSession` and
+   `Agent.Close` cancel a title still running and wait for it to stop, so nothing is written to a closed log. A
+   print-mode run that ends first may leave the session unnamed.
+10. **The provider:** the CLI builds the small model's provider as the session's is built, by its own provider id,
+    credential, login and models.json entry, with the session's id and retry settings. A provider with no credential
+    is warned of once at the run's start, and no title is made.
+11. **Titles move to 1.0:** 0005-MADR's "Automatic titles" row gains a dated note that F5-5 brings them into F5 (the
+    owner's split of F5, 2026-10-16), made only with `smallModel`.
+
+**Not taken:** opencode's and Kilo's family lists that pick a small model unasked; grok-build's refreshes at turns 3
+and 6; Codex's structured reply; a retry on the next prompt; a small model for anything but titles.
+
+**F5-5's steps:**
+
+1. **`internal/config`:** `smallModel` (decision 1) in `keys.go`, `settings.go`, the template's "Model" section, and
+   the schema; its rule in `merge.go`.
+2. **`acpserver`:** `Options.Title` (the small model's provider builder, its id and catalog entry); the title
+   (decisions 4 to 9) in a new `title.go`, started by `Prompt` at a new session's first prompt; `CloseSession` and
+   `Close` stopping it.
+3. **`internal/cli`:** `smallModel` read, its provider built (decision 10), and given to the agent; the warning.
+4. **Records:** this plan's execution record; 0005-MADR's notes on choice 11 and the titles row; the template's text;
+   `docs/README.md`.
+
+**F5-5's tests,** each seen failing on a scratch copy:
+
+- `internal/config`: the key's rule, global-only scope, default, template and schema.
+- `acpserver`: a title written and reported at the first prompt, from that prompt, with the request's prompt, block,
+  thinking level and cap; none without `Options.Title`; none for a named session, a resumed one with a conversation,
+  or a later prompt; a name given meanwhile winning; the reply's cleaning, an empty reply writing nothing; a failure
+  logged, nothing written, no retry; the usage entry, priced, in `/usage`; closing the session stopping a title still
+  running; the turn not waiting for the title.
+- `internal/cli`: `smallModel` reaching the agent with its provider; no credential warned of once, and no title.
+- **Existing tests:** none should change: `Options.Title` is nil wherever a test builds the agent, and no test's
+  settings name a small model. `TestKeysMatchSettings`'s count, 27, becomes 28.
