@@ -197,7 +197,11 @@ func TestWireCases(t *testing.T) {
 
 // A 429 with no Retry-After takes its wait from the provider's reset header:
 // a Go duration on OpenAI and Hugging Face, an RFC 3339 time on Claude
-// (go-llmprovider-sdk v1.4.0; 0005-PLAN F4-1a).
+// (go-llmprovider-sdk v1.4.0; 0005-PLAN F4-1a). Claude's time has whole
+// seconds, so it is a whole second 91 s ahead of the second the test starts
+// in, and the wait is in (90 s less the time the call takes, 91 s] (0023-PLAN
+// deviation 2: from the clock as it was, the second it dropped could leave
+// the wait just under 89 s).
 func TestWireRateLimitResets(t *testing.T) {
 	for _, c := range []struct {
 		id, model, header string
@@ -207,7 +211,7 @@ func TestWireRateLimitResets(t *testing.T) {
 		{"openai", "gpt-6-luna", "x-ratelimit-reset-requests", func() string { return "90s" }, 90 * time.Second, 90 * time.Second},
 		{"huggingface", "deepseek-ai/DeepSeek-V4-Flash-0731", "x-ratelimit-reset-requests", func() string { return "90s" }, 90 * time.Second, 90 * time.Second},
 		{"claude", "claude-haiku-5-5", "anthropic-ratelimit-requests-reset",
-			func() string { return time.Now().Add(90 * time.Second).UTC().Format(time.RFC3339) }, 89 * time.Second, 90 * time.Second},
+			func() string { return time.Now().Truncate(time.Second).Add(91 * time.Second).UTC().Format(time.RFC3339) }, 89 * time.Second, 91 * time.Second},
 	} {
 		t.Run(c.id, func(t *testing.T) {
 			w := &cannedWire{status: http.StatusTooManyRequests, header: http.Header{c.header: {c.value()}}, body: wireRateLimited}

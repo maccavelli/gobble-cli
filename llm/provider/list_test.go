@@ -85,21 +85,40 @@ const kiloListing = `{"data":[` +
 	`"supported_parameters":["max_tokens","tools","reasoning"],"preferredIndex":6}]}`
 
 // A live listing gives the full curated catalog, past the static six, from
-// one request with the key, and no generation or metadata request
-// (0020-MADR D2, F7).
+// one request with the key, beside the model metadata document, which gets
+// no credential, and no generation (0020-MADR D2, F7). The models past the
+// six are the SDK's order: from go-llmprovider-sdk v1.14.0, newest first by
+// release date, then by id (its 0041-MADR D3, llmprovider/catalog/menu.go),
+// so the two undated ones here sort by id. From v1.14.0 every provider's
+// listing but Kilo's and Ollama's fetches the document (0023-PLAN, deviation
+// 1). The document's URL and the key are each run's own, since the SDK
+// caches each document URL, and from v1.14.0 each listing's key, for the
+// process.
 func TestListFullCatalog(t *testing.T) {
-	c, o := cannedClient(map[string]route{openaiModels: {status: http.StatusOK, body: openaiListing}})
-	l, err := List(t.Context(), "openai", "sk-test", o)
+	run := metadataRuns.Add(1)
+	metadata := fmt.Sprintf("metadata.test/%s-%d-%d.json", t.Name(), os.Getpid(), run)
+	key := fmt.Sprintf("sk-test-%d-%d", os.Getpid(), run)
+	c, o := cannedClient(map[string]route{openaiModels: {status: http.StatusOK, body: openaiListing},
+		metadata: {status: http.StatusOK, body: "{}"}})
+	o.ModelMetadataURL = "https://" + metadata
+	l, err := List(t.Context(), "openai", key, o)
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"gpt-6-luna", "gpt-5.6-luna", "gpt-4.1-mini", "gpt-5.6-terra", "gpt-6.1-sol", "gpt-6-astra", "gpt-5-nano", "gpt-5-mini"}
+	want := []string{"gpt-6-luna", "gpt-5.6-luna", "gpt-4.1-mini", "gpt-5.6-terra", "gpt-6.1-sol", "gpt-6-astra", "gpt-5-mini", "gpt-5-nano"}
 	if !l.Live || l.Err != nil || !slices.Equal(l.Models, want) {
 		t.Fatalf("listing %+v, want live %q", l, want)
 	}
 	seen, auth := c.requests()
-	if !slices.Equal(seen, []string{"GET " + openaiModels}) || !slices.Equal(auth, []string{"Bearer sk-test"}) {
-		t.Fatalf("requests %q with %d authorization headers, want one listing with the key", seen, len(auth))
+	byRequest := map[string]string{}
+	for i, r := range seen {
+		byRequest[r] = auth[i]
+	}
+	if len(seen) != 2 || byRequest["GET "+openaiModels] != "Bearer "+key {
+		t.Fatalf("requests %q, want the listing with the key and the metadata document", seen)
+	}
+	if a, ok := byRequest["GET "+metadata]; !ok || a != "" {
+		t.Fatalf("the metadata document: requested %v, with Authorization %q; want it requested with none", ok, a)
 	}
 }
 
@@ -125,13 +144,16 @@ var metadataRuns atomic.Int64
 // fetches it alongside the listing and waits for it only when the listing
 // answers, so the listing here answers (0020-PLAN P1 deviation 1); a URL of
 // each run's own keeps the SDK's in-process cache, and its remembered
-// failures, from answering (0020-MADR D2, F6).
+// failures, from answering (0020-MADR D2, F6), and a key of each run's own
+// keeps its listing cache, from go-llmprovider-sdk v1.14.0, from answering
+// the listing (0023-PLAN, deviation 1).
 func TestListFetchesMetadata(t *testing.T) {
-	path := fmt.Sprintf("/%s-%d-%d.json", t.Name(), os.Getpid(), metadataRuns.Add(1))
+	run := metadataRuns.Add(1)
+	path := fmt.Sprintf("/%s-%d-%d.json", t.Name(), os.Getpid(), run)
 	zen := `{"object":"list","data":[{"id":"claude-haiku-5-5","object":"model"},{"id":"deepseek-v4.1-flash","object":"model"}]}`
 	c, o := cannedClient(map[string]route{"opencode.ai/zen/v1/models": {status: http.StatusOK, body: zen}})
 	o.ModelMetadataURL = "https://metadata.test" + path
-	l, err := List(t.Context(), "opencode-zen", "z", o)
+	l, err := List(t.Context(), "opencode-zen", fmt.Sprintf("z-%d-%d", os.Getpid(), run), o)
 	if err != nil {
 		t.Fatal(err)
 	}
