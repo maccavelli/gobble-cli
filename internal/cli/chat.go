@@ -70,7 +70,7 @@ func (c *ChatCmd) Run(k *kong.Context, e *runEnv) error {
 	if err != nil {
 		return err
 	}
-	e.tools, e.mcpOff, e.mcpAllow = choice.builtins, choice.mcpOff, choice.mcpAllow
+	e.tools, e.mcpOff, e.mcpAllow, e.noGrants = choice.builtins, choice.mcpOff, choice.mcpAllow, choice.noGrants
 	if c.AddDir, err = resolveAddDirs(base, c.AddDir); err != nil {
 		return err
 	}

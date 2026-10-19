@@ -78,6 +78,9 @@ type Options struct {
 	// Tools are the agent's tools. Nil is builtin.Tools(); an empty, non-nil
 	// slice is none.
 	Tools []tool.Tool
+	// NoRequestPermissions leaves request_permissions out of every session,
+	// as the tool flags may (0005-PLAN F6-5 deviation 1).
+	NoRequestPermissions bool
 	// Store keeps sessions. Nil keeps them in memory.
 	Store session.Store
 	// Now is the clock entries are stamped with. Nil is time.Now.
@@ -126,6 +129,7 @@ type Agent struct {
 	info     func(provider, model string) llm.Model
 	override Override
 	tools    []tool.Tool
+	noGrants bool
 	byName   map[string]tool.Tool
 	store    session.Store
 	now      func() time.Time
@@ -239,6 +243,9 @@ type liveSession struct {
 	// allowBypass offers the bypass mode, from the settings at the start
 	// (0005-PLAN F6-4 decision 2).
 	allowBypass bool
+	// grants are the user's request_permissions grants, the turn's and the
+	// session's, under mu, replaced rather than changed in place (F6-5).
+	grants []grant
 	// rules is the session's rule engine, built when it starts; its
 	// layers change as answers and /permissions add and remove rules,
 	// under mu (0005-PLAN F6-2b decision E).
@@ -254,7 +261,7 @@ var (
 // the first request, so it can send session updates.
 func New(opts Options) *Agent {
 	a := &Agent{version: opts.Version, newID: opts.NewID, provider: opts.Provider, models: opts.Models, info: opts.ModelInfo,
-		override: opts.Override, tools: opts.Tools, store: opts.Store, now: opts.Now, mcp: opts.MCP, logger: opts.Logger, prompt: opts.Prompt,
+		override: opts.Override, tools: opts.Tools, noGrants: opts.NoRequestPermissions, store: opts.Store, now: opts.Now, mcp: opts.MCP, logger: opts.Logger, prompt: opts.Prompt,
 		settings: opts.Settings, auth: opts.Auth, save: opts.SaveSetting, personalities: opts.Personalities, compactionPrompts: opts.CompactionPrompts, titles: opts.Title,
 		trust: opts.Trust, perms: opts.Permissions, sessions: map[acp.SessionId]*liveSession{}}
 	if a.logger == nil {
@@ -570,6 +577,7 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 		s.streaming = false
 		s.retryAbort, s.waiting = nil, false
 		a.mu.Unlock()
+		a.endTurnGrants(s) // a turn's grants end with it (F6-5 decision 4)
 	}()
 
 	prompt := userMessage(p.Prompt)
@@ -605,6 +613,11 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 	tools := append(a.toolsOf(s), mcpTools...)
 	if a.modeOf(s) == modePlan {
 		tools = append(tools, exitPlan{a: a, conn: conn, s: s})
+	}
+	// request_permissions, deferred until a declined call or tool_search
+	// loads it (0005-PLAN F6-5; 0012-MADR D9).
+	if !a.noGrants {
+		tools = append(tools, requestPermissions{a: a, conn: conn, s: s})
 	}
 	// The rules' hidden tools are neither sent nor found by tool_search
 	// (0005-PLAN F6-2 decision 6).

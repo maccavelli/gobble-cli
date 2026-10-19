@@ -193,6 +193,9 @@ type turn struct {
 	sent     []tool.Spec
 	specs    jsontext.Value
 	deferred []tool.Tool
+	// grantLoad is the permissions family a declined call is loading,
+	// which runTools loads after its result (0005-PLAN F6-5 decision 6).
+	grantLoad []string
 	// repeat is the run of identical calls the turn's last call ended, and
 	// last that call's key (0005-PLAN F5-3 decision 1); bad counts the
 	// turn's consecutive results whose arguments were refused, badTool the
@@ -724,6 +727,12 @@ func (t *turn) runTools(calls []llm.ToolCallDone) (llm.Message, bool) {
 				return m, false
 			}
 		}
+		if load := t.grantLoad; len(load) > 0 {
+			t.grantLoad = nil
+			if names := t.load(load); len(names) > 0 && !t.emit(Loaded{Names: names}) {
+				return m, false
+			}
+		}
 	}
 	return m, true
 }
@@ -762,7 +771,10 @@ func (t *turn) runTool(c llm.ToolCallDone) (tool.Result, bool) {
 	if sj, ok := tl.(tool.Subjecter); ok {
 		subject = sj.Subject(call, env)
 	}
-	if res, denied := t.approve(call, spec, title, outside, subject); denied {
+	if res, denied, grantable := t.approve(call, spec, title, outside, subject); denied {
+		if grantable {
+			res = t.offerGrant(res)
+		}
 		return res, t.emit(ToolEnd{Call: call, Result: res})
 	}
 	env.AllowOutside = len(outside) > 0
@@ -785,14 +797,16 @@ func (t *turn) runTool(c llm.ToolCallDone) (tool.Result, bool) {
 // approve asks the policy about every call, with what its rules match: its
 // paths or its command, its paths outside the workspace roots, and whether
 // its tool is read-only (0005-PLAN F6-2 decisions 3, 4 and 7). It returns
-// the result to give the model when the call does not run. With no policy
-// a call runs, and an outside call is refused: there is no one to ask.
-func (t *turn) approve(call tool.Call, spec tool.Spec, title string, outside []string, subject tool.Subject) (tool.Result, bool) {
+// the result to give the model when the call does not run, and whether the
+// person declined a call a grant could cover (F6-5 decision 6). With no
+// policy a call runs, and an outside call is refused: there is no one to
+// ask.
+func (t *turn) approve(call tool.Call, spec tool.Spec, title string, outside []string, subject tool.Subject) (tool.Result, bool, bool) {
 	if t.a.cfg.Policy == nil {
 		if len(outside) > 0 {
-			return tool.ErrorResult(outside[0] + " is outside the workspace (the working directory and the additional directories), and no permission policy can approve it."), true
+			return tool.ErrorResult(outside[0] + " is outside the workspace (the working directory and the additional directories), and no permission policy can approve it."), true, false
 		}
-		return tool.Result{}, false
+		return tool.Result{}, false, false
 	}
 	if len(outside) > 0 {
 		title += " (outside the workspace)"
@@ -808,19 +822,36 @@ func (t *turn) approve(call tool.Call, spec tool.Spec, title string, outside []s
 	d, err := t.a.cfg.Policy.Decide(t.ctx, rule)
 	switch {
 	case t.ctx.Err() != nil:
-		return tool.ErrorResult(cancelledText), true
+		return tool.ErrorResult(cancelledText), true, false
 	case err != nil:
-		return tool.ErrorResult(fmt.Sprintf("the permission request failed, so %s did not run: %v", spec.Name, err)), true
+		return tool.ErrorResult(fmt.Sprintf("the permission request failed, so %s did not run: %v", spec.Name, err)), true, false
 	case !d.Allow && d.Refusal != "":
-		return tool.ErrorResult(d.Refusal), true
+		return tool.ErrorResult(d.Refusal), true, false
 	case !d.Allow:
 		msg := "The user declined this call, so it did not run."
 		if d.Reason != "" {
 			msg += " " + d.Reason
 		}
-		return tool.ErrorResult(msg), true
+		return tool.ErrorResult(msg), true, d.Grantable
 	}
-	return tool.Result{}, false
+	return tool.Result{}, false, false
+}
+
+// grantNote ends a declined call's result when it loads request_permissions
+// (0012-MADR D9; 0005-PLAN F6-5 decision 6).
+const grantNote = "request_permissions is now available: call it to ask the user for read or write access to paths, for this turn or this session."
+
+// offerGrant is a declined call's result, ending with grantNote when the
+// permissions family is deferred: runTools loads it after the result, as a
+// tool_search load is, once.
+func (t *turn) offerGrant(res tool.Result) tool.Result {
+	i := slices.IndexFunc(t.deferred, func(d tool.Tool) bool { return d.Spec().Family == tool.FamilyPermissions })
+	if i < 0 || slices.Contains(t.grantLoad, t.deferred[i].Spec().Name) {
+		return res
+	}
+	t.grantLoad = append(t.grantLoad, t.deferred[i].Spec().Name)
+	res.Output = tool.TextResult(res.Text() + " " + grantNote).Output
+	return res
 }
 
 const cancelledText = "The user cancelled the turn, so this call did not finish."

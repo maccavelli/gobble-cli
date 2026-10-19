@@ -8129,3 +8129,78 @@ sentence; the log's `grant` source; `/permissions` listing and removing a grant.
 
 **Not taken:** codex's sandbox widening, which gobble's `exp/sandbox` would need; saving a grant beyond the session;
 an `environment_id`, which codex needs for remote environments and gobble does not have.
+
+**F6-5's deviation (2026-10-19),** found at step 3 and resolved by the owner's choice of the same day, before the step
+went on:
+
+1. **`tool_search` on every request.** A deferred `request_permissions` (decision 1, 0012-MADR's row) means some tool
+   is always deferred, and the agent offers `tool_search` whenever one is (`agent/agent.go:141-145`; 0012-MADR D7,
+   "`tool_search`, whenever anything is deferred", `:431`); 0012-MADR also has the system prompt name the categories
+   of deferred tools `tool_search` can find (`:419`), which the sections take from the agent's own tools alone
+   (`acpserver/sysprompt.go`). The entry did not name either consequence, and four tests asserted that a session with
+   nothing deferred sends no `tool_search` (`acpserver/toolload_test.go:106`, `:147`; `internal/cli/mcp_test.go`'s
+   `TestToolFlagsSelectMCPTools` and `TestToolFlagsSelectResourceTools`). *Resolution (the owner's choice, "Follow
+   0012-MADR"):* every session's requests carry `tool_search`, and the system prompt's tools section names the
+   `permissions` category while `request_permissions` is deferred and not hidden; the four tests follow, each keeping
+   its point (nothing else deferred) another way. The alternative, adding the tool only at D9's event, would have
+   departed from 0012-MADR's row.
+   - *Found carrying it out, and decided by the rule already in force:* `-t` is "an allowlist over every tool"
+     (0002-PLAN Phase 5), so the tool flags select `request_permissions` as they select any tool: `-t` without it,
+     `--exclude-tools request_permissions` and `--no-tools` leave it out, and with it `tool_search`; it joins the names
+     an unknown tool's error lists (`acpserver.Options.NoRequestPermissions`).
+
+**F6-5's execution record (2026-10-19).**
+
+- **Ran as the entry wrote it,** on the owner's word "committed, proceed" after the entry's commit `382f64a`, with 2a
+  and 3a, and with deviation 1 above, the owner's choice. F6 is complete with it: trust, rules and requests, shell
+  commands, modes and grants. The owner's tag waited for this commit.
+- **What was built:**
+  - `tool`: `FamilyPermissions`;
+  - `permission`: `Decision.Grantable`, set on a declined call a grant could cover;
+  - `agent`: `approve` gives a declined call's grantability; `offerGrant` ends its result with D9's sentence and
+    names the permissions family, which `runTools` loads after the result, as `tool_search`'s loads are, once;
+  - `acpserver`: `grants.go` (`request_permissions` with 0012-MADR's schema, deferred, its own question with `grant`
+    and `refuse`; the session's grants, turn and session, ended with the turn or the session; `byGrant`;
+    `grantable`); `planPolicy` applying `byGrant` after `byMode` and setting `Grantable`; the tool added to each
+    turn's tools; the system prompt's `permissions` category; `/permissions` listing and removing grants;
+    `Options.NoRequestPermissions` and `RequestPermissionsTool`;
+  - `internal/cli`: the tool flags selecting `request_permissions` (deviation 1).
+- **What the entry left unsaid, decided inside it:**
+  - **`Decision.Grantable`** carries decision 6's "whose tool a grant could cover" from the policy to the agent, which
+    cannot tell a limit's question from a rule's; a declined `AGENTS.md` write, a limit's question, loads nothing;
+  - **the tool's own question** offers `grant` ("Grant") and `refuse` ("Refuse") with ACP's `allow_once` and
+    `reject_once` kinds, so the line view shows `[y]` and `[n]` and no `[f]`, which is a tool call's `reject_once` id
+    alone; another client's `_meta.gobble.feedback` on a refusal still reaches the model;
+  - **a grant's paths** are resolved with `fsx.Resolve` against the working directory, `~` included, each once; a
+    call is covered when every path it names, its outside paths among them, is the grant's or below it, a write
+    needing a write grant;
+  - **a grant's provenance** is the first covering grant's scope, `grant turn` or `grant session`;
+  - **the tool cannot be called before it is loaded,** as every deferred tool: a model that wants it first finds it
+    with `tool_search`, or is offered it by a decline.
+- **Tests,** each new assertion seen failing on a scratch copy:
+  - `acpserver`: `TestRequestPermissionsSpec`; `TestGrants` (an outside read and a write under the grant unasked, a
+    write outside it, an `AGENTS.md` write and a write where the grant reads only asked, a deny under it refusing, the
+    log's `grant turn`, the next turn asking again); `TestGrantSession` (the session's grant past the turn, listed
+    third, removed, asking again); `TestRequestPermissionsAnswers` (seven refusals and answers, the user's refusal
+    with its reason, network beside paths); `TestGrantLoad` (a declined write loading the family once, with the
+    sentence once; a deny, a limit's question, plan mode and a command loading nothing);
+    `TestResourceToolsLoadAtFirstPrompt` and `TestToolLoadRecordedAndReplayed` follow deviation 1;
+  - `internal/cli`: `TestPrintRefusesGrant` (with and without `--yes`); `TestToolFlagsSelectMCPTools`,
+    `TestToolFlagsSelectResourceTools` and `TestMainExitCodes` follow deviation 1.
+- **The negatives:** 31 mutations over the grants, the tool, the load, the flags and the system prompt, each applied
+  alone to a scratch copy after control runs of the named tests passed unmutated. The first run caught 28: two did
+  not build (unused names) and were rewritten; one renamed the grant's option without the constant its answer is
+  compared to, so it changed nothing, and was rewritten to change the constant, which `TestPrintRefusesGrant` then
+  catches. Drafting the harness showed no test asked whether a read grant covers a write, and `TestGrants` gained
+  one. The final run: 31 of 31 caught.
+- **The gates:**
+  - the pre-add check on the 16 changed `.go` files, clean;
+  - lint for linux, darwin and windows with `CGO_ENABLED=0`, `0 issues.` each;
+  - macOS: `CGO_ENABLED=1 go test -race -count=1 ./...`, 35 packages ok, and `make preflight`, `preflight passed`;
+  - the Linux machine and the Windows laptop, over ssh on a copy of the working tree (721 files) in a fresh temporary
+    directory: `go test -count=1 ./...` and `CGO_ENABLED=1 go test -race -count=1 ./...`, 35 packages ok on each,
+    Windows with `TMP` and `TEMP` outside the user's home; `make preflight`, every step through `apidiff` passed on
+    each, and `check-records` and `markdownlint` after it; `verify-build-metadata` needs a commit the copy does not
+    have, and passed on macOS;
+  - the identifier scan over the change: no account name, hostname or real-machine path.
+- **Not done, and why:** a sandbox for the network (`exp/sandbox`); saving grants beyond the session (not taken above).

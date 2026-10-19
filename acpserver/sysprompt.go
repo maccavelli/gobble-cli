@@ -86,6 +86,11 @@ func (a *Agent) sections(s *liveSession) []sysprompt.Section {
 			names = append(names, sp.Name)
 		}
 	}
+	// request_permissions is the session's own deferred tool, offered each
+	// turn (0005-PLAN F6-5 deviation 1; 0012-MADR :419).
+	if !a.noGrants && !slices.Contains(loaded, requestPermissionsTool) && !hidden.Hidden(requestPermissionsTool) && !slices.Contains(families, tool.FamilyPermissions) {
+		families = append(families, tool.FamilyPermissions)
+	}
 	slices.Sort(families)
 	var skills string
 	if slices.Contains(names, "read") {

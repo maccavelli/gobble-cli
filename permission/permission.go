@@ -50,10 +50,12 @@ type Rule struct {
 // without asking anyone, such as plan mode's: it is the whole text the
 // model reads, in place of a declined call's.
 // By, when set, is the rule or limit that decided (0005-PLAN F6-2
-// decision 12).
+// decision 12). Grantable, on a call the person declined, says a
+// request_permissions grant could cover it (F6-5 decision 6).
 type Decision struct {
-	Allow   bool   `json:"allow"`
-	Reason  string `json:"reason,omitzero"`
-	Refusal string `json:"refusal,omitzero"`
-	By      Spec   `json:"by,omitzero"`
+	Allow     bool   `json:"allow"`
+	Reason    string `json:"reason,omitzero"`
+	Refusal   string `json:"refusal,omitzero"`
+	By        Spec   `json:"by,omitzero"`
+	Grantable bool   `json:"grantable,omitzero"`
 }

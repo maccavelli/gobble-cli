@@ -75,7 +75,9 @@ func (e *runEnv) agentOptions() acpserver.Options {
 		// --model and --thinking win over every session's own (0005-PLAN F4-2c).
 		Override: acpserver.Override{Provider: e.pick.Provider, Model: e.pick.Model, Thinking: e.pick.Thinking, Mode: e.mode},
 		Tools:    e.tools,
-		Store:    e.sessionStore(),
+		// The tool flags select request_permissions too (0005-PLAN F6-5).
+		NoRequestPermissions: e.noGrants,
+		Store:                e.sessionStore(),
 		MCP: acpserver.MCPOptions{
 			Config: mcpConfigPath(), Off: e.mcpOff, Allow: e.mcpAllow, UserAgent: identity().UserAgent(),
 		},
@@ -251,6 +253,8 @@ type toolChoice struct {
 	builtins []tool.Tool
 	mcpOff   bool
 	mcpAllow func(name string) bool
+	// noGrants leaves request_permissions out (0005-PLAN F6-5 deviation 1).
+	noGrants bool
 }
 
 // toolSet is the in-process agent's tools from -t/--tools, --exclude-tools
@@ -264,7 +268,7 @@ type toolChoice struct {
 // validate. builtins are the built-in tools to choose from, with the
 // process settings' options (0018-PLAN P5 deviation 15).
 func (f *SharedFlags) toolSet(builtins []tool.Tool) (toolChoice, error) {
-	known := builtin.Names()
+	known := append(builtin.Names(), acpserver.RequestPermissionsTool)
 	for _, n := range append(slices.Clone(f.Tools), f.ExcludeTools...) {
 		if !slices.Contains(known, n) && !isMCPName(n) {
 			return toolChoice{}, usageErrorf("unknown tool %q (the tools are %s)", n, strings.Join(known, ", "))
@@ -272,7 +276,7 @@ func (f *SharedFlags) toolSet(builtins []tool.Tool) (toolChoice, error) {
 	}
 	switch {
 	case f.NoTools:
-		return toolChoice{builtins: []tool.Tool{}, mcpOff: true}, nil
+		return toolChoice{builtins: []tool.Tool{}, mcpOff: true, noGrants: true}, nil
 	case len(f.Tools) == 0 && len(f.ExcludeTools) == 0:
 		return toolChoice{builtins: builtins}, nil
 	}
@@ -292,6 +296,8 @@ func (f *SharedFlags) toolSet(builtins []tool.Tool) (toolChoice, error) {
 	return toolChoice{
 		builtins: out,
 		mcpOff:   allowlist && len(listed) == 0,
+		noGrants: allowlist && !slices.Contains(f.Tools, acpserver.RequestPermissionsTool) ||
+			slices.Contains(f.ExcludeTools, acpserver.RequestPermissionsTool),
 		mcpAllow: func(name string) bool {
 			return (!allowlist || slices.Contains(listed, name)) && !slices.Contains(excluded, name)
 		},

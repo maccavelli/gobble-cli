@@ -899,7 +899,7 @@ Otherwise it stays a shell command. File status, diffs, git, checksums and archi
    * Running cells (Kilo L7) needs a kernel, and waits for its own decision.
    * Deferred exposure.
 10. **Documents in `read`**: text from PDF, DOCX, XLSX and PPTX files, within bounded ranges: PDF pages, sheet ranges with a cell cap (goose G4–G6; grok-build K9, K10; Kilo L4, L5). No tool is added, as grok-build and Kilo fold documents into read.
-11. **`request_permissions {permissions, reason}`** asks the client for a scoped read, write or network grant, for the turn or the session, instead of failing (codex X5, X6).
+11. **`request_permissions {permissions, reason}`** asks the client for a scoped read, write or network grant, for the turn or the session, instead of failing (codex X5, X6). *(2026-10-19, 0005-PLAN F6-5, built: gobble has no sandbox, so a grant answers the permission questions about calls under its paths, a deny rule and gobble's limits still holding, by the owner's choice of that date; a request for network alone is answered that nothing in gobble restricts it; deferred, loaded by `tool_search` or by a declined call a grant could cover.)*
 
 ~~**Exposure.** These tools are direct: read, write, edit, `apply_patch` (for GPT-family models), grep, find, `tree`, move, delete, copy, mkdir, bash, powershell, the job tools and `request_permissions`. `lsp`, `monitor` and `notebook` are deferred, found through `tool_search` (B6; codex X7, X8, X12; grok-build K16), so the descriptions sent with every request stay few.~~
 

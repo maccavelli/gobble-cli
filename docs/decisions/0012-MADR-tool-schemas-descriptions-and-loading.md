@@ -456,6 +456,7 @@ The owner's proposals stand where the evidence supports them:
      These are in the first prefix, and cost no cache break.
   2. **By `tool_search`.** It ranks deferred tools with D11's BM25. It returns at most `limit` results, each with the tool's name and its description's first sentence, and loads them with their families. Its text says what was loaded and that the tools are callable from the next step.
   3. **On a named event.** A call refused because the session lacks a permission loads the `permissions` family, and the refusal says `request_permissions` is now available. No other event loads tools in 1.0. Each new event is added by amending this decision.
+     *(2026-10-19, built by 0005-PLAN F6-5: the event is a call the person declined that a grant could cover, a file tool's with no limit asking; a deny rule's, a limit's and plan mode's refusals do not load it, since a grant does not lift them. With `request_permissions` always deferred, `tool_search` is on every request, as item 6 of D7's list has it, and the system prompt names the `permissions` category.)*
   4. **Loads are append-only.**
      - A loaded tool is appended after the tools already sent, in load order, and is never removed or reordered within the session.
      - The load is recorded in the transcript (V12). F3's frozen baseline treats the tools list as part of the baseline, which grows only by appending (V16).
@@ -528,7 +529,7 @@ The owner's proposals stand where the evidence supports them:
 | `bash`, `powershell` | direct | `command` req, `minLength` 1; `timeout` integer 1–600 seconds, default 120; `workdir` |
 | `todo` | direct | `todos` req: array of `{content` req `minLength` 1, `status` req enum `pending`, `in_progress`, `completed`; `priority` enum `high`, `medium`, `low`, default `medium``}` (V21). An empty array clears the list. |
 | `tool_search` | direct when anything is deferred | `query` req, `minLength` 1; `limit` integer 1–20, default 5 |
-| `request_permissions` | deferred, `permissions` | `permissions` req: `{read` array of paths, `write` array of paths, `network` boolean`}`, `minProperties` 1; `reason` req `minLength` 1; `scope` enum `turn`, `session`, default `turn` |
+| `request_permissions` | deferred, `permissions` | `permissions` req: `{read` array of paths, `write` array of paths, `network` boolean`}`, `minProperties` 1; `reason` req `minLength` 1; `scope` enum `turn`, `session`, default `turn` *(2026-10-19, built by 0005-PLAN F6-5, as written; the tool flags select it as any tool.)* |
 | `list_mcp_resources` | deferred, `mcp-resources` | `server`; `cursor` |
 | `list_mcp_resource_templates` | deferred, `mcp-resources` | `server`; `cursor` |
 | `read_mcp_resource` | deferred, `mcp-resources` | `server` req; `uri` req |

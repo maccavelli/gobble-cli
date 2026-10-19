@@ -73,6 +73,28 @@ func TestPrintYesRepeated(t *testing.T) {
 	}
 }
 
+// Print mode refuses request_permissions with and without --yes: its
+// answers are not a tool call's allow_once (0005-PLAN F6-5 decision 1).
+func TestPrintRefusesGrant(t *testing.T) {
+	for _, yes := range []bool{false, true} {
+		home, dir := t.TempDir(), t.TempDir()
+		t.Chdir(dir)
+		s := llmtest.NewScript(llmtest.ToolCall("s0", "tool_search", `{"query":"request_permissions"}`),
+			llmtest.ToolCall("g1", "request_permissions", `{"permissions":{"write":["src"]},"reason":"to build"}`), llmtest.Text("done"))
+		withModel(t, s)
+		args := []string{"--no-session", "-p", "go"}
+		if yes {
+			args = append([]string{"--yes"}, args...)
+		}
+		mustRun(t, home, args...)
+		reqs := s.Requests()
+		last := reqs[len(reqs)-1].Messages
+		if got := last[len(last)-1].Content[0].Text; !strings.Contains(got, "The user refused the request.") {
+			t.Fatalf("--yes %v: result %q", yes, got)
+		}
+	}
+}
+
 // An untrusted project's rules are not applied; a trusted one's follow the
 // global file's (0005-PLAN F6-1 decision 8, F6-2 decision 4).
 func TestProjectRulesNeedTrust(t *testing.T) {

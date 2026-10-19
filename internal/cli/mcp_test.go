@@ -275,7 +275,13 @@ func TestToolFlagsSelectResourceTools(t *testing.T) {
 	if got := run("--exclude-tools", "read_mcp_resource"); slices.Contains(got, "read_mcp_resource") || !slices.Contains(got, "list_mcp_resources") {
 		t.Fatalf("--exclude-tools: %q", got)
 	}
-	if got := run(); !slices.Contains(got, "read_mcp_resource") || slices.Contains(got, "tool_search") {
+	// The resource tools load at once, so nothing but request_permissions is
+	// deferred: without it there is no tool_search, and with it tool_search
+	// is offered (0005-PLAN F6-5 deviation 1).
+	if got := run("--exclude-tools", "request_permissions"); !slices.Contains(got, "read_mcp_resource") || slices.Contains(got, "tool_search") {
+		t.Fatalf("no request_permissions: %q", got)
+	}
+	if got := run(); !slices.Contains(got, "read_mcp_resource") || !slices.Contains(got, "tool_search") || slices.Contains(got, "request_permissions") {
 		t.Fatalf("no flags: %q", got)
 	}
 }

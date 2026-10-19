@@ -145,7 +145,7 @@ func (p planPolicy) Decide(ctx context.Context, r permission.Rule) (permission.D
 	}
 	mode := p.a.modeOf(p.s)
 	e := withDefaults(p.a.rulesOf(p.s), p.mcp, mode)
-	v := byMode(e.Evaluate(r), r, mode)
+	v := byGrant(byMode(e.Evaluate(r), r, mode), r, p.a.grantsOf(p.s))
 	p.a.logDecision(ctx, p.s, r, v, mode)
 	switch {
 	case v.Effect == permission.ModeDeny:
@@ -190,6 +190,7 @@ func (p planPolicy) Decide(ctx context.Context, r permission.Rule) (permission.D
 	if !d.Allow && ans.feedback != "" {
 		d.Reason = "The user said: " + ans.feedback
 	}
+	d.Grantable = !d.Allow && grantable(r, v)
 	return d, nil
 }
 

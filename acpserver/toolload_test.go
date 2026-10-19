@@ -103,7 +103,9 @@ func TestToolLoadRecordedAndReplayed(t *testing.T) {
 	if _, err := prompt(t, c, id, "second"); err != nil {
 		t.Fatal(err)
 	}
-	llmtest.AssertTools(t, model.Requests()[3], "read", "widget_tool")
+	// request_permissions stays deferred, so tool_search is offered
+	// (0005-PLAN F6-5 deviation 1).
+	llmtest.AssertTools(t, model.Requests()[3], "read", "widget_tool", "tool_search")
 
 	list, _ := slash(t, c, client, id, "/fork")
 	var second string
@@ -120,13 +122,14 @@ func TestToolLoadRecordedAndReplayed(t *testing.T) {
 	if _, err := prompt(t, c, forked, "in the fork"); err != nil {
 		t.Fatal(err)
 	}
-	llmtest.AssertTools(t, model.Requests()[4], "read", "widget_tool")
+	llmtest.AssertTools(t, model.Requests()[4], "read", "widget_tool", "tool_search")
 }
 
 // A server that offers resources makes the three resource tools load at
 // the first prompt: they are sent from its first request and named in the
-// system prompt, the load is recorded once, and tool_search is not offered
-// (0005-PLAN F1d-2).
+// system prompt, the load is recorded once, and tool_search is offered for
+// request_permissions alone, the system prompt naming no other category
+// (0005-PLAN F1d-2; F6-5 deviation 1).
 func TestResourceToolsLoadAtFirstPrompt(t *testing.T) {
 	model := llmtest.NewScript(llmtest.Text("ok"), llmtest.Text("again"))
 	c, a, _ := connectMCP(t, model, MCPOptions{})
@@ -143,8 +146,11 @@ func TestResourceToolsLoadAtFirstPrompt(t *testing.T) {
 				t.Errorf("request %d lacks %s: %v", i, n, names)
 			}
 		}
-		if slices.Contains(names, builtin.ToolSearchName) || !slices.Contains(names, "mcp__docs__echo") {
-			t.Errorf("request %d tools %v; want the server's tools, and no tool_search", i, names)
+		if !slices.Contains(names, builtin.ToolSearchName) || !slices.Contains(names, "mcp__docs__echo") || slices.Contains(names, RequestPermissionsTool) {
+			t.Errorf("request %d tools %v; want the server's tools, and tool_search", i, names)
+		}
+		if sys := req.Messages[0].Content[0].Text; !strings.Contains(sys, "- tool_search can find more tools for: permissions.\n") {
+			t.Errorf("request %d system prompt: want only the permissions category deferred", i)
 		}
 	}
 	a.mu.Lock()

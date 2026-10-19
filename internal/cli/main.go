@@ -150,9 +150,11 @@ type runEnv struct {
 	listings   map[string]*modelListing
 	// tools are the in-process agent's tools; nil is the built-ins.
 	tools []tool.Tool
-	// mcpOff and mcpAllow are the MCP tools the tool flags select.
+	// mcpOff and mcpAllow are the MCP tools the tool flags select, and
+	// noGrants leaves request_permissions out.
 	mcpOff   bool
 	mcpAllow func(name string) bool
+	noGrants bool
 	// store is the agent's session store, opened on first use.
 	store session.Store
 	// prompt is what the prompt flags set: the system prompt's replacement

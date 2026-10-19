@@ -276,6 +276,10 @@ type Subjecter interface {
 	Subject(call Call, env Env) Subject
 }
 
+// FamilyPermissions is request_permissions' family, which a declined call
+// a grant could cover loads (0012-MADR D7, D9; 0005-PLAN F6-5).
+const FamilyPermissions = "permissions"
+
 // Rerouter is implemented by a tool that hands some calls to another: the
 // agent runs such a call as the call Reroute gives, when that tool is
 // offered, keeping the call's id (0012-MADR D10).

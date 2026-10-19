@@ -64,6 +64,11 @@ func (a *Agent) listRules(t *cmdTurn) string {
 		b.WriteString(t.text(personality.PermissionsRule, personality.Args{
 			argNumber: strconv.Itoa(i + 1), argRule: r.rule.String(), argFrom: r.rule.Source.String()}) + "\n")
 	}
+	// The session's grants follow its rules (0005-PLAN F6-5 decision 8).
+	for i, g := range a.grantsOf(t.s) {
+		b.WriteString(t.text(personality.PermissionsRule, personality.Args{
+			argNumber: strconv.Itoa(len(rules) + i + 1), argRule: g.String(), argFrom: g.scope}) + "\n")
+	}
 	b.WriteString("\n" + t.text(personality.PermissionsLimits, nil) + "\n")
 	return b.String()
 }
@@ -72,10 +77,18 @@ func (a *Agent) listRules(t *cmdTurn) string {
 // file's rule, whose file is edited in place; a trusted project's, --set's
 // and the defaults are changed where they are set.
 func (a *Agent) removeRule(ctx context.Context, t *cmdTurn, n string) string {
-	rules := a.inForce(t.s)
+	rules, grants := a.inForce(t.s), a.grantsOf(t.s)
 	i, err := strconv.Atoi(n)
-	if err != nil || i < 1 || i > len(rules) {
+	if err != nil || i < 1 || i > len(rules)+len(grants) {
 		return t.text(personality.PermissionsNoRule, personality.Args{argNumber: n})
+	}
+	if i > len(rules) {
+		g := grants[i-len(rules)-1]
+		args := personality.Args{argNumber: n, argRule: g.String(), argFrom: g.scope}
+		if !a.dropGrant(t.s, g) {
+			return t.text(personality.PermissionsNoRule, args)
+		}
+		return t.text(personality.PermissionsRemoved, args)
 	}
 	r := rules[i-1]
 	args := personality.Args{argNumber: n, argRule: r.rule.String(), argFrom: r.rule.Source.String()}

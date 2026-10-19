@@ -76,6 +76,9 @@ Early, and built in the order [docs/README.md](docs/README.md#build-order) gives
 - **Modes:** `default`, `accept-edits` (edits without asking), `plan` (read-only until a plan is approved) and
   `bypass` (asks nothing but gobble's own limits, offered only with `permissions.allowBypass: true` in the global
   settings); `/mode`, `/plan` and `--mode`.
+- **`request_permissions`:** after you decline a file call, the model can ask you for read or write access to paths,
+  for the turn or the session, saying why; a grant answers the questions under those paths, and your deny rules and
+  gobble's limits still hold.
 - **Personalities:** gobble speaks as `boring`, `dry` (the default), `snarky` or `bombastic`, or one of your own;
   `/personality`, `--personality` and `gobble personality list|show|check|path|reset`. The messages in its catalog, and
   the system prompt's tools and rules sections, compaction's prompts and the built-in tools' descriptions, can be
@@ -93,7 +96,7 @@ Early, and built in the order [docs/README.md](docs/README.md#build-order) gives
   provider's variable; `gobble auth login --api-key -|logout|status|check`, signing in to Grok or Kilo with
   `gobble auth login grok|kilo`, and `gobble auth import --from-pi` ([guide](docs/guides/credentials.md)).
 
-Not built yet: `request_permissions` (0005-PLAN F6-5); `--offline`, which is refused until then; the enhanced TUI
+Not built yet: `--offline`, which is refused until 0005-PLAN X3; the enhanced TUI
 mode; and `gobble update`. The full v1 line, tiered into
 a v1.0.0 gate, a v1.x train and `exp/`, is in [0005-MADR](docs/decisions/0005-MADR-v1-feature-scope.md).
 
