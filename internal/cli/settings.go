@@ -15,6 +15,7 @@ import (
 	"github.com/maccavelli/gobble-cli/compaction"
 	"github.com/maccavelli/gobble-cli/internal/config"
 	"github.com/maccavelli/gobble-cli/llm"
+	"github.com/maccavelli/gobble-cli/personality"
 )
 
 // processOnce holds the process settings, resolved once a run.
@@ -82,7 +83,8 @@ func (e *runEnv) resolveSettings(cwd string, read config.Read, report func(strin
 
 // toSession is a session's settings as acpserver takes them (0018-MADR
 // D17): compaction is complete, so it never mixes defaults (0005-PLAN F5-2
-// decision 8).
+// decision 8); the personality is the default, dry, which 0022-PLAN P3
+// makes a setting (P2's deviation 1).
 func toSession(s config.Settings) acpserver.SessionSettings {
 	return acpserver.SessionSettings{
 		SteeringMode: s.SteeringMode, FollowUpMode: s.FollowUpMode, Thinking: s.DefaultThinkingLevel,
@@ -92,8 +94,18 @@ func toSession(s config.Settings) acpserver.SessionSettings {
 			ThresholdPercent: int(s.Compaction.ThresholdPercent), ThresholdTokens: int(s.Compaction.ThresholdTokens),
 		},
 		MCPStartupWait: s.MCPStartupWait(), MCPStopGrace: s.MCPStopGrace(), MCPStopTimeout: s.MCPStopTimeout(),
-		Retry: retryOf(s.Retry), AutoCompactionOff: !s.Compaction.Enabled,
+		Retry: retryOf(s.Retry), AutoCompactionOff: !s.Compaction.Enabled, Personality: personality.Default,
 	}
+}
+
+// cliVoice is the voice of the CLI's own lines, the sessions' personality
+// (0022-PLAN P2, deviation 1).
+func cliVoice() *personality.Voice {
+	v, err := personality.New(personality.Options{Name: personality.Default})
+	if err != nil { // a built-in always loads
+		panic(err)
+	}
+	return v
 }
 
 // retryOf is the retry settings as a session takes them (0005-PLAN F5-1).

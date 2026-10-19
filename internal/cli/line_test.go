@@ -10,6 +10,7 @@ import (
 	"github.com/maccavelli/gobble-cli/acpclient/acptest"
 	"github.com/maccavelli/gobble-cli/internal/cli/term"
 	"github.com/maccavelli/gobble-cli/llm/llmtest"
+	"github.com/maccavelli/gobble-cli/personality"
 )
 
 // lineHarness runs a line session over a pipe, with raw mode stubbed and
@@ -20,6 +21,7 @@ type lineHarness struct {
 	e              *runEnv
 	keys           *io.PipeWriter
 	cwd            string
+	voice          *personality.Voice // the session's lines; nil is boring
 	stdout, stderr *syncBuffer
 	done           chan error
 
@@ -69,7 +71,7 @@ func (h *lineHarness) start(first Prompt) {
 	if cwd == "" {
 		cwd = acptest.Abs("/work")
 	}
-	ls := &lineSession{e: h.e, cwd: cwd, base: cwd, in: keysR, raw: h.raw}
+	ls := &lineSession{e: h.e, cwd: cwd, base: cwd, in: keysR, raw: h.raw, opts: display{voice: h.voice}}
 	go func() { h.done <- ls.run(first) }()
 	h.t.Cleanup(func() { keysW.Close() }) //nolint:errcheck,gosec // test cleanup
 }

@@ -30,7 +30,7 @@ func (s *syncBuffer) String() string {
 func TestSpinnerFrames(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		var w syncBuffer
-		sp := StartSpinner(t.Context(), &w, colorOn, false, "thinking")
+		sp := StartSpinner(t.Context(), &w, colorOn, false, func() string { return "thinking" })
 		time.Sleep(350 * time.Millisecond)
 		if err := sp.Stop(); err != nil {
 			t.Fatal(err)
@@ -46,7 +46,7 @@ func TestSpinnerStopsOnCancel(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		var w syncBuffer
 		ctx, cancel := context.WithCancel(t.Context())
-		sp := StartSpinner(ctx, &w, colorOn, true, "x")
+		sp := StartSpinner(ctx, &w, colorOn, true, func() string { return "x" })
 		time.Sleep(150 * time.Millisecond)
 		cancel()
 		synctest.Wait()
@@ -67,7 +67,7 @@ func TestSpinnerStopsOnCancel(t *testing.T) {
 func TestSpinnerSilentOffTerminal(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		var w syncBuffer
-		sp := StartSpinner(t.Context(), &w, colorOff, true, "x")
+		sp := StartSpinner(t.Context(), &w, colorOff, true, func() string { return "x" })
 		time.Sleep(time.Second)
 		if err := sp.Stop(); err != nil {
 			t.Fatal(err)

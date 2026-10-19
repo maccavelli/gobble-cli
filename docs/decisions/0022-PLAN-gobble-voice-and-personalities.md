@@ -9,7 +9,7 @@ associated-madr: "0022-MADR-gobble-voice-and-personalities.md"
 
 Associated MADR: [0022-MADR-gobble-voice-and-personalities.md](0022-MADR-gobble-voice-and-personalities.md)
 
-*Approved 2026-10-18 ("committed, approved, proceed"); P1 complete 2026-10-18. Each later phase is made executable on the owner's word, with its facts measured then, as 0005-PLAN's sub-phases are.*
+*Approved 2026-10-18 ("committed, approved, proceed"); P1 complete 2026-10-18; P2 complete 2026-10-18, with deviation 1. Each later phase is made executable on the owner's word, with its facts measured then, as 0005-PLAN's sub-phases are.*
 
 ## Goal
 
@@ -59,7 +59,7 @@ Six phases, each one commit with its own execution record and gates, in this ord
 1. **`personality/builtin/dry/`:** `personality.md` and `messages.md` from 0022-MADR's drafts, extended to every key of the inventory where D2 gives a voice, and at least 40 `turn.working` lines.
 2. **`personality/builtin/rules.md`:** the `personality_rules` text of D3, embedded, not overridable.
 3. **`prompt`:** `Options.Personality` (the brief's body) and `Options.PersonalityRules`; `Build` puts `personality` after the preamble and `personality_rules` after it, both tagged as other sections are, neither under `boring`; both kept under `SYSTEM.md` (D4).
-4. **`acpserver`:** the session's personality (from `SessionSettings`) reaches the prompt and the catalog; `dry` when the settings give none.
+4. **`acpserver`:** the session's personality (from `SessionSettings`) reaches the prompt and the catalog; ~~`dry` when the settings give none~~ *gobble's settings give `dry`, and the server's unset value stays `boring` (2026-10-18, P2's deviation 1)*.
 5. **`internal/cli`:** the spinner rotates `turn.working` every 4 seconds (D12's first item); status lines and the footer take the session's voice.
 6. **Errors:** `Output` gains a lead line, `<key>.lead`, before an `Error:` or `Warning:` line when the voice has one (D13); the line itself unchanged.
 7. **Records:** 0005-MADR's amendment to rules 3 and 4; 0008-MADR's for the spinner; this plan's P2 record.
@@ -178,3 +178,49 @@ Six phases, each one commit with its own execution record and gates, in this ord
   - **a multi-line reply is two keys** joined in code (`model.current` and `model.list`), so a variant is always one line;
   - **the spinner's label is not read by any test:** it draws only on a terminal. Its text is pinned by `TestBoringIsTodaysText`; its call site is one line.
 - **Next:** P2, Dry and the default, made executable on the owner's word.
+
+**P2's deviations, 2026-10-18, decided by the owner:**
+
+1. **Where the Dry default lives.** Found while building step 4, with steps 1, 2, 3, 5 and 6 built and the existing tests passing. Step 4 says the server takes `dry` "when the settings give none"; 0022-MADR D17 says an unset personality is `boring`, so every existing test keeps today's text. The server's tests give no settings, so both cannot hold. Measured on scratch copies: a server default of `dry` fails 17 existing tests (reply text, `session.golden`, system-prompt checks); a default given by gobble's settings fails 2 (`TestModelOptionOffersListedModels`, which reads a reply through the CLI, and `TestSessionSettingsReachAgent`, which compares the settings).
+   - **Chosen ("CLI's settings give Dry"):** `internal/cli`'s `toSession` gives every session `dry` (`personality.Default`), and P3 moves it into the `personality` setting's default. `SessionSettings.Personality` empty, the server's unset value, is `boring`, as D17 has it. Every user of gobble, its CLI, its TUI and an ACP client such as magic-cli-remote's phone app through `gobble acp`, gets `dry`. Step 4 is struck through and annotated.
+   - **Not chosen:** the server defaulting to `dry`, with the 17 tests opting into `boring` and D17 amended.
+   - No file is added to the phase's scope; `internal/cli/settings.go` was in step 5's.
+
+**P2 — A: Dry, the default (2026-10-18).**
+
+- **Ran as the plan wrote it,** with deviation 1 above, on the owner's word "committed, proceed" after `4663ff6`. P3 is next, made executable when the owner asks.
+- **What was built:**
+  - `personality`: `builtin/dry/personality.md`, 0022-MADR's draft brief with "Swear. Not even mildly." added by the owner's answer 2; `builtin/dry/messages.md`, every one of the 50 keys, two or three variants for most, 44 spinner lines, and five lead keys; `builtin/rules.md`, the house rules of D3, embedded and not overridable. `Voice` gains `Brief`, `Rules`, `Lead`, `Variants`; `Builtins`, `Canonical`, `Default` (`dry`); the built-ins load once.
+  - `prompt`: `Options.Personality` and `Options.PersonalityRules`; `Build` puts `personality` and `personality_rules` after the preamble, a custom one included, neither under `boring`.
+  - `acpserver`: `SessionSettings.Personality`; each session's voice from it (`voiceOf`), `boring` with a log line for an unknown name; the system prompt carries the voice's brief and rules.
+  - `internal/cli`: `toSession` gives `dry` (deviation 1); `cliVoice`, the line view's and print mode's voice (`displayFor`, `newPrintSink`, which the test needed); `Output.Lead`, before five errors and warnings of the line view: no credential, the session failing to open, images refused, authentication, a failed turn.
+  - `render`: `StartSpinner` takes a label function, asked at the start and every 4 seconds (`labelEvery`).
+- **Tests,** new: `personality/builtins_test.go` (`TestBuiltinsLoad`, `TestBuiltinsFactsRule`, `TestBuiltinsWidths`, `TestBuiltinsGuards`), `prompt/personality_test.go` (`TestBuildPersonality`, `TestGoldenSystemPromptDry` with `testdata/system_dry.golden`), `acpserver/personality_test.go` (`TestSessionPersonality`), `internal/cli/lead_test.go` (`TestLineSessionLeads`, `TestOutputLead`, `TestCLIVoice`), `internal/cli/render/spinner_label_test.go` (`TestSpinnerLabelRotates`).
+- **Existing tests changed,** none loosened:
+  - `TestSessionSettingsReachAgent`: the settings gain `Personality: dry`;
+  - `TestModelOptionOffersListedModels`: `/model`'s reply, now dry's, must be one of dry's variants, whole, where it was checked to contain boring's `Model: gpt-5-nano`;
+  - the spinner's three tests pass a label function, the new parameter;
+  - the line view's test harness gains an optional voice, nil being `boring`;
+  - every other test and golden file passes unchanged, `boring` being the server's unset value (deviation 1).
+- **Negatives,** 30 of 30 caught on a scratch copy after control runs:
+  - `personality`: dry not built in; `normal` not boring's; no brief; the rules under `boring`; dry speaking boring's catalog; a lead given empty; variants unfilled; a dry variant losing a placeholder, insulting the user, swearing, borrowing a character's name, running too long; a dry key missing; the spinner under 40 lines; the house rules changed;
+  - `prompt`: the personality dropped under a custom prompt; the rules' section misnamed;
+  - `acpserver`: no brief in the system prompt; the setting's name ignored; the unknown name unlogged; sessions given no voice;
+  - `internal/cli`: no `dry` from `toSession`; the line view's or print mode's voice boring; no lead written; the failed turn's, authentication's and no-credential's leads dropped;
+  - `render`: the label not refreshed; refreshed every 2 seconds.
+  - The first run caught 29: dry speaking boring's catalog passed `TestSessionPersonality`, which compared the reply with the same voice's variants. It now also requires a reply that is not boring's. Caught on the rerun, and the whole set was run again on the final code: 30 of 30.
+- **Measured:** the two sections add 3,040 bytes to the system prompt under `dry` (`system_dry.golden` against `system.golden`), 760 tokens by gobble's own estimate (four characters a token), within 0022-MADR D18's 600 to 900.
+- **Gates:**
+  - the pre-add check on the changed `.go` files, clean;
+  - lint for linux, darwin and windows, `0 issues.` each with `CGO_ENABLED=0`, after three findings fixed in the code: `LeadNoCredential`'s key read as a credential (`gosec`), with the reason as its `nolint`; a private `variants` beside the public `Variants` (`revive`), renamed `choices`; and markdownlint's blank line before the house rules' list, which the golden file then took;
+  - the macOS laptop's `CGO_ENABLED=1 go test -race -count=1 ./...`, 34 packages ok, no race report;
+  - `make preflight` on macOS: passed;
+  - **not run:** Windows `go test ./...` and `-race`, the second Linux machine's `-race`, and Windows and WSL `make preflight`, on the owner's machines; and no session against a model, which P6's evaluation is.
+- **What the plan left unsaid:**
+  - deviation 1, where the default lives;
+  - **the 80-column limit** of 0022-MADR D17 is 80 columns or boring's own width at typical values, whichever is wider: boring's paused-compaction lines already pass 80, and boring is today's text. A spinner line is held to 60, room for its frame;
+  - **leads are keys of their own,** five of them, which boring does not have, so its errors stand alone; a lead has no placeholders, the facts being on the error's line;
+  - **leads are shown in the line view only;** print mode's failures and every error before a session (usage, flags) stay plain, as D12 keeps print mode quiet;
+  - **two lead call sites have no test:** the session failing to open and images refused. Each is one line, as the three tested ones are;
+  - **the spinner's label comes from the session's voice in the line view;** under `boring`, `working`, as before.
+- **Next:** P3, choosing, and Snarky and Bombastic, made executable on the owner's word.

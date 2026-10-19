@@ -94,6 +94,10 @@ type Options struct {
 	// Custom replaces the preamble, and leaves out tools and rules, as Pi's
 	// SYSTEM.md does.
 	Custom string
+	// Personality is the session's personality brief, and PersonalityRules
+	// the house rules that outrank it; both empty under boring (0022-MADR
+	// D3, D4).
+	Personality, PersonalityRules string
 	// Append is the addendum, Pi's APPEND_SYSTEM.md.
 	Append string
 	// Tools are the agent's own tools' names, which the rules depend on.
@@ -111,12 +115,20 @@ type Options struct {
 // Build is the system prompt's sections in Pi's order, without docs, which
 // gobble has none of yet: preamble, tools, rules, addendum,
 // project_context, skills, cwd (Pi's buildSystemPromptSections,
-// system-prompt.ts:121-180; 0005-PLAN F3-1).
+// system-prompt.ts:121-180; 0005-PLAN F3-1). The personality and its house
+// rules follow the preamble, a custom one included (0022-MADR D4).
 func Build(o Options) []Section {
 	out := []Section{{Name: "preamble", Text: Preamble}}
 	if o.Custom != "" {
 		out[0].Text = o.Custom
-	} else {
+	}
+	if o.Personality != "" {
+		out = append(out, tagged("personality", o.Personality))
+	}
+	if o.PersonalityRules != "" {
+		out = append(out, tagged("personality_rules", o.PersonalityRules))
+	}
+	if o.Custom == "" {
 		if t := toolsText(o.Tools, o.Deferred); t != "" {
 			out = append(out, tagged("tools", t))
 		}

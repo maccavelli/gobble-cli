@@ -359,7 +359,7 @@ func (a *Agent) NewSession(ctx context.Context, p acp.NewSessionRequest) (acp.Ne
 	s := &liveSession{id: acp.SessionId(id), cwd: p.Cwd, dirs: dirs, log: log, tree: session.NewTree(nil),
 		think: cmp.Or(a.override.Thinking, ss.Thinking), model: cmp.Or(a.override.Model, a.models().Default), mode: modeDefault,
 		queue: sessionQueue(ss), compaction: ss.Compaction, cache: cacheOf(ss.CacheRetention), retry: ss.Retry,
-		autoCompactOff: ss.AutoCompactionOff}
+		autoCompactOff: ss.AutoCompactionOff, voice: a.voiceOf(ss)}
 	if len(forked) > 0 {
 		for _, e := range forked {
 			if err := log.Append(ctx, e); err != nil {
@@ -840,7 +840,7 @@ func (a *Agent) open(ctx context.Context, id acp.SessionId, cwd string, extra []
 	// The history's thinking level wins: restore sets it (0018-MADR D17).
 	s := &liveSession{id: id, cwd: cwd, dirs: dirs, log: log, think: thinkingOff, model: a.models().Default, mode: modeDefault,
 		queue: sessionQueue(ss), compaction: ss.Compaction, cache: cacheOf(ss.CacheRetention), retry: ss.Retry,
-		autoCompactOff: ss.AutoCompactionOff}
+		autoCompactOff: ss.AutoCompactionOff, voice: a.voiceOf(ss)}
 	a.restore(s, log.Entries())
 	// The run's override wins over the history's choice (0005-PLAN F4-2c).
 	if err := a.applyOverride(ctx, s); err != nil {

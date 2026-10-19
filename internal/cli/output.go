@@ -6,6 +6,7 @@ import (
 	"io"
 
 	"github.com/maccavelli/gobble-cli/internal/cli/term"
+	"github.com/maccavelli/gobble-cli/personality"
 )
 
 // errBrokenPipe ends the process quietly with status 0: the reader of
@@ -43,6 +44,14 @@ func (o *Output) Errorf(format string, args ...any) { o.diag("Error: ", format, 
 
 // Warnf prints "Warning: …" on stderr.
 func (o *Output) Warnf(format string, args ...any) { o.diag("Warning: ", format, args...) }
+
+// Lead writes voice's line for key before an error or a warning, when the
+// voice has one; boring has none (0022-MADR D13).
+func (o *Output) Lead(voice *personality.Voice, key personality.Key) {
+	if line, ok := voice.Lead(key); ok {
+		o.diag("", "%s", line)
+	}
+}
 
 // Notef writes a status line to stderr, unprefixed, such as a retry's.
 func (o *Output) Notef(format string, args ...any) { o.diag("", format, args...) }

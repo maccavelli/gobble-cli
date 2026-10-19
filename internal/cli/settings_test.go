@@ -17,6 +17,7 @@ import (
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/llm/llmtest"
 	"github.com/maccavelli/gobble-cli/llm/provider"
+	"github.com/maccavelli/gobble-cli/personality"
 	"github.com/maccavelli/gobble-cli/session"
 	"github.com/maccavelli/gobble-cli/session/jsonl"
 	"github.com/maccavelli/gobble-cli/tool"
@@ -145,7 +146,7 @@ func TestSessionSettingsReachAgent(t *testing.T) {
 		SteeringMode: "all", FollowUpMode: "all", Thinking: "low", CacheRetention: "long",
 		Compaction:     compaction.Settings{ReserveTokens: compaction.DefaultSettings.ReserveTokens, KeepRecentTokens: 100},
 		MCPStartupWait: 7 * time.Millisecond, MCPStopGrace: 8 * time.Millisecond, MCPStopTimeout: 9 * time.Millisecond,
-		Retry: llm.DefaultRetry,
+		Retry: llm.DefaultRetry, Personality: personality.Default,
 	}
 	if got != want {
 		t.Fatalf("Settings = %+v, want %+v", got, want)
@@ -156,7 +157,7 @@ func TestSessionSettingsReachAgent(t *testing.T) {
 	today := acpserver.SessionSettings{
 		SteeringMode: "one-at-a-time", FollowUpMode: "one-at-a-time", Thinking: "off", CacheRetention: "short", Compaction: compaction.DefaultSettings,
 		MCPStartupWait: 10 * time.Second, MCPStopGrace: 500 * time.Millisecond, MCPStopTimeout: 2 * time.Second,
-		Retry: llm.DefaultRetry,
+		Retry: llm.DefaultRetry, Personality: personality.Default,
 	}
 	if got := toSession(config.Defaults()); got != today {
 		t.Fatalf("toSession(Defaults()) = %+v, want %+v", got, today)

@@ -56,7 +56,7 @@ func runLine(e *runEnv, c *ChatCmd, first Prompt, cwd, base string) error {
 
 func displayFor(c *ChatCmd) display {
 	home, _ := os.UserHomeDir() //nolint:errcheck // no home only means paths are not shortened
-	return display{showThinking: c.ShowThinking, verbose: c.Verbose, stats: c.Stats, home: home}
+	return display{showThinking: c.ShowThinking, verbose: c.Verbose, stats: c.Stats, home: home, voice: cliVoice()}
 }
 
 func (ls *lineSession) run(first Prompt) error {
@@ -71,6 +71,7 @@ func (ls *lineSession) run(first Prompt) error {
 	// authentication error (0008-MADR D1). gobble configure arrives with
 	// 0005-PLAN F4, so the warning names the variables.
 	if _, err := provider.ChooseWith(e.hasCredential, e.chosenProvider()); err != nil {
+		e.out.Lead(ls.opts.voice, personality.LeadNoCredential)
 		e.out.Warnf("%s", e.noCredentialMessage())
 	}
 	// A resumed session opens at once, from its file, and says so; a new one
@@ -178,7 +179,9 @@ func (ls *lineSession) history() editor.History {
 func (ls *lineSession) turn(p Prompt) error {
 	e := ls.e
 	v := newView(e.out, ls.opts, e.now)
-	sp := render.StartSpinner(e.ctx, e.out.err, e.out.caps.Err, e.out.caps.Unicode, ls.opts.voice.Text(personality.TurnWorking, nil))
+	sp := render.StartSpinner(e.ctx, e.out.err, e.out.caps.Err, e.out.caps.Unicode, func() string {
+		return ls.opts.voice.Text(personality.TurnWorking, nil)
+	})
 	v.beforeWrite = func() {
 		if err := sp.Stop(); err != nil {
 			e.log().WarnContext(e.ctx, "spinner", slog.String("error", err.Error()))
@@ -195,6 +198,7 @@ func (ls *lineSession) turn(p Prompt) error {
 	}()
 	if err := ls.ensureSession(); err != nil {
 		v.quiet()
+		e.out.Lead(ls.opts.voice, personality.LeadSessionFailed)
 		e.out.Errorf("%v", err)
 		return e.ctx.Err()
 	}
@@ -213,16 +217,19 @@ func (ls *lineSession) turn(p Prompt) error {
 	switch {
 	case errors.Is(perr, acpclient.ErrImagesUnsupported):
 		v.quiet()
+		e.out.Lead(ls.opts.voice, personality.LeadImages)
 		e.out.Errorf("the agent does not accept images (%s)", imageNames(p))
 		return nil
 	case errors.Is(perr, acpclient.ErrAuthRequired):
 		v.quiet()
+		e.out.Lead(ls.opts.voice, personality.LeadAuth)
 		e.out.Errorf("%s", e.authMessage())
 		return nil
 	case perr != nil:
 		if err := v.finish(res); err != nil {
 			return err
 		}
+		e.out.Lead(ls.opts.voice, personality.LeadTurnFailed)
 		e.out.Errorf("%v", perr)
 		return nil
 	}

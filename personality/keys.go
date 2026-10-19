@@ -73,3 +73,16 @@ var Keys = []Key{
 	NameNormalized, NameSet, ForkNone, ForkList, ForkNothingBefore, ForkNoMessage, ForkDone, CloneNone, CloneDone,
 	TodosNone, CompactStart, CompactFailed, CompactDone,
 }
+
+// The lines a personality may put before an error or a warning in gobble's
+// line view (0022-MADR D13). boring has none: its errors stand alone.
+const (
+	LeadNoCredential  Key = "error.no_credential.lead" //nolint:gosec // a message key, not a credential
+	LeadSessionFailed Key = "error.session_failed.lead"
+	LeadImages        Key = "error.images.lead"
+	LeadAuth          Key = "error.auth.lead"
+	LeadTurnFailed    Key = "error.turn_failed.lead"
+)
+
+// LeadKeys are every lead key.
+var LeadKeys = []Key{LeadNoCredential, LeadSessionFailed, LeadImages, LeadAuth, LeadTurnFailed}

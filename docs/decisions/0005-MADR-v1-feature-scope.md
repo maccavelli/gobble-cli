@@ -774,7 +774,8 @@ Earlier phases had set the precedent: 0002-PLAN copied Pi's MCP configuration me
    * Messages follow gobble's style, `<tool> <path>: <what>; <how to fix>`, and keep what makes another harness's message useful, such as the offset to continue from.
    * A harness's runtime or implementation quirk is not copied.
    * Copying another harness's text needs a stated reason in the PLAN.
-4. **Golden tests check behaviour,** such as which lines, which file content and which error case. A message is checked as gobble's own text.
+   * *(2026-10-18, [0022-MADR-gobble-voice-and-personalities.md](0022-MADR-gobble-voice-and-personalities.md) D13 and D16: a message a person reads may be led by one line in the session's personality; the message itself keeps gobble's style, and the text a model reads keeps it under every personality.)*
+4. **Golden tests check behaviour,** such as which lines, which file content and which error case. A message is checked as gobble's own text. *(2026-10-18, 0022-MADR D17: a test checks the message as `boring` gives it, today's text, and a personality's variants by the facts rule.)*
 5. **Exact behaviours and limits are defaults.** Where this record's rows give an exact source behaviour or limit (for example "Pi's normalisation order", "2000 lines or 50 KB"), they are defaults gobble keeps unless a choice below or a PLAN gives a reason to differ.
 
 **The owner's choices, 2026-10-07,** with 0010-REPORT's section for the evidence:

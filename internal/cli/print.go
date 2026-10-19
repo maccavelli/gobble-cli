@@ -66,6 +66,11 @@ type printSink struct {
 	err     error
 }
 
+// newPrintSink is print mode's sink, in the sessions' voice (0022-PLAN P2).
+func newPrintSink(e *runEnv, c *ChatCmd) *printSink {
+	return &printSink{out: e.out, stream: c.OutputFormat == "stream-json", now: e.now, voice: cliVoice()}
+}
+
 func (s *printSink) on(u acpclient.Update) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -153,7 +158,7 @@ func runPrint(e *runEnv, c *ChatCmd, p Prompt, cwd, base string) (err error) {
 			e.out.Warnf("%v", cerr)
 		}
 	}()
-	sink := &printSink{out: e.out, stream: c.OutputFormat == "stream-json", now: e.now}
+	sink := newPrintSink(e, c)
 	sess, _, err := openSession(ctx, conn, c.sessionChoice(), cwd, base, sink.on)
 	if err != nil {
 		return err

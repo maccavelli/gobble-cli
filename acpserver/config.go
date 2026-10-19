@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"log/slog"
 	"slices"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/maccavelli/gobble-cli/compaction"
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/llm/catalog"
+	"github.com/maccavelli/gobble-cli/personality"
 	"github.com/maccavelli/gobble-cli/session"
 )
 
@@ -71,6 +73,9 @@ type SessionSettings struct {
 	// Retry is the session's retry settings (0005-PLAN F5-1). Settings never
 	// give a zero one, whose base delay is none.
 	Retry llm.Retry
+	// Personality is the session's personality, by name: a built-in one, or
+	// one of boring's names; empty is boring (0022-MADR D1, D17).
+	Personality string
 }
 
 // sessionSettings are the settings for a session in cwd: Options.Settings',
@@ -93,6 +98,17 @@ func (a *Agent) sessionSettings(cwd string) SessionSettings {
 		s.Retry = llm.DefaultRetry
 	}
 	return s
+}
+
+// voiceOf is the session's voice: its settings' personality, or boring,
+// with a log line, for a name no personality has (0022-PLAN P2).
+func (a *Agent) voiceOf(ss SessionSettings) *personality.Voice {
+	v, err := personality.New(personality.Options{Name: ss.Personality})
+	if err != nil {
+		a.logger.Warn("personality", slog.String("error", err.Error()))
+		return nil
+	}
+	return v
 }
 
 // sessionQueue is a session's queues in its settings' modes (0018-PLAN P5

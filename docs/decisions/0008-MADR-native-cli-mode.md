@@ -407,7 +407,7 @@ Further rules:
 - **Ctrl+C at the prompt** clears a non-empty line. On an empty line it prints the hint `Press Ctrl+C again to exit`, and a second Ctrl+C within 2 s exits 0.
 - **Ctrl+C during a turn** sends ACP `session/cancel` and returns to the prompt. A second Ctrl+C while cancelling exits 130.
 - **Turn display.**
-  - A spinner on stderr while waiting, terminal only. It writes `\r` and `ESC[K` from one goroutine.
+  - A spinner on stderr while waiting, terminal only. It writes `\r` and `ESC[K` from one goroutine. *(2026-10-18, [0022-MADR-gobble-voice-and-personalities.md](0022-MADR-gobble-voice-and-personalities.md) D12, 0022-PLAN P2: its label is a line from the session's personality, a new one every 4 seconds; under `boring`, `working`.)*
   - Then the D7 stream.
   - Then the D7 status line.
 - **Start-up.** No network call before the first prompt.
