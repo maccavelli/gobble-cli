@@ -124,6 +124,8 @@ func (e *runEnv) promptOptions() acpserver.PromptOptions {
 	if dirs, _, err := systemDirs(); err == nil {
 		o.ConfigDir = dirs.Config
 	}
+	// The user's tools and rules sections (0022-PLAN P5).
+	o.ToolsSection, o.RulesSection = e.prompts().sections[promptTools], e.prompts().sections[promptRules]
 	if home, err := os.UserHomeDir(); err == nil {
 		o.Home = home
 	}
@@ -290,11 +292,12 @@ var toolsWith = builtin.ToolsWith
 // of the process settings (0018-MADR D17), and the whole output of long
 // commands kept in <state>/output (0005-PLAN F1b), or in the OS temp
 // directory when the state directory cannot be resolved.
-func builtinTools(s config.Settings) []tool.Tool {
+func (e *runEnv) builtinTools(s config.Settings) []tool.Tool {
 	o := builtinOptions(s)
 	if dirs, _, err := systemDirs(); err == nil {
 		o.OutputDir = filepath.Join(dirs.State, "output")
 	}
+	o.Descriptions = e.prompts().descriptions // the user's (0022-PLAN P5)
 	return toolsWith(o)
 }
 

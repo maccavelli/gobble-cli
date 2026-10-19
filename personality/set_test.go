@@ -97,11 +97,11 @@ func TestLoadSet(t *testing.T) {
 		"## retry.offline\n\n- The sea is calm, and so is the network.\n")
 	writePersonality(t, dir, "quiet", "---\nname: quiet\nlevel: 1\nsummary: Hush.\n---\nYou say little.\n", "")
 	bad := map[string][2]string{
-		"misnamed": {"---\nname: other\nlevel: 2\n---\nx\n", ""},
-		"dry":      {"---\nname: dry\nlevel: 3\n---\nx\n", ""},
-		"nokey":    {"---\nname: nokey\nlevel: 2\n---\nx\n", "## no.such.key\n\n- x\n"},
-		"facts":    {"---\nname: facts\nlevel: 2\n---\nx\n", "## retry.empty_reply\n\n- Again, {attempt} of many.\n"},
-		"nobrief":  {"", "## retry.offline\n\n- x\n"},
+		"misnamed":  {"---\nname: other\nlevel: 2\n---\nx\n", ""},
+		"bombastic": {"---\nname: bombastic\nlevel: 3\n---\nx\n", ""},
+		"nokey":     {"---\nname: nokey\nlevel: 2\n---\nx\n", "## no.such.key\n\n- x\n"},
+		"facts":     {"---\nname: facts\nlevel: 2\n---\nx\n", "## retry.empty_reply\n\n- Again, {attempt} of many.\n"},
+		"nobrief":   {"", "## retry.offline\n\n- x\n"},
 	}
 	for name, files := range bad {
 		writePersonality(t, dir, name, files[0], files[1])
@@ -133,7 +133,7 @@ func TestLoadSet(t *testing.T) {
 	}
 	infos := set.Infos()
 	if len(infos) != 6 || infos[0] != (Info{Name: Boring, Level: 1, Summary: BoringSummary, Builtin: true}) ||
-		infos[4] != (Info{Name: "pirate", Level: 2, Summary: "Arr."}) {
+		infos[4] != (Info{Name: "pirate", Level: 2, Summary: "Arr.", Source: filepath.Join(dir, "pirate")}) {
 		t.Fatalf("infos %+v", infos)
 	}
 	if _, err := (*Set)(nil).New(Options{Name: "pirate"}); err == nil {

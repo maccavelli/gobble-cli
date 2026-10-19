@@ -119,29 +119,37 @@ func Canonical(name string) string { return (*Set)(nil).Canonical(name) }
 // names; empty is boring, the zero value code relies on (0022-MADR D17).
 func New(o Options) (*Voice, error) { return (*Set)(nil).New(o) }
 
-// Set is the personalities a process offers: the built-ins, and the
-// user's own from their config directory (0022-PLAN P3). A nil Set is the
-// built-ins alone.
+// Set is the personalities a process offers: the built-ins, with the
+// user's files over them, and the user's own, from their config directory
+// (0022-PLAN P3, P5). A nil Set is the built-ins alone.
 type Set struct {
 	user  map[string]builtinData
 	order []string
+	// over are the built-ins the user's files change, each laid over its
+	// built-in; dirs are where each user-made or changed one came from.
+	over map[string]builtinData
+	dirs map[string]string
 }
 
-// Info is a personality as /personality lists it.
+// Info is a personality as /personality and gobble personality list it.
+// Source is the directory of a user-made personality, or of the files that
+// change a built-in; "" for a built-in as shipped.
 type Info struct {
 	Name    string
 	Level   int
 	Summary string
 	Builtin bool
+	Source  string
 }
 
-// LoadSet reads the user's personalities under dir, one directory each,
-// named for the personality, holding personality.md and messages.md. A
-// directory that does not make a personality is left out with an error
-// naming it; one named for a built-in is P5's override, and is left out
-// too. A missing dir is no personalities.
+// LoadSet reads the personalities under dir, one directory each, named
+// for the personality, holding personality.md and messages.md: a
+// built-in's name changes that built-in (loadOverride), any other makes a
+// personality of the user's. The prompts directory is not a personality
+// (PromptsDir). A directory that does not make a personality is left out
+// with an error naming it. A missing dir is no personalities.
 func LoadSet(dir string) (*Set, []error) {
-	set := &Set{user: map[string]builtinData{}}
+	set := &Set{user: map[string]builtinData{}, over: map[string]builtinData{}, dirs: map[string]string{}}
 	if dir == "" {
 		return set, nil
 	}
@@ -154,15 +162,25 @@ func LoadSet(dir string) (*Set, []error) {
 	}
 	var errs []error
 	for _, e := range entries {
-		if !e.IsDir() {
+		if !e.IsDir() || e.Name() == PromptsDir {
 			continue
 		}
-		d, err := loadUser(filepath.Join(dir, e.Name()), e.Name())
+		path := filepath.Join(dir, e.Name())
+		if slices.Contains(Builtins, e.Name()) {
+			d, err := loadOverride(path, e.Name())
+			if err != nil {
+				errs = append(errs, err)
+				continue
+			}
+			set.over[e.Name()], set.dirs[e.Name()] = d, path
+			continue
+		}
+		d, err := loadUser(path, e.Name())
 		if err != nil {
 			errs = append(errs, err)
 			continue
 		}
-		set.user[e.Name()] = d
+		set.user[e.Name()], set.dirs[e.Name()] = d, path
 		set.order = append(set.order, e.Name())
 	}
 	return set, errs
@@ -283,12 +301,25 @@ func (set *Set) Infos() []Info {
 		if n == Boring {
 			summary = BoringSummary
 		}
-		out = append(out, Info{Name: n, Level: set.Level(n), Summary: summary, Builtin: slices.Contains(Builtins, n)})
+		out = append(out, Info{Name: n, Level: set.Level(n), Summary: summary, Builtin: slices.Contains(Builtins, n), Source: set.Dir(n)})
 	}
 	return out
 }
 
+// Dir is where the named personality's files are, as Info.Source.
+func (set *Set) Dir(name string) string {
+	if set == nil {
+		return ""
+	}
+	return set.dirs[set.Canonical(name)]
+}
+
 func (set *Set) data(name string) (builtinData, bool) {
+	if set != nil {
+		if d, ok := set.over[name]; ok {
+			return d, true
+		}
+	}
 	if d, ok := builtins()[name]; ok {
 		return d, true
 	}
@@ -297,6 +328,13 @@ func (set *Set) data(name string) (builtinData, bool) {
 		return d, ok
 	}
 	return builtinData{}, false
+}
+
+// boring is boring's catalog, with the user's changes over it: every
+// personality's fallback.
+func (set *Set) boring() *Catalog {
+	d, _ := set.data(Boring) //nolint:errcheck // boring is always known
+	return d.catalog
 }
 
 // New is the Voice of o.Name, any personality the Set knows or one of
@@ -315,7 +353,7 @@ func (set *Set) New(o Options) (*Voice, error) {
 		seed = rand.Uint64() //nolint:gosec // variety in wording, not security
 	}
 	rng := rand.New(rand.NewPCG(seed, seed^0x9e3779b97f4a7c15)) //nolint:gosec // variety in wording, not security
-	v := &Voice{name: name, level: set.Level(name), boring: boringCat(), rng: rng, last: map[Key]int{}, brief: d.brief}
+	v := &Voice{name: name, level: set.Level(name), boring: set.boring(), rng: rng, last: map[Key]int{}, brief: d.brief}
 	if name != Boring {
 		v.own = d.catalog
 	}

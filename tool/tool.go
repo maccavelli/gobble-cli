@@ -344,6 +344,24 @@ type generic[In, Out any] struct {
 	resolved    *jsonschema.Resolved
 }
 
+// Redescribed is t with description in place of its own, so a user's file
+// can replace a built-in tool's (0022-MADR D15). A tool New did not build
+// is returned as it is.
+func Redescribed(t Tool, description string) Tool {
+	if r, ok := t.(redescriber); ok {
+		return r.withDescription(description)
+	}
+	return t
+}
+
+type redescriber interface{ withDescription(string) Tool }
+
+func (g *generic[In, Out]) withDescription(description string) Tool {
+	c := *g
+	c.description = description
+	return &c
+}
+
 func (g *generic[In, Out]) Spec() Spec {
 	return Spec{
 		Name:        g.name,

@@ -28,6 +28,10 @@ type PromptOptions struct {
 	System, Append string
 	// NoContextFiles reads no context file, nested ones included.
 	NoContextFiles bool
+	// ToolsSection and RulesSection are the user's text for the tools and
+	// rules sections, checked by prompt.CheckSection; "" is gobble's
+	// (0022-MADR D15).
+	ToolsSection, RulesSection string
 	// GOOS is the system the prompt says commands run on; "" is the host's
 	// (0005-PLAN F3-1 deviation 5).
 	GOOS string
@@ -56,6 +60,11 @@ func (a *Agent) sections(s *liveSession) []sysprompt.Section {
 	}
 	var files []sysprompt.File
 	diags := waiting
+	// A project's personalities wait for trust, as its SYSTEM.md does
+	// (0022-MADR D15; 0005-PLAN F6).
+	if p := filepath.Join(s.cwd, ".gobble", "personalities"); isDir(p) {
+		diags = append(diags, sysprompt.Diagnostic{Path: p, Message: sysprompt.TrustNote})
+	}
 	if !o.NoContextFiles {
 		f, d := sysprompt.ContextFiles(o.ConfigDir, s.cwd)
 		files, diags = f, append(diags, d...)
@@ -86,7 +95,7 @@ func (a *Agent) sections(s *liveSession) []sysprompt.Section {
 	}
 	return sysprompt.Build(sysprompt.Options{Custom: system, Append: appended, Tools: names, Deferred: families,
 		ContextFiles: files, Skills: skills, Cwd: cmp.Or(o.cwd, s.cwd), GOOS: goos,
-		Personality: a.voice(s).Brief(), PersonalityRules: a.voice(s).Rules()})
+		Personality: a.voice(s).Brief(), PersonalityRules: a.voice(s).Rules(), ToolsSection: o.ToolsSection, RulesSection: o.RulesSection})
 }
 
 // skills are the session's skills, found in 0005-MADR's order (Skill

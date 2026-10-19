@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -87,13 +88,21 @@ func TestProcessSettingsReachTools(t *testing.T) {
 		t.Errorf("chat's OutputDir %q", chat.OutputDir)
 	}
 	chat.OutputDir = ""
-	if chat != want || acp != want {
+	// No file under personalities/prompts: no description of the user's
+	// (0022-PLAN P5).
+	if len(chat.Descriptions) != 0 || len(acp.Descriptions) != 0 {
+		t.Fatalf("descriptions %v, %v", chat.Descriptions, acp.Descriptions)
+	}
+	chat.Descriptions, acp.Descriptions = nil, nil
+	if !reflect.DeepEqual(chat, want) || !reflect.DeepEqual(acp, want) {
 		t.Fatalf("chat %+v, acp %+v; want %+v", chat, acp, want)
 	}
 	if r := runIn(t, t.TempDir(), "acp"); r.code != ExitOK {
 		t.Fatalf("acp: %+v", r)
 	}
-	if last := got()[2]; last != builtinOptions(config.Defaults()) || last.MaxTimeout != 10*time.Minute || last.ShellPath != "" {
+	last := got()[2]
+	last.Descriptions = nil
+	if !reflect.DeepEqual(last, builtinOptions(config.Defaults())) || last.MaxTimeout != 10*time.Minute || last.ShellPath != "" {
 		t.Fatalf("no file gave %+v", last)
 	}
 }

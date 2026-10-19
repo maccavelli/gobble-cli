@@ -47,6 +47,10 @@ type Options struct {
 	// offers terminals (tool.Env.Terminal), so the user can watch it
 	// (0005-PLAN F1d-3). Off, or with no client terminal, bash runs here.
 	UseClientTerminal bool
+	// Descriptions are the user's description templates, by tool name,
+	// each in place of the built-in's when it passes CheckDescription
+	// (0022-MADR D15).
+	Descriptions map[string]string
 }
 
 // goosWindows is runtime.GOOS on Windows.
@@ -67,14 +71,15 @@ func (o Options) withDefaults() Options {
 
 // ToolsWith returns the built-in tools configured by o, in 0012-MADR D7's
 // order: read, write, edit, grep, find, tree, move, delete, copy, mkdir
-// and bash, and on Windows powershell.
+// and bash, and on Windows powershell; each with the user's description
+// when o has one that passes CheckDescription.
 func ToolsWith(o Options) []tool.Tool {
 	o = o.withDefaults()
 	ts := []tool.Tool{readWith(o), Write(), Edit(), Grep(), Find(), Tree(), Move(), Delete(), Copy(), Mkdir(), Todo(), bashWith(o)}
 	if runtime.GOOS == goosWindows {
 		ts = append(ts, powershellWith(o))
 	}
-	return ts
+	return redescribe(ts, o)
 }
 
 // Tools is ToolsWith the default options.

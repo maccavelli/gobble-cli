@@ -9,7 +9,7 @@ associated-madr: "0022-MADR-gobble-voice-and-personalities.md"
 
 Associated MADR: [0022-MADR-gobble-voice-and-personalities.md](0022-MADR-gobble-voice-and-personalities.md)
 
-*Approved 2026-10-18 ("committed, approved, proceed"); P1 complete 2026-10-18; P2 complete 2026-10-18, with deviation 1; P3 complete 2026-10-18; P4 complete 2026-10-18, with deviations 1 and 2. Each later phase is made executable on the owner's word, with its facts measured then, as 0005-PLAN's sub-phases are.*
+*Approved 2026-10-18 ("committed, approved, proceed"); P1 complete 2026-10-18; P2 complete 2026-10-18, with deviation 1; P3 complete 2026-10-18; P4 complete 2026-10-18, with deviations 1 and 2; P5 complete 2026-10-18, with deviation 1. Each later phase is made executable on the owner's word, with its facts measured then, as 0005-PLAN's sub-phases are.*
 
 ## Goal
 
@@ -99,7 +99,7 @@ Six phases, each one commit with its own execution record and gates, in this ord
 ### P5 — C: every text overridable
 
 1. **`personality`:** the override layer of D15: `<config>/personalities/<name>/…` for personalities and messages, `<config>/personalities/prompts/<id>.md` for model-facing text, each validated (placeholders; 0012-MADR D5's checks for a tool description; a compaction prompt's required placeholders); `personality_rules`, the facts rule, D9's floor and D10's question not overridable.
-2. **Prompt ids:** the system prompt's `tools` and `rules` sections, each compaction prompt, each built-in tool's description; the list fixed in code, so an unknown id is a warning.
+2. **Prompt ids:** the system prompt's `tools` and `rules` sections, ~~each compaction prompt,~~ *(deferred to 0005-PLAN F5-4: P5's deviation 1)* each built-in tool's description; the list fixed in code, so an unknown id is a warning.
 3. **A project's overrides:** `.gobble/personalities/`, loaded only in a trusted project, with no `personality.md` (D15); until 0005-PLAN F6 builds trust, found and reported as waiting, as `.gobble/SYSTEM.md` is today.
 4. **`gobble personality`:** `list`, `show NAME [KEY]`, `check`, `path`, `reset NAME|prompts/ID` (with confirmation).
 5. **Records:** this plan's P5 record.
@@ -340,3 +340,56 @@ Six phases, each one commit with its own execution record and gates, in this ord
   - `make preflight` on macOS: passed;
   - **not run:** Windows `go test ./...` and `-race`, the second Linux machine's `-race`, and Windows and WSL `make preflight`, on the owner's machines; and the lines' tone in a real session, which P6's evaluation is.
 - **Next:** P5, every text overridable, made executable on the owner's word.
+
+**P5's deviations, 2026-10-18, decided by the owner:**
+
+1. **Compaction prompts wait for F5-4.** Found while measuring P5's facts, before building. Step 1 checks that "a compaction prompt keeps its required placeholders", as 0022-MADR D15 has it; today's four compaction prompts (`compaction/serialize.go`: the system prompt, the summary, the update and the turn prefix) are Pi's, word for word, and have none, the previous summary and the focus instructions being joined on in code (`compaction/compaction.go`). And 0005-PLAN F5-4, not yet run, replaces them with opencode's template and grok-build's sections, so an override written now would be written against text about to be replaced.
+   - **Chosen ("Defer them to F5-4"):** P5 makes the system prompt's `tools` and `rules` sections and each built-in tool's description overridable; F5-4 adds the compaction prompts' ids and checks when it writes the new template. Step 2 is annotated; D15 is amended in place, dated; 0005-PLAN's "F5-4, refined" gains item 8.
+   - **Not chosen:** ids for today's four prompts now, checked as not empty, with no placeholder, and the update prompt keeping its `<previous-summary>` mention; F5-4 would then keep, map or retire them, and users' files with them.
+   - No file is added to the phase's scope; `compaction` leaves it.
+
+**P5 — C: every text overridable (2026-10-18).**
+
+- **Ran as the plan wrote it,** with deviation 1 above, on the owner's word "committed, proceed" after P4's commit. P6, the owner's live evaluation, is next.
+- **What was built:**
+  - `personality`:
+    - `<config>/personalities/<built-in>/` changes that built-in (`loadOverride`): a `personality.md` replaces its brief and keeps its name and level, so the house rules and Bombastic's question stay; a `messages.md` replaces the keys it has, checked by `CheckCatalog`, the rest the built-in's own. A change to boring's messages is every personality's fallback;
+    - `prompts/` beside them is no personality (`PromptsDir`);
+    - `Info.Source` and `Set.Dir`: where a user-made or changed personality's files are.
+  - `tool`: `Redescribed`, a tool `New` built with another description, all else the same.
+  - `tool/builtin`: 0012-MADR D5's checks, which were a test's helpers, are code (`descriptionProblems`); `CheckDescription` renders the user's template with the tools' limits, as a built-in's is, and holds it to them; `Options.Descriptions`, taken by `ToolsWith` for each that passes; `powershellName`.
+  - `prompt`: `Options.ToolsSection` and `RulesSection`, in place of gobble's sections, the tools section still needing tools and neither under a custom prompt; `CheckSection`.
+  - `acpserver`: `PromptOptions.ToolsSection` and `RulesSection`; a project's `.gobble/personalities/` reported as waiting for trust, as its `SYSTEM.md` is.
+  - `internal/cli`:
+    - the prompt ids, fixed in code: `tools`, `rules`, and `tool.<name>` for each built-in tool, powershell's on every host; `<config>/personalities/prompts/<id>.md` read once (`loadPrompts`), a file with another name, or one that fails its check, warned of with its path and the rule, and left out;
+    - the descriptions given to the built-in tools, in a session and under `gobble acp`; the sections to the system prompt;
+    - `gobble personality`: `list` (name, level, source, summary), `show NAME [KEY]` (the brief, or a key's lines with their placeholders), `check` (every file, exit 1 on a problem, a project's directory reported as waiting), `path`, and `reset NAME|prompts/ID`, which removes the named personality's `personality.md` and `messages.md`, and its directory once empty, or the one prompt's file, after `[y/N]`.
+- **Decisions made inside the plan:**
+  - **A built-in's brief keeps its name and level.** D15 has `personality.md` replace a built-in's, and keeps D9's floor and D10's question; a level the user could lower would let Bombastic speak without its question.
+  - **boring is changed by its messages only:** no brief, no lead and no ambient line, which boring does not have (D4, D12, D13).
+  - **A description is a template,** filled from the tools' options as a built-in's is (0012-MADR D5 item 1), and checked against the tools this package builds.
+  - **The sections are checked** for words and for not closing their own tag; they have no placeholders.
+  - **`reset NAME` removes the two files a personality is made of,** and nothing else in its directory; the directory goes once it is empty.
+  - **0012-MADR is unchanged,** as D16 has it: the user's description is held to its D5, which D15 names.
+- **Tests,** new:
+  - `personality/override_test.go`: `TestOverride` (a built-in's brief and lines changed, the rest its own; boring's change as every fallback; the house rules as shipped whatever files there are; `prompts/` no personality; sources and `Dir` by boring's other name); `TestOverrideRefused` (a level or a name changed, a brief, an ambient line or a lead for boring, a broken placeholder, an empty directory; each named, the built-in as shipped);
+  - `tool/redescribed_test.go` (`TestRedescribed`); `tool/builtin/checkdescription_test.go` (`TestCheckDescription`: rendered with the limits; not a tool, no Returns, two bullets, a tool that is not one, a template that fails to run or to parse, over 1,200 bytes; `ToolsWith` taking the one that passes); `prompt/override_test.go` (`TestBuildSectionOverrides`, `TestCheckSection`);
+  - `internal/cli/personalitycmd_test.go`: `TestLoadPrompts` (the sections and a description taken; a description failing D5, a compaction prompt's id and a stray file refused by path; an empty section and one closing its tag); `TestPromptOverridesReachTheModel` (the sections in the system prompt and read's description, its limit filled, in the request; a project's personality kept out and reported as waiting); `TestPersonalityCommand` (`list`, `show` with and without a key, by boring's other name and by fallback, unknown names and keys exit 2, `path`, `check` clean and with two problems, exit 1); `TestPersonalityReset` (no removes nothing; yes removes the two files and keeps the rest; one prompt's file; nothing to reset; a prompt with no id, a path, `prompts` itself, each exit 2 and unasked).
+- **Existing tests changed,** none loosened:
+  - `TestLoadSet`: a `dry` directory is now a change to dry, not an error, so the refused built-in is a `bombastic` brief that lowers its level; the user's personality's `Info` gains its `Source`;
+  - `TestProcessSettingsReachTools` compares `builtin.Options`, which now holds a map, with `reflect.DeepEqual`, after requiring no descriptions;
+  - `TestDescriptionShape` calls the checks by their new name.
+- **Negatives,** 48 of 48 caught on a scratch copy after control runs:
+  - `personality`: a brief's level or name not held; boring given a brief, an ambient line or a lead; the catalog not checked; an empty directory taken; the change not laid over, or the built-in not under it; the brief not taken; `prompts/` read as a personality; a built-in's directory read as the user's; a change ignored; the fallback as shipped; `Dir` by another name; the source not kept;
+  - `tool` and `tool/builtin`: `Redescribed` changing nothing; a failing description taken; the budget and the bullet count loosened; the limits not filled; a passing description not taken; any name taken as a tool; `ToolsWith` without the descriptions;
+  - `prompt`: a blank section taken; a closing tag taken; any section's name taken; either section not the user's;
+  - `acpserver`: the sections not passed; the project's directory not reported;
+  - `internal/cli`: any file name taken; a compaction id offered; the description, or a section's trimming, dropped; the descriptions or the tools section not wired; `list`'s source, `show`'s key check, `check`'s exit and count wrong; `reset` not asking, taking another file, taking an unknown id or a path, or resetting nothing; the overrides not kept.
+  - The first run caught 45 of 48. One mutation did not build and was rewritten. `Set.Dir` by boring's other name had no test, and the 1,200-byte budget, a test's helper until now, had never seen a description over it: `TestOverride` and `TestCheckDescription` gained both. The whole set was run on the final code, after the lint fixes: 48 of 48.
+- **Gates:**
+  - the pre-add check on the 22 changed `.go` files, clean;
+  - lint for linux, darwin and windows, `0 issues.` each with `CGO_ENABLED=0`, after four findings fixed in the code: `powershell` as a constant (`goconst`, two); `Redescribed`'s method after its type (`gocritic`), and renamed `withDescription`, as it differed from `Redescribed` by case alone (`revive`);
+  - the macOS laptop's `CGO_ENABLED=1 go test -race -count=1 ./...`, 34 packages ok, no race report;
+  - `make preflight` on macOS: passed;
+  - **not run:** Windows `go test ./...` and `-race`, the second Linux machine's `-race`, and Windows and WSL `make preflight`, on the owner's machines.
+- **Next:** P6, the owner's live evaluation, with its GATES record; 0005-PLAN F5-4 owes the compaction prompts' ids (deviation 1).

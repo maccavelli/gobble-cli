@@ -31,7 +31,9 @@ func (c *ACPCmd) Run(e *runEnv) error {
 	// The process keys come from the global file and --set only: a
 	// project's do not apply under acp (0018-MADR D16). builtin's own
 	// output directory stays, as it is today (0018-PLAN P5 deviation 16).
-	e.tools = toolsWith(builtinOptions(e.processSettings("").Settings))
+	o := builtinOptions(e.processSettings("").Settings)
+	o.Descriptions = e.prompts().descriptions // the user's (0022-PLAN P5)
+	e.tools = toolsWith(o)
 	var in io.Reader = strings.NewReader("") // no stdin: end of file at once
 	if r := e.stdinReader(); r != nil {
 		in = r

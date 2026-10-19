@@ -55,7 +55,7 @@ func (c *ChatCmd) Run(k *kong.Context, e *runEnv) error {
 		e.setRuntimeKey(e.pick.Provider, key)
 		keyFromStdin = !e.out.caps.In
 	}
-	choice, err := c.toolSet(builtinTools(e.processSettings(cwd).Settings))
+	choice, err := c.toolSet(e.builtinTools(e.processSettings(cwd).Settings))
 	if err != nil {
 		return err
 	}

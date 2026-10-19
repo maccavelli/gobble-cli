@@ -6113,6 +6113,10 @@ proposed. The facts are measured, and each item settled, when F5-4 is made execu
    - With no tool results to remove, or after the last step, it fails with `the conversation is too large to summarise
      with this model: start a new session, or choose a model with a larger window`. That failure pauses the trigger for
      the session (F5-2 decision 11).
+8. **The prompts are overridable** *(added 2026-10-18 by the owner's choice, 0022-PLAN P5's deviation 1)*. Each prompt
+   the new template has gets an id among 0022-PLAN P5's prompt ids, and a file
+   `<config>/personalities/prompts/<id>.md` replaces it, checked at load for what the code fills in or relies on, as
+   0022-MADR D15 has it; a file that fails is ignored with a warning, and the built-in is used.
 
 **Left for later, with no phase yet:**
 

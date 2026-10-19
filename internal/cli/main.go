@@ -181,6 +181,9 @@ type runEnv struct {
 	personality       string
 	personalitiesOnce sync.Once
 	personalitySet    *personality.Set
+	// promptSet are the user's prompt overrides, read once (0022-PLAN P5).
+	promptsOnce sync.Once
+	promptSet   promptOverrides
 }
 
 func (e *runEnv) log() *slog.Logger { return e.logs.get() }

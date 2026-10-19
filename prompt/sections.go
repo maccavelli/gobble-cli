@@ -1,9 +1,11 @@
 package prompt
 
 import (
+	"cmp"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 )
@@ -110,6 +112,25 @@ type Options struct {
 	Skills string
 	// Cwd is the working directory; GOOS the system commands run on.
 	Cwd, GOOS string
+	// ToolsSection and RulesSection, when set, are the user's text for the
+	// tools and rules sections, in place of gobble's (0022-MADR D15). The
+	// tools section still needs tools, and neither is under a custom
+	// prompt.
+	ToolsSection, RulesSection string
+}
+
+// CheckSection checks the user's text for the section name, tools or
+// rules: it has words, and does not close its own tag (0022-MADR D15).
+func CheckSection(name, text string) error {
+	switch {
+	case name != "tools" && name != "rules":
+		return fmt.Errorf("no section %s is the user's to replace", name)
+	case strings.TrimSpace(text) == "":
+		return errors.New("it is empty")
+	case strings.Contains(text, "</"+name+">"):
+		return fmt.Errorf("it closes the section's tag, </%s>", name)
+	}
+	return nil
 }
 
 // Build is the system prompt's sections in Pi's order, without docs, which
@@ -130,9 +151,9 @@ func Build(o Options) []Section {
 	}
 	if o.Custom == "" {
 		if t := toolsText(o.Tools, o.Deferred); t != "" {
-			out = append(out, tagged("tools", t))
+			out = append(out, tagged("tools", cmp.Or(strings.TrimSpace(o.ToolsSection), t)))
 		}
-		out = append(out, tagged("rules", rules(o.Tools, o.GOOS)))
+		out = append(out, tagged("rules", cmp.Or(strings.TrimSpace(o.RulesSection), rules(o.Tools, o.GOOS))))
 	}
 	if o.Append != "" {
 		out = append(out, tagged("addendum", o.Append))
