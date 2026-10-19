@@ -140,7 +140,7 @@ func TestAlwaysAnswers(t *testing.T) {
 				t.Fatalf("the second call: %q, want the saved rule's refusal", got)
 			}
 			list, _ := slash(t, c, client, id, "/permissions")
-			if !strings.Contains(list, "1. "+effect+": write(/a.txt) ") || !strings.Contains(list, tc.from) {
+			if !strings.Contains(list, "3. "+effect+": write(/a.txt) ") || !strings.Contains(list, tc.from) {
 				t.Fatalf("/permissions:\n%s\nwant the rule from %s", list, tc.from)
 			}
 			switch tc.option {
@@ -220,7 +220,7 @@ func TestQuestionOptions(t *testing.T) {
 	if got := ids(q); !slices.Equal(got, once) || marks(q)[keyLimit] == nil || marks(q)[keyRule] == nil {
 		t.Errorf("a delete: %q, _meta %v", got, q.Meta)
 	}
-	q = ask(t, llmtest.ToolCall("b1", "bash", `{"command":"ls *.go"}`), nil)
+	q = ask(t, llmtest.ToolCall("b1", "bash", `{"command":"./run-*.sh"}`), nil)
 	if got := ids(q); !slices.Equal(got, once) || marks(q)[keyOnceOnly] != textOnceOnly || marks(q)[keyLimit] != nil {
 		t.Errorf("a glob command: %q, _meta %v", got, q.Meta)
 	}
@@ -267,7 +267,7 @@ func TestAlwaysOutside(t *testing.T) {
 	}
 	list, _ := slash(t, c, client, id, "/permissions")
 	p := filepath.ToSlash(secret)
-	if !strings.Contains(list, "1. allow: read("+p+") (session)") || !strings.Contains(list, "2. allow: external_directory("+p+") (session)") {
+	if !strings.Contains(list, "3. allow: read("+p+") (session)") || !strings.Contains(list, "4. allow: external_directory("+p+") (session)") {
 		t.Fatalf("/permissions:\n%s", list)
 	}
 }
@@ -356,8 +356,10 @@ func TestPermissionsCommand(t *testing.T) {
 		return got
 	}
 	list := run("/permissions")
-	for _, want := range []string{"With no rule, a read-only built-in tool runs", "1. allow: read (settings.yaml:10 (global))",
-		"2. deny: read(.env) (proj.yaml:2 (project))", "3. ask: bash(*) (--set)", "4. ask: grep (" + perms.Store.Path + " (project store))",
+	// The default rules come first (0005-PLAN F6-3 decision 10).
+	for _, want := range []string{"With no rule, a read-only built-in tool runs", "1. ask: bash(gobble update*) (default)",
+		"2. ask: powershell(gobble update*) (default)", "3. allow: read (settings.yaml:10 (global))",
+		"4. deny: read(.env) (proj.yaml:2 (project))", "5. ask: bash(*) (--set)", "6. ask: grep (" + perms.Store.Path + " (project store))",
 		"Whatever the rules say"} {
 		if !strings.Contains(list, want) {
 			t.Errorf("list lacks %q:\n%s", want, list)
@@ -369,20 +371,22 @@ func TestPermissionsCommand(t *testing.T) {
 		{"/permissions ask bash(make test) global", "Added ask: bash(make test) (settings.yaml:11 (global))."},
 		{"/permissions allow read([a)", "That is not a rule:"},
 		{"/permissions frob", "/permissions lists the rules;"},
-		{"/permissions remove 9", "There is no rule 9;"},
-		{"/permissions remove 3", "Rule 3, deny: read(.env), is set in proj.yaml:2 (project); change it there."},
-		{"/permissions remove 4", "Rule 4, ask: bash(*), is set in --set; change it there."},
+		{"/permissions remove 99", "There is no rule 99;"},
+		{"/permissions remove 1", "Rule 1, ask: bash(gobble update*), is set in default; change it there."},
+		{"/permissions remove 5", "Rule 5, deny: read(.env), is set in proj.yaml:2 (project); change it there."},
+		{"/permissions remove 6", "Rule 6, ask: bash(*), is set in --set; change it there."},
 	} {
 		if got := run(c.cmd); !strings.Contains(got, c.want) {
 			t.Errorf("%s: %q, want %q", c.cmd, got, c.want)
 		}
 	}
-	// In force now: 1 read (global), 2 bash(make test) (global), 3 read(.env),
-	// 4 bash(*), 5 grep (store), 6 edit(/x.go) (store), 7 todo (session).
+	// In force now: 1 and 2 the defaults, 3 read (global), 4 bash(make test)
+	// (global), 5 read(.env), 6 bash(*), 7 grep (store), 8 edit(/x.go)
+	// (store), 9 todo (session).
 	for _, c := range []struct{ cmd, want string }{
-		{"/permissions remove 7", "Removed allow: todo (session)."},
-		{"/permissions remove 6", "Removed deny: edit(/x.go)"},
-		{"/permissions remove 2", "Removed ask: bash(make test) (settings.yaml:11 (global))."},
+		{"/permissions remove 9", "Removed allow: todo (session)."},
+		{"/permissions remove 8", "Removed deny: edit(/x.go)"},
+		{"/permissions remove 4", "Removed ask: bash(make test) (settings.yaml:11 (global))."},
 	} {
 		if got := run(c.cmd); !strings.Contains(got, c.want) {
 			t.Errorf("%s: %q, want %q", c.cmd, got, c.want)
@@ -395,7 +399,7 @@ func TestPermissionsCommand(t *testing.T) {
 		t.Errorf("store %v", got)
 	}
 	list = run("/permissions")
-	if strings.Contains(list, "todo") || strings.Contains(list, "make test") || strings.Contains(list, "x.go") || !strings.Contains(list, "4. ask: grep") {
+	if strings.Contains(list, "todo") || strings.Contains(list, "make test") || strings.Contains(list, "x.go") || !strings.Contains(list, "6. ask: grep") || !strings.Contains(list, "1. ask: bash(gobble update*) (default)") {
 		t.Errorf("after the removals:\n%s", list)
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -213,7 +214,8 @@ func TestOutsideRoots(t *testing.T) {
 	}
 }
 
-// A shell call's subject is its whole command; a read-only call with no
+// A shell call's subjects are its simple commands, each with its "always"
+// pattern (0005-PLAN F6-3 decisions 2 and 4a); a read-only call with no
 // path names the working directory; with no policy every inside call runs
 // (0005-PLAN F6-2 decision 3).
 func TestPolicySubjects(t *testing.T) {
@@ -230,7 +232,8 @@ func TestPolicySubjects(t *testing.T) {
 	if len(p.rules) != 2 {
 		t.Fatalf("rules = %+v", p.rules)
 	}
-	if b := p.rules[0]; b.Tool != "bash" || b.Kind != permission.SubjectCommand || !slices.Equal(b.Subjects, []string{"echo hi && git status"}) || b.ReadOnly {
+	if b := p.rules[0]; b.Tool != "bash" || b.Kind != permission.SubjectCommand || !slices.Equal(b.Subjects, []string{"echo hi", "git status"}) ||
+		!slices.Equal(b.Saves, []string{"echo *", "git status *"}) || b.ReadOnly {
 		t.Errorf("bash rule = %+v", b)
 	}
 	if f := p.rules[1]; f.Tool != "find" || f.Kind != permission.SubjectPath || !slices.Equal(f.Subjects, []string{dir}) || !f.ReadOnly {
@@ -242,6 +245,59 @@ func TestPolicySubjects(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, "a.txt")); err != nil {
 		t.Fatalf("no policy: the write did not run: %v", err)
+	}
+}
+
+// A plain shell file command runs as the native tool: its events, its
+// policy question and its run are that tool's, and the model reads its
+// result after a line naming it, as the answer to its bash call. With the
+// native tool not offered, bash runs it (0012-MADR D10; 0005-PLAN F6-3
+// decision 9).
+func TestShellReroute(t *testing.T) {
+	if _, err := exec.LookPath("bash"); err != nil {
+		t.Skip("no bash on PATH")
+	}
+	dir := t.TempDir()
+	write := func() {
+		if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write()
+	s := llmtest.NewScript(llmtest.ToolCall("b1", "bash", args(t, map[string]string{"command": "rm a.txt"})), llmtest.Text("ok"))
+	p := &policy{allow: true}
+	evs, _, err := collect(t.Context(), t, agent.New(agent.Config{Provider: s, Tools: builtin.Tools(), Policy: p}), tool.Env{Cwd: dir}, "rm it")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "a.txt")); err == nil {
+		t.Fatal("a.txt is still there")
+	}
+	if len(p.rules) != 1 || p.rules[0].Tool != "delete" || p.rules[0].CallID != "b1" {
+		t.Fatalf("rules %+v, want delete's question", p.rules)
+	}
+	var start agent.ToolStart
+	for _, ev := range evs {
+		if s, ok := ev.(agent.ToolStart); ok {
+			start = s
+		}
+	}
+	if start.Call.Name != "delete" || start.Call.ID != "b1" {
+		t.Fatalf("start %+v", start.Call)
+	}
+	sent := s.Requests()[1].Messages
+	if r := sent[len(sent)-1].Content[0]; r.ToolCallID != "b1" || r.ToolName != "bash" || !strings.HasPrefix(r.Text, "bash ran this as gobble's delete tool.\n") {
+		t.Fatalf("result %+v", r)
+	}
+	write()
+	without := slices.DeleteFunc(builtin.Tools(), func(tl tool.Tool) bool { return tl.Spec().Name == "delete" })
+	s = llmtest.NewScript(llmtest.ToolCall("b1", "bash", args(t, map[string]string{"command": "rm a.txt"})), llmtest.Text("ok"))
+	p = &policy{allow: true}
+	if _, _, err := collect(t.Context(), t, agent.New(agent.Config{Provider: s, Tools: without, Policy: p}), tool.Env{Cwd: dir}, "rm it"); err != nil {
+		t.Fatal(err)
+	}
+	if len(p.rules) != 1 || p.rules[0].Tool != "bash" {
+		t.Fatalf("without delete: rules %+v, want bash's question", p.rules)
 	}
 }
 

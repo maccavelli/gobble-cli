@@ -56,6 +56,14 @@ type Options struct {
 // goosWindows is runtime.GOOS on Windows.
 const goosWindows = "windows"
 
+// The names the shell's parsing and interception compare (0005-PLAN F6-3):
+// bash's, mkdir's, and the file tools' path argument.
+const (
+	nameBash  = "bash"
+	nameMkdir = "mkdir"
+	keyPath   = "path"
+)
+
 // defaultMaxTimeout is MaxTimeout's zero value.
 const defaultMaxTimeout = 10 * time.Minute
 

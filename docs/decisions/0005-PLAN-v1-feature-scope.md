@@ -7838,3 +7838,77 @@ a sub-command reaching it inside a pipeline, a subshell and `bash -c`.
 Go); opencode's portable scanner's refusals of every substitution and compound command, which decision 2 parses
 instead; grok-build's prefix matching, which the arity table replaces; re-basing operands after a `cd`, which grok-build
 does by making them ask, and which decision 7 leaves to `external_directory` on the `cd` itself.
+
+**F6-3's execution record (2026-10-19).**
+
+- **Ran as the entry wrote it,** on the owner's word "committed, proceed" after the entry's commit `32732c7`, with 4a.
+  No deviation: nothing the entry decides changed. What it left unsaid is listed below. F6-4, the modes, is next, made
+  executable on the owner's word; no release is tagged before F6-5.
+- **What was built:**
+  - `go.mod`: `mvdan.cc/sh/v3 v3.14.1`, a direct requirement with its first import; `NOTICE` credits opencode's
+    arity table;
+  - `tool/builtin`: `shellparse.go` (`parseShell`: the simple commands at any depth by `syntax.Walk`, their texts
+    masked, their arity patterns, the exec-affecting assignments, wrappers, inline shells to depth 8, `cd`'s
+    directories, file operands and redirections' files); `arity.go`, opencode's 137 entries, generated from
+    `parse.ts:23-161` and checked entry for entry; `intercept.go` (`interceptShell`, D10's table); `bashSubject`,
+    `powershellSubject` and `bashOutside`; the constants `nameBash`, `nameMkdir` and `keyPath`;
+  - `tool`: `Subject.Commands` and `Saves` in place of `Command`; `Rerouter` and `WithReroute`;
+  - `permission`: `Rule.Saves`; `Remember` saving a command's pattern, once for two subjects that share it, and none
+    for a glob in a prefix;
+  - `agent`: a rerouted call runs as the native tool, its events, question and run that tool's, its id kept, and the
+    model's result its bash call's, after the line "bash ran this as gobble's <tool> tool.";
+  - `acpserver`: the defaults layer, first, with `ask: bash(gobble update*)` and `ask: powershell(gobble update*)`;
+    the options naming the patterns a shell "always" saves.
+- **What the entry left unsaid, decided inside it:**
+  - **a program word holding `*`, `?` or `[` is not a plain word** (decision 3), so `./run-*.sh` is raw;
+  - **a wrapper whose program is an expansion makes the call raw** (`sudo $(which rm) x`): the program it runs is not
+    a plain word. Found writing `TestParseShellRaw`;
+  - **`time` is bash's keyword,** parsed as a clause, so `time -p cmd` gives `cmd`'s subject alone;
+  - **a call with its own `workdir` is not intercepted:** the native tools resolve paths against the working
+    directory, not the call's. D10 does not say; 0012-MADR's note records it;
+  - **a native tool the session does not offer** (`--exclude-tools delete`) leaves the call to bash;
+  - **`~` is resolved by `fsx.Resolve`,** Pi's normalisation, which already expands it, on Windows `~\` too; a
+    separate expansion first written was redundant, which mutation 33 of the first harness run showed, and was
+    removed;
+  - **the "always" options' names quote each pattern in backticks,** "Allow `git status *`, `make test *` for this
+    session";
+  - **the default rules are listed first by `/permissions`,** numbered 1 and 2, every other rule after them.
+- **Tests,** each new assertion seen failing on a scratch copy:
+  - `tool/builtin`: `TestParseShellSubjects` (lists, pipelines, subshells, groups, substitutions, functions, loops and
+    conditions; assignments left out and `PATH` kept; arity one to three; a non-literal or quoted expansion in the
+    prefix saving the exact text; quoted words; a redirection kept); `TestParseShellRaw` (ten raw cases);
+    `TestParseShellMasking` (Kilo's six cases and two of gobble's); `TestParseShellWrappers` (nine wrapper and
+    inline forms, depth 8 parsed and 9 raw); `TestParseShellPaths`; `TestBashOutside`; `TestShellIntercept` (14 forms,
+    40 near misses, a workdir); `TestSubjects` asserts the commands and saves, PowerShell raw;
+  - `permission`: `TestRemember` asserts the arity save, its dedupe and four globbed prefixes;
+  - `agent`: `TestShellReroute` (delete's question, events and result line; bash's with delete not offered);
+    `TestPolicySubjects` asserts the commands and saves;
+  - `acpserver`: `TestShellDenyReachesSubcommands` (seven commands, the deny reached in each); `TestShellInterceptLimits`
+    (`rm -r .git` refused, `rm a.txt` delete's limit question); `TestGobbleUpdateDefault`; `TestShellAlwaysArity`;
+    `TestShellOutsideOperand`; `TestPermissionsCommand` renumbered, with the defaults listed and not removable;
+    `TestQuestionOptions` and the line view's once-only test use `./run-*.sh` for a call no rule matches alone.
+- **The negatives:** 58 mutations over the parser, `bashOutside`, the interception, the reroute, `Remember` and the
+  server, each applied alone to a scratch copy after control runs of the named tests passed unmutated. The first run
+  caught 54 of 59: three did not build (unused names) and were rewritten; one showed `TestShellDenyReachesSubcommands`
+  never put the denied command first, and it gained `rm x && ls`; one showed `expandTilde` redundant, and it was
+  removed with its mutation. Drafting the harness showed two cases no test pinned, a quoted expansion in the prefix
+  and an escaped operand, and `TestParseShellSubjects` and `TestParseShellPaths` gained them. The final run: 58 of 58
+  caught.
+- **The gates:**
+  - the pre-add check on the 22 changed `.go` files, clean;
+  - lint for linux, darwin and windows with `CGO_ENABLED=0`, `0 issues.` each, after ten findings in the new code were
+    fixed in it (the literals `bash`, `mkdir` and `path` made constants, a depth test simplified, `syntax.ClbOut` made
+    `RdrClob`, a loop made `FieldsSeq`);
+  - macOS: `CGO_ENABLED=1 go test -race -count=1 ./...`, 35 packages ok, and `make preflight`, `preflight passed`,
+    after `go mod tidy` moved `mvdan.cc/sh/v3` to the direct requirements (`go get` had added it without); `archtest`
+    passed with the new import, and `govulncheck` found no vulnerabilities;
+  - the Linux machine and the Windows laptop, over ssh on a copy of the working tree (716 files) in a fresh temporary
+    directory: `go test -count=1 ./...` and `CGO_ENABLED=1 go test -race -count=1 ./...`, 35 packages ok on each,
+    Windows with `TMP` and `TEMP` outside the user's home; `make preflight`, every step through `apidiff` passed on
+    each, and `check-records` and `markdownlint` after it; `verify-build-metadata` needs a commit the copy does not
+    have, and passed on macOS. The first Windows run failed `TestBashOutside`: the test wrote a Windows directory
+    unquoted into a bash command, whose backslashes bash reads as escapes, as the parser did; the test quotes it, and
+    both machines were run again on the final tree;
+  - the identifier scan over the change: no account name, hostname or real-machine path.
+- **Not done, and why:** the modes (F6-4) and `request_permissions` (F6-5); PowerShell is not parsed (choice 5);
+  operands after a `cd` are resolved against the workdir, not re-based (not taken above).

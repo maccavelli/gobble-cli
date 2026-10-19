@@ -64,9 +64,11 @@ type PermissionOptions struct {
 	RemoveGlobal func(rule permission.Spec) ([]permission.Spec, error)
 }
 
-// The session engine's layers, in the order they are joined (decision E).
+// The session engine's layers, in the order they are joined (decision E;
+// F6-3 decision 10's defaults first).
 const (
-	layerGlobal = iota
+	layerDefault = iota
+	layerGlobal
 	layerProject
 	layerSet
 	layerStore
@@ -77,13 +79,23 @@ const (
 // layerSetName is --set's layer, as internal/config names it.
 const layerSetName = "--set"
 
-// engineOf is a session's rule engine: its settings' rules split by their
-// source into the global, project and --set layers, then stored, the
-// project store's, and the session's, none yet; relative to its project
-// root, or to cwd when it has none, with gobble's protected paths placed
-// by its home and config directories (0005-PLAN F6-2 decisions 3 to 5).
+// defaultRules are the rules before every file's: gobble update asks,
+// from a shell, though a broader allow follows (0005-MADR's self-update
+// row; 0005-PLAN F6-3 decision 10).
+var defaultRules = []permission.Spec{
+	{Effect: permission.ModeAsk, Tool: "bash", Pattern: "gobble update*", Source: permission.RuleSource{Layer: permission.LayerDefault}},
+	{Effect: permission.ModeAsk, Tool: "powershell", Pattern: "gobble update*", Source: permission.RuleSource{Layer: permission.LayerDefault}},
+}
+
+// engineOf is a session's rule engine: the default rules, then its
+// settings' rules split by their source into the global, project and --set
+// layers, then stored, the project store's, and the session's, none yet;
+// relative to its project root, or to cwd when it has none, with gobble's
+// protected paths placed by its home and config directories (0005-PLAN
+// F6-2 decisions 3 to 5).
 func engineOf(ss SessionSettings, cwd string, stored []permission.Spec) permission.Engine {
 	layers := make([][]permission.Spec, layerCount)
+	layers[layerDefault] = defaultRules
 	for _, r := range ss.Rules {
 		i := layerGlobal
 		switch r.Source.Layer {

@@ -735,6 +735,15 @@ func (t *turn) runTool(c llm.ToolCallDone) (tool.Result, bool) {
 		res := tool.ErrorResult(fmt.Sprintf("there is no tool named %q", c.Name))
 		return res, t.emit(ToolStart{Call: call, Title: c.Name}) && t.emit(ToolEnd{Call: call, Result: res})
 	}
+	// A plain shell file command runs as the native tool, which the rules,
+	// limits and journal see (0012-MADR D10).
+	var rerouted string
+	if r, ok := tl.(tool.Rerouter); ok {
+		if nc, ok := r.Reroute(call); ok && t.tools[nc.Name] != nil {
+			rerouted = call.Name
+			call, tl = nc, t.tools[nc.Name]
+		}
+	}
 	spec := tl.Spec()
 	title := spec.Name
 	if d, ok := tl.(tool.Describer); ok {
@@ -767,6 +776,9 @@ func (t *turn) runTool(c llm.ToolCallDone) (tool.Result, bool) {
 			res = tool.ErrorResult(fmt.Sprintf("%s failed: %v", spec.Name, err))
 		}
 	}
+	if rerouted != "" {
+		res.Output = tool.TextResult(fmt.Sprintf("%s ran this as gobble's %s tool.\n%s", rerouted, spec.Name, res.Text())).Output
+	}
 	return res, t.emit(ToolEnd{Call: call, Result: res})
 }
 
@@ -790,8 +802,8 @@ func (t *turn) approve(call tool.Call, spec tool.Spec, title string, outside []s
 	switch {
 	case len(subject.Paths) > 0:
 		rule.Kind, rule.Subjects = permission.SubjectPath, subject.Paths
-	case subject.Command != "":
-		rule.Kind, rule.Subjects = permission.SubjectCommand, []string{subject.Command}
+	case len(subject.Commands) > 0:
+		rule.Kind, rule.Subjects, rule.Saves = permission.SubjectCommand, subject.Commands, subject.Saves
 	}
 	d, err := t.a.cfg.Policy.Decide(t.ctx, rule)
 	switch {

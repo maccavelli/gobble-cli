@@ -39,6 +39,9 @@ type Rule struct {
 	Kind     SubjectKind `json:"kind,omitzero"`
 	Subjects []string    `json:"subjects,omitzero"`
 	Outside  []string    `json:"outside,omitzero"`
+	// Saves are a command's subjects' "always" patterns, beside Subjects,
+	// "" for a subject's exact text (0005-PLAN F6-3 decisions 4 and 11).
+	Saves []string `json:"saves,omitzero"`
 	// ReadOnly says the tool changes nothing, for the defaults.
 	ReadOnly bool `json:"readOnly,omitzero"`
 }

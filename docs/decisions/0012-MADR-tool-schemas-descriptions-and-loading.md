@@ -461,6 +461,9 @@ The owner's proposals stand where the evidence supports them:
      - The load is recorded in the transcript (V12). F3's frozen baseline treats the tools list as part of the baseline, which grows only by appending (V16).
      - Until the SDK carries native deferral (D13), each mid-session load breaks the prompt cache once, from that request on (F10). Never removing a tool means it never breaks it again for that tool.
 - **D10. Plain shell file commands are caught in the harness.** This lands in F6, with its `mvdan.cc/sh` parsing (V17, V27).
+  *(2026-10-19, 0005-PLAN F6-3 decision 9, built: as written here, a call with its own `workdir` excepted, since the
+  native tools resolve paths against the working directory; a native tool the session does not offer leaves the call to
+  bash. V27's `CallExpr` is at `syntax/nodes.go:362` in `v3.14.1`, the release F6-3 requires.)*
   - **When it applies.** A bash command is intercepted when all of these hold:
     - it parses to exactly one simple command (`CallExpr`): no pipe, list, redirect, substitution, subshell, or glob or variable left to expand;
     - its program is `rm`, `rmdir`, `mv`, `cp` or `mkdir`;

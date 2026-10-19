@@ -85,6 +85,19 @@ func TestRemember(t *testing.T) {
 			t.Errorf("%+v: saved %v; want no rule, since none matches it alone", r, rules)
 		}
 	}
+	// A command's arity pattern is saved in place of its text, once for two
+	// subjects that share it; a glob in the prefix keeps the call to "once"
+	// (0005-PLAN F6-3 decision 4a).
+	arity := Rule{Tool: "bash", Kind: SubjectCommand, Subjects: []string{"git status -s", "git status", "ls $X"},
+		Saves: []string{"git status *", "git status *", ""}}
+	if rules, ok := e.Remember(ModeAllow, arity); !ok || !slices.Equal(texts(rules), []string{"allow: bash(git status *)", "allow: bash(ls $X)"}) {
+		t.Errorf("arity: %q, %v", texts(rules), ok)
+	}
+	for _, save := range []string{"git *.go *", "make t? *", "x[1] *", "{a,b} *"} {
+		if rules, ok := e.Remember(ModeAllow, Rule{Tool: "bash", Kind: SubjectCommand, Subjects: []string{"x"}, Saves: []string{save}}); ok {
+			t.Errorf("%q: saved %v; want once only", save, rules)
+		}
+	}
 	// A saved command matches itself alone.
 	rules, _ := e.Remember(ModeAllow, Rule{Tool: "bash", Kind: SubjectCommand, Subjects: []string{"git status"}})
 	if v := (Engine{Layers: [][]Spec{rules}}).Evaluate(Rule{Tool: "bash", Kind: SubjectCommand, Subjects: []string{"git status -s"}}); v.Effect != ModeAsk {

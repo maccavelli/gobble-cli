@@ -3,6 +3,7 @@ package acpserver
 import (
 	"context"
 	"errors"
+	"strings"
 
 	acp "github.com/maccavelli/acp-go-sdk2"
 
@@ -36,6 +37,9 @@ type question struct {
 	repeated        int
 	by              *permission.Spec
 	always, hides   bool
+	// saves, for a shell call, are the patterns an "always" saves, which
+	// its options' names show (F6-3 decision 4a).
+	saves []string
 }
 
 // answer is the option chosen, none for a cancel, and a reject's reason.
@@ -55,19 +59,23 @@ func (q question) options() []acp.PermissionOption {
 		}
 		return name
 	}
+	what := ""
+	if len(q.saves) > 0 {
+		what = " `" + strings.Join(q.saves, "`, `") + "`"
+	}
 	out := []acp.PermissionOption{opt(allowOnce, "Allow once", acp.PermissionOptionKindAllowOnce)}
 	if q.always {
 		out = append(out,
-			opt(allowSession, "Allow for this session", acp.PermissionOptionKindAllowAlways),
-			opt(allowProject, "Allow for this project", acp.PermissionOptionKindAllowAlways),
-			opt(allowAlways, "Allow everywhere", acp.PermissionOptionKindAllowAlways))
+			opt(allowSession, "Allow"+what+" for this session", acp.PermissionOptionKindAllowAlways),
+			opt(allowProject, "Allow"+what+" for this project", acp.PermissionOptionKindAllowAlways),
+			opt(allowAlways, "Allow"+what+" everywhere", acp.PermissionOptionKindAllowAlways))
 	}
 	out = append(out, opt(rejectOnce, "Reject", acp.PermissionOptionKindRejectOnce))
 	if q.always {
 		out = append(out,
-			opt(rejectSession, never("Reject for this session"), acp.PermissionOptionKindRejectAlways),
-			opt(rejectProject, never("Reject for this project"), acp.PermissionOptionKindRejectAlways),
-			opt(rejectAlways, never("Reject everywhere"), acp.PermissionOptionKindRejectAlways))
+			opt(rejectSession, never("Reject"+what+" for this session"), acp.PermissionOptionKindRejectAlways),
+			opt(rejectProject, never("Reject"+what+" for this project"), acp.PermissionOptionKindRejectAlways),
+			opt(rejectAlways, never("Reject"+what+" everywhere"), acp.PermissionOptionKindRejectAlways))
 	}
 	return out
 }

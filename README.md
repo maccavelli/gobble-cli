@@ -69,7 +69,10 @@ Early, and built in the order [docs/README.md](docs/README.md#build-order) gives
   `allow: bash(git status*)`; the last that matches decides. With none, a read-only built-in tool runs and every other
   call asks. A write under `.git` or `~/.ssh` is always refused, and a delete always asks. A question offers "once",
   "for this session", "for this project" or "everywhere" each way, and `[f]` rejects with a reason the model reads;
-  `/permissions` lists, removes and adds rules. In print mode, `--yes` allows once what a rule asks.
+  `/permissions` lists, removes and adds rules. In print mode, `--yes` allows once what a rule asks. A bash
+  command is split into its simple commands, each matched on its own, so `deny: bash(rm *)` reaches `make && rm -rf x`;
+  an "always" covers the command's prefix, such as `git status *`, which the question names; a plain `rm`, `mv`, `cp`,
+  `rmdir` or `mkdir` runs as gobble's own tool.
 - **Personalities:** gobble speaks as `boring`, `dry` (the default), `snarky` or `bombastic`, or one of your own;
   `/personality`, `--personality` and `gobble personality list|show|check|path|reset`. The messages in its catalog, and
   the system prompt's tools and rules sections, compaction's prompts and the built-in tools' descriptions, can be
@@ -87,8 +90,7 @@ Early, and built in the order [docs/README.md](docs/README.md#build-order) gives
   provider's variable; `gobble auth login --api-key -|logout|status|check`, signing in to Grok or Kilo with
   `gobble auth login grok|kilo`, and `gobble auth import --from-pi` ([guide](docs/guides/credentials.md)).
 
-Not built yet: shell-command patterns, the accept-edits and bypass modes and `request_permissions` (0005-PLAN F6-3 to
-F6-5); `--offline`, which is refused until then; the enhanced TUI
+Not built yet: the accept-edits and bypass modes and `request_permissions` (0005-PLAN F6-4 and F6-5); `--offline`, which is refused until then; the enhanced TUI
 mode; and `gobble update`. The full v1 line, tiered into
 a v1.0.0 gate, a v1.x train and `exp/`, is in [0005-MADR](docs/decisions/0005-MADR-v1-feature-scope.md).
 

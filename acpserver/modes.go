@@ -131,6 +131,11 @@ func (p planPolicy) Decide(ctx context.Context, r permission.Rule) (permission.D
 			q.onceOnly = textOnceOnly
 		}
 		q.hides = r.Kind == permission.SubjectNone || len(r.Subjects) == 0
+		if q.always && r.Kind == permission.SubjectCommand {
+			for _, s := range deny {
+				q.saves = append(q.saves, s.Pattern)
+			}
+		}
 	}
 	ans, err := p.inner.ask(ctx, r, q)
 	d := permission.Decision{By: v.By}

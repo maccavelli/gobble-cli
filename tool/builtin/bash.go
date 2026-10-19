@@ -19,7 +19,7 @@ func Bash() tool.Tool { return bashWith(Options{}.withDefaults()) }
 // (shell.go).
 func bashWith(o Options) tool.Tool {
 	sh := shell{
-		name: "bash",
+		name: nameBash,
 		find: func() (string, error) { return BashPath(o) },
 		args: func(command string) []string {
 			if o.ShellCommandPrefix != "" {
@@ -34,8 +34,9 @@ func bashWith(o Options) tool.Tool {
 		},
 		tool.WithKind(tool.KindExecute),
 		tool.WithAnnotations(tool.Annotations{DestructiveHint: true, OpenWorldHint: true}),
-		tool.WithOutside(shellOutside),
-		tool.WithSubject(shellSubject),
+		tool.WithOutside(bashOutside),
+		tool.WithSubject(bashSubject),
+		tool.WithReroute(interceptShell),
 		tool.WithDescribe(shellDescribe),
 		shellSchema(o),
 	)

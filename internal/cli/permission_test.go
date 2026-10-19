@@ -137,7 +137,7 @@ func lastToolResult(t *testing.T, s *llmtest.Script) string {
 // (decision A).
 func TestPermissionPromptOnceOnly(t *testing.T) {
 	dir := t.TempDir()
-	model := llmtest.NewScript(llmtest.ToolCall("b1", "bash", `{"command":"ls *.go"}`), llmtest.Text("done"))
+	model := llmtest.NewScript(llmtest.ToolCall("b1", "bash", `{"command":"./run-*.sh"}`), llmtest.Text("done"))
 	h := newModelHarness(t, model, dir)
 	h.start(Prompt{})
 	h.press("list them\r")

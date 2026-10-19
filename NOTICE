@@ -28,8 +28,9 @@ which is licensed under the MIT License:
 The licence's full text is in llm/catalog/data/LICENSE.models.dev.
 
 This product copies prompt text from opencode
-(https://github.com/anomalyco/opencode), in compaction/prompts.go, which
-is licensed under the MIT License:
+(https://github.com/anomalyco/opencode), in compaction/prompts.go, and
+its table of command arities, in tool/builtin/arity.go, which is
+licensed under the MIT License:
 
   Copyright (c) 2025 opencode
 

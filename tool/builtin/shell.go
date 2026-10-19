@@ -75,7 +75,7 @@ func runShell(ctx context.Context, sh shell, o Options, in shellIn, env tool.Env
 		return tool.Result{}, err
 	}
 	timeout := commandTimeout(in.Timeout, o.MaxTimeout)
-	if sh.name == "bash" && o.UseClientTerminal && env.Terminal != nil {
+	if sh.name == nameBash && o.UseClientTerminal && env.Terminal != nil {
 		return runTerminal(ctx, env.Terminal, sh, o, program, dir, in, env, timeout)
 	}
 
@@ -319,22 +319,59 @@ func shellDescribe(c tool.Call, _ tool.Env) string {
 	return title("run " + a.Command)
 }
 
-// shellOutside is the Confined answer of a shell tool: its workdir, when it
-// is outside the roots.
-// shellSubject is a shell call's command line, the whole of it, which the
-// rules match until 0005-PLAN F6-3 splits it (F6-2 decision 3).
-func shellSubject(c tool.Call, _ tool.Env) tool.Subject {
+// bashSubject is a bash call's simple commands, each with the pattern an
+// "always" saves, or its whole command when it must be raw (0005-PLAN F6-3
+// decisions 2 to 6).
+func bashSubject(c tool.Call, _ tool.Env) tool.Subject {
 	var a shellIn
 	if err := json.Unmarshal(c.Args, &a); err != nil {
 		return tool.Subject{}
 	}
-	return tool.Subject{Command: a.Command}
+	sc := parseShell(a.Command)
+	return tool.Subject{Commands: sc.subjects, Saves: sc.saves}
 }
 
+// powershellSubject is a PowerShell call's whole command, one raw subject:
+// gobble has no parser for it (decision 8).
+func powershellSubject(c tool.Call, _ tool.Env) tool.Subject {
+	var a shellIn
+	if err := json.Unmarshal(c.Args, &a); err != nil {
+		return tool.Subject{}
+	}
+	return tool.Subject{Commands: []string{strings.TrimSpace(a.Command)}, Saves: []string{""}}
+}
+
+// shellOutside is the Confined answer of PowerShell: its workdir, when it
+// is outside the roots.
 func shellOutside(c tool.Call, env tool.Env) []string {
 	var a shellIn
 	if err := json.Unmarshal(c.Args, &a); err != nil {
 		return nil
 	}
 	return outsideOf(workspace(env), env, a.Workdir)
+}
+
+// bashOutside is bash's: its workdir, and each directory its cd names, each
+// file operand of a file program and each redirection's file, resolved
+// against the workdir, ~ at the home directory (fsx.Resolve), when it is
+// outside the roots (decision 7).
+func bashOutside(c tool.Call, env tool.Env) []string {
+	var a shellIn
+	if err := json.Unmarshal(c.Args, &a); err != nil {
+		return nil
+	}
+	ws := workspace(env)
+	out := outsideOf(ws, env, a.Workdir)
+	at := env
+	if a.Workdir != "" {
+		at.Cwd = resolve(env, a.Workdir)
+	}
+	for _, p := range parseShell(a.Command).paths {
+		for _, o := range outsideOf(ws, at, p) {
+			if !slices.Contains(out, o) {
+				out = append(out, o)
+			}
+		}
+	}
+	return out
 }

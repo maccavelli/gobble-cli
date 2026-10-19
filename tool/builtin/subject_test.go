@@ -20,7 +20,8 @@ func TestSubjects(t *testing.T) {
 	cases := map[string]struct {
 		args  string
 		paths []string
-		cmd   string
+		cmds  []string
+		saves []string
 	}{
 		"read":   {args: `{"path":"a.txt"}`, paths: []string{in("a.txt")}},
 		"write":  {args: `{"path":"sub/b.txt","content":"x"}`, paths: []string{in(filepath.Join("sub", "b.txt"))}},
@@ -32,7 +33,7 @@ func TestSubjects(t *testing.T) {
 		"copy":   {args: `{"from":"a.txt","to":` + quote(t, abs) + `}`, paths: []string{in("a.txt"), abs}},
 		"delete": {args: `{"path":".env"}`, paths: []string{in(".env")}},
 		"mkdir":  {args: `{"path":"d"}`, paths: []string{in("d")}},
-		"bash":   {args: `{"command":"git status && rm -rf x"}`, cmd: "git status && rm -rf x"},
+		"bash":   {args: `{"command":"git status && rm -rf x"}`, cmds: []string{"git status", "rm -rf x"}, saves: []string{"git status *", "rm *"}},
 		"todo":   {args: `{"todos":[]}`},
 	}
 	tools := append(Tools(), powershellWith(Options{}.withDefaults()))
@@ -41,7 +42,9 @@ func TestSubjects(t *testing.T) {
 		name := tl.Spec().Name
 		c, ok := cases[name]
 		if name == "powershell" {
+			// PowerShell is one raw subject (0005-PLAN F6-3 decision 8).
 			c, ok = cases["bash"], true
+			c.cmds, c.saves = []string{"git status && rm -rf x"}, []string{""}
 		}
 		if !ok {
 			t.Errorf("%s: no case", name)
@@ -52,8 +55,8 @@ func TestSubjects(t *testing.T) {
 		if sj, ok := tl.(tool.Subjecter); ok {
 			got = sj.Subject(tool.Call{Name: name, Args: []byte(c.args)}, tool.Env{Cwd: cwd})
 		}
-		if !slices.Equal(got.Paths, c.paths) || got.Command != c.cmd {
-			t.Errorf("%s: subject %+v, want paths %q, command %q", name, got, c.paths, c.cmd)
+		if !slices.Equal(got.Paths, c.paths) || !slices.Equal(got.Commands, c.cmds) || !slices.Equal(got.Saves, c.saves) {
+			t.Errorf("%s: subject %+v, want paths %q, commands %q, saves %q", name, got, c.paths, c.cmds, c.saves)
 		}
 	}
 	for name := range cases {

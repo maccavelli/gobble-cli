@@ -333,12 +333,16 @@ func under(p, dir string) bool {
 const (
 	pathMeta    = `*?[{\`
 	commandMeta = `*?`
+	// prefixMeta are the characters that keep an arity prefix from being
+	// saved (F6-3 decision 4).
+	prefixMeta = `*?[{`
 )
 
-// Remember is the rules an "always" answer of effect saves for r, each
-// matching r's subjects as they were matched and nothing else (F6-2b
-// decisions A and C): a path from the root with a leading "/", or absolute
-// outside it; a command whole; a tool with no subject by its name. An allow
+// Remember is the rules an "always" answer of effect saves for r (F6-2b
+// decisions A and C, F6-3 decision 4a): a path from the root with a
+// leading "/", or absolute outside it; a command's arity pattern from
+// r.Saves, or its exact text when it has none; a tool with no subject by
+// its name; each saved once. An allow
 // also saves an external_directory rule for each path outside the roots;
 // a deny saves the tool's alone. ok is false when a subject holds a
 // pattern's character, so no rule matches it alone: only "once" can answer.
@@ -347,7 +351,7 @@ func (e Engine) Remember(effect Mode, r Rule) (rules []Spec, ok bool) {
 	if r.Kind == SubjectNone || len(r.Subjects) == 0 {
 		rules = append(rules, spec(r.Tool, ""))
 	}
-	for _, subj := range r.Subjects {
+	for i, subj := range r.Subjects {
 		switch r.Kind {
 		case SubjectPath:
 			p, exact := e.exactPath(subj)
@@ -356,10 +360,21 @@ func (e Engine) Remember(effect Mode, r Rule) (rules []Spec, ok bool) {
 			}
 			rules = append(rules, spec(r.Tool, p))
 		case SubjectCommand:
-			if strings.ContainsAny(subj, commandMeta) {
+			save := ""
+			if i < len(r.Saves) {
+				save = r.Saves[i]
+			}
+			switch {
+			case save != "" && strings.ContainsAny(strings.TrimSuffix(save, " *"), prefixMeta):
+				return nil, false
+			case save != "":
+				subj = save
+			case strings.ContainsAny(subj, commandMeta):
 				return nil, false
 			}
-			rules = append(rules, spec(r.Tool, subj))
+			if s := spec(r.Tool, subj); !slices.Contains(rules, s) {
+				rules = append(rules, s)
+			}
 		}
 	}
 	if effect == ModeAllow {

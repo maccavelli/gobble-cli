@@ -263,14 +263,24 @@ type Locator interface {
 // name (0005-PLAN F6-2 decision 3): the absolute paths a file tool names, or
 // a shell tool's command line. The zero Subject is the name alone.
 type Subject struct {
-	Paths   []string
-	Command string
+	Paths []string
+	// Commands are a shell call's subjects, one per simple command, and
+	// Saves the pattern an "always" answer saves for each, "" for its exact
+	// text (0005-PLAN F6-3 decisions 2 and 4).
+	Commands, Saves []string
 }
 
 // Subjecter is implemented by a tool whose calls the rules match by their
 // paths or their command.
 type Subjecter interface {
 	Subject(call Call, env Env) Subject
+}
+
+// Rerouter is implemented by a tool that hands some calls to another: the
+// agent runs such a call as the call Reroute gives, when that tool is
+// offered, keeping the call's id (0012-MADR D10).
+type Rerouter interface {
+	Reroute(call Call) (Call, bool)
 }
 
 // Confined is implemented by a tool whose calls name files. Outside returns
@@ -293,6 +303,7 @@ type config struct {
 	outside     func(Call, Env) []string
 	locate      func(Call, Env) []Location
 	subject     func(Call, Env) Subject
+	reroute     func(Call) (Call, bool)
 	prepare     func(jsontext.Value) (jsontext.Value, error)
 	schema      func(*jsonschema.Schema)
 }
@@ -307,6 +318,12 @@ func WithOutside(outside func(call Call, env Env) []string) Option {
 // (Locator). Without it a tool names none.
 func WithLocations(locate func(call Call, env Env) []Location) Option {
 	return func(cfg *config) { cfg.locate = locate }
+}
+
+// WithReroute sets which calls the tool hands to another (Rerouter).
+// Without it a tool runs every call itself.
+func WithReroute(reroute func(call Call) (Call, bool)) Option {
+	return func(cfg *config) { cfg.reroute = reroute }
 }
 
 // WithSubject sets what the permission rules match on a call (Subjecter).
@@ -409,6 +426,14 @@ func (g *generic[In, Out]) Locations(call Call, env Env) []Location {
 		return g.cfg.locate(call, env)
 	}
 	return nil
+}
+
+// Reroute is WithReroute's function, or none.
+func (g *generic[In, Out]) Reroute(call Call) (Call, bool) {
+	if g.cfg.reroute != nil {
+		return g.cfg.reroute(call)
+	}
+	return Call{}, false
 }
 
 // Subject is WithSubject's function, or the zero Subject.
