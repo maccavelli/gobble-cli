@@ -17,6 +17,7 @@ import (
 type ACPCmd struct {
 	Login  string `name:"login" complete:"provider" placeholder:"PROVIDER" help:"Sign in to a provider, or store its API key, in this terminal, then exit: what an ACP client's terminal auth method runs."`
 	Device bool   `name:"device" help:"With --login, sign in with a device code."`
+	Mode   string `complete:"mode" placeholder:"MODE" help:"Mode the sessions start in: default, accept-edits, plan, or bypass (with permissions.allowBypass)."`
 }
 
 // Run serves the agent until stdin closes or a signal arrives.
@@ -27,6 +28,9 @@ func (c *ACPCmd) Run(e *runEnv) error {
 		return e.acpLogin(c.Login, c.Device)
 	case c.Device:
 		return usageErrorf("--device is for --login")
+	}
+	if err := e.chooseMode(c.Mode); err != nil {
+		return err
 	}
 	// The process keys come from the global file and --set only: a
 	// project's do not apply under acp (0018-MADR D16). builtin's own

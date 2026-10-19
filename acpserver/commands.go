@@ -400,10 +400,10 @@ func (a *Agent) cmdMode(ctx context.Context, t *cmdTurn, arg string) error {
 	switch {
 	case arg == "":
 		t.say(t.text(personality.ModeCurrent, personality.Args{argMode: current}) + "\n" +
-			t.text(personality.ModeList, personality.Args{argModes: modeDefault + ", " + modePlan}))
+			t.text(personality.ModeList, personality.Args{argModes: modeNames(t.s.allowBypass, ", ")}))
 		return nil
-	case !validMode(arg):
-		t.say(t.text(personality.ModeUnknown, personality.Args{argMode: strconv.Quote(arg), argModes: modeDefault + " and " + modePlan}))
+	case !validMode(arg, t.s.allowBypass):
+		t.say(t.text(personality.ModeUnknown, personality.Args{argMode: strconv.Quote(arg), argModes: modeNames(t.s.allowBypass, ", ")}))
 		return nil
 	case arg == modePlan && current == modePlan:
 		t.say(t.text(personality.ModeAlreadyPlan, nil))

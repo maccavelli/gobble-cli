@@ -80,7 +80,7 @@ func TestProjectRulesNeedTrust(t *testing.T) {
 	t.Setenv("GOBBLE_HOME", home)
 	writeFile(t, filepath.Join(home, "settings.yaml"), "permissions:\n  rules:\n    - allow: bash(git *)\n")
 	proj := trustProject(t)
-	writeFile(t, filepath.Join(proj, ".gobble", "settings.yaml"), "permissions:\n  rules:\n    - deny: read(.env)\n")
+	writeFile(t, filepath.Join(proj, ".gobble", "settings.yaml"), "permissions:\n  allowBypass: true\n  rules:\n    - deny: read(.env)\n")
 	out := &Output{out: &bytes.Buffer{}, err: &bytes.Buffer{}}
 	e := &runEnv{ctx: t.Context(), out: out, logs: &lazyLog{out: out}, store: session.NewMemoryStore()}
 	t.Cleanup(func() {
@@ -103,5 +103,10 @@ func TestProjectRulesNeedTrust(t *testing.T) {
 	}
 	if got := layers(); len(got) != 2 || got[1] != "deny: read(.env) @project" {
 		t.Fatalf("trusted: %q, want the project's rule after the global one", got)
+	}
+	// A trusted project's allowBypass is global-only, so its sessions are not
+	// offered bypass (0005-PLAN F6-4 decision 2).
+	if e.agentOptions().Settings(proj).AllowBypass {
+		t.Fatal("a trusted project's allowBypass reached its session")
 	}
 }

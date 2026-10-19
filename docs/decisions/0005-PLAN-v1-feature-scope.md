@@ -7990,3 +7990,60 @@ starting in `default`; the log's mode.
 **Not taken:** grok-build's `dontAsk` and classifier modes; a `defaultMode` setting, which `--mode` covers for a run;
 saving the mode in the session file, which Pi does not; a managed policy that blocks bypass, which `allowBypass` being
 global-only stands in for.
+
+**F6-4's execution record (2026-10-19).**
+
+- **Ran as the entry wrote it,** on the owner's word "committed, proceed" after the entry's commit `1a5ba5b`, with 3a
+  and 4a. No deviation: nothing the entry decides changed. What it left unsaid is listed below. F6-5,
+  `request_permissions`, is next, made executable on the owner's word; no release is tagged before it.
+- **What was built:**
+  - `internal/config`: `permissions.allowBypass` (a bool, `false`, global only, read when a session starts), its
+    template lines and the schema; `boolFalse` beside `boolTrue`;
+  - `acpserver`: the four modes, `modesOf`, `validMode` and `modeNames` by whether the session offers bypass;
+    `SessionSettings.AllowBypass` and the session's `allowBypass`; `Override.Mode` and `startMode`; `withDefaults`
+    allowing an edit in accept-edits where no rule decides; `byMode`, the mode's verdict and its source,
+    `mode accept-edits` or `mode bypass`; the log's `mode`; `/mode` over the session's modes;
+  - `internal/cli`: `--mode` on the default command and on `gobble acp`, with its completion; `chooseMode`, refusing an
+    unknown mode and `bypass` without the global `allowBypass`; the session settings' `AllowBypass`.
+- **What the entry left unsaid, decided inside it:**
+  - **the start's `current_mode_update`** was already sent with the session's first `available_commands_update`
+    (`acpserver/commands.go:592`), and a session's response carries its mode; both now give the start mode;
+  - **a `--mode` the session does not offer** starts it in `default`, with a log line, rather than failing the
+    session: the CLI refuses the flag first, so this is `Override`'s guard for another caller;
+  - **`--mode bypass` is checked against the global file alone**, before a project's settings are read;
+    `allowBypass` being global-only keeps a trusted project's from reaching its sessions too, which
+    `TestProjectRulesNeedTrust` now asserts;
+  - **the modes' names and descriptions:** "Accept edits", "Change files without asking; ask before commands and
+    deletes."; "Bypass", "Ask nothing but gobble's own limits; deny rules still refuse.";
+  - **`/mode`'s list and its unknown-mode reply** join the session's modes with ", ".
+- **Tests,** each new assertion seen failing on a scratch copy:
+  - `acpserver`: `TestModesOffered` (the modes with and without `allowBypass`, `set_mode` and `/mode` refusing
+    bypass, the list line exact); `TestAcceptEdits` (eleven calls: five edit tools and a shell `mv` unasked, a delete,
+    bash, an outside write and `AGENTS.md` asked, an `ask` rule still asking, the log's mode and source);
+    `TestBypass` (a default's, a rule's and an outside read's question answered, a deny refusing with nothing asked, a
+    hidden tool kept out, a delete's and `AGENTS.md`'s limit still asking, the repeated-call question still asked);
+    `TestPlanCeiling`; `TestStartMode` (`--mode`'s start announced, an unoffered one starting in default, a loaded
+    session in default); `TestSetModeUpdates` follows the three modes; the session golden gains accept-edits;
+  - `internal/cli`: `TestModeFlag` (an unknown mode, `bypass` without the key on the default command and `gobble acp`,
+    a project's key not unlocking it, the global key unlocking it, print mode writing in accept-edits without
+    `--yes`); `TestSessionSettingsReachAgent` asserts `AllowBypass`; `TestProjectRulesNeedTrust` asserts a trusted
+    project's `allowBypass` reaching no session;
+  - `internal/config`: the key count, the rendered document and the schema follow the new key.
+- **The negatives:** 24 mutations over the key, the modes, the start, accept-edits, bypass, the ceiling, the log,
+  `/mode` and `--mode`, each applied alone to a scratch copy after control runs of the named tests passed unmutated.
+  The first run caught 22: dropping the key's global-only scope passed `TestModeFlag`, whose check reads only the
+  global file, and `TestProjectRulesNeedTrust` gained the session's assertion; listing `/mode` without bypass passed
+  `TestModesOffered`, whose session was already in bypass, and it gained the list line's exact check. The final run:
+  24 of 24 caught.
+- **The gates:**
+  - the pre-add check on the 22 changed `.go` files, clean;
+  - lint for linux, darwin and windows with `CGO_ENABLED=0`, `0 issues.` each, after two findings in the new code were
+    fixed in it (a key-value log call made `slog.String`, the bool keys' `"false"` made `boolFalse`);
+  - macOS: `CGO_ENABLED=1 go test -race -count=1 ./...`, 35 packages ok, and `make preflight`, `preflight passed`;
+  - the Linux machine and the Windows laptop, over ssh on a copy of the working tree (719 files) in a fresh temporary
+    directory: `go test -count=1 ./...` and `CGO_ENABLED=1 go test -race -count=1 ./...`, 35 packages ok on each,
+    Windows with `TMP` and `TEMP` outside the user's home; `make preflight`, every step through `apidiff` passed on
+    each, and `check-records` and `markdownlint` after it; `verify-build-metadata` needs a commit the copy does not
+    have, and passed on macOS;
+  - the identifier scan over the change: no account name, hostname or real-machine path.
+- **Not done, and why:** F6-5's `request_permissions`; a `defaultMode` setting and a saved mode (not taken above).

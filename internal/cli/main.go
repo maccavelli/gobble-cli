@@ -189,6 +189,9 @@ type runEnv struct {
 	// yes is --yes: print mode allows once what a rule or the mode asks
 	// (0005-PLAN F6-2 decision 8).
 	yes bool
+	// mode is --mode, the mode the run's sessions start in (0005-PLAN F6-4
+	// decision 7).
+	mode string
 }
 
 func (e *runEnv) log() *slog.Logger { return e.logs.get() }

@@ -33,6 +33,7 @@ sessionDir: ""
 defaultProjectTrust: ask
 permissions:
   rules: []
+  allowBypass: false
 personality: dry
 bombasticAccepted: false
 compaction:

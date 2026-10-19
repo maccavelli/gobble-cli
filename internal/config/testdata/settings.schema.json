@@ -115,6 +115,12 @@
           },
           "description": "The permission rules, in order: each allow, ask or deny of a tool, or of a tool and a pattern in parentheses. The last that matches a call decides; with none, a read-only built-in tool runs and every other call asks.",
           "default": []
+        },
+        "allowBypass": {
+          "type": "boolean",
+          "description": "Whether the bypass mode is offered, which answers every question but gobble's own limits; a project's file cannot set it.",
+          "default": false,
+          "x-gobble-global-only": true
         }
       },
       "additionalProperties": false

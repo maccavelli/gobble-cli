@@ -23,8 +23,9 @@ func modeUpdates(client *acptest.Client) []string {
 	return out
 }
 
-// session/new advertises default and plan; set_mode to plan then default
-// confirms each with current_mode_update (0002-PLAN Phase 6 Accept).
+// session/new advertises default, accept-edits and plan, and not bypass
+// without allowBypass; set_mode to plan then default confirms each with
+// current_mode_update (0002-PLAN Phase 6 Accept; 0005-PLAN F6-4 decision 1).
 func TestSetModeUpdates(t *testing.T) {
 	c, client := connectWith(t, llmtest.NewScript(), &acptest.Client{})
 	initialize(t, c.Client)
@@ -32,7 +33,8 @@ func TestSetModeUpdates(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s.Modes == nil || s.Modes.CurrentModeId != modeDefault || len(s.Modes.AvailableModes) != 2 || s.Modes.AvailableModes[1].Id != modePlan {
+	if s.Modes == nil || s.Modes.CurrentModeId != modeDefault || len(s.Modes.AvailableModes) != 3 ||
+		s.Modes.AvailableModes[1].Id != modeAcceptEdits || s.Modes.AvailableModes[2].Id != modePlan {
 		t.Fatalf("modes %+v", s.Modes)
 	}
 	for _, m := range []acp.SessionModeId{modePlan, modeDefault} {

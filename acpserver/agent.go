@@ -236,6 +236,9 @@ type liveSession struct {
 	trust      permission.TrustDecision
 	project    ProjectOverrides
 	trustNoted bool
+	// allowBypass offers the bypass mode, from the settings at the start
+	// (0005-PLAN F6-4 decision 2).
+	allowBypass bool
 	// rules is the session's rule engine, built when it starts; its
 	// layers change as answers and /permissions add and remove rules,
 	// under mu (0005-PLAN F6-2b decision E).
@@ -409,8 +412,9 @@ func (a *Agent) NewSession(ctx context.Context, p acp.NewSessionRequest) (acp.Ne
 	// The run's override starts a new session, as defaultThinkingLevel does;
 	// a fork's history is set to it after its restore (0005-PLAN F4-2c).
 	s := &liveSession{id: acp.SessionId(id), cwd: p.Cwd, dirs: dirs, log: log, tree: session.NewTree(nil),
-		think: cmp.Or(a.override.Thinking, ss.Thinking), model: cmp.Or(a.override.Model, a.models().Default), mode: modeDefault,
-		queue: sessionQueue(ss), compaction: ss.Compaction, cache: cacheOf(ss.CacheRetention), retry: ss.Retry,
+		think: cmp.Or(a.override.Thinking, ss.Thinking), model: cmp.Or(a.override.Model, a.models().Default), mode: a.startMode(ss.AllowBypass),
+		allowBypass: ss.AllowBypass,
+		queue:       sessionQueue(ss), compaction: ss.Compaction, cache: cacheOf(ss.CacheRetention), retry: ss.Retry,
 		autoCompactOff: ss.AutoCompactionOff, voice: a.voiceOf(ss), insultsAccepted: ss.BombasticAccepted,
 		root: ss.ProjectRoot, trust: ss.Trust, project: projectOf(ss.Project),
 		rules: engineOf(ss, p.Cwd, a.storedRules(cmp.Or(ss.ProjectRoot, p.Cwd)))}
@@ -441,7 +445,7 @@ func (a *Agent) NewSession(ctx context.Context, p acp.NewSessionRequest) (acp.Ne
 		return acp.NewSessionResponse{}, err
 	}
 	model, think := a.choices(s)
-	return acp.NewSessionResponse{SessionId: s.id, ConfigOptions: a.configOptions(model, think), Modes: modeState(s.mode)}, nil
+	return acp.NewSessionResponse{SessionId: s.id, ConfigOptions: a.configOptions(model, think), Modes: modeState(s.mode, s.allowBypass)}, nil
 }
 
 // oneLine is a name on one line, trimmed, as Pi stores one
@@ -604,7 +608,7 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 	}
 	// The rules' hidden tools are neither sent nor found by tool_search
 	// (0005-PLAN F6-2 decision 6).
-	tools = visible(withDefaults(a.rulesOf(s), mcpTools), tools)
+	tools = visible(withDefaults(a.rulesOf(s), mcpTools, a.modeOf(s)), tools)
 	loaded := loadedTools(s.tree.Path())
 	if fresh := startLoads(tools, loaded); len(fresh) > 0 {
 		w.add(toolsEntry(fresh))
@@ -921,8 +925,9 @@ func (a *Agent) open(ctx context.Context, id acp.SessionId, cwd string, extra []
 	}
 	ss := a.sessionSettings(cwd)
 	// The history's thinking level wins: restore sets it (0018-MADR D17).
-	s := &liveSession{id: id, cwd: cwd, dirs: dirs, log: log, think: thinkingOff, model: a.models().Default, mode: modeDefault,
-		queue: sessionQueue(ss), compaction: ss.Compaction, cache: cacheOf(ss.CacheRetention), retry: ss.Retry,
+	s := &liveSession{id: id, cwd: cwd, dirs: dirs, log: log, think: thinkingOff, model: a.models().Default, mode: a.startMode(ss.AllowBypass),
+		allowBypass: ss.AllowBypass,
+		queue:       sessionQueue(ss), compaction: ss.Compaction, cache: cacheOf(ss.CacheRetention), retry: ss.Retry,
 		autoCompactOff: ss.AutoCompactionOff, voice: a.voiceOf(ss), insultsAccepted: ss.BombasticAccepted,
 		root: ss.ProjectRoot, trust: ss.Trust, project: projectOf(ss.Project),
 		rules: engineOf(ss, cwd, a.storedRules(cmp.Or(ss.ProjectRoot, cwd)))}
@@ -960,7 +965,7 @@ func (a *Agent) LoadSession(ctx context.Context, p acp.LoadSessionRequest) (acp.
 		return acp.LoadSessionResponse{}, err
 	}
 	model, think := a.choices(s)
-	return acp.LoadSessionResponse{ConfigOptions: a.configOptions(model, think), Modes: modeState(s.mode), Meta: resumedMeta(st)}, nil
+	return acp.LoadSessionResponse{ConfigOptions: a.configOptions(model, think), Modes: modeState(s.mode, s.allowBypass), Meta: resumedMeta(st)}, nil
 }
 
 // resumedMeta is a resumed session's _meta.gobble: its title (the name,
@@ -996,7 +1001,7 @@ func (a *Agent) ResumeSession(ctx context.Context, p acp.ResumeSessionRequest) (
 		return acp.ResumeSessionResponse{}, err
 	}
 	model, think := a.choices(s)
-	return acp.ResumeSessionResponse{ConfigOptions: a.configOptions(model, think), Modes: modeState(s.mode),
+	return acp.ResumeSessionResponse{ConfigOptions: a.configOptions(model, think), Modes: modeState(s.mode, s.allowBypass),
 		Meta: resumedMeta(s.state())}, nil
 }
 

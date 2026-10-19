@@ -50,8 +50,12 @@ type Key struct {
 	Doc     string
 }
 
-// boolTrue is a bool key's true, as the template writes it.
-const boolTrue = "true"
+// boolTrue and boolFalse are a bool key's values, as the template writes
+// them.
+const (
+	boolTrue  = "true"
+	boolFalse = "false"
+)
 
 // pathSessionDir is the one path key that must be absolute.
 const pathSessionDir = "sessionDir"
@@ -91,9 +95,11 @@ var Keys = []Key{
 		Doc: "Whether a project with no saved decision is trusted: ask (gobble's terminal asks; anywhere else it is not trusted), always, or never."},
 	{Path: pathPermissionRules, Kind: KindRules, Default: "[]", Read: ReadSession,
 		Doc: "The permission rules, in order: each allow, ask or deny of a tool, or of a tool and a pattern in parentheses. The last that matches a call decides; with none, a read-only built-in tool runs and every other call asks."},
+	{Path: "permissions.allowBypass", Kind: KindBool, Default: boolFalse, Scope: ScopeGlobalOnly, Read: ReadSession,
+		Doc: "Whether the bypass mode is offered, which answers every question but gobble's own limits; a project's file cannot set it."},
 	{Path: "personality", Kind: KindString, Default: "dry", Scope: ScopeGlobalOnly, Read: ReadSession,
 		Doc: "The personality gobble speaks in: boring (also plain or normal), dry, snarky, bombastic, or one of your own under personalities/ in this directory."},
-	{Path: "bombasticAccepted", Kind: KindBool, Default: "false", Scope: ScopeGlobalOnly, Read: ReadSession,
+	{Path: "bombasticAccepted", Kind: KindBool, Default: boolFalse, Scope: ScopeGlobalOnly, Read: ReadSession,
 		Doc: "Whether you have agreed to bombastic, which insults you; gobble asks once, and sets this when you agree."},
 	{Path: "compaction.enabled", Kind: KindBool, Default: boolTrue, Read: ReadSession,
 		Doc: "Whether gobble compacts the conversation on its own: before a model call once it nears the model's window, and once when the model says it is over it."},
@@ -119,7 +125,7 @@ var Keys = []Key{
 		Doc: "The bash the bash tool runs. Empty finds one: Git's bash on Windows, bash on PATH elsewhere."},
 	{Path: "shellCommandPrefix", Kind: KindString, Scope: ScopeGlobalOnly, Read: ReadProcess,
 		Doc: "A line run before every bash command, such as \"set -euo pipefail\"."},
-	{Path: "tools.bash.useClientTerminal", Kind: KindBool, Default: "false", Read: ReadProcess,
+	{Path: "tools.bash.useClientTerminal", Kind: KindBool, Default: boolFalse, Read: ReadProcess,
 		Doc: "Whether bash runs in the ACP client's terminal when the client offers one."},
 	{Path: "tools.bash.maxTimeoutMs", Kind: KindInt, Default: "600000", Min: 1, Read: ReadProcess,
 		Doc: "The longest timeout, in milliseconds, a bash command may ask for."},

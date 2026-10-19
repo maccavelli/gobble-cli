@@ -144,7 +144,7 @@ func TestSessionSettingsReachAgent(t *testing.T) {
 	writeFile(t, filepath.Join(home, "settings.yaml"),
 		"defaultThinkingLevel: low\ncacheRetention: long\nsteeringMode: all\nfollowUpMode: all\ncompaction:\n  keepRecentTokens: 100\n"+
 			"mcp:\n  startupWaitMs: 7\n  stopGraceMs: 8\n  stopTimeoutMs: 9\nshellCommandPrefix: set -e\n"+
-			"permissions:\n  rules:\n    - deny: read(.env)\n")
+			"permissions:\n  allowBypass: true\n  rules:\n    - deny: read(.env)\n")
 	out := &Output{out: &bytes.Buffer{}, err: &bytes.Buffer{}}
 	e := &runEnv{ctx: t.Context(), out: out, logs: &lazyLog{out: out}, store: session.NewMemoryStore()}
 	t.Cleanup(func() {
@@ -163,7 +163,9 @@ func TestSessionSettingsReachAgent(t *testing.T) {
 		ProjectRoot: cwd, Trust: permission.TrustDecision{Trusted: true, Source: permission.SourceNothing},
 		// The rules, each with its file and line (0005-PLAN F6-2).
 		Rules: []permission.Spec{{Effect: permission.ModeDeny, Tool: "read", Pattern: ".env",
-			Source: permission.RuleSource{Layer: permission.LayerGlobal, File: filepath.Join(home, "settings.yaml"), Line: 14}}},
+			Source: permission.RuleSource{Layer: permission.LayerGlobal, File: filepath.Join(home, "settings.yaml"), Line: 15}}},
+		// bypass offered (0005-PLAN F6-4 decision 2).
+		AllowBypass: true,
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("Settings = %+v, want %+v", got, want)

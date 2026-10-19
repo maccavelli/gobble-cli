@@ -52,6 +52,9 @@ func (c *ChatCmd) Run(k *kong.Context, e *runEnv) error {
 	if err := e.choosePersonality(c.Personality); err != nil {
 		return err
 	}
+	if err := e.chooseMode(c.Mode); err != nil {
+		return err
+	}
 	// --api-key -'s key is the run's, for --model's provider, and is never
 	// written; read from stdin, it leaves stdin no input (0005-PLAN F4-3a).
 	keyFromStdin := false

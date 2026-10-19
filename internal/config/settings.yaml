@@ -119,8 +119,12 @@
 #     - allow: bash(git status*)
 #     - deny: read(.env)
 #     - allow: external_directory(/tmp/**)
+# The bypass mode answers every question but gobble's own limits, and
+# is offered only when allowBypass is true; a project's file cannot set
+# it. Set it with: gobble config set permissions.allowBypass true
 # permissions:
 #   rules: []
+#   allowBypass: false
 
 # ---------------------------------------------------------------------
 # Personality

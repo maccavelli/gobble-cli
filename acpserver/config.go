@@ -94,6 +94,8 @@ type SessionSettings struct {
 	// trusted project's and --set, in that order, each with its source
 	// (0005-PLAN F6-2 decisions 2 and 4).
 	Rules []permission.Spec
+	// AllowBypass offers the bypass mode (0005-PLAN F6-4 decision 2).
+	AllowBypass bool
 	// Home and ConfigDir place gobble's protected paths, ~/.ssh and the
 	// config directory's files (decision 5); "" is the user's home and
 	// PromptOptions.ConfigDir.
@@ -236,6 +238,9 @@ func (a *Agent) setConfig(ctx context.Context, s *liveSession, id, value string)
 // F4-2c). Provider is the model's provider; an empty field is not given.
 type Override struct {
 	Provider, Model, Thinking string
+	// Mode is a session's mode at its start, --mode's; a mode the session
+	// does not offer starts it in default (0005-PLAN F6-4 decisions 6, 7).
+	Mode string
 }
 
 // applyOverride sets a session its history restored to the agent's

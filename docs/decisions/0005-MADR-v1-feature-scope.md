@@ -227,6 +227,12 @@ ACP modes:
 
 A `current_mode_update` is emitted on every change.
 
+*(2026-10-19, 0005-PLAN F6-4, built: the four modes, ids `default`, `accept-edits`, `plan` and `bypass`; accept-edits
+allows `write`, `edit`, `move`, `copy` and `mkdir` where no rule of the user's decides, by the owner's choice of
+2026-10-19, a delete, bash and an outside path still asking; bypass answers every question but gobble's limits', by the
+owner's choice of the same day, a deny still refusing; plan's read-only ceiling over every rule; the mode not saved in
+the session file; `--mode <id>` for a run's sessions.)*
+
 Checkpoints:
 
 * Before each mutating batch, the file contents that `edit` and `write`
@@ -626,7 +632,7 @@ Further 0001-REPORT errata are kept here rather than in the report, which record
 | Quiet, offline start | 1.0 | `gobble acp` makes no network call before `session/new`. `--offline` / `GOBBLE_OFFLINE=1` also disables catalog refresh and `web_fetch`. |
 | Client terminal default | 1.0 | `tools.bash.useClientTerminal` defaults to `false`, because the phone shows only `"terminal <id>"`. |
 | `/deep-research` alias | 1.x | Advertised with the skill. mcremote's command-name rule rejects `/skill:…`. |
-| `bypass` on the phone | 1.0 | `permissions.allowBypass` defaults to `false`. mcremote marks `bypass` dangerous only after 0179 D7. |
+| `bypass` on the phone | 1.0 | `permissions.allowBypass` defaults to `false`. mcremote marks `bypass` dangerous only after 0179 D7. *(2026-10-19, 0005-PLAN F6-4, built: global only, so a project's file cannot set it; `bypass` is offered and settable only with it, `--mode bypass` refused without it.)* |
 
 The companion table in this record stays the **target**. magic-cli-remote 0179 D9 is the form it takes there. The `KindNative` rows for `fork`, `undo`, `redo`, `diff`, `compact` and `thinking` are safe only once 0179 D3 (strict fallback) has landed. Until then the default-fallback hazard (0002 fifth amendment) applies. The count "19 of 30 at full 1.x" holds under 0179.
 

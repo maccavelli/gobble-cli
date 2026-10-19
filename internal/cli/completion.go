@@ -66,6 +66,8 @@ func completionRegistry() complete.Registry {
 		"setting":   complete.ListSource(settingCandidates, true),
 		// The personalities, built-in and the user's (0022-PLAN P3).
 		"personality": complete.ListSource(personalityCandidates, true),
+		// The session modes (0005-PLAN F6-4).
+		"mode": complete.ListSource(modeCandidates, true),
 	}
 }
 

@@ -38,6 +38,7 @@ type SharedFlags struct {
 
 	// Personality.
 	Personality string `complete:"personality" placeholder:"NAME" help:"Personality for this run's sessions: boring, dry, snarky, bombastic, or your own."`
+	Mode        string `complete:"mode" placeholder:"MODE" help:"Mode this run's sessions start in: default, accept-edits, plan, or bypass (with permissions.allowBypass)."`
 
 	// Tools.
 	Tools        []string `short:"t" sep:"," complete:"tools" placeholder:"NAME,…" help:"Enable only these tools."`

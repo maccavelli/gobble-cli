@@ -156,19 +156,47 @@ func (a *Agent) addToLayer(s *liveSession, i int, source permission.RuleSource, 
 
 // withDefaults is e with the defaults of decision 4: allow for a built-in
 // read-only tool, ask for every other tool and for each of mcp's, whatever
-// it declares.
-func withDefaults(e permission.Engine, mcp []tool.Tool) permission.Engine {
+// it declares; in accept-edits, allow for an edit too, a rule the user
+// wrote still deciding first (F6-4 decision 3a).
+func withDefaults(e permission.Engine, mcp []tool.Tool, mode string) permission.Engine {
 	names := make(map[string]bool, len(mcp))
 	for _, t := range mcp {
 		names[t.Spec().Name] = true
 	}
 	e.Default = func(r permission.Rule) permission.Mode {
-		if r.ReadOnly && !names[r.Tool] {
+		if r.ReadOnly && !names[r.Tool] || mode == modeAcceptEdits && editTools[r.Tool] {
 			return permission.ModeAllow
 		}
 		return permission.ModeAsk
 	}
 	return e
+}
+
+// editTools are the tools accept-edits allows: the native ones that change
+// files, other than delete, which always asks (F6-4 decision 3).
+var editTools = map[string]bool{"write": true, "edit": true, "move": true, "copy": true, "mkdir": true}
+
+// The rule sources a mode gives (F6-4 decision 8).
+const (
+	sourceAcceptEdits = "mode accept-edits"
+	sourceBypass      = "mode bypass"
+)
+
+// byMode is v as the session's mode leaves it: an edit accept-edits'
+// default allowed is the mode's; in bypass a question that no limit asked
+// is allowed, the mode's (F6-4 decisions 3a, 4a and 8).
+func byMode(v permission.Verdict, r permission.Rule, mode string) permission.Verdict {
+	mine := func(source string) permission.Verdict {
+		return permission.Verdict{Effect: permission.ModeAllow,
+			By: permission.Spec{Effect: permission.ModeAllow, Tool: r.Tool, Source: permission.RuleSource{Layer: source}}}
+	}
+	switch {
+	case mode == modeAcceptEdits && v.Effect == permission.ModeAllow && editTools[r.Tool] && v.By.Source.Layer == permission.LayerDefault:
+		return mine(sourceAcceptEdits)
+	case mode == modeBypass && v.Effect == permission.ModeAsk && v.Limit == "":
+		return mine(sourceBypass)
+	}
+	return v
 }
 
 // visible are tools without those the rules hide: a tool whose last
@@ -189,8 +217,8 @@ func refusalOf(r permission.Rule, v permission.Verdict) string {
 
 // logDecision logs a call's verdict, its tool, subjects, effect and the
 // rule that decided, with its source, "from" (decision 12).
-func (a *Agent) logDecision(ctx context.Context, s *liveSession, r permission.Rule, v permission.Verdict) {
-	attrs := []any{slog.String("session", string(s.id)), slog.String("tool", r.Tool), slog.Any("subjects", r.Subjects),
+func (a *Agent) logDecision(ctx context.Context, s *liveSession, r permission.Rule, v permission.Verdict, mode string) {
+	attrs := []any{slog.String("session", string(s.id)), slog.String("mode", mode), slog.String("tool", r.Tool), slog.Any("subjects", r.Subjects),
 		slog.String("effect", string(v.Effect)), slog.String("rule", v.By.String()), slog.String("from", v.By.Source.String())}
 	if len(r.Outside) > 0 {
 		attrs = append(attrs, slog.Any("outside", r.Outside))

@@ -35,6 +35,9 @@ type Permissions struct {
 	// Rules are every layer's, joined: the global file's, then a trusted
 	// project's, then --set's.
 	Rules []PermissionRule `yaml:"rules" json:"rules,omitempty"`
+	// AllowBypass offers the bypass mode; only the global file sets it
+	// (0005-PLAN F6-4 decision 2).
+	AllowBypass bool `yaml:"allowBypass" json:"allowBypass,omitempty"`
 }
 
 // Compaction is the compaction settings (0005-PLAN F5-2).
@@ -118,6 +121,8 @@ func (s *Settings) field(path string) any {
 		return &s.DefaultProjectTrust
 	case pathPermissionRules:
 		return &s.Permissions.Rules
+	case "permissions.allowBypass":
+		return &s.Permissions.AllowBypass
 	case "personality":
 		return &s.Personality
 	case "bombasticAccepted":

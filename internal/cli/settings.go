@@ -100,7 +100,7 @@ func toSession(s config.Settings) acpserver.SessionSettings {
 		},
 		MCPStartupWait: s.MCPStartupWait(), MCPStopGrace: s.MCPStopGrace(), MCPStopTimeout: s.MCPStopTimeout(),
 		Retry: retryOf(s.Retry), AutoCompactionOff: !s.Compaction.Enabled, Personality: s.Personality,
-		BombasticAccepted: s.BombasticAccepted, Rules: rulesOf(s.Permissions.Rules),
+		BombasticAccepted: s.BombasticAccepted, Rules: rulesOf(s.Permissions.Rules), AllowBypass: s.Permissions.AllowBypass,
 	}
 }
 

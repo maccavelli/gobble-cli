@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json/v2"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	acp "github.com/maccavelli/acp-go-sdk2"
@@ -12,11 +13,12 @@ import (
 	"github.com/maccavelli/gobble-cli/tool"
 )
 
-// The session modes (0002-PLAN Phase 6). 0005-PLAN F6 adds accept-edits
-// and bypass.
+// The session modes (0002-PLAN Phase 6; 0005-PLAN F6-4 decision 1).
 const (
-	modeDefault = "default"
-	modePlan    = "plan"
+	modeDefault     = "default"
+	modeAcceptEdits = "accept-edits"
+	modePlan        = "plan"
+	modeBypass      = "bypass"
 )
 
 // exitPlanTool is the tool that asks the user to leave plan mode.
@@ -29,11 +31,23 @@ const (
 
 var modes = []acp.SessionMode{
 	{Id: modeDefault, Name: "Default", Description: new("Ask before changing files or running commands.")},
+	{Id: modeAcceptEdits, Name: "Accept edits", Description: new("Change files without asking; ask before commands and deletes.")},
 	{Id: modePlan, Name: "Plan", Description: new("Read-only: explore and plan, then leave plan mode with an approved plan.")},
+	{Id: modeBypass, Name: "Bypass", Description: new("Ask nothing but gobble's own limits; deny rules still refuse.")},
 }
 
-func validMode(id string) bool {
-	for _, m := range modes {
+// modesOf are the modes a session offers: bypass only when its settings
+// allow it (decision 1).
+func modesOf(allowBypass bool) []acp.SessionMode {
+	if allowBypass {
+		return modes
+	}
+	return modes[:len(modes)-1]
+}
+
+// validMode reports whether id is one of the modes a session offers.
+func validMode(id string, allowBypass bool) bool {
+	for _, m := range modesOf(allowBypass) {
 		if string(m.Id) == id {
 			return true
 		}
@@ -41,9 +55,30 @@ func validMode(id string) bool {
 	return false
 }
 
+// modeNames are the modes a session offers, as /mode lists them.
+func modeNames(allowBypass bool, sep string) string {
+	var names []string
+	for _, m := range modesOf(allowBypass) {
+		names = append(names, string(m.Id))
+	}
+	return strings.Join(names, sep)
+}
+
 // modeState is the modes a session response advertises.
-func modeState(current string) *acp.SessionModeState {
-	return &acp.SessionModeState{AvailableModes: modes, CurrentModeId: acp.SessionModeId(current)}
+func modeState(current string, allowBypass bool) *acp.SessionModeState {
+	return &acp.SessionModeState{AvailableModes: modesOf(allowBypass), CurrentModeId: acp.SessionModeId(current)}
+}
+
+// startMode is a new or reopened session's mode: the run's --mode when the
+// session offers it, else default; it is not saved (decision 6).
+func (a *Agent) startMode(allowBypass bool) string {
+	if m := a.override.Mode; m != "" {
+		if validMode(m, allowBypass) {
+			return m
+		}
+		a.logger.Warn("mode: not offered by this session; starting in default", slog.String("mode", m))
+	}
+	return modeDefault
 }
 
 func modeUpdate(current string) acp.SessionUpdate {
@@ -61,8 +96,8 @@ func (a *Agent) modeOf(s *liveSession) string {
 // setMode changes a session's mode and confirms it with
 // current_mode_update. The mode is not persisted: Pi has no mode entry.
 func (a *Agent) setMode(ctx context.Context, s *liveSession, id string) error {
-	if !validMode(id) {
-		return invalidParams(s.id, fmt.Sprintf("unknown mode %q (the modes are default and plan)", id))
+	if !validMode(id, s.allowBypass) {
+		return invalidParams(s.id, fmt.Sprintf("unknown mode %q (the modes are %s)", id, modeNames(s.allowBypass, ", ")))
 	}
 	a.mu.Lock()
 	s.mode = id
@@ -108,13 +143,14 @@ func (p planPolicy) Decide(ctx context.Context, r permission.Rule) (permission.D
 	if r.Repeated != 0 {
 		return p.inner.Decide(ctx, r)
 	}
-	e := withDefaults(p.a.rulesOf(p.s), p.mcp)
-	v := e.Evaluate(r)
-	p.a.logDecision(ctx, p.s, r, v)
+	mode := p.a.modeOf(p.s)
+	e := withDefaults(p.a.rulesOf(p.s), p.mcp, mode)
+	v := byMode(e.Evaluate(r), r, mode)
+	p.a.logDecision(ctx, p.s, r, v, mode)
 	switch {
 	case v.Effect == permission.ModeDeny:
 		return permission.Decision{Refusal: refusalOf(r, v), By: v.By}, nil
-	case p.a.modeOf(p.s) == modePlan && (v.Effect == permission.ModeAsk || !r.ReadOnly):
+	case mode == modePlan && (v.Effect == permission.ModeAsk || !r.ReadOnly):
 		return permission.Decision{Refusal: fmt.Sprintf(
 			"Plan mode is read-only, so %s did not run. Call %s with the plan to ask the user to leave plan mode.", r.Tool, exitPlanTool)}, nil
 	case v.Effect == permission.ModeAllow:
