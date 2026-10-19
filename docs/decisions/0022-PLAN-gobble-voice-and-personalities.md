@@ -393,3 +393,10 @@ Six phases, each one commit with its own execution record and gates, in this ord
   - `make preflight` on macOS: passed;
   - **not run:** Windows `go test ./...` and `-race`, the second Linux machine's `-race`, and Windows and WSL `make preflight`, on the owner's machines.
 - **Next:** P6, the owner's live evaluation, with its GATES record; 0005-PLAN F5-4 owes the compaction prompts' ids (deviation 1).
+
+**P6 — prepared (2026-10-18).**
+
+- On the owner's word "committed, proceed" after P5's commit, the owner chose the providers, `openai` and `grok`, and to run the scenarios themselves, from a record prepared for them.
+- [0022-GATES-voice-live-evaluation.md](../reports/0022-GATES-voice-live-evaluation.md) holds the setup, a throwaway fixture with three planted problems, Part A (S4 to S6 in print mode, 24 runs, scripted) and Part B (S1 to S3 and S7 in the line view, 8 sessions), and the results tables.
+- **Checked before handing over,** on a scratch copy: the setup and fixture blocks run as written, both planted tests fail, and `calc.go` has the 19 lines S5 asks for; a Part A command, run with no credential in an empty environment, parses and stops at the credential (exit 3), so no provider was called.
+- **Waiting on:** the owner's runs. The outcomes, the tokens, how each model played each part, and any tuning are written into the GATES record and here from the outputs the owner sends.

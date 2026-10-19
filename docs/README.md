@@ -53,6 +53,7 @@
 | 0021 | MADR | [Ask for prompt caching on agent turns, with one provider and session id per ACP session](decisions/0021-MADR-prompt-caching-per-session.md) | accepted (2026-10-13, by the owner; gobble-cli issue 2) |
 | 0021 | PLAN | [Ask for prompt caching on agent turns, with one provider and session id per ACP session](decisions/0021-PLAN-prompt-caching-per-session.md) | completed (2026-10-13; P1–P4; P3 deviation 1) |
 | 0022 | MADR | [gobble speaks in its own voice: four personalities on a sarcasm scale, written in natural-language files, with every text overridable](decisions/0022-MADR-gobble-voice-and-personalities.md) | accepted 2026-10-18 (the owner's design and answers of that date: four personalities, `/personality`, Dry by default; D12 amended 2026-10-18, P4's slow lines and goodbye; D15 amended 2026-10-18, compaction prompts wait for F5-4) |
+| 0022 | GATES | [gobble's voice: the owner's live evaluation](reports/0022-GATES-voice-live-evaluation.md) | prepared 2026-10-18; waiting on the owner's runs (`openai`, `grok`) |
 | 0022 | PLAN | [Implement gobble's voice: four personalities, a natural-language catalog, and overrides for every text](decisions/0022-PLAN-gobble-voice-and-personalities.md) | in progress (approved 2026-10-18; P1 complete 2026-10-18, the catalog with `boring` only; P2 complete 2026-10-18, Dry the default, deviation 1; P3 complete 2026-10-18, choosing, Snarky and Bombastic; P4 complete 2026-10-18, ambient text, deviations 1 and 2; P5 complete 2026-10-18, overrides, deviation 1) |
 
 0003-MADR has no PLAN of its own. 0004-PLAN Phase 2 and 0005-PLAN F10 implement it.
@@ -104,7 +105,7 @@ The plans run in sequence.
   - Run: P3, choosing, and Snarky and Bombastic, on 2026-10-18 (no deviation; the phone check is the owner's).
   - Run: P4, ambient text and easter eggs, on 2026-10-18 (two deviations, D12 amended).
   - Run: P5, every text overridable, on 2026-10-18 (one deviation: compaction prompts wait for 0005-PLAN F5-4).
-  - Next: P6, the owner's live evaluation.
+  - Prepared: P6, the owner's live evaluation, in 0022-GATES (2026-10-18); waiting on the owner's runs against `openai` and `grok`.
 - **0012-PLAN.** Run: P1–P6 and P8 on 2026-10-08. P7 ~~waits on go-llmprovider-sdk's per-tool strict flag~~ follows 0005-PLAN F4-1a, which pins go-llmprovider-sdk `v1.7.0` and its strict flag (2026-10-11).
   - Run: P7 on 2026-10-13: `strict: false` where a call may leave an argument out, no flag otherwise. Complete; the Claude, Gemini and Grok live tests are the owner's.
 - `git ls-remote origin refs/heads/main` on 2026-10-08 returned `740f7b71450238e747dba99b4fa1eccd488ad79e`.
