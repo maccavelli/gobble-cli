@@ -7912,3 +7912,81 @@ does by making them ask, and which decision 7 leaves to `external_directory` on 
   - the identifier scan over the change: no account name, hostname or real-machine path.
 - **Not done, and why:** the modes (F6-4) and `request_permissions` (F6-5); PowerShell is not parsed (choice 5);
   operands after a `cd` are resolved against the workdir, not re-based (not taken above).
+
+**2026-10-19 — F6-4 made executable: the modes** (the owner's word of 2026-10-19, "committed, proceed", after F6-3's
+commit `74a78ed`). *Approved as written on the owner's word of 2026-10-19 ("Approve as written"), with 3a and 4a,
+the owner's choices of the same day.* It carries out F6 decision 1's F6-4 and 0005-MADR's ACP modes, and adds what they
+leave open: decisions 1 to 10 below.
+
+**The facts,** measured on 2026-10-19 against `main` `74a78ed`, grok-build `2bdd1d6a` and Kilo `2a1903f291`:
+
+- **0005-MADR's ACP modes** (`0005-MADR-v1-feature-scope.md:218-227`): `default`, read-only tools allowed, edits and
+  bash asking; `accept-edits`, edits allowed, bash asking; `plan`, read-only, left through `request_permission`
+  carrying the plan; `bypass`, "no prompts, which is Pi's behaviour", advertised only when `permissions.allowBypass`
+  is set; a `current_mode_update` on every change. `:629`: `permissions.allowBypass` defaults to `false`. `:301` and
+  `:645`: `--mode` is a 1.0 global flag, gobble's ACP mode id.
+- **gobble today:** two modes, `default` and `plan` (`acpserver/modes.go:15-35`), not persisted, "Pi has no mode
+  entry" (`:62`); `setMode` sends `current_mode_update` (`:63-75`); `exit_plan_mode`'s approval returns to `default`
+  (`:232`). Plan mode refuses, after the rules, a call that is not read-only or that would ask, and a deny is the
+  rule's (`planPolicy`, F6-2a). `/mode` lists `default, plan` (`acpserver/commands.go:398-405`; the `mode.*` keys).
+  There is no `--mode` flag (`internal/cli/flags.go`), and no `permissions.allowBypass` key.
+- **grok-build:** `acceptEdits` appends an allow for edits, and `bypassPermissions` a catch-all allow, each a
+  "synthetic" rule, and "synthetics are fallbacks", explicit rules deciding first
+  (`crates/codegen/xai-grok-permission-rules/src/resolution.rs:41-66`, `:593-594`); a managed policy can block bypass
+  (`:41-48`); an untrusted folder's `defaultMode` is dropped (`:595`); edits of hook roots, git hooks, `.ssh`, startup
+  files and its own configuration still ask in `acceptEdits` (`shell_access.rs:376-439`).
+- **Kilo:** plan mode's edit restrictions are a ceiling, merged after the user's rules so that no allow reaches past
+  them (`packages/opencode/src/kilocode/agent/index.ts:290-305`, `:530-545`).
+
+**The decisions:**
+
+1. **Four modes,** with ACP ids `default`, `accept-edits`, `plan` and `bypass`, in that order, each with a name and a
+   description; `bypass` is offered, and settable, only when `permissions.allowBypass` is true.
+2. **`permissions.allowBypass`:** a boolean, `false` by default, global only, so a project's file never sets it (a
+   project cannot unlock bypass for itself), read when a session starts; its template line says what it unlocks.
+3. **`accept-edits`** (*the owner's choice of 2026-10-19: 3a, "Your rules still win"*): an edit is a call to `write`, `edit`, `move`, `copy` or `mkdir` (and a
+   plain shell `mv`, `cp` or `mkdir`, which runs as one, F6-3 decision 9); a delete still asks (F6-2 decision 5), bash
+   still asks, and a path outside the workspace still asks by `external_directory`.
+   - **3a, recommended:** the mode changes the defaults only: an edit no rule decides is allowed, and a rule the user
+     wrote still decides, an `ask: edit(src/**)` asking (grok-build's "synthetics are fallbacks").
+   - **3b:** the mode allows an edit whatever a rule asks; only a deny rule and gobble's limits hold.
+4. **`bypass`** (*the owner's choice of 2026-10-19: 4a, "Limits still ask"*): every question a rule, a default or `external_directory` asks is allowed without
+   asking; a deny rule still refuses, a hidden tool stays hidden, and the repeated-call question, which approves no
+   write, is still asked.
+   - **4a, recommended:** gobble's limits still ask (a write to the configuration paths, a delete): F6-2 decision 5's
+     "no rule, no always and no `--yes`" lifts them, and bypass is one more answer that does not.
+   - **4b:** bypass answers the limits' questions too, Pi's "no prompts"; the protected paths are still refused.
+5. **`plan`'s ceiling,** as F6-2a built it, named: no rule and no mode widens it; a call that is not read-only, or
+   that would ask, is refused, `exit_plan_mode` being the way out.
+6. **The mode's life:** set by `session/set_mode`, `/mode`, `/plan`, `exit_plan_mode` and `--mode`; not saved in the
+   session file (Pi has no mode entry), so a loaded or resumed session starts in `default`, or in `--mode`'s; a
+   `current_mode_update` on every change, the start's included.
+7. **`--mode <id>`** (0005-MADR's global flag): the run's sessions start in that mode; `bypass` without
+   `allowBypass` is a usage error naming the key; it applies to print mode, the line view and `gobble acp`.
+8. **Provenance:** the decision log gains the session's mode; a call a mode allowed is logged with its rule as
+   `mode accept-edits` or `mode bypass`, and a question carries the rule that asked, as now.
+9. **`/mode`** lists the session's modes; its messages are the `mode.*` keys, unchanged in wording.
+10. **Unchanged:** the rules, the stores, the limits' marks, `--yes`, print mode's answers.
+
+**F6-4's steps:**
+
+1. **`internal/config`:** `permissions.allowBypass`, its template line and the schema.
+2. **`acpserver`:** the four modes and their offer; `SessionSettings.AllowBypass`; the start mode
+   (`Override.Mode`); `accept-edits`' defaults and `bypass`'s answers in `planPolicy` (decisions 3, 4, 8); `/mode`.
+3. **`internal/cli`:** `--mode`, checked against `allowBypass`; the session settings' `AllowBypass`.
+4. **Records:** this plan's execution record; 0005-MADR's modes and `allowBypass` rows marked built;
+   `docs/README.md`; `docs/architecture.md`; the root README.
+
+**F6-4's tests,** each seen failing on a scratch copy: the modes offered with and without `allowBypass`, and `bypass`
+refused without it by `set_mode`, `/mode` and `--mode`; a project's `allowBypass` refused; `accept-edits` allowing each
+edit tool and a shell `mv`, still asking for a delete, bash, an outside path and a configuration path, and decision 3
+as chosen against an `ask` rule; `bypass` answering a rule's, a default's and `external_directory`'s question, keeping
+a deny, a hidden tool and the repeated-call question, and decision 4 as chosen for the limits; plan's ceiling over an
+allow rule in each other mode's place; `--mode` starting a session with its `current_mode_update`; a loaded session
+starting in `default`; the log's mode.
+
+**F6-4's gates:** as F6-3's.
+
+**Not taken:** grok-build's `dontAsk` and classifier modes; a `defaultMode` setting, which `--mode` covers for a run;
+saving the mode in the session file, which Pi does not; a managed policy that blocks bypass, which `allowBypass` being
+global-only stands in for.
