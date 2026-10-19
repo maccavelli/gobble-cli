@@ -237,25 +237,36 @@ func (c *PersonalityShowCmd) Run(e *runEnv) error {
 }
 
 // Run checks the personalities and the prompts, prints each problem, and
-// exits 1 when there is one. A project's personalities are reported as
-// waiting for trust, which is no problem.
+// exits 1 when there is one. A trusted project's personality files are
+// checked too; an untrusted project's are reported as held back, which is
+// no problem (0005-PLAN F6-1 decision 8).
 func (*PersonalityCheckCmd) Run(e *runEnv) error {
 	dir, err := personalitiesDir()
 	if err != nil {
 		return err
 	}
 	set, errs := personality.LoadSet(dir)
-	prompts, perrs := loadPrompts(filepath.Join(dir, personality.PromptsDir), builtinOptions(e.processSettings("").Settings))
+	o := builtinOptions(e.processSettings("").Settings)
+	prompts, perrs := loadPrompts(filepath.Join(dir, personality.PromptsDir), o)
 	errs = append(errs, perrs...)
+	var held string
+	if cwd, err := os.Getwd(); err == nil {
+		if p := filepath.Join(cwd, ".gobble", "personalities"); isDir(p) {
+			if _, d := e.projectTrust(cwd); d.Trusted {
+				_, perrs := set.WithProject(p)
+				project, qerrs := loadPrompts(filepath.Join(p, personality.PromptsDir), o)
+				errs = append(append(errs, perrs...), qerrs...)
+				prompts.count += project.count
+			} else {
+				held = fmt.Sprintf("%s: %s\n", p, sysprompt.TrustNote)
+			}
+		}
+	}
 	var b strings.Builder
 	for _, err := range errs {
 		b.WriteString(err.Error() + "\n")
 	}
-	if cwd, err := os.Getwd(); err == nil {
-		if p := filepath.Join(cwd, ".gobble", "personalities"); isDir(p) {
-			fmt.Fprintf(&b, "%s: %s\n", p, sysprompt.TrustNote)
-		}
-	}
+	b.WriteString(held)
 	changed := 0
 	for _, info := range set.Infos() {
 		if info.Source != "" {

@@ -232,3 +232,27 @@ There is no humor level 2. The levels are 1, 3, 4 and 5.
 ## humor.unknown
 
 Unknown humor level {level}. The levels are 1, 3, 4 and 5.
+
+## trust.untrusted
+
+this project is not trusted: its .gobble files and skills are not loaded; gobble trust trusts it
+
+## trust.current
+
+This project, {root}, is {decision}.
+
+## trust.saved
+
+Saved: {path} is {state}. It applies from this project's next session.
+
+## trust.not_saved
+
+Nothing was saved.
+
+## trust.failed
+
+The decision was not saved: {error}
+
+## trust.unavailable
+
+This agent cannot save a trust decision; gobble trust saves one.

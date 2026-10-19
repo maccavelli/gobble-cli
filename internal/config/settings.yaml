@@ -75,6 +75,19 @@
 # sessionDir: ""
 
 # ---------------------------------------------------------------------
+# Projects
+# ---------------------------------------------------------------------
+
+# Whether a project gobble has no saved decision for is trusted: ask,
+# always or never. A trusted project's own files load: its
+# .gobble/settings.yaml, SYSTEM.md, skills, prompts and personalities.
+# With ask, gobble's terminal asks; print mode, gobble acp and gobble
+# config cannot, so there it is not trusted. gobble trust and gobble
+# untrust save a decision, and --approve or --no-approve decide one
+# run. Only this file can set it, never a project's.
+# defaultProjectTrust: ask
+
+# ---------------------------------------------------------------------
 # Personality
 # ---------------------------------------------------------------------
 

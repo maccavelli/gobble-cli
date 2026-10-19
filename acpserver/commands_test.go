@@ -74,7 +74,7 @@ func TestEveryAdvertisedCommandExecutes(t *testing.T) {
 	}
 	for _, name := range names {
 		if !strings.Contains(name, "/") && !slices.Contains([]string{"help", "compact", "usage", "context", "session", "model", "thinking", "mode", "plan", "name", "fork", "clone", "todos",
-			"personality"}, name) {
+			"personality", "trust"}, name) {
 			t.Errorf("unexpected command %s", name)
 		}
 	}

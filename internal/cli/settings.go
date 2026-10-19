@@ -38,13 +38,18 @@ func parseOverrides(args []string) ([]config.Override, error) {
 }
 
 // settingsOptions are Resolve's options for cwd: the global file, cwd's
-// project file, and --set. No project is trusted until 0005-PLAN F6.
+// project file, applied when the project is trusted (0005-PLAN F6-1), and
+// --set.
 func (e *runEnv) settingsOptions(cwd string) (config.Options, error) {
 	d, _, err := systemDirs()
 	if err != nil {
 		return config.Options{}, failf("%v", err)
 	}
-	return config.Options{ConfigDir: d.Config, Cwd: cwd, Overrides: e.overrides}, nil
+	trusted := func(string) bool {
+		_, d := e.projectTrust(cwd)
+		return d.Trusted
+	}
+	return config.Options{ConfigDir: d.Config, Cwd: cwd, Overrides: e.overrides, Trusted: trusted}, nil
 }
 
 // processSettings are the process keys' settings (0018-MADR D16): resolved

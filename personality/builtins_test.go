@@ -31,8 +31,11 @@ var statusKeys = []Key{
 var spinnerKeys = []Key{TurnWorking, TurnSlow, TurnVerySlow}
 
 // leftBoring are the keys a built-in personality leaves to boring on
-// purpose, by personality (0022-MADR D17). Today none.
-var leftBoring = map[string][]Key{}
+// purpose, by personality (0022-MADR D17): trust's, whose facts a person
+// acts on to let a project's files load (0005-PLAN F6-1).
+var leftBoring = map[string][]Key{Dry: trustKeys, Snarky: trustKeys, Bombastic: trustKeys}
+
+var trustKeys = []Key{TrustUntrusted, TrustCurrent, TrustSaved, TrustNotSaved, TrustFailed, TrustUnavailable}
 
 // The words no personality but bombastic aims at the user, and the
 // profanity each allows (0022-MADR D7 to D9, D17). The lists are a cheap

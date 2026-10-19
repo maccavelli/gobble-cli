@@ -137,10 +137,6 @@ func TestLaterFlagsAreRejected(t *testing.T) {
 			}
 		})
 	}
-	r := runMain(t, nil, "--no-approve", "x")
-	if r.code != ExitUsage || !strings.Contains(r.stderr, "--approve is not yet available (0005-PLAN F6)") {
-		t.Fatalf("--no-approve: exit %d, stderr %q", r.code, r.stderr)
-	}
 }
 
 func cmpOr(a, b string) string {

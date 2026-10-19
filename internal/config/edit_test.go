@@ -268,6 +268,9 @@ func TestCheck(t *testing.T) {
 		{"smallModel", "openai/", LayerGlobal, "smallModel: " + smallModelRule},
 		{"smallModel", "ollama/llama3", LayerGlobal, "smallModel: " + smallModelRule},
 		{"smallModel", "openai/gpt-5-nano", LayerProject, "smallModel: only the global settings file can set this"},
+		// 0005-PLAN F6-1 decision 4: ask, always or never, global-only.
+		{"defaultProjectTrust", "yes", LayerGlobal, "defaultProjectTrust: must be one of ask, always, never"},
+		{"defaultProjectTrust", "always", LayerProject, "defaultProjectTrust: only the global settings file can set this"},
 	}
 	for _, b := range bad {
 		if err := Check(b.path, b.value, b.layer); err == nil || err.Error() != b.want {
@@ -278,7 +281,8 @@ func TestCheck(t *testing.T) {
 		path, value string
 		layer       Layer
 	}{{"shellPath", "/bin/bash", LayerGlobal}, {"steeringMode", "all", LayerProject}, {"externalEditor", "", LayerProject},
-		{"smallModel", "openai/gpt-5-nano", LayerGlobal}, {"smallModel", "grok/grok-4.6", LayerGlobal}, {"smallModel", "", LayerGlobal}} {
+		{"smallModel", "openai/gpt-5-nano", LayerGlobal}, {"smallModel", "grok/grok-4.6", LayerGlobal}, {"smallModel", "", LayerGlobal},
+		{"defaultProjectTrust", "never", LayerGlobal}} {
 		if err := Check(g.path, g.value, g.layer); err != nil {
 			t.Errorf("Check(%s, %s, %v) = %v", g.path, g.value, g.layer, err)
 		}

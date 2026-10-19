@@ -51,7 +51,7 @@ type PromptOptions struct {
 // session.
 func (a *Agent) sections(s *liveSession) []sysprompt.Section {
 	o := a.prompt
-	system, appended, waiting := sysprompt.SystemFiles(o.ConfigDir, s.cwd)
+	system, appended, waiting := sysprompt.SystemFiles(o.ConfigDir, s.cwd, s.trust.Trusted)
 	if o.System != "" {
 		system = o.System
 	}
@@ -60,9 +60,10 @@ func (a *Agent) sections(s *liveSession) []sysprompt.Section {
 	}
 	var files []sysprompt.File
 	diags := waiting
-	// A project's personalities wait for trust, as its SYSTEM.md does
-	// (0022-MADR D15; 0005-PLAN F6).
-	if p := filepath.Join(s.cwd, ".gobble", "personalities"); isDir(p) {
+	// An untrusted project's personalities are held back, as its SYSTEM.md
+	// is; a trusted one's are in the session's settings (0022-MADR D15;
+	// 0005-PLAN F6-1 decision 8).
+	if p := filepath.Join(s.cwd, ".gobble", "personalities"); isDir(p) && !s.trust.Trusted {
 		diags = append(diags, sysprompt.Diagnostic{Path: p, Message: sysprompt.TrustNote})
 	}
 	if !o.NoContextFiles {
@@ -95,20 +96,35 @@ func (a *Agent) sections(s *liveSession) []sysprompt.Section {
 	}
 	return sysprompt.Build(sysprompt.Options{Custom: system, Append: appended, Tools: names, Deferred: families,
 		ContextFiles: files, Skills: skills, Cwd: cmp.Or(o.cwd, s.cwd), GOOS: goos,
-		Personality: a.voice(s).Brief(), PersonalityRules: a.voice(s).Rules(), ToolsSection: o.ToolsSection, RulesSection: o.RulesSection})
+		Personality: a.voice(s).Brief(), PersonalityRules: a.voice(s).Rules(),
+		ToolsSection: cmp.Or(s.project.ToolsSection, o.ToolsSection), RulesSection: cmp.Or(s.project.RulesSection, o.RulesSection)})
 }
 
 // skills are the session's skills, found in 0005-MADR's order (Skill
-// discovery order (changed)): the config directory's skills/, then
-// ~/.agents/skills; the project's .gobble/skills and its .agents/skills,
-// from the cwd up to the repository root, wait for trust (0005-PLAN F6),
-// and the Pi bridge for F10. Each diagnostic is logged once per session.
+// discovery order (changed)): a trusted project's .gobble/skills and its
+// .agents/skills, from the cwd up to the repository root, then the config
+// directory's skills/, then ~/.agents/skills, the first of a name winning;
+// an untrusted project's are held back, each with a note (0005-PLAN F6-1
+// decision 8), and the Pi bridge waits for F10. Each diagnostic is logged
+// once per session.
 func (a *Agent) skills(s *liveSession) []skill.Skill {
 	o := a.prompt
 	if o.NoSkills {
 		return nil
 	}
+	// Home's own .agents/skills is the user's, never the project's, as Pi
+	// excludes it by the real home directory, whether or not it is read.
+	home := o.Home
+	if home == "" {
+		home, _ = os.UserHomeDir() //nolint:errcheck // with no home, none is excluded
+	}
+	project := sysprompt.ProjectSkillDirs(s.cwd, home)
 	var sources []skill.Source
+	if s.trust.Trusted {
+		for _, dir := range project {
+			sources = append(sources, skill.Source{Dir: dir, Agents: filepath.Base(filepath.Dir(dir)) == ".agents"})
+		}
+	}
 	if o.ConfigDir != "" {
 		sources = append(sources, skill.Source{Dir: filepath.Join(o.ConfigDir, "skills")})
 	}
@@ -120,28 +136,30 @@ func (a *Agent) skills(s *liveSession) []skill.Skill {
 	for _, d := range diags {
 		notes = append(notes, sysprompt.Diagnostic{Path: d.Path, Message: d.Message, Winner: d.Winner})
 	}
-	// Home's own .agents/skills is the user's, never the project's, as Pi
-	// excludes it by the real home directory, whether or not it is read.
-	home := o.Home
-	if home == "" {
-		home, _ = os.UserHomeDir() //nolint:errcheck // with no home, none is excluded
-	}
-	for _, dir := range projectSkillDirs(s.cwd, home) {
-		notes = append(notes, sysprompt.Diagnostic{Path: dir, Message: sysprompt.TrustNote})
+	if !s.trust.Trusted {
+		for _, dir := range project {
+			notes = append(notes, sysprompt.Diagnostic{Path: dir, Message: sysprompt.TrustNote})
+		}
 	}
 	a.note(s, notes)
 	return found
 }
 
-// templates are the session's prompt templates (0005-PLAN F3-3): the config
-// directory's prompts/; the project's .gobble/prompts waits for trust
-// (0005-PLAN F6), and the Pi bridge for F10. A template that has a
+// templates are the session's prompt templates (0005-PLAN F3-3): a trusted
+// project's .gobble/prompts, then the config directory's prompts/, the
+// first of a name winning; an untrusted project's are held back with a
+// note (0005-PLAN F6-1 decision 8), and the Pi bridge waits for F10. A
+// template that has a
 // built-in command's name is left out, logged in Pi's collision wording
 // with the built-in as the winner (F3-3 deviation 1). Each diagnostic is
 // logged once per session.
 func (a *Agent) templates(s *liveSession) []sysprompt.Template {
 	o := a.prompt
 	var dirs []string
+	project := filepath.Join(s.cwd, ".gobble", "prompts")
+	if s.trust.Trusted {
+		dirs = append(dirs, project)
+	}
 	if o.ConfigDir != "" {
 		dirs = append(dirs, filepath.Join(o.ConfigDir, "prompts"))
 	}
@@ -155,8 +173,8 @@ func (a *Agent) templates(s *liveSession) []sysprompt.Template {
 		}
 		out = append(out, t)
 	}
-	if p := filepath.Join(s.cwd, ".gobble", "prompts"); isDir(p) {
-		diags = append(diags, sysprompt.Diagnostic{Path: p, Message: sysprompt.TrustNote})
+	if isDir(project) && !s.trust.Trusted {
+		diags = append(diags, sysprompt.Diagnostic{Path: project, Message: sysprompt.TrustNote})
 	}
 	a.note(s, diags)
 	return out
@@ -180,40 +198,6 @@ func (a *Agent) expand(s *liveSession, text string) (string, bool) {
 }
 
 func isDir(p string) bool { info, err := os.Stat(p); return err == nil && info.IsDir() }
-
-// projectSkillDirs are the project's own skill directories that exist: its
-// .gobble/skills, and each .agents/skills from cwd up to the repository
-// root, or the filesystem root outside one, but not home's, which is the
-// user's (Pi's collectAncestorAgentsSkillDirs, package-manager.ts:468-487).
-func projectSkillDirs(cwd, home string) []string {
-	var out []string
-	if p := filepath.Join(cwd, ".gobble", "skills"); isDir(p) {
-		out = append(out, p)
-	}
-	stop := ""
-	for d := filepath.Clean(cwd); ; {
-		if _, err := os.Stat(filepath.Join(d, ".git")); err == nil {
-			stop = d
-			break
-		}
-		parent := filepath.Dir(d)
-		if parent == d {
-			break
-		}
-		d = parent
-	}
-	for d := filepath.Clean(cwd); ; {
-		if p := filepath.Join(d, ".agents", "skills"); isDir(p) && (home == "" || filepath.Clean(d) != filepath.Clean(home)) {
-			out = append(out, p)
-		}
-		parent := filepath.Dir(d)
-		if d == stop || parent == d {
-			break
-		}
-		d = parent
-	}
-	return out
-}
 
 // note logs each diagnostic once per session.
 func (a *Agent) note(s *liveSession, diags []sysprompt.Diagnostic) {

@@ -30,6 +30,7 @@ defaultThinkingLevel: off
 steeringMode: all
 followUpMode: all
 sessionDir: ""
+defaultProjectTrust: ask
 personality: dry
 bombasticAccepted: false
 compaction:
@@ -78,7 +79,7 @@ func TestRenderOrigin(t *testing.T) {
 		"followUpMode: all # from --set",
 		"  stopGraceMs: 100 # from " + global + ":3 (global)",
 		`externalEditor: "" # default`,
-		"# not applied: " + project + ": project settings apply once the project is trusted (0005-PLAN F6)",
+		"# not applied: " + project + ": project settings apply once the project is trusted (gobble trust)",
 		"#   it would set: externalEditor",
 	} {
 		if !strings.Contains(got, line+"\n") {

@@ -13,6 +13,7 @@ import (
 	"github.com/maccavelli/gobble-cli/compaction"
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/llm/catalog"
+	"github.com/maccavelli/gobble-cli/permission"
 	"github.com/maccavelli/gobble-cli/personality"
 	"github.com/maccavelli/gobble-cli/session"
 )
@@ -80,6 +81,14 @@ type SessionSettings struct {
 	// BombasticAccepted says the user has agreed to a level-5 personality,
 	// so it is not asked (0022-MADR D10).
 	BombasticAccepted bool
+	// ProjectRoot is the session's project root, and Trust whether it is
+	// trusted, with the step that decided; zero is not trusted, told no
+	// one (0005-PLAN F6-1 decisions 1 and 2).
+	ProjectRoot string
+	Trust       permission.TrustDecision
+	// Project is a trusted project's own overrides; nil is none
+	// (decision 8).
+	Project *ProjectOverrides
 }
 
 // sessionSettings are the settings for a session in cwd: Options.Settings',
@@ -107,7 +116,11 @@ func (a *Agent) sessionSettings(cwd string) SessionSettings {
 // voiceOf is the session's voice: its settings' personality, or boring,
 // with a log line, for a name no personality has (0022-PLAN P2).
 func (a *Agent) voiceOf(ss SessionSettings) *personality.Voice {
-	v, err := a.newVoice(ss.Personality)
+	set := a.personalities
+	if ss.Project != nil && ss.Project.Personalities != nil {
+		set = ss.Project.Personalities
+	}
+	v, err := set.New(personality.Options{Name: ss.Personality})
 	if err != nil {
 		a.logger.Warn("personality", slog.String("error", err.Error()))
 		return nil

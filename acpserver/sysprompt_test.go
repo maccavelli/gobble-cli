@@ -267,7 +267,7 @@ func TestPromptOptionsAndTrust(t *testing.T) {
 		strings.Contains(sys, "Project rule.") || strings.Contains(sys, "Untrusted.") || strings.Contains(sys, "<rules>") {
 		t.Fatalf("system prompt %q", sys)
 	}
-	if n := strings.Count(logs.String(), "needs a trusted project"); n != 1 {
+	if n := strings.Count(logs.String(), "the project is not trusted"); n != 1 {
 		t.Fatalf("the trust note was logged %d times:\n%s", n, logs.String())
 	}
 	flagged := llmtest.NewScript(llmtest.Text("c"))

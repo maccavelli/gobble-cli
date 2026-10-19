@@ -24,6 +24,7 @@ import (
 	"github.com/maccavelli/gobble-cli/internal/fsx"
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/llm/catalog"
+	"github.com/maccavelli/gobble-cli/permission"
 	"github.com/maccavelli/gobble-cli/personality"
 	sysprompt "github.com/maccavelli/gobble-cli/prompt"
 	"github.com/maccavelli/gobble-cli/session"
@@ -110,6 +111,8 @@ type Options struct {
 	// Title is the small model that names a new session from its first
 	// prompt; zero names none (0005-PLAN F5-5).
 	Title TitleOptions
+	// Trust is /trust's store; zero saves nothing (0005-PLAN F6-1).
+	Trust TrustOptions
 }
 
 // Agent is gobble's acp.Agent.
@@ -138,6 +141,8 @@ type Agent struct {
 	compactionPrompts compaction.Prompts
 	// titles is the small model that names sessions.
 	titles TitleOptions
+	// trust is /trust's store.
+	trust TrustOptions
 
 	mu       sync.Mutex
 	conn     *acp.AgentSideConnection
@@ -220,6 +225,14 @@ type liveSession struct {
 	titleCancel context.CancelFunc
 	titleDone   chan struct{}
 	nameMu      sync.Mutex
+	// root is the session's project root, trust whether it is trusted, and
+	// project a trusted project's overrides, all fixed when the session
+	// starts; trustNoted says an untrusted project's notice was sent
+	// (0005-PLAN F6-1).
+	root       string
+	trust      permission.TrustDecision
+	project    ProjectOverrides
+	trustNoted bool
 }
 
 var (
@@ -233,7 +246,7 @@ func New(opts Options) *Agent {
 	a := &Agent{version: opts.Version, newID: opts.NewID, provider: opts.Provider, models: opts.Models, info: opts.ModelInfo,
 		override: opts.Override, tools: opts.Tools, store: opts.Store, now: opts.Now, mcp: opts.MCP, logger: opts.Logger, prompt: opts.Prompt,
 		settings: opts.Settings, auth: opts.Auth, save: opts.SaveSetting, personalities: opts.Personalities, compactionPrompts: opts.CompactionPrompts, titles: opts.Title,
-		sessions: map[acp.SessionId]*liveSession{}}
+		trust: opts.Trust, sessions: map[acp.SessionId]*liveSession{}}
 	if a.logger == nil {
 		a.logger = slog.New(slog.DiscardHandler)
 	}
@@ -391,7 +404,8 @@ func (a *Agent) NewSession(ctx context.Context, p acp.NewSessionRequest) (acp.Ne
 	s := &liveSession{id: acp.SessionId(id), cwd: p.Cwd, dirs: dirs, log: log, tree: session.NewTree(nil),
 		think: cmp.Or(a.override.Thinking, ss.Thinking), model: cmp.Or(a.override.Model, a.models().Default), mode: modeDefault,
 		queue: sessionQueue(ss), compaction: ss.Compaction, cache: cacheOf(ss.CacheRetention), retry: ss.Retry,
-		autoCompactOff: ss.AutoCompactionOff, voice: a.voiceOf(ss), insultsAccepted: ss.BombasticAccepted}
+		autoCompactOff: ss.AutoCompactionOff, voice: a.voiceOf(ss), insultsAccepted: ss.BombasticAccepted,
+		root: ss.ProjectRoot, trust: ss.Trust, project: projectOf(ss.Project)}
 	if len(forked) > 0 {
 		for _, e := range forked {
 			if err := log.Append(ctx, e); err != nil {
@@ -441,7 +455,7 @@ func (a *Agent) restore(s *liveSession, entries []session.Entry) {
 		s.model = st.model
 	}
 	if st.personality != "" {
-		v, err := a.newVoice(st.personality)
+		v, err := a.newVoice(s, st.personality)
 		if err != nil {
 			a.logger.Warn("personality: the session's is not kept", slog.String("error", err.Error()))
 			return
@@ -495,6 +509,7 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 		return acp.PromptResponse{}, err
 	}
 	defer release()
+	a.noteTrust(turnCtx, conn, s)
 	// A skill, or a template, is expanded into the user's message, as Pi
 	// expands them; any other command runs, a built-in or unknown. No
 	// template has a built-in's name (Agent.templates), so a built-in
@@ -574,7 +589,7 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 	if w.err != nil {
 		return acp.PromptResponse{}, appendFailed(w.err)
 	}
-	tools := append(slices.Clip(a.tools), a.mcpTools(turnCtx, s.mcp)...)
+	tools := append(a.toolsOf(s), a.mcpTools(turnCtx, s.mcp)...)
 	if a.modeOf(s) == modePlan {
 		tools = append(tools, exitPlan{a: a, conn: conn, s: s})
 	}
@@ -896,7 +911,8 @@ func (a *Agent) open(ctx context.Context, id acp.SessionId, cwd string, extra []
 	// The history's thinking level wins: restore sets it (0018-MADR D17).
 	s := &liveSession{id: id, cwd: cwd, dirs: dirs, log: log, think: thinkingOff, model: a.models().Default, mode: modeDefault,
 		queue: sessionQueue(ss), compaction: ss.Compaction, cache: cacheOf(ss.CacheRetention), retry: ss.Retry,
-		autoCompactOff: ss.AutoCompactionOff, voice: a.voiceOf(ss), insultsAccepted: ss.BombasticAccepted}
+		autoCompactOff: ss.AutoCompactionOff, voice: a.voiceOf(ss), insultsAccepted: ss.BombasticAccepted,
+		root: ss.ProjectRoot, trust: ss.Trust, project: projectOf(ss.Project)}
 	a.restore(s, log.Entries())
 	// The run's override wins over the history's choice (0005-PLAN F4-2c).
 	if err := a.applyOverride(ctx, s); err != nil {

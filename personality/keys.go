@@ -69,6 +69,14 @@ const (
 	PersonalityDeclined Key = "personality.declined"
 	HumorTwo            Key = "humor.two"
 	HumorUnknown        Key = "humor.unknown"
+
+	// /trust, and an untrusted project's notice (0005-PLAN F6-1).
+	TrustUntrusted   Key = "trust.untrusted"
+	TrustCurrent     Key = "trust.current"
+	TrustSaved       Key = "trust.saved"
+	TrustNotSaved    Key = "trust.not_saved"
+	TrustFailed      Key = "trust.failed"
+	TrustUnavailable Key = "trust.unavailable"
 )
 
 // Keys are every key, in the order above.
@@ -82,6 +90,7 @@ var Keys = []Key{
 	NameNormalized, NameSet, ForkNone, ForkList, ForkNothingBefore, ForkNoMessage, ForkDone, CloneNone, CloneDone,
 	TodosNone, CompactStart, CompactFailed, CompactDone,
 	PersonalityCurrent, PersonalityList, PersonalitySet, PersonalityUnknown, PersonalityDeclined, HumorTwo, HumorUnknown,
+	TrustUntrusted, TrustCurrent, TrustSaved, TrustNotSaved, TrustFailed, TrustUnavailable,
 }
 
 // The lines a personality may put before an error or a warning in gobble's

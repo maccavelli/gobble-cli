@@ -13,7 +13,7 @@ import (
 )
 
 func TestPermissionLine(t *testing.T) {
-	line, keys := permissionLine(acpclient.PermissionRequest{Tool: acpclient.ToolCall{Title: "write \x1b[31ma.txt"},
+	line, keys, _ := permissionLine(acpclient.PermissionRequest{Tool: acpclient.ToolCall{Title: "write \x1b[31ma.txt"},
 		Options: []acpclient.PermissionOption{{ID: "ok", Kind: "allow_once"}, {ID: "no", Kind: "reject_once"}}})
 	want := strings.Join(strings.Fields(term.Sanitize("write \x1b[31ma.txt")), " ") + "?  [y] allow once  [n] deny  [c] cancel "
 	if line != want || strings.Contains(line, "\x1b") {

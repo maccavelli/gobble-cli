@@ -69,19 +69,28 @@ func (a *Agent) voice(s *liveSession) *personality.Voice {
 	return s.voice
 }
 
-// newVoice is the named personality's voice: a built-in, one of boring's
-// names, or one of Options.Personalities.
-func (a *Agent) newVoice(name string) (*personality.Voice, error) {
-	return a.personalities.New(personality.Options{Name: name})
+// setOf is the personalities s may take: Options.Personalities, with its
+// trusted project's files over them (0005-PLAN F6-1 decision 8).
+func (a *Agent) setOf(s *liveSession) *personality.Set {
+	if s.project.Personalities != nil {
+		return s.project.Personalities
+	}
+	return a.personalities
+}
+
+// newVoice is the named personality's voice for s: a built-in, one of
+// boring's names, or one of setOf's.
+func (a *Agent) newVoice(s *liveSession, name string) (*personality.Voice, error) {
+	return a.setOf(s).New(personality.Options{Name: name})
 }
 
 // namedVoice is newVoice of a name as the user typed it: as it is, or in
 // lower case.
-func (a *Agent) namedVoice(name string) (*personality.Voice, error) {
-	v, err := a.newVoice(name)
+func (a *Agent) namedVoice(s *liveSession, name string) (*personality.Voice, error) {
+	v, err := a.newVoice(s, name)
 	if err != nil {
 		if low := strings.ToLower(name); low != name {
-			return a.newVoice(low)
+			return a.newVoice(s, low)
 		}
 	}
 	return v, err
@@ -185,7 +194,7 @@ func (a *Agent) settleVoice(ctx context.Context, conn *acp.AgentSideConnection, 
 	if err != nil || ok {
 		return err
 	}
-	dry, err := a.newVoice(personality.Default)
+	dry, err := a.newVoice(s, personality.Default)
 	if err != nil {
 		return err
 	}
@@ -210,16 +219,16 @@ func (a *Agent) cmdPersonality(ctx context.Context, t *cmdTurn, arg string) erro
 		var b strings.Builder
 		b.WriteString(t.text(personality.PersonalityCurrent, personality.Args{argName: t.voice.Name()}) + "\n")
 		b.WriteString(t.text(personality.PersonalityList, nil) + "\n")
-		for _, info := range a.personalities.Infos() {
+		for _, info := range a.setOf(t.s).Infos() {
 			fmt.Fprintf(&b, "  %s (%d) — %s\n", info.Name, info.Level, info.Summary)
 		}
 		t.say(b.String())
 		return nil
 	}
-	v, err := a.namedVoice(arg)
+	v, err := a.namedVoice(t.s, arg)
 	if err != nil {
 		t.say(t.text(personality.PersonalityUnknown, personality.Args{argName: strconv.Quote(arg),
-			argNames: strings.Join(a.personalities.Names(), ", ")}))
+			argNames: strings.Join(a.setOf(t.s).Names(), ", ")}))
 		return nil //nolint:nilerr // the unknown name is the command's answer (above)
 	}
 	return a.choose(ctx, t, v)
@@ -239,7 +248,7 @@ func (a *Agent) cmdHumor(ctx context.Context, t *cmdTurn, arg string) error {
 		t.say(t.text(personality.HumorUnknown, personality.Args{argLevel: strconv.Quote(arg)}))
 		return nil
 	}
-	v, err := a.newVoice(name)
+	v, err := a.newVoice(t.s, name)
 	if err != nil {
 		return err
 	}
@@ -283,9 +292,9 @@ func (a *Agent) extSetPersonality(ctx context.Context, params jsontext.Value) (a
 	if err != nil {
 		return nil, err
 	}
-	v, err := a.namedVoice(p.Name)
+	v, err := a.namedVoice(s, p.Name)
 	if err != nil || p.Name == "" {
-		return nil, invalidParams(s.id, fmt.Sprintf("unknown personality %q; the personalities are %s", p.Name, strings.Join(a.personalities.Names(), ", ")))
+		return nil, invalidParams(s.id, fmt.Sprintf("unknown personality %q; the personalities are %s", p.Name, strings.Join(a.setOf(s).Names(), ", ")))
 	}
 	conn := a.connection()
 	after, _, err := a.switchPersonality(ctx, conn, s, newUpdates(ctx, conn, s.id), v)

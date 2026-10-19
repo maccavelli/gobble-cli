@@ -108,7 +108,7 @@ func (a *Agent) runCompaction(ctx context.Context, s *liveSession, prep *compact
 		a.mu.Unlock()
 	}()
 	res, err := compaction.Compact(ctx, prep, m, compaction.Request{Instructions: instructions, PlanMode: a.modeOf(s) == modePlan,
-		Prompts: a.compactionPrompts})
+		Prompts: a.compactionPromptsOf(s)})
 	if err != nil {
 		return compaction.Result{}, 0, err
 	}

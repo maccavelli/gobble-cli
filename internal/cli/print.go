@@ -156,6 +156,7 @@ func (s *printSink) writeJSON(v any) {
 // mapping the outcome to D10's codes.
 func runPrint(e *runEnv, c *ChatCmd, p Prompt, cwd, base string) (err error) {
 	ctx := e.ctx
+	e.noteUntrusted(cwd)
 	// Nobody can answer a question: tool calls are declined, and the
 	// level-5 personality's question too (0022-MADR D10).
 	conn, err := e.startAgentWith(ctx, e.printPermission)

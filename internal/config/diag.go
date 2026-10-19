@@ -44,7 +44,7 @@ const (
 	textUnknown        = "not used by this gobble"
 	textGlobalOnly     = "only the global settings file can set this"
 	textCredential     = "credentials go in auth.json, not settings.yaml"
-	textUntrusted      = "project settings apply once the project is trusted (0005-PLAN F6)"
+	textUntrusted      = "project settings apply once the project is trusted (gobble trust)"
 )
 
 func errorAt(file string, line int, path, text string) Diagnostic {

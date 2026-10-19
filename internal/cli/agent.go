@@ -85,6 +85,12 @@ func (e *runEnv) agentOptions() acpserver.Options {
 		Settings: func(cwd string) acpserver.SessionSettings {
 			ss := toSession(e.sessionSettings(cwd).Settings)
 			ss.Personality = e.personalityName(ss.Personality)
+			// The project's trust, and a trusted project's own overrides
+			// (0005-PLAN F6-1).
+			ss.ProjectRoot, ss.Trust = e.projectTrust(cwd)
+			if ss.Trust.Trusted {
+				ss.Project = e.projectOverrides(cwd)
+			}
 			return ss
 		},
 		// An agent method per provider that takes a credential, answered from
@@ -99,6 +105,8 @@ func (e *runEnv) agentOptions() acpserver.Options {
 		CompactionPrompts: e.prompts().compaction,
 		// The small model that names a new session (0005-PLAN F5-5).
 		Title: e.titleOptions(),
+		// /trust saves to trust.json, as gobble trust does (0005-PLAN F6-1).
+		Trust: trustOptions(),
 	}
 }
 
@@ -197,7 +205,11 @@ func (e *runEnv) sessionStore() session.Store {
 // Tests replace it with a scripted agent.
 var agentServe = func(e *runEnv) acpclient.ServeFunc {
 	return func(ctx context.Context, in io.Reader, out io.Writer) error {
-		return acpserver.Serve(ctx, in, out, acpserver.ServeOptions{Agent: e.agentOptions(), Logger: e.log()})
+		o := e.agentOptions()
+		// gobble's own modes tell the user of an untrusted project
+		// themselves (0005-PLAN F6-1 decision 9).
+		o.Trust.Quiet = true
+		return acpserver.Serve(ctx, in, out, acpserver.ServeOptions{Agent: o, Logger: e.log()})
 	}
 }
 

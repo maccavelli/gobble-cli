@@ -51,7 +51,7 @@ type SharedFlags struct {
 	NoSkills           bool   `name:"no-skills" help:"Do not load skills."`
 
 	// Trust, approval and environment.
-	Approve bool     `negatable:"" help:"Approve tool calls without asking (--no-approve: always ask)."`
+	Approve bool     `negatable:"" help:"Trust the project's own files for this run (--no-approve: ignore them)."`
 	Yes     bool     `help:"Answer yes to confirmations."`
 	Offline bool     `help:"Make no network calls except to the model."`
 	Cwd     string   `complete:"dir" placeholder:"DIR" help:"Run as if started in DIR."`
@@ -76,7 +76,7 @@ const apiKeyLiteral = "--api-key takes -: a key on the command line shows in pro
 // (0008-MADR D12).
 var laterFlags = map[string]string{
 	"offline": plan0005X3,
-	"approve": plan0005F6, "yes": plan0005F6,
+	"yes":     plan0005F6,
 }
 
 // given is the set of flags named on the command line, by long name.

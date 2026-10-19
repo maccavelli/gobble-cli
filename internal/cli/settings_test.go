@@ -18,6 +18,7 @@ import (
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/llm/llmtest"
 	"github.com/maccavelli/gobble-cli/llm/provider"
+	"github.com/maccavelli/gobble-cli/permission"
 	"github.com/maccavelli/gobble-cli/personality"
 	"github.com/maccavelli/gobble-cli/session"
 	"github.com/maccavelli/gobble-cli/session/jsonl"
@@ -150,12 +151,15 @@ func TestSessionSettingsReachAgent(t *testing.T) {
 			t.Error(err)
 		}
 	})
-	got := e.agentOptions().Settings(t.TempDir())
+	cwd := t.TempDir()
+	got := e.agentOptions().Settings(cwd)
 	want := acpserver.SessionSettings{
 		SteeringMode: "all", FollowUpMode: "all", Thinking: "low", CacheRetention: "long",
 		Compaction:     compaction.Settings{ReserveTokens: compaction.DefaultSettings.ReserveTokens, KeepRecentTokens: 100},
 		MCPStartupWait: 7 * time.Millisecond, MCPStopGrace: 8 * time.Millisecond, MCPStopTimeout: 9 * time.Millisecond,
 		Retry: llm.DefaultRetry, Personality: personality.Default,
+		// A project with no files that need trust is trusted (0005-PLAN F6-1).
+		ProjectRoot: cwd, Trust: permission.TrustDecision{Trusted: true, Source: permission.SourceNothing},
 	}
 	if got != want {
 		t.Fatalf("Settings = %+v, want %+v", got, want)

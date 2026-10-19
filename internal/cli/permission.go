@@ -10,44 +10,100 @@ import (
 	"github.com/maccavelli/gobble-cli/internal/cli/term"
 )
 
+// ACP's option kinds, as acpclient gives them.
+const (
+	kindAllowOnce    = "allow_once"
+	kindAllowAlways  = "allow_always"
+	kindRejectOnce   = "reject_once"
+	kindRejectAlways = "reject_always"
+)
+
 // permissionKeys are D16's keys, by ACP option kind, in the order shown.
 var permissionKeys = []struct {
 	key   byte
 	kind  string
 	label string
 }{
-	{'y', "allow_once", "allow once"},
-	{'a', "allow_always", "always"},
-	{'n', "reject_once", "deny"},
-	{'N', "reject_always", "never"},
+	{'y', kindAllowOnce, "allow once"},
+	{'a', kindAllowAlways, "always"},
+	{'n', kindRejectOnce, "deny"},
+	{'N', kindRejectAlways, "never"},
 }
 
 // ctrlC is Ctrl+C in raw mode.
 const ctrlC = 0x03
 
 // permissionLine is D16's one line: the call's title, then the keys of the
-// options offered, then [c] cancel. keys maps each shown key to its
-// option.
-func permissionLine(r acpclient.PermissionRequest) (string, map[byte]string) {
-	keys := map[byte]string{}
+// options offered, then [c] cancel. Where two options share a kind, as
+// trust's answers do, each option is listed by its name, [1] to [9], in
+// the order offered (0005-PLAN F6-1 decision 6); otherwise D16's keys, by
+// kind. keys maps each shown key to its option, and labels each option to
+// the word echoed when it is chosen.
+func permissionLine(r acpclient.PermissionRequest) (line string, keys map[byte]string, labels map[string]string) {
+	keys, labels = map[byte]string{}, map[string]string{}
 	var b strings.Builder
 	title := strings.Join(strings.Fields(term.Sanitize(r.Tool.Title)), " ")
 	if title == "" {
 		title = "Run the tool call"
 	}
 	fmt.Fprintf(&b, "%s?", title)
-	for _, k := range permissionKeys {
-		for _, o := range r.Options {
-			if o.Kind == k.kind {
-				if _, seen := keys[k.key]; !seen {
-					keys[k.key] = o.ID
-					fmt.Fprintf(&b, "  [%c] %s", k.key, k.label)
+	if kindsRepeat(r.Options) {
+		for i, o := range r.Options[:min(len(r.Options), 9)] {
+			key := byte('1' + i)
+			name := strings.Join(strings.Fields(term.Sanitize(o.Name)), " ")
+			keys[key], labels[o.ID] = o.ID, name
+			fmt.Fprintf(&b, "  [%c] %s", key, name)
+		}
+	} else {
+		for _, k := range permissionKeys {
+			for _, o := range r.Options {
+				if o.Kind == k.kind {
+					if _, seen := keys[k.key]; !seen {
+						keys[k.key], labels[o.ID] = o.ID, k.label
+						fmt.Fprintf(&b, "  [%c] %s", k.key, k.label)
+					}
 				}
 			}
 		}
 	}
 	b.WriteString("  [c] cancel ")
-	return b.String(), keys
+	return b.String(), keys, labels
+}
+
+// kindsRepeat reports whether two options share a kind.
+func kindsRepeat(opts []acpclient.PermissionOption) bool {
+	seen := map[string]bool{}
+	for _, o := range opts {
+		if seen[o.Kind] {
+			return true
+		}
+		seen[o.Kind] = true
+	}
+	return false
+}
+
+// chooseKey reads keys with read until one of keys is pressed, and gives
+// its option; c, Ctrl+C, the end of input and a read error give "", a
+// cancel. A key that is not shown is ignored.
+func chooseKey(keys map[byte]string, read func([]byte) (int, error)) string {
+	buf := make([]byte, 1)
+	for {
+		n, err := read(buf)
+		if err != nil || n == 0 || buf[0] == 'c' || buf[0] == ctrlC {
+			return ""
+		}
+		if id, ok := keys[buf[0]]; ok {
+			return id
+		}
+	}
+}
+
+// labelOf is the word echoed for the chosen option: its label, or cancel.
+func labelOf(labels map[string]string, id string) string {
+	if l, ok := labels[id]; ok && id != "" {
+		return l
+	}
+	return "cancel"
 }
 
 // askPermission is the line session's answer to session/request_permission
@@ -63,7 +119,7 @@ func (ls *lineSession) askPermission(ctx context.Context, r acpclient.Permission
 	if keysIn == nil {
 		return acpclient.PermissionAnswer{}
 	}
-	line, keys := permissionLine(r)
+	line, keys, labels := permissionLine(r)
 	errw := ls.e.out.err
 	if _, err := fmt.Fprint(errw, line); err != nil {
 		return acpclient.PermissionAnswer{}
@@ -72,29 +128,9 @@ func (ls *lineSession) askPermission(ctx context.Context, r acpclient.Permission
 	if err != nil {
 		return acpclient.PermissionAnswer{}
 	}
-	answer := acpclient.PermissionAnswer{}
-	buf := make([]byte, 1)
-	for {
-		n, err := keysIn.ReadContext(ctx, buf)
-		if err != nil || n == 0 {
-			break
-		}
-		if buf[0] == 'c' || buf[0] == ctrlC {
-			break
-		}
-		if id, ok := keys[buf[0]]; ok {
-			answer.OptionID = id
-			break
-		}
-	}
+	answer := acpclient.PermissionAnswer{OptionID: chooseKey(keys, func(b []byte) (int, error) { return keysIn.ReadContext(ctx, b) })}
 	rerr := restore()
-	choice := "cancel"
-	for _, k := range permissionKeys {
-		if id, ok := keys[k.key]; ok && id == answer.OptionID && answer.OptionID != "" {
-			choice = k.label
-		}
-	}
-	if _, err := fmt.Fprintf(errw, "%s\n", choice); err != nil || rerr != nil {
+	if _, err := fmt.Fprintf(errw, "%s\n", labelOf(labels, answer.OptionID)); err != nil || rerr != nil {
 		ls.e.log().WarnContext(ctx, "permission prompt", slog.String("write_error", fmt.Sprint(err)), slog.String("restore_error", fmt.Sprint(rerr)))
 	}
 	return answer

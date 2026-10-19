@@ -76,6 +76,7 @@ func TestDefaultsEqualCode(t *testing.T) {
 		{"stopGrace", s.MCPStopGrace().String(), "500ms"},
 		{"stopTimeout", s.MCPStopTimeout().String(), "2s"},
 		{"sessionDir", s.SessionDir, ""},
+		{"defaultProjectTrust", s.DefaultProjectTrust, "ask"},
 		{"shellPath", s.ShellPath, ""},
 		{"shellCommandPrefix", s.ShellCommandPrefix, ""},
 		{"externalEditor", s.ExternalEditor, ""},
@@ -103,8 +104,8 @@ func TestKeysMatchSettings(t *testing.T) {
 			t.Errorf("%s: Value = %v %v, want %v", k.Path, v, ok, defaultValue(k))
 		}
 	}
-	if len(Keys) != 28 {
-		t.Errorf("%d keys, want 0018-MADR D14's 13, 0019-MADR D15's defaultProvider, 0021-MADR D3's cacheRetention, 0005-PLAN F4-2c's defaultModel, F5-1's five retry keys, F5-2's four compaction keys, F5-5's smallModel and 0022-PLAN P3's two personality keys", len(Keys))
+	if len(Keys) != 29 {
+		t.Errorf("%d keys, want 0018-MADR D14's 13, 0019-MADR D15's defaultProvider, 0021-MADR D3's cacheRetention, 0005-PLAN F4-2c's defaultModel, F5-1's five retry keys, F5-2's four compaction keys, F5-5's smallModel, F6-1's defaultProjectTrust and 0022-PLAN P3's two personality keys", len(Keys))
 	}
 }
 
@@ -158,7 +159,7 @@ func TestProjectDisabledUntilTrusted(t *testing.T) {
 	if r.Settings.SteeringMode != "one-at-a-time" || r.Settings.MCP.StopGraceMs != 500 {
 		t.Fatalf("an untrusted project applied: %+v", r.Settings)
 	}
-	if len(r.Disabled) != 1 || r.Disabled[0].Reason != "project settings apply once the project is trusted (0005-PLAN F6)" ||
+	if len(r.Disabled) != 1 || r.Disabled[0].Reason != "project settings apply once the project is trusted (gobble trust)" ||
 		!slices.Equal(r.Disabled[0].Keys, []string{"steeringMode", "mcp.stopGraceMs"}) {
 		t.Fatalf("disabled %+v", r.Disabled)
 	}

@@ -18,8 +18,8 @@ type Options struct {
 	Cwd string
 	// Read selects session or process keys; zero is both.
 	Read Read
-	// Trusted reports whether a project root is trusted. Nil trusts none,
-	// which is every project until 0005-PLAN F6 supplies it (D5).
+	// Trusted reports whether a project root is trusted. Nil trusts none
+	// (D5); the CLI gives 0005-PLAN F6-1's decision.
 	Trusted func(root string) bool
 	// Overrides are --set's, the session layer.
 	Overrides []Override

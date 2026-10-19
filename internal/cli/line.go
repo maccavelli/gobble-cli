@@ -113,6 +113,7 @@ func (ls *lineSession) run(first Prompt) error {
 		}
 	}
 
+	e.noteUntrusted(ls.cwd)
 	if line, ok := ls.amb.welcome(ls.spoken(), e.now()); ok {
 		e.out.Notef("%s", line)
 	}

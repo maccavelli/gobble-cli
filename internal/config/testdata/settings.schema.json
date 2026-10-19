@@ -77,6 +77,17 @@
       "default": "",
       "x-gobble-global-only": true
     },
+    "defaultProjectTrust": {
+      "type": "string",
+      "description": "Whether a project with no saved decision is trusted: ask (gobble's terminal asks; anywhere else it is not trusted), always, or never.",
+      "default": "ask",
+      "enum": [
+        "ask",
+        "always",
+        "never"
+      ],
+      "x-gobble-global-only": true
+    },
     "personality": {
       "type": "string",
       "description": "The personality gobble speaks in: boring (also plain or normal), dry, snarky, bombastic, or one of your own under personalities/ in this directory.",

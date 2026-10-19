@@ -99,7 +99,7 @@ func TestConfigGetOrigin(t *testing.T) {
 		"steeringMode: all # from " + c.global() + ":1 (global)",
 		"followUpMode: all # from --set",
 		"defaultThinkingLevel: off # default",
-		"# not applied: " + c.project() + ": project settings apply once the project is trusted (0005-PLAN F6)",
+		"# not applied: " + c.project() + ": project settings apply once the project is trusted (gobble trust)",
 		"#   it would set: externalEditor",
 	} {
 		if !strings.Contains(r.stdout, line+"\n") {

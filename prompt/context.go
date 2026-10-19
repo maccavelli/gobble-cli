@@ -28,8 +28,9 @@ type Diagnostic struct {
 var candidates = []string{"AGENTS.override.md", "AGENTS.md", "AGENTS.MD", "CLAUDE.md", "CLAUDE.MD"}
 
 // TrustNote is the diagnostic of a project file that loads only for a
-// trusted project, which gobble has none of before 0005-PLAN F6.
-const TrustNote = "not loaded: it needs a trusted project (0005-PLAN F6)"
+// trusted project, logged for each one an untrusted project holds back
+// (0005-PLAN F6-1 decision 9).
+const TrustNote = "not loaded: the project is not trusted (gobble trust, or /trust)"
 
 // readFile is the context files' reader; tests replace it.
 var readFile = os.ReadFile
@@ -157,11 +158,12 @@ func Nested(cwd, path string) []File {
 	return out
 }
 
-// SystemFiles are SYSTEM.md's and APPEND_SYSTEM.md's texts from the config
-// directory, and the project's own copies under .gobble, which wait for
-// trust (Pi's resource-loader.ts:1201-1227; 0005-MADR, amendment of
-// 2026-10-10, item 3).
-func SystemFiles(configDir, cwd string) (system, appended string, waiting []Diagnostic) {
+// SystemFiles are SYSTEM.md's and APPEND_SYSTEM.md's texts: a trusted
+// project's own copy under .gobble, each winning over the config
+// directory's (0005-MADR's row; 0005-PLAN F6-1 decision 8); an untrusted
+// project's copies are held back, each with a note (Pi's
+// resource-loader.ts:1201-1227; 0005-MADR, amendment of 2026-10-10, item 3).
+func SystemFiles(configDir, cwd string, trusted bool) (system, appended string, waiting []Diagnostic) {
 	read := func(dir, name string) string {
 		if dir == "" {
 			return ""
@@ -173,10 +175,20 @@ func SystemFiles(configDir, cwd string) (system, appended string, waiting []Diag
 		return string(bytes.TrimPrefix(b, []byte("\ufeff")))
 	}
 	system, appended = read(configDir, "SYSTEM.md"), read(configDir, "APPEND_SYSTEM.md")
-	for _, name := range []string{"SYSTEM.md", "APPEND_SYSTEM.md"} {
-		p := filepath.Join(cwd, ".gobble", name)
-		if _, err := os.Stat(p); err == nil || !errors.Is(err, fs.ErrNotExist) {
+	for _, f := range []struct {
+		name string
+		text *string
+	}{{"SYSTEM.md", &system}, {"APPEND_SYSTEM.md", &appended}} {
+		p := filepath.Join(cwd, ".gobble", f.name)
+		if _, err := os.Stat(p); errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+		if !trusted {
 			waiting = append(waiting, Diagnostic{Path: p, Message: TrustNote})
+			continue
+		}
+		if b, err := readFile(p); err == nil {
+			*f.text = string(bytes.TrimPrefix(b, []byte("\ufeff")))
 		}
 	}
 	return system, appended, waiting

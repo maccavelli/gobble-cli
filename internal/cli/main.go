@@ -184,6 +184,8 @@ type runEnv struct {
 	// promptSet are the user's prompt overrides, read once (0022-PLAN P5).
 	promptsOnce sync.Once
 	promptSet   promptOverrides
+	// trust is the run's project trust (0005-PLAN F6-1).
+	trust trustState
 }
 
 func (e *runEnv) log() *slog.Logger { return e.logs.get() }

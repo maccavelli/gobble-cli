@@ -65,6 +65,13 @@ var todaysText = map[Key]string{
 	PersonalityDeclined: "Bombastic was not chosen; the personality stays {name}.",
 	HumorTwo:            "There is no humor level 2. The levels are 1, 3, 4 and 5.",
 	HumorUnknown:        "Unknown humor level {level}. The levels are 1, 3, 4 and 5.",
+	// New with 0005-PLAN F6-1.
+	TrustUntrusted:   "this project is not trusted: its .gobble files and skills are not loaded; gobble trust trusts it",
+	TrustCurrent:     "This project, {root}, is {decision}.",
+	TrustSaved:       "Saved: {path} is {state}. It applies from this project's next session.",
+	TrustNotSaved:    "Nothing was saved.",
+	TrustFailed:      "The decision was not saved: {error}",
+	TrustUnavailable: "This agent cannot save a trust decision; gobble trust saves one.",
 }
 
 // The boring catalog holds today's text, word for word, for every key.

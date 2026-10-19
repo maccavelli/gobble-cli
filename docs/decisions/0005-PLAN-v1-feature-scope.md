@@ -6805,7 +6805,8 @@ and 6; Codex's structured reply; a retry on the next prompt; a small model for a
 - `--yes` answers what a rule or the mode would ask, never gobble's own limits.
 
 0005-MADR's notes of 2026-10-19 on its Rules, Permission requests and Project trust rows, 0018-MADR's on its key list,
-and 0008-MADR's on the permission prompt record what changes there.) *Proposed: not approved for execution.*
+and 0008-MADR's on the permission prompt record what changes there.) *Approved and run on the owner's word "follow
+recommendations and proceed", the home and filesystem-root limit kept; see "F6-1's execution record".*
 
 **The facts,** measured on 2026-10-19 against `main` `07cf51d`; Pi `1402973a9d`, opencode `501b15af26`, Kilo
 `2a1903f291`, Codex `8c076942cb` and grok-build `2bdd1d6a63`:
@@ -7013,3 +7014,123 @@ count, 28, becomes 29; the tests that list every flag the CLI refuses lose `--ap
 **Not taken:** Pi's extension answer, which waits for F7's hook; Codex's lookup by both the cwd and the git root,
 since gobble's project files hang off one root; asking from `gobble acp`, which cannot ask before `session/new`
 returns the session's id; applying `/trust` to the running session.
+
+**F6-1's execution record (2026-10-19).**
+
+- **Ran as the entry wrote it,** on the owner's word "follow recommendations and proceed" after the entry was presented,
+  with the home and filesystem-root limit kept as decision 3 has it (the owner asked for its pros and cons first, and
+  took the recommendation to keep it); the entry's records were committed as `755c744` while it ran. No deviation:
+  nothing the entry decides changed. What it left unsaid is listed below. F6-2 is next, made executable on the owner's
+  word.
+- **What was built:**
+  - `internal/config`: `defaultProjectTrust` (an enum, global-only, a process key), its `Settings` field, the
+    template's "Projects" block, the schema; `textUntrusted` reworded;
+  - `permission/trust.go`: `DecideTrust`, decision 2's order with the step that decided (`TrustSource`, the hook's step
+    reserved for F7); `TrustStore` over `trust.json` (`Load`, `Lookup` up through the parents, `Save`, `Forget`, under
+    `filelock.EditPolicy`, sorted, two-space indent, `0600`); `TooBroad` and `ErrTooBroad`;
+  - `prompt`: `SystemFiles` takes the decision, a trusted project's copies winning; `TrustNote` reworded;
+    `ProjectSkillDirs`, moved from acpserver, and `TrustFiles`, the files decision 1 names;
+  - `personality`: `Set.WithProject`, a project's `messages.md` over the user's set for one session, its
+    `personality.md` refused (0022-MADR D15); the six `trust.*` message keys;
+  - `acpserver`: `SessionSettings.ProjectRoot`, `Trust` and `Project` (`ProjectOverrides`); the session's skills,
+    templates, sections, personalities, compaction prompts and tool descriptions from a trusted project
+    (`setOf`, `toolsOf`, `compactionPromptsOf`); `/trust` and `TrustOptions`; the notice on the first reply
+    (`noteTrust`);
+  - `internal/cli`: the run's `trustState` and `projectTrust`, given to `config.Resolve` and to each session; the line
+    view's question before the session (`decideTrustHere`, `askTrust`); the numbered prompt line and the key loop
+    both prompts share (`permissionLine`, `chooseKey`); the line view's and print mode's line (`noteUntrusted`);
+    `gobble trust` and `gobble untrust`; `--approve`/`--no-approve`, out of `laterFlags`, with Pi's meaning; a
+    trusted project's personality and prompt overrides (`projectOverrides`); `/trust`'s store (`trustOptions`).
+- **What the entry left unsaid, decided inside it:**
+  - **the trust messages are catalog keys, left to boring by every built-in.** Every reply a person reads is a key
+    (0022-PLAN P1), so `/trust`'s replies and the notice are six `trust.*` keys in boring's catalog. Dry, Snarky and
+    Bombastic leave them to boring on purpose (`leftBoring`, 0022-MADR D17), since a person acts on their facts to let
+    a project's files load. This adds `personality/keys.go`, boring's `messages.md` and two test files to the steps'
+    files;
+  - **`personality.Set.WithProject`** carries decision 8's personality overrides, in `personality/override.go`, a
+    file the steps did not name. A project's directory naming no personality the user has is left out with a warning;
+  - **`prompt.TrustFiles`,** with `ProjectSkillDirs` moved from acpserver, so the CLI and acpserver share decision 1's
+    list. A new file, `prompt/trust.go`;
+  - **gobble's own modes send no ACP notice** (`TrustOptions.Quiet`): the line view and print mode print their own
+    line, and the in-process agent's would have reached print mode's stdout, the reply;
+  - **the line view's and print mode's line needs a held-back file.** `--no-approve` in a project with nothing to
+    trust printed it: `TestLaterFlagsAreRejected` showed it, once `--approve` left `laterFlags`;
+  - **the question is two lines:** `Trusting <root> lets gobble load the project's .gobble settings, SYSTEM.md,
+    skills, prompts and personalities.`, then `Trust <root>?` and its answers. Decision 5 quoted it as one, but the
+    prompt line ends with its answers;
+  - **with home as the parent folder,** no kind repeats, so the question keeps 0008-MADR's `[y] [a] [n] [N]` keys, as
+    decision 6 says: `[y]` trusts for the run, `[a]` saves "trusted", `[n]` and `[N]` the same for "not trusted";
+  - **`gobble trust DIR` prints DIR's decision,** which can differ from its root's: a subdirectory whose own `.gobble`
+    has nothing has nothing to trust, as decision 1 keeps the files where they are;
+  - **`gobble personality check`** checks a trusted project's personality files, and notes an untrusted project's;
+  - **a `trust.json` that cannot be read** is logged, and trusts nothing; a saved answer that cannot be written is
+    warned of, and holds for the run;
+  - **`/trust` with no store** says so (`trust.unavailable`); a session whose settings decided nothing, as every test
+    agent's, gets no notice and keeps today's behaviour;
+  - **`SessionSettings.Project` is a pointer,** so the struct stays comparable (`TestNilSettingsIsToday` compares it).
+- **Tests,** new:
+  - `permission/trust_test.go`: `TestDecideTrustOrder` (a row a step, and an unreadable store), `TestTrustLookupNearest`
+    (a parent's and a child's, and `Forget`), `TestTrustSaveTooBroad`, `TestTrustSymlinkedRoot` (saved and found by the
+    real path, through the link), `TestTrustFileShape`, `TestTrustConcurrentSaves` (16 at once);
+  - `prompt`: `TestSystemFiles` gains the trusted case; `TestTrustFiles`;
+  - `personality/project_test.go`: `TestWithProject`;
+  - `internal/config`: `TestCheck` gains `defaultProjectTrust`'s refusals;
+  - `acpserver/trust_test.go`: `TestTrustedProjectLoads` (a trusted and an untrusted session of one agent: SYSTEM.md,
+    APPEND_SYSTEM.md, skills in both layouts, templates, personality messages before and after a switch, tool
+    descriptions, and six notes for the untrusted alone), `TestTrustedProjectSections`,
+    `TestTrustedProjectCompactionPrompts`, `TestTrustCommand` (each answer, a cancel, a failed save, the parent not
+    offered when it is home), `TestUntrustedNotice` (once, not in the session file or the next request; quiet,
+    trusted and undecided told nothing);
+  - `internal/cli/trust_test.go`: `TestTrustCommands`, `TestPrintModeTrust` (decision 2's order in print mode, and
+    stdout clean), `TestProjectSettingsNeedTrust` (0005-PLAN F6's accept), `TestProjectOverridesReachSession`,
+    `TestPersonalityCheckProject`, `TestTrustQuestion` (each answer, saved or for the run, asked once a run),
+    `TestTrustQuestionNoParent`, `TestLineViewTrust` (the line once, none after asking; `/trust`'s numbered question
+    answered and saved), `TestPermissionLineNumbered`.
+- **Existing tests changed,** none loosened: the notes' new wording (`TestPromptOptionsAndTrust`,
+  `TestProjectDisabledUntilTrusted`, `TestRenderOrigin`, `TestConfigGetOrigin`); `/trust` in
+  `TestEveryAdvertisedCommandExecutes` and `session.golden`'s command list; `TestKeysMatchSettings`, 28 keys to 29,
+  `TestDefaultsEqualCode`'s default and `TestRenderDocument`'s line;
+  `TestBoringIsTodaysText`'s six keys; `TestLaterFlagsAreRejected` loses `--no-approve`; `TestSessionSettingsReachAgent`
+  gains the session's root and decision; `TestPermissionLine` takes the line's third result.
+- **Negatives,** 69 of 69 caught on a scratch copy after control runs: each step of the order skipped; the lookup not
+  walking up, or not by the real path; a save not by the real path; home or a root saved; no lock; the file's indent
+  or mode; `Forget` keeping the entry; the key not global-only; `SystemFiles` ignoring trust, or the user's copy kept;
+  `TrustFiles` missing personalities; `WithProject` taking a brief, an unknown directory, changing the user's set, or
+  laying the user's over the project's; each of acpserver's loads ignoring trust, both skill layouts swapped, the
+  templates' order swapped, the notes logged for a trusted project, the sections, descriptions, compaction prompts
+  (and the user's fallback), the voice at start and after a switch; the notice repeated, not quiet, sent for an
+  undecided session, or not sent; `/trust`'s parent, its "not trusted", the home check, its handler, the session's
+  root; in the CLI, the flag, `Resolve`'s trust, the session's decision and overrides, `Quiet`, the held-back check,
+  the asked check, print mode's and the line view's line, saving an answer, keeping a run's, asking twice, the parent
+  when it is home, the parent's and "do not trust"'s answers, `defaultProjectTrust`, the root, the descriptions'
+  check, the numbered line, the kind check, the cancel key, and `personality check`'s project.
+  - The first run caught 63 of 69. All six misses were the harness's own: each mutation left a variable or an import
+    unused, so the copy did not build. Rewritten to build, all six were caught, one after a second rewrite, and the
+    whole set was run again on the final code: 69 of 69.
+- **Gates:**
+  - the pre-add check on the 47 changed `.go` files, clean;
+  - lint for linux, darwin and windows, `0 issues.` each with `CGO_ENABLED=0`, after ten findings fixed in the code:
+    ACP's option kinds as constants (`goconst`, seven), a variable named `real` renamed (`revive`, two), and the failed
+    save that is `/trust`'s answer given errcheck's reason, as `/personality`'s unknown name is (`nilerr`);
+  - the macOS laptop's `CGO_ENABLED=1 go test -race -count=1 ./...`, 35 packages ok, no race report;
+  - `make preflight` on macOS: `preflight passed`;
+  - **the Linux machine and the Windows laptop,** run from this session over ssh at the owner's word of 2026-10-19,
+    each on a copy of the working tree in a fresh temporary directory, never in its own checkout:
+    - `go test -count=1 ./...` and `CGO_ENABLED=1 go test -race -count=1 ./...`, 35 packages ok on each, no race report.
+      Windows ran with `TMP` and `TEMP` outside the user's home, for the reason below;
+    - `make preflight`, every step through `apidiff` passed on each (golangci-lint `0 issues.`), and `check-records`
+      and `markdownlint` after it. `verify-build-metadata` needs a commit (`git rev-parse HEAD`), which the copy, a
+      staged repository with nothing committed, does not have: it passed on macOS alone;
+  - **the Windows laptop found a fault in two of F6-1's tests:** `TestTrustCommands` and `TestTrustQuestionNoParent`
+    set `HOME`, which `os.UserHomeDir` does not read on Windows, so the home refusal was never tried there. A
+    `setHome` helper sets `USERPROFILE` too; both pass on Windows, Linux and macOS. The code was right;
+  - **found on the Windows laptop, and not F6-1's:** a real `AGENTS.md` in the user's home there reaches five tests,
+    since `t.TempDir` is under the home: `prompt`'s `TestWorktreeShadowing`, `TestConfigFirstAndUnreadable`,
+    `TestGoldenSystemPrompt` and `TestGoldenSystemPromptDry`, and acpserver's `TestAutoCompactSystemPrompt`. They fail
+    the same way at `e5ab039`, before F6-1, and pass with `TMP` outside the home. The tests do not keep the context
+    walk inside their fixtures; fixing them waits for its own pair;
+  - Windows' case-insensitive path comparison ran in the Windows laptop's suite, though no test gives it two
+    spellings of one path.
+- **Not tested by the suite:** `ChatCmd.Run`'s call of the question, which needs a terminal on stdin and stderr that
+  `Main` never has in a test; the question itself is tested through `decideTrustHere`.
+- **Next:** F6-2, rules and permission requests, made executable on the owner's word.

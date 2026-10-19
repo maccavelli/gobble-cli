@@ -119,15 +119,24 @@ func TestNested(t *testing.T) {
 	}
 }
 
-// SYSTEM.md and APPEND_SYSTEM.md come from the config directory; the
-// project's copies wait for trust.
+// SYSTEM.md and APPEND_SYSTEM.md come from the config directory; an
+// untrusted project's copies are held back, each with a note, and a
+// trusted project's win, each on its own (0005-PLAN F6-1 decision 8).
 func TestSystemFiles(t *testing.T) {
 	cfg, cwd := t.TempDir(), t.TempDir()
 	write(t, filepath.Join(cfg, "SYSTEM.md"), "system")
 	write(t, filepath.Join(cfg, "APPEND_SYSTEM.md"), "\ufeffappended")
 	write(t, filepath.Join(cwd, ".gobble", "SYSTEM.md"), "project")
-	sys, app, waiting := SystemFiles(cfg, cwd)
+	sys, app, waiting := SystemFiles(cfg, cwd, false)
 	if sys != "system" || app != "appended" || len(waiting) != 1 || waiting[0].Message != TrustNote {
-		t.Fatalf("system %q, append %q, waiting %+v", sys, app, waiting)
+		t.Fatalf("untrusted: system %q, append %q, waiting %+v", sys, app, waiting)
+	}
+	sys, app, waiting = SystemFiles(cfg, cwd, true)
+	if sys != "project" || app != "appended" || len(waiting) != 0 {
+		t.Fatalf("trusted: system %q, append %q, waiting %+v", sys, app, waiting)
+	}
+	write(t, filepath.Join(cwd, ".gobble", "APPEND_SYSTEM.md"), "\ufeffproject appended")
+	if _, app, _ = SystemFiles(cfg, cwd, true); app != "project appended" {
+		t.Fatalf("trusted: append %q", app)
 	}
 }

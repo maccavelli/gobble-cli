@@ -40,6 +40,7 @@ var commands = []command.Command{
 	{Name: "clone", Description: "Start a new session from a copy of this one"},
 	{Name: "todos", Description: "Show the todo list"},
 	{Name: cmdPersonality, Description: "Show or set the personality", Hint: "[boring|dry|snarky|bombastic]"},
+	{Name: "trust", Description: "Show whether this project is trusted, and save a decision"},
 }
 
 // availableCommands is the commands as ACP lists them, then each template
@@ -120,6 +121,7 @@ func (a *Agent) handlers() map[string]handler {
 		// /humor is hidden: not in commands (0022-PLAN P3).
 		cmdPersonality: a.cmdPersonality,
 		cmdHumor:       a.cmdHumor,
+		"trust":        a.cmdTrust,
 	}
 }
 

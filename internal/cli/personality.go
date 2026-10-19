@@ -92,7 +92,7 @@ func (e *runEnv) printPermission(_ context.Context, r acpclient.PermissionReques
 		e.out.Warnf("a level-5 personality asks first, and print mode cannot ask; this run uses %s. "+
 			"Choose it once in a session to agree.", personality.Default)
 	}
-	for _, kind := range []string{"reject_once", "reject_always"} {
+	for _, kind := range []string{kindRejectOnce, kindRejectAlways} {
 		for _, o := range r.Options {
 			if o.Kind == kind {
 				return acpclient.PermissionAnswer{OptionID: o.ID}
