@@ -33,9 +33,13 @@ var spinnerKeys = []Key{TurnWorking, TurnSlow, TurnVerySlow}
 // leftBoring are the keys a built-in personality leaves to boring on
 // purpose, by personality (0022-MADR D17): trust's, whose facts a person
 // acts on to let a project's files load (0005-PLAN F6-1).
-var leftBoring = map[string][]Key{Dry: trustKeys, Snarky: trustKeys, Bombastic: trustKeys}
+var leftBoring = map[string][]Key{Dry: factKeys, Snarky: factKeys, Bombastic: factKeys}
 
-var trustKeys = []Key{TrustUntrusted, TrustCurrent, TrustSaved, TrustNotSaved, TrustFailed, TrustUnavailable}
+// factKeys are /trust's and /permissions' replies, whose facts a person
+// acts on (0005-PLAN F6-1, F6-2b decision H).
+var factKeys = []Key{TrustUntrusted, TrustCurrent, TrustSaved, TrustNotSaved, TrustFailed, TrustUnavailable,
+	PermissionsDefaults, PermissionsRule, PermissionsNone, PermissionsLimits, PermissionsRemoved, PermissionsFixed,
+	PermissionsNoRule, PermissionsAdded, PermissionsBad, PermissionsUsage, PermissionsFailed}
 
 // The words no personality but bombastic aims at the user, and the
 // profanity each allows (0022-MADR D7 to D9, D17). The lists are a cheap

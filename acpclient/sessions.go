@@ -76,7 +76,7 @@ func (o NewSessionOptions) meta() map[string]any {
 	if len(g) == 0 {
 		return nil
 	}
-	return map[string]any{"gobble": g}
+	return map[string]any{metaGobble: g}
 }
 
 // NewSessionWith is NewSession with options.
@@ -146,7 +146,7 @@ func (c *Conn) ResumeSessionWith(ctx context.Context, id, cwd string, opts Resum
 		return nil, Resumed{}, sessionError("session/resume", err)
 	}
 	var r Resumed
-	if g, ok := resp.Meta["gobble"].(map[string]any); ok {
+	if g, ok := resp.Meta[metaGobble].(map[string]any); ok {
 		r.Title, _ = g["title"].(string) //nolint:errcheck // absent is none
 		if n, ok := g["messages"].(float64); ok {
 			r.Messages = int(n)

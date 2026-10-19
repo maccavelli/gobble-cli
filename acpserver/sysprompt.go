@@ -72,11 +72,12 @@ func (a *Agent) sections(s *liveSession) []sysprompt.Section {
 	}
 	a.note(s, diags)
 	loaded := loadedTools(s.tree.Path())
+	hidden := a.rulesOf(s)
 	var names, families []string
 	for _, t := range a.tools {
 		sp := t.Spec()
 		switch {
-		case sp.Exposure == tool.ExposureHidden, s.rules.Hidden(sp.Name):
+		case sp.Exposure == tool.ExposureHidden, hidden.Hidden(sp.Name):
 		case sp.Exposure == tool.ExposureDeferred && !slices.Contains(loaded, sp.Name):
 			if sp.Family != "" && !slices.Contains(families, sp.Family) {
 				families = append(families, sp.Family)

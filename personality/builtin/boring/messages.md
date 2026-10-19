@@ -256,3 +256,49 @@ The decision was not saved: {error}
 ## trust.unavailable
 
 This agent cannot save a trust decision; gobble trust saves one.
+
+## permissions.defaults
+
+With no rule, a read-only built-in tool runs, and every other call asks, an MCP tool's among them; a path outside the workspace asks.
+
+## permissions.rule
+
+{number}. {rule} ({from})
+
+## permissions.none
+
+No rules are set.
+
+## permissions.limits
+
+Whatever the rules say, a write under .git or ~/.ssh, or to gobble's credential, trust or permission files, is refused;
+a write to gobble's or the project's configuration, an AGENTS.md or the project's skills, and every delete, asks.
+
+## permissions.removed
+
+Removed {rule} ({from}).
+
+## permissions.fixed
+
+Rule {number}, {rule}, is set in {from}; change it there.
+
+## permissions.no_rule
+
+There is no rule {number}; /permissions lists them.
+
+## permissions.added
+
+Added {rule} ({from}).
+
+## permissions.bad
+
+That is not a rule: {error}
+
+## permissions.usage
+
+/permissions lists the rules; /permissions remove N removes one;
+/permissions allow|ask|deny RULE [session|project|global] adds one, to the session by default.
+
+## permissions.failed
+
+{rule} was not saved where you chose: {error}. It applies to this session.

@@ -41,6 +41,7 @@ var commands = []command.Command{
 	{Name: "todos", Description: "Show the todo list"},
 	{Name: cmdPersonality, Description: "Show or set the personality", Hint: "[boring|dry|snarky|bombastic]"},
 	{Name: "trust", Description: "Show whether this project is trusted, and save a decision"},
+	{Name: "permissions", Description: "List, remove or add permission rules", Hint: "[remove N | allow|ask|deny RULE [session|project|global]]"},
 }
 
 // availableCommands is the commands as ACP lists them, then each template
@@ -122,6 +123,7 @@ func (a *Agent) handlers() map[string]handler {
 		cmdPersonality: a.cmdPersonality,
 		cmdHumor:       a.cmdHumor,
 		"trust":        a.cmdTrust,
+		"permissions":  a.cmdPermissions,
 	}
 }
 

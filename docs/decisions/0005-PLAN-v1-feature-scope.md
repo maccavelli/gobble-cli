@@ -7625,3 +7625,89 @@ preflight` on macOS, the Linux machine and the Windows laptop, the identifier sc
 **Not taken:** opencode's per-tool "always" patterns (an arity prefix for a command), which F6-3 weighs with its
 sub-commands; a parent lookup for the store, which would let one answer cover every project below a directory;
 showing `_meta.gobble.rule` in the line view, which F6-4's modes may want.
+
+**F6-2b's execution record (2026-10-19).**
+
+- **Ran as the entry wrote it,** on the owner's word "committed, proceed" after the entry's commit `3a9f5fb`, with A1
+  and B1. No deviation: nothing the entry decides changed. What it left unsaid is listed below. F6-2 is complete; F6-3,
+  shell commands, is next, made executable on the owner's word.
+- **What was built:**
+  - `permission`: a pattern's leading `/` kept, so it anchors at the root (decision C); `Spec.Rule`; a source with a
+    file and no line prints as `<file> (<layer>)`; `Engine.Remember`, the rules an "always" saves, or none when a
+    subject holds `*`, `?`, `[`, `{` or, for a path, `\` (decision A); `StoredRule` and `RuleStore` over
+    `permissions.json` (`Load`, `Rules`, `Add`, `Remove`), keyed by the root's real path, exact, locked, sorted,
+    `0600`;
+  - `internal/config`: `AppendRule` and `RemoveRule`, editing the global file's `permissions.rules` in place: a line
+    after a block list's last item, or an item's lines deleted, comments kept; a flow list, the template's `[]`, and
+    an absent key written through `Apply`, which uncomments the template's block; each result checked by
+    `readsBack`. A removal names the line and the rule, and refuses a line that no longer holds it;
+  - `acpserver`: the session's engine in five layers (global, project, `--set`, store, session), each replaced, never
+    changed in place, under the agent's lock, and read at each call; the eight options (`question.go`), the once pair
+    for a limit, a repeated call and decision A's calls, `_meta.gobble.onceOnly`, `_meta.gobble.rule`; an "always"
+    answer's saves (`remember`) and a failed save's notice; a reject's feedback; `/permissions` (`permissions.go`);
+    `PermissionOptions`; `RejectOnceID`;
+  - `acpclient`: `PermissionAnswer.Feedback`, sent as `_meta.gobble.feedback`; `PermissionRequest.OnceOnly`;
+    `acptest.Client.Answer`, a test's own answer;
+  - `internal/cli`: the line view's `[f] deny and say why` and its reason, read in raw mode with its own echo; the
+    once-only reason on the line before the question; `permissionOptions`, the store and the global file's edits
+    given to the agent;
+  - `personality`: eleven `permissions.*` keys in boring's catalog, which dry, snarky and bombastic leave to boring,
+    as `/trust`'s (`factKeys`).
+- **What the entry left unsaid, decided inside it:**
+  - **the store type is `permission.RuleStore`,** not step 1's `PermissionStore`: golint refuses the stutter of
+    `permission.PermissionStore`;
+  - **a path subject holding `\`** is decision A's too, since gobble's globs read it as an escape; a command's `\`
+    is not, since opencode's wildcard makes it `/` in the pattern and the command alike;
+  - **"always" is offered only when both an allow and a deny can be saved exactly;** an outside path with a glob
+    character keeps "always" from either;
+  - **a "never" hides the tool from the next turn's request,** since a turn's tools are fixed when it starts; the
+    deny refuses its calls in the same turn;
+  - **an "everywhere" answer replaces the session's global layer with the file's rules after the append,** so the
+    rule carries its file and line for `/permissions remove`, and an edit made to the file meanwhile shows too;
+  - **the line view's `[f]` echoes the reason itself,** in raw mode, Enter ending it, backspace erasing, Ctrl+C or the
+    end of input cancelling; an empty reason is a plain reject;
+  - **the once-only mark is acpclient's to pass** (`OnceOnly`), so the line view can say why (decision A1); the
+    step's acpclient list named `Feedback` alone;
+  - **the option names:** "Allow once" and "Reject" for the once pair, where the question said "Allow" before;
+  - **`/permissions remove N` of a global rule** goes through `RemoveGlobal`, which refuses a rule whose file is not
+    the global settings file;
+  - **the template's block** names the "everywhere" answer and `permissions.json`.
+- **Tests,** each new assertion seen failing on a scratch copy:
+  - `permission`: `TestPatternAnchored`; `TestRemember` (each form, each saved rule deciding its own call, five calls
+    no rule can match alone, a saved command not matching a longer one); `TestRuleStore` (shape, mode, real path,
+    once each, a child root not taking its parent's, the last removal dropping the root, bad rules named);
+    `TestRuleStoreConcurrent`;
+  - `internal/config`: `TestAppendRuleTemplate` (the template uncommented, a second append in place, a value that
+    must be quoted, every other line kept); `TestAppendAndRemoveRule` (a hand-written list's comments through an
+    append and removals, a stale line refused, the last removal, a flow list, a value that is not a list);
+  - `acpserver`: `TestAlwaysAnswers` (each of the six, one question for two calls, the rule listed with its source,
+    the store's file and the next session of an untrusted project, the global file); `TestQuestionOptions`;
+    `TestRejectAlwaysHides`; `TestAlwaysOutside`; `TestFeedback`; `TestAlwaysSaveFailed`; `TestPermissionsCommand`;
+    `TestRepeatedCallQuestion` asserts the once pair; the session golden gains `/permissions`;
+  - `acpclient`: `TestRequestPermission` asserts the once-only mark and the feedback's `_meta`;
+  - `internal/cli`: `TestPermissionLine` (`[f]` only with `reject_once`), `TestReadWhy`, `TestPermissionPrompt`
+    (numbered options, and `[f]` with a reason the model reads), `TestPermissionPromptOnceOnly`,
+    `TestPermissionOptions`;
+  - `personality`: the new texts pinned word for word (`TestBoringIsTodaysText`).
+- **The negatives:** 64 mutations, each applied alone to a scratch copy after control runs of the named tests passed
+  unmutated. The first runs stopped on an anchor the harness had escaped wrongly, and on one aimed at the wrong
+  file; three did not build (unused names the mutations left) and were rewritten. One, dropping `!d.Allow` from the
+  feedback's guard, cannot be seen: the agent reads a decision's reason only on a decline, so it was dropped as an
+  equivalent mutation, and the guard stays so an allowed decision carries no reason. Drafting the harness showed that
+  `TestReadWhy`'s Ctrl+C case ended at the end of input, which cancels too; it gained text after the Ctrl+C. The final
+  run: 64 of 64 caught.
+- **The gates:**
+  - the pre-add check on the 28 changed `.go` files, clean, after golint's stutter was fixed (the rename above);
+  - lint for linux, darwin and windows with `CGO_ENABLED=0`, `0 issues.` each, after three findings in the new code
+    were fixed in it (acpclient's `"gobble"` key made `metaGobble`, a loop made `slices.Backward`);
+  - markdownlint refused a 233-character line in boring's catalog; the two long `permissions.*` texts wrap there, the
+    catalog joining a paragraph's lines with a space, and their pinned text is unchanged;
+  - macOS: `CGO_ENABLED=1 go test -race -count=1 ./...`, 35 packages ok, and `make preflight`, `preflight passed`;
+  - the Linux machine and the Windows laptop, over ssh on a copy of the working tree (710 files) in a fresh temporary
+    directory: `go test -count=1 ./...` and `CGO_ENABLED=1 go test -race -count=1 ./...`, 35 packages ok on each,
+    Windows with `TMP` and `TEMP` outside the user's home; `make preflight`, every step through `apidiff` passed on
+    each, and `check-records` and `markdownlint` after it; `verify-build-metadata` needs a commit the copy does not
+    have, and passed on macOS;
+  - the identifier scan over the change: no account name, hostname or real-machine path.
+- **Not done, and why:** F6-3's shell-command patterns, F6-4's modes and F6-5's `request_permissions`; the line view
+  shows no `_meta.gobble.rule` (not taken above).

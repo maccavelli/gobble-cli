@@ -77,6 +77,20 @@ const (
 	TrustNotSaved    Key = "trust.not_saved"
 	TrustFailed      Key = "trust.failed"
 	TrustUnavailable Key = "trust.unavailable"
+
+	// /permissions, and an "always" answer that was not saved (0005-PLAN
+	// F6-2b decisions E and H).
+	PermissionsDefaults Key = "permissions.defaults"
+	PermissionsRule     Key = "permissions.rule"
+	PermissionsNone     Key = "permissions.none"
+	PermissionsLimits   Key = "permissions.limits"
+	PermissionsRemoved  Key = "permissions.removed"
+	PermissionsFixed    Key = "permissions.fixed"
+	PermissionsNoRule   Key = "permissions.no_rule"
+	PermissionsAdded    Key = "permissions.added"
+	PermissionsBad      Key = "permissions.bad"
+	PermissionsUsage    Key = "permissions.usage"
+	PermissionsFailed   Key = "permissions.failed"
 )
 
 // Keys are every key, in the order above.
@@ -91,6 +105,8 @@ var Keys = []Key{
 	TodosNone, CompactStart, CompactFailed, CompactDone,
 	PersonalityCurrent, PersonalityList, PersonalitySet, PersonalityUnknown, PersonalityDeclined, HumorTwo, HumorUnknown,
 	TrustUntrusted, TrustCurrent, TrustSaved, TrustNotSaved, TrustFailed, TrustUnavailable,
+	PermissionsDefaults, PermissionsRule, PermissionsNone, PermissionsLimits, PermissionsRemoved, PermissionsFixed,
+	PermissionsNoRule, PermissionsAdded, PermissionsBad, PermissionsUsage, PermissionsFailed,
 }
 
 // The lines a personality may put before an error or a warning in gobble's

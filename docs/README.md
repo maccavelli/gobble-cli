@@ -108,6 +108,7 @@ The plans run in sequence.
     question is marked, the outside title stays).
   - Made executable: F6-2b, the questions and the stores, on 2026-10-19; approved as written, with "once only" for a
     subject no rule can match exactly and the project store applying untrusted.
+  - Run: F6-2b on 2026-10-19 (no deviation). F6-2 is complete; F6-3, shell commands, is next on the owner's word.
   - The SDKs: [0023-PLAN](decisions/0023-PLAN-pin-current-releases.md) pinned go-llmprovider-sdk `v1.15.0` and
     acp-go-sdk2 `v1.16.0` on 2026-10-19, so `gobble acp` answers a request piped before the end of its input. A
     provider's default model, the first of its live listing, may change with the SDK's ranking from `v1.14.0`, and every
@@ -178,7 +179,7 @@ The plans:
 | see how other harnesses design what gobble builds, and which design gobble chose | [0010-REPORT](reports/0010-REPORT-harness-design-survey.md), [0005-MADR](decisions/0005-MADR-v1-feature-scope.md) (amendment of 2026-10-07) |
 | retry failed model calls, wait for the network, or compact the conversation on its own | [0005-PLAN](decisions/0005-PLAN-v1-feature-scope.md) (F5-1, F5-2, F5-4), the `retry` and `compaction` blocks of `settings.yaml` |
 | name sessions with a small model | [0005-PLAN](decisions/0005-PLAN-v1-feature-scope.md) (F5-5), [guides/choosing-a-model.md](guides/choosing-a-model.md) |
-| allow, ask or deny a tool call by rule, or let print mode answer with `--yes` | [0005-PLAN](decisions/0005-PLAN-v1-feature-scope.md) (F6-2), the `permissions` block of `settings.yaml` |
+| allow, ask or deny a tool call by rule, answer "always" for a session, a project or everywhere, list and edit the rules with `/permissions`, or let print mode answer with `--yes` | [0005-PLAN](decisions/0005-PLAN-v1-feature-scope.md) (F6-2, F6-2b), the `permissions` block of `settings.yaml` |
 | trust a project, so its own settings, `SYSTEM.md`, skills, prompts and personality files load | [0005-PLAN](decisions/0005-PLAN-v1-feature-scope.md) (F6-1), [0005-MADR](decisions/0005-MADR-v1-feature-scope.md) (Project trust), `gobble trust --help` |
 | choose gobble's personality, or change its messages and model-facing text | [0022-MADR](decisions/0022-MADR-gobble-voice-and-personalities.md), `gobble personality --help` |
 | see how six harnesses compact a conversation, and what gobble's F5 takes | [0005-REPORT](reports/0005-REPORT-compaction-across-six-harnesses.md), [0005-MADR](decisions/0005-MADR-v1-feature-scope.md) (amendment of 2026-10-18) |

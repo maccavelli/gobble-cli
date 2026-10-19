@@ -227,9 +227,29 @@ func TestRequestPermission(t *testing.T) {
 	if selected(pick("n")); asked.Limit != "a delete always asks" || asked.Repeated != 3 {
 		t.Fatalf("marks: asked %+v", asked)
 	}
-	req.Meta = map[string]any{"gobble": map[string]any{"limit": 7, "repeated": "3"}}
-	if selected(pick("n")); asked.Limit != "" || asked.Repeated != 0 {
+	req.Meta = map[string]any{"gobble": map[string]any{"limit": 7, "repeated": "3", "onceOnly": 1}}
+	if selected(pick("n")); asked.Limit != "" || asked.Repeated != 0 || asked.OnceOnly != "" {
 		t.Fatalf("mistyped marks: asked %+v", asked)
+	}
+	req.Meta = map[string]any{"gobble": map[string]any{"onceOnly": "no rule can match it"}}
+	if selected(pick("n")); asked.OnceOnly != "no rule can match it" {
+		t.Fatalf("once-only mark: asked %+v", asked)
+	}
+	// A reject's reason goes back in the answer's _meta.gobble.feedback
+	// (gobble-cli 0005-PLAN F6-2b decision F); an answer without one has
+	// no _meta.
+	h := &handler{permission: func(context.Context, PermissionRequest) PermissionAnswer {
+		return PermissionAnswer{OptionID: "n", Feedback: "use git mv"}
+	}}
+	resp, err := h.RequestPermission(t.Context(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if g, _ := resp.Meta["gobble"].(map[string]any); g["feedback"] != "use git mv" {
+		t.Fatalf("answer _meta %v", resp.Meta)
+	}
+	if resp, _ := pick("n").RequestPermission(t.Context(), req); resp.Meta != nil {
+		t.Fatalf("answer without feedback: _meta %v", resp.Meta)
 	}
 }
 

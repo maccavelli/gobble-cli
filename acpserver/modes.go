@@ -87,17 +87,20 @@ func (a *Agent) SetSessionMode(ctx context.Context, p acp.SetSessionModeRequest)
 	return acp.SetSessionModeResponse{}, nil
 }
 
-// planPolicy decides a call by the session's rules and gobble's limits
-// (0005-PLAN F6-2 decisions 4 and 5), logging each verdict: a deny refuses
-// without asking, an allow runs, and an ask asks the client, marking a
-// limit's question. While the session is in plan mode, a call that is not
-// read-only, or that would ask, is refused without asking: plan mode is
-// read-only. A repeated call's question, which approves no write
-// (0005-PLAN F5-3 decision 1), is the client's alone.
+// planPolicy decides a call by the session's rules as they are at the
+// call, and gobble's limits (0005-PLAN F6-2 decisions 4 and 5), logging
+// each verdict: a deny refuses without asking, an allow runs, and an ask
+// asks the client, offering the "always" options when no limit asked and
+// a rule can match the call alone, and saving the rules an "always"
+// answer gives (F6-2b decisions A to G). While the session is in plan
+// mode, a call that is not read-only, or that would ask, is refused
+// without asking: plan mode is read-only. A repeated call's question,
+// which approves no write (0005-PLAN F5-3 decision 1), is the client's
+// alone.
 type planPolicy struct {
 	a     *Agent
 	s     *liveSession
-	rules permission.Engine
+	mcp   []tool.Tool
 	inner *acpPolicy
 }
 
@@ -105,7 +108,8 @@ func (p planPolicy) Decide(ctx context.Context, r permission.Rule) (permission.D
 	if r.Repeated != 0 {
 		return p.inner.Decide(ctx, r)
 	}
-	v := p.rules.Evaluate(r)
+	e := withDefaults(p.a.rulesOf(p.s), p.mcp)
+	v := e.Evaluate(r)
 	p.a.logDecision(ctx, p.s, r, v)
 	switch {
 	case v.Effect == permission.ModeDeny:
@@ -116,9 +120,44 @@ func (p planPolicy) Decide(ctx context.Context, r permission.Rule) (permission.D
 	case v.Effect == permission.ModeAllow:
 		return permission.Decision{Allow: true, By: v.By}, nil
 	}
-	d, err := p.inner.ask(ctx, r, v.Limit)
-	d.By = v.By
-	return d, err
+	q := question{limit: v.Limit, by: &v.By}
+	var allow, deny []permission.Spec
+	if v.Limit == "" {
+		var okAllow, okDeny bool
+		allow, okAllow = e.Remember(permission.ModeAllow, r)
+		deny, okDeny = e.Remember(permission.ModeDeny, r)
+		q.always = okAllow && okDeny
+		if !q.always {
+			q.onceOnly = textOnceOnly
+		}
+		q.hides = r.Kind == permission.SubjectNone || len(r.Subjects) == 0
+	}
+	ans, err := p.inner.ask(ctx, r, q)
+	d := permission.Decision{By: v.By}
+	if err != nil {
+		return d, err
+	}
+	switch ans.option {
+	case allowOnce:
+		d.Allow = true
+	case allowSession, allowProject, allowAlways:
+		d.Allow = true
+		p.save(ctx, scopes[ans.option], allow)
+	case rejectSession, rejectProject, rejectAlways:
+		p.save(ctx, scopes[ans.option], deny)
+	}
+	if !d.Allow && ans.feedback != "" {
+		d.Reason = "The user said: " + ans.feedback
+	}
+	return d, nil
+}
+
+// save saves an "always" answer's rules in scope, telling the person when
+// they could not be saved there (decision E).
+func (p planPolicy) save(ctx context.Context, scope string, rules []permission.Spec) {
+	if _, err := p.a.remember(ctx, p.s, scope, rules); err != nil {
+		p.a.noteSaveFailed(ctx, p.inner.conn, p.s, rules, err)
+	}
 }
 
 type exitPlanInput struct {

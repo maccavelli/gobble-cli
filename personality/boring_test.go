@@ -72,6 +72,20 @@ var todaysText = map[Key]string{
 	TrustNotSaved:    "Nothing was saved.",
 	TrustFailed:      "The decision was not saved: {error}",
 	TrustUnavailable: "This agent cannot save a trust decision; gobble trust saves one.",
+	// New with 0005-PLAN F6-2b.
+	PermissionsDefaults: "With no rule, a read-only built-in tool runs, and every other call asks, an MCP tool's among them; a path outside the workspace asks.",
+	PermissionsRule:     "{number}. {rule} ({from})",
+	PermissionsNone:     "No rules are set.",
+	PermissionsLimits: "Whatever the rules say, a write under .git or ~/.ssh, or to gobble's credential, trust or permission files, is refused; " +
+		"a write to gobble's or the project's configuration, an AGENTS.md or the project's skills, and every delete, asks.",
+	PermissionsRemoved: "Removed {rule} ({from}).",
+	PermissionsFixed:   "Rule {number}, {rule}, is set in {from}; change it there.",
+	PermissionsNoRule:  "There is no rule {number}; /permissions lists them.",
+	PermissionsAdded:   "Added {rule} ({from}).",
+	PermissionsBad:     "That is not a rule: {error}",
+	PermissionsUsage: "/permissions lists the rules; /permissions remove N removes one; " +
+		"/permissions allow|ask|deny RULE [session|project|global] adds one, to the session by default.",
+	PermissionsFailed: "{rule} was not saved where you chose: {error}. It applies to this session.",
 }
 
 // The boring catalog holds today's text, word for word, for every key.

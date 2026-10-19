@@ -113,6 +113,8 @@ type Options struct {
 	Title TitleOptions
 	// Trust is /trust's store; zero saves nothing (0005-PLAN F6-1).
 	Trust TrustOptions
+	// Permissions are where rules are saved (0005-PLAN F6-2b).
+	Permissions PermissionOptions
 }
 
 // Agent is gobble's acp.Agent.
@@ -143,6 +145,7 @@ type Agent struct {
 	titles TitleOptions
 	// trust is /trust's store.
 	trust TrustOptions
+	perms PermissionOptions
 
 	mu       sync.Mutex
 	conn     *acp.AgentSideConnection
@@ -233,8 +236,9 @@ type liveSession struct {
 	trust      permission.TrustDecision
 	project    ProjectOverrides
 	trustNoted bool
-	// rules is the session's rule engine, fixed when it starts, as its
-	// settings are (0005-PLAN F6-2).
+	// rules is the session's rule engine, built when it starts; its
+	// layers change as answers and /permissions add and remove rules,
+	// under mu (0005-PLAN F6-2b decision E).
 	rules permission.Engine
 }
 
@@ -249,7 +253,7 @@ func New(opts Options) *Agent {
 	a := &Agent{version: opts.Version, newID: opts.NewID, provider: opts.Provider, models: opts.Models, info: opts.ModelInfo,
 		override: opts.Override, tools: opts.Tools, store: opts.Store, now: opts.Now, mcp: opts.MCP, logger: opts.Logger, prompt: opts.Prompt,
 		settings: opts.Settings, auth: opts.Auth, save: opts.SaveSetting, personalities: opts.Personalities, compactionPrompts: opts.CompactionPrompts, titles: opts.Title,
-		trust: opts.Trust, sessions: map[acp.SessionId]*liveSession{}}
+		trust: opts.Trust, perms: opts.Permissions, sessions: map[acp.SessionId]*liveSession{}}
 	if a.logger == nil {
 		a.logger = slog.New(slog.DiscardHandler)
 	}
@@ -408,7 +412,8 @@ func (a *Agent) NewSession(ctx context.Context, p acp.NewSessionRequest) (acp.Ne
 		think: cmp.Or(a.override.Thinking, ss.Thinking), model: cmp.Or(a.override.Model, a.models().Default), mode: modeDefault,
 		queue: sessionQueue(ss), compaction: ss.Compaction, cache: cacheOf(ss.CacheRetention), retry: ss.Retry,
 		autoCompactOff: ss.AutoCompactionOff, voice: a.voiceOf(ss), insultsAccepted: ss.BombasticAccepted,
-		root: ss.ProjectRoot, trust: ss.Trust, project: projectOf(ss.Project), rules: engineOf(ss, p.Cwd)}
+		root: ss.ProjectRoot, trust: ss.Trust, project: projectOf(ss.Project),
+		rules: engineOf(ss, p.Cwd, a.storedRules(cmp.Or(ss.ProjectRoot, p.Cwd)))}
 	if len(forked) > 0 {
 		for _, e := range forked {
 			if err := log.Append(ctx, e); err != nil {
@@ -599,8 +604,7 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 	}
 	// The rules' hidden tools are neither sent nor found by tool_search
 	// (0005-PLAN F6-2 decision 6).
-	rules := withDefaults(s.rules, mcpTools)
-	tools = visible(rules, tools)
+	tools = visible(withDefaults(a.rulesOf(s), mcpTools), tools)
 	loaded := loadedTools(s.tree.Path())
 	if fresh := startLoads(tools, loaded); len(fresh) > 0 {
 		w.add(toolsEntry(fresh))
@@ -615,7 +619,7 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 		Tools:    tools,
 		Model:    chosen,
 		Thinking: think,
-		Policy:   planPolicy{a: a, s: s, rules: rules, inner: &acpPolicy{conn: conn, session: p.SessionId}},
+		Policy:   planPolicy{a: a, s: s, mcp: mcpTools, inner: &acpPolicy{conn: conn, session: p.SessionId}},
 		Queue:    s.queue,
 		Search:   builtin.ToolSearch(),
 		Loaded:   loaded,
@@ -920,7 +924,8 @@ func (a *Agent) open(ctx context.Context, id acp.SessionId, cwd string, extra []
 	s := &liveSession{id: id, cwd: cwd, dirs: dirs, log: log, think: thinkingOff, model: a.models().Default, mode: modeDefault,
 		queue: sessionQueue(ss), compaction: ss.Compaction, cache: cacheOf(ss.CacheRetention), retry: ss.Retry,
 		autoCompactOff: ss.AutoCompactionOff, voice: a.voiceOf(ss), insultsAccepted: ss.BombasticAccepted,
-		root: ss.ProjectRoot, trust: ss.Trust, project: projectOf(ss.Project), rules: engineOf(ss, cwd)}
+		root: ss.ProjectRoot, trust: ss.Trust, project: projectOf(ss.Project),
+		rules: engineOf(ss, cwd, a.storedRules(cmp.Or(ss.ProjectRoot, cwd)))}
 	a.restore(s, log.Entries())
 	// The run's override wins over the history's choice (0005-PLAN F4-2c).
 	if err := a.applyOverride(ctx, s); err != nil {

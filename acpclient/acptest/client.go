@@ -19,6 +19,8 @@ type Client struct {
 	// Allow selects the first allow_once or allow_always option of every
 	// permission request.
 	Allow bool
+	// Answer, when set, answers every permission request in place of Allow.
+	Answer func(acp.RequestPermissionRequest) acp.RequestPermissionResponse
 	// Files, when not nil, serves fs/read_text_file and fs/write_text_file:
 	// a read answers a path's text, a write sets it. FileCalls records
 	// each. A test that advertises fs sets it.
@@ -99,6 +101,9 @@ func (c *Client) RequestPermission(_ context.Context, r acp.RequestPermissionReq
 	c.mu.Lock()
 	c.permissions = append(c.permissions, r)
 	c.mu.Unlock()
+	if c.Answer != nil {
+		return c.Answer(r), nil
+	}
 	if c.Allow {
 		for _, o := range r.Options {
 			if o.Kind == acp.PermissionOptionKindAllowOnce || o.Kind == acp.PermissionOptionKindAllowAlways {

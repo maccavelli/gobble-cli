@@ -107,6 +107,9 @@ func (e *runEnv) agentOptions() acpserver.Options {
 		Title: e.titleOptions(),
 		// /trust saves to trust.json, as gobble trust does (0005-PLAN F6-1).
 		Trust: trustOptions(),
+		// The "always" answers and /permissions save to permissions.json
+		// and the global settings.yaml (0005-PLAN F6-2b decision E).
+		Permissions: permissionOptions(),
 	}
 }
 

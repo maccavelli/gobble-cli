@@ -47,8 +47,11 @@ type RuleSource struct {
 }
 
 func (s RuleSource) String() string {
-	if s.File == "" {
+	switch {
+	case s.File == "":
 		return s.Layer
+	case s.Line == 0:
+		return fmt.Sprintf("%s (%s)", s.File, s.Layer)
 	}
 	return fmt.Sprintf("%s:%d (%s)", s.File, s.Line, s.Layer)
 }
@@ -63,11 +66,14 @@ type Spec struct {
 }
 
 // String is the rule as a settings file writes it: "allow: bash(git *)".
-func (s Spec) String() string {
+func (s Spec) String() string { return string(s.Effect) + ": " + s.Rule() }
+
+// Rule is the rule without its effect: "bash(git *)".
+func (s Spec) Rule() string {
 	if s.Pattern == "" {
-		return string(s.Effect) + ": " + s.Tool
+		return s.Tool
 	}
-	return fmt.Sprintf("%s: %s(%s)", s.Effect, s.Tool, s.Pattern)
+	return s.Tool + "(" + s.Pattern + ")"
 }
 
 // ErrBadRule is ParseSpec's error.
@@ -94,7 +100,7 @@ func ParseSpec(effect Mode, text string) (Spec, error) {
 		return Spec{}, fmt.Errorf("%w: %q names no tool; write <tool> or <tool>(<pattern>)", ErrBadRule, text)
 	}
 	if pattern != "" {
-		if _, err := fsx.CompileGlob(strings.TrimPrefix(filepath.ToSlash(pattern), "/")); err != nil {
+		if _, err := fsx.CompileGlob(filepath.ToSlash(pattern)); err != nil {
 			return Spec{}, fmt.Errorf("%w: %q: %w", ErrBadRule, text, err)
 		}
 	}
@@ -206,15 +212,16 @@ func (e Engine) match(tool string, kind SubjectKind, subject string, def Mode) V
 }
 
 // patternMatches reports whether pattern takes subject: any for "" or "*";
-// a path by gobble's globs; a command by opencode's wildcard; a tool with no
-// subject only by "" or "*".
+// a path by gobble's globs, a leading "/" anchoring the pattern at the root
+// as gitignore's does (F6-2b decision C); a command by opencode's wildcard;
+// a tool with no subject only by "" or "*".
 func patternMatches(kind SubjectKind, pattern, subject string) bool {
 	if pattern == "" || pattern == "*" {
 		return true
 	}
 	switch kind {
 	case SubjectPath:
-		g, err := fsx.CompileGlob(strings.TrimPrefix(filepath.ToSlash(pattern), "/"))
+		g, err := fsx.CompileGlob(filepath.ToSlash(pattern))
 		return err == nil && g.Match(strings.TrimPrefix(subject, "/"), false)
 	case SubjectCommand:
 		return wildcard(subject, pattern)
@@ -319,6 +326,66 @@ func (e Engine) configPath(p string) bool {
 func under(p, dir string) bool {
 	rel, err := filepath.Rel(filepath.Clean(dir), p)
 	return err == nil && filepath.IsLocal(rel) || samePath(p, dir)
+}
+
+// pathMeta and commandMeta are the characters that make a subject a
+// pattern rather than itself: gobble's globs' and opencode's wildcard's.
+const (
+	pathMeta    = `*?[{\`
+	commandMeta = `*?`
+)
+
+// Remember is the rules an "always" answer of effect saves for r, each
+// matching r's subjects as they were matched and nothing else (F6-2b
+// decisions A and C): a path from the root with a leading "/", or absolute
+// outside it; a command whole; a tool with no subject by its name. An allow
+// also saves an external_directory rule for each path outside the roots;
+// a deny saves the tool's alone. ok is false when a subject holds a
+// pattern's character, so no rule matches it alone: only "once" can answer.
+func (e Engine) Remember(effect Mode, r Rule) (rules []Spec, ok bool) {
+	spec := func(tool, pattern string) Spec { return Spec{Effect: effect, Tool: tool, Pattern: pattern} }
+	if r.Kind == SubjectNone || len(r.Subjects) == 0 {
+		rules = append(rules, spec(r.Tool, ""))
+	}
+	for _, subj := range r.Subjects {
+		switch r.Kind {
+		case SubjectPath:
+			p, exact := e.exactPath(subj)
+			if !exact {
+				return nil, false
+			}
+			rules = append(rules, spec(r.Tool, p))
+		case SubjectCommand:
+			if strings.ContainsAny(subj, commandMeta) {
+				return nil, false
+			}
+			rules = append(rules, spec(r.Tool, subj))
+		}
+	}
+	if effect == ModeAllow {
+		for _, out := range r.Outside {
+			p, exact := e.exactPath(out)
+			if !exact {
+				return nil, false
+			}
+			rules = append(rules, spec(ExternalDirectory, p))
+		}
+	}
+	return rules, true
+}
+
+// exactPath is p as a pattern that matches it alone: from the root with a
+// leading "/" inside it, absolute outside it; false when p holds a glob's
+// character.
+func (e Engine) exactPath(p string) (string, bool) {
+	shown := e.relative(p)
+	if strings.ContainsAny(shown, pathMeta) {
+		return "", false
+	}
+	if !strings.HasPrefix(shown, "/") && !filepath.IsAbs(filepath.FromSlash(shown)) {
+		shown = "/" + shown
+	}
+	return shown, true
 }
 
 // Hidden reports whether tool is left out of the model's tools: the last

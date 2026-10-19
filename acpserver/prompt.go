@@ -271,49 +271,6 @@ func cutBytes(s string, n int) string {
 	return s[:cut] + "…"
 }
 
-// acpPolicy approves calls by asking the client (session/request_permission),
-// with one allow and one reject option. A cancelled request is a refusal.
-type acpPolicy struct {
-	conn    *acp.AgentSideConnection
-	session acp.SessionId
-}
-
-func (p *acpPolicy) Decide(ctx context.Context, r permission.Rule) (permission.Decision, error) {
-	return p.ask(ctx, r, "")
-}
-
-// ask asks the client about r. A limit, when set, is the gobble limit that
-// asked, which the question carries in _meta.gobble.limit (0005-PLAN F6-2
-// decisions 5 and 8); a repeated call's question carries its run in
-// _meta.gobble.repeated (F6-2a's deviation 2).
-func (p *acpPolicy) ask(ctx context.Context, r permission.Rule, limit string) (permission.Decision, error) {
-	if p.conn == nil {
-		return permission.Decision{}, errors.New("no client connection")
-	}
-	req := acp.RequestPermissionRequest{
-		SessionId: p.session,
-		ToolCall:  acp.ToolCallUpdate{ToolCallId: acp.ToolCallId(r.CallID), Title: new(ruleTitle(r)), RawInput: jsonRaw(r.Input)},
-		Options: []acp.PermissionOption{
-			{OptionId: allowOnce, Name: "Allow", Kind: acp.PermissionOptionKindAllowOnce},
-			{OptionId: rejectOnce, Name: "Reject", Kind: acp.PermissionOptionKindRejectOnce},
-		},
-	}
-	switch {
-	case limit != "":
-		req.Meta = map[string]any{gobble: map[string]any{keyLimit: limit}}
-	case r.Repeated != 0:
-		req.Meta = map[string]any{gobble: map[string]any{keyRepeated: r.Repeated}}
-	}
-	resp, err := p.conn.RequestPermission(ctx, req)
-	if err != nil {
-		return permission.Decision{}, err
-	}
-	if s := resp.Outcome.Selected; s != nil && s.OptionId == allowOnce {
-		return permission.Decision{Allow: true}, nil
-	}
-	return permission.Decision{Allow: false}, nil
-}
-
 // jsonRaw passes JSON through the SDK's encoding/json as it is, as a
 // json.RawMessage, which encodes verbatim. Empty is none, which the
 // field's omitempty leaves out (0014-MADR D4).

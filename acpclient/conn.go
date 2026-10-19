@@ -53,19 +53,24 @@ type Options struct {
 	Permission func(ctx context.Context, r PermissionRequest) PermissionAnswer
 }
 
+// metaGobble is gobble's key in an ACP _meta.
+const metaGobble = "gobble"
+
 // PermissionRequest is the agent asking to run a tool call.
 //
-// Limit and Repeated are gobble's marks, from the request's _meta.gobble:
-// the limit that asked, which no "always" and no --yes may approve, and a
-// repeated call's run, whose question asks whether the turn may go on
-// (gobble-cli 0005-PLAN F6-2 decisions 5 and 8, and F6-2a's deviations 1
-// and 2). Another agent sends neither.
+// Limit, Repeated and OnceOnly are gobble's marks, from the request's
+// _meta.gobble: the limit that asked, which no "always" and no --yes may
+// approve; a repeated call's run, whose question asks whether the turn may
+// go on; and why a question offers "once" alone (gobble-cli 0005-PLAN F6-2
+// decisions 5 and 8, F6-2a's deviations 1 and 2, F6-2b decision A).
+// Another agent sends none.
 type PermissionRequest struct {
 	SessionID string
 	Tool      ToolCall
 	Options   []PermissionOption
 	Limit     string
 	Repeated  int
+	OnceOnly  string
 }
 
 // PermissionOption is one answer the agent offers. Kind is ACP's:
@@ -75,8 +80,12 @@ type PermissionOption struct {
 }
 
 // PermissionAnswer is the option chosen; an empty OptionID cancels.
+// Feedback, with a reject, is the person's reason, which the answer's
+// _meta.gobble.feedback carries to the model (gobble-cli 0005-PLAN F6-2
+// decision 11).
 type PermissionAnswer struct {
 	OptionID string
+	Feedback string
 }
 
 // AgentInfo is what the agent said about itself in initialize.
@@ -214,7 +223,7 @@ type Prompt struct {
 // unscanned is a text block marked for gobble's agent not to scan for @path.
 func unscanned(text string) acp.ContentBlock {
 	b := acp.TextBlock(text)
-	b.Text.Meta = map[string]any{"gobble": map[string]any{"mentions": false}}
+	b.Text.Meta = map[string]any{metaGobble: map[string]any{"mentions": false}}
 	return b
 }
 
@@ -295,7 +304,7 @@ func (s *Session) Prompt(ctx context.Context, p Prompt) (Result, error) {
 		return Result{}, fmt.Errorf("session/prompt: %w", err)
 	}
 	r := Result{StopReason: string(resp.StopReason)}
-	if g, ok := resp.Meta["gobble"].(map[string]any); ok {
+	if g, ok := resp.Meta[metaGobble].(map[string]any); ok {
 		r.SwitchTo, _ = g["switchTo"].(string) //nolint:errcheck // absent is none
 	}
 	if u := resp.Usage; u != nil {
@@ -441,7 +450,7 @@ func (h *handler) commandsOf(id acp.SessionId) []Command {
 func (h *handler) RequestPermission(ctx context.Context, r acp.RequestPermissionRequest) (acp.RequestPermissionResponse, error) {
 	if h.permission != nil {
 		req := PermissionRequest{SessionID: string(r.SessionId), Tool: ToolCall{ID: string(r.ToolCall.ToolCallId), Content: toolContent(r.ToolCall.Content)}}
-		req.Limit, req.Repeated = gobbleMarks(r.Meta)
+		gobbleMarks(&req, r.Meta)
 		if r.ToolCall.Title != nil {
 			req.Tool.Title = *r.ToolCall.Title
 		}
@@ -451,7 +460,11 @@ func (h *handler) RequestPermission(ctx context.Context, r acp.RequestPermission
 		a := h.permission(ctx, req)
 		for _, o := range r.Options {
 			if a.OptionID != "" && string(o.OptionId) == a.OptionID {
-				return acp.RequestPermissionResponse{Outcome: acp.NewRequestPermissionOutcomeSelected(o.OptionId)}, nil
+				resp := acp.RequestPermissionResponse{Outcome: acp.NewRequestPermissionOutcomeSelected(o.OptionId)}
+				if a.Feedback != "" {
+					resp.Meta = map[string]any{metaGobble: map[string]any{"feedback": a.Feedback}}
+				}
+				return resp, nil
 			}
 		}
 		return acp.RequestPermissionResponse{Outcome: acp.NewRequestPermissionOutcomeCancelled()}, nil
@@ -466,23 +479,25 @@ func (h *handler) RequestPermission(ctx context.Context, r acp.RequestPermission
 	return acp.RequestPermissionResponse{Outcome: acp.NewRequestPermissionOutcomeCancelled()}, nil
 }
 
-// gobbleMarks are a permission request's _meta.gobble limit and repeated
-// marks; a missing or mistyped one is none.
-func gobbleMarks(meta map[string]any) (limit string, repeated int) {
-	g, ok := meta["gobble"].(map[string]any)
+// gobbleMarks sets req's marks from a permission request's _meta.gobble;
+// a missing or mistyped one is none.
+func gobbleMarks(req *PermissionRequest, meta map[string]any) {
+	g, ok := meta[metaGobble].(map[string]any)
 	if !ok {
-		return "", 0
+		return
 	}
 	if s, ok := g["limit"].(string); ok {
-		limit = s
+		req.Limit = s
+	}
+	if s, ok := g["onceOnly"].(string); ok {
+		req.OnceOnly = s
 	}
 	switch n := g["repeated"].(type) {
 	case float64:
-		repeated = int(n)
+		req.Repeated = int(n)
 	case int:
-		repeated = n
+		req.Repeated = n
 	}
-	return limit, repeated
 }
 
 // The client advertises no file-system or terminal capability, so these

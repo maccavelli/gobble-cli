@@ -44,6 +44,11 @@ func TestRepeatedCallQuestion(t *testing.T) {
 		if n, _ := perms[0].Meta[gobble].(map[string]any)[keyRepeated].(float64); n != 3 {
 			t.Fatalf("%s: _meta %v, want gobble.repeated 3", mode, perms[0].Meta)
 		}
+		// It offers the two "once" options alone (0005-PLAN F6-2b
+		// decision D).
+		if o := perms[0].Options; len(o) != 2 || o[0].OptionId != allowOnce || o[1].OptionId != rejectOnce {
+			t.Fatalf("%s: options %+v", mode, o)
+		}
 	}
 }
 
