@@ -129,7 +129,7 @@ Comments survived all three. Only the splice kept the file's layout.
 - **Kong.** Only `internal/cli` may import it (rule 9, `internal/archtest/check.go:332-342`).
 - **The verbs** are `gobble config get|set|edit|path|validate|schema|import` (0005-MADR `:284`).
 - **Keys records already name:**
-  - `permissions.allow`, `ask` and `deny` (`:212`);
+  - `permissions.allow`, `ask` and `deny` (`:212`); *(2026-10-19, the owner's choice, 0005-PLAN "F6 re-made as five sub-phases": one ordered list, `permissions.rules`, in their place.)*
   - `defaultProjectTrust` (`:214`);
   - `hooks`, read from project settings only when trusted (`:243`);
   - `tools.bash.useClientTerminal`, default `false` (`:621`);

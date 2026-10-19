@@ -232,6 +232,8 @@ API.
 
 ### F6 — permissions, modes, trust (1.0; extends 0002-PLAN Phase 6)
 
+*(2026-10-19: re-made as five sub-phases, F6-1 to F6-5, by the owner's choices of that date; see the Amendments entry "F6 re-made as five sub-phases, F6-1 made executable: project trust". The steps below stand where that entry does not change them.)*
+
 *(2026-10-08, 0005-MADR amendment "native tools": `request_permissions` lands here. A delete always asks, whatever an allow rule says.)*
 *(2026-10-08, 0012-MADR D10: a bash command that is one plain `rm`, `rmdir`, `mv`, `cp` or `mkdir` with flags that map exactly runs as the native tool; anything else is permission-checked as a shell command. D7: `request_permissions` is deferred, and loads when a call is refused for a permission.)*
 
@@ -6794,3 +6796,220 @@ and 6; Codex's structured reply; a retry on the next prompt; a small model for a
     preflight`, on the owner's machines; and a title from a live small model.
 - **Next:** F6, made executable on the owner's word; the SDK retries' status waits for go-llmprovider-sdk issue 3;
   the first-byte deadline for F4-1b.
+
+**2026-10-19 — F6 re-made as five sub-phases, F6-1 made executable: project trust** (the owner's word of 2026-10-19,
+"committed, proceed", after F5-5's commit `07cf51d`, and the owner's choices of that date:
+- five sub-phases, trust first;
+- the rules as one ordered list, `permissions.rules`, the last match winning;
+- an "always" answer kept in the scope the person picks when asked: this session, this project, or everywhere;
+- `--yes` answers what a rule or the mode would ask, never gobble's own limits.
+
+0005-MADR's notes of 2026-10-19 on its Rules, Permission requests and Project trust rows, 0018-MADR's on its key list,
+and 0008-MADR's on the permission prompt record what changes there.) *Proposed: not approved for execution.*
+
+**The facts,** measured on 2026-10-19 against `main` `07cf51d`; Pi `1402973a9d`, opencode `501b15af26`, Kilo
+`2a1903f291`, Codex `8c076942cb` and grok-build `2bdd1d6a63`:
+
+- **gobble today:**
+  - `permission` declares types only (`permission/doc.go:4`): `Policy`, `Rule {Tool, Mode, CallID, Title, Input,
+    Repeated}` and `Decision {Allow, Reason, Refusal}` (`permission/permission.go:9-45`). A `Rule` carries no kind and
+    no paths;
+  - the agent asks for every call that is not read-only, and for a read-only one that names a path outside the roots,
+    always with `ModeAsk` (`agent/agent.go:773-798`); the outside paths reach the question only as " (outside the
+    workspace)" in its title (`:778`);
+  - acpserver offers two options, `allow_once` and `reject_once` (`acpserver/prompt.go:281-300`). So a delete, like
+    every call, asks each time, with no answer that stands for later calls;
+  - the line view's prompt keys one option per kind, `y`, `a`, `n`, `N` (`internal/cli/permission.go:14-23`, `:41-49`);
+    a second option of the same kind is never shown. Print mode picks a reject, or cancels (`internal/cli/personality.go:90-103`);
+  - `--approve`/`--no-approve` and `--yes` are parsed and refused with exit 2 for F6 (`internal/cli/flags.go:54-55`,
+    `:77-80`). The `--approve` help says "Approve tool calls without asking (--no-approve: always ask)", where 0005-MADR
+    names the flag for project trust (`0005-MADR-v1-feature-scope.md:302-304`);
+  - modes are `default` and `plan` (`acpserver/modes.go:15-33`); plan mode refuses through `planPolicy` (`:94-106`);
+  - the project settings file is `.gobble/settings.yaml` at the git top-level of the cwd, or at the cwd
+    (`internal/config/resolve.go:55-64`). `Resolve` applies it only when `Options.Trusted(root)` says so, and records a
+    disabled layer with `textUntrusted` otherwise (`:94-112`; `internal/config/diag.go:47`). The CLI never sets
+    `Trusted` (`internal/cli/settings.go:40-48`);
+  - the files found and not loaded, each with `prompt.TrustNote` (`prompt/context.go:32`), all under the cwd: `.gobble/SYSTEM.md`
+    and `APPEND_SYSTEM.md` (`:176-181`); `.gobble/personalities` (`acpserver/sysprompt.go:63-67`); `.gobble/skills` and
+    each `.agents/skills` from the cwd up to the repository root, home's excepted (`:129-131`, `:188-216`);
+    `.gobble/prompts` (`:158-160`). Each note is logged once per session (`:219-236`) and not sent to the client;
+    `gobble personality check` prints them (`internal/cli/personalitycmd.go:254-257`);
+  - the user's prompt overrides and personalities are loaded once a process (`internal/cli/personality.go:22`,
+    `personalitycmd.go:154`); each session's settings are resolved when it starts (`internal/cli/agent.go:85-89`);
+  - no `trust.json`, `gobble trust`, `gobble untrust` or `/trust` exists; the commands are `acpserver/commands.go:28-43`'s;
+  - `internal/filelock`'s `EditPolicy` is the lock settings edits take (`internal/filelock/lock.go:52`);
+  - no key is named `permissions.*` or `defaultProjectTrust` (`internal/config/keys.go:71-128`); `go.mod` requires no
+    shell parser.
+- **Pi's trust** (`packages/coding-agent/`):
+  - the order: a CLI override; trusted when nothing needs trust; an extension's answer; the saved decision; then
+    `defaultProjectTrust` (`always`, `never`, or `ask`, the default, global only); then the question, or untrusted with
+    no UI (`src/core/project-trust.ts:47-97`; `src/core/settings-schema.ts:266-271`; `src/core/settings-defaults.ts:30`;
+    `docs/security.md:59-65`);
+  - what needs trust: `.pi/` settings, `mcp.json`, extensions, skills, prompts, themes, `SYSTEM.md`, `APPEND_SYSTEM.md`,
+    and `.agents/skills` in the cwd or an ancestor, home's excepted (`src/core/trust-manager.ts:30-39`, `:186-208`);
+  - the store: `trust.json` in the agent directory, `{"<path>": true|false|null}`, sorted, two-space indent, under a
+    lock (`trust-manager.ts:28`, `:116-177`, `:213-215`). The key is the cwd's real path, and a lookup walks up through
+    its parents, the nearest saved decision winning (`:41-59`);
+  - the question offers Trust; Trust parent folder; Trust (this session only); Do not trust; Do not trust (this session
+    only) (`trust-manager.ts:67-97`). `/trust` saves a choice and says to restart (`src/modes/interactive/interactive-mode.ts:5335-5348`);
+    an untrusted project is reported once (`:4239-4252`); print, JSON and RPC modes cannot ask, so `ask` there is
+    untrusted (`docs/security.md:75-82`);
+  - `--approve`/`-a` and `--no-approve` trust or ignore the project's files for one run (`src/cli/args.ts:241-244`,
+    `:341-342`).
+- **Codex** keys trust by the cwd, then the project root, then the git root, a worktree's being its main repository's,
+  and loads an untrusted project's layers disabled (`codex-rs/config/src/loader/mod.rs:1068-1110`, `:132-134`;
+  `codex-rs/git-utils/src/trust.rs:12-23`).
+- **grok-build** keeps trust in its home directory, so a cloned repository cannot trust itself, and does not record
+  a decision for the home directory or the filesystem root (`crates/codegen/xai-grok-permission-rules/src/folder_trust.rs:69-77`;
+  `src/trust.rs:17-22`, `:436-438`).
+- **The rule engines, for F6-2:** opencode's rule is `{action, resource, effect}`, the last match winning and no match
+  asking (`packages/core/src/permission.ts:87-97`); an "always" is saved per project (`permission/saved.ts:63-78`);
+  a reply may reject with feedback for the model (`permission.ts:276-296`); a tool denied for `*` is hidden
+  (`packages/core/src/tool.ts:292-295`). Kilo keeps the older `{permission, pattern, action}` shape
+  (`packages/schema/src/v1/permission.ts:16-19`), saves an "always" to its global config (`packages/opencode/src/permission/index.ts:342-366`),
+  turns an allow into a question for its protected configuration paths and never saves an "always" for them
+  (`src/kilocode/permission/config-paths.ts:11-23`; `permission/index.ts:198-213`, `:338-340`), refuses non-interactive
+  approval for flagged requests (`:295-304`), and tags every decision with its source (`src/kilocode/permission/provenance.ts:13-34`).
+
+**The decisions:**
+
+1. **Five sub-phases,** each one commit with its own record and gates, in this order:
+   - **F6-1 — project trust:** the decision and its order, `trust.json`, `defaultProjectTrust`, `gobble trust` and
+     `gobble untrust`, `/trust`, `--approve`/`--no-approve`, and the project files F3 holds back, loaded when trusted;
+   - **F6-2 — rules and permission requests:** the engine, `permissions.rules`, the defaults from tool annotations,
+     the four option kinds with the three scopes, rejection with feedback, hidden denied tools, provenance, gobble's
+     limits (protected paths; a delete asks), the `external_directory` rule, `/permissions`, and `--yes`;
+   - **F6-3 — shell commands:** `mvdan.cc/sh`, a pattern per sub-command, "always" at an arity prefix, Kilo's
+     inert-operator masking, raw patterns that fail closed, PowerShell as one raw pattern, 0012-MADR D10's native
+     file commands, and the default `bash(gobble update*)` → ask;
+   - **F6-4 — modes:** `accept-edits`, and `bypass` behind `permissions.allowBypass`, with a `current_mode_update` on
+     every change; plan mode's read-only ceiling, which no rule widens (Kilo's);
+   - **F6-5 — `request_permissions`:** 0012-MADR's row, deferred in the `permissions` family, loaded when a call is
+     refused for a permission (0012-MADR D9).
+
+   F6-2 to F6-5 are each made executable in turn, with their facts measured then. Decisions 2 to 4 are the owner's
+   choices of today, for F6-2, to be refined when it is made executable.
+2. **The rules are one ordered list, the last match winning** (choice 6; the owner's choice of 2026-10-19). This
+   replaces 0005-MADR's Rules row, whose three lists rank deny over ask over allow whatever their order:
+   ```yaml
+   permissions:
+     rules:
+       - ask: bash(*)
+       - allow: bash(git status*)
+       - allow: edit(src/**)
+       - deny: read(**/.env)
+   ```
+   - The layers are joined in order: the defaults from each tool's annotations, the global file's rules, a trusted
+     project's, the "always" answers saved for everywhere, those saved for the project, then the session's. No match
+     asks.
+   - gobble's limits are applied after the rules, and no rule lifts them: the protected paths, a delete's question, and
+     a mode's ceiling.
+   - 0018-MADR's `permissions.allow`, `ask` and `deny` become `permissions.rules`.
+3. **An "always" is kept where the person says** (the owner's choice of 2026-10-19). A request offers `allow_always`
+   and `reject_always` each in three scopes, as options with their own ids and names: this session (memory only); this
+   project (saved in gobble's config directory, keyed by the project root as `trust.json` is, never in the repository,
+   so a cloned repository cannot approve itself); everywhere (a rule added to the global `settings.yaml`, as Kilo does).
+   A protected path is never offered an "always" (Kilo).
+4. **`--yes` answers what a rule or the mode would ask** (the owner's choice of 2026-10-19). A delete and a protected
+   path are still refused without a person, and a deny rule always holds. Without `--yes`, print mode refuses every
+   question, as today.
+
+**F6-1's decisions:**
+
+1. **One decision a session, for its project root.** The root is 0018-MADR D2's: the git top-level of the session's
+   cwd, or the cwd. The decision gates every file the project supplies: the root's `.gobble/settings.yaml`; the cwd's
+   `.gobble/SYSTEM.md`, `APPEND_SYSTEM.md`, `skills/`, `prompts/` and `personalities/`; and each `.agents/skills` from
+   the cwd up to the root, home's excepted. Where those files sit is unchanged.
+2. **Pi's order:**
+   1. `--approve` trusts and `--no-approve` ignores the project for this run;
+   2. a project with none of decision 1's files is trusted, and nothing is saved;
+   3. the hook: F7 adds it here, and until then this step decides nothing;
+   4. the saved decision: the nearest of the root and its parents in `trust.json`;
+   5. `defaultProjectTrust`: `always` trusts, `never` does not;
+   6. `ask`, the default: gobble's line view asks, in its terminal, before the session starts (decision 5). Nothing
+      else can ask before a session, so print mode, `gobble acp`'s sessions and `gobble config` take `ask` as untrusted,
+      as Pi's print, JSON and RPC modes do.
+3. **`trust.json`,** in gobble's config directory, which 0003-MADR already names for it: `{"<path>": true|false}`, the
+   path the root's real path, written sorted with a two-space indent under `filelock`'s `EditPolicy`, mode `0600`. A
+   lookup walks up from the root's real path, the nearest saved decision winning (Pi). A decision is not saved for the
+   home directory or a filesystem root, which would trust every project under it (grok-build). Paths compare as the OS
+   does: case-insensitively on Windows.
+4. **`defaultProjectTrust`** (string, `ask`, `always` or `never`; default `ask`; global-only, 0018-MADR D6; a process
+   key). It is read from the global file alone, before the project layer is decided.
+5. **The line view's question** is Pi's, with gobble's words: `Trust <root>? It lets gobble load the project's
+   .gobble settings, SYSTEM.md, skills, prompts and personalities.`, and five answers: trust; trust the parent folder
+   (`<parent>`), offered unless the parent is home or a filesystem root; trust for this run; do not trust; do not trust
+   for this run. A run's answer is kept in memory for the run's sessions.
+6. **The prompt numbers its options when a kind repeats.** The question in decision 5 has two answers of each of two
+   kinds, as F6-2's scopes will. Where every option's kind is different, the line keeps 0008-MADR's `[y] [a] [n] [N]`
+   keys. Otherwise it lists each option by its name, `[1]` to `[9]`, then `[c] cancel`. `/trust`'s request uses the
+   same line.
+7. **The commands:**
+   - `gobble trust [DIR]` saves "trusted" for DIR's project root (the cwd's by default), and `gobble untrust [DIR]`
+     saves "not trusted"; `gobble untrust --forget [DIR]` removes the saved decision, so the default applies again;
+     `gobble trust --list` prints every saved decision. Each prints the decision for DIR afterwards, and its source;
+   - `/trust`, advertised in `available_commands`, prints the session's decision and its source, then asks through
+     `session/request_permission`: trust (`allow_always`), trust the parent folder (`allow_always`, when decision 3
+     allows it), do not trust (`reject_always`). A cancel saves nothing. The choice applies from the project's next
+     session, as Pi's `/trust` says to restart: a session's settings, prompt and tools are fixed when it starts;
+   - `--approve`/`--no-approve` leave `laterFlags`, and their help becomes "Trust the project's own files for this
+     run (--no-approve: ignore them)". `--yes` stays there until F6-2.
+8. **What a trusted project loads:**
+   - its settings layer, through 0018-MADR D5's `Trusted`;
+   - its `SYSTEM.md` and `APPEND_SYSTEM.md`, each winning over the user's copy (0005-MADR's row);
+   - its skills, in 0005-MADR's discovery order, project first, the first of a name winning;
+   - its prompt templates, `.gobble/prompts` before the config directory's, the first of a name winning, as skills do;
+   - its personality overrides, `personalities/<name>/messages.md` and `personalities/prompts/<id>.md`, over the user's
+     for that session, the project's winning, with 0022-MADR D15's checks. A project's `personality.md` is refused with
+     a note (D15). The model-facing overrides, the tools and rules sections, the compaction prompts and the tool
+     descriptions, apply to that session alone.
+9. **An untrusted project is reported once:**
+   - each held-back file's note keeps its log line, worded `not loaded: the project is not trusted (gobble trust, or
+     /trust)`; the settings layer's reason is `project settings apply once the project is trusted (gobble trust)`;
+   - the line view prints one line before the welcome when it did not just ask, and print mode one line on stderr:
+     `this project is not trusted: its .gobble files and skills are not loaded; gobble trust trusts it`;
+   - an ACP session's first reply opens with the same line, sent as a command's reply is (`acpserver/commands.go:125-128`):
+     not written to the session file, and not seen by the model.
+
+**F6-1's steps:**
+
+1. **`internal/config`:** `defaultProjectTrust` in `keys.go` (an enum, global-only, a process key); the `Settings`
+   field and its cases; the template block; `testdata/settings.schema.json` from `genschema`; `textUntrusted`
+   reworded.
+2. **`permission/trust.go`:** the store (`trust.json`: load, save, forget, list, under the lock), the nearest-decision
+   lookup, the home and root refusal, the files that need trust, and `DecideTrust`, decision 2's order with its source.
+3. **`prompt`:** `SystemFiles` and `TrustNote` take the decision; a trusted project's copies win.
+4. **`acpserver`:** `SessionSettings` gains the trust decision and, when trusted, the project's overrides;
+   `sysprompt.go` loads the project's skills, templates, personalities and sections per session; tool descriptions per
+   session; `/trust`, through a new `Options.Trust` that saves, as `Options.SaveSetting` writes a setting; the notice
+   on the first reply.
+5. **`internal/cli`:** the trust function, given to `config.Resolve` and to the sessions; the line view's question and
+   the numbered prompt line; print mode's line; `gobble trust` and `gobble untrust` in Kong; the flags; the project's
+   personality and prompt overrides loaded per session as the user's are.
+6. **Records:** this plan's execution record; `docs/README.md`.
+
+**F6-1's tests,** each seen failing on a scratch copy:
+
+- `permission`: decision 2's order, a row per step, with its source; the nearest saved decision, a parent's and a
+  child's; the refusal of home and a filesystem root; a symlinked root saved by its real path; the file's shape and
+  mode; two saves at once, neither lost;
+- `internal/config`: `defaultProjectTrust`'s values and its refusal from a project file; **an untrusted project's
+  `settings.yaml` has no effect** (0005-PLAN F6's accept), and a trusted one's does;
+- `acpserver`: a trusted session loads the project's `SYSTEM.md`, skills, templates and personality overrides, the
+  project's winning, and an untrusted one loads none and logs each note; a project's `personality.md` refused; a
+  session's tool description from its project and not another session's; `/trust` saving each answer and saving
+  nothing on cancel; the first reply's notice, not in the session file and not in the next request;
+- `internal/cli`: `gobble trust`, `untrust`, `--forget` and `--list`; `--approve` and `--no-approve` over a saved
+  decision; print mode's line, and its `ask` taken as untrusted; the line view's question with each answer, and a
+  run's answer kept for the run only; the numbered prompt line, and 0008-MADR's keys unchanged when kinds differ.
+
+**F6-1's gates:** the pre-add check on the changed `.go` files; lint for linux, darwin and windows with
+`CGO_ENABLED=0`; `CGO_ENABLED=1 go test -race -count=1 ./...`; `make preflight`. Windows `go test` and `-race`, the
+second Linux machine's `-race`, and Windows and WSL `make preflight` are the owner's.
+
+**Existing tests:** the tests that pin a held-back file's note change with its wording; `TestKeysMatchSettings`'s
+count, 28, becomes 29; the tests that list every flag the CLI refuses lose `--approve`.
+
+**Not taken:** Pi's extension answer, which waits for F7's hook; Codex's lookup by both the cwd and the git root,
+since gobble's project files hang off one root; asking from `gobble acp`, which cannot ask before `session/new`
+returns the session's id; applying `/trust` to the running session.
