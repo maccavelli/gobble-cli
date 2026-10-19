@@ -8047,3 +8047,85 @@ global-only stands in for.
     have, and passed on macOS;
   - the identifier scan over the change: no account name, hostname or real-machine path.
 - **Not done, and why:** F6-5's `request_permissions`; a `defaultMode` setting and a saved mode (not taken above).
+
+**2026-10-19 — F6-5 made executable: `request_permissions`** (the owner's word of 2026-10-19, "committed, proceed",
+after F6-4's commit `aeb12c4`). *Approved as written on the owner's word of 2026-10-19 ("Approve as written"), with
+2a and 3a, the owner's choices of the same day.* It carries out F6 decision 1's F6-5, 0005-MADR's native-tools item 11
+and 0012-MADR's row and D9 event, and adds what they leave open: decisions 1 to 9 below. It is F6's last sub-phase; the owner's tag waits for its commit.
+
+**The facts,** measured on 2026-10-19 against `main` `aeb12c4` and codex `8c076942cb`:
+
+- **0005-MADR** (`0005-MADR-v1-feature-scope.md:902`): "`request_permissions {permissions, reason}` asks the client for
+  a scoped read, write or network grant, for the turn or the session, instead of failing (codex X5, X6)".
+- **0012-MADR:** deferred, alone in the `permissions` family (`:436`, `:443`); its schema `permissions` required,
+  `{read` array of paths, `write` array of paths, `network` boolean`}` with `minProperties` 1, `reason` required with
+  `minLength` 1, `scope` `turn` or `session`, `turn` by default (`:531`); D9's third way of loading: "A call refused
+  because the session lacks a permission loads the `permissions` family, and the refusal says `request_permissions`
+  is now available. No other event loads tools in 1.0" (`:458`); loads are append-only (`:459-460`).
+- **codex** (`codex-rs/core/src/tools/handlers/request_permissions.rs`, `shell_spec.rs:154-184`, `:276-291`): the
+  request's paths are resolved against the turn's environment (`:79`), an empty request is refused ("requires at
+  least one permission", `:92`), the session asks the client (`:97`) and the response is the tool's output; what is
+  granted widens its OS sandbox's file-system and network policy. `reason` is optional there.
+- **gobble today:** no sandbox, so nothing gates the network; the permission engine decides file tools by their paths
+  and the shell by its commands (F6-2, F6-3). The agent loads tools only from a result that is not an error
+  (`agent/agent.go:722`), and a refusal is an error, so D9's event needs its own path. Session-scoped answers live in
+  the session's rule layer (F6-2b decision E); `exit_plan_mode` is the model of a tool that asks the client for its
+  own call (`acpserver/modes.go`).
+
+**The decisions:**
+
+1. **The tool,** in acpserver beside `exit_plan_mode`, with 0012-MADR's schema exactly; deferred, family
+   `permissions`; read-only, since it asks rather than changes. Its question offers `grant` ("Grant") and `refuse`
+   ("Refuse"), ids that `--yes` does not answer, so print mode refuses it, with or without `--yes`; its title names
+   the paths, the scope and the reason.
+2. **What a grant does** (*the owner's choice of 2026-10-19: 2a, "Answers questions only"*). A grant is a set of paths, resolved against the working directory, each
+   covering itself and everything below it: a read grant for `read`, `grep`, `find` and `tree`, a write grant for
+   those and for `write`, `edit`, `move`, `copy` and `mkdir`.
+   - **2a, recommended:** a grant answers questions only: a call whose every path a grant covers, that a rule, a
+     default or `external_directory` would ask about, runs; a deny rule the user wrote still refuses, and gobble's
+     limits still refuse or ask, as in bypass (F6-4 decision 4a). A grant is the person's answer to many questions at
+     once, never an undoing of what they wrote.
+   - **2b:** a grant is an allow rule after every other, as an "always" answer is, so a deny rule under the granted
+     paths no longer refuses; the limits still hold.
+3. **`network`** (*the owner's choice of 2026-10-19: 3a, "Keep it, say so"*). gobble gates no network access (there is no sandbox, and no web tool yet):
+   - **3a, recommended:** the field stays, as 0012-MADR writes the schema; a request that asks only for `network` is
+     answered without a question that nothing in gobble restricts network access, and one that asks for paths too is
+     asked about its paths alone;
+   - **3b:** the field is dropped from the schema, by amendment of 0012-MADR's row, until something gates the
+     network.
+4. **The scope:** `turn` grants end when the prompt's turn ends; `session` grants end with the session, unsaved, as
+   the session's "always" answers do (F6-2b decision E). Neither is offered as saved for a project or everywhere.
+5. **Plan mode:** a write grant is refused without a question ("plan mode is read-only"); a read grant is asked, and
+   reads were allowed already, so it matters only outside the workspace. Bypass and accept-edits change nothing about
+   the tool's own question.
+6. **D9's event:** a call the person declined (or that print mode or a cancelled question refused), whose tool a
+   grant could cover, loads the `permissions` family once, if it is not loaded, and its refusal ends "request_permissions
+   is now available: call it to ask the user for read or write access to paths, for this turn or this session." A
+   deny rule's, a limit's and plan mode's refusals do not load it, since a grant does not lift them (decision 2a); the
+   load is recorded as every load is (`gobble.tools`).
+7. **The answer the model reads:** what was granted, the paths, the scope, and that calls under them run without
+   asking; or that the user refused, with their feedback when the answer carries it (F6-2b decision F).
+8. **Provenance:** a call a grant allowed is logged with its rule as `grant turn` or `grant session`; `/permissions`
+   lists the session's grants after its rules, numbered, removable.
+9. **Unchanged:** the rules, the modes, the limits, the stores.
+
+**F6-5's steps:**
+
+1. **`tool`:** the `permissions` family's name, which the agent and acpserver share.
+2. **`agent`:** D9's load on a declined call, with the refusal's last sentence (decision 6).
+3. **`acpserver`:** `request_permissions` (decisions 1, 3, 5, 7); the session's grants, turn and session, and their
+   end; `byGrant` in `planPolicy` after `byMode` (decisions 2 and 8); `/permissions`' grants.
+4. **Records:** this plan's execution record; 0005-MADR's item 11 and 0012-MADR's row and D9 marked built;
+   `docs/README.md`; `docs/architecture.md`; the root README.
+
+**F6-5's tests,** each seen failing on a scratch copy: the schema, an empty request and a missing reason refused; a
+grant answering a read outside the workspace and a write inside it, for the turn and then not, and for the session;
+a deny rule and each limit holding under a grant, and decision 2 as chosen; a path outside every grant still asked;
+`network` alone and with paths, decision 3 as chosen; plan mode refusing a write grant; print mode refusing, with and
+without `--yes`; the family loaded on a decline and not on a deny, a limit or plan mode, and once; the refusal's
+sentence; the log's `grant` source; `/permissions` listing and removing a grant.
+
+**F6-5's gates:** as F6-4's.
+
+**Not taken:** codex's sandbox widening, which gobble's `exp/sandbox` would need; saving a grant beyond the session;
+an `environment_id`, which codex needs for remote environments and gobble does not have.

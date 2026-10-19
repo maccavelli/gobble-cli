@@ -114,7 +114,9 @@ The plans run in sequence.
   - Run: F6-3 on 2026-10-19 (no deviation).
   - Made executable: F6-4, the modes, on 2026-10-19; approved as written, the user's rules winning over
     accept-edits and gobble's limits still asking in bypass.
-  - Run: F6-4 on 2026-10-19 (no deviation). F6-5, `request_permissions`, is next on the owner's word. No release is
+  - Run: F6-4 on 2026-10-19 (no deviation).
+  - Made executable: F6-5, `request_permissions`, on 2026-10-19; approved as written, a grant answering questions
+    only and `network` kept but gating nothing. No release is
     tagged before F6-5, by the owner's choice of that date.
   - The SDKs: [0023-PLAN](decisions/0023-PLAN-pin-current-releases.md) pinned go-llmprovider-sdk `v1.15.0` and
     acp-go-sdk2 `v1.16.0` on 2026-10-19, so `gobble acp` answers a request piped before the end of its input. A
