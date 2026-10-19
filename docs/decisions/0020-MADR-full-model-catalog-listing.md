@@ -61,7 +61,7 @@ The issue names its evidence at an older commit (`ad6ea57`, SDK `v1.2.1`); every
 - **F4. The capable profile changes the head of the open catalogs.** On Kilo it adds 13 models the utility profile leaves out (`kilo-auto/*`, dense models of 14B or less) and puts `openai/gpt-6-astra` first; on OpenAI it changes nothing.
 - **F5. A listing costs about a second, and its failure is safe but its error text is not.** The measured listings took 0.27 to 1.9 s, bounded by the SDK at 10 s; a failure gives the static six with `Live` false. The provider's message can carry a masked fragment of the key, so it must not reach a log.
 - **F6. Model metadata costs one 395 KB fetch per process, for the open catalogs only.** OpenCode Zen and Go, Hugging Face and Together rank with it; OpenAI and Kilo request none.
-- **F7. A listing sends no generation.** `catalog.List` makes one `GET` of the provider's model list, plus the metadata fetch; probes belong to a provider's `ListModels`, and gobble's `New` turns them off.
+- **F7. A listing sends no generation.** `catalog.List` makes one `GET` of the provider's model list, plus the metadata fetch; probes belong to a provider's `ListModels`, and gobble's `New` turns them off. *(2026-10-19, 0023-PLAN deviation 1: from go-llmprovider-sdk `v1.14.0` the metadata fetch goes with every provider's listing but Kilo's and Ollama's, where it went with Hugging Face's, Together's and opencode's; a listing past the curated six is newest first; and a listing is served from an in-process cache for 10 minutes.)*
 - **F8. The model choice is read many times per session, with no context, in every mode.** So a listing must be made once and kept, not made per read, and print mode lists too.
 - **F9. The default model can come from the listing without changing the provider.** The session's chosen model is what each request names.
 - **F10. One test would reach the network.** `TestDefaultProviderSetting` sets a credential and builds the model choice, so a real lister would list OpenCode Go with `test-only`.
@@ -91,7 +91,7 @@ Chosen option: "A", because it offers the full catalog now, through the one pack
 
 ### The decisions
 
-- **D1. Require `github.com/maccavelli/go-llmprovider-sdk v1.11.0`,** with the sums measured above, in the commit that adds D2's listing, never `WithLimit`. *(2026-10-13, 0020-PLAN P1 deviation 3: `v1.12.0`, the latest tag, with F12's sums; gobble sets no `Request.Cache`, so its requests do not change. Setting it is a later record's.)*
+- **D1. Require `github.com/maccavelli/go-llmprovider-sdk v1.11.0`,** with the sums measured above, in the commit that adds D2's listing, never `WithLimit`. *(2026-10-13, 0020-PLAN P1 deviation 3: `v1.12.0`, the latest tag, with F12's sums; gobble sets no `Request.Cache`, so its requests do not change. Setting it is a later record's.)* *(2026-10-19: `v1.15.0`, by [0023-MADR-pin-current-releases.md](0023-MADR-pin-current-releases.md).)*
 - **D2. `llm/provider` gains `List(ctx, id, apiKey, o) (Listing, error)`.**
   - It calls `catalog.List` with `llmprovider.NewStaticToken(apiKey)`, `catalog.WithProfile(catalog.ProfileCapable)`, `Options`' client info and HTTP client, and model metadata on; no limit and no probe. It passes no logger, so the SDK logs nothing of a listing, and D6's line is the only one.
   - `Listing` is `{Models []string; Live bool; Err error}`: the listing's `Recommended` when it is live and not empty; otherwise the static models, `Live` false, and the reason in `Err`, wrapped as `New`'s errors are (`mapError`).

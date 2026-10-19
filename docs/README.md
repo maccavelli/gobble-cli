@@ -55,8 +55,8 @@
 | 0022 | MADR | [gobble speaks in its own voice: four personalities on a sarcasm scale, written in natural-language files, with every text overridable](decisions/0022-MADR-gobble-voice-and-personalities.md) | accepted 2026-10-18 (the owner's design and answers of that date: four personalities, `/personality`, Dry by default; D12 amended 2026-10-18, P4's slow lines and goodbye; D15 amended 2026-10-18, compaction prompts wait for F5-4, settled by F5-4 the same day) |
 | 0022 | GATES | [gobble's voice: the owner's live evaluation](reports/0022-GATES-voice-live-evaluation.md) | prepared 2026-10-18; waiting on the owner's runs (`openai`, `grok`) |
 | 0022 | PLAN | [Implement gobble's voice: four personalities, a natural-language catalog, and overrides for every text](decisions/0022-PLAN-gobble-voice-and-personalities.md) | in progress (approved 2026-10-18; P1 complete 2026-10-18, the catalog with `boring` only; P2 complete 2026-10-18, Dry the default, deviation 1; P3 complete 2026-10-18, choosing, Snarky and Bombastic; P4 complete 2026-10-18, ambient text, deviations 1 and 2; P5 complete 2026-10-18, overrides, deviation 1; P6 prepared 2026-10-18, the owner's live evaluation in 0022-GATES) |
-| 0023 | MADR | [Pin the current releases: acp-go-sdk2 v1.16.0, go-llmprovider-sdk v1.15.0, the x modules and the tool modules](decisions/0023-MADR-pin-current-releases.md) | accepted 2026-10-19 (golangci-lint kept at the fleet's `v2.14.0`) |
-| 0023 | PLAN | [Implement pinning the current releases](decisions/0023-PLAN-pin-current-releases.md) | in progress (approved 2026-10-19; runs before 0005-PLAN F6-2) |
+| 0023 | MADR | [Pin the current releases: acp-go-sdk2 v1.16.0, go-llmprovider-sdk v1.15.0, the x modules and the tool modules](decisions/0023-MADR-pin-current-releases.md) | accepted 2026-10-19 (golangci-lint kept at the fleet's `v2.14.0`; deviation 1's note on the metadata fetch, 2026-10-19) |
+| 0023 | PLAN | [Implement pinning the current releases](decisions/0023-PLAN-pin-current-releases.md) | completed (2026-10-19; one deviation, the metadata fetch every listing makes, accepted) |
 
 0003-MADR has no PLAN of its own. 0004-PLAN Phase 2 and 0005-PLAN F10 implement it.
 
@@ -103,13 +103,14 @@ The plans run in sequence.
   - Docs brought up to date on 2026-10-19: `architecture.md`, the root README, `developing.md`,
     `choosing-a-model.md`, the stale package comments, and `personality`'s tier.
   - Made executable: F6-2, rules and permission requests, on 2026-10-19, as two sub-phases, F6-2a the engine and
-    F6-2b the questions and stores; approved as written, to run after 0023-PLAN.
-  - The SDKs, as of 2026-10-19 (pinning them is [0023-PLAN](decisions/0023-PLAN-pin-current-releases.md), approved, next;
-    acp-go-sdk2 has since tagged `v1.16.0`): go-llmprovider-sdk `v1.15.0` ships OpenAI's ChatGPT-plan sign-in, which F4-3d waits
-    for, and `WithRetryNotify`, the retry notices F5-1 left for later (its issues 2 and 3, closed 2026-10-19);
-    gobble pins `v1.13.0`, and each adoption is a sub-phase made executable on the owner's word. F4-1b still waits:
-    `v1.15.0`'s retry still buffers a stream (`llmprovider/retry.go:79-80`). acp-go-sdk2 `v1.15.2` answers the
-    requests received before the end of input (its issue 8); gobble pins `v1.14.0`.
+    F6-2b the questions and stores; approved as written, to run after 0023-PLAN, which is complete.
+  - The SDKs: [0023-PLAN](decisions/0023-PLAN-pin-current-releases.md) pinned go-llmprovider-sdk `v1.15.0` and
+    acp-go-sdk2 `v1.16.0` on 2026-10-19, so `gobble acp` answers a request piped before the end of its input. A
+    provider's default model, the first of its live listing, may change with the SDK's ranking from `v1.14.0`, and every
+    listing but Kilo's and Ollama's also fetches models.dev's metadata document, with no credential, at most once in 10
+    minutes. The SDK's ChatGPT-plan sign-in, which F4-3d waits for, and `WithRetryNotify`, the retry notices F5-1 left
+    for later, are each a sub-phase made executable on the owner's word. F4-1b still waits: `v1.15.0`'s retry still
+    buffers a stream (`llmprovider/retry.go:79-80`).
 - **0014-PLAN.** Run: P0 and P1, the move to acp-go-sdk2 `v0.14.0`, on 2026-10-10. Complete.
 - **0018-PLAN.** Run: P1–P7, the configuration surface, on 2026-10-12, P7, the deadline lock, as an amendment.
   Complete. Put ahead of 0017 by the owner.

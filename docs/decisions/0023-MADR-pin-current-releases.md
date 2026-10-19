@@ -107,6 +107,7 @@ the owner decides at review.* *(2026-10-19: accepted by the owner, "Approve 0023
 - **D4. `gobble acp` answers a request piped before end of file** (acp-go-sdk2 issue 8, fixed in `v1.15.2`): a test
   runs the agent over a pipe that closes after one request and reads its answer. No gobble code changes, since the fix
   is the SDK's default; the test fails at `v1.14.0`.
+- *(2026-10-19, 0023-PLAN deviation 1, the owner's choice: from go-llmprovider-sdk `v1.14.0` every provider's listing but Kilo's and Ollama's also fetches the model metadata document, `models.opencode.ai/api.json`, with no credential, cached in-process for 10 minutes; gobble takes it, as 0020-MADR's "model metadata on, once per process" covers, and `TestListFullCatalog` requires the document to carry no `Authorization`. The facts above, which said one test failed on its order, missed this second check, which the order failure hid.)*
 - **D5. The listing's order is the SDK's:** `TestListFullCatalog` takes `v1.15.0`'s order once the PLAN shows, from the
   SDK's source, which change makes it. 0020-MADR D4 is unchanged: a new session starts on the listing's first model,
   which `v1.14.0`'s ranking may now choose differently for a provider; that is said in the README's notes for the

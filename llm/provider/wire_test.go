@@ -211,7 +211,9 @@ func TestWireRateLimitResets(t *testing.T) {
 		{"openai", "gpt-6-luna", "x-ratelimit-reset-requests", func() string { return "90s" }, 90 * time.Second, 90 * time.Second},
 		{"huggingface", "deepseek-ai/DeepSeek-V4-Flash-0731", "x-ratelimit-reset-requests", func() string { return "90s" }, 90 * time.Second, 90 * time.Second},
 		{"claude", "claude-haiku-5-5", "anthropic-ratelimit-requests-reset",
-			func() string { return time.Now().Truncate(time.Second).Add(91 * time.Second).UTC().Format(time.RFC3339) }, 89 * time.Second, 91 * time.Second},
+			func() string {
+				return time.Now().Truncate(time.Second).Add(91 * time.Second).UTC().Format(time.RFC3339)
+			}, 89 * time.Second, 91 * time.Second},
 	} {
 		t.Run(c.id, func(t *testing.T) {
 			w := &cannedWire{status: http.StatusTooManyRequests, header: http.Header{c.header: {c.value()}}, body: wireRateLimited}
