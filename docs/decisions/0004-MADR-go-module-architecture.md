@@ -258,6 +258,16 @@ exp/a2a/                          Agent2Agent agent card and task endpoint
 exp/sandbox/                      OS sandbox profiles for bash (Seatbelt, Landlock)
 ```
 
+*(2026-10-19, the owner's choice, 0005-PLAN "The docs brought up to date": the packages `go list ./...` prints that the
+map above leaves out, since they came later. `personality/` is **beta**: gobble's voice, the message catalog, the
+personalities' briefs and the user's and a trusted project's changes;
+[0022-MADR-gobble-voice-and-personalities.md](0022-MADR-gobble-voice-and-personalities.md) D16 put it under rule 1 and
+named no tier. The others are internal by their path or are test fixtures: `internal/cli/complete/`,
+`internal/cli/editor/`, `internal/cli/render/` and `internal/cli/term/` (the native CLI mode's completion, editor,
+output and terminal), `internal/config/genschema/` (the settings' schema generator), `internal/filelock/` (the lock
+between processes), `internal/frontmatter/` (skills' and templates' YAML frontmatter), `internal/proctree/` (process
+trees), and `mcpclient/mcptest/` (beta, an MCP server fixture for tests). `docs/architecture.md` describes each.)*
+
 Names with a `client` or `server` suffix (`mcpclient`, `acpserver`)
 avoid shadowing the SDK package names `mcp` and `acp`, which appear
 alongside them in the same file.

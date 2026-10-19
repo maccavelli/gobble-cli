@@ -3,7 +3,7 @@
   "properties": {
     "defaultProvider": {
       "type": "string",
-      "description": "The provider gobble uses, with its first model; its credential variable must be set. Empty takes the first provider whose credential variable is set.",
+      "description": "The provider gobble uses, with its first model; it needs a credential, from any source gobble auth status lists. Empty takes the first provider, in this order, with a credential.",
       "default": "",
       "enum": [
         "",

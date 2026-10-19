@@ -7,15 +7,15 @@
 //
 // # Live tests
 //
-// A test that calls a real provider carries the build tag live_<provider>
-// (live_anthropic, live_openai, …) and gets its credential with
-// LiveCredential, which skips the test when the provider's usual variable is
-// unset:
+// A test that calls a real provider carries the build tag live_<provider>,
+// gobble's provider id (live_claude, live_openai, …), and gets its credential
+// with LiveCredential, which skips the test when the provider's usual
+// variable is unset:
 //
-//	//go:build live_anthropic
+//	//go:build live_claude
 //
 //	key := llmtest.LiveCredential(t, "ANTHROPIC_API_KEY")
 //
-// Run one with go test -tags live_anthropic. Default CI passes no live_ tag,
+// Run one with go test -tags live_claude. Default CI passes no live_ tag,
 // so live tests never run there.
 package llmtest

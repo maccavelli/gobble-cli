@@ -40,7 +40,8 @@ A local build reports its version as `0.0.0-dev`, plus the commit. `version --js
 fields as one JSON object. `version --identity` prints the line the release workflow checks.
 
 `gobble` with no command is the line session, `gobble -p "…"` answers one prompt, and `gobble acp`
-serves the agent on stdio. A prompt needs a model credential in the environment.
+serves the agent on stdio. A prompt needs a model credential: from `--api-key -`, `auth.json`,
+`models.json`'s `apiKey` or the provider's variable ([credentials.md](credentials.md)).
 
 ## Test
 
@@ -142,20 +143,20 @@ for a quicker loop.
 
 ## Live tests
 
-A test that calls a real model provider is a live test. None exists yet, and default CI runs none.
-The convention, from `llm/llmtest`:
+A test that calls a real model provider is a live test. `llm/provider` has one for each of
+`openai`, `claude`, `gemini` and `grok`, and default CI runs none. The convention, from `llm/llmtest`:
 
-- the file carries the build tag `live_<provider>`, such as `live_anthropic`;
+- the file carries the build tag `live_<provider>`, gobble's provider id, such as `live_claude`;
 - the test reads its credential with `llmtest.LiveCredential`, which skips the test when the
   provider's usual variable is unset:
 
   ```go
-  //go:build live_anthropic
+  //go:build live_claude
 
   key := llmtest.LiveCredential(t, "ANTHROPIC_API_KEY")
   ```
 
-- you run it with `go test -tags live_anthropic ./...`.
+- you run it with `go test -tags live_claude ./llm/provider/`.
 
 Never commit a credential or put one on a command line. Export it in your shell.
 

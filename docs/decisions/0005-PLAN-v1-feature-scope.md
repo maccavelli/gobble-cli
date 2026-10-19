@@ -7134,3 +7134,266 @@ returns the session's id; applying `/trust` to the running session.
 - **Not tested by the suite:** `ChatCmd.Run`'s call of the question, which needs a terminal on stdin and stderr that
   `Main` never has in a test; the question itself is tested through `decideTrustHere`.
 - **Next:** F6-2, rules and permission requests, made executable on the owner's word.
+
+**2026-10-19 — The docs brought up to date** (the owner's word of 2026-10-19, after F6-1's commit `30b8a4b`: "proceed
+to do due dilligence. prove all assertions. make no assumptions. update related docs and ensure they are accurate,
+up-to-date and detailed"; and the owner's choice of that date that the update covers the stale package comments and
+gives `personality` the beta tier). *Approved and run on that word; the record follows.*
+
+**What was found,** each re-proven in this session by a command or a read of the line, after two read-only audits of
+`docs/architecture.md` and of the README, `docs/README.md` and the guides:
+
+- `docs/architecture.md` was last changed in `794f7da`, 22 commits before `30b8a4b`: it had no row for `personality`
+  or `internal/config/genschema`, gave go-llmprovider-sdk as `v1.12.0` where `go.mod:16` has `v1.13.0`, said Kong is
+  imported in `internal/cli` only where `internal/cli/complete` imports it too, left `personality` out of rule 1
+  (`internal/archtest/check.go:127`), said a project's skills and prompts "wait for trust", named none of F5's,
+  0022's or F6-1's work, listed three of `scripts/`'s five files and one of `docs/guides/`'s four, and said CI's release
+  is a rehearsal "on every push and pull request", where CI runs on pushes to `main`, `v*` tags and pull requests
+  (`.github/workflows/ci.yml:2-6`) and the build is a release only for a tag the release spec admits
+  (go-selfupdate-lib `v1.15.2`, `internal/cmd/selfupdate-release/plan.go:95-101`);
+- `personality/doc.go` had no `Stability:` line, and no record gave it a tier; `internal/frontmatter` and
+  `internal/config/genschema` have no `doc.go`;
+- the root README gave the same stale SDK version, said "manual compaction", and listed the permission engine as
+  not built at all, where F6-1 is; it named none of F5's, 0022's or F6-1's commands and settings;
+- `docs/README.md` linked `architecture.md#sibling-sources`, a heading that no longer exists; called 0006-MADR
+  "proposed" where its frontmatter says `accepted` (set in `9d472a9`); left the 0004-MADR status cell's parenthesis
+  open; called 0018-PLAN's run "P1–P6" where it ran P1–P7; and had no rows for retry, titles, trust or personalities;
+- 0006-MADR's body still said "This file is a proposal. Nothing here is accepted", and named the machine its survey
+  ran on: a host name committed in `c1f52a8` and `5353bdb` (2026-10-04), both pushed;
+- `docs/guides/developing.md` said a prompt needs a credential "in the environment" and that no live test exists,
+  with the tag `live_anthropic`, where `llm/provider` has `live_openai`, `live_claude`, `live_gemini` and `live_grok`
+  tests (`llm/provider/live_*_test.go:1`), as `llm/llmtest/doc.go`'s example also said;
+- `docs/guides/choosing-a-model.md` and `defaultProvider`'s setting text said "the first provider whose credential
+  variable is set", where `provider.ChooseWith` takes a credential from any source (`llm/provider/ambient.go:35-55`);
+  the guide did not mention `smallModel`;
+- the package comments of `agent` ("steering and follow-up queues come later"), `llm/provider` ("until 0005-PLAN F4
+  adds flags and a credential store") and `compaction` ("the automatic trigger and overflow recovery arrive with
+  0005-PLAN F5") described work since done;
+- 0018-MADR D5 still said "Until F6 builds trust, nothing is trusted";
+- 0004-MADR's package map leaves out ten packages `go list ./...` prints;
+- the SDKs moved: go-llmprovider-sdk `v1.15.0` ships OpenAI's ChatGPT-plan sign-in (its 0043-MADR, `LoginChatGPTPlan`
+  in `llmprovider/auth/oauth_plan.go:93`) and `WithRetryNotify` (its 0044-MADR, `llmprovider/retry.go:29-46`, `:90-101`),
+  closing its issues 2 and 3 on 2026-10-19, while its retry still buffers a stream (`retry.go:79-80`); acp-go-sdk2
+  `v1.15.2` answers the requests received before the end of input (its issue 8, release notes `v1.15.2`) and changes
+  no exported API since `v1.14.0` beyond three additions (`ElicitationSchema.PropertyOrder`, `UnstableMcpError.Extra`
+  and its `MarshalJSON`).
+
+**What changed:**
+
+- `docs/architecture.md`: every row checked against the tree; `personality` and `internal/config/genschema` added;
+  the rows of `agent`, `llm`, `llm/provider`, `tool`, `tool/builtin`, `permission`, `compaction`, `prompt`, `skill`,
+  `acpserver`, `acpclient`, `acpclient/acptest`, `internal/cli`, `internal/cli/render` and `internal/filelock` brought
+  to what the code does; the surfaces, rule 1, the SDK version, the tool directives, the checks, CI's triggers, the
+  release's rehearsal rule, NOTICE's credits and the tree corrected;
+- `README.md`: Status and Stack;
+- `docs/README.md`: the index cells above, the run list's SDK status and this entry, the plans list, and four rows of
+  the "I want to…" matrix;
+- `docs/guides/developing.md` and `docs/guides/choosing-a-model.md`: as found;
+- package comments: `agent/doc.go`, `llm/provider/doc.go`, `compaction/doc.go`, `llm/llmtest/doc.go`, and
+  `personality/doc.go`'s `Stability: beta`;
+- `defaultProvider`'s text in `internal/config/keys.go` and the template, and the schema from `genschema`;
+- 0006-MADR: the stale proposal line struck and annotated, and the host name replaced, forward only: the two
+  commits keep it, as AGENTS.md's rule for a pushed identifier says;
+- 0004-MADR: a dated note naming the ten packages its map leaves out, `personality` beta among them; 0018-MADR D5: a
+  dated note that F6-1 built trust.
+
+**Checks,** each seen to fail on a deliberately broken copy first:
+
+- a link checker over the README, `docs/README.md`, `docs/architecture.md` and the guides, for every relative link
+  and `#anchor` by GitHub's heading slugs: on a planted file with `architecture.md#sibling-sources` and a missing
+  file, `2 broken`, exit 1; on the docs as they now are, `0 broken`;
+- an architecture check: every package `go list ./...` prints has a row whose tier is its `doc.go` `Stability:`
+  line, or internal by its path, and every direct requirement's version is `go.mod`'s. On `30b8a4b`'s file: no row
+  for `internal/config/genschema` and `personality`, and the SDK at the wrong version, 3 mismatches, exit 1; on a
+  copy with `personality` made stable and the MCP SDK at `v1.7.0`, 2 mismatches; on the file as it now is, 0
+  mismatches over 48 packages.
+
+  Both scripts are in the session's scratchpad, not in the repository; adding them to `make preflight` would be a
+  change of its own.
+- The Go gates are recorded with F6-2's entry below, which follows in the same change.
+
+**Left as they are, named:** the unproven statements the audits could not check without accounts or a live
+service: `choosing-a-model.md`'s sample listing and `credentials.md`'s login transcripts; `docs/README.md`'s
+`git ls-remote` value of 2026-10-08, a snapshot of that day; F5-1's run date, 2026-10-16 in the record, where its
+commit `ce012b8` carries 2026-10-17.
+
+**2026-10-19 — F6-2 made executable: rules and permission requests** (the owner's word of 2026-10-19, the same as the
+entry above, and the owner's choices of that date:
+- a pattern matches by the kind of tool: paths for the file tools, the whole command for the shell tools, the name
+  for the rest;
+- the protected paths deny writes, and reads are free;
+- a rejection's feedback and a question's provenance travel in `_meta`, which gobble's own CLI fills;
+- an MCP tool asks by default whatever it declares;
+- a shell call's "always" covers its exact command until F6-3;
+- `/permissions` lists, removes and adds rules;
+- a project's saved rules go in `<config>/permissions.json`.
+
+0005-MADR's notes of 2026-10-19 on its Rules and Protected paths rows, 0018-MADR's on D4, and 0008-MADR's on the
+permission prompt record what changes there.) *Approved as written on the owner's word of 2026-10-19 ("Approve as
+written"): two sub-phases, and decision 4's refinement, the everywhere rules at the end of the global layer. F6-2a is
+made executable and run after [0023-PLAN-pin-current-releases.md](0023-PLAN-pin-current-releases.md), by the owner's
+choice of the same day; F6-2b after F6-2a's commit.*
+
+**The facts,** measured on 2026-10-19 against `main` `30b8a4b`, acp-go-sdk2 `v1.14.0` (and `v1.15.2`, which does not
+change these types), opencode `501b15af26`, Kilo `2a1903f291` and grok-build `2bdd1d6a63`:
+
+- **gobble's permission contract** is `Policy.Decide(ctx, Rule)`, `Rule {Tool, Mode, CallID, Title, Input, Repeated}`
+  and `Decision {Allow, Reason, Refusal}` (`permission/permission.go:8-45`). A `Rule` carries no paths and no
+  command.
+- **The agent asks only for a call that is not read-only, or that names a path outside the roots**
+  (`agent/agent.go:773-781`): a read-only call inside the roots never reaches the policy, so no rule could deny it
+  today. Every ask is `ModeAsk` (`:782`). A refusal is the model's text as it is; a decline is "The user declined this
+  call, so it did not run." with the policy's reason after it (`:788-795`).
+- **acpserver's policy** offers `allow_once` and `reject_once` (`acpserver/prompt.go:274-300`), inside `planPolicy`,
+  which refuses every ask in plan mode (`acpserver/modes.go:90-106`; wired at `acpserver/agent.go:610`).
+- **ACP's question and answer:** a `PermissionOption` is `{_meta, kind, name, optionId}` and a
+  `RequestPermissionResponse` is `{_meta, outcome}`, the outcome a selected option id or cancelled (acp-go-sdk2
+  `v1.14.0` `types_gen.go:8825-8838`, `:10145-10159`, `:10347-10356`). Nothing but `_meta` can carry a reason.
+- **gobble's clients:** acpclient hands a question to `Options.Permission` and maps its answer to an option, and
+  with none set selects the first `reject_once`, else `reject_always`, else cancels (`acpclient/conn.go:430-458`). The
+  line view numbers the options when a kind repeats (`internal/cli/permission.go`, F6-1). Print mode rejects
+  (`internal/cli/personality.go:87-104`). `--yes` is parsed and refused for F6 (`internal/cli/flags.go:79`).
+- **The tools' facts:** `Annotations {ReadOnlyHint, DestructiveHint, IdempotentHint, OpenWorldHint}`
+  (`tool/tool.go:31-37`); read, grep, find, tree, todo, `tool_search` and the resource tools are read-only; write,
+  edit, move, delete, copy, bash and powershell are destructive; mkdir is idempotent only (`tool/builtin/*.go`'s
+  `WithAnnotations`). Seven tools name their paths before they run (`WithLocations`: read, write, edit, move, delete,
+  copy, mkdir); twelve name their paths outside the roots (`WithOutside`, grep, find, tree, bash and powershell among
+  them) (`tool/tool.go:255-268`, `:285-295`). Delete asks every time only because no policy can say "always"
+  (`tool/builtin/fileops.go:60-61`).
+- **MCP tools** are named `mcp__<server>__<tool>` (`mcpclient/name.go:12-25`), and take the server's
+  `readOnlyHint` as their own (`mcpclient/tool.go:30-36`).
+- **Settings:** no setting is a list; a sequence where a key expects a scalar is a type error (`internal/config/
+  merge.go:106-112`), and 0018-MADR D4 says a higher layer's sequence replaces a lower one's (`:286-291`).
+- **gobble's glob engine** is `fsx.CompileGlob`: gitignore's syntax, `*` and `?` never crossing `/`, `**` across
+  directories, a pattern with no `/` matching a name at any depth (`internal/fsx/glob.go:17-28`).
+- **opencode:** a rule is `{action, resource, effect}`; `evaluate` takes the last rule whose action and resource
+  match, and asks when none does (`packages/core/src/permission.ts:87-97`); its wildcard turns `*` into "anything"
+  and a trailing `" *"` into an optional argument list (`packages/core/src/util/wildcard.ts:3-14`); a tool whose last
+  matching rule is `resource "*"` and `deny` is hidden (`packages/core/src/tool.ts:292-295`); a rejection with a
+  message fails the call as `CorrectedError{feedback}` and every other pending question of the session with it
+  (`permission.ts:276-296`); "always" is saved per project (`packages/core/src/permission/saved.ts:63-78`).
+- **Kilo:** its protected configuration paths are `.kilo/` and `.kilocode/` at any depth and `kilo.json`,
+  `kilo.jsonc`, `opencode.json`, `opencode.jsonc` and `AGENTS.md` at the root (`packages/opencode/src/kilocode/
+  permission/config-paths.ts:11-23`); a request for one turns an allow into a question (`packages/opencode/src/
+  permission/index.ts:196-214`) and its "always" into once (`:338-340`); a flagged request refuses an approval that is
+  not an interactive human's (`:293-304`); every decision records its source, `agent`, `global`, `project`, `yolo`,
+  `session`, `manual` or `default`, and the deciding rule (`src/kilocode/permission/provenance.ts:12-34`).
+- **grok-build** keeps edits of hook roots, git hooks, `.ssh`, shell startup files, `/etc`, its own configuration and
+  others' settings files behind a question even in its accept-edits mode (`crates/codegen/xai-grok-permission-rules/
+  src/shell_access.rs:376-389`).
+
+**The decisions:**
+
+1. **Two sub-phases,** each one commit with its own record and gates, proposed here for the owner's review:
+   - **F6-2a — the engine:** the rules, their grammar and subjects, the layers, gobble's limits, hidden tools, the
+     `external_directory` rule, provenance in the log, `--yes`, and the policy consulted for every call;
+   - **F6-2b — the questions and the stores:** the eight options with their three scopes, `permissions.json`, a rule
+     added to the global `settings.yaml`, feedback, `/permissions`, and the question's provenance.
+2. **The rules** (`permissions.rules`, the owner's choice of 2026-10-19, F6 decision 2): an ordered list of one-key
+   mappings, `allow`, `ask` or `deny`, each a rule `<tool>` or `<tool>(<pattern>)`. The tool part matches a tool's
+   name with opencode's wildcard, so `mcp__github__*` covers a server's tools and `*` every tool; no pattern is `*`.
+   A rule that does not parse, or names `allow` and `deny` together, is a settings error reported with its file and
+   line, and its layer applies without it.
+3. **What a pattern matches** (the owner's choice of 2026-10-19):
+   - **the file tools** (read, write, edit, grep, find, tree, move, delete, copy, mkdir): each path the call names,
+     relative to the project root with `/` inside it, absolute outside it, through `fsx.CompileGlob`, so `src/**` is
+     everything below `src` and `.env` is that name at any depth. A tool gains a `tool.Subjects` hook naming its paths,
+     which grep, find and tree need, since they name their paths only outside the roots today;
+   - **bash and powershell:** the whole command string, through opencode's wildcard, so `git status*` covers
+     `git status -s`, and `git *` covers `git` alone; F6-3 splits the command into sub-commands;
+   - **every other tool, MCP tools among them:** the name alone; a pattern on one never matches.
+
+   A call with several subjects, a move's two paths, is denied if any is denied, asks if any asks, and is allowed
+   only when all are.
+4. **The layers, joined in order, the last match winning** (F6 decision 2), with one refinement for the owner's
+   review: the "always" answers saved for everywhere are rules appended to the global `settings.yaml` (F6 decision 3),
+   so they are the global layer's last rules, not a layer after the project's:
+   1. **the defaults:** `allow` for each built-in read-only tool; `ask` for every other tool, an MCP tool whatever its
+      hints (the owner's choice of 2026-10-19); and `ask: external_directory(*)`;
+   2. the global file's `permissions.rules`, then a trusted project's;
+   3. the project's saved rules, from `permissions.json`;
+   4. the session's.
+
+   No match asks. The policy is consulted for every call (`agent/agent.go:779`'s read-only skip goes), so a deny rule
+   reaches a read; the defaults keep today's behaviour for a session with no rules.
+5. **gobble's limits,** applied after the rules, which no rule, no "always" and no `--yes` lifts:
+   - **protected paths deny writes** (the owner's choice of 2026-10-19): write, edit, move, delete, copy and mkdir on a
+     path under any `.git/`, under `~/.ssh/`, or at gobble's `auth.json`, `trust.json` or `permissions.json`. Reads
+     there are rules like any other;
+   - **these always ask before a write, never with "always" offered** (Kilo's): gobble's config directory, a project's
+     `.gobble/`, any `AGENTS.md`, and a project's `.agents/skills/`;
+   - **a delete always asks,** whatever an allow rule says (0005-MADR's native-tools amendment), and is never offered
+     "always";
+   - plan mode keeps refusing through `planPolicy` until F6-4 makes it a ceiling.
+6. **Hidden tools** (opencode's): a tool whose last matching rule is a `deny` with no pattern, or `*`, is neither sent
+   to the model nor found by `tool_search`.
+7. **`external_directory`:** a path outside the roots is the subject of an `external_directory` rule, the absolute
+   path matched by `fsx.CompileGlob`, in place of " (outside the workspace)" in the question's title. Its default asks;
+   `allow: external_directory(/tmp/**)` lets a session use `/tmp`.
+8. **`--yes`** (F6 decision 4): print mode answers "allow once" to a question a rule or the mode asked, and still
+   rejects a question one of decision 5's limits asked, which the question marks in `_meta.gobble.limit`. Without
+   `--yes`, print mode rejects every question, as today. It leaves `laterFlags`.
+9. **The question** (F6-2b): `allow_once`; `allow_always` for this session, this project and everywhere; `reject_once`;
+   `reject_always` for the same three (F6 decision 3), each its own option id and name. An "always" saves the call's
+   subjects as they were matched: the exact paths, the exact command (the owner's choice of 2026-10-19), or the tool's
+   name. A question under decision 5's limits offers only the two "once" options.
+10. **The stores** (F6-2b):
+    - the session's rules live in memory, and end with the session: a resumed session starts without them;
+    - the project's are `<config>/permissions.json` (the owner's choice of 2026-10-19), `{"<root's real path>":
+      [{"allow": "<rule>"}, …]}`, mode `0600`, locked for every change, as `trust.json` is;
+    - everywhere's are appended to the global `settings.yaml`'s `permissions.rules`, edited in place as `gobble config
+      set` edits, creating the key from its commented template block when it is absent. `internal/config` gains its
+      first list-valued key, whose layers are joined rather than replaced, by a dated amendment of 0018-MADR D4.
+11. **Feedback** (the owner's choice of 2026-10-19, F6-2b): an answer's `_meta.gobble.feedback`, a string, is passed to
+    the model with the refusal: "The user declined this call, so it did not run. The user said: <feedback>". gobble's
+    line view offers `[f] deny and say why`, which reads one line of text, then rejects once with it; acpclient's
+    `PermissionAnswer` gains `Feedback`. Another client may send it.
+12. **Provenance** (the owner's choice of 2026-10-19): F6-2a logs each decision, its tool, subjects, effect and the
+    deciding rule with its source (`default`, the settings file and line, `project` store, `session`, or a limit);
+    F6-2b also puts the source in the question's `_meta.gobble.rule`. No session-file entry is written.
+13. **`/permissions`** (the owner's choice of 2026-10-19, F6-2b): lists every rule in force, in order, numbered, with
+    its source; `/permissions remove N` removes a session rule, a project-store rule or a global-file rule (a trusted
+    project's own `settings.yaml` and the defaults are not removable there); `/permissions allow|ask|deny <rule>
+    [session|project|global]` adds one, the session by default.
+14. **Unchanged:** the repeated-call question (`Rule.Repeated`), `exit_plan_mode`, the level-5 personality's question
+    and `/trust`'s, none of which is a tool call's rule; `bash(gobble update*)` → ask, which F6-3 adds.
+
+**F6-2a's steps:**
+
+1. **`permission`:** the rule grammar, its parser and errors; the evaluation over layers with each rule's source; the
+   limits; the hidden-tool test; `Rule` gains its subjects and `Decision` its deciding rule.
+2. **`tool`, `tool/builtin`:** `tool.Subjects` and each file tool's paths, bash's and powershell's command.
+3. **`internal/config`:** the `permissions.rules` key, its validation, the join across layers, the template block,
+   the schema.
+4. **`agent`:** every call asks the policy; outside paths become `external_directory` subjects.
+5. **`acpserver`:** the engine inside `planPolicy`, over the session's layers; hidden tools left out of the request and
+   of `tool_search`; each decision logged; the limit mark in the question's `_meta`.
+6. **`internal/cli`:** `--yes` out of `laterFlags`, and print mode's answer.
+7. **Records:** this plan's execution record; `docs/README.md`; `docs/architecture.md`.
+
+**F6-2a's tests,** each seen failing on a scratch copy: the grammar's accepted and refused rules, with file and line;
+last-match-wins across the four layers, a row a layer; each tool kind's subjects, a move's two paths, `.env` at any
+depth, an absolute path outside the root; the defaults, an MCP tool marked read-only still asking; each limit lifted by
+neither a rule, an "always" nor `--yes`; a deny reaching a read; a hidden tool absent from the request and from
+`tool_search`; `external_directory` asked and allowed by a rule; print mode with and without `--yes`; an untrusted
+project's rules not applied.
+
+**F6-2a's gates:** the pre-add check on the changed `.go` files; lint for linux, darwin and windows with
+`CGO_ENABLED=0`; `go test -count=1 ./...`, `CGO_ENABLED=1 go test -race -count=1 ./...` and `make preflight` on macOS,
+on the Linux machine and on the Windows laptop, each over ssh on a copy of the working tree, as F6-1's were.
+
+**F6-2b** is made executable after F6-2a's commit, with its facts measured then.
+
+**Not taken:** opencode's resource strings for paths, where `*` crosses directories (the owner's choice); Kilo's
+per-agent hard rulesets, which wait for F6-4's modes; a session-file entry for each decision (the owner's choice);
+grok-build's prefix matching for shell commands, which F6-3 replaces with parsed sub-commands.
+
+**The Go gates of the docs update above,** run on its package comments, `keys.go` and the schema:
+- the pre-add check on the six changed `.go` files, clean;
+- lint for linux, darwin and windows, `0 issues.` each with `CGO_ENABLED=0`;
+- macOS: `CGO_ENABLED=1 go test -race -count=1 ./...`, 35 packages ok, and `make preflight`, `preflight passed`;
+- the Linux machine and the Windows laptop, over ssh on a copy of the working tree in a fresh temporary directory:
+  `go test -count=1 ./...` and `CGO_ENABLED=1 go test -race -count=1 ./...`, 35 packages ok on each, Windows with
+  `TMP` and `TEMP` outside the user's home; `make preflight`, every step through `apidiff` passed on each, and
+  `check-records` and `markdownlint` after it; `verify-build-metadata` needs a commit the copy does not have, and passed
+  on macOS.

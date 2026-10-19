@@ -14,8 +14,13 @@ From the first that applies:
 2. **The `defaultProvider` and `defaultModel` settings.** `defaultModel` is a new session's model,
    its id exactly; it is used only with `defaultProvider`, and gobble warns once when it cannot
    use it.
-3. **The first provider whose credential variable is set,** with the first model its listing
-   offers.
+3. **The first provider, in the SDK's registry order (gemini, openai, claude, grok, opencode-zen,
+   opencode-go, huggingface, kilo, together), with a credential** from any of its sources
+   ([credentials](credentials.md)), with the first model its listing offers.
+
+A second model, `smallModel` (`provider/id`, set only in your own settings file), names each new session
+from its first prompt; it is sent that prompt. Its provider needs a credential too, and gobble warns once when
+it has none. Empty, the default, names no session.
 
 `--thinking` sets the thinking level: `off`, `minimal`, `low`, `medium`, `high`, `xhigh` or `max`.
 Without it, a new session starts at `defaultThinkingLevel`, and a resumed one keeps its own. A level

@@ -15,11 +15,11 @@ Gobble's default mode is a native terminal CLI. The library is Kong. TUI mode is
 
 Goose (`aaif-goose/goose`) ships a large terminal binary, `goose`, whose command tree, session prompt, completion, configure flow, skills listing, and updater are all in one clap program. The desktop UI is out of scope. The question this record answers is which of those terminal-CLI ideas are worth leveraging in gobble's native CLI, and which are not.
 
-This file is a proposal. Nothing here is accepted. No PLAN is paired with it.
+~~This file is a proposal. Nothing here is accepted.~~ *(2026-10-19: accepted 2026-10-04, as the frontmatter says, by `9d472a9`, "accept wider goose CLI scope in Phase 2 (0006)"; this line was not updated then.)* No PLAN is paired with it.
 
 ### What was measured, not assumed
 
-The goose checkout on MAC420 was read, not executed.
+The goose checkout on the owner's machine was read, not executed. *(2026-10-19: the machine's name, committed here in `c1f52a8` and `5353bdb`, is replaced, as AGENTS.md's identifier rule asks.)*
 
 - `git rev-parse HEAD` in `gitrepos/goose` returned `591edd47cf2cfea4957d720c607cf2a4def8673d`. `git rev-parse --abbrev-ref HEAD` returned `main`. `git remote get-url origin` returned `https://github.com/aaif-goose/goose.git`. `git status -sb` showed `## main...origin/main` and no dirty paths. `git log -1` subject was `fix(tom): read messages from config (#12634)`, committed `2026-10-02 15:03:24 +0000` (2026-10-02 10:03 CT). That is the tree assessed. It matches the requested prefix `591edd4`.
 - The binary `goose` was not run. Behavior below is what the source says it will do, not a captured CLI transcript.

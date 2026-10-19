@@ -288,12 +288,15 @@ Chosen: **A**. In the probe it kept the file exactly apart from the edited value
   - sequences and scalars from a higher layer replace a lower one's;
   - `null` in a higher layer clears the key back to the layer below.
 
-  The `+name`/`-name`/`!glob` patches apply only to sequences the schema marks as patchable; none of this record's keys is one. The merge works on the parsed trees, so every effective value keeps its file, its line and its layer, for `--origin` and for diagnostics.
+  *(2026-10-19, 0005-PLAN "F6-2 made executable", proposed: `permissions.rules`, F6's ordered list of rules, is the first list-valued key, and its layers are joined, global first, not replaced, since the last matching rule wins across them.)* The `+name`/`-name`/`!glob` patches apply only to sequences the schema marks as patchable; none of this record's keys is one. The merge works on the parsed trees, so every effective value keeps its file, its line and its layer, for `--origin` and for diagnostics.
 - **D5. Trust gates the project layer, and says why.**
   - The project file is always read and validated, but applied only when `internal/config` is told the project is trusted.
   - Until F6 builds trust, nothing is trusted. The layer is disabled with the reason in D7.
   - `gobble config get --origin` and `gobble config validate` show a disabled layer, its reason, and each key it would have set.
   - F6 supplies the decision as one function value, `func(root string) bool`. This record builds no trust store.
+  - *(2026-10-19: 0005-PLAN F6-1 built it. The CLI gives `Resolve` the project's decision, in F6-1's order: the run's
+    `--approve` or `--no-approve`, trusted when nothing needs trust, `trust.json`, `defaultProjectTrust`, then the
+    line session's question; with nothing decided it is not trusted. The second bullet's "until F6" is past.)*
 - **D6. Global-only keys.** A project file never sets these, trusted or not; a project value is reported and ignored:
   - `sessionDir`, `shellPath` and `shellCommandPrefix` (this record's keys);
   - `defaultProjectTrust` and `permissions.allowBypass` (F6's, when added).

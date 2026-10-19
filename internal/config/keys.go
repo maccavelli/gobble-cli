@@ -71,7 +71,7 @@ var queueModes = []string{"one-at-a-time", "all"}
 // schema or Settings field fails the package's tests.
 var Keys = []Key{
 	{Path: "defaultProvider", Kind: KindEnum, Enum: []string{"", "gemini", "openai", "claude", "grok", "opencode-zen", "opencode-go", "huggingface", "kilo", "together"},
-		Read: ReadProcess, Doc: "The provider gobble uses, with its first model; its credential variable must be set. Empty takes the first provider whose credential variable is set."},
+		Read: ReadProcess, Doc: "The provider gobble uses, with its first model; it needs a credential, from any source gobble auth status lists. Empty takes the first provider, in this order, with a credential."},
 	{Path: "defaultModel", Kind: KindString, Read: ReadProcess,
 		Doc: "The model a new session starts with, of defaultProvider's, its id exactly. Empty takes the provider's first listed model; without defaultProvider it is ignored."},
 	{Path: pathSmallModel, Kind: KindString, Scope: ScopeGlobalOnly, Read: ReadProcess,

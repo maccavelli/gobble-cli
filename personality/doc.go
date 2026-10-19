@@ -1,6 +1,7 @@
 // Package personality is gobble's voice (0022-MADR): the catalog of every
 // message a person reads, written in natural-language Markdown, one file
 // per personality, and the personality briefs the system prompt carries.
+// Stability: beta
 //
 // A catalog file is Markdown. Each message is a level-two heading naming
 // its key, followed by its variants: one per bullet, or one paragraph.
