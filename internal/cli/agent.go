@@ -97,6 +97,8 @@ func (e *runEnv) agentOptions() acpserver.Options {
 		Personalities: e.personalities(),
 		// The user's compaction prompts (0005-PLAN F5-4 decision 8).
 		CompactionPrompts: e.prompts().compaction,
+		// The small model that names a new session (0005-PLAN F5-5).
+		Title: e.titleOptions(),
 	}
 }
 

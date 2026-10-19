@@ -441,6 +441,14 @@ func (a *Agent) cmdName(ctx context.Context, t *cmdTurn, arg string) error {
 // setName is /name's and _gobble/set_session_name's one path: the name on
 // one line, written as session_info, then reported as session_info_update.
 func (a *Agent) setName(ctx context.Context, s *liveSession, out *updates, arg string) (string, error) {
+	s.nameMu.Lock()
+	defer s.nameMu.Unlock()
+	return a.setNameLocked(ctx, s, out, arg)
+}
+
+// setNameLocked is setName with s.nameMu held, for the title, which
+// checks the name first (0005-PLAN F5-5 decision 7).
+func (a *Agent) setNameLocked(ctx context.Context, s *liveSession, out *updates, arg string) (string, error) {
 	name := oneLine(arg)
 	if err := s.append(ctx, a.now(), session.Entry{Type: session.TypeSessionInfo, Name: new(name)}); err != nil {
 		return "", appendFailed(err)

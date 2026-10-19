@@ -122,6 +122,9 @@ func TestEditEveryTemplateKey(t *testing.T) {
 }
 
 // sample is a valid value for k other than its default.
+// smallModelRule is smallModel's rule's text (0005-PLAN F5-5 decision 1).
+const smallModelRule = "must be provider/id, with one of gemini, openai, claude, grok, opencode-zen, opencode-go, huggingface, kilo, together"
+
 func sample(k Key) string {
 	switch k.Kind {
 	case KindBool:
@@ -138,6 +141,9 @@ func sample(k Key) string {
 		return k.Enum[len(k.Enum)-1]
 	case KindPath:
 		return "~/sessions"
+	}
+	if k.Path == pathSmallModel {
+		return "openai/gpt-5-nano"
 	}
 	return "sample text"
 }
@@ -257,6 +263,11 @@ func TestCheck(t *testing.T) {
 		{"mcp.startupWaitMs", "0", LayerGlobal, "mcp.startupWaitMs: must be at least 1"},
 		{"shellPath", "/bin/bash", LayerProject, "shellPath: only the global settings file can set this"},
 		{"sessionDir", "rel", LayerGlobal, "sessionDir: must be an absolute path, or start with ~"},
+		// 0005-PLAN F5-5 decision 1: provider/id, global-only.
+		{"smallModel", "gpt-5-nano", LayerGlobal, "smallModel: " + smallModelRule},
+		{"smallModel", "openai/", LayerGlobal, "smallModel: " + smallModelRule},
+		{"smallModel", "ollama/llama3", LayerGlobal, "smallModel: " + smallModelRule},
+		{"smallModel", "openai/gpt-5-nano", LayerProject, "smallModel: only the global settings file can set this"},
 	}
 	for _, b := range bad {
 		if err := Check(b.path, b.value, b.layer); err == nil || err.Error() != b.want {
@@ -266,7 +277,8 @@ func TestCheck(t *testing.T) {
 	for _, g := range []struct {
 		path, value string
 		layer       Layer
-	}{{"shellPath", "/bin/bash", LayerGlobal}, {"steeringMode", "all", LayerProject}, {"externalEditor", "", LayerProject}} {
+	}{{"shellPath", "/bin/bash", LayerGlobal}, {"steeringMode", "all", LayerProject}, {"externalEditor", "", LayerProject},
+		{"smallModel", "openai/gpt-5-nano", LayerGlobal}, {"smallModel", "grok/grok-4.6", LayerGlobal}, {"smallModel", "", LayerGlobal}} {
 		if err := Check(g.path, g.value, g.layer); err != nil {
 			t.Errorf("Check(%s, %s, %v) = %v", g.path, g.value, g.layer, err)
 		}

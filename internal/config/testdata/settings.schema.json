@@ -23,6 +23,12 @@
       "description": "The model a new session starts with, of defaultProvider's, its id exactly. Empty takes the provider's first listed model; without defaultProvider it is ignored.",
       "default": ""
     },
+    "smallModel": {
+      "type": "string",
+      "description": "The model, as provider/id, that names a new session from its first prompt; empty names none. It is sent that prompt.",
+      "default": "",
+      "x-gobble-global-only": true
+    },
     "cacheRetention": {
       "type": "string",
       "description": "How long the model service keeps a session's prompt cached: none, short (five minutes on Anthropic's models) or long (an hour).",

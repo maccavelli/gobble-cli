@@ -141,7 +141,7 @@ Tier definitions:
 | ACP session methods | 1.0 | `session/list`, `session/load`, `session/resume`, `session/close`. `session_info_update` carries names and titles. |
 | Names, fork, clone | 1.0 | `/name`, `/fork [entry]`, `/clone`, and the matching `_gobble/*` methods. |
 | Tree navigation and labels | 1.x | `/tree` prints the tree. `/tree <id>` moves the leaf, with a branch summary. `/label`. The TUI has a tree navigator. |
-| Automatic titles | 1.x | After the first turn, a cheap model call sets `session_info.name` when it is empty. |
+| Automatic titles | 1.x | After the first turn, a cheap model call sets `session_info.name` when it is empty. *(2026-10-18: brought into F5 by 0005-PLAN F5-5, the owner's split of F5 of 2026-10-16: at the first prompt, in the background, only with `smallModel` set.)* |
 | Pi import | 1.x | `gobble session list --pi` and `gobble session import`, through the 0003 bridge. |
 | Export | 1.x | `gobble session export --format jsonl|md|html` and `/export`. The HTML is self-contained, rendered server-side with a Go Markdown renderer, and needs no JavaScript. |
 | Share | 1.x | `/share` through `gh gist create` when `gh` is present. There is no hosted gateway. |
@@ -821,7 +821,7 @@ Earlier phases had set the precedent: 0002-PLAN copied Pi's MCP configuration me
    * *(2026-10-18, the owner's choice, amendment "compaction, from six harnesses": four additions for F5-2 and five for F5-4; the recovery from a too-large request becomes goose's removal of tool results in steps.)*
    * Chunked summarising waits for a real need.
 10. **Agents and modes (§6).** gobble keeps its two modes, default and plan. Custom agents, an ask mode and Kilo's plan follow-up are not adopted now.
-11. **Models (§9).** Provider-neutral reasoning variants, mapped for each provider and offered over ACP as `thought_level`. A small-model role runs titles and summaries. The catalog's data stays go-llmprovider-sdk's; gobble overlays limits or costs only where the SDK lacks them. *(2026-10-10: ~~the catalog's data stays go-llmprovider-sdk's~~ the SDK has no limits or costs, so the catalog is a models.dev snapshot; the small-model role is F5's. Second amendment of this date, items 2 and 6.)*
+11. **Models (§9).** Provider-neutral reasoning variants, mapped for each provider and offered over ACP as `thought_level`. A small-model role runs titles ~~and summaries~~ *(2026-10-18, 0005-PLAN F5-5, the owner's choice: titles only; summaries stay the session's model, as every surveyed harness keeps them)*. The catalog's data stays go-llmprovider-sdk's; gobble overlays limits or costs only where the SDK lacks them. *(2026-10-10: ~~the catalog's data stays go-llmprovider-sdk's~~ the SDK has no limits or costs, so the catalog is a models.dev snapshot; the small-model role is F5's. Second amendment of this date, items 2 and 6.)*
 12. **Extras (§12).**
     * X2's checkpoints follow opencode's shadow git repository, which borrows the real repository's objects and keeps per-step trees and patches. Kilo's checks apply: validate before restore, report failed restores honestly, and time out on large repositories.
     * Project memory joins the 1.x train as a new item with its own MADR, on Kilo's design: a capped injected index, a recall tool, and capture that refuses transient, personal, secret and policy-shaped items.

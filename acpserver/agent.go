@@ -107,6 +107,9 @@ type Options struct {
 	// CompactionPrompts are the user's compaction prompts; empty ones are
 	// gobble's (0005-PLAN F5-4 decision 8).
 	CompactionPrompts compaction.Prompts
+	// Title is the small model that names a new session from its first
+	// prompt; zero names none (0005-PLAN F5-5).
+	Title TitleOptions
 }
 
 // Agent is gobble's acp.Agent.
@@ -133,6 +136,8 @@ type Agent struct {
 	personalities *personality.Set
 	// compactionPrompts are the user's compaction prompts.
 	compactionPrompts compaction.Prompts
+	// titles is the small model that names sessions.
+	titles TitleOptions
 
 	mu       sync.Mutex
 	conn     *acp.AgentSideConnection
@@ -207,6 +212,14 @@ type liveSession struct {
 	// insultsAccepted is the bombasticAccepted setting the session started
 	// with (0022-MADR D10).
 	insultsAccepted bool
+	// titleTried says the session's title was tried; titleCancel and
+	// titleDone stop a title still running and tell when it stopped
+	// (0005-PLAN F5-5). nameMu makes a name's check and its write one step,
+	// for the title and setName.
+	titleTried  bool
+	titleCancel context.CancelFunc
+	titleDone   chan struct{}
+	nameMu      sync.Mutex
 }
 
 var (
@@ -219,7 +232,7 @@ var (
 func New(opts Options) *Agent {
 	a := &Agent{version: opts.Version, newID: opts.NewID, provider: opts.Provider, models: opts.Models, info: opts.ModelInfo,
 		override: opts.Override, tools: opts.Tools, store: opts.Store, now: opts.Now, mcp: opts.MCP, logger: opts.Logger, prompt: opts.Prompt,
-		settings: opts.Settings, auth: opts.Auth, save: opts.SaveSetting, personalities: opts.Personalities, compactionPrompts: opts.CompactionPrompts,
+		settings: opts.Settings, auth: opts.Auth, save: opts.SaveSetting, personalities: opts.Personalities, compactionPrompts: opts.CompactionPrompts, titles: opts.Title,
 		sessions: map[acp.SessionId]*liveSession{}}
 	if a.logger == nil {
 		a.logger = slog.New(slog.DiscardHandler)
@@ -263,6 +276,7 @@ func (a *Agent) Close() error {
 	var errs []error
 	for _, s := range sessions {
 		a.closeMCP(s.mcp)
+		a.closeTitle(s)
 		errs = append(errs, s.log.Close())
 	}
 	return errors.Join(errs...)
@@ -504,6 +518,11 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 	}
 	if isCommand && !isExpanded {
 		return a.runCommand(turnCtx, s, conn, name, args)
+	}
+	// A new session's first prompt names it, alongside the turn
+	// (0005-PLAN F5-5 decision 4).
+	if a.titleWanted(s) {
+		a.startTitle(turnCtx, s, text)
 	}
 	model, err := a.sessionProvider(s)
 	if err != nil {
@@ -1093,6 +1112,7 @@ func (a *Agent) CloseSession(ctx context.Context, p acp.CloseSessionRequest) (ac
 		t.Stop()
 	}
 	a.closeMCP(s.mcp)
+	a.closeTitle(s)
 	if err := s.log.Close(); err != nil {
 		return acp.CloseSessionResponse{}, acp.NewInternalError(map[string]any{keyReason: err.Error()})
 	}

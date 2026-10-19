@@ -6622,7 +6622,8 @@ Kilo's chunked summarising, as before.
 
 **2026-10-18 — F5-5 made executable: the small model** (the owner's word of 2026-10-18, "committed, proceed", after
 F5-4's commit, and the owner's choices of that date: the small model writes titles only; no titles while it is
-unset; a title made at the first prompt, in the background.) *Proposed: not approved for execution.*
+unset; a title made at the first prompt, in the background.) *Approved and run on the owner's word "committed,
+approved to proceed" after `64add13`; see "F5-5's execution record".*
 
 **The facts,** measured on 2026-10-18 against `main` after F5-4's commit; opencode `501b15af26` and its v1 at
 `907b3bc518`; Kilo `2a1903f291`; Codex `8c076942`; grok-build `2bdd1d6a`; Pi `1402973a`:
@@ -6731,3 +6732,65 @@ and 6; Codex's structured reply; a retry on the next prompt; a small model for a
 - `internal/cli`: `smallModel` reaching the agent with its provider; no credential warned of once, and no title.
 - **Existing tests:** none should change: `Options.Title` is nil wherever a test builds the agent, and no test's
   settings name a small model. `TestKeysMatchSettings`'s count, 27, becomes 28.
+
+**F5-5's execution record (2026-10-18).**
+
+- **Ran as the entry wrote it,** with no deviation, on the owner's word "committed, approved to proceed" after
+  `64add13`. F5 is complete; F6, permissions, modes and trust, is the next phase by number, made executable on the owner's word.
+- **What was built:**
+  - `internal/config`: `smallModel` (decision 1), its rule in `merge.go` (`must be provider/id, with one of …`), its
+    template block after `defaultModel`, the schema;
+  - `acpserver`: `TitleOptions` and `Options.Title`; `title.go`: whether a prompt names its session (`titleWanted`),
+    the background title (`startTitle`, `writeTitle`), its request and the reply's cleaning (`cleanTitle`), the usage
+    entry, `closeTitle`; `Prompt` starts it after the command branch, with the turn's context's values and not its
+    end; `CloseSession` and `Close` stop it; `setName` and the title share `nameMu`, so a name's check and its write
+    are one step, and the title reads the name under `appendMu`, as an append writes;
+  - `internal/cli`: `titleOptions` and `smallProvider` (decision 10), the agent given them; the warning for a provider
+    with no credential, through the log, as the settings' other warnings are.
+- **Decisions made inside the entry:**
+  - **a first prompt that is a command does not use the attempt:** a command is not the task; the first prompt that
+    reaches the model is the one titled;
+  - **the reply is cleaned in turns:** quotes and a final mark are taken off until neither is left, so `'Title'.`
+    and `'Title.'` both give `Title` (the first test run showed the single pass keeping a quote);
+  - **the wait on close is bounded by `closeWait`,** as a running turn's is, and logged when it runs out;
+  - **a cancelled title writes nothing because `closeTitle` waits for it,** not by a check of its own: a check before
+    the write was removed, as no test could see it decide anything once the wait held;
+  - **the warning goes through the log:** written straight to stderr, it raced the model listing's log line on the
+    same writer in tests (`go test -race`); the log serialises its writes.
+- **Tests,** new:
+  - `internal/config`: `TestCheck` gains `smallModel`'s refusals (no provider, no id, an unknown provider, from a
+    project) and its acceptances; `TestKeysMatchSettings`, 28 keys; `TestRenderDocument`, the key in its place;
+  - `acpserver/title_test.go`: `TestTitleFirstPrompt` (the request, its block cut at 2,000 characters, the level and
+    the cap; the cleaned name, reported and in `get_state`; the usage entry, counted by `/usage`; no second request);
+    `TestTitleNotWanted` (no small model; a session named at its start; a first command, then the prompt after it;
+    an unnamed resumed session with a conversation); `TestTitleOnce` (a failed first turn and a failed title, then no
+    second title); `TestTitleRace` (the turn not waiting; `/name` given meanwhile winning; `session/close` stopping a
+    title still running, writing and logging nothing); `TestTitleFailure`; `TestCleanTitle`;
+  - `internal/cli/title_test.go`: `TestSmallModelTitles` (the provider built by its id and model; the title in the
+    session file; no setting, no warning and no build; no credential, one warning and no build).
+- **Existing tests changed,** none loosened: `edit_test.go`'s `sample` gives `smallModel` a value its rule takes, as
+  `sessionDir`'s is a path.
+- **Negatives,** 30 of 30 caught on a scratch copy after control runs: the rule taking an empty id or any provider, or
+  not applied; the key not global-only; titles without a small model, twice a session, for a named session or one
+  with a conversation; the source cut, the cap, the level and the block changed; the usage entry's kind or usage
+  dropped; a name given meanwhile overwritten; an empty reply written; the title not cancelled on close; a cancelled
+  title's error logged; the `<think>` block kept; a blank first line taken; spaces not collapsed; the cleaning done
+  once; the cut doubled; the title not started, not stopped by `session/close`, or not passed to `New`; the CLI's
+  credential check skipped, a missing setting read as one, the provider built with its id and model swapped, or not
+  given to the agent.
+  - The first run caught 21 of 31. Five mutations did not build and were rewritten; one that crashed the tests with a
+    panic was caught, the harness having counted only `--- FAIL` lines; one looped until the timeout, and was
+    rewritten as a single pass. Three were gaps: an unnamed resumed session with a conversation, a run with no
+    `smallModel` warning nothing, and the one-attempt flag, which only decides when the first title fails, since a
+    title that succeeds names the session first; each now has its test. The check before the write was removed, as
+    above. The whole set was run on the final code: 30 of 30.
+- **Gates:**
+  - the pre-add check on the 13 changed `.go` files, clean;
+  - lint for linux, darwin and windows, `0 issues.` each with `CGO_ENABLED=0`, after two findings fixed in the code:
+    the title's context from the turn's (`contextcheck`), and `WarnContext` for its warning (`sloglint`);
+  - the macOS laptop's `CGO_ENABLED=1 go test -race -count=1 ./...`, 34 packages ok, no race report;
+  - `make preflight` on macOS: passed;
+  - **not run:** Windows `go test ./...` and `-race`, the second Linux machine's `-race`, and Windows and WSL `make
+    preflight`, on the owner's machines; and a title from a live small model.
+- **Next:** F6, made executable on the owner's word; the SDK retries' status waits for go-llmprovider-sdk issue 3;
+  the first-byte deadline for F4-1b.

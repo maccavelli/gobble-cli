@@ -157,6 +157,8 @@ func convert(k Key, n *yaml.Node) (any, string) {
 		return nil, "must be one of " + enumList(k.Enum)
 	case k.Path == pathSessionDir && s != "" && !isAbsOrHome(s):
 		return nil, "must be an absolute path, or start with ~"
+	case k.Path == pathSmallModel && s != "" && !smallModelValid(s):
+		return nil, "must be provider/id, with one of " + strings.Join(modelProviders(), ", ")
 	}
 	return s, ""
 }
@@ -168,6 +170,20 @@ func enumList(values []string) string {
 		shown[i] = cmp.Or(v, `""`)
 	}
 	return strings.Join(shown, ", ")
+}
+
+// modelProviders are the providers a model setting may name:
+// defaultProvider's, without its empty value.
+func modelProviders() []string {
+	k, _ := KeyOf("defaultProvider")
+	return slices.DeleteFunc(slices.Clone(k.Enum), func(p string) bool { return p == "" })
+}
+
+// smallModelValid reports whether s is provider/id, its provider one of
+// modelProviders and its id not empty (0005-PLAN F5-5 decision 1).
+func smallModelValid(s string) bool {
+	p, id, ok := strings.Cut(s, "/")
+	return ok && strings.TrimSpace(id) != "" && slices.Contains(modelProviders(), p)
 }
 
 // isAbsOrHome reports whether p is absolute, or starts with ~ for the home

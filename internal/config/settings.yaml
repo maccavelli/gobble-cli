@@ -36,6 +36,14 @@
 # ignored. --model wins over it for a run.
 # defaultModel: ""
 
+# The model that names a new session, as provider/id: gemini, openai,
+# claude, grok, opencode-zen, opencode-go, huggingface, kilo or together,
+# then the model's id. At the session's first prompt it is sent that
+# prompt and asked for a short title, which /name, or a name given at
+# the start, outranks. Its provider needs a credential. Empty names no
+# session, and makes no extra call. Only this file can set it.
+# smallModel: ""
+
 # How long the model service keeps this session's prompt cached, so
 # the next request reads it back: none, short or long. On Anthropic's
 # models short is five minutes and long an hour; elsewhere both ask

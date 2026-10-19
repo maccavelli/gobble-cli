@@ -103,8 +103,8 @@ func TestKeysMatchSettings(t *testing.T) {
 			t.Errorf("%s: Value = %v %v, want %v", k.Path, v, ok, defaultValue(k))
 		}
 	}
-	if len(Keys) != 27 {
-		t.Errorf("%d keys, want 0018-MADR D14's 13, 0019-MADR D15's defaultProvider, 0021-MADR D3's cacheRetention, 0005-PLAN F4-2c's defaultModel, F5-1's five retry keys, F5-2's four compaction keys and 0022-PLAN P3's two personality keys", len(Keys))
+	if len(Keys) != 28 {
+		t.Errorf("%d keys, want 0018-MADR D14's 13, 0019-MADR D15's defaultProvider, 0021-MADR D3's cacheRetention, 0005-PLAN F4-2c's defaultModel, F5-1's five retry keys, F5-2's four compaction keys, F5-5's smallModel and 0022-PLAN P3's two personality keys", len(Keys))
 	}
 }
 
