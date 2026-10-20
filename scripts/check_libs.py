@@ -179,14 +179,20 @@ def advisories(lib: Library) -> list[dict]:
         return json.load(resp)
 
 
+def api_paths(lib: Library, version: str, work: Path) -> tuple[Path, Path]:
+    """The scratch module and the export of the library at version. Both name
+    the library, so two libraries at one version do not collide (0023-PLAN
+    amendment of 2026-10-19, A4)."""
+    return work / f"api-{lib.repo}-{version}", work / f"{lib.repo}-{version}.exp"
+
+
 def export_api(apidiff: Path, lib: Library, version: str, work: Path, logs: Path) -> Path:
     """apidiff's export of the library at version, from a scratch module requiring it."""
-    mod = work / f"api-{version}"
+    mod, out = api_paths(lib, version, work)
     mod.mkdir()
     log = logs / f"{lib.repo}-api-{version}.log"
     run(["go", "mod", "init", "scratch/checklibs"], mod, log)
     run(["go", "get", f"{lib.module}@{version}"], mod, logs / f"{lib.repo}-api-get-{version}.log", GOFLAGS="-mod=mod")
-    out = work / f"{version}.exp"
     if run([str(apidiff), "-m", "-w", str(out), lib.module], mod, log, GOFLAGS="-mod=mod") != 0 or not out.exists():
         raise RuntimeError(f"apidiff could not export {lib.module}@{version}; see {log}")
     return out
@@ -280,9 +286,17 @@ def remove_tree(path: Path) -> bool:
     return not path.exists()
 
 
+def api_paths_distinct() -> bool:
+    """Two libraries at one version export to paths of their own."""
+    work = Path("work")
+    a, b = api_paths(LIBRARIES[1], "v1.17.0", work), api_paths(LIBRARIES[2], "v1.17.0", work)
+    return not set(a) & set(b)
+
+
 def self_test() -> int:
-    """The parsers on fixed inputs, and the API step for a library pinned at
-    the tag; each case must give its expected answer."""
+    """The parsers on fixed inputs, the API step for a library pinned at the
+    tag, and the API paths of two libraries at one version; each case must
+    give its expected answer."""
     mod_a = "module m\n\nrequire (\n\tgithub.com/maccavelli/acp-go-sdk2 v0.14.0\n\tgolang.org/x/sys v0.48.0 // indirect\n)\n"
     mod_b = mod_a.replace("v0.14.0", "v0.17.0")
     mod_c = mod_b.replace("golang.org/x/sys v0.48.0 // indirect\n", "golang.org/x/sys v0.48.0 // indirect\n\texample.com/x v1.0.0\n")
@@ -298,6 +312,7 @@ def self_test() -> int:
         ("< 1.2.0, >= 1.0.0 covers v1.1.0", covers("< 1.2.0, >= 1.0.0", "v1.1.0")),
         ("< 1.2.0, >= 1.0.0 does not cover v1.2.0", not covers("< 1.2.0, >= 1.0.0", "v1.2.0")),
         ("a library pinned at the tag is not compared", pinned_at_tag_not_compared()),
+        ("two libraries at one version do not share API paths", api_paths_distinct()),
     ]
     for name, ok in cases:
         print(f"self-test {name}: {'ok' if ok else 'FAIL'}")

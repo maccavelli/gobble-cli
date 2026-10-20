@@ -164,7 +164,8 @@ seen failing at `v1.14.0` and passing at `v1.16.0`; `TestListFullCatalog` failin
 
 ## Amendment (2026-10-19): acp-go-sdk2 `v1.16.3`, go-llmprovider-sdk `v1.17.0`, go-selfupdate-lib `v1.17.0`
 
-*Proposed: the owner decides at review.* The owner asked on 2026-10-19, after `fa28838`, to "ensure we are pinning the
+*Proposed: the owner decides at review.* *(2026-10-19: accepted by the owner, "committed, proceed", after `9ff0809`;
+executed the same day, no deviation.)* The owner asked on 2026-10-19, after `fa28838`, to "ensure we are pinning the
 most updated releases of acp-go-sdk2, go-llmprovider-sdk and go-selfupdate-lib". Each fact below was measured that
 day against `main` `fa28838`.
 

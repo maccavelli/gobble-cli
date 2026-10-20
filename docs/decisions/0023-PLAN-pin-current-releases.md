@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: complete
 date: 2026-10-19
 associated-madr: "0023-MADR-pin-current-releases.md"
 ---
@@ -150,7 +150,7 @@ metadata document".
 ## Amendment (2026-10-19): the three libraries' newer tags
 
 *Proposed,* for the MADR's amendment of 2026-10-19 (A1–A6). It starts after the owner approves it, on `main` at or
-after `fa28838`.
+after `fa28838`. *(Approved on the owner's word "committed, proceed" after `9ff0809`, and run the same day.)*
 
 **Scope.** In: `go.mod`, `go.sum`; `.github/workflows/ci.yml:145`, `:157`; `scripts/check_libs.py`; the records and
 docs of A6. Out: any new feature of the three libraries (A5); the x and tool modules, golangci-lint and CI's actions,
@@ -184,3 +184,49 @@ which this amendment does not measure.
 
 **Rollout and rollback.** One commit, the owner's. Reverting it returns the three pins and the workflow SHAs to
 `fa28838`'s; the `check-libs` fix stands alone and may stay.
+
+### Execution record (2026-10-19)
+
+**Run** on `main` at `9ff0809`, as the steps say, with no deviation.
+
+1. **Measured again:** the newest tags are still `v1.16.3`, `v1.17.0` and `v1.17.0`. go-llmprovider-sdk `v1.17.0`'s
+   release is published ("Latest", 02:01 UTC on 2026-10-20) and its tag's CI run `39355939832` passed, so A3 holds.
+2. **`check-libs` (A4):** `api_paths(lib, version, work)` gives `api-<repo>-<version>` and `<repo>-<version>.exp`, and
+   `export_api` takes both from it (`scripts/check_libs.py`). `--self-test` gains "two libraries at one version do not
+   share API paths": `ok` on the change; on a scratch copy with the old names, `self-test two libraries at one version
+   do not share API paths: FAIL`, exit 1. The case it guards, seen live: `check_libs.py --from v1.16.0` exported
+   `v1.16.0` three times and `v1.17.0` twice in one run, `api: ok` for all three and "0 failing checks", where the old
+   script stopped with `FileExistsError: … api-v1.17.0`.
+3. **The pins (A1):** `go get` of the three tags, `go mod tidy`. `go.mod`: three lines (`v1.16.0` → `v1.16.3`,
+   `v1.15.0` → `v1.17.0`, `v1.15.2` → `v1.17.0`); `go.sum`: the six lines of those three modules; tidy moved nothing
+   else and added no module.
+4. **The workflows (A2):** `git ls-remote` gave `v1.17.0^{}` = `adc2c757d7e2fa9ed7e5eb5ff33a076eba34f4bd`; both `uses:`
+   lines (`.github/workflows/ci.yml:145`, `:157`) moved to it, none of `436a7f59` left. At the two commits,
+   `build-selfupdate-release.yml` is byte-identical; `publish-selfupdate-release.yml` adds only the optional `sign` and
+   `note-verifier-key` inputs and `SELFUPDATE_NOTE_KEY` secret, the `sign` job (`if: inputs.sign`), publish's
+   `needs: sign` with the skipped-and-not-`sign` condition, and two steps under `if: inputs.sign`. No input gobble
+   passes changed and none is newly required.
+5. **Records and docs (A6):** `docs/architecture.md`'s dependency table, `README.md`'s Stack, `docs/README.md`'s rows
+   and SDK line; dated notes in 0019-MADR D2 and D14; this record.
+
+**Verification:**
+
+- `make check-libs` on a scratch clone with the change as a local commit (made with `git commit-tree`, so the
+  repository was only read): every check `ok` for the three, each `api: pinned at <tag>; nothing to compare`, "0
+  failing checks".
+- `scripts/check_libs.py --self-test`: ten cases `ok`; the new one seen failing as in step 2.
+- macOS: `go test -count=1 ./...` and `CGO_ENABLED=1 go test -race -count=1 ./...`, 35 packages ok each; `make
+  preflight`, `preflight passed` (golangci-lint `0 issues.`, govulncheck "No vulnerabilities found.",
+  `verify-build-metadata` ok on its seven checks).
+- The Linux machine and the Windows laptop, over ssh with `-o BatchMode=yes -o ConnectTimeout=5`, on a copy of the
+  working tree, Windows with `TMP` and `TEMP` outside the user's home: the tests and the race detector, 35 packages ok
+  on each; `make preflight`, every step through `apidiff` passed (golangci-lint `0 issues.`, "No vulnerabilities
+  found."), stopping at `verify-build-metadata` with `git rev-parse HEAD` exiting 128, since a copy has no commit;
+  `make check-records markdownlint`, "0 issues in 0 files".
+- The pre-add check does not apply: no Go file changed.
+- The release workflows: `main`'s CI run after the owner's push rehearses the build job at `adc2c757`; the publish
+  job is first reached by the next tag, with `sign` skipped.
+
+**Not done here, named:** any new feature of the three libraries (MADR A5): go-selfupdate-lib's signed release
+statement, `before_uninstall` hook and `NewGitHubUpdater`; go-llmprovider-sdk's `catalog.Cache`. 0005-PLAN F4-1b still
+waits, `v1.17.0`'s retry still buffering a stream (`llmprovider/retry.go:82`).
