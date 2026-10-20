@@ -2,7 +2,7 @@
 status: proposed
 date: 2026-10-20
 decision-makers: repository owner
-consulted: go-llmprovider-sdk v1.17.0 (llmprovider/providers, catalog, auth/oauth_plan.go, its 0043-MADR); acp-go-sdk2 v1.16.3 (SessionConfigSelectOptions)
+consulted: go-llmprovider-sdk v1.17.0 (llmprovider/providers, catalog, wizard, auth/oauth_plan.go, its 0043-MADR); acp-go-sdk2 v1.16.3 (SessionConfigSelectOptions); Pi 1402973a9, opencode 501b15af26, Kilo Code 2a1903f291 and goose 9920efa1 (0025-REPORT)
 informed: none
 ---
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
@@ -76,6 +76,14 @@ signatures and encrypted reasoning in `ProviderData` (`llm/llm.go:106-113`; `llm
 refuses or mis-reads them. Each assistant message records its `provider` and `model` (`session/session.go:147`;
 `acpserver/history.go:185`, `:201`), so a replay can tell whose data is whose.
 
+**What the other harnesses do,** and what the SDK already provides, is
+[0025-REPORT-provider-ux-across-harnesses.md](../reports/0025-REPORT-provider-ux-across-harnesses.md): Pi, opencode,
+Kilo Code and goose each switch model mid-session; Pi's replay rules are keyed by model; opencode and Kilo remember
+recent models; goose remembers a model per provider; the SDK's `wizard.ConfigureLLM` runs a sign-in over a line-mode
+`Prompter`, and its `catalog` already layers live, stale and static listings. Its replay filter is by wire format only
+(`llmprovider/internal/wire/wire.go:42-44`), so two providers on one wire (OpenAI and Grok; Claude, Kilo and OpenCode)
+would pass each other's opaque reasoning.
+
 **ACP.** A select option may group its values (`acp.NewSessionConfigSelectOptionsGrouped`, acp-go-sdk2 `v1.16.3`
 `helpers_gen.go:346-349`), so a client can show models under their providers.
 
@@ -104,60 +112,108 @@ Chosen option: "A. Every credentialed provider in the session", because it is wh
 decides at review.* *(2026-10-20: Q1 and Q2 answered by the owner: another provider's thinking is dropped; consent
 under a plan is asked once and saved.)*
 
-- **D1. A session's models are every credentialed provider's** (the owner's answer: "Any model, any provider").
-  - The model choice becomes a list of providers, each with its models and its state. A model is named
-    `provider/model` wherever it can be ambiguous; a bare id is accepted when exactly one provider has it.
-  - `/model` with no argument shows the current model and every provider's models, grouped; `/model provider/model` or
-    a unique bare id switches. The ACP `model` option is grouped by provider, its values `provider/model`.
-  - Switching to another provider's model builds that provider for the session and writes `model_change` with the new
-    provider; the conversation continues. The provider of a session restored from its log is its last
-    `model_change`'s, when that provider has a credential; else the start choice's (D2), with a note.
-  - **Replay across providers:** a message produced by another provider is sent without its provider-specific data:
-    thinking signatures, encrypted reasoning and `ProviderData` are dropped, and that provider's thinking text is
-    dropped too, as visible text it was never meant to be (owner question Q1). Text, tool calls and tool results are
-    kept. The log is not rewritten.
-  - It amends 0021-MADR D4, 0020-MADR D3–D5, 0019-MADR D15 (the setting is the start's preference, not the session's
-    only provider) and 0005-PLAN F4-2c decision 4, each with a dated note.
-- **D2. A new session starts on the last choice** (the owner's answer: "Your last choice").
-  - The order: `--model` / `--provider`; then the `defaultProvider` and `defaultModel` settings; then the last model
-    the user chose, kept in `<state>/last-model.json` as `provider/model` and written when `/model`, the ACP option or
-    `--model` chooses; then, with none, today's registry order, with a note naming the provider and how to switch
-    (`/model`, `--model`, `defaultProvider`).
-  - A start choice whose provider has no credential, or whose key is marked dead (D3), falls to the next in that order
-    with a note; `--model` and `--provider` still fail rather than fall (0019-MADR D15's reason).
-- **D3. Keys are checked by listing, and a dead one is marked** (the owner's answer: "Check by listing, mark").
-  - At start, every provider with a credential is listed once, concurrently, in the background (one request each, the
-    SDK's `catalog.List`, as 0020-MADR D3 lists one today). A provider whose listing fails with `ErrAuth`, `ErrQuota`
-    or `ErrNotPermitted` is marked with that state and its reason, and its models are not offered for a switch until a
-    later `/login` or listing succeeds; any other failure (offline, unavailable) keeps its static models, marked
-    "not listed".
-  - The session does not wait for the listings: a switch to a provider not yet listed waits for its listing, at most
-    the listing's own deadline.
-  - "Funded" is what a listing shows and no more; a key that lists but cannot generate shows at its first request.
-- **D4. Browse providers and catalogs, in the CLI and in the session.**
-  - `gobble providers` lists every provider: id, name, auth methods (API key, sign-in), the credential's source
-    (`auth status`'s), and with `--check` D3's state. `gobble models list --provider ID` lists one provider's catalog,
-    its static models when it has no credential, marked so.
-  - In a session: `/providers` (the same list, with D3's states) and `/models [provider] [search]` (one provider's
-    models, or every provider's, with a search). Both are agent commands, so ACP clients have them too.
-- **D5. Sign in from the session, and ChatGPT's plan sign-in** (the owner's answer: "/login + ChatGPT now").
-  - `/login [provider]` and `/logout <provider>` in the line session: with no provider, a numbered list to choose
-    from; then that provider's methods: an API key typed with no echo, Grok's browser or device sign-in, Kilo's device
-    sign-in, ChatGPT's plan sign-in. The credential goes to `auth.json` as `gobble auth login` stores it, the
-    credential cache is refreshed, the provider is listed (D3) and joins the session's models. They are line-session
-    commands, since they need the terminal; ACP clients keep the `terminal` auth methods of 0005-PLAN F4-3c-2. This
-    amends 0005-MADR's "`/login` and `/logout` are TUI-only".
-  - **ChatGPT's plan sign-in, 0005-PLAN F4-3d, now:** `gobble auth login openai` (and `/login openai`) offers it beside
-    the API key, through `auth.LoginChatGPTPlan` with `AgentName` "gobble" and a stable `HostID` kept in the state
-    directory; the session is stored in `auth.json` as an OAuth login, and the openai provider sends its requests
-    under the plan. It is browser-only; on a machine without one, the sign-in URL is printed for another device
-    (`OpenURL`), and the code is pasted back (`InputCode`).
-  - **The terms, kept by gobble:** under a plan session, background calls — the session title and automatic
-    compaction — are made only after the user consents once, asked at the first plan session and saved; without
-    consent they are skipped (no title; compaction only on `/compact`) (owner question Q2). Requests go from the
-    user's own process only; nothing pools or shares the session.
+*(Revised 2026-10-20, before review, from [0025-REPORT-provider-ux-across-harnesses.md](../reports/0025-REPORT-provider-ux-across-harnesses.md),
+at the owner's request to "evaluate and analyze against the proposed madr and plan … adjust the madr/plan as needed".
+What changed from the first draft: the replay is keyed by model, not provider, and takes Pi's rules whole (D2);
+`last-model.json` becomes a list of recent models, with each provider's last model (D3); dead keys are marked lazily
+too, and a public listing is "not checked" (D4); the in-line picker and the provider states are specified (D5);
+`/login` runs the SDK's wizard, a refused switch leads to it, and `auth login` takes `--method` (D6); first-run setup
+(D7) and cycling a scoped set (D8) are new, each the owner's to take (Q3, Q5); a strip-and-retry safety net is offered
+(Q4). D1's owner answers stand.)* *(2026-10-20: Q3, Q4 and Q5 answered by the owner: first-run setup offered;
+one strip-and-retry; cycling as P7. Every owner question is answered.)*
+
+- **D1. Any model of any credentialed provider, at start and mid-session** (the owner's answer: "Any model, any
+  provider").
+  - **One name for a model everywhere,** `provider/model[:thinking]`, resolved by the rules `--model` already uses
+    (Pi's `resolveCliModel`, 0005-PLAN F4-2c): a bare id when exactly one offered provider has it; a fuzzy match that
+    prefers an alias to a dated id; an ambiguity answered with the candidates. `/model`, the ACP option, `--model`,
+    `defaultModel` and `enabledModels` (D8) take the same grammar.
+  - `/model <ref>` switches; `/model <provider>` switches to that provider's last model (D3), else its first
+    recommended one. The ACP `model` option is grouped (D5), values `provider/model`.
+  - A switch builds the provider for the session and writes `model_change` with it; the conversation continues. When
+    the new model's context window is smaller than the context in use, the switch says so and suggests `/compact`
+    (goose). A switch to a provider marked dead (D4) is refused with its reason; to one with no credential, the line
+    session offers `/login <provider>` (D6) rather than sending the user away to configure it.
+  - A session restored from its log takes its last `model_change`'s model when that provider has a credential and is
+    not marked dead; else the start choice (D3), with a note.
+  - It amends 0021-MADR D4, 0020-MADR D3–D5, 0019-MADR D15 (the setting becomes a start preference) and 0005-PLAN
+    F4-2c decision 4, each with a dated note.
+- **D2. Replay on another model: Pi's rules** (the owner's Q1 answer, "drop it", made precise).
+  - **Same model** is provider, wire format and model id all equal, as Pi's `isSameModel`
+    (`transform-messages.ts:122-125`). A message from the same model is replayed as it is, signatures and encrypted
+    reasoning included.
+  - **From another model,** a switch within one provider included: its thinking is dropped with its signatures and
+    encrypted reasoning; its text is sent bare, without `ProviderData`; its tool calls lose `ProviderData` and
+    Gemini's thought signature (the SDK sends its skip marker for a call with none); call ids a wire refuses are left
+    to the SDK's `RemapCallIDs`.
+  - An errored or aborted assistant message is not replayed; a tool call left with no result gets a synthetic error
+    result, "No result provided", before the next message (Pi, `transform-messages.ts:179-253`).
+  - The log is never rewritten; the rules apply where the history becomes a request.
+- **D3. The start, and what gobble remembers** (the owner's answer: "Your last choice").
+  - `<state>/models.json` keeps `recent`, up to ten `provider/model` refs, newest first, the shape opencode and Kilo
+    keep; a choice by `/model`, the ACP option or `--model` puts its ref first. A provider's last model is its newest
+    entry there.
+  - The start order: `--model` / `--provider`; then the `defaultProvider` and `defaultModel` settings; then `recent`'s
+    newest whose provider has a credential and is not marked dead; then the registry order, with a note naming the
+    provider and how to switch. `--model` and `--provider` still fail rather than fall (0019-MADR D15's reason); each
+    other step falls to the next with a note.
+  - A switch is the session's; saving a default is explicit: `/model <ref> --default` writes `defaultModel`, and its
+    provider as `defaultProvider`, to the global settings, as Pi's Ctrl+S does.
+- **D4. Each provider's state, by listing, with its reason** (the owner's answer: "Check by listing, mark").
+  - At start every credentialed provider is listed once, concurrently, in the background, through the SDK's
+    `catalog.List`, which never spends a generation; its last good listing is kept on disk (`WithLastGood`, in
+    `<cache>/catalog/<provider>.json`), so the picker shows it at once and the live one replaces it.
+  - The states, from `Catalog.Source` and `Catalog.Err`: **live** (with its model count); **stale** (a cached listing,
+    with its age); **key rejected**, **quota exhausted**, **not permitted** (with the provider's reason; its models are
+    not offered for a switch until `/login` or a later listing succeeds); **not listed** (offline or unavailable: its
+    static models offered); **not checked** (OpenCode Zen and Go, Hugging Face and Kilo, whose listing needs no key and
+    so cannot reject one); **no credential** (with its variable and `/login`).
+  - A request that fails with `ErrAuth` or `ErrQuota` marks its provider then too, as opencode resolves lazily. No key
+    is ever checked by a billed request.
+- **D5. Browse providers and models, in the CLI and the session.**
+  - **The picker, line mode:** `/model` with no argument prints a numbered list: the current model; the recent ones
+    (five); then each provider under a heading with its state (D4), its models with the SDK menu's facts (context
+    window, input and output price, thinking) and caveats (deprecated, no tools). The prompt reads a number to switch,
+    or words to filter (`catalog.Search` per provider), or nothing to leave. `/model <words>` that is not a ref opens it
+    filtered. The layout is 0024-MADR D2's.
+  - **ACP:** the `model` option grouped, "Recent" first, then one group per provider with a usable state.
+  - **Providers:** `/providers` and `gobble providers [--check] [--json]`: each of the ten, its state, its credential's
+    source in Pi's words ("env: OPENAI_API_KEY", "auth.json: sign-in", "none — /login grok"), its sign-in methods.
+  - **Catalogs:** `/models [provider] [words]` and `gobble models list [--provider ID] [--all]`; `--all` and a provider
+    with no credential show the static catalog with the models.dev facts, marked so.
+- **D6. Sign in where the user is** (the owner's answer: "/login + ChatGPT now").
+  - `/login [provider]` in the line session runs the SDK's `wizard.ConfigureLLM` with gobble's own `Prompter` over the
+    line editor (out of raw mode, 0024-MADR D1; `Secret` with no echo) and gobble's `auth.json` as its `TokenStore`
+    (Pi's shape, through the existing `LoginStore` adapter). The provider list shows each one's state in Pi's words; the
+    wizard checks a typed key by listing and asks again when it is refused. After it, the credential cache is
+    refreshed, the provider is listed (D4), and the picker opens filtered to it (opencode, Pi).
+  - `/logout [provider]` runs `wizard.Logout`: it lists stored credentials only, revokes an OpenAI or Grok session,
+    deletes it, and says that an environment variable still applies (Pi's words).
+  - `gobble auth login <provider> --method api-key|browser|device|chatgpt-plan` signs in with no menu (opencode's
+    `--method`), for scripts and for a terminal with no menus.
+  - ACP clients keep the `terminal` auth methods of 0005-PLAN F4-3c-2. This amends 0005-MADR's "`/login` and `/logout`
+    are TUI-only".
+  - **ChatGPT's plan sign-in, 0005-PLAN F4-3d, now:** `/login openai` and `--method chatgpt-plan` through
+    `auth.LoginChatGPTPlan` with `AgentName` "gobble" and a stable `HostID` in the state directory; stored as an OAuth
+    login; the openai provider sends its requests under the plan. Only the plan method is offered for OpenAI's account
+    sign-in: the SDK's Codex-client-id methods (its browser and device OAuth, the Codex CLI import) are not, by
+    0005-MADR's rule. It is browser-only; with no browser, the URL is printed and the code pasted back (`OpenURL`,
+    `InputCode`).
+  - **The terms, kept by gobble:** under a plan session, background calls (the session title, automatic compaction)
+    wait for the user's consent, asked once at the first plan session and saved (the owner's Q2 answer); without it
+    they are skipped (no title; compaction only on `/compact`). Requests go from the user's own process; nothing pools
+    or shares the session.
   - Grok's sign-in is unchanged (0005-MADR, the owner's accepted risk) and joins `/login`. The Pi import still skips
     OpenAI OAuth, which Pi holds under Codex's client id.
+- **D7. First-run setup** (owner question Q3). When no provider has a credential, the line session offers the
+  wizard, `/login`'s, before its first prompt, instead of only "set one of …"; `gobble setup` runs it at any time.
+  Declined, the session goes on as today.
+- **D8. Cycling a few models** (owner question Q5). An `enabledModels` setting (Pi's globs, such as `anthropic/*` or
+  `*sonnet*:high`) scopes a set; Ctrl+P in the line editor switches to the next model of the set, or of the recent
+  ones when no set is given, each a D1 switch, and prints the model it switched to. Ctrl+P is free: `golang.org/x/term`
+  binds only Ctrl+C, Ctrl+D, Ctrl+U and the arrow keys (`terminal.go:148-161`). Pi's Shift+Ctrl+P for the previous
+  model sends the same byte as Ctrl+P on a byte-stream terminal, so "previous" takes another key, Alt+P where the
+  terminal sends it as `ESC p`, measured on the three systems in the phase that builds it.
 
 ### Consequences
 
@@ -165,10 +221,13 @@ under a plan is asked once and saved.)*
   and in ACP clients.
 * Good, because a dead key is shown as such before the user picks it, not after a failed turn.
 * Good, because a ChatGPT or Grok subscription can be used without an API key.
+* Good, because the picker, the states and the sign-in reuse the SDK's catalog, search and wizard, and the replay
+  rules are the ones gobble's Pi session format already expects.
+* Good, because a missing credential leads to signing in, in the session, not to leaving it.
 * Neutral, because a session start makes one listing request per credentialed provider, in the background, where it
   made one.
-* Bad, because a conversation switched to another provider loses the earlier provider's thinking and its replay
-  data; the new provider sees the text and the tool calls only.
+* Bad, because a conversation switched to another model loses the earlier model's thinking and its replay data;
+  the new model sees the text and the tool calls only.
 * Bad, because four accepted records change by amendment, and the session engine's one-provider assumption is
   removed across `acpserver`, `internal/cli` and `llm/provider`.
 * Bad, because the plan sign-in brings duties gobble must keep (consent before background use), and the flow has no
@@ -207,6 +266,14 @@ the Windows laptop.
   without asking (against the terms the SDK quotes, so not recommended). **Answer (2026-10-20): ask once, and save
   the answer.**
 
+* **Q3. First-run setup (D7).** Offered: take it (recommended: a first run with no key leads into signing in); or
+  leave the first run as today, with `/login` and `gobble setup` alone. **Answer (2026-10-20): offer setup.**
+* **Q4. A strip-and-retry safety net.** When a provider rejects a request over a thinking signature despite D2, retry
+  it once with every thinking block stripped (goose). Offered: take it (recommended: D2 should make it rare, and a
+  failed turn is worse); or leave D2 alone, the error shown. **Answer (2026-10-20): retry once.**
+* **Q5. Cycling a scoped set (D8).** Offered: take it, `enabledModels` and Ctrl+P (recommended for a terminal user who
+  moves between a few models); or leave it for later, `/model` alone. **Answer (2026-10-20): yes, as P7.**
+
 ## More Information
 
 - [0019-MADR-sibling-libraries-current-pins-and-integration.md](0019-MADR-sibling-libraries-current-pins-and-integration.md) D15: `defaultProvider`.
@@ -214,4 +281,5 @@ the Windows laptop.
 - [0021-MADR-prompt-caching-per-session.md](0021-MADR-prompt-caching-per-session.md) D4: one provider per ACP session.
 - [0005-MADR-v1-feature-scope.md](0005-MADR-v1-feature-scope.md) and [0005-PLAN-v1-feature-scope.md](0005-PLAN-v1-feature-scope.md): F4-2c, F4-3b (Grok), F4-3d (ChatGPT), `/login`.
 - [0023-MADR-pin-current-releases.md](0023-MADR-pin-current-releases.md) D6: the plan sign-in left to F4-3d.
+- The survey: [0025-REPORT-provider-ux-across-harnesses.md](../reports/0025-REPORT-provider-ux-across-harnesses.md).
 - The plan: [0025-PLAN-provider-choice-and-auth.md](0025-PLAN-provider-choice-and-auth.md).
