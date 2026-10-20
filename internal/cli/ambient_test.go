@@ -198,7 +198,7 @@ func TestLineAmbient(t *testing.T) {
 		return slices.ContainsFunc(dry.Variants(personality.EasterGobble, nil), func(l string) bool { return strings.Contains(h.stdout.String(), turkeyASCII+l+"\n") })
 	})
 	h.press("/help\r")
-	waitUntil(t, func() bool { return strings.Contains(h.stdout.String(), "Commands:") })
+	waitUntil(t, func() bool { return strings.Contains(h.stdout.String(), "Commands\n") })
 	h.press("/humor 4\r")
 	waitUntil(t, func() bool { return strings.Contains(h.stdout.String(), "humored") })
 	h.press("\x04")
@@ -208,7 +208,7 @@ func TestLineAmbient(t *testing.T) {
 	if !any(personality.SessionGoodbye, nil)() {
 		t.Fatalf("no goodbye in %q", h.stderr.String())
 	}
-	help := h.stdout.String()[strings.Index(h.stdout.String(), "Commands:"):]
+	help := h.stdout.String()[strings.Index(h.stdout.String(), "Commands\n"):]
 	help, _, _ = strings.Cut(help, "\n> ")
 	if strings.Contains(help, "/gobble") || strings.Contains(help, "/humor") {
 		t.Fatalf("/help shows a hidden command:\n%s", help)

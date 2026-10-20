@@ -141,9 +141,10 @@ func (ls *lineSession) run(first Prompt) error {
 	ed := editor.New(&r, e.out.out, e.out.err, opts)
 	defer ed.Restore()
 
-	// outOfRaw runs f with the terminal out of raw mode: a turn, so output
-	// keeps its line ends and Ctrl+C is a signal the turn takes, or the
-	// external editor.
+	// outOfRaw runs f with the terminal out of raw mode, so output keeps its
+	// line ends and Ctrl+C is a signal f takes. The terminal is raw only
+	// while the editor reads: a submission, local command or prompt, is
+	// handled out of it (0024-MADR D1).
 	outOfRaw := func(f func() error) error {
 		if rerr := restore(); rerr != nil {
 			return failf("restore the terminal: %v", rerr)
@@ -177,14 +178,14 @@ func (ls *lineSession) run(first Prompt) error {
 		case err != nil:
 			return failf("%v", err)
 		}
-		handled, err := ls.slash(text, turn, outOfRaw)
+		err = outOfRaw(func() error {
+			handled, err := ls.slash(text, ls.turn)
+			if err != nil || handled {
+				return err
+			}
+			return ls.turn(Prompt{Text: text})
+		})
 		if err != nil {
-			return err
-		}
-		if handled {
-			continue
-		}
-		if err := turn(Prompt{Text: text}); err != nil {
 			return err
 		}
 	}

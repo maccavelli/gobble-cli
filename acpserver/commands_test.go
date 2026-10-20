@@ -95,7 +95,7 @@ func TestCommandsAnswer(t *testing.T) {
 		{"/context", "Session Info"},
 		{"/session", "Context: "},
 		{"/compact", "Compaction failed: Nothing to compact (session too small)"},
-		{"/help", "/compact [instructions] — Compact the session context"},
+		{"/help", "/compact [focus] — Summarize the conversation to free context"},
 		{"/bogus", "Unknown command /bogus. /help lists the commands."},
 	} {
 		if text, _ := slash(t, c, client, id, tc.cmd); !strings.Contains(text, tc.want) {

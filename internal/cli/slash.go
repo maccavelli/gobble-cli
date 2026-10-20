@@ -2,26 +2,29 @@ package cli
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
 
+	xterm "golang.org/x/term"
+
 	"github.com/maccavelli/gobble-cli/acpclient"
 	"github.com/maccavelli/gobble-cli/command"
 	"github.com/maccavelli/gobble-cli/internal/cli/editor"
+	"github.com/maccavelli/gobble-cli/internal/cli/render"
 )
 
 // localCommands are the line session's own commands, united with the
 // agent's (0008-MADR D13). /exit and /quit end the editor's read itself.
+// Each description says what the command does and takes (0024-MADR D3).
 var localCommands = []acpclient.Command{
-	{Name: "help", Description: "List the commands"},
-	{Name: "exit", Description: "Leave the session"},
-	{Name: "quit", Description: "Leave the session"},
-	{Name: "edit", Description: "Write the prompt in your editor", Hint: "[text]"},
-	{Name: "new", Description: "Start a new session"},
+	{Name: "help", Description: "Show this list of commands"},
+	{Name: "exit", Description: "Leave gobble (Ctrl+D also leaves)"},
+	{Name: "quit", Description: "Leave gobble; the same as /exit"},
+	{Name: "edit", Description: "Write the prompt in your editor, starting from text; it is sent when the editor closes", Hint: "[text]"},
+	{Name: "new", Description: "Start a new session in this directory, closing the current one"},
 }
 
 // hiddenAgentCommands are the agent's commands it does not advertise,
@@ -67,9 +70,9 @@ func (ls *lineSession) ensureSession() error {
 // slash handles a submission that is a command the line session owns, or
 // one no one owns, which is an error printed here and never sent (D13).
 // handled is false for prompt text and for the agent's commands, which go
-// to the agent as prompts. outOfRaw runs f with the terminal out of raw
-// mode, for the external editor.
-func (ls *lineSession) slash(text string, turn func(Prompt) error, outOfRaw func(func() error) error) (handled bool, err error) {
+// to the agent as prompts. It runs with the terminal out of raw mode, as a
+// turn does (0024-MADR D1).
+func (ls *lineSession) slash(text string, turn func(Prompt) error) (handled bool, err error) {
 	name, args, ok := command.Parse(text)
 	if !ok {
 		return false, nil
@@ -89,13 +92,8 @@ func (ls *lineSession) slash(text string, turn func(Prompt) error, outOfRaw func
 		ls.choice = ls.choice.next()
 		return true, e.out.Resultf("%s\n", dimmed("new session", e.out.caps.Out.Color))
 	case "edit":
-		var composed string
-		err := outOfRaw(func() error {
-			var cerr error
-			configured := e.processSettings(ls.cwd).Settings.ExternalEditor // 0018-MADR D17
-			composed, cerr = compose(e.ctx, os.Getenv, configured, ls.stateDir(), args, ls.runEditor)
-			return cerr
-		})
+		configured := e.processSettings(ls.cwd).Settings.ExternalEditor // 0018-MADR D17
+		composed, err := compose(e.ctx, os.Getenv, configured, ls.stateDir(), args, ls.runEditor)
 		if err != nil {
 			e.out.Errorf("%v", err)
 			return true, nil
@@ -116,20 +114,17 @@ func (ls *lineSession) slash(text string, turn func(Prompt) error, outOfRaw func
 	return false, nil
 }
 
-// helpText lists the local commands, then the agent's.
+// helpText lists the local commands, then the agent's, laid out for the
+// terminal's width as it is now (0024-MADR D2).
 func (ls *lineSession) helpText() string {
-	var b strings.Builder
-	line := func(c acpclient.Command) {
-		name := "/" + c.Name
-		if c.Hint != "" {
-			name += " " + c.Hint
+	entries := func(cs []acpclient.Command) []render.CommandEntry {
+		out := make([]render.CommandEntry, len(cs))
+		for i, c := range cs {
+			out[i] = render.CommandEntry{Name: c.Name, Hint: c.Hint, Description: c.Description}
 		}
-		fmt.Fprintf(&b, "  %s — %s\n", name, c.Description)
+		return out
 	}
-	b.WriteString("Commands:\n")
-	for _, c := range localCommands {
-		line(c)
-	}
+	sections := []render.CommandSection{{Heading: "Commands", Commands: entries(localCommands)}}
 	if ls.sess != nil {
 		var agent []acpclient.Command
 		for _, c := range ls.sess.Commands() {
@@ -138,13 +133,23 @@ func (ls *lineSession) helpText() string {
 			}
 		}
 		if len(agent) > 0 {
-			b.WriteString("Agent commands:\n")
-			for _, c := range agent {
-				line(c)
-			}
+			sections = append(sections, render.CommandSection{Heading: "Agent commands", Commands: entries(agent)})
 		}
 	}
-	return b.String()
+	// The last column stays empty: a terminal that wraps as soon as it is
+	// written to would put a blank row after a full line.
+	return render.CommandList(sections, max(ls.width()-1, 1), ls.e.out.caps.Out.Color)
+}
+
+// width is standard output's width now, since a terminal is resized, else
+// the one found at start.
+func (ls *lineSession) width() int {
+	if f, ok := ls.e.out.out.(*os.File); ok && ls.e.out.caps.Out.TTY {
+		if w, _, err := xterm.GetSize(int(f.Fd())); err == nil && w > 0 { //nolint:gosec // G115: a terminal's descriptor fits an int
+			return w
+		}
+	}
+	return ls.e.out.caps.Out.Width
 }
 
 // closeSession ends the open session, if any.

@@ -2,10 +2,12 @@ package cli
 
 import (
 	"context"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/maccavelli/gobble-cli/acpclient/acptest"
@@ -19,18 +21,18 @@ func TestSlashHelpUnion(t *testing.T) {
 	h := newModelHarness(t, model, t.TempDir())
 	h.start(Prompt{})
 	h.press("/help\r")
-	waitUntil(t, func() bool { return strings.Contains(h.stdout.String(), "Agent commands:") })
+	waitUntil(t, func() bool { return strings.Contains(h.stdout.String(), "Agent commands\n") })
 	h.press("\x04")
 	if err := h.wait(); err != nil {
 		t.Fatal(err)
 	}
 	out := h.stdout.String()
-	for _, want := range []string{"  /new — Start a new session\n", "  /edit [text] — Write the prompt in your editor\n", "  /compact [instructions] — "} {
+	for _, want := range []string{"\n  /new ", "Start a new session in this directory", "\n  /edit [text] ", "\n  /compact [focus] "} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("help lacks %q:\n%s", want, out)
 		}
 	}
-	if strings.Count(out, "/help — ") != 1 {
+	if strings.Count(out, "\n  /help ") != 1 {
 		t.Fatalf("/help listed twice:\n%s", out)
 	}
 	if len(model.Requests()) != 0 {
@@ -172,5 +174,79 @@ func TestCloneSwitches(t *testing.T) {
 	}
 	if r := model.Requests()[1]; len(r.Messages) < 4 {
 		t.Fatalf("the clone's prompt carried %d messages, want its history", len(r.Messages))
+	}
+}
+
+// rawWrites records, for each write to a stream, whether the line
+// harness's terminal was in raw mode at the time.
+type rawWrites struct {
+	h  *lineHarness
+	mu sync.Mutex
+	ws []rawWrite
+}
+
+type rawWrite struct {
+	text string
+	raw  bool
+}
+
+// rawWriter writes to w, recording each write with the terminal's state.
+type rawWriter struct {
+	rec *rawWrites
+	w   io.Writer
+}
+
+func (r rawWriter) Write(p []byte) (int, error) {
+	r.rec.h.mu.Lock()
+	raw := r.rec.h.raws > r.rec.h.restores
+	r.rec.h.mu.Unlock()
+	r.rec.mu.Lock()
+	r.rec.ws = append(r.rec.ws, rawWrite{text: string(p), raw: raw})
+	r.rec.mu.Unlock()
+	return r.w.Write(p)
+}
+
+// rawAt reports whether the write holding want was made in raw mode, and
+// whether there was one.
+func (r *rawWrites) rawAt(want string) (raw, found bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, w := range r.ws {
+		if strings.Contains(w.text, want) {
+			return w.raw, true
+		}
+	}
+	return false, false
+}
+
+// The line session's own commands print with the terminal out of raw mode,
+// as a turn does: in raw mode a bare line feed keeps the column, and /help
+// ran off to the right (0024-MADR D1).
+func TestLocalCommandsPrintOutOfRaw(t *testing.T) {
+	h := newLineHarness(t, &acptest.ScriptAgent{})
+	rec := &rawWrites{h: h}
+	h.e.out.out = rawWriter{rec: rec, w: h.stdout}
+	h.e.out.err = rawWriter{rec: rec, w: h.stderr}
+	h.start(Prompt{})
+	h.press("/help\r")
+	waitUntil(t, func() bool { return strings.Contains(h.stdout.String(), "Commands") })
+	h.press("/nosuch\r")
+	waitUntil(t, func() bool { return strings.Contains(h.stderr.String(), "unknown command") })
+	h.press("/new\r")
+	waitUntil(t, func() bool { return strings.Contains(h.stdout.String(), "new session") })
+	h.press("\x04")
+	if err := h.wait(); err != nil {
+		t.Fatal(err)
+	}
+	// The editor echoes what is typed in raw mode, rightly; these are only
+	// the commands' own output.
+	for _, want := range []string{"Commands", "unknown command /nosuch", "new session"} {
+		raw, found := rec.rawAt(want)
+		switch {
+		case !found:
+			t.Errorf("nothing written holding %q", want)
+		case raw:
+			t.Errorf("%q was written with the terminal in raw mode", want)
+		}
 	}
 }

@@ -24,24 +24,25 @@ import (
 // phases land (/todos, 0005-PLAN F1d-1). Every one is advertised, and
 // only these are: a test
 // sends each and asserts it is handled (advertisement ⊆ handlers). TUI
-// chrome is never here.
+// chrome is never here. Each description says what the command does with
+// no argument and with one; a hint is a short synopsis (0024-MADR D3).
 var commands = []command.Command{
-	{Name: "help", Description: "List the commands"},
-	{Name: "compact", Description: "Compact the session context, optionally focused by instructions", Hint: "[instructions]"},
-	{Name: "usage", Description: "Show the session's tokens and cost"},
-	{Name: "context", Description: "Show context-window use and session information"},
-	{Name: "session", Description: "Show session information and statistics"},
-	{Name: "model", Description: "Show or set the model", Hint: "[model]"},
-	{Name: "thinking", Description: "Show or set the thinking level", Hint: "[level]"},
-	{Name: "mode", Description: "Show or set the session mode", Hint: "[default|plan]"},
-	{Name: "plan", Description: "Enter plan mode: read-only until a plan is approved"},
-	{Name: "name", Description: "Show or set the session name", Hint: "[name]"},
-	{Name: "fork", Description: "Start a new session from before an earlier message", Hint: "[entry]"},
+	{Name: "help", Description: "Show this list of commands"},
+	{Name: "compact", Description: "Summarize the conversation to free context; focus says what the summary should keep", Hint: "[focus]"},
+	{Name: "usage", Description: "Show this session's token counts and cost"},
+	{Name: "context", Description: "Show the session's file, mode, model, message counts and context-window use"},
+	{Name: "session", Description: "The same as /context"},
+	{Name: "model", Description: "Show the current model and the ones available, or switch to model", Hint: "[model]"},
+	{Name: "thinking", Description: "Show the thinking level and the model's levels, or set level", Hint: "[level]"},
+	{Name: "mode", Description: "Show the session mode and the modes available, or switch to mode", Hint: "[mode]"},
+	{Name: "plan", Description: "Enter plan mode: read-only until you approve a plan"},
+	{Name: "name", Description: "Show the session's name, or rename it", Hint: "[name]"},
+	{Name: "fork", Description: "List your earlier messages, or start a new session from before entry", Hint: "[entry]"},
 	{Name: "clone", Description: "Start a new session from a copy of this one"},
-	{Name: "todos", Description: "Show the todo list"},
-	{Name: cmdPersonality, Description: "Show or set the personality", Hint: "[boring|dry|snarky|bombastic]"},
-	{Name: "trust", Description: "Show whether this project is trusted, and save a decision"},
-	{Name: "permissions", Description: "List, remove or add permission rules", Hint: "[remove N | allow|ask|deny RULE [session|project|global]]"},
+	{Name: "todos", Description: "Show the agent's todo list for this session"},
+	{Name: cmdPersonality, Description: "List the personalities, or switch to one", Hint: "[boring|dry|snarky|bombastic]"},
+	{Name: "trust", Description: "Show whether this project is trusted, and choose for its next session"},
+	{Name: "permissions", Description: "List the rules in force, remove rule N, or add a rule (session, project or global)", Hint: "[remove N | allow|ask|deny RULE]"},
 }
 
 // availableCommands is the commands as ACP lists them, then each template

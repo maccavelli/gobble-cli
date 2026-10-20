@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 date: 2026-10-20
 decision-makers: repository owner
 consulted: none
@@ -80,7 +80,8 @@ reads `/help`'s output after `Commands:`. No test runs `/help` on a terminal in 
 
 Chosen option: "A. The terminal is raw only while the editor reads", because it fixes every local command at one
 place, keeps output byte-identical between cooked and raw paths, and lets Ctrl+C reach a local command as a signal, as
-it does a turn. *Proposed: the owner decides at review.* *(2026-10-20, the owner's answers: Q1 indented under
+it does a turn. *Proposed: the owner decides at review.* *(2026-10-20: accepted by the owner, "accepted, approved to
+proceed", after `6ab7928`.)* *(2026-10-20, the owner's answers: Q1 indented under
 headings; Q2 D3's table as proposed; Q3 a later amendment.)*
 
 - **D1. Out of raw mode for every local command.** After the editor returns a submission, the line session leaves raw
@@ -121,12 +122,14 @@ headings; Q2 D3's table as proposed; Q3 a later amendment.)*
   | `/fork` | `[entry]` | List your earlier messages, or start a new session from before entry |
   | `/clone` | | Start a new session from a copy of this one |
   | `/todos` | | Show the agent's todo list for this session |
-  | `/personality` | `[name]` | Show the personality, or switch to boring, dry, snarky or bombastic |
+  | `/personality` | ~~`[name]`~~ `[boring\|dry\|snarky\|bombastic]` | ~~Show the personality, or switch to boring, dry, snarky or bombastic~~ List the personalities, or switch to one |
   | `/trust` | | Show whether this project is trusted, and choose for its next session |
   | `/permissions` | `[remove N \| allow\|ask\|deny RULE]` | List the rules in force, remove rule N, or add a rule (session, project or global) |
 
   The line session's five are in `internal/cli/slash.go`; the agent's in `acpserver/commands.go`, so every ACP client
-  and the agent's own `/help` get them.
+  and the agent's own `/help` get them. *(2026-10-20, 0024-PLAN deviation 2, the owner's choice: `/personality`'s hint
+  stays the one [0022-MADR-gobble-voice-and-personalities.md](0022-MADR-gobble-voice-and-personalities.md) decided,
+  naming the built-ins, and its description no longer repeats them.)*
 - **D4. Tests,** each seen failing on the current code first:
   - the line session handles `/help`, `/new` and an unknown command with the terminal out of raw mode, through a raw
     function that records its state;
@@ -184,3 +187,80 @@ column 0; the gates on macOS, the Linux machine and the Windows laptop.
 - [0008-MADR-native-cli-mode.md](0008-MADR-native-cli-mode.md) D13: the line session's one registry of slash commands.
 - [0005-PLAN-v1-feature-scope.md](0005-PLAN-v1-feature-scope.md) F6-4: the modes.
 - The plan: [0024-PLAN-cli-mode-polish.md](0024-PLAN-cli-mode-polish.md).
+
+## Amendment (2026-10-20): a log record printed into the conversation, and the home directory it named
+
+*Proposed: the owner decides at review.* The owner asked on 2026-10-20, after P1's run, to "add the 2 additional
+found items to scope": the two findings of 0024-PLAN's P1 record. Each fact below was measured that day on the working
+tree, P1's change applied and not yet committed.
+
+### Context
+
+**Finding 1: a log record in slog's text form, printed into the conversation.** On the Linux machine, the session
+that `/help` opened printed, before the list:
+
+```text
+time=2026-10-20T15:31:11.659Z level=WARN msg="prompt: a file was not used" file=<home>/.agents/skills reason="not loaded: the project is not trusted (gobble trust, or /trust)"
+```
+
+- It is the agent's note on a skills directory an untrusted project holds back
+  (`acpserver/sysprompt.go:208-225`, `note`), which 0005-PLAN F6-1 decision 8 asks for: "an untrusted project's are
+  held back, each with a note".
+- It reaches the terminal because every log record at warning level or above is written to stderr by
+  `slog.NewTextHandler` (`internal/logging/logging.go:40-43`), and the line session passes its stderr in
+  (`internal/cli/main.go:81`, `:222`). That is the owner's decision of 2026-10-05 in 0004-PLAN Phase 2 step 4
+  (`0004-PLAN-go-module-architecture.md:808`): "a text handler at `max(Level, slog.LevelWarn)` … The terminal shows
+  warnings and errors only".
+- 0008-MADR D3 has every diagnostic on stderr "prefixed `Error:` or `Warning:`"; D18 keeps user output and logging
+  apart. A log record on a terminal is the one diagnostic in neither form: a timestamp, `key=value` pairs and Go
+  quoting, 178 columns here, never wrapped.
+- The log file keeps every record as JSON (`logging.go:32-38`), whatever stderr shows.
+- **Not measured:** a record logged while the editor reads, with the terminal raw, would reach it with bare line
+  ends (MADR D1's bug, for a write the loop does not order). No such record was seen; the title and other background
+  work log from the agent's goroutines.
+
+**Finding 2: "its path was the account's real home": not a defect.** P1's record said the warned directory was the
+account's own `.agents/skills` although the run set `HOME` to a scratch directory, and that "that directory's lookup
+may not follow `HOME`". It does follow it:
+
+- `ProjectSkillDirs` (`prompt/trust.go:12-40`) walks up from the working directory to the repository root, or to the
+  filesystem root outside a repository, collecting each `.agents/skills`, and skips only the one in `$HOME` itself
+  (`:30`); the agent passes `os.UserHomeDir()`, which reads `$HOME` (`acpserver/sysprompt.go:122-127`).
+- The capture ran with `HOME` and the working directory both a scratch directory below the account's home, outside any
+  repository, so the walk reached the account's home, whose `.agents/skills` was then a project's, held back as
+  untrusted.
+- A probe in a synthetic tree with no repository (`fakehome/.agents/skills/demo/SKILL.md`, the working directory
+  `fakehome/proj`): with `HOME=fakehome`, no warning about `fakehome/.agents/skills`; with `HOME=fakehome/proj`, the
+  warning. `prompt/trust_test.go:13-32` tests the exclusion inside a repository, where the walk stops at the root
+  first; nothing tests it outside one.
+
+### Decision
+
+- **D6. On a terminal, a log record on stderr reads as gobble's own diagnostic** (owner question Q4).
+  - When stderr is a terminal, the stderr handler writes a record at warning level or above as one diagnostic:
+    `Warning:` or `Error:`, the message, then its attributes in parentheses as `key: value`, separated by `; `. No
+    time, no level word, no quoting. A path under `$HOME` is shown with `~`. The diagnostic is wrapped at spaces to
+    stderr's width, less one column, its continuation lines indented two columns.
+  - The record above becomes: `Warning: prompt: a file was not used (file: ~/.agents/skills; reason: not loaded: the
+    project is not trusted (gobble trust, or /trust))`.
+  - Redaction applies as before (`ReplaceAttr`), and the level stays `max(Level, LevelWarn)`.
+  - When stderr is not a terminal (a script, a pipe, CI), the handler stays slog's text, unchanged; under `gobble
+    acp` there is still no stderr handler. The log file is unchanged.
+  - It amends the owner's decision in 0004-PLAN Phase 2 step 4 for a terminal only, with a dated note there.
+- **D7. Finding 2 is closed as a test, not a fix:** a test that, outside any repository, the walk skips `$HOME`'s own
+  `.agents/skills` and keeps an ancestor's, seen failing on a scratch copy without the `$HOME` check. P1's record
+  gets a dated correction of its finding.
+- **Out of scope, named:** the bare line ends of a record logged while the editor reads (finding 1's last point),
+  unmeasured; it waits for a later item, with a measurement first.
+
+### Options for D6
+
+* **A. A diagnostic on a terminal, slog text elsewhere** (recommended): a person reads `Warning:` lines; a script or
+  CI log keeps parseable records; the file holds everything.
+* **B. No log records on a terminal at all,** the file only: the conversation stays clean, but a warning a user should
+  act on (an untrusted project's skills, a rotation failure) is then seen by no one.
+* **C. Unchanged:** slog's text on every stderr, as today.
+
+### Owner questions
+
+* **Q4. Finding 1's form.** A, B or C above; A recommended. **Answer (2026-10-20): A, a `Warning:` line.**
