@@ -162,13 +162,19 @@ Never commit a credential or put one on a command line. Export it in your shell.
 
 ## CI and the release rehearsal
 
-`.github/workflows/ci.yml` runs on every push to `main`, on every pull request, and on `v*` tags:
+`.github/workflows/ci.yml` runs on every push to `main`, on every pull request, and on `v*` tags.
+A push or pull request whose changes are all in the docs set (`*.md` at the root, `docs/**/*.md`,
+`.claude/rules/*.md`, `.grok/rules/*.md` and `.opencode/rules.md`) skips it, and
+`.github/workflows/docs.yml` runs `make check-records` and `make markdownlint` on one Linux runner
+instead; a Markdown file Go reads, such as a built-in tool's description, runs the full CI, and a `v*`
+tag is never filtered. Its jobs:
 
 - `validate` runs `go test`, `make preflight` and `make archtest` on Linux, macOS and Windows, and
   `make race` on Linux and macOS;
 - `sbom` saves the dependency graph's SPDX SBOM;
 - `build` builds the five release binaries and runs `gobble version --identity` on each platform.
-  Without a tag this is a rehearsal, stamped `rehearsal-<commit>`;
+  Without a tag this is a rehearsal, stamped `rehearsal-<commit>`, so a docs-only push or pull
+  request has none;
 - `release` publishes a GitHub release, only on a `v*` tag at `main`'s head.
 
 ## Decision records

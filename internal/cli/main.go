@@ -148,7 +148,7 @@ type runEnv struct {
 	// provider (0020-MADR D3).
 	listingsMu sync.Mutex
 	listings   map[string]*modelListing
-	// recent and recentLoaded are models.json's recent models, read once,
+	// recent and recentLoaded are recent-models.json's recent models, read once,
 	// under recentMu (0025-MADR D3).
 	recent       []string
 	recentLoaded bool
@@ -173,6 +173,10 @@ type runEnv struct {
 	// gives defaultModel's warning once (0005-PLAN F4-2c).
 	pick             modelPick
 	defaultModelOnce sync.Once
+	// startOnce chooses startAt, where a run starts when --model names no
+	// provider, once (0025-MADR D3).
+	startOnce sync.Once
+	startAt   startChoice
 	// creds is the run's credential resolver, built once; credsMu guards
 	// credWarned, the providers whose resolution error was warned, and
 	// knownKeys, the keys resolved once for lookups (0005-PLAN F4-3a).

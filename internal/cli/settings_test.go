@@ -266,8 +266,10 @@ func TestAddDirAbsoluteAndChecked(t *testing.T) {
 
 // defaultProvider's values are the SDK's providers that take a key, in
 // order; the setting reaches the agent's provider and model list as gobble
-// acp reads it, and -p names the preferred provider's variable when it is
-// unset, never choosing another (0019-MADR D15).
+// acp reads it. A setting whose provider has no credential, while another
+// has one, starts the run there with a warning (0025-MADR D3; it amends
+// 0019-MADR D15's error, which stays for --model and for a run with no
+// credential at all: TestStartNoCredential).
 func TestDefaultProviderSetting(t *testing.T) {
 	k, ok := config.KeyOf("defaultProvider")
 	if want := append([]string{""}, provider.KeyProviders()...); !ok || !slices.Equal(k.Enum, want) {
@@ -293,8 +295,16 @@ func TestDefaultProviderSetting(t *testing.T) {
 		t.Fatalf("provider %v, %v; want opencode-go", p, err)
 	}
 	writeFile(t, filepath.Join(home, "settings.yaml"), "defaultProvider: openai\n")
-	r := runIn(t, home, "-p", "x")
-	if r.code != ExitAuth || !strings.Contains(r.stderr, "Error: no model credential: defaultProvider is openai; set OPENAI_API_KEY") {
-		t.Fatalf("openai without its key: %+v", r)
+	stderr := &syncBuffer{} // background listings warn into it
+	out2 := &Output{out: &bytes.Buffer{}, err: stderr}
+	e2 := &runEnv{ctx: t.Context(), out: out2, logs: &lazyLog{out: out2, stderr: stderr}}
+	t.Cleanup(func() {
+		if err := e2.logs.close(); err != nil {
+			t.Error(err)
+		}
+	})
+	e2.processSettings("")
+	if c := e2.modelChoice(); c.Provider != "opencode-zen" || !strings.Contains(stderr.String(), "Warning: defaultProvider openai has no credential; the run starts on another provider") {
+		t.Fatalf("openai without its key: started on %q, warnings %q; want opencode-zen, the first with a key, and the warning", c.Provider, stderr.String())
 	}
 }

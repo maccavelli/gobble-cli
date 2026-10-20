@@ -307,7 +307,7 @@ func (a *Agent) pickerText(c ModelChoice, picks []pick, keep func(int) bool) str
 			}
 		}
 	}
-	b.WriteString("\n/model N or /model provider/model switches; /model words lists the matches.\n")
+	b.WriteString("\n/model N or /model provider/model switches, and with --default new runs start on it; /model words lists the matches.\n")
 	return b.String()
 }
 

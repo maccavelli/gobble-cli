@@ -150,6 +150,9 @@ This pair, `status: proposed`, and `docs/README.md`'s two rows. Checks: `make ch
 3. **[0004-PLAN-go-module-architecture.md](0004-PLAN-go-module-architecture.md):** a dated note after the note of
    2026-10-07 under Phase 4 that names "the CI rehearsal of every push": a push whose changes are all in the docs set
    no longer rehearses (0026-MADR D4). The note of 2026-10-07 is not rewritten.
+   *(2026-10-20, P2 deviation 1, the owner's choice: no note is both under Phase 4 and the one naming "the CI
+   rehearsal of every push", which is under `## Verification`. The note goes after the Phase 4 note of 2026-10-07, and
+   names the Verification note and the amendment "Phase 4 steps 2–4 made executable" as covered by it.)*
 4. **`docs/README.md`:** this pair's rows, and the 0004-PLAN row's status gains the note.
 5. **Checks:** `make check-records`, `make markdownlint`, and an identifier scan of the changed files for the local
    account name and the hostname domain. This commit changes Markdown only, all in the docs set, so its push is P3's
@@ -304,6 +307,8 @@ No deviation from the step as written.
 
 ### P2 — stopped before its first edit (2026-10-20), waiting on the owner
 
+*(Resolved the same day: deviation 1 below.)*
+
 P2 step 3 places the 0004-PLAN note "after the note of 2026-10-07 under Phase 4 that names 'the CI rehearsal of every
 push'", and the MADR's Context cites that phrase to the same place ("note of 2026-10-07 under Phase 4"). No note is
 both. In [0004-PLAN-go-module-architecture.md](0004-PLAN-go-module-architecture.md) at `bdd8268`:
@@ -332,3 +337,50 @@ resolutions offered, each recorded here and in a dated note on the MADR's Contex
 
 Doing nothing leaves P2 undone: once P1 is pushed, `docs/architecture.md`, `docs/guides/developing.md` and 0004-PLAN
 say the rehearsal runs on every push, which is no longer true, and P3 has no docs-only commit to push.
+
+**P2 deviation 1, 2026-10-20, decided by the owner** ("One note after 395, covering all (Recommended)"): the
+0004-PLAN note's place, above.
+
+- **Chosen:** resolution 1. One dated note after the Phase 4 note of 2026-10-07 (0004-PLAN line 395), naming the
+  Verification note of that date (line 425) and the amendment "Phase 4 steps 2–4 made executable" (line 1007) as
+  covered by it; neither is rewritten. The MADR's Context citation gets a dated correction, and P2 step 3 a dated
+  annotation; neither is rewritten.
+- **Not chosen:** resolution 2, a note after each of lines 395 and 425; resolution 3, one note after line 425 only.
+- No file is added to P2's scope; the MADR's correction is a record edit within the pair.
+
+### P2 (2026-10-20)
+
+Begun on `main` at `bdd8268`, after P0 and P1 in the working tree, with deviation 1 above. While P2 ran, `main`
+moved to `4377b6d` (not pushed; `origin/main` is `d76e3d2`), a commit made outside this plan that holds P0's and
+P1's files, with the P1 record and the stop entry above, together with other work's code; the Rules' "Each phase is
+one commit" is not met for P0 and P1, and nothing here rewrites that commit. P2's changes are the working tree's
+only changes against `4377b6d`. Each claim was checked against
+`ci.yml` and `docs.yml` as P1 left them: `ci.yml`'s `paths-ignore` is on `push` and `pull_request` both, with the five
+patterns; `docs.yml` runs on `push` to `main` and `pull_request` only, with no tag trigger, one `ubuntu-24.04` job and
+the steps `make check-records` and `make markdownlint`; `build` is a rehearsal off a tag; and GitHub does not evaluate
+path filters for a tag push (MADR, "GitHub's path filters").
+
+1. **`docs/architecture.md`:**
+   - "Checks", the `ci.yml` bullet: a push or pull request whose changes are all in the docs set (the five patterns,
+     named) skips it, and `.github/workflows/docs.yml` runs `make check-records` and `make markdownlint` on one Linux
+     runner instead; a Markdown file Go reads (a built-in tool's description, a personality, a test fixture) is outside
+     the set and runs the full CI; a `v*` tag is never filtered; a link to the MADR.
+   - "The release", `build`'s sub-bullet: "on any other run, so on every push and pull request outside the docs set,
+     it is a rehearsal".
+   - "Tree": `.github/workflows/docs.yml  the docs-only check: records and markdownlint`, under `ci.yml`'s line.
+2. **`docs/guides/developing.md`,** "CI and the release rehearsal": the opening line ends with a full stop, then one
+   sentence with the same split, then "Its jobs:" before the list; `build`'s bullet adds "so a docs-only push or pull
+   request has none". The bullet never said "every push"; the opening line did, and the new sentence qualifies it.
+3. **0004-PLAN:** the dated note of 2026-10-20 after the Phase 4 note of 2026-10-07, as deviation 1 has it, naming the
+   docs set, `docs.yml`, the full CI on any other change and on every tag, and 0026-MADR D4.
+4. **`docs/README.md`:** the 0004-PLAN row's status gains "a docs-only push no longer rehearses, note 2026-10-20
+   (0026)"; this pair's rows say P2 is complete with one deviation, and the MADR's citation corrected. The 0025 PLAN
+   row, changed by other work in the same tree, is not this phase's.
+5. **Checks,** in the working tree (both read the documentation only):
+   - `make check-records`: exit 0, no finding.
+   - `make markdownlint`: exit 0, `Linting: 55 files` / `Summary: 0 issues in 0 files`.
+   - An identifier scan of the changed files for the local account name, the host name and local absolute paths:
+     none. The host has no domain part to scan for.
+
+   No new check is added, so none is seen failing. Every file this phase changes is under `docs/` and ends `.md`, in
+   the docs set, so its push is P3's docs-only test.

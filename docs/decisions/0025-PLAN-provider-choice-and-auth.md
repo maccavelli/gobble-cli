@@ -350,3 +350,81 @@ error; the switch within OpenAI's models went on as well.
 
 **Not done in P2, as the plan says:** the start order (P3); browsing (P4); `/login` (P5). A switch to a provider with no
 credential says it is not usable, with its variable; P5 offers `/login` there.
+
+**Deviation 4, 2026-10-20, P3, decided by the owner** ("Rename to recent-models.json"): P1 kept the recent models in
+`<state>/models.json`, as MADR D3 named it. gobble's custom models file is `models.json` in the config directory
+(`internal/cli/modelsjson.go:40`), and with `GOBBLE_HOME` set the config and state directories are one
+(`internal/appdirs/dirs.go:56-61`), so choosing a model rewrote the user's custom models; with the platforms' own
+directories they are apart. P3's start-order test found it: its environment, under `GOBBLE_HOME`, warned "models.json:
+providers: required; the file is ignored" after a recent model was remembered. P1 was never released, so no file needs
+moving.
+
+- **Chosen:** the recent models in `<state>/recent-models.json`; MADR D3 annotated; a test that a `models.json` beside
+  it is left as it was.
+- **Not chosen:** the same name in a subdirectory.
+- No file is added to P3's scope beyond `internal/cli/choice.go` and `internal/cli/choice_test.go`, P1's, where the
+  name is.
+
+### P3 execution record (2026-10-20)
+
+**Run** on `main` at `4377b6d`, on the owner's word "committed, proceed", with deviation 4 above.
+
+**Steps:**
+
+1. **Tests first,** each seen failing:
+   - `internal/cli` (`start_test.go`): `TestStartOrder`, against a stub that kept today's start (`started on /, want
+     claude/claude-2`; `started on openai/openai-1, want claude/claude-2`; `note "", want "Starting on OpenAI
+     (openai)…"`); `TestStartNoteInLineSession` (`condition not met within 5 s`) before the line session printed the
+     note. On scratch copies: `TestStartOrder` with the start ignoring a refused listing (`started on
+     claude/claude-haiku-5-5, want openai/openai-1`); `TestStartNoCredential` with the setting dropped when nothing has
+     a credential (`… set one of GEMINI_API_KEY, OPENAI_API_KEY, …`); `TestRecentModels` with the file named
+     `models.json` again (`the custom models.json is now "{\n  \"recent\": [\n    \"openai/m5\", …`).
+   - `acpserver`: `TestModelSaveDefault` (`/model fake/m2 --default: "Unknown model \"fake/m2 --default\"…"`).
+2. **The start** (`internal/cli/start.go`), chosen once a process: `--model`'s provider; else the `defaultProvider`
+   setting's, when it has a credential and its listing did not refuse it; else the newest recent model whose provider
+   has a credential and was not refused; else the first provider with a key, in the registry's order, with a note when
+   several had one. A setting or a recent model passed by is warned of; with no credential at all the start is the
+   setting's, so the error names its variable as before. `chosenProvider` is `--model`'s or the start's; the
+   `defaultModel` setting is read only when its `defaultProvider` is the start; a recent start takes its model when the
+   provider still offers it.
+3. **The note** in the line session, before the first prompt: "Starting on OpenAI (openai), the first provider with a
+   key; /model switches, and the defaultProvider setting or --model chooses where a run starts." Seen in a
+   pseudo-terminal with two dummy keys and a dead proxy, after one listing warning per provider (below).
+4. **`/model <ref> --default`** switches and saves `defaultProvider` and `defaultModel` through the agent's
+   `SaveSetting`, saying "Saved fake/m2 as the default: new runs start on it."; `/model --default` saves the session's
+   model. The list's footer names `--default`.
+5. **Records:** deviation 4 above and MADR D3's note; a dated note in 0019-MADR D15 (a setting no longer fails a run
+   another provider can start; the error stays for `--model` and for no credential at all); this record.
+
+**Tests changed with it, none loosened:** `TestDefaultProviderSetting`'s last check, 0019-MADR D15's error for a
+`defaultProvider` with no credential, now checks D3's fall-through: the run starts on the first provider with a key
+and warns. It reads the model choice, not a `-p` run, which would now reach a model.
+
+**Found by the gates and fixed in the phase:**
+
+- **A data race in the new and changed tests** (macOS and Windows race runs, `race detected during execution of test`
+  in `TestDefaultProviderSetting`): their stderr was a `bytes.Buffer` that a background listing's warning writes to;
+  both now use the package's `syncBuffer`. Twenty race runs then passed.
+- **A timing flaw in P1's `TestLastGoodOnDisk`** (macOS, once: `the listing was handed [] at 0001-01-01…`): it read
+  what claude's listing was handed before that listing's goroutine had begun; it now waits for it. Two hundred runs,
+  and fifty under the race detector, passed.
+- The first round's Linux logs were removed when the tree was copied again for the second round, before they were read;
+  its exit codes showed a failure in the plain test run as well as the race run. The rounds after it are the record.
+
+**Found, not done here (a question for the owner):** since P1 lists every credentialed provider, each listing that
+fails writes its own warning at start ("model listing failed; offering the curated static list (provider: …)"), one
+per provider, where there was one; offline, with eight keys, eight lines. 0020-MADR D6 asks for one warning per failed
+listing. The states are also in `/model` and `/providers` (P4).
+
+**Gates (the last round):**
+
+- the pre-add check on the twelve changed `.go` files, `12 file(s) clean`, then on the three test files changed after
+  it, clean; lint for linux, darwin and windows, `0 issues.` each, after golint's and revive's `else` after a return,
+  and modernize's `slices.Contains` and `slices.Backward` in a test;
+- macOS: the tests and the race detector, 35 packages ok each; `make preflight`, `preflight passed`;
+- the Linux machine and the Windows laptop, over ssh with `-o BatchMode=yes -o ConnectTimeout=5`, on a copy of the
+  working tree, Windows with `TMP` and `TEMP` outside the user's home: the tests and the race detector, 35 packages ok
+  on each; `make preflight` through `apidiff` (`0 issues.`), stopping at `verify-build-metadata` on a copy; `make
+  check-records markdownlint`, "0 issues in 0 files".
+
+**Not done in P3, as the plan says:** browsing (P4), `/login` (P5), ChatGPT (P6), cycling (P7).

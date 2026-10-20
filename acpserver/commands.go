@@ -347,6 +347,16 @@ func (a *Agent) cmdModel(ctx context.Context, t *cmdTurn, arg string) error {
 		return nil
 	}
 	picks := c.picks()
+	// A trailing --default saves the model a run starts on (0025-MADR D3).
+	save := false
+	if rest, ok := strings.CutSuffix(arg, "--default"); ok && (rest == "" || strings.HasSuffix(rest, " ")) {
+		arg, save = strings.TrimSpace(rest), true
+		if arg == "" {
+			model, _ := a.choices(t.s)
+			t.say(a.saveDefault(a.provOf(t.s), model))
+			return nil
+		}
+	}
 	if arg == "" {
 		model, _ := a.choices(t.s)
 		t.say(t.text(personality.ModelCurrent, personality.Args{argModel: refOf(c.Provider, model)}) + "\n" +
@@ -359,7 +369,7 @@ func (a *Agent) cmdModel(ctx context.Context, t *cmdTurn, arg string) error {
 			t.say(fmt.Sprintf("No entry %d: /model lists %d.", n, len(picks)))
 			return nil
 		}
-		return a.switchModel(ctx, t, c, picks[n-1].provider, picks[n-1].model)
+		return a.switchModel(ctx, t, c, picks[n-1].provider, picks[n-1].model, save)
 	}
 	if prov, model, ok := splitRef(arg, ps); ok && prov != "" {
 		p := ps[slices.IndexFunc(ps, func(x ProviderChoice) bool { return x.ID == prov })]
@@ -368,7 +378,7 @@ func (a *Agent) cmdModel(ctx context.Context, t *cmdTurn, arg string) error {
 			t.say(fmt.Sprintf("%s is not usable: %s", prov, joinReason(string(p.State), p.Reason)))
 			return nil
 		case slices.Contains(p.Models, model):
-			return a.switchModel(ctx, t, c, prov, model)
+			return a.switchModel(ctx, t, c, prov, model, save)
 		}
 	}
 	if i := slices.IndexFunc(ps, func(x ProviderChoice) bool { return x.ID == arg }); i >= 0 {
@@ -378,7 +388,7 @@ func (a *Agent) cmdModel(ctx context.Context, t *cmdTurn, arg string) error {
 			return nil
 		}
 		if m := lastModel(c.Recent, p.ID, p.Models); m != "" {
-			return a.switchModel(ctx, t, c, p.ID, m)
+			return a.switchModel(ctx, t, c, p.ID, m, save)
 		}
 	}
 	var exact []pick
@@ -388,7 +398,7 @@ func (a *Agent) cmdModel(ctx context.Context, t *cmdTurn, arg string) error {
 		}
 	}
 	if len(exact) == 1 {
-		return a.switchModel(ctx, t, c, exact[0].provider, exact[0].model)
+		return a.switchModel(ctx, t, c, exact[0].provider, exact[0].model, save)
 	}
 	keep := a.matches(picks, arg)
 	for i := range picks {
@@ -405,7 +415,7 @@ func (a *Agent) cmdModel(ctx context.Context, t *cmdTurn, arg string) error {
 // included; a switch that cannot be made is said, and the session stays as
 // it was. A model whose window is smaller than the context in use says so
 // (0025-MADR D1).
-func (a *Agent) switchModel(ctx context.Context, t *cmdTurn, _ ModelChoice, provider, model string) error {
+func (a *Agent) switchModel(ctx context.Context, t *cmdTurn, _ ModelChoice, provider, model string, save bool) error {
 	ref := refOf(provider, model)
 	used := a.usedOf(t.s)
 	err := a.setConfigUpdate(ctx, t, configModel, ref)
@@ -420,8 +430,27 @@ func (a *Agent) switchModel(ctx context.Context, t *cmdTurn, _ ModelChoice, prov
 	if window := a.modelOf(provider, model).ContextWindow; window > 0 && used > window {
 		text += fmt.Sprintf("\nThe conversation uses %d tokens; %s's window is %d tokens. Run /compact before the next prompt.", used, ref, window)
 	}
+	if save {
+		text += "\n" + a.saveDefault(provider, model)
+	}
 	t.say(text)
 	return nil
+}
+
+// saveDefault saves provider's model as the defaultProvider and
+// defaultModel settings, which a run starts on before its recent models
+// (0025-MADR D3), and says so.
+func (a *Agent) saveDefault(provider, model string) string {
+	ref := refOf(provider, model)
+	if a.save == nil {
+		return "The default cannot be saved here; set defaultProvider and defaultModel in the settings."
+	}
+	for _, kv := range [][2]string{{"defaultProvider", provider}, {"defaultModel", model}} {
+		if err := a.save(kv[0], kv[1]); err != nil {
+			return fmt.Sprintf("%s was not saved as the default: %v", ref, err)
+		}
+	}
+	return fmt.Sprintf("Saved %s as the default: new runs start on it.", ref)
 }
 
 // lastModel is provider's last model: the newest recent one it still

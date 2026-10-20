@@ -167,6 +167,39 @@ func TestModelOptionGrouped(t *testing.T) {
 	}
 }
 
+// /model <ref> --default switches and saves the model as the default a run
+// starts on; /model --default saves the session's (0025-MADR D3).
+func TestModelSaveDefault(t *testing.T) {
+	var saved []string
+	client := &acptest.Client{Allow: true}
+	ag := New(Options{Version: "1.2.3", Provider: func(string, llm.Retry) (llm.Provider, error) { return llmtest.NewScript(), nil },
+		Models: func() ModelChoice { return multiModels }, Store: jsonl.New(t.TempDir(), jsonl.Options{}),
+		SaveSetting: func(path, value string) error { saved = append(saved, path+"="+value); return nil }})
+	c := acptest.Connect(t, ag, client)
+	ag.SetConnection(c.Agent)
+	t.Cleanup(func() {
+		if err := ag.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	initialize(t, c.Client)
+	id := newSession(t, c, t.TempDir(), nil).SessionId
+	text, _ := slash(t, c, client, id, "/model fake/m2 --default")
+	if !strings.HasPrefix(text, "Model: fake/m2") || !strings.Contains(text, "Saved fake/m2 as the default: new runs start on it.") {
+		t.Fatalf("/model fake/m2 --default: %q", text)
+	}
+	if want := []string{"defaultProvider=fake", "defaultModel=m2"}; !slices.Equal(saved, want) {
+		t.Fatalf("saved %q, want %q", saved, want)
+	}
+	saved = nil
+	if text, _ := slash(t, c, client, id, "/model --default"); text != "Saved fake/m2 as the default: new runs start on it." {
+		t.Fatalf("/model --default: %q", text)
+	}
+	if want := []string{"defaultProvider=fake", "defaultModel=m2"}; !slices.Equal(saved, want) {
+		t.Fatalf("saved %q, want %q", saved, want)
+	}
+}
+
 // A window is shown short: tokens below a thousand as they are.
 func TestTokensShort(t *testing.T) {
 	for n, want := range map[int]string{0: "", 5: "5", 999: "999", 128_000: "128K", 1_000_000: "1M", 1_100_000: "1.1M"} {

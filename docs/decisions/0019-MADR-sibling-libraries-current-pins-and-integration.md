@@ -239,6 +239,10 @@ Chosen option: **A**. It is the only option that leaves gobble on releases with 
   - *(2026-10-20, [0025-MADR-provider-choice-and-auth.md](0025-MADR-provider-choice-and-auth.md) D1, D3, 0025-PLAN P2: the setting names the provider a run starts with; a session may
     switch to another credentialed provider's model, which the user chooses, so the rule below, never another
     provider than the user's, holds.)*
+  - *(2026-10-20, [0025-MADR-provider-choice-and-auth.md](0025-MADR-provider-choice-and-auth.md) D3, 0025-PLAN P3: a
+    setting whose provider has no credential, or whose key a listing refused, while another provider has one, no
+    longer fails the run: it falls to the recent models, then to the registry's order, with a warning. The error
+    below stays for `--model`, and for a run with no credential at all, where it names the setting's variable.)*
   - **The choice:** `llm/provider`'s `Choose(env, preferred)` takes the setting. With `preferred` set, it is that provider with its first curated model when its credential variable is set; otherwise `ErrNoCredential` naming that variable, never another provider, since a silent fall-back would send the work to a provider the user did not choose. The no-credential message gobble prints names the same variable.
   - **The enum is the SDK's:** a test fails when the SDK's key-taking ids, in order, differ from the enum, so a bump that adds or reorders a provider fails a test that names it.
   - **What stays F4's:** Ollama is not in the enum, since it takes no key and has no curated model, so choosing it needs `defaultModel`; `defaultModel` and the model scope stay 0005-PLAN F4-2's, with `--provider` and `--model`, which win over the key for their run when F4-2 lands.

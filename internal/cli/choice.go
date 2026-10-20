@@ -15,8 +15,14 @@ import (
 	"github.com/maccavelli/gobble-cli/llm/provider"
 )
 
-// recentKept is how many recent models models.json keeps (0025-MADR D3).
+// recentKept is how many recent models recent-models.json keeps (0025-MADR
+// D3).
 const recentKept = 10
+
+// recentFileName is the recent models' file in the state directory; not
+// models.json, gobble's custom models file, which shares the directory when
+// GOBBLE_HOME is set (0025-PLAN deviation 4).
+const recentFileName = "recent-models.json"
 
 // lastGoodLimit is how old a kept listing may be to be shown, the SDK's own
 // limit for WithLastGood (0041-MADR D6 of go-llmprovider-sdk).
@@ -77,16 +83,16 @@ func listingState(id string, r provider.Listing, now time.Time) (acpserver.Provi
 	return state, reason, 0
 }
 
-// recentFile is models.json's shape.
+// recentFile is recent-models.json's shape.
 type recentFile struct {
 	Recent []string `json:"recent"`
 }
 
-// recentMu guards the recent models, read once from models.json, and its
+// recentMu guards the recent models, read once from recent-models.json, and its
 // writes (0025-MADR D3).
 var recentMu sync.Mutex
 
-// recentModels are the recent models, newest first: models.json's, read
+// recentModels are the recent models, newest first: recent-models.json's, read
 // once a process; an unreadable file is none, with a warning.
 func (e *runEnv) recentModels() []string {
 	recentMu.Lock()
@@ -94,17 +100,17 @@ func (e *runEnv) recentModels() []string {
 	return slices.Clone(e.loadRecent())
 }
 
-// loadRecent reads models.json once; recentMu is held.
+// loadRecent reads recent-models.json once; recentMu is held.
 func (e *runEnv) loadRecent() []string {
 	if e.recentLoaded {
 		return e.recent
 	}
 	e.recentLoaded = true
-	path, err := stateFile("models.json")
+	path, err := stateFile(recentFileName)
 	if err != nil {
 		return nil
 	}
-	b, err := os.ReadFile(path) //nolint:gosec // G304: the state directory's own models.json
+	b, err := os.ReadFile(path) //nolint:gosec // G304: the state directory's own recent-models.json
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
@@ -113,7 +119,7 @@ func (e *runEnv) loadRecent() []string {
 		err = json.Unmarshal(b, &f)
 	}
 	if err != nil {
-		e.out.Warnf("models.json: %v; the recent models are not read", err)
+		e.out.Warnf("%s: %v; the recent models are not read", recentFileName, err)
 		return nil
 	}
 	e.recent = f.Recent
@@ -121,7 +127,7 @@ func (e *runEnv) loadRecent() []string {
 }
 
 // rememberModel puts ref first among the recent models, ten kept, each
-// once, and writes models.json owner-only; a failed write is a warning.
+// once, and writes recent-models.json owner-only; a failed write is a warning.
 func (e *runEnv) rememberModel(ref string) {
 	recentMu.Lock()
 	defer recentMu.Unlock()
@@ -131,7 +137,7 @@ func (e *runEnv) rememberModel(ref string) {
 		recent = recent[:recentKept]
 	}
 	e.recent = recent
-	path, err := stateFile("models.json")
+	path, err := stateFile(recentFileName)
 	if err == nil {
 		var b []byte
 		if b, err = json.MarshalIndent(recentFile{Recent: recent}, "", "  "); err == nil {
@@ -139,7 +145,7 @@ func (e *runEnv) rememberModel(ref string) {
 		}
 	}
 	if err != nil {
-		e.out.Warnf("models.json: %v", err)
+		e.out.Warnf("%s: %v", recentFileName, err)
 	}
 }
 

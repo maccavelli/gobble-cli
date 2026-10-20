@@ -49,9 +49,10 @@ func offlineModels(ctx context.Context, mj *catalog.ModelsJSON) []llm.Model {
 	return out
 }
 
-// chosenProvider is the run's provider: --model's, else the defaultProvider
-// setting's, which may be empty.
-func (e *runEnv) chosenProvider() string { return cmp.Or(e.pick.Provider, e.defaultProvider()) }
+// chosenProvider is the run's provider: --model's, else where the run
+// starts, by the defaultProvider setting, the recent models or the registry's
+// order (0025-MADR D3); empty with no credential and no setting.
+func (e *runEnv) chosenProvider() string { return cmp.Or(e.pick.Provider, e.startProvider()) }
 
 // defaultModel is the defaultModel setting as provider id's new-session
 // model: used with defaultProvider when ids, the model choice, or the

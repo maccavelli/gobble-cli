@@ -173,13 +173,20 @@ The direct requirements in `go.mod`:
   the real shells.
 - `.github/workflows/ci.yml`, on pushes to `main`, on `v*` tags and on pull requests: on Linux,
   macOS and Windows, `go test`, `make preflight` and `make archtest`; `make race` on Linux and
-  macOS; on Linux, `go mod tidy -diff`, shellcheck and actionlint.
+  macOS; on Linux, `go mod tidy -diff`, shellcheck and actionlint. A push or pull request whose
+  changes are all in the docs set (`*.md` at the root, `docs/**/*.md`, `.claude/rules/*.md`,
+  `.grok/rules/*.md` and `.opencode/rules.md`) skips it, and `.github/workflows/docs.yml` runs
+  `make check-records` and `make markdownlint` on one Linux runner instead. A Markdown file Go reads (a
+  built-in tool's description, a personality, a test fixture) is outside the set, so a change to it
+  runs the full CI; a `v*` tag is never filtered
+  ([0026-MADR](decisions/0026-MADR-skip-full-ci-for-docs-only-pushes.md)).
 - The release, in the same workflow:
   - `sbom` takes the dependency graph's SPDX SBOM as `gobble.spdx.json`;
   - `build` is go-selfupdate-lib's build workflow over `internal/cli/selfupdate-release.json`. It
     builds the five binaries (darwin/arm64, linux/amd64, linux/arm64, windows/amd64,
     windows/arm64), checks them, writes `SHA256SUMS`, and runs `gobble version --identity` on each
-    platform. On a tag the spec admits it builds the release; on any other run it is a rehearsal;
+    platform. On a tag the spec admits it builds the release; on any other run, so on every push and
+    pull request outside the docs set, it is a rehearsal;
   - `release`, on a `v*` tag only, is the library's publish workflow, which releases and attests.
 
 ## Tree
@@ -194,6 +201,7 @@ opencode.json             opencode's project settings
 Makefile                  the gates above
 go.mod, go.sum            the module and its sums
 .github/workflows/ci.yml  CI
+.github/workflows/docs.yml  the docs-only check: records and markdownlint
 .golangci.yml             the lint set
 .markdownlint-cli2.jsonc  fleet Markdown style
 .gitattributes            LF on every platform

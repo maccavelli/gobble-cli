@@ -135,10 +135,21 @@ func TestProviderChoicesConcurrent(t *testing.T) {
 	settled(t, e) // claude's listing ends, and keeps its file, before the home is removed
 }
 
-// models.json keeps ten recent models, newest first, each once, owner-only;
-// an unreadable one is none, with a warning (0025-MADR D3).
+// recent-models.json keeps ten recent models, newest first, each once,
+// owner-only, and leaves the custom models' models.json beside it, under
+// GOBBLE_HOME, as it was; an unreadable one is none, with a warning
+// (0025-MADR D3, deviation 4).
 func TestRecentModels(t *testing.T) {
 	e, _ := modelEnv(t)
+	dirs, _, err := systemDirs()
+	if err != nil {
+		t.Fatal(err)
+	}
+	custom := []byte(`{"providers":{"local":{"baseUrl":"http://127.0.0.1:1/v1","models":[{"id":"mine"}]}}}`)
+	if dirs.Config != dirs.State {
+		t.Fatalf("under GOBBLE_HOME the config and state directories are one: %s, %s", dirs.Config, dirs.State)
+	}
+	writeFile(t, filepath.Join(dirs.Config, "models.json"), string(custom))
 	for i := range 12 {
 		e.rememberModel(fmt.Sprintf("openai/m%d", i))
 	}
@@ -148,23 +159,22 @@ func TestRecentModels(t *testing.T) {
 	if !slices.Equal(got, want) {
 		t.Fatalf("recent %q, want %q", got, want)
 	}
-	dirs, _, err := systemDirs()
-	if err != nil {
-		t.Fatal(err)
+	if b, err := os.ReadFile(filepath.Join(dirs.Config, "models.json")); err != nil || !bytes.Equal(b, custom) {
+		t.Fatalf("the custom models.json is now %q (%v), want it as it was", b, err)
 	}
-	path := filepath.Join(dirs.State, "models.json")
+	path := filepath.Join(dirs.State, "recent-models.json")
 	if info, err := os.Stat(path); err != nil {
 		t.Fatal(err)
 	} else if runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 {
-		t.Fatalf("models.json mode %v, want 0600", info.Mode().Perm())
+		t.Fatalf("recent-models.json mode %v, want 0600", info.Mode().Perm())
 	}
 	if err := os.WriteFile(path, []byte("{not json"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	next := envHere(t) // the file is read once a run
 	stderr := next.out.err.(*bytes.Buffer)
-	if got := next.recentModels(); got != nil || !strings.Contains(stderr.String(), "Warning: models.json") {
-		t.Fatalf("an unreadable models.json gave %q, warnings %q", got, stderr.String())
+	if got := next.recentModels(); got != nil || !strings.Contains(stderr.String(), "Warning: recent-models.json") {
+		t.Fatalf("an unreadable recent-models.json gave %q, warnings %q", got, stderr.String())
 	}
 }
 
@@ -204,9 +214,13 @@ func TestLastGoodOnDisk(t *testing.T) {
 	if claude.State != acpserver.StateStale || !slices.Equal(claude.Models, []string{"c1", "c2"}) || claude.Age < time.Hour {
 		t.Fatalf("claude while listing: %+v, want the kept listing, stale, two hours old", claude)
 	}
-	mu.Lock()
-	got := handed
-	mu.Unlock()
+	var got provider.Options
+	waitFor(func() bool { // claude's listing runs on its own goroutine, and may not have begun
+		mu.Lock()
+		defer mu.Unlock()
+		got = handed
+		return got.LastGood != nil
+	})
 	if !slices.Equal(got.LastGood, []string{"c1", "c2", "c3"}) || !got.LastGoodAt.Equal(at) {
 		t.Fatalf("the listing was handed %q at %s, want the kept usable ids at %s", got.LastGood, got.LastGoodAt, at)
 	}

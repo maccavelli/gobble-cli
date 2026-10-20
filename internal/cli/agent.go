@@ -194,7 +194,12 @@ func (e *runEnv) modelChoice() acpserver.ModelChoice {
 	}
 	ids, def := models(sel, e.modelListing(sel).get())
 	ids = withModelsJSON(ids, e.modelsJSON(), sel.ID)
-	def = cmp.Or(e.defaultModel(sel.ID, ids), def)
+	if p := e.defaultProvider(); p == "" || p == sel.ID { // a setting the start passed by is not read
+		def = cmp.Or(e.defaultModel(sel.ID, ids), def)
+	}
+	if m := e.startModel(); m != "" && e.pick.Provider == "" && e.startProvider() == sel.ID && slices.Contains(ids, m) {
+		def = m // the recent model the run starts on (0025-MADR D3)
+	}
 	for _, m := range []string{e.pick.Model, def} {
 		if m != "" && !slices.Contains(ids, m) {
 			ids = append(ids, m)

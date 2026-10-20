@@ -394,6 +394,8 @@ publish through it).
 
 *(2026-10-07: step 1 was written by 0002-PLAN Phase 8. Steps 2–4 are made executable in the entry "Phase 4 steps 2–4 made executable" of this date, by the owner's decisions of that date. Step 2's own build job and go-core-lib v1.1.0 pin are replaced by go-selfupdate-lib v1.9.0's build and publish workflows. Step 3, `make release-dry-run`, and its Accept line are struck: the build workflow's rehearsal on every push and pull request replaces them.)*
 
+*(2026-10-20: a push or pull request whose changes are all in the docs set (`*.md` at the root, `docs/**/*.md`, `.claude/rules/*.md`, `.grok/rules/*.md` and `.opencode/rules.md`) no longer runs `ci.yml`, so it no longer rehearses; `.github/workflows/docs.yml` runs the records check and markdownlint for it instead. Any other push or pull request rehearses as before, and every `v*` tag runs the full CI ([0026-MADR-skip-full-ci-for-docs-only-pushes.md](0026-MADR-skip-full-ci-for-docs-only-pushes.md) D4). This note also covers the note of 2026-10-07 under Verification, "the CI rehearsal of every push", and the amendment "Phase 4 steps 2–4 made executable", "every push and pull request rehearses"; neither is rewritten.)*
+
 ### Phase 5 — documentation
 
 1. Rewrite [architecture.md](../architecture.md) to list every package

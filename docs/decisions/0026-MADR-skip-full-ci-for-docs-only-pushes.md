@@ -37,6 +37,10 @@ Each fact below was observed on 2026-10-20, at `bdd8268` (the CI files are uncha
 - `build` needs `validate` and `sbom` and calls go-selfupdate-lib's build workflow at `v1.17.0` (`ci.yml:143-148`); off
   a tag it is a rehearsal. 0004-PLAN replaced `make release-dry-run` with "the CI rehearsal of every push"
   ([0004-PLAN-go-module-architecture.md](0004-PLAN-go-module-architecture.md), note of 2026-10-07 under Phase 4).
+  *(2026-10-20, corrected at P2 by the owner's choice: the quoted phrase is the note of 2026-10-07 under 0004-PLAN's
+  `## Verification`; the note of that date under Phase 4 says "the build workflow's rehearsal on every push and pull
+  request", and the amendment "Phase 4 steps 2–4 made executable" says "every push and pull request rehearses". All
+  three say the rehearsal runs on every push, and D4's one note, after the Phase 4 note, covers them.)*
 - `release` needs `build` and runs only when the build is not a rehearsal, that is on a `v*` tag (`ci.yml:150-163`).
 - `.github/workflows/` holds `ci.yml` only. The "Dependency Graph" runs in the run list are GitHub's own automatic
   submission (event `dynamic`), not a workflow file of this repository.

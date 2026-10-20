@@ -114,6 +114,9 @@ func (ls *lineSession) run(first Prompt) error {
 	}
 
 	e.noteUntrusted(ls.cwd)
+	if note := e.startNote(); note != "" { // which of several providers the run took (0025-MADR D3)
+		e.out.Notef("%s", note)
+	}
 	if line, ok := ls.amb.welcome(ls.spoken(), e.now()); ok {
 		e.out.Notef("%s", line)
 	}

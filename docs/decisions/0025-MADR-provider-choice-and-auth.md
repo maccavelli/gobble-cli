@@ -151,7 +151,9 @@ one strip-and-retry; cycling as P7. Every owner question is answered.)*
   - The log is never rewritten; the rules apply where the history becomes a request.
 - **D3. The start, and what gobble remembers** (the owner's answer: "Your last choice").
   - `<state>/models.json` keeps `recent`, up to ten `provider/model` refs, newest first, the shape opencode and Kilo
-    keep; a choice by `/model`, the ACP option or `--model` puts its ref first. A provider's last model is its newest
+    keep *(2026-10-20, 0025-PLAN deviation 4, the owner's choice: the file is `<state>/recent-models.json`, since
+    `models.json` is gobble's custom models file, in the config directory, which is the state directory too when
+    `GOBBLE_HOME` is set)*; a choice by `/model`, the ACP option or `--model` puts its ref first. A provider's last model is its newest
     entry there.
   - The start order: `--model` / `--provider`; then the `defaultProvider` and `defaultModel` settings; then `recent`'s
     newest whose provider has a credential and is not marked dead; then the registry order, with a note naming the
