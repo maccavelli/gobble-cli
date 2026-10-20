@@ -23,13 +23,18 @@ type ModelsCmd struct {
 
 // ModelsListCmd is gobble models list, and --list-models.
 type ModelsListCmd struct {
-	Search []string `arg:"" optional:"" complete:"none" help:"Search words, each matched against the provider and id."`
+	Search   []string `arg:"" optional:"" complete:"none" help:"Search words, each matched against the provider and id."`
+	Provider string   `complete:"provider" help:"Only this provider's models, its known ones when it has no credential."`
+	All      bool     `help:"Every provider's models, the known ones of those with no credential."`
 }
 
 // Run prints the list.
 func (c *ModelsListCmd) Run(e *runEnv) error {
 	e.ensureSettingsFile()
-	return e.printModels(strings.Join(c.Search, " "))
+	if c.Provider != "" && !slices.Contains(provider.Providers(), c.Provider) {
+		return usageErrorf("unknown provider %q; gobble providers lists them", c.Provider)
+	}
+	return e.printModels(strings.Join(c.Search, " "), c.Provider, c.All)
 }
 
 // ModelsInfoCmd is gobble models info.
@@ -54,18 +59,36 @@ func (c *ModelsInfoCmd) Run(e *runEnv) error {
 // printModels prints Pi's --list-models table (cli/list-models.ts) for the
 // providers with a credential: each one's offline set and live listing,
 // each model once, its facts from the catalog with no request; search's
-// words filter it as Pi's fuzzyFilter does.
-func (e *runEnv) printModels(search string) error {
+// words filter it as Pi's fuzzyFilter does. only keeps one provider; all,
+// and only for a provider with no credential, add the known models of those
+// with none, named in a note after the table; both take Ollama, which takes
+// no key (0025-MADR D5).
+func (e *runEnv) printModels(search, only string, all bool) error {
 	var sels []provider.Selection
-	for _, p := range provider.KeyProviders() {
+	var unkeyed []string
+	ids := provider.KeyProviders()
+	if only != "" || all {
+		ids = provider.Providers()
+	}
+	for _, p := range ids {
+		if only != "" && p != only {
+			continue
+		}
+		if provider.CredentialVar(p) == "" {
+			sels = append(sels, provider.Selection{ID: p})
+			continue
+		}
 		if !e.hasCredential(p) {
+			if all || only != "" {
+				unkeyed = append(unkeyed, p)
+			}
 			continue
 		}
 		if sel, err := provider.ChooseWith(e.hasCredential, p); err == nil {
 			sels = append(sels, sel)
 		}
 	}
-	if len(sels) == 0 {
+	if len(sels) == 0 && len(unkeyed) == 0 {
 		return e.out.Resultf("No models available. Set one of %s.\n", strings.Join(provider.CredentialVars(), ", "))
 	}
 	listings := make([]*modelListing, len(sels))
@@ -88,6 +111,11 @@ func (e *runEnv) printModels(search string) error {
 			rows = append(rows, provider.ModelInfoContext(e.ctx, sel.ID, "", id, mj))
 		}
 	}
+	for _, p := range unkeyed {
+		for _, id := range withModelsJSON(provider.KnownModels(p), mj, p) {
+			rows = append(rows, provider.ModelInfoContext(e.ctx, p, "", id, mj))
+		}
+	}
 	rows = searchModels(rows, search)
 	if len(rows) == 0 {
 		return e.out.Resultf("No models matching %q\n", search)
@@ -95,7 +123,14 @@ func (e *runEnv) printModels(search string) error {
 	slices.SortFunc(rows, func(a, b llm.Model) int {
 		return cmp.Or(catalog.CompareIDs(a.Provider, b.Provider), catalog.CompareIDs(a.ID, b.ID))
 	})
-	return e.out.Result(modelTable(rows))
+	out := modelTable(rows)
+	switch {
+	case only != "" && len(unkeyed) == 1:
+		out = fmt.Appendf(out, "\n%s has no credential: these are the models gobble knows of it. gobble auth login %s sets one.\n", only, only)
+	case len(unkeyed) > 0:
+		out = fmt.Appendf(out, "\nNo credential, the models gobble knows: %s.\n", strings.Join(unkeyed, ", "))
+	}
+	return e.out.Result(out)
 }
 
 // modelTable is Pi's columns, two spaces apart, each as wide as its widest

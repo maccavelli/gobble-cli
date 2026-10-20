@@ -86,6 +86,16 @@ func KeyProviders() []string {
 	return ids
 }
 
+// Providers are every built-in provider's id, in registry order, Ollama's,
+// which takes no key, among them (0025-MADR D5).
+func Providers() []string {
+	var ids []string
+	for _, d := range providers.Default().Descriptors() {
+		ids = append(ids, string(d.ID))
+	}
+	return ids
+}
+
 // Label is the built-in provider id's label, such as "Grok (xAI)", from
 // its SDK descriptor, or id itself for one the SDK does not know
 // (0005-PLAN F4-3c).

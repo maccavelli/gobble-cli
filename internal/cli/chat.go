@@ -29,7 +29,7 @@ func (c *ChatCmd) Run(k *kong.Context, e *runEnv) error {
 	// --list-models is gobble models list, the prompt words its search, as
 	// Pi's --list-models [search] (0005-MADR; 0005-PLAN F4-2c).
 	if c.ListModels {
-		return e.printModels(strings.Join(c.Prompt, " "))
+		return e.printModels(strings.Join(c.Prompt, " "), "", false)
 	}
 	mode := resolveMode(c.Print, e.out.caps.In, e.out.caps.Out.TTY)
 	// The working directory comes first: the process settings, and so the

@@ -102,6 +102,17 @@ func TestProviderChoicesStates(t *testing.T) {
 	if c.Provider != "openai" || c.Default != "gpt-a" {
 		t.Errorf("the run's provider %q default %q, want openai and gpt-a", c.Provider, c.Default)
 	}
+	// Each carries its credential's source and how to sign in, and one that
+	// offers no model the models gobble knows of it (0025-MADR D5).
+	if p := got["openai"]; p.Source != "env: OPENAI_API_KEY" || p.Methods != "API key" || p.Known != nil {
+		t.Errorf("openai's source %q, methods %q, known %d", p.Source, p.Methods, len(p.Known))
+	}
+	if p := got["grok"]; p.Methods != "API key; browser or device sign-in" {
+		t.Errorf("grok's methods %q", p.Methods)
+	}
+	if p := got["gemini"]; p.Source != "none — gobble auth login gemini" || !slices.Equal(p.Known, provider.KnownModels("gemini")) {
+		t.Errorf("gemini's source %q, known %d models", p.Source, len(p.Known))
+	}
 }
 
 // The listings run at once, each in its own time: a slow one is shown as

@@ -113,7 +113,7 @@ func (e *runEnv) modelListing(sel provider.Selection) *modelListing {
 	k := readKept(sel.ID, time.Now())
 	o.LastGood, o.LastGoodAt = k.usable, k.at
 	l := newModelListing(func() provider.Listing {
-		if key == "" && !login {
+		if key == "" && !login && provider.CredentialVar(sel.ID) != "" { // Ollama takes no key (0025-MADR D5)
 			// A key that did not resolve, already warned of, lists nothing: no
 			// request goes without one (0005-PLAN F4-3a deviation 3).
 			return provider.Listing{Models: provider.Models(sel.ID), Err: errNoListingKey}

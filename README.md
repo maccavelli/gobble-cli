@@ -92,6 +92,11 @@ Early, and built in the order [docs/README.md](docs/README.md#build-order) gives
   corrections to a model's window, price and thinking levels ([guide](docs/guides/models-json.md)).
 - **Choosing a model:** `--model` and `--provider` by Pi's rules, `--thinking` up to `max`, the
   `defaultModel` setting, and `gobble models list|info` ([guide](docs/guides/choosing-a-model.md)).
+- **Browsing providers and catalogs:** `gobble providers [--check] [--json]` lists every provider with its
+  credential's source and how to sign in, and with `--check` its state; `gobble models list --provider ID`
+  and `--all` show a provider's catalog, the models gobble knows of one with no credential marked so. In a
+  session, `/providers` lists the same with each provider's state, and `/models [provider] [words]` lists
+  one provider's models, or every provider's, numbered as `/model N` takes them.
 - **Credentials** in Pi's order: `--api-key -`, a Pi-style `auth.json`, `models.json`'s `apiKey`, then the
   provider's variable; `gobble auth login --api-key -|logout|status|check`, signing in to Grok or Kilo with
   `gobble auth login grok|kilo`, and `gobble auth import --from-pi` ([guide](docs/guides/credentials.md)).

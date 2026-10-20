@@ -36,18 +36,18 @@ const lastGoodLimit = 24 * time.Hour
 func (e *runEnv) providerChoices(run string, runModels []string) []acpserver.ProviderChoice {
 	var out []acpserver.ProviderChoice
 	for _, id := range provider.KeyProviders() {
-		p := acpserver.ProviderChoice{ID: id, Label: provider.Label(id)}
+		p := acpserver.ProviderChoice{ID: id, Label: provider.Label(id), Source: e.credentialWords(id), Methods: signInWords(id)}
 		if !e.hasCredential(id) {
 			p.State = acpserver.StateNoCredential
 			p.Reason = fmt.Sprintf("— set %s, or gobble auth login %s", provider.CredentialVar(id), id)
-			out = append(out, p)
+			out = append(out, withKnown(p))
 			continue
 		}
 		l := e.modelListing(provider.Selection{ID: id})
 		if id == run {
 			p.State, p.Reason, p.Age = listingState(id, l.get(), time.Now())
 			p.Models = runModels
-			out = append(out, p)
+			out = append(out, withKnown(p))
 			continue
 		}
 		r, ok := l.peek()
@@ -62,9 +62,18 @@ func (e *runEnv) providerChoices(run string, runModels []string) []acpserver.Pro
 		default:
 			p.State, p.Models = acpserver.StateListing, provider.Models(id)
 		}
-		out = append(out, p)
+		out = append(out, withKnown(p))
 	}
 	return out
+}
+
+// withKnown is p with the models gobble knows of it when it offers none, for
+// /models (0025-MADR D5).
+func withKnown(p acpserver.ProviderChoice) acpserver.ProviderChoice {
+	if !p.State.Usable() {
+		p.Known = provider.KnownModels(p.ID)
+	}
+	return p
 }
 
 // listingState is a listing's state, reason and age: a live listing's, a

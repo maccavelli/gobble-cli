@@ -23,10 +23,11 @@ import (
 var multiModels = ModelChoice{Provider: "fake", Models: []string{"m1", "m2"}, Default: "m1",
 	Recent: []string{"fake/m2", "other/x9"},
 	Providers: []ProviderChoice{
-		{ID: "fake", Label: "Fake", State: StateLive, Models: []string{"m1", "m2"}},
-		{ID: "other", Label: "Other", State: StateLive, Models: []string{"x9"}},
+		{ID: "fake", Label: "Fake", State: StateLive, Models: []string{"m1", "m2"}, Source: "env: FAKE_API_KEY", Methods: "API key"},
+		{ID: "other", Label: "Other", State: StateLive, Models: []string{"x9"}, Source: "auth.json: sign-in", Methods: "API key; device sign-in"},
 		{ID: "dead", Label: "Dead", State: StateKeyRejected, Reason: "(HTTP 401) — gobble auth login dead", Models: []string{"d1"}},
-		{ID: "none", Label: "None", State: StateNoCredential, Reason: "— set NONE_API_KEY, or gobble auth login none"},
+		{ID: "none", Label: "None", State: StateNoCredential, Reason: "— set NONE_API_KEY, or gobble auth login none",
+			Source: "none — gobble auth login none", Methods: "API key", Known: []string{"n1", "n2"}},
 	}}
 
 // remembered records what Options.Remember is told.
@@ -246,5 +247,50 @@ func TestRefusedKeyMarksProvider(t *testing.T) {
 	text, _ := slash(t, c, client, id, "/model")
 	if !strings.Contains(text, "**Fake** — key rejected (HTTP 401)") || strings.Contains(text, "sk-pl") {
 		t.Fatalf("/model after a refused key:\n%s", text)
+	}
+}
+
+// /providers lists the session's providers, each with its state and
+// reason, its credential's source and how to sign in (0025-MADR D5).
+func TestProvidersSlash(t *testing.T) {
+	c, client, id := choiceAgent(t, llmtest.NewScript(), &remembered{})
+	text, _ := slash(t, c, client, id, "/providers")
+	for _, want := range []string{
+		"| Provider | State | Credential | Sign-in |",
+		"| Fake (fake) | live | env: FAKE_API_KEY | API key |",
+		"| Other (other) | live | auth.json: sign-in | API key; device sign-in |",
+		"| Dead (dead) | key rejected (HTTP 401) — gobble auth login dead |",
+		"| None (none) | no credential — set NONE_API_KEY, or gobble auth login none | none — gobble auth login none | API key |",
+		"/models <provider> lists one provider's models.",
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("/providers lacks %q:\n%s", want, text)
+		}
+	}
+}
+
+// /models lists one provider's models with /model's numbers, or every
+// provider's, with words to match; a provider that offers none shows the
+// models gobble knows of it (0025-MADR D5).
+func TestModelsSlash(t *testing.T) {
+	c, client, id := choiceAgent(t, llmtest.NewScript(), &remembered{})
+	text, _ := slash(t, c, client, id, "/models other")
+	if !strings.Contains(text, "**Other** — live") || !strings.Contains(text, "| 5 | other/x9 |") || strings.Contains(text, "fake/m1") {
+		t.Errorf("/models other:\n%s", text)
+	}
+	text, _ = slash(t, c, client, id, "/models fake m2")
+	if !strings.Contains(text, "| 4 | fake/m2 |") || strings.Contains(text, "| 3 | fake/m1 |") {
+		t.Errorf("/models fake m2:\n%s", text)
+	}
+	text, _ = slash(t, c, client, id, "/models")
+	if !strings.Contains(text, "| 3 | fake/m1 |") || !strings.Contains(text, "| 5 | other/x9 |") || strings.Contains(text, "Model: ") {
+		t.Errorf("/models:\n%s", text)
+	}
+	text, _ = slash(t, c, client, id, "/models none")
+	if !strings.Contains(text, "**None** — no credential") || !strings.Contains(text, "none/n1, none/n2") {
+		t.Errorf("/models none:\n%s", text)
+	}
+	if text, _ := slash(t, c, client, id, "/models zz"); text != `No model matches "zz".` {
+		t.Errorf("/models zz: %q", text)
 	}
 }

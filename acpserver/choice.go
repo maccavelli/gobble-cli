@@ -11,6 +11,7 @@ import (
 
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/llm/catalog"
+	"github.com/maccavelli/gobble-cli/personality"
 )
 
 // ProviderState is a provider's state in the model choice: whether its
@@ -54,6 +55,13 @@ type ProviderChoice struct {
 	Models []string
 	// Age is a stale listing's age.
 	Age time.Duration
+	// Source is where its credential comes from, in Pi's words, such as
+	// "env: OPENAI_API_KEY"; Methods how to sign in, such as "API key;
+	// browser or device sign-in" (0025-MADR D5).
+	Source, Methods string
+	// Known are the models gobble knows of it without a listing, shown by
+	// /models when it offers none.
+	Known []string
 }
 
 // StateOf is provider id's state after err, a listing's or a turn's
@@ -382,4 +390,81 @@ func (a *Agent) matches(picks []pick, words string) func(int) bool {
 		}
 		return q != ""
 	}
+}
+
+// stateText is a provider's state as /providers shows it: the state, a
+// stale listing's age, and its reason.
+func stateText(p ProviderChoice) string {
+	s := string(p.State)
+	if p.State == StateStale && p.Age > 0 {
+		s += " (" + p.Age.Round(time.Minute).String() + " old)"
+	}
+	return joinReason(s, p.Reason)
+}
+
+// cmdProviders is /providers: the session's providers as a table, each with
+// its state, its credential's source in Pi's words and how to sign in
+// (0025-MADR D5).
+func (a *Agent) cmdProviders(_ context.Context, t *cmdTurn, _ string) error {
+	ps := a.choice().providerList()
+	if len(ps) == 0 {
+		t.say(t.text(personality.ModelNone, nil))
+		return nil
+	}
+	var b strings.Builder
+	b.WriteString("| Provider | State | Credential | Sign-in |\n| :-- | :-- | :-- | :-- |\n")
+	for _, p := range ps {
+		fmt.Fprintf(&b, "| %s (%s) | %s | %s | %s |\n", p.Label, p.ID, stateText(p), p.Source, p.Methods)
+	}
+	b.WriteString("\n/models <provider> lists one provider's models.\n")
+	t.say(b.String())
+	return nil
+}
+
+// cmdModels is /models [provider] [words]: one provider's models, or every
+// provider's, those matching words, numbered as /model numbers them, so
+// /model N picks one; a provider that offers none shows its state and the
+// models gobble knows of it (0025-MADR D5).
+func (a *Agent) cmdModels(_ context.Context, t *cmdTurn, arg string) error {
+	c := a.choice()
+	ps := c.providerList()
+	words := strings.TrimSpace(arg)
+	prov := ""
+	if first, rest, _ := strings.Cut(words, " "); first != "" && slices.ContainsFunc(ps, func(p ProviderChoice) bool { return p.ID == first }) {
+		prov, words = first, strings.TrimSpace(rest)
+	}
+	if prov != "" {
+		p := ps[slices.IndexFunc(ps, func(x ProviderChoice) bool { return x.ID == prov })]
+		if !p.State.Usable() {
+			refs := make([]string, len(p.Known))
+			for i, m := range p.Known {
+				refs[i] = refOf(p.ID, m)
+			}
+			text := heading(p)
+			if len(refs) > 0 {
+				text += "\n\nKnown models, offered once it is usable: " + strings.Join(refs, ", ") + "."
+			}
+			t.say(text)
+			return nil
+		}
+	}
+	picks := c.picks()
+	match := func(int) bool { return true }
+	if words != "" {
+		match = a.matches(picks, words)
+	}
+	keep := func(i int) bool {
+		if i < 0 {
+			return prov == "" && words == ""
+		}
+		return picks[i].section != sectionRecent && (prov == "" || picks[i].provider == prov) && match(i)
+	}
+	for i := range picks {
+		if keep(i) {
+			t.say(a.pickerText(c, picks, keep))
+			return nil
+		}
+	}
+	t.say(fmt.Sprintf("No model matches %q.", cmpOr(words, prov)))
+	return nil
 }

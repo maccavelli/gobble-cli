@@ -428,3 +428,65 @@ listing. The states are also in `/model` and `/providers` (P4).
   check-records markdownlint`, "0 issues in 0 files".
 
 **Not done in P3, as the plan says:** browsing (P4), `/login` (P5), ChatGPT (P6), cycling (P7).
+
+### P4 execution record (2026-10-20)
+
+**Run** on `main` at `6b1b72a`, on the owner's word "committed all, proceed". No deviation.
+
+**Steps:**
+
+1. **Tests first:**
+   - `internal/cli` (`providerscmd_test.go`): `TestProvidersCommand`, `TestProvidersCheckAndJSON`,
+     `TestModelsListProviderAll`; `TestProviderChoicesStates` extended to require each provider's credential source,
+     sign-in methods and, for one that offers no model, the models gobble knows of it, seen failing before
+     `providerChoices` filled them (`openai's source "", methods "", known 0`; `grok's methods ""`; `gemini's source
+     "", known 0 models`).
+   - `acpserver` (`choice_test.go`): `TestProvidersSlash`, `TestModelsSlash`; `TestEveryAdvertisedCommandExecutes`'s
+     allowed set and `testdata/session.golden` take the two commands, the golden checked line by line: only the
+     commands frame changed, `/providers` and `/models` added after `/model`, every other command as it was.
+   - Each new assertion was seen failing on a scratch copy of the tree, one mutation at a time, the tree untouched:
+     `Providers()` as the key providers alone (`providers [… nine …], want the ten`); the credential's `env:` dropped;
+     Grok's browser sign-in forgotten; a listing without `--check` (`2 listings without --check`); `--check` with no
+     state; Ollama's listing wanting a key; `--all` and `--provider` adding no known models; `--provider ollama` not
+     listed; `providerChoices` with no known models (`gemini's … known 0 models`) or no source; `/providers` without
+     the credential column; `/models` ignoring its provider (`/models other:` listing fake's); `/models` without the
+     known models (`/models none:`); `/providers` not handled. Fourteen mutations, fourteen failures; the restored copy
+     passed.
+2. **`gobble providers [--check] [--json]`** (`internal/cli/providerscmd.go`): every built-in provider, Ollama among
+   them (`provider.Providers()`), in the registry's order, with its name, its credential's source in Pi's words (`env:
+   OPENAI_API_KEY`, `auth.json: key`, `auth.json: sign-in…`, `none — gobble auth login <id>`, Ollama's `runs on your
+   machine, no key`) and how to sign in; no listing without `--check`; `--check` starts every listing before reading
+   the first and adds the state and reason, D4's words; `--json` the same rows.
+3. **`gobble models list --provider ID` and `--all`** (`internal/cli/modelscmd.go`): one provider's models, or every
+   provider's, the known models of one with no credential added and named in a note after the table; an unknown
+   provider is a usage error. Ollama, which takes no key, is listed by both, and its listing no longer waits for a key
+   it does not take (`internal/cli/models.go`).
+4. **`/providers` and `/models [provider] [words]`** (`acpserver/choice.go`, `commands.go`), advertised to ACP clients
+   and in `/help` with 0024-MADR D3's description rule: `/providers` a markdown table of each provider's state, a stale
+   listing's age, its reason, its credential's source and its sign-in methods; `/models` a provider's models, or every
+   provider's, matching words, numbered as `/model` numbers them so `/model N` picks one; a provider that offers none
+   shows its state and the models gobble knows of it. The CLI's `providerChoices` fills the source, the methods and the
+   known models (`internal/cli/choice.go`).
+5. **Records:** `README.md` (browsing providers and catalogs), `docs/architecture.md` (`providers` among the commands,
+   `/providers` and `/models` among the session's); this record.
+
+**Found by the gates and fixed in the phase:** golangci-lint's goconst, the new table header's `"provider"` being the
+string's third use: it is the package's `labelProvider`. gofmt split `listable` onto three lines.
+
+**Found, not done here (a question for the owner):** `docs/guides/choosing-a-model.md` still describes the start and
+`/model` before P2 and P3 (a session's `/model` "for that session only", no `--default`, no start order) and does not
+name browsing. P4's records are `README.md` and `docs/architecture.md` alone, so the guide is unchanged. The startup
+listing-warning question from P3's record is still open.
+
+**Gates:**
+
+- the pre-add check on the thirteen changed `.go` files, `13 file(s) clean (gofmt, golint, govulncheck)`, after gofmt's
+  change above; `make preflight` on macOS, `preflight passed`, golangci-lint `0 issues.` after goconst's;
+- macOS: the tests and the race detector, 35 packages ok each;
+- the Linux machine and the Windows laptop, over ssh with `-o BatchMode=yes -o ConnectTimeout=5`, on a copy of the
+  working tree, Windows with `TMP` and `TEMP` outside the user's home: the tests and the race detector, 35 packages ok
+  on each; `make preflight` through `apidiff` (golangci-lint `0 issues.`), stopping at `verify-build-metadata` on a
+  copy; `make check-records markdownlint`, "0 issues in 0 files". The Windows copy was sent as a file and unpacked
+  there, after a streamed copy stalled part-way; the tree it ran on held all 744 files.
+
+**Not done in P4, as the plan says:** `/login` and first-run setup (P5), ChatGPT (P6), cycling (P7).
