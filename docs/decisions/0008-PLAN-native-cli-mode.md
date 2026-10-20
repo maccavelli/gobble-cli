@@ -1,6 +1,6 @@
 ---
-status: completed
-date: 2026-10-05
+status: in-progress
+date: 2026-10-19
 ---
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
 
@@ -959,3 +959,52 @@ The plan's Deferred list stands. Two items are added:
   1. **Emphasis does not cross a code span.** P8's rules styled emphasis "outside inline code spans", which leaves `*a `b` c*` plain, where CommonMark would make it italic. The case pins that behaviour as part of the subset.
   2. **`styleMarker` became `splitMarker`.** It returns the coloured marker apart from the rest of the line, so the emphasis pass never sees the marker.
   3. **The styles come from a function, not a table.** A map keyed by `"***"`, `"__"` and so on repeated `mdstream.go`'s literals, and goconst failed the first preflight. `emphasisStyle(c, n)` takes the run's character and length instead.
+
+## Amendment (2026-10-19): `verify-build-metadata` at a clean release tag
+
+*Proposed, with the owner's choices of 2026-10-19: release `v0.1.1` from the fix, and amend this plan, P4 step 13
+being the check's origin.*
+
+**What happened.** The owner tagged `v0.1.0` at `e870f03`, whose `main` run had passed. The tag's run failed
+`validate` on Ubuntu, macOS and Windows, so `build` and `release` were skipped and nothing was published. Each failed
+the same two checks of `make preflight`'s `verify-build-metadata` (run `39343582934`):
+
+```text
+verify-build-metadata: FAIL unstamped version is 0.0.0-dev+<rev>: got '0.1.0'
+verify-build-metadata: FAIL unstamped version names HEAD: got '0.1.0', HEAD e870f03aa8fd
+```
+
+**The facts,** measured on 2026-10-19 against `e870f03`:
+
+- **The binary is right.** 0008-MADR D19 item 1 gives the version as "the release tag without `v`, or
+  `0.0.0-dev+<revision>` for other builds" (`0008-MADR-native-cli-mode.md:677`), and its outcome note says "every
+  build that is not a clean tag reports `0.0.0-dev+<revision>[.dirty]`" (`:913`). `internal/buildinfo` keeps the
+  module version Go records when it is a clean tag, SemVer with no build metadata and not a pseudo-version
+  (`internal/buildinfo/buildinfo.go:66-76`). Since Go 1.24, `go build` in a checkout records the tag at `HEAD` as the
+  main module's version when the tree is clean; at the tag, the unstamped build reported `0.1.0`.
+- **The check is wrong at a tag.** `scripts/verify_build_metadata.py:89-90` expects every unstamped build to report
+  `0.0.0-dev+<12 hex>` naming `HEAD`. No commit had a tag before `v0.1.0`, so no run met the case.
+- **The tag carries the check.** A run on `v0.1.0` checks out `e870f03`'s script, so running it again fails again.
+
+**The decision.** The check expects what D19 item 1 says: when `HEAD` carries a release tag, `vX.Y.Z` in gobble's
+strict form (0005-MADR's GitHub releases row), and the tree is clean, the unstamped build reports `X.Y.Z`, the
+highest such tag when there are several; otherwise `0.0.0-dev+<12 hex of HEAD>`, with `.dirty` exactly when the tree
+is dirty, as now. The stamped checks are unchanged.
+
+**Steps.**
+
+1. `scripts/verify_build_metadata.py`: the tag at `HEAD` (`git tag --points-at HEAD`, strict `vX.Y.Z`, the highest),
+   and the unstamped checks split on it; the docstring says so.
+2. Records: this amendment's execution record; `docs/README.md`; 0008-MADR's D19 outcome note marked with the case.
+3. Release (the owner's): commit, push, let `main`'s run pass, then tag `v0.1.1` at that commit. `v0.1.0` stays an
+   unreleased tag, unchanged.
+
+**Verification,** each case seen on a scratch clone of the repository, never by tagging or dirtying the working tree:
+the old script failing at a clean tag, as CI did; the new one passing at a clean tag, with no tag, with a tag and a
+dirty tree (`0.0.0-dev+…dirty`), and with two tags at `HEAD` (the higher); the new one failing when the binary is made
+to report the dev version at a tag. Gates: the pre-add check does not apply (no Go file changes); `make preflight` on
+macOS, on the Linux machine and on the Windows laptop, with `verify-build-metadata` run on each in a scratch clone at
+a scratch tag, since a copy of the tree has no commit; `make check-records` and `markdownlint`.
+
+**Rollout and rollback.** The change is to a check alone; reverting the commit restores the old expectation. The
+release follows the owner's tag.
