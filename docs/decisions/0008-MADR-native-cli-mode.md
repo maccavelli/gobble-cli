@@ -1,6 +1,6 @@
 ---
 status: accepted
-date: 2026-10-07
+date: 2026-10-19
 decision-makers: repository owner
 consulted: goose-cli source (aaif-goose/goose 591edd4); Pi coding-agent source (earendil-works/pi f5d2004 and the fork at 312184e); go-tui-lib, go-selfupdate-lib, go-llmprovider-sdk, magic-cli-remote, mcp-server-magictools and prepare-commit-msg sources; Kong v1.16.1; golang.org/x/term v0.46.0
 informed: none
@@ -910,7 +910,7 @@ These are execution details. Every decision above is settled.
   - D17's output rule: a third `kind` field for PowerShell, and the 80-rune cap on descriptions only;
   - D17's bash row: support for bash 3.2.
 - **D18's forbidigo note was a false alarm, withdrawn on the day.** golangci-lint's one-issue-per-line reporting hid forbidigo's finding behind errcheck's on the same line. Measurement 12's configuration stands. Plants are run with `--uniq-by-line=false`.
-- **D19 item 1 held, but only after a fix.** Since Go 1.24 an unstamped `go build` records a VCS pseudo-version, which the first `internal/buildinfo` reported. Every build that is not a clean tag now reports `0.0.0-dev+<revision>[.dirty]`, which `verify-build-metadata` checks. The comparison upstream that makes this matter is 0009-REPORT M7.
+- **D19 item 1 held, but only after a fix.** Since Go 1.24 an unstamped `go build` records a VCS pseudo-version, which the first `internal/buildinfo` reported. Every build that is not a clean tag now reports `0.0.0-dev+<revision>[.dirty]`, which `verify-build-metadata` checks. The comparison upstream that makes this matter is 0009-REPORT M7. *(2026-10-19: at a clean `v0` or `v1` tag the unstamped build reports the tag, which the check did not expect until 0008-PLAN's amendment of 2026-10-19; a higher major version is ignored by Go on this module path.)*
 - **D14's Kong rules:**
   - an `Exit` that panics a sentinel is necessary: with an `Exit` that returns, `--help` went on to run `chat`;
   - `kong.UsageOnError()` has no effect without `FatalIfErrorf`, so it is not used;

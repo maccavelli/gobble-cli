@@ -8,7 +8,11 @@ Builds cmd/gobble twice into a temporary directory and checks
    the stamped version without its "v", the commit at HEAD and the commit
    time, both of which go build records from the checkout.
 2. Unstamped, it reports 0.0.0-dev+<12 hex>, with ".dirty" exactly when the
-   working tree has changes (0008-MADR D19 item 1, 0008-PLAN A15).
+   working tree has changes (0008-MADR D19 item 1, 0008-PLAN A15); at a
+   release tag vX.Y.Z on HEAD, with a clean tree, it reports X.Y.Z, the
+   highest such tag, since go build records the tag as the module's version
+   (0008-PLAN amendment of 2026-10-19). Only a v0 or v1 tag is: the module
+   path has no /vN suffix, so Go ignores a tag of a higher major version.
 
 Standard library only. Exit status 0 when every check passes, 1 otherwise.
 """
@@ -31,6 +35,9 @@ VERSION_VAR = "github.com/maccavelli/go-selfupdate-lib/buildinfo.version"
 KIND_VAR = "github.com/maccavelli/go-selfupdate-lib/buildinfo.kind"
 STAMP = "v1.2.3"
 DEV_RE = re.compile(r"^0\.0\.0-dev\+[0-9a-f]{12}(\.dirty)?$")
+# RELEASE_RE is a release tag in gobble's strict form (0005-MADR, GitHub
+# releases).
+RELEASE_RE = re.compile(r"^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
 
 
 @dataclass
@@ -64,6 +71,14 @@ def version_json(binary: Path) -> dict[str, str]:
     return json.loads(r.stdout)
 
 
+def release_tag() -> str | None:
+    """The highest release tag on HEAD, without its v, or None."""
+    tags = [t for t in git("tag", "--points-at", "HEAD").split() if (m := RELEASE_RE.match(t)) and m.group(1) in ("0", "1")]
+    if not tags:
+        return None
+    return max(tags, key=lambda t: tuple(int(n) for n in RELEASE_RE.match(t).groups())).removeprefix("v")
+
+
 def commit_time() -> str:
     return datetime.fromtimestamp(int(git("log", "-1", "--format=%ct")), UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -81,11 +96,18 @@ def checks(tmp: Path) -> list[Check]:
     build(plain, None)
     u = version_json(plain)
 
-    return [
+    stamped_checks = [
         Check("stamped version", s.get("version") == STAMP.removeprefix("v"), f"got {s.get('version')!r}, want {STAMP.removeprefix('v')!r}"),
         Check("stamped commit is HEAD", s.get("commit") == head, f"got {s.get('commit')!r}, want {head!r}"),
         Check("stamped date is the commit time", s.get("date") == when, f"got {s.get('date')!r}, want {when!r}"),
         Check("name", s.get("name") == "gobble", f"got {s.get('name')!r}"),
+    ]
+    tag = release_tag()
+    if tag is not None and not dirty:
+        return stamped_checks + [
+            Check("unstamped version at a release tag is the tag", u.get("version") == tag, f"got {u.get('version')!r}, want {tag!r}"),
+        ]
+    return stamped_checks + [
         Check("unstamped version is 0.0.0-dev+<rev>", bool(DEV_RE.match(u.get("version", ""))), f"got {u.get('version')!r}"),
         Check("unstamped version names HEAD", u.get("version", "").startswith(f"0.0.0-dev+{head[:12]}"), f"got {u.get('version')!r}, HEAD {head[:12]}"),
         Check("unstamped .dirty matches the tree", u.get("version", "").endswith(".dirty") == dirty,

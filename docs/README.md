@@ -31,7 +31,7 @@
 | 0007 | MADR | [Bring the repository up to the fleet scaffold: agent rules, lint and line-ending config, records tooling, portable Makefile](decisions/0007-MADR-repository-scaffolding-to-fleet-standard.md) | accepted (amended 2026-10-04 (0008)) |
 | 0007 | PLAN | [Bring gobble-cli up to the fleet repository scaffold](decisions/0007-PLAN-repository-scaffolding-to-fleet-standard.md) | completed (staged; the owner commits) |
 | 0008 | MADR | [The native CLI mode: a lightweight line client on Kong, x/term and the standard library, natively integrated with magic-cli-remote](decisions/0008-MADR-native-cli-mode.md) | accepted (`tools.go` note 2026-10-07; spinner label from the personality, 2026-10-18 (0022); welcome, goodbye and ambient lines, 2026-10-18 (0022); numbered permission options, 2026-10-19 (0005-PLAN F6-1)) |
-| 0008 | PLAN | [Implement the native CLI mode](decisions/0008-PLAN-native-cli-mode.md) | in progress (completed 2026-10-05; P8 emphasis follow-up 2026-10-05; amendment of 2026-10-19, `verify-build-metadata` at a release tag, proposed) |
+| 0008 | PLAN | [Implement the native CLI mode](decisions/0008-PLAN-native-cli-mode.md) | completed (2026-10-05; P8 emphasis follow-up 2026-10-05; amendment of 2026-10-19, `verify-build-metadata` at a release tag, executed 2026-10-19, one deviation: `v0`/`v1` tags only) |
 | 0009 | REPORT | [magic-cli-remote findings from gobble work](reports/0009-REPORT-magic-cli-remote-findings.md) | observation (running; updated 2026-10-12, M11–M14) |
 | 0010 | REPORT | [Harness design survey: Pi, opencode and Kilo across the v1 line](reports/0010-REPORT-harness-design-survey.md) | observation (2026-10-07) |
 | 0011 | REPORT | [Native tools across six harnesses: which operations gobble implements itself](reports/0011-REPORT-native-tools-survey.md) | observation (2026-10-08; 88 verified claims; schemas, descriptions, loading and BM25 evaluated 2026-10-08) |
@@ -120,8 +120,9 @@ The plans run in sequence.
   - Run: F6-5 on 2026-10-19 (one deviation: `tool_search` on every request, as 0012-MADR D7 has it). F6 is complete;
     the owner's tag, which waited for F6-5, may follow its commit.
   - The `v0.1.0` tag's run failed `verify-build-metadata`, whose check did not expect a tag at `HEAD`; nothing was
-    published. [0008-PLAN](decisions/0008-PLAN-native-cli-mode.md)'s amendment of 2026-10-19 fixes the check, and the
-    release is to be `v0.1.1`, by the owner's choice.
+    published. [0008-PLAN](decisions/0008-PLAN-native-cli-mode.md)'s amendment of 2026-10-19 fixed the check the same
+    day (one deviation: only a `v0` or `v1` tag is the module's version), and the release is to be `v0.1.1`, by the
+    owner's choice.
   - The SDKs: [0023-PLAN](decisions/0023-PLAN-pin-current-releases.md) pinned go-llmprovider-sdk `v1.15.0` and
     acp-go-sdk2 `v1.16.0` on 2026-10-19, so `gobble acp` answers a request piped before the end of its input. A
     provider's default model, the first of its live listing, may change with the SDK's ranking from `v1.14.0`, and every

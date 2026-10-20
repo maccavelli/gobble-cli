@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: completed
 date: 2026-10-19
 ---
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
@@ -962,8 +962,8 @@ The plan's Deferred list stands. Two items are added:
 
 ## Amendment (2026-10-19): `verify-build-metadata` at a clean release tag
 
-*Proposed, with the owner's choices of 2026-10-19: release `v0.1.1` from the fix, and amend this plan, P4 step 13
-being the check's origin.*
+*Approved and executed on 2026-10-19, with the owner's choices of that day: release `v0.1.1` from the fix, and amend
+this plan, P4 step 13 being the check's origin.*
 
 **What happened.** The owner tagged `v0.1.0` at `e870f03`, whose `main` run had passed. The tag's run failed
 `validate` on Ubuntu, macOS and Windows, so `build` and `release` were skipped and nothing was published. Each failed
@@ -989,12 +989,13 @@ verify-build-metadata: FAIL unstamped version names HEAD: got '0.1.0', HEAD e870
 **The decision.** The check expects what D19 item 1 says: when `HEAD` carries a release tag, `vX.Y.Z` in gobble's
 strict form (0005-MADR's GitHub releases row), and the tree is clean, the unstamped build reports `X.Y.Z`, the
 highest such tag when there are several; otherwise `0.0.0-dev+<12 hex of HEAD>`, with `.dirty` exactly when the tree
-is dirty, as now. The stamped checks are unchanged.
+is dirty, as now. The stamped checks are unchanged. *(Deviation 1, 2026-10-19: only a `v0` or `v1` tag; Go ignores a
+higher major version on this module path. See the execution record.)*
 
 **Steps.**
 
 1. `scripts/verify_build_metadata.py`: the tag at `HEAD` (`git tag --points-at HEAD`, strict `vX.Y.Z`, the highest),
-   and the unstamped checks split on it; the docstring says so.
+   and the unstamped checks split on it; the docstring says so. *(Deviation 1: major version `0` or `1` only.)*
 2. Records: this amendment's execution record; `docs/README.md`; 0008-MADR's D19 outcome note marked with the case.
 3. Release (the owner's): commit, push, let `main`'s run pass, then tag `v0.1.1` at that commit. `v0.1.0` stays an
    unreleased tag, unchanged.
@@ -1008,3 +1009,62 @@ a scratch tag, since a copy of the tree has no commit; `make check-records` and 
 
 **Rollout and rollback.** The change is to a check alone; reverting the commit restores the old expectation. The
 release follows the owner's tag.
+
+### Execution record (2026-10-19)
+
+**Step 1.** `scripts/verify_build_metadata.py` gains `RELEASE_RE` and `release_tag()`: the tags at `HEAD` (`git tag
+--points-at HEAD`) in strict `vX.Y.Z` form with major version `0` or `1`, the highest, without its `v`, or none. The
+stamped checks are unchanged. With a tag and a clean tree, the unstamped build is checked for one thing, "unstamped
+version at a release tag is the tag"; otherwise the three dev checks run as before. The docstring states both cases
+and the major-version rule. No Go file changed.
+
+**Step 2.** This record; the status above; `docs/README.md`'s 0008 row and status note; 0008-MADR's D19 outcome note.
+
+**Step 3** is the owner's: commit, push, `main`'s run, then the `v0.1.1` tag.
+
+**Deviation 1 (2026-10-19): a `v0` or `v1` tag only.** The decision above says the unstamped build reports `X.Y.Z` at
+any clean `vX.Y.Z` tag. The scratch clone showed otherwise for a higher major version: with `v9.9.9` at `HEAD`, the
+unstamped binary reported `0.0.0-dev+<rev>`. The module path, `github.com/maccavelli/gobble-cli`, has no `/vN`
+suffix, so Go takes only a `v0` or `v1` tag as its version and records a pseudo-version otherwise, which
+`internal/buildinfo` reports as the dev version. A check counting every major version would fail at a `v2` or later
+tag as `v0.1.0`'s run did. Tagging is not limited: a release binary is stamped through `-ldflags -X` (`Makefile:88`)
+and reports any tag. The owner's resolution: keep the `v0`/`v1` filter for now. Not done, and named as the
+alternatives the owner did not choose: reading the major version from `go.mod`'s module path, which matters only if
+the path gains a `/vN` suffix; and making an unstamped build report any tag by reading git itself, which would change
+0008-MADR D19.
+
+**Verification.** `scratchpad/p8_verify.py` (not committed) clones the repository, tags and dirties only the clone,
+and runs the committed script (`efadf9c`) and the new one against it. Output on macOS, abridged to the result lines
+and the deciding checks:
+
+```text
+clone HEAD efadf9c
+PASS old script at a clean tag fails, as CI did: exit 1
+    verify-build-metadata: FAIL unstamped version is 0.0.0-dev+<rev>: got '0.9.9'
+    verify-build-metadata: FAIL unstamped version names HEAD: got '0.9.9', HEAD efadf9c2d5b7
+PASS new script at a clean tag: exit 0
+    verify-build-metadata: ok   unstamped version at a release tag is the tag
+PASS new script with two tags takes the higher: exit 0
+    verify-build-metadata: ok   unstamped version at a release tag is the tag
+PASS new script with no tag: exit 0
+    verify-build-metadata: ok   unstamped version is 0.0.0-dev+<rev>
+PASS new script at a v9 tag, which Go ignores: exit 0
+    verify-build-metadata: ok   unstamped version is 0.0.0-dev+<rev>
+PASS new script at a tag with a dirty tree: exit 0
+    verify-build-metadata: ok   unstamped .dirty matches the tree
+PASS new script fails when the binary reports the dev version at a tag: exit 1
+    verify-build-metadata: FAIL unstamped version at a release tag is the tag: got '0.0.0-dev', want '0.9.9'
+all as expected
+```
+
+The tags were `v0.9.9` and `v0.10.0` (the higher is `0.10.0`); the last case builds with `GOFLAGS=-buildvcs=false`,
+so the binary reports the bare dev version at a tag and the new check fails. The same seven results, `all as
+expected`, came on the Linux machine and on the Windows laptop, each from a bundle of the repository at `efadf9c`
+and the new script.
+
+**Gates.** The pre-add check does not apply. `make preflight` on macOS: `preflight passed`, `verify-build-metadata`
+taking the dev path on the working tree. On the Linux machine and the Windows laptop, `make preflight` on a copy of
+the tree passed every gate through `archtest` and `apidiff` (`apidiff: no-op below v1.0.0`) and stopped at
+`verify-build-metadata` with `git rev-parse HEAD` exiting 128, since a copy has no commit; the scratch clones above
+are that check's run on those hosts. `make check-records markdownlint` passed on all three (`Summary: 0 issues in 0
+files`, 54 files on the copies).
