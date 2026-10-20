@@ -109,7 +109,7 @@ func TestPiFixtureContext(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := []string{string(resp.ConfigOptions[0].Select.CurrentValue), string(resp.ConfigOptions[1].Select.CurrentValue)}; got[0] != "claude-sonnet-4-5" || got[1] != "medium" {
+	if got := []string{string(resp.ConfigOptions[0].Select.CurrentValue), string(resp.ConfigOptions[1].Select.CurrentValue)}; got[0] != "anthropic/claude-sonnet-4-5" || got[1] != "medium" {
 		t.Errorf("restored model and thinking %v", got)
 	}
 	var shown []string

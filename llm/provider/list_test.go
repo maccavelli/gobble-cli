@@ -194,6 +194,67 @@ func TestListFallsBack(t *testing.T) {
 	}
 }
 
+// A live listing says where it came from and when, and carries every usable
+// id, which a later run hands back as its last good listing (0025-MADR D4).
+func TestListSourceAndUsable(t *testing.T) {
+	run := metadataRuns.Add(1)
+	metadata := fmt.Sprintf("metadata.test/%s-%d-%d.json", t.Name(), os.Getpid(), run)
+	_, o := cannedClient(map[string]route{openaiModels: {status: http.StatusOK, body: openaiListing},
+		metadata: {status: http.StatusOK, body: "{}"}})
+	o.ModelMetadataURL = "https://" + metadata
+	before := time.Now()
+	l, err := List(t.Context(), "openai", fmt.Sprintf("sk-src-%d-%d", os.Getpid(), run), o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !l.Live || l.Source != "live" || l.FetchedAt.Before(before.Add(-time.Second)) {
+		t.Fatalf("listing %+v, want live, source live, fetched now", l)
+	}
+	for _, m := range l.Models {
+		if !slices.Contains(l.Usable, m) {
+			t.Fatalf("usable %q lacks listed %q", l.Usable, m)
+		}
+	}
+}
+
+// After a transient failure, a last good listing from an earlier run within
+// a day is served as a stale listing, with its time (0025-MADR D4).
+func TestListServesLastGood(t *testing.T) {
+	run := metadataRuns.Add(1)
+	metadata := fmt.Sprintf("metadata.test/%s-%d-%d.json", t.Name(), os.Getpid(), run)
+	_, o := cannedClient(map[string]route{openaiModels: {status: http.StatusServiceUnavailable, body: `{"error":{"message":"busy"}}`},
+		metadata: {status: http.StatusOK, body: "{}"}})
+	o.ModelMetadataURL = "https://" + metadata
+	o.LastGood, o.LastGoodAt = []string{"gpt-6-luna", "gpt-5-mini"}, time.Now().Add(-time.Hour)
+	l, err := List(t.Context(), "openai", fmt.Sprintf("sk-stale-%d-%d", os.Getpid(), run), o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !l.Live || l.Source != "stale" || !slices.Contains(l.Models, "gpt-6-luna") || !l.FetchedAt.Equal(o.LastGoodAt) {
+		t.Fatalf("listing %+v, want the last good one, stale, fetched at %s", l, o.LastGoodAt)
+	}
+}
+
+// The listings that need no key, and so cannot reject one, are OpenCode Zen
+// and Go's, Hugging Face's and Kilo's (go-llmprovider-sdk v1.17.0,
+// llmprovider/catalog/discovery.go: 1012, 1045, 1251).
+func TestPublicListing(t *testing.T) {
+	public := []string{"opencode-zen", "opencode-go", "huggingface", "kilo"}
+	for _, id := range append(KeyProviders(), "ollama") {
+		if got := PublicListing(id); got != slices.Contains(public, id) {
+			t.Errorf("PublicListing(%q) = %v", id, got)
+		}
+	}
+}
+
+// Search finds a model by part of its id, best first.
+func TestSearch(t *testing.T) {
+	got := Search("openai", []string{"gpt-6-luna", "gpt-5-mini", "gpt-5-nano"}, "mini")
+	if len(got) == 0 || got[0] != "gpt-5-mini" || slices.Contains(got, "gpt-6-luna") {
+		t.Fatalf("Search mini = %q, want gpt-5-mini first and no gpt-6-luna", got)
+	}
+}
+
 // FailureKind names each class, wrapped or not, and never an error's
 // text (0020-MADR D6).
 func TestFailureKind(t *testing.T) {

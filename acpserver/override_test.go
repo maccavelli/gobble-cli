@@ -89,7 +89,7 @@ func resume(t *testing.T, c *acptest.Conn, id acp.SessionId, cwd string) []acp.S
 func TestOverrideNew(t *testing.T) {
 	c, _ := overrideAgent(t, t.TempDir(), Override{Provider: "fake", Model: "m2"}, llmtest.NewScript())
 	resp := newSession(t, c, t.TempDir(), nil)
-	if got := currentModel(t, resp.ConfigOptions); got != "m2" {
+	if got := currentModel(t, resp.ConfigOptions); got != "fake/m2" {
 		t.Errorf("model %q, want the override's m2", got)
 	}
 	if got := entryTypes(t, c, resp.SessionId); slices.Contains(got, "model_change") || slices.Contains(got, "thinking_level_change") {
@@ -114,7 +114,7 @@ func TestOverrideResume(t *testing.T) {
 	o := Override{Provider: "fake", Model: "m2"}
 	c, closeAgent := overrideAgent(t, dir, o, llmtest.NewScript())
 	opts := resume(t, c, id, cwd)
-	if got := currentModel(t, opts); got != "m2" {
+	if got := currentModel(t, opts); got != "fake/m2" {
 		t.Errorf("model %q, want the override's m2", got)
 	}
 	if _, current := thoughtLevel(t, opts); current != thinkingOff {
@@ -143,7 +143,7 @@ func TestOverrideFork(t *testing.T) {
 	src := storedSession(t, dir, cwd, thinkingOff)
 	c, _ := overrideAgent(t, dir, Override{Provider: "fake", Model: "m2"}, llmtest.NewScript())
 	resp := newSession(t, c, cwd, map[string]any{"gobble": map[string]any{"forkFrom": string(src)}})
-	if got := currentModel(t, resp.ConfigOptions); got != "m2" {
+	if got := currentModel(t, resp.ConfigOptions); got != "fake/m2" {
 		t.Errorf("model %q, want the override's m2", got)
 	}
 	if got := entryTypes(t, c, resp.SessionId); len(got) == 0 || got[len(got)-1] != "model_change" {

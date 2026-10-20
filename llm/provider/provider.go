@@ -72,6 +72,11 @@ type Options struct {
 	// Retry is the session's retry settings; nil is llm.DefaultRetry. Off
 	// builds the provider without the SDK's retry (0005-PLAN F5-1).
 	Retry *llm.Retry
+	// LastGood and LastGoodAt are a listing kept from an earlier run, its
+	// Usable ids and its FetchedAt, which List serves as a stale listing
+	// after a transient failure, within 24 hours (0025-MADR D4).
+	LastGood   []string
+	LastGoodAt time.Time
 }
 
 // login is provider id's stored login, as the SDK's session, when o has no

@@ -324,9 +324,8 @@ func TestModelAndThinkingCommands(t *testing.T) {
 	for _, tc := range []struct{ cmd, want string }{
 		{"/thinking HIGH", "Thinking level: high"},
 		{"/thinking loud", `Unknown thinking level "loud". Available levels: off, minimal, low, medium, high, xhigh.`},
-		{"/model m2", "Model: m2"},
-		{"/model nope", `Unknown model "nope". Available models: m1, m2.`},
-		{"/model", "Model: m2\nModels: m1, m2"},
+		{"/model m2", "Model: fake/m2"},
+		{"/model nope", `Unknown model "nope". Available models: fake/m1, fake/m2.`},
 	} {
 		if text, _ := slash(t, c, client, id, tc.cmd); text != tc.want {
 			t.Errorf("%s: %q, want %q", tc.cmd, text, tc.want)
@@ -340,6 +339,10 @@ func TestModelAndThinkingCommands(t *testing.T) {
 	}
 	if updates != 2 {
 		t.Fatalf("%d config_option_updates, want 2", updates)
+	}
+	if text, _ := slash(t, c, client, id, "/model"); !strings.HasPrefix(text, "Model: fake/m2\nModels: 2 models\n") ||
+		!strings.Contains(text, "| 1 | fake/m1 |") || !strings.Contains(text, "| 2 | fake/m2 |") {
+		t.Errorf("/model: %q", text)
 	}
 	if _, err := prompt(t, c, id, "go"); err != nil {
 		t.Fatal(err)

@@ -236,7 +236,7 @@ func TestConfigOptionsPersist(t *testing.T) {
 	first := llmtest.NewScript(llmtest.Text("a"))
 	c1, _ := sessionAgent(t, dir, first, &acptest.Client{})
 	resp := newSession(t, c1, cwd, nil)
-	if len(resp.ConfigOptions) != 2 || resp.ConfigOptions[0].Select.CurrentValue != "m1" || resp.ConfigOptions[1].Select.CurrentValue != "off" {
+	if len(resp.ConfigOptions) != 2 || resp.ConfigOptions[0].Select.CurrentValue != "fake/m1" || resp.ConfigOptions[1].Select.CurrentValue != "off" {
 		t.Fatalf("config options %+v", resp.ConfigOptions)
 	}
 	for _, kv := range [][2]string{{"model", "m2"}, {"thought_level", "high"}} {
@@ -266,7 +266,7 @@ func TestConfigOptionsPersist(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if loaded.ConfigOptions[0].Select.CurrentValue != "m2" || loaded.ConfigOptions[1].Select.CurrentValue != "high" {
+	if loaded.ConfigOptions[0].Select.CurrentValue != "fake/m2" || loaded.ConfigOptions[1].Select.CurrentValue != "high" {
 		t.Fatalf("restored options %+v", loaded.ConfigOptions)
 	}
 	if _, err := prompt(t, c2, resp.SessionId, "y"); err != nil {

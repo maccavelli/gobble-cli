@@ -340,27 +340,103 @@ func (a *Agent) qualified(model string) string {
 // percentOf is used as a percentage of window.
 func percentOf(used, window int) float64 { return float64(used) / float64(window) * 100 }
 
+// cmdModel is /model: with no argument, the numbered list of every usable
+// provider's models; with an entry's number, a provider/model ref or an id
+// one provider offers, a switch; with other words, the entries that match,
+// keeping their numbers (0025-MADR D1, D5, deviation 2). A fuzzy pick is
+// left to --model, which has no list to show.
 func (a *Agent) cmdModel(ctx context.Context, t *cmdTurn, arg string) error {
-	choice := a.models()
-	if len(choice.Models) == 0 {
+	c := a.choice()
+	ps := c.providerList()
+	if len(ps) == 0 {
 		t.say(t.text(personality.ModelNone, nil))
 		return nil
 	}
+	picks := c.picks()
 	if arg == "" {
 		model, _ := a.choices(t.s)
-		t.say(t.text(personality.ModelCurrent, personality.Args{argModel: model}) + "\n" +
-			t.text(personality.ModelList, personality.Args{argModels: strings.Join(choice.Models, ", ")}))
+		t.say(t.text(personality.ModelCurrent, personality.Args{argModel: refOf(c.Provider, model)}) + "\n" +
+			t.text(personality.ModelList, personality.Args{argModels: countModels(picks)}) + "\n" +
+			a.pickerText(c, picks, func(int) bool { return true }))
 		return nil
 	}
-	if !slices.Contains(choice.Models, arg) {
-		t.say(t.text(personality.ModelUnknown, personality.Args{argModel: strconv.Quote(arg), argModels: strings.Join(choice.Models, ", ")}))
+	if n, err := strconv.Atoi(arg); err == nil {
+		if n < 1 || n > len(picks) {
+			t.say(fmt.Sprintf("No entry %d: /model lists %d.", n, len(picks)))
+			return nil
+		}
+		return a.switchModel(ctx, t, c, picks[n-1].provider, picks[n-1].model)
+	}
+	if prov, model, ok := splitRef(arg, ps); ok && prov != "" {
+		p := ps[slices.IndexFunc(ps, func(x ProviderChoice) bool { return x.ID == prov })]
+		switch {
+		case !p.State.Usable():
+			t.say(fmt.Sprintf("%s is not usable: %s", prov, joinReason(string(p.State), p.Reason)))
+			return nil
+		case slices.Contains(p.Models, model):
+			return a.switchModel(ctx, t, c, prov, model)
+		}
+	}
+	var exact []pick
+	for _, p := range picks {
+		if p.model == arg && p.section != sectionRecent {
+			exact = append(exact, p)
+		}
+	}
+	if len(exact) == 1 {
+		return a.switchModel(ctx, t, c, exact[0].provider, exact[0].model)
+	}
+	keep := a.matches(picks, arg)
+	for i := range picks {
+		if keep(i) {
+			t.say(a.pickerText(c, picks, keep))
+			return nil
+		}
+	}
+	t.say(t.text(personality.ModelUnknown, personality.Args{argModel: strconv.Quote(arg), argModels: someRefs(picks)}))
+	return nil
+}
+
+// switchModel makes provider's model the session's. Another provider's
+// model waits for 0025-PLAN P2.
+func (a *Agent) switchModel(ctx context.Context, t *cmdTurn, c ModelChoice, provider, model string) error {
+	if provider != c.Provider {
+		t.say(fmt.Sprintf("Switching to another provider's model is not available yet; this session's provider is %s.", c.Provider))
 		return nil
 	}
-	if err := a.setConfigUpdate(ctx, t, configModel, arg); err != nil {
+	if err := a.setConfigUpdate(ctx, t, configModel, model); err != nil {
 		return err
 	}
-	t.say(t.text(personality.ModelSet, personality.Args{argModel: arg}))
+	t.say(t.text(personality.ModelSet, personality.Args{argModel: refOf(provider, model)}))
 	return nil
+}
+
+// countModels is how many models the list offers, and from how many
+// providers.
+func countModels(picks []pick) string {
+	refs, provs := map[string]bool{}, map[string]bool{}
+	for _, p := range picks {
+		refs[refOf(p.provider, p.model)], provs[p.provider] = true, true
+	}
+	if len(provs) == 1 {
+		return fmt.Sprintf("%d models", len(refs))
+	}
+	return fmt.Sprintf("%d models from %d providers", len(refs), len(provs))
+}
+
+// someRefs is the first five models of the list, each once, for an
+// unknown model's answer.
+func someRefs(picks []pick) string {
+	var refs []string
+	for _, p := range picks {
+		if r := refOf(p.provider, p.model); !slices.Contains(refs, r) {
+			refs = append(refs, r)
+		}
+		if len(refs) == recentShown {
+			return strings.Join(refs, ", ") + ", …"
+		}
+	}
+	return strings.Join(refs, ", ")
 }
 
 // cmdThinking is /thinking: the session model's levels, as thought_level

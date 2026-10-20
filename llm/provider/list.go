@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
+	"time"
 
 	"github.com/maccavelli/go-llmprovider-sdk/llmprovider"
 	"github.com/maccavelli/go-llmprovider-sdk/llmprovider/catalog"
@@ -23,6 +25,36 @@ type Listing struct {
 	Live bool
 	// Err is why the listing was not live; nil when it was.
 	Err error
+	// Source is where a live listing came from: "live", read now or within
+	// the SDK's ten minutes, or "stale", the last good listing after a
+	// transient failure; "" when not live (0025-MADR D4).
+	Source string
+	// FetchedAt is when a live listing was read from the provider.
+	FetchedAt time.Time
+	// Usable are every usable id of a live listing, uncapped, as the SDK's
+	// WithLastGood takes them back.
+	Usable []string
+}
+
+// publicListings are the providers whose listing needs no key
+// (go-llmprovider-sdk v1.17.0, llmprovider/catalog/discovery.go: OpenCode's
+// /models at 1012, Hugging Face's at 1045, Kilo's at 1251).
+var publicListings = []string{"opencode-zen", "opencode-go", "huggingface", "kilo"}
+
+// PublicListing reports whether provider id's listing needs no key, so a
+// listing cannot reject one: OpenCode Zen and Go, Hugging Face and Kilo
+// (0025-MADR D4).
+func PublicListing(id string) bool { return slices.Contains(publicListings, id) }
+
+// Search is the ids of models that match query, best first, by the SDK's
+// matcher: the id exactly, as a prefix or substring, then its label, then a
+// subsequence (0025-MADR D5).
+func Search(id string, models []string, query string) []string {
+	var out []string
+	for _, m := range catalog.Search(llmprovider.ProviderID(id), models, query) {
+		out = append(out, m.ID)
+	}
+	return out
 }
 
 // List lists the built-in provider id's models with apiKey, through the
@@ -41,6 +73,9 @@ func List(ctx context.Context, id, apiKey string, o Options) (Listing, error) {
 	opts = append(opts, o.sdkOptions()...)
 	if o.ModelMetadataURL != "" {
 		opts = append(opts, llmprovider.WithModelMetadataURL(o.ModelMetadataURL))
+	}
+	if len(o.LastGood) > 0 {
+		opts = append(opts, catalog.WithLastGood(o.LastGood, o.LastGoodAt))
 	}
 	var src llmprovider.TokenSource = llmprovider.NewStaticToken(apiKey)
 	o.APIKey, o.Logger = apiKey, nil
@@ -62,7 +97,7 @@ func List(ctx context.Context, id, apiKey string, o Options) (Listing, error) {
 		}
 		return Listing{Models: Models(id), Err: reason}, nil
 	}
-	return Listing{Models: cat.Recommended, Live: true}, nil
+	return Listing{Models: cat.Recommended, Live: true, Source: string(cat.Source), FetchedAt: cat.FetchedAt, Usable: cat.Usable}, nil
 }
 
 // failureKinds name the errors FailureKind knows, most specific first.

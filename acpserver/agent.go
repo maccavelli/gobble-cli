@@ -67,6 +67,13 @@ type Options struct {
 	// Models is the model choice offered as the model config option. Nil
 	// offers none.
 	Models func() ModelChoice
+	// Remember is told each model the user chooses, as a provider/model ref,
+	// by /model or the model option, for the recent models (0025-MADR D3).
+	// Nil remembers nothing.
+	Remember func(ref string)
+	// SearchModels is the SDK's matcher over a provider's models, for /model
+	// with words (0025-MADR D5). Nil matches words in each ref and name.
+	SearchModels func(provider string, models []string, query string) []string
 	// ModelInfo is what the catalog knows of a provider's model: its levels,
 	// window and price (0005-PLAN F4-2a). Nil knows nothing, so every model
 	// offers off to xhigh, with no window and no price.
@@ -122,10 +129,15 @@ type Options struct {
 
 // Agent is gobble's acp.Agent.
 type Agent struct {
-	version  string
-	newID    func() string
-	provider func(sessionID string, retry llm.Retry) (llm.Provider, error)
-	models   func() ModelChoice
+	version       string
+	newID         func() string
+	provider      func(sessionID string, retry llm.Retry) (llm.Provider, error)
+	models        func() ModelChoice
+	rememberModel func(ref string)
+	search        func(provider string, models []string, query string) []string
+	// marksMu guards marks, the providers a turn saw refused (0025-MADR D4).
+	marksMu  sync.Mutex
+	marks    map[string]mark
 	info     func(provider, model string) llm.Model
 	override Override
 	tools    []tool.Tool
@@ -261,6 +273,7 @@ var (
 // the first request, so it can send session updates.
 func New(opts Options) *Agent {
 	a := &Agent{version: opts.Version, newID: opts.NewID, provider: opts.Provider, models: opts.Models, info: opts.ModelInfo,
+		rememberModel: opts.Remember, search: opts.SearchModels,
 		override: opts.Override, tools: opts.Tools, noGrants: opts.NoRequestPermissions, store: opts.Store, now: opts.Now, mcp: opts.MCP, logger: opts.Logger, prompt: opts.Prompt,
 		settings: opts.Settings, auth: opts.Auth, save: opts.SaveSetting, personalities: opts.Personalities, compactionPrompts: opts.CompactionPrompts, titles: opts.Title,
 		trust: opts.Trust, perms: opts.Permissions, sessions: map[acp.SessionId]*liveSession{}}
@@ -679,6 +692,7 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 				s.history = append(s.history, prompt) // the file keeps the prompt too
 				a.mu.Unlock()
 			}
+			a.markFailure(a.models().Provider, err)
 			return acp.PromptResponse{}, promptError(err)
 		}
 		w.event(ev)

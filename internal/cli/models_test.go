@@ -257,11 +257,15 @@ func TestModelOptionOffersListedModels(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := dry.Variants(personality.ModelSet, personality.Args{"model": "gpt-5-nano"}); !slices.Contains(want, said) {
+	if want := dry.Variants(personality.ModelSet, personality.Args{"model": "openai/gpt-5-nano"}); !slices.Contains(want, said) {
 		t.Fatalf("/model gpt-5-nano answered %q, want one of %q", said, want)
 	}
-	if !slices.Equal(offered, listed) || current != "gpt-5-nano" {
-		t.Fatalf("model option offers %q with %q current, want %q with gpt-5-nano", offered, current, listed)
+	var refs []string // the option's values are provider/model refs (0025-MADR D1)
+	for _, m := range listed {
+		refs = append(refs, "openai/"+m)
+	}
+	if !slices.Equal(offered, refs) || current != "openai/gpt-5-nano" {
+		t.Fatalf("model option offers %q with %q current, want %q with openai/gpt-5-nano", offered, current, refs)
 	}
 	if _, err := s.Prompt(t.Context(), acpclient.Prompt{Text: "x"}); err != nil {
 		t.Fatal(err)
@@ -279,15 +283,21 @@ type configUpdate struct {
 		ConfigOptions []struct {
 			ID           string `json:"id"`
 			CurrentValue string `json:"currentValue"`
-			Options      []struct {
-				Value string `json:"value"`
+			// Options are values, or groups of them (0025-MADR D5).
+			Options []struct {
+				Value   string `json:"value"`
+				Group   string `json:"group"`
+				Options []struct {
+					Value string `json:"value"`
+				} `json:"options"`
 			} `json:"options"`
 		} `json:"configOptions"`
 	} `json:"update"`
 }
 
 // replies is the agent's text, and the model option of the last
-// config_option_update: its values and its current value.
+// config_option_update: its values, the recent group's left out, and its
+// current value.
 func replies(mu *sync.Mutex, updates []acpclient.Update) (said string, offered []string, current string) {
 	mu.Lock()
 	defer mu.Unlock()
@@ -304,7 +314,14 @@ func replies(mu *sync.Mutex, updates []acpclient.Update) (said string, offered [
 			if o.ID == "model" {
 				offered, current = nil, o.CurrentValue
 				for _, v := range o.Options {
-					offered = append(offered, v.Value)
+					if v.Group == "" {
+						offered = append(offered, v.Value)
+					}
+					if v.Group != "recent" {
+						for _, g := range v.Options {
+							offered = append(offered, g.Value)
+						}
+					}
 				}
 			}
 		}

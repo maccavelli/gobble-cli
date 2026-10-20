@@ -4099,7 +4099,9 @@ session's choice, and recorded; the model scope left to 1.x).
    another model's facts onto it, so the catalog does not know it unless `models.json` describes it. A resolution
    error is a usage error, exit 2.
 4. **The chosen provider is the run's:** the agent's, the model choice's, the listing's and the credential message's,
-   in place of `defaultProvider`'s. The chosen model joins the model choice when the listing lacks it.
+   in place of `defaultProvider`'s. The chosen model joins the model choice when the listing lacks it. *(2026-10-20,
+   [0025-MADR-provider-choice-and-auth.md](0025-MADR-provider-choice-and-auth.md) D1, 0025-PLAN P1: the model choice holds every credentialed provider; the run's is the session's to start
+   with, and P2 lets a session switch.)*
 5. **The flags win over every session the run opens.** A new session starts with them. A forked, loaded or resumed one
    is set to them after its history, and each change is recorded as a `model_change` or a `thinking_level_change`, as
    `/model` and `/thinking` record one. The level is clamped to the model's, Pi's way. Pi records the level only;

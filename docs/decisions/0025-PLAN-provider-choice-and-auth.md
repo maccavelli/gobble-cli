@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: in-progress
 date: 2026-10-20
 associated-madr: "0025-MADR-provider-choice-and-auth.md"
 ---
@@ -157,3 +157,105 @@ setting, P6 restores the refusal, P5 the CLI-only login, P4 removes the commands
 one-provider session, P1 the one provider's model list. `<state>/models.json` and `<cache>/catalog/` are ignored by
 the reverted code. `auth.json` entries written by P5 and P6 are Pi's shape, read by the reverted code as before
 (an OpenAI OAuth entry is then skipped, as the Pi import skips one).
+
+## Execution record
+
+**Deviation 1, 2026-10-20, P1, decided by the owner** ("Kind and status only"): MADR D4 shows a dead provider "with the
+provider's reason", but 0020-MADR F5 found that "the provider's message can carry a masked fragment of the key, so it
+must not reach a log", and D6 logs only `FailureKind`, "never the error's text".
+
+- **Chosen:** the reason is gobble's words for the kind (`key rejected`, `quota exhausted`, `not permitted`, `not
+  listed: offline`, …), with the HTTP status when the error carries one, and the way out (`/login <provider>`). MADR D4
+  annotated.
+- **Not chosen:** the provider's text with key-like parts masked.
+- No file is added to P1's scope.
+
+**Deviation 2, 2026-10-20, P1, decided by the owner** ("/model N, markdown"): MADR D5's picker "reads a number to switch,
+or words to filter", but `/model` is an agent command, run by every ACP client, and cannot pause for a reply.
+
+- **Chosen:** `/model` prints the list numbered, as markdown: the current model, the recent ones, then a heading per
+  provider with its state and a table of its models (#, model, context, input and output price per million tokens,
+  thinking); `/model N` picks entry N; `/model <words>` that is not a ref prints the matching entries with their
+  numbers. The CLI renders the tables aligned (`internal/cli/render/table.go`), and editors render markdown. MADR D5
+  annotated.
+- **Not chosen:** an interactive prompt in the line session alone, with the printed list for ACP clients.
+- No file is added to P1's scope.
+
+### P1 execution record (2026-10-20)
+
+**Run** on `main` at `a417f51`, on the owner's word "committed, proceed", with deviations 1 and 2 above.
+
+**Clarification, not a deviation:** MADR D1 names models by `--model`'s rules, a fuzzy match included, and D5 has
+`/model <words>` list the matches. Both hold by keeping each where it serves: `/model` switches on an entry's number, a
+`provider/model` ref, or an id exactly one usable provider offers; any other words list their matches (D5), by the
+SDK's matcher (`SearchModels`) and each word in the ref or the model's name. The fuzzy pick stays with `--model` and
+`defaultModel`, which have no list to show. `llm/catalog`'s `parsePattern` picks one model for a short word such as
+`m`, which in `/model` would switch where the user meant to filter.
+
+**Steps:**
+
+1. **Tests first,** each seen failing:
+   - `llm/provider`: `TestListSourceAndUsable`, `TestListServesLastGood`, `TestPublicListing`, `TestSearch`, against
+     stubs: `Source: FetchedAt:0001-01-01 … Usable:[]`; the 503 gave the static models, `Live:false`;
+     `PublicListing("opencode-zen") = false` (and Go's, Hugging Face's, Kilo's); `Search mini = []`.
+   - `acpserver`: `TestModelPicker`, `TestModelPick`, `TestModelOptionGrouped`, `TestRefusedKeyMarksProvider`, against
+     the unchanged `/model`: `/model lacks "Model: fake/m1"` (it answered `Model: m1\nModels: m1, m2`), `/model 4:
+     "Unknown model \"4\"…"`; and `TestStateOf`, whose eight failure cases each failed on a scratch copy whose
+     `StateOf` answered `not listed` with no reason (`StateOf(… sk-pl***nt) = not listed "", want quota exhausted
+     "(HTTP 429)"`, … `want not listed "(listing failed)"`).
+   - `internal/cli`: `TestProviderChoicesStates`, `TestProviderChoicesConcurrent`, `TestRecentModels`,
+     `TestLastGoodOnDisk`, `TestChoiceWiring`, against stubs: `providers [], want ["gemini" "openai" …]`, `recent [],
+     want ["openai/m5" …]`, `claude while listing: {…State: …}, want the kept listing, stale`, `the agent remembers
+     nothing or searches without the SDK's matcher`.
+2. **The choice:**
+   - `llm/provider`: `Listing` gains `Source`, `FetchedAt` and `Usable`; `Options` gains `LastGood` and `LastGoodAt`,
+     handed to the SDK as `catalog.WithLastGood`; `PublicListing` (OpenCode Zen and Go, Hugging Face, Kilo, from the
+     SDK's `discovery.go:1012`, `:1045`, `:1251`); `Search` over `catalog.Search`.
+   - `acpserver` (`choice.go`): `ProviderState` and its nine states; `ProviderChoice`; `StateOf`, gobble's words and
+     the HTTP status, never the error's text; `ModelChoice` gains `Providers` and `Recent`, a choice without
+     `Providers` read as its own provider, live; `Options.Remember` and `Options.SearchModels`.
+   - `internal/cli` (`choice.go`): every key provider in registry order; the run's listing waited for, the others
+     peeked, a running one shown by its kept listing (`<cache>/catalog/<id>.json`, within 24 hours) as stale, else as
+     listing with its static models; `<state>/models.json`, read once a run, ten kept, written owner-only through a
+     temporary file; `--model` remembered; every credentialed provider's listing started with the agent.
+3. **Lazy marking:** a turn failing with `ErrAuth`, `ErrQuota` or `ErrNotPermitted` marks its provider for the
+   process (`acpserver/agent.go`, at the turn's failure).
+4. **`/model` and the option:** `/model` prints the numbered markdown list (deviation 2), `/model N`, a ref, or an id
+   one provider offers switches, other words list their matches, an unknown model names five; the option is grouped,
+   `recent` then each usable provider, values refs; a bare id of the session's provider is still taken. A model of
+   another provider answers "Switching to another provider's model is not available yet; this session's provider is
+   …", until P2.
+5. **Records:** dated notes in 0020-MADR D3 and D5 and 0005-PLAN F4-2c decision 4; this record.
+
+**Tests changed with it,** to the refs D1 gives the option and `/model`, none loosened: `TestModelAndThinkingCommands`
+(`/model m2` answers `Model: fake/m2`; `/model` lists `| 1 | fake/m1 |`), `TestConfigOptionsPersist`,
+`TestOverrideNew`, `TestOverrideResume`, `TestOverrideFork` and `TestPiFixtureContext` (the option's current value a
+ref), `TestModelOptionOffersListedModels` (the grouped option's values, the recent group left out, and the reply
+naming `openai/gpt-5-nano`). The ACP golden is unchanged: its agent offers no model.
+
+**Found and fixed in the phase:** two tests of mine raced their cleanup (a held listing wrote its kept file into a
+home being removed); each now ends its listing first. Thirty runs of the new tests under the race detector passed.
+Lint asked for a constant for "Recent", `strings.FieldsSeq`, and the repo's `G304` / `G101` annotations; done.
+
+**In the terminal** (gobble built to a scratch directory, a scratch home, two dummy keys and a dead proxy, so no
+request left the machine; every listing failed, so each provider showed its static models): with colour, `/model`
+printed `The model is openai/gpt-6-luna.`, `Also available: 11 models from 2 providers`, then an aligned table per
+provider (`|   1 | openai/gpt-6-luna    |    1.1M |   0.10 |    0.50 | off–max  |`), then the seven providers with no
+credential, each `— set <VAR>, or gobble auth login <id>`. With `NO_COLOR` the markdown is printed raw, as 0008-MADR D7
+has all agent text. Bold keeps its `**` markers in the line view, by 0008-PLAN P8's styling. Two things were seen and
+are not P1's: an unclassified listing failure first showed no reason, now "(listing failed)" (`TestStateOf`); a
+spinner's label runs into the reply's first line, which the capture's stripped escapes may cause, unmeasured.
+
+**Gates:**
+
+- the pre-add check on the nineteen changed `.go` files: `go-precheck: 19 file(s) clean (gofmt, golint, govulncheck)`;
+  lint for linux, darwin and windows, `0 issues.` each;
+- macOS: `go test -count=1 ./...` and `CGO_ENABLED=1 go test -race -count=1 ./...`, 35 packages ok each; `make
+  preflight`, `preflight passed`;
+- the Linux machine and the Windows laptop, over ssh with `-o BatchMode=yes -o ConnectTimeout=5`, on a copy of the
+  working tree, Windows with `TMP` and `TEMP` outside the user's home: the tests and the race detector, 35 packages ok
+  on each; `make preflight` through `apidiff` (golangci-lint `0 issues.`), stopping at `verify-build-metadata` with
+  `git rev-parse HEAD` exiting 128 on a copy; `make check-records markdownlint`, "0 issues in 0 files".
+
+**Not done in P1, as the plan says:** switching to another provider's model (P2); the start order (P3); `/providers`,
+`/models`, `gobble providers` (P4); `/login` (P5). Until P5, a refused key's way out names `gobble auth login`.

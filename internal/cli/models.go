@@ -36,6 +36,10 @@ type modelListing struct {
 	result   provider.Listing
 	at       time.Time // when result was listed
 	retrying bool
+
+	// kept is the listing an earlier run kept on disk, shown while this
+	// one runs (0025-MADR D4).
+	kept kept
 }
 
 func newModelListing(fetch func() provider.Listing, now func() time.Time) *modelListing {
@@ -69,6 +73,18 @@ func (l *modelListing) get() provider.Listing {
 	return l.result
 }
 
+// peek is the kept listing without waiting: ok is false while the first
+// listing runs. It starts the listing, and a retry as get does.
+func (l *modelListing) peek() (provider.Listing, bool) {
+	l.start()
+	select {
+	case <-l.ready:
+		return l.get(), true
+	default:
+		return provider.Listing{}, false
+	}
+}
+
 // retry lists again and keeps the answer, live or not, with its time.
 func (l *modelListing) retry() {
 	r := l.fetch()
@@ -92,6 +108,10 @@ func (e *runEnv) modelListing(sel provider.Selection) *modelListing {
 	if login {
 		o.Logins = e.logins() // a login lists as a key does (0005-PLAN F4-3b decision 9)
 	}
+	// The listing an earlier run kept is shown while this one runs, and
+	// served after a transient failure (0025-MADR D4).
+	k := readKept(sel.ID, time.Now())
+	o.LastGood, o.LastGoodAt = k.usable, k.at
 	l := newModelListing(func() provider.Listing {
 		if key == "" && !login {
 			// A key that did not resolve, already warned of, lists nothing: no
@@ -106,8 +126,12 @@ func (e *runEnv) modelListing(sel provider.Selection) *modelListing {
 			e.log().WarnContext(e.ctx, "model listing failed; offering the curated static list",
 				slog.String("provider", sel.ID), slog.String("kind", provider.FailureKind(r.Err)))
 		}
+		if r.Live && r.Source == "live" {
+			writeKept(sel.ID, r)
+		}
 		return r
 	}, time.Now)
+	l.kept = k
 	if e.listings == nil {
 		e.listings = map[string]*modelListing{}
 	}
@@ -115,11 +139,17 @@ func (e *runEnv) modelListing(sel provider.Selection) *modelListing {
 	return l
 }
 
-// startModelListing starts the run's provider's listing when a credential
-// is set, so the first session rarely waits for it (0020-MADR D3).
+// startModelListing starts every credentialed provider's listing, the run's
+// first, so the first session rarely waits for it (0020-MADR D3) and the
+// others' states are ready soon after (0025-MADR D4).
 func (e *runEnv) startModelListing() {
 	if sel, err := provider.ChooseWith(e.hasCredential, e.chosenProvider()); err == nil {
 		e.modelListing(sel).start()
+	}
+	for _, id := range provider.KeyProviders() {
+		if e.hasCredential(id) {
+			e.modelListing(provider.Selection{ID: id}).start()
+		}
 	}
 }
 

@@ -148,6 +148,10 @@ type runEnv struct {
 	// provider (0020-MADR D3).
 	listingsMu sync.Mutex
 	listings   map[string]*modelListing
+	// recent and recentLoaded are models.json's recent models, read once,
+	// under recentMu (0025-MADR D3).
+	recent       []string
+	recentLoaded bool
 	// tools are the in-process agent's tools; nil is the built-ins.
 	tools []tool.Tool
 	// mcpOff and mcpAllow are the MCP tools the tool flags select, and

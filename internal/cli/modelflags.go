@@ -32,6 +32,7 @@ func (e *runEnv) pickModel(f *SharedFlags) (modelPick, error) {
 	if res.Warning != "" {
 		e.out.Warnf("%s", res.Warning)
 	}
+	e.rememberModel(res.Model.Provider + "/" + res.Model.ID) // --model chooses too (0025-MADR D3)
 	return modelPick{Provider: res.Model.Provider, Model: res.Model.ID, Thinking: cmp.Or(f.Thinking, res.Level)}, nil
 }
 

@@ -159,6 +159,12 @@ type ModelChoice struct {
 	Provider string
 	Models   []string
 	Default  string
+	// Providers are every provider with its state and models, the session's
+	// among them (0025-MADR D1, D4). Empty is Provider's alone, live.
+	Providers []ProviderChoice
+	// Recent are the user's recent models as provider/model refs, newest
+	// first (0025-MADR D3).
+	Recent []string
 }
 
 // configOptions are a session's config options: model, when there are
@@ -166,10 +172,10 @@ type ModelChoice struct {
 // session's clamped to them. Both are ungrouped selects with a category
 // (D19 item 4).
 func (a *Agent) configOptions(model, thinking string) []acp.SessionConfigOption {
-	choice := a.models()
+	choice := a.choice()
 	var out []acp.SessionConfigOption
-	if len(choice.Models) > 0 {
-		out = append(out, selectOption(configModel, "Model", acp.SessionConfigOptionCategoryModel, model, choice.Models))
+	if picks := choice.picks(); len(picks) > 0 {
+		out = append(out, modelOption(refOf(choice.Provider, model), picks))
 	}
 	levels := a.levelsOf(model)
 	return append(out, selectOption(configThinking, "Thinking", acp.SessionConfigOptionCategoryThoughtLevel,
@@ -188,17 +194,50 @@ func selectOption(id, name string, category acp.SessionConfigOptionCategory, cur
 	}}
 }
 
+// modelOption is the model option, grouped as /model lists it: the recent
+// models, then each usable provider's, its values provider/model refs
+// (0025-MADR D1, D5).
+func modelOption(current string, picks []pick) acp.SessionConfigOption {
+	var groups acp.SessionConfigSelectOptionsGrouped
+	for _, p := range picks {
+		if len(groups) == 0 || groups[len(groups)-1].Name != p.section {
+			gid := p.provider // a group's id is its provider's, or recent
+			if p.section == sectionRecent {
+				gid = "recent"
+			}
+			groups = append(groups, acp.SessionConfigSelectGroup{Group: acp.SessionConfigGroupId(gid), Name: p.section})
+		}
+		ref := refOf(p.provider, p.model)
+		g := &groups[len(groups)-1]
+		g.Options = append(g.Options, acp.SessionConfigSelectOption{Name: ref, Value: acp.SessionConfigValueId(ref)})
+	}
+	category := acp.SessionConfigOptionCategoryModel
+	return acp.SessionConfigOption{Select: &acp.SessionConfigOptionSelect{
+		Id: acp.SessionConfigId(configModel), Name: "Model", Category: &category, Type: "select",
+		CurrentValue: acp.SessionConfigValueId(current),
+		Options:      acp.SessionConfigSelectOptions{Grouped: &groups},
+	}}
+}
+
 // setConfig sets the model or the thinking level from the session's next
 // prompt and records the change (model_change, thinking_level_change)
 // before anything reports it. A new model clamps the session's level to its
 // own, recorded only when that changes it, as Pi does (0005-PLAN F4-2a). It
 // is the one path of set_config_option, /model and /thinking.
 func (a *Agent) setConfig(ctx context.Context, s *liveSession, id, value string) ([]acp.SessionConfigOption, error) {
-	choice := a.models()
+	choice := a.choice()
 	model, think := a.choices(s)
 	var entries []session.Entry
 	switch id {
 	case configModel:
+		// A value is a provider/model ref, or the session provider's bare id
+		// (0025-MADR D1). Another provider's model waits for 0025-PLAN P2.
+		if prov, m, ok := splitRef(value, choice.providerList()); ok && prov != "" {
+			if prov != choice.Provider {
+				return nil, invalidParams(s.id, fmt.Sprintf("switching to another provider's model is not available yet: %q", value))
+			}
+			value = m
+		}
 		if !slices.Contains(choice.Models, value) {
 			return nil, invalidParams(s.id, fmt.Sprintf("unknown model %q", value))
 		}
@@ -228,6 +267,9 @@ func (a *Agent) setConfig(ctx context.Context, s *liveSession, id, value string)
 		if err := s.append(ctx, a.now(), e); err != nil {
 			return nil, appendFailed(err)
 		}
+	}
+	if id == configModel && a.rememberModel != nil {
+		a.rememberModel(refOf(choice.Provider, value))
 	}
 	model, think = a.choices(s)
 	return a.configOptions(model, think), nil

@@ -62,6 +62,10 @@ func (e *runEnv) agentOptions() acpserver.Options {
 		Version:  identity().Version,
 		Provider: modelProvider(e),
 		Models:   e.modelChoice,
+		// The recent models, and the SDK's matcher for /model with words
+		// (0025-MADR D3, D5).
+		Remember:     e.rememberModel,
+		SearchModels: provider.Search,
 		// What the catalog knows of a model, with the provider's key or login,
 		// found as modelProvider finds it, for its listing (0005-PLAN F4-2a,
 		// F4-3a, F4-3b).
@@ -178,7 +182,8 @@ func (e *runEnv) modelChoice() acpserver.ModelChoice {
 			ids = append(ids, m)
 		}
 	}
-	return acpserver.ModelChoice{Provider: sel.ID, Models: ids, Default: def}
+	return acpserver.ModelChoice{Provider: sel.ID, Models: ids, Default: def,
+		Providers: e.providerChoices(sel.ID, ids), Recent: e.recentModels()}
 }
 
 // sessionStore is the store sessions are kept in: <data>/sessions

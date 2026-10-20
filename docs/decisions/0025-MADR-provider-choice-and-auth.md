@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 date: 2026-10-20
 decision-makers: repository owner
 consulted: go-llmprovider-sdk v1.17.0 (llmprovider/providers, catalog, wizard, auth/oauth_plan.go, its 0043-MADR); acp-go-sdk2 v1.16.3 (SessionConfigSelectOptions); Pi 1402973a9, opencode 501b15af26, Kilo Code 2a1903f291 and goose 9920efa1 (0025-REPORT)
@@ -109,7 +109,7 @@ would pass each other's opaque reasoning.
 
 Chosen option: "A. Every credentialed provider in the session", because it is what the owner asked for and chose on
 2026-10-20, and the session log already records each message's provider, which a switch needs. *Proposed: the owner
-decides at review.* *(2026-10-20: Q1 and Q2 answered by the owner: another provider's thinking is dropped; consent
+decides at review.* *(2026-10-20: accepted by the owner, "committed, proceed", after `a417f51`.)* *(2026-10-20: Q1 and Q2 answered by the owner: another provider's thinking is dropped; consent
 under a plan is asked once and saved.)*
 
 *(Revised 2026-10-20, before review, from [0025-REPORT-provider-ux-across-harnesses.md](../reports/0025-REPORT-provider-ux-across-harnesses.md),
@@ -167,7 +167,9 @@ one strip-and-retry; cycling as P7. Every owner question is answered.)*
     with its age); **key rejected**, **quota exhausted**, **not permitted** (with the provider's reason; its models are
     not offered for a switch until `/login` or a later listing succeeds); **not listed** (offline or unavailable: its
     static models offered); **not checked** (OpenCode Zen and Go, Hugging Face and Kilo, whose listing needs no key and
-    so cannot reject one); **no credential** (with its variable and `/login`).
+    so cannot reject one); **no credential** (with its variable and `/login`). *(2026-10-20, 0025-PLAN deviation 1,
+    the owner's choice: a reason is gobble's words for the failure's kind, with the HTTP status when known, never the
+    provider's text, which can carry a fragment of the key (0020-MADR F5, D6).)*
   - A request that fails with `ErrAuth` or `ErrQuota` marks its provider then too, as opencode resolves lazily. No key
     is ever checked by a billed request.
 - **D5. Browse providers and models, in the CLI and the session.**
@@ -175,7 +177,10 @@ one strip-and-retry; cycling as P7. Every owner question is answered.)*
     (five); then each provider under a heading with its state (D4), its models with the SDK menu's facts (context
     window, input and output price, thinking) and caveats (deprecated, no tools). The prompt reads a number to switch,
     or words to filter (`catalog.Search` per provider), or nothing to leave. `/model <words>` that is not a ref opens it
-    filtered. The layout is 0024-MADR D2's.
+    filtered. The layout is 0024-MADR D2's. *(2026-10-20, 0025-PLAN deviation 2, the owner's choice: `/model` is an
+    agent command, which every ACP client runs and which cannot pause for a reply, so the list is printed numbered as
+    markdown, a heading per provider with its state and a table of its models, and `/model N` picks entry N;
+    `/model <words>` prints the entries that match, keeping their numbers.)*
   - **ACP:** the `model` option grouped, "Recent" first, then one group per provider with a usable state.
   - **Providers:** `/providers` and `gobble providers [--check] [--json]`: each of the ten, its state, its credential's
     source in Pi's words ("env: OPENAI_API_KEY", "auth.json: sign-in", "none — /login grok"), its sign-in methods.
