@@ -1,6 +1,6 @@
 ---
 status: in-progress
-date: 2026-10-07
+date: 2026-10-20
 associated-madr: "0004-MADR-go-module-architecture.md"
 ---
 # Implement the gobble module architecture: scaffold, contracts, boundaries, toolchain, release
@@ -597,7 +597,7 @@ repository's `0018-MADR-apache-2-license.md`; `NOTICE` names it.
   * contradictory update flags are `2` (usage);
   * a cancelled update is `4`, or `130` on SIGINT.
 * **Phase 4.** Read the original steps with these additions.
-  * **Precondition, recorded with evidence before the first tag** (an owner action, not this plan's): on `maccavelli/gobble-cli`,
+  * **Precondition, recorded with evidence before the first tag** (an owner action, not this plan's): on `maccavelli/gobble-cli`, *(2026-10-20: not met before the first tags; met after them. See the entry "Phase 4's release precondition, met after the first tags" of that date.)*
     * "immutable releases" is enabled;
     * a tag ruleset restricts `v*` to the owner, with 2FA.
 
@@ -1251,3 +1251,76 @@ The case `rule 2 root pin` (`internal/archtest/check_test.go:37-40`) asserts the
   3. **architecture.md's import rule 7 was wrong.** It said no stable package imports `exp/...`; `checkRule7` lets only `cmd/gobble` import it. Step 1 asks for the rules "as they are enforced", so the line now says that, and so does the guide.
   4. **"Every command shown is run" did not hold for `make probe-conhost`.** It opens a Console Host window and borrows the clipboard, so it was not run here. The guide names it in a table with what it needs and quotes no output from it.
   5. **The module has 43 packages, not 44,** once `tools.go` is gone.
+
+**2026-10-20 — Phase 4's release precondition, met after the first tags (the owner's decisions of 2026-10-19 and 2026-10-20).**
+
+The amendment of 2026-10-01 made two repository settings a precondition, "recorded with evidence before the first
+tag": immutable releases enabled, and a tag ruleset restricting `v*` to the owner, with 2FA. Neither was in place, or
+recorded, when the owner pushed the first two tags. This entry records what happened, what was changed, and what is
+still unverified. Every fact below was read with `gh` or `git` on 2026-10-20; times are UTC.
+
+* **The two tags.** Both are annotated tags, pushed by the owner:
+  * `v0.1.0` at `e870f03`, tagged 2026-10-19 23:45:56;
+  * `v0.1.1` at `66f4957`, tagged 2026-10-20 03:11:51.
+* **`v0.1.0`: no release.** Run 39343582934 concluded `failure`: `validate` failed on Ubuntu, macOS and Windows at
+  `verify-build-metadata`, whose unstamped check did not expect a release tag at `HEAD`, so `build` and `release`
+  were skipped. Nothing was published. The check was fixed by
+  [0008-PLAN-native-cli-mode.md](0008-PLAN-native-cli-mode.md)'s amendment of 2026-10-19 (`fa28838`). The tag stays,
+  unreleased; `gh release view v0.1.0` gives "release not found".
+* **`v0.1.1`, attempt 1: a mutable release, as the precondition predicted.** Run 39363019252, attempt 1, started
+  03:11:54, concluded `failure` at 03:27:30.
+  * Passed: `validate` on the three runners, `sbom`, `build / build`, and the five `build / identity` jobs. The
+    metadata fix held at a tag.
+  * `release / publish` (go-selfupdate-lib `v1.17.0`'s workflow at `adc2c757`, pinned by
+    [0023-PLAN-pin-current-releases.md](0023-PLAN-pin-current-releases.md)'s amendment of 2026-10-19) created the draft,
+    attested the staged files, and published the release at 03:25:21.
+  * Its last step, "Wait for immutability and release attestation", failed after 120 s: "v0.1.1 is published, but
+    GitHub has not marked it immutable after 120 s. Immutable releases must be on for maccavelli/gobble-cli: Settings
+    > General > Releases > "Enable release immutability"".
+  * `gh release view v0.1.1 --json isImmutable` gave `false`, and `gh api repos/maccavelli/gobble-cli/immutable-releases`
+    gave `{"enabled":false,"enforced_by_owner":false}`.
+  * The failure is the one this plan's precondition names: "the reusable workflow publishes, waits 120 s, fails, and
+    leaves a mutable release".
+* **Immutable releases enabled** (the owner's word, 2026-10-20: "You should be able to enable immutable via the gh
+  cli"):
+  * `gh api -X PUT repos/maccavelli/gobble-cli/immutable-releases` exited 0;
+  * the read-back gave `{"enabled":true,"enforced_by_owner":false}`.
+  * The setting does not reach a release published before it: `v0.1.1` still gave `isImmutable: false`.
+* **The mutable release deleted, the tag kept** (the owner's word: "Delete and rerun"):
+  * the agent's `gh release delete` was refused by its permission classifier, so the owner ran `gh release delete
+    v0.1.1 --repo maccavelli/gobble-cli --yes`;
+  * after it, `gh release view v0.1.1` gave "release not found", and `git ls-remote --tags origin v0.1.1` still listed
+    the tag (`46fb5873…`, peeling to `66f4957`).
+  * Between 03:25:21 and the deletion, `v0.1.1` was downloadable as a mutable release.
+* **`v0.1.1`, attempt 2: released and immutable.** `gh run rerun 39363019252` re-ran every job.
+  * Attempt 2 started 13:36:50 and concluded `success` at 13:53:10.
+  * Passed: `validate` on the three runners, `sbom`, `build / build`, the five `build / identity` jobs, and
+    `release / publish` in 28 s. `release / sign` was skipped: it is go-selfupdate-lib `v1.17.0`'s opt-in signing
+    job, and gobble passes no `sign`.
+  * The release was published at 13:53:03. `gh release view v0.1.1` gives `isImmutable: true`, `isDraft: false`, and
+    seven assets: `gobble-darwin-arm64`, `gobble-linux-amd64`, `gobble-linux-arm64`, `gobble-windows-amd64.exe`,
+    `gobble-windows-arm64.exe`, `gobble.spdx.json` and `SHA256SUMS`.
+  * `gh release verify v0.1.1` exited 0, listing each asset's digest; `SHA256SUMS` is
+    `sha256:4e7cadddcf7120185dd4ce714f5181ea9adb74e494726890f9bac709e9541a39`.
+* **The tag ruleset** (the owner's word, 2026-10-20: "restrict pushing v* tags to me, the repo owner").
+  * **Before:** the repository is public and user-owned. Its only collaborator is the owner's account, with the role
+    `admin`. `gh api repos/maccavelli/gobble-cli/rulesets` listed no ruleset, and `main` has no branch protection.
+  * **Created:** `gh api -X POST repos/maccavelli/gobble-cli/rulesets`. The ruleset, as GitHub returned it:
+    * id `25481802`, name "release tags: owner only", `target: tag`, `enforcement: active`;
+    * `ref_name` includes `refs/tags/v*` and excludes nothing;
+    * the rules `creation`, `update`, `deletion` and `non_fast_forward`;
+    * one bypass actor: `RepositoryRole` `5`, the repository admin role, `bypass_mode: always`.
+  * The response gave `current_user_can_bypass: always` for the owner's token. Only the owner holds the admin role
+    today, so only the owner can create, move or delete a `v*` tag. A collaborator later given `admin` could too.
+  * The release workflows publish a release for a tag that already exists, and create no tag.
+* **Not verified, named.**
+  * **No refused push was seen.** No second account and no token without the admin role was available, so no refused
+    `v*` push was observed. The ruleset's effect rests on GitHub's response, not on an observed refusal.
+  * **2FA is unrecorded.** The token cannot read it: `gh api user` gives `two_factor_authentication: null`. A ruleset
+    on a user-owned repository cannot require it, so 2FA on the owner's account is the owner's to confirm.
+  * **The next tag is the first under both settings.** It is the first to be published immutable at its first attempt,
+    and the first pushed under the ruleset.
+* **What this plan predicted wrongly.** The precondition was written as a gate "before the first tag" with no check
+  that enforces it. Nothing in `ci.yml` or `make preflight` reads either setting, so the first tags went out without
+  them. Whether to add such a check (a `gh api` read in the tag run before `build`) is left to the owner; this entry
+  adds none.
