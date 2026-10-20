@@ -109,7 +109,7 @@ func (c *autoCompaction) compact(ctx context.Context, overflow bool) (*agent.Com
 		}
 		chosen, _ := a.choices(s)
 		used := compaction.EstimateText(a.systemText(s)) + compaction.EstimateEntries(s.tree.Path())
-		if !compaction.Over(used, a.modelOf(chosen).ContextWindow, settings) {
+		if !compaction.Over(used, a.modelOf(c.providerID, chosen).ContextWindow, settings) {
 			return nil, nil
 		}
 	}
@@ -158,10 +158,10 @@ func (c *autoCompaction) compact(ctx context.Context, overflow bool) (*agent.Com
 // model may not; otherwise the session's model.
 func (a *Agent) summaryModel(s *liveSession, p llm.Provider, providerID string) compaction.Model {
 	chosen, think := a.choices(s)
-	m := compaction.Model{Provider: p, Model: chosen, Thinking: think, MaxTokens: a.modelOf(chosen).MaxTokens}
+	m := compaction.Model{Provider: p, Model: chosen, Thinking: think, MaxTokens: a.modelOf(providerID, chosen).MaxTokens}
 	prev, provider := lastAssistantModel(s.tree.Path())
-	if prev != "" && prev != chosen && provider == providerID && slices.Contains(a.models().Models, prev) {
-		m.Model, m.Thinking, m.MaxTokens = prev, catalog.Clamp(a.levelsOf(prev), think), a.modelOf(prev).MaxTokens
+	if prev != "" && prev != chosen && provider == providerID && slices.Contains(a.modelsOf(providerID), prev) {
+		m.Model, m.Thinking, m.MaxTokens = prev, catalog.Clamp(a.levelsOf(providerID, prev), think), a.modelOf(providerID, prev).MaxTokens
 	}
 	return m
 }

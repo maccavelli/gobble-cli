@@ -1,9 +1,30 @@
 name: CI
+
+# A push or pull request whose every changed file is in the docs set below
+# skips this workflow, and .github/workflows/docs.yml checks it instead; that
+# file's `paths` must list the same five patterns
+# (docs/decisions/0026-MADR-skip-full-ci-for-docs-only-pushes.md and its
+# PLAN). A tag push is never filtered, so every v* tag runs this workflow in
+# full. A Markdown file outside these patterns (an embedded tool description,
+# a personality, a test fixture) is read by Go and runs the full CI on
+# purpose.
 on:
   push:
     branches: [main]
     tags: ['v*']
+    paths-ignore:
+      - '*.md'
+      - 'docs/**/*.md'
+      - '.claude/rules/*.md'
+      - '.grok/rules/*.md'
+      - '.opencode/rules.md'
   pull_request:
+    paths-ignore:
+      - '*.md'
+      - 'docs/**/*.md'
+      - '.claude/rules/*.md'
+      - '.grok/rules/*.md'
+      - '.opencode/rules.md'
 
 # The token is read-only: CI fetches and runs tools, and needs no write
 # access (docs/decisions/0004-PLAN-go-module-architecture.md, amendment of

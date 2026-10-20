@@ -95,6 +95,20 @@ const (
 type Message struct {
 	Role    Role      `json:"role"`
 	Content []Content `json:"content,omitzero"`
+	// Origin is the provider and model that wrote an assistant message,
+	// and whether its turn failed, so a request to another model replays it
+	// without that model's data (0025-MADR D2). Zero is unknown.
+	Origin Origin `json:"origin,omitzero"`
+}
+
+// Origin is where an assistant message came from (0025-MADR D2).
+type Origin struct {
+	// Provider and Model are gobble's provider id and the model's id.
+	Provider string `json:"provider,omitzero"`
+	Model    string `json:"model,omitzero"`
+	// Failed reports a turn that ended in an error or was aborted, which is
+	// not replayed.
+	Failed bool `json:"failed,omitzero"`
 }
 
 // Content is one block inside a Message. Type is one of the Content*

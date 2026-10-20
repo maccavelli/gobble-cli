@@ -1,0 +1,47 @@
+name: Docs
+
+# Checks a push or pull request that changes the documentation, which ci.yml
+# skips when every changed file is in the docs set: the records check and
+# markdownlint, through the Make targets `make preflight` runs for them. The
+# first five patterns are the docs set, and ci.yml's `paths-ignore` on `push`
+# and `pull_request` must list the same five; the last two are this check's
+# own files (docs/decisions/0026-MADR-skip-full-ci-for-docs-only-pushes.md
+# and its PLAN). A change to anything else runs ci.yml, and so does every
+# tag; this workflow has no tag trigger.
+on:
+  push:
+    branches: [main]
+    paths: &docs
+      - '*.md'
+      - 'docs/**/*.md'
+      - '.claude/rules/*.md'
+      - '.grok/rules/*.md'
+      - '.opencode/rules.md'
+      - '.markdownlint-cli2.jsonc'
+      - '.github/workflows/docs.yml'
+  pull_request:
+    paths: *docs
+
+# The token is read-only, as ci.yml's.
+permissions:
+  contents: read
+
+# One run per ref: a newer push cancels the older run.
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+# The runner image's Python and Node, with no setup action, as ci.yml uses
+# them; no Go. The checkout pin follows ci.yml's by hand.
+jobs:
+  docs:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: make check-records
+        run: make check-records
+      - name: make markdownlint
+        run: make markdownlint

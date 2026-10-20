@@ -67,6 +67,10 @@ type Options struct {
 	// Models is the model choice offered as the model config option. Nil
 	// offers none.
 	Models func() ModelChoice
+	// ProviderFor builds provider id's model for a session switched to it,
+	// with the session's id and retry settings (0025-MADR D1). Nil offers no
+	// switch to another provider.
+	ProviderFor func(id, sessionID string, retry llm.Retry) (llm.Provider, error)
 	// Remember is told each model the user chooses, as a provider/model ref,
 	// by /model or the model option, for the recent models (0025-MADR D3).
 	// Nil remembers nothing.
@@ -129,9 +133,11 @@ type Options struct {
 
 // Agent is gobble's acp.Agent.
 type Agent struct {
-	version       string
-	newID         func() string
-	provider      func(sessionID string, retry llm.Retry) (llm.Provider, error)
+	version  string
+	newID    func() string
+	provider func(sessionID string, retry llm.Retry) (llm.Provider, error)
+	// providerFor builds another provider for a switched session.
+	providerFor   func(id, sessionID string, retry llm.Retry) (llm.Provider, error)
 	models        func() ModelChoice
 	rememberModel func(ref string)
 	search        func(provider string, models []string, query string) []string
@@ -191,6 +197,9 @@ type liveSession struct {
 	// follows (0005-PLAN F2-2).
 	tree  *session.Tree
 	model string
+	// providerID is the provider of model, the session's own: the run's
+	// until the user switches (0025-MADR D1); "" is the run's.
+	providerID string
 	// provider is the session's own model provider, built on its first
 	// use with the session's id; cache is the hint its turns send
 	// (0021-MADR D3, D4).
@@ -272,7 +281,7 @@ var (
 // New returns an Agent. Bind it to its connection with SetConnection before
 // the first request, so it can send session updates.
 func New(opts Options) *Agent {
-	a := &Agent{version: opts.Version, newID: opts.NewID, provider: opts.Provider, models: opts.Models, info: opts.ModelInfo,
+	a := &Agent{version: opts.Version, newID: opts.NewID, provider: opts.Provider, providerFor: opts.ProviderFor, models: opts.Models, info: opts.ModelInfo,
 		rememberModel: opts.Remember, search: opts.SearchModels,
 		override: opts.Override, tools: opts.Tools, noGrants: opts.NoRequestPermissions, store: opts.Store, now: opts.Now, mcp: opts.MCP, logger: opts.Logger, prompt: opts.Prompt,
 		settings: opts.Settings, auth: opts.Auth, save: opts.SaveSetting, personalities: opts.Personalities, compactionPrompts: opts.CompactionPrompts, titles: opts.Title,
@@ -464,8 +473,7 @@ func (a *Agent) NewSession(ctx context.Context, p acp.NewSessionRequest) (acp.Ne
 	if err := a.startFrames(ctx, conn, s); err != nil {
 		return acp.NewSessionResponse{}, err
 	}
-	model, think := a.choices(s)
-	return acp.NewSessionResponse{SessionId: s.id, ConfigOptions: a.configOptions(model, think), Modes: modeState(s.mode, s.allowBypass)}, nil
+	return acp.NewSessionResponse{SessionId: s.id, ConfigOptions: a.configOptions(s), Modes: modeState(s.mode, s.allowBypass)}, nil
 }
 
 // oneLine is a name on one line, trimmed, as Pi stores one
@@ -482,9 +490,19 @@ func (a *Agent) restore(s *liveSession, entries []session.Entry) {
 	s.tree = session.NewTree(entries)
 	st := replayPath(entries, s.tree.Path())
 	s.history, s.think = st.history, st.thinking
-	choice := a.models()
-	if st.model != "" && (choice.Provider == "" || st.provider == choice.Provider) {
+	// The session goes on with the provider it last used, the run's or one
+	// it switched to, while that one is usable (0025-MADR D1).
+	choice := a.choice()
+	prov := canonicalProvider(st.provider)
+	switch {
+	case st.model == "":
+	case choice.Provider == "" || prov == "" || prov == choice.Provider:
 		s.model = st.model
+	case slices.ContainsFunc(choice.providerList(), func(p ProviderChoice) bool { return p.ID == prov && p.State.Usable() }):
+		s.providerID, s.model = prov, st.model
+	default:
+		a.logger.Warn("model: the session's provider is not usable; the session goes on with the run's",
+			slog.String("provider", prov), slog.String("model", st.model))
 	}
 	if st.personality != "" {
 		v, err := a.newVoice(s, st.personality)
@@ -604,8 +622,8 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 		prompt.Content = append([]llm.Content{{Type: llm.ContentText, Text: files}}, prompt.Content...)
 	}
 	chosen, think := a.choices(s)
-	think = catalog.Clamp(a.levelsOf(chosen), think) // as thought_level shows it
-	w := writer{a: a, s: s, ctx: context.WithoutCancel(ctx), provider: a.providerID(model), model: chosen, written: map[string]bool{}}
+	think = catalog.Clamp(a.levelsOf(a.provOf(s), chosen), think) // as thought_level shows it
+	w := writer{a: a, s: s, ctx: context.WithoutCancel(ctx), provider: a.providerID(s, model), model: chosen, written: map[string]bool{}}
 	// The system prompt's baseline or patch comes before the user's message,
 	// as Pi puts a system patch before it (0005-PLAN F3-1).
 	system, update := a.writePrompt(&w, s)
@@ -692,7 +710,7 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 				s.history = append(s.history, prompt) // the file keeps the prompt too
 				a.mu.Unlock()
 			}
-			a.markFailure(a.models().Provider, err)
+			a.markFailure(a.provOf(s), err)
 			return acp.PromptResponse{}, promptError(err)
 		}
 		w.event(ev)
@@ -707,8 +725,9 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 		}
 		out.event(ev, &last)
 		if end, ok := ev.(agent.End); ok {
+			msgs := stamped(end.Messages, llm.Origin{Provider: w.provider, Model: w.model}, end.StopReason == agent.StopCancelled)
 			a.mu.Lock()
-			s.history = append(s.history, end.Messages...)
+			s.history = append(s.history, msgs...)
 			a.mu.Unlock()
 			used := int(last.InputTokens + last.OutputTokens)
 			a.setUsed(s, used)
@@ -762,9 +781,9 @@ func clearedMeta(s *liveSession) map[string]any {
 
 // providerID names the provider assistant messages record: the model
 // choice's, else the provider's own id.
-func (a *Agent) providerID(p llm.Provider) string {
-	if c := a.models(); c.Provider != "" {
-		return c.Provider
+func (a *Agent) providerID(s *liveSession, p llm.Provider) string {
+	if id := a.provOf(s); id != "" {
+		return id
 	}
 	return p.ID()
 }
@@ -849,7 +868,7 @@ func (w *writer) event(ev agent.Event) {
 	case agent.Queued:
 		w.add(session.Entry{Type: session.TypeMessage, Message: userEntryMessage(ev.Message, ts())})
 	case agent.Message:
-		w.add(session.Entry{Type: session.TypeMessage, Message: assistantEntryMessage(ev, w.provider, w.model, w.a.modelOf(w.model), ts())})
+		w.add(session.Entry{Type: session.TypeMessage, Message: assistantEntryMessage(ev, w.provider, w.model, w.a.modelOf(w.provider, w.model), ts())})
 	case agent.ToolEnd:
 		w.written[ev.Call.ID] = true
 		w.add(session.Entry{Type: session.TypeMessage, Message: toolResultMessage(ev.Call.ID, ev.Call.Name, ev.Result.Text(), ev.Result.IsError, ts())})
@@ -881,10 +900,17 @@ func (a *Agent) sessionProvider(s *liveSession) (llm.Provider, error) {
 	if s.provider != nil {
 		return s.provider, nil
 	}
-	if a.provider == nil {
+	build := a.provider
+	if id := s.providerID; id != "" && id != a.models().Provider { // a switched session's (0025-MADR D1)
+		if a.providerFor == nil {
+			return nil, ErrNoProvider
+		}
+		build = func(sid string, retry llm.Retry) (llm.Provider, error) { return a.providerFor(id, sid, retry) }
+	}
+	if build == nil {
 		return nil, ErrNoProvider
 	}
-	p, err := a.provider(string(s.id), s.retry)
+	p, err := build(string(s.id), s.retry)
 	if err != nil {
 		return nil, err
 	}
@@ -991,8 +1017,7 @@ func (a *Agent) LoadSession(ctx context.Context, p acp.LoadSessionRequest) (acp.
 	if err := a.startFrames(ctx, conn, s); err != nil {
 		return acp.LoadSessionResponse{}, err
 	}
-	model, think := a.choices(s)
-	return acp.LoadSessionResponse{ConfigOptions: a.configOptions(model, think), Modes: modeState(s.mode, s.allowBypass), Meta: resumedMeta(st)}, nil
+	return acp.LoadSessionResponse{ConfigOptions: a.configOptions(s), Modes: modeState(s.mode, s.allowBypass), Meta: resumedMeta(st)}, nil
 }
 
 // resumedMeta is a resumed session's _meta.gobble: its title (the name,
@@ -1027,8 +1052,7 @@ func (a *Agent) ResumeSession(ctx context.Context, p acp.ResumeSessionRequest) (
 	if err := a.startFrames(ctx, conn, s); err != nil {
 		return acp.ResumeSessionResponse{}, err
 	}
-	model, think := a.choices(s)
-	return acp.ResumeSessionResponse{ConfigOptions: a.configOptions(model, think), Modes: modeState(s.mode, s.allowBypass),
+	return acp.ResumeSessionResponse{ConfigOptions: a.configOptions(s), Modes: modeState(s.mode, s.allowBypass),
 		Meta: resumedMeta(s.state())}, nil
 }
 
@@ -1195,6 +1219,9 @@ func (a *Agent) SetSessionConfigOption(ctx context.Context, p acp.SetSessionConf
 		return acp.SetSessionConfigOptionResponse{}, invalidParams(v.SessionId, "unknown session")
 	}
 	opts, err := a.setConfig(ctx, s, string(v.ConfigId), string(v.Value))
+	if se, ok := errors.AsType[*switchError](err); ok {
+		return acp.SetSessionConfigOptionResponse{}, invalidParams(s.id, se.Error())
+	}
 	if err != nil {
 		return acp.SetSessionConfigOptionResponse{}, err
 	}

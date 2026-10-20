@@ -114,7 +114,8 @@ func cloneRequest(r *llm.Request) *llm.Request {
 	c.Tools = slices.Clone(r.Tools)
 	c.Messages = make([]llm.Message, len(r.Messages))
 	for i, m := range r.Messages {
-		c.Messages[i] = llm.Message{Role: m.Role, Content: slices.Clone(m.Content)}
+		m.Content = slices.Clone(m.Content) // every field kept, Origin among them
+		c.Messages[i] = m
 	}
 	return &c
 }

@@ -3,6 +3,7 @@ package acpserver
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -42,12 +43,23 @@ func cacheOf(setting string) llm.CacheRetention {
 	return llm.CacheRetention(setting)
 }
 
-// modelOf is what the catalog knows of the session provider's model.
-func (a *Agent) modelOf(model string) llm.Model { return a.info(a.models().Provider, model) }
+// modelOf is what the catalog knows of provider's model.
+func (a *Agent) modelOf(provider, model string) llm.Model { return a.info(provider, model) }
 
-// levelsOf are the thinking levels model offers, by Pi's rule
+// levelsOf are the thinking levels provider's model offers, by Pi's rule
 // (catalog.Levels); a model the catalog does not know offers off to xhigh.
-func (a *Agent) levelsOf(model string) []string { return catalog.Levels(a.modelOf(model)) }
+func (a *Agent) levelsOf(provider, model string) []string {
+	return catalog.Levels(a.modelOf(provider, model))
+}
+
+// provOf is s's provider: the one it switched to, or the run's
+// (0025-MADR D1). a.mu must not be held.
+func (a *Agent) provOf(s *liveSession) string {
+	a.mu.Lock()
+	id := s.providerID
+	a.mu.Unlock()
+	return cmpOr(id, a.models().Provider)
+}
 
 // SessionSettings are the settings a session takes when it starts
 // (0018-MADR D16, D17). A zero field takes the agent's default.
@@ -167,17 +179,18 @@ type ModelChoice struct {
 	Recent []string
 }
 
-// configOptions are a session's config options: model, when there are
-// models to choose, and thought_level, the model's levels with the
-// session's clamped to them. Both are ungrouped selects with a category
-// (D19 item 4).
-func (a *Agent) configOptions(model, thinking string) []acp.SessionConfigOption {
-	choice := a.choice()
+// configOptions are s's config options: model, when there are models to
+// choose, grouped (0025-MADR D5), and thought_level, the model's levels
+// with the session's clamped to them, each a select with a category (D19
+// item 4). a.mu must not be held.
+func (a *Agent) configOptions(s *liveSession) []acp.SessionConfigOption {
+	model, thinking := a.choices(s)
+	prov := a.provOf(s)
 	var out []acp.SessionConfigOption
-	if picks := choice.picks(); len(picks) > 0 {
-		out = append(out, modelOption(refOf(choice.Provider, model), picks))
+	if picks := a.choice().picks(); len(picks) > 0 {
+		out = append(out, modelOption(refOf(prov, model), picks))
 	}
-	levels := a.levelsOf(model)
+	levels := a.levelsOf(prov, model)
 	return append(out, selectOption(configThinking, "Thinking", acp.SessionConfigOptionCategoryThoughtLevel,
 		catalog.Clamp(levels, thinking), levels))
 }
@@ -227,33 +240,49 @@ func modelOption(current string, picks []pick) acp.SessionConfigOption {
 func (a *Agent) setConfig(ctx context.Context, s *liveSession, id, value string) ([]acp.SessionConfigOption, error) {
 	choice := a.choice()
 	model, think := a.choices(s)
+	cur := a.provOf(s)
 	var entries []session.Entry
 	switch id {
 	case configModel:
-		// A value is a provider/model ref, or the session provider's bare id
-		// (0025-MADR D1). Another provider's model waits for 0025-PLAN P2.
-		if prov, m, ok := splitRef(value, choice.providerList()); ok && prov != "" {
-			if prov != choice.Provider {
-				return nil, invalidParams(s.id, fmt.Sprintf("switching to another provider's model is not available yet: %q", value))
-			}
-			value = m
+		// A value is a provider/model ref, or the session provider's bare id;
+		// another provider's model switches the session to it, its provider
+		// built first, so a failure leaves the session as it was (0025-MADR
+		// D1).
+		prov, m := cur, value
+		ps := choice.providerList()
+		if p, mm, ok := splitRef(value, ps); ok && p != "" {
+			prov, m = p, mm
 		}
-		if !slices.Contains(choice.Models, value) {
+		if i := slices.IndexFunc(ps, func(x ProviderChoice) bool { return x.ID == prov }); i >= 0 && !ps[i].State.Usable() {
+			return nil, &switchError{ref: refOf(prov, m), err: errors.New(joinReason(string(ps[i].State), ps[i].Reason))}
+		}
+		if !slices.Contains(a.modelsOf(prov), m) {
 			return nil, invalidParams(s.id, fmt.Sprintf("unknown model %q", value))
 		}
-		clamped := catalog.Clamp(a.levelsOf(value), think)
+		var built llm.Provider
+		if prov != cur {
+			var err error
+			if built, err = a.buildProvider(s, prov); err != nil {
+				return nil, &switchError{ref: refOf(prov, m), err: err}
+			}
+		}
+		clamped := catalog.Clamp(a.levelsOf(prov, m), think)
 		a.mu.Lock()
-		if value != s.model { // a new model's window may fit (0005-PLAN F5-2 decision 11)
+		if m != s.model || prov != cur { // a new model's window may fit (0005-PLAN F5-2 decision 11)
 			s.pause, s.pauseErr = pauseNone, ""
 		}
-		s.model, s.think = value, clamped
+		if prov != cur {
+			s.providerID, s.provider = prov, built
+		}
+		s.model, s.think = m, clamped
 		a.mu.Unlock()
-		entries = append(entries, session.Entry{Type: session.TypeModelChange, Provider: choice.Provider, ModelID: value})
+		value = refOf(prov, m)
+		entries = append(entries, session.Entry{Type: session.TypeModelChange, Provider: prov, ModelID: m})
 		if clamped != think {
 			entries = append(entries, session.Entry{Type: session.TypeThinkingLevelChange, ThinkingLevel: clamped})
 		}
 	case configThinking:
-		if !slices.Contains(a.levelsOf(model), value) {
+		if !slices.Contains(a.levelsOf(cur, model), value) {
 			return nil, invalidParams(s.id, fmt.Sprintf("unknown thinking level %q", value))
 		}
 		a.mu.Lock()
@@ -269,10 +298,38 @@ func (a *Agent) setConfig(ctx context.Context, s *liveSession, id, value string)
 		}
 	}
 	if id == configModel && a.rememberModel != nil {
-		a.rememberModel(refOf(choice.Provider, value))
+		a.rememberModel(value)
 	}
-	model, think = a.choices(s)
-	return a.configOptions(model, think), nil
+	return a.configOptions(s), nil
+}
+
+// switchError is a switch to another provider's model that could not be
+// made: the provider is not usable, or could not be built (0025-MADR D1).
+type switchError struct {
+	ref string
+	err error
+}
+
+func (e *switchError) Error() string { return fmt.Sprintf("Cannot switch to %s: %v", e.ref, e.err) }
+
+func (e *switchError) Unwrap() error { return e.err }
+
+// buildProvider builds provider id's model for s: the run's through
+// Provider, another through ProviderFor (0025-MADR D1).
+func (a *Agent) buildProvider(s *liveSession, id string) (llm.Provider, error) {
+	a.mu.Lock()
+	retry := s.retry
+	a.mu.Unlock()
+	if id == a.models().Provider {
+		if a.provider == nil {
+			return nil, ErrNoProvider
+		}
+		return a.provider(string(s.id), retry)
+	}
+	if a.providerFor == nil {
+		return nil, ErrNoProvider
+	}
+	return a.providerFor(id, string(s.id), retry)
 }
 
 // Override is a run's own model and thinking level, --model's and
@@ -298,22 +355,26 @@ func (a *Agent) applyOverride(ctx context.Context, s *liveSession) error {
 	}
 	model, think := a.choices(s)
 	var entries []session.Entry
-	changed := o.Model != "" && o.Model != model
+	prov := a.provOf(s)
+	changed := o.Model != "" && (o.Model != model || o.Provider != "" && o.Provider != prov)
 	if changed {
-		model = o.Model
+		model, prov = o.Model, cmpOr(o.Provider, prov)
 		entries = append(entries, session.Entry{Type: session.TypeModelChange, Provider: o.Provider, ModelID: model})
 	}
 	level := think
 	switch {
 	case o.Thinking != "":
-		level = catalog.Clamp(a.levelsOf(model), o.Thinking)
+		level = catalog.Clamp(a.levelsOf(prov, model), o.Thinking)
 	case changed:
-		level = catalog.Clamp(a.levelsOf(model), think)
+		level = catalog.Clamp(a.levelsOf(prov, model), think)
 	}
 	if level != think {
 		entries = append(entries, session.Entry{Type: session.TypeThinkingLevelChange, ThinkingLevel: level})
 	}
 	a.mu.Lock()
+	if changed && prov != cmpOr(s.providerID, a.models().Provider) {
+		s.providerID, s.provider = prov, nil // the run's model, --model's (0025-MADR D1)
+	}
 	s.model, s.think = model, level
 	a.mu.Unlock()
 	for _, e := range entries {

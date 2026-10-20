@@ -70,7 +70,7 @@ func (a *Agent) compactSession(ctx context.Context, s *liveSession, instructions
 		return compaction.Result{}, 0, err
 	}
 	chosen, think := a.choices(s)
-	m := compaction.Model{Provider: model, Model: chosen, Thinking: think, MaxTokens: a.modelOf(chosen).MaxTokens}
+	m := compaction.Model{Provider: model, Model: chosen, Thinking: think, MaxTokens: a.modelOf(a.provOf(s), chosen).MaxTokens}
 	return a.runCompaction(ctx, s, prep, m, instructions)
 }
 
@@ -117,7 +117,7 @@ func (a *Agent) runCompaction(ctx context.Context, s *liveSession, prep *compact
 		return compaction.Result{}, 0, acp.NewInternalError(map[string]any{keyReason: err.Error()})
 	}
 	e := session.Entry{Type: session.TypeCompaction, Summary: res.Summary, FirstKeptEntryID: res.FirstKeptEntryID,
-		TokensBefore: new(res.TokensBefore), Details: details, Usage: pricedUsage(res.Usage, a.modelOf(m.Model)), FromHook: new(false)}
+		TokensBefore: new(res.TokensBefore), Details: details, Usage: pricedUsage(res.Usage, a.modelOf(a.provOf(s), m.Model)), FromHook: new(false)}
 	// The new baseline goes just before the compaction, which stays the
 	// path's last entry, as Prepare's "Already compacted" reads it (0005-PLAN
 	// F3-1 deviation 3).

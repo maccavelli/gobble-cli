@@ -558,7 +558,7 @@ func (a *Agent) extGetLastAssistantText(_ context.Context, params jsontext.Value
 			continue
 		}
 		blocks, err := m.Blocks()
-		if err != nil || m.StopReason == "aborted" && len(blocks) == 0 {
+		if err != nil || m.StopReason == piAborted && len(blocks) == 0 {
 			continue
 		}
 		var b strings.Builder
@@ -615,7 +615,7 @@ func (a *Agent) statsOf(s *liveSession, entries []session.Entry) sessionStats {
 		Tokens: statsTokens{Input: t.input, Output: t.output, CacheRead: t.cacheRead, CacheWrite: t.cacheWrite,
 			Total: t.input + t.output + t.cacheRead + t.cacheWrite}, Cost: t.cost}
 	model, _ := a.choices(s)
-	if window := a.modelOf(model).ContextWindow; window > 0 {
+	if window := a.modelOf(a.provOf(s), model).ContextWindow; window > 0 {
 		used := a.usedOf(s)
 		st.ContextUsage = &contextUsage{Tokens: used, ContextWindow: window, Percent: percentOf(used, window)}
 	}

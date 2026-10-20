@@ -270,22 +270,20 @@ func (a *Agent) usageText(s *liveSession, voice *personality.Voice, entries []se
 	b.WriteString(voice.Text(personality.UsageHeading, nil) + "\n\n")
 	tot.tokenLines(&b)
 	model, _ := a.choices(s)
-	if info := a.modelOf(model); info.Priced {
+	prov := a.provOf(s)
+	if info := a.modelOf(prov, model); info.Priced {
 		fmt.Fprintf(&b, "Cost: $%.3f\n", tot.cost)
 	} else {
 		name := "no model"
 		if model != "" {
-			name = a.qualified(model)
+			name = a.qualified(prov, model)
 		}
 		b.WriteString(voice.Text(personality.UsageCostUnknown, personality.Args{argModel: name}) + "\n")
 	}
 	if tot.estimated {
 		b.WriteString("\n" + voice.Text(personality.UsageEstimated, nil) + "\n")
 	}
-	provider := a.models().Provider
-	if provider == "" {
-		provider = "the provider"
-	}
+	provider := cmpOr(prov, "the provider")
 	b.WriteString(voice.Text(personality.UsageNoAccount, personality.Args{argProvider: provider}) + "\n")
 	return b.String()
 }
@@ -309,9 +307,10 @@ func (a *Agent) cmdContext(_ context.Context, t *cmdTurn, _ string) error {
 		}
 	}
 	model, _ := a.choices(s)
+	prov := a.provOf(s)
 	shown := "none"
 	if model != "" {
-		shown = a.qualified(model)
+		shown = a.qualified(prov, model)
 	}
 	fmt.Fprintf(&b, "File: %s\nID: %s\nMode: %s\nModel: %s\n\n", file, s.id, a.modeOf(s), shown)
 	fmt.Fprintf(&b, "Messages\nTotal: %d\nUser: %d\nAssistant: %d\nTools: %d calls, %d results\n\n",
@@ -319,7 +318,7 @@ func (a *Agent) cmdContext(_ context.Context, t *cmdTurn, _ string) error {
 	b.WriteString("Tokens\n")
 	tot.tokenLines(&b)
 	used := a.usedOf(s)
-	if window := a.modelOf(model).ContextWindow; window > 0 {
+	if window := a.modelOf(prov, model).ContextWindow; window > 0 {
 		fmt.Fprintf(&b, "\nContext: %s of %s tokens (%.1f%%)\n", thousands(int64(used)), thousands(int64(window)), percentOf(used, window))
 	} else {
 		fmt.Fprintf(&b, "\nContext: %s tokens (estimated) of an unknown window\n", thousands(int64(used)))
@@ -330,12 +329,7 @@ func (a *Agent) cmdContext(_ context.Context, t *cmdTurn, _ string) error {
 
 // qualified is model with the session provider's id before it, as
 // provider/model, or model alone when there is no provider.
-func (a *Agent) qualified(model string) string {
-	if p := a.models().Provider; p != "" {
-		return p + "/" + model
-	}
-	return model
-}
+func (a *Agent) qualified(provider, model string) string { return refOf(provider, model) }
 
 // percentOf is used as a percentage of window.
 func percentOf(used, window int) float64 { return float64(used) / float64(window) * 100 }
@@ -377,6 +371,16 @@ func (a *Agent) cmdModel(ctx context.Context, t *cmdTurn, arg string) error {
 			return a.switchModel(ctx, t, c, prov, model)
 		}
 	}
+	if i := slices.IndexFunc(ps, func(x ProviderChoice) bool { return x.ID == arg }); i >= 0 {
+		p := ps[i]
+		if !p.State.Usable() {
+			t.say(fmt.Sprintf("%s is not usable: %s", p.ID, joinReason(string(p.State), p.Reason)))
+			return nil
+		}
+		if m := lastModel(c.Recent, p.ID, p.Models); m != "" {
+			return a.switchModel(ctx, t, c, p.ID, m)
+		}
+	}
 	var exact []pick
 	for _, p := range picks {
 		if p.model == arg && p.section != sectionRecent {
@@ -397,18 +401,41 @@ func (a *Agent) cmdModel(ctx context.Context, t *cmdTurn, arg string) error {
 	return nil
 }
 
-// switchModel makes provider's model the session's. Another provider's
-// model waits for 0025-PLAN P2.
-func (a *Agent) switchModel(ctx context.Context, t *cmdTurn, c ModelChoice, provider, model string) error {
-	if provider != c.Provider {
-		t.say(fmt.Sprintf("Switching to another provider's model is not available yet; this session's provider is %s.", c.Provider))
+// switchModel makes provider's model the session's, another provider's
+// included; a switch that cannot be made is said, and the session stays as
+// it was. A model whose window is smaller than the context in use says so
+// (0025-MADR D1).
+func (a *Agent) switchModel(ctx context.Context, t *cmdTurn, _ ModelChoice, provider, model string) error {
+	ref := refOf(provider, model)
+	used := a.usedOf(t.s)
+	err := a.setConfigUpdate(ctx, t, configModel, ref)
+	if se, ok := errors.AsType[*switchError](err); ok {
+		t.say(se.Error())
 		return nil
 	}
-	if err := a.setConfigUpdate(ctx, t, configModel, model); err != nil {
+	if err != nil {
 		return err
 	}
-	t.say(t.text(personality.ModelSet, personality.Args{argModel: refOf(provider, model)}))
+	text := t.text(personality.ModelSet, personality.Args{argModel: ref})
+	if window := a.modelOf(provider, model).ContextWindow; window > 0 && used > window {
+		text += fmt.Sprintf("\nThe conversation uses %d tokens; %s's window is %d tokens. Run /compact before the next prompt.", used, ref, window)
+	}
+	t.say(text)
 	return nil
+}
+
+// lastModel is provider's last model: the newest recent one it still
+// offers, else its first (0025-MADR D1, D3).
+func lastModel(recent []string, provider string, models []string) string {
+	for _, r := range recent {
+		if m, ok := strings.CutPrefix(r, provider+"/"); ok && slices.Contains(models, m) {
+			return m
+		}
+	}
+	if len(models) > 0 {
+		return models[0]
+	}
+	return ""
 }
 
 // countModels is how many models the list offers, and from how many
@@ -443,7 +470,7 @@ func someRefs(picks []pick) string {
 // offers them (0005-PLAN F4-2a).
 func (a *Agent) cmdThinking(ctx context.Context, t *cmdTurn, arg string) error {
 	model, think := a.choices(t.s)
-	levels := a.levelsOf(model)
+	levels := a.levelsOf(a.provOf(t.s), model)
 	if arg == "" {
 		t.say(t.text(personality.ThinkingCurrent, personality.Args{argLevel: catalog.Clamp(levels, think)}) + "\n" +
 			t.text(personality.ThinkingList, personality.Args{argLevels: strings.Join(levels, ", ")}))

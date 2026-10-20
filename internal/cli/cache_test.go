@@ -37,6 +37,35 @@ func TestModelProviderSessionID(t *testing.T) {
 	}
 }
 
+// A session switched to another provider builds that provider, not the
+// run's, with the session's id and its own credential's source (0025-MADR
+// D1).
+func TestProviderForBuildsNamed(t *testing.T) {
+	t.Setenv("GOBBLE_HOME", t.TempDir())
+	t.Setenv("OPENAI_API_KEY", "test-only")
+	t.Setenv("ANTHROPIC_API_KEY", "test-only")
+	var preferred, session, source string
+	old := ambientProvider
+	ambientProvider = func(_ func(string) (string, bool), p string, o provider.Options) (llm.Provider, provider.Selection, error) {
+		preferred, session, source = p, o.SessionID, o.CredentialSource
+		return nil, provider.Selection{}, errors.New("recorded")
+	}
+	t.Cleanup(func() { ambientProvider = old })
+	out := &Output{out: &bytes.Buffer{}, err: &bytes.Buffer{}}
+	e := &runEnv{ctx: t.Context(), out: out, logs: &lazyLog{out: out}}
+	t.Cleanup(func() {
+		if err := e.logs.close(); err != nil {
+			t.Error(err)
+		}
+	})
+	if _, err := providerFor(e)("claude", "sess-7", llm.DefaultRetry); err == nil || preferred != "claude" || session != "sess-7" || source != "ANTHROPIC_API_KEY" {
+		t.Fatalf("built %q for session %q with source %q (err %v), want claude, sess-7, ANTHROPIC_API_KEY", preferred, session, source, err)
+	}
+	if o := e.agentOptions(); o.ProviderFor == nil {
+		t.Fatal("the agent cannot switch provider")
+	}
+}
+
 // cacheRetention reaches a session's requests: short by default, the
 // settings file's value, --set's, and the default with a warning in the
 // log for a value that is not one of the three (0021-MADR D3).

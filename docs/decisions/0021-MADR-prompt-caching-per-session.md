@@ -116,6 +116,9 @@ Chosen option: "A", because it asks every provider that can through the SDK's on
   - `llm/provider.Options` gains `SessionID`, sent as `llmprovider.WithSessionID` by `New`; `Ambient` passes it through.
   - `acpserver.Options.Provider` becomes `func(sessionID string) (llm.Provider, error)`. Each `liveSession` keeps its own provider, built on its first use (a prompt, `/compact` or `_gobble/compact`) with the session's ACP id, under `a.mu`, and kept for the session's life; `Agent.model` goes. A failed build is not kept, as today.
   - The provider leaves with the session on `session/close`, and needs no close of its own (F4).
+  - *(2026-10-20, [0025-MADR-provider-choice-and-auth.md](0025-MADR-provider-choice-and-auth.md) D1, 0025-PLAN P2: a session may switch to another provider's model; it then builds that
+    provider, with the same session id, through `Options.ProviderFor`, and keeps it. One provider at a time, and one
+    session id, per session.)*
   - A loaded or resumed session has its stored id, so it keeps its routing key across a restart; a fork or a clone has its own new id.
   - `internal/cli`'s `modelProvider` builds with `Options.SessionID` set to the id it is given.
 - **D5. The ACP prompt response reports cache writes.** `acpUsage` sets `CachedWriteTokens` when the turn wrote, as it sets `CachedReadTokens`.

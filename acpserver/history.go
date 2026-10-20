@@ -136,6 +136,13 @@ func piUsage(u llm.Usage) *session.Usage {
 }
 
 // piStop is llm's stop reason as Pi names it.
+// piAborted and piError are Pi's stop reasons for a turn the user ended and
+// one that failed, neither replayed (0025-MADR D2).
+const (
+	piAborted = "aborted"
+	piError   = "error"
+)
+
 func piStop(s llm.StopReason) string {
 	switch s {
 	case llm.StopToolUse:
@@ -143,7 +150,7 @@ func piStop(s llm.StopReason) string {
 	case llm.StopMaxTokens:
 		return "length"
 	case "":
-		return "aborted"
+		return piAborted
 	}
 	return "stop"
 }
@@ -234,7 +241,8 @@ func (st *state) addMessage(m *session.Message) {
 		if m.Usage != nil {
 			st.lastUsed = m.Usage.Input + m.Usage.Output
 		}
-		st.history = append(st.history, llm.Message{Role: llm.RoleAssistant, Content: assistantContent(blocks)})
+		st.history = append(st.history, llm.Message{Role: llm.RoleAssistant, Content: assistantContent(blocks),
+			Origin: llm.Origin{Provider: canonicalProvider(m.Provider), Model: m.Model, Failed: m.StopReason == piError || m.StopReason == piAborted}})
 	case session.RoleToolResult:
 		c := llm.Content{Type: llm.ContentToolResult, ToolCallID: m.ToolCallID, ToolName: m.ToolName, Text: m.Text(), IsError: m.IsError != nil && *m.IsError}
 		// Consecutive results are one tool message, as the agent sends them.

@@ -259,3 +259,94 @@ spinner's label runs into the reply's first line, which the capture's stripped e
 
 **Not done in P1, as the plan says:** switching to another provider's model (P2); the start order (P3); `/providers`,
 `/models`, `gobble providers` (P4); `/login` (P5). Until P5, a refused key's way out names `gobble auth login`.
+
+**Deviation 3, 2026-10-20, P2, decided by the owner** ("Fix llmtest"): `llm/llmtest`'s `cloneRequest`
+(`llm/llmtest/script.go:109-120`) rebuilt each recorded message from its role and content only, so a test saw no
+`llm.Message.Origin`, the field P2 adds; the requests a provider receives were unaffected. `TestSwitchProvider` found
+it: the other provider's recorded request had no origin on the first provider's answer.
+
+- **Chosen:** `cloneRequest` copies the whole message and clones its content, so a recorded request keeps every field.
+- **Not chosen:** checking the origin in the session's history instead, which would not show what reaches the
+  provider.
+- **File added to P2's scope:** `llm/llmtest/script.go`.
+
+### P2 execution record (2026-10-20)
+
+**Run** on `main` at `bdd8268`, on the owner's word "committed, proceed", with deviation 3 above.
+
+**Steps:**
+
+1. **Tests first,** each seen failing:
+   - `llm/provider` (`replay_test.go`): `TestReplayOtherModel`, `TestReplayFailedAndOrphaned` and
+     `TestStripThinkingAndSignatureRefused` failed on stubs that returned their input (`to b/mb:
+     ["user:text" "assistant:thinking,text,tool_call" …] with provider data true`); `TestWireReplay` (`another model's
+     thinking was sent: {… "signature":"sig-A" …}`) and `TestWireSignatureRetry` (`the retried request failed: … 400 …
+     Invalid ` + "`signature`" + ` in ` + "`thinking`" + ` block`) on the unchanged `Stream`. `TestReplaySameModel` and
+     `TestReplayUnknownOrigin` assert what stays the same, so each was seen failing on a scratch copy instead: every
+     known origin treated as foreign (`same model: [… "assistant:text,tool_call" …], want … thinking … with its
+     signatures`), and a zero origin treated as foreign (`unknown origin: …, want it whole`).
+   - `acpserver` (`switch_test.go`): `TestSwitchProvider` (command and option), `TestSwitchToProviderLandsOnItsLast`,
+     `TestSwitchWarnsOnSmallerWindow`, `TestSwitchBuildFails`, `TestRestoreSwitchedSession`, on P1's code (`/model
+     other/x9: "Switching to another provider's model is not available yet…"`; the restored turn `llmtest: script
+     exhausted`). `TestTokensShort`, for a window under a thousand shown as "0K", on a scratch copy (`tokensShort(5) =
+     "0K", want "5"`).
+   - `internal/cli`: `TestProviderForBuildsNamed`, on a scratch copy whose `providerFor` built the run's provider
+     (`built "" for session "sess-7"…`).
+2. **The origin:** `llm.Message` gains `Origin{Provider, Model, Failed}`. A turn's assistant messages are stamped with
+   the session's provider and model at the turn's end, a cancelled turn's last one failed (`stamped`); a log's are
+   stamped from its entries, `error` and `aborted` failed, and a Pi provider name mapped to gobble's (`anthropic` is
+   `claude`, `canonicalProvider` over `catalog.ProviderID`), seen failing on a scratch copy that kept the name
+   (`TestPiFixtureContext`: `restored … [claude/other medium]`).
+3. **The replay** (`llm/provider/replay.go`), where the adapter builds a request: Pi's rules keyed by provider and
+   model (a model's wire follows from those two); another model's thinking dropped and its text and calls without
+   `ProviderData`; a failed turn not replayed, nor its calls' results; an unanswered call given "No result provided"
+   before the next assistant or user message and at the end; a message with no origin sent as it was.
+4. **Q4:** `Stream` makes each attempt through `attempt`; a 400 whose text names a signature or encrypted content
+   (`signatureRefused`), before any event, is sent once more with every thinking block and signature stripped; any
+   other 400 is not.
+5. **The switch:** `liveSession.providerID`; `setConfig` takes a ref, builds another provider first through
+   `Options.ProviderFor` (`buildProvider`), so a failure (`switchError`, "Cannot switch to … : …") leaves the session
+   as it was, then records `model_change` with the provider; `sessionProvider` builds a switched session's provider
+   through `ProviderFor`. `modelOf`, `levelsOf` and `qualified` take the provider, and every caller passes the
+   session's (`provOf`): the thinking levels, the window, the price, `/usage`, `/session`, compaction, `usage_update`.
+   `/model <provider>` lands on that provider's newest recent model, else its first; a switch to a smaller window than
+   the context in use says so and suggests `/compact`. A restored session goes on with its last provider when it is
+   usable, else with the run's and a warning (`provider=…`). `--model` still wins over a restored session.
+6. **The CLI:** `providerFor` builds a named provider as `modelProvider` builds the run's: its key in Pi's order or its
+   login, `models.json`'s base URL and headers, its credential's source, the session's id and retry settings.
+7. **Records:** dated notes in 0021-MADR D4 and 0019-MADR D15; this record.
+
+**Tests changed with it, none loosened:** `TestModelPick`'s three answers for another provider's model, P1's "not
+available yet", are now the switch's own refusal for an agent with no `ProviderFor`; `TestPiFixtureContext`'s provider
+is gobble's `claude`, which a Pi session names `anthropic`, so it now checks the mapping (`claude/claude-sonnet-4-5`
+restored).
+
+**The live check,** on the owner's credential variables, in a scratch home and working directory, with only provider
+ids, model ids and outcomes kept:
+
+```text
+/model gemini/gemini-3.5-flash-lite   → Very good. The model is now gemini/gemini-3.5-flash-lite.
+read hello.txt, its first word        → ▸ read hello.txt ✓ … Pineapple.        ($0.0025)
+/model openai/gpt-6-luna              → openai/gpt-6-luna it is.
+What was that word?                   → Pineapple                               ($0.0031)
+/model openai/gpt-5.6-luna            → Very good. The model is now openai/gpt-5.6-luna.
+Spell that word backwards             → elppaenip                               ($0.0042)
+/session                              → Total: 8, Tools: 1 calls, 1 results
+```
+
+OpenAI took the conversation Gemini began, a tool call and its result included, with Gemini's data left out and no
+error; the switch within OpenAI's models went on as well.
+
+**Gates:**
+
+- the pre-add check on the nineteen changed `.go` files, `19 file(s) clean`, after lint's asks: Pi's stop reasons as
+  constants (`piAborted`, `piError`), `strconv.Itoa`, a builder in a test, and two providers' error texts passed
+  through a variable so golint does not read them as gobble's; lint for linux, darwin and windows, `0 issues.` each;
+- macOS: the tests and the race detector, 35 packages ok each; `make preflight`, `preflight passed`;
+- the Linux machine and the Windows laptop, over ssh with `-o BatchMode=yes -o ConnectTimeout=5`, on a copy of the
+  working tree, Windows with `TMP` and `TEMP` outside the user's home: the tests and the race detector, 35 packages ok
+  on each; `make preflight` through `apidiff` (`0 issues.`), stopping at `verify-build-metadata` on a copy; `make
+  check-records markdownlint`, "0 issues in 0 files".
+
+**Not done in P2, as the plan says:** the start order (P3); browsing (P4); `/login` (P5). A switch to a provider with no
+credential says it is not usable, with its variable; P5 offers `/login` there.

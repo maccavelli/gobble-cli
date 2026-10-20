@@ -89,9 +89,10 @@ func TestModelPicker(t *testing.T) {
 }
 
 // /model takes an entry's number, a ref, or a bare id one provider has, and
-// tells Remember; a model of another provider waits for P2, an unknown one
-// is refused, and words that are no model filter the list keeping its
-// numbers (0025-MADR D1, D3, D5).
+// tells Remember; another provider's model this agent cannot build is
+// refused, the session left as it was; an unknown one is refused, and words
+// that are no model filter the list keeping its numbers (0025-MADR D1, D3,
+// D5).
 func TestModelPick(t *testing.T) {
 	r := &remembered{}
 	c, client, id := choiceAgent(t, llmtest.NewScript(), r)
@@ -99,8 +100,8 @@ func TestModelPick(t *testing.T) {
 		{"/model 4", "Model: fake/m2"},
 		{"/model fake/m1", "Model: fake/m1"},
 		{"/model m2", "Model: fake/m2"},
-		{"/model 5", "Switching to another provider's model is not available yet; this session's provider is fake."},
-		{"/model other/x9", "Switching to another provider's model is not available yet; this session's provider is fake."},
+		{"/model 5", "Cannot switch to other/x9: acpserver: no model provider configured"},
+		{"/model other/x9", "Cannot switch to other/x9: acpserver: no model provider configured"},
 		{"/model 99", "No entry 99: /model lists 5."},
 		{"/model dead/d1", "dead is not usable: key rejected (HTTP 401) — gobble auth login dead"},
 	} {
@@ -111,7 +112,7 @@ func TestModelPick(t *testing.T) {
 	if got, want := r.got(), []string{"fake/m2", "fake/m1", "fake/m2"}; !slices.Equal(got, want) {
 		t.Errorf("remembered %q, want %q", got, want)
 	}
-	if text, _ := slash(t, c, client, id, "/model x9"); text != "Switching to another provider's model is not available yet; this session's provider is fake." {
+	if text, _ := slash(t, c, client, id, "/model x9"); text != "Cannot switch to other/x9: acpserver: no model provider configured" {
 		t.Errorf("/model x9, an id one provider offers: %q", text)
 	}
 	text, _ := slash(t, c, client, id, "/model m")
@@ -163,6 +164,15 @@ func TestModelOptionGrouped(t *testing.T) {
 	}
 	if got := r.got(); !slices.Equal(got, []string{"fake/m2", "fake/m1"}) {
 		t.Fatalf("remembered %q", got)
+	}
+}
+
+// A window is shown short: tokens below a thousand as they are.
+func TestTokensShort(t *testing.T) {
+	for n, want := range map[int]string{0: "", 5: "5", 999: "999", 128_000: "128K", 1_000_000: "1M", 1_100_000: "1.1M"} {
+		if got := tokensShort(n); got != want {
+			t.Errorf("tokensShort(%d) = %q, want %q", n, got, want)
+		}
 	}
 }
 

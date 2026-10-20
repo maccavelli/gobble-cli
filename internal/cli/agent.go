@@ -46,6 +46,23 @@ var modelProvider = func(e *runEnv) func(sessionID string, retry llm.Retry) (llm
 	}
 }
 
+// providerFor builds provider id's model for a session switched to it, as
+// modelProvider builds the run's: its key in Pi's order or its stored
+// login, models.json's base URL and headers, and the session's id and
+// retry settings (0025-MADR D1). Tests replace it.
+var providerFor = func(e *runEnv) func(id, sessionID string, retry llm.Retry) (llm.Provider, error) {
+	return func(id, sessionID string, retry llm.Retry) (llm.Provider, error) {
+		o := provider.Options{ClientName: appName, ClientVersion: identity().Version, Logger: e.log(), SessionID: sessionID,
+			Logins: e.logins(), Retry: &retry}
+		o = e.providerOptions(id, o)
+		if src, ok := e.credentials().Has(id); ok {
+			o.CredentialSource = string(src)
+		}
+		p, _, err := ambientProvider(e.credentialKey, id, o)
+		return p, err
+	}
+}
+
 // ambientProvider builds the ambient provider; a test replaces it to see
 // the options it is given.
 var ambientProvider = provider.AmbientWith
@@ -59,9 +76,10 @@ func (e *runEnv) agentOptions() acpserver.Options {
 		e.log().Warn("model catalog", slog.Any("error", err))
 	}
 	return acpserver.Options{
-		Version:  identity().Version,
-		Provider: modelProvider(e),
-		Models:   e.modelChoice,
+		Version:     identity().Version,
+		Provider:    modelProvider(e),
+		ProviderFor: providerFor(e),
+		Models:      e.modelChoice,
 		// The recent models, and the SDK's matcher for /model with words
 		// (0025-MADR D3, D5).
 		Remember:     e.rememberModel,

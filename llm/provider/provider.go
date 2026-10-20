@@ -250,57 +250,75 @@ func (a *adapter) Capabilities() llm.Capabilities {
 }
 
 // Stream maps the SDK's stream onto llm's sealed events, as llm's package
-// documentation lists.
+// documentation lists. Another model's messages go without its data
+// (0025-MADR D2); a request refused over a signature despite that, before
+// any event, is sent once more with no thinking at all (0025-MADR Q4).
 func (a *adapter) Stream(ctx context.Context, req *llm.Request) iter.Seq2[llm.Event, error] {
 	return func(yield func(llm.Event, error) bool) {
-		sreq, err := toRequest(req)
-		if err != nil {
-			yield(nil, err)
-			return
-		}
-		var out strings.Builder
-		calls := false
-		ctx := context.WithValue(ctx, modelKey{}, req.Model) // for the header transport (0005-PLAN F4-2b)
-		for ev, err := range llmprovider.Stream(ctx, a.p, sreq) {
-			if err != nil {
-				if ue, ok := errors.AsType[*url.Error](err); ok && offline(err) {
-					a.mu.Lock()
-					a.offlineURL = ue.URL
-					a.mu.Unlock()
-				}
-				if refusedAnswer(err) { // a refusal, as one with text is (0005-PLAN F5-3 decision 5)
-					yield(llm.Done{StopReason: llm.StopRefusal}, nil)
-					return
-				}
-				yield(nil, a.rejected(mapError(err), err))
-				return
-			}
-			var e llm.Event
-			switch ev.Type {
-			case llmprovider.EventTextDelta:
-				out.WriteString(ev.Text)
-				e = llm.TextDelta{Text: ev.Text}
-			case llmprovider.EventReasoningDelta:
-				e = llm.ThinkingDelta{Text: ev.Text}
-			case llmprovider.EventItem:
-				switch it := ev.Item.(type) {
-				case llmprovider.FunctionCallItem:
-					calls = true
-					e = llm.ToolCallDone{ID: it.CallID, Name: it.Name, Args: it.Arguments, ProviderData: signatureData(it.Signature)}
-				case llmprovider.ReasoningItem:
-					e = llm.ThinkingDelta{ProviderData: reasoningData(it)}
-				}
-			case llmprovider.EventDone:
-				if !yield(usageOf(ev.Response, sreq, out.String()), nil) {
-					return
-				}
-				e = llm.Done{StopReason: stopOf(ev.Response, calls)}
-			}
-			if e != nil && !yield(e, nil) {
-				return
-			}
+		msgs := replay(req.Messages, string(a.id), req.Model)
+		if a.attempt(ctx, req, msgs, true, yield) {
+			a.attempt(ctx, req, stripThinking(msgs), false, yield)
 		}
 	}
+}
+
+// attempt streams req with msgs, and reports whether it was refused over a
+// signature before any event, when canRetry, instead of yielding that.
+func (a *adapter) attempt(ctx context.Context, req *llm.Request, msgs []llm.Message, canRetry bool, yield func(llm.Event, error) bool) (retry bool) {
+	r := *req
+	r.Messages = msgs
+	sreq, err := toRequest(&r)
+	if err != nil {
+		yield(nil, err)
+		return false
+	}
+	var out strings.Builder
+	calls, sent := false, false
+	ctx = context.WithValue(ctx, modelKey{}, req.Model) // for the header transport (0005-PLAN F4-2b)
+	for ev, err := range llmprovider.Stream(ctx, a.p, sreq) {
+		if err != nil {
+			if canRetry && !sent && signatureRefused(mapError(err)) {
+				return true
+			}
+			if ue, ok := errors.AsType[*url.Error](err); ok && offline(err) {
+				a.mu.Lock()
+				a.offlineURL = ue.URL
+				a.mu.Unlock()
+			}
+			if refusedAnswer(err) { // a refusal, as one with text is (0005-PLAN F5-3 decision 5)
+				yield(llm.Done{StopReason: llm.StopRefusal}, nil)
+				return false
+			}
+			yield(nil, a.rejected(mapError(err), err))
+			return false
+		}
+		sent = true
+		var e llm.Event
+		switch ev.Type {
+		case llmprovider.EventTextDelta:
+			out.WriteString(ev.Text)
+			e = llm.TextDelta{Text: ev.Text}
+		case llmprovider.EventReasoningDelta:
+			e = llm.ThinkingDelta{Text: ev.Text}
+		case llmprovider.EventItem:
+			switch it := ev.Item.(type) {
+			case llmprovider.FunctionCallItem:
+				calls = true
+				e = llm.ToolCallDone{ID: it.CallID, Name: it.Name, Args: it.Arguments, ProviderData: signatureData(it.Signature)}
+			case llmprovider.ReasoningItem:
+				e = llm.ThinkingDelta{ProviderData: reasoningData(it)}
+			}
+		case llmprovider.EventDone:
+			if !yield(usageOf(ev.Response, sreq, out.String()), nil) {
+				return false
+			}
+			e = llm.Done{StopReason: stopOf(ev.Response, calls)}
+		}
+		if e != nil && !yield(e, nil) {
+			return false
+		}
+	}
+	return false
 }
 
 // reasoning is a ReasoningItem as ProviderData carries it for replay.

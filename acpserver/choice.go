@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -201,6 +202,43 @@ func (a *Agent) choice() ModelChoice {
 	return c
 }
 
+// modelsOf are provider's offered models, when it is usable (0025-MADR D1).
+func (a *Agent) modelsOf(provider string) []string {
+	for _, p := range a.choice().providerList() {
+		if p.ID == provider && p.State.Usable() {
+			return p.Models
+		}
+	}
+	return nil
+}
+
+// canonicalProvider is gobble's id for a provider a log names, Pi's
+// "anthropic" as "claude" among them, so a Pi session's turns are the same
+// model's (0025-MADR D2); a name gobble does not know is kept.
+func canonicalProvider(name string) string {
+	if id, ok := catalog.ProviderID(name); ok {
+		return id
+	}
+	return name
+}
+
+// stamped is a turn's messages with origin on each assistant one; a
+// cancelled turn's last assistant message is marked failed, so it is not
+// replayed (0025-MADR D2).
+func stamped(msgs []llm.Message, origin llm.Origin, cancelled bool) []llm.Message {
+	out := slices.Clone(msgs)
+	last := -1
+	for i := range out {
+		if out[i].Role == llm.RoleAssistant {
+			out[i].Origin, last = origin, i
+		}
+	}
+	if cancelled && last >= 0 {
+		out[last].Origin.Failed = true
+	}
+	return out
+}
+
 // mark is a provider's state after a refused turn.
 type mark struct {
 	state  ProviderState
@@ -282,8 +320,10 @@ func tokensShort(n int) string {
 		return fmt.Sprintf("%dM", n/1_000_000)
 	case n >= 1_000_000:
 		return fmt.Sprintf("%.1fM", float64(n)/1_000_000)
-	default:
+	case n >= 1000:
 		return fmt.Sprintf("%dK", n/1000)
+	default:
+		return strconv.Itoa(n)
 	}
 }
 
