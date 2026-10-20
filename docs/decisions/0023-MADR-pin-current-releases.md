@@ -161,3 +161,92 @@ seen failing at `v1.14.0` and passing at `v1.16.0`; `TestListFullCatalog` failin
 - [0007-MADR-repository-scaffolding-to-fleet-standard.md](0007-MADR-repository-scaffolding-to-fleet-standard.md) D5: golangci-lint's fleet pin.
 - [0005-PLAN-v1-feature-scope.md](0005-PLAN-v1-feature-scope.md): F4-3d, F5-1 decision 5, and the entry "The docs brought up to date".
 - acp-go-sdk2 issues 7, 8 and 9; go-llmprovider-sdk issues 2 and 3, all closed.
+
+## Amendment (2026-10-19): acp-go-sdk2 `v1.16.3`, go-llmprovider-sdk `v1.17.0`, go-selfupdate-lib `v1.17.0`
+
+*Proposed: the owner decides at review.* The owner asked on 2026-10-19, after `fa28838`, to "ensure we are pinning the
+most updated releases of acp-go-sdk2, go-llmprovider-sdk and go-selfupdate-lib". Each fact below was measured that
+day against `main` `fa28838`.
+
+### Context
+
+**What is pinned, and what is newest** (`go.mod:15-17`; `GOPROXY=direct go list -m -versions`; `gh release list`;
+`gh run list` on each library):
+
+| Module | Pinned | Newest tag | The tag's state |
+| :--- | :--- | :--- | :--- |
+| `acp-go-sdk2` | `v1.16.0` | `v1.16.3` (also `v1.16.1`, `v1.16.2`) | GitHub release "Latest"; the tag's CI passed |
+| `go-llmprovider-sdk` | `v1.15.0` | `v1.17.0` (also `v1.16.0`) | tagged 01:46 UTC on 2026-10-20; the tag's CI run in progress at measurement and no GitHub release yet, "Latest" being `v1.16.0` |
+| `go-selfupdate-lib` | `v1.15.2` | `v1.17.0` (also `v1.16.0`), at `adc2c757d7e2fa9ed7e5eb5ff33a076eba34f4bd` | tags only, as at `v1.15.2`; the tag's CI passed |
+
+CI's release jobs call go-selfupdate-lib's `build-selfupdate-release.yml` and `publish-selfupdate-release.yml` at
+`436a7f5976a6815491c7384527fef90869574a1b # v1.15.2` (`.github/workflows/ci.yml:145`, `:157`), pinned with `go.mod`
+since 0019-PLAN P2.
+
+**What the checks say** (0019-MADR D14's `scripts/check_libs.py`, which clones the committed repository):
+acp-go-sdk2 `v1.16.3` and go-llmprovider-sdk `v1.17.0`: get and tidy, version, modules, build, vet for linux, darwin
+and windows, test, api, govulncheck and advisories all `ok`. go-selfupdate-lib `v1.17.0`, run alone (`--lib`): every
+check `ok`, "0 failing checks". Run together, the script stopped at go-selfupdate-lib's api step with
+`FileExistsError: … api-v1.17.0`: `export_api` names its scratch module and its export by version alone
+(`scripts/check_libs.py:182-190`), so two libraries checked at the same version collide. No run met the case before.
+
+**What changes** (each library's release notes, CHANGELOG and exported API at the tags, in the module cache):
+
+- **acp-go-sdk2** (ACP schema still `1.25.0`; the exported API the same): `v1.16.1` (its 0023-MADR) ends running
+  notification handlers' contexts at `Close()`, with cause `ErrConnectionClosed`, where they ended up to 5 s later;
+  gobble's notification handlers do not read their context (`acpclient/conn.go:373`, `acpserver/agent.go:906`), and
+  `acpclient` closes input before `Close()` (`acpclient/conn.go:173-191`). `v1.16.2` lowers its Go floor to 1.26.9
+  with `toolchain go1.27.2`; gobble stays at `go 1.27.2`. `v1.16.3` changes documentation only.
+- **go-llmprovider-sdk** (no new module; `go 1.27.2`): `v1.16.0` (its 0048-MADR) adds `catalog.Cache`,
+  `catalog.WithCache` and `providers.DefaultWith`, the default of one cache a process unchanged; gobble uses
+  `catalog.List` and `providers.Default()` (`llm/provider/list.go:54`, `ambient.go`). `v1.17.0` (its 0049-MADR) gives
+  its errors sentinels: an OAuth `access_denied` or an expired device code matches `ErrAuthFailure`; a provider it does
+  not serve, `ErrUnsupported`; a nil `*StaticToken` or a foreign `DeviceLogin.Wait`, `ErrInvalidRequest` in place of a
+  panic. gobble's logins wrap the SDK's error in `mapError` (`llm/provider/login.go:106`, `:119`, `:132`), whose table
+  maps `ErrAuthFailure` to `llm.ErrAuth` (`llm/provider/provider.go:460-469`); gobble's tests already require a
+  denied login to be `llm.ErrAuth` (`llm/provider/login_test.go:242`, `:333`), and pass at `v1.17.0`. A denial's
+  message may now carry the SDK's "authentication failed" as well. Retry still buffers a stream
+  (`llmprovider/retry.go:82`), so 0005-PLAN F4-1b still waits.
+- **go-selfupdate-lib** (no new module; Go floor lowered to 1.26.9; `v1.0.0`–`v1.4.1` retracted): `v1.16.0` (its
+  0025-MADR) adds `NewGitHubUpdater`, `HTTPError`, `service.CommandError`, `Clock`, `NewVersionProberWith`,
+  `NewSlogReporter`, `selfupdatetest.VerifyReleaseSource` and an opt-in `verify/signednote`; redacts `Credential` and
+  `GitHubOptions` when printed; fixes a Task Scheduler data race; reserves the asset name `SHA256SUMS.note`. `v1.17.0`
+  (its 0026-MADR) adds the `before_uninstall` hook and the installers' `--force`. gobble imports `buildinfo`
+  (`internal/buildinfo/buildinfo.go:9`) and, in a test, `selfupdate` and `releasespec`
+  (`internal/cli/release_test.go:8-9`); its release spec declares no hook. Of the two workflows gobble calls,
+  `build-selfupdate-release.yml` is unchanged from `436a7f59` to `adc2c757`; `publish-selfupdate-release.yml` gains an
+  opt-in `sign` job (input default false, `environment: selfupdate-signing`), and the publish job now `needs: sign`,
+  running when it succeeded or was skipped without `sign`. gobble passes no `sign`. The publish job runs only on a
+  tag, so `main`'s rehearsal does not reach it.
+
+### Decision
+
+Chosen: pin the three newest tags, with the workflows, and fix the check that found the collision.
+
+- **A1. The pins:** acp-go-sdk2 `v1.16.3`, go-llmprovider-sdk `v1.17.0`, go-selfupdate-lib `v1.17.0`, and the
+  indirect moves `go mod tidy` makes; nothing else of D1 moves.
+- **A2. The workflows follow the library:** both `uses:` lines at `adc2c757d7e2fa9ed7e5eb5ff33a076eba34f4bd # v1.17.0`.
+- **A3. go-llmprovider-sdk `v1.17.0` only once its tag's CI has passed and its GitHub release is published;** until
+  then the plan stops and asks, the alternative being `v1.16.0`, its "Latest" release.
+- **A4. `check-libs` names its API exports by library and version,** so two libraries at one version do not collide;
+  its `--self-test` gains the case, seen failing with today's names.
+- **A5. Nothing new is adopted** (D6 holds): not go-selfupdate-lib's signing, hook or updater, nor the provider SDK's
+  `catalog.Cache`. The login errors' new sentinels are taken as they come, `mapError` unchanged.
+- **A6. The records and docs follow** as D7 says: `docs/architecture.md`, `README.md`, `docs/README.md`, and dated notes
+  in 0019-MADR D2 and D14.
+
+### Consequences
+
+* Good, because the three libraries are at their newest tags and `check-libs` checks all three in one run again.
+* Good, because a denied or expired provider login is classified by the SDK, not by gobble's guess at its message.
+* Neutral, because the publish workflow's new `sign` job is first exercised by gobble's next tag; it is skipped there,
+  and the job it gates ran as before in go-selfupdate-lib's own CI.
+* Bad, because go-llmprovider-sdk `v1.17.0` is hours old; A3 holds the pin until its release is published.
+
+### Options not chosen
+
+* **Pin acp-go-sdk2 and go-selfupdate-lib now and go-llmprovider-sdk `v1.16.0`,** its published release: good, because
+  nothing waits; bad, because the provider SDK stays one tag behind, which the owner asked against. Kept as A3's
+  fallback.
+* **Leave `check-libs` and check the libraries one at a time:** bad, because `make check-libs`, the documented command,
+  fails on the next run.

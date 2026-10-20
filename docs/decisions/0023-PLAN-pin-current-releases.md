@@ -1,5 +1,5 @@
 ---
-status: complete
+status: in-progress
 date: 2026-10-19
 associated-madr: "0023-MADR-pin-current-releases.md"
 ---
@@ -146,3 +146,41 @@ metadata document".
   until this change is committed.
 
 **Not done here, named:** the SDKs' new features (MADR D6); golangci-lint `v2.15.0` (MADR D3, the owner's choice).
+
+## Amendment (2026-10-19): the three libraries' newer tags
+
+*Proposed,* for the MADR's amendment of 2026-10-19 (A1–A6). It starts after the owner approves it, on `main` at or
+after `fa28838`.
+
+**Scope.** In: `go.mod`, `go.sum`; `.github/workflows/ci.yml:145`, `:157`; `scripts/check_libs.py`; the records and
+docs of A6. Out: any new feature of the three libraries (A5); the x and tool modules, golangci-lint and CI's actions,
+which this amendment does not measure.
+
+**Steps.**
+
+1. **Measure again,** since tags move: `go list -m -versions` for the three; `gh release list` and `gh run list` for
+   go-llmprovider-sdk. A newer tag than the MADR's, or `v1.17.0`'s CI not passed or its release not published (A3), is
+   a deviation: stop and ask.
+2. **`check-libs` (A4) first:** `export_api`'s scratch module and export named `api-<repo>-<version>` and
+   `<repo>-<version>.exp`; `--self-test` gains a case that two libraries at one version get different paths, seen
+   failing on a scratch copy with today's names.
+3. **The pins (A1):** `go get github.com/maccavelli/acp-go-sdk2@v1.16.3 github.com/maccavelli/go-llmprovider-sdk@v1.17.0
+   github.com/maccavelli/go-selfupdate-lib@v1.17.0`, `go mod tidy`; the `go.mod` diff is those three lines and what
+   tidy moves, named in the record; no module added.
+4. **The workflows (A2):** both `uses:` lines from `436a7f59… # v1.15.2` to `adc2c757… # v1.17.0`, the SHA read from
+   the tag (`git ls-remote`, the peeled `^{}` line).
+5. **Records and docs (A6):** `docs/architecture.md`'s dependency table, `README.md`'s Stack, `docs/README.md`'s rows
+   and SDK line, dated notes in 0019-MADR D2 and D14, and this amendment's execution record.
+
+**Verification.**
+
+- `make check-libs` on a scratch clone of the change, all three at their tags with nothing to compare; before the
+  commit it clones `HEAD`, so it is run once on a local commit in a scratch clone, never on the working tree.
+- `scripts/check_libs.py --self-test`, with the new case seen failing on a copy.
+- `go test -count=1 ./...`, `CGO_ENABLED=1 go test -race -count=1 ./...` and `make preflight` on macOS, the Linux
+  machine and the Windows laptop, the remote two on a copy of the tree; `check-records` and `markdownlint`.
+- The release workflows: a SHA and its comment change. `main`'s CI run after the owner's push runs the build job as a
+  rehearsal at the new SHA; the publish job is first reached by the next tag, with `sign` skipped.
+
+**Rollout and rollback.** One commit, the owner's. Reverting it returns the three pins and the workflow SHAs to
+`fa28838`'s; the `check-libs` fix stands alone and may stay.
