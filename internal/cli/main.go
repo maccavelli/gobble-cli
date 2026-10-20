@@ -220,6 +220,11 @@ type lazyLog struct {
 func (l *lazyLog) get() *slog.Logger {
 	l.once.Do(func() {
 		opts := logging.Options{Level: l.level, Stderr: l.stderr, Warn: l.stderr}
+		// On a terminal a record is a diagnostic, as D3's are (0024-MADR D6).
+		if l.stderr != nil && l.out.caps.Err.TTY {
+			opts.TerminalWidth = l.out.caps.Err.Width
+			opts.Home, _ = os.UserHomeDir() //nolint:errcheck // with no home, paths are shown whole
+		}
 		if d, _, err := systemDirs(); err != nil {
 			l.out.Warnf("no log file: %v", err)
 		} else {

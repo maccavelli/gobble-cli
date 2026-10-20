@@ -190,7 +190,8 @@ column 0; the gates on macOS, the Linux machine and the Windows laptop.
 
 ## Amendment (2026-10-20): a log record printed into the conversation, and the home directory it named
 
-*Proposed: the owner decides at review.* The owner asked on 2026-10-20, after P1's run, to "add the 2 additional
+*Proposed: the owner decides at review.* *(2026-10-20: accepted by the owner, "committed, proceed", after
+`381f381`, with Q4 answered A; executed the same day.)* The owner asked on 2026-10-20, after P1's run, to "add the 2 additional
 found items to scope": the two findings of 0024-PLAN's P1 record. Each fact below was measured that day on the working
 tree, P1's change applied and not yet committed.
 

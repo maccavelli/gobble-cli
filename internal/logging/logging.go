@@ -17,6 +17,13 @@ type Options struct {
 	// Stderr receives warnings and errors as text. Nil means none, as under
 	// `gobble acp`.
 	Stderr io.Writer
+	// TerminalWidth is Stderr's width when it is a terminal, where a record
+	// is gobble's own diagnostic; 0, not a terminal, keeps slog's text
+	// (0024-MADR D6).
+	TerminalWidth int
+	// Home is the user's home directory, shown as ~ on a terminal; empty
+	// shows every path whole.
+	Home string
 	// Warn receives the one report of a failed rotation. Nil means nowhere.
 	Warn io.Writer
 }
@@ -37,7 +44,10 @@ func Open(opts Options) (*slog.Logger, io.Closer, error) {
 		handlers = append(handlers, slog.NewJSONHandler(r, &slog.HandlerOptions{Level: opts.Level, ReplaceAttr: redact}))
 		closer = r
 	}
-	if opts.Stderr != nil {
+	switch {
+	case opts.Stderr != nil && opts.TerminalWidth > 0:
+		handlers = append(handlers, newTerminalHandler(opts.Stderr, max(opts.Level, slog.LevelWarn), opts.TerminalWidth, opts.Home))
+	case opts.Stderr != nil:
 		handlers = append(handlers, slog.NewTextHandler(opts.Stderr,
 			&slog.HandlerOptions{Level: max(opts.Level, slog.LevelWarn), ReplaceAttr: redact}))
 	}

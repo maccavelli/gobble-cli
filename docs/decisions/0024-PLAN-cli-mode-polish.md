@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: complete
 date: 2026-10-20
 associated-madr: "0024-MADR-cli-mode-polish.md"
 ---
@@ -191,7 +191,8 @@ clients render.
 
 ## Amendment (2026-10-20): P2, the log record on a terminal, and the home walk's test
 
-*Proposed,* for the MADR's amendment of 2026-10-20 (D6, D7). It starts after the owner approves it, and after P1's
+*Proposed,* for the MADR's amendment of 2026-10-20 (D6, D7). *(Approved on the owner's word "committed, proceed"
+after `381f381`, P1's commit, and run the same day.)* It starts after the owner approves it, and after P1's
 commit. Q4 is answered (2026-10-20): option A, a `Warning:` line on a terminal.
 
 **Correction of P1's finding (2026-10-20).** "Its path was the account's real home, though the run set `HOME` to a
@@ -199,7 +200,7 @@ scratch directory: that directory's lookup may not follow `HOME`" is wrong: the 
 put `HOME` below the account's home, outside a repository. See the MADR's amendment, finding 2.
 
 **Scope.** In: `internal/logging/logging.go` and a new `internal/logging/terminal.go` (the terminal form), their
-tests; `internal/cli/main.go` (stderr's terminal and width passed in); `prompt/trust_test.go`; 0004-PLAN's dated note;
+tests; *(deviation 3: `internal/logging/doc.go`)*; `internal/cli/main.go` (stderr's terminal and width passed in); `prompt/trust_test.go`; 0004-PLAN's dated note;
 `docs/README.md`. Out: a record logged while the editor reads (the MADR's out-of-scope item); the wording of any one log
 message.
 
@@ -231,3 +232,78 @@ on macOS, the Linux machine and the Windows laptop, the remote two on a copy of 
 
 **Rollout and rollback.** One commit, the owner's. Reverting it restores slog's text on a terminal; the log file and
 `gobble acp` are untouched either way.
+
+### P2 execution record (2026-10-20)
+
+**Deviation 3, 2026-10-20, decided by the owner** ("Update doc.go"): the package comment of `internal/logging`
+(`doc.go:1-3`) says the logger writes "text to stderr at warning and above", true after D6 only when stderr is not a
+terminal; `doc.go` was not in P2's scope.
+
+- **Chosen:** `doc.go`'s comment says both forms. One comment.
+- **Not chosen:** leaving the comment inaccurate on a terminal.
+- **File added to P2's scope:** `internal/logging/doc.go`.
+
+**P2, run 2026-10-20,** on `main` at `381f381`, with deviation 3 above.
+
+1. **The handler's tests** (`internal/logging/terminal_test.go`), against `Options.TerminalWidth` and `Options.Home`,
+   the two fields added first with nothing reading them, so the tests ran against today's text handler:
+   - `TestTerminalWarning`, `TestTerminalError`, `TestTerminalWraps`, `TestTerminalRedacts` and
+     `TestTerminalWithAttrs` failed, each on slog's text: `stderr "time=… level=WARN msg=\"prompt: a file was not
+     used\" file=…"`, `stderr "time=… level=ERROR msg=\"turn failed\"\n"`, `not wrapped: …`, `want 5 redactions,
+     the group's keys and the path kept: … api_key=[REDACTED] http.authorization=[REDACTED] …`, `stderr "time=…
+     level=WARN msg=slow session=s1 tool.ms=900\n"`;
+   - `TestTerminalShowsWarningsOnly` passed on today's handler, which also stops below warning level; it was seen
+     failing instead on a scratch copy whose terminal handler took the file's level: `info reached the terminal:
+     "Warning: started (pid: 42)\n"`.
+2. **D6:** `internal/logging/terminal.go`, a `slog.Handler` of its own (`Enabled`, `Handle`, `WithAttrs`,
+   `WithGroup`): `Warning:` below error, `Error:` from it; attributes as `key: value`, a group's keys prefixed
+   `group.`; `redact` on each leaf, as the text handler's `ReplaceAttr`; a path equal to or under `Home` with `~`;
+   wrapped at spaces to `TerminalWidth - 1` columns, a wide East Asian rune two (`golang.org/x/text/width`, already a
+   requirement), continuation lines indented two, a word too long cut; each diagnostic written whole under a lock.
+   `Open` uses it when `Stderr` is set and `TerminalWidth > 0`, at `max(Level, LevelWarn)`; otherwise slog's text,
+   unchanged. `internal/cli/main.go` sets `TerminalWidth` to `caps.Err.Width` and `Home` to `os.UserHomeDir()` when
+   stderr is a terminal. `doc.go` (deviation 3) says both forms. All of `internal/logging`'s tests pass, the
+   unchanged text-handler ones (`TestFileGetsLevelStderrGetsWarnings`, `TestRedaction`, `TestNoStderrUnderACP`)
+   included.
+3. **D7:** `TestProjectSkillDirsOutsideRepository` (`prompt/trust_test.go`): a tree with no `.git`, the working
+   directory below `home`, `home`, an ancestor and the project each holding `.agents/skills`; the result, kept to the
+   test's own directory since a real ancestor may hold one, is the project's then the ancestor's. It skips if the
+   temporary directory is inside a repository; it ran on all three systems. On a scratch copy whose
+   `ProjectSkillDirs` lacked the `$HOME` check it failed: `got […/outer/home/proj/.agents/skills
+   …/outer/home/.agents/skills …/outer/.agents/skills]`.
+4. **The capture again:** `/help` in a pseudo-terminal with `HOME` below a directory holding
+   `.agents/skills/demo/SKILL.md`, so the session logs the note; the check from the first line after `/help`, with no
+   `--from-heading`:
+   - macOS: 100 columns, `32 lines, widest 99 of 100 columns, bare LF 0`, `ok`; 60 columns, `48 lines, widest 59 of
+     60 columns, bare LF 0`, `ok`;
+   - the Linux machine: 100 columns, `32 lines, widest 99 of 100 columns, bare LF 0`, `ok`; 60 columns, `50 lines,
+     widest 59 of 60 columns, bare LF 0`, `ok`. Two notes there, the planted directory's and the account's own home's,
+     the run's `HOME` being a scratch directory below it, as finding 2 explains:
+
+     ```text
+     Warning: prompt: a file was not used (file:
+       /home/<user>/.agents/skills; reason: not loaded: the project
+       is not trusted (gobble trust, or /trust))
+     ```
+
+   No `~` shows in the captures, whose paths are not under their scratch `HOME`; `TestTerminalWarning` covers it.
+5. **Records:** this record; 0004-PLAN Phase 2 step 4's dated note; the statuses; `docs/README.md`'s rows.
+
+**The gates, and the lint failure they caught.** The first round failed `make preflight` on the Linux machine and the
+Windows laptop at golangci-lint: `internal/logging/terminal.go:35:58: importShadow: shadow of imported from
+'golang.org/x/text/width' package 'width' (gocritic)`, the handler's constructor having a parameter named `width`. It
+was renamed `cols`. The first macOS round's `preflight passed` is not counted: the rename landed while it ran. After
+the rename, lint for linux, darwin and windows gave `0 issues.` each, and the second round:
+
+- the pre-add check on the six changed `.go` files: `go-precheck: 6 file(s) clean (gofmt, golint, govulncheck)`, and
+  `terminal.go` again after the rename, `1 file(s) clean`;
+- macOS: `go test -count=1 ./...` and `CGO_ENABLED=1 go test -race -count=1 ./...`, 35 packages ok each; `make
+  preflight`, `preflight passed` (golangci-lint `0 issues.`, "No vulnerabilities found.");
+- the Linux machine and the Windows laptop, over ssh with `-o BatchMode=yes -o ConnectTimeout=5`, on a copy of the
+  working tree, Windows with `TMP` and `TEMP` outside the user's home: the tests and the race detector, 35 packages ok
+  on each; `make preflight`, every step through `apidiff` passed (golangci-lint `0 issues.`), stopping at
+  `verify-build-metadata` with `git rev-parse HEAD` exiting 128, since a copy has no commit; `make check-records
+  markdownlint`, "0 issues in 0 files".
+
+**Not done, named:** a record logged while the editor reads, with the terminal raw (the MADR amendment's
+out-of-scope item); the wording of any one log message, such as "prompt: a file was not used".
