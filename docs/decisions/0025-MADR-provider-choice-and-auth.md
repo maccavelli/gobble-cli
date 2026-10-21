@@ -174,6 +174,11 @@ one strip-and-retry; cycling as P7. Every owner question is answered.)*
     provider's text, which can carry a fragment of the key (0020-MADR F5, D6).)*
   - A request that fails with `ErrAuth` or `ErrQuota` marks its provider then too, as opencode resolves lazily. No key
     is ever checked by a billed request.
+  - *(2026-10-20, the owner's choice after P3, "Run's provider only": at start only the provider the run starts on (D3)
+    warns of a failed listing on stderr; another provider's failure is a record in the log file and its state in
+    `/providers`, `/model` and `gobble providers --check`, so eight keys offline make one line where they made eight. A
+    setting or a recent model D3 passes by keeps D3's own warning. It amends 0020-MADR D6, with a dated note there;
+    0025-PLAN P5 step 3.)*
 - **D5. Browse providers and models, in the CLI and the session.**
   - **The picker, line mode:** `/model` with no argument prints a numbered list: the current model; the recent ones
     (five); then each provider under a heading with its state (D4), its models with the SDK menu's facts (context
@@ -196,6 +201,18 @@ one strip-and-retry; cycling as P7. Every owner question is answered.)*
     refreshed, the provider is listed (D4), and the picker opens filtered to it (opencode, Pi).
   - `/logout [provider]` runs `wizard.Logout`: it lists stored credentials only, revokes an OpenAI or Grok session,
     deletes it, and says that an environment variable still applies (Pi's words).
+  - *(2026-10-20, 0025-PLAN deviation 6, the owner's choice "gobble's flow, SDK parts": measured in P5,
+    `wizard.ConfigureLLM` always ends with its own model search and menu; its Kilo device sign-in saves an OAuth
+    session and asks for an organization, where gobble stores the key Kilo returns; and it asks five providers for an
+    endpoint gobble keeps in `models.json`. So `/login` is gobble's own flow over its prompter: the provider, with its
+    credential's source; the method, gobble's (API key; Grok's browser and device sign-in; Kilo's device sign-in); the
+    credential through gobble's existing sign-ins, a typed key checked by listing and asked again, up to three keys;
+    then the steps above, the cache refreshed, the provider listed and its models shown for `/model N`. `/logout`
+    takes gobble's existing logout, which revokes a Grok session. The wizard is not used; P6 calls
+    `auth.LoginChatGPTPlan` itself, as below.)*
+  - *(2026-10-20, 0025-PLAN deviation 7, the owner's choice "Raw mode, masked echo": the line session's reader owns
+    stdin, and out of raw mode the terminal echoes, so `Secret` reads in raw mode through the reader, echoing `*` for
+    each character, as the permission prompt reads its reason; the other questions read out of raw mode.)*
   - `gobble auth login <provider> --method api-key|browser|device|chatgpt-plan` signs in with no menu (opencode's
     `--method`), for scripts and for a terminal with no menus.
   - ACP clients keep the `terminal` auth methods of 0005-PLAN F4-3c-2. This amends 0005-MADR's "`/login` and `/logout`

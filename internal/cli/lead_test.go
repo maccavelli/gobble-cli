@@ -53,8 +53,11 @@ func TestLineSessionLeads(t *testing.T) {
 			got := lineBefore(h.stderr.String(), c.error)
 			leads := dry.Variants(c.lead, nil)
 			// The harness has no credential, so the session opens with the
-			// warning, led in dry.
-			if w := lineBefore(h.stderr.String(), "Warning: no model credential"); voice != nil &&
+			// warning, led in dry, once the sign-in offered first is declined;
+			// the harness's terminal echoes no answer, so the lead follows the
+			// question on its line (0025-MADR D7).
+			w := strings.TrimPrefix(lineBefore(h.stderr.String(), "Warning: no model credential"), firstRunQuestion+" [Y/n]: ")
+			if voice != nil &&
 				!slices.Contains(dry.Variants(personality.LeadNoCredential, nil), w) {
 				t.Errorf("%s, dry: the line before the credential warning is %q", c.name, w)
 			}

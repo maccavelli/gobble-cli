@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"time"
 
@@ -48,6 +49,9 @@ type lineSession struct {
 	// keys is the editor's reader, which the permission prompt reads a
 	// key from while a turn runs.
 	keys *editor.Reader
+	// pasting is whether the editor turned bracketed paste on, which a
+	// question turns off while it reads (0025-PLAN deviation 7).
+	pasting bool
 }
 
 // runLine opens the line session on the process's terminal.
@@ -84,6 +88,7 @@ func (ls *lineSession) spoken() *personality.Voice {
 
 func (ls *lineSession) run(first Prompt) error {
 	e := ls.e
+	e.inLine = true // /login signs in here (0025-MADR D6)
 	if ls.amb == nil {
 		ls.amb = newAmbient(e.out.caps.Err.TTY)
 	}
@@ -94,9 +99,11 @@ func (ls *lineSession) run(first Prompt) error {
 	ls.conn = conn
 	defer ls.close()
 	// The session opens without a credential; a turn then fails with the
-	// authentication error (0008-MADR D1). gobble configure arrives with
-	// 0005-PLAN F4, so the warning names the variables.
-	if _, err := provider.ChooseWith(e.hasCredential, e.chosenProvider()); err != nil {
+	// authentication error (0008-MADR D1). On a terminal with no credential
+	// at all, the sign-in is offered before the first prompt (0025-MADR
+	// D7); otherwise the warning names the variables.
+	setup := e.out.caps.In && !slices.ContainsFunc(provider.KeyProviders(), e.hasCredential)
+	if _, err := provider.ChooseWith(e.hasCredential, e.chosenProvider()); err != nil && !setup {
 		e.out.Lead(ls.spoken(), personality.LeadNoCredential)
 		e.out.Warnf("%s", e.noCredentialMessage())
 	}
@@ -126,6 +133,11 @@ func (ls *lineSession) run(first Prompt) error {
 	ls.mu.Lock()
 	ls.keys = &r
 	ls.mu.Unlock()
+	if setup {
+		if err := ls.firstRun(); err != nil {
+			return err
+		}
+	}
 	restore, err := ls.raw()
 	if err != nil {
 		return failf("%v", err)
@@ -143,6 +155,7 @@ func (ls *lineSession) run(first Prompt) error {
 	}
 	ed := editor.New(&r, e.out.out, e.out.err, opts)
 	defer ed.Restore()
+	ls.pasting = true
 
 	// outOfRaw runs f with the terminal out of raw mode, so output keeps its
 	// line ends and Ctrl+C is a signal f takes. The terminal is raw only

@@ -100,6 +100,7 @@ func (e *runEnv) printModels(search, only string, all bool) error {
 	var rows []llm.Model
 	for i, sel := range sels {
 		ids := withModelsJSON(provider.KnownModels(sel.ID), mj, sel.ID)
+		e.warnListing(sel.ID, listings[i])
 		if l := listings[i].get(); l.Live {
 			for _, m := range l.Models {
 				if !slices.Contains(ids, m) {

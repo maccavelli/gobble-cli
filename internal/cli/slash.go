@@ -25,6 +25,8 @@ var localCommands = []acpclient.Command{
 	{Name: "quit", Description: "Leave gobble; the same as /exit"},
 	{Name: "edit", Description: "Write the prompt in your editor, starting from text; it is sent when the editor closes", Hint: "[text]"},
 	{Name: "new", Description: "Start a new session in this directory, closing the current one"},
+	{Name: "login", Description: "Sign in to a provider, or store its API key, then list its models", Hint: "[provider]"},
+	{Name: "logout", Description: "Remove a provider's stored credential, revoking a sign-in", Hint: "[provider]"},
 }
 
 // hiddenAgentCommands are the agent's commands it does not advertise,
@@ -86,6 +88,10 @@ func (ls *lineSession) slash(text string, turn func(Prompt) error) (handled bool
 		return true, e.out.Result([]byte(ls.helpText()))
 	case "gobble": // hidden: in no list, and not completed (0022-MADR D12)
 		return true, e.out.Result([]byte(ls.amb.gobbleText(ls.spoken(), e.out.caps.Unicode)))
+	case "login": // 0025-MADR D6
+		return true, ls.login(args, turn)
+	case "logout":
+		return true, ls.logout(args)
 	case "new":
 		ls.closeSession()
 		ls.amb.newSession()

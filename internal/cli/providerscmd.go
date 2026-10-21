@@ -98,7 +98,7 @@ func (e *runEnv) credentialWords(id string) string {
 	src := e.credentialSource(id)
 	switch {
 	case src == "none":
-		return "none — gobble auth login " + id
+		return "none — " + e.signInHint(id)
 	case src == "auth.json":
 		return "auth.json: key"
 	case strings.HasPrefix(src, "auth.json, an OAuth login"):

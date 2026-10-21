@@ -84,6 +84,8 @@ func (e *runEnv) agentOptions() acpserver.Options {
 		// (0025-MADR D3, D5).
 		Remember:     e.rememberModel,
 		SearchModels: provider.Search,
+		// A sign-in or a sign-out lifts a refused turn's mark (0025-MADR D4, D6).
+		CredentialGeneration: e.credentialGeneration,
 		// What the catalog knows of a model, with the provider's key or login,
 		// found as modelProvider finds it, for its listing (0005-PLAN F4-2a,
 		// F4-3a, F4-3b).
@@ -192,7 +194,9 @@ func (e *runEnv) modelChoice() acpserver.ModelChoice {
 	if err != nil {
 		return acpserver.ModelChoice{}
 	}
-	ids, def := models(sel, e.modelListing(sel).get())
+	l := e.modelListing(sel)
+	ids, def := models(sel, l.get())
+	e.warnListing(sel.ID, l) // the run's provider's failure warns (0025-MADR D4)
 	ids = withModelsJSON(ids, e.modelsJSON(), sel.ID)
 	if p := e.defaultProvider(); p == "" || p == sel.ID { // a setting the start passed by is not read
 		def = cmp.Or(e.defaultModel(sel.ID, ids), def)

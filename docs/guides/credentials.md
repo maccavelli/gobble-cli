@@ -73,6 +73,16 @@ $ gobble auth check --provider claude --json
 }
 ```
 
+`--method api-key` does the same: `--method` names how to sign in, with no menu, `api-key`, `browser` or
+`device`, as the provider offers them. A way the provider does not offer is refused, naming its ways:
+
+```text
+$ echo sk-test-only | gobble auth login anthropic --method api-key
+Saved API key for claude
+$ gobble auth login grok --method nope
+Error: grok signs in with --method api-key or browser or device, not "nope"
+```
+
 `gobble auth logout <provider>` removes the provider's entry. Variables and `models.json` are left
 alone:
 
@@ -141,6 +151,42 @@ Error: claude has no login; use --api-key -
 
 An OAuth entry for any other provider, such as one copied from Pi, is kept, and gobble says it does
 not use it.
+
+## Signing in from a session
+
+In a session, `/login` asks which provider to sign in to, each shown with where its credential comes
+from now, then how, when the provider offers more than a key: Grok's browser and device sign-in,
+Kilo's device sign-in. `/login claude` asks no provider. A typed key echoes a `*` for each character,
+and gobble checks it by listing the provider's models, which spends nothing: a key the provider
+refuses is asked for again, up to three keys, and a key the listing cannot check is saved with a
+note. Then gobble lists the provider's models, numbered for `/model N`. Ctrl+C leaves the sign-in,
+not gobble. Here gobble had no credential, and no network:
+
+```text
+> /login claude
+Claude (Anthropic) API key: *************
+The key could not be checked: not listed (listing failed); it is saved all the same.
+Saved API key for claude
+```
+
+`/logout` lists only the credentials `auth.json` holds and removes the one chosen, as
+`gobble auth logout` does; it says when the provider's variable is still set, since that still gives
+it a credential. A provider with no credential is offered as `/login <provider>` in `/providers`,
+`/model` and `/login`'s own list.
+
+With no credential at all, a session on a terminal asks first:
+
+```text
+No provider has a credential yet. Sign in to one now? [Y/n]:
+```
+
+Yes runs `/login`; no goes on as before, naming the variables. `gobble setup` asks the same
+questions at any time, on a terminal; without one it says to use `gobble auth login`:
+
+```text
+$ gobble setup < /dev/null
+Error: gobble setup asks its questions on a terminal; gobble auth login <provider> --method signs in without one
+```
 
 ## Signing in from an editor or magic-cli-remote
 
@@ -239,5 +285,5 @@ $ gobble -p hello
 Error: grok rejected the OAuth login in auth.json; sign in again with gobble auth login grok
 ```
 
-With no key at all, gobble names the variables to set. When a key's command fails, gobble says so,
-naming the command, and sends nothing.
+With no key at all, gobble names the variables to set, after a session on a terminal has offered to
+sign in. When a key's command fails, gobble says so, naming the command, and sends nothing.

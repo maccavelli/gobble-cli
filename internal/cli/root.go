@@ -13,6 +13,7 @@ type Root struct {
 	Models      ModelsCmd      `cmd:"" help:"List the models gobble knows, or show one."`
 	Providers   ProvidersCmd   `cmd:"" help:"List the providers, each with its credential's source and how to sign in."`
 	Auth        AuthCmd        `cmd:"" help:"Store, remove and check model credentials."`
+	Setup       SetupCmd       `cmd:"" help:"Sign in to a provider, or store its API key, answering questions on the terminal."`
 	Personality PersonalityCmd `cmd:"" help:"List and check the personalities, and the files that change gobble's text."`
 	Trust       TrustCmd       `cmd:"" help:"Trust a project, so its own .gobble settings, SYSTEM.md, skills, prompts and personalities load."`
 	Untrust     UntrustCmd     `cmd:"" help:"Stop trusting a project, or forget the decision saved for it."`

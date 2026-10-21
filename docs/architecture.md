@@ -13,12 +13,13 @@ The binary has these surfaces:
 
 - **The native CLI mode, the default.** `gobble` with no command is `chat`: a line session in a
   terminal, or one prompt with `-p` or piped input. It is an ACP client of gobble's own agent,
-  in process.
+  in process. Its own commands are `/help`, `/exit`, `/quit`, `/edit`, `/new`, and `/login` and
+  `/logout`, which sign in on the terminal; with no credential at all it offers the sign-in first.
 - **The ACP agent.** `gobble acp` serves the agent on stdio, for editors and magic-cli-remote.
   `gobble acp --login <provider>` signs in, or stores a key, in a terminal an ACP client opens for
   its terminal auth method.
 - **Commands.** `version`, `completion`, `config path|get|set|unset|edit|init|update|validate|schema`,
-  `mcp add|remove|list`, `models list|info`, `providers`, `auth login|logout|status|check|import`,
+  `mcp add|remove|list`, `models list|info`, `providers`, `setup`, `auth login|logout|status|check|import`,
   `personality list|show|check|path|reset`, `trust [DIR] [--list]` and `untrust [DIR] [--forget]`.
 - **Settings and trust.** Settings are a commented `settings.yaml` in the config directory, created
   from an embedded template on the first run. A trusted project's `.gobble/settings.yaml` and

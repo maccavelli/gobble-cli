@@ -44,6 +44,7 @@ type AuthLoginCmd struct {
 	Provider string `arg:"" complete:"provider" help:"The provider."`
 	APIKey   string `name:"api-key" complete:"none" placeholder:"-" help:"Read the key from stdin, or ask for it: -."`
 	Device   bool   `name:"device" help:"Sign in with a device code, on a machine without a browser."`
+	Method   string `name:"method" complete:"none" help:"How to sign in, with no menu: api-key (the key from stdin), browser or device, as the provider offers."`
 	JSON     bool   `name:"json" help:"Print the login's events as JSON lines on stdout, and nothing on stderr."`
 }
 
@@ -92,9 +93,22 @@ func (c *AuthLoginCmd) runWith(e *runEnv, ev *loginEvents) error {
 	if err != nil {
 		return err
 	}
+	if c.Method != "" { // 0025-MADR D6
+		if c.APIKey != "" || c.Device {
+			return usageErrorf("--method is instead of --api-key and --device")
+		}
+		switch method, err := methodOf(id, c.Method); {
+		case err != nil:
+			return err
+		case method == methodAPIKey:
+			c.APIKey = "-"
+		default:
+			c.Device = method == methodDevice
+		}
+	}
 	switch c.APIKey {
 	case "":
-		return e.loginWith(id, c.Device, ev)
+		return e.loginWith(e.ctx, id, c.Device, ev, nil)
 	case "-":
 		if c.Device {
 			return usageErrorf("--device is for a login; --api-key - stores a key")
@@ -155,26 +169,28 @@ func (e *runEnv) saved(ev *loginEvents, id, typ string) error {
 }
 
 // login is loginWith in text.
-func (e *runEnv) login(id string, device bool) error { return e.loginWith(id, device, nil) }
+func (e *runEnv) login(id string, device bool) error { return e.loginWith(e.ctx, id, device, nil, nil) }
 
 // loginWith signs in to provider id (0005-PLAN F4-3b decision 6): Grok's
 // browser login, or its device login with device; Kilo's device login,
 // whose key is stored escaped, so Pi's grammar gives it back unchanged. Any
-// other provider has none. ev, when not nil, takes what it shows. A login's
-// own error is returned as is: Main prints it and exits 1, as failf would,
-// and --json's error event names its kind.
-func (e *runEnv) loginWith(id string, device bool, ev *loginEvents) error {
+// other provider has none. ev, when not nil, takes what it shows. paste,
+// when not nil, reads a browser login's pasted redirect URL; otherwise a
+// terminal's stdin does. ctx ends the login. A login's own error is
+// returned as is: Main prints it and exits 1, as failf would, and --json's
+// error event names its kind.
+func (e *runEnv) loginWith(ctx context.Context, id string, device bool, ev *loginEvents, paste func(context.Context) (string, error)) error {
 	show := func(d provider.DeviceCode) error { return e.showDeviceCode(ev, id, d) }
 	path := authPath()
 	switch {
 	case path == "":
 		return failf("auth.json: the config directory cannot be resolved")
 	case provider.HasKeyLogin(id):
-		key, err := keyLogin(e.ctx, id, provider.LoginOptions{}, show)
+		key, err := keyLogin(ctx, id, provider.LoginOptions{}, show)
 		if err != nil {
 			return err
 		}
-		if err := auth.Set(e.ctx, path, id, auth.Entry{Type: auth.TypeAPIKey, Key: catalog.QuoteValue(key)}); err != nil {
+		if err := auth.Set(ctx, path, id, auth.Entry{Type: auth.TypeAPIKey, Key: catalog.QuoteValue(key)}); err != nil {
 			return failf("%v", err)
 		}
 		return e.saved(ev, id, auth.TypeAPIKey)
@@ -182,13 +198,16 @@ func (e *runEnv) loginWith(id string, device bool, ev *loginEvents) error {
 		store := auth.Logins{Path: path}
 		var err error
 		if device {
-			err = deviceLogin(e.ctx, id, provider.LoginOptions{}, show, store)
+			err = deviceLogin(ctx, id, provider.LoginOptions{}, show, store)
 		} else {
 			o := provider.LoginOptions{OpenURL: func(u string) error { return e.showLoginURL(ev, id, u) }}
-			if e.offersPaste(ev) {
+			switch {
+			case paste != nil:
+				o.InputCode = paste
+			case e.offersPaste(ev):
 				o.InputCode = e.pastedRedirect
 			}
-			err = browserLogin(e.ctx, id, o, store)
+			err = browserLogin(ctx, id, o, store)
 		}
 		if err != nil {
 			return err
@@ -278,38 +297,52 @@ func (c *AuthLogoutCmd) Run(e *runEnv) error {
 	if err != nil {
 		return err
 	}
+	said, err := e.logout(e.ctx, id)
+	if err != nil {
+		return err
+	}
+	if said == "" {
+		said = "No stored credentials to remove. gobble auth logout only removes credentials saved by gobble auth login; " +
+			"environment variables and models.json config are unchanged."
+	}
+	return e.out.Resultf("%s\n", said)
+}
+
+// logout removes provider id's entry from auth.json, revoking a Grok
+// session first, and says what it did in Pi's words; "" when there was
+// nothing to remove (0005-PLAN F4-3b decision 7; 0025-MADR D6).
+func (e *runEnv) logout(ctx context.Context, id string) (string, error) {
 	path := authPath()
 	if path == "" {
-		return failf("auth.json: the config directory cannot be resolved")
+		return "", failf("auth.json: the config directory cannot be resolved")
 	}
 	f, err := auth.Load(path)
 	if err != nil {
-		return failf("%v", err)
+		return "", failf("%v", err)
 	}
 	was, _ := f.Entry(id)
 	if was.Type == auth.TypeOAuth && provider.HasLogin(id) {
 		// Revoked, then removed whether or not revocation succeeded
 		// (0005-PLAN F4-3b decision 7).
-		revoke, err := logoutLogin(e.ctx, id, provider.LoginOptions{}, auth.Logins{Path: path})
+		revoke, err := logoutLogin(ctx, id, provider.LoginOptions{}, auth.Logins{Path: path})
 		if err != nil {
-			return failf("%v", err)
+			return "", failf("%v", err)
 		}
 		if revoke != nil {
 			e.out.Warnf("%s's session could not be revoked (%s); it was removed from auth.json", id, provider.FailureKind(revoke))
 		}
-		return e.out.Resultf("Logged out of %s\n", id)
+		return "Logged out of " + id, nil
 	}
-	removed, err := auth.Delete(e.ctx, path, id)
+	removed, err := auth.Delete(ctx, path, id)
 	switch {
 	case err != nil:
-		return failf("%v", err)
+		return "", failf("%v", err)
 	case !removed:
-		return e.out.Resultf("No stored credentials to remove. gobble auth logout only removes credentials saved by gobble auth login; " +
-			"environment variables and models.json config are unchanged.\n")
+		return "", nil
 	case was.Type == auth.TypeOAuth:
-		return e.out.Resultf("Logged out of %s\n", id)
+		return "Logged out of " + id, nil
 	}
-	return e.out.Resultf("Removed stored API key for %s. Environment variables and models.json config are unchanged.\n", id)
+	return fmt.Sprintf("Removed stored API key for %s. Environment variables and models.json config are unchanged.", id), nil
 }
 
 // AuthStatusCmd is gobble auth status.

@@ -35,8 +35,20 @@ func (e *runEnv) startModel() string { return e.start().model }
 func (e *runEnv) startNote() string { return e.start().note }
 
 func (e *runEnv) start() startChoice {
-	e.startOnce.Do(func() { e.startAt = e.chooseStart() })
+	e.startMu.Lock()
+	defer e.startMu.Unlock()
+	if !e.started {
+		e.startAt, e.started = e.chooseStart(), true
+	}
 	return e.startAt
+}
+
+// restart has the next start() choose again, after the credentials
+// changed (0025-MADR D6).
+func (e *runEnv) restart() {
+	e.startMu.Lock()
+	defer e.startMu.Unlock()
+	e.started = false
 }
 
 func (e *runEnv) chooseStart() startChoice {

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -24,32 +25,76 @@ func authPath() string {
 	return filepath.Join(dirs.Config, "auth.json")
 }
 
-// credentials is the run's credential resolver, built once: --api-key's key
-// (set by setRuntimeKey), auth.json, models.json's keys and the providers'
-// variables, in Pi's order. A file that cannot be read is not used, with
-// one warning (0005-PLAN F4-3a).
+// credentials is the run's credential resolver, built when first needed:
+// --api-key's key (set by setRuntimeKey), auth.json, models.json's keys and
+// the providers' variables, in Pi's order. A file that cannot be read is
+// not used, with one warning (0005-PLAN F4-3a).
 func (e *runEnv) credentials() *auth.Resolver {
-	e.credsOnce.Do(func() {
-		mj := e.modelsJSON()
-		r := &auth.Resolver{
-			Runtime:       map[string]string{},
-			ModelsJSONKey: mj.APIKey,
-			Var:           provider.CredentialVar,
-			LookupEnv:     os.LookupEnv,
-			Run:           func(command string) (string, error) { return e.runCommand(e.ctx, command) },
-			HasLogin:      provider.HasLogin,
-		}
-		if path := authPath(); path != "" {
-			f, err := auth.Load(path)
-			if err != nil {
-				e.log().Warn("auth.json", slog.String("message", err.Error()+"; the file is not used"))
-			} else {
-				r.File = f
-			}
-		}
-		e.creds = r
-	})
+	e.credsBuild.Lock()
+	defer e.credsBuild.Unlock()
+	if e.creds == nil {
+		e.creds = e.newResolver(map[string]string{})
+	}
 	return e.creds
+}
+
+// newResolver is a resolver over the files as they are now, with runtime
+// as --api-key's keys.
+func (e *runEnv) newResolver(runtime map[string]string) *auth.Resolver {
+	mj := e.modelsJSON()
+	r := &auth.Resolver{
+		Runtime:       runtime,
+		ModelsJSONKey: mj.APIKey,
+		Var:           provider.CredentialVar,
+		LookupEnv:     os.LookupEnv,
+		Run:           func(command string) (string, error) { return e.runCommand(e.ctx, command) },
+		HasLogin:      provider.HasLogin,
+	}
+	if path := authPath(); path != "" {
+		f, err := auth.Load(path)
+		if err != nil {
+			e.log().Warn("auth.json", slog.String("message", err.Error()+"; the file is not used"))
+		} else {
+			r.File = f
+		}
+	}
+	return r
+}
+
+// refreshCredentials reads the credentials again after a sign-in or a
+// sign-out changed provider id's: the resolver, with --api-key's keys kept;
+// the keys resolved for lookups; id's listing, which lists again with the
+// new credential; and where a run starts. id's generation advances, so a
+// mark a refused turn set under the old credential no longer holds
+// (0025-MADR D4, D6).
+func (e *runEnv) refreshCredentials(id string) {
+	e.credsBuild.Lock()
+	runtime := map[string]string{}
+	if e.creds != nil {
+		maps.Copy(runtime, e.creds.Runtime)
+	}
+	e.creds = e.newResolver(runtime)
+	e.credsBuild.Unlock()
+	e.credsMu.Lock()
+	e.knownKeys = nil
+	delete(e.credWarned, id)
+	if e.credGen == nil {
+		e.credGen = map[string]uint64{}
+	}
+	e.credGen[id]++
+	e.credsMu.Unlock()
+	e.listingsMu.Lock()
+	delete(e.listings, id)
+	e.listingsMu.Unlock()
+	e.restart()
+}
+
+// credentialGeneration is provider id's credential generation, which a
+// sign-in or a sign-out advances (0025-MADR D4).
+func (e *runEnv) credentialGeneration(id string) uint64 {
+	e.credsMu.Lock()
+	defer e.credsMu.Unlock()
+	return e.credGen[id]
 }
 
 // setRuntimeKey is --api-key's key for provider id, for this run alone.

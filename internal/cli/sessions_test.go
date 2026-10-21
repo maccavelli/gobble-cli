@@ -328,6 +328,9 @@ func TestLineSessionResumedLine(t *testing.T) {
 		choice: sessionChoice{resume: "s1"}}
 	done := make(chan error, 1)
 	go func() { done <- ls.run(Prompt{}) }()
+	if _, err := io.WriteString(keysW, "n\r"); err != nil { // no credential: the sign-in offered first is declined (0025-MADR D7)
+		t.Fatal(err)
+	}
 	waitUntil(t, func() bool { return strings.Contains(stdout.String(), "> ") })
 	if _, err := io.WriteString(keysW, "next\r"); err != nil {
 		t.Fatal(err)

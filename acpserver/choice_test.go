@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	acp "github.com/maccavelli/acp-go-sdk2"
@@ -233,6 +234,42 @@ func TestStateOf(t *testing.T) {
 		if state != tc.state || reason != tc.reason || strings.Contains(reason, "sk-") {
 			t.Errorf("StateOf(%v) = %s %q, want %s %q", tc.err, state, reason, tc.state, tc.reason)
 		}
+	}
+}
+
+// A refused turn's mark holds while the provider's credential is the one it
+// was set under: a sign-in, which advances the generation, lifts it
+// (0025-MADR D4, D6).
+func TestSignInLiftsMark(t *testing.T) {
+	refused := llmtest.Turn{Err: &llm.APIError{Status: 401, Err: fmt.Errorf("%w: refused", llm.ErrAuth)}}
+	var gen atomic.Uint64
+	client := &acptest.Client{Allow: true}
+	ag := New(Options{Version: "1.2.3", Provider: func(string, llm.Retry) (llm.Provider, error) { return llmtest.NewScript(refused), nil },
+		Models: func() ModelChoice { return multiModels }, Store: jsonl.New(t.TempDir(), jsonl.Options{}),
+		CredentialGeneration: func(id string) uint64 {
+			if id == "fake" {
+				return gen.Load()
+			}
+			return 0
+		}})
+	c := acptest.Connect(t, ag, client)
+	ag.SetConnection(c.Agent)
+	t.Cleanup(func() {
+		if err := ag.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	initialize(t, c.Client)
+	id := newSession(t, c, t.TempDir(), nil).SessionId
+	if _, err := prompt(t, c, id, "hello"); err == nil {
+		t.Fatal("the refused turn answered")
+	}
+	if text, _ := slash(t, c, client, id, "/model"); !strings.Contains(text, "**Fake** — key rejected (HTTP 401)") {
+		t.Fatalf("/model after a refused key:\n%s", text)
+	}
+	gen.Add(1)
+	if text, _ := slash(t, c, client, id, "/model"); !strings.Contains(text, "**Fake** — live") {
+		t.Fatalf("/model after a sign-in:\n%s", text)
 	}
 }
 

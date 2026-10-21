@@ -114,7 +114,12 @@ session (D4), and signed in to from the session, ChatGPT's plan and Grok's subsc
    - D7: with no credential the session offers the wizard before its first prompt; declined, it goes on; `gobble
      setup` runs it.
 2. **The credential cache** (`internal/cli/credentials.go:31-52`) becomes refreshable after a login or a logout.
-3. **Records:** a dated note in 0005-MADR (`/login`, `/logout` in the line session).
+3. **The start's warnings** *(added 2026-10-20, the owner's choice "Run's provider only", MADR D4's note)*: tests first,
+   with three keys and every listing failing, stderr holds one listing warning, the run's provider's, and the log file
+   a record for each of the three; then a listing of another provider logs its failure at info level, which reaches
+   the log file and not stderr.
+4. **Records:** a dated note in 0005-MADR (`/login`, `/logout` in the line session); a dated note in 0020-MADR D6 (the
+   start's warnings).
 
 ### P6 — ChatGPT's plan sign-in (D6, 0005-PLAN F4-3d)
 
@@ -476,7 +481,8 @@ string's third use: it is the package's `labelProvider`. gofmt split `listable` 
 **Found, not done here (a question for the owner):** `docs/guides/choosing-a-model.md` still describes the start and
 `/model` before P2 and P3 (a session's `/model` "for that session only", no `--default`, no start order) and does not
 name browsing. P4's records are `README.md` and `docs/architecture.md` alone, so the guide is unchanged. The startup
-listing-warning question from P3's record is still open.
+listing-warning question from P3's record is still open. *(2026-10-20, after `349fda1`, the owner's choices: the
+guide is deviation 5 below; the warnings are P5 step 3.)*
 
 **Gates:**
 
@@ -490,3 +496,160 @@ listing-warning question from P3's record is still open.
   there, after a streamed copy stalled part-way; the tree it ran on held all 744 files.
 
 **Not done in P4, as the plan says:** `/login` and first-run setup (P5), ChatGPT (P6), cycling (P7).
+
+**Deviation 5, 2026-10-20, P4, decided by the owner after its commit `349fda1`** ("Amend P4, fix now"):
+`docs/guides/choosing-a-model.md`, the user's guide to choosing a model, still described one provider a run: the start
+without `defaultProvider`'s fall-through or the recent models (P3), `/model` "for that session only" with no switch
+across providers or `--default` (P2, P3), and listing with no providers or catalogs (P4). P4's records named
+`README.md` and `docs/architecture.md` alone.
+
+- **Chosen:** the guide rewritten where it was stale, in P4: the start order as P3 built it; switching in a session,
+  `/model`'s list, numbers, refs, `--default`, and what another model is sent; browsing, `gobble providers`, the
+  states, `models list --provider` and `--all`, `/providers` and `/models`. Its examples are `gobble`'s own output,
+  run with no credential in a scratch home.
+- **Not chosen:** the guide in P5's records, or a guides pair after 0025.
+- **File added to P4's scope:** `docs/guides/choosing-a-model.md`. Checked with `make check-records markdownlint`.
+
+**Deviation 6, 2026-10-20, P5, decided by the owner** ("gobble's flow, SDK parts"): measured before P5's tests,
+`go-llmprovider-sdk` v1.17.0's `wizard.ConfigureLLM`, which MADR D6 has `/login` run, does not fit gobble's credentials:
+
+- it always ends with its own model search and menu (`wizard/configure.go:232`, `selectModel`), where D6 opens
+  gobble's picker after it;
+- Kilo's device sign-in saves an OAuth session and then asks for a Kilo organization (`wizard/auth.go:292-349`),
+  where gobble stores the key Kilo returns (`provider.KeyLogin`) and reads no Kilo session or organization
+  (`provider.HasLogin` is Grok's alone): `/login kilo` would store a credential gobble cannot read;
+- it asks Kilo, Hugging Face, Together, OpenCode and Ollama for an endpoint (`SupportsBaseURL`,
+  `wizard/configure.go:277-322`), which gobble keeps in `models.json` and would not save;
+- its sign-in methods are its registry's descriptors' (`wizard/auth.go:72-85`), the Codex-client-id methods among
+  OpenAI's.
+
+- **Chosen:** `/login` is gobble's own flow over its prompter: the provider (the key providers, each with its
+  credential's source), the method (gobble's: an API key; Grok's browser and device sign-in; Kilo's device sign-in),
+  the credential through gobble's existing sign-ins (`internal/cli/auth.go`'s), a typed key checked by a listing and
+  asked for again on a refusal, up to three keys; then D6's after-steps. `/logout` uses `gobble auth logout`'s code.
+  MADR D6 annotated.
+- **Not chosen:** the wizard with a gobble registry and Kilo's OAuth login learned; the wizard with Kilo's API key
+  alone.
+- No file is added to P5's scope; `llm/provider` needs no wizard wrapper.
+
+**Deviation 7, 2026-10-20, P5, decided by the owner** ("Raw mode, masked echo"): step 1 has the prompter's questions
+"each out of raw mode" and `Secret` "with no echo". Out of raw mode the terminal echoes what is typed, and the line
+session's `editor.Reader` owns stdin (0008-MADR D6), so `term.ReadPassword` cannot read it.
+
+- **Chosen:** `Select`, `Confirm` and `Input` read out of raw mode, a line at a time; `Secret` reads in raw mode
+  through the reader, echoing `*` for each character, Backspace erasing one, Enter ending, Ctrl+C cancelling, as the
+  permission prompt reads its reason (`internal/cli/permission.go`, `readWhy`). Bracketed paste is off while a
+  question reads, so a pasted key or URL arrives as typed text. MADR D6 annotated.
+- **Not chosen:** no echo at all.
+- No file is added to P5's scope.
+
+**Deviation 8, 2026-10-20, P5, decided by the owner** ("Yes, in P5"): step 4 names only dated notes in 0005-MADR and
+0020-MADR. `README.md`'s credentials line, `docs/architecture.md`'s commands and `docs/guides/credentials.md` would not
+name `/login`, `/logout`, `gobble setup`, `auth login --method` or the first-run offer.
+
+- **Chosen:** the three updated in P5, the guide's examples gobble's own output in a scratch home with no credential
+  and no network.
+- **Not chosen:** the two summaries alone; or none, the docs catching up later.
+- **Files added to P5's scope:** `README.md`, `docs/architecture.md`, `docs/guides/credentials.md`.
+
+**Deviation 9, 2026-10-20, P5, decided by the owner** ("Stub in TestMain, in P5"): one of P5's negative experiments
+(`--method` accepting any word) sent `gobble auth login grok --method nope` to Grok's real browser sign-in, and it
+opened xAI's sign-in page in the owner's browser; nothing was signed in or stored. `internal/cli`'s `TestMain` keeps
+every test off the network's listings (0020-MADR D7) but not off the browser opener (`openURL`,
+`internal/cli/browser.go:14`) or the sign-ins (`browserLogin`, `deviceLogin`, `keyLogin`, `logoutLogin`,
+`internal/cli/auth.go`), which every test that signs in replaces itself.
+
+- **Chosen:** `TestMain` replaces the opener with one that opens nothing, and the sign-ins, the logout's revocation
+  with them since it calls xAI too, with ones that fail at once with a test error; a test that needs one replaces it
+  as now. A test checks the replacements by identity, so seeing it fail on the unchanged code calls nothing.
+- **Not chosen:** the opener alone; a separate pair for test isolation.
+- **File added to P5's scope:** `internal/cli/testmain_test.go`.
+
+### P5 execution record (2026-10-20)
+
+**Run** on `main` at `349fda1`, on the owner's word "Record, then do P5", after deviation 5 and the start's warnings
+were recorded (MADR D4's note, step 3), with deviations 6, 7, 8 and 9 above.
+
+**Steps:**
+
+1. **Tests,** `internal/cli/login_test.go` and `acpserver/choice_test.go`:
+   - the prompter: `TestQuestionsChoose`, `TestQuestionsConfirmAndInput`, `TestQuestionsSecret` (the masked echo,
+     raw mode entered before the prompt and restored once, paste markers and escape sequences left out, Ctrl+C and
+     the end of input cancelling);
+   - `/login`: `TestLoginSlash` (no menu for claude's one method; a refused key asked for again with `(HTTP 401)`;
+     the accepted key stored, the credentials read again, claude's models listed; no key on screen; bracketed paste
+     off while asking), `TestLoginUncheckedKey`, `TestLoginMenuAndRefusals` (every key provider with its source; three
+     refused keys, nothing saved), `TestLoginGrokDevice`, `TestLoginInterrupt` (Ctrl+C ends the sign-in, not gobble);
+   - `/logout`: `TestLogoutSlash` (only `auth.json`'s credentials offered; a Grok session revoked; a variable still
+     set named; a second removal says there is none);
+   - `TestModelOffersLogin`, `TestFirstRunSetup` (taken and declined), `TestSetupNeedsTerminal`,
+     `TestAuthLoginMethod`, `TestStartWarnsRunProviderOnly` (one warning, the run's provider's, and a record of each
+     of the three in the log file); `TestSignInLiftsMark` in `acpserver`.
+   - Each was seen failing on a scratch copy of the tree, one mutation at a time, the tree untouched: twenty-five
+     mutations, twenty-five failures, among them a choice past the list (`choose = 8`), a secret echoing itself
+     (`the echo "Key: sk-ab…"`), the prompt written before raw mode (`the prompt "Key: " was written before raw mode`),
+     a refused key saved (`auth.json's claude key "sk-test-REFUSED-1"`), Ctrl+C not taken (`the sign-in did not take
+     the interrupt`), every failed listing warning (`4 warnings at start, want openai's alone`) and a mark outliving a
+     sign-in; the restored copy passed. Two first forms were redone: one did not build, and `--method` accepting any
+     word fell through to Grok's real browser sign-in and failed only by timing out; the tests do not stub the
+     browser opener, and it opened xAI's sign-in page in the owner's browser on the macOS host, as the owner
+     reported (no sign-in completed, nothing stored). Its redone form takes `browser` for claude, which has no
+     login. Deviation 9 followed: `TestMain` now stubs the opener and the sign-ins, `TestNoBrowserOrSignIn` checks
+     them by identity (seen failing on the unchanged code for all five, nothing called), and the mutation that opened
+     the browser, run again behind them, fails in 0.05 s with `tests open no browser and sign in nowhere`.
+2. **The credential cache** is refreshable (`internal/cli/credentials.go`): after a sign-in or a sign-out the resolver
+   is built again, `--api-key`'s keys kept; the keys resolved for lookups are dropped; the provider's listing is made
+   again; where a run starts is chosen again (`internal/cli/start.go`); and the provider's credential generation
+   advances. `acpserver.Options.CredentialGeneration` gives it to the agent, whose mark of a refused turn holds only
+   under the generation it was set in, so a sign-in lifts it, as MADR D4 says (`acpserver/agent.go`, `choice.go`).
+3. **The start's warnings** (step 3): every failed listing is a record in the log file at info level; the run's
+   provider's warns, once per attempt, and so does each listing `gobble models list` shows (`internal/cli/models.go`,
+   `agent.go`, `modelscmd.go`).
+4. **The sign-in** (`internal/cli/prompt.go`, `login.go`): the prompter; `/login [provider]` and `/logout [provider]`
+   as the line session's own commands (`slash.go`); the first-run offer before the first prompt (`line.go`);
+   `gobble setup` (`root.go`); `gobble auth login --method api-key|browser|device` (`auth.go`), whose `loginWith`
+   now takes the sign-in's context and a paste source, so a pasted redirect URL comes through the reader that owns
+   stdin, and whose logout is shared with `/logout`. In the line session a provider with no credential reads
+   `/login <provider>` in `/providers`, `/model` and the menu (`choice.go`, `providerscmd.go`).
+5. **Records:** dated notes in 0005-MADR (`/login`, `/logout` in the line session) and 0020-MADR D6; deviations 6, 7,
+   8 and 9, with MADR D6's notes for 6 and 7; `README.md`, `docs/architecture.md`, `docs/guides/credentials.md`; this
+   record.
+
+**Tests changed with it, none loosened:**
+
+- The line harness (`line_test.go`) and `TestLineSessionResumedLine` answer the first-run offer, which every session
+  with no credential on a terminal now asks: they decline it, so each test's session goes on as it did. `TestMain`
+  clears every key, so without that every line-session test waited at the question.
+- `TestLineSessionLeads` takes the declined question off the lead's line before comparing: the harness's terminal
+  echoes no answer, so the lead follows the question on one line, where a terminal would show the typed `n` and a
+  line end. The lead is still required, and still directly before the warning.
+
+**Found in a pseudo-terminal and fixed in the phase:** a first run driven in a pseudo-terminal, with no key and a
+dead proxy, so no request left the host, showed two faults the tests had not:
+
+- the key's first character echoed in clear (`Claude (Anthropic) API key: d*************`): `secret` wrote its
+  prompt and then entered raw mode, so a character typed at once was echoed by the terminal in cooked mode. Raw mode
+  is now on before the prompt; a test pins the order.
+- no notice for a key the listing could not check: `provider.List` gives a refused or failed listing in the listing
+  (`Listing.Err`) with no error, and `typedKey` read only the error, so a refusal also lost its HTTP status. It reads
+  the listing's; the tests' lister reports failures as `List` does; `TestLoginUncheckedKey` is new.
+
+The run then showed thirteen `*` for a thirteen-character key, none of it in clear, the notice, `Saved API key for
+claude`, claude's models listed, and `/logout claude` leaving an empty `auth.json`.
+
+**Not measured live:** a key checked against a real provider, and the Grok and Kilo sign-ins through `/login`, which
+call the same `loginWith` as `gobble auth login`, measured in 0005-PLAN F4-3b; the owner's own `/login` is the live
+check.
+
+**Gates:**
+
+- the pre-add check on the twenty-two changed `.go` files, `22 file(s) clean (gofmt, golint, govulncheck)`; `make
+  preflight` on macOS, `preflight passed`, golangci-lint `0 issues.`;
+- macOS: the tests and the race detector, 35 packages ok each;
+- the Linux machine and the Windows laptop, over ssh with `-o BatchMode=yes -o ConnectTimeout=5`, on a copy of the
+  working tree sent as a file and unpacked there, all 747 files, Windows with `TMP` and `TEMP` outside the user's
+  home: the tests and the race detector, 35 packages ok on each; `make preflight` through `apidiff` (golangci-lint
+  `0 issues.`), stopping at `verify-build-metadata` on a copy; `make check-records markdownlint`, "0 issues in 0
+  files". An earlier round on both, on the tree before the pseudo-terminal's fixes, passed the same.
+
+**Not done in P5, as the plan says:** ChatGPT's plan sign-in (P6), cycling (P7).

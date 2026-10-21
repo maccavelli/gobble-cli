@@ -36,6 +36,9 @@ type modelListing struct {
 	result   provider.Listing
 	at       time.Time // when result was listed
 	retrying bool
+	// attempts counts the listings ended; warned is the attempt last warned
+	// of (0020-MADR D6).
+	attempts, warned int
 
 	// kept is the listing an earlier run kept on disk, shown while this
 	// one runs (0025-MADR D4).
@@ -53,6 +56,7 @@ func (l *modelListing) start() {
 			r := l.fetch()
 			l.mu.Lock()
 			l.result, l.at = r, l.now()
+			l.attempts++
 			l.mu.Unlock()
 			close(l.ready)
 		}()
@@ -91,11 +95,38 @@ func (l *modelListing) retry() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.result, l.at, l.retrying = r, l.now(), false
+	l.attempts++
 }
 
+// unwarned is the kept listing when it failed and its attempt was not yet
+// warned of, which it now is: one warning per attempt (0020-MADR D6).
+func (l *modelListing) unwarned() (provider.Listing, bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.result.Live || l.attempts == 0 || l.warned == l.attempts {
+		return provider.Listing{}, false
+	}
+	l.warned = l.attempts
+	return l.result, true
+}
+
+// warnListing warns that provider id's listing failed, once per attempt:
+// the run's provider's, and each one gobble models list shows. Another
+// provider's failure is a record in the log file and its state, not a line
+// at start (0020-MADR D6; 0025-MADR D4).
+func (e *runEnv) warnListing(id string, l *modelListing) {
+	if r, ok := l.unwarned(); ok {
+		e.log().WarnContext(e.ctx, listingFailed, slog.String("provider", id), slog.String("kind", provider.FailureKind(r.Err)))
+	}
+}
+
+// listingFailed is a failed listing's record.
+const listingFailed = "model listing failed; offering the curated static list"
+
 // modelListing is the listing of sel's models for this process, made with
-// sel's credential. A failed listing is the static models, and a warning
-// names the provider and the failure's kind, never its text (0020-MADR D6).
+// sel's credential. A failed listing is the static models, and a record in
+// the log file names the provider and the failure's kind, never its text
+// (0020-MADR D6); warnListing warns of it.
 func (e *runEnv) modelListing(sel provider.Selection) *modelListing {
 	e.listingsMu.Lock()
 	defer e.listingsMu.Unlock()
@@ -122,9 +153,8 @@ func (e *runEnv) modelListing(sel provider.Selection) *modelListing {
 		if err != nil {
 			r = provider.Listing{Models: provider.Models(sel.ID), Err: err}
 		}
-		if !r.Live {
-			e.log().WarnContext(e.ctx, "model listing failed; offering the curated static list",
-				slog.String("provider", sel.ID), slog.String("kind", provider.FailureKind(r.Err)))
+		if !r.Live { // the log file's record; warnListing warns of the run's (0025-MADR D4)
+			e.log().InfoContext(e.ctx, listingFailed, slog.String("provider", sel.ID), slog.String("kind", provider.FailureKind(r.Err)))
 		}
 		if r.Live && r.Source == "live" {
 			writeKept(sel.ID, r)

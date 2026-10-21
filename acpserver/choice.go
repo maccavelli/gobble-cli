@@ -202,7 +202,7 @@ func (a *Agent) choice() ModelChoice {
 	}
 	ps := slices.Clone(c.providerList())
 	for i, p := range ps {
-		if m, ok := a.marks[p.ID]; ok {
+		if m, ok := a.marks[p.ID]; ok && m.gen == a.generation(p.ID) {
 			ps[i].State, ps[i].Reason = m.state, m.reason
 		}
 	}
@@ -247,10 +247,21 @@ func stamped(msgs []llm.Message, origin llm.Origin, cancelled bool) []llm.Messag
 	return out
 }
 
-// mark is a provider's state after a refused turn.
+// mark is a provider's state after a refused turn, under its credential's
+// generation then.
 type mark struct {
 	state  ProviderState
 	reason string
+	gen    uint64
+}
+
+// generation is provider id's credential generation, or 0 when the
+// embedder gives none.
+func (a *Agent) generation(id string) uint64 {
+	if a.credGen == nil {
+		return 0
+	}
+	return a.credGen(id)
 }
 
 // markFailure marks provider when a turn's err says its key was refused,
@@ -261,12 +272,13 @@ func (a *Agent) markFailure(provider string, err error) {
 		return
 	}
 	state, reason := StateOf(provider, err)
+	gen := a.generation(provider)
 	a.marksMu.Lock()
 	defer a.marksMu.Unlock()
 	if a.marks == nil {
 		a.marks = map[string]mark{}
 	}
-	a.marks[provider] = mark{state, reason}
+	a.marks[provider] = mark{state, reason, gen}
 }
 
 // heading is a provider's line above its models: its label, its state, and

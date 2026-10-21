@@ -99,7 +99,12 @@ Early, and built in the order [docs/README.md](docs/README.md#build-order) gives
   one provider's models, or every provider's, numbered as `/model N` takes them.
 - **Credentials** in Pi's order: `--api-key -`, a Pi-style `auth.json`, `models.json`'s `apiKey`, then the
   provider's variable; `gobble auth login --api-key -|logout|status|check`, signing in to Grok or Kilo with
-  `gobble auth login grok|kilo`, and `gobble auth import --from-pi` ([guide](docs/guides/credentials.md)).
+  `gobble auth login grok|kilo`, `--method api-key|browser|device` for no menu, and `gobble auth import --from-pi`
+  ([guide](docs/guides/credentials.md)).
+- **Signing in where you are:** `/login [provider]` in a session asks which provider and how, checks a typed key
+  by listing the provider's models, stores it, and lists the models to switch to; `/logout [provider]` removes a
+  stored credential. With no credential at all, a session offers the sign-in before its first prompt, and
+  `gobble setup` runs it at any time.
 
 Not built yet: `--offline`, which is refused until 0005-PLAN X3; the enhanced TUI
 mode; and `gobble update`. The full v1 line, tiered into

@@ -39,7 +39,7 @@ func (e *runEnv) providerChoices(run string, runModels []string) []acpserver.Pro
 		p := acpserver.ProviderChoice{ID: id, Label: provider.Label(id), Source: e.credentialWords(id), Methods: signInWords(id)}
 		if !e.hasCredential(id) {
 			p.State = acpserver.StateNoCredential
-			p.Reason = fmt.Sprintf("— set %s, or gobble auth login %s", provider.CredentialVar(id), id)
+			p.Reason = fmt.Sprintf("— set %s, or %s", provider.CredentialVar(id), e.signInHint(id))
 			out = append(out, withKnown(p))
 			continue
 		}

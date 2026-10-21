@@ -1,7 +1,9 @@
 package cli
 
 import (
+	"cmp"
 	"io"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -10,6 +12,7 @@ import (
 	"github.com/maccavelli/gobble-cli/acpclient/acptest"
 	"github.com/maccavelli/gobble-cli/internal/cli/term"
 	"github.com/maccavelli/gobble-cli/llm/llmtest"
+	"github.com/maccavelli/gobble-cli/llm/provider"
 	"github.com/maccavelli/gobble-cli/personality"
 )
 
@@ -24,6 +27,9 @@ type lineHarness struct {
 	voice          *personality.Voice // the session's lines; nil is boring
 	stdout, stderr *syncBuffer
 	done           chan error
+	// answer is pressed for the sign-in offered when no provider has a
+	// credential; "" declines it (0025-MADR D7).
+	answer string
 
 	mu             sync.Mutex
 	raws, restores int
@@ -63,7 +69,10 @@ func newModelHarness(t *testing.T, s *llmtest.Script, cwd string) *lineHarness {
 	return h
 }
 
-// start runs the session with first as the composed first prompt.
+// start runs the session with first as the composed first prompt. With
+// no provider's credential set, it answers the sign-in the session offers
+// first with answer, declining it unless a test set it (0025-MADR D7), so
+// the session goes on as it did before the offer.
 func (h *lineHarness) start(first Prompt) {
 	keysR, keysW := io.Pipe()
 	h.keys = keysW
@@ -72,8 +81,12 @@ func (h *lineHarness) start(first Prompt) {
 		cwd = acptest.Abs("/work")
 	}
 	ls := &lineSession{e: h.e, cwd: cwd, base: cwd, in: keysR, raw: h.raw, voice: h.voice}
+	offered := !slices.ContainsFunc(provider.KeyProviders(), h.e.hasCredential)
 	go func() { h.done <- ls.run(first) }()
 	h.t.Cleanup(func() { keysW.Close() }) //nolint:errcheck,gosec // test cleanup
+	if offered {
+		h.press(cmp.Or(h.answer, "n\r"))
+	}
 }
 
 func (h *lineHarness) raw() (func() error, error) {

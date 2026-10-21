@@ -173,18 +173,26 @@ type runEnv struct {
 	// gives defaultModel's warning once (0005-PLAN F4-2c).
 	pick             modelPick
 	defaultModelOnce sync.Once
-	// startOnce chooses startAt, where a run starts when --model names no
-	// provider, once (0025-MADR D3).
-	startOnce sync.Once
-	startAt   startChoice
-	// creds is the run's credential resolver, built once; credsMu guards
-	// credWarned, the providers whose resolution error was warned, and
-	// knownKeys, the keys resolved once for lookups (0005-PLAN F4-3a).
-	credsOnce  sync.Once
+	// inLine is whether the run is the line session, where /login signs in
+	// (0025-MADR D6).
+	inLine bool
+	// startAt is where a run starts when --model names no provider, chosen
+	// once, and again after a sign-in or a sign-out; startMu guards it
+	// (0025-MADR D3, D6).
+	startMu sync.Mutex
+	started bool
+	startAt startChoice
+	// creds is the run's credential resolver, built when first needed and
+	// again after a sign-in or a sign-out; credsBuild guards it. credsMu
+	// guards credWarned, the providers whose resolution error was warned,
+	// knownKeys, the keys resolved once for lookups (0005-PLAN F4-3a), and
+	// credGen, each provider's credential generation (0025-MADR D4).
+	credsBuild sync.Mutex
 	creds      *auth.Resolver
 	credsMu    sync.Mutex
 	credWarned map[string]bool
 	knownKeys  map[string]string
+	credGen    map[string]uint64
 	// personality is --personality's, by its canonical name, which the
 	// run's sessions start with; "" leaves the setting's (0022-PLAN P3).
 	// personalitySet are the personalities, loaded once.

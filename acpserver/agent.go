@@ -75,6 +75,12 @@ type Options struct {
 	// by /model or the model option, for the recent models (0025-MADR D3).
 	// Nil remembers nothing.
 	Remember func(ref string)
+	// CredentialGeneration is provider id's credential generation, which
+	// advances when its credential changes, by a sign-in or a sign-out; a
+	// mark a refused turn set holds only while the generation is the one
+	// it was set under (0025-MADR D4, D6). Nil keeps a mark for the
+	// agent's life.
+	CredentialGeneration func(id string) uint64
 	// SearchModels is the SDK's matcher over a provider's models, for /model
 	// with words (0025-MADR D5). Nil matches words in each ref and name.
 	SearchModels func(provider string, models []string, query string) []string
@@ -142,8 +148,10 @@ type Agent struct {
 	rememberModel func(ref string)
 	search        func(provider string, models []string, query string) []string
 	// marksMu guards marks, the providers a turn saw refused (0025-MADR D4).
-	marksMu  sync.Mutex
-	marks    map[string]mark
+	marksMu sync.Mutex
+	marks   map[string]mark
+	// credGen is Options.CredentialGeneration.
+	credGen  func(id string) uint64
 	info     func(provider, model string) llm.Model
 	override Override
 	tools    []tool.Tool
@@ -282,7 +290,7 @@ var (
 // the first request, so it can send session updates.
 func New(opts Options) *Agent {
 	a := &Agent{version: opts.Version, newID: opts.NewID, provider: opts.Provider, providerFor: opts.ProviderFor, models: opts.Models, info: opts.ModelInfo,
-		rememberModel: opts.Remember, search: opts.SearchModels,
+		rememberModel: opts.Remember, search: opts.SearchModels, credGen: opts.CredentialGeneration,
 		override: opts.Override, tools: opts.Tools, noGrants: opts.NoRequestPermissions, store: opts.Store, now: opts.Now, mcp: opts.MCP, logger: opts.Logger, prompt: opts.Prompt,
 		settings: opts.Settings, auth: opts.Auth, save: opts.SaveSetting, personalities: opts.Personalities, compactionPrompts: opts.CompactionPrompts, titles: opts.Title,
 		trust: opts.Trust, perms: opts.Permissions, sessions: map[acp.SessionId]*liveSession{}}

@@ -320,7 +320,7 @@ handlers, and a test enforces it.
 |---|---|
 | `/help`, `/compact [instr]`, `/usage`, `/context`, `/session`, `/status`, `/model [id]`, `/thinking [level]`, `/mode [id]`, `/plan`, `/name [name]`, `/fork [entry]`, `/clone`, `/todos`, `/mcp [status\|reconnect]`, `/permissions`, `/trust`, `/reload`, `/skill:<name>`, template commands | 1.0 |
 | `/tree [id]`, `/label`, `/undo`, `/redo`, `/diff [turn]`, `/ps`, `/stop [job]`, `/review`, `/init`, `/agents`, `/export [path]`, `/share`, `/archive`, `/delete`, `/mcp:<server>:<prompt>` | 1.x |
-| TUI only, never advertised: `/settings`, `/hotkeys`, `/quit`, `/copy`, `/new`, `/resume`, `/login`, `/logout`, `/theme`, `/changelog`, `/editor` | 1.0 (TUI) |
+| TUI only, never advertised: `/settings`, `/hotkeys`, `/quit`, `/copy`, `/new`, `/resume`, `/login`, `/logout`, `/theme`, `/changelog`, `/editor` *(2026-10-20, 0025-MADR D6: `/login` and `/logout` are the line session's own commands too, never advertised to ACP clients, which keep the terminal auth methods)* | 1.0 (TUI) |
 
 ### Companion `command.Table` target (magic-cli-remote `IDPi`)
 
