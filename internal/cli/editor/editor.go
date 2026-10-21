@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	xterm "golang.org/x/term"
+
+	"github.com/maccavelli/gobble-cli/internal/cli/term"
 )
 
 // ErrExit is returned by ReadPrompt for a second Ctrl+C on an empty line
@@ -25,11 +27,14 @@ type History interface {
 
 // Options configure an Editor. Empty prompts take the defaults "> " and
 // "… "; pass "... " for ASCII glyphs. Complete, when set, is called for Tab
-// with the line and the cursor's byte offset.
+// with the line and the cursor's byte offset. Header, when set, is read
+// before each new prompt and written on its own line above it, never above
+// a continuation prompt (0024-MADR D8).
 type Options struct {
 	Prompt, Continue string
 	History          History
 	Complete         func(line string, pos int) (newLine string, newPos int, ok bool)
+	Header           func() string
 }
 
 // Editor reads one submission at a time from a terminal in raw mode.
@@ -71,6 +76,9 @@ func (e *Editor) Restore() {
 // ErrExit for a second Ctrl+C. When ctx is done it returns ctx's error.
 func (e *Editor) ReadPrompt(ctx context.Context) (string, error) {
 	e.keys.ctx = ctx
+	if err := e.header(); err != nil {
+		return "", err
+	}
 	for {
 		e.term.SetPrompt(e.prompt())
 		line, err := e.term.ReadLine()
@@ -113,6 +121,23 @@ func (e *Editor) ReadPrompt(ctx context.Context) (string, error) {
 		}
 		return text, nil
 	}
+}
+
+// header writes Options.Header above the new prompt, through the terminal,
+// whose count of the cursor it keeps: one line, with escape sequences and
+// control characters dropped and line breaks made spaces.
+func (e *Editor) header() error {
+	if e.opts.Header == nil || e.sub.open() {
+		return nil
+	}
+	h := strings.Join(strings.Fields(term.Sanitize(e.opts.Header())), " ")
+	if h == "" {
+		return nil
+	}
+	if _, err := e.term.Write([]byte(h + "\n")); err != nil {
+		return fmt.Errorf("editor header: %w", err)
+	}
+	return nil
 }
 
 func (e *Editor) prompt() string {

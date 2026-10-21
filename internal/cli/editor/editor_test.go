@@ -142,3 +142,32 @@ func TestContextCancelled(t *testing.T) {
 		t.Fatalf("err = %v, want context.Canceled", err)
 	}
 }
+
+// Header is written on its own line before each new prompt, once a
+// submission and never before a continuation prompt, without escape
+// sequences or line breaks; with none, nothing is (0024-MADR D8).
+func TestHeader(t *testing.T) {
+	calls := 0
+	header := func() string { calls++; return "proj (main)" }
+	subs, out, _, _ := run(t, strings.NewReader("one\\\rtwo\rthree\r"), Options{Header: header})
+	if !slices.Equal(subs, []string{"one\ntwo", "three"}) {
+		t.Fatalf("submissions %q", subs)
+	}
+	// Three new prompts: one for each submission, and the one that reads
+	// the end of input.
+	o := out.String()
+	if n := strings.Count(o, "proj (main)\r\n> "); n != 3 || calls != 3 || strings.Count(o, "> ") != 3 {
+		t.Fatalf("the header before %d prompts, read %d times, want 3 and 3: %q", n, calls, o)
+	}
+	if strings.Contains(o, "proj (main)\r\n… ") {
+		t.Fatalf("the header before a continuation prompt: %q", o)
+	}
+	_, out, _, _ = run(t, strings.NewReader("x\r"), Options{Header: func() string { return "a\x1b[31mb\nc\x07" }})
+	if !strings.Contains(out.String(), "ab c\r\n> ") || strings.Contains(out.String(), "\x1b[31m") {
+		t.Fatalf("a header with escapes and a line break: %q", out)
+	}
+	_, out, _, _ = run(t, strings.NewReader("x\r"), Options{})
+	if !strings.HasPrefix(out.String(), "\x1b[?2004h> ") {
+		t.Fatalf("with no header the prompt is drawn first: %q", out)
+	}
+}

@@ -14,7 +14,8 @@ The binary has these surfaces:
 - **The native CLI mode, the default.** `gobble` with no command is `chat`: a line session in a
   terminal, or one prompt with `-p` or piped input. It is an ACP client of gobble's own agent,
   in process. Its own commands are `/help`, `/exit`, `/quit`, `/edit`, `/new`, and `/login` and
-  `/logout`, which sign in on the terminal; with no credential at all it offers the sign-in first.
+  `/logout`, which sign in on the terminal; with no credential at all it offers the sign-in first. Above each new
+  prompt it shows the workspace: the repository's name, else the directory's, and the branch from `HEAD`.
 - **The ACP agent.** `gobble acp` serves the agent on stdio, for editors and magic-cli-remote.
   `gobble acp --login <provider>` signs in, or stores a key, in a terminal an ACP client opens for
   its terminal auth method.

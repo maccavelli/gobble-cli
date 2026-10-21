@@ -3,6 +3,8 @@ package cli
 import (
 	"cmp"
 	"io"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -246,5 +248,33 @@ func TestLineSessionTurnError(t *testing.T) {
 	}
 	if !strings.Contains(h.stderr.String(), "Error: session/prompt:") {
 		t.Fatalf("stderr %q", h.stderr.String())
+	}
+}
+
+// The line session draws the repository's name and branch above each new
+// prompt, at start and after a turn; outside a repository, the directory's
+// name alone (0024-MADR D8).
+func TestPromptHeader(t *testing.T) {
+	root := t.TempDir()
+	proj := filepath.Join(root, "proj")
+	writeFile(t, filepath.Join(proj, ".git", "HEAD"), "ref: refs/heads/main\n")
+	sub := filepath.Join(proj, "sub")
+	if err := os.MkdirAll(sub, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	plain := filepath.Join(root, "plainname")
+	if err := os.MkdirAll(plain, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	for cwd, want := range map[string]string{sub: "proj (main)", plain: "plainname"} {
+		h := newLineHarness(t, &acptest.ScriptAgent{Turns: []acptest.Turn{{Updates: []string{chunk("fine")}}}})
+		h.cwd = cwd
+		h.start(Prompt{})
+		h.press("hi\r")
+		waitUntil(t, func() bool { return strings.Count(h.stdout.String(), want+"\r\n> ") == 2 })
+		h.press("\x04")
+		if err := h.wait(); err != nil {
+			t.Fatal(err)
+		}
 	}
 }

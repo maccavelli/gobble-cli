@@ -310,7 +310,7 @@ out-of-scope item); the wording of any one log message, such as "prompt: a file 
 
 ## Amendment (2026-10-21): P3, the workspace's name and branch above the prompt
 
-*Proposed,* for the MADR's amendment of 2026-10-21 (D8). It starts after the owner approves it, on `main` at or after
+*Proposed,* for the MADR's amendment of 2026-10-21 (D8). *(Approved on the owner's word "accepted, proceed", 2026-10-21.)* It starts after the owner approves it, on `main` at or after
 `eb8f155`. Q5–Q8 are answered. *(Revised twice the same day, before review, with the MADR: a draft for a line below
 the prompt was written for Q8, then set aside when the owner returned to above the prompt; this is the first draft's
 P3 again.)*
@@ -344,3 +344,49 @@ this repository showing `gobble-cli (<branch>)` above the prompt; the pre-add ch
 Windows laptop, the remote two on a copy of the tree; `check-records` and `markdownlint`.
 
 **Rollout and rollback.** One commit. Reverting it removes the line; nothing is stored.
+
+### P3 execution record (2026-10-21)
+
+**Run** on `main` at `eb8f155`, on the owner's word "accepted, proceed", with no deviation.
+
+**Steps:**
+
+1. **Tests first,** each seen failing against stubs (`fsx.GitBranch` returning `""`; `Options.Header` not read):
+   `TestGitBranch` (`GitBranch(a) = "", want "feature/x"`; `GitBranch(wt) = "", want "topic"`; `GitBranch(detached) =
+   "", want "detached"`), `TestHeader` (`the header before 0 prompts, read 0 times`), `TestPromptHeader` (`condition
+   not met within 5 s`). `TestHeader` first counted two prompts for two submissions; the editor draws a third, the one
+   that reads the end of input, and gives it the header, as D8 says, so the test counts three and checks the `> `
+   count as well. On a scratch copy, one mutation at a time, the tree untouched: a worktree's branch read from the
+   common git directory (`GitBranch(wt) = "feature/x", want "topic"`); the reftable case removed (`".invalid"`); a
+   commit shown as itself; the header written above the continuation prompt too (`read 6 times`); the header written
+   unsanitized (`"\x1b[?2004ha\x1b[31mb c\a\r\n> x…"`); the header not written; the session's directory named
+   instead of the repository's; no header passed. Eight mutations, eight failures (the unsanitized one redone so it
+   built); the restored copy passed.
+2. **`fsx.GitBranch`** (`internal/fsx/git.go`): `GitRepo`'s walk is `gitDirs`, which also returns the checkout's own
+   git directory; `GitRepo` keeps its signature and behaviour. `GitBranch` reads that directory's `HEAD`: `ref:
+   refs/heads/<name>` gives the name, `.invalid` gives `""`, anything else `detached`.
+3. **`editor.Options.Header`** (`internal/cli/editor/editor.go`): `ReadPrompt` writes it before its first prompt,
+   through `x/term`'s `Write`, which keeps its count of the cursor, as one line: `term.Sanitize`, then line breaks and
+   tabs made spaces; nothing for an empty header or an open continuation.
+4. **The line session** (`internal/cli/line.go`): `workspaceLine(ls.cwd)`, the repository's or the directory's name,
+   and the branch in parentheses when there is one.
+5. **In a pseudo-terminal,** with a dummy key and a dead proxy, so no request left the host, a session started in a
+   repository's subdirectory, `/new`, then `/exit`:
+   - macOS, this repository's `internal/`, branch `main`: `gobble-cli (main)` above `> /new` and above `> /exit`;
+   - the Linux machine, the copy of the tree after `git init` (branch `main`), from its `internal/`: `gobble-check
+     (main)` above both prompts; from a directory in no repository, `plainname` above both.
+6. **Records:** `docs/architecture.md`'s line-session line, `docs/README.md`'s rows, this record.
+
+**Gates:**
+
+- the pre-add check on the six changed `.go` files, `6 file(s) clean (gofmt, golint, govulncheck)`;
+- macOS: `make preflight`, `preflight passed`; the tests and the race detector, 35 packages ok each;
+- the Linux machine and the Windows laptop, Go 1.27.3, over ssh with `-o BatchMode=yes -o ConnectTimeout=5`, on a copy
+  of the working tree sent as a file, all 747 files, Windows with `TMP` and `TEMP` outside the user's home: the tests
+  and the race detector, 35 packages ok on each; `make preflight` through `apidiff`, golangci-lint `0 issues.` and
+  govulncheck "No vulnerabilities found.", stopping at `verify-build-metadata` on a copy; `make check-records
+  markdownlint`, "0 issues in 0 files".
+
+**Not done, as the plan says:** colour; running `git` for a reftable `HEAD`; print mode and `gobble acp`. Windows was
+not captured in a terminal: the line is written through `x/term` as every prompt is, and the plan names no Windows
+capture.

@@ -15,6 +15,7 @@ import (
 	"github.com/maccavelli/gobble-cli/internal/appdirs"
 	"github.com/maccavelli/gobble-cli/internal/cli/editor"
 	"github.com/maccavelli/gobble-cli/internal/cli/render"
+	"github.com/maccavelli/gobble-cli/internal/fsx"
 	"github.com/maccavelli/gobble-cli/llm/provider"
 	"github.com/maccavelli/gobble-cli/personality"
 )
@@ -149,7 +150,8 @@ func (ls *lineSession) run(first Prompt) error {
 			}
 		}
 	}()
-	opts := editor.Options{History: ls.history(), Complete: ls.complete}
+	opts := editor.Options{History: ls.history(), Complete: ls.complete,
+		Header: func() string { return workspaceLine(ls.cwd) }}
 	if !e.out.caps.Unicode {
 		opts.Continue = "... "
 	}
@@ -205,6 +207,20 @@ func (ls *lineSession) run(first Prompt) error {
 			return err
 		}
 	}
+}
+
+// workspaceLine is the line above each new prompt: the name of the
+// repository cwd is in, else cwd's own, and the branch checked out, read
+// from HEAD (0024-MADR D8).
+func workspaceLine(cwd string) string {
+	name := filepath.Base(cwd)
+	if repo, _, ok := fsx.GitRepo(cwd); ok {
+		name = filepath.Base(repo)
+	}
+	if b := fsx.GitBranch(cwd); b != "" {
+		return name + " (" + b + ")"
+	}
+	return name
 }
 
 // history opens <state>/history. Without it the session still runs.

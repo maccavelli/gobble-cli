@@ -268,7 +268,7 @@ may not follow `HOME`". It does follow it:
 
 ## Amendment (2026-10-21): the workspace's name and branch above the prompt
 
-*Proposed: the owner decides at review.* The owner asked on 2026-10-21, after `eb8f155`: "in cli mode, in the default
+*Proposed: the owner decides at review.* *(2026-10-21: accepted by the owner, "accepted, proceed".)* The owner asked on 2026-10-21, after `eb8f155`: "in cli mode, in the default
 session prompt, show the project/workspace/repo name above the prompt", a CLI-mode polish item under D5. The owner's
 answers to three questions of the same day are recorded as Q5–Q7 below. *(Revised twice the same day, before
 review: the owner asked to "change it to sit below the prompt, not above it. it will keep the session chat cleaner that
