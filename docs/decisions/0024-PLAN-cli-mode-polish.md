@@ -307,3 +307,40 @@ the rename, lint for linux, darwin and windows gave `0 issues.` each, and the se
 
 **Not done, named:** a record logged while the editor reads, with the terminal raw (the MADR amendment's
 out-of-scope item); the wording of any one log message, such as "prompt: a file was not used".
+
+## Amendment (2026-10-21): P3, the workspace's name and branch above the prompt
+
+*Proposed,* for the MADR's amendment of 2026-10-21 (D8). It starts after the owner approves it, on `main` at or after
+`eb8f155`. Q5–Q8 are answered. *(Revised twice the same day, before review, with the MADR: a draft for a line below
+the prompt was written for Q8, then set aside when the owner returned to above the prompt; this is the first draft's
+P3 again.)*
+
+**Scope.** In: `internal/fsx/git.go` and its test (`GitBranch`); `internal/cli/editor/editor.go` and its test
+(`Options.Header`); `internal/cli/line.go` (the header) and a line-session test; `docs/architecture.md`'s line-session
+line; `docs/README.md`'s rows. Out: colour; running `git`; watching `HEAD` between prompts; print mode and `gobble acp`.
+
+**Steps.**
+
+1. **Tests first,** each seen failing on the unchanged code, or on a scratch copy:
+   - `internal/fsx`: `TestGitBranch` — a repository whose `HEAD` is `ref: refs/heads/feature/x` gives `feature/x`; a
+     commit id gives `detached`; a worktree, `.git` a `gitdir:` file, gives its own `HEAD`'s branch, not the main
+     one's; a reftable `refs/heads/.invalid` gives `""`; a directory outside a repository gives `""`.
+   - `internal/cli/editor`: `TestHeader` — with `Header` set, the output holds the header and `\r\n` before `> `,
+     once per submission, and none before the continuation prompt of a line ending in `\`; with none, the output is
+     as today; a header holding an escape sequence is written without it.
+   - `internal/cli`: `TestPromptHeader` — the line session in a directory below a repository named `proj` on branch
+     `main` shows `proj (main)` above the first prompt and again after a turn; outside a repository, the directory's
+     name alone.
+2. **`fsx.GitBranch`,** sharing `GitRepo`'s walk, which keeps its signature and behaviour.
+3. **`editor.Options.Header`,** a `func() string`, nil for none; `ReadPrompt` writes it, sanitized, with `\r\n` before
+   each fresh prompt.
+4. **The line session** passes a header of the repository's or directory's name and the branch, from `ls.cwd`.
+5. **Records:** `docs/architecture.md`, `docs/README.md`'s rows, and this amendment's execution record, with a capture
+   from a pseudo-terminal.
+
+**Verification.** Each new test seen failing first, its failure quoted; a pseudo-terminal capture of a session in
+this repository showing `gobble-cli (<branch>)` above the prompt; the pre-add check on the changed `.go` files; `go test
+-count=1 ./...`, `CGO_ENABLED=1 go test -race -count=1 ./...` and `make preflight` on macOS, the Linux machine and the
+Windows laptop, the remote two on a copy of the tree; `check-records` and `markdownlint`.
+
+**Rollout and rollback.** One commit. Reverting it removes the line; nothing is stored.

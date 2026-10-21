@@ -1389,5 +1389,6 @@ with no deviation.
   govulncheck "No vulnerabilities found.", stopping at `verify-build-metadata` on a copy; `make check-records
   markdownlint`, "0 issues in 0 files".
 - No Go file changed, so the pre-add check does not apply.
-- **After the owner's push:** `main`'s CI run must pass `validate` on the three runners, where run `39610203216`
-  failed; not yet seen.
+- **After the owner's push:** `main`'s CI run `39625457404`, for `eb8f155`, concluded `success`: `validate` on
+  `ubuntu-24.04`, `macos-15` and `windows-2025`, `sbom`, `build` and its five identity jobs passed, `release` skipped
+  as on any untagged push; run `39610203216` had failed `validate` on all three.

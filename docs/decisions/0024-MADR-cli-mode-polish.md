@@ -265,3 +265,76 @@ may not follow `HOME`". It does follow it:
 ### Owner questions
 
 * **Q4. Finding 1's form.** A, B or C above; A recommended. **Answer (2026-10-20): A, a `Warning:` line.**
+
+## Amendment (2026-10-21): the workspace's name and branch above the prompt
+
+*Proposed: the owner decides at review.* The owner asked on 2026-10-21, after `eb8f155`: "in cli mode, in the default
+session prompt, show the project/workspace/repo name above the prompt", a CLI-mode polish item under D5. The owner's
+answers to three questions of the same day are recorded as Q5–Q7 below. *(Revised twice the same day, before
+review: the owner asked to "change it to sit below the prompt, not above it. it will keep the session chat cleaner that
+way", and a draft for a line below the prompt that erased itself was written; the owner then returned to the first
+design: "put it above the prompt as decided before" (Q8). This text is the first design's again.)* Each fact below was
+measured that day at `eb8f155`.
+
+### Context
+
+- **The prompt is `x/term`'s.** The line session's editor (`internal/cli/editor/editor.go`) draws `> `, or `… ` on a
+  continuation line, through `xterm.Terminal.SetPrompt` (`:75`) before each `ReadLine`. The terminal keeps the prompt
+  on one line and measures it to place the cursor, so a prompt holding a line break would misplace it; a line above
+  the prompt is written before it, not in it. The editor runs in raw mode, so that line ends in `\r\n`, as its
+  notices do (`:127-132`).
+- **The loop.** `internal/cli/line.go:184` calls `ed.ReadPrompt` once per submission, after each turn or local
+  command, with the session's directory in `ls.cwd`.
+- **Finding the repository.** `fsx.GitRepo` (`internal/fsx/git.go:15`) walks up from a directory for `.git`, a directory
+  or a worktree's `gitdir:` file, as Pi's `findGitPaths` does, and gives the repository's directory and its common git
+  directory; prompt's context files and the project settings use it. A worktree's `HEAD` is in its own git directory,
+  which `GitRepo` reads but does not return.
+- **What Pi shows.** Pi's footer (`packages/coding-agent/src/core/footer-data-provider.ts`, at Pi `1402973a9`) reads
+  `HEAD`: `ref: refs/heads/<name>` gives the branch, anything else "detached"; only a reftable repository, whose
+  `HEAD` reads `refs/heads/.invalid`, makes it run `git symbolic-ref`.
+
+### Decision
+
+- **D8. Above each new prompt, the workspace's name and branch** (Q5–Q7).
+  - **The name** is the top-level directory's name of the git repository the session's directory is in, found as
+    `fsx.GitRepo` finds it; outside a repository, the session's directory's own name.
+  - **The branch,** in parentheses after it, is read from the repository's `HEAD`, a worktree's own: `ref:
+    refs/heads/<name>` gives `<name>`, slashes kept; a commit id gives `detached`, as Pi's does. No `git` command is
+    run, so a reftable repository's `.invalid` shows no branch. Outside a repository there is none:
+    `gobble-cli (main)`, `gobble-cli (detached)`, `scratch`.
+  - **When:** on a line of its own before each new prompt: at the first prompt and after each turn or local command;
+    never before a continuation line. It is read again each time, so a branch the session switched shows at the next
+    prompt.
+  - **How:** the line as it is, no colour (Q7's preview); a control character in a name or a branch is dropped, as
+    gobble's other terminal text is sanitized.
+  - **Where:** the line session only. Print mode and `gobble acp` print no prompt.
+  - **Built as:** `fsx.GitBranch(dir)`, `HEAD` read through `GitRepo`'s walk, its worktree case included; a `Header`
+    on `editor.Options`, written before a fresh prompt; and the line session's header from `ls.cwd`.
+
+### Consequences
+
+* Good, because the user sees which repository and branch the session works in before each prompt, as Pi's footer
+  shows them.
+* Neutral, because each prompt reads `.git` and `HEAD`: a walk up the directories and one small file, no process.
+* Bad, because a reftable repository shows its name with no branch, where Pi asks `git`.
+
+### Options not chosen
+
+* **Below the prompt, erasing itself** (the second draft, Q8): drawn on the row below the prompt while the user types,
+  and erased before Enter, so the conversation's scrollback never holds it; also erased, until the next prompt, when
+  the input wraps or the user recalls history or pastes. Bad, because it needs the editor's key reader to erase it
+  before `x/term` handles each such key, with cursor save and restore new to the editor, for a line that vanishes
+  while the user types long input.
+* **The name with the path below the repository's top,** or **the directory's name alone** (Q5).
+* **Once, at session start** (Q6).
+* **The name alone, dimmed,** or **a labelled rule** (Q7).
+* **Running `git` for a reftable `HEAD`,** as Pi does: one process per prompt in those repositories, for a branch the
+  file does not name; not taken, the option chosen naming no `git` command.
+
+### Owner questions
+
+* **Q5. Which name.** **Answer (2026-10-21): the repository's name, else the directory's.**
+* **Q6. When.** **Answer (2026-10-21): above every new prompt.**
+* **Q7. How it looks.** **Answer (2026-10-21): the name with the git branch,** `gobble-cli (main)`.
+* **Q8. Above or below.** The owner asked for below the prompt, then returned to above. **Answer (2026-10-21): above
+  the prompt,** "as decided before".
