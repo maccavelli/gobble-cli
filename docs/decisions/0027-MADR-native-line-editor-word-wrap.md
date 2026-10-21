@@ -90,6 +90,11 @@ owner decides at review.* *(2026-10-21: accepted by the owner, "Both, P4 then 00
   - ↑/↓ move between the line's rows when it has more than one, and recall history from its first and last row
     (Q1);
   - Ctrl+A/E and Home/End go to the start and end of the line, not of the row (Q1's companion).
+  - *Amended 2026-10-21 (0027-PLAN P3, deviation 1; the owner's answer "Also add Ctrl+←/→"):* `ESC b` / `ESC f`
+    and Ctrl+←/→ (`ESC[1;5D` / `ESC[1;5C`) also move by word, as Alt+←/→ do. Measured in P3: macOS Terminal sends
+    `ESC b` / `ESC f` for Option+←/→, which `x/term` does not read, and Ctrl+←/→ send `ESC[1;5D` / `ESC[1;5C` in every
+    terminal that receives them. Every other key `x/term` reads arrives as it reads it, in every terminal measured;
+    Terminal's Home and End send nothing, so Ctrl+A/E are its way to the line's ends.
 - **D5. What stays as it is:** the key reader (two-stage Ctrl+C, the paste markers, the reader that owns stdin),
   a paste coalesced into one submission with its notice (Q2), backslash continuation, the completion callback, the
   header (0024 D8), history from its file, `/edit`, the `… ` continuation prompt, and Console Host's input.

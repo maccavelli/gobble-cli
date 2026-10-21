@@ -141,3 +141,87 @@ Windows laptop, Go 1.27.3, on a copy of the working tree, all 754 files, Windows
 home: the tests and the race detector, 35 packages ok on each, `make preflight` through `apidiff` (golangci-lint `0
 issues.`, govulncheck "No vulnerabilities found."), stopping at `verify-build-metadata` on a copy; `make check-records
 markdownlint`, "0 issues in 0 files".
+
+### P3 execution record (2026-10-21)
+
+**Run** on `main` at `d6e5bb7`.
+
+1. **The measurement,** with no keyboard: scratch probes outside the tree, each reading in `x/term`'s raw mode as the
+   editor does (on Windows, with virtual-terminal input on), 31 keys each.
+   - **Windows** (the Windows laptop, Windows 11 build 26200): each key written into the probe's own console as a
+     key-down and a key-up event (`WriteConsoleInputW`), as Windows Terminal hands keys to its console host, and read
+     back. Hosts: the ssh session's console; Console Host (`conhost.exe`, headless); Windows Terminal 1.24's console
+     host (`OpenConsole.exe`, headless); and, inside each of the last two, the probe started from Windows PowerShell
+     5.1 and from PowerShell 7.6. All seven alike.
+   - **Linux** (the Linux machine, Ubuntu 26.04): xterm 407 and xfce4-terminal 1.1.5 (VTE 0.84, the library of
+     GNOME's terminals), on a virtual display, each key pressed with `xdotool` and followed by `#` as a separator.
+     xfce4-terminal ran with its menu bar hidden: shown, its Alt+F opens the File menu.
+   - **macOS** (this repository's development machine): WezTerm and Terminal, each key pressed by System Events after
+     checking the probe's window was in front; kitty 0.49.2 and iTerm2 3.6.11, each key posted to that application's
+     process only. Mission Control's "Move a Space" shortcuts are on there, so Ctrl+←/→ were not pressed in WezTerm and
+     Terminal: typed, they never reach a terminal. Posted to kitty's and iTerm2's process, they bypassed it.
+
+   | Keys | What arrives | `x/term` |
+   | --- | --- | --- |
+   | ←, →, ↑, ↓, Delete, Backspace, Alt+←/→, Ctrl+A/E/B/F/K/U/W/T/L/P/N/D/C, Tab, Enter | as `x/term` reads them, in every terminal | read |
+   | Home / End | `ESC[H` / `ESC[F`; in Terminal, nothing (it scrolls its window) | read |
+   | Option+←/→ in Terminal | `ESC b` / `ESC f`, where every other terminal sends `ESC[1;3D` / `ESC[1;3C` | **not read** |
+   | Ctrl+←/→ | `ESC[1;5D` / `ESC[1;5C` | not read |
+   | Alt+B / Alt+F | `ESC b` / `ESC f`; xterm `â` / `æ` (its eight-bit input); with Option typing symbols (Terminal, kitty, iTerm2 as installed), `∫` / `ƒ` | not read; xterm's and the Mac's characters are typed |
+   | Shift+Tab | `ESC[Z` | not read |
+   | Shift+Enter | `\r`, as Enter | as Enter |
+
+**Deviation 1, 2026-10-21, decided by the owner** ("Also add Ctrl+←/→"): in macOS Terminal, Option+←/→ send `ESC b` /
+`ESC f`, not the `ESC[1;3D` / `ESC[1;3C` `x/term` reads for Alt+←/→, so they do nothing in gobble today; and Terminal's
+Home and End send nothing at all.
+
+- **Chosen:** `ESC b` / `ESC f` and Ctrl+←/→ (`ESC[1;5D` / `ESC[1;5C`) move by word, as Alt+←/→ do. MADR D4 is
+  amended. Step 2's table gains them, tested against Alt+←/→'s result, since `x/term` has no result of its own for them.
+- **Not chosen:** `ESC b` / `ESC f` alone; no new keys, Terminal's Option+←/→ recorded as doing nothing.
+- **Home and End in Terminal:** recorded, not fixed: gobble cannot act on a key it never receives; Ctrl+A/E reach the
+  line's ends there.
+- **Shift+Enter** sends what Enter sends in every terminal measured, so it cannot mean anything of its own.
+- **Files added to P3's scope:** none.
+
+2. **Tests first, the parity table** (`internal/cli/editor/buffer_test.go`). Its reference is `x/term`'s `Terminal`
+   itself, run on the same bytes over an in-memory connection, then asked for its line and cursor by a key that reaches
+   its completion callback: what `x/term` gives today is measured, not written down. `TestKeysMatchXterm`: 55 cases
+   from a typed state (the moves, Backspace and Ctrl+H, Home, End, Ctrl+A/B/E/F, Alt+←/→, Delete, Ctrl+D, K, U, W, T,
+   L, Tab, unknown sequences, wide and accented text, Enter, CR LF, LF, Ctrl+D and Ctrl+C ending the input, pastes,
+   control keys inside a paste, the 4096-rune limit, history), each on one row and, but for the nine that use ↑ or ↓,
+   on rows of 12 columns. `TestKeysSplitAcrossReads` (one byte at a time); `TestWordKeys` (`ESC b`, `ESC f` and
+   Ctrl+←/→ against Alt+←/→'s result, deviation 1); `TestRowKeys` (19 cases: ↑/↓ and Ctrl+P/N by row and then history,
+   the column kept or the nearest before it, wide characters, a full row, a recalled entry edited by row);
+   `TestPlacesMatchLayout` (the cursor's place at every rune index is the layout's, on 13 texts); `TestClearScreenKey`;
+   `TestCompletionCallback`. Against a stub, all seven failed: 54 of 54 parity cases on one row and 45 of 45 on rows
+   of 12. One case was added after the stub's run and before the negatives, a paste of three lines, the only shape
+   whose middle line both starts and ends inside the paste.
+
+   Two things the reference showed about `x/term`, recorded, not copied: after Ctrl+D or Ctrl+C ends the input, it
+   keeps the read that held the key and ends every later `ReadLine` the same way, so its line there cannot be probed
+   (those cases compare the lines and the end of input); and inside a paste it would put an unknown escape sequence in
+   the line as the rune `U+D800`, where the buffer drops it.
+3. **The key handling** (`internal/cli/editor/buffer.go`): `decodeKey` (the control bytes and escape sequences
+   `x/term` reads, plus deviation 1's four; a key's start waits for its end; inside a paste only the end marker is a
+   key); `lineBuffer`, the line and cursor in runes, whose `feed` applies keys until a line ends, the input ends or
+   Ctrl+L asks for a clear screen, with `x/term`'s paste marking and CR LF; ↑/↓ by row through `placesOf`, the cursor's
+   place at each rune index in one pass over the layout's rows, then history; the completion callback as `x/term` calls
+   it. The key reader is unchanged. Not used by the editor yet: nothing a user sees changes.
+4. **Negatives,** on a scratch copy, one mutation at a time: `ESC b` not read; Ctrl+← not read (each `pos:14`, want
+   `pos:9`); ↑ always recalling (`pos 25`, want `15`); ↓ always recalling; the row's first place, not the nearest; no
+   next-row place past a full row (`place (0, 13), layout (1, 2)`); a word back stopping at the spaces; a line begun in a
+   paste not marked pasted (`pasted:[true false false]`, want `[true true false]`); CR LF as two Enters; no line limit;
+   Ctrl+D on an empty line going on; a key's start not waited for (`héllo[D[1;3D…` typed as text); Ctrl+T at the end
+   swapping past it (a panic, index out of range); ↓ not bringing back the user's own line; the callback given a rune
+   offset (`2`, want `3`); Ctrl+L not reported. Sixteen mutations, sixteen failures; the restored copy passed.
+
+**Found by the gates and fixed in the phase:** `gofmt` drift in `buffer_test.go` (the alignment of `fixedHistory`'s
+three one-line methods), in the pre-add check and `make preflight` on macOS; the tests and the race detector had passed
+on all three hosts. `gofmt -w` on the file, and every gate run again.
+
+**Gates,** after the fix: the pre-add check on the two new `.go` files, `2 file(s) clean (gofmt, golint, govulncheck)`;
+macOS `make preflight`, `preflight passed`, and the tests and the race detector, 35 packages ok each; the Linux machine
+and the Windows laptop, Go 1.27.3, on a copy of the working tree, all 756 files, Windows with `TMP` and `TEMP` outside
+the user's home: the tests and the race detector, 35 packages ok on each, `make preflight` through `apidiff`
+(golangci-lint `0 issues.`, govulncheck "No vulnerabilities found."), stopping at `verify-build-metadata` on a copy;
+`make check-records markdownlint`, "0 issues in 0 files".
