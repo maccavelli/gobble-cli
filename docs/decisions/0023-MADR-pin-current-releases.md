@@ -32,7 +32,7 @@ day against `main` `30b8a4b`, by the command or file named.
 | `golang.org/x/exp` (apidiff) | `v0.0.0-20260908205506-85c1c2202aba` | `v0.0.0-20261014143641-f0251eb4aa3e` | `tool` directive |
 | `golang.org/x/lint` (golint) | `v0.0.0-20241112194109-818c5a804067` | the same | `tool` directive |
 | golangci-lint | `v2.14.0` (`Makefile:121-124`, `.github/workflows/ci.yml:53`) | `v2.15.0` | installed by `go install` |
-| Go | `go1.27.2` (`go.mod:3`) | `go1.27.2` | toolchain |
+| Go | `go1.27.2` (`go.mod:3`) | `go1.27.2` | toolchain *(2026-10-21: `go1.27.3`, by [0004-MADR-go-module-architecture.md](0004-MADR-go-module-architecture.md)'s amendment of that date)* |
 | `actions/checkout`, `actions/setup-go` | `v7.0.1`, `v7.0.0` | the same | CI, by commit |
 | `actions/upload-artifact` | `v7.0.1` (`ci.yml:64`, `:136`) | `v7.0.2` | CI, by commit |
 

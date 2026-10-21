@@ -6,7 +6,7 @@ they are that way is in the [decision records](../README.md).
 
 ## What you need
 
-- **Go 1.27.2.** `go.mod` names it, and `go version` should print `go version go1.27.2 …`.
+- **Go 1.27.3.** `go.mod` names it, and `go version` should print `go version go1.27.3 …`.
 - **GNU make and bash.** On Windows, run `make` from Git Bash or from PowerShell. The Makefile uses
   Git's bash either way. In PowerShell a bare `bash` is WSL, not Git Bash.
 - **Python 3**, for the records and build-metadata checks. The Makefile runs `python3`; set

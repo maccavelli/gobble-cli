@@ -95,7 +95,7 @@ def version_key(v: str) -> tuple[int, int, int]:
 def clean_env(**extra: str) -> dict[str, str]:
     """The environment without credential-shaped variables, with extra set."""
     env = {k: v for k, v in os.environ.items() if not SECRET.search(k)}
-    env.update(GOTOOLCHAIN="go1.27.2", CGO_ENABLED="0", **extra)
+    env.update(GOTOOLCHAIN="go1.27.3", CGO_ENABLED="0", **extra)
     return env
 
 

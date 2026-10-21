@@ -27,7 +27,7 @@ implementations and keeps every third-party SDK behind one package.
 What the fleet and toolchain provide on 2026-09-29 (read in source or
 probed):
 
-* **Toolchain.** `go1.27.1`. *(2026-10-08: `go1.27.2`; see the amendment of that date.)* `$GOROOT/api/go1.27.txt` lists
+* **Toolchain.** `go1.27.1`. *(2026-10-08: `go1.27.2`; see the amendment of that date.)* *(2026-10-21: `go1.27.3`; see the amendment of that date.)* `$GOROOT/api/go1.27.txt` lists
   `encoding/json/v2` and `encoding/json/jsontext` as public API, and the
   `jsonv2` experiment is on by default in `internal/buildcfg`. The same
   file lists a new standard-library `uuid` package (`New`, `NewV7`),
@@ -1013,3 +1013,49 @@ It reproduced on a clean export of `4504465`, so no change of gobble's caused it
 * `AGENTS.md`, `docs/architecture.md` and `docs/guides/developing.md` name Go 1.27.2.
 * Both development hosts' `GOTOOLCHAIN` pin moves to `go1.27.2`, by the owner's decision.
 * This record's title keeps "Go 1.27.1", as written; the language features it lists are 1.27's, and unchanged.
+
+### Amendment (2026-10-21): the toolchain is Go 1.27.3
+
+*Proposed: the owner decides at review.* *(2026-10-21: accepted by the owner, "accepted. approved to proceed.")* The owner asked on 2026-10-21 to "ensure this repo is pinned to go 1.27.3".
+Each fact below was measured that day against `main` `978d38d`.
+
+**Why.**
+
+* **`main`'s CI fails on every runner.** Run `39610203216`, for `978d38d`: `validate` failed on `ubuntu-24.04`,
+  `macos-15` and `windows-2025` at `make preflight`'s govulncheck, with "Vulnerability #1: GO-2026-6809 … Found in:
+  crypto/x509@go1.27.2 … Fixed in: crypto/x509@go1.27.3"; `build` and `release` were skipped. CI installs the Go that
+  `go.mod` names (`.github/workflows/ci.yml:62`, `go-version-file: go.mod`), which is `go 1.27.2` (`go.mod:3`).
+* **The vulnerability is reachable.** GO-2026-6809, "Distrust compromised intermediate certificates in crypto/x509",
+  standard library. `GOTOOLCHAIN=go1.27.2 go tool govulncheck ./...` exits 3, with an example trace from
+  `internal/logging/terminal.go:63`; with `GOTOOLCHAIN=go1.27.3` it gives "No vulnerabilities found." and exits 0.
+* **Go 1.27.3 is released and stable.** `go.dev/dl/?mode=json` lists `go1.27.3` first; the release history gives it
+  as released 2026-10-19 with "security fixes to the crypto/x509 package".
+* **The development hosts already run it.** `go version` and `go env GOTOOLCHAIN` give `go1.27.3` on macOS, the Linux
+  machine and the Windows laptop, which is why the local gates passed while CI failed.
+* **Measured on a scratch copy,** `go.mod`'s `go` line moved to `1.27.3`: `go mod tidy` changes nothing else in
+  `go.mod` or `go.sum`; `make preflight` passes, govulncheck "No vulnerabilities found."; and a Go 1.27.2 toolchain
+  refuses the module: "go: go.mod requires go >= 1.27.3 (running go 1.27.2; GOTOOLCHAIN=go1.27.2)".
+
+**What changes.**
+
+* `go.mod`'s `go` line, and the toolchain this record's Toolchain line names, become `1.27.3`. CI follows `go.mod`,
+  so it installs Go 1.27.3. No `toolchain` line is added: one equal to the `go` line says nothing more.
+* `AGENTS.md`, `docs/architecture.md` and `docs/guides/developing.md` name Go 1.27.3.
+* `scripts/check_libs.py`'s `GOTOOLCHAIN` for its checks (`:98`) becomes `go1.27.3`.
+* The hosts' `GOTOOLCHAIN` is already `go1.27.3`; nothing changes there.
+* A dated note in [0023-MADR-pin-current-releases.md](0023-MADR-pin-current-releases.md)'s Go row, the current-pins
+  record.
+
+**Options not chosen.**
+
+* **Pin CI's Go to 1.27.3 and leave `go 1.27.2`:** good, because a module importing gobble's packages keeps the lower
+  floor; bad, because anyone building gobble on Go 1.27.2 builds the vulnerable `crypto/x509` unwarned, and CI would
+  no longer read its Go from `go.mod`, as this record set it.
+* **Add `toolchain go1.27.3` beside `go 1.27.3`:** bad, because it repeats the `go` line; it would mean something only
+  with a lower `go` line, the option above.
+
+**Consequences.**
+
+* Good, because CI passes govulncheck again, and no toolchain older than the fix builds gobble.
+* Neutral, because every host and CI already resolve to Go 1.27.3; the change makes `go.mod` say so.
+* Bad, because a module that imports gobble's packages now needs Go 1.27.3; Go downloads it when `GOTOOLCHAIN` allows.

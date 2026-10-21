@@ -1326,3 +1326,68 @@ still unverified. Every fact below was read with `gh` or `git` on 2026-10-20; ti
   that enforces it. Nothing in `ci.yml` or `make preflight` reads either setting, so the first tags went out without
   them. Whether to add such a check (a `gh api` read in the tag run before `build`) is left to the owner; this entry
   adds none.
+
+**2026-10-21 — the toolchain moves to Go 1.27.3 (0004-MADR's amendment of 2026-10-21; approved).** It starts after
+the owner approves it *(approved 2026-10-21, "accepted. approved to proceed.")*, on `main` at or after `978d38d`, as one commit.
+
+**Files:** `go.mod`; `AGENTS.md`; `docs/architecture.md`; `docs/guides/developing.md`; `scripts/check_libs.py`;
+`docs/decisions/0004-MADR-go-module-architecture.md` (the Toolchain line's note); a dated note in
+`docs/decisions/0023-MADR-pin-current-releases.md`; this PLAN; `docs/README.md` (the 0004 rows).
+
+**Steps:**
+
+1. **Measure again:** `go.dev/dl/?mode=json`'s newest stable Go, and `go version` on the three hosts. A newer patch
+   than `go1.27.3`, or a host not on it, is a deviation: stop and ask.
+2. `go.mod`'s `go` line to `1.27.3`; `go mod tidy`, which must change nothing else (`git diff go.mod go.sum` shows the
+   one line).
+3. `AGENTS.md:12`, `docs/architecture.md:9` and `docs/guides/developing.md:9` name Go 1.27.3;
+   `scripts/check_libs.py:98`'s `GOTOOLCHAIN` is `go1.27.3`.
+4. The records: the Toolchain line's dated note in 0004-MADR (`*(2026-10-21: `go1.27.3`; see the amendment of that
+   date.)*`); the Go row's note in 0023-MADR; `docs/README.md`'s 0004 rows; this entry's execution record.
+
+**Verification:**
+
+* **The gate catches the old toolchain** (on a scratch copy, never the tree): with the change, `GOTOOLCHAIN=go1.27.2
+  go build ./...` fails with "go.mod requires go >= 1.27.3"; without it, `GOTOOLCHAIN=go1.27.2 go tool govulncheck
+  ./...` reports GO-2026-6809 and exits 3, as CI did.
+* `go mod tidy` clean; `make preflight` on macOS, govulncheck "No vulnerabilities found.";
+  `scripts/check_libs.py --self-test`.
+* `go test -count=1 ./...` and `CGO_ENABLED=1 go test -race -count=1 ./...` on macOS, the Linux machine and the
+  Windows laptop, the remote two on a copy of the tree; `make preflight` there through `apidiff`; `make check-records
+  markdownlint`.
+* No Go file changes, so the pre-add check does not apply.
+* **After the owner's push:** `main`'s CI run passes `validate` on the three runners, where run `39610203216` failed.
+
+**Rollout and rollback:** one commit. Reverting it returns `go.mod` to `go 1.27.2`, which CI's govulncheck then fails
+again until Go 1.27.2's `crypto/x509` is no longer reported.
+
+**Go 1.27.3, 2026-10-21 — complete (the owner commits).** It ran as the entry above wrote it, on `main` at `978d38d`,
+with no deviation.
+
+1. **Measured again:** `go.dev/dl/?mode=json`'s newest stable Go is `go1.27.3`; `go version` gives `go1.27.3` on
+   macOS, the Linux machine and the Windows laptop.
+2. `go.mod:3` is `go 1.27.3`. `go mod tidy` changed nothing else: `git diff go.mod go.sum` is that one line.
+3. `AGENTS.md:12`, `docs/architecture.md:9` and `docs/guides/developing.md:9` name Go 1.27.3;
+   `scripts/check_libs.py:98` sets `GOTOOLCHAIN=go1.27.3`. Not changed, named: `docs/guides/developing.md:36`, a
+   `gobble version` transcript of 2026-10-07 that prints `go: 1.27.2`. It shows that build's own commit and date, and
+   changing its Go alone would show output no build printed; the earlier records' 1.27.1 and 1.27.2 are history.
+4. The records: the Toolchain line's note and the amendment's acceptance in 0004-MADR; the Go row's note in
+   0023-MADR; `docs/README.md`'s 0004 rows; this record.
+
+**Verification:**
+
+- **The gate catches the old toolchain,** on scratch copies: the changed tree under `GOTOOLCHAIN=go1.27.2 go build
+  ./...` exits 1 with "go: go.mod requires go >= 1.27.3 (running go 1.27.2; GOTOOLCHAIN=go1.27.2)"; `HEAD`'s tree
+  (`git archive`) under `GOTOOLCHAIN=go1.27.2 go tool govulncheck ./...` exits 3 with "Vulnerability #1:
+  GO-2026-6809", as CI's run `39610203216` did.
+- `scripts/check_libs.py --self-test`: every case `ok`.
+- macOS, Go 1.27.3: `make preflight`, `preflight passed`, govulncheck "No vulnerabilities found."; `go test -count=1
+  ./...` and `CGO_ENABLED=1 go test -race -count=1 ./...`, 35 packages ok each.
+- The Linux machine and the Windows laptop, Go 1.27.3, over ssh with `-o BatchMode=yes -o ConnectTimeout=5`, on a copy
+  of the working tree sent as a file, all 747 files, Windows with `TMP` and `TEMP` outside the user's home: the tests
+  and the race detector, 35 packages ok on each; `make preflight` through `apidiff`, golangci-lint `0 issues.` and
+  govulncheck "No vulnerabilities found.", stopping at `verify-build-metadata` on a copy; `make check-records
+  markdownlint`, "0 issues in 0 files".
+- No Go file changed, so the pre-add check does not apply.
+- **After the owner's push:** `main`'s CI run must pass `validate` on the three runners, where run `39610203216`
+  failed; not yet seen.
