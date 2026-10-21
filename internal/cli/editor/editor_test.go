@@ -171,3 +171,47 @@ func TestHeader(t *testing.T) {
 		t.Fatalf("with no header the prompt is drawn first: %q", out)
 	}
 }
+
+// firstBreak is the number of columns the first row held before the editor
+// broke the input line: the visible characters between the prompt's start
+// and the first \r\n after it.
+func firstBreak(t *testing.T, out string) int {
+	t.Helper()
+	i := strings.Index(out, "> ")
+	if i < 0 {
+		t.Fatalf("no prompt in %q", out)
+	}
+	row, _, ok := strings.Cut(out[i:], "\r\n")
+	if !ok {
+		t.Fatalf("no line break after the prompt in %q", out)
+	}
+	return len(row)
+}
+
+// The prompt breaks at the terminal's width, to 120 columns, and at 80 when
+// the width is unknown, never at x/term's 80 on a wider terminal (0024-MADR
+// D9).
+func TestWidth(t *testing.T) {
+	long := strings.Repeat("a", 150) + "\r"
+	for _, tc := range []struct {
+		name  string
+		width func() int
+		want  int
+	}{
+		{"the terminal's 100", func() int { return 100 }, 100},
+		{"200, capped at 120", func() int { return 200 }, 120},
+		{"60", func() int { return 60 }, 60},
+		{"unknown, 0", func() int { return 0 }, 80},
+		{"no width at all", nil, 80},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			subs, out, _, _ := run(t, strings.NewReader(long), Options{Width: tc.width})
+			if len(subs) != 1 || subs[0] != strings.Repeat("a", 150) {
+				t.Fatalf("the text sent changed: %q", subs)
+			}
+			if got := firstBreak(t, out.String()); got != tc.want {
+				t.Fatalf("the first row held %d columns, want %d", got, tc.want)
+			}
+		})
+	}
+}

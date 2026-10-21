@@ -278,3 +278,23 @@ func TestPromptHeader(t *testing.T) {
 		}
 	}
 }
+
+// The line session gives the editor the terminal's width: a long prompt on
+// a 100-column terminal breaks at column 100, not 80 (0024-MADR D9).
+func TestPromptWidth(t *testing.T) {
+	h := newLineHarness(t, &acptest.ScriptAgent{Turns: []acptest.Turn{{Updates: []string{chunk("fine")}}}})
+	h.e.out.caps.Out.Width = 100
+	h.start(Prompt{})
+	h.press(strings.Repeat("b", 150) + "\r")
+	waitUntil(t, func() bool { return strings.Contains(h.stdout.String(), "fine") })
+	h.press("\x04")
+	if err := h.wait(); err != nil {
+		t.Fatal(err)
+	}
+	out := h.stdout.String()
+	i := strings.Index(out, "> b")
+	row, _, _ := strings.Cut(out[i:], "\r\n")
+	if len(row) != 100 {
+		t.Fatalf("the first row held %d columns, want 100: %q", len(row), row)
+	}
+}

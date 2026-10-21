@@ -29,13 +29,23 @@ type History interface {
 // "… "; pass "... " for ASCII glyphs. Complete, when set, is called for Tab
 // with the line and the cursor's byte offset. Header, when set, is read
 // before each new prompt and written on its own line above it, never above
-// a continuation prompt (0024-MADR D8).
+// a continuation prompt (0024-MADR D8). Width, when set, is the terminal's
+// width, read before each prompt; the line breaks there, at most at
+// MaxWidth, and at DefaultWidth when it is unknown (0024-MADR D9).
 type Options struct {
 	Prompt, Continue string
 	History          History
 	Complete         func(line string, pos int) (newLine string, newPos int, ok bool)
 	Header           func() string
+	Width            func() int
 }
+
+// The prompt's widths (0024-MADR D9): the most columns a line takes, and
+// the width when the terminal's is unknown.
+const (
+	MaxWidth     = 120
+	DefaultWidth = 80
+)
 
 // Editor reads one submission at a time from a terminal in raw mode.
 type Editor struct {
@@ -76,6 +86,9 @@ func (e *Editor) Restore() {
 // ErrExit for a second Ctrl+C. When ctx is done it returns ctx's error.
 func (e *Editor) ReadPrompt(ctx context.Context) (string, error) {
 	e.keys.ctx = ctx
+	if err := e.size(); err != nil {
+		return "", err
+	}
 	if err := e.header(); err != nil {
 		return "", err
 	}
@@ -121,6 +134,21 @@ func (e *Editor) ReadPrompt(ctx context.Context) (string, error) {
 		}
 		return text, nil
 	}
+}
+
+// size gives the terminal the width the line breaks at: Options.Width's,
+// to MaxWidth, or DefaultWidth when it is unknown.
+func (e *Editor) size() error {
+	w := DefaultWidth
+	if e.opts.Width != nil {
+		if got := e.opts.Width(); got > 0 {
+			w = min(got, MaxWidth)
+		}
+	}
+	if err := e.term.SetSize(w, 24); err != nil {
+		return fmt.Errorf("editor width: %w", err)
+	}
+	return nil
 }
 
 // header writes Options.Header above the new prompt, through the terminal,

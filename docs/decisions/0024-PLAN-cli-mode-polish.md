@@ -390,3 +390,54 @@ Windows laptop, the remote two on a copy of the tree; `check-records` and `markd
 **Not done, as the plan says:** colour; running `git` for a reftable `HEAD`; print mode and `gobble acp`. Windows was
 not captured in a terminal: the line is written through `x/term` as every prompt is, and the plan names no Windows
 capture.
+
+## Amendment (2026-10-21): P4, the prompt's width
+
+*Proposed,* *(approved 2026-10-21, "Both, P4 then 0027")*, for the MADR's amendment of 2026-10-21 (D9), Q9 answered B: the width here; words while typing are
+[0027-PLAN-native-line-editor-word-wrap.md](0027-PLAN-native-line-editor-word-wrap.md)'s. It starts after the owner
+approves it, on `main` at or after `9dcd596`. *(Revised the same day, before review: the redraw of an entered prompt is
+dropped, Q9 answered B.)*
+
+**Scope.** In: `internal/cli/editor/editor.go` and its test (the width); `internal/cli/line.go` (the terminal's width
+given to the editor) and its test; `docs/README.md`'s rows. Out: word wrap (0027); a resize mid-line.
+
+**Steps.**
+
+1. **Tests first,** each seen failing on the unchanged code: `internal/cli/editor`, over a scripted terminal, a width
+   of 100 and a 150-character line show the break at column 100, not 80; a width of 200 gives 120; no width gives 80.
+   `internal/cli`: the line session gives the editor the terminal's width, read at each prompt.
+2. **The width:** `editor.Options` takes a `Width func() int`; before each prompt the editor calls `SetSize` with
+   `min(width, 120)`, 80 when it is unknown or 0.
+3. **In a pseudo-terminal** on macOS, at 100 and at 200 columns: a long prompt breaks at 100 and at 120.
+4. **Records:** this amendment's execution record and `docs/README.md`'s rows.
+
+**Verification.** Each new test seen failing first; step 3's captures; the pre-add check on the changed `.go` files;
+`go test -count=1 ./...`, `CGO_ENABLED=1 go test -race -count=1 ./...` and `make preflight` on macOS, the Linux machine
+and the Windows laptop, the remote two on a copy of the tree; `check-records` and `markdownlint`.
+
+**Rollout and rollback.** One commit. Reverting it returns the 80-column editor.
+
+### P4 execution record (2026-10-21)
+
+**Run** on `main` at `0354223`, on the owner's word "Both, P4 then 0027", with no deviation.
+
+1. **Tests first,** seen failing on the unchanged editor with a stub `Options.Width` it did not read: `TestWidth`
+   (`internal/cli/editor`), "the first row held 80 columns, want 100", "… want 120" (a width of 200) and "… want 60";
+   its cases of an unknown width, 0 and none, passed at 80 as they should. `TestPromptWidth` (`internal/cli`): "the
+   first row held 80 columns, want 100".
+2. **The width:** `editor.Options.Width`, a `func() int`; before each prompt the editor calls `x/term`'s `SetSize`
+   with `min(width, MaxWidth)`, `MaxWidth` 120, or `DefaultWidth` 80 when the width is unknown or 0. The line session
+   passes `ls.width`, which reads the terminal's width at each call (`internal/cli/slash.go`).
+3. **In a pseudo-terminal** on macOS, 150 characters typed and not sent: at 100 columns the first row held 100; at
+   200, 120; at 70, 70. The build before the change held 80 at 100 columns.
+4. **Records:** this record and `docs/README.md`'s rows.
+
+**Gates:** the pre-add check on the four changed `.go` files, `4 file(s) clean (gofmt, golint, govulncheck)`; macOS
+`make preflight`, `preflight passed`, and the tests and the race detector, 35 packages ok each; the Linux machine and
+the Windows laptop, Go 1.27.3, on a copy of the working tree, all 749 files, Windows with `TMP` and `TEMP` outside the
+user's home: the tests and the race detector, 35 packages ok on each, and `make preflight` through `apidiff`
+(golangci-lint `0 issues.`, govulncheck "No vulnerabilities found."), stopping at `verify-build-metadata` on a copy;
+`make check-records markdownlint`, "0 issues in 0 files".
+
+**Not done, as the plan says:** words kept whole (0027); a resize in the middle of a line, which takes effect at the
+next prompt.

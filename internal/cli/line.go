@@ -151,7 +151,7 @@ func (ls *lineSession) run(first Prompt) error {
 		}
 	}()
 	opts := editor.Options{History: ls.history(), Complete: ls.complete,
-		Header: func() string { return workspaceLine(ls.cwd) }}
+		Header: func() string { return workspaceLine(ls.cwd) }, Width: ls.width}
 	if !e.out.caps.Unicode {
 		opts.Continue = "... "
 	}

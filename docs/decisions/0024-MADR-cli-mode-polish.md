@@ -338,3 +338,61 @@ measured that day at `eb8f155`.
 * **Q7. How it looks.** **Answer (2026-10-21): the name with the git branch,** `gobble-cli (main)`.
 * **Q8. Above or below.** The owner asked for below the prompt, then returned to above. **Answer (2026-10-21): above
   the prompt,** "as decided before".
+
+## Amendment (2026-10-21): the prompt's width follows the terminal, and an entered prompt is word-wrapped
+
+*Proposed: the owner decides at review.* *(2026-10-21: accepted by the owner, "Both, P4 then 0027".)* The owner reported on 2026-10-21, after `9dcd596`: "The prompt is being cut
+and wrapped at around 80 chars, including in the middle of words. My terminal is much wider than 80 chars. The line
+wrap needs to be dynamic, based on the available width of the user's terminal to a max of 120 chars, ensuring not to
+cut words or punctuation such as a trailing comma when wrapping the prompt text." A CLI-mode polish item under D5.
+Each fact was measured that day at `9dcd596`.
+
+### Context
+
+- **`x/term` assumes 80 columns.** `xterm.NewTerminal` starts with `termWidth: 80` (`golang.org/x/term` `v0.47.0`,
+  `terminal.go:139`) until `SetSize` is called, and gobble never calls it: no `SetSize` in `internal/cli`. The terminal's
+  real width is known (`internal/cli/term/caps.go:49`, `xterm.GetSize`) and used for gobble's own output, such as
+  `/help` (`internal/cli/slash.go:154`), but not given to the line editor.
+- **It breaks the line itself.** When the cursor reaches `termWidth`, `x/term` writes `\r\n` (`terminal.go:381-401`),
+  so on any terminal the input breaks at column 80, wherever that falls in a word. P6's recordings show it: `> Fix
+  the off-by-one … tell me whether the wh` / `ole test suite will pass …`. Its cursor arithmetic for editing a long
+  line (`moveCursorToPos`, `terminal.go:286-316`) uses the same 80.
+- **It wraps by character only.** `x/term` places each character at the next column and row; it has no notion of
+  words, so a line editor built on it cannot keep a word whole while the user types without replacing its rendering.
+- **gobble already wraps words.** `render.wrapIndented` (`internal/cli/render/commands.go:118`) fills lines to a width,
+  breaking only at spaces, with wide characters measured (`displayWidth`); a word wider than a line is cut. `/help`
+  uses it (D2).
+- **Where an entered line sits.** After Enter, `x/term` has written the prompt and the line, then `\r\n`
+  (`terminal.go:582-591`), at a width it knows, so the rows the line took are known when `ReadLine` returns.
+
+### Decision
+
+*(Revised the same day, before review, for Q9's answer: whole words while typing, which needs gobble's own line editor
+in place of `x/term`'s rendering; that is
+[0027-MADR-native-line-editor-word-wrap.md](0027-MADR-native-line-editor-word-wrap.md). The first draft also redrew an
+entered prompt word-wrapped; 0027's editor makes that unneeded, so this amendment keeps the width alone, which ships
+first.)*
+
+- **D9. The prompt's width is the terminal's, to 120 columns** (Q9).
+  - Before each prompt, the editor reads the terminal's width and gives `x/term` the smaller of it and 120
+    (`SetSize`); 80 when the width is unknown. A resize between prompts takes effect at the next one. The input then
+    breaks at the true width, not at column 80, and cursor movement in a long line uses the true width.
+  - Words may still split at the right edge, by character, as `x/term` draws; keeping them whole is 0027's.
+
+### Consequences
+
+* Good, because the prompt uses the terminal's width, to 120 columns, at once, before 0027's editor.
+* Good, because editing a long line moves the cursor correctly on a terminal wider or narrower than 80 columns.
+* Neutral, because words still split at the right edge until 0027's editor replaces `x/term`'s rendering.
+
+### Options not chosen
+
+* **Redraw an entered prompt word-wrapped** (this amendment's first draft): words whole in the scrollback, split while
+  typing; set aside by Q9's answer, which keeps them whole while typing too.
+* **No cap:** the terminal's full width; the owner's 120 rules it out.
+
+### Owner questions
+
+* **Q9. Words while typing, or at Enter.** A: the width now, words kept whole once the prompt is entered. B: words kept
+  whole while typing too, with gobble's own line editor. **Answer (2026-10-21): B,** "Whole words while typing";
+  0027-MADR is that editor, and the width here ships first.
