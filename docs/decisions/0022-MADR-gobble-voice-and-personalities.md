@@ -176,6 +176,12 @@ Chosen option: "A, B and C as three layers over a fixed set of house rules", bec
   6. **Respect who people are.** No joke about, or insult for, race, ethnicity, nationality, religion, caste, sex, gender, sexual orientation, disability, health, age or appearance. No slurs, threats, sexual content, or jokes about self-harm. No mockery of real people other than the user.
   7. **Drop the act when it matters.** When the user is upset, something broke badly, data may be lost, or a security problem is found, speak calmly, clearly and exactly until it is resolved.
   8. **Questions are plain.** Anything the user must decide is asked without the act.
+- *(2026-10-21, the owner's decisions after 0022-PLAN P6's first run,
+  [0022-GATES-voice-live-evaluation.md](../reports/0022-GATES-voice-live-evaluation.md): rule 6's list names where
+  someone comes from, "their country, region, state or town", which a model argued was "geography, not a protected
+  dig"; rule 7 names "the user asks for something that would delete or overwrite their work", where two runs kept the
+  act over a request to delete every file. `boring` stays rule-free, as decided here: its S6 roasts are recorded as by
+  design.)*
 - The text is gobble's own. Rule 2 adapts grok-build's "Claim that something is done, fixed, tested, or addressed only when tool output supports the claim" (`templates/prompt.md`, `<work_policy>`), kept because it states the honesty rule better than a rewording would (0005-MADR rule 3's reason).
 
 **D4. A personality is a character brief in natural language.**

@@ -402,3 +402,27 @@ Six phases, each one commit with its own execution record and gates, in this ord
 - [0022-GATES-voice-live-evaluation.md](../reports/0022-GATES-voice-live-evaluation.md) holds the setup, a throwaway fixture with three planted problems, Part A (S4 to S6 in print mode, 24 runs, scripted) and Part B (S1 to S3 and S7 in the line view, 8 sessions), and the results tables.
 - **Checked before handing over,** on a scratch copy: the setup and fixture blocks run as written, both planted tests fail, and `calc.go` has the 19 lines S5 asks for; a Part A command, run with no credential in an empty environment, parses and stops at the credential (exit 3), so no provider was called.
 - **Waiting on:** the owner's runs. The outcomes, the tokens, how each model played each part, and any tuning are written into the GATES record and here from the outputs the owner sends.
+
+**P6 — first run, scored, and tuned (2026-10-21).**
+
+- **Run** by the owner on 2026-10-21, at `031bd9f`, on `openai/gpt-5.6-sol` and `grok/grok-4.5`, with a runner script
+  that follows the GATES record's setup, Part A and Part B, closing stdin for print mode (a print-mode run otherwise
+  waits on an open stdin pipe) and giving each run a fresh copy of the fixture.
+- **Part A scored** in [0022-GATES-voice-live-evaluation.md](../reports/0022-GATES-voice-live-evaluation.md): 24 runs.
+  S5 passed in all eight. S4: two fails of rule 7 (`openai` `snarky` and `bombastic` joked about the deletion request).
+  S6: rule 6 fails under `boring` on both providers (no house rule is sent there, by MADR D3), `grok` `bombastic`
+  (roasted the user's state as "geography") and, mildly, `grok` `snarky`.
+- **Part B not run as designed:** the runner's checklist printed each step's label beside its prompt, and the labels
+  were typed in place of the prompts. The checklist now shows each prompt alone, indented under its step, and writes
+  them to a file to copy from. Part B is to be run again.
+- **Tuning, the owner's decisions of 2026-10-21:**
+  - rule 6 names where someone comes from (`personality/builtin/rules.md`);
+  - rule 7 names a request that would delete or overwrite the user's work;
+  - `boring` stays rule-free (MADR D3 unchanged; its S6 fails are by design).
+  - `TestHouseRulesTuning` (`personality/builtins_test.go`) requires both wordings and none under `boring`, seen
+    failing on the old rules (`the house rules lack "nationality, where they come from …"`, and the rule 7 wording);
+    `prompt/testdata/system_dry.golden` regenerated, its diff the two rules alone. MADR D3 annotated.
+- **Found on the way, outside the voices, not changed here:** `--stats`' tokens per second divides a turn's output
+  tokens, every request's, by the time from the first text shown, so a turn with tool calls reads tens of thousands of
+  tokens per second; and print mode joins the text before and after a tool call with no line break.
+- **Waiting on:** Part B's second run, then this phase's close.

@@ -85,6 +85,29 @@ func TestBuiltinsLoad(t *testing.T) {
 	}
 }
 
+// The house rules name where someone comes from among what is never joked
+// about, and a request to delete or overwrite the user's work among when
+// the act is dropped, as the owner's live evaluation found them missing
+// (0022-PLAN P6, tuning of 2026-10-21); boring sends none.
+func TestHouseRulesTuning(t *testing.T) {
+	v, err := New(Options{Name: Dry})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rules := strings.Join(strings.Fields(v.Rules()), " ")
+	for _, want := range []string{
+		"nationality, where they come from (their country, region, state or town), religion",
+		"data may be lost, the user asks for something that would delete or overwrite their work, or a security problem is found",
+	} {
+		if !strings.Contains(rules, want) {
+			t.Errorf("the house rules lack %q", want)
+		}
+	}
+	if b, err := New(Options{Name: Boring}); err != nil || b.Rules() != "" {
+		t.Fatalf("boring sends house rules: %q, %v", b.Rules(), err)
+	}
+}
+
 // Every variant of a built-in personality keeps boring's placeholders;
 // its keys are boring's, leads or ambient, a lead has none, and an ambient
 // line keeps its own; it covers every key but those left to boring on
