@@ -65,7 +65,7 @@
 | 0026 | MADR | [Skip the full CI for a push or pull request that changes only the documentation, and check it with a one-job docs workflow](decisions/0026-MADR-skip-full-ci-for-docs-only-pushes.md) | accepted 2026-10-20 (option B, as recommended, by the owner; the docs set, not go-selfupdate-lib's `**.md`, since 36 tracked `.md` files are embedded or test input; the Context's 0004-PLAN citation corrected at P2, 2026-10-20) |
 | 0026 | PLAN | [Implement skipping the full CI for docs-only pushes, with a docs workflow](decisions/0026-PLAN-skip-full-ci-for-docs-only-pushes.md) | in progress (approved 2026-10-20; P0–P3; P0 and P1 complete 2026-10-20, no deviation; P2 complete 2026-10-20, one deviation: the 0004-PLAN note's place, the owner's choice; P3 waits on the pushes) |
 | 0027 | MADR | [gobble's own line editor for the native CLI mode, wrapping whole words while the user types](decisions/0027-MADR-native-line-editor-word-wrap.md) | accepted 2026-10-21 (from 0024-MADR Q9's answer; Q1, Q2 answered A) |
-| 0027 | PLAN | [Implement gobble's own line editor, wrapping whole words while the user types](decisions/0027-PLAN-native-line-editor-word-wrap.md) | in progress (approved 2026-10-21; four phases, after 0024-PLAN P4; P1 complete 2026-10-21, the layout) |
+| 0027 | PLAN | [Implement gobble's own line editor, wrapping whole words while the user types](decisions/0027-PLAN-native-line-editor-word-wrap.md) | in progress (approved 2026-10-21; four phases, after 0024-PLAN P4; P1 complete 2026-10-21, the layout; P2 complete 2026-10-21, the renderer) |
 
 0003-MADR has no PLAN of its own. 0004-PLAN Phase 2 and 0005-PLAN F10 implement it.
 

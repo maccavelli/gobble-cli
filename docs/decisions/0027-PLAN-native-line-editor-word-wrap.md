@@ -112,3 +112,32 @@ machine and the Windows laptop, Go 1.27.3, on a copy of the working tree, Window
 user's home: the tests and the race detector, 35 packages ok on each, then, on the renamed tree, `make preflight`
 through `apidiff` (golangci-lint `0 issues.`, govulncheck "No vulnerabilities found."), stopping at
 `verify-build-metadata` on a copy; `make check-records markdownlint`, "0 issues in 0 files".
+
+### P2 execution record (2026-10-21)
+
+**Run** on `main` at `b619163`, with no deviation.
+
+1. **The screen model** (`internal/cli/editor/screen_test.go`, test code only): a grid with a cursor that takes
+   printable runes (a wide one in two cells), `\r`, line feed (scrolling at the bottom), cursor up, down, forward and
+   back, and erase to the end of the screen and of the line; a rune in the last column leaves a wrap pending, as
+   terminals do. `TestScreenModel`'s twelve cases seen failing against a stub (all twelve), then passing. One expected
+   value in the first draft was wrong by hand-tracing (`b    Y` for `b   Y`), corrected before the model was written.
+2. **The renderer** (`internal/cli/editor/draw.go`): `draw` moves up by the cursor's row in the last drawing, `\r`,
+   erases to the end of the screen, writes the rows joined by `\r\n`, then moves to the cursor's row, `\r`, and
+   forward to its column; a line taller than the screen is drawn from a window of rows that holds the cursor. `finish`
+   leaves the line drawn and moves below it. `TestDrawRedraws`, `TestDrawFullRows`, `TestDrawTallLine` and
+   `TestDrawFinish` seen failing against a stub, then passing. `TestDrawTallLine` was strengthened before the
+   negatives, with the cursor at a tall line's start: without it, a renderer with no window passed, the last rows
+   scrolling into the same place.
+3. **Negatives,** on a scratch copy, one mutation at a time: the redraw from the cursor's row, not the line's top; no
+   erase; the column moved to without a row start (`cursor (2, 8)` for `(2, 4)`); no window on a tall line
+   (`["  r4" … "  r7"]` for `["> r0" … "  r3"]`); `finish` leaving the cursor on the line; and in the screen model, no
+   pending wrap, no scrolling, an erase that leaves the line. Eight mutations, eight failures; the restored copy
+   passed. Not used by the editor yet: nothing a user sees changes.
+
+**Gates:** the pre-add check on the three new `.go` files, `3 file(s) clean (gofmt, golint, govulncheck)`; macOS `make
+preflight`, `preflight passed`, and the tests and the race detector, 35 packages ok each; the Linux machine and the
+Windows laptop, Go 1.27.3, on a copy of the working tree, all 754 files, Windows with `TMP` and `TEMP` outside the user's
+home: the tests and the race detector, 35 packages ok on each, `make preflight` through `apidiff` (golangci-lint `0
+issues.`, govulncheck "No vulnerabilities found."), stopping at `verify-build-metadata` on a copy; `make check-records
+markdownlint`, "0 issues in 0 files".
