@@ -425,4 +425,8 @@ Six phases, each one commit with its own execution record and gates, in this ord
 - **Found on the way, outside the voices, not changed here:** `--stats`' tokens per second divides a turn's output
   tokens, every request's, by the time from the first text shown, so a turn with tool calls reads tens of thousands of
   tokens per second; and print mode joins the text before and after a tool call with no line break.
-- **Waiting on:** Part B's second run, then this phase's close.
+- **Part B, second run** (2026-10-21, at `9dcd596`, the tuned rules): six sessions scored in the GATES record. S2, S3
+  and S1 passed in all six; S2's trap was sprung by `openai` under `dry`, `snarky` and `bombastic`, each admitting the
+  wrong prediction in the reply that showed the failure. S7 was not testable: a compaction keeps the last 20,000 tokens
+  (`compaction.keepRecentTokens`), and no session reached that, so `/compact` found nothing to summarize.
+- **Waiting on:** `grok` `boring` and `dry`, and S7 run in a way that compacts, before this phase closes.
