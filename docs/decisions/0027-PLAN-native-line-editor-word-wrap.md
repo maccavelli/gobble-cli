@@ -79,3 +79,36 @@ today (MADR D1–D7).
 
 One commit per phase. P1 to P3 change nothing a user sees. P4 switches the editor; reverting it returns `x/term`'s
 `Terminal` with 0024's width. Nothing is stored.
+
+## Execution record
+
+### P1 execution record (2026-10-21)
+
+**Run** on `main` at `4e21173`, on the owner's word "Both, P4 then 0027", with no deviation.
+
+1. **Tests first,** seen failing against stubs of `lineWidth` (0) and `layout` (no rows): `TestLineWidth` and all
+   fourteen cases of `TestLayout` (`internal/cli/editor/layout_test.go`). Three expected widths in the first draft of
+   the table were wrong for what their cases meant (a last row exactly full, a first row that fit more): corrected
+   before any code, at 13, 11 and 19 columns.
+2. **The layout** (`internal/cli/editor/layout.go`): `lineWidth` (the terminal's width, to 120, 80 when unknown);
+   `layout(prompt, text, cursor, columns)`, rows breaking at the last space a row's room reaches, the space taken by the
+   break, a word wider than a row cut, continuation rows indented by the prompt's width, wide characters as two columns
+   (`golang.org/x/text/width`), the cursor placed by the same rows and moved to the next row's start when it would
+   stand past the last column. The editor's `size` (0024 P4) uses `lineWidth`, its own rule removed; `TestWidth`
+   holds it. Not used by the editor yet: nothing a user sees changes.
+3. **Negatives,** on a scratch copy, one mutation at a time, the tree untouched: rows breaking by character
+   (`["> the quick brow" "  n fox jumps"]`); the break keeping its space; wide characters as one column; no cap at 120
+   (`lineWidth(200) = 200`); no 80 when unknown; the cursor past the last column; continuation rows not indented; the
+   editor's width ignoring the cap (`the first row held 152 columns, want 120`). Eight mutations, eight failures (one
+   redone so it built); the restored copy passed.
+
+**Found by the gates and fixed in the phase:** gocritic's `importShadow`, `layout`'s parameter `width` shadowing the
+`width` package: it is `columns`. Seen on macOS, the Linux machine and the Windows laptop, whose first runs were on the
+tree before the rename; each ran again after it.
+
+**Gates:** the pre-add check on the three changed `.go` files, `3 file(s) clean (gofmt, golint, govulncheck)`, after the
+rename; macOS `make preflight`, `preflight passed`, and the tests and the race detector, 35 packages ok each; the Linux
+machine and the Windows laptop, Go 1.27.3, on a copy of the working tree, Windows with `TMP` and `TEMP` outside the
+user's home: the tests and the race detector, 35 packages ok on each, then, on the renamed tree, `make preflight`
+through `apidiff` (golangci-lint `0 issues.`, govulncheck "No vulnerabilities found."), stopping at
+`verify-build-metadata` on a copy; `make check-records markdownlint`, "0 issues in 0 files".

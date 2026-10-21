@@ -141,9 +141,7 @@ func (e *Editor) ReadPrompt(ctx context.Context) (string, error) {
 func (e *Editor) size() error {
 	w := DefaultWidth
 	if e.opts.Width != nil {
-		if got := e.opts.Width(); got > 0 {
-			w = min(got, MaxWidth)
-		}
+		w = lineWidth(e.opts.Width())
 	}
 	if err := e.term.SetSize(w, 24); err != nil {
 		return fmt.Errorf("editor width: %w", err)
