@@ -1,0 +1,81 @@
+---
+status: in-progress
+date: 2026-10-21
+associated-madr: "0027-MADR-native-line-editor-word-wrap.md"
+---
+<!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
+
+# Implement gobble's own line editor, wrapping whole words while the user types
+
+Associated MADR: [0027-MADR-native-line-editor-word-wrap.md](0027-MADR-native-line-editor-word-wrap.md)
+
+*Proposed. Approved 2026-10-21 ("Both, P4 then 0027"), Q1 and Q2 answered A. It starts after the owner approves it and answers Q1 and Q2, on `main` after 0024-PLAN P4 (the width), so
+the width the editor reads is already the terminal's. Each phase is one commit; each starts by measuring again what it
+relies on, and a fact that differs is a deviation, stopped and asked.*
+
+## Goal
+
+In the line session, the prompt wraps at the terminal's width, to 120 columns, never inside a word or before its
+punctuation, while it is typed and in the scrollback, with every editing key, history, paste and completion as they are
+today (MADR D1–D7).
+
+## Scope
+
+- **In:** `internal/cli/editor` (the buffer, the layout, the renderer, the keys, and the read loop moved onto them);
+  its tests and a screen model for them; `internal/cli/line.go` where it builds the editor; 0008-MADR D6's dated note;
+  `docs/architecture.md`; `docs/README.md`.
+- **Out:** a multi-line buffer (Q2 B), unless the owner takes it; the agent's replies; the TUI mode.
+
+## Implementation Steps
+
+### P1 — the layout (D2)
+
+1. **Tests first:** a table of prompt, text, width and cursor, with the rows and the cursor's row and column wanted:
+   breaks only at spaces; `comma,` and `end.` kept whole; a word wider than a row cut; continuation rows indented by
+   the prompt's width; wide characters as two columns; the width capped at 120 and 80 when unknown; the cursor at a
+   row's end, at the text's end, inside a cut word; an empty text.
+2. **`layout(prompt, text, cursor, width)`** in `internal/cli/editor`: rows and the cursor's place. Unused by the
+   editor yet: no visible change.
+
+### P2 — the screen model and the renderer (D3)
+
+1. **A screen model** in the test package: a grid that takes `\r`, line feed, cursor up/down/forward/back, erase to the
+   end of the screen and of the line, and printable runes, and answers "what is on screen, where is the cursor". Its
+   own tests first.
+2. **Tests first:** drawing a layout, then another (longer, shorter, fewer rows), leaves exactly the new rows and the
+   cursor in its place; a line taller than the screen keeps the cursor's row on screen.
+3. **The renderer:** from the rows drawn last time to the new ones, by relative moves.
+
+### P3 — the keys (D4, D5)
+
+1. **Measure first:** the bytes each key sends on macOS Terminal, a Linux terminal and Windows Terminal and Console Host
+   (through the key reader), as 0008-MADR measurement 10 did for paste. A key that differs from `x/term`'s table is a
+   deviation.
+2. **Tests first, a parity table:** for each key `x/term` handles, the buffer and cursor after it, as `x/term` gives
+   them today on a one-row line, and on a wrapped line; ↑/↓ by row and history (Q1); Ctrl+A/E to the line's ends.
+3. **The key handling** on the buffer, using the key reader as it is.
+
+### P4 — the editor on them (D1, D5)
+
+1. **Tests first:** the editor's existing tests pass unchanged on the new editor (paste coalescing, Ctrl+C twice,
+   Ctrl+D, `/exit`, history, Tab, the header); new: a long prompt typed at widths 60, 100 and 200 ends on a screen with
+   no word split and rows of at most 120 columns; a resize between keys redraws at the new width.
+2. **The read loop** on the buffer, the layout and the renderer; `x/term`'s `Terminal` no longer used; `x/term` kept for
+   raw mode and the size.
+3. **In a pseudo-terminal,** on macOS and the Linux machine, at 60, 100 and 200 columns: typing, editing in the
+   middle, history recall, a paste, Tab, Ctrl+C; the final screens rendered from the bytes. Windows: the owner's look
+   in Windows Terminal and Console Host. A screen that differs from the tests is a deviation.
+4. **Records:** 0008-MADR D6's dated note; `docs/architecture.md`'s line-session lines; `docs/README.md`.
+
+## Verification
+
+- Every new test seen failing first, on the unchanged code or on a scratch copy, its failure quoted in the record.
+- Each phase: the pre-add check on its changed `.go` files; `go test -count=1 ./...`, `CGO_ENABLED=1 go test -race
+  -count=1 ./...` and `make preflight` on macOS, the Linux machine and the Windows laptop, the remote two on a copy of
+  the tree; `check-records` and `markdownlint`.
+- P4's captures, and the owner's look on Windows, before the phase is complete.
+
+## Rollout and Rollback
+
+One commit per phase. P1 to P3 change nothing a user sees. P4 switches the editor; reverting it returns `x/term`'s
+`Terminal` with 0024's width. Nothing is stored.
