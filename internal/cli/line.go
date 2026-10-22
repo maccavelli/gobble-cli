@@ -111,8 +111,10 @@ func (ls *lineSession) run(first Prompt) error {
 		ls.amb = newAmbient(e.out.caps.Err.TTY)
 	}
 	if ls.resize != nil { // on a terminal: keep what is shown, and route resizes (0030-MADR D3, D4, D6)
-		ls.tr = &transcript{}
-		e.out.rec = ls.tr
+		if e.out.rec == nil { // the chat command keeps it from its start (D4, as amended)
+			e.out.rec = &transcript{}
+		}
+		ls.tr = e.out.rec
 		defer func() { e.out.rec = nil }()
 		ls.editorResize = make(chan struct{}, 1)
 		ctx, cancel := context.WithCancel(e.ctx)

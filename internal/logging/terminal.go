@@ -16,9 +16,11 @@ import (
 // the message, then the attributes in parentheses as "key: value",
 // separated by "; ", wrapped at spaces to the width less one column, the
 // continuation lines indented two (0024-MADR D6). A path under home is
-// shown with ~. The redaction is the text handler's.
+// shown with ~. The redaction is the text handler's. With show, the
+// diagnostic goes to it unwrapped instead (0030-MADR D4, as amended).
 type terminalHandler struct {
 	w     *lockedWriter
+	show  func(diagnostic string)
 	level slog.Leveler
 	width int
 	home  string
@@ -32,8 +34,8 @@ type lockedWriter struct {
 	w  io.Writer
 }
 
-func newTerminalHandler(w io.Writer, level slog.Leveler, cols int, home string) *terminalHandler {
-	return &terminalHandler{w: &lockedWriter{w: w}, level: level, width: cols, home: home}
+func newTerminalHandler(w io.Writer, show func(string), level slog.Leveler, cols int, home string) *terminalHandler {
+	return &terminalHandler{w: &lockedWriter{w: w}, show: show, level: level, width: cols, home: home}
 }
 
 func (h *terminalHandler) Enabled(_ context.Context, l slog.Level) bool {
@@ -54,13 +56,13 @@ func (h *terminalHandler) Handle(_ context.Context, r slog.Record) error {
 	if len(parts) > 0 {
 		text += " (" + strings.Join(parts, "; ") + ")"
 	}
-	var b strings.Builder
-	for _, line := range wrapWords(strings.Fields(text), h.width-1, 2) {
-		b.WriteString(line + "\n")
-	}
 	h.w.mu.Lock()
 	defer h.w.mu.Unlock()
-	_, err := io.WriteString(h.w.w, b.String())
+	if h.show != nil {
+		h.show(text)
+		return nil
+	}
+	_, err := io.WriteString(h.w.w, Wrap(text, h.width))
 	return err
 }
 
@@ -115,6 +117,19 @@ func (h *terminalHandler) tilde(v string) string {
 		return "~" + string(filepath.Separator) + rest
 	}
 	return v
+}
+
+// Wrap draws a diagnostic as the terminal handler writes it on a terminal
+// cols columns wide; with no width known (under 2), on one line.
+func Wrap(diagnostic string, cols int) string {
+	if cols < 2 {
+		return strings.Join(strings.Fields(diagnostic), " ") + "\n"
+	}
+	var b strings.Builder
+	for _, line := range wrapWords(strings.Fields(diagnostic), cols-1, 2) {
+		b.WriteString(line + "\n")
+	}
+	return b.String()
 }
 
 // wrapWords fills lines of at most room columns with words, every line

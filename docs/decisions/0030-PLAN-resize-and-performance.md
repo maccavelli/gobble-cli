@@ -186,7 +186,7 @@ second Windows read path.
 
   kitty keeps 2,000 lines and xfce4-terminal 1,000 by default, so most of a 10,000-row reprint scrolls out of
   them.
-- **gobble,** benchmarks in a scratch copy, five runs on each host. A reply (1.6 KB) is rendered as the view does:
+- **gobble,** benchmarks in a scratch copy, five runs on each host. A reply (1.6 KB *(921 bytes: corrected in P5's record)*) is rendered as the view does:
   streamed in chunks of 64 bytes, styled, wrapped. The transcript is that reply repeated to 4 MB, rendered at 60
   columns.
 
@@ -411,7 +411,7 @@ the wrapper only. `render.Stream` appends once per chunk (`internal/cli/render/m
 returns slices of its buffer, so it is left as it is; the targets are met by the wrapper's rework alone. 0030-MADR
 D5's amendment is annotated.
 
-1. **Benchmarks,** each on the reply of 0028-PLAN P4's captures (`internal/cli/render/testdata/reply.txt`, 1.6 KB:
+1. **Benchmarks,** each on the reply of 0028-PLAN P4's captures (`internal/cli/render/testdata/reply.txt`, 1.6 KB *(921 bytes: corrected in P5's record)*:
    prose, a list, code, a table and a long URL):
    - `render`: `BenchmarkReplyRender`, the reply streamed in chunks of 64 bytes, styled and wrapped as the view does;
      `BenchmarkReplyRedraw`, the same reply drawn again whole at a new width;
@@ -508,3 +508,140 @@ Eight mutations, eight failures; the restored copy passed.
   | KeyDraw | 1.50 µs (1.5) | 5.28 µs (5) | 1.08 µs (1.4) |
 
 **P4 complete, 2026-10-22.**
+
+### P5 execution record (2026-10-22)
+
+Approved by the owner's "committed, proceed", 2026-10-22.
+
+**Deviation 6, 2026-10-22, decided by the owner** ("Fix in 0030 first"). Step 1's first capture (macOS, a narrowing
+mid-prompt) showed both replies and both prompts reprinted whole at 60 columns. But two warnings shown at the start
+were gone from the screen and the scrollback after the reprint. One came from `internal/cli/modelflags.go`, written
+while `ChatCmd.Run` picks the model, before `internal/cli/line.go` opened the transcript. The other was a log record
+that the log's terminal handler (`internal/logging/terminal.go`) wrote to stderr itself. The code also showed the
+handler wrapping at the width read when the log opened, so a record logged after a narrowing would be wrapped at the
+old width and cut by the terminal. P3 kept only what `Output`, the view and the editor write. 0030-MADR D4 is
+amended. Added to P5, before the captures, as step 0:
+
+1. **Tests first,** each seen failing on a stub:
+   - `internal/logging`: with `Options.Show` set, a record goes to it as one unwrapped diagnostic (its prefix,
+     message, attributes, redaction and `~`), and nothing is written to stderr; `Wrap` draws a diagnostic exactly
+     as the handler writes it at that width.
+   - `internal/cli`: the chat command keeps a transcript from its start in the line session on a terminal, and not
+     in print mode or off a terminal; a warning written before the session opens is reprinted with it; a log record
+     shown during the session is reprinted wrapped at the new width; a record logged after a narrowing is wrapped
+     at the new width.
+2. **The code:**
+   - `ChatCmd.Run` starts the transcript at its start (`keepShown`), which the line session then takes over.
+   - `logging.Options.Show` and `logging.Wrap`; on a terminal the cli passes `Output.logRecord`, which wraps at
+     stderr's width at that moment, writes, and keeps the record as a piece drawn at a width.
+3. **Negatives,** one at a time on a scratch copy: the transcript started late again; the record not kept; the
+   record wrapped at the log's opening width; `Show` ignored.
+
+Files added to P5's scope: `internal/cli/chat.go`, `internal/cli/line.go`, `internal/cli/main.go`,
+`internal/cli/output.go`, `internal/logging/logging.go`, `internal/logging/terminal.go` and their tests.
+
+**Deviation 7, 2026-10-22, decided by the owner** ("0030 P5, then 0031, then 0029"). Step 1's capture of a
+resize mid-reply cannot be made: gobble's replies are not streamed. The pinned go-llmprovider-sdk's retry
+wrapper buffers them (0005-PLAN F4-1b), and a timed probe saw the stub stream a reply over 2.15 s while gobble
+showed it whole 12 ms after Enter. In every capture the narrowing therefore fell after the reply's last
+byte. [0031-PLAN-sdk-current-releases-and-adoption.md](0031-PLAN-sdk-current-releases-and-adoption.md) turns on
+live streaming in its P2, and that phase runs the mid-reply capture on the three hosts. P5 captures the
+resize mid-prompt. The view's reprint at a reply's next line end stays covered by P3's
+`TestViewReprintsAtTheNextLineEnd` until then.
+
+**Step 0 (deviation 6), tests first,** each seen failing on a stub (an `Options.Show` the log ignored, a `Wrap`
+returning nothing, a `keepShown` and an `Output.logRecord` that did nothing):
+
+- `TestTerminalShow`: `shown []`, want the one unwrapped diagnostic with `~` and `[REDACTED]`.
+- `TestWrapIsTheHandlers`: `Wrap ""` at 30, 60 and 200 columns against the handler's wrapped text.
+- `TestKeepShownFromTheStart/the_line_session_on_a_terminal`: `kept false, want true`.
+- `TestLineSessionReprintsWhatCameBefore`: both warnings "not reprinted, wrapped at 60".
+- `TestLogRecordWrapsAtTheWidthNow`: "not wrapped at 40" for a record logged after the width fell from 100.
+- `TestWrapNoWidth`, added while writing the code: with no width known, `Wrap` put one word on each row; it now
+  leaves the diagnostic on one line, as the plain text handler did when the width was 0.
+
+**The code:** `ChatCmd.Run` resolves the mode first and calls `keepShown`, which starts the transcript in the line
+session on a terminal; `lineSession.run` takes it over, or starts one as before. `logging.Options.Show` and
+`logging.Wrap`; on a terminal, `lazyLog` passes `Output.logRecord`, which wraps with `logging.Wrap` at
+`errColumns()` (stderr's width now, not capped at 120, as the handler's was not) and keeps the record as a piece
+drawn at the reprint's width. The log still serializes its records.
+
+**Step 1, the captures,** scratch programs only, the model a stub on 127.0.0.1:
+
+- `p5screen.py`: termtest's screen and its three narrowings, with a scrollback, `CSI 3 J`, cursor addressing, erase
+  variants and OSC strings, answering the editor's cursor query from its own state.
+- `p5_pty.py` (macOS, the Linux machine): gobble in a pty of 120 x 60; "hi" and its reply; a 124-character prompt
+  typed; the screen narrowed to 60 the way the chosen terminal narrows, then the pty, which signals gobble; 1.5 s;
+  the prompt sent and its reply. Run once for each narrowing.
+- `p5conpty.exe` (the Windows laptop): the same steps in Windows' pseudo-console (`CreatePseudoConsole`,
+  `ResizePseudoConsole`); its bytes drawn on the Mac, narrowed at the resize's offset as Windows narrows. Its first
+  run failed: gobble.exe took the harness's own stdio (ssh's pipes) and ran in print mode ("no prompt"); the harness
+  now starts it with `STARTF_USESTDHANDLES`.
+- `p5_check.py`, on the screen and scrollback at the end: each reply equal, row for row, to `replyAt(reply, 60)` as
+  a 60-column terminal shows it (the heading, the code line, the table and the URL kept whole past 60 and continued
+  by the terminal); as many replies as were sent; "> hi" and the long prompt once each, the prompt's words whole;
+  the two warnings of the start once each, wrapped at 60; no word of five letters or more from the reply anywhere
+  else. The rows that are none of these are listed.
+
+  Its negatives, each seen failing: five broken copies of a passing capture's rows (a word cut, a row as drawn at
+  120 left above, the prompt twice, a prompt word cut, a reply missing); gobble built from P2's commit `d772e34`,
+  which has no reprint ("1 replies on the screen and scrollback, want 2", the first reply's rows left at 120 and cut
+  by the terminal, `writin` / `g code`); and HEAD `ec5240f` before deviation 6 (`'Warning: Model "stub-model" not
+  found' 0 times, want once`, and the same for the listing's warning).
+
+  Results:
+
+  | Host | Narrowing | Check |
+  |---|---|---|
+  | macOS | re-wraps, cursor down | ok: 2 replies of 32 rows; other rows the header, `proj`, `0s`, `>` |
+  | macOS | re-wraps, cursor kept | ok |
+  | macOS | cuts | ok |
+  | The Linux machine | re-wraps, cursor down | ok; the trust question its fresh home asks, wrapped at 60, among the other rows |
+  | The Linux machine | re-wraps, cursor kept | ok |
+  | The Linux machine | cuts | ok |
+  | The Windows laptop | Windows' own | ok |
+
+  In each capture the screen just before the narrowing held the long prompt typed whole and unsent, one reply came
+  before it, and `CSI 3 J` and the second reply after it (`midprompt.py`).
+
+**The negatives of deviation 6,** one at a time on a scratch copy:
+
+- **The transcript started late** (the `keepShown` call removed from `ChatCmd.Run`): the macOS capture's check,
+  `'Warning: Model "stub-model" not found' 0 times, want once`.
+- **`keepShown` keeping nothing:** `TestKeepShownFromTheStart`, `kept false, want true`; and
+  `TestLineSessionReprintsWhatCameBefore`.
+- **A log record not kept:** `TestLineSessionReprintsWhatCameBefore`, `"Warning: model listing failed;" is not
+  reprinted, wrapped at 60`.
+- **Records wrapped at the log's opening width** (`TerminalWidth` set again in place of `Show`): the same failure.
+- **`Show` ignored by the log:** `TestTerminalShow`, `shown []`.
+
+Five mutations, five failures; the restored copy passed.
+
+**Found by the gates and fixed in the phase:** golangci-lint's `importShadow` (`Wrap`'s parameter named `width`,
+the package `golang.org/x/text/width`; renamed `cols`) and `sloglint` (the test's message a variable; now a
+constant).
+
+**Gates,** after those fixes:
+
+- The pre-add check on the eight changed `.go` files: `8 file(s) clean (gofmt, golint, govulncheck)`.
+- macOS: `make preflight`, `preflight passed`; the tests and the race detector, 36 packages ok each.
+- The Linux machine and the Windows laptop, on a copy of the tree: the tests and the race detector, 36 packages ok on
+  each; `make preflight` reached `apidiff` (golangci-lint `0 issues.`, govulncheck "No vulnerabilities found.") and
+  stopped at `verify-build-metadata`, as the copies are not git checkouts.
+- `make check-records markdownlint`: exit 0 on each host.
+- The Windows laptop, `make probe-conhost`: `--- PASS: TestConhost`.
+- `make perf`, each within three times its baseline: macOS ReplyRender 32.5 µs, Reprint 9.45 ms, LineSessionStart
+  839 µs, KeyDraw 1.52 µs; the Linux machine 145 µs, 33.8 ms, 3.52 ms, 6.05 µs; the Windows laptop 29.9 µs, 7.83 ms,
+  4.75 ms, 1.09 µs. The run before the lint fixes measured macOS at about twice its baselines (ReplyRender 76 µs)
+  while the machine was busy; this run, on the same code bar the two renames, is the one recorded.
+
+**A correction to P1's and P4's records, 2026-10-22:** the reply both call "1.6 KB" is 921 bytes
+(`internal/cli/render/testdata/reply.txt`). 1.6 KB was the size of 0028-PLAN P4's whole capture of it.
+
+**Step 3, the records:** the dated notes 0030-MADR D7 promises, in 0028-MADR (its consequence "the breaks are fixed
+when written") and in 0027-PLAN (P4's "found, not fixed" note on narrowing); `docs/architecture.md`'s rows for
+`internal/cli`, `internal/cli/editor`, `internal/cli/term` and `internal/logging`; `docs/README.md`.
+
+**Step 2, the owner's look in WezTerm and Windows Terminal, is not done.** The owner, 2026-10-22: "I will check the
+terminals later. Commit to main, then proceed." P5 is committed with steps 0, 1 and 3, and stays in progress until
+that look; its binaries were built from this tree. 0031-PLAN starts meanwhile, as the owner directed.

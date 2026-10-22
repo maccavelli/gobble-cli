@@ -11,6 +11,7 @@ import (
 	"github.com/maccavelli/gobble-cli/internal/cli/editor"
 	"github.com/maccavelli/gobble-cli/internal/cli/render"
 	"github.com/maccavelli/gobble-cli/internal/cli/term"
+	"github.com/maccavelli/gobble-cli/internal/logging"
 	"github.com/maccavelli/gobble-cli/personality"
 )
 
@@ -87,6 +88,20 @@ func (o *Output) diag(prefix, format string, args ...any) {
 	}
 }
 
+// logRecord shows a log record on stderr as the log's terminal handler
+// draws it (0024-MADR D6), at stderr's width now, and keeps it, to be drawn
+// again at the new width on a reprint (0030-MADR D4, as amended). The log
+// serializes its calls.
+func (o *Output) logRecord(diagnostic string) {
+	at := func(width int) string { return logging.Wrap(diagnostic, width) }
+	if o.rec != nil {
+		o.rec.drawn(len(diagnostic), at)
+	}
+	if _, err := io.WriteString(o.err, at(o.errColumns())); err != nil && o.errWrite == nil {
+		o.errWrite = err
+	}
+}
+
 // errWidth is the width gobble's messages wrap to: stderr's, read now, at
 // most 120 columns, or 0, no wrapping, when stderr is not a terminal
 // (0028-MADR D6).
@@ -94,11 +109,17 @@ func (o *Output) errWidth() int {
 	if !o.caps.Err.TTY {
 		return 0
 	}
+	return min(o.errColumns(), editor.MaxWidth)
+}
+
+// errColumns is stderr's width now, or the width read at the start when
+// it cannot be read.
+func (o *Output) errColumns() int {
 	w := o.caps.Err.Width
 	if f, ok := o.err.(*os.File); ok {
 		if c, _, err := xterm.GetSize(int(f.Fd())); err == nil && c > 0 { //nolint:gosec // G115: a terminal's descriptor fits an int
 			w = c
 		}
 	}
-	return min(w, editor.MaxWidth)
+	return w
 }

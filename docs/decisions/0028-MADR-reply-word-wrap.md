@@ -118,7 +118,10 @@ that must stay exact are left alone.
 * Good, because copied prose is still valid Markdown with the same meaning, and code, tables and tool output are
   copied unchanged.
 * Bad, because the breaks are fixed when written. Widening the window does not rejoin them, and narrowing it makes the
-  terminal wrap the wrapped rows again, raggedly. Terminals reflow only their own soft wraps.
+  terminal wrap the wrapped rows again, raggedly. Terminals reflow only their own soft wraps. *(2026-10-22:
+  superseded for the line session on a terminal by
+  [0030-MADR-resize-and-performance.md](0030-MADR-resize-and-performance.md) D7: once resizing settles, the
+  conversation is drawn again at the new width.)*
 * Bad, because a copied paragraph has line breaks where it was wrapped. Markdown renders it the same, but plain-text
   destinations show the breaks.
 * Bad, because the last word of a release can wait for the next chunk: a few characters, briefly.

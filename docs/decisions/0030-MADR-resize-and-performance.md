@@ -96,6 +96,14 @@ clearing the terminal's scrollback.
   It is bounded by size alone: at most 4 MB. Past that, the oldest pieces go, and the reprint begins with one line
   saying so. The owner's answers of 2026-10-22: "2MB is too small. raise it to 4MB", and no limit on the number of
   pieces ("Drop it, bytes only"), since short pieces would reach any count long before 4 MB.
+
+  *Amended 2026-10-22 (0030-PLAN P5, deviation 6; the owner's answer "Fix in 0030 first"):* P5's capture found two
+  warnings missing after a reprint. One was written before the line session opened its transcript (the model's,
+  while the chat command picks it). The other was a log record, which the log's terminal handler wrote to stderr
+  itself, not through `Output`. The transcript is therefore kept from the chat command's start, once it knows it runs
+  the line session on a terminal. The log's terminal handler is a fourth writer: on a terminal it hands each record,
+  unwrapped, to `Output`, which wraps it as the handler did (0024-MADR D6), at stderr's width when it is shown
+  rather than the width read when the log opened, and keeps it, drawn again at the new width on a reprint.
 - **D5. A performance budget,** with each item a test or benchmark in `internal/cli`, measured in P1 and enforced
   from P2:
   - a key's drawing writes at most the changed text plus 40 bytes;

@@ -236,9 +236,11 @@ type lazyLog struct {
 func (l *lazyLog) get() *slog.Logger {
 	l.once.Do(func() {
 		opts := logging.Options{Level: l.level, Stderr: l.stderr, Warn: l.stderr}
-		// On a terminal a record is a diagnostic, as D3's are (0024-MADR D6).
+		// On a terminal a record is a diagnostic, as D3's are (0024-MADR D6),
+		// shown through Output at the width of the moment and kept for a
+		// reprint (0030-MADR D4, as amended).
 		if l.stderr != nil && l.out.caps.Err.TTY {
-			opts.TerminalWidth = l.out.caps.Err.Width
+			opts.Show = l.out.logRecord
 			opts.Home, _ = os.UserHomeDir() //nolint:errcheck // with no home, paths are shown whole
 		}
 		if d, _, err := systemDirs(); err != nil {

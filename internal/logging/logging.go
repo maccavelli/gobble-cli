@@ -21,6 +21,11 @@ type Options struct {
 	// is gobble's own diagnostic; 0, not a terminal, keeps slog's text
 	// (0024-MADR D6).
 	TerminalWidth int
+	// Show, when set, is given each warning and error as gobble's own
+	// diagnostic, unwrapped, in place of Stderr: its caller wraps it with
+	// Wrap at the terminal's width when it is shown, and can draw it again
+	// at another (0030-MADR D4, as amended).
+	Show func(diagnostic string)
 	// Home is the user's home directory, shown as ~ on a terminal; empty
 	// shows every path whole.
 	Home string
@@ -45,8 +50,10 @@ func Open(opts Options) (*slog.Logger, io.Closer, error) {
 		closer = r
 	}
 	switch {
+	case opts.Show != nil:
+		handlers = append(handlers, newTerminalHandler(nil, opts.Show, max(opts.Level, slog.LevelWarn), 0, opts.Home))
 	case opts.Stderr != nil && opts.TerminalWidth > 0:
-		handlers = append(handlers, newTerminalHandler(opts.Stderr, max(opts.Level, slog.LevelWarn), opts.TerminalWidth, opts.Home))
+		handlers = append(handlers, newTerminalHandler(opts.Stderr, nil, max(opts.Level, slog.LevelWarn), opts.TerminalWidth, opts.Home))
 	case opts.Stderr != nil:
 		handlers = append(handlers, slog.NewTextHandler(opts.Stderr,
 			&slog.HandlerOptions{Level: max(opts.Level, slog.LevelWarn), ReplaceAttr: redact}))

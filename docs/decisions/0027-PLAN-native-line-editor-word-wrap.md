@@ -362,7 +362,9 @@ again.
   editor and on `x/term`'s alike.
 - **Narrowing a terminal that reflows its rows** (most do) may leave the last drawing's rows misplaced for one
   redraw: the editor moves up by the rows it drew, which the terminal has since reflowed. The screen model does not
-  reflow; not measured.
+  reflow; not measured. *(2026-10-22: measured and fixed by
+  [0030-PLAN-resize-and-performance.md](0030-PLAN-resize-and-performance.md): P1 measured three ways terminals
+  narrow, P2 redraws the prompt by the one the cursor's place shows, and P3 reprints the conversation.)*
 
 **Gates,** after the fixes: the pre-add check on the fourteen changed `.go` files, `14 file(s) clean (gofmt, golint,
 govulncheck)`; macOS `make preflight`, `preflight passed`, and the tests and the race detector, 36 packages ok each; the

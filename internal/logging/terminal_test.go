@@ -99,6 +99,58 @@ func TestTerminalRedacts(t *testing.T) {
 	}
 }
 
+// With Show, each warning goes to it as one diagnostic, unwrapped, with its
+// attributes, redaction and ~, and nothing is written to stderr: the caller
+// wraps it when it is shown (0030-MADR D4, as amended).
+func TestTerminalShow(t *testing.T) {
+	home := filepath.Join(t.TempDir(), "home")
+	var stderr bytes.Buffer
+	var shown []string
+	log, closer, err := Open(Options{Level: slog.LevelInfo, Stderr: &stderr, TerminalWidth: 40, Home: home,
+		Show: func(d string) { shown = append(shown, d) }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := closer.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	reason := "not loaded: the project is not trusted (gobble trust, or /trust), and the rest of this reason is long"
+	log.WarnContext(t.Context(), "prompt: a file was not used", slog.String("file", filepath.Join(home, "skills")),
+		slog.String("api_key", "sk-live-1"), slog.String("reason", reason))
+	log.InfoContext(t.Context(), "started")
+	want := "Warning: prompt: a file was not used (file: " + filepath.Join("~", "skills") + "; api_key: " + redacted +
+		"; reason: " + reason + ")"
+	if len(shown) != 1 || shown[0] != want {
+		t.Fatalf("shown %q\nwant  [%q]", shown, want)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("written to stderr as well: %q", stderr.String())
+	}
+}
+
+// Wrap draws a diagnostic exactly as the handler writes it at that width.
+func TestWrapIsTheHandlers(t *testing.T) {
+	reason := "not loaded: the project is not trusted (gobble trust, or /trust), and the rest of this reason is long"
+	for _, width := range []int{30, 60, 200} {
+		log, stderr, _ := openTerminal(t, width, "")
+		log.WarnContext(t.Context(), "prompt: a file was not used", slog.String("reason", reason))
+		if got := Wrap("Warning: prompt: a file was not used (reason: "+reason+")", width); got != stderr.String() {
+			t.Errorf("at %d: Wrap %q\nhandler %q", width, got, stderr.String())
+		}
+	}
+}
+
+// With no width known, Wrap leaves a diagnostic on one line.
+func TestWrapNoWidth(t *testing.T) {
+	for _, width := range []int{0, 1} {
+		if got := Wrap("Warning: model listing failed (provider: kilo)", width); got != "Warning: model listing failed (provider: kilo)\n" {
+			t.Errorf("at %d: %q", width, got)
+		}
+	}
+}
+
 // Below warning level nothing reaches a terminal; the file still has it.
 func TestTerminalShowsWarningsOnly(t *testing.T) {
 	log, stderr, path := openTerminal(t, 200, "")

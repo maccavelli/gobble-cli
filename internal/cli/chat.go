@@ -19,6 +19,10 @@ type ChatCmd struct {
 // composes the input, then runs print mode or the line session over ACP
 // (0002-PLAN Phase 2).
 func (c *ChatCmd) Run(k *kong.Context, e *runEnv) error {
+	mode := resolveMode(c.Print, e.out.caps.In, e.out.caps.Out.TTY)
+	if !c.ListModels {
+		keepShown(e.out, mode)
+	}
 	e.ensureSettingsFile()
 	g := givenFlags(k)
 	// With --api-key -, piped stdin is the key, never the input (0005-PLAN F4-3a).
@@ -31,7 +35,6 @@ func (c *ChatCmd) Run(k *kong.Context, e *runEnv) error {
 	if c.ListModels {
 		return e.printModels(strings.Join(c.Prompt, " "), "", false)
 	}
-	mode := resolveMode(c.Print, e.out.caps.In, e.out.caps.Out.TTY)
 	// The working directory comes first: the process settings, and so the
 	// built-in tools' options, are its (0018-PLAN P5 deviation 15).
 	cwd, base, err := resolveCwd(c.Cwd)
@@ -108,6 +111,16 @@ func (c *ChatCmd) Run(k *kong.Context, e *runEnv) error {
 		return runPrint(e, c, prompt, cwd, base)
 	}
 	return runLine(e, c, prompt, cwd, base)
+}
+
+// keepShown starts the transcript of what the line session shows on a
+// terminal at the chat command's start, so that what is written before
+// the session opens, such as the model's warning, is reprinted with it
+// (0030-MADR D4, as amended). The session takes it over.
+func keepShown(o *Output, mode Mode) {
+	if mode == ModeLine && o.caps.Out.TTY && o.rec == nil {
+		o.rec = &transcript{}
+	}
 }
 
 // resolveCwd is the session's working directory: --cwd made absolute, which

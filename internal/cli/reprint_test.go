@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"log/slog"
 	"regexp"
 	"slices"
 	"strings"
@@ -181,6 +182,116 @@ func TestLateReprintGoesToTheEditor(t *testing.T) {
 	}
 	if n := handed.Load(); n != 1 {
 		t.Fatalf("handed to the editor %d times, want 1", n)
+	}
+}
+
+// The chat command keeps what is shown from its start in the line session
+// on a terminal, so a warning written before the session opens, such as the
+// model's, is kept; not in print mode, and not off a terminal (0030-MADR D4,
+// as amended).
+func TestKeepShownFromTheStart(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		mode      Mode
+		tty, kept bool
+	}{
+		{"the line session on a terminal", ModeLine, true, true},
+		{"print mode", ModePrint, true, false},
+		{"off a terminal", ModeLine, false, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var out, errw strings.Builder
+			s := term.Stream{TTY: tc.tty, Width: 80}
+			o := &Output{out: &out, err: &errw, caps: term.Caps{In: tc.tty, Out: s, Err: s}}
+			keepShown(o, tc.mode)
+			o.Warnf("Model %q not found for provider %q. Using custom model id.", "stub-model", "kilo")
+			if kept := o.rec != nil && strings.Contains(reprintText(o.rec, 80, false), `Warning: Model "stub-model"`); kept != tc.kept {
+				t.Fatalf("kept %v, want %v", kept, tc.kept)
+			}
+		})
+	}
+}
+
+// A warning written before the session opened, and a log record shown
+// during it, are reprinted with the conversation, wrapped at the new width
+// (0030-MADR D4, as amended).
+func TestLineSessionReprintsWhatCameBefore(t *testing.T) {
+	agent := &acptest.ScriptAgent{Turns: []acptest.Turn{{Updates: []string{chunk("reply-1\n")}}}}
+	h := newLineHarness(t, agent)
+	h.e.out.caps.Out.TTY, h.e.out.caps.Err.TTY = true, true
+	h.e.out.caps.Err.Width = 100
+	var width atomic.Int64
+	width.Store(100)
+	h.termWidth = func() int { return int(width.Load()) }
+	log := &modeLog{h: h}
+	h.e.out.out, h.e.out.err = log, log
+	h.e.logs = &lazyLog{level: slog.LevelInfo, out: h.e.out, stderr: log}
+	keepShown(h.e.out, ModeLine)
+	h.e.out.Warnf("Model %q not found for provider %q. Using custom model id.", "stub-model", "kilo")
+	h.start(Prompt{})
+	h.press("hi\r")
+	waitUntil(t, func() bool { return strings.Contains(log.String(), "reply-1") })
+	h.e.log().WarnContext(t.Context(), "model listing failed; offering the curated static list",
+		slog.String("provider", "kilo"), slog.String("kind", "other"))
+	time.Sleep(200 * time.Millisecond) // the next prompt drawn
+	n := len(log.String())
+	width.Store(60)
+	h.resize <- struct{}{}
+	waitUntil(t, func() bool { return strings.Contains(log.String()[n:], "\x1b[6n") })
+	h.press("\x1b[5;3R")
+	waitUntil(t, func() bool { return strings.Contains(log.String()[n:], "\x1b[3J") })
+	time.Sleep(100 * time.Millisecond)
+	lines := afterLastClear(log.String(), 60)
+	h.press("\x04")
+	if err := h.wait(); err != nil {
+		t.Fatal(err)
+	}
+	for _, first := range []string{`Warning: Model "stub-model" not found`, "Warning: model listing failed;"} {
+		i := slices.IndexFunc(lines, func(l string) bool { return strings.HasPrefix(l, first) })
+		if i < 0 || i+1 >= len(lines) || !strings.HasPrefix(lines[i+1], "  ") {
+			t.Errorf("%q is not reprinted, wrapped at 60: %q", first, lines)
+			continue
+		}
+		for _, l := range lines[i : i+2] {
+			if len([]rune(l)) > 60 {
+				t.Errorf("a row of %d columns, more than 60: %q", len([]rune(l)), l)
+			}
+		}
+	}
+}
+
+// A log record is shown wrapped at stderr's width when it is logged, not
+// when the log opened, and kept to be drawn again (0030-MADR D4, as amended).
+func TestLogRecordWrapsAtTheWidthNow(t *testing.T) {
+	t.Setenv("GOBBLE_HOME", t.TempDir())
+	var out, errw strings.Builder
+	o := &Output{out: &out, err: &errw, caps: term.Caps{In: true, Out: term.Stream{TTY: true, Width: 100},
+		Err: term.Stream{TTY: true, Width: 100}}, rec: &transcript{}}
+	l := &lazyLog{level: slog.LevelInfo, out: o, stderr: &errw}
+	t.Cleanup(func() {
+		if err := l.close(); err != nil {
+			t.Error(err)
+		}
+	})
+	const msg = "model listing failed; offering the curated static list"
+	l.get().WarnContext(t.Context(), msg, slog.String("provider", "kilo"))
+	if got := errw.String(); got != "Warning: "+msg+" (provider: kilo)\n" {
+		t.Fatalf("at 100 columns: %q", got)
+	}
+	errw.Reset()
+	o.caps.Err.Width = 40
+	l.get().WarnContext(t.Context(), msg, slog.String("provider", "kilo"))
+	rows := strings.Split(strings.TrimSuffix(errw.String(), "\n"), "\n")
+	if len(rows) < 2 {
+		t.Fatalf("not wrapped at 40: %q", errw.String())
+	}
+	for _, r := range rows {
+		if len(r) > 39 {
+			t.Errorf("a row of %d columns, more than 39: %q", len(r), r)
+		}
+	}
+	if s := reprintText(o.rec, 50, false); strings.Count(s, "Warning: model listing failed;") != 2 {
+		t.Fatalf("the records are not kept: %q", s)
 	}
 }
 
