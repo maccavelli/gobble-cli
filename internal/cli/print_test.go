@@ -15,7 +15,7 @@ import (
 )
 
 // withAgent makes Main's agent the scripted one for the rest of the test.
-func withAgent(t *testing.T, agent *acptest.ScriptAgent) {
+func withAgent(t testing.TB, agent *acptest.ScriptAgent) {
 	t.Helper()
 	old := agentServe
 	agentServe = func(*runEnv) acpclient.ServeFunc { return agent.Serve }

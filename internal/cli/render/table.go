@@ -16,15 +16,22 @@ const zwj = 0x200d // zero-width joiner
 func displayWidth(s string) int {
 	w := 0
 	for _, r := range s {
-		switch {
-		case r == zwj, unicode.In(r, unicode.Mn, unicode.Me):
-		case isWide(r):
-			w += 2
-		default:
-			w++
-		}
+		w += runeWidth(r)
 	}
 	return w
+}
+
+// runeWidth is the number of columns r occupies, by displayWidth's rules.
+func runeWidth(r rune) int {
+	switch {
+	case r >= 0x20 && r < 0x7f: // printable ASCII, most of what is drawn
+		return 1
+	case r == zwj, unicode.In(r, unicode.Mn, unicode.Me):
+		return 0
+	case isWide(r):
+		return 2
+	}
+	return 1
 }
 
 func isWide(r rune) bool {

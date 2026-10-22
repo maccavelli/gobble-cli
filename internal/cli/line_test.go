@@ -22,7 +22,7 @@ import (
 // lineHarness runs a line session over a pipe, with raw mode stubbed and
 // stdout and stderr captured.
 type lineHarness struct {
-	t              *testing.T
+	t              testing.TB
 	agent          *acptest.ScriptAgent
 	e              *runEnv
 	keys           *io.PipeWriter
@@ -64,7 +64,7 @@ func (c *rawCheckedInput) Read(p []byte) (int, error) {
 	return c.r.Read(p)
 }
 
-func newLineHarness(t *testing.T, agent *acptest.ScriptAgent) *lineHarness {
+func newLineHarness(t testing.TB, agent *acptest.ScriptAgent) *lineHarness {
 	t.Helper()
 	t.Setenv("GOBBLE_HOME", t.TempDir())
 	withAgent(t, agent)

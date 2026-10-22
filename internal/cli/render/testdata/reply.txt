@@ -1,0 +1,18 @@
+Hello again. If you have a specific task—whether it’s writing code, reviewing documentation, debugging, or anything else—please describe it in your own words. I’ll be precise, courteous, and to the point.
+
+## A heading that is longer than sixty columns, which is kept whole on its row
+
+- A list item with enough words in it to need a second row at sixty columns, continued under its text.
+- Another item, short.
+
+> A quote that is long enough to wrap at sixty columns, its rows each starting with the marker again.
+
+```go
+func main() { fmt.Println("a long line of code that is wider than sixty columns and stays exactly as it is") }
+```
+
+| name | value |
+|---|---|
+| a cell that is long enough to pass sixty columns on its own row | b |
+
+See https://example.com/a/very/long/path/that/is/wider/than/the/row/at/sixty/columns/index.html for more. Done, with **some bold words across a break** and `inline code` too.

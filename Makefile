@@ -89,7 +89,7 @@ LDFLAGS := -X $(BUILDINFO).version=$(VERSION) -X $(BUILDINFO).kind=$(BUILD_KIND)
 
 .PHONY: build install test race vet fmt lint staticcheck vulncheck tidy clean \
 	pre-add-check preflight check-cgo-off verify-build-metadata fix-check archtest apidiff \
-	check-records check-libs markdownlint probe-conhost completion-shells $(BIN)
+	check-records check-libs markdownlint probe-conhost completion-shells perf $(BIN)
 
 # Shipped binaries are pure Go. check-cgo-off refuses CGO_ENABLED other than 0
 # and any `import "C"` in a .go file (0004-PLAN phase 0 accept).
@@ -111,6 +111,11 @@ test:
 
 race:
 	CGO_ENABLED=1 go test -race ./...
+
+# The CLI mode's timings against their baselines, at most three times each
+# (0030-MADR D5). Not part of preflight: timing varies by host and by load.
+perf:
+	go test -tags perf -run '^TestPerfBudget$$' -count=1 -v ./internal/cli/ ./internal/cli/editor/
 
 vet:
 	go vet ./...

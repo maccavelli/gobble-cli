@@ -1,6 +1,9 @@
 package render
 
-import "strings"
+import (
+	"strings"
+	"unicode/utf8"
+)
 
 // Wrap breaks streamed Markdown prose at spaces so no row is wider than a
 // width, and passes code, tables and headings through unchanged (0028-MADR
@@ -20,36 +23,42 @@ import "strings"
 // back the word still arriving and the last finished word on the row, which
 // the next word may move to a new row (D5, as amended). Feeding text in any
 // chunks gives what feeding it whole gives.
+//
+// Words, gaps and a line's start are kept in byte buffers that are reused,
+// and a finished word becomes the held one by swapping buffers, so wrapping
+// allocates little more than its output (0030-MADR D5, as amended).
 type Wrap struct {
 	out   strings.Builder // this push's output
 	width int
-	esc   string // an escape sequence still arriving
+	esc   []byte // an escape sequence still arriving
 
 	known     bool   // the current line's kind is known
-	head      string // the line's start, while its kind is not known
-	headPlain string // head without its escapes
+	head      []byte // the line's start, while its kind is not known
+	headPlain []byte // head without its escapes
 	pass      bool   // the current line passes through
 	opening   bool   // the current line opened the fence
-	line      string // the current passed line, without escapes, to find the fence's close
+	line      []byte // the current passed line, without escapes, to find the fence's close
 	fence     string // the open fence's marker run, or ""
 
 	cont      string // a prose line's continuation prefix
 	col       int    // the columns used on the row
-	held      string // the last finished word on the row, not yet written
-	heldPlain string // held without its escapes
-	heldGap   string // the spaces before held
+	held      []byte // the last finished word on the row, not yet written
+	heldPlain []byte // held without its escapes
+	heldGap   []byte // the spaces before held
 	heldFirst bool   // held is the row's first word
-	gap       string // the spaces after held, before word
-	word      string // the word still arriving
-	wordPlain string // word without its escapes
+	gap       []byte // the spaces after held, before word
+	word      []byte // the word still arriving
+	wordPlain []byte // word without its escapes
 }
 
 // Push wraps text to width columns and returns what it can release; a width
 // of 0 or less wraps nothing.
 func (w *Wrap) Push(text string, width int) string {
 	w.width = width
-	for _, r := range text {
-		w.take(r)
+	for i := 0; i < len(text); {
+		r, size := utf8.DecodeRuneInString(text[i:])
+		w.take(r, text[i:i+size])
+		i += size
 	}
 	out := w.out.String()
 	w.out.Reset()
@@ -59,34 +68,35 @@ func (w *Wrap) Push(text string, width int) string {
 // Flush returns everything held and starts afresh, as at a line start with
 // no fence open. Call it with the Stream's Flush.
 func (w *Wrap) Flush() string {
-	if w.esc != "" {
-		esc := w.esc
-		w.esc = ""
+	if len(w.esc) > 0 {
+		esc := string(w.esc)
+		w.esc = w.esc[:0]
 		w.token(esc, true)
 	}
-	if !w.known && w.head != "" {
+	if !w.known && len(w.head) > 0 {
 		w.classify(true)
 	}
 	if w.known && !w.pass {
 		w.endWord()
 		w.emitHeld()
-		w.out.WriteString(w.gap)
+		w.out.Write(w.gap)
 	}
 	out := w.out.String()
 	*w = Wrap{}
 	return out
 }
 
-// take reads a rune, gathering an escape sequence until it is whole.
-func (w *Wrap) take(r rune) {
-	if w.esc == "" && r != 0x1b {
-		w.token(string(r), false)
+// take reads a rune, r, written as s, gathering an escape sequence until it
+// is whole.
+func (w *Wrap) take(r rune, s string) {
+	if len(w.esc) == 0 && r != 0x1b {
+		w.token(s, false)
 		return
 	}
-	w.esc += string(r)
+	w.esc = append(w.esc, s...)
 	if len(w.esc) == 2 && r != '[' || len(w.esc) > 2 && r >= 0x40 && r <= 0x7e {
-		esc := w.esc
-		w.esc = ""
+		esc := string(w.esc)
+		w.esc = w.esc[:0]
 		w.token(esc, true)
 	}
 }
@@ -103,9 +113,9 @@ func (w *Wrap) token(t string, esc bool) {
 				w.token(t, false)
 				return
 			}
-			w.head += t
+			w.head = append(w.head, t...)
 			if !esc {
-				w.headPlain += t
+				w.headPlain = append(w.headPlain, t...)
 				w.classify(false)
 			}
 			return
@@ -116,9 +126,9 @@ func (w *Wrap) token(t string, esc bool) {
 		switch {
 		case esc:
 		case t != "\n":
-			w.line += t
+			w.line = append(w.line, t...)
 		default:
-			if w.fence != "" && !w.opening && isFenceClose(w.line, w.fence) {
+			if w.fence != "" && !w.opening && isFenceClose(string(w.line), w.fence) {
 				w.fence = ""
 			}
 			w.startLine()
@@ -127,43 +137,46 @@ func (w *Wrap) token(t string, esc bool) {
 	}
 	switch {
 	case esc:
-		w.word += t
+		w.word = append(w.word, t...)
 	case t == "\n":
 		w.endWord()
 		w.emitHeld()
-		if w.fits(after(w.col, w.gap)) {
-			w.out.WriteString(w.gap)
+		if w.fits(afterBytes(w.col, w.gap)) {
+			w.out.Write(w.gap)
 		}
 		w.out.WriteByte('\n')
 		w.startLine()
 	case t == " " || t == "\t":
 		w.endWord()
-		w.gap += t
+		w.gap = append(w.gap, t...)
 	default:
-		w.word += t
-		w.wordPlain += t
+		w.word = append(w.word, t...)
+		w.wordPlain = append(w.wordPlain, t...)
 	}
 }
 
-// startLine forgets the line just ended; an open fence stays open.
+// startLine forgets the line just ended, keeping its buffers; an open fence
+// stays open.
 func (w *Wrap) startLine() {
-	w.known, w.head, w.headPlain, w.pass, w.opening, w.line = false, "", "", false, false, ""
-	w.cont, w.col, w.gap, w.word, w.wordPlain = "", 0, "", "", ""
-	w.held, w.heldPlain, w.heldGap, w.heldFirst = "", "", "", false
+	w.known, w.pass, w.opening = false, false, false
+	w.head, w.headPlain, w.line = w.head[:0], w.headPlain[:0], w.line[:0]
+	w.cont, w.col = "", 0
+	w.gap, w.word, w.wordPlain = w.gap[:0], w.word[:0], w.wordPlain[:0]
+	w.held, w.heldPlain, w.heldGap, w.heldFirst = w.held[:0], w.heldPlain[:0], w.heldGap[:0], false
 }
 
 // classify decides the line's kind from its start, once it can, or at the
 // line's end; a prose line's prefix is written and the rest of its start
 // taken as prose.
 func (w *Wrap) classify(atEnd bool) {
-	kind, n, run, ok := lineKind(w.headPlain, atEnd)
+	kind, n, run, ok := lineKind(string(w.headPlain), atEnd)
 	if !ok {
 		return
 	}
-	head, plain := w.head, w.headPlain
-	w.head, w.headPlain, w.known = "", "", true
+	head, plain := string(w.head), string(w.headPlain)
+	w.head, w.headPlain, w.known = w.head[:0], w.headPlain[:0], true
 	if kind != kindProse {
-		w.pass, w.line = true, plain
+		w.pass, w.line = true, append(w.line[:0], plain...)
 		if kind == kindFence {
 			w.fence, w.opening = run, true
 		}
@@ -179,8 +192,10 @@ func (w *Wrap) classify(atEnd bool) {
 		return ' '
 	}, plain[:n])
 	w.col = after(0, plain[:n])
-	for _, r := range rest {
-		w.take(r)
+	for i := 0; i < len(rest); {
+		r, size := utf8.DecodeRuneInString(rest[i:])
+		w.take(r, rest[i:i+size])
+		i += size
 	}
 }
 
@@ -216,42 +231,55 @@ func escapeLen(s string) int {
 // otherwise on a new row, unless it would open a block there, when the held
 // word moves down with it, or, when it cannot, the word stays on this row.
 func (w *Wrap) endWord() {
-	if w.word == "" {
+	if len(w.word) == 0 {
 		return
 	}
-	word, plain, gap := w.word, w.wordPlain, w.gap
-	w.word, w.wordPlain, w.gap = "", "", ""
 	switch {
-	case w.held == "":
-		w.held, w.heldPlain, w.heldGap, w.heldFirst = word, plain, gap, true
+	case len(w.held) == 0:
+		w.hold(true, true)
 		return
-	case w.fits(after(after(after(w.col, w.heldGap+w.heldPlain), gap), plain)):
-	case !opensBlock(plain):
+	case w.fits(afterBytes(afterBytes(afterBytes(afterBytes(w.col, w.heldGap), w.heldPlain), w.gap), w.wordPlain)):
+	case !opensBlock(string(w.wordPlain)):
 		w.emitHeld()
 		w.newRow()
-		w.held, w.heldPlain, w.heldGap, w.heldFirst = word, plain, "", true
+		w.hold(false, true)
 		return
-	case !w.heldFirst && !opensBlock(w.heldPlain):
+	case !w.heldFirst && !opensBlock(string(w.heldPlain)):
 		w.newRow()
-		w.heldGap = ""
+		w.heldGap = w.heldGap[:0]
 	}
 	w.emitHeld()
-	w.held, w.heldPlain, w.heldGap, w.heldFirst = word, plain, gap, false
+	w.hold(true, false)
+}
+
+// hold makes the word just finished the held one, with the gap before it
+// when gap is true, by swapping buffers; first says it starts its row.
+func (w *Wrap) hold(gap, first bool) {
+	w.held, w.word = w.word, w.held[:0]
+	w.heldPlain, w.wordPlain = w.wordPlain, w.heldPlain[:0]
+	if gap {
+		w.heldGap, w.gap = w.gap, w.heldGap[:0]
+	} else {
+		w.heldGap, w.gap = w.heldGap[:0], w.gap[:0]
+	}
+	w.heldFirst = first
 }
 
 func (w *Wrap) fits(col int) bool { return w.width <= 0 || col <= w.width }
 
 func (w *Wrap) emitHeld() {
-	if w.held == "" {
+	if len(w.held) == 0 {
 		return
 	}
-	w.out.WriteString(w.heldGap + w.held)
-	w.col = after(w.col, w.heldGap+w.heldPlain)
-	w.held, w.heldPlain, w.heldGap = "", "", ""
+	w.out.Write(w.heldGap)
+	w.out.Write(w.held)
+	w.col = afterBytes(afterBytes(w.col, w.heldGap), w.heldPlain)
+	w.held, w.heldPlain, w.heldGap = w.held[:0], w.heldPlain[:0], w.heldGap[:0]
 }
 
 func (w *Wrap) newRow() {
-	w.out.WriteString("\n" + w.cont)
+	w.out.WriteByte('\n')
+	w.out.WriteString(w.cont)
 	w.col = after(0, w.cont)
 }
 
@@ -259,13 +287,26 @@ func (w *Wrap) newRow() {
 // multiple of 8, other runes by their display width.
 func after(col int, s string) int {
 	for _, r := range s {
-		if r == '\t' {
-			col = (col/8 + 1) * 8
-			continue
-		}
-		col += displayWidth(string(r))
+		col = advance(col, r)
 	}
 	return col
+}
+
+// afterBytes is after for bytes.
+func afterBytes(col int, b []byte) int {
+	for i := 0; i < len(b); {
+		r, size := utf8.DecodeRune(b[i:])
+		col = advance(col, r)
+		i += size
+	}
+	return col
+}
+
+func advance(col int, r rune) int {
+	if r == '\t' {
+		return (col/8 + 1) * 8
+	}
+	return col + runeWidth(r)
 }
 
 // The kinds of line Wrap tells apart.
@@ -408,5 +449,5 @@ func opensBlock(word string) bool {
 // an escape sequence (0030-MADR D3). The words a line holds are empty at
 // its start.
 func (w *Wrap) Idle() bool {
-	return !w.known && w.head == "" && w.esc == ""
+	return !w.known && len(w.head) == 0 && len(w.esc) == 0
 }

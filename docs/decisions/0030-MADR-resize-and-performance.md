@@ -110,6 +110,15 @@ clearing the terminal's scrollback.
   the Windows laptop. The wrapper and the Markdown stream are reworked to build words and lines without an allocation
   per character. The targets, against P1's baseline: at least 3× fewer allocations, and a reprint of the last 10,000
   rows at least 2× faster on each host. The budget tests enforce them.
+
+  *Amended 2026-10-22 (0030-PLAN P4, deviation 4; the owner's answer "Post-rework, record it"):* the baselines are
+  the in-repository benchmarks' medians after the rework, on each host, not P1's figures, which came from a scratch
+  benchmark and would let a several-fold slowdown pass at 3×. The reprint's allocation budget is the count after the
+  rework and a quarter more. The targets against P1 are checked once, in 0030-PLAN's P4 record.
+
+  *Amended 2026-10-22 (0030-PLAN P4, deviation 5; the owner's answer "Record it, leave Stream"):* of the two, only
+  the wrapper built its words and lines a character at a time. The Markdown stream appends once per chunk, so it is
+  not reworked; the wrapper's rework alone meets the targets.
 - **D6. Print mode and off a terminal:** unchanged. No transcript is kept, and nothing is redrawn.
 - **D7. Supersedes** 0028-MADR's consequence "the breaks are fixed when written" for the line session on a
   terminal, and 0027-PLAN P4's "found, not fixed" note on reflow when narrowing. Both are recorded there as dated

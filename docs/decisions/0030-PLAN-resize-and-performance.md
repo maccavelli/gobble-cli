@@ -387,3 +387,124 @@ Seventeen mutations, seventeen failures; the restored copy passed.
 - The Windows laptop, `make probe-conhost`: `--- PASS: TestConhost`.
 
 **P3 complete, 2026-10-22.**
+
+### P4 execution record (2026-10-22)
+
+**Deviation 3, 2026-10-22, decided by the owner** ("option 1"). The gates found `make preflight` failing at
+`markdownlint` on macOS and the Windows laptop: `internal/cli/render/testdata/reply.md:18:5 error MD034/no-bare-urls
+Bare URL used`. The file is new in P4: the benchmarks' mixed reply, whose long bare URL is deliberate, a word wider
+than the row, as a model sends it. It is input for the renderer, not documentation, so it is renamed
+`internal/cli/render/testdata/reply.txt`, and its four readers in the tests follow. Its content is unchanged, and
+markdownlint keeps covering every document. No decision changes, so 0030-MADR is not amended.
+
+**Deviation 4, 2026-10-22, decided by the owner** ("Post-rework, record it"). Step 1 says the baselines are P1's.
+P1's figures came from a benchmark in a scratch copy, not from the benchmarks P4 adds: on the Windows laptop P1
+measured the last 10,000 rows at 95–98 ms, and P4's `BenchmarkReprint` on HEAD's unchanged code at 48.2 ms. Three
+times P1's figures would also pass a reworked reprint slowed several times over (108 ms against 9.4 ms on macOS). The
+baselines are therefore P4's own benchmarks after step 4's rework, the median of five runs on each host, and the
+reprint's allocation budget is the count after the rework (5,051) and a quarter more, 6,300. The targets against P1
+are checked once, below. 0030-MADR D5 is amended.
+
+**Deviation 5, 2026-10-22, decided by the owner** ("Record it, leave Stream"). Step 4 names `render.Wrap` and
+`render.Stream`, after P1's finding that both build their words and lines a character at a time. That is true of
+the wrapper only. `render.Stream` appends once per chunk (`internal/cli/render/mdstream.go`, `m.buf += chunk`) and
+returns slices of its buffer, so it is left as it is; the targets are met by the wrapper's rework alone. 0030-MADR
+D5's amendment is annotated.
+
+1. **Benchmarks,** each on the reply of 0028-PLAN P4's captures (`internal/cli/render/testdata/reply.txt`, 1.6 KB:
+   prose, a list, code, a table and a long URL):
+   - `render`: `BenchmarkReplyRender`, the reply streamed in chunks of 64 bytes, styled and wrapped as the view does;
+     `BenchmarkReplyRedraw`, the same reply drawn again whole at a new width;
+   - `cli`: `BenchmarkReprint`, a 4 MB transcript of replies drawn back to its last 10,000 rows at 60 columns, as a
+     reprint does; `BenchmarkLineSessionStart`, the line session in process from start to its first prompt;
+   - `editor`: `BenchmarkKeyDraw`, a key typed at the end of a long prompt, drawn.
+
+   The line session's test harness (`newLineHarness`, `withAgent`) takes `testing.TB`, so the start-up benchmark
+   shares it. No test changed otherwise.
+2. **Budget tests,** run by `go test` on every host, since they count rather than time:
+   - `TestKeyDrawBudget` (`editor`): a key at a long line's end, one in its middle, and a cursor move each write at
+     most the bytes after what each row's old and new text share, plus 40. It passed on HEAD's code, as 0027's
+     renderer already rewrites only a row's changed end; the first mutation below shows it failing.
+   - `TestReprintAllocationBudget` (`cli`): 1,000 rows of replies drawn again at 60 columns allocate at most 6,300
+     times. On HEAD's code it failed at 99,821 allocations; after step 4, 5,051.
+3. **`make perf`:** `TestPerfBudget`, tagged `perf`, in `cli` (ReplyRender, Reprint, LineSessionStart) and in
+   `editor` (KeyDraw), each against three times its baseline for the host's GOOS. A host with no baseline is logged,
+   not failed. The baselines (deviation 4):
+
+   | Benchmark | macOS | Linux machine | Windows laptop |
+   |---|---|---|---|
+   | ReplyRender | 30 µs | 110 µs | 54 µs |
+   | Reprint | 9.4 ms | 29 ms | 12 ms |
+   | LineSessionStart | 830 µs | 2.9 ms | 6.9 ms |
+   | KeyDraw | 1.5 µs | 5 µs | 1.4 µs |
+
+4. **The optimisation:**
+   - `render.Wrap` keeps its words, gap, held word and line in byte buffers that are reused, and swaps them where it
+     copied strings: a held word becomes the current one by exchanging the two buffers. Runes are decoded in place
+     (`utf8.DecodeRuneInString`); a column advances by `advance(col, r)`.
+   - `runeWidth`, shared with the table, answers printable ASCII (most of what is drawn) without the width tables.
+   - `render.Stream` is not changed (deviation 5). With the wrapper reworked, a reply's allocations fell from 2,673
+     to 242 without it.
+
+   Every render test and every split test passes unchanged.
+
+**Measurements,** five runs on each host of P4's benchmarks, on HEAD's code (with P4's test files, which run on it
+unchanged) and after step 4. Medians:
+
+| Benchmark | macOS | Linux machine | Windows laptop | Allocations | Bytes |
+|---|---|---|---|---|---|
+| ReplyRender | 94.1 → 29.5 µs (3.2×) | 464 → 109 µs (4.2×) | 134 → 53.8 µs (2.5×) | 2,673 → 242 | 52 → 14.7 KB |
+| ReplyRedraw | 87.9 → 23.7 µs (3.7×) | 437 → 73.7 µs (5.9×) | 229 → 63.4 µs (3.6×) | 2,559 → 129 | 51 → 13.3 KB |
+| Reprint | 38.0 → 9.4 ms (4.0×) | 118 → 29.4 ms (4.0×) | 48.2 → 11.6 ms (4.1×) | 985,246 → 49,696 | 21.7 → 7.3 MB |
+| LineSessionStart | 960 → 834 µs | 3.6 → 2.9 ms | 6.5 → 6.9 ms | 4,604 (Windows 4,832), unchanged | unchanged |
+| KeyDraw | 1.5 → 1.5 µs | 4.9 → 5.0 µs | 1.4 → 1.4 µs | 8, unchanged | 808, unchanged |
+
+After the rework the runs spread least on macOS (within 5 per cent), more on the Linux machine (Reprint 25.2–31.0 ms)
+and most on the Windows laptop (ReplyRender 24.8–79.4 µs, Reprint 7.3–25.4 ms).
+
+**The targets, against P1's baseline:**
+
+- Allocations at least 3× fewer: a reply 2,673 → 242 (11×); the last 10,000 rows 1.03 million → 49,696 (20×).
+- The last 10,000 rows at least 2× faster: macOS 36 → 9.4 ms (3.8×), the Linux machine 113–126 → 29.4 ms (3.8–4.3×),
+  the Windows laptop 95–98 → 11.6 ms (8.2–8.4×). Against HEAD's code in P4's own benchmark, 4.0–4.1× on each host.
+
+Both met. Start-up and a key's drawing were not targets and did not change.
+
+**Negatives,** one mutation at a time on a scratch copy; each must fail the named test (the timing ones with
+`-tags perf`):
+
+- **A changed row written whole** (`TestKeyDrawBudget`): `104 bytes for 1 runes changed, more than 41`.
+- **The word built by joining strings, rune by rune** (`TestReprintAllocationBudget`): `27125 allocations for 1,000
+  rows, more than 6300`.
+- **A held word copied, not swapped** (`TestReprintAllocationBudget`): `12305 allocations for 1,000 rows, more than
+  6300`.
+- **The reprint slowed by 30 ms** (`TestPerfBudget`): `Reprint: 44.455666ms per op, more than 3 times its baseline
+  9.4ms`.
+- **A key's drawing slowed by 20 µs** (`TestPerfBudget`): `KeyDraw: 29.865µs per op, more than 3 times its baseline
+  1.5µs`.
+- **The ASCII fast path's width wrong,** **a gap carried onto a new row,** and **widths counted in bytes**
+  (`TestWrap`): each failed with wrapped rows differing from the want.
+
+Eight mutations, eight failures; the restored copy passed.
+
+**Found by the gates and fixed in the phase:** `markdownlint` on the benchmarks' reply (deviation 3).
+
+**Gates:**
+
+- The pre-add check on the eleven changed `.go` files: `11 file(s) clean (gofmt, golint, govulncheck)`.
+- macOS: `make preflight`, `preflight passed`; the tests and the race detector, 36 packages ok each.
+- The Linux machine and the Windows laptop, on a copy of the tree: the tests and the race detector, 36 packages ok on
+  each. `make preflight` reached `apidiff` (golangci-lint `0 issues.` on both, govulncheck "No vulnerabilities
+  found.") and stopped at `verify-build-metadata`, as the copies are not git checkouts.
+- `make check-records markdownlint`: exit 0 on each host, and again on macOS once this record was written.
+- The Windows laptop, `make probe-conhost`: `--- PASS: TestConhost`.
+- `make perf`, each within three times its baseline:
+
+  | Benchmark | macOS | Linux machine | Windows laptop |
+  |---|---|---|---|
+  | ReplyRender | 32.6 µs (30) | 136 µs (110) | 28.9 µs (54) |
+  | Reprint | 9.57 ms (9.4) | 29.9 ms (29) | 7.65 ms (12) |
+  | LineSessionStart | 827 µs (830) | 3.73 ms (2.9) | 5.13 ms (6.9) |
+  | KeyDraw | 1.50 µs (1.5) | 5.28 µs (5) | 1.08 µs (1.4) |
+
+**P4 complete, 2026-10-22.**
