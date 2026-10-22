@@ -126,9 +126,9 @@ a v1.0.0 gate, a v1.x train and `exp/`, is in [0005-MADR](docs/decisions/0005-MA
 
 - **Modes:** a native terminal CLI mode, the default, and an enhanced terminal TUI mode, not built yet.
 - **CLI:** [Kong](https://github.com/alecthomas/kong) `v1.16.1`.
-- **Protocols:** the [ACP Go SDK](https://github.com/maccavelli/acp-go-sdk2) `acp-go-sdk2` `v1.16.3`, and the
+- **Protocols:** the [ACP Go SDK](https://github.com/maccavelli/acp-go-sdk2) `acp-go-sdk2` `v1.20.0`, and the
   [MCP Go SDK](https://github.com/modelcontextprotocol/go-sdk) `v1.8.0`.
-- **Models:** [go-llmprovider-sdk](https://github.com/maccavelli/go-llmprovider-sdk) `v1.17.0`, behind
+- **Models:** [go-llmprovider-sdk](https://github.com/maccavelli/go-llmprovider-sdk) `v1.21.0`, behind
   gobble's own `llm` facade. Only `llm/provider` imports it.
 - **Tool schemas:** JSON Schema 2020-12 from Go types, with [jsonschema-go](https://github.com/google/jsonschema-go) `v0.4.3`.
 - **Settings, skills and templates:** YAML through [go.yaml.in/yaml/v3](https://github.com/yaml/go-yaml) `v3.0.5`.

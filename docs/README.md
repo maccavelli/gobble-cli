@@ -73,7 +73,7 @@
 | 0030 | MADR | [Redraw the native CLI mode at the new width when the terminal is resized, and hold its performance to a measured budget](decisions/0030-MADR-resize-and-performance.md) | accepted 2026-10-22 (from the owner's look at 0028-PLAN P4; option A, live area at once and the conversation on settle, chosen by the owner; D3, D4 revised 2026-10-22: 4 MB, the last 10,000 rows; D2 and D5 amended by 0030-PLAN P1's deviations 1 and 2; D5 amended again by P4's deviations 4 and 5: the baselines after the rework, the Markdown stream not reworked; D4 amended by P5's deviation 6: kept from the chat command's start, and log records kept) |
 | 0030 | PLAN | [Implement redrawing on resize, and the performance budget](decisions/0030-PLAN-resize-and-performance.md) | in progress (approved 2026-10-22; five phases, before 0029-PLAN; P1 complete 2026-10-22, the measurements, with deviations 1 and 2: the live redraw picked per resize, and an optimisation added to P4; P2 complete 2026-10-22, the resize notice and the live redraw; P3 complete 2026-10-22, the transcript and the reprint; P4 complete 2026-10-22, the benchmarks, the budget tests, `make perf` and the wrapper's rework, with deviations 3, 4 and 5: the benchmarks' reply renamed `reply.txt`, the baselines after the rework, the Markdown stream left as it is; P5 in progress 2026-10-22, the captures of a resize mid-prompt on the three hosts and the records committed, with deviations 6 and 7: warnings from before the session and log records kept for the reprint, the mid-reply capture moved to 0031-PLAN P2; the owner's look in WezTerm and Windows Terminal to come) |
 | 0031 | MADR | [Pin go-llmprovider-sdk v1.21.0 and acp-go-sdk2 v1.20.0, and hand back to them what gobble does that they now do](decisions/0031-MADR-sdk-current-releases-and-adoption.md) | accepted 2026-10-22 (from the owner's request to pin the current SDKs and adopt as much of them as possible; Q1 `v1.21.0`, Q2 the wizard in phase 4, chosen by the owner) |
-| 0031 | PLAN | [Implement the current SDK releases, and hand back to them what gobble does that they now do](decisions/0031-PLAN-sdk-current-releases-and-adoption.md) | proposed 2026-10-22 (five phases: the pins, live streaming, the ACP connection's end, the SDK's credential step, the smaller copies; Q3 answered: after 0030-PLAN P5, before 0029-PLAN; awaiting approval to execute) |
+| 0031 | PLAN | [Implement the current SDK releases, and hand back to them what gobble does that they now do](decisions/0031-PLAN-sdk-current-releases-and-adoption.md) | proposed 2026-10-22 (five phases: the pins, live streaming, the ACP connection's end, the SDK's credential step, the smaller copies; Q3 answered: after 0030-PLAN P5, before 0029-PLAN; in progress, approved 2026-10-22; P1 complete 2026-10-22, go-llmprovider-sdk `v1.21.0` and acp-go-sdk2 `v1.20.0` pinned, no code change) |
 
 0003-MADR has no PLAN of its own. 0004-PLAN Phase 2 and 0005-PLAN F10 implement it.
 
@@ -154,7 +154,9 @@ The plans run in sequence.
   - The SDKs again: 0023-PLAN's amendment of 2026-10-19 pinned acp-go-sdk2 `v1.16.3`, go-llmprovider-sdk `v1.17.0` and
     go-selfupdate-lib `v1.17.0`, with CI's two release workflows at the last, and made `check-libs` name its API
     exports by library. Nothing new is adopted; a denied or expired provider login is now classified by the SDK. F4-1b
-    still waits: `v1.17.0`'s retry still buffers a stream (`llmprovider/retry.go:82`).
+    still waits: `v1.17.0`'s retry still buffers a stream (`llmprovider/retry.go:82`). *(2026-10-22: 0031-PLAN P1
+    pins acp-go-sdk2 `v1.20.0` and go-llmprovider-sdk `v1.21.0`, whose `v1.19.0` added `WithStreamRetry`; F4-1b is
+    0031-PLAN P2.)*
 - **0014-PLAN.** Run: P0 and P1, the move to acp-go-sdk2 `v0.14.0`, on 2026-10-10. Complete.
 - **0018-PLAN.** Run: P1–P7, the configuration surface, on 2026-10-12, P7, the deadline lock, as an amendment.
   Complete. Put ahead of 0017 by the owner.

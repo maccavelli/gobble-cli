@@ -229,4 +229,4 @@ which this amendment does not measure.
 
 **Not done here, named:** any new feature of the three libraries (MADR A5): go-selfupdate-lib's signed release
 statement, `before_uninstall` hook and `NewGitHubUpdater`; go-llmprovider-sdk's `catalog.Cache`. 0005-PLAN F4-1b still
-waits, `v1.17.0`'s retry still buffering a stream (`llmprovider/retry.go:82`).
+waits, `v1.17.0`'s retry still buffering a stream (`llmprovider/retry.go:82`). *(2026-10-22: moved again by [0031-MADR-sdk-current-releases-and-adoption.md](0031-MADR-sdk-current-releases-and-adoption.md) D1, to acp-go-sdk2 `v1.20.0` and go-llmprovider-sdk `v1.21.0`; F4-1b is 0031-PLAN P2.)*

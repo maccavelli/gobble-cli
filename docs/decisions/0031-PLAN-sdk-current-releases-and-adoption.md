@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: in-progress
 date: 2026-10-22
 associated-madr: "0031-MADR-sdk-current-releases-and-adoption.md"
 ---
@@ -129,3 +129,33 @@ The owner's answer, 2026-10-22: "0030 P5, then 0031, then 0029". The tag is `v1.
 One commit per phase. Reverting P2 restores buffered replies and silent provider retries. Reverting P3 restores the
 old connection end. Reverting P4 restores gobble's own sign-in, and `auth.json` stays readable by both, since its shape
 does not change. Reverting P1 needs every later phase reverted first, since they use the new tags' names.
+
+## Execution record
+
+Approved by the owner's "Commit to main, then proceed", 2026-10-22, after the MADR's answers were recorded and
+0030-PLAN P5 was committed (`3ec6761`).
+
+### P1 execution record (2026-10-22)
+
+1. **`make check-libs`** (`scripts/check_libs.py --lib … --tag …`), each on a scratch clone:
+   - go-llmprovider-sdk, pinned `v1.17.0`, checking `v1.21.0`: get and tidy, version, modules, build, vet for linux,
+     darwin and windows, test, api, govulncheck and advisories all `ok`; "0 failing checks".
+   - acp-go-sdk2, pinned `v1.16.3`, checking `v1.20.0`: the same twelve checks `ok`; "0 failing checks".
+2. **The pins:** `go get github.com/maccavelli/go-llmprovider-sdk@v1.21.0 github.com/maccavelli/acp-go-sdk2@v1.20.0`,
+   `go mod tidy`. `go.mod`: the two lines (`v1.17.0` → `v1.21.0`, `v1.16.3` → `v1.20.0`); `go.sum`: those modules'
+   four lines; no other module moved. No code changed: `go build ./...` and the tests passed as they were.
+3. **Records:** `docs/architecture.md`'s pin table; `README.md`'s stack; dated notes in 0023-MADR (A1), 0023-PLAN
+   (its "not done here") and `docs/README.md`'s 0005-PLAN entry, that the pins moved here and F4-1b is P2.
+4. **Gates:**
+   - The pre-add check on every tracked Go file: `577 file(s) clean (gofmt, golint, govulncheck)`.
+   - macOS: `make preflight`, `preflight passed`; the tests and the race detector, 36 packages ok each.
+   - The Linux machine and the Windows laptop, on a copy of the tree: the tests and the race detector, 36 packages
+     ok on each; `make preflight` reached `apidiff` (golangci-lint `0 issues.`, govulncheck "No vulnerabilities
+     found.") and stopped at `verify-build-metadata`, as the copies are not git checkouts.
+   - `make check-records markdownlint`: exit 0 on each host.
+   - The Windows laptop, `make probe-conhost`: `--- PASS: TestConhost`.
+   - `make perf`, each within three times its baseline: macOS ReplyRender 32.7 µs, Reprint 9.67 ms,
+     LineSessionStart 924 µs, KeyDraw 1.52 µs; the Linux machine 95.8 µs, 23.1 ms, 2.64 ms, 3.98 µs; the Windows
+     laptop 29.8 µs, 7.81 ms, 4.99 ms, 1.09 µs.
+
+**P1 complete, 2026-10-22.**
