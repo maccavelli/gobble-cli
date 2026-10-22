@@ -71,3 +71,49 @@ func TestDiagnosticPrefixes(t *testing.T) {
 		t.Fatalf("diagnostics reached stdout: %q", out.String())
 	}
 }
+
+// On a terminal, gobble's messages wrap at spaces to stderr's width, at
+// most 120 columns, continued two columns in; off a terminal each is one
+// line, as it was (0028-MADR D6).
+func TestMessagesWrapOnATerminal(t *testing.T) {
+	warning := "no model credential: set one of " + strings.Repeat("SOME_PROVIDER_API_KEY, ", 8) + "or sign in"
+	for _, tc := range []struct {
+		name  string
+		tty   bool
+		width int
+		want  int // the widest row; 0 is one line
+	}{
+		{"a terminal 60 wide", true, 60, 60},
+		{"a terminal 200 wide", true, 200, 120},
+		{"not a terminal", false, 60, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var errw bytes.Buffer
+			o := &Output{out: &bytes.Buffer{}, err: &errw}
+			o.caps.Err.TTY, o.caps.Err.Width = tc.tty, tc.width
+			o.Warnf("%s", warning)
+			o.Errorf("%s", warning)
+			got := errw.String()
+			if tc.want == 0 {
+				if got != "Warning: "+warning+"\nError: "+warning+"\n" {
+					t.Errorf("stderr %q, want each message on one line", got)
+				}
+				return
+			}
+			rows := strings.Split(strings.TrimSuffix(got, "\n"), "\n")
+			widest := 0
+			for _, r := range rows {
+				widest = max(widest, len(r))
+				if !strings.HasPrefix(r, "Warning: ") && !strings.HasPrefix(r, "Error: ") && !strings.HasPrefix(r, "  ") {
+					t.Errorf("row %q is neither a message's first nor continued two columns in", r)
+				}
+			}
+			if widest > tc.want || widest < tc.want-25 {
+				t.Errorf("rows %q: widest %d, want at most %d and close to it", rows, widest, tc.want)
+			}
+			if words := strings.Join(strings.Fields(got), " "); words != "Warning: "+warning+" Error: "+warning {
+				t.Errorf("words %q changed", words)
+			}
+		})
+	}
+}

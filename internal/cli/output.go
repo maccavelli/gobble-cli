@@ -4,7 +4,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 
+	xterm "golang.org/x/term"
+
+	"github.com/maccavelli/gobble-cli/internal/cli/editor"
+	"github.com/maccavelli/gobble-cli/internal/cli/render"
 	"github.com/maccavelli/gobble-cli/internal/cli/term"
 	"github.com/maccavelli/gobble-cli/personality"
 )
@@ -56,8 +61,26 @@ func (o *Output) Lead(voice *personality.Voice, key personality.Key) {
 // Notef writes a status line to stderr, unprefixed, such as a retry's.
 func (o *Output) Notef(format string, args ...any) { o.diag("", format, args...) }
 
+// diag writes a message to stderr, wrapped on a terminal (0028-MADR D6).
 func (o *Output) diag(prefix, format string, args ...any) {
-	if _, err := fmt.Fprintf(o.err, prefix+format+"\n", args...); err != nil && o.errWrite == nil {
+	msg := render.Message(prefix+fmt.Sprintf(format, args...), o.errWidth())
+	if _, err := io.WriteString(o.err, msg+"\n"); err != nil && o.errWrite == nil {
 		o.errWrite = err
 	}
+}
+
+// errWidth is the width gobble's messages wrap to: stderr's, read now, at
+// most 120 columns, or 0, no wrapping, when stderr is not a terminal
+// (0028-MADR D6).
+func (o *Output) errWidth() int {
+	if !o.caps.Err.TTY {
+		return 0
+	}
+	w := o.caps.Err.Width
+	if f, ok := o.err.(*os.File); ok {
+		if c, _, err := xterm.GetSize(int(f.Fd())); err == nil && c > 0 { //nolint:gosec // G115: a terminal's descriptor fits an int
+			w = c
+		}
+	}
+	return min(w, editor.MaxWidth)
 }

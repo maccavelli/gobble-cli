@@ -277,3 +277,52 @@ Eleven mutations, eleven failures; the restored copy passed.
 - The Windows laptop, `make probe-conhost`: `--- PASS: TestConhost`.
 
 **P2 complete, 2026-10-22.**
+
+### P3 execution record (2026-10-22)
+
+The owner chose to finish 0028's P3 and P4 before 0029 ("Finish 0028 P3 and P4 first, then 0029").
+
+1. **Tests first,** against a stub `render.Message` that returned its input:
+   - `TestMessage` (`internal/cli/render/message_test.go`): broken at spaces; a long word whole; each line of a
+     message on its own, continued two columns past its indentation; a line that fits kept, spaces and all; wide
+     characters; escape sequences of no width; no width. On the stub, the five cases that need a break failed. The
+     three that ask for no change passed.
+   - `TestMessagesWrapOnATerminal` (`internal/cli/output_test.go`): a long `Warnf` and `Errorf` on a terminal 60 and
+     200 wide, and off a terminal. The terminal cases failed with each message on one row. The off-terminal case
+     passed, as it asks for no change.
+
+   The wide-character case first asked for 16 columns, where its first row takes 17; corrected to 17 before the code
+   was written.
+2. **`render.Message`** (`internal/cli/render/message.go`) wraps each line of a message that does not fit. Its words
+   are those of `strings.Fields`; continuation rows are indented two columns past the line's own indentation; a word
+   wider than its row is left whole; escape sequences take no columns (`visibleWidth`). **`Output.diag`**
+   (`internal/cli/output.go`) passes every message through it at `errWidth`: stderr's width, read now, at most
+   `editor.MaxWidth`, or 0 when stderr is not a terminal. `wrapIndented`, which cuts a word wider than its row, was
+   not reused, since D6 leaves such a word whole.
+
+**Negatives,** on a scratch copy, one mutation at a time:
+
+- a row allowed past the width;
+- a line that fits rewrapped;
+- continuation rows not indented;
+- escape sequences counted as columns;
+- wrapping off a terminal;
+- the width not capped;
+- messages not wrapped.
+
+The width-cap mutation first left `editor` imported and unused, so it did not build. It was redone as
+`min(w, editor.MaxWidth*10)`. Seven mutations, seven failures; the restored copy passed.
+
+**Found by the gates and fixed in the phase:** `modernize`, `strings.FieldsSeq` in `render.Message`.
+
+**Gates:**
+
+- The pre-add check on the four changed `.go` files: `4 file(s) clean (gofmt, golint, govulncheck)`.
+- macOS: `make preflight`, `preflight passed`; the tests and the race detector, 36 packages ok each.
+- The Linux machine and the Windows laptop, on a copy of the tree: the tests and the race detector, 36 packages ok on
+  each. `make preflight` reached `apidiff` (golangci-lint `0 issues.`, govulncheck "No vulnerabilities found.") and
+  stopped at `verify-build-metadata`, as the copies are not git checkouts.
+- `make check-records markdownlint`: "0 issues in 0 files".
+- The Windows laptop, `make probe-conhost`: `--- PASS: TestConhost`.
+
+**P3 complete, 2026-10-22.**
