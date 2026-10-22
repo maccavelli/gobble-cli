@@ -415,6 +415,11 @@ Further rules:
 - **Start-up.** No network call before the first prompt.
 
 **D6. The line editor: `x/term` `Terminal` plus a thin adapter (F7, F14).** This meets 0006 D12.
+*(2026-10-21, [0027-MADR-native-line-editor-word-wrap.md](0027-MADR-native-line-editor-word-wrap.md): `x/term`'s
+`Terminal` is replaced by gobble's own line editor, a buffer, a word-wrapping layout and a renderer, so the prompt
+wraps at the terminal's width, to 120 columns, in whole words; `x/term` gives raw mode and the size only. F7's "thin
+adapter" is reversed there. The Ctrl+C reader, paste coalescing (the buffer marks a line ended inside a paste, as
+`ErrPasteIndicator` did), history, owning stdin and `/edit` stay as decided below.)*
 - **Ctrl+C.** A reader in front of the terminal maps the Ctrl+C byte, `0x03`, to the D5 behaviour, so Ctrl+C never reaches `Terminal` as EOF.
 - **Paste.**
   - Bracketed paste is on. Lines returned with `ErrPasteIndicator` are coalesced, and the paste is submitted once, when the next non-paste Enter arrives.

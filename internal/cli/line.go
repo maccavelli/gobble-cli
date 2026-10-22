@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	xterm "golang.org/x/term"
+
 	"github.com/maccavelli/gobble-cli/acpclient"
 	"github.com/maccavelli/gobble-cli/internal/appdirs"
 	"github.com/maccavelli/gobble-cli/internal/cli/editor"
@@ -151,12 +153,16 @@ func (ls *lineSession) run(first Prompt) error {
 		}
 	}()
 	opts := editor.Options{History: ls.history(), Complete: ls.complete,
-		Header: func() string { return workspaceLine(ls.cwd) }, Width: ls.width}
+		Header: func() string { return workspaceLine(ls.cwd) }, Width: ls.width, Height: ls.height}
 	if !e.out.caps.Unicode {
 		opts.Continue = "... "
 	}
 	ed := editor.New(&r, e.out.out, e.out.err, opts)
-	defer ed.Restore()
+	defer func() {
+		if rerr := ed.Restore(); rerr != nil {
+			e.out.Warnf("restore the terminal: %v", rerr)
+		}
+	}()
 	ls.pasting = true
 
 	// outOfRaw runs f with the terminal out of raw mode, so output keeps its
@@ -207,6 +213,17 @@ func (ls *lineSession) run(first Prompt) error {
 			return err
 		}
 	}
+}
+
+// height is the terminal's height, for a prompt taller than the screen
+// (0027-MADR D3), or 0 when standard output is not a terminal.
+func (ls *lineSession) height() int {
+	if f, ok := ls.e.out.out.(*os.File); ok && ls.e.out.caps.Out.TTY {
+		if _, h, err := xterm.GetSize(int(f.Fd())); err == nil && h > 0 { //nolint:gosec // G115: a terminal's descriptor fits an int
+			return h
+		}
+	}
+	return 0
 }
 
 // workspaceLine is the line above each new prompt: the name of the

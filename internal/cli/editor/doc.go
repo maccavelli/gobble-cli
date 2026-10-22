@@ -1,7 +1,9 @@
-// Package editor is the line editor of the native CLI mode: golang.org/x/term's
-// Terminal behind gobble's adapter, with two-stage Ctrl+C, bracketed paste
-// coalesced into one submission, a file-backed history, backslash
-// continuation and an external editor (0008-MADR D6).
+// Package editor is the line editor of the native CLI mode: gobble's own,
+// with the line in a buffer, laid out in whole words to the terminal's width
+// (to 120 columns) and drawn again after each key, two-stage Ctrl+C,
+// bracketed paste coalesced into one submission, a file-backed history,
+// backslash continuation and an external editor (0008-MADR D6;
+// 0027-MADR). golang.org/x/term gives it raw mode only.
 // Stability: internal
 //
 // One Reader owns stdin for the life of the process. Nothing in this package

@@ -86,6 +86,19 @@ owner decides at review.* *(2026-10-21: accepted by the owner, "Both, P4 then 00
   The terminal's width is read at each drawing, so a resize takes effect at the next key on every system, without a
   signal. A line taller than the screen is drawn from the row that holds the cursor. After Enter, the line stays as
   drawn, word-wrapped, and the cursor goes below it.
+  *Amended 2026-10-21 (0027-PLAN P4, deviation 4; the owner's answer "Draw without blanking"):* the owner saw the
+  line flicker in Windows Terminal. Windows Terminal's console host passes the drawing through as written, and
+  erasing to the end of the screen before writing the rows let the terminal paint the line blank between the two.
+  The cursor also jumped to column 0 and back. The drawing no longer erases first. It rewrites only the rows that
+  changed, each from its first changed column, then erases what is left of a row that got shorter and any rows the
+  line no longer has. The cursor is hidden while it moves. Each drawing that writes is wrapped in synchronized output
+  (DEC mode 2026), which a terminal that lacks it ignores. A first drawing still starts with `\r` and an erase to
+  the end of the screen, since nothing of the line is on screen yet.
+  *Amended 2026-10-21 (0027-PLAN P5; approved with the owner's answer "Fix, P4, P5, one look"):* Ctrl+D on an empty line and a second Ctrl+C leave the line the
+  same way, the cursor at the start of the row below it. The line session leaves raw mode and bracketed paste before
+  it writes the goodbye, so the goodbye has a row of its own and ends with a real line end. Found in P4's captures,
+  on the new editor and on `x/term`'s alike: the goodbye was written on the last prompt's row, after its text, and
+  ended by a line feed in raw mode.
 - **D4. The keys:** each one `x/term` handles today, with its meaning, plus:
   - ↑/↓ move between the line's rows when it has more than one, and recall history from its first and last row
     (Q1);
@@ -98,9 +111,23 @@ owner decides at review.* *(2026-10-21: accepted by the owner, "Both, P4 then 00
 - **D5. What stays as it is:** the key reader (two-stage Ctrl+C, the paste markers, the reader that owns stdin),
   a paste coalesced into one submission with its notice (Q2), backslash continuation, the completion callback, the
   header (0024 D8), history from its file, `/edit`, the `… ` continuation prompt, and Console Host's input.
+  *Amended 2026-10-21 (0027-PLAN P5; approved with the owner's answer "Fix, P4, P5, one look"):* the reader that owns stdin (`editor.Reader`) reads only when it is
+  asked to: one read of stdin for each `ReadContext` that finds nothing buffered, none ahead. Today it reads ahead
+  from `Start`. On Windows, a console read takes the mode in force when it starts and keeps it after the mode changes.
+  So a read started before raw mode, or during a turn or a question, stays a line read. It returns only at the
+  next Enter, with every key before it, arrows and Ctrl+C included, in one chunk. P4's headless captures under
+  Windows Terminal's console host saw this: the first read returned 379 bytes at the first Enter in 1 of 3 runs of
+  the new editor and 2 of 6 of `x/term`'s. The line session starts the reader before it enters raw mode
+  (`internal/cli/line.go`), because the first-run questions read cooked lines through it first. Reading only when
+  asked starts each read in the mode of whoever asked: raw for the editor, cooked for a question. The reader still
+  owns stdin for the process's life and never closes it (0008-MADR F20). On macOS and Linux a mode change applies to
+  a read already waiting, so nothing changes there but the read-ahead.
 - **D6. Tests:** the layout by table; the editor driven by key bytes against a small screen model in the test package
   (cursor moves, `\r`, line feed, erase to end of screen and of line), checked by the screen it ends with; and in a
   pseudo-terminal on macOS and Linux. Windows by the owner's eye in Windows Terminal and Console Host.
+  *Amended 2026-10-21 (0027-PLAN P4, deviation 3; the owner's answer "Share the screen model"):* the screen
+  model is a test package of its own, `internal/cli/term/termtest`, so the line session's tests in `internal/cli`
+  check the screen too; it also takes home, erasing the whole screen, and private modes (bracketed paste).
 - **D7. No new module;** `golang.org/x/term` and `golang.org/x/text` are already required.
 
 ### Consequences
@@ -111,7 +138,8 @@ owner decides at review.* *(2026-10-21: accepted by the owner, "Both, P4 then 00
 * Bad, because gobble now owns the editing and drawing `x/term` gave it: every key, the cursor arithmetic and the
   terminal quirks, on three systems; P3's parity tests carry that.
 * Bad, because a redraw after each key writes more to the terminal than `x/term`'s incremental drawing; on a slow
-  remote link a long line may flicker. Measured in the PLAN.
+  remote link a long line may flicker. Measured in the PLAN. *(Deviation 4: with only changed text written, typing the
+  owner's 337-character report writes about 1,230 bytes, against `x/term`'s 343.)*
 * Neutral, because 0008-MADR D6's "thin adapter" becomes an editor of gobble's own, a reversal recorded there.
 
 ### Confirmation

@@ -208,8 +208,18 @@ func TestLineAmbient(t *testing.T) {
 	if !any(personality.SessionGoodbye, nil)() {
 		t.Fatalf("no goodbye in %q", h.stderr.String())
 	}
-	help := h.stdout.String()[strings.Index(h.stdout.String(), "Commands\n"):]
-	help, _, _ = strings.Cut(help, "\n> ")
+	// /help's rows, up to the next prompt's, on the screen (0027-PLAN P4,
+	// deviation 3).
+	lines := screenOf(h.stdout.String(), 80).Lines()
+	start := slices.Index(lines, "Commands")
+	if start < 0 {
+		t.Fatalf("no Commands row on the screen: %q", lines)
+	}
+	end := start + 1
+	for end < len(lines) && !strings.HasPrefix(lines[end], ">") {
+		end++
+	}
+	help := strings.Join(lines[start:end], "\n")
 	if strings.Contains(help, "/gobble") || strings.Contains(help, "/humor") {
 		t.Fatalf("/help shows a hidden command:\n%s", help)
 	}

@@ -13,6 +13,7 @@ import (
 
 	"github.com/maccavelli/gobble-cli/acpclient/acptest"
 	"github.com/maccavelli/gobble-cli/internal/cli/term"
+	"github.com/maccavelli/gobble-cli/internal/cli/term/termtest"
 	"github.com/maccavelli/gobble-cli/llm/llmtest"
 	"github.com/maccavelli/gobble-cli/llm/provider"
 	"github.com/maccavelli/gobble-cli/personality"
@@ -271,7 +272,18 @@ func TestPromptHeader(t *testing.T) {
 		h.cwd = cwd
 		h.start(Prompt{})
 		h.press("hi\r")
-		waitUntil(t, func() bool { return strings.Count(h.stdout.String(), want+"\r\n> ") == 2 })
+		// Checked on the screen (0027-PLAN P4, deviation 3): the header's
+		// row, each directly above a prompt's.
+		above := func() int {
+			lines, n := screenOf(h.stdout.String(), 80).Lines(), 0
+			for i := 0; i+1 < len(lines); i++ {
+				if lines[i] == want && strings.HasPrefix(lines[i+1], ">") {
+					n++
+				}
+			}
+			return n
+		}
+		waitUntil(t, func() bool { return above() == 2 })
 		h.press("\x04")
 		if err := h.wait(); err != nil {
 			t.Fatal(err)
@@ -291,10 +303,20 @@ func TestPromptWidth(t *testing.T) {
 	if err := h.wait(); err != nil {
 		t.Fatal(err)
 	}
-	out := h.stdout.String()
-	i := strings.Index(out, "> b")
-	row, _, _ := strings.Cut(out[i:], "\r\n")
-	if len(row) != 100 {
-		t.Fatalf("the first row held %d columns, want 100: %q", len(row), row)
+	// Checked on the screen (0027-PLAN P4, deviation 3).
+	lines := screenOf(h.stdout.String(), 100).Lines()
+	i := slices.IndexFunc(lines, func(l string) bool { return strings.HasPrefix(l, "> b") })
+	if i < 0 || i+1 == len(lines) || lines[i] != "> "+strings.Repeat("b", 98) || lines[i+1] != "  "+strings.Repeat("b", 52) {
+		t.Fatalf("want a first row of 100 columns, the rest below it: screen %q", lines)
 	}
+}
+
+// screenOf is what out shows on a terminal width columns wide: what the
+// editor draws in raw mode, and the rest, written with \n alone, as output
+// processing shows it.
+func screenOf(out string, width int) *termtest.Screen {
+	s := termtest.New(width, 400)
+	s.Cooked = true
+	_, _ = s.Write([]byte(out))
+	return s
 }

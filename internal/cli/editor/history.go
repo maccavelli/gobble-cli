@@ -56,7 +56,7 @@ func (h *FileHistory) Add(entry string) {
 func (h *FileHistory) Len() int { return len(h.entries) }
 
 // At returns an entry; 0 is the most recent. It panics when idx is out of
-// range, as x/term's History contract allows.
+// range, as the History contract allows: the editor checks Len first.
 func (h *FileHistory) At(idx int) string {
 	if idx < 0 || idx >= len(h.entries) {
 		panic(fmt.Sprintf("editor: history index %d out of range [0,%d)", idx, len(h.entries)))

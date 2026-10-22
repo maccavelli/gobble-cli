@@ -243,7 +243,7 @@ func childRun(ctx context.Context, dir string) (subs []string, err error) {
 	r := &Reader{}
 	r.Start(ctx, in)
 	e := New(r, out, out, Options{})
-	defer e.Restore()
+	defer func() { err = errors.Join(err, e.Restore()) }()
 
 	if err := os.WriteFile(filepath.Join(dir, "ready"), []byte(consoleWindow()), 0o600); err != nil {
 		return nil, err

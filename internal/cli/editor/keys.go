@@ -12,9 +12,9 @@ const (
 	keyCtrlD = 0x04
 	keyEnter = '\r'
 
-	// keyInterrupt is the private key Ctrl+C becomes outside a paste. x/term
-	// maps no meaning to 0x1C, so it reaches AutoCompleteCallback with the
-	// whole line (x/term terminal.go, handleKey's default case).
+	// keyInterrupt is the private key Ctrl+C becomes outside a paste. The
+	// buffer gives 0x1C no meaning, so it reaches the completion callback
+	// with the whole line (lineBuffer.other).
 	keyInterrupt = 0x1c
 
 	// exitWindow is how long a second Ctrl+C on an empty line exits.
@@ -31,12 +31,12 @@ type contextReader interface {
 	ReadContext(ctx context.Context, p []byte) (int, error)
 }
 
-// keyReader sits between stdin and the Terminal. Outside a bracketed paste
+// keyReader sits between stdin and the editor. Outside a bracketed paste
 // it rewrites Ctrl+C to keyInterrupt and returns at once, so the callback
 // decides what Ctrl+C means before any later byte is read. The decision is
 // carried out by the one key the callback may queue: Enter, which ends the
 // empty line so the notice can be printed between prompts, or Ctrl+D, which
-// makes ReadLine return io.EOF on the empty line.
+// ends the input on the empty line.
 type keyReader struct {
 	src     io.Reader
 	ctx     context.Context
@@ -102,7 +102,7 @@ func (k *keyReader) track(c byte) {
 	}
 }
 
-// interrupt is called from AutoCompleteCallback for keyInterrupt. A
+// interrupt is called from the completion callback for keyInterrupt. A
 // non-empty line is cleared. On an empty line the first press arms the exit
 // window and asks for the notice; a second press inside it exits.
 func (k *keyReader) interrupt(line string) (newLine string, newPos int, ok bool) {

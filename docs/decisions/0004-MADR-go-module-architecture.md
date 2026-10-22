@@ -268,6 +268,10 @@ output and terminal), `internal/config/genschema/` (the settings' schema generat
 between processes), `internal/frontmatter/` (skills' and templates' YAML frontmatter), `internal/proctree/` (process
 trees), and `mcpclient/mcptest/` (beta, an MCP server fixture for tests). `docs/architecture.md` describes each.)*
 
+*(2026-10-21, the owner's choice, 0027-PLAN P4 deviation 3: `internal/cli/term/termtest/`, a test fixture, internal by
+its path: a terminal screen model the native CLI mode's tests draw on. It imports only the standard library and
+`golang.org/x/text`, and only tests import it.)*
+
 Names with a `client` or `server` suffix (`mcpclient`, `acpserver`)
 avoid shadowing the SDK package names `mcp` and `acp`, which appear
 alongside them in the same file.

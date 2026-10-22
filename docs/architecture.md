@@ -105,9 +105,10 @@ The tier is each package's `Stability:` line in its `doc.go`. **stable** package
 | `mcpclient/mcptest` | beta | An MCP server fixture for tests, over stdio and HTTP. |
 | `internal/cli` | internal | The command edge: the Kong grammar, `chat` and its flags, the line session, print mode, the exit codes, signals and output. Project trust for the run: `--approve` and `--no-approve`, the line session's question before the session starts, `gobble trust` and `gobble untrust`, and a trusted project's personality and prompt files for each session. Each session's permission rules, the line view's numbered options and `[f] deny and say why`, `permissions.json` and the global file's edits for the agent, and `--yes`, with which print mode allows once a question a rule or the default asks. The personality's welcome, goodbye and ambient lines, the small model's provider, and `auth import --from-pi`. It holds `selfupdate-release.json`, the release spec. |
 | `internal/cli/complete` | internal | Native shell completion for bash, zsh, fish and PowerShell. |
-| `internal/cli/editor` | internal | The line editor: `golang.org/x/term` behind gobble's adapter, with history, paste and an external editor. |
+| `internal/cli/editor` | internal | The line editor, gobble's own: the line in a buffer, laid out in whole words to the terminal's width, to 120 columns, and drawn again after each key, with history, paste and an external editor; `golang.org/x/term` gives it raw mode. |
 | `internal/cli/render` | internal | Terminal output of the native CLI mode: streamed Markdown, tool output, a status line and a spinner whose label the personality may change. |
 | `internal/cli/term` | internal | Terminal capabilities, styles, escape sanitising and Windows console setup. |
+| `internal/cli/term/termtest` | internal | A terminal screen model for the native CLI mode's tests: what is drawn on it, checked by the rows and the cursor it ends with. Only tests import it. |
 | `internal/tui` | internal | The enhanced TUI mode (placeholder). |
 | `internal/appdirs` | internal | The config, data, state and cache directories, created owner-only. |
 | `internal/buildinfo` | internal | The build's version, commit, toolchain, platform and User-Agent. |

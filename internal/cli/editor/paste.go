@@ -3,8 +3,8 @@ package editor
 import "strings"
 
 // coalescer gathers the lines of one submission. With bracketed paste on,
-// x/term returns each pasted line separately, marked by ErrPasteIndicator;
-// a typed line ending in a backslash continues. The next line ended by a
+// the buffer ends each pasted line separately, marked as pasted; a typed
+// line ending in a backslash continues. The next line ended by a
 // plain Enter completes the submission.
 type coalescer struct {
 	parts  []string

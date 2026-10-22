@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"testing/iotest"
+
+	"github.com/maccavelli/gobble-cli/internal/cli/term/termtest"
 )
 
 // run feeds input to a new Editor and collects submissions until an error.
@@ -86,7 +88,9 @@ func TestRestoreDisablesBracketedPaste(t *testing.T) {
 	var out bytes.Buffer
 	e := New(strings.NewReader(""), &out, io.Discard, Options{})
 	out.Reset()
-	e.Restore()
+	if err := e.Restore(); err != nil {
+		t.Fatal(err)
+	}
 	if got := out.String(); got != "\x1b[?2004l" {
 		t.Fatalf("Restore wrote %q", got)
 	}
@@ -145,72 +149,67 @@ func TestContextCancelled(t *testing.T) {
 
 // Header is written on its own line before each new prompt, once a
 // submission and never before a continuation prompt, without escape
-// sequences or line breaks; with none, nothing is (0024-MADR D8).
+// sequences or line breaks; with none, nothing is (0024-MADR D8). Checked
+// on the screen (0027-PLAN P4, deviation 2).
 func TestHeader(t *testing.T) {
 	calls := 0
 	header := func() string { calls++; return "proj (main)" }
-	subs, out, _, _ := run(t, strings.NewReader("one\\\rtwo\rthree\r"), Options{Header: header})
+	s := termtest.New(40, 10)
+	subs := onScreen(t, s, strings.NewReader("one\\\rtwo\rthree\r"), Options{Header: header})
 	if !slices.Equal(subs, []string{"one\ntwo", "three"}) {
 		t.Fatalf("submissions %q", subs)
 	}
 	// Three new prompts: one for each submission, and the one that reads
 	// the end of input.
-	o := out.String()
-	if n := strings.Count(o, "proj (main)\r\n> "); n != 3 || calls != 3 || strings.Count(o, "> ") != 3 {
-		t.Fatalf("the header before %d prompts, read %d times, want 3 and 3: %q", n, calls, o)
+	want := []string{"proj (main)", `> one\`, "… two", "proj (main)", "> three", "proj (main)", ">", "", "", ""}
+	if got := s.Lines(); !slices.Equal(got, want) || calls != 3 {
+		t.Fatalf("screen %q, the header read %d times; want %q, 3", got, calls, want)
 	}
-	if strings.Contains(o, "proj (main)\r\n… ") {
-		t.Fatalf("the header before a continuation prompt: %q", o)
-	}
-	_, out, _, _ = run(t, strings.NewReader("x\r"), Options{Header: func() string { return "a\x1b[31mb\nc\x07" }})
-	if !strings.Contains(out.String(), "ab c\r\n> ") || strings.Contains(out.String(), "\x1b[31m") {
-		t.Fatalf("a header with escapes and a line break: %q", out)
-	}
-	_, out, _, _ = run(t, strings.NewReader("x\r"), Options{})
-	if !strings.HasPrefix(out.String(), "\x1b[?2004h> ") {
-		t.Fatalf("with no header the prompt is drawn first: %q", out)
-	}
-}
 
-// firstBreak is the number of columns the first row held before the editor
-// broke the input line: the visible characters between the prompt's start
-// and the first \r\n after it.
-func firstBreak(t *testing.T, out string) int {
-	t.Helper()
-	i := strings.Index(out, "> ")
-	if i < 0 {
-		t.Fatalf("no prompt in %q", out)
+	s = termtest.New(40, 4)
+	var out bytes.Buffer
+	e := New(strings.NewReader("x\r"), io.MultiWriter(s, &out), io.Discard,
+		Options{Header: func() string { return "a\x1b[31mb\nc\x07" }})
+	if _, err := e.ReadPrompt(t.Context()); err != nil {
+		t.Fatal(err)
 	}
-	row, _, ok := strings.Cut(out[i:], "\r\n")
-	if !ok {
-		t.Fatalf("no line break after the prompt in %q", out)
+	if got := s.Lines(); got[0] != "ab c" || got[1] != "> x" || strings.Contains(out.String(), "\x1b[31m") {
+		t.Fatalf("a header with escapes and a line break: screen %q, written %q", got, out.String())
 	}
-	return len(row)
+
+	s = termtest.New(40, 4)
+	onScreen(t, s, strings.NewReader("x\r"), Options{})
+	if got := s.Lines(); got[0] != "> x" {
+		t.Fatalf("with no header the prompt is drawn first: screen %q", got)
+	}
 }
 
 // The prompt breaks at the terminal's width, to 120 columns, and at 80 when
 // the width is unknown, never at x/term's 80 on a wider terminal (0024-MADR
-// D9).
+// D9): a word wider than a row, cut at the row's end, shows it. Checked on
+// the screen (0027-PLAN P4, deviation 2).
 func TestWidth(t *testing.T) {
-	long := strings.Repeat("a", 150) + "\r"
+	word := strings.Repeat("a", 150)
 	for _, tc := range []struct {
-		name  string
-		width func() int
-		want  int
+		name     string
+		terminal int // the screen's width
+		width    func() int
+		want     int
 	}{
-		{"the terminal's 100", func() int { return 100 }, 100},
-		{"200, capped at 120", func() int { return 200 }, 120},
-		{"60", func() int { return 60 }, 60},
-		{"unknown, 0", func() int { return 0 }, 80},
-		{"no width at all", nil, 80},
+		{"the terminal's 100", 100, func() int { return 100 }, 100},
+		{"200, capped at 120", 200, func() int { return 200 }, 120},
+		{"60", 60, func() int { return 60 }, 60},
+		{"unknown, 0", 200, func() int { return 0 }, 80},
+		{"no width at all", 200, nil, 80},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			subs, out, _, _ := run(t, strings.NewReader(long), Options{Width: tc.width})
-			if len(subs) != 1 || subs[0] != strings.Repeat("a", 150) {
+			s := termtest.New(tc.terminal, 8)
+			subs := onScreen(t, s, strings.NewReader(word+"\r"), Options{Width: tc.width})
+			if len(subs) != 1 || subs[0] != word {
 				t.Fatalf("the text sent changed: %q", subs)
 			}
-			if got := firstBreak(t, out.String()); got != tc.want {
-				t.Fatalf("the first row held %d columns, want %d", got, tc.want)
+			if got := s.Lines()[0]; !strings.HasPrefix(got, "> a") || displayWidth(got) != tc.want {
+				t.Fatalf("the first row held %d columns, want %d: screen %q", displayWidth(got), tc.want, s.Lines())
 			}
 		})
 	}
