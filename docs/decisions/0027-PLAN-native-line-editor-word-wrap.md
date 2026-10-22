@@ -1,6 +1,6 @@
 ---
-status: in-progress
-date: 2026-10-21
+status: complete
+date: 2026-10-22
 associated-madr: "0027-MADR-native-line-editor-word-wrap.md"
 ---
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
@@ -496,5 +496,7 @@ goodbye mutations were pointed at it, and all five failed again, the restored co
 - `make check-records markdownlint`: "0 issues in 0 files".
 - The Windows laptop, `make probe-conhost`: `--- PASS: TestConhost`.
 
-**Open:** the owner's look in Windows Terminal and Console Host (step 4, moved here from P4 by deviation 4). P5 and
-this plan are complete when it is done.
+**The owner's look, 2026-10-22,** in Windows Terminal and Console Host (step 4, moved here from P4 by deviation 4):
+"seems fine". The owner committed P5 as `6361bd9`, with 0028's proposed records.
+
+**P5 complete, 2026-10-22; this plan complete.**

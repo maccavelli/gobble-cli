@@ -1,6 +1,6 @@
 ---
-status: proposed
-date: 2026-10-21
+status: accepted
+date: 2026-10-22
 decision-makers: repository owner
 consulted: the owner's WezTerm session of 0027-PLAN P5's test build (read with `wezterm cli get-text`); goose's streaming Markdown (0008-MADR F9)
 informed: none
@@ -92,6 +92,11 @@ that must stay exact are left alone.
   word when no space or line end has followed it yet, and releases it when one comes. `view.flush`, which runs before
   every non-text event and at the turn's end, flushes it too. Feeding a reply in any chunks gives the same output as
   feeding it whole.
+  *Amended 2026-10-22 (0028-PLAN P1, deviation 1; the owner's answer "Hold one more word"):* D4's rule cannot be kept
+  if only the word still arriving is held. When a word that would open a block must start a row, the word before it
+  has already been written. So the wrapper also holds the last finished word on the current row until the next word
+  shows whether the break must move. Streamed prose shows up to one word later than it arrives. The flushes are
+  unchanged.
 - **D6. gobble's messages** (`Notef`, `Warnf`, errors) wrap at stderr's width, to 120 columns, at spaces. Continuation
   rows are indented two columns, and a word wider than the row is left whole, as in D3.
 - **D7. Order.** The wrapper runs on the text `render.Stream` releases, before `render.Tables` and `render.Style`.
