@@ -48,6 +48,17 @@ type keyReader struct {
 	notice     bool
 	exit       bool
 	armedUntil time.Time
+
+	// resize and timeout, when set, stop a read with no bytes: the
+	// terminal was resized, or the wait for its cursor's place is over
+	// (0030-MADR D2).
+	resize  <-chan struct{}
+	timeout <-chan time.Time
+}
+
+// untilReader is satisfied by *Reader.
+type untilReader interface {
+	ReadUntil(ctx context.Context, p []byte, resize <-chan struct{}, timeout <-chan time.Time) (int, error)
 }
 
 func (k *keyReader) Read(p []byte) (int, error) {
@@ -82,6 +93,9 @@ func (k *keyReader) Read(p []byte) (int, error) {
 }
 
 func (k *keyReader) readSrc(p []byte) (int, error) {
+	if ur, ok := k.src.(untilReader); ok && k.ctx != nil && (k.resize != nil || k.timeout != nil) {
+		return ur.ReadUntil(k.ctx, p, k.resize, k.timeout)
+	}
 	if cr, ok := k.src.(contextReader); ok && k.ctx != nil {
 		return cr.ReadContext(k.ctx, p)
 	}

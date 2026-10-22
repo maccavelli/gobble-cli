@@ -17,6 +17,7 @@ import (
 	"github.com/maccavelli/gobble-cli/internal/appdirs"
 	"github.com/maccavelli/gobble-cli/internal/cli/editor"
 	"github.com/maccavelli/gobble-cli/internal/cli/render"
+	"github.com/maccavelli/gobble-cli/internal/cli/term"
 	"github.com/maccavelli/gobble-cli/internal/fsx"
 	"github.com/maccavelli/gobble-cli/llm/provider"
 	"github.com/maccavelli/gobble-cli/personality"
@@ -38,6 +39,9 @@ type lineSession struct {
 	in io.Reader
 	// raw puts the terminal in raw mode and returns the restore.
 	raw func() (restore func() error, err error)
+	// resize notices the terminal's resizes; nil off a terminal
+	// (0030-MADR D1).
+	resize <-chan struct{}
 
 	conn *acpclient.Conn
 	sess *acpclient.Session
@@ -65,9 +69,11 @@ func runLine(e *runEnv, c *ChatCmd, first Prompt, cwd, base string) error {
 // newLineSession is the line session for a session in cwd, speaking the
 // voice it starts with (0022-PLAN P3).
 func newLineSession(e *runEnv, c *ChatCmd, cwd, base string) *lineSession {
+	stdout, _ := e.out.out.(*os.File) //nolint:errcheck // not a file means no terminal to watch
 	return &lineSession{
 		e: e, cwd: cwd, base: base, opts: displayFor(c), voice: e.runVoice(cwd), in: e.stdin, choice: c.sessionChoice(),
-		raw: func() (func() error, error) { return editor.Raw(e.stdin) },
+		raw:    func() (func() error, error) { return editor.Raw(e.stdin) },
+		resize: term.WatchResize(e.ctx, stdout),
 	}
 }
 
@@ -153,7 +159,7 @@ func (ls *lineSession) run(first Prompt) error {
 		}
 	}()
 	opts := editor.Options{History: ls.history(), Complete: ls.complete,
-		Header: func() string { return workspaceLine(ls.cwd) }, Width: ls.width, Height: ls.height}
+		Header: func() string { return workspaceLine(ls.cwd) }, Width: ls.width, Height: ls.height, Resize: ls.resize}
 	if !e.out.caps.Unicode {
 		opts.Continue = "... "
 	}

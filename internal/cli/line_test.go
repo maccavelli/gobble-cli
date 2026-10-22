@@ -38,6 +38,8 @@ type lineHarness struct {
 	raws, restores int
 	// cookedReads counts the reads of stdin started out of raw mode.
 	cookedReads int
+	// resize is the session's resize notice, sent by a test.
+	resize chan struct{}
 }
 
 // rawCheckedInput is the session's stdin, counting the reads started while
@@ -101,7 +103,9 @@ func (h *lineHarness) start(first Prompt) {
 	if cwd == "" {
 		cwd = acptest.Abs("/work")
 	}
-	ls := &lineSession{e: h.e, cwd: cwd, base: cwd, in: &rawCheckedInput{h: h, r: keysR}, raw: h.raw, voice: h.voice}
+	h.resize = make(chan struct{}, 1)
+	ls := &lineSession{e: h.e, cwd: cwd, base: cwd, in: &rawCheckedInput{h: h, r: keysR}, raw: h.raw, voice: h.voice,
+		resize: h.resize}
 	offered := !slices.ContainsFunc(provider.KeyProviders(), h.e.hasCredential)
 	go func() { h.done <- ls.run(first) }()
 	h.t.Cleanup(func() { keysW.Close() }) //nolint:errcheck,gosec // test cleanup
@@ -195,6 +199,23 @@ func TestLineSessionReadsOnlyWhenAsked(t *testing.T) {
 	h.mu.Unlock()
 	if cooked != 1 {
 		t.Fatalf("%d reads of stdin started out of raw mode; want 1, the sign-in question's", cooked)
+	}
+}
+
+// A resize at the prompt asks the terminal where its cursor is, and on the
+// reply draws the line again, with no key pressed (0030-MADR D1, D2).
+func TestLineSessionRedrawsOnResize(t *testing.T) {
+	h := newLineHarness(t, &acptest.ScriptAgent{})
+	h.start(Prompt{})
+	waitUntil(t, func() bool { return strings.Contains(h.stdout.String(), "> ") })
+	h.resize <- struct{}{}
+	waitUntil(t, func() bool { return strings.Contains(h.stdout.String(), "\x1b[6n") })
+	n := len(h.stdout.String())
+	h.press("\x1b[3;3R")
+	waitUntil(t, func() bool { return strings.Contains(h.stdout.String()[n:], "\r\x1b[J") })
+	h.press("\x04")
+	if err := h.wait(); err != nil {
+		t.Fatal(err)
 	}
 }
 

@@ -71,7 +71,7 @@
 | 0029 | MADR | [Lay the native CLI mode's permission prompt out as a grouped menu, with the full command and its patterns once](decisions/0029-MADR-permission-prompt-layout.md) | accepted 2026-10-22 (from the owner's report; layout A chosen by the owner from three drafts) |
 | 0029 | PLAN | [Implement the grouped permission prompt](decisions/0029-PLAN-permission-prompt-layout.md) | approved 2026-10-22, to start after 0030-PLAN ("Finish 0028 P3 and P4 first, then 0029"; then "0030 first"; three phases) |
 | 0030 | MADR | [Redraw the native CLI mode at the new width when the terminal is resized, and hold its performance to a measured budget](decisions/0030-MADR-resize-and-performance.md) | accepted 2026-10-22 (from the owner's look at 0028-PLAN P4; option A, live area at once and the conversation on settle, chosen by the owner; D3, D4 revised 2026-10-22: 4 MB, the last 10,000 rows; D2 and D5 amended by 0030-PLAN P1's deviations 1 and 2) |
-| 0030 | PLAN | [Implement redrawing on resize, and the performance budget](decisions/0030-PLAN-resize-and-performance.md) | in progress (approved 2026-10-22; five phases, before 0029-PLAN; P1 complete 2026-10-22, the measurements, with deviations 1 and 2: the live redraw picked per resize, and an optimisation added to P4) |
+| 0030 | PLAN | [Implement redrawing on resize, and the performance budget](decisions/0030-PLAN-resize-and-performance.md) | in progress (approved 2026-10-22; five phases, before 0029-PLAN; P1 complete 2026-10-22, the measurements, with deviations 1 and 2: the live redraw picked per resize, and an optimisation added to P4; P2 complete 2026-10-22, the resize notice and the live redraw) |
 
 0003-MADR has no PLAN of its own. 0004-PLAN Phase 2 and 0005-PLAN F10 implement it.
 

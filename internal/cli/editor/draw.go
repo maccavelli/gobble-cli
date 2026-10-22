@@ -26,6 +26,34 @@ type renderer struct {
 	// after finish; at and column are the cursor's place among them.
 	drawn      []string
 	at, column int
+	// up, for a first drawing after a resize, is how many rows above the
+	// cursor the line's first row now is (lift).
+	up int
+}
+
+// lift is how many rows above the cursor the line drawn last starts, now
+// that the terminal is terminal columns wide (0030-MADR D2, as amended).
+// Terminals re-wrap the line's rows at the new width, unless they cut them
+// off, as xterm (cut) does; the column of a cursor report (col, 1-based,
+// when known) tells which when the cursor's column was past the new width.
+// A terminal that keeps the cursor's row pushes the rows above it out of
+// the top; moving up stops at the screen's first row, which is where the
+// line is then drawn from.
+func (r *renderer) lift(terminal, col int, known, cut bool) int {
+	if len(r.drawn) == 0 || terminal <= 0 {
+		return 0
+	}
+	if known && r.column >= terminal && r.column%terminal != terminal-1 {
+		cut = col-1 == terminal-1
+	}
+	if cut {
+		return r.at
+	}
+	up := r.column / terminal
+	for _, d := range r.drawn[:r.at] {
+		up += max((displayWidth(d)+terminal-1)/terminal, 1)
+	}
+	return up
 }
 
 // draw draws l in place of the line drawn last, never erasing first: each
@@ -48,8 +76,12 @@ func (r *renderer) draw(l screenLayout, height int) error {
 	var b strings.Builder
 	cur := r.at
 	if len(r.drawn) == 0 {
+		if r.up > 0 {
+			fmt.Fprintf(&b, "\x1b[%dA", r.up)
+		}
 		b.WriteString("\r\x1b[J")
 	}
+	r.up = 0
 	for i, row := range rows {
 		var was string
 		if i < len(r.drawn) {

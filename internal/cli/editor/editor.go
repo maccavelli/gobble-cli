@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	xterm "golang.org/x/term"
 
@@ -42,6 +43,9 @@ type Options struct {
 	Header           func() string
 	Width            func() int
 	Height           func() int
+	// Resize, when set, notices that the terminal was resized: the line is
+	// drawn again at the new width without waiting for a key (0030-MADR D2).
+	Resize <-chan struct{}
 }
 
 // The prompt's widths (0024-MADR D9): the most columns a line takes, and
@@ -75,6 +79,9 @@ type Editor struct {
 	readErr error
 	// pasting says bracketed paste has been turned on.
 	pasting bool
+	// waiting, after a resize, times the wait for the terminal's cursor
+	// report; nil when none is awaited.
+	waiting *time.Timer
 }
 
 // New returns an Editor reading in (normally a started *Reader) and drawing
@@ -87,7 +94,7 @@ func New(in io.Reader, out, errw io.Writer, opts Options) *Editor {
 	if opts.Continue == "" {
 		opts.Continue = "… "
 	}
-	e := &Editor{keys: &keyReader{src: in}, out: out, errw: errw, opts: opts, draw: renderer{out: out}}
+	e := &Editor{keys: &keyReader{src: in, resize: opts.Resize}, out: out, errw: errw, opts: opts, draw: renderer{out: out}}
 	e.line = newLineBuffer(opts.History)
 	e.line.complete = e.onKey
 	return e
@@ -171,9 +178,10 @@ func (e *Editor) readLine(prompt string) (string, bool, error) {
 	}
 	buf := make([]byte, chunkSize)
 	for {
-		before := len(e.in)
-		rest, ev := e.line.feed(e.in)
-		e.in = rest
+		ev, err := e.feed()
+		if err != nil {
+			return "", false, err
+		}
 		switch ev {
 		case lineEnded:
 			e.line.pos = len(e.line.text)
@@ -200,20 +208,110 @@ func (e *Editor) readLine(prompt string) (string, bool, error) {
 			}
 			continue
 		}
-		if len(e.in) != before {
-			if err := e.redraw(); err != nil {
-				return "", false, err
-			}
-		}
 		if e.readErr != nil {
 			err := e.readErr
 			e.readErr = nil
 			return "", false, err
 		}
 		n, err := e.keys.Read(buf)
+		switch {
+		case errors.Is(err, errResized):
+			if err := e.askCursor(); err != nil {
+				return "", false, err
+			}
+			continue
+		case errors.Is(err, errWaitOver):
+			if err := e.resized(0, false); err != nil {
+				return "", false, err
+			}
+			continue
+		}
 		e.in = append(e.in, buf[:n]...)
 		e.readErr = err
+		if e.waiting != nil {
+			if _, col, rest, ok := takeCursorReport(e.in); ok {
+				e.in = rest
+				if err := e.resized(col, true); err != nil {
+					return "", false, err
+				}
+			}
+		}
 	}
+}
+
+// feed gives the bytes read to the line and draws it if they changed it;
+// while the terminal's cursor report is awaited after a resize, the bytes
+// wait, since the drawing on screen is not where the editor last left it.
+func (e *Editor) feed() (bufferEvent, error) {
+	if e.waiting != nil {
+		return needMore, nil
+	}
+	before := len(e.in)
+	rest, ev := e.line.feed(e.in)
+	e.in = rest
+	if ev == needMore && len(e.in) != before {
+		return ev, e.redraw()
+	}
+	return ev, nil
+}
+
+// cursorWait is how long the editor waits for the terminal's cursor report
+// after a resize before it redraws without one (0030-MADR D2, as amended).
+const cursorWait = 150 * time.Millisecond
+
+// askCursor asks the terminal where its cursor is (DSR, CSI 6 n) after a
+// resize, and starts the wait for the reply.
+func (e *Editor) askCursor() error {
+	if e.waiting != nil {
+		e.waiting.Stop()
+	}
+	e.waiting = time.NewTimer(cursorWait)
+	e.keys.timeout = e.waiting.C
+	if _, err := io.WriteString(e.out, "\x1b[6n"); err != nil {
+		return fmt.Errorf("ask the cursor's place: %w", err)
+	}
+	return nil
+}
+
+// resized draws the line again at the terminal's new width, from where its
+// first row is now: col is the column of the terminal's cursor report,
+// 1-based, when known is true (0030-MADR D2, as amended).
+func (e *Editor) resized(col int, known bool) error {
+	e.waiting.Stop()
+	e.waiting, e.keys.timeout = nil, nil
+	terminal := DefaultWidth
+	if e.opts.Width != nil && e.opts.Width() > 0 {
+		terminal = e.opts.Width()
+	}
+	up := e.draw.lift(terminal, col, known, os.Getenv("XTERM_VERSION") != "")
+	e.draw.forget()
+	e.draw.up = up
+	return e.redraw()
+}
+
+// takeCursorReport takes the first cursor report (CSI row ; col R) out of
+// b.
+func takeCursorReport(b []byte) (row, col int, rest []byte, ok bool) {
+	for i := 0; i+1 < len(b); i++ {
+		if b[i] != 0x1b || b[i+1] != '[' {
+			continue
+		}
+		j, nums, n := i+2, [2]int{}, 0
+		for ; j < len(b) && n < 2; j++ {
+			switch c := b[j]; {
+			case c >= '0' && c <= '9':
+				nums[n] = nums[n]*10 + int(c-'0')
+				continue
+			case c == ';' && n == 0:
+				n++
+				continue
+			case c == 'R' && n == 1:
+				return nums[0], nums[1], append(b[:i:i], b[j+1:]...), true
+			}
+			break
+		}
+	}
+	return 0, 0, b, false
 }
 
 // redraw lays the line out at the terminal's width now and draws it in

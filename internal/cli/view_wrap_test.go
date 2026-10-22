@@ -149,6 +149,41 @@ func TestThinkingWraps(t *testing.T) {
 	checkWrapped(t, screenRows(out, 100), ownersReply, 40)
 }
 
+// A reply still arriving when the terminal narrows wraps at the new width
+// from the next text on (0030-MADR D2).
+func TestReplyAfterResizeWrapsAtNewWidth(t *testing.T) {
+	var out, errw strings.Builder
+	s := term.Stream{TTY: true, Width: 100}
+	o := &Output{out: &out, err: &errw, caps: term.Caps{In: true, Out: s, Err: s, Unicode: true}}
+	width := 100
+	v := newView(o, display{width: func() int { return width }}, stepClock())
+	half := strings.Repeat("alpha beta gamma delta ", 8) + "\n"
+	v.on(acpclient.Update{Kind: acpclient.KindAgentText, Text: half})
+	width = 40
+	v.on(acpclient.Update{Kind: acpclient.KindAgentText, Text: half})
+	if err := v.finish(acpclient.Result{StopReason: "end_turn"}); err != nil {
+		t.Fatal(err)
+	}
+	rows := strings.Split(strings.TrimSuffix(out.String(), "\n"), "\n")
+	k, words := 0, 0 // the first paragraph's rows end where its words do
+	for k < len(rows) && words < len(strings.Fields(half)) {
+		words += len(strings.Fields(rows[k]))
+		k++
+	}
+	if k == len(rows) {
+		t.Fatalf("no rows after the first paragraph: %q", rows)
+	}
+	for i, r := range rows {
+		limit := 40
+		if i < k {
+			limit = 100
+		}
+		if len(r) > limit {
+			t.Fatalf("row %d is %d columns, more than %d: %q", i, len(r), limit, rows)
+		}
+	}
+}
+
 // Thinking text still held when the reply starts is written before the
 // reply, not after it (0028-MADR D5).
 func TestThinkingFlushedBeforeReply(t *testing.T) {

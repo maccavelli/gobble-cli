@@ -2,12 +2,21 @@ package editor
 
 import (
 	"context"
+	"errors"
 	"io"
 	"sync"
+	"time"
 )
 
 // chunkSize is the size of one read from stdin.
 const chunkSize = 512
+
+// errResized and errWaitOver end a ReadUntil with no bytes: the terminal
+// was resized, or the wait for its cursor's place is over.
+var (
+	errResized  = errors.New("editor: terminal resized")
+	errWaitOver = errors.New("editor: no reply from the terminal")
+)
 
 type chunk struct {
 	b   []byte
@@ -72,6 +81,30 @@ func (r *Reader) send(ctx context.Context, c chunk) bool {
 // Read implements io.Reader with the context given to Start.
 func (r *Reader) Read(p []byte) (int, error) {
 	return r.ReadContext(r.ctx, p)
+}
+
+// ReadUntil is ReadContext that also stops waiting, with no bytes, when
+// resize or timeout delivers: errResized or errWaitOver. A read asked for
+// stays asked, and is served to the next call. A nil channel never
+// delivers.
+func (r *Reader) ReadUntil(ctx context.Context, p []byte, resize <-chan struct{}, timeout <-chan time.Time) (int, error) {
+	if len(r.pending) == 0 && r.err == nil {
+		if !r.asked {
+			r.asks <- struct{}{}
+			r.asked = true
+		}
+		select {
+		case c := <-r.chunks:
+			r.pending, r.err, r.asked = c.b, c.err, false
+		case <-resize:
+			return 0, errResized
+		case <-timeout:
+			return 0, errWaitOver
+		case <-ctx.Done():
+			return 0, ctx.Err()
+		}
+	}
+	return r.ReadContext(ctx, p)
 }
 
 // ReadContext reads buffered input; with none, it asks for one read of

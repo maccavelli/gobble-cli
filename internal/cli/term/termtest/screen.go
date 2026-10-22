@@ -8,6 +8,8 @@
 package termtest
 
 import (
+	"fmt"
+	"slices"
 	"strings"
 
 	"golang.org/x/text/width"
@@ -34,6 +36,9 @@ type Screen struct {
 	// Hidden is the cursor hidden, by DECTCEM (CSI ?25l; CSI ?25h shows
 	// it).
 	Hidden bool
+	// Answer, when set, is given the terminal's reply to a cursor position
+	// query (CSI 6 n): CSI row ; column R, 1-based.
+	Answer func(reply string)
 
 	width, height int
 	cells         [][]rune
@@ -153,6 +158,10 @@ func (s *Screen) csi(final rune, n int, given bool) {
 				s.cells[s.Row][c] = ' '
 			}
 		}
+	case 'n':
+		if n == 6 && s.Answer != nil {
+			s.Answer(fmt.Sprintf("\x1b[%d;%dR", s.Row+1, s.Col+1))
+		}
 	}
 }
 
@@ -181,6 +190,65 @@ func (s *Screen) put(r rune) {
 		return
 	}
 	s.Col += w
+}
+
+// Narrowing is what a terminal does to its rows when its window gets
+// narrower, the three ways 0030-PLAN P1 measured.
+type Narrowing int
+
+const (
+	// ReflowDown re-wraps each row at the new width and moves the cursor
+	// with its cell, down (WezTerm, kitty, Terminal.app, Windows).
+	ReflowDown Narrowing = iota
+	// ReflowKeepRow re-wraps each row but keeps the cursor on its screen
+	// row, pushing the rows above it out of the top (iTerm2, VTE).
+	ReflowKeepRow
+	// Cut keeps each row on one row, cut at the new width (xterm).
+	Cut
+)
+
+// Resize makes the screen columns wide, its rows changed as how says.
+// Each row is taken as a line of its own, as the line session writes
+// them, and re-wrapped by runes, which is enough for the ASCII the tests
+// draw: a wide character is not kept whole.
+func (s *Screen) Resize(columns int, how Narrowing) {
+	text := make([][]rune, len(s.cells))
+	for i, row := range s.cells {
+		text[i] = []rune(strings.TrimRight(string(slices.DeleteFunc(slices.Clone(row), func(r rune) bool { return r == wideTail })), " "))
+	}
+	row, col := s.Row, s.Col
+	s.width, s.pending = columns, false
+	if how == Cut {
+		for i := range s.cells {
+			s.cells[i] = s.blank()
+			copy(s.cells[i], text[i][:min(len(text[i]), columns)])
+		}
+		s.Col = min(col, columns-1)
+		return
+	}
+	var rows [][]rune
+	at := 0
+	for i, line := range text {
+		if i == row {
+			at = len(rows) + col/columns
+		}
+		for len(line) > columns {
+			rows = append(rows, line[:columns])
+			line = line[columns:]
+		}
+		rows = append(rows, line)
+	}
+	start := max(at-(s.height-1), 0) // the cursor's row on screen, the rows above it scrolled off as needed
+	if how == ReflowKeepRow {
+		start = max(at-row, 0)
+	}
+	for i := range s.cells {
+		s.cells[i] = s.blank()
+		if start+i < len(rows) {
+			copy(s.cells[i], rows[start+i])
+		}
+	}
+	s.Row, s.Col = at-start, col%columns
 }
 
 // Lines are the screen's rows, trailing spaces dropped.

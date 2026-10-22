@@ -217,3 +217,80 @@ byte. P4 gains step 4, reworking `render.Wrap` and `render.Stream` against targe
 faster reprints. 0030-MADR D5 is amended.
 
 **P1 complete, 2026-10-22.** It changed nothing in the tree; its programs stayed in scratch.
+
+### P2 execution record (2026-10-22)
+
+1. **Tests first,** each seen failing on stubs:
+   - The screen model (`internal/cli/term/termtest`). `TestScreenAnswersCursorQuery` failed with `reply "", want
+     "\x1b[2;5R"`. `TestScreenResize`, with P1's three behaviours (`ReflowDown`, `ReflowKeepRow`, `Cut`), failed with
+     the rows unchanged. Its first draft used a 6-row screen, where the re-wrapped rows scrolled the header away in
+     both re-wrapping kinds; it was redrawn on 10 rows before the code was written.
+   - The watcher (`internal/cli/term`). `TestPollSizeNotices` and `TestWatchResizeSignal`, which sends SIGWINCH to the
+     test process, failed with `no channel`. `TestWatchResizeNotATerminal` passed, as it asks for none.
+   - The reader. `TestReaderWakes` failed with a deadlock on a `ReadUntil` that ignored the resize.
+   - The editor (`internal/cli/editor/resize_test.go`). `TestResizeRedrawsAtOnce`, in the three kinds, and
+     `TestResizeWithoutAReply` failed with the owner's cut words on screen (`"words fi" "ll words …"`).
+     `TestCursorReportIsNoText` passed: an unknown sequence was already dropped.
+   - The line session. `TestLineSessionRedrawsOnResize` failed with `condition not met within 5 s`: no cursor query.
+   - The view. `TestReplyAfterResizeWrapsAtNewWidth` passed: 0028 already reads the width at each release. It stays
+     as a guard, and a mutation shows it can fail.
+2. **The code:**
+   - `term.WatchResize`: SIGWINCH on macOS and Linux; on Windows the console's size read every 100 ms; notices
+     coalesced; nil for a file that is not a terminal.
+   - `editor.Reader.ReadUntil`: a read that a resize, or the end of a wait, stops with no bytes, its asked read kept.
+   - In the editor, `Options.Resize`. On a resize it writes `CSI 6 n` and waits up to 150 ms (`cursorWait`) for the
+     report, holding typed keys meanwhile. It then redraws from `renderer.lift` rows up, as a first drawing.
+     `takeCursorReport` takes the report out of the input.
+   - `lift` counts the rows the old ones re-wrap to, or the rows as drawn where the terminal cuts. The cursor
+     report's column decides which when the cursor's column was past the new width, `XTERM_VERSION` otherwise.
+   - The line session passes `term.WatchResize` on stdout to the editor.
+3. **A real terminal,** a look beyond the plan: gobble built from the working tree in a new WezTerm window, against the
+   scratch stub. A long prompt was sent as text, and the pane narrowed by a split from 80 to 43 columns, with no key
+   after. The prompt was clean: 5 rows at 43, every word whole. The same check on a build of `5a2d106` (before P2)
+   showed `"> … long enough to fill t"`, `"hree rows …"`.
+
+**Negatives,** on a scratch copy, one mutation at a time:
+
+- SIGWINCH not noticed;
+- a change of size not noticed;
+- notices not coalesced;
+- a resize not waking the read;
+- a woken read asked again (`2 reads of stdin, want 1`);
+- no cursor query;
+- the report not taken out;
+- a cut never told by the column;
+- the rows as drawn, never re-wrapped;
+- the first drawing not moved up;
+- keys fed while the report is awaited;
+- the line session giving the editor no resize;
+- the reply's width read once (`row 2 is 97 columns, more than 40`);
+- the model's kept row lost;
+- the model answering no query.
+
+Two passed at first:
+
+- **Capping the lift at the cursor's row** was an equivalent mutation: moving up stops at the screen's first row in
+  every terminal and in the model, so the cap changed nothing. It was taken out, and with it `resized`'s row.
+- **Keys fed while the report is awaited:** no test typed during the wait. `TestKeysTypedWhileTheReportIsAwaited`
+  was added, its keys sent between the query and the reply.
+
+Fifteen mutations, fifteen failures; the restored copy passed.
+
+**Found by the gates and fixed in the phase:**
+
+- revive's `confusing-naming` on macOS: `watchResize` differed from `WatchResize` only by case, and was renamed
+  `resizeNotices`.
+- `errcheck` on the Windows laptop alone: the size read's error was discarded in `resize_windows.go`, a file the other
+  hosts do not build. It is now handled: a failed read counts as no size.
+
+**Gates, after both fixes:**
+
+- The pre-add check on the sixteen changed `.go` files: `16 file(s) clean (gofmt, golint, govulncheck)`.
+- macOS: `make preflight`, `preflight passed`; the tests and the race detector, 36 packages ok each.
+- The Linux machine and the Windows laptop, on a copy of the tree: the tests and the race detector, 36 packages ok on
+  each. `make preflight` reached `apidiff` (golangci-lint `0 issues.` on both, govulncheck "No vulnerabilities
+  found.") and stopped at `verify-build-metadata`, as the copies are not git checkouts.
+- `make check-records markdownlint`: "0 issues in 0 files".
+- The Windows laptop, `make probe-conhost`: `--- PASS: TestConhost`.
+
+**P2 complete, 2026-10-22.**

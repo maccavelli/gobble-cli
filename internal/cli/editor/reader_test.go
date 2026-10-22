@@ -2,10 +2,12 @@ package editor
 
 import (
 	"context"
+	"errors"
 	"io"
 	"sync"
 	"testing"
 	"testing/synctest"
+	"time"
 )
 
 // heldInput is stdin whose reads wait until the test gives them bytes; it
@@ -31,6 +33,52 @@ func (h *heldInput) reads() int {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return h.started
+}
+
+// A resize, or the end of a wait, stops ReadUntil with no bytes and the
+// read it asked for still asked: the next call is served by it, and no
+// second read of stdin starts (0030-MADR D2).
+func TestReaderWakes(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		in := &heldInput{give: make(chan string)}
+		ctx, cancel := context.WithCancel(t.Context())
+		defer func() {
+			cancel()
+			close(in.give)
+		}()
+		var r Reader
+		r.Start(ctx, in)
+		resize := make(chan struct{}, 1)
+		buf := make([]byte, 16)
+		done := make(chan error)
+		go func() {
+			_, err := r.ReadUntil(t.Context(), buf, resize, nil)
+			done <- err
+		}()
+		synctest.Wait()
+		resize <- struct{}{}
+		if err := <-done; !errors.Is(err, errResized) {
+			t.Fatalf("err %v, want errResized", err)
+		}
+		timeout := make(chan time.Time, 1)
+		timeout <- time.Now()
+		if _, err := r.ReadUntil(t.Context(), buf, nil, timeout); !errors.Is(err, errWaitOver) {
+			t.Fatalf("err %v, want errWaitOver", err)
+		}
+		got := make(chan string)
+		go func() {
+			n, _ := r.ReadUntil(t.Context(), buf, nil, nil)
+			got <- string(buf[:n])
+		}()
+		synctest.Wait()
+		in.give <- "ab"
+		if s := <-got; s != "ab" {
+			t.Fatalf("read %q, want %q", s, "ab")
+		}
+		if n := in.reads(); n != 1 {
+			t.Fatalf("%d reads of stdin, want 1", n)
+		}
+	})
 }
 
 // The reader reads stdin only when asked: nothing at Start, one read for a
