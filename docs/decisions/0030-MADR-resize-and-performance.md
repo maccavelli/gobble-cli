@@ -69,10 +69,13 @@ clearing the terminal's scrollback.
   for D3, and that is recorded as a deviation.
 - **D3. The conversation, on settle.** About 150 ms after the last resize, gobble writes, at the new width:
   - clear the screen and the scrollback (`CSI 2 J`, `CSI 3 J`, home);
-  - everything the line session has shown;
+  - the last 10,000 rows, at the new width, of what the line session has shown, after one line saying that earlier
+    output was not reprinted when there is more;
   - the live area.
 
-  It writes this as one synchronized update (DEC mode 2026, as 0027's drawing does).
+  It writes this as one synchronized update (DEC mode 2026, as 0027's drawing does). Most terminals keep 3,500 to
+  10,000 rows of scrollback, so rows beyond that would be dropped as soon as they were written; the limit keeps a
+  reprint quick (the owner's answer of 2026-10-22, "Last 10,000 rows").
 - **D4. The transcript.** The line session keeps what it has shown, in order, as pieces it can draw again at a width:
   - the header and each sent prompt (0027's layout);
   - each reply and its thinking, kept as the Markdown released (0028's styling and wrapping);
@@ -80,14 +83,15 @@ clearing the terminal's scrollback.
   - output whose layout depends on the width, such as `/help`'s list, kept as a function of the width;
   - everything else, such as tool output, diffs and the status line, kept as written.
 
-  It is bounded: at most 2 MB or 2000 pieces. Past that, the oldest go, and the reprint begins with one line saying
-  so.
+  It is bounded by size alone: at most 4 MB. Past that, the oldest pieces go, and the reprint begins with one line
+  saying so. The owner's answers of 2026-10-22: "2MB is too small. raise it to 4MB", and no limit on the number of
+  pieces ("Drop it, bytes only"), since short pieces would reach any count long before 4 MB.
 - **D5. A performance budget,** with each item a test or benchmark in `internal/cli`, measured in P1 and enforced
   from P2:
   - a key's drawing writes at most the changed text plus 40 bytes;
   - rendering a 1000-row transcript at a new width allocates at most a recorded number of times;
-  - benchmarks for start-up to the first prompt, a key, a reply's rendering, and a reprint of 1000 rows, with
-    recorded baselines;
+  - benchmarks for start-up to the first prompt, a key, a reply's rendering, and a reprint of 10,000 rows (the most
+    D3 writes) from a 4 MB transcript, with recorded baselines;
   - a budget test that fails when a benchmark is more than 3× its baseline. That test is tagged `perf` and run by
     `make perf`, not by `make preflight`, since timing varies by host.
 - **D6. Print mode and off a terminal:** unchanged. No transcript is kept, and nothing is redrawn.

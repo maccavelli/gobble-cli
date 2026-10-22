@@ -39,8 +39,9 @@ resizing settles. No word is cut. Performance has a recorded baseline and a budg
    rest are driven headless.
 2. **Windows' resize.** Check whether a reader in virtual-terminal input mode sees any event when the console is
    resized, under Console Host and Windows Terminal's host. If none, D1's 100 ms poll stands.
-3. **The baseline:** start-up, a key, a reply's rendering, and the costs a reprint of 1000 rows would have, as
-   benchmarks in a scratch copy, on all three hosts.
+3. **The baseline:** start-up, a key, a reply's rendering, and the costs a reprint of 10,000 rows from a 4 MB
+   transcript would have, as benchmarks in a scratch copy, on all three hosts. The time each terminal takes to
+   show a reprint of 1,000 and 10,000 rows, and whether `CSI 3 J` clears its scrollback.
 
 The findings are recorded before P2. A terminal where the cursor cannot be found decides D2 there, as a deviation.
 
@@ -60,7 +61,9 @@ The findings are recorded before P2. A terminal where the cursor cannot be found
      from 120 to 60 columns: after the settle, the screen and scrollback hold everything, every prose row whole at
      60, and the code and table as written;
    - several resizes within 150 ms reprint once;
-   - the bound: past 2000 pieces, the oldest go and the reprint says so;
+   - the bound: past 4 MB, the oldest pieces go and the reprint says so;
+   - a reprint writes at most the last 10,000 rows at the new width, after one line saying earlier output was not
+     reprinted;
    - print mode and off a terminal: nothing kept.
 2. **The transcript** at the line session's three writers (`Output`, the view, the editor), **the reprint** as one
    synchronized update, and **the bound.**
