@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: complete
 date: 2026-10-22
 associated-madr: "0028-MADR-reply-word-wrap.md"
 ---
@@ -326,3 +326,39 @@ The width-cap mutation first left `editor` imported and unused, so it did not bu
 - The Windows laptop, `make probe-conhost`: `--- PASS: TestConhost`.
 
 **P3 complete, 2026-10-22.**
+
+### P4 execution record (2026-10-22)
+
+1. **Captures,** with scratch drivers and a scratch stub model outside the tree (`stubllm`, a Chat Completions server
+   on 127.0.0.1 answering every request with one reply). It answers `stream: false` with one completion, since
+   gobble's pinned SDK, v1.17.0, does not stream yet. `models.json` in a scratch home pointed `kilo` at it, with a
+   dummy key; no real model or network was reached. The reply mixed prose (the owner's sentence), a heading, a list, a
+   quote, a code block, a table and a long URL. Print mode printed it raw (Q2).
+   - **macOS and the Linux machine:** `gobble chat` in a pty of 60, 100 and 200 columns; on the Linux machine, the
+     project's trust question was answered "deny once" first. A scratch check (`p28_check.py`) of what gobble
+     wrote, escapes removed, and of the rows drawn on `termtest`'s screen:
+     - every prose row at most `min(columns, 120)`, unless it is one word;
+     - the reply's words whole and in order, quote markers and table rows aside;
+     - the heading, the code line and the table row each whole on a row;
+     - the list item's rows continued under its text, and the quote's with `>`;
+     - every prose row whole on a screen row.
+
+     Six of six passed. The widest prose rows were 91 of 60 (the URL, alone), 100 of 100 and 116 of 120.
+   - **The Windows laptop,** headless, under Console Host and Windows Terminal's console host, at the same widths:
+     the host's screen drawn with `pyte`, its reply rows equal to the macOS screen's at the same width. Six of six.
+   - **Seen failing:** the check on a capture of `6361bd9` (before 0028): `row of 204 columns over 60`, and the list
+     and quote not continued. The comparison on a Windows capture at 100 columns against the macOS screen at 60:
+     `DIFFERENT from macOS`.
+   - **Shown, as D3 decided:** at 60 columns the heading, the code line and the table, wider than the terminal, are
+     broken by the terminal at its edge, as before 0028.
+   - **Found, not fixed (predates 0028):** a warning written while the spinner is on its row starts after the
+     spinner's text (`⠋ Brushing off the documentationWarning: model listing faile` / `d; …`), so its first row is
+     cut at the edge. Clearing the spinner before a message would end it.
+2. **The owner's look, 2026-10-22:** "resizing by narrowing the window can cut words the wrap doesn't dynamically
+   adjust. resizing causes a pretty long delay before the terminal is re-drawn". This is D3's consequence, "the
+   breaks are fixed when written". Measured: gobble writes nothing when the terminal is resized, until the next key.
+   The owner chose to redraw at the new width on a resize. That is a new decision,
+   [0030-MADR-resize-and-performance.md](0030-MADR-resize-and-performance.md), which supersedes the consequence.
+   0028's wrapping stands, and 0030 draws through it.
+
+**P4 complete, 2026-10-22; this plan complete.** What the look found is 0030's to do.
