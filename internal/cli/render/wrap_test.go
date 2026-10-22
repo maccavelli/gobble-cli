@@ -2,9 +2,12 @@ package render
 
 import (
 	"math/rand/v2"
+	"slices"
 	"strings"
 	"testing"
 	"unicode/utf8"
+
+	"github.com/maccavelli/gobble-cli/internal/cli/term"
 )
 
 // wrapCases are replies and the rows a width makes of them (0028-MADR D3,
@@ -109,6 +112,56 @@ func TestWrapAnySplit(t *testing.T) {
 			}
 			if got := wrapAll(chunks, tc.width); got != tc.want {
 				t.Fatalf("%s, chunks %q: got %q, want %q", tc.name, chunks, got, tc.want)
+			}
+		}
+	}
+}
+
+// splitEscapes parts s into its escape sequences, in order, and the rest.
+func splitEscapes(s string) (escapes, plain string) {
+	var e, p strings.Builder
+	for i := 0; i < len(s); i++ {
+		if s[i] == 0x1b && i+1 < len(s) && s[i+1] == '[' {
+			j := i + 2
+			for j < len(s) && (s[j] < 0x40 || s[j] > 0x7e) {
+				j++
+			}
+			e.WriteString(s[i:min(j+1, len(s))])
+			i = j
+			continue
+		}
+		p.WriteByte(s[i])
+	}
+	return e.String(), p.String()
+}
+
+// Styled text wraps as its plain text does: with the escapes taken out, the
+// rows are the plain text's, and every escape is kept, in order, whatever
+// the chunks (0028-MADR D7, as amended).
+func TestWrapStyled(t *testing.T) {
+	on := term.Stream{Color: true}
+	cases := append(slices.Clip(wrapCases), struct {
+		name, in string
+		width    int
+		want     string
+	}{"emphasis across a break", "this is **very bold** and `some code` here\n", 16, ""})
+	for _, tc := range cases {
+		plainIn := Tables(tc.in)
+		styled := Style(plainIn, on)
+		want := wrapAll([]string{plainIn}, tc.width)
+		wantEsc, _ := splitEscapes(styled)
+		splits := [][]string{{styled}}
+		for c := range styled {
+			if c > 0 {
+				splits = append(splits, []string{styled[:c], styled[c:]})
+			}
+		}
+		for _, chunks := range splits {
+			got := wrapAll(chunks, tc.width)
+			esc, plain := splitEscapes(got)
+			if plain != want || esc != wantEsc {
+				t.Fatalf("%s, chunks %q:\ngot   %q\nplain %q, want %q\nescapes %q, want %q", tc.name, chunks, got, plain,
+					want, esc, wantEsc)
 			}
 		}
 	}

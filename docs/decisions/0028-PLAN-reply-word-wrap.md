@@ -183,3 +183,97 @@ inline code, not a fence" was added and fails under it. Eleven mutations, eleven
 - The Windows laptop, `make probe-conhost`: `--- PASS: TestConhost`.
 
 **P1 complete, 2026-10-22.**
+
+### P2 execution record (2026-10-22)
+
+**Deviation 2, 2026-10-22, decided by the owner** ("Wrap after Style"). Before the view was changed, MADR D7 (the
+wrapper before `Tables` and `Style`) proved to lose styling. `Style` colours a span only when it sees it whole within
+one call and one line, and the wrapper's held words, or a row break, can split a span that `render.Stream` released
+whole: `**very bold** and` released as `**very`, with `bold** and` held. The view styles each release first, as
+before, and `render.Wrap` takes styled text. Escape sequences count as zero width, stay with their word and are never
+dropped at a break, and line kinds and block openers are read with escapes removed. 0028-MADR D7 is amended. Added to
+the phase: P1's wrapper and its tests (styled input, in `internal/cli/render`).
+
+**Deviation 3, 2026-10-22, decided by the owner** ("Check it on the screen"). With the view wrapping,
+`TestLineViewTrust` (`internal/cli/trust_test.go:326`) timed out (`condition not met within 5 s`). `/trust`'s
+confirmation, `Saved: <project> is trusted.` (gobble's agent, the catalog's `trust.saved`,
+`personality/builtin/boring/messages.md`; first named here as `internal/cli/trust.go:330`, which is `gobble trust`'s,
+until a mutation there left the test passing), is reply text. The test's project path is
+a long temporary directory, so the line passes the harness's 80 columns and wraps, and the test looked for it as one
+unbroken substring of stdout. The test now looks for the confirmation's words in order across the wrapped rows, and
+checks that no row is over 80 columns unless it holds a single word, which D3 leaves whole. Added to the phase:
+`internal/cli/trust_test.go`.
+
+1. **Deviation 2's wrapper first.** `TestWrapStyled` (`internal/cli/render/wrap_test.go`) styles every P1 case with
+   colour on, plus `this is **very bold** and `some code` here` at 16 columns, and wraps it whole and at every split.
+   Its two checks: with the escapes taken out, the rows are the plain text's; and every escape is kept, in order. It
+   failed on P1's wrapper: the styled list marker `\x1b[36m-\x1b[0m` hid the list item, so `- alpha` was not continued
+   under its text. `render.Wrap` then took escapes:
+   - gathered whole across pushes;
+   - kept with the word they are in, or with the line's start;
+   - counted as zero width;
+   - left out of what `lineKind` and `opensBlock` read;
+   - and, through `cutPlain`, kept with a prose line's prefix.
+
+   Every render test passes. P1's eleven mutations were run again on the new wrapper, two of them re-pointed at
+   changed lines, and all eleven failed.
+2. **Tests first** (`internal/cli/view_wrap_test.go`), each seen failing on the view as it was, with `display.width`
+   added and unused:
+   - `TestReplyWrapsOnScreen`: the owner's reply in chunks of 7 runes, at 60, 100 and 120 columns on terminals of 60,
+     100 and 177, colour off and on. The screen showed the owner's cut: `"writin" "g"`, `"debuggi" "ng,"`, and
+     `row of 177 columns, more than 120`.
+   - `TestReplyKeepsCodeAndTables`: a heading, a code block, a table and a list at 40. Failed on the list:
+     `no line "- a list item with enough words in it to"`. Its first draft expected a padded table row, but with colour
+     off the view does not run `Tables`; corrected.
+   - `TestReplyFlushedBeforeTool`: `stdout "alpha beta gamma delta epsilon\n▸ read notes.md ✓\n"`.
+   - `TestThinkingWraps`: `row of 100 columns, more than 40`.
+   - `TestLineSessionWrapsReplies`, the line session at 80 and 200 columns and off a terminal. The terminal cases
+     failed with the reply on one row. The off-terminal case passed, as it asks for no change.
+   - `TestThinkingFlushedBeforeReply`, added after the negatives below.
+3. **The view** (`internal/cli/view.go`):
+   - `text` styles a release, as before, and then wraps it at `display.width`, read at each release.
+   - `flush` flushes the reply's wrapper and the thinking's.
+   - A thought flushes only the reply's wrapper, so the next thought chunk continues its row. The reply's first text
+     flushes the thinking's wrapper.
+   - The line session gives each turn `lineSession.replyWidth` (`internal/cli/line.go`): the terminal's width, at
+     most `editor.MaxWidth`, or 0 when stdout is not a terminal.
+4. **Deviation 3 carried out:** `TestLineViewTrust` waits for `shownWrapped`. That helper checks the confirmation's
+   words in order, and that no row is wider than 80 columns unless it is one word. Its first draft measured the
+   editor's drawing, escape sequences and `\r` moves included, as a row; it now measures what each row shows.
+
+**Negatives,** on a scratch copy, one mutation at a time:
+
+- the width not capped: `widest` over 120;
+- wrapping off a terminal: `the reply is not as it came`;
+- the line session giving no width;
+- the reply's wrapper not flushed before a tool: `"alpha beta gamma\n▸ read notes.md ✓\n"`;
+- the view not wrapping replies: `"writin" "g"`;
+- thinking not wrapped;
+- the thinking's wrapper not flushed when the reply starts: `"weighing the\nAnswer.\n options here\n"`;
+- the confirmation changed: `condition not met within 5 s`;
+- escapes counted as width;
+- escapes dropped with a held word;
+- a line's kind read with its escapes.
+
+Two passed at first:
+
+- **The thinking's flush:** no test followed thinking with a reply, so `TestThinkingFlushedBeforeReply` was added.
+- **The confirmation:** it was mutated in `internal/cli/trust.go:330`, which is `gobble trust`'s. The line session's
+  comes from the catalog's `trust.saved`, and the mutation was moved there.
+
+Eleven mutations, eleven failures; the restored copy passed.
+
+**Found by the gates and fixed in the phase:** golangci-lint's `modernize`, three in the new tests (`slices.Clip`,
+`strings.SplitSeq` twice).
+
+**Gates:**
+
+- The pre-add check on the six changed `.go` files: `6 file(s) clean (gofmt, golint, govulncheck)`.
+- macOS: `make preflight`, `preflight passed`; the tests and the race detector, 36 packages ok each.
+- The Linux machine and the Windows laptop, on a copy of the tree: the tests and the race detector, 36 packages ok on
+  each. `make preflight` reached `apidiff` (golangci-lint `0 issues.`, govulncheck "No vulnerabilities found.") and
+  stopped at `verify-build-metadata`, as the copies are not git checkouts.
+- `make check-records markdownlint`: "0 issues in 0 files".
+- The Windows laptop, `make probe-conhost`: `--- PASS: TestConhost`.
+
+**P2 complete, 2026-10-22.**

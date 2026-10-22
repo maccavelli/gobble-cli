@@ -4,8 +4,10 @@ import "strings"
 
 // Wrap breaks streamed Markdown prose at spaces so no row is wider than a
 // width, and passes code, tables and headings through unchanged (0028-MADR
-// D3–D5, D7). It takes the text a Stream releases, before Tables and Style,
-// so it counts no escape sequences.
+// D3–D5, D7). It takes what Style made of the text a Stream released:
+// escape sequences count as zero width, stay with the word they are in and
+// are never dropped at a break, and a line's kind and a word's opening a
+// block are read with them taken out (D7, as amended).
 //
 // Prose is a paragraph, a list item or a block quote: its continuation rows
 // are indented under a list item's text and repeat a quote's markers, and
@@ -21,21 +23,25 @@ import "strings"
 type Wrap struct {
 	out   strings.Builder // this push's output
 	width int
+	esc   string // an escape sequence still arriving
 
-	known   bool   // the current line's kind is known
-	head    string // the line's start, while its kind is not known
-	pass    bool   // the current line passes through
-	opening bool   // the current line opened the fence
-	line    string // the current passed line, to find the fence's close
-	fence   string // the open fence's marker run, or ""
+	known     bool   // the current line's kind is known
+	head      string // the line's start, while its kind is not known
+	headPlain string // head without its escapes
+	pass      bool   // the current line passes through
+	opening   bool   // the current line opened the fence
+	line      string // the current passed line, without escapes, to find the fence's close
+	fence     string // the open fence's marker run, or ""
 
 	cont      string // a prose line's continuation prefix
 	col       int    // the columns used on the row
 	held      string // the last finished word on the row, not yet written
+	heldPlain string // held without its escapes
 	heldGap   string // the spaces before held
 	heldFirst bool   // held is the row's first word
 	gap       string // the spaces after held, before word
 	word      string // the word still arriving
+	wordPlain string // word without its escapes
 }
 
 // Push wraps text to width columns and returns what it can release; a width
@@ -53,6 +59,11 @@ func (w *Wrap) Push(text string, width int) string {
 // Flush returns everything held and starts afresh, as at a line start with
 // no fence open. Call it with the Stream's Flush.
 func (w *Wrap) Flush() string {
+	if w.esc != "" {
+		esc := w.esc
+		w.esc = ""
+		w.token(esc, true)
+	}
 	if !w.known && w.head != "" {
 		w.classify(true)
 	}
@@ -66,35 +77,58 @@ func (w *Wrap) Flush() string {
 	return out
 }
 
+// take reads a rune, gathering an escape sequence until it is whole.
 func (w *Wrap) take(r rune) {
+	if w.esc == "" && r != 0x1b {
+		w.token(string(r), false)
+		return
+	}
+	w.esc += string(r)
+	if len(w.esc) == 2 && r != '[' || len(w.esc) > 2 && r >= 0x40 && r <= 0x7e {
+		esc := w.esc
+		w.esc = ""
+		w.token(esc, true)
+	}
+}
+
+// token takes one rune, or a whole escape sequence (esc), which has no
+// width.
+func (w *Wrap) token(t string, esc bool) {
 	if !w.known {
 		if w.fence != "" {
 			w.known, w.pass = true, true
 		} else {
-			if r == '\n' {
+			if t == "\n" {
 				w.classify(true)
-				w.take(r)
+				w.token(t, false)
 				return
 			}
-			w.head += string(r)
-			w.classify(false)
+			w.head += t
+			if !esc {
+				w.headPlain += t
+				w.classify(false)
+			}
 			return
 		}
 	}
 	if w.pass {
-		w.out.WriteRune(r)
-		if r != '\n' {
-			w.line += string(r)
-			return
+		w.out.WriteString(t)
+		switch {
+		case esc:
+		case t != "\n":
+			w.line += t
+		default:
+			if w.fence != "" && !w.opening && isFenceClose(w.line, w.fence) {
+				w.fence = ""
+			}
+			w.startLine()
 		}
-		if w.fence != "" && !w.opening && isFenceClose(w.line, w.fence) {
-			w.fence = ""
-		}
-		w.startLine()
 		return
 	}
-	switch r {
-	case '\n':
+	switch {
+	case esc:
+		w.word += t
+	case t == "\n":
 		w.endWord()
 		w.emitHeld()
 		if w.fits(after(w.col, w.gap)) {
@@ -102,51 +136,80 @@ func (w *Wrap) take(r rune) {
 		}
 		w.out.WriteByte('\n')
 		w.startLine()
-	case ' ', '\t':
+	case t == " " || t == "\t":
 		w.endWord()
-		w.gap += string(r)
+		w.gap += t
 	default:
-		w.word += string(r)
+		w.word += t
+		w.wordPlain += t
 	}
 }
 
 // startLine forgets the line just ended; an open fence stays open.
 func (w *Wrap) startLine() {
-	w.known, w.head, w.pass, w.opening, w.line = false, "", false, false, ""
-	w.cont, w.col, w.gap, w.word = "", 0, "", ""
-	w.held, w.heldGap, w.heldFirst = "", "", false
+	w.known, w.head, w.headPlain, w.pass, w.opening, w.line = false, "", "", false, false, ""
+	w.cont, w.col, w.gap, w.word, w.wordPlain = "", 0, "", "", ""
+	w.held, w.heldPlain, w.heldGap, w.heldFirst = "", "", "", false
 }
 
 // classify decides the line's kind from its start, once it can, or at the
 // line's end; a prose line's prefix is written and the rest of its start
 // taken as prose.
 func (w *Wrap) classify(atEnd bool) {
-	kind, n, run, ok := lineKind(w.head, atEnd)
+	kind, n, run, ok := lineKind(w.headPlain, atEnd)
 	if !ok {
 		return
 	}
-	head := w.head
-	w.head, w.known = "", true
+	head, plain := w.head, w.headPlain
+	w.head, w.headPlain, w.known = "", "", true
 	if kind != kindProse {
-		w.pass, w.line = true, head
+		w.pass, w.line = true, plain
 		if kind == kindFence {
 			w.fence, w.opening = run, true
 		}
 		w.out.WriteString(head)
 		return
 	}
-	prefix := head[:n]
+	prefix, rest := cutPlain(head, n)
 	w.out.WriteString(prefix)
 	w.cont = strings.Map(func(r rune) rune {
 		if r == '>' || r == '\t' {
 			return r
 		}
 		return ' '
-	}, prefix)
-	w.col = after(0, prefix)
-	for _, r := range head[n:] {
+	}, plain[:n])
+	w.col = after(0, plain[:n])
+	for _, r := range rest {
 		w.take(r)
 	}
+}
+
+// cutPlain cuts s after its first n bytes that are not in an escape
+// sequence, the escapes among them kept with the head.
+func cutPlain(s string, n int) (head, rest string) {
+	i := 0
+	for plain := 0; i < len(s) && plain < n; {
+		if s[i] == 0x1b {
+			i += escapeLen(s[i:])
+			continue
+		}
+		i++
+		plain++
+	}
+	return s[:i], s[i:]
+}
+
+// escapeLen is the length of the escape sequence s starts with: a control
+// sequence through its final byte, or ESC and one byte.
+func escapeLen(s string) int {
+	if len(s) < 2 || s[1] != '[' {
+		return min(2, len(s))
+	}
+	j := 2
+	for j < len(s) && (s[j] < 0x40 || s[j] > 0x7e) {
+		j++
+	}
+	return min(j+1, len(s))
 }
 
 // endWord places the word just finished: after the held word if it fits;
@@ -156,24 +219,24 @@ func (w *Wrap) endWord() {
 	if w.word == "" {
 		return
 	}
-	word, gap := w.word, w.gap
-	w.word, w.gap = "", ""
+	word, plain, gap := w.word, w.wordPlain, w.gap
+	w.word, w.wordPlain, w.gap = "", "", ""
 	switch {
 	case w.held == "":
-		w.held, w.heldGap, w.heldFirst = word, gap, true
+		w.held, w.heldPlain, w.heldGap, w.heldFirst = word, plain, gap, true
 		return
-	case w.fits(after(after(after(w.col, w.heldGap+w.held), gap), word)):
-	case !opensBlock(word):
+	case w.fits(after(after(after(w.col, w.heldGap+w.heldPlain), gap), plain)):
+	case !opensBlock(plain):
 		w.emitHeld()
 		w.newRow()
-		w.held, w.heldGap, w.heldFirst = word, "", true
+		w.held, w.heldPlain, w.heldGap, w.heldFirst = word, plain, "", true
 		return
-	case !w.heldFirst && !opensBlock(w.held):
+	case !w.heldFirst && !opensBlock(w.heldPlain):
 		w.newRow()
 		w.heldGap = ""
 	}
 	w.emitHeld()
-	w.held, w.heldGap, w.heldFirst = word, gap, false
+	w.held, w.heldPlain, w.heldGap, w.heldFirst = word, plain, gap, false
 }
 
 func (w *Wrap) fits(col int) bool { return w.width <= 0 || col <= w.width }
@@ -183,8 +246,8 @@ func (w *Wrap) emitHeld() {
 		return
 	}
 	w.out.WriteString(w.heldGap + w.held)
-	w.col = after(w.col, w.heldGap+w.held)
-	w.held, w.heldGap = "", ""
+	w.col = after(w.col, w.heldGap+w.heldPlain)
+	w.held, w.heldPlain, w.heldGap = "", "", ""
 }
 
 func (w *Wrap) newRow() {
@@ -324,6 +387,8 @@ func afterMarker(s string, j int, atEnd bool) (kind, prefix int, run string, ok 
 // fence, a thematic break or a setext underline (0028-MADR D4).
 func opensBlock(word string) bool {
 	switch {
+	case word == "":
+		return false
 	case word[0] == '>' || word[0] == '|':
 		return true
 	case word[0] == '#':

@@ -20,6 +20,9 @@ type display struct {
 	home                         string
 	// voice speaks the view's own lines; nil is boring (0022-PLAN P1).
 	voice *personality.Voice
+	// width is the width replies and thinking wrap to, read as they
+	// arrive; nil, or 0, wraps nothing (0028-MADR D1, D2).
+	width func() int
 }
 
 // turnClock times a turn: the start, the first token and the end.
@@ -47,6 +50,8 @@ type view struct {
 
 	mu      sync.Mutex
 	md      render.Stream
+	wrap    render.Wrap // the reply's rows (0028-MADR)
+	think   render.Wrap // the thinking text's rows
 	clock   turnClock
 	tools   map[string]*toolState
 	usage   *acpclient.ContextUsage
@@ -105,6 +110,7 @@ func (v *view) on(u acpclient.Update) {
 		}
 		if v.thought {
 			v.thought = false
+			v.write(v.think.Flush())
 			v.newline()
 		}
 		v.text(v.md.Push(term.Sanitize(u.Text)))
@@ -113,9 +119,13 @@ func (v *view) on(u acpclient.Update) {
 		if !v.opts.showThinking || u.Text == "" {
 			return
 		}
-		v.flush()
+		v.flushReply() // not the thinking: its next chunk continues the row
 		v.thought = true
-		v.write(term.Dim.Wrap(term.Sanitize(u.Text), v.caps.Out.Color))
+		s := term.Dim.Wrap(term.Sanitize(u.Text), v.caps.Out.Color)
+		if w := v.wrapWidth(); w > 0 {
+			s = v.think.Push(s, w)
+		}
+		v.write(s)
 	case acpclient.KindToolCall:
 		st := &toolState{title: u.Tool.Title, status: u.Tool.Status}
 		v.tools[u.Tool.ID] = st
@@ -237,20 +247,38 @@ func (v *view) content(cs []acpclient.ToolContent) {
 }
 
 // text writes Markdown the stream released: styled when colour is on, raw
-// when it is off (D7).
+// when it is off (D7), then wrapped to the terminal's width, when there is
+// one (0028-MADR D1, D7 as amended).
 func (v *view) text(s string) {
-	if s == "" {
-		return
-	}
-	if v.caps.Out.Color {
+	if s != "" && v.caps.Out.Color {
 		s = render.Style(render.Tables(s), v.caps.Out)
+	}
+	if w := v.wrapWidth(); w > 0 {
+		s = v.wrap.Push(s, w)
 	}
 	v.write(s)
 }
 
-// flush writes what the Markdown stream still holds. It runs before every
-// non-text event and at the turn's end.
-func (v *view) flush() { v.text(v.md.Flush()) }
+// wrapWidth is the width replies wrap to now; 0 wraps nothing.
+func (v *view) wrapWidth() int {
+	if v.opts.width == nil {
+		return 0
+	}
+	return v.opts.width()
+}
+
+// flush writes what the Markdown stream and the wrappers still hold. It
+// runs before every non-text event and at the turn's end.
+func (v *view) flush() {
+	v.flushReply()
+	v.write(v.think.Flush())
+}
+
+// flushReply writes what the Markdown stream and the reply's wrapper hold.
+func (v *view) flushReply() {
+	v.text(v.md.Flush())
+	v.write(v.wrap.Flush())
+}
 
 // line writes s as a line of its own.
 func (v *view) line(s string) {

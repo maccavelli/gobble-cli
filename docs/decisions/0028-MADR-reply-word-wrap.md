@@ -102,6 +102,14 @@ that must stay exact are left alone.
 - **D7. Order.** The wrapper runs on the text `render.Stream` releases, before `render.Tables` and `render.Style`.
   So it counts no escape sequences, and `Style` sees the line starts the wrapper made, none of which opens a block
   (D4).
+  *Amended 2026-10-22 (0028-PLAN P2, deviation 2; the owner's answer "Wrap after Style"):* `Style` colours an
+  emphasis or code span only when it sees the whole span within one call and one line. `render.Stream` releases
+  whole spans, but the wrapper's held words (D5, as amended) can split one, as can a row break. For example,
+  `**very bold** and` would be released as `**very`, with `bold** and` held. So the view styles each release first,
+  as it did before 0028, and the wrapper runs on the styled text:
+  - escape sequences count as zero width and travel with the word they are in;
+  - a row break drops only spaces, never an escape;
+  - a line's kind and a word's opening a block are read from the text with escapes removed.
 - **D8. No new module:** `golang.org/x/text/width` is already required.
 
 ### Consequences

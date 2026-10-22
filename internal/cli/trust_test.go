@@ -323,7 +323,9 @@ func TestLineViewTrust(t *testing.T) {
 	h.press("/trust\r")
 	waitUntil(t, func() bool { return strings.Contains(h.stderr.String(), "[3] Do not trust  [c] cancel ") })
 	h.press("1")
-	waitUntil(t, func() bool { return strings.Contains(h.stdout.String(), "Saved: "+proj+" is trusted.") })
+	// The confirmation is a reply, wrapped at the harness's 80 columns
+	// (0028-PLAN P2, deviation 3).
+	waitUntil(t, func() bool { return shownWrapped(h.stdout.String(), "Saved: "+proj+" is trusted.", 80) })
 	h.press("\x04")
 	if err := h.wait(); err != nil {
 		t.Fatal(err)

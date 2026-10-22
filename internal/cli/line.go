@@ -220,6 +220,16 @@ func (ls *lineSession) run(first Prompt) error {
 	}
 }
 
+// replyWidth is the width a turn's replies wrap to: the terminal's, at
+// most 120 columns, or 0, no wrapping, when stdout is not a terminal
+// (0028-MADR D1, D2; Q1).
+func (ls *lineSession) replyWidth() int {
+	if !ls.e.out.caps.Out.TTY {
+		return 0
+	}
+	return min(ls.width(), editor.MaxWidth)
+}
+
 // goodbye turns bracketed paste off and leaves raw mode (restore, when not
 // nil), then writes the goodbye, so it ends with a real line end
 // (0027-MADR D3, as amended for P5).
@@ -288,6 +298,7 @@ func (ls *lineSession) turn(p Prompt) error {
 	e := ls.e
 	opts := ls.opts
 	opts.voice = ls.spoken()
+	opts.width = ls.replyWidth
 	v := newView(e.out, opts, e.now)
 	ls.amb.startTurn()
 	start := e.now()
