@@ -67,6 +67,16 @@ clearing the terminal's scrollback.
   new width within 50 ms of the resize. Before this is built, P1 measures how each terminal reflows the cursor's
   rows when narrowed. If any terminal leaves the cursor somewhere the editor cannot find, the live area there waits
   for D3, and that is recorded as a deviation.
+  *Amended 2026-10-22 (0030-PLAN P1, deviation 1; the owner's answer "Pick per resize"):* P1 found three behaviours.
+  WezTerm, kitty, Terminal.app and Windows re-wrap and move the cursor down. iTerm2 and VTE re-wrap and keep the
+  cursor's row, pushing the prompt's top into the scrollback. xterm cuts rows off. After each resize, the editor reads
+  the cursor's place (DSR, `CSI 6 n`; the key reader takes the reply, which is not a key) and redraws by the
+  matching method:
+  - up by the re-wrapped rows;
+  - up by the rows as drawn;
+  - or, where the top is out of reach, from the screen's first row, the rest left to D3.
+
+  In iTerm2 and VTE one old row can show above the prompt until D3's reprint.
 - **D3. The conversation, on settle.** About 150 ms after the last resize, gobble writes, at the new width:
   - clear the screen and the scrollback (`CSI 2 J`, `CSI 3 J`, home);
   - the last 10,000 rows, at the new width, of what the line session has shown, after one line saying that earlier
@@ -94,6 +104,12 @@ clearing the terminal's scrollback.
     D3 writes) from a 4 MB transcript, with recorded baselines;
   - a budget test that fails when a benchmark is more than 3× its baseline. That test is tagged `perf` and run by
     `make perf`, not by `make preflight`, since timing varies by host.
+
+  *Amended 2026-10-22 (0030-PLAN P1, deviation 2; the owner's answer "Yes, add it"):* P1 measured rendering at about
+  1.6 allocations per byte. A 10,000-row reprint took 36 ms on macOS, 113–126 ms on the Linux machine and 95–98 ms on
+  the Windows laptop. The wrapper and the Markdown stream are reworked to build words and lines without an allocation
+  per character. The targets, against P1's baseline: at least 3× fewer allocations, and a reprint of the last 10,000
+  rows at least 2× faster on each host. The budget tests enforce them.
 - **D6. Print mode and off a terminal:** unchanged. No transcript is kept, and nothing is redrawn.
 - **D7. Supersedes** 0028-MADR's consequence "the breaks are fixed when written" for the line session on a
   terminal, and 0027-PLAN P4's "found, not fixed" note on reflow when narrowing. Both are recorded there as dated
