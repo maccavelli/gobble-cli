@@ -38,8 +38,14 @@ type lineHarness struct {
 	raws, restores int
 	// cookedReads counts the reads of stdin started out of raw mode.
 	cookedReads int
-	// resize is the session's resize notice, sent by a test.
-	resize chan struct{}
+	// resize is the session's resize notice, sent by a test; noResize runs
+	// the session as off a terminal, with none.
+	resize   chan struct{}
+	noResize bool
+	// termWidth, when set, is the terminal's width the session reads.
+	termWidth func() int
+	// ls is the session started.
+	ls *lineSession
 }
 
 // rawCheckedInput is the session's stdin, counting the reads started while
@@ -105,7 +111,11 @@ func (h *lineHarness) start(first Prompt) {
 	}
 	h.resize = make(chan struct{}, 1)
 	ls := &lineSession{e: h.e, cwd: cwd, base: cwd, in: &rawCheckedInput{h: h, r: keysR}, raw: h.raw, voice: h.voice,
-		resize: h.resize}
+		resize: h.resize, termWidth: h.termWidth}
+	if h.noResize {
+		ls.resize = nil
+	}
+	h.ls = ls
 	offered := !slices.ContainsFunc(provider.KeyProviders(), h.e.hasCredential)
 	go func() { h.done <- ls.run(first) }()
 	h.t.Cleanup(func() { keysW.Close() }) //nolint:errcheck,gosec // test cleanup

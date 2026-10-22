@@ -42,6 +42,15 @@ type lineSession struct {
 	// resize notices the terminal's resizes; nil off a terminal
 	// (0030-MADR D1).
 	resize <-chan struct{}
+	// termWidth, when set, is the terminal's width in place of the one
+	// read from stdout: a test's.
+	termWidth func() int
+	// tr is what the session has shown, for a reprint; nil off a terminal
+	// (0030-MADR D4, D6).
+	tr *transcript
+	// editorResize is the editor's resize notice: the terminal's, routed to
+	// the editor at the prompt and to the view while a turn runs.
+	editorResize chan struct{}
 
 	conn *acpclient.Conn
 	sess *acpclient.Session
@@ -101,6 +110,15 @@ func (ls *lineSession) run(first Prompt) error {
 	if ls.amb == nil {
 		ls.amb = newAmbient(e.out.caps.Err.TTY)
 	}
+	if ls.resize != nil { // on a terminal: keep what is shown, and route resizes (0030-MADR D3, D4, D6)
+		ls.tr = &transcript{}
+		e.out.rec = ls.tr
+		defer func() { e.out.rec = nil }()
+		ls.editorResize = make(chan struct{}, 1)
+		ctx, cancel := context.WithCancel(e.ctx)
+		defer cancel()
+		go ls.route(ctx)
+	}
 	conn, err := e.startAgentWith(e.ctx, ls.askPermission)
 	if err != nil {
 		return err
@@ -159,7 +177,11 @@ func (ls *lineSession) run(first Prompt) error {
 		}
 	}()
 	opts := editor.Options{History: ls.history(), Complete: ls.complete,
-		Header: func() string { return workspaceLine(ls.cwd) }, Width: ls.width, Height: ls.height, Resize: ls.resize}
+		Header: func() string { return workspaceLine(ls.cwd) }, Width: ls.width, Height: ls.height, Resize: ls.editorResize}
+	if ls.tr != nil {
+		opts.Shown = ls.tr.drawn
+		opts.Reprint = func(width int) string { return reprintText(ls.tr, width, e.out.caps.Out.Color) }
+	}
 	if !e.out.caps.Unicode {
 		opts.Continue = "... "
 	}
@@ -306,6 +328,8 @@ func (ls *lineSession) turn(p Prompt) error {
 	opts.voice = ls.spoken()
 	opts.width = ls.replyWidth
 	v := newView(e.out, opts, e.now)
+	v.reprintWidth = ls.width
+	v.afterTurn = func() { notifyOnce(ls.editorResize) }
 	ls.amb.startTurn()
 	start := e.now()
 	sp := render.StartSpinner(e.ctx, e.out.err, e.out.caps.Err, e.out.caps.Unicode, ls.spinnerLabel(start))
@@ -412,5 +436,34 @@ func (ls *lineSession) close() {
 	}
 	if len(errs) > 0 {
 		ls.e.out.Warnf("%v", errors.Join(errs...))
+	}
+}
+
+// route takes the terminal's resize notices until ctx is done: to the view
+// while a turn runs, which reprints at the reply's next line end, else to
+// the editor, which redraws its line and reprints (0030-MADR D2, D3).
+func (ls *lineSession) route(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ls.resize:
+		}
+		ls.mu.Lock()
+		v := ls.view
+		ls.mu.Unlock()
+		if v != nil {
+			v.resized()
+		} else {
+			notifyOnce(ls.editorResize)
+		}
+	}
+}
+
+// notifyOnce puts a notice on ch unless one already waits there.
+func notifyOnce(ch chan struct{}) {
+	select {
+	case ch <- struct{}{}:
+	default:
 	}
 }

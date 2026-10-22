@@ -169,6 +169,127 @@ func TestKeysTypedWhileTheReportIsAwaited(t *testing.T) {
 	resizeRun(t, termtest.ReflowDown, true, false, " and more")
 }
 
+// reprintSession runs an editor on a screen 80 columns wide whose earlier
+// output is "old output", with Reprint giving "history at <width>"; it
+// types hello world and returns what the test needs to resize it.
+type reprintSession struct {
+	ls       *lockedScreen
+	keys     *keyFeed
+	width    atomic.Int64
+	resize   chan struct{}
+	reprints atomic.Int64
+	written  strings.Builder
+	mu       sync.Mutex
+}
+
+func (r *reprintSession) Write(p []byte) (int, error) {
+	r.mu.Lock()
+	r.written.Write(p)
+	r.mu.Unlock()
+	return r.ls.Write(p)
+}
+
+func startReprint(t *testing.T) *reprintSession {
+	t.Helper()
+	r := &reprintSession{ls: &lockedScreen{s: termtest.New(80, 10)}, keys: &keyFeed{ch: make(chan string, 16)},
+		resize: make(chan struct{}, 1)}
+	r.width.Store(80)
+	r.ls.s.Answer = func(reply string) { r.keys.ch <- reply }
+	if _, err := r.ls.Write([]byte("old output\r\n")); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	var rd Reader
+	rd.Start(ctx, r.keys)
+	e := New(&rd, r, io.Discard, Options{Width: func() int { return int(r.width.Load()) }, Resize: r.resize,
+		Reprint: func(width int) string {
+			r.reprints.Add(1)
+			return "history at " + string(rune('0'+width/10)) + string(rune('0'+width%10)) + "\n"
+		}})
+	done := make(chan struct{})
+	go func() {
+		_, _ = e.ReadPrompt(ctx)
+		close(done)
+	}()
+	t.Cleanup(func() {
+		cancel()
+		<-done
+	})
+	r.keys.ch <- "hello world"
+	return r
+}
+
+func (r *reprintSession) narrow(columns int) {
+	r.ls.resize(columns, termtest.ReflowDown)
+	r.width.Store(int64(columns))
+	r.resize <- struct{}{}
+}
+
+// Once resizes settle, the screen and its scrollback are cleared and the
+// conversation written again at the new width, then the line, as one
+// synchronized update (0030-MADR D3).
+func TestReprintOnSettle(t *testing.T) {
+	t.Setenv("XTERM_VERSION", "")
+	r := startReprint(t)
+	time.Sleep(100 * time.Millisecond)
+	r.narrow(43)
+	want := []string{"history at 43", "> hello world"}
+	end := time.Now().Add(3 * time.Second)
+	for {
+		lines, row, col := r.ls.look()
+		if slices.Equal(lines[:2], want) && slices.Equal(lines[2:], make([]string, 8)) && row == 1 && col == 13 {
+			break
+		}
+		if time.Now().After(end) {
+			t.Fatalf("screen %q, cursor (%d, %d); want %q, the cursor at (1, 13)", lines, row, col, want)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	r.mu.Lock()
+	out := r.written.String()
+	r.mu.Unlock()
+	before, _, found := strings.Cut(out, "\x1b[3J")
+	if !found || strings.LastIndex(before, "\x1b[?2026h") < strings.LastIndex(before, "\x1b[?2026l") {
+		t.Fatalf("the reprint did not clear the scrollback inside a synchronized update: %q", out)
+	}
+}
+
+// Resizes made one after another, each before the last settled, reprint
+// once (0030-MADR D3).
+func TestResizesReprintOnce(t *testing.T) {
+	t.Setenv("XTERM_VERSION", "")
+	r := startReprint(t)
+	time.Sleep(100 * time.Millisecond)
+	for _, w := range []int{70, 60, 50} {
+		r.narrow(w)
+		time.Sleep(40 * time.Millisecond)
+	}
+	time.Sleep(600 * time.Millisecond)
+	if n := r.reprints.Load(); n != 1 {
+		t.Fatalf("%d reprints, want 1", n)
+	}
+}
+
+// The editor gives the transcript what it leaves on the screen: the
+// header, and each line sent, drawn at whatever width it is asked for
+// (0030-MADR D4).
+func TestShownLines(t *testing.T) {
+	var shown []func(int) string
+	s := termtest.New(80, 6)
+	onScreen(t, s, strings.NewReader("alpha beta gamma\r"), Options{
+		Header: func() string { return "proj" },
+		Shown:  func(_ int, at func(int) string) { shown = append(shown, at) },
+	})
+	var got []string
+	for _, at := range shown {
+		got = append(got, at(12))
+	}
+	want := []string{"proj\n", "> alpha beta\n  gamma\n"}
+	if !slices.Equal(got[:min(len(got), 2)], want) {
+		t.Fatalf("shown at 12: %q, want %q first", got, want)
+	}
+}
+
 // A cursor report typed, or arriving late, is no key: nothing of it is put
 // in the line.
 func TestCursorReportIsNoText(t *testing.T) {

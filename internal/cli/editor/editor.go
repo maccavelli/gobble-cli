@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -46,6 +47,14 @@ type Options struct {
 	// Resize, when set, notices that the terminal was resized: the line is
 	// drawn again at the new width without waiting for a key (0030-MADR D2).
 	Resize <-chan struct{}
+	// Shown, when set, is given what the editor leaves on the screen, the
+	// header, each line sent and each notice, as its size in bytes and how
+	// it is drawn at a terminal's width (0030-MADR D4).
+	Shown func(size int, at func(width int) string)
+	// Reprint, when set, is what the screen showed before the line, drawn
+	// at a width: once resizes settle, the screen and its scrollback are
+	// cleared and it is written again, then the line (0030-MADR D3).
+	Reprint func(width int) string
 }
 
 // The prompt's widths (0024-MADR D9): the most columns a line takes, and
@@ -82,6 +91,9 @@ type Editor struct {
 	// waiting, after a resize, times the wait for the terminal's cursor
 	// report; nil when none is awaited.
 	waiting *time.Timer
+	// settling, after the live redraw, times the wait for resizes to
+	// settle before the reprint; nil when none is due.
+	settling *time.Timer
 }
 
 // New returns an Editor reading in (normally a started *Reader) and drawing
@@ -191,6 +203,7 @@ func (e *Editor) readLine(prompt string) (string, bool, error) {
 			if err := e.draw.finish(); err != nil {
 				return "", false, err
 			}
+			e.showLine()
 			line, pasted := e.line.take()
 			return line, pasted, nil
 		case endOfInput:
@@ -220,8 +233,13 @@ func (e *Editor) readLine(prompt string) (string, bool, error) {
 				return "", false, err
 			}
 			continue
-		case errors.Is(err, errWaitOver):
+		case errors.Is(err, errWaitOver) && e.waiting != nil:
 			if err := e.resized(0, false); err != nil {
+				return "", false, err
+			}
+			continue
+		case errors.Is(err, errWaitOver):
+			if err := e.reprint(); err != nil {
 				return "", false, err
 			}
 			continue
@@ -265,6 +283,10 @@ func (e *Editor) askCursor() error {
 	if e.waiting != nil {
 		e.waiting.Stop()
 	}
+	if e.settling != nil {
+		e.settling.Stop()
+		e.settling = nil
+	}
 	e.waiting = time.NewTimer(cursorWait)
 	e.keys.timeout = e.waiting.C
 	if _, err := io.WriteString(e.out, "\x1b[6n"); err != nil {
@@ -286,7 +308,55 @@ func (e *Editor) resized(col int, known bool) error {
 	up := e.draw.lift(terminal, col, known, os.Getenv("XTERM_VERSION") != "")
 	e.draw.forget()
 	e.draw.up = up
+	if e.opts.Reprint != nil {
+		e.settling = time.NewTimer(settleWait)
+		e.keys.timeout = e.settling.C
+	}
 	return e.redraw()
+}
+
+// settleWait is how long after the last resize the conversation is
+// reprinted (0030-MADR D3).
+const settleWait = 150 * time.Millisecond
+
+// reprint clears the screen and its scrollback and writes Options.Reprint
+// at the terminal's width, then the line, as one synchronized update
+// (0030-MADR D3).
+func (e *Editor) reprint() error {
+	e.settling, e.keys.timeout = nil, nil
+	terminal := DefaultWidth
+	if e.opts.Width != nil && e.opts.Width() > 0 {
+		terminal = e.opts.Width()
+	}
+	text := strings.ReplaceAll(strings.ReplaceAll(e.opts.Reprint(terminal), "\r\n", "\n"), "\n", "\r\n")
+	e.draw.forget()
+	e.draw.prefix = "\x1b[2J\x1b[3J\x1b[H" + text
+	return e.redraw()
+}
+
+// show gives Options.Shown what the editor left on the screen, drawn the
+// same at every width.
+func (e *Editor) show(s string) {
+	if e.opts.Shown != nil {
+		e.opts.Shown(len(s), func(int) string { return s + "\n" })
+	}
+}
+
+// showLine gives Options.Shown the line just sent, laid out again at
+// whatever width it is drawn at.
+func (e *Editor) showLine() {
+	if e.opts.Shown == nil {
+		return
+	}
+	prompt, text := e.line.prompt, slices.Clone(e.line.text)
+	e.opts.Shown(len(prompt)+len(string(text)), func(width int) string {
+		l := layout(prompt, text, len(text), lineWidth(width))
+		var b strings.Builder
+		for _, row := range l.rows {
+			b.WriteString(strings.TrimRight(row, " ") + "\n")
+		}
+		return b.String()
+	})
 }
 
 // takeCursorReport takes the first cursor report (CSI row ; col R) out of
@@ -342,6 +412,7 @@ func (e *Editor) header() error {
 	if _, err := io.WriteString(e.out, h+"\r\n"); err != nil {
 		return fmt.Errorf("editor header: %w", err)
 	}
+	e.show(h)
 	return nil
 }
 
@@ -358,6 +429,7 @@ func (e *Editor) notify(msg string) error {
 	if _, err := fmt.Fprintf(e.errw, "%s\r\n", msg); err != nil {
 		return fmt.Errorf("editor notice: %w", err)
 	}
+	e.show(msg)
 	return nil
 }
 

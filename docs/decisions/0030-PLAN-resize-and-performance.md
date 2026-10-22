@@ -294,3 +294,96 @@ Fifteen mutations, fifteen failures; the restored copy passed.
 - The Windows laptop, `make probe-conhost`: `--- PASS: TestConhost`.
 
 **P2 complete, 2026-10-22.**
+
+### P3 execution record (2026-10-22)
+
+1. **Tests first,** each seen failing on stubs:
+   - The transcript (`internal/cli/transcript_test.go`): `TestTranscriptRendersAtAWidth` (fixed text as written, a
+     message wrapped, a function of the width at 20 and 40), `TestTranscriptRenderKeepsTheNewestRows` and
+     `TestTranscriptBound`. Each failed with an empty render.
+   - The editor (`internal/cli/editor/resize_test.go`):
+     - `TestReprintOnSettle` failed with `"old output" "> hello world"` still on screen;
+     - `TestResizesReprintOnce` failed with `0 reprints, want 1`;
+     - `TestShownLines` failed with `shown at 12: []`.
+   - The view: `TestViewReprintsAtTheNextLineEnd` failed with `not reprinted at the line's end`. `TestWrapIdle` failed
+     with `a new wrapper is not idle`.
+   - The line session (`internal/cli/reprint_test.go`): `TestLineSessionReprintsOnResize` covers a reply with prose,
+     a list and code, the startup warning, a sent prompt, the status line and `/help`, narrowed from 100 to 60
+     columns. Its first run failed because of the test: it waited for `to the point.` as one piece of text, which the
+     reply's wrapping at 100 columns broke across rows. It was corrected to look for the words; the mutations below
+     show it failing for its own reasons. `TestNoTranscriptOffATerminal` passed, as it asks that nothing changes off
+     a terminal.
+2. **The code:**
+   - `transcript` (`internal/cli/transcript.go`): pieces drawn at a terminal's width:
+     - fixed text;
+     - messages (`render.Message`, to 120 columns);
+     - functions of the width (`/help`, the editor's lines);
+     - growing sources (a reply's Markdown, thinking).
+
+     It is bounded at 4 MB by bytes alone. `render` walks back from the newest piece to 10,000 rows and draws no
+     piece it will not show. `reprintText` puts a dimmed line first when anything was left out.
+   - `Output.rec`: `Result` keeps fixed text and `diag` keeps a message's source; `emit` writes without keeping.
+   - The view keeps a reply's and thinking's sources and shows their rows unkept; everything else it writes is kept
+     as written, the status line too. `resized` starts a 150 ms settle. The reprint is made when the view is at a
+     line's start with both wrappers idle (`render.Wrap.Idle`); a reprint still due when the turn ends goes to the
+     editor (`afterTurn`).
+   - The editor: `Options.Shown` for the header, each line sent (its layout at any width) and each notice. After
+     the live redraw, a 150 ms settle wait, then `Options.Reprint` drawn behind `CSI 2 J`, `CSI 3 J` and home. The
+     renderer's `prefix` puts all of it, and the line, in one synchronized update.
+   - The line session makes the transcript only when it has a resize notice, that is, on a terminal. It routes the
+     terminal's resizes to the view while a turn runs, else to the editor (`route`). `/help` is kept as
+     `helpText(width)`, and a permission question with its answer as shown.
+3. **A real terminal,** a look beyond the plan: gobble in a new WezTerm window against the scratch stub's mixed reply,
+   the pane narrowed by a split after the reply. The whole pane, scrollback included, was read once settled. At 43
+   columns: prose whole, no row over the width, the list continued, the reply shown once. The same check on a build of
+   `d772e34` (before P3) showed `"…specific task—wh"`, `"ether it’s writing code…"`.
+
+**Negatives,** on a scratch copy, one mutation at a time:
+
+- a reprint at each resize, no settle (`3 reprints, want 1`);
+- the scrollback not cleared;
+- the reprint not synchronized;
+- the editor's lines not shown;
+- the header not shown;
+- messages not kept;
+- the reply kept as written, not as its source (its words cut at 60);
+- the reply's rows kept as well as its source (`reprinted 2 times`);
+- the status line not kept;
+- `/help` kept as written (`a /help row of 60 columns, more than 59`);
+- the bound not kept;
+- the row limit not kept (`100 pieces drawn for 10 rows`);
+- a transcript kept off a terminal;
+- a reprint in the middle of a line;
+- a late reprint not handed to the editor;
+- the router sending nothing to the editor;
+- a wrapper idle in a partial escape.
+
+Four passed at first:
+
+- **The reply's rows kept as well as its source:** the tests looked for the words but not how often they appeared.
+  Both reprint tests now count the reply's first line.
+- **The row limit:** the output was the same, but every older piece was drawn, which is the cost the limit exists to
+  save. `TestTranscriptRenderDrawsOnlyWhatItShows` counts the pieces drawn.
+- **The wrappers reset after a reprint:** an equivalent mutation. A reprint is made only when both wrappers are
+  idle, and a Stream releases a code fence only once it is closed, so a fresh wrapper and an idle one are the same.
+  The reset was taken out. A test written for a reprint inside an open fence was dropped, since the Stream never
+  lets the wrapper see one.
+- **`Idle` ignoring held words:** equivalent, since a line's words are empty at its start. `Idle` was cut to what
+  matters, and a partial escape case was added to its test.
+
+Seventeen mutations, seventeen failures; the restored copy passed.
+
+**Found by the gates and fixed in the phase:** gofmt drift in `view.go`, and `modernize`'s `slices.Backward` and
+`strings.Cut`. Each was fixed before the gates ran on all three hosts.
+
+**Gates:**
+
+- The pre-add check on the fourteen changed `.go` files: `14 file(s) clean (gofmt, golint, govulncheck)`.
+- macOS: `make preflight`, `preflight passed`; the tests and the race detector, 36 packages ok each.
+- The Linux machine and the Windows laptop, on a copy of the tree: the tests and the race detector, 36 packages ok on
+  each. `make preflight` reached `apidiff` (golangci-lint `0 issues.` on both, govulncheck "No vulnerabilities
+  found.") and stopped at `verify-build-metadata`, as the copies are not git checkouts.
+- `make check-records markdownlint`: exit 0 on each host.
+- The Windows laptop, `make probe-conhost`: `--- PASS: TestConhost`.
+
+**P3 complete, 2026-10-22.**

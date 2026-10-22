@@ -167,6 +167,26 @@ func TestWrapStyled(t *testing.T) {
 	}
 }
 
+// A wrapper is idle at a line's start with nothing held back, which is when
+// a reprint can draw everything again without losing or doubling a word
+// (0030-MADR D3).
+func TestWrapIdle(t *testing.T) {
+	var w Wrap
+	if !w.Idle() {
+		t.Fatal("a new wrapper is not idle")
+	}
+	for _, st := range []struct {
+		in   string
+		idle bool
+	}{{"alpha beta", false}, {" gamma", false}, {"\n", true}, {"- ", false}, {"x\n", true}, {"\x1b[", false},
+		{"2mdim\x1b[0m\n", true}} {
+		w.Push(st.in, 40)
+		if w.Idle() != st.idle {
+			t.Fatalf("after %q, idle %v, want %v", st.in, w.Idle(), st.idle)
+		}
+	}
+}
+
 // A push releases all it can: only the word still arriving and the last
 // finished word on the row are held (0028-MADR D5, as amended).
 func TestWrapStreams(t *testing.T) {

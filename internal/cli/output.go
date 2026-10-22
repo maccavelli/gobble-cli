@@ -26,10 +26,24 @@ type Output struct {
 	// errWrite is the first failed write to err. Nothing can report it, so
 	// it is kept only for tests.
 	errWrite error
+	// rec, in the line session on a terminal, keeps what is shown for a
+	// reprint (0030-MADR D4); nil elsewhere.
+	rec *transcript
 }
 
-// Result writes p to stdout. A broken pipe becomes errBrokenPipe.
+// Result writes p to stdout. A broken pipe becomes errBrokenPipe. In the
+// line session on a terminal, p is kept as written for a reprint
+// (0030-MADR D4).
 func (o *Output) Result(p []byte) error {
+	if o.rec != nil {
+		o.rec.fixed(string(p))
+	}
+	return o.emit(p)
+}
+
+// emit writes p to stdout without keeping it: for output the caller keeps
+// in a form it can draw again, such as a reply's Markdown.
+func (o *Output) emit(p []byte) error {
 	if _, err := o.out.Write(p); err != nil {
 		if isBrokenPipe(err) {
 			return errBrokenPipe
@@ -63,7 +77,11 @@ func (o *Output) Notef(format string, args ...any) { o.diag("", format, args...)
 
 // diag writes a message to stderr, wrapped on a terminal (0028-MADR D6).
 func (o *Output) diag(prefix, format string, args ...any) {
-	msg := render.Message(prefix+fmt.Sprintf(format, args...), o.errWidth())
+	src := prefix + fmt.Sprintf(format, args...)
+	if o.rec != nil {
+		o.rec.message(src)
+	}
+	msg := render.Message(src, o.errWidth())
 	if _, err := io.WriteString(o.err, msg+"\n"); err != nil && o.errWrite == nil {
 		o.errWrite = err
 	}

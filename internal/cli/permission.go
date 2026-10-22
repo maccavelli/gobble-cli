@@ -209,9 +209,11 @@ func (ls *lineSession) askPermission(ctx context.Context, r acpclient.Permission
 	read := func(b []byte) (int, error) { return keysIn.ReadContext(ctx, b) }
 	answer := acpclient.PermissionAnswer{OptionID: chooseKey(keys, read)}
 	var werr error
+	shown := line
 	if answer.OptionID == chooseWhy {
 		_, werr = fmt.Fprintf(errw, "%s: ", labelOf(labels, chooseWhy))
 		why, ok := readWhy(read, func(s string) { fmt.Fprint(errw, s) }) //nolint:errcheck // the echo is best effort
+		shown += labelOf(labels, chooseWhy) + ": " + why
 		answer = acpclient.PermissionAnswer{}
 		if ok {
 			answer = acpclient.PermissionAnswer{OptionID: acpserver.RejectOnceID, Feedback: why}
@@ -219,6 +221,9 @@ func (ls *lineSession) askPermission(ctx context.Context, r acpclient.Permission
 		}
 	}
 	rerr := restore()
+	if rec := ls.e.out.rec; rec != nil { // the question and its answer, as shown (0030-MADR D4)
+		rec.fixed(shown + labelOf(labels, answer.OptionID) + "\n")
+	}
 	if _, err := fmt.Fprintf(errw, "%s\n", labelOf(labels, answer.OptionID)); err != nil || rerr != nil || werr != nil {
 		ls.e.log().WarnContext(ctx, "permission prompt", slog.String("write_error", fmt.Sprint(err)), slog.String("restore_error", fmt.Sprint(rerr)))
 	}

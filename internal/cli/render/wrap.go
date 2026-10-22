@@ -402,3 +402,11 @@ func opensBlock(word string) bool {
 	}
 	return false
 }
+
+// Idle reports whether w is at a line's start holding nothing back: what
+// it wrote ends a line, and nothing waits to be written, not even part of
+// an escape sequence (0030-MADR D3). The words a line holds are empty at
+// its start.
+func (w *Wrap) Idle() bool {
+	return !w.known && w.head == "" && w.esc == ""
+}

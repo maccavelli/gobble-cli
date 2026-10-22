@@ -29,6 +29,9 @@ type renderer struct {
 	// up, for a first drawing after a resize, is how many rows above the
 	// cursor the line's first row now is (lift).
 	up int
+	// prefix, for a first drawing, is written first in the same
+	// synchronized update: a reprint's clear and conversation.
+	prefix string
 }
 
 // lift is how many rows above the cursor the line drawn last starts, now
@@ -76,12 +79,13 @@ func (r *renderer) draw(l screenLayout, height int) error {
 	var b strings.Builder
 	cur := r.at
 	if len(r.drawn) == 0 {
+		b.WriteString(r.prefix)
 		if r.up > 0 {
 			fmt.Fprintf(&b, "\x1b[%dA", r.up)
 		}
 		b.WriteString("\r\x1b[J")
 	}
-	r.up = 0
+	r.up, r.prefix = 0, ""
 	for i, row := range rows {
 		var was string
 		if i < len(r.drawn) {

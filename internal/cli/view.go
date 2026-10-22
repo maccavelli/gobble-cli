@@ -48,17 +48,29 @@ type view struct {
 	// beforeWrite stops the spinner; it is called before the first write.
 	beforeWrite func()
 
-	mu      sync.Mutex
-	md      render.Stream
-	wrap    render.Wrap // the reply's rows (0028-MADR)
-	think   render.Wrap // the thinking text's rows
-	clock   turnClock
-	tools   map[string]*toolState
-	usage   *acpclient.ContextUsage
-	wrote   bool // anything is on stdout
-	atBOL   bool // the cursor is at the start of a line
-	thought bool // the last text written was thinking
-	err     error
+	mu    sync.Mutex
+	md    render.Stream
+	wrap  render.Wrap // the reply's rows (0028-MADR)
+	think render.Wrap // the thinking text's rows
+	// reprintWidth is the terminal's width for a reprint (0030-MADR D3).
+	reprintWidth func() int
+	// afterTurn hands a reprint still due when the turn ends to the
+	// editor.
+	afterTurn func()
+	// reply and thinking are the transcript's pieces still growing.
+	reply, thinking *piece
+	// settle times the wait for resizes to settle; reprintDue says one
+	// settled and its reprint waits for a line's end; ended, the turn's.
+	settle     *time.Timer
+	reprintDue bool
+	ended      bool
+	clock      turnClock
+	tools      map[string]*toolState
+	usage      *acpclient.ContextUsage
+	wrote      bool // anything is on stdout
+	atBOL      bool // the cursor is at the start of a line
+	thought    bool // the last text written was thinking
+	err        error
 }
 
 // toolState is a tool call as last drawn: its fields, and the header line
@@ -101,6 +113,7 @@ func (v *view) setVoice(voice *personality.Voice) {
 func (v *view) on(u acpclient.Update) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
+	defer v.tryReprint()
 	switch u.Kind {
 	case acpclient.KindAgentText:
 		v.clock.token(v.now())
@@ -110,7 +123,8 @@ func (v *view) on(u acpclient.Update) {
 		}
 		if v.thought {
 			v.thought = false
-			v.write(v.think.Flush())
+			v.show(v.think.Flush())
+			v.thinking = nil
 			v.newline()
 		}
 		v.text(v.md.Push(term.Sanitize(u.Text)))
@@ -121,11 +135,12 @@ func (v *view) on(u acpclient.Update) {
 		}
 		v.flushReply() // not the thinking: its next chunk continues the row
 		v.thought = true
+		v.keep(&v.thinking, v.thinkingAt, term.Sanitize(u.Text))
 		s := term.Dim.Wrap(term.Sanitize(u.Text), v.caps.Out.Color)
 		if w := v.wrapWidth(); w > 0 {
 			s = v.think.Push(s, w)
 		}
-		v.write(s)
+		v.show(s)
 	case acpclient.KindToolCall:
 		st := &toolState{title: u.Tool.Title, status: u.Tool.Status}
 		v.tools[u.Tool.ID] = st
@@ -250,13 +265,14 @@ func (v *view) content(cs []acpclient.ToolContent) {
 // when it is off (D7), then wrapped to the terminal's width, when there is
 // one (0028-MADR D1, D7 as amended).
 func (v *view) text(s string) {
+	v.keep(&v.reply, v.replyAt, s)
 	if s != "" && v.caps.Out.Color {
 		s = render.Style(render.Tables(s), v.caps.Out)
 	}
 	if w := v.wrapWidth(); w > 0 {
 		s = v.wrap.Push(s, w)
 	}
-	v.write(s)
+	v.show(s)
 }
 
 // wrapWidth is the width replies wrap to now; 0 wraps nothing.
@@ -271,13 +287,15 @@ func (v *view) wrapWidth() int {
 // runs before every non-text event and at the turn's end.
 func (v *view) flush() {
 	v.flushReply()
-	v.write(v.think.Flush())
+	v.show(v.think.Flush())
+	v.thinking = nil
 }
 
 // flushReply writes what the Markdown stream and the reply's wrapper hold.
 func (v *view) flushReply() {
 	v.text(v.md.Flush())
-	v.write(v.wrap.Flush())
+	v.show(v.wrap.Flush())
+	v.reply = nil
 }
 
 // line writes s as a line of its own.
@@ -294,12 +312,22 @@ func (v *view) newline() {
 	}
 }
 
-func (v *view) write(s string) {
+func (v *view) write(s string) { v.put(s, true) }
+
+// show writes rows the transcript keeps in another form: a reply's and
+// thinking's, kept as their source (0030-MADR D4).
+func (v *view) show(s string) { v.put(s, false) }
+
+func (v *view) put(s string, keep bool) {
 	if s == "" || v.err != nil {
 		return
 	}
 	v.stopSpinner()
-	v.err = v.out.Result([]byte(s))
+	if keep {
+		v.err = v.out.Result([]byte(s))
+	} else {
+		v.err = v.out.emit([]byte(s))
+	}
 	v.wrote = true
 	v.atBOL = strings.HasSuffix(s, "\n")
 }
@@ -328,7 +356,17 @@ func (v *view) finish(res acpclient.Result) error {
 	v.newline()
 	v.clock.end = v.now()
 	v.stopSpinner()
+	v.ended = true
+	if v.settle != nil {
+		v.settle.Stop()
+	}
+	if v.reprintDue && v.afterTurn != nil {
+		v.afterTurn() // the editor reprints at the prompt
+	}
 	line := statusLine(v.clock, v.usage, res, v.opts.stats, v.caps.Err, v.glyphs, v.opts.voice)
+	if v.out.rec != nil {
+		v.out.rec.fixed(dimmed(line, v.caps.Err.Color) + "\n")
+	}
 	if _, err := io.WriteString(v.out.err, dimmed(line, v.caps.Err.Color)+"\n"); err != nil && v.err == nil {
 		v.err = fmt.Errorf("write stderr: %w", err)
 	}
@@ -385,4 +423,82 @@ func dimmed(line string, on bool) string {
 		return line
 	}
 	return term.Dim.Wrap(strings.ReplaceAll(line, "\x1b[0m", "\x1b[0;2m"), true)
+}
+
+// reprintSettle is how long after the last resize the conversation is
+// reprinted (0030-MADR D3).
+const reprintSettle = 150 * time.Millisecond
+
+// resized notices a resize while the turn runs: once resizes settle,
+// the conversation is reprinted at the next line's end (0030-MADR D3).
+func (v *view) resized() {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if v.ended {
+		if v.afterTurn != nil {
+			v.afterTurn()
+		}
+		return
+	}
+	if v.settle != nil {
+		v.settle.Stop()
+	}
+	v.settle = time.AfterFunc(reprintSettle, func() {
+		v.mu.Lock()
+		defer v.mu.Unlock()
+		v.reprintDue = true
+		v.tryReprint()
+	})
+}
+
+// tryReprint makes a due reprint when the view is at a line's start with
+// nothing held back, so that everything shown so far can be drawn again
+// and the reply goes on from there, no word lost or doubled. v.mu is held.
+func (v *view) tryReprint() {
+	if !v.reprintDue || v.ended || v.out.rec == nil || !v.atBOL || !v.wrap.Idle() || !v.think.Idle() {
+		return
+	}
+	v.reprintDue = false
+	width := 0
+	if v.reprintWidth != nil {
+		width = v.reprintWidth()
+	}
+	if width <= 0 {
+		return
+	}
+	text := reprintText(v.out.rec, width, v.caps.Out.Color)
+	v.stopSpinner()
+	if err := v.out.emit([]byte("\x1b[?2026h\x1b[2J\x1b[3J\x1b[H" + text + "\x1b[?2026l")); err != nil && v.err == nil {
+		v.err = err
+	}
+	// The wrappers are idle at a line's start, and a Stream releases a code
+	// fence only once it is closed, so they go on as they are.
+	v.atBOL = text == "" || strings.HasSuffix(text, "\n")
+}
+
+// keep adds s to the transcript piece *p, opening it, drawn by at.
+func (v *view) keep(p **piece, at func(src string, width int) string, s string) {
+	if v.out.rec == nil || s == "" {
+		return
+	}
+	if *p == nil {
+		*p = v.out.rec.open(at)
+	}
+	(*p).add(v.out.rec, s)
+}
+
+// replyAt draws a reply's Markdown at a terminal's width as the view
+// does: styled when colour is on, then wrapped, to 120 columns.
+func (v *view) replyAt(src string, width int) string {
+	if v.caps.Out.Color {
+		src = render.Style(render.Tables(src), v.caps.Out)
+	}
+	var w render.Wrap
+	return w.Push(src, min(width, 120)) + w.Flush()
+}
+
+// thinkingAt draws thinking text at a terminal's width, dimmed.
+func (v *view) thinkingAt(src string, width int) string {
+	var w render.Wrap
+	return w.Push(term.Dim.Wrap(src, v.caps.Out.Color), min(width, 120)) + w.Flush()
 }

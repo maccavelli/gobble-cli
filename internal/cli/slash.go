@@ -85,7 +85,12 @@ func (ls *lineSession) slash(text string, turn func(Prompt) error) (handled bool
 		if err := ls.ensureSession(); err != nil {
 			e.out.Errorf("%v", err)
 		}
-		return true, e.out.Result([]byte(ls.helpText()))
+		text := ls.helpText(ls.width())
+		if e.out.rec != nil { // laid out again at a reprint's width (0030-MADR D4)
+			e.out.rec.drawn(len(text), ls.helpText)
+			return true, e.out.emit([]byte(text))
+		}
+		return true, e.out.Result([]byte(text))
 	case "gobble": // hidden: in no list, and not completed (0022-MADR D12)
 		return true, e.out.Result([]byte(ls.amb.gobbleText(ls.spoken(), e.out.caps.Unicode)))
 	case "login": // 0025-MADR D6
@@ -120,9 +125,9 @@ func (ls *lineSession) slash(text string, turn func(Prompt) error) (handled bool
 	return false, nil
 }
 
-// helpText lists the local commands, then the agent's, laid out for the
-// terminal's width as it is now (0024-MADR D2).
-func (ls *lineSession) helpText() string {
+// helpText lists the local commands, then the agent's, laid out for a
+// terminal width columns wide (0024-MADR D2).
+func (ls *lineSession) helpText(width int) string {
 	entries := func(cs []acpclient.Command) []render.CommandEntry {
 		out := make([]render.CommandEntry, len(cs))
 		for i, c := range cs {
@@ -144,12 +149,15 @@ func (ls *lineSession) helpText() string {
 	}
 	// The last column stays empty: a terminal that wraps as soon as it is
 	// written to would put a blank row after a full line.
-	return render.CommandList(sections, max(ls.width()-1, 1), ls.e.out.caps.Out.Color)
+	return render.CommandList(sections, max(width-1, 1), ls.e.out.caps.Out.Color)
 }
 
 // width is standard output's width now, since a terminal is resized, else
 // the one found at start.
 func (ls *lineSession) width() int {
+	if ls.termWidth != nil {
+		return ls.termWidth()
+	}
 	if f, ok := ls.e.out.out.(*os.File); ok && ls.e.out.caps.Out.TTY {
 		if w, _, err := xterm.GetSize(int(f.Fd())); err == nil && w > 0 { //nolint:gosec // G115: a terminal's descriptor fits an int
 			return w
