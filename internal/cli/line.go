@@ -158,7 +158,11 @@ func (ls *lineSession) run(first Prompt) error {
 		opts.Continue = "... "
 	}
 	ed := editor.New(&r, e.out.out, e.out.err, opts)
+	edRestored := false
 	defer func() {
+		if edRestored {
+			return
+		}
 		if rerr := ed.Restore(); rerr != nil {
 			e.out.Warnf("restore the terminal: %v", rerr)
 		}
@@ -192,10 +196,11 @@ func (ls *lineSession) run(first Prompt) error {
 		text, err := ed.ReadPrompt(e.ctx)
 		switch {
 		case errors.Is(err, io.EOF), errors.Is(err, editor.ErrExit):
-			// /exit, /quit, Ctrl+D and a second Ctrl+C all end the read.
-			if line, ok := ls.amb.goodbye(ls.spoken()); ok {
-				e.out.Notef("%s", line)
-			}
+			// /exit, /quit, Ctrl+D and a second Ctrl+C all end the read;
+			// the deferred restores find nothing to undo.
+			edRestored = true
+			ls.goodbye(ed, restore)
+			restore = nil
 			return nil
 		case e.ctx.Err() != nil:
 			return context.Cause(e.ctx)
@@ -212,6 +217,24 @@ func (ls *lineSession) run(first Prompt) error {
 		if err != nil {
 			return err
 		}
+	}
+}
+
+// goodbye turns bracketed paste off and leaves raw mode (restore, when not
+// nil), then writes the goodbye, so it ends with a real line end
+// (0027-MADR D3, as amended for P5).
+func (ls *lineSession) goodbye(ed *editor.Editor, restore func() error) {
+	e := ls.e
+	if err := ed.Restore(); err != nil {
+		e.out.Warnf("restore the terminal: %v", err)
+	}
+	if restore != nil {
+		if err := restore(); err != nil {
+			e.out.Warnf("restore the terminal: %v", err)
+		}
+	}
+	if line, ok := ls.amb.goodbye(ls.spoken()); ok {
+		e.out.Notef("%s", line)
 	}
 }
 

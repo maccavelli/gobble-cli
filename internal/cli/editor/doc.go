@@ -6,7 +6,10 @@
 // 0027-MADR). golang.org/x/term gives it raw mode only.
 // Stability: internal
 //
-// One Reader owns stdin for the life of the process. Nothing in this package
-// closes it: on Windows, closing a console input handle while a read is
-// pending hangs the process (0008-MADR F20, measurement 10).
+// One Reader owns stdin for the life of the process. It reads only when
+// asked, so each read starts in the terminal mode of whoever asked: a
+// Windows console read keeps the mode it started in (0027-MADR D5, as
+// amended). Nothing in this package closes stdin: on Windows, closing a
+// console input handle while a read is pending hangs the process (0008-MADR
+// F20, measurement 10).
 package editor

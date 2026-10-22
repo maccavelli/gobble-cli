@@ -432,3 +432,69 @@ phases.
 **Found, not fixed (outside this plan), during deviation 4:** after the second Ctrl+C, gobble printed its goodbye but
 sometimes had not exited 3 s later. This happened on the Linux machine in 2 of 6 runs of this build and 1 of 5 of
 `x/term`'s (built from `1cc1616`), so it predates P4.
+
+### P5 execution record (2026-10-21)
+
+Approved by the owner's answer "Fix, P4, P5, one look", after P4's commit `31799e6`.
+
+1. **Measured first** on the Windows laptop: P4's headless driver at 100 columns, keys sent once the prompt shows.
+   The build was P4's commit with a scratch key log. The first read held the keys typed before the first Enter, 379
+   bytes, in 6 of 10 runs under Console Host and 3 of 10 under Windows Terminal's console host; the other runs' first
+   read was one typed chunk of 16 bytes.
+2. **Tests first,** each seen failing on the code as it was:
+   - `TestReaderReadsOnlyWhenAsked` (`internal/cli/editor/reader_test.go`, in a `synctest` bubble, stdin a stub
+     that counts reads): `1 reads started before any was asked for`.
+   - `TestLineSessionReadsOnlyWhenAsked` (`internal/cli/line_test.go`). The harness's stdin counts reads started out
+     of raw mode. With no credential, the sign-in question is offered and declined, then a prompt, its turn, Ctrl+D:
+     `3 reads of stdin started out of raw mode; want 1, the sign-in question's`, in three runs of three.
+   - `TestEndOfInputLeavesTheLine` (`internal/cli/editor/editor_screen_test.go`), Ctrl+D and a second Ctrl+C:
+     `screen [">" ...], cursor (0, 2)`. Its first draft pressed Ctrl+C on a typed line, which clears the line
+     rather than arming the exit, so that case was ended by the input running out. It was corrected to two Ctrl+C
+     on an empty line, and step 5 shows it failing for its own reason.
+   - `TestGoodbyeOnItsOwnRow` (`internal/cli/line_test.go`), stdout and stderr in one log that notes raw mode at
+     each write: `the goodbye was written in raw mode`, `the goodbye was written with bracketed paste on`, and the
+     screen's row `"> Very good. I shall be here, tidying the context."`.
+3. **The fix:**
+   - `Reader` (`internal/cli/editor/reader.go`) waits for an ask, or its context's end, before each read of stdin.
+     `ReadContext` asks once when nothing is buffered, and a read asked for and not served is served to the next
+     call.
+   - `readLine` finishes the drawing before it returns the end of input.
+   - The line session (`internal/cli/line.go`) turns bracketed paste off and leaves raw mode before the goodbye, and
+     skips its deferred restores.
+   - `keys_test.go`'s session cancels its reader's context at the end, since the reader now waits for an ask
+     rather than in a read that closing the pipe ends.
+   - The package comment describes the reader.
+4. **Measured again,** as in step 1, on the working tree: 0 of 10 under each host, every first read 16 bytes.
+   P4's captures again: macOS and the Linux machine 24 of 24; the Windows laptop 24 of 24 under both hosts, no run
+   losing the first line. A scratch check of each capture's last screen (`check_goodbye.py`): the second Ctrl+C
+   leaves the bare prompt, and the goodbye is on the row below it, in all twelve.
+5. **Negatives,** on a scratch copy, one mutation at a time:
+   - The reader reading ahead: `1 reads started before any was asked for`; the line session's test hangs
+     (`condition not met within 5 s`).
+   - One ask starting two reads: `2 reads started after the one asked for was served, want 1`.
+   - `readLine` not finishing on the end of input: both cases, `cursor (0, 2)` and `cursor (1, 2)`.
+   - Bracketed paste still on at the goodbye: `the goodbye was written with bracketed paste on`.
+   - Raw mode still on at the goodbye: `the goodbye was written in raw mode`.
+
+   Five mutations, five failures; the restored copy passed.
+
+**Found, not fixed (outside this plan):** the slow exit above is also seen on macOS. In five runs each at 100 columns,
+gobble had not exited 3 s after its goodbye in 4 of 5 runs of P4's commit and 1 of 5 of P5's. P5 neither causes nor
+fixes it.
+
+**Found by the gates and fixed in the phase:** golangci-lint's `gocognit` on all three hosts, `cognitive complexity 56
+of func (*lineSession).run is high (> 50)`, from the goodbye's restores. They moved to `lineSession.goodbye`; the two
+goodbye mutations were pointed at it, and all five failed again, the restored copy passing.
+
+**Gates, after the fix:**
+
+- The pre-add check on the eight changed `.go` files: `8 file(s) clean (gofmt, golint, govulncheck)`.
+- macOS: `make preflight`, `preflight passed`; the tests and the race detector, 36 packages ok each.
+- The Linux machine and the Windows laptop, on a copy of the tree: the tests and the race detector, 36 packages ok on
+  each. `make preflight` reached `apidiff` (golangci-lint `0 issues.`, govulncheck "No vulnerabilities found.") and
+  stopped at `verify-build-metadata`, as the copies are not git checkouts.
+- `make check-records markdownlint`: "0 issues in 0 files".
+- The Windows laptop, `make probe-conhost`: `--- PASS: TestConhost`.
+
+**Open:** the owner's look in Windows Terminal and Console Host (step 4, moved here from P4 by deviation 4). P5 and
+this plan are complete when it is done.

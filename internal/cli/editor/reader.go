@@ -17,30 +17,43 @@ type chunk struct {
 // Reader owns stdin. Start launches the one goroutine that reads it, in
 // chunkSize pieces, for the life of the process; Read and ReadContext serve
 // those chunks to the editor. The underlying reader is never closed (F20).
+//
+// It reads only when asked: one read of stdin for each ReadContext that
+// finds nothing buffered, none ahead. So a read starts in the terminal mode
+// of whoever asked, raw for the editor and cooked for a question; on
+// Windows a console read keeps the mode it started in (0027-MADR D5, as
+// amended for P5).
 type Reader struct {
 	wg      sync.WaitGroup
 	ctx     context.Context
+	asks    chan struct{}
 	chunks  chan chunk
+	asked   bool // a read was asked for and has not been served
 	pending []byte
 	err     error
 }
 
-// Start begins reading in. It must be called once, before any Read. The
-// goroutine stops when in returns an error, or when ctx is done and a read
-// has completed; a read that is blocked stays blocked, which is why in is
-// never closed to stop it.
+// Start makes in the reader's stdin. It must be called once, before any
+// Read; it reads nothing until asked. The goroutine stops when in returns
+// an error, or when ctx is done and no read is blocked; a read that is
+// blocked stays blocked, which is why in is never closed to stop it.
 func (r *Reader) Start(ctx context.Context, in io.Reader) {
 	r.ctx = ctx
-	r.chunks = make(chan chunk, 16)
+	r.asks = make(chan struct{}, 1)
+	r.chunks = make(chan chunk, 1)
 	r.wg.Go(func() {
 		for {
-			buf := make([]byte, chunkSize)
-			n, err := in.Read(buf)
-			if n > 0 && !r.send(ctx, chunk{b: buf[:n]}) {
+			select {
+			case <-r.asks:
+			case <-ctx.Done():
 				return
 			}
-			if err != nil {
-				r.send(ctx, chunk{err: err})
+			buf := make([]byte, chunkSize)
+			n, err := in.Read(buf)
+			for n == 0 && err == nil {
+				n, err = in.Read(buf)
+			}
+			if !r.send(ctx, chunk{b: buf[:n], err: err}) || err != nil {
 				return
 			}
 		}
@@ -61,17 +74,23 @@ func (r *Reader) Read(p []byte) (int, error) {
 	return r.ReadContext(r.ctx, p)
 }
 
-// ReadContext reads buffered input, waiting for the next chunk until ctx is
-// done. An error from stdin is returned once the data before it is consumed,
-// and on every call after that.
+// ReadContext reads buffered input; with none, it asks for one read of
+// stdin and waits for it until ctx is done. A read asked for and not
+// served by then is served to the next call. An error from stdin is
+// returned once the data before it is consumed, and on every call after
+// that.
 func (r *Reader) ReadContext(ctx context.Context, p []byte) (int, error) {
 	if len(r.pending) == 0 {
 		if r.err != nil {
 			return 0, r.err
 		}
+		if !r.asked {
+			r.asks <- struct{}{}
+			r.asked = true
+		}
 		select {
 		case c := <-r.chunks:
-			r.pending, r.err = c.b, c.err
+			r.pending, r.err, r.asked = c.b, c.err, false
 		case <-ctx.Done():
 			return 0, ctx.Err()
 		}

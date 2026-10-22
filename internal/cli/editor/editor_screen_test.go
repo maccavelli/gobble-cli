@@ -187,6 +187,35 @@ func TestTallLineShowsTheCursorRow(t *testing.T) {
 }
 
 // Ctrl+L clears the screen and draws the line again at its top.
+// Ctrl+D on an empty line and a second Ctrl+C leave the line as Enter
+// does, the cursor at the start of the row below it, so what is written
+// next, the goodbye, has a row of its own (0027-MADR D3, as amended for
+// P5).
+func TestEndOfInputLeavesTheLine(t *testing.T) {
+	for _, tc := range []struct{ name, keys string }{
+		{"Ctrl+D", "\x04"},
+		{"a second Ctrl+C", "\x03\x03"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := termtest.New(20, 6)
+			if subs := onScreen(t, s, strings.NewReader(tc.keys), Options{Width: func() int { return 20 }}); len(subs) > 0 {
+				t.Fatalf("sent %q", subs)
+			}
+			lines := s.Lines()
+			last := -1
+			for i, l := range lines {
+				if strings.HasPrefix(l, ">") {
+					last = i
+				}
+			}
+			if last < 0 || lines[last] != ">" || s.Row != last+1 || s.Col != 0 {
+				t.Fatalf("screen %q, cursor (%d, %d); want the bare prompt drawn, the cursor at the start of the row below it",
+					lines, s.Row, s.Col)
+			}
+		})
+	}
+}
+
 func TestClearScreenOnScreen(t *testing.T) {
 	s := termtest.New(20, 6)
 	if _, err := s.Write([]byte("old output\r\nmore\r\n")); err != nil {

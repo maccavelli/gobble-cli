@@ -18,19 +18,21 @@ import (
 // session drives an Editor through a pipe, as stdin would, inside a
 // synctest bubble so the exit window runs on the fake clock.
 type session struct {
-	pw   *io.PipeWriter
-	e    *Editor
-	errw *bytes.Buffer
-	wg   sync.WaitGroup
+	pw     *io.PipeWriter
+	e      *Editor
+	errw   *bytes.Buffer
+	wg     sync.WaitGroup
+	cancel context.CancelFunc // stops the reader, which waits to be asked
 }
 
 func newSession(t *testing.T) *session {
 	t.Helper()
 	pr, pw := io.Pipe()
+	ctx, cancel := context.WithCancel(context.Background())
 	r := &Reader{}
-	r.Start(context.Background(), pr)
+	r.Start(ctx, pr)
 	errw := new(bytes.Buffer)
-	return &session{pw: pw, e: New(r, io.Discard, errw, Options{}), errw: errw}
+	return &session{pw: pw, e: New(r, io.Discard, errw, Options{}), errw: errw, cancel: cancel}
 }
 
 // feed writes each step's bytes, sleeping before the ones with a delay.
@@ -51,6 +53,7 @@ func (s *session) close(t *testing.T) {
 	if err := s.pw.Close(); err != nil {
 		t.Error(err)
 	}
+	s.cancel()
 	synctest.Wait()
 }
 

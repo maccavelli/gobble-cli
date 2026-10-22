@@ -162,7 +162,8 @@ func (e *Editor) ReadPrompt(ctx context.Context) (string, error) {
 // readLine reads one line after prompt, drawing it after each read's keys:
 // the line and whether it was pasted (a line ended inside a bracketed
 // paste), or io.EOF for Ctrl+D on an empty line, or the read's error. A
-// line ended stays drawn, the cursor moved below it.
+// line ended, or left by Ctrl+D or a second Ctrl+C, stays drawn, the cursor
+// moved below it.
 func (e *Editor) readLine(prompt string) (string, bool, error) {
 	e.line.prompt = prompt
 	if err := e.redraw(); err != nil {
@@ -185,6 +186,9 @@ func (e *Editor) readLine(prompt string) (string, bool, error) {
 			line, pasted := e.line.take()
 			return line, pasted, nil
 		case endOfInput:
+			if err := e.draw.finish(); err != nil {
+				return "", false, err
+			}
 			return "", false, io.EOF
 		case clearScreen:
 			if _, err := io.WriteString(e.out, "\x1b[2J\x1b[H"); err != nil {

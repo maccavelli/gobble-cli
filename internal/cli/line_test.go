@@ -36,6 +36,24 @@ type lineHarness struct {
 
 	mu             sync.Mutex
 	raws, restores int
+	// cookedReads counts the reads of stdin started out of raw mode.
+	cookedReads int
+}
+
+// rawCheckedInput is the session's stdin, counting the reads started while
+// the terminal is out of raw mode.
+type rawCheckedInput struct {
+	h *lineHarness
+	r io.Reader
+}
+
+func (c *rawCheckedInput) Read(p []byte) (int, error) {
+	c.h.mu.Lock()
+	if c.h.raws == c.h.restores {
+		c.h.cookedReads++
+	}
+	c.h.mu.Unlock()
+	return c.r.Read(p)
 }
 
 func newLineHarness(t *testing.T, agent *acptest.ScriptAgent) *lineHarness {
@@ -83,7 +101,7 @@ func (h *lineHarness) start(first Prompt) {
 	if cwd == "" {
 		cwd = acptest.Abs("/work")
 	}
-	ls := &lineSession{e: h.e, cwd: cwd, base: cwd, in: keysR, raw: h.raw, voice: h.voice}
+	ls := &lineSession{e: h.e, cwd: cwd, base: cwd, in: &rawCheckedInput{h: h, r: keysR}, raw: h.raw, voice: h.voice}
 	offered := !slices.ContainsFunc(provider.KeyProviders(), h.e.hasCredential)
 	go func() { h.done <- ls.run(first) }()
 	h.t.Cleanup(func() { keysW.Close() }) //nolint:errcheck,gosec // test cleanup
@@ -149,6 +167,105 @@ func TestLineSessionTurn(t *testing.T) {
 	}
 	if !strings.Contains(h.stderr.String(), "0s") {
 		t.Fatalf("no status line on stderr: %q", h.stderr.String())
+	}
+}
+
+// Stdin is read only when the editor or a question asks. Out of raw mode,
+// only the sign-in question's answer is read: never ahead, after the
+// answer or during a turn, where on Windows the read would stay a line
+// read once raw mode is back (0027-MADR D5, as amended for P5).
+func TestLineSessionReadsOnlyWhenAsked(t *testing.T) {
+	for _, p := range provider.KeyProviders() {
+		t.Setenv(provider.CredentialVar(p), "")
+	}
+	agent := &acptest.ScriptAgent{Turns: []acptest.Turn{{Updates: []string{chunk("reply-1\n")}}}}
+	h := newLineHarness(t, agent)
+	if slices.ContainsFunc(provider.KeyProviders(), h.e.hasCredential) {
+		t.Fatal("a provider has a credential; the sign-in question is not offered")
+	}
+	h.start(Prompt{})
+	h.press("hello\r")
+	waitUntil(t, func() bool { return strings.Contains(h.stdout.String(), "reply-1") })
+	h.press("\x04")
+	if err := h.wait(); err != nil {
+		t.Fatalf("session ended with %v", err)
+	}
+	h.mu.Lock()
+	cooked := h.cookedReads
+	h.mu.Unlock()
+	if cooked != 1 {
+		t.Fatalf("%d reads of stdin started out of raw mode; want 1, the sign-in question's", cooked)
+	}
+}
+
+// modeLog is stdout and stderr in one, as a terminal shows them, noting
+// for each write whether the terminal was in raw mode.
+type modeLog struct {
+	h      *lineHarness
+	mu     sync.Mutex
+	writes []string
+	raw    []bool
+}
+
+func (m *modeLog) Write(p []byte) (int, error) {
+	m.h.mu.Lock()
+	raw := m.h.raws > m.h.restores
+	m.h.mu.Unlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.writes = append(m.writes, string(p))
+	m.raw = append(m.raw, raw)
+	return len(p), nil
+}
+
+func (m *modeLog) String() string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return strings.Join(m.writes, "")
+}
+
+// After a second Ctrl+C, the goodbye has a row of its own below the last
+// prompt, and is written with raw mode and bracketed paste already off, so
+// its line end is a real one (0027-MADR D3, as amended for P5).
+func TestGoodbyeOnItsOwnRow(t *testing.T) {
+	h := newLineHarness(t, &acptest.ScriptAgent{})
+	dry := dryVoice(t)
+	h.voice = dry
+	h.e.out.caps.Err.TTY = true
+	log := &modeLog{h: h}
+	h.e.out.out, h.e.out.err = log, log
+	h.start(Prompt{})
+	h.press("\x03")
+	h.press("\x03")
+	if err := h.wait(); err != nil {
+		t.Fatalf("session ended with %v", err)
+	}
+	goodbyes := dry.Variants(personality.SessionGoodbye, nil)
+	log.mu.Lock()
+	at := slices.IndexFunc(log.writes, func(w string) bool {
+		return slices.ContainsFunc(goodbyes, func(g string) bool { return strings.Contains(w, g) })
+	})
+	var before string
+	var raw bool
+	if at >= 0 {
+		before, raw = strings.Join(log.writes[:at], ""), log.raw[at]
+	}
+	log.mu.Unlock()
+	if at < 0 {
+		t.Fatalf("no goodbye in %q", log.String())
+	}
+	if raw {
+		t.Error("the goodbye was written in raw mode")
+	}
+	if strings.LastIndex(before, "\x1b[?2004l") < strings.LastIndex(before, "\x1b[?2004h") {
+		t.Error("the goodbye was written with bracketed paste on")
+	}
+	lines := screenOf(log.String(), 80).Lines()
+	if !slices.ContainsFunc(lines, func(l string) bool { return slices.Contains(goodbyes, l) }) {
+		for len(lines) > 0 && lines[len(lines)-1] == "" {
+			lines = lines[:len(lines)-1]
+		}
+		t.Errorf("no row holds the goodbye alone: %q", lines)
 	}
 }
 
