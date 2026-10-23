@@ -10,7 +10,7 @@ import (
 )
 
 // closeTimeout bounds how long cleanup waits for both connections to stop.
-const closeTimeout = 5 * time.Second
+var closeTimeout = 5 * time.Second
 
 // Conn is an agent and a client joined by in-memory pipes.
 type Conn struct {
@@ -30,7 +30,8 @@ func Pair(t testing.TB, agent acp.Agent) (*acp.ClientSideConnection, *Recorder) 
 // Connect joins agent and client over two pipes, records every frame, and
 // returns both sides. An agent that sends notifications needs c.Agent: set
 // it on the agent before the first request. The pipes close, and both
-// connections are awaited, when the test ends.
+// connections and their handlers are awaited, when the test ends; one that
+// outlives closeTimeout fails the test (0031-MADR D5).
 func Connect(t testing.TB, agent acp.Agent, client acp.Client) *Conn {
 	t.Helper()
 	rec := &Recorder{}
@@ -48,15 +49,31 @@ func Connect(t testing.TB, agent acp.Agent, client acp.Client) *Conn {
 				t.Errorf("acptest: close pipe: %v", err)
 			}
 		}
-		deadline := time.After(closeTimeout)
-		for _, done := range []<-chan struct{}{c.Agent.Done(), c.Client.Done()} {
-			select {
-			case <-done:
-			case <-deadline:
-				t.Errorf("acptest: a connection did not stop within %v of its pipe closing", closeTimeout)
+		for _, wait := range []func() error{c.Agent.Wait, c.Client.Wait} {
+			if !handlersDone(wait, closeTimeout) {
+				t.Errorf("acptest: a connection or its handlers did not stop within %v of its pipe closing", closeTimeout)
 				return
 			}
 		}
 	})
 	return c
+}
+
+// handlersDone waits for wait, at most limit, and reports whether it
+// returned: a handler that ignores its context would hold a connection's
+// Wait forever (0031-MADR D5).
+func handlersDone(wait func() error, limit time.Duration) bool {
+	done := make(chan struct{})
+	go func() {
+		_ = wait() //nolint:errcheck // the connection's end is read from Err
+		close(done)
+	}()
+	timer := time.NewTimer(limit)
+	defer timer.Stop()
+	select {
+	case <-done:
+		return true
+	case <-timer.C:
+		return false
+	}
 }

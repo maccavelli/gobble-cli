@@ -49,9 +49,9 @@ func sessionError(method string, err error) error {
 		}
 	}
 	switch {
-	case re.Code == -32600 && strings.Contains(reason, "is open in another gobble process"):
+	case re.Code == int(acp.ErrorCodeInvalidRequest) && strings.Contains(reason, "is open in another gobble process"):
 		return &agentError{reason: reason, kind: ErrSessionLocked}
-	case re.Code == -32602:
+	case re.Code == int(acp.ErrorCodeInvalidParams):
 		return &agentError{reason: reason, kind: ErrInvalidSession}
 	}
 	return fmt.Errorf("%s: %w", method, err)

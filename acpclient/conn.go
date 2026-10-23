@@ -17,7 +17,7 @@ import (
 )
 
 // closeTimeout bounds how long Close waits for the agent to stop.
-const closeTimeout = 5 * time.Second
+var closeTimeout = 5 * time.Second
 
 // ErrImagesUnsupported is returned by Prompt when the prompt carries images
 // and the agent did not advertise promptCapabilities.image. Nothing is sent:
@@ -27,9 +27,6 @@ var ErrImagesUnsupported = errors.New("the agent does not accept images")
 // ErrAuthRequired matches a prompt the agent refused with ACP's
 // auth_required error (-32000): it has no usable credential.
 var ErrAuthRequired = errors.New("the agent needs a model credential")
-
-// authRequiredCode is ACP's auth_required JSON-RPC error code.
-const authRequiredCode = -32000
 
 // ServeFunc runs an agent over in and out until in reaches end of file.
 // acpserver.Serve, wrapped in a closure, is one.
@@ -168,8 +165,10 @@ func (c *Conn) Agent() AgentInfo { return c.agent }
 func (c *Conn) Dropped() uint64 { return c.conn.DroppedNotifications() }
 
 // Close ends the agent's input and waits for the agent to stop, then
-// closes the connection (0016-MADR A1). It returns the agent's error, if
-// any, then the connection's.
+// closes the connection and waits for its handlers, so no update is
+// handled after it returns (0016-MADR A1; 0031-MADR D5). Each wait is at
+// most closeTimeout. It returns the agent's error, if any, then the
+// connection's.
 func (c *Conn) Close() error {
 	if err := c.toAgent.Close(); err != nil {
 		return fmt.Errorf("close agent input: %w", err)
@@ -180,15 +179,38 @@ func (c *Conn) Close() error {
 	select {
 	case served = <-c.served:
 	case <-deadline.C:
-		return fmt.Errorf("the agent did not stop within %v of its input closing", closeTimeout)
+		return errors.Join(fmt.Errorf("the agent did not stop within %v of its input closing", closeTimeout), c.conn.Close())
 	}
+	var errs []error
 	if served != nil {
-		return errors.Join(fmt.Errorf("agent: %w", served), c.conn.Close())
+		errs = append(errs, fmt.Errorf("agent: %w", served))
 	}
 	if err := c.conn.Close(); err != nil {
-		return fmt.Errorf("close connection: %w", err)
+		errs = append(errs, fmt.Errorf("close connection: %w", err))
 	}
-	return nil
+	if !handlersDone(c.conn.Wait, closeTimeout) {
+		errs = append(errs, fmt.Errorf("the connection's handlers did not stop within %v of its close", closeTimeout))
+	}
+	return errors.Join(errs...)
+}
+
+// handlersDone waits for wait, at most limit, and reports whether it
+// returned: a handler that ignores its context would hold a connection's
+// Wait forever (0031-MADR D5).
+func handlersDone(wait func() error, limit time.Duration) bool {
+	done := make(chan struct{})
+	go func() {
+		_ = wait() //nolint:errcheck // the connection's end is read from Err
+		close(done)
+	}()
+	timer := time.NewTimer(limit)
+	defer timer.Stop()
+	select {
+	case <-done:
+		return true
+	case <-timer.C:
+		return false
+	}
 }
 
 // Session is one ACP session.
@@ -297,7 +319,7 @@ func (s *Session) Prompt(ctx context.Context, p Prompt) (Result, error) {
 		blocks = append(blocks, acp.ImageBlock(base64.StdEncoding.EncodeToString(img.Data), img.MIME))
 	}
 	resp, err := s.c.conn.Prompt(ctx, acp.PromptRequest{SessionId: s.id, Prompt: blocks})
-	if re, ok := errors.AsType[*acp.RequestError](err); ok && re.Code == authRequiredCode {
+	if re, ok := errors.AsType[*acp.RequestError](err); ok && re.Code == int(acp.ErrorCodeAuthenticationRequired) {
 		return Result{}, fmt.Errorf("session/prompt: %w: %w", ErrAuthRequired, err)
 	}
 	if err != nil {

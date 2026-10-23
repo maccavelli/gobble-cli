@@ -262,3 +262,65 @@ is: 0031-MADR D4 is amended, 0005-PLAN's line is annotated, and the comments in 
 
 **Not done, for the owner:** a live turn against a real provider, which the plan's verification asks the owner to
 take; the owner's look at 0030-PLAN P5 is also still to come. P2 is committed with the rest of its steps done.
+
+### P3 execution record (2026-10-22)
+
+1. **Tests first,** each seen failing on the old code. `acpclient`'s and `acptest`'s close timeouts became package
+   variables, with no change in behaviour, so a test can shorten them.
+   - `acpclient/close_test.go`:
+     - `TestCloseWaitsForHandlers`: a session's update handler takes 300 ms. Failed with "Close returned while a
+       session update was still being handled".
+     - `TestCloseBoundedWhenAHandlerHangs`: one never returns, the timeout set to 300 ms. Failed with `Close: <nil>,
+       want an error saying the handlers did not stop`.
+   - `acpserver/serve_test.go`, `TestServeReportsABrokenInput`: a reader that fails. Failed with `Serve over a broken
+     input: <nil>, want its error`; at the input's end, nil, as before.
+   - `acpclient/acptest/cleanup_test.go`, `TestCleanupWaitsForHandlers`: `Connect`'s cleanup run by a stand-in
+     `testing.TB`. Its first draft hung the agent's prompt handler, which the old cleanup already caught, since a
+     prompt handler holds the agent's reader and `Done` never closed; it proved nothing of `Wait`. The test now hangs
+     the client's `session/update` handler, which runs off the reader. The old cleanup then reported `[]`: "the
+     cleanup passed with the client's update handler still running". (A draft that awaited the prompt itself never
+     returned, since a prompt's answer waits for its update to be handled; it was stopped, and its test binary was
+     checked gone.)
+2. **The code:**
+   - `acpserver.Serve` waits for the connection's handlers (`Wait`, at most `endWait`, 5 s), then returns `Err()`
+     unless the input ended or this side closed it; on `ctx`, the same after `Close`.
+   - `acpclient.Conn.Close`, after the agent stops and the connection closes, waits for its handlers, at most
+     `closeTimeout`, and says so when they do not stop. On the agent's own timeout it now closes the connection too.
+   - `acptest`: `Connect`'s cleanup waits on each connection's `Wait`, bounded; `ScriptAgent.Serve` waits for its
+     handlers before it returns.
+   - The constants (0016-MADR D4 and D5): `authRequiredCode` and the `-32600` and `-32602` literals give way to
+     `acp.ErrorCodeAuthenticationRequired`, `ErrorCodeInvalidRequest` and `ErrorCodeInvalidParams`; the five
+     hand-written discriminators go (`acpserver/modes.go`, `commands.go` three times, `prompt.go`). No golden file
+     changed. Three of the five are in `acpserver/testdata/session.golden`; `config_option_update` is read off the
+     wire by `internal/cli/models_test.go`, and `session_info_update` by `acpserver/commands_test.go`.
+   - `acpserver/binary_test.go` (MADR D8, moved here as the plan says) runs `gobble acp` through
+     `agentproc.Command{Grace: 2 * time.Second, OutputTap: …}`; `Close` returning nil is the exit of status 0 within
+     2 s that 0008-MADR D19 item 6 asks for.
+3. **Negatives,** one at a time on a scratch copy:
+   - **`Wait` dropped from `Close`:** both close tests fail ("Close returned while a session update was still being
+     handled"; "Close: <nil>").
+   - **`Err` ignored in `Serve`:** `Serve over a broken input: <nil>, want its error`.
+   - **`acptest`'s cleanup waiting on `Done` alone:** "the cleanup reported []".
+   - **The invalid-params code swapped:** `TestInvalidParamsCarriesReason`, `want ErrInvalidSession naming the
+     refused cwd`.
+   - **The auth-required code swapped:** `TestAuthRequired`, `want ErrAuthRequired`.
+
+   Five mutations, five failures; the restored copy passed.
+4. **Records:** dated notes on 0016-MADR D4 and D5; `docs/architecture.md`'s `acpclient/acptest` row.
+
+**Found by the gates and fixed in the phase:** `modernize`'s `slices.Backward`, in the new cleanup test.
+
+**Gates:**
+
+- The pre-add check on the thirteen changed `.go` files: `13 file(s) clean (gofmt, golint, govulncheck)`.
+- macOS: `make preflight`, `preflight passed`; the tests and the race detector, 36 packages ok each.
+- The Linux machine and the Windows laptop, on a copy of the tree: the tests and the race detector, 36 packages ok on
+  each; `make preflight` reached `apidiff` (golangci-lint `0 issues.`, govulncheck "No vulnerabilities found.") and
+  stopped at `verify-build-metadata`, as the copies are not git checkouts.
+- `make check-records markdownlint`: exit 0 on each host.
+- The Windows laptop, `make probe-conhost`: `--- PASS: TestConhost`.
+- `make perf`, each within three times its baseline: macOS ReplyRender 32.2 µs, Reprint 9.50 ms, LineSessionStart
+  842 µs, KeyDraw 1.52 µs; the Linux machine 130 µs, 29.7 ms, 3.63 ms, 5.12 µs; the Windows laptop 29.7 µs, 7.76 ms,
+  4.69 ms, 1.11 µs.
+
+**P3 complete, 2026-10-22.**

@@ -3,10 +3,30 @@ package acpserver
 import (
 	"bytes"
 	"encoding/json/v2"
+	"errors"
+	"io"
 	"strings"
 	"testing"
 	"time"
 )
+
+// errBroken is a read failure, as a broken stdin gives one.
+var errBroken = errors.New("the input broke")
+
+type brokenReader struct{}
+
+func (brokenReader) Read([]byte) (int, error) { return 0, errBroken }
+
+// Serve returns the input's error when its input fails, and nil at its end
+// (0031-MADR D5).
+func TestServeReportsABrokenInput(t *testing.T) {
+	if err := Serve(t.Context(), brokenReader{}, io.Discard, ServeOptions{}); !errors.Is(err, errBroken) {
+		t.Fatalf("Serve over a broken input: %v, want its error", err)
+	}
+	if err := Serve(t.Context(), strings.NewReader(""), io.Discard, ServeOptions{}); err != nil {
+		t.Fatalf("Serve at the end of its input: %v, want nil", err)
+	}
+}
 
 // A request written to `gobble acp` and followed at once by the end of its
 // input is answered before Serve returns: a script that pipes requests in

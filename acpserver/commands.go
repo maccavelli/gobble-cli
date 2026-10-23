@@ -528,7 +528,7 @@ func (a *Agent) setConfigUpdate(ctx context.Context, t *cmdTurn, id, value strin
 	if err != nil {
 		return err
 	}
-	t.out.send(acp.SessionUpdate{ConfigOptionUpdate: &acp.SessionConfigOptionUpdate{SessionUpdate: "config_option_update", ConfigOptions: opts}})
+	t.out.send(acp.SessionUpdate{ConfigOptionUpdate: &acp.SessionConfigOptionUpdate{ConfigOptions: opts}})
 	return nil
 }
 
@@ -594,7 +594,7 @@ func (a *Agent) setNameLocked(ctx context.Context, s *liveSession, out *updates,
 	if err := s.append(ctx, a.now(), session.Entry{Type: session.TypeSessionInfo, Name: new(name)}); err != nil {
 		return "", appendFailed(err)
 	}
-	out.send(acp.SessionUpdate{SessionInfoUpdate: &acp.SessionSessionInfoUpdate{SessionUpdate: "session_info_update", Title: acp.PatchValue(name)}})
+	out.send(acp.SessionUpdate{SessionInfoUpdate: &acp.SessionSessionInfoUpdate{Title: acp.PatchValue(name)}})
 	return name, out.err
 }
 
@@ -725,7 +725,7 @@ func (a *Agent) startFrames(ctx context.Context, conn *acp.AgentSideConnection, 
 	used := compaction.EstimateText(a.systemText(s)) + compaction.EstimateEntries(s.tree.Path())
 	a.setUsed(s, used)
 	out := newUpdates(ctx, conn, s.id)
-	out.send(acp.SessionUpdate{AvailableCommandsUpdate: &acp.SessionAvailableCommandsUpdate{SessionUpdate: "available_commands_update", AvailableCommands: availableCommands(templates)}})
+	out.send(acp.SessionUpdate{AvailableCommandsUpdate: &acp.SessionAvailableCommandsUpdate{AvailableCommands: availableCommands(templates)}})
 	out.send(modeUpdate(a.modeOf(s)))
 	out.send(a.contextUpdate(s, used))
 	out.notify(methodPersonality, a.personalityNotice(s))

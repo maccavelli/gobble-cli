@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json/v2"
 	"errors"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,6 +15,7 @@ import (
 	"time"
 
 	acp "github.com/maccavelli/acp-go-sdk2"
+	"github.com/maccavelli/acp-go-sdk2/agentproc"
 
 	"github.com/maccavelli/gobble-cli/acpclient/acptest"
 	"github.com/maccavelli/gobble-cli/llm/provider"
@@ -91,21 +91,15 @@ func TestGobbleACPBinary(t *testing.T) {
 	}
 	cmd := exec.CommandContext(t.Context(), bin, "acp")
 	cmd.Env = append(withoutCredentials(os.Environ()), "GOBBLE_HOME="+t.TempDir())
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		t.Fatal(err)
-	}
 	var stderr, wire syncBuffer
 	cmd.Stderr = &stderr
-	if err := cmd.Start(); err != nil {
+	// agentproc owns the pipes, records the wire, and on Close ends the
+	// agent's input and waits Grace for it to exit (0031-MADR D8).
+	proc, err := (&agentproc.Command{Cmd: cmd, Grace: 2 * time.Second, OutputTap: &wire}).Start(&acptest.Client{})
+	if err != nil {
 		t.Fatal(err)
 	}
-	client := &acptest.Client{}
-	conn := acp.NewClientSideConnection(client, stdin, io.TeeReader(stdout, &wire))
+	conn := proc.Conn()
 
 	init, err := conn.Initialize(t.Context(), acp.InitializeRequest{ProtocolVersion: acp.ProtocolVersionNumber})
 	if err != nil || init.AgentInfo == nil || init.AgentInfo.Name != "gobble" || init.AgentInfo.Version == "" {
@@ -126,18 +120,10 @@ func TestGobbleACPBinary(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := stdin.Close(); err != nil {
-		t.Fatal(err)
-	}
-	exited := make(chan error, 1)
-	go func() { exited <- cmd.Wait() }()
-	select {
-	case err := <-exited:
-		if err != nil {
-			t.Fatalf("gobble acp exited with %v after stdin closed, want 0; stderr %q", err, stderr.String())
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("gobble acp did not exit within 2 s of stdin closing (0008-MADR D19 item 6)")
+	// Close returns nil only for an exit of status 0, of the agent's own,
+	// within the grace of its input closing (0008-MADR D19 item 6).
+	if err := proc.Close(); err != nil {
+		t.Fatalf("gobble acp did not exit 0 within 2 s of stdin closing: %v; stderr %q", err, stderr.String())
 	}
 	if s := stderr.String(); s != "" {
 		t.Fatalf("gobble acp wrote to stderr: %q", s)
