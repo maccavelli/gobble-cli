@@ -34,8 +34,12 @@ type modPkg struct {
 	Err  string
 }
 
-// tuiLib is go-tui-lib's module path.
-const tuiLib = "github.com/maccavelli/go-tui-lib"
+// tuiLib is go-tui-lib's module path; xansi is the one Charm module the
+// native CLI may import (0032-MADR amendment A1).
+const (
+	tuiLib = "github.com/maccavelli/go-tui-lib"
+	xansi  = "github.com/charmbracelet/x/ansi"
+)
 
 type edge struct {
 	from string
@@ -266,10 +270,10 @@ func checkRule4(pkgs []modPkg) []Violation {
 }
 
 // checkRule5 keeps Charm in internal/tui, which may import anything of
-// go-tui-lib. internal/cli may import a go-tui-lib package whose whole
-// closure holds no Charm, and never internal/tui; any other package, none
-// of go-tui-lib but tuitest in a test (0004-MADR rule 5, as amended by
-// 0032-MADR D1).
+// go-tui-lib. internal/cli may import x/ansi, and a go-tui-lib package
+// whose whole closure holds no Charm but x/ansi, and never internal/tui;
+// any other package, none of go-tui-lib but tuitest in a test (0004-MADR
+// rule 5, as amended by 0032-MADR D1 and its amendment A1).
 func checkRule5(pkgs []modPkg) []Violation {
 	closure := map[string][]string{}
 	for _, p := range pkgs {
@@ -286,7 +290,9 @@ func checkRule5(pkgs []modPkg) []Violation {
 		to, _ := relOf(e.to)
 		switch {
 		case isCharm(e.to):
-			vs = add(vs, 5, e)
+			if !under(rel, "internal/cli") || !pathUnder(e.to, xansi) {
+				vs = add(vs, 5, e)
+			}
 		case under(rel, "internal/cli") && to != "" && under(to, "internal/tui"):
 			vs = add(vs, 5, e)
 		case !pathUnder(e.to, tuiLib), e.test && isTUITest(e.to):
@@ -310,7 +316,7 @@ func charmIn(imp string, closure map[string][]string) string {
 		return "its closure is unknown"
 	}
 	for _, d := range deps {
-		if isCharm(d) {
+		if isCharm(d) && !pathUnder(d, xansi) {
 			return "through " + d
 		}
 	}

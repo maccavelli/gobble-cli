@@ -84,7 +84,7 @@ Chosen option: "A", the owner's answers of 2026-10-22: "Charm-free packages only
 for 0029-PLAN P2 "Becomes go-tui-lib's first inline component". It keeps the default binary free of Charm, puts each
 element in one place for both modes, and follows gobble's rule of waiting for the library.
 
-- **D1. The boundary.** Rule 5 is amended: `internal/cli` and its packages may import a go-tui-lib package whose whole
+- **D1. The boundary** *(amendment A1, accepted 2026-10-22, admits `x/ansi`: see below)*. Rule 5 is amended: `internal/cli` and its packages may import a go-tui-lib package whose whole
   import closure holds no Charm module (`charm.land/...`, `github.com/charmbracelet/...`); everything else of
   go-tui-lib, and Charm itself, stays in `internal/tui`. `internal/cli` may not import `internal/tui`, which would
   bring Charm in through it. `archtest` checks the closure, not only the direct import.
@@ -141,6 +141,74 @@ plan step, with the gates on macOS, the Linux machine and the Windows laptop.
 
 * Good, because it changes no rule.
 * Bad, because the native CLI's elements stay gobble's own, built a second time for the TUI.
+
+## Amendment A1 (accepted 2026-10-22): admit `x/ansi` into the native CLI
+
+*Accepted by the owner, 2026-10-22: "Post. File. Approved".*
+
+### Context
+
+P2 found that D1 asks more of go-tui-lib than it first appeared. go-tui-lib's text work, in its headless packages and
+its TUI alike, is built on `github.com/charmbracelet/x/ansi`, which gobble's rule counts as Charm:
+
+- **Writing sequences:** notifications, OSC 8 links, OSC 52 copies, tmux passthrough, mode switches, terminal queries
+  and the Kitty keyboard protocol (`DesktopNotification`, `SetHyperlink`, `SetSystemClipboard`, `TmuxPassthrough`,
+  `ModeSetting`, `RequestPrimaryDeviceAttributes`, `RequestKittyKeyboard`, …).
+- **Parsing:** `DecodeSequence`, with which its `internal/sanitize` cleans untrusted text.
+- **Measuring:** `StringWidth`, `GraphemeWidth`, `WcWidth`, `Strip` and `Truncate`, by grapheme cluster.
+
+Bubble Tea, Lip Gloss and ultraviolet are built on it too, so the TUI side can never drop it. Taking it out of the
+headless packages alone would leave go-tui-lib with two implementations of measuring and parsing, so that a line-mode
+CLI and the TUI could disagree on a line's width.
+
+`x/ansi` itself is not a UI framework: it is pure Go, about fifty files, at `v0.11.8` as go-tui-lib's `v0.12.0`
+requires, and pulls in only text utilities, at the versions that tag requires: `github.com/clipperhouse/displaywidth`
+`v0.11.0`, `github.com/clipperhouse/uax29/v2` `v2.7.0` (grapheme clusters), `github.com/lucasb-eyer/go-colorful`
+`v1.4.1` and `github.com/mattn/go-runewidth` `v0.0.27`. (`x/ansi`'s own `go.mod` also names
+`github.com/bits-and-blooms/bitset`; no package of go-tui-lib's build uses it, and if one ever does it is named here
+before it is required.)
+
+The owner, 2026-10-22, on the pros and cons of changing `x/ansi` in go-tui-lib: "Draft it".
+
+### Considered options
+
+* **A1a. Admit `x/ansi` into the native CLI**, and keep every other Charm module out.
+* **A1b. Keep D1 as written:** go-tui-lib takes `x/ansi` out of its headless packages, writing its own measuring,
+  parsing and sequences there.
+
+### Decision
+
+Chosen option: "A1a", because it keeps D1's purpose (no TUI framework in the default binary) without making the
+library measure and parse text twice.
+
+- **A1.1** `internal/cli` and its packages may import `github.com/charmbracelet/x/ansi`, directly or in a go-tui-lib
+  package's closure, with the modules it requires. Every other Charm module stays refused there: `charm.land/...`
+  (Bubble Tea, Bubbles, Lip Gloss), `github.com/charmbracelet/colorprofile`, `github.com/charmbracelet/ultraviolet`,
+  `github.com/charmbracelet/x/term` and the rest of `github.com/charmbracelet/...`. The core packages of rule 1 still
+  import no Charm module, `x/ansi` included.
+- **A1.2** This record names those modules, at the versions go-tui-lib's tag requires, for `AGENTS.md`'s dependency
+  rule; each is added to `go.mod` in the commit that first imports it.
+- **A1.3** go-tui-lib's issues 2 to 10 are told: `x/ansi` may stay; what gobble's native CLI needs is that the
+  package link no Bubble Tea, Bubbles, Lip Gloss, colorprofile or ultraviolet. Issue 6 (`fuzzy`, which imports `x/ansi`
+  alone) then asks only for a tag.
+- **A1.4** gobble may then measure and strip text with `x/ansi` in place of its own rune-width code, and clean it with
+  go-tui-lib's sanitiser once that is exported, each as its own adoption step, measured against 0030-MADR D5's
+  performance budget first.
+
+### Consequences
+
+* Good, because the line-mode CLI and the TUI measure, truncate and clean text alike.
+* Good, because grapheme clusters (ZWJ emoji, flags) are measured right, which gobble's rune-by-rune width is not.
+* Good, because the go-tui-lib requests shrink to "link no Bubble Tea, Lip Gloss, colorprofile or ultraviolet".
+* Bad, because the default binary gains `x/ansi` and four text modules, and a pre-1.0 module joins the CLI's
+  dependencies (go-tui-lib's pin buffers its changes).
+* Neutral, because 0008-MADR F5's sentence "the CLI mode's dependencies are Kong, `x/term` and `x/sys`" no longer
+  holds; its reason, no TUI framework in the CLI mode, does.
+
+### Confirmation
+
+0032-PLAN P1a's `archtest` cases, each seen failing first; and the first adoption that brings `x/ansi` into `go.mod`,
+which `archtest` then checks against the real closure.
 
 ## More Information
 

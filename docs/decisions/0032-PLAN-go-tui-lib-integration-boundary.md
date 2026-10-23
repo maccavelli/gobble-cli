@@ -59,6 +59,26 @@ Then: 0029-PLAN gets a dated note that P2 waits for item 2's tag; this PLAN's re
 One step per tag, written as an amendment to this PLAN when the tag exists: pin it, draw through it, remove what it
 replaces in gobble, and gate it on the three hosts. 0029-PLAN P2 is the first.
 
+### P1a — `x/ansi` admitted (MADR amendment A1)
+
+*Approved by the owner, 2026-10-22: "Post. File. Approved", with step 4's comments and the sanitiser issue.*
+
+1. **Tests first,** in `TestImportRules`: `internal/cli` importing `github.com/charmbracelet/x/ansi` directly passes;
+   `internal/cli` importing a go-tui-lib package whose closure holds `x/ansi` and its text modules passes; one whose
+   closure also holds `charm.land/bubbletea/v2`, `colorprofile` or `ultraviolet` is refused, naming that module; a core
+   package (rule 1's roots) importing `x/ansi` is refused, by rule 1 and rule 5; `internal/tui` passes as before.
+2. **The check:** rule 5's closure test, and its direct-import test for `internal/cli`, exempt
+   `github.com/charmbracelet/x/ansi` and its sub-packages, and nothing else.
+3. **Records:** 0004-MADR rule 5's amendment note, 0008-MADR F5's dated note and `docs/architecture.md`'s rule 5 name
+   `x/ansi`.
+4. **go-tui-lib's issues 2 to 10:** a comment on each that `x/ansi` may stay, and what gobble's CLI still needs it to
+   drop; at the owner's word, as before. If the sanitiser is wanted from the CLI, an issue asking for it exported.
+5. **Gates. Commit.** The negatives: the exemption widened to all of `github.com/charmbracelet/x/...`; the exemption
+   given to a core package; the closure's Bubble Tea no longer named.
+
+The first adoption that brings `x/ansi` into `go.mod` (`fuzzy` at its tag, or gobble's width measured with it) is a
+P3 step, measured against 0030-MADR D5's budget before it lands.
+
 ## Verification
 
 - `archtest`'s new cases, each seen failing first; a negative per case on a scratch copy.
@@ -139,3 +159,41 @@ gobble's ASCII output, so it waits, as the rest do. `when` and `layout`, the oth
 the native CLI. Nothing of go-tui-lib is adopted yet; P3 begins with the first of these issues tagged.
 
 0029-PLAN's P2 has a dated note that it waits for issue 7.
+
+### P1a execution record (2026-10-22)
+
+The owner, on the pros and cons of changing `x/ansi` in go-tui-lib, asked for the amendment ("Draft it"), then approved
+it with this phase ("Post. File. Approved").
+
+1. **Tests first,** in `TestImportRules`, with an `xansi` constant added as a stub:
+   - `rule 5 cli may import x/ansi` and `rule 5 cli go-tui-lib whose charm is x/ansi alone` failed on the check before
+     it, `unexpected edge`;
+   - `rule 5 cli go-tui-lib with bubbletea beyond x/ansi` and `… with ultraviolet beyond x/ansi` failed, the old
+     refusal naming `x/ansi` (`missing "charm.land/bubbletea/v2"`, `missing "github.com/charmbracelet/ultraviolet"`);
+   - `rule 5 cli may not import another charm x module` (`x/term`), `rule 5 a core package may not import x/ansi` and
+     `rule 1 a core package may not import x/ansi` passed, and stay as guards;
+   - P1's `rule 5 cli go-tui-lib with charm further down` had used `x/ansi` as its Charm module; it now uses
+     `colorprofile`, as A1 decides.
+2. **The check:** `internal/cli`'s direct import of `x/ansi` (or a sub-package) passes; the closure test skips
+   `x/ansi` and refuses the first other Charm module it meets. Nothing else changed.
+3. **Records:** 0004-MADR rule 5's note, 0008-MADR F5's note and `docs/architecture.md`'s rule 5 name `x/ansi`.
+4. **go-tui-lib:** a comment on issues 2 to 10, each saying `x/ansi` and `internal/sanitize` may stay and what that
+   issue's packages must still drop; issue 6 (`fuzzy`) needs only a tag. Issue 12 filed: the sanitiser exported, with
+   invalid UTF-8 made harmless and the bidirectional controls made visible, so gobble can drop its own (which has no
+   fuzz target; go-tui-lib's has). Each text was scanned for identifiers first.
+5. **Negatives,** one at a time on a scratch copy: the exemption widened to all of `github.com/charmbracelet/x/...`
+   (fails `… another charm x module`); given to every package (fails `… a core package may not import x/ansi`); the
+   closure test exempting nothing (fails three cases); the closure's Bubble Tea no longer named past `x/ansi` (fails
+   three cases). The restored copy passed.
+
+**Gates:** the pre-add check on the two changed `.go` files, `2 file(s) clean (gofmt, golint, govulncheck)`; macOS,
+`make preflight` `preflight passed`, the tests and the race detector 36 packages ok each; the Linux machine and the
+Windows laptop, on a copy of the tree, the tests and the race detector 36 packages ok each, `make preflight` to
+`verify-build-metadata` (golangci-lint `0 issues.`, govulncheck "No vulnerabilities found."); `make check-records
+markdownlint` exit 0 on each host; `make probe-conhost`, `--- PASS: TestConhost`; `make perf` within three times each
+baseline (macOS ReplyRender 32.7 µs, Reprint 9.55 ms, LineSessionStart 826 µs, KeyDraw 1.50 µs; the Linux machine,
+slowed as in 0031-PLAN P5's gates, 195 µs, 47.2 ms, 5.29 ms, 7.31 µs; the Windows laptop 28.4 µs, 7.30 ms, 5.01 ms,
+1.08 µs).
+
+**P1a complete, 2026-10-22.** Nothing of go-tui-lib or `x/ansi` is in `go.mod` yet: each comes with the adoption that
+first imports it, P3's steps, beginning with whichever of issues 2 to 12 is tagged first.

@@ -79,9 +79,35 @@ func TestImportRules(t *testing.T) {
 			{ImportPath: modulePath + "/internal/cli/render", Imports: []string{tuiLib + "/termsvc"}},
 			{ImportPath: tuiLib + "/termsvc", Deps: []string{"strings", tuiLib + "/termcap", "charm.land/bubbletea/v2"}},
 		}},
-		{name: "rule 5 cli go-tui-lib with charm further down", rule: 5, want: "github.com/charmbracelet/x/ansi", pkgs: []modPkg{
+		{name: "rule 5 cli go-tui-lib with charm further down", rule: 5, want: "github.com/charmbracelet/colorprofile", pkgs: []modPkg{
 			{ImportPath: modulePath + "/internal/cli", Imports: []string{tuiLib + "/a"}},
-			{ImportPath: tuiLib + "/a", Deps: []string{tuiLib + "/b", "github.com/charmbracelet/x/ansi"}},
+			{ImportPath: tuiLib + "/a", Deps: []string{tuiLib + "/b", "github.com/charmbracelet/colorprofile"}},
+		}},
+		// 0032-MADR amendment A1: x/ansi, and it alone of Charm, may reach
+		// internal/cli.
+		{name: "rule 5 cli may import x/ansi", rule: 5, pkgs: []modPkg{
+			{ImportPath: modulePath + "/internal/cli/render", Imports: []string{xansi, xansi + "/parser"}},
+		}},
+		{name: "rule 5 cli go-tui-lib whose charm is x/ansi alone", rule: 5, pkgs: []modPkg{
+			{ImportPath: modulePath + "/internal/cli", Imports: []string{tuiLib + "/fuzzy"}},
+			{ImportPath: tuiLib + "/fuzzy", Deps: []string{xansi, xansi + "/parser", "github.com/clipperhouse/uax29/v2", "unicode/utf8"}},
+		}},
+		{name: "rule 5 cli go-tui-lib with bubbletea beyond x/ansi", rule: 5, want: "charm.land/bubbletea/v2", pkgs: []modPkg{
+			{ImportPath: modulePath + "/internal/cli", Imports: []string{tuiLib + "/termsvc"}},
+			{ImportPath: tuiLib + "/termsvc", Deps: []string{xansi, "charm.land/bubbletea/v2"}},
+		}},
+		{name: "rule 5 cli go-tui-lib with ultraviolet beyond x/ansi", rule: 5, want: "github.com/charmbracelet/ultraviolet", pkgs: []modPkg{
+			{ImportPath: modulePath + "/internal/cli", Imports: []string{tuiLib + "/termcap"}},
+			{ImportPath: tuiLib + "/termcap", Deps: []string{xansi, "github.com/charmbracelet/ultraviolet"}},
+		}},
+		{name: "rule 5 cli may not import another charm x module", rule: 5, want: "github.com/charmbracelet/x/term", pkgs: []modPkg{
+			{ImportPath: modulePath + "/internal/cli", Imports: []string{"github.com/charmbracelet/x/term"}},
+		}},
+		{name: "rule 5 a core package may not import x/ansi", rule: 5, want: xansi, pkgs: []modPkg{
+			{ImportPath: modulePath + "/agent", Imports: []string{xansi}},
+		}},
+		{name: "rule 1 a core package may not import x/ansi", rule: 1, want: xansi, pkgs: []modPkg{
+			{ImportPath: modulePath + "/permission", Imports: []string{xansi}},
 		}},
 		{name: "rule 5 cli go-tui-lib whose closure is unknown", rule: 5, want: tuiLib + "/unseen", pkgs: []modPkg{
 			{ImportPath: modulePath + "/internal/cli", Imports: []string{tuiLib + "/unseen"}},
