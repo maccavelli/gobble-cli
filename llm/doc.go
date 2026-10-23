@@ -16,10 +16,12 @@
 //	reasoning_delta → ThinkingDelta
 //	item            → ToolCallDone when the item is a function call
 //	done            → Usage, then Done
+//	a retry notice  → ProviderRetry, before the call's first event
 //
-// The SDK yields complete items while native streaming is unsupported, so
-// ToolCallStart and ToolCallDelta stay in the sealed set for a later stream
-// and are not produced yet.
+// The stream is live where the provider streams natively, through the SDK's
+// WithStreamRetry (0031-MADR D2). The SDK yields tool calls as complete
+// items, with no argument deltas, so ToolCallStart and ToolCallDelta stay in
+// the sealed set for a later stream and are not produced yet.
 //
 // Sentinel mapping, most specific first because the SDK sentinels overlap:
 //

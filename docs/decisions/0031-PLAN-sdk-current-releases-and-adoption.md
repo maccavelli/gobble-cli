@@ -159,3 +159,106 @@ Approved by the owner's "Commit to main, then proceed", 2026-10-22, after the MA
      laptop 29.8 µs, 7.81 ms, 4.99 ms, 1.09 µs.
 
 **P1 complete, 2026-10-22.**
+
+### P2 execution record (2026-10-22)
+
+**A correction to step 1, 2026-10-22.** Step 1 says the tests stream "as `llm/provider/wire_test.go` does". It does
+not: its canned wire answers JSON, which is all a buffered provider asks for. A probe on a scratch copy, with
+`WithStreamRetry` in place of `WithRetry`, failed eleven `llm/provider` tests: ten wire tests with "stream ended
+before" each wire's last event (`response.completed`, `message_stop`, `interaction.completed`, `[DONE]`), and
+`TestNewReportsRetryCapabilities`, which asserts the buffering this phase removes. The agent's and the CLI's tests
+passed unchanged. So the canned wire now answers each request in the form it asks for: JSON when it is not
+streamed, and, when it is, the same reply as the wire's Server-Sent Events (`llm/provider/wire_sse_test.go`), the
+empty-answer and refusal cases included. The converted tests pass on the buffered code before any change, and pass
+streamed. There was no choice for the owner here: no route but the tests' conversion keeps the tree correct.
+
+**Deviation 1, 2026-10-22, decided by the owner** ("Keep the re-run; guard failures only"). The agent's guard, as
+MADR D3 first worded it ("a call that has yielded text or thinking is not sent again by the agent's offline or
+empty-reply retries"), failed four cases of `TestEmptyReplyRunsAgain` (`agent/retry_test.go:201`, `:225`, `:238`,
+`:254`): a reply that completes with thinking alone is empty by 0005-PLAN F5-1 decision 4, and is run again. The
+guard now applies to a call that fails after showing text or thinking; a completed thinking-only reply is run again
+as before. 0031-MADR D3 is amended; F5-1 and its tests are unchanged.
+
+**Deviation 2, 2026-10-22, decided by the owner** ("Cause is the class"). 0005-PLAN F5-1 decision 5 planned the
+SDK's retries to reach a client as `_gobble/retry` with `cause` `provider`; step 2 built them with the failure's
+class as the cause, which the view's existing line shows ("retrying: rate-limited (attempt 1 of 3)"). The class it
+is: 0031-MADR D4 is amended, 0005-PLAN's line is annotated, and the comments in `agent/event.go` and
+`acpclient/update.go` that listed two causes now say the set is open.
+
+1. **Tests first,** each seen failing on the buffered code, with `llm.ProviderRetry` added as a stub nothing
+   produced:
+   - `llm/provider/stream_test.go`, on canned wires for OpenAI, Claude, Gemini and Together, one per wire:
+     - `TestStreamIsLive`: the wire holds the rest of the reply until the first text delta reaches the caller, or
+       2 s pass. Failed on every wire: `stream: … invalid character 'e' looking for beginning of value (streamed
+       false)`, the buffered provider asking for no stream.
+     - `TestFailureAfterFirstDeltaNotRetried`: the stream cut after its first delta. Failed with `text ""`.
+     - `TestProviderRetryReported`: a 503, then the stream. Failed as the others did.
+     - `TestNewReportsRetryCapabilities`, turned round: `openai: native streaming false, want true`, and the same
+       for Claude; OpenCode's best-effort stays false.
+   - `agent/retry_test.go`:
+     - `TestNoResendAfterShown/offline_after_text`: the half-shown text was sent again after an offline wait,
+       `after 2 requests`;
+     - `TestNoResendAfterShown/empty_after_thinking`: an empty-answer error after thinking, sent again;
+     - `TestProviderRetryShown`: `retries []`.
+   - `internal/cli/cutoff_test.go`, `TestCutOffReply`: `mid-reply` failed, `the cut-off line shown false, want
+     true`; `before any reply` and `after a tool ran` passed, and stay as guards.
+2. **The code:**
+   - `llm/provider/provider.go`: `WithStreamRetry(p, policyOf(r), notice)`. `notice` hands each `RetryNotice` to a
+     hook the call puts in its context; the hook yields `llm.ProviderRetry` (attempt, of how many, the wait, and
+     `FailureKind`'s class) before the call's events, and a caller that stops there cancels the wait.
+     `NativeStreaming` comes from the wrapped provider.
+   - `agent/agent.go`: the reply marks `shown` once text or thinking is yielded. A call that fails after that ends
+     the turn with its error and is not sent again by the offline, empty-reply or overflow resends (deviation 1). A
+     `ProviderRetry` is a `Retry` start of its class (deviation 2), ended when the call's events begin or it ends.
+   - `internal/cli/view.go` and `line.go`: the view marks a reply or thinking drawn last, cleared by a tool call
+     or a plan; when the prompt fails, `cutOff` writes "(the reply was cut off)", dimmed, on its own line before the
+     status line and the error, and keeps it for a reprint.
+   - `llm/doc.go`, `llm/llm.go`: what is now true of the stream.
+3. **The capture of a resize mid-reply** (0030-PLAN P5's, deviation 7 there), with 0030-PLAN P5's scratch tools,
+   gobble built from this tree, the stub streaming over 2.2 s:
+
+   | Host | Narrowing | Check | Narrowed at byte, within the reply's |
+   |---|---|---|---|
+   | macOS | re-wraps, cursor down | ok: 1 reply of 32 rows | 415, of 365–2024 |
+   | macOS | re-wraps, cursor kept | ok | 421, of 397–2055 |
+   | macOS | cuts | ok | 403, of 379–2037 |
+   | The Linux machine | re-wraps, cursor down | ok | 800, of 776–2725 |
+   | The Linux machine | re-wraps, cursor kept | ok | 829, of 805–2768 |
+   | The Linux machine | cuts | ok | 844, of 794–2757 |
+   | The Windows laptop | Windows' own | ok | 764, of 740–3393 |
+
+   The mid-prompt captures were run again with streaming, and all seven passed. The timing probe of 0030-PLAN P5's
+   deviation 7, which then saw the whole reply 12 ms after Enter, now saw its first text at 78 ms and its last at
+   2.224 s, with the stub's stream running 0.004–2.215 s.
+4. **Negatives,** one at a time on a scratch copy:
+   - **The buffering `WithRetry` back:** `TestNewReportsRetryCapabilities` (`openai: native streaming false, want
+     true`) and `TestStreamIsLive` (`streamed false`).
+   - **The provider's notices dropped:** `TestProviderRetryReported`, `retries [], want one: attempt 1 of 3,
+     unavailable, with its wait`.
+   - **A resend allowed after text was shown:** `TestNoResendAfterShown`, `after 2 requests`.
+   - **The provider's retry not shown by the agent:** `TestProviderRetryShown`, an end with no start.
+   - **The cut-off line missing:** `TestCutOffReply`, `the cut-off line shown false, want true`.
+   - **A tool not ending the reply:** `TestCutOffReply`, `the cut-off line shown true, want false`.
+
+   Six mutations, six failures; the restored copy passed.
+5. **Records:** 0031-MADR D3 and D4 amended (deviations 1 and 2); dated notes in 0005-PLAN (decision 3, F4-1b;
+   F5-1 decision 5, issue 3), in `docs/README.md`'s 0005 entry, and in 0030-PLAN P5's deviation 7.
+
+**Found by the gates and fixed in the phase:** `perfsprint`'s string concatenation in a loop, twice, and
+`staticcheck`'s QF1001, all in the new tests.
+
+**Gates:**
+
+- The pre-add check on the seventeen changed `.go` files: `17 file(s) clean (gofmt, golint, govulncheck)`.
+- macOS: `make preflight`, `preflight passed`; the tests and the race detector, 36 packages ok each.
+- The Linux machine and the Windows laptop, on a copy of the tree: the tests and the race detector, 36 packages ok on
+  each; `make preflight` reached `apidiff` (golangci-lint `0 issues.`, govulncheck "No vulnerabilities found.") and
+  stopped at `verify-build-metadata`, as the copies are not git checkouts.
+- `make check-records markdownlint`: exit 0 on each host.
+- The Windows laptop, `make probe-conhost`: `--- PASS: TestConhost`.
+- `make perf`, each within three times its baseline: macOS ReplyRender 32.9 µs, Reprint 9.39 ms, LineSessionStart
+  827 µs, KeyDraw 1.54 µs; the Linux machine 123 µs, 28.4 ms, 3.24 ms, 5.09 µs; the Windows laptop 29.5 µs, 7.73 ms,
+  5.13 ms, 1.10 µs.
+
+**Not done, for the owner:** a live turn against a real provider, which the plan's verification asks the owner to
+take; the owner's look at 0030-PLAN P5 is also still to come. P2 is committed with the rest of its steps done.

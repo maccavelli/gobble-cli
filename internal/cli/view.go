@@ -70,6 +70,7 @@ type view struct {
 	wrote      bool // anything is on stdout
 	atBOL      bool // the cursor is at the start of a line
 	thought    bool // the last text written was thinking
+	replying   bool // reply text or thinking was drawn last: a failure now cuts the reply off
 	err        error
 }
 
@@ -121,6 +122,7 @@ func (v *view) on(u acpclient.Update) {
 			v.line("[" + u.Block + "]")
 			return
 		}
+		v.replying = true
 		if v.thought {
 			v.thought = false
 			v.show(v.think.Flush())
@@ -134,7 +136,7 @@ func (v *view) on(u acpclient.Update) {
 			return
 		}
 		v.flushReply() // not the thinking: its next chunk continues the row
-		v.thought = true
+		v.thought, v.replying = true, true
 		v.keep(&v.thinking, v.thinkingAt, term.Sanitize(u.Text))
 		s := term.Dim.Wrap(term.Sanitize(u.Text), v.caps.Out.Color)
 		if w := v.wrapWidth(); w > 0 {
@@ -142,11 +144,13 @@ func (v *view) on(u acpclient.Update) {
 		}
 		v.show(s)
 	case acpclient.KindToolCall:
+		v.replying = false
 		st := &toolState{title: u.Tool.Title, status: u.Tool.Status}
 		v.tools[u.Tool.ID] = st
 		v.header(st)
 		v.content(u.Tool.Content)
 	case acpclient.KindToolCallUpdate:
+		v.replying = false
 		st, ok := v.tools[u.Tool.ID]
 		if !ok {
 			st = &toolState{}
@@ -161,6 +165,7 @@ func (v *view) on(u acpclient.Update) {
 		v.header(st)
 		v.content(u.Tool.Content)
 	case acpclient.KindPlan:
+		v.replying = false
 		items := make([]render.PlanItem, 0, len(u.Plan))
 		for _, e := range u.Plan {
 			items = append(items, render.PlanItem{Content: e.Content, Status: e.Status})
@@ -296,6 +301,17 @@ func (v *view) flushReply() {
 	v.text(v.md.Flush())
 	v.show(v.wrap.Flush())
 	v.reply = nil
+}
+
+// cutOff says the reply was cut off, on a line of its own after what was
+// drawn, when the turn failed while its reply or thinking was being drawn
+// (0031-MADR D3).
+func (v *view) cutOff() {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if v.replying {
+		v.line(dimmed("(the reply was cut off)", v.caps.Out.Color))
+	}
 }
 
 // line writes s as a line of its own.

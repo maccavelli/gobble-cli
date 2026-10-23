@@ -130,9 +130,19 @@ its own.
   does not either: a call that has yielded text or thinking is not sent again by the agent's offline or empty-reply
   retries, so no text is shown twice. The turn ends with the error, and the text already shown stays, followed by a
   line saying the reply was cut off. A failure before the first delta is retried as today.
+
+  *Amended 2026-10-22 (0031-PLAN P2, deviation 1; the owner's answer "Keep the re-run; guard failures only"):* the
+  guard is for a call that fails after showing text or thinking (offline, an empty-answer error, an overflow). A call
+  that completes with thinking alone is still run again, its thinking shown again, as 0005-PLAN F5-1 decision 4 has
+  it and as it was when replies were buffered.
 - **D4. Provider retries are shown.** The `notify` of D2 reaches the turn as a retry of its own cause, the provider's,
   with its attempt, delay and error class, shown as the offline and empty-reply waits are. This answers 0005-PLAN's
   "once the SDK offers a callback (issue 3)".
+
+  *Amended 2026-10-22 (0031-PLAN P2, deviation 2; the owner's answer "Cause is the class"):* the retry's cause
+  is the failure's class (`unavailable`, `rate-limited`, `timeout`, `quota`, …), so the line reads "retrying:
+  rate-limited (attempt 1 of 3)". 0005-PLAN's planned cause `provider` is superseded, and `_gobble/retry`'s causes
+  are an open set.
 - **D5. The ACP connection's end.** `acpserver.Serve` waits for the connection's handlers (`Wait`), bounded by a
   timeout since gobble's notification handlers do not read their context, before closing the agent, and returns
   `Err()` when the input failed other than by its end. `acpclient.Conn.Close` closes the connection after `Wait`, on a

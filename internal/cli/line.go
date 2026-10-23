@@ -379,6 +379,7 @@ func (ls *lineSession) turn(p Prompt) error {
 		e.out.Errorf("%s", e.authMessage())
 		return nil
 	case perr != nil:
+		v.cutOff()
 		if err := v.finish(res); err != nil {
 			return err
 		}

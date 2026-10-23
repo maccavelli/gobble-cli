@@ -547,7 +547,9 @@ showed it whole 12 ms after Enter. In every capture the narrowing therefore fell
 byte. [0031-PLAN-sdk-current-releases-and-adoption.md](0031-PLAN-sdk-current-releases-and-adoption.md) turns on
 live streaming in its P2, and that phase runs the mid-reply capture on the three hosts. P5 captures the
 resize mid-prompt. The view's reprint at a reply's next line end stays covered by P3's
-`TestViewReprintsAtTheNextLineEnd` until then.
+`TestViewReprintsAtTheNextLineEnd` until then. *(2026-10-22: run in 0031-PLAN P2 with replies streamed: on macOS
+and the Linux machine in each of the three narrowings, and on the Windows laptop, the narrowing fell inside the
+reply and every check passed; see that plan's P2 record.)*
 
 **Step 0 (deviation 6), tests first,** each seen failing on a stub (an `Options.Show` the log ignored, a `Wrap`
 returning nothing, a `keepShown` and an `Output.logRecord` that did nothing):

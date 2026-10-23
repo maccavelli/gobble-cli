@@ -278,3 +278,52 @@ func TestEmptyReplyRunsAgain(t *testing.T) {
 		})
 	}
 }
+
+// A call that has shown text or thinking is not sent again: an offline
+// failure after text, and an empty answer after thinking, each end the turn
+// with their error after one request and no wait, so nothing is shown twice
+// (0031-MADR D3).
+func TestNoResendAfterShown(t *testing.T) {
+	t.Run("offline after text", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			p := &probing{Script: llmtest.NewScript(llmtest.Turn{Events: []llm.Event{llm.TextDelta{Text: "half a re"}}, Err: errOffline},
+				llmtest.Text("never")), start: time.Now(), answers: []error{nil}}
+			a := agent.New(agent.Config{Provider: p, Retry: &llm.Retry{OfflineWait: time.Minute}})
+			ws, _, err := runRetry(t.Context(), t, a, p.start)
+			if !errors.Is(err, llm.ErrOffline) || len(ws) != 0 || len(p.Requests()) != 1 {
+				t.Fatalf("err %v, retries %+v after %d requests; want llm.ErrOffline, no wait, one request", err, ws, len(p.Requests()))
+			}
+		})
+	})
+	t.Run("empty after thinking", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			s := llmtest.NewScript(llmtest.Turn{Events: []llm.Event{llm.ThinkingDelta{Text: "hmm"}}, Err: errEmptyAnswer},
+				llmtest.Text("never"))
+			ws, _, err := runRetry(t.Context(), t, agent.New(agent.Config{Provider: s, Retry: &llm.Retry{}}), time.Now())
+			if !errors.Is(err, llm.ErrEmptyReply) || len(ws) != 0 || len(s.Requests()) != 1 {
+				t.Fatalf("err %v, retries %+v after %d requests; want llm.ErrEmptyReply, no wait, one request", err, ws, len(s.Requests()))
+			}
+		})
+	})
+}
+
+// A retry the provider reports is a Retry of the failure's class, with its
+// attempt, of how many, and its wait, ended once the call's events begin
+// (0031-MADR D4).
+func TestProviderRetryShown(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		start := time.Now()
+		s := llmtest.NewScript(llmtest.Turn{Events: []llm.Event{
+			llm.ProviderRetry{Attempt: 1, MaxAttempts: 3, Wait: 2 * time.Second, Kind: "unavailable"},
+			llm.TextDelta{Text: "ok"}, llm.Usage{InputTokens: 10, OutputTokens: 1}, llm.Done{StopReason: llm.StopEndTurn},
+		}})
+		ws, end, err := runRetry(t.Context(), t, agent.New(agent.Config{Provider: s}), start)
+		want := []waited{
+			{agent.Retry{Phase: agent.RetryStart, Cause: "unavailable", Attempt: 1, MaxAttempts: 3, Delay: 2 * time.Second}, 0},
+			{agent.Retry{Phase: agent.RetryEnd, Cause: "unavailable"}, 0},
+		}
+		if err != nil || !slices.Equal(ws, want) || !slices.Equal(texts(end.Messages), []string{"user:go", "assistant:ok"}) {
+			t.Fatalf("err %v, retries %+v, messages %q; want %+v and the reply", err, ws, texts(end.Messages), want)
+		}
+	})
+}

@@ -382,6 +382,9 @@ type reply struct {
 	calls    []llm.ToolCallDone
 	stop     llm.StopReason
 	usage    llm.Usage
+	// shown is set once the call has shown text or thinking: it is not sent
+	// again, which would show them twice (0031-MADR D3).
+	shown bool
 }
 
 func (r *reply) message() llm.Message {
@@ -478,6 +481,10 @@ func (t *turn) next() (*reply, bool) {
 		case err == nil && t.ctx.Err() != nil:
 			t.endWait(cause, turnCancelled)
 			return r, !t.stopped
+		case err != nil && r != nil && r.shown:
+			// A call that failed after showing text or thinking is not sent again:
+			// what was shown stays, and the turn ends with the error. A completed
+			// thinking-only reply is still run again (0031-MADR D3, as amended).
 		case errors.Is(err, llm.ErrContextOverflow) && !resent && t.a.cfg.Compact != nil:
 			resent = true
 			done, cerr := t.compact(true)
@@ -647,16 +654,37 @@ func (t *turn) call() (*reply, error) {
 	msgs = append(append(msgs, t.history...), t.added...)
 	req := &llm.Request{Model: t.a.cfg.Model, Messages: msgs, Tools: t.specs, Thinking: t.a.cfg.Thinking, Cache: t.a.cfg.Cache}
 	r := &reply{}
+	var retrying RetryCause // the provider's retry under way, ended when its events begin
+	endRetry := func(why string) {
+		if retrying != "" {
+			t.emit(Retry{Phase: RetryEnd, Cause: retrying, Err: why})
+			retrying = ""
+		}
+	}
 	for ev, err := range t.a.cfg.Provider.Stream(t.ctx, req) {
 		if err != nil {
 			if t.ctx.Err() != nil {
+				endRetry(turnCancelled)
 				return r, nil
 			}
+			endRetry(err.Error())
 			return r, err
 		}
+		if pr, ok := ev.(llm.ProviderRetry); ok {
+			// The provider retries before any event: shown as the turn's own waits
+			// are, its cause the failure's class (0031-MADR D4).
+			endRetry("")
+			retrying = RetryCause(pr.Kind)
+			if !t.emit(Retry{Phase: RetryStart, Cause: retrying, Attempt: pr.Attempt, MaxAttempts: pr.MaxAttempts, Delay: pr.Wait}) {
+				return r, nil
+			}
+			continue
+		}
+		endRetry("")
 		switch ev := ev.(type) {
 		case llm.TextDelta:
 			r.text.WriteString(ev.Text)
+			r.shown = r.shown || ev.Text != ""
 			if ev.Text != "" && !t.emit(TextDelta{Text: ev.Text}) {
 				return r, nil
 			}
@@ -668,6 +696,7 @@ func (t *turn) call() (*reply, error) {
 				r.thinking = append(r.thinking, llm.Content{Type: llm.ContentThinking, Text: r.pending.String(), ProviderData: ev.ProviderData})
 				r.pending.Reset()
 			}
+			r.shown = r.shown || ev.Text != ""
 			if ev.Text != "" && !t.emit(ThinkingDelta{Text: ev.Text}) {
 				return r, nil
 			}
@@ -684,6 +713,7 @@ func (t *turn) call() (*reply, error) {
 			r.stop = ev.StopReason
 		}
 	}
+	endRetry("")
 	return r, nil
 }
 

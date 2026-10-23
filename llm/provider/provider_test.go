@@ -143,16 +143,22 @@ func TestUsageCacheWrite(t *testing.T) {
 	}
 }
 
-// New reports the retry wrapper's capabilities, which buffer the stream,
-// not the inner provider's; Wrap, with no retry, keeps the provider's
-// (0019-MADR D2).
+// New reports native streaming where the provider streams natively, through
+// the retry wrapper that now passes the stream on, and not for OpenCode's
+// best-effort streaming (0031-MADR D2; it reported the buffering wrapper's
+// before, 0019-MADR D2). Wrap, with no retry, keeps the provider's.
 func TestNewReportsRetryCapabilities(t *testing.T) {
-	p, err := New("openai", Options{APIKey: "test-only"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if p.Capabilities().NativeStreaming {
-		t.Fatal("New reports native streaming through the buffering retry wrapper")
+	for _, c := range []struct {
+		id   string
+		want bool
+	}{{"openai", true}, {"claude", true}, {"opencode-zen", false}} {
+		p, err := New(c.id, Options{APIKey: "test-only"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := p.Capabilities().NativeStreaming; got != c.want {
+			t.Errorf("%s: native streaming %v, want %v", c.id, got, c.want)
+		}
 	}
 	f := sdktest.NewFake("fake", llmprovider.Capabilities{NativeStreaming: llmprovider.Supported})
 	if !Wrap(f).Capabilities().NativeStreaming {

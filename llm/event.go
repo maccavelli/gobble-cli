@@ -1,6 +1,21 @@
 package llm
 
-import "encoding/json/jsontext"
+import (
+	"encoding/json/jsontext"
+	"time"
+)
+
+// ProviderRetry is a retry the provider makes before any of the call's
+// events: the try that failed, of how many, the wait about to begin, and
+// the failure's class (0031-MADR D4). The call's events follow from the
+// try that succeeds.
+type ProviderRetry struct {
+	Attempt, MaxAttempts int
+	Wait                 time.Duration
+	Kind                 string
+}
+
+func (ProviderRetry) event() {}
 
 // Event is the sealed stream value.
 // The unexported method keeps the set closed.

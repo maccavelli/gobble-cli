@@ -57,7 +57,8 @@ type Loaded struct{ Names []string }
 // Retry is a wait the turn takes before it calls the model again
 // (0005-PLAN F5-1 decision 5): a Start before each wait, and one End when
 // the call after it succeeds, the wait is cut short, or the retries run
-// out. Cause is RetryOffline or RetryEmptyReply. An offline wait has one
+// out. Cause is RetryOffline, RetryEmptyReply, or, for a retry the provider
+// makes, the failure's class (0031-MADR D4, as amended). An offline wait has one
 // Start and one End, and no Attempt. Delay is the wait about to start, for
 // an empty reply; Err is why the End is not a success, or "".
 type Retry struct {

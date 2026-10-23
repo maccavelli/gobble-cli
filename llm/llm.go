@@ -43,7 +43,7 @@ var DefaultRetry = Retry{MaxRetries: 3, BaseDelay: 2 * time.Second, MaxDelay: 60
 
 // Capabilities says what this process can actually send.
 // ImageInput stays false until the SDK accepts image input.
-// NativeStreaming stays false while the SDK's retry wrapper buffers the stream (0005-PLAN F4-1b).
+// NativeStreaming is true where the provider streams natively, which the SDK's retry now passes on (0031-MADR D2).
 type Capabilities struct {
 	ImageInput      bool `json:"imageInput,omitzero"`
 	NativeStreaming bool `json:"nativeStreaming,omitzero"`

@@ -121,14 +121,18 @@ func TestProbePort(t *testing.T) {
 // 5). These pin the SDK's message (sdkEmptyAnswer) (0005-PLAN F5-1
 // decision 4).
 func TestWireEmptyAnswer(t *testing.T) {
-	for _, c := range []struct{ wire, id, model, body string }{
-		{"responses", "openai", "gpt-6-luna", `{"id":"r","status":"completed","output":[],"usage":{"input_tokens":12,"output_tokens":0,"total_tokens":12}}`},
-		{"messages", "claude", "claude-haiku-5-5", `{"id":"m","type":"message","role":"assistant","stop_reason":"end_turn","content":[],"usage":{"input_tokens":12,"output_tokens":0}}`},
-		{"interactions", "gemini", "gemini-3.5-flash-lite", `{"id":"i","status":"completed","steps":[],"usage":{"total_input_tokens":12,"total_output_tokens":0,"total_tokens":12}}`},
-		{"chat completions", "together", "zai-org/GLM-5.3-Flash", `{"id":"c","choices":[],"usage":{"prompt_tokens":12,"completion_tokens":0,"total_tokens":12}}`},
+	for _, c := range []struct{ wire, id, model, body, stream string }{
+		{"responses", "openai", "gpt-6-luna", `{"id":"r","status":"completed","output":[],"usage":{"input_tokens":12,"output_tokens":0,"total_tokens":12}}`,
+			sse("response.completed", `{"type":"response.completed","response":{"id":"r","status":"completed","output":[],"usage":{"input_tokens":12,"output_tokens":0,"total_tokens":12}}}`)},
+		{"messages", "claude", "claude-haiku-5-5", `{"id":"m","type":"message","role":"assistant","stop_reason":"end_turn","content":[],"usage":{"input_tokens":12,"output_tokens":0}}`,
+			sse("message_start", `{"type":"message_start","message":{"id":"m","type":"message","role":"assistant","content":[],"usage":{"input_tokens":12,"output_tokens":0}}}`) + sse("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":0}}`) + sse("message_stop", `{"type":"message_stop"}`)},
+		{"interactions", "gemini", "gemini-3.5-flash-lite", `{"id":"i","status":"completed","steps":[],"usage":{"total_input_tokens":12,"total_output_tokens":0,"total_tokens":12}}`,
+			sse("interaction.created", `{"event_type":"interaction.created","interaction":{"id":"i","status":"in_progress"}}`) + sse("interaction.completed", `{"event_type":"interaction.completed","interaction":{"id":"i","status":"completed","steps":[],"usage":{"total_input_tokens":12,"total_output_tokens":0,"total_tokens":12}}}`) + sse("done", `[DONE]`)},
+		{"chat completions", "together", "zai-org/GLM-5.3-Flash", `{"id":"c","choices":[],"usage":{"prompt_tokens":12,"completion_tokens":0,"total_tokens":12}}`,
+			sse("", `{"id":"c","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}`) + sse("", `{"id":"c","choices":[],"usage":{"prompt_tokens":12,"completion_tokens":0,"total_tokens":12}}`) + sse("", `[DONE]`)},
 	} {
 		t.Run(c.wire, func(t *testing.T) {
-			w := &cannedWire{status: http.StatusOK, body: c.body}
+			w := &cannedWire{status: http.StatusOK, body: c.body, stream: c.stream}
 			o := wireStream(t, c.id, c.model, w, wireRequest())
 			if !errors.Is(o.err, llm.ErrEmptyReply) || !errors.Is(o.err, llm.ErrIncomplete) {
 				t.Fatalf("err %v, want llm.ErrEmptyReply and llm.ErrIncomplete", o.err)
@@ -137,7 +141,8 @@ func TestWireEmptyAnswer(t *testing.T) {
 		})
 	}
 	refusal := &cannedWire{status: http.StatusOK,
-		body: `{"id":"m","type":"message","role":"assistant","stop_reason":"refusal","content":[],"usage":{"input_tokens":12,"output_tokens":0}}`}
+		body:   `{"id":"m","type":"message","role":"assistant","stop_reason":"refusal","content":[],"usage":{"input_tokens":12,"output_tokens":0}}`,
+		stream: sse("message_start", `{"type":"message_start","message":{"id":"m","type":"message","role":"assistant","content":[],"usage":{"input_tokens":12,"output_tokens":0}}}`) + sse("message_delta", `{"type":"message_delta","delta":{"stop_reason":"refusal"},"usage":{"output_tokens":0}}`) + sse("message_stop", `{"type":"message_stop"}`)}
 	o := wireStream(t, "claude", "claude-haiku-5-5", refusal, wireRequest())
 	if o.err != nil || o.stop != llm.StopRefusal || o.text != "" {
 		t.Fatalf("refusal: err %v, stop %q, text %q; want a reply that stops as a refusal, with nothing in it", o.err, o.stop, o.text)

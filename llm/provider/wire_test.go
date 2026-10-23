@@ -50,6 +50,7 @@ type cannedWire struct {
 	status int
 	header http.Header
 	body   string
+	stream string
 	tool   bool
 
 	mu      sync.Mutex
@@ -78,8 +79,17 @@ func (c *cannedWire) RoundTrip(r *http.Request) (*http.Response, error) {
 		}
 		return &http.Response{StatusCode: status, Header: out, Body: io.NopCloser(strings.NewReader(b)), Request: r}, nil
 	}
+	streams := strings.Contains(string(body), `"stream":true`)
 	if c.status != 0 {
+		if streams && c.stream != "" {
+			return reply(c.status, http.Header{"Content-Type": {"text/event-stream"}}, c.stream)
+		}
 		return reply(c.status, c.header, c.body)
+	}
+	if strings.Contains(string(body), `"stream":true`) {
+		if s, ok := wireStreamFor(r.URL.Path, c.tool); ok {
+			return reply(http.StatusOK, http.Header{"Content-Type": {"text/event-stream"}}, s)
+		}
 	}
 	pick := func(text, tool string) (*http.Response, error) {
 		if c.tool {

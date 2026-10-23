@@ -3405,6 +3405,8 @@ F4-1a keeps the tool result's error flag and the wire tests.)*
    - after the first event, every event passes through, and a failure ends the stream with no `EventDone`, as 0031-MADR D4 has it.
 
    F4-1b pins the first release that has it. Until then, `Stream` stays buffered and `NativeStreaming` says so.
+   *(2026-10-22: go-llmprovider-sdk `v1.19.0` has it as `WithStreamRetry`; [0031-PLAN-sdk-current-releases-and-adoption.md](0031-PLAN-sdk-current-releases-and-adoption.md) P1 pins `v1.21.0` and P2
+   is F4-1b.)*
 4. **0012-PLAN P7 follows F4-1a,** made executable as an amendment to 0012-PLAN first, as P7's own text requires.
 5. **F4-2 follows F4-1a.** It does not wait for F4-1b, which lands before F4's accept.
 
@@ -5700,7 +5702,8 @@ histories were rewritten; the report's line numbers match these heads within a f
      Another client may ignore it.
 
    The SDK's own retries get the same notification, `cause` `provider`, once the SDK offers a callback (issue 3), in a
-   sub-phase made executable then.
+   sub-phase made executable then. *(2026-10-22: done by [0031-PLAN-sdk-current-releases-and-adoption.md](0031-PLAN-sdk-current-releases-and-adoption.md) P2, the cause being the failure's class, not
+   `provider`, by its deviation 2.)*
 6. **The retry methods are Pi's two.**
    - `_gobble/set_auto_retry {sessionId, enabled}` writes `retry.enabled` to the global settings, as Pi's does. Within
      the session, decisions 3 and 4 follow it at once; the SDK's retry follows it from the next provider built.

@@ -191,17 +191,29 @@ func New(id string, o Options) (llm.Provider, error) {
 	if err != nil {
 		return nil, fmt.Errorf("provider %s: %w", id, mapError(err))
 	}
-	// The retry wrapper buffers the stream, so its capabilities, not the
-	// inner provider's, are what gobble can deliver (0019-MADR D2).
+	// The retry wrapper passes the stream on as it arrives, retrying only a
+	// failure before its first event, and keeps the provider's capabilities,
+	// native streaming included (0031-MADR D2).
 	r := llm.DefaultRetry
 	if o.Retry != nil {
 		r = *o.Retry
 	}
 	w := p
 	if !r.Off {
-		w = llmprovider.WithRetry(p, policyOf(r))
+		w = llmprovider.WithStreamRetry(p, policyOf(r), notice)
 	}
 	return &adapter{p: w, id: p.ID(), caps: w.Capabilities(), source: o.CredentialSource, login: login != nil}, nil
+}
+
+// noticeKey carries a call's hook for the retry notices of its stream.
+type noticeKey struct{}
+
+// notice hands n to the hook of the call whose stream it comes from. The
+// SDK calls it on the goroutine ranging that stream, before its wait.
+func notice(ctx context.Context, n llmprovider.RetryNotice) {
+	if hook, ok := ctx.Value(noticeKey{}).(func(llmprovider.RetryNotice)); ok {
+		hook(n)
+	}
 }
 
 // Wrap adapts an SDK provider to llm.Provider, with no retry of its own.
@@ -273,9 +285,23 @@ func (a *adapter) attempt(ctx context.Context, req *llm.Request, msgs []llm.Mess
 		return false
 	}
 	var out strings.Builder
-	calls, sent := false, false
+	calls, sent, stopped := false, false, false
 	ctx = context.WithValue(ctx, modelKey{}, req.Model) // for the header transport (0005-PLAN F4-2b)
+	// The provider's retries are yielded as they are made; a caller that
+	// stops at one ends the wait at once (0031-MADR D4).
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	ctx = context.WithValue(ctx, noticeKey{}, func(n llmprovider.RetryNotice) {
+		if !stopped && !yield(llm.ProviderRetry{Attempt: n.Attempt, MaxAttempts: n.MaxAttempts, Wait: n.Wait,
+			Kind: FailureKind(mapError(n.Err))}, nil) {
+			stopped = true
+			cancel()
+		}
+	})
 	for ev, err := range llmprovider.Stream(ctx, a.p, sreq) {
+		if stopped {
+			return false
+		}
 		if err != nil {
 			if canRetry && !sent && signatureRefused(mapError(err)) {
 				return true
