@@ -55,6 +55,10 @@ const metaGobble = "gobble"
 
 // PermissionRequest is the agent asking to run a tool call.
 //
+// FullTitle is the call's whole description, the request's title when
+// the agent sends none; Saves are the patterns an "always" saves, and
+// Hides says a "never" hides the tool (gobble-cli 0029-MADR D4).
+//
 // Limit, Repeated and OnceOnly are gobble's marks, from the request's
 // _meta.gobble: the limit that asked, which no "always" and no --yes may
 // approve; a repeated call's run, whose question asks whether the turn may
@@ -68,6 +72,9 @@ type PermissionRequest struct {
 	Limit     string
 	Repeated  int
 	OnceOnly  string
+	FullTitle string
+	Saves     []string
+	Hides     bool
 }
 
 // PermissionOption is one answer the agent offers. Kind is ACP's:
@@ -476,6 +483,9 @@ func (h *handler) RequestPermission(ctx context.Context, r acp.RequestPermission
 		if r.ToolCall.Title != nil {
 			req.Tool.Title = *r.ToolCall.Title
 		}
+		if req.FullTitle == "" {
+			req.FullTitle = req.Tool.Title
+		}
 		for _, o := range r.Options {
 			req.Options = append(req.Options, PermissionOption{ID: string(o.OptionId), Name: o.Name, Kind: string(o.Kind)})
 		}
@@ -513,6 +523,23 @@ func gobbleMarks(req *PermissionRequest, meta map[string]any) {
 	}
 	if s, ok := g["onceOnly"].(string); ok {
 		req.OnceOnly = s
+	}
+	if s, ok := g["title"].(string); ok {
+		req.FullTitle = s
+	}
+	if l, ok := g["saves"].([]any); ok {
+		req.Saves = make([]string, 0, len(l))
+		for _, v := range l {
+			s, ok := v.(string)
+			if !ok {
+				req.Saves = nil
+				break
+			}
+			req.Saves = append(req.Saves, s)
+		}
+	}
+	if b, ok := g["hides"].(bool); ok {
+		req.Hides = b
 	}
 	switch n := g["repeated"].(type) {
 	case float64:

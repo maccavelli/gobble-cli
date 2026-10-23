@@ -40,6 +40,9 @@ type question struct {
 	// saves, for a shell call, are the patterns an "always" saves, which
 	// its options' names show (F6-3 decision 4a).
 	saves []string
+	// title is the call's whole description, for a client that shows it
+	// (0029-MADR D3).
+	title string
 }
 
 // answer is the option chosen, none for a cancel, and a reject's reason.
@@ -80,7 +83,19 @@ func (q question) options() []acp.PermissionOption {
 	return out
 }
 
-// meta is q's _meta.gobble: its marks and its rule, or none.
+// The _meta.gobble keys of a tool call's question for a client that lays
+// it out itself: the call's whole description, cut to maxFullTitle runes;
+// the patterns an "always" saves; and whether a "never" hides the tool
+// (0029-MADR D3).
+const (
+	keyTitle     = "title"
+	keySaves     = "saves"
+	keyHides     = "hides"
+	maxFullTitle = 2000
+)
+
+// meta is q's _meta.gobble: its marks, its rule and its description, or
+// none.
 func (q question) meta() map[string]any {
 	g := map[string]any{}
 	switch {
@@ -93,6 +108,15 @@ func (q question) meta() map[string]any {
 	}
 	if q.by != nil {
 		g[keyRule] = map[string]any{keyRule: q.by.String(), keyFrom: q.by.Source.String()}
+	}
+	if q.title != "" {
+		g[keyTitle] = cutTo(q.title, maxFullTitle)
+	}
+	if len(q.saves) > 0 { // only an "always" has patterns to save
+		g[keySaves] = q.saves
+	}
+	if q.always && q.hides { // as options shows it: only beside an "always"
+		g[keyHides] = true
 	}
 	if len(g) == 0 {
 		return nil
@@ -120,6 +144,7 @@ func (p *acpPolicy) ask(ctx context.Context, r permission.Rule, q question) (ans
 	if p.conn == nil {
 		return answer{}, errors.New("no client connection")
 	}
+	q.title = r.Title
 	resp, err := p.conn.RequestPermission(ctx, acp.RequestPermissionRequest{
 		Meta:      q.meta(),
 		SessionId: p.session,

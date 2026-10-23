@@ -203,9 +203,14 @@ func TestEditNeedsOneMatch(t *testing.T) {
 	}
 }
 
+// A description is one line, whole; acpserver cuts the title a client sees
+// (0029-MADR D3, as amended). A summary is cut.
 func TestBounds(t *testing.T) {
-	if got := title(strings.Repeat("é", 100)); utf8.RuneCountInString(got) != maxTitle || !strings.HasSuffix(got, "…") {
-		t.Fatalf("title has %d runes", utf8.RuneCountInString(got))
+	if got := title(strings.Repeat("é", 100)); utf8.RuneCountInString(got) != 100 || strings.Contains(got, "…") {
+		t.Fatalf("title has %d runes, cut %v; want all 100", utf8.RuneCountInString(got), strings.Contains(got, "…"))
+	}
+	if got := title("run a\n  b\tc"); got != "run a b c" {
+		t.Fatalf("title %q, want it on one line", got)
 	}
 	if got := summary(strings.Repeat("é", 300)); len(got) > maxSummary || !utf8.ValidString(got) {
 		t.Fatalf("summary is %d bytes, valid %v", len(got), utf8.ValidString(got))
@@ -214,16 +219,9 @@ func TestBounds(t *testing.T) {
 
 func TestDescribeTitles(t *testing.T) {
 	env := tool.Env{Cwd: filepath.Join(string(filepath.Separator), "w")}
-	cases := map[tool.Tool]string{
-		Read():  `{"path":"internal/cli/term.go"}`,
-		Write(): `{"path":"a.go","content":""}`,
-		Bash():  `{"command":"go test ./... && ` + strings.Repeat("x", 80) + `"}`,
-	}
-	for tl, args := range cases {
-		got := tl.(tool.Describer).Describe(tool.Call{Args: jsontext.Value(args)}, env)
-		if utf8.RuneCountInString(got) > maxTitle {
-			t.Errorf("%s title %q is over %d runes", tl.Spec().Name, got, maxTitle)
-		}
+	long := "go test ./... && " + strings.Repeat("x", 80)
+	if got := Bash().(tool.Describer).Describe(tool.Call{Args: jsontext.Value(`{"command":"` + long + `"}`)}, env); got != "run "+long {
+		t.Errorf("a long command's title %q, want it whole", got)
 	}
 	if got := Read().(tool.Describer).Describe(tool.Call{Args: jsontext.Value(`{"path":"internal/cli/term.go"}`)}, env); got != "read internal/cli/term.go" {
 		t.Errorf("read title %q", got)

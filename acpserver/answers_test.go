@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"unicode/utf8"
 
 	acp "github.com/maccavelli/acp-go-sdk2"
 
@@ -212,7 +213,9 @@ func TestQuestionOptions(t *testing.T) {
 	if got := ids(q); !slices.Equal(got, want) {
 		t.Errorf("a write's options %q", got)
 	}
-	if r, _ := marks(q)[keyRule].(map[string]any); r[keyRule] != "ask: write" || r[keyFrom] != "default" || len(marks(q)) != 1 {
+	// The rule, and the call's whole description (0029-MADR D3); nothing else.
+	if r, _ := marks(q)[keyRule].(map[string]any); r[keyRule] != "ask: write" || r[keyFrom] != "default" ||
+		marks(q)[keyTitle] != "write a.txt" || len(marks(q)) != 2 {
 		t.Errorf("a write's _meta %v", q.Meta)
 	}
 	once := []string{"allow_once=Allow once", "reject_once=Reject"}
@@ -227,6 +230,71 @@ func TestQuestionOptions(t *testing.T) {
 	q = ask(t, llmtest.ToolCall("p1", "ping", `{}`), append(builtin.Tools(), pingStub()))
 	if got := ids(q); len(got) != 8 || got[7] != "reject_always=Reject everywhere, hiding the tool" || got[5] != "reject_session=Reject for this session, hiding the tool" {
 		t.Errorf("a tool with no subject: %q", got)
+	}
+}
+
+// A tool call's question carries, in _meta.gobble, the call's whole
+// description (cut at 2000 runes), the patterns an "always" saves and
+// whether a "never" hides the tool; its title stays cut to 60 runes and
+// its option names stay. A grant's question carries none of the three
+// (0029-MADR D3).
+func TestQuestionFullTitle(t *testing.T) {
+	ask := func(t *testing.T, call llmtest.Turn, tools []tool.Tool) acp.RequestPermissionRequest {
+		t.Helper()
+		client := &acptest.Client{}
+		c := answersAgent(t, llmtest.NewScript(call, llmtest.Text("done")), client, SessionSettings{}, PermissionOptions{}, tools)
+		cwd := t.TempDir()
+		writeFile(t, filepath.Join(cwd, "f.txt"), "x")
+		if _, err := prompt(t, c, openSession(t, c, cwd), "go"); err != nil {
+			t.Fatal(err)
+		}
+		perms := client.Permissions()
+		if len(perms) != 1 {
+			t.Fatalf("%d questions", len(perms))
+		}
+		return perms[0]
+	}
+	marks := func(r acp.RequestPermissionRequest) map[string]any {
+		m, _ := r.Meta[gobble].(map[string]any)
+		return m
+	}
+	cmd := "echo '=== staged ==='; git diff --cached --stat; echo '=== log ==='; git log --oneline -5"
+	q := ask(t, llmtest.ToolCall("b1", "bash", `{"command":"`+strings.ReplaceAll(cmd, `"`, `\"`)+`"}`), nil)
+	saves, _ := marks(q)["saves"].([]any)
+	if marks(q)["title"] != "run "+cmd || len(saves) != 3 || saves[0] != "echo *" || saves[1] != "git diff *" || saves[2] != "git log *" ||
+		marks(q)["hides"] != nil {
+		t.Errorf("a command's _meta %v", q.Meta)
+	}
+	if title := *q.ToolCall.Title; utf8.RuneCountInString(title) != 60 || !strings.HasSuffix(title, "…") || len(q.Options) != 8 ||
+		q.Options[1].Name != "Allow `echo *`, `git diff *`, `git log *` for this session" {
+		t.Errorf("the title %q or the options %v changed", title, q.Options)
+	}
+	q = ask(t, llmtest.ToolCall("p1", "ping", `{}`), append(builtin.Tools(), pingStub()))
+	if marks(q)["hides"] != true || marks(q)["saves"] != nil || marks(q)["title"] == nil {
+		t.Errorf("a tool with no subject: _meta %v", q.Meta)
+	}
+	q = ask(t, llmtest.ToolCall("d1", "delete", `{"path":"f.txt"}`), nil)
+	if marks(q)["title"] != "delete f.txt" || marks(q)["saves"] != nil || marks(q)["hides"] != nil {
+		t.Errorf("a delete, which offers no always: _meta %v", q.Meta)
+	}
+	long := strings.Repeat("y", 2500)
+	q = ask(t, llmtest.ToolCall("b2", "bash", `{"command":"echo `+long+`"}`), nil)
+	if title, _ := marks(q)["title"].(string); utf8.RuneCountInString(title) != 2000 || !strings.HasSuffix(title, "…") {
+		t.Errorf("a long command's title has %d runes, want 2000, cut", utf8.RuneCountInString(title))
+	}
+
+	client := &acptest.Client{Answer: granting}
+	s := llmtest.NewScript(findGrant(), grantCall(t, "g1", nil, []string{"src"}, "session"), llmtest.Text("ok"))
+	c, id, _ := modeAgent(t, s, client, SessionSettings{}, "", "", t.TempDir())
+	if _, err := prompt(t, c, id, "grant"); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range client.Permissions() {
+		for _, k := range []string{"title", "saves", "hides"} {
+			if _, ok := marks(p)[k]; ok {
+				t.Errorf("a grant's question carries %q: _meta %v", k, p.Meta)
+			}
+		}
 	}
 }
 

@@ -21,9 +21,7 @@ const (
 	// the model (0005-MADR, Tools).
 	maxLines = 2000
 	maxBytes = 50 * 1024
-	// maxTitle is a title's length in runes, and maxSummary a summary's in
-	// bytes (0008-MADR D19 item 3).
-	maxTitle   = 60
+	// maxSummary is a summary's length in bytes (0008-MADR D19 item 3).
 	maxSummary = 400
 )
 
@@ -105,15 +103,9 @@ func Names() []string {
 	return names
 }
 
-// title is s on one line, cut to maxTitle runes.
-func title(s string) string {
-	s = strings.Join(strings.Fields(s), " ")
-	if utf8.RuneCountInString(s) <= maxTitle {
-		return s
-	}
-	r := []rune(s)
-	return string(r[:maxTitle-1]) + "…"
-}
+// title is s on one line, whole: acpserver cuts the title a client sees,
+// and a permission question shows it all (0029-MADR D3, as amended).
+func title(s string) string { return strings.Join(strings.Fields(s), " ") }
 
 // summary is s cut to maxSummary bytes on a rune boundary.
 func summary(s string) string {

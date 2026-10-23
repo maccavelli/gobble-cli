@@ -184,6 +184,43 @@ func TestNewSessionMeta(t *testing.T) {
 	}
 }
 
+// A tool call's request gives its whole description, the patterns an
+// "always" saves and whether a rejection hides the tool, from
+// _meta.gobble; with no description there, or a mistyped one, the
+// request's title (0029-MADR D4).
+func TestPermissionFullTitle(t *testing.T) {
+	var asked PermissionRequest
+	h := &handler{permission: func(_ context.Context, r PermissionRequest) PermissionAnswer {
+		asked = r
+		return PermissionAnswer{}
+	}}
+	ask := func(meta map[string]any) PermissionRequest {
+		t.Helper()
+		req := acp.RequestPermissionRequest{SessionId: "s", Meta: meta,
+			ToolCall: acp.ToolCallUpdate{ToolCallId: "c1", Title: new("run echo a; git diff --cached --stat; echo b; git…")},
+			Options:  []acp.PermissionOption{{OptionId: "y", Name: "Allow once", Kind: acp.PermissionOptionKindAllowOnce}}}
+		if _, err := h.RequestPermission(t.Context(), req); err != nil {
+			t.Fatal(err)
+		}
+		return asked
+	}
+	whole := "run echo a; git diff --cached --stat; echo b; git log --oneline -5"
+	got := ask(map[string]any{"gobble": map[string]any{"title": whole, "saves": []any{"echo *", "git diff *", "git log *"}, "hides": true}})
+	if got.FullTitle != whole || !slices.Equal(got.Saves, []string{"echo *", "git diff *", "git log *"}) || !got.Hides {
+		t.Fatalf("with the meta: %q, %q, hides %v", got.FullTitle, got.Saves, got.Hides)
+	}
+	for name, meta := range map[string]map[string]any{
+		"no meta":   nil,
+		"mistyped":  {"gobble": map[string]any{"title": 5, "saves": "echo *", "hides": "yes"}},
+		"no gobble": {"other": map[string]any{"title": whole}},
+	} {
+		got := ask(meta)
+		if got.FullTitle != "run echo a; git diff --cached --stat; echo b; git…" || got.Saves != nil || got.Hides {
+			t.Errorf("%s: %q, %q, hides %v; want the request's title and no marks", name, got.FullTitle, got.Saves, got.Hides)
+		}
+	}
+}
+
 // Options.Permission answers permission requests with an offered option;
 // an answer naming none cancels; with no Permission the client declines.
 func TestRequestPermission(t *testing.T) {

@@ -84,6 +84,12 @@ command and every choice, and it keeps today's keys.
   (`title`, one line, cut at 2000 runes), the patterns it saves (`saves`) and whether a remembered rejection hides the
   tool (`hides`). The request's `title` stays cut to 60 runes and the option names stay as they are, for other ACP
   clients.
+
+  *Amended 2026-10-22 (0029-PLAN P1, deviation 1; the owner's answer "Tools stop cutting"):* the agent did not
+  have the whole description to send. Each built-in tool's describer cut it to 60 runes itself
+  (`tool/builtin/builtin.go`, `title`, `maxTitle = 60`), before `acpserver` cut it again. The describers now keep a
+  description on one line and no longer cut it; `acpserver`'s `cutTitle` still cuts every title an ACP client
+  sees, a tool call's and a permission request's, to 60 runes, so other clients see no change.
 - **D4. What the client reads.** `acpclient.PermissionRequest` gains `FullTitle`, `Saves` and `Hides`, read from
   `_meta.gobble`. The fields are added, so `acpclient`'s beta API stays compatible. With no `title` in the meta, the
   client uses the request's title.
