@@ -209,7 +209,10 @@ one strip-and-retry; cycling as P7. Every owner question is answered.)*
     credential through gobble's existing sign-ins, a typed key checked by listing and asked again, up to three keys;
     then the steps above, the cache refreshed, the provider listed and its models shown for `/model N`. `/logout`
     takes gobble's existing logout, which revokes a Grok session. The wizard is not used; P6 calls
-    `auth.LoginChatGPTPlan` itself, as below.)*
+    `auth.LoginChatGPTPlan` itself, as below.)* *(2026-10-23: superseded by [0031-MADR-sdk-current-releases-and-adoption.md](0031-MADR-sdk-current-releases-and-adoption.md) D7, carried out in
+    0031-PLAN P4a. go-llmprovider-sdk `v1.22.0`'s `ResolveCredential` asks no model, Kilo's device sign-in can
+    give a key, and `NoEndpointPrompt` asks no endpoint. So `/login` keeps gobble's provider menu and asks
+    everything after it through the wizard. `/logout` is unchanged.)*
   - *(2026-10-20, 0025-PLAN deviation 7, the owner's choice "Raw mode, masked echo": the line session's reader owns
     stdin, and out of raw mode the terminal echoes, so `Secret` reads in raw mode through the reader, echoing `*` for
     each character, as the permission prompt reads its reason; the other questions read out of raw mode.)*

@@ -44,19 +44,10 @@ type LoginStore interface {
 	LockRefresh(ctx context.Context, id string) (unlock func(), err error)
 }
 
-// LoginOptions configure a login. Origin replaces the vendor's issuer, and
-// HTTPClient the SDK's client, for tests. OpenURL is given the browser
-// login's URL; InputCode, when set, may return the redirect URL the user
-// pastes instead of the browser reaching the callback.
+// LoginOptions configure a logout: HTTPClient replaces the SDK's client,
+// for tests.
 type LoginOptions struct {
 	HTTPClient *http.Client
-	Origin     string
-	OpenURL    func(string) error
-	InputCode  func(context.Context) (string, error)
-}
-
-func (o LoginOptions) flow() auth.OAuthFlowOptions {
-	return auth.OAuthFlowOptions{HTTPClient: o.HTTPClient, Issuer: o.Origin, OpenURL: o.OpenURL, InputCode: o.InputCode}
 }
 
 // DeviceCode is what a device login shows: where to go, the code to enter
@@ -93,57 +84,6 @@ func PiLogin(id, access, refresh string, expires time.Time) (*Login, bool) {
 // (0005-PLAN F4-3b decision 8).
 func LoginRejected(id string) string {
 	return id + " rejected the OAuth login in auth.json; sign in again with gobble auth login " + id
-}
-
-// BrowserLogin signs in to provider id in the browser and saves the login
-// in store.
-func BrowserLogin(ctx context.Context, id string, o LoginOptions, store LoginStore) error {
-	if !HasLogin(id) {
-		return fmt.Errorf("provider %s has no OAuth login", id)
-	}
-	s, err := auth.LoginBrowserOAuth(ctx, llmprovider.ProviderID(id), o.flow())
-	if err != nil {
-		return fmt.Errorf("%s login: %w", id, mapError(err))
-	}
-	return store.Save(ctx, id, loginOf(s))
-}
-
-// DeviceLogin signs in to provider id with a device code, given to show,
-// and saves the login in store. An error from show cancels the login.
-func DeviceLogin(ctx context.Context, id string, o LoginOptions, show func(DeviceCode) error, store LoginStore) error {
-	if !HasLogin(id) {
-		return fmt.Errorf("provider %s has no OAuth login", id)
-	}
-	s, err := device(ctx, id, o, show)
-	if err != nil {
-		return fmt.Errorf("%s login: %w", id, mapError(err))
-	}
-	return store.Save(ctx, id, loginOf(s))
-}
-
-// KeyLogin signs in to provider id with a device code, given to show, and
-// returns the API key the login gives. An error from show cancels it.
-func KeyLogin(ctx context.Context, id string, o LoginOptions, show func(DeviceCode) error) (string, error) {
-	if !HasKeyLogin(id) {
-		return "", fmt.Errorf("provider %s has no device login that gives a key", id)
-	}
-	s, err := device(ctx, id, o, show)
-	if err != nil {
-		return "", fmt.Errorf("%s login: %w", id, mapError(err))
-	}
-	return s.Access, nil
-}
-
-func device(ctx context.Context, id string, o LoginOptions, show func(DeviceCode) error) (*auth.OAuthSession, error) {
-	d, err := auth.StartDeviceOAuth(ctx, llmprovider.ProviderID(id), o.flow())
-	if err != nil {
-		return nil, err
-	}
-	if err := show(DeviceCode{URL: d.VerificationURI, Code: d.UserCode, Expires: d.Expiry}); err != nil {
-		d.Cancel()
-		return nil, err
-	}
-	return d.Wait(ctx)
 }
 
 // Logout revokes provider id's stored login, then deletes it from store,

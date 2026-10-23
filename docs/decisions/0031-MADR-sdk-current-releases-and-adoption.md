@@ -194,6 +194,18 @@ its own.
 
   *(2026-10-23: the three changes ship in go-llmprovider-sdk `v1.22.0`, which D1's amendment of that date pins.
   Once it is pinned, P4's hold lifts, and P4 resumes at the owner's word.)*
+
+  *Amended 2026-10-23 (0031-PLAN deviation 5; the owner's answer "Split: P4a, then P4b"):* D7 is carried out in
+  two phases.
+  - *P4a moves the API key, Grok's browser and device sign-ins and Kilo's device sign-in onto
+    `ResolveCredential`. It passes `SkipMethods` per provider, since the option applies to every provider in one
+    call. It uses `ShowDeviceCode` for `auth login --json`'s `device_code` event, `NoPastePrompt` where no terminal
+    reads, and `InputerContext` in the line session.*
+  - *P4b adds the ChatGPT plan sign-in, with what it needs of gobble.*
+
+  *`--api-key -` and `gobble auth logout` stay gobble's own. `HasLogin` and `HasKeyLogin` stay for choosing which
+  stored logins gobble uses, while the menus come from the wizard's offered methods. So D8's amendment, which sent
+  them with D7, holds for the menus only.*
 - **D8. The smaller copies go.** `gobble models --search` uses `catalog.Search`; `llm/catalog.Price` uses
   `ModelCost.RatesFor`; `CacheWrite1hTokens` is counted; `HasLogin` and `HasKeyLogin` read `Descriptor.AuthMethods`;
   `acpserver/binary_test.go` uses `agentproc`.

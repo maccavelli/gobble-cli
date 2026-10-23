@@ -128,6 +128,92 @@ is lifted, and P4 resumes at the owner's word.)*
    bypassed.
 4. Records: 0025-MADR deviation 6 and 0025-PLAN P6 noted as superseded by this phase. Gates. Commit.
 
+*(2026-10-23, deviation 5: the steps above are replaced by P4a and P4b below; see deviation 5's entry.)*
+
+#### P4a — the existing sign-ins through the wizard
+
+1. **Tests first,** each seen failing on the unchanged code or a stub. No test opens a browser, reaches a real
+   sign-in or writes outside a temporary `GOBBLE_HOME`.
+   - **Where they run:** `llm/provider`'s tests use its in-process issuer (`login_test.go`), reached through an HTTP
+     client that sends every request to it, and a scripted prompter.
+   - **`SignIn` offers only gobble's methods for each provider:**
+     - Grok: the API key, the browser and the device sign-ins, without its token paste or its CLI import;
+     - Kilo: the API key and the device sign-in;
+     - OpenAI: the API key alone, since the ChatGPT plan is P4b.
+   - **A forced method asks no menu.**
+   - **Grok's browser sign-in:**
+     - it saves the session to the store;
+     - with a prompter that gives up a read, it returns after the callback with no Enter;
+     - under `NoPastePrompt` the prompter is never read.
+   - **Grok's device sign-in** gives `ShowDeviceCode` the URL, the code and a non-zero expiry, then saves the session.
+   - **Kilo's device sign-in** returns the token as a key marked as the device's, and saves no session.
+   - **A typed key the listing refuses** is asked again, up to three times. Neither the notice nor the returned
+     error carries the service's text. An empty key ends the sign-in.
+   - **In `internal/cli`:**
+     - `/login`, `gobble setup` and the first-run offer save `auth.json` in its shape, through the wizard;
+     - `gobble auth login --json` emits `device_code` with `expires`, `browser_url` and `saved`, and reads nothing.
+2. **The code:**
+   - **`llm/provider`:** a `Prompter` interface of gobble's, and `SignIn` over `wizard.ResolveCredential`, with:
+     - `TokenStore` from the login store;
+     - `KiloDeviceKey`;
+     - `NoEndpointPrompt`;
+     - `SkipMethods` computed per provider;
+     - `Discover`, its listing with gobble's client name and no model metadata;
+     - `ShowDeviceCode`, `NoPastePrompt` and `OpenURL` from the caller.
+   - **`internal/cli`:**
+     - `questions` implements the prompter, `InputContext` included;
+     - `signIn`, `typedKey` and `loginWith` go through `SignIn`;
+     - `signInMethods` comes from the methods `SignIn` offers;
+     - `BrowserLogin`, `DeviceLogin` and `KeyLogin` are removed once nothing calls them.
+   - **Kept:**
+     - `--api-key -`, a key from stdin with no menu and no check;
+     - `gobble auth logout`, gobble's own words and revocation;
+     - gobble's provider menu, with its credential words;
+     - `HasLogin` and `HasKeyLogin`, which still decide which stored logins gobble uses.
+3. **Negatives,** one at a time on a scratch copy:
+   - the per-provider `SkipMethods` dropped, so OpenAI's browser sign-in is offered;
+   - `ShowDeviceCode` unwired, so the `device_code` event is missing;
+   - `NoPastePrompt` off under `--json`, so the prompter is read;
+   - `InputContext` removed, so the sign-in waits for an Enter.
+4. **Records:**
+   - 0025-MADR deviation 6 noted as superseded by P4a;
+   - `docs/architecture.md`;
+   - `docs/README.md`.
+
+   Then the gates, and a commit.
+
+#### P4b — the ChatGPT plan sign-in (0025-PLAN P6, 0005-PLAN F4-3d)
+
+1. **Measure first,** as 0025-PLAN P6 step 1 says:
+   - the SDK's `LoginChatGPTPlan` and `OAuthSession.PlanUsage`;
+   - the OpenAI provider under a plan session;
+   - the wizard offering the plan with `AgentName` set;
+   - OpenAI's terms page read again, with its date recorded.
+
+   A difference from 0031-MADR D7 is a deviation.
+2. **Tests first,** against a scripted issuer:
+   - `/login openai` and `--method chatgpt-plan` offer the plan and the API key only;
+   - the plan session's fields (`Resource`, `Scope`, `IDToken`, `HostID`) go through `provider.Login`, `auth.Entry`
+     and the store, and back unchanged;
+   - the OpenAI provider is built with the session;
+   - a second sign-in reuses the client;
+   - the consent is asked once and saved, and without it no title or automatic compaction request is made under the
+     plan.
+3. **The code:**
+   - `AgentName` "gobble";
+   - `HasLogin` true for an OpenAI plan session;
+   - the refusal in `loginWith` removed;
+   - the consent setting, with its schema and template entry.
+4. **Records:**
+   - 0025-PLAN P6 and 0005-PLAN F4-3d noted as done here;
+   - 0005-MADR's ChatGPT row;
+   - `README.md`;
+   - `docs/README.md`.
+
+   Then the gates, and a commit.
+5. **Live check** by the owner's own sign-in, `gobble auth login openai --method chatgpt-plan`, then one turn on a
+   plan model. It is recorded without any credential.
+
 ### P5 — the smaller copies, and the records (D8)
 
 *(2026-10-22, deviation 4: the search alone, and the records; see P5's record.)*
@@ -482,3 +568,127 @@ Approved by the owner's "Proceed", 2026-10-23.
 
 **P1a complete, 2026-10-23.** go-tui-lib is still unrequired, as D1's amendment says. P4 waits only for the owner's
 word.
+
+### Deviation 5, 2026-10-23, decided by the owner ("Split: P4a, then P4b")
+
+At the owner's "proceed with p4", before any test, the wizard at `v1.22.0` was read against P4's steps and gobble's
+sign-in code (`internal/cli/login.go`, `auth.go`, `prompt.go`; `llm/provider/login.go`). Nothing was written before
+the owner chose. The findings:
+
+- **Step 2's prompter "over the line session" in `internal/cli`** would import go-llmprovider-sdk there, which
+  0004-MADR rule 4 forbids. Deviation 3 already moved the wizard's caller to `llm/provider`, behind a prompter
+  interface of gobble's. `questions` (`internal/cli/prompt.go`) implements that interface.
+- **The three new hooks** are not named in P4:
+  - `ShowDeviceCode` is the source for `auth login --json`'s `device_code` event, with its expiry;
+  - `NoPastePrompt` serves `--json` and a run with no terminal;
+  - `InputerContext` lets the line session give up the paste prompt, since `questions` reads through
+    `editor.Reader.ReadContext`.
+- **`SkipMethods` leaves a method out of every provider's menu** (`wizard/auth.go:73-86`). At `v1.22.0`:
+  - OpenAI offers `api_key`, `browser_oauth`, `device_code`, `token_stdin`, `import_vendor_cli` and
+    `chatgpt_plan`;
+  - Grok offers the same without `chatgpt_plan`;
+  - Kilo offers `api_key` and `device_code`.
+
+  OpenAI's browser sign-in (the Codex client) must go while Grok's stays. So gobble keeps its own provider menu and
+  passes `ResolveCredential` each provider's id with that provider's skips.
+- **A forced method,** as `--method` and `--device` force one, is every other method skipped. The wizard still asks
+  a menu of one non-key method (`wizard/auth.go:167-197`), and `questions.choose` already answers a menu of one
+  itself.
+- **The wizard's returned errors** begin "wizard:" and wrap the service's error, whose text it does not show in a
+  notice (`refusalError`, `wizard/configure.go:461`). gobble keeps printing its own message and the failure's class.
+- **The wizard asks to keep a saved session** only with `Options.Existing` of kind OAuth (`wizard/auth.go`,
+  `keepExistingOAuth`). gobble passes none, so a sign-in always starts fresh, as it does today.
+- **The ChatGPT plan sign-in,** which D7 brings in, is 0025-PLAN P6's whole scope. It takes about as much work as
+  the rest of P4:
+  - the plan session's four extra fields through `provider.Login`, `auth.Entry` and the store;
+  - the OpenAI provider built from a plan session;
+  - the consent to background use;
+  - a live sign-in by the owner.
+
+The owner chose to split P4, as recommended:
+
+- **P4a** moves the existing sign-ins onto the wizard.
+- **P4b** adds the ChatGPT plan.
+- Each phase has its own commit, and each reverts on its own.
+
+P4's steps are annotated, and P4a and P4b replace them. 0031-MADR D7 is amended.
+
+### P4a execution record (2026-10-23)
+
+1. **Tests first.**
+   - **`llm/provider/signin_test.go`:** `TestSignInMethods`, `TestSignInMenu`, `TestSignInGrokBrowser`,
+     `TestSignInDevice` and `TestSignInRefusedKeys`.
+     - They run against `login_test.go`'s issuer, which now answers as xAI's own (`origin`) and lists models by key.
+       It is reached through `toIssuer`, an HTTP client that sends every request to it.
+     - On a stub `SignIn` all five failed: `Methods(grok) = [], want ["api-key" "browser" "device"]`, and
+       `provider: SignIn is not written yet` for each of the other four.
+   - **`internal/cli`:** the tests drive one seam, `signInWith`, in place of `browserLogin`, `deviceLogin` and
+     `keyLogin`. TestMain's `noSignIn` replaces it, and `TestNoBrowserOrSignIn` checks that.
+     - New: `TestQuestionsPrompter` and `TestLoginAsksThroughQuestions`.
+     - Rewritten: `TestLoginSlash`, `TestLoginMenuAndRefusals`, `TestAuthLoginGrok`, `TestAuthLoginKilo`,
+       `TestAuthLoginJSON`, `TestAuthLoginMethod` and `TestACPLogin`.
+     - Removed: `TestLoginUncheckedKey` and `TestLoginGrokDevice`. The note they checked, and the menu, are now the
+       wizard's, and `llm/provider` tests them.
+   - **Removed with their code:** `TestGrokDeviceLogin`, `TestGrokBrowserLogin` and `TestKeyLogin`.
+2. **The code.**
+   - **`llm/provider/signin.go`:**
+     - the types: `Prompter`, `Choice`, `SignInOptions`, `Credential` and `SignInError`;
+     - `Methods` and `SignIn`, over `wizard.ResolveCredential`;
+     - `wizardPrompter`, the wizard's `Prompter` and `InputerContext`, which answers a menu of one itself.
+   - **`llm/provider/login.go`:** `BrowserLogin`, `DeviceLogin`, `KeyLogin` and `device` are gone. `LoginOptions`
+     keeps the client `Logout` uses.
+   - **`internal/cli`:**
+     - `prompter` (over `questions`) and `unasked` are the two prompters;
+     - `questions` reads with a context passed down (`inputContext`, `lineContext`, `fill(ctx)`);
+     - `signIn` and `loginWith` go through `signInTo`;
+     - `methodOf` reads `provider.Methods`;
+     - `typedKey`, `signInMethods`, `pastedRedirect` and `showLoginURL` are gone, and `openLoginURL` opens the URL
+       the wizard has shown.
+   - **Kept:** `--api-key -`, `gobble auth logout`, gobble's provider menu, `HasLogin` and `HasKeyLogin`.
+3. **Found while running:**
+   - **The SDK caches an issuer's signing keys by its URL.** Test issuers that answer as `https://auth.x.ai` with
+     fresh keys failed with "oauth: id_token rejected: bad signature" in 5 of 6 runs of `TestSignInDevice`. Every
+     test issuer now signs with one key (`issuerKey`), and four runs of the package then passed.
+   - **The first "InputContext removed" mutation** hung until its 120 s timeout instead of failing. The scripted
+     paste now answers an Enter after 5 s, and the test requires the sign-in back within 4 s.
+   - **The first gate run** found seven lint findings:
+     - five `revive` confusing-naming (`Choose` beside `choose`): the prompter moved to its own type, `prompter`;
+     - one `contextcheck` on `Input`: the read's context is now passed down;
+     - one `modernize` embedlit in the test.
+
+     The second run passed.
+4. **Negatives,** one at a time on a scratch copy; each failed its tests, and the restored copy passed:
+   - **The per-provider skips dropped:** grok's menu showed five methods, adding "Paste an xAI API key" and "Use
+     the Grok CLI login (~/.grok/auth.json)", and OpenAI asked a menu.
+   - **`ShowDeviceCode` unwired:** `shown []`, and `ShowDeviceCode's error: <nil>`.
+   - **`NoPastePrompt` off in the wizard:** the paste prompt was asked.
+   - **`NoPaste` off under `--json`:** `a paste was offered with no terminal: [true true]`, and `--json true on a
+     terminal: <nil>, paste offered [true]`.
+   - **`InputContext` removed:** `the paste prompt was read 1 times in 5.018135667s, want once, given up`.
+   - **An empty secret not cancelled:** `an empty secret: <nil>, want cancelled`.
+   - **`Input` ignores its context:** `an ended context: <nil>`.
+   - **A device key stored unescaped:** kilo's entry resolved through a command.
+   - **The public listing's note dropped:** stderr lacked "Kilo Gateway lists its models without a key, so the key
+     was not checked."
+5. **Records:**
+   - 0025-MADR deviation 6, noted as superseded by 0031-MADR D7;
+   - `docs/architecture.md`: the CLI mode and `llm/provider`'s row;
+   - `docs/README.md`.
+6. **Gates:**
+   - The pre-add check on the eleven changed `.go` files: `11 file(s) clean (gofmt, golint, govulncheck)`.
+   - **macOS:**
+     - `make preflight`: `preflight passed`;
+     - the tests and the race detector: 36 packages ok each;
+     - `make perf` passed: ReplyRender 32.8 µs, Reprint 9.57 ms, LineSessionStart 827 µs, KeyDraw 1.50 µs.
+   - **The Linux machine and the Windows laptop,** each on a copy of the tree:
+     - the tests and the race detector: 36 packages ok on each;
+     - `make preflight` passed golangci-lint (`0 issues.`) and govulncheck ("No vulnerabilities found."), then stopped
+       at `verify-build-metadata`, as the copies are not git checkouts;
+     - `make check-records markdownlint`: exit 0.
+   - **The Windows laptop:** `make probe-conhost` gave `--- PASS: TestConhost`.
+   - **`make perf` on the remote hosts:**
+     - the Linux machine: 117 µs, 28.0 ms, 3.65 ms, 4.77 µs;
+     - the Windows laptop: 29.1 µs, 7.73 ms, 3.73 ms, 1.09 µs.
+
+**P4a complete, 2026-10-23.** What is still to come: P4b, the ChatGPT plan sign-in, at the owner's word; and a live
+sign-in by the owner to Grok or Kilo through the wizard, since no test reaches a real sign-in.

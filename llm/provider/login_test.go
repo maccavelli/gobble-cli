@@ -8,7 +8,6 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json/v2"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -19,8 +18,6 @@ import (
 
 	"github.com/maccavelli/go-llmprovider-sdk/llmprovider"
 	"github.com/maccavelli/go-llmprovider-sdk/llmprovider/auth"
-
-	"github.com/maccavelli/gobble-cli/llm"
 )
 
 // memLogins is a LoginStore in memory, counting refresh locks.
@@ -71,6 +68,10 @@ func (m *memLogins) LockRefresh(context.Context, string) (func(), error) {
 type testIssuer struct {
 	*httptest.Server
 	key *ecdsa.PrivateKey
+	// origin is the issuer the discovery document and ID tokens name,
+	// ti.URL when empty: a sign-in reaching the issuer through toIssuer
+	// sees the SDK's own.
+	origin string
 
 	mu        sync.Mutex
 	nonce     string
@@ -80,9 +81,13 @@ type testIssuer struct {
 	kiloPolls int
 }
 
+// issuerKey is every test issuer's signing key: the SDK caches an issuer's
+// keys by its URL, so issuers answering as one origin must sign alike.
+var issuerKey = sync.OnceValues(func() (*ecdsa.PrivateKey, error) { return ecdsa.GenerateKey(elliptic.P256(), rand.Reader) })
+
 func newTestIssuer(t *testing.T) *testIssuer {
 	t.Helper()
-	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	key, err := issuerKey()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,9 +104,9 @@ func newTestIssuer(t *testing.T) *testIssuer {
 	}
 	mux.HandleFunc("/.well-known/openid-configuration", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{
-			"issuer": ti.URL, "authorization_endpoint": ti.URL + "/oauth2/authorize", "token_endpoint": ti.URL + "/oauth2/token",
-			"device_authorization_endpoint": ti.URL + "/oauth2/device/code", "jwks_uri": ti.URL + "/jwks",
-			"revocation_endpoint": ti.URL + "/oauth2/revoke", "id_token_signing_alg_values_supported": []string{"ES256"},
+			"issuer": ti.base(), "authorization_endpoint": ti.base() + "/oauth2/authorize", "token_endpoint": ti.base() + "/oauth2/token",
+			"device_authorization_endpoint": ti.base() + "/oauth2/device/code", "jwks_uri": ti.base() + "/jwks",
+			"revocation_endpoint": ti.base() + "/oauth2/revoke", "id_token_signing_alg_values_supported": []string{"ES256"},
 		})
 	})
 	mux.HandleFunc("/jwks", func(w http.ResponseWriter, _ *http.Request) {
@@ -120,7 +125,7 @@ func newTestIssuer(t *testing.T) *testIssuer {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "access_denied"})
 			return
 		}
-		claims := map[string]any{"iss": ti.URL, "aud": r.FormValue("client_id"), "sub": "user-1",
+		claims := map[string]any{"iss": ti.base(), "aud": r.FormValue("client_id"), "sub": "user-1",
 			"exp": time.Now().Add(time.Hour).Unix(), "iat": time.Now().Unix()}
 		if r.FormValue("grant_type") == "authorization_code" {
 			claims["nonce"] = nonce
@@ -153,7 +158,27 @@ func newTestIssuer(t *testing.T) *testIssuer {
 			writeJSON(w, http.StatusOK, map[string]string{"token": "kilo-token-0123456789"})
 		}
 	})
+	// A provider's model listing: refused, with the service's own text, for a
+	// key that begins "refused"; otherwise one model.
+	mux.HandleFunc("GET /v1/", func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "), "refused") {
+			writeJSON(w, http.StatusUnauthorized, map[string]any{"error": map[string]string{"message": serviceText}})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"object": "list", "data": []map[string]string{{"id": "grok-4.6", "object": "model"}}})
+	})
 	return ti
+}
+
+// serviceText is a refusal's own text, which gobble never shows.
+const serviceText = "SERVICE-TEXT-do-not-show"
+
+// base is the issuer the discovery document and ID tokens name.
+func (ti *testIssuer) base() string {
+	if ti.origin != "" {
+		return ti.origin
+	}
+	return ti.URL
 }
 
 func b64(b []byte) string { return base64.RawURLEncoding.EncodeToString(b) }
@@ -218,44 +243,6 @@ func TestLoginStoreAdapter(t *testing.T) {
 	}
 }
 
-// Grok's device login shows its code, waits for approval and saves the
-// verified session; a denial is llm.ErrAuth and saves nothing.
-func TestGrokDeviceLogin(t *testing.T) {
-	ti := newTestIssuer(t)
-	store := &memLogins{}
-	var shown DeviceCode
-	show := func(d DeviceCode) error { shown = d; return nil }
-	if err := DeviceLogin(t.Context(), "grok", LoginOptions{Origin: ti.URL}, show, store); err != nil {
-		t.Fatal(err)
-	}
-	if shown.Code != "ABCD-1234" || shown.URL != ti.URL+"/device" {
-		t.Errorf("shown %+v", shown)
-	}
-	l := store.logins["grok"]
-	if l == nil || l.Access != "access-1" || l.Refresh != "refresh-1" || l.Issuer != ti.URL || l.TokenURL != ti.URL+"/oauth2/token" ||
-		l.ClientID != auth.DefaultGrokOAuthClientID || time.Until(l.Expires) < 50*time.Minute {
-		t.Errorf("saved %v", l)
-	}
-
-	ti.with(func() { ti.deny = true })
-	denied := &memLogins{}
-	if err := DeviceLogin(t.Context(), "grok", LoginOptions{Origin: ti.URL}, show, denied); !errors.Is(err, llm.ErrAuth) {
-		t.Errorf("a denial: %v, want llm.ErrAuth", err)
-	}
-	if len(denied.logins) != 0 {
-		t.Errorf("a denial saved %v", denied.logins)
-	}
-	if err := DeviceLogin(t.Context(), "openai", LoginOptions{Origin: ti.URL}, show, denied); err == nil {
-		t.Error("openai's OAuth login was not refused")
-	}
-	stop := errors.New("stop")
-	ti.with(func() { ti.deny = false })
-	if err := DeviceLogin(t.Context(), "grok", LoginOptions{Origin: ti.URL}, func(DeviceCode) error { return stop }, denied); !errors.Is(err, stop) ||
-		len(denied.logins) != 0 {
-		t.Errorf("show's error: %v, saved %v", err, denied.logins)
-	}
-}
-
 // authorizeParams reads an authorize URL's redirect, state and nonce, and
 // gives the issuer the nonce for its next ID token.
 func (ti *testIssuer) authorizeParams(t *testing.T, raw string) (redirect, state string) {
@@ -267,75 +254,6 @@ func (ti *testIssuer) authorizeParams(t *testing.T, raw string) (redirect, state
 	q := u.Query()
 	ti.with(func() { ti.nonce = q.Get("nonce") })
 	return q.Get("redirect_uri"), q.Get("state")
-}
-
-// Grok's browser login gives OpenURL the authorize URL and saves the
-// session when the browser reaches the callback, or when the user pastes
-// the URL it ended on.
-func TestGrokBrowserLogin(t *testing.T) {
-	ti := newTestIssuer(t)
-	store := &memLogins{}
-	var opened string
-	browser := func(u string) error {
-		opened = u
-		redirect, state := ti.authorizeParams(t, u)
-		go func() {
-			resp, err := http.Get(redirect + "?code=c1&state=" + url.QueryEscape(state)) //nolint:noctx // the test's browser
-			if err == nil {
-				_ = resp.Body.Close()
-			}
-		}()
-		return nil
-	}
-	if err := BrowserLogin(t.Context(), "grok", LoginOptions{Origin: ti.URL, OpenURL: browser}, store); err != nil {
-		t.Fatal(err)
-	}
-	if !strings.HasPrefix(opened, ti.URL+"/oauth2/authorize?") || store.logins["grok"] == nil || store.logins["grok"].Access != "access-1" {
-		t.Errorf("opened %q, saved %v", opened, store.logins["grok"])
-	}
-
-	pasted := &memLogins{}
-	urls := make(chan string, 1)
-	o := LoginOptions{
-		Origin:  ti.URL,
-		OpenURL: func(u string) error { urls <- u; return nil },
-		InputCode: func(ctx context.Context) (string, error) {
-			select {
-			case u := <-urls:
-				redirect, state := ti.authorizeParams(t, u)
-				return redirect + "?code=c2&state=" + url.QueryEscape(state), nil
-			case <-ctx.Done():
-				return "", ctx.Err()
-			}
-		},
-	}
-	if err := BrowserLogin(t.Context(), "grok", o, pasted); err != nil || pasted.logins["grok"] == nil {
-		t.Errorf("a pasted redirect: %v, saved %v", err, pasted.logins)
-	}
-}
-
-// Kilo's device login waits through a pending poll and gives the token as
-// a key; a denial is llm.ErrAuth; only kilo has one. Each poll waits for
-// the SDK's 3 s.
-func TestKeyLogin(t *testing.T) {
-	ti := newTestIssuer(t)
-	var shown DeviceCode
-	key, err := KeyLogin(t.Context(), "kilo", LoginOptions{Origin: ti.URL}, func(d DeviceCode) error { shown = d; return nil })
-	if err != nil || key != "kilo-token-0123456789" {
-		t.Fatalf("key %q, %v", key, err)
-	}
-	var polls int
-	ti.with(func() { polls = ti.kiloPolls })
-	if shown.Code != "KILO-1" || shown.URL != ti.URL+"/kilo" || polls != 2 {
-		t.Errorf("shown %+v after %d polls", shown, polls)
-	}
-	ti.with(func() { ti.deny = true })
-	if _, err := KeyLogin(t.Context(), "kilo", LoginOptions{Origin: ti.URL}, func(DeviceCode) error { return nil }); !errors.Is(err, llm.ErrAuth) {
-		t.Errorf("a denial: %v, want llm.ErrAuth", err)
-	}
-	if _, err := KeyLogin(t.Context(), "openai", LoginOptions{Origin: ti.URL}, func(DeviceCode) error { return nil }); err == nil {
-		t.Error("openai's key login was not refused")
-	}
 }
 
 // Logout revokes the stored refresh token at the issuer, then deletes the

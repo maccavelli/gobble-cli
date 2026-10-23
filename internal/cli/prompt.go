@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/maccavelli/gobble-cli/llm/provider"
 )
 
 // errCancelled ends a sign-in the user left: Ctrl+C, the end of input, or
@@ -40,6 +42,60 @@ type questions struct {
 
 // option is one answer to a choice: its label and a detail shown beside it.
 type option struct{ label, detail string }
+
+// prompter is a sign-in's prompter over questions (0031-MADR D7): what the
+// SDK's wizard asks is asked there, and an empty secret ends the sign-in.
+type prompter struct{ q *questions }
+
+// Choose implements provider.Prompter.
+func (p prompter) Choose(title string, choices []provider.Choice, def int) (int, error) {
+	opts := make([]option, len(choices))
+	for i, c := range choices {
+		opts[i] = option{c.Label, c.Detail}
+	}
+	return p.q.choose(title, opts, def)
+}
+
+// Confirm implements provider.Prompter.
+func (p prompter) Confirm(question string, def bool) (bool, error) { return p.q.confirm(question, def) }
+
+// Input implements provider.Prompter: the read gives up when ctx ends, and
+// the reader that owns stdin serves what it read then to the next question.
+func (p prompter) Input(ctx context.Context, prompt string) (string, error) {
+	return p.q.inputContext(ctx, prompt)
+}
+
+// Secret implements provider.Prompter; an empty answer cancels.
+func (p prompter) Secret(prompt string) (string, error) {
+	s, err := p.q.secret(prompt)
+	if err == nil && s == "" {
+		return "", errCancelled
+	}
+	return s, err
+}
+
+// Notify implements provider.Prompter.
+func (p prompter) Notify(format string, args ...any) { p.q.notify(format, args...) }
+
+// unasked is a sign-in's prompter where nothing may be asked: no terminal,
+// or --json. Its notices go to out.
+type unasked struct{ out io.Writer }
+
+// errNoTerminal is a sign-in that would ask a question with no terminal.
+var errNoTerminal = errors.New("this sign-in asks a question, and there is no terminal to ask it on")
+
+func (unasked) Choose(string, []provider.Choice, int) (int, error) { return 0, errNoTerminal }
+func (unasked) Confirm(string, bool) (bool, error)                 { return false, errNoTerminal }
+func (unasked) Input(context.Context, string) (string, error)      { return "", errNoTerminal }
+func (unasked) Secret(string) (string, error)                      { return "", errNoTerminal }
+func (u unasked) Notify(format string, args ...any) {
+	fmt.Fprintf(u.out, format+"\n", args...) //nolint:errcheck // a notice is best effort
+}
+
+var (
+	_ provider.Prompter = prompter{}
+	_ provider.Prompter = unasked{}
+)
 
 // notify tells the user something, on a line of its own.
 func (q *questions) notify(format string, args ...any) {
@@ -107,14 +163,20 @@ func (q *questions) confirm(question string, def bool) (bool, error) {
 }
 
 // input asks for a line of visible text.
-func (q *questions) input(prompt string) (string, error) {
+func (q *questions) input(prompt string) (string, error) { return q.inputContext(q.ctx, prompt) }
+
+// inputContext is input, read until ctx ends.
+func (q *questions) inputContext(ctx context.Context, prompt string) (string, error) {
 	fmt.Fprintf(q.out, "%s: ", prompt) //nolint:errcheck // the answer is read all the same
-	return q.line()
+	return q.lineContext(ctx)
 }
 
 // line is the next line typed, trimmed, with any bracketed-paste markers
 // taken out. The end of input and ctx ending are errCancelled.
-func (q *questions) line() (string, error) {
+func (q *questions) line() (string, error) { return q.lineContext(q.ctx) }
+
+// lineContext is line, read until ctx ends.
+func (q *questions) lineContext(ctx context.Context) (string, error) {
 	for {
 		if q.afterCR && len(q.pending) > 0 && q.pending[0] == '\n' {
 			q.pending = q.pending[1:]
@@ -128,16 +190,16 @@ func (q *questions) line() (string, error) {
 			q.pending = q.pending[i+1:]
 			return plainLine(s), nil
 		}
-		if err := q.fill(); err != nil {
+		if err := q.fill(ctx); err != nil {
 			return "", err
 		}
 	}
 }
 
-// fill reads the next chunk into pending.
-func (q *questions) fill() error {
+// fill reads the next chunk into pending, until ctx ends.
+func (q *questions) fill(ctx context.Context) error {
 	buf := make([]byte, 512)
-	n, err := q.in.ReadContext(q.ctx, buf)
+	n, err := q.in.ReadContext(ctx, buf)
 	q.pending = append(q.pending, buf[:n]...)
 	if n == 0 && err != nil {
 		return fmt.Errorf("%w (%w)", errCancelled, err)
@@ -191,7 +253,7 @@ func (q *questions) readSecret() (string, error) {
 	esc := 0 // 1 after ESC, 2 inside a control sequence
 	for {
 		if len(q.pending) == 0 {
-			if err := q.fill(); err != nil {
+			if err := q.fill(q.ctx); err != nil {
 				return "", err
 			}
 		}

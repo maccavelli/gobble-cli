@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"bufio"
 	"cmp"
 	"context"
 	"encoding/json/jsontext"
@@ -15,6 +14,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/maccavelli/gobble-cli/internal/auth"
+	"github.com/maccavelli/gobble-cli/internal/cli/editor"
 	"github.com/maccavelli/gobble-cli/llm/catalog"
 	"github.com/maccavelli/gobble-cli/llm/provider"
 )
@@ -48,13 +48,9 @@ type AuthLoginCmd struct {
 	JSON     bool   `name:"json" help:"Print the login's events as JSON lines on stdout, and nothing on stderr."`
 }
 
-// The logins, which a test replaces (0005-PLAN F4-3b).
-var (
-	browserLogin = provider.BrowserLogin
-	deviceLogin  = provider.DeviceLogin
-	keyLogin     = provider.KeyLogin
-	logoutLogin  = provider.Logout
-)
+// logoutLogin revokes and removes a login; a test replaces it (0005-PLAN
+// F4-3b).
+var logoutLogin = provider.Logout
 
 // Run stores the key read for --api-key - as the provider's api_key entry,
 // or, without --api-key, signs in to the provider (0005-PLAN F4-3b). With
@@ -100,15 +96,15 @@ func (c *AuthLoginCmd) runWith(e *runEnv, ev *loginEvents) error {
 		switch method, err := methodOf(id, c.Method); {
 		case err != nil:
 			return err
-		case method == methodAPIKey:
+		case method == provider.MethodAPIKey:
 			c.APIKey = "-"
 		default:
-			c.Device = method == methodDevice
+			c.Device = method == provider.MethodDevice
 		}
 	}
 	switch c.APIKey {
 	case "":
-		return e.loginWith(e.ctx, id, c.Device, ev, nil)
+		return e.loginWith(e.ctx, id, c.Device, ev)
 	case "-":
 		if c.Device {
 			return usageErrorf("--device is for a login; --api-key - stores a key")
@@ -169,64 +165,51 @@ func (e *runEnv) saved(ev *loginEvents, id, typ string) error {
 }
 
 // login is loginWith in text.
-func (e *runEnv) login(id string, device bool) error { return e.loginWith(e.ctx, id, device, nil, nil) }
+func (e *runEnv) login(id string, device bool) error { return e.loginWith(e.ctx, id, device, nil) }
 
-// loginWith signs in to provider id (0005-PLAN F4-3b decision 6): Grok's
-// browser login, or its device login with device; Kilo's device login,
-// whose key is stored escaped, so Pi's grammar gives it back unchanged. Any
-// other provider has none. ev, when not nil, takes what it shows. paste,
-// when not nil, reads a browser login's pasted redirect URL; otherwise a
-// terminal's stdin does. ctx ends the login. A login's own error is
-// returned as is: Main prints it and exits 1, as failf would, and --json's
-// error event names its kind.
-func (e *runEnv) loginWith(ctx context.Context, id string, device bool, ev *loginEvents, paste func(context.Context) (string, error)) error {
-	show := func(d provider.DeviceCode) error { return e.showDeviceCode(ev, id, d) }
-	path := authPath()
+// loginWith signs in to provider id with no menu (0005-PLAN F4-3b decision
+// 6; 0031-MADR D7): Grok's browser sign-in, or its device sign-in with
+// device; Kilo's device sign-in, which gives a key. Any other provider has
+// none. ev, when not nil, takes what it shows. On a terminal, and never
+// with --json, a browser sign-in also takes the URL its browser ends on,
+// pasted. ctx ends the sign-in. Its own error is returned as is: Main prints
+// it and exits 1, as failf would, and --json's error event names its kind.
+func (e *runEnv) loginWith(ctx context.Context, id string, device bool, ev *loginEvents) error {
+	o := provider.SignInOptions{
+		Method:         provider.MethodBrowser,
+		NoPaste:        !e.offersPaste(ev),
+		ShowDeviceCode: func(d provider.DeviceCode) error { return e.showDeviceCode(ev, id, d) },
+		OpenURL:        func(u string) error { return e.openLoginURL(ev, id, u) },
+	}
 	switch {
-	case path == "":
-		return failf("auth.json: the config directory cannot be resolved")
 	case provider.HasKeyLogin(id):
-		key, err := keyLogin(ctx, id, provider.LoginOptions{}, show)
-		if err != nil {
-			return err
-		}
-		if err := auth.Set(ctx, path, id, auth.Entry{Type: auth.TypeAPIKey, Key: catalog.QuoteValue(key)}); err != nil {
-			return failf("%v", err)
-		}
-		return e.saved(ev, id, auth.TypeAPIKey)
+		o.Method = provider.MethodDevice
 	case provider.HasLogin(id):
-		store := auth.Logins{Path: path}
-		var err error
 		if device {
-			err = deviceLogin(ctx, id, provider.LoginOptions{}, show, store)
-		} else {
-			o := provider.LoginOptions{OpenURL: func(u string) error { return e.showLoginURL(ev, id, u) }}
-			switch {
-			case paste != nil:
-				o.InputCode = paste
-			case e.offersPaste(ev):
-				o.InputCode = e.pastedRedirect
-			}
-			err = browserLogin(ctx, id, o, store)
+			o.Method = provider.MethodDevice
 		}
-		if err != nil {
-			return err
-		}
-		return e.saved(ev, id, auth.TypeOAuth)
 	case id == "openai":
 		return usageErrorf("openai's login waits for go-llmprovider-sdk's Sign in with ChatGPT for agents (0005-PLAN F4-3d); use --api-key -")
+	default:
+		return usageErrorf("%s has no login; use --api-key -", id)
 	}
-	return usageErrorf("%s has no login; use --api-key -", id)
+	var p provider.Prompter = unasked{out: e.out.err}
+	if !o.NoPaste {
+		var r editor.Reader
+		r.Start(ctx, e.stdin)
+		p = prompter{&questions{ctx: ctx, in: &r, out: e.out.err}}
+	}
+	return e.signInTo(ctx, p, id, o, ev)
 }
 
-// offersPaste reports whether a browser login takes a pasted redirect URL:
-// on a terminal, and never with --json (0005-PLAN F4-3c decision 6).
+// offersPaste reports whether a browser sign-in takes a pasted redirect
+// URL: on a terminal, and never with --json (0005-PLAN F4-3c decision 6).
 func (e *runEnv) offersPaste(ev *loginEvents) bool {
 	return ev == nil && e.out.caps.In && e.stdin != nil
 }
 
 // showDeviceCode tells the user where to enter provider id's device code,
-// or emits the device_code event.
+// or emits the device_code event, with when the code expires.
 func (e *runEnv) showDeviceCode(ev *loginEvents, id string, d provider.DeviceCode) error {
 	if ev != nil {
 		c := loginEvent{Event: "device_code", Provider: id, URL: d.URL, Code: d.Code}
@@ -241,48 +224,20 @@ func (e *runEnv) showDeviceCode(ev *loginEvents, id string, d provider.DeviceCod
 	return nil
 }
 
-// showLoginURL prints a browser login's URL, or emits the browser_url
-// event, then opens it: the SDK gives the URL nowhere else, so a machine
-// whose browser does not open still shows it (0005-PLAN F4-3b decision 6).
-// A browser that does not open is not an error.
-func (e *runEnv) showLoginURL(ev *loginEvents, id, u string) error {
+// openLoginURL emits a browser sign-in's browser_url event with --json, then
+// opens the URL; the wizard has already shown it, so a machine whose
+// browser does not open still has it (0005-PLAN F4-3b decision 6). A
+// browser that does not open is not an error.
+func (e *runEnv) openLoginURL(ev *loginEvents, id, u string) error {
 	if ev != nil {
 		if err := ev.emit(loginEvent{Event: "browser_url", Provider: id, URL: u}); err != nil {
 			return err
-		}
-	} else {
-		msg := "Open this URL to sign in to %s:\n  %s\n"
-		if e.offersPaste(ev) {
-			msg += "If the browser cannot reach this machine, paste the URL it ends on here.\n"
-		}
-		if _, err := fmt.Fprintf(e.out.err, msg, id, u); err != nil {
-			return fmt.Errorf("write stderr: %w", err)
 		}
 	}
 	if err := openURL(e.ctx, u); err != nil {
 		e.log().Debug("open browser", slog.String("error", err.Error()))
 	}
 	return nil
-}
-
-// pastedRedirect is the redirect URL the user pastes on a terminal, read
-// as one line; ctx ending gives up waiting for it.
-func (e *runEnv) pastedRedirect(ctx context.Context) (string, error) {
-	line := make(chan string, 1)
-	go func() {
-		s, _ := bufio.NewReader(e.stdin).ReadString('\n') //nolint:errcheck // an unread line is no paste
-		line <- strings.TrimSpace(s)
-	}()
-	select {
-	case s := <-line:
-		if s == "" {
-			<-ctx.Done() // nothing pasted: the browser's callback may still arrive
-			return "", ctx.Err()
-		}
-		return s, nil
-	case <-ctx.Done():
-		return "", ctx.Err()
-	}
 }
 
 // AuthLogoutCmd is gobble auth logout.

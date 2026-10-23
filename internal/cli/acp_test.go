@@ -15,9 +15,9 @@ import (
 func TestACPLogin(t *testing.T) {
 	c := newCfgEnv(t)
 	logins := 0
-	replace(t, &browserLogin, func(ctx context.Context, id string, _ provider.LoginOptions, store provider.LoginStore) error {
+	replace(t, &signInWith, func(ctx context.Context, id string, _ provider.Prompter, _ provider.SignInOptions, store provider.LoginStore) (provider.Credential, error) {
 		logins++
-		return store.Save(ctx, id, &provider.Login{Access: "a", Refresh: "r"})
+		return provider.Credential{}, store.Save(ctx, id, &provider.Login{Access: "a", Refresh: "r"})
 	})
 	r := c.run("acp", "--login", "grok")
 	if r.code != ExitOK || r.stdout != "Logged in to grok\n" || logins != 1 {

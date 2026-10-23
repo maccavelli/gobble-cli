@@ -6,58 +6,28 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strings"
-	"time"
 
-	"github.com/maccavelli/gobble-cli/acpserver"
 	"github.com/maccavelli/gobble-cli/internal/auth"
 	"github.com/maccavelli/gobble-cli/internal/cli/editor"
-	"github.com/maccavelli/gobble-cli/llm"
+	"github.com/maccavelli/gobble-cli/llm/catalog"
 	"github.com/maccavelli/gobble-cli/llm/provider"
 	"github.com/maccavelli/gobble-cli/personality"
 )
 
-// The ways to sign in, as --method names them (0025-MADR D6).
-const (
-	methodAPIKey  = "api-key"
-	methodBrowser = "browser"
-	methodDevice  = "device"
-)
-
-// maxKeys is how many typed keys a sign-in tries before it stops on a
-// refusal, as go-llmprovider-sdk's wizard does.
-const maxKeys = 3
-
-// signInMethod is one way to sign in to a provider; id is --method's word.
-type signInMethod struct{ id, label string }
-
-// signInMethods are provider id's ways to sign in, gobble's own (0025-MADR
-// D6, deviation 6): an API key; Grok's browser and device sign-in; Kilo's
-// device sign-in, which gives a key.
-func signInMethods(id string) []signInMethod {
-	label := provider.Label(id)
-	ms := []signInMethod{{methodAPIKey, "Paste a " + label + " API key"}}
-	switch {
-	case provider.HasLogin(id):
-		ms = append(ms, signInMethod{methodBrowser, "Sign in to " + label + " in a browser"},
-			signInMethod{methodDevice, "Sign in to " + label + " with a code, on any device"})
-	case provider.HasKeyLogin(id):
-		ms = append(ms, signInMethod{methodDevice, "Sign in to " + label + " with a code, on any device; it gives a key"})
-	}
-	return ms
-}
+// signInWith signs in through the SDK's wizard; a test replaces it
+// (0031-MADR D7).
+var signInWith = provider.SignIn
 
 // methodOf is --method's word as one of provider id's methods; another is
 // a usage error naming them.
 func methodOf(id, word string) (string, error) {
-	var ids []string
-	for _, m := range signInMethods(id) {
-		if m.id == word {
-			return word, nil
-		}
-		ids = append(ids, m.id)
+	ms := provider.Methods(id)
+	if slices.Contains(ms, word) {
+		return word, nil
 	}
-	return "", usageErrorf("%s signs in with --method %s, not %q", id, strings.Join(ids, " or "), word)
+	return "", usageErrorf("%s signs in with --method %s, not %q", id, strings.Join(ms, " or "), word)
 }
 
 // signInHint is how the user signs in to provider id where they are: /login
@@ -69,10 +39,10 @@ func (e *runEnv) signInHint(id string) string {
 	return "gobble auth login " + id
 }
 
-// signIn is /login's flow (0025-MADR D6, deviation 6): want, or a provider
+// signIn is /login's flow (0025-MADR D6; 0031-MADR D7): want, or a provider
 // chosen from those that take a key, each with its credential's source;
-// then one of its methods; then its credential, through gobble's sign-ins.
-// It returns the provider signed in to.
+// then the SDK's wizard, through q, asks how and signs in. It returns the
+// provider signed in to.
 func (e *runEnv) signIn(ctx context.Context, q *questions, want string) (string, error) {
 	id := want
 	if id == "" {
@@ -87,79 +57,35 @@ func (e *runEnv) signIn(ctx context.Context, q *questions, want string) (string,
 		}
 		id = ids[i]
 	}
-	ms := signInMethods(id)
-	opts := make([]option, len(ms))
-	for i, m := range ms {
-		opts[i] = option{m.label, ""}
-	}
-	i, err := q.choose("How do you sign in to "+provider.Label(id)+"?", opts, 0)
-	if err != nil {
-		return "", err
-	}
-	if ms[i].id == methodAPIKey {
-		return id, e.typedKey(ctx, q, id)
-	}
-	return id, e.loginWith(ctx, id, ms[i].id == methodDevice, nil, func(ctx context.Context) (string, error) {
-		return (&questions{ctx: ctx, in: q.in, out: q.out}).line()
-	})
+	return id, e.signInTo(ctx, prompter{q}, id, provider.SignInOptions{}, nil)
 }
 
-// typedKey asks for provider id's API key and checks it with a listing,
-// which spends no generation: a key the provider refuses is asked for
-// again, up to maxKeys; one the listing cannot check is saved with a note.
-// The key is stored in auth.json as gobble auth login --api-key - stores it.
-func (e *runEnv) typedKey(ctx context.Context, q *questions, id string) error {
+// signInTo signs in to provider id through the SDK's wizard, asking p, with
+// o's method and callbacks (0031-MADR D7), and stores what it gives: a key
+// in auth.json, a device's escaped so Pi's grammar gives it back unchanged;
+// a login, which the wizard saved there through the login store. ev, when
+// not nil, takes the saved event.
+func (e *runEnv) signInTo(ctx context.Context, p provider.Prompter, id string, o provider.SignInOptions, ev *loginEvents) error {
 	path := authPath()
 	if path == "" {
 		return failf("auth.json: the config directory cannot be resolved")
 	}
-	label := provider.Label(id)
-	for keys := 1; ; keys++ {
-		key, err := q.secret(label + " API key")
-		if err != nil {
-			return err
-		}
-		if key == "" {
-			return errCancelled
-		}
-		r, err := listModels(ctx, id, key, e.providerOptions(id, provider.Options{ClientName: appName, ClientVersion: identity().Version}))
-		if err != nil {
-			r = provider.Listing{Err: err}
-		}
-		// A refused or failed listing is r.Err, as provider.List gives it.
-		state, reason, _ := listingState(id, r, time.Now())
-		switch {
-		case state == acpserver.StateKeyRejected && keys == maxKeys:
-			return failf("%s refused %d keys; none was saved", label, keys)
-		case state == acpserver.StateKeyRejected:
-			q.notify("%s refused the key%s. Enter another, or an empty line to stop.", label, prefixed(statusOf(r.Err)))
-			continue
-		case state == acpserver.StateNotChecked:
-			q.notify("%s lists its models without a key, so the key was not checked.", label)
-		case !r.Live:
-			q.notify("The key could not be checked: %s; it is saved all the same.", strings.TrimSpace(string(state)+" "+reason))
-		}
-		if err := auth.Set(ctx, path, id, auth.Entry{Type: auth.TypeAPIKey, Key: key}); err != nil {
-			return failf("%v", err)
-		}
-		return e.saved(nil, id, auth.TypeAPIKey)
+	o.Options = e.providerOptions(id, provider.Options{ClientName: appName, ClientVersion: identity().Version})
+	c, err := signInWith(ctx, id, p, o, auth.Logins{Path: path})
+	switch {
+	case err != nil:
+		return err
+	case c.Key == "":
+		return e.saved(ev, id, auth.TypeOAuth)
+	case c.Device:
+		c.Key = catalog.QuoteValue(c.Key)
+	case provider.PublicListing(id):
+		p.Notify("%s lists its models without a key, so the key was not checked.", provider.Label(id))
 	}
-}
-
-// statusOf is err's HTTP status in words, "HTTP 401", or "".
-func statusOf(err error) string {
-	if ae, ok := errors.AsType[*llm.APIError](err); ok && ae.Status > 0 {
-		return fmt.Sprintf("HTTP %d", ae.Status)
+	if err := auth.Set(ctx, path, id, auth.Entry{Type: auth.TypeAPIKey, Key: c.Key}); err != nil {
+		return failf("%v", err)
 	}
-	return ""
-}
-
-// prefixed is s in parentheses after a space, or "".
-func prefixed(s string) string {
-	if s == "" {
-		return ""
-	}
-	return " (" + s + ")"
+	return e.saved(ev, id, auth.TypeAPIKey)
 }
 
 // storedCredentials are the key providers auth.json holds a credential

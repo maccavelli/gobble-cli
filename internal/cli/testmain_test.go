@@ -26,16 +26,8 @@ var errNoSignIn = errors.New("tests open no browser and sign in nowhere")
 
 func noBrowser(context.Context, string) error { return errNoSignIn }
 
-func noBrowserLogin(context.Context, string, provider.LoginOptions, provider.LoginStore) error {
-	return errNoSignIn
-}
-
-func noDeviceLogin(context.Context, string, provider.LoginOptions, func(provider.DeviceCode) error, provider.LoginStore) error {
-	return errNoSignIn
-}
-
-func noKeyLogin(context.Context, string, provider.LoginOptions, func(provider.DeviceCode) error) (string, error) {
-	return "", errNoSignIn
+func noSignIn(context.Context, string, provider.Prompter, provider.SignInOptions, provider.LoginStore) (provider.Credential, error) {
+	return provider.Credential{}, errNoSignIn
 }
 
 func noLogout(context.Context, string, provider.LoginOptions, provider.LoginStore) (revoke, err error) {
@@ -48,11 +40,9 @@ func noLogout(context.Context, string, provider.LoginOptions, provider.LoginStor
 func TestNoBrowserOrSignIn(t *testing.T) {
 	same := func(a, b any) bool { return reflect.ValueOf(a).Pointer() == reflect.ValueOf(b).Pointer() }
 	for name, ok := range map[string]bool{
-		"openURL":      same(openURL, noBrowser),
-		"browserLogin": same(browserLogin, noBrowserLogin),
-		"deviceLogin":  same(deviceLogin, noDeviceLogin),
-		"keyLogin":     same(keyLogin, noKeyLogin),
-		"logoutLogin":  same(logoutLogin, noLogout),
+		"openURL":     same(openURL, noBrowser),
+		"signInWith":  same(signInWith, noSignIn),
+		"logoutLogin": same(logoutLogin, noLogout),
 	} {
 		if !ok {
 			t.Errorf("%s is not TestMain's: a test could open a browser or sign in", name)
@@ -75,6 +65,6 @@ func TestMain(m *testing.M) {
 		}
 	}
 	listModels = offlineList
-	openURL, browserLogin, deviceLogin, keyLogin, logoutLogin = noBrowser, noBrowserLogin, noDeviceLogin, noKeyLogin, noLogout
+	openURL, signInWith, logoutLogin = noBrowser, noSignIn, noLogout
 	os.Exit(m.Run()) //nolint:forbidigo // TestMain's exit
 }

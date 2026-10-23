@@ -229,30 +229,48 @@ func replace[T any](t *testing.T, v *T, fake T) {
 	t.Cleanup(func() { *v = old })
 }
 
-// gobble auth login grok runs the browser login, printing its URL before
-// opening it, or with --device the device login, showing its code; either
-// saves the login (0005-PLAN F4-3b decision 6).
+// browserThenDevice is a sign-in that does what the wizard does for Grok
+// and Kilo with no terminal: a browser sign-in shows its URL, then gives it
+// to OpenURL and saves the login; a device sign-in gives its code to
+// ShowDeviceCode, then saves the login, or gives Kilo's key. It records
+// whether a paste was offered.
+func browserThenDevice(authorize string, pasted *[]bool) signInFunc {
+	return func(ctx context.Context, id string, p provider.Prompter, o provider.SignInOptions, store provider.LoginStore) (provider.Credential, error) {
+		*pasted = append(*pasted, !o.NoPaste)
+		if o.Method == provider.MethodBrowser {
+			p.Notify("Open %s in your browser", authorize)
+			if err := o.OpenURL(authorize); err != nil {
+				return provider.Credential{}, err
+			}
+			return provider.Credential{}, store.Save(ctx, id, &provider.Login{Access: "a-browser", Refresh: "r", Issuer: "https://auth.x.ai"})
+		}
+		d := provider.DeviceCode{URL: "https://accounts.x.ai/device", Code: "ABCD-1234", Expires: time.Date(2026, 10, 15, 13, 0, 0, 0, time.FixedZone("", 3600))}
+		if id == "kilo" {
+			d = provider.DeviceCode{URL: "https://app.kilo.ai/device", Code: "KILO-1"}
+		}
+		if err := o.ShowDeviceCode(d); err != nil {
+			return provider.Credential{}, err
+		}
+		if id == "kilo" {
+			return provider.Credential{Key: "!x$y", Device: true}, nil
+		}
+		return provider.Credential{}, store.Save(ctx, id, &provider.Login{Access: "a-device", Refresh: "r"})
+	}
+}
+
+// gobble auth login grok runs the browser sign-in, which shows its URL
+// before it is opened, or with --device the device sign-in, which shows its
+// code; either saves the login (0005-PLAN F4-3b decision 6; 0031-MADR D7).
 func TestAuthLoginGrok(t *testing.T) {
 	c := newCfgEnv(t)
 	var opened []string
 	replace(t, &openURL, func(_ context.Context, u string) error { opened = append(opened, u); return nil })
 	const authorize = "https://auth.x.ai/oauth2/authorize?state=s"
-	replace(t, &browserLogin, func(ctx context.Context, id string, o provider.LoginOptions, store provider.LoginStore) error {
-		if err := o.OpenURL(authorize); err != nil {
-			return err
-		}
-		return store.Save(ctx, id, &provider.Login{Access: "a-browser", Refresh: "r", Issuer: "https://auth.x.ai"})
-	})
-	replace(t, &deviceLogin, func(ctx context.Context, id string, _ provider.LoginOptions, show func(provider.DeviceCode) error,
-		store provider.LoginStore) error {
-		if err := show(provider.DeviceCode{URL: "https://accounts.x.ai/device", Code: "ABCD-1234"}); err != nil {
-			return err
-		}
-		return store.Save(ctx, id, &provider.Login{Access: "a-device", Refresh: "r"})
-	})
+	var pasted []bool
+	replace(t, &signInWith, browserThenDevice(authorize, &pasted))
 	c.write(c.authFile(), `{"openai": {"type": "api_key", "key": "keep"}}`)
 
-	c.want(c.run("auth", "login", "grok"), ExitOK, "Logged in to grok\n", "Open this URL to sign in to grok:\n  "+authorize+"\n")
+	c.want(c.run("auth", "login", "grok"), ExitOK, "Logged in to grok\n", "Open "+authorize+" in your browser\n")
 	if len(opened) != 1 || opened[0] != authorize {
 		t.Errorf("opened %q, want the authorize URL once", opened)
 	}
@@ -264,10 +282,13 @@ func TestAuthLoginGrok(t *testing.T) {
 	if got := c.read(c.authFile()); !strings.Contains(got, `"access": "a-device"`) || len(opened) != 1 {
 		t.Errorf("auth.json after the device login, %d opened:\n%s", len(opened), got)
 	}
-	replace(t, &browserLogin, func(context.Context, string, provider.LoginOptions, provider.LoginStore) error {
-		return fmt.Errorf("grok login: %w", llm.ErrAuth)
+	if !slices.Equal(pasted, []bool{false, false}) {
+		t.Errorf("a paste was offered with no terminal: %v", pasted)
+	}
+	replace(t, &signInWith, func(context.Context, string, provider.Prompter, provider.SignInOptions, provider.LoginStore) (provider.Credential, error) {
+		return provider.Credential{}, &provider.SignInError{ID: "grok"}
 	})
-	if r := c.run("auth", "login", "grok"); r.code != ExitFailure || !strings.Contains(r.stderr, "grok login:") {
+	if r := c.run("auth", "login", "grok"); r.code != ExitFailure || !strings.Contains(r.stderr, "grok sign-in failed") {
 		t.Errorf("a failed login: exit %d, stderr %q", r.code, r.stderr)
 	}
 }
@@ -277,13 +298,8 @@ func TestAuthLoginGrok(t *testing.T) {
 // nothing (0005-PLAN F4-3b decision 3 of the first entry).
 func TestAuthLoginKilo(t *testing.T) {
 	c := newCfgEnv(t)
-	token := "!x$y"
-	replace(t, &keyLogin, func(_ context.Context, _ string, _ provider.LoginOptions, show func(provider.DeviceCode) error) (string, error) {
-		if err := show(provider.DeviceCode{URL: "https://app.kilo.ai/device", Code: "KILO-1"}); err != nil {
-			return "", err
-		}
-		return token, nil
-	})
+	var pasted []bool
+	replace(t, &signInWith, browserThenDevice("", &pasted))
 	c.write(c.authFile(), `{"openai": {"type": "api_key", "key": "keep"}}`)
 	c.want(c.run("auth", "login", "kilo"), ExitOK, "Saved API key for kilo\n", "Open https://app.kilo.ai/device and enter the code KILO-1\n")
 	f, err := auth.Load(c.authFile())
@@ -293,14 +309,14 @@ func TestAuthLoginKilo(t *testing.T) {
 	e, _ := f.Entry("kilo")
 	got, err := catalog.ResolveValue(e.Key, func(string) (string, bool) { return "", false },
 		func(string) (string, error) { return "", errors.New("ran a command") })
-	if e.Type != auth.TypeAPIKey || e.Key != "$!x$$y" || got != token || err != nil {
-		t.Errorf("kilo's entry %+v resolves to %q, %v; want %q stored escaped", e, got, err, token)
+	if e.Type != auth.TypeAPIKey || e.Key != "$!x$$y" || got != "!x$y" || err != nil {
+		t.Errorf("kilo's entry %+v resolves to %q, %v; want %q stored escaped", e, got, err, "!x$y")
 	}
 	if o, _ := f.Entry("openai"); o.Key != "keep" {
 		t.Errorf("openai's entry: %+v", o)
 	}
-	replace(t, &keyLogin, func(context.Context, string, provider.LoginOptions, func(provider.DeviceCode) error) (string, error) {
-		return "", fmt.Errorf("kilo login: %w", llm.ErrAuth)
+	replace(t, &signInWith, func(context.Context, string, provider.Prompter, provider.SignInOptions, provider.LoginStore) (provider.Credential, error) {
+		return provider.Credential{}, fmt.Errorf("kilo sign-in: %w", llm.ErrAuth)
 	})
 	c.write(c.authFile(), `{}`)
 	if r := c.run("auth", "login", "kilo"); r.code != ExitFailure || c.read(c.authFile()) != "{}" {
@@ -318,24 +334,7 @@ func TestAuthLoginJSON(t *testing.T) {
 	replace(t, &openURL, func(context.Context, string) error { return errors.New("no browser") })
 	const authorize = "https://auth.x.ai/oauth2/authorize?state=s"
 	var pasted []bool
-	replace(t, &browserLogin, func(ctx context.Context, id string, o provider.LoginOptions, store provider.LoginStore) error {
-		pasted = append(pasted, o.InputCode != nil)
-		if err := o.OpenURL(authorize); err != nil {
-			return err
-		}
-		return store.Save(ctx, id, &provider.Login{Access: "a-browser", Refresh: "r"})
-	})
-	replace(t, &deviceLogin, func(ctx context.Context, id string, _ provider.LoginOptions, show func(provider.DeviceCode) error,
-		store provider.LoginStore) error {
-		d := provider.DeviceCode{URL: "https://accounts.x.ai/device", Code: "ABCD-1234", Expires: time.Date(2026, 10, 15, 13, 0, 0, 0, time.FixedZone("", 3600))}
-		if err := show(d); err != nil {
-			return err
-		}
-		return store.Save(ctx, id, &provider.Login{Access: "a-device", Refresh: "r"})
-	})
-	replace(t, &keyLogin, func(_ context.Context, _ string, _ provider.LoginOptions, show func(provider.DeviceCode) error) (string, error) {
-		return "k", show(provider.DeviceCode{URL: "https://app.kilo.ai/device", Code: "KILO-1"})
-	})
+	replace(t, &signInWith, browserThenDevice(authorize, &pasted))
 	// A state directory that is a file fails the log file, whose warning
 	// would reach stderr.
 	c.write(filepath.Join(c.dir, "state-file"), "")
@@ -371,8 +370,8 @@ func TestAuthLoginJSON(t *testing.T) {
 	}
 
 	// A failed login's message is what gobble prints without --json.
-	replace(t, &browserLogin, func(context.Context, string, provider.LoginOptions, provider.LoginStore) error {
-		return fmt.Errorf("grok login: %w", llm.ErrAuth)
+	replace(t, &signInWith, func(context.Context, string, provider.Prompter, provider.SignInOptions, provider.LoginStore) (provider.Credential, error) {
+		return provider.Credential{}, fmt.Errorf("grok sign-in: %w", llm.ErrAuth)
 	})
 	text := c.run("auth", "login", "grok")
 	msg, ok := strings.CutPrefix(strings.TrimSuffix(text.stderr, "\n"), "Error: ")
@@ -413,9 +412,9 @@ func TestAuthLoginJSON(t *testing.T) {
 		o := &Output{out: &out, err: &errw, caps: term.Caps{In: true}}
 		e := &runEnv{ctx: t.Context(), out: o, stdin: stdinFile(t, ""), logs: &lazyLog{out: o, stderr: &errw}}
 		pasted = nil
-		replace(t, &browserLogin, func(ctx context.Context, id string, o provider.LoginOptions, store provider.LoginStore) error {
-			pasted = append(pasted, o.InputCode != nil)
-			return store.Save(ctx, id, &provider.Login{Access: "a", Refresh: "r"})
+		replace(t, &signInWith, func(ctx context.Context, id string, _ provider.Prompter, o provider.SignInOptions, store provider.LoginStore) (provider.Credential, error) {
+			pasted = append(pasted, !o.NoPaste)
+			return provider.Credential{}, store.Save(ctx, id, &provider.Login{Access: "a", Refresh: "r"})
 		})
 		err := (&AuthLoginCmd{Provider: "grok", JSON: j}).Run(e)
 		if cerr := e.logs.close(); cerr != nil {

@@ -135,6 +135,49 @@ func TestQuestionsSecret(t *testing.T) {
 	}
 }
 
+// questions are the sign-in's prompter: Input gives up when its context
+// ends and leaves what is typed next to the next question; an empty secret
+// cancels; with no terminal, every question is refused and a notice still
+// shown (0031-MADR D7).
+func TestQuestionsPrompter(t *testing.T) {
+	qs, out, _ := asked(t, "\r", "https://localhost/cb?code=1\n")
+	q := prompter{qs}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if _, err := q.Input(ctx, "Paste"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("an ended context: %v", err)
+	}
+	if s, err := q.Input(t.Context(), "Paste"); err != nil || s != "" {
+		t.Fatalf("the next answer = %q, %v; want the empty line typed next", s, err)
+	}
+	if s, err := q.Input(t.Context(), "Paste"); err != nil || s != "https://localhost/cb?code=1" {
+		t.Fatalf("the paste = %q, %v", s, err)
+	}
+	if i, err := q.Choose("Which?", []provider.Choice{{Label: "Only"}}, 0); err != nil || i != 0 {
+		t.Fatalf("one choice: %d, %v", i, err)
+	}
+	q.Notify("note %d", 1)
+	if !strings.Contains(out.String(), "Paste: ") || !strings.HasSuffix(out.String(), "note 1\n") {
+		t.Fatalf("wrote %q", out)
+	}
+	qs, _, _ = asked(t, "\r")
+	if _, err := (prompter{qs}).Secret("Key"); !errors.Is(err, errCancelled) {
+		t.Fatalf("an empty secret: %v, want cancelled", err)
+	}
+	var notes bytes.Buffer
+	u := unasked{out: &notes}
+	if _, err := u.Secret("Key"); !errors.Is(err, errNoTerminal) {
+		t.Fatalf("unasked: %v", err)
+	}
+	if _, err := u.Choose("Which?", nil, 0); !errors.Is(err, errNoTerminal) {
+		t.Fatalf("unasked: %v", err)
+	}
+	u.Notify("Open %s", "https://x.test")
+	if notes.String() != "Open https://x.test\n" {
+		t.Fatalf("unasked's notice %q", notes.String())
+	}
+}
+
 // keyLister answers claude's listing by its key: live, offline, or
 // refused, a failure in the listing as provider.List gives it; every other
 // listing fails offline.
@@ -152,22 +195,16 @@ func keyLister(good string) func(context.Context, string, string, provider.Optio
 	}
 }
 
-// A key the listing cannot check, offline, is saved, and the user is told.
-func TestLoginUncheckedKey(t *testing.T) {
-	withLister(t, keyLister("never"))
-	h := newModelHarness(t, llmtest.NewScript(), t.TempDir())
-	h.start(Prompt{})
-	h.press("/login claude\r")
-	waitUntil(t, func() bool { return strings.Contains(h.stderr.String(), "API key: ") })
-	h.press("sk-test-OFFLINE\r")
-	waitUntil(t, func() bool { return strings.Contains(h.stdout.String(), "Saved API key for claude") })
-	h.press("\x04")
-	if err := h.wait(); err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(h.stderr.String(), "The key could not be checked: not listed (offline); it is saved all the same.") ||
-		storedKey(t, "claude") != "sk-test-OFFLINE" {
-		t.Fatalf("stderr:\n%s", h.stderr)
+// signInFunc is provider.SignIn's shape.
+type signInFunc = func(context.Context, string, provider.Prompter, provider.SignInOptions, provider.LoginStore) (provider.Credential, error)
+
+// typedKeySignIn is a sign-in that asks for a key through the prompter and
+// gives it, as the wizard's key method does; it records the options.
+func typedKeySignIn(got *provider.SignInOptions) signInFunc {
+	return func(_ context.Context, id string, p provider.Prompter, o provider.SignInOptions, _ provider.LoginStore) (provider.Credential, error) {
+		*got = o
+		key, err := p.Secret("Enter your " + provider.Label(id) + " API key")
+		return provider.Credential{Key: key}, err
 	}
 }
 
@@ -182,19 +219,18 @@ func storedKey(t *testing.T, id string) string {
 	return en.Key
 }
 
-// /login claude asks for the key with no menu, as claude has one method;
-// a key claude's listing refuses is asked for again, with the status; the
-// key it accepts is stored, the credentials are read again, and claude's
-// models are listed, numbered for /model N. No key is ever shown
-// (0025-MADR D6).
+// /login claude signs in through the SDK's wizard, choosing no method:
+// the key it asks for is read as a secret, stored, the credentials are read
+// again, and claude's models are listed, numbered for /model N. No key is
+// ever shown (0025-MADR D6; 0031-MADR D7).
 func TestLoginSlash(t *testing.T) {
 	withLister(t, keyLister("sk-test-GOOD-2"))
+	var o provider.SignInOptions
+	replace(t, &signInWith, typedKeySignIn(&o))
 	h := newModelHarness(t, llmtest.NewScript(), t.TempDir())
 	h.start(Prompt{})
 	h.press("/login claude\r")
-	waitUntil(t, func() bool { return strings.Contains(h.stderr.String(), "Claude (Anthropic) API key: ") })
-	h.press("sk-test-REFUSED-1\r")
-	waitUntil(t, func() bool { return strings.Contains(h.stderr.String(), "refused the key (HTTP 401)") })
+	waitUntil(t, func() bool { return strings.Contains(h.stderr.String(), "Enter your Claude (Anthropic) API key: ") })
 	h.press("sk-test-GOOD-2\r")
 	waitUntil(t, func() bool { return strings.Contains(h.stdout.String(), "claude/claude-x2") })
 	h.press("\x04")
@@ -203,6 +239,9 @@ func TestLoginSlash(t *testing.T) {
 	}
 	if got := storedKey(t, "claude"); got != "sk-test-GOOD-2" {
 		t.Fatalf("auth.json's claude key %q", got)
+	}
+	if o.Method != "" || o.ClientName != appName {
+		t.Errorf("the sign-in's options %+v, want no method and gobble's client", o)
 	}
 	if !strings.Contains(h.stdout.String(), "Saved API key for claude") || !strings.Contains(h.stdout.String(), "Claude (Anthropic)** — live") {
 		t.Fatalf("stdout:\n%s", h.stdout)
@@ -221,6 +260,8 @@ func TestLoginSlash(t *testing.T) {
 // Ctrl+C while /login asks cancels the sign-in, not gobble; nothing is
 // saved and the session goes on.
 func TestLoginInterrupt(t *testing.T) {
+	var o provider.SignInOptions
+	replace(t, &signInWith, typedKeySignIn(&o))
 	h := newModelHarness(t, llmtest.NewScript(), t.TempDir())
 	h.start(Prompt{})
 	h.press("/login claude\r")
@@ -239,9 +280,14 @@ func TestLoginInterrupt(t *testing.T) {
 }
 
 // /login with no provider offers every provider that takes a key, with
-// its credential's source; three refused keys end it with nothing saved.
+// its credential's source; a sign-in the provider refused says so in
+// gobble's words, with nothing saved.
 func TestLoginMenuAndRefusals(t *testing.T) {
-	withLister(t, keyLister("never"))
+	var signedIn string
+	replace(t, &signInWith, func(_ context.Context, id string, _ provider.Prompter, _ provider.SignInOptions, _ provider.LoginStore) (provider.Credential, error) {
+		signedIn = id
+		return provider.Credential{}, &provider.SignInError{ID: id, Keys: 3}
+	})
 	h := newModelHarness(t, llmtest.NewScript(), t.TempDir())
 	h.start(Prompt{})
 	h.press("/login\r")
@@ -253,47 +299,57 @@ func TestLoginMenuAndRefusals(t *testing.T) {
 		}
 	}
 	h.press(fmt.Sprintf("%d\r", n))
-	for i := range maxKeys {
-		waitUntil(t, func() bool { return strings.Count(h.stderr.String(), "API key: ") == i+1 })
-		h.press(fmt.Sprintf("sk-test-%d\r", i))
-	}
-	waitUntil(t, func() bool { return strings.Contains(h.stderr.String(), "refused 3 keys; none was saved") })
+	waitUntil(t, func() bool { return strings.Contains(h.stderr.String(), "claude refused 3 keys; none was saved") })
 	h.press("\x04")
 	if err := h.wait(); err != nil {
 		t.Fatal(err)
 	}
-	if got := storedKey(t, "claude"); got != "" {
-		t.Fatalf("a refused key was stored: %q", got)
+	if signedIn != "claude" || storedKey(t, "claude") != "" {
+		t.Fatalf("signed in to %q; stored %q", signedIn, storedKey(t, "claude"))
 	}
 }
 
-// /login grok offers grok's three ways; the device code one runs gobble's
-// device sign-in, which shows where to enter the code.
-func TestLoginGrokDevice(t *testing.T) {
-	var called string
-	old := deviceLogin
-	deviceLogin = func(_ context.Context, id string, _ provider.LoginOptions, show func(provider.DeviceCode) error, _ provider.LoginStore) error {
-		called = id
-		return show(provider.DeviceCode{URL: "https://example.test/device", Code: "ABCD-1234"})
-	}
-	t.Cleanup(func() { deviceLogin = old })
+// The wizard's questions are the line session's: a menu numbered, a notice
+// on its own line; a login the wizard saved is reported as one. A key from
+// a public listing, typed, is noted as not checked (0031-MADR D7).
+func TestLoginAsksThroughQuestions(t *testing.T) {
+	replace(t, &signInWith, func(ctx context.Context, id string, p provider.Prompter, _ provider.SignInOptions, store provider.LoginStore) (provider.Credential, error) {
+		if id == "kilo" {
+			key, err := p.Secret("Enter your Kilo key")
+			return provider.Credential{Key: key}, err
+		}
+		i, err := p.Choose("Choose how to authenticate with Grok:", []provider.Choice{{Label: "Key"}, {Label: "Browser"}, {Label: "Device", Detail: "a code"}}, 0)
+		if err != nil || i != 2 {
+			return provider.Credential{}, fmt.Errorf("chose %d: %w", i, err)
+		}
+		p.Notify("Open %s and enter the code %s", "https://example.test/device", "ABCD-1234")
+		return provider.Credential{}, store.Save(ctx, id, &provider.Login{Access: "a", Refresh: "r"})
+	})
 	h := newModelHarness(t, llmtest.NewScript(), t.TempDir())
 	h.start(Prompt{})
 	h.press("/login grok\r")
 	waitUntil(t, func() bool { return strings.Contains(h.stderr.String(), "Number [1]: ") })
-	for _, want := range []string{"Paste a Grok (xAI) API key", "Sign in to Grok (xAI) in a browser", "Sign in to Grok (xAI) with a code, on any device"} {
-		if !strings.Contains(h.stderr.String(), want) {
-			t.Errorf("grok's ways lack %q:\n%s", want, h.stderr)
-		}
+	if !strings.Contains(h.stderr.String(), "Choose how to authenticate with Grok:\n  1  Key\n  2  Browser\n  3  Device   a code\n") {
+		t.Errorf("the menu:\n%s", h.stderr)
 	}
 	h.press("3\r")
 	waitUntil(t, func() bool { return strings.Contains(h.stdout.String(), "Logged in to grok") })
+	h.press("/login kilo\r")
+	waitUntil(t, func() bool { return strings.Contains(h.stderr.String(), "Enter your Kilo key: ") })
+	h.press("kilo-typed\r")
+	waitUntil(t, func() bool { return strings.Contains(h.stdout.String(), "Saved API key for kilo") })
 	h.press("\x04")
 	if err := h.wait(); err != nil {
 		t.Fatal(err)
 	}
-	if called != "grok" || !strings.Contains(h.stderr.String(), "Open https://example.test/device and enter the code ABCD-1234") {
-		t.Fatalf("the device sign-in ran for %q; stderr:\n%s", called, h.stderr)
+	for _, want := range []string{"Open https://example.test/device and enter the code ABCD-1234\n",
+		provider.Label("kilo") + " lists its models without a key, so the key was not checked.\n"} {
+		if !strings.Contains(h.stderr.String(), want) {
+			t.Errorf("stderr lacks %q:\n%s", want, h.stderr)
+		}
+	}
+	if storedKey(t, "kilo") != "kilo-typed" {
+		t.Errorf("kilo's key %q", storedKey(t, "kilo"))
 	}
 }
 
@@ -358,12 +414,14 @@ func TestModelOffersLogin(t *testing.T) {
 // declined, the session goes on with the warning (0025-MADR D7).
 func TestFirstRunSetup(t *testing.T) {
 	withLister(t, keyLister("sk-test-GOOD"))
+	var o provider.SignInOptions
+	replace(t, &signInWith, typedKeySignIn(&o))
 	h := newModelHarness(t, llmtest.NewScript(), t.TempDir())
 	h.answer = "\r"
 	h.start(Prompt{})
 	waitUntil(t, func() bool { return strings.Contains(h.stderr.String(), "Sign in to which provider?") })
 	h.press(fmt.Sprintf("%d\r", slices.Index(provider.KeyProviders(), "claude")+1))
-	waitUntil(t, func() bool { return strings.Contains(h.stderr.String(), "API key: ") })
+	waitUntil(t, func() bool { return strings.Contains(h.stderr.String(), "Enter your Claude (Anthropic) API key: ") })
 	h.press("sk-test-GOOD\r")
 	waitUntil(t, func() bool { return strings.Contains(h.stdout.String(), "claude/claude-x1") })
 	h.press("\x04")
@@ -396,20 +454,19 @@ func TestSetupNeedsTerminal(t *testing.T) {
 
 // gobble auth login --method signs in with no menu: api-key reads the key
 // from stdin; device runs the device sign-in; a method the provider does
-// not have is refused, naming its methods (0025-MADR D6).
+// not have is refused, naming its methods (0025-MADR D6; 0031-MADR D7).
 func TestAuthLoginMethod(t *testing.T) {
 	c := newCfgEnv(t)
 	c.want(c.runStdin(stdinFile(t, "sk-test-only\n"), "auth", "login", "claude", "--method", "api-key"), ExitOK, "Saved API key for claude\n", "")
-	var called bool
-	old := deviceLogin
-	deviceLogin = func(context.Context, string, provider.LoginOptions, func(provider.DeviceCode) error, provider.LoginStore) error {
-		called = true
-		return nil
-	}
-	t.Cleanup(func() { deviceLogin = old })
+	var methods []string
+	replace(t, &signInWith, func(ctx context.Context, id string, _ provider.Prompter, o provider.SignInOptions, store provider.LoginStore) (provider.Credential, error) {
+		methods = append(methods, o.Method)
+		return provider.Credential{}, store.Save(ctx, id, &provider.Login{Access: "a", Refresh: "r"})
+	})
 	c.want(c.run("auth", "login", "grok", "--method", "device"), ExitOK, "Logged in to grok\n", "")
-	if !called {
-		t.Fatal("--method device did not run the device sign-in")
+	c.want(c.run("auth", "login", "grok", "--method", "browser"), ExitOK, "Logged in to grok\n", "")
+	if !slices.Equal(methods, []string{provider.MethodDevice, provider.MethodBrowser}) {
+		t.Fatalf("the sign-ins ran with %q", methods)
 	}
 	r := c.run("auth", "login", "grok", "--method", "nope")
 	if r.code != ExitUsage || !strings.Contains(r.stderr, `grok signs in with --method api-key or browser or device, not "nope"`) {
