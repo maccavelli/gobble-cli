@@ -225,8 +225,8 @@ check `ok`, "0 failing checks". Run together, the script stopped at go-selfupdat
 Chosen: pin the three newest tags, with the workflows, and fix the check that found the collision.
 
 - **A1. The pins:** acp-go-sdk2 `v1.16.3`, go-llmprovider-sdk `v1.17.0`, go-selfupdate-lib `v1.17.0`, and the
-  indirect moves `go mod tidy` makes; nothing else of D1 moves. *(2026-10-22: moved again by [0031-MADR-sdk-current-releases-and-adoption.md](0031-MADR-sdk-current-releases-and-adoption.md) D1, to acp-go-sdk2 `v1.20.0` and go-llmprovider-sdk `v1.21.0`; F4-1b is 0031-PLAN P2.)*
-- **A2. The workflows follow the library:** both `uses:` lines at `adc2c757d7e2fa9ed7e5eb5ff33a076eba34f4bd # v1.17.0`.
+  indirect moves `go mod tidy` makes; nothing else of D1 moves. *(2026-10-22: moved again by [0031-MADR-sdk-current-releases-and-adoption.md](0031-MADR-sdk-current-releases-and-adoption.md) D1, to acp-go-sdk2 `v1.20.0` and go-llmprovider-sdk `v1.21.0`; F4-1b is 0031-PLAN P2.)* *(2026-10-23: moved again by [0031-MADR-sdk-current-releases-and-adoption.md](0031-MADR-sdk-current-releases-and-adoption.md) D1's amendment (0031-PLAN P1a), to go-llmprovider-sdk `v1.22.0` and go-selfupdate-lib `v1.17.2`, the workflows with it.)*
+- **A2. The workflows follow the library:** both `uses:` lines at `adc2c757d7e2fa9ed7e5eb5ff33a076eba34f4bd # v1.17.0`. *(2026-10-23: at `036289ecc701d84c7749f4950a57a154c1af2cf4 # v1.17.2`, by 0031-PLAN P1a.)*
 - **A3. go-llmprovider-sdk `v1.17.0` only once its tag's CI has passed and its GitHub release is published;** until
   then the plan stops and asks, the alternative being `v1.16.0`, its "Latest" release.
 - **A4. `check-libs` names its API exports by library and version,** so two libraries at one version do not collide;

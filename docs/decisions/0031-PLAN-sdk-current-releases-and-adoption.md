@@ -1,6 +1,6 @@
 ---
 status: in-progress
-date: 2026-10-22
+date: 2026-10-23
 associated-madr: "0031-MADR-sdk-current-releases-and-adoption.md"
 ---
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
@@ -50,6 +50,29 @@ The owner's answer, 2026-10-22: "0030 P5, then 0031, then 0029". The tag is `v1.
    that the pins moved here.
 4. Gates (below). Commit.
 
+### P1a — the current pins (D1's amendment of 2026-10-23)
+
+*Added 2026-10-23, approved by the owner's "Proceed" that day. It runs after P5 and before P4, which it unblocks.*
+
+1. `make check-libs` for go-llmprovider-sdk at `v1.22.0`, go-selfupdate-lib at `v1.17.2` and acp-go-sdk2 at
+   `v1.20.0`. Its results go in the execution record. *(This step ran before approval, read-only on scratch clones;
+   see P1a's record.)*
+2. `go get github.com/maccavelli/go-llmprovider-sdk@v1.22.0 github.com/maccavelli/go-selfupdate-lib@v1.17.2`, then
+   `go mod tidy`. No code change is expected; a change that turns out to be needed is a deviation.
+3. `.github/workflows/ci.yml`: move the `build` and `release` jobs' `uses:` from `adc2c757… # v1.17.0` to
+   `036289ecc701d84c7749f4950a57a154c1af2cf4 # v1.17.2`, the commit that `v1.17.2^{}` names (0023-MADR A2).
+4. Records:
+   - `docs/architecture.md`'s pin table and `README.md`'s stack;
+   - a dated note in 0023-MADR (A1, A2) and in 0023-PLAN that the go-selfupdate-lib pin moved here;
+   - a note in this plan's P4 that its hold is lifted;
+   - `docs/README.md`.
+5. Gates, as P1's (Verification). Commit.
+
+P1a leaves out two things:
+
+- go-tui-lib, for the reason D1's amendment gives;
+- P4 itself, which resumes only at the owner's word.
+
 ### P2 — live streaming, a cut-off reply, provider retries (D2–D4)
 
 1. **Tests first,** each seen failing on the current code or a stub, on an `httptest` server streaming Server-Sent
@@ -87,7 +110,8 @@ The owner's answer, 2026-10-22: "0030 P5, then 0031, then 0029". The tag is `v1.
 ### P4 — the SDK's credential step (D7; only if Q2 keeps it here)
 
 *(2026-10-22, deviation 3: P4 waits for three go-llmprovider-sdk changes, and its code lives in `llm/provider`;
-see P3's record.)*
+see P3's record.)* *(2026-10-23: the three changes ship in go-llmprovider-sdk `v1.22.0`, pinned by P1a; the hold
+is lifted, and P4 resumes at the owner's word.)*
 
 1. **Tests first,** every sign-in against an `httptest` server and a scripted `wizard.Prompter`; no test opens a
    browser, reaches a real sign-in, or writes outside a temporary `GOBBLE_HOME`:
@@ -404,3 +428,57 @@ The search is P5's; the rest is noted in 0031-MADR D8's amendment. The binary te
 
 **P4 waits** for go-llmprovider-sdk issues 6, 7 and 8 (deviation 3). This plan stays in progress until then: P1, P2,
 P3 and P5 are done, and the owner's live turn (P2) and look (0030-PLAN P5) are still to come.
+
+### P1a record (2026-10-23)
+
+The owner asked: "Ensure gobble pins current versions of the go-llmprovider-sdk, go-selfupdate-lib, go-tui-lib, and
+acp-go-sdk2 dependencies". The newest tags, from `git ls-remote --tags`:
+
+| Library | Pinned | Newest | CI on the tag |
+| :--- | :--- | :--- | :--- |
+| go-llmprovider-sdk | `v1.21.0` | `v1.22.0` | success |
+| go-selfupdate-lib | `v1.17.0` | `v1.17.2` (`v1.17.2^{}` = `036289ecc701d84c7749f4950a57a154c1af2cf4`) | success |
+| acp-go-sdk2 | `v1.20.0` | `v1.20.0` | — |
+| go-tui-lib | not required | `v0.12.0` | — |
+
+Step 1, run before approval on scratch clones, outside the tree (`scripts/check_libs.py --lib … --tag …`):
+
+- **go-llmprovider-sdk,** pinned `v1.21.0`, checking `v1.22.0`, and **go-selfupdate-lib,** pinned `v1.17.0`,
+  checking `v1.17.2`: each passed its twelve checks, "0 failing checks". The checks were get and tidy, version,
+  modules, build, vet for linux, darwin and windows, test, api, govulncheck and advisories.
+- **acp-go-sdk2** at `v1.20.0`: the same checks passed; for api, "pinned at v1.20.0; nothing to compare".
+
+Approved by the owner's "Proceed", 2026-10-23.
+
+2. **The pins:** `go get github.com/maccavelli/go-llmprovider-sdk@v1.22.0
+   github.com/maccavelli/go-selfupdate-lib@v1.17.2`, then `go mod tidy`:
+   - `go` printed "upgraded … v1.21.0 => v1.22.0" and "upgraded … v1.17.0 => v1.17.2".
+   - `go.mod` changed in those two lines, and `go.sum` in those modules' four lines. No other module moved.
+   - No code changed.
+3. **The workflows:** `.github/workflows/ci.yml`'s `build` and `release` jobs use
+   `036289ecc701d84c7749f4950a57a154c1af2cf4 # v1.17.2`, and `adc2c757` no longer appears in the file.
+4. **Records:**
+   - `docs/architecture.md`'s pin table and `README.md`'s stack;
+   - dated notes in 0023-MADR (A1 and A2) and in 0023-PLAN;
+   - P4's note that its hold is lifted;
+   - 0031-MADR D1's amendment, accepted;
+   - `docs/README.md`.
+5. **Gates:**
+   - **The pre-add check**, on every tracked Go file: `583 file(s) clean (gofmt, golint, govulncheck)`.
+   - **macOS:**
+     - `make preflight`: `preflight passed`;
+     - the tests and the race detector: 36 packages ok each;
+     - `make perf` passed: ReplyRender 32.7 µs, Reprint 9.64 ms, LineSessionStart 891 µs, KeyDraw 1.56 µs.
+   - **The Linux machine and the Windows laptop,** each on a copy of the tree:
+     - the tests and the race detector: 36 packages ok on each;
+     - `make preflight` reached `apidiff` (golangci-lint `0 issues.`, govulncheck "No vulnerabilities found.") and
+       stopped at `verify-build-metadata`, as the copies are not git checkouts;
+     - `make check-records markdownlint`: exit 0 on each.
+   - **The Windows laptop:** `make probe-conhost` gave `--- PASS: TestConhost`.
+   - **`make perf` on the remote hosts,** each within three times its baseline:
+     - the Linux machine: 142 µs, 34.4 ms, 4.07 ms, 5.39 µs;
+     - the Windows laptop: 28.8 µs, 7.77 ms, 4.98 ms, 1.11 µs.
+   - **The release workflows** at `v1.17.2` are first run by CI after the owner pushes.
+
+**P1a complete, 2026-10-23.** go-tui-lib is still unrequired, as D1's amendment says. P4 waits only for the owner's
+word.

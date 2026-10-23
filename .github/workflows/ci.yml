@@ -163,7 +163,7 @@ jobs:
 
   build:
     needs: [validate, sbom]
-    uses: maccavelli/go-selfupdate-lib/.github/workflows/build-selfupdate-release.yml@adc2c757d7e2fa9ed7e5eb5ff33a076eba34f4bd # v1.17.0
+    uses: maccavelli/go-selfupdate-lib/.github/workflows/build-selfupdate-release.yml@036289ecc701d84c7749f4950a57a154c1af2cf4 # v1.17.2
     with:
       spec-path: internal/cli/selfupdate-release.json
       extras-artifact-name: extras
@@ -175,7 +175,7 @@ jobs:
       contents: write
       id-token: write
       attestations: write
-    uses: maccavelli/go-selfupdate-lib/.github/workflows/publish-selfupdate-release.yml@adc2c757d7e2fa9ed7e5eb5ff33a076eba34f4bd # v1.17.0
+    uses: maccavelli/go-selfupdate-lib/.github/workflows/publish-selfupdate-release.yml@036289ecc701d84c7749f4950a57a154c1af2cf4 # v1.17.2
     with:
       artifact-name: ${{ needs.build.outputs.artifact-name }}
       products-json: ${{ needs.build.outputs.products-json }}

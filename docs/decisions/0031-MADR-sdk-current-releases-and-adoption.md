@@ -123,6 +123,30 @@ its own.
   `make check-libs` (0019-PLAN P1) and landed with `go get` and `go mod tidy`. The behaviour changes above are taken as
   they are: gobble passes no typed-nil token source and no nil to an ACP constructor, and does not use the wizard
   until D7.
+
+  *Amended 2026-10-23 (0031-PLAN P1a; accepted by the owner's "Proceed" that day), from the owner's request "Ensure gobble
+  pins current versions of the go-llmprovider-sdk, go-selfupdate-lib, go-tui-lib, and acp-go-sdk2 dependencies".
+  Each tag below is the library's newest, and its CI passed on the tag:*
+  - *go-llmprovider-sdk `v1.22.0` (2026-10-23):*
+    - *It adds `wizard.Options.ShowDeviceCode` with `wizard.DeviceCode`, `wizard.Options.NoPastePrompt` and
+      `wizard.InputerContext`. These are D7's three gaps, go-llmprovider-sdk issues 6, 7 and 8, now closed.*
+    - *It changes one behaviour: an empty answer to a browser sign-in's paste prompt is asked again, instead of
+      ending the sign-in. gobble does not call the wizard yet (D7), so no gobble code changes.*
+  - *go-selfupdate-lib `v1.17.2`, from 0023-MADR's `v1.17.0`:*
+    - *CI's two release workflows move with it, to `036289ecc701d84c7749f4950a57a154c1af2cf4 # v1.17.2`, as
+      0023-MADR A2 has them follow the library. Of the two workflows, only the publish workflow's header comment
+      changed; neither changed its inputs.*
+    - *`v1.17.1` fixes three things: the installers' report of a partial uninstall, a panic in a nil `*Updater`'s
+      `Checker`, and the serialising of a managed install's session.*
+    - *`v1.17.2` raises the module's Go floor to 1.26.10, for GO-2026-6809, and builds its release tools with Go
+      1.27.3, which gobble already uses.*
+  - *acp-go-sdk2 stays at `v1.20.0`, its newest tag.*
+  - *go-tui-lib's newest tag is `v0.12.0`, but it is not required:*
+    - *no gobble package imports it;*
+    - *AGENTS.md ("Dependencies") adds a requirement in the commit of its first import;*
+    - *`go mod tidy` would drop a requirement with no import.*
+
+    *It enters `go.mod` with 0032-PLAN P3's first adoption, at the newest tag at that time.*
 - **D2. Live streaming (0005-PLAN F4-1b).** `llm/provider` wraps each provider with `WithStreamRetry(p, policy,
   notify)` in place of `WithRetry`. `NativeStreaming` is reported from the wrapped provider, true when it is
   `Supported`; the OpenCode providers' `BestEffort` stays reported as false. Retry off still means no wrapper.
@@ -167,6 +191,9 @@ its own.
   comes with it, with what it needs of gobble: the plan session's fields in `auth.json` and the store, and the
   consent to background use that 0025-PLAN P6 step 2 names. The three changes are go-llmprovider-sdk issues 6, 7 and
   8.
+
+  *(2026-10-23: the three changes ship in go-llmprovider-sdk `v1.22.0`, which D1's amendment of that date pins.
+  Once it is pinned, P4's hold lifts, and P4 resumes at the owner's word.)*
 - **D8. The smaller copies go.** `gobble models --search` uses `catalog.Search`; `llm/catalog.Price` uses
   `ModelCost.RatesFor`; `CacheWrite1hTokens` is counted; `HasLogin` and `HasKeyLogin` read `Descriptor.AuthMethods`;
   `acpserver/binary_test.go` uses `agentproc`.
