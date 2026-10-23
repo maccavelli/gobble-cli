@@ -456,7 +456,9 @@ ACP-native behaviour, beyond the method list in 0002:
    No package imports `github.com/anthropics/anthropic-sdk-go`,
    `github.com/openai/openai-go`, or `google.golang.org/genai`.
 5. Only `internal/tui` imports `charm.land/...` and
-   `github.com/maccavelli/go-tui-lib`. Only `internal/cli`
+   `github.com/maccavelli/go-tui-lib`. *(Amended 2026-10-22 by [0032-MADR-go-tui-lib-integration-boundary.md](0032-MADR-go-tui-lib-integration-boundary.md)
+   D1: `internal/cli` and its packages may also import a go-tui-lib package whose whole import closure holds no
+   Charm module, and never `internal/tui`; `internal/archtest` checks the closure.)* Only `internal/cli`
    imports Kong. The config surface is undecided and will be either a native Kong facility or a surface we write. Config implementation stays unspecified.
 6. `internal/cli` and `internal/tui` never import `agent`. They drive the
    agent through `acpclient` (0002's rule).

@@ -163,3 +163,6 @@ saves an empty pattern (`saves` `[""]`), which the options' names show as `` ` `
 **P2 stopped by the owner, 2026-10-22** ("Stop p2"), before any of it was written, and an evaluation of integrating
 go-tui-lib asked for instead ("Evaluate integrating the go-tui-lib sdk now so we can build the more complex cli and
 tui elements in a canonical manner"). P2 waits for that evaluation's outcome.
+
+*(2026-10-22: the evaluation is [0032-MADR-go-tui-lib-integration-boundary.md](0032-MADR-go-tui-lib-integration-boundary.md). By its D4, P2 draws through go-tui-lib's inline
+question once it is tagged: go-tui-lib issue 7. Until then the question stays one line.)*

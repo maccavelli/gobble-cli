@@ -28,8 +28,14 @@ type modPkg struct {
 	Imports      []string
 	TestImports  []string
 	XTestImports []string
-	Err          string
+	// Deps, for a go-tui-lib package, is its whole import closure, as go
+	// list gives it (0032-MADR D1).
+	Deps []string
+	Err  string
 }
+
+// tuiLib is go-tui-lib's module path.
+const tuiLib = "github.com/maccavelli/go-tui-lib"
 
 type edge struct {
 	from string
@@ -51,6 +57,7 @@ func loadGraph(ctx context.Context, dir string) ([]modPkg, error) {
 	for {
 		var raw struct {
 			ImportPath   string
+			Deps         []string
 			Imports      []string
 			TestImports  []string
 			XTestImports []string
@@ -64,6 +71,10 @@ func loadGraph(ctx context.Context, dir string) ([]modPkg, error) {
 		}
 		if err != nil {
 			return nil, fmt.Errorf("decode go list: %w", err)
+		}
+		if pathUnder(raw.ImportPath, tuiLib) { // its closure, for rule 5
+			pkgs = append(pkgs, modPkg{ImportPath: raw.ImportPath, Deps: raw.Deps})
+			continue
 		}
 		if _, ok := relOf(raw.ImportPath); !ok {
 			continue
@@ -157,7 +168,7 @@ func isSelfUpdateTest(imp string) bool {
 }
 
 func isTUITest(imp string) bool {
-	return pathUnder(imp, "github.com/maccavelli/go-tui-lib/tuitest")
+	return pathUnder(imp, tuiLib+"/tuitest")
 }
 
 func isCharm(imp string) bool {
@@ -254,28 +265,56 @@ func checkRule4(pkgs []modPkg) []Violation {
 	return vs
 }
 
+// checkRule5 keeps Charm in internal/tui, which may import anything of
+// go-tui-lib. internal/cli may import a go-tui-lib package whose whole
+// closure holds no Charm, and never internal/tui; any other package, none
+// of go-tui-lib but tuitest in a test (0004-MADR rule 5, as amended by
+// 0032-MADR D1).
 func checkRule5(pkgs []modPkg) []Violation {
+	closure := map[string][]string{}
+	for _, p := range pkgs {
+		if pathUnder(p.ImportPath, tuiLib) {
+			closure[p.ImportPath] = p.Deps
+		}
+	}
 	var vs []Violation
 	for _, e := range edges(pkgs) {
 		rel, ok := relOf(e.from)
-		if !ok {
+		if !ok || under(rel, "internal/tui") {
 			continue
 		}
+		to, _ := relOf(e.to)
 		switch {
 		case isCharm(e.to):
-			if !under(rel, "internal/tui") {
-				vs = add(vs, 5, e)
-			}
-		case pathUnder(e.to, "github.com/maccavelli/go-tui-lib"):
-			if e.test && isTUITest(e.to) {
-				continue
-			}
-			if !under(rel, "internal/tui") {
-				vs = add(vs, 5, e)
+			vs = add(vs, 5, e)
+		case under(rel, "internal/cli") && to != "" && under(to, "internal/tui"):
+			vs = add(vs, 5, e)
+		case !pathUnder(e.to, tuiLib), e.test && isTUITest(e.to):
+		case !under(rel, "internal/cli"):
+			vs = add(vs, 5, e)
+		default:
+			if why := charmIn(e.to, closure); why != "" {
+				vs = append(vs, Violation{Rule: 5, From: e.from, To: e.to + " (" + why + ")"})
 			}
 		}
 	}
 	return vs
+}
+
+// charmIn says why go-tui-lib package imp may not reach internal/cli: the
+// first Charm package in its closure, or that its closure is unknown; ""
+// when it holds no Charm.
+func charmIn(imp string, closure map[string][]string) string {
+	deps, ok := closure[imp]
+	if !ok {
+		return "its closure is unknown"
+	}
+	for _, d := range deps {
+		if isCharm(d) {
+			return "through " + d
+		}
+	}
+	return ""
 }
 
 func checkRule6(pkgs []modPkg) []Violation {

@@ -69,6 +69,37 @@ func TestImportRules(t *testing.T) {
 			ImportPath: modulePath + "/internal/tui",
 			Imports:    []string{"charm.land/lipgloss/v2"},
 		}}},
+		// 0032-MADR D1: internal/cli may import a go-tui-lib package whose
+		// whole closure holds no Charm, and never internal/tui.
+		{name: "rule 5 cli may import a charm-free go-tui-lib package", rule: 5, pkgs: []modPkg{
+			{ImportPath: modulePath + "/internal/cli", Imports: []string{tuiLib + "/glyph"}},
+			{ImportPath: tuiLib + "/glyph", Deps: []string{"strings", "unicode/utf8", tuiLib + "/internal/enum"}},
+		}},
+		{name: "rule 5 cli go-tui-lib with charm in its closure", rule: 5, want: tuiLib + "/termsvc", pkgs: []modPkg{
+			{ImportPath: modulePath + "/internal/cli/render", Imports: []string{tuiLib + "/termsvc"}},
+			{ImportPath: tuiLib + "/termsvc", Deps: []string{"strings", tuiLib + "/termcap", "charm.land/bubbletea/v2"}},
+		}},
+		{name: "rule 5 cli go-tui-lib with charm further down", rule: 5, want: "github.com/charmbracelet/x/ansi", pkgs: []modPkg{
+			{ImportPath: modulePath + "/internal/cli", Imports: []string{tuiLib + "/a"}},
+			{ImportPath: tuiLib + "/a", Deps: []string{tuiLib + "/b", "github.com/charmbracelet/x/ansi"}},
+		}},
+		{name: "rule 5 cli go-tui-lib whose closure is unknown", rule: 5, want: tuiLib + "/unseen", pkgs: []modPkg{
+			{ImportPath: modulePath + "/internal/cli", Imports: []string{tuiLib + "/unseen"}},
+		}},
+		{name: "rule 5 cli may not import internal/tui", rule: 5, want: modulePath + "/internal/tui", pkgs: []modPkg{
+			{ImportPath: modulePath + "/internal/cli/editor", Imports: []string{modulePath + "/internal/tui/widgets"}},
+		}},
+		{name: "rule 5 a core package may not import a charm-free go-tui-lib package", rule: 5, want: tuiLib + "/glyph", pkgs: []modPkg{
+			{ImportPath: modulePath + "/agent", Imports: []string{tuiLib + "/glyph"}},
+			{ImportPath: tuiLib + "/glyph", Deps: []string{"strings"}},
+		}},
+		{name: "rule 5 tui may import any of go-tui-lib", rule: 5, pkgs: []modPkg{
+			{ImportPath: modulePath + "/internal/tui", Imports: []string{tuiLib + "/workspace"}},
+			{ImportPath: tuiLib + "/workspace", Deps: []string{"charm.land/bubbletea/v2"}},
+		}},
+		{name: "rule 5 a test may import tuitest", rule: 5, pkgs: []modPkg{
+			{ImportPath: modulePath + "/agent", TestImports: []string{tuiLib + "/tuitest"}},
+		}},
 		{name: "rule 6 module", rule: 6},
 		{name: "rule 6 cli agent", rule: 6, want: modulePath + "/agent", pkgs: []modPkg{{
 			ImportPath: modulePath + "/internal/cli",

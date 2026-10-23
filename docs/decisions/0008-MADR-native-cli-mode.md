@@ -153,7 +153,9 @@ F4. **The exit-code rules disagree.**
 - In Pi's json mode, a failed assistant turn still exits 0 (`docs/cli-integration.md:46`).
 - Consequence: the 128-plus-signal convention is a superset of both tables. The one real conflict is "abort", and D10 resolves it.
 
-F5. **Rule 5 makes the CLI mode Charm-free (measurement 7).**
+F5. **Rule 5 makes the CLI mode Charm-free (measurement 7).** *(2026-10-22: [0032-MADR-go-tui-lib-integration-boundary.md](0032-MADR-go-tui-lib-integration-boundary.md) D1 opens the door D8 and D11
+left: the CLI mode may import a go-tui-lib package whose whole import closure holds no Charm module. The CLI mode
+stays free of Charm.)*
 - `internal/cli` cannot import lipgloss, glamour, colorprofile, `x/ansi` or bubbletea. It cannot import any go-tui-lib package either, including `glyph`, which imports only the standard library.
 - Consequence: the CLI mode's dependencies are Kong, `x/term` and `x/sys`. Colour, width, sanitising and Markdown styling in that mode are gobble code or standard-library code.
 - This matches the owner's "lightweight", and it keeps CLI mode separate from TUI mode. D2.

@@ -138,7 +138,8 @@ The tier is each package's `Stability:` line in its `doc.go`. **stable** package
 2. Only `acpserver` and `acpclient/...` import the ACP SDK.
 3. Only `mcpclient` imports the MCP go-sdk.
 4. Only `llm/provider` imports go-llmprovider-sdk; no vendor LLM SDK is imported.
-5. Only `internal/tui` may import Charm and go-tui-lib.
+5. Only `internal/tui` may import Charm, and any of go-tui-lib; `internal/cli` may import a go-tui-lib package whose
+   whole import closure holds no Charm, and never `internal/tui` (0032-MADR D1).
 6. `internal/cli` and `internal/tui` never import `agent`; they go through `acpclient`.
 7. Only `cmd/gobble` imports `exp/...`.
 8. Only `internal/cli` imports go-selfupdate-lib, and `internal/buildinfo` its `buildinfo`.
