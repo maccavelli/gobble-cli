@@ -580,7 +580,7 @@ Further 0001-REPORT errata are kept here rather than in the report, which record
   * `read` returns image content only when the model accepts images **and** the SDK can send them.
   * Today the SDK cannot, so `read` always takes the text-note path.
   * ACP `promptCapabilities.image` is `false` until SDK image input lands.
-* **Usage and cost are estimated until the SDK decodes usage** (its S9). The usage ledger, `/usage`, `usage_update`, the footer and auto-compaction use the estimate, labelled as such.
+* **Usage and cost are estimated until the SDK decodes usage** (its S9). *(2026-10-22: the SDK decodes it; `llm/provider` estimates, marked `Estimated`, only a reply that reports none.)* The usage ledger, `/usage`, `usage_update`, the footer and auto-compaction use the estimate, labelled as such.
 * **Prompt-cache warming stays 1.x, and is blocked.**
   * The SDK sends no cache hints, and has one cached-token counter with no read/write split.
   * The row lands only once the SDK supports Claude `cache_control` and the split.

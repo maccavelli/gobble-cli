@@ -3,7 +3,6 @@ package cli
 import (
 	"cmp"
 	"fmt"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -59,7 +58,7 @@ func (c *ModelsInfoCmd) Run(e *runEnv) error {
 // printModels prints Pi's --list-models table (cli/list-models.ts) for the
 // providers with a credential: each one's offline set and live listing,
 // each model once, its facts from the catalog with no request; search's
-// words filter it as Pi's fuzzyFilter does. only keeps one provider; all,
+// the SDK's search filters it. only keeps one provider; all,
 // and only for a provider with no credential, add the known models of those
 // with none, named in a note after the table; both take Ollama, which takes
 // no key (0025-MADR D5).
@@ -193,56 +192,25 @@ func yesNo(known, v bool) string {
 	return "no"
 }
 
-// searchSplit splits a search into its words, as Pi's fuzzyFilter does.
-var searchSplit = regexp.MustCompile(`[\s/]+`)
-
-// searchModels are the rows whose "<provider> <id>" matches every word of
-// search, by Pi's fuzzyMatch (tui/src/fuzzy.ts); every row for no words.
+// searchModels are the rows the SDK's search finds among each provider's
+// models, as the ACP picker searches (0031-MADR D8); every row for a blank
+// search.
 func searchModels(rows []llm.Model, search string) []llm.Model {
-	words := slices.DeleteFunc(searchSplit.Split(strings.TrimSpace(search), -1), func(w string) bool { return w == "" })
-	if len(words) == 0 {
+	search = strings.TrimSpace(search)
+	if search == "" {
 		return rows
 	}
-	return slices.DeleteFunc(slices.Clone(rows), func(m llm.Model) bool {
-		text := m.Provider + " " + m.ID
-		return slices.ContainsFunc(words, func(w string) bool { return !fuzzyMatch(w, text) })
-	})
-}
-
-// The two shapes whose letters and digits Pi's fuzzyMatch also tries
-// swapped.
-var (
-	lettersDigits = regexp.MustCompile(`^([a-z]+)(\d+)$`)
-	digitsLetters = regexp.MustCompile(`^(\d+)([a-z]+)$`)
-)
-
-// fuzzyMatch reports whether query's characters appear in text in order,
-// without case, or do with its letters and digits swapped, as Pi's
-// fuzzyMatch decides a match.
-func fuzzyMatch(query, text string) bool {
-	q, t := strings.ToLower(query), strings.ToLower(text)
-	if subsequence(q, t) {
-		return true
+	ids := map[string][]string{}
+	for _, m := range rows {
+		ids[m.Provider] = append(ids[m.Provider], m.ID)
 	}
-	for _, re := range []*regexp.Regexp{lettersDigits, digitsLetters} {
-		if m := re.FindStringSubmatch(q); m != nil {
-			return subsequence(m[2]+m[1], t)
+	found := map[string]bool{}
+	for p, ms := range ids {
+		for _, id := range provider.Search(p, ms, search) {
+			found[p+"/"+id] = true
 		}
 	}
-	return false
-}
-
-func subsequence(q, t string) bool {
-	rest := q
-	for _, r := range t {
-		if rest == "" {
-			break
-		}
-		if first, size := utf8.DecodeRuneInString(rest); r == first {
-			rest = rest[size:]
-		}
-	}
-	return rest == ""
+	return slices.DeleteFunc(slices.Clone(rows), func(m llm.Model) bool { return !found[m.Provider+"/"+m.ID] })
 }
 
 // modelInfo is a model's facts, one aligned line each, "unknown" for what

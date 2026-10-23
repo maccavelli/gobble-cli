@@ -154,9 +154,30 @@ its own.
   `SkipMethods` for the methods gobble does not offer, over a `wizard.Prompter` that draws in gobble's line session.
   gobble keeps its model picker and its `auth.json` store. The ChatGPT plan sign-in comes with it, which replaces
   0025-PLAN P6. Whether D7 is in this record is Q2.
+
+  *Amended 2026-10-22 (0031-PLAN P4, deviation 3; the owner's answer "B: hold P4 for 3 SDK gaps"):* D7 waits for
+  three go-llmprovider-sdk changes: a structured device-code hook carrying the verification URL, the code and its expiry; an option that starts no
+  paste prompt, for a sign-in with no terminal; and no wait for Enter once a browser sign-in has finished. At `v1.21.0` a device code reaches the
+  caller only inside a formatted notice (`wizard/auth.go:656`), with no expiry, so `gobble auth login --json`'s
+  `device_code` event (0005-PLAN F4-3c decision 6) has no source; a browser sign-in always starts a paste prompt
+  and, once the browser has finished, waits for Enter (`wizard/auth.go:715-754`). With them, every sign-in path
+  goes through the wizard, and none is kept twice. The wizard's caller lives in `llm/provider`, behind a prompter
+  interface of gobble's, since only that package imports go-llmprovider-sdk
+  ([0004-MADR-go-module-architecture.md](0004-MADR-go-module-architecture.md) rule 4). The ChatGPT plan sign-in
+  comes with it, with what it needs of gobble: the plan session's fields in `auth.json` and the store, and the
+  consent to background use that 0025-PLAN P6 step 2 names. The three changes are go-llmprovider-sdk issues 6, 7 and
+  8.
 - **D8. The smaller copies go.** `gobble models --search` uses `catalog.Search`; `llm/catalog.Price` uses
   `ModelCost.RatesFor`; `CacheWrite1hTokens` is counted; `HasLogin` and `HasKeyLogin` read `Descriptor.AuthMethods`;
   `acpserver/binary_test.go` uses `agentproc`.
+
+  *Amended 2026-10-22 (0031-PLAN P5, deviation 4; the owner's answer "Search only; the rest noted"):* of D8, the
+  search and the binary test are carried out. `Price` stays gobble's: it lives in `llm/catalog`, called from
+  `acpserver`, neither of which may import go-llmprovider-sdk (0004-MADR rule 4), and calling `RatesFor` through
+  `llm/provider` takes more conversion code than the four-line tier loop it would replace. `CacheWrite1hTokens`
+  waits for the SDK to give a rate to price it by: `ModelRates` has one cache-write rate, so counting the tokens
+  would change no figure gobble shows. `HasLogin` and `HasKeyLogin` go with D7, where `SkipMethods` replaces them:
+  the registry's `AuthMethods` lists methods gobble does not offer, so until then gobble's own list stays.
 - **D9. Not now, each with its reason:**
   - native tool deferral (`Tool.Deferred`, `ToolLoadItem`): it changes the prompt cache's design, which
     0012-MADR and 0021-MADR own;

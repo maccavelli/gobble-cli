@@ -3369,7 +3369,7 @@ Choices made within the wording:
 - **The small-model role:** F5.
 - **`--offline`:** X3.
 - **Reading the Codex and Grok CLIs' own credential files** (the SDK's vendor CLI sessions): not in F4's steps; it waits for an amendment that places it.
-- **Image input, ~~native streaming,~~ cache-write accounting ~~and 0012-PLAN P7~~:** each waits for the SDK. *(2026-10-11: native streaming is F4-1b, and P7 follows F4-1a; see the Amendments entry "F4-1 re-made for go-llmprovider-sdk `v1.7.0`".)*
+- **Image input, ~~native streaming,~~ cache-write accounting ~~and 0012-PLAN P7~~:** each waits for the SDK. *(2026-10-22, [0031-PLAN-sdk-current-releases-and-adoption.md](0031-PLAN-sdk-current-releases-and-adoption.md) P5: cache-write accounting landed with the SDK's `CacheWriteTokens`, which `llm/provider` maps into `llm.Usage`; image input still waits, the SDK having no image item at `v1.21.0`.)* *(2026-10-11: native streaming is F4-1b, and P7 follows F4-1a; see the Amendments entry "F4-1 re-made for go-llmprovider-sdk `v1.7.0`".)*
 
 **2026-10-11 — F4-1 re-made for go-llmprovider-sdk `v1.7.0`** (the owner's decisions of 2026-10-11: pin `v1.7.0`, and take the latest tag at each later sub-phase; bring a tool result's error flag, a true `NativeStreaming` and live streaming into F4-1; the stream's retry lives in the SDK).
 *(2026-10-13, 0019-MADR D2: re-based on `v1.10.2`. The pin and a truthful `NativeStreaming`, the retry wrapper's, landed in 0019-PLAN P3 (`a7de4a8`);
@@ -3460,7 +3460,8 @@ The pin and the truthful `NativeStreaming` are done (0019-PLAN P3); the rest is 
 
 **Deferred, named:**
 
-- **Image input and cache-write accounting:** each still waits for the SDK.
+- **Image input and cache-write accounting:** each still waits for the SDK. *(2026-10-22: cache-write accounting
+  no longer does; image input still does. See [0031-PLAN-sdk-current-releases-and-adoption.md](0031-PLAN-sdk-current-releases-and-adoption.md) P5.)*
 - **Call-argument deltas** (`ToolCallStart`, `ToolCallDelta`): the SDK yields calls whole (0031-MADR D2), so they wait for an SDK release that streams them.
 
 **2026-10-13 — F4-1a re-made at go-llmprovider-sdk `v1.12.0`** (the owner's choices of 2026-10-13: re-plan F4-1a to what remains;

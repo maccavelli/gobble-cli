@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/llm/catalog"
 	"github.com/maccavelli/gobble-cli/llm/provider"
 )
@@ -124,24 +125,36 @@ tier      above 100000: input $3, output $4, cache read $1, cache write $0
 	}
 }
 
-// A search word matches as a subsequence, without case, or with its letters
-// and digits swapped, as Pi's fuzzyMatch decides.
-func TestFuzzyMatch(t *testing.T) {
-	for _, c := range []struct {
-		query, text string
-		want        bool
-	}{
-		{"luna", "openai gpt-6-luna", true},
-		{"LUNA", "openai gpt-6-luna", true},
-		{"gpt6", "openai gpt-6-luna", true},
-		{"6gpt", "openai gpt-6-luna", true},
-		{"gpt7", "openai gpt-6-luna", false},
-		{"anul", "openai gpt-6-luna", false},
-		{"", "openai gpt-6-luna", true},
-	} {
-		if got := fuzzyMatch(c.query, c.text); got != c.want {
-			t.Errorf("fuzzyMatch(%q, %q) = %v, want %v", c.query, c.text, got, c.want)
+// A search finds, of each provider's models, what the SDK's search finds,
+// as the ACP picker does; an empty one keeps every row (0031-MADR D8).
+func TestModelsSearchIsTheSDKs(t *testing.T) {
+	rows := []llm.Model{{Provider: "openai", ID: "gpt-6-luna"}, {Provider: "openai", ID: "gpt-6-astra"},
+		{Provider: "claude", ID: "claude-haiku-5-5"}, {Provider: "claude", ID: "claude-opus-5-5"}}
+	for _, q := range []string{"luna", "LUNA", "6gpt", "gpt6", "openai luna", "haiku", "opus-5", "zzz"} {
+		var want []string
+		for _, p := range []string{"openai", "claude"} {
+			var ids []string
+			for _, m := range rows {
+				if m.Provider == p {
+					ids = append(ids, m.ID)
+				}
+			}
+			for _, id := range provider.Search(p, ids, q) {
+				want = append(want, p+"/"+id)
+			}
 		}
+		var got []string
+		for _, m := range searchModels(rows, q) {
+			got = append(got, m.Provider+"/"+m.ID)
+		}
+		slices.Sort(want)
+		slices.Sort(got)
+		if !slices.Equal(got, want) {
+			t.Errorf("search %q: %q, want the SDK's %q", q, got, want)
+		}
+	}
+	if got := searchModels(rows, "  "); len(got) != len(rows) {
+		t.Errorf("an empty search kept %d rows, want all %d", len(got), len(rows))
 	}
 }
 

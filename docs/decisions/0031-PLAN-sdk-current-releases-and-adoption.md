@@ -86,6 +86,9 @@ The owner's answer, 2026-10-22: "0030 P5, then 0031, then 0029". The tag is `v1.
 
 ### P4 — the SDK's credential step (D7; only if Q2 keeps it here)
 
+*(2026-10-22, deviation 3: P4 waits for three go-llmprovider-sdk changes, and its code lives in `llm/provider`;
+see P3's record.)*
+
 1. **Tests first,** every sign-in against an `httptest` server and a scripted `wizard.Prompter`; no test opens a
    browser, reaches a real sign-in, or writes outside a temporary `GOBBLE_HOME`:
    - `/login`, `gobble auth login` and the first-run offer each ask through gobble's prompter and save to
@@ -102,6 +105,8 @@ The owner's answer, 2026-10-22: "0030 P5, then 0031, then 0029". The tag is `v1.
 4. Records: 0025-MADR deviation 6 and 0025-PLAN P6 noted as superseded by this phase. Gates. Commit.
 
 ### P5 — the smaller copies, and the records (D8)
+
+*(2026-10-22, deviation 4: the search alone, and the records; see P5's record.)*
 
 1. **Tests first:** `gobble models --search` finds what `catalog.Search` finds; `Price` equals `ModelCost.RatesFor`
    on tiered and flat models; a reply's usage counts `CacheWrite1hTokens`; `HasLogin` and `HasKeyLogin` follow the
@@ -324,3 +329,78 @@ take; the owner's look at 0030-PLAN P5 is also still to come. P2 is committed wi
   4.69 ms, 1.11 µs.
 
 **P3 complete, 2026-10-22.**
+
+### Deviation 3, 2026-10-22, decided by the owner ("B: hold P4 for 3 SDK gaps")
+
+Before P4's first test, a read of the wizard at `v1.21.0` against gobble's sign-in found:
+
+- **Where:** step 2's "a `wizard.Prompter` over the line session" would put a go-llmprovider-sdk import in
+  `internal/cli`, which 0004-MADR rule 4 forbids (`internal/archtest/check.go:250`). The wizard's caller belongs
+  in `llm/provider`, behind a prompter interface of gobble's.
+- **`gobble auth login --json`:** its `device_code` event (URL, code, expiry; 0005-PLAN F4-3c decision 6) has
+  no source but the text of a notice, `Open %s and enter code %s` (`wizard/auth.go:656`), with no expiry; and a
+  browser sign-in always starts a paste prompt, which a sign-in with no terminal can neither answer nor leave.
+- **On a terminal:** after a browser sign-in the wizard waits for Enter ("Browser sign-in finished; press Enter
+  to continue", `wizard/auth.go:739-753`), and an empty paste ends the sign-in, where gobble's keeps waiting.
+- **The ChatGPT plan sign-in** needs the plan session's four fields carried by `provider.Login`, `auth.Entry`
+  and the store, and the consent to background use 0025-PLAN P6 step 2 names.
+
+The owner chose to hold P4 until the SDK has a structured device-code hook carrying the verification URL, the code and its expiry; an option that starts no paste prompt, for a sign-in with no terminal; and no wait for Enter once a browser sign-in has finished. Every sign-in path then goes
+through the wizard, the ChatGPT plan sign-in with it, and none is kept twice. Filed at the owner's word ("file the
+SDK requests in the SDK repo as issues, then proceed") as go-llmprovider-sdk issues 6 (the device code and its expiry
+as data), 7 (a browser sign-in with no paste prompt) and 8 (no wait for Enter). P5 goes ahead meanwhile. 0031-MADR D7
+is amended. Nothing of P4 was written.
+
+### P5 execution record (2026-10-22)
+
+**Deviation 4, 2026-10-22, decided by the owner** ("Search only; the rest noted"). Read against the code, step 1's
+four adoptions were uneven:
+
+- `gobble models --search` can use the SDK's search: `provider.Search` already wraps `catalog.Search`
+  (`llm/provider/list.go:52`) for the ACP picker, while `internal/cli/modelscmd.go` kept Pi's fuzzy match beside it.
+- `llm/catalog.Price` is called from `acpserver/history.go:114`; neither package may import go-llmprovider-sdk
+  (0004-MADR rule 4). `archtest` would allow `acpserver` to import `llm/provider`, but calling `RatesFor` that way
+  needs a conversion from `llm.ModelCost`, more code than the four-line tier loop it would replace.
+- The SDK counts `CacheWrite1hTokens`, but `ModelRates` has one cache-write rate, so counting them would change no
+  figure gobble shows.
+- The registry's `AuthMethods` lists methods gobble does not offer (OpenAI's browser and Codex sign-ins), so
+  `HasLogin` and `HasKeyLogin` would still need gobble's list; D7's `SkipMethods` replaces them, and D7 waits.
+
+The search is P5's; the rest is noted in 0031-MADR D8's amendment. The binary test moved to `agentproc` in P3.
+
+1. **Tests first:** `TestModelsSearchIsTheSDKs` (`internal/cli/modelscmd_test.go`), in place of `TestFuzzyMatch`,
+   Pi's matcher's: for eight searches over two providers' models, the rows `searchModels` keeps are those
+   `provider.Search` finds per provider, and a blank search keeps every row. On Pi's matcher it failed:
+   `search "6gpt": ["openai/gpt-6-astra" "openai/gpt-6-luna"], want the SDK's []` and `search "openai luna":
+   ["openai/gpt-6-luna"], want the SDK's []`. Those two are the change a user sees: a search with letters and digits
+   swapped, or with a provider's name among its words, no longer finds the model; `--provider` names the provider.
+2. **The code:** `searchModels` groups the rows by provider and keeps those `provider.Search` finds; Pi's
+   `fuzzyMatch`, `subsequence` and their patterns go. The table is sorted after the search, as before, so only which
+   rows are kept changes. `TestModelsList`'s searches pass unchanged.
+3. **Records,** the waits on the SDK that no longer hold, each with a dated note: 0005-PLAN's cache-write
+   accounting (twice), 0005-MADR's estimated usage, 0012-PLAN's strict flag, 0004-MADR's `NativeStreaming`;
+   `docs/architecture.md`'s `llm/provider` row, on the streaming retry.
+4. **Negatives,** on a scratch copy: **the search ignored** fails `TestModelsList` and `TestModelsSearchIsTheSDKs`;
+   **the SDK's matches kept by id alone** (not by provider and id) fails both. The restored copy passed.
+
+**Gates:**
+
+- The pre-add check on the two changed `.go` files: `2 file(s) clean (gofmt, golint, govulncheck)`.
+- macOS: `make preflight`, `preflight passed`; the tests and the race detector, 36 packages ok each; `make perf`
+  passed (ReplyRender 32.4 µs, Reprint 9.74 ms, LineSessionStart 876 µs, KeyDraw 1.54 µs).
+- The Linux machine and the Windows laptop, on a copy of the tree: the tests and the race detector, 36 packages ok on
+  each; `make preflight` reached `apidiff` (golangci-lint `0 issues.`, govulncheck "No vulnerabilities found.") and
+  stopped at `verify-build-metadata`, as the copies are not git checkouts; `make check-records markdownlint`, exit 0.
+- The Windows laptop: `make probe-conhost`, `--- PASS: TestConhost`; `make perf` passed (28.9 µs, 7.80 ms, 4.73 ms,
+  1.10 µs).
+- **The Linux machine's `make perf` failed in the gate run:** `LineSessionStart: 8.963211ms per op, more than 3 times
+  its baseline 2.9ms`, with every benchmark there at two to three times its usual time (ReplyRender 261 µs, Reprint
+  64.3 ms, KeyDraw 9.06 µs). None of them touches the model search. The machine was loaded (load average 3 on four
+  cores) by another project's test run, started there at the same time and not this session's, which was left
+  alone. Run again alone in the same copy, `make perf` passed (ReplyRender 235 µs, Reprint 56.0 ms,
+  LineSessionStart 6.08 ms, KeyDraw 10.1 µs), still slowed. HEAD before P5 (`ea04387`), run on the same machine
+  under the same load a minute later, was as slow (192 µs, 59.0 ms, 5.76 ms, 8.66 µs). The slowdown is the
+  machine's, not P5's; the gate passed on the second run.
+
+**P4 waits** for go-llmprovider-sdk issues 6, 7 and 8 (deviation 3). This plan stays in progress until then: P1, P2,
+P3 and P5 are done, and the owner's live turn (P2) and look (0030-PLAN P5) are still to come.

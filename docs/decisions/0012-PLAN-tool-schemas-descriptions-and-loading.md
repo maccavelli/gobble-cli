@@ -8,7 +8,7 @@ date: 2026-10-13
 
 Implements [0012-MADR-tool-schemas-descriptions-and-loading.md](0012-MADR-tool-schemas-descriptions-and-loading.md) decisions D1, D2, D3's probe and D5, closing findings F2, F3, F5 and F6. F4 and F17 were measured by the MADR's Probe D before this plan's approval. It places D4 and D6–D14 in the 0005-PLAN sub-phases that build their tools, so findings F7–F16 close there, by the notes P1 writes.
 
-*(2026-10-08, before approval: D3 was amended by the owner's choice. Its opt-out, `strict: false` for tools with optional arguments, waits on go-llmprovider-sdk's per-tool strict flag. It is named under Deferred, with the phase that lands it.)*
+*(2026-10-08, before approval: D3 was amended by the owner's choice. Its opt-out, `strict: false` for tools with optional arguments, waits on go-llmprovider-sdk's per-tool strict flag. It is named under Deferred, with the phase that lands it.)* *(2026-10-22: the flag came in `v1.7.0`, and P7 was complete on 2026-10-13.)*
 
 *(2026-10-09: P9 is added for 0012-MADR D15, proposed, closing F19. It needs the owner's approval like any phase.)*
 

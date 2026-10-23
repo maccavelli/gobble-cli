@@ -867,7 +867,8 @@ current HEAD changes documentation only; its released Go source is unchanged.
   pass those opt-in helpers implicitly.
 * `LICENSE` is Apache-2.0. There is still no git tag. The existing rule
   remains: development may pin a recorded commit, while a gobble release
-  waits for an SDK `v1.0.0-rc.N` or later. `NativeStreaming` is still
+  waits for an SDK `v1.0.0-rc.N` or later. *(2026-10-22: go-llmprovider-sdk `v1.21.0` reports `NativeStreaming`
+  for its built-ins, and gobble passes the stream on, by [0031-PLAN-sdk-current-releases-and-adoption.md](0031-PLAN-sdk-current-releases-and-adoption.md) P2.)* `NativeStreaming` is still
   `Unsupported` on all built-ins, and `Item` still has no image input,
   tool-output error bit or opaque thinking payload. The adapter must keep
   advertising those limits until the SDK code changes.
