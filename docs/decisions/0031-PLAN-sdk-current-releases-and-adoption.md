@@ -75,7 +75,7 @@ P1a leaves out two things:
 
 ### P1b — go-llmprovider-sdk `v1.22.2` and go-selfupdate-lib `v1.22.0` (D1's second amendment)
 
-*Added 2026-10-23, revised 2026-10-24 to the owner's versions; proposed. It runs before P4b.*
+*Added 2026-10-23, revised 2026-10-24 to the owner's versions, and approved by the owner's "committed, proceed" that day. It runs before P4b.*
 
 1. `make check-libs` for go-llmprovider-sdk at `v1.22.2` and go-selfupdate-lib at `v1.22.0`. *(This step ran before
    approval, read-only on scratch clones; see P1b's record.)*
@@ -611,6 +611,44 @@ Step 1, run before approval on scratch clones, outside the tree (`scripts/check_
 - **go-llmprovider-sdk,** pinned `v1.22.0`, checking `v1.22.2`: each of the twelve checks "ok", "0 failing checks;
   scratch removed".
 - **go-selfupdate-lib,** pinned `v1.17.2`, checking `v1.22.0`: the same.
+
+The owner committed this amendment as `d30fd3c` and approved P1b: "committed, proceed", 2026-10-24.
+
+2. **The pins:** `go get github.com/maccavelli/go-llmprovider-sdk@v1.22.2
+   github.com/maccavelli/go-selfupdate-lib@v1.22.0`, then `go mod tidy`:
+   - `go` printed "upgraded … v1.22.0 => v1.22.2" and "upgraded … v1.17.2 => v1.22.0".
+   - `go.mod` changed in those two lines, and `go.sum` in those modules' four lines. No other module moved.
+   - No code changed.
+3. **The workflows:** `.github/workflows/ci.yml`'s `build` and `release` jobs use
+   `84805563ed252df384f59ced45a3daf529702ab4 # v1.22.0`, and `036289ec` no longer appears in the file.
+4. **Records:**
+   - `docs/architecture.md`'s pin table and `README.md`'s stack;
+   - dated notes in 0023-MADR (A1 and A2) and in 0023-PLAN;
+   - 0031-MADR D1's second amendment, accepted;
+   - `docs/README.md`.
+5. **Gates:**
+   - **The sign-in tests,** four runs of `go test -count=1 -run
+     'TestSignIn|TestLogin|TestAuthLogin|TestACPLogin|TestQuestionsPrompter' ./llm/provider/ ./internal/cli/`: each
+     passed. A `-v` run listed the 19 tests the pattern selects, each `--- PASS`.
+   - **The pre-add check**, on every tracked Go file: `585 file(s) clean (gofmt, golint, govulncheck)`.
+   - **macOS:**
+     - `make preflight`: `preflight passed`;
+     - the tests and the race detector: 36 packages ok each;
+     - `make perf` passed: ReplyRender 33.8 µs, Reprint 10.0 ms, LineSessionStart 956 µs, KeyDraw 1.56 µs.
+   - **The Linux machine and the Windows laptop,** each on a copy of the tree:
+     - the tests and the race detector: 36 packages ok on each;
+     - `make preflight` passed golangci-lint (`0 issues.`) and govulncheck ("No vulnerabilities found."), then stopped
+       at `verify-build-metadata`, as the copies are not git checkouts;
+     - `make check-records markdownlint`: exit 0 on each.
+   - **The Windows laptop:** `make probe-conhost` gave `--- PASS: TestConhost`.
+   - **`make perf` on the remote hosts,** each passing `TestPerfBudget`:
+     - the Linux machine: 189 µs, 39.1 ms, 4.72 ms, 7.29 µs;
+     - the Windows laptop: 29.4 µs, 7.70 ms, 4.35 ms, 1.10 µs.
+   - **The identifier scan** of the ten changed files: 0 hits.
+   - **The release workflows** at `v1.22.0` are first run by CI after the owner pushes.
+
+**P1b complete, 2026-10-24.** No test reaches a real sign-in, so the wizard's fixes are seen by the owner's own
+sign-in, with P4a's. What is still to come in this plan: P4b, the ChatGPT plan sign-in, at the owner's word.
 
 ### Deviation 5, 2026-10-23, decided by the owner ("Split: P4a, then P4b")
 

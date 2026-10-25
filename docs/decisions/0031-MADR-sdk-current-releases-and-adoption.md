@@ -148,7 +148,7 @@ its own.
 
     *It enters `go.mod` with 0032-PLAN P3's first adoption, at the newest tag at that time.*
 
-  *Amended again 2026-10-24 (0031-PLAN P1b; proposed), from the owner's request "assess the acp-go-sdk2,
+  *Amended again 2026-10-24 (0031-PLAN P1b; accepted by the owner's "committed, proceed" that day), from the owner's request "assess the acp-go-sdk2,
   go-llmprovider-sdk, go-selfupdate-lib, and go-tui-lib versions and ensure we are pinning the current versions and
   using the fullest featuresets possible", and the owner's correction of 2026-10-24, "go-selfupdate-lib is v1.22.0,
   go-llmprovider-sdk is v1.22.2". CI passed on each tag:*
