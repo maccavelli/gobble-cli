@@ -73,6 +73,29 @@ P1a leaves out two things:
 - go-tui-lib, for the reason D1's amendment gives;
 - P4 itself, which resumes only at the owner's word.
 
+### P1b — go-llmprovider-sdk `v1.22.2` and go-selfupdate-lib `v1.22.0` (D1's second amendment)
+
+*Added 2026-10-23, revised 2026-10-24 to the owner's versions; proposed. It runs before P4b.*
+
+1. `make check-libs` for go-llmprovider-sdk at `v1.22.2` and go-selfupdate-lib at `v1.22.0`. *(This step ran before
+   approval, read-only on scratch clones; see P1b's record.)*
+2. `go get github.com/maccavelli/go-llmprovider-sdk@v1.22.2 github.com/maccavelli/go-selfupdate-lib@v1.22.0`, then
+   `go mod tidy`. No code change and no other module's move is expected; either is a deviation.
+3. `.github/workflows/ci.yml`: move the `build` and `release` jobs' `uses:` from `036289ec… # v1.17.2` to
+   `84805563ed252df384f59ced45a3daf529702ab4 # v1.22.0`, the commit that `v1.22.0^{}` names (0023-MADR A2).
+4. Records:
+   - `docs/architecture.md`'s pin table and `README.md`'s stack;
+   - a dated note in 0023-MADR (A1, A2) and in 0023-PLAN that the pins moved again here;
+   - D1's second amendment, accepted;
+   - `docs/README.md`.
+5. Gates, as P1's (Verification), with the P4a sign-in tests run four times, since the wizard changed under them.
+   Commit.
+
+P1b leaves out:
+
+- `gobble update`, which would use `DefaultHTTPClient`: it is 0005-PLAN F10 step 4, a feature of its own;
+- go-tui-lib, still unrequired, and acp-go-sdk2, already at its newest tag.
+
 ### P2 — live streaming, a cut-off reply, provider retries (D2–D4)
 
 1. **Tests first,** each seen failing on the current code or a stub, on an `httptest` server streaming Server-Sent
@@ -568,6 +591,26 @@ Approved by the owner's "Proceed", 2026-10-23.
 
 **P1a complete, 2026-10-23.** go-tui-lib is still unrequired, as D1's amendment says. P4 waits only for the owner's
 word.
+
+### P1b record (2026-10-24)
+
+The owner asked: "assess the acp-go-sdk2, go-llmprovider-sdk, go-selfupdate-lib, and go-tui-lib versions and ensure we
+are pinning the current versions and using the fullest featuresets possible". The first draft, of 2026-10-23, took
+go-selfupdate-lib `v1.19.0`; the owner corrected it on 2026-10-24: "go-selfupdate-lib is v1.22.0,
+go-llmprovider-sdk is v1.22.2". The newest tags, from each repository's tags:
+
+| Library | Pinned | Newest | CI on the tag |
+| :--- | :--- | :--- | :--- |
+| go-llmprovider-sdk | `v1.22.0` | `v1.22.2` | success |
+| go-selfupdate-lib | `v1.17.2` | `v1.22.0` (`v1.22.0^{}` = `84805563ed252df384f59ced45a3daf529702ab4`) | success |
+| acp-go-sdk2 | `v1.20.0` | `v1.20.0` | — |
+| go-tui-lib | not required | `v0.12.0` | — |
+
+Step 1, run before approval on scratch clones, outside the tree (`scripts/check_libs.py --lib … --tag …`):
+
+- **go-llmprovider-sdk,** pinned `v1.22.0`, checking `v1.22.2`: each of the twelve checks "ok", "0 failing checks;
+  scratch removed".
+- **go-selfupdate-lib,** pinned `v1.17.2`, checking `v1.22.0`: the same.
 
 ### Deviation 5, 2026-10-23, decided by the owner ("Split: P4a, then P4b")
 

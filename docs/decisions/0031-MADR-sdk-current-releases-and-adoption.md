@@ -147,6 +147,36 @@ its own.
     - *`go mod tidy` would drop a requirement with no import.*
 
     *It enters `go.mod` with 0032-PLAN P3's first adoption, at the newest tag at that time.*
+
+  *Amended again 2026-10-24 (0031-PLAN P1b; proposed), from the owner's request "assess the acp-go-sdk2,
+  go-llmprovider-sdk, go-selfupdate-lib, and go-tui-lib versions and ensure we are pinning the current versions and
+  using the fullest featuresets possible", and the owner's correction of 2026-10-24, "go-selfupdate-lib is v1.22.0,
+  go-llmprovider-sdk is v1.22.2". CI passed on each tag:*
+  - *go-llmprovider-sdk `v1.22.2` (2026-10-24), from `v1.22.0`. `v1.22.1` and `v1.22.2` fix the wizard, which gobble
+    signs in through since P4a; the SDK's `0059-MADR` records each fix. Those that reach gobble's options:*
+    - *a sign-in the model listing refuses no longer replaces the saved session (W2); gobble passes both
+      `TokenStore` and `Discover`;*
+    - *a typed key the provider accepts is no longer warned about for its shape, and the expected shape is named only
+      after a refusal (W1, W3, W14);*
+    - *a saved session that cannot be used is no longer offered (W6);*
+    - *under `NoEndpointPrompt`, which gobble sets, a plain-http endpoint the caller holds is used with a notice,
+      not asked about (W9).*
+
+    *No exported name is added or changed, and gobble's tests pass at `v1.22.2` unchanged.*
+  - *go-selfupdate-lib `v1.22.0` (2026-10-24), from `v1.17.2`. CI's two release workflows move with it, to
+    `84805563ed252df384f59ced45a3daf529702ab4 # v1.22.0`:*
+    - *`v1.18.0` adds `selfupdate.DefaultHTTPClient`, the client the library recommends for `GitHubOptions.Client`,
+      and launchd job status. `v1.19.0` to `v1.22.0` add Task Scheduler registration, status, enabling and a one-shot
+      handoff; a supervised adapter for runit, s6 and OpenRC; and scrub a service manager's variables from handoffs.*
+    - *Nothing gobble uses changes. The two release workflows, `buildinfo`, `selfupdate/releasespec` and
+      `selfupdate/selfupdatetest` are identical between the tags; in `selfupdate`, gobble's tests use `Platform`,
+      whose file changed in one comment. The module's requirements are unchanged.*
+    - *gobble has no updater yet: `gobble update` is 0005-PLAN F10 step 4, not built. `DefaultHTTPClient` is the
+      client F10 passes when it is. The service additions serve a program installed as a service, which gobble is
+      not.*
+  - *acp-go-sdk2 stays at `v1.20.0`, its newest tag; since it, its main branch has only tools, tests and records.
+    go-tui-lib's newest tag is still `v0.12.0`, unrequired for the reason above, and none of gobble's requests to it
+    (its issues 2 to 12) is in a tag.*
 - **D2. Live streaming (0005-PLAN F4-1b).** `llm/provider` wraps each provider with `WithStreamRetry(p, policy,
   notify)` in place of `WithRetry`. `NativeStreaming` is reported from the wrapped provider, true when it is
   `Supported`; the OpenCode providers' `BestEffort` stays reported as false. Retry off still means no wrapper.
