@@ -188,6 +188,9 @@ The plans:
    sibling libraries' pins (0019), the full model catalog (0020), prompt caching (0021) and gobble's voice (0022);
    each is in the run list above.
 
+| 0033 | MADR | [Align docs-only CI and disclosure gates](decisions/0033-MADR-align-docs-ci-and-disclosure-gates.md) | proposed |
+| 0033 | PLAN | [Implement aligned docs-only CI and disclosure gates](decisions/0033-PLAN-align-docs-ci-and-disclosure-gates.md) | proposed |
+
 ## I want to…
 
 | I want to… | Start here |
