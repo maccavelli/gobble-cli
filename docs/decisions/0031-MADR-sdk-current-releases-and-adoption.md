@@ -177,6 +177,13 @@ its own.
   - *acp-go-sdk2 stays at `v1.20.0`, its newest tag; since it, its main branch has only tools, tests and records.
     go-tui-lib's newest tag is still `v0.12.0`, unrequired for the reason above, and none of gobble's requests to it
     (its issues 2 to 12) is in a tag.*
+
+  *(2026-10-25: acp-go-sdk2 tagged `v1.21.0` at `7f3b210`. That tag ships
+  [acp-go-sdk2#11](https://github.com/maccavelli/acp-go-sdk2/issues/11): the stable `SessionUpdate` constructors,
+  `SessionUpdate.Kind()`, and `ClientRefusals`
+  ([0036-MADR-session-update-constructors-kind-and-client-refusals.md](https://github.com/maccavelli/acp-go-sdk2/blob/v1.21.0/docs/decisions/0036-MADR-session-update-constructors-kind-and-client-refusals.md)
+  in that repository). gobble's pin stays `v1.20.0`. Adopting `v1.21.0` is
+  [gobble-cli#5](https://github.com/maccavelli/gobble-cli/issues/5), a later pair (0034), not this record.)*
 - **D2. Live streaming (0005-PLAN F4-1b).** `llm/provider` wraps each provider with `WithStreamRetry(p, policy,
   notify)` in place of `WithRetry`. `NativeStreaming` is reported from the wrapped provider, true when it is
   `Supported`; the OpenCode providers' `BestEffort` stays reported as false. Retry off still means no wrapper.
@@ -256,6 +263,9 @@ its own.
     listings safe, but what the guard also decides needs measuring first;
   - the update-variant helpers 0016-MADR D13 asks acp-go-sdk2 for: no issue was ever filed, and filing one is the
     owner's to do;
+    *(2026-10-25: the issue is [acp-go-sdk2#11](https://github.com/maccavelli/acp-go-sdk2/issues/11), implemented in
+    `v1.21.0`. gobble's consumption is [gobble-cli#5](https://github.com/maccavelli/gobble-cli/issues/5). This bullet
+    stays "not now" until that pair pins `v1.21.0`.)*
   - Ollama as a keyless choice, and what the SDKs lack (above).
 
 **Q1, the go-llmprovider-sdk tag.** `v1.21.0` (recommended): a superset of `v1.20.x` with no breaking change, the Go

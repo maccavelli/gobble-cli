@@ -1,6 +1,6 @@
 ---
 status: in-progress
-date: 2026-10-23
+date: 2026-10-25
 associated-madr: "0031-MADR-sdk-current-releases-and-adoption.md"
 ---
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
@@ -14,6 +14,10 @@ Associated MADR: [0031-MADR-sdk-current-releases-and-adoption.md](0031-MADR-sdk-
 gobble pins go-llmprovider-sdk `v1.21.0` (or the tag Q1 settles) and acp-go-sdk2 `v1.20.0`; replies stream live with
 the SDK's retry; provider retries are shown; the ACP connection ends after its handlers; and gobble's copies of what the
 SDKs do are gone (MADR D1–D8). What D9 leaves is named, not done.
+
+*(2026-10-25: D1's pin is go-llmprovider-sdk `v1.22.2`, go-selfupdate-lib `v1.22.0`, acp-go-sdk2 `v1.20.0`.
+acp-go-sdk2's newest tag is `v1.21.0`, which ships D9's update-variant helpers (issue 11). gobble does not pin it
+in this plan; that is [gobble-cli#5](https://github.com/maccavelli/gobble-cli/issues/5).)*
 
 ## Scope
 
