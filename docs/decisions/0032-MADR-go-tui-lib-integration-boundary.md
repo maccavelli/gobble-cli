@@ -210,6 +210,20 @@ library measure and parse text twice.
 0032-PLAN P1a's `archtest` cases, each seen failing first; and the first adoption that brings `x/ansi` into `go.mod`,
 which `archtest` then checks against the real closure.
 
+## Amendment A2 (2026-10-29): the /v2 module and the packages now tagged
+
+*Recorded by [0035-PLAN-pin-current-sibling-releases-and-remove-gobble-copies.md](0035-PLAN-pin-current-sibling-releases-and-remove-gobble-copies.md) P0, from [0035-MADR-pin-current-sibling-releases-and-remove-gobble-copies.md](0035-MADR-pin-current-sibling-releases-and-remove-gobble-copies.md) (accepted 2026-10-29). D1–D7 and A1 are unchanged.*
+
+- **The module.** go-tui-lib moved from `v0.12.0` (2026-10-11) to `v1.13.0` and `v2.0.0` (both 2026-10-24). Its module path
+  is now `github.com/maccavelli/go-tui-lib/v2`. 0035-PLAN pins `v2.6.2`, by its deviation 1.
+- **The boundary still holds.** Every package the CLI would use links no Charm module but `x/ansi`, by `go list -deps` on
+  linux, darwin and windows. 0035-MADR's closure table has the list, and is not copied here.
+- **A1.2's module list is unchanged** at `v2.6.2`: `x/ansi` `v0.11.8`, `clipperhouse/displaywidth` `v0.11.0`,
+  `clipperhouse/uax29/v2` `v2.7.0`, `lucasb-eyer/go-colorful` `v1.4.1` and `mattn/go-runewidth` `v0.0.27`.
+- **D3's components are tagged:** `ask` (`v2.3.0`), `pick` (`v2.4.0`), `lineedit` (`v2.5.0`), and `stream` and
+  `transcript` (`v2.6.0`). Adopting them is 0035-PLAN P13–P18. `pick` and `termcap` are not adopted (0035-PLAN PQ6).
+- **`archtest`** names `/v2`, and refuses the v1 path (0035-MADR D13, 0035-PLAN P13).
+
 ## More Information
 
 - [0004-MADR-go-module-architecture.md](0004-MADR-go-module-architecture.md): rule 5, and "wait rather than copy";

@@ -213,6 +213,11 @@ its own.
   for the network (`agent/agent.go:503`) never starts. On a scratch clone, a row `{llmprovider.ErrOffline,
   llm.ErrOffline}` above the unavailable row made the tests pass. Moving these pins is
   `0035-MADR-pin-current-sibling-releases-and-remove-gobble-copies.md`'s; this D1 stays as written.)*
+
+  *(2026-10-29, later: [0035-MADR-pin-current-sibling-releases-and-remove-gobble-copies.md](0035-MADR-pin-current-sibling-releases-and-remove-gobble-copies.md) is accepted, and its PLAN pins acp-go-sdk2 `v1.26.0`, go-llmprovider-sdk `v1.24.1`,
+  go-selfupdate-lib `v1.23.0` and go-tui-lib/v2 `v2.6.2`. The last two are newer than the note above, by that PLAN's
+  deviation 1. The statement of 2026-10-24 that go-tui-lib's newest tag is `v0.12.0`, with none of gobble's
+  requests tagged, no longer holds: every request is delivered (go-tui-lib's issue tracker has none open).)*
 - **D2. Live streaming (0005-PLAN F4-1b).** `llm/provider` wraps each provider with `WithStreamRetry(p, policy,
   notify)` in place of `WithRetry`. `NativeStreaming` is reported from the wrapped provider, true when it is
   `Supported`; the OpenCode providers' `BestEffort` stays reported as false. Retry off still means no wrapper.
@@ -310,6 +315,7 @@ its own.
     [0034-MADR-pin-acp-go-sdk2-v1-21-0-and-adopt-session-update-helpers.md](0034-MADR-pin-acp-go-sdk2-v1-21-0-and-adopt-session-update-helpers.md), is still
     proposed; `0035-MADR-pin-current-sibling-releases-and-remove-gobble-copies.md` proposes to supersede it at
     acp-go-sdk2 `v1.26.0`. The listing guard's bullet stands.)*
+    *(2026-10-29, later: 0034 is superseded, and the helpers are carried out by [0035-MADR-pin-current-sibling-releases-and-remove-gobble-copies.md](0035-MADR-pin-current-sibling-releases-and-remove-gobble-copies.md) D7–D9.)*
 
 **Q1, the go-llmprovider-sdk tag.** `v1.21.0` (recommended): a superset of `v1.20.x` with no breaking change, the Go
 1.27.3 floor, and D7's entry points. `v1.20.1`: the same without D7. `v1.20.0`, as named: builds safely here only

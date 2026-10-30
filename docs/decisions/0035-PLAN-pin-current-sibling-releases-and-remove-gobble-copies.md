@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: in-progress
 date: 2026-10-29
 associated-madr: "0035-MADR-pin-current-sibling-releases-and-remove-gobble-copies.md"
 ---
@@ -16,8 +16,8 @@ gobble pins these four tags, and drops the code each of them now replaces:
 
 - acp-go-sdk2 `v1.26.0`;
 - go-llmprovider-sdk `v1.24.1`;
-- go-selfupdate-lib `v1.22.3`;
-- `github.com/maccavelli/go-tui-lib/v2` `v2.6.1`.
+- go-selfupdate-lib ~~`v1.22.3`~~ `v1.23.0` (deviation 1);
+- `github.com/maccavelli/go-tui-lib/v2` ~~`v2.6.1`~~ `v2.6.2` (deviation 1).
 
 The outcome:
 
@@ -109,6 +109,9 @@ recommended one):
 So the steps below stand as written, and no phase waits on a question.
 
 ## Order
+
+*Deviation 1 (2026-10-29): the pin phases run first, in the order P0, P2, P3, P4, P7, P13, P14. Then P1, P5, P6,
+P8–P12 and P15–P19 follow, in number order. See the execution record.*
 
 P0 to P19, in order, by the owner's answer to Q6 ("Risk-first sequence"). A phase starts only on the owner's word for
 it, or for a named range ("do phase N", "do P3–P6", "execute the plan").
@@ -312,11 +315,14 @@ Files: `scripts/check_libs.py`.
      | `python3 scripts/check_libs.py --lib acp-go-sdk2 --tag v1.26.0` | `staticcheck: FAIL` and `lint: FAIL` (F2's 12 lines) |
      | `python3 scripts/check_libs.py --lib go-llmprovider-sdk --tag v1.24.1` | `test: FAIL` (F1's `TestWireOffline`); `staticcheck` and `lint` ok |
      | `python3 scripts/check_libs.py --lib go-selfupdate-lib --tag v1.22.3` | every check ok |
-     | `python3 scripts/check_libs.py --lib go-tui-lib --tag v2.6.1` | every check ok, `modules` ok with the five allowed, `archtest` ok |
+     | `python3 scripts/check_libs.py --lib go-tui-lib --tag v2.6.2` (deviation 1) | every check ok, `modules` ok with the five allowed, `archtest` ok |
 9. **G-local.** `make preflight` lints no Python, so `python3 -m py_compile scripts/check_libs.py` is also run.
    G-hosts: the self-test on both hosts. **Commit.**
 
 ### P3 — go-selfupdate-lib `v1.22.3` (MADR D1)
+
+*Deviation 1: the tag is `v1.23.0`, and the workflow pins are `67520be8af1ad1b6228c29e4b1aa3e61e1ca7ae4 # v1.23.0`.
+Every step below reads with those values. Step 3's workflow assertion compares `v1.22.0` with `v1.23.0`.*
 
 Files:
 
@@ -731,6 +737,8 @@ Files: `internal/archtest/check.go`, `internal/archtest/check_test.go`.
 
 ### P14 — go-tui-lib `v2.6.1`, and `ask` for the permission prompt (MADR D1, D14 step 1; 0029-PLAN P2; PQ4)
 
+*Deviation 1: the tag is `v2.6.2`. Every step below reads with it.*
+
 Files:
 
 - `go.mod`, `go.sum`;
@@ -1032,5 +1040,50 @@ Each phase's own steps are its acceptance criteria. Across the plan:
 
 ## Execution record
 
-Not started. The plan is `proposed`: PQ1, PQ2 and PQ4–PQ7 are answered (2026-10-29), and it waits for the owner's word
-to start ("execute the plan", or a phase or range).
+PQ1, PQ2 and PQ4–PQ7 were answered on 2026-10-29.
+
+### Deviation 1 (2026-10-29): newer tags, and the pin phases first
+
+- **Found.** The owner asked: "i want to update all pins to current versions". C2's `git ls-remote --tags` that day
+  listed go-selfupdate-lib `v1.23.0` and go-tui-lib `v2.6.2`, both newer than MADR D1's tags. The MADR's D1
+  amendment of this date gives the evidence. acp-go-sdk2 `v1.26.0` and go-llmprovider-sdk `v1.24.1` are unchanged.
+- **The owner's answers, the same day:**
+  - tags: "The newest (Recommended)";
+  - scope: "Pin phases, reordered (Recommended)".
+- **Decision.**
+  - P3 pins go-selfupdate-lib `v1.23.0`, with the workflow pins at `67520be8af1ad1b6228c29e4b1aa3e61e1ca7ae4`.
+  - P2's live run and P14 use go-tui-lib `v2.6.2`.
+  - The phases run P0, P2, P3, P4, P7, P13, P14, then the rest in number order.
+  - P7 needs only P4's go-llmprovider-sdk pin, which it does not touch, and P13 needs nothing between them. So
+    moving them ahead of P5, P6 and P8–P12 changes no phase's own steps.
+  - P1 moves after P14. Its docs fix needs no tag.
+- **Files added to scope:** none.
+
+### P0 record (2026-10-29): the records
+
+Approved by the owner's "Pin phases, reordered (Recommended)", 2026-10-29, which starts this plan. The plan's status
+is now `in-progress`.
+
+- **C1.** The tree held only this pair's deviation 1, and `HEAD` was `7894bb3`. The hooks path is the global hooks
+  directory, and `go version` is `go1.27.3 darwin/arm64`.
+- **Steps 1–6, done as written:**
+  1. 0034's MADR and PLAN are `superseded by` 0035-MADR, with a note under each title.
+  2. 0031-MADR is read as it stands, with the other session's notes of 2026-10-29. Its D1 note already named 0035 and
+     the tags of that hour, so one further note gives deviation 1's tags and retires the `v0.12.0` statement. Its D9
+     note gains one line: 0034 is superseded.
+  3. 0032-MADR gains amendment A2.
+  4. 0032-PLAN gains a note under "P3 and on".
+  5. 0029-PLAN gains a note after P2's stop.
+  6. 0016-MADR gains a note at D13.
+- **Step 7:**
+  - `docs/README.md` notes the rows of 0016, 0029, 0031 and 0032, and marks 0034 superseded and this PLAN in
+    progress.
+  - *Added in this step:* the two 0036 rows. They were missing from `65a1242`, the other session's commit, and
+    `AGENTS.md` requires every record to be indexed. This is a fix to the index, inside step 7's file. 0036's records
+    themselves are not touched.
+- **Step 8, the gates, each exit 0:**
+  - `make check-records markdownlint`;
+  - `python3 scripts/check_records.py --check-all`;
+  - `make preflight`, all 13 steps, "preflight passed". It was run although no Go file changed, since `AGENTS.md`
+    asks for it before every commit.
+- No deviation.

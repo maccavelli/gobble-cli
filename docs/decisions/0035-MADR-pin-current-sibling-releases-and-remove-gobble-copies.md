@@ -341,6 +341,23 @@ policy. And one record keeps the order, and the cross-library facts (check-libs,
 
   Each is checked first by `make check-libs` as extended by D2. Each pin is its own commit. A tag newer than these, at
   the time a pin step runs, is a deviation for the owner, not a silent substitute.
+
+  *Amended 2026-10-29, by the PLAN's deviation 1, from the owner's request "i want to update all pins to current
+  versions" and answer "The newest (Recommended)". `git ls-remote --tags` that day listed two newer tags:*
+  - ***go-selfupdate-lib `v1.23.0`** (`67520be8af1ad1b6228c29e4b1aa3e61e1ca7ae4`, 2026-10-29), in place of `v1.22.3`:*
+    - *`python3 scripts/check_libs.py --lib go-selfupdate-lib --tag v1.23.0` passed all 12 checks, `api`
+      included;*
+    - *between `v1.22.3` and `v1.23.0`, `buildinfo`, `selfupdate/releasespec`, the module's `go.mod` and the two
+      reusable release workflows are unchanged. `selfupdate/selfupdatetest`, which gobble's tests import, gains
+      `Publish` and a stricter `VerifyReleaseSource`;*
+    - *the rest, `Plan` and `Apply`, the handoff's plan, `servicetest` and the service fixes, is in packages gobble
+      does not import;*
+    - *the two `ci.yml` pins become `67520be8af1ad1b6228c29e4b1aa3e61e1ca7ae4 # v1.23.0`.*
+  - ***go-tui-lib/v2 `v2.6.2`** (2026-10-29), in place of `v2.6.1`. It fixes a parser panic in `termcap` and
+    `inline`, by bounding a reply's parameter separators (`696f4af`). `inline` is under `ask` and `lineedit`.
+    `go.mod` is unchanged, so A1.2's module list still holds.*
+
+  *acp-go-sdk2 `v1.26.0` and go-llmprovider-sdk `v1.24.1` are still the newest.*
 - **D2. `check-libs` sees what preflight sees.**
   - `scripts/check_libs.py` runs `make staticcheck` and `make lint` on its scratch module for each library, so that F2
     would have been reported.

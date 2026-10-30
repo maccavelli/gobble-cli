@@ -59,6 +59,9 @@ Then: 0029-PLAN gets a dated note that P2 waits for item 2's tag; this PLAN's re
 One step per tag, written as an amendment to this PLAN when the tag exists: pin it, draw through it, remove what it
 replaces in gobble, and gate it on the three hosts. 0029-PLAN P2 is the first.
 
+*(2026-10-29: carried out by [0035-PLAN-pin-current-sibling-releases-and-remove-gobble-copies.md](0035-PLAN-pin-current-sibling-releases-and-remove-gobble-copies.md) P13–P18, which pins go-tui-lib/v2 `v2.6.2`. This PLAN stays `in-progress` until
+that PLAN's P18, whose commit makes it `complete`.)*
+
 ### P1a — `x/ansi` admitted (MADR amendment A1)
 
 *Approved by the owner, 2026-10-22: "Post. File. Approved", with step 4's comments and the sanitiser issue.*

@@ -166,3 +166,6 @@ tui elements in a canonical manner"). P2 waits for that evaluation's outcome.
 
 *(2026-10-22: the evaluation is [0032-MADR-go-tui-lib-integration-boundary.md](0032-MADR-go-tui-lib-integration-boundary.md). By its D4, P2 draws through go-tui-lib's inline
 question once it is tagged: go-tui-lib issue 7. Until then the question stays one line.)*
+
+*(2026-10-29: `ask` is tagged, in go-tui-lib `v2.3.0`. P2 resumes as [0035-PLAN-pin-current-sibling-releases-and-remove-gobble-copies.md](0035-PLAN-pin-current-sibling-releases-and-remove-gobble-copies.md) P14, at go-tui-lib/v2 `v2.6.2`, with
+0029-MADR D1 amended there by that PLAN's PQ4.)*

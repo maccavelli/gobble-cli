@@ -251,6 +251,7 @@ Chosen: **A**, because it is the largest change that stays honest and decided.
   - **Boolean config options** (`session.configOptions.boolean`) and **`session/list` pagination:** gobble offers selects only, and lists everything at once, both of which the schema allows.
   - **SDK requests, to acp-go-sdk2, the owner's repository:** helpers for `available_commands_update`, `current_mode_update`, `config_option_update`, `session_info_update`, `usage_update`, `notice` and the compaction updates, and a fix to `example/agent/main.go:150`'s comment, which names an interface that does not exist.
     *(2026-10-25: the helpers are [acp-go-sdk2#11](https://github.com/maccavelli/acp-go-sdk2/issues/11), in tag `v1.21.0`: `UpdateAvailableCommands`, `UpdateCurrentMode`, `UpdateConfigOptions`, `UpdateSessionTitle`, `UpdateUsage`, `UpdateNotice`, `UpdateCompaction`, `UpdateCompactionSummary` / `Text`, plus `SessionUpdate.Kind()` and `ClientRefusals`. The example comment is already fixed. gobble still pins `v1.20.0`; consuming them is [gobble-cli#5](https://github.com/maccavelli/gobble-cli/issues/5).)*
+    *(2026-10-29: carried out by [0035-MADR-pin-current-sibling-releases-and-remove-gobble-copies.md](0035-MADR-pin-current-sibling-releases-and-remove-gobble-copies.md) D7, at acp-go-sdk2 `v1.26.0`; 0034 is superseded.)*
 
 ### Consequences
 

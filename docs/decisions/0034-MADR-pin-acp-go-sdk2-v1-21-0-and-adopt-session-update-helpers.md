@@ -1,6 +1,6 @@
 ---
-status: proposed
-date: 2026-10-25
+status: superseded by 0035-MADR-pin-current-sibling-releases-and-remove-gobble-copies.md
+date: 2026-10-29
 decision-makers: repository owner
 consulted: none
 informed: magic-cli-remote
@@ -8,6 +8,9 @@ informed: magic-cli-remote
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
 
 # Pin acp-go-sdk2 v1.21.0, replace SessionUpdate literals with its helpers, and embed ClientRefusals
+
+*Superseded 2026-10-29, never executed, by [0035-MADR-pin-current-sibling-releases-and-remove-gobble-copies.md](0035-MADR-pin-current-sibling-releases-and-remove-gobble-copies.md). Its D2–D5 are that record's D7–D9, at acp-go-sdk2 `v1.26.0`;
+the work is [0035-PLAN-pin-current-sibling-releases-and-remove-gobble-copies.md](0035-PLAN-pin-current-sibling-releases-and-remove-gobble-copies.md)'s P7–P10.*
 
 ## Context and Problem Statement
 
