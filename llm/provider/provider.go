@@ -19,6 +19,7 @@ import (
 	"github.com/maccavelli/go-llmprovider-sdk/llmprovider"
 	"github.com/maccavelli/go-llmprovider-sdk/llmprovider/auth"
 	"github.com/maccavelli/go-llmprovider-sdk/llmprovider/providers"
+	"github.com/maccavelli/go-llmprovider-sdk/llmprovider/providers/claude"
 
 	"github.com/maccavelli/gobble-cli/llm"
 )
@@ -75,6 +76,9 @@ type Options struct {
 	// after a transient failure, within 24 hours (0025-MADR D4).
 	LastGood   []string
 	LastGoodAt time.Time
+	// Workspace is the Anthropic workspace a Claude key not scoped to one
+	// runs in; empty sends none. Other providers ignore it (0035-MADR D5).
+	Workspace string
 }
 
 // login is provider id's stored login, as the SDK's session, when o has no
@@ -182,6 +186,9 @@ func New(id string, o Options) (llm.Provider, error) {
 		opts = append(opts, llmprovider.WithLogger(o.Logger))
 	}
 	opts = append(opts, o.sdkOptions()...)
+	if o.Workspace != "" {
+		opts = append(opts, llmprovider.For(llmprovider.ProviderClaude, claude.WithWorkspace(o.Workspace)))
+	}
 	if o.SessionID != "" {
 		opts = append(opts, llmprovider.WithSessionID(o.SessionID))
 	}
@@ -505,6 +512,8 @@ func reasoningFor(level string) *llmprovider.Reasoning {
 // sentinels maps the SDK's kinds onto llm's, most specific first, because
 // the SDK's overlap (llm's doc).
 var sentinels = []struct{ sdk, llm error }{
+	{llmprovider.ErrWorkspaceRequired, llm.ErrWorkspace},
+	{llmprovider.ErrWorkspaceNotFound, llm.ErrWorkspace},
 	{llmprovider.ErrQuotaExhausted, llm.ErrQuota},
 	{llmprovider.ErrRateLimited, llm.ErrRateLimited},
 	{llmprovider.ErrContextOverflow, llm.ErrContextOverflow},

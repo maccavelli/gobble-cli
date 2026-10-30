@@ -79,6 +79,19 @@ func TestResolveOrder(t *testing.T) {
 
 // models.json's key wins over the variable, its command uncached; a failed
 // command is an error naming it and no value; Has runs no command.
+// An auth.json api_key's workspace comes with its key; the run's key
+// carries none (0035-MADR D5).
+func TestResolveWorkspace(t *testing.T) {
+	r, _ := resolverFor(t, `{"claude": {"type": "api_key", "key": "sk", "workspace": "wrkspc_1"}}`, nil, nil)
+	if c, ok, err := r.Credential("claude"); err != nil || !ok || c.Workspace != "wrkspc_1" || c.Source != SourceFile {
+		t.Fatalf("%+v, %v, %v", c, ok, err)
+	}
+	r.Runtime["claude"] = "flag-key"
+	if c, _, _ := r.Credential("claude"); c.Workspace != "" || c.Source != SourceFlag {
+		t.Fatalf("the run's key: %+v", c)
+	}
+}
+
 func TestResolveModelsJSON(t *testing.T) {
 	r, ran := resolverFor(t, `{}`, map[string]string{"openai": "!mj", "grok": "!fail"}, map[string]string{"OPENAI_API_KEY": "env"})
 	for range 2 {

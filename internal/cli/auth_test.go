@@ -261,6 +261,22 @@ func browserThenDevice(authorize string, pasted *[]bool) signInFunc {
 // gobble auth login grok runs the browser sign-in, which shows its URL
 // before it is opened, or with --device the device sign-in, which shows its
 // code; either saves the login (0005-PLAN F4-3b decision 6; 0031-MADR D7).
+// --workspace stores a Claude key's Anthropic workspace beside it, and is
+// refused for any other provider and for a control character (0035-MADR
+// D5, 0035-PLAN PQ1).
+func TestAuthLoginWorkspace(t *testing.T) {
+	c := newCfgEnv(t)
+	r := c.runStdin(stdinFile(t, "sk-ant\n"), "auth", "login", "anthropic", "--api-key", "-", "--workspace", "wrkspc_1")
+	c.want(r, ExitOK, "Saved API key for claude\n", "")
+	if got := c.read(c.authFile()); !strings.Contains(got, `"workspace": "wrkspc_1"`) {
+		t.Fatalf("auth.json:\n%s", got)
+	}
+	c.want(c.runStdin(stdinFile(t, "k"), "auth", "login", "openai", "--api-key", "-", "--workspace", "w"), ExitUsage, "",
+		"--workspace is for claude, an Anthropic workspace")
+	c.want(c.runStdin(stdinFile(t, "k"), "auth", "login", "anthropic", "--api-key", "-", "--workspace", "w\x07"), ExitUsage, "",
+		"--workspace: a workspace ID holds no control character")
+}
+
 func TestAuthLoginGrok(t *testing.T) {
 	c := newCfgEnv(t)
 	var opened []string

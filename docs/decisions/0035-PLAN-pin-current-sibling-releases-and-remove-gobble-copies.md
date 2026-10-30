@@ -1511,3 +1511,78 @@ The base is P1's commit `9c77d5c`.
 8. G-hosts, on a copy of the tree (808 files), `go1.27.3`: on the Linux machine and the Windows laptop, `go test` and race exit 0, 36 ok; `preflight` to `verify-build-metadata` (no commit, C6); records and markdownlint exit 0.
 
 No deviation. 0036-PLAN's P0, which waits for this phase, may now run on the owner's word.
+
+### Deviation 6 (2026-10-30): P6's files beyond its list
+
+- **Found.** Step 3 takes the workspace from the resolved credential "where `providerOptions(id, o)` is filled", and has
+  `lookupModel` pass it. Doing so meant files outside the step's list:
+  - `internal/cli/main.go` and `internal/cli/credentials.go`: `knownKeys` caches the whole `auth.Credential`, with a new
+    `knownWorkspace(id)` beside `knownKey(id)`, so a lookup runs no key command again;
+  - `internal/cli/agent.go:97`: `ModelInfo` gains the workspace;
+  - `llm/provider/model.go`: `ModelInfo(id, apiKey, workspace, logins, model, mj)`, and `modelInfoFrom` and
+    `lookupModel` gain the workspace. It is an exported change in a beta package, below v1, so `apidiff` does not
+    gate it.
+- **Handling.** These were made in the course of the step, as its own wording requires, not on a separate answer.
+  They are recorded here so that the phase is not described as narrower than it was, and the owner is told in the
+  handoff. No decision changes.
+- **Files added to scope:** the four above, and the tests of the listed files (`internal/auth/logins_test.go`,
+  `llm/provider/model_test.go`, the new `llm/provider/workspace_test.go` and `acpserver/workspace_test.go`).
+
+### P6 record (2026-10-30): the Anthropic workspace
+
+PQ1 (a) and PQ2 (a). The base is P5's commit `43649b8`.
+
+1. **The store.**
+   - `auth.Entry` gains `Workspace` (`"workspace"`).
+   - `Set` is replaced by `SetKey(ctx, path, provider, key, workspace)`. It merges `type`, `key` and `workspace` into the
+     entry as `SetOAuth` does: fields gobble does not read are kept, an oauth login's fields are dropped, and with no
+     workspace the field goes.
+   - Every caller moved: `auth.go`, `login.go`, `acp.go`, `piimport.go` (with `""`), and the store's own tests.
+   - `TestStoreRoundTrip` is unchanged and passes byte for byte. The merge keeps Pi's order, and a key over `{type, key}`
+     gives the same bytes.
+   - New `TestStoreKeyKeepsUnknownFields` checks four things: Cloudflare's `env` is kept, the workspace is written, an
+     oauth entry's tokens go under a key, and a later `SetKey` with none removes the workspace.
+2. **The resolver.** `auth.Credential` gains `Workspace`, set only from an auth.json `api_key`. New `TestResolveWorkspace`
+   checks that a `--api-key` runtime key carries none.
+3. **The provider.**
+   - `provider.Options` gains `Workspace`.
+   - `New` appends `llmprovider.For(llmprovider.ProviderClaude, claude.WithWorkspace(…))`, and `List` appends
+     `For(…, catalog.WithClaudeWorkspace(…))`, each only when it is set. `lookupModel` appends the listing option too.
+   - `providerOptions` fills it from `knownWorkspace(id)`, so the run's provider, a switched-to provider, the small
+     model, the listing and sign-in all get it. `agent.go`'s `ModelInfo` gets it as well.
+4. **The wizard.** `SignIn` passes `Existing.Workspace` from `o.Workspace` and returns `Credential.Workspace` from
+   `res.Workspace`, and `signInTo` stores it.
+5. **PQ1 (a).**
+   - `gobble auth login` has `--workspace ID`, refused for any provider but Claude, and for a control character
+     (`checkWorkspace`).
+   - `gobble acp --login claude` asks `Workspace ID (empty for none): ` after the key, when stdin is a terminal.
+   - `TestAuthLoginWorkspace` checks the stored field and both refusals. The terminal prompt is not exercised by a test,
+     since it needs a real terminal's stdin, as `readAPIKey`'s own prompt does.
+6. **Errors.**
+   - `llm.ErrWorkspace` ("llm: workspace needed").
+   - `sentinels` gains `ErrWorkspaceRequired` and `ErrWorkspaceNotFound`, both mapping to it.
+   - `FailureKind` gives `workspace`. `StateOf` gives not listed, with the way to name one.
+   - `promptError` answers `workspaceAdvice` alone, without the service's message.
+   - New `TestWireWorkspace` uses the SDK's measured refusal text and checks the error and the class. It also checks that
+     Claude's request carries `anthropic-workspace-id: wrkspc_1` while OpenAI's carries none.
+   - New `TestWorkspaceWords` checks the agent's wording.
+7. **`docs/guides/credentials.md`** has "An Anthropic workspace" under "Storing a key". `ANTHROPIC_WORKSPACE_ID` is not
+   read (PQ2 (a)).
+8. **Seen failing (C9), on copies:**
+   - **`SetKey` merging into nothing, the old replace:** `TestStoreKeyKeepsUnknownFields` fails with
+     `"CLOUDFLARE_ACCOUNT_ID": "x" not kept`.
+
+     The first attempt's anchor matched both `SetKey` and `SetOAuth`, and the copy script refused it. It was rerun with
+     an anchor unique to `SetKey`.
+   - **The `For(…)` dropped from `New`:** `TestWireWorkspace` fails with
+     `claude: anthropic-workspace-id "", want "wrkspc_1"`.
+   - **`checkWorkspace` not refusing other providers:** `TestAuthLoginWorkspace` fails.
+9. **G-local.**
+   - `make pre-add-check` on the 24 Go files: clean.
+   - `make preflight`: "preflight passed".
+   - `make race`: 36 ok.
+   - `make perf`: ReplyRender 32.7 µs (baseline 30), Reprint 9.60 ms (9.4), LineSessionStart 983 µs (830), KeyDraw
+     1.52 µs (1.5).
+10. G-hosts, on a copy of the tree (810 files), `go1.27.3`: on the Linux machine and the Windows laptop, `go test` and race exit 0, 36 ok; `preflight` to `verify-build-metadata` (no commit, C6); records and markdownlint exit 0; `make perf` passed on both; `make probe-conhost` passed `TestConhost` on the Windows laptop.
+
+One deviation: deviation 6, above. The go-llmprovider-sdk phases, P4 to P6, are complete.

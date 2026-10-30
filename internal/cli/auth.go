@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/maccavelli/gobble-cli/internal/auth"
@@ -46,6 +47,9 @@ type AuthLoginCmd struct {
 	Device   bool   `name:"device" help:"Sign in with a device code, on a machine without a browser."`
 	Method   string `name:"method" complete:"none" help:"How to sign in, with no menu: api-key (the key from stdin), browser or device, as the provider offers."`
 	JSON     bool   `name:"json" help:"Print the login's events as JSON lines on stdout, and nothing on stderr."`
+	// Workspace is the Anthropic workspace a Claude key not scoped to one
+	// runs in, stored beside the key (0035-MADR D5, 0035-PLAN PQ1).
+	Workspace string `name:"workspace" complete:"none" placeholder:"ID" help:"With --api-key -, the Anthropic workspace a Claude key not scoped to one runs in."`
 }
 
 // logoutLogin revokes and removes a login; a test replaces it (0005-PLAN
@@ -89,6 +93,9 @@ func (c *AuthLoginCmd) runWith(e *runEnv, ev *loginEvents) error {
 	if err != nil {
 		return err
 	}
+	if err := checkWorkspace(id, c.Workspace); err != nil {
+		return err
+	}
 	if c.Method != "" { // 0025-MADR D6
 		if c.APIKey != "" || c.Device {
 			return usageErrorf("--method is instead of --api-key and --device")
@@ -120,10 +127,24 @@ func (c *AuthLoginCmd) runWith(e *runEnv, ev *loginEvents) error {
 	if path == "" {
 		return failf("auth.json: the config directory cannot be resolved")
 	}
-	if err := auth.Set(e.ctx, path, id, auth.Entry{Type: auth.TypeAPIKey, Key: key}); err != nil {
+	if err := auth.SetKey(e.ctx, path, id, key, c.Workspace); err != nil {
 		return failf("%v", err)
 	}
 	return e.saved(ev, id, auth.TypeAPIKey)
+}
+
+// checkWorkspace refuses --workspace for any provider but Claude, and a
+// value that cannot be a header's (0035-MADR D5).
+func checkWorkspace(id, workspace string) error {
+	switch {
+	case workspace == "":
+		return nil
+	case id != "claude":
+		return usageErrorf("--workspace is for claude, an Anthropic workspace")
+	case strings.ContainsFunc(workspace, unicode.IsControl):
+		return usageErrorf("--workspace: a workspace ID holds no control character")
+	}
+	return nil
 }
 
 // loginEvents writes gobble auth login --json's events to stdout, one JSON

@@ -77,6 +77,9 @@ func List(ctx context.Context, id, apiKey string, o Options) (Listing, error) {
 	if len(o.LastGood) > 0 {
 		opts = append(opts, catalog.WithLastGood(o.LastGood, o.LastGoodAt))
 	}
+	if o.Workspace != "" {
+		opts = append(opts, llmprovider.For(llmprovider.ProviderClaude, catalog.WithClaudeWorkspace(o.Workspace)))
+	}
 	var src llmprovider.TokenSource = llmprovider.NewStaticToken(apiKey)
 	o.APIKey, o.Logger = apiKey, nil
 	login, err := o.login(ctx, id) // with no key, id's stored login (0005-PLAN F4-3b decision 9)
@@ -105,6 +108,7 @@ var failureKinds = []struct {
 	err  error
 	kind string
 }{
+	{llm.ErrWorkspace, "workspace"},
 	{llm.ErrQuota, "quota"},
 	{llm.ErrRateLimited, "rate-limited"},
 	{llm.ErrAuth, "auth"},
@@ -117,8 +121,8 @@ var failureKinds = []struct {
 
 // FailureKind names err's class for a log line, and never carries its
 // text, which a provider may fill with part of the credential
-// (0020-MADR F5): quota, rate-limited, auth, not-permitted, unavailable,
-// timeout, canceled, empty, or other.
+// (0020-MADR F5): workspace, quota, rate-limited, auth, not-permitted,
+// unavailable, timeout, canceled, empty, or other.
 func FailureKind(err error) string {
 	for _, k := range failureKinds {
 		if errors.Is(err, k.err) {

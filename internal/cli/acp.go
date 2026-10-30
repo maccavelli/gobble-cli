@@ -1,6 +1,9 @@
 package cli
 
 import (
+	"bufio"
+	"errors"
+	"fmt"
 	"io"
 	"strings"
 
@@ -68,12 +71,34 @@ func (e *runEnv) acpLogin(name string, device bool) error {
 	if err != nil {
 		return err
 	}
+	workspace, err := e.readWorkspace(id)
+	if err != nil {
+		return err
+	}
 	path := authPath()
 	if path == "" {
 		return failf("auth.json: the config directory cannot be resolved")
 	}
-	if err := auth.Set(e.ctx, path, id, auth.Entry{Type: auth.TypeAPIKey, Key: key}); err != nil {
+	if err := auth.SetKey(e.ctx, path, id, key, workspace); err != nil {
 		return failf("%v", err)
 	}
 	return e.out.Resultf("Saved API key for %s\n", id)
+}
+
+// readWorkspace asks a terminal for Claude's workspace after its key, one
+// line, empty for none; any other provider, or a stdin that is not a
+// terminal, has none (0035-MADR D5, 0035-PLAN PQ1).
+func (e *runEnv) readWorkspace(id string) (string, error) {
+	if id != "claude" || e.stdin == nil || !e.out.caps.In {
+		return "", nil
+	}
+	if _, err := fmt.Fprint(e.out.err, "Workspace ID (empty for none): "); err != nil {
+		return "", fmt.Errorf("write stderr: %w", err)
+	}
+	line, err := bufio.NewReader(io.LimitReader(e.stdin, 4<<10)).ReadString('\n')
+	if err != nil && !errors.Is(err, io.EOF) {
+		return "", failf("workspace: %v", err)
+	}
+	workspace := strings.TrimSpace(line)
+	return workspace, checkWorkspace(id, workspace)
 }

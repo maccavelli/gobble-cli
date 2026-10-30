@@ -94,7 +94,7 @@ func (e *runEnv) agentOptions() acpserver.Options {
 			if e.knownLogin(id) {
 				logins = e.logins()
 			}
-			return provider.ModelInfo(id, e.knownKey(id), logins, model, e.modelsJSON())
+			return provider.ModelInfo(id, e.knownKey(id), e.knownWorkspace(id), logins, model, e.modelsJSON())
 		},
 		// --model and --thinking win over every session's own (0005-PLAN F4-2c).
 		Override: acpserver.Override{Provider: e.pick.Provider, Model: e.pick.Model, Thinking: e.pick.Thinking, Mode: e.mode},

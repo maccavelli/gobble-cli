@@ -40,6 +40,9 @@ type Entry struct {
 	// whether it sends X-OpenAI-Fedramp (0015-REPORT F5).
 	Issuer, ClientID, AccountID, TokenURL string
 	FedRAMP                               bool
+	// Workspace is the Anthropic workspace an api_key not scoped to one
+	// runs in, written as "workspace" (0035-MADR D5).
+	Workspace string
 }
 
 // member is one provider's entry as the file holds it: its bytes are kept,
@@ -103,12 +106,14 @@ func parse(data []byte) (*File, error) {
 			AccountID string  `json:"accountId"`
 			TokenURL  string  `json:"tokenUrl"`
 			FedRAMP   bool    `json:"fedramp"`
+			Workspace string  `json:"workspace"`
 		}
 		if value.Kind() != '{' || json.Unmarshal(value, &e) != nil || e.Type == nil {
 			return nil, fmt.Errorf("invalid auth.json credential for provider %q", provider)
 		}
 		entry := Entry{Type: *e.Type, Key: e.Key, Expires: e.Expires, Access: e.Access, Refresh: e.Refresh,
-			Issuer: e.Issuer, ClientID: e.ClientID, AccountID: e.AccountID, TokenURL: e.TokenURL, FedRAMP: e.FedRAMP}
+			Issuer: e.Issuer, ClientID: e.ClientID, AccountID: e.AccountID, TokenURL: e.TokenURL, FedRAMP: e.FedRAMP,
+			Workspace: e.Workspace}
 		f.members = append(f.members, member{provider: provider, value: value.Clone(), entry: entry})
 	}
 	if _, err := d.ReadToken(); err != nil {
@@ -138,26 +143,56 @@ func (f *File) index(provider string) int {
 	return slices.IndexFunc(f.members, func(m member) bool { return m.provider == provider })
 }
 
-// Set stores e as provider's entry: under auth.json's lock it re-reads the
-// file, replaces or adds the one entry, and writes the file whole, as Pi's
-// modify does. A file it cannot parse is an error, and is not overwritten.
-func Set(ctx context.Context, path, provider string, e Entry) error {
-	value, err := json.Marshal(struct {
-		Type string `json:"type"`
-		Key  string `json:"key,omitempty"`
-	}{e.Type, e.Key})
+// SetKey stores key as provider's api_key, in workspace when it is not
+// empty: under auth.json's lock it re-reads the file and sets the entry's
+// type, key and workspace, keeping every field gobble does not read, as
+// SetOAuth does, and dropping an oauth login's fields and, with no
+// workspace, the workspace; or adds the entry. It writes the file whole, as
+// Pi's modify does. A file it cannot parse is an error, and is not
+// overwritten (0035-MADR D5).
+func SetKey(ctx context.Context, path, provider, key, workspace string) error {
+	var set []field
+	var err error
+	for _, f := range []struct{ name, v string }{{"type", TypeAPIKey}, {"key", key}, {"workspace", workspace}} {
+		if f.v == "" {
+			continue
+		}
+		b, merr := json.Marshal(f.v)
+		err = errors.Join(err, merr)
+		set = append(set, field{f.name, b})
+	}
 	if err != nil {
 		return fmt.Errorf("auth.json: %w", err)
 	}
-	return modify(ctx, path, func(f *File) bool {
+	remove := []string{"access", "refresh", "expires", "issuer", "clientId", "accountId", "tokenUrl", "fedramp"}
+	if key == "" {
+		remove = append(remove, "key")
+	}
+	if workspace == "" {
+		remove = append(remove, "workspace")
+	}
+	e := Entry{Type: TypeAPIKey, Key: key, Workspace: workspace}
+	var mergeErr error
+	err = modify(ctx, path, func(f *File) bool {
+		var old jsontext.Value
+		i := f.index(provider)
+		if i >= 0 {
+			old = f.members[i].value
+		}
+		value, err := merge(old, set, remove)
+		if err != nil {
+			mergeErr = fmt.Errorf("auth.json: provider %s: %w", provider, err)
+			return false
+		}
 		m := member{provider: provider, value: value, entry: e}
-		if i := f.index(provider); i >= 0 {
+		if i >= 0 {
 			f.members[i] = m
 		} else {
 			f.members = append(f.members, m)
 		}
 		return true
 	})
+	return errors.Join(err, mergeErr)
 }
 
 // SetOAuth stores e as provider's oauth entry: under auth.json's lock it

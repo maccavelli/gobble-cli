@@ -30,6 +30,10 @@ var (
 	// ErrEmptyReply means the provider's answer had nothing usable in it,
 	// and was not a refusal or a safety stop (0005-PLAN F5-1).
 	ErrEmptyReply = errors.New("llm: empty reply")
+	// ErrWorkspace means the provider needs a workspace the credential
+	// does not name, or refuses the one it names: an Anthropic key not
+	// scoped to a workspace (0035-MADR D5).
+	ErrWorkspace = errors.New("llm: workspace needed")
 )
 
 // APIError is a provider HTTP failure.

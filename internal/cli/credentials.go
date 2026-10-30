@@ -122,21 +122,28 @@ func (e *runEnv) credential(id string) (auth.Credential, bool) {
 // knownKey is provider id's key for what only informs, such as a model's
 // facts and the model listing: resolved once per provider, so a command is
 // not run for every lookup.
-func (e *runEnv) knownKey(id string) string {
+func (e *runEnv) knownKey(id string) string { return e.known(id).Key }
+
+// knownWorkspace is provider id's stored workspace, resolved as knownKey
+// resolves its key (0035-MADR D5).
+func (e *runEnv) knownWorkspace(id string) string { return e.known(id).Workspace }
+
+// known is provider id's credential, resolved once per provider.
+func (e *runEnv) known(id string) auth.Credential {
 	e.credsMu.Lock()
-	if k, ok := e.knownKeys[id]; ok {
+	if c, ok := e.knownKeys[id]; ok {
 		e.credsMu.Unlock()
-		return k
+		return c
 	}
 	e.credsMu.Unlock()
 	c, _ := e.credential(id)
 	e.credsMu.Lock()
 	defer e.credsMu.Unlock()
 	if e.knownKeys == nil {
-		e.knownKeys = map[string]string{}
+		e.knownKeys = map[string]auth.Credential{}
 	}
-	e.knownKeys[id] = c.Key
-	return c.Key
+	e.knownKeys[id] = c
+	return c
 }
 
 // knownLogin reports whether provider id's credential is a stored OAuth

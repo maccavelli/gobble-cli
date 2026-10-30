@@ -64,6 +64,9 @@ type Credential struct {
 	Key string
 	// Device reports that Key came from a device sign-in, Kilo's.
 	Device bool
+	// Workspace is the Anthropic workspace the wizard asked for, for a
+	// Claude key not scoped to one (0035-MADR D5).
+	Workspace string
 }
 
 // offers reports whether gobble offers the SDK's method m for provider id:
@@ -172,7 +175,7 @@ func SignIn(ctx context.Context, id string, p Prompter, o SignInOptions, store L
 	}, o.sdkOptions()...)
 	res, _, err := wizard.ResolveCredential(ctx, w, wizard.Options{
 		Registry:         providers.Default(),
-		Existing:         wizard.Result{Provider: d.ID, BaseURL: o.BaseURL},
+		Existing:         wizard.Result{Provider: d.ID, BaseURL: o.BaseURL, Workspace: o.Workspace},
 		Discover:         true,
 		ProviderOptions:  listing,
 		TokenStore:       sdkStore{store},
@@ -200,7 +203,7 @@ func SignIn(ctx context.Context, id string, p Prompter, o SignInOptions, store L
 	if res.Kind == wizard.CredOAuth {
 		return Credential{}, nil
 	}
-	return Credential{Key: res.APIKey, Device: device}, nil
+	return Credential{Key: res.APIKey, Device: device, Workspace: res.Workspace}, nil
 }
 
 // ownError is an error of the caller's, a Prompter's or a callback's, which

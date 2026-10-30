@@ -22,7 +22,7 @@ func TestLoginsLoadSave(t *testing.T) {
 	if err != nil || got == nil || *got != *in {
 		t.Fatalf("Load: %v, %v; want %v", got, err, in)
 	}
-	if err := Set(t.Context(), l.Path, "openai", Entry{Type: TypeAPIKey, Key: "k"}); err != nil {
+	if err := SetKey(t.Context(), l.Path, "openai", "k", ""); err != nil {
 		t.Fatal(err)
 	}
 	for _, id := range []string{"openai", "kilo"} {

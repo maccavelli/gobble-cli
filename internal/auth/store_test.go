@@ -50,7 +50,7 @@ func writeAuth(t *testing.T, content string) string {
 // file's order; entries parse as Pi's shape (0005-PLAN F4-3a decision 4).
 func TestStoreRoundTrip(t *testing.T) {
 	path := writeAuth(t, piFile)
-	if err := Set(t.Context(), path, "openai", Entry{Type: TypeAPIKey, Key: "new"}); err != nil {
+	if err := SetKey(t.Context(), path, "openai", "new", ""); err != nil {
 		t.Fatal(err)
 	}
 	got, err := os.ReadFile(path)
@@ -74,7 +74,7 @@ func TestStoreRoundTrip(t *testing.T) {
 	if e, _ := f.Entry("cloudflare"); e != (Entry{Type: TypeAPIKey, Key: "$CF_KEY"}) {
 		t.Errorf("cloudflare: %+v", e)
 	}
-	if err := Set(t.Context(), path, "gemini", Entry{Type: TypeAPIKey, Key: "g"}); err != nil {
+	if err := SetKey(t.Context(), path, "gemini", "g", ""); err != nil {
 		t.Fatal(err)
 	}
 	if got, _ := os.ReadFile(path); !strings.HasSuffix(string(got), "  },\n  \"gemini\": {\n    \"type\": \"api_key\",\n    \"key\": \"g\"\n  }\n}\n") {
@@ -91,6 +91,48 @@ func TestStoreRoundTrip(t *testing.T) {
 	}
 }
 
+// SetKey keeps the fields gobble does not read, as SetOAuth does, writes a
+// workspace and removes one it is not given, and drops an oauth login's
+// fields (0035-MADR D5).
+func TestStoreKeyKeepsUnknownFields(t *testing.T) {
+	path := writeAuth(t, piFile)
+	if err := SetKey(t.Context(), path, "cloudflare", "$CF_KEY2", "wrkspc_1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetKey(t.Context(), path, "anthropic", "sk", ""); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`"key": "$CF_KEY2"`, `"CLOUDFLARE_ACCOUNT_ID": "x"`, `"workspace": "wrkspc_1"`} {
+		if !strings.Contains(string(got), want) {
+			t.Errorf("%s not kept:\n%s", want, got)
+		}
+	}
+	for _, gone := range []string{"r-not-real", "a-not-real", "acct", "1781000000000"} {
+		if strings.Contains(string(got), gone) {
+			t.Errorf("the oauth login's %s kept under an api_key:\n%s", gone, got)
+		}
+	}
+	f, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e, _ := f.Entry("cloudflare"); e != (Entry{Type: TypeAPIKey, Key: "$CF_KEY2", Workspace: "wrkspc_1"}) {
+		t.Errorf("cloudflare: %+v", e)
+	}
+	if err := SetKey(t.Context(), path, "cloudflare", "$CF_KEY2", ""); err != nil {
+		t.Fatal(err)
+	}
+	if f, err := Load(path); err != nil {
+		t.Fatal(err)
+	} else if e, _ := f.Entry("cloudflare"); e.Workspace != "" {
+		t.Errorf("the workspace kept after SetKey gave none: %+v", e)
+	}
+}
+
 // Writers of different providers, at once, each keep the other's entry:
 // every change re-reads under the lock.
 func TestStoreConcurrent(t *testing.T) {
@@ -98,7 +140,7 @@ func TestStoreConcurrent(t *testing.T) {
 	var wg sync.WaitGroup
 	errs := make(chan error, 20)
 	for i := range 20 {
-		wg.Go(func() { errs <- Set(t.Context(), path, fmt.Sprintf("p%d", i), Entry{Type: TypeAPIKey, Key: "k"}) })
+		wg.Go(func() { errs <- SetKey(t.Context(), path, fmt.Sprintf("p%d", i), "k", "") })
 	}
 	wg.Wait()
 	close(errs)
@@ -177,7 +219,7 @@ func TestStoreOAuthRoundTrip(t *testing.T) {
 // in a directory made 0700 when it is created.
 func TestStoreMode(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "new", "auth.json")
-	if err := Set(t.Context(), path, "openai", Entry{Type: TypeAPIKey, Key: "k"}); err != nil {
+	if err := SetKey(t.Context(), path, "openai", "k", ""); err != nil {
 		t.Fatal(err)
 	}
 	if ok, err := appdirs.FileIsOwnerOnly(path); err != nil || !ok {
@@ -206,7 +248,7 @@ func TestStoreBadFile(t *testing.T) {
 			if _, err := Load(path); err == nil || !strings.Contains(err.Error(), path) {
 				t.Errorf("Load: %v, want an error naming the file", err)
 			}
-			if err := Set(t.Context(), path, "gemini", Entry{Type: TypeAPIKey, Key: "g"}); err == nil {
+			if err := SetKey(t.Context(), path, "gemini", "g", ""); err == nil {
 				t.Error("Set over a bad file succeeded")
 			}
 			if got, _ := os.ReadFile(path); string(got) != content {

@@ -281,10 +281,17 @@ func jsonRaw(v jsontext.Value) stdjson.RawMessage {
 	return v
 }
 
+// workspaceAdvice is what a turn refused for want of an Anthropic workspace
+// says (0035-MADR D5).
+const workspaceAdvice = "claude needs an Anthropic workspace for this key: run /login, or gobble auth login claude --api-key - --workspace ID"
+
 // promptError is the JSON-RPC error of a failed turn: auth_required for a
 // missing or refused credential, otherwise an internal error carrying the
 // message.
 func promptError(err error) error {
+	if errors.Is(err, llm.ErrWorkspace) { // the service's words are not shown (0035-MADR D5)
+		return acp.NewInternalError(map[string]any{keyError: workspaceAdvice})
+	}
 	if errors.Is(err, llm.ErrAuth) {
 		return acp.NewAuthRequired(map[string]any{keyError: err.Error()})
 	}

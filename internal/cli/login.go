@@ -82,7 +82,7 @@ func (e *runEnv) signInTo(ctx context.Context, p provider.Prompter, id string, o
 	case provider.PublicListing(id):
 		p.Notify("%s lists its models without a key, so the key was not checked.", provider.Label(id))
 	}
-	if err := auth.Set(ctx, path, id, auth.Entry{Type: auth.TypeAPIKey, Key: c.Key}); err != nil {
+	if err := auth.SetKey(ctx, path, id, c.Key, c.Workspace); err != nil {
 		return failf("%v", err)
 	}
 	return e.saved(ev, id, auth.TypeAPIKey)

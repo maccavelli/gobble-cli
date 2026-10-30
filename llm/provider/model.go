@@ -59,14 +59,19 @@ func SnapshotErr() error {
 // A model nothing knows has only its provider and id. mj, when not nil, is
 // models.json: a layer above the snapshot, and its thinkingLevelMap
 // (0005-PLAN F4-2b). With no apiKey, a provider with an OAuth login uses
-// logins' stored login, when logins is not nil (0005-PLAN F4-3b).
-func ModelInfo(id, apiKey string, logins LoginStore, model string, mj *gcatalog.ModelsJSON) llm.Model {
+// logins' stored login, when logins is not nil (0005-PLAN F4-3b). workspace
+// is a Claude key's, for its listing (0035-MADR D5).
+func ModelInfo(id, apiKey, workspace string, logins LoginStore, model string, mj *gcatalog.ModelsJSON) llm.Model {
 	ctx := context.Background()
 	login, err := Options{Logins: logins}.login(ctx, id)
 	if err == nil && login != nil && apiKey == "" {
-		return modelInfoFrom(ctx, id, login, model, mj)
+		return modelInfoFrom(ctx, id, login, "", model, mj)
 	}
-	return ModelInfoContext(ctx, id, apiKey, model, mj)
+	var src llmprovider.TokenSource
+	if apiKey != "" {
+		src = llmprovider.NewStaticToken(apiKey)
+	}
+	return modelInfoFrom(ctx, id, src, workspace, model, mj)
 }
 
 // ModelInfoContext is ModelInfo for a caller with a context, which bounds
@@ -76,20 +81,20 @@ func ModelInfoContext(ctx context.Context, id, apiKey, model string, mj *gcatalo
 	if apiKey != "" {
 		src = llmprovider.NewStaticToken(apiKey)
 	}
-	return modelInfoFrom(ctx, id, src, model, mj)
+	return modelInfoFrom(ctx, id, src, "", model, mj)
 }
 
 // modelInfoFrom is ModelInfoContext with src, the credential's token source, or
-// nil for none.
-func modelInfoFrom(ctx context.Context, id string, src llmprovider.TokenSource, model string, mj *gcatalog.ModelsJSON) llm.Model {
+// nil for none, and a Claude key's workspace.
+func modelInfoFrom(ctx context.Context, id string, src llmprovider.TokenSource, workspace, model string, mj *gcatalog.ModelsJSON) llm.Model {
 	var layers []catalog.Layer
 	if meta, err := snapshot(); err == nil {
 		layers = append(layers, *meta)
 	}
 	if mj == nil {
-		return lookupModel(ctx, id, src, model, layers...)
+		return lookupModel(ctx, id, src, model, workspace, layers...)
 	}
-	m := lookupModel(ctx, id, src, model, append(layers, modelsJSONLayer{mj})...)
+	m := lookupModel(ctx, id, src, model, workspace, append(layers, modelsJSONLayer{mj})...)
 	if f, ok := mj.Facts(id, model); ok && len(f.LevelMap) > 0 {
 		m.LevelMap = map[string]bool{}
 		for level, v := range f.LevelMap {
@@ -125,9 +130,12 @@ func toolModels(id string, meta *catalog.Metadata) []string {
 }
 
 // lookupModel is ModelInfo over layers, the later ranking above the earlier,
-// bounded by ctx.
-func lookupModel(ctx context.Context, id string, src llmprovider.TokenSource, model string, layers ...catalog.Layer) llm.Model {
+// bounded by ctx; a listing it starts runs in workspace for Claude.
+func lookupModel(ctx context.Context, id string, src llmprovider.TokenSource, model, workspace string, layers ...catalog.Layer) llm.Model {
 	opts := []llmprovider.Option{llmprovider.WithoutModelMetadata()}
+	if workspace != "" {
+		opts = append(opts, llmprovider.For(llmprovider.ProviderClaude, catalog.WithClaudeWorkspace(workspace)))
+	}
 	for _, l := range layers {
 		opts = append(opts, catalog.WithModelLayer(l))
 	}

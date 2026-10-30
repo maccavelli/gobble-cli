@@ -185,13 +185,14 @@ type runEnv struct {
 	// creds is the run's credential resolver, built when first needed and
 	// again after a sign-in or a sign-out; credsBuild guards it. credsMu
 	// guards credWarned, the providers whose resolution error was warned,
-	// knownKeys, the keys resolved once for lookups (0005-PLAN F4-3a), and
+	// knownKeys, the credentials resolved once for lookups, their keys and
+	// workspaces (0005-PLAN F4-3a; 0035-MADR D5), and
 	// credGen, each provider's credential generation (0025-MADR D4).
 	credsBuild sync.Mutex
 	creds      *auth.Resolver
 	credsMu    sync.Mutex
 	credWarned map[string]bool
-	knownKeys  map[string]string
+	knownKeys  map[string]auth.Credential
 	credGen    map[string]uint64
 	// personality is --personality's, by its canonical name, which the
 	// run's sessions start with; "" leaves the setting's (0022-PLAN P3).

@@ -76,6 +76,8 @@ func StateOf(id string, err error) (ProviderState, string) {
 	switch {
 	case err == nil:
 		return StateLive, ""
+	case errors.Is(err, llm.ErrWorkspace):
+		return StateNotListed, joinReason(status, "— needs an Anthropic workspace: gobble auth login "+id+" --api-key - --workspace ID")
 	case errors.Is(err, llm.ErrQuota):
 		return StateQuotaExhausted, status
 	case errors.Is(err, llm.ErrAuth):

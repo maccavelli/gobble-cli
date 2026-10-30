@@ -194,7 +194,7 @@ func (c *AuthImportCmd) choose(e *runEnv, ask bool, named, has map[string]bool, 
 // with the SDK's issuer and client id.
 func importEntry(e *runEnv, path, id string, entry auth.Entry) error {
 	if entry.Type == auth.TypeAPIKey {
-		return auth.Set(e.ctx, path, id, auth.Entry{Type: auth.TypeAPIKey, Key: entry.Key})
+		return auth.SetKey(e.ctx, path, id, entry.Key, "")
 	}
 	var exp time.Time
 	if entry.Expires > 0 {

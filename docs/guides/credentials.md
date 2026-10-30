@@ -93,6 +93,21 @@ Removed stored API key for openai. Environment variables and models.json config 
 
 Pi's `anthropic`, `google` and `xai` name gobble's `claude`, `gemini` and `grok` here too.
 
+### An Anthropic workspace
+
+An Anthropic API key that is not scoped to a workspace needs one named with each request. gobble keeps it beside
+the key in `auth.json`, as `"workspace"`, and sends it to Claude alone:
+
+```text
+$ gobble auth login anthropic --api-key - --workspace wrkspc_01ABCDEF
+Saved API key for claude
+```
+
+`/login` and `gobble setup` ask for the workspace when Claude refuses a key without one, and keep the one that
+lists. `gobble acp --login claude` asks for it after the key, empty for none. `ANTHROPIC_WORKSPACE_ID` is not
+read. A turn refused for want of a workspace says how to name one, and does not show the service's message
+(0035-MADR D5).
+
 ## Signing in
 
 Two providers let you sign in with your account instead of pasting a key:

@@ -21,10 +21,13 @@ const (
 
 // Credential is a provider's key and where it came from; or, with Login, a
 // stored OAuth login, which the provider loads itself (0005-PLAN F4-3b).
+// Workspace is the Anthropic workspace an auth.json api_key runs in; a
+// key from anywhere else carries none (0035-MADR D5).
 type Credential struct {
-	Key    string
-	Source Source
-	Login  bool
+	Key       string
+	Source    Source
+	Login     bool
+	Workspace string
 }
 
 // Resolver finds a provider's credential in Pi's order (ai/src/auth/
@@ -132,7 +135,7 @@ func (r *Resolver) stored(id string, e Entry) (Credential, bool, error) {
 	if err != nil {
 		return Credential{}, false, fmt.Errorf("auth.json: provider %s: %w", id, err)
 	}
-	return Credential{Key: key, Source: SourceFile}, true, nil
+	return Credential{Key: key, Source: SourceFile, Workspace: e.Workspace}, true, nil
 }
 
 func (r *Resolver) cachedRun(command string) (string, error) {
