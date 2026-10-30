@@ -47,11 +47,16 @@ NOLINT = re.compile(r"//nolint:([A-Za-z0-9_,-]+)")
 def scan() -> tuple[list[str], dict[tuple[str, int], set[str]], dict[str, set[str]]]:
     """Directives that break rules 1 and 2; the checks each line-directive names, by the (file, line) it
     covers; each file's file-wide checks. A directive may name several checks, comma-separated."""
-    files = subprocess.run(["git", "ls-files", "*.go"], capture_output=True, text=True, check=True).stdout.split()
+    # The Go files staticcheck reads: tracked and untracked, less the ignored,
+    # and less a tracked file deleted but not yet staged (0035-PLAN deviation 8).
+    files = subprocess.run(["git", "ls-files", "-co", "--exclude-standard", "*.go"], capture_output=True, text=True,
+                           check=True).stdout.split()
     bad: list[str] = []
     covers: dict[tuple[str, int], set[str]] = {}
     file_wide: dict[str, set[str]] = {}
     for path in files:
+        if not os.path.exists(path):
+            continue
         with open(path, encoding="utf-8") as fh:
             lines = fh.read().splitlines()
         for i, line in enumerate(lines):

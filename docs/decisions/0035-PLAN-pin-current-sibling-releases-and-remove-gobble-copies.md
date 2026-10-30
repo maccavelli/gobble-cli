@@ -1683,3 +1683,26 @@ The base is P9's commit `8e3a6b3`.
 5. G-hosts, on a copy (811 files), `go1.27.3`: on the Linux machine and the Windows laptop, `go test` and race exit 0, 36 ok; `preflight` to `verify-build-metadata` (no commit, C6); records and markdownlint exit 0.
 
 One deviation: deviation 7, above.
+
+### Deviation 8 (2026-10-30): P7's gate read files staticcheck does not
+
+- **Found,** in P11's `make preflight`, which deleted `acpserver/rewrite.go`:
+  `FileNotFoundError: [Errno 2] No such file or directory: 'acpserver/rewrite.go'` from
+  `scripts/check_staticcheck_ignored.py`, on each GOOS. The gate listed `git ls-files '*.go'`, which keeps a tracked
+  file deleted but not yet staged, and it skipped new, untracked files until they were staged. It is a defect in P7's
+  gate, found in this plan's live run.
+- **The owner's answer, 2026-10-30:** "Fix in its own commit (Recommended)".
+- **Decision.** The gate lists `git ls-files -co --exclude-standard '*.go'`: tracked and untracked files, less the
+  ignored. It skips a path missing on disk, so it reads what staticcheck reads. The fix is committed alone, before P11's
+  commit.
+- **Seen failing (C9),** on a scratch clone of P10's commit:
+  - **The old gate, with a tracked Go file deleted:** `FileNotFoundError` (exit 1).
+  - **The old gate, with an untracked file holding `//lint:ignore SA1019 no record`:** exit 0. It passed the file it
+    never read.
+  - **The fixed gate:** exit 1 on that untracked file (`the reason cites no NNNN-MADR or NNNN-PLAN record`), and no
+    crash with the file deleted.
+- **Checks.**
+  - `python3 -m py_compile` on the script: exit 0.
+  - `make staticcheck` on the working tree, with P11's deletion in it: the gate passed on each GOOS.
+  - The host gates run with P11's, on a copy holding this fix.
+- **Files added to scope:** `scripts/check_staticcheck_ignored.py`.
