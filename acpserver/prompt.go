@@ -322,11 +322,11 @@ func acpUsage(u llm.Usage) *acp.Usage { //nolint:staticcheck // as the lint:igno
 func (a *Agent) contextUpdate(s *liveSession, used int) acp.SessionUpdate {
 	model, _ := a.choices(s)
 	info := a.modelOf(a.provOf(s), model)
-	u := &acp.SessionUsageUpdate{Used: count(int64(used)), Size: count(int64(info.ContextWindow))}
+	up := acp.UpdateUsage(count(int64(used)), count(int64(info.ContextWindow)))
 	if info.Priced {
-		u.Cost = &acp.Cost{Amount: sessionTotals(s.log.Entries()).cost, Currency: "USD"}
+		up.UsageUpdate.Cost = &acp.Cost{Amount: sessionTotals(s.log.Entries()).cost, Currency: "USD"}
 	}
-	return acp.SessionUpdate{UsageUpdate: u}
+	return up
 }
 
 // count is a token count as ACP's: a negative count, which no provider

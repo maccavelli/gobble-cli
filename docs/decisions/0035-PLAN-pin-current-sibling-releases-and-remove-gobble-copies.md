@@ -1586,3 +1586,27 @@ PQ1 (a) and PQ2 (a). The base is P5's commit `43649b8`.
 10. G-hosts, on a copy of the tree (810 files), `go1.27.3`: on the Linux machine and the Windows laptop, `go test` and race exit 0, 36 ok; `preflight` to `verify-build-metadata` (no commit, C6); records and markdownlint exit 0; `make perf` passed on both; `make probe-conhost` passed `TestConhost` on the Windows laptop.
 
 One deviation: deviation 6, above. The go-llmprovider-sdk phases, P4 to P6, are complete.
+
+### P8 record (2026-10-30): the constructors
+
+The base is P6's commit `d204826`.
+
+1. **The five literals,** replaced as the table has them. The signatures were read again with `go doc` at `v1.26.0`:
+   - `UpdateCurrentMode(SessionModeId)` in `modes.go`;
+   - `UpdateConfigOptions`, `UpdateSessionTitle(Patch[string])` and `UpdateAvailableCommands` in `commands.go`;
+   - `UpdateUsage(used, size)` in `prompt.go`'s `contextUpdate`, whose `Cost` is set on the returned `UsageUpdate`.
+2. **Assert.**
+   - No `acp.SessionUpdate{` with one of the five fields remains in non-test `acpserver`.
+   - `git diff --exit-code acpserver/testdata/session.golden` exits 0.
+   - `go test ./acpserver/... ./acpclient/...` passes.
+3. **Seen failing (C9).** On a copy with `UpdateUsage`'s arguments swapped, `TestSession` fails with
+   `transcript differs from testdata/session.golden at line 6`, and so does `TestCatalogPriced`. The golden covers the
+   usage update.
+4. **G-local.**
+   - `make pre-add-check` on the three files: clean.
+   - `make preflight`: "preflight passed".
+   - `make race`: 36 ok.
+5. **G-hosts,** on a copy (810 files), `go1.27.3`. On the Linux machine and the Windows laptop: `go test` and race exit
+   0, 36 ok; `preflight` to `verify-build-metadata` (no commit, C6); records and markdownlint exit 0.
+
+No deviation.

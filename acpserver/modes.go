@@ -82,7 +82,7 @@ func (a *Agent) startMode(allowBypass bool) string {
 }
 
 func modeUpdate(current string) acp.SessionUpdate {
-	return acp.SessionUpdate{CurrentModeUpdate: &acp.SessionCurrentModeUpdate{CurrentModeId: acp.SessionModeId(current)}}
+	return acp.UpdateCurrentMode(acp.SessionModeId(current))
 }
 
 // modeOf is a session's mode, read under the agent's lock: set_mode may
