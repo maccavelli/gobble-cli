@@ -7,8 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/maccavelli/gobble-cli/acpclient"
-	"github.com/maccavelli/gobble-cli/internal/cli/term"
 	"github.com/maccavelli/gobble-cli/llm/llmtest"
 	"github.com/maccavelli/gobble-cli/permission"
 	"github.com/maccavelli/gobble-cli/personality"
@@ -266,10 +264,17 @@ func TestTrustQuestion(t *testing.T) {
 		if d.Trusted != c.trusted || d.Source != c.source {
 			t.Errorf("%q: %+v", c.key, d)
 		}
-		want := "Trust " + proj + "?  [1] Trust  [2] Trust the parent folder (" + parent + ")  [3] Trust for this run  [4] Do not trust  [5] Do not trust for this run  [c] cancel "
-		if s := errw.String(); !strings.Contains(s, "Trusting "+proj+" lets gobble load the project's .gobble settings, SYSTEM.md, skills, prompts and personalities.\n"+want) ||
-			strings.Count(s, want) != 1 {
-			t.Errorf("%q: stderr %q", c.key, s)
+		// The question, drawn by ask as 0029-MADR D2 lays it out, once.
+		s := shownOn(t, errw.String(), 120)
+		if !strings.Contains(errw.String(), "Trusting "+proj+" lets gobble load the project's .gobble settings, SYSTEM.md, skills, prompts and personalities.") ||
+			strings.Count(s, "Trust "+proj+"?") != 1 {
+			t.Errorf("%q: stderr\n%s", c.key, s)
+		}
+		for _, want := range []string{"[1] Trust", "[2] Trust the parent folder (" + parent + ")", "[3] Trust for this run",
+			"[4] Do not trust", "[5] Do not trust for this run", "[c] cancel"} {
+			if !strings.Contains(s, want) {
+				t.Errorf("%q: %q not shown in\n%s", c.key, want, s)
+			}
 		}
 		m := saved(t, home)
 		at := proj
@@ -305,8 +310,9 @@ func TestTrustQuestionNoParent(t *testing.T) {
 		}
 	})
 	e.decideTrustHere(proj)
-	if s := errw.String(); !strings.Contains(s, "Trust "+proj+"?  [y] allow once  [a] always  [n] deny  [N] never  [c] cancel allow once\n") {
-		t.Fatalf("stderr %q", s)
+	if s := shownOn(t, errw.String(), 120); !strings.Contains(s, "Trust "+proj+"?") ||
+		!strings.Contains(s, "[y] allow once  [a] always  [n] deny  [N] never") || !strings.Contains(s, "> allow once") {
+		t.Fatalf("stderr\n%s", s)
 	}
 	if _, d := e.projectTrust(proj); !d.Trusted || d.Source != permission.SourceAnswer {
 		t.Fatalf("%+v", d)
@@ -321,7 +327,7 @@ func TestLineViewTrust(t *testing.T) {
 	h := newModelHarness(t, llmtest.NewScript(), proj)
 	h.start(Prompt{})
 	h.press("/trust\r")
-	waitUntil(t, func() bool { return strings.Contains(h.stderr.String(), "[3] Do not trust  [c] cancel ") })
+	waitUntil(t, func() bool { return strings.Contains(h.stderr.String(), "[3] Do not trust") })
 	h.press("1")
 	// The confirmation is a reply, wrapped at the harness's 80 columns
 	// (0028-PLAN P2, deviation 3).
@@ -333,8 +339,12 @@ func TestLineViewTrust(t *testing.T) {
 	if n := strings.Count(h.stderr.String(), untrustedLine); n != 1 {
 		t.Fatalf("told %d times:\n%s", n, h.stderr.String())
 	}
-	if !strings.Contains(h.stderr.String(), "Trust "+proj+"?  [1] Trust  [2] Trust the parent folder ("+filepath.Dir(proj)+")  [3] Do not trust  [c] cancel Trust\n") {
-		t.Fatalf("stderr %q", h.stderr.String())
+	shown := shownOn(t, h.stderr.String(), 120)
+	for _, want := range []string{"Trust " + proj + "?", "[1] Trust", "[2] Trust the parent folder (" + filepath.Dir(proj) + ")",
+		"[3] Do not trust", "> Trust"} {
+		if !strings.Contains(shown, want) {
+			t.Fatalf("%q not shown in\n%s", want, shown)
+		}
 	}
 	if m := saved(t, os.Getenv("GOBBLE_HOME")); !m[proj] || len(m) != 1 {
 		t.Fatalf("trust.json %v", m)
@@ -348,38 +358,5 @@ func TestLineViewTrust(t *testing.T) {
 	}
 	if strings.Contains(h2.stderr.String(), untrustedLine) {
 		t.Fatal("told after it asked")
-	}
-}
-
-// Where two options share a kind, the line lists each by its name, [1] to
-// [9]; chooseKey ignores a key not shown, and c cancels (decision 6).
-func TestPermissionLineNumbered(t *testing.T) {
-	r := acpclient.PermissionRequest{Tool: acpclient.ToolCall{Title: "Trust /p"}, Options: []acpclient.PermissionOption{
-		{ID: "a1", Name: "Trust", Kind: "allow_always"}, {ID: "a2", Name: "Trust the  parent", Kind: "allow_always"},
-		{ID: "n", Name: "Do not \x1b[31mtrust", Kind: "reject_always"}}}
-	line, keys, labels := permissionLine(r)
-	name := strings.Join(strings.Fields(term.Sanitize("Do not \x1b[31mtrust")), " ")
-	if want := "Trust /p?  [1] Trust  [2] Trust the parent  [3] " + name + "  [c] cancel "; line != want {
-		t.Fatalf("line %q, want %q", line, want)
-	}
-	if len(keys) != 3 || keys['1'] != "a1" || keys['2'] != "a2" || keys['3'] != "n" || labels["a2"] != "Trust the parent" {
-		t.Fatalf("keys %v, labels %v", keys, labels)
-	}
-	reader := func(s string) func([]byte) (int, error) {
-		return func(b []byte) (int, error) {
-			if s == "" {
-				return 0, os.ErrClosed
-			}
-			b[0], s = s[0], s[1:]
-			return 1, nil
-		}
-	}
-	for in, want := range map[string]string{"x2": "a2", "9c3": "", "": "", "\x03": ""} {
-		if got := chooseKey(keys, reader(in)); got != want {
-			t.Errorf("%q: %q, want %q", in, got, want)
-		}
-	}
-	if labelOf(labels, "") != "cancel" || labelOf(labels, "a1") != "Trust" {
-		t.Error("labelOf")
 	}
 }

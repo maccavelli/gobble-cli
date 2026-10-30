@@ -169,3 +169,7 @@ question once it is tagged: go-tui-lib issue 7. Until then the question stays on
 
 *(2026-10-29: `ask` is tagged, in go-tui-lib `v2.3.0`. P2 resumes as [0035-PLAN-pin-current-sibling-releases-and-remove-gobble-copies.md](0035-PLAN-pin-current-sibling-releases-and-remove-gobble-copies.md) P14, at go-tui-lib/v2 `v2.6.2`, with
 0029-MADR D1 amended there by that PLAN's PQ4.)*
+
+*(2026-10-29: P2 is carried out by 0035-PLAN P14. Its record, in that PLAN, is P2's execution record:
+`internal/cli/permission.go` builds `ask.Question`s to D1 and D2 as amended, `askOn` draws them in raw mode, and the
+line session's prompt and the trust question both use it. P3, on real terminals, is this PLAN's still.)*

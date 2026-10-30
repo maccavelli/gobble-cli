@@ -91,6 +91,34 @@ const (
 	PermissionsBad      Key = "permissions.bad"
 	PermissionsUsage    Key = "permissions.usage"
 	PermissionsFailed   Key = "permissions.failed"
+
+	// The permission prompt's words: a tool call's question, every other
+	// question's keys, and the answers echoed (0029-MADR D1, D2; 0035-PLAN
+	// P14, deviation 4).
+	PromptUntitled             Key = "prompt.untitled"
+	PromptPatterns             Key = "prompt.patterns"
+	PromptAllow                Key = "prompt.allow"
+	PromptReject               Key = "prompt.reject"
+	PromptOnce                 Key = "prompt.once"
+	PromptSession              Key = "prompt.session"
+	PromptProject              Key = "prompt.project"
+	PromptEverywhere           Key = "prompt.everywhere"
+	PromptHides                Key = "prompt.hides"
+	PromptSayWhy               Key = "prompt.say_why"
+	PromptCancel               Key = "prompt.cancel"
+	PromptAllowOnce            Key = "prompt.allow_once"
+	PromptAlways               Key = "prompt.always"
+	PromptDeny                 Key = "prompt.deny"
+	PromptNever                Key = "prompt.never"
+	PromptDenyWhy              Key = "prompt.deny_why"
+	PromptEchoAllowSession     Key = "prompt.echo.allow_session"
+	PromptEchoAllowProject     Key = "prompt.echo.allow_project"
+	PromptEchoAllowEverywhere  Key = "prompt.echo.allow_everywhere"
+	PromptEchoRejectOnce       Key = "prompt.echo.reject_once"
+	PromptEchoRejectSession    Key = "prompt.echo.reject_session"
+	PromptEchoRejectProject    Key = "prompt.echo.reject_project"
+	PromptEchoRejectEverywhere Key = "prompt.echo.reject_everywhere"
+	PromptEchoSayWhy           Key = "prompt.echo.say_why"
 )
 
 // Keys are every key, in the order above.
@@ -107,6 +135,10 @@ var Keys = []Key{
 	TrustUntrusted, TrustCurrent, TrustSaved, TrustNotSaved, TrustFailed, TrustUnavailable,
 	PermissionsDefaults, PermissionsRule, PermissionsNone, PermissionsLimits, PermissionsRemoved, PermissionsFixed,
 	PermissionsNoRule, PermissionsAdded, PermissionsBad, PermissionsUsage, PermissionsFailed,
+	PromptUntitled, PromptPatterns, PromptAllow, PromptReject, PromptOnce, PromptSession, PromptProject,
+	PromptEverywhere, PromptHides, PromptSayWhy, PromptCancel, PromptAllowOnce, PromptAlways, PromptDeny, PromptNever,
+	PromptDenyWhy, PromptEchoAllowSession, PromptEchoAllowProject, PromptEchoAllowEverywhere, PromptEchoRejectOnce,
+	PromptEchoRejectSession, PromptEchoRejectProject, PromptEchoRejectEverywhere, PromptEchoSayWhy,
 }
 
 // The lines a personality may put before an error or a warning in gobble's

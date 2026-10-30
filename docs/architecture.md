@@ -59,8 +59,8 @@ The binary has these surfaces:
   asks the person for read or write access to paths, for the turn or the session, with a reason;
   a grant answers the questions about calls under its paths, deny rules and gobble's limits still
   holding, and `/permissions` lists and removes grants after the rules.
-- **The enhanced TUI mode.** Not built yet: `internal/tui` is a placeholder, and go-tui-lib is not
-  required yet.
+- **The enhanced TUI mode.** Not built yet: `internal/tui` is a placeholder. The CLI mode uses go-tui-lib's
+  Charm-free `ask` for its permission prompt (0035-PLAN P14).
 
 The command library is Kong, in `internal/cli` and `internal/cli/complete` only. Sessions are stored
 as JSONL in Pi's v3 shapes, under gobble's data directory.
@@ -103,7 +103,7 @@ The tier is each package's `Stability:` line in its `doc.go`. **stable** package
 | `acpclient/acptest` | stable | An agent and a client over in-memory pipes, with a frame recorder and golden transcripts, for tests. Its client can serve files and scripted terminals, and records extension notices. When the test ends it waits for both connections and their handlers, and fails the test past its timeout. |
 | `mcpclient` | beta | MCP servers over stdio and streamable HTTP, through the go-sdk. Each stdio server runs as an `internal/proctree` tree and is stopped as Pi stops one. A server that advertises resources is listed, read and searched through the resource tools. |
 | `mcpclient/mcptest` | beta | An MCP server fixture for tests, over stdio and HTTP. |
-| `internal/cli` | internal | The command edge: the Kong grammar, `chat` and its flags, the line session, print mode, the exit codes, signals and output. On a terminal the line session keeps what it shows, from the chat command's start, as pieces it can draw at a width, at most 4 MB; once resizing settles it clears the screen and scrollback and draws the last 10,000 rows again at the new width (0030-MADR). Project trust for the run: `--approve` and `--no-approve`, the line session's question before the session starts, `gobble trust` and `gobble untrust`, and a trusted project's personality and prompt files for each session. Each session's permission rules, the line view's numbered options and `[f] deny and say why`, `permissions.json` and the global file's edits for the agent, and `--yes`, with which print mode allows once a question a rule or the default asks. The personality's welcome, goodbye and ambient lines, the small model's provider, and `auth import --from-pi`. It holds `selfupdate-release.json`, the release spec. |
+| `internal/cli` | internal | The command edge: the Kong grammar, `chat` and its flags, the line session, print mode, the exit codes, signals and output. On a terminal the line session keeps what it shows, from the chat command's start, as pieces it can draw at a width, at most 4 MB; once resizing settles it clears the screen and scrollback and draws the last 10,000 rows again at the new width (0030-MADR). Project trust for the run: `--approve` and `--no-approve`, the line session's question before the session starts, `gobble trust` and `gobble untrust`, and a trusted project's personality and prompt files for each session. Each session's permission rules, the line view's permission prompt, drawn by go-tui-lib's `ask` as 0029-MADR D1 and D2 lay it out, its words the session's voice's, `permissions.json` and the global file's edits for the agent, and `--yes`, with which print mode allows once a question a rule or the default asks. The personality's welcome, goodbye and ambient lines, the small model's provider, and `auth import --from-pi`. It holds `selfupdate-release.json`, the release spec. |
 | `internal/cli/complete` | internal | Native shell completion for bash, zsh, fish and PowerShell. |
 | `internal/cli/editor` | internal | The line editor, gobble's own: the line in a buffer, laid out in whole words to the terminal's width, to 120 columns, and drawn again after each key and at once after a resize, by the way the cursor's place shows the terminal narrowed, with history, paste and an external editor; `golang.org/x/term` gives it raw mode. |
 | `internal/cli/render` | internal | Terminal output of the native CLI mode: streamed Markdown, tool output, a status line and a spinner whose label the personality may change. |
@@ -129,7 +129,8 @@ The tier is each package's `Stability:` line in its `doc.go`. **stable** package
 
 ## Import rules
 
-`internal/archtest` (`make archtest`) checks these on `go list -deps -json ./...`:
+`internal/archtest` (`make archtest`) checks these on `go list -deps -test -json ./...`, so that a go-tui-lib
+package only a test imports has its closure checked too:
 
 1. The core packages (`agent`, `llm`, `tool`, `session`, `skill`, `hook`, `compaction`, `prompt`,
    `command`, `permission`, `checkpoint`, `personality`) import no ACP, MCP or provider SDK, no
@@ -156,6 +157,7 @@ The direct requirements in `go.mod`:
 | `github.com/modelcontextprotocol/go-sdk` | `v1.8.0` |
 | `github.com/maccavelli/go-llmprovider-sdk` | `v1.24.1` |
 | `github.com/maccavelli/go-selfupdate-lib` | `v1.23.0` |
+| `github.com/maccavelli/go-tui-lib/v2` | `v2.6.2` |
 | `github.com/google/jsonschema-go` | `v0.4.3` |
 | `go.yaml.in/yaml/v3` | `v3.0.5` |
 | `golang.org/x/sys`, `golang.org/x/term`, `golang.org/x/text` | `v0.49.0`, `v0.47.0`, `v0.43.0` |

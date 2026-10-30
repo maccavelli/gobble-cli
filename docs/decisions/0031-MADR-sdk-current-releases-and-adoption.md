@@ -223,6 +223,7 @@ its own.
   *(2026-10-29: go-llmprovider-sdk is pinned at `v1.24.1`, with the `ErrOffline` row of 0035-MADR D3, by 0035-PLAN
   P4.)*
   *(2026-10-29: acp-go-sdk2 is pinned at `v1.26.0`, with 0035-MADR D6's checked suppression, by 0035-PLAN P7.)*
+  *(2026-10-29: go-tui-lib/v2 `v2.6.2` is required, its first import `ask`, by 0035-PLAN P14.)*
 - **D2. Live streaming (0005-PLAN F4-1b).** `llm/provider` wraps each provider with `WithStreamRetry(p, policy,
   notify)` in place of `WithRetry`. `NativeStreaming` is reported from the wrapped provider, true when it is
   `Supported`; the OpenCode providers' `BestEffort` stays reported as false. Retry off still means no wrapper.

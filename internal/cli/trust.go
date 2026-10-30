@@ -161,8 +161,10 @@ func (e *runEnv) decideTrustHere(cwd string) {
 	e.trust.mu.Unlock()
 }
 
-// askTrust is decision 5's question on stderr, its answer one key read in
-// raw mode; c, Ctrl+C and the end of input cancel.
+// askTrust is decision 5's question on stderr, drawn by go-tui-lib's ask
+// as 0029-MADR D2 lays it out, its answer one key read in raw mode; c,
+// Ctrl+C and the end of input cancel. stdin is read with no deadline, so a
+// key the asker waits on the clock for waits for the next key instead.
 func (e *runEnv) askTrust(root string) trustAnswer {
 	parent := filepath.Dir(root)
 	opts := []acpclient.PermissionOption{{ID: answerTrust, Name: "Trust", Kind: kindAllowAlways}}
@@ -175,19 +177,19 @@ func (e *runEnv) askTrust(root string) trustAnswer {
 		acpclient.PermissionOption{ID: answerUntrustRun, Name: "Do not trust for this run", Kind: kindRejectOnce})
 	e.out.Notef(trustExplanation, root)
 	r := acpclient.PermissionRequest{Tool: acpclient.ToolCall{Title: fmt.Sprintf(trustQuestionText, root)}, Options: opts}
-	line, keys, labels := permissionLine(r)
-	errw := e.out.err
-	if _, err := fmt.Fprint(errw, line); err != nil {
-		return trustAnswer{}
-	}
 	restore, err := trustRaw(e)
 	if err != nil {
 		return trustAnswer{}
 	}
-	id := chooseKey(keys, e.stdin.Read)
+	read := func(_ context.Context, p []byte) (int, error) { return e.stdin.Read(p) }
+	resp, _, werr := askOn(e.ctx, permissionQuestion(nil, r), promptWidth(e.out), e.out.caps.Unicode, e.out.err, read)
 	rerr := restore()
-	if _, err := fmt.Fprintf(errw, "%s\n", labelOf(labels, id)); err != nil || rerr != nil {
-		e.log().Warn("trust prompt", slog.String("write_error", fmt.Sprint(err)), slog.String("restore_error", fmt.Sprint(rerr)))
+	if werr != nil || rerr != nil {
+		e.log().Warn("trust prompt", slog.String("write_error", fmt.Sprint(werr)), slog.String("restore_error", fmt.Sprint(rerr)))
+	}
+	id := ""
+	if !resp.Canceled {
+		id = resp.Answer.ID
 	}
 	switch id {
 	case answerTrust:

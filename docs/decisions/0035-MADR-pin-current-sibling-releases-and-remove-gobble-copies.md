@@ -474,6 +474,11 @@ policy. And one record keeps the order, and the cross-library facts (check-libs,
   - The `tuitest` exception matches `/v2/tuitest`.
 
   Each case is seen failing first on a scratch copy. This lands before, or in, the first import.
+
+  *Amended 2026-10-29, by the PLAN's deviation 5, from the owner's answer "Teach archtest test closures":*
+  - *`archtest` loads the graph with `go list -deps -test`, so that a go-tui-lib package only a test imports has its
+    closure checked. P14's tests import `inline/inlinetest`, whose closure was unknown before.*
+  - *A test build's package variants and test mains are skipped. `TestLoadGraphTestClosures` checks both halves.*
 - **D14. Adoption order**, each its own phase with the pin in the first. 0030-MADR D5's benchmarks are no worse
   after any step. Steps 1 to 4 keep the CLI's goldens. Step 5 takes the library's look and re-records them (Q3):
   1. `ask`, which is 0029-PLAN P2 resumed (0032-MADR D4). It replaces the one-line prompt and `readWhy`.
@@ -560,7 +565,9 @@ policy. And one record keeps the order, and the cross-library facts (check-libs,
     (`internal/cli/transcript.go:15`), so gobble keeps a locked wrapper.
 
   *So, of D14's steps:*
-  - *step 1, `ask`, waits on the PLAN's PQ4;*
+  - *step 1, `ask`, waits on the PLAN's PQ4;* *(Carried out 2026-10-29 by P14. By the PLAN's deviation 4, from the
+    owner's answer "Catalogue the prompt words (Recommended)", the prompt's words are 24 `prompt.*` voice keys, with
+    `ask`'s own three formats left at its defaults.)*
   - *step 2 becomes `glyph`, with `safetext` by PQ5, and `termcap` dropped;*
   - *step 3, `pick`, is PQ6;*
   - *step 4, `lineedit`, is PQ7;*

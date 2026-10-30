@@ -134,9 +134,9 @@ func TestLinePersonalityQuestion(t *testing.T) {
 	writeFile(t, file, "personality: bombastic\n")
 	h.start(Prompt{})
 	h.press("hello\r")
-	const question = "Bombastic insults you and your decisions. It does what you choose, and it keeps gobble's house rules. Switch to it?" +
-		"  [a] always  [n] deny  [c] cancel "
-	waitUntil(t, func() bool { return strings.Contains(h.stderr.String(), question) })
+	// The question, drawn by ask (0035-PLAN P14): its title, then its keys.
+	const question = "Bombastic insults you and your decisions. It does what you choose, and it keeps gobble's house rules. Switch to it?"
+	waitUntil(t, func() bool { return strings.Contains(h.stderr.String(), "[a] always  [n] deny") })
 	h.press("a")
 	waitUntil(t, func() bool { return strings.Contains(h.stdout.String(), "first") })
 	h.press("again\r")
@@ -145,8 +145,9 @@ func TestLinePersonalityQuestion(t *testing.T) {
 	if err := h.wait(); err != nil {
 		t.Fatal(err)
 	}
-	if n := strings.Count(h.stderr.String(), question); n != 1 {
-		t.Fatalf("asked %d times", n)
+	shown := shownOn(t, h.stderr.String(), 120)
+	if n := strings.Count(shown, question); n != 1 || !strings.Contains(shown, "[a] always  [n] deny") {
+		t.Fatalf("asked %d times:\n%s", n, shown)
 	}
 	b, err := os.ReadFile(file)
 	if err != nil || !strings.Contains(string(b), "bombasticAccepted: true") {

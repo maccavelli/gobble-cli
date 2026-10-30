@@ -98,6 +98,19 @@ command and every choice, and it keeps today's keys.
 - **D6. Sanitised:** the description, the patterns, the title and every option name pass through `term.Sanitize`, as
   today.
 
+*Amended 2026-10-29, by [0035-PLAN-pin-current-sibling-releases-and-remove-gobble-copies.md](0035-PLAN-pin-current-sibling-releases-and-remove-gobble-copies.md) P14 and its PQ4, the owner's answer "Take ask's behaviour (Recommended)".*
+
+*The prompt is drawn by go-tui-lib's `ask`, at `v2.6.2`. Where it differs from D1 and D2 as written, `ask`'s behaviour
+stands:*
+- *the Reject row's "(hides the tool)" ends that row's last answer, `[8] everywhere (hides the tool)`, since a row has
+  no suffix of its own;*
+- *a word wider than its row is broken at the width, not left whole;*
+- *the answer is echoed after the glyph set's prompt, `>` in ASCII and `❯` where the terminal shows Unicode;*
+- *D6's cleaning is `ask`'s, by safetext's Line rules, in place of `term.Sanitize`.*
+
+*By that PLAN's deviation 4, every word of the prompt is a key of gobble's voice catalogue (`prompt.*`), with today's
+English in the boring catalogue. The built-in personalities leave them to boring, as trust's facts are (0022-MADR D17).*
+
 ### Consequences
 
 * Good, because the whole command is shown before it runs, and the patterns once.

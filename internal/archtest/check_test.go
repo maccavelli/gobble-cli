@@ -287,6 +287,24 @@ func loadReal(t *testing.T) []modPkg {
 	return pkgs
 }
 
+// The real graph holds the closure of a go-tui-lib package only a test
+// imports, inline/inlinetest, and none of a test build's variants or test
+// mains (0035-PLAN P14, deviation 5).
+func TestLoadGraphTestClosures(t *testing.T) {
+	var closure bool
+	for _, pkg := range loadReal(t) {
+		if strings.Contains(pkg.ImportPath, " [") || strings.HasSuffix(pkg.ImportPath, ".test") {
+			t.Errorf("a test build's package listed: %s", pkg.ImportPath)
+		}
+		if pkg.ImportPath == tuiLib+"/inline/inlinetest" && len(pkg.Deps) > 0 {
+			closure = true
+		}
+	}
+	if !closure {
+		t.Fatal("no closure for " + tuiLib + "/inline/inlinetest, which only tests import")
+	}
+}
+
 func joinViolations(vs []Violation) string {
 	var b strings.Builder
 	for _, v := range vs {

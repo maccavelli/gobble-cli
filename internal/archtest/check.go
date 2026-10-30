@@ -50,8 +50,14 @@ type edge struct {
 	test bool
 }
 
+// loadGraph lists the module's packages and their dependencies, the tests'
+// included, so that a go-tui-lib package only a test imports has its
+// closure too (0035-PLAN P14, deviation 5). A test build lists the
+// module's packages again as variants ("p [p.test]") and its test mains
+// ("p.test"); those are skipped, since each package's own entry carries
+// its test imports apart from its imports.
 func loadGraph(ctx context.Context, dir string) ([]modPkg, error) {
-	cmd := exec.CommandContext(ctx, "go", "list", "-e", "-deps", "-json", "./...")
+	cmd := exec.CommandContext(ctx, "go", "list", "-e", "-deps", "-test", "-json", "./...")
 	cmd.Dir = dir
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -79,11 +85,15 @@ func loadGraph(ctx context.Context, dir string) ([]modPkg, error) {
 		if err != nil {
 			return nil, fmt.Errorf("decode go list: %w", err)
 		}
-		if pathUnder(raw.ImportPath, tuiLib) { // its closure, for rule 5
-			pkgs = append(pkgs, modPkg{ImportPath: raw.ImportPath, Deps: raw.Deps})
+		path, variant := strings.CutSuffix(raw.ImportPath, "]")
+		if variant {
+			path, _, _ = strings.Cut(path, " [")
+		}
+		if pathUnder(path, tuiLib) { // its closure, for rule 5
+			pkgs = append(pkgs, modPkg{ImportPath: path, Deps: raw.Deps})
 			continue
 		}
-		if _, ok := relOf(raw.ImportPath); !ok {
+		if _, ok := relOf(path); !ok || variant || strings.HasSuffix(path, ".test") {
 			continue
 		}
 		item := modPkg{

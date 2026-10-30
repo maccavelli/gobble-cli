@@ -36,10 +36,15 @@ var spinnerKeys = []Key{TurnWorking, TurnSlow, TurnVerySlow}
 var leftBoring = map[string][]Key{Dry: factKeys, Snarky: factKeys, Bombastic: factKeys}
 
 // factKeys are /trust's and /permissions' replies, whose facts a person
-// acts on (0005-PLAN F6-1, F6-2b decision H).
+// acts on (0005-PLAN F6-1, F6-2b decision H), and the permission prompt's
+// words, a person's answer to a tool call (0035-PLAN P14, deviation 4).
 var factKeys = []Key{TrustUntrusted, TrustCurrent, TrustSaved, TrustNotSaved, TrustFailed, TrustUnavailable,
 	PermissionsDefaults, PermissionsRule, PermissionsNone, PermissionsLimits, PermissionsRemoved, PermissionsFixed,
-	PermissionsNoRule, PermissionsAdded, PermissionsBad, PermissionsUsage, PermissionsFailed}
+	PermissionsNoRule, PermissionsAdded, PermissionsBad, PermissionsUsage, PermissionsFailed,
+	PromptUntitled, PromptPatterns, PromptAllow, PromptReject, PromptOnce, PromptSession, PromptProject, PromptEverywhere,
+	PromptHides, PromptSayWhy, PromptCancel, PromptAllowOnce, PromptAlways, PromptDeny, PromptNever, PromptDenyWhy,
+	PromptEchoAllowSession, PromptEchoAllowProject, PromptEchoAllowEverywhere, PromptEchoRejectOnce, PromptEchoRejectSession,
+	PromptEchoRejectProject, PromptEchoRejectEverywhere, PromptEchoSayWhy}
 
 // The words no personality but bombastic aims at the user, and the
 // profanity each allows (0022-MADR D7 to D9, D17). The lists are a cheap

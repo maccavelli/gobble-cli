@@ -1327,3 +1327,119 @@ The base is P7's commit `3a2129c`.
 6. G-hosts, on a copy of the tree (808 files): on the Linux machine and the Windows laptop (`go1.27.3`), `go test` exit 0, race exit 0 with 36 packages ok, `preflight` to `verify-build-metadata` (stopped at `git rev-parse HEAD`, exit 128: no commit, C6), and records and markdownlint exit 0.
 
 No deviation.
+
+### Deviation 4 (2026-10-29): P14 step 7, the prompt's words
+
+- **Found.** Step 7 put `ask`'s "reason prompt, echo and cancel" texts in gobble's voice catalogue. At `v2.6.2` those are
+  formats: `"%s: "`, `"%[1]s: %[2]s"`, and `"cancel"`, which is used only when the cancel answer has no label. The
+  words a person reads are gobble's own labels and echoes. `permission.go` hard-coded them, outside the catalogue, a gap
+  against 0022-MADR's "every text overridable".
+- **The owner's answer, 2026-10-29:** "Catalogue the prompt words (Recommended)".
+- **Decision.**
+  - The prompt's words are 24 voice keys, `prompt.*` in `personality/keys.go`, with today's English in the boring
+    catalogue and in `TestBoringIsTodaysText`. They cover:
+    - the untitled title;
+    - `Patterns: {patterns}`;
+    - Allow and Reject;
+    - once, session, project and everywhere;
+    - `(hides the tool)`;
+    - both say-why labels;
+    - cancel;
+    - D16's four labels;
+    - the eight echoes.
+  - `ask`'s three formats keep their defaults.
+  - The built-in personalities leave the keys to boring, as trust's facts are: they are a person's answer to a tool call
+    (0022-MADR D17, `leftBoring` in `personality/builtins_test.go`). A user's own catalogue may still override them.
+- **Files added to scope:** `personality/keys.go`, `personality/builtin/boring/messages.md`, `personality/boring_test.go`
+  and `personality/builtins_test.go`, in place of the "voice catalogue files" step 7 named generally.
+
+### Deviation 5 (2026-10-29): archtest and test-only imports, and a fourth prompt test
+
+- **Found.** `go test ./...` with P14's tests failed twice:
+  - `TestImportRules/rule_5_module`:
+    `internal/cli imports github.com/maccavelli/go-tui-lib/v2/inline/inlinetest (its closure is unknown)`.
+    `archtest` learned the closures of go-tui-lib packages from `go list -deps`, which lists no test's imports.
+  - `TestLinePersonalityQuestion` (`internal/cli/personality_run_test.go`, outside step 8's list) waited for the old one-line
+    level-5 question: `condition not met within 5 s`.
+- **The owner's answer, 2026-10-29:** "Teach archtest test closures". The options not taken were gobble's own `termtest`
+  screen in the new tests, and stopping P14.
+- **Decision.**
+  - `loadGraph` runs `go list -e -deps -test -json ./...`. It strips a variant's `" [p.test]"` from a go-tui-lib package,
+    and skips the module's test variants and `.test` mains, whose imports each package's own entry already carries.
+  - `TestLoadGraphTestClosures` checks both halves.
+  - `TestLinePersonalityQuestion` reads `ask`'s drawing.
+  - `docs/architecture.md`'s import-rules line names `-test`.
+- **Files added to scope:** `internal/archtest/check.go`, `internal/archtest/check_test.go` and
+  `internal/cli/personality_run_test.go`.
+
+### P14 record (2026-10-29): go-tui-lib/v2 `v2.6.2`, and `ask` for the permission prompt
+
+The base is P13's commit `3f92ae9`. 0029-PLAN P2 is carried out here.
+
+1. **C2.** `v2.6.2` is the newest `v2` tag. P2's `check-libs` run of it passed every check, `archtest` included.
+2. **The requirement.**
+   - `go get github.com/maccavelli/go-tui-lib/v2@v2.6.2`, then `go mod tidy`.
+   - Compared with P13's `go.mod`, it adds `github.com/maccavelli/go-tui-lib/v2 v2.6.2` and exactly 0032-MADR A1.2's five
+     modules, at its versions: `x/ansi v0.11.8`, `displaywidth v0.11.0`, `uax29/v2 v2.7.0`, `go-colorful v1.4.1` and
+     `go-runewidth v0.0.27`.
+   - `x/ansi` is direct, since the tests import it, which A1.1 allows. No sixth module.
+3. **The question.**
+   - `permissionQuestion(v, r)` builds `ask.Question`. For a tool call's exact eight options (by acpserver's ids) it
+     gives D1's rows:
+     - Allow `[1]`…`[4]` and Reject `[5]`…`[8]`, labelled once, session, project and everywhere, each echoed in
+       words;
+     - `(hides the tool)` ending `[8]` when `Hides` is set;
+     - `[f] reject and say why` (`Reason: true`).
+   - It capitalises the whole title (`FullTitle`, else the title) and adds `?`. It shows `Patterns:` when `Saves` is set.
+   - For every other question it gives D2's one row: numbered by name where kinds repeat, else `y`/`a`/`n`/`N`, with
+     `[f] deny and say why` when `reject_once` is offered.
+   - `OnceOnly` is a note in parentheses. `[c] cancel` ends the last row.
+4. **The prompt.**
+   - `askOn` draws in a region with no cursor query, so nothing waits on a terminal's reply.
+   - It decodes keys with `termkey`, gives `read` a deadline when the asker or the decoder waits on the clock, cancels
+     at the end of input, and returns the rows `View` leaves.
+   - `askPermission` runs it in raw mode, through the editor's reader, at `promptWidth` (stderr's, at most 120, or 120
+     off a terminal). It records the rows in the transcript and maps the response to the answer.
+5. **The trust question** uses the same `askOn`, reading stdin with no deadline. Its answer switch is unchanged.
+6. **Removed:** `permissionLine`, `chooseKey`, `labelOf`, `readWhy`, `cutWhy`, `maxWhy`, `chooseWhy`, `sayWhy` and the
+   raw-key constants, together with the code in `trust.go` that called them. `ask.DefaultReasonLimit` is the same
+   2048 bytes.
+7. **The catalogue,** as deviation 4.
+8. **Tests.**
+   - `TestPermissionQuestion` asserts each question exactly:
+     - the tool call;
+     - the tool call hiding the tool;
+     - once-only;
+     - every kind once;
+     - numbered;
+     - untitled.
+   - `TestAskOn` covers each answer, a reason with backspace, `c`, Ctrl+C, the end of input, Ctrl+C inside a reason,
+     and a 2048-byte cut.
+   - `TestAskOnDraws` draws D1's example at 60 and 100 columns on `inline/inlinetest`'s screen, with every row no wider
+     than the width, and checks `promptWidth` at 200 columns, which gives 120.
+   - `TestPermissionPrompt` and `TestPermissionPromptOnceOnly` run in the line session.
+   - `TestTrustQuestion`, `TestTrustQuestionNoParent` and `TestLineViewTrust` read the drawing.
+   - `TestPermissionLineNumbered` is removed; its cases are `TestPermissionQuestion`'s "numbered" and `TestAskOn`'s
+     ignored key.
+   - `TestLinePersonalityQuestion` follows deviation 5.
+9. **Seen failing (C9), on copies of the tree:**
+   - **The builder without `Reason: true`:** `TestAskOn/why` and `TestAskOn/ctrl+c_in_a_reason` fail.
+   - **The cap doubled** (`2*editor.MaxWidth`): `TestAskOnDraws` fails with
+     `promptWidth at 200 columns: 200, want 120`.
+
+     The first attempt at this break, which dropped `editor.MaxWidth`, did not compile (the `editor` import was left
+     unused). Only the compiling break is evidence.
+   - **archtest's loader without `-test`:** `TestImportRules/rule_5_module` fails (`its closure is unknown`), and so
+     does `TestLoadGraphTestClosures` (`no closure for …/inline/inlinetest`).
+   - **The variant filter dropped:** `TestLoadGraphTestClosures` fails with
+     `a test build's package listed: …/llm/provider [….test]`, among others.
+10. **0029.** 0029-MADR has a dated amendment of D1 and D2 for PQ4 (a) and deviation 4. 0029-PLAN has a dated note that
+    P2 is carried out here. P3, on real terminals, stays that PLAN's.
+11. **Docs.**
+    - `README.md` "Stack" names go-tui-lib `/v2` `v2.6.2`.
+    - `docs/architecture.md` adds the pin, `ask` in the CLI and `-test` in the import rules.
+    - 0031-MADR has a note at D1. 0035-MADR has notes at D13 and D14.
+12. G-local: `make pre-add-check` on the 10 Go files, clean (gofmt, golint, govulncheck); `make preflight` passed after two fixes it caught: `go mod tidy` moved `x/ansi` to a direct requirement once the tests imported it, and golangci-lint's modernize asked for `strings.SplitSeq`. `make race`: 36 packages ok. `make perf`, each within 0030-MADR D5's three times: ReplyRender 32.98 µs (baseline 30), Reprint 9.75 ms (9.4), LineSessionStart 945 µs (830), KeyDraw 1.52 µs (1.5).
+13. G-hosts, on a copy of the final tree (808 files), `go1.27.3`: on the Linux machine and the Windows laptop, `go test` exit 0, race exit 0 with 36 packages ok, `preflight` to `verify-build-metadata` (stopped at `git rev-parse HEAD`, exit 128: no commit, C6), records and markdownlint exit 0, and `make perf` passed (the Linux machine: ReplyRender 143.8 µs of 110, Reprint 33.2 ms of 29, LineSessionStart 3.35 ms of 2.9, KeyDraw 5.94 µs of 5; the Windows laptop: 28.1 µs of 54, 7.13 ms of 12, 3.52 ms of 6.9, 1.04 µs of 1.4). `make probe-conhost` on the Windows laptop: `--- PASS: TestConhost`. A first host run, on the tree before the two fixes, passed its tests, race, perf and probe-conhost and stopped `preflight` at the tidy check.
+
+Two deviations: 4 and 5, above.

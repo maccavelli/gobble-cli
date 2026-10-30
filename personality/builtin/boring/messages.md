@@ -302,3 +302,99 @@ That is not a rule: {error}
 ## permissions.failed
 
 {rule} was not saved where you chose: {error}. It applies to this session.
+
+## prompt.untitled
+
+Run the tool call
+
+## prompt.patterns
+
+Patterns: {patterns}
+
+## prompt.allow
+
+Allow
+
+## prompt.reject
+
+Reject
+
+## prompt.once
+
+once
+
+## prompt.session
+
+session
+
+## prompt.project
+
+project
+
+## prompt.everywhere
+
+everywhere
+
+## prompt.hides
+
+(hides the tool)
+
+## prompt.say_why
+
+reject and say why
+
+## prompt.cancel
+
+cancel
+
+## prompt.allow_once
+
+allow once
+
+## prompt.always
+
+always
+
+## prompt.deny
+
+deny
+
+## prompt.never
+
+never
+
+## prompt.deny_why
+
+deny and say why
+
+## prompt.echo.allow_session
+
+allow for this session
+
+## prompt.echo.allow_project
+
+allow for this project
+
+## prompt.echo.allow_everywhere
+
+allow everywhere
+
+## prompt.echo.reject_once
+
+reject once
+
+## prompt.echo.reject_session
+
+reject for this session
+
+## prompt.echo.reject_project
+
+reject for this project
+
+## prompt.echo.reject_everywhere
+
+reject everywhere
+
+## prompt.echo.say_why
+
+reject
