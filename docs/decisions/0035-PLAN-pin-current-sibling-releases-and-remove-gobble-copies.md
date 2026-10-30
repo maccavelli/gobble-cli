@@ -1650,3 +1650,36 @@ The base is P8's commit `f5a94d0`.
 8. G-hosts, on a copy (811 files), `go1.27.3`: on the Linux machine and the Windows laptop, `go test` and race exit 0, 36 ok; `preflight` to `verify-build-metadata` (no commit, C6); records and markdownlint exit 0.
 
 No deviation.
+
+### Deviation 7 (2026-10-30): P10 step 3's unknown variant
+
+- **Found.** Step 3 asked `TestTranslate` to see `Variant == "unknown"` for a notification whose `sessionUpdate` is a
+  number. The SDK refuses one on the agent's side before it is sent:
+  `session/prompt: {"code":-32603,…"error":"SessionUpdate: discriminator \"sessionUpdate\": json: cannot unmarshal number into Go value of type string","update":11}`.
+  So no client receives one.
+- **Probe.** On a scratch copy, `{"sessionUpdate":"gobble_future_update","x":1}` reached the client as `KindOther`, and
+  `Kind()` named it `gobble_future_update`.
+- **The owner's answer, 2026-10-30:** "Test a future variant (Recommended)".
+- **Decision.** The third case is that future variant: `Variant == "gobble_future_update"`, with the `Kind` still
+  `KindOther`. That is the case `Kind()` exists for, a variant gobble has no constant for.
+- **Files added to scope:** none.
+
+### P10 record (2026-10-30): `Kind()`
+
+The base is P9's commit `8e3a6b3`.
+
+1. **`Variant`.** `acpclient.Update` gains `Variant`, set by `translate` from `n.Update.Kind()` for every update. `KindOther`
+   and `KindCompaction` are unchanged.
+2. **`TestTranslate`.**
+   - It sends the future variant as the twelfth update, whose kind is `KindOther`.
+   - It asserts `Variant` for three updates: `agent_message_chunk` for the first, `config_option_update` for the
+     `KindOther` at index 10, and `gobble_future_update` for the twelfth, as deviation 7 has it.
+3. **Seen failing (C9).** On a copy with `Variant` left unset, `TestTranslate` fails:
+   `update 0: variant "", want "agent_message_chunk"`, and so on for each.
+4. **G-local.**
+   - `make pre-add-check` on the two files: clean.
+   - `make preflight`: "preflight passed".
+   - `make race`: 36 ok.
+5. G-hosts, on a copy (811 files), `go1.27.3`: on the Linux machine and the Windows laptop, `go test` and race exit 0, 36 ok; `preflight` to `verify-build-metadata` (no commit, C6); records and markdownlint exit 0.
+
+One deviation: deviation 7, above.

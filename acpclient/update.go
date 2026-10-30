@@ -72,6 +72,10 @@ func (k Kind) String() string {
 // type (0004-MADR rule 2).
 type Update struct {
 	Kind Kind
+	// Variant is the wire's sessionUpdate value, the SDK's Kind(), for every
+	// update, a KindOther's included: "config_option_update", or a variant
+	// newer than this client, by its own name (0035-MADR D9).
+	Variant string
 	// Text is the chunk's text, for KindAgentText and KindThought.
 	Text string
 	// Block names a chunk's content type when it is not text: "image",
@@ -241,8 +245,8 @@ func translate(n acp.SessionNotification) (Update, error) {
 	if err != nil {
 		return Update{}, fmt.Errorf("encode session/update: %w", err)
 	}
-	u := Update{Params: params}
 	s := n.Update
+	u := Update{Params: params, Variant: s.Kind()}
 	switch {
 	case s.AgentMessageChunk != nil:
 		u.Kind = KindAgentText

@@ -68,6 +68,7 @@ func TestTranslate(t *testing.T) {
 		`{"sessionUpdate":"current_mode_update","currentModeId":"plan"}`,
 		`{"sessionUpdate":"session_info_update","title":"my session"}`,
 		`{"sessionUpdate":"config_option_update","configOptions":[]}`,
+		`{"sessionUpdate":"gobble_future_update","x":1}`,
 	}}}}
 	c := start(t, agent, acpclient.Options{Name: "test", Version: "0.0.0"})
 	var col collector
@@ -81,7 +82,7 @@ func TestTranslate(t *testing.T) {
 	got := col.all()
 	wantKinds := []acpclient.Kind{acpclient.KindAgentText, acpclient.KindThought, acpclient.KindAgentText, acpclient.KindToolCall,
 		acpclient.KindToolCallUpdate, acpclient.KindPlan, acpclient.KindUsage, acpclient.KindCommands, acpclient.KindMode,
-		acpclient.KindSessionInfo, acpclient.KindOther}
+		acpclient.KindSessionInfo, acpclient.KindOther, acpclient.KindOther}
 	if len(got) != len(wantKinds) {
 		t.Fatalf("got %d updates, want %d: %+v", len(got), len(wantKinds), got)
 	}
@@ -116,6 +117,12 @@ func TestTranslate(t *testing.T) {
 	}
 	if u := got[6].Context; u.Used != 1200 || u.Size != 200000 || u.Cost == nil || u.Cost.Amount != 0.25 || u.Cost.Currency != "USD" {
 		t.Errorf("usage = %+v", u)
+	}
+	// Kind() names every variant, one with no Kind case included (0035-MADR D9).
+	for i, want := range map[int]string{0: "agent_message_chunk", 10: "config_option_update", 11: "gobble_future_update"} {
+		if got[i].Variant != want {
+			t.Errorf("update %d: variant %q, want %q", i, got[i].Variant, want)
+		}
 	}
 	if !strings.Contains(string(got[7].Params), `"available_commands_update"`) {
 		t.Errorf("other update's params = %s", got[7].Params)
