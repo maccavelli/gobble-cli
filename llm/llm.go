@@ -42,7 +42,7 @@ type Retry struct {
 var DefaultRetry = Retry{MaxRetries: 3, BaseDelay: 2 * time.Second, MaxDelay: 60 * time.Second, OfflineWait: 5 * time.Minute}
 
 // Capabilities says what this process can actually send.
-// ImageInput stays false until the SDK accepts image input.
+// ImageInput stays false until gobble sends images (0035-MADR D18; 0036-MADR D7).
 // NativeStreaming is true where the provider streams natively, which the SDK's retry now passes on (0031-MADR D2).
 type Capabilities struct {
 	ImageInput      bool `json:"imageInput,omitzero"`

@@ -288,7 +288,7 @@ func TestRetryPolicy(t *testing.T) {
 func TestReasoningLevels(t *testing.T) {
 	for level, want := range map[string]llmprovider.Effort{
 		"": "", "off": "", "minimal": llmprovider.EffortLow, "low": llmprovider.EffortLow, "medium": llmprovider.EffortMedium,
-		"high": llmprovider.EffortHigh, "xhigh": llmprovider.EffortXHigh, "max": llmprovider.EffortXHigh,
+		"high": llmprovider.EffortHigh, "xhigh": llmprovider.EffortXHigh, "max": llmprovider.EffortMax,
 	} {
 		r := reasoningFor(level)
 		if (r == nil) != (want == "") || r != nil && r.Effort != want {

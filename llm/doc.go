@@ -44,7 +44,7 @@
 //	medium  → medium
 //	high    → high
 //	xhigh   → xhigh
-//	max     → xhigh  (degraded)
+//	max     → max    (stepped down by the SDK to the highest the model takes)
 //
 // Usage carries input, output, reasoning, cache-read, and cache-write counts
 // plus Estimated. When the SDK reports any non-zero count, the adapter uses

@@ -126,8 +126,8 @@ func TestProbePort(t *testing.T) {
 // Each of the four wires' answer with nothing in it is llm.ErrEmptyReply,
 // still llm.ErrIncomplete, after one request; a refusal with nothing in it
 // is no error but a reply that stops as a refusal (0005-PLAN F5-3 decision
-// 5). These pin the SDK's message (sdkEmptyAnswer) (0005-PLAN F5-1
-// decision 4).
+// 5). The SDK marks such an answer ErrEmptyAnswer, and says why in Reason
+// (0005-PLAN F5-1 decision 4; 0035-MADR D4).
 func TestWireEmptyAnswer(t *testing.T) {
 	for _, c := range []struct{ wire, id, model, body, stream string }{
 		{"responses", "openai", "gpt-6-luna", `{"id":"r","status":"completed","output":[],"usage":{"input_tokens":12,"output_tokens":0,"total_tokens":12}}`,

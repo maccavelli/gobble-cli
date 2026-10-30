@@ -1472,3 +1472,42 @@ Approved by the owner's "committed proceed", 2026-10-30. The base is P14's commi
      `make check-records markdownlint` exit 0 on both.
 
 No deviation.
+
+### P5 record (2026-10-30): go-llmprovider-sdk's copies go
+
+The base is P1's commit `9c77d5c`.
+
+1. **Offline.**
+   - `offline()` and `unreachable()` are deleted, along with the `runtime` and `syscall` imports they alone used.
+   - `mapError`'s `case !kind && offline(err)`, and its `kind`, are removed. The `ErrOffline` row of P4 carries offline
+     alone.
+   - The stream's guard records `offlineURL` from the `*url.Error` when `errors.Is(err, llmprovider.ErrOffline)`. The
+     SDK's `transport.WrapOffline` keeps the original error in the chain.
+   - `Probe`, `dialProbe`, `probeTimeout` and `offlineURL` stay.
+   - `mapError`'s one-case `switch` became an `if`.
+2. **Empty answer.** `sdkEmptyAnswer` is deleted. `emptyAnswer` and `refusedAnswer` read
+   `errors.Is(ae.Kind, llmprovider.ErrEmptyAnswer)`: the SDK's wire sets `Kind: llmprovider.ErrEmptyAnswer`, a child of
+   `ErrIncomplete` (`internal/wire/finish.go:35`). `Reason` still chooses between them: empty or `stop`, against
+   `content_filter`. `TestWireEmptyAnswer`'s comment no longer pins a message; its assertions already read
+   `llm.ErrEmptyReply` and `llm.StopRefusal`.
+3. **`max`.**
+   - `reasoningFor` maps `"max"` to `llmprovider.EffortMax`, and `TestReasoningLevels` expects it.
+   - No display of `WarningEffortDegraded` is built. gobble reads no SDK warning today, and 0036-MADR D3 is the record
+     that makes them reach it.
+4. **Docs.**
+   - `llm/doc.go`'s table reads `max → max (stepped down by the SDK to the highest the model takes)`.
+   - `docs/guides/choosing-a-model.md` says `max` is sent as `max` and stepped down where the model does not take it.
+   - `llm/llm.go:45` reads `ImageInput stays false until gobble sends images (0035-MADR D18; 0036-MADR D7).`
+5. **Seen failing (C9), on copies:**
+   - With the `ErrOffline` row removed, `TestWireOffline` fails:
+     `err llm: unavailable: llmprovider: offline: … connection refused, want llm.ErrOffline`. Offline now rests on the
+     row alone.
+   - With `refusedAnswer` reading `ae.Reason == ""`, `TestWireEmptyAnswer` fails, at `interactions`.
+6. **Assert by search:** no `sdkEmptyAnswer`, `func offline(` or `unreachable(` in `llm/`.
+7. **G-local.**
+   - `make pre-add-check` on the five files: clean.
+   - `make preflight`: "preflight passed".
+   - `make race`: 36 ok.
+8. G-hosts, on a copy of the tree (808 files), `go1.27.3`: on the Linux machine and the Windows laptop, `go test` and race exit 0, 36 ok; `preflight` to `verify-build-metadata` (no commit, C6); records and markdownlint exit 0.
+
+No deviation. 0036-PLAN's P0, which waits for this phase, may now run on the owner's word.

@@ -11,11 +11,9 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"runtime"
 	"slices"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/maccavelli/go-llmprovider-sdk/llmprovider"
@@ -306,7 +304,7 @@ func (a *adapter) attempt(ctx context.Context, req *llm.Request, msgs []llm.Mess
 			if canRetry && !sent && signatureRefused(mapError(err)) {
 				return true
 			}
-			if ue, ok := errors.AsType[*url.Error](err); ok && offline(err) {
+			if ue, ok := errors.AsType[*url.Error](err); ok && errors.Is(err, llmprovider.ErrOffline) {
 				a.mu.Lock()
 				a.offlineURL = ue.URL
 				a.mu.Unlock()
@@ -496,7 +494,7 @@ func hasOptional(schema any) bool {
 func reasoningFor(level string) *llmprovider.Reasoning {
 	effort := map[string]llmprovider.Effort{
 		"minimal": llmprovider.EffortLow, "low": llmprovider.EffortLow, "medium": llmprovider.EffortMedium,
-		"high": llmprovider.EffortHigh, "xhigh": llmprovider.EffortXHigh, "max": llmprovider.EffortXHigh,
+		"high": llmprovider.EffortHigh, "xhigh": llmprovider.EffortXHigh, "max": llmprovider.EffortMax,
 	}[level]
 	if effort == "" {
 		return nil
@@ -521,19 +519,13 @@ var sentinels = []struct{ sdk, llm error }{
 	{llmprovider.ErrUnsupported, llm.ErrUnsupported},
 }
 
-// sdkEmptyAnswer ends the message of the SDK's answer with no content
-// (go-llmprovider-sdk internal/wire/finish.go, EmptyAnswer). The wire tests
-// pin it, so an SDK that words it otherwise fails them.
-const sdkEmptyAnswer = ": the answer has no content"
-
 // emptyAnswer reports whether err is the SDK's answer with nothing in it
-// that is not a refusal or a safety stop, which the SDK puts in Reason: an
-// APIError of ErrIncomplete with the SDK's message and no reason, or stop
-// (0005-PLAN F5-1 decision 4).
+// that is not a refusal or a safety stop, which the SDK puts in Reason:
+// ErrEmptyAnswer with no reason, or stop (0005-PLAN F5-1 decision 4;
+// 0035-MADR D4).
 func emptyAnswer(err error) bool {
 	ae, ok := errors.AsType[*llmprovider.APIError](err)
-	return ok && errors.Is(ae.Kind, llmprovider.ErrIncomplete) && strings.HasSuffix(ae.Message, sdkEmptyAnswer) &&
-		(ae.Reason == "" || ae.Reason == string(llmprovider.FinishStop))
+	return ok && errors.Is(ae.Kind, llmprovider.ErrEmptyAnswer) && (ae.Reason == "" || ae.Reason == string(llmprovider.FinishStop))
 }
 
 // refusedAnswer reports whether err is the SDK's answer with nothing in it
@@ -541,40 +533,7 @@ func emptyAnswer(err error) bool {
 // content_filter (0005-PLAN F5-3 decision 5).
 func refusedAnswer(err error) bool {
 	ae, ok := errors.AsType[*llmprovider.APIError](err)
-	return ok && errors.Is(ae.Kind, llmprovider.ErrIncomplete) && strings.HasSuffix(ae.Message, sdkEmptyAnswer) &&
-		ae.Reason == string(llmprovider.FinishContentFilter)
-}
-
-// offline reports whether err is a request that could not be sent for want
-// of a network: a *url.Error whose host's name did not resolve, or whose
-// dial timed out or found the network or host unreachable or the port
-// refused (0005-PLAN F5-1 decision 3).
-func offline(err error) bool {
-	if _, ok := errors.AsType[*url.Error](err); !ok { //nolint:errcheck // only whether the chain holds one matters
-		return false
-	}
-	if _, ok := errors.AsType[*net.DNSError](err); ok { //nolint:errcheck // only whether the chain holds one matters
-		return true
-	}
-	op, ok := errors.AsType[*net.OpError](err)
-	if !ok || op.Op != "dial" {
-		return false
-	}
-	if op.Timeout() {
-		return true
-	}
-	return slices.ContainsFunc(unreachable(), func(e syscall.Errno) bool { return errors.Is(err, e) })
-}
-
-// unreachable are the dial errors offline counts: refused, network down
-// or unreachable, host unreachable. Windows reports them as Winsock's
-// codes, which syscall names for no other system.
-func unreachable() []syscall.Errno {
-	if runtime.GOOS == "windows" {
-		const wsaENETDOWN, wsaENETUNREACH, wsaECONNREFUSED, wsaEHOSTUNREACH = 10050, 10051, 10061, 10065
-		return []syscall.Errno{wsaECONNREFUSED, wsaENETDOWN, wsaENETUNREACH, wsaEHOSTUNREACH}
-	}
-	return []syscall.Errno{syscall.ECONNREFUSED, syscall.ENETDOWN, syscall.ENETUNREACH, syscall.EHOSTUNREACH}
+	return ok && errors.Is(ae.Kind, llmprovider.ErrEmptyAnswer) && ae.Reason == string(llmprovider.FinishContentFilter)
 }
 
 // probeTimeout bounds one Probe's dial (Kilo's PROBE_MS, 0005-PLAN F5-1
@@ -623,18 +582,15 @@ func mapError(err error) error {
 	if err == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return err
 	}
-	wrapped, kind := err, false
+	wrapped := err
 	for _, s := range sentinels {
 		if errors.Is(err, s.sdk) {
-			wrapped, kind = fmt.Errorf("%w: %w", s.llm, err), true
+			wrapped = fmt.Errorf("%w: %w", s.llm, err)
 			break
 		}
 	}
-	switch {
-	case emptyAnswer(err):
+	if emptyAnswer(err) {
 		wrapped = fmt.Errorf("%w: %w", llm.ErrEmptyReply, wrapped)
-	case !kind && offline(err):
-		wrapped = fmt.Errorf("%w: %w", llm.ErrOffline, err)
 	}
 	if ae, ok := errors.AsType[*llmprovider.APIError](err); ok {
 		return &llm.APIError{Status: ae.Status, RetryAfter: ae.RetryAfter, Err: wrapped}

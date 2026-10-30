@@ -38,8 +38,8 @@ it has none. Empty, the default, names no session.
 
 `--thinking` sets the thinking level: `off`, `minimal`, `low`, `medium`, `high`, `xhigh` or `max`.
 Without it, a new session starts at `defaultThinkingLevel`, and a resumed one keeps its own. A level
-the model does not offer is clamped to the nearest one it does, higher first. gobble's providers
-take no level above `xhigh` yet, so `max` is sent as `xhigh`.
+the model does not offer is clamped to the nearest one it does, higher first. `max` is sent as `max`, and
+the provider steps it down to the highest effort the model takes, where the model does not take it.
 
 ## What `--model` accepts
 
