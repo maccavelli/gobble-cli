@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -39,8 +40,15 @@ func TestWireOffline(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err := drain(t, p, wireRequest()); !errors.Is(err, llm.ErrOffline) {
+			_, err = drain(t, p, wireRequest())
+			if !errors.Is(err, llm.ErrOffline) {
 				t.Fatalf("err %v, want llm.ErrOffline", err)
+			}
+			// One llm kind, once: the SDK's offline also matches its
+			// unavailable, which must not win (0035-MADR D3).
+			if n := strings.Count(err.Error(), llm.ErrOffline.Error()); n != 1 || errors.Is(err, llm.ErrUnavailable) {
+				t.Fatalf("err %v: %q %d times, unavailable %v; want once, and not unavailable", err, llm.ErrOffline, n,
+					errors.Is(err, llm.ErrUnavailable))
 			}
 			var mu sync.Mutex
 			var dialed []string

@@ -1168,3 +1168,46 @@ Deviation 1's tag, `v1.23.0`, in place of `v1.22.3`. The base is P2's commit `0a
    check is macOS-only (C6).
 
 No deviation.
+
+### Deviation 2 (2026-10-29): P4 step 4's assertion
+
+- **Found.** Step 4 asks that `err.Error()` hold `"offline"` exactly once. The SDK's own text is `llmprovider: offline: …`,
+  so a correct single wrap reads `llm: offline: llmprovider: offline: Post …`, and the assertion as written would fail
+  on correct code. This was found while writing the step, before any test ran. It is the plan's error.
+- **The owner's answer, the same day:** "Count llm's text (Recommended)".
+- **Decision.** `TestWireOffline` asserts two things:
+  - `strings.Count(err.Error(), llm.ErrOffline.Error()) == 1`, which is `"llm: offline"` exactly once;
+  - `errors.Is(err, llm.ErrUnavailable)` is false.
+
+  That pins what the step meant: gobble's sentinel wraps once, and the unavailable row no longer wins.
+- **Files added to scope:** none. `llm/provider/offline_test.go` was already the step's test.
+
+### P4 record (2026-10-29): go-llmprovider-sdk `v1.24.1` and the offline row
+
+The base is P3's commit `8632061`.
+
+1. **C2.** `v1.24.1` is still the newest. P2's `check-libs` run gave `test: FAIL` on `TestWireOffline` alone, as
+   expected.
+2. **The pin.** `go get github.com/maccavelli/go-llmprovider-sdk@v1.24.1`, then `go mod tidy`, each exit 0. Only
+   `go.mod` (one line) and `go.sum` (four) change.
+3. **The row.** `{llmprovider.ErrOffline, llm.ErrOffline}` sits directly above the unavailable row in `sentinels`, with
+   a three-line comment citing 0035-MADR D3.
+4. **The test, as deviation 2.**
+   - `case !kind && offline(err):` stays until P5, as written.
+   - `go test -run 'TestWireOffline|TestErrorMapping' ./llm/provider/`: ok.
+5. **Seen failing (C9), on copies at the new pin:**
+   - **The row removed.** `TestWireOffline` fails on both subtests with MADR F1's message:
+     `err llm: unavailable: llmprovider: offline: Post "http://127.0.0.1:…/v1/responses": dial tcp …: connect: connection refused, want llm.ErrOffline`.
+   - **A double wrap.** Here `case offline(err):` wraps `wrapped` again. The new assertion fails:
+     `err llm: offline: llm: offline: llmprovider: offline: … : "llm: offline" 2 times, unavailable false; want once, and not unavailable`.
+   - The first attempt at the second break, which dropped `!kind`, did not compile (`kind` unused). It was replaced by
+     one that keeps `kind` used, and only the compiling break's result is evidence.
+6. **Docs.** `README.md` "Stack" and the `docs/architecture.md` pin table say `v1.24.1`. 0031-MADR has a note at D1.
+7. **G-local.**
+   - `make pre-add-check FILES="llm/provider/provider.go llm/provider/offline_test.go"`:
+     `2 file(s) clean (gofmt, golint, govulncheck)`.
+   - `make preflight`: "preflight passed".
+   - `make race`: exit 0, 36 packages ok.
+8. G-hosts, on a copy of the tree (807 files): on the Linux machine (`go1.27.3 linux/amd64`) and the Windows laptop (`go1.27.3 windows/amd64`), `go test` exit 0, race exit 0 with 36 packages ok, `preflight` to `verify-build-metadata` (stopped at `git rev-parse HEAD`, exit 128: the copy has no commit, C6), and records and markdownlint exit 0.
+
+One deviation: deviation 2, above.

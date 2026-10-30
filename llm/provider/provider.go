@@ -513,6 +513,10 @@ var sentinels = []struct{ sdk, llm error }{
 	{llmprovider.ErrIncomplete, llm.ErrIncomplete},
 	{llmprovider.ErrAuthFailure, llm.ErrAuth},
 	{llmprovider.ErrNotPermitted, llm.ErrNotPermitted},
+	// Offline also matches ErrProviderUnavailable since the SDK's v1.23.0,
+	// so it comes first: the agent waits for the network on llm.ErrOffline
+	// (0035-MADR D3).
+	{llmprovider.ErrOffline, llm.ErrOffline},
 	{llmprovider.ErrProviderUnavailable, llm.ErrUnavailable},
 	{llmprovider.ErrUnsupported, llm.ErrUnsupported},
 }
