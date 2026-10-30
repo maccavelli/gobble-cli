@@ -218,6 +218,8 @@ its own.
   go-selfupdate-lib `v1.23.0` and go-tui-lib/v2 `v2.6.2`. The last two are newer than the note above, by that PLAN's
   deviation 1. The statement of 2026-10-24 that go-tui-lib's newest tag is `v0.12.0`, with none of gobble's
   requests tagged, no longer holds: every request is delivered (go-tui-lib's issue tracker has none open).)*
+  *(2026-10-29: go-selfupdate-lib is pinned at `v1.23.0`, with both release workflow pins at `67520be8…`, by
+  0035-PLAN P3.)*
 - **D2. Live streaming (0005-PLAN F4-1b).** `llm/provider` wraps each provider with `WithStreamRetry(p, policy,
   notify)` in place of `WithRetry`. `NativeStreaming` is reported from the wrapped provider, true when it is
   `Supported`; the OpenCode providers' `BestEffort` stays reported as false. Retry off still means no wrapper.

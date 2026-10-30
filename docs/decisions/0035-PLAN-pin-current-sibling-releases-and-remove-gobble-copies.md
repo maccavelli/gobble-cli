@@ -1137,3 +1137,34 @@ import would test nothing it ships. This follows the owner's answer, and no deci
   tree (807 files).
 
 No deviation.
+
+### P3 record (2026-10-29): go-selfupdate-lib `v1.23.0`
+
+Deviation 1's tag, `v1.23.0`, in place of `v1.22.3`. The base is P2's commit `0ad318c`.
+
+1. **C2.** `git ls-remote --tags` lists `v1.23.0` as the newest `v1` tag, peeled to
+   `67520be8af1ad1b6228c29e4b1aa3e61e1ca7ae4`. `check-libs` for that tag passed every check in P2.
+2. **The pin.** `go get github.com/maccavelli/go-selfupdate-lib@v1.23.0`, then `go mod tidy`, each exit 0.
+   `git diff --stat` shows `go.mod` (one line) and `go.sum` (four) only.
+3. **The workflow pins.**
+   - `ci.yml:166` and `:178` read `@67520be8af1ad1b6228c29e4b1aa3e61e1ca7ae4 # v1.23.0`.
+   - That commit is `refs/tags/v1.23.0^{}` by `git ls-remote`.
+   - In a scratch clone of the library, `git diff --quiet v1.22.0 v1.23.0 --
+     .github/workflows/build-selfupdate-release.yml .github/workflows/publish-selfupdate-release.yml` exits 0: the
+     workflows are identical.
+4. **Docs.** `README.md` "Stack" and the `docs/architecture.md` pin table say `v1.23.0`. 0031-MADR has a note at D1.
+5. **G-local.**
+   - `make preflight`: "preflight passed".
+   - `make race`: exit 0, 36 packages ok.
+   - `make pre-add-check` was not run: no Go file changed.
+6. **G-hosts,** on a copy of the tree (807 files) on each host:
+
+   | Host | Go | `go test` | race | `preflight` | records and markdownlint |
+   | :--- | :--- | :--- | :--- | :--- | :--- |
+   | the Linux machine | `go1.27.3 linux/amd64` | exit 0 | exit 0, 36 ok | to `verify-build-metadata` | exit 0 |
+   | the Windows laptop | `go1.27.3 windows/amd64` | exit 0 | exit 0, 36 ok | to `verify-build-metadata` | exit 0 |
+
+   On both, `verify-build-metadata` stops at `git rev-parse HEAD` (exit 128), since the copy has no commit. That
+   check is macOS-only (C6).
+
+No deviation.

@@ -28,8 +28,8 @@ github.com/maccavelli/acp-go-sdk2 v1.20.0 h1:RSZL1Kvpm1kAJdSPmoTC012074XZjCRwh7P
 github.com/maccavelli/acp-go-sdk2 v1.20.0/go.mod h1:5WHwC+Nd7Wz7V0c0Xtz5MyYUpUKet1X9nHzLowXYhj4=
 github.com/maccavelli/go-llmprovider-sdk v1.22.2 h1:y1CPrg5GY+tBMSWogGypps3y2QvVYJt3mw7sQD2PjWQ=
 github.com/maccavelli/go-llmprovider-sdk v1.22.2/go.mod h1:dE+W7oDyvVmAxpSOuIJO3qSD3bDTh/olLt/TbByBE1M=
-github.com/maccavelli/go-selfupdate-lib v1.22.0 h1:AHBwXsYs08WGTteAU7e/1NAa/CqbnTbZx+Xj6LSjKmk=
-github.com/maccavelli/go-selfupdate-lib v1.22.0/go.mod h1:boXH5t3XBFF7sNNQL8r/w1TUJjuzjrDh7bKDCrlP0Q8=
+github.com/maccavelli/go-selfupdate-lib v1.23.0 h1:qu0d9llmj+fHcV8gkBnOxfEXhr+AAMV42eAONYxjzGE=
+github.com/maccavelli/go-selfupdate-lib v1.23.0/go.mod h1:boXH5t3XBFF7sNNQL8r/w1TUJjuzjrDh7bKDCrlP0Q8=
 github.com/modelcontextprotocol/go-sdk v1.8.0 h1:KIvahhYqwtbeniWVPs3TcXEA7b8jEtwfBpOTAI+Urx4=
 github.com/modelcontextprotocol/go-sdk v1.8.0/go.mod h1:dL7u98E/zjJTGzEq+j30jQ8K2k1mb6LeAH4inEcSGts=
 github.com/rogpeppe/go-internal v1.15.0 h1:D0RCU5rMAp+SpgkiNdrjfJ+LX4J1M32V2NeCY7EJ6hc=
