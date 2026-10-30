@@ -2,19 +2,28 @@
 """Check gobble against the latest tags of its sibling libraries.
 
 docs/decisions/0019-MADR-sibling-libraries-current-pins-and-integration.md
-D14: for acp-go-sdk2, go-llmprovider-sdk and go-selfupdate-lib, take the
-latest semver tag (never a branch), and on a scratch clone of this
-repository outside the working tree:
+D14, extended by
+docs/decisions/0035-MADR-pin-current-sibling-releases-and-remove-gobble-copies.md
+D2: for acp-go-sdk2, go-llmprovider-sdk, go-selfupdate-lib and go-tui-lib,
+take the latest semver tag of the major the module path names (never a
+branch), and on a scratch clone of this repository outside the working tree:
 
   1. go get the tag and go mod tidy, failing on any other module that moves;
-  2. go build, go vet for linux, darwin and windows, and go test the
-     packages that import the library;
+  2. go build, go vet for linux, darwin and windows, go test the packages
+     that import the library, and make staticcheck and make lint, which see
+     a deprecation go vet does not (0035-MADR F2); for go-tui-lib also make
+     archtest, which checks the CLI's boundary against the real closure;
   3. apidiff from the pinned version, failing on an incompatible change of a
      v1 module (a module below v1 is reported, not failed); apidiff's exit
      status is not its verdict, so its text is read; a library pinned at
      the tag has nothing to compare;
   4. govulncheck, and the library's GitHub security advisories, which
      govulncheck does not see.
+
+A library gobble does not require yet (go-tui-lib, before its first
+import) is probed: the scratch clone gains a file importing the packages
+gobble will use, so tidy keeps the requirement, and the modules it may add
+are the ones the library names; there is no pinned version to diff from.
 
 It needs the network, so it is `make check-libs`, not part of preflight.
 It reads, prints and sends no credential: every command runs without the
@@ -54,19 +63,36 @@ REQUIRE = re.compile(r"^\s*([^\s()]+)\s+(v[^\s]+)")
 
 @dataclass(frozen=True)
 class Library:
+    """A sibling library: its repository, the gobble packages that import it,
+    its module path when that is not the repository's (a /vN module), the
+    major whose tags count (None: v0 and v1), the packages a probe imports
+    while gobble does not require it, and the modules that first import may
+    add (0035-MADR D2)."""
+
     repo: str
     packages: tuple[str, ...]
+    path: str = ""
+    major: int | None = None
+    probe: tuple[str, ...] = ()
+    allow_new: tuple[str, ...] = ()
 
     @property
     def module(self) -> str:
-        return f"github.com/{OWNER}/{self.repo}"
+        return self.path or f"github.com/{OWNER}/{self.repo}"
 
 
 LIBRARIES = (
     Library("acp-go-sdk2", ("./acpclient/...", "./acpserver/...", "./internal/cli/...")),
     Library("go-llmprovider-sdk", ("./llm/...", "./acpserver/...", "./internal/cli/...")),
     Library("go-selfupdate-lib", ("./internal/buildinfo/...", "./internal/cli/...", "./internal/archtest/...")),
+    Library("go-tui-lib", ("./internal/cli/...", "./internal/archtest/..."), path=f"github.com/{OWNER}/go-tui-lib/v2", major=2,
+            probe=("ask", "glyph", "lineedit", "safetext", "stream", "transcript"),
+            allow_new=("github.com/charmbracelet/x/ansi", "github.com/clipperhouse/displaywidth",
+                       "github.com/clipperhouse/uax29/v2", "github.com/lucasb-eyer/go-colorful",
+                       "github.com/mattn/go-runewidth")),
 )
+
+PROBE_FILE = "internal/cli/zz_checklibs_probe.go"
 
 
 @dataclass
@@ -108,14 +134,21 @@ def run(args: list[str], cwd: Path, log: Path, timeout: int = 1800, **env: str) 
                               timeout=timeout).returncode
 
 
+def newest(tags: set[str], major: int | None) -> str | None:
+    """The newest semver tag of major (None: v0 and v1), or None."""
+    ok = (lambda m: m == major) if major is not None else (lambda m: m in (0, 1))
+    semver = sorted((t for t in tags if SEMVER.match(t) and ok(version_key(t)[0])), key=version_key)
+    return semver[-1] if semver else None
+
+
 def latest_tag(lib: Library) -> str:
     out = subprocess.run(["git", "ls-remote", "--tags", f"https://github.com/{OWNER}/{lib.repo}"],
                          capture_output=True, text=True, timeout=120, env=clean_env(), check=True).stdout
     tags = {line.split("refs/tags/")[1].removesuffix("^{}") for line in out.splitlines() if "refs/tags/" in line}
-    semver = sorted((t for t in tags if SEMVER.match(t)), key=version_key)
-    if not semver:
-        raise RuntimeError(f"{lib.repo} has no semver tag")
-    return semver[-1]
+    tag = newest(tags, lib.major)
+    if tag is None:
+        raise RuntimeError(f"{lib.repo} has no semver tag of major {lib.major if lib.major is not None else '0 or 1'}")
+    return tag
 
 
 def module_version(lib: Library, root: Path) -> str:
@@ -124,8 +157,20 @@ def module_version(lib: Library, root: Path) -> str:
                           text=True, timeout=120, env=clean_env(), check=True).stdout.strip()
 
 
-def pinned(lib: Library) -> str:
-    return module_version(lib, REPO)
+def pinned(lib: Library) -> str | None:
+    """The version gobble requires, or None when it does not require it."""
+    listed = subprocess.run(["go", "list", "-m", "-f", "{{.Path}}", "all"], cwd=REPO, capture_output=True, text=True,
+                            timeout=120, env=clean_env(), check=True).stdout.split()
+    return module_version(lib, REPO) if lib.module in listed else None
+
+
+def probe_source(lib: Library) -> str:
+    """The scratch clone's file that imports lib's probe packages, gofmt-clean."""
+    lines = ["// Code written by scripts/check_libs.py in a scratch clone only (0035-MADR D2).", "", "package cli", "",
+             "import ("]
+    for pkg in sorted(lib.probe):
+        lines += ["\t// probed by check-libs before gobble's first import of the library", f'\t_ "{lib.module}/{pkg}"']
+    return "\n".join(lines + [")", ""])
 
 
 def requirements(gomod: str) -> dict[str, str]:
@@ -147,10 +192,12 @@ def requirements(gomod: str) -> dict[str, str]:
     return out
 
 
-def moved_modules(before: str, after: str, module: str) -> list[str]:
-    """The modules other than module that a go.mod change adds, removes or moves."""
+def moved_modules(before: str, after: str, module: str, allow: tuple[str, ...] = ()) -> list[str]:
+    """The modules other than module that a go.mod change adds, removes or
+    moves, less those allow names as added by a first import."""
     a, b = requirements(before), requirements(after)
-    return sorted(p for p in a.keys() | b.keys() if p != module and a.get(p) != b.get(p))
+    return sorted(p for p in a.keys() | b.keys()
+                  if p != module and a.get(p) != b.get(p) and not (p in allow and p not in a))
 
 
 def incompatible(apidiff_text: str) -> list[str]:
@@ -240,11 +287,17 @@ def check_library(lib: Library, tag: str, base: str, work: Path) -> Report:
     logs = work / "logs"
     logs.mkdir(exist_ok=True)
     clone = work / f"clone-{lib.repo}"
-    report.note("versions", f"pinned {base}, checking {tag}")
+    report.note("versions", f"pinned {base or 'nothing'}, checking {tag}")
     if run(["git", "clone", "--quiet", str(REPO), str(clone)], work, logs / f"{lib.repo}-clone.log") != 0:
         report.check("clone", False)
         return report
     before = (clone / "go.mod").read_text(encoding="utf-8")
+    if base is None:
+        if not lib.probe:
+            report.check("pinned", False, "gobble does not require it, and it names no packages to probe")
+            return report
+        (clone / PROBE_FILE).write_text(probe_source(lib), encoding="utf-8")
+        report.note("pinned", f"not required; probing {len(lib.probe)} packages through {PROBE_FILE}")
     ok = run(["go", "get", f"{lib.module}@{tag}"], clone, logs / f"{lib.repo}-get.log") == 0
     ok = ok and run(["go", "mod", "tidy"], clone, logs / f"{lib.repo}-tidy.log") == 0
     if not report.check("get and tidy", ok, "" if ok else f"see {logs}"):
@@ -255,14 +308,22 @@ def check_library(lib: Library, tag: str, base: str, work: Path) -> Report:
     got = module_version(lib, clone)
     if not report.check("version", got == tag, "" if got == tag else f"tidy moved it to {got}: {tag} lacks a package gobble imports"):
         return report
-    moved = moved_modules(before, (clone / "go.mod").read_text(encoding="utf-8"), lib.module)
+    allow = lib.allow_new if base is None else ()
+    moved = moved_modules(before, (clone / "go.mod").read_text(encoding="utf-8"), lib.module, allow)
     report.check("modules", not moved, "new or changed module: " + ", ".join(moved) if moved else "")
     report.check("build", run(["go", "build", "./..."], clone, logs / f"{lib.repo}-build.log") == 0)
     for goos in GOOSES:
         report.check(f"vet {goos}", run(["go", "vet", "./..."], clone, logs / f"{lib.repo}-vet-{goos}.log", GOOS=goos) == 0)
     tested = run(["go", "test", "-count=1", *lib.packages], clone, logs / f"{lib.repo}-test.log") == 0
     report.check("test", tested, "" if tested else f"see {logs / (lib.repo + '-test.log')}")
-    check_api(report, lib, base, tag, work, logs)
+    for gate in ("staticcheck", "lint", *(("archtest",) if lib.probe else ())):
+        log = logs / f"{lib.repo}-{gate}.log"
+        passed = run(["make", gate], clone, log) == 0
+        report.check(gate, passed, "" if passed else f"see {log}")
+    if base is None:
+        report.note("api", "not required; nothing to compare")
+    else:
+        check_api(report, lib, base, tag, work, logs)
     report.check("govulncheck", run(["go", "tool", "govulncheck", "./..."], clone, logs / f"{lib.repo}-vuln.log") == 0)
     try:
         hits = [f"advisory {a.get('ghsa_id')} covers {tag}" for a in advisories(lib)
@@ -302,6 +363,13 @@ def self_test() -> int:
     mod_c = mod_b.replace("golang.org/x/sys v0.48.0 // indirect\n", "golang.org/x/sys v0.48.0 // indirect\n\texample.com/x v1.0.0\n")
     diff_bad = "Incompatible changes:\n- Foo: removed\n\nCompatible changes:\n- Bar: added\n"
     diff_ok = "Compatible changes:\n- Bar: added\n"
+    tui = next(lib for lib in LIBRARIES if lib.repo == "go-tui-lib")
+    tags = {"v0.12.0", "v1.13.0", "v2.6.1", "v2.6.1-rc1", "nightly"}
+    allow = ("example.com/a", "example.com/b", "example.com/c", "example.com/d", "example.com/e")
+    mod_d = mod_a + "require (\n" + "".join(f"\t{m} v1.0.0 // indirect\n" for m in (*allow, "example.com/sixth")) + ")\n"
+    probe_want = ("// Code written by scripts/check_libs.py in a scratch clone only (0035-MADR D2).\n\npackage cli\n\nimport (\n"
+                  "\t// probed by check-libs before gobble's first import of the library\n\t_ \"example.com/x/v2/a\"\n"
+                  "\t// probed by check-libs before gobble's first import of the library\n\t_ \"example.com/x/v2/b\"\n)\n")
     cases = [
         ("an incompatible line fails", incompatible(diff_bad) == ["- Foo: removed"]),
         ("no incompatible line passes", incompatible(diff_ok) == []),
@@ -313,6 +381,13 @@ def self_test() -> int:
         ("< 1.2.0, >= 1.0.0 does not cover v1.2.0", not covers("< 1.2.0, >= 1.0.0", "v1.2.0")),
         ("a library pinned at the tag is not compared", pinned_at_tag_not_compared()),
         ("two libraries at one version do not share API paths", api_paths_distinct()),
+        ("a path overrides the module", tui.module == "github.com/maccavelli/go-tui-lib/v2"
+         and LIBRARIES[0].module == "github.com/maccavelli/acp-go-sdk2"),
+        ("major 2 keeps v2.6.1 alone", newest(tags, 2) == "v2.6.1"),
+        ("no major drops v2", newest(tags, None) == "v1.13.0"),
+        ("a first import may add the allowed modules alone",
+         moved_modules(mod_a, mod_d, "example.com/lib", allow) == ["example.com/sixth"]),
+        ("the probe file is exact", probe_source(Library("x", (), path="example.com/x/v2", probe=("b", "a"))) == probe_want),
     ]
     for name, ok in cases:
         print(f"self-test {name}: {'ok' if ok else 'FAIL'}")
@@ -321,7 +396,7 @@ def self_test() -> int:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Check gobble against the latest tags of its sibling libraries.")
-    ap.add_argument("--lib", choices=[lib.repo for lib in LIBRARIES], help="one library; default all three")
+    ap.add_argument("--lib", choices=[lib.repo for lib in LIBRARIES], help="one library; default all of them")
     ap.add_argument("--tag", help="the version to check; default the latest semver tag")
     ap.add_argument("--from", dest="base", help="the version to diff from; default the pinned one")
     ap.add_argument("--keep", action="store_true", help="keep the scratch directory")

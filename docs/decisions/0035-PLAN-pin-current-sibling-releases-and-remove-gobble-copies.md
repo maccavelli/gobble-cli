@@ -1087,3 +1087,53 @@ is now `in-progress`.
   - `make preflight`, all 13 steps, "preflight passed". It was run although no Go file changed, since `AGENTS.md`
     asks for it before every commit.
 - No deviation.
+
+### P2 record (2026-10-29): check-libs sees what preflight sees
+
+`scripts/check_libs.py`, P0's commit `2feb647` as the base.
+
+**Steps 1–7, done as written, apart from the probe list:**
+
+- `Library` gains `path`, `major`, `probe` and `allow_new`.
+- `latest_tag` filters through a new pure `newest(tags, major)`.
+- `pinned` returns `None` for a module gobble does not require, read from `go list -m all`.
+- `check_library` behaves as follows for such a library:
+  - it writes `internal/cli/zz_checklibs_probe.go` in the scratch clone only, with each blank import commented for
+    revive's `blank-imports`;
+  - it notes `pinned: not required`;
+  - it skips `api`;
+  - it allows `allow_new` in `modules`.
+- `staticcheck` and `lint` run for every library after `test`, and `archtest` for a library with probe packages.
+- The docstring and the `--lib` help are updated.
+
+*Note:* the probe list is `ask`, `glyph`, `lineedit`, `safetext`, `stream` and `transcript`. Step 3 also named `pick`
+and `termcap`, which PQ6 (a), answered after the step was written, does not adopt. Probing packages gobble will not
+import would test nothing it ships. This follows the owner's answer, and no decision changes.
+
+**Step 8, the verification:**
+
+- **`python3 scripts/check_libs.py --self-test`:** all 15 cases ok, the 5 new among them.
+- **Seen failing (C9), on copies of the tree** (`<scratch>/break-P2-1`, `-2`, since removed):
+  - with `newest`'s major test inverted (`m != major`), the self-test exits 1:
+    `self-test major 2 keeps v2.6.1 alone: FAIL`;
+  - with `allow` ignored in `moved_modules`, the self-test exits 1:
+    `self-test a first import may add the allowed modules alone: FAIL`.
+- **Live runs.** Deviation 1's tags were used for the two libraries it moved. Each run is the expected one:
+
+  | Command | Result |
+  | :--- | :--- |
+  | `--lib acp-go-sdk2 --tag v1.26.0` | exit 1: `staticcheck: FAIL` (48 SA1019 lines, F2's 16 findings on each of three GOOS) and `lint: FAIL` (`12 issues: * staticcheck: 12`); every other check ok |
+  | `--lib go-llmprovider-sdk --tag v1.24.1` | exit 1: `test: FAIL`, `--- FAIL: TestWireOffline/refused` and `/unknown_host` (F1); `staticcheck` and `lint` ok |
+  | `--lib go-selfupdate-lib --tag v1.23.0` | exit 0, all 14 checks ok |
+  | `--lib go-tui-lib --tag v2.6.2` | exit 0: `pinned: not required; probing 6 packages`, `modules` ok with the five allowed, `staticcheck`, `lint` and `archtest` ok, `api: not required; nothing to compare` |
+
+**Step 9, the gates:**
+
+- `python3 -m py_compile scripts/check_libs.py`: exit 0.
+- `make preflight`: "preflight passed".
+- `make race`: exit 0, 36 packages ok.
+- `make pre-add-check` was not run: no Go file is staged.
+- **G-hosts.** The self-test passed all 15 cases on the Linux machine and on the Windows laptop, each on a copy of the
+  tree (807 files).
+
+No deviation.
