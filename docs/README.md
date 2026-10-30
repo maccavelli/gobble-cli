@@ -81,7 +81,7 @@
 | 0034 | MADR | [Pin acp-go-sdk2 v1.21.0, replace SessionUpdate literals with its helpers, and embed ClientRefusals](decisions/0034-MADR-pin-acp-go-sdk2-v1-21-0-and-adopt-session-update-helpers.md) | superseded by 0035-MADR 2026-10-29 (never executed) |
 | 0034 | PLAN | [Implement pinning acp-go-sdk2 v1.21.0 and adopting its SessionUpdate helpers](decisions/0034-PLAN-pin-acp-go-sdk2-v1-21-0-and-adopt-session-update-helpers.md) | superseded by 0035-MADR 2026-10-29 (never executed) |
 | 0035 | MADR | [Pin every sibling library's current tag, adopt what it now provides, and remove gobble's copies](decisions/0035-MADR-pin-current-sibling-releases-and-remove-gobble-copies.md) | accepted 2026-10-29 (acp-go-sdk2 `v1.26.0`, go-llmprovider-sdk `v1.24.1`, go-selfupdate-lib `v1.22.3`, go-tui-lib/v2 `v2.6.1`; Q1–Q6 answered by the owner: no Magic gate, a narrow checked SA1019 ignore, go-tui-lib's defaults with gobble's guards, `InProcess` last, the workspace stored, risk-first order; D2, D5 and D14 facts of 2026-10-29 from writing the PLAN; supersedes 0034 by its PLAN's P0) |
-| 0035 | PLAN | [Implement pinning every sibling library's current tag, adopting what it provides, and removing gobble's copies](decisions/0035-PLAN-pin-current-sibling-releases-and-remove-gobble-copies.md) | in progress (approved 2026-10-29 by the owner's "Pin phases, reordered"; deviation 1: go-selfupdate-lib `v1.23.0`, go-tui-lib/v2 `v2.6.2`, the pin phases P0, P2, P3, P4, P7, P13, P14 first; P0, P2, P3, P4, P7, P13 and P14 complete, every pin current; deviations 2 to 5; P1, P5, P6, P8–P12 and P15–P19 to follow) |
+| 0035 | PLAN | [Implement pinning every sibling library's current tag, adopting what it provides, and removing gobble's copies](decisions/0035-PLAN-pin-current-sibling-releases-and-remove-gobble-copies.md) | in progress (approved 2026-10-29 by the owner's "Pin phases, reordered"; deviation 1: go-selfupdate-lib `v1.23.0`, go-tui-lib/v2 `v2.6.2`, the pin phases P0, P2, P3, P4, P7, P13, P14 first; P0, P1, P2, P3, P4, P7, P13 and P14 complete, every pin current; deviations 2 to 5; P5, P6, P8–P12 and P15–P19 to follow) |
 | 0036 | MADR | [Adopt what go-llmprovider-sdk v1.23.0 and v1.24.0 added: one registry, warnings, learned refusals, Chat Completions servers, a facts search and images](decisions/0036-MADR-adopt-go-llmprovider-sdk-new-capabilities.md) | accepted 2026-10-29 (Q1–Q4 answered by the owner; starts after 0035's go-llmprovider-sdk phases; row added by 0035-PLAN P0, missing from its own commit) |
 | 0036 | PLAN | [Implement adopting what go-llmprovider-sdk v1.23.0 and v1.24.0 added](decisions/0036-PLAN-adopt-go-llmprovider-sdk-new-capabilities.md) | in progress (approved 2026-10-29; P0 waits for 0035's go-llmprovider-sdk phases) |
 
@@ -182,6 +182,30 @@ The plans run in sequence.
   - Run: P5, every text overridable, on 2026-10-18 (one deviation: compaction prompts wait for 0005-PLAN F5-4,
     settled by F5-4 the same day).
   - Prepared: P6, the owner's live evaluation, in 0022-GATES (2026-10-18); waiting on the owner's runs against `openai` and `grok`.
+- **[0023-PLAN](decisions/0023-PLAN-pin-current-releases.md).** Complete: the SDKs' pins of 2026-10-19, and its
+  amendment's. Its execution record has each phase.
+- **[0024-PLAN](decisions/0024-PLAN-cli-mode-polish.md).** Complete. Its execution record has each phase.
+- **[0025-PLAN](decisions/0025-PLAN-provider-choice-and-auth.md).** In progress: P6, the ChatGPT sign-in, is 0031-PLAN
+  P4b's. Its execution record has each phase.
+- **[0026-PLAN](decisions/0026-PLAN-skip-full-ci-for-docs-only-pushes.md).** In progress. Its execution record has each
+  phase.
+- **[0027-PLAN](decisions/0027-PLAN-native-line-editor-word-wrap.md).** Complete. Its execution record has each phase.
+- **[0028-PLAN](decisions/0028-PLAN-reply-word-wrap.md).** Complete. Its execution record has each phase.
+- **[0029-PLAN](decisions/0029-PLAN-permission-prompt-layout.md).** In progress: P1 run; P2 carried out by 0035-PLAN
+  P14 (2026-10-29); P3 to run. Its execution record has each phase.
+- **[0030-PLAN](decisions/0030-PLAN-resize-and-performance.md).** In progress. Its execution record has each phase.
+- **[0031-PLAN](decisions/0031-PLAN-sdk-current-releases-and-adoption.md).** In progress: P4b, the ChatGPT plan
+  sign-in, to run; its pins moved on by 0035-PLAN. Its execution record has each phase.
+- **[0032-PLAN](decisions/0032-PLAN-go-tui-lib-integration-boundary.md).** In progress: P1, P2 and P1a run; P3 and on
+  are 0035-PLAN P13–P18. Its execution record has each phase.
+- **[0033-PLAN](decisions/0033-PLAN-align-docs-ci-and-disclosure-gates.md).** Proposed; not started.
+- **[0034-PLAN](decisions/0034-PLAN-pin-acp-go-sdk2-v1-21-0-and-adopt-session-update-helpers.md).** Superseded by 0035,
+  never executed.
+- **[0035-PLAN](decisions/0035-PLAN-pin-current-sibling-releases-and-remove-gobble-copies.md).** In progress: P0, P2,
+  P3, P4, P7, P13 and P14 run on 2026-10-29, every pin current (deviations 1 to 5); the rest to follow. Its execution
+  record has each phase.
+- **[0036-PLAN](decisions/0036-PLAN-adopt-go-llmprovider-sdk-new-capabilities.md).** In progress: P0 waits for
+  0035-PLAN P5. Its execution record has each phase.
 - **0012-PLAN.** Run: P1–P6 and P8 on 2026-10-08. P7 ~~waits on go-llmprovider-sdk's per-tool strict flag~~ follows 0005-PLAN F4-1a, which pins go-llmprovider-sdk `v1.7.0` and its strict flag (2026-10-11).
   - Run: P7 on 2026-10-13: `strict: false` where a call may leave an argument out, no flag otherwise. Complete; the Claude, Gemini and Grok live tests are the owner's.
 - `git ls-remote origin refs/heads/main` on 2026-10-08 returned `740f7b71450238e747dba99b4fa1eccd488ad79e`.
@@ -195,6 +219,10 @@ The plans:
 5. **The pairs of 0014 and 0018 to 0022** — the move to acp-go-sdk2 (0014), the configuration surface (0018), the
    sibling libraries' pins (0019), the full model catalog (0020), prompt caching (0021) and gobble's voice (0022);
    each is in the run list above.
+6. **The pairs of 0023 to 0036** — the SDKs' pins (0023, 0031), the CLI mode's polish, editor, wrapping, prompt and
+   resizing (0024, 0027 to 0030), providers and sign-in (0025), docs-only CI (0026, 0033), go-tui-lib's boundary
+   (0032), every sibling library's current tag and gobble's copies removed (0035, superseding 0034), and
+   go-llmprovider-sdk's new capabilities (0036); each is in the run list above.
 
 ## I want to…
 
@@ -227,7 +255,7 @@ The plans:
 | know why the race gate can fail in `internal/cli` once in a few hundred runs, and what gobble does about it | [0013-REPORT](reports/0013-REPORT-go-json-nested-marshal-race.md) |
 | know which go-llmprovider-sdk, go-selfupdate-lib and acp-go-sdk2 releases gobble pins, what each next release changes, in what order gobble takes them, and whether to adopt them now | [0015-REPORT](reports/0015-REPORT-sibling-library-pins-and-order.md) |
 | know which parts of ACP and acp-go-sdk2 gobble uses, which it leaves, and why | [0016-MADR](decisions/0016-MADR-acp-go-sdk2-v0.15.0-and-stable-surface.md), [0014-MADR](decisions/0014-MADR-move-to-acp-go-sdk2.md) (the move to sdk2) |
-| pin acp-go-sdk2 `v1.21.0` and drop gobble's `SessionUpdate` literals and client stubs | [0034-MADR](decisions/0034-MADR-pin-acp-go-sdk2-v1-21-0-and-adopt-session-update-helpers.md), [gobble-cli#5](https://github.com/maccavelli/gobble-cli/issues/5) |
+| pin the sibling libraries' current tags and drop gobble's copies | [0035-MADR](decisions/0035-MADR-pin-current-sibling-releases-and-remove-gobble-copies.md), [gobble-cli#5](https://github.com/maccavelli/gobble-cli/issues/5) |
 | know how gobble's tools are described to a model, which are always loaded, and how `tool_search` finds the rest | [0012-MADR](decisions/0012-MADR-tool-schemas-descriptions-and-loading.md), [0011-REPORT](reports/0011-REPORT-native-tools-survey.md) (evaluation) |
 | see how other harnesses design what gobble builds, and which design gobble chose | [0010-REPORT](reports/0010-REPORT-harness-design-survey.md), [0005-MADR](decisions/0005-MADR-v1-feature-scope.md) (amendment of 2026-10-07) |
 | retry failed model calls, wait for the network, or compact the conversation on its own | [0005-PLAN](decisions/0005-PLAN-v1-feature-scope.md) (F5-1, F5-2, F5-4), the `retry` and `compaction` blocks of `settings.yaml` |

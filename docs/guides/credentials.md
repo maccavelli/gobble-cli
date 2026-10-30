@@ -139,12 +139,13 @@ $ gobble auth logout grok
 Logged out of grok
 ```
 
-Signing in to ChatGPT comes later, through OpenAI's sign-in for third-party agents (0005-PLAN
-F4-3d); until then, use an OpenAI API key. Any other provider takes a key:
+Signing in to ChatGPT comes later, with 0031-PLAN P4b: go-llmprovider-sdk has had OpenAI's sign-in for
+third-party agents since `v1.15.0`, and gobble does not offer it yet. Until then, use an OpenAI API key. Any
+other provider takes a key:
 
 ```text
 $ gobble auth login openai
-Error: openai's login waits for go-llmprovider-sdk's Sign in with ChatGPT for agents (0005-PLAN F4-3d); use --api-key -
+Error: openai's ChatGPT sign-in is not in gobble yet (0031-PLAN P4b); use --api-key -
 $ gobble auth login anthropic
 Error: claude has no login; use --api-key -
 ```

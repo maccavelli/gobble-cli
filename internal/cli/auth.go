@@ -189,7 +189,7 @@ func (e *runEnv) loginWith(ctx context.Context, id string, device bool, ev *logi
 			o.Method = provider.MethodDevice
 		}
 	case id == "openai":
-		return usageErrorf("openai's login waits for go-llmprovider-sdk's Sign in with ChatGPT for agents (0005-PLAN F4-3d); use --api-key -")
+		return usageErrorf("openai's ChatGPT sign-in is not in gobble yet (0031-PLAN P4b); use --api-key -")
 	default:
 		return usageErrorf("%s has no login; use --api-key -", id)
 	}

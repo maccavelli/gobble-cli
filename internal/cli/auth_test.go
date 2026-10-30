@@ -47,7 +47,7 @@ func TestAuthLogin(t *testing.T) {
 		t.Errorf("auth.json:\n%s", got)
 	}
 	c.want(c.runStdin(stdinFile(t, "k2"), "auth", "login", "anthropic", "--api-key", "-"), ExitOK, "Saved API key for claude\n", "")
-	c.want(c.run("auth", "login", "openai"), ExitUsage, "", "openai's login waits for go-llmprovider-sdk's Sign in with ChatGPT for agents (0005-PLAN F4-3d); use --api-key -")
+	c.want(c.run("auth", "login", "openai"), ExitUsage, "", "openai's ChatGPT sign-in is not in gobble yet (0031-PLAN P4b); use --api-key -")
 	c.want(c.run("auth", "login", "anthropic"), ExitUsage, "", "claude has no login; use --api-key -")
 	c.want(c.runStdin(stdinFile(t, "k"), "auth", "login", "grok", "--api-key", "-", "--device"), ExitUsage, "", "--device is for a login")
 	if r := c.run("auth", "login", "openai", "--api-key", "sk-literal"); r.code != ExitUsage ||

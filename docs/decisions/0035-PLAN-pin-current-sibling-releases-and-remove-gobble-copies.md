@@ -1443,3 +1443,32 @@ The base is P13's commit `3f92ae9`. 0029-PLAN P2 is carried out here.
 13. G-hosts, on a copy of the final tree (808 files), `go1.27.3`: on the Linux machine and the Windows laptop, `go test` exit 0, race exit 0 with 36 packages ok, `preflight` to `verify-build-metadata` (stopped at `git rev-parse HEAD`, exit 128: no commit, C6), records and markdownlint exit 0, and `make perf` passed (the Linux machine: ReplyRender 143.8 µs of 110, Reprint 33.2 ms of 29, LineSessionStart 3.35 ms of 2.9, KeyDraw 5.94 µs of 5; the Windows laptop: 28.1 µs of 54, 7.13 ms of 12, 3.52 ms of 6.9, 1.04 µs of 1.4). `make probe-conhost` on the Windows laptop: `--- PASS: TestConhost`. A first host run, on the tree before the two fixes, passed its tests, race, perf and probe-conhost and stopped `preflight` at the tidy check.
 
 Two deviations: 4 and 5, above.
+
+### P1 record (2026-10-30): the docs
+
+Approved by the owner's "committed proceed", 2026-10-30. The base is P14's commit `c54ecf3`.
+
+1. **The OpenAI login's message.** `internal/cli/auth.go:192` reads `openai's ChatGPT sign-in is not in gobble yet
+   (0031-PLAN P4b); use --api-key -`, and `internal/cli/auth_test.go:50` expects it. No other code or guide carries the
+   old message (a search found none).
+2. **The credentials guide.** `docs/guides/credentials.md` says the ChatGPT sign-in comes with 0031-PLAN P4b, since the SDK
+   has had it since `v1.15.0`. Its quoted error matches step 1.
+3. **`docs/README.md`.**
+   - "Build order" gains a bullet for each PLAN from 0023 to 0036. Each states that PLAN's frontmatter status and
+     points to its execution record. The plan adds 0036, which did not exist when it was written.
+   - The plans list gains item 6.
+   - The "I want to…" row points to 0035-MADR. The #5 link is kept.
+4. **Seen failing (C9).** On a copy of the tree with the old message put back in `auth.go`, `TestAuthLogin` fails.
+5. **The gates.**
+   - **G-local.** `make pre-add-check` on the two files: clean. `make preflight` passed. Its first run failed
+     markdownlint on a new bullet at 256 characters (MD013, the limit 200), so the bullets were wrapped at 120. Two
+     bullets also no longer claim an execution record: 0033 (proposed) and 0034 (never executed). `make race`: 36 ok.
+     `make perf`: ReplyRender 32.6 µs (baseline 30), Reprint 9.46 ms (9.4), LineSessionStart 877 µs (830), KeyDraw
+     1.51 µs (1.5).
+   - **G-hosts,** on the Linux machine and the Windows laptop: `go test` and race exit 0, 36 ok; `preflight` to
+     `verify-build-metadata` (no commit, C6); `make perf` passed; `make probe-conhost` on the Windows laptop passed
+     `TestConhost`.
+   - The hosts' first records run (exit 2) had the tree from before the wrap. A second run, on the fixed tree, gave
+     `make check-records markdownlint` exit 0 on both.
+
+No deviation.
