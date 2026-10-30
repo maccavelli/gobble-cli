@@ -103,7 +103,9 @@ docs/reports/NNNN-GATES-short-slug.md
 
 - `NNNN` is a zero-padded 4-digit number, one sequence across
   `docs/decisions/` and `docs/reports/`. A MADR and its PLAN share the same
-  number and the same slug.
+  number and the same slug. A MADR carried out by several PLANs gives each
+  the MADR's number and a slug of its own, naming its part
+  (`docs/decisions/0037-MADR-hardening-integrity-and-performance.md`, Q5).
 - **Next number** comes from `python3 scripts/check_records.py --next`.
   Never reuse a number, never renumber an existing record, never leave a gap
   deliberately.
