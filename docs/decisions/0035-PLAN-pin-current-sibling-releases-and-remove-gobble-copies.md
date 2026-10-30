@@ -1836,3 +1836,14 @@ The base is deviation 9's commit `4ca7992`.
 7. G-hosts, on a copy of the final tree (812 files), `go1.27.3`: on the Linux machine and the Windows laptop, `go test` and race exit 0, 36 ok; `preflight` to `verify-build-metadata` (no commit, C6); records and markdownlint exit 0; `make perf` passed on both; `make probe-conhost` passed `TestConhost`. A first host run used the tree before staticcheck's fixes.
 
 One deviation: deviation 10, above.
+
+### P16 record (2026-10-30): `pick`
+
+By PQ6 (a), no code changes. The base is P15's commit `884a6a0`.
+
+1. The MADR has a dated note at D18: `pick` is new UI, not a replacement, for a record of its own.
+2. The MADR has a dated note at D14 step 3: neither `pick` nor `termcap` is adopted, and `internal/cli/term/caps.go` stays.
+3. `docs/README.md`'s row is updated.
+4. Gates: `make check-records markdownlint`, exit 0. Records only.
+
+No deviation.

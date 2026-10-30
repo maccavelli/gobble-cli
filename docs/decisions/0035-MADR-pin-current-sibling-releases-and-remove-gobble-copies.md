@@ -574,7 +574,8 @@ policy. And one record keeps the order, and the cross-library facts (check-libs,
     owner's answer "Catalogue the prompt words (Recommended)", the prompt's words are 24 `prompt.*` voice keys, with
     `ask`'s own three formats left at its defaults.)*
   - *step 2 becomes `glyph`, with `safetext` by PQ5, and `termcap` dropped;*
-  - *step 3, `pick`, is PQ6;*
+  - *step 3, `pick`, is PQ6;* *(2026-10-30, P16: neither `pick` nor `termcap` is adopted. `caps.go` stays gobble's, since
+    `termcap` has no TTY, width or locale detection.)*
   - *step 4, `lineedit`, is PQ7;*
   - *step 5 stands, with `wrap.go` kept for thinking text and the width helpers moved to `x/ansi`.*
 
@@ -622,6 +623,9 @@ policy. And one record keeps the order, and the cross-library facts (check-libs,
   - go-selfupdate-lib `v1.23.0`.
 
   Each gives gobble something new, rather than removing a copy. The waits listed above stand.
+
+  *(2026-10-30, by the PLAN's P16 and PQ6 (a): go-tui-lib's `pick` joins this list. The CLI has no picker for it to
+  replace, so a picker is new UI, for a record of its own.)*
 
   *(2026-10-29: [0036-MADR-adopt-go-llmprovider-sdk-new-capabilities.md](0036-MADR-adopt-go-llmprovider-sdk-new-capabilities.md), accepted the same day in another session, is the record for go-llmprovider-sdk's
   remainder:*
