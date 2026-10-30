@@ -80,6 +80,8 @@
 | 0033 | PLAN | [Implement aligned docs-only CI and disclosure gates](decisions/0033-PLAN-align-docs-ci-and-disclosure-gates.md) | proposed |
 | 0034 | MADR | [Pin acp-go-sdk2 v1.21.0, replace SessionUpdate literals with its helpers, and embed ClientRefusals](decisions/0034-MADR-pin-acp-go-sdk2-v1-21-0-and-adopt-session-update-helpers.md) | proposed (2026-10-25; gobble-cli issue 5; Q1 pin now, Q2 `Kind()` this pair, Q3 do not wait on 0031 P4b) |
 | 0034 | PLAN | [Implement pinning acp-go-sdk2 v1.21.0 and adopting its SessionUpdate helpers](decisions/0034-PLAN-pin-acp-go-sdk2-v1-21-0-and-adopt-session-update-helpers.md) | proposed (P1 pin, P2 constructors, P3 `ClientRefusals`, P4 `Kind()`; `session.golden` unchanged) |
+| 0035 | MADR | [Pin every sibling library's current tag, adopt what it now provides, and remove gobble's copies](decisions/0035-MADR-pin-current-sibling-releases-and-remove-gobble-copies.md) | accepted 2026-10-29 (acp-go-sdk2 `v1.26.0`, go-llmprovider-sdk `v1.24.1`, go-selfupdate-lib `v1.22.3`, go-tui-lib/v2 `v2.6.1`; Q1–Q6 answered by the owner: no Magic gate, a narrow checked SA1019 ignore, go-tui-lib's defaults with gobble's guards, `InProcess` last, the workspace stored, risk-first order; D2, D5 and D14 facts of 2026-10-29 from writing the PLAN; supersedes 0034 by its PLAN's P0) |
+| 0035 | PLAN | [Implement pinning every sibling library's current tag, adopting what it provides, and removing gobble's copies](decisions/0035-PLAN-pin-current-sibling-releases-and-remove-gobble-copies.md) | proposed (2026-10-29; P0–P19; PQ1, PQ2 and PQ4–PQ7 answered by the owner the same day, each the recommended option; waits for the word to execute) |
 
 0003-MADR has no PLAN of its own. 0004-PLAN Phase 2 and 0005-PLAN F10 implement it.
 
