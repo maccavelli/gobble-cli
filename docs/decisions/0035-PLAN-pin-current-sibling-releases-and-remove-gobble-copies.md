@@ -1610,3 +1610,43 @@ The base is P6's commit `d204826`.
    0, 36 ok; `preflight` to `verify-build-metadata` (no commit, C6); records and markdownlint exit 0.
 
 No deviation.
+
+### P9 record (2026-10-30): the refusals and the permission option
+
+The base is P8's commit `f5a94d0`.
+
+1. **`acpclient`'s `handler`** embeds `acp.ClientRefusals`, with a comment citing 0014-MADR D3. The nine methods and the
+   comment above them are gone. `var _ acp.Client = (*handler)(nil)` still compiles.
+2. **`acpserver.Agent`** embeds `acp.AgentRefusals`. Removed:
+   - `DeleteSession` and `Logout`;
+   - the "methods below are not implemented" comment, which `Logout` alone sat under.
+
+   Its own `CloseSession`, `ListSessions` and `ResumeSession` take precedence. The existing tests show each still
+   answers: `TestCloseWaitsForTurn`, `TestListSessions`, `TestListSkipsNonAbsoluteCwd`, `TestResumeWithoutReplay`,
+   `TestResumeConnects` and `TestOverrideResume`.
+
+   **`acptest.ScriptAgent`** embeds it too. Its `DeleteSession`, `Logout`, `ListSessions` and `ResumeSession` stubs
+   are gone. `Authenticate` stays, ungated, as do its `SetSessionMode` and `SetSessionConfigOption`, which
+   `AgentRefusals` does not cover. `acptest.Client` is unchanged.
+3. **The reject loop** is `acp.PickPermissionOption(r.Options, RejectOnce, RejectAlways)`.
+4. **Tests.**
+   - New `acpclient/refusals_test.go`, `TestClientRefusals`. Each of the eight request methods answers
+     `acp.IsMethodNotFound`, and `CompleteElicitation` returns nil.
+   - The existing `TestPermissionDeclined` is the permission test step 4 names. It covers reject once, reject always,
+     and cancelled where no reject option is offered.
+   - `delete_test.go` and the `-32601` tests pass unchanged.
+5. **Seen failing (C9), on copies:**
+   - A `handler` overriding `ReadTextFile` to return nil makes `TestClientRefusals` fail with
+     `fs/read_text_file: <nil>, want method not found`.
+   - With `PickPermissionOption` given the allow kinds, `TestPermissionDeclined/reject_once` fails.
+6. **Assert.**
+   - No `NewMethodNotFound` remains in `acpserver/agent.go`.
+   - In `acpclient/conn.go` one remains (`:458`): the extension-method answer, as step 6 expected for that switch.
+   - `session.golden` is unchanged.
+7. **G-local.**
+   - `make pre-add-check` on the four files: clean.
+   - `make preflight`: "preflight passed".
+   - `make race`: 36 ok.
+8. G-hosts, on a copy (811 files), `go1.27.3`: on the Linux machine and the Windows laptop, `go test` and race exit 0, 36 ok; `preflight` to `verify-build-metadata` (no commit, C6); records and markdownlint exit 0.
+
+No deviation.

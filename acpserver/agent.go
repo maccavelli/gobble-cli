@@ -139,6 +139,12 @@ type Options struct {
 
 // Agent is gobble's acp.Agent.
 type Agent struct {
+	// AgentRefusals answers the gated methods gobble does not offer,
+	// session/delete and logout, "method not found"; its own CloseSession,
+	// ListSessions and ResumeSession take precedence (0014-MADR D3,
+	// 0016-MADR A2; 0035-MADR D8).
+	acp.AgentRefusals
+
 	version  string
 	newID    func() string
 	provider func(sessionID string, retry llm.Retry) (llm.Provider, error)
@@ -1174,12 +1180,6 @@ func sessionInfo(sum session.Summary) acp.SessionInfo {
 	return info
 }
 
-// DeleteSession answers method-not-found: gobble does not delete sessions
-// over ACP, and advertises no sessionCapabilities.delete (0014-MADR D3).
-func (*Agent) DeleteSession(context.Context, acp.DeleteSessionRequest) (acp.DeleteSessionResponse, error) {
-	return acp.DeleteSessionResponse{}, acp.NewMethodNotFound(acp.AgentMethodSessionDelete)
-}
-
 // CloseSession closes the session's log, releasing its writer lock.
 func (a *Agent) CloseSession(ctx context.Context, p acp.CloseSessionRequest) (acp.CloseSessionResponse, error) {
 	a.mu.Lock()
@@ -1235,13 +1235,4 @@ func (a *Agent) SetSessionConfigOption(ctx context.Context, p acp.SetSessionConf
 		return acp.SetSessionConfigOptionResponse{}, err
 	}
 	return acp.SetSessionConfigOptionResponse{ConfigOptions: opts}, nil
-}
-
-// The methods below are not implemented in this phase and are not
-// advertised; each answers "method not found".
-
-// Logout is not offered: agentCapabilities.auth has no logout, so the SDK
-// answers -32601 before this runs (0016-MADR A2).
-func (*Agent) Logout(context.Context, acp.LogoutRequest) (acp.LogoutResponse, error) {
-	return acp.LogoutResponse{}, acp.NewMethodNotFound(acp.AgentMethodLogout)
 }

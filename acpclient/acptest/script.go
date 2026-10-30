@@ -39,6 +39,10 @@ type Turn struct {
 // next Turn and records what it was sent. Serve runs it on a stream pair,
 // as acpserver.Serve runs gobble's agent.
 type ScriptAgent struct {
+	// AgentRefusals answers the gated methods the script does not play
+	// (0035-MADR D8).
+	acp.AgentRefusals
+
 	Turns []Turn
 	// Image is advertised as promptCapabilities.image.
 	Image bool
@@ -62,12 +66,6 @@ type ScriptAgent struct {
 }
 
 var _ acp.Agent = (*ScriptAgent)(nil)
-
-// DeleteSession answers "method not found", as an agent that advertises no
-// session deletion does (0014-MADR D3).
-func (*ScriptAgent) DeleteSession(context.Context, acp.DeleteSessionRequest) (acp.DeleteSessionResponse, error) {
-	return acp.DeleteSessionResponse{}, acp.NewMethodNotFound(acp.AgentMethodSessionDelete)
-}
 
 // Serve runs the agent over in and out until in reaches end of file, when
 // it returns nil, or ctx is done, when it returns context.Cause(ctx); each
@@ -257,21 +255,6 @@ func (a *ScriptAgent) CloseSession(context.Context, acp.CloseSessionRequest) (ac
 // Authenticate is not offered.
 func (*ScriptAgent) Authenticate(context.Context, acp.AuthenticateRequest) (acp.AuthenticateResponse, error) {
 	return acp.AuthenticateResponse{}, acp.NewMethodNotFound(acp.AgentMethodAuthenticate)
-}
-
-// Logout is not offered.
-func (*ScriptAgent) Logout(context.Context, acp.LogoutRequest) (acp.LogoutResponse, error) {
-	return acp.LogoutResponse{}, acp.NewMethodNotFound(acp.AgentMethodLogout)
-}
-
-// ListSessions is not offered.
-func (*ScriptAgent) ListSessions(context.Context, acp.ListSessionsRequest) (acp.ListSessionsResponse, error) {
-	return acp.ListSessionsResponse{}, acp.NewMethodNotFound(acp.AgentMethodSessionList)
-}
-
-// ResumeSession is not offered.
-func (*ScriptAgent) ResumeSession(context.Context, acp.ResumeSessionRequest) (acp.ResumeSessionResponse, error) {
-	return acp.ResumeSessionResponse{}, acp.NewMethodNotFound(acp.AgentMethodSessionResume)
 }
 
 // SetSessionMode is not offered.

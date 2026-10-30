@@ -367,6 +367,11 @@ func (s *Session) Close(ctx context.Context) error {
 // handler is the client side of the connection: it routes session updates
 // to their session and declines what the client does not offer.
 type handler struct {
+	// ClientRefusals answers the file-system, terminal and elicitation
+	// methods "method not found": the client advertises none of them
+	// (0014-MADR D3; 0035-MADR D8).
+	acp.ClientRefusals
+
 	mu       sync.Mutex
 	sessions map[acp.SessionId]func(Update)
 	// pending receives updates for an unknown session while a session/new
@@ -502,12 +507,8 @@ func (h *handler) RequestPermission(ctx context.Context, r acp.RequestPermission
 		}
 		return acp.RequestPermissionResponse{Outcome: acp.NewRequestPermissionOutcomeCancelled()}, nil
 	}
-	for _, kind := range []acp.PermissionOptionKind{acp.PermissionOptionKindRejectOnce, acp.PermissionOptionKindRejectAlways} {
-		for _, o := range r.Options {
-			if o.Kind == kind {
-				return acp.RequestPermissionResponse{Outcome: acp.NewRequestPermissionOutcomeSelected(o.OptionId)}, nil
-			}
-		}
+	if o, ok := acp.PickPermissionOption(r.Options, acp.PermissionOptionKindRejectOnce, acp.PermissionOptionKindRejectAlways); ok {
+		return acp.RequestPermissionResponse{Outcome: acp.NewRequestPermissionOutcomeSelected(o.OptionId)}, nil
 	}
 	return acp.RequestPermissionResponse{Outcome: acp.NewRequestPermissionOutcomeCancelled()}, nil
 }
@@ -548,54 +549,4 @@ func gobbleMarks(req *PermissionRequest, meta map[string]any) {
 	case int:
 		req.Repeated = n
 	}
-}
-
-// The client advertises no file-system or terminal capability, so these
-// answer "method not found".
-
-// ReadTextFile is not offered.
-func (*handler) ReadTextFile(context.Context, acp.ReadTextFileRequest) (acp.ReadTextFileResponse, error) {
-	return acp.ReadTextFileResponse{}, acp.NewMethodNotFound(acp.ClientMethodFsReadTextFile)
-}
-
-// WriteTextFile is not offered.
-func (*handler) WriteTextFile(context.Context, acp.WriteTextFileRequest) (acp.WriteTextFileResponse, error) {
-	return acp.WriteTextFileResponse{}, acp.NewMethodNotFound(acp.ClientMethodFsWriteTextFile)
-}
-
-// CreateTerminal is not offered.
-func (*handler) CreateTerminal(context.Context, acp.CreateTerminalRequest) (acp.CreateTerminalResponse, error) {
-	return acp.CreateTerminalResponse{}, acp.NewMethodNotFound(acp.ClientMethodTerminalCreate)
-}
-
-// KillTerminal is not offered.
-func (*handler) KillTerminal(context.Context, acp.KillTerminalRequest) (acp.KillTerminalResponse, error) {
-	return acp.KillTerminalResponse{}, acp.NewMethodNotFound(acp.ClientMethodTerminalKill)
-}
-
-// TerminalOutput is not offered.
-func (*handler) TerminalOutput(context.Context, acp.TerminalOutputRequest) (acp.TerminalOutputResponse, error) {
-	return acp.TerminalOutputResponse{}, acp.NewMethodNotFound(acp.ClientMethodTerminalOutput)
-}
-
-// ReleaseTerminal is not offered.
-func (*handler) ReleaseTerminal(context.Context, acp.ReleaseTerminalRequest) (acp.ReleaseTerminalResponse, error) {
-	return acp.ReleaseTerminalResponse{}, acp.NewMethodNotFound(acp.ClientMethodTerminalRelease)
-}
-
-// WaitForTerminalExit is not offered.
-func (*handler) WaitForTerminalExit(context.Context, acp.WaitForTerminalExitRequest) (acp.WaitForTerminalExitResponse, error) {
-	return acp.WaitForTerminalExitResponse{}, acp.NewMethodNotFound(acp.ClientMethodTerminalWaitForExit)
-}
-
-// CreateElicitation is not offered, and no elicitation capability is
-// advertised (0014-MADR D3).
-func (*handler) CreateElicitation(context.Context, acp.CreateElicitationRequest) (acp.CreateElicitationResponse, error) {
-	return acp.CreateElicitationResponse{}, acp.NewMethodNotFound(acp.ClientMethodElicitationCreate)
-}
-
-// CompleteElicitation is a notification of an elicitation this client
-// never accepted, so it is ignored.
-func (*handler) CompleteElicitation(context.Context, acp.CompleteElicitationNotification) error {
-	return nil
 }
