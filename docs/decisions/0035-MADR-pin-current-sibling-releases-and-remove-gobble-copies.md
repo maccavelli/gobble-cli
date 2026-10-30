@@ -576,7 +576,11 @@ policy. And one record keeps the order, and the cross-library facts (check-libs,
   - *step 2 becomes `glyph`, with `safetext` by PQ5, and `termcap` dropped;*
   - *step 3, `pick`, is PQ6;* *(2026-10-30, P16: neither `pick` nor `termcap` is adopted. `caps.go` stays gobble's, since
     `termcap` has no TTY, width or locale detection.)*
-  - *step 4, `lineedit`, is PQ7;*
+  - *step 4, `lineedit`, is PQ7;* *(2026-10-30, by the PLAN's deviation 11: held. At `v2.6.2` a `lineedit` key, laid
+    out again whole, is 14.9 µs on macOS, 42.0 µs on the Linux machine and 11.8 µs on the Windows laptop. That is past
+    0030-MADR D5's budgets of 4.5, 15 and 4.2 µs, which this decision keeps. Step 4 waits for a go-tui-lib tag that
+    meets them, asked for in [go-tui-lib#13](https://github.com/maccavelli/go-tui-lib/issues/13). `internal/cli/editor` stays gobble's until then, and step 5 waits
+    with it.)*
   - *step 5 stands, with `wrap.go` kept for thinking text and the width helpers moved to `x/ansi`.*
 
   *(Answered 2026-10-29: PQ4 (a) `ask`'s behaviour, 0029-MADR D1 amended; PQ5 (a) `safetext` on terminal paths, print

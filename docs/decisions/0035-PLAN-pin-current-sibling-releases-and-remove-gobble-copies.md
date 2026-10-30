@@ -113,6 +113,9 @@ So the steps below stand as written, and no phase waits on a question.
 *Deviation 1 (2026-10-29): the pin phases run first, in the order P0, P2, P3, P4, P7, P13, P14. Then P1, P5, P6,
 P8–P12 and P15–P19 follow, in number order. See the execution record.*
 
+*Deviation 11 (2026-10-30): P17 is held for go-tui-lib's `lineedit` key cost, [go-tui-lib#13](https://github.com/maccavelli/go-tui-lib/issues/13), and P18 and P19 wait
+with it. See the execution record.*
+
 P0 to P19, in order, by the owner's answer to Q6 ("Risk-first sequence"). A phase starts only on the owner's word for
 it, or for a named range ("do phase N", "do P3–P6", "execute the plan").
 
@@ -1847,3 +1850,121 @@ By PQ6 (a), no code changes. The base is P15's commit `884a6a0`.
 4. Gates: `make check-records markdownlint`, exit 0. Records only.
 
 No deviation.
+
+### Deviation 11 (2026-10-30): P17 held for go-tui-lib's `lineedit` key cost
+
+- **Found.** Step 5 holds `BenchmarkKeyDraw`, the Composer's draw of one key, to 0030-MADR D5's budget of three times
+  each host's baseline. At `v2.6.2` the whole key (`HandleInput`, then draining `NextEvent`) breaches it on all three
+  hosts:
+
+  | Host | Baseline | Budget | `lineedit` key |
+  | --- | --- | --- | --- |
+  | macOS | 1.5 µs | 4.5 µs | 14.9 µs, 53 allocations |
+  | the Linux machine | 5 µs | 15 µs | 42.0 µs, 53 allocations |
+  | the Windows laptop | 1.4 µs | 4.2 µs | 11.8 µs, 53 allocations |
+
+  The old benchmark timed only the renderer's draw of rows laid out beforehand. On macOS, measured on scratch copies
+  with three runs of 2 s each:
+  - gobble's whole key at `6c5eb02` (buffer, layout, draw) is 4.24 µs, with 17 allocations;
+  - `inline.Region.Draw` of rows laid out beforehand is 1.92 µs, with 5;
+  - `Composer.View` alone is 6.5 µs, with 42 allocations and 9.4 KB.
+
+  The new whole key is 3.4× the old one. A CPU and memory profile puts 92% of the bytes allocated, and about 19% of
+  the CPU, in `lineedit.layout` → `layLine`: every key lays the whole line out again. Backspace's `lineinput.Line.cut`
+  rebuilds the text with `strings.Join`, about 10% of the CPU. No host option changes either. MADR D14 says
+  0030-MADR D5's benchmarks are no worse after any step, so step 4 cannot be met at this tag.
+- **The owner's answer, 2026-10-30:** "Hold P17 for go-tui-lib". The options not taken were:
+  - two budgets: the draw's old measure kept, plus a whole-key benchmark with new baselines, the regression recorded;
+  - deferring `lineedit`, PQ7 (c).
+- **Decision.**
+  - Step 5 stands as written. P17 waits for a go-tui-lib tag whose Composer key is within the budgets above on every
+    host.
+  - The issue is [go-tui-lib#13](https://github.com/maccavelli/go-tui-lib/issues/13), filed on the owner's word the same day: "lineedit: a key costs about 3.4 times what
+    gobble's editor did, mostly from laying the whole line out again". It gives the benchmark, the table above and
+    the profile. It asks for one of four things:
+    - layout from the changed row;
+    - the layout kept between draws, by the text's version and the width;
+    - fewer allocations in `layLine`, with each cluster's width measured once;
+    - `Line.cut` without rebuilding the text.
+  - P18 writes the transcript's reprint between P17's region's `Clear` and `Draw` (its step 5), and P19 closes both.
+    So P18 and P19 wait with P17.
+  - P17's work stays in the working tree, uncommitted, because step 8's commit needs step 5. It is described in the
+    P17 record below.
+- **Files added to scope:**
+  - `internal/cli/prompt.go` and `internal/cli/permission.go`: `keysIn` reads with `Read(ctx, p)`, `inline.Reader`'s
+    method, in place of `editor.Reader`'s `ReadContext`.
+  - `internal/cli/view_wrap_test.go`.
+
+### P17 record (2026-10-30): `lineedit`, held at step 5
+
+The base is `6c5eb02`. Nothing is committed (deviation 11).
+
+1. **The host** (`internal/cli/editor/editor.go`).
+   - Each prompt is a `lineedit.Composer` drawn in the editor's one `inline.Region`. The region's reflow is
+     `ReflowCut` under `XTERM_VERSION`, else `ReflowDown`.
+   - The keymap is built once, `keymap.New(keymap.Settings{}, lineedit.DefaultRules())`, and passed with
+     `WithKeymap`.
+   - The Composer's other options are step 3's: `WithCompleter`, `WithPaste(PasteInsert)`, `WithLimit(4096)`,
+     `WithClearScreen`, `WithHeader`, and `WithExternalEditor` when `Options.External` is set.
+   - `termkey.Decoder` decodes the input; a held escape is flushed after `DefaultEscTimeout`.
+   - Inputs go to the Composer one at a time, so keys typed after a submission wait for the next prompt.
+   - The Composer's writes are written once for each read.
+   - gobble's parts stay the host's:
+     - the Ctrl+C window, driven from `EditInterrupt`;
+     - `/exit` and `/quit`, and skipping an empty submission;
+     - the history, added to only for submissions `ReadPrompt` returns;
+     - the paste notice on errw, for a paste of more than one line;
+     - the 120-column cap;
+     - the reprint once resizes settle, written through the region's `Print` as one synchronized update.
+   - After a submission, the empty prompt the Composer draws below it, and the region's clearing of it, are both
+     dropped. That leaves the cursor at the start of the row below the line, as before.
+2. **What went:** `buffer.go`, `draw.go`, `layout.go`, `keys.go`, `paste.go` and `reader.go`, with `buffer_test.go`,
+   `draw_test.go`, `layout_test.go` and `reader_test.go`.
+   - `buffer_test.go`'s cases moved to the new `parity_test.go`.
+   - `TestLineWidth` moved to `editor_test.go`.
+   - The draw tests' and the reader's cases are go-tui-lib's own tests.
+3. **`history.go`:** `FileHistory` keeps a `lineedit.MemHistory`, read with `ReadFrom` and saved with `WriteTo`, whose
+   format is gobble's. The 1000 entries, the `0600` mode and the atomic rename stay.
+4. **The callers.**
+   - `auth.go`, `login.go` and `line.go` make an `inline.NewReader`; `prompt.go` and `permission.go` read through it.
+   - `line.go` sets `Options.External` to `slash.go`'s new `editLine`, which runs `Compose` out of raw mode for ctrl+x
+     ctrl+e.
+5. **The PQ7 changes, each named in its test.**
+   - `TestReadPrompt`: a paste is one buffer, its CR made LF, and a Ctrl+C inside it is cleaned out: `"ab"`, where
+     gobble's kept `"a\x03b"`.
+   - `TestPasteNoticeAndPrompts`: one buffer, the notice kept, once for each paste.
+   - `TestHeader`: a trailing backslash's line break is in the buffer, so the first row is `> one`, where gobble's was
+     `> one\`.
+   - `TestEditingMidLineOnScreen`: alt+→ goes to a word's end.
+   - `TestWordKeys`: words are letters and digits, and stop at punctuation.
+   - In `TestKeysMatchXterm`, the cases PQ7 changes are skipped, each naming the test that holds it: two alt+→ cases,
+     Ctrl+C and the five paste cases.
+   - Two other changes:
+     - `TestLineSessionRedrawsOnResize` narrows the terminal, since the region redraws only at a new width;
+     - `TestLineSessionWrapsReplies` measures rows with `ansi.StringWidth`, since the end of the line's synchronized
+       update now comes before the reply.
+   - The screen tests use `inline/inlinetest.Screen`.
+6. **Seen failing (C9).** On a scratch copy, each break made its test fail:
+   - the host's Ctrl+C window skipped: `TestCtrlCTwiceInsideWindowExits` fails, "deadlock: all goroutines in bubble are
+     blocked";
+   - the history saved `0644`: `TestHistoryCapAndFiles` fails, `mode = -rw-r--r--, want 0600`;
+   - the external editor's text dropped: `TestExternalEditor` fails;
+   - a notice written over the prompt: `TestNoticesAboveThePrompt` fails;
+   - typed-ahead keys dropped: `TestReadPrompt/keys_typed_ahead_go_to_the_next_prompt` fails, `["one"]`;
+   - the empty prompt below a submission written: `TestLineSessionWrapsReplies` fails;
+   - `earliest` reversed: `TestEarliest` fails;
+   - a paste's CR kept: `TestReadPrompt/pasted_lines_are_one_submission` fails, `"line1line2line3"`;
+   - each key's drawing doubled: `TestKeyDrawBudget` fails, `82 bytes for 1 bytes changed, more than 41`.
+7. **G-local:**
+   - `make pre-add-check` on the 19 Go files: clean;
+   - `make preflight`: passed, after revive's confusing-naming on `readPrompt` and `add`, renamed `nextSubmission` and
+     `record`;
+   - `make race`: 36 ok;
+   - `make perf`: ReplyRender 33.5 µs (baseline 30), Reprint 9.73 ms (9.4), LineSessionStart 978 µs (830), and KeyDraw
+     14.9 µs (1.5), the breach.
+8. **G-hosts:**
+   - on both hosts: `go test`, race (36 ok) and records pass. Preflight stops at `verify-build-metadata`, as on every
+     copy;
+   - `make perf` breaches KeyDraw on both, as deviation 11's table has it;
+   - `make probe-conhost` passes on the Windows laptop.
+9. **Not done:** step 8's commit.
