@@ -292,8 +292,11 @@ func promptError(err error) error {
 }
 
 // acpUsage is the turn's usage for the prompt response.
-func acpUsage(u llm.Usage) *acp.Usage {
-	out := &acp.Usage{InputTokens: count(u.InputTokens), OutputTokens: count(u.OutputTokens), TotalTokens: count(u.InputTokens + u.OutputTokens)}
+//
+//lint:ignore SA1019 acp-go-sdk2 keeps this unstable-schema name under v1 (0035-MADR D6)
+func acpUsage(u llm.Usage) *acp.Usage { //nolint:staticcheck // as the lint:ignore above
+	//lint:ignore SA1019 acp-go-sdk2 keeps this unstable-schema name under v1 (0035-MADR D6)
+	out := &acp.Usage{InputTokens: count(u.InputTokens), OutputTokens: count(u.OutputTokens), TotalTokens: count(u.InputTokens + u.OutputTokens)} //nolint:staticcheck // as the lint:ignore above
 	if u.ReasoningTokens > 0 {
 		out.ThoughtTokens = new(count(u.ReasoningTokens))
 	}

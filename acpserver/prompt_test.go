@@ -137,8 +137,10 @@ func TestReadReachesTheReply(t *testing.T) {
 	if len(client.Permissions()) != 0 {
 		t.Fatal("read asked permission; it is read-only")
 	}
-	if resp.Usage == nil || resp.Usage.TotalTokens != 37 {
-		t.Fatalf("response usage %+v", resp.Usage)
+	//lint:ignore SA1019 acp-go-sdk2 keeps this unstable-schema name under v1 (0035-MADR D6)
+	if resp.Usage == nil || resp.Usage.TotalTokens != 37 { //nolint:staticcheck // as the lint:ignore above
+		//lint:ignore SA1019 acp-go-sdk2 keeps this unstable-schema name under v1 (0035-MADR D6)
+		t.Fatalf("response usage %+v", resp.Usage) //nolint:staticcheck // as the lint:ignore above
 	}
 }
 

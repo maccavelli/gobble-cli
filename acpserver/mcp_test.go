@@ -197,7 +197,8 @@ func TestUnofferedTransportsRefused(t *testing.T) {
 		capability string
 	}{
 		{acp.McpServer{Sse: &acp.McpServerSseInline{Name: "old", Type: "sse", Url: "https://example.com/sse", Headers: []acp.HttpHeader{}}}, "mcpCapabilities.sse"},
-		{acp.McpServer{Acp: &acp.McpServerAcpInline{Name: "peer", Type: "acp", ServerId: "x"}}, "mcpCapabilities.acp"},
+		//lint:ignore SA1019 acp-go-sdk2 keeps this unstable-schema name under v1 (0035-MADR D6)
+		{acp.McpServer{Acp: &acp.McpServerAcpInline{Name: "peer", Type: "acp", ServerId: "x"}}, "mcpCapabilities.acp"}, //nolint:staticcheck // as the lint:ignore above
 	} {
 		_, err := acp.SendRequest[acp.NewSessionResponse](c.Client.Connection(), t.Context(), acp.AgentMethodSessionNew,
 			acp.NewSessionRequest{Cwd: t.TempDir(), McpServers: []acp.McpServer{tc.s}})

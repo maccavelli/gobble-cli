@@ -743,7 +743,8 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 			if out.err != nil {
 				return acp.PromptResponse{}, out.err
 			}
-			resp := acp.PromptResponse{StopReason: acp.StopReason(end.StopReason), Usage: acpUsage(end.Usage)}
+			//lint:ignore SA1019 acp-go-sdk2 keeps this unstable-schema name under v1 (0035-MADR D6)
+			resp := acp.PromptResponse{StopReason: acp.StopReason(end.StopReason), Usage: acpUsage(end.Usage)} //nolint:staticcheck // as the lint:ignore above
 			if end.StopReason == agent.StopCancelled {
 				resp.Meta = clearedMeta(s)
 			}

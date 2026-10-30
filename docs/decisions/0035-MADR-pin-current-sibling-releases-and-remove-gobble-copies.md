@@ -424,6 +424,28 @@ policy. And one record keeps the order, and the cross-library facts (check-libs,
     It is seen failing first on a scratch copy.
   - The gate is the shape of magic-cli-remote's `scripts/check_staticcheck_ignored.py`, written for gobble's tree.
   - It lands in the pin's commit, since the pin fails `make staticcheck` without it.
+
+  *Amended 2026-10-29, by the PLAN's deviation 3, from the owner's answer "House idiom + general gate
+  (Recommended)".*
+
+  *P7 found that the gate as written refused five older suppressions:*
+  - *SA1019 on MCP roots, at `mcpclient/conn.go:136`;*
+  - *ST1005 on Pi's error texts, at `mcpclient/value.go:76` and `:79`, and at `compaction/compaction.go:51` and
+    `:53`.*
+
+  *Each follows a recorded house idiom, 0002-PLAN Phase 5 deviation 3: a `//lint:ignore` line for standalone
+  staticcheck, paired with `//nolint:staticcheck // as the lint:ignore above` on the line itself for golangci-lint.
+  So D6 is carried out in that idiom:*
+  - *each of F2's 12 lines has both;*
+  - *`.golangci.yml` gains no exclusion, so no future deprecation is silenced centrally;*
+  - *the gate, `scripts/check_staticcheck_ignored.py`, holds every suppression in the module to the idiom:*
+    - *each `//lint:ignore` cites a record;*
+    - *each is paired with a `//nolint:staticcheck`, and each `//nolint:staticcheck` with a `//lint:ignore`;*
+    - *each ignored finding sits under a directive of its own check.*
+
+  *MCP roots stays as 0002-PLAN decided. The MCP go-sdk deprecates roots by SEP-2577, "functional during the
+  deprecation window (at least twelve months)", with migration through tool parameters, resource URIs or
+  configuration. Moving off it is a product choice for a record of its own.*
 - **D7. The five `SessionUpdate` literals become the SDK's constructors** (0034-MADR D2). `session.golden` stays
   byte-identical, and a difference stops the phase (0034-MADR D3).
 - **D8. The refusals.** `acpclient`'s `handler` embeds `ClientRefusals`, and the nine stubs go. `acpserver.Agent`

@@ -336,7 +336,8 @@ func (s *Session) Prompt(ctx context.Context, p Prompt) (Result, error) {
 	if g, ok := resp.Meta[metaGobble].(map[string]any); ok {
 		r.SwitchTo, _ = g["switchTo"].(string) //nolint:errcheck // absent is none
 	}
-	if u := resp.Usage; u != nil {
+	//lint:ignore SA1019 acp-go-sdk2 keeps this unstable-schema name under v1 (0035-MADR D6)
+	if u := resp.Usage; u != nil { //nolint:staticcheck // as the lint:ignore above
 		r.Usage = &Usage{
 			InputTokens: toInt(u.InputTokens), OutputTokens: toInt(u.OutputTokens), TotalTokens: toInt(u.TotalTokens),
 			ThoughtTokens: toIntPtr(u.ThoughtTokens), CachedReadTokens: toIntPtr(u.CachedReadTokens), CachedWriteTokens: toIntPtr(u.CachedWriteTokens),

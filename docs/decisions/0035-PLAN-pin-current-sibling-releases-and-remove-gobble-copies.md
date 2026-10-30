@@ -505,7 +505,8 @@ Files:
      `prompt.go:295` and `:296`.
    - Run `gofmt -w` on the eight files. `gofmt` moves a directive that follows a doc comment below a `//` line, as at
      `prompt.go:295` (probed 2026-10-29).
-4. **`.golangci.yml`.** golangci-lint v2.14.0 does not honour `//lint:ignore` (probed 2026-10-29: all 12 still
+4. *~~Superseded by deviation 3: no `.golangci.yml` rule. Each line carries `//nolint:staticcheck // as the lint:ignore
+   above` instead, the house idiom of 0002-PLAN Phase 5 deviation 3.~~ As written:* **`.golangci.yml`.** golangci-lint v2.14.0 does not honour `//lint:ignore` (probed 2026-10-29: all 12 still
    reported). After the `internal/config/genschema` rule, add:
 
    ```yaml
@@ -516,7 +517,10 @@ Files:
            text: "SA1019: .*github\\.com/maccavelli/acp-go-sdk2\\..* is deprecated: this declaration comes from the unstable ACP schema"
    ```
 
-5. **`scripts/check_staticcheck_ignored.py`.**
+5. *Amended by deviation 3: the gate is record-based. Each `//lint:ignore` cites a NNNN-MADR or NNNN-PLAN record and is
+   paired with a `//nolint:staticcheck`, each `//nolint:staticcheck` follows a `//lint:ignore`, and each ignored finding
+   is under a directive of its own check. That holds every suppression in the module, the five older ones included.
+   As written:* **`scripts/check_staticcheck_ignored.py`.**
    - It follows magic-cli-remote's script of the same name: the same two checks, the stdlib only, and
      `python3 -I`-safe. It is rewritten for gobble, not copied.
    - `REASON` is `"0035-MADR D6"`, `SDK` is `"github.com/maccavelli/acp-go-sdk2."`, and `NOTICE` is `"this declaration
@@ -1211,3 +1215,83 @@ The base is P3's commit `8632061`.
 8. G-hosts, on a copy of the tree (807 files): on the Linux machine (`go1.27.3 linux/amd64`) and the Windows laptop (`go1.27.3 windows/amd64`), `go test` exit 0, race exit 0 with 36 packages ok, `preflight` to `verify-build-metadata` (stopped at `git rev-parse HEAD`, exit 128: the copy has no commit, C6), and records and markdownlint exit 0.
 
 One deviation: deviation 2, above.
+
+### Deviation 3 (2026-10-29): P7's gate and the house idiom
+
+- **Found.** `make staticcheck` with the gate as step 5 wrote it (directives citing `0035-MADR D6` only) failed on each
+  GOOS, on five suppressions older than this plan:
+  - `mcpclient/conn.go:136`, `//lint:ignore SA1019 roots are deprecated from MCP 2026-07-28 but still served, and servers
+    on earlier protocols read them (0002-PLAN Phase 5, deviation 3)`;
+  - `mcpclient/value.go:76` and `:79`, and `compaction/compaction.go:51` and `:53`, each `//lint:ignore ST1005 Pi's
+    message, word for word (0002-PLAN Phase 5, deviation 3…)`.
+
+  These are pre-existing and recorded. Each pairs its `//lint:ignore` with `//nolint:staticcheck // as the lint:ignore
+  above`, the idiom 0002-PLAN Phase 5 deviation 3 set: standalone staticcheck reads only `//lint:ignore`, and
+  golangci-lint reads only `//nolint`. Step 4's central `.golangci.yml` text rule departed from that idiom, and would
+  have silenced every future acp-go-sdk2 deprecation for golangci-lint.
+- **Research, for the owner's request** "dig into this a bit. research best practices and the most idiomatic
+  approaches…":
+  - the MCP go-sdk `v1.8.0` deprecates roots by SEP-2577, "functional during the deprecation window (at least twelve
+    months)". `v1.8.0` is that module's newest version;
+  - acp-go-sdk2's own boundary is its `unstable` package, which cannot take fields already merged onto stable types,
+    such as `PromptResponse.Usage`.
+
+  Three options were offered: the house idiom with a general gate; quarantining the unstable uses in one `unstable.go`
+  per package, with file-wide directives; and an exact baseline file of the allowed ignored findings.
+- **The owner's answer, 2026-10-29:** "House idiom + general gate (Recommended)".
+- **Decision.**
+  - Each of F2's 12 lines carries both the `//lint:ignore` line and `//nolint:staticcheck // as the lint:ignore
+    above`.
+  - `.golangci.yml` is not changed.
+  - The gate is record-based, for every suppression in the module. Each `//lint:ignore` or `//lint:file-ignore`
+    cites a NNNN-MADR or NNNN-PLAN record. Each `//lint:ignore` is paired with a `//nolint:staticcheck` on the next
+    line, and each `//nolint:staticcheck` follows a `//lint:ignore`. Each ignored finding is under a directive of its
+    own check, comma-separated lists included.
+  - The MADR's D6 carries the amendment.
+- **Files added to scope:** none. `.golangci.yml` leaves P7's changes.
+
+### P7 record (2026-10-29): acp-go-sdk2 `v1.26.0`, the suppression and its gate
+
+The base is P4's commit `bd79d2a`.
+
+1. **C2.** `v1.26.0` is still the newest. P2's `check-libs` gave `staticcheck: FAIL` and `lint: FAIL` alone, as
+   expected.
+2. **The pin.** `go get github.com/maccavelli/acp-go-sdk2@v1.26.0`, then `go mod tidy`, each exit 0. Only `go.mod` (one
+   line) and `go.sum` (four) change.
+3. **The directives.**
+   - Each of F2's 12 lines has the `//lint:ignore SA1019 acp-go-sdk2 keeps this unstable-schema name under v1
+     (0035-MADR D6)` line above it.
+   - The script asserted that each target line holds an F2 name.
+   - `gofmt -w` moved the one under `acpUsage`'s doc comment below a `//` line.
+   - By deviation 3, each target line also ends `//nolint:staticcheck // as the lint:ignore above`.
+4. **`.golangci.yml`:** unchanged, by deviation 3.
+5. **The gate** is `scripts/check_staticcheck_ignored.py`, mode 0644 like the repository's other scripts, as
+   deviation 3 has it.
+6. **`Makefile`.** `staticcheck` runs `$(PYTHON) scripts/check_staticcheck_ignored.py ./$(STATICCHECK_BIN)` per GOOS.
+7. **Seen failing (C9).** Four copies of the tree (`<scratch>/break-P7-1` to `-4`, removed), each a git repository
+   for `git ls-files`, with the tree's staticcheck binary. Each exits 1:
+   - **no record cited:** `acpclient/conn.go:339: the reason cites no NNNN-MADR or NNNN-PLAN record`;
+   - **the `//nolint` removed:** `acpclient/conn.go:340: no //nolint:staticcheck under the //lint:ignore at line 339`;
+   - **a stray `//nolint:staticcheck` planted:** `acpclient/conn.go:1: //nolint:staticcheck with no //lint:ignore on
+     the line above`;
+   - **a fake staticcheck reporting an ignored SA1019 at an uncovered line:** `acpserver/agent.go:1: ignored SA1019
+     under no directive of that check`.
+
+   The first attempt at the fourth passed the fake as two arguments, and the script answered with its usage error
+   (exit 2). Only the rerun, with the fake as one executable path, is evidence.
+
+   Without the `//nolint` pairs, `make lint` reported `12 issues: * staticcheck: 12`, on a scratch clone of
+   2026-10-29.
+8. **Assert.** `make staticcheck` prints, for each of linux, darwin and windows,
+   `check_staticcheck_ignored: 17 directive(s), 22 ignored finding(s), each recorded and paired`. Those are F2's 12
+   directives and the 5 older ones. The findings are 18 SA1019 (F2's 16 and MCP roots' 2) and 4 ST1005. The count of
+   `-show-ignored` SA1019 records is 18 on each GOOS. `make lint`: `0 issues.`
+9. **Docs.** `README.md` "Stack" and the `docs/architecture.md` pin table say `v1.26.0`. 0031-MADR has a note at D1.
+10. **G-local.**
+    - `make pre-add-check` on the 8 Go files: `8 file(s) clean (gofmt, golint, govulncheck)`.
+    - `make preflight`: "preflight passed".
+    - `make race`: exit 0, 36 packages ok.
+    - `acpserver/testdata/session.golden` is unchanged.
+11. G-hosts, on a copy of the tree (808 files): on the Linux machine (`go1.27.3 linux/amd64`) and the Windows laptop (`go1.27.3 windows/amd64`), `go test` exit 0, race exit 0 with 36 packages ok, `preflight` through `staticcheck` and its gate to `verify-build-metadata` (stopped at `git rev-parse HEAD`, exit 128: no commit, C6), and records and markdownlint exit 0.
+
+One deviation: deviation 3, above.

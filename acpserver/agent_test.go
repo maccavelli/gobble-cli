@@ -141,11 +141,13 @@ func TestCapabilitiesAreHonest(t *testing.T) {
 		t.Error("session list and resume are implemented (Phase 4) and must be advertised")
 	case got.SessionCapabilities.Close == nil:
 		t.Error("session close is implemented and must be advertised")
-	case got.SessionCapabilities.Fork != nil, got.SessionCapabilities.Delete != nil:
+	//lint:ignore SA1019 acp-go-sdk2 keeps this unstable-schema name under v1 (0035-MADR D6)
+	case got.SessionCapabilities.Fork != nil, got.SessionCapabilities.Delete != nil: //nolint:staticcheck // as the lint:ignore above
 		t.Error("session fork or delete advertised; neither is implemented")
 	case !got.McpCapabilities.Http:
 		t.Error("MCP over streamable HTTP is implemented (Phase 5) and must be advertised")
-	case got.McpCapabilities.Sse, got.McpCapabilities.Acp:
+	//lint:ignore SA1019 acp-go-sdk2 keeps this unstable-schema name under v1 (0035-MADR D6)
+	case got.McpCapabilities.Sse, got.McpCapabilities.Acp: //nolint:staticcheck // as the lint:ignore above
 		t.Error("MCP over SSE or ACP advertised; neither is offered")
 	case !got.PromptCapabilities.EmbeddedContext:
 		t.Error("resource blocks are read (0005-PLAN F3-4) and embeddedContext must be advertised")

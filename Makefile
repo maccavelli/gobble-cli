@@ -149,6 +149,7 @@ staticcheck: $(STATICCHECK_BIN)
 	for goos in linux darwin windows; do \
 		echo "staticcheck $$ver GOOS=$$goos"; \
 		GOOS=$$goos CGO_ENABLED=0 ./$(STATICCHECK_BIN) ./... || rc=1; \
+		GOOS=$$goos CGO_ENABLED=0 $(PYTHON) scripts/check_staticcheck_ignored.py ./$(STATICCHECK_BIN) || rc=1; \
 	done; \
 	exit $$rc
 

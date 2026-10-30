@@ -46,7 +46,8 @@ func TestScriptAgentPlaysTurns(t *testing.T) {
 	}}
 	c, id := dial(t, agent)
 	r, err := prompt(t, c, id)
-	if err != nil || r.StopReason != "max_tokens" || r.Usage == nil || r.Usage.OutputTokens != 5 {
+	//lint:ignore SA1019 acp-go-sdk2 keeps this unstable-schema name under v1 (0035-MADR D6)
+	if err != nil || r.StopReason != "max_tokens" || r.Usage == nil || r.Usage.OutputTokens != 5 { //nolint:staticcheck // as the lint:ignore above
 		t.Fatalf("turn 1 = %+v, %v", r, err)
 	}
 	if _, err := prompt(t, c, id); err == nil || !strings.Contains(err.Error(), "provider down") {

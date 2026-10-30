@@ -186,8 +186,10 @@ func (a *ScriptAgent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.Prom
 	}
 	resp := acp.PromptResponse{StopReason: acp.StopReason(cmp.Or(turn.StopReason, string(acp.StopReasonEndTurn)))}
 	if turn.Usage != "" {
-		resp.Usage = &acp.Usage{}
-		if err := json.Unmarshal([]byte(turn.Usage), resp.Usage); err != nil {
+		//lint:ignore SA1019 acp-go-sdk2 keeps this unstable-schema name under v1 (0035-MADR D6)
+		resp.Usage = &acp.Usage{} //nolint:staticcheck // as the lint:ignore above
+		//lint:ignore SA1019 acp-go-sdk2 keeps this unstable-schema name under v1 (0035-MADR D6)
+		if err := json.Unmarshal([]byte(turn.Usage), resp.Usage); err != nil { //nolint:staticcheck // as the lint:ignore above
 			return acp.PromptResponse{}, acp.NewInternalError(map[string]any{"usage": err.Error()})
 		}
 	}
