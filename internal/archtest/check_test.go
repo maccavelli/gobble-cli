@@ -83,6 +83,22 @@ func TestImportRules(t *testing.T) {
 			{ImportPath: modulePath + "/internal/cli", Imports: []string{tuiLib + "/a"}},
 			{ImportPath: tuiLib + "/a", Deps: []string{tuiLib + "/b", "github.com/charmbracelet/colorprofile"}},
 		}},
+		// 0035-MADR D13: go-tui-lib is its /v2 module; the v1 path is refused
+		// everywhere, and tuitest's exception is the /v2 path's. The paths are
+		// written out, not built from tuiLib, so a constant that drifts fails.
+		{name: "rule 5 v1 path refused", rule: 5, want: "go-tui-lib's v1 path", pkgs: []modPkg{
+			{ImportPath: modulePath + "/internal/cli", Imports: []string{"github.com/maccavelli/go-tui-lib/glyph"}},
+			{ImportPath: "github.com/maccavelli/go-tui-lib/glyph", Deps: []string{"strings"}},
+		}},
+		{name: "rule 5 v1 path refused in internal/tui", rule: 5, want: "go-tui-lib's v1 path", pkgs: []modPkg{
+			{ImportPath: modulePath + "/internal/tui", Imports: []string{"github.com/maccavelli/go-tui-lib/theme"}},
+		}},
+		{name: "rule 5 tuitest v2 in a test", rule: 5, pkgs: []modPkg{
+			{ImportPath: modulePath + "/agent", TestImports: []string{"github.com/maccavelli/go-tui-lib/v2/tuitest"}},
+		}},
+		{name: "rule 5 tuitest v2 outside a test", rule: 5, want: "github.com/maccavelli/go-tui-lib/v2/tuitest", pkgs: []modPkg{
+			{ImportPath: modulePath + "/agent", Imports: []string{"github.com/maccavelli/go-tui-lib/v2/tuitest"}},
+		}},
 		// 0032-MADR amendment A1: x/ansi, and it alone of Charm, may reach
 		// internal/cli.
 		{name: "rule 5 cli may import x/ansi", rule: 5, pkgs: []modPkg{

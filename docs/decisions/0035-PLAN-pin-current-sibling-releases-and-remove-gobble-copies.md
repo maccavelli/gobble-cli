@@ -1295,3 +1295,35 @@ The base is P4's commit `bd79d2a`.
 11. G-hosts, on a copy of the tree (808 files): on the Linux machine (`go1.27.3 linux/amd64`) and the Windows laptop (`go1.27.3 windows/amd64`), `go test` exit 0, race exit 0 with 36 packages ok, `preflight` through `staticcheck` and its gate to `verify-build-metadata` (stopped at `git rev-parse HEAD`, exit 128: no commit, C6), and records and markdownlint exit 0.
 
 One deviation: deviation 3, above.
+
+### P13 record (2026-10-29): archtest names `/v2`
+
+The base is P7's commit `3a2129c`.
+
+1. **The constants.** `tuiLib` is `github.com/maccavelli/go-tui-lib/v2`. `tuiLibV1` is the old path. The comment cites
+   0035-MADR D13.
+2. **The v1 path.** `checkRule5` refuses an edge whose target is under `tuiLibV1` and not under `tuiLib`. The check comes
+   before the `internal/tui` skip, so the refusal holds everywhere, `internal/tui` included. The message reads
+   `<path> (go-tui-lib's v1 path; import github.com/maccavelli/go-tui-lib/v2, 0035-MADR D13)`.
+3. **New cases in `TestImportRules`,** with the paths written out, not built from `tuiLib`, so that a constant which
+   drifts fails:
+   - `rule 5 v1 path refused`, from `internal/cli`;
+   - `rule 5 v1 path refused in internal/tui`;
+   - `rule 5 tuitest v2 in a test`, which is allowed;
+   - `rule 5 tuitest v2 outside a test`, which is refused.
+
+   The existing cases build their paths from `tuiLib`, so they move to `/v2` with it.
+4. **Seen failing (C9).** On a copy of the tree with only the new cases added, so with P12's `check.go` (the v1
+   constant), `go test ./internal/archtest/` exits 1:
+   - `rule_5_v1_path_refused` and `rule_5_v1_path_refused_in_internal/tui`: `missing "go-tui-lib's v1 path"`;
+   - `rule_5_tuitest_v2_in_a_test`: `unexpected edge`.
+
+   `outside a test` passes there too, since the old prefix already refuses it, as step 4 expected. With P13 applied,
+   the package passes.
+5. **G-local.**
+   - `make pre-add-check` on the two files: `2 file(s) clean (gofmt, golint, govulncheck)`.
+   - `make preflight`: "preflight passed".
+   - `make race`: exit 0, 36 packages ok.
+6. G-hosts, on a copy of the tree (808 files): on the Linux machine and the Windows laptop (`go1.27.3`), `go test` exit 0, race exit 0 with 36 packages ok, `preflight` to `verify-build-metadata` (stopped at `git rev-parse HEAD`, exit 128: no commit, C6), and records and markdownlint exit 0.
+
+No deviation.

@@ -34,11 +34,14 @@ type modPkg struct {
 	Err  string
 }
 
-// tuiLib is go-tui-lib's module path; xansi is the one Charm module the
-// native CLI may import (0032-MADR amendment A1).
+// tuiLib is go-tui-lib's module path, its /v2 major since v2.0.0, and
+// tuiLibV1 the path before it, which no package may import (0035-MADR
+// D13); xansi is the one Charm module the native CLI may import
+// (0032-MADR amendment A1).
 const (
-	tuiLib = "github.com/maccavelli/go-tui-lib"
-	xansi  = "github.com/charmbracelet/x/ansi"
+	tuiLib   = "github.com/maccavelli/go-tui-lib/v2"
+	tuiLibV1 = "github.com/maccavelli/go-tui-lib"
+	xansi    = "github.com/charmbracelet/x/ansi"
 )
 
 type edge struct {
@@ -273,7 +276,8 @@ func checkRule4(pkgs []modPkg) []Violation {
 // go-tui-lib. internal/cli may import x/ansi, and a go-tui-lib package
 // whose whole closure holds no Charm but x/ansi, and never internal/tui;
 // any other package, none of go-tui-lib but tuitest in a test (0004-MADR
-// rule 5, as amended by 0032-MADR D1 and its amendment A1).
+// rule 5, as amended by 0032-MADR D1 and its amendment A1). No package,
+// internal/tui included, imports go-tui-lib's v1 path (0035-MADR D13).
 func checkRule5(pkgs []modPkg) []Violation {
 	closure := map[string][]string{}
 	for _, p := range pkgs {
@@ -284,6 +288,10 @@ func checkRule5(pkgs []modPkg) []Violation {
 	var vs []Violation
 	for _, e := range edges(pkgs) {
 		rel, ok := relOf(e.from)
+		if ok && pathUnder(e.to, tuiLibV1) && !pathUnder(e.to, tuiLib) {
+			vs = append(vs, Violation{Rule: 5, From: e.from, To: e.to + " (go-tui-lib's v1 path; import " + tuiLib + ", 0035-MADR D13)"})
+			continue
+		}
 		if !ok || under(rel, "internal/tui") {
 			continue
 		}
