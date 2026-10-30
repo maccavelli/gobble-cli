@@ -466,6 +466,11 @@ policy. And one record keeps the order, and the cross-library facts (check-libs,
   - `Close` gains the runner's three steps and `ErrAbandoned`.
   - This is the last acp-go-sdk2 phase, since it changes how the CLI's agent stops.
 
+  *(2026-10-30, by the PLAN's deviation 9: held. At `v1.26.0`, `agentproc.Process.Close` waits without bound for a
+  client handler that never returns, where gobble's `Close` is bounded. D12 waits for
+  [acp-go-sdk2#12](https://github.com/maccavelli/acp-go-sdk2/issues/12), and `acpclient.Start` stays gobble's until a tag
+  carries it.)*
+
 ### go-tui-lib
 
 - **D13. `archtest` names `/v2`.**

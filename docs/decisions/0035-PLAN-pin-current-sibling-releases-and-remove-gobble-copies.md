@@ -1755,3 +1755,24 @@ The base is P10's commit `7ed439f`, then deviation 8's `bb4e5eb`.
 9. G-hosts, on a copy (811 files), `go1.27.3`: on the Linux machine and the Windows laptop, `go test` and race exit 0, 36 ok; `preflight` to `verify-build-metadata` (no commit, C6); records and markdownlint exit 0. A first host run, before step 3's fix, stopped `preflight` at golangci-lint's contextcheck, the same finding.
 
 No deviation of its own; deviation 8, P7's gate, was found here and fixed in its own commit first.
+
+### Deviation 9 (2026-10-30): P12 held for acp-go-sdk2
+
+- **Found.** With `acpclient.Start` on `agentproc.InProcess` and `Close` as `Process.Close()` and then the connection's
+  `WaitContext`, `TestCloseBoundedWhenAHandlerHangs` never returned; `go test`'s 10 m timeout ended it. The goroutine
+  dump showed `Process.Close` → `Process.Wait` → `Connection.Wait` → `sync.WaitGroup.Wait`, with the client's update
+  handler blocked. At `v1.26.0`, `Process.Close` is its steps and then `Wait` (`agentproc/agentproc.go:517-519`), and
+  `Wait` waits for the connection without bound (`:389`, `connection.go:870`). The grace bounds the agent, not the
+  client's handlers. Step 4 required the two close tests to pass unchanged, so the step could not be met.
+- **The owner's answer, 2026-10-30:** "Hold P12; ask the SDK (Recommended)". The options not taken were bounding the
+  SDK's `Close` in gobble, which would rebuild the wait P11 removed, and dropping P12.
+- **Decision.**
+  - P12's uncommitted edits, to `acpclient/conn.go` alone and made in this phase, are reverted (`git checkout --
+    acpclient/conn.go`). `acpclient.Start` stays as P11 left it: gobble's pipes, bounded by `closeTimeout`, its waits
+    through `WaitContext`.
+  - The issue is [acp-go-sdk2#12](https://github.com/maccavelli/acp-go-sdk2/issues/12). It asks for `Close` to bound the
+    connection's wait by the grace and report the handlers it leaves, or for a `CloseContext`, or a way to stop without
+    `Wait`.
+  - P12 is held until a tag carries one of those. Then it runs as written, its step 4's expectation unchanged.
+  - The plan continues with P15.
+- **Files added to scope:** none. The issue is outward-facing, and was filed on the owner's answer.
