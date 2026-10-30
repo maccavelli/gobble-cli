@@ -36,6 +36,10 @@ func stdioServer(command string) acp.McpServer {
 	return acp.McpServer{Stdio: &acp.McpServerStdio{Name: "fx", Command: command, Args: []string{}, Env: []acp.EnvVariable{}}}
 }
 
+// stdioRewrite is Serve's inbound rewrite, the SDK's
+// ResolveStdioCommands over exec.LookPath (0035-MADR D11).
+var stdioRewrite = acp.ResolveStdioCommands(exec.LookPath)
+
 // A bare stdio command that resolves on PATH becomes its absolute path; one
 // that does not, and one already absolute, are left as they are (0019-MADR
 // D6).
@@ -45,7 +49,7 @@ func TestResolveBareCommands(t *testing.T) {
 	req := &acp.NewSessionRequest{Cwd: t.TempDir(), McpServers: []acp.McpServer{
 		stdioServer("gobble-fake-mcp"), stdioServer("no-such-command-0019"), stdioServer(abs),
 	}}
-	if err := resolveBareCommands(t.Context(), acp.AgentMethodSessionNew, req); err != nil {
+	if err := stdioRewrite(t.Context(), acp.AgentMethodSessionNew, req); err != nil {
 		t.Fatal(err)
 	}
 	got := []string{req.McpServers[0].Stdio.Command, req.McpServers[1].Stdio.Command, req.McpServers[2].Stdio.Command}
@@ -56,7 +60,7 @@ func TestResolveBareCommands(t *testing.T) {
 		&acp.LoadSessionRequest{McpServers: []acp.McpServer{stdioServer("gobble-fake-mcp")}},
 		&acp.ResumeSessionRequest{McpServers: []acp.McpServer{stdioServer("gobble-fake-mcp")}},
 	} {
-		if err := resolveBareCommands(t.Context(), "", p); err != nil {
+		if err := stdioRewrite(t.Context(), "", p); err != nil {
 			t.Fatal(err)
 		}
 		var servers []acp.McpServer
@@ -91,7 +95,7 @@ func TestResolveBareCommandsKeepsRelative(t *testing.T) {
 		t.Fatalf("LookPath = %q, %v; want a relative path and no error, or this case tests nothing", path, err)
 	}
 	req := &acp.NewSessionRequest{McpServers: []acp.McpServer{stdioServer("gobble-rel-mcp")}}
-	if err := resolveBareCommands(t.Context(), acp.AgentMethodSessionNew, req); err != nil {
+	if err := stdioRewrite(t.Context(), acp.AgentMethodSessionNew, req); err != nil {
 		t.Fatal(err)
 	}
 	if got := req.McpServers[0].Stdio.Command; got != "gobble-rel-mcp" {

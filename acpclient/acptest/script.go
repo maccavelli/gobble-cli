@@ -67,25 +67,20 @@ type ScriptAgent struct {
 
 var _ acp.Agent = (*ScriptAgent)(nil)
 
-// Serve runs the agent over in and out until in reaches end of file, when
-// it returns nil, or ctx is done, when it returns context.Cause(ctx); each
-// once its handlers have returned, or closeTimeout has passed (0031-MADR D5).
+// Serve runs the agent over in and out through the SDK's ServeAgent: nil
+// when in reaches end of file and the connection ended cleanly, and
+// context.Cause(ctx) when ctx is done first, after a graceful shutdown
+// (0035-MADR D11).
 func (a *ScriptAgent) Serve(ctx context.Context, in io.Reader, out io.Writer) error {
-	conn := acp.NewAgentSideConnection(a, out, in, acp.WithLogger(slog.New(slog.DiscardHandler)))
+	return acp.ServeAgent(ctx, a, in, out, acp.WithLogger(slog.New(slog.DiscardHandler)))
+}
+
+// SetAgentConnection keeps the connection the SDK built for the script's
+// updates; its constructor calls it before it reads.
+func (a *ScriptAgent) SetAgentConnection(conn *acp.AgentSideConnection) {
 	a.mu.Lock()
 	a.conn = conn
 	a.mu.Unlock()
-	select {
-	case <-conn.Done():
-	case <-ctx.Done():
-		_ = conn.Close() //nolint:errcheck // the cause is ctx's
-		handlersDone(conn.Wait, closeTimeout)
-		return context.Cause(ctx)
-	}
-	if !handlersDone(conn.Wait, closeTimeout) {
-		return fmt.Errorf("acptest: the agent's handlers did not stop within %v of its end", closeTimeout)
-	}
-	return nil
 }
 
 // Methods are the agent methods received, in order.

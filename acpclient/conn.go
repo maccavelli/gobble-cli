@@ -150,7 +150,7 @@ func Start(ctx context.Context, serve ServeFunc, opts Options) (*Conn, error) {
 		err = fmt.Errorf("agent speaks ACP protocol %d, want %d", pve.Answered, pve.Requested)
 	}
 	if err != nil {
-		return nil, errors.Join(fmt.Errorf("initialize: %w", err), c.Close())
+		return nil, errors.Join(fmt.Errorf("initialize: %w", err), c.closeFrom(ctx))
 	}
 	c.agent = AgentInfo{
 		Image:       resp.AgentCapabilities.PromptCapabilities.Image,
@@ -176,7 +176,11 @@ func (c *Conn) Dropped() uint64 { return c.conn.DroppedNotifications() }
 // handled after it returns (0016-MADR A1; 0031-MADR D5). Each wait is at
 // most closeTimeout. It returns the agent's error, if any, then the
 // connection's.
-func (c *Conn) Close() error {
+func (c *Conn) Close() error { return c.closeFrom(context.Background()) }
+
+// closeFrom is Close, its waits keeping base's values and never its
+// cancellation: closeTimeout alone bounds them, whatever base says.
+func (c *Conn) closeFrom(base context.Context) error {
 	if err := c.toAgent.Close(); err != nil {
 		return fmt.Errorf("close agent input: %w", err)
 	}
@@ -195,29 +199,12 @@ func (c *Conn) Close() error {
 	if err := c.conn.Close(); err != nil {
 		errs = append(errs, fmt.Errorf("close connection: %w", err))
 	}
-	if !handlersDone(c.conn.Wait, closeTimeout) {
+	wctx, cancel := context.WithTimeout(context.WithoutCancel(base), closeTimeout)
+	defer cancel()
+	if err := c.conn.Connection().WaitContext(wctx); errors.Is(err, context.DeadlineExceeded) {
 		errs = append(errs, fmt.Errorf("the connection's handlers did not stop within %v of its close", closeTimeout))
 	}
 	return errors.Join(errs...)
-}
-
-// handlersDone waits for wait, at most limit, and reports whether it
-// returned: a handler that ignores its context would hold a connection's
-// Wait forever (0031-MADR D5).
-func handlersDone(wait func() error, limit time.Duration) bool {
-	done := make(chan struct{})
-	go func() {
-		_ = wait() //nolint:errcheck // the connection's end is read from Err
-		close(done)
-	}()
-	timer := time.NewTimer(limit)
-	defer timer.Stop()
-	select {
-	case <-done:
-		return true
-	case <-timer.C:
-		return false
-	}
 }
 
 // Session is one ACP session.

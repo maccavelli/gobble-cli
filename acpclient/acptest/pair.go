@@ -1,6 +1,8 @@
 package acptest
 
 import (
+	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"testing"
@@ -49,31 +51,14 @@ func Connect(t testing.TB, agent acp.Agent, client acp.Client) *Conn {
 				t.Errorf("acptest: close pipe: %v", err)
 			}
 		}
-		for _, wait := range []func() error{c.Agent.Wait, c.Client.Wait} {
-			if !handlersDone(wait, closeTimeout) {
+		ctx, cancel := context.WithTimeout(context.Background(), closeTimeout)
+		defer cancel()
+		for _, conn := range []*acp.Connection{c.Agent.Connection(), c.Client.Connection()} {
+			if err := conn.WaitContext(ctx); errors.Is(err, context.DeadlineExceeded) {
 				t.Errorf("acptest: a connection or its handlers did not stop within %v of its pipe closing", closeTimeout)
 				return
 			}
 		}
 	})
 	return c
-}
-
-// handlersDone waits for wait, at most limit, and reports whether it
-// returned: a handler that ignores its context would hold a connection's
-// Wait forever (0031-MADR D5).
-func handlersDone(wait func() error, limit time.Duration) bool {
-	done := make(chan struct{})
-	go func() {
-		_ = wait() //nolint:errcheck // the connection's end is read from Err
-		close(done)
-	}()
-	timer := time.NewTimer(limit)
-	defer timer.Stop()
-	select {
-	case <-done:
-		return true
-	case <-timer.C:
-		return false
-	}
 }

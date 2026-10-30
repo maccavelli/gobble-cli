@@ -1706,3 +1706,52 @@ One deviation: deviation 7, above.
   - `make staticcheck` on the working tree, with P11's deletion in it: the gate passed on each GOOS.
   - The host gates run with P11's, on a copy holding this fix.
 - **Files added to scope:** `scripts/check_staticcheck_ignored.py`.
+
+### P11 record (2026-10-30): the connection's end
+
+The base is P10's commit `7ed439f`, then deviation 8's `bb4e5eb`.
+
+1. **`acpserver.Serve`** calls `acp.ServeAgent(ctx, agent, in, out, WithLogger, WithInboundRewrite(ResolveStdioCommands(exec.LookPath)),
+   WithPromptOverlapPolicy(PromptOverlapConcurrent))`, then `agent.Close()`.
+   - `endWait`, `ended` and `handlersDone` are gone.
+   - The comment keeps 0016-MADR A1 and 0019-MADR D6, and its doc says how each end is reported.
+   - `ServeAgent` binds the agent through the constructor's `SetAgentConnection`, as verified when the plan was written.
+2. **`rewrite.go` is deleted.** `TestResolveBareCommands` and `TestResolveBareCommandsKeepsRelative` exercise
+   `stdioRewrite`, a test variable holding `acp.ResolveStdioCommands(exec.LookPath)`, with the same cases, and pass.
+   `TestServeResolvesBareCommand` is unchanged and passes.
+3. **The client.** `Conn.Close` waits through `c.conn.Connection().WaitContext`, bounded by `closeTimeout`, and
+   `handlersDone` is gone.
+   - golangci-lint's contextcheck then reported `Start`'s error path calling `Close`, which builds its own context
+     (`acpclient/conn.go:153`). So `Close()` is now `closeFrom(context.Background())`, and `Start` calls `closeFrom(ctx)`.
+     Its waits use `context.WithoutCancel(base)`: base's values, never its cancellation, so `closeTimeout` alone bounds
+     them, as before.
+   - The helper is named `closeFrom`, since revive's `confusing-naming` refused `close` beside `Close`.
+   - This is a fix to the step's own code, not a deviation.
+4. **`acptest`.**
+   - `Connect`'s cleanup waits on both connections' `WaitContext` within one `closeTimeout`, and its `handlersDone` is
+     gone.
+   - `ScriptAgent.Serve` is `acp.ServeAgent(ctx, a, in, out, …)`.
+   - `ScriptAgent` keeps its connection through `SetAgentConnection`, which the SDK's constructor calls before it reads,
+     where `Serve` used to set it after the constructor returned.
+5. **New `TestServeShutdownCancelsPrompt`.** A prompt in flight, its turn waiting on its context (the `slowStop`
+   provider), is answered `"stopReason":"cancelled"` when `Serve`'s context ends, and `Serve` returns an error matching
+   `context.Canceled`.
+   - `TestServeReportsABrokenInput`, `TestServeAnswersBeforeEndOfInput` and `TestServeClosesConnection` pass unchanged,
+     as do `close_test.go`'s two tests and `TestCleanupWaitsForHandlers`.
+   - The overflow-as-clean defect is fixed by `ended`'s deletion. Its evidence is `ServeAgent`'s use of `EndedCleanly`
+     (`serve.go:39`), as step 5 had it.
+6. **Seen failing (C9).** The new test run against a scratch clone of P10's commit, with only the test added, fails:
+   `output ended before the answer to 3`. The old `Serve` closed the connection under the prompt.
+7. **Assert.**
+   - No `handlersDone`, `func ended` or `resolveBareCommands` remains in the module.
+   - No `endWait` remains in `acpserver` or `acpclient`. `agent/agent.go`'s `turn.endWait` is the agent's retry
+     wait, another thing by the same name, and stays.
+   - `session.golden` is unchanged.
+8. **G-local.**
+   - `make pre-add-check` on the changed files: clean.
+   - `make preflight`: "preflight passed", after deviation 8's fix and step 3's contextcheck fix. Its earlier runs
+     failed on those two, in that order.
+   - `make race`: 36 ok.
+9. G-hosts, on a copy (811 files), `go1.27.3`: on the Linux machine and the Windows laptop, `go test` and race exit 0, 36 ok; `preflight` to `verify-build-metadata` (no commit, C6); records and markdownlint exit 0. A first host run, before step 3's fix, stopped `preflight` at golangci-lint's contextcheck, the same finding.
+
+No deviation of its own; deviation 8, P7's gate, was found here and fixed in its own commit first.
