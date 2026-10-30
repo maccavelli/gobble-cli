@@ -9,15 +9,19 @@ import (
 	"strings"
 	"testing"
 	"testing/iotest"
+	"time"
 
-	"github.com/maccavelli/gobble-cli/internal/cli/term/termtest"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/maccavelli/go-tui-lib/v2/inline"
+	"github.com/maccavelli/go-tui-lib/v2/inline/inlinetest"
+	"github.com/maccavelli/go-tui-lib/v2/lineedit"
 )
 
 // run feeds input to a new Editor and collects submissions until an error.
 func run(t *testing.T, in io.Reader, opts Options) (subs []string, out, errw *bytes.Buffer, err error) {
 	t.Helper()
 	out, errw = new(bytes.Buffer), new(bytes.Buffer)
-	e := New(in, out, errw, opts)
+	e := New(inline.NewReader(in), out, errw, opts)
 	for {
 		s, err := e.ReadPrompt(t.Context())
 		if err != nil {
@@ -27,10 +31,32 @@ func run(t *testing.T, in io.Reader, opts Options) (subs []string, out, errw *by
 	}
 }
 
+// newScreen is a screen columns wide and rows tall, measured as the
+// editor's region measures.
+func newScreen(columns, rows int) *inlinetest.Screen {
+	return inlinetest.NewScreen(columns, rows, ansi.WcWidth)
+}
+
+// laidOut is text after prompt as lineedit lays it out at columns, the
+// rows' trailing spaces trimmed as a screen shows them, and the cursor at
+// its end.
+func laidOut(prompt, text string, columns int) (rows []string, row, col int) {
+	c := lineedit.NewComposer(lineedit.WithPrompt(prompt))
+	c.SetText(text)
+	rows, row, col = c.View(columns)
+	for i, r := range rows {
+		rows[i] = strings.TrimRight(r, " ")
+	}
+	return rows, row, col
+}
+
 // measurement10 is Console Host's byte stream for a three-line paste
 // (0008-MADR measurement 10), followed by the user's Enter.
 const measurement10 = "\x1b[200~line1\rline2\rline3\x1b[201~\r"
 
+// ReadPrompt's submissions. By 0035-PLAN PQ7 (a), lineedit's: a paste is
+// one buffer, its CR made LF, and a Ctrl+C inside it is cleaned out, where
+// gobble's kept it as text ("a\x03b" before, "ab" now).
 func TestReadPrompt(t *testing.T) {
 	cases := []struct {
 		name string
@@ -42,13 +68,15 @@ func TestReadPrompt(t *testing.T) {
 		{"paste markers split across reads", iotest.OneByteReader(strings.NewReader(measurement10)), []string{"line1\nline2\nline3"}, io.EOF},
 		{"Ctrl+C clears a non-empty line", strings.NewReader("abc\x03xyz\r"), []string{"xyz"}, io.EOF},
 		{"Ctrl+C clears the whole line, not only left of the cursor", strings.NewReader("abcd\x1b[D\x1b[D\x03xy\r"), []string{"xy"}, io.EOF},
-		{"Ctrl+C inside a paste is text", strings.NewReader("\x1b[200~a\x03b\x1b[201~\r"), []string{"a\x03b"}, io.EOF},
+		{"Ctrl+C inside a paste is cleaned out", strings.NewReader("\x1b[200~a\x03b\x1b[201~\r"), []string{"ab"}, io.EOF},
 		{"backslash continues", strings.NewReader("one\\\rtwo\r"), []string{"one\ntwo"}, io.EOF},
+		{"alt+enter continues", strings.NewReader("one\x1b\rtwo\r"), []string{"one\ntwo"}, io.EOF},
 		{"empty submissions are skipped", strings.NewReader("\r  \rhi\r"), []string{"hi"}, io.EOF},
 		{"/exit ends", strings.NewReader("/exit\rmore\r"), nil, io.EOF},
 		{"/quit ends", strings.NewReader("/quit\r"), nil, io.EOF},
 		{"Ctrl+D on an empty line ends", strings.NewReader("\x04more\r"), nil, io.EOF},
 		{"Ctrl+D on a non-empty line does not end", strings.NewReader("ab\x04\r"), []string{"ab"}, io.EOF},
+		{"keys typed ahead go to the next prompt", strings.NewReader("one\rtwo\r"), []string{"one", "two"}, io.EOF},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -63,6 +91,10 @@ func TestReadPrompt(t *testing.T) {
 	}
 }
 
+// A paste of more than one line is noticed on errw, once for each paste,
+// as gobble's was; by PQ7 (a) it is in the one buffer, which the
+// continuation prompt draws, as a trailing backslash's line is
+// (0035-PLAN P17, before: the notice once a submission joined its lines).
 func TestPasteNoticeAndPrompts(t *testing.T) {
 	_, out, errw, _ := run(t, strings.NewReader(measurement10+"a\\\rb\r"), Options{})
 	if got := errw.String(); got != "… 3 pasted lines\r\n" {
@@ -75,6 +107,10 @@ func TestPasteNoticeAndPrompts(t *testing.T) {
 	if !strings.Contains(o, "> ") || !strings.Contains(o, "… ") {
 		t.Fatalf("prompt or continuation prompt missing: %q", o)
 	}
+	_, _, errw, _ = run(t, strings.NewReader("\x1b[200~one line\x1b[201~\r"), Options{})
+	if got := errw.String(); got != "" {
+		t.Fatalf("a one-line paste noticed: %q", got)
+	}
 }
 
 func TestASCIIPrompts(t *testing.T) {
@@ -86,7 +122,7 @@ func TestASCIIPrompts(t *testing.T) {
 
 func TestRestoreDisablesBracketedPaste(t *testing.T) {
 	var out bytes.Buffer
-	e := New(strings.NewReader(""), &out, io.Discard, Options{})
+	e := New(inline.NewReader(strings.NewReader("")), &out, io.Discard, Options{})
 	out.Reset()
 	if err := e.Restore(); err != nil {
 		t.Fatal(err)
@@ -102,9 +138,11 @@ func (m *memHistory) Add(e string)      { m.entries = append(m.entries, e) }
 func (m *memHistory) Len() int          { return len(m.entries) }
 func (m *memHistory) At(idx int) string { return m.entries[len(m.entries)-1-idx] }
 
+// History gets each submission ReadPrompt returns, once, and nothing it
+// skips: an empty line, /exit.
 func TestHistoryGetsWholeSubmissions(t *testing.T) {
 	h := &memHistory{}
-	subs, _, _, _ := run(t, strings.NewReader(measurement10+"first\r\x1b[A\r"), Options{History: h})
+	subs, _, _, _ := run(t, strings.NewReader(measurement10+"first\r  \r\x1b[A\r/exit\r"), Options{History: h})
 	want := []string{"line1\nline2\nline3", "first", "first"}
 	if !slices.Equal(subs, want) {
 		t.Fatalf("submissions = %q, want %q", subs, want)
@@ -138,56 +176,88 @@ func TestContextCancelled(t *testing.T) {
 		}
 	})
 	ctx, cancel := context.WithCancel(t.Context())
-	r := &Reader{}
-	r.Start(ctx, pr)
-	e := New(r, io.Discard, io.Discard, Options{})
+	e := New(inline.NewReader(pr), io.Discard, io.Discard, Options{})
 	cancel()
 	if _, err := e.ReadPrompt(ctx); !errors.Is(err, context.Canceled) {
 		t.Fatalf("err = %v, want context.Canceled", err)
 	}
 }
 
-// Header is written on its own line before each new prompt, once a
-// submission and never before a continuation prompt, without escape
-// sequences or line breaks; with none, nothing is (0024-MADR D8). Checked
-// on the screen (0027-PLAN P4, deviation 2).
+// ctrl+x ctrl+e gives the line to Options.External and puts what it
+// returns in its place; an error leaves the line as it was. Without
+// External the keys do nothing.
+func TestExternalEditor(t *testing.T) {
+	var gave string
+	external := func(_ context.Context, text string) (string, error) {
+		gave = text
+		if text == "fail" {
+			return "", errors.New("no editor")
+		}
+		return "edited\ntext", nil
+	}
+	subs, _, _, _ := run(t, strings.NewReader("draft\x18\x05\r"), Options{External: external})
+	if gave != "draft" || !slices.Equal(subs, []string{"edited\ntext"}) {
+		t.Fatalf("External given %q, sent %q; want \"draft\" and the edited text", gave, subs)
+	}
+	subs, _, _, _ = run(t, strings.NewReader("fail\x18\x05\r"), Options{External: external})
+	if !slices.Equal(subs, []string{"fail"}) {
+		t.Fatalf("after an error, sent %q, want the line unchanged", subs)
+	}
+	subs, _, _, _ = run(t, strings.NewReader("draft\x18\x05\r"), Options{})
+	if !slices.Equal(subs, []string{"draft"}) {
+		t.Fatalf("with no External, sent %q", subs)
+	}
+}
+
+// Header is drawn on its own line above each new prompt, never above a
+// continuation, without escape sequences or line breaks; with none,
+// nothing is (0024-MADR D8). By PQ7 (a), a trailing backslash puts a line
+// break in the one buffer, so the first row shows "> one" where gobble's
+// showed `> one\`.
 func TestHeader(t *testing.T) {
 	calls := 0
 	header := func() string { calls++; return "proj (main)" }
-	s := termtest.New(40, 10)
-	subs := onScreen(t, s, strings.NewReader("one\\\rtwo\rthree\r"), Options{Header: header})
+	s := newScreen(40, 10)
+	var subs []string
+	e := New(inline.NewReader(strings.NewReader("one\\\rtwo\rthree\r")), s, io.Discard, Options{Header: header})
+	for {
+		text, err := e.ReadPrompt(t.Context())
+		if err != nil {
+			break
+		}
+		subs = append(subs, text)
+	}
 	if !slices.Equal(subs, []string{"one\ntwo", "three"}) {
 		t.Fatalf("submissions %q", subs)
 	}
 	// Three new prompts: one for each submission, and the one that reads
 	// the end of input.
-	want := []string{"proj (main)", `> one\`, "… two", "proj (main)", "> three", "proj (main)", ">", "", "", ""}
-	if got := s.Lines(); !slices.Equal(got, want) || calls != 3 {
+	want := []string{"proj (main)", "> one", "… two", "proj (main)", "> three", "proj (main)", ">", "", "", ""}
+	if got := trimmedLines(s); !slices.Equal(got, want) || calls != 3 {
 		t.Fatalf("screen %q, the header read %d times; want %q, 3", got, calls, want)
 	}
 
-	s = termtest.New(40, 4)
+	s = newScreen(40, 4)
 	var out bytes.Buffer
-	e := New(strings.NewReader("x\r"), io.MultiWriter(s, &out), io.Discard,
+	e = New(inline.NewReader(strings.NewReader("x\r")), io.MultiWriter(s, &out), io.Discard,
 		Options{Header: func() string { return "a\x1b[31mb\nc\x07" }})
 	if _, err := e.ReadPrompt(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	if got := s.Lines(); got[0] != "ab c" || got[1] != "> x" || strings.Contains(out.String(), "\x1b[31m") {
+	if got := trimmedLines(s); got[0] != "ab c" || got[1] != "> x" || strings.Contains(out.String(), "\x1b[31m") {
 		t.Fatalf("a header with escapes and a line break: screen %q, written %q", got, out.String())
 	}
 
-	s = termtest.New(40, 4)
+	s = newScreen(40, 4)
 	onScreen(t, s, strings.NewReader("x\r"), Options{})
-	if got := s.Lines(); got[0] != "> x" {
+	if got := trimmedLines(s); got[0] != "> x" {
 		t.Fatalf("with no header the prompt is drawn first: screen %q", got)
 	}
 }
 
 // The prompt breaks at the terminal's width, to 120 columns, and at 80 when
 // the width is unknown, never at x/term's 80 on a wider terminal (0024-MADR
-// D9): a word wider than a row, cut at the row's end, shows it. Checked on
-// the screen (0027-PLAN P4, deviation 2).
+// D9): a word wider than a row, cut at the row's end, shows it.
 func TestWidth(t *testing.T) {
 	word := strings.Repeat("a", 150)
 	for _, tc := range []struct {
@@ -203,14 +273,34 @@ func TestWidth(t *testing.T) {
 		{"no width at all", 200, nil, 80},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			s := termtest.New(tc.terminal, 8)
+			s := newScreen(tc.terminal, 8)
 			subs := onScreen(t, s, strings.NewReader(word+"\r"), Options{Width: tc.width})
 			if len(subs) != 1 || subs[0] != word {
 				t.Fatalf("the text sent changed: %q", subs)
 			}
-			if got := s.Lines()[0]; !strings.HasPrefix(got, "> a") || displayWidth(got) != tc.want {
-				t.Fatalf("the first row held %d columns, want %d: screen %q", displayWidth(got), tc.want, s.Lines())
+			if got := trimmedLines(s)[0]; !strings.HasPrefix(got, "> a") || ansi.StringWidth(got) != tc.want {
+				t.Fatalf("the first row held %d columns, want %d: screen %q", ansi.StringWidth(got), tc.want, trimmedLines(s))
 			}
 		})
+	}
+}
+
+func TestLineWidth(t *testing.T) {
+	for terminal, want := range map[int]int{-1: DefaultWidth, 0: DefaultWidth, 1: 1, 60: 60, 120: 120, 121: 120, 300: 120} {
+		if got := lineWidth(terminal); got != want {
+			t.Errorf("lineWidth(%d) = %d, want %d", terminal, got, want)
+		}
+	}
+}
+
+// earliest picks the earlier of two times, a zero one being none.
+func TestEarliest(t *testing.T) {
+	a, b := time.Unix(1, 0), time.Unix(2, 0)
+	for _, tc := range []struct{ x, y, want time.Time }{
+		{a, b, a}, {b, a, a}, {time.Time{}, b, b}, {a, time.Time{}, a}, {time.Time{}, time.Time{}, time.Time{}},
+	} {
+		if got := earliest(tc.x, tc.y); !got.Equal(tc.want) {
+			t.Errorf("earliest(%v, %v) = %v, want %v", tc.x, tc.y, got, tc.want)
+		}
 	}
 }

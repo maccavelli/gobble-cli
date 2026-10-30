@@ -7,77 +7,65 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/maccavelli/go-tui-lib/v2/lineedit"
 )
 
 // maxHistory is the number of entries kept.
 const maxHistory = 1000
 
 // FileHistory is a History kept in a file, one entry per line, with "\n"
-// written as `\n` and `\` as `\\`. Every Add rewrites the file by atomic
+// written as `\n` and `\` as `\\`: lineedit.MemHistory's file form, which
+// is gobble's (0035-PLAN P17). Every Add rewrites the file by atomic
 // replace: a temp file in the same directory, then a rename. A write error
 // does not stop the editor; Err reports the last one.
 type FileHistory struct {
-	path    string
-	entries []string // oldest first
-	err     error
+	path string
+	mem  lineedit.MemHistory
+	err  error
 }
 
 // OpenHistory loads the history at path. A missing file is an empty history.
 func OpenHistory(path string) (*FileHistory, error) {
-	h := &FileHistory{path: path}
-	b, err := os.ReadFile(path) //nolint:gosec // G304: gobble's own <state>/history, chosen by the caller
+	h := &FileHistory{path: path, mem: lineedit.MemHistory{Max: maxHistory}}
+	f, err := os.Open(path) //nolint:gosec // G304: gobble's own <state>/history, chosen by the caller
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
 		return h, nil
 	case err != nil:
 		return nil, fmt.Errorf("read history: %w", err)
 	}
-	for line := range strings.SplitSeq(strings.TrimSuffix(string(b), "\n"), "\n") {
-		if line = strings.TrimSuffix(line, "\r"); line != "" {
-			h.entries = append(h.entries, unescape(line))
-		}
+	_, err = h.mem.ReadFrom(f)
+	if err = errors.Join(err, f.Close()); err != nil {
+		return nil, fmt.Errorf("read history: %w", err)
 	}
-	h.trim()
 	return h, nil
 }
 
 // Add appends entry unless it is empty or repeats the most recent entry,
 // then saves the file.
 func (h *FileHistory) Add(entry string) {
-	if entry == "" || (len(h.entries) > 0 && h.entries[len(h.entries)-1] == entry) {
+	if entry == "" || (h.mem.Len() > 0 && h.mem.At(0) == entry) {
 		return
 	}
-	h.entries = append(h.entries, entry)
-	h.trim()
+	h.mem.Add(entry)
 	h.err = h.save()
 }
 
 // Len returns the number of entries.
-func (h *FileHistory) Len() int { return len(h.entries) }
+func (h *FileHistory) Len() int { return h.mem.Len() }
 
 // At returns an entry; 0 is the most recent. It panics when idx is out of
 // range, as the History contract allows: the editor checks Len first.
-func (h *FileHistory) At(idx int) string {
-	if idx < 0 || idx >= len(h.entries) {
-		panic(fmt.Sprintf("editor: history index %d out of range [0,%d)", idx, len(h.entries)))
-	}
-	return h.entries[len(h.entries)-1-idx]
-}
+func (h *FileHistory) At(idx int) string { return h.mem.At(idx) }
 
 // Err returns the error of the last save, or nil.
 func (h *FileHistory) Err() error { return h.err }
 
-func (h *FileHistory) trim() {
-	if extra := len(h.entries) - maxHistory; extra > 0 {
-		h.entries = h.entries[extra:]
-	}
-}
-
 func (h *FileHistory) save() (err error) {
 	var b strings.Builder
-	for _, e := range h.entries {
-		b.WriteString(escape(e))
-		b.WriteByte('\n')
+	if _, err := h.mem.WriteTo(&b); err != nil {
+		return fmt.Errorf("save history: %w", err)
 	}
 	tmp, err := os.CreateTemp(filepath.Dir(h.path), ".history-*")
 	if err != nil {
@@ -102,32 +90,4 @@ func (h *FileHistory) save() (err error) {
 		return fmt.Errorf("save history: %w", err)
 	}
 	return nil
-}
-
-func escape(s string) string {
-	return strings.NewReplacer(`\`, `\\`, "\n", `\n`).Replace(s)
-}
-
-func unescape(s string) string {
-	if !strings.Contains(s, `\`) {
-		return s
-	}
-	var b strings.Builder
-	for i := 0; i < len(s); i++ {
-		if s[i] != '\\' || i+1 == len(s) {
-			b.WriteByte(s[i])
-			continue
-		}
-		i++
-		switch s[i] {
-		case 'n':
-			b.WriteByte('\n')
-		case '\\':
-			b.WriteByte('\\')
-		default:
-			b.WriteByte('\\')
-			b.WriteByte(s[i])
-		}
-	}
-	return b.String()
 }

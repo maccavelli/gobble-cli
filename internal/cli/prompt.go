@@ -17,9 +17,9 @@ import (
 // an empty answer where one is needed.
 var errCancelled = errors.New("cancelled")
 
-// keysIn is the reader that owns stdin: editor.Reader.
+// keysIn is the reader that owns stdin: go-tui-lib's inline.Reader.
 type keysIn interface {
-	ReadContext(ctx context.Context, p []byte) (int, error)
+	Read(ctx context.Context, p []byte) (int, error)
 }
 
 // questions asks the user what a sign-in needs, on the terminal (0025-MADR
@@ -199,7 +199,7 @@ func (q *questions) lineContext(ctx context.Context) (string, error) {
 // fill reads the next chunk into pending, until ctx ends.
 func (q *questions) fill(ctx context.Context) error {
 	buf := make([]byte, 512)
-	n, err := q.in.ReadContext(ctx, buf)
+	n, err := q.in.Read(ctx, buf)
 	q.pending = append(q.pending, buf[:n]...)
 	if n == 0 && err != nil {
 		return fmt.Errorf("%w (%w)", errCancelled, err)

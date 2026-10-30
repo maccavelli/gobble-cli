@@ -14,8 +14,9 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/maccavelli/go-tui-lib/v2/inline"
+
 	"github.com/maccavelli/gobble-cli/internal/auth"
-	"github.com/maccavelli/gobble-cli/internal/cli/editor"
 	"github.com/maccavelli/gobble-cli/llm/catalog"
 	"github.com/maccavelli/gobble-cli/llm/provider"
 )
@@ -216,9 +217,7 @@ func (e *runEnv) loginWith(ctx context.Context, id string, device bool, ev *logi
 	}
 	var p provider.Prompter = unasked{out: e.out.err}
 	if !o.NoPaste {
-		var r editor.Reader
-		r.Start(ctx, e.stdin)
-		p = prompter{&questions{ctx: ctx, in: &r, out: e.out.err}}
+		p = prompter{&questions{ctx: ctx, in: inline.NewReader(e.stdin), out: e.out.err}}
 	}
 	return e.signInTo(ctx, p, id, o, ev)
 }

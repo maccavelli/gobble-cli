@@ -9,6 +9,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/maccavelli/go-tui-lib/v2/inline"
+
 	"github.com/maccavelli/gobble-cli/internal/auth"
 	"github.com/maccavelli/gobble-cli/internal/cli/editor"
 	"github.com/maccavelli/gobble-cli/llm/catalog"
@@ -277,9 +279,7 @@ func (c *SetupCmd) Run(e *runEnv) error {
 	if !e.out.caps.In || e.stdin == nil {
 		return usageErrorf("gobble setup asks its questions on a terminal; gobble auth login <provider> --method signs in without one")
 	}
-	var r editor.Reader
-	r.Start(e.ctx, e.stdin)
-	q := &questions{ctx: e.ctx, in: &r, out: e.out.err, raw: func() (func() error, error) { return editor.Raw(e.stdin) }}
+	q := &questions{ctx: e.ctx, in: inline.NewReader(e.stdin), out: e.out.err, raw: func() (func() error, error) { return editor.Raw(e.stdin) }}
 	id, err := e.signIn(e.ctx, q, "")
 	switch {
 	case errors.Is(err, errCancelled):

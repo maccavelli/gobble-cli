@@ -6,10 +6,15 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"slices"
 	"strings"
+	"sync/atomic"
 	"time"
 
+	"github.com/maccavelli/go-tui-lib/v2/glyph"
+	"github.com/maccavelli/go-tui-lib/v2/inline"
+	"github.com/maccavelli/go-tui-lib/v2/keymap"
+	"github.com/maccavelli/go-tui-lib/v2/lineedit"
+	"github.com/maccavelli/go-tui-lib/v2/termkey"
 	xterm "golang.org/x/term"
 
 	"github.com/maccavelli/gobble-cli/internal/cli/term"
@@ -30,11 +35,11 @@ type History interface {
 // Options configure an Editor. Empty prompts take the defaults "> " and
 // "… "; pass "... " for ASCII glyphs. Complete, when set, is called for Tab
 // with the line and the cursor's byte offset. Header, when set, is read
-// before each new prompt and written on its own line above it, never above
-// a continuation prompt (0024-MADR D8). Width, when set, is the terminal's
-// width, read at each drawing; the line is laid out to it, at most to
+// before each new prompt and drawn on its own line above it, never above a
+// continuation (0024-MADR D8). Width, when set, is the terminal's width,
+// read at each prompt and resize; the line is laid out to it, at most to
 // MaxWidth, and to DefaultWidth when it is unknown (0024-MADR D9, 0027-MADR
-// D2). Height, when set, is the terminal's height, read at each drawing: a
+// D2). Height, when set, is the terminal's height, read at each key: a
 // line taller than it is drawn from the rows around the cursor's
 // (0027-MADR D3); 0 or unset draws every row.
 type Options struct {
@@ -55,6 +60,10 @@ type Options struct {
 	// at a width: once resizes settle, the screen and its scrollback are
 	// cleared and it is written again, then the line (0030-MADR D3).
 	Reprint func(width int) string
+	// External, when set, edits the line's text in the user's editor, for
+	// ctrl+x ctrl+e, and returns what it holds afterwards; on an error the
+	// line is left as it was (0035-PLAN P17).
+	External func(ctx context.Context, text string) (string, error)
 }
 
 // The prompt's widths (0024-MADR D9): the most columns a line takes, and
@@ -70,46 +79,84 @@ const (
 	pasteModeOff = "\x1b[?2004l"
 )
 
-// Editor reads one submission at a time from a terminal in raw mode: the
-// line in a buffer, laid out in whole words and drawn again after each key
-// (0027-MADR D1–D3).
+const (
+	// exitWindow is how long a second Ctrl+C on an empty line exits.
+	exitWindow = 2 * time.Second
+	// settleWait is how long after the last resize's redraw the
+	// conversation is reprinted (0030-MADR D3).
+	settleWait = 150 * time.Millisecond
+	// chunkSize is the most bytes one read of the terminal takes.
+	chunkSize = 512
+)
+
+// Editor reads one submission at a time from a terminal in raw mode. Each
+// prompt is a go-tui-lib lineedit.Composer, drawn in an inline.Region
+// below the scrollback; the Editor is its host and keeps what is gobble's:
+// the Ctrl+C exit window, /exit and /quit, skipping an empty submission,
+// the paste notice, the history, the reprint once resizes settle, and the
+// 120-column cap (0035-MADR D14 step 4; 0035-PLAN P17, PQ7).
 type Editor struct {
-	keys *keyReader
+	in   *inline.Reader
 	out  io.Writer
 	errw io.Writer
 	opts Options
-	sub  coalescer
 
-	line *lineBuffer
-	draw renderer
-	// in holds bytes read and not yet used; readErr, the error of the
-	// last read, returned once they are.
-	in      []byte
+	keys   *keymap.Keymap
+	region *inline.Region
+	dec    termkey.Decoder
+	hist   *submissions
+
+	// line is the prompt being read, and head the header drawn above it;
+	// line is nil between prompts.
+	line *lineedit.Composer
+	head string
+	// held is what was read and decoded and not yet given to a prompt;
+	// readErr, the read's error, returned once held is used.
+	held    []termkey.Input
 	readErr error
+	// escDue is when the decoder gives up a held escape, the input quiet
+	// since the last bytes (termkey.DefaultEscTimeout).
+	escDue time.Time
+	// width is the width the prompt is laid out to.
+	width int
 	// pasting says bracketed paste has been turned on.
 	pasting bool
-	// waiting, after a resize, times the wait for the terminal's cursor
-	// report; nil when none is awaited.
-	waiting *time.Timer
-	// settling, after the live redraw, times the wait for resizes to
-	// settle before the reprint; nil when none is due.
-	settling *time.Timer
+	// armedUntil ends the exit window.
+	armedUntil time.Time
+	// resized says the terminal was resized and the region's redraw is
+	// awaited; settleAt is when the reprint is due, zero for none.
+	resized  bool
+	settleAt time.Time
+	// pending is what the prompt asked to write, written at once before
+	// each read, each notice and the external editor, and on return.
+	pending strings.Builder
+	// interrupted, notice and external are what the last input asked of
+	// the host, done once the Composer's writes before them are written.
+	interrupted *string
+	notice      string
+	external    *string
 }
 
-// New returns an Editor reading in (normally a started *Reader) and drawing
-// on out. Notices go to errw. The first ReadPrompt turns bracketed paste
-// on; Restore turns it off.
-func New(in io.Reader, out, errw io.Writer, opts Options) *Editor {
+// New returns an Editor reading in, the process's one reader of the
+// terminal, and drawing on out. Notices go to errw. The first ReadPrompt
+// turns bracketed paste on; Restore turns it off.
+func New(in *inline.Reader, out, errw io.Writer, opts Options) *Editor {
 	if opts.Prompt == "" {
 		opts.Prompt = "> "
 	}
 	if opts.Continue == "" {
 		opts.Continue = "… "
 	}
-	e := &Editor{keys: &keyReader{src: in, resize: opts.Resize}, out: out, errw: errw, opts: opts, draw: renderer{out: out}}
-	e.line = newLineBuffer(opts.History)
-	e.line.complete = e.onKey
-	return e
+	reflow := inline.ReflowDown // re-wraps (0030-PLAN P1)
+	if os.Getenv("XTERM_VERSION") != "" {
+		reflow = inline.ReflowCut // xterm cuts a narrowed row
+	}
+	keys, err := keymap.New(keymap.Settings{}, lineedit.DefaultRules())
+	if err != nil {
+		panic(fmt.Sprintf("editor: lineedit's default keys: %v", err)) // the library's own rules
+	}
+	return &Editor{in: in, out: out, errw: errw, opts: opts, keys: keys,
+		region: inline.NewRegion(inline.WithReflow(reflow)), hist: &submissions{h: opts.History}}
 }
 
 // Restore turns bracketed paste off. Call it before the process exits or
@@ -125,324 +172,436 @@ func (e *Editor) Restore() error {
 // It returns io.EOF for Ctrl+D on an empty line, /exit and /quit, and
 // ErrExit for a second Ctrl+C. When ctx is done it returns ctx's error.
 func (e *Editor) ReadPrompt(ctx context.Context) (string, error) {
-	e.keys.ctx = ctx
+	text, err := e.nextSubmission(ctx)
+	if ferr := e.flush(); ferr != nil && err == nil {
+		return "", ferr
+	}
+	return text, err
+}
+
+func (e *Editor) nextSubmission(ctx context.Context) (string, error) {
 	if !e.pasting {
 		if _, err := io.WriteString(e.out, pasteModeOn); err != nil {
 			return "", fmt.Errorf("bracketed paste on: %w", err)
 		}
 		e.pasting = true
 	}
-	if err := e.header(); err != nil {
-		return "", err
+	if e.line == nil {
+		e.open()
 	}
-	for {
-		line, pasted, err := e.readLine(e.prompt())
-		switch {
-		case errors.Is(err, io.EOF):
-			e.sub = coalescer{}
-			if e.keys.takeExit() {
-				return "", ErrExit
-			}
-			return "", io.EOF
-		case err != nil:
-			return "", err
-		case pasted:
-			e.sub.addPasted(line)
-			continue
-		}
-		if e.keys.takeNotice() {
-			if err := e.notify("Press Ctrl+C again to exit"); err != nil {
-				return "", err
-			}
-			continue
-		}
-		if !e.sub.addTyped(line) {
-			continue
-		}
-		text, pastes := e.sub.take()
-		if pastes > 0 {
-			if err := e.notify(fmt.Sprintf("%s %d pasted lines", strings.TrimSpace(e.opts.Continue), pastes+1)); err != nil {
-				return "", err
-			}
-		}
-		switch strings.TrimSpace(text) {
-		case "":
-			continue
-		case "/exit", "/quit":
-			return "", io.EOF
-		}
-		if e.opts.History != nil {
-			e.opts.History.Add(text)
-		}
-		return text, nil
-	}
-}
-
-// readLine reads one line after prompt, drawing it after each read's keys:
-// the line and whether it was pasted (a line ended inside a bracketed
-// paste), or io.EOF for Ctrl+D on an empty line, or the read's error. A
-// line ended, or left by Ctrl+D or a second Ctrl+C, stays drawn, the cursor
-// moved below it.
-func (e *Editor) readLine(prompt string) (string, bool, error) {
-	e.line.prompt = prompt
-	if err := e.redraw(); err != nil {
-		return "", false, err
+	if text, done, err := e.drain(ctx); done || err != nil {
+		return text, err
 	}
 	buf := make([]byte, chunkSize)
 	for {
-		ev, err := e.feed()
-		if err != nil {
-			return "", false, err
+		for len(e.held) > 0 {
+			in := e.held[0]
+			e.held = e.held[1:]
+			e.input(in, time.Now())
+			if text, done, err := e.drain(ctx); done || err != nil {
+				return text, err
+			}
 		}
-		switch ev {
-		case lineEnded:
-			e.line.pos = len(e.line.text)
-			if err := e.redraw(); err != nil {
-				return "", false, err
-			}
-			if err := e.draw.finish(); err != nil {
-				return "", false, err
-			}
-			e.showLine()
-			line, pasted := e.line.take()
-			return line, pasted, nil
-		case endOfInput:
-			if err := e.draw.finish(); err != nil {
-				return "", false, err
-			}
-			return "", false, io.EOF
-		case clearScreen:
-			if _, err := io.WriteString(e.out, "\x1b[2J\x1b[H"); err != nil {
-				return "", false, fmt.Errorf("clear the screen: %w", err)
-			}
-			e.draw.forget()
-			if err := e.redraw(); err != nil {
-				return "", false, err
-			}
-			continue
-		}
-		if e.readErr != nil {
-			err := e.readErr
+		if err := e.readErr; err != nil {
 			e.readErr = nil
-			return "", false, err
+			return "", err // the input's end or error; the prompt stays drawn
 		}
-		n, err := e.keys.Read(buf)
-		switch {
-		case errors.Is(err, errResized):
-			if err := e.askCursor(); err != nil {
-				return "", false, err
-			}
-			continue
-		case errors.Is(err, errWaitOver) && e.waiting != nil:
-			if err := e.resized(0, false); err != nil {
-				return "", false, err
-			}
-			continue
-		case errors.Is(err, errWaitOver):
-			if err := e.reprint(); err != nil {
-				return "", false, err
-			}
-			continue
+		n, resized, err := e.read(ctx, buf)
+		if err != nil && ctx.Err() != nil {
+			return "", ctx.Err()
 		}
-		e.in = append(e.in, buf[:n]...)
-		e.readErr = err
-		if e.waiting != nil {
-			if _, col, rest, ok := takeCursorReport(e.in); ok {
-				e.in = rest
-				if err := e.resized(col, true); err != nil {
-					return "", false, err
+		now := time.Now()
+		e.held = e.dec.Decode(buf[:n], e.held)
+		if err != nil {
+			e.held = e.dec.Flush(e.held)
+			e.readErr = err
+		} else if n == 0 && e.dec.Pending() && !time.Now().Before(e.escDue) {
+			e.held = e.dec.Flush(e.held) // a lone escape, the input quiet since
+		}
+		if n > 0 {
+			e.escDue = now.Add(termkey.DefaultEscTimeout)
+		}
+		if resized {
+			e.resize(now)
+		}
+		e.timeout(now)
+		if text, done, err := e.drain(ctx); done || err != nil {
+			return text, err
+		}
+	}
+}
+
+// open starts a new prompt at the terminal's width now, with the header
+// read for it.
+func (e *Editor) open() {
+	e.head = ""
+	if e.opts.Header != nil {
+		e.head = strings.Join(strings.Fields(term.CleanLine(e.opts.Header(), true)), " ") // the editor draws on a terminal
+	}
+	head := e.head
+	o := []lineedit.Option{lineedit.WithRegion(e.region), lineedit.WithKeymap(e.keys),
+		lineedit.WithPrompt(e.opts.Prompt), lineedit.WithContinue(e.opts.Continue), lineedit.WithGlyphs(glyphsOf(e.opts.Continue)),
+		lineedit.WithHistory(e.hist), lineedit.WithPaste(lineedit.PasteInsert), lineedit.WithLimit(lineedit.DefaultLimit),
+		lineedit.WithClearScreen(), lineedit.WithHeader(func() string { return head })}
+	if e.opts.Complete != nil {
+		o = append(o, lineedit.WithCompleter(lineedit.CompleterFunc(e.opts.Complete)))
+	}
+	if e.opts.External != nil {
+		o = append(o, lineedit.WithExternalEditor())
+	}
+	e.line = lineedit.NewComposer(o...)
+	e.setHeight()
+	e.width = e.terminalWidth()
+	e.line.Resize(e.width, time.Now())
+}
+
+// glyphsOf is the glyph set the continuation prompt is drawn from: ASCII's
+// for "... ".
+func glyphsOf(cont string) glyph.Set { return glyph.For(cont != "... ") }
+
+// input gives one decoded input to the prompt, at the terminal's width
+// now (0027-MADR D3). A paste's line breaks are LF, as Console Host's CR
+// are not (0008-MADR measurement 10), and a paste of more than one line
+// asks for the notice.
+func (e *Editor) input(in termkey.Input, now time.Time) {
+	if e.terminalWidth() != e.width {
+		e.resize(now)
+	}
+	if in.Kind == termkey.InputPaste {
+		in.Text = strings.ReplaceAll(strings.ReplaceAll(in.Text, "\r\n", "\n"), "\r", "\n")
+		if n := strings.Count(in.Text, "\n"); n > 0 {
+			e.notice = fmt.Sprintf("%s %d pasted lines", strings.TrimSpace(e.opts.Continue), n+1)
+		}
+	}
+	e.setHeight()
+	e.line.HandleInput(in, now)
+}
+
+// resize lays the prompt out at the terminal's new width; the region asks
+// where the cursor is and redraws from there (0030-MADR D2).
+func (e *Editor) resize(now time.Time) {
+	e.setHeight()
+	e.width = e.terminalWidth()
+	e.line.Resize(e.width, now)
+	e.resized, e.settleAt = true, time.Time{}
+}
+
+// timeout runs the prompt's wait, for the cursor report or a key
+// sequence, once the clock has passed it.
+func (e *Editor) timeout(now time.Time) {
+	if at, ok := e.line.Timeout(); ok && !now.Before(at) {
+		e.line.HandleTimeout(now)
+	}
+}
+
+// settle starts the wait for the reprint once a resize's redraw is done,
+// and reprints when it is over (0030-MADR D3).
+func (e *Editor) settle(now time.Time) {
+	if e.resized {
+		if _, waiting := e.region.Timeout(); waiting {
+			return
+		}
+		e.resized = false
+		if e.opts.Reprint != nil {
+			e.settleAt = now.Add(settleWait)
+		}
+	}
+	if e.settleAt.IsZero() || now.Before(e.settleAt) {
+		return
+	}
+	e.settleAt = time.Time{}
+	text := e.opts.Reprint(e.width)
+	if text == "" {
+		e.write(e.region.Clear() + "\x1b[2J\x1b[3J\x1b[H")
+		e.redraw()
+		return
+	}
+	e.write(e.region.Print("\x1b[2J\x1b[3J\x1b[H" + text)) // one synchronized update, the prompt redrawn below
+}
+
+// drain writes what the prompt asks and acts on what it gives: a
+// submission is returned, and /exit, /quit, the end of input and a second
+// Ctrl+C end the read. A prompt that ends leaves what it committed in the
+// scrollback, the cursor at the start of the row below, where the
+// caller's output comes next: the empty prompt the Composer draws below a
+// submission, and the region's clearing of it, are both dropped.
+func (e *Editor) drain(ctx context.Context) (string, bool, error) {
+	var text string
+	submitted, sent := false, false
+	var end error
+	for {
+		for ev := e.line.NextEvent(); ev.Kind != lineedit.EditNone; ev = e.line.NextEvent() {
+			switch ev.Kind {
+			case lineedit.EditWrite:
+				if !sent {
+					e.write(ev.Data)
 				}
+			case lineedit.EditSubmit:
+				switch strings.TrimSpace(ev.Text) {
+				case "":
+				case "/exit", "/quit":
+					end, sent = io.EOF, true
+				default:
+					text, submitted, sent = ev.Text, true, true
+				}
+			case lineedit.EditEOF:
+				if end == nil {
+					end = io.EOF
+				}
+			case lineedit.EditInterrupt:
+				t := ev.Text
+				e.interrupted = &t
+			case lineedit.EditExternal:
+				t := ev.Text
+				e.external = &t
 			}
 		}
+		acted, err := e.act(ctx)
+		if err != nil {
+			end = err
+		}
+		if !acted { // else the writes it asked for come next
+			break
+		}
 	}
+	if !submitted && end == nil {
+		e.settle(time.Now())
+		return "", false, nil
+	}
+	if c := e.region.Clear(); !sent {
+		e.write(c)
+	}
+	e.line, e.resized, e.settleAt = nil, false, time.Time{}
+	if end != nil {
+		return "", true, end
+	}
+	e.showSubmission(text)
+	e.hist.record(text)
+	return text, true, nil
 }
 
-// feed gives the bytes read to the line and draws it if they changed it;
-// while the terminal's cursor report is awaited after a resize, the bytes
-// wait, since the drawing on screen is not where the editor last left it.
-func (e *Editor) feed() (bufferEvent, error) {
-	if e.waiting != nil {
-		return needMore, nil
+// act does what the last input asked of the host once the Composer's
+// writes before it are written, and says whether it did anything.
+func (e *Editor) act(ctx context.Context) (bool, error) {
+	acted := false
+	if msg := e.notice; msg != "" {
+		e.notice, acted = "", true
+		if err := e.noticeAbove(msg); err != nil {
+			return true, err
+		}
 	}
-	before := len(e.in)
-	rest, ev := e.line.feed(e.in)
-	e.in = rest
-	if ev == needMore && len(e.in) != before {
-		return ev, e.redraw()
+	if t := e.interrupted; t != nil {
+		e.interrupted, acted = nil, true
+		if err := e.interrupt(*t); err != nil {
+			return true, err
+		}
 	}
-	return ev, nil
+	if t := e.external; t != nil {
+		e.external, acted = nil, true
+		e.write(e.region.Clear())
+		if err := e.flush(); err != nil {
+			return true, err
+		}
+		if edited, err := e.opts.External(ctx, *t); err == nil {
+			e.line.SetText(edited)
+		}
+		e.redraw()
+	}
+	return acted, nil
 }
 
-// cursorWait is how long the editor waits for the terminal's cursor report
-// after a resize before it redraws without one (0030-MADR D2, as amended).
-const cursorWait = 150 * time.Millisecond
+// interrupt is Ctrl+C: a non-empty line is cleared; on an empty line the
+// first press arms the exit window and says so above the prompt, and a
+// second inside it exits, the prompt left on the screen.
+func (e *Editor) interrupt(text string) error {
+	if text != "" {
+		e.armedUntil = time.Time{}
+		e.line.SetText("")
+		return nil
+	}
+	now := time.Now()
+	if now.Before(e.armedUntil) {
+		e.line.Cancel()
+		return ErrExit
+	}
+	e.armedUntil = now.Add(exitWindow)
+	return e.noticeAbove("Press Ctrl+C again to exit")
+}
 
-// askCursor asks the terminal where its cursor is (DSR, CSI 6 n) after a
-// resize, and starts the wait for the reply.
-func (e *Editor) askCursor() error {
-	if e.waiting != nil {
-		e.waiting.Stop()
+// noticeAbove writes msg to errw on its own line above the prompt, which
+// is drawn again below it.
+func (e *Editor) noticeAbove(msg string) error {
+	e.write(e.region.Clear())
+	if err := e.flush(); err != nil {
+		return err
 	}
-	if e.settling != nil {
-		e.settling.Stop()
-		e.settling = nil
+	if _, err := fmt.Fprintf(e.errw, "%s\r\n", msg); err != nil {
+		return fmt.Errorf("editor notice: %w", err)
 	}
-	e.waiting = time.NewTimer(cursorWait)
-	e.keys.timeout = e.waiting.C
-	if _, err := io.WriteString(e.out, "\x1b[6n"); err != nil {
-		return fmt.Errorf("ask the cursor's place: %w", err)
+	if e.opts.Shown != nil {
+		e.opts.Shown(len(msg), func(int) string { return msg + "\n" })
 	}
+	e.redraw()
 	return nil
 }
 
-// resized draws the line again at the terminal's new width, from where its
-// first row is now: col is the column of the terminal's cursor report,
-// 1-based, when known is true (0030-MADR D2, as amended).
-func (e *Editor) resized(col int, known bool) error {
-	e.waiting.Stop()
-	e.waiting, e.keys.timeout = nil, nil
-	terminal := DefaultWidth
-	if e.opts.Width != nil && e.opts.Width() > 0 {
-		terminal = e.opts.Width()
-	}
-	up := e.draw.lift(terminal, col, known, os.Getenv("XTERM_VERSION") != "")
-	e.draw.forget()
-	e.draw.up = up
-	if e.opts.Reprint != nil {
-		e.settling = time.NewTimer(settleWait)
-		e.keys.timeout = e.settling.C
-	}
-	return e.redraw()
+// redraw draws the prompt in a cleared region.
+func (e *Editor) redraw() {
+	rows, row, col := e.line.View(e.width)
+	e.write(e.region.Draw(rows, row, col))
 }
 
-// settleWait is how long after the last resize the conversation is
-// reprinted (0030-MADR D3).
-const settleWait = 150 * time.Millisecond
-
-// reprint clears the screen and its scrollback and writes Options.Reprint
-// at the terminal's width, then the line, as one synchronized update
-// (0030-MADR D3).
-func (e *Editor) reprint() error {
-	e.settling, e.keys.timeout = nil, nil
-	terminal := DefaultWidth
-	if e.opts.Width != nil && e.opts.Width() > 0 {
-		terminal = e.opts.Width()
+// read reads the terminal until bytes come, the terminal is resized, or
+// the clock makes something due: the prompt's wait, the decoder's held
+// escape, or the reprint. resized reports the resize; a wait that is over
+// returns no bytes and no error.
+func (e *Editor) read(ctx context.Context, p []byte) (n int, resized bool, err error) {
+	if err := e.flush(); err != nil {
+		return 0, false, err
 	}
-	text := strings.ReplaceAll(strings.ReplaceAll(e.opts.Reprint(terminal), "\r\n", "\n"), "\n", "\r\n")
-	e.draw.forget()
-	e.draw.prefix = "\x1b[2J\x1b[3J\x1b[H" + text
-	return e.redraw()
+	var due time.Time
+	if at, ok := e.line.Timeout(); ok {
+		due = at
+	}
+	if e.dec.Pending() {
+		due = earliest(due, e.escDue)
+	}
+	if e.resized && e.opts.Reprint != nil {
+		due = earliest(due, time.Now().Add(settleWait))
+	}
+	due = earliest(due, e.settleAt)
+	if due.IsZero() && e.opts.Resize == nil {
+		n, err = e.in.Read(ctx, p)
+		return n, false, err
+	}
+	rctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	var timer <-chan time.Time
+	if !due.IsZero() {
+		t := time.NewTimer(time.Until(due))
+		defer t.Stop()
+		timer = t.C
+	}
+	var gotResize atomic.Bool
+	stop := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		select {
+		case <-e.opts.Resize:
+			gotResize.Store(true)
+		case <-timer:
+		case <-stop:
+			return
+		}
+		cancel()
+	}()
+	n, err = e.in.Read(rctx, p)
+	close(stop)
+	<-done
+	if err != nil && ctx.Err() == nil && rctx.Err() != nil {
+		err = nil // a resize or a wait over, not the caller's end
+	}
+	return n, gotResize.Load(), err
 }
 
-// show gives Options.Shown what the editor left on the screen, drawn the
-// same at every width.
-func (e *Editor) show(s string) {
-	if e.opts.Shown != nil {
-		e.opts.Shown(len(s), func(int) string { return s + "\n" })
+// earliest is the earlier of a and b, a zero time being none.
+func earliest(a, b time.Time) time.Time {
+	switch {
+	case a.IsZero():
+		return b
+	case b.IsZero() || a.Before(b):
+		return a
+	}
+	return b
+}
+
+func (e *Editor) setHeight() {
+	if e.opts.Height != nil {
+		e.region.SetHeight(e.opts.Height())
 	}
 }
 
-// showLine gives Options.Shown the line just sent, laid out again at
-// whatever width it is drawn at.
-func (e *Editor) showLine() {
+// terminalWidth is the width the prompt is laid out to (0024-MADR D9).
+func (e *Editor) terminalWidth() int {
+	if e.opts.Width == nil {
+		return DefaultWidth
+	}
+	return lineWidth(e.opts.Width())
+}
+
+// lineWidth is the width a prompt is laid out to on a terminal that many
+// columns wide: at most MaxWidth, and DefaultWidth when it is unknown.
+func lineWidth(terminal int) int {
+	if terminal <= 0 {
+		return DefaultWidth
+	}
+	return min(terminal, MaxWidth)
+}
+
+// showSubmission gives Options.Shown the header drawn above the line sent,
+// and the line, laid out again at whatever width it is drawn at.
+func (e *Editor) showSubmission(text string) {
 	if e.opts.Shown == nil {
 		return
 	}
-	prompt, text := e.line.prompt, slices.Clone(e.line.text)
-	e.opts.Shown(len(prompt)+len(string(text)), func(width int) string {
-		l := layout(prompt, text, len(text), lineWidth(width))
+	if h := e.head; h != "" {
+		e.opts.Shown(len(h), func(int) string { return h + "\n" })
+	}
+	prompt, cont := e.opts.Prompt, e.opts.Continue
+	e.opts.Shown(len(prompt)+len(text), func(width int) string {
+		c := lineedit.NewComposer(lineedit.WithPrompt(prompt), lineedit.WithContinue(cont), lineedit.WithGlyphs(glyphsOf(cont)))
+		c.SetText(text)
+		rows, row, _ := c.View(lineWidth(width))
+		if row == len(rows)-1 && len(rows) > 1 && strings.TrimSpace(rows[row]) == "" {
+			rows = rows[:row] // the row the cursor would wrap to, not the text's
+		}
 		var b strings.Builder
-		for _, row := range l.rows {
-			b.WriteString(strings.TrimRight(row, " ") + "\n")
+		for _, r := range rows {
+			b.WriteString(strings.TrimRight(r, " ") + "\n")
 		}
 		return b.String()
 	})
 }
 
-// takeCursorReport takes the first cursor report (CSI row ; col R) out of
-// b.
-func takeCursorReport(b []byte) (row, col int, rest []byte, ok bool) {
-	for i := 0; i+1 < len(b); i++ {
-		if b[i] != 0x1b || b[i+1] != '[' {
-			continue
-		}
-		j, nums, n := i+2, [2]int{}, 0
-		for ; j < len(b) && n < 2; j++ {
-			switch c := b[j]; {
-			case c >= '0' && c <= '9':
-				nums[n] = nums[n]*10 + int(c-'0')
-				continue
-			case c == ';' && n == 0:
-				n++
-				continue
-			case c == 'R' && n == 1:
-				return nums[0], nums[1], append(b[:i:i], b[j+1:]...), true
-			}
-			break
-		}
-	}
-	return 0, 0, b, false
-}
+// write keeps s to write with the rest of what the prompt asks.
+func (e *Editor) write(s string) { e.pending.WriteString(s) }
 
-// redraw lays the line out at the terminal's width now and draws it in
-// place of the last drawing.
-func (e *Editor) redraw() error {
-	l := e.line
-	l.columns = DefaultWidth
-	if e.opts.Width != nil {
-		l.columns = lineWidth(e.opts.Width())
-	}
-	height := 0
-	if e.opts.Height != nil {
-		height = max(e.opts.Height(), 0)
-	}
-	return e.draw.draw(layout(l.prompt, l.text, l.pos, l.columns), height)
-}
-
-// header writes Options.Header above the new prompt: one line, with escape
-// sequences and control characters dropped and line breaks made spaces.
-func (e *Editor) header() error {
-	if e.opts.Header == nil || e.sub.open() {
+// flush writes what the prompt asked, in one write.
+func (e *Editor) flush() error {
+	if e.pending.Len() == 0 {
 		return nil
 	}
-	h := strings.Join(strings.Fields(term.CleanLine(e.opts.Header(), true)), " ") // the editor draws on a terminal
-	if h == "" {
-		return nil
+	_, err := io.WriteString(e.out, e.pending.String())
+	e.pending.Reset()
+	if err != nil {
+		return fmt.Errorf("draw the prompt: %w", err)
 	}
-	if _, err := io.WriteString(e.out, h+"\r\n"); err != nil {
-		return fmt.Errorf("editor header: %w", err)
-	}
-	e.show(h)
 	return nil
 }
 
-func (e *Editor) prompt() string {
-	if e.sub.open() {
-		return e.opts.Continue
+// submissions is the History a prompt recalls. The Composer adds each
+// submission it gives; ReadPrompt adds only those it returns, so an empty
+// line, /exit and /quit stay out (0027-MADR D4).
+type submissions struct{ h History }
+
+// Add is the Composer's, and adds nothing: see record.
+func (s *submissions) Add(string) {}
+
+func (s *submissions) record(text string) {
+	if s.h != nil {
+		s.h.Add(text)
 	}
-	return e.opts.Prompt
 }
 
-// notify writes one line to errw. A line has just ended, so the cursor is
-// at column 0 and the next prompt is drawn below it.
-func (e *Editor) notify(msg string) error {
-	if _, err := fmt.Fprintf(e.errw, "%s\r\n", msg); err != nil {
-		return fmt.Errorf("editor notice: %w", err)
+func (s *submissions) Len() int {
+	if s.h == nil {
+		return 0
 	}
-	e.show(msg)
-	return nil
+	return s.h.Len()
 }
 
-// onKey is the buffer's completion callback: Ctrl+C's key and Tab.
-func (e *Editor) onKey(line string, pos int, key rune) (newLine string, newPos int, ok bool) {
-	switch {
-	case key == keyInterrupt:
-		return e.keys.interrupt(line)
-	case key == '\t' && e.opts.Complete != nil:
-		return e.opts.Complete(line, pos)
-	}
-	return "", 0, false
-}
+func (s *submissions) At(idx int) string { return s.h.At(idx) }
 
 // Raw puts the terminal on f into raw mode and returns the func that
 // restores it. On Windows this also enables virtual-terminal input, which

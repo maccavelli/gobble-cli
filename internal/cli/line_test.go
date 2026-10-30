@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -212,12 +213,18 @@ func TestLineSessionReadsOnlyWhenAsked(t *testing.T) {
 	}
 }
 
-// A resize at the prompt asks the terminal where its cursor is, and on the
-// reply draws the line again, with no key pressed (0030-MADR D1, D2).
+// A resize at the prompt that narrows the terminal asks it where its
+// cursor is, and on the reply draws the line again, with no key pressed
+// (0030-MADR D1, D2). One that leaves the width as it was asks nothing:
+// go-tui-lib's region redraws only at a new width (0035-PLAN P17).
 func TestLineSessionRedrawsOnResize(t *testing.T) {
 	h := newLineHarness(t, &acptest.ScriptAgent{})
+	var width atomic.Int64
+	width.Store(80)
+	h.termWidth = func() int { return int(width.Load()) }
 	h.start(Prompt{})
 	waitUntil(t, func() bool { return strings.Contains(h.stdout.String(), "> ") })
+	width.Store(60)
 	h.resize <- struct{}{}
 	waitUntil(t, func() bool { return strings.Contains(h.stdout.String(), "\x1b[6n") })
 	n := len(h.stdout.String())

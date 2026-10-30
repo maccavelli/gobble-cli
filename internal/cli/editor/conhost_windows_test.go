@@ -26,6 +26,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/maccavelli/go-tui-lib/v2/inline"
 	"golang.org/x/sys/windows"
 
 	"github.com/maccavelli/gobble-cli/internal/cli/term"
@@ -240,9 +241,7 @@ func childRun(ctx context.Context, dir string) (subs []string, err error) {
 	}
 	defer func() { err = errors.Join(err, restoreIn()) }()
 
-	r := &Reader{}
-	r.Start(ctx, in)
-	e := New(r, out, out, Options{})
+	e := New(inline.NewReader(in), out, out, Options{})
 	defer func() { err = errors.Join(err, e.Restore()) }()
 
 	if err := os.WriteFile(filepath.Join(dir, "ready"), []byte(consoleWindow()), 0o600); err != nil {

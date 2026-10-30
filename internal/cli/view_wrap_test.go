@@ -7,6 +7,8 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"github.com/charmbracelet/x/ansi"
+
 	"github.com/maccavelli/gobble-cli/acpclient"
 	"github.com/maccavelli/gobble-cli/acpclient/acptest"
 	"github.com/maccavelli/gobble-cli/internal/cli/term"
@@ -236,7 +238,7 @@ func TestLineSessionWrapsReplies(t *testing.T) {
 			}
 			widest := 0
 			for _, r := range rows {
-				widest = max(widest, len(r))
+				widest = max(widest, ansi.StringWidth(r)) // the escapes that end the line's drawing take no columns
 			}
 			if len(rows) < 2 || widest > tc.want || widest < tc.want-5 {
 				t.Errorf("reply rows %q: widest %d, want at most %d and close to it", rows, widest, tc.want)

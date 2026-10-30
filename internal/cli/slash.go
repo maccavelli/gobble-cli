@@ -204,6 +204,25 @@ func (*lineSession) stateDir() string {
 	return os.TempDir()
 }
 
+// editLine is ctrl+x ctrl+e at the prompt (0035-PLAN P17): the line's
+// text in the user's editor, as /edit opens it, run by outOfRaw out of raw
+// mode. An error is shown, and the editor keeps the line.
+func (ls *lineSession) editLine(outOfRaw func(func() error) error) func(context.Context, string) (string, error) {
+	return func(ctx context.Context, text string) (string, error) {
+		var edited string
+		err := outOfRaw(func() error {
+			configured := ls.e.processSettings(ls.cwd).Settings.ExternalEditor // 0018-MADR D17
+			var err error
+			edited, err = compose(ctx, os.Getenv, configured, ls.stateDir(), text, ls.runEditor)
+			return err
+		})
+		if err != nil {
+			ls.e.out.Errorf("%v", err)
+		}
+		return edited, err
+	}
+}
+
 // runEditor runs the external editor on the process's terminal.
 func (ls *lineSession) runEditor(c *exec.Cmd) error {
 	c.Stdin, c.Stdout, c.Stderr = ls.e.stdin, ls.e.out.out, ls.e.out.err

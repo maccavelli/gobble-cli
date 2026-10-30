@@ -6,7 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/maccavelli/gobble-cli/internal/cli/term/termtest"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/maccavelli/go-tui-lib/v2/inline"
+	"github.com/maccavelli/go-tui-lib/v2/inline/inlinetest"
 )
 
 // report is the owner's report that asked for this editor (0027-MADR), a
@@ -18,9 +20,9 @@ const report = "The prompt is being cut and wrapped at around 80 chars, includin
 
 // onScreen runs a new Editor on in, drawing on s, until an error, and
 // returns the submissions.
-func onScreen(t *testing.T, s *termtest.Screen, in io.Reader, opts Options) []string {
+func onScreen(t *testing.T, s *inlinetest.Screen, in io.Reader, opts Options) []string {
 	t.Helper()
-	e := New(in, s, io.Discard, opts)
+	e := New(inline.NewReader(in), s, io.Discard, opts)
 	var subs []string
 	for {
 		text, err := e.ReadPrompt(t.Context())
@@ -31,13 +33,22 @@ func onScreen(t *testing.T, s *termtest.Screen, in io.Reader, opts Options) []st
 	}
 }
 
+// trimmedLines is the screen's rows without their trailing spaces.
+func trimmedLines(s *inlinetest.Screen) []string {
+	lines := s.Lines()
+	for i, l := range lines {
+		lines[i] = strings.TrimRight(l, " ")
+	}
+	return lines
+}
+
 // lineRows are the screen's rows from the first that starts with prompt,
 // through the last before an empty one or the next prompt, and the row
 // after them. A run's last read draws a new prompt, so after a line sent
 // that row holds the bare prompt.
-func lineRows(t *testing.T, s *termtest.Screen, prompt string) (rows []string, next int) {
+func lineRows(t *testing.T, s *inlinetest.Screen, prompt string) (rows []string, next int) {
 	t.Helper()
-	lines := s.Lines()
+	lines := trimmedLines(s)
 	bare := strings.TrimSpace(prompt)
 	for i, l := range lines {
 		if strings.HasPrefix(l, prompt) {
@@ -55,11 +66,12 @@ func lineRows(t *testing.T, s *termtest.Screen, prompt string) (rows []string, n
 // checkNextPrompt fails unless the row after a sent line holds the next
 // prompt, alone, with the cursor after it: Enter left the line as drawn and
 // moved below it.
-func checkNextPrompt(t *testing.T, s *termtest.Screen, next int) {
+func checkNextPrompt(t *testing.T, s *inlinetest.Screen, next int) {
 	t.Helper()
-	if next >= len(s.Lines()) || s.Lines()[next] != ">" || s.Row != next || s.Col != 2 {
+	lines := trimmedLines(s)
+	if next >= len(lines) || lines[next] != ">" || s.Row != next || s.Col != 2 {
 		t.Errorf("after the sent line, the cursor at (%d, %d), want the next prompt's (%d, 2) alone; screen %q",
-			s.Row, s.Col, next, s.Lines())
+			s.Row, s.Col, next, lines)
 	}
 }
 
@@ -70,7 +82,7 @@ func checkWholeWords(t *testing.T, rows []string, text string, columns int) {
 	t.Helper()
 	var parts []string
 	for i, r := range rows {
-		if w := displayWidth(r); w > columns {
+		if w := ansi.StringWidth(r); w > columns {
 			t.Errorf("row %d is %d columns, more than %d: %q", i, w, columns, r)
 		}
 		if i == 0 {
@@ -90,7 +102,7 @@ func checkWholeWords(t *testing.T, rows []string, text string, columns int) {
 // and stays so once sent; the text sent is as typed (0027-MADR D2, D3).
 func TestTypingKeepsWordsWhole(t *testing.T) {
 	for _, width := range []int{60, 100, 200} {
-		s := termtest.New(width, 20)
+		s := newScreen(width, 20)
 		subs := onScreen(t, s, strings.NewReader(report+"\r"), Options{Width: func() int { return width }})
 		if !slices.Equal(subs, []string{report}) {
 			t.Fatalf("at %d columns, sent %q", width, subs)
@@ -98,8 +110,8 @@ func TestTypingKeepsWordsWhole(t *testing.T) {
 		columns := min(width, MaxWidth)
 		rows, next := lineRows(t, s, "> ")
 		checkWholeWords(t, rows, report, columns)
-		if want := layout("> ", []rune(report), len(report), columns).rows; !slices.Equal(rows, want) {
-			t.Errorf("at %d columns, the screen's rows %q, want the layout's %q", width, rows, want)
+		if want, _, _ := laidOut("> ", report, columns); !slices.Equal(rows, want) {
+			t.Errorf("at %d columns, the screen's rows %q, want lineedit's %q", width, rows, want)
 		}
 		checkNextPrompt(t, s, next)
 	}
@@ -125,11 +137,10 @@ func (c *chunkReader) Read(p []byte) (int, error) {
 	return n, nil
 }
 
-// The width is read at each drawing: narrowed between keys, the line is
-// drawn again at the new width, nothing of the wider drawing left
-// (0027-MADR D3).
+// The width is read at each key: narrowed between keys, the line is drawn
+// again at the new width, nothing of the wider drawing left (0027-MADR D3).
 func TestResizeBetweenKeys(t *testing.T) {
-	s := termtest.New(100, 20)
+	s := newScreen(100, 20)
 	width := 100
 	half := len(report) / 2
 	in := &chunkReader{chunks: []string{report[:half], report[half:], "\r"}, before: func(i int) {
@@ -145,29 +156,32 @@ func TestResizeBetweenKeys(t *testing.T) {
 	checkWholeWords(t, rows, report, 60)
 	checkNextPrompt(t, s, next)
 	var shown []string
-	for _, l := range s.Lines() {
+	for _, l := range trimmedLines(s) {
 		if l != "" {
 			shown = append(shown, l)
 		}
 	}
 	if !slices.Equal(shown, append(rows, ">")) {
-		t.Errorf("the screen holds more than the line and the next prompt: %q", s.Lines())
+		t.Errorf("the screen holds more than the line and the next prompt: %q", trimmedLines(s))
 	}
 }
 
 // Editing in the middle of a line of several rows draws it again whole:
-// the screen holds the layout of the edited text.
+// the screen holds the layout of the edited text. By PQ7 (a), alt+→ goes
+// to the end of this or the next word, lineedit's, so the insertion
+// starts with its space; gobble's went to the next word's start
+// ("INSERTED " before).
 func TestEditingMidLineOnScreen(t *testing.T) {
-	s := termtest.New(30, 12)
+	s := newScreen(30, 12)
 	typed := "alpha beta gamma delta epsilon zeta eta theta"
-	in := typed + "\x01" + "\x1b[1;3C\x1b[1;3C" + "INSERTED " + "\x1b[F" + " iota" + "\r"
+	in := typed + "\x01" + "\x1b[1;3C\x1b[1;3C" + " INSERTED" + "\x1b[F" + " iota" + "\r"
 	want := "alpha beta INSERTED gamma delta epsilon zeta eta theta iota"
 	subs := onScreen(t, s, strings.NewReader(in), Options{Width: func() int { return 30 }})
 	if !slices.Equal(subs, []string{want}) {
 		t.Fatalf("sent %q, want %q", subs, want)
 	}
 	rows, next := lineRows(t, s, "> ")
-	if l := layout("> ", []rune(want), len(want), 30).rows; !slices.Equal(rows, l) {
+	if l, _, _ := laidOut("> ", want, 30); !slices.Equal(rows, l) {
 		t.Errorf("screen rows %q, want %q", rows, l)
 	}
 	checkNextPrompt(t, s, next)
@@ -177,7 +191,7 @@ func TestEditingMidLineOnScreen(t *testing.T) {
 // at the line's start, its first row is on screen with the cursor on it
 // (0027-MADR D3).
 func TestTallLineShowsTheCursorRow(t *testing.T) {
-	s := termtest.New(20, 5)
+	s := newScreen(20, 5)
 	in := strings.NewReader(strings.Repeat("word ", 30) + "\x01")
 	onScreen(t, s, in, Options{Width: func() int { return 20 }, Height: func() int { return 5 }})
 	if got := s.Lines()[s.Row]; !strings.HasPrefix(got, "> word") || s.Col != 2 {
@@ -186,7 +200,6 @@ func TestTallLineShowsTheCursorRow(t *testing.T) {
 	}
 }
 
-// Ctrl+L clears the screen and draws the line again at its top.
 // Ctrl+D on an empty line and a second Ctrl+C leave the line as Enter
 // does, the cursor at the start of the row below it, so what is written
 // next, the goodbye, has a row of its own (0027-MADR D3, as amended for
@@ -197,11 +210,11 @@ func TestEndOfInputLeavesTheLine(t *testing.T) {
 		{"a second Ctrl+C", "\x03\x03"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			s := termtest.New(20, 6)
+			s := newScreen(20, 6)
 			if subs := onScreen(t, s, strings.NewReader(tc.keys), Options{Width: func() int { return 20 }}); len(subs) > 0 {
 				t.Fatalf("sent %q", subs)
 			}
-			lines := s.Lines()
+			lines := trimmedLines(s)
 			last := -1
 			for i, l := range lines {
 				if strings.HasPrefix(l, ">") {
@@ -216,8 +229,9 @@ func TestEndOfInputLeavesTheLine(t *testing.T) {
 	}
 }
 
+// Ctrl+L clears the screen and draws the line again at its top.
 func TestClearScreenOnScreen(t *testing.T) {
-	s := termtest.New(20, 6)
+	s := newScreen(20, 6)
 	if _, err := s.Write([]byte("old output\r\nmore\r\n")); err != nil {
 		t.Fatal(err)
 	}
@@ -225,7 +239,21 @@ func TestClearScreenOnScreen(t *testing.T) {
 	if !slices.Equal(subs, []string{"abc"}) {
 		t.Fatalf("sent %q", subs)
 	}
-	if got := s.Lines(); !slices.Equal(got, []string{"> abc", ">", "", "", "", ""}) || s.Row != 1 {
+	if got := trimmedLines(s); !slices.Equal(got, []string{"> abc", ">", "", "", "", ""}) || s.Row != 1 {
 		t.Errorf("screen %q, cursor row %d; want only \"> abc\" and the next prompt, the cursor on it", got, s.Row)
+	}
+}
+
+// The Ctrl+C notice and the paste notice go above the prompt, which is
+// drawn again below them, nothing of it left above.
+func TestNoticesAboveThePrompt(t *testing.T) {
+	s := newScreen(30, 6)
+	e := New(inline.NewReader(strings.NewReader("ab\x1b[200~x\ny\x1b[201~\x03\x03")), s, s, Options{Width: func() int { return 30 }})
+	if _, err := e.ReadPrompt(t.Context()); err == nil {
+		t.Fatal("ReadPrompt returned a submission")
+	}
+	want := []string{"… 2 pasted lines", "Press Ctrl+C again to exit", ">", "", "", ""}
+	if got := trimmedLines(s); !slices.Equal(got, want) {
+		t.Fatalf("screen %q, want %q", got, want)
 	}
 }

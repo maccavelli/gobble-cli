@@ -10,14 +10,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/maccavelli/gobble-cli/internal/cli/term/termtest"
+	"github.com/maccavelli/go-tui-lib/v2/inline"
+	"github.com/maccavelli/go-tui-lib/v2/inline/inlinetest"
 )
 
-// lockedScreen is a termtest screen the editor's goroutine draws on while
-// the test reads it.
+// lockedScreen is a screen the editor's goroutine draws on while the test
+// reads it.
 type lockedScreen struct {
 	mu sync.Mutex
-	s  *termtest.Screen
+	s  *inlinetest.Screen
 }
 
 func (l *lockedScreen) Write(p []byte) (int, error) {
@@ -29,10 +30,10 @@ func (l *lockedScreen) Write(p []byte) (int, error) {
 func (l *lockedScreen) look() (lines []string, row, col int) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	return l.s.Lines(), l.s.Row, l.s.Col
+	return trimmedLines(l.s), l.s.Row, l.s.Col
 }
 
-func (l *lockedScreen) resize(columns int, how termtest.Narrowing) {
+func (l *lockedScreen) resize(columns int, how inline.Reflow) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.s.Resize(columns, how)
@@ -55,22 +56,14 @@ func (k *keyFeed) Read(p []byte) (int, error) {
 // tells a cut row from a re-wrapped one.
 var resizeText = strings.Repeat("words fill ", 25) + "the last row of the prompt here"
 
-func trimmed(rows []string) []string {
-	out := make([]string, len(rows))
-	for i, r := range rows {
-		out[i] = strings.TrimRight(r, " ")
-	}
-	return out
-}
-
 // resizeRun types resizeText on a screen 80 columns wide below a header,
 // narrows the screen to 43 columns as how says, sends the resize notice,
 // and waits for the screen to show the line laid out at 43: below the
 // header when the header can still be on screen (wantTop false), else from
 // the screen's first row. It fails the test if that never shows.
-func resizeRun(t *testing.T, how termtest.Narrowing, answer, wantTop bool, during string) {
+func resizeRun(t *testing.T, how inline.Reflow, answer, wantTop bool, during string) {
 	t.Helper()
-	ls := &lockedScreen{s: termtest.New(80, 20)}
+	ls := &lockedScreen{s: newScreen(80, 20)}
 	if _, err := ls.Write([]byte("header\r\n")); err != nil {
 		t.Fatal(err)
 	}
@@ -91,9 +84,7 @@ func resizeRun(t *testing.T, how termtest.Narrowing, answer, wantTop bool, durin
 	width.Store(80)
 	resize := make(chan struct{}, 1)
 	ctx, cancel := context.WithCancel(t.Context())
-	var r Reader
-	r.Start(ctx, keys)
-	e := New(&r, ls, io.Discard, Options{Width: func() int { return int(width.Load()) },
+	e := New(inline.NewReader(keys), ls, io.Discard, Options{Width: func() int { return int(width.Load()) },
 		Height: func() int { return 20 }, Resize: resize})
 	done := make(chan struct{})
 	go func() {
@@ -105,9 +96,8 @@ func resizeRun(t *testing.T, how termtest.Narrowing, answer, wantTop bool, durin
 		<-done
 	}()
 	keys.ch <- resizeText
-	text := []rune(resizeText)
-	before := layout("> ", text, len(text), 80)
-	if last := before.rows[len(before.rows)-1]; len(last) < 44 {
+	before, brow, bcol := laidOut("> ", resizeText, 80)
+	if last := before[len(before)-1]; len(last) < 44 {
 		t.Fatalf("the test's text: its last row at 80 is %d columns, want more than 43", len(last))
 	}
 	wait := func(want []string, top, row, col int) bool {
@@ -122,23 +112,22 @@ func resizeRun(t *testing.T, how termtest.Narrowing, answer, wantTop bool, durin
 		}
 		return false
 	}
-	if !wait(trimmed(before.rows), 1, 1+before.row, before.column) {
+	if !wait(before, 1, 1+brow, bcol) {
 		lines, r, c := ls.look()
 		t.Fatalf("the line was not drawn at 80: %q, cursor (%d, %d)", lines, r, c)
 	}
 	ls.resize(43, how)
 	width.Store(43)
 	resize <- struct{}{}
-	text = []rune(resizeText + during)
-	after := layout("> ", text, len(text), 43)
+	after, arow, acol := laidOut("> ", resizeText+during, 43)
 	top := 1
 	if wantTop {
 		top = 0
 	}
-	if !wait(trimmed(after.rows), top, top+after.row, after.column) {
+	if !wait(after, top, top+arow, acol) {
 		lines, r, c := ls.look()
 		t.Fatalf("after the resize, screen %q, cursor (%d, %d); want %q from row %d, the cursor at (%d, %d)",
-			lines, r, c, trimmed(after.rows), top, top+after.row, after.column)
+			lines, r, c, after, top, top+arow, acol)
 	}
 }
 
@@ -149,16 +138,16 @@ func resizeRun(t *testing.T, how termtest.Narrowing, answer, wantTop bool, durin
 // (0030-MADR D2, as amended).
 func TestResizeRedrawsAtOnce(t *testing.T) {
 	t.Setenv("XTERM_VERSION", "")
-	t.Run("re-wrapped, the cursor down", func(t *testing.T) { resizeRun(t, termtest.ReflowDown, true, false, "") })
-	t.Run("re-wrapped, the cursor kept", func(t *testing.T) { resizeRun(t, termtest.ReflowKeepRow, true, true, "") })
-	t.Run("cut, told by the cursor's column", func(t *testing.T) { resizeRun(t, termtest.Cut, true, false, "") })
+	t.Run("re-wrapped, the cursor down", func(t *testing.T) { resizeRun(t, inline.ReflowDown, true, false, "") })
+	t.Run("re-wrapped, the cursor kept", func(t *testing.T) { resizeRun(t, inline.ReflowKeepRow, true, true, "") })
+	t.Run("cut, told by the cursor's column", func(t *testing.T) { resizeRun(t, inline.ReflowCut, true, false, "") })
 }
 
 // A terminal that does not answer the cursor query is redrawn as one that
 // re-wraps, once the wait is over.
 func TestResizeWithoutAReply(t *testing.T) {
 	t.Setenv("XTERM_VERSION", "")
-	resizeRun(t, termtest.ReflowDown, false, false, "")
+	resizeRun(t, inline.ReflowDown, false, false, "")
 }
 
 // Keys typed while the cursor report is awaited wait with it, and are put
@@ -166,7 +155,7 @@ func TestResizeWithoutAReply(t *testing.T) {
 // would be drawn where the line no longer is.
 func TestKeysTypedWhileTheReportIsAwaited(t *testing.T) {
 	t.Setenv("XTERM_VERSION", "")
-	resizeRun(t, termtest.ReflowDown, true, false, " and more")
+	resizeRun(t, inline.ReflowDown, true, false, " and more")
 }
 
 // reprintSession runs an editor on a screen 80 columns wide whose earlier
@@ -191,7 +180,7 @@ func (r *reprintSession) Write(p []byte) (int, error) {
 
 func startReprint(t *testing.T) *reprintSession {
 	t.Helper()
-	r := &reprintSession{ls: &lockedScreen{s: termtest.New(80, 10)}, keys: &keyFeed{ch: make(chan string, 16)},
+	r := &reprintSession{ls: &lockedScreen{s: newScreen(80, 10)}, keys: &keyFeed{ch: make(chan string, 16)},
 		resize: make(chan struct{}, 1)}
 	r.width.Store(80)
 	r.ls.s.Answer = func(reply string) { r.keys.ch <- reply }
@@ -199,9 +188,7 @@ func startReprint(t *testing.T) *reprintSession {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(t.Context())
-	var rd Reader
-	rd.Start(ctx, r.keys)
-	e := New(&rd, r, io.Discard, Options{Width: func() int { return int(r.width.Load()) }, Resize: r.resize,
+	e := New(inline.NewReader(r.keys), r, io.Discard, Options{Width: func() int { return int(r.width.Load()) }, Resize: r.resize,
 		Reprint: func(width int) string {
 			r.reprints.Add(1)
 			return "history at " + string(rune('0'+width/10)) + string(rune('0'+width%10)) + "\n"
@@ -220,7 +207,7 @@ func startReprint(t *testing.T) *reprintSession {
 }
 
 func (r *reprintSession) narrow(columns int) {
-	r.ls.resize(columns, termtest.ReflowDown)
+	r.ls.resize(columns, inline.ReflowDown)
 	r.width.Store(int64(columns))
 	r.resize <- struct{}{}
 }
@@ -248,9 +235,10 @@ func TestReprintOnSettle(t *testing.T) {
 	r.mu.Lock()
 	out := r.written.String()
 	r.mu.Unlock()
-	before, _, found := strings.Cut(out, "\x1b[3J")
-	if !found || strings.LastIndex(before, "\x1b[?2026h") < strings.LastIndex(before, "\x1b[?2026l") {
-		t.Fatalf("the reprint did not clear the scrollback inside a synchronized update: %q", out)
+	before, after, found := strings.Cut(out, "\x1b[3J")
+	if !found || strings.LastIndex(before, "\x1b[?2026h") < strings.LastIndex(before, "\x1b[?2026l") ||
+		strings.Index(after, "\x1b[?2026l") < strings.Index(after, "> hello world") {
+		t.Fatalf("the reprint did not clear the scrollback and draw the line inside one synchronized update: %q", out)
 	}
 }
 
@@ -275,7 +263,7 @@ func TestResizesReprintOnce(t *testing.T) {
 // (0030-MADR D4).
 func TestShownLines(t *testing.T) {
 	var shown []func(int) string
-	s := termtest.New(80, 6)
+	s := newScreen(80, 6)
 	onScreen(t, s, strings.NewReader("alpha beta gamma\r"), Options{
 		Header: func() string { return "proj" },
 		Shown:  func(_ int, at func(int) string) { shown = append(shown, at) },
@@ -285,15 +273,15 @@ func TestShownLines(t *testing.T) {
 		got = append(got, at(12))
 	}
 	want := []string{"proj\n", "> alpha beta\n  gamma\n"}
-	if !slices.Equal(got[:min(len(got), 2)], want) {
-		t.Fatalf("shown at 12: %q, want %q first", got, want)
+	if !slices.Equal(got, want) {
+		t.Fatalf("shown at 12: %q, want %q", got, want)
 	}
 }
 
 // A cursor report typed, or arriving late, is no key: nothing of it is put
 // in the line.
 func TestCursorReportIsNoText(t *testing.T) {
-	s := termtest.New(40, 4)
+	s := newScreen(40, 4)
 	subs := onScreen(t, s, strings.NewReader("ab\x1b[12;40Rcd\r"), Options{})
 	if !slices.Equal(subs, []string{"abcd"}) {
 		t.Fatalf("sent %q, want [abcd]", subs)

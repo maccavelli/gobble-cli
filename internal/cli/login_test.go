@@ -19,11 +19,11 @@ import (
 	"github.com/maccavelli/gobble-cli/llm/provider"
 )
 
-// chunks is a reader that owns stdin, as editor.Reader does: each read
+// chunks is a reader that owns stdin, as inline.Reader does: each read
 // gives the next chunk, then the end of input.
 type chunks struct{ c []string }
 
-func (r *chunks) ReadContext(ctx context.Context, p []byte) (int, error) {
+func (r *chunks) Read(ctx context.Context, p []byte) (int, error) {
 	if err := ctx.Err(); err != nil {
 		return 0, err
 	}

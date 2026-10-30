@@ -13,26 +13,26 @@ import (
 	"testing"
 	"testing/synctest"
 	"time"
+
+	"github.com/maccavelli/go-tui-lib/v2/inline"
 )
 
 // session drives an Editor through a pipe, as stdin would, inside a
 // synctest bubble so the exit window runs on the fake clock.
 type session struct {
-	pw     *io.PipeWriter
-	e      *Editor
-	errw   *bytes.Buffer
-	wg     sync.WaitGroup
-	cancel context.CancelFunc // stops the reader, which waits to be asked
+	pw   *io.PipeWriter
+	r    *inline.Reader
+	e    *Editor
+	errw *bytes.Buffer
+	wg   sync.WaitGroup
 }
 
 func newSession(t *testing.T) *session {
 	t.Helper()
 	pr, pw := io.Pipe()
-	ctx, cancel := context.WithCancel(context.Background())
-	r := &Reader{}
-	r.Start(ctx, pr)
 	errw := new(bytes.Buffer)
-	return &session{pw: pw, e: New(r, io.Discard, errw, Options{}), errw: errw, cancel: cancel}
+	r := inline.NewReader(pr)
+	return &session{pw: pw, r: r, e: New(r, io.Discard, errw, Options{}), errw: errw}
 }
 
 // feed writes each step's bytes, sleeping before the ones with a delay.
@@ -53,7 +53,11 @@ func (s *session) close(t *testing.T) {
 	if err := s.pw.Close(); err != nil {
 		t.Error(err)
 	}
-	s.cancel()
+	// The reader's goroutine reads only when asked: one more read takes
+	// the pipe's end, and it returns.
+	if _, err := s.r.Read(context.Background(), make([]byte, 1)); !errors.Is(err, io.EOF) {
+		t.Errorf("the read after the end: %v, want io.EOF", err)
+	}
 	synctest.Wait()
 }
 
@@ -104,8 +108,9 @@ func TestCtrlCOnTextDisarmsWindow(t *testing.T) {
 	})
 }
 
-// stdinFiles hold or touch the stdin reader. None may call Close (F20).
-var stdinFiles = []string{"reader.go", "keys.go", "editor.go", "paste.go"}
+// stdinFiles hold or touch the stdin reader. None may call Close (F20);
+// inline.Reader, the reader itself, never closes its input.
+var stdinFiles = []string{"editor.go"}
 
 func TestNoCloseOnStdin(t *testing.T) {
 	for _, name := range stdinFiles {

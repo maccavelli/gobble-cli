@@ -259,7 +259,7 @@ func (ls *lineSession) askPermission(ctx context.Context, r acpclient.Permission
 		return acpclient.PermissionAnswer{}
 	}
 	out := ls.e.out
-	resp, rows, werr := askOn(ctx, permissionQuestion(ls.spoken(), r), promptWidth(out), out.caps.Unicode, out.err, keysIn.ReadContext)
+	resp, rows, werr := askOn(ctx, permissionQuestion(ls.spoken(), r), promptWidth(out), out.caps.Unicode, out.err, keysIn.Read)
 	rerr := restore()
 	if rec := out.rec; rec != nil { // the question and its answer, as shown (0030-MADR D4)
 		rec.fixed(strings.Join(rows, "\n") + "\n")

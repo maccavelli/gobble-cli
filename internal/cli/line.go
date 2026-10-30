@@ -13,6 +13,8 @@ import (
 
 	xterm "golang.org/x/term"
 
+	"github.com/maccavelli/go-tui-lib/v2/inline"
+
 	"github.com/maccavelli/gobble-cli/acpclient"
 	"github.com/maccavelli/gobble-cli/internal/appdirs"
 	"github.com/maccavelli/gobble-cli/internal/cli/editor"
@@ -34,7 +36,7 @@ type lineSession struct {
 	base   string
 	opts   display
 	choice sessionChoice
-	// in is the terminal's input, owned by one editor.Reader for the life
+	// in is the terminal's input, owned by one inline.Reader for the life
 	// of the process (0008-MADR D6).
 	in io.Reader
 	// raw puts the terminal in raw mode and returns the restore.
@@ -64,7 +66,7 @@ type lineSession struct {
 	amb *ambient
 	// keys is the editor's reader, which the permission prompt reads a
 	// key from while a turn runs.
-	keys *editor.Reader
+	keys *inline.Reader
 	// pasting is whether the editor turned bracketed paste on, which a
 	// question turns off while it reads (0025-PLAN deviation 7).
 	pasting bool
@@ -157,10 +159,9 @@ func (ls *lineSession) run(first Prompt) error {
 		e.out.Notef("%s", line)
 	}
 
-	var r editor.Reader
-	r.Start(e.ctx, ls.in)
+	r := inline.NewReader(ls.in)
 	ls.mu.Lock()
-	ls.keys = &r
+	ls.keys = r
 	ls.mu.Unlock()
 	if setup {
 		if err := ls.firstRun(); err != nil {
@@ -178,6 +179,7 @@ func (ls *lineSession) run(first Prompt) error {
 			}
 		}
 	}()
+	var outOfRaw func(f func() error) error
 	opts := editor.Options{History: ls.history(), Complete: ls.complete,
 		Header: func() string { return workspaceLine(ls.cwd) }, Width: ls.width, Height: ls.height, Resize: ls.editorResize}
 	if ls.tr != nil {
@@ -187,7 +189,8 @@ func (ls *lineSession) run(first Prompt) error {
 	if !e.out.caps.Unicode {
 		opts.Continue = "... "
 	}
-	ed := editor.New(&r, e.out.out, e.out.err, opts)
+	opts.External = ls.editLine(func(f func() error) error { return outOfRaw(f) })
+	ed := editor.New(r, e.out.out, e.out.err, opts)
 	edRestored := false
 	defer func() {
 		if edRestored {
@@ -203,7 +206,7 @@ func (ls *lineSession) run(first Prompt) error {
 	// line ends and Ctrl+C is a signal f takes. The terminal is raw only
 	// while the editor reads: a submission, local command or prompt, is
 	// handled out of it (0024-MADR D1).
-	outOfRaw := func(f func() error) error {
+	outOfRaw = func(f func() error) error {
 		if rerr := restore(); rerr != nil {
 			return failf("restore the terminal: %v", rerr)
 		}
