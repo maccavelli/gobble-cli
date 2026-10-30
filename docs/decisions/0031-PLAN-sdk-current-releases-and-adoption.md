@@ -19,6 +19,12 @@ SDKs do are gone (MADR D1–D8). What D9 leaves is named, not done.
 acp-go-sdk2's newest tag is `v1.21.0`, which ships D9's update-variant helpers (issue 11). gobble does not pin it
 in this plan; that is [gobble-cli#5](https://github.com/maccavelli/gobble-cli/issues/5).)*
 
+*(2026-10-29: the pins are unchanged. The newest tags are acp-go-sdk2 `v1.26.0`, go-llmprovider-sdk `v1.24.1`,
+go-selfupdate-lib `v1.22.3` and go-tui-lib/v2 `v2.6.1` (0031-MADR D1's note of this date).
+[gobble-cli#6](https://github.com/maccavelli/gobble-cli/issues/6) retargets acp-go-sdk2 to `v1.25.0`, and
+`0035-MADR-pin-current-sibling-releases-and-remove-gobble-copies.md` (proposed) to `v1.26.0`. This plan pins
+none of them.)*
+
 ## Scope
 
 - **In:**
@@ -32,6 +38,10 @@ in this plan; that is [gobble-cli#5](https://github.com/maccavelli/gobble-cli/is
     0023-PLAN (the pins), 0025-MADR and 0025-PLAN (deviation 6, P6); `docs/architecture.md`; `docs/README.md`.
 - **Out:** everything in MADR D9; image input and the other things the SDKs lack; 0029-PLAN; the Windows job-object
   race in `internal/proctree`, for its own record.
+  *(2026-10-29: image input and most of "the other things the SDKs lack" shipped in go-llmprovider-sdk `v1.23.0`
+  (0031-MADR's note of this date). Adopting them is
+  [0036-MADR-adopt-go-llmprovider-sdk-new-capabilities.md](0036-MADR-adopt-go-llmprovider-sdk-new-capabilities.md), after
+  `0035-MADR-pin-current-sibling-releases-and-remove-gobble-copies.md` pins the tag. They stay out of this plan.)*
 
 ## Order
 
@@ -777,3 +787,24 @@ P4's steps are annotated, and P4a and P4b replace them. 0031-MADR D7 is amended.
 
 **P4a complete, 2026-10-23.** What is still to come: P4b, the ChatGPT plan sign-in, at the owner's word; and a live
 sign-in by the owner to Grok or Kilo through the wizard, since no test reaches a real sign-in.
+
+### Status, 2026-10-29
+
+Read against the repository that day, at `ccd8aa8`:
+
+- **Done:** P1, P2, P3, P5, P1a, P4a and P1b.
+- **To come:** P4b, the ChatGPT plan sign-in, at the owner's word. `internal/cli/auth.go:192` still refuses
+  OpenAI's login. P4b needs no newer tag: `auth.LoginChatGPTPlan` is in the pinned `v1.22.2`
+  (`llmprovider/auth/oauth_plan.go:94`).
+- **Not recorded in this plan:**
+  - the owner's live turn against a real provider (P2);
+  - the owner's live sign-in to Grok or Kilo through the wizard (P4a, P1b);
+  - the owner's look at [0030-PLAN-resize-and-performance.md](0030-PLAN-resize-and-performance.md) P5.
+- **P4b and the newer tags:**
+  - If P4b runs after go-llmprovider-sdk moves to `v1.24.1`, the offline row the move needs (0031-MADR D1's note
+    of this date) belongs to the record that moves the pin,
+    `0035-MADR-pin-current-sibling-releases-and-remove-gobble-copies.md` (its D3), not to P4b.
+  - P4b and phase P1 of
+    [0036-PLAN-adopt-go-llmprovider-sdk-new-capabilities.md](0036-PLAN-adopt-go-llmprovider-sdk-new-capabilities.md)
+    both change `SignIn` (`llm/provider/signin.go`). Whichever lands second rebases on the first.
+- This plan stays `in-progress`.

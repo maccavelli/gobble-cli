@@ -98,6 +98,21 @@ SDK's empty answer (gobble matches its message), and offline detection (gobble's
 acp-go-sdk2: helpers for the update variants 0016-MADR D13 asked for, and a default client for fs, terminal and
 elicitation (gobble's stubs stay). gobble keeps these until the SDKs have them.
 
+*(2026-10-29: most of the list above has shipped. go-llmprovider-sdk `v1.23.0` (2026-10-26) has image input
+(`ImageItem`, `Capabilities.Images`), an effort above `xhigh` (`EffortMax`), a generic OpenAI-compatible provider
+(`providers/chatcompat`), an exported sentinel for the empty answer (`ErrEmptyAnswer`) and offline detection
+(`ErrOffline`, by gobble's own rule, moved into the SDK's `internal/transport/offline.go`). The SDK's
+`0061-MADR-consumer-gaps-from-gobble-issue-9.md` declined the other two: a per-request header option (its D6: a
+caller's `RoundTripper` through `WithHTTPClient`, so `headerTransport` stays) and tool-call argument deltas (its D8).
+In acp-go-sdk2, `v1.21.0` has the update-variant helpers (D9's note of 2026-10-25) and `ClientRefusals`, which
+answers fs, terminal and elicitation as gobble's stubs do
+([0034-MADR-pin-acp-go-sdk2-v1-21-0-and-adopt-session-update-helpers.md](0034-MADR-pin-acp-go-sdk2-v1-21-0-and-adopt-session-update-helpers.md),
+proposed). gobble still uses none of them. Adopting the go-llmprovider-sdk items is
+`0035-MADR-pin-current-sibling-releases-and-remove-gobble-copies.md` (D3–D5, proposed, written by another
+session and not yet committed on this date) and
+[0036-MADR-adopt-go-llmprovider-sdk-new-capabilities.md](0036-MADR-adopt-go-llmprovider-sdk-new-capabilities.md) (accepted the same
+day).)*
+
 ## Decision Drivers
 
 * The owner's direction: adopt as much of the SDKs as possible, to keep gobble lean.
@@ -184,6 +199,20 @@ its own.
   ([0036-MADR-session-update-constructors-kind-and-client-refusals.md](https://github.com/maccavelli/acp-go-sdk2/blob/v1.21.0/docs/decisions/0036-MADR-session-update-constructors-kind-and-client-refusals.md)
   in that repository). gobble's pin stays `v1.20.0`. Adopting `v1.21.0` is
   [gobble-cli#5](https://github.com/maccavelli/gobble-cli/issues/5), a later pair (0034), not this record.)*
+
+  *(2026-10-29: the newest tags, from `git ls-remote --tags` that day, are acp-go-sdk2 `v1.26.0`, go-llmprovider-sdk
+  `v1.24.1` (2026-10-27), go-selfupdate-lib `v1.22.3` and go-tui-lib `v2.6.1`. go-tui-lib's module path is now
+  `github.com/maccavelli/go-tui-lib/v2`. gobble still pins acp-go-sdk2 `v1.20.0`, go-llmprovider-sdk `v1.22.2` and
+  go-selfupdate-lib `v1.22.0`, and requires no go-tui-lib.*
+
+  *`scripts/check_libs.py --lib go-llmprovider-sdk --tag v1.24.1` that day passed 11 of its 12 checks. `apidiff`
+  listed 25 compatible changes and no incompatible one. The tests failed, in `llm/provider` `TestWireOffline`: `err
+  llm: unavailable: llmprovider: offline: … connect: connection refused, want llm.ErrOffline`. Since `v1.23.0` an
+  offline failure also matches `ErrProviderUnavailable`. `mapError` takes the first matching row of `sentinels`
+  (`llm/provider/provider.go:509-518`) and tags `llm.ErrOffline` only when none matched (`:632`), so the agent's wait
+  for the network (`agent/agent.go:503`) never starts. On a scratch clone, a row `{llmprovider.ErrOffline,
+  llm.ErrOffline}` above the unavailable row made the tests pass. Moving these pins is
+  `0035-MADR-pin-current-sibling-releases-and-remove-gobble-copies.md`'s; this D1 stays as written.)*
 - **D2. Live streaming (0005-PLAN F4-1b).** `llm/provider` wraps each provider with `WithStreamRetry(p, policy,
   notify)` in place of `WithRetry`. `NativeStreaming` is reported from the wrapped provider, true when it is
   `Supported`; the OpenCode providers' `BestEffort` stays reported as false. Retry off still means no wrapper.
@@ -254,6 +283,12 @@ its own.
   waits for the SDK to give a rate to price it by: `ModelRates` has one cache-write rate, so counting the tokens
   would change no figure gobble shows. `HasLogin` and `HasKeyLogin` go with D7, where `SkipMethods` replaces them:
   the registry's `AuthMethods` lists methods gobble does not offer, so until then gobble's own list stays.
+
+  *(2026-10-29: the rate has not come. go-llmprovider-sdk's `0061-MADR-consumer-gaps-from-gobble-issue-9.md` D7,
+  in that repository, defers it "until models.dev publishes a 1-hour cache-write price", so counting
+  `CacheWrite1hTokens` would still change no figure. `HasLogin` and `HasKeyLogin`
+  stayed with P4a, as D7's amendment of 2026-10-23 says, and are still hard-coded, now at `llm/provider/login.go:62`
+  and `:66`, not `:71` and `:75`.)*
 - **D9. Not now, each with its reason:**
   - native tool deferral (`Tool.Deferred`, `ToolLoadItem`): it changes the prompt cache's design, which
     0012-MADR and 0021-MADR own;
@@ -267,6 +302,14 @@ its own.
     `v1.21.0`. gobble's consumption is [gobble-cli#5](https://github.com/maccavelli/gobble-cli/issues/5). This bullet
     stays "not now" until that pair pins `v1.21.0`.)*
   - Ollama as a keyless choice, and what the SDKs lack (above).
+    *(2026-10-29: "what the SDKs lack" has mostly shipped; see the note of this date under "What the SDKs still
+    lack". For Ollama as a keyless choice, go-llmprovider-sdk `v1.23.0`'s `chatcompat.Discover` finds the local Chat
+    Completions servers running, Ollama among them.
+    [0036-MADR-adopt-go-llmprovider-sdk-new-capabilities.md](0036-MADR-adopt-go-llmprovider-sdk-new-capabilities.md) D5 leaves
+    offering them in `gobble setup` to a later record. The update-variant helpers' pair,
+    [0034-MADR-pin-acp-go-sdk2-v1-21-0-and-adopt-session-update-helpers.md](0034-MADR-pin-acp-go-sdk2-v1-21-0-and-adopt-session-update-helpers.md), is still
+    proposed; `0035-MADR-pin-current-sibling-releases-and-remove-gobble-copies.md` proposes to supersede it at
+    acp-go-sdk2 `v1.26.0`. The listing guard's bullet stands.)*
 
 **Q1, the go-llmprovider-sdk tag.** `v1.21.0` (recommended): a superset of `v1.20.x` with no breaking change, the Go
 1.27.3 floor, and D7's entry points. `v1.20.1`: the same without D7. `v1.20.0`, as named: builds safely here only
@@ -330,3 +373,4 @@ shows text arriving as it is written.
 - Found while reading, not decided here: `internal/proctree/tree_windows.go` assigns the Windows job object after
   the process starts, the race acp-go-sdk2 `v1.20.0` fixed in its own `agentproc` (a child leaked in 20 of 20 of its
   trials). It is a gobble defect for a record of its own.
+  *(2026-10-29: it still has no record of its own.)*
