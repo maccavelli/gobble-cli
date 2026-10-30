@@ -1,28 +1,15 @@
 package term
 
 import (
-	"strings"
 	"testing"
 )
 
-// The bidi controls and U+FFFD are built from code points, so this file
+// The bidi override and U+FFFD are built from code points, so this file
 // carries no invisible or reordering characters itself.
 var (
 	rlo  = string(rune(0x202e))
-	lre  = string(rune(0x202a))
-	rle  = string(rune(0x202b))
-	pdf  = string(rune(0x202c))
-	lro  = string(rune(0x202d))
-	lri  = string(rune(0x2066))
-	pdi  = string(rune(0x2069))
-	lrm  = string(rune(0x200e))
-	rlm  = string(rune(0x200f))
-	alm  = string(rune(0x061c))
 	repl = string(rune(0xfffd))
 )
-
-// escaped returns the visible form EscapeBidi writes for a code point.
-func escaped(hex string) string { return "\\u" + hex }
 
 func TestSanitize(t *testing.T) {
 	cases := []struct {
@@ -49,26 +36,6 @@ func TestSanitize(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := Sanitize(tc.in); got != tc.want {
 				t.Fatalf("Sanitize(%q) = %q, want %q", tc.in, got, tc.want)
-			}
-		})
-	}
-}
-
-func TestEscapeBidi(t *testing.T) {
-	cases := []struct {
-		name, in, want string
-	}{
-		{"clean", "plain text", "plain text"},
-		{"RLO", "a" + rlo + "b", "a" + escaped("202E") + "b"},
-		{"isolates and marks", lri + "x" + pdi + lrm + rlm + alm,
-			escaped("2066") + "x" + escaped("2069") + escaped("200E") + escaped("200F") + escaped("061C")},
-		{"embeddings", lre + rle + pdf + lro,
-			strings.Join([]string{escaped("202A"), escaped("202B"), escaped("202C"), escaped("202D")}, "")},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := EscapeBidi(tc.in); got != tc.want {
-				t.Fatalf("EscapeBidi(%q) = %q, want %q", tc.in, got, tc.want)
 			}
 		})
 	}

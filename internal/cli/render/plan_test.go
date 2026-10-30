@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/maccavelli/gobble-cli/internal/cli/term"
+	"github.com/maccavelli/go-tui-lib/v2/glyph"
 )
 
 func TestPlan(t *testing.T) {
@@ -13,8 +13,8 @@ func TestPlan(t *testing.T) {
 		{Content: "fix\x1b[2J the\n test", Status: PlanInProgress},
 		{Content: "run the suite", Status: PlanPending},
 	}
-	golden(t, "plan-color", Plan(items, colorOn, term.Unicode))
-	golden(t, "plan-plain", Plan(items, colorOff, term.ASCII))
+	golden(t, "plan-color", Plan(items, colorOn, glyph.Unicode()))
+	golden(t, "plan-plain", Plan(items, colorOff, glyph.ASCII()))
 }
 
 func TestStats(t *testing.T) {
@@ -29,7 +29,7 @@ func TestStats(t *testing.T) {
 		{time.Second, 10, 0, "ttft 1s"},
 	}
 	for _, c := range cases {
-		if got := Stats(c.ttft, c.tokens, c.gen, term.Unicode); got != c.want {
+		if got := Stats(c.ttft, c.tokens, c.gen, glyph.Unicode()); got != c.want {
 			t.Errorf("Stats(%v, %d, %v) = %q, want %q", c.ttft, c.tokens, c.gen, got, c.want)
 		}
 	}

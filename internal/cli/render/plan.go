@@ -3,6 +3,8 @@ package render
 import (
 	"strings"
 
+	"github.com/maccavelli/go-tui-lib/v2/glyph"
+
 	"github.com/maccavelli/gobble-cli/internal/cli/term"
 )
 
@@ -21,17 +23,17 @@ type PlanItem struct {
 // Plan draws the agent's plan as a checklist, one step per line: done
 // steps checked in green, the running one arrowed in bold, the rest dim
 // (0008-MADR D7). The content is sanitised.
-func Plan(items []PlanItem, s term.Stream, g term.Glyphs) string {
+func Plan(items []PlanItem, s term.Stream, g glyph.Set) string {
 	var b strings.Builder
 	for _, it := range items {
-		text := strings.Join(strings.Fields(term.Sanitize(it.Content)), " ")
+		text := strings.Join(strings.Fields(term.CleanLine(it.Content, s.TTY)), " ")
 		var mark string
 		var style term.Style
 		switch it.Status {
 		case PlanCompleted:
-			mark, style = g.Check, term.Green
+			mark, style = g.Done, term.Green
 		case PlanInProgress:
-			mark, style = g.Arrow, term.Bold
+			mark, style = g.Heading, term.Bold
 		default:
 			mark, style = g.Bullet, term.Dim
 		}

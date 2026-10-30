@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/maccavelli/go-tui-lib/v2/glyph"
+
 	"github.com/maccavelli/gobble-cli/internal/cli/term"
 )
 
@@ -27,7 +29,7 @@ func TestToolHeader(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := ToolHeader(tc.title, tc.status, tc.s, term.Unicode)
+			got := ToolHeader(tc.title, tc.status, tc.s, glyph.Unicode())
 			if got != tc.want {
 				t.Fatalf("ToolHeader = %q, want %q", got, tc.want)
 			}
@@ -47,23 +49,23 @@ func numbered(n int) string {
 }
 
 func TestToolOutputGolden(t *testing.T) {
-	golden(t, "tool_output_25", ToolOutput(numbered(25), false, term.Unicode, nil))
+	golden(t, "tool_output_25", ToolOutput(numbered(25), false, glyph.Unicode(), nil, true))
 }
 
 func TestToolOutputBounds(t *testing.T) {
-	if got := ToolOutput(numbered(20), false, term.Unicode, nil); got != numbered(20) {
+	if got := ToolOutput(numbered(20), false, glyph.Unicode(), nil, true); got != numbered(20) {
 		t.Fatalf("20 lines were cut:\n%s", got)
 	}
-	if got := ToolOutput(numbered(25), true, term.Unicode, nil); got != numbered(25) {
+	if got := ToolOutput(numbered(25), true, glyph.Unicode(), nil, true); got != numbered(25) {
 		t.Fatalf("verbose output was cut:\n%s", got)
 	}
-	if got := ToolOutput(numbered(21), false, term.ASCII, nil); !strings.Contains(got, "... 1 lines hidden (--verbose shows all)\n") {
+	if got := ToolOutput(numbered(21), false, glyph.ASCII(), nil, true); !strings.Contains(got, "~ 1 lines hidden (--verbose shows all)\n") { // glyph's ASCII ellipsis (0035-PLAN P15)
 		t.Fatalf("21 lines: %q", got)
 	}
-	if got := ToolOutput("ok\x1b]0;title\x07\n", false, term.Unicode, nil); got != "ok\n" {
+	if got := ToolOutput("ok\x1b]0;title\x07\n", false, glyph.Unicode(), nil, true); got != "ok\n" {
 		t.Fatalf("output not sanitised: %q", got)
 	}
-	if got := ToolOutput("", false, term.Unicode, nil); got != "" {
+	if got := ToolOutput("", false, glyph.Unicode(), nil, true); got != "" {
 		t.Fatalf("empty output rendered as %q", got)
 	}
 }

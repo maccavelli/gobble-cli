@@ -5,6 +5,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/maccavelli/go-tui-lib/v2/glyph"
+
 	"github.com/maccavelli/gobble-cli/internal/cli/term"
 	"github.com/maccavelli/gobble-cli/personality"
 )
@@ -26,11 +28,11 @@ const (
 
 // ToolHeader is one line: the arrow glyph, the sanitised title truncated to
 // fit s.Width in display columns, and a status suffix.
-func ToolHeader(title, status string, s term.Stream, g term.Glyphs) string {
+func ToolHeader(title, status string, s term.Stream, g glyph.Set) string {
 	suffix, style := statusSuffix(status, g)
-	head := g.Arrow + " "
+	head := g.Heading + " "
 	room := s.Width - displayWidth(head) - displayWidth(suffix) - 1
-	t := truncateWidth(strings.Join(strings.Fields(term.Sanitize(title)), " "), max(room, 1), g.Ellipsis)
+	t := truncateWidth(strings.Join(strings.Fields(term.CleanLine(title, s.TTY)), " "), max(room, 1), g.Ellipsis)
 	line := term.Bold.Wrap(head, s.Color) + t
 	if suffix != "" {
 		line += " " + style.Wrap(suffix, s.Color)
@@ -38,12 +40,12 @@ func ToolHeader(title, status string, s term.Stream, g term.Glyphs) string {
 	return line
 }
 
-func statusSuffix(status string, g term.Glyphs) (string, term.Style) {
+func statusSuffix(status string, g glyph.Set) (string, term.Style) {
 	switch status {
 	case StatusCompleted:
-		return g.Check, term.Green
+		return g.Done, term.Green
 	case StatusFailed:
-		return g.Cross, term.Red
+		return g.Failed, term.Red
 	case StatusPending, StatusInProgress:
 		return g.Ellipsis, term.Dim
 	}
@@ -53,8 +55,8 @@ func statusSuffix(status string, g term.Glyphs) (string, term.Style) {
 // ToolOutput sanitises out and, unless verbose, shows only the first and
 // last ten lines of output longer than twenty, with a count of the rest in
 // voice's words (a nil voice is boring's, 0022-PLAN P1).
-func ToolOutput(out string, verbose bool, g term.Glyphs, voice *personality.Voice) string {
-	out = strings.TrimSuffix(term.Sanitize(out), "\n")
+func ToolOutput(out string, verbose bool, g glyph.Set, voice *personality.Voice, terminal bool) string {
+	out = strings.TrimSuffix(term.Clean(out, terminal), "\n")
 	if out == "" {
 		return ""
 	}

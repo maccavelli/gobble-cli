@@ -1776,3 +1776,63 @@ No deviation of its own; deviation 8, P7's gate, was found here and fixed in its
   - P12 is held until a tag carries one of those. Then it runs as written, its step 4's expectation unchanged.
   - The plan continues with P15.
 - **Files added to scope:** none. The issue is outward-facing, and was filed on the owner's answer.
+
+### Deviation 10 (2026-10-30): P15 step 3's bidi claim
+
+- **Found.** Step 3's `TestTerminalCleaning` expected a bidi override (U+202E) to be absent from terminal output.
+  safetext's `Text` rules, which PQ5 chose, keep bidi, as `term.Sanitize` does: the test failed with
+  `terminal true: "‮" shown in "ab‮cd end\n"`. The MADR's facts list what `Text` removes, and bidi is not
+  among them. The step's claim was the plan's error.
+- **The owner's answer, 2026-10-30:** "Keep Text; fix the test (Recommended)". The options not taken were escaping bidi
+  in terminal model text, and safetext's `Strict` rules.
+- **Decision.**
+  - On a terminal, the test asserts that the zero-width space and the OSC 52 write are gone and the bidi override is
+    kept.
+  - Off a terminal, it asserts `term.Sanitize`'s bytes, the zero-width space kept.
+  - Stripping or escaping bidi in model text is not this plan's. It would be a new decision.
+- **Files added to scope:** none.
+
+### P15 record (2026-10-30): `glyph`, and `safetext` on terminal paths
+
+The base is deviation 9's commit `4ca7992`.
+
+1. **`glyph`.**
+   - `term.Glyphs`, `term.Unicode` and `term.ASCII` are gone from `term/style.go`; `Style.Wrap` stays.
+   - `glyphsFor(c)` is `glyph.For(c.Unicode)`. Every user reads `glyph.Set`, with the fields renamed: `Arrow` →
+     `Heading`, `Check` → `Done`, `Cross` → `Failed`, `Bar` → `MeterFill`, `BarEmpty` → `MeterTrack`. That covers
+     `view.go`, `print.go`, `render/plan.go`, `render/tool.go`, `render/status.go`, and their tests.
+   - The Unicode set's values are gobble's own. ASCII's ellipsis is `~` where it was `...`, by Q3's direction, and the
+     one test that showed it, `TestToolOutputBounds`, now expects `~ 1 lines hidden`.
+   - `TestGlyphSets` moved to `internal/cli/glyphs_test.go`. It checks that each field gobble draws is set in both
+     sets, and that ASCII's are ASCII.
+2. **`safetext`, by PQ5 (a).**
+   - `term.Clean(s, terminal)` and `term.CleanLine(s, terminal)` use `safetext.Clean` with `Text()` and `Line()` on a
+     terminal, and `term.Sanitize` elsewhere.
+   - The line view's model text, thinking, diffs, terminal ids, plan and tool title and output, and `/help`'s command
+     list call them with `caps.Out.TTY`. `ToolOutput` and `CommandList`, with `commandLines`, `entryOf` and
+     `nameColumn`, gain a `terminal` argument.
+   - The editor's header uses `CleanLine(…, true)`, since the editor draws on a terminal.
+   - `term.Sanitize` stays at `print.go:201`, for print mode, and in `complete/protocol.go`, whose shell-completion
+     output a script reads. That makes three calls in two files.
+   - `EscapeBidi`, its helper `isBidi`, its test and the test's bidi variables and `escaped` helper are deleted. They
+     were dead code.
+3. **Tests.**
+   - `TestTerminalCleaning` (`internal/cli/clean_test.go`) is as deviation 10 has it. Its characters are written as
+     `\u` escapes, for staticcheck's ST1018.
+   - `TestSanitize` stays, for print mode.
+   - No view golden changed, and `print-json.golden` and `print-stream-json.golden` are byte-identical
+     (`git diff --stat` on `*.golden` and `testdata` is empty).
+4. **Seen failing (C9).** On a copy with the reply's cleaning back on `term.Sanitize`, `TestTerminalCleaning` fails with
+   `terminal true: "​" shown`.
+5. **Assert.** `term.Sanitize` remains only at `internal/cli/print.go:201` and `internal/cli/complete/protocol.go:130`
+   and `:140`.
+6. **G-local.**
+   - `make pre-add-check` on the 18 Go files: clean.
+   - `make preflight` passed after staticcheck's two findings were fixed: ST1018 on the test's raw format characters,
+     and U1000 on `isBidi` and the dead test helpers.
+   - `make race`: 36 ok.
+   - `make perf`: ReplyRender 33.4 µs (baseline 30), Reprint 9.85 ms (9.4), LineSessionStart 909 µs (830), KeyDraw
+     1.55 µs (1.5).
+7. G-hosts, on a copy of the final tree (812 files), `go1.27.3`: on the Linux machine and the Windows laptop, `go test` and race exit 0, 36 ok; `preflight` to `verify-build-metadata` (no commit, C6); records and markdownlint exit 0; `make perf` passed on both; `make probe-conhost` passed `TestConhost`. A first host run used the tree before staticcheck's fixes.
+
+One deviation: deviation 10, above.

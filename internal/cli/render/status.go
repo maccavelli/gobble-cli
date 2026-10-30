@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/maccavelli/go-tui-lib/v2/glyph"
+
 	"github.com/maccavelli/gobble-cli/internal/cli/term"
 )
 
@@ -20,12 +22,12 @@ const (
 // StatusLine is the context line after a turn: elapsed time, a 20-cell bar
 // of used against size, the percentage and token counts, and the cost when
 // known. size 0 leaves out the bar.
-func StatusLine(elapsed time.Duration, used, size int64, cost *float64, s term.Stream, g term.Glyphs) string {
+func StatusLine(elapsed time.Duration, used, size int64, cost *float64, s term.Stream, g glyph.Set) string {
 	parts := []string{elapsed.Round(time.Second).String()}
 	if size > 0 {
 		pct := float64(used) * 100 / float64(size)
 		filled := min(barCells, max(0, int(pct*barCells/100+0.5)))
-		bar := strings.Repeat(g.Bar, filled) + strings.Repeat(g.BarEmpty, barCells-filled)
+		bar := strings.Repeat(g.MeterFill, filled) + strings.Repeat(g.MeterTrack, barCells-filled)
 		parts = append(parts, fmt.Sprintf("%s %.0f%% %s/%s",
 			barStyle(pct).Wrap(bar, s.Color), pct, tokens(used), tokens(size)))
 	}
@@ -38,7 +40,7 @@ func StatusLine(elapsed time.Duration, used, size int64, cost *float64, s term.S
 // Stats is the --stats suffix of the status line: the time to the first
 // token, then tokens per second when both the output tokens and the time
 // spent generating them are known.
-func Stats(ttft time.Duration, outputTokens int64, gen time.Duration, g term.Glyphs) string {
+func Stats(ttft time.Duration, outputTokens int64, gen time.Duration, g glyph.Set) string {
 	s := "ttft " + ttft.Round(100*time.Millisecond).String()
 	if outputTokens > 0 && gen > 0 {
 		s += fmt.Sprintf(" %s %.0f tok/s", g.Bullet, float64(outputTokens)/gen.Seconds())

@@ -31,7 +31,7 @@ Agent commands
                 List the rules in force, remove rule N, or
                 add a rule (session, project or global)
 `
-	if got := CommandList(helpSections, 60, false); got != want {
+	if got := CommandList(helpSections, 60, false, true); got != want {
 		t.Fatalf("at 60 columns:\n%s\nwant:\n%s", got, want)
 	}
 }
@@ -55,7 +55,7 @@ Agent commands
     remove rule N, or add a rule
     (session, project or global)
 `
-	if got := CommandList(helpSections, 32, false); got != want {
+	if got := CommandList(helpSections, 32, false, true); got != want {
 		t.Fatalf("at 32 columns:\n%s\nwant:\n%s", got, want)
 	}
 }
@@ -63,7 +63,7 @@ Agent commands
 // At every width no line is wider than the terminal or ends in a space.
 func TestCommandListFits(t *testing.T) {
 	for _, width := range []int{100, 80, 60, 45, 40, 32, 20} {
-		for i, line := range strings.Split(strings.TrimSuffix(CommandList(helpSections, width, false), "\n"), "\n") {
+		for i, line := range strings.Split(strings.TrimSuffix(CommandList(helpSections, width, false, true), "\n"), "\n") {
 			if w := displayWidth(line); w > width {
 				t.Errorf("width %d, line %d is %d columns: %q", width, i+1, w, line)
 			}
@@ -77,7 +77,7 @@ func TestCommandListFits(t *testing.T) {
 // With colour on only the command name is bold, and the columns are those
 // of the plain list.
 func TestCommandListColor(t *testing.T) {
-	got := CommandList(helpSections, 60, true)
+	got := CommandList(helpSections, 60, true, true)
 	if !strings.Contains(got, "  \x1b[1m/help\x1b[0m         Show this list of commands\n") {
 		t.Fatalf("no bold name at the plain list's columns:\n%q", got)
 	}
@@ -91,7 +91,7 @@ func TestCommandListColor(t *testing.T) {
 func TestCommandListSanitizes(t *testing.T) {
 	got := CommandList([]CommandSection{{Heading: "Agent commands", Commands: []CommandEntry{
 		{Name: "tpl", Description: "Run it\x1b[2J now"},
-	}}}, 60, false)
+	}}}, 60, false, true)
 	if strings.Contains(got, "\x1b") {
 		t.Fatalf("an escape reached the list: %q", got)
 	}

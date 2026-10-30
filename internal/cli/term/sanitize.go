@@ -1,10 +1,30 @@
 package term
 
 import (
-	"fmt"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/maccavelli/go-tui-lib/v2/safetext"
 )
+
+// Clean is s cleaned for where it goes: on a terminal by go-tui-lib's
+// safetext, with its Text rules; anywhere else, such as a pipe, by
+// Sanitize, so that bytes a script reads do not change (0035-PLAN PQ5).
+func Clean(s string, terminal bool) string {
+	if terminal {
+		return safetext.Clean(s, safetext.Text())
+	}
+	return Sanitize(s)
+}
+
+// CleanLine is Clean for text shown on one line: safetext's Line rules on
+// a terminal. Neither collapses a run of spaces.
+func CleanLine(s string, terminal bool) string {
+	if terminal {
+		return safetext.Clean(s, safetext.Line())
+	}
+	return Sanitize(s)
+}
 
 const (
 	esc = 0x1b
@@ -121,34 +141,4 @@ func skipString(s string, i int, belEnds bool) int {
 		i += size
 	}
 	return i
-}
-
-// EscapeBidi rewrites the Unicode bidirectional controls as visible \uXXXX
-// text, so tool output cannot reorder what the user reads (Trojan Source).
-func EscapeBidi(s string) string {
-	if !strings.ContainsFunc(s, isBidi) {
-		return s
-	}
-	var b strings.Builder
-	b.Grow(len(s) + 8)
-	for _, r := range s {
-		if isBidi(r) {
-			fmt.Fprintf(&b, `\u%04X`, r)
-			continue
-		}
-		b.WriteRune(r)
-	}
-	return b.String()
-}
-
-func isBidi(r rune) bool {
-	switch {
-	case r == 0x061c, r == 0x200e, r == 0x200f:
-		return true
-	case r >= 0x202a && r <= 0x202e:
-		return true
-	case r >= 0x2066 && r <= 0x2069:
-		return true
-	}
-	return false
 }

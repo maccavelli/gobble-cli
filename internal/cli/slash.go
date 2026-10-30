@@ -149,7 +149,7 @@ func (ls *lineSession) helpText(width int) string {
 	}
 	// The last column stays empty: a terminal that wraps as soon as it is
 	// written to would put a blank row after a full line.
-	return render.CommandList(sections, max(width-1, 1), ls.e.out.caps.Out.Color)
+	return render.CommandList(sections, max(width-1, 1), ls.e.out.caps.Out.Color, ls.e.out.caps.Out.TTY)
 }
 
 // width is standard output's width now, since a terminal is resized, else

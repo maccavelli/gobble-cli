@@ -1,9 +1,7 @@
 package term
 
 import (
-	"reflect"
 	"testing"
-	"unicode/utf8"
 )
 
 func TestStyleWrap(t *testing.T) {
@@ -28,24 +26,5 @@ func TestStyleWrap(t *testing.T) {
 	}
 	if got := (Bold).Wrap("", true); got != "" {
 		t.Fatalf("empty text wrapped: %q", got)
-	}
-}
-
-func TestGlyphSets(t *testing.T) {
-	for name, g := range map[string]Glyphs{"Unicode": Unicode, "ASCII": ASCII} {
-		v := reflect.ValueOf(g)
-		for i := range v.NumField() {
-			s := v.Field(i).String()
-			if s == "" {
-				t.Errorf("%s.%s is empty", name, v.Type().Field(i).Name)
-			}
-			if name == "ASCII" {
-				for _, r := range s {
-					if r >= utf8.RuneSelf {
-						t.Errorf("ASCII.%s = %q is not ASCII", v.Type().Field(i).Name, s)
-					}
-				}
-			}
-		}
 	}
 }

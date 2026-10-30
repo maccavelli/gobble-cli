@@ -405,7 +405,7 @@ func (e *Editor) header() error {
 	if e.opts.Header == nil || e.sub.open() {
 		return nil
 	}
-	h := strings.Join(strings.Fields(term.Sanitize(e.opts.Header())), " ")
+	h := strings.Join(strings.Fields(term.CleanLine(e.opts.Header(), true)), " ") // the editor draws on a terminal
 	if h == "" {
 		return nil
 	}

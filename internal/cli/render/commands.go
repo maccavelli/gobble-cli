@@ -35,18 +35,18 @@ const (
 // its own lines, four columns in. No line is wider than width or ends in a
 // space. With color, the command's name is bold. What the list holds is
 // sanitized, since a template's description is the user's text.
-func CommandList(sections []CommandSection, width int, color bool) string {
+func CommandList(sections []CommandSection, width int, color, terminal bool) string {
 	var b strings.Builder
-	nameCol := nameColumn(sections, width)
+	nameCol := nameColumn(sections, width, terminal)
 	for i, s := range sections {
 		if i > 0 {
 			b.WriteString("\n")
 		}
-		for _, line := range wrapIndented(strings.Fields(term.Sanitize(s.Heading)), width, 0, commandDeep) {
+		for _, line := range wrapIndented(strings.Fields(term.CleanLine(s.Heading, terminal)), width, 0, commandDeep) {
 			b.WriteString(line + "\n")
 		}
 		for _, c := range s.Commands {
-			for _, line := range commandLines(c, nameCol, width, color) {
+			for _, line := range commandLines(c, nameCol, width, color, terminal) {
 				b.WriteString(line + "\n")
 			}
 		}
@@ -55,9 +55,9 @@ func CommandList(sections []CommandSection, width int, color bool) string {
 }
 
 // entryOf is the command as typed, with its hint.
-func entryOf(c CommandEntry) string {
-	entry := "/" + term.Sanitize(c.Name)
-	if hint := term.Sanitize(c.Hint); hint != "" {
+func entryOf(c CommandEntry, terminal bool) string {
+	entry := "/" + term.CleanLine(c.Name, terminal)
+	if hint := term.CleanLine(c.Hint, terminal); hint != "" {
 		entry += " " + hint
 	}
 	return entry
@@ -66,7 +66,7 @@ func entryOf(c CommandEntry) string {
 // nameColumn is the width of the widest entry that fits the name column, at
 // most 32 and at most half the room, or 0 below 40 columns, where every
 // description goes on its own lines.
-func nameColumn(sections []CommandSection, width int) int {
+func nameColumn(sections []CommandSection, width int, terminal bool) int {
 	if width < commandNarrow {
 		return 0
 	}
@@ -74,7 +74,7 @@ func nameColumn(sections []CommandSection, width int) int {
 	col := 0
 	for _, s := range sections {
 		for _, c := range s.Commands {
-			if w := displayWidth(entryOf(c)); w <= limit {
+			if w := displayWidth(entryOf(c, terminal)); w <= limit {
 				col = max(col, w)
 			}
 		}
@@ -84,9 +84,9 @@ func nameColumn(sections []CommandSection, width int) int {
 
 // commandLines lays out one command: its entry beside its description, or
 // above it when the entry is wider than the name column.
-func commandLines(c CommandEntry, nameCol, width int, color bool) []string {
-	entry := entryOf(c)
-	desc := strings.Fields(term.Sanitize(c.Description))
+func commandLines(c CommandEntry, nameCol, width int, color, terminal bool) []string {
+	entry := entryOf(c, terminal)
+	desc := strings.Fields(term.CleanLine(c.Description, terminal))
 	var lines []string
 	if ew := displayWidth(entry); nameCol > 0 && ew <= nameCol {
 		descCol := commandIndent + nameCol + commandGap
@@ -105,7 +105,7 @@ func commandLines(c CommandEntry, nameCol, width int, color bool) []string {
 		lines = append(wrapIndented(strings.Fields(entry), width, commandIndent, commandDeep),
 			wrapIndented(desc, width, descCol, descCol)...)
 	}
-	name := "/" + term.Sanitize(c.Name)
+	name := "/" + term.CleanLine(c.Name, terminal)
 	if rest, ok := strings.CutPrefix(lines[0][commandIndent:], name); ok {
 		lines[0] = lines[0][:commandIndent] + term.Bold.Wrap(name, color) + rest
 	}

@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/maccavelli/go-tui-lib/v2/glyph"
+
 	"github.com/maccavelli/gobble-cli/acpclient"
 	"github.com/maccavelli/gobble-cli/internal/cli/term"
 )
@@ -18,12 +20,12 @@ func TestStopText(t *testing.T) {
 		if got := stopText(nil, reason); got != want {
 			t.Errorf("%s: %q, want %q", reason, got, want)
 		}
-		line := statusLine(turnClock{}, nil, acpclient.Result{StopReason: reason}, false, term.Stream{}, term.ASCII, nil)
+		line := statusLine(turnClock{}, nil, acpclient.Result{StopReason: reason}, false, term.Stream{}, glyph.ASCII(), nil)
 		if !strings.HasSuffix(line, " "+want) {
 			t.Errorf("%s: the line %q does not end with it", reason, line)
 		}
 	}
-	if line := statusLine(turnClock{}, nil, acpclient.Result{StopReason: "end_turn"}, false, term.Stream{}, term.ASCII, nil); strings.Contains(line, "end_turn") {
+	if line := statusLine(turnClock{}, nil, acpclient.Result{StopReason: "end_turn"}, false, term.Stream{}, glyph.ASCII(), nil); strings.Contains(line, "end_turn") {
 		t.Fatalf("an ordinary end named: %q", line)
 	}
 }

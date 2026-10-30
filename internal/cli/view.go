@@ -8,6 +8,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/maccavelli/go-tui-lib/v2/glyph"
+
 	"github.com/maccavelli/gobble-cli/acpclient"
 	"github.com/maccavelli/gobble-cli/internal/cli/render"
 	"github.com/maccavelli/gobble-cli/internal/cli/term"
@@ -42,7 +44,7 @@ func (c *turnClock) token(now time.Time) {
 type view struct {
 	out    *Output
 	caps   term.Caps
-	glyphs term.Glyphs
+	glyphs glyph.Set
 	opts   display
 	now    func() time.Time
 	// beforeWrite stops the spinner; it is called before the first write.
@@ -95,12 +97,9 @@ func newView(out *Output, opts display, now func() time.Time) *view {
 	}
 }
 
-func glyphsFor(c term.Caps) term.Glyphs {
-	if c.Unicode {
-		return term.Unicode
-	}
-	return term.ASCII
-}
+// glyphsFor is go-tui-lib's glyph set for c: Unicode's where the terminal
+// shows it, else ASCII's (0035-MADR D14 step 2).
+func glyphsFor(c term.Caps) glyph.Set { return glyph.For(c.Unicode) }
 
 // setVoice is the session's new voice, for the rest of the turn
 // (0022-PLAN P3).
@@ -129,7 +128,7 @@ func (v *view) on(u acpclient.Update) {
 			v.thinking = nil
 			v.newline()
 		}
-		v.text(v.md.Push(term.Sanitize(u.Text)))
+		v.text(v.md.Push(term.Clean(u.Text, v.caps.Out.TTY)))
 	case acpclient.KindThought:
 		v.clock.token(v.now())
 		if !v.opts.showThinking || u.Text == "" {
@@ -137,8 +136,9 @@ func (v *view) on(u acpclient.Update) {
 		}
 		v.flushReply() // not the thinking: its next chunk continues the row
 		v.thought, v.replying = true, true
-		v.keep(&v.thinking, v.thinkingAt, term.Sanitize(u.Text))
-		s := term.Dim.Wrap(term.Sanitize(u.Text), v.caps.Out.Color)
+		thought := term.Clean(u.Text, v.caps.Out.TTY)
+		v.keep(&v.thinking, v.thinkingAt, thought)
+		s := term.Dim.Wrap(thought, v.caps.Out.Color)
 		if w := v.wrapWidth(); w > 0 {
 			s = v.think.Push(s, w)
 		}
@@ -246,22 +246,22 @@ func (v *view) content(cs []acpclient.ToolContent) {
 	for _, c := range cs {
 		switch {
 		case c.Diff != nil:
-			path := render.ShortPath(term.Sanitize(c.Diff.Path), v.opts.home)
+			path := render.ShortPath(term.CleanLine(c.Diff.Path, v.caps.Out.TTY), v.opts.home)
 			var old *string
 			if c.Diff.OldText != nil {
-				o := term.Sanitize(*c.Diff.OldText)
+				o := term.Clean(*c.Diff.OldText, v.caps.Out.TTY)
 				old = &o
 			}
-			diff := render.UnifiedDiff(path, old, term.Sanitize(c.Diff.NewText))
+			diff := render.UnifiedDiff(path, old, term.Clean(c.Diff.NewText, v.caps.Out.TTY))
 			v.flush()
 			v.newline()
-			v.write(render.Diff(render.ToolOutput(diff, v.opts.verbose, v.glyphs, v.opts.voice), v.caps.Out))
+			v.write(render.Diff(render.ToolOutput(diff, v.opts.verbose, v.glyphs, v.opts.voice, v.caps.Out.TTY), v.caps.Out))
 		case c.Terminal != "":
-			v.line("terminal " + term.Sanitize(c.Terminal))
+			v.line("terminal " + term.CleanLine(c.Terminal, v.caps.Out.TTY))
 		default:
 			v.flush()
 			v.newline()
-			v.write(render.ToolOutput(c.Text, v.opts.verbose, v.glyphs, v.opts.voice))
+			v.write(render.ToolOutput(c.Text, v.opts.verbose, v.glyphs, v.opts.voice, v.caps.Out.TTY))
 		}
 	}
 }
@@ -392,7 +392,7 @@ func (v *view) finish(res acpclient.Result) error {
 // statusLine is the line after a turn: render.StatusLine from the last
 // usage_update, the --stats figures, and the stop reason, in voice's
 // words, unless the turn simply ended.
-func statusLine(c turnClock, u *acpclient.ContextUsage, res acpclient.Result, stats bool, s term.Stream, g term.Glyphs,
+func statusLine(c turnClock, u *acpclient.ContextUsage, res acpclient.Result, stats bool, s term.Stream, g glyph.Set,
 	voice *personality.Voice) string {
 	var used, size int64
 	var cost *float64

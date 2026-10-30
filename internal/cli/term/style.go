@@ -45,14 +45,3 @@ func (s Style) Wrap(text string, on bool) string {
 	}
 	return "\x1b[" + strings.Join(codes, ";") + "m" + text + "\x1b[0m"
 }
-
-// Glyphs are the symbols the renderer draws.
-type Glyphs struct {
-	Bullet, Arrow, Check, Cross, Ellipsis, Bar, BarEmpty string
-}
-
-// Unicode and ASCII are the two glyph sets. Caps.Unicode chooses between them.
-var (
-	Unicode = Glyphs{Bullet: "•", Arrow: "▸", Check: "✓", Cross: "✗", Ellipsis: "…", Bar: "━", BarEmpty: "╌"}
-	ASCII   = Glyphs{Bullet: "*", Arrow: ">", Check: "+", Cross: "x", Ellipsis: "...", Bar: "#", BarEmpty: "-"}
-)
