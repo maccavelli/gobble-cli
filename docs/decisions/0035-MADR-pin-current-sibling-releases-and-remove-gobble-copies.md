@@ -359,8 +359,9 @@ policy. And one record keeps the order, and the cross-library facts (check-libs,
 
   *acp-go-sdk2 `v1.26.0` and go-llmprovider-sdk `v1.24.1` are still the newest.*
 
-  *Amended 2026-10-31, by the PLAN's deviation 12, from the owner's request "there is a new release of acp-go-sdk2 out,
-  we need to pin the latest", and go-tui-lib's release the same day:*
+  *Amended 2026-10-31, by the PLAN's deviation 12, from the owner's requests "there is a new release of acp-go-sdk2 out,
+  we need to pin the latest" and, the next day, "ensure we are pinning them to current release versions. also ensure
+  we pin current go-selfupdate-lib where relevent.":*
   - ***acp-go-sdk2 `v1.28.0`**, in place of `v1.26.0`:*
     - *`v1.27.0` adds the package `remote`;*
     - *`v1.28.0` adds `Process.CloseContext`, `Process.KillContext` and `acp.ErrHandlersRunning`. They answer
@@ -372,8 +373,17 @@ policy. And one record keeps the order, and the cross-library facts (check-libs,
       `docs/decisions/0023-MADR-line-mode-components.md`, A12. That answers
       [go-tui-lib#13](https://github.com/maccavelli/go-tui-lib/issues/13);*
     - *its `go.mod` is unchanged.*
-  - *`python3 scripts/check_libs.py --lib <library> --tag <tag>` passed every check for each: 13 for acp-go-sdk2, and 14
-    for go-tui-lib, with `archtest`. `staticcheck`, `lint` and `api` are among them.*
+  - ***go-selfupdate-lib `v1.23.1`** (`c24f5919cd9e9e3ba3736e64bcf18a6e2a51489e`, 2026-10-30), in place of `v1.23.0`:*
+    - *it only raises its requirements to `golang.org/x/sys` `v0.49.0`, `golang.org/x/term` `v0.47.0` and
+      `golang.org/x/mod` `v0.42.0`. gobble already requires those versions, so its `go.mod` changes on the library's
+      line alone;*
+    - *its reusable release workflows are byte-identical to `v1.23.0`'s. The two `ci.yml` pins still move to
+      `c24f5919cd9e9e3ba3736e64bcf18a6e2a51489e # v1.23.1`, so they name the pinned tag.*
+  - *`python3 scripts/check_libs.py --lib <library> --tag <tag>` passed every check for each: 13 each for acp-go-sdk2
+    and go-selfupdate-lib, and 14 for go-tui-lib, with `archtest`. `staticcheck`, `lint` and `api` are among them.*
+
+  *go-llmprovider-sdk `v1.24.1` is still the newest on 2026-10-31: by `git ls-remote --tags`, by its GitHub releases, and
+  by `check-libs`, which checked `v1.24.1` against the pin.*
 - **D2. `check-libs` sees what preflight sees.**
   - `scripts/check_libs.py` runs `make staticcheck` and `make lint` on its scratch module for each library, so that F2
     would have been reported.

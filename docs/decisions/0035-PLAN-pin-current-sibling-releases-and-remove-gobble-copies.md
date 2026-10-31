@@ -726,7 +726,7 @@ Files: `acpclient/conn.go`, `acpclient/close_test.go`, `acpclient/conn_test.go`.
 8. G-local, G-hosts, with `make perf`, since `LineSessionStart` includes `Start`. **Commit.**
 
 *Amended 2026-10-31, by deviation 12, at acp-go-sdk2 `v1.28.0`:* steps 1, 3, 4 and 6 are as deviation 12 gives them.
-Steps 2, 5, 7 and 8 stand, step 5's 2 s bound included. P12 runs after P20.
+Steps 2, 5, 7 and 8 stand, step 5's 2 s bound included. P12 runs after P20, P21 and P22.
 
 ### P13 — archtest names `/v2` (MADR D13)
 
@@ -932,7 +932,7 @@ Files:
 7. **The Windows laptop:** `conhost_windows_test.go` and `make probe-conhost` pass.
 8. G-local with `make perf`, and G-hosts with `make perf` and `make probe-conhost`. **Commit.**
 
-*Amended 2026-10-31, by deviation 12:* P17 resumes after P21, on `feature/p17-lineedit`, rebased onto `main`.
+*Amended 2026-10-31, by deviation 12:* P17 resumes after P21 and P12, on `feature/p17-lineedit`, rebased onto `main`.
 Step 8's commit is on that branch, and the owner fast-forwards `main` to it.
 
 ### P18 — `stream` and `transcript` (MADR D14 step 5; Q3; PQ3)
@@ -1049,6 +1049,23 @@ Files: `go.mod`, `go.sum`, `README.md`, `docs/architecture.md`.
 
 No check is added, so C9 has nothing to break.
 
+### P22 — go-selfupdate-lib `v1.23.1` (MADR D1, amended 2026-10-31; deviation 12)
+
+Files: `go.mod`, `go.sum`, `.github/workflows/ci.yml`, `README.md`, `docs/architecture.md`.
+
+1. **Checked first:** `python3 scripts/check_libs.py --lib go-selfupdate-lib --tag v1.23.1` reports every check ok.
+2. **The pin:** `go get github.com/maccavelli/go-selfupdate-lib@v1.23.1`, then `go mod tidy`.
+   - `go.mod` changes on that line alone, since gobble already requires the library's new `golang.org/x` versions.
+   - `go.sum` changes in go-selfupdate-lib's lines alone.
+3. **The workflow pins:** both `ci.yml` lines that name `67520be8af1ad1b6228c29e4b1aa3e61e1ca7ae4 # v1.23.0` name
+   `c24f5919cd9e9e3ba3736e64bcf18a6e2a51489e # v1.23.1`, the tag's commit by `git ls-remote --tags`.
+   - Assert by search: no `67520be8` remains in `.github/`.
+4. **No source change.** `buildinfo`, `selfupdate` and their tests pass unchanged.
+5. **The docs:** `README.md:136` and `docs/architecture.md:159` name `v1.23.1`.
+6. G-local, and G-hosts. **Commit.**
+
+No check is added, so C9 has nothing to break.
+
 ## Verification
 
 Each phase's own steps are its acceptance criteria. Across the plan:
@@ -1069,7 +1086,7 @@ Each phase's own steps are its acceptance criteria. Across the plan:
   - P8–P12 need P7;
   - P14–P18 need P13;
   - P15–P18 need P14's requirement.
-  - P12 needs P20, and P17 needs P21 (deviation 12).
+  - P12 needs P20, and P17 needs P21 (deviation 12). P22 needs nothing after P3.
 
   Reverting a pin phase reverts the phases that need it, newest first.
 - Nothing is pushed by this plan. The owner pushes, after the disclosure guard.
@@ -2043,9 +2060,25 @@ The base is `6c5eb02`. Nothing is committed (deviation 11).
 
     On the same runs, `internal/cli`'s `ReplyRender`, `Reprint` and `LineSessionStart` passed their budgets on every
     host.
-  - **`check-libs`.** `python3 scripts/check_libs.py --lib acp-go-sdk2 --tag v1.28.0` passed all 13 checks.
-    `--lib go-tui-lib --tag v2.7.0` passed all 14. `staticcheck`, `lint` and `api` are among them, and `archtest` is
-    among go-tui-lib's.
+  - The owner, 2026-10-31, after this entry's first version was committed (`505e030`), and before it was pushed or
+    any of its phases ran: "go-tui-lib, acp-go-sdk2, and go-llmprovider-sdk all have new tagged releases. ensure we
+    are pinning them to current release versions. also ensure we pin current go-selfupdate-lib where relevent." This
+    entry was extended for it, adding P22 and moving the pin phases first.
+    - **go-selfupdate-lib `v1.23.1`** (`c24f5919cd9e9e3ba3736e64bcf18a6e2a51489e`, 2026-10-30) is newer than P3's
+      `v1.23.0`.
+      - Its changelog: it requires `golang.org/x/sys` `v0.49.0`, `golang.org/x/term` `v0.47.0` and `golang.org/x/mod`
+        `v0.42.0`, and nothing exported or visible changes. gobble's `go.mod` already has those three versions.
+      - `diff -r` of the two module zips: the source is unchanged, and so is `.github/`. Only the docs, `go.mod` and
+        `go.sum` differ.
+      - gobble names the tag in `go.mod`, in two `ci.yml` workflow pins (`:166`, `:178`), in `README.md:136` and in
+        `docs/architecture.md:159`.
+    - **go-llmprovider-sdk** has no tag newer than the pinned `v1.24.1`: `git ls-remote --tags`, the GitHub releases
+      (`v1.24.1`, "Latest", 2026-10-27) and `check-libs` agree.
+    - acp-go-sdk2 `v1.28.0` and go-tui-lib/v2 `v2.7.0` are still the newest.
+  - **`check-libs`.** `python3 scripts/check_libs.py --lib acp-go-sdk2 --tag v1.28.0` passed all 13 checks;
+    `--lib go-selfupdate-lib --tag v1.23.1` all 13; `--lib go-tui-lib --tag v2.7.0` all 14. `staticcheck`, `lint` and
+    `api` are among them, and `archtest` is among go-tui-lib's. `--lib go-llmprovider-sdk` checked `v1.24.1`, the pin,
+    with 0 failing.
   - `feature/p17-lineedit` has never been pushed: `git ls-remote --heads origin feature/p17-lineedit` is empty.
     `main` is three commits past its base, `61f7115`.
 - **The owner's answers, 2026-10-31:**
@@ -2060,15 +2093,16 @@ The base is `6c5eb02`. Nothing is committed (deviation 11).
     - 0037's first plan first.
 - **Decision.**
   - MADR D1, D12 and D14 step 4 have dated notes.
-  - **The order:**
+  - **The order.** The pin phases go first, as deviation 1 put them, so that every pin is current before P12 and P17:
     1. these records;
     2. P20, acp-go-sdk2 `v1.28.0`;
-    3. P12;
-    4. P21, go-tui-lib/v2 `v2.7.0`;
-    5. P17, on its branch;
-    6. the owner's fast-forward of `main`;
-    7. P18;
-    8. P19.
+    3. P21, go-tui-lib/v2 `v2.7.0`;
+    4. P22, go-selfupdate-lib `v1.23.1`;
+    5. P12;
+    6. P17, on its branch;
+    7. the owner's fast-forward of `main`;
+    8. P18;
+    9. P19.
 
     Then [0037-PLAN-permission-and-file-tool-hardening.md](0037-PLAN-permission-and-file-tool-hardening.md) resumes at
     its P3.
@@ -2091,15 +2125,16 @@ The base is `6c5eb02`. Nothing is committed (deviation 11).
        - with `Close` as `c.proc.Close()`, `TestCloseBoundedWhenAHandlerHangs` does not return, under
          `go test -timeout 60s`.
   - **P17, resumed:**
-    1. After P21's commit, `git rebase main feature/p17-lineedit`. `8630b77` touches `internal/cli` alone, and `main`
+    1. After P12's commit, `git rebase main feature/p17-lineedit`. `8630b77` touches `internal/cli` alone, and `main`
        has not touched it since `61f7115`. A conflict stops the phase as a deviation.
     2. Steps 5, 7 and 8 run on the rebased branch. The step 6 breaks and the P17 record's other results are not
        repeated, since the rebase changes none of P17's files. The tests and gates run again in full.
     3. A second commit on the branch has the records: the P17 record's completion, and the `docs/README.md` row.
     4. The owner fast-forwards `main` to the branch. That is a merge, so it is human-only. P18 starts after it.
-  - P20 and P21 are new phases, above.
+  - P20, P21 and P22 are new phases, above.
 - **Files added to scope:**
   - P20 and P21: `go.mod`, `go.sum`, `README.md` and `docs/architecture.md`;
+  - P22: the same, and `.github/workflows/ci.yml`;
   - the records: [0037-PLAN-permission-and-file-tool-hardening.md](0037-PLAN-permission-and-file-tool-hardening.md),
     with a dated note that it pauses after P2.
 
