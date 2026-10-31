@@ -197,3 +197,52 @@ func TestRuleStoreConcurrent(t *testing.T) {
 func jsonString(p string) string {
 	return `"` + strings.ReplaceAll(p, `\`, `\\`) + `"`
 }
+
+// caseless makes dir/Proj and returns it and its lower-case spelling, or
+// skips the test where the temp directory's volume tells the two apart.
+func caseless(t *testing.T) (proj, lower string) {
+	t.Helper()
+	base, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	proj, lower = filepath.Join(base, "Proj"), filepath.Join(base, "proj")
+	if err := os.MkdirAll(proj, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(lower); err != nil || !folds() {
+		t.Skip("the temp directory's volume is case-sensitive, or this platform does not fold")
+	}
+	return proj, lower
+}
+
+// A project's saved rules load for any spelling the volume takes for its
+// path, which can only add rules (0037-MADR D5).
+func TestStoreLookupFoldsCase(t *testing.T) {
+	proj, lower := caseless(t)
+	s := RuleStore{Path: filepath.Join(t.TempDir(), PermissionsFile)}
+	if _, err := s.Add(t.Context(), proj, Spec{Effect: ModeDeny, Tool: "bash", Pattern: "rm *"}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.Rules(lower)
+	if err != nil || len(got) != 1 || got[0].Pattern != "rm *" {
+		t.Fatalf("Rules(%s) = %+v, %v; want the reject saved for %s", lower, got, err, proj)
+	}
+}
+
+// A trust grant compares as it did before 0037, never through fsx.Fold: on
+// darwin a differently spelled directory is asked again, since folding a
+// grant would widen it on a case-sensitive volume; on windows it is found,
+// as trust has always compared there, NTFS ignoring case (0037-MADR D5, as
+// noted by 0037-PLAN P2's deviation 2).
+func TestTrustStaysExact(t *testing.T) {
+	proj, lower := caseless(t)
+	s := store(t)
+	if _, err := s.Save(t.Context(), proj, true); err != nil {
+		t.Fatal(err)
+	}
+	want := runtime.GOOS == "windows"
+	if _, _, ok, err := s.Lookup(lower); ok != want || err != nil {
+		t.Fatalf("Lookup(%s) after a grant for %s: ok %v, err %v; want ok %v", lower, proj, ok, err, want)
+	}
+}

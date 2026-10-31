@@ -244,3 +244,39 @@ func TestWriteIsAtomic(t *testing.T) {
 		t.Fatalf("a reader saw %d partial files, starting %q", len(bad), bad[0])
 	}
 }
+
+// Fold compares as the default volume does: case and normalisation on darwin
+// and windows, nothing on linux; SamePath and UnderDir compare through it
+// (0037-MADR D2).
+func TestFold(t *testing.T) {
+	folding := runtime.GOOS == "darwin" || runtime.GOOS == "windows"
+	nfd := "Re\u0301sume\u0301" // decomposed, as macOS may hand a name over
+	for _, c := range []struct{ a, b string }{{".GIT", ".git"}, {"Agents.md", "AGENTS.md"}, {nfd, "R\u00e9sum\u00e9"}} {
+		if got := Fold(c.a) == Fold(c.b); got != folding {
+			t.Errorf("Fold(%q) == Fold(%q) is %v, want %v", c.a, c.b, got, folding)
+		}
+	}
+	dir := filepath.FromSlash("/w/Proj")
+	if got := SamePath(filepath.FromSlash("/w/proj"), dir); got != folding {
+		t.Errorf("SamePath(/w/proj, /w/Proj) = %v, want %v", got, folding)
+	}
+	if got := UnderDir(filepath.FromSlash("/w/PROJ/a/b"), dir); got != folding {
+		t.Errorf("UnderDir(/w/PROJ/a/b, /w/Proj) = %v, want %v", got, folding)
+	}
+	if !UnderDir(dir, dir) || !UnderDir(filepath.Join(dir, "x"), dir) || UnderDir(filepath.FromSlash("/w/Projx"), dir) {
+		t.Error("UnderDir: a directory, a child, and a sibling with a longer name")
+	}
+}
+
+// On windows an element's trailing dots and spaces are dropped, as Win32
+// drops them, so .git. is .git (0037-MADR D2).
+func TestFoldWindows(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("windows only")
+	}
+	for _, p := range []string{`C:\r\.git.\config`, `C:\r\.git \config`, `C:\r\.GIT..\config`} {
+		if got, want := Fold(p), Fold(`C:\r\.git\config`); got != want {
+			t.Errorf("Fold(%q) = %q, want %q", p, got, want)
+		}
+	}
+}

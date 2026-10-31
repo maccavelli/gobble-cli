@@ -176,7 +176,7 @@ func (e Engine) Evaluate(r Rule) Verdict {
 	}
 	var v Verdict
 	for i, s := range subjects {
-		got := e.match(r.Tool, r.Kind, s, def)
+		got := e.matchReadings(r.Tool, r.Kind, s, def)
 		if i == 0 || stricter(got.Effect, v.Effect) {
 			v = got
 		}
@@ -187,6 +187,52 @@ func (e Engine) Evaluate(r Rule) Verdict {
 		}
 	}
 	return e.limits(r, v)
+}
+
+// readingsOf is a subject's readings: a path as given, and as the file
+// system resolves it when that differs, so that a symlink cannot carry a
+// path past a rule (0037-MADR D2, D5); any other subject as it is.
+func readingsOf(kind SubjectKind, s string) []string {
+	if kind != SubjectPath || s == "" {
+		return []string{s}
+	}
+	return readings(s)
+}
+
+// matchReadings is subject's verdict over its readings: the strictest of
+// those a rule matched, or the default's when no rule matched any. A
+// reading only the default decides does not outrank one a rule decides, so
+// an allow written for either spelling of a path still allows, and a deny
+// for either still denies (0037-MADR D5, as amended by 0037-PLAN P2's
+// deviation 1).
+func (e Engine) matchReadings(tool string, kind SubjectKind, subject string, def Mode) Verdict {
+	var v, fallback Verdict
+	found := false
+	for i, reading := range readingsOf(kind, subject) {
+		got := e.match(tool, kind, reading, def)
+		if got.By.Source.Layer == LayerDefault {
+			if i == 0 {
+				fallback = got
+			}
+			continue
+		}
+		if !found || stricter(got.Effect, v.Effect) {
+			v, found = got, true
+		}
+	}
+	if !found {
+		return fallback
+	}
+	return v
+}
+
+// readings are p cleaned, and its real path when that differs.
+func readings(p string) []string {
+	p = filepath.Clean(p)
+	if r := fsx.RealPath(p); r != p {
+		return []string{p, r}
+	}
+	return []string{p}
 }
 
 // match is the last rule over the layers that names tool and whose pattern
@@ -221,20 +267,29 @@ func patternMatches(kind SubjectKind, pattern, subject string) bool {
 	}
 	switch kind {
 	case SubjectPath:
-		g, err := fsx.CompileGlob(filepath.ToSlash(pattern))
-		return err == nil && g.Match(strings.TrimPrefix(subject, "/"), false)
+		g, err := fsx.CompileGlob(folded(pattern))
+		return err == nil && g.Match(strings.TrimPrefix(folded(subject), "/"), false)
 	case SubjectCommand:
 		return wildcard(subject, pattern)
 	}
 	return false
 }
 
-// relative is p relative to the root with "/", when it is inside it, and
-// otherwise absolute with "/".
+// folded is a pattern or a path with "/", as the volume compares names
+// (fsx.Fold): a path rule then holds for every spelling the volume takes
+// for the same file (0037-MADR D5).
+func folded(p string) string {
+	return filepath.ToSlash(fsx.Fold(filepath.FromSlash(p)))
+}
+
+// relative is p relative to the root with "/", when it is inside the root
+// as given or as resolved, and otherwise absolute with "/".
 func (e Engine) relative(p string) string {
 	if e.Root != "" {
-		if rel, err := filepath.Rel(e.Root, p); err == nil && filepath.IsLocal(rel) {
-			return filepath.ToSlash(rel)
+		for _, root := range readings(e.Root) {
+			if rel, err := filepath.Rel(root, p); err == nil && filepath.IsLocal(rel) {
+				return filepath.ToSlash(rel)
+			}
 		}
 	}
 	return filepath.ToSlash(p)
@@ -288,19 +343,21 @@ func (e Engine) limits(r Rule, v Verdict) Verdict {
 }
 
 // protected reports whether p is under a .git directory, under ~/.ssh, or
-// one of gobble's credential, trust and permission files.
+// one of gobble's credential, trust and permission files: as given or as
+// resolved, and in any spelling the volume takes for it (0037-MADR D2).
 func (e Engine) protected(p string) bool {
-	p = filepath.Clean(p)
-	if slices.Contains(strings.Split(filepath.ToSlash(p), "/"), ".git") {
-		return true
-	}
-	if e.Home != "" && under(p, filepath.Join(e.Home, ".ssh")) {
-		return true
-	}
-	if e.ConfigDir != "" {
-		for _, name := range []string{"auth.json", TrustFile, "permissions.json"} {
-			if samePath(p, filepath.Join(e.ConfigDir, name)) {
-				return true
+	for _, q := range readings(p) {
+		if slices.Contains(strings.Split(folded(q), "/"), ".git") {
+			return true
+		}
+		if e.Home != "" && under(q, filepath.Join(e.Home, ".ssh")) {
+			return true
+		}
+		if e.ConfigDir != "" {
+			for _, name := range []string{"auth.json", TrustFile, "permissions.json"} {
+				if samePlace(q, filepath.Join(e.ConfigDir, name)) {
+					return true
+				}
 			}
 		}
 	}
@@ -308,24 +365,42 @@ func (e Engine) protected(p string) bool {
 }
 
 // configPath reports whether p is in gobble's config directory, under the
-// project's .gobble or .agents/skills, or an AGENTS.md.
+// project's .gobble or .agents/skills, or an AGENTS.md, as protected reads
+// it.
 func (e Engine) configPath(p string) bool {
-	p = filepath.Clean(p)
-	switch {
-	case filepath.Base(p) == "AGENTS.md":
-		return true
-	case e.ConfigDir != "" && under(p, e.ConfigDir):
-		return true
-	case e.Root != "" && (under(p, filepath.Join(e.Root, ".gobble")) || under(p, filepath.Join(e.Root, ".agents", "skills"))):
-		return true
+	for _, q := range readings(p) {
+		switch {
+		case fsx.Fold(filepath.Base(q)) == fsx.Fold("AGENTS.md"):
+			return true
+		case e.ConfigDir != "" && under(q, e.ConfigDir):
+			return true
+		case e.Root != "" && (under(q, filepath.Join(e.Root, ".gobble")) || under(q, filepath.Join(e.Root, ".agents", "skills"))):
+			return true
+		}
 	}
 	return false
 }
 
-// under reports whether p is dir or inside it.
+// under reports whether p is dir or inside it, dir as given or as resolved,
+// compared as the volume compares names.
 func under(p, dir string) bool {
-	rel, err := filepath.Rel(filepath.Clean(dir), p)
-	return err == nil && filepath.IsLocal(rel) || samePath(p, dir)
+	for _, d := range readings(dir) {
+		if fsx.UnderDir(p, d) {
+			return true
+		}
+	}
+	return false
+}
+
+// samePlace reports whether p is the file named, as given or as resolved,
+// compared as the volume compares names.
+func samePlace(p, file string) bool {
+	for _, f := range readings(file) {
+		if fsx.SamePath(p, f) {
+			return true
+		}
+	}
+	return false
 }
 
 // pathMeta and commandMeta are the characters that make a subject a

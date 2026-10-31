@@ -618,3 +618,99 @@ The base is P0's `2a8d70c`.
    * `make preflight`: passed;
    * `make race`: 36 ok.
 9. **G-hosts:** on the Linux machine and the Windows laptop, `go test` passed, race passed with 36 ok, and `make check-records markdownlint` passed. `make preflight` stopped at `verify-build-metadata`, which needs a commit, as on every copy..
+
+### Deviation 1 (2026-10-30): P2's readings, and the default
+
+* **Found.** P2 matched each path subject as given and as resolved, and kept the stricter verdict, as MADR D5 and P2
+  step 3 say. Two existing tests then failed. Both pass at `e13d154`.
+  * `permission/rules_test.go:135`, `TestEvaluateSubjects`: `allow: write(/tmp/**)` for `/tmp/scratch/out.txt` gave
+    `{Effect:ask By:ask: write}`.
+  * `permission/store_test.go:74`, `TestRemember`, "an outside path, allowed": a saved allow gave `ask`.
+
+  On macOS `/tmp` resolves to `/private/tmp`, and `/var` to `/private/var`. The resolved reading matched no rule, so it
+  took the default, ask, and ask is stricter than the allow the given reading matched. Every absolute allow rule for a
+  path with a symlink in it would have asked.
+* **The owner's answer, 2026-10-30:** "Defaults don't outrank (Recommended)". The options not taken were:
+  * consulting the resolved reading for deny and ask rules only;
+  * keeping D5 literal, and changing the two tests.
+* **Decision.**
+  * `Evaluate` takes, per subject, `matchReadings`: the strictest verdict among the readings a rule matched, or the
+    default's when no rule matched any.
+  * Across subjects the strictest wins, as before.
+  * MADR D5 has a dated amendment.
+  * Both tests pass unchanged.
+* **Files added to scope:** none.
+
+### Deviation 2 (2026-10-30): P2's trust test on windows
+
+* **Found.** On the Windows laptop, `go test` and `make race` failed one test, `TestTrustStaysExact`:
+  `store_test.go:242: Lookup(…\proj) found the grant for …\Proj: ok true, err <nil>`. macOS and the Linux machine
+  passed.
+  * This is not a regression. Trust's `samePath` (`permission/trust.go:282-283`) has compared with `strings.EqualFold`
+    on windows since before 0037, as NTFS ignores case. P2 did not change it.
+  * MADR D5's "trust grants stay exact" meant unchanged. Step 6, and the test as written, asserted "not found" on every
+    platform.
+* **The owner's answer, 2026-10-30:** "Test follows trust's rule (Recommended)". The options not taken were:
+  * making trust compare case-sensitively on windows;
+  * folding trust everywhere, which reverses D5 on a case-sensitive macOS volume.
+* **Decision.**
+  * `TestTrustStaysExact` asserts trust as it compares: not found on darwin, found on windows.
+  * No code changes.
+  * MADR D5 has a dated note.
+* **Files added to scope:** none.
+
+### P2 record (2026-10-30): paths compared as the filesystem resolves them
+
+The base is P1's `e13d154`.
+
+1. **`fsx`** (`internal/fsx/workspace.go`).
+   * `realPath` is exported as `RealPath`, unchanged, at its five calls.
+   * `Fold` is new. On darwin and windows it applies NFC, then `cases.Fold()`; on windows each element also drops its
+     trailing dots and spaces. Elsewhere it returns the path unchanged.
+     `golang.org/x/text` was already required, so `go.mod` is unchanged.
+   * `SamePath` and `UnderDir` compare through `Fold`. *The plan named the second `Under`. revive's confusing-naming
+     refused it beside `ignore.go`'s unexported `under`, a file outside P2, so the new function took the name
+     `UnderDir`.*
+2. **`permission/rules.go`.**
+   * `readings(p)`: `p` cleaned, and `fsx.RealPath(p)` when that differs.
+   * `protected` and `configPath` test every reading. They test `.git` among `folded(q)`'s elements, `AGENTS.md` by
+     `Fold` of the base name, and the anchors through `under` and `samePlace`, which take each anchor as given and as
+     resolved.
+   * `patternMatches` compiles and matches path patterns through `folded`.
+   * `relative` tries the root as given and as resolved.
+   * `Evaluate` takes `matchReadings` per subject, by deviation 1.
+3. **`permission/store.go`:** the project store's two lookups compare through `fsx.SamePath`.
+4. **`permission/trust.go`:** `samePath` is unchanged. Its comment now says why a trust grant is not folded.
+5. **Tests.**
+   * `TestProtectedFoldsCase`: denies and asks on darwin and windows, and allows on linux, where the spellings are
+     other files. *The plan's step 6 listed the denials without the platform; the MADR's D2 limits folding to darwin and
+     windows, and the test follows the MADR.*
+   * `TestProtectedRealPath` and `TestPathRulesRealPath`, the latter with deviation 1's allow through a link.
+   * `TestPathRulesFoldCase`.
+   * `TestStoreLookupFoldsCase` and `TestTrustStaysExact`, in `store_test.go`, which is in P2's list. Both run where the
+     temp volume ignores case, as on macOS and windows, and skip elsewhere, with the reason (C10).
+     `TestTrustStaysExact` asserts trust as it compares, by deviation 2: not found on darwin, found on windows.
+   * `TestFold` and `TestFoldWindows`, the latter on Windows.
+   * The existing tests pass unchanged, after deviation 1.
+6. **Seen failing (C9),** each on its own scratch copy, absolute paths left out here:
+   * `.git` compared exactly: `TestProtectedFoldsCase` fails, `.GIT/config: {Effect:allow By:allow: write Limit:}, want
+     deny`, and the same for `.Git/config` and `docs/../.GIT/config`;
+   * no real-path reading:
+     * `TestProtectedRealPath` fails, `docs/x/config through a link to .git: {Effect:allow …}, want the protected limit`;
+     * `TestPathRulesRealPath` fails, `link/k, a link to secret: {Effect:allow …}, want the deny`;
+   * a default outranking a matched reading, as first written: `TestEvaluateSubjects` (`an absolute pattern:
+     {Effect:ask …}`), `TestRemember` and `TestPathRulesRealPath` (`an allow for the real path, through the link:
+     {Effect:ask …}, want the allow`) fail;
+   * the store compared exactly: `TestStoreLookupFoldsCase` fails, `Rules(…/proj) = [], <nil>; want the reject saved
+     for …/Proj`;
+   * trust folded: `TestTrustStaysExact` fails, `Lookup(…/proj) found the grant for …/Proj: ok true`. The first try of
+     this break failed to build, because `trust.go` already imports `fsx`. It was rerun without the duplicate import.
+   * `Fold` a no-op: `TestFold` fails, `Fold(".GIT") == Fold(".git") is false, want true`, and the same for the
+     `SamePath` and `UnderDir` lines.
+7. **G-local:**
+   * `make pre-add-check` on the 7 Go files: clean;
+   * `make preflight`: passed, after the rename in step 1;
+   * `make race`: 36 ok.
+   * After deviation 2's test change: `make pre-add-check` on `permission/store_test.go` was clean, `make preflight`
+     passed, and `go test -race ./permission/` was ok.
+8. **G-hosts:** first run: the Linux machine passed; on the Windows laptop `TestTrustStaysExact` failed in `go test` and race, which is deviation 2. After it, on both hosts, `go test` passed, race passed with 36 ok, and `make check-records markdownlint` passed. `make preflight` stopped at `verify-build-metadata`, as on every copy..

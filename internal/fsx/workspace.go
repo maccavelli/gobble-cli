@@ -8,6 +8,9 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"golang.org/x/text/cases"
+	"golang.org/x/text/unicode/norm"
 )
 
 // ErrOutside is the error of a path outside every root, opened without
@@ -32,9 +35,9 @@ func (w Workspace) Outside(abs string) bool {
 	if len(w.Roots) == 0 {
 		return false
 	}
-	resolved := realPath(abs)
+	resolved := RealPath(abs)
 	for _, r := range w.Roots {
-		if within(realPath(r), resolved) {
+		if within(RealPath(r), resolved) {
 			return false
 		}
 	}
@@ -108,10 +111,10 @@ func (w Workspace) open(abs string) (*os.Root, string, error) {
 	// Inside only through a symlink: a root reached by resolving a link,
 	// such as a root under a linked directory. Lexically abs is under no
 	// root, so open it by its real path.
-	resolved := realPath(abs)
+	resolved := RealPath(abs)
 	for _, r := range w.Roots {
-		if rel, ok := relative(realPath(r), resolved); ok {
-			root, err := os.OpenRoot(realPath(r))
+		if rel, ok := relative(RealPath(r), resolved); ok {
+			root, err := os.OpenRoot(RealPath(r))
 			if err != nil {
 				return nil, "", err
 			}
@@ -121,9 +124,9 @@ func (w Workspace) open(abs string) (*os.Root, string, error) {
 	return nil, "", fmt.Errorf("%s: %w", abs, ErrOutside)
 }
 
-// realPath is abs with the symlinks of its deepest existing ancestor
+// RealPath is abs with the symlinks of its deepest existing ancestor
 // resolved, and the part that does not exist yet appended as it is.
-func realPath(abs string) string {
+func RealPath(abs string) string {
 	p := filepath.Clean(abs)
 	var rest []string
 	for {
@@ -198,4 +201,45 @@ func foldKey(p string) string {
 
 func local(rel string) bool {
 	return rel == "." || filepath.IsLocal(rel)
+}
+
+// Fold is p as the platform's default volume compares names, for checks
+// that must hold for every spelling of a path (0037-MADR D2, D5). On darwin
+// and windows it is NFC-normalised and case-folded, since APFS ignores case
+// and normalisation and NTFS ignores case; on windows each element also
+// loses its trailing dots and spaces, which Win32 drops. Elsewhere p is
+// unchanged. A case-sensitive volume on darwin is then checked more
+// strictly than it needs to be, never less.
+func Fold(p string) string {
+	if runtime.GOOS != "darwin" && runtime.GOOS != goosWindows {
+		return p
+	}
+	p = cases.Fold().String(norm.NFC.String(p))
+	if runtime.GOOS != goosWindows {
+		return p
+	}
+	vol := filepath.VolumeName(p)
+	elems := strings.FieldsFunc(p[len(vol):], func(c rune) bool { return c == '\\' || c == '/' })
+	for i, e := range elems {
+		if e != "." && e != ".." {
+			elems[i] = strings.TrimRight(e, ". ")
+		}
+	}
+	lead := ""
+	if rest := p[len(vol):]; rest != "" && (rest[0] == '\\' || rest[0] == '/') {
+		lead = string(filepath.Separator)
+	}
+	return vol + lead + strings.Join(elems, string(filepath.Separator))
+}
+
+// SamePath reports whether a and b name the same path, compared through
+// Fold after cleaning.
+func SamePath(a, b string) bool {
+	return Fold(filepath.Clean(a)) == Fold(filepath.Clean(b))
+}
+
+// UnderDir reports whether p is dir or inside it, compared through Fold.
+func UnderDir(p, dir string) bool {
+	rel, err := filepath.Rel(Fold(filepath.Clean(dir)), Fold(filepath.Clean(p)))
+	return err == nil && (rel == "." || filepath.IsLocal(rel))
 }

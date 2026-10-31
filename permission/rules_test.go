@@ -2,7 +2,9 @@ package permission
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -220,5 +222,107 @@ func TestHidden(t *testing.T) {
 		if got := e.Hidden(tool); got != want {
 			t.Errorf("Hidden(%s) = %v", tool, got)
 		}
+	}
+}
+
+// folds says whether this platform's default volume ignores case, as
+// fsx.Fold compares names.
+func folds() bool { return runtime.GOOS == "darwin" || runtime.GOOS == "windows" }
+
+// The protected and configuration paths hold in every spelling the volume
+// takes for them: on darwin and windows, .GIT/config is .git/config, and
+// Agents.md is an AGENTS.md (0037-MADR D2). On linux they are other files.
+func TestProtectedFoldsCase(t *testing.T) {
+	root := filepath.FromSlash("/work/repo")
+	e := Engine{Root: root, Layers: [][]Spec{{spec(t, ModeAllow, "write", LayerGlobal)}}}
+	for _, c := range []struct {
+		rel  string
+		want Mode // on a folding volume; linux allows
+	}{
+		{".GIT/config", ModeDeny},
+		{".Git/config", ModeDeny},
+		{"docs/../.GIT/config", ModeDeny},
+		{"Agents.md", ModeAsk},
+		{".Gobble/settings.yaml", ModeAsk},
+	} {
+		want := c.want
+		if !folds() {
+			want = ModeAllow
+		}
+		v := e.Evaluate(Rule{Tool: "write", Kind: SubjectPath, Subjects: []string{filepath.Join(root, filepath.FromSlash(c.rel))}})
+		if v.Effect != want {
+			t.Errorf("%s: %+v, want %s", c.rel, v, want)
+		}
+	}
+}
+
+// symlinkOr skips the test where the platform cannot make a symlink.
+func symlinkOr(t *testing.T, target, link string) {
+	t.Helper()
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("no symlink here: %v", err)
+	}
+}
+
+// A path through a symlink to .git is protected as .git is (0037-MADR D2).
+func TestProtectedRealPath(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ".git"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "docs"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	symlinkOr(t, filepath.Join("..", ".git"), filepath.Join(root, "docs", "x"))
+	e := Engine{Root: root, Layers: [][]Spec{{spec(t, ModeAllow, "write", LayerGlobal)}}}
+	v := e.Evaluate(Rule{Tool: "write", Kind: SubjectPath, Subjects: []string{filepath.Join(root, "docs", "x", "config")}})
+	if v.Effect != ModeDeny || v.Limit != limitProtected {
+		t.Errorf("docs/x/config through a link to .git: %+v, want the protected limit", v)
+	}
+}
+
+// A path rule's deny holds for every spelling the volume takes (0037-MADR
+// D5).
+func TestPathRulesFoldCase(t *testing.T) {
+	root := filepath.FromSlash("/work/repo")
+	e := Engine{Root: root, Layers: [][]Spec{{
+		spec(t, ModeAllow, "read", LayerGlobal),
+		spec(t, ModeAllow, "edit", LayerGlobal),
+		spec(t, ModeDeny, "read(.env)", LayerGlobal),
+		spec(t, ModeDeny, "edit(Secrets/**)", LayerGlobal),
+	}}}
+	want := ModeAllow
+	if folds() {
+		want = ModeDeny
+	}
+	for _, c := range []struct{ tool, rel string }{{"read", ".ENV"}, {"edit", "secrets/k"}} {
+		v := e.Evaluate(Rule{Tool: c.tool, Kind: SubjectPath, Subjects: []string{filepath.Join(root, filepath.FromSlash(c.rel))}})
+		if v.Effect != want {
+			t.Errorf("%s %s: %+v, want %s", c.tool, c.rel, v, want)
+		}
+	}
+}
+
+// A path rule's deny holds through a symlink to what it names, and an
+// allow written for the real path still allows the link's spelling: a
+// reading no rule matches does not outrank one a rule matches (0037-MADR D5,
+// as amended by 0037-PLAN P2's deviation 1).
+func TestPathRulesRealPath(t *testing.T) {
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "secret"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	symlinkOr(t, "secret", filepath.Join(root, "link"))
+	e := Engine{Root: root, Layers: [][]Spec{{spec(t, ModeAllow, "read", LayerGlobal), spec(t, ModeDeny, "read(secret/**)", LayerGlobal)}}}
+	if v := e.Evaluate(Rule{Tool: "read", Kind: SubjectPath, Subjects: []string{filepath.Join(root, "link", "k")}}); v.Effect != ModeDeny {
+		t.Errorf("link/k, a link to secret: %+v, want the deny", v)
+	}
+	allowReal := "write(" + filepath.ToSlash(filepath.Join(root, "secret")) + "/**)"
+	e = Engine{Layers: [][]Spec{{spec(t, ModeAllow, allowReal, LayerGlobal)}}}
+	if v := e.Evaluate(Rule{Tool: "write", Kind: SubjectPath, Subjects: []string{filepath.Join(root, "link", "k")}}); v.Effect != ModeAllow {
+		t.Errorf("an allow for the real path, through the link: %+v, want the allow", v)
 	}
 }

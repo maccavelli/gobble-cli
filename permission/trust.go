@@ -274,7 +274,9 @@ func realPath(dir string) (string, error) {
 }
 
 // samePath compares two clean paths as the OS does: without regard to
-// case on Windows.
+// case on Windows. Trust grants compare through it, and not through
+// fsx.Fold: folding a grant on darwin would widen it to another directory on
+// a case-sensitive volume (0037-MADR D5).
 func samePath(a, b string) bool {
 	a, b = filepath.Clean(a), filepath.Clean(b)
 	if runtime.GOOS == "windows" {

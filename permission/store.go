@@ -90,7 +90,7 @@ func (s RuleStore) Rules(root string) ([]Spec, error) {
 	var out []Spec
 	var errs []error
 	for k, rules := range m {
-		if !samePath(k, p) {
+		if !fsx.SamePath(k, p) { // a project's rules load for any spelling of its path (0037-MADR D5)
 			continue
 		}
 		for _, r := range rules {
@@ -151,7 +151,7 @@ func (s RuleStore) Remove(ctx context.Context, root string, rule Spec) (bool, er
 // keyOf is m's key for the real path p: one already there for it, or p.
 func keyOf(m map[string][]StoredRule, p string) string {
 	for k := range m {
-		if samePath(k, p) {
+		if fsx.SamePath(k, p) {
 			return k
 		}
 	}

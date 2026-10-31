@@ -447,6 +447,16 @@ plan may tune one only through a deviation.
   * The project store's lookup folds case the same way, which can only add rules.
   * Trust grants stay exact: folding a grant would widen it on a case-sensitive volume, so a differently spelled cwd is
     asked again.
+
+  *(2026-10-30, by 0037-PLAN-permission-and-file-tool-hardening.md's deviation 1: "the stricter verdict wins" is
+  amended. A reading that no rule matches takes only the default. That default does not outrank a reading a rule
+  matches. Per subject, the verdict is the strictest among the readings a rule matched, or the default when none
+  matched. A deny for either spelling still denies, and an allow for either spelling still allows. As first written,
+  with `/tmp` and `/var` symlinks on macOS, every absolute allow rule for such a path asked instead.)*
+
+  *(2026-10-30, by the plan's deviation 2: "stay exact" means that trust grants compare as they did before 0037, never
+  through `fsx.Fold`. On windows they have always ignored case (`permission/trust.go:282-283`), as NTFS does, and they
+  still do.)*
 * **D6. A write through a symlink writes the link's target, and keeps the link (F5).**
   * The target is resolved inside the workspace roots, and `os.Root` refuses an escape. The write is atomic beside the
     target.
