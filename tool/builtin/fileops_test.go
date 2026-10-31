@@ -159,3 +159,51 @@ func TestFileOpsOutside(t *testing.T) {
 		}
 	}
 }
+
+// An intercepted mv or cp into an existing directory puts its source inside
+// it, as the shell does, and leaves what the directory holds (0037-MADR D1).
+func TestInterceptIntoDirectory(t *testing.T) {
+	for _, tc := range []struct {
+		cmd, want, result string
+	}{
+		{"mv -f f.txt d", "d/f.txt", "moved f.txt to d/f.txt"},
+		{"mv f.txt d", "d/f.txt", "moved f.txt to d/f.txt"},
+		{"cp -f f.txt d", "d/f.txt", "copied f.txt to d/f.txt"},
+		{"cp -r src d", "d/src/x", "copied src to d/src (1 entry)"},
+	} {
+		t.Run(tc.cmd, func(t *testing.T) {
+			dir := project(t, map[string]string{"f.txt": "f", "src/x": "x", "d/precious.txt": "keep"})
+			call, ok := interceptShell(tool.Call{ID: "c1", Name: nameBash, Args: shellArgs(t, tc.cmd, "")})
+			if !ok {
+				t.Fatalf("%q was not intercepted", tc.cmd)
+			}
+			tl := map[string]tool.Tool{"move": Move(), "copy": Copy()}[call.Name]
+			r, err := tl.Run(t.Context(), call, tool.Env{Cwd: dir, Roots: []string{dir}, Rerouted: nameBash})
+			if err != nil {
+				t.Fatal(err)
+			}
+			wantText(t, r, tc.result)
+			if b, err := os.ReadFile(filepath.Join(dir, "d", "precious.txt")); err != nil || string(b) != "keep" {
+				t.Fatalf("d/precious.txt: %q, %v", b, err)
+			}
+			if !exists(filepath.Join(dir, filepath.FromSlash(tc.want))) {
+				t.Fatalf("%s is missing", tc.want)
+			}
+		})
+	}
+}
+
+// The model's own move or copy, overwrite or not, never removes a directory
+// to put a file in its place (0037-MADR D1).
+func TestMakeRoomKeepsDirectory(t *testing.T) {
+	for _, tl := range []tool.Tool{Move(), Copy()} {
+		for _, overwrite := range []bool{false, true} {
+			dir := project(t, map[string]string{"f.txt": "f", "d/precious.txt": "keep"})
+			args := fmt.Sprintf(`{"from":"f.txt","to":"d","overwrite":%v}`, overwrite)
+			wantError(t, runIn(t, tl, dir, args), tl.Spec().Name+": d is a directory; a file cannot replace it")
+			if !exists(filepath.Join(dir, "d", "precious.txt")) || !exists(filepath.Join(dir, "f.txt")) {
+				t.Fatalf("%s with overwrite %v changed the files", tl.Spec().Name, overwrite)
+			}
+		}
+	}
+}

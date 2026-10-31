@@ -50,7 +50,7 @@ func Move() tool.Tool {
 			property(s, "overwrite").Default = []byte("false")
 		}),
 		tool.WithOutside(twoPaths),
-		tool.WithSubject(pathSubject("from", "to")),
+		tool.WithSubject(fromTo),
 		tool.WithLocations(argLocations("from", "to")),
 		tool.WithDescribe(func(c tool.Call, env tool.Env) string {
 			return title("move " + shown(env, argString(c, "from")) + " to " + shown(env, argString(c, "to")))
@@ -86,7 +86,7 @@ func Copy() tool.Tool {
 			property(s, "overwrite").Default = []byte("false")
 		}),
 		tool.WithOutside(twoPaths),
-		tool.WithSubject(pathSubject("from", "to")),
+		tool.WithSubject(fromTo),
 		tool.WithLocations(argLocations("from", "to")),
 		tool.WithDescribe(func(c tool.Call, env tool.Env) string {
 			return title("copy " + shown(env, argString(c, "from")) + " to " + shown(env, argString(c, "to")))
@@ -112,13 +112,51 @@ func Mkdir() tool.Tool {
 // it is outside the roots.
 func twoPaths(c tool.Call, env tool.Env) []string {
 	ws := workspace(env)
-	return append(outsideOf(ws, env, argString(c, "from")), outsideOf(ws, env, argString(c, "to"))...)
+	to := argString(c, "to")
+	if from := argString(c, "from"); from != "" && to != "" {
+		to = destination(env, resolve(env, from), resolve(env, to))
+	}
+	return append(outsideOf(ws, env, argString(c, "from")), outsideOf(ws, env, to)...)
+}
+
+// fromTo is the Subjecter answer of move and copy: from, and the path the
+// call writes, which destination gives.
+func fromTo(c tool.Call, env tool.Env) tool.Subject {
+	sj := pathSubject("from", "to")(c, env)
+	if from, to := argString(c, "from"), argString(c, "to"); from != "" && to != "" {
+		sj.Paths[len(sj.Paths)-1] = destination(env, resolve(env, from), resolve(env, to))
+	}
+	return sj
+}
+
+// destination is where a move or a copy of from puts it: to, or, for an mv
+// or a cp the shell tool handed over (0012-MADR D10), to/<base(from)> when
+// to is an existing directory, as the shell puts it (0037-MADR D1). A call
+// the model makes itself keeps to as the new path.
+func destination(env tool.Env, from, to string) string {
+	if env.Rerouted != nameBash {
+		return to
+	}
+	if info, err := workspace(env).Stat(to); err == nil && info.IsDir() {
+		return filepath.Join(to, filepath.Base(from))
+	}
+	return to
+}
+
+// shownTo is a move's or a copy's destination as the result names it: as
+// typed, or with from's name under it when destination put it there.
+func shownTo(env tool.Env, typed, from, to, dest string) string {
+	if dest == to {
+		return shown(env, typed)
+	}
+	return shown(env, filepath.Join(typed, filepath.Base(from)))
 }
 
 func runMove(_ context.Context, in moveIn, env tool.Env) (tool.Result, error) {
 	ws := workspace(env)
-	from, to := resolve(env, in.From), resolve(env, in.To)
-	name := shown(env, in.From) + " to " + shown(env, in.To)
+	from, typedTo := resolve(env, in.From), resolve(env, in.To)
+	to := destination(env, from, typedTo)
+	name := shown(env, in.From) + " to " + shownTo(env, in.To, from, typedTo, to)
 	unlock := fsx.LockPair(from, to)
 	defer unlock()
 	info, err := ws.Lstat(from)
@@ -128,7 +166,7 @@ func runMove(_ context.Context, in moveIn, env tool.Env) (tool.Result, error) {
 	if fsx.Inside(from, to) {
 		return tool.Result{}, fmt.Errorf("move %s: a directory cannot move into itself", name)
 	}
-	if err := makeRoom(ws, "move", env, in.To, to, in.Overwrite); err != nil {
+	if err := makeRoom(ws, "move", env, in.To, to, info, in.Overwrite); err != nil {
 		return tool.Result{}, err
 	}
 	err = ws.Rename(from, to)
@@ -179,8 +217,9 @@ func runDelete(_ context.Context, in deleteIn, env tool.Env) (tool.Result, error
 
 func runCopy(_ context.Context, in copyIn, env tool.Env) (tool.Result, error) {
 	ws := workspace(env)
-	from, to := resolve(env, in.From), resolve(env, in.To)
-	name := shown(env, in.From) + " to " + shown(env, in.To)
+	from, typedTo := resolve(env, in.From), resolve(env, in.To)
+	to := destination(env, from, typedTo)
+	name := shown(env, in.From) + " to " + shownTo(env, in.To, from, typedTo, to)
 	unlock := fsx.LockPair(from, to)
 	defer unlock()
 	info, err := ws.Lstat(from)
@@ -190,7 +229,7 @@ func runCopy(_ context.Context, in copyIn, env tool.Env) (tool.Result, error) {
 	if info.IsDir() && fsx.Inside(from, to) {
 		return tool.Result{}, fmt.Errorf("copy %s: a directory cannot be copied into itself", name)
 	}
-	if err := makeRoom(ws, "copy", env, in.To, to, in.Overwrite); err != nil {
+	if err := makeRoom(ws, "copy", env, in.To, to, info, in.Overwrite); err != nil {
 		return tool.Result{}, err
 	}
 	n, err := copyEntry(ws, from, to, info)
@@ -220,12 +259,16 @@ func runMkdir(_ context.Context, in mkdirIn, env tool.Env) (tool.Result, error) 
 	return opResult("created " + name), nil
 }
 
-// makeRoom checks the destination of a move or a copy: refused when it
-// exists and overwrite is not set, removed when it is, and its directory
-// required to exist.
-func makeRoom(ws fsx.Workspace, op string, env tool.Env, path, abs string, overwrite bool) error {
+// makeRoom checks the destination of a move or a copy of src: refused when
+// it exists and overwrite is not set, removed when it is, and its directory
+// required to exist. A directory is never removed to make room for a source
+// that is not one, overwrite or not (0037-MADR D1).
+func makeRoom(ws fsx.Workspace, op string, env tool.Env, path, abs string, src fs.FileInfo, overwrite bool) error {
 	name := shown(env, path)
-	if _, err := ws.Lstat(abs); err == nil {
+	if info, err := ws.Lstat(abs); err == nil {
+		if info.IsDir() && !src.IsDir() {
+			return fmt.Errorf("%s: %s is a directory; a file cannot replace it", op, name)
+		}
 		if !overwrite {
 			return fmt.Errorf("%s: %s already exists; set overwrite to replace it", op, name)
 		}

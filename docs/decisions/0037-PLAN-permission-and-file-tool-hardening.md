@@ -558,3 +558,63 @@ The owner's answers, from the MADR, 2026-10-30:
 
 * Q1 (a), "Write in place", in P5;
 * Q6 (a), "P17 to a branch", in P0.
+
+### P0 record (2026-10-30): the records, and P17 to its branch
+
+* **Start.** `main` at `61f7115`. The hooks are the global directory, and Go is `go1.27.3`. The tree held 0035's P17
+  whole (18 modified files, 10 staged deletions, `internal/cli/editor/parity_test.go`) and the four record files.
+  `make preflight` passed with P17 in the tree.
+* **The commits were run by the owner.** The permission check refused `git commit` from the agent.
+  1. The two new records were untracked, so a first `git commit -- <paths>` failed with "pathspec … did not match any
+     file(s) known to git". They were added with `git add`, and the pathspec commit made `2a8d70c` on `main`, the four
+     files alone.
+  2. `git switch -c feature/p17-lineedit`, then `git add -A -- internal/cli` (18 modified, 10 deleted, 1 added), then
+     `git commit --no-edit` made `8630b77`.
+  3. `git switch main`.
+* **Acceptance:**
+  * `main` is at `2a8d70c`, with an empty `git status --short`;
+  * `git log main..feature/p17-lineedit` is `8630b77` alone;
+  * `go test -count=1 ./internal/cli/...` passes on `main`'s editor.
+
+### P1 record (2026-10-30): `mv` and `cp` into a directory
+
+The base is P0's `2a8d70c`.
+
+1. **`tool.Env.Rerouted`** (`tool/tool.go`), `json:"-"`, is documented in `Env`'s comment. `agent`'s `runTool` sets it
+   from `rerouted` before `Outside`, `Subject` and `Run` (`agent/agent.go`).
+2. **`destination`, `fromTo` and `shownTo`** (`tool/builtin/fileops.go`).
+   * `destination(env, from, to)` gives `to/<base(from)>` when `env.Rerouted` is `bash` and `to` is an existing
+     directory (`Workspace.Stat`, following a link), and `to` otherwise.
+   * `move` and `copy` take `fromTo` as their subject in place of `pathSubject("from", "to")`. `twoPaths`, `runMove` and
+     `runCopy` use `destination` too.
+   * The result names the real destination, for example "moved f.txt to d/f.txt".
+   * Their `Locations` stay `argLocations("from", "to")`. `acpserver` computes them from the session's own environment
+     (`acpserver/prompt.go:104`), with no `Rerouted`, as a display hint at the call's start. The result line names the
+     path written.
+3. **`makeRoom`** takes the source's `fs.FileInfo`. It refuses "`<to>` is a directory; a file cannot replace it" for a
+   source that is not a directory and a destination that is one, whether or not `overwrite` is set. A directory still
+   replaces a directory under `overwrite`.
+4. **Tests.**
+   * `TestInterceptIntoDirectory`: `mv -f f.txt d`, `mv f.txt d`, `cp -f f.txt d` and `cp -r src d`.
+   * `TestMakeRoomKeepsDirectory`: move and copy, `overwrite` false and true.
+   * `TestReroutedEnv` (`agent`), end to end through bash:
+     * the rule's subjects are `f.txt` and `d/f.txt`;
+     * the file lands in `d`;
+     * the model's own `move` to `d` keeps `d` as its subject, and does not run.
+   * The existing `TestMove`, `TestCopy` and `TestShellReroute` pass unchanged.
+5. **Seen failing (C9),** each on its own scratch copy:
+   * `destination` always `to`: `TestInterceptIntoDirectory/mv_-f_f.txt_d` fails, `result (isError true): move: d is a
+     directory; a file cannot replace it`, want `moved f.txt to d/f.txt`;
+   * `makeRoom`'s guard removed: `TestMakeRoomKeepsDirectory` fails, `move: d already exists; set overwrite to replace
+     it`, want an error containing `move: d is a directory; a file cannot replace it`;
+   * `agent` not setting `Rerouted`: `TestReroutedEnv` fails, the rule's subjects naming `d`, not `d/f.txt`;
+   * both steps undone, F1 as found: `TestInterceptIntoDirectory/mv_-f_f.txt_d` fails, `result (isError false): moved
+     f.txt to d`. That is the result that removed `d`.
+6. **0012-MADR D10** has a dated note.
+7. **`apidiff`.** `make preflight`'s step reports "apidiff: no-op below v1.0.0". The module is below v1.0.0, so P1's and
+   P3's `apidiff` steps cannot find anything until it is not. This is recorded, not a deviation: no finding was made.
+8. **G-local:**
+   * `make pre-add-check` on the 5 Go files: clean;
+   * `make preflight`: passed;
+   * `make race`: 36 ok.
+9. **G-hosts:** on the Linux machine and the Windows laptop, `go test` passed, race passed with 36 ok, and `make check-records markdownlint` passed. `make preflight` stopped at `verify-build-metadata`, which needs a commit, as on every copy..

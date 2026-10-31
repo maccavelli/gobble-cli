@@ -793,6 +793,7 @@ func (t *turn) runTool(c llm.ToolCallDone) (tool.Result, bool) {
 	}
 	env := t.env
 	env.Deferred = t.deferredSpecs()
+	env.Rerouted = rerouted
 	var outside []string
 	if c, ok := tl.(tool.Confined); ok {
 		outside = c.Outside(call, env)

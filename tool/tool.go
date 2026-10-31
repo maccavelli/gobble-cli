@@ -141,7 +141,9 @@ type Call struct {
 // the client's, when it offers them; nil otherwise (0005-PLAN F1d-3).
 // Instructions gives the context files below Cwd that a read of path
 // brings in, those the session has not had yet; nil gives none (0005-PLAN
-// F3-1).
+// F3-1). Rerouted is the tool a call was rerouted from (Rerouter), such as
+// bash for an intercepted mv, set before the call's Subject and Run; ""
+// for a call the model made to the tool itself (0037-MADR D1).
 type Env struct {
 	Cwd          string                          `json:"cwd,omitzero"`
 	Roots        []string                        `json:"roots,omitzero"`
@@ -151,6 +153,7 @@ type Env struct {
 	Files        TextFiles                       `json:"-"`
 	Terminal     Terminal                        `json:"-"`
 	Instructions func(path string) []Instruction `json:"-"`
+	Rerouted     string                          `json:"-"`
 }
 
 // Instruction is a context file a read brings in: its path, and its text as

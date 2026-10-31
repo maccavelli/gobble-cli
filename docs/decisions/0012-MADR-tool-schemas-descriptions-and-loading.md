@@ -465,6 +465,10 @@ The owner's proposals stand where the evidence supports them:
   *(2026-10-19, 0005-PLAN F6-3 decision 9, built: as written here, a call with its own `workdir` excepted, since the
   native tools resolve paths against the working directory; a native tool the session does not offer leaves the call to
   bash. V27's `CallExpr` is at `syntax/nodes.go:362` in `v3.14.1`, the release F6-3 requires.)*
+  *(2026-10-30, 0037-MADR D1, built by 0037-PLAN-permission-and-file-tool-hardening.md P1: the flags did not map exactly
+  when the last operand was an existing directory. `mv -f f d` removed `d` and put the file in its place. An intercepted
+  `mv` or `cp` now puts its source inside an existing directory, as the shell does, through `tool.Env.Rerouted`, and
+  `move` and `copy` never remove a directory to make room for a file.)*
   - **When it applies.** A bash command is intercepted when all of these hold:
     - it parses to exactly one simple command (`CallExpr`): no pipe, list, redirect, substitution, subshell, or glob or variable left to expand;
     - its program is `rm`, `rmdir`, `mv`, `cp` or `mkdir`;

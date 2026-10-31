@@ -301,6 +301,49 @@ func TestShellReroute(t *testing.T) {
 	}
 }
 
+// A rerouted call's Env names the tool it came from, before its Subject and
+// its Run: an intercepted mv into an existing directory is asked about, and
+// run, as the path the shell would write. The model's own move keeps to as
+// the new path (0037-MADR D1).
+func TestReroutedEnv(t *testing.T) {
+	if _, err := exec.LookPath("bash"); err != nil {
+		t.Skip("no bash on PATH")
+	}
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "d"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("f"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s := llmtest.NewScript(llmtest.ToolCall("b1", "bash", args(t, map[string]string{"command": "mv -f f.txt d"})), llmtest.Text("ok"))
+	p := &policy{allow: true}
+	if _, _, err := collect(t.Context(), t, agent.New(agent.Config{Provider: s, Tools: builtin.Tools(), Policy: p}), tool.Env{Cwd: dir}, "mv"); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{filepath.Join(dir, "f.txt"), filepath.Join(dir, "d", "f.txt")}
+	if len(p.rules) != 1 || p.rules[0].Tool != "move" || !slices.Equal(p.rules[0].Subjects, want) {
+		t.Fatalf("rules %+v, want move's question about %q", p.rules, want)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "d", "f.txt")); err != nil {
+		t.Fatalf("the file is not inside d: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "g.txt"), []byte("g"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s = llmtest.NewScript(llmtest.ToolCall("m1", "move", args(t, map[string]string{"from": "g.txt", "to": "d"})), llmtest.Text("ok"))
+	p = &policy{allow: true}
+	if _, _, err := collect(t.Context(), t, agent.New(agent.Config{Provider: s, Tools: builtin.Tools(), Policy: p}), tool.Env{Cwd: dir}, "move"); err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{filepath.Join(dir, "g.txt"), filepath.Join(dir, "d")}; len(p.rules) != 1 || !slices.Equal(p.rules[0].Subjects, want) {
+		t.Fatalf("the model's own move: rules %+v, want %q", p.rules, want)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "g.txt")); err != nil {
+		t.Fatalf("the model's own move onto a directory ran: %v", err)
+	}
+}
+
 // A refusal made without asking is the whole result the model reads.
 func TestPolicyRefusal(t *testing.T) {
 	dir := t.TempDir()
