@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	acp "github.com/maccavelli/acp-go-sdk2"
+
+	"github.com/maccavelli/gobble-cli/jsonx"
 )
 
 // A tool call with no input sends no rawInput key, and one with input
@@ -14,7 +16,7 @@ import (
 // (0014-PLAN P1 deviation 2).
 func TestRawInputOnTheWire(t *testing.T) {
 	for in, want := range map[string]string{"": "", `{"a":1}`: `"rawInput":{"a":1}`} {
-		b, err := stdjson.Marshal(acp.StartToolCall("c1", "t", acp.WithStartRawInput(jsonRaw([]byte(in)))))
+		b, err := stdjson.Marshal(acp.StartToolCall("c1", "t", acp.WithStartRawInput(jsonx.Splice([]byte(in)))))
 		if err != nil {
 			t.Fatal(err)
 		}

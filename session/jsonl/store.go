@@ -3,7 +3,6 @@ package jsonl
 import (
 	"bytes"
 	"context"
-	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"iter"
@@ -14,6 +13,7 @@ import (
 	"sync"
 
 	"github.com/maccavelli/gobble-cli/internal/filelock"
+	"github.com/maccavelli/gobble-cli/jsonx"
 	"github.com/maccavelli/gobble-cli/session"
 )
 
@@ -198,7 +198,7 @@ func parse(b []byte) (session.Header, []session.Entry, int, error) {
 	if i == len(lines) {
 		return h, nil, 0, errors.New("empty file")
 	}
-	if err := json.Unmarshal(lines[i], &h); err != nil || h.Type != session.TypeHeader || h.ID == "" {
+	if err := jsonx.Unmarshal(lines[i], &h); err != nil || h.Type != session.TypeHeader || h.ID == "" {
 		return h, nil, 0, errors.New("the first line is not a session header")
 	}
 	v := max(h.Version, 1)
@@ -212,7 +212,7 @@ func parse(b []byte) (session.Header, []session.Entry, int, error) {
 			continue
 		}
 		var e session.Entry
-		if err := json.Unmarshal(line, &e); err != nil || e.Type == "" || e.Type == session.TypeHeader {
+		if err := jsonx.Unmarshal(line, &e); err != nil || e.Type == "" || e.Type == session.TypeHeader {
 			skipped++
 			continue
 		}
@@ -313,7 +313,7 @@ func (l *fileLog) Append(_ context.Context, e session.Entry) error {
 		}
 		return l.create()
 	}
-	line, err := json.Marshal(e)
+	line, err := jsonx.Marshal(e)
 	if err != nil {
 		return fmt.Errorf("session: encode entry: %w", err)
 	}
@@ -339,7 +339,7 @@ func (l *fileLog) create() error {
 	}
 	var buf bytes.Buffer
 	for _, v := range append([]any{l.header}, entriesAny(l.entries)...) {
-		b, err := json.Marshal(v)
+		b, err := jsonx.Marshal(v)
 		if err != nil {
 			return errors.Join(fmt.Errorf("session: encode: %w", err), release())
 		}

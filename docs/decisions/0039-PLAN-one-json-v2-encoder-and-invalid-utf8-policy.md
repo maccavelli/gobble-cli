@@ -163,6 +163,16 @@ Files: this plan; the MADR; `docs/README.md`; by PQ1, 0035's MADR and PLAN, and 
 
 ### P1 — the crash and break fix (MADR D1 to D3's core, D5 to D10, D20)
 
+*Amended 2026-10-31, by deviation 1:*
+* *`acpserver/personality.go` is added to the files;*
+* *step 3 covers all eight callers of `acpserver`'s `mustJSON`;*
+* *`jsonx.Fields` builds the four-string `reasoning` value, so `reasoningData` and `signatureData` keep their
+  signatures and the stream loop does not change.*
+
+*Amended 2026-10-31, by deviation 2:*
+* *`compaction/project_test.go` is added to the files;*
+* *`acpserver/convert_test.go`'s one `jsonRaw` call becomes `jsonx.Splice`.*
+
 Files:
 * new: `jsonx/doc.go`, `jsonx/jsonx.go`, `jsonx/jsonx_test.go`, `jsonx/fuzz_test.go`;
 * `session/session.go`, `session/session_test.go`, `session/jsonl/store.go`, `session/jsonl/store_test.go`;
@@ -224,6 +234,9 @@ Files:
    * `acpserver/history.go:106`'s error is `assistantEntryMessage`'s return (step 3);
    * `compaction/serialize.go:72-75`, `Convert`'s custom case, keeps `Content: m.Content` and drops the `Blocks` and
      `SetBlocks` re-encode. Its three callers read the result through `Blocks` (MADR D7).
+
+     *Amended 2026-10-31, by deviation 3:* the re-encode is Pi's `convertToLlm`, which makes a string content one text
+     block. So a stored content that is a JSON string is written with `SetText`, and an array is kept as stored.
 5. **Extension results and params** (D8, D10): `acpserver/extensions.go:73` encodes with `jsonx.Marshal`, and `:129`
    decodes with `jsonx.Unmarshal`.
 6. **The splice** (D9): `acpserver/prompt.go`'s `rawInput` (`:199-204`) and `jsonRaw` (`:277-282`) are deleted. Their
@@ -250,7 +263,7 @@ Files:
     | `TestLoneSurrogateLineLoads` | `session/jsonl/store_test.go` | the entry loads with U+FFFD, and is not counted as malformed | skipped, one malformed line |
     | `TestFrom`, `TestValue`, `TestSplice`, `TestIsNull` | `jsonx/jsonx_test.go` | #9's U1 table: nil and empty are absent; `null` is present and null; `{}` writes `{}`; `{` is stored and its parent's marshal fails; `Value` is never empty non-nil; `Splice` over the MADR's five rows | `TestSplice` with `Splice` the identity, on the cut-off row |
     | `TestSetTextInvalidUTF8`, `TestSetTextMatchesSetBlocks` | `session/session_test.go` | one text block with U+FFFD; equal to `SetBlocks` for valid text | with `SetText` delegating to `SetBlocks` and dropping its error: empty content |
-    | `TestRawInputOnTheWire` | `acpserver/convert_test.go` | unchanged; passes with `jsonRaw` gone | not new |
+    | `TestRawInputOnTheWire` | `acpserver/convert_test.go` | its cases and assertions unchanged; its one `jsonRaw` call is `jsonx.Splice` (deviation 2) | not new |
 
 11. **Assert by search**, exit status taken before any filter:
     * no `func mustJSON` and no `func quote(` in the module;
@@ -538,7 +551,7 @@ Each Confirmation item of the MADR, with the phase and the test that meets it:
 | 13 a lone-surrogate session line loads | P1 | `TestLoneSurrogateLineLoads` |
 | 14 no change elsewhere | each phase, P7 in full | the goldens; `make perf` |
 | 15 `jsonx`'s own tests | P1, P4 | `TestFrom`, `TestValue`, `TestSplice`, `TestIsNull`, `TestSetTextInvalidUTF8`, `TestSetTextMatchesSetBlocks` |
-| 16 empty `rawInput` left out | P1 | `TestRawInputOnTheWire`, unchanged |
+| 16 empty `rawInput` left out | P1 | `TestRawInputOnTheWire`, its cases and assertions unchanged |
 | 17 `Convert` and the tags change nothing | P1, P8 | the existing replay, serialization, compaction, `_gobble/*` and personality tests |
 | 18 notifications decoded with v2 | P4 | `TestNotificationDecodedWithV2` |
 | 19 the wire unchanged | P4 | `TestNotifyFramesUnchanged`; `session.golden` |
@@ -567,5 +580,201 @@ Every phase also passes G-local and G-hosts (C6, C7), and keeps `make check-reco
 
 ## Execution record
 
-No phase has run. Each phase appends its record here: what it did, the gates' output, and each seen-failing run quoted,
-with a dated entry for every deviation.
+Each phase appends its record here: what it did, the gates' output, and each seen-failing run quoted, with a dated
+entry for every deviation.
+
+### P0 record (2026-10-31): the records
+
+* `9b3bffe`: 0035's records, its deviation 13 and P23, by PQ1 (a). `check_records.py --check-all` and markdownlint passed
+  on an export of exactly the staged tree, since `docs/README.md`'s 0038 and 0039 rows were held out of the commit.
+* `153ef60`: this pair and 0038-REPORT. `make check-records markdownlint` passed with nothing unstaged.
+* The hooks directory is the global one. The identifier scans of both staged diffs found none.
+
+### Deviation 1 (2026-10-31): P1, the eight callers of `acpserver`'s `mustJSON`
+
+* **Found,** at P1's start (`153ef60`), by listing the callers of every function P1 changes. Step 3 deletes
+  `acpserver/history.go:46-52` `mustJSON`, but planned for two of its eight callers, `history.go:39` and `:66`. The other
+  six are:
+  * `acpserver/sysprompt.go:326` `contextEntry`, which encodes context files' paths, so a path that is not UTF-8
+    panics today; it reaches the writer at `acpserver/agent.go:894`;
+  * `acpserver/agent.go:822` `toolsEntry`, reaching the writer at `:672` and `:897`;
+  * `acpserver/history.go:414` `todoEntry`, reaching the writer at `agent.go:891`;
+  * `acpserver/personality.go:38` `personalityEntry`, a file outside P1's list, appended at `:176`, whose error is
+    returned;
+  * `acpserver/history.go:272` and `:287`, in `assistantContent`, which encode a `reasoning` value of four strings on
+    replay. `replayPath` returns a `state`, with no error path (`acpserver/agent.go:505`, `acpserver/history.go:182`).
+
+  `llm/provider/provider.go:363-376`'s `reasoningData` and `signatureData` encode the same four-string shape, and P1
+  had them return errors into the stream loop.
+* **The owner's answer:** "Extend P1, add jsonx.Fields (Recommended)". The options not taken were:
+  * propagating errors everywhere, through `assistantContent`, `replayPath`'s `state` and its two callers, and the
+    stream loop;
+  * narrowing P1, with `mustJSON` kept on `jsonx.Marshal` until P7.
+* **Decision.**
+  * P1 covers all eight callers.
+    * `contextEntry`, `toolsEntry`, `todoEntry` and `personalityEntry` return `(session.Entry, error)` through
+      `jsonx.Value`.
+    * Their callers pass the error to `w.fail`, or return it as `append`'s error is returned.
+  * `jsonx` gains `type Field struct{ Name, Value string }` and `Fields(fs ...Field) jsontext.Value`. It writes an
+    object of the fields whose `Value` is not empty, in the order given, each name and value through `Quote`, and `{}`
+    when none is. That is what `json.Marshal` writes for a struct of `omitzero` string fields in that order, under the
+    data policy. It cannot fail.
+    * `FuzzFields` holds the equality against `jsonx.Marshal` of such a struct. It is seen failing with the fields
+      sorted.
+    * `reasoningData`, `signatureData` and `assistantContent`'s two values use it. They keep their signatures, and the
+      stream loop and replay do not change.
+  * MADR D1 and D6 have dated amendments.
+* **Files added to P1:** `acpserver/personality.go`; `llm/provider/provider_test.go` no longer needs to change.
+
+### Deviation 2 (2026-10-31): P1, two tests that call what P1 changes
+
+* **Found** while P1 changed `prompt.BaselineData` and `PatchData` to return an error. Every test calling a function
+  whose signature P1 changes, or which it deletes, was listed. There are two:
+  * `compaction/project_test.go:188`, `:190` and `:191` call `BaselineData` and `PatchData`. The file is outside P1's
+    list;
+  * `acpserver/convert_test.go:17` calls `jsonRaw`, which P1 deletes. The PLAN's P1 table and verification row, and
+    the MADR's Confirmation 16, said the test passes "unchanged", which cannot hold.
+* **The owner's answer:** "Add the test file, change one call (Recommended)". The option not taken was to keep `jsonRaw`
+  as an alias of `jsonx.Splice` so that the test stayed literally unchanged.
+* **Decision.**
+  * `compaction/project_test.go` joins P1. It takes the two functions' errors, with `t.Fatal`, and its assertions do
+    not change.
+  * `acpserver/convert_test.go:17`'s call becomes `jsonx.Splice`. Its cases and assertions do not change.
+  * The MADR's Confirmation 16, P1's table row and the verification row say so.
+* **Files added to P1:** `compaction/project_test.go`.
+
+### Deviation 3 (2026-10-31): P1, `Convert`'s re-encode is Pi parity
+
+* **Found** when `compaction`'s tests ran after step 4. `TestProjectMatchesPi` (`compaction/project_test.go:71-105`)
+  failed on the v2, v2-branched, v3 and v3-branched fixtures. Measured on a scratch copy, a custom message's content
+  came out as stored, `"A message from a hook."`, where Pi's `convertToLlm` writes `[{"type":"text","text":"A message
+  from a hook."}]`.
+  * The re-encode step 4 removed made a string content one text block.
+  * The MADR's D7 said "no reader sees a change", which was wrong: the Pi fixtures compare the converted messages.
+  * The fault was in the plan, not in the code.
+* **The owner's answer:** "String to SetText, array kept (Recommended)". The options not taken were:
+  * restoring the re-encode with a fallback to the stored content on error;
+  * `Convert` returning an error through its three callers.
+* **Decision.**
+  * In `Convert`'s custom case, a stored content that `jsonx.Unmarshal` reads as a JSON string is written with
+    `SetText`, which cannot fail and writes what `SetBlocks` writes for one text block. An array is kept as stored.
+  * Every caller reads it through `Blocks`, and Pi's fixtures compare it decoded, so neither sees a difference from
+    the re-encoded array.
+  * Measured on a scratch copy before the change: `compaction`'s tests pass, `TestProjectMatchesPi` included.
+  * The MADR's D7 bullet has a dated correction.
+* **Files added:** none.
+
+### Deviation 4 (2026-10-31): P1 step 11's asserts and three test sites
+
+* **Found** when step 11's asserts ran. In non-test code they are clean:
+  * no `func mustJSON` and no `func quote(` that panics;
+  * no `_ = …SetBlocks(`;
+  * no "always encode" but `internal/config/render.go:92`, which is YAML;
+  * no `jsonRaw(` and no `rawInput(`.
+
+  Step 11 said "in a Go file", and three test sites match:
+  * `acpserver/tree_test.go:207-215` and `acpclient/conn_test.go:403-411`, two `jsonString` helpers that panic on an
+    encode error of a test-chosen string ("a string always encodes");
+  * `acpserver/autocompact_test.go:199`, which P7 changes to `reflect.DeepEqual`.
+
+  `tool/builtin/subject_test.go:70`'s `quote(t, p)` matches by name only: it reports with `t.Fatal`.
+* **The owner's answer:** "Fix the two helpers in P1 (Recommended)". The option not taken was to scope the assert to
+  non-test code.
+* **Decision.**
+  * The two `jsonString` helpers return `string(jsonx.Quote(s))`, which cannot fail, so no test panics on an encode
+    error.
+  * The assert then holds for every Go file but `internal/config/render.go` and `acpserver/autocompact_test.go`,
+    P7's site. `subject_test.go`'s `quote` stays.
+* **Files added to P1:** `acpserver/tree_test.go`, `acpclient/conn_test.go`.
+
+### P1 record (2026-10-31): the crash and break fix
+
+The base is P0's `153ef60`. Deviations 1 to 4, above, changed the step's scope; this record states what was built.
+
+1. **`jsonx`** (`jsonx/doc.go`, `jsonx/jsonx.go`): `Options`, `StrictOptions`, `Marshal`, `Unmarshal`, `MarshalStrict`,
+   `UnmarshalStrict`, `Value`, `Quote`, `Field` and `Fields` (deviation 1), `From`, `Splice`, `IsAbsent`, `IsNull`. It
+   imports `bytes`, `encoding/json/v2` and `encoding/json/jsontext` only. `Quote` is `jsontext.AppendQuote`, its error a
+   replacement report, which the doc comment and a `nolint` comment state.
+2. **`session`:** `SetText`, new and infallible; `SetBlocks` and `Blocks` on `jsonx`. `session/jsonl/store.go`'s two
+   decodes and two encodes are on `jsonx` (step 7), and its v2 import goes.
+3. **No encode panics:**
+   * `tool/tool.go`'s and `mcpclient/tool.go`'s `quote` are gone; their three callers call `jsonx.Quote`.
+   * `prompt/sections.go`'s `mustJSON` is gone. `BaselineData` and `PatchData` return `(jsontext.Value, error)`, and
+     `ParseData` decodes through `jsonx`.
+   * `acpserver/history.go`'s `mustJSON` is gone, and with it all eight of its uses (deviation 1):
+     * `extra` returns its error;
+     * `assistantEntryMessage` returns `(*session.Message, error)`;
+     * `contextEntry`, `toolsEntry`, `todoEntry` and `personalityEntry` return `(session.Entry, error)`;
+     * replay's two `reasoning` values use `reasoningValue`, on `jsonx.Fields`.
+   * `userEntryMessage` writes its one string with `jsonx.Quote`, which cannot fail, so it keeps its signature. Step 3
+     had it return an error; deviation 1's principle, an infallible helper where the value is strings only, applies.
+   * `llm/provider`'s `reasoningData` is on `jsonx.Fields`. It and `signatureData` keep their signatures, and the
+     stream loop does not change (deviation 1).
+4. **No discarded `SetBlocks` error:**
+   * `toolResultMessage`, `compaction/serialize.go`'s text and `compaction/estimate.go`'s two sites use `SetText`;
+   * `Convert`'s custom case writes a string content with `SetText`, and keeps an array as stored (deviation 3).
+5. **The writer:** `(*writer).fail` and `addEntry` (`acpserver/agent.go`). Each builder's error reaches `w.err`, which
+   ends the prompt with `appendFailed`, as an append's does. `personalityEntry`'s error is returned with `append`'s.
+6. **Extensions:** results by `jsonx.Marshal`, params by `jsonx.Unmarshal` (`acpserver/extensions.go`).
+7. **The splice:** `rawInput` and `jsonRaw` are gone. `acpserver/prompt.go`, `question.go` and `history.go` call
+   `jsonx.Splice`, and `prompt.go`'s `stdjson` and `jsontext` imports go with them.
+8. **Empty raw values:** `agent/agent.go`'s two `tool.Call`s use `jsonx.From([]byte(c.Args))`.
+9. **0004-MADR:** a dated amendment, "`jsonx`, gobble's one JSON package".
+10. **Tests.** The PLAN's names, with two changes:
+    * `TestBadBlockReachesWriter` became `TestWriterKeepsBuildError` (`acpserver/history_test.go`) and
+      `TestSetBlocksBadJSON` (`session/session_test.go`). `assistantEntryMessage`'s error cannot be reached with a real
+      model's input: its arguments are decoded before they are kept, and `extra`'s inputs are strings or decoded JSON.
+      So each half of the path is pinned on its own;
+    * `TestPolicies`, of the two policies, is added to `jsonx/jsonx_test.go`.
+
+    **Seen failing at the base** (C9), each test alone in an export of `153ef60`:
+
+    | Test | Exit | The failure |
+    | :--- | :--- | :--- |
+    | `TestToolResultMessageInvalidUTF8` | 1 | `saved "null": blocks [], <nil>`: content empty; `"null"` is #9's F3, `String()` of an absent value |
+    | `TestTurnReadsInvalidUTF8File` | 1 | `panic: jsontext: invalid UTF-8 [recovered, repanicked]` |
+    | `TestCutOffToolCallArguments` | 1 | `{"code":-32602,"message":"Invalid params","data":{"error":"json: error calling MarshalJSON for type *acp.SessionUpdate: …` |
+    | `TestInvalidUTF8ContextFile` | 1 | `panic: jsontext: invalid UTF-8 within "/baseline/3/text" after offset 685 [recovered, repanicked]` |
+    | `TestExtensionParamsLoneSurrogate` | 1 | `error -32602 "jsontext: invalid surrogate pair …"; want -32602, unknown session` |
+    | `TestReadInvalidUTF8`, `TestBashInvalidUTF8Output`, `TestGrepInvalidUTF8File` | 1 each | `panic: jsontext: invalid UTF-8 [recovered, repanicked]` |
+    | `TestLoneSurrogateLineLoads` | 1 | `read: 1 entries, 1 skipped, <nil>; want 2 and 0` |
+
+    **Seen failing on a planted break** (C9), each on a scratch copy of the finished tree:
+
+    | Test | Break | The failure |
+    | :--- | :--- | :--- |
+    | `TestSplice` | `Splice` the identity | `cut off: Splice("{\"path\":\"a.tx") = "{\"path\":\"a.tx", want …` |
+    | `FuzzQuote` | `Quote` as `json.Marshal(s)`, its error ignored | `Quote("caf\xe9") = , Marshal = "caf…"`, on three seeds |
+    | `FuzzFields` | the fields sorted by name | `Fields = {"format":…,"signature":…,"text":…}, Marshal = {"text":…,"signature":…,"format":…}` |
+    | `TestFrom` | `From` without its empty case | `From([]byte{}) = "", want nil` |
+    | `TestPolicies` | `Options` without `AllowInvalidUTF8` | `Marshal of invalid UTF-8: jsontext: invalid UTF-8 within "/s"` |
+    | `TestIsNull` | no space trimmed | `IsNull(" null\n") = false, want true` |
+    | `TestValue` | `Value` on `MarshalStrict` | `Value = "null", jsontext: invalid UTF-8 within "/s"` |
+    | `TestSetTextInvalidUTF8` | `SetText` on a strict marshal, its error ignored | `session: message content: jsontext: invalid character ']' …` |
+    | `TestSetTextMatchesSetBlocks` | `SetText`'s fields reversed | `SetText("plain") = [{"text":"plain","type":"text"}], SetBlocks = [{"type":"text","text":"plain"}]` |
+    | `TestSetBlocksBadJSON` | `SetBlocks` ignoring its marshal error | `SetBlocks of bad arguments = "[{…\"arguments\"", want an error` |
+    | `TestWriterKeepsBuildError` | `addEntry` adding despite the error | a nil `liveSession` dereference at `history_test.go:78` |
+
+    The first planted break for `TestSetTextInvalidUTF8` did not compile, since it left `bytes` unused. It proves
+    nothing, and was planted again as above.
+    `FuzzQuote` and `FuzzFields` also ran 20 s each against the finished code: 1,124,870 and 143,780 executions, no
+    failure.
+11. **Assert by search** (step 11, with deviation 4):
+    * no `func mustJSON`, and no `func quote(` that panics. `tool/builtin/subject_test.go:70`'s `quote(t, p)` reports with
+      `t.Fatal`;
+    * 0 `_ = …SetBlocks(`;
+    * "always encode" only in `internal/config/render.go`, which is YAML, and `acpserver/autocompact_test.go`, P7's;
+    * 0 `jsonRaw(` or `rawInput(`.
+12. **Goldens:** none changed (`git status --short -- '*.golden'`: empty).
+13. **G-local:**
+    * `make pre-add-check` on the 34 changed and new Go files: clean;
+    * `make preflight`: passed. Its first run stopped at golangci-lint's `unconvert`, at `jsonx/fuzz_test.go:55`, an
+      unneeded `jsontext.Value(got)`. That was a fix to the step's own code, not a deviation;
+    * `make race`: 37 ok, `jsonx` the new package;
+    * no `make perf`, since P1 touches no `internal/cli` file.
+14. **G-hosts,** on the Linux machine and the Windows laptop, with 813 files shipped to each:
+    * `go test`: passed;
+    * race: passed, 37 ok;
+    * `make check-records markdownlint`: passed;
+    * preflight stops at `verify-build-metadata`, as on every copy. A first host run, before step 13's lint fix,
+      stopped at the same `unconvert` finding.

@@ -7,6 +7,7 @@ import (
 
 	acp "github.com/maccavelli/acp-go-sdk2"
 
+	"github.com/maccavelli/gobble-cli/jsonx"
 	"github.com/maccavelli/gobble-cli/permission"
 )
 
@@ -148,7 +149,7 @@ func (p *acpPolicy) ask(ctx context.Context, r permission.Rule, q question) (ans
 	resp, err := p.conn.RequestPermission(ctx, acp.RequestPermissionRequest{
 		Meta:      q.meta(),
 		SessionId: p.session,
-		ToolCall:  acp.ToolCallUpdate{ToolCallId: acp.ToolCallId(r.CallID), Title: new(ruleTitle(r)), RawInput: jsonRaw(r.Input)},
+		ToolCall:  acp.ToolCallUpdate{ToolCallId: acp.ToolCallId(r.CallID), Title: new(ruleTitle(r)), RawInput: jsonx.Splice(r.Input)},
 		Options:   q.options(),
 	})
 	if err != nil {

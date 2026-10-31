@@ -282,3 +282,35 @@ func TestCloseUnwritten(t *testing.T) {
 		t.Fatalf("id not freed: %v", err)
 	}
 }
+
+// A line holding a lone surrogate escape, as JavaScript's JSON.stringify
+// writes one, loads with U+FFFD, and is not counted malformed (0039-MADR D2;
+// Confirmation 13). The backslash is made in code (0039-PLAN C4).
+func TestLoneSurrogateLineLoads(t *testing.T) {
+	dir := t.TempDir()
+	s := New(dir, Options{})
+	l := create(t, s, "s1", "/w")
+	path := l.(*fileLog).path
+	if err := l.Close(); err != nil {
+		t.Fatal(err)
+	}
+	line := strings.ReplaceAll(`{"type":"message","id":"cccc0001","parentId":"bbbb0001","timestamp":"x","message":{"role":"user","content":"cut ~ud83d"}}`, "~", string(rune(92)))
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteString(line + "\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	_, entries, skipped, err := s.Read(t.Context(), "s1")
+	if err != nil || skipped != 0 || len(entries) != 2 {
+		t.Fatalf("read: %d entries, %d skipped, %v; want 2 and 0", len(entries), skipped, err)
+	}
+	bs, err := entries[1].Message.Blocks()
+	if err != nil || len(bs) != 1 || bs[0].Text != "cut \uFFFD" {
+		t.Fatalf("the loaded line's text %+v, %v", bs, err)
+	}
+}

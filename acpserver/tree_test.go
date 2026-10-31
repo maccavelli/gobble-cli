@@ -12,6 +12,7 @@ import (
 	acp "github.com/maccavelli/acp-go-sdk2"
 
 	"github.com/maccavelli/gobble-cli/acpclient/acptest"
+	"github.com/maccavelli/gobble-cli/jsonx"
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/llm/llmtest"
 	"github.com/maccavelli/gobble-cli/session"
@@ -207,10 +208,4 @@ func TestPromptFollowsTheLeaf(t *testing.T) {
 }
 
 // jsonString is s as a JSON string literal, for a path inside raw JSON.
-func jsonString(s string) string {
-	b, err := json.Marshal(s)
-	if err != nil { // a string always encodes
-		panic(err)
-	}
-	return string(b)
-}
+func jsonString(s string) string { return string(jsonx.Quote(s)) }

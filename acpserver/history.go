@@ -10,6 +10,7 @@ import (
 
 	"github.com/maccavelli/gobble-cli/agent"
 	"github.com/maccavelli/gobble-cli/compaction"
+	"github.com/maccavelli/gobble-cli/jsonx"
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/llm/catalog"
 	"github.com/maccavelli/gobble-cli/session"
@@ -29,26 +30,27 @@ type reasoning struct {
 	Format    string `json:"format,omitzero"`
 }
 
+// reasoningValue is r's JSON: jsonx.Fields writes what Marshal writes for
+// reasoning's omitzero strings, and cannot fail (0039-PLAN deviation 1).
+func reasoningValue(r reasoning) jsontext.Value {
+	return jsonx.Fields(jsonx.Field{Name: "text", Value: r.Text}, jsonx.Field{Name: "signature", Value: r.Signature},
+		jsonx.Field{Name: "encrypted", Value: r.Encrypted}, jsonx.Field{Name: "format", Value: r.Format})
+}
+
 // gobbleMember is a block's extra member holding gobble's own data, which Pi
 // ignores.
 type gobbleMember struct {
 	Gobble jsontext.Value `json:"gobble,omitzero"`
 }
 
-func extra(v any) jsontext.Value {
-	b, err := json.Marshal(gobbleMember{Gobble: mustJSON(v)})
+// extra is v under a block's gobble member. It fails only when v holds a
+// jsontext.Value that is not JSON (0039-MADR D7).
+func extra(v any) (jsontext.Value, error) {
+	g, err := jsonx.Value(v)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
-	return b
-}
-
-func mustJSON(v any) jsontext.Value {
-	b, err := json.Marshal(v)
-	if err != nil { // values of plain fields always encode
-		panic(err)
-	}
-	return b
+	return jsonx.Value(gobbleMember{Gobble: g})
 }
 
 func ms(ts string) int64 {
@@ -63,12 +65,12 @@ func userEntryMessage(m llm.Message, ts string) *session.Message {
 			texts = append(texts, c.Text)
 		}
 	}
-	return &session.Message{Role: session.RoleUser, Content: mustJSON(strings.Join(texts, "\n\n")), Timestamp: ms(ts)}
+	return &session.Message{Role: session.RoleUser, Content: jsonx.Quote(strings.Join(texts, "\n\n")), Timestamp: ms(ts)}
 }
 
 // assistantEntryMessage is an assistant message in Pi's shape, its usage
 // priced as info's (0005-PLAN F4-2a).
-func assistantEntryMessage(ev agent.Message, provider, model string, info llm.Model, ts string) *session.Message {
+func assistantEntryMessage(ev agent.Message, provider, model string, info llm.Model, ts string) (*session.Message, error) {
 	var blocks []session.Block
 	for _, c := range ev.Message.Content {
 		switch c.Type {
@@ -80,7 +82,11 @@ func assistantEntryMessage(ev agent.Message, provider, model string, info llm.Mo
 				if r.Encrypted != "" && r.Signature == "" {
 					b.ThinkingSignature, b.Redacted = r.Encrypted, r.Text == ""
 				}
-				b.Unknown = extra(c.ProviderData)
+				u, err := extra(c.ProviderData)
+				if err != nil {
+					return nil, err
+				}
+				b.Unknown = u
 			}
 			blocks = append(blocks, b)
 		case llm.ContentText:
@@ -92,7 +98,11 @@ func assistantEntryMessage(ev agent.Message, provider, model string, info llm.Mo
 				b.Arguments = jsontext.Value(c.ToolArgs)
 			} else {
 				b.Arguments = jsontext.Value("{}")
-				b.Unknown = extra(map[string]string{"rawArguments": c.ToolArgs})
+				u, err := extra(map[string]string{"rawArguments": c.ToolArgs})
+				if err != nil {
+					return nil, err
+				}
+				b.Unknown = u
 			}
 			var r reasoning
 			if len(c.ProviderData) > 0 && json.Unmarshal(c.ProviderData, &r) == nil {
@@ -103,8 +113,10 @@ func assistantEntryMessage(ev agent.Message, provider, model string, info llm.Mo
 	}
 	m := &session.Message{Role: session.RoleAssistant, API: sdkAPI, Provider: provider, Model: model,
 		Usage: pricedUsage(ev.Usage, info), StopReason: piStop(ev.StopReason), Timestamp: ms(ts)}
-	_ = m.SetBlocks(blocks) //nolint:errcheck // blocks of plain fields always encode
-	return m
+	if err := m.SetBlocks(blocks); err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 // pricedUsage is piUsage with its cost by Pi's rule at m's price; zero when
@@ -119,7 +131,7 @@ func pricedUsage(u llm.Usage, m llm.Model) *session.Usage {
 // toolResultMessage is one tool call's result in Pi's shape.
 func toolResultMessage(id, name, text string, isError bool, ts string) *session.Message {
 	m := &session.Message{Role: session.RoleToolResult, ToolCallID: id, ToolName: name, IsError: new(isError), Timestamp: ms(ts)}
-	_ = m.SetBlocks([]session.Block{{Type: session.BlockText, Text: text}}) //nolint:errcheck // as above
+	m.SetText(text)
 	return m
 }
 
@@ -269,7 +281,7 @@ func assistantContent(blocks []session.Block) []llm.Content {
 				if b.Redacted {
 					r = reasoning{Encrypted: b.ThinkingSignature}
 				}
-				data = mustJSON(r)
+				data = reasoningValue(r)
 			}
 			out = append(out, llm.Content{Type: llm.ContentThinking, Text: b.Thinking, ProviderData: data})
 		case session.BlockText:
@@ -284,7 +296,7 @@ func assistantContent(blocks []session.Block) []llm.Content {
 			}
 			c := llm.Content{Type: llm.ContentToolCall, ToolCallID: b.ID, ToolName: b.Name, ToolArgs: args}
 			if b.ThoughtSignature != "" {
-				c.ProviderData = mustJSON(reasoning{Signature: b.ThoughtSignature})
+				c.ProviderData = reasoningValue(reasoning{Signature: b.ThoughtSignature})
 			}
 			out = append(out, c)
 		}
@@ -399,7 +411,7 @@ func replayToolCall(b session.Block, result *session.Message, tools map[string]t
 		}
 	}
 	return acp.StartToolCall(acp.ToolCallId(b.ID), cutTitle(title), acp.WithStartKind(kind), acp.WithStartStatus(status),
-		acp.WithStartRawInput(jsonRaw(b.Arguments)),
+		acp.WithStartRawInput(jsonx.Splice(b.Arguments)),
 		acp.WithStartContent([]acp.ToolCallContent{acp.ToolContent(acp.TextBlock(cutBytes(firstLine(text), maxSummary)))}))
 }
 
@@ -410,8 +422,9 @@ type todoData struct {
 
 // todoEntry records a call's plan, which is not nil (tool.Result.Plan). An
 // empty plan is written as [], so the entry says the list was cleared.
-func todoEntry(plan []tool.PlanItem) session.Entry {
-	return session.Entry{Type: session.TypeCustom, CustomType: session.CustomTodo, Data: mustJSON(todoData{Todos: plan})}
+func todoEntry(plan []tool.PlanItem) (session.Entry, error) {
+	data, err := jsonx.Value(todoData{Todos: plan})
+	return session.Entry{Type: session.TypeCustom, CustomType: session.CustomTodo, Data: data}, err
 }
 
 // todosOf is the list a gobble.todo entry holds, and whether it holds one.

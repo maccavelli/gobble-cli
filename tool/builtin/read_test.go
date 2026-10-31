@@ -186,3 +186,16 @@ func bmp() []byte {
 	b[26], b[28] = 1, 24
 	return b
 }
+
+// read of a file that is not valid UTF-8 returns its text with U+FFFD for
+// each invalid byte, where it panicked (0039-MADR defect 1; Confirmation 2).
+func TestReadInvalidUTF8(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "latin1.txt"), []byte("caf\xe9 au lait\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r := call(t, Read(), tool.Env{Cwd: dir}, map[string]any{"path": "latin1.txt"})
+	if r.IsError || !strings.Contains(r.Text(), "caf\uFFFD au lait") {
+		t.Fatalf("read = %+v, text %q; want U+FFFD for the invalid byte", r, r.Text())
+	}
+}

@@ -221,3 +221,14 @@ func TestDefaultMaxTimeout(t *testing.T) {
 		t.Fatalf("defaultMaxTimeout %v; internal/config's tools.bash.maxTimeoutMs says 10m", defaultMaxTimeout)
 	}
 }
+
+// A command whose output is not valid UTF-8 gives a result with U+FFFD for
+// each invalid byte, where it panicked (0039-MADR defect 1; Confirmation 2).
+func TestBashInvalidUTF8Output(t *testing.T) {
+	needBash(t)
+	o, env := testOptions(t), tool.Env{Cwd: t.TempDir()}
+	r := runBash(t, o, env, map[string]any{"command": `printf 'a\377b\n'`})
+	if !strings.Contains(r.Text(), "a\uFFFDb") {
+		t.Fatalf("bash = %+v, text %q; want U+FFFD for the invalid byte", r, r.Text())
+	}
+}

@@ -2,8 +2,6 @@ package acpserver
 
 import (
 	"context"
-	stdjson "encoding/json"
-	"encoding/json/jsontext"
 	"errors"
 	"fmt"
 	"math"
@@ -13,6 +11,7 @@ import (
 	acp "github.com/maccavelli/acp-go-sdk2"
 
 	"github.com/maccavelli/gobble-cli/agent"
+	"github.com/maccavelli/gobble-cli/jsonx"
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/permission"
 	"github.com/maccavelli/gobble-cli/tool"
@@ -99,7 +98,7 @@ func (u *updates) event(ev agent.Event, last *llm.Usage) {
 	case agent.ToolStart:
 		u.flush()
 		opts := []acp.ToolCallStartOpt{acp.WithStartKind(toolKind(ev.Spec.Kind)),
-			acp.WithStartStatus(acp.ToolCallStatusPending), acp.WithStartRawInput(rawInput(ev.Call))}
+			acp.WithStartStatus(acp.ToolCallStatusPending), acp.WithStartRawInput(jsonx.Splice(ev.Call.Args))}
 		if l, ok := u.tools[ev.Call.Name].(tool.Locator); ok {
 			if locs := acpLocations(l.Locations(ev.Call, u.env)); len(locs) > 0 {
 				opts = append(opts, acp.WithStartLocations(locs))
@@ -196,13 +195,6 @@ func toolKind(k tool.Kind) acp.ToolKind {
 	return acp.ToolKind(k)
 }
 
-func rawInput(c tool.Call) stdjson.RawMessage {
-	if len(c.Args) == 0 {
-		return nil
-	}
-	return jsonRaw(c.Args)
-}
-
 // resultContent is a finished call's content: a self-contained summary of at
 // most maxSummary bytes first, then the diffs, then the output.
 func resultContent(r tool.Result) []acp.ToolCallContent {
@@ -269,16 +261,6 @@ func cutBytes(s string, n int) string {
 		cut--
 	}
 	return s[:cut] + "…"
-}
-
-// jsonRaw passes JSON through the SDK's encoding/json as it is, as a
-// json.RawMessage, which encodes verbatim. Empty is none, which the
-// field's omitempty leaves out (0014-MADR D4).
-func jsonRaw(v jsontext.Value) stdjson.RawMessage {
-	if len(v) == 0 {
-		return nil
-	}
-	return v
 }
 
 // workspaceAdvice is what a turn refused for want of an Anthropic workspace

@@ -7,6 +7,8 @@ import (
 	"fmt"
 
 	"github.com/google/jsonschema-go/jsonschema"
+
+	"github.com/maccavelli/gobble-cli/jsonx"
 )
 
 // Tool is one callable operation.
@@ -225,12 +227,12 @@ func (r Result) Text() string {
 
 // TextResult is a successful result whose output is text.
 func TextResult(text string) Result {
-	return Result{Output: quote(text)}
+	return Result{Output: jsonx.Quote(text)}
 }
 
 // ErrorResult is a failed result the model reads as text.
 func ErrorResult(text string) Result {
-	return Result{Output: quote(text), IsError: true}
+	return Result{Output: jsonx.Quote(text), IsError: true}
 }
 
 // BadArgumentsResult is the error result of a call whose arguments were
@@ -239,14 +241,6 @@ func BadArgumentsResult(text string) Result {
 	r := ErrorResult(text)
 	r.BadArguments = true
 	return r
-}
-
-func quote(s string) jsontext.Value {
-	b, err := json.Marshal(s)
-	if err != nil { // a string always encodes
-		panic(err)
-	}
-	return b
 }
 
 // Describer is implemented by a tool that can title a call before it runs,

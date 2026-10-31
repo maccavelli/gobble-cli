@@ -4,7 +4,6 @@ import (
 	"context"
 	stdjson "encoding/json"
 	"encoding/json/jsontext"
-	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"maps"
@@ -17,6 +16,7 @@ import (
 	"github.com/maccavelli/gobble-cli/command"
 	"github.com/maccavelli/gobble-cli/compaction"
 	"github.com/maccavelli/gobble-cli/internal/fsx"
+	"github.com/maccavelli/gobble-cli/jsonx"
 	"github.com/maccavelli/gobble-cli/session"
 )
 
@@ -70,7 +70,7 @@ func (a *Agent) HandleExtensionMethod(ctx context.Context, method string, params
 	if err != nil {
 		return nil, err
 	}
-	b, err := json.Marshal(res)
+	b, err := jsonx.Marshal(res)
 	if err != nil {
 		return nil, acp.NewInternalError(map[string]any{keyReason: err.Error()})
 	}
@@ -126,7 +126,7 @@ func extSession[P interface{ session() acp.SessionId }](a *Agent, params jsontex
 	if len(params) == 0 {
 		params = jsontext.Value("{}")
 	}
-	if err := json.Unmarshal(params, &p); err != nil {
+	if err := jsonx.Unmarshal(params, &p); err != nil {
 		return p, nil, acp.NewInvalidParams(map[string]any{keyReason: err.Error()})
 	}
 	a.mu.Lock()

@@ -184,11 +184,19 @@ func TestEstimateAfterEdit(t *testing.T) {
 // F3-1).
 func TestProjectPromptEntries(t *testing.T) {
 	patch := []prompt.Patch{{Name: "rules", Text: new("<rules>\n- r\n</rules>")}}
+	baseData, err := prompt.BaselineData([]prompt.Section{{Name: "preamble", Text: "p"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	patchData, err := prompt.PatchData(patch)
+	if err != nil {
+		t.Fatal(err)
+	}
 	p := (&path{}).
-		add(session.Entry{Type: session.TypeCustom, CustomType: session.CustomPrompt, Data: prompt.BaselineData([]prompt.Section{{Name: "preamble", Text: "p"}})}).
+		add(session.Entry{Type: session.TypeCustom, CustomType: session.CustomPrompt, Data: baseData}).
 		add(text(session.RoleUser, "hi")).
-		add(session.Entry{Type: session.TypeCustom, CustomType: session.CustomPrompt, Data: prompt.PatchData(patch)}).
-		add(session.Entry{Type: session.TypeCustom, CustomType: "other", Data: prompt.PatchData(patch)})
+		add(session.Entry{Type: session.TypeCustom, CustomType: session.CustomPrompt, Data: patchData}).
+		add(session.Entry{Type: session.TypeCustom, CustomType: "other", Data: patchData})
 	proj := Project(p.entries)
 	if len(proj[0].Messages) != 0 || len(proj[3].Messages) != 0 {
 		t.Fatalf("a baseline or another custom entry gave messages: %+v", proj)

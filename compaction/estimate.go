@@ -219,7 +219,7 @@ func entryMessages(e session.Entry) []*session.Message {
 		}
 		if _, patch, err := prompt.ParseData(e.Data); err == nil && len(patch) > 0 {
 			m := &session.Message{Role: session.RoleUser, Timestamp: millis(e.Timestamp)}
-			_ = m.SetBlocks([]session.Block{{Type: session.BlockText, Text: prompt.Update(patch)}}) //nolint:errcheck // a text block always encodes
+			m.SetText(prompt.Update(patch))
 			return []*session.Message{m}
 		}
 	}
@@ -259,7 +259,7 @@ func edit(msgs []*session.Message, e session.Entry) []*session.Message {
 		if m.Role == session.RoleAssistant || m.Role == session.RoleToolResult {
 			var s string
 			if json.Unmarshal(r.Content, &s) == nil {
-				_ = c.SetBlocks([]session.Block{{Type: session.BlockText, Text: s}}) //nolint:errcheck // a text block always encodes
+				c.SetText(s)
 			}
 		}
 		out[i] = &c

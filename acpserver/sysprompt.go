@@ -10,6 +10,7 @@ import (
 	"slices"
 
 	"github.com/maccavelli/gobble-cli/compaction"
+	"github.com/maccavelli/gobble-cli/jsonx"
 	"github.com/maccavelli/gobble-cli/llm"
 	sysprompt "github.com/maccavelli/gobble-cli/prompt"
 	"github.com/maccavelli/gobble-cli/session"
@@ -257,14 +258,16 @@ func (a *Agent) writePrompt(w *writer, s *liveSession) (string, *llm.Message) {
 	cur := a.sections(s)
 	base, current, ok := promptState(s.tree.Path())
 	if !ok {
-		w.add(promptEntry(sysprompt.BaselineData(cur)))
+		data, err := sysprompt.BaselineData(cur)
+		w.addEntry(promptEntry(data), err)
 		return sysprompt.Text(cur), nil
 	}
 	patch := sysprompt.Diff(current, cur)
 	if patch == nil {
 		return sysprompt.Text(base), nil
 	}
-	w.add(promptEntry(sysprompt.PatchData(patch)))
+	data, err := sysprompt.PatchData(patch)
+	w.addEntry(promptEntry(data), err)
 	return sysprompt.Text(base), &llm.Message{Role: llm.RoleUser, Content: []llm.Content{{Type: llm.ContentText, Text: sysprompt.Update(patch)}}}
 }
 
@@ -282,7 +285,11 @@ func (a *Agent) systemText(s *liveSession) string {
 // just before the compaction entry (0005-MADR, amendment of 2026-10-10,
 // item 1; 0005-PLAN F3-1 deviation 3).
 func (a *Agent) rebase(s *liveSession, w func(session.Entry) error) error {
-	return w(promptEntry(sysprompt.BaselineData(a.sections(s))))
+	data, err := sysprompt.BaselineData(a.sections(s))
+	if err != nil {
+		return err
+	}
+	return w(promptEntry(data))
 }
 
 // instructions is the read tool's Env.Instructions for s: the nested
@@ -322,6 +329,7 @@ type contextData struct {
 	Paths []string `json:"paths"`
 }
 
-func contextEntry(paths []string) session.Entry {
-	return session.Entry{Type: session.TypeCustom, CustomType: session.CustomContext, Data: mustJSON(contextData{Paths: paths})}
+func contextEntry(paths []string) (session.Entry, error) {
+	data, err := jsonx.Value(contextData{Paths: paths})
+	return session.Entry{Type: session.TypeCustom, CustomType: session.CustomContext, Data: data}, err
 }

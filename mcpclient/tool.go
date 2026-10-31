@@ -12,6 +12,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/maccavelli/gobble-cli/jsonx"
 	"github.com/maccavelli/gobble-cli/tool"
 )
 
@@ -119,19 +120,11 @@ func (t *mcpTool) Run(ctx context.Context, call tool.Call, _ tool.Env) (tool.Res
 	if res.IsError && text == "" {
 		text = fmt.Sprintf("MCP tool %s returned an error", label)
 	}
-	return tool.Result{Output: quote(text), IsError: res.IsError}, nil
+	return tool.Result{Output: jsonx.Quote(text), IsError: res.IsError}, nil
 }
 
 func seconds(d time.Duration) string {
 	return strconv.FormatFloat(d.Seconds(), 'f', -1, 64)
-}
-
-func quote(s string) jsontext.Value {
-	b, err := json.Marshal(s)
-	if err != nil { // a string always encodes
-		panic(err)
-	}
-	return b
 }
 
 // resultText is a result as the model reads it: each block as Pi's

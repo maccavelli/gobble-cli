@@ -21,6 +21,7 @@ import (
 	"github.com/maccavelli/go-llmprovider-sdk/llmprovider/providers"
 	"github.com/maccavelli/go-llmprovider-sdk/llmprovider/providers/claude"
 
+	"github.com/maccavelli/gobble-cli/jsonx"
 	"github.com/maccavelli/gobble-cli/llm"
 )
 
@@ -360,12 +361,12 @@ type reasoning struct {
 	Format    string `json:"format,omitzero"`
 }
 
+// reasoningData is it as reasoning's JSON. jsonx.Fields writes what
+// Marshal writes for reasoning's omitzero strings, and cannot fail
+// (0039-PLAN deviation 1).
 func reasoningData(it llmprovider.ReasoningItem) jsontext.Value {
-	b, err := json.Marshal(reasoning{Text: it.Text, Signature: it.Signature, Encrypted: it.Encrypted, Format: it.Format})
-	if err != nil { // a struct of strings always encodes
-		panic(err)
-	}
-	return b
+	return jsonx.Fields(jsonx.Field{Name: "text", Value: it.Text}, jsonx.Field{Name: "signature", Value: it.Signature},
+		jsonx.Field{Name: "encrypted", Value: it.Encrypted}, jsonx.Field{Name: "format", Value: it.Format})
 }
 
 func signatureData(sig string) jsontext.Value {

@@ -279,3 +279,29 @@ func TestPromptOptionsAndTrust(t *testing.T) {
 		t.Fatalf("with System set, the system prompt is %q", sys)
 	}
 }
+
+// A context file that is not valid UTF-8 gives a baseline with U+FFFD, and
+// the first prompt completes (0039-MADR defect 1; Confirmation 3).
+func TestInvalidUTF8ContextFile(t *testing.T) {
+	dir, cwd, cfg := t.TempDir(), t.TempDir(), t.TempDir()
+	writeFile(t, filepath.Join(cwd, "AGENTS.md"), "R\xe9gle du projet.")
+	model := llmtest.NewScript(llmtest.Text("a"))
+	var logs bytes.Buffer
+	c := promptAgent(t, dir, model, PromptOptions{ConfigDir: cfg}, &logs)
+	id := newSession(t, c, cwd, nil).SessionId
+	if _, err := prompt(t, c, id, "one"); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(promptEntries(t, dir, string(id)), ","); got != "baseline" {
+		t.Fatalf("entries %s, want one baseline", got)
+	}
+	var baseline string
+	for _, e := range savedEntries(t, dir, string(id)) {
+		if e.CustomType == session.CustomPrompt {
+			baseline = string(e.Data)
+		}
+	}
+	if !strings.Contains(baseline, "R"+replacement+"gle du projet.") {
+		t.Fatalf("baseline %q, want U+FFFD for the invalid byte", baseline)
+	}
+}

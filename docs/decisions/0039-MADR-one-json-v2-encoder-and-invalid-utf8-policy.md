@@ -378,6 +378,11 @@ decisions below are written to those answers (More Information, "The owner's ans
   * a value `IsValid(jsontext.AllowInvalidUTF8(true))` accepts is itself;
   * anything else is `Quote(string(v))`, the text as a JSON string.
 
+  *Amended 2026-10-31, by the PLAN's deviation 1: `jsonx` also has `type Field struct{ Name, Value string }` and
+  `Fields(fs ...Field) jsontext.Value`. It writes an object of the fields whose `Value` is not empty, in the order given,
+  through `Quote`. That is what `Marshal` writes for a struct of `omitzero` string fields, and a fuzz target holds the
+  equality. It cannot fail. It serves the four-string `reasoning` value (D6).*
+
   `Quote(s)` is `jsontext.AppendQuote(nil, s)`. Its error means only that invalid UTF-8 was replaced, as measured
   above, which is D2's policy, so `Quote` returns the literal and no error. The fuzz target of Confirmation 5 holds the
   measurement: `Quote` equals `Marshal` under D2, byte for byte.
@@ -535,6 +540,12 @@ decisions below are written to those answers (More Information, "The owner's ans
   * `reasoningData` and `signatureData` (`llm/provider/provider.go:363-376`) return `(jsontext.Value, error)` through
     `jsonx.Value`. Their callers in the stream loop (`:338`, `:340`) yield that error, as the loop yields a provider's
     (`:323`).
+
+    *Amended 2026-10-31, by the PLAN's deviation 1:* `acpserver`'s `mustJSON` has eight callers, not two. The four
+    entry builders, `contextEntry`, `toolsEntry`, `todoEntry` and `personalityEntry`, return their error to the writer
+    or to `append`. The `reasoning` value, four strings, is built by `jsonx.Fields`, which cannot fail, in
+    `reasoningData`, `signatureData` and `acpserver`'s replay (`acpserver/history.go:272`, `:287`). So those keep their
+    signatures, and neither the stream loop nor the replay gains an error path.
 * **D7. No encode error is discarded.** Each of the six `_ = m.SetBlocks(...)` goes, in one of three ways:
   * **`session.(*Message).SetText(s string)`,** new, with no error: the content is one text block, built from
     `jsonx.Quote`, so it cannot fail. It replaces `SetBlocks` at the four sites that write one text block:
@@ -551,6 +562,11 @@ decisions below are written to those answers (More Information, "The owner's ans
     `Blocks` reads a string or an array of blocks alike (`session/session.go:225-238`). So no reader sees a change, and
     `Convert` and its callers, `replayPath`, `serializeOmitting` and `turnRequest`, which return no error, keep their
     signatures.
+
+    *Corrected 2026-10-31, by the PLAN's deviation 3:* a reader does see the change. `TestProjectMatchesPi` compares
+    the converted messages with Pi's `convertToLlm`, which makes a string content one text block, and that is what the
+    re-encode did. So a string content is written with `SetText`, and an array is kept as stored. Neither has an error
+    path, and the Pi fixtures pass.
 
   Under D2, a string and a struct of strings always encode. What can still fail is a `jsontext.Value` holding bad JSON,
   which is a defect worth seeing. In `acpserver`, `assistantEntryMessage`, `userEntryMessage`, `BaselineData` and
@@ -842,7 +858,8 @@ Each test below is seen failing first on a scratch copy, as stated, and the exec
     * `SetText` of invalid UTF-8 writes one text block with U+FFFD. Seen failing with `SetBlocks` in its place.
 16. **An empty `rawInput` is left out, and a valid one carried as it is,** through `Splice`. `TestRawInputOnTheWire`
     (`acpserver/convert_test.go:12-17`) pins both today: "A tool call with no input sends no rawInput key, and one with
-    input carries it verbatim". It passes unchanged with `jsonRaw` replaced by `Splice`.
+    input carries it verbatim". Its cases and assertions are unchanged. Its one `jsonRaw` call becomes `Splice`, since
+    `jsonRaw` goes (the PLAN's deviation 2).
 17. **`Convert` and the `inline` tags change nothing a reader sees:** the replay, serialization and compaction tests,
     and the `_gobble/*` and personality tests, pass unchanged.
 18. **The client decodes `_gobble/*` notifications with v2:** a `_gobble/retry` whose cause holds a lone surrogate

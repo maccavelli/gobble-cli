@@ -171,3 +171,16 @@ func TestSearchOutside(t *testing.T) {
 		}
 	}
 }
+
+// grep over a file that is not valid UTF-8 gives a result with U+FFFD for
+// each invalid byte, where it panicked (0039-MADR defect 1; Confirmation 2).
+func TestGrepInvalidUTF8File(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "latin1.txt"), []byte("caf\xe9 au lait\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r := call(t, Grep(), tool.Env{Cwd: dir}, map[string]any{"pattern": "lait"})
+	if r.IsError || !strings.Contains(r.Text(), "caf\uFFFD au lait") {
+		t.Fatalf("grep = %+v, text %q; want U+FFFD for the invalid byte", r, r.Text())
+	}
+}

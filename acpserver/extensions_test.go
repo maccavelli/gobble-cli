@@ -3,6 +3,7 @@ package acpserver
 import (
 	"bytes"
 	"context"
+	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"errors"
 	"os"
@@ -689,5 +690,21 @@ func TestQueuedMentions(t *testing.T) {
 		if q, _ := got[key].([]any); !slices.Equal(q, w) {
 			t.Errorf("%s: %q, want %q", key, got[key], w)
 		}
+	}
+}
+
+// A _gobble/* request whose params hold a lone surrogate escape, as a
+// JavaScript client's JSON.stringify can write, is read as the SDK reads
+// every other param: here, an unknown session (0039-MADR D10;
+// Confirmation 7). The backslash is made in code (0039-PLAN C4).
+func TestExtensionParamsLoneSurrogate(t *testing.T) {
+	dir, cwd, cfg := t.TempDir(), t.TempDir(), t.TempDir()
+	var logs bytes.Buffer
+	c := promptAgent(t, dir, llmtest.NewScript(), PromptOptions{ConfigDir: cfg}, &logs)
+	newSession(t, c, cwd, nil)
+	params := strings.ReplaceAll(`{"sessionId":"nope~ud83d"}`, "~", string(rune(92)))
+	_, err := c.Client.CallExtension(t.Context(), "_gobble/get_entries", jsontext.Value(params))
+	if code, reason := errText(t, err); code != -32602 || reason != "unknown session" {
+		t.Fatalf("error %d %q; want -32602, unknown session", code, reason)
 	}
 }

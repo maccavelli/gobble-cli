@@ -1068,3 +1068,16 @@ Each fact below was measured that day against `main` `978d38d`.
 * Good, because CI passes govulncheck again, and no toolchain older than the fix builds gobble.
 * Neutral, because every host and CI already resolve to Go 1.27.3; the change makes `go.mod` say so.
 * Bad, because a module that imports gobble's packages now needs Go 1.27.3; Go downloads it when `GOTOOLCHAIN` allows.
+
+### Amendment (2026-10-31): `jsonx`, gobble's one JSON package
+
+*Accepted 2026-10-31, with [0039-MADR-one-json-v2-encoder-and-invalid-utf8-policy.md](0039-MADR-one-json-v2-encoder-and-invalid-utf8-policy.md)
+(its D1 and D23); made in its PLAN's P1.*
+
+* **The package map gains** `jsonx/`, stable: gobble's one way to encode and decode JSON, on `encoding/json/v2`, under
+  0039-MADR's two policies, the data policy and the configuration policy.
+* **It is a leaf.** It imports only the standard library: `bytes`, `encoding/json/v2` and `encoding/json/jsontext`.
+* **Every package of the module may import it, contract packages included.** Rule 1 bars only outside SDKs, so no
+  import-boundary rule changes for that. `jsonx` importing a package of this module is barred by a new
+  `internal/archtest` rule, added in 0039-PLAN's P9.
+* **No package of the module imports `encoding/json` (v1)** once 0039-PLAN is complete. `depguard` enforces it from P9.

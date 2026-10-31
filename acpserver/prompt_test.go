@@ -378,3 +378,50 @@ func TestOnePromptAtATime(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// A turn whose model reads a Latin-1 file completes: the next request
+// carries the result, and the saved result holds U+FFFD for the invalid
+// byte (0039-MADR defect 1; Confirmation 1).
+func TestTurnReadsInvalidUTF8File(t *testing.T) {
+	dir, cwd := t.TempDir(), t.TempDir()
+	writeFile(t, filepath.Join(cwd, "notes.txt"), "caf\xe9 au lait\n")
+	model := llmtest.NewScript(llmtest.ToolCall("r1", "read", `{"path":"notes.txt"}`), llmtest.Text("done"))
+	c, _ := readAgent(t, dir, model)
+	id := newSession(t, c, cwd, nil).SessionId
+	resp, err := prompt(t, c, id, "read it")
+	if err != nil || resp.StopReason != acp.StopReasonEndTurn {
+		t.Fatalf("prompt: %+v, %v", resp, err)
+	}
+	if reqs := model.Requests(); len(reqs) != 2 || !strings.Contains(requestToolResults(reqs[1]), "au lait") {
+		t.Fatalf("the model's next request carries no read result (%d requests)", len(reqs))
+	}
+	if got := savedToolResult(t, savedEntries(t, dir, string(id)), "r1"); !strings.Contains(got, "caf"+replacement+" au lait") {
+		t.Fatalf("saved result %q, want U+FFFD for the invalid byte", got)
+	}
+}
+
+// A tool call cut off mid-arguments is sent with its text as rawInput, and
+// the turn goes on to its reply (0039-MADR defect 3, D9; Confirmation 6).
+func TestCutOffToolCallArguments(t *testing.T) {
+	dir, cwd := t.TempDir(), t.TempDir()
+	writeFile(t, filepath.Join(cwd, "a.txt"), "hello\n")
+	model := llmtest.NewScript(llmtest.ToolCall("r1", "read", `{"path":"a.tx`), llmtest.Text("after the call"))
+	c, client := readAgent(t, dir, model)
+	id := newSession(t, c, cwd, nil).SessionId
+	resp, err := prompt(t, c, id, "go")
+	if err != nil || resp.StopReason != acp.StopReasonEndTurn {
+		t.Fatalf("prompt: %+v, %v", resp, err)
+	}
+	ups := client.Updates()
+	starts, results := toolUpdates(ups)
+	if len(starts) != 1 || len(results) == 0 {
+		t.Fatalf("tool_call %d, tool_call_update %d; want the call and its result", len(starts), len(results))
+	}
+	var raw string
+	if err := json.Unmarshal(starts[0].RawInput, &raw); err != nil || raw != `{"path":"a.tx` {
+		t.Fatalf("rawInput %s, %v; want the arguments as a JSON string", starts[0].RawInput, err)
+	}
+	if got := agentText(ups); got != "after the call" {
+		t.Fatalf("agent text %q, want the reply", got)
+	}
+}

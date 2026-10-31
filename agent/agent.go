@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/maccavelli/gobble-cli/jsonx"
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/permission"
 	"github.com/maccavelli/gobble-cli/tool"
@@ -768,7 +769,7 @@ func (t *turn) runTools(calls []llm.ToolCallDone) (llm.Message, bool) {
 }
 
 func (t *turn) runTool(c llm.ToolCallDone) (tool.Result, bool) {
-	call := tool.Call{ID: c.ID, Name: c.Name, Args: jsontext.Value(c.Args)}
+	call := tool.Call{ID: c.ID, Name: c.Name, Args: jsonx.From([]byte(c.Args))}
 	tl, known := t.tools[c.Name]
 	if !known {
 		res := tool.ErrorResult(fmt.Sprintf("there is no tool named %q", c.Name))
@@ -948,7 +949,7 @@ func (t *turn) stopRepeat(c llm.ToolCallDone) (tool.Result, bool) {
 	if t.a.cfg.Policy == nil {
 		return t.runTool(c)
 	}
-	call := tool.Call{ID: c.ID, Name: c.Name, Args: jsontext.Value(c.Args)}
+	call := tool.Call{ID: c.ID, Name: c.Name, Args: jsonx.From([]byte(c.Args))}
 	title := c.Name
 	if tl, ok := t.tools[c.Name]; ok {
 		if d, ok := tl.(tool.Describer); ok {

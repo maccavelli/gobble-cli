@@ -13,6 +13,7 @@ import (
 
 	acp "github.com/maccavelli/acp-go-sdk2"
 
+	"github.com/maccavelli/gobble-cli/jsonx"
 	"github.com/maccavelli/gobble-cli/personality"
 	"github.com/maccavelli/gobble-cli/session"
 )
@@ -34,8 +35,9 @@ type personalityData struct {
 	Name string `json:"name"`
 }
 
-func personalityEntry(name string) session.Entry {
-	return session.Entry{Type: session.TypeCustom, CustomType: session.CustomPersonality, Data: mustJSON(personalityData{Name: name})}
+func personalityEntry(name string) (session.Entry, error) {
+	data, err := jsonx.Value(personalityData{Name: name})
+	return session.Entry{Type: session.TypeCustom, CustomType: session.CustomPersonality, Data: data}, err
 }
 
 // personalityOf is a gobble.personality entry's name.
@@ -173,7 +175,11 @@ func (a *Agent) switchPersonality(ctx context.Context, conn *acp.AgentSideConnec
 	if err != nil || !ok {
 		return a.voice(s), false, err
 	}
-	if err := s.append(ctx, a.now(), personalityEntry(v.Name())); err != nil {
+	e, err := personalityEntry(v.Name())
+	if err == nil {
+		err = s.append(ctx, a.now(), e)
+	}
+	if err != nil {
 		return nil, false, appendFailed(err)
 	}
 	a.mu.Lock()

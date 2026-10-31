@@ -22,6 +22,7 @@ import (
 	"github.com/maccavelli/gobble-cli/command"
 	"github.com/maccavelli/gobble-cli/compaction"
 	"github.com/maccavelli/gobble-cli/internal/fsx"
+	"github.com/maccavelli/gobble-cli/jsonx"
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/llm/catalog"
 	"github.com/maccavelli/gobble-cli/permission"
@@ -669,7 +670,7 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 	tools = visible(withDefaults(a.rulesOf(s), mcpTools, a.modeOf(s)), tools)
 	loaded := loadedTools(s.tree.Path())
 	if fresh := startLoads(tools, loaded); len(fresh) > 0 {
-		w.add(toolsEntry(fresh))
+		w.addEntry(toolsEntry(fresh))
 		if w.err != nil {
 			return acp.PromptResponse{}, appendFailed(w.err)
 		}
@@ -818,8 +819,9 @@ type toolsData struct {
 }
 
 // toolsEntry records a load.
-func toolsEntry(names []string) session.Entry {
-	return session.Entry{Type: session.TypeCustom, CustomType: customTools, Data: mustJSON(toolsData{Loaded: names})}
+func toolsEntry(names []string) (session.Entry, error) {
+	data, err := jsonx.Value(toolsData{Loaded: names})
+	return session.Entry{Type: session.TypeCustom, CustomType: customTools, Data: data}, err
 }
 
 // loadedTools are the tools path's gobble.tools entries loaded, in load
@@ -873,6 +875,23 @@ func (w *writer) add(e session.Entry) {
 	}
 }
 
+// fail keeps err as the writer's error, as add keeps an append's: the first
+// one ends the prompt (0039-MADR D7).
+func (w *writer) fail(err error) {
+	if w.err == nil {
+		w.err = err
+	}
+}
+
+// addEntry adds e, or keeps err when building e failed.
+func (w *writer) addEntry(e session.Entry, err error) {
+	if err != nil {
+		w.fail(err)
+		return
+	}
+	w.add(e)
+}
+
 // event writes what ev completes: a queued user message as it enters, the
 // assistant message of a model call, each tool result before its terminal
 // update, followed by its plan as a gobble.todo entry when it has one, and
@@ -883,18 +902,19 @@ func (w *writer) event(ev agent.Event) {
 	case agent.Queued:
 		w.add(session.Entry{Type: session.TypeMessage, Message: userEntryMessage(ev.Message, ts())})
 	case agent.Message:
-		w.add(session.Entry{Type: session.TypeMessage, Message: assistantEntryMessage(ev, w.provider, w.model, w.a.modelOf(w.provider, w.model), ts())})
+		m, err := assistantEntryMessage(ev, w.provider, w.model, w.a.modelOf(w.provider, w.model), ts())
+		w.addEntry(session.Entry{Type: session.TypeMessage, Message: m}, err)
 	case agent.ToolEnd:
 		w.written[ev.Call.ID] = true
 		w.add(session.Entry{Type: session.TypeMessage, Message: toolResultMessage(ev.Call.ID, ev.Call.Name, ev.Result.Text(), ev.Result.IsError, ts())})
 		if ev.Result.Plan != nil {
-			w.add(todoEntry(ev.Result.Plan))
+			w.addEntry(todoEntry(ev.Result.Plan))
 		}
 		if len(ev.Result.Instructions) > 0 {
-			w.add(contextEntry(ev.Result.Instructions))
+			w.addEntry(contextEntry(ev.Result.Instructions))
 		}
 	case agent.Loaded:
-		w.add(toolsEntry(ev.Names))
+		w.addEntry(toolsEntry(ev.Names))
 	case agent.End:
 		for _, m := range ev.Messages {
 			for _, c := range m.Content {

@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/maccavelli/gobble-cli/jsonx"
 	"github.com/maccavelli/gobble-cli/session"
 )
 
@@ -62,16 +63,19 @@ func BranchSummaryText(summary string) string {
 func Convert(m *session.Message) *session.Message {
 	text := func(s string) *session.Message {
 		u := &session.Message{Role: session.RoleUser, Timestamp: m.Timestamp}
-		_ = u.SetBlocks([]session.Block{{Type: session.BlockText, Text: s}}) //nolint:errcheck // a text block always encodes
+		u.SetText(s)
 		return u
 	}
 	switch m.Role {
 	case session.RoleUser, session.RoleAssistant, session.RoleToolResult:
 		return m
 	case session.RoleCustom:
+		// Pi's convertToLlm makes a string content one text block; an array
+		// is kept as stored (0039-PLAN deviation 3).
 		u := &session.Message{Role: session.RoleUser, Content: m.Content, Timestamp: m.Timestamp}
-		if blocks, err := m.Blocks(); err == nil {
-			_ = u.SetBlocks(blocks) //nolint:errcheck // blocks just decoded encode
+		var s string
+		if jsonx.Unmarshal(m.Content, &s) == nil {
+			u.SetText(s)
 		}
 		return u
 	case session.RoleBranchSummary:

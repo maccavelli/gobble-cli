@@ -3,11 +3,12 @@ package prompt
 import (
 	"cmp"
 	"encoding/json/jsontext"
-	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"slices"
 	"strings"
+
+	"github.com/maccavelli/gobble-cli/jsonx"
 )
 
 // data is a gobble.prompt entry's data: a baseline or a patch, as arrays
@@ -22,37 +23,31 @@ type dataSection struct {
 	Text *string `json:"text"`
 }
 
-// BaselineData is a baseline's entry data.
-func BaselineData(sections []Section) jsontext.Value {
+// BaselineData is a baseline's entry data. A section's text that is not
+// valid UTF-8, such as a Latin-1 AGENTS.md, is written with U+FFFD for
+// each invalid byte (0039-MADR D6).
+func BaselineData(sections []Section) (jsontext.Value, error) {
 	d := data{Baseline: make([]dataSection, len(sections))}
 	for i, s := range sections {
 		d.Baseline[i] = dataSection{Name: s.Name, Text: new(s.Text)}
 	}
-	return mustJSON(d)
+	return jsonx.Value(d)
 }
 
-// PatchData is a patch's entry data.
-func PatchData(patch []Patch) jsontext.Value {
+// PatchData is a patch's entry data, written as BaselineData's is.
+func PatchData(patch []Patch) (jsontext.Value, error) {
 	d := data{Patch: make([]dataSection, len(patch))}
 	for i, p := range patch {
 		d.Patch[i] = dataSection(p)
 	}
-	return mustJSON(d)
-}
-
-func mustJSON(v any) jsontext.Value {
-	b, err := json.Marshal(v)
-	if err != nil { // plain strings always encode
-		panic(err)
-	}
-	return b
+	return jsonx.Value(d)
 }
 
 // ParseData reads a gobble.prompt entry's data: a baseline, or else a
 // patch.
 func ParseData(v jsontext.Value) (baseline []Section, patch []Patch, err error) {
 	var d data
-	if err := json.Unmarshal(v, &d); err != nil {
+	if err := jsonx.Unmarshal(v, &d); err != nil {
 		return nil, nil, err
 	}
 	switch {

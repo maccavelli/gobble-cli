@@ -145,12 +145,19 @@ func TestDiffApply(t *testing.T) {
 // with a removal's null kept.
 func TestEntryData(t *testing.T) {
 	base := []Section{{"preamble", "p"}, {"cwd", "<cwd>\n/w\n</cwd>"}}
-	got, patch, err := ParseData(BaselineData(base))
+	baseData, err := BaselineData(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, patch, err := ParseData(baseData)
 	if err != nil || patch != nil || !reflect.DeepEqual(got, base) {
 		t.Fatalf("baseline %+v, %+v, %v", got, patch, err)
 	}
 	want := []Patch{{Name: "rules", Text: new("r")}, {Name: "cwd"}}
-	data := PatchData(want)
+	data, err := PatchData(want)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !strings.Contains(string(data), `{"name":"cwd","text":null}`) {
 		t.Fatalf("patch data %s keeps no null", data)
 	}

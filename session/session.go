@@ -1,11 +1,11 @@
 package session
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json/jsontext"
-	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"iter"
@@ -13,6 +13,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/maccavelli/gobble-cli/jsonx"
 )
 
 // Version is the session format gobble writes, Pi's v3, and the newest it
@@ -227,27 +229,40 @@ func (m *Message) Blocks() ([]Block, error) {
 		return nil, nil
 	}
 	var s string
-	if err := json.Unmarshal(m.Content, &s); err == nil {
+	if err := jsonx.Unmarshal(m.Content, &s); err == nil {
 		return []Block{{Type: BlockText, Text: s}}, nil
 	}
 	var bs []Block
-	if err := json.Unmarshal(m.Content, &bs); err != nil {
+	if err := jsonx.Unmarshal(m.Content, &bs); err != nil {
 		return nil, fmt.Errorf("session: message content: %w", err)
 	}
 	return bs, nil
 }
 
-// SetBlocks writes a message's content as an array of blocks.
+// SetBlocks writes a message's content as an array of blocks. It fails only
+// for a block holding a jsontext.Value that is not JSON, such as a tool
+// call's arguments (0039-MADR D7).
 func (m *Message) SetBlocks(bs []Block) error {
 	if bs == nil {
 		bs = []Block{}
 	}
-	b, err := json.Marshal(bs)
+	b, err := jsonx.Marshal(bs)
 	if err != nil {
 		return fmt.Errorf("session: message content: %w", err)
 	}
 	m.Content = b
 	return nil
+}
+
+// SetText writes a message's content as one text block, as SetBlocks writes
+// it; it cannot fail, since each invalid UTF-8 byte is written as U+FFFD
+// (0039-MADR D7).
+func (m *Message) SetText(s string) {
+	var b bytes.Buffer
+	b.WriteByte('[')
+	b.Write(jsonx.Fields(jsonx.Field{Name: "type", Value: BlockText}, jsonx.Field{Name: "text", Value: s}))
+	b.WriteByte(']')
+	m.Content = b.Bytes()
 }
 
 // Text is the message's text blocks joined by single spaces, as Pi's list

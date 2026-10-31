@@ -3,7 +3,6 @@ package acpclient_test
 import (
 	"bufio"
 	"context"
-	"encoding/json/v2"
 	"errors"
 	"io"
 	"log/slog"
@@ -17,6 +16,7 @@ import (
 
 	"github.com/maccavelli/gobble-cli/acpclient"
 	"github.com/maccavelli/gobble-cli/acpclient/acptest"
+	"github.com/maccavelli/gobble-cli/jsonx"
 )
 
 // start runs agent in process and closes the connection when the test ends.
@@ -404,10 +404,4 @@ func TestInvalidParamsCarriesReason(t *testing.T) {
 }
 
 // jsonString is s as a JSON string literal, for a path inside raw JSON.
-func jsonString(s string) string {
-	b, err := json.Marshal(s)
-	if err != nil { // a string always encodes
-		panic(err)
-	}
-	return string(b)
-}
+func jsonString(s string) string { return string(jsonx.Quote(s)) }

@@ -194,3 +194,38 @@ func TestMemoryStore(t *testing.T) {
 		t.Fatalf("read unknown: %v", err)
 	}
 }
+
+// SetText writes one text block, with U+FFFD for each invalid byte, and
+// cannot fail (0039-MADR D7; Confirmation 15).
+func TestSetTextInvalidUTF8(t *testing.T) {
+	var m Message
+	m.SetText("caf\xe9")
+	bs, err := m.Blocks()
+	if err != nil || len(bs) != 1 || bs[0].Type != BlockText || bs[0].Text != "caf\uFFFD" {
+		t.Fatalf("content %q: blocks %+v, %v", m.Content, bs, err)
+	}
+}
+
+// SetText writes what SetBlocks writes for one text block, byte for byte.
+func TestSetTextMatchesSetBlocks(t *testing.T) {
+	for _, s := range []string{"", "plain", "a<b&c>d", "tab\tnl\n", "caf\xe9", "\u2028"} {
+		var a, b Message
+		a.SetText(s)
+		if err := b.SetBlocks([]Block{{Type: BlockText, Text: s}}); err != nil {
+			t.Fatal(err)
+		}
+		if string(a.Content) != string(b.Content) {
+			t.Errorf("SetText(%q) = %s, SetBlocks = %s", s, a.Content, b.Content)
+		}
+	}
+}
+
+// SetBlocks reports a block holding arguments that are not JSON, rather
+// than writing an empty content (0039-MADR D7; Confirmation 4).
+func TestSetBlocksBadJSON(t *testing.T) {
+	var m Message
+	err := m.SetBlocks([]Block{{Type: BlockToolCall, ID: "c1", Name: "read", Arguments: jsontext.Value("{")}})
+	if err == nil {
+		t.Fatalf("SetBlocks of bad arguments = %q, want an error", m.Content)
+	}
+}
