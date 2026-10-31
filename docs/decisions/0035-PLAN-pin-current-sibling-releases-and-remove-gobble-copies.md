@@ -2314,3 +2314,56 @@ The base is P22's `78d916f`. Steps 1, 3, 4 and 6 are deviation 12's; steps 2, 5,
    - `make probe-conhost` passed on the Windows laptop.
 
 No deviation. The MADR's D12 note of 2026-10-31 describes what was built, so it is not amended.
+
+### P17 record, completed (2026-10-31): `lineedit`, rebased and committed
+
+Deviation 12 resumed P17 after P12's `2c9d3b3`. The record of 2026-10-30, above, stands for steps 1 to 6.
+
+1. **The base.** `feature/p17-lineedit`'s commit `8630b77` had `2a8d70c` as its parent, 0037's records, which is on
+   `main` and whose parent is `61f7115`. Deviation 12 gives the base as `61f7115`, one commit short. Its point holds
+   either way: `8630b77` touches `internal/cli` alone (`git show --name-only`: 29 files, none outside it), and
+   `git diff --name-only 61f7115 main -- internal/cli` is empty.
+2. **The rebase.** `git ls-remote --heads origin feature/p17-lineedit` was empty, so the branch had never been pushed.
+   `git rebase main feature/p17-lineedit`: "Successfully rebased", with no conflict. `8630b77` is now `2c13842`, on
+   `2c9d3b3`.
+3. **Step 5, the key's cost.** go-tui-lib/v2 `v2.7.0`, pinned by P21, is what `main` builds. `BenchmarkKeyDraw` and
+   `TestKeyDrawBudget` now measure the Composer, and pass on every host:
+
+   | Host | Budget | `v2.6.2` (deviation 11) | `2c13842` |
+   | --- | --- | --- | --- |
+   | macOS | 4.5 µs | 14.9 µs, 53 allocations | 1.465 µs, 5 allocations |
+   | the Linux machine | 15 µs | 42.0 µs, 53 allocations | 5.87 µs, 5 allocations |
+   | the Windows laptop | 4.2 µs | 11.8 µs, 53 allocations | 1.254 µs, 5 allocations |
+
+4. **Step 7.** On the Windows laptop, `conhost_windows_test.go` passes within `go test`, and `make probe-conhost`
+   passes.
+5. **Step 8, G-local,** at `2c13842`, the tree clean:
+   - `make pre-add-check` on the commit's 19 Go files: clean;
+   - `go test -count=1 ./...`: 36 ok;
+   - `make preflight`: passed, `verify-build-metadata` included, since the tree is a commit;
+   - `make race`: 36 ok;
+   - `make perf`: `ReplyRender` 33.1 µs, `Reprint` 9.88 ms, `LineSessionStart` 937 µs (P12: 886 µs), `KeyDraw`
+     1.465 µs.
+6. **Step 8, G-hosts,** with 805 files shipped to each:
+   - `go test`: passed;
+   - race: passed, 36 ok;
+   - `make check-records markdownlint`: passed;
+   - preflight stops at `verify-build-metadata`, as on every copy;
+   - `make perf` passed on both:
+     - the Windows laptop: `ReplyRender` 30.5 µs, `Reprint` 7.71 ms, `LineSessionStart` 4.28 ms (P12: 4.27 ms),
+       `KeyDraw` 1.254 µs;
+     - the Linux machine: `ReplyRender` 171.1 µs, `Reprint` 48.2 ms, `LineSessionStart` 7.57 ms, `KeyDraw` 5.87 µs.
+       That is against P12's 118.2 µs, 28.2 ms, 3.16 ms and 4.89 µs the same day.
+   - The Linux figures were all higher, `ReplyRender` and `Reprint` among them, which P17 does not touch, and
+     `LineSessionStart` was near its 8.7 ms budget. So `make perf` was run three more times on the same copy. The
+     host's load average was 5.78 before and 5.88 after, with no gate of this plan running. The ranges were
+     `ReplyRender` 176–198 µs, `Reprint` 37.9–41.8 ms, `LineSessionStart` 4.55–5.55 ms and `KeyDraw` 6.10–7.22 µs,
+     each passing. `LineSessionStart` rose with `ReplyRender`, so the rise is the host's load. On the two quiet hosts,
+     P17 moves `LineSessionStart` by +6% on macOS and by nothing on the Windows laptop.
+   - `make probe-conhost` passed on the Windows laptop.
+7. **Left for P19.** `docs/architecture.md:108` still describes `internal/cli/editor` as gobble's own line editor.
+   P19 step 1 rewrites the package notes, so it is changed there.
+8. **The commits.** `2c13842` is the code. This record and the `docs/README.md` row are a second commit on the branch.
+   The owner fast-forwards `main` to it. That is a merge, so it is human-only, and P18 starts after it.
+
+No deviation of its own. The base correction in item 1 changes no decision.
