@@ -384,6 +384,18 @@ policy. And one record keeps the order, and the cross-library facts (check-libs,
 
   *go-llmprovider-sdk `v1.24.1` is still the newest on 2026-10-31: by `git ls-remote --tags`, by its GitHub releases, and
   by `check-libs`, which checked `v1.24.1` against the pin.*
+
+  *Amended 2026-10-31, by the PLAN's deviation 13, from the owner's note during P18, "go-tui-lib 2.7.1 is current", and
+  answer "New pin phase first (Recommended)":*
+  - ***go-tui-lib/v2 `v2.7.1`** (`3039804ce2f8bee9a37315e1ee670738780ab6f3`, 2026-10-31), in place of `v2.7.0`:*
+    - *its one code change is `inline/inlinetest/screen.go`: a test screen's row drops its trailing blank cells, where
+      it trimmed trailing spaces, so a cluster that ends in a space is kept (go-tui-lib's
+      `docs/decisions/0023-MADR-line-mode-components.md` A13, its 0023-PLAN step 7d). No exported name changes.
+      gobble's editor tests read that screen;*
+    - *`stream` and `transcript` are byte-identical to `v2.7.0`'s. The rest is docs and one fuzz seed;*
+    - *`python3 scripts/check_libs.py --lib go-tui-lib --tag v2.7.1` passed all 14 checks, `archtest` and `api` among
+      them.*
+  - *The pin is its own phase, before D14 step 5's code.*
 - **D2. `check-libs` sees what preflight sees.**
   - `scripts/check_libs.py` runs `make staticcheck` and `make lint` on its scratch module for each library, so that F2
     would have been reported.
@@ -617,6 +629,80 @@ policy. And one record keeps the order, and the cross-library facts (check-libs,
     `make perf` gives a key 1.48 µs on macOS, 3.50 µs on the Linux machine and 1.21 µs on the Windows laptop, with 5
     allocations each. All three are within the budgets above.)*
   - *step 5 stands, with `wrap.go` kept for thinking text and the width helpers moved to `x/ansi`.*
+
+  *Amendment of 2026-10-31, **proposed** for the owner's review, by the PLAN's deviation 13: step 5 in two parts, its
+  transcript half held for [go-tui-lib#14](https://github.com/maccavelli/go-tui-lib/issues/14).*
+
+  - ***Found,** at P18's start, against go-tui-lib `v2.7.1`:*
+    - *`transcript.Transcript` owns the settle: `Resize`, `Timeout`, and `HandleTimeout(now, idle)`, which gives the
+      reprint. It has no call that draws at a width without a settle. gobble's editor runs a settle of its own
+      (`internal/cli/editor/editor.go:299-320`, `settleWait`). It writes the reprint with the prompt as one
+      synchronized update, `region.Print("\x1b[2J\x1b[3J\x1b[H" + text)` (`:319`). So step 5 changes the editor,
+      which the PLAN's P18 did not list.*
+    - *A probe at `v2.7.1` drove `TestHostReprint`'s state, a one-row region below a kept reply and a settled resize
+      from 60 to 40 columns, on `inlinetest.Screen`. It split the bytes at each `?2026l`, where a terminal presents a
+      frame:*
+
+      | How the host writes it | Frames | The prompt at each frame's end |
+      | --- | --- | --- |
+      | the library's recipe, `region.Clear() + out + region.Draw(…)` (`transcript/doc.go:34`) | 3 | absent, absent, present |
+      | `region.Print(out)`, the reprint synchronized | 2, nested | absent, present |
+      | `region.Print(out)` under `transcript.WithSynchronized(false)` | 1 | present |
+      | `out` alone, no region drawn, as mid-turn | 1 | no region |
+
+    - *The one composition in one frame needs the transcript unsynchronized, and the mid-turn reprint needs it
+      synchronized. `WithSynchronized` is fixed per `Transcript`, so one `Transcript` cannot serve both. Nor does
+      `Region.Print`'s documentation cover a text that clears the screen.*
+    - *Each `AddText`, `AddDrawn` and `AddReply` calls `trim` (`transcript.go:91`), which reads `Source()` of every
+      kept reply's Printer. A Printer written on the view's goroutine must therefore be serialized with every
+      Transcript call.*
+  - ***The options,** compared for the owner on 2026-10-31 for future-proofing, flexibility and extensibility:*
+    - *A. adopt `transcript` as it is, either with the recipe's frame without a prompt, or with
+      `WithSynchronized(false)` and `Print`, which leans on an undocumented use and leaves the mid-turn reprint
+      unsynchronized;*
+    - *B. ask go-tui-lib for a reprint drawn at a width on demand, and keep gobble's own settle. That copies the
+      library's settle in gobble, against `AGENTS.md`'s rule that gobble waits rather than copies;*
+    - *C. ask go-tui-lib to compose the reprint with a drawn region in one synchronized update, with B's on-demand
+      reprint as a separable item.*
+
+    *The owner chose C: "option C, draft the detailed, comprehensive, and actionable issue for the sdk repo and post
+    it." It is [go-tui-lib#14](https://github.com/maccavelli/go-tui-lib/issues/14), filed the same day. Item 1 is
+    required: the composition in one frame, with the same `Transcript` still synchronized where no region is drawn.
+    Item 2 is wanted and separable: an on-demand reprint. Item 3 asks for docs: the contract of the Printer
+    `AddReply` keeps.*
+  - ***Proposed decision:***
+    - ***Step 5a, `stream`, now.** Each reply is a `stream.Printer`, by step 5's rules for colour on and off. The width
+      helpers move to `x/ansi`, and `mdstream.go`, `mdstyle.go` and `table.go` go. Thinking keeps `render.Wrap`.
+      The goldens are re-recorded under Q3 and its guards. `internal/cli/transcript.go` and both settles stay
+      gobble's for now. A reply's piece is drawn again from its kept source by a new Printer, at the reprint's width
+      and with the view's options, which is what `Printer.At` does. So no Printer is read on another goroutine while
+      it is written.*
+    - ***Step 5b, `transcript`, once a go-tui-lib tag carries #14's item 1,** pinned by its own phase:*
+      - *`internal/cli/transcript.go` becomes a mutex-guarded wrapper of one `transcript.Transcript`. Its lock also
+        covers the view's writes to a reply's Printer, by #14's item 3;*
+      - *the editor's settle and the view's (`tryReprint`, `reprintSettle`) give way to the Transcript's;*
+      - *at the prompt, the reprint is written by #14's composition, and mid-turn, as `HandleTimeout` gives it;*
+      - *the guards stand: the notice's text from gobble's voice catalogue, its style the library's default, and
+        piped output byte-identical.*
+
+      *#14's item 2, if it ships, is not adopted by this record. ctrl+l stays `lineedit`'s.*
+    - ***The order** (proposed): the `v2.7.1` pin, then step 5a. While 5b waits, [0037-PLAN-permission-and-file-tool-hardening.md](0037-PLAN-permission-and-file-tool-hardening.md)
+      resumes at its P3. Step 5b and the PLAN's P19 run once the tag is pinned. The alternative is to hold 0037 too,
+      until 5b is done.*
+  - ***Consequences** of the proposal:*
+    - *Good, because the prompt never disappears for a frame. The composition is fixed and tested once, upstream,
+      for every inline host, and gobble's own settle and clear code go entirely at 5b.*
+    - *Good, because 5a removes the renderer's Markdown and tables now, without waiting.*
+    - *Bad, because the transcript's adoption waits on a sibling release, as deviations 9 and 11 did, and the PLAN's
+      P19 waits with it.*
+    - *Bad, because the CLI's reprint changes in two steps: 5a's reply drawing, then 5b's `SGR 0`, terminal rows and
+      notice. Each step's golden and test diff is reviewed on its own.*
+  - ***Confirmation** of the proposal:*
+    - *5a: `view-plain.golden`, `print-json.golden` and `print-stream-json.golden` are byte-identical. No
+      `render.Stream`, `render.Style`, `render.Tables`, `displayWidth` or `truncateWidth` remains;*
+    - *5b: a test on `inlinetest.Screen` splits the reprint at each `?2026l` and finds the prompt row at every frame's
+      end. Run against the library's current recipe on a scratch copy, it fails. `make race` fails on a copy without
+      the wrapper's lock.*
 
   *(Answered 2026-10-29: PQ4 (a) `ask`'s behaviour, 0029-MADR D1 amended; PQ5 (a) `safetext` on terminal paths, print
   mode and the piped view keeping `term.Sanitize`; PQ6 (a) neither `pick` nor `termcap`; PQ7 (a) `lineedit`'s

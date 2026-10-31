@@ -1,6 +1,6 @@
 ---
 status: in-progress
-date: 2026-10-29
+date: 2026-10-31
 associated-madr: "0035-MADR-pin-current-sibling-releases-and-remove-gobble-copies.md"
 ---
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
@@ -122,6 +122,12 @@ it, or for a named range ("do phase N", "do P3–P6", "execute the plan").
 - P6, P14, P15, P16 and P17 were written to PQ1, PQ2 and PQ4–PQ7's recommended answers, which the owner chose
   (above).
 - P18 is written to PQ3's measurement.
+
+*Deviation 13 (2026-10-31): P23 pins go-tui-lib/v2 `v2.7.1`, before P18. P18 is held: its file list missed the editor,
+and the owner chose to ask go-tui-lib for the composition it needs
+([go-tui-lib#14](https://github.com/maccavelli/go-tui-lib/issues/14)). The MADR's D14 step 5 amendment, which splits P18
+into P18a and P18b, is proposed and waits for the owner's review. `0039-PLAN-one-json-v2-encoder-and-invalid-utf8-policy.md`'s
+P1 runs before P23 (0039-MADR Q1). See the execution record.*
 
 ## Questions this plan adds
 
@@ -937,6 +943,12 @@ Step 8's commit is on that branch, and the owner fast-forwards `main` to it.
 
 ### P18 — `stream` and `transcript` (MADR D14 step 5; Q3; PQ3)
 
+*Held 2026-10-31, by deviation 13: its file list missed `internal/cli/editor/editor.go` and the tests built on the old
+transcript, and the composition step 5 needs is asked of go-tui-lib in
+[go-tui-lib#14](https://github.com/maccavelli/go-tui-lib/issues/14). The MADR's D14 step 5 amendment of 2026-10-31,
+proposed, splits this phase into P18a (`stream`, now) and P18b (`transcript`, after the tag). Its steps are written when
+the owner accepts it.*
+
 Files:
 
 - `internal/cli/render/mdstream.go`, `mdstyle.go`, `table.go` (deleted), and their tests and testdata;
@@ -1063,6 +1075,23 @@ Files: `go.mod`, `go.sum`, `.github/workflows/ci.yml`, `README.md`, `docs/archit
 4. **No source change.** `buildinfo`, `selfupdate` and their tests pass unchanged.
 5. **The docs:** `README.md:136` and `docs/architecture.md:159` name `v1.23.1`.
 6. G-local, and G-hosts. **Commit.**
+
+No check is added, so C9 has nothing to break.
+
+### P23 — go-tui-lib/v2 `v2.7.1` (MADR D1, amended 2026-10-31; deviation 13)
+
+Files: `go.mod`, `go.sum`, `README.md`, `docs/architecture.md`.
+
+1. **Checked first:** `python3 scripts/check_libs.py --lib go-tui-lib --tag v2.7.1` reports every check ok, `archtest`
+   among them. At the base it did, on 2026-10-31: 14 checks, 0 failing.
+2. **The pin:** `go get github.com/maccavelli/go-tui-lib/v2@v2.7.1`, then `go mod tidy`.
+   * `go.mod` changes on that line alone.
+   * `go.sum` changes in go-tui-lib's lines alone.
+3. **No source change.** `v2.7.1` changes only `inline/inlinetest/screen.go`'s `line`, which now drops a row's trailing
+   blank cells where it trimmed trailing spaces. `internal/cli/editor`'s tests, which read that screen, pass unchanged.
+   A test whose expectation changes is a deviation, since the MADR's D1 amendment says nothing gobble sees changes.
+4. **The docs:** `README.md:137` and `docs/architecture.md:160` name `v2.7.1`.
+5. G-local with `make perf`, and G-hosts with `make perf` and `make probe-conhost`. **Commit.**
 
 No check is added, so C9 has nothing to break.
 
@@ -2367,3 +2396,50 @@ Deviation 12 resumed P17 after P12's `2c9d3b3`. The record of 2026-10-30, above,
    The owner fast-forwards `main` to it. That is a merge, so it is human-only, and P18 starts after it.
 
 No deviation of its own. The base correction in item 1 changes no decision.
+
+
+### Deviation 13 (2026-10-31): go-tui-lib `v2.7.1`, and P18's file list
+
+- **Found, at P18's start** (`31e3c1c`):
+  - The owner, during P18: "go-tui-lib 2.7.1 is current". `git ls-remote --tags` lists `v2.7.1`
+    (`3039804ce2f8bee9a37315e1ee670738780ab6f3`, 2026-10-31).
+    - Its one code change is `inline/inlinetest/screen.go`'s `line`: go-tui-lib's
+      `docs/decisions/0023-MADR-line-mode-components.md` A13, its 0023-PLAN step 7d.
+    - `stream` and `transcript` are byte-identical to `v2.7.0`'s.
+    - `python3 scripts/check_libs.py --lib go-tui-lib --tag v2.7.1`: 14 checks, 0 failing.
+  - P18's file list misses `internal/cli/editor/editor.go`, `editor/resize_test.go`, `internal/cli/reprint_test.go`,
+    `internal/cli/transcript_test.go`, `internal/cli/bench_test.go`, and `render`'s `tool_test.go`, `commands_test.go`,
+    `golden_test.go` and `bench_test.go`.
+    - `transcript.Transcript` owns the settle (`Resize`, `Timeout`, `HandleTimeout`), and has no call that draws at a
+      width without one.
+    - gobble's editor runs its own settle, and writes the reprint with the prompt as one synchronized update
+      (`internal/cli/editor/editor.go:299-320`).
+  - A probe at `v2.7.1` measured how a host can write a reprint with a drawn region. The library's documented recipe
+    takes 3 frames, with the prompt absent from two. `region.Print` of the reprint takes 2, nested. Only an
+    unsynchronized `Transcript` gives 1, which then breaks the mid-turn reprint. The MADR's D14 step 5 amendment records
+    the table.
+- **The owner's answers, 2026-10-31:**
+  - The pin: "New pin phase first (Recommended)". The options not taken were pinning it inside P18, and staying on
+    `v2.7.0`.
+  - P18: after a comparison of three approaches for future-proofing, flexibility and extensibility, "option C, draft the
+    detailed, comprehensive, and actionable issue for the sdk repo and post it. then ground in facts and the codebase,
+    and write the madr for review, pending the sdk release that carries the required enhancements." The approaches not
+    taken were adopting `transcript` as it is, and asking for a reprint drawn at a width on demand alone.
+- **Decision.**
+  - MADR D1 has a dated amendment for `v2.7.1`, decided.
+  - MADR D14 step 5 has a dated amendment, **proposed** for the owner's review. It splits step 5 into 5a, `stream` now,
+    and 5b, `transcript` after a go-tui-lib tag carries
+    [go-tui-lib#14](https://github.com/maccavelli/go-tui-lib/issues/14)'s item 1. The issue was filed the same day, on
+    the owner's word.
+  - P23 is new, above. P18 is held until the amendment is reviewed. Then P18a's and P18b's steps are written, with the
+    files found here.
+  - **The order:**
+    1. `0039-PLAN-one-json-v2-encoder-and-invalid-utf8-policy.md`'s
+       P1, the crash fix, first, by 0039-MADR's Q1, "run the crash fix first";
+    2. then P23;
+    3. then P18a, once the amendment is accepted;
+    4. P18b and P19 after go-tui-lib's tag.
+
+    Whether 0037-PLAN resumes while P18b waits is the amendment's proposed order, decided with it.
+- **Files added to scope:** P23's `go.mod`, `go.sum`, `README.md` and `docs/architecture.md`. P18's files wait for its
+  steps.
