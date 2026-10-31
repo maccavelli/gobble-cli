@@ -3,7 +3,6 @@ package catalog
 import (
 	"bytes"
 	"encoding/json/jsontext"
-	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"maps"
@@ -11,6 +10,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/maccavelli/gobble-cli/jsonx"
 	"github.com/maccavelli/gobble-cli/llm"
 )
 
@@ -114,6 +114,11 @@ var (
 	trailingCommas = regexp.MustCompile(`"(?:\\.|[^"\\])*"|,(\s*[}\]])`)
 )
 
+// StripModelsJSON is data as gobble reads a models.json: a BOM, // comments
+// and trailing commas removed, as Pi removes them. Every newline is kept, so
+// a line counted in the result is the file's (0039-PLAN deviation 5).
+func StripModelsJSON(data []byte) []byte { return stripJSON(data) }
+
 // stripJSON removes a BOM, // comments and trailing commas, as Pi does.
 func stripJSON(data []byte) []byte {
 	data = bytes.TrimPrefix(data, []byte("\uFEFF"))
@@ -138,7 +143,7 @@ func stripJSON(data []byte) []byte {
 // does not use; sdk is the SDK's version, for the diagnostics.
 func ParseModelsJSON(data []byte, sdk string) (*ModelsJSON, []string, error) {
 	var f mjFile
-	if err := json.Unmarshal(stripJSON(data), &f); err != nil {
+	if err := jsonx.UnmarshalStrict(stripJSON(data), &f); err != nil {
 		return nil, nil, fmt.Errorf("models.json: %w", err)
 	}
 	if f.Providers == nil {

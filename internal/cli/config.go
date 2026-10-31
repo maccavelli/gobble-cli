@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"cmp"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
@@ -8,11 +9,16 @@ import (
 	"io/fs"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 
 	"github.com/maccavelli/gobble-cli/internal/cli/editor"
 	"github.com/maccavelli/gobble-cli/internal/config"
+	"github.com/maccavelli/gobble-cli/jsonx"
+	"github.com/maccavelli/gobble-cli/llm/catalog"
+	"github.com/maccavelli/gobble-cli/mcpclient"
+	"github.com/maccavelli/gobble-cli/permission"
 )
 
 // openEditor is editor.Open; tests replace it.
@@ -311,13 +317,97 @@ func (c *ConfigUpdateCmd) Run(e *runEnv) error {
 	return e.out.Result(preview)
 }
 
-// Run prints every diagnostic of the global and project files.
+// Run prints every diagnostic of the global and project files, and of the
+// JSON configuration and state files gobble reads (0039-MADR D3, Q6).
 func (c *ConfigValidateCmd) Run(e *runEnv) error {
 	_, ds, err := e.resolveHere()
 	if err != nil {
 		return err
 	}
-	return e.printDiagnostics(ds, c.Strict)
+	return e.printDiagnostics(append(ds, jsonDiagnostics(jsonConfigFiles())...), c.Strict)
+}
+
+// jsonConfigFile is a JSON configuration or state file, read as gobble
+// reads it.
+type jsonConfigFile struct {
+	path   string
+	models bool // models.json: JSONC, stripped first (0039-PLAN deviation 5)
+	mcp    bool // mcp.json: its entries are checked too
+}
+
+// jsonConfigFiles are the JSON files gobble reads from its configuration
+// directory; none when that directory cannot be resolved.
+func jsonConfigFiles() []jsonConfigFile {
+	dirs, _, err := systemDirs()
+	if err != nil {
+		return nil
+	}
+	return []jsonConfigFile{
+		{path: mcpConfigPath(), mcp: true},
+		{path: authPath()},
+		{path: filepath.Join(dirs.Config, "models.json"), models: true},
+		{path: filepath.Join(dirs.Config, permission.PermissionsFile)},
+		{path: filepath.Join(dirs.Config, permission.TrustFile)},
+	}
+}
+
+// jsonDiagnostics checks each present file strictly. A repeated name,
+// invalid UTF-8 or a syntax error is an error naming the file, the line and
+// the path, and never a value, since auth.json holds credentials; then
+// models.json's and mcp.json's own errors, which make gobble ignore the file
+// or an entry of it.
+func jsonDiagnostics(files []jsonConfigFile) []config.Diagnostic {
+	var ds []config.Diagnostic
+	for _, f := range files {
+		if f.path == "" {
+			continue
+		}
+		data, err := os.ReadFile(f.path)
+		switch {
+		case errors.Is(err, fs.ErrNotExist):
+			continue
+		case err != nil:
+			ds = append(ds, config.Diagnostic{File: f.path, Severity: config.SeverityError, Text: "could not read: " + err.Error()})
+			continue
+		}
+		if f.models {
+			data = catalog.StripModelsJSON(data)
+		}
+		var v jsontext.Value
+		if err := jsonx.UnmarshalStrict(data, &v); err != nil {
+			ds = append(ds, jsonDiagnostic(f.path, data, err))
+			continue
+		}
+		switch {
+		case f.models:
+			if _, _, err := catalog.ParseModelsJSON(data, ""); err != nil {
+				ds = append(ds, config.Diagnostic{File: f.path, Severity: config.SeverityError, Text: err.Error()})
+			}
+		case f.mcp:
+			for _, msg := range mcpclient.Load(f.path).Errors {
+				ds = append(ds, config.Diagnostic{File: f.path, Severity: config.SeverityError, Text: strings.TrimPrefix(msg, f.path+": ")})
+			}
+		}
+	}
+	return ds
+}
+
+// jsonDiagnostic is a strict decode's error as a finding: its line, counted
+// in data, and its JSON Pointer, with a text of gobble's own.
+func jsonDiagnostic(file string, data []byte, err error) config.Diagnostic {
+	d := config.Diagnostic{File: file, Severity: config.SeverityError, Text: "not valid JSON"}
+	if se, ok := errors.AsType[*jsontext.SyntacticError](err); ok {
+		end := min(max(se.ByteOffset, 0), int64(len(data)))
+		d.Line = 1 + bytes.Count(data[:end], []byte("\n"))
+		d.Path = string(se.JSONPointer)
+	}
+	switch {
+	case errors.Is(err, jsontext.ErrDuplicateName):
+		d.Text = "a name is repeated"
+	case jsontext.Value(data).IsValid(jsontext.AllowInvalidUTF8(true)):
+		d.Text = "not valid UTF-8"
+	}
+	return d
 }
 
 // printDiagnostics prints ds one per line, by file and line, and exits 1

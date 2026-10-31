@@ -260,3 +260,41 @@ func TestStoreBadFile(t *testing.T) {
 		t.Errorf("no file: %v, %v; want an empty File", f, err)
 	}
 }
+
+// auth.json is configuration: invalid UTF-8 or a lone surrogate escape is
+// refused, never repaired (0039-MADR D3; Confirmation 8). The backslash is
+// made in code (0039-PLAN C4).
+func TestAuthFileStrict(t *testing.T) {
+	for name, body := range map[string]string{
+		"invalid byte":   "{\"openai\":{\"type\":\"api_key\",\"key\":\"k\xff\"}}",
+		"lone surrogate": strings.ReplaceAll(`{"openai":{"type":"api_key","key":"k~ud83d"}}`, "~", string(rune(92))),
+	} {
+		path := filepath.Join(t.TempDir(), "auth.json")
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := Load(path); err == nil {
+			t.Errorf("%s: Load accepted it", name)
+		}
+	}
+}
+
+// A key holding an invalid byte is refused, and auth.json is left as it was:
+// a credential is never written altered (0039-MADR D3; Confirmation 8).
+func TestSetKeyInvalidUTF8(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "auth.json")
+	if err := SetKey(t.Context(), path, "openai", "good", ""); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := SetKey(t.Context(), path, "openai", "bad\xff", ""); err == nil {
+		t.Fatal("SetKey accepted a key holding an invalid byte")
+	}
+	after, err := os.ReadFile(path)
+	if err != nil || string(after) != string(before) {
+		t.Fatalf("auth.json changed: %q, %v; want %q", after, err, before)
+	}
+}

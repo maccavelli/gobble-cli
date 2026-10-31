@@ -145,3 +145,11 @@ func TestModelsJSONHeaders(t *testing.T) {
 		t.Error("HasHeaders")
 	}
 }
+
+// models.json is configuration: an invalid byte is refused, never repaired
+// (0039-MADR D3; Confirmation 8).
+func TestModelsJSONStrict(t *testing.T) {
+	if _, _, err := ParseModelsJSON([]byte("{\"providers\":{\"x\xff\":{}}}"), ""); err == nil {
+		t.Fatal("ParseModelsJSON accepted an invalid byte")
+	}
+}

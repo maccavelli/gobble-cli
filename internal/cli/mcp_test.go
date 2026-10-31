@@ -306,3 +306,17 @@ func TestMCPServerCompletion(t *testing.T) {
 		t.Fatalf("completion created files: %v %v", entries, err)
 	}
 }
+
+// `gobble mcp list` reports a repeated server name as a config error and
+// exits 1 (0039-MADR D3, Q6; Confirmation 22).
+func TestMCPListDuplicate(t *testing.T) {
+	home := t.TempDir()
+	p := filepath.Join(home, "mcp.json")
+	if err := os.WriteFile(p, []byte(`{"mcpServers":{"a":{"command":"x"},"a":{"command":"y"}}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r := runIn(t, home, "mcp", "list")
+	if r.code != ExitFailure || !strings.Contains(r.stdout, "config error: "+p+": ") || !strings.Contains(r.stdout, `"a"`) {
+		t.Fatalf("exit %d, stdout %q; want a config error naming a", r.code, r.stdout)
+	}
+}

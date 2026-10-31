@@ -3,10 +3,10 @@ package catalog
 import (
 	"bytes"
 	_ "embed" // the snapshot
-	"encoding/json/v2"
 	"slices"
 	"time"
 
+	"github.com/maccavelli/gobble-cli/jsonx"
 	"github.com/maccavelli/gobble-cli/llm"
 )
 
@@ -29,7 +29,7 @@ func Source() (url string, fetched time.Time) {
 		Source  string `json:"source"`
 		Fetched string `json:"fetched"`
 	}
-	if json.Unmarshal(source, &s) != nil {
+	if jsonx.UnmarshalStrict(source, &s) != nil {
 		return "", time.Time{}
 	}
 	t, err := time.Parse("2006-01-02T15:04Z", s.Fetched)

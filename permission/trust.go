@@ -3,7 +3,6 @@ package permission
 import (
 	"context"
 	"encoding/json/jsontext"
-	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -14,6 +13,7 @@ import (
 
 	"github.com/maccavelli/gobble-cli/internal/filelock"
 	"github.com/maccavelli/gobble-cli/internal/fsx"
+	"github.com/maccavelli/gobble-cli/jsonx"
 )
 
 // TrustFile is the saved trust decisions' file in gobble's config
@@ -147,7 +147,7 @@ func (s TrustStore) Load() (map[string]bool, error) {
 		return nil, fmt.Errorf("%s: %w", TrustFile, err)
 	}
 	m := map[string]bool{}
-	if err := json.Unmarshal(data, &m); err != nil {
+	if err := jsonx.UnmarshalStrict(data, &m); err != nil {
 		return nil, fmt.Errorf("%s: %w", TrustFile, err)
 	}
 	return m, nil
@@ -238,7 +238,7 @@ func (s TrustStore) modify(ctx context.Context, change func(map[string]bool) boo
 	if !change(m) {
 		return nil
 	}
-	data, err := json.Marshal(m, json.Deterministic(true), jsontext.WithIndent("  "))
+	data, err := jsonx.MarshalStrict(m, jsontext.WithIndent("  "))
 	if err != nil {
 		return fmt.Errorf("%s: %w", TrustFile, err)
 	}

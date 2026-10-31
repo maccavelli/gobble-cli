@@ -2,7 +2,6 @@ package mcpclient
 
 import (
 	"encoding/json/jsontext"
-	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -14,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/maccavelli/gobble-cli/jsonx"
 )
 
 // DefaultTimeout is a server's per-request timeout when its entry sets none,
@@ -206,7 +207,7 @@ func (e entry) str(key string) (string, bool) {
 		return "", false
 	}
 	var s string
-	if json.Unmarshal(v, &s) != nil {
+	if jsonx.UnmarshalStrict(v, &s) != nil {
 		return "", false
 	}
 	return s, true
@@ -223,7 +224,7 @@ func (e entry) pairs(key string) ([]Pair, bool) {
 	out := make([]Pair, 0, len(ms))
 	for _, m := range ms {
 		var s string
-		if m.value.Kind() != '"' || json.Unmarshal(m.value, &s) != nil {
+		if m.value.Kind() != '"' || jsonx.UnmarshalStrict(m.value, &s) != nil {
 			return nil, false
 		}
 		out = append(out, Pair{Name: m.name, Value: s})
@@ -253,7 +254,7 @@ func (e entry) common(s *Server) error {
 		}
 		for _, m := range ms {
 			var x string
-			if m.value.Kind() != '"' || json.Unmarshal(m.value, &x) != nil || !slices.Contains(exposures, x) {
+			if m.value.Kind() != '"' || jsonx.UnmarshalStrict(m.value, &x) != nil || !slices.Contains(exposures, x) {
 				return e.errorf("toolExposure %q must be one of %s", m.name, choices)
 			}
 			s.ToolExposure = append(s.ToolExposure, Pair{Name: m.name, Value: x})
@@ -270,7 +271,7 @@ func (e entry) common(s *Server) error {
 	}
 	if v, ok := e.value("timeout"); ok {
 		var secs float64
-		if v.Kind() != '0' || json.Unmarshal(v, &secs) != nil || !(secs > 0) || math.IsInf(secs, 0) {
+		if v.Kind() != '0' || jsonx.UnmarshalStrict(v, &secs) != nil || !(secs > 0) || math.IsInf(secs, 0) {
 			return e.errorf("timeout must be a positive number of seconds")
 		}
 		s.Timeout = time.Duration(secs * float64(time.Second))
@@ -303,7 +304,7 @@ func (e entry) stdio(s Server, cmd string) (Server, error) {
 	s.Command = cmd
 	if v, ok := e.value("args"); ok {
 		var args []string
-		if v.Kind() != '[' || json.Unmarshal(v, &args) != nil {
+		if v.Kind() != '[' || jsonx.UnmarshalStrict(v, &args) != nil {
 			return Server{}, e.errorf("args must be an array of strings")
 		}
 		s.Args = args
@@ -352,7 +353,7 @@ func validateOAuth(v jsontext.Value) error {
 	}
 	port, hasPort := 0.0, false
 	if pv, ok := e.value("callbackPort"); ok {
-		if pv.Kind() != '0' || json.Unmarshal(pv, &port) != nil || port != math.Trunc(port) || port < 1 || port > 65535 {
+		if pv.Kind() != '0' || jsonx.UnmarshalStrict(pv, &port) != nil || port != math.Trunc(port) || port < 1 || port > 65535 {
 			return errors.New("oauth.callbackPort must be a port number")
 		}
 		hasPort = true

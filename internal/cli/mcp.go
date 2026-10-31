@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/maccavelli/gobble-cli/internal/cli/complete"
+	"github.com/maccavelli/gobble-cli/jsonx"
 	"github.com/maccavelli/gobble-cli/mcpclient"
 )
 
@@ -152,7 +153,7 @@ func setPair(ps []mcpclient.Pair, name, value string) []mcpclient.Pair {
 // []mcpclient.Pair value is an object of strings.
 func encodeObject(ms []member) (jsontext.Value, error) {
 	var buf bytes.Buffer
-	enc := jsontext.NewEncoder(&buf)
+	enc := jsontext.NewEncoder(&buf, jsonx.StrictOptions())
 	write := func(tok jsontext.Token) error { return enc.WriteToken(tok) }
 	if err := write(jsontext.BeginObject); err != nil {
 		return nil, err

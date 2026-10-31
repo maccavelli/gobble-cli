@@ -129,3 +129,23 @@ func TestAddRefusesAMalformedFile(t *testing.T) {
 		t.Fatalf("file changed: %s", got)
 	}
 }
+
+// Add and Remove refuse an mcp.json holding a repeated name, and leave it as
+// it was, where they used to rewrite it without the first value (0039-MADR
+// D3, Q6; Confirmation 22).
+func TestEditRefusesDuplicate(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "mcp.json")
+	in := []byte(`{"mcpServers":{"github":{"command":"first"},"github":{"command":"second"}}}`)
+	if err := os.WriteFile(p, in, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Add(p, "new", jsontext.Value(`{"command":"n"}`)); err == nil {
+		t.Error("Add edited a file holding a repeated name")
+	}
+	if _, err := Remove(p, "github"); err == nil {
+		t.Error("Remove edited a file holding a repeated name")
+	}
+	if b, err := os.ReadFile(p); err != nil || !bytes.Equal(b, in) {
+		t.Fatalf("mcp.json is now %q, %v; want it unchanged", b, err)
+	}
+}

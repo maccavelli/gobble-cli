@@ -367,3 +367,44 @@ func TestReadOnlyCommandsCreateNothing(t *testing.T) {
 		}
 	}
 }
+
+// validate checks the JSON configuration and state files strictly: a
+// repeated name in each is an error with its file, line and path, no value
+// is printed, and the exit is 1; clean files give no finding (0039-MADR D3,
+// Q6; Confirmation 22). models.json is read as gobble reads it, its comment
+// stripped (0039-PLAN deviation 5).
+func TestConfigValidateJSONFiles(t *testing.T) {
+	c := newCfgEnv(t)
+	bad := map[string]string{
+		"mcp.json":         "{\"mcpServers\": {\n\"a\": {\"command\": \"x\"},\n\"a\": {\"command\": \"y\"}}}\n",
+		"auth.json":        "{\"openai\": {\"type\": \"api_key\", \"key\": \"sk-secret-1\"},\n\"openai\": {\"type\": \"api_key\", \"key\": \"sk-secret-2\"}}\n",
+		"models.json":      "// a comment\n{\"providers\": {\"x\": {},\n\"x\": {}}}\n",
+		"permissions.json": "{\"a\": [],\n\"a\": []}\n",
+		"trust.json":       "{\"/w\": true,\n\"/w\": false}\n",
+	}
+	lines := map[string]string{"mcp.json": ":3: ", "auth.json": ":2: ", "models.json": ":3: ", "permissions.json": ":2: ", "trust.json": ":2: "}
+	for name, body := range bad {
+		c.write(filepath.Join(c.home, name), body)
+	}
+	r := c.run("config", "validate")
+	if r.code != ExitFailure || strings.Contains(r.stdout, "sk-secret") {
+		t.Fatalf("exit %d, stdout:\n%s", r.code, r.stdout)
+	}
+	for name, line := range lines {
+		want := filepath.Join(c.home, name) + line
+		found := false
+		for l := range strings.SplitSeq(r.stdout, "\n") {
+			found = found || strings.HasPrefix(l, want) && strings.HasSuffix(l, ": a name is repeated")
+		}
+		if !found {
+			t.Errorf("no finding %q…a name is repeated in:\n%s", want, r.stdout)
+		}
+	}
+	clean := map[string]string{"mcp.json": `{"mcpServers": {}}`, "auth.json": `{}`, "models.json": "// c\n{\"providers\": {}}", "permissions.json": `{}`, "trust.json": `{}`}
+	for name, body := range clean {
+		c.write(filepath.Join(c.home, name), body)
+	}
+	if r := c.run("config", "validate"); r.code != ExitOK || r.stdout != "" {
+		t.Fatalf("clean files: exit %d, stdout %q", r.code, r.stdout)
+	}
+}

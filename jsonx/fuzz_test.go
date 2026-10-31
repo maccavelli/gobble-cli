@@ -1,9 +1,11 @@
 package jsonx_test
 
 import (
+	"encoding/json/jsontext"
 	"testing"
 
 	"github.com/maccavelli/gobble-cli/jsonx"
+	"github.com/maccavelli/gobble-cli/session"
 )
 
 // Quote equals Marshal byte for byte, and is valid JSON, for any bytes
@@ -53,6 +55,25 @@ func FuzzFields(f *testing.F) {
 		}
 		if !got.IsValid() {
 			t.Fatalf("Fields = %s, not valid JSON", got)
+		}
+	})
+}
+
+// gobble writes no repeated name: a session entry whose embedded unknown
+// members repeat a known one either fails to encode, or encodes to JSON that
+// a strict reader accepts (0039-MADR D3, Q6; Confirmation 22).
+func FuzzNoDuplicateWritten(f *testing.F) {
+	f.Add("message", "id1", `{"type":"other"}`)
+	f.Add("custom", "id2", `{"x":1,"x":2}`)
+	f.Add("message", "", `{"extra":true}`)
+	f.Fuzz(func(t *testing.T, typ, id, unknown string) {
+		e := session.Entry{Type: typ, ID: id, Unknown: jsontext.Value(unknown)}
+		out, err := jsonx.Marshal(e)
+		if err != nil {
+			return
+		}
+		if !jsontext.Value(out).IsValid() {
+			t.Fatalf("encoded %q, which a strict reader refuses", out)
 		}
 	})
 }

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json/jsontext"
-	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -14,6 +13,7 @@ import (
 	"time"
 
 	"github.com/maccavelli/gobble-cli/internal/filelock"
+	"github.com/maccavelli/gobble-cli/jsonx"
 )
 
 // The entry types of Pi's auth.json (ai/src/auth/types.ts).
@@ -81,7 +81,7 @@ func parse(data []byte) (*File, error) {
 	if len(bytes.TrimSpace(data)) == 0 {
 		return f, nil
 	}
-	d := jsontext.NewDecoder(bytes.NewReader(data))
+	d := jsontext.NewDecoder(bytes.NewReader(data), jsonx.StrictOptions())
 	if tok, err := d.ReadToken(); err != nil || tok.Kind() != '{' {
 		return nil, errors.New("invalid auth.json: expected an object")
 	}
@@ -108,7 +108,7 @@ func parse(data []byte) (*File, error) {
 			FedRAMP   bool    `json:"fedramp"`
 			Workspace string  `json:"workspace"`
 		}
-		if value.Kind() != '{' || json.Unmarshal(value, &e) != nil || e.Type == nil {
+		if value.Kind() != '{' || jsonx.UnmarshalStrict(value, &e) != nil || e.Type == nil {
 			return nil, fmt.Errorf("invalid auth.json credential for provider %q", provider)
 		}
 		entry := Entry{Type: *e.Type, Key: e.Key, Expires: e.Expires, Access: e.Access, Refresh: e.Refresh,
@@ -157,7 +157,7 @@ func SetKey(ctx context.Context, path, provider, key, workspace string) error {
 		if f.v == "" {
 			continue
 		}
-		b, merr := json.Marshal(f.v)
+		b, merr := jsonx.MarshalStrict(f.v)
 		err = errors.Join(err, merr)
 		set = append(set, field{f.name, b})
 	}
@@ -240,7 +240,7 @@ type field struct {
 // fedramp when false.
 func oauthFields(e Entry) (set []field, remove []string, err error) {
 	add := func(name string, v any) {
-		b, merr := json.Marshal(v)
+		b, merr := jsonx.MarshalStrict(v)
 		err = errors.Join(err, merr)
 		set = append(set, field{name, b})
 	}
@@ -282,7 +282,7 @@ func merge(old jsontext.Value, set []field, remove []string) (jsontext.Value, er
 	}
 	done := map[string]bool{}
 	if len(old) > 0 {
-		d := jsontext.NewDecoder(bytes.NewReader(old))
+		d := jsontext.NewDecoder(bytes.NewReader(old), jsonx.StrictOptions())
 		if _, err := d.ReadToken(); err != nil {
 			return nil, err
 		}

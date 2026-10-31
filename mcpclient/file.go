@@ -15,6 +15,7 @@ import (
 
 	"github.com/maccavelli/gobble-cli/internal/filelock"
 	"github.com/maccavelli/gobble-cli/internal/fsx"
+	"github.com/maccavelli/gobble-cli/jsonx"
 )
 
 // member is one name and value of a JSON object, in document order.
@@ -25,10 +26,11 @@ type member struct {
 
 var errNotObject = errors.New("not a JSON object")
 
-// members are a JSON object's members in order. A repeated name keeps its
-// first place and its last value, as JSON.parse does.
+// members are a JSON object's members in order. A repeated name, at any
+// depth, is an error: no reader can tell which value was meant, and an edit
+// would delete one (0039-MADR D3, Q6).
 func members(b []byte) ([]member, error) {
-	d := jsontext.NewDecoder(bytes.NewReader(b), jsontext.AllowDuplicateNames(true))
+	d := jsontext.NewDecoder(bytes.NewReader(b), jsonx.StrictOptions())
 	tok, err := d.ReadToken()
 	if err != nil {
 		return nil, err
@@ -37,7 +39,6 @@ func members(b []byte) ([]member, error) {
 		return nil, errNotObject
 	}
 	var out []member
-	at := map[string]int{}
 	for d.PeekKind() != '}' {
 		tok, err := d.ReadToken()
 		if err != nil {
@@ -49,11 +50,6 @@ func members(b []byte) ([]member, error) {
 			return nil, err
 		}
 		v = v.Clone() // the decoder reuses its buffer
-		if i, ok := at[name]; ok {
-			out[i].value = v
-			continue
-		}
-		at[name] = len(out)
 		out = append(out, member{name: name, value: v})
 	}
 	if _, err := d.ReadToken(); err != nil {
@@ -77,7 +73,7 @@ func find(ms []member, name string) (jsontext.Value, bool) {
 // object encodes members as one compact JSON object, in order.
 func object(ms []member) (jsontext.Value, error) {
 	var buf bytes.Buffer
-	enc := jsontext.NewEncoder(&buf)
+	enc := jsontext.NewEncoder(&buf, jsonx.StrictOptions())
 	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
 		return nil, err
 	}

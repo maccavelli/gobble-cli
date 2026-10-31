@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 )
@@ -103,5 +104,44 @@ func TestLoad(t *testing.T) {
 	}
 	if c := Load(filepath.Join(t.TempDir(), "none.json")); len(c.Errors) != 0 || len(c.Servers) != 0 {
 		t.Errorf("missing file: %+v", c)
+	}
+}
+
+// mcp.json is configuration: an invalid byte is refused (0039-MADR D3;
+// Confirmation 8).
+func TestMCPConfigStrict(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "mcp.json")
+	if err := os.WriteFile(p, []byte("{\"mcpServers\":{\"a\":{\"command\":\"x\xff\"}}}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if c := Load(p); len(c.Errors) != 1 || len(c.Servers) != 0 {
+		t.Fatalf("Load = %+v; want one error and no server", c)
+	}
+}
+
+// A repeated server name is refused, with an error naming it, and no server
+// of the file loads: no reader can tell which was meant (0039-MADR D3, Q6;
+// Confirmation 22).
+func TestDuplicateServerRefused(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "mcp.json")
+	body := `{"mcpServers":{"github":{"command":"first"},"other":{"command":"x"},"github":{"command":"second"}}}`
+	if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c := Load(p)
+	if len(c.Servers) != 0 || len(c.Errors) != 1 || !strings.Contains(c.Errors[0], `"github"`) || !strings.Contains(c.Errors[0], "mcpServers") {
+		t.Fatalf("Load = %+v; want one error naming mcpServers and github", c)
+	}
+}
+
+// A field set twice in a server is refused the same way.
+func TestDuplicateFieldRefused(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "mcp.json")
+	if err := os.WriteFile(p, []byte(`{"mcpServers":{"a":{"command":"x","command":"y"}}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c := Load(p)
+	if len(c.Servers) != 0 || len(c.Errors) != 1 || !strings.Contains(c.Errors[0], `"command"`) {
+		t.Fatalf("Load = %+v; want one error naming command", c)
 	}
 }

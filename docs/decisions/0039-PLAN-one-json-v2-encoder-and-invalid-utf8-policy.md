@@ -302,7 +302,9 @@ Files:
    * `Add` and `Remove` (`mcpclient/file.go:102-148`) fail on the same error before writing, so the file is not changed.
    * The agent's note (`acpserver/mcp.go:71-73`) and `gobble mcp list`'s `config error:` and exit 1
      (`internal/cli/mcp.go:250`, `:298`) need no change. A test pins each.
-3. **`gobble config validate`** (`internal/cli/config.go:57-60`, `:315-341`) also checks the JSON configuration files:
+3. **`gobble config validate`** (`internal/cli/config.go:57-60`, `:315-341`) also checks the JSON configuration files.
+   *Amended 2026-10-31, by deviation 5:* `models.json` is stripped first, as gobble reads it, through a new
+   `catalog.StripModelsJSON`, and `ParseModelsJSON`'s own error is a finding too:
    * `mcpConfigPath()` (`internal/cli/agent.go:178-184`), `authPath()` (`internal/cli/credentials.go:20-25`),
      `models.json` (`internal/cli/modelsjson.go:40`), and `permission.PermissionsFile` and `permission.TrustFile` in
      the configuration directory;
@@ -778,3 +780,119 @@ The base is P0's `153ef60`. Deviations 1 to 4, above, changed the step's scope; 
     * `make check-records markdownlint`: passed;
     * preflight stops at `verify-build-metadata`, as on every copy. A first host run, before step 13's lint fix,
       stopped at the same `unconvert` finding.
+
+### Deviation 5 (2026-10-31): P2, `models.json` is JSONC
+
+* **Found** while writing step 3. gobble reads `models.json` through `stripJSON`, which removes a BOM, `//` comments
+  and trailing commas, "as Pi does" (`llm/catalog/modelsjson.go:117-145`). A plain strict decode, as step 3 had it,
+  would refuse a valid commented file.
+  * `stripJSON` keeps every newline: a comment is removed up to its `\n`, and a trailing comma's removal keeps the
+    whitespace after it. So a line counted in the stripped bytes is the file's line.
+  * `ParseModelsJSON` strips internally and does not expose the stripped bytes, so its syntax errors' offsets could
+    not be mapped to lines.
+* **The owner's answer:** "Strip as gobble reads it (Recommended)". The option not taken was to validate through
+  `ParseModelsJSON` only, with no line or path.
+* **Decision.**
+  * `llm/catalog` exports `StripModelsJSON(data []byte) []byte`, which is `stripJSON`.
+  * `gobble config validate` strips `models.json` with it, then decodes strictly. A duplicate, invalid UTF-8 or a
+    syntax error gets its file, line and path.
+  * When that passes, `ParseModelsJSON`'s own error, such as no `providers` object or a field of the wrong type, which
+    makes gobble ignore the file whole, is a finding too.
+* **Files added:** none; `llm/catalog/modelsjson.go` is already P2's.
+
+### P2 record (2026-10-31): the configuration policy, and the duplicate-name gates
+
+The base is P1's `6b5af2c`. Deviation 5 changed step 3.
+
+1. **The strict sites** use `jsonx`'s strict forms:
+   * `internal/auth/store.go`: its two decoders take `jsonx.StrictOptions()`, and its decode and two encodes use
+     `UnmarshalStrict` and `MarshalStrict`;
+   * `llm/catalog/catalog.go:32` and `llm/catalog/modelsjson.go:141` use `UnmarshalStrict`;
+   * `mcpclient/config.go`'s six decodes use `UnmarshalStrict`, and `mcpclient/file.go`'s decoder and encoder take
+     `StrictOptions()`;
+   * `internal/cli/mcp.go:155`'s encoder takes `StrictOptions()`;
+   * `permission/store.go` and `permission/trust.go` decode with `UnmarshalStrict`, and encode with `MarshalStrict` and
+     `jsontext.WithIndent("  ")`.
+
+   Every one of these already decoded with v2's defaults, so the only changes in behaviour are step 2's and step 3's.
+   The existing tests of the five packages passed unchanged.
+2. **`mcp.json`'s repeated names** (Q6): `members` (`mcpclient/file.go`) drops `AllowDuplicateNames(true)`, and its
+   doc comment says a repeated name, at any depth, is an error. Its last-value bookkeeping went with it, since the
+   decoder now refuses a repeat before it could run. `Load`, `Add`, `Remove`, the agent's note and `gobble mcp list`
+   needed no further change.
+3. **`gobble config validate`** (`internal/cli/config.go`), with deviation 5:
+   * `jsonConfigFiles` names `mcp.json`, `auth.json`, `models.json`, `permissions.json` and `trust.json` in the
+     configuration directory, through `systemDirs`, `mcpConfigPath` and `authPath`;
+   * `jsonDiagnostics` reads each present file, strips `models.json` with the new `catalog.StripModelsJSON`, and
+     decodes with `jsonx.UnmarshalStrict` into a `jsontext.Value`. Then it adds `ParseModelsJSON`'s error, or
+     `mcpclient.Load`'s errors;
+   * `jsonDiagnostic` takes the line and path from the `*jsontext.SyntacticError`. Its text is "a name is repeated"
+     (`jsontext.ErrDuplicateName`), "not valid UTF-8" (the bytes valid under `AllowInvalidUTF8`), or "not valid JSON".
+     No value is printed.
+
+   Measured with the built command on a scratch home holding five bad files, `auth.json`'s two keys
+   `sk-secret-1` and `sk-secret-2` among them:
+
+   ```text
+   <home>/auth.json:2: /openai: a name is repeated
+   <home>/mcp.json:3: /mcpServers/a: a name is repeated
+   <home>/models.json:3: /providers/x: a name is repeated
+   <home>/permissions.json:2: /a: a name is repeated
+   <home>/trust.json:2: not valid UTF-8
+   ```
+
+   The exit was 1, and no `sk-secret` was printed.
+4. **Tests,** each passing, and each seen failing on its planted break (C9):
+
+   | Test | Break | The failure |
+   | :--- | :--- | :--- |
+   | `TestAuthFileStrict` | the auth store's decoder and decode on the data policy | `invalid byte: Load accepted it`, `lone surrogate: Load accepted it` |
+   | `TestSetKeyInvalidUTF8` | `SetKey`'s encode on the data policy | `SetKey accepted a key holding an invalid byte` |
+   | `TestModelsJSONStrict` | `ParseModelsJSON`'s decode on the data policy | `ParseModelsJSON accepted an invalid byte` |
+   | `TestMCPConfigStrict` | `members` and the six value decodes on the data policy | `Load` gave server `a` the command `x` with U+FFFD |
+   | `TestDuplicateServerRefused`, `TestDuplicateFieldRefused`, `TestEditRefusesDuplicate` | `AllowDuplicateNames(true)` put back in `members` | `Load` gave the servers; `Remove edited a file holding a repeated name` |
+   | `TestMCPListDuplicate` | the same | `mcp list` started both `a` servers, and printed no config error |
+   | `TestConfigValidateJSONFiles` | `validate` without the JSON files | `exit 0` and no finding |
+   | `FuzzNoDuplicateWritten` | `AllowDuplicateNames(true)` in `jsonx.Options()` | `encoded {"type":"message",…,"type":"other"}, which a strict reader refuses` |
+
+   `FuzzNoDuplicateWritten` also ran 20 s against the finished code, with 2,142,401 executions and no failure. It
+   lives in `jsonx/fuzz_test.go`, an external test package, which imports `session`.
+5. **Notes for later phases:**
+   * P9's `forbidigo` rule forbids v2's `MarshalEncode` and `UnmarshalDecode` outside `jsonx`.
+     `internal/cli/mcp.go:181` calls `json.MarshalEncode`, and P8's step 1 calls `json.UnmarshalDecode`. `jsonx` will
+     need thin wrappers for both before P9, or the rule exempts them. That is P8's or P9's to settle, as a deviation
+     if it changes a step.
+   * P9's `archtest` rule, that `jsonx` imports no package of this module, must count `jsonx`'s non-test imports only,
+     since `jsonx/fuzz_test.go` imports `session`.
+6. **G-local:**
+   * `make pre-add-check` on the 16 changed Go files: clean; after the lint fixes below, on the 2 files they touched:
+     clean;
+   * `make preflight`: passed. Its first run stopped at golangci-lint's `modernize`, twice:
+     `internal/cli/config.go:400`, an `errors.As` that `errors.AsType[*jsontext.SyntacticError]` replaces, and
+     `internal/cli/config_test.go:396`, a range over `strings.Split` that `strings.SplitSeq` replaces. Both were fixes
+     to the step's own code, not deviations;
+   * `go test ./...`: 37 ok; `make race`: 37 ok;
+   * `make perf`, since P2 touches `internal/cli`: passed, with ReplyRender 35.96 µs (baseline 30 µs), Reprint
+     10.45 ms (baseline 9.4 ms), LineSessionStart 1.19 ms (baseline 830 µs, 5012 allocations) and KeyDraw 1.533 µs
+     (baseline 1.5 µs).
+   * LineSessionStart was above the 886 to 937 µs of 0035-PLAN's recent phases, so it was measured again against the tree before P1
+     (`153ef60`) and P1 (`6b5af2c`), each from `git archive` into the scratchpad:
+     * four interleaved rounds gave the base 945 to 1,036 µs, P1 1,026 to 1,125 µs and P2 1,068 to 1,141 µs, with
+       the machine's load average between 24 and 29;
+     * one more round each gave the base 1.232 ms, P1 982 µs and P2 1.072 ms;
+     * the allocations per session start are 5,012, 5,011 and 5,011.
+
+     The allocations are the same, the ranges overlap, and the slowest single run was the base's. They show no
+     slowing by P2; the rise follows the machine's load. One `make perf` run under load failed every budget at about four times its baseline,
+     KeyDraw among them, which P2 does not touch; it is not counted.
+7. **G-hosts,** on the Linux machine and the Windows laptop, with 813 files shipped to each:
+   * `go test`: passed;
+   * race: passed, 37 ok;
+   * `make check-records markdownlint`: passed;
+   * preflight stops at `verify-build-metadata`, as on every copy. A first host run, before the lint fixes, stopped at
+     the same two `modernize` findings;
+   * `make perf`: passed on both. The Linux machine: ReplyRender 146.8 µs (baseline 110 µs), Reprint 34.95 ms
+     (baseline 29 ms), LineSessionStart 4.00 ms (baseline 2.9 ms), KeyDraw 5.545 µs (baseline 5 µs). The Windows
+     laptop: ReplyRender 28.91 µs (baseline 54 µs), Reprint 7.44 ms (baseline 12 ms), LineSessionStart 4.51 ms
+     (baseline 6.9 ms), KeyDraw 1.215 µs (baseline 1.4 µs);
+   * the conhost probe on the Windows laptop: passed.
