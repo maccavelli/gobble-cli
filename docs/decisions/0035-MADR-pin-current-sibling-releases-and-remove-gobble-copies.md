@@ -358,6 +358,22 @@ policy. And one record keeps the order, and the cross-library facts (check-libs,
     `go.mod` is unchanged, so A1.2's module list still holds.*
 
   *acp-go-sdk2 `v1.26.0` and go-llmprovider-sdk `v1.24.1` are still the newest.*
+
+  *Amended 2026-10-31, by the PLAN's deviation 12, from the owner's request "there is a new release of acp-go-sdk2 out,
+  we need to pin the latest", and go-tui-lib's release the same day:*
+  - ***acp-go-sdk2 `v1.28.0`**, in place of `v1.26.0`:*
+    - *`v1.27.0` adds the package `remote`;*
+    - *`v1.28.0` adds `Process.CloseContext`, `Process.KillContext` and `acp.ErrHandlersRunning`. They answer
+      [acp-go-sdk2#12](https://github.com/maccavelli/acp-go-sdk2/issues/12), closed 2026-10-30;*
+    - *its `go.mod` gains `github.com/coder/websocket` `v1.8.15`, for `remote`. gobble imports neither. On a scratch
+      copy, `go mod tidy` adds neither to gobble's `go.mod` or `go.sum`.*
+  - ***go-tui-lib/v2 `v2.7.0`**, in place of `v2.6.2`:*
+    - *a `lineedit` key no longer lays the whole line out again: go-tui-lib's
+      `docs/decisions/0023-MADR-line-mode-components.md`, A12. That answers
+      [go-tui-lib#13](https://github.com/maccavelli/go-tui-lib/issues/13);*
+    - *its `go.mod` is unchanged.*
+  - *`python3 scripts/check_libs.py --lib <library> --tag <tag>` passed every check for each: 13 for acp-go-sdk2, and 14
+    for go-tui-lib, with `archtest`. `staticcheck`, `lint` and `api` are among them.*
 - **D2. `check-libs` sees what preflight sees.**
   - `scripts/check_libs.py` runs `make staticcheck` and `make lint` on its scratch module for each library, so that F2
     would have been reported.
@@ -471,6 +487,12 @@ policy. And one record keeps the order, and the cross-library facts (check-libs,
   [acp-go-sdk2#12](https://github.com/maccavelli/acp-go-sdk2/issues/12), and `acpclient.Start` stays gobble's until a tag
   carries it.)*
 
+  *(2026-10-31, by the PLAN's deviation 12: resumed at acp-go-sdk2 `v1.28.0`, by the owner's answer "Grace ½, ctx 1×":*
+  - *`Close` is the runner's `CloseContext`, bounded by `closeTimeout`;*
+  - *the runner's grace is half of `closeTimeout`;*
+  - *a client handler that never returns is reported after `closeTimeout`, as today;*
+  - *an agent that stops for nothing is killed, and abandoned, within one and a half times `closeTimeout`.)*
+
 ### go-tui-lib
 
 - **D13. `archtest` names `/v2`.**
@@ -581,6 +603,9 @@ policy. And one record keeps the order, and the cross-library facts (check-libs,
     0030-MADR D5's budgets of 4.5, 15 and 4.2 µs, which this decision keeps. Step 4 waits for a go-tui-lib tag that
     meets them, asked for in [go-tui-lib#13](https://github.com/maccavelli/go-tui-lib/issues/13). `internal/cli/editor` stays gobble's until then, and step 5 waits
     with it.)*
+    *(2026-10-31, by the PLAN's deviation 12: resumed at `v2.7.0`. On a scratch copy of P17's work, gobble's own
+    `make perf` gives a key 1.48 µs on macOS, 3.50 µs on the Linux machine and 1.21 µs on the Windows laptop, with 5
+    allocations each. All three are within the budgets above.)*
   - *step 5 stands, with `wrap.go` kept for thinking text and the width helpers moved to `x/ansi`.*
 
   *(Answered 2026-10-29: PQ4 (a) `ask`'s behaviour, 0029-MADR D1 amended; PQ5 (a) `safetext` on terminal paths, print

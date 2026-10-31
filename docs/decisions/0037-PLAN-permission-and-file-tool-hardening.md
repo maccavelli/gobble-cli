@@ -714,3 +714,12 @@ The base is P1's `e13d154`.
    * After deviation 2's test change: `make pre-add-check` on `permission/store_test.go` was clean, `make preflight`
      passed, and `go test -race ./permission/` was ok.
 8. **G-hosts:** first run: the Linux machine passed; on the Windows laptop `TestTrustStaysExact` failed in `go test` and race, which is deviation 2. After it, on both hosts, `go test` passed, race passed with 36 ok, and `make check-records markdownlint` passed. `make preflight` stopped at `verify-build-metadata`, as on every copy..
+
+### Paused after P2 (2026-10-31)
+
+The owner asked for acp-go-sdk2's new release to be pinned, and go-tui-lib `v2.7.0` arrived the same day. Both resume
+held work in [0035-PLAN-pin-current-sibling-releases-and-remove-gobble-copies.md](0035-PLAN-pin-current-sibling-releases-and-remove-gobble-copies.md),
+by its deviation 12, which the owner ordered first ("0035 first (Recommended)"). This plan resumes at P3 once that
+plan's P19 is done. 0035's P17 returns to `main` as this plan's Rollout and Rollback says: `feature/p17-lineedit` is
+rebased onto `main`, and the owner fast-forwards `main` to it.
+

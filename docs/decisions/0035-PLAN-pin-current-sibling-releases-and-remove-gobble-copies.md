@@ -725,6 +725,9 @@ Files: `acpclient/conn.go`, `acpclient/close_test.go`, `acpclient/conn_test.go`.
    pass unchanged.
 8. G-local, G-hosts, with `make perf`, since `LineSessionStart` includes `Start`. **Commit.**
 
+*Amended 2026-10-31, by deviation 12, at acp-go-sdk2 `v1.28.0`:* steps 1, 3, 4 and 6 are as deviation 12 gives them.
+Steps 2, 5, 7 and 8 stand, step 5's 2 s bound included. P12 runs after P20.
+
 ### P13 — archtest names `/v2` (MADR D13)
 
 Files: `internal/archtest/check.go`, `internal/archtest/check_test.go`.
@@ -929,6 +932,9 @@ Files:
 7. **The Windows laptop:** `conhost_windows_test.go` and `make probe-conhost` pass.
 8. G-local with `make perf`, and G-hosts with `make perf` and `make probe-conhost`. **Commit.**
 
+*Amended 2026-10-31, by deviation 12:* P17 resumes after P21, on `feature/p17-lineedit`, rebased onto `main`.
+Step 8's commit is on that branch, and the owner fast-forwards `main` to it.
+
 ### P18 — `stream` and `transcript` (MADR D14 step 5; Q3; PQ3)
 
 Files:
@@ -1012,6 +1018,37 @@ Files:
 5. **Status.** This plan's status becomes `complete` when every phase's criteria are met. That includes P6, so
    P6's questions must be answered first.
 
+### P20 — acp-go-sdk2 `v1.28.0` (MADR D1, amended 2026-10-31; deviation 12)
+
+Files: `go.mod`, `go.sum`, `README.md`, `docs/architecture.md`.
+
+1. **Checked first:** `python3 scripts/check_libs.py --lib acp-go-sdk2 --tag v1.28.0` reports every check ok.
+2. **The pin:** `go get github.com/maccavelli/acp-go-sdk2@v1.28.0`, then `go mod tidy`.
+   - `go.mod` changes on that line alone.
+   - `go.sum` changes in acp-go-sdk2's lines alone.
+   - `github.com/coder/websocket` is in neither file.
+3. **No source change.** `acpclient`, `acpserver` and `internal/cli` build and pass their tests unchanged.
+4. **The docs:** `README.md:129` and `docs/architecture.md:156` name `v1.28.0`.
+5. G-local, and G-hosts. **Commit.**
+
+No check is added, so C9 has nothing to break.
+
+### P21 — go-tui-lib/v2 `v2.7.0` (MADR D1, amended 2026-10-31; deviation 12)
+
+Files: `go.mod`, `go.sum`, `README.md`, `docs/architecture.md`.
+
+1. **Checked first:** `python3 scripts/check_libs.py --lib go-tui-lib --tag v2.7.0` reports every check ok, `archtest`
+   among them.
+2. **The pin:** `go get github.com/maccavelli/go-tui-lib/v2@v2.7.0`, then `go mod tidy`.
+   - `go.mod` changes on that line alone.
+   - `go.sum` changes in go-tui-lib's lines alone.
+3. **No source change.** `internal/cli`'s tests pass unchanged, P14's `ask` prompt and P15's `glyph` and `safetext`
+   among them.
+4. **The docs:** `README.md:137` and `docs/architecture.md:160` name `v2.7.0`.
+5. G-local with `make perf`, and G-hosts with `make perf` and `make probe-conhost`. **Commit.**
+
+No check is added, so C9 has nothing to break.
+
 ## Verification
 
 Each phase's own steps are its acceptance criteria. Across the plan:
@@ -1032,6 +1069,7 @@ Each phase's own steps are its acceptance criteria. Across the plan:
   - P8–P12 need P7;
   - P14–P18 need P13;
   - P15–P18 need P14's requirement.
+  - P12 needs P20, and P17 needs P21 (deviation 12).
 
   Reverting a pin phase reverts the phases that need it, newest first.
 - Nothing is pushed by this plan. The owner pushes, after the disclosure guard.
@@ -1968,3 +2006,100 @@ The base is `6c5eb02`. Nothing is committed (deviation 11).
    - `make perf` breaches KeyDraw on both, as deviation 11's table has it;
    - `make probe-conhost` passes on the Windows laptop.
 9. **Not done:** step 8's commit.
+
+### Deviation 12 (2026-10-31): new tags, and P12 and P17 resumed
+
+- **Found.**
+  - The owner, 2026-10-30: "there is a new release of acp-go-sdk2 out, we need to pin the latest. also, a new release
+    of go-tui-lib is going to be out in about 20 minutes."
+  - The module proxy lists acp-go-sdk2 `v1.27.0` and `v1.28.0` after `v1.26.0`, and go-tui-lib/v2 `v2.7.0` after
+    `v2.6.2`. MADR D1 makes a newer tag a deviation for the owner, and the Rollout section makes it a new amendment.
+  - **acp-go-sdk2 `v1.28.0`** answers [acp-go-sdk2#12](https://github.com/maccavelli/acp-go-sdk2/issues/12), closed
+    2026-10-30, which held P12 (deviation 9).
+    - `go doc agentproc.Process.Close`: "Like Wait, Close waits without bound for a client handler that ignores its
+      context; CloseContext bounds it."
+    - `CloseContext(ctx)` runs Close's steps. Should ctx end during them, the steps left run as `Kill`'s do.
+    - Should ctx end before `Wait` would return, it returns `context.Cause(ctx)`, joined with
+      `acp.ErrHandlersRunning` when the connection's handlers still run, and with the agent's error. It returns at most
+      a grace after ctx ends.
+    - `v1.27.0` adds the package `remote`, whose `github.com/coder/websocket` `v1.8.15` is in the SDK's `go.mod`.
+      gobble imports neither. On a scratch copy, `go mod tidy` adds neither to gobble's `go.mod` or `go.sum`.
+  - **go-tui-lib/v2 `v2.7.0`** carries go-tui-lib's 0023-PLAN Step 7c, its answer to
+    [go-tui-lib#13](https://github.com/maccavelli/go-tui-lib/issues/13).
+    - The issue is still open. go-tui-lib's record leaves it for its owner to close.
+    - That library's perf gate gives the key 1.43 µs on macOS, 4.99 µs on Linux and 2.30 µs on Windows.
+    - Its A12 item 2 also measures gobble's own `BenchmarkKeyDraw` at `6c5eb02` as 1.55 µs and 8 allocations. That is
+      against deviation 11's 4.24 µs and 17, a figure from another harness. It is not measured again here. The
+      budgets are 0030-MADR D5's either way.
+  - **P17's key at `v2.7.0`.** `make perf` ran on a scratch export of `feature/p17-lineedit` (`8630b77`) with
+    `go get github.com/maccavelli/go-tui-lib/v2@v2.7.0`. The tree was not touched. `internal/cli/...`'s tests passed
+    on the export first.
+
+    | Host | Budget | `v2.6.2` (deviation 11) | `v2.7.0` |
+    | --- | --- | --- | --- |
+    | macOS | 4.5 µs | 14.9 µs, 53 allocations | 1.479 µs, 5 allocations |
+    | the Linux machine | 15 µs | 42.0 µs, 53 allocations | 3.498 µs, 5 allocations |
+    | the Windows laptop | 4.2 µs | 11.8 µs, 53 allocations | 1.208 µs, 5 allocations |
+
+    On the same runs, `internal/cli`'s `ReplyRender`, `Reprint` and `LineSessionStart` passed their budgets on every
+    host.
+  - **`check-libs`.** `python3 scripts/check_libs.py --lib acp-go-sdk2 --tag v1.28.0` passed all 13 checks.
+    `--lib go-tui-lib --tag v2.7.0` passed all 14. `staticcheck`, `lint` and `api` are among them, and `archtest` is
+    among go-tui-lib's.
+  - `feature/p17-lineedit` has never been pushed: `git ls-remote --heads origin feature/p17-lineedit` is empty.
+    `main` is three commits past its base, `61f7115`.
+- **The owner's answers, 2026-10-31:**
+  - P12's bound: "Grace ½, ctx 1× (Recommended)". The options not taken were:
+    - the grace at `closeTimeout` and ctx at twice it, which reports a hung handler after twice today's bound;
+    - both at `closeTimeout`, where step 2 and the kill race at the same instant.
+  - P17's return to `main`: "Rebase branch, you merge". The options not taken were:
+    - cherry-picking `8630b77` onto `main`;
+    - finishing on the branch, with a merge commit.
+  - The order: "0035 first (Recommended)". The options not taken were:
+    - the pins now, and the rest after 0037's first plan;
+    - 0037's first plan first.
+- **Decision.**
+  - MADR D1, D12 and D14 step 4 have dated notes.
+  - **The order:**
+    1. these records;
+    2. P20, acp-go-sdk2 `v1.28.0`;
+    3. P12;
+    4. P21, go-tui-lib/v2 `v2.7.0`;
+    5. P17, on its branch;
+    6. the owner's fast-forward of `main`;
+    7. P18;
+    8. P19.
+
+    Then [0037-PLAN-permission-and-file-tool-hardening.md](0037-PLAN-permission-and-file-tool-hardening.md) resumes at
+    its P3.
+  - **P12, steps 1, 3, 4 and 6 as amended:**
+    1. `Start` builds `agentproc.InProcess{Serve: <the adapter>, Grace: closeTimeout / 2, ConnectionOptions:
+       connOpts}`.
+    3. `Close`, through `closeFrom(base)`:
+       - `ctx, cancel := context.WithTimeout(context.WithoutCancel(base), closeTimeout)`, then
+         `err := c.proc.CloseContext(ctx)`;
+       - it returns nil when `err` is nil, and otherwise `agent: %w` of it;
+       - when `errors.Is(err, acp.ErrHandlersRunning)`, today's words, "the connection's handlers did not stop within
+         <closeTimeout> of its close", are joined in front;
+       - `agentproc.ErrAbandoned`, `agentproc.ErrKilled` and `acp.ErrHandlersRunning` stay readable with `errors.Is`;
+       - P11's separate `WaitContext` goes, since `CloseContext`'s wait is the connection's.
+    4. `closeTimeout` bounds `Close` as a whole, and the runner's grace is half of it, so `SetCloseTimeout` bounds
+       both. `TestCloseWaitsForHandlers` and `TestCloseBoundedWhenAHandlerHangs` pass unchanged; a change to either is
+       a deviation.
+    6. Seen failing, each on a scratch copy:
+       - with `Grace` unset, so 5 s, `TestCloseAbandonsAStuckAgent` fails its 2 s bound;
+       - with `Close` as `c.proc.Close()`, `TestCloseBoundedWhenAHandlerHangs` does not return, under
+         `go test -timeout 60s`.
+  - **P17, resumed:**
+    1. After P21's commit, `git rebase main feature/p17-lineedit`. `8630b77` touches `internal/cli` alone, and `main`
+       has not touched it since `61f7115`. A conflict stops the phase as a deviation.
+    2. Steps 5, 7 and 8 run on the rebased branch. The step 6 breaks and the P17 record's other results are not
+       repeated, since the rebase changes none of P17's files. The tests and gates run again in full.
+    3. A second commit on the branch has the records: the P17 record's completion, and the `docs/README.md` row.
+    4. The owner fast-forwards `main` to the branch. That is a merge, so it is human-only. P18 starts after it.
+  - P20 and P21 are new phases, above.
+- **Files added to scope:**
+  - P20 and P21: `go.mod`, `go.sum`, `README.md` and `docs/architecture.md`;
+  - the records: [0037-PLAN-permission-and-file-tool-hardening.md](0037-PLAN-permission-and-file-tool-hardening.md),
+    with a dated note that it pauses after P2.
+
