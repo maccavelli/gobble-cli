@@ -2198,3 +2198,31 @@ The base is P20's `6f7787f`.
        5.005 µs against its baseline of 5 µs and budget of 15 µs;
      - the Windows laptop: `ReplyRender` 28.4 µs, `Reprint` 7.13 ms, `LineSessionStart` 3.91 ms, `KeyDraw` 1.055 µs;
    - `make probe-conhost` passed on the Windows laptop.
+
+### P22 record (2026-10-31): go-selfupdate-lib `v1.23.1`
+
+The base is P21's `adb6c47`.
+
+1. **Checked first:** `python3 scripts/check_libs.py --lib go-selfupdate-lib --tag v1.23.1`, run again at the base:
+   "pinned v1.23.0, checking v1.23.1", "0 failing checks".
+2. **The pin:** `go get github.com/maccavelli/go-selfupdate-lib@v1.23.1` ("upgraded … v1.23.0 => v1.23.1"), then
+   `go mod tidy`.
+   - `go.mod` changes on the go-selfupdate-lib line alone. The library's new `golang.org/x` minimums are the versions
+     gobble already required.
+   - `go.sum` changes in go-selfupdate-lib's two lines alone.
+3. **The workflow pins:** `.github/workflows/ci.yml`'s two `uses:` lines, `build` and `release`, now name
+   `c24f5919cd9e9e3ba3736e64bcf18a6e2a51489e # v1.23.1`. A search of `.github/` finds no `67520be8`.
+4. **No source change.** `go test -count=1 ./...` passes, `buildinfo` and `selfupdate` included.
+5. **The docs:** `README.md:136` and `docs/architecture.md:159` name `v1.23.1`.
+6. No check is added, so C9 has nothing to break.
+7. **G-local:**
+   - `make pre-add-check`: 589 files clean;
+   - `make preflight`: passed;
+   - `make race`: 36 ok.
+8. **G-hosts,** on the Linux machine and the Windows laptop, with 814 files shipped to each:
+   - `go test`: passed;
+   - race: passed, 36 ok;
+   - `make check-records markdownlint`: passed;
+   - preflight stops at `verify-build-metadata`, as on every copy.
+9. **Not checkable here:** the release workflows run only in CI, on a tag or a rehearsal. The pinned commit's two
+   workflow files are byte-identical to `v1.23.0`'s, by deviation 12's `diff -r` of the two module zips.
