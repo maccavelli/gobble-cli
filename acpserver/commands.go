@@ -13,6 +13,7 @@ import (
 
 	"github.com/maccavelli/gobble-cli/command"
 	"github.com/maccavelli/gobble-cli/compaction"
+	"github.com/maccavelli/gobble-cli/jsonx"
 	"github.com/maccavelli/gobble-cli/llm/catalog"
 	"github.com/maccavelli/gobble-cli/personality"
 	sysprompt "github.com/maccavelli/gobble-cli/prompt"
@@ -156,7 +157,12 @@ func (a *Agent) runCommand(turnCtx context.Context, s *liveSession, conn *acp.Ag
 // cancelled is a cancelled command turn's answer: not an error, with the
 // session's queues emptied into _meta (clearedMeta).
 func cancelled(s *liveSession) (acp.PromptResponse, error) {
-	return acp.PromptResponse{StopReason: acp.StopReasonCancelled, Meta: clearedMeta(s)}, nil
+	return withCleared(s, acp.PromptResponse{StopReason: acp.StopReasonCancelled})
+}
+
+// switchMeta is a /fork or /clone answer's _meta.gobble (0039-MADR D15).
+type switchMeta struct {
+	SwitchTo string `json:"switchTo"`
 }
 
 func (*Agent) cmdHelp(_ context.Context, t *cmdTurn, _ string) error {
@@ -682,7 +688,11 @@ func (a *Agent) copyTo(ctx context.Context, t *cmdTurn, path []session.Entry, do
 	if err != nil {
 		return err
 	}
-	t.meta = map[string]any{gobble: map[string]any{"switchTo": string(id)}}
+	meta, err := jsonx.SetMember(nil, gobble, switchMeta{SwitchTo: string(id)})
+	if err != nil {
+		return err
+	}
+	t.meta = meta
 	t.say(t.text(done, personality.Args{argID: string(id)}))
 	return nil
 }
@@ -699,15 +709,15 @@ func (a *Agent) copySession(ctx context.Context, s *liveSession, path []session.
 	}
 	log, err := a.store.Create(ctx, h)
 	if err != nil {
-		return "", acp.NewInternalError(map[string]any{keyReason: err.Error()})
+		return "", acp.NewInternalError(jsonx.Strings(map[string]string{keyReason: err.Error()}))
 	}
 	for _, e := range path {
 		if err := log.Append(ctx, e); err != nil {
-			return "", acp.NewInternalError(map[string]any{keyReason: errors.Join(err, log.Close()).Error()})
+			return "", acp.NewInternalError(jsonx.Strings(map[string]string{keyReason: errors.Join(err, log.Close()).Error()}))
 		}
 	}
 	if err := log.Close(); err != nil {
-		return "", acp.NewInternalError(map[string]any{keyReason: err.Error()})
+		return "", acp.NewInternalError(jsonx.Strings(map[string]string{keyReason: err.Error()}))
 	}
 	return id, nil
 }

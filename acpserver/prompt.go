@@ -62,12 +62,19 @@ func (u *updates) send(su acp.SessionUpdate) {
 }
 
 // notify sends an extension notification about the session, as send sends
-// an update: once one fails, nothing more is sent.
+// an update: once one fails, nothing more is sent. gobble encodes params
+// with encoding/json/v2, and the SDK splices them (0039-MADR D13); an
+// encode error is kept as a send's is, and nothing is sent.
 func (u *updates) notify(method string, params any) {
 	if u.err != nil || u.conn == nil {
 		return
 	}
-	u.err = u.conn.NotifyExtension(u.ctx, method, params)
+	v, err := jsonx.Value(params)
+	if err != nil {
+		u.err = fmt.Errorf("%s: %w", method, err)
+		return
+	}
+	u.err = u.conn.NotifyExtension(u.ctx, method, v)
 }
 
 // retryNotice is _gobble/retry's params (0005-PLAN F5-1 decision 5).
@@ -272,12 +279,12 @@ const workspaceAdvice = "claude needs an Anthropic workspace for this key: run /
 // message.
 func promptError(err error) error {
 	if errors.Is(err, llm.ErrWorkspace) { // the service's words are not shown (0035-MADR D5)
-		return acp.NewInternalError(map[string]any{keyError: workspaceAdvice})
+		return acp.NewInternalError(jsonx.Strings(map[string]string{keyError: workspaceAdvice}))
 	}
 	if errors.Is(err, llm.ErrAuth) {
-		return acp.NewAuthRequired(map[string]any{keyError: err.Error()})
+		return acp.NewAuthRequired(jsonx.Strings(map[string]string{keyError: err.Error()}))
 	}
-	return acp.NewInternalError(map[string]any{keyError: err.Error()})
+	return acp.NewInternalError(jsonx.Strings(map[string]string{keyError: err.Error()}))
 }
 
 // acpUsage is the turn's usage for the prompt response.

@@ -145,7 +145,7 @@ func (a *Agent) askInsults(ctx context.Context, conn *acp.AgentSideConnection, s
 	}
 	if a.save != nil {
 		if err := a.save("bombasticAccepted", "true"); err != nil {
-			return false, acp.NewInternalError(map[string]any{keyReason: err.Error()})
+			return false, acp.NewInternalError(jsonx.Strings(map[string]string{keyReason: err.Error()}))
 		}
 	}
 	a.mu.Lock()

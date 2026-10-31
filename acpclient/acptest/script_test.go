@@ -53,7 +53,7 @@ func TestScriptAgentPlaysTurns(t *testing.T) {
 	if _, err := prompt(t, c, id); err == nil || !strings.Contains(err.Error(), "provider down") {
 		t.Fatalf("turn 2 err = %v, want the scripted error", err)
 	}
-	if _, err := prompt(t, c, id); err == nil || !strings.Contains(err.Error(), `"update":0`) {
+	if _, err := prompt(t, c, id); err == nil || !strings.Contains(err.Error(), `"update":"0"`) {
 		t.Fatalf("turn 3 err = %v, want the bad update named", err)
 	}
 	if _, err := prompt(t, c, id); err == nil || !strings.Contains(err.Error(), "script exhausted after 3 turns") {

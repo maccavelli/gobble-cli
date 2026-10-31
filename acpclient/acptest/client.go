@@ -5,9 +5,12 @@ import (
 	"encoding/json/jsontext"
 	"math"
 	"slices"
+	"strconv"
 	"sync"
 
 	acp "github.com/maccavelli/acp-go-sdk2"
+
+	"github.com/maccavelli/gobble-cli/jsonx"
 )
 
 // Client is the default test client. It records session/update
@@ -133,7 +136,7 @@ func (c *Client) ReadTextFile(_ context.Context, r acp.ReadTextFileRequest) (acp
 	c.fileCalls = append(c.fileCalls, "read "+r.Path)
 	text, ok := c.Files[r.Path]
 	if !ok {
-		return acp.ReadTextFileResponse{}, acp.NewInvalidParams(map[string]any{"path": r.Path, "reason": "no such file"})
+		return acp.ReadTextFileResponse{}, acp.NewInvalidParams(jsonx.Strings(map[string]string{"path": r.Path, "reason": "no such file"}))
 	}
 	return acp.ReadTextFileResponse{Content: text}, nil
 }
@@ -197,7 +200,7 @@ func (t *Terminals) exit() (*uint32, error) {
 // error, answered as an internal error rather than wrapped (0014-PLAN C4).
 func exitCode(n int) (*uint32, error) {
 	if n < 0 || n > math.MaxUint32 {
-		return nil, acp.NewInternalError(map[string]any{"exitCode": n, "reason": "outside ACP's range"})
+		return nil, acp.NewInternalError(jsonx.Strings(map[string]string{"exitCode": strconv.Itoa(n), "reason": "outside ACP's range"}))
 	}
 	return new(uint32(n)), nil
 }

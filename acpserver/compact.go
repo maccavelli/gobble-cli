@@ -9,6 +9,7 @@ import (
 	acp "github.com/maccavelli/acp-go-sdk2"
 
 	"github.com/maccavelli/gobble-cli/compaction"
+	"github.com/maccavelli/gobble-cli/jsonx"
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/personality"
 	"github.com/maccavelli/gobble-cli/session"
@@ -114,7 +115,7 @@ func (a *Agent) runCompaction(ctx context.Context, s *liveSession, prep *compact
 	}
 	details, err := json.Marshal(res.Details)
 	if err != nil {
-		return compaction.Result{}, 0, acp.NewInternalError(map[string]any{keyReason: err.Error()})
+		return compaction.Result{}, 0, acp.NewInternalError(jsonx.Strings(map[string]string{keyReason: err.Error()}))
 	}
 	e := session.Entry{Type: session.TypeCompaction, Summary: res.Summary, FirstKeptEntryID: res.FirstKeptEntryID,
 		TokensBefore: new(res.TokensBefore), Details: details, Usage: pricedUsage(res.Usage, a.modelOf(a.provOf(s), m.Model)), FromHook: new(false)}

@@ -14,6 +14,7 @@ import (
 	acp "github.com/maccavelli/acp-go-sdk2"
 
 	"github.com/maccavelli/gobble-cli/internal/fsx"
+	"github.com/maccavelli/gobble-cli/jsonx"
 	"github.com/maccavelli/gobble-cli/permission"
 	"github.com/maccavelli/gobble-cli/tool"
 )
@@ -135,8 +136,8 @@ func (r requestPermissions) Run(ctx context.Context, call tool.Call, env tool.En
 	}
 	if sel := resp.Outcome.Selected; sel == nil || sel.OptionId != grantYes {
 		text := "The user refused the request."
-		if g, ok := resp.Meta[gobble].(map[string]any); ok {
-			if f, ok := g[keyFeedback].(string); ok && f != "" {
+		if g, ok := jsonx.Member[map[string]any](resp.Meta, gobble); ok {
+			if f, ok := jsonx.Member[string](g, keyFeedback); ok && f != "" {
 				text += " The user said: " + cutBytes(f, maxFeedback)
 			}
 		}

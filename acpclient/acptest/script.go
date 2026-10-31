@@ -9,9 +9,12 @@ import (
 	"io"
 	"log/slog"
 	"slices"
+	"strconv"
 	"sync"
 
 	acp "github.com/maccavelli/acp-go-sdk2"
+
+	"github.com/maccavelli/gobble-cli/jsonx"
 )
 
 // Turn is a scripted answer to one session/prompt. Updates are ACP
@@ -156,7 +159,7 @@ func sendUpdates(ctx context.Context, conn *acp.AgentSideConnection, id acp.Sess
 	for i, u := range updates {
 		var update acp.SessionUpdate
 		if err := json.Unmarshal([]byte(u), &update); err != nil {
-			return acp.NewInternalError(map[string]any{"update": i, "error": err.Error()})
+			return acp.NewInternalError(jsonx.Strings(map[string]string{"update": strconv.Itoa(i), "error": err.Error()}))
 		}
 		if err := conn.SessionUpdate(ctx, acp.SessionNotification{SessionId: id, Update: update}); err != nil {
 			return err
@@ -183,7 +186,7 @@ func (a *ScriptAgent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.Prom
 		resp.Usage = &acp.Usage{} //nolint:staticcheck // as the lint:ignore above
 		//lint:ignore SA1019 acp-go-sdk2 keeps this unstable-schema name under v1 (0035-MADR D6)
 		if err := json.Unmarshal([]byte(turn.Usage), resp.Usage); err != nil { //nolint:staticcheck // as the lint:ignore above
-			return acp.PromptResponse{}, acp.NewInternalError(map[string]any{"usage": err.Error()})
+			return acp.PromptResponse{}, acp.NewInternalError(jsonx.Strings(map[string]string{"usage": err.Error()}))
 		}
 	}
 	if wait != nil {
@@ -213,7 +216,7 @@ func (a *ScriptAgent) startTurn(p acp.PromptRequest) (Turn, *acp.AgentSideConnec
 	a.methods = append(a.methods, acp.AgentMethodSessionPrompt)
 	a.prompts = append(a.prompts, string(v))
 	if a.next >= len(a.Turns) {
-		return Turn{}, nil, nil, acp.NewInternalError(map[string]any{"script": fmt.Sprintf("acptest: script exhausted after %d turns", len(a.Turns))})
+		return Turn{}, nil, nil, acp.NewInternalError(jsonx.Strings(map[string]string{"script": fmt.Sprintf("acptest: script exhausted after %d turns", len(a.Turns))}))
 	}
 	turn := a.Turns[a.next]
 	a.next++

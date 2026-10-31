@@ -71,7 +71,7 @@ func (a *Agent) HandleExtensionMethod(ctx context.Context, method string, params
 	}
 	b, err := jsonx.Marshal(res)
 	if err != nil {
-		return nil, acp.NewInternalError(map[string]any{keyReason: err.Error()})
+		return nil, acp.NewInternalError(jsonx.Strings(map[string]string{keyReason: err.Error()}))
 	}
 	return jsontext.Value(b), nil
 }
@@ -126,7 +126,7 @@ func extSession[P interface{ session() acp.SessionId }](a *Agent, params jsontex
 		params = jsontext.Value("{}")
 	}
 	if err := jsonx.Unmarshal(params, &p); err != nil {
-		return p, nil, acp.NewInvalidParams(map[string]any{keyReason: err.Error()})
+		return p, nil, acp.NewInvalidParams(jsonx.Strings(map[string]string{keyReason: err.Error()}))
 	}
 	a.mu.Lock()
 	s, ok := a.sessions[p.session()]
@@ -245,9 +245,9 @@ func (a *Agent) extCompact(ctx context.Context, params jsontext.Value) (any, err
 	var reqErr *acp.RequestError
 	switch {
 	case turnCtx.Err() != nil:
-		return nil, acp.NewInternalError(map[string]any{keyError: "Compaction cancelled"})
+		return nil, acp.NewInternalError(jsonx.Strings(map[string]string{keyError: "Compaction cancelled"}))
 	case errors.Is(err, compaction.ErrAlreadyCompacted), errors.Is(err, compaction.ErrNothingToCompact):
-		return nil, acp.NewInvalidRequest(map[string]any{keySessionID: s.id, keyReason: err.Error()})
+		return nil, acp.NewInvalidRequest(jsonx.Strings(map[string]string{keySessionID: string(s.id), keyReason: err.Error()}))
 	case errors.As(err, &reqErr):
 		return nil, err
 	case err != nil:
@@ -317,7 +317,7 @@ func (a *Agent) extSetAutoRetry(_ context.Context, params jsontext.Value) (any, 
 	}
 	if a.save != nil {
 		if err := a.save("retry.enabled", strconv.FormatBool(*p.Enabled)); err != nil {
-			return nil, acp.NewInternalError(map[string]any{keyReason: err.Error()})
+			return nil, acp.NewInternalError(jsonx.Strings(map[string]string{keyReason: err.Error()}))
 		}
 	}
 	a.mu.Lock()
@@ -344,7 +344,7 @@ func (a *Agent) extSetAutoCompaction(_ context.Context, params jsontext.Value) (
 	}
 	if a.save != nil {
 		if err := a.save("compaction.enabled", strconv.FormatBool(*p.Enabled)); err != nil {
-			return nil, acp.NewInternalError(map[string]any{keyReason: err.Error()})
+			return nil, acp.NewInternalError(jsonx.Strings(map[string]string{keyReason: err.Error()}))
 		}
 	}
 	a.mu.Lock()

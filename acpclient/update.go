@@ -7,6 +7,8 @@ import (
 	"time"
 
 	acp "github.com/maccavelli/acp-go-sdk2"
+
+	"github.com/maccavelli/gobble-cli/jsonx"
 )
 
 // Kind is the kind of a session update, as gobble's clients act on it.
@@ -133,7 +135,7 @@ func retryOf(params jsontext.Value) (acp.SessionId, Retry, error) {
 		DelayMs     int64         `json:"delayMs"`
 		Error       string        `json:"error"`
 	}
-	if err := json.Unmarshal(params, &n); err != nil {
+	if err := jsonx.Unmarshal(params, &n); err != nil {
 		return "", Retry{}, fmt.Errorf("%s: %w", methodRetry, err)
 	}
 	return n.SessionID, Retry{Phase: n.Phase, Cause: n.Cause, Attempt: n.Attempt, MaxAttempts: n.MaxAttempts,
@@ -165,7 +167,7 @@ func compactionOf(params jsontext.Value) (acp.SessionId, Compaction, error) {
 		Error        string        `json:"error"`
 		Paused       string        `json:"paused"`
 	}
-	if err := json.Unmarshal(params, &n); err != nil {
+	if err := jsonx.Unmarshal(params, &n); err != nil {
 		return "", Compaction{}, fmt.Errorf("%s: %w", methodCompaction, err)
 	}
 	return n.SessionID, Compaction{Phase: n.Phase, Reason: n.Reason, TokensBefore: n.TokensBefore, Error: n.Error, Paused: n.Paused}, nil
@@ -189,7 +191,7 @@ func personalityOf(params jsontext.Value) (acp.SessionId, Personality, error) {
 		Name      string        `json:"name"`
 		Level     int           `json:"level"`
 	}
-	if err := json.Unmarshal(params, &n); err != nil {
+	if err := jsonx.Unmarshal(params, &n); err != nil {
 		return "", Personality{}, fmt.Errorf("%s: %w", methodPersonality, err)
 	}
 	return n.SessionID, Personality{Name: n.Name, Level: n.Level}, nil

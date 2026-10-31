@@ -8,6 +8,8 @@ import (
 	"time"
 
 	acp "github.com/maccavelli/acp-go-sdk2"
+
+	"github.com/maccavelli/gobble-cli/jsonx"
 )
 
 // ErrSessionLocked matches a session/resume or session/load the agent
@@ -66,26 +68,32 @@ type NewSessionOptions struct {
 	AdditionalDirectories []string
 }
 
-func (o NewSessionOptions) meta() map[string]any {
-	g := map[string]any{}
-	for k, v := range map[string]string{"sessionId": o.ID, "forkFrom": o.ForkFrom, "name": o.Name} {
-		if v != "" {
-			g[k] = v
-		}
+func (o NewSessionOptions) meta() (map[string]any, error) {
+	if o.ID == "" && o.ForkFrom == "" && o.Name == "" {
+		return nil, nil
 	}
-	if len(g) == 0 {
-		return nil
-	}
-	return map[string]any{metaGobble: g}
+	return jsonx.SetMember(nil, metaGobble, newSessionMeta{ForkFrom: o.ForkFrom, Name: o.Name, SessionID: o.ID})
+}
+
+// newSessionMeta is session/new's _meta.gobble, its members in sorted
+// order, as v1 wrote the map it replaces (0039-MADR D15).
+type newSessionMeta struct {
+	ForkFrom  string `json:"forkFrom,omitzero"`
+	Name      string `json:"name,omitzero"`
+	SessionID string `json:"sessionId,omitzero"`
 }
 
 // NewSessionWith is NewSession with options.
 func (c *Conn) NewSessionWith(ctx context.Context, cwd string, opts NewSessionOptions, on func(Update)) (*Session, error) {
 	c.newMu.Lock()
 	defer c.newMu.Unlock()
+	meta, err := opts.meta()
+	if err != nil {
+		return nil, fmt.Errorf("session/new: %w", err)
+	}
 	c.handler.setPending(on)
 	defer c.handler.setPending(nil)
-	resp, err := c.conn.NewSession(ctx, acp.NewSessionRequest{Cwd: cwd, McpServers: []acp.McpServer{}, Meta: opts.meta(),
+	resp, err := c.conn.NewSession(ctx, acp.NewSessionRequest{Cwd: cwd, McpServers: []acp.McpServer{}, Meta: meta,
 		AdditionalDirectories: opts.AdditionalDirectories})
 	if err != nil {
 		return nil, sessionError("session/new", err)
@@ -104,7 +112,11 @@ type setNameParams struct {
 // /name does. A refusal, such as an empty name, is ErrInvalidSession with
 // the agent's reason as its text.
 func (s *Session) SetName(ctx context.Context, name string) error {
-	if _, err := s.c.conn.CallExtension(ctx, "_gobble/set_session_name", setNameParams{SessionID: s.id, Name: name}); err != nil {
+	params, err := jsonx.Value(setNameParams{SessionID: s.id, Name: name})
+	if err != nil {
+		return fmt.Errorf("_gobble/set_session_name: %w", err)
+	}
+	if _, err := s.c.conn.CallExtension(ctx, "_gobble/set_session_name", params); err != nil {
 		return sessionError("_gobble/set_session_name", err)
 	}
 	return nil
@@ -146,11 +158,9 @@ func (c *Conn) ResumeSessionWith(ctx context.Context, id, cwd string, opts Resum
 		return nil, Resumed{}, sessionError("session/resume", err)
 	}
 	var r Resumed
-	if g, ok := resp.Meta[metaGobble].(map[string]any); ok {
-		r.Title, _ = g["title"].(string) //nolint:errcheck // absent is none
-		if n, ok := g["messages"].(float64); ok {
-			r.Messages = int(n)
-		}
+	if g, ok := jsonx.Member[map[string]any](resp.Meta, metaGobble); ok {
+		r.Title, _ = jsonx.Member[string](g, "title")    //nolint:errcheck // absent is none
+		r.Messages, _ = jsonx.Member[int](g, "messages") //nolint:errcheck // absent is none
 	}
 	return &Session{id: sid, c: c}, r, nil
 }

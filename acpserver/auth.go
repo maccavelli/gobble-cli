@@ -5,6 +5,8 @@ import (
 	"fmt"
 
 	acp "github.com/maccavelli/acp-go-sdk2"
+
+	"github.com/maccavelli/gobble-cli/jsonx"
 )
 
 // AuthProvider is a provider ACP authentication names: its id, which is
@@ -75,7 +77,7 @@ func (a *Agent) Authenticate(_ context.Context, p acp.AuthenticateRequest) (acp.
 		if a.auth.Has != nil && a.auth.Has(ap.ID) {
 			return acp.AuthenticateResponse{}, nil
 		}
-		return acp.AuthenticateResponse{}, acp.NewAuthRequired(map[string]any{"provider": ap.ID, keyReason: "no credential", "command": ap.Command})
+		return acp.AuthenticateResponse{}, acp.NewAuthRequired(jsonx.Strings(map[string]string{"provider": ap.ID, keyReason: "no credential", "command": ap.Command}))
 	}
-	return acp.AuthenticateResponse{}, acp.NewInvalidParams(map[string]any{keyReason: fmt.Sprintf("unknown auth method %q", p.MethodId)})
+	return acp.AuthenticateResponse{}, acp.NewInvalidParams(jsonx.Strings(map[string]string{keyReason: fmt.Sprintf("unknown auth method %q", p.MethodId)}))
 }

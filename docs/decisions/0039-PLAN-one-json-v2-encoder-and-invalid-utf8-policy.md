@@ -924,3 +924,177 @@ The base is P2's `f38c1c5`. No deviation.
    * race: passed, 37 ok;
    * `make check-records markdownlint`: passed;
    * preflight stops at `verify-build-metadata`, as on every copy.
+
+### Deviation 6 (2026-10-31): P4, the extension tests and `ExtensionMux`
+
+* **Found** reading step 2 against acp-go-sdk2 `v1.28.0`. `ExtensionMux.HandleExtensionMethod` takes a call for a
+  notification only when `acp.IsNotification(ctx)` says so (`extensions.go:121-122`), which is true only for a context
+  the connection marked. The SDK exports no way to mark one. `acpclient/retry_test.go:19-33`,
+  `compaction_test.go:18-29` and `personality_test.go:19-38` call `h.HandleExtensionMethod(t.Context(), ...)` directly,
+  so under step 2 each would be answered `-32601`. Two of their assertions are also D12's changes: an unregistered
+  notification is ignored, no longer `-32601`, and bad params are logged with no callback, no longer `-32602`.
+* **The owner's answer:** "Real connection pair (Recommended)". The options not taken were a per-method function per
+  notification tested directly with one routing test, and holding P4 for an SDK issue.
+* **Decision.** A test helper in `acpclient` wires an agent-side connection over `io.Pipe` to a client-side connection
+  serving the `handler`, with a capturing `slog` handler, and sends real notifications. The three tests keep their
+  assertions of the decoded update, its params, and nothing for another session, and assert D12's two changes as the
+  new behaviour.
+* **Files added:** none; the three test files are P4's.
+
+### Deviation 7 (2026-10-31): P4, two integers in `acptest`'s error data
+
+* **Found** counting step 4's 34 calls. D14 names one test-support integer, `"update": i`
+  (`acpclient/acptest/script.go:159`). `acpclient/acptest/client.go:200`'s `"exitCode": n` is a second.
+  `acpclient/acptest/script_test.go:56` asserts the first's bytes, `"update":0`, which `strconv.Itoa` makes
+  `"update":"0"`. That file is not in P4's list.
+* **The owner's answer:** "Itoa both, update test (Recommended)". The option not taken was a typed struct for the two
+  sites, keeping the numbers.
+* **Decision.** Both integers go through `strconv.Itoa`, and `script_test.go:56` asserts `"update":"0"`. The MADR's D14
+  is amended. Also recorded: `acpclient/conn.go:435`, one of the 34, goes with `HandleExtensionMethod` in step 2, so
+  33 calls are rebuilt with `jsonx.Strings`.
+* **Files added:** `acpclient/acptest/script_test.go`.
+
+### Deviation 8 (2026-10-31): P4, two tests read `_meta.gobble` as a Go map
+
+* **Found** reading the `_meta.gobble` tests against step 5. The `acpserver` tests read what came over the wire, which
+  the SDK decodes into `map[string]any`, so they pass unchanged. `acpclient/sessions_test.go:180`
+  (`NewSessionOptions.meta()`) and `:285` (the permission answer's `_meta`) type-assert the writer's own Go value,
+  which becomes a `jsontext.Value`. Step 6 says every existing `_meta.gobble` test passes unchanged.
+* **The owner's answer:** "Read via jsonx.Member (Recommended)". The option not taken was a v1 round trip in the tests.
+* **Decision.** The two tests read the members with `jsonx.Member`, with the same assertions. The MADR's Confirmation
+  21 is amended. Also recorded: each `_meta.gobble` struct declares its fields in sorted JSON-name order, the order v1
+  writes today's maps in, so the wire's bytes do not change.
+* **Files added:** none; `acpclient/sessions_test.go` is P4's.
+
+### Deviation 9 (2026-10-31): P4, `acpserver.Capabilities()` returns an error
+
+* **Found** writing step 5. D15's writer at `acpserver/agent.go:385`, `_meta.gobble.extensions`, is inside
+  `func Capabilities() acp.AgentCapabilities` (`:371`), which is exported and has no error result. `jsonx.SetMember`
+  returns an error, and D7 discards none. Its one caller is `Initialize` (`:400`), which returns an error. The other
+  seven writers are in functions that return an error already, or gain one with no exported change.
+* **The owner's answer:** "Return an error (Recommended)". The option not taken was a `jsonx` helper writing a string
+  array through `Quote`, which cannot fail, keeping the signature.
+* **Decision.** `Capabilities()` returns `(acp.AgentCapabilities, error)`, and `Initialize` answers its error as an
+  internal error whose data is built by `jsonx.Strings`. The MADR's D15 is amended. `apidiff` is a no-op below
+  v1.0.0, so no gate reports the change; this entry and the amendment are its record.
+* **Files added:** none; `acpserver/agent.go` is P4's.
+
+### Deviation 10 (2026-10-31): P4, `errText` reads an in-process error's data
+
+* **Found** running the tests after step 5. `errText` (`acpserver/extensions_test.go:121`) type-asserts `re.Data` as
+  `map[string]any`. Sixteen of its seventeen callers read errors decoded from the wire, which are maps, and pass.
+  `TestClaimTurnAdmitsOne` (`:628`) calls `a.claimTurn` in process, so its data is the `jsontext.Value` that
+  `jsonx.Strings` built, and it failed: `refusal -32600 ""`. Step 6 and Confirmation 20 say the `errText` tests pass
+  unchanged.
+* **The owner's answer:** "errText decodes via jsonx (Recommended)". The option not taken was racing real prompts over
+  the wire in that test.
+* **Decision.** `errText` encodes `re.Data` with `jsonx.Marshal` and decodes it into `map[string]any` with
+  `jsonx.Unmarshal`. No caller's assertion changes. The MADR's Confirmation 20 is amended.
+* **Files added:** none; `acpserver/extensions_test.go` is a test of P4's `acpserver/extensions.go`.
+
+### P4 record (2026-10-31): everything gobble defines, on v2
+
+The base is P3's `4f76649`. Deviations 6 to 10 changed steps 2, 4, 5 and 6, and added
+`acpclient/acptest/script_test.go`.
+
+1. **`jsonx`** (step 1) gains three functions:
+   * `Strings(map[string]string) jsontext.Value`, keys sorted with `slices.Sorted`, as v2 sorts a map of strings, and
+     each key and value through `Quote`. It cannot fail. Where two keys holding invalid bytes are repaired to the same
+     name, the later one is left out, because `Marshal` refuses that map for its repeated name and `Strings` writes no
+     repeated name;
+   * `SetMember(meta, key, v) (map[string]any, error)`, a copy of `meta` with `key` set to `Value(v)`;
+   * `Member[T](meta, key) (T, bool)`, `meta[key]` re-encoded and decoded into `T`, false when missing, unencodable
+     or mistyped.
+2. **Receiving** (step 2, deviation 6): `acpclient`'s `handler` has an `acp.ExtensionMux`, registered on first use
+   through a `sync.Once`, so the `&handler{}` literals in tests keep working.
+   * `HandleExtensionMethod` hands every call to the mux.
+   * The three `acp.Notify[jsontext.Value]` registrations call `retryOf`, `compactionOf` and `personalityOf`, which
+     decode with `jsonx.Unmarshal`. A decode error is returned for the connection to log.
+   * `deliver` routes to `h.sessions` and `h.pending` as before.
+   * `acpclient/update.go` keeps `encoding/json` for `translate`'s encode, which is P5's.
+3. **Sending** (step 3): `updates.notify` encodes `params` with `jsonx.Value`. On error it keeps
+   `"<method>: <err>"` as `u.err` and sends nothing. Its eleven callers are unchanged. `Session.SetName` passes
+   `jsonx.Value(setNameParams{...})` and returns its error.
+4. **Error data** (step 4, deviation 7):
+   * 33 calls build `jsonx.Strings(map[string]string{...})`. The 34th, `acpclient/conn.go:435`, went with
+     `HandleExtensionMethod`'s switch;
+   * `acp.SessionId` values are converted with `string(...)` at five sites: `agent.go` four, `extensions.go` one;
+   * both integers go through `strconv.Itoa`: `acpclient/acptest/script.go:159`'s `update` and
+     `acpclient/acptest/client.go:200`'s `exitCode`. `acpclient/acptest/script_test.go:56` asserts `"update":"0"`;
+   * four new error sites from step 5 build their data the same way: `Initialize`, `withCleared`, `LoadSession` and
+     `ResumeSession`. That is 37 calls in all.
+5. **`_meta.gobble`** (step 5, deviations 8 and 9):
+   * **Eight writers, each a struct:** `questionMeta` with `ruleMeta`, `capabilitiesMeta`, `clearedGobble` with
+     `clearedQueues`, `resumedGobble`, `switchMeta`, `newSessionMeta` (client), `mentionsMeta` and `feedbackMeta`.
+     * Each sets its value with `jsonx.SetMember`.
+     * Each declares its fields in sorted JSON-name order, the order in which v1 wrote the map it replaces.
+     * The writers that had no error now return one: `question.meta`, `Capabilities` (deviation 9), `clearedMeta`,
+       `resumedMeta`, `NewSessionOptions.meta` and the client's `unscanned`. `copyTo` and `RequestPermission`
+       already returned one.
+     * A cancelled turn's meta is set by a new `withCleared`, which `cancelled` also uses. That keeps `Prompt`'s
+       cognitive complexity within `gocognit`'s 50.
+   * **Seven readers, member by member:** `jsonx.Member[map[string]any]` for `gobble`, then `jsonx.Member[T]` for
+     each member, in `acpclient/conn.go` (`switchTo`, `gobbleMarks`), `acpclient/sessions.go` (`title`, `messages`),
+     `acpserver/grants.go` and `question.go` (`feedback`), `acpserver/mentions.go` (`mentions`) and
+     `acpserver/config.go` (`readNewSessionMeta`).
+     * `gobbleMarks`'s hand-made `saves` loop and its `float64`/`int` switch became `Member[[]string]` and
+       `Member[int]`.
+   * **Deviation 8's two tests** in `acpclient/sessions_test.go` read through `jsonx.Member`, with the same
+     assertions. **Deviation 10's** `errText` reads `re.Data` through `jsonx`.
+6. **Tests,** each passing, and each seen failing on its planted break (C9), on a scratch copy:
+
+   | Test | Break | The failure |
+   | :--- | :--- | :--- |
+   | `TestNotificationDecodedWithV2` | `retryOf`'s decode with `jsontext.AllowInvalidUTF8(false)` | `lone surrogate: updates [], want one with cause "offline�"` |
+   | `TestNotifyFramesUnchanged` | `notify` encoding with `jsonx.MarshalStrict` | `_gobble/retry "x\xffy": notify wrote error: _gobble/retry: jsontext: invalid UTF-8 within "/error"`, and the same for compaction and personality |
+   | `FuzzStrings` | `Strings` over `slices.Collect(maps.Keys(m))`, unsorted | `Strings(...) = {"reason":"boom","sessionId":"s1","error":"x"}, Marshal = {"error":"x","reason":"boom","sessionId":"s1"}` |
+   | `TestMetaMemberMistyped` | `gobbleMarks` decoding the whole object into one struct | `asked {… Limit: Repeated:0 …}, want the limit and no repeated` |
+   | `TestRetryNotification`, `TestCompactionNotification`, `TestPersonalityNotification` (deviation 6) | the three handlers returning `nil` on a decode error | each `bad params: … want it logged and not delivered`; `TestNotificationDecodedWithV2`'s `a string attempt` too |
+   | `TestMetaWireBytes` (`acpserver`), added | `questionMeta`'s `Limit` declared before `Hides` | `question _meta {"gobble":{"limit":"L","hides":true,…}}, want {"gobble":{"hides":true,"limit":"L",…}}` |
+   | `TestMetaWireBytes` (`acpclient`), added | `newSessionMeta`'s `SessionID` declared first | `session/new _meta {"gobble":{"sessionId":"i",…}}, want {"gobble":{"forkFrom":"f",…}}` |
+
+   * **The two `TestMetaWireBytes` tests** were added to hold deviation 8's claim that the wire's bytes do not change.
+     `session.golden` pins only the capabilities' `_meta`.
+     * Their expected bytes were checked at the base. A probe on a scratch copy of `4f76649` encoded the old writers'
+       maps with v1, and printed the same five strings for the agent's writers.
+     * One case was first written wrong: a question with no marks expected `null`. v2 writes a nil map as `{}`, and
+       the SDK leaves a nil `_meta` out. So the case now asserts that `meta()` returns nil.
+   * **The notification tests** wait through `session/new`. `notifyPair` sends the notifications from the agent, then
+     `session/new` from the client.
+     * The SDK returns a response to its caller only after the notifications received before it are handled and
+       logged.
+     * A first version waited on a request from the agent. That raced, because the client handles requests
+       concurrently with notifications, and the log assertion failed once.
+   * **A bad notification over a real connection** is a mistyped member, such as `attempt` given as a string. The SDK
+     refuses to send syntactically broken params.
+   * **`TestNotifyFramesUnchanged` asserts** that the SDK's frame is a notification for the method and session, so two
+     identical errors cannot pass it.
+   * **`FuzzStrings` ran** 15 s while it was written, 249,212 executions, and 20 s on the finished code, 735,795
+     executions, with no failure.
+7. **A first try in step 5** tagged `clearedQueues`' slices `format:emitnull`, to keep a nil queue `null`. v2
+   refuses that option on a `[]string` field, so `clearedMeta` failed, and `TestCancelClearsQueue` saw `{}`.
+   `queue.clear` never returns nil, since an empty queue is `[]string{}`, which v1 wrote as `[]`. So the fields are
+   plain `[]string`. That was a fix to the step's own code, not a deviation.
+8. **Assert by search:**
+   * no SDK error constructor in `acpserver` or `acpclient` takes a `map[string]any`;
+   * no `map[string]any{gobble:` or `{metaGobble:` writer, and no `Meta[gobble].(` or `Meta[metaGobble].(` reader,
+     outside tests;
+   * `acpclient/conn.go` holds no `NewMethodNotFound` or `NewInvalidParams`;
+   * 11 `notify` callers;
+   * `session.golden` and every other golden are unchanged.
+9. **G-local:**
+   * `make pre-add-check` on the 27 changed Go files: clean; after the `gocognit` fix, on the 2 files it touched:
+     clean;
+   * `make preflight`: passed. Its first run stopped at golangci-lint's `gocognit`: `(*Agent).Prompt` at 53, over 50,
+     from step 5's error branch. `withCleared` fixed it; that was a fix to the step's own code, not a deviation;
+   * `go test ./...`: 37 ok; `make race`: 37 ok;
+   * no `make perf`, since P4 touches no `internal/cli` file.
+10. **G-hosts,** on the Linux machine and the Windows laptop, with 813 files shipped to each:
+    * `go test`: passed;
+    * race: passed, 37 ok;
+    * `make check-records markdownlint`: passed;
+    * preflight stops at `verify-build-metadata`, as on every copy.
+11. **Notes for later phases:**
+    * `acpclient/sessions.go:45` (`sessionError`) reads an agent error's data by `re.Data.(map[string]any)`. Over the
+      wire that is the map the SDK decoded, so it works. P7 or P8 may want it read through `jsonx`, to match.
+    * `acpserver/auth_test.go:87` reads error data the same way, from the wire.

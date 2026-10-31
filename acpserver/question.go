@@ -95,34 +95,53 @@ const (
 	maxFullTitle = 2000
 )
 
+// questionMeta is a question's _meta.gobble. Its members are named by the
+// keys above and rules.go's, in sorted order, as v1 wrote the map they
+// replace (0039-MADR D15).
+type questionMeta struct {
+	Hides    bool      `json:"hides,omitzero"`
+	Limit    string    `json:"limit,omitzero"`
+	OnceOnly string    `json:"onceOnly,omitzero"`
+	Repeated int       `json:"repeated,omitzero"`
+	Rule     *ruleMeta `json:"rule,omitzero"`
+	Saves    []string  `json:"saves,omitzero"`
+	Title    string    `json:"title,omitzero"`
+}
+
+// ruleMeta is the rule that asked, and where it came from.
+type ruleMeta struct {
+	From string `json:"from"`
+	Rule string `json:"rule"`
+}
+
 // meta is q's _meta.gobble: its marks, its rule and its description, or
 // none.
-func (q question) meta() map[string]any {
-	g := map[string]any{}
+func (q question) meta() (map[string]any, error) {
+	var g questionMeta
 	switch {
 	case q.limit != "":
-		g[keyLimit] = q.limit
+		g.Limit = q.limit
 	case q.repeated != 0:
-		g[keyRepeated] = q.repeated
+		g.Repeated = q.repeated
 	case q.onceOnly != "":
-		g[keyOnceOnly] = q.onceOnly
+		g.OnceOnly = q.onceOnly
 	}
 	if q.by != nil {
-		g[keyRule] = map[string]any{keyRule: q.by.String(), keyFrom: q.by.Source.String()}
+		g.Rule = &ruleMeta{From: q.by.Source.String(), Rule: q.by.String()}
 	}
 	if q.title != "" {
-		g[keyTitle] = cutTo(q.title, maxFullTitle)
+		g.Title = cutTo(q.title, maxFullTitle)
 	}
 	if len(q.saves) > 0 { // only an "always" has patterns to save
-		g[keySaves] = q.saves
+		g.Saves = q.saves
 	}
 	if q.always && q.hides { // as options shows it: only beside an "always"
-		g[keyHides] = true
+		g.Hides = true
 	}
-	if len(g) == 0 {
-		return nil
+	if g.Limit == "" && g.Repeated == 0 && g.OnceOnly == "" && g.Rule == nil && g.Title == "" && g.Saves == nil && !g.Hides {
+		return nil, nil
 	}
-	return map[string]any{gobble: g}
+	return jsonx.SetMember(nil, gobble, g)
 }
 
 // acpPolicy asks the client about a call (session/request_permission). A
@@ -146,8 +165,12 @@ func (p *acpPolicy) ask(ctx context.Context, r permission.Rule, q question) (ans
 		return answer{}, errors.New("no client connection")
 	}
 	q.title = r.Title
+	meta, err := q.meta()
+	if err != nil {
+		return answer{}, err
+	}
 	resp, err := p.conn.RequestPermission(ctx, acp.RequestPermissionRequest{
-		Meta:      q.meta(),
+		Meta:      meta,
 		SessionId: p.session,
 		ToolCall:  acp.ToolCallUpdate{ToolCallId: acp.ToolCallId(r.CallID), Title: new(ruleTitle(r)), RawInput: jsonx.Splice(r.Input)},
 		Options:   q.options(),
@@ -159,8 +182,8 @@ func (p *acpPolicy) ask(ctx context.Context, r permission.Rule, q question) (ans
 	if s := resp.Outcome.Selected; s != nil {
 		a.option = s.OptionId
 	}
-	if g, ok := resp.Meta[gobble].(map[string]any); ok {
-		if f, ok := g[keyFeedback].(string); ok {
+	if g, ok := jsonx.Member[map[string]any](resp.Meta, gobble); ok {
+		if f, ok := jsonx.Member[string](g, keyFeedback); ok {
 			a.feedback = cutBytes(f, maxFeedback)
 		}
 	}

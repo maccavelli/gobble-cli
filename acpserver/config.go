@@ -13,6 +13,7 @@ import (
 	acp "github.com/maccavelli/acp-go-sdk2"
 
 	"github.com/maccavelli/gobble-cli/compaction"
+	"github.com/maccavelli/gobble-cli/jsonx"
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/llm/catalog"
 	"github.com/maccavelli/gobble-cli/permission"
@@ -402,9 +403,9 @@ type newSessionMeta struct {
 }
 
 func readNewSessionMeta(meta map[string]any) newSessionMeta {
-	g, _ := meta[gobble].(map[string]any) //nolint:errcheck // absent or not an object is none
+	g, _ := jsonx.Member[map[string]any](meta, gobble) //nolint:errcheck // absent or not an object is none
 	str := func(k string) string {
-		s, _ := g[k].(string) //nolint:errcheck // absent or not a string is none
+		s, _ := jsonx.Member[string](g, k) //nolint:errcheck // absent or not a string is none
 		return s
 	}
 	return newSessionMeta{SessionID: str("sessionId"), ForkFrom: str("forkFrom"), Name: str("name")}

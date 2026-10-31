@@ -9,6 +9,7 @@ import (
 	acp "github.com/maccavelli/acp-go-sdk2"
 
 	"github.com/maccavelli/gobble-cli/internal/fsx"
+	"github.com/maccavelli/gobble-cli/jsonx"
 )
 
 // The user message's files (0005-PLAN F3-4): what a prompt's resource
@@ -117,8 +118,8 @@ func mentionPath(m mention, cwd string, ws fsx.Workspace) (string, bool) {
 // false: input the client has already handled, such as the CLI's stdin and
 // attached files (0005-PLAN F3-4 deviation 1).
 func unscanned(b *acp.ContentBlockText) bool {
-	g, _ := b.Meta[gobble].(map[string]any) //nolint:errcheck // absent or not an object is none
-	v, ok := g["mentions"].(bool)
+	g, _ := jsonx.Member[map[string]any](b.Meta, gobble) //nolint:errcheck // absent or not an object is none
+	v, ok := jsonx.Member[bool](g, "mentions")
 	return ok && !v
 }
 

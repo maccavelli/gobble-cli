@@ -13,6 +13,7 @@ import (
 	acp "github.com/maccavelli/acp-go-sdk2"
 
 	"github.com/maccavelli/gobble-cli/acpclient/acptest"
+	"github.com/maccavelli/gobble-cli/jsonx"
 )
 
 // nameAgent is a script agent that answers _gobble/set_session_name,
@@ -174,12 +175,14 @@ func TestAdditionalDirectoriesNotAdvertised(t *testing.T) {
 
 // NewSessionOptions travel as _meta.gobble, holding only what is set.
 func TestNewSessionMeta(t *testing.T) {
-	if (NewSessionOptions{}).meta() != nil {
-		t.Fatal("empty options sent _meta")
+	if m, err := (NewSessionOptions{}).meta(); m != nil || err != nil {
+		t.Fatalf("empty options sent _meta %v, %v", m, err)
 	}
-	m := NewSessionOptions{ID: "i", Name: "n"}.meta()
-	g, _ := m["gobble"].(map[string]any) //nolint:errcheck // checked below
-	if len(g) != 2 || g["sessionId"] != "i" || g["name"] != "n" {
+	m, err := NewSessionOptions{ID: "i", Name: "n"}.meta()
+	// The writer's value is the jsontext.Value gobble encoded, read as the
+	// agent reads it (0039-PLAN deviation 8).
+	g, _ := jsonx.Member[map[string]any](m, "gobble") //nolint:errcheck // checked below
+	if err != nil || len(g) != 2 || g["sessionId"] != "i" || g["name"] != "n" {
 		t.Fatalf("meta %v", m)
 	}
 }
@@ -282,7 +285,7 @@ func TestRequestPermission(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if g, _ := resp.Meta["gobble"].(map[string]any); g["feedback"] != "use git mv" {
+	if g, _ := jsonx.Member[map[string]any](resp.Meta, "gobble"); g["feedback"] != "use git mv" {
 		t.Fatalf("answer _meta %v", resp.Meta)
 	}
 	if resp, _ := pick("n").RequestPermission(t.Context(), req); resp.Meta != nil {

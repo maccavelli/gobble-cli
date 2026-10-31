@@ -368,7 +368,11 @@ var _ acp.AgentConnAware = (*Agent)(nil)
 // resuming and closing sessions, and MCP servers over stdio and streamable
 // HTTP. Images, audio and embedded context are turned on by the phases
 // that implement them.
-func Capabilities() acp.AgentCapabilities {
+func Capabilities() (acp.AgentCapabilities, error) {
+	meta, err := jsonx.SetMember(nil, gobble, capabilitiesMeta{Extensions: extensionNames()})
+	if err != nil {
+		return acp.AgentCapabilities{}, err
+	}
 	return acp.AgentCapabilities{
 		LoadSession:     true,
 		McpCapabilities: acp.McpCapabilities{Http: true},
@@ -383,13 +387,22 @@ func Capabilities() acp.AgentCapabilities {
 		},
 		// gobble's extension methods, as ACP's extensibility page has custom
 		// capabilities advertised (0002-PLAN Phase 7).
-		Meta: map[string]any{gobble: map[string]any{"extensions": extensionNames()}},
-	}
+		Meta: meta,
+	}, nil
+}
+
+// capabilitiesMeta is initialize's _meta.gobble (0039-MADR D15).
+type capabilitiesMeta struct {
+	Extensions []string `json:"extensions"`
 }
 
 // Initialize answers the handshake. It makes no network call (0008-MADR
 // D19 item 6).
 func (a *Agent) Initialize(_ context.Context, p acp.InitializeRequest) (acp.InitializeResponse, error) {
+	caps, err := Capabilities()
+	if err != nil {
+		return acp.InitializeResponse{}, acp.NewInternalError(jsonx.Strings(map[string]string{keyReason: err.Error()}))
+	}
 	a.mu.Lock()
 	a.client = p.ClientCapabilities
 	a.mu.Unlock()
@@ -397,13 +410,13 @@ func (a *Agent) Initialize(_ context.Context, p acp.InitializeRequest) (acp.Init
 	return acp.InitializeResponse{
 		ProtocolVersion:   acp.ProtocolVersionNumber,
 		AgentInfo:         &acp.Implementation{Name: gobble, Title: &title, Version: a.version},
-		AgentCapabilities: Capabilities(),
+		AgentCapabilities: caps,
 		AuthMethods:       a.authMethods(p.ClientCapabilities.Auth.Terminal),
 	}, nil
 }
 
 func invalidParams(id acp.SessionId, reason string) error {
-	return acp.NewInvalidParams(map[string]any{keySessionID: id, keyReason: reason})
+	return acp.NewInvalidParams(jsonx.Strings(map[string]string{keySessionID: string(id), keyReason: reason}))
 }
 
 // NewSession opens a session in the client's working directory. Its file is
@@ -450,7 +463,7 @@ func (a *Agent) NewSession(ctx context.Context, p acp.NewSessionRequest) (acp.Ne
 		return acp.NewSessionResponse{}, invalidParams(acp.SessionId(id), "a session with this id exists")
 	}
 	if err != nil {
-		return acp.NewSessionResponse{}, acp.NewInternalError(map[string]any{keyReason: err.Error()})
+		return acp.NewSessionResponse{}, acp.NewInternalError(jsonx.Strings(map[string]string{keyReason: err.Error()}))
 	}
 	ss := a.sessionSettings(p.Cwd)
 	// The run's override starts a new session, as defaultThinkingLevel does;
@@ -465,7 +478,7 @@ func (a *Agent) NewSession(ctx context.Context, p acp.NewSessionRequest) (acp.Ne
 	if len(forked) > 0 {
 		for _, e := range forked {
 			if err := log.Append(ctx, e); err != nil {
-				return acp.NewSessionResponse{}, errors.Join(acp.NewInternalError(map[string]any{keyReason: err.Error()}), log.Close())
+				return acp.NewSessionResponse{}, errors.Join(acp.NewInternalError(jsonx.Strings(map[string]string{keyReason: err.Error()})), log.Close())
 			}
 		}
 		a.restore(s, forked)
@@ -475,7 +488,7 @@ func (a *Agent) NewSession(ctx context.Context, p acp.NewSessionRequest) (acp.Ne
 	}
 	if meta.Name != "" {
 		if err := s.append(ctx, a.now(), session.Entry{Type: session.TypeSessionInfo, Name: new(oneLine(meta.Name))}); err != nil {
-			return acp.NewSessionResponse{}, errors.Join(acp.NewInternalError(map[string]any{keyReason: err.Error()}), log.Close())
+			return acp.NewSessionResponse{}, errors.Join(acp.NewInternalError(jsonx.Strings(map[string]string{keyReason: err.Error()})), log.Close())
 		}
 	}
 	s.mcp = a.startMCP(ctx, s.cwd, servers, notes, ss)
@@ -552,9 +565,9 @@ func (s *liveSession) state() state { return replayPath(s.tree.Entries(), s.tree
 // internal.
 func appendFailed(err error) error {
 	if old, ok := errors.AsType[*session.ErrOldVersion](err); ok {
-		return acp.NewInvalidRequest(map[string]any{keyReason: old.Error()})
+		return acp.NewInvalidRequest(jsonx.Strings(map[string]string{keyReason: old.Error()}))
 	}
-	return acp.NewInternalError(map[string]any{keyReason: err.Error()})
+	return acp.NewInternalError(jsonx.Strings(map[string]string{keyReason: err.Error()}))
 }
 
 // Prompt runs one turn of the session: the model, and the tools it asks
@@ -753,12 +766,12 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 			//lint:ignore SA1019 acp-go-sdk2 keeps this unstable-schema name under v1 (0035-MADR D6)
 			resp := acp.PromptResponse{StopReason: acp.StopReason(end.StopReason), Usage: acpUsage(end.Usage)} //nolint:staticcheck // as the lint:ignore above
 			if end.StopReason == agent.StopCancelled {
-				resp.Meta = clearedMeta(s)
+				return withCleared(s, resp)
 			}
 			return resp, nil
 		}
 	}
-	return acp.PromptResponse{StopReason: acp.StopReasonCancelled, Meta: clearedMeta(s)}, nil
+	return cancelled(s)
 }
 
 // claimTurn makes the caller's work the session's one running turn, or
@@ -771,7 +784,7 @@ func (a *Agent) claimTurn(ctx context.Context, s *liveSession) (context.Context,
 	defer a.mu.Unlock()
 	if s.cancel != nil {
 		cancel()
-		return nil, nil, acp.NewInvalidRequest(map[string]any{keySessionID: s.id, keyReason: "a prompt is already running"})
+		return nil, nil, acp.NewInvalidRequest(jsonx.Strings(map[string]string{keySessionID: string(s.id), keyReason: "a prompt is already running"}))
 	}
 	idle := make(chan struct{})
 	s.cancel, s.idle = cancel, idle
@@ -787,12 +800,35 @@ func (a *Agent) claimTurn(ctx context.Context, s *liveSession) (context.Context,
 // clearedMeta empties a cancelled turn's queues into the response's
 // _meta.gobble.cleared, so a client can restore the text, as Pi's terminal
 // does (owner's decision of 2026-10-07). It is nil when both were empty.
-func clearedMeta(s *liveSession) map[string]any {
+func clearedMeta(s *liveSession) (map[string]any, error) {
 	steering, followUp := s.queue.clear()
 	if len(steering) == 0 && len(followUp) == 0 {
-		return nil
+		return nil, nil
 	}
-	return map[string]any{gobble: map[string]any{"cleared": map[string]any{"steering": steering, "followUp": followUp}}}
+	return jsonx.SetMember(nil, gobble, clearedGobble{Cleared: clearedQueues{FollowUp: followUp, Steering: steering}})
+}
+
+// withCleared is resp with the session's queues emptied into its
+// _meta.gobble.cleared, for a cancelled turn.
+func withCleared(s *liveSession, resp acp.PromptResponse) (acp.PromptResponse, error) {
+	meta, err := clearedMeta(s)
+	if err != nil {
+		return acp.PromptResponse{}, acp.NewInternalError(jsonx.Strings(map[string]string{keyReason: err.Error()}))
+	}
+	resp.Meta = meta
+	return resp, nil
+}
+
+// clearedGobble is a cancelled turn's _meta.gobble (0039-MADR D15). An
+// empty queue is [], as queue.clear gives it and v1 wrote it.
+type clearedGobble struct {
+	Cleared clearedQueues `json:"cleared"`
+}
+
+// clearedQueues are the queues' texts.
+type clearedQueues struct {
+	FollowUp []string `json:"followUp"`
+	Steering []string `json:"steering"`
 }
 
 // providerID names the provider assistant messages record: the model
@@ -998,7 +1034,7 @@ func (a *Agent) open(ctx context.Context, id acp.SessionId, cwd string, extra []
 	_, live := a.sessions[id]
 	a.mu.Unlock()
 	if live {
-		return nil, acp.NewInvalidRequest(map[string]any{keySessionID: id, keyReason: "the session is already open"})
+		return nil, acp.NewInvalidRequest(jsonx.Strings(map[string]string{keySessionID: string(id), keyReason: "the session is already open"}))
 	}
 	servers, notes, err := a.mcpServers(id, req)
 	if err != nil {
@@ -1007,7 +1043,7 @@ func (a *Agent) open(ctx context.Context, id acp.SessionId, cwd string, extra []
 	log, err := a.store.Open(ctx, session.ID(id))
 	if err != nil {
 		if locked, ok := errors.AsType[*session.ErrLocked](err); ok {
-			return nil, acp.NewInvalidRequest(map[string]any{keySessionID: id, keyReason: locked.Error()})
+			return nil, acp.NewInvalidRequest(jsonx.Strings(map[string]string{keySessionID: string(id), keyReason: locked.Error()}))
 		}
 		return nil, invalidParams(id, err.Error())
 	}
@@ -1052,14 +1088,18 @@ func (a *Agent) LoadSession(ctx context.Context, p acp.LoadSessionRequest) (acp.
 	if err := a.startFrames(ctx, conn, s); err != nil {
 		return acp.LoadSessionResponse{}, err
 	}
-	return acp.LoadSessionResponse{ConfigOptions: a.configOptions(s), Modes: modeState(s.mode, s.allowBypass), Meta: resumedMeta(st)}, nil
+	meta, err := resumedMeta(st)
+	if err != nil {
+		return acp.LoadSessionResponse{}, acp.NewInternalError(jsonx.Strings(map[string]string{keyReason: err.Error()}))
+	}
+	return acp.LoadSessionResponse{ConfigOptions: a.configOptions(s), Modes: modeState(s.mode, s.allowBypass), Meta: meta}, nil
 }
 
 // resumedMeta is a resumed session's _meta.gobble: its title (the name,
 // else the first prompt) and the number of user and assistant messages on
 // its path, which ACP's SessionInfo does not carry (0002-PLAN Phase 4,
 // deviation of 2026-10-06).
-func resumedMeta(st state) map[string]any {
+func resumedMeta(st state) (map[string]any, error) {
 	title, n := st.name, 0
 	for _, e := range st.messages {
 		switch e.Message.Role {
@@ -1072,7 +1112,13 @@ func resumedMeta(st state) map[string]any {
 			n++
 		}
 	}
-	return map[string]any{gobble: map[string]any{"title": cutTitle(title), "messages": n}}
+	return jsonx.SetMember(nil, gobble, resumedGobble{Messages: n, Title: cutTitle(title)})
+}
+
+// resumedGobble is a resumed session's _meta.gobble (0039-MADR D15).
+type resumedGobble struct {
+	Messages int    `json:"messages"`
+	Title    string `json:"title"`
 }
 
 // ResumeSession opens a stored session with no replay.
@@ -1087,8 +1133,12 @@ func (a *Agent) ResumeSession(ctx context.Context, p acp.ResumeSessionRequest) (
 	if err := a.startFrames(ctx, conn, s); err != nil {
 		return acp.ResumeSessionResponse{}, err
 	}
+	meta, err := resumedMeta(s.state())
+	if err != nil {
+		return acp.ResumeSessionResponse{}, acp.NewInternalError(jsonx.Strings(map[string]string{keyReason: err.Error()}))
+	}
 	return acp.ResumeSessionResponse{ConfigOptions: a.configOptions(s), Modes: modeState(s.mode, s.allowBypass),
-		Meta: resumedMeta(s.state())}, nil
+		Meta: meta}, nil
 }
 
 // ListSessions lists the sessions with a file, and the live ones of this
@@ -1105,7 +1155,7 @@ func (a *Agent) ListSessions(ctx context.Context, p acp.ListSessionsRequest) (ac
 	out := []acp.SessionInfo{}
 	for sum, err := range a.store.List(ctx, f) {
 		if err != nil {
-			return acp.ListSessionsResponse{}, acp.NewInternalError(map[string]any{keyReason: err.Error()})
+			return acp.ListSessionsResponse{}, acp.NewInternalError(jsonx.Strings(map[string]string{keyReason: err.Error()}))
 		}
 		info := sessionInfo(sum)
 		if err := info.Validate(); err != nil {
@@ -1228,7 +1278,7 @@ func (a *Agent) CloseSession(ctx context.Context, p acp.CloseSessionRequest) (ac
 	a.closeMCP(s.mcp)
 	a.closeTitle(s)
 	if err := s.log.Close(); err != nil {
-		return acp.CloseSessionResponse{}, acp.NewInternalError(map[string]any{keyReason: err.Error()})
+		return acp.CloseSessionResponse{}, acp.NewInternalError(jsonx.Strings(map[string]string{keyReason: err.Error()}))
 	}
 	return acp.CloseSessionResponse{}, nil
 }
@@ -1239,7 +1289,7 @@ func (a *Agent) CloseSession(ctx context.Context, p acp.CloseSessionRequest) (ac
 func (a *Agent) SetSessionConfigOption(ctx context.Context, p acp.SetSessionConfigOptionRequest) (acp.SetSessionConfigOptionResponse, error) {
 	v := p.ValueId
 	if v == nil {
-		return acp.SetSessionConfigOptionResponse{}, acp.NewInvalidParams(map[string]any{keyReason: "only select options are offered"})
+		return acp.SetSessionConfigOptionResponse{}, acp.NewInvalidParams(jsonx.Strings(map[string]string{keyReason: "only select options are offered"}))
 	}
 	a.mu.Lock()
 	s, ok := a.sessions[v.SessionId]

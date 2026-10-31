@@ -18,6 +18,7 @@ import (
 
 	"github.com/maccavelli/gobble-cli/acpclient/acptest"
 	"github.com/maccavelli/gobble-cli/compaction"
+	"github.com/maccavelli/gobble-cli/jsonx"
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/llm/llmtest"
 	"github.com/maccavelli/gobble-cli/session"
@@ -118,7 +119,12 @@ func errText(t *testing.T, err error) (int, string) {
 	if !errors.As(err, &re) {
 		t.Fatalf("err = %v, want a JSON-RPC error", err)
 	}
-	data, _ := re.Data.(map[string]any) //nolint:errcheck // no data is no text
+	// Data decoded from the wire is a map; an error made in process carries
+	// the jsontext.Value gobble encoded (0039-PLAN deviation 10).
+	var data map[string]any
+	if b, err := jsonx.Marshal(re.Data); err == nil {
+		_ = jsonx.Unmarshal(b, &data) //nolint:errcheck // no data is no text
+	}
 	for _, k := range []string{keyReason, "error"} {
 		if s, ok := data[k].(string); ok {
 			return re.Code, s

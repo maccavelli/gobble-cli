@@ -1,11 +1,14 @@
 package acpserver
 
 import (
+	"bufio"
 	"context"
 	"encoding/json/v2"
 	"errors"
 	"fmt"
+	"io"
 	"iter"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -423,5 +426,60 @@ func TestCutOffToolCallArguments(t *testing.T) {
 	}
 	if got := agentText(ups); got != "after the call" {
 		t.Fatalf("agent text %q, want the reply", got)
+	}
+}
+
+// frameOf is the one JSON-RPC frame send writes on an agent-side
+// connection, without its newline.
+func frameOf(t *testing.T, send func(*acp.AgentSideConnection) error) string {
+	t.Helper()
+	toClientR, toClientW := io.Pipe()
+	toAgentR, toAgentW := io.Pipe()
+	t.Cleanup(func() {
+		toAgentW.Close()  //nolint:errcheck,gosec // test cleanup
+		toClientR.Close() //nolint:errcheck,gosec // test cleanup
+	})
+	conn := acp.NewAgentSideConnection(&acptest.ScriptAgent{}, toClientW, toAgentR, acp.WithLogger(slog.New(slog.DiscardHandler)))
+	errs := make(chan error, 1)
+	go func() { errs <- send(conn) }()
+	line := make(chan string, 1)
+	go func() {
+		b, _ := bufio.NewReader(toClientR).ReadString('\n') //nolint:errcheck // an empty frame fails the test
+		line <- strings.TrimSuffix(b, "\n")
+	}()
+	if err := <-errs; err != nil {
+		return "error: " + err.Error()
+	}
+	return <-line
+}
+
+// gobble's own v2 encoding of each _gobble/* notification is spliced by the
+// SDK into the frame the SDK writes from the Go value, byte for byte, for
+// text with <, &, U+2028 and an invalid byte (0039-MADR D13,
+// Confirmation 19).
+func TestNotifyFramesUnchanged(t *testing.T) {
+	for _, text := range []string{"plain", "a<b&c\u2028d", "x\xffy"} {
+		for _, n := range []struct {
+			method string
+			params any
+		}{
+			{methodRetry, retryNotice{SessionID: "s1", Phase: "start", Cause: "rate-limited", Attempt: 1, MaxAttempts: 3, DelayMs: 2000, Error: text}},
+			{methodCompaction, compactionNotice{SessionID: "s1", Phase: phaseEnd, Reason: reasonManual, Error: text, Paused: pauseSession}},
+			{methodCompaction, compactionNotice{SessionID: "s1", Phase: phaseEnd, Reason: reasonManual, TokensBefore: 1234}},
+			{methodPersonality, personalityNotice{SessionID: "s1", Name: text, Level: 3}},
+		} {
+			want := frameOf(t, func(c *acp.AgentSideConnection) error { return c.NotifyExtension(t.Context(), n.method, n.params) })
+			if !strings.HasPrefix(want, `{"jsonrpc":"2.0","method":"`+n.method+`","params":{"sessionId":"s1"`) {
+				t.Fatalf("the SDK wrote %q, not a notification", want)
+			}
+			got := frameOf(t, func(c *acp.AgentSideConnection) error {
+				u := &updates{conn: c, ctx: t.Context(), session: "s1"}
+				u.notify(n.method, n.params)
+				return u.err
+			})
+			if got != want {
+				t.Errorf("%s %q: notify wrote\n%s\nthe SDK writes\n%s", n.method, text, got, want)
+			}
+		}
 	}
 }

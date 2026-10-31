@@ -617,6 +617,13 @@ decisions below are written to those answers (More Information, "The owner's ans
     SDK drops.
   * This is 0038's step 2, with one change: the report had the SDK decode into the types, which is v1. Here the SDK
     routes and gobble decodes. The agent's twenty methods stay on gobble's map (D22).
+
+  *Amended 2026-10-31, by the PLAN's deviation 6:* `ExtensionMux` tells a notification from a request by
+  `acp.IsNotification(ctx)`, and takes a call it did not receive through a connection for a request (acp-go-sdk2
+  `v1.28.0` `extensions.go:121-122`). The SDK exports no way to mark a context as a notification. So the client's
+  three notification tests, which called `HandleExtensionMethod` directly, send real notifications through a
+  connection pair instead, and assert D12's two changes: an unregistered notification is ignored, and bad params
+  are logged with no callback.
 * **D13. Every `_gobble/*` payload gobble sends is encoded by gobble, with v2, and handed to the SDK as a
   `jsontext.Value`:**
   * the agent's notifications, all of which pass through `updates.notify` (`acpserver/prompt.go:68-72`): `_gobble/retry`
@@ -642,6 +649,12 @@ decisions below are written to those answers (More Information, "The owner's ans
   `jsonx.Strings(map[string]string) jsontext.Value` writes such an object, its keys sorted and each value through
   `jsonx.Quote`, so it cannot fail. The integer is formatted with `strconv.Itoa`. A map of strings the SDK encodes is
   sorted by v1, and its strings re-escaped when spliced, so the wire does not change.
+
+  *Amended 2026-10-31, by the PLAN's deviation 7:* there are two test-support integers, not one: `"update": i`
+  (`acpclient/acptest/script.go:159`) and `"exitCode": n` (`acpclient/acptest/client.go:200`). Both are formatted
+  with `strconv.Itoa`. `acpclient/acptest/script_test.go:56` read the first as `"update":0`, and reads
+  `"update":"0"`. The `acpclient/conn.go` call goes with `HandleExtensionMethod` (D12), so 33 calls are
+  rebuilt.
 * **D15. `_meta.gobble` is typed, and encoded and decoded by gobble.** It is gobble's own schema in ACP's
   extensibility slot. ACP's `Meta` fields are the SDK's `map[string]any`, so gobble puts a `jsontext.Value` under its
   key, which the SDK's v1 encoder splices, and reads its key's value back through `jsonx`:
@@ -658,6 +671,11 @@ decisions below are written to those answers (More Information, "The owner's ans
   * `jsonx` gains two generic helpers for this: `SetMember(meta map[string]any, key string, v any) (map[string]any,
     error)` and `Member[T any](meta map[string]any, key string) (T, bool)`. The second reports a missing or mistyped
     member as not present.
+
+  *Amended 2026-10-31, by the PLAN's deviation 9:* the `extensions` writer (`acpserver/agent.go:385`) is inside
+  `acpserver.Capabilities()`, which is exported and returned no error. It returns `(acp.AgentCapabilities, error)`,
+  and its one caller, `Initialize`, answers the error as an internal error. This is an exported signature change,
+  made below v1.0.0, where `apidiff` is a no-op.
 
 ### The move off v1, and the bytes a script reads
 
@@ -872,9 +890,17 @@ Each test below is seen failing first on a scratch copy, as stated, and the exec
     `notify`'s encoding on a scratch copy: the invalid byte's frame is not sent.
 20. **`jsonx.Strings`** writes valid JSON, its keys sorted, equal to `json.Marshal` of the same `map[string]string`
     under D2, by a fuzz target. The `errText` tests in `acpserver` pass unchanged.
+
+    *Amended 2026-10-31, by the PLAN's deviation 10:* their assertions pass unchanged. The helper `errText`
+    reads an error's data through `jsonx`, since `TestClaimTurnAdmitsOne` reads an error made in process, whose
+    data is the `jsontext.Value` `jsonx.Strings` built, not a map the SDK decoded.
 21. **`_meta.gobble`:** each reader's existing tests pass unchanged, a mistyped member included, and a test plants one
     mistyped member beside a good one and reads the good one. Seen failing with a whole-struct decode in place of
     `Member`.
+
+    *Amended 2026-10-31, by the PLAN's deviation 8:* the tests that read `_meta.gobble` from the wire pass
+    unchanged. Two in `acpclient/sessions_test.go` read the writer's Go value directly, which is now a
+    `jsontext.Value`; they read it through `jsonx.Member`, with the same assertions.
 22. **Duplicates are refused at every gate:**
     * an `mcp.json` with two servers named `github` fails `Load` with one error naming `mcpServers` and `github`, and
       loads no server from it; a server whose `command` is set twice fails the same way;

@@ -15,8 +15,10 @@ import (
 	acp "github.com/maccavelli/acp-go-sdk2"
 
 	"github.com/maccavelli/gobble-cli/acpclient/acptest"
+	"github.com/maccavelli/gobble-cli/jsonx"
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/llm/llmtest"
+	"github.com/maccavelli/gobble-cli/permission"
 	"github.com/maccavelli/gobble-cli/session"
 	"github.com/maccavelli/gobble-cli/session/jsonl"
 	"github.com/maccavelli/gobble-cli/tool"
@@ -334,5 +336,44 @@ func TestServeClosesConnection(t *testing.T) {
 	}
 	if _, err := outR.Read(make([]byte, 1)); err == nil {
 		t.Error("Serve's output still open after it returned")
+	}
+}
+
+// Each of the agent's _meta.gobble writers writes the bytes v1 wrote from
+// the map it replaces, whose keys v1 sorted (0039-MADR D15; 0039-PLAN
+// deviation 8).
+func TestMetaWireBytes(t *testing.T) {
+	// metaBytes is meta as the SDK's encoder writes it: gobble's member
+	// spliced as encoded.
+	metaBytes := func(meta map[string]any, err error) string {
+		t.Helper()
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, err := jsonx.Marshal(meta)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(b)
+	}
+	q := question{limit: "L", title: "T", saves: []string{"git *"}, always: true, hides: true,
+		by: &permission.Spec{Effect: permission.ModeAsk, Tool: "bash", Pattern: "git *", Source: permission.RuleSource{Layer: permission.LayerDefault}}}
+	if m, err := (question{}).meta(); m != nil || err != nil {
+		t.Fatalf("a question with no marks has _meta %v, %v", m, err)
+	}
+	steered := &liveSession{queue: newQueue()}
+	steered.queue.steer("s")
+	for _, tc := range []struct {
+		name, got, want string
+	}{
+		{"question", metaBytes(q.meta()), `{"gobble":{"hides":true,"limit":"L","rule":{"from":"default","rule":"ask: bash(git *)"},"saves":["git *"],"title":"T"}}`},
+		{"repeated", metaBytes(question{repeated: 3}.meta()), `{"gobble":{"repeated":3}}`},
+		{"cleared", metaBytes(clearedMeta(steered)), `{"gobble":{"cleared":{"followUp":[],"steering":["s"]}}}`},
+		{"resumed", metaBytes(resumedMeta(state{name: "n"})), `{"gobble":{"messages":0,"title":"n"}}`},
+		{"switchTo", metaBytes(jsonx.SetMember(nil, gobble, switchMeta{SwitchTo: "s2"})), `{"gobble":{"switchTo":"s2"}}`},
+	} {
+		if tc.got != tc.want {
+			t.Errorf("%s _meta %s, want %s", tc.name, tc.got, tc.want)
+		}
 	}
 }

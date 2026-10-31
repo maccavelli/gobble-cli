@@ -59,6 +59,30 @@ func FuzzFields(f *testing.F) {
 	})
 }
 
+// Strings equals Marshal of the same map, and is valid JSON with no
+// repeated name, for any keys and values; where Marshal refuses two keys
+// repaired alike, Strings still writes valid JSON (0039-MADR
+// Confirmation 20).
+func FuzzStrings(f *testing.F) {
+	f.Add("reason", "boom", "sessionId", "s1", "error", "x")
+	f.Add("b", "caf\xe9", "a", "<&>", "", "")
+	f.Add("a\xfe", "1", "a\xff", "2", "a\xfeb", "3")
+	f.Fuzz(func(t *testing.T, k1, v1, k2, v2, k3, v3 string) {
+		m := map[string]string{k1: v1, k2: v2, k3: v3}
+		got := jsonx.Strings(m)
+		if !got.IsValid() {
+			t.Fatalf("Strings(%q) = %s, not valid JSON", m, got)
+		}
+		want, err := jsonx.Marshal(m)
+		if err != nil {
+			return
+		}
+		if string(got) != string(want) {
+			t.Fatalf("Strings(%q) = %s, Marshal = %s", m, got, want)
+		}
+	})
+}
+
 // gobble writes no repeated name: a session entry whose embedded unknown
 // members repeat a known one either fails to encode, or encodes to JSON that
 // a strict reader accepts (0039-MADR D3, Q6; Confirmation 22).

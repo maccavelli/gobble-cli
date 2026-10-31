@@ -14,6 +14,8 @@ import (
 
 	acp "github.com/maccavelli/acp-go-sdk2"
 	"github.com/maccavelli/acp-go-sdk2/agentproc"
+
+	"github.com/maccavelli/gobble-cli/jsonx"
 )
 
 // closeTimeout bounds Close as a whole; each of the runner's steps waits
@@ -224,10 +226,19 @@ type Prompt struct {
 }
 
 // unscanned is a text block marked for gobble's agent not to scan for @path.
-func unscanned(text string) acp.ContentBlock {
+func unscanned(text string) (acp.ContentBlock, error) {
 	b := acp.TextBlock(text)
-	b.Text.Meta = map[string]any{metaGobble: map[string]any{"mentions": false}}
-	return b
+	meta, err := jsonx.SetMember(nil, metaGobble, mentionsMeta{Mentions: false})
+	if err != nil {
+		return acp.ContentBlock{}, err
+	}
+	b.Text.Meta = meta
+	return b, nil
+}
+
+// mentionsMeta is a text block's _meta.gobble (0039-MADR D15).
+type mentionsMeta struct {
+	Mentions bool `json:"mentions"`
 }
 
 // Image is an image content block's data.
@@ -290,7 +301,11 @@ func (s *Session) Prompt(ctx context.Context, p Prompt) (Result, error) {
 	var blocks []acp.ContentBlock
 	for _, c := range p.Context {
 		if c != "" {
-			blocks = append(blocks, unscanned(c))
+			b, err := unscanned(c)
+			if err != nil {
+				return Result{}, fmt.Errorf("session/prompt: %w", err)
+			}
+			blocks = append(blocks, b)
 		}
 	}
 	if p.Text != "" {
@@ -307,8 +322,8 @@ func (s *Session) Prompt(ctx context.Context, p Prompt) (Result, error) {
 		return Result{}, fmt.Errorf("session/prompt: %w", err)
 	}
 	r := Result{StopReason: string(resp.StopReason)}
-	if g, ok := resp.Meta[metaGobble].(map[string]any); ok {
-		r.SwitchTo, _ = g["switchTo"].(string) //nolint:errcheck // absent is none
+	if g, ok := jsonx.Member[map[string]any](resp.Meta, metaGobble); ok {
+		r.SwitchTo, _ = jsonx.Member[string](g, "switchTo") //nolint:errcheck // absent is none
 	}
 	//lint:ignore SA1019 acp-go-sdk2 keeps this unstable-schema name under v1 (0035-MADR D6)
 	if u := resp.Usage; u != nil { //nolint:staticcheck // as the lint:ignore above
@@ -354,6 +369,11 @@ type handler struct {
 	// commands are each session's latest available_commands_update.
 	commands   map[acp.SessionId][]Command
 	permission func(context.Context, PermissionRequest) PermissionAnswer
+
+	// ext routes gobble's _gobble/* notifications, registered on first use
+	// (0039-MADR D12).
+	extOnce sync.Once
+	ext     acp.ExtensionMux
 }
 
 var _ acp.Client = (*handler)(nil)
@@ -405,35 +425,50 @@ func (h *handler) SessionUpdate(_ context.Context, n acp.SessionNotification) er
 
 var _ acp.ExtensionMethodHandler = (*handler)(nil)
 
-// HandleExtensionMethod delivers gobble's _gobble/retry,
-// _gobble/compaction and _gobble/personality notifications to their
-// session's callback, as KindRetry, KindCompaction and KindPersonality,
-// and answers any other extension method with -32601, which the SDK drops
-// for a notification. A notification for an unknown session goes to the
-// session being created, as an update does: _gobble/personality comes
-// before session/new's response (0022-MADR D6).
-func (h *handler) HandleExtensionMethod(_ context.Context, method string, params jsontext.Value) (any, error) {
-	var (
-		id  acp.SessionId
-		u   = Update{Params: params}
-		err error
-	)
-	switch method {
-	case methodRetry:
-		u.Kind = KindRetry
-		id, u.Retry, err = retryOf(params)
-	case methodCompaction:
-		u.Kind = KindCompaction
-		id, u.Compaction, err = compactionOf(params)
-	case methodPersonality:
-		u.Kind = KindPersonality
-		id, u.Personality, err = personalityOf(params)
-	default:
-		return nil, acp.NewMethodNotFound(method)
-	}
-	if err != nil {
-		return nil, acp.NewInvalidParams(map[string]any{"reason": err.Error()})
-	}
+// HandleExtensionMethod serves gobble's _gobble/retry, _gobble/compaction
+// and _gobble/personality notifications through an acp.ExtensionMux. Each
+// is decoded by gobble with encoding/json/v2 and delivered to its
+// session's callback, as KindRetry, KindCompaction and KindPersonality; a
+// decode failure is the connection's to log, and reaches no callback. Any
+// other extension notification is ignored, and a request is answered
+// -32601 (0039-MADR D12).
+func (h *handler) HandleExtensionMethod(ctx context.Context, method string, params jsontext.Value) (any, error) {
+	h.extOnce.Do(h.registerExtensions)
+	return h.ext.HandleExtensionMethod(ctx, method, params)
+}
+
+// registerExtensions registers the three notifications on h.ext.
+func (h *handler) registerExtensions() {
+	acp.Notify(&h.ext, methodRetry, func(_ context.Context, params jsontext.Value) error {
+		id, r, err := retryOf(params)
+		if err != nil {
+			return err
+		}
+		h.deliver(id, Update{Kind: KindRetry, Retry: r, Params: params})
+		return nil
+	})
+	acp.Notify(&h.ext, methodCompaction, func(_ context.Context, params jsontext.Value) error {
+		id, c, err := compactionOf(params)
+		if err != nil {
+			return err
+		}
+		h.deliver(id, Update{Kind: KindCompaction, Compaction: c, Params: params})
+		return nil
+	})
+	acp.Notify(&h.ext, methodPersonality, func(_ context.Context, params jsontext.Value) error {
+		id, p, err := personalityOf(params)
+		if err != nil {
+			return err
+		}
+		h.deliver(id, Update{Kind: KindPersonality, Personality: p, Params: params})
+		return nil
+	})
+}
+
+// deliver gives u to the session's callback. A notification for an unknown
+// session goes to the session being created, as an update does:
+// _gobble/personality comes before session/new's response (0022-MADR D6).
+func (h *handler) deliver(id acp.SessionId, u Update) {
 	h.mu.Lock()
 	on := h.sessions[id]
 	if on == nil && h.pending != nil {
@@ -444,7 +479,6 @@ func (h *handler) HandleExtensionMethod(_ context.Context, method string, params
 	if on != nil {
 		on(u)
 	}
-	return nil, nil
 }
 
 func (h *handler) commandsOf(id acp.SessionId) []Command {
@@ -474,7 +508,11 @@ func (h *handler) RequestPermission(ctx context.Context, r acp.RequestPermission
 			if a.OptionID != "" && string(o.OptionId) == a.OptionID {
 				resp := acp.RequestPermissionResponse{Outcome: acp.NewRequestPermissionOutcomeSelected(o.OptionId)}
 				if a.Feedback != "" {
-					resp.Meta = map[string]any{metaGobble: map[string]any{"feedback": a.Feedback}}
+					meta, err := jsonx.SetMember(nil, metaGobble, feedbackMeta{Feedback: a.Feedback})
+					if err != nil {
+						return acp.RequestPermissionResponse{}, err
+					}
+					resp.Meta = meta
 				}
 				return resp, nil
 			}
@@ -490,37 +528,31 @@ func (h *handler) RequestPermission(ctx context.Context, r acp.RequestPermission
 // gobbleMarks sets req's marks from a permission request's _meta.gobble;
 // a missing or mistyped one is none.
 func gobbleMarks(req *PermissionRequest, meta map[string]any) {
-	g, ok := meta[metaGobble].(map[string]any)
+	g, ok := jsonx.Member[map[string]any](meta, metaGobble)
 	if !ok {
 		return
 	}
-	if s, ok := g["limit"].(string); ok {
+	if s, ok := jsonx.Member[string](g, "limit"); ok {
 		req.Limit = s
 	}
-	if s, ok := g["onceOnly"].(string); ok {
+	if s, ok := jsonx.Member[string](g, "onceOnly"); ok {
 		req.OnceOnly = s
 	}
-	if s, ok := g["title"].(string); ok {
+	if s, ok := jsonx.Member[string](g, "title"); ok {
 		req.FullTitle = s
 	}
-	if l, ok := g["saves"].([]any); ok {
-		req.Saves = make([]string, 0, len(l))
-		for _, v := range l {
-			s, ok := v.(string)
-			if !ok {
-				req.Saves = nil
-				break
-			}
-			req.Saves = append(req.Saves, s)
-		}
+	if l, ok := jsonx.Member[[]string](g, "saves"); ok {
+		req.Saves = l
 	}
-	if b, ok := g["hides"].(bool); ok {
+	if b, ok := jsonx.Member[bool](g, "hides"); ok {
 		req.Hides = b
 	}
-	switch n := g["repeated"].(type) {
-	case float64:
-		req.Repeated = int(n)
-	case int:
+	if n, ok := jsonx.Member[int](g, "repeated"); ok {
 		req.Repeated = n
 	}
+}
+
+// feedbackMeta is a permission answer's _meta.gobble (0039-MADR D15).
+type feedbackMeta struct {
+	Feedback string `json:"feedback"`
 }
