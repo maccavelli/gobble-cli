@@ -2226,3 +2226,91 @@ The base is P21's `adb6c47`.
    - preflight stops at `verify-build-metadata`, as on every copy.
 9. **Not checkable here:** the release workflows run only in CI, on a tag or a rehearsal. The pinned commit's two
    workflow files are byte-identical to `v1.23.0`'s, by deviation 12's `diff -r` of the two module zips.
+
+### P12 record (2026-10-31): `agentproc.InProcess`
+
+The base is P22's `78d916f`. Steps 1, 3, 4 and 6 are deviation 12's; steps 2, 5, 7 and 8 are as written.
+
+1. **`Start`** (`acpclient/conn.go:136`) builds `agentproc.InProcess{Serve: serve, Grace: closeTimeout / 2,
+   ConnectionOptions: connOpts}` and starts it with the handler. `connOpts` is unchanged: the logger, the overflow
+   policy, the drop handler and the queue limit.
+   - `Serve` is `serve` itself. `ServeFunc`'s underlying type is `InProcess.Serve`'s, so it is assignable, and the
+     pass-through closure step 1 names would be the same function. golangci-lint's gocritic, whose `style` tag holds
+     `unlambda`, refuses such a closure. This is a fix to the step's own code, not a deviation.
+   - `serve` runs on the runner's own context, where it ran on `context.WithoutCancel(ctx)`. No caller's
+     cancellation reaches it either way. Neither `agentServe` (`internal/cli/agent.go:243`) nor the module reads a
+     value from that context: a search for `ctx.Value` and `context.WithValue` in `acpserver`, `agent`, `internal/cli`
+     and `acpclient` finds none.
+   - `ServeFunc` is unchanged, so `internal/cli/agent.go` is too.
+2. **The connection.** `c.conn` is `p.Conn()`, and `Initialize` follows as before. `Conn` has lost `toAgent` and
+   `served`, and gained `proc`. The `cmp` import went with the goroutine that used it.
+3. **`Close`**, through `closeFrom` (`:183`), is `context.WithTimeout(context.WithoutCancel(base), closeTimeout)`,
+   then `c.proc.CloseContext(ctx)` (`:186`).
+   - nil stays nil. Otherwise the error is `agent: %w` of it.
+   - Under `errors.Is(err, acp.ErrHandlersRunning)` (`:191`), "the connection's handlers did not stop within
+     <closeTimeout> of its close" is joined in front.
+   - P11's `WaitContext` and the "did not stop within … of its input closing" path are gone.
+
+   The two bounded cases now read as follows, logged on a scratch copy with a `t.Logf` added:
+
+   ```text
+   TestCloseBoundedWhenAHandlerHangs: Close after 301.211167ms: the connection's handlers did not stop within 300ms of its close
+           agent: context deadline exceeded
+           acp: the connection's handlers still run
+   TestCloseAbandonsAStuckAgent: Close after 302.224666ms: agent: context deadline exceeded
+           agentproc: agent killed: agentproc: in-process agent abandoned
+   ```
+
+4. **`closeTimeout`** (`:21`) bounds `Close` as a whole, and the grace is half of it, read at `Start`.
+   `TestCloseWaitsForHandlers` and `TestCloseBoundedWhenAHandlerHangs` are unchanged and pass, the second at its
+   300 ms.
+5. **New `TestCloseAbandonsAStuckAgent`** (`acpclient/close_test.go:86`), with `SetCloseTimeout(t,
+   200*time.Millisecond)`.
+   - Its serve answers `initialize` through a `ScriptAgent`, on `context.WithoutCancel` of its ctx. Then, at its
+     input's end, it blocks on a channel the test's cleanup closes. So it ignores both its input's end and its
+     context's cancellation. `Start` needs the `initialize` answer, so a serve that reads nothing could not be
+     started.
+   - `Close` returns an error matching `agentproc.ErrAbandoned`, in about 300 ms against the test's 2 s.
+   - That is the bound `go doc agentproc` gives at `v1.28.0`. The 200 ms ends during the second step, at 100 ms of
+     grace each; the steps left run as `Kill`'s, which waits a grace, 100 ms, before it abandons.
+   - The first version passed `context.WithoutCancel(t.Context())`. golangci-lint's contextcheck refused it, at
+     `close_test.go:92`: "Non-inherited new context, use function like `context.WithXXX` instead". The fix derives
+     from serve's own ctx, which is what the test means. This is a fix to the step's own code, not a deviation. The
+     breaks below were run again after it, with the same results.
+6. **Seen failing (C9),** each on a scratch copy of the tree:
+   - `Grace` unset, so the runner's 5 s: `TestCloseAbandonsAStuckAgent` fails, exit 1, with
+     `close_test.go:106: Close took 5.205135541s, past its bound of 2s`.
+   - `Close` as `c.proc.Close()`: `TestCloseBoundedWhenAHandlerHangs` fails under `go test -timeout 60s`, exit 1,
+     with `panic: test timed out after 1m0s`. The goroutine dump has `agentproc.(*Process).Close` →
+     `agentproc.(*Process).Wait` → `acp.(*Connection).Wait`, deviation 9's stack.
+7. **Assert.**
+   - `grep -c io.Pipe acpclient/conn.go` gives 0.
+   - `go test -count=1 ./...` passes, 36 ok, `internal/cli` included, its tests unchanged (`print_test.go:21` among
+     them).
+   - `acpclient/conn_test.go` is unchanged. Its `io.Pipe`s connect the SDK's own client in a test of it, not
+     `Start`, so it had nothing to change.
+8. **G-local:**
+   - `make pre-add-check FILES="acpclient/conn.go acpclient/close_test.go"`: 2 files clean;
+   - `make preflight`: passed. Its first run stopped at golangci-lint's contextcheck, step 5's finding;
+   - `make race`: 36 ok;
+   - `make perf` passed:
+
+     | Benchmark | macOS | Baseline |
+     | --- | --- | --- |
+     | `ReplyRender` | 33.2 µs | 30 µs |
+     | `Reprint` | 9.87 ms | 9.4 ms |
+     | `LineSessionStart` | 886 µs | 830 µs |
+     | `KeyDraw` | 1.575 µs, 8 allocations | 1.5 µs |
+
+9. **G-hosts,** on the Linux machine and the Windows laptop, with 814 files shipped to each:
+   - `go test`: passed;
+   - race: passed, 36 ok;
+   - `make check-records markdownlint`: passed;
+   - preflight stops at `verify-build-metadata`, as on every copy. A first host run, made before step 5's fix,
+     stopped at golangci-lint's contextcheck, the same finding;
+   - `make perf` passed on both:
+     - the Linux machine: `ReplyRender` 118.2 µs, `Reprint` 28.2 ms, `LineSessionStart` 3.16 ms, `KeyDraw` 4.89 µs;
+     - the Windows laptop: `ReplyRender` 28.9 µs, `Reprint` 7.56 ms, `LineSessionStart` 4.27 ms, `KeyDraw` 1.063 µs;
+   - `make probe-conhost` passed on the Windows laptop.
+
+No deviation. The MADR's D12 note of 2026-10-31 describes what was built, so it is not amended.

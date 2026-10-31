@@ -1,7 +1,6 @@
 package acpclient
 
 import (
-	"cmp"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -14,9 +13,11 @@ import (
 	"time"
 
 	acp "github.com/maccavelli/acp-go-sdk2"
+	"github.com/maccavelli/acp-go-sdk2/agentproc"
 )
 
-// closeTimeout bounds how long Close waits for the agent to stop.
+// closeTimeout bounds Close as a whole; each of the runner's steps waits
+// half of it (0035-MADR D12).
 var closeTimeout = 5 * time.Second
 
 // ErrImagesUnsupported is returned by Prompt when the prompt carries images
@@ -103,26 +104,18 @@ type AgentInfo struct {
 type Conn struct {
 	conn    *acp.ClientSideConnection
 	agent   AgentInfo
-	toAgent *io.PipeWriter
-	served  chan error
+	proc    *agentproc.Process
 	handler *handler
 	newMu   sync.Mutex // serialises NewSession
 }
 
-// Start runs serve over a pair of pipes, connects to it and sends
-// initialize. The agent runs until Close, whatever happens to ctx; ctx
-// bounds only the handshake. Start fails if the agent speaks a protocol
-// other than 1.
+// Start runs serve in this process through agentproc.InProcess, connects
+// to it and sends initialize. The agent runs until Close, whatever happens
+// to ctx; ctx bounds only the handshake. Start fails if the agent speaks a
+// protocol other than 1.
 func Start(ctx context.Context, serve ServeFunc, opts Options) (*Conn, error) {
-	toAgentR, toAgentW := io.Pipe()
-	toClientR, toClientW := io.Pipe()
-	c := &Conn{toAgent: toAgentW, served: make(chan error, 1), handler: &handler{sessions: map[acp.SessionId]func(Update){},
+	c := &Conn{handler: &handler{sessions: map[acp.SessionId]func(Update){},
 		commands: map[acp.SessionId][]Command{}, permission: opts.Permission}}
-	go func() {
-		err := serve(context.WithoutCancel(ctx), toAgentR, toClientW)
-		toClientW.CloseWithError(cmp.Or(err, io.EOF)) //nolint:errcheck,gosec // CloseWithError always returns nil
-		c.served <- err
-	}()
 	logger := opts.Logger
 	if logger == nil {
 		logger = slog.New(slog.DiscardHandler)
@@ -139,7 +132,12 @@ func Start(ctx context.Context, serve ServeFunc, opts Options) (*Conn, error) {
 	if opts.MaxQueued > 0 {
 		connOpts = append(connOpts, acp.WithMaxQueuedNotifications(opts.MaxQueued))
 	}
-	c.conn = acp.NewClientSideConnection(c.handler, toAgentW, toClientR, connOpts...)
+	// serve runs on the runner's own context, which no caller's cancels.
+	p, err := (&agentproc.InProcess{Serve: serve, Grace: closeTimeout / 2, ConnectionOptions: connOpts}).Start(c.handler)
+	if err != nil {
+		return nil, fmt.Errorf("start agent: %w", err)
+	}
+	c.proc, c.conn = p, p.Conn()
 	resp, err := c.conn.Initialize(ctx, acp.InitializeRequest{
 		ProtocolVersion: acp.ProtocolVersionNumber,
 		ClientInfo:      &acp.Implementation{Name: opts.Name, Version: opts.Version},
@@ -171,40 +169,29 @@ func (c *Conn) Agent() AgentInfo { return c.agent }
 // Dropped is the number of inbound notifications dropped so far.
 func (c *Conn) Dropped() uint64 { return c.conn.DroppedNotifications() }
 
-// Close ends the agent's input and waits for the agent to stop, then
-// closes the connection and waits for its handlers, so no update is
-// handled after it returns (0016-MADR A1; 0031-MADR D5). Each wait is at
-// most closeTimeout. It returns the agent's error, if any, then the
-// connection's.
+// Close stops the agent by the runner's steps: it ends the agent's input,
+// then cancels its context, then abandons it. It then waits for the
+// connection's handlers, so no update is handled after it returns
+// (0016-MADR A1; 0031-MADR D5). closeTimeout bounds it, and the runner's
+// kill half as long again. Its error wraps the agent's, and
+// agentproc.ErrAbandoned, agentproc.ErrKilled and acp.ErrHandlersRunning
+// read through it with errors.Is (0035-MADR D12).
 func (c *Conn) Close() error { return c.closeFrom(context.Background()) }
 
-// closeFrom is Close, its waits keeping base's values and never its
-// cancellation: closeTimeout alone bounds them, whatever base says.
+// closeFrom is Close, its bound keeping base's values and never its
+// cancellation: closeTimeout alone bounds it, whatever base says.
 func (c *Conn) closeFrom(base context.Context) error {
-	if err := c.toAgent.Close(); err != nil {
-		return fmt.Errorf("close agent input: %w", err)
-	}
-	deadline := time.NewTimer(closeTimeout)
-	defer deadline.Stop()
-	var served error
-	select {
-	case served = <-c.served:
-	case <-deadline.C:
-		return errors.Join(fmt.Errorf("the agent did not stop within %v of its input closing", closeTimeout), c.conn.Close())
-	}
-	var errs []error
-	if served != nil {
-		errs = append(errs, fmt.Errorf("agent: %w", served))
-	}
-	if err := c.conn.Close(); err != nil {
-		errs = append(errs, fmt.Errorf("close connection: %w", err))
-	}
-	wctx, cancel := context.WithTimeout(context.WithoutCancel(base), closeTimeout)
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(base), closeTimeout)
 	defer cancel()
-	if err := c.conn.Connection().WaitContext(wctx); errors.Is(err, context.DeadlineExceeded) {
-		errs = append(errs, fmt.Errorf("the connection's handlers did not stop within %v of its close", closeTimeout))
+	err := c.proc.CloseContext(ctx)
+	if err == nil {
+		return nil
 	}
-	return errors.Join(errs...)
+	err = fmt.Errorf("agent: %w", err)
+	if errors.Is(err, acp.ErrHandlersRunning) {
+		return errors.Join(fmt.Errorf("the connection's handlers did not stop within %v of its close", closeTimeout), err)
+	}
+	return err
 }
 
 // Session is one ACP session.

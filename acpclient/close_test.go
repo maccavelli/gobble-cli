@@ -2,11 +2,15 @@ package acpclient_test
 
 import (
 	"context"
+	"errors"
+	"io"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/maccavelli/acp-go-sdk2/agentproc"
 
 	"github.com/maccavelli/gobble-cli/acpclient"
 	"github.com/maccavelli/gobble-cli/acpclient/acptest"
@@ -73,5 +77,32 @@ func TestCloseBoundedWhenAHandlerHangs(t *testing.T) {
 	}
 	if d := time.Since(start); d > 2*time.Second {
 		t.Fatalf("Close took %v, past its timeout of 300ms", d)
+	}
+}
+
+// An agent that answers initialize, then ignores its input's end and its
+// context, is abandoned, and Close says so within its bound (0035-MADR
+// D12).
+func TestCloseAbandonsAStuckAgent(t *testing.T) {
+	acpclient.SetCloseTimeout(t, 200*time.Millisecond)
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+	agent := &acptest.ScriptAgent{}
+	stuck := func(ctx context.Context, in io.Reader, out io.Writer) error {
+		err := agent.Serve(context.WithoutCancel(ctx), in, out)
+		<-release
+		return err
+	}
+	c, err := acpclient.Start(t.Context(), stuck, acpclient.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	err = c.Close()
+	if !errors.Is(err, agentproc.ErrAbandoned) {
+		t.Fatalf("Close: %v, want an error matching agentproc.ErrAbandoned", err)
+	}
+	if d := time.Since(start); d > 2*time.Second {
+		t.Fatalf("Close took %v, past its bound of 2s", d)
 	}
 }
