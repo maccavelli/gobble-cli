@@ -2161,3 +2161,40 @@ The base is `7166cc9`.
    - race: passed, 36 ok;
    - `make check-records markdownlint`: passed;
    - preflight stops at `verify-build-metadata`, as on every copy.
+
+### P21 record (2026-10-31): go-tui-lib/v2 `v2.7.0`
+
+The base is P20's `6f7787f`.
+
+1. **Checked first:** `python3 scripts/check_libs.py --lib go-tui-lib --tag v2.7.0`, run again at the base: "pinned v2.6.2,
+   checking v2.7.0", `archtest` ok, "0 failing checks".
+2. **The pin:** `go get github.com/maccavelli/go-tui-lib/v2@v2.7.0` ("upgraded … v2.6.2 => v2.7.0"), then
+   `go mod tidy`.
+   - `go.mod` changes on the go-tui-lib line alone.
+   - `go.sum` changes in go-tui-lib's two lines alone. Its `go.mod` hash is unchanged, since that file is.
+3. **No source change.** `go test -count=1 ./...` passes, `internal/cli`'s prompt, glyph and safetext tests included.
+4. **The docs:** `README.md:137` and `docs/architecture.md:160` name `v2.7.0`.
+5. No check is added, so C9 has nothing to break.
+6. **G-local:**
+   - `make pre-add-check`: 589 files clean;
+   - `make preflight`: passed;
+   - `make race`: 36 ok;
+   - `make perf` passed. `KeyDraw` here times gobble's own editor, which `main` still has until P17:
+
+     | Benchmark | macOS | Baseline |
+     | --- | --- | --- |
+     | `ReplyRender` | 33.7 µs | 30 µs |
+     | `Reprint` | 10.0 ms | 9.4 ms |
+     | `LineSessionStart` | 947 µs | 830 µs |
+     | `KeyDraw` | 1.547 µs, 8 allocations | 1.5 µs |
+
+7. **G-hosts,** on the Linux machine and the Windows laptop, with 814 files shipped to each:
+   - `go test`: passed;
+   - race: passed, 36 ok;
+   - `make check-records markdownlint`: passed;
+   - preflight stops at `verify-build-metadata`, as on every copy;
+   - `make perf` passed on both:
+     - the Linux machine: `ReplyRender` 120.6 µs, `Reprint` 30.5 ms, `LineSessionStart` 3.15 ms, and `KeyDraw`
+       5.005 µs against its baseline of 5 µs and budget of 15 µs;
+     - the Windows laptop: `ReplyRender` 28.4 µs, `Reprint` 7.13 ms, `LineSessionStart` 3.91 ms, `KeyDraw` 1.055 µs;
+   - `make probe-conhost` passed on the Windows laptop.

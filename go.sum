@@ -50,8 +50,8 @@ github.com/maccavelli/go-llmprovider-sdk v1.24.1 h1:V0PoBRJktD4FwKKaU0cChPcesMRz
 github.com/maccavelli/go-llmprovider-sdk v1.24.1/go.mod h1:dE+W7oDyvVmAxpSOuIJO3qSD3bDTh/olLt/TbByBE1M=
 github.com/maccavelli/go-selfupdate-lib v1.23.0 h1:qu0d9llmj+fHcV8gkBnOxfEXhr+AAMV42eAONYxjzGE=
 github.com/maccavelli/go-selfupdate-lib v1.23.0/go.mod h1:boXH5t3XBFF7sNNQL8r/w1TUJjuzjrDh7bKDCrlP0Q8=
-github.com/maccavelli/go-tui-lib/v2 v2.6.2 h1:t8m584hmhpqAXZRWj6x9MQBarDqiI2wtwHUPq7Dgb/A=
-github.com/maccavelli/go-tui-lib/v2 v2.6.2/go.mod h1:GDnV1CL70qUJCRDDzF/KD+HSZllb/fpO8a2+i+DPbqs=
+github.com/maccavelli/go-tui-lib/v2 v2.7.0 h1:hDtMvzxCEOlyCeRq/bGnjPoqvDfiILn2P9xTkoevb44=
+github.com/maccavelli/go-tui-lib/v2 v2.7.0/go.mod h1:GDnV1CL70qUJCRDDzF/KD+HSZllb/fpO8a2+i+DPbqs=
 github.com/mattn/go-runewidth v0.0.27 h1:Feg/Oou5zI/wnpgDF6omIU0OokC9GxLC/WRknhVlIR0=
 github.com/mattn/go-runewidth v0.0.27/go.mod h1:3qAiGCV4Koz/yuveO58qUefmUTRm8r0IGEXZ9jeHp/8=
 github.com/modelcontextprotocol/go-sdk v1.8.0 h1:KIvahhYqwtbeniWVPs3TcXEA7b8jEtwfBpOTAI+Urx4=

@@ -134,7 +134,7 @@ a v1.0.0 gate, a v1.x train and `exp/`, is in [0005-MADR](docs/decisions/0005-MA
 - **Settings, skills and templates:** YAML through [go.yaml.in/yaml/v3](https://github.com/yaml/go-yaml) `v3.0.5`.
 - **Build identity and self-update:** [go-selfupdate-lib](https://github.com/maccavelli/go-selfupdate-lib)
   `v1.23.0`. gobble does not reimplement self-update.
-- **TUI:** [go-tui-lib](https://github.com/maccavelli/go-tui-lib) `/v2` `v2.6.2`. The CLI mode draws its permission
+- **TUI:** [go-tui-lib](https://github.com/maccavelli/go-tui-lib) `/v2` `v2.7.0`. The CLI mode draws its permission
   prompt with its Charm-free `ask`. gobble does not reimplement core TUI; where a behaviour is not in the library
   yet, gobble waits rather than copying it.
 
