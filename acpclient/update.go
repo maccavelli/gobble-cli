@@ -2,6 +2,7 @@ package acpclient
 
 import (
 	"encoding/json"
+	"encoding/json/jsontext"
 	"fmt"
 	"time"
 
@@ -102,7 +103,7 @@ type Update struct {
 	Personality Personality
 	// Params is the session/update params object as the SDK encodes it,
 	// for clients that pass the ACP stream through (0008-MADR D9).
-	Params json.RawMessage
+	Params jsontext.Value
 }
 
 // Retry is a wait the agent's turn takes before calling the model again,
@@ -122,7 +123,7 @@ type Retry struct {
 const methodRetry = "_gobble/retry"
 
 // retryOf decodes _gobble/retry's params, with the session they name.
-func retryOf(params json.RawMessage) (acp.SessionId, Retry, error) {
+func retryOf(params jsontext.Value) (acp.SessionId, Retry, error) {
 	var n struct {
 		SessionID   acp.SessionId `json:"sessionId"`
 		Phase       string        `json:"phase"`
@@ -155,7 +156,7 @@ const methodCompaction = "_gobble/compaction"
 
 // compactionOf decodes _gobble/compaction's params, with the session they
 // name.
-func compactionOf(params json.RawMessage) (acp.SessionId, Compaction, error) {
+func compactionOf(params jsontext.Value) (acp.SessionId, Compaction, error) {
 	var n struct {
 		SessionID    acp.SessionId `json:"sessionId"`
 		Phase        string        `json:"phase"`
@@ -182,7 +183,7 @@ const methodPersonality = "_gobble/personality"
 
 // personalityOf decodes _gobble/personality's params, with the session
 // they name.
-func personalityOf(params json.RawMessage) (acp.SessionId, Personality, error) {
+func personalityOf(params jsontext.Value) (acp.SessionId, Personality, error) {
 	var n struct {
 		SessionID acp.SessionId `json:"sessionId"`
 		Name      string        `json:"name"`

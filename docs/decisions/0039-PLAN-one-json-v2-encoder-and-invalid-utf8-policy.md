@@ -896,3 +896,31 @@ The base is P1's `6b5af2c`. Deviation 5 changed step 3.
      laptop: ReplyRender 28.91 µs (baseline 54 µs), Reprint 7.44 ms (baseline 12 ms), LineSessionStart 4.51 ms
      (baseline 6.9 ms), KeyDraw 1.215 µs (baseline 1.4 µs);
    * the conhost probe on the Windows laptop: passed.
+
+### P3 record (2026-10-31): the renames
+
+The base is P2's `f38c1c5`. No deviation.
+
+1. **The spellings** (step 1): each `json.RawMessage` or `stdjson.RawMessage` is `jsontext.Value`:
+   * `acpclient/acptest/client.go`, 2; `acpclient/conn.go`, 1; `acpserver/extensions.go`, 2; `acpserver/grants.go`, 1;
+   * `acpclient/compaction_test.go`, 3; `acpclient/personality_test.go`, 4; `acpclient/retry_test.go`, 3;
+   * `acpclient/update.go`, 4: `Params` at `:105`, and the parameters of `retryOf`, `compactionOf` and
+     `personalityOf`, which step 1's "each" covers in a file the phase lists. `update.go` keeps `encoding/json`, for
+     the decodes and the encode P4 moves to `jsonx`, and gains `encoding/json/jsontext`.
+
+   `acpserver/prompt.go` had no spelling left after P1. `acpclient/sessions_test.go`'s one spelling is P7's, with that
+   file's v1 decode.
+2. **No change at run time** (step 2): the types are identical. `go build ./...` and `go vet` passed, with every test
+   unchanged. No test was added, so C9 has nothing to plant.
+3. **Assert** (step 3): `grep` for `"encoding/json"` and `stdjson` over the 8 files and `acpserver/prompt.go` finds
+   nothing (exit 1). `acpclient/update.go` holds no `RawMessage`.
+4. **G-local:**
+   * `make pre-add-check` on the 8 changed Go files: clean;
+   * `make preflight`: passed;
+   * `make race`: 37 ok;
+   * no `make perf`, since P3 touches no `internal/cli` file.
+5. **G-hosts,** on the Linux machine and the Windows laptop, with 813 files shipped to each:
+   * `go test`: passed;
+   * race: passed, 37 ok;
+   * `make check-records markdownlint`: passed;
+   * preflight stops at `verify-build-metadata`, as on every copy.

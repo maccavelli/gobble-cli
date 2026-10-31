@@ -3,7 +3,7 @@ package acpserver
 import (
 	"cmp"
 	"context"
-	stdjson "encoding/json"
+	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"fmt"
 	"path/filepath"
@@ -77,7 +77,7 @@ var requestPermissionsSpec = tool.New(requestPermissionsTool,
 		s.Properties["reason"].MinLength = new(1)
 		scope := s.Properties["scope"]
 		scope.Enum = []any{grantTurn, grantSession}
-		scope.Default = stdjson.RawMessage(`"` + grantTurn + `"`)
+		scope.Default = jsontext.Value(`"` + grantTurn + `"`)
 	})).Spec()
 
 // requestPermissions is the tool, for one session's turn.

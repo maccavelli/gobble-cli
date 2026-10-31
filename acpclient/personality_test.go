@@ -1,7 +1,7 @@
 package acpclient
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
 	"errors"
 	"testing"
 
@@ -15,7 +15,7 @@ import (
 func TestPersonalityNotification(t *testing.T) {
 	var got, pending []Update
 	h := &handler{sessions: map[acp.SessionId]func(Update){"s1": func(u Update) { got = append(got, u) }}}
-	params := json.RawMessage(`{"sessionId":"s1","name":"snarky","level":4}`)
+	params := jsontext.Value(`{"sessionId":"s1","name":"snarky","level":4}`)
 	if _, err := h.HandleExtensionMethod(t.Context(), "_gobble/personality", params); err != nil {
 		t.Fatal(err)
 	}
@@ -24,18 +24,18 @@ func TestPersonalityNotification(t *testing.T) {
 		t.Fatalf("updates %+v, want one KindPersonality snarky 4 with its params", got)
 	}
 	h.setPending(func(u Update) { pending = append(pending, u) })
-	if _, err := h.HandleExtensionMethod(t.Context(), "_gobble/personality", json.RawMessage(`{"sessionId":"s2","name":"dry","level":3}`)); err != nil {
+	if _, err := h.HandleExtensionMethod(t.Context(), "_gobble/personality", jsontext.Value(`{"sessionId":"s2","name":"dry","level":3}`)); err != nil {
 		t.Fatal(err)
 	}
 	h.setPending(nil)
-	if _, err := h.HandleExtensionMethod(t.Context(), "_gobble/personality", json.RawMessage(`{"sessionId":"s2","name":"boring","level":1}`)); err != nil {
+	if _, err := h.HandleExtensionMethod(t.Context(), "_gobble/personality", jsontext.Value(`{"sessionId":"s2","name":"boring","level":1}`)); err != nil {
 		t.Fatal(err)
 	}
 	if len(pending) != 2 || pending[0].Personality.Name != "dry" || pending[1].Personality.Name != "boring" {
 		t.Fatalf("the new session's updates %+v", pending)
 	}
 	var re *acp.RequestError
-	if _, err := h.HandleExtensionMethod(t.Context(), "_gobble/personality", json.RawMessage(`{`)); !errors.As(err, &re) || re.Code != -32602 {
+	if _, err := h.HandleExtensionMethod(t.Context(), "_gobble/personality", jsontext.Value(`{`)); !errors.As(err, &re) || re.Code != -32602 {
 		t.Fatalf("bad params: %v, want -32602", err)
 	}
 }

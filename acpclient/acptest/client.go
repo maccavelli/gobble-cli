@@ -2,7 +2,7 @@ package acptest
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
 	"math"
 	"slices"
 	"sync"
@@ -67,14 +67,14 @@ func (c *Client) SessionUpdate(_ context.Context, n acp.SessionNotification) err
 // Notice is an extension message the agent sent: its method and params.
 type Notice struct {
 	Method string
-	Params json.RawMessage
+	Params jsontext.Value
 }
 
 var _ acp.ExtensionMethodHandler = (*Client)(nil)
 
 // HandleExtensionMethod records an extension message from the agent, such
 // as _gobble/retry, and answers it with nothing.
-func (c *Client) HandleExtensionMethod(_ context.Context, method string, params json.RawMessage) (any, error) {
+func (c *Client) HandleExtensionMethod(_ context.Context, method string, params jsontext.Value) (any, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.notices = append(c.notices, Notice{Method: method, Params: slices.Clone(params)})

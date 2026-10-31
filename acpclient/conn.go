@@ -3,7 +3,7 @@ package acpclient
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
+	"encoding/json/jsontext"
 	"errors"
 	"fmt"
 	"io"
@@ -412,7 +412,7 @@ var _ acp.ExtensionMethodHandler = (*handler)(nil)
 // for a notification. A notification for an unknown session goes to the
 // session being created, as an update does: _gobble/personality comes
 // before session/new's response (0022-MADR D6).
-func (h *handler) HandleExtensionMethod(_ context.Context, method string, params json.RawMessage) (any, error) {
+func (h *handler) HandleExtensionMethod(_ context.Context, method string, params jsontext.Value) (any, error) {
 	var (
 		id  acp.SessionId
 		u   = Update{Params: params}

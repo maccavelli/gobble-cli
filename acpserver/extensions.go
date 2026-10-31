@@ -2,7 +2,6 @@ package acpserver
 
 import (
 	"context"
-	stdjson "encoding/json"
 	"encoding/json/jsontext"
 	"errors"
 	"fmt"
@@ -61,7 +60,7 @@ var _ acp.ExtensionMethodHandler = (*Agent)(nil)
 // HandleExtensionMethod answers a _gobble/ method, and any other _ method
 // with -32601. A result is encoded here with encoding/json/v2, as the
 // session file is, and handed to the SDK as JSON it passes through.
-func (a *Agent) HandleExtensionMethod(ctx context.Context, method string, params stdjson.RawMessage) (any, error) {
+func (a *Agent) HandleExtensionMethod(ctx context.Context, method string, params jsontext.Value) (any, error) {
 	ext, ok := extensions[method]
 	if !ok {
 		return nil, acp.NewMethodNotFound(method)
@@ -74,7 +73,7 @@ func (a *Agent) HandleExtensionMethod(ctx context.Context, method string, params
 	if err != nil {
 		return nil, acp.NewInternalError(map[string]any{keyReason: err.Error()})
 	}
-	return stdjson.RawMessage(b), nil
+	return jsontext.Value(b), nil
 }
 
 // sessionParams is every request's sessionId.

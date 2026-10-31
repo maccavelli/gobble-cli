@@ -1,7 +1,7 @@
 package acpclient
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
 	"errors"
 	"testing"
 
@@ -14,11 +14,11 @@ import (
 func TestCompactionNotification(t *testing.T) {
 	var got []Update
 	h := &handler{sessions: map[acp.SessionId]func(Update){"s1": func(u Update) { got = append(got, u) }}}
-	params := json.RawMessage(`{"sessionId":"s1","phase":"end","reason":"threshold","tokensBefore":1234,"error":"boom","paused":"session"}`)
+	params := jsontext.Value(`{"sessionId":"s1","phase":"end","reason":"threshold","tokensBefore":1234,"error":"boom","paused":"session"}`)
 	if _, err := h.HandleExtensionMethod(t.Context(), "_gobble/compaction", params); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := h.HandleExtensionMethod(t.Context(), "_gobble/compaction", json.RawMessage(`{"sessionId":"other","phase":"start"}`)); err != nil {
+	if _, err := h.HandleExtensionMethod(t.Context(), "_gobble/compaction", jsontext.Value(`{"sessionId":"other","phase":"start"}`)); err != nil {
 		t.Fatal(err)
 	}
 	want := Compaction{Phase: "end", Reason: "threshold", TokensBefore: 1234, Error: "boom", Paused: "session"}
@@ -26,7 +26,7 @@ func TestCompactionNotification(t *testing.T) {
 		t.Fatalf("updates %+v, want one KindCompaction %+v with its params", got, want)
 	}
 	var re *acp.RequestError
-	if _, err := h.HandleExtensionMethod(t.Context(), "_gobble/compaction", json.RawMessage(`{`)); !errors.As(err, &re) || re.Code != -32602 {
+	if _, err := h.HandleExtensionMethod(t.Context(), "_gobble/compaction", jsontext.Value(`{`)); !errors.As(err, &re) || re.Code != -32602 {
 		t.Fatalf("bad params: %v, want -32602", err)
 	}
 }
