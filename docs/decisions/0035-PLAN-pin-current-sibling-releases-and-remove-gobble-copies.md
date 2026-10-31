@@ -2138,3 +2138,26 @@ The base is `6c5eb02`. Nothing is committed (deviation 11).
   - the records: [0037-PLAN-permission-and-file-tool-hardening.md](0037-PLAN-permission-and-file-tool-hardening.md),
     with a dated note that it pauses after P2.
 
+### P20 record (2026-10-31): acp-go-sdk2 `v1.28.0`
+
+The base is `7166cc9`.
+
+1. **Checked first:** `python3 scripts/check_libs.py --lib acp-go-sdk2 --tag v1.28.0`, run again at the base: "pinned
+   v1.26.0, checking v1.28.0", "0 failing checks".
+2. **The pin:** `go get github.com/maccavelli/acp-go-sdk2@v1.28.0` ("upgraded … v1.26.0 => v1.28.0"), then
+   `go mod tidy`.
+   - `go.mod` changes on the acp-go-sdk2 line alone.
+   - `go.sum` changes in acp-go-sdk2's two lines alone.
+   - `github.com/coder/websocket` is in neither file: `grep -c websocket go.mod go.sum` gives 0 for each.
+3. **No source change.** `go build ./...` and `go test -count=1 ./...` pass.
+4. **The docs:** `README.md:129` and `docs/architecture.md:156` name `v1.28.0`.
+5. No check is added, so C9 has nothing to break.
+6. **G-local:**
+   - `make pre-add-check`: 589 files clean;
+   - `make preflight`: passed;
+   - `make race`: 36 ok.
+7. **G-hosts,** on the Linux machine and the Windows laptop, with 814 files shipped to each:
+   - `go test`: passed;
+   - race: passed, 36 ok;
+   - `make check-records markdownlint`: passed;
+   - preflight stops at `verify-build-metadata`, as on every copy.
