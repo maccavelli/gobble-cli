@@ -3,7 +3,6 @@ package acptest
 import (
 	"cmp"
 	"context"
-	"encoding/json"
 	"encoding/json/jsontext"
 	"fmt"
 	"io"
@@ -158,7 +157,7 @@ func (a *ScriptAgent) NewSession(ctx context.Context, p acp.NewSessionRequest) (
 func sendUpdates(ctx context.Context, conn *acp.AgentSideConnection, id acp.SessionId, updates []string) error {
 	for i, u := range updates {
 		var update acp.SessionUpdate
-		if err := json.Unmarshal([]byte(u), &update); err != nil {
+		if err := jsonx.Unmarshal([]byte(u), &update); err != nil {
 			return acp.NewInternalError(jsonx.Strings(map[string]string{"update": strconv.Itoa(i), "error": err.Error()}))
 		}
 		if err := conn.SessionUpdate(ctx, acp.SessionNotification{SessionId: id, Update: update}); err != nil {
@@ -185,7 +184,7 @@ func (a *ScriptAgent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.Prom
 		//lint:ignore SA1019 acp-go-sdk2 keeps this unstable-schema name under v1 (0035-MADR D6)
 		resp.Usage = &acp.Usage{} //nolint:staticcheck // as the lint:ignore above
 		//lint:ignore SA1019 acp-go-sdk2 keeps this unstable-schema name under v1 (0035-MADR D6)
-		if err := json.Unmarshal([]byte(turn.Usage), resp.Usage); err != nil { //nolint:staticcheck // as the lint:ignore above
+		if err := jsonx.Unmarshal([]byte(turn.Usage), resp.Usage); err != nil { //nolint:staticcheck // as the lint:ignore above
 			return acp.PromptResponse{}, acp.NewInternalError(jsonx.Strings(map[string]string{"usage": err.Error()}))
 		}
 	}
@@ -203,7 +202,7 @@ func (a *ScriptAgent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.Prom
 
 // startTurn records the prompt and takes the next Turn.
 func (a *ScriptAgent) startTurn(p acp.PromptRequest) (Turn, *acp.AgentSideConnection, chan struct{}, error) {
-	b, err := json.Marshal(p)
+	b, err := jsonx.Marshal(p)
 	if err != nil {
 		return Turn{}, nil, nil, err
 	}

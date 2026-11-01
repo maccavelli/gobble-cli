@@ -1,12 +1,12 @@
 package builtin
 
 import (
-	"encoding/json/v2"
 	"slices"
 	"strings"
 
 	"mvdan.cc/sh/v3/syntax"
 
+	"github.com/maccavelli/gobble-cli/jsonx"
 	"github.com/maccavelli/gobble-cli/tool"
 )
 
@@ -19,7 +19,7 @@ import (
 // F6-3 decision 9).
 func interceptShell(c tool.Call) (tool.Call, bool) {
 	var a shellIn
-	if err := json.Unmarshal(c.Args, &a); err != nil || a.Workdir != "" {
+	if err := jsonx.Unmarshal(c.Args, &a); err != nil || a.Workdir != "" {
 		return tool.Call{}, false
 	}
 	f, err := syntax.NewParser(syntax.Variant(syntax.LangBash)).Parse(strings.NewReader(a.Command), "")
@@ -54,7 +54,7 @@ func interceptShell(c tool.Call) (tool.Call, bool) {
 	if !ok {
 		return tool.Call{}, false
 	}
-	data, err := json.Marshal(args)
+	data, err := jsonx.Marshal(args)
 	if err != nil {
 		return tool.Call{}, false
 	}

@@ -74,7 +74,7 @@ func inputSchema(s any) jsontext.Value {
 	if _, ok := m["properties"]; !ok {
 		m["properties"] = map[string]any{}
 	}
-	b, err := json.Marshal(m, json.Deterministic(true))
+	b, err := jsonx.Marshal(m, json.Deterministic(true))
 	if err != nil {
 		return jsontext.Value(`{"type":"object","properties":{}}`)
 	}
@@ -133,7 +133,7 @@ func seconds(d time.Duration) string {
 // images.
 func resultText(r *mcp.CallToolResult) string {
 	if len(r.Content) == 0 && r.StructuredContent != nil {
-		b, err := json.Marshal(r.StructuredContent, json.Deterministic(true), jsontext.WithIndent("  "))
+		b, err := jsonx.Marshal(r.StructuredContent, json.Deterministic(true), jsontext.WithIndent("  "))
 		if err == nil {
 			return string(b)
 		}

@@ -3,7 +3,6 @@ package provider
 import (
 	"context"
 	"encoding/json/jsontext"
-	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"iter"
@@ -436,14 +435,14 @@ func toRequest(req *llm.Request) (*llmprovider.Request, error) {
 			case c.Type == llm.ContentThinking:
 				it := llmprovider.ReasoningItem{Text: c.Text}
 				var r reasoning
-				if len(c.ProviderData) > 0 && json.Unmarshal(c.ProviderData, &r) == nil {
+				if len(c.ProviderData) > 0 && jsonx.Unmarshal(c.ProviderData, &r) == nil {
 					it = llmprovider.ReasoningItem{Text: r.Text, Signature: r.Signature, Encrypted: r.Encrypted, Format: r.Format}
 				}
 				out.Input = append(out.Input, it)
 			case c.Type == llm.ContentToolCall:
 				var r reasoning
 				if len(c.ProviderData) > 0 {
-					_ = json.Unmarshal(c.ProviderData, &r) //nolint:errcheck // an unreadable signature is sent as none
+					_ = jsonx.Unmarshal(c.ProviderData, &r) //nolint:errcheck // an unreadable signature is sent as none
 				}
 				out.Input = append(out.Input, llmprovider.FunctionCallItem{CallID: c.ToolCallID, Name: c.ToolName, Arguments: c.ToolArgs, Signature: r.Signature})
 			case c.Type == llm.ContentToolResult:
@@ -458,7 +457,7 @@ func toRequest(req *llm.Request) (*llmprovider.Request, error) {
 			Description string `json:"description"`
 			InputSchema any    `json:"inputSchema"`
 		}
-		if err := json.Unmarshal(req.Tools, &specs); err != nil {
+		if err := jsonx.Unmarshal(req.Tools, &specs); err != nil {
 			return nil, fmt.Errorf("provider: request tools: %w", err)
 		}
 		for _, s := range specs {

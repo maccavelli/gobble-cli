@@ -2,13 +2,13 @@ package acpserver
 
 import (
 	"context"
-	"encoding/json/v2"
 	"fmt"
 	"log/slog"
 	"strings"
 
 	acp "github.com/maccavelli/acp-go-sdk2"
 
+	"github.com/maccavelli/gobble-cli/jsonx"
 	"github.com/maccavelli/gobble-cli/permission"
 	"github.com/maccavelli/gobble-cli/tool"
 )
@@ -234,7 +234,7 @@ func (exitPlan) Describe(tool.Call, tool.Env) string { return "leave plan mode" 
 
 func (e exitPlan) Run(ctx context.Context, call tool.Call, _ tool.Env) (tool.Result, error) {
 	var in exitPlanInput
-	if err := json.Unmarshal(call.Args, &in); err != nil {
+	if err := jsonx.Unmarshal(call.Args, &in); err != nil {
 		return tool.ErrorResult(fmt.Sprintf("%s: invalid arguments: %v", exitPlanTool, err)), nil
 	}
 	if strings.TrimSpace(in.Plan) == "" {

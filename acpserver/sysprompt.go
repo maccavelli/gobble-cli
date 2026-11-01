@@ -2,7 +2,6 @@ package acpserver
 
 import (
 	"cmp"
-	"encoding/json/v2"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -308,7 +307,7 @@ func (a *Agent) instructions(s *liveSession) func(string) []tool.Instruction {
 				continue
 			}
 			var d contextData
-			if json.Unmarshal(e.Data, &d) == nil {
+			if jsonx.Unmarshal(e.Data, &d) == nil {
 				for _, p := range d.Paths {
 					held[p] = true
 				}

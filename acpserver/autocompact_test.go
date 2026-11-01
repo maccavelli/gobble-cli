@@ -1,12 +1,13 @@
 package acpserver
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -196,9 +197,7 @@ func sameCompactionNotices(got, want []map[string]any) bool {
 			g = mapsWithout(g, "tokensBefore")
 			w = mapsWithout(w, "tokensBefore")
 		}
-		gb, _ := json.Marshal(g) //nolint:errcheck // a decoded map always encodes
-		wb, _ := json.Marshal(w) //nolint:errcheck // as above
-		return string(gb) == string(wb)
+		return reflect.DeepEqual(g, w)
 	})
 }
 

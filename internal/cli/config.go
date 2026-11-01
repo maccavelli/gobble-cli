@@ -199,7 +199,7 @@ func getJSON(r config.Resolved, path string, keys []config.Key, origin bool) ([]
 	}
 	opts := []json.Options{json.Deterministic(true), jsontext.WithIndent("  ")}
 	if !origin {
-		return json.Marshal(value, opts...)
+		return jsonx.Marshal(value, opts...)
 	}
 	origins := map[string]originJSON{}
 	for _, k := range keys {
@@ -216,7 +216,7 @@ func getJSON(r config.Resolved, path string, keys []config.Key, origin bool) ([]
 	} else {
 		wrapped["settings"] = value
 	}
-	return json.Marshal(wrapped, opts...)
+	return jsonx.Marshal(wrapped, opts...)
 }
 
 // Run checks the value, then writes it (D12: a bad value exits 2, a write

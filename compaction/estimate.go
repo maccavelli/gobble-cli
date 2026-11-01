@@ -2,10 +2,10 @@ package compaction
 
 import (
 	"encoding/json/jsontext"
-	"encoding/json/v2"
 	"slices"
 	"time"
 
+	"github.com/maccavelli/gobble-cli/jsonx"
 	"github.com/maccavelli/gobble-cli/prompt"
 	"github.com/maccavelli/gobble-cli/session"
 )
@@ -243,7 +243,7 @@ func edit(msgs []*session.Message, e session.Entry) []*session.Message {
 	var r struct {
 		Content jsontext.Value `json:"content"`
 	}
-	if json.Unmarshal(e.Replacement, &r) != nil {
+	if jsonx.Unmarshal(e.Replacement, &r) != nil {
 		return msgs
 	}
 	out := make([]*session.Message, len(msgs))
@@ -258,7 +258,7 @@ func edit(msgs []*session.Message, e session.Entry) []*session.Message {
 		c.Content = r.Content
 		if m.Role == session.RoleAssistant || m.Role == session.RoleToolResult {
 			var s string
-			if json.Unmarshal(r.Content, &s) == nil {
+			if jsonx.Unmarshal(r.Content, &s) == nil {
 				c.SetText(s)
 			}
 		}

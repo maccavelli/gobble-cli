@@ -2,7 +2,6 @@ package compaction
 
 import (
 	"encoding/json/jsontext"
-	"encoding/json/v2"
 	"fmt"
 	"slices"
 	"strconv"
@@ -101,7 +100,7 @@ func BashText(m *session.Message) string {
 		text += "(no output)"
 	}
 	var code float64
-	exited := len(m.ExitCode) > 0 && json.Unmarshal(m.ExitCode, &code) == nil
+	exited := len(m.ExitCode) > 0 && jsonx.Unmarshal(m.ExitCode, &code) == nil
 	switch {
 	case m.Cancelled != nil && *m.Cancelled:
 		text += "\n\n(command cancelled)"
@@ -229,7 +228,7 @@ type member struct {
 
 // members are an object's members in order.
 func members(v jsontext.Value) ([]member, error) {
-	d := jsontext.NewDecoder(strings.NewReader(string(v)))
+	d := jsontext.NewDecoder(strings.NewReader(string(v)), jsonx.Options())
 	if tok, err := d.ReadToken(); err != nil || tok.Kind() != '{' {
 		return nil, fmt.Errorf("not an object: %w", err)
 	}
@@ -275,7 +274,7 @@ func (f fileOps) add(m *session.Message) {
 		var a struct {
 			Path *string `json:"path"`
 		}
-		if json.Unmarshal(b.Arguments, &a) != nil || a.Path == nil || *a.Path == "" {
+		if jsonx.Unmarshal(b.Arguments, &a) != nil || a.Path == nil || *a.Path == "" {
 			continue
 		}
 		switch b.Name {

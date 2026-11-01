@@ -3,13 +3,13 @@ package cli
 import (
 	"bufio"
 	"context"
-	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"os"
 	"strings"
 
 	"github.com/maccavelli/gobble-cli/acpclient"
+	"github.com/maccavelli/gobble-cli/jsonx"
 	"github.com/maccavelli/gobble-cli/session"
 	"github.com/maccavelli/gobble-cli/session/jsonl"
 )
@@ -188,7 +188,7 @@ func headerID(path string) (string, error) {
 			continue
 		}
 		var h session.Header
-		if err := json.Unmarshal([]byte(line), &h); err != nil || h.Type != session.TypeHeader || h.ID == "" {
+		if err := jsonx.Unmarshal([]byte(line), &h); err != nil || h.Type != session.TypeHeader || h.ID == "" {
 			return "", errors.New("not a session file")
 		}
 		return string(h.ID), nil

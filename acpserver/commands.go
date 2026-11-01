@@ -2,7 +2,6 @@ package acpserver
 
 import (
 	"context"
-	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"slices"
@@ -205,7 +204,7 @@ func sessionTotals(entries []session.Entry) totals {
 		var x struct {
 			Estimated bool `json:"estimated"`
 		}
-		if len(u.Unknown) > 0 && json.Unmarshal(u.Unknown, &x) == nil && x.Estimated {
+		if len(u.Unknown) > 0 && jsonx.Unmarshal(u.Unknown, &x) == nil && x.Estimated {
 			t.estimated = true
 		}
 	}

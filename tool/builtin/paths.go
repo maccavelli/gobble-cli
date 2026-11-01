@@ -1,7 +1,6 @@
 package builtin
 
 import (
-	"encoding/json/v2"
 	"errors"
 	"io/fs"
 	"path/filepath"
@@ -9,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/maccavelli/gobble-cli/internal/fsx"
+	"github.com/maccavelli/gobble-cli/jsonx"
 	"github.com/maccavelli/gobble-cli/tool"
 )
 
@@ -88,7 +88,7 @@ func argPath(c tool.Call) string {
 	var a struct {
 		Path string `json:"path"`
 	}
-	if err := json.Unmarshal(c.Args, &a); err != nil {
+	if err := jsonx.Unmarshal(c.Args, &a); err != nil {
 		return ""
 	}
 	return a.Path

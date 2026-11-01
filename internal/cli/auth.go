@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"context"
 	"encoding/json/jsontext"
-	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -17,6 +16,7 @@ import (
 	"github.com/maccavelli/go-tui-lib/v2/inline"
 
 	"github.com/maccavelli/gobble-cli/internal/auth"
+	"github.com/maccavelli/gobble-cli/jsonx"
 	"github.com/maccavelli/gobble-cli/llm/catalog"
 	"github.com/maccavelli/gobble-cli/llm/provider"
 )
@@ -167,7 +167,7 @@ type loginEvent struct {
 }
 
 func (l *loginEvents) emit(e loginEvent) error {
-	b, err := json.Marshal(e)
+	b, err := jsonx.Marshal(e)
 	if err != nil {
 		return fmt.Errorf("login event: %w", err)
 	}
@@ -406,7 +406,7 @@ func (c *AuthCheckCmd) Run(e *runEnv) error {
 	r := e.check(c.Provider, c.Model)
 	var out []byte
 	if c.JSON {
-		b, err := json.Marshal(r, jsontext.WithIndent("  "))
+		b, err := jsonx.Marshal(r, jsontext.WithIndent("  "))
 		if err != nil {
 			return failf("auth check: %v", err)
 		}

@@ -2,12 +2,12 @@ package cli
 
 import (
 	"cmp"
-	"encoding/json/v2"
 	"fmt"
 	"os"
 
 	"github.com/maccavelli/gobble-cli/internal/appdirs"
 	"github.com/maccavelli/gobble-cli/internal/config"
+	"github.com/maccavelli/gobble-cli/jsonx"
 )
 
 // systemDirs resolves the directory roles; tests replace it.
@@ -58,7 +58,7 @@ func (c *ConfigPathCmd) Run(e *runEnv) error {
 		r.Project, _ = config.ProjectFile(cwd)
 	}
 	if c.JSON {
-		b, err := json.Marshal(r)
+		b, err := jsonx.Marshal(r)
 		if err != nil {
 			return failf("config path: %v", err)
 		}

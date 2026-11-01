@@ -2,13 +2,13 @@ package toolsearch
 
 import (
 	"cmp"
-	"encoding/json/v2"
 	"maps"
 	"math"
 	"slices"
 	"strings"
 	"unicode"
 
+	"github.com/maccavelli/gobble-cli/jsonx"
 	"github.com/maccavelli/gobble-cli/tool"
 )
 
@@ -166,7 +166,7 @@ func firstSentence(desc string) (first, rest string) {
 // depth of properties and items.
 func properties(schema []byte) []string {
 	var root map[string]any
-	if len(schema) == 0 || json.Unmarshal(schema, &root) != nil {
+	if len(schema) == 0 || jsonx.Unmarshal(schema, &root) != nil {
 		return nil
 	}
 	var out []string

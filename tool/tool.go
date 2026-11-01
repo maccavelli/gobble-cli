@@ -3,7 +3,6 @@ package tool
 import (
 	"context"
 	"encoding/json/jsontext"
-	"encoding/json/v2"
 	"fmt"
 
 	"github.com/google/jsonschema-go/jsonschema"
@@ -219,7 +218,7 @@ type Diff struct {
 // JSON itself.
 func (r Result) Text() string {
 	var s string
-	if err := json.Unmarshal(r.Output, &s); err == nil {
+	if err := jsonx.Unmarshal(r.Output, &s); err == nil {
 		return s
 	}
 	return string(r.Output)
@@ -469,14 +468,14 @@ func (g *generic[In, Out]) Run(ctx context.Context, call Call, env Env) (Result,
 		args = prepared
 	}
 	var instance any
-	if err := json.Unmarshal(args, &instance); err != nil {
+	if err := jsonx.Unmarshal(args, &instance); err != nil {
 		return BadArgumentsResult(fmt.Sprintf("%s: the arguments are not JSON: %v", g.name, err)), nil
 	}
 	if err := g.resolved.Validate(instance); err != nil {
 		return BadArgumentsResult(fmt.Sprintf("%s: invalid arguments: %v", g.name, err)), nil
 	}
 	var in In
-	if err := json.Unmarshal(args, &in); err != nil {
+	if err := jsonx.Unmarshal(args, &in); err != nil {
 		return BadArgumentsResult(fmt.Sprintf("%s: invalid arguments: %v", g.name, err)), nil
 	}
 	out, err := g.fn(ctx, in, env)
@@ -498,7 +497,7 @@ func resultOf(out any) (Result, error) {
 	case string:
 		return TextResult(v), nil
 	}
-	b, err := json.Marshal(out)
+	b, err := jsonx.Marshal(out)
 	if err != nil {
 		return Result{}, fmt.Errorf("tool: encode output: %w", err)
 	}
@@ -540,7 +539,7 @@ func New[In, Out any](name, description string, fn func(context.Context, In, Env
 	if _, err := published.Resolve(nil); err != nil {
 		panic(fmt.Sprintf("tool: %s: resolve published schema: %v", name, err))
 	}
-	raw, err := json.Marshal(published)
+	raw, err := jsonx.Marshal(published)
 	if err != nil {
 		panic(fmt.Sprintf("tool: %s: encode input schema: %v", name, err))
 	}

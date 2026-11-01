@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json/jsontext"
-	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"strings"
@@ -12,6 +11,7 @@ import (
 	"github.com/google/jsonschema-go/jsonschema"
 
 	"github.com/maccavelli/gobble-cli/internal/fsx"
+	"github.com/maccavelli/gobble-cli/jsonx"
 	"github.com/maccavelli/gobble-cli/tool"
 )
 
@@ -108,17 +108,17 @@ func prepareEdit(args jsontext.Value) (jsontext.Value, error) {
 		m["edits"] = editList(raw)
 	}
 	var oldText, newText string
-	if json.Unmarshal(m["oldText"], &oldText) == nil && json.Unmarshal(m["newText"], &newText) == nil {
+	if jsonx.Unmarshal(m["oldText"], &oldText) == nil && jsonx.Unmarshal(m["newText"], &newText) == nil {
 		var edits []jsontext.Value
-		if err := json.Unmarshal(m["edits"], &edits); err != nil {
+		if err := jsonx.Unmarshal(m["edits"], &edits); err != nil {
 			edits = nil
 		}
-		single, err := json.Marshal(edit{OldText: oldText, NewText: newText})
+		single, err := jsonx.Marshal(edit{OldText: oldText, NewText: newText})
 		if err != nil {
 			return nil, err
 		}
 		edits = append(edits, single)
-		list, err := json.Marshal(edits)
+		list, err := jsonx.Marshal(edits)
 		if err != nil {
 			return nil, err
 		}
@@ -126,13 +126,13 @@ func prepareEdit(args jsontext.Value) (jsontext.Value, error) {
 		delete(m, "oldText")
 		delete(m, "newText")
 	}
-	return json.Marshal(m)
+	return jsonx.Marshal(m)
 }
 
 // object is args as an object's members, when args is one.
 func object(args jsontext.Value) (map[string]jsontext.Value, bool) {
 	var m map[string]jsontext.Value
-	if err := json.Unmarshal(args, &m); err != nil || m == nil {
+	if err := jsonx.Unmarshal(args, &m); err != nil || m == nil {
 		return nil, false
 	}
 	return m, true
@@ -144,7 +144,7 @@ func object(args jsontext.Value) (map[string]jsontext.Value, bool) {
 func editList(raw jsontext.Value) jsontext.Value {
 	candidate := raw
 	var s string
-	fromString := json.Unmarshal(raw, &s) == nil
+	fromString := jsonx.Unmarshal(raw, &s) == nil
 	if fromString {
 		candidate = jsontext.Value(s)
 	}
@@ -159,8 +159,8 @@ func editList(raw jsontext.Value) jsontext.Value {
 			OldText *string `json:"oldText"`
 			NewText *string `json:"newText"`
 		}
-		if json.Unmarshal(candidate, &one) == nil && one.OldText != nil && one.NewText != nil {
-			if b, err := json.Marshal([]edit{{OldText: *one.OldText, NewText: *one.NewText}}); err == nil {
+		if jsonx.Unmarshal(candidate, &one) == nil && one.OldText != nil && one.NewText != nil {
+			if b, err := jsonx.Marshal([]edit{{OldText: *one.OldText, NewText: *one.NewText}}); err == nil {
 				return b
 			}
 		}

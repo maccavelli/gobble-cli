@@ -470,7 +470,8 @@ Files: every D4 row not done in P1 to P6, and the ten test files that import v1.
      the expected map;
    * `acpserver/convert_test.go:17` calls the SDK value's own `MarshalJSON`;
    * the decodes into `map[string]any` use v2.
-3. **Assert:** `grep -rlE '"encoding/json"$' --include=*.go .` returns nothing.
+3. **Assert:** `grep -rlE '"encoding/json"$' --include=*.go .` returns nothing. *(Deviation 15: at P7 it returns
+   only `internal/archtest/check.go`, P8's; P8 asserts nothing.)*
 4. **Unchanged:** `session.golden`, `print-json.golden`, `print-stream-json.golden`, and every other golden; `make perf`
    (Confirmation 14).
 5. G-local with `make perf`. G-hosts with `make perf` and `make probe-conhost`. **Commit.**
@@ -482,7 +483,7 @@ new `llm/llm_test.go`, `session/doc.go`, `docs/architecture.md`.
 
 1. **`internal/archtest/check.go:68`** reads `go list -json`'s stream with `jsontext.NewDecoder(&stdout,
    jsonx.Options())` and `json.UnmarshalDecode` until `io.EOF`. `make archtest` passes, and its rules report what they
-   reported before.
+   reported before. *(Deviation 15: then `grep -rlE '"encoding/json"$' --include=*.go .` returns nothing.)*
 2. **The eight `json:",inline"` tags** (`acpserver/extensions.go:88`, `:93`, `:98`, `:103`, `:108`, `:113`, `:118`;
    `acpserver/personality.go:276`) are dropped. The `_gobble/*` and personality tests pass unchanged (Confirmation 17).
 3. **The hatch's tests** (Confirmation 11):
@@ -1279,3 +1280,86 @@ teardown failure outside P6. Neither added a file.
      laptop: ReplyRender 27.75 µs (baseline 54 µs), Reprint 7.25 ms (baseline 12 ms), LineSessionStart 3.73 ms
      (baseline 6.9 ms), KeyDraw 1.199 µs (baseline 1.4 µs);
    * the conhost probe on the Windows laptop: passed.
+
+### Deviation 15 (2026-11-01): P7, step 3's assertion and `internal/archtest/check.go`
+
+* **Found** at P7's start. Step 3 asserts that no Go file imports `encoding/json`, but `internal/archtest/check.go:68`
+  (`json.NewDecoder(&stdout)`) still does, and it is P8's file (P8 step 1). The plan's own ordering, not the code, is
+  the cause.
+* **The owner's answer:** "Assert at P7, check at P8 (Recommended)". The option not taken was moving P8 step 1 into P7.
+* **Decision.** P7's assertion is that the grep returns only `internal/archtest/check.go`. P8 asserts that it returns
+  nothing, once step 1 is done. P7 step 3 and P8 step 1 are annotated.
+* **Files added:** none.
+
+### Deviation 16 (2026-11-01): P7, the local `make perf` under another project's load
+
+* **Found** in P7's G-local. `make perf` failed: `ReplyRender: 102.076µs per op, more than 3 times its baseline 30µs`
+  (`internal/cli/perf_test.go:88`). The Mac's load average was 82, mostly another project's test processes. The
+  allocations matched P6's: ReplyRender 257, Reprint 49,696.
+* **Measured.** Three rounds alternating P7's tree and P6's commit `ec6298e` on the Mac, at load 34 to 35, all passed and
+  overlapped: ReplyRender 38 to 47 µs against 40 to 43 µs, LineSessionStart 1.31 to 1.39 ms against 1.32 to 1.83 ms.
+* **The owner's answer:** "run the perf on the linux host since the macos host is too busy".
+* **Decision.** P7's perf evidence is the Linux machine's, two rounds alternating P7's copy and P6's commit, in the P7
+  record. The budget and the test are unchanged.
+* **Files added:** none.
+
+### P7 record (2026-11-01): the remaining data sites, and the test files
+
+The base is P6's `ec6298e`. Deviation 15 changed step 3's assertion; deviation 16 moved the perf evidence to the Linux
+machine. Neither added a file.
+
+1. **The data sites** (step 1). Each `json.Marshal` and `json.Unmarshal` became `jsonx`'s, with its options kept, 66
+   calls in 33 files, counted by an asserted script:
+   * the files and lines step 1 names, at their current lines (C2);
+   * `acpserver/history.go`'s six `json.Unmarshal` calls (now `:79`, `:96`, `:107`, `:273`, `:293`, `:435`). Step 1 does
+     not list them, but its Files line covers "every D4 row not done in P1 to P6", and `history.go`'s D4 row names
+     `jsonx.Unmarshal`. P1 did the rest of that row;
+   * the `jsontext` decoders at `compaction/serialize.go:231` and `session/migrate.go:103`, and the encoder at
+     `session/migrate.go:105`, take `jsonx.Options()`. With `session/migrate.go`, step 1 changed 34 files.
+
+   Kept as they were:
+   * `json.Deterministic(true)` where a site passes it (`internal/config/schema.go:66`, `mcpclient/tool.go:77` and
+     `:136`, `internal/cli/config.go:200`). It repeats `jsonx.Options()`, which the plan keeps as written;
+   * `internal/cli/mcp.go:182`'s `json.MarshalEncode` onto P2's strict encoder, which no step names. `jsonx` has no
+     wrapper for it, which P9's `forbidigo` will need (the P5 record's notes).
+2. **The seven test files that still imported v1** (step 2):
+   * `acpclient/sessions_test.go`: `nameAgent.HandleExtensionMethod` takes `jsontext.Value`, and decodes with v2;
+   * `acpserver/autocompact_test.go`: `sameCompactionNotices` compares with `reflect.DeepEqual`, in place of two v1
+     encodes. The notices' values are strings, and `tokensBefore` is removed before comparing when the want is -1;
+   * `acpserver/convert_test.go`: `TestRawInputOnTheWire` calls the SDK value's own `MarshalJSON`;
+   * `acpserver/retry_test.go`, `internal/cli/models_test.go`, `internal/cli/personalitycmd_test.go`: v2 decodes into
+     the same values, all of whose names are tagged;
+   * `internal/cli/providerscmd_test.go`: `TestProvidersCheckAndJSON` decodes into `[]providerRow`. Its untagged
+     anonymous struct matched `id` and `signIn` only through v1's case-insensitive matching.
+
+   | Break | The failure |
+   | :--- | :--- |
+   | `TestAutoCompactPauseTurn`'s expected `"paused": "turn"` changed to `"session"` | `autocompact_test.go:464: notices [… map[error:Summarization failed: llm: offline paused:turn phase:end reason:threshold] …], want [… map[error:Summarization failed: llm: offline paused:session phase:end reason:threshold] …]` |
+3. **Assert** (step 3, deviation 15): `grep -rlE '"encoding/json"$' --include=*.go .` returns only
+   `internal/archtest/check.go`.
+4. **Unchanged** (step 4): `go test` changed no golden or `testdata` file; `git status` showed none.
+5. **G-local:**
+   * `make pre-add-check` on the 41 changed Go files: clean;
+   * `make preflight`: passed;
+   * `go test ./...`: 37 ok; `make race`: 37 ok;
+   * `make perf`: deviation 16.
+6. **G-hosts,** on the Linux machine and the Windows laptop, with 817 files shipped to each:
+   * `go test`: passed on both; race: passed on both, 37 ok;
+   * `make check-records markdownlint`: passed on both;
+   * preflight stops at `verify-build-metadata`, as on every copy;
+   * `make perf`: passed on both. The Linux machine: ReplyRender 179.80 µs (baseline 110 µs), Reprint 49.98 ms
+     (baseline 29 ms), LineSessionStart 7.47 ms (baseline 2.9 ms), KeyDraw 6.333 µs (baseline 5 µs), its load not
+     recorded. The Windows laptop: ReplyRender 30.94 µs (baseline 54 µs), Reprint 7.47 ms
+     (baseline 12 ms), LineSessionStart 4.16 ms (baseline 6.9 ms), KeyDraw 1.307 µs (baseline 1.4 µs);
+   * the conhost probe on the Windows laptop: passed.
+7. **Perf on the Linux machine** (deviation 16), 4 CPUs, alternating P7's copy and P6's commit, every run passing:
+
+   | Round | Tree | Load | ReplyRender | Reprint | LineSessionStart | KeyDraw |
+   | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+   | 1 | P7 | 0.29 | 130.17 µs | 33.00 ms | 4.22 ms | 4.984 µs |
+   | 1 | P6 | 0.78 | 100.62 µs | 27.85 ms | 3.19 ms | 3.831 µs |
+   | 2 | P7 | 1.67 | 114.45 µs | 28.11 ms | 3.25 ms | 4.438 µs |
+   | 2 | P6 | 1.61 | 103.83 µs | 27.90 ms | 3.63 ms | 3.887 µs |
+
+   The baselines are ReplyRender 110 µs, Reprint 29 ms, LineSessionStart 2.9 ms and KeyDraw 5 µs. The allocations
+   matched across the two trees: ReplyRender 257, Reprint 49,696, LineSessionStart 5,017 to 5,020.

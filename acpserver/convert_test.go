@@ -1,7 +1,6 @@
 package acpserver
 
 import (
-	stdjson "encoding/json"
 	"math"
 	"strings"
 	"testing"
@@ -16,7 +15,7 @@ import (
 // (0014-PLAN P1 deviation 2).
 func TestRawInputOnTheWire(t *testing.T) {
 	for in, want := range map[string]string{"": "", `{"a":1}`: `"rawInput":{"a":1}`} {
-		b, err := stdjson.Marshal(acp.StartToolCall("c1", "t", acp.WithStartRawInput(jsonx.Splice([]byte(in)))))
+		b, err := acp.StartToolCall("c1", "t", acp.WithStartRawInput(jsonx.Splice([]byte(in)))).MarshalJSON()
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"context"
 	"encoding/json/jsontext"
-	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"iter"
@@ -214,7 +213,7 @@ func encodeSpecs(specs []tool.Spec) jsontext.Value {
 	if len(specs) == 0 {
 		return nil
 	}
-	b, err := json.Marshal(specs)
+	b, err := jsonx.Marshal(specs)
 	if err != nil {
 		panic(fmt.Sprintf("agent: encode tool specs: %v", err))
 	}

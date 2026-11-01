@@ -2,7 +2,7 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"path/filepath"
 	"slices"
@@ -76,9 +76,7 @@ func TestProvidersCheckAndJSON(t *testing.T) {
 		t.Fatalf("--check:\n%s", r.stdout)
 	}
 	r = runIn(t, home, "providers", "--check", "--json")
-	var rows []struct {
-		ID, Name, Credential, SignIn, State, Reason string
-	}
+	var rows []providerRow
 	if err := json.Unmarshal([]byte(r.stdout), &rows); err != nil || len(rows) != 10 {
 		t.Fatalf("--json: %v, %d rows:\n%s", err, len(rows), r.stdout)
 	}

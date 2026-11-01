@@ -2,7 +2,8 @@ package acpclient
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"io"
 	"log/slog"
@@ -24,7 +25,7 @@ type nameAgent struct {
 	calls []string
 }
 
-func (a *nameAgent) HandleExtensionMethod(_ context.Context, method string, params json.RawMessage) (any, error) {
+func (a *nameAgent) HandleExtensionMethod(_ context.Context, method string, params jsontext.Value) (any, error) {
 	a.mu.Lock()
 	a.calls = append(a.calls, method+" "+string(params))
 	a.mu.Unlock()

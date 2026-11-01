@@ -3,7 +3,6 @@ package acpserver
 import (
 	"context"
 	"encoding/json/jsontext"
-	"encoding/json/v2"
 	"fmt"
 	"log/slog"
 	"strconv"
@@ -46,7 +45,7 @@ func personalityOf(e session.Entry) (string, bool) {
 		return "", false
 	}
 	var d personalityData
-	if err := json.Unmarshal(e.Data, &d); err != nil || d.Name == "" {
+	if err := jsonx.Unmarshal(e.Data, &d); err != nil || d.Name == "" {
 		return "", false
 	}
 	return d.Name, true

@@ -3,7 +3,6 @@ package builtin
 import (
 	"bytes"
 	"context"
-	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -16,6 +15,7 @@ import (
 	"github.com/google/jsonschema-go/jsonschema"
 
 	"github.com/maccavelli/gobble-cli/internal/fsx"
+	"github.com/maccavelli/gobble-cli/jsonx"
 	"github.com/maccavelli/gobble-cli/tool"
 )
 
@@ -363,7 +363,7 @@ func orDot(path string) string {
 // argString is a string argument of a call, for its title, or "".
 func argString(c tool.Call, key string) string {
 	var args map[string]any
-	if json.Unmarshal(c.Args, &args) != nil {
+	if jsonx.Unmarshal(c.Args, &args) != nil {
 		return ""
 	}
 	if s, ok := args[key].(string); ok {

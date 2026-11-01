@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+
+	"github.com/maccavelli/gobble-cli/jsonx"
 )
 
 // firstKeptIndex is a v1 compaction's member naming its first kept entry by
@@ -98,9 +100,9 @@ func cutMember(v jsontext.Value, name string) (rest, value jsontext.Value, err e
 	if len(v) == 0 {
 		return v, nil, nil
 	}
-	dec := jsontext.NewDecoder(bytes.NewReader(v))
+	dec := jsontext.NewDecoder(bytes.NewReader(v), jsonx.Options())
 	var buf bytes.Buffer
-	enc := jsontext.NewEncoder(&buf)
+	enc := jsontext.NewEncoder(&buf, jsonx.Options())
 	if tok, err := dec.ReadToken(); err != nil || tok.Kind() != '{' {
 		return nil, nil, fmt.Errorf("unknown members are not an object: %w", err)
 	}

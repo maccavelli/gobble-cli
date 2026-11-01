@@ -254,7 +254,7 @@ func (c *MCPListCmd) Run(e *runEnv) error {
 	}
 	var out []byte
 	if c.JSON {
-		if out, err = json.Marshal(r, jsontext.WithIndent("  ")); err != nil {
+		if out, err = jsonx.Marshal(r, jsontext.WithIndent("  ")); err != nil {
 			return failf("mcp list: %v", err)
 		}
 		out = append(out, '\n')

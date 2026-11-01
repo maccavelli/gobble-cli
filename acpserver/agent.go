@@ -3,7 +3,6 @@ package acpserver
 import (
 	"cmp"
 	"context"
-	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -869,7 +868,7 @@ func loadedTools(path []session.Entry) []string {
 			continue
 		}
 		var d toolsData
-		if json.Unmarshal(e.Data, &d) != nil {
+		if jsonx.Unmarshal(e.Data, &d) != nil {
 			continue
 		}
 		for _, n := range d.Loaded {

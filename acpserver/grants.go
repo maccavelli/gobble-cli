@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"context"
 	"encoding/json/jsontext"
-	"encoding/json/v2"
 	"fmt"
 	"path/filepath"
 	"slices"
@@ -100,7 +99,7 @@ func (requestPermissions) Describe(tool.Call, tool.Env) string { return "ask for
 // Run asks the user for the grant and records it (decisions 1, 3, 5 and 7).
 func (r requestPermissions) Run(ctx context.Context, call tool.Call, env tool.Env) (tool.Result, error) {
 	var in requestPermissionsInput
-	if err := json.Unmarshal(call.Args, &in); err != nil {
+	if err := jsonx.Unmarshal(call.Args, &in); err != nil {
 		return tool.ErrorResult(fmt.Sprintf("%s: invalid arguments: %v", requestPermissionsTool, err)), nil
 	}
 	scope := cmp.Or(in.Scope, grantTurn)

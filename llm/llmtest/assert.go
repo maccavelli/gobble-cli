@@ -1,11 +1,11 @@
 package llmtest
 
 import (
-	"encoding/json/v2"
 	"slices"
 	"strings"
 	"testing"
 
+	"github.com/maccavelli/gobble-cli/jsonx"
 	"github.com/maccavelli/gobble-cli/llm"
 )
 
@@ -39,7 +39,7 @@ func AssertTools(t testing.TB, req *llm.Request, names ...string) {
 		Name string `json:"name"`
 	}
 	if len(req.Tools) > 0 {
-		if err := json.Unmarshal(req.Tools, &specs); err != nil {
+		if err := jsonx.Unmarshal(req.Tools, &specs); err != nil {
 			t.Errorf("request tools are not a JSON array of named specs: %v", err)
 			return
 		}

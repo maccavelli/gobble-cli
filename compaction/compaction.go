@@ -2,13 +2,13 @@ package compaction
 
 import (
 	"context"
-	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"slices"
 	"strings"
 	"unicode/utf8"
 
+	"github.com/maccavelli/gobble-cli/jsonx"
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/session"
 )
@@ -148,7 +148,7 @@ func (f fileOps) carry(c session.Entry) {
 		return
 	}
 	var d Details
-	if json.Unmarshal(c.Details, &d) != nil {
+	if jsonx.Unmarshal(c.Details, &d) != nil {
 		return
 	}
 	for _, p := range d.ReadFiles {

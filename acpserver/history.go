@@ -2,7 +2,6 @@ package acpserver
 
 import (
 	"encoding/json/jsontext"
-	"encoding/json/v2"
 	"fmt"
 	"strings"
 
@@ -77,7 +76,7 @@ func assistantEntryMessage(ev agent.Message, provider, model string, info llm.Mo
 		case llm.ContentThinking:
 			b := session.Block{Type: session.BlockThinking, Thinking: c.Text}
 			var r reasoning
-			if len(c.ProviderData) > 0 && json.Unmarshal(c.ProviderData, &r) == nil {
+			if len(c.ProviderData) > 0 && jsonx.Unmarshal(c.ProviderData, &r) == nil {
 				b.ThinkingSignature = r.Signature
 				if r.Encrypted != "" && r.Signature == "" {
 					b.ThinkingSignature, b.Redacted = r.Encrypted, r.Text == ""
@@ -94,7 +93,7 @@ func assistantEntryMessage(ev agent.Message, provider, model string, info llm.Mo
 		case llm.ContentToolCall:
 			b := session.Block{Type: session.BlockToolCall, ID: c.ToolCallID, Name: c.ToolName}
 			var obj map[string]any
-			if json.Unmarshal([]byte(c.ToolArgs), &obj) == nil && obj != nil {
+			if jsonx.Unmarshal([]byte(c.ToolArgs), &obj) == nil && obj != nil {
 				b.Arguments = jsontext.Value(c.ToolArgs)
 			} else {
 				b.Arguments = jsontext.Value("{}")
@@ -105,7 +104,7 @@ func assistantEntryMessage(ev agent.Message, provider, model string, info llm.Mo
 				b.Unknown = u
 			}
 			var r reasoning
-			if len(c.ProviderData) > 0 && json.Unmarshal(c.ProviderData, &r) == nil {
+			if len(c.ProviderData) > 0 && jsonx.Unmarshal(c.ProviderData, &r) == nil {
 				b.ThoughtSignature = r.Signature
 			}
 			blocks = append(blocks, b)
@@ -271,7 +270,7 @@ func assistantContent(blocks []session.Block) []llm.Content {
 	for _, b := range blocks {
 		var g gobbleMember
 		if len(b.Unknown) > 0 {
-			_ = json.Unmarshal(b.Unknown, &g) //nolint:errcheck // no gobble member is none
+			_ = jsonx.Unmarshal(b.Unknown, &g) //nolint:errcheck // no gobble member is none
 		}
 		switch b.Type {
 		case session.BlockThinking:
@@ -291,7 +290,7 @@ func assistantContent(blocks []session.Block) []llm.Content {
 			var raw struct {
 				RawArguments string `json:"rawArguments"`
 			}
-			if len(g.Gobble) > 0 && json.Unmarshal(g.Gobble, &raw) == nil && raw.RawArguments != "" {
+			if len(g.Gobble) > 0 && jsonx.Unmarshal(g.Gobble, &raw) == nil && raw.RawArguments != "" {
 				args = raw.RawArguments
 			}
 			c := llm.Content{Type: llm.ContentToolCall, ToolCallID: b.ID, ToolName: b.Name, ToolArgs: args}
@@ -433,7 +432,7 @@ func todosOf(e session.Entry) ([]tool.PlanItem, bool) {
 		return nil, false
 	}
 	var d todoData
-	if err := json.Unmarshal(e.Data, &d); err != nil {
+	if err := jsonx.Unmarshal(e.Data, &d); err != nil {
 		return nil, false
 	}
 	return d.Todos, true

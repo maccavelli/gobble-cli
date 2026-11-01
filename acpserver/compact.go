@@ -2,7 +2,6 @@ package acpserver
 
 import (
 	"context"
-	"encoding/json/v2"
 	"errors"
 	"strconv"
 
@@ -113,7 +112,7 @@ func (a *Agent) runCompaction(ctx context.Context, s *liveSession, prep *compact
 	if err != nil {
 		return compaction.Result{}, 0, err
 	}
-	details, err := json.Marshal(res.Details)
+	details, err := jsonx.Marshal(res.Details)
 	if err != nil {
 		return compaction.Result{}, 0, acp.NewInternalError(jsonx.Strings(map[string]string{keyReason: err.Error()}))
 	}

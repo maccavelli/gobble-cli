@@ -2,7 +2,6 @@ package builtin
 
 import (
 	"context"
-	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"os"
@@ -15,6 +14,7 @@ import (
 	"github.com/google/jsonschema-go/jsonschema"
 
 	"github.com/maccavelli/gobble-cli/internal/proctree"
+	"github.com/maccavelli/gobble-cli/jsonx"
 	"github.com/maccavelli/gobble-cli/tool"
 )
 
@@ -313,7 +313,7 @@ func sameKey(a, b string) bool {
 // shellDescribe titles a call "run <command>".
 func shellDescribe(c tool.Call, _ tool.Env) string {
 	var a shellIn
-	if err := json.Unmarshal(c.Args, &a); err != nil || a.Command == "" {
+	if err := jsonx.Unmarshal(c.Args, &a); err != nil || a.Command == "" {
 		return "run ?"
 	}
 	return title("run " + a.Command)
@@ -324,7 +324,7 @@ func shellDescribe(c tool.Call, _ tool.Env) string {
 // decisions 2 to 6).
 func bashSubject(c tool.Call, _ tool.Env) tool.Subject {
 	var a shellIn
-	if err := json.Unmarshal(c.Args, &a); err != nil {
+	if err := jsonx.Unmarshal(c.Args, &a); err != nil {
 		return tool.Subject{}
 	}
 	sc := parseShell(a.Command)
@@ -335,7 +335,7 @@ func bashSubject(c tool.Call, _ tool.Env) tool.Subject {
 // gobble has no parser for it (decision 8).
 func powershellSubject(c tool.Call, _ tool.Env) tool.Subject {
 	var a shellIn
-	if err := json.Unmarshal(c.Args, &a); err != nil {
+	if err := jsonx.Unmarshal(c.Args, &a); err != nil {
 		return tool.Subject{}
 	}
 	return tool.Subject{Commands: []string{strings.TrimSpace(a.Command)}, Saves: []string{""}}
@@ -345,7 +345,7 @@ func powershellSubject(c tool.Call, _ tool.Env) tool.Subject {
 // is outside the roots.
 func shellOutside(c tool.Call, env tool.Env) []string {
 	var a shellIn
-	if err := json.Unmarshal(c.Args, &a); err != nil {
+	if err := jsonx.Unmarshal(c.Args, &a); err != nil {
 		return nil
 	}
 	return outsideOf(workspace(env), env, a.Workdir)
@@ -357,7 +357,7 @@ func shellOutside(c tool.Call, env tool.Env) []string {
 // outside the roots (decision 7).
 func bashOutside(c tool.Call, env tool.Env) []string {
 	var a shellIn
-	if err := json.Unmarshal(c.Args, &a); err != nil {
+	if err := jsonx.Unmarshal(c.Args, &a); err != nil {
 		return nil
 	}
 	ws := workspace(env)

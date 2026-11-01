@@ -2,7 +2,6 @@ package builtin
 
 import (
 	"context"
-	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -14,6 +13,7 @@ import (
 	"github.com/google/jsonschema-go/jsonschema"
 
 	"github.com/maccavelli/gobble-cli/internal/fsx"
+	"github.com/maccavelli/gobble-cli/jsonx"
 	"github.com/maccavelli/gobble-cli/tool"
 )
 
@@ -115,7 +115,7 @@ func readLocations(c tool.Call, env tool.Env) []tool.Location {
 	var a struct {
 		Offset int `json:"offset"`
 	}
-	_ = json.Unmarshal(c.Args, &a) //nolint:errcheck // no offset is line 0, none
+	_ = jsonx.Unmarshal(c.Args, &a) //nolint:errcheck // no offset is line 0, none
 	return []tool.Location{{Path: resolve(env, p), Line: max(a.Offset, 0)}}
 }
 

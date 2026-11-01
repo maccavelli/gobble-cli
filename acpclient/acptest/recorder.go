@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json/jsontext"
-	"encoding/json/v2"
 	"fmt"
 	"io"
 	"os"
@@ -14,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/maccavelli/gobble-cli/jsonx"
 )
 
 // Direction is which way a frame travelled.
@@ -175,7 +176,7 @@ func hostIndependent(transcript string) string {
 	}
 	return jsonString.ReplaceAllStringFunc(transcript, func(lit string) string {
 		var s string
-		if json.Unmarshal([]byte(lit), &s) != nil {
+		if jsonx.Unmarshal([]byte(lit), &s) != nil {
 			return lit
 		}
 		rest, ok := strings.CutPrefix(s, root)

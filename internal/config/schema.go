@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/google/jsonschema-go/jsonschema"
+
+	"github.com/maccavelli/gobble-cli/jsonx"
 )
 
 // globalOnlyKeyword marks a key a project's file may not set.
@@ -31,7 +33,7 @@ func Schema() ([]byte, error) {
 			return nil, err
 		}
 		p.Description = k.Doc
-		def, err := json.Marshal(defaultValue(k))
+		def, err := jsonx.Marshal(defaultValue(k))
 		if err != nil {
 			return nil, err
 		}
@@ -61,7 +63,7 @@ func Schema() ([]byte, error) {
 			p.Extra[globalOnlyKeyword] = true
 		}
 	}
-	b, err := json.Marshal(s, json.Deterministic(true), jsontext.WithIndent("  "))
+	b, err := jsonx.Marshal(s, json.Deterministic(true), jsontext.WithIndent("  "))
 	if err != nil {
 		return nil, fmt.Errorf("config: schema: %w", err)
 	}

@@ -1,10 +1,10 @@
 package cli
 
 import (
-	"encoding/json/v2"
 	"fmt"
 
 	"github.com/maccavelli/gobble-cli/internal/buildinfo"
+	"github.com/maccavelli/gobble-cli/jsonx"
 )
 
 // identity is the build identity; tests replace it.
@@ -38,7 +38,7 @@ func (c *VersionCmd) Run(e *runEnv) error {
 	}
 	r := versionReport{Name: "gobble", Version: i.Version, Commit: i.Commit, Date: i.Date, Go: i.Go, OS: i.OS, Arch: i.Arch}
 	if c.JSON {
-		b, err := json.Marshal(r)
+		b, err := jsonx.Marshal(r)
 		if err != nil {
 			return failf("version: %v", err)
 		}

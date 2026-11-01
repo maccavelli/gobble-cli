@@ -1,12 +1,12 @@
 package compaction
 
 import (
-	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"slices"
 	"strings"
 
+	"github.com/maccavelli/gobble-cli/jsonx"
 	"github.com/maccavelli/gobble-cli/session"
 )
 
@@ -245,7 +245,7 @@ func todoList(path []session.Entry) string {
 		var d struct {
 			Todos []todoItem `json:"todos"`
 		}
-		if json.Unmarshal(e.Data, &d) == nil {
+		if jsonx.Unmarshal(e.Data, &d) == nil {
 			last = d.Todos
 		}
 	}
