@@ -12,4 +12,20 @@
 //
 // session/jsonl stores sessions as files; NewMemoryStore keeps them in
 // memory, for --no-session and tests.
+//
+// # Raw JSON and binary
+//
+// A member kept as written is a jsontext.Value, and binary data is a
+// []byte (0039-MADR D20, D21):
+//
+//	the member     the Go value            written as
+//	absent         nil, len 0              left out, by omitzero
+//	null           jsontext.Value("null")  null
+//	a JSON value   its bytes               those bytes
+//	binary         []byte                  a base64 string
+//
+// An empty non-nil jsontext.Value is not JSON, and a field holding one fails
+// the marshal. A raw value enters a field through jsonx.From, jsonx.Value or
+// jsonx.Quote, which never give one. Tests and diagnostics compare len(v)
+// and string(v), never v.String(), which gives "null" for an absent value.
 package session

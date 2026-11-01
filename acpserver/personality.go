@@ -278,8 +278,8 @@ func (a *Agent) choose(ctx context.Context, t *cmdTurn, v *personality.Voice) er
 }
 
 type setPersonalityParams struct {
-	sessionParams `json:",inline"`
-	Name          string `json:"name"`
+	sessionParams
+	Name string `json:"name"`
 }
 
 // personalityResult is _gobble/set_personality's result: the session's

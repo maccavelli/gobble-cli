@@ -3,11 +3,15 @@ package archtest
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
+	"errors"
 	"fmt"
 	"io"
 	"os/exec"
 	"strings"
+
+	"github.com/maccavelli/gobble-cli/jsonx"
 )
 
 const modulePath = "github.com/maccavelli/gobble-cli"
@@ -65,7 +69,7 @@ func loadGraph(ctx context.Context, dir string) ([]modPkg, error) {
 	if err := cmd.Run(); err != nil {
 		return nil, fmt.Errorf("go list: %w\n%s", err, stderr.String())
 	}
-	dec := json.NewDecoder(&stdout)
+	dec := jsontext.NewDecoder(&stdout, jsonx.Options())
 	var pkgs []modPkg
 	for {
 		var raw struct {
@@ -78,8 +82,8 @@ func loadGraph(ctx context.Context, dir string) ([]modPkg, error) {
 				Err string
 			}
 		}
-		err := dec.Decode(&raw)
-		if err == io.EOF {
+		err := json.UnmarshalDecode(dec, &raw)
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {

@@ -84,38 +84,38 @@ type sessionParams struct {
 func (p sessionParams) session() acp.SessionId { return p.SessionID }
 
 type messageParams struct {
-	sessionParams `json:",inline"`
-	Message       string `json:"message"`
+	sessionParams
+	Message string `json:"message"`
 }
 
 type modeParams struct {
-	sessionParams `json:",inline"`
-	Mode          string `json:"mode"`
+	sessionParams
+	Mode string `json:"mode"`
 }
 
 type compactParams struct {
-	sessionParams      `json:",inline"`
+	sessionParams
 	CustomInstructions string `json:"customInstructions"`
 }
 
 type enabledParams struct {
-	sessionParams `json:",inline"`
-	Enabled       *bool `json:"enabled"`
+	sessionParams
+	Enabled *bool `json:"enabled"`
 }
 
 type nameParams struct {
-	sessionParams `json:",inline"`
-	Name          string `json:"name"`
+	sessionParams
+	Name string `json:"name"`
 }
 
 type forkParams struct {
-	sessionParams `json:",inline"`
-	EntryID       string `json:"entryId"`
+	sessionParams
+	EntryID string `json:"entryId"`
 }
 
 type entriesParams struct {
-	sessionParams `json:",inline"`
-	Since         *string `json:"since"`
+	sessionParams
+	Since *string `json:"since"`
 }
 
 // extSession decodes params and finds their live session: bad params and

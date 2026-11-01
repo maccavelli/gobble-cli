@@ -4,9 +4,12 @@ import (
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"errors"
+	"io"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/maccavelli/gobble-cli/jsonx"
 )
 
 // Lines in Pi's shapes (session-format.md, message-types.md at 312184edb,
@@ -227,5 +230,61 @@ func TestSetBlocksBadJSON(t *testing.T) {
 	err := m.SetBlocks([]Block{{Type: BlockToolCall, ID: "c1", Name: "read", Arguments: jsontext.Value("{")}})
 	if err == nil {
 		t.Fatalf("SetBlocks of bad arguments = %q, want an error", m.Content)
+	}
+}
+
+// Entry.Replacement and Message.ExitCode keep null apart from absent:
+// absent is left out and read back absent, null is kept, and a value
+// round-trips (0039-MADR D21).
+func TestRawNullAndAbsent(t *testing.T) {
+	replacement := func(e Entry) jsontext.Value { return e.Replacement }
+	exitCode := func(e Entry) jsontext.Value { return e.Message.ExitCode }
+	for _, c := range []struct {
+		line  string
+		field func(Entry) jsontext.Value
+		want  string // "" is absent
+	}{
+		{`{"type":"context_edit","parentId":null,"targetId":"a"}`, replacement, ""},
+		{`{"type":"context_edit","parentId":null,"targetId":"a","replacement":null}`, replacement, "null"},
+		{`{"type":"context_edit","parentId":null,"targetId":"a","replacement":{"content":[{"type":"text","text":"x"}]}}`, replacement, `{"content":[{"type":"text","text":"x"}]}`},
+		{`{"type":"message","parentId":null,"message":{"role":"bashExecution","command":"ls"}}`, exitCode, ""},
+		{`{"type":"message","parentId":null,"message":{"role":"bashExecution","command":"ls","exitCode":null}}`, exitCode, "null"},
+		{`{"type":"message","parentId":null,"message":{"role":"bashExecution","command":"ls","exitCode":7}}`, exitCode, "7"},
+		{`{"type":"message","parentId":null,"message":{"role":"bashExecution","command":"ls","exitCode":{"signal":"TERM"}}}`, exitCode, `{"signal":"TERM"}`},
+	} {
+		var e Entry
+		if err := jsonx.Unmarshal([]byte(c.line), &e); err != nil {
+			t.Fatalf("%s: %v", c.line, err)
+		}
+		if got := c.field(e); string(got) != c.want || (c.want == "" && len(got) != 0) {
+			t.Errorf("%s: read %q, want %q", c.line, got, c.want)
+		}
+		b, err := jsonx.Marshal(e)
+		if err != nil || string(b) != c.line {
+			t.Errorf("%s: written %s, %v", c.line, b, err)
+		}
+	}
+}
+
+// An empty non-nil raw value is not JSON: planted on a field it fails the
+// marshal, and through jsonx.From it is absent and left out (0039-MADR D20,
+// D21).
+func TestEmptyRawValue(t *testing.T) {
+	for _, c := range []struct {
+		entry func(jsontext.Value) Entry
+		want  string
+	}{
+		{func(v jsontext.Value) Entry { return Entry{Type: "context_edit", TargetID: "a", Replacement: v} },
+			`{"type":"context_edit","parentId":null,"targetId":"a"}`},
+		{func(v jsontext.Value) Entry {
+			return Entry{Type: "message", Message: &Message{Role: "bashExecution", Command: "ls", ExitCode: v}}
+		}, `{"type":"message","parentId":null,"message":{"role":"bashExecution","command":"ls"}}`},
+	} {
+		if b, err := jsonx.Marshal(c.entry(jsontext.Value{})); !errors.Is(err, io.ErrUnexpectedEOF) {
+			t.Errorf("an empty value planted: wrote %s, %v; want the EOF error", b, err)
+		}
+		if b, err := jsonx.Marshal(c.entry(jsonx.From([]byte{}))); err != nil || string(b) != c.want {
+			t.Errorf("through jsonx.From: wrote %s, %v; want %s", b, err, c.want)
+		}
 	}
 }

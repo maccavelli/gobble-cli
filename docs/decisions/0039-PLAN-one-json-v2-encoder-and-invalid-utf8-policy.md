@@ -1363,3 +1363,50 @@ machine. Neither added a file.
 
    The baselines are ReplyRender 110 µs, Reprint 29 ms, LineSessionStart 2.9 ms and KeyDraw 5 µs. The allocations
    matched across the two trees: ReplyRender 257, Reprint 49,696, LineSessionStart 5,017 to 5,020.
+
+### P8 record (2026-11-01): `archtest`, the `inline` tags, the hatch's tests, and the docs
+
+The base is P7's `fe671d6`. No deviation; deviation 15's assertion is met here.
+
+1. **`internal/archtest/check.go`** (step 1) reads `go list -json`'s stream with
+   `jsontext.NewDecoder(&stdout, jsonx.Options())` and `json.UnmarshalDecode`, until `errors.Is(err, io.EOF)`.
+   * `make archtest`: passed.
+   * **Its rules report what they reported before.** A scratch test, added to a copy of P7's commit and to a copy of
+     the tree, wrote `loadGraph`'s packages (import path, error, imports, test and external test imports, and the size
+     of `Deps`) and each of rules 1 to 9's violations. The two dumps differ in one line, `internal/archtest`'s own
+     imports, which now hold `encoding/json/jsontext`, `encoding/json/v2`, `errors` and `jsonx` in place of
+     `encoding/json`. Both list 65 packages, and every rule reports `[]` in both.
+   * **Deviation 15's assertion:** `grep -rlE '"encoding/json"$' --include=*.go .` returns nothing (exit 1).
+2. **The eight `json:",inline"` tags** (step 2) are dropped: seven in `acpserver/extensions.go`, one in
+   `acpserver/personality.go`, by an asserted script; `gofmt` realigned the fields. `go test ./acpserver/` passed
+   unchanged, the `_gobble/*` and personality tests with it (Confirmation 17).
+3. **The hatch's tests** (step 3, Confirmation 11):
+   * `TestRawNullAndAbsent` (`session/session_test.go`) reads and writes seven lines through `jsonx`: a
+     `context_edit` with `replacement` absent, `null` and an object, and a `bashExecution` message with `exitCode`
+     absent, `null`, `7` and an object. Absent reads back with `len` 0; each line is written back byte for byte;
+   * `TestEmptyRawValue` plants `jsontext.Value{}` on each field and wants `io.ErrUnexpectedEOF` from the marshal,
+     then wants `jsonx.From([]byte{})` on it left out;
+   * `TestContentDataBase64` (new `llm/llm_test.go`) writes `Content.Data` `[]byte{0, 1, 2, 0xff}` as
+     `"data":"AAEC/w=="` and reads it back.
+
+   | Test | Break | The failure |
+   | :--- | :--- | :--- |
+   | `TestRawNullAndAbsent` | `Replacement`'s and `ExitCode`'s tags `omitzero` changed to `omitempty` | `{"type":"context_edit","parentId":null,"targetId":"a","replacement":null}: written {"type":"context_edit","parentId":null,"targetId":"a"}, <nil>`, and the same for `"exitCode":null` |
+   | `TestEmptyRawValue` | `jsonx.From` without its `len(b) == 0` check | `through jsonx.From: wrote {…,"replacement", json: cannot marshal from Go jsontext.Value: unexpected EOF within "/replacement" after offset 68`, and the same for `/message/exitCode` |
+   | `TestContentDataBase64` | `Content.Data` retyped `jsontext.Value` | `wrote {"type":"image","mediaType":"image/png","data", json: cannot marshal from Go jsontext.Value: invalid character '\x00' at start of value within "/data" after offset 47` |
+4. **The docs** (step 4):
+   * `session/doc.go` gains "Raw JSON and binary": a table of absent, `null`, a JSON value and binary, with each one's
+     Go value and how it is written; that an empty non-nil value fails the marshal and that `jsonx.From`, `Value` and
+     `Quote` never give one; and that tests compare `len(v)` and `string(v)`, never `v.String()`. `go doc ./session`
+     renders the table as a block;
+   * `docs/architecture.md`'s package table gains a `jsonx` row, after `gobble`: the two policies, the raw-value
+     builders, `Strings` and `Fields`, `Member` and `SetMember`, and that it imports no package of this module (which
+     `go list` confirms: `bytes`, `encoding/json/jsontext`, `encoding/json/v2`, `maps`, `slices`).
+5. **G-local:**
+   * `make pre-add-check` on the 6 changed Go files: clean;
+   * `make preflight`: passed;
+   * `go test ./...`: 38 ok, `llm` being new to the count; `make race`: 38 ok.
+6. **G-hosts,** on the Linux machine and the Windows laptop, with 818 files shipped to each:
+   * `go test` and race: passed on both, 38 ok;
+   * `make check-records markdownlint`: passed on both;
+   * preflight stops at `verify-build-metadata`, as on every copy.
