@@ -61,10 +61,11 @@ type view struct {
 	// afterTurn hands a reprint still due when the turn ends to the
 	// editor.
 	afterTurn func()
-	// reply and thinking are the transcript's pieces still growing.
-	reply, thinking *piece
-	// settle times the wait for resizes to settle; reprintDue says one
-	// settled and its reprint waits for a line's end; ended, the turn's.
+	// thinking is the transcript's thinking piece still growing.
+	thinking *growing
+	// settle wakes the view when the transcript's settle ends; reprintDue
+	// says a resize came and its reprint is not yet written; ended, the
+	// turn's.
 	settle     *time.Timer
 	reprintDue bool
 	ended      bool
@@ -139,7 +140,7 @@ func (v *view) on(u acpclient.Update) {
 		v.flushReply() // not the thinking: its next chunk continues the row
 		v.thought, v.replying = true, true
 		thought := term.Clean(u.Text, v.caps.Out.TTY)
-		v.keep(&v.thinking, v.thinkingAt, thought)
+		v.keepThought(thought)
 		s := term.Dim.Wrap(thought, v.caps.Out.Color)
 		if w := v.wrapWidth(); w > 0 {
 			s = v.think.Push(s, w)
@@ -274,17 +275,39 @@ func (v *view) content(cs []acpclient.ToolContent) {
 // 0035-MADR D14 step 5a). Off a terminal the chunk is written as
 // term.Clean gave it: the Printer is the terminal path, as safetext is
 // (0035-PLAN PQ5, deviation 18).
+//
+// A reply's Printer is kept by the transcript from its first chunk, and
+// drawn again by its At at a reprint, so each call on it goes through the
+// transcript's lock (0035-MADR D14 step 5b).
 func (v *view) text(s string) {
-	v.keep(&v.reply, v.replyAt, s)
 	if !v.caps.Out.TTY {
 		v.show(s)
 		return
 	}
+	width := v.wrapWidth()
 	if v.printer == nil {
-		v.printer = v.replyPrinter(v.wrapWidth())
+		v.printer = v.replyPrinter(width)
+		if v.out.rec != nil {
+			v.out.rec.reply(v.printer)
+		}
 	}
-	v.printer.SetWidth(v.wrapWidth())
-	v.show(v.printer.Write(s))
+	var out string
+	v.onPrinter(func(p *stream.Printer) {
+		p.SetWidth(width)
+		out = p.Write(s)
+	})
+	v.show(out)
+}
+
+// onPrinter runs f on the reply's Printer, under the transcript's lock when
+// there is a transcript.
+func (v *view) onPrinter(f func(p *stream.Printer)) {
+	p := v.printer
+	if v.out.rec == nil {
+		f(p)
+		return
+	}
+	v.out.rec.do(func() { f(p) })
 }
 
 // replyPrinter is a reply's Printer at width: go-tui-lib's styling and
@@ -315,11 +338,13 @@ func (v *view) flush() {
 
 // flushReply writes what the reply's Printer holds, and ends the reply.
 func (v *view) flushReply() {
-	if v.printer != nil {
-		v.show(v.printer.Flush())
-		v.printer = nil
+	if v.printer == nil {
+		return
 	}
-	v.reply = nil
+	var out string
+	v.onPrinter(func(p *stream.Printer) { out = p.Flush() })
+	v.printer = nil
+	v.show(out)
 }
 
 // cutOff says the reply was cut off, on a line of its own after what was
@@ -396,7 +421,7 @@ func (v *view) finish(res acpclient.Result) error {
 		v.settle.Stop()
 	}
 	if v.reprintDue && v.afterTurn != nil {
-		v.afterTurn() // the editor reprints at the prompt
+		v.afterTurn() // the editor writes the reprint at the prompt
 	}
 	line := statusLine(v.clock, v.usage, res, v.opts.stats, v.caps.Err, v.glyphs, v.opts.voice)
 	if v.out.rec != nil {
@@ -460,12 +485,10 @@ func dimmed(line string, on bool) string {
 	return term.Dim.Wrap(strings.ReplaceAll(line, "\x1b[0m", "\x1b[0;2m"), true)
 }
 
-// reprintSettle is how long after the last resize the conversation is
-// reprinted (0030-MADR D3).
-const reprintSettle = 150 * time.Millisecond
-
-// resized notices a resize while the turn runs: once resizes settle,
-// the conversation is reprinted at the next line's end (0030-MADR D3).
+// resized notices a resize while the turn runs: the transcript starts its
+// settle, and once it ends the conversation is reprinted when the view is
+// next idle, at a paragraph's end (0030-MADR D3, as amended; 0035-MADR D14
+// step 5b).
 func (v *view) resized() {
 	v.mu.Lock()
 	defer v.mu.Unlock()
@@ -475,59 +498,65 @@ func (v *view) resized() {
 		}
 		return
 	}
+	if v.out.rec == nil || v.reprintWidth == nil {
+		return
+	}
+	v.reprintDue = true
+	v.out.rec.Resize(v.reprintWidth(), time.Now())
+	at, ok := v.out.rec.Timeout()
+	if !ok {
+		return
+	}
 	if v.settle != nil {
 		v.settle.Stop()
 	}
-	v.settle = time.AfterFunc(reprintSettle, func() {
+	v.settle = time.AfterFunc(time.Until(at), func() {
 		v.mu.Lock()
 		defer v.mu.Unlock()
-		v.reprintDue = true
 		v.tryReprint()
 	})
 }
 
-// tryReprint makes a due reprint when the view is at a line's start with
-// nothing held back, so that everything shown so far can be drawn again
-// and the reply goes on from there, no word lost or doubled. v.mu is held.
+// tryReprint writes the transcript's reprint, once resizes have settled
+// and the view is at a line's start with nothing held back, so that
+// everything shown so far is drawn again and the reply goes on from there,
+// no word lost or doubled. No region is drawn while a turn runs, so the
+// reprint is written as it is, one synchronized update of its own. v.mu is
+// held.
 func (v *view) tryReprint() {
-	if !v.reprintDue || v.ended || v.out.rec == nil || !v.atBOL || (v.printer != nil && !v.printer.Idle()) || !v.think.Idle() {
+	if !v.reprintDue || v.ended || v.out.rec == nil {
+		return
+	}
+	idle := v.atBOL && v.think.Idle()
+	if idle && v.printer != nil {
+		v.onPrinter(func(p *stream.Printer) { idle = p.Idle() })
+	}
+	out := v.out.rec.HandleTimeout(time.Now(), idle)
+	if out == "" {
 		return
 	}
 	v.reprintDue = false
-	width := 0
-	if v.reprintWidth != nil {
-		width = v.reprintWidth()
-	}
-	if width <= 0 {
-		return
-	}
-	text := reprintText(v.out.rec, width, v.caps.Out.Color)
 	v.stopSpinner()
-	if err := v.out.emit([]byte("\x1b[?2026h\x1b[2J\x1b[3J\x1b[H" + text + "\x1b[?2026l")); err != nil && v.err == nil {
+	if err := v.out.emit([]byte(out)); err != nil && v.err == nil {
 		v.err = err
 	}
-	// The Printer and the wrapper are idle at a line's start, holding
+	// The reprint ends at a line's start: after its last piece's line end,
+	// or home when nothing was kept. The Printer and the wrapper hold
 	// nothing, so they go on as they are.
-	v.atBOL = text == "" || strings.HasSuffix(text, "\n")
+	v.atBOL = true
 }
 
-// keep adds s to the transcript piece *p, opening it, drawn by at.
-func (v *view) keep(p **piece, at func(src string, width int) string, s string) {
+// keepThought adds a thinking block's text to its transcript piece,
+// started at the block's first text and drawn from all of it so far
+// (0035-PLAN PQ9).
+func (v *view) keepThought(s string) {
 	if v.out.rec == nil || s == "" {
 		return
 	}
-	if *p == nil {
-		*p = v.out.rec.open(at)
+	if v.thinking == nil {
+		v.thinking = v.out.rec.grow(v.thinkingAt)
 	}
-	(*p).add(v.out.rec, s)
-}
-
-// replyAt draws a reply's Markdown at a terminal's width, to 120
-// columns, by a new Printer with the view's options: what that Printer's
-// At gives, since a fresh Printer is idle.
-func (v *view) replyAt(src string, width int) string {
-	p := v.replyPrinter(min(width, 120))
-	return p.Write(src) + p.Flush()
+	v.out.rec.add(v.thinking, s)
 }
 
 // thinkingAt draws thinking text at a terminal's width, dimmed.

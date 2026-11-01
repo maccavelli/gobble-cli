@@ -56,14 +56,24 @@ type Options struct {
 	// header, each line sent and each notice, as its size in bytes and how
 	// it is drawn at a terminal's width (0030-MADR D4).
 	Shown func(size int, at func(width int) string)
-	// Reprint, when set, is what the screen showed before the line, drawn
-	// at a width: once resizes settle, the screen and its scrollback are
-	// cleared and it is written again, then the line (0030-MADR D3).
-	Reprint func(width int) string
+	// Reprint, when set, keeps what the screen showed before the line: once
+	// resizes settle, the screen and its scrollback are cleared and it is
+	// written again, then the line (0030-MADR D3; 0035-MADR D14 step 5b).
+	Reprint Reprinter
 	// External, when set, edits the line's text in the user's editor, for
 	// ctrl+x ctrl+e, and returns what it holds afterwards; on an error the
 	// line is left as it was (0035-PLAN P17).
 	External func(ctx context.Context, text string) (string, error)
+}
+
+// Reprinter is the conversation shown before the line, kept to be drawn
+// again once resizes settle: go-tui-lib's transcript, which owns the
+// settle. Resize is told each new width, Timeout is when the settle ends,
+// and HandleTimeout gives the reprint once it has (0035-MADR D14 step 5b).
+type Reprinter interface {
+	Resize(width int, now time.Time)
+	Timeout() (time.Time, bool)
+	HandleTimeout(now time.Time, idle bool) string
 }
 
 // The prompt's widths (0024-MADR D9): the most columns a line takes, and
@@ -82,9 +92,6 @@ const (
 const (
 	// exitWindow is how long a second Ctrl+C on an empty line exits.
 	exitWindow = 2 * time.Second
-	// settleWait is how long after the last resize's redraw the
-	// conversation is reprinted (0030-MADR D3).
-	settleWait = 150 * time.Millisecond
 	// chunkSize is the most bytes one read of the terminal takes.
 	chunkSize = 512
 )
@@ -93,7 +100,7 @@ const (
 // prompt is a go-tui-lib lineedit.Composer, drawn in an inline.Region
 // below the scrollback; the Editor is its host and keeps what is gobble's:
 // the Ctrl+C exit window, /exit and /quit, skipping an empty submission,
-// the paste notice, the history, the reprint once resizes settle, and the
+// the paste notice, the history, writing the reprint once resizes settle, and the
 // 120-column cap (0035-MADR D14 step 4; 0035-PLAN P17, PQ7).
 type Editor struct {
 	in   *inline.Reader
@@ -123,10 +130,6 @@ type Editor struct {
 	pasting bool
 	// armedUntil ends the exit window.
 	armedUntil time.Time
-	// resized says the terminal was resized and the region's redraw is
-	// awaited; settleAt is when the reprint is due, zero for none.
-	resized  bool
-	settleAt time.Time
 	// pending is what the prompt asked to write, written at once before
 	// each read, each notice and the external editor, and on return.
 	pending strings.Builder
@@ -278,12 +281,15 @@ func (e *Editor) input(in termkey.Input, now time.Time) {
 }
 
 // resize lays the prompt out at the terminal's new width; the region asks
-// where the cursor is and redraws from there (0030-MADR D2).
+// where the cursor is and redraws from there (0030-MADR D2). The transcript
+// starts its settle.
 func (e *Editor) resize(now time.Time) {
 	e.setHeight()
 	e.width = e.terminalWidth()
 	e.line.Resize(e.width, now)
-	e.resized, e.settleAt = true, time.Time{}
+	if e.opts.Reprint != nil {
+		e.opts.Reprint.Resize(e.width, now)
+	}
 }
 
 // timeout runs the prompt's wait, for the cursor report or a key
@@ -294,29 +300,17 @@ func (e *Editor) timeout(now time.Time) {
 	}
 }
 
-// settle starts the wait for the reprint once a resize's redraw is done,
-// and reprints when it is over (0030-MADR D3).
+// settle writes the reprint once resizes have settled, by the region's
+// Print: one synchronized update, the prompt drawn again below it, held
+// while the region awaits the cursor's report (0030-MADR D3; go-tui-lib
+// v2.9.0's recipe).
 func (e *Editor) settle(now time.Time) {
-	if e.resized {
-		if _, waiting := e.region.Timeout(); waiting {
-			return
-		}
-		e.resized = false
-		if e.opts.Reprint != nil {
-			e.settleAt = now.Add(settleWait)
-		}
-	}
-	if e.settleAt.IsZero() || now.Before(e.settleAt) {
+	if e.opts.Reprint == nil {
 		return
 	}
-	e.settleAt = time.Time{}
-	text := e.opts.Reprint(e.width)
-	if text == "" {
-		e.write(e.region.Clear() + "\x1b[2J\x1b[3J\x1b[H")
-		e.redraw()
-		return
+	if out := e.opts.Reprint.HandleTimeout(now, true); out != "" {
+		e.write(e.region.Print(out))
 	}
-	e.write(e.region.Print("\x1b[2J\x1b[3J\x1b[H" + text)) // one synchronized update, the prompt redrawn below
 }
 
 // drain writes what the prompt asks and acts on what it gives: a
@@ -371,7 +365,7 @@ func (e *Editor) drain(ctx context.Context) (string, bool, error) {
 	if c := e.region.Clear(); !sent {
 		e.write(c)
 	}
-	e.line, e.resized, e.settleAt = nil, false, time.Time{}
+	e.line = nil
 	if end != nil {
 		return "", true, end
 	}
@@ -466,10 +460,11 @@ func (e *Editor) read(ctx context.Context, p []byte) (n int, resized bool, err e
 	if e.dec.Pending() {
 		due = earliest(due, e.escDue)
 	}
-	if e.resized && e.opts.Reprint != nil {
-		due = earliest(due, time.Now().Add(settleWait))
+	if e.opts.Reprint != nil {
+		if at, ok := e.opts.Reprint.Timeout(); ok {
+			due = earliest(due, at)
+		}
 	}
-	due = earliest(due, e.settleAt)
 	if due.IsZero() && e.opts.Resize == nil {
 		n, err = e.in.Read(ctx, p)
 		return n, false, err

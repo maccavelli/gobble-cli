@@ -20,6 +20,7 @@ var todaysText = map[Key]string{
 	TurnStopRefusal:         "refusal",
 	TurnStopCancelled:       "cancelled",
 	LinesHidden:             "{n} lines hidden (--verbose shows all)",
+	TranscriptEarlierOutput: "(earlier output is not shown again)",
 	CommandUnknown:          "Unknown command /{name}. /help lists the commands.",
 	HelpHeading:             "Commands:",
 	UsageHeading:            "Session usage",

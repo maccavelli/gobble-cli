@@ -1,125 +1,147 @@
 package cli
 
 import (
-	"slices"
-	"strings"
 	"sync"
+	"time"
 
+	"github.com/maccavelli/go-tui-lib/v2/msgcat"
+	"github.com/maccavelli/go-tui-lib/v2/stream"
+	tuitranscript "github.com/maccavelli/go-tui-lib/v2/transcript"
+
+	"github.com/maccavelli/gobble-cli/internal/cli/editor"
 	"github.com/maccavelli/gobble-cli/internal/cli/render"
+	"github.com/maccavelli/gobble-cli/personality"
 )
 
-// transcript is what the line session has shown on a terminal, in order,
-// as pieces that can be drawn again at a width, so that a resize can
-// reprint the conversation with no word cut (0030-MADR D3, D4). It keeps
-// at most maxTranscript bytes; past that, the oldest pieces go. It is
-// shared by the editor's, the view's and the agent's goroutines.
+// transcript is what the line session has shown on a terminal, kept by one
+// go-tui-lib Transcript, so that once a resize settles the conversation is
+// reprinted with no word cut (0030-MADR D3, D4; 0035-MADR D14 step 5b): the
+// newest 4 MB of pieces, a reprint the newest 10,000 rows, the library's
+// defaults. The Transcript, and every reply's Printer it keeps, are used
+// by the editor's, the view's, the agent's, the permission prompt's and the
+// log's goroutines, so each call on them goes through mu, by AddReply's
+// contract.
 type transcript struct {
-	mu      sync.Mutex
-	pieces  []*piece
-	size    int
-	dropped bool // pieces went, past the bound
+	mu sync.Mutex
+	tr *tuitranscript.Transcript
+	// voice speaks the notice that earlier output is not shown again; nil,
+	// or a nil voice, is boring's.
+	voice func() *personality.Voice
 }
 
-// piece is one thing shown: its source, which a reply's grows while it
-// arrives, its size in bytes, and how it is drawn at a terminal's width.
-type piece struct {
-	src  string
-	size int
-	at   func(src string, width int) string
+// growing is a piece whose source grows while it is shown, such as a
+// thinking block; its source is read and written under the transcript's
+// lock.
+type growing struct{ src string }
+
+// newTranscript keeps what is shown on a terminal terminal columns wide.
+func newTranscript(terminal int, o ...tuitranscript.Option) *transcript {
+	t := &transcript{}
+	notice := msgcat.CatalogFunc(func(id msgcat.MessageID) (string, bool) {
+		if id != tuitranscript.MsgEarlierOutput {
+			return "", false
+		}
+		var v *personality.Voice
+		if t.voice != nil {
+			v = t.voice()
+		}
+		return v.Text(personality.TranscriptEarlierOutput, nil), true
+	})
+	t.tr = tuitranscript.NewTranscript(append([]tuitranscript.Option{tuitranscript.WithCatalog(notice)}, o...)...)
+	t.tr.Resize(reprintWidth(terminal), time.Now())
+	return t
 }
 
-// maxTranscript bounds what the transcript keeps, in bytes (0030-MADR D4,
-// as revised); maxReprintRows bounds a reprint (D3).
-const (
-	maxTranscript  = 4 << 20
-	maxReprintRows = 10000
-)
+// reprintWidth is the width the conversation is drawn again at on a
+// terminal that many columns wide: the editor's, at most 120 columns, the
+// widest a reply or a message is drawn (0035-PLAN PQ8).
+func reprintWidth(terminal int) int {
+	if terminal <= 0 {
+		return editor.DefaultWidth
+	}
+	return min(terminal, editor.MaxWidth)
+}
 
-// fixed keeps s as written: output whose layout gobble does not make.
+// setVoice says whose words the notice is in.
+func (t *transcript) setVoice(voice func() *personality.Voice) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.voice = voice
+}
+
+// fixed keeps s as written: output whose layout gobble does not make. It
+// may hold SGR, which the library's AddText would clean away.
 func (t *transcript) fixed(s string) {
 	if s != "" {
-		t.open(func(src string, _ int) string { return src }).add(t, s)
+		t.drawn(len(s), func(int) string { return s })
 	}
 }
 
 // message keeps one of gobble's messages, drawn as render.Message draws it
 // at the terminal's width, to 120 columns (0028-MADR D6).
 func (t *transcript) message(s string) {
-	t.open(func(src string, width int) string { return render.Message(src, min(width, 120)) + "\n" }).add(t, s)
+	t.drawn(len(s), func(width int) string { return render.Message(s, min(width, 120)) + "\n" })
 }
 
-// drawn keeps a piece of size bytes drawn at a width by at, such as /help's
-// list or a line the editor sent.
-func (t *transcript) drawn(size int, at func(width int) string) {
-	t.open(func(_ string, width int) string { return at(width) }).grow(t, "", size)
-}
-
-// open starts a piece drawn by at from its source, empty until added to.
-func (t *transcript) open(at func(src string, width int) string) *piece {
-	p := &piece{at: at}
-	t.mu.Lock()
-	t.pieces = append(t.pieces, p)
-	t.mu.Unlock()
-	return p
-}
-
-// add appends s to p's source.
-func (p *piece) add(t *transcript, s string) { p.grow(t, s, len(s)) }
-
-func (p *piece) grow(t *transcript, s string, size int) {
+// drawn keeps a piece drawn at a width by at, such as /help's list or a
+// line the editor sent. Its size is the library's to measure.
+func (t *transcript) drawn(_ int, at func(width int) string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	p.src += s
-	p.size += size
-	t.size += size
-	for t.size > maxTranscript && len(t.pieces) > 1 {
-		t.size -= t.pieces[0].size
-		t.pieces = t.pieces[1:]
-		t.dropped = true
-	}
+	t.tr.AddDrawn(at)
 }
 
-// reprintText is t drawn at a terminal's width for a reprint, after a dimmed
-// line saying so when earlier output was left out, by the bound or by the
-// row limit (0030-MADR D3, D4).
-func reprintText(t *transcript, width int, color bool) string {
-	s, cut := t.render(width, maxReprintRows)
-	if cut {
-		s = dimmed("(earlier output is not shown again)", color) + "\n" + s
-	}
-	return s
+// grow starts a piece drawn at a width by at from its source, which grows
+// by add. The library counts its size once, when it starts, so what it
+// grows by is not counted toward the bound (0035-PLAN PQ9).
+func (t *transcript) grow(at func(src string, width int) string) *growing {
+	g := &growing{}
+	t.drawn(0, func(width int) string { return at(g.src, width) })
+	return g
 }
 
-// render is the transcript drawn at width: the newest pieces back to at
-// most maxRows rows, the oldest of them cut to fit, and whether anything
-// earlier was left out, by the bound or by maxRows.
-func (t *transcript) render(width, maxRows int) (string, bool) {
+// add appends s to g's source.
+func (t *transcript) add(g *growing, s string) {
 	t.mu.Lock()
-	pieces := make([]piece, len(t.pieces))
-	for i, p := range t.pieces {
-		pieces[i] = *p
-	}
-	cut := t.dropped
-	t.mu.Unlock()
-	var drawn []string
-	rows := 0
-	for i := len(pieces) - 1; i >= 0 && rows < maxRows; i-- {
-		s := pieces[i].at(pieces[i].src, width)
-		n := strings.Count(s, "\n")
-		if rows+n > maxRows {
-			lines := strings.SplitAfter(s, "\n")
-			s = strings.Join(lines[len(lines)-(maxRows-rows)-1:], "")
-			n, cut = maxRows-rows, true
-		}
-		drawn = append(drawn, s)
-		rows += n
-		if i > 0 && rows >= maxRows {
-			cut = true
-		}
-	}
-	var b strings.Builder
-	for _, s := range slices.Backward(drawn) {
-		b.WriteString(s)
-	}
-	return b.String(), cut
+	defer t.mu.Unlock()
+	g.src += s
+}
+
+// reply keeps a reply's Printer, drawn again by its At at a reprint's
+// width. From then on every call on p goes through do.
+func (t *transcript) reply(p *stream.Printer) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.tr.AddReply(p)
+}
+
+// do runs f under the lock: each call on a kept reply's Printer goes
+// through it.
+func (t *transcript) do(f func()) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	f()
+}
+
+// Resize notices that the terminal is now terminal columns wide; a
+// reprint is due once resizes settle (editor.Reprinter).
+func (t *transcript) Resize(terminal int, now time.Time) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.tr.Resize(reprintWidth(terminal), now)
+}
+
+// Timeout is when the settle ends, while resizes settle (editor.Reprinter).
+func (t *transcript) Timeout() (time.Time, bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.tr.Timeout()
+}
+
+// HandleTimeout is the reprint, once resizes settled and the caller is
+// idle, or "" (editor.Reprinter).
+func (t *transcript) HandleTimeout(now time.Time, idle bool) string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.tr.HandleTimeout(now, idle)
 }

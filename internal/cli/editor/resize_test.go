@@ -12,6 +12,7 @@ import (
 
 	"github.com/maccavelli/go-tui-lib/v2/inline"
 	"github.com/maccavelli/go-tui-lib/v2/inline/inlinetest"
+	"github.com/maccavelli/go-tui-lib/v2/transcript"
 )
 
 // lockedScreen is a screen the editor's goroutine draws on while the test
@@ -159,8 +160,9 @@ func TestKeysTypedWhileTheReportIsAwaited(t *testing.T) {
 }
 
 // reprintSession runs an editor on a screen 80 columns wide whose earlier
-// output is "old output", with Reprint giving "history at <width>"; it
-// types hello world and returns what the test needs to resize it.
+// output is "old output", with a go-tui-lib Transcript as Reprint, holding
+// one piece drawn as "history at <width>"; it types hello world and
+// returns what the test needs to resize it.
 type reprintSession struct {
 	ls       *lockedScreen
 	keys     *keyFeed
@@ -187,12 +189,14 @@ func startReprint(t *testing.T) *reprintSession {
 	if _, err := r.ls.Write([]byte("old output\r\n")); err != nil {
 		t.Fatal(err)
 	}
+	tr := transcript.NewTranscript()
+	tr.Resize(80, time.Now())
+	tr.AddDrawn(func(width int) string {
+		return "history at " + string(rune('0'+width/10)) + string(rune('0'+width%10)) + "\n"
+	})
 	ctx, cancel := context.WithCancel(t.Context())
 	e := New(inline.NewReader(r.keys), r, io.Discard, Options{Width: func() int { return int(r.width.Load()) }, Resize: r.resize,
-		Reprint: func(width int) string {
-			r.reprints.Add(1)
-			return "history at " + string(rune('0'+width/10)) + string(rune('0'+width%10)) + "\n"
-		}})
+		Reprint: countedReprints{tr, &r.reprints}})
 	done := make(chan struct{})
 	go func() {
 		_, _ = e.ReadPrompt(ctx)
@@ -204,6 +208,20 @@ func startReprint(t *testing.T) *reprintSession {
 	})
 	r.keys.ch <- "hello world"
 	return r
+}
+
+// countedReprints is a Transcript that counts the reprints it gives.
+type countedReprints struct {
+	*transcript.Transcript
+	n *atomic.Int64
+}
+
+func (c countedReprints) HandleTimeout(now time.Time, idle bool) string {
+	out := c.Transcript.HandleTimeout(now, idle)
+	if out != "" {
+		c.n.Add(1)
+	}
+	return out
 }
 
 func (r *reprintSession) narrow(columns int) {
@@ -239,6 +257,51 @@ func TestReprintOnSettle(t *testing.T) {
 	if !found || strings.LastIndex(before, "\x1b[?2026h") < strings.LastIndex(before, "\x1b[?2026l") ||
 		strings.Index(after, "\x1b[?2026l") < strings.Index(after, "> hello world") {
 		t.Fatalf("the reprint did not clear the scrollback and draw the line inside one synchronized update: %q", out)
+	}
+}
+
+// The reprint and the prompt are written as one synchronized update: at
+// the end of every frame a terminal presents, each ?2026l, the prompt's
+// row is on the screen, so it never disappears for a frame (0035-MADR D14
+// step 5b; go-tui-lib v2.9.0's recipe, region.Print).
+func TestReprintFramesKeepThePrompt(t *testing.T) {
+	t.Setenv("XTERM_VERSION", "")
+	r := startReprint(t)
+	time.Sleep(100 * time.Millisecond)
+	r.mu.Lock()
+	before := r.written.String()
+	r.mu.Unlock()
+	r.narrow(43)
+	end := time.Now().Add(3 * time.Second)
+	for {
+		lines, _, _ := r.ls.look()
+		if r.reprints.Load() == 1 && slices.Equal(lines[:2], []string{"history at 43", "> hello world"}) {
+			break
+		}
+		if time.Now().After(end) {
+			t.Fatalf("no reprint: screen %q", lines)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	r.mu.Lock()
+	after := r.written.String()[len(before):]
+	r.mu.Unlock()
+	s := newScreen(80, 10)
+	if _, err := s.Write([]byte("old output\r\n" + before)); err != nil {
+		t.Fatal(err)
+	}
+	s.Resize(43, inline.ReflowDown)
+	frames := strings.SplitAfter(after, "\x1b[?2026l")
+	if len(frames) < 2 {
+		t.Fatalf("no synchronized frame after the resize: %q", after)
+	}
+	for i, f := range frames[:len(frames)-1] {
+		if _, err := s.Write([]byte(f)); err != nil {
+			t.Fatal(err)
+		}
+		if lines := trimmedLines(s); !slices.Contains(lines, "> hello world") {
+			t.Fatalf("frame %d of %d ends without the prompt: %q\nframe %q", i+1, len(frames)-1, lines, f)
+		}
 	}
 }
 

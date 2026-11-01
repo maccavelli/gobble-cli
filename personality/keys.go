@@ -21,6 +21,9 @@ const (
 	TurnStopRefusal         Key = "turn.stop.refusal"
 	TurnStopCancelled       Key = "turn.stop.cancelled"
 	LinesHidden             Key = "lines.hidden"
+	// TranscriptEarlierOutput heads a reprint that leaves earlier output
+	// out: go-tui-lib's transcript.earlier-output (0035-MADR D14 step 5b).
+	TranscriptEarlierOutput Key = "transcript.earlier-output"
 
 	// The agent's slash commands, through any ACP client.
 	CommandUnknown    Key = "command.unknown"
@@ -125,7 +128,7 @@ const (
 var Keys = []Key{
 	RetryOffline, RetryEmptyReply, RetryAttempt, CompactionStart, CompactionFailed, CompactionFailedTurn,
 	CompactionFailedSession, TurnWorking, TurnStopMaxTokens, TurnStopMaxRequests, TurnStopRefusal, TurnStopCancelled,
-	LinesHidden,
+	LinesHidden, TranscriptEarlierOutput,
 	CommandUnknown, HelpHeading, UsageHeading, UsageCostUnknown, UsageEstimated, UsageNoAccount, SessionHeading,
 	ModelNone, ModelCurrent, ModelList, ModelUnknown, ModelSet, ThinkingCurrent, ThinkingList, ThinkingUnknown,
 	ThinkingSet, ModeCurrent, ModeList, ModeUnknown, ModeAlreadyPlan, ModePlanOn, ModeSet, NameCurrent, NameUsage,

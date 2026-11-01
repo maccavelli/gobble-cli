@@ -6,12 +6,14 @@ import (
 	"testing"
 	"time"
 
+	tuitranscript "github.com/maccavelli/go-tui-lib/v2/transcript"
+
 	"github.com/maccavelli/gobble-cli/acpclient/acptest"
 	"github.com/maccavelli/gobble-cli/internal/cli/term"
 )
 
-// benchTranscript is a transcript of 4 MB of the benchmark reply, each a
-// piece drawn as the view draws a reply.
+// benchTranscript is a transcript of 4 MB of the benchmark reply, each
+// kept as the view keeps a reply: its Printer, given the reply.
 func benchTranscript(tb testing.TB) *transcript {
 	tb.Helper()
 	reply, err := os.ReadFile("render/testdata/reply.txt")
@@ -20,11 +22,19 @@ func benchTranscript(tb testing.TB) *transcript {
 	}
 	s := term.Stream{TTY: true, Color: true, Width: 100}
 	v := newView(&Output{caps: term.Caps{Out: s, Err: s}}, display{}, stepClock())
-	tr := &transcript{}
-	for range maxTranscript / len(reply) {
-		tr.open(v.replyAt).add(tr, string(reply))
-	}
+	tr := newTranscript(100)
+	keepReplies(tr, v, string(reply), tuitranscript.DefaultMaxBytes/len(reply))
 	return tr
+}
+
+// keepReplies keeps n replies in tr, each a Printer of v's given reply
+// whole, as the view keeps one.
+func keepReplies(tr *transcript, v *view, reply string, n int) {
+	for range n {
+		p := v.replyPrinter(100)
+		tr.reply(p)
+		tr.do(func() { p.Write(reply); p.Flush() })
+	}
 }
 
 // A reprint at 60 columns of the last 10,000 rows of a 4 MB transcript, the
@@ -34,7 +44,7 @@ func BenchmarkReprint(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for b.Loop() {
-		tr.render(60, maxReprintRows)
+		reprintAt(tr, 60)
 	}
 }
 

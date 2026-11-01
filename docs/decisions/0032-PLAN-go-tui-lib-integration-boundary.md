@@ -1,6 +1,6 @@
 ---
-status: in-progress
-date: 2026-10-22
+status: complete
+date: 2026-11-01
 associated-madr: "0032-MADR-go-tui-lib-integration-boundary.md"
 ---
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
@@ -61,6 +61,9 @@ replaces in gobble, and gate it on the three hosts. 0029-PLAN P2 is the first.
 
 *(2026-10-29: carried out by [0035-PLAN-pin-current-sibling-releases-and-remove-gobble-copies.md](0035-PLAN-pin-current-sibling-releases-and-remove-gobble-copies.md) P13–P18, which pins go-tui-lib/v2 `v2.6.2`. This PLAN stays `in-progress` until
 that PLAN's P18, whose commit makes it `complete`.)*
+
+*(2026-11-01: 0035-PLAN's deviation 15 split its P18 into P18a, `stream`, and P18b, `transcript`, at go-tui-lib/v2
+`v2.9.0`. P18b's commit carries out the last adoption, and this PLAN is `complete`.)*
 
 ### P1a — `x/ansi` admitted (MADR amendment A1)
 
@@ -200,3 +203,10 @@ slowed as in 0031-PLAN P5's gates, 195 µs, 47.2 ms, 5.29 ms, 7.31 µs; the Wind
 
 **P1a complete, 2026-10-22.** Nothing of go-tui-lib or `x/ansi` is in `go.mod` yet: each comes with the adoption that
 first imports it, P3's steps, beginning with whichever of issues 2 to 12 is tagged first.
+
+### P3 and on, record (2026-11-01)
+
+Carried out by 0035-PLAN, whose execution record has each phase: P14, `ask` for the permission prompt; P15, `glyph` and
+`safetext` on terminal paths; P16, `pick` and `termcap`, not adopted; P17, `lineedit`; P18a, `stream` for replies; P18b,
+`transcript` for the reprint, go-tui-lib/v2 pinned at `v2.9.0` by its P26. Of D7's adoptions, every element gobble
+asked go-tui-lib for is now drawn through it but `pick` and `termcap`, which P16 left out. **Complete, 2026-11-01.**

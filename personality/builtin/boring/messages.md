@@ -57,6 +57,10 @@ cancelled
 
 {n} lines hidden (--verbose shows all)
 
+## transcript.earlier-output
+
+(earlier output is not shown again)
+
 ## command.unknown
 
 Unknown command /{name}. /help lists the commands.

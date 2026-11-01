@@ -125,7 +125,7 @@ func TestLineSessionReprintsOnResize(t *testing.T) {
 func TestViewReprintsAtTheNextLineEnd(t *testing.T) {
 	var out, errw strings.Builder
 	s := term.Stream{TTY: true, Width: 100}
-	o := &Output{out: &out, err: &errw, caps: term.Caps{In: true, Out: s, Err: s, Unicode: true}, rec: &transcript{}}
+	o := &Output{out: &out, err: &errw, caps: term.Caps{In: true, Out: s, Err: s, Unicode: true}, rec: newTranscript(100)}
 	var width atomic.Int64
 	width.Store(100)
 	v := newView(o, display{width: func() int { return int(width.Load()) }}, stepClock())
@@ -170,9 +170,9 @@ var statusRow = regexp.MustCompile(`^\d+(\.\d+)?m?s\b`)
 func TestLateReprintGoesToTheEditor(t *testing.T) {
 	var out, errw strings.Builder
 	s := term.Stream{TTY: true, Width: 100}
-	o := &Output{out: &out, err: &errw, caps: term.Caps{In: true, Out: s, Err: s, Unicode: true}, rec: &transcript{}}
+	o := &Output{out: &out, err: &errw, caps: term.Caps{In: true, Out: s, Err: s, Unicode: true}, rec: newTranscript(100)}
 	v := newView(o, display{width: func() int { return 100 }}, stepClock())
-	v.reprintWidth = func() int { return 100 }
+	v.reprintWidth = func() int { return 80 } // a resize to 80 columns
 	var handed atomic.Int64
 	v.afterTurn = func() { handed.Add(1) }
 	v.on(acpclient.Update{Kind: acpclient.KindAgentText, Text: "a reply that ends in the middle of a line"})
@@ -206,7 +206,7 @@ func TestKeepShownFromTheStart(t *testing.T) {
 			o := &Output{out: &out, err: &errw, caps: term.Caps{In: tc.tty, Out: s, Err: s}}
 			keepShown(o, tc.mode)
 			o.Warnf("Model %q not found for provider %q. Using custom model id.", "stub-model", "kilo")
-			if kept := o.rec != nil && strings.Contains(reprintText(o.rec, 80, false), `Warning: Model "stub-model"`); kept != tc.kept {
+			if kept := o.rec != nil && strings.Contains(reprinted(reprintAt(o.rec, 80)), `Warning: Model "stub-model"`); kept != tc.kept {
 				t.Fatalf("kept %v, want %v", kept, tc.kept)
 			}
 		})
@@ -267,7 +267,7 @@ func TestLogRecordWrapsAtTheWidthNow(t *testing.T) {
 	t.Setenv("GOBBLE_HOME", t.TempDir())
 	var out, errw strings.Builder
 	o := &Output{out: &out, err: &errw, caps: term.Caps{In: true, Out: term.Stream{TTY: true, Width: 100},
-		Err: term.Stream{TTY: true, Width: 100}}, rec: &transcript{}}
+		Err: term.Stream{TTY: true, Width: 100}}, rec: newTranscript(100)}
 	l := &lazyLog{level: slog.LevelInfo, out: o, stderr: &errw}
 	t.Cleanup(func() {
 		if err := l.close(); err != nil {
@@ -291,7 +291,7 @@ func TestLogRecordWrapsAtTheWidthNow(t *testing.T) {
 			t.Errorf("a row of %d columns, more than 39: %q", len(r), r)
 		}
 	}
-	if s := reprintText(o.rec, 50, false); strings.Count(s, "Warning: model listing failed;") != 2 {
+	if s := reprinted(reprintAt(o.rec, 50)); strings.Count(s, "Warning: model listing failed;") != 2 {
 		t.Fatalf("the records are not kept: %q", s)
 	}
 }

@@ -2996,3 +2996,71 @@ The base is `fd25f9f`, deviation 15's records commit. Deviations 16 to 21 arose 
 
     The first host run, on the tree before deviation 21's budget, failed race on both hosts at
     `TestReprintAllocationBudget`, as on the Mac.
+
+### P18b record (2026-11-01): `transcript`
+
+The base is P18a's `cce5ab0`. No deviation.
+
+1. **Facts** (step 1) held: the transcript is touched from the five goroutines listed; the editor reads only between
+   turns (`lineSession.run`'s `ReadPrompt` loop), so no region is drawn while a turn runs.
+2. **The wrapper** (step 2): `internal/cli/transcript.go` is a `sync.Mutex` around one
+   `tuitranscript.NewTranscript(tuitranscript.WithCatalog(…))`, with the library's defaults. `newTranscript(terminal)`
+   sizes it at once, since the library's first `Resize` starts no settle. Every call on the `Transcript` and on a kept
+   reply's Printer goes through the lock: the view's `onPrinter` runs `SetWidth`, `Write`, `Flush` and `Idle` under it.
+3. **The pieces** (step 3): `fixed`, `message` and `drawn` are `AddDrawn`; a reply is `AddReply(p)` at its first chunk;
+   thinking is `grow`, an `AddDrawn` whose function draws a `growing` source, appended to under the lock (PQ9 (a)).
+4. **The width** (step 4, PQ8 (a)): `reprintWidth`, the terminal's to `editor.MaxWidth`, `editor.DefaultWidth` when
+   unknown, for the view's resizes and the editor's alike.
+5. **One settle** (step 5):
+   * `editor.Options.Reprint` is an `editor.Reprinter`: `Resize`, `Timeout` and `HandleTimeout`. The editor tells it
+     each resize, arms its read at `Timeout()`, and writes `region.Print(HandleTimeout(now, true))`. `settleWait`, the
+     editor's `resized` and `settleAt`, and the empty-reprint branch are gone;
+   * the view's `resized` calls `Resize` and arms a timer at `Timeout()`; `tryReprint`, also run after each update,
+     writes `HandleTimeout(now, idle)` as it is, `idle` being a line's start with the Printer and the thinking wrapper
+     idle. `reprintSettle` is gone;
+   * a reprint still due when the turn ends goes to the editor by `afterTurn`, as before.
+6. **The notice** (step 6): `personality.TranscriptEarlierOutput`, `transcript.earlier-output`, boring's text "(earlier
+   output is not shown again)", left to boring by dry, snarky and bombastic (`builtins_test.go`'s `notSpoken`). The
+   catalog gives the session's voice for `MsgEarlierOutput`; the line session sets it to `ls.spoken`. The notice is
+   unstyled, the library's default.
+7. **Removed** (step 7): gobble's `render`, `grow`'s bound and `reprintText`; `piece`; the view's `keep` and `replyAt`.
+8. **Tests** (step 8), each change named:
+   * `transcript_test.go`: `TestTranscriptRendersAtAWidth` stays, its expected text unchanged, read through the
+     library's reprint by `reprintAt` and `reprinted` (the preamble and `?2026l` stripped, CR LF read as LF).
+     `TestTranscriptRenderKeepsTheNewestRows`, `TestTranscriptRenderDrawsOnlyWhatItShows` and `TestTranscriptBound`
+     went: they tested what the library's `Transcript` does now, under its own tests. New: `TestTranscriptNoticeInTheVoice`
+     and `TestReplyPrinterUnderTheLock`;
+   * `reprint_test.go`: transcripts are made by `newTranscript(100)`, `reprintText(…)` reads become
+     `reprinted(reprintAt(…))`, and `TestLateReprintGoesToTheEditor` resizes to 80 where its "resize" kept 100, since
+     the library starts no settle for a width it already has. Its assertion is unchanged;
+   * `editor/resize_test.go`: `startReprint` gives the editor a go-tui-lib `Transcript` holding one drawn piece,
+     counted by `countedReprints`; the assertions of `TestReprintOnSettle` and `TestResizesReprintOnce` are unchanged.
+     New: `TestReprintFramesKeepThePrompt`, the MADR's Confirmation of 5b, which replays the editor's bytes after a
+     resize and finds `> hello world` at the end of every `?2026l` frame;
+   * `budget_test.go`: 1,000 rows are counted as terminal rows (`terminalRows`), the MADR's listed difference, where
+     the line feeds were counted: 1,000 terminal rows are 813 lines of the benchmark reply at 60 columns. With the
+     notice before them. The budget is **6,300 again** (deviation 21): 4,473 allocations, and 5,052 under race;
+   * `bench_test.go`: `BenchmarkReprint` reprints a 4 MiB transcript of kept replies (`keepReplies`).
+9. **Seen failing** (step 9, C9), each on a scratch copy:
+
+   | Break | The failure |
+   | :--- | :--- |
+   | the editor writes `region.Clear() + out + region.Draw(…)` | `TestReprintFramesKeepThePrompt`: `frame 2 of 4 ends without the prompt: ["old output" "" …]` |
+   | `onPrinter` without the transcript's lock | `make race`'s `TestReplyPrinterUnderTheLock`: `WARNING: DATA RACE`, twice |
+   | the catalog leaves the notice to the library's English | `TestTranscriptNoticeInTheVoice`: `the voice's notice: "(earlier output is not shown again)\ntwo\nthree\n"` |
+10. **Goldens** (step 10): none changed.
+11. **Assert by search** (step 11): no `reprintText`, `reprintSettle`, `settleWait`, `maxReprintRows` or `maxTranscript`
+    remains (`grep` exits 1).
+12. **Benchmarks** (step 12): Reprint on the Mac 5.53 ms and 43,557 allocations (baseline 9.4 ms; 49,696 allocations
+    before P18a, 60,091 at P18a), beside go-tui-lib's 5.2 ms and 43,541 on an M1 Pro; the Linux machine 16.89 ms and
+    the Windows laptop 5.10 ms, against 29 ms and 12 ms.
+13. **Docs** (step 13): `docs/architecture.md`'s `internal/cli` note says the transcript and its settle are go-tui-lib's,
+    behind a locked wrapper. 0032-PLAN is `complete`, with a record of P3 onward, and its two `docs/README.md` entries
+    say so.
+14. **G-local:** `make pre-add-check` on the 13 changed Go files: clean; `make preflight`: passed; `go test ./...` and
+    `make race`: 38 ok; `make perf` at load 20: ReplyRender 24.32 µs, Reprint 5.53 ms, LineSessionStart 951.0 µs,
+    KeyDraw 1.498 µs, every one within budget.
+15. **G-hosts,** 807 files shipped to each: `go test` and race passed on both, 38 ok; `make check-records markdownlint`
+    passed on both; preflight stops at `verify-build-metadata`, as on every copy; `make perf` passed on both (the Linux
+    machine ReplyRender 99.12 µs, Reprint 16.89 ms, LineSessionStart 3.29 ms, KeyDraw 4.515 µs; the Windows laptop
+    37.22 µs, 5.10 ms, 6.13 ms, 1.259 µs); the conhost probe on the Windows laptop: passed.

@@ -32,8 +32,12 @@ var spinnerKeys = []Key{TurnWorking, TurnSlow, TurnVerySlow}
 
 // leftBoring are the keys a built-in personality leaves to boring on
 // purpose, by personality (0022-MADR D17): trust's, whose facts a person
-// acts on to let a project's files load (0005-PLAN F6-1).
-var leftBoring = map[string][]Key{Dry: factKeys, Snarky: factKeys, Bombastic: factKeys}
+// acts on to let a project's files load (0005-PLAN F6-1), and a reprint's
+// notice, which only says what the screen leaves out (0035-PLAN P18b).
+var leftBoring = map[string][]Key{Dry: notSpoken, Snarky: notSpoken, Bombastic: notSpoken}
+
+// notSpoken are the keys every built-in personality leaves to boring.
+var notSpoken = append(slices.Clip(factKeys), TranscriptEarlierOutput)
 
 // factKeys are /trust's and /permissions' replies, whose facts a person
 // acts on (0005-PLAN F6-1, F6-2b decision H), and the permission prompt's

@@ -119,7 +119,7 @@ func (c *ChatCmd) Run(k *kong.Context, e *runEnv) error {
 // (0030-MADR D4, as amended). The session takes it over.
 func keepShown(o *Output, mode Mode) {
 	if mode == ModeLine && o.caps.Out.TTY && o.rec == nil {
-		o.rec = &transcript{}
+		o.rec = newTranscript(o.caps.Out.Width)
 	}
 }
 

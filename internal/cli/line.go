@@ -114,9 +114,10 @@ func (ls *lineSession) run(first Prompt) error {
 	}
 	if ls.resize != nil { // on a terminal: keep what is shown, and route resizes (0030-MADR D3, D4, D6)
 		if e.out.rec == nil { // the chat command keeps it from its start (D4, as amended)
-			e.out.rec = &transcript{}
+			e.out.rec = newTranscript(ls.width())
 		}
 		ls.tr = e.out.rec
+		ls.tr.setVoice(ls.spoken)
 		defer func() { e.out.rec = nil }()
 		ls.editorResize = make(chan struct{}, 1)
 		ctx, cancel := context.WithCancel(e.ctx)
@@ -184,7 +185,7 @@ func (ls *lineSession) run(first Prompt) error {
 		Header: func() string { return workspaceLine(ls.cwd) }, Width: ls.width, Height: ls.height, Resize: ls.editorResize}
 	if ls.tr != nil {
 		opts.Shown = ls.tr.drawn
-		opts.Reprint = func(width int) string { return reprintText(ls.tr, width, e.out.caps.Out.Color) }
+		opts.Reprint = ls.tr
 	}
 	if !e.out.caps.Unicode {
 		opts.Continue = "... "
@@ -446,8 +447,9 @@ func (ls *lineSession) close() {
 }
 
 // route takes the terminal's resize notices until ctx is done: to the view
-// while a turn runs, which reprints at the reply's next line end, else to
-// the editor, which redraws its line and reprints (0030-MADR D2, D3).
+// while a turn runs, which reprints at the reply's next paragraph end, else
+// to the editor, which redraws its line and reprints (0030-MADR D2, D3, as
+// amended).
 func (ls *lineSession) route(ctx context.Context) {
 	for {
 		select {
