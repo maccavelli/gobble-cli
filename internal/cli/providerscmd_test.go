@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -83,6 +84,27 @@ func TestProvidersCheckAndJSON(t *testing.T) {
 	}
 	if rows[2].ID != "claude" || rows[2].State != "key rejected" || rows[2].Reason != "(HTTP 401) — gobble auth login claude" || rows[1].Credential != "env: OPENAI_API_KEY" {
 		t.Fatalf("--json rows %+v", rows[:3])
+	}
+}
+
+// --json prints its strings as they are, not HTML-escaped: here a credential
+// that quotes an auth.json entry's type, a<b&c> (0039-MADR D17, 0039-PLAN
+// deviation 13).
+func TestProvidersJSON(t *testing.T) {
+	home := t.TempDir()
+	t.Chdir(t.TempDir())
+	writeFile(t, filepath.Join(home, "auth.json"), `{"openai": {"type": "a<b&c>"}}`+"\n")
+	r := runIn(t, home, "providers", "--json")
+	want := `
+  {
+    "id": "openai",
+    "name": "OpenAI",
+    "credential": "auth.json, a \"a<b&c>\" entry gobble does not use",
+    "signIn": "API key"
+  },
+`
+	if r.code != 0 || !strings.Contains(r.stdout, want) {
+		t.Fatalf("exit %d, stderr %q; --json:\n%s\nwant the row:%s", r.code, r.stderr, r.stdout, want)
 	}
 }
 

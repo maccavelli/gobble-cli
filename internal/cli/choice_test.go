@@ -239,6 +239,52 @@ func TestLastGoodOnDisk(t *testing.T) {
 	settled(t, e) // claude's listing ends before the home is removed
 }
 
+// recent-models.json as v1 wrote it, its \u escapes and a nil slice's null
+// included, loads as before, with no warning (0039-MADR D17).
+func TestRecentModelsV1File(t *testing.T) {
+	for name, want := range map[string][]string{
+		"recent-models-v1.json":      {"openai/gpt-a", "claude/c<1>&2"},
+		"recent-models-v1-null.json": nil,
+	} {
+		t.Run(name, func(t *testing.T) {
+			b, err := os.ReadFile(filepath.Join("testdata", name))
+			if err != nil {
+				t.Fatal(err)
+			}
+			e, _ := modelEnv(t)
+			path, err := stateFile(recentFileName)
+			if err != nil {
+				t.Fatal(err)
+			}
+			writeFile(t, path, string(b))
+			got := e.recentModels()
+			if warned := e.out.err.(*bytes.Buffer).String(); !slices.Equal(got, want) || warned != "" {
+				t.Fatalf("recent %q, warnings %q; want %q and none", got, warned, want)
+			}
+		})
+	}
+}
+
+// A kept listing as v1 wrote it, its usable ids null, loads as before
+// (0039-MADR D17).
+func TestKeptListingV1File(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("testdata", "catalog-v1.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	modelEnv(t)
+	path, err := catalogFile("claude")
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, path, string(b))
+	at := time.Date(2026, 10, 31, 9, 30, 0, 123456789, time.FixedZone("", -4*60*60))
+	k := readKept("claude", at.Add(time.Hour))
+	if !slices.Equal(k.models, []string{"c1", "c2"}) || k.usable != nil || !k.at.Equal(at) {
+		t.Fatalf("kept %q, usable %q, at %s; want [c1 c2], none, at %s", k.models, k.usable, k.at, at)
+	}
+}
+
 // The agent remembers what /model and the option choose, and searches with
 // the SDK's matcher; --model's choice is remembered too (0025-MADR D3, D5).
 func TestChoiceWiring(t *testing.T) {

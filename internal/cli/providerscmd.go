@@ -1,13 +1,14 @@
 package cli
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
 	"fmt"
 	"regexp"
 	"strings"
 	"time"
 	"unicode/utf8"
 
+	"github.com/maccavelli/gobble-cli/jsonx"
 	"github.com/maccavelli/gobble-cli/llm/provider"
 )
 
@@ -48,7 +49,7 @@ func (c *ProvidersCmd) Run(e *runEnv) error {
 		}
 	}
 	if c.JSON {
-		b, err := json.MarshalIndent(rows, "", "  ")
+		b, err := jsonx.Marshal(rows, jsontext.WithIndent("  "))
 		if err != nil {
 			return err
 		}

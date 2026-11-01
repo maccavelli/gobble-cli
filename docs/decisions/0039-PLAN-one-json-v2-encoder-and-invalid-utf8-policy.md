@@ -431,7 +431,8 @@ Files: `internal/cli/choice.go`, `internal/cli/choice_test.go`, `internal/cli/pr
    * `TestRecentModelsV1File` and `TestKeptListingV1File`: fixtures exactly as v1 wrote them, `null` slices included,
      load as before;
    * `TestProvidersJSON`: pins `gobble providers --json` for a row whose reason holds `<` and `&`, unescaped, the change
-     the MADR's Consequences name.
+     the MADR's Consequences name. *(Deviation 13: no input reaches the reason. The row's credential holds them,
+     from an `auth.json` entry of an unknown type.)*
 
    Seen failing: the fixture tests, with the files' `null` read into a type that refuses it; `TestProvidersJSON`, with
    `jsontext.EscapeForHTML(true)` planted.
@@ -1194,4 +1195,87 @@ The base is P4's `5a20d06`. Deviations 11 and 12 added `acpclient/conn_test.go`,
      (baseline 29 ms), LineSessionStart 3.14 ms (baseline 2.9 ms), KeyDraw 4.473 µs (baseline 5 µs). The Windows
      laptop: ReplyRender 29.03 µs (baseline 54 µs), Reprint 7.26 ms (baseline 12 ms), LineSessionStart 4.57 ms
      (baseline 6.9 ms), KeyDraw 1.212 µs (baseline 1.4 µs);
+   * the conhost probe on the Windows laptop: passed.
+
+### Deviation 13 (2026-11-01): P6, `TestProvidersJSON` pins the credential, not the reason
+
+* **Found** reading P6's files.
+  * A row's reason is `acpserver.StateOf`'s (`acpserver/choice.go:71-95`): fixed words joined with the provider's id
+    and an HTTP status. No input puts `<` or `&` in it, so step 3's test cannot be written as stated.
+  * A row's credential can hold them. `credentialSource` (`internal/cli/auth.go:360`) quotes an `auth.json` entry's
+    type when gobble does not use it. A scratch build of P5's tree, given an `auth.json` entry of type `a<b&c>`, printed
+    that row's credential with `\u003c`, `\u0026` and `\u003e`. That is the behaviour before P6.
+* **The owner's answer:** "Pin the credential (Recommended)". The option not taken was an encoding function split out
+  of `providerscmd.go` for a unit test, a seam for the test alone that leaves the command unpinned.
+* **Decision.** `TestProvidersJSON` writes an `auth.json` entry of type `a<b&c>` and pins that row's credential,
+  unescaped. Step 3 is annotated. The MADR is unchanged: D17 and its Consequences speak of the strings, not the reason.
+* **Files added:** none.
+
+### Deviation 14 (2026-11-01): P6, a Windows teardown failure in `TestLoginAsksThroughQuestions`
+
+* **Found** in P6's G-hosts. On the Windows laptop, `go test -count=1 ./...` failed once:
+  `--- FAIL: TestLoginAsksThroughQuestions (0.21s)` with `testing.go:1619: TempDir RemoveAll cleanup: unlinkat
+  <TMP>\TestLoginAsksThroughQuestions<n>\002: The directory is not empty.` The `002` directory is the test's
+  `GOBBLE_HOME` (`newModelHarness`, `internal/cli/line_test.go:88`). Something wrote into it after the test ended. The
+  race run on the same host, which runs the same test, passed.
+* **Not reproduced,** on the Windows laptop: `-run '^TestLoginAsksThroughQuestions$' -count=30` gave 0 failures, and
+  `go test -count=5 ./internal/cli/` gave 0, each on P6's copy and on P5's commit `cfa514f`.
+* **Not P6's code.** The test lists offline, so `writeKept` is never reached. `readKept` finds no kept file and returns
+  before it decodes. The late writer is not identified. One unverified candidate is a model listing the harness does not
+  wait for, logging after `logs.close`.
+* **The owner's answer:** "Record as pre-existing, rerun (Recommended)". The options not taken were diagnosing and fixing
+  the harness inside 0039, and holding P6 for a record of its own.
+* **Decision.** The failure is recorded as pre-existing and out of this plan's scope. Windows' `go test -count=1 ./...`
+  was rerun on P6's copy: 37 ok. The flake waits for a record of its own; no assertion or test was changed.
+* **Files added:** none.
+
+### P6 record (2026-11-01): the local files and the providers output
+
+The base is P5's `cfa514f`. Deviation 13 changed which field `TestProvidersJSON` pins; deviation 14 recorded a Windows
+teardown failure outside P6. Neither added a file.
+
+1. **`internal/cli/choice.go`** (step 1):
+   * `loadRecent` and `readKept` decode with `jsonx.UnmarshalStrict`;
+   * `rememberModel` encodes with `jsonx.MarshalStrict(…, jsontext.WithIndent("  "))`;
+   * `writeKept` encodes with `jsonx.MarshalStrict`;
+   * the v1 import is gone.
+
+   A scratch program compared the writes, P5's v1 against P6's options, for the same values. `recent-models.json`,
+   indented, was byte-identical, and so was a kept listing with usable ids. A kept listing whose usable ids are nil
+   writes `"usable":[]` where v1 wrote `"usable":null`, as D17 says.
+2. **`internal/cli/providerscmd.go`** (step 2) encodes with `jsonx.Marshal(rows, jsontext.WithIndent("  "))`. The v1
+   import is gone.
+3. **Tests** (step 3, Confirmation 10, deviation 13). The three fixtures, `internal/cli/testdata/recent-models-v1.json`,
+   `recent-models-v1-null.json` and `catalog-v1.json`, were written by a scratch program with v1's `json.MarshalIndent`
+   and `json.Marshal`, on `choice.go`'s types as P5 had them, and copied unchanged:
+   * `recent-models-v1.json` holds two models, one with v1's `\u003c`, `\u003e` and `\u0026`;
+   * `recent-models-v1-null.json` is `{"recent": null}`, as v1 wrote a nil slice;
+   * `catalog-v1.json` is a kept listing with `"usable":null`, and a `fetchedAt` with nanoseconds and a −04:00 offset.
+
+   | Test | Break | The failure |
+   | :--- | :--- | :--- |
+   | `TestRecentModelsV1File` | `Recent` retyped to a planted `refuseNull`, a `[]string` whose `UnmarshalJSONFrom` refuses `null` | `recent-models-v1-null.json`: `recent [], warnings "Warning: recent-models.json: json: cannot unmarshal into Go cli.refuseNull within \"/recent\": null refused; the recent models are not read\n"; want [] and none` |
+   | `TestKeptListingV1File` | `Usable` retyped the same way | `kept [], usable [], at 0001-01-01 00:00:00 +0000 UTC; want [c1 c2], none, at 2026-10-31 09:30:00.123456789 -0400 -0400` |
+   | `TestProvidersJSON` | `jsontext.EscapeForHTML(true)` planted in `providerscmd.go`'s encode | the row printed `"credential": "auth.json, a \"a\u003cb\u0026c\u003e\" entry gobble does not use"`, where the test wants `a<b&c>` |
+
+   * The `refuseNull` break is needed because v2, like v1, decodes `null` into a slice, an array, a `time.Time` or a
+     struct as its zero value. A scratch probe showed none of them refuses it.
+   * `recent-models-v1.json`, which holds no `null`, passed under that break, as expected.
+4. **G-local:**
+   * `make pre-add-check` on the 4 changed Go files: clean;
+   * `make preflight`: passed;
+   * `go test ./...`: 37 ok; `make race`: 37 ok;
+   * `make perf`: passed, with ReplyRender 34.04 µs (baseline 30 µs), Reprint 10.13 ms (baseline 9.4 ms),
+     LineSessionStart 1.158 ms (baseline 830 µs), and KeyDraw 1.485 µs (baseline 1.5 µs). The machine's load average was
+     about 25. LineSessionStart made 5,011 allocations, against 5,009 at P5 and 5,011 at P2.
+5. **G-hosts,** on the Linux machine and the Windows laptop, with 817 files shipped to each:
+   * `go test`: passed on the Linux machine. On the Windows laptop it failed once, in `TestLoginAsksThroughQuestions`'s
+     teardown (deviation 14), and passed on its rerun, 37 ok;
+   * race: passed on both, 37 ok;
+   * `make check-records markdownlint`: passed on both;
+   * preflight stops at `verify-build-metadata`, as on every copy;
+   * `make perf`: passed on both. The Linux machine: ReplyRender 152.24 µs (baseline 110 µs), Reprint 30.38 ms
+     (baseline 29 ms), LineSessionStart 3.39 ms (baseline 2.9 ms), KeyDraw 5.547 µs (baseline 5 µs). The Windows
+     laptop: ReplyRender 27.75 µs (baseline 54 µs), Reprint 7.25 ms (baseline 12 ms), LineSessionStart 3.73 ms
+     (baseline 6.9 ms), KeyDraw 1.199 µs (baseline 1.4 µs);
    * the conhost probe on the Windows laptop: passed.

@@ -1,7 +1,7 @@
 package cli
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
 	"errors"
 	"fmt"
 	"os"
@@ -12,6 +12,7 @@ import (
 
 	"github.com/maccavelli/gobble-cli/acpserver"
 	"github.com/maccavelli/gobble-cli/internal/appdirs"
+	"github.com/maccavelli/gobble-cli/jsonx"
 	"github.com/maccavelli/gobble-cli/llm/provider"
 )
 
@@ -125,7 +126,7 @@ func (e *runEnv) loadRecent() []string {
 	}
 	var f recentFile
 	if err == nil {
-		err = json.Unmarshal(b, &f)
+		err = jsonx.UnmarshalStrict(b, &f)
 	}
 	if err != nil {
 		e.out.Warnf("%s: %v; the recent models are not read", recentFileName, err)
@@ -149,7 +150,7 @@ func (e *runEnv) rememberModel(ref string) {
 	path, err := stateFile(recentFileName)
 	if err == nil {
 		var b []byte
-		if b, err = json.MarshalIndent(recentFile{Recent: recent}, "", "  "); err == nil {
+		if b, err = jsonx.MarshalStrict(recentFile{Recent: recent}, jsontext.WithIndent("  ")); err == nil {
 			err = writePrivate(path, append(b, '\n'))
 		}
 	}
@@ -208,7 +209,7 @@ func readKept(id string, now time.Time) kept {
 		return kept{}
 	}
 	var k keptListing
-	if json.Unmarshal(b, &k) != nil || k.FetchedAt.IsZero() || now.Sub(k.FetchedAt) > lastGoodLimit {
+	if jsonx.UnmarshalStrict(b, &k) != nil || k.FetchedAt.IsZero() || now.Sub(k.FetchedAt) > lastGoodLimit {
 		return kept{}
 	}
 	return kept{models: k.Models, usable: k.Usable, at: k.FetchedAt}
@@ -221,7 +222,7 @@ func writeKept(id string, r provider.Listing) {
 	if err != nil {
 		return
 	}
-	b, err := json.Marshal(keptListing{Models: r.Models, Usable: r.Usable, FetchedAt: r.FetchedAt})
+	b, err := jsonx.MarshalStrict(keptListing{Models: r.Models, Usable: r.Usable, FetchedAt: r.FetchedAt})
 	if err != nil {
 		return
 	}
