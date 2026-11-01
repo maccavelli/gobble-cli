@@ -396,6 +396,53 @@ policy. And one record keeps the order, and the cross-library facts (check-libs,
     - *`python3 scripts/check_libs.py --lib go-tui-lib --tag v2.7.1` passed all 14 checks, `archtest` and `api` among
       them.*
   - *The pin is its own phase, before D14 step 5's code.*
+
+  *Amended 2026-11-01, by the PLAN's deviation 14, from the owner's request "we need to update the pins, ensure go-selfupdate-lib, go-tui-lib, acp-go-sdk2, and go-llmprovider-sdk are all pinned to current releases." Each tag is the newest of its
+  major by `git ls-remote --tags` that day, and, where the library publishes releases, its GitHub release marked
+  Latest:*
+  - ***acp-go-sdk2 `v1.31.1`** (`151b6e8b58d8310ecd4df527c07d2df2f56668a9`, 2026-11-01), in place of `v1.28.0`. The ACP
+    schema is still `1.25.0`, and each release's `make api` reports compatible additions only, or none:*
+    - *`v1.29.0` adds `acp.OverflowBlock` and makes it the default: a full notification queue pauses reading, where it
+      closed the connection. `acpclient` names `OverflowDropNewest` (`acpclient/conn.go:133`), so the client is
+      unchanged. `acpserver.Serve` names no policy, so the agent's default moves from closing to pausing. A client sends
+      the agent only `session/cancel` among notifications, and `Agent.Cancel` waits for nothing the client sends later
+      (gobble-cli#8's reading), so no handler meets the policy's rule. Adopting `OverflowBlock` in `acpclient`, and
+      retiring the drop warning, stays gobble-cli#8's;*
+    - *`v1.30.0` bounds what a connection holds of its peer at 64 MiB by default (`WithMaxQueuedBytes`), and answers a
+      request past it with `-32603`. gobble's messages are bounded at the SDK's 10 MiB, and a budget below that is
+      raised to it. `RequestId` now refuses a JSON object, which gobble never sends;*
+    - *`v1.31.0` adds sending and receiving middleware and `RequestIDFromContext`, which gobble does not use;*
+    - *`v1.31.1` changes no exported name and no behaviour: it documents when `v1.31.0`'s observer runs and pins it
+      with a test, and changes the library's own pre-add check.*
+  - ***go-llmprovider-sdk `v1.25.0`** (`4b511a5c402eb157b971b45dd33964597a8dae7f`, 2026-10-31), in place of `v1.24.1`:*
+    - *it adds `catalog.Lister`, `wizard.Options.LocalServers` and `llmprovider.NewHTTPClient`, none of which gobble
+      uses;*
+    - *the wizard, which gobble's sign-in runs through `wizard.ResolveCredential` (`llm/provider`'s `SignIn`), changes:
+      a Chat Completions server that wants a key is asked for one, up to three times; a saved session the listing then
+      refuses no longer ends the run, but shows a notice and the sign-in menu once. gobble imports no `chatcompat`
+      itself; which of its providers the SDK builds on it was not read, so P25's sign-in tests are where either change
+      would show.*
+  - ***go-tui-lib/v2 `v2.9.0`** (`16349ecdc7dd1bb630162b4d1d8853cea5874b84`, 2026-11-01), in place of `v2.7.0`, and of
+    `v2.7.1`, which deviation 13 named and P23 had not yet pinned:*
+    - *`v2.7.1`'s change is as deviation 13 recorded;*
+    - *`v2.8.0`: `safetext` removes an OSC 8 link longer than 2,048 bytes; gobble's terminal paths clean through
+      `safetext.Text()` and `safetext.Line()` (`internal/cli/term/sanitize.go`). It also adds opt-outs and message
+      catalogues to packages gobble does not import, and view facts to `termcap`;*
+    - *`v2.9.0`: `inline.Region.Print` drops any mode 2026 sequence in its text, so the region's `WithSynchronized`
+      alone decides, and adds no line end after a text that ends with `CSI H`. gobble's editor writes its reprint
+      through `region.Print("\x1b[2J\x1b[3J\x1b[H" + text)` (`internal/cli/editor/editor.go:319`). gobble adds no
+      mode 2026 sequence to that text (`reprintText`, `internal/cli/line.go:187`), and an empty reprint is written with
+      `region.Clear()`, not `Print` (`editor.go:313-316`), so the `CSI H` rule is not reached there. `transcript` gains
+      `Reprint(idle)`;*
+    - *`v2.9.0` closes [go-tui-lib#14](https://github.com/maccavelli/go-tui-lib/issues/14), whose item 1 the proposed
+      D14 step 5b waits for. That amendment is still the owner's to review.*
+  - *go-selfupdate-lib `v1.23.1` is still the newest, by `git ls-remote --tags`; it publishes no GitHub releases.*
+  - *`python3 scripts/check_libs.py --lib <library>`, each at its newest tag: acp-go-sdk2 13 checks (at `v1.31.1`, run
+    again after the owner's note "acp-go-sdk2 has bumped to v1.31.1. ensure that all proposed pin updates still reflect current tag versions.") and go-llmprovider-sdk 13, each 0 failing; go-tui-lib 14, `archtest` among them, 0 failing; `staticcheck`, `lint` and `api` among each.
+    go-selfupdate-lib, checked at its pinned tag, failed one of 13: `test`, in `TestLastGoodOnDisk`'s cleanup,
+    `TempDir RemoveAll cleanup: … directory not empty`. That is the teardown failure
+    `0039-PLAN-one-json-v2-encoder-and-invalid-utf8-policy.md`'s deviations 14 and 18 recorded in another test, and
+    nothing of go-selfupdate-lib's changed.*
 - **D2. `check-libs` sees what preflight sees.**
   - `scripts/check_libs.py` runs `make staticcheck` and `make lint` on its scratch module for each library, so that F2
     would have been reported.

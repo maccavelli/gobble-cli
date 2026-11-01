@@ -1,6 +1,6 @@
 ---
 status: in-progress
-date: 2026-10-31
+date: 2026-11-01
 associated-madr: "0035-MADR-pin-current-sibling-releases-and-remove-gobble-copies.md"
 ---
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
@@ -1080,6 +1080,8 @@ No check is added, so C9 has nothing to break.
 
 ### P23 — go-tui-lib/v2 `v2.7.1` (MADR D1, amended 2026-10-31; deviation 13)
 
+*Superseded by P26, by deviation 14: `v2.9.0` is pinned in its place, and P23 is not run.*
+
 Files: `go.mod`, `go.sum`, `README.md`, `docs/architecture.md`.
 
 1. **Checked first:** `python3 scripts/check_libs.py --lib go-tui-lib --tag v2.7.1` reports every check ok, `archtest`
@@ -1091,6 +1093,58 @@ Files: `go.mod`, `go.sum`, `README.md`, `docs/architecture.md`.
    blank cells where it trimmed trailing spaces. `internal/cli/editor`'s tests, which read that screen, pass unchanged.
    A test whose expectation changes is a deviation, since the MADR's D1 amendment says nothing gobble sees changes.
 4. **The docs:** `README.md:137` and `docs/architecture.md:160` name `v2.7.1`.
+5. G-local with `make perf`, and G-hosts with `make perf` and `make probe-conhost`. **Commit.**
+
+No check is added, so C9 has nothing to break.
+
+### P24 — acp-go-sdk2 `v1.31.1` (MADR D1, amended 2026-11-01; deviation 14)
+
+Files: `go.mod`, `go.sum`, `README.md`, `docs/architecture.md`.
+
+1. **Checked first:** `python3 scripts/check_libs.py --lib acp-go-sdk2 --tag v1.31.1` reports every check ok. On
+   2026-11-01 it did: 13 checks, 0 failing.
+2. **The pin:** `go get github.com/maccavelli/acp-go-sdk2@v1.31.1`, then `go mod tidy`.
+   * `go.mod` changes on that line alone.
+   * `go.sum` changes in acp-go-sdk2's lines alone.
+3. **No source change.** `acpclient`, `acpserver` and `internal/cli` build and pass their tests unchanged:
+   * `TestDropReported` still passes, since `acpclient` names `OverflowDropNewest`;
+   * `acpserver/testdata/session.golden` and the `stream-json` goldens are unchanged.
+
+   A failing test is a deviation: the MADR's amendment says nothing gobble sees changes but the agent's default policy.
+4. **The docs:** `README.md:129` and `docs/architecture.md:164` name `v1.31.1`.
+5. G-local, and G-hosts. **Commit.**
+
+No check is added, so C9 has nothing to break.
+
+### P25 — go-llmprovider-sdk `v1.25.0` (MADR D1, amended 2026-11-01; deviation 14)
+
+Files: `go.mod`, `go.sum`, `README.md`, `docs/architecture.md`.
+
+1. **Checked first:** `python3 scripts/check_libs.py --lib go-llmprovider-sdk --tag v1.25.0` reports every check ok. On
+   2026-11-01 it did: 13 checks, 0 failing.
+2. **The pin:** `go get github.com/maccavelli/go-llmprovider-sdk@v1.25.0`, then `go mod tidy`.
+   * `go.mod` changes on that line alone.
+   * `go.sum` changes in go-llmprovider-sdk's lines alone.
+3. **No source change.** `llm/provider`, `internal/cli` and `acpserver` pass their tests unchanged, the sign-in tests
+   among them.
+4. **The docs:** `README.md:131` and `docs/architecture.md:166` name `v1.25.0`.
+5. G-local, and G-hosts. **Commit.**
+
+No check is added, so C9 has nothing to break.
+
+### P26 — go-tui-lib/v2 `v2.9.0` (MADR D1, amended 2026-11-01; deviation 14; in place of P23)
+
+Files: `go.mod`, `go.sum`, `README.md`, `docs/architecture.md`.
+
+1. **Checked first:** `python3 scripts/check_libs.py --lib go-tui-lib --tag v2.9.0` reports every check ok, `archtest`
+   among them. On 2026-11-01 it did: 14 checks, 0 failing.
+2. **The pin:** `go get github.com/maccavelli/go-tui-lib/v2@v2.9.0`, then `go mod tidy`.
+   * `go.mod` changes on that line alone.
+   * `go.sum` changes in go-tui-lib's lines alone.
+3. **No source change.** `internal/cli` and `internal/cli/editor` pass their tests unchanged: the permission prompt's,
+   `glyph`'s and `safetext`'s, the editor's reprint and resize tests, and `view-plain.golden`. A test whose
+   expectation changes is a deviation.
+4. **The docs:** `README.md:137` and `docs/architecture.md:168` name `v2.9.0`.
 5. G-local with `make perf`, and G-hosts with `make perf` and `make probe-conhost`. **Commit.**
 
 No check is added, so C9 has nothing to break.
@@ -2443,3 +2497,37 @@ No deviation of its own. The base correction in item 1 changes no decision.
     Whether 0037-PLAN resumes while P18b waits is the amendment's proposed order, decided with it.
 - **Files added to scope:** P23's `go.mod`, `go.sum`, `README.md` and `docs/architecture.md`. P18's files wait for its
   steps.
+
+### Deviation 14 (2026-11-01): every pin to its current release
+
+- **Found,** on the owner's request "we need to update the pins, ensure go-selfupdate-lib, go-tui-lib, acp-go-sdk2, and go-llmprovider-sdk are all pinned to current releases." (`main` at `dcbb9b0`). `git ls-remote --tags` and the libraries'
+  GitHub releases list three newer tags:
+  - acp-go-sdk2 `v1.31.0`, its release marked Latest, against the pin `v1.28.0`. Later that day the owner noted
+    "acp-go-sdk2 has bumped to v1.31.1. ensure that all proposed pin updates still reflect current tag versions." Every proposed tag was listed again: `v1.31.1` (`151b6e8`) is
+    acp-go-sdk2's newest and Latest, and the other three tags are unchanged. `check_libs.py` at `v1.31.1`: 13 checks,
+    0 failing. It changes no exported name or behaviour against `v1.31.0`;
+  - go-llmprovider-sdk `v1.25.0`, its release marked Latest, against `v1.24.1`;
+  - go-tui-lib/v2 `v2.9.0`, against `v2.7.0`, and past P23's `v2.7.1`, which was never pinned.
+
+  go-selfupdate-lib's `v1.23.1` is still the newest.
+- **Measured,** each by `python3 scripts/check_libs.py --lib <library>` at its newest tag, on scratch clones:
+  acp-go-sdk2 13 checks, go-llmprovider-sdk 13 and go-tui-lib 14, each 0 failing. go-selfupdate-lib, at its pinned
+  tag, failed `test` once, in `TestLastGoodOnDisk`'s teardown (`TempDir RemoveAll cleanup: … directory not empty`).
+  That is the failure 0039-PLAN's deviations 14 and 18 recorded in `TestLoginAsksThroughQuestions`, now in a second
+  test. Both run model listings under a test's `GOBBLE_HOME`; the late writer is still not identified. It waits for its
+  own record, as they decided.
+- **What reaches gobble,** read from the release notes, the tags' commits and gobble's call sites; the MADR's D1
+  amendment has it in full:
+  - acp-go-sdk2: the agent's default overflow policy moves from closing to pausing; the client names its own;
+  - go-llmprovider-sdk: the sign-in wizard's handling of a refused saved session;
+  - go-tui-lib: `Region.Print`'s handling of mode 2026 and of a trailing `CSI H`, under the editor's reprint, and
+    `safetext`'s OSC 8 bound.
+- **Also found:** go-tui-lib#14 is closed, released in `v2.9.0` with `Transcript.Reprint`. The MADR's proposed D14 step
+  5b waited for it. The amendment is still the owner's to review; P18a and P18b are not written until it is.
+- **Decision** (proposed with this deviation, for the owner's approval):
+  - MADR D1 has a dated amendment for the three tags;
+  - P24 (acp-go-sdk2 `v1.31.1`), P25 (go-llmprovider-sdk `v1.25.0`) and P26 (go-tui-lib/v2 `v2.9.0`) are new, each its
+    own commit, in that order;
+  - P23 is superseded by P26 and not run;
+  - adopting `OverflowBlock` in `acpclient` stays gobble-cli#8's, outside these phases.
+- **Files added to scope:** P24's, P25's and P26's `go.mod`, `go.sum`, `README.md` and `docs/architecture.md`.
