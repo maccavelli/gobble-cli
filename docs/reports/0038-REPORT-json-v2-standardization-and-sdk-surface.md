@@ -392,3 +392,12 @@ None of this blocks gobble.
   - `testing.Benchmark` of the two encoders.
 - **The official texts:** the package documentation is from `go doc` at go1.27.3. The release notes, the migration guide and
   ACP's page were read at the URLs above on 2026-10-31.
+
+## Note (2026-11-01): carried out
+
+[0039-PLAN-one-json-v2-encoder-and-invalid-utf8-policy.md](../decisions/0039-PLAN-one-json-v2-encoder-and-invalid-utf8-policy.md)
+carried out this report's recommended order (section 9), as
+[0039-MADR-one-json-v2-encoder-and-invalid-utf8-policy.md](../decisions/0039-MADR-one-json-v2-encoder-and-invalid-utf8-policy.md)
+decided it, with the crash fix first. The steps' commits: the renames `4f76649`; `ExtensionMux` and everything gobble
+defines `5a20d06`; `translate` `cfa514f`; the local files and the providers output `ec6298e`; the tests `fe671d6`;
+`archtest` `b0c884f`; the guards `b32942a`. The text above this note is as it was observed.

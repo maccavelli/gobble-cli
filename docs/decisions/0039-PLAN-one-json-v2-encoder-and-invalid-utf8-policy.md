@@ -1,6 +1,6 @@
 ---
-status: in-progress
-date: 2026-10-31
+status: complete
+date: 2026-11-01
 associated-madr: "0039-MADR-one-json-v2-encoder-and-invalid-utf8-policy.md"
 ---
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
@@ -1546,3 +1546,112 @@ login test's teardown failure, outside P9; deviation 19 added `internal/archtest
      laptop: ReplyRender 29.07 µs (baseline 54 µs), Reprint 7.33 ms (baseline 12 ms), LineSessionStart 4.33 ms
      (baseline 6.9 ms), KeyDraw 1.208 µs (baseline 1.4 µs);
    * the conhost probe on the Windows laptop: passed.
+
+### P10 record (2026-11-01): close-out
+
+The base is P9's `b32942a`. No deviation.
+
+1. **The count** (step 1), measured on `b32942a` by a scratch script over `go list -json ./...`, and by `grep`:
+   * 50 packages in the module; 0 import `encoding/json`, counting `Imports`, `TestImports` and `XTestImports`.
+     `grep -rlE '"encoding/json"$' --include=*.go .` exits 1;
+   * outside `jsonx`, three non-test files import `encoding/json/v2`, and only for options, with no encode or decode
+     call: `internal/cli/config.go` (`json.Options`, `json.Deterministic`), `internal/config/schema.go` and
+     `mcpclient/tool.go` (`json.Deterministic`);
+   * the only non-test calls to v2's `Marshal`, `MarshalWrite`, `MarshalEncode`, `Unmarshal`, `UnmarshalRead` and
+     `UnmarshalDecode` are `jsonx/jsonx.go`'s eight, which P9's `forbidigo` rule allows.
+2. **Issue comments** (step 2), for the owner to post. Posting is outward-facing, so it waits for the owner's word, and
+   the commits they name resolve on GitHub only once pushed. Neither issue is closed here.
+
+   gobble-cli#7:
+
+   ```text
+   gobble-cli#7 is carried out by 0039-MADR and its PLAN
+   (docs/decisions/0039-MADR-one-json-v2-encoder-and-invalid-utf8-policy.md, and the PLAN beside it).
+
+   - U1, the single-marshaler sweep: done. No package of the module imports encoding/json,
+     tests included (go list over its 50 packages). Commits: 4f76649 (RawMessage spelled
+     jsontext.Value), 5a20d06 (everything gobble defines on v2: _gobble/* notifications,
+     payloads, error data, _meta.gobble), cfa514f (session/update params, stream-json bytes
+     unchanged), ec6298e (recent-models.json, the kept listing, providers --json), fe671d6 (every
+     remaining site and test), b0c884f (archtest). The fixture acceptance: recent-models.json
+     and a kept listing as v1 wrote them, null included, load (TestRecentModelsV1File,
+     TestKeptListingV1File, ec6298e).
+   - U2, strict decoding at the ACP boundary: declined (0039-MADR D19). The SDK decodes ACP's
+     methods and its types keep unknown members; gobble's own _gobble/* params stay lenient, so
+     a newer client's field does not make an older agent answer -32602.
+   - U3, store hardening: moved to 0037 (0039-MADR D22).
+   - U4, SDK lockstep: met at acp-go-sdk2 v1.28.0, as 0039-MADR records; v1.29.0 is #8's.
+   - U5, the guard: done in b32942a. depguard denies encoding/json in every file, tests
+     included; forbidigo keeps v2's Marshal/Unmarshal family inside jsonx in non-test code.
+     Each was seen failing on a planted break. The open question: the allowlist is empty.
+
+   Also from this work: non-UTF-8 text no longer panics the agent, encode errors are no
+   longer discarded, and a cut-off tool call no longer fails the prompt (6b5af2c); the JSON
+   configuration files are decoded strictly, a repeated name refused, and
+   `gobble config validate` checks them (f38c1c5).
+   ```
+
+   gobble-cli#9:
+
+   ```text
+   gobble-cli#9 is carried out by 0039-MADR and its PLAN
+   (docs/decisions/0039-MADR-one-json-v2-encoder-and-invalid-utf8-policy.md, and the PLAN beside it).
+
+   - U0, the records: 153ef60.
+   - U1, jsonx: 6b5af2c, at the module root. From, Value (this issue's Marshal, returning
+     jsontext.Value), Quote, Splice, IsAbsent, IsNull, and the two policies (Marshal and
+     Unmarshal for data, MarshalStrict and UnmarshalStrict for configuration). 5a20d06 added
+     Strings, Member and SetMember; b32942a the stream functions MarshalEncode, UnmarshalDecode
+     and their Strict forms.
+   - U2, ad hoc constructors replaced: 6b5af2c (prompt's mustJSON gone; the agent's tool calls
+     through jsonx.From).
+   - U3, absent against null: b0c884f (TestRawNullAndAbsent on Entry.Replacement and
+     Message.ExitCode; TestEmptyRawValue).
+   - U4, the ACP seam: 6b5af2c (jsonRaw and rawInput replaced by jsonx.Splice) and 4f76649
+     (every RawMessage spelled jsontext.Value).
+   - U5, the docs: b0c884f (session/doc.go's table; docs/architecture.md's jsonx row).
+   - U6, the []byte guard: b32942a, internal/archtest rule 11; today only llm.Content.Data.
+   - F1: From, Value and Splice never give an empty non-nil value; pinned by TestFrom and
+     TestEmptyRawValue. F2: PreserveRawStrings is used nowhere; stream-json's update lines use
+     EscapeForHTML and EscapeForJS, and their bytes are unchanged (cfa514f). F3: session/doc.go
+     says to compare len and string(v), never String(). F4: 4f76649.
+   - Acceptance 1: jsonx's tests; the empty-value EOF was seen failing first (P1's record).
+     2: b0c884f. 3: every package's tests pass. 4: TestContentDataBase64 (b0c884f).
+     5: depguard (b32942a). 6: archtest rule 10 (b32942a); a planted jsonx -> session import
+     fails as an import cycle, since session imports jsonx, and a planted jsonx -> command
+     import fails rule 10 itself. 7: b0c884f.
+   - Open questions: From does not validate, and Splice does where an invalid value would break
+     the encoder; PreserveRawStrings nowhere; the package is jsonx at the module root.
+   ```
+3. **0038-REPORT** (step 3) gains a dated note: its recommended order was carried out by this plan, with the phases'
+   commits. The report's text above the note is unchanged.
+4. **The disclosure guard** (step 4), run as `AGENTS.md` gives it over the outgoing commits, `origin/main` `31e3c1c` to
+   `b32942a` (11 commits, `9b3bffe` to `b32942a`): exit 0, no output. This phase's own commit is outgoing too; the
+   pre-push hook runs the same guard over it. Nothing was pushed.
+5. **The Confirmation** (step 5). Each item, the phase that met it, and where its record is:
+
+   | Item | Phase | Commit | Evidence |
+   | :--- | :--- | :--- | :--- |
+   | 1 to 7, 13, 16 | P1 | `6b5af2c` | the P1 record's tests, each seen failing at the base |
+   | 8, 22 | P2 | `f38c1c5` | the P2 record |
+   | 9 | P5 | `cfa514f` | `TestPrintStreamJSONEscapes`, its golden equal to the base's v1 output |
+   | 10 | P6 | `ec6298e` | `TestRecentModelsV1File`, `TestKeptListingV1File` |
+   | 11 | P8 | `b0c884f` | `TestRawNullAndAbsent`, `TestEmptyRawValue`, `TestContentDataBase64` |
+   | 12 | P9 | `b32942a` | the twelve planted breaks |
+   | 14 | each, P7 in full | `fe671d6` | no golden changed in any phase; `make perf` in each phase that touched `internal/cli` (P7's by deviation 16) |
+   | 15 | P1, P4 | `6b5af2c`, `5a20d06` | `jsonx`'s tests, `FuzzQuote`, `FuzzStrings` |
+   | 17 | P1, P8 | `6b5af2c`, `b0c884f` | the replay, serialization, compaction, `_gobble/*` and personality tests, unchanged |
+   | 18 to 21 | P4 | `5a20d06` | `TestNotificationDecodedWithV2`, `TestNotifyFramesUnchanged`, `FuzzStrings`, `TestMetaMemberMistyped` |
+
+   Confirmation 4's second test was split in P1 into `TestWriterKeepsBuildError` and `TestSetBlocksBadJSON`, as the
+   P1 record says. Every test the Verification table names is in the tree.
+
+   The records commits are P0's `9b3bffe` (0035's records, by PQ1 (a)) and `153ef60` (this pair and 0038).
+6. **Left for other records,** named so they are not read as oversights:
+   * `TestLoginAsksThroughQuestions`'s teardown failure (deviations 14 and 18), pre-existing, about 1 in 30 to 60 runs
+     under `-race`, waits for a record of its own;
+   * #7's U3, store hardening, and the wire's 10 MiB bound are 0037's (MADR D22);
+   * acp-go-sdk2 `v1.29.0` and `OverflowBlock` are gobble-cli#8's;
+   * the agent's twenty `_gobble/*` methods through `acp.Handle`, and `bytes.Lines` in the store (MADR D22).
+7. **Status:** every Confirmation item is met, so this plan is `complete`. The MADR stays `accepted`; no fact it states
+   changed in P10.
