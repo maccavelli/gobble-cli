@@ -2531,3 +2531,22 @@ No deviation of its own. The base correction in item 1 changes no decision.
   - P23 is superseded by P26 and not run;
   - adopting `OverflowBlock` in `acpclient` stays gobble-cli#8's, outside these phases.
 - **Files added to scope:** P24's, P25's and P26's `go.mod`, `go.sum`, `README.md` and `docs/architecture.md`.
+
+### P24 record (2026-11-01): acp-go-sdk2 `v1.31.1`
+
+The base is `5149928`, the records commit of deviation 14. No deviation.
+
+1. **C2:** `git ls-remote --tags` at the phase's start lists `v1.31.1` as acp-go-sdk2's newest `v1` tag.
+2. **Checked first** (step 1): `python3 scripts/check_libs.py --lib acp-go-sdk2 --tag v1.31.1`, "pinned v1.28.0,
+   checking v1.31.1": 13 checks, 0 failing.
+3. **The pin** (step 2): `go get github.com/maccavelli/acp-go-sdk2@v1.31.1` ("upgraded … v1.28.0 => v1.31.1"), then
+   `go mod tidy`. `go.mod` changed on acp-go-sdk2's line alone; `go.sum` lost the two `v1.28.0` lines and gained the
+   two `v1.31.1` lines, and nothing else.
+4. **No source change** (step 3): `TestDropReported` passed, `acpclient` naming `OverflowDropNewest`; after the gates,
+   `git status` showed only the phase's four files, so no golden changed.
+5. **The docs** (step 4): `README.md:129` and `docs/architecture.md:164` name `v1.31.1`.
+6. **G-local:** no Go file changed, so `make pre-add-check` had none to check; `make preflight`: passed; `make race`: 38
+   ok. P24 touches nothing under `internal/cli`, so no `make perf`.
+7. **G-hosts,** on the Linux machine and the Windows laptop, with 818 files shipped to each: `go test` and race passed
+   on both, 38 ok; `make check-records markdownlint` passed on both; preflight stops at `verify-build-metadata`, as on
+   every copy.
