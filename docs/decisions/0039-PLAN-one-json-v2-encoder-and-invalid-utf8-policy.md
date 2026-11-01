@@ -415,7 +415,8 @@ Files: `acpclient/conn.go`, `acpclient/update.go`, `internal/cli/agent.go`, `int
      `print-stream-json-escapes.golden`, with the update lines escaped and the result line not. Seen failing with
      `EscapeForJS` dropped from `translate`.
    * `print-stream-json.golden` and `print-json.golden` are unchanged.
-6. `make apidiff`, within preflight, reports only the added field.
+6. `make apidiff`, within preflight, reports only the added field. *(Deviation 12: `make apidiff` is a no-op below
+   v1.0.0. The evidence is a diff of `go doc -all ./acpclient` between the phase's base and its tree.)*
 7. G-local with `make perf`. G-hosts with `make perf` and `make probe-conhost`. **Commit.**
 
 ### P6 — the local files and the providers output (MADR D17)
@@ -1098,3 +1099,99 @@ The base is P3's `4f76649`. Deviations 6 to 10 changed steps 2, 4, 5 and 6, and 
     * `acpclient/sessions.go:45` (`sessionError`) reads an agent error's data by `re.Data.(map[string]any)`. Over the
       wire that is the map the SDK decoded, so it works. P7 or P8 may want it read through `jsonx`, to match.
     * `acpserver/auth_test.go:87` reads error data the same way, from the wire.
+
+### Deviation 11 (2026-10-31): P5, four test assertions read `Update.Params` unasked
+
+* **Found** reading `Update.Params`' readers before step 2. The one production reader is `stream-json`
+  (`internal/cli/print.go:113`), which step 3 has ask for it. Four test assertions, in two files outside P5's list,
+  read it from a connection that does not:
+  * `acpclient/conn_test.go:93-94` and `:127` (`TestTranslate`) and `:330` (`TestUpdatesBeforeNewSessionReturns`)
+    start with `acpclient.Options{}`;
+  * `internal/cli/models_test.go:310` (`replies`) decodes a `config_option_update`, which has no typed field, from the
+    `Params` of a connection started by `e.startAgent` (`:231`).
+
+  Under step 2 each would read nil `Params` and fail. That is D16 working, not a defect. The MADR's statement that
+  `Params` is read in one place holds for production code, so it is not amended.
+* **The owner's answer:** "Tests ask for Params (Recommended)". The option not taken was to encode `Params` always,
+  amending D16.
+* **Decision.**
+  * The two `acpclient` tests start with `acpclient.Options{Params: true}`, and `TestTranslate` also asserts that
+    `Options{}` leaves `Params` nil.
+  * `models_test.go` starts through `startAgentWith(ctx, nil, true)`, step 3's new argument.
+  * Every existing assertion is kept.
+* **Files added:** `acpclient/conn_test.go`, `internal/cli/models_test.go`.
+
+### Deviation 12 (2026-10-31): P5, `line.go`, and step 6's `apidiff`
+
+* **Found** running P5's gates.
+  * Step 3 gives `startAgentWith` a `params` argument. Its other caller, `internal/cli/line.go:126`, must pass
+    `false`, and `line.go` is not in P5's list.
+  * `make apidiff` prints `apidiff: no-op below v1.0.0` (the `Makefile`; also deviation 9), so step 6 cannot be
+    shown by it.
+  * Also found, and not a deviation: `startAgent`'s one caller was `internal/cli/models_test.go`, which deviation 11
+    moved to `startAgentWith(ctx, nil, true)`. staticcheck then reported `startAgent` unused (U1000), so it is removed
+    from `internal/cli/agent.go`, a file of P5's.
+* **The owner's answers:** "Add line.go to P5 (Recommended)" and "go doc diff (Recommended)". The options not taken
+  were a second start function for the stream, and holding P5 for an `apidiff` comparison.
+* **Decision.**
+  * `line.go` passes `false`: the line mode reads no `Params`.
+  * Step 6's evidence is the diff of `go doc -all ./acpclient` between the base and the tree, and step 6 is annotated.
+* **Files added:** `internal/cli/line.go`.
+
+### P5 record (2026-10-31): `translate`
+
+The base is P4's `5a20d06`. Deviations 11 and 12 added `acpclient/conn_test.go`, `internal/cli/models_test.go` and
+`internal/cli/line.go`, and annotated step 6.
+
+1. **`acpclient.Options.Params`** (step 1, PQ2 (a)): "encodes `Update.Params`, for a client that passes the stream
+   through". The `handler` keeps it. `Update.Params`' doc says it is set only when `Options.Params` is, and that for
+   `KindRetry`, `KindCompaction` and `KindPersonality` it is the notification's params, as received.
+2. **`translate(n, params)`** (step 2) encodes only when asked, with
+   `jsonx.Marshal(n, jsontext.EscapeForHTML(true), jsontext.EscapeForJS(true))`. `acpclient/update.go` imports no
+   `encoding/json`.
+3. **Print mode** (step 3, deviation 12):
+   * `runPrint` builds its sink first, and calls `startAgentWith(ctx, e.printPermission, sink.stream)`;
+   * `line.go` passes `false`;
+   * `startAgent`, whose one caller deviation 11 moved, is removed, and its doc folded into `startAgentWith`'s.
+4. **`writeJSON`** (step 4) encodes with `jsonx.Marshal`, with no escaping options. Its comment states the two styles,
+   by D16. `internal/cli/print.go` imports no `encoding/json/v2`.
+5. **Tests** (step 5, deviation 11):
+
+   | Test | Break | The failure |
+   | :--- | :--- | :--- |
+   | `TestPrintStreamJSONEscapes`, with the new `print-stream-json-escapes.golden` | `translate` without `EscapeForJS` | the second update line `"text":"<U+2028>d<U+2029>"`, raw, where the golden has `"text":" d "` |
+   | `TestParamsOnlyWhenAsked` (`acpclient/conn_test.go`), added by deviation 11 | `translate` encoding whatever `params` says | `updates = [{Kind:commands … Params:{…}}], want one KindCommands with no params` |
+
+   * **The golden is not only the code's own output.** The same test was added to a scratch copy of the base,
+     `5a20d06`, where `translate` encoded with v1's `json.Marshal`, and run there with `-update`. Its golden was
+     identical, by `cmp`, to the one this phase commits.
+     * Its update lines escape `<`, `&`, `>`, U+2028 and U+2029.
+     * Its result line writes them raw.
+   * `print-stream-json.golden` and `print-json.golden` are unchanged, and so is every other golden.
+   * Deviation 11's three changed starts keep every assertion. `TestTranslate` and
+     `TestUpdatesBeforeNewSessionReturns` ask for `Params: true`, and `models_test.go` starts through
+     `startAgentWith(t.Context(), nil, true)`.
+6. **The exported API** (step 6, deviation 12). `make apidiff` prints `apidiff: no-op below v1.0.0`. Instead,
+   `go doc -all ./acpclient` was diffed between a scratch copy of `5a20d06` and the tree. The diff is the added
+   `Options.Params` field with its comment, and `Update.Params`' longer doc comment, and nothing else.
+7. **G-local:**
+   * `make pre-add-check` on the 8 changed Go files: clean; after `startAgent`'s removal, on `internal/cli/agent.go`:
+     clean;
+   * `make preflight`: passed. Its first run stopped at staticcheck's U1000, `startAgent` unused, on linux, darwin and
+     windows. That is deviation 12's third finding;
+   * `go test ./...`: 37 ok; `make race`: 37 ok;
+   * `make perf`: passed, with ReplyRender 33.54 µs (baseline 30 µs), Reprint 9.89 ms (baseline 9.4 ms),
+     LineSessionStart 927.5 µs (baseline 830 µs), and KeyDraw 1.482 µs (baseline 1.5 µs). The machine's load average
+     was about 23.
+   * LineSessionStart made 5,009 allocations, against 5,011 at P2, the last phase that ran `make perf`. That is
+     consistent with the line mode no longer encoding each update's params; it was not measured further.
+8. **G-hosts,** on the Linux machine and the Windows laptop, with 814 files shipped to each:
+   * `go test`: passed;
+   * race: passed, 37 ok;
+   * `make check-records markdownlint`: passed;
+   * preflight stops at `verify-build-metadata`, as on every copy;
+   * `make perf`: passed on both. The Linux machine: ReplyRender 111.8 µs (baseline 110 µs), Reprint 28.34 ms
+     (baseline 29 ms), LineSessionStart 3.14 ms (baseline 2.9 ms), KeyDraw 4.473 µs (baseline 5 µs). The Windows
+     laptop: ReplyRender 29.03 µs (baseline 54 µs), Reprint 7.26 ms (baseline 12 ms), LineSessionStart 4.57 ms
+     (baseline 6.9 ms), KeyDraw 1.212 µs (baseline 1.4 µs);
+   * the conhost probe on the Windows laptop: passed.

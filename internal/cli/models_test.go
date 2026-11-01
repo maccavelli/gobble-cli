@@ -228,7 +228,9 @@ func TestModelOptionOffersListedModels(t *testing.T) {
 	withLister(t, (&liveLister{ids: listed}).list)
 	script := llmtest.NewScript(llmtest.Text("ok"))
 	withModel(t, script)
-	conn, err := e.startAgent(t.Context())
+	// replies reads the config_option_update from its params, which the
+	// connection is asked for (0039-PLAN deviation 11).
+	conn, err := e.startAgentWith(t.Context(), nil, true)
 	if err != nil {
 		t.Fatal(err)
 	}

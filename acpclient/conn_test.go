@@ -70,7 +70,7 @@ func TestTranslate(t *testing.T) {
 		`{"sessionUpdate":"config_option_update","configOptions":[]}`,
 		`{"sessionUpdate":"gobble_future_update","x":1}`,
 	}}}}
-	c := start(t, agent, acpclient.Options{Name: "test", Version: "0.0.0"})
+	c := start(t, agent, acpclient.Options{Name: "test", Version: "0.0.0", Params: true})
 	var col collector
 	s, err := c.NewSession(t.Context(), acptest.Abs("/w"), col.on)
 	if err != nil {
@@ -322,13 +322,28 @@ func TestStartRefusesOtherProtocols(t *testing.T) {
 // callback, as Phase 6's available_commands_update will.
 func TestUpdatesBeforeNewSessionReturns(t *testing.T) {
 	agent := &acptest.ScriptAgent{SessionUpdates: []string{`{"sessionUpdate":"available_commands_update","availableCommands":[]}`}}
-	c := start(t, agent, acpclient.Options{})
+	c := start(t, agent, acpclient.Options{Params: true})
 	var col collector
 	if _, err := c.NewSession(t.Context(), acptest.Abs("/w"), col.on); err != nil {
 		t.Fatal(err)
 	}
 	if got := col.all(); len(got) != 1 || !strings.Contains(string(got[0].Params), "available_commands_update") {
 		t.Fatalf("updates = %+v, want the one sent before session/new returned", got)
+	}
+}
+
+// Without Options.Params, an update is translated and its Params is nil:
+// no update is encoded that no one reads (0039-MADR D16; 0039-PLAN
+// deviation 11).
+func TestParamsOnlyWhenAsked(t *testing.T) {
+	agent := &acptest.ScriptAgent{SessionUpdates: []string{`{"sessionUpdate":"available_commands_update","availableCommands":[]}`}}
+	c := start(t, agent, acpclient.Options{})
+	var col collector
+	if _, err := c.NewSession(t.Context(), acptest.Abs("/w"), col.on); err != nil {
+		t.Fatal(err)
+	}
+	if got := col.all(); len(got) != 1 || got[0].Kind != acpclient.KindCommands || got[0].Params != nil {
+		t.Fatalf("updates = %+v, want one KindCommands with no params", got)
 	}
 }
 

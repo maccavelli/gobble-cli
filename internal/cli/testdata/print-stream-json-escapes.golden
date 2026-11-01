@@ -1,0 +1,4 @@
+{"type":"session","id":"s1","cwd":"<cwd>","timestamp":"2026-10-05T12:00:00Z"}
+{"sessionId":"s1","update":{"content":{"text":"a\u003cb\u0026c\u003e","type":"text"},"sessionUpdate":"agent_message_chunk"}}
+{"sessionId":"s1","update":{"content":{"text":"\u2028d\u2029","type":"text"},"sessionUpdate":"agent_message_chunk"}}
+{"type":"result","text":"a<b&c> d ","stopReason":"end_turn","usage":null,"cost":null,"sessionId":"s1"}

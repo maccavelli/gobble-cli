@@ -51,6 +51,10 @@ type Options struct {
 	// Permission answers the agent's session/request_permission. Nil
 	// declines every request, as a client with no one to ask must.
 	Permission func(ctx context.Context, r PermissionRequest) PermissionAnswer
+	// Params encodes Update.Params, for a client that passes the stream
+	// through. Without it a session/update's Params is nil, and no update
+	// is encoded for nothing (0039-MADR D16).
+	Params bool
 }
 
 // metaGobble is gobble's key in an ACP _meta.
@@ -117,7 +121,7 @@ type Conn struct {
 // protocol other than 1.
 func Start(ctx context.Context, serve ServeFunc, opts Options) (*Conn, error) {
 	c := &Conn{handler: &handler{sessions: map[acp.SessionId]func(Update){},
-		commands: map[acp.SessionId][]Command{}, permission: opts.Permission}}
+		commands: map[acp.SessionId][]Command{}, permission: opts.Permission, params: opts.Params}}
 	logger := opts.Logger
 	if logger == nil {
 		logger = slog.New(slog.DiscardHandler)
@@ -369,6 +373,8 @@ type handler struct {
 	// commands are each session's latest available_commands_update.
 	commands   map[acp.SessionId][]Command
 	permission func(context.Context, PermissionRequest) PermissionAnswer
+	// params is Options.Params.
+	params bool
 
 	// ext routes gobble's _gobble/* notifications, registered on first use
 	// (0039-MADR D12).
@@ -410,7 +416,7 @@ func (h *handler) SessionUpdate(_ context.Context, n acp.SessionNotification) er
 	if on == nil {
 		return nil
 	}
-	u, err := translate(n)
+	u, err := translate(n, h.params)
 	if err != nil {
 		return err
 	}

@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/maccavelli/gobble-cli/acpclient"
 	"github.com/maccavelli/gobble-cli/internal/cli/term"
+	"github.com/maccavelli/gobble-cli/jsonx"
 	"github.com/maccavelli/gobble-cli/personality"
 )
 
@@ -141,8 +141,12 @@ func (s *printSink) begin(id, cwd string) {
 	s.held = nil
 }
 
+// writeJSON writes one of gobble's own stream-json lines, the header or the
+// result. It does not escape <, >, & or U+2028 and U+2029, where the
+// session/update lines between them, the SDK's bytes, do: two styles in one
+// stream, by 0039-MADR D16, and no byte a script reads changed by it.
 func (s *printSink) writeJSON(v any) {
-	b, err := json.Marshal(v)
+	b, err := jsonx.Marshal(v)
 	if err != nil {
 		if s.err == nil {
 			s.err = fmt.Errorf("encode output: %w", err)
@@ -157,9 +161,11 @@ func (s *printSink) writeJSON(v any) {
 func runPrint(e *runEnv, c *ChatCmd, p Prompt, cwd, base string) (err error) {
 	ctx := e.ctx
 	e.noteUntrusted(cwd)
+	sink := newPrintSink(e, c, cwd)
 	// Nobody can answer a question: tool calls are declined, and the
-	// level-5 personality's question too (0022-MADR D10).
-	conn, err := e.startAgentWith(ctx, e.printPermission)
+	// level-5 personality's question too (0022-MADR D10). Only stream-json
+	// reads each update's params.
+	conn, err := e.startAgentWith(ctx, e.printPermission, sink.stream)
 	if err != nil {
 		return err
 	}
@@ -168,7 +174,6 @@ func runPrint(e *runEnv, c *ChatCmd, p Prompt, cwd, base string) (err error) {
 			e.out.Warnf("%v", cerr)
 		}
 	}()
-	sink := newPrintSink(e, c, cwd)
 	sess, _, err := openSession(ctx, conn, c.sessionChoice(), cwd, base, sink.on)
 	if err != nil {
 		return err

@@ -250,16 +250,12 @@ var agentServe = func(e *runEnv) acpclient.ServeFunc {
 	}
 }
 
-// startAgent starts the agent and sends initialize, declining every
-// permission request (print mode). A dropped notification is reported
-// once per drop on stderr; the session goes on.
-func (e *runEnv) startAgent(ctx context.Context) (*acpclient.Conn, error) {
-	return e.startAgentWith(ctx, nil)
-}
-
-// startAgentWith is startAgent with permission requests answered by
-// permission: the line session's prompt (0008-MADR D16).
-func (e *runEnv) startAgentWith(ctx context.Context, permission func(context.Context, acpclient.PermissionRequest) acpclient.PermissionAnswer) (*acpclient.Conn, error) {
+// startAgentWith starts the agent and sends initialize, with permission
+// requests answered by permission: the line session's prompt, or print
+// mode's refusal (0008-MADR D16). A dropped notification is reported once
+// per drop on stderr; the session goes on. params asks for each update's
+// Update.Params, which only stream-json reads (0039-MADR D16).
+func (e *runEnv) startAgentWith(ctx context.Context, permission func(context.Context, acpclient.PermissionRequest) acpclient.PermissionAnswer, params bool) (*acpclient.Conn, error) {
 	conn, err := acpclient.Start(ctx, agentServe(e), acpclient.Options{
 		Name:    appName,
 		Version: identity().Version,
@@ -268,6 +264,7 @@ func (e *runEnv) startAgentWith(ctx context.Context, permission func(context.Con
 			e.out.Warnf("dropped %d ACP notifications (%s)", total, method)
 		},
 		Permission: permission,
+		Params:     params,
 	})
 	if err != nil {
 		return nil, failf("start the agent: %v", err)

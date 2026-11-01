@@ -118,6 +118,24 @@ func TestPrintStreamJSON(t *testing.T) {
 	golden(t, "print-stream-json", strings.ReplaceAll(r.stdout, string(enc), `"<cwd>"`))
 }
 
+// stream-json's update lines escape <, &, U+2028 and U+2029 as the SDK
+// writes them, and gobble's own result line does not: two styles in one
+// stream, each unchanged (0039-MADR D16, Q4, Confirmation 9).
+func TestPrintStreamJSONEscapes(t *testing.T) {
+	fixedClock(t)
+	withAgent(t, &acptest.ScriptAgent{Turns: []acptest.Turn{{Updates: []string{chunk("a<b&c>"), chunk(" d ")}}}})
+	dir := t.TempDir()
+	r := runMain(t, nil, "-p", "--output-format", "stream-json", "--cwd", dir, "x")
+	if r.code != ExitOK {
+		t.Fatalf("exit %d, stderr %q", r.code, r.stderr)
+	}
+	enc, err := json.Marshal(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	golden(t, "print-stream-json-escapes", strings.ReplaceAll(r.stdout, string(enc), `"<cwd>"`))
+}
+
 // A failed session/prompt exits 1. The JSON formats still write the result,
 // with stopReason "error" and the message (owner's decision of 2026-10-05);
 // text writes nothing to stdout.

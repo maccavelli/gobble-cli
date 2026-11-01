@@ -1,7 +1,6 @@
 package acpclient
 
 import (
-	"encoding/json"
 	"encoding/json/jsontext"
 	"fmt"
 	"time"
@@ -104,7 +103,10 @@ type Update struct {
 	// Personality is the session's personality, for KindPersonality.
 	Personality Personality
 	// Params is the session/update params object as the SDK encodes it,
-	// for clients that pass the ACP stream through (0008-MADR D9).
+	// for clients that pass the ACP stream through (0008-MADR D9). It is
+	// set only when Options.Params is (0039-MADR D16). For KindRetry,
+	// KindCompaction and KindPersonality it is the notification's params,
+	// as received.
 	Params jsontext.Value
 }
 
@@ -242,14 +244,20 @@ type Cost struct {
 	Currency string  `json:"currency"`
 }
 
-// translate makes an Update from a notification.
-func translate(n acp.SessionNotification) (Update, error) {
-	params, err := json.Marshal(n)
-	if err != nil {
-		return Update{}, fmt.Errorf("encode session/update: %w", err)
-	}
+// translate makes an Update from a notification. With params, it encodes
+// the notification as Update.Params, with encoding/json/v2 and v1's
+// escaping of <, >, & and U+2028 and U+2029, so its bytes are those the SDK
+// writes (0039-MADR D16, Q4).
+func translate(n acp.SessionNotification, params bool) (Update, error) {
 	s := n.Update
-	u := Update{Params: params, Variant: s.Kind()}
+	u := Update{Variant: s.Kind()}
+	if params {
+		b, err := jsonx.Marshal(n, jsontext.EscapeForHTML(true), jsontext.EscapeForJS(true))
+		if err != nil {
+			return Update{}, fmt.Errorf("encode session/update: %w", err)
+		}
+		u.Params = b
+	}
 	switch {
 	case s.AgentMessageChunk != nil:
 		u.Kind = KindAgentText
