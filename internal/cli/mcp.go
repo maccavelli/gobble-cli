@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json/jsontext"
-	"encoding/json/v2"
 	"fmt"
 	"iter"
 	"os"
@@ -179,7 +178,7 @@ func encodeObject(ms []member) (jsontext.Value, error) {
 			}
 			continue
 		}
-		if err := json.MarshalEncode(enc, m.value); err != nil {
+		if err := jsonx.MarshalEncodeStrict(enc, m.value); err != nil {
 			return nil, err
 		}
 	}

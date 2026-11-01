@@ -502,13 +502,17 @@ new `llm/llm_test.go`, `session/doc.go`, `docs/architecture.md`.
 
 ### P9 — the guards (MADR D24)
 
-Files: `.golangci.yml`, `internal/archtest/check.go`, `internal/archtest/check_test.go`.
+Files: `.golangci.yml`, `internal/archtest/check.go`, `internal/archtest/check_test.go`. *(Deviation 17 adds
+`jsonx/jsonx.go`, `jsonx/jsonx_test.go`, `internal/cli/mcp.go` and `docs/architecture.md`; deviation 19 adds
+`internal/archtest/doc.go`.)*
 
 1. **`depguard`**: a rule beside `logging` (`.golangci.yml:41-53`), for every file, tests included, denying
    `encoding/json$` with the message "use jsonx, on encoding/json/v2 (0039-MADR D24)".
 2. **`forbidigo`**: a rule (`.golangci.yml:56-64`) forbidding `encoding/json/v2`'s `Marshal`, `MarshalWrite`,
    `MarshalEncode`, `Unmarshal`, `UnmarshalRead` and `UnmarshalDecode`, with `analyze-types: true`, its exact pattern
-   settled when first seen failing. An exclusion keeps `jsonx/` and `_test.go` files out of it.
+   settled when first seen failing. An exclusion keeps `jsonx/` and `_test.go` files out of it. *(Deviation 17: the
+   two stream calls outside `jsonx`, `internal/cli/mcp.go`'s `MarshalEncode` and `internal/archtest/check.go`'s
+   `UnmarshalDecode`, move first to `jsonx`'s new stream functions.)*
 3. **`internal/archtest`**, two rules, each with a test case in `check_test.go`:
    * `jsonx` imports no package of this module;
    * a struct field of type `[]byte` with a `json` tag is allowed only where listed: today `llm/llm.go`
@@ -1410,3 +1414,135 @@ The base is P7's `fe671d6`. No deviation; deviation 15's assertion is met here.
    * `go test` and race: passed on both, 38 ok;
    * `make check-records markdownlint`: passed on both;
    * preflight stops at `verify-build-metadata`, as on every copy.
+
+### Deviation 17 (2026-11-01): P9, the two stream calls outside `jsonx`, and `jsonx`'s stream functions
+
+* **Found** at P9's start. Step 2's `forbidigo` rule forbids v2's `MarshalEncode` and `UnmarshalDecode` outside `jsonx/`
+  in non-test code, and two sites call them:
+  * `internal/cli/mcp.go:182`, `json.MarshalEncode(enc, m.value)`, onto P2's strict encoder. No step names it, and the
+    file is not P9's;
+  * `internal/archtest/check.go:85`, `json.UnmarshalDecode(dec, &raw)`, which P8 step 1 wrote as the plan said.
+
+  The plan's own steps conflict; the code did not cause it.
+* **Measured,** on a scratch program under Go 1.27.3. Options passed to `MarshalEncode` and `UnmarshalDecode` take
+  precedence over the stream's own for that call, in both directions: a lenient call on a strict stream repairs invalid
+  UTF-8 and lets a repeated name through, and a strict call on a lenient stream refuses both. A call passing only
+  `json.Deterministic(true)`, which is all `StrictOptions()` set, overrides neither.
+* **The owner's answers:** first "option 1 vs option 2, pros and cons. i am leaning toward option 2 because it seems
+  more idiomatic, extensible, and api standards adherent. explain."; then, given the comparison, "option2 with 4
+  function forms". The option not taken was rewriting the two sites with `MarshalStrict` then `WriteValue`, and
+  `ReadValue` then `Unmarshal`.
+* **Decision.**
+  * `jsonx` gains four stream functions, each passing its policy's options ahead of the caller's:
+    `MarshalEncode` and `UnmarshalDecode` under the data policy, `MarshalEncodeStrict` and `UnmarshalDecodeStrict`
+    under the configuration policy.
+  * `Options()` and `StrictOptions()` state their UTF-8 and duplicate-name rules explicitly, so a call overrides a
+    stream built with the other policy. They are v2's defaults where they are not D2's, so every existing call's
+    behaviour is unchanged.
+  * `internal/cli/mcp.go` calls `jsonx.MarshalEncodeStrict`, and `internal/archtest/check.go` calls
+    `jsonx.UnmarshalDecode`.
+  * The MADR's D1, D18 and D24 are amended.
+* **Files added:** `jsonx/jsonx.go`, `jsonx/jsonx_test.go`, `internal/cli/mcp.go`, and `docs/architecture.md` for
+  `jsonx`'s row. `internal/cli` is touched, so G-local and G-hosts take `make perf` and `make probe-conhost` (C6, C7).
+
+### Deviation 18 (2026-11-01): P9, `TestLoginAsksThroughQuestions`'s teardown failure, again
+
+* **Found** in P9's G-local. `make race` failed once: `--- FAIL: TestLoginAsksThroughQuestions` with
+  `testing.go:1619: TempDir RemoveAll cleanup: unlinkat <TMP>/TestLoginAsksThroughQuestions<n>/002: directory not
+  empty`. It is deviation 14's failure, there on the Windows laptop, here on macOS.
+* **Reproduced, and pre-existing,** on the Mac under `-race` with `-run '^TestLoginAsksThroughQuestions$'`: 1 failure
+  in `-count=30` on P9's tree, and 1 in two runs of `-count=30` on P8's commit `b0c884f`, each with the same error. A
+  rerun of `go test -race ./internal/cli/` passed.
+* **The owner's answer:** "Record, rerun, keep it deferred (Recommended)". The option not taken was writing the flake's
+  own record before P10.
+* **Decision.** As deviation 14: recorded, out of this plan's scope, and left for a record of its own; no assertion or
+  test changed. `make race` was rerun: 38 ok. The flake will recur in later runs until that record fixes it.
+* **Files added:** none.
+
+### Deviation 19 (2026-11-01): P9, `internal/archtest/doc.go`
+
+* **Found** writing P9's record. `internal/archtest/doc.go` said the test "checks the eight rules in 0004-MADR", and
+  that "Rules 4 and 8 name their edges even though those imports are not in the tree yet". There were nine rules
+  before P9 and are eleven after it. `go list` shows both edges in the tree now: `llm/provider` imports
+  go-llmprovider-sdk, and `internal/buildinfo` go-selfupdate-lib's `buildinfo`. The file is in no phase's list, so the
+  first P9 record left it.
+* **The owner's answer:** "update this: Not done: internal/archtest/doc.go still says it checks "the eight rules";
+  there are now eleven. It was already out of date before P9 and isn't in any phase's file list, so I left it and noted
+  it in the record."
+* **Decision.** `doc.go` names the command as `loadGraph` runs it, `go list -e -deps -test -json ./...`, and the eleven
+  rules: 1 to 9 from 0004-MADR as amended, 10 and 11 from 0039-MADR D24, with `docs/architecture.md` as their list. The
+  stale sentence about rules 4 and 8 goes. The P9 record's "Not done" item is replaced.
+* **Files added:** `internal/archtest/doc.go`.
+
+### P9 record (2026-11-01): the guards
+
+The base is P8's `b0c884f`. Deviation 17 added `jsonx`'s stream functions and four files; deviation 18 recorded the
+login test's teardown failure, outside P9; deviation 19 added `internal/archtest/doc.go`.
+
+1. **`jsonx`'s stream functions** (deviation 17):
+   * `MarshalEncode`, `UnmarshalDecode`, `MarshalEncodeStrict` and `UnmarshalDecodeStrict`, each passing its policy's
+     options ahead of the caller's to v2's own;
+   * `Options()` is `AllowInvalidUTF8(true)`, `AllowDuplicateNames(false)`, `Deterministic(true)`, and
+     `StrictOptions()` is `AllowInvalidUTF8(false)`, `AllowDuplicateNames(false)`, `Deterministic(true)`. The `false`
+     rules are v2's defaults, so every existing call behaves as before; `go test ./...` passed unchanged;
+   * `internal/cli/mcp.go:182` calls `jsonx.MarshalEncodeStrict`, and `internal/archtest/check.go` calls
+     `jsonx.UnmarshalDecode`. Neither file imports `encoding/json/v2` now;
+   * `TestStreamPolicies` (`jsonx/jsonx_test.go`) runs each function on a stream built with the other policy: the data
+     functions repair invalid UTF-8 on a strict stream and refuse a repeated name on a lenient one; the strict functions
+     refuse invalid UTF-8 and a repeated name on a lenient stream; both decoders read two values, then `io.EOF`.
+2. **`depguard`** (step 1): a `json` rule beside `logging`, for `$all` files, denying `encoding/json$` with "use jsonx,
+   on encoding/json/v2 (0039-MADR D24)".
+3. **`forbidigo`** (step 2), the pattern as first seen failing:
+   `^json\.(Marshal|MarshalWrite|MarshalEncode|Unmarshal|UnmarshalRead|UnmarshalDecode)$` with
+   `pkg: ^encoding/json/v2$`, under the existing `analyze-types: true`. The existing `_test.go` exclusion covers tests,
+   and a new one excludes `^jsonx/` for this rule's text, `0039-MADR D24`, only.
+4. **`internal/archtest`** (step 3):
+   * rule 10: `jsonx`'s `Imports` hold no package of this module. Its tests' imports are not counted, since
+     `jsonx_test` imports `jsonx`;
+   * rule 11: a struct field of type `[]byte` or `[]uint8` with a `json` tag, other than `json:"-"`, is one of
+     `byteFieldsAllowed`, today `llm.Content.Data`. It parses each module package's `GoFiles`, which `loadGraph` now
+     reads from `go list` with `Dir`. A struct inside a function is named by the function;
+   * `Violation` gains `Field`, and reads "rule 11: <package> has <field>";
+   * `check_test.go`: five table cases (rule 10 on the module, `jsonx` importing `session`, `jsonx`'s tests importing
+     the module, `session` importing `jsonx`; rule 11 on the module), and `TestRule11ScratchFile`, over a scratch file
+     with a tagged field, an untagged one, a `yaml` tag, two names on one field, `json:"-"`, a struct in a function, and
+     `Content.Data` in `session` and in `llm`.
+5. **Seen failing** (step 4, Confirmation 12), each on a scratch copy of the finished tree:
+
+   | Break | Command | The failure |
+   | :--- | :--- | :--- |
+   | `stdjson "encoding/json"`, used, in `tool/tool.go` | `golangci-lint run ./tool/` | `tool/tool.go:5:2: import 'encoding/json' is not allowed from list 'json': use jsonx, on encoding/json/v2 (0039-MADR D24) (depguard)` |
+   | the same in `tool/tool_test.go` | `golangci-lint run ./tool/` | `tool/tool_test.go:5:2: import 'encoding/json' is not allowed from list 'json': …` |
+   | `json.Marshal(1)` in `tool/tool.go` | `golangci-lint run ./tool/` | `` tool/tool.go:221:41: use of `json.Marshal` forbidden because "encode and decode through jsonx, under its policies (0039-MADR D24)" (forbidigo) `` |
+   | `v2.Unmarshal`, the package imported as `v2`, in `tool/tool.go` | `golangci-lint run ./tool/` | `` tool/tool.go:221:50: use of `v2.Unmarshal` forbidden because … `` |
+   | the `^jsonx/` exclusion removed | `golangci-lint run ./jsonx/` | `` jsonx/jsonx.go:29:9: use of `json.Marshal` forbidden … ``, and the same for each of `jsonx`'s v2 calls |
+   | `jsonx` imports `command` | `go test ./internal/archtest/` | `TestImportRules/rule_10_module: unexpected edge: rule 10: …/jsonx imports …/command` |
+   | `jsonx` imports `session`, as step 4 names it | `go test ./internal/archtest/` | `import cycle not allowed`, `[setup failed]`: `session` imports `jsonx`, so this break fails the build before the rule runs. The `command` break above is the rule's own |
+   | `` Raw []byte `json:"raw,omitzero"` `` on `session.Entry` | `go test ./internal/archtest/` | `TestImportRules/rule_11_module: unexpected edge: rule 11: …/session has a []byte field with a json tag, Entry.Raw` |
+   | `Options()` without `AllowDuplicateNames(false)` | `go test -run TestStreamPolicies ./jsonx/` | `UnmarshalDecode on a lenient stream accepted a repeated name: map[a:2]` |
+   | `StrictOptions()` without `AllowInvalidUTF8(false)` | the same | `MarshalEncodeStrict on a lenient stream wrote "\"a�b\"\n"`, and `UnmarshalDecodeStrict on a lenient stream read "a�b"` |
+   | `MarshalEncode` passing only the caller's options | the same | `MarshalEncode on a strict stream wrote "{\"a\":\"x\"", jsontext: invalid UTF-8 within "/s" after offset 13` |
+   | `UnmarshalDecodeStrict` under `Options()` | the same | `UnmarshalDecodeStrict on a lenient stream read "a�b"` |
+
+   The first `depguard` break, a blank `_ "encoding/json"` placed out of order, failed only on `gofmt` and `revive`'s
+   blank-import rule, with no `depguard` line; that `golangci-lint` keeps one issue per line by default is a likely cause,
+   not checked. It was replaced by the used, sorted import above, which `depguard` alone reports.
+6. **`docs/architecture.md`**: `jsonx`'s row names the stream functions, and the import rules gain 10 and 11 and a
+   paragraph on the two lint rules.
+7. **`internal/archtest/doc.go`** (deviation 19) names the eleven rules and the `go list` command `loadGraph` runs.
+8. **G-local:**
+   * `make pre-add-check` on the 5 changed Go files: clean; after deviation 19, on `internal/archtest/doc.go`: clean;
+   * `make preflight`: passed, `golangci-lint` with the two new rules among it; after deviation 19: passed;
+   * `go test ./...`: 38 ok; `make race`: deviation 18, then 38 ok;
+   * `make perf`: passed at load 25, with ReplyRender 42.71 µs (baseline 30 µs), Reprint 12.53 ms (baseline 9.4
+     ms), LineSessionStart 1.432 ms (baseline 830 µs), KeyDraw 1.671 µs (baseline 1.5 µs); LineSessionStart made
+     5,011 allocations.
+9. **G-hosts,** on the Linux machine and the Windows laptop, with 818 files shipped to each:
+   * `go test` and race: passed on both, 38 ok;
+   * `make check-records markdownlint`: passed on both;
+   * preflight stops at `verify-build-metadata`, as on every copy;
+   * `make perf`: passed on both. The Linux machine: ReplyRender 128.72 µs (baseline 110 µs), Reprint 31.18 ms
+     (baseline 29 ms), LineSessionStart 4.52 ms (baseline 2.9 ms), KeyDraw 4.769 µs (baseline 5 µs). The Windows
+     laptop: ReplyRender 29.07 µs (baseline 54 µs), Reprint 7.33 ms (baseline 12 ms), LineSessionStart 4.33 ms
+     (baseline 6.9 ms), KeyDraw 1.208 µs (baseline 1.4 µs);
+   * the conhost probe on the Windows laptop: passed.

@@ -198,6 +198,21 @@ func TestImportRules(t *testing.T) {
 			ImportPath: modulePath + "/internal/cli/complete",
 			Imports:    []string{"github.com/alecthomas/kong"},
 		}}},
+		{name: "rule 10 module", rule: 10},
+		{name: "rule 10 jsonx session", rule: 10, want: "jsonx imports " + modulePath + "/session", pkgs: []modPkg{{
+			ImportPath: modulePath + "/jsonx",
+			Imports:    []string{"bytes", modulePath + "/session"},
+		}}},
+		{name: "rule 10 jsonx's tests may import the module", rule: 10, pkgs: []modPkg{{
+			ImportPath:   modulePath + "/jsonx",
+			TestImports:  []string{modulePath + "/session"},
+			XTestImports: []string{modulePath + "/jsonx"},
+		}}},
+		{name: "rule 10 session may import jsonx", rule: 10, pkgs: []modPkg{{
+			ImportPath: modulePath + "/session",
+			Imports:    []string{modulePath + "/jsonx"},
+		}}},
+		{name: "rule 11 module", rule: 11},
 	}
 
 	for _, tc := range cases {
@@ -239,6 +254,38 @@ func TestRule8ScratchFile(t *testing.T) {
 	got = checkRule(8, []modPkg{pkgFromFile(t, testFile, modulePath+"/agent", true)})
 	if len(got) != 0 {
 		t.Fatalf("test file should be allowed, got %s", joinViolations(got))
+	}
+}
+
+// Rule 11 refuses a []byte field with a json tag outside its list, in a
+// struct type or one inside a function, and allows an untagged one, a
+// tag with no json key, one json leaves out, and llm.Content.Data
+// (0039-MADR D24).
+func TestRule11ScratchFile(t *testing.T) {
+	dir := t.TempDir()
+	src := "package p\n\n" +
+		"type Entry struct {\n\tRaw []byte `json:\"raw\"`\n\tPlain []byte\n\tYAML []byte `yaml:\"y\"`\n\tA, B []uint8 `json:\"ab\"`\n\tSkip []byte `json:\"-\"`\n}\n\n" +
+		"type Content struct {\n\tData []byte `json:\"data,omitzero\"`\n}\n\n" +
+		"func f() {\n\t_ = struct {\n\t\tInner []byte `json:\"inner\"`\n\t}{}\n}\n"
+	if err := os.WriteFile(filepath.Join(dir, "scratch.go"), []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	pkg := func(rel string) []modPkg {
+		return []modPkg{{ImportPath: modulePath + "/" + rel, Dir: dir, GoFiles: []string{"scratch.go"}}}
+	}
+	got := joinViolations(checkRule(11, pkg("session")))
+	for _, want := range []string{"session has a []byte field with a json tag, Entry.Raw", "Entry.A", "Entry.B", "f.Inner", "Content.Data"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("rule 11 in session lacks %s:\n%s", want, got)
+		}
+	}
+	for _, not := range []string{"Plain", "YAML", "Skip"} {
+		if strings.Contains(got, not) {
+			t.Errorf("rule 11 refused %s, which has no json tag:\n%s", not, got)
+		}
+	}
+	if got := joinViolations(checkRule(11, pkg("llm"))); strings.Contains(got, "Content.Data") {
+		t.Errorf("rule 11 refused llm.Content.Data, which is listed:\n%s", got)
 	}
 }
 

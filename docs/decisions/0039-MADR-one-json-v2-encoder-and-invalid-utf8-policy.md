@@ -390,6 +390,22 @@ decisions below are written to those answers (More Information, "The owner's ans
   `o` comes after the policy's options, so a caller adds options, such as `jsontext.WithIndent("  ")`. Undoing the
   policy is what the guard (D24) and the review are for.
 
+  *Amended 2026-11-01, by the PLAN's deviation 17: `jsonx` also has four stream functions, for a `jsontext.Encoder` or
+  `Decoder`:*
+
+  ```go
+  func MarshalEncode(enc *jsontext.Encoder, v any, o ...json.Options) error       // the data policy (D2)
+  func UnmarshalDecode(dec *jsontext.Decoder, v any, o ...json.Options) error     // io.EOF past the last value
+  func MarshalEncodeStrict(enc *jsontext.Encoder, v any, o ...json.Options) error // the configuration policy (D3)
+  func UnmarshalDecodeStrict(dec *jsontext.Decoder, v any, o ...json.Options) error
+  ```
+
+  *Options passed to v2's `MarshalEncode` and `UnmarshalDecode` take precedence over the stream's own for the call, so
+  each function applies its policy whatever the stream was built with. That needs each policy to state its rules:
+  `Options()` is `AllowInvalidUTF8(true)`, `AllowDuplicateNames(false)` and `Deterministic(true)`;
+  `StrictOptions()` is `AllowInvalidUTF8(false)`, `AllowDuplicateNames(false)` and `Deterministic(true)`. The two
+  `false` rules are v2's defaults, so D2 and D3 are unchanged.*
+
 ### The two policies
 
 * **D2. The data policy is `jsontext.AllowInvalidUTF8(true)` and `json.Deterministic(true)`.** It applies to protocol
@@ -698,6 +714,9 @@ decisions below are written to those answers (More Information, "The owner's ans
 * **D18. `internal/archtest/check.go` reads `go list -json` with a `jsontext.Decoder`** and `jsonx.Options()`, decoding
   each object until `io.EOF`. `go list` writes exact field names, which `modPkg`'s untagged fields match.
 
+  *Amended 2026-11-01, by the PLAN's deviation 17: each object is decoded by `jsonx.UnmarshalDecode`, not v2's own,
+  so that D24's `forbidigo` rule holds outside `jsonx/`.*
+
 ### #9's hatch
 
 * **D19. No `RejectUnknownMembers` on ACP payloads** (#7's U2).
@@ -756,6 +775,9 @@ decisions below are written to those answers (More Information, "The owner's ans
     `UnmarshalDecode` outside `jsonx/`,** in non-test code. `.golangci.yml:56-64` already forbids calls, with
     `analyze-types: true`. The exact pattern is settled when it is first seen failing. Tests may call v2 directly, since
     some compare bytes as v2 writes them;
+
+    *Amended 2026-11-01, by the PLAN's deviation 17: a stream's value is encoded or decoded through `jsonx`'s stream
+    functions (D1's amendment), so no non-test file outside `jsonx/` calls these six;*
   * **`internal/archtest` gains two rules:** `jsonx` imports no gobble package; and a `[]byte` struct field with a
     `json` tag is allowed only where listed, which today is `llm.Content.Data` (#9's U6). The second reads struct tags
     with `go/parser` over the packages `go list` reports. Rule 1 today only stops contract packages importing outside

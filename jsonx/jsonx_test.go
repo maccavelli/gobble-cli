@@ -1,8 +1,11 @@
 package jsonx_test
 
 import (
+	"bytes"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
+	"errors"
+	"io"
 	"strings"
 	"testing"
 
@@ -118,5 +121,56 @@ func TestPolicies(t *testing.T) {
 	}
 	if _, err := json.Marshal(m); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// The stream functions apply their policy whatever the stream was built
+// with, since a call's options take precedence over the stream's
+// (0039-MADR D1's amendment; 0039-PLAN deviation 17).
+func TestStreamPolicies(t *testing.T) {
+	const bad = "a\xffb"
+	lenient := json.JoinOptions(jsontext.AllowInvalidUTF8(true), jsontext.AllowDuplicateNames(true))
+	decoder := func(in string, o json.Options) *jsontext.Decoder {
+		return jsontext.NewDecoder(strings.NewReader(in), o)
+	}
+
+	var buf bytes.Buffer
+	if err := jsonx.MarshalEncode(jsontext.NewEncoder(&buf, jsonx.StrictOptions()), map[string]string{"s": bad, "a": "x"}); err != nil ||
+		buf.String() != "{\"a\":\"x\",\"s\":\"a�b\"}\n" {
+		t.Errorf("MarshalEncode on a strict stream wrote %q, %v; want the keys sorted and U+FFFD", buf.String(), err)
+	}
+	buf.Reset()
+	if err := jsonx.MarshalEncodeStrict(jsontext.NewEncoder(&buf, lenient), bad); err == nil {
+		t.Errorf("MarshalEncodeStrict on a lenient stream wrote %q", buf.String())
+	}
+
+	var s string
+	if err := jsonx.UnmarshalDecode(decoder(`"`+bad+`"`, jsonx.StrictOptions()), &s); err != nil || s != "a�b" {
+		t.Errorf("UnmarshalDecode on a strict stream read %q, %v; want U+FFFD", s, err)
+	}
+	var m map[string]int
+	if err := jsonx.UnmarshalDecode(decoder(`{"a":1,"a":2}`, lenient), &m); err == nil {
+		t.Errorf("UnmarshalDecode on a lenient stream accepted a repeated name: %v", m)
+	}
+	if err := jsonx.UnmarshalDecodeStrict(decoder(`"`+bad+`"`, lenient), &s); err == nil {
+		t.Errorf("UnmarshalDecodeStrict on a lenient stream read %q", s)
+	}
+	if err := jsonx.UnmarshalDecodeStrict(decoder(`{"a":1,"a":2}`, lenient), &m); err == nil {
+		t.Errorf("UnmarshalDecodeStrict on a lenient stream accepted a repeated name: %v", m)
+	}
+
+	for name, read := range map[string]func(*jsontext.Decoder, any, ...json.Options) error{
+		"UnmarshalDecode": jsonx.UnmarshalDecode, "UnmarshalDecodeStrict": jsonx.UnmarshalDecodeStrict,
+	} {
+		dec := decoder(`{"a":1} {"a":2}`, jsonx.Options())
+		for _, want := range []int{1, 2} {
+			m = nil
+			if err := read(dec, &m); err != nil || m["a"] != want {
+				t.Errorf("%s read %v, %v; want a %d", name, m, err, want)
+			}
+		}
+		if err := read(dec, &m); !errors.Is(err, io.EOF) {
+			t.Errorf("%s past the last value: %v, want io.EOF", name, err)
+		}
 	}
 }

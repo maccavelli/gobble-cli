@@ -4,11 +4,16 @@ import (
 	"bytes"
 	"context"
 	"encoding/json/jsontext"
-	"encoding/json/v2"
 	"errors"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"io"
 	"os/exec"
+	"path/filepath"
+	"reflect"
+	"strconv"
 	"strings"
 
 	"github.com/maccavelli/gobble-cli/jsonx"
@@ -16,14 +21,19 @@ import (
 
 const modulePath = "github.com/maccavelli/gobble-cli"
 
-// Violation is one forbidden import edge.
+// Violation is one forbidden import edge, or, for rule 11, a forbidden
+// field, which Field names.
 type Violation struct {
-	Rule int
-	From string
-	To   string
+	Rule  int
+	From  string
+	To    string
+	Field string
 }
 
 func (v Violation) String() string {
+	if v.Field != "" {
+		return fmt.Sprintf("rule %d: %s has %s", v.Rule, v.From, v.Field)
+	}
 	return fmt.Sprintf("rule %d: %s imports %s", v.Rule, v.From, v.To)
 }
 
@@ -36,6 +46,10 @@ type modPkg struct {
 	// list gives it (0032-MADR D1).
 	Deps []string
 	Err  string
+	// Dir and GoFiles are a module package's directory and its non-test
+	// Go files, for rule 11.
+	Dir     string
+	GoFiles []string
 }
 
 // tuiLib is go-tui-lib's module path, its /v2 major since v2.0.0, and
@@ -78,11 +92,13 @@ func loadGraph(ctx context.Context, dir string) ([]modPkg, error) {
 			Imports      []string
 			TestImports  []string
 			XTestImports []string
+			Dir          string
+			GoFiles      []string
 			Error        *struct {
 				Err string
 			}
 		}
-		err := json.UnmarshalDecode(dec, &raw)
+		err := jsonx.UnmarshalDecode(dec, &raw)
 		if errors.Is(err, io.EOF) {
 			break
 		}
@@ -105,6 +121,8 @@ func loadGraph(ctx context.Context, dir string) ([]modPkg, error) {
 			Imports:      raw.Imports,
 			TestImports:  raw.TestImports,
 			XTestImports: raw.XTestImports,
+			Dir:          raw.Dir,
+			GoFiles:      raw.GoFiles,
 		}
 		if raw.Error != nil {
 			item.Err = raw.Error.Err
@@ -412,6 +430,115 @@ func checkRule9(pkgs []modPkg) []Violation {
 	return vs
 }
 
+// checkRule10: jsonx imports no package of this module, so that every
+// package may import it (0039-MADR D1, D24). Its own tests may.
+func checkRule10(pkgs []modPkg) []Violation {
+	var vs []Violation
+	for _, pkg := range pkgs {
+		if pkg.ImportPath != modulePath+"/jsonx" {
+			continue
+		}
+		for _, imp := range pkg.Imports {
+			if _, ok := relOf(imp); ok {
+				vs = add(vs, 10, edge{from: pkg.ImportPath, to: imp})
+			}
+		}
+	}
+	return vs
+}
+
+// byteFieldsAllowed are the struct fields of type []byte with a json tag,
+// as package.Type.Field: binary data, which encodes as base64; raw JSON is
+// a jsontext.Value (0039-MADR D20, D24).
+var byteFieldsAllowed = map[string]bool{
+	"llm.Content.Data": true,
+}
+
+// checkRule11: a struct field of type []byte with a json tag is one of
+// byteFieldsAllowed. Each package's non-test Go files are parsed.
+func checkRule11(pkgs []modPkg) []Violation {
+	var vs []Violation
+	for _, pkg := range pkgs {
+		rel, ok := relOf(pkg.ImportPath)
+		if !ok || pkg.Dir == "" {
+			continue
+		}
+		for _, name := range pkg.GoFiles {
+			fields, err := jsonByteFields(filepath.Join(pkg.Dir, name))
+			if err != nil {
+				vs = append(vs, Violation{Rule: 11, From: pkg.ImportPath, Field: "a file not parsed: " + err.Error()})
+				continue
+			}
+			for _, f := range fields {
+				if !byteFieldsAllowed[rel+"."+f] {
+					vs = append(vs, Violation{Rule: 11, From: pkg.ImportPath, Field: "a []byte field with a json tag, " + f})
+				}
+			}
+		}
+	}
+	return vs
+}
+
+// jsonByteFields are path's struct fields of type []byte with a json tag,
+// each as Type.Field, the type being the declared type or function that
+// holds the struct.
+func jsonByteFields(path string) ([]string, error) {
+	file, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.SkipObjectResolution)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	scan := func(owner string, n ast.Node) {
+		ast.Inspect(n, func(n ast.Node) bool {
+			st, ok := n.(*ast.StructType)
+			if !ok {
+				return true
+			}
+			for _, field := range st.Fields.List {
+				if !isByteSlice(field.Type) || field.Tag == nil {
+					continue
+				}
+				tag, err := strconv.Unquote(field.Tag.Value)
+				if err != nil {
+					continue
+				}
+				if v, ok := reflect.StructTag(tag).Lookup("json"); !ok || v == "-" {
+					continue
+				}
+				for _, name := range field.Names {
+					out = append(out, owner+"."+name.Name)
+				}
+			}
+			return true
+		})
+	}
+	for _, decl := range file.Decls {
+		switch d := decl.(type) {
+		case *ast.GenDecl:
+			for _, spec := range d.Specs {
+				if ts, ok := spec.(*ast.TypeSpec); ok {
+					scan(ts.Name.Name, ts.Type)
+				} else {
+					scan("var", spec)
+				}
+			}
+		case *ast.FuncDecl:
+			scan(d.Name.Name, d)
+		}
+	}
+	return out, nil
+}
+
+// isByteSlice reports whether t is []byte or []uint8.
+func isByteSlice(t ast.Expr) bool {
+	at, ok := t.(*ast.ArrayType)
+	if !ok || at.Len != nil {
+		return false
+	}
+	id, ok := at.Elt.(*ast.Ident)
+	return ok && (id.Name == "byte" || id.Name == "uint8")
+}
+
 func checkRule(rule int, pkgs []modPkg) []Violation {
 	switch rule {
 	case 1:
@@ -432,6 +559,10 @@ func checkRule(rule int, pkgs []modPkg) []Violation {
 		return checkRule8(pkgs)
 	case 9:
 		return checkRule9(pkgs)
+	case 10:
+		return checkRule10(pkgs)
+	case 11:
+		return checkRule11(pkgs)
 	default:
 		return []Violation{{Rule: rule, From: "archtest", To: "unknown rule"}}
 	}

@@ -53,6 +53,13 @@ linters:
               desc: use log/slog (0008-MADR D18)
             - pkg: github.com/rs/zerolog
               desc: use log/slog (0008-MADR D18)
+        json:
+          list-mode: lax
+          files:
+            - $all
+          deny:
+            - pkg: encoding/json$
+              desc: use jsonx, on encoding/json/v2 (0039-MADR D24)
     forbidigo:
       analyze-types: true
       forbid:
@@ -62,6 +69,9 @@ linters:
           msg: use log/slog (0008-MADR D18)
         - pattern: ^os\.(Stdout|Stderr|Exit)$
           msg: use the writers and exit code passed to cli.Main (0008-MADR D18)
+        - pattern: ^json\.(Marshal|MarshalWrite|MarshalEncode|Unmarshal|UnmarshalRead|UnmarshalDecode)$
+          pkg: ^encoding/json/v2$
+          msg: encode and decode through jsonx, under its policies (0039-MADR D24)
     sloglint:
       no-mixed-args: true
       attr-only: true
@@ -140,6 +150,11 @@ linters:
       - linters:
           - forbidigo
         path: cmd/gobble/main\.go
+      # jsonx is where encoding/json/v2 is called (0039-MADR D24).
+      - linters:
+          - forbidigo
+        path: ^jsonx/
+        text: 0039-MADR D24
       # A generator a developer runs, never shipped (0018-PLAN P2 deviation 2).
       - linters:
           - forbidigo

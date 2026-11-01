@@ -1,7 +1,8 @@
 // Package archtest enforces the module import boundaries.
 // Stability: internal
 //
-// The test runs go list -deps -json ./... and checks the eight rules in
-// 0004-MADR. Rules 4 and 8 name their edges even though those imports are
-// not in the tree yet.
+// The test runs go list -e -deps -test -json ./... and checks eleven rules:
+// rules 1 to 9 are 0004-MADR's import rules, as amended; rule 10 keeps
+// jsonx a leaf, and rule 11 allows a []byte field with a json tag only
+// where listed (0039-MADR D24). docs/architecture.md lists them.
 package archtest

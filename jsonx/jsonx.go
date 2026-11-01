@@ -9,16 +9,20 @@ import (
 )
 
 // Options are the data policy's options: invalid UTF-8 written and read as
-// U+FFFD, and map keys sorted. They serve a jsontext.Encoder or Decoder, or
-// a v2 call that needs them.
+// U+FFFD, a repeated member name refused, and map keys sorted. They serve a
+// jsontext.Encoder or Decoder, or a v2 call that needs them. Each rule is
+// stated, so a stream function's call overrides a stream built with the
+// other policy (0039-PLAN deviation 17).
 func Options() json.Options {
-	return json.JoinOptions(jsontext.AllowInvalidUTF8(true), json.Deterministic(true))
+	return json.JoinOptions(jsontext.AllowInvalidUTF8(true), jsontext.AllowDuplicateNames(false), json.Deterministic(true))
 }
 
 // StrictOptions are the configuration policy's options: encoding/json/v2's
-// defaults, which refuse invalid UTF-8 and a repeated member name, with map
-// keys sorted.
-func StrictOptions() json.Options { return json.Deterministic(true) }
+// defaults, which refuse invalid UTF-8 and a repeated member name, stated,
+// with map keys sorted.
+func StrictOptions() json.Options {
+	return json.JoinOptions(jsontext.AllowInvalidUTF8(false), jsontext.AllowDuplicateNames(false), json.Deterministic(true))
+}
 
 // Marshal encodes v under the data policy, then o.
 func Marshal(v any, o ...json.Options) ([]byte, error) {
@@ -38,6 +42,32 @@ func MarshalStrict(v any, o ...json.Options) ([]byte, error) {
 // UnmarshalStrict decodes b into v under the configuration policy, then o.
 func UnmarshalStrict(b []byte, v any, o ...json.Options) error {
 	return json.Unmarshal(b, v, append([]json.Options{StrictOptions()}, o...)...)
+}
+
+// MarshalEncode encodes v as enc's next value under the data policy, then
+// o, whatever enc was built with: a call's options take precedence over the
+// stream's for that call.
+func MarshalEncode(enc *jsontext.Encoder, v any, o ...json.Options) error {
+	return json.MarshalEncode(enc, v, append([]json.Options{Options()}, o...)...)
+}
+
+// UnmarshalDecode decodes dec's next value into v under the data policy,
+// then o, whatever dec was built with; past the last value it is io.EOF.
+func UnmarshalDecode(dec *jsontext.Decoder, v any, o ...json.Options) error {
+	return json.UnmarshalDecode(dec, v, append([]json.Options{Options()}, o...)...)
+}
+
+// MarshalEncodeStrict encodes v as enc's next value under the configuration
+// policy, then o, whatever enc was built with.
+func MarshalEncodeStrict(enc *jsontext.Encoder, v any, o ...json.Options) error {
+	return json.MarshalEncode(enc, v, append([]json.Options{StrictOptions()}, o...)...)
+}
+
+// UnmarshalDecodeStrict decodes dec's next value into v under the
+// configuration policy, then o, whatever dec was built with; past the last
+// value it is io.EOF.
+func UnmarshalDecodeStrict(dec *jsontext.Decoder, v any, o ...json.Options) error {
+	return json.UnmarshalDecode(dec, v, append([]json.Options{StrictOptions()}, o...)...)
 }
 
 // Value is v encoded by Marshal, as a hatch value: never empty non-nil.
