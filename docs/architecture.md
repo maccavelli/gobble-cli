@@ -165,7 +165,7 @@ The direct requirements in `go.mod`:
 | `github.com/modelcontextprotocol/go-sdk` | `v1.8.0` |
 | `github.com/maccavelli/go-llmprovider-sdk` | `v1.25.0` |
 | `github.com/maccavelli/go-selfupdate-lib` | `v1.23.1` |
-| `github.com/maccavelli/go-tui-lib/v2` | `v2.7.0` |
+| `github.com/maccavelli/go-tui-lib/v2` | `v2.9.0` |
 | `github.com/google/jsonschema-go` | `v0.4.3` |
 | `go.yaml.in/yaml/v3` | `v3.0.5` |
 | `golang.org/x/sys`, `golang.org/x/term`, `golang.org/x/text` | `v0.49.0`, `v0.47.0`, `v0.43.0` |

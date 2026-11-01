@@ -2581,3 +2581,37 @@ The base is P24's `d0bfd38`. No deviation.
 8. **G-hosts,** on the Linux machine and the Windows laptop, with 818 files shipped to each: `go test` and race passed
    on both, 38 ok; `make check-records markdownlint` passed on both; preflight stops at `verify-build-metadata`, as on
    every copy.
+
+### P26 record (2026-11-01): go-tui-lib/v2 `v2.9.0`
+
+The base is P25's `2b1b262`. No deviation. P23 was not run (deviation 14).
+
+1. **C2:** `git ls-remote --tags` at the phase's start lists `v2.9.0` as go-tui-lib's newest `v2` tag.
+2. **Checked first** (step 1): `python3 scripts/check_libs.py --lib go-tui-lib --tag v2.9.0`, "pinned v2.7.0, checking
+   v2.9.0": 14 checks, 0 failing, `archtest: ok` among them.
+3. **The pin** (step 2): `go get github.com/maccavelli/go-tui-lib/v2@v2.9.0` ("upgraded … v2.7.0 => v2.9.0"), then
+   `go mod tidy`. `go.mod` changed on go-tui-lib's line alone; `go.sum` lost the two `v2.7.0` lines and gained the two
+   `v2.9.0` lines, and nothing else.
+4. **No source change** (step 3): `go test ./internal/cli/...` passed, every package: `internal/cli` (the permission
+   prompt's, `glyph`'s and `safetext`'s tests, and `view-plain.golden`), `editor` (its reprint and resize tests),
+   `render`, `term`, `termtest` and `complete`. After the gates, `git status` showed only the phase's four files, so no
+   golden changed.
+5. **The docs** (step 4): `README.md:137` and `docs/architecture.md:168` name `v2.9.0`.
+6. **G-local:**
+   * no Go file changed, so `make pre-add-check` had none to check;
+   * `make preflight`: passed; `make race`: 38 ok;
+   * `make perf`: passed at load 24, with ReplyRender 33.57 µs (baseline 30 µs), Reprint 10.02 ms (baseline 9.4
+     ms), LineSessionStart 972.2 µs (baseline 830 µs), KeyDraw 1.479 µs (baseline 1.5 µs). The allocations were
+     257, 49,696, 5,015 and 5, as at P9.
+7. **G-hosts,** on the Linux machine and the Windows laptop, with 818 files shipped to each:
+   * `go test` and race: passed on both, 38 ok;
+   * `make check-records markdownlint`: passed on both;
+   * preflight stops at `verify-build-metadata`, as on every copy;
+   * `make perf`: passed on both. The Linux machine: ReplyRender 190.27 µs (baseline 110 µs), Reprint 38.52 ms
+     (baseline 29 ms), LineSessionStart 5.06 ms (baseline 2.9 ms), KeyDraw 6.242 µs (baseline 5 µs), its load not
+     recorded. The Windows laptop: ReplyRender 27.65 µs (baseline 54 µs), Reprint 7.59 ms (baseline 12 ms),
+     LineSessionStart 3.70 ms (baseline 6.9 ms), KeyDraw 1.200 µs (baseline 1.4 µs);
+   * the conhost probe on the Windows laptop: passed.
+8. **Every pin current** (the plan's Verification, first item): `go list -m` reports acp-go-sdk2 `v1.31.1`,
+   go-llmprovider-sdk `v1.25.0`, go-selfupdate-lib `v1.23.1` and go-tui-lib/v2 `v2.9.0`, the MADR's D1 as amended on
+   2026-11-01.
