@@ -163,7 +163,7 @@ The direct requirements in `go.mod`:
 | `github.com/alecthomas/kong` | `v1.16.1` |
 | `github.com/maccavelli/acp-go-sdk2` | `v1.31.1` |
 | `github.com/modelcontextprotocol/go-sdk` | `v1.8.0` |
-| `github.com/maccavelli/go-llmprovider-sdk` | `v1.24.1` |
+| `github.com/maccavelli/go-llmprovider-sdk` | `v1.25.0` |
 | `github.com/maccavelli/go-selfupdate-lib` | `v1.23.1` |
 | `github.com/maccavelli/go-tui-lib/v2` | `v2.7.0` |
 | `github.com/google/jsonschema-go` | `v0.4.3` |

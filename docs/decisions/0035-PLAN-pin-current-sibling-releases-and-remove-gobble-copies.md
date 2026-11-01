@@ -2550,3 +2550,34 @@ The base is `5149928`, the records commit of deviation 14. No deviation.
 7. **G-hosts,** on the Linux machine and the Windows laptop, with 818 files shipped to each: `go test` and race passed
    on both, 38 ok; `make check-records markdownlint` passed on both; preflight stops at `verify-build-metadata`, as on
    every copy.
+
+### P25 record (2026-11-01): go-llmprovider-sdk `v1.25.0`
+
+The base is P24's `d0bfd38`. No deviation.
+
+1. **C2:** `git ls-remote --tags` at the phase's start lists `v1.25.0` as go-llmprovider-sdk's newest `v1` tag.
+2. **Checked first** (step 1): `python3 scripts/check_libs.py --lib go-llmprovider-sdk --tag v1.25.0`, "pinned v1.24.1,
+   checking v1.25.0": 13 checks, 0 failing.
+3. **The pin** (step 2): `go get github.com/maccavelli/go-llmprovider-sdk@v1.25.0` ("upgraded … v1.24.1 => v1.25.0"),
+   then `go mod tidy`. `go.mod` changed on the SDK's line alone; `go.sum` lost the two `v1.24.1` lines and gained the
+   two `v1.25.0` lines, and nothing else.
+4. **No source change** (step 3): `go test ./llm/provider/ ./internal/cli/ ./acpserver/` passed, the sign-in tests
+   among them; after the gates, `git status` showed only the phase's four files.
+5. **Which wizard changes reach gobble,** made exact. The MADR's D1 amendment left the question to this phase's tests.
+   [gobble-cli#10](https://github.com/maccavelli/gobble-cli/issues/10), filed the same day, traced it, and its reading
+   was checked here against `llm/provider/signin.go:176-190` and the SDK's `llmprovider/providers/providers.go`:
+   * not reached: a refused saved session's new sign-in menu, since gobble's `wizard.Options.Existing` names no
+     `Kind` and a session is offered only for `CredOAuth`; and the Chat Completions changes, since `providers.Default()`
+     imports no `chatcompat` and `LocalServers` is off. The catalog's `Err` is not read either, since gobble discards
+     the catalog;
+   * reached, by #10's reading: an offline machine's listing notice says "offline", not "provider unavailable"; and a
+     `models.json` base URL the wizard refuses is named by scheme, host and path, its query and fragment elided. No
+     gobble test reads either text.
+
+   #10's own proposal, `withHeaders` over `llmprovider.NewHTTPClient()`, is a code change, outside this pin phase.
+6. **The docs** (step 4): `README.md:131` and `docs/architecture.md:166` name `v1.25.0`.
+7. **G-local:** no Go file changed, so `make pre-add-check` had none to check; `make preflight`: passed; `make race`: 38
+   ok. P25 touches nothing under `internal/cli`, so no `make perf`.
+8. **G-hosts,** on the Linux machine and the Windows laptop, with 818 files shipped to each: `go test` and race passed
+   on both, 38 ok; `make check-records markdownlint` passed on both; preflight stops at `verify-build-metadata`, as on
+   every copy.
