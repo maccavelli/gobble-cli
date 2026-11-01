@@ -105,6 +105,8 @@ recommended one):
 - **PQ5.** "Terminal paths (Recommended)": (a).
 - **PQ6.** "Not adopted (Recommended)": (a).
 - **PQ7.** "Take lineedit's (Recommended)": (a).
+- **PQ8.** "Cap at 120 (Recommended)": (a). Answered 2026-11-01, with deviation 15.
+- **PQ9.** "AddDrawn at block start (Recommended)": (a). Answered 2026-11-01, with deviation 15.
 
 So the steps below stand as written, and no phase waits on a question.
 
@@ -187,6 +189,29 @@ P1 runs before P23 (0039-MADR Q1). See the execution record.*
   - **(b)** Keep gobble's behaviour where a host hook allows it, and file go-tui-lib requests for the rest. P17 waits on
     their tag.
   - **(c)** Defer `lineedit` to a record of its own. P17 is skipped and `internal/cli/editor` stays.
+- **PQ8. The reprint's width (P18b).** go-tui-lib's `Transcript` draws every piece at the one width its last
+  `Resize` gave. Today the view reprints at the terminal's full width (`v.reprintWidth = ls.width`, `line.go:336`),
+  drawing replies and messages at `min(width, 120)`, while the editor reprints at its own `e.width`, which is capped at
+  `editor.MaxWidth`, 120 (`editor.go:72`, `:535-540`).
+  - **(a) Recommended.** The wrapper resizes the `Transcript` to `min(ls.width(), editor.MaxWidth)`, the width the
+    editor reprints at today. A reply's `p.At(width)` then matches the width it was drawn at live (`replyWidth`,
+    `line.go:259-264`), and each row, at most 120 cells, is one terminal row on a wider terminal. The cost: on a
+    terminal wider than 120 columns, a log record or `/help` is reprinted at 120 where the view's reprint drew it at
+    the full width.
+  - **(b)** The full width, with each reply kept by `AddDrawn(func(w) string { return p.At(min(w, 120)) })`, not
+    `AddReply`. Today's widths are kept, but `AddDrawn` counts a piece's size once, when it is added, so the 4 MiB
+    bound no longer sees a reply grow.
+  - **(c)** The full width, with `AddReply`. Replies are reprinted wider than they were drawn live, on a terminal
+    wider than 120 columns.
+- **PQ9. Thinking text (P18b).** `stream` has no plain streaming wrapper, so thinking keeps `render.Wrap`, dimmed
+  (P18a step 3), and the `Transcript` has no piece that grows other than a reply's Printer.
+  - **(a) Recommended.** `AddDrawn` when a thinking block starts, its function drawing the block's source so far,
+    dimmed and wrapped at `min(width, 120)`, read under the wrapper's lock. A reprint mid-block shows the block as far
+    as it has come, as today. The cost: `AddDrawn` counts the piece's size once, when it is added, so thinking text
+    is not counted toward the 4 MiB bound.
+  - **(b)** `AddDrawn` when the block ends, so its size is counted exactly. A reprint while a thinking block streams
+    leaves that block out.
+  - **(c)** Ask go-tui-lib for a growing drawn piece, and hold P18b and P19 for its tag.
 
 ## Implementation Steps
 
@@ -943,6 +968,9 @@ Step 8's commit is on that branch, and the owner fast-forwards `main` to it.
 
 ### P18 — `stream` and `transcript` (MADR D14 step 5; Q3; PQ3)
 
+*Split 2026-11-01, by deviation 15: P18a and P18b below replace this phase, which is not run as written. Its
+steps stand as the source of theirs.*
+
 *Held 2026-10-31, by deviation 13: its file list missed `internal/cli/editor/editor.go` and the tests built on the old
 transcript, and the composition step 5 needs is asked of go-tui-lib in
 [go-tui-lib#14](https://github.com/maccavelli/go-tui-lib/issues/14). The MADR's D14 step 5 amendment of 2026-10-31,
@@ -1007,6 +1035,148 @@ Files:
    remains.
 10. **0032-PLAN:** its P3 and on are recorded as carried out, and its status becomes `complete`.
 11. G-local with `make perf`, and G-hosts with `make perf` and `make probe-conhost`. **Commit.**
+
+### P18a — `stream` (MADR D14 step 5a, accepted 2026-11-01; Q3; PQ3; deviation 15)
+
+Files:
+
+- `internal/cli/view.go`, `internal/cli/perf_test.go`;
+- `internal/cli/render/`: `mdstream.go`, `mdstream_test.go`, `mdstyle.go`, `mdstyle_test.go`, `table.go`,
+  `table_test.go` (deleted), with `testdata/mdstream.json`, `testdata/style.input.txt`, `testdata/style.golden` and
+  `testdata/tables.golden` (deleted); `bench_test.go`, `wrap.go`, `tool.go`, `commands.go`, `message.go`,
+  `tool_test.go`, `commands_test.go`;
+- `internal/cli/testdata/view-color.golden`;
+- `docs/architecture.md`.
+
+1. **PQ3's facts,** re-read at the phase's start; a difference is a deviation:
+   - `internal/cli/print.go` imports no `render` (`print.go:3-16`);
+   - the line view styles by `caps.Out.Color` (`view.go:274`, `:509`);
+   - `replyWidth` is 0 off a terminal, and `min(width, editor.MaxWidth)` on one (`line.go:259-264`);
+   - the line view runs only when stdout is a terminal (`mode.go:23-28`).
+2. **The reply is a `stream.Printer`,** one for each reply, in place of `view`'s `md render.Stream` and
+   `wrap render.Wrap` (`view.go:54-55`):
+   - **colour on:** `stream.NewPrinter(stream.WithMarkup(stream.DefaultMarkup()), stream.WithWidth(v.wrapWidth()))`,
+     the library's table layout kept;
+   - **colour off:** `stream.NewPrinter(stream.WithoutTableLayout(), stream.WithWidth(v.wrapWidth()))`, the zero
+     `Markup`. With no width that is "the cleaned input, byte for byte" (go-tui-lib `stream/doc.go:16-18`), Q3's guard;
+   - each chunk is `p.Write(chunk)` (today `v.md.Push`, `view.go:131`), after `p.SetWidth(v.wrapWidth())`, so a resize
+     applies to the lines printed from then on, as `render.Wrap.Push(s, w)` does today (`view.go:278`);
+   - `text` (`view.go:272-281`) no longer calls `render.Style`, `render.Tables` or `v.wrap.Push`: the Printer's output
+     is shown as it is;
+   - `flushReply` (`view.go:300-304`) shows `p.Flush()` and drops the Printer;
+   - `tryReprint`'s idle check (`view.go:474`) reads the reply Printer's `Idle()` (no Printer is idle) in place of
+     `v.wrap.Idle()`;
+   - the transcript keeps each chunk as the Printer is given it, so a reply's kept source is the same text as today's;
+   - `replyAt` (`view.go:508-514`) draws a reply again from its kept source by a new Printer with the view's options,
+     `p.Write(src)` then `p.At(min(width, editor.MaxWidth))`. gobble's own `transcript.go` stays, by the MADR's 5a.
+3. **Thinking keeps `render.Wrap`,** dimmed (`view.go:143`, `:517-520`), since `stream` has no plain streaming
+   wrapper. `wrap.go` stays, with a comment naming the gap.
+4. **The width helpers** (0032-MADR A1.4):
+   - `displayWidth` gives way to `ansi.StringWidth` at `message.go:58`, `commands.go:77`, `:91`, `:128`, `:135`, `:137`
+     and `:157`, `tool.go:34`, and in `commands_test.go:67` and `tool_test.go:36-37`;
+   - `truncateWidth` gives way to `ansi.Truncate(s, n, "")` at `tool.go:35`;
+   - `runeWidth`, `isWide` and `zwj`, which `wrap.go`'s `advance` needs (`wrap.go:309`), move into `wrap.go`
+     unchanged. `escapeLen` stays in `wrap.go`, for `message.go:51`.
+
+   `render`'s `tool_output_25.golden`, `plan-*.golden` and `udiff-*.golden` are byte-identical. A diff means `x/ansi`
+   measures a cell differently, and is a deviation.
+5. **Deleted:** `mdstream.go`, `mdstyle.go` and `table.go`, with their tests and the four testdata files above. Their
+   cases are go-tui-lib's `stream` tests now (go-tui-lib issue 10). `render/bench_test.go` loses
+   `BenchmarkReplyRender` and `BenchmarkReplyRedraw`, which drive the deleted code; go-tui-lib's
+   `stream/bench_test.go` holds the reply's budget, 257 allocations. `render/testdata/reply.txt` stays: `internal/cli`'s
+   budget, bench and perf tests read it.
+6. **`benchReplyRender`** (`perf_test.go:60-84`) drives the Printer, colour on, width 100, 64-byte chunks, as it
+   drove `render`. The ReplyRender baseline is unchanged, and 0030-MADR D5's budgets hold.
+7. **Goldens:**
+   - `view-plain.golden` and `view-thinking-verbose-stats.golden` are byte-identical: both are colour off, Q3's guard;
+   - `print-json.golden`, `print-stream-json.golden` and `print-stream-json-escapes.golden` are byte-identical;
+   - `view-color.golden` is re-recorded. Each hunk of its diff is traced to the library's styling: `DefaultMarkup()`'s
+     spans each closed by `SGR 0` (go-tui-lib `stream/style.go:78`), links styled, a multi-line setext heading's last
+     line only, and the library's table layout. A hunk that matches none stops the phase.
+8. **Seen failing** (C9): on a copy whose colour-off path uses `DefaultMarkup()`, `view-plain.golden` fails.
+9. **Assert by search:** no `render.Stream`, `render.Style`, `render.Tables`, `displayWidth` or `truncateWidth`
+   remains in the module.
+10. **`docs/architecture.md`:** `internal/cli/render`'s note says replies are drawn by go-tui-lib's `stream`, and that
+    `render` keeps tool output, plans, diffs, the status line, the spinner, messages, and `Wrap` for thinking.
+11. G-local with `make perf`, and G-hosts with `make perf` and `make probe-conhost`. **Commit.**
+
+### P18b — `transcript` (MADR D14 step 5b, accepted 2026-11-01; Q3; PQ8; PQ9; deviation 15)
+
+Files:
+
+- `internal/cli/transcript.go`, `transcript_test.go`, `view.go`, `line.go`, `output.go`, `slash.go`, `chat.go`,
+  `permission.go`, `reprint_test.go`, `budget_test.go`, `bench_test.go`, `perf_test.go`;
+- `internal/cli/editor/editor.go`, `editor/resize_test.go`;
+- `personality/keys.go`, `personality/builtin/boring/messages.md`, `personality/boring_test.go`,
+  `personality/builtins_test.go`;
+- `docs/architecture.md`, `docs/decisions/0032-PLAN-go-tui-lib-integration-boundary.md`.
+
+1. **Facts,** re-read at the phase's start; a difference is a deviation:
+   - the transcript is touched from five goroutines: the ACP notification handler (`view.on`), the view's settle timer
+     (`view.go:462`), the editor loop (`finish`, `/help`, the editor's `Shown` and reprint), the permission request
+     (`permission.go:264-265`), and the logger (`output.go:95-98`);
+   - no `inline.Region` is drawn while a turn runs, so a mid-turn reprint is written as it is.
+2. **The wrapper.** `internal/cli/transcript.go`'s `transcript` becomes a locked wrapper of one
+   `transcript.NewTranscript(transcript.WithCatalog(…))`, with the library's defaults: 4 MiB (`DefaultMaxBytes`, today's
+   `maxTranscript`), 10,000 rows (`DefaultMaxRows`, today's `maxReprintRows`) and a 150 ms settle (`DefaultSettle`,
+   today's `reprintSettle` and `settleWait`). Its lock serializes every call on the `Transcript`, and every call on a
+   kept reply's Printer, `Write`, `Flush` and `SetWidth` among them, by `AddReply`'s contract (go-tui-lib
+   `transcript/transcript.go:84-88`).
+3. **The pieces,** by today's kind:
+   - **fixed** (`output.go:39-40`, `view.go:384`, `permission.go:264-265`): `AddDrawn` of a function that returns the
+     text as written. It may hold SGR, which `AddText` would clean away;
+   - **message** (`output.go:82-83`): `AddDrawn(func(w int) string { return render.Message(src, min(w, 120)) + "\n" })`;
+   - **drawn** (`output.go:96-98`, `slash.go:89-90`, `line.go:186`): `AddDrawn(f)`;
+   - **reply:** `AddReply(p)`, the reply's Printer from P18a, by PQ8;
+   - **thinking:** by PQ9 (a), `AddDrawn` when a thinking block starts, of a function that draws the block's source so
+     far, dimmed and wrapped by `render.Wrap` at the width, read under the wrapper's lock. Its size is counted once,
+     when it is added, so thinking text is not counted toward the 4 MiB bound.
+4. **The width,** by PQ8 (a): the wrapper resizes the `Transcript` to `min(ls.width(), editor.MaxWidth)`, the width
+   the editor reprints at today, for the view's resizes and the editor's alike.
+5. **One settle.** The view's (`reprintSettle`, `resized`, `tryReprint`, `view.go:446-493`) and the editor's
+   (`settleWait`, `resized`, `settleAt`, `settle`, `editor.go:87`, `:128-129`, `:282-320`) give way to the
+   `Transcript`'s:
+   - a resize calls the wrapper's `Resize(width, now)`;
+   - the editor's `Options.Reprint func(width int) string` (`editor.go:62`) becomes an interface of the wrapper's
+     `Timeout()` and `HandleTimeout(now, idle)`. The editor arms its read timer at `Timeout()`, and at the prompt
+     writes `region.Print(out)` of `HandleTimeout(now, true)`, the v2.9.0 recipe (go-tui-lib
+     `docs/guides/migrating.md:46-52`). Its empty-reprint branch (`editor.go:314-317`) goes: the library's reprint of
+     an empty transcript ends with `CSI H`, after which `Print` adds no line end;
+   - mid-turn, the view arms a timer at `Timeout()` and writes `HandleTimeout(now, idle)` as it is, `idle` being the
+     view at a line's start with the reply's Printer and the thinking wrapper idle; the `Transcript`'s own synchronized
+     update stands, since no region is drawn (go-tui-lib `transcript/doc.go:37-42`);
+   - a reprint still due when the turn ends is the editor's next `HandleTimeout`, as `afterTurn` hands it over today
+     (`view.go:376-381`).
+6. **The notice.** gobble's voice gains the key `transcript.earlier-output`, boring's text "(earlier output is not
+   shown again)", today's literal (`transcript.go:88`), left to boring in the other builtins. `WithCatalog` is a
+   `msgcat.CatalogFunc` that gives `Voice.Text` for the library's `MsgEarlierOutput`. Its style is the library's
+   default, unstyled, by Q3, where today's is dim.
+7. **Removed:** `transcript.go`'s own `render`, `grow` and its bound, and `reprintText`; the view's settle timer and
+   `tryReprint`; the editor's settle fields.
+8. **Tests:**
+   - `transcript_test.go`: gobble's render and bound tests go, being the library's now; a test is added that a reply's
+     Printer is written under the wrapper's lock;
+   - `reprint_test.go` and `editor/resize_test.go` drive the wrapper. Assertions on the reprint's bytes change for
+     the library's: `SGR 0` first, CR LF line ends, the notice unstyled. Each changed assertion is named in the
+     record; one changed for any other reason is a deviation;
+   - a new test on `inlinetest.Screen` splits the prompt's reprint at each `?2026l` and finds the prompt row at every
+     frame's end (the MADR's Confirmation of 5b);
+   - `TestReprintAllocationBudget` (`budget_test.go`) and `BenchmarkReprint` (`bench_test.go`) measure the wrapper's
+     path. Their budgets stand: a budget the library's path exceeds is a deviation.
+9. **Seen failing** (C9):
+   - the `inlinetest.Screen` test, on a copy whose editor writes `region.Clear() + out + region.Draw(…)`, the
+     pre-v2.9.0 recipe;
+   - `make race`, on a copy without the wrapper's lock around a reply's Printer;
+   - the notice, on a copy whose catalog gives the library's English text in place of gobble's voice: a test that
+     sets a non-boring voice finds that voice's text.
+10. **Goldens:** `view-plain.golden`, `view-thinking-verbose-stats.golden`, `view-color.golden` as P18a left it, and the
+    print goldens are byte-identical. No golden holds a reprint.
+11. **Assert by search:** no `reprintText`, `reprintSettle`, `settleWait` or `maxReprintRows` remains.
+12. **Benchmarks:** the Reprint baseline and 0030-MADR D5's budgets hold. The record quotes the figures beside
+    go-tui-lib's: 5.2 ms and 43,541 allocations for a 4 MiB reprint on macOS (go-tui-lib `docs/guides/migrating.md:244-254`).
+13. **Docs:** `docs/architecture.md`'s `internal/cli` note says the transcript and its settle are go-tui-lib's, behind
+    a locked wrapper. 0032-PLAN records its P3 onward as carried out, and its status becomes `complete`.
+14. G-local with `make perf`, and G-hosts with `make perf` and `make probe-conhost`. **Commit.**
 
 ### P19 — close-out
 
@@ -2615,3 +2785,27 @@ The base is P25's `2b1b262`. No deviation. P23 was not run (deviation 14).
 8. **Every pin current** (the plan's Verification, first item): `go list -m` reports acp-go-sdk2 `v1.31.1`,
    go-llmprovider-sdk `v1.25.0`, go-selfupdate-lib `v1.23.1` and go-tui-lib/v2 `v2.9.0`, the MADR's D1 as amended on
    2026-11-01.
+
+### Deviation 15 (2026-11-01): D14 step 5 accepted, and P18 split into P18a and P18b
+
+- **The owner's answer** to the MADR's proposed D14 step 5 amendment, after the pins: "Accept the split, run both now
+  (Recommended)". The options not taken were one step 5 phase, and deferring step 5 while 0037-PLAN resumed. The
+  MADR records the acceptance under the amendment.
+- **Found,** surveying go-tui-lib `v2.9.0` and gobble at `48a2003` for the steps, where P18 as written differs:
+  - the constructor is `transcript.NewTranscript`; there is no width cap in `stream`; `transcript`'s defaults are 4 MiB,
+    10,000 rows and a 150 ms settle, gobble's own values; the notice is `transcript.earlier-output`, whose English text
+    is gobble's literal;
+  - every piece of a reprint is drawn at one width, where gobble draws replies and messages at `min(width, 120)` and the
+    editor and the view reprint at different widths: PQ8;
+  - the `Transcript` has no growing piece but a reply's Printer, and thinking keeps `render.Wrap`: PQ9;
+  - `wrap.go` needs `table.go`'s `runeWidth` (`wrap.go:309`), and `message.go` needs `wrap.go`'s `escapeLen`
+    (`message.go:51`); `render/testdata/reply.txt` is read by `internal/cli`'s budget, bench and perf tests. So
+    `table.go` cannot go whole without those moves;
+  - `view-thinking-verbose-stats.golden` is colour off, so it stays byte-identical, where P18 had it re-recorded;
+  - the editor's reprint option, `Options.Reprint` (`editor.go:62`), and its tests change in P18b, which P18's list
+    lacked.
+- **Decision.** P18 is split: P18a (`stream`) and P18b (`transcript`) above, each its own commit, then P19. P18b's
+  steps 3 and 4 wait on PQ8 and PQ9; the rest of P18b, and all of P18a, need no further answer.
+- **The owner's answers,** the same day: PQ8, "Cap at 120 (Recommended)"; PQ9, "AddDrawn at block start
+  (Recommended)". P18b's steps 3 and 4 are written to them.
+- **Files added to scope:** P18a's and P18b's lists above.

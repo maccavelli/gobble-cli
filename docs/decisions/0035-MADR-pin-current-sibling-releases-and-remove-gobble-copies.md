@@ -751,6 +751,21 @@ policy. And one record keeps the order, and the cross-library facts (check-libs,
       end. Run against the library's current recipe on a scratch copy, it fails. `make race` fails on a copy without
       the wrapper's lock.*
 
+  *Accepted 2026-11-01, by the PLAN's deviation 15, from the owner's answer "Accept the split, run both now
+  (Recommended)". The options not taken were one step 5 phase, and deferring step 5 while 0037-PLAN resumed.*
+  - *go-tui-lib `v2.9.0` (`16349ec`), pinned by the PLAN's P26, carries all three of
+    [go-tui-lib#14](https://github.com/maccavelli/go-tui-lib/issues/14)'s items, and the issue is closed:*
+    - *item 1: `inline.Region.Print` writes its text inside the region's own synchronized update and drops any mode 2026
+      sequence the text holds, so a reprint as `HandleTimeout` gives it, from one `Transcript` with its defaults, is
+      written as `region.Print(out)` at the prompt, and as `out` alone mid-turn. The proposal's "#14's composition" is
+      that call;*
+    - *item 2: `Transcript.Reprint(idle)`, a reprint on demand. As proposed, this record does not adopt it;*
+    - *item 3: the kept Printer's contract, in `AddReply`'s documentation.*
+  - *So 5b's precondition is met. **The order** is P18a, then P18b, each its own commit, then P19. 0037-PLAN waits until
+    they are done, so the proposal's alternative of resuming it while 5b waits does not arise.*
+  - *The proposal's decision, consequences and confirmation stand, with "once a go-tui-lib tag carries #14's item 1"
+    met by `v2.9.0`.*
+
   *(Answered 2026-10-29: PQ4 (a) `ask`'s behaviour, 0029-MADR D1 amended; PQ5 (a) `safetext` on terminal paths, print
   mode and the piped view keeping `term.Sanitize`; PQ6 (a) neither `pick` nor `termcap`; PQ7 (a) `lineedit`'s
   behaviour, gobble keeping its host parts.)*
