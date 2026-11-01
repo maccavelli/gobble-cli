@@ -1045,6 +1045,7 @@ Files:
   `table_test.go` (deleted), with `testdata/mdstream.json`, `testdata/style.input.txt`, `testdata/style.golden` and
   `testdata/tables.golden` (deleted); `bench_test.go`, `wrap.go`, `tool.go`, `commands.go`, `message.go`,
   `tool_test.go`, `commands_test.go`;
+  *(deviation 17 adds `wrap_test.go`);*
 - `internal/cli/testdata/view-color.golden`;
 - `docs/architecture.md`.
 
@@ -1077,6 +1078,8 @@ Files:
    - `truncateWidth` gives way to `ansi.Truncate(s, n, "")` at `tool.go:35`;
    - `runeWidth`, `isWide` and `zwj`, which `wrap.go`'s `advance` needs (`wrap.go:309`), move into `wrap.go`
      unchanged. `escapeLen` stays in `wrap.go`, for `message.go:51`.
+   - *(Deviation 16: `mdstyle.go`'s `fenceRun`, `isFenceClose`, `isHeading` and `markerLen`, which `Wrap` also
+     needs, move into `wrap.go` unchanged too.)*
 
    `render`'s `tool_output_25.golden`, `plan-*.golden` and `udiff-*.golden` are byte-identical. A diff means `x/ansi`
    measures a cell differently, and is a deviation.
@@ -1162,7 +1165,8 @@ Files:
    - a new test on `inlinetest.Screen` splits the prompt's reprint at each `?2026l` and finds the prompt row at every
      frame's end (the MADR's Confirmation of 5b);
    - `TestReprintAllocationBudget` (`budget_test.go`) and `BenchmarkReprint` (`bench_test.go`) measure the wrapper's
-     path. Their budgets stand: a budget the library's path exceeds is a deviation.
+     path. Their budgets stand: a budget the library's path exceeds is a deviation. *(Deviation 21: P18a's interim
+     8,500 returns to 6,300 here, the count on the library's path being measured first.)*
 9. **Seen failing** (C9):
    - the `inlinetest.Screen` test, on a copy whose editor writes `region.Clear() + out + region.Draw(…)`, the
      pre-v2.9.0 recipe;
@@ -2809,3 +2813,186 @@ The base is P25's `2b1b262`. No deviation. P23 was not run (deviation 14).
 - **The owner's answers,** the same day: PQ8, "Cap at 120 (Recommended)"; PQ9, "AddDrawn at block start
   (Recommended)". P18b's steps 3 and 4 are written to them.
 - **Files added to scope:** P18a's and P18b's lists above.
+
+### Deviation 16 (2026-11-01): P18a, `wrap.go`'s line classifiers in `mdstyle.go`
+
+- **Found** building P18a's step 5: with `mdstyle.go` deleted, `render` does not build. `wrap.go` calls four of its
+  line classifiers, `fenceRun`, `isFenceClose`, `isHeading` and `markerLen` (`wrap.go:138`, `:397`, `:410`, `:466`,
+  `:469`, `:472`: "undefined"). They are pure functions of a line, using `strings` alone. Step 4 moved `table.go`'s
+  `runeWidth`, `isWide` and `zwj` for the same reason, but did not name these. The plan's gap, not the code's.
+- **The owner's answer:** "Move them into wrap.go (Recommended)". The option not taken was keeping `mdstyle.go` with
+  only the four helpers, renamed.
+- **Decision.** The four move into `wrap.go` unchanged, with their comments; `mdstyle.go` goes whole. Step 4 is
+  annotated.
+- **Files added:** none; `wrap.go` and `mdstyle.go` are P18a's.
+
+### Deviation 17 (2026-11-01): P18a, `TestWrapStyled` styled its input with the deleted code
+
+- **Found** vetting P18a: `internal/cli/render/wrap_test.go:149-150`, `TestWrapStyled`, made its styled input with
+  `Tables` and `Style` (`vet: wrap_test.go:149:14: undefined: Tables`). It pins that styled text wraps as its plain text
+  does, every escape kept, whatever the chunks. Thinking still reaches `Wrap` styled, dimmed (`view.go:141`). The file
+  is not in P18a's list. Every other test in the module builds; `perf_test.go`'s `render.Stream` is step 6's.
+- **The owner's answer:** "Style with go-tui-lib's stream (Recommended)". The option not taken was styling each case
+  whole with `term.Dim.Wrap`, which checks fewer escape paths.
+- **Decision.** `TestWrapStyled` styles each case with `stream.NewPrinter(stream.WithMarkup(stream.DefaultMarkup()),
+  stream.WithoutTableLayout())`, and its assertions stand.
+- **Files added:** `internal/cli/render/wrap_test.go`.
+
+### Deviation 19 (2026-11-01): P18a, a mid-turn reprint waits for the paragraph's end
+
+- **Found** running P18a's tests: `TestViewReprintsAtTheNextLineEnd` (`internal/cli/reprint_test.go:142`) failed with
+  `not reprinted at the line's end`.
+  - A mid-turn reprint waits until nothing is held back (`tryReprint`, `view.go:474`), now the reply's Printer's
+    `Idle()`.
+  - go-tui-lib's Printer holds a paragraph's latest line until the next line arrives, so that a setext heading is drawn
+    as one (`stream/doc.go`). A scratch probe at `v2.9.0`: idle after a blank line, a list item or a fence line; never
+    mid-paragraph; a table held to its end.
+  - Reprinting while a line is held prints it twice, since `At` draws the held line and the next `Write` releases it:
+    the reason `Transcript.Reprint(false)` gives (`transcript/transcript.go:184`). P18b's `Transcript` keeps the rule.
+- **The owner's answer:** "take option 1, but also open a detailed, descriptive issue in the go-tui-lib repo requesting the functionality for the Printer." Option 1 was: reprint at the paragraph's end, the test feeding the paragraph's end
+  and asserting the reprint there, its other assertions unchanged, and a dated amendment to 0030-MADR D3. The option
+  not taken was holding P18a for a go-tui-lib release.
+- **Decision.**
+  - A mid-turn reprint is written once the reply's Printer is idle: at a paragraph's or a block's end, not a line's.
+  - `TestViewReprintsAtTheNextLineEnd` feeds the first paragraph's end, a blank line, where it fed the line's end, and
+    asserts the reprint there; its assertions after that stand: each word once, in order, no row past 40 columns.
+  - 0030-MADR D3 has a dated amendment.
+  - [go-tui-lib#15](https://github.com/maccavelli/go-tui-lib/issues/15), filed the same day on the owner's word, asks
+    for `Printer.Printed(width)`, the reply as far as printed, and a `Transcript` that reprints with a reply holding a
+    line. gobble adopts it, when a tag carries it, through a record of its own.
+- **Files added:** `docs/decisions/0030-MADR-resize-and-performance.md`, and `internal/cli/reprint_test.go`, which was
+  P18b's.
+
+### Deviation 18 (2026-11-01): P18a, the reply's Printer on the terminal path only
+
+- **Found** running P18a's tests: `TestTerminalCleaning` (`internal/cli/clean_test.go:40`), its off-terminal case,
+  failed with `terminal false: "\u200b" missing from "ab\u202ecd end\n"`. go-tui-lib's Printer cleans by
+  `safetext.Text()` at least, which removes a zero-width space, where the view off a terminal kept `term.Sanitize`'s
+  bytes (PQ5 (a), deviation 10).
+- **Reassessed** at the owner's request, "assess this again. analyze the current codebase and evaluate options in the
+  current version of go-tui-lib and find a more api native, idiomatic, and compatible solution. be creative. propose 3
+  options, including a recommendation based on grounded facts and research":
+  - no `safetext.Rules` keeps U+200B; only `Escape` shows it, escaped (go-tui-lib `safetext/rules.go:9-58`);
+  - `stream.WithRules` never cleans below `safetext.Text()` (`stream/options.go:39-43`), the library's own decision
+    (its `0024-MADR-opt-in-and-opt-out-coverage.md` D2), so an option below it is not to be asked for;
+  - `stream`'s scope is "a line-mode CLI's scrollback" (`stream/doc.go:1-2`);
+  - gobble's `term.Clean` already parts the terminal path, safetext's `Text`, from the byte path, `term.Sanitize`
+    (`internal/cli/term/sanitize.go:13-18`), by PQ5 (a);
+  - the line view runs only with stdout a terminal (`mode.go:23-28`), so its off-terminal path is reached in tests.
+- **The options:** A, the Printer on the terminal path, chosen by `term.Clean`'s predicate; B, the Printer everywhere,
+  PQ5 and deviation 10 amended for the view; C, the view terminal-only by construction, the off-terminal guard moved
+  to print mode's tests.
+- **The owner's answer:** "A: Printer on the terminal path (Recommended)".
+- **Decision.** `view.text` gives a chunk to the reply's Printer only when `caps.Out.TTY`; off a terminal it writes the
+  chunk as `term.Clean(s, false)` gave it, today's bytes. PQ5 (a) and deviation 10 stand, and `TestTerminalCleaning`
+  is unchanged. `replyAt` needs no branch: the transcript is kept only on a terminal (`chat.go:121`).
+- **Files added:** none.
+
+### Deviation 20 (2026-11-01): P18a, `render`'s package doc
+
+- **Found** at P18a's step 10: `internal/cli/render/doc.go` described the package as "a stream that releases only
+  Markdown that can no longer change meaning, Markdown coloured in place, aligned tables", all three deleted by step 5.
+  The file is not in P18a's list.
+- **The owner's answer:** "Update doc.go in P18a (Recommended)". The option not taken was leaving it to P19.
+- **Decision.** `render/doc.go` says what `render` keeps, and that replies are drawn by go-tui-lib's `stream`. `wrap.go`'s
+  comments that named `Style`, `Stream` and `Tables` are brought up to date too; that file is P18a's.
+- **Files added:** `internal/cli/render/doc.go`.
+
+### Deviation 21 (2026-11-01): P18a, the reprint's allocation budget, re-measured on go-tui-lib's Printer
+
+- **Found** in P18a's G-local: `make race` failed `TestReprintAllocationBudget` (`internal/cli/budget_test.go:41`),
+  `6808 allocations for 1,000 rows, more than 6300`. A reply drawn again at a reprint now goes through go-tui-lib's
+  Printer (`replyAt`). On the same 1,000-row reprint:
+
+  | Tree | `go test` | `go test -race` |
+  | :--- | :--- | :--- |
+  | P18a's base, `fd25f9f` | 5,051 | 5,053 |
+  | P18a | 6,104 | 6,808 |
+
+  `make perf`'s Reprint benchmark went from 49,696 to 60,091 allocations (+21%), and from its 9.4 ms baseline to
+  7.87 ms. The budget, 6,300, is 0030-MADR D5's: 0030-PLAN P4's count and a quarter more. No gobble-side change was
+  found that cuts these allocations within P18a's design without gaming the measurement.
+- **The owner's answer:** "Re-baseline in 0030-MADR D5 (Recommended)", whose option also files a go-tui-lib issue for
+  fewer allocations in a redraw. The option not taken was holding P18a for a go-tui-lib release.
+- **Decision.**
+  - 0030-MADR D5 has a dated amendment: the reprint's allocation budget is re-measured on the library's path by D5's
+    own rule, the higher of the two runs and a quarter more, 6,808 × 1.25, rounded down to the hundred: 8,500. The
+    Reprint benchmark's 60,091 allocations are recorded beside it. The time budget is unchanged, and met.
+  - `reprintAllocBudget` (`budget_test.go`) is 8,500, with its comment naming the amendment.
+  - ~~A go-tui-lib issue asks for fewer allocations in the Printer's redraw.~~ Withdrawn by the correction below.
+- **Corrected the same day, before any commit.** The question put to the owner said P18b would carry the same cost.
+  It does not: go-tui-lib's own `BenchmarkReprint` at `v2.9.0`, run on a scratch copy, makes 43,541 allocations in
+  5.5 ms, below gobble's old 49,696 and within the library's `TestReprintBudget`. The extra allocations are P18a's
+  interim `replyAt`, which draws each reply again from its source by a fresh Printer, cleaned and rendered anew: the
+  MADR's 5a design, so that no Printer is read on another goroutine before P18b's lock. P18b draws a kept reply by the
+  library's `At`. The owner's answer to the corrected facts: "Interim 8,500, restore 6,300 at P18b (Recommended)". The
+  options not taken were merging P18a into P18b, and keeping 8,500 after P18b.
+- **Decision, as corrected.**
+  - 8,500 is P18a's interim budget, so recorded in 0030-MADR D5's amendment.
+  - P18b re-measures on the library's path and restores 6,300 when its count fits, by D5's rule; a count that does not
+    fit is a deviation.
+  - No go-tui-lib issue: the library's redraw already allocates less than gobble's did.
+- **Files added:** `internal/cli/budget_test.go`, which was P18b's.
+
+### P18a record (2026-11-01): `stream`
+
+The base is `fd25f9f`, deviation 15's records commit. Deviations 16 to 21 arose in this phase.
+
+1. **PQ3's facts** (step 1) held: `print.go` imports no `render`; the view styles by `caps.Out.Color`
+   (`view.go:274`, `:509`); `replyWidth` is 0 off a terminal (`line.go:259-264`); the line view runs only with stdout a
+   terminal (`mode.go:23-28`).
+2. **The reply** (step 2): `view` keeps `printer *stream.Printer`, made at a reply's first chunk by `replyPrinter`:
+   `DefaultMarkup()` with the library's table layout when colour is on, the zero `Markup` with `WithoutTableLayout()`
+   when it is off, at `wrapWidth()`. Each chunk is `SetWidth(wrapWidth())` then `Write`; `flushReply` shows `Flush()`;
+   `tryReprint` reads the Printer's `Idle()`.
+   - Off a terminal the chunk is written as `term.Clean` gave it, with no Printer (deviation 18).
+   - `replyAt` draws a kept reply by a fresh Printer at `min(width, 120)`, `Write(src) + Flush()`, which is what `At`
+     gives on an idle Printer (`stream/printer.go:85-97`), in one pass where the step's `Write` then `At` makes two.
+3. **Thinking** (step 3) keeps `render.Wrap`, dimmed; `wrap.go`'s doc names the gap.
+4. **The width helpers** (step 4): `displayWidth` gave way to `ansi.StringWidth` and `truncateWidth` to
+   `ansi.Truncate(…, g.Ellipsis)`: the step's `""` was wrong, since `tool.go` passes the glyph set's ellipsis.
+   `runeWidth`, `isWide` and `zwj` moved into `wrap.go`, its `x/text/width` import aliased `xwidth` for gocritic's
+   `importShadow`; `mdstyle.go`'s four line classifiers moved with them (deviation 16).
+   - A scratch probe compared the helpers. `x/ansi` measures a joined emoji family as 2 cells where gobble's counted
+     6, a tab as 0 where gobble's counted 1, and an escape sequence as 0 where gobble's counted its bytes; truncating to
+     1 cell gives the ellipsis where gobble's gave "". `render`'s `tool_output_25.golden`, `plan-*.golden` and
+     `udiff-*.golden` are byte-identical, so none of these reaches a golden.
+5. **Deleted** (step 5): `mdstream.go`, `mdstyle.go`, `table.go`, their tests, and `mdstream.json`, `style.input.txt`,
+   `style.golden` and `tables.golden`. `render/bench_test.go` went whole: its two benchmarks were all it held.
+   `render/testdata/reply.txt` stays. `wrap_test.go`'s `TestWrapStyled` styles its input with the library's Printer
+   (deviation 17).
+6. **`benchReplyRender`** (step 6) drives `view.replyPrinter(100)` in 64-byte chunks: 23.65 µs and 200 allocations
+   on the Mac, against its 30 µs baseline and 257 allocations before.
+7. **Goldens** (step 7): **every golden is byte-identical**, `view-color.golden` included. The step expected it
+   re-recorded; it has no hunk, since `DefaultMarkup()` is gobble's styling, ported (`stream/style.go:100-110`), and the
+   turn's table lays out the same. `view-plain.golden`, `view-thinking-verbose-stats.golden` and the print goldens are
+   unchanged, as the step requires.
+8. **Seen failing** (step 8, C9): on a copy whose colour-off Printer took `WithMarkup(stream.DefaultMarkup())`,
+   `TestViewGoldens` failed: `--- FAIL: TestViewGoldens/view-plain` with `view-plain differs from
+   testdata/view-plain.golden`, and `view-thinking-verbose-stats` with it. Deviation 18's branch was seen failing first
+   as the failure that found it.
+9. **Assert by search** (step 9): no `render.Stream`, `render.Style`, `render.Tables`, `displayWidth` or `truncateWidth`
+   remains (`grep` exits 1).
+10. **Docs** (step 10, deviation 20): `docs/architecture.md`'s `internal/cli/render` row and `render/doc.go` say what
+    `render` keeps, and that replies are go-tui-lib's `stream`'s, on a terminal.
+11. **Behaviour changed, by decision:** a mid-turn reprint waits for a paragraph's end (deviation 19,
+    [go-tui-lib#15](https://github.com/maccavelli/go-tui-lib/issues/15)); the reprint's allocation budget is 8,500 until
+    P18b (deviation 21).
+12. **G-local**, on the final tree:
+    * `make pre-add-check` on the 12 changed Go files: clean;
+    * `make preflight`: passed. Its first run stopped at gocritic's `importShadow` in `wrap.go`, fixed by the alias;
+    * `go test ./...`: 38 ok; `make race`: 38 ok. Its first run failed `TestReprintAllocationBudget` (deviation 21);
+    * `make perf` at load 17: ReplyRender 23.65 µs (baseline 30 µs), Reprint 7.58 ms (baseline 9.4 ms, 60,091
+      allocations), LineSessionStart 934.3 µs (baseline 830 µs), KeyDraw 1.485 µs (baseline 1.5 µs).
+13. **G-hosts**, on the final tree, on the Linux machine and the Windows laptop, 807 files shipped to each (the 11
+    deleted files listed but absent):
+    * `go test` and race: passed on both, 38 ok; `make check-records markdownlint`: passed on both; preflight stops at
+      `verify-build-metadata`, as on every copy;
+    * `make perf`: passed on both. The Linux machine: ReplyRender 94.26 µs (baseline 110 µs), Reprint 25.65 ms
+      (baseline 29 ms), LineSessionStart 3.41 ms (baseline 2.9 ms), KeyDraw 4.383 µs (baseline 5 µs). The Windows
+      laptop: ReplyRender 28.96 µs (baseline 54 µs), Reprint 6.30 ms (baseline 12 ms), LineSessionStart 4.76 ms
+      (baseline 6.9 ms), KeyDraw 1.285 µs (baseline 1.4 µs);
+    * the conhost probe on the Windows laptop: passed.
+
+    The first host run, on the tree before deviation 21's budget, failed race on both hosts at
+    `TestReprintAllocationBudget`, as on the Mac.

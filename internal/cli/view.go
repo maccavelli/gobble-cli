@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/maccavelli/go-tui-lib/v2/glyph"
+	"github.com/maccavelli/go-tui-lib/v2/stream"
 
 	"github.com/maccavelli/gobble-cli/acpclient"
 	"github.com/maccavelli/gobble-cli/internal/cli/render"
@@ -50,10 +51,11 @@ type view struct {
 	// beforeWrite stops the spinner; it is called before the first write.
 	beforeWrite func()
 
-	mu    sync.Mutex
-	md    render.Stream
-	wrap  render.Wrap // the reply's rows (0028-MADR)
-	think render.Wrap // the thinking text's rows
+	mu sync.Mutex
+	// printer draws the reply now arriving; nil between replies (0035-MADR
+	// D14 step 5a).
+	printer *stream.Printer
+	think   render.Wrap // the thinking text's rows
 	// reprintWidth is the terminal's width for a reprint (0030-MADR D3).
 	reprintWidth func() int
 	// afterTurn hands a reprint still due when the turn ends to the
@@ -128,7 +130,7 @@ func (v *view) on(u acpclient.Update) {
 			v.thinking = nil
 			v.newline()
 		}
-		v.text(v.md.Push(term.Clean(u.Text, v.caps.Out.TTY)))
+		v.text(term.Clean(u.Text, v.caps.Out.TTY))
 	case acpclient.KindThought:
 		v.clock.token(v.now())
 		if !v.opts.showThinking || u.Text == "" {
@@ -266,18 +268,33 @@ func (v *view) content(cs []acpclient.ToolContent) {
 	}
 }
 
-// text writes Markdown the stream released: styled when colour is on, raw
-// when it is off (D7), then wrapped to the terminal's width, when there is
-// one (0028-MADR D1, D7 as amended).
+// text gives a chunk of the reply to its Printer, and writes the lines it
+// prints: styled when colour is on, raw when it is off (D7), wrapped to the
+// terminal's width now, when there is one (0028-MADR D1, D7 as amended;
+// 0035-MADR D14 step 5a). Off a terminal the chunk is written as
+// term.Clean gave it: the Printer is the terminal path, as safetext is
+// (0035-PLAN PQ5, deviation 18).
 func (v *view) text(s string) {
 	v.keep(&v.reply, v.replyAt, s)
-	if s != "" && v.caps.Out.Color {
-		s = render.Style(render.Tables(s), v.caps.Out)
+	if !v.caps.Out.TTY {
+		v.show(s)
+		return
 	}
-	if w := v.wrapWidth(); w > 0 {
-		s = v.wrap.Push(s, w)
+	if v.printer == nil {
+		v.printer = v.replyPrinter(v.wrapWidth())
 	}
-	v.show(s)
+	v.printer.SetWidth(v.wrapWidth())
+	v.show(v.printer.Write(s))
+}
+
+// replyPrinter is a reply's Printer at width: go-tui-lib's styling and
+// table layout when colour is on; with it off, the zero Markup and no
+// table layout, the reply's source as it came (Q3's guard).
+func (v *view) replyPrinter(width int) *stream.Printer {
+	if v.caps.Out.Color {
+		return stream.NewPrinter(stream.WithMarkup(stream.DefaultMarkup()), stream.WithWidth(width))
+	}
+	return stream.NewPrinter(stream.WithoutTableLayout(), stream.WithWidth(width))
 }
 
 // wrapWidth is the width replies wrap to now; 0 wraps nothing.
@@ -288,18 +305,20 @@ func (v *view) wrapWidth() int {
 	return v.opts.width()
 }
 
-// flush writes what the Markdown stream and the wrappers still hold. It
-// runs before every non-text event and at the turn's end.
+// flush writes what the reply's Printer and the thinking's wrapper still
+// hold. It runs before every non-text event and at the turn's end.
 func (v *view) flush() {
 	v.flushReply()
 	v.show(v.think.Flush())
 	v.thinking = nil
 }
 
-// flushReply writes what the Markdown stream and the reply's wrapper hold.
+// flushReply writes what the reply's Printer holds, and ends the reply.
 func (v *view) flushReply() {
-	v.text(v.md.Flush())
-	v.show(v.wrap.Flush())
+	if v.printer != nil {
+		v.show(v.printer.Flush())
+		v.printer = nil
+	}
 	v.reply = nil
 }
 
@@ -471,7 +490,7 @@ func (v *view) resized() {
 // nothing held back, so that everything shown so far can be drawn again
 // and the reply goes on from there, no word lost or doubled. v.mu is held.
 func (v *view) tryReprint() {
-	if !v.reprintDue || v.ended || v.out.rec == nil || !v.atBOL || !v.wrap.Idle() || !v.think.Idle() {
+	if !v.reprintDue || v.ended || v.out.rec == nil || !v.atBOL || (v.printer != nil && !v.printer.Idle()) || !v.think.Idle() {
 		return
 	}
 	v.reprintDue = false
@@ -487,8 +506,8 @@ func (v *view) tryReprint() {
 	if err := v.out.emit([]byte("\x1b[?2026h\x1b[2J\x1b[3J\x1b[H" + text + "\x1b[?2026l")); err != nil && v.err == nil {
 		v.err = err
 	}
-	// The wrappers are idle at a line's start, and a Stream releases a code
-	// fence only once it is closed, so they go on as they are.
+	// The Printer and the wrapper are idle at a line's start, holding
+	// nothing, so they go on as they are.
 	v.atBOL = text == "" || strings.HasSuffix(text, "\n")
 }
 
@@ -503,14 +522,12 @@ func (v *view) keep(p **piece, at func(src string, width int) string, s string) 
 	(*p).add(v.out.rec, s)
 }
 
-// replyAt draws a reply's Markdown at a terminal's width as the view
-// does: styled when colour is on, then wrapped, to 120 columns.
+// replyAt draws a reply's Markdown at a terminal's width, to 120
+// columns, by a new Printer with the view's options: what that Printer's
+// At gives, since a fresh Printer is idle.
 func (v *view) replyAt(src string, width int) string {
-	if v.caps.Out.Color {
-		src = render.Style(render.Tables(src), v.caps.Out)
-	}
-	var w render.Wrap
-	return w.Push(src, min(width, 120)) + w.Flush()
+	p := v.replyPrinter(min(width, 120))
+	return p.Write(src) + p.Flush()
 }
 
 // thinkingAt draws thinking text at a terminal's width, dimmed.

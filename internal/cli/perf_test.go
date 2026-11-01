@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/maccavelli/gobble-cli/internal/cli/render"
 	"github.com/maccavelli/gobble-cli/internal/cli/term"
 )
 
@@ -55,30 +54,22 @@ func perfCheck(t *testing.T, baselines map[string]map[string]time.Duration, name
 }
 
 // benchReplyRender is a reply rendered as the view renders it while it
-// streams: chunks of 64 bytes through render.Stream, styled, wrapped at
-// 100 columns.
+// streams: chunks of 64 bytes through the view's reply Printer, colour on,
+// at 100 columns (0035-MADR D14 step 5a).
 func benchReplyRender(b *testing.B) {
 	reply, err := os.ReadFile("render/testdata/reply.txt")
 	if err != nil {
 		b.Fatal(err)
 	}
-	on := term.Stream{Color: true}
+	v := &view{caps: term.Caps{Out: term.Stream{Color: true}}}
 	b.ReportAllocs()
 	for b.Loop() {
-		var md render.Stream
-		var w render.Wrap
+		p := v.replyPrinter(100)
 		var out strings.Builder
-		push := func(s string) {
-			if s != "" {
-				s = render.Style(render.Tables(s), on)
-			}
-			out.WriteString(w.Push(s, 100))
-		}
 		for i := 0; i < len(reply); i += 64 {
-			push(md.Push(string(reply[i:min(i+64, len(reply))])))
+			out.WriteString(p.Write(string(reply[i:min(i+64, len(reply))])))
 		}
-		push(md.Flush())
-		out.WriteString(w.Flush())
+		out.WriteString(p.Flush())
 	}
 }
 

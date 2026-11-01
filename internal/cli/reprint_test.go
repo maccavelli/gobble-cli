@@ -118,9 +118,10 @@ func TestLineSessionReprintsOnResize(t *testing.T) {
 	}
 }
 
-// A reply still arriving when resizes settle is reprinted at its next line
-// end, when nothing is held back, and goes on at the new width with no word
-// twice (0030-MADR D3).
+// A reply still arriving when resizes settle is reprinted at its
+// paragraph's end, when nothing is held back, and goes on at the new width
+// with no word twice (0030-MADR D3, as amended by 0035-PLAN deviation 19).
+// A paragraph's line is held until the next, so the line's end is too soon.
 func TestViewReprintsAtTheNextLineEnd(t *testing.T) {
 	var out, errw strings.Builder
 	s := term.Stream{TTY: true, Width: 100}
@@ -137,9 +138,9 @@ func TestViewReprintsAtTheNextLineEnd(t *testing.T) {
 	if strings.Contains(out.String(), "\x1b[3J") {
 		t.Fatal("reprinted in the middle of a line")
 	}
-	v.on(acpclient.Update{Kind: acpclient.KindAgentText, Text: "end of the first.\n"})
+	v.on(acpclient.Update{Kind: acpclient.KindAgentText, Text: "end of the first.\n\n"})
 	if !strings.Contains(out.String(), "\x1b[3J") {
-		t.Fatal("not reprinted at the line's end")
+		t.Fatal("not reprinted at the paragraph's end")
 	}
 	second := strings.Repeat("epsilon zeta eta theta ", 5) + "end.\n"
 	v.on(acpclient.Update{Kind: acpclient.KindAgentText, Text: second})

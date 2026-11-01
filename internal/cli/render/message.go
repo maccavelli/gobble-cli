@@ -1,6 +1,10 @@
 package render
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/charmbracelet/x/ansi"
+)
 
 // Message wraps a message of gobble's own to width columns (0028-MADR D6).
 // Each line of s that does not fit is broken at spaces, its continuation
@@ -55,7 +59,7 @@ func visibleWidth(s string) int {
 		for j < len(s) && s[j] != 0x1b {
 			j++
 		}
-		n += displayWidth(s[i:j])
+		n += ansi.StringWidth(s[i:j])
 		i = j
 	}
 	return n

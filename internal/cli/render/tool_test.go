@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/maccavelli/go-tui-lib/v2/glyph"
 
 	"github.com/maccavelli/gobble-cli/internal/cli/term"
@@ -33,8 +34,8 @@ func TestToolHeader(t *testing.T) {
 			if got != tc.want {
 				t.Fatalf("ToolHeader = %q, want %q", got, tc.want)
 			}
-			if tc.s.Width < 80 && displayWidth(got) > tc.s.Width {
-				t.Fatalf("header is %d columns, wider than %d", displayWidth(got), tc.s.Width)
+			if tc.s.Width < 80 && ansi.StringWidth(got) > tc.s.Width {
+				t.Fatalf("header is %d columns, wider than %d", ansi.StringWidth(got), tc.s.Width)
 			}
 		})
 	}

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"github.com/maccavelli/gobble-cli/internal/cli/term"
+	"github.com/maccavelli/go-tui-lib/v2/stream"
 )
 
 // wrapCases are replies and the rows a width makes of them (0028-MADR D3,
@@ -139,15 +139,15 @@ func splitEscapes(s string) (escapes, plain string) {
 // rows are the plain text's, and every escape is kept, in order, whatever
 // the chunks (0028-MADR D7, as amended).
 func TestWrapStyled(t *testing.T) {
-	on := term.Stream{Color: true}
 	cases := append(slices.Clip(wrapCases), struct {
 		name, in string
 		width    int
 		want     string
 	}{"emphasis across a break", "this is **very bold** and `some code` here\n", 16, ""})
 	for _, tc := range cases {
-		plainIn := Tables(tc.in)
-		styled := Style(plainIn, on)
+		plainIn := tc.in
+		p := stream.NewPrinter(stream.WithMarkup(stream.DefaultMarkup()), stream.WithoutTableLayout())
+		styled := p.Write(plainIn) + p.Flush() // a reply styled as the view styles one (0035-PLAN deviation 17)
 		want := wrapAll([]string{plainIn}, tc.width)
 		wantEsc, _ := splitEscapes(styled)
 		splits := [][]string{{styled}}

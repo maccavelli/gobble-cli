@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/maccavelli/go-tui-lib/v2/glyph"
 
 	"github.com/maccavelli/gobble-cli/internal/cli/term"
@@ -31,8 +32,8 @@ const (
 func ToolHeader(title, status string, s term.Stream, g glyph.Set) string {
 	suffix, style := statusSuffix(status, g)
 	head := g.Heading + " "
-	room := s.Width - displayWidth(head) - displayWidth(suffix) - 1
-	t := truncateWidth(strings.Join(strings.Fields(term.CleanLine(title, s.TTY)), " "), max(room, 1), g.Ellipsis)
+	room := s.Width - ansi.StringWidth(head) - ansi.StringWidth(suffix) - 1
+	t := ansi.Truncate(strings.Join(strings.Fields(term.CleanLine(title, s.TTY)), " "), max(room, 1), g.Ellipsis)
 	line := term.Bold.Wrap(head, s.Color) + t
 	if suffix != "" {
 		line += " " + style.Wrap(suffix, s.Color)

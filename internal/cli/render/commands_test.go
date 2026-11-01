@@ -3,6 +3,8 @@ package render
 import (
 	"strings"
 	"testing"
+
+	"github.com/charmbracelet/x/ansi"
 )
 
 // helpSections is a fixed list: a short entry, one whose description
@@ -64,7 +66,7 @@ Agent commands
 func TestCommandListFits(t *testing.T) {
 	for _, width := range []int{100, 80, 60, 45, 40, 32, 20} {
 		for i, line := range strings.Split(strings.TrimSuffix(CommandList(helpSections, width, false, true), "\n"), "\n") {
-			if w := displayWidth(line); w > width {
+			if w := ansi.StringWidth(line); w > width {
 				t.Errorf("width %d, line %d is %d columns: %q", width, i+1, w, line)
 			}
 			if strings.HasSuffix(line, " ") {

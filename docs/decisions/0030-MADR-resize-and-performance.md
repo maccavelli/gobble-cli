@@ -86,6 +86,13 @@ clearing the terminal's scrollback.
   It writes this as one synchronized update (DEC mode 2026, as 0027's drawing does). Most terminals keep 3,500 to
   10,000 rows of scrollback, so rows beyond that would be dropped as soon as they were written; the limit keeps a
   reprint quick (the owner's answer of 2026-10-22, "Last 10,000 rows").
+
+  *Amended 2026-11-01 (0035-PLAN-pin-current-sibling-releases-and-remove-gobble-copies.md, deviation 19; the owner's
+  answer "take option 1"):* while a reply streams, the reprint waits until the reply's go-tui-lib Printer holds
+  nothing: at a paragraph's or a block's end, where gobble's own renderer reprinted at the next line's end. The Printer
+  holds a paragraph's latest line until the next, so a setext heading is drawn as one, and a reprint while it holds one
+  would print it twice. [go-tui-lib#15](https://github.com/maccavelli/go-tui-lib/issues/15) asks for a reprint
+  mid-paragraph.
 - **D4. The transcript.** The line session keeps what it has shown, in order, as pieces it can draw again at a width:
   - the header and each sent prompt (0027's layout);
   - each reply and its thinking, kept as the Markdown released (0028's styling and wrapping);
@@ -127,6 +134,15 @@ clearing the terminal's scrollback.
   *Amended 2026-10-22 (0030-PLAN P4, deviation 5; the owner's answer "Record it, leave Stream"):* of the two, only
   the wrapper built its words and lines a character at a time. The Markdown stream appends once per chunk, so it is
   not reworked; the wrapper's rework alone meets the targets.
+
+  *Amended 2026-11-01 (0035-PLAN-pin-current-sibling-releases-and-remove-gobble-copies.md, deviation 21; the owner's
+  answer "Re-baseline in 0030-MADR D5"):* a reply is drawn again by go-tui-lib's `stream.Printer` since 0035-MADR D14
+  step 5a. Drawing 1,000 rows of replies again allocates 6,104 times, and 6,808 under the race detector, against 5,051
+  and 5,053 before. The budget is re-measured by this decision's rule, the higher count and a quarter more: 8,500. A
+  reprint of 10,000 rows allocates 60,091 times, from 49,696, and its time stays within its baseline. The budget is
+  interim: the cost is P18a's redraw by a fresh Printer, and go-tui-lib's own reprint, which P18b adopts, makes 43,541
+  allocations, so P18b re-measures and restores 6,300 when its count fits (the owner's corrected answer, "Interim 8,500,
+  restore 6,300 at P18b").
 - **D6. Print mode and off a terminal:** unchanged. No transcript is kept, and nothing is redrawn.
 - **D7. Supersedes** 0028-MADR's consequence "the breaks are fixed when written" for the line session on a
   terminal, and 0027-PLAN P4's "found, not fixed" note on reflow when narrowing. Both are recorded there as dated

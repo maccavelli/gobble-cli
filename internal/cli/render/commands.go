@@ -3,6 +3,7 @@ package render
 import (
 	"strings"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/maccavelli/gobble-cli/internal/cli/term"
 )
 
@@ -74,7 +75,7 @@ func nameColumn(sections []CommandSection, width int, terminal bool) int {
 	col := 0
 	for _, s := range sections {
 		for _, c := range s.Commands {
-			if w := displayWidth(entryOf(c, terminal)); w <= limit {
+			if w := ansi.StringWidth(entryOf(c, terminal)); w <= limit {
 				col = max(col, w)
 			}
 		}
@@ -88,7 +89,7 @@ func commandLines(c CommandEntry, nameCol, width int, color, terminal bool) []st
 	entry := entryOf(c, terminal)
 	desc := strings.Fields(term.CleanLine(c.Description, terminal))
 	var lines []string
-	if ew := displayWidth(entry); nameCol > 0 && ew <= nameCol {
+	if ew := ansi.StringWidth(entry); nameCol > 0 && ew <= nameCol {
 		descCol := commandIndent + nameCol + commandGap
 		lines = wrapIndented(desc, width, descCol, descCol)
 		head := strings.Repeat(" ", commandIndent) + entry
@@ -125,16 +126,16 @@ func wrapIndented(words []string, width, first, rest int) []string {
 		indent, used = rest, 0
 	}
 	for _, w := range words {
-		ww := displayWidth(w)
+		ww := ansi.StringWidth(w)
 		if used > 0 && used+1+ww > max(width-indent, 1) {
 			flush()
 		}
 		for used == 0 && ww > max(width-indent, 1) {
 			head, tail := cutWidth(w, max(width-indent, 1))
 			line.WriteString(head)
-			used = displayWidth(head)
+			used = ansi.StringWidth(head)
 			flush()
-			w, ww = tail, displayWidth(tail)
+			w, ww = tail, ansi.StringWidth(tail)
 		}
 		if used > 0 {
 			line.WriteByte(' ')
@@ -154,7 +155,7 @@ func wrapIndented(words []string, width, first, rest int) []string {
 func cutWidth(s string, w int) (head, tail string) {
 	used := 0
 	for i, r := range s {
-		rw := displayWidth(string(r))
+		rw := ansi.StringWidth(string(r))
 		if used+rw > w && i > 0 {
 			return s[:i], s[i:]
 		}

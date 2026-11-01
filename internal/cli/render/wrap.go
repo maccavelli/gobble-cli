@@ -2,13 +2,20 @@ package render
 
 import (
 	"strings"
+	"unicode"
 	"unicode/utf8"
+
+	xwidth "golang.org/x/text/width"
 )
 
+// Wrap stays gobble's for thinking text: go-tui-lib's stream wraps a
+// Markdown reply, and has no plain streaming wrapper (0035-MADR D14
+// step 5a).
+//
 // Wrap breaks streamed Markdown prose at spaces so no row is wider than a
 // width, and passes code, tables and headings through unchanged (0028-MADR
-// D3–D5, D7). It takes what Style made of the text a Stream released:
-// escape sequences count as zero width, stay with the word they are in and
+// D3–D5, D7). It takes styled text, such as dimmed thinking: escape
+// sequences count as zero width, stay with the word they are in and
 // are never dropped at a break, and a line's kind and a word's opening a
 // block are read with them taken out (D7, as amended).
 //
@@ -17,7 +24,7 @@ import (
 // none starts with a word that would open a block, so the text still means
 // what it meant when copied. A word wider than the row is left whole on a
 // row of its own. A fenced or indented code line, a table row (a line that
-// starts with |, as Tables has it) and a heading pass through.
+// starts with |) and a heading pass through.
 //
 // Across pushes it keeps the row's column and the line's kind, and holds
 // back the word still arriving and the last finished word on the row, which
@@ -66,7 +73,7 @@ func (w *Wrap) Push(text string, width int) string {
 }
 
 // Flush returns everything held and starts afresh, as at a line start with
-// no fence open. Call it with the Stream's Flush.
+// no fence open. Call it when the text it wraps ends.
 func (w *Wrap) Flush() string {
 	if len(w.esc) > 0 {
 		esc := string(w.esc)
@@ -300,6 +307,71 @@ func afterBytes(col int, b []byte) int {
 		i += size
 	}
 	return col
+}
+
+const zwj = 0x200d // zero-width joiner
+
+// runeWidth is the number of columns r occupies: 2 for an East Asian
+// Wide or Fullwidth rune, 0 for a combining mark or a zero-width joiner,
+// and 1 otherwise. Only Wrap measures by it; the rest of render measures
+// with x/ansi (0032-MADR A1.4).
+func runeWidth(r rune) int {
+	switch {
+	case r >= 0x20 && r < 0x7f: // printable ASCII, most of what is drawn
+		return 1
+	case r == zwj, unicode.In(r, unicode.Mn, unicode.Me):
+		return 0
+	case isWide(r):
+		return 2
+	}
+	return 1
+}
+
+func isWide(r rune) bool {
+	k := xwidth.LookupRune(r).Kind()
+	return k == xwidth.EastAsianWide || k == xwidth.EastAsianFullwidth
+}
+
+// The line classifiers Wrap reads a line's kind by (0035-PLAN deviation 16).
+
+// fenceRun returns the run of three or more backticks or tildes that opens a
+// fence on line, after at most three spaces of indentation, or "".
+func fenceRun(line string) string {
+	t := strings.TrimLeft(line, " ")
+	if len(line)-len(t) > 3 || t == "" || (t[0] != '`' && t[0] != '~') {
+		return ""
+	}
+	run := t[:len(t)-len(strings.TrimLeft(t, t[:1]))]
+	if len(run) < 3 || (run[0] == '`' && strings.Contains(t[len(run):], "`")) {
+		return ""
+	}
+	return run
+}
+
+func isFenceClose(line, open string) bool {
+	t := strings.TrimSpace(line)
+	return len(t) >= len(open) && strings.Trim(t, open[:1]) == ""
+}
+
+func isHeading(line string) bool {
+	h := len(line) - len(strings.TrimLeft(line, "#"))
+	return h >= 1 && h <= 6 && (len(line) == h || line[h] == ' ' || line[h] == '\t')
+}
+
+func markerLen(s string) int {
+	switch {
+	case s == "":
+		return 0
+	case s[0] == '>':
+		return 1
+	case (s[0] == '-' || s[0] == '*' || s[0] == '+') && len(s) > 1 && s[1] == ' ':
+		return 1
+	}
+	d := len(s) - len(strings.TrimLeft(s, "0123456789"))
+	if d >= 1 && d <= 9 && len(s) > d+1 && (s[d] == '.' || s[d] == ')') && s[d+1] == ' ' {
+		return d + 1
+	}
+	return 0
 }
 
 func advance(col int, r rune) int {
