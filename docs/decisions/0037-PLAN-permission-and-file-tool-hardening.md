@@ -326,6 +326,8 @@ Files:
      be inside a root (`ErrOutside` otherwise, as `os.Root` reports it).
    * The atomic write then happens beside the target, and the link is untouched.
    * `WriteFileMode`, for files outside a workspace, follows the link the same way, with no root.
+   * *(Deviation 5: `RealPath` cannot resolve a dangling link, so such a link is read with `os.Readlink`, one hop at a
+     time, up to 40 hops.)*
 2. **A file with more than one hard link is written in place.** When the target's link count is above one, the write
    opens it with `O_WRONLY|O_TRUNC`, writes, syncs and closes. The file's mode and every link are kept.
    * The count is `Stat_t.Nlink` on Unix, and `GetFileInformationByHandle`'s `NumberOfLinks` on Windows.
@@ -854,3 +856,75 @@ The base is P3's `062909d`. Deviations 3 and 4.
    `make race`: 38 ok. P4 touches nothing under `internal/cli`, so no `make perf`.
 7. **G-hosts,** 809 files shipped to each: `go test` and race passed on both, 38 ok; `make check-records markdownlint`
    passed on both; preflight stops at `verify-build-metadata`, as on every copy.
+
+### Deviation 5 (2026-11-02): P5, a dangling symlink is replaced by a regular file
+
+- **Found** after P5's gates had passed, by a probe on a scratch copy. Step 1 resolves a symlink with `fsx.RealPath`,
+  which cannot resolve a link whose target does not exist yet: it returns the link's own path, and `writeAtomic`
+  renames over it. With `CLAUDE.md -> AGENTS.md` and no `AGENTS.md`, the probe printed
+  `inside: err=<nil> link mode=-rw-r--r-- target exists=false`: the link was replaced and the target not made. A dangling
+  link to a path outside the roots was refused by `os.Root` (`statat escape.md: path escapes from parent`), not with
+  `ErrOutside`, and kept. The behaviour is as before P5, which replaced every link, but contradicts MADR D6 ("writes the
+  link's target, and keeps the link") for this case.
+- **The owner's answer:** "Follow it with Readlink (Recommended)". The options not taken were to refuse a write through
+  a dangling link, or to keep the behaviour and amend D6 to say so.
+- **Decision.** `follow` resolves a link that `filepath.EvalSymlinks` (what `RealPath` tries first) can resolve as
+  step 1 says. A dangling one is read with `os.Readlink`, a relative target joined to the link's directory, and the
+  result followed again, up to 40 hops, Linux's own limit; past that the write fails, and the link is kept. The write
+  then creates the target, and the root check applies to it, so an outside target gets `ErrOutside`. A test,
+  `TestWriteThroughDanglingSymlink`, covers a target inside the roots, one outside, and a loop, and each case is seen
+  failing. D6 is unchanged: this makes the code meet it. Step 1 is annotated.
+- **Files added:** none; `write.go` and `write_test.go` are P5's.
+
+### P5 record (2026-11-02): writes through symlinks and hard links
+
+The base is P4's `c4eb473`. Deviation 5.
+
+1. **A symlink is followed** (step 1, deviation 5): `follow` (`internal/fsx/write.go`) `Lstat`s the path; a symlink is
+   resolved with `filepath.EvalSymlinks`, what `RealPath` tries first, and a dangling one is read with `os.Readlink`, a
+   relative target joined to the link's directory, up to `maxHops` (40) links. `Workspace.WriteFile` then opens the
+   target through its root as before, so a target outside every root gets `ErrOutside`; `WriteFileMode` follows the
+   same way, with no root. The link itself is not written.
+2. **A file with more than one hard link is written in place** (step 2): `writeAtomic` asks `links` for the existing
+   file's count, and above one calls `writeInPlace`: `O_WRONLY|O_TRUNC`, write, sync, close, through `fill`, which the
+   atomic path now shares. `links` is `Stat_t.Nlink` in `write_unix.go` (`//go:build !windows`, as
+   `internal/appdirs/base_unix.go`), and `GetFileInformationByHandle`'s `NumberOfLinks` in `write_windows.go`, which
+   opens the file to read it.
+3. **The directory is synced** (step 3): after the rename, `syncDir` opens the parent through the same `fileSystem` and
+   syncs it, and its error is returned. On Windows it does nothing.
+4. **Tests** (step 4, `internal/fsx/write_test.go`, a new file):
+   * `TestWriteThroughSymlink`: `CLAUDE.md -> AGENTS.md` stays a link and `AGENTS.md` holds the new bytes; a second
+     part does the same through `WriteFileMode`, which step 1 names and no listed test held;
+   * `TestWriteSymlinkOutsideRoot`: refused with `ErrOutside`; the link and its target unchanged;
+   * `TestWriteThroughDanglingSymlink` (deviation 5): a dangling link's target inside the roots is made and the link
+     kept; one outside is refused with `ErrOutside`, the target not made; `a.md -> b.md -> a.md` fails and both stay
+     links;
+   * `TestWriteHardLinkInPlace`: `b` holds the new bytes, `a` and `b` are one file, and `links` counts 2;
+   * `TestWriteNewFileAtomic`: a single-link file gets a new inode. It skips on Windows, as the step says.
+
+   The symlink tests skip, with the reason, where a symlink cannot be made (C10); on the Windows laptop they ran.
+5. **Seen failing** (step 5, C9), each on a scratch copy:
+
+   | Break | The failure |
+   | :--- | :--- |
+   | step 1 undone: a link written as itself (the step's) | `TestWriteThroughSymlink`: `CLAUDE.md is no longer a symlink (mode -rw-------) after the write, want the link kept`; `TestWriteThroughDanglingSymlink` the same |
+   | `WriteFileMode` alone not following | `TestWriteThroughSymlink`: `linked.json is no longer a symlink (mode -rw-------) after the write, want the link kept` |
+   | a followed link written past the root check | `TestWriteSymlinkOutsideRoot`: `write through the link = <nil>, want ErrOutside`; `TestWriteThroughDanglingSymlink`: `write through the dangling link out = <nil>, want ErrOutside` |
+   | deviation 5 undone: `RealPath` alone, as step 1 first read | `TestWriteThroughDanglingSymlink`: `CLAUDE.md is no longer a symlink (mode -rw-r--r--) after the write, want the link kept` |
+   | the hop bound removed | `TestWriteThroughDanglingSymlink`: `panic: test timed out after 20s` |
+   | step 2 undone: no write in place (the step's) | `TestWriteHardLinkInPlace`: `b = "old\n", want the new bytes` |
+   | every existing file written in place | `TestWriteNewFileAtomic`: `in.txt kept its inode, want a new file renamed into place` |
+
+   A first loop break kept the bound and replaced only its error with the link's path. It passed: `os.Root` then
+   refuses the loop itself when it stats the link. The bound is what that break must undo, so it was changed to remove
+   it.
+6. **Not done:** step 3 has no test. A directory sync changes nothing a process can see; only a crash after the rename
+   would show it.
+7. **G-local:** `make pre-add-check` on the 4 Go files: clean; `make preflight`: passed; `go test ./...`: 38 ok;
+   `make race`: 38 ok. P5 touches nothing under `internal/cli`, so no `make perf`.
+8. **G-hosts,** 812 files shipped to each: `go test` and race passed on both, 38 ok, and the five tests above passed
+   on the Linux machine; on the Windows laptop four passed and `TestWriteNewFileAtomic` skipped.
+   `make check-records markdownlint` passed on both; preflight stops at `verify-build-metadata`, as on every copy.
+   On the Linux machine the first run's log ended after the race count, likely cut short by the remote processes of
+   a run stopped earlier for the `links` change; preflight and records were rerun on that copy: preflight stopped at
+   `verify-build-metadata`, and records passed.

@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -39,8 +40,14 @@ func (osFS) Remove(name string) error                  { return os.Remove(name) 
 // WriteFile replaces or creates abs with data, and its parent directories.
 // It writes a temporary file beside abs and renames it into place, so a
 // reader sees the old content or the new, never part of it. An existing
-// file keeps its permission bits; a new one is 0o644.
+// file keeps its permission bits; a new one is 0o644. A symlink is followed
+// to its target, which must be inside a root, and a file with more than one
+// hard link is written in place (0037-MADR D6).
 func (w Workspace) WriteFile(abs string, data []byte) error {
+	abs, err := follow(abs)
+	if err != nil {
+		return err
+	}
 	root, rel, err := w.open(abs)
 	if err != nil {
 		return err
@@ -55,9 +62,48 @@ func (w Workspace) WriteFile(abs string, data []byte) error {
 // WriteFileMode replaces or creates abs with data, as WriteFile does, for a
 // file outside any workspace, such as a settings file or mcp.json: written
 // beside abs, synced, and renamed into place. An existing file keeps its
-// permission bits; a new one gets newMode (0018-PLAN P1 deviation 1).
+// permission bits; a new one gets newMode (0018-PLAN P1 deviation 1). A
+// symlink and a hard link are kept, as WriteFile keeps them.
 func WriteFileMode(abs string, data []byte, newMode fs.FileMode) error {
+	abs, err := follow(abs)
+	if err != nil {
+		return err
+	}
 	return writeAtomic(osFS{}, abs, data, newMode)
+}
+
+// maxHops is how many dangling symlinks follow reads before it gives up:
+// Linux's own limit.
+const maxHops = 40
+
+// follow is abs, or, when abs is a symlink, the file it names, so a write
+// through the link writes its target and keeps the link. A link whose
+// target does not exist yet is read one hop at a time, so the write creates
+// the target (0037-PLAN deviation 5).
+func follow(abs string) (string, error) {
+	for range maxHops {
+		info, err := os.Lstat(abs)
+		switch {
+		case errors.Is(err, fs.ErrNotExist):
+			return abs, nil
+		case err != nil:
+			return "", err
+		case info.Mode()&fs.ModeSymlink == 0:
+			return abs, nil
+		}
+		if resolved, err := filepath.EvalSymlinks(abs); err == nil {
+			return resolved, nil
+		}
+		target, err := os.Readlink(abs)
+		if err != nil {
+			return "", err
+		}
+		if !filepath.IsAbs(target) {
+			target = filepath.Join(filepath.Dir(abs), target)
+		}
+		abs = target
+	}
+	return "", fmt.Errorf("%s: more than %d symlinks", abs, maxHops)
 }
 
 func writeAtomic(fsys fileSystem, name string, data []byte, newMode fs.FileMode) error {
@@ -70,6 +116,15 @@ func writeAtomic(fsys fileSystem, name string, data []byte, newMode fs.FileMode)
 	switch info, err := fsys.Stat(name); {
 	case err == nil:
 		mode = info.Mode().Perm()
+		// A rename would leave the other names on the old content, so a
+		// file with more than one is written in place (0037-MADR Q1 (a)).
+		n, err := links(fsys, name, info)
+		if err != nil {
+			return err
+		}
+		if n > 1 {
+			return writeInPlace(fsys, name, data)
+		}
 	case !errors.Is(err, fs.ErrNotExist):
 		return err
 	}
@@ -81,13 +136,7 @@ func writeAtomic(fsys fileSystem, name string, data []byte, newMode fs.FileMode)
 	if err != nil {
 		return err
 	}
-	_, werr := f.Write(data)
-	if serr := f.Sync(); werr == nil {
-		werr = serr
-	}
-	if cerr := f.Close(); werr == nil {
-		werr = cerr
-	}
+	werr := fill(f, data)
 	if werr == nil {
 		werr = fsys.Chmod(tmp, mode)
 	}
@@ -96,8 +145,31 @@ func writeAtomic(fsys fileSystem, name string, data []byte, newMode fs.FileMode)
 	}
 	if werr != nil {
 		_ = fsys.Remove(tmp) //nolint:errcheck // the write's error is the one to report
+		return werr
 	}
-	return werr
+	return syncDir(fsys, filepath.Dir(name))
+}
+
+// writeInPlace truncates name and writes data into it, keeping its mode and
+// every name it has.
+func writeInPlace(fsys fileSystem, name string, data []byte) error {
+	f, err := fsys.OpenFile(name, os.O_WRONLY|os.O_TRUNC, 0)
+	if err != nil {
+		return err
+	}
+	return fill(f, data)
+}
+
+// fill writes data to f, syncs and closes it, and returns the first error.
+func fill(f *os.File, data []byte) error {
+	_, err := f.Write(data)
+	if serr := f.Sync(); err == nil {
+		err = serr
+	}
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	return err
 }
 
 // renameWindow is how long a rename keeps retrying an error that another
