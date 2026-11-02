@@ -41,11 +41,9 @@ type Options struct {
 	Name, Version string
 	// Logger receives the connection's diagnostics. Nil discards them.
 	Logger *slog.Logger
-	// OnDrop is called when an inbound notification is dropped because the
-	// queue is full. The connection keeps going (0004-MADR, amendment of
-	// 2026-10-01).
-	OnDrop func(method string, total uint64)
-	// MaxQueued is the inbound notification queue's size. Zero keeps the
+	// MaxQueued is how many inbound notifications wait before the
+	// connection stops reading the agent until a handler returns: the agent
+	// is paused, and nothing is dropped (0040-MADR D1, D3). Zero keeps the
 	// SDK's default.
 	MaxQueued int
 	// Permission answers the agent's session/request_permission. Nil
@@ -130,10 +128,9 @@ func Start(ctx context.Context, serve ServeFunc, opts Options) (*Conn, error) {
 	// inside the constructor, so a later SetLogger would race with it.
 	connOpts := []acp.ConnectionOption{
 		acp.WithLogger(logger),
-		acp.WithNotificationOverflowPolicy(acp.OverflowDropNewest),
-	}
-	if opts.OnDrop != nil {
-		connOpts = append(connOpts, acp.WithNotificationDropHandler(opts.OnDrop))
+		// A full queue pauses the agent; nothing is dropped. The SDK's
+		// default, named so that a test pins it (0040-MADR D1).
+		acp.WithNotificationOverflowPolicy(acp.OverflowBlock),
 	}
 	if opts.MaxQueued > 0 {
 		connOpts = append(connOpts, acp.WithMaxQueuedNotifications(opts.MaxQueued))
@@ -171,9 +168,6 @@ func Start(ctx context.Context, serve ServeFunc, opts Options) (*Conn, error) {
 
 // Agent is the agent's initialize answer.
 func (c *Conn) Agent() AgentInfo { return c.agent }
-
-// Dropped is the number of inbound notifications dropped so far.
-func (c *Conn) Dropped() uint64 { return c.conn.DroppedNotifications() }
 
 // Close stops the agent by the runner's steps: it ends the agent's input,
 // then cancels its context, then abandons it. It then waits for the

@@ -797,6 +797,7 @@ Still `proposed`. Three sibling trees were re-read and built in scratch copies:
 * gobble carries the `replace`, because gobble's in-process clients need the option API.
 * `acpserver` uses the default policy. Its inbound notifications are `session/cancel`, and dropping one would lose a cancel.
 * `acpclient` sets `OverflowDropNewest` with a drop handler that surfaces a notice. That client serves the CLI, the TUI, `task` subagents and `acptest`.
+  * *Superseded 2026-11-01 by [0040-MADR-acpclient-notification-back-pressure.md](0040-MADR-acpclient-notification-back-pressure.md): `acpclient` names acp-go-sdk2's `OverflowBlock`, so a full queue pauses the agent and nothing is dropped; the drop handler and its notice are gone.*
 * The exit plan stays magic-cli-remote `0167-MADR-the-acp-sdk-is-dormant-and-its-bounded-queue-is-an-availability-defect.md`.
 * **2026-10-05, owner's decision (0002-PLAN Phase 2, deviation of this date): gobble pins `v0.13.6-mcr.2`.**
   * `mcr.2` is `mcr.1` plus one commit (`565efea`, tag object `cb6914d`).

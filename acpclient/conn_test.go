@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"slices"
@@ -258,19 +259,28 @@ func TestCancel(t *testing.T) {
 	}
 }
 
-// A full notification queue drops the newest notification and reports it,
-// and the connection keeps going.
-func TestDropReported(t *testing.T) {
+// A full notification queue pauses the agent instead of dropping: with a
+// queue of 1 and the update callback blocked, the prompt waits; released,
+// every update arrives, once, in order, and the connection goes on
+// (0040-MADR D1, D5).
+func TestBlockedUpdatesArriveInOrder(t *testing.T) {
 	updates := make([]string, 4)
 	for i := range updates {
-		updates[i] = `{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"x"}}`
+		updates[i] = fmt.Sprintf(`{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"u%d"}}`, i)
 	}
 	agent := &acptest.ScriptAgent{Turns: []acptest.Turn{{Updates: updates}, {}}}
-	dropped := make(chan uint64, 8)
-	c := start(t, agent, acpclient.Options{MaxQueued: 1, OnDrop: func(_ string, total uint64) { dropped <- total }})
+	c := start(t, agent, acpclient.Options{MaxQueued: 1})
 	release := make(chan struct{})
-	var once sync.Once
-	s, err := c.NewSession(t.Context(), acptest.Abs("/w"), func(acpclient.Update) { <-release })
+	var mu sync.Mutex
+	var got []string
+	s, err := c.NewSession(t.Context(), acptest.Abs("/w"), func(u acpclient.Update) {
+		<-release
+		if u.Kind == acpclient.KindAgentText {
+			mu.Lock()
+			got = append(got, u.Text)
+			mu.Unlock()
+		}
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -280,22 +290,22 @@ func TestDropReported(t *testing.T) {
 		done <- err
 	}()
 	select {
-	case n := <-dropped:
-		if n < 1 {
-			t.Fatalf("drop total %d", n)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("no drop reported with a queue of 1 and a blocked handler")
+	case err := <-done:
+		t.Fatalf("the prompt returned while its updates were held: %v", err)
+	case <-time.After(300 * time.Millisecond):
 	}
-	once.Do(func() { close(release) })
+	close(release)
 	if err := <-done; err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.Prompt(t.Context(), acpclient.Prompt{Text: "still there"}); err != nil {
-		t.Fatalf("the connection did not survive the drop: %v", err)
+	mu.Lock()
+	seen := slices.Clone(got)
+	mu.Unlock()
+	if want := []string{"u0", "u1", "u2", "u3"}; !slices.Equal(seen, want) {
+		t.Fatalf("updates %q, want %q, each once, in order", seen, want)
 	}
-	if c.Dropped() == 0 {
-		t.Fatal("Dropped() = 0 after a reported drop")
+	if _, err := s.Prompt(t.Context(), acpclient.Prompt{Text: "still there"}); err != nil {
+		t.Fatalf("the connection did not go on after the pause: %v", err)
 	}
 }
 

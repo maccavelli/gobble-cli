@@ -252,17 +252,13 @@ var agentServe = func(e *runEnv) acpclient.ServeFunc {
 
 // startAgentWith starts the agent and sends initialize, with permission
 // requests answered by permission: the line session's prompt, or print
-// mode's refusal (0008-MADR D16). A dropped notification is reported once
-// per drop on stderr; the session goes on. params asks for each update's
+// mode's refusal (0008-MADR D16). params asks for each update's
 // Update.Params, which only stream-json reads (0039-MADR D16).
 func (e *runEnv) startAgentWith(ctx context.Context, permission func(context.Context, acpclient.PermissionRequest) acpclient.PermissionAnswer, params bool) (*acpclient.Conn, error) {
 	conn, err := acpclient.Start(ctx, agentServe(e), acpclient.Options{
-		Name:    appName,
-		Version: identity().Version,
-		Logger:  e.log(),
-		OnDrop: func(method string, total uint64) {
-			e.out.Warnf("dropped %d ACP notifications (%s)", total, method)
-		},
+		Name:       appName,
+		Version:    identity().Version,
+		Logger:     e.log(),
 		Permission: permission,
 		Params:     params,
 	})

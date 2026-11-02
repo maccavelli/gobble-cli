@@ -102,6 +102,10 @@ and leaves no field that never fires. Q1 below is answered (a).
   `OverflowDropNewest` for `acpclient`; 0008-MADR's "Delivery" fact (`:116`) gains one that gobble's client no longer
   drops.
 
+  *Amended 2026-11-01, by the PLAN's deviation 1 (the owner's answer "Skip 0008; correct D6 (Recommended)"): 0008-MADR's "Delivery" fact
+  describes magic-cli-remote's daemon, through its SDK fork (`acpagent/session.go:582-603`, Magic's 0167-MADR), not
+  gobble's client, and stays true of Magic. It gets no note; 0004-MADR's alone does.*
+
 ### Consequences
 
 * Good, because no notification is lost: a slow terminal or reader slows the agent, and `stream-json` holds every
@@ -158,7 +162,8 @@ and leaves no field that never fires. Q1 below is answered (a).
 * [gobble-cli#8](https://github.com/maccavelli/gobble-cli/issues/8): this record carries it out.
 * [0004-MADR-go-module-architecture.md](0004-MADR-go-module-architecture.md), amendment of 2026-10-01: superseded for
   `acpclient`'s overflow policy (D6).
-* [0008-MADR-native-cli-mode.md](0008-MADR-native-cli-mode.md): its "Delivery" fact gains a note (D6).
+* [0008-MADR-native-cli-mode.md](0008-MADR-native-cli-mode.md): its "Delivery" fact is Magic's, and is left as it is
+  (D6, as amended).
 * [0002-MADR-cli-acp-headless-mcp-v1.md](0002-MADR-cli-acp-headless-mcp-v1.md) and its PLAN record the earlier choice,
   after Magic's 0167-MADR; they are history and are left as they are.
 * [0035-MADR-pin-current-sibling-releases-and-remove-gobble-copies.md](0035-MADR-pin-current-sibling-releases-and-remove-gobble-copies.md):
