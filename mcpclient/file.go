@@ -156,7 +156,7 @@ func lockForEdit(path string) (release func() error, err error) {
 
 // readForEdit reads an mcp.json for an edit; a missing file is empty.
 func readForEdit(path string) (text []byte, top, servers []member, err error) {
-	text, err = os.ReadFile(path) //nolint:gosec // G304: the user's own mcp.json
+	text, err = fsx.ReadRegularFile(path, fsx.ConfigLimit)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil, nil, nil
 	}

@@ -25,6 +25,10 @@ var (
 	ErrTooLarge error = fileError("file too large")
 )
 
+// ConfigLimit is the most a settings or configuration file may hold
+// (0037-MADR D10).
+const ConfigLimit = 1 << 20
+
 // ReadRegularFile reads abs, a file outside any workspace, when it is a
 // regular file of at most limit bytes.
 func ReadRegularFile(abs string, limit int) ([]byte, error) {

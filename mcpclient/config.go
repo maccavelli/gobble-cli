@@ -7,13 +7,13 @@ import (
 	"io/fs"
 	"math"
 	"net/url"
-	"os"
 	"regexp"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/maccavelli/gobble-cli/internal/fsx"
 	"github.com/maccavelli/gobble-cli/jsonx"
 )
 
@@ -81,7 +81,7 @@ var errShape = errors.New(`expected an object with an "mcpServers" object`)
 // invalid entry is skipped with an error while the others load.
 func Load(path string) Config {
 	c := Config{Path: path}
-	b, err := os.ReadFile(path) //nolint:gosec // G304: the user's own mcp.json
+	b, err := fsx.ReadRegularFile(path, fsx.ConfigLimit)
 	if errors.Is(err, fs.ErrNotExist) {
 		return c
 	}

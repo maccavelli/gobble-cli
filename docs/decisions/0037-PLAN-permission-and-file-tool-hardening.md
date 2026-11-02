@@ -406,6 +406,7 @@ Files:
 * `permission/trust.go:142`;
 * `internal/cli/modelsjson.go:52`;
 * `internal/auth/store.go:65`;
+* by deviation 7: `internal/cli/config.go:365` and `internal/cli/completion.go:143`;
 * the tests beside each.
 
 1. **One reader.** Each `os.ReadFile` above becomes `fsx.ReadRegularFile(path, fsx.ConfigLimit)`, where `ConfigLimit` is
@@ -1027,3 +1028,100 @@ The base is P5's `7114b5e`. Deviation 6.
    at `verify-build-metadata`, as on every copy. A host run stopped for the lint fixes left its preflight running on
    the Linux machine; that process tree, in the scratch copy's directory, was stopped before the rerun, and nothing else
    there was touched.
+
+### Deviation 7 (2026-11-02): P7, `config validate` and completion read the same files
+
+- **Found** reading the code before P7's first write. Two readers of D10's files are not in P7's list.
+  `jsonDiagnostics` (`internal/cli/config.go:365`), which `gobble config validate` runs, reads `mcp.json`, `auth.json`,
+  `models.json`, `permissions.json` and the trust file with `os.ReadFile`; shell completion's `completionModelsJSON`
+  (`internal/cli/completion.go:143`) reads `models.json` the same way. After P7 as written, gobble would refuse a FIFO
+  there at once while `config validate` and tab completion block on it, and read a large one whole. Both are older
+  than P7.
+  Two of P7's line references had moved, the functions unchanged: `mcpclient/config.go:84` and `mcpclient/file.go:159`.
+  `personality.md`, `messages.md`, skills, prompt templates, `recent-models.json` and the catalog cache are prompt
+  content or state, not D10's configuration files, and P7 leaves them as they are.
+- **The owner's answer:** "Cover both in P7 (Recommended)". The option not taken was P7 as written, with a later phase
+  for these two.
+- **Decision.**
+  * `jsonDiagnostics` reads each file through `fsx.ReadRegularFile(path, fsx.ConfigLimit)`; a refused file is its
+    existing "could not read" error diagnostic, naming the file and the reason.
+  * `completionModelsJSON` reads through the same call; a refused file is no models, as an unreadable one is today.
+  * Two more Unix tests, each seen failing: `TestConfigValidateRefusesFIFO` and
+    `TestCompletionModelsJSONRefusesFIFO`, each within 1 s.
+  * MADR D10 gets a dated note.
+- **Files added:** `internal/cli/config.go`, `internal/cli/completion.go`, and the tests beside them.
+
+### P7 record (2026-11-02): configuration files read as regular files, within 1 MiB
+
+The base is P6's `603bad6`. Deviation 7.
+
+1. **One reader** (step 1, deviation 7): `fsx.ConfigLimit` is 1 MiB (`internal/fsx/regular.go`). Each reader below now
+   calls `fsx.ReadRegularFile(path, fsx.ConfigLimit)` where it called `os.ReadFile`, and keeps its own handling of what
+   comes back:
+   * `readLayer` (`internal/config/resolve.go`), `Update` (`update.go`), `edit` (`edit.go`) and `editRules`
+     (`rulesedit.go`);
+   * `Load` (`mcpclient/config.go`) and `readForEdit` (`mcpclient/file.go`);
+   * `RuleStore.Load` (`permission/store.go`) and `TrustStore.Load` (`permission/trust.go`);
+   * `readModelsJSON` (`internal/cli/modelsjson.go`) and `Load` (`internal/auth/store.go`);
+   * by deviation 7, `jsonDiagnostics` (`internal/cli/config.go`) and `completionModelsJSON`
+     (`internal/cli/completion.go`).
+
+   A missing file is still `fs.ErrNotExist`, so every "missing is empty" path is unchanged. A refused file takes each
+   caller's existing route for an unreadable one: an error `Diagnostic` from `readLayer` (`open <file>: not a regular
+   file`) and from `jsonDiagnostics` (`could not read: open <file>: not a regular file`), the error `Update`, `Set`, `AppendRule`, `Add`, `Remove`, both
+   stores and `auth.Load` already return, `Load`'s one entry in `Config.Errors`, `readModelsJSON`'s warning, and
+   completion's nil. `os` left the imports of `resolve.go`, `rulesedit.go` and `mcpclient/config.go`; `internal/auth`
+   imports `internal/fsx` for the first time, which no archtest rule forbids, and `fsx` imports no package of this
+   module.
+2. **The project layer before trust** (step 2): `Resolve` reads the project layer through `readLayer`, so item 1 covers
+   it; `TestResolveRefusesFIFO` checks it on an untrusted project.
+3. **Tests** (step 3, deviation 7), each package's in a new `regular_test.go`, with its own `fifo` (`mkfifo(1)`,
+   skipping on Windows, C10) and a deadline helper:
+   * `internal/config`: `TestResolveRefusesFIFO` (an untrusted project's FIFO `settings.yaml`, within 1 s, an error
+     diagnostic naming "not a regular file"); `TestResolveRefusesLarge` (a 2 MiB global `settings.yaml`: a diagnostic
+     naming `file too large: over 1 MiB`, under 4 MiB allocated; it runs on every platform); `TestResolveDevZero`
+     (`.gobble/settings.yaml -> /dev/zero`, "not a regular file", skipped on Windows); `TestEditorsRefuseFIFO`, with
+     `Update`, `Set` and `AppendRule` each refusing a FIFO within 1 s as `fsx.ErrNotRegular`, and each giving
+     `fs.ErrNotExist` for a missing file, as before.
+   * `mcpclient`: `TestConfigRefusesFIFO`. `Load` of a missing file is empty, and `Add` to one creates it; `Load` of a
+     FIFO is one error naming "not a regular file", and `Add` to it is `fsx.ErrNotRegular`, each within 1 s.
+   * `permission`: `TestStoresRefuseFIFO`, for `permissions.json` and the trust file: missing is empty, and a FIFO is
+     `fsx.ErrNotRegular` with the file's name first, within 1 s.
+   * `internal/auth`: `TestLoadRefusesFIFO`, the same for `auth.json`.
+   * `internal/cli`: `TestModelsJSONRefusesFIFO` (no models, warned "not a regular file"; missing is none, unwarned);
+     `TestConfigValidateRefusesFIFO` (`gobble config validate` with a FIFO `auth.json` exits 1 within 1 s, printing
+     `<file>: could not read: open <file>: not a regular file`; with no files it prints nothing, which
+     `TestConfigValidateExits` already holds); `TestCompletionModelsJSONRefusesFIFO` (nil within 1 s, as for a missing
+     file).
+   * Measured on a scratch copy on macOS, three runs: `TestResolveRefusesLarge`'s `Resolve` allocates about 10 KB; the
+     size is refused from the opened file's own `Stat`, before a byte is read.
+4. **Seen failing** (step 4, C9), each on a scratch copy; a reader "put back" calls `os.ReadFile` again:
+
+   | Break | The failure |
+   | :--- | :--- |
+   | `readLayer` put back (the step's) | `TestResolveRefusesFIFO`: `still blocked after 1s`; `TestResolveRefusesLarge`: `Resolve of a 2 MiB settings.yaml allocated 14812248 bytes, want under 4 MiB`, and `diagnostics [], want an error about <tmp>/config/settings.yaml naming "file too large: over 1 MiB"` |
+   | the flag kept, the type check gone | `TestResolveRefusesFIFO`: only the untrusted-project warning, no error; `TestResolveDevZero`: `read <tmp>/settings.yaml: file too large: over 1 MiB`, not "not a regular file" |
+   | `ConfigLimit` at 1 GiB | `TestResolveRefusesLarge`: `diagnostics [], want an error … naming "file too large: over 1 MiB"` |
+   | `Update`, `edit` and `editRules` put back | `TestEditorsRefuseFIFO/Update`, `/Set` and `/AppendRule`: each `still blocked after 1s` |
+   | `mcpclient.Load` put back | `TestConfigRefusesFIFO`: `still blocked after 1s` at `Load` |
+   | `readForEdit` put back | `TestConfigRefusesFIFO`: `still blocked after 1s` at `Add` |
+   | both stores put back | `TestStoresRefuseFIFO/permissions.json` and `/trust.json`: each `still blocked after 1s` |
+   | `auth.Load` put back | `TestLoadRefusesFIFO`: `still blocked after 1s` |
+   | `readModelsJSON` put back | `TestModelsJSONRefusesFIFO`: `still blocked after 1s` |
+   | `jsonDiagnostics` put back (deviation 7) | `TestConfigValidateRefusesFIFO`: `still blocked after 1s` |
+   | `completionModelsJSON` put back (deviation 7) | `TestCompletionModelsJSONRefusesFIFO`: `still blocked after 1s` |
+
+   `TestResolveDevZero` is not run on the step's copy: with `os.ReadFile` it reads `/dev/zero` until memory runs out,
+   F9's own finding. The no-check copy holds it, failing on the limit instead. The allocation bound was first checked
+   after the diagnostic, which stopped the test before it; it now comes first, so the step's copy shows both failures.
+5. **G-local:** `make pre-add-check` on the 18 Go files: clean; `make preflight`: passed; `make race`: 38 ok;
+   `make perf`: passed (`TestPerfBudget`). The first `go test ./...` failed one test, `TestLastGoodOnDisk`, in its
+   teardown: `TempDir RemoveAll cleanup: … /catalog: directory not empty`. That is the late writer under a test's
+   `GOBBLE_HOME` that 0039-PLAN's deviations 14 and 18 and 0035-PLAN's deviation 14 recorded, which waits for a record
+   of its own; P7 changes nothing it runs. The second run: 38 ok.
+6. **G-hosts,** 822 files shipped to each: `go test` and race passed on both, 38 ok; `make check-records markdownlint`
+   passed on both; preflight stops at `verify-build-metadata`, as on every copy. `make perf` passed on both
+   (`TestPerfBudget` in `internal/cli` and in `internal/cli/editor`), and `make probe-conhost` passed on the Windows
+   laptop (`TestConhost`). Run alone with `-v`, the thirteen new tests passed on the Linux machine. On the Windows laptop
+   `TestResolveRefusesLarge` passed; the FIFO cases skipped ("Windows has no FIFOs") and `TestResolveDevZero` skipped
+   ("Windows has no /dev/zero"), each test's missing-file checks running before its skip.

@@ -10,6 +10,7 @@ import (
 
 	"github.com/maccavelli/gobble-cli/internal/cli/complete"
 	"github.com/maccavelli/gobble-cli/internal/config"
+	"github.com/maccavelli/gobble-cli/internal/fsx"
 	"github.com/maccavelli/gobble-cli/llm/catalog"
 	"github.com/maccavelli/gobble-cli/llm/provider"
 	"github.com/maccavelli/gobble-cli/session"
@@ -140,7 +141,7 @@ func completionModelsJSON() *catalog.ModelsJSON {
 	if err != nil {
 		return nil
 	}
-	data, err := os.ReadFile(filepath.Join(dirs.Config, "models.json")) //nolint:gosec // G304: the config directory's own models.json
+	data, err := fsx.ReadRegularFile(filepath.Join(dirs.Config, "models.json"), fsx.ConfigLimit)
 	if err != nil {
 		return nil
 	}

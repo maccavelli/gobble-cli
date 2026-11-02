@@ -482,6 +482,9 @@ plan may tune one only through a deviation.
   * That covers `settings.yaml`, global and project. Plan 1 audits `mcp.json`, `models.json`, `permissions.json` and
     the trust file, and applies the same rule to each.
   * A refused file is a diagnostic, as a malformed one is today.
+
+  *(2026-11-02, by 0037-PLAN-permission-and-file-tool-hardening.md's deviation 7: `gobble config validate` and shell
+  completion read the same files through the same reader, so neither blocks on a file gobble refuses.)*
 * **D11. Glob matching is linear, and recursive file operations stop on cancel and compare real paths (F10, F11).**
   * At compile time, consecutive `**` collapse into one, as git's wildmatch does.
   * Matching is memoised on the pattern index and the name index, which makes it O(P·N). The prototype took

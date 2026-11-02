@@ -72,7 +72,7 @@ func edit(file string, e Edit) (err error) {
 		return err
 	}
 	defer func() { err = errors.Join(err, release()) }()
-	data, err := os.ReadFile(file) //nolint:gosec // G304: the settings file the caller names
+	data, err := fsx.ReadRegularFile(file, fsx.ConfigLimit)
 	if err != nil {
 		return err
 	}

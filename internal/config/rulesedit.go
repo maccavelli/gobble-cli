@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 
 	"go.yaml.in/yaml/v3"
@@ -87,7 +86,7 @@ func editRules(file string, want func(old []PermissionRule) ([]PermissionRule, e
 		return err
 	}
 	defer func() { err = errors.Join(err, release()) }()
-	data, err := os.ReadFile(file) //nolint:gosec // G304: the settings file the caller names
+	data, err := fsx.ReadRegularFile(file, fsx.ConfigLimit)
 	if err != nil {
 		return err
 	}

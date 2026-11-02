@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/maccavelli/gobble-cli/internal/filelock"
+	"github.com/maccavelli/gobble-cli/internal/fsx"
 	"github.com/maccavelli/gobble-cli/jsonx"
 )
 
@@ -62,7 +63,7 @@ type File struct {
 // not an object of entries, each an object with a string "type", is an
 // error naming it.
 func Load(path string) (*File, error) {
-	data, err := os.ReadFile(path) //nolint:gosec // G304: the config directory's own auth.json
+	data, err := fsx.ReadRegularFile(path, fsx.ConfigLimit)
 	if errors.Is(err, fs.ErrNotExist) {
 		return &File{}, nil
 	}

@@ -3,7 +3,6 @@ package config
 import (
 	"errors"
 	"io/fs"
-	"os"
 	"path/filepath"
 
 	"github.com/maccavelli/gobble-cli/internal/fsx"
@@ -128,7 +127,7 @@ func Resolve(o Options) (Resolved, []Diagnostic) {
 // readLayer reads and checks one file. A missing file is no layer and no
 // diagnostic; nil leaves mean the file was absent or unusable.
 func readLayer(file string, layer Layer) (map[string]leaf, []Diagnostic) {
-	data, err := os.ReadFile(file) //nolint:gosec // G304: GlobalFile's or ProjectFile's settings.yaml
+	data, err := fsx.ReadRegularFile(file, fsx.ConfigLimit)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil
 	}

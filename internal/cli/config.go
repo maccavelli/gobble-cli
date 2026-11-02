@@ -15,6 +15,7 @@ import (
 
 	"github.com/maccavelli/gobble-cli/internal/cli/editor"
 	"github.com/maccavelli/gobble-cli/internal/config"
+	"github.com/maccavelli/gobble-cli/internal/fsx"
 	"github.com/maccavelli/gobble-cli/jsonx"
 	"github.com/maccavelli/gobble-cli/llm/catalog"
 	"github.com/maccavelli/gobble-cli/mcpclient"
@@ -362,7 +363,7 @@ func jsonDiagnostics(files []jsonConfigFile) []config.Diagnostic {
 		if f.path == "" {
 			continue
 		}
-		data, err := os.ReadFile(f.path)
+		data, err := fsx.ReadRegularFile(f.path, fsx.ConfigLimit)
 		switch {
 		case errors.Is(err, fs.ErrNotExist):
 			continue

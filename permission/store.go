@@ -61,7 +61,7 @@ type RuleStore struct {
 
 // Load is every project's saved rules; a missing file is none.
 func (s RuleStore) Load() (map[string][]StoredRule, error) {
-	data, err := os.ReadFile(s.Path)
+	data, err := fsx.ReadRegularFile(s.Path, fsx.ConfigLimit)
 	if errors.Is(err, fs.ErrNotExist) {
 		return map[string][]StoredRule{}, nil
 	}

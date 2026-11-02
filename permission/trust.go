@@ -139,7 +139,7 @@ var ErrTooBroad = errors.New("trusting it would trust every project under it")
 
 // Load is every saved decision; a missing file is none.
 func (s TrustStore) Load() (map[string]bool, error) {
-	data, err := os.ReadFile(s.Path)
+	data, err := fsx.ReadRegularFile(s.Path, fsx.ConfigLimit)
 	if errors.Is(err, fs.ErrNotExist) {
 		return map[string]bool{}, nil
 	}

@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/maccavelli/gobble-cli/internal/fsx"
 	"github.com/maccavelli/gobble-cli/llm/catalog"
 	"github.com/maccavelli/gobble-cli/llm/provider"
 	"github.com/maccavelli/gobble-cli/tool/builtin"
@@ -49,7 +50,7 @@ func (e *runEnv) modelsJSON() *catalog.ModelsJSON {
 }
 
 func (e *runEnv) readModelsJSON(path string) *catalog.ModelsJSON {
-	data, err := os.ReadFile(path) //nolint:gosec // G304: the config directory's own models.json
+	data, err := fsx.ReadRegularFile(path, fsx.ConfigLimit)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil
 	}
