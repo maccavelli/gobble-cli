@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: complete
 date: 2026-11-01
 associated-madr: "0040-MADR-acpclient-notification-back-pressure.md"
 ---
@@ -163,3 +163,31 @@ The base is P0's `8250cc4`. Deviations 1 and 2.
     `verify-build-metadata`, as on every copy; `make perf` passed on both (the Linux machine ReplyRender 170.79 µs,
     Reprint 18.59 ms, LineSessionStart 4.23 ms, KeyDraw 6.108 µs; the Windows laptop 28.39 µs, 3.82 ms, 5.18 ms,
     1.245 µs); the conhost probe on the Windows laptop: passed.
+
+### P2 record (2026-11-01): close-out
+
+The base is P1's `dafb87b`. No deviation.
+
+1. **A comment for gobble-cli#8** (step 1), for the owner to post; posting waits for the owner's word:
+
+   ```text
+   Done in dafb87b, under 0040-MADR and its PLAN
+   (docs/decisions/0040-MADR-acpclient-notification-back-pressure.md).
+
+   - acpclient names acp-go-sdk2's OverflowBlock (pinned at v1.31.1): a full notification
+     queue pauses the agent until the client catches up. Nothing is dropped, and the
+     connection stays open. The SDK logs a pause past 5 seconds through the run's log.
+   - Options.OnDrop, Conn.Dropped() and the CLI's "dropped N ACP notifications" warning are
+     removed; Options.MaxQueued stays, as the count at which the reader pauses.
+   - TestDropReported is replaced by TestBlockedUpdatesArriveInOrder: with MaxQueued 1 and a
+     blocked callback, the agent's updates wait; released, all arrive in order, and a second
+     prompt succeeds. It fails with OverflowDropNewest put back.
+   - The agent side has had the SDK's default, OverflowBlock, since the v1.31.1 pin.
+
+   This closes the issue.
+   ```
+2. **The disclosure guard** (step 2), over the outgoing commits, `origin/main` `9250596` to `dafb87b` (`8250cc4`,
+   `dafb87b`): exit 0, no output. This phase's commit is outgoing too; the pre-push hook runs the same guard over it.
+   Nothing was pushed.
+3. **Status** (step 3): the MADR's Confirmation 1 to 5 is met, by P1's record. This plan is `complete`; the MADR stays
+   `accepted`.
