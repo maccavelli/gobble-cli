@@ -38,7 +38,12 @@ The binary has these surfaces:
   workspace asks unless an `external_directory` rule allows it, and a tool denied whole is hidden
   from the model. Whatever the rules say, a write under `.git` or `~/.ssh`, or to gobble's
   credential, trust and permission files, is refused; a write to gobble's or the project's
-  configuration, an `AGENTS.md` or the project's skills, and every delete, ask. Print mode
+  configuration, an `AGENTS.md` or the project's skills, and every delete, ask. A bash command meets
+  the same two limits for the files its text names as written: its output redirections (`>`, `>>`,
+  `>|`, `&>`, `&>>`, `<>`), the operands of `tee`, `truncate`, `rm`, `rmdir`, `mv`, `cp`, `mkdir`,
+  `touch`, `ln`, `chmod` and `chown`, and the files `sed`, `perl` or `ruby` edit in place
+  (`-i`, `-i<suffix>`, `--in-place`), and no others: a pipeline into `xargs`, `find -delete`, a
+  bundled flag such as `perl -pi`, and a path built at run time are beyond it (0037-MADR D3). Print mode
   refuses every question; `--yes` allows once what a rule or the default asks, never those. Each
   decision is logged with its rule and source. A question offers allow and reject once, for
   this session, for this project (kept in the config directory's `permissions.json`, by the

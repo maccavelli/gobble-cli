@@ -211,6 +211,48 @@ func TestEvaluateLimits(t *testing.T) {
 	}
 }
 
+// A bash command whose literal writes reach a protected path is denied by
+// the limit, whatever the rules allow; .GIT is .git where the volume folds
+// case. A write elsewhere is the rules' (0037-MADR D3). Each rule carries
+// its Writes as bash's Subject gives them, resolved at the root.
+func TestBashWritesProtected(t *testing.T) {
+	root := filepath.FromSlash("/work/repo")
+	e := Engine{Root: root, Layers: [][]Spec{{spec(t, ModeAllow, "bash(echo *)", LayerGlobal)}}}
+	at := func(rel string) string { return filepath.Join(root, filepath.FromSlash(rel)) }
+	for _, c := range []struct {
+		cmd, write string
+		want       Mode
+		limit      string
+	}{
+		{"echo x > .git/config", ".git/config", ModeDeny, limitProtected},
+		{"echo x >> .GIT/config", ".GIT/config", ModeDeny, limitProtected},
+		{"tee .git/hooks/pre-commit", ".git/hooks/pre-commit", ModeDeny, limitProtected},
+		{"sed -i s/a/b/ .git/config", ".git/config", ModeDeny, limitProtected},
+		{"echo x > out.txt", "out.txt", ModeAllow, ""},
+	} {
+		want, limit := c.want, c.limit
+		if strings.Contains(c.write, ".GIT") && !folds() {
+			want, limit = ModeAllow, "" // another directory on linux
+		}
+		v := e.Evaluate(Rule{Tool: "bash", Kind: SubjectCommand, Subjects: []string{c.cmd}, Writes: []string{at(c.write)}})
+		if v.Effect != want || v.Limit != limit {
+			t.Errorf("%q: %+v, want %s, limit %q", c.cmd, v, want, limit)
+		}
+	}
+}
+
+// A bash command whose literal writes reach a configuration path asks, by
+// the limit, where the rules allow it (0037-MADR D3).
+func TestBashWritesConfig(t *testing.T) {
+	root := filepath.FromSlash("/work/repo")
+	e := Engine{Root: root, Layers: [][]Spec{{spec(t, ModeAllow, "bash(echo *)", LayerGlobal)}}}
+	v := e.Evaluate(Rule{Tool: "bash", Kind: SubjectCommand, Subjects: []string{"echo x > AGENTS.md"},
+		Writes: []string{filepath.Join(root, "AGENTS.md")}})
+	if v.Effect != ModeAsk || v.Limit != limitConfig || v.By.Source.Layer != LayerLimit {
+		t.Fatalf("echo x > AGENTS.md: %+v, want the limit's question", v)
+	}
+}
+
 // A tool whose last rule is a deny for every subject is hidden; one with a
 // narrower deny, or a later allow, is not (decision 6).
 func TestHidden(t *testing.T) {

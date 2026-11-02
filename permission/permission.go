@@ -44,6 +44,10 @@ type Rule struct {
 	Saves []string `json:"saves,omitzero"`
 	// ReadOnly says the tool changes nothing, for the defaults.
 	ReadOnly bool `json:"readOnly,omitzero"`
+	// Writes are the files a shell command writes, as far as its text names
+	// them, resolved; the limits check them whatever the tool (0037-MADR
+	// D3).
+	Writes []string `json:"writes,omitzero"`
 }
 
 // Decision is a policy answer. Refusal, when set, is a refusal made

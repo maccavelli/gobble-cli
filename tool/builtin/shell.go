@@ -322,13 +322,25 @@ func shellDescribe(c tool.Call, _ tool.Env) string {
 // bashSubject is a bash call's simple commands, each with the pattern an
 // "always" saves, or its whole command when it must be raw (0005-PLAN F6-3
 // decisions 2 to 6).
-func bashSubject(c tool.Call, _ tool.Env) tool.Subject {
+func bashSubject(c tool.Call, env tool.Env) tool.Subject {
 	var a shellIn
 	if err := jsonx.Unmarshal(c.Args, &a); err != nil {
 		return tool.Subject{}
 	}
 	sc := parseShell(a.Command)
-	return tool.Subject{Commands: sc.subjects, Saves: sc.saves}
+	s := tool.Subject{Commands: sc.subjects, Saves: sc.saves}
+	// The files it writes, resolved against its workdir as bashOutside
+	// resolves its paths (0037-MADR D3).
+	at := env
+	if a.Workdir != "" {
+		at.Cwd = resolve(env, a.Workdir)
+	}
+	for _, w := range sc.writes {
+		if p := resolve(at, w); !slices.Contains(s.Writes, p) {
+			s.Writes = append(s.Writes, p)
+		}
+	}
+	return s
 }
 
 // powershellSubject is a PowerShell call's whole command, one raw subject:

@@ -850,6 +850,7 @@ func (t *turn) approve(call tool.Call, spec tool.Spec, title string, outside []s
 	case len(subject.Commands) > 0:
 		rule.Kind, rule.Subjects, rule.Saves = permission.SubjectCommand, subject.Commands, subject.Saves
 	}
+	rule.Writes = subject.Writes // the files a shell command writes, for the limits (0037-MADR D3)
 	d, err := t.a.cfg.Policy.Decide(t.ctx, rule)
 	switch {
 	case t.ctx.Err() != nil:

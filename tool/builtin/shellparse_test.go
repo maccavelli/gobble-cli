@@ -152,6 +152,82 @@ func TestParseShellPaths(t *testing.T) {
 	}
 }
 
+// A command's writes are its output redirections' literal files, its
+// writing programs' literal operands, and an in-place editor's files, its
+// script left out; a sink, a read, an expansion and a command
+// substitution are none. A writing program's every operand counts, such as
+// chmod's mode, which names no protected path (0037-MADR D3).
+func TestShellWrites(t *testing.T) {
+	for _, c := range []struct {
+		cmd    string
+		writes []string
+	}{
+		{"echo x > out", []string{"out"}},
+		{"echo x >> out", []string{"out"}},
+		{"echo x >| out", []string{"out"}},
+		{"echo x &> out", []string{"out"}},
+		{"echo x &>> out", []string{"out"}},
+		{"cat <> out", []string{"out"}},
+		{`echo x > "a b"`, []string{"a b"}},
+		{"echo x > /dev/null 2>/dev/null", nil},
+		{"sort < in.txt", nil},
+		{"tee a 'b c'", []string{"a", "b c"}},
+		{"echo a | tee -a .git/config", []string{".git/config"}},
+		{"truncate -s0 f", []string{"f"}},
+		{"rm -rf x y", []string{"x", "y"}},
+		{"rmdir d", []string{"d"}},
+		{"mv a b", []string{"a", "b"}},
+		{"cp -r a b", []string{"a", "b"}},
+		{"mkdir -p d", []string{"d"}},
+		{"touch f", []string{"f"}},
+		{"ln -s a b", []string{"a", "b"}},
+		{"chmod 600 f", []string{"600", "f"}},
+		{"chown u f", []string{"u", "f"}},
+		{"sed -i s/a/b/ f", []string{"f"}},
+		{"sed -i.bak -e s/a/b/ f g", []string{"f", "g"}},
+		{"sed --in-place s/a/b/ f", []string{"f"}},
+		{"sed -i -f script.sed f", []string{"f"}},
+		{"sed s/a/b/ f", nil},
+		{"perl -i -pe 's/a/b/' f", []string{"f"}},
+		{"ruby -i -pe '$_.upcase!' f", []string{"f"}},
+		{"perl -pe 's/a/b/' f", nil},
+		{"cat f", nil},
+		{"echo x > $F", nil},
+		{"tee $F", nil},
+		{"echo x > $(mktemp)", nil},
+		{"bash -c 'echo x > y'", []string{"y"}},
+	} {
+		if got := parseShell(c.cmd).writes; !slices.Equal(got, c.writes) {
+			t.Errorf("%q: %q, want %q", c.cmd, got, c.writes)
+		}
+	}
+
+	// bashSubject resolves them against the workdir, ~ at the home
+	// directory, each once.
+	root, other := t.TempDir(), t.TempDir()
+	env := tool.Env{Cwd: root, Roots: []string{root}}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skip("no home directory")
+	}
+	subject := func(cmd, workdir string) []string {
+		args := `{"command":` + quote(t, cmd)
+		if workdir != "" {
+			args += `,"workdir":` + quote(t, workdir)
+		}
+		return bashSubject(tool.Call{Name: "bash", Args: []byte(args + "}")}, env).Writes
+	}
+	if got := subject("echo x > a.txt; tee a.txt", ""); !slices.Equal(got, []string{filepath.Join(root, "a.txt")}) {
+		t.Errorf("against the cwd, once: %q", got)
+	}
+	if got := subject("echo x > a.txt", other); !slices.Equal(got, []string{filepath.Join(other, "a.txt")}) {
+		t.Errorf("against the workdir: %q", got)
+	}
+	if got := subject("echo x >> ~/.ssh/authorized_keys", ""); !slices.Equal(got, []string{filepath.Join(home, ".ssh", "authorized_keys")}) {
+		t.Errorf("~: %q", got)
+	}
+}
+
 // bash's outside paths are its workdir and its paths, resolved against
 // the workdir, ~ at the home directory (decision 7).
 func TestBashOutside(t *testing.T) {

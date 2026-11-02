@@ -1,6 +1,6 @@
 ---
 status: in-progress
-date: 2026-10-30
+date: 2026-11-01
 associated-madr: "0037-MADR-hardening-integrity-and-performance.md"
 ---
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
@@ -723,3 +723,54 @@ by its deviation 12, which the owner ordered first ("0035 first (Recommended)").
 plan's P19 is done. 0035's P17 returns to `main` as this plan's Rollout and Rollback says: `feature/p17-lineedit` is
 rebased onto `main`, and the owner fast-forwards `main` to it.
 
+
+### Resumed at P3 (2026-11-01)
+
+0035-PLAN's P19 is done, so this plan resumes at P3, as the pause above says, on the owner's "proceed". `main` is at
+`5e41482`. 0035's P17 reached `main` through that plan's own phases, as its execution record shows.
+
+### P3 record (2026-11-01): bash's literal write targets meet the protected-path limit
+
+The base is `5e41482`. No deviation.
+
+1. **The parser** (step 1): `shellCommand` gains `writes`. `add` collects a redirection's literal file when `writesTo`
+   says it writes: `RdrOut`, `AppOut`, `RdrClob`, `RdrAll`, `AppAll` and `RdrInOut`, a sink excluded by
+   `redirectPath`. `call` collects `writeOperands`: every literal operand of `tee`, `truncate`, `rm`, `rmdir`, `mv`,
+   `cp`, `mkdir`, `touch`, `ln`, `chmod` and `chown` (`writeProgram`), by `fileOperands`; and `inPlaceFiles` for `sed`,
+   `perl` and `ruby`, when `-i`, `-i<suffix>`, `--in-place` or `--in-place=…` is among the options, the script left out:
+   the word after `-e`, `--expression` (and `-f`, `--file` for `sed`), or after a `perl`/`ruby` bundle ending in `e` or
+   `E`, else the first operand.
+   * A writing program's every operand counts, such as `chmod`'s mode; none names a protected path.
+   * `perl -pi -e …`, its in-place flag bundled, is not recognised: the step names `-i`, `-i<suffix>` and `--in-place`.
+     `docs/architecture.md` says so.
+   * golangci-lint's goconst found `"sed"` four times in the new code; it is the constant `sed`.
+2. **The tool** (step 2): `bashSubject` returns `Writes`, each resolved by `resolve` against the workdir, as
+   `bashOutside` resolves its paths, each once.
+3. **The rule** (step 3): `approve` sets `rule.Writes = subject.Writes`.
+4. **The limit** (step 4): `limits` checks `r.Writes` first, for any tool: a protected path denies (`limitProtected`), and
+   a config path asks (`limitConfig`) unless the verdict is deny. Both use P2's `protected` and `configPath`.
+5. **`docs/architecture.md`** (step 5): the permission section names the redirections, programs and in-place flags the
+   check covers, and what it does not: a pipeline into `xargs`, `find -delete`, a bundled flag such as `perl -pi`, and
+   a path built at run time.
+6. **Tests** (step 6):
+   * `TestShellWrites` (`tool/builtin/shellparse_test.go`): each redirection operator, each writing program, quoted
+     operands, `sed -i`, `sed -i.bak -e`, `--in-place`, `sed -i -f`, `sed` without it, `perl -i -pe`, `ruby -i -pe`,
+     `perl -pe` without it, a sink, a read, `$F`, a command substitution and `bash -c`. A second part checks step 2's
+     resolution through `bashSubject`: against the cwd, once; against the workdir; `~` at the home directory;
+   * `TestBashWritesProtected` and `TestBashWritesConfig` (`permission/rules_test.go`), each rule carrying its `Writes` as
+     bash's Subject gives them, since `permission`'s tests do not import `tool/builtin`. `.GIT/config` is denied where
+     the volume folds case, `folds()`, and allowed by the rule on linux, as P2's `TestProtectedFoldsCase` has it.
+7. **Seen failing** (step 7, C9), each on a scratch copy:
+
+   | Break | The failure |
+   | :--- | :--- |
+   | `limits` ignoring `Writes` (the step's) | `TestBashWritesProtected`: `"echo x > .git/config": {Effect:allow By:allow: bash(echo *) Limit:}, want deny, limit "gobble never changes files under .git, …"`, and the same for each protected case; `TestBashWritesConfig`: `echo x > AGENTS.md: {Effect:allow …}, want the limit's question` |
+   | the parser collecting no writes | `TestShellWrites`: `"echo x > out": [], want ["out"]`, and each case after |
+8. **`apidiff`** (step 8): `make preflight`'s step reports "apidiff: no-op below v1.0.0", as at P1. `go doc -all` of `tool`
+   and `permission`, against `5e41482`, shows `Subject.Writes` and `Rule.Writes` added, and nothing else.
+9. **G-local:** `make pre-add-check` on the 8 changed Go files: clean; `make preflight`: passed, its first run stopped at
+   the goconst finding above; `go test ./...`: 38 ok; `make race`: 38 ok. P3 touches nothing under `internal/cli`, so no
+   `make perf`.
+10. **G-hosts,** 809 files shipped to each: the first run, before the goconst fix, passed `go test` and race and stopped
+    preflight at the same finding on both; on the fixed tree, `go test` and race passed on both, 38 ok,
+    `make check-records markdownlint` passed on both, and preflight stops at `verify-build-metadata`, as on every copy.

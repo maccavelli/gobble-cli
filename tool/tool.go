@@ -264,6 +264,11 @@ type Subject struct {
 	// Saves the pattern an "always" answer saves for each, "" for its exact
 	// text (0005-PLAN F6-3 decisions 2 and 4).
 	Commands, Saves []string
+	// Writes are the files a shell call writes, as far as its text names
+	// them literally, resolved: its output redirections' files and its
+	// writing programs' operands, which gobble's protected-path limit
+	// checks whatever the rules say (0037-MADR D3).
+	Writes []string
 }
 
 // Subjecter is implemented by a tool whose calls the rules match by their

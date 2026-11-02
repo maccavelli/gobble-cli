@@ -8,19 +8,21 @@ import (
 )
 
 // A bash command as the permission rules see it (0005-PLAN F6-3): one
-// subject per simple command, at any depth, with its "always" pattern, and
-// the paths its cd, its file programs and its redirections name.
+// subject per simple command, at any depth, with its "always" pattern, the
+// paths its cd, its file programs and its redirections name, and the files
+// it writes, as far as its text names them (0037-MADR D3).
 
 // maxInline is how deep `bash -c '<script>'` is parsed (decision 6;
 // grok-build's MAX_INLINE_SHELL_DEPTH).
 const maxInline = 8
 
 // shellCommand is a bash command's subjects, each with the pattern an
-// "always" saves, "" for its exact text, and the literal paths it names,
-// unresolved.
+// "always" saves, "" for its exact text, the literal paths it names, and
+// the literal files it writes, unresolved.
 type shellCommand struct {
 	subjects, saves []string
 	paths           []string
+	writes          []string
 }
 
 // parseShell is command's subjects (decisions 2 to 7). A command that does
@@ -53,6 +55,9 @@ func (sc *shellCommand) add(src string, depth int) bool {
 			for _, r := range x.Redirs {
 				if p, ok := redirectPath(r); ok {
 					sc.paths = append(sc.paths, p)
+					if writesTo(r) {
+						sc.writes = append(sc.writes, p)
+					}
 				}
 			}
 		case *syntax.CallExpr:
@@ -106,6 +111,7 @@ func (sc *shellCommand) call(src string, assigns []*syntax.Assign, args []*synta
 		}
 	}
 	sc.paths = append(sc.paths, fileOperands(words, lits)...)
+	sc.writes = append(sc.writes, writeOperands(words, lits)...)
 	if i, ok := unwrap(words, lits); ok {
 		if !sc.call(src, nil, args[i:], st, depth) {
 			return false
@@ -282,6 +288,98 @@ func redirectPath(r *syntax.Redirect) (string, bool) {
 	return p, true
 }
 
+// writesTo reports whether r writes its file: >, >>, >|, &>, &>> and <>
+// (0037-MADR D3).
+func writesTo(r *syntax.Redirect) bool {
+	switch r.Op {
+	case syntax.RdrOut, syntax.AppOut, syntax.RdrClob, syntax.RdrAll, syntax.AppAll, syntax.RdrInOut:
+		return true
+	}
+	return false
+}
+
+// writeProgram are the file programs that write their operands
+// (0037-MADR D3).
+var writeProgram = map[string]bool{}
+
+// inPlaceProgram are the programs that write their file operands when an
+// in-place flag is given: -i, -i<suffix> or --in-place (0037-MADR D3).
+var inPlaceProgram = map[string]bool{sed: true, "perl": true, "ruby": true}
+
+// sed is the stream editor, whose -f takes a script file and whose -E is
+// no script.
+const sed = "sed"
+
+// writeOperands are the literal files a simple command writes: a writing
+// program's operands, and an in-place editor's file operands, its script
+// left out.
+func writeOperands(words []string, lits []bool) []string {
+	switch {
+	case writeProgram[words[0]]:
+		return fileOperands(words, lits)
+	case inPlaceProgram[words[0]]:
+		return inPlaceFiles(words, lits)
+	}
+	return nil
+}
+
+// inPlaceFiles are sed's, perl's or ruby's literal file operands when an
+// in-place flag is among its options. The script given by -e (or a bundle
+// ending in e or E), --expression, -f or --file is not a file it writes;
+// with none of those, its first operand is the script, and is left out.
+func inPlaceFiles(words []string, lits []bool) []string {
+	inPlace, scripted := false, false
+	var operands []int
+	options := true
+	for i := 1; i < len(words); i++ {
+		w := words[i]
+		switch {
+		case options && w == "--":
+			options = false
+		case options && lits[i] && (w == "-i" || strings.HasPrefix(w, "-i") || w == "--in-place" || strings.HasPrefix(w, "--in-place=")):
+			inPlace = true
+		case options && lits[i] && scriptOption(words[0], w):
+			scripted = true
+			i++ // the script, or its file
+		case options && lits[i] && strings.HasPrefix(w, "-"):
+			if strings.HasPrefix(w, "--expression=") || strings.HasPrefix(w, "--file=") {
+				scripted = true
+			}
+		default:
+			operands = append(operands, i)
+		}
+	}
+	if !inPlace {
+		return nil
+	}
+	if !scripted && len(operands) > 0 {
+		operands = operands[1:]
+	}
+	var out []string
+	for _, i := range operands {
+		if lits[i] && words[i] != "" {
+			out = append(out, words[i])
+		}
+	}
+	return out
+}
+
+// scriptOption reports whether option w of program takes the script, or
+// its file, as the next word.
+func scriptOption(program, w string) bool {
+	switch w {
+	case "-e", "--expression":
+		return true
+	case "-f", "--file":
+		return program == sed
+	}
+	if program != sed && !strings.HasPrefix(w, "--") && len(w) > 2 {
+		last := w[len(w)-1]
+		return last == 'e' || last == 'E'
+	}
+	return program != sed && w == "-E"
+}
+
 // fileProgram are the programs whose operands are files (decision 7):
 // grok-build's readers and writers (shell_access.rs:636-650), and the file
 // commands.
@@ -292,6 +390,9 @@ func init() {
 		base64 base32 cut sort uniq wc diff comm rev jq yq ag ack zcat zless zmore zgrep zegrep zfgrep bzcat bzgrep xzcat
 		xzgrep zstdcat lz4cat tee truncate rm rmdir mv cp mkdir touch ln chmod chown`) {
 		fileProgram[p] = true
+	}
+	for p := range strings.FieldsSeq(`tee truncate rm rmdir mv cp mkdir touch ln chmod chown`) {
+		writeProgram[p] = true
 	}
 }
 

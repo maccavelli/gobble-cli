@@ -319,13 +319,20 @@ const (
 // write to a protected path is denied; a write to a configuration path,
 // and a delete, are the limit's question whenever the rules do not deny
 // them, so the question is marked, and --yes does not approve it, when
-// the rules would only have asked (decision 8).
+// the rules would only have asked (decision 8). A shell command's Writes
+// meet the same two limits, whatever its tool (0037-MADR D3).
 func (e Engine) limits(r Rule, v Verdict) Verdict {
-	if !slices.Contains(writers, r.Tool) || r.Kind != SubjectPath {
-		return v
-	}
 	limit := func(effect Mode, why string) Verdict {
 		return Verdict{Effect: effect, By: Spec{Effect: effect, Tool: r.Tool, Source: RuleSource{Layer: LayerLimit}}, Limit: why}
+	}
+	if slices.ContainsFunc(r.Writes, e.protected) {
+		return limit(ModeDeny, limitProtected)
+	}
+	if v.Effect != ModeDeny && slices.ContainsFunc(r.Writes, e.configPath) {
+		return limit(ModeAsk, limitConfig)
+	}
+	if !slices.Contains(writers, r.Tool) || r.Kind != SubjectPath {
+		return v
 	}
 	if slices.ContainsFunc(r.Subjects, e.protected) {
 		return limit(ModeDeny, limitProtected)
