@@ -1,10 +1,12 @@
 package fsx
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -44,6 +46,11 @@ func (osFS) Remove(name string) error                  { return os.Remove(name) 
 // to its target, which must be inside a root, and a file with more than one
 // hard link is written in place (0037-MADR D6).
 func (w Workspace) WriteFile(abs string, data []byte) error {
+	return w.writeFrom(abs, bytes.NewReader(data))
+}
+
+// writeFrom is WriteFile with the content read from r.
+func (w Workspace) writeFrom(abs string, r io.Reader) error {
 	abs, err := follow(abs)
 	if err != nil {
 		return err
@@ -53,10 +60,10 @@ func (w Workspace) WriteFile(abs string, data []byte) error {
 		return err
 	}
 	if root == nil {
-		return writeAtomic(osFS{}, abs, data, newFileMode)
+		return writeAtomicFrom(osFS{}, abs, r, newFileMode)
 	}
 	defer root.Close() //nolint:errcheck // the rename has happened or failed by now
-	return writeAtomic(root, rel, data, newFileMode)
+	return writeAtomicFrom(root, rel, r, newFileMode)
 }
 
 // WriteFileMode replaces or creates abs with data, as WriteFile does, for a
@@ -107,6 +114,12 @@ func follow(abs string) (string, error) {
 }
 
 func writeAtomic(fsys fileSystem, name string, data []byte, newMode fs.FileMode) error {
+	return writeAtomicFrom(fsys, name, bytes.NewReader(data), newMode)
+}
+
+// writeAtomicFrom is writeAtomic with the content read from r, so a copy
+// streams (0037-MADR D7).
+func writeAtomicFrom(fsys fileSystem, name string, r io.Reader, newMode fs.FileMode) error {
 	if dir := filepath.Dir(name); dir != "." {
 		if err := fsys.MkdirAll(dir, 0o750); err != nil {
 			return err
@@ -123,7 +136,7 @@ func writeAtomic(fsys fileSystem, name string, data []byte, newMode fs.FileMode)
 			return err
 		}
 		if n > 1 {
-			return writeInPlace(fsys, name, data)
+			return writeInPlace(fsys, name, r)
 		}
 	case !errors.Is(err, fs.ErrNotExist):
 		return err
@@ -136,7 +149,7 @@ func writeAtomic(fsys fileSystem, name string, data []byte, newMode fs.FileMode)
 	if err != nil {
 		return err
 	}
-	werr := fill(f, data)
+	werr := fill(f, r)
 	if werr == nil {
 		werr = fsys.Chmod(tmp, mode)
 	}
@@ -150,19 +163,19 @@ func writeAtomic(fsys fileSystem, name string, data []byte, newMode fs.FileMode)
 	return syncDir(fsys, filepath.Dir(name))
 }
 
-// writeInPlace truncates name and writes data into it, keeping its mode and
-// every name it has.
-func writeInPlace(fsys fileSystem, name string, data []byte) error {
+// writeInPlace truncates name and writes r's content into it, keeping its
+// mode and every name it has.
+func writeInPlace(fsys fileSystem, name string, r io.Reader) error {
 	f, err := fsys.OpenFile(name, os.O_WRONLY|os.O_TRUNC, 0)
 	if err != nil {
 		return err
 	}
-	return fill(f, data)
+	return fill(f, r)
 }
 
-// fill writes data to f, syncs and closes it, and returns the first error.
-func fill(f *os.File, data []byte) error {
-	_, err := f.Write(data)
+// fill copies r into f, syncs and closes f, and returns the first error.
+func fill(f *os.File, r io.Reader) error {
+	_, err := io.Copy(f, r)
 	if serr := f.Sync(); err == nil {
 		err = serr
 	}

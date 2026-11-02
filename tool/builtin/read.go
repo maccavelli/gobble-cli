@@ -1,14 +1,18 @@
 package builtin
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/google/jsonschema-go/jsonschema"
 
@@ -17,8 +21,21 @@ import (
 	"github.com/maccavelli/gobble-cli/tool"
 )
 
-// maxLineChars is where read cuts a long line (opencode's limit).
-const maxLineChars = 2000
+const (
+	// maxLineChars is where read cuts a long line (opencode's limit).
+	maxLineChars = 2000
+	// lineKeep is how much of a shown line read holds: maxLineChars
+	// characters of the longest UTF-8 encoding, and one more, so
+	// truncateLine still sees that the line is longer.
+	lineKeep = (maxLineChars + 1) * utf8.UTFMax
+	// readChunk is a streamed read's buffer, and the size of the chunks
+	// the lines after the last one shown are counted in (0037-MADR D7).
+	readChunk = 64 << 10
+	// maxImageBytes is the most read loads of a file named as an image.
+	maxImageBytes = 20 << 20
+	// utf8BOM is the byte-order mark read does not show.
+	utf8BOM = "\uFEFF"
+)
 
 type readIn struct {
 	Path   string `json:"path" jsonschema:"the file or directory to read, relative to the working directory or absolute"`
@@ -50,23 +67,24 @@ func readWith(o Options) tool.Tool {
 			if info.IsDir() {
 				return readDir(ws, abs, name, in)
 			}
-			io := textIO{ctx: ctx, ws: ws}
-			if !imagePath(abs) {
-				io = textIOFor(ctx, env, ws, abs)
-			}
-			b, err := io.read(abs)
+			src, done, err := openText(ctx, env, ws, abs)
 			if err != nil {
 				return tool.Result{}, fmt.Errorf("read %s: %w", name, unwrapPath(err))
 			}
-			if mime := imageType(b); mime != "" {
+			defer done() //nolint:errcheck // read-only
+			head, err := src.Peek(sniffBytes)
+			if err != nil && !errors.Is(err, io.EOF) {
+				return tool.Result{}, fmt.Errorf("read %s: %w", name, unwrapPath(err))
+			}
+			if mime := imageType(head); mime != "" {
 				r := tool.TextResult(fmt.Sprintf("Read image file [%s]\n%s", mime, imageNotSent))
 				r.Summary = summary(fmt.Sprintf("read %s (%s, not sent)", name, mime))
 				return r, nil
 			}
-			if binaryContent(b) {
+			if binaryContent(head) {
 				return tool.Result{}, fmt.Errorf("read %s: a binary file; read cannot show it", name)
 			}
-			text, lines, err := numbered(string(b), in, name)
+			text, lines, err := numbered(src, in, name)
 			if err != nil {
 				return tool.Result{}, err
 			}
@@ -106,6 +124,30 @@ func imagePath(abs string) bool {
 	return slices.Contains(imageExts, strings.ToLower(filepath.Ext(abs)))
 }
 
+// openText opens the file abs for read, as a regular file (0037-MADR D7):
+// an image whole, up to maxImageBytes; a file the client offers through it,
+// whole, as the client returns it; and any other file streamed from disk.
+// done releases it.
+func openText(ctx context.Context, env tool.Env, ws fsx.Workspace, abs string) (src *bufio.Reader, done func() error, err error) {
+	whole := func(b []byte, err error) (*bufio.Reader, func() error, error) {
+		if err != nil {
+			return nil, nil, err
+		}
+		return bufio.NewReader(bytes.NewReader(b)), func() error { return nil }, nil
+	}
+	if imagePath(abs) {
+		return whole(ws.ReadRegular(abs, maxImageBytes))
+	}
+	if t := textIOFor(ctx, env, ws, abs); t.files != nil {
+		return whole(t.read(abs))
+	}
+	f, err := ws.OpenRegular(abs)
+	if err != nil {
+		return nil, nil, err
+	}
+	return bufio.NewReaderSize(f, readChunk), f.Close, nil
+}
+
 // readLocations is a read's file, at its offset when one is given.
 func readLocations(c tool.Call, env tool.Env) []tool.Location {
 	p := argPath(c)
@@ -142,35 +184,102 @@ func statFile(env tool.Env, ws fsx.Workspace, path string) (string, fs.FileInfo,
 
 // numbered is a text file's lines from in.Offset, each as "N: text", with a
 // footer. A BOM and the CR of a CRLF are not shown, and a final newline does
-// not count as a line. It also returns the file's line count.
-func numbered(s string, in readIn, name string) (string, int, error) {
-	lines := countingLines(strings.TrimPrefix(s, "\uFEFF"))
-	total := len(lines)
-	if total == 0 {
-		return "(empty file)", 0, nil
+// not count as a line. It also returns the file's line count. Only the
+// lines shown are held; the rest are counted as they stream past
+// (0037-MADR D7).
+func numbered(src *bufio.Reader, in readIn, name string) (string, int, error) {
+	if bom, err := src.Peek(len(utf8BOM)); err == nil && string(bom) == utf8BOM {
+		src.Discard(len(utf8BOM)) //nolint:errcheck,gosec // peeked
 	}
 	first := max(in.Offset, 1)
-	if first > total {
-		return "", total, fmt.Errorf("read %s: offset %d is past the end of the file (%s)", name, in.Offset, count(total, "line", "lines"))
-	}
 	limit := maxLines
 	if in.Limit > 0 {
 		limit = min(in.Limit, maxLines)
 	}
 	var b strings.Builder
-	last, byBytes := first-1, false
-	for n := first; n <= total && n < first+limit; n++ {
-		text, _ := truncateLine(strings.TrimSuffix(lines[n-1], "\r"), maxLineChars)
-		line := strconv.Itoa(n) + ": " + text + "\n"
-		if b.Len()+len(line) > maxBytes && n > first {
+	n, last, byBytes := 0, first-1, false
+	for n < first-1+limit {
+		line, ok, err := nextLine(src, n+1 >= first)
+		if err != nil {
+			return "", 0, fmt.Errorf("read %s: %w", name, unwrapPath(err))
+		}
+		if !ok {
+			break
+		}
+		n++
+		if n < first {
+			continue
+		}
+		text, _ := truncateLine(strings.TrimSuffix(line, "\r"), maxLineChars)
+		out := strconv.Itoa(n) + ": " + text + "\n"
+		if b.Len()+len(out) > maxBytes && n > first {
 			byBytes = true
 			break
 		}
-		b.WriteString(line)
+		b.WriteString(out)
 		last = n
+	}
+	rest, err := countRest(src)
+	if err != nil {
+		return "", 0, fmt.Errorf("read %s: %w", name, unwrapPath(err))
+	}
+	total := n + rest
+	if total == 0 {
+		return "(empty file)", 0, nil
+	}
+	if first > total {
+		return "", total, fmt.Errorf("read %s: offset %d is past the end of the file (%s)", name, in.Offset, count(total, "line", "lines"))
 	}
 	b.WriteString(footer("lines", first, last, total, byBytes))
 	return b.String(), total, nil
+}
+
+// nextLine reads src's next line, without its newline, holding at most
+// lineKeep bytes of it when keep is set and none otherwise. ok is false at
+// the end, when there is no line left.
+func nextLine(src *bufio.Reader, keep bool) (line string, ok bool, err error) {
+	var held []byte
+	for {
+		frag, err := src.ReadSlice('\n')
+		ok = ok || len(frag) > 0
+		if keep && len(held) < lineKeep {
+			held = append(held, frag[:min(len(frag), lineKeep-len(held))]...)
+		}
+		switch {
+		case err == nil:
+			return string(bytes.TrimSuffix(held, []byte("\n"))), true, nil
+		case errors.Is(err, bufio.ErrBufferFull):
+			continue
+		case errors.Is(err, io.EOF):
+			return string(held), ok, nil
+		default:
+			return "", false, err
+		}
+	}
+}
+
+// countRest is the number of lines left in src: its newlines, and one more
+// for a last line without one. It reads in chunks of readChunk bytes.
+func countRest(src io.Reader) (int, error) {
+	buf := make([]byte, readChunk)
+	n, last := 0, byte('\n')
+	for {
+		k, err := src.Read(buf)
+		if chunk := buf[:k]; len(chunk) > 0 {
+			n += bytes.Count(chunk, []byte{'\n'})
+			last = chunk[len(chunk)-1]
+		}
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return 0, err
+		}
+	}
+	if last != '\n' {
+		n++
+	}
+	return n, nil
 }
 
 // footer is the last line of a read: where the output stopped and the

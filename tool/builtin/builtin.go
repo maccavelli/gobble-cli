@@ -3,6 +3,7 @@ package builtin
 import (
 	"context"
 	"errors"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -138,9 +139,10 @@ func countLines(s string) int {
 // (tool.Env.Files) when it offers them and the path is inside the
 // workspace roots, so the call sees the client's unsaved changes; else
 // through the workspace (0005-PLAN F1d-3). Confinement is the workspace's
-// either way: a path is stat-ed through it, or its parent made through it,
+// either way: a path is opened through it, or its parent made through it,
 // before the client is asked, and that refuses a path that leaves the
-// roots, a symbolic link's included.
+// roots, a symbolic link's included. A file read is a regular file, so a
+// FIFO is refused rather than waited on (0037-MADR D7).
 type textIO struct {
 	ctx   context.Context
 	ws    fsx.Workspace
@@ -157,12 +159,15 @@ func textIOFor(ctx context.Context, env tool.Env, ws fsx.Workspace, abs string) 
 }
 
 func (t textIO) read(abs string) ([]byte, error) {
-	if t.files == nil {
-		return t.ws.ReadFile(abs)
-	}
-	if _, err := t.ws.Stat(abs); err != nil {
+	f, err := t.ws.OpenRegular(abs)
+	if err != nil {
 		return nil, err
 	}
+	if t.files == nil {
+		defer f.Close() //nolint:errcheck // read-only
+		return io.ReadAll(f)
+	}
+	f.Close() //nolint:errcheck,gosec // opened only to check it is a regular file
 	s, err := t.files.ReadTextFile(t.ctx, abs)
 	return []byte(s), err
 }

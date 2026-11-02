@@ -375,6 +375,9 @@ Files:
    * `numbered`'s output is unchanged for every existing test.
 3. **`grep`.** `candidate` (`tool/builtin/grep.go:321-333`) reads through `Walker.ReadRegular(rel, maxGrepFileBytes)`.
    A non-regular file is skipped silently, as an unreadable one is today.
+   * *(Deviation 6: `grep` naming one file reads it through `ReadRegular` too, and a file that is not regular is an
+     error there, not a skip. `textIO.read`'s local path, which `edit` and `write` share, opens through
+     `OpenRegular`.)*
 4. **`copy`.** `CopyFile` opens the source with `OpenRegular`, and streams it into `writeAtomicFrom`. The atomic rename,
    the sync and the mode are as `writeAtomic`'s.
 5. **Tests.**
@@ -928,3 +931,99 @@ The base is P4's `c4eb473`. Deviation 5.
    On the Linux machine the first run's log ended after the race count, likely cut short by the remote processes of
    a run stopped earlier for the `links` change; preflight and records were rerun on that copy: preflight stopped at
    `verify-build-metadata`, and records passed.
+
+### Deviation 6 (2026-11-02): P6, grep's single file and textIO.read's local path
+
+- **Found** reading the code before P6's first write. Step 3 changes `candidate`, `grep`'s directory walk, only; `grep`
+  naming one file reads it in `runGrep` (`tool/builtin/grep.go:88-92`, `s.ws.ReadFile(s.abs)`), where a FIFO's size is
+  0, and blocks. The file list names `textIO.read` (`tool/builtin/builtin.go:159`), but step 2 describes only its client
+  path; its local path is `ws.ReadFile`, which `edit` (`tool/builtin/edit.go:46`, `:64`) and `write` (`readOld`,
+  `tool/builtin/write.go:51`) also read through, and which blocks on a FIFO the same way. Both hangs are older than P6.
+- **The owner's answer:** "Cover both in P6 (Recommended)". The options not taken were to do the steps as written and
+  record both as not done, or to fix `grep` alone.
+- **Decision.**
+  * `grep` naming one file reads it through `Workspace.ReadRegular(abs, maxGrepFileBytes)`. `ErrTooLarge` counts it as
+    too big, as today; `ErrNotRegular` is the call's error, `grep <name>: not a regular file`, since a skip would read
+    as "no matches".
+  * `textIO.read`'s local path opens through `OpenRegular` and reads the whole file, with no new size limit, so `edit`
+    and `write` naming a FIFO fail at once with "not a regular file".
+  * Two more Unix tests, each seen failing: `TestGrepFileRefusesFIFO` and `TestEditRefusesFIFO`, each within 1 s.
+  * MADR D7 gets a dated note.
+- **Files added:** none; `grep.go`, `builtin.go` and `grep_test.go` are P6's, and `TestEditRefusesFIFO` goes in
+  `read_test.go`, beside `TestReadRefusesFIFO`.
+
+### P6 record (2026-11-02): the file tools read only regular files, and only what they need
+
+The base is P5's `7114b5e`. Deviation 6.
+
+1. **Opening** (step 1):
+   * `internal/fsx/regular.go`: `ErrNotRegular` ("not a regular file") and `ErrTooLarge` ("file too large") are a
+     `fileError` whose `Unwrap` is `fs.ErrInvalid`. `regular` checks the opened file's own `Stat`, and closes it when it
+     is not a regular file. `readAtMost` refuses a file whose size is over the limit before reading it, then reads at
+     most limit + 1 bytes, so a file that grows is caught; the error names the limit (`file too large: over 1 KiB`).
+     `ReadRegularFile`, for P7, opens a path outside any workspace the same way.
+   * `nonblock_unix.go` (`//go:build unix`) is `syscall.O_NONBLOCK`; `nonblock_other.go` is 0.
+   * `Workspace.OpenRegular` and `ReadRegular` (`workspace.go`) open through the root as `ReadFile` does, with
+     `O_RDONLY|nonblock`; both go through `openRegularInfo`, which also returns the info.
+2. **`read`** (step 2): `openText` (`tool/builtin/read.go`) opens an image whole through `ReadRegular` up to
+   `maxImageBytes` (20 MiB); a file the client offers through `textIO.read`, which checks it with `OpenRegular` first;
+   and any other file through `OpenRegular`, streamed by a 64 KiB `bufio.Reader`. The image and binary sniffs read the
+   reader's first 4096 bytes, the bytes they read before. `numbered` now takes the reader: it holds only the lines it
+   shows, at most `lineKeep` (8,004) bytes of each, and `countRest` counts the rest in 64 KiB chunks. Every existing
+   `TestReadText` output is unchanged.
+3. **`grep`** (step 3, deviation 6): `Walker` keeps an `open` function through its root, and `Walker.ReadRegular`
+   reads through it. `candidate` reads through `Walker.ReadRegular(rel, maxGrepFileBytes)`, so its `fs.DirEntry`
+   parameter went; `ErrTooLarge` counts the file as too big, as the size check did, and anything else unreadable is
+   skipped. Grep naming one file reads it through `Workspace.ReadRegular`, and `ErrNotRegular` is the call's error,
+   `grep pipe: not a regular file`; `search.size`, which only that path read, went with the old check.
+4. **`copy`** (step 4): `CopyFile` opens the source with `openRegularInfo` and streams it into `writeFrom`, which is
+   `WriteFile` taking an `io.Reader`; `writeAtomicFrom` is `writeAtomic`'s reader form, and `fill` copies with
+   `io.Copy`. `WriteFile` and `writeAtomic` pass a `bytes.Reader`. The rename, the sync, the mode, and P5's links are
+   unchanged.
+5. **`textIO.read`** (deviation 6): its local path opens through `OpenRegular` and reads with `io.ReadAll`, with no
+   new limit, so `edit` and `write` naming a FIFO fail at once.
+6. **Tests** (step 5, deviation 6):
+   * `tool/builtin/read_test.go`: `TestReadRefusesFIFO` (`read pipe: not a regular file`, under 100 ms, a 2 s
+     deadline); `TestEditRefusesFIFO`, which covers `write` as well (`edit pipe: not a regular file` and
+     `write pipe: not a regular file`, a 1 s deadline); `TestReadStreamsLimit` (an 8 MiB file read with `limit: 50`
+     allocates under 2 MiB; the footer gives 131,072 lines); and two `TestReadText` cases for the held prefix: a
+     20,000-byte line, and 3,000 four-byte characters, each cut at 2,000.
+   * `tool/builtin/grep_test.go`, a new file: `TestGrepSkipsFIFO` and `TestGrepFileRefusesFIFO`, each with a 1 s
+     deadline.
+   * `internal/fsx/ops_test.go`: `TestCopyFileStreams` (16 MiB, under 2 MiB allocated, the bytes and the 0640 mode
+     match) and `TestCopyRefusesFIFO` (`ErrNotRegular` within 2 s, and nothing made).
+   * `internal/fsx/regular_test.go`, a new file: `TestReadRegular` and `TestReadRegularRefusesFIFO`, which hold the
+     three readers directly, `ReadRegularFile` having no caller until P7: a regular file read, a directory and a FIFO
+     `ErrNotRegular`, a 1,025-byte file over a 1 KiB limit `ErrTooLarge`, each also `fs.ErrInvalid`.
+   * The FIFO tests make the FIFO with `mkfifo(1)`, so the test files build on Windows without per-platform files, and
+     skip there with the reason (C10). On the Windows laptop the six skipped; everything else ran.
+   * Measured on a scratch copy on macOS, three runs each: the limited read allocates about 404 KB, the copy about
+     60 KB.
+7. **Seen failing** (step 6, C9), each on a scratch copy:
+
+   | Break | The failure |
+   | :--- | :--- |
+   | step 1 undone: no flag, no check (the step's) | `TestReadRefusesFIFO`: `read {"path":"pipe"} was still running after 2s`; every other FIFO test on its deadline the same way |
+   | the flag kept, the check gone | `TestReadRefusesFIFO`: `read of a FIFO = "(empty file)" (isError false), <nil>`; `TestGrepFileRefusesFIFO`: `"grep pipe: no matches for hit"`; `TestCopyRefusesFIFO`, `TestReadRegularRefusesFIFO` |
+   | step 2 undone: today's whole-file read (the step's) | `TestReadStreamsLimit`: `read of 8 MiB with limit 50 allocated 8746232 bytes, want under 2 MiB` |
+   | a shown line held to 2,000 bytes | `TestReadText`: the long-line cases, without the cut |
+   | step 3 undone: `candidate` with `ReadFile` | `TestGrepSkipsFIFO`: `grep {"pattern":"hit"} was still running after 1s` |
+   | deviation 6 undone for one file | `TestGrepFileRefusesFIFO`: `grep {"pattern":"hit","path":"pipe"} was still running after 1s` |
+   | deviation 6 undone for `textIO.read` | `TestEditRefusesFIFO`: `edit {"path":"pipe",…} was still running after 1s` |
+   | step 4 undone: copy whole | `TestCopyFileStreams`: `a 16 MiB copy allocated 16820408 bytes, want under 2 MiB`; `TestCopyRefusesFIFO`: `still blocked after 2s` |
+   | the limit not enforced | `TestReadRegular`: `Workspace.ReadRegular(big.txt) = <nil>, want ErrTooLarge naming the 1 KiB limit`, and the same for the other two |
+
+   With the flag kept and the check gone, `TestGrepSkipsFIFO` passes: the FIFO opens at once and reads empty, so it has
+   no match. The flag is what it holds.
+8. **G-local:** the first `make preflight` stopped at `golangci-lint` on the new code: gosec G602 on `buf[k-1]`
+   (`countRest` now indexes the chunk read), ineffassign on a test's `content = ""` (the content is no longer held),
+   noctx on `exec.Command` (now `exec.CommandContext(t.Context(), …)`), revive's redefines-builtin-id on five `max`
+   parameters (now `limit`), and confusing-naming on `openRegular` beside `OpenRegular` (now `openRegularInfo`). Each
+   was fixed in the code, and the breaks were rerun on the result. Then `make pre-add-check` on the 14 Go files: clean;
+   `make preflight`: passed; `go test ./...`: 38 ok; `make race`: 38 ok. P6 touches nothing under `internal/cli`, so no
+   `make perf`.
+9. **G-hosts,** 817 files shipped to each: `go test` and race passed on both, 38 ok; the new tests passed on the Linux
+   machine, and on the Windows laptop as item 6 says. `make check-records markdownlint` passed on both; preflight stops
+   at `verify-build-metadata`, as on every copy. A host run stopped for the lint fixes left its preflight running on
+   the Linux machine; that process tree, in the scratch copy's directory, was stopped before the rerun, and nothing else
+   there was touched.

@@ -17,6 +17,7 @@ import (
 // directory, "." being the directory itself. Close it when done.
 type Walker struct {
 	fsys   fs.FS
+	open   func(rel string) (*os.File, error) // opens rel for reading, through the root
 	close  func() error
 	ig     *Ignore
 	base   string          // the walk's directory, from the top level the ignore rules use
@@ -35,6 +36,9 @@ func (w Workspace) Walker(dir string) (*Walker, error) {
 	k := &Walker{close: func() error { return nil }, ig: &Ignore{}, loaded: map[string]bool{}}
 	if root == nil {
 		k.fsys = os.DirFS(dir)
+		k.open = func(name string) (*os.File, error) {
+			return os.OpenFile(filepath.Join(dir, filepath.FromSlash(name)), os.O_RDONLY|nonblock, 0) //nolint:gosec // G304: outside the roots only when the user approved the call
+		}
 	} else {
 		sub, err := fs.Sub(root.FS(), filepath.ToSlash(rel))
 		if err != nil {
@@ -42,6 +46,9 @@ func (w Workspace) Walker(dir string) (*Walker, error) {
 			return nil, err
 		}
 		k.fsys, k.close = sub, root.Close
+		k.open = func(name string) (*os.File, error) {
+			return root.OpenFile(filepath.Join(rel, filepath.FromSlash(name)), os.O_RDONLY|nonblock, 0)
+		}
 	}
 	if top := repoTop(dir); top != "" {
 		k.base = slash(top, dir)
@@ -73,6 +80,22 @@ func (k *Walker) Close() error { return k.close() }
 
 // ReadFile reads rel.
 func (k *Walker) ReadFile(rel string) ([]byte, error) { return fs.ReadFile(k.fsys, rel) }
+
+// ReadRegular reads rel when it is a regular file of at most limit bytes,
+// as Workspace.ReadRegular does: anything else is ErrNotRegular, and a
+// larger file ErrTooLarge.
+func (k *Walker) ReadRegular(rel string, limit int) ([]byte, error) {
+	f, err := k.open(rel)
+	if err != nil {
+		return nil, err
+	}
+	info, err := regular(f, rel)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close() //nolint:errcheck // read-only
+	return readAtMost(f, rel, info.Size(), limit)
+}
 
 // Stat is fs.Stat of rel.
 func (k *Walker) Stat(rel string) (fs.FileInfo, error) { return fs.Stat(k.fsys, rel) }

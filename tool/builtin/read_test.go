@@ -1,11 +1,16 @@
 package builtin
 
 import (
+	"context"
+	"encoding/json/jsontext"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/maccavelli/gobble-cli/tool"
 )
@@ -59,6 +64,12 @@ func TestReadText(t *testing.T) {
 			"60: Line 60\n(lines 41-60 of 100; continue with offset=61)", true},
 		{"long line", "short\n" + strings.Repeat("y", 3000), map[string]any{"offset": 2},
 			"2: " + strings.Repeat("y", 2000) + "\u2026 (line cut at 2000 characters)\n(end of file, 2 lines)", false},
+		// A streamed read holds only the start of a long line: enough
+		// for 2000 characters of 4 bytes, and the cut still shows.
+		{"long line past what is held", strings.Repeat("y", 20000) + "\nz", map[string]any{},
+			"1: " + strings.Repeat("y", 2000) + "\u2026 (line cut at 2000 characters)\n2: z\n(end of file, 2 lines)", false},
+		{"long line of 4-byte characters", strings.Repeat("\U0001F600", 3000), map[string]any{},
+			"1: " + strings.Repeat("\U0001F600", 2000) + "\u2026 (line cut at 2000 characters)\n(end of file, 1 line)", false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -197,5 +208,100 @@ func TestReadInvalidUTF8(t *testing.T) {
 	r := call(t, Read(), tool.Env{Cwd: dir}, map[string]any{"path": "latin1.txt"})
 	if r.IsError || !strings.Contains(r.Text(), "caf\uFFFD au lait") {
 		t.Fatalf("read = %+v, text %q; want U+FFFD for the invalid byte", r, r.Text())
+	}
+}
+
+// fifo makes a FIFO at p with mkfifo(1), or skips where the platform
+// cannot make one (0037-PLAN C10).
+func fifo(t *testing.T, p string) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows has no FIFOs")
+	}
+	if out, err := exec.CommandContext(t.Context(), "mkfifo", p).CombinedOutput(); err != nil { //nolint:gosec // G204: a test's temporary path
+		t.Skipf("cannot make a FIFO here: %v %s", err, out)
+	}
+}
+
+// outcome is a call run by runBounded, and how long it took.
+type outcome struct {
+	r    tool.Result
+	err  error
+	took time.Duration
+}
+
+// runBounded runs tl with args and returns its outcome, failing the test
+// when the call is still running at deadline. A call blocked for good is
+// left behind.
+func runBounded(t *testing.T, tl tool.Tool, env tool.Env, args string, deadline time.Duration) outcome {
+	t.Helper()
+	done := make(chan outcome, 1)
+	start := time.Now()
+	go func() {
+		r, err := tl.Run(context.Background(), tool.Call{ID: "c1", Name: tl.Spec().Name, Args: jsontext.Value(args)}, env)
+		done <- outcome{r, err, time.Since(start)}
+	}()
+	select {
+	case o := <-done:
+		return o
+	case <-time.After(deadline):
+		t.Fatalf("%s %s was still running after %v", tl.Spec().Name, args, deadline)
+		return outcome{}
+	}
+}
+
+// read of a FIFO is refused at once, not left waiting for a writer
+// (0037-MADR D7).
+func TestReadRefusesFIFO(t *testing.T) {
+	dir := t.TempDir()
+	fifo(t, filepath.Join(dir, "pipe"))
+	o := runBounded(t, Read(), tool.Env{Cwd: dir}, `{"path":"pipe"}`, 2*time.Second)
+	if o.err != nil || !o.r.IsError || o.r.Text() != "read pipe: not a regular file" {
+		t.Fatalf("read of a FIFO = %q (isError %v), %v; want the error \"read pipe: not a regular file\"", o.r.Text(), o.r.IsError, o.err)
+	}
+	if o.took > 100*time.Millisecond {
+		t.Fatalf("read of a FIFO took %v, want under 100ms", o.took)
+	}
+}
+
+// edit and write read through read's open, so they refuse a FIFO too
+// (0037-PLAN deviation 6).
+func TestEditRefusesFIFO(t *testing.T) {
+	dir := t.TempDir()
+	fifo(t, filepath.Join(dir, "pipe"))
+	for _, c := range []struct {
+		tl         tool.Tool
+		args, want string
+	}{
+		{Edit(), `{"path":"pipe","edits":[{"oldText":"a","newText":"b"}]}`, "edit pipe: not a regular file"},
+		{Write(), `{"path":"pipe","content":"b"}`, "write pipe: not a regular file"},
+	} {
+		o := runBounded(t, c.tl, tool.Env{Cwd: dir}, c.args, time.Second)
+		if o.err != nil || !o.r.IsError || o.r.Text() != c.want {
+			t.Fatalf("%s of a FIFO = %q (isError %v), %v; want the error %q", c.tl.Spec().Name, o.r.Text(), o.r.IsError, o.err, c.want)
+		}
+	}
+}
+
+// A read with a limit holds the lines it shows, not the file: an 8 MiB
+// file read with limit 50 allocates under 2 MiB, and its total is right
+// (0037-MADR D7).
+func TestReadStreamsLimit(t *testing.T) {
+	dir := t.TempDir()
+	const lineBytes, size = 64, 8 << 20
+	if err := os.WriteFile(filepath.Join(dir, "big.txt"), []byte(strings.Repeat(strings.Repeat("x", lineBytes-1)+"\n", size/lineBytes)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runtime.GC()
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	r := call(t, Read(), tool.Env{Cwd: dir}, map[string]any{"path": "big.txt", "limit": 50})
+	runtime.ReadMemStats(&after)
+	if alloc := after.TotalAlloc - before.TotalAlloc; alloc > 2<<20 {
+		t.Fatalf("read of 8 MiB with limit 50 allocated %d bytes, want under 2 MiB", alloc)
+	}
+	want := fmt.Sprintf("50: %s\n(lines 1-50 of %d; continue with offset=51)", strings.Repeat("x", lineBytes-1), size/lineBytes)
+	if r.IsError || !strings.HasSuffix(r.Text(), want) {
+		t.Fatalf("output ends %q, want %q", r.Text()[max(0, len(r.Text())-len(want)-20):], want)
 	}
 }

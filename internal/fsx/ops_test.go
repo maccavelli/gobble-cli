@@ -1,6 +1,7 @@
 package fsx
 
 import (
+	"bytes"
 	"errors"
 	"os"
 	"path/filepath"
@@ -57,6 +58,54 @@ func TestCopyFile(t *testing.T) {
 	}
 	if info, err := os.Stat(to); err != nil || info.Mode().Perm() != 0o750 {
 		t.Fatalf("the copy's mode is %v, %v; want 0750", info.Mode().Perm(), err)
+	}
+}
+
+// A copy streams: 16 MiB copied allocates under 2 MiB, and the copy has the
+// source's bytes and mode (0037-MADR D7).
+func TestCopyFileStreams(t *testing.T) {
+	dir := t.TempDir()
+	w := Workspace{Roots: []string{dir}}
+	from, to := filepath.Join(dir, "big.bin"), filepath.Join(dir, "copy.bin")
+	data := bytes.Repeat([]byte("0123456789abcdef"), 1<<20)
+	if err := os.WriteFile(from, data, 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(from, 0o640); err != nil {
+		t.Fatal(err)
+	}
+	runtime.GC()
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	if err := w.CopyFile(from, to); err != nil {
+		t.Fatal(err)
+	}
+	runtime.ReadMemStats(&after)
+	if alloc := after.TotalAlloc - before.TotalAlloc; alloc > 2<<20 {
+		t.Fatalf("a 16 MiB copy allocated %d bytes, want under 2 MiB", alloc)
+	}
+	if b, err := os.ReadFile(to); err != nil || !bytes.Equal(b, data) { //nolint:gosec // test file
+		t.Fatalf("the copy holds %d bytes, %v; want the source's %d", len(b), err, len(data))
+	}
+	if runtime.GOOS == "windows" {
+		return // Windows has no Unix permission bits to keep
+	}
+	if info, err := os.Stat(to); err != nil || info.Mode().Perm() != 0o640 {
+		t.Fatalf("the copy's mode is %v, %v; want 0640", info.Mode().Perm(), err)
+	}
+}
+
+// copy of a FIFO is refused at once, and makes nothing (0037-MADR D7).
+func TestCopyRefusesFIFO(t *testing.T) {
+	dir := t.TempDir()
+	w := Workspace{Roots: []string{dir}}
+	from, to := filepath.Join(dir, "pipe"), filepath.Join(dir, "copy")
+	fifo(t, from)
+	if err := bounded(t, 2*time.Second, func() error { return w.CopyFile(from, to) }); !errors.Is(err, ErrNotRegular) {
+		t.Fatalf("copy of a FIFO = %v, want ErrNotRegular", err)
+	}
+	if _, err := os.Lstat(to); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("the refused copy made %s: %v", filepath.Base(to), err)
 	}
 }
 

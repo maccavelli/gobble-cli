@@ -85,9 +85,15 @@ func runGrep(ctx context.Context, in grepIn, env tool.Env) (tool.Result, error) 
 		g.where = func(string) string { return s.abs }
 	}
 	if s.walker == nil {
-		if s.size > maxGrepFileBytes {
+		// One file named: one that is not regular is the call's error, since
+		// a skip would read as no matches (0037-PLAN deviation 6).
+		b, err := s.ws.ReadRegular(s.abs, maxGrepFileBytes)
+		switch {
+		case errors.Is(err, fsx.ErrTooLarge):
 			g.big++
-		} else if b, err := s.ws.ReadFile(s.abs); err == nil && !hasNUL(b) {
+		case errors.Is(err, fsx.ErrNotRegular):
+			return tool.Result{}, fmt.Errorf("grep %s: %w", s.shown, fsx.ErrNotRegular)
+		case err == nil && !hasNUL(b):
 			g.file(s.shown, b)
 		}
 	} else {
@@ -98,7 +104,7 @@ func runGrep(ctx context.Context, in grepIn, env tool.Env) (tool.Result, error) 
 			if d.IsDir() || (glob != nil && !glob.Match(rel, false)) {
 				return nil
 			}
-			b, tooBig := candidate(s.walker, rel, d)
+			b, tooBig := candidate(s.walker, rel)
 			g.big += boolCount(tooBig)
 			if b != nil {
 				g.file(rel, b)
@@ -264,7 +270,6 @@ type search struct {
 	ws     fsx.Workspace
 	abs    string
 	shown  string
-	size   int64
 	walker *fsx.Walker // nil for a file
 }
 
@@ -289,7 +294,6 @@ func openSearch(env tool.Env, name, path string) (search, error) {
 		return search{}, fmt.Errorf("%s %s: %w", name, s.shown, unwrapPath(err))
 	}
 	if !info.IsDir() {
-		s.size = info.Size()
 		return s, nil
 	}
 	if s.walker, err = ws.Walker(abs); err != nil {
@@ -316,17 +320,16 @@ func joinNotes(body string, notes []string) string {
 }
 
 // candidate is a file's bytes for searching, or nil when it is skipped:
-// too big (which tooBig reports, so the result can say so), or unreadable
-// or binary, which are skipped silently, as ripgrep skips them.
-func candidate(k *fsx.Walker, rel string, d fs.DirEntry) (b []byte, tooBig bool) {
-	info, err := d.Info()
-	if err != nil {
-		return nil, false
-	}
-	if info.Size() > maxGrepFileBytes {
+// too big (which tooBig reports, so the result can say so), or not a
+// regular file, unreadable or binary, which are skipped silently, as
+// ripgrep skips them. The type and size are the opened file's (0037-MADR
+// D7).
+func candidate(k *fsx.Walker, rel string) (b []byte, tooBig bool) {
+	b, err := k.ReadRegular(rel, maxGrepFileBytes)
+	switch {
+	case errors.Is(err, fsx.ErrTooLarge):
 		return nil, true
-	}
-	if b, err = k.ReadFile(rel); err != nil || hasNUL(b) {
+	case err != nil || hasNUL(b):
 		return nil, false
 	}
 	return b, false

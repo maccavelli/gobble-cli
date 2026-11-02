@@ -98,17 +98,15 @@ func (w Workspace) Rename(from, to string) error {
 }
 
 // CopyFile writes a copy of the file from at to, atomically, with from's
-// permission bits.
+// permission bits. from must be a regular file (ErrNotRegular otherwise),
+// and is streamed, not read whole (0037-MADR D7).
 func (w Workspace) CopyFile(from, to string) error {
-	info, err := w.Stat(from)
+	src, info, err := w.openRegularInfo(from)
 	if err != nil {
 		return err
 	}
-	data, err := w.ReadFile(from)
-	if err != nil {
-		return err
-	}
-	if err := w.WriteFile(to, data); err != nil {
+	defer src.Close() //nolint:errcheck // read-only
+	if err := w.writeFrom(to, src); err != nil {
 		return err
 	}
 	return w.chmod(to, info.Mode().Perm())

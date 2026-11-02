@@ -467,6 +467,10 @@ plan may tune one only through a deviation.
     anything that is not a regular file.
   * `read` streams up to `offset + limit` and counts the remaining lines in fixed chunks.
   * `copy` streams through the atomic writer.
+
+  *(2026-11-02, by 0037-PLAN-permission-and-file-tool-hardening.md's deviation 6: `grep` naming one file checks it the
+  same way, and a file that is not regular is the call's error there, not a skip. `edit` and `write` share `read`'s
+  local open, so they refuse such a file too, with no new size limit.)*
 * **D8. Edits count overlapping matches, and keep the line endings they did not touch (F7).**
   * Every layer's count advances one byte after each match and stops at two.
   * A file with no `\r` is not converted at all.

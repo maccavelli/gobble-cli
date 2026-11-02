@@ -44,6 +44,49 @@ func (w Workspace) Outside(abs string) bool {
 	return true
 }
 
+// OpenRegular opens abs for reading, through its root, when it is a regular
+// file. The type is that of the opened file, not of a separate stat; on Unix
+// the open does not wait for a FIFO's writer. Anything else is
+// ErrNotRegular (0037-MADR D7).
+func (w Workspace) OpenRegular(abs string) (*os.File, error) {
+	f, _, err := w.openRegularInfo(abs)
+	return f, err
+}
+
+// ReadRegular reads abs, through its root, when it is a regular file of at
+// most limit bytes; past limit it is ErrTooLarge.
+func (w Workspace) ReadRegular(abs string, limit int) ([]byte, error) {
+	f, info, err := w.openRegularInfo(abs)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close() //nolint:errcheck // read-only
+	return readAtMost(f, abs, info.Size(), limit)
+}
+
+// openRegularInfo is OpenRegular, with the opened file's info.
+func (w Workspace) openRegularInfo(abs string) (*os.File, fs.FileInfo, error) {
+	root, rel, err := w.open(abs)
+	if err != nil {
+		return nil, nil, err
+	}
+	var f *os.File
+	if root == nil {
+		f, err = os.OpenFile(abs, os.O_RDONLY|nonblock, 0) //nolint:gosec // G304: outside the roots only when the user approved the call
+	} else {
+		f, err = root.OpenFile(rel, os.O_RDONLY|nonblock, 0)
+		root.Close() //nolint:errcheck,gosec // the file stays open
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	info, err := regular(f, abs)
+	if err != nil {
+		return nil, nil, err
+	}
+	return f, info, nil
+}
+
 // ReadFile reads abs.
 func (w Workspace) ReadFile(abs string) ([]byte, error) {
 	root, rel, err := w.open(abs)
