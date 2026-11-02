@@ -59,8 +59,12 @@ The binary has these surfaces:
   asks the person for read or write access to paths, for the turn or the session, with a reason;
   a grant answers the questions about calls under its paths, deny rules and gobble's limits still
   holding, and `/permissions` lists and removes grants after the rules.
-- **The enhanced TUI mode.** Not built yet: `internal/tui` is a placeholder. The CLI mode uses go-tui-lib's
-  Charm-free `ask` for its permission prompt (0035-PLAN P14).
+- **The enhanced TUI mode.** Not built yet: `internal/tui` is a placeholder. The CLI mode draws through
+  go-tui-lib's Charm-free packages (0035-MADR D14): `ask` for the permission prompt; `lineedit`, `inline`, `termkey`
+  and `keymap` for the editor; `stream` for replies; `transcript` for the reprint, its notice's words through
+  `msgcat`; `glyph` and `safetext` for glyphs and cleaning; and `x/ansi` for widths. gobble keeps `term/caps.go`,
+  print mode's `term.Sanitize`, `render.Wrap` for thinking text, and the editor's host: its history, external
+  editor, Ctrl+C window and 120-column cap.
 
 The command library is Kong, in `internal/cli` and `internal/cli/complete` only. Sessions are stored
 as JSONL in Pi's v3 shapes, under gobble's data directory.

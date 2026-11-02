@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: complete
 date: 2026-11-01
 associated-madr: "0035-MADR-pin-current-sibling-releases-and-remove-gobble-copies.md"
 ---
@@ -3064,3 +3064,94 @@ The base is P18a's `cce5ab0`. No deviation.
     passed on both; preflight stops at `verify-build-metadata`, as on every copy; `make perf` passed on both (the Linux
     machine ReplyRender 99.12 µs, Reprint 16.89 ms, LineSessionStart 3.29 ms, KeyDraw 4.515 µs; the Windows laptop
     37.22 µs, 5.10 ms, 6.13 ms, 1.259 µs); the conhost probe on the Windows laptop: passed.
+
+### P19 record (2026-11-01): close-out
+
+The base is P18b's `94aed06`. No deviation.
+
+1. **`docs/architecture.md`** (step 1): its note on the CLI mode names what `internal/cli` imports of go-tui-lib, by
+   `go list`: `ask`, `glyph`, `inline`, `keymap`, `lineedit`, `msgcat`, `safetext`, `stream`, `termkey` and
+   `transcript`, with `x/ansi`. That is the step's list and `msgcat`, which P18b step 6's notice catalogue brought in.
+   It says what stays gobble's: `term/caps.go`, print mode's `term.Sanitize`, `render.Wrap` and the editor's host.
+2. **Lines removed** (step 2):
+   * the step's command, `git diff --stat ccd8aa8..HEAD -- ':!docs' ':!*_test.go' ':!*/testdata/*'`: `122 files
+     changed, 3202 insertions(+), 3553 deletions(-)`. The range holds 51 commits, 0037-PLAN's two and
+     0039-PLAN's ten among them, so it is not 0035's alone;
+   * 0035's own 24 code commits, by `git show --numstat` with the same exclusions: 3,113 lines removed and 1,913
+     added, a net 1,200 fewer. The largest are `2c13842`, `lineedit` (−1,392, +495), and `cce5ab0`, `stream` (−823,
+     +143);
+   * against the MADR's estimate, "up to about 3,700 lines", which its D14 note already called high: `caps.go`,
+     `wrap.go`, `external.go` and the history and Ctrl+C code stay, and P16 adopted neither `pick` nor `termcap`.
+3. **Issue comments** (step 3), for the owner to post; posting is outward-facing, so it waits for the owner's word.
+   #5 and #6 were closed on 2026-10-31; their comments are for the record.
+
+   gobble-cli#4:
+
+   ```text
+   Partly carried out by 0035-PLAN (docs/decisions/0035-PLAN-pin-current-sibling-releases-and-remove-gobble-copies.md).
+
+   Done:
+   - ErrOffline: the SDK's sentinel maps to llm.ErrOffline (bd79d2a, P4), and gobble's
+     offline() and unreachable() copies are gone (43649b8, P5).
+   - Empty answer: the message-suffix match gives way to llmprovider.ErrEmptyAnswer, Reason
+     still telling empty from refused (43649b8, P5).
+   - EffortMax: "max" maps to llmprovider.EffortMax (43649b8, P5).
+   - go-llmprovider-sdk is pinned at v1.25.0 (2b1b262, P25).
+
+   Not done, and still this issue's:
+   - the header hook: models.json headers still go through gobble's withHeaders; adopting
+     llmprovider.NewHTTPClient for them is #10;
+   - the generic Chat Completions constructor (chatcompat);
+   - image input (0036-MADR D7);
+   - native tool deferral;
+   - the 1-hour cache-write rate.
+
+   So this issue stays open.
+   ```
+
+   gobble-cli#5 (closed 2026-10-31), for the record:
+
+   ```text
+   Carried out by 0035-PLAN (docs/decisions/0035-PLAN-pin-current-sibling-releases-and-remove-gobble-copies.md):
+   - acp-go-sdk2 pinned at v1.26.0 (3a2129c, P7), now v1.31.1 (d0bfd38, P24);
+   - the SessionUpdate constructors replace the composite literals (f5a94d0, P8);
+   - the SDK's ClientRefusals are embedded in place of the nine stubs, and PickPermissionOption is
+     adopted (8e3a6b3, P9);
+   - Kind() gives every acpclient.Update its sessionUpdate variant (7ed439f, P10).
+   ```
+
+   gobble-cli#6 (closed 2026-10-31), for the record:
+
+   ```text
+   Where its three items ended, by 0035-PLAN (docs/decisions/0035-PLAN-pin-current-sibling-releases-and-remove-gobble-copies.md):
+   1. go-tui-lib/v2: first imported for the permission prompt through ask (c54ecf3, P14), then
+      glyph and safetext (884a6a0, P15), lineedit (2c13842, P17), stream for replies (cce5ab0,
+      P18a) and transcript for the reprint (94aed06, P18b), pinned at v2.9.0 (48a2003, P26).
+   2. acp-go-sdk2: v1.26.0 (3a2129c, P7), v1.28.0 (6f7787f, P20), now v1.31.1 (d0bfd38, P24),
+      with ServeAgent (f9b9041, P11) and agentproc.InProcess (2c9d3b3, P12).
+   3. The ChatGPT plan sign-in is not 0035's: it stays 0031-PLAN P4b, documented as pending
+      (9c77d5c).
+   ```
+4. **The disclosure guard** (step 4), run as `AGENTS.md` gives it over the outgoing commits, `origin/main` `48a2003` to
+   `94aed06` (`fd25f9f`, `cce5ab0`, `94aed06`): exit 0, no output. This phase's commit is outgoing too; the pre-push
+   hook runs the same guard over it. Nothing was pushed.
+5. **The plan's Verification,** each item checked on `94aed06`:
+   * `go list -m` reports acp-go-sdk2 `v1.31.1`, go-llmprovider-sdk `v1.25.0`, go-selfupdate-lib `v1.23.1` and
+     go-tui-lib/v2 `v2.9.0`, the MADR's D1 as amended on 2026-11-01;
+   * `make check-libs`: each library "pinned …, checking" the same tag, its newest; "0 failing checks";
+   * `acpserver/testdata/session.golden`, `view-plain.golden`, `print-json.golden` and `print-stream-json.golden` are
+     byte-identical to `ccd8aa8`'s (`git diff --quiet`);
+   * `make preflight`, `make race` and `make perf` passed on macOS, the Linux machine and the Windows laptop, and
+     `make probe-conhost` on the Windows laptop, at each phase that names them; their records quote them;
+   * every new test and gate has a quoted failure from a broken copy, in its phase's record.
+6. **Status** (step 5): every phase's criteria are met. P6's questions were answered on 2026-10-29 (PQ1 (a), PQ2 (a)).
+   P18 ran as P18a and P18b (deviation 15), and P23 was superseded by P26 (deviation 14). This plan is `complete`;
+   the MADR stays `accepted`.
+7. **Left for other records,** named so they are not read as oversights:
+   * [go-tui-lib#15](https://github.com/maccavelli/go-tui-lib/issues/15), a reprint mid-paragraph (deviation 19): gobble
+     adopts it, when a tag carries it, through a record of its own;
+   * gobble-cli#8, `OverflowBlock` in `acpclient`, and gobble-cli#10, `NewHTTPClient` for `models.json` headers;
+   * the rest of gobble-cli#4, above;
+   * the teardown failure in `TestLoginAsksThroughQuestions` and `TestLastGoodOnDisk` (0039-PLAN's deviations 14 and
+     18, and this plan's deviation 14), which waits for a record of its own;
+   * 0031-PLAN P4b, the ChatGPT plan sign-in.
