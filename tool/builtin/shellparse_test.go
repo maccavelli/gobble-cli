@@ -3,10 +3,12 @@ package builtin
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
 
+	"github.com/maccavelli/gobble-cli/permission"
 	"github.com/maccavelli/gobble-cli/tool"
 )
 
@@ -34,8 +36,10 @@ func TestParseShellSubjects(t *testing.T) {
 		{"arity for a short command", "git", []string{"git"}, []string{"git *"}},
 		{"a non-literal word in the prefix", "git $SUB x", []string{"git $SUB x"}, []string{""}},
 		{"a quoted expansion in the prefix", `git "$SUB" x`, []string{`git "$SUB" x`}, []string{""}},
-		{"quoted words", `"git" 'status'`, []string{`"git" 'status'`}, []string{"git status *"}},
-		{"a redirection kept", "echo hi > out.txt", []string{"echo hi > out.txt"}, []string{"echo *"}},
+		{"quoted words, and their normalised form", `"git" 'status'`, []string{`"git" 'status'`, "git status"},
+			[]string{"git status *", "git status *"}},
+		{"a redirection kept, and the words without it", "echo hi > out.txt", []string{"echo hi > out.txt", "echo hi"},
+			[]string{"echo *", "echo *"}},
 	} {
 		sc := parseShell(c.cmd)
 		if !slices.Equal(sc.subjects, c.subjects) || !slices.Equal(sc.saves, c.saves) {
@@ -69,18 +73,20 @@ func TestParseShellRaw(t *testing.T) {
 // Kilo's masking: an operator character is _ only where it is inert, and
 // every other byte is as written (decision 5;
 // packages/opencode/test/kilocode/tool/shell-pattern.test.ts:173-187).
+// Each raw subject is followed by its normalised form: the words unquoted,
+// with no redirection (0037-MADR D4).
 func TestParseShellMasking(t *testing.T) {
-	for in, want := range map[string]string{
-		`grep "a|b" f 2>/dev/null`:        `grep "a_b" f 2_/dev/null`,
-		`cat f 2>&1`:                      `cat f 2__1`,
-		`grep a\|b f`:                     `grep a\_b f`,
-		`echo test > output.txt`:          `echo test > output.txt`,
-		`cat $'a\'b' > out.txt`:           `cat _'a\'b' > out.txt`,
-		"cat <<'EOF'\na|b\nEOF":           "cat <<'EOF'_a_b_EOF",
-		`echo 'x;y' "$HOME" >&-`:          `echo 'x_y' "$HOME" __-`,
-		`printf '%s\n' "a&&b" </dev/null`: `printf '%s\n' "a__b" _/dev/null`,
+	for in, want := range map[string][2]string{
+		`grep "a|b" f 2>/dev/null`:        {`grep "a_b" f 2_/dev/null`, `grep a|b f`},
+		`cat f 2>&1`:                      {`cat f 2__1`, `cat f`},
+		`grep a\|b f`:                     {`grep a\_b f`, `grep a|b f`},
+		`echo test > output.txt`:          {`echo test > output.txt`, `echo test`},
+		`cat $'a\'b' > out.txt`:           {`cat _'a\'b' > out.txt`, `cat $'a\'b'`},
+		"cat <<'EOF'\na|b\nEOF":           {"cat <<'EOF'_a_b_EOF", "cat"},
+		`echo 'x;y' "$HOME" >&-`:          {`echo 'x_y' "$HOME" __-`, `echo x;y "$HOME"`},
+		`printf '%s\n' "a&&b" </dev/null`: {`printf '%s\n' "a__b" _/dev/null`, `printf %s\n a&&b`},
 	} {
-		if got := parseShell(in).subjects; len(got) != 1 || got[0] != want {
+		if got := parseShell(in).subjects; !slices.Equal(got, want[:]) {
 			t.Errorf("%q: %q, want %q", in, got, want)
 		}
 	}
@@ -101,8 +107,8 @@ func TestParseShellWrappers(t *testing.T) {
 		{"time -p command -- ls", []string{"command -- ls", "ls"}},
 		{"sudo -u bob rm x", []string{"sudo -u bob rm x"}},
 		{"command -v rm", []string{"command -v rm"}},
-		{"bash -c 'rm x && ls'", []string{"bash -c 'rm x __ ls'", "rm x", "ls"}},
-		{`sh -ec "git push"`, []string{`sh -ec "git push"`, "git push"}},
+		{"bash -c 'rm x && ls'", []string{"bash -c 'rm x __ ls'", "bash -c rm x && ls", "rm x", "ls"}},
+		{`sh -ec "git push"`, []string{`sh -ec "git push"`, "sh -ec git push", "git push"}},
 		{"bash script.sh", []string{"bash script.sh"}},
 	} {
 		if got := parseShell(c.cmd).subjects; !slices.Equal(got, c.subjects) {
@@ -116,11 +122,71 @@ func TestParseShellWrappers(t *testing.T) {
 		}
 		return s
 	}
-	if got := parseShell(nest(8)).subjects; len(got) != 9 || got[8] != "rm x" {
+	// Each bash -c is a subject twice, raw and normalised (0037-MADR D4).
+	if got := parseShell(nest(8)).subjects; len(got) != 17 || got[16] != "rm x" {
 		t.Errorf("depth 8: %d subjects, last %q", len(got), got[len(got)-1])
 	}
 	if got := parseShell(nest(9)).subjects; len(got) != 1 || got[0] != nest(9) {
 		t.Errorf("depth 9: %q, want it raw", got)
+	}
+}
+
+// Under allow: bash then deny: bash(rm *), quoting, an escape, a tab, a
+// path and, where the volume finds a program whatever its case, case no
+// longer get round the deny: the command is matched in its raw and its
+// normalised form (0037-MADR D4, F3's table). An "always" saves only the
+// raw subjects' patterns (0037-PLAN deviation 3).
+func TestCommandBypasses(t *testing.T) {
+	rule := func(effect permission.Mode, text string) permission.Spec {
+		s, err := permission.ParseSpec(effect, text)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return s
+	}
+	e := permission.Engine{Layers: [][]permission.Spec{{rule(permission.ModeAllow, "bash"), rule(permission.ModeDeny, "bash(rm *)")}}}
+	ruleOf := func(cmd string) permission.Rule {
+		sc := parseShell(cmd)
+		return permission.Rule{Tool: "bash", Kind: permission.SubjectCommand, Subjects: sc.subjects, Saves: sc.saves}
+	}
+	denied := []string{
+		`\rm -rf build`, `"rm" -rf build`, `r''m -rf build`, "rm\t-rf build", "/bin/rm -rf build",
+		// F3's rows denied before: they stay denied.
+		"rm -rf build", "a && rm -rf build", "echo $(rm -rf build)", "command rm -rf build", "env rm -rf build",
+		"sudo rm -rf build", "FOO=1 rm -rf build",
+	}
+	if runtime.GOOS == "darwin" || runtime.GOOS == "windows" {
+		denied = append(denied, "RM -rf build") // the volume finds RM as rm
+	}
+	for _, cmd := range denied {
+		if v := e.Evaluate(ruleOf(cmd)); v.Effect != permission.ModeDeny {
+			t.Errorf("%q: %+v, want denied", cmd, v)
+		}
+	}
+	// Beyond pattern rules, as docs/architecture.md says: the program xargs
+	// or find runs is not a word of the command.
+	for _, cmd := range []string{"echo build | xargs rm -rf", "find build -delete"} {
+		if v := e.Evaluate(ruleOf(cmd)); v.Effect != permission.ModeAllow {
+			t.Errorf("%q: %+v, want allowed: it is beyond a pattern rule", cmd, v)
+		}
+	}
+	// An "always" saves each raw subject's pattern once, and nothing for a
+	// normalised form.
+	for cmd, want := range map[string][]string{
+		`\rm -rf build`:     {"rm *"},
+		`"rm" -rf build`:    {"rm *"},
+		"/bin/rm -rf build": {"/bin/rm *"},
+		"echo hi > out.txt": {"echo *"},
+		`"git" 'status'`:    {"git status *"},
+	} {
+		saved, ok := e.Remember(permission.ModeAllow, ruleOf(cmd))
+		var got []string
+		for _, s := range saved {
+			got = append(got, s.Pattern)
+		}
+		if !ok || !slices.Equal(got, want) {
+			t.Errorf("%q: always saves %q (%v), want %q", cmd, got, ok, want)
+		}
 	}
 }
 

@@ -1,6 +1,6 @@
 ---
 status: in-progress
-date: 2026-11-01
+date: 2026-11-02
 associated-madr: "0037-MADR-hardening-integrity-and-performance.md"
 ---
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
@@ -298,6 +298,8 @@ Files:
    * on darwin and windows, the program word lower-cased.
 
    The raw subject, and its save, are unchanged, so "always" answers save what they save today.
+   *(Deviation 3: the normalised subject's save is the raw subject's save, not `""`, so that `Remember` makes the same
+   rule twice and keeps it once; it is added only where that save is not empty.)*
 2. **Matching.** `wildcard` (`permission/rules.go:113-137`) folds case on darwin as it does on windows. Every subject's
    verdict is already combined by strictness (`Evaluate`, `:178-183`), so a deny on either form denies.
 3. **Tests.** `TestCommandBypasses`, under `allow: bash` then `deny: bash(rm *)`:
@@ -774,3 +776,81 @@ The base is `5e41482`. No deviation.
 10. **G-hosts,** 809 files shipped to each: the first run, before the goconst fix, passed `go test` and race and stopped
     preflight at the same finding on both; on the fixed tree, `go test` and race passed on both, 38 ok,
     `make check-records markdownlint` passed on both, and preflight stops at `verify-build-metadata`, as on every copy.
+
+### Deviation 3 (2026-11-01): P4 step 1, the normalised subject's save
+
+- **Found** at P4's start. Step 1 appends the normalised subject "with an empty save (`""`)", and says "always" answers
+  save what they save today. Those contradict:
+  - `Engine.Remember` (`permission/rules.go:431-460`) makes a rule from every subject, and an empty save means the
+    subject's exact text;
+  - the question's patterns are `Remember`'s (`acpserver/modes.go:163-173`).
+
+  So `/bin/rm -rf build`, answered "always allow", would also save `bash(rm -rf build)`, and the question would show it.
+  A normalised form holding `*`, such as `"ls" *.go` read as `ls *.go`, would make `Remember` refuse, leaving only
+  "once" where "always" is offered today.
+- **The owner's answer:** "Normalised form reuses raw save (Recommended)". The option not taken was a match-only field,
+  `Forms`, on `tool.Subject` and `permission.Rule`.
+- **Corrected before any code, the same day.** The chosen option's "or the raw text when that save is empty" would make
+  `Remember` refuse where it saves today: a raw save is empty only when a word of the arity prefix is an expansion, such
+  as `git ${SUB} -f`, or for the `PATH=…` subject, and `Remember` checks a save against `*?[{` but an exact subject
+  against `*?` alone. The owner's answer: "Skip when raw save empty (Recommended)". The option not taken kept the raw
+  text as the save.
+- **Decision.** The normalised subject is added only when it differs from the raw subject and the raw save is not
+  empty, and its save is the raw subject's. `Remember` then makes the same rule for both and keeps it once, so saved
+  rules, the question's patterns and whether "always" is offered are as today. A test pins `Remember`'s rules for each
+  bypass. A command whose arity prefix holds an expansion gets no normalised form; its deny pattern cannot name that
+  word literally anyway. Step 1 is annotated.
+- **Files added:** none.
+
+### Deviation 4 (2026-11-02): P4, three parser tests see the normalised subject
+
+- **Found** running P4's tests: `TestParseShellSubjects` (`tool/builtin/shellparse_test.go:42`),
+  `TestParseShellMasking` (`:84`) and `TestParseShellWrappers` (`:109`, `:120`) list each command's exact subjects, and
+  now see a second, normalised one: `git status` after `"git" 'status'`, `echo test` after
+  `echo test > output.txt`, and 17 subjects at depth 8 where there were 9. A raw subject keeps its
+  masked redirections, its quoting and a `bash -c` script as written, so its normalised form differs. It is MADR D4's
+  design; the step did not name these tests.
+- **The owner's answer:** "Update the expected lists (Recommended)". The option not taken added a normalised subject only
+  for a difference a deny pattern could be dodged by, which would still miss `echo hi > out.txt` under
+  `deny: bash(echo hi)`.
+- **Decision.** Each failing case's expected subjects, and saves, gain the normalised entry as the parser gives it,
+  written in full; the masking cases assert the raw subject and its normalised form as a pair; the depth tests count
+  both forms. Nothing is loosened. Each change is named in the P4 record.
+- **Files added:** none; `shellparse_test.go` is P4's.
+
+### P4 record (2026-11-02): commands matched in their raw and their normalised form
+
+The base is P3's `062909d`. Deviations 3 and 4.
+
+1. **The normalised subject** (step 1, deviation 3): `call` adds, after a command's raw subject, `normalised`: its words
+   as `wordValue` reads them, a non-literal word as written, joined by single spaces; the program by `path.Base` when it
+   holds a `/`, and lower-cased on darwin and windows. It is added when it differs from the raw subject and the raw save
+   is not empty, with the raw subject's save, so `Remember` keeps one rule for both.
+2. **Matching** (step 2): `wildcard` ignores case on darwin as on windows. `Evaluate` already takes the strictest
+   subject's verdict, so a deny on either form denies.
+3. **Tests** (step 3, deviation 4):
+   * `TestCommandBypasses` (`tool/builtin/shellparse_test.go`, which imports `permission`; `permission` imports no
+     `tool` package): under `allow: bash` then `deny: bash(rm *)`, `\rm -rf build`, `"rm" -rf build`,
+     `r''m -rf build`, `rm<TAB>-rf build` and `/bin/rm -rf build` are denied, with F3's denied rows; `RM -rf build` on
+     darwin and windows; `echo build | xargs rm -rf` and `find build -delete` are allowed, the test saying why. A last
+     part pins `Remember`: an "always" saves `rm *`, `/bin/rm *`, `echo *` and `git status *`, once each, and nothing for
+     a normalised form;
+   * `TestWildcard` (`permission/rules_test.go`) gains a case: `RM -RF build` against `rm *` matches on darwin and
+     windows, and not on linux. Without it no test held step 2, since the normalised subject already lower-cases the
+     program;
+   * by deviation 4, `TestParseShellSubjects` ("quoted words", "a redirection kept"), `TestParseShellMasking` (each of
+     its eight cases now a raw and normalised pair) and `TestParseShellWrappers` (`bash -c 'rm x && ls'`,
+     `sh -ec "git push"`, and depth 8's count, 9 to 17) list the normalised subjects as the parser gives them.
+4. **`docs/architecture.md`** (step 4): a bash command is matched as written and as the shell runs it; a deny rule sees
+   its program and its literal words; `xargs`, `find -delete` and a command assembled at run time are beyond it.
+5. **Seen failing** (step 5, C9), each on a scratch copy:
+
+   | Break | The failure |
+   | :--- | :--- |
+   | no normalised subject (the step's) | `TestCommandBypasses`: `"\\rm -rf build": {Effect:allow By:allow: bash Limit:}, want denied`, and the same for `"rm"`, `r''m`, the tab and `/bin/rm` |
+   | the normalised subject's save `""`, as step 1 first read | `TestCommandBypasses`: `"\\rm -rf build": always saves ["rm *" "rm -rf build"] (true), want ["rm *"]`, and the same for each row |
+   | `wildcard` folding case on windows alone | `TestWildcard`: `wildcard(RM -RF build, rm *) = false, want true on darwin` |
+6. **G-local:** `make pre-add-check` on the 4 changed Go files: clean; `make preflight`: passed; `go test ./...`: 38 ok;
+   `make race`: 38 ok. P4 touches nothing under `internal/cli`, so no `make perf`.
+7. **G-hosts,** 809 files shipped to each: `go test` and race passed on both, 38 ok; `make check-records markdownlint`
+   passed on both; preflight stops at `verify-build-metadata`, as on every copy.

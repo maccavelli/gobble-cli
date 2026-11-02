@@ -33,7 +33,10 @@ The binary has these surfaces:
 - **Permissions.** Every tool call is decided by `permissions.rules`, an ordered list of `allow`,
   `ask` and `deny` rules: the global file's, then a trusted project's, then `--set`'s. A rule
   names a tool, or a tool and a pattern over each path the call names, relative to the project,
-  or over each simple command of a bash call (PowerShell's whole command). The last that matches decides; with none, a read-only
+  or over each simple command of a bash call (PowerShell's whole command). A bash command is matched as written and as
+  the shell runs it: its words unquoted, the program by its base name, and on macOS and Windows without regard to
+  case; a deny rule takes either. So a deny rule for a command sees its program and its literal words; `xargs`,
+  `find -delete` and a command assembled at run time are beyond it (0037-MADR D4). The last that matches decides; with none, a read-only
   built-in tool runs and every other call, an MCP tool's among them, asks. A path outside the
   workspace asks unless an `external_directory` rule allows it, and a tool denied whole is hidden
   from the model. Whatever the rules say, a write under `.git` or `~/.ssh`, or to gobble's

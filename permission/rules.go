@@ -109,11 +109,12 @@ func ParseSpec(effect Mode, text string) (Spec, error) {
 
 // wildcard is opencode's matcher (packages/core/src/util/wildcard.ts):
 // "*" is any text, "?" one character, a trailing " *" also matches nothing
-// after the word, and on Windows case is ignored.
+// after the word, and on darwin and windows, whose volumes find a program
+// whatever its case, case is ignored (0037-MADR D4).
 func wildcard(input, pattern string) bool {
 	var b strings.Builder
 	b.WriteString("(?s")
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
 		b.WriteString("i")
 	}
 	b.WriteString(")^")

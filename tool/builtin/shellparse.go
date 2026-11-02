@@ -1,6 +1,8 @@
 package builtin
 
 import (
+	"path"
+	"runtime"
 	"slices"
 	"strings"
 
@@ -101,8 +103,17 @@ func (sc *shellCommand) call(src string, assigns []*syntax.Assign, args []*synta
 		}
 		return true
 	}
-	sc.subjects = append(sc.subjects, subjectText(src, args[0].Pos(), args, st))
-	sc.saves = append(sc.saves, arityPattern(words, lits))
+	raw, save := subjectText(src, args[0].Pos(), args, st), arityPattern(words, lits)
+	sc.subjects = append(sc.subjects, raw)
+	sc.saves = append(sc.saves, save)
+	// The command as the shell runs it, so that quoting, a tab, a path or
+	// case does not get round a deny rule; with the raw subject's save, so
+	// that an "always" saves what it saves for the raw one (0037-MADR D4;
+	// 0037-PLAN deviation 3).
+	if n := normalised(src, args, words, lits); save != "" && n != raw {
+		sc.subjects = append(sc.subjects, n)
+		sc.saves = append(sc.saves, save)
+	}
 	for _, a := range assigns {
 		if a.Name != nil && execKey(a.Name.Value) {
 			sc.subjects = append(sc.subjects, subjectText(src, assigns[0].Pos(), args, st))
@@ -125,6 +136,29 @@ func (sc *shellCommand) call(src string, assigns []*syntax.Assign, args []*synta
 		}
 	}
 	return true
+}
+
+// normalised is a simple command's words as the shell runs them: each
+// literal word unquoted, its escapes taken out, any other word as written,
+// joined by single spaces; the program by its base name when it is a path,
+// and in lower case on darwin and windows, whose volumes find a program
+// whatever its case (0037-MADR D4).
+func normalised(src string, args []*syntax.Word, words []string, lits []bool) string {
+	out := make([]string, len(words))
+	for i := range words {
+		if lits[i] {
+			out[i] = words[i]
+		} else {
+			out[i] = src[args[i].Pos().Offset():args[i].End().Offset()]
+		}
+	}
+	if strings.Contains(out[0], "/") {
+		out[0] = path.Base(out[0])
+	}
+	if runtime.GOOS == "darwin" || runtime.GOOS == "windows" {
+		out[0] = strings.ToLower(out[0])
+	}
+	return strings.Join(out, " ")
 }
 
 // wordValue is w's value when it is literal: plain text, single quotes

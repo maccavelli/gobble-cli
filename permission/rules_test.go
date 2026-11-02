@@ -78,6 +78,12 @@ func TestWildcard(t *testing.T) {
 			t.Errorf("wildcard(%q, %q) = %v", c.in, c.pat, got)
 		}
 	}
+	// Case is ignored where the volume finds a program whatever its case:
+	// darwin and windows (0037-MADR D4).
+	folding := runtime.GOOS == "darwin" || runtime.GOOS == "windows"
+	if got := wildcard("RM -RF build", "rm *"); got != folding {
+		t.Errorf("wildcard(RM -RF build, rm *) = %v, want %v on %s", got, folding, runtime.GOOS)
+	}
 }
 
 // The last matching rule across the layers decides, the defaults before
