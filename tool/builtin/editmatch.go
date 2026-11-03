@@ -42,17 +42,10 @@ func lineEnding(s string) string {
 	return "\r\n"
 }
 
-// toLF makes every line ending a \n: CRLF first, then a lone CR.
-func toLF(s string) string {
-	return strings.ReplaceAll(strings.ReplaceAll(s, "\r\n", "\n"), "\r", "\n")
-}
-
-// restoreEnding gives LF text the file's line ending back.
-func restoreEnding(s, ending string) string {
-	if ending == "\r\n" {
-		return strings.ReplaceAll(s, "\n", "\r\n")
-	}
-	return s
+// lfView is s with each \r\n as \n. A lone \r stays a character, not a
+// line break, so each line of the view is a line of s (0037-MADR D8).
+func lfView(s string) string {
+	return strings.ReplaceAll(s, "\r\n", "\n")
 }
 
 var (
@@ -133,15 +126,23 @@ func (e editError) noChange() error {
 	return fmt.Errorf("edit %s: the edits change nothing", e.path)
 }
 
-// applyEdits applies edits to LF content and returns the new content. path
-// is the file as the model is shown it, for the errors.
-func applyEdits(content string, edits []edit, path string) (string, error) {
+// lineEdit is a run of the content's lines, [start, end), and the text
+// that replaces them, its line endings \n.
+type lineEdit struct {
+	start, end int
+	text       string
+}
+
+// applyEdits applies edits to content, a file's LF view, and returns the new
+// content and the lines it rewrote, so that the file itself can be rebuilt
+// from them. path is the file as the model is shown it, for the errors.
+func applyEdits(content string, edits []edit, path string) (string, []lineEdit, error) {
 	ee := editError{path: path, total: len(edits)}
 	norms := make([]edit, len(edits))
 	for i, e := range edits {
-		norms[i] = edit{OldText: toLF(e.OldText), NewText: toLF(e.NewText)}
+		norms[i] = edit{OldText: lfView(e.OldText), NewText: lfView(e.NewText)}
 		if norms[i].OldText == "" {
-			return "", ee.empty(i)
+			return "", nil, ee.empty(i)
 		}
 	}
 	useFuzzy := slices.ContainsFunc(norms, func(e edit) bool {
@@ -155,45 +156,51 @@ func applyEdits(content string, edits []edit, path string) (string, error) {
 	for i, e := range norms {
 		at, n, err := locate(base, e.OldText, useFuzzy, i, ee)
 		if err != nil {
-			return "", err
+			return "", nil, err
 		}
 		ms = append(ms, matched{index: i, at: at, len: n, newText: e.NewText})
 	}
 	slices.SortFunc(ms, func(a, b matched) int { return a.at - b.at })
 	for i := 1; i < len(ms); i++ {
 		if prev, cur := ms[i-1], ms[i]; prev.at+prev.len > cur.at {
-			return "", ee.overlap(prev.index, cur.index)
+			return "", nil, ee.overlap(prev.index, cur.index)
 		}
 	}
-	var out string
-	if useFuzzy {
-		kept, err := replaceKeepingLines(content, base, ms)
-		if err != nil {
-			return "", fmt.Errorf("edit %s: %w", path, err)
-		}
-		out = kept
-	} else {
-		out = replaceAll(base, ms, 0)
+	les, err := lineEdits(content, base, ms)
+	if err != nil {
+		return "", nil, fmt.Errorf("edit %s: %w", path, err)
 	}
+	out := spliceLines(linesWithEndings(content), les, "\n")
 	if out == content {
-		return "", ee.noChange()
+		return "", nil, ee.noChange()
 	}
-	return out, nil
+	return out, les, nil
+}
+
+// occurrences is where s first occurs in base, and how many times it
+// occurs: a second occurrence overlapping the first counts, so a lone
+// count is a unique match (0037-MADR D8).
+func occurrences(base, s string) (at, n int) {
+	at, n = strings.Index(base, s), strings.Count(base, s)
+	if n == 1 && at < len(base) && strings.Contains(base[at+1:], s) {
+		n = 2
+	}
+	return at, n
 }
 
 // locate finds one edit's oldText in base by the layers, and returns where
 // and how long the match is.
 func locate(base, old string, inFuzzy bool, i int, ee editError) (int, int, error) {
-	if n := strings.Count(base, old); n == 1 {
-		return strings.Index(base, old), len(old), nil
+	if at, n := occurrences(base, old); n == 1 {
+		return at, len(old), nil
 	} else if n > 1 {
 		return 0, 0, ee.duplicate(i, n)
 	}
 	find := old
 	if inFuzzy {
 		find = fuzzy(old)
-		if n := strings.Count(base, find); n == 1 {
-			return strings.Index(base, find), len(find), nil
+		if at, n := occurrences(base, find); n == 1 {
+			return at, len(find), nil
 		} else if n > 1 {
 			return 0, 0, ee.duplicate(i, n)
 		}
@@ -284,15 +291,13 @@ func lineRange(lines []span, m matched) (int, int, error) {
 	return start, end + 1, nil
 }
 
-// replaceKeepingLines applies replacements matched in base, the normalised
-// view of original, to original. Each replacement is widened to the lines it
-// touches; those lines come from base with the replacement made, and every
-// other line is copied from original.
-func replaceKeepingLines(original, base string, ms []matched) (string, error) {
-	origLines := linesWithEndings(original)
+// lineEdits widens replacements matched in base, content or its normalised
+// view, to the lines they touch: those lines come from base with the
+// replacements made, and every other line stays content's.
+func lineEdits(content, base string, ms []matched) ([]lineEdit, error) {
 	baseLines := spans(base)
-	if len(origLines) != len(baseLines) {
-		return "", errors.New("normalising the file changed its number of lines; resend the edit with oldText copied exactly")
+	if len(linesWithEndings(content)) != len(baseLines) {
+		return nil, errors.New("normalising the file changed its number of lines; resend the edit with oldText copied exactly")
 	}
 	type group struct {
 		start, end int
@@ -302,7 +307,7 @@ func replaceKeepingLines(original, base string, ms []matched) (string, error) {
 	for _, m := range ms {
 		s, e, err := lineRange(baseLines, m)
 		if err != nil {
-			return "", err
+			return nil, err
 		}
 		if n := len(groups); n > 0 && s < groups[n-1].end {
 			groups[n-1].end = max(groups[n-1].end, e)
@@ -311,14 +316,28 @@ func replaceKeepingLines(original, base string, ms []matched) (string, error) {
 		}
 		groups = append(groups, group{start: s, end: e, ms: []matched{m}})
 	}
+	les := make([]lineEdit, 0, len(groups))
+	for _, g := range groups {
+		from, to := baseLines[g.start].start, baseLines[g.end-1].end
+		les = append(les, lineEdit{start: g.start, end: g.end, text: replaceAll(base[from:to], g.ms, from)})
+	}
+	return les, nil
+}
+
+// spliceLines is lines with each of les in place of the lines it covers,
+// its line endings given as ending. Every other line keeps its own.
+func spliceLines(lines []string, les []lineEdit, ending string) string {
 	var b strings.Builder
 	next := 0
-	for _, g := range groups {
-		b.WriteString(strings.Join(origLines[next:g.start], ""))
-		from, to := baseLines[g.start].start, baseLines[g.end-1].end
-		b.WriteString(replaceAll(base[from:to], g.ms, from))
-		next = g.end
+	for _, le := range les {
+		b.WriteString(strings.Join(lines[next:le.start], ""))
+		if ending != "\n" {
+			b.WriteString(strings.ReplaceAll(le.text, "\n", ending))
+		} else {
+			b.WriteString(le.text)
+		}
+		next = le.end
 	}
-	b.WriteString(strings.Join(origLines[next:], ""))
-	return b.String(), nil
+	b.WriteString(strings.Join(lines[next:], ""))
+	return b.String()
 }

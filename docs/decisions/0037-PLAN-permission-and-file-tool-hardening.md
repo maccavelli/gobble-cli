@@ -1,6 +1,6 @@
 ---
 status: in-progress
-date: 2026-11-02
+date: 2026-11-03
 associated-madr: "0037-MADR-hardening-integrity-and-performance.md"
 ---
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
@@ -435,7 +435,8 @@ Files:
 * `tool/builtin/editmatch.go`;
 * `tool/builtin/edit.go`;
 * `tool/builtin/editmatch_test.go`;
-* `tool/builtin/edit_test.go`.
+* `tool/builtin/edit_test.go`;
+* by deviation 8: `tool/builtin/editstrategy.go` and `tool/builtin/fuzz_test.go`.
 
 1. **Uniqueness.**
    * In `locate` (`editmatch.go:186-197`), a count of one, in either layer, is accepted only if no second occurrence
@@ -462,6 +463,32 @@ Files:
 4. **Seen failing (C9).** On a copy with `strings.Count` alone, `TestEditOverlappingDuplicate` fails. On a copy with
    `toLF` and `restoreEnding`, `TestEditKeepsUntouchedEndings` fails.
 5. G-local and G-hosts. **Commit.**
+
+### P8a — the edit lock's waits, jittered (deviation 9; 0018-MADR D18)
+
+Added by deviation 9. P8 is held, uncommitted, until this phase passes; the two land in one commit.
+
+Files:
+
+* `internal/filelock/lock.go`;
+* `internal/filelock/lock_test.go`.
+
+1. **Jitter.** In `Lock`, each wait before the last is drawn uniformly from half to all of the policy's scheduled gap
+   (`d/2 + rand.N(d/2+1)`, `math/rand/v2`). The wait cut to end at the deadline is not jittered, so the last try is
+   still at the deadline and the `*HeldError` comes no sooner (0018-PLAN P7, deviation 24). `EditPolicy` is unchanged:
+   20 ms, doubling to 100 ms, for 2 s.
+2. **Tests.**
+   * ~~`TestLockWaitersSpread`: 16 goroutines each take the same lock with `EditPolicy`, hold it 1 ms and release it;
+     all are done within 1 s. In lock-step the waits alone come to about 20 + 40 + 80 + 12 × 100 ms, 1.34 s.~~
+     *(2026-11-03, deviation 10: replaced by `TestLockJitter`, a test of the draw itself; lock-step measured 0.88–1.37 s,
+     so the bound passed the broken code in 2 runs of 3.)*
+   * `TestLockDeadline`, `TestLockOutlastsPiBudget` and the other existing lock tests pass unchanged.
+   * `TestTrustConcurrentSaves` is unchanged. On the Windows laptop it runs 20 times under race, and the durations are
+     recorded.
+3. **Seen failing (C9).** On a copy without the jitter, ~~`TestLockWaitersSpread` fails on its 1 s bound~~
+   *(deviation 10: `TestLockJitter` fails)*.
+4. G-local and G-hosts over P8 and P8a together; on the Windows laptop the full race suite runs three times. **Commit**
+   P8 and P8a together, with both records.
 
 ### P9 — the spill file's cap (MADR D9; F8)
 
@@ -1125,3 +1152,157 @@ The base is P6's `603bad6`. Deviation 7.
    laptop (`TestConhost`). Run alone with `-v`, the thirteen new tests passed on the Linux machine. On the Windows laptop
    `TestResolveRefusesLarge` passed; the FIFO cases skipped ("Windows has no FIFOs") and `TestResolveDevZero` skipped
    ("Windows has no /dev/zero"), each test's missing-file checks running before its skip.
+
+### Deviation 8 (2026-11-02): P8, layer 3's escaped match, and the fuzz test
+
+- **Found** reading the code before P8's first write.
+  * Layer 3's `escapeNormalized` (`tool/builtin/editstrategy.go:124-132`) steps past each whole match
+    (`off += i + len(plain)`), so it too counts only non-overlapping matches. On a scratch copy, the file
+    `x\n}\n}\n}\n` with the oldText `}\n}\n`, written with real newlines or as the escaped literal `}\\n}\\n`, was
+    accepted as unique and gave `x\nY\n}\n` both times. D8 says every layer; step 1 covers `locate`'s first two, and
+    `editstrategy.go` is not in P8's list. `lineTrimmed` and `indentFlexible` advance one line at a time, so they already
+    count overlapping blocks. The fault is older than P8.
+  * `FuzzEditMatch` (`tool/builtin/fuzz_test.go:27-35`) calls `applyEdits` and `toLF`, both of which step 2 changes;
+    the file is not in P8's list.
+- **The owner's answers:** "Fix it in P8 (Recommended)" and "Update fuzz_test.go (Recommended)". The options not taken
+  were to leave layer 3 and record it as not done, and to keep `toLF` for the fuzz test alone.
+- **Decision.**
+  * `escapeNormalized` advances one byte after each match, so an overlapping second match is a second candidate, and
+    `locate`'s existing duplicate error refuses it (`occurs 2 times`). `TestEditOverlappingDuplicate` gains the escaped
+    case, seen failing.
+  * `FuzzEditMatch` converts its content as the view does, only `\r\n`, and takes `applyEdits`' new result; its two
+    properties stay. `toLF` goes.
+  * MADR D8 gets a dated note.
+- **Files added:** `tool/builtin/editstrategy.go` and `tool/builtin/fuzz_test.go`.
+
+### Deviation 9 (2026-11-02): P8's Windows race run, sixteen racing trust saves outlast the edit lock
+
+- **Found** in P8's G-hosts. The Windows laptop's first full race run failed `TestTrustConcurrentSaves`
+  (`permission/trust_test.go:204`, 2.03 s): three of its sixteen concurrent `TrustStore.Save` calls returned
+  `trust.json: locked by pid 69216`, and thirteen entries were saved. P8 changes only `tool/builtin`.
+- **The owner's answer:** "Stop; investigate first". The option not taken was to record it as a load-dependent failure
+  and finish P8.
+- **Investigated,** read-only, on scratch copies:
+  * Alone under race, 20 runs each on the Windows laptop: 20 of 20 passed at P8's tree (28.8 s) and at `603bad6`,
+    before P7 changed `TrustStore.Load` (28.6 s). A second full race run of P8's tree passed, 38 ok.
+  * Every run takes about 1.4 s, plain or under race, on the Windows laptop at `c4eb473` (before P5), `603bad6` and P8's
+    tree, and on macOS (1.39–1.50 s). No phase of this plan changed it.
+  * One uncontended save takes about 5.5 ms on the Windows laptop: the lock 0.2–0.4 ms, `Load` 0.1 ms, the atomic write
+    about 1 ms. Sixteen need about 90 ms of work, so the 1.4 s is waiting.
+  * **The cause.** `filelock.Lock` waits on a fixed schedule, 20, 40, 80, then 100 ms, with no jitter. Sixteen waiters
+    that start together wake together: one takes the lock each round, and the rest sleep the next 100 ms, so sixteen
+    saves take about 1.4 s of `EditPolicy`'s 2 s. A loaded host stretches the rounds past the deadline.
+  * With each wait drawn from half to all of its gap, in a scratch copy of `lock.go`: 0.19–0.29 s plain and 0.20–0.33 s
+    under race on the Windows laptop, ten runs each, and 0.41–0.61 s on macOS, five runs.
+- **Decision.** A new phase, P8a, jitters `Lock`'s waits; `EditPolicy`'s numbers and the deadline's last try stay.
+  P8 waits, uncommitted, for P8a, and they land in one commit. 0018-MADR D18 and this plan's MADR get dated notes.
+- **Files added:** `internal/filelock/lock.go`, `internal/filelock/lock_test.go`, and
+  `docs/decisions/0018-MADR-configuration-surface.md`.
+
+### Deviation 10 (2026-11-03): P8a, the lock test is a test of the draw
+
+- **Found** in P8a's seen-failing run. On a copy without the jitter, `TestLockWaitersSpread` passed 2 runs of 3 (0.88 s
+  each) and failed one (`16 waiters took 1.370763625s, want under 1s`). Ten runs each on macOS: with a 1 ms hold,
+  jittered 0.11–0.21 s, lock-step 0.97–1.37 s; with a 5 ms hold, 0.21–0.35 s and 1.08–1.39 s. The goroutines start far
+  enough apart that more than one can win a round, so lock-step is not a fixed floor, and a bound low enough to catch
+  it, about 0.6 s, would leave the jittered case about twice its time, a load-dependent test of a load-dependent fault.
+- **The owner's answer:** "Deterministic test of the draw (Recommended)". The option not taken was the timing test with
+  a 5 ms hold and a 0.6 s bound.
+- **Decision.** The draw moves into `spread(d, left)` in `lock.go`. `TestLockJitter` draws 1000 waits with `d < left`:
+  each lies in `[d/2, d]`, and they vary; with `d` at or past `left` the wait is exactly `left`, so the deadline's last
+  try holds. `TestLockWaitersSpread` is not added. The measurements stay in the record, and `TestTrustConcurrentSaves`
+  stays the end-to-end check.
+- **Files added:** none.
+
+### P8 record (2026-11-03): edits count overlapping matches, and leave the line endings they did not touch
+
+The base is P7's `e042fef`. Deviation 8.
+
+1. **Uniqueness** (step 1, deviation 8): `occurrences(base, s)` (`tool/builtin/editmatch.go`) is `strings.Count` and
+   the first index, with a lone count raised to 2 when `s` occurs again from one byte after the first match. `locate`
+   uses it at the exact and the normalised layer, so an overlapping second match is `duplicate(i, 2)`; a count above
+   one keeps its number. Layer 3's `escapeNormalized` (`editstrategy.go`) looks again one byte after each match, so an
+   overlapping second match is a second candidate, and `locate`'s existing duplicate error refuses it.
+2. **Line endings** (step 2):
+   * `lfView` converts only `\r\n` to `\n`; a lone `\r` stays a character, so each line of the view is a line of the
+     file. The edits' oldText and newText get the same conversion, so a lone `\r` in oldText matches one in the file.
+     `toLF` and `restoreEnding` are gone; nothing else used them once `FuzzEditMatch` moved to `lfView`.
+   * `applyEdits` returns, with its result, the lines it rewrote: `[]lineEdit`, each a run of the view's lines and its
+     replacement text, which is its matched spans widened to whole lines. `lineEdits` builds them, as
+     `replaceKeepingLines` did, now at every layer, not the normalised layer alone; `spliceLines` puts them in place.
+   * `edit.go`: a file with no `\r` is written as `applyEdits` returns it, with no conversion. Otherwise the file is
+     rebuilt from its own lines: an untouched line is copied with its own ending, and the lines an edit wrote take the
+     file's dominant ending, `lineEnding`'s first newline.
+3. **Tests** (step 3, deviation 8):
+   * `tool/builtin/editmatch_test.go`, a new file: `TestEditOverlappingDuplicate`, with `x\n}\n}\n}\n` and `}\n}\n`
+     refused as `occurs 2 times`, the file unchanged, at the exact layer, the normalised layer (`‘}\n‘}\n` against
+     `'}\n'}\n'}\n`) and the escape-normalised one (the literal `}\\n}\\n`). `TestEditBehaviour`'s `duplicate` keeps
+     `occurs 3 times`.
+   * `tool/builtin/edit_test.go`: `TestEditKeepsUntouchedEndings` (`a\r\nb\nc\n`, `b` to `B`, gives `a\r\nB\r\nc\n`;
+     the same through the normalised layer, `b  `; and two written lines, `a\r\nb\nc\nd\r\n` to
+     `a\r\nB\r\nC\r\nd\r\n`); `TestEditLoneCR` (`b\rstill b\n` keeps its `\r` with the edit elsewhere, and oldText
+     `b\rstill` matches it); `TestEditLFOnly` (`a\nb  \n\tc\nd` and a normalised edit, each byte-identical outside the
+     edit, a last line with no newline included).
+   * The existing edit tests pass unchanged, the five CRLF and BOM cases of `TestEditBehaviour` included; no
+     expectation depended on whole-file conversion.
+   * `tool/builtin/fuzz_test.go`: `FuzzEditMatch` takes `lfView` and the new result, and one more seed, below.
+4. **The fuzzer's find.** Run for 30 s on a scratch copy, `FuzzEditMatch` panicked within a second on the content `\r`,
+   oldText `" "` and newText `"0"`: both normalise to `""`, `Count("", "")` is 1, and `occurrences` sliced
+   `base[1:]` of an empty base. At `e042fef` the same input is not a panic, since `toLF` made the content `\n`; the
+   fault was P8's own. `occurrences` looks for a second match only while the first starts inside
+   `base`, and the input is now a seed. A second run, 120 s and about 2.5 million inputs, found nothing.
+5. **Seen failing** (step 4, C9, deviation 8), each on a scratch copy:
+
+   | Break | The failure |
+   | :--- | :--- |
+   | `strings.Count` alone (the step's) | `TestEditOverlappingDuplicate/exact` and `/normalised`: `result = "edited f.txt: 1 replacement" (isError false), want the error "edit f.txt: oldText occurs 2 times; …"` |
+   | `escapeNormalized` stepping past each whole match (deviation 8) | `TestEditOverlappingDuplicate/escape-normalised`: the same |
+   | `toLF` and `restoreEnding` back (the step's) | `TestEditKeepsUntouchedEndings/exact` and `/normalised`: `file = "a\r\nB\r\nc\r\n", want "a\r\nB\r\nc\n"`; `TestEditLoneCR/edited_elsewhere`: `file = "TARGET\nb\nstill b\n", want "TARGET\nb\rstill b\n"`, and `/matched` |
+   | the edits' oldText converting a lone `\r` | `TestEditLoneCR/matched`: `oldText was not found` |
+   | the written lines left with the view's `\n` | `TestEditKeepsUntouchedEndings`, all three: `/several_lines` gives `"a\r\nB\nC\nd\r\n"` |
+   | an LF-only file rebuilt with a CRLF ending | `TestEditLFOnly/exact`: `file = "a\nb  \n\tC\r\nd", want "a\nb  \n\tC\nd"`, and `/normalised` |
+   | no guard at the end of `base` | `FuzzEditMatch/seed#7`: `panic: runtime error: slice bounds out of range [1:0]` |
+
+   `TestEditKeepsUntouchedEndings/several_lines` passes on the step's copy, since the old conversion also made that
+   file CRLF throughout; the written-lines break holds it. `TestEditLFOnly` passes on the step's copy too: the old code
+   already left a file with no `\r` whole. It guards the no-`\r` path, and fails when that path is skipped and the file
+   is rebuilt with a CRLF ending.
+6. **G-local:** `make pre-add-check` on the 6 Go files: clean; `make preflight`: passed; `go test ./...`: 38 ok;
+   `make race`: 38 ok. P8 touches nothing under `internal/cli`, so no `make perf`.
+7. **G-hosts,** first run, 823 files shipped to each: on the Linux machine `go test` and race passed, 38 ok, and
+   `make check-records markdownlint` passed; on the Windows laptop `go test` and records passed, and race failed
+   `TestTrustConcurrentSaves` (`trust.json: locked by pid 69216`), which is deviation 9. P8 was held for P8a, and the
+   final gates ran over both: P8a's record, items 4 and 5.
+
+### P8a record (2026-11-03): the edit lock's waits, jittered
+
+The base is P7's `e042fef`, with P8 held in the tree. Deviations 9 and 10.
+
+1. **Jitter** (step 1, deviation 10): `spread(d, left)` (`internal/filelock/lock.go`) is the wait before `Lock`'s next
+   try: `left` when the gap `d` reaches the deadline, so the last try is still at the deadline; otherwise
+   `d/2 + rand.N(d/2+1)`, from `math/rand/v2`. golangci-lint's gosec G404 (a weak random number generator) is marked
+   `//nolint:gosec // G404: a retry's spread, not a secret`. `EditPolicy` is unchanged.
+2. **Tests** (step 2, deviation 10): `TestLockJitter` (`internal/filelock/lock_test.go`) draws 1000 waits with a 100 ms
+   gap and 1 s left: each within `[50ms, 100ms]`, at least 100 distinct; with the gap at or past the time left, the wait
+   is exactly the time left. `TestLockWaitersSpread`, as step 2 first wrote it, was not kept: lock-step passed it in 2
+   runs of 3. `TestLockDeadline`, `TestLockOutlastsPiBudget`, `TestLockRetries` and `TestLockContext` pass unchanged.
+   Measured on macOS, sixteen contended lockers, ten runs each: jittered 0.11–0.21 s with a 1 ms hold and 0.21–0.35 s
+   with 5 ms; lock-step 0.97–1.37 s and 1.08–1.39 s. `TestTrustConcurrentSaves` on macOS: 0.35–0.53 s, from 1.39–1.50 s.
+3. **Seen failing** (step 3, C9), each on a scratch copy:
+
+   | Break | The failure |
+   | :--- | :--- |
+   | no jitter, every wait its gap | `TestLockJitter`: `1000 draws gave 1 distinct waits, want them spread` |
+   | the last wait jittered too | `TestLockJitter`: `spread(1s, 1s) = 702.317733ms, want exactly 1s` and `spread(2s, 1s) = 1.372208618s, want exactly 1s` |
+   | no jitter, against step 2's first test | `TestLockWaitersSpread`: passed at 0.88 s twice, failed once with `16 waiters took 1.370763625s, want under 1s`: deviation 10 |
+
+4. **G-local,** over P8 and P8a: `make pre-add-check` on the 8 Go files: clean; the first `make preflight` stopped at
+   golangci-lint's G404, item 1; then `make preflight`: passed; `go test ./...`: 38 ok; `make race`: 38 ok.
+5. **G-hosts,** over P8 and P8a, 823 files shipped to each: `go test` and race passed on both, 38 ok;
+   `make check-records markdownlint` passed on both; preflight stops at `verify-build-metadata`, as on every copy. The
+   Windows laptop then ran the full race suite three more times, 38 ok each, and `TestTrustConcurrentSaves` 20 times
+   under race, all passing in 0.19–0.40 s, where it had taken 1.30–1.42 s. P8's and P8a's new tests, run alone with
+   `-v`, passed on both hosts.
+   * The first attempt at these gates shipped nothing: the scratch host-gate script was missing, and the Windows runs
+     it went on to tested the copy left there by P8's run, which is why their trust timings were still 1.30–1.42 s. The
+     script was written again, and the gates above are its second run, the shipped copy checked to hold `spread`.

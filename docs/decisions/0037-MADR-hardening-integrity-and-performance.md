@@ -476,6 +476,9 @@ plan may tune one only through a deviation.
   * A file with no `\r` is not converted at all.
   * A file with `\r` keeps each untouched line's own ending. Only the replaced span takes the file's dominant ending,
     as `replaceKeepingLines` already does for fuzzy matches. A lone `\r` is not a line break for this conversion.
+
+  *(2026-11-02, by 0037-PLAN-permission-and-file-tool-hardening.md's deviation 8: layer 3's escape-normalised strategy
+  counted only non-overlapping matches too, and now advances one byte after each.)*
 * **D9. The spill file is capped at 256 MiB (F8).** Lines and bytes are still counted past the cap, and the result says
   the file was cut there.
 * **D10. Every settings and configuration file is read as a regular file, through a 1 MiB limit (F9).**
@@ -770,7 +773,9 @@ it.
   * [0005-MADR-v1-feature-scope.md](0005-MADR-v1-feature-scope.md) and
     [0005-PLAN-v1-feature-scope.md](0005-PLAN-v1-feature-scope.md): F3-4, F5-3, F6-2a's decision 12, F8;
   * [0012-MADR-tool-schemas-descriptions-and-loading.md](0012-MADR-tool-schemas-descriptions-and-loading.md): D10;
-  * [0018-MADR-configuration-surface.md](0018-MADR-configuration-surface.md): D8 and D15;
+  * [0018-MADR-configuration-surface.md](0018-MADR-configuration-surface.md): D8 and D15; *(2026-11-02, by
+    0037-PLAN-permission-and-file-tool-hardening.md's deviation 9: and D18, whose edit lock's waits P8a
+    jitters.)*
   * [0030-MADR-resize-and-performance.md](0030-MADR-resize-and-performance.md): D5's budgets;
   * [0004-MADR-go-module-architecture.md](0004-MADR-go-module-architecture.md): the client's queue.
 * **Revisit:**

@@ -52,12 +52,16 @@ func Edit() tool.Tool {
 			if rest, ok := strings.CutPrefix(raw, "\ufeff"); ok {
 				bom, content = "\ufeff", rest
 			}
-			ending := lineEnding(content)
-			updated, err := applyEdits(toLF(content), in.Edits, name)
+			updated, les, err := applyEdits(lfView(content), in.Edits, name)
 			if err != nil {
 				return tool.Result{}, err
 			}
-			final := bom + restoreEnding(updated, ending)
+			final := bom + updated
+			if strings.Contains(content, "\r") {
+				// Only the lines the edits wrote take the file's ending; every
+				// other line keeps its own (0037-MADR D8).
+				final = bom + spliceLines(linesWithEndings(content), les, lineEnding(content))
+			}
 			if beforeWrite != nil {
 				beforeWrite(abs)
 			}

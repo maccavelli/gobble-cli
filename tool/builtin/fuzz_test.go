@@ -17,6 +17,7 @@ func FuzzEditMatch(f *testing.F) {
 		{"\uFF21\uFF22\n", "AB", "ab"},
 		{"x x", "x", "y"},
 		{"", "a", "b"},
+		{"\r", " ", "0"}, // both normalise to "": no second match past the end (0037-PLAN P8)
 	} {
 		f.Add(s[0], s[1], s[2])
 	}
@@ -24,15 +25,15 @@ func FuzzEditMatch(f *testing.F) {
 		if !utf8.ValidString(content) || !utf8.ValidString(oldText) || !utf8.ValidString(newText) {
 			return
 		}
-		lf := toLF(content)
-		out, err := applyEdits(lf, []edit{{OldText: oldText, NewText: newText}}, "f")
+		lf := lfView(content)
+		out, _, err := applyEdits(lf, []edit{{OldText: oldText, NewText: newText}}, "f")
 		if err != nil {
 			return
 		}
 		if out == lf {
 			t.Fatalf("accepted an edit that changed nothing: %q", out)
 		}
-		if !strings.Contains(out, toLF(newText)) {
+		if !strings.Contains(out, lfView(newText)) {
 			t.Fatalf("result %q lacks newText %q", out, newText)
 		}
 	})

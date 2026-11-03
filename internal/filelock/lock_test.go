@@ -127,3 +127,26 @@ func TestLockDeadline(t *testing.T) {
 		t.Fatalf("Lock gave up after %v, want between %v and %v", took, lo, hi)
 	}
 }
+
+// Each wait but the last is drawn from half to all of its gap, and the
+// draws vary; the wait that reaches the deadline is exactly the time left
+// (0037-PLAN deviation 9, deviation 10).
+func TestLockJitter(t *testing.T) {
+	const d, left = 100 * time.Millisecond, time.Second
+	seen := map[time.Duration]bool{}
+	for range 1000 {
+		w := spread(d, left)
+		if w < d/2 || w > d {
+			t.Fatalf("spread(%v, %v) = %v, want within [%v, %v]", d, left, w, d/2, d)
+		}
+		seen[w] = true
+	}
+	if len(seen) < 100 {
+		t.Errorf("1000 draws gave %d distinct waits, want them spread", len(seen))
+	}
+	for _, d := range []time.Duration{left, 2 * left} {
+		if w := spread(d, left); w != left {
+			t.Errorf("spread(%v, %v) = %v, want exactly %v", d, left, w, left)
+		}
+	}
+}

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand/v2"
 	"os"
 	"strconv"
 	"strings"
@@ -52,7 +53,8 @@ type Policy struct{ First, Max, Deadline time.Duration }
 var EditPolicy = Policy{First: 20 * time.Millisecond, Max: 100 * time.Millisecond, Deadline: 2 * time.Second}
 
 // Lock is TryLock, tried again under p while another process holds the
-// lock. Its last wait is cut to end at p.Deadline from the first try, where
+// lock. Each wait but the last is jittered, from half to all of its gap.
+// Its last wait is cut to end at p.Deadline from the first try, where
 // it tries once more, so it returns the last try's *HeldError no sooner
 // than p.Deadline (0018-PLAN P7, deviation 24); it returns ctx's error when
 // ctx ends first.
@@ -65,7 +67,7 @@ func Lock(ctx context.Context, path string, p Policy) (release func() error, err
 		if !errors.As(err, &held) || wait <= 0 || left <= 0 {
 			return release, err
 		}
-		t := time.NewTimer(min(wait, left))
+		t := time.NewTimer(spread(wait, left))
 		select {
 		case <-ctx.Done():
 			t.Stop()
@@ -74,6 +76,17 @@ func Lock(ctx context.Context, path string, p Policy) (release func() error, err
 		}
 		wait = min(2*wait, max(p.Max, p.First))
 	}
+}
+
+// spread is the wait before Lock's next try: the gap d, drawn from half to
+// all of it, so waiters that started together do not wake together and win
+// one a round (0037-PLAN deviation 9). The wait that reaches left, the time
+// to the deadline, is exactly left, so the last try is at the deadline.
+func spread(d, left time.Duration) time.Duration {
+	if d >= left {
+		return left
+	}
+	return d/2 + rand.N(d/2+1) //nolint:gosec // G404: a retry's spread, not a secret
 }
 
 func readPID(f *os.File) int {

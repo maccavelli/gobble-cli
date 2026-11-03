@@ -148,6 +148,47 @@ func TestEditStrategies(t *testing.T) {
 	}
 }
 
+// In a file of mixed endings, the lines an edit writes take the file's
+// ending, its first newline's, and every other line keeps its own, at the
+// exact and the normalised layer (0037-MADR D8; F7).
+func TestEditKeepsUntouchedEndings(t *testing.T) {
+	cases := []editCase{
+		{name: "exact", content: "a\r\nb\nc\n", edits: []edit{{"b", "B"}}, want: "a\r\nB\r\nc\n"},
+		{name: "normalised", content: "a\r\nb  \nc\n", edits: []edit{{"b\n", "B\n"}}, want: "a\r\nB\r\nc\n"},
+		{name: "several lines", content: "a\r\nb\nc\nd\r\n", edits: []edit{{"b\nc", "B\nC"}}, want: "a\r\nB\r\nC\r\nd\r\n"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) { checkEdit(t, tc) })
+	}
+}
+
+// A lone \r is a character, not a line break: a line holding one keeps it
+// when the edit is elsewhere, and an oldText holding one matches it
+// (0037-MADR D8; F7).
+func TestEditLoneCR(t *testing.T) {
+	cases := []editCase{
+		{name: "edited elsewhere", content: "target\nb\rstill b\n", edits: []edit{{"target", "TARGET"}},
+			want: "TARGET\nb\rstill b\n"},
+		{name: "matched", content: "target\nb\rstill b\n", edits: []edit{{"b\rstill", "b\rSTILL"}},
+			want: "target\nb\rSTILL b\n"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) { checkEdit(t, tc) })
+	}
+}
+
+// A file with no \r is edited as it is: every byte outside the edit stays,
+// a last line with no newline included (0037-MADR D8).
+func TestEditLFOnly(t *testing.T) {
+	cases := []editCase{
+		{name: "exact", content: "a\nb  \n\tc\nd", edits: []edit{{"\tc", "\tC"}}, want: "a\nb  \n\tC\nd"},
+		{name: "normalised", content: "keep  \nx’y\nlast", edits: []edit{{"x'y", "xy"}}, want: "keep  \nxy\nlast"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) { checkEdit(t, tc) })
+	}
+}
+
 // A change to the file between the edit's read and its write fails the
 // edit, and the change is kept.
 func TestEditCompareAndSwap(t *testing.T) {

@@ -115,7 +115,9 @@ var escapes = strings.NewReplacer(
 )
 
 // escapeNormalized matches find with one level of escaping removed, for
-// oldText written as a string literal's source rather than its value.
+// oldText written as a string literal's source rather than its value. It
+// looks again one byte after each match, so an overlapping second match is
+// a second candidate (0037-MADR D8).
 func escapeNormalized(content, find string) []span {
 	plain := escapes.Replace(find)
 	if plain == find || plain == "" {
@@ -128,6 +130,6 @@ func escapeNormalized(content, find string) []span {
 			return out
 		}
 		out = append(out, span{start: off + i, end: off + i + len(plain)})
-		off += i + len(plain)
+		off += i + 1
 	}
 }
