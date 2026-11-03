@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: complete
 date: 2026-11-03
 associated-madr: "0037-MADR-hardening-integrity-and-performance.md"
 ---
@@ -589,6 +589,8 @@ Each phase's own steps are its acceptance criteria. Across the plan:
   * P6 and P7: a FIFO or a device is refused by name, and a configuration file over 1 MiB is refused;
   * P8: an ambiguous overlapping edit is refused, and an edit no longer rewrites other lines' endings;
   * P9: the spill file stops at 256 MiB.
+  * P10: a copy or a move into itself by another spelling of the path is refused, and a copy or a recursive
+    delete stops on cancel *(added at P11: the list stopped at P9)*.
 * **P17** stays on `feature/p17-lineedit` until go-tui-lib#13 ships. It is then rebased onto `main` under 0035-PLAN.
 
 ## Execution record
@@ -1436,3 +1438,41 @@ The base is P9's `ae80138`. Deviation 12.
 8. **G-hosts,** 824 files shipped to each, after the loop's change: `go test` and race passed on both, 38 ok;
    `make check-records markdownlint` passed on both; preflight stops at `verify-build-metadata`, as on every copy.
    P10's six new tests, run alone with `-v`, passed on both hosts, none skipped: the Windows laptop makes symlinks.
+
+### P11 record (2026-11-03): close-out
+
+The base is P10's `5791512`.
+
+1. **Goal** (step 1), each criterion against the records:
+
+   | Criterion | Met by |
+   | :--- | :--- |
+   | an intercepted `mv` or `cp` into a directory does what the shell does; no directory is removed for a file (D1) | P1: `TestInterceptIntoDirectory`, `TestMakeRoomKeepsDirectory` |
+   | no letter case, symlink, Windows spelling or bash command reaches a protected path without the limit (D2, D3) | P2: `TestProtectedFoldsCase`, `TestProtectedRealPath`, `TestFoldWindows`; P3: `TestBashWritesProtected`, `TestBashWritesConfig` |
+   | a deny rule is not got round by quoting, case, a tab, an absolute program path or a symlink (D4, D5) | P4: `TestCommandBypasses`; P2: `TestPathRulesFoldCase`, `TestPathRulesRealPath` |
+   | a write through a symlink writes its target, and hard links are kept (D6, Q1 (a)) | P5: `TestWriteThroughSymlink`, `TestWriteHardLinkInPlace`; a dangling symlink is replaced by a regular file, deviation 5 |
+   | no file tool or configuration reader hangs on a FIFO, reads past its need, or holds a file it should not (D7, D10) | P6: the `…RefusesFIFO` tests, `TestReadStreamsLimit`, `TestCopyFileStreams`; P7: twelve readers through `ReadRegularFile` within 1 MiB, deviation 7 |
+   | an edit refuses an ambiguous overlapping match and keeps the line endings it did not touch (D8) | P8: `TestEditOverlappingDuplicate`, `TestEditKeepsUntouchedEndings`, `TestEditLoneCR`, `TestEditLFOnly`, deviation 8 |
+   | command output on disk is capped (D9) | P9: `TestSpillCap`, deviation 11 |
+   | glob matching is linear; a recursive copy into itself, by any spelling, is refused and can be cancelled (D11) | P10: `TestGlobLinear`, `TestCopyIntoItselfRealPath`, `TestCopyHonoursCancel`, deviation 12 |
+   | every gate passes on the three hosts at each phase | each record's G-local and G-hosts. The failures found on the way were deviation 2 (P2, Windows) and deviation 9 (P8, Windows), each fixed before its phase's commit, and the known `TestLastGoodOnDisk` teardown flake at P7, passing on its rerun |
+   | the goldens are byte-identical throughout | **not met as written; met in substance.** `git diff --stat 2a8d70c..HEAD -- '*.golden'` is not empty: `internal/cli/render/testdata/style.golden` and `tables.golden` by `cce5ab0` (0035-PLAN) and `internal/cli/testdata/print-stream-json-escapes.golden` by `cfa514f` (0039-PLAN), both landed while this plan was paused after P2. `git show --stat` of each of this plan's ten commits, `e13d154`, `df92312`, `062909d`, `c4eb473`, `7114b5e`, `603bad6`, `e042fef`, `f7e1f1f`, `ae80138` and `5791512`, touches no golden |
+
+   **Verification,** across the plan:
+   * Every test the steps name exists in the tree but `TestLockWaitersSpread`, which deviation 10 replaced with
+     `TestLockJitter`; every test the records name exists but the same one. Each record from P1 to P10 quotes its
+     seen-failing runs.
+   * `apidiff` is a no-op below v1.0.0, as P1 and P3 recorded. In its place, the exported declarations each of the ten
+     commits adds or removes outside `internal/`, from `git show`: `tool.Env.Rerouted` (`e13d154`), and
+     `permission.Rule.Writes` and `tool.Subject.Writes` (`062909d`); the others none. That is the list the Verification
+     section gives.
+   * `make perf` and `make probe-conhost` ran where `internal/cli` changed, P7's `e042fef` alone among the ten: `make perf`
+     on all three hosts, `make probe-conhost` on the Windows laptop, all passing.
+2. **Status** (step 2): this plan is `complete`. The MADR stays `accepted`, with its plans 2 and 3 to follow (D34).
+   "Rollout and Rollback"'s list of what users see gains P10's line. `docs/architecture.md` is unchanged: P3, P4 and P9
+   wrote their own lines, and none of its statements on settings, locks, globs, the file tools or the spill file is
+   contradicted by P5–P10.
+3. **The disclosure guard** (step 3), run as `AGENTS.md` gives it over the outgoing commits, `origin/main` `5e41482` to
+   `5791512` (`062909d` to `5791512`, eight commits): exit 0, no output. This phase's commit is outgoing too; the
+   pre-push hook runs the same guard over it. Nothing was pushed.
+4. **Records** (step 4): `make check-records markdownlint` passed.
