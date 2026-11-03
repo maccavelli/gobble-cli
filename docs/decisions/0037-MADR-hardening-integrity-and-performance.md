@@ -499,6 +499,10 @@ plan may tune one only through a deviation.
   cannot be stopped part-way. The recursive delete checks the context in its count, `countEntries`, before it removes
   anything. The removal, once started, runs to its end.)*
 
+  *(2026-11-03, by 0037-PLAN-permission-and-file-tool-hardening.md's deviation 12: the path an operation acts on is
+  real up to its own name, which is not followed, since move, delete and copy act on a link itself; a root is real
+  whole, and the lexical check stays.)*
+
 ### Category 2 — state integrity, bounds and secrets
 
 * **D12. A mention is bounded, and so is user text in a summary request (F12).**

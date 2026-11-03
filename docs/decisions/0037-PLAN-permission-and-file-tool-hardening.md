@@ -517,14 +517,17 @@ Files:
 * `internal/fsx/ops.go`: `IsRoot`, `Inside`;
 * `internal/fsx/ops_test.go`;
 * `tool/builtin/fileops.go`: `copyEntry`, `countEntries` and their callers, with a context;
-* `tool/builtin/fileops_test.go`.
+* `tool/builtin/fileops_test.go`;
+* by deviation 12: the MADR, for D11's note.
 
 1. **`**` collapses.** `compile` (`glob.go:67-94`) collapses consecutive `**` segments into one.
 2. **Memoised matching.**
    * `matchSegs` becomes an iterative or memoised match over (pattern index, name index), with a table of
      `len(pat)+1` × `len(name)+1` entries allocated once per match.
    * The results equal today's on every existing glob and ignore test.
-3. **Real paths.** `IsRoot` and `Inside` compare `RealPath` of both sides, through P2's `Fold`.
+3. **Real paths.** ~~`IsRoot` and `Inside` compare `RealPath` of both sides, through P2's `Fold`.~~
+   *(2026-11-03, deviation 12: the path an operation acts on is compared as `RealPath` of its directory and its
+   own name, the last link not followed; a root is `RealPath` whole; today's lexical check stays too.)*
 4. **Cancel.**
    * `runMove`, `runDelete` and `runCopy` take their context, now discarded as `_`.
    * `copyEntry` and `countEntries` check it before each entry, and return `context.Cause`.
@@ -536,6 +539,8 @@ Files:
    * `TestCopyIntoItselfRealPath`: copying `ws/a` to `RealPath(ws)/a/b` is refused, "cannot be copied into itself".
    * `TestCopyHonoursCancel`: a copy of a 2,000-entry tree with a cancelled context returns `context.Canceled` and
      copies fewer entries.
+   * `TestRealPathKeepsLinks` (deviation 12): a symlink to a directory moves into that directory, and a symlink to
+     the workspace root is deleted, as today.
 6. **Seen failing (C9).** On a copy with today's `matchSegs`, `TestGlobLinear` fails on its bound. On a copy with
    lexical `Inside`, `TestCopyIntoItselfRealPath` fails with its 5 s test deadline.
 7. G-local and G-hosts. **Commit.**
@@ -1352,3 +1357,82 @@ The base is P8 and P8a's `f7e1f1f`. Deviation 11.
 6. **G-hosts,** 824 files shipped to each: `go test` and race passed on both, 38 ok; `make check-records markdownlint`
    passed on both; preflight stops at `verify-build-metadata`, as on every copy. `TestSpillCap` and
    `TestBashLongOutput`, run alone with `-v`, passed on both hosts.
+
+### Deviation 12 (2026-11-03): P10, a real path that follows the last link refuses calls that work today
+
+- **Found** in a probe on a scratch copy before P10's first write. With `Inside` as
+  `UnderDir(RealPath(to), RealPath(from))` and `IsRoot` as `UnderDir(RealPath(r), RealPath(abs))`
+  (`internal/fsx/ops.go:159-168`, `:194`), two calls that succeed at `ae80138` were refused:
+  * a symlink `l` to the directory `d`, moved to `d/l2`: `move l to d/l2: a directory cannot move into itself`;
+  * a symlink to the workspace root, deleted: `delete rootlink: a workspace root cannot be deleted`.
+
+  Move, delete and copy act on the link itself, through `Lstat`, and `RealPath` follows the last link as well. Step 3,
+  as written, would add these refusals; nothing is broken before P10.
+- **The owner's answer:** "Resolve the parent (Recommended)". The option not taken was `RealPath` of the whole path,
+  with the two refusals recorded as a change users see.
+- **Decision.**
+  * The path an operation acts on is compared as `RealPath` of its directory, joined with its own name: the last element
+    is not followed. A workspace root is `RealPath` whole. The comparison is `UnderDir`, through P2's `Fold`.
+  * Today's lexical check stays, so a call refused today is still refused.
+  * F11's copy of `ws/a` to `<real path of ws>/a/b` is refused by the real comparison.
+  * `TestRealPathKeepsLinks` checks the two probe calls succeed, on a host that can make symlinks (C10). MADR D11 gets a
+    dated note.
+- **Files added:** `docs/decisions/0037-MADR-hardening-integrity-and-performance.md`, for D11's note.
+
+### P10 record (2026-11-03): linear globs, and recursive operations that compare real paths and stop on cancel
+
+The base is P9's `ae80138`. Deviation 12.
+
+1. **`**` collapses** (step 1): `compile` (`internal/fsx/glob.go`) passes its segments through `collapse`, which makes
+   each run of `**` one, the leading `**` of a pattern without a `/` included.
+2. **The table match** (step 2): `matchSegs` fills one table of `(len(pat)+1) × (len(name)+1)` booleans per call, from
+   the end: whether `pat[i:]` matches `name[j:]`. A `**` is `next[j] || row[j+1]`, a trailing one needs one segment
+   at least, and a plain segment calls `path.Match` only when the rest of the pattern matches the rest of the name.
+   Every existing glob, ignore and walk test passes unchanged.
+3. **Real paths** (step 3, deviation 12): `Inside` (`internal/fsx/ops.go`) is `within(from, to)`, as before, or
+   `UnderDir(realEntry(to), realEntry(from))`. `IsRoot` is `within(abs, r)`, as before, or
+   `UnderDir(RealPath(r), realEntry(abs))`. `realEntry(p)` is `RealPath` of `p`'s directory joined with `p`'s own name,
+   so a link the operation acts on is not followed. `UnderDir` compares through P2's `Fold`.
+4. **Cancel** (step 4): `runMove`, `runDelete` and `runCopy` (`tool/builtin/fileops.go`) take their context.
+   `copyEntry` checks it at the start of each call, so before each entry it copies, and `countEntries` before each
+   entry it counts; each returns `context.Cause`. `moveCopy`, the cross-device move's copy, takes the context with it,
+   and `TestMove`'s replacement takes the new signature. `RemoveAll` runs uninterrupted once started (MADR D11's note of 2026-10-30).
+   `tool.Run` returns `context.Cause` whenever the context is done when the call returns, so a cancelled call is the
+   cause, not a result.
+5. **Tests** (step 5, deviation 12):
+   * `internal/fsx/glob_test.go`: `TestGlobLinear`, F10's two patterns against 31 and 41 segments, each matching and
+     not matching as before within 50 ms, and the run of nine `**` compiled to two segments. `TestGlobMatchesUnchanged`,
+     a table of twenty patterns with runs of `**`, a trailing `**` and `**` between others; then every pattern of up to
+     five segments from `**`, `a`, `*` and `b` against every path of up to six segments from `a` and `b`, 1,365 by 127,
+     compared with `recursiveSegs`, the match it replaced, kept in the test.
+   * `internal/fsx/ops_test.go`: `TestIsRootRealPath`, with the root a symlink: the link, its real path and the
+     directory above are roots, a path under the real one is not; a path under the real `a` is `Inside` the link's `a`,
+     and a sibling is not. P10's steps name no `IsRoot` test; `ops_test.go` is in its list.
+   * `tool/builtin/fileops_test.go`: `TestCopyIntoItselfRealPath`, with the workspace a symlink and a 5 s deadline:
+     copying `a` to `<real path of ws>/a/b` is refused, "a directory cannot be copied into itself", and nothing is made;
+     `TestRealPathKeepsLinks`, deviation 12's two calls; `TestCopyHonoursCancel`, a tree of 40 directories of 49 files,
+     2,000 entries, copied with a cancelled context, `context.Canceled` and fewer than 2,000 entries copied, then
+     deleted recursively with it, `context.Canceled` and all 2,000 left.
+   * Each symlink test skips, with its reason, where a symlink cannot be made (C10).
+6. **Seen failing** (step 6, C9, deviation 12), each on a scratch copy:
+
+   | Break | The failure |
+   | :--- | :--- |
+   | `glob.go` as at `ae80138`, with `collapse` the identity (the baseline) | `TestGlobLinear`: `the run of nine compiled to ["**" "**" "**" "**" "**" "**" "**" "**" "**" "z"], want [** z]`; `"**/**/**/**/**/**/**/**/**/z" against 31 segments took 3.461854916s, want within 50ms`; `"**/a/**/a/**/a/**/a/**/a/**/a/z" against 41 segments took 114.413791ms`. `TestGlob` and `TestGlobMatchesUnchanged` pass there |
+   | today's recursive `matchSegs`, with `collapse` (the step's) | `TestGlobLinear`: `"**/a/**/a/**/a/**/a/**/a/**/a/z" against 41 segments took 113.176791ms, want within 50ms` |
+   | no `collapse` | `TestGlobLinear`: `the run of nine compiled to ["**" "**" "**" "**" "**" "**" "**" "**" "**" "z"], want [** z]` |
+   | a trailing `**` matching no segment | `TestGlobMatchesUnchanged`: `"a/**/**" matching "a" (dir true) = true, want false`, `"a/**/b/**" matching "a/b"`, and `["**"] against [] = true, want false` |
+   | lexical `Inside` (the step's) | `TestCopyIntoItselfRealPath` (5.08 s): `copy gave context deadline exceeded, want its refusal` |
+   | lexical `IsRoot` | `TestIsRootRealPath`: `IsRoot("<tmp>/real") = false, want true`, and for the directory above |
+   | `RealPath` of the whole path, step 3 as written | `TestRealPathKeepsLinks`: `move l to d/l2: a directory cannot move into itself` |
+   | the same in `IsRoot` alone | `TestRealPathKeepsLinks`: `delete rootlink: a workspace root cannot be deleted` |
+   | `copyEntry` without its check | `TestCopyHonoursCancel` (27.12 s): `the cancelled copy made 2000 entries, want fewer than 2000` |
+   | `countEntries` without its check | `TestCopyHonoursCancel`: `the cancelled delete left 0 entries, want 2000` |
+
+7. **G-local:** `make pre-add-check` on the 6 Go files: clean; the first `make preflight` stopped at golangci-lint's
+   `intrange` in `TestGlobMatchesUnchanged` (`for n := 0; n <= 6; n++`), made `for n := range 7`; then `make preflight`:
+   passed; `go test ./...`: 38 ok; `make race`: 38 ok, both run before the loop's change, and `internal/fsx` and
+   `tool/builtin` rerun under race after it: ok. P10 touches nothing under `internal/cli`, so no `make perf`.
+8. **G-hosts,** 824 files shipped to each, after the loop's change: `go test` and race passed on both, 38 ok;
+   `make check-records markdownlint` passed on both; preflight stops at `verify-build-metadata`, as on every copy.
+   P10's six new tests, run alone with `-v`, passed on both hosts, none skipped: the Windows laptop makes symlinks.

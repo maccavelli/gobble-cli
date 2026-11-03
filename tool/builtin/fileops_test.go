@@ -1,6 +1,7 @@
 package builtin
 
 import (
+	"context"
 	"encoding/json/jsontext"
 	"errors"
 	"fmt"
@@ -55,7 +56,7 @@ func TestMove(t *testing.T) {
 
 	saved := moveCopy
 	defer func() { moveCopy = saved }()
-	moveCopy = func(ws fsx.Workspace, from, to string, info fs.FileInfo) (int, error) {
+	moveCopy = func(_ context.Context, ws fsx.Workspace, from, to string, info fs.FileInfo) (int, error) {
 		_ = ws.MkdirAll(to) //nolint:errcheck // a partial copy, for the move to remove
 		return 0, errors.New("disk full")
 	}
@@ -206,4 +207,101 @@ func TestMakeRoomKeepsDirectory(t *testing.T) {
 			}
 		}
 	}
+}
+
+// runCtx runs tl with args under env and ctx.
+func runCtx(ctx context.Context, tl tool.Tool, env tool.Env, args string) (tool.Result, error) {
+	return tl.Run(ctx, tool.Call{ID: "c1", Name: tl.Spec().Name, Args: jsontext.Value(args)}, env)
+}
+
+// A copy of ws/a to the real path of ws, then a/b, is a copy into itself,
+// refused, not a tree that grows until the deadline (0037-MADR F11, D11).
+func TestCopyIntoItselfRealPath(t *testing.T) {
+	base := t.TempDir()
+	real, ws := filepath.Join(base, "real"), filepath.Join(base, "ws")
+	if err := os.MkdirAll(filepath.Join(real, "a"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(real, "a", "x"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(real, ws); err != nil {
+		t.Skipf("no symlinks here: %v", err)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	to := filepath.Join(fsx.RealPath(ws), "a", "b")
+	r, err := runCtx(ctx, Copy(), tool.Env{Cwd: ws, Roots: []string{ws}}, fmt.Sprintf(`{"from":"a","to":%q}`, to))
+	if err != nil {
+		t.Fatalf("copy gave %v, want its refusal", err)
+	}
+	wantError(t, r, "a directory cannot be copied into itself")
+	if exists(to) {
+		t.Fatalf("%s was made", to)
+	}
+}
+
+// A symlink to a directory moves into it, and a symlink to the root is
+// deleted, as before: each acts on the link, not on what it names
+// (0037-PLAN-permission-and-file-tool-hardening.md, deviation 12).
+func TestRealPathKeepsLinks(t *testing.T) {
+	dir := project(t, map[string]string{"d/x": "x"})
+	if err := os.Symlink("d", filepath.Join(dir, "l")); err != nil {
+		t.Skipf("no symlinks here: %v", err)
+	}
+	if err := os.Symlink(dir, filepath.Join(dir, "rootlink")); err != nil {
+		t.Fatal(err)
+	}
+	wantText(t, runIn(t, Move(), dir, `{"from":"l","to":"d/l2"}`), "moved l to d/l2")
+	if info, err := os.Lstat(filepath.Join(dir, "d", "l2")); err != nil || info.Mode()&fs.ModeSymlink == 0 {
+		t.Fatalf("d/l2 is not the moved link: %v", err)
+	}
+	wantText(t, runIn(t, Delete(), dir, `{"path":"rootlink"}`), "deleted rootlink")
+	if exists(filepath.Join(dir, "rootlink")) || !exists(filepath.Join(dir, "d", "x")) {
+		t.Fatal("the delete did not remove the link alone")
+	}
+}
+
+// A cancelled copy of a 2,000-entry tree stops and copies fewer entries,
+// and a cancelled recursive delete removes none (0037-MADR D11).
+func TestCopyHonoursCancel(t *testing.T) {
+	files := map[string]string{}
+	for d := range 40 {
+		for f := range 49 {
+			files[fmt.Sprintf("tree/d%02d/f%02d", d, f)] = "x"
+		}
+	}
+	dir := project(t, files)
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	env := tool.Env{Cwd: dir, Roots: []string{dir}}
+	if _, err := runCtx(ctx, Copy(), env, `{"from":"tree","to":"copy"}`); !errors.Is(err, context.Canceled) {
+		t.Fatalf("copy gave %v, want context.Canceled", err)
+	}
+	if n := entriesUnder(t, filepath.Join(dir, "copy")); n >= 2000 {
+		t.Fatalf("the cancelled copy made %d entries, want fewer than 2000", n)
+	}
+	if _, err := runCtx(ctx, Delete(), env, `{"path":"tree","recursive":true}`); !errors.Is(err, context.Canceled) {
+		t.Fatalf("delete gave %v, want context.Canceled", err)
+	}
+	if n := entriesUnder(t, filepath.Join(dir, "tree")); n != 2000 {
+		t.Fatalf("the cancelled delete left %d entries, want 2000", n)
+	}
+}
+
+// entriesUnder is how many entries lie under dir, 0 when it does not exist.
+func entriesUnder(t *testing.T, dir string) int {
+	t.Helper()
+	n := -1
+	err := filepath.WalkDir(dir, func(_ string, _ fs.DirEntry, err error) error {
+		n++
+		return err
+	})
+	if errors.Is(err, fs.ErrNotExist) {
+		return 0
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	return n
 }

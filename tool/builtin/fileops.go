@@ -152,7 +152,7 @@ func shownTo(env tool.Env, typed, from, to, dest string) string {
 	return shown(env, filepath.Join(typed, filepath.Base(from)))
 }
 
-func runMove(_ context.Context, in moveIn, env tool.Env) (tool.Result, error) {
+func runMove(ctx context.Context, in moveIn, env tool.Env) (tool.Result, error) {
 	ws := workspace(env)
 	from, typedTo := resolve(env, in.From), resolve(env, in.To)
 	to := destination(env, from, typedTo)
@@ -171,7 +171,7 @@ func runMove(_ context.Context, in moveIn, env tool.Env) (tool.Result, error) {
 	}
 	err = ws.Rename(from, to)
 	if errors.Is(err, fsx.ErrCrossDevice) {
-		if _, err := moveCopy(ws, from, to, info); err != nil {
+		if _, err := moveCopy(ctx, ws, from, to, info); err != nil {
 			ws.RemoveAll(to) //nolint:errcheck,gosec // the partial copy; the source is untouched
 			return tool.Result{}, fmt.Errorf("move %s: the copy failed, and %s is as it was: %w", name, shown(env, in.From), unwrapPath(err))
 		}
@@ -183,7 +183,7 @@ func runMove(_ context.Context, in moveIn, env tool.Env) (tool.Result, error) {
 	return opResult("moved " + name), nil
 }
 
-func runDelete(_ context.Context, in deleteIn, env tool.Env) (tool.Result, error) {
+func runDelete(ctx context.Context, in deleteIn, env tool.Env) (tool.Result, error) {
 	ws := workspace(env)
 	abs := resolve(env, in.Path)
 	name := shown(env, in.Path)
@@ -202,7 +202,7 @@ func runDelete(_ context.Context, in deleteIn, env tool.Env) (tool.Result, error
 		}
 		return opResult("deleted " + name), nil
 	}
-	n, err := countEntries(ws, abs)
+	n, err := countEntries(ctx, ws, abs)
 	if err != nil {
 		return tool.Result{}, fmt.Errorf("delete %s: %w", name, unwrapPath(err))
 	}
@@ -215,7 +215,7 @@ func runDelete(_ context.Context, in deleteIn, env tool.Env) (tool.Result, error
 	return opResult(fmt.Sprintf("deleted %s/ (%s)", trimSlash(name), count(n, "entry", "entries"))), nil
 }
 
-func runCopy(_ context.Context, in copyIn, env tool.Env) (tool.Result, error) {
+func runCopy(ctx context.Context, in copyIn, env tool.Env) (tool.Result, error) {
 	ws := workspace(env)
 	from, typedTo := resolve(env, in.From), resolve(env, in.To)
 	to := destination(env, from, typedTo)
@@ -232,7 +232,7 @@ func runCopy(_ context.Context, in copyIn, env tool.Env) (tool.Result, error) {
 	if err := makeRoom(ws, "copy", env, in.To, to, info, in.Overwrite); err != nil {
 		return tool.Result{}, err
 	}
-	n, err := copyEntry(ws, from, to, info)
+	n, err := copyEntry(ctx, ws, from, to, info)
 	if err != nil {
 		return tool.Result{}, fmt.Errorf("copy %s: %w", name, unwrapPath(err))
 	}
@@ -291,8 +291,12 @@ var moveCopy = copyEntry
 
 // copyEntry copies from to to: a file atomically with its mode, a link as a
 // link, a directory entry by entry. It returns the entries copied under a
-// directory.
-func copyEntry(ws fsx.Workspace, from, to string, info fs.FileInfo) (int, error) {
+// directory, and stops before the next entry once ctx is done (0037-MADR
+// D11).
+func copyEntry(ctx context.Context, ws fsx.Workspace, from, to string, info fs.FileInfo) (int, error) {
+	if ctx.Err() != nil {
+		return 0, context.Cause(ctx)
+	}
 	switch {
 	case info.Mode()&fs.ModeSymlink != 0:
 		return 0, ws.CopyLink(from, to)
@@ -312,7 +316,7 @@ func copyEntry(ws fsx.Workspace, from, to string, info fs.FileInfo) (int, error)
 		if err != nil {
 			return n, err
 		}
-		sub, err := copyEntry(ws, filepath.Join(from, e.Name()), filepath.Join(to, e.Name()), ei)
+		sub, err := copyEntry(ctx, ws, filepath.Join(from, e.Name()), filepath.Join(to, e.Name()), ei)
 		if err != nil {
 			return n, err
 		}
@@ -322,16 +326,20 @@ func copyEntry(ws fsx.Workspace, from, to string, info fs.FileInfo) (int, error)
 }
 
 // countEntries is how many entries lie under the directory abs, at every
-// depth.
-func countEntries(ws fsx.Workspace, abs string) (int, error) {
+// depth. It stops before the next entry once ctx is done, so a recursive
+// delete can be cancelled before it removes anything (0037-MADR D11).
+func countEntries(ctx context.Context, ws fsx.Workspace, abs string) (int, error) {
 	entries, err := ws.ReadDir(abs)
 	if err != nil {
 		return 0, err
 	}
 	n := len(entries)
 	for _, e := range entries {
+		if ctx.Err() != nil {
+			return 0, context.Cause(ctx)
+		}
 		if e.IsDir() {
-			sub, err := countEntries(ws, filepath.Join(abs, e.Name()))
+			sub, err := countEntries(ctx, ws, filepath.Join(abs, e.Name()))
 			if err != nil {
 				return 0, err
 			}

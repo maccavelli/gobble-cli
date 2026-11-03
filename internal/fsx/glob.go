@@ -89,8 +89,21 @@ func compile(p string) (matcher, error) {
 		}
 		segs[i] = s
 	}
-	m.segs = segs
+	m.segs = collapse(segs)
 	return m, nil
+}
+
+// collapse is segs with each run of "**" made one, as git's wildmatch does:
+// a run matches what one does (0037-MADR D11).
+func collapse(segs []string) []string {
+	out := make([]string, 0, len(segs))
+	for _, s := range segs {
+		if s == "**" && len(out) > 0 && out[len(out)-1] == "**" {
+			continue
+		}
+		out = append(out, s)
+	}
+	return out
 }
 
 func (m matcher) match(rel string, dir bool) bool {
@@ -101,31 +114,30 @@ func (m matcher) match(rel string, dir bool) bool {
 }
 
 // matchSegs matches pattern segments against name segments, "**" taking
-// any number of them.
+// any number of them and a trailing one at least one. It fills a table of
+// whether pat[i:] matches name[j:] from the end, so each pair is decided
+// once: O(len(pat)·len(name)) (0037-MADR D11).
 func matchSegs(pat, name []string) bool {
-	for len(pat) > 0 {
-		if pat[0] == "**" {
-			rest := pat[1:]
-			if len(rest) == 0 {
-				return len(name) > 0
+	np, nn := len(pat), len(name)
+	w := nn + 1
+	t := make([]bool, (np+1)*w)
+	t[np*w+nn] = true
+	for i := np - 1; i >= 0; i-- {
+		row, next := t[i*w:(i+1)*w], t[(i+1)*w:(i+2)*w]
+		for j := nn; j >= 0; j-- {
+			switch {
+			case pat[i] == "**" && i == np-1:
+				row[j] = j < nn
+			case pat[i] == "**":
+				row[j] = next[j] || (j < nn && row[j+1])
+			case j < nn && next[j+1]:
+				// compile checked every segment, so Match cannot fail here.
+				ok, err := path.Match(pat[i], name[j])
+				row[j] = err == nil && ok
 			}
-			for i := 0; i <= len(name); i++ {
-				if matchSegs(rest, name[i:]) {
-					return true
-				}
-			}
-			return false
 		}
-		if len(name) == 0 {
-			return false
-		}
-		// compile checked every segment, so Match cannot fail here.
-		if ok, err := path.Match(pat[0], name[0]); err != nil || !ok {
-			return false
-		}
-		pat, name = pat[1:], name[1:]
 	}
-	return len(name) == 0
+	return t[0]
 }
 
 // trailingEscape reports whether p ends in a backslash that escapes

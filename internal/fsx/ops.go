@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"syscall"
 )
 
@@ -155,10 +156,12 @@ func (w Workspace) chmod(abs string, mode fs.FileMode) error {
 }
 
 // IsRoot reports whether abs is a workspace root, or a directory above one,
-// which delete refuses.
+// which delete refuses: as spelled, or as realEntry has abs against the
+// root's real path (0037-MADR D11).
 func (w Workspace) IsRoot(abs string) bool {
+	entry := realEntry(abs)
 	for _, r := range w.Roots {
-		if within(abs, r) {
+		if within(abs, r) || UnderDir(RealPath(r), entry) {
 			return true
 		}
 	}
@@ -189,6 +192,21 @@ func closeRoot(r *os.Root) {
 	}
 }
 
-// Inside reports whether to is from or under it: a move or a copy of a
-// directory into itself.
-func Inside(from, to string) bool { return within(from, to) }
+// Inside reports whether to is from or under it, as spelled or as
+// realEntry has them: a move or a copy of a directory into itself
+// (0037-MADR D11).
+func Inside(from, to string) bool {
+	return within(from, to) || UnderDir(realEntry(to), realEntry(from))
+}
+
+// realEntry is p with its directory's real path and its own name as it is.
+// A move, a copy or a delete acts on a link itself, so the last name is not
+// followed (0037-PLAN-permission-and-file-tool-hardening.md, deviation 12).
+func realEntry(p string) string {
+	p = filepath.Clean(p)
+	dir := filepath.Dir(p)
+	if dir == p {
+		return p
+	}
+	return filepath.Join(RealPath(dir), filepath.Base(p))
+}

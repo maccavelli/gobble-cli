@@ -190,3 +190,31 @@ func TestLockPair(t *testing.T) {
 	unlock := LockPair(a, a) // the same path twice is one lock
 	unlock()
 }
+
+// Through a root that is a symlink, its real path and the directory above
+// it are a root to IsRoot, and a path under the real one is Inside a path
+// under the link (0037-MADR D11).
+func TestIsRootRealPath(t *testing.T) {
+	base := t.TempDir()
+	real, link := filepath.Join(base, "real"), filepath.Join(base, "ws")
+	mkdir(t, filepath.Join(real, "a"))
+	if err := os.Symlink(real, link); err != nil {
+		t.Skipf("no symlinks here: %v", err)
+	}
+	w := Workspace{Roots: []string{link}}
+	r := RealPath(link)
+	for _, c := range []struct {
+		abs  string
+		want bool
+	}{{link, true}, {r, true}, {filepath.Dir(r), true}, {filepath.Join(r, "a"), false}} {
+		if got := w.IsRoot(c.abs); got != c.want {
+			t.Errorf("IsRoot(%q) = %v, want %v", c.abs, got, c.want)
+		}
+	}
+	if !Inside(filepath.Join(link, "a"), filepath.Join(r, "a", "b")) {
+		t.Error("the real path under ws/a is not Inside ws/a")
+	}
+	if Inside(filepath.Join(link, "a"), filepath.Join(r, "b")) {
+		t.Error("a sibling of ws/a is Inside it")
+	}
+}
