@@ -16,12 +16,16 @@ const outputKeep = 7 * 24 * time.Hour
 // outputPattern names the files: 0003-MADR's gobble-bash-<id>.log.
 const outputPattern = "gobble-bash-*.log"
 
+// spillCap is the most a spill file holds (0037-MADR D9). Past it the
+// output is still counted, and its tail kept, but no more is written.
+var spillCap = 256 << 20
+
 // spill collects a command's combined output. It holds the output in memory
 // until it passes maxLines lines or maxBytes bytes; from then on everything
-// goes to a file in dir, and only the last tailKeep bytes stay in memory for
-// the model. exec calls Write from one goroutine at a time when stdout and
-// stderr are the same writer, but the lock keeps that from being a promise
-// the tool relies on.
+// goes to a file in dir, up to spillCap, and only the last tailKeep bytes
+// stay in memory for the model. exec calls Write from one goroutine at a
+// time when stdout and stderr are the same writer, but the lock keeps that
+// from being a promise the tool relies on.
 type spill struct {
 	dir string
 
@@ -32,6 +36,8 @@ type spill struct {
 	last     byte
 	file     *os.File
 	path     string
+	saved    int   // the bytes written to the file
+	cut      bool  // the file stopped at spillCap
 	err      error // the first error writing the file
 }
 
@@ -54,14 +60,25 @@ func (s *spill) Write(p []byte) (int, error) {
 		}
 		return len(p), nil
 	}
-	if s.err == nil {
-		if _, err := s.file.Write(p); err != nil {
-			s.err = err
-		}
-	}
+	s.save(p)
 	s.mem = append(s.mem, p...)
 	s.trim()
 	return len(p), nil
+}
+
+// save writes p to the file, up to spillCap in all; what is past it is cut.
+func (s *spill) save(p []byte) {
+	if s.err != nil || s.cut {
+		return
+	}
+	if room := spillCap - s.saved; len(p) > room {
+		p, s.cut = p[:room], true
+	}
+	n, err := s.file.Write(p)
+	s.saved += n
+	if err != nil {
+		s.err = err
+	}
 }
 
 // open starts the file with what is in memory, once. A failure keeps the
@@ -79,9 +96,7 @@ func (s *spill) open() {
 		return
 	}
 	s.file, s.path = f, f.Name()
-	if _, err := f.Write(s.mem); err != nil {
-		s.err = err
-	}
+	s.save(s.mem)
 	s.trim()
 }
 

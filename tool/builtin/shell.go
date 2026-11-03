@@ -169,7 +169,9 @@ func outputResult(out *spill, status int, stopped bool, note string, timeout, ma
 	var b strings.Builder
 	if t.truncated() || out.file != nil {
 		whole := "the whole output could not be saved: " + errText(out.err)
-		if out.err == nil && out.path != "" {
+		if out.err == nil && out.cut {
+			whole = fmt.Sprintf("the output is in %s; the file holds the first %d MiB", out.path, spillCap>>20)
+		} else if out.err == nil && out.path != "" {
 			whole = "the whole output is in " + out.path
 		} else if out.err == nil {
 			whole = "the whole output was not saved"

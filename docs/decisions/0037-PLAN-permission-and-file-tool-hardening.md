@@ -495,7 +495,8 @@ Files:
 Files:
 
 * `tool/builtin/output.go`;
-* `tool/builtin/output_test.go`.
+* `tool/builtin/output_test.go`;
+* by deviation 11: `tool/builtin/shell.go` and `docs/architecture.md`.
 
 1. **The cap.**
    * `spillCap` is a package variable, `256 << 20`.
@@ -1306,3 +1307,48 @@ The base is P7's `e042fef`, with P8 held in the tree. Deviations 9 and 10.
    * The first attempt at these gates shipped nothing: the scratch host-gate script was missing, and the Windows runs
      it went on to tested the copy left there by P8's run, which is why their trust timings were still 1.30–1.42 s. The
      script was written again, and the gates above are its second run, the shipped copy checked to hold `spread`.
+
+### Deviation 11 (2026-11-03): P9, the notice is written in shell.go, and architecture.md's line
+
+- **Found** reading the code before P9's first write.
+  * The notice that names the spill file is built by `outputResult` (`tool/builtin/shell.go:170-177`, "the whole output
+    is in <path>"), not in `output.go`; step 2 cannot add its note without `shell.go`, which is not in P9's list.
+  * `docs/architecture.md:101` says bash keeps "the whole output of long commands", which is no longer true past the cap.
+  * A gap in the list, not a failure; nothing is broken before P9.
+- **The owner's answer:** "Add both files to P9 (Recommended)". The option not taken was `shell.go` in P9 and the
+  architecture line at P11.
+- **Decision.** A cut spill's notice reads "the output is in <path>; the file holds the first <cap>", the size written
+  from `spillCap`, so the test's 1 MiB cap reads "1 MiB". A spill under the cap keeps today's "the whole output is in
+  <path>", so `TestBashLongOutput` is unchanged. `docs/architecture.md:101` says the output is kept "up to 256 MiB".
+- **Files added:** `tool/builtin/shell.go` and `docs/architecture.md`.
+
+### P9 record (2026-11-03): the spill file's cap
+
+The base is P8 and P8a's `f7e1f1f`. Deviation 11.
+
+1. **The cap** (step 1): `spillCap` (`tool/builtin/output.go`) is a package variable, `256 << 20`. `spill.save` writes to
+   the file at most `spillCap` bytes in all, `saved` counting them; the write that reaches past it is written up to the
+   cap and sets `cut`, and nothing more is written. `open`'s first write of what was in memory goes through `save` too.
+   `Write` still counts every byte and line and keeps the tail in memory; only the file stops.
+2. **The result** (step 2, deviation 11): `outputResult` (`tool/builtin/shell.go`), for a cut file with no write error,
+   says "the output is in <path>; the file holds the first <n> MiB", `n` being `spillCap>>20`. An uncut spill keeps
+   "the whole output is in <path>", so `TestBashLongOutput` is unchanged. `docs/architecture.md`'s `tool/builtin` row
+   says the output of long commands is kept "up to 256 MiB".
+3. **Tests** (step 3): `TestSpillCap` (`tool/builtin/output_test.go`, a new file) sets `spillCap` to 1 MiB and writes
+   4 MiB of 64-byte lines in 3000-byte chunks, so one write straddles the cap. The file is exactly the output's first
+   1 MiB; the byte and line counts are the whole output's; the tail is `tailKeep` bytes and the output's last; the
+   result names the file and "the file holds the first 1 MiB", and ends with the last line. No test in the package runs
+   in parallel, so setting the variable is safe.
+4. **Seen failing** (step 4, C9), each on a scratch copy:
+
+   | Break | The failure |
+   | :--- | :--- |
+   | no cap, every byte written (the step's) | `file holds 4194304 bytes, want the output's first 1048576` |
+   | the cut file named as the whole output | `result does not say "the output is in <tmp>/gobble-bash-<n>.log; the file holds the first 1 MiB)"` |
+   | the tail kept no more once the file is cut | `tail is 102400 bytes, want the output's last 102400` |
+
+5. **G-local:** `make pre-add-check` on the 3 Go files: clean; `make preflight`: passed; `go test ./...`: 38 ok;
+   `make race`: 38 ok. P9 touches nothing under `internal/cli`, so no `make perf`.
+6. **G-hosts,** 824 files shipped to each: `go test` and race passed on both, 38 ok; `make check-records markdownlint`
+   passed on both; preflight stops at `verify-build-metadata`, as on every copy. `TestSpillCap` and
+   `TestBashLongOutput`, run alone with `-v`, passed on both hosts.
