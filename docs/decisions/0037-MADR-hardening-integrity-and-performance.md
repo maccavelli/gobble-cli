@@ -384,7 +384,7 @@ sibling library provides: AGENTS.md's rule is that gobble waits for the library.
   * `!command` header values not cached (0005-PLAN F4-2b).
 * **Noted and not taken:**
   * session appends are one write per line with no fsync, which survives a process crash and loses at most the tail on
-    power loss;
+    power loss *(2026-11-04: now a decision, D39, Q10 (a))*;
   * `proctree`'s `Exited` sends only SIGTERM to an orphan;
   * `toolsearch` recomputes document frequency per search, which is trivial at real tool counts;
   * `go test ./internal/auth` takes about 27 s because a test waits out the lock policy.
@@ -532,6 +532,9 @@ plan may tune one only through a deviation.
   * The entry joins `l.entries` only after the write succeeds.
   * `Open`, which holds the writer's lock, cuts an unparseable last line that has no newline, a torn write. It logs the
     bytes cut once.
+
+  *(2026-11-04: carried out by `0037-PLAN-session-store-durability.md`, not plan 2 (D36). How it is built, including
+  the failed `create` and the Windows truncate, is D37.)*
 * **D17. The log redacts secrets by value, and caps long strings (F17).**
   * `redact` keeps its key rule, and adds `cookie`, `set-cookie`, `proxy-authorization`, `credential` and
     `credentials`.
@@ -631,6 +634,10 @@ plan may tune one only through a deviation.
 
   Before plan 1's first phase, 0035's uncommitted P17 is committed to `feature/p17-lineedit`, leaving `main`'s tree
   clean (Q6 (a)).
+
+  *(2026-11-04, by the amendment's D36 and Q8 (a): a fourth plan,
+  [0037-PLAN-session-store-durability.md](0037-PLAN-session-store-durability.md), carries D16 and D37–D41 and needs
+  none of the others. Plan 2 keeps D12–D15 and D17–D22.)*
 * **D35. The upstream items are the owner's issues, filed 2026-10-30:** [go-llmprovider-sdk#10](https://github.com/maccavelli/go-llmprovider-sdk/issues/10) for the header option, and [acp-go-sdk2#13](https://github.com/maccavelli/acp-go-sdk2/issues/13) for
   back-pressure (Q7). gobble adopts each when a tag carries it, through a record of its own.
 
@@ -694,6 +701,114 @@ it.
 
   *Answered: the owner had already filed both on 2026-10-30, as [go-llmprovider-sdk#10](https://github.com/maccavelli/go-llmprovider-sdk/issues/10) and [acp-go-sdk2#13](https://github.com/maccavelli/acp-go-sdk2/issues/13), and both are being worked on.*
 
+### Amendment (2026-11-04): the session store, and gobble-cli#7's U3
+
+On 2026-11-04 the owner asked to assess [gobble-cli#7](https://github.com/maccavelli/gobble-cli/issues/7): "ensure it is
+actually still open … if it is open we need to work on that to get it completed and optimized." Four of #7's five units
+are settled by [0039-MADR-one-json-v2-encoder-and-invalid-utf8-policy.md](0039-MADR-one-json-v2-encoder-and-invalid-utf8-policy.md).
+The fifth, U3 (the `session/jsonl` store's hardening), is not, and this record never received it:
+
+* **The handoff did not land.** 0039-MADR D22 (2026-10-31) passed three items to this record: "an `fsync` policy and an
+  entry size cap for the session store", and "0038's `bytes.Lines` for reading a session file", for the performance
+  category. This record, written a day earlier, has no decision for any of them. Only D16 touches the store, and its
+  plan (D34's plan 2) is not written.
+* **The code, re-read on 2026-11-04 at `67f72fb`:**
+  * `Append` adds the entry to `l.entries` before it writes (`session/jsonl/store.go:309`), and `write` returns a failed
+    write's error without marking the log torn (`:375-377`). F16 stands as surveyed.
+  * `create` deletes the pending id and marks the log written before its write (`:352-356`). A failed first write leaves
+    a partial file and a log that believes it is on disk.
+  * Nothing calls `Sync`. `parse` builds a slice of every line with `bytes.Split` before decoding one (`:192`).
+  * No test kills a writer. `TestMalformedAndTornLines` (`session/jsonl/store_test.go:148-183`) plants a torn line by
+    hand and expects it skipped, not cut.
+* **#7's size cap rests on a misreading.** #7 asks for a write-side cap "mirroring the 1 MiB read cap mcremote applies"
+  on engine frames. magic-cli-remote's 1 MiB is its WebSocket frame to the phone
+  (magic-cli-remote `internal/provider/output/output.go:15`, `internal/config/config.go:106-109`). magic-cli-remote does
+  not read gobble's session files, and gobble's own reader reads a file whole, with no line limit (`store.go:172`). One
+  legitimate entry can be large: `read` loads an image of up to 20 MiB (`tool/builtin/read.go:35`), base64 in the
+  entry.
+* **An `O_APPEND` file cannot be cut through its own handle on Windows.** Go 1.27.3 opens it without `FILE_WRITE_DATA`
+  (`syscall/syscall_windows.go:385-393`), which setting a file's end needs. D16's truncate must open the path. The
+  plan's first step confirms this on the Windows laptop before any code depends on it.
+
+The owner answered three questions on 2026-11-04:
+
+* **Q8. Where U3's work goes.**
+  * **(a) Recommended.** A plan of its own, `0037-PLAN-session-store-durability.md`, carrying D16 and D36–D41. Plan 2
+    keeps D12–D15 and D17–D22.
+  * **(b)** The whole of plan 2, D12–D22, with the store first.
+
+  *Answered: (a), "Own small plan".*
+* **Q9. A cap on a session entry's size.**
+  * **(a) Recommended.** No cap, decided and recorded. An entry is bounded where it is made.
+  * **(b)** A ceiling well above any source, such as 64 MiB.
+  * **(c)** 1 MiB, as #7 asks.
+
+  *Answered: (a), "No cap, recorded".*
+* **Q10. An `fsync` policy for appends.**
+  * **(a) Recommended.** None. A process crash loses no entry `Append` returned for, and power loss can lose the tail,
+    which D16's cut leaves clean.
+  * **(b)** One sync at the end of each turn.
+  * **(c)** A sync for every append.
+
+  *Answered: (a), "None, keep 0037's call".*
+
+The decisions, written to those answers:
+
+* **D36. The session store has a plan of its own, which closes #7's U3 (Q8 (a)).**
+  * D34 gains a fourth plan, `0037-PLAN-session-store-durability.md`, carrying D16 and D37–D41. It needs none of the
+    other three.
+  * D34's plan 2 keeps D12–D15 and D17–D22.
+  * This record is the receiving end of 0039-MADR D22's store items. The wire's 10 MiB frame bound, also sent here by
+    D22, stays with plan 2's resource bounds and is not in this plan.
+* **D37. D16, as it is built.**
+  * The log keeps its file's size in memory. `Open` sets it from the bytes it read, and each write that succeeds
+    advances it. No append adds a `stat`.
+  * A write that fails, wholly or in part, is cut back to that size through the path (`os.Truncate`), never through the
+    append handle. When the cut fails too, the log is marked torn, so the next line starts on a line of its own.
+  * The entry joins `l.entries` only after its write succeeds. A failed `Append` leaves `Entries` as it was.
+  * For `create`, the size before is "no file". A failed first write closes and removes the new file, releases the
+    lock, and returns the id to pending. The log stays unwritten, holding the entries before the failed one, so the
+    next `Append` tries `create` again.
+  * `Open` cuts the last line only when all three hold: the file is of the current version, since an older file is
+    never written; the line has no newline; and it does not decode as an entry. The cut is logged once at Warn, with the
+    file's base name and the bytes cut. A complete entry that only lacks its newline is kept, and the next line starts
+    on its own, as today.
+  * `Read` holds no lock and never cuts.
+  * A writer killed during `create`'s write can leave a torn header. `Open` and `Read` report that file as
+    `session.ErrCorrupt`, as today. It is not cut, since an empty file is no less corrupt.
+  * The package comment's "A file is never rewritten" gains its one exception: under the writer lock, gobble cuts the
+    bytes of its own failed append, and an unparseable torn last line.
+* **D38. A session entry has no size cap (Q9 (a)).**
+  * An entry is bounded where it is made: D12 for mentions, D13's 256 KiB backstop for a tool result, `read`'s 20 MiB
+    for an image.
+  * A store cap would refuse a turn's record after the turn had run, and leave the live session ahead of its file,
+    which D15 exists to prevent.
+  * magic-cli-remote's 1 MiB is a WebSocket frame, not a reader of these files. #7's request is answered by this
+    decision, not met.
+* **D39. Appends are not synced (Q10 (a)).**
+  * This turns the survey's "noted and not taken" into the decision #7 asked for.
+  * A process crash or kill loses no entry `Append` returned for: the operating system holds the bytes. Power loss or a
+    kernel crash can lose the last entries, and can leave a torn last line. D37's cut leaves that file clean on the next
+    `Open`.
+  * The package comment and `docs/architecture.md`'s `session/jsonl` row say so.
+* **D40. A writer killed mid-append reopens with every acknowledged entry (#7's U3 acceptance).**
+  * A test re-runs its own binary as a writer that appends large entries and reports each `Append` that returned. The
+    test kills it, by `Process.Kill` on every host, then opens the file and checks:
+    * every entry the writer reported is present, in order;
+    * at most the one entry being written when it died is missing;
+    * a torn tail was cut and logged, with the bytes the file lost;
+    * the next `Append` writes a file that reads back with nothing skipped.
+  * One round kills the writer during its loop, wherever the kill lands. Another has the writer leave half a line on
+    disk itself before it is killed, so the torn path runs on every host, every time.
+  * It runs in `go test ./...` on all three hosts, and under `-race`.
+* **D41. A session file is read line by line, without first slicing every line (0038's item).**
+  * `parse` iterates with `bytes.Lines` (Go 1.24). It keeps the per-line skip and warning that Pi's format needs, which
+    a streaming `jsontext.Decoder` would not.
+  * A benchmark measures `parse` before and after, with `-benchmem`. The gain claimed is only what it shows. If it
+    shows none, the change is not made, and the plan records why.
+  * `FuzzParse` and the fixture tests are unchanged and pass.
+  * D24's streaming summaries for `List` stay plan 3's.
+
 ### Consequences
 
 * Good, because the one finding that destroys data (F1) and the one that turns a write into code execution (F2) are
@@ -712,6 +827,14 @@ it.
 * Bad, because three plans of about thirty decisions are a long piece of work. It runs while 0035 waits.
 * Bad, because the cut values (256 MiB, 20 KB, 16,000 characters, 2,048 characters, 1 MiB, 512 bytes) are judgement,
   not measurement, and some may need tuning.
+* Good, because a failed append leaves the session file and the session in memory as they were, on every host, and a
+  killed writer's session reopens with every entry it acknowledged (D37, D40). *(Added 2026-11-04.)*
+* Neutral, because `TestMalformedAndTornLines` changes what it expects: the torn line it plants is cut by `Open`, so
+  one line is skipped where two were (D37). *(Added 2026-11-04.)*
+* Bad, because power loss can still lose the last entries of a session (D39), and #7's entry cap is declined rather
+  than built (D38). *(Added 2026-11-04.)*
+* Bad, because the store gains a test seam, two unexported function fields for opening and cutting a file, so that a
+  short write can be made on every host (D37). *(Added 2026-11-04.)*
 
 ### Confirmation
 
@@ -736,8 +859,11 @@ it.
   * a heredoc secret and a `Bearer` header (D17);
   * an alternating loop (D30);
   * the anchored and unanchored estimates (D31).
+  * *(Added 2026-11-04:)* a short write, a failed cut, a failed first write, and a torn last line in a current and in
+    an older file (D37); a writer killed mid-append, and one killed with half a line on disk (D40); `parse` before and
+    after, by benchmark (D41).
 * Each performance decision's benchmark shows its gain against the survey's figure, and is held to its budget by
-  `make perf` on all three hosts (D33).
+  `make perf` on all three hosts (D33). D41's benchmark is measured and recorded, not held to a budget.
 * The gates at each phase are those of every plan here:
   * `make pre-add-check`, `make preflight` and `make race` locally;
   * the same and `make perf` on the Linux machine and the Windows laptop;
@@ -790,6 +916,10 @@ it.
     jitters.)*
   * [0030-MADR-resize-and-performance.md](0030-MADR-resize-and-performance.md): D5's budgets;
   * [0004-MADR-go-module-architecture.md](0004-MADR-go-module-architecture.md): the client's queue.
+  * *(Added 2026-11-04:)* [0039-MADR-one-json-v2-encoder-and-invalid-utf8-policy.md](0039-MADR-one-json-v2-encoder-and-invalid-utf8-policy.md):
+    D22, whose store items the amendment receives;
+    [0038-REPORT-json-v2-standardization-and-sdk-surface.md](../reports/0038-REPORT-json-v2-standardization-and-sdk-surface.md):
+    section 8's U3 and its `bytes.Lines` item; [gobble-cli#7](https://github.com/maccavelli/gobble-cli/issues/7): U3.
 * **Revisit:**
   * the cut values in D9, D10, D12, D13 and D17, once the plans' tests and real use show where they bind;
   * D24's summary cache, if a list is still slow at a user's real session count;

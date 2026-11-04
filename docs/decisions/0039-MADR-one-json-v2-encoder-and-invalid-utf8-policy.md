@@ -743,6 +743,10 @@ decisions below are written to those answers (More Information, "The owner's ans
   * the agent's twenty `_gobble/*` methods through `acp.Handle`. It changes a decode failure's error data from `reason`
     to `error`, which is a wire change of its own;
   * #7's U3: an `fsync` policy and an entry size cap for the session store, both durability decisions;
+    *(2026-11-04: received by
+    [0037-MADR-hardening-integrity-and-performance.md](0037-MADR-hardening-integrity-and-performance.md)'s amendment,
+    D36–D41, with 0038's `bytes.Lines` item below; carried out by
+    [0037-PLAN-session-store-durability.md](0037-PLAN-session-store-durability.md).)*
   * the wire's 10 MiB frame bound for diffs and `rawInput`, for 0037's resource bounds;
   * acp-go-sdk2's own `acptest` (0035-MADR D18);
   * acp-go-sdk2 `v1.29.0` and `OverflowBlock`, which is [gobble-cli#8](https://github.com/maccavelli/gobble-cli/issues/8)'s.
