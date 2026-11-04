@@ -131,7 +131,7 @@ and the owner chose to ask go-tui-lib for the composition it needs
 into P18a and P18b, is proposed and waits for the owner's review. `0039-PLAN-one-json-v2-encoder-and-invalid-utf8-policy.md`'s
 P1 runs before P23 (0039-MADR Q1). See the execution record.*
 
-*Deviation 22 (2026-11-03), proposed: P27 pins acp-go-sdk2 `v1.31.2`, then P28 go-selfupdate-lib `v1.24.0`, each on
+*Deviation 22 (2026-11-03), approved by the owner's "committed, proceed": P27 pins acp-go-sdk2 `v1.31.2`, then P28 go-selfupdate-lib `v1.24.0`, each on
 the owner's word, after P19. See the execution record.*
 
 ## Questions this plan adds
@@ -3225,3 +3225,24 @@ The base is P18b's `94aed06`. No deviation.
     it to `complete`.
 - **Files added to scope:** P27's `go.mod`, `go.sum`, `README.md` and `docs/architecture.md`; P28's the same and
   `.github/workflows/ci.yml`.
+- **Approved** 2026-11-03 by the owner's "committed, proceed", after the records commit `73bd6c2`.
+
+### P27 record (2026-11-03): acp-go-sdk2 `v1.31.2`
+
+The base is `73bd6c2`, the records commit of deviation 22. No deviation.
+
+1. **C2:** `git ls-remote --tags` at the phase's start lists `v1.31.2` as acp-go-sdk2's newest `v1` tag.
+2. **Checked first** (step 1): `python3 scripts/check_libs.py --lib acp-go-sdk2 --tag v1.31.2`, "pinned v1.31.1,
+   checking v1.31.2": 13 checks, "0 failing checks".
+3. **The pin** (step 2): `go get github.com/maccavelli/acp-go-sdk2@v1.31.2` ("upgraded … v1.31.1 => v1.31.2"), then
+   `go mod tidy`. `go.mod` changed on acp-go-sdk2's line alone; `go.sum` lost the two `v1.31.1` lines and gained the
+   two `v1.31.2` lines, the `go.mod` hash unchanged, and nothing else.
+4. **No source change** (step 3): `go test -count=1 ./acpclient/... ./acpserver/... ./internal/cli/` passed, `acpclient`,
+   `acpclient/acptest`, `acpserver` and `internal/cli` ok. After the gates, `git status` showed only the phase's four
+   files, so no golden changed.
+5. **The docs** (step 4): `README.md:129` and `docs/architecture.md:176` name `v1.31.2`; neither names `v1.31.1`.
+6. **G-local:** no Go file changed, so `make pre-add-check` had none to check; `make preflight`: passed; `make race`: 38
+   ok. P27 touches nothing under `internal/cli`, so no `make perf`.
+7. **G-hosts,** on the Linux machine and the Windows laptop, with 824 files shipped to each: `go test` and race passed
+   on both, 38 ok; `make check-records markdownlint` passed on both; preflight stops at `verify-build-metadata`, as on
+   every copy.

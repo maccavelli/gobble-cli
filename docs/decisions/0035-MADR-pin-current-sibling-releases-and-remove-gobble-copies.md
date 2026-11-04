@@ -444,7 +444,7 @@ policy. And one record keeps the order, and the cross-library facts (check-libs,
     `0039-PLAN-one-json-v2-encoder-and-invalid-utf8-policy.md`'s deviations 14 and 18 recorded in another test, and
     nothing of go-selfupdate-lib's changed.*
 
-  *Amended 2026-11-03, by the PLAN's deviation 22, **proposed** for the owner's approval, from the owner's request
+  *Amended 2026-11-03, by the PLAN's deviation 22, accepted 2026-11-03 by the owner's "committed, proceed", from the owner's request
   "assess go-llmprovider-sdk, acp-go-sdk2, go-selfupdate-lib and go-tui-lib and update our pins accordingly." Each tag
   is the newest of its major by `git ls-remote --tags` and the Go module proxy that day:*
   - ***acp-go-sdk2 `v1.31.2`** (`69eff662951c4e6457e55590d7d50e302dc395d3`, 2026-11-03), its GitHub release marked
