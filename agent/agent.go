@@ -104,6 +104,11 @@ type Agent struct {
 	tools    map[string]tool.Tool // the tools a call may name
 	direct   []tool.Spec          // the specs sent, in order
 	deferred []tool.Tool          // the tools behind tool_search, in Config order
+	// deferredSpecs are every deferred tool's spec, loaded or not, in
+	// Config order, as Request.Deferred carries them: the adapter sends a
+	// loaded one natively when its load survives in the history it sends,
+	// and as an ordinary tool otherwise (0012-MADR D16, D17).
+	deferredSpecs jsontext.Value
 }
 
 // New returns an Agent. It panics if two tools share a name, which is a
@@ -126,11 +131,13 @@ func New(cfg Config) *Agent {
 		loaded[n] = true
 	}
 	deferring := false
+	var deferredSpecs []tool.Spec
 	for _, t := range cfg.Tools {
 		switch s := t.Spec(); s.Exposure {
 		case tool.ExposureHidden:
 		case tool.ExposureDeferred:
 			deferring = true
+			deferredSpecs = append(deferredSpecs, s)
 			if !loaded[s.Name] {
 				a.deferred = append(a.deferred, t)
 			}
@@ -138,6 +145,7 @@ func New(cfg Config) *Agent {
 			a.offer(t)
 		}
 	}
+	a.deferredSpecs = encodeSpecs(deferredSpecs)
 	// tool_search goes before the loaded tools and stays while any tool is
 	// deferred, loaded or not, so a load made in a turn keeps its place at
 	// the next prompt (0012-MADR D19).
@@ -660,7 +668,11 @@ func (t *turn) call() (*reply, error) {
 		msgs = append(msgs, llm.Message{Role: llm.RoleSystem, Content: []llm.Content{{Type: llm.ContentText, Text: t.system}}})
 	}
 	msgs = append(append(msgs, t.history...), t.added...)
-	req := &llm.Request{Model: t.a.cfg.Model, Messages: msgs, Tools: t.specs, Thinking: t.a.cfg.Thinking, Cache: t.a.cfg.Cache}
+	req := &llm.Request{Model: t.a.cfg.Model, Messages: msgs, Tools: t.specs, Thinking: t.a.cfg.Thinking, Cache: t.a.cfg.Cache,
+		Deferred: t.a.deferredSpecs}
+	if s := t.a.cfg.Search; s != nil && len(req.Deferred) > 0 && t.tools[s.Spec().Name] != nil {
+		req.Search = s.Spec().Name
+	}
 	r := &reply{}
 	var retrying RetryCause // the provider's retry under way, ended when its events begin
 	endRetry := func(why string) {
@@ -760,14 +772,22 @@ func (t *turn) runTools(calls []llm.ToolCallDone) (llm.Message, bool) {
 			break
 		}
 		m.Content = append(m.Content, llm.Content{Type: llm.ContentToolResult, ToolCallID: c.ID, ToolName: c.Name, Text: res.Text(), IsError: res.IsError})
-		if len(res.Load) > 0 && !res.IsError {
-			if names := t.load(res.Load); len(names) > 0 && !t.emit(Loaded{Names: names}) {
-				return m, false
+		// A load is named on the result that made it, and its event names
+		// the call, so a later request can replay it (0012-MADR D16, D18).
+		loads := func(names []string) bool {
+			if len(names) == 0 {
+				return true
 			}
+			last := &m.Content[len(m.Content)-1]
+			last.Loads = append(last.Loads, names...)
+			return t.emit(Loaded{Names: names, CallID: c.ID})
+		}
+		if len(res.Load) > 0 && !res.IsError && !loads(t.load(res.Load)) {
+			return m, false
 		}
 		if load := t.grantLoad; len(load) > 0 {
 			t.grantLoad = nil
-			if names := t.load(load); len(names) > 0 && !t.emit(Loaded{Names: names}) {
+			if !loads(t.load(load)) {
 				return m, false
 			}
 		}

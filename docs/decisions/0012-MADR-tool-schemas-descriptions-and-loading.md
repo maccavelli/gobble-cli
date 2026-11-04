@@ -666,18 +666,32 @@ phase that it changes.)
   - **`llm.Content` gains `Loads`,** on a `ContentToolResult`: the deferred tools that result loaded, each family
     expanded, in load order.
   - **The adapter, `llm/provider`'s `toRequest`, builds the SDK's request:**
-    - the SDK's `Tools` are the entries of `Tools` that `Deferred` does not name, in order, then each `Deferred` spec
-      with `Deferred: true`, and the `Search` tool has `Search: true`;
+    - ~~the SDK's `Tools` are the entries of `Tools` that `Deferred` does not name, in order, then each `Deferred` spec
+      with `Deferred: true`, and the `Search` tool has `Search: true`;~~ *(Refined 2026-11-04,
+      0012-PLAN-native-tool-deferral.md deviation 3, the owner's choice: the adapter, which sees the history after
+      `replay` has dropped what it drops, decides D17.)*
+    - the SDK's `Tools` are the entries of `Tools`, in order, less those `Deferred` names whose load some result in
+      the replayed history carries; then each `Deferred` spec not kept as an ordinary tool, with `Deferred: true`;
+      and the `Search` tool has `Search: true`. A tool in both `Tools` and `Deferred` whose load no surviving result
+      carries stays an ordinary tool, in its place (D17);
     - after each `FunctionCallOutputItem`, it adds one `ToolLoadItem` for each name in that result's `Loads` that
       `Deferred` holds;
     - with `Deferred` empty, the request is today's, field for field.
   - **gobble has no per-provider switch.** The form is the SDK's (F21's table). Q5 (b) would add the only exception.
 - **D17. A load the request cannot replay is sent as an ordinary tool.**
-  - A loaded tool whose loading result is not in the request's history goes in `Tools`, not in `Deferred`. That is:
+  - ~~A loaded tool whose loading result is not in the request's history goes in `Tools`, not in `Deferred`.~~
+    *(Refined 2026-11-04, 0012-PLAN-native-tool-deferral.md deviation 3: `llm/provider`'s `replay` drops a
+    cancelled turn's last assistant message and its results (`llm/provider/replay.go:49-74`). A load made there
+    would be in the agent's history but not in what the SDK receives, and a tool sent deferred with no load is
+    hidden from the model. So the agent names every deferred tool in `Deferred`, and the adapter decides, after
+    `replay`.)* A loaded tool whose load no result in the replayed history carries is sent as an ordinary tool, in
+    its place in `Tools`. That is:
     - a session-start family (D9 item 1);
     - a tool loaded before a compaction that dropped its result;
     - a load recorded before this amendment, which names no call.
-  - The turn works this out again after a compaction. The compaction has already started a new prefix, so the cache
+    - *(2026-11-04, deviation 3)* a tool loaded by a cancelled turn's last step, which `replay` does not send.
+  - ~~The turn works this out again after a compaction.~~ Every request is decided afresh, so a compaction needs
+    nothing of its own *(2026-11-04, deviation 3)*. The compaction has already started a new prefix, so the cache
     loses nothing more.
 - **D18. A load is recorded with the call that made it.**
   - `agent.Loaded` gains `CallID`, and the `gobble.tools` entry gains `callId`.

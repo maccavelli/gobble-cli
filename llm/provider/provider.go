@@ -445,7 +445,8 @@ func toolSpecs(v jsontext.Value, what string) ([]toolSpec, error) {
 // toRequest maps llm's request onto the SDK's. Deferred tools go as the
 // SDK's deferred tools, after the others, the Search tool as its search,
 // and each load a result names as a ToolLoadItem after that result; a
-// request that defers nothing is sent as Tools has it (0012-MADR D16).
+// loaded tool whose load no result here carries stays an ordinary tool; a
+// request that defers nothing is sent as Tools has it (0012-MADR D16, D17).
 func toRequest(req *llm.Request) (*llmprovider.Request, error) {
 	out := &llmprovider.Request{Model: req.Model, Reasoning: reasoningFor(req.Thinking), Cache: llmprovider.CacheRetention(req.Cache),
 		MaxOutputTokens: req.MaxTokens}
@@ -453,7 +454,7 @@ func toRequest(req *llm.Request) (*llmprovider.Request, error) {
 	if err != nil {
 		return nil, err
 	}
-	isDeferred := map[string]bool{}
+	isDeferred, replayed := map[string]bool{}, map[string]bool{} // replayed: loaded by an item this request sends
 	for _, s := range deferred {
 		isDeferred[s.Name] = true
 	}
@@ -489,6 +490,7 @@ func toRequest(req *llm.Request) (*llmprovider.Request, error) {
 				for _, n := range c.Loads {
 					if isDeferred[n] {
 						out.Input = append(out.Input, llmprovider.ToolLoadItem{CallID: c.ToolCallID, Name: n})
+						replayed[n] = true
 					}
 				}
 			}
@@ -499,16 +501,34 @@ func toRequest(req *llm.Request) (*llmprovider.Request, error) {
 	if err != nil {
 		return nil, err
 	}
+	// A loaded tool, in Tools and Deferred, goes as deferred only when a
+	// result this request sends carries its load. Otherwise its load went
+	// with a compaction, a turn replay does not send, or a session from
+	// before loads named their call, and it stays an ordinary tool in its
+	// place (0012-MADR D17).
+	ordinary := map[string]bool{}
 	for _, s := range specs {
-		if isDeferred[s.Name] {
+		if isDeferred[s.Name] && replayed[s.Name] {
 			continue // sent below, as deferred
 		}
+		ordinary[s.Name] = true
 		out.Tools = append(out.Tools, llmprovider.Tool{Name: s.Name, Description: s.Description, Schema: s.InputSchema,
-			Strict: strictFor(s.InputSchema), Search: len(deferred) > 0 && s.Name == req.Search})
+			Strict: strictFor(s.InputSchema), Search: s.Name == req.Search})
 	}
+	sent := false
 	for _, s := range deferred {
+		if ordinary[s.Name] {
+			continue
+		}
+		sent = true
 		out.Tools = append(out.Tools, llmprovider.Tool{Name: s.Name, Description: s.Description, Schema: s.InputSchema,
 			Strict: strictFor(s.InputSchema), Deferred: true})
+	}
+	if !sent {
+		// Nothing is deferred, so there is no search: today's request.
+		for i := range out.Tools {
+			out.Tools[i].Search = false
+		}
 	}
 	return out, nil
 }

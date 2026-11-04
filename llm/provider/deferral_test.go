@@ -116,6 +116,26 @@ func TestToRequestDeferral(t *testing.T) {
 			t.Fatalf("the SDK refuses the request: %v", err)
 		}
 	})
+	// A compaction that dropped the loading result, a session-start family
+	// and a session recorded before 0012-MADR D18 all reach the adapter as a
+	// tool in Tools and Deferred whose load no result carries (D17).
+	t.Run("loaded without its result", func(t *testing.T) {
+		r := deferRequest(t, true)
+		r.Messages[len(r.Messages)-1].Content[0].Loads = nil
+		sreq, err := toRequest(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got, want := toolNamesOf(sreq), []string{"read", "tool_search+search", "request_permissions", "lsp+deferred"}; !slices.Equal(got, want) {
+			t.Fatalf("tools %q, want %q", got, want)
+		}
+		if slices.ContainsFunc(sreq.Input, func(it llmprovider.Item) bool { _, ok := it.(llmprovider.ToolLoadItem); return ok }) {
+			t.Fatalf("input %+v loads a tool no result loads", sreq.Input)
+		}
+		if err := (llmprovider.Capabilities{Tools: llmprovider.Supported}).Check(sreq); err != nil {
+			t.Fatalf("the SDK refuses the request: %v", err)
+		}
+	})
 	t.Run("a load the request does not defer", func(t *testing.T) {
 		r := deferRequest(t, true)
 		res := &r.Messages[len(r.Messages)-1].Content[0]
@@ -207,6 +227,31 @@ func TestWireDeferral(t *testing.T) {
 				t.Fatalf("no form for %s", w.id)
 			}
 		})
+	}
+}
+
+// A cancelled turn's last assistant message is not replayed, nor its
+// results, so a load its search made never reaches the SDK: the tool goes
+// as an ordinary one, and nothing loads it (0012-MADR D17; 0012-PLAN
+// deviation 3).
+func TestDeferralAfterCancelledTurn(t *testing.T) {
+	r := deferRequest(t, true)
+	for i := range r.Messages {
+		if r.Messages[i].Role == llm.RoleAssistant {
+			r.Messages[i].Origin = llm.Origin{Provider: "claude", Model: "claude-haiku-5-5", Failed: true}
+		}
+	}
+	c := &cannedWire{}
+	if o := wireStream(t, "claude", "claude-haiku-5-5", c, r); o.err != nil {
+		t.Fatal(o.err)
+	}
+	_, bodies := c.requests()
+	tools := bodyTools(t, bodies[0])
+	if n := strings.Count(tools, `"defer_loading":true`); n != 1 || !strings.Contains(tools, deferPerms.Name) {
+		t.Fatalf("tools %s: want request_permissions sent, and only lsp deferred", tools)
+	}
+	if strings.Contains(bodies[0], `"tool_reference"`) {
+		t.Fatalf("body %s loads a tool through a result it does not send", bodies[0])
 	}
 }
 

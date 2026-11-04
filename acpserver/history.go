@@ -177,8 +177,9 @@ type state struct {
 	messages        []session.Entry             // the path's message entries
 	context         []compaction.Projected      // the entries the model sees, and their messages
 	path            []session.Entry
-	todos           []tool.PlanItem // the path's last todo list
-	personality     string          // the path's last gobble.personality, or ""
+	todos           []tool.PlanItem     // the path's last todo list
+	personality     string              // the path's last gobble.personality, or ""
+	loads           map[string][]string // tool call id → what its result loaded (0012-MADR D18)
 }
 
 // replayState reads entries: model_change, thinking_level_change and the
@@ -196,7 +197,8 @@ func replayState(entries []session.Entry) state {
 // replayPath is replayState along path, a live session's: its tree's path
 // from wherever its leaf is (0005-PLAN F2-2).
 func replayPath(entries, path []session.Entry) state {
-	st := state{results: map[string]*session.Message{}, thinking: thinkingOff, name: session.Name(entries), path: path}
+	st := state{results: map[string]*session.Message{}, thinking: thinkingOff, name: session.Name(entries), path: path,
+		loads: map[string][]string{}}
 	for _, e := range st.path {
 		switch e.Type {
 		case session.TypeModelChange:
@@ -209,6 +211,9 @@ func replayPath(entries, path []session.Entry) state {
 			}
 			if name, ok := personalityOf(e); ok {
 				st.personality = name
+			}
+			if id, names, ok := loadOf(e); ok {
+				st.loads[id] = append(st.loads[id], names...)
 			}
 		case session.TypeMessage:
 			if e.Message == nil {
@@ -255,7 +260,8 @@ func (st *state) addMessage(m *session.Message) {
 		st.history = append(st.history, llm.Message{Role: llm.RoleAssistant, Content: assistantContent(blocks),
 			Origin: llm.Origin{Provider: canonicalProvider(m.Provider), Model: m.Model, Failed: m.StopReason == piError || m.StopReason == piAborted}})
 	case session.RoleToolResult:
-		c := llm.Content{Type: llm.ContentToolResult, ToolCallID: m.ToolCallID, ToolName: m.ToolName, Text: m.Text(), IsError: m.IsError != nil && *m.IsError}
+		c := llm.Content{Type: llm.ContentToolResult, ToolCallID: m.ToolCallID, ToolName: m.ToolName, Text: m.Text(), IsError: m.IsError != nil && *m.IsError,
+			Loads: st.loads[m.ToolCallID]}
 		// Consecutive results are one tool message, as the agent sends them.
 		if n := len(st.history); n > 0 && st.history[n-1].Role == llm.RoleTool {
 			st.history[n-1].Content = append(st.history[n-1].Content, c)
@@ -263,6 +269,21 @@ func (st *state) addMessage(m *session.Message) {
 		}
 		st.history = append(st.history, llm.Message{Role: llm.RoleTool, Content: []llm.Content{c}})
 	}
+}
+
+// loadOf is a gobble.tools entry's call id and the tools its result
+// loaded. ok is false for any other entry, and for a load that names no
+// call: one at session start, or one written before 0012-MADR D18, whose
+// tools the adapter then sends as ordinary ones (D17).
+func loadOf(e session.Entry) (id string, names []string, ok bool) {
+	if e.Type != session.TypeCustom || e.CustomType != customTools {
+		return "", nil, false
+	}
+	var d toolsData
+	if jsonx.Unmarshal(e.Data, &d) != nil || d.CallID == "" {
+		return "", nil, false
+	}
+	return d.CallID, d.Loaded, true
 }
 
 func assistantContent(blocks []session.Block) []llm.Content {

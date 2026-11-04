@@ -2,12 +2,14 @@ package acpserver
 
 import (
 	"context"
+	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	acp "github.com/maccavelli/acp-go-sdk2"
 
@@ -20,6 +22,140 @@ import (
 	"github.com/maccavelli/gobble-cli/tool"
 	"github.com/maccavelli/gobble-cli/tool/builtin"
 )
+
+// toolsCalls are the gobble.tools entries' call ids in session id's file,
+// "" for an entry that names none.
+func toolsCalls(t *testing.T, dir, id string) []string {
+	t.Helper()
+	files, err := filepath.Glob(filepath.Join(dir, "*", "*_"+id+".jsonl"))
+	if err != nil || len(files) != 1 {
+		t.Fatalf("session %s files %v, %v", id, files, err)
+	}
+	b, err := os.ReadFile(files[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []string
+	for line := range strings.Lines(string(b)) {
+		var e session.Entry
+		if json.Unmarshal([]byte(line), &e) != nil || e.CustomType != customTools {
+			continue
+		}
+		var d struct {
+			CallID string `json:"callId"`
+		}
+		if err := json.Unmarshal(e.Data, &d); err != nil {
+			t.Fatal(err)
+		}
+		out = append(out, d.CallID)
+	}
+	return out
+}
+
+// deferredOf are the names a request's Deferred specs carry.
+func deferredOf(t *testing.T, req *llm.Request) []string {
+	t.Helper()
+	if len(req.Deferred) == 0 {
+		return nil
+	}
+	var specs []tool.Spec
+	if err := json.Unmarshal(req.Deferred, &specs); err != nil {
+		t.Fatal(err)
+	}
+	var out []string
+	for _, s := range specs {
+		out = append(out, s.Name)
+	}
+	return out
+}
+
+// resultLoads is the Loads of call id's result among msgs, and whether it
+// was found.
+func resultLoads(msgs []llm.Message, id string) ([]string, bool) {
+	for _, m := range msgs {
+		for _, c := range m.Content {
+			if c.Type == llm.ContentToolResult && c.ToolCallID == id {
+				return c.Loads, true
+			}
+		}
+	}
+	return nil, false
+}
+
+// A load is recorded with its call; the next prompt, and a fork resumed
+// from the file, send that call's result naming the load, with the tool
+// among the deferred ones, so it is loaded natively (0012-MADR D16, D18).
+func TestResumeReplaysLoads(t *testing.T) {
+	dir, cwd := t.TempDir(), t.TempDir()
+	model := llmtest.NewScript(
+		llmtest.ToolCall("s1", builtin.ToolSearchName, `{"query":"widgets"}`),
+		llmtest.Text("A1"),
+		llmtest.Text("A2"),
+		llmtest.Text("A3"),
+	)
+	c, client := loadAgent(t, dir, model, []tool.Tool{builtin.Read(), widgetTool()})
+	id := newSession(t, c, cwd, nil).SessionId
+	if _, err := prompt(t, c, id, "first"); err != nil {
+		t.Fatal(err)
+	}
+	if got := toolsCalls(t, dir, string(id)); !slices.Equal(got, []string{"s1"}) {
+		t.Fatalf("gobble.tools call ids %q, want s1", got)
+	}
+	if _, err := prompt(t, c, id, "second"); err != nil {
+		t.Fatal(err)
+	}
+	list, _ := slash(t, c, client, id, "/fork")
+	var second string
+	for line := range strings.SplitSeq(list, "\n") {
+		if f := strings.Fields(line); len(f) == 2 && f[1] == "second" {
+			second = f[0]
+		}
+	}
+	_, resp := slash(t, c, client, id, "/fork "+second)
+	forked := acp.SessionId(switchTo(t, resp))
+	if _, err := c.Client.ResumeSession(t.Context(), acp.ResumeSessionRequest{SessionId: forked, Cwd: cwd}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := prompt(t, c, forked, "in the fork"); err != nil {
+		t.Fatal(err)
+	}
+	for _, i := range []int{2, 3} {
+		req := model.Requests()[i]
+		if loads, ok := resultLoads(req.Messages, "s1"); !ok || !slices.Equal(loads, []string{"widget_tool"}) {
+			t.Errorf("request %d: s1's result loads %q (found %v), want widget_tool", i, loads, ok)
+		}
+		if got := deferredOf(t, req); !slices.Contains(got, "widget_tool") {
+			t.Errorf("request %d: Deferred %q lacks widget_tool", i, got)
+		}
+	}
+}
+
+// A gobble.tools entry puts its load on its call's result when the history
+// is rebuilt; one with no call id, as gobble wrote before 0012-MADR D18,
+// puts it on none, so the adapter sends the tool as an ordinary one (D17).
+func TestReplayLoadsByCall(t *testing.T) {
+	ts := session.Timestamp(time.Date(2026, 11, 4, 12, 0, 0, 0, time.UTC))
+	for _, c := range []struct {
+		name string
+		data string
+		want []string
+	}{
+		{"with its call", `{"loaded":["widget_tool"],"callId":"c1"}`, []string{"widget_tool"}},
+		{"from before D18", `{"loaded":["widget_tool"]}`, nil},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			entries := []session.Entry{
+				{Type: session.TypeMessage, ID: "e1", Message: agentMessageWithCalls("c1")},
+				{Type: session.TypeMessage, ID: "e2", ParentID: new("e1"), Message: toolResultMessage("c1", "bash", "ok", false, ts)},
+				{Type: session.TypeCustom, ID: "e3", ParentID: new("e2"), CustomType: customTools, Data: jsontext.Value(c.data)},
+			}
+			loads, ok := resultLoads(replayState(entries).history, "c1")
+			if !ok || !slices.Equal(loads, c.want) {
+				t.Fatalf("c1's result loads %q (found %v), want %q", loads, ok, c.want)
+			}
+		})
+	}
+}
 
 // widgetTool is a deferred tool for the load tests.
 func widgetTool() tool.Tool {

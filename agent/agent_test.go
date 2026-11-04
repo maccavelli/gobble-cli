@@ -736,6 +736,107 @@ func TestToolsStableAcrossPrompts(t *testing.T) {
 	}
 }
 
+// deferredNames are the names a request's Deferred specs carry.
+func deferredNames(t *testing.T, r *llm.Request) []string {
+	t.Helper()
+	if len(r.Deferred) == 0 {
+		return nil
+	}
+	var specs []tool.Spec
+	if err := json.Unmarshal(r.Deferred, &specs); err != nil {
+		t.Fatal(err)
+	}
+	var out []string
+	for _, s := range specs {
+		out = append(out, s.Name)
+	}
+	return out
+}
+
+// resultFor is the tool result for call id among msgs.
+func resultFor(t *testing.T, msgs []llm.Message, id string) llm.Content {
+	t.Helper()
+	for _, m := range msgs {
+		for _, c := range m.Content {
+			if c.Type == llm.ContentToolResult && c.ToolCallID == id {
+				return c
+			}
+		}
+	}
+	t.Fatalf("no result for %s in %+v", id, msgs)
+	return llm.Content{}
+}
+
+// Every request names the deferred tools, loaded or not, and the search;
+// the result that loaded tools names them, families included, and its
+// Loaded event its call; Tools is as before; and with nothing deferred,
+// neither field is set (0012-MADR D16, D18).
+func TestLoadRecordedOnResult(t *testing.T) {
+	var seen [][]string
+	s := llmtest.NewScript(llmtest.ToolCall("s1", "tool_search", `{}`), llmtest.Text("done"))
+	a := agent.New(agent.Config{Provider: s, Tools: exposureTools(), Search: searchStub([]string{"b"}, &seen)})
+	evs, _, err := collect(t.Context(), t, a, tool.Env{}, "find it")
+	if err != nil {
+		t.Fatal(err)
+	}
+	reqs := s.Requests()
+	for i, r := range reqs {
+		if got := deferredNames(t, r); !slices.Equal(got, []string{"b", "c", "d"}) || r.Search != "tool_search" {
+			t.Fatalf("request %d: Deferred %q, Search %q; want b, c, d and tool_search", i, got, r.Search)
+		}
+	}
+	llmtest.AssertTools(t, reqs[1], "a", "tool_search", "b", "c")
+	if res := resultFor(t, reqs[1].Messages, "s1"); !slices.Equal(res.Loads, []string{"b", "c"}) {
+		t.Fatalf("the search's result loads %q, want b and c", res.Loads)
+	}
+	var loaded []agent.Loaded
+	for _, ev := range evs {
+		if l, ok := ev.(agent.Loaded); ok {
+			loaded = append(loaded, l)
+		}
+	}
+	if len(loaded) != 1 || loaded[0].CallID != "s1" || !slices.Equal(loaded[0].Names, []string{"b", "c"}) {
+		t.Fatalf("Loaded events %+v, want one for s1 naming b and c", loaded)
+	}
+
+	none := llmtest.NewScript(llmtest.Text("ok"))
+	b := agent.New(agent.Config{Provider: none, Tools: []tool.Tool{stub("a", "", "")}, Search: searchStub(nil, &seen)})
+	if _, _, err := collect(t.Context(), t, b, tool.Env{}, "hi"); err != nil {
+		t.Fatal(err)
+	}
+	if r := none.Requests()[0]; len(r.Deferred) != 0 || r.Search != "" {
+		t.Fatalf("nothing deferred: Deferred %s, Search %q", r.Deferred, r.Search)
+	}
+}
+
+// declineGrantable declines every call, as one a grant could cover.
+type declineGrantable struct{}
+
+func (declineGrantable) Decide(context.Context, permission.Rule) (permission.Decision, error) {
+	return permission.Decision{Grantable: true}, nil
+}
+
+// A declined call that loads the permissions family names the load on its
+// own result, and its Loaded event names the call (0012-MADR D16, D18).
+func TestGrantLoadRecordedOnResult(t *testing.T) {
+	w := tool.New("w", "w writes a thing.", func(context.Context, struct{}, tool.Env) (string, error) { return "wrote", nil })
+	tools := []tool.Tool{w, stub("rp", tool.ExposureDeferred, tool.FamilyPermissions)}
+	s := llmtest.NewScript(llmtest.ToolCall("w1", "w", `{}`), llmtest.Text("done"))
+	var seen [][]string
+	a := agent.New(agent.Config{Provider: s, Tools: tools, Policy: declineGrantable{}, Search: searchStub(nil, &seen)})
+	evs, end, err := collect(t.Context(), t, a, tool.Env{}, "write it")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res := resultFor(t, end.Messages, "w1"); !res.IsError || !slices.Equal(res.Loads, []string{"rp"}) {
+		t.Fatalf("the declined call's result %+v, want an error that loads rp", res)
+	}
+	i := slices.IndexFunc(evs, func(ev agent.Event) bool { _, ok := ev.(agent.Loaded); return ok })
+	if i < 0 || evs[i].(agent.Loaded).CallID != "w1" {
+		t.Fatalf("no Loaded event for w1 in %+v", evs)
+	}
+}
+
 // tool_search stays while a tool is deferred, loaded or not, so a session
 // whose every deferred tool has loaded does not lose it (0012-MADR D19).
 func TestSearchStaysWhenAllLoaded(t *testing.T) {

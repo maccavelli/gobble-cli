@@ -206,7 +206,8 @@ Files: `llm/llm.go`, `llm/doc.go`, `llm/provider/provider.go`, `llm/provider/def
 ### P3 — the agent fills them, and the session keeps the call (MADR D16–D18)
 
 Files: `agent/agent.go`, `agent/event.go`, `agent/agent_test.go`, `acpserver/agent.go`, `acpserver/history.go`,
-`acpserver/toolload_test.go`.
+`acpserver/toolload_test.go`. *(2026-11-04, deviation 3: and `llm/provider/provider.go` and
+`llm/provider/deferral_test.go`.)*
 
 1. **Tests first:**
    - `agent`, `TestLoadRecordedOnResult`. After a load, the request carries:
@@ -215,23 +216,36 @@ Files: `agent/agent.go`, `agent/event.go`, `agent/agent_test.go`, `acpserver/age
      - `Loads`, naming `b` and `c`, on the `tool_search` result.
 
      The `Loaded` event carries that result's call id. `Tools` is as P1 has it.
-   - `agent`, `TestLoadWithoutResultIsOrdinary`. With `Loaded: d` and a history that holds no result loading `d`, `d`
-     is in `Tools` and not in `Deferred`. Given the history of `TestLoadRecordedOnResult`, the next prompt's request
-     keeps `b` and `c` in `Deferred`.
-   - `agent`, `TestCompactionMakesLoadsOrdinary`. A compaction during the turn drops the loading result. The next
-     request has `b` and `c` in `Tools` and not in `Deferred`, and no `Loads` survives in the compacted history.
+   - ~~`agent`, `TestLoadWithoutResultIsOrdinary`~~ and ~~`TestCompactionMakesLoadsOrdinary`~~ *(2026-11-04, deviation
+     3: replaced by the adapter's tests below, since the adapter decides D17)*.
+   - `agent`, `TestGrantLoadRecordedOnResult`. A declined call a grant could cover has `Loads` naming the
+     permissions family on its result, and its `Loaded` event carries the call's id. *(Added by deviation 3. The
+     declined call's load was in step 2 with no test of its own.)*
+   - `llm/provider`, in `TestToRequestDeferral` *(deviation 3)*:
+     - `loaded without its result`: `request_permissions` is in `Tools` and `Deferred`, and no result carries its
+       load. The SDK's tools are `read, tool_search+search, request_permissions, lsp+deferred`, with no
+       `ToolLoadItem`. This case covers a compaction, a session-start family and an older session, which all reach
+       the adapter alike;
+     - `TestDeferralAfterCancelledTurn`, through `claude`'s wire: the `tool_search` call's assistant message is
+       marked failed, as a cancelled turn's last is. The body sends `request_permissions` without `defer_loading`,
+       and holds no `tool_reference`.
    - `acpserver`, `TestResumeReplaysLoads`, beside `acpserver/toolload_test.go`'s existing case:
      - the `gobble.tools` entry carries `callId`;
      - after a resume, and in a fork, the first request's history has `Loads` on that call's result, and `Deferred`
        holds `widget_tool`;
-     - a session whose entry has no `callId`, written by hand as an older gobble writes it, sends `widget_tool` in
-       `Tools` and not in `Deferred`.
+     - a session whose entry has no `callId`, written by hand as an older gobble writes it, ~~sends `widget_tool` in
+       `Tools` and not in `Deferred`~~ has no `Loads` on any result, so the adapter sends `widget_tool` as an
+       ordinary tool *(2026-11-04, deviation 3)*.
 2. **The code:**
    - `agent.Loaded` gains `CallID` (`agent/event.go:55`).
    - The turn sets `Loads` on the result that loaded (`agent/agent.go:755-765`), for both `tool_search`'s load and the
      declined call's.
-   - Each request computes `Deferred` from the session's deferred tools, leaving out those D17 makes ordinary, and sets
-     `Search`. This is done again after a compaction.
+   - ~~Each request computes `Deferred` from the session's deferred tools, leaving out those D17 makes ordinary, and sets
+     `Search`. This is done again after a compaction.~~ *(2026-11-04, deviation 3)* Each request names every deferred
+     tool of the session in `Deferred`, in `Config.Tools` order, and sets `Search` to `tool_search` while it is
+     offered.
+   - *(Deviation 3)* `toRequest` keeps a tool in both `Tools` and `Deferred` as an ordinary tool, in its place,
+     unless a result in the replayed input carries its load (MADR D16, D17 as refined).
    - `acpserver`:
      - `toolsEntry` writes `callId` (`acpserver/agent.go:857`);
      - `replayPath`, or the step that turns its messages into `llm` content (`acpserver/history.go:198-258`), sets
@@ -239,8 +253,10 @@ Files: `agent/agent.go`, `agent/event.go`, `agent/agent_test.go`, `acpserver/age
      - `loadedTools` is unchanged, so `Config.Loaded` still holds every loaded name.
 3. **Planted breaks** (C9):
    - `Loads` not set: `TestLoadRecordedOnResult` fails;
-   - every loaded tool kept in `Deferred`: `TestLoadWithoutResultIsOrdinary` and `TestCompactionMakesLoadsOrdinary`
-     fail;
+   - ~~every loaded tool kept in `Deferred`: `TestLoadWithoutResultIsOrdinary` and `TestCompactionMakesLoadsOrdinary`
+     fail;~~ *(deviation 3)* the adapter sending every `Deferred` tool deferred, whether its load survived or not:
+     `loaded without its result` and `TestDeferralAfterCancelledTurn` fail;
+   - *(deviation 3)* the declined call's `Loads` not set: `TestGrantLoadRecordedOnResult` fails;
    - `callId` not written: `TestResumeReplaysLoads` fails.
 4. **Gates and commit.** G-local and G-hosts. `apidiff` reports `agent.Loaded.CallID` as a compatible addition, and
    nothing else. Commit (C6).
@@ -468,3 +484,95 @@ answered the same day: (a) to each, Q5 with a Grok check in P4's probe.
     - `make check-records markdownlint` exited 0.
 - **Not done in P2:** nothing fills the new fields yet. Every request gobble sends is still the one P1 sends, which
   P3 changes.
+
+### Deviation 3 (2026-11-04): P3, the agent cannot see what `replay` drops
+
+- **Found** while reading for step 2, before any of P3's code was written.
+  - `llm/provider`'s `replay` drops a failed assistant message and its calls' results (`llm/provider/replay.go:49-74`).
+  - A cancelled turn's last assistant message is marked failed (`acpserver/choice.go:244-248`).
+  - Suppose a turn's last step ran `tool_search`, its result loaded a tool, and the turn was then cancelled. The load is
+    recorded, and the agent's history holds the result with `Loads`. Under step 2 as written, the agent would send the
+    tool deferred, and the SDK would receive no load. On the native wires and Grok the model could not see the tool,
+    while gobble held it as loaded.
+  - This was not pre-existing: it was P3's design.
+- **Decision,** the owner's choice of two put ("Decide in the adapter"):
+  - `toRequest`, which works on the history after `replay`, sends a tool that is in both `Tools` and `Deferred` as
+    deferred only when a surviving result carries its load. Otherwise the tool stays an ordinary tool, in its place.
+  - The agent names every deferred tool in `Deferred`, with no scan of its history. A compaction, a session-start
+    family, an older session and a cancelled turn all reach the same rule.
+  - The choice not taken was for the agent to copy `replay`'s rule about failed messages, which would duplicate it in
+    `agent`, and break again without notice when `replay` changes.
+- **Records:** MADR D16's adapter bullet and D17 are refined in place, with the originals struck through.
+- **Scope:**
+  - `llm/provider/provider.go` and `llm/provider/deferral_test.go` join P3.
+  - The agent's two D17 tests become adapter tests, and `TestGrantLoadRecordedOnResult` is added.
+
+### P3 record (2026-11-04): the agent fills them, and the session keeps the call
+
+- **Files:**
+  - as listed: `agent/agent.go`, `agent/event.go`, `agent/agent_test.go`, `acpserver/agent.go`, `acpserver/history.go`
+    and `acpserver/toolload_test.go`;
+  - by deviation 3: `llm/provider/provider.go` and `llm/provider/deferral_test.go`. No other file was added.
+- **The API, read from the diff.** One exported field is added: `agent.Loaded.CallID string`. Everything else P3 adds
+  is unexported (C8's note).
+- **The code:**
+  - **`agent.New`** encodes every deferred tool's spec, loaded or not, in `Config.Tools` order, once.
+    - Each request carries that as `Deferred`.
+    - It sets `Search` to `tool_search` while `tool_search` is offered and something is deferred.
+  - **`runTools`** names a load on the result that made it (`Loads`), for `tool_search`'s load and for a declined
+    call's, and emits `Loaded{Names, CallID}`.
+  - **`toRequest`** sends a tool that is in both `Tools` and `Deferred` as deferred only when a `ToolLoadItem` it sends
+    loads it. Otherwise the tool stays ordinary, in its place.
+    - `Search` is cleared when nothing goes deferred, so that request is today's.
+  - **`acpserver`:**
+    - `toolsData` gains `callId` (`omitzero`). `toolsEntry` takes the call id: the agent's for a `Loaded` event, and
+      `""` for a session-start load.
+    - `replayPath` collects each entry's call id and names into `state.loads`, and `addMessage` sets `Loads` on that
+      call's result. `loadOf` skips an entry with no call id.
+- **Tests first,** run on the code as it stood, with only `agent.Loaded.CallID` added so the tests compiled. Each
+  failed as planned:
+  - `TestLoadRecordedOnResult`: `agent_test.go:785: request 0: Deferred [], Search ""; want b, c, d and tool_search`;
+  - `TestGrantLoadRecordedOnResult`: `agent_test.go:832: the declined call's result {...}`, with no `Loads`;
+  - `TestToRequestDeferral/loaded_without_its_result`: `tools [... "request_permissions+deferred" ...], want [...
+    "request_permissions" ...]`;
+  - `TestDeferralAfterCancelledTurn`: `deferral_test.go:251`, with `request_permissions` sent deferred;
+  - `TestResumeReplaysLoads`: `toolload_test.go:102: gobble.tools call ids [""], want s1`;
+  - `TestReplayLoadsByCall/with_its_call`: `toolload_test.go:154: c1's result loads [] (found true), want
+    ["widget_tool"]`.
+
+  `TestReplayLoadsByCall/from_before_D18` passed before and after, as it asserts today's behaviour.
+- **After the change:** `agent`, `acpserver`, `llm/...` and `internal/cli` pass. The tree needed one `gofmt -w`, of
+  `acpserver/history.go`'s struct alignment.
+- **Planted breaks** (C2, each on its own copy):
+  1. **`Loads` not set on the result.**
+     - `TestLoadRecordedOnResult`: `the search's result loads [], want b and c`.
+     - `TestGrantLoadRecordedOnResult` failed with it.
+     - `TestResumeReplaysLoads` failed too: `request 2: s1's result loads [] (found true), want widget_tool`.
+  2. **The adapter sending every `Deferred` tool deferred.**
+     - `TestToRequestDeferral/loaded_without_its_result` failed.
+     - `TestDeferralAfterCancelledTurn` failed at `deferral_test.go:251`.
+  3. **The declined call's load emitted, but not named on its result.**
+     - `TestGrantLoadRecordedOnResult` failed.
+  4. **`callId` not written.**
+     - `TestResumeReplaysLoads`: `gobble.tools call ids [""], want s1`.
+  5. **`addMessage` not setting `Loads`.** This break was added to the plan's four, to hold the rebuild step.
+     - `TestResumeReplaysLoads` failed with `request 3: s1's result loads [] (found true), want widget_tool`: only the
+       fork, which is rebuilt from the file. The live session's next prompt keeps `Loads` in memory.
+     - `TestReplayLoadsByCall/with_its_call` failed with it.
+- **G-local:**
+  - `make pre-add-check` on the eight Go files: `go-precheck: 8 file(s) clean (gofmt, golint, govulncheck).`;
+  - `make preflight`: `preflight passed`;
+  - `make race`: exit 0, 38 packages `ok`.
+- **G-hosts:**
+  - Both hosts got 833 files, with no `._*` files.
+  - On the Linux machine and on the Windows laptop:
+    - `go test -count=1 ./...` exited 0, with 38 packages `ok`;
+    - `CGO_ENABLED=1 go test -race -count=1 ./...` exited 0;
+    - `make preflight` passed `gofmt` to `apidiff`, then stopped at `verify-build-metadata` (C5);
+    - `make check-records markdownlint` exited 0.
+- **Goldens:** none changed. No golden holds a `gobble.tools` entry.
+- **What this changes for a user:** loading `request_permissions` no longer changes the tools list on Claude 4.5 and
+  later (`claude`, OpenCode Zen), GPT-5.4 and later (`openai`, either gateway's responses route), or Grok.
+  - The exception is F21's: a Responses load from a declined call is appended.
+  - Every other wire sends the tools in P1's order, as before.
+  - The cache saving itself is unmeasured here. P4's owner-run probe reads it.

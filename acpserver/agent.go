@@ -682,7 +682,7 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 	tools = visible(withDefaults(a.rulesOf(s), mcpTools, a.modeOf(s)), tools)
 	loaded := loadedTools(s.tree.Path())
 	if fresh := startLoads(tools, loaded); len(fresh) > 0 {
-		w.addEntry(toolsEntry(fresh))
+		w.addEntry(toolsEntry(fresh, ""))
 		if w.err != nil {
 			return acp.PromptResponse{}, appendFailed(w.err)
 		}
@@ -851,11 +851,15 @@ var sessionStartFamilies = []string{builtin.ResourceFamily}
 
 type toolsData struct {
 	Loaded []string `json:"loaded"`
+	// CallID is the call whose result made the load; "" for a load at
+	// session start, and for every entry gobble wrote before 0012-MADR D18.
+	CallID string `json:"callId,omitzero"`
 }
 
-// toolsEntry records a load.
-func toolsEntry(names []string) (session.Entry, error) {
-	data, err := jsonx.Value(toolsData{Loaded: names})
+// toolsEntry records a load, with the call whose result made it, or ""
+// for none (0012-MADR D18).
+func toolsEntry(names []string, callID string) (session.Entry, error) {
+	data, err := jsonx.Value(toolsData{Loaded: names, CallID: callID})
 	return session.Entry{Type: session.TypeCustom, CustomType: customTools, Data: data}, err
 }
 
@@ -963,7 +967,7 @@ func (w *writer) event(ev agent.Event) {
 			w.addEntry(contextEntry(ev.Result.Instructions))
 		}
 	case agent.Loaded:
-		w.addEntry(toolsEntry(ev.Names))
+		w.addEntry(toolsEntry(ev.Names, ev.CallID))
 	case agent.End:
 		for _, m := range ev.Messages {
 			for _, c := range m.Content {

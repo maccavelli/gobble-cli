@@ -52,7 +52,11 @@ type Queued struct{ Message llm.Message }
 // Loaded is deferred tools a call's result loaded, with their families, in
 // the order they join the requests. It comes after that call's ToolEnd, and
 // they are sent from the next model call on (0012-MADR D9).
-type Loaded struct{ Names []string }
+type Loaded struct {
+	Names []string
+	// CallID is the call whose result loaded them (0012-MADR D18).
+	CallID string
+}
 
 // Retry is a wait the turn takes before it calls the model again
 // (0005-PLAN F5-1 decision 5): a Start before each wait, and one End when
