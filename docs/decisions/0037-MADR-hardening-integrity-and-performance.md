@@ -370,6 +370,10 @@ sibling library provides: AGENTS.md's rule is that gobble waits for the library.
   `http.DefaultTransport` when `models.json` sets headers. That drops the SDK client's 300 s response-header timeout, so
   a gateway that accepts and never answers hangs the turn (R, the survey's reading of the SDK). The fix is an SDK option
   to add request headers to its own client: [go-llmprovider-sdk#10](https://github.com/maccavelli/go-llmprovider-sdk/issues/10).
+
+  *(2026-11-03: go-llmprovider-sdk `v1.25.0` answered it with `llmprovider.NewHTTPClient`, and
+  [0041-MADR-models-json-headers-on-sdk-http-client.md](0041-MADR-models-json-headers-on-sdk-http-client.md) adopts it:
+  `withHeaders` wraps the SDK's own client when given none.)*
 * **Upstream, in acp-go-sdk2.** The client drops the newest notification when its queue is full
   ([0004-MADR-go-module-architecture.md](0004-MADR-go-module-architecture.md), amendment of 2026-10-01). Back-pressure
   is the SDK's to offer: [acp-go-sdk2#13](https://github.com/maccavelli/acp-go-sdk2/issues/13).
@@ -629,6 +633,10 @@ plan may tune one only through a deviation.
   clean (Q6 (a)).
 * **D35. The upstream items are the owner's issues, filed 2026-10-30:** [go-llmprovider-sdk#10](https://github.com/maccavelli/go-llmprovider-sdk/issues/10) for the header option, and [acp-go-sdk2#13](https://github.com/maccavelli/acp-go-sdk2/issues/13) for
   back-pressure (Q7). gobble adopts each when a tag carries it, through a record of its own.
+
+  *(2026-11-03: both are adopted. acp-go-sdk2#13 by
+  [0040-MADR-acpclient-notification-back-pressure.md](0040-MADR-acpclient-notification-back-pressure.md), and
+  go-llmprovider-sdk#10 by [0041-MADR-models-json-headers-on-sdk-http-client.md](0041-MADR-models-json-headers-on-sdk-http-client.md).)*
 
 ### Questions for the owner
 

@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/maccavelli/go-llmprovider-sdk/llmprovider"
+
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/tool"
 	"github.com/maccavelli/gobble-cli/tool/builtin"
@@ -354,6 +356,46 @@ func TestWireHeaders(t *testing.T) {
 	if paths, _ := w.requests(); len(paths) != 1 || calls.Load() != 1 {
 		t.Errorf("%d requests reached the wire and Headers ran %d times; want none sent and no retry", len(paths)-1, calls.Load())
 	}
+}
+
+// With no client, models.json's headers ride on the SDK's own client, so
+// the provider keeps the SDK's shared, bounded transport; a caller's client
+// keeps its transport and fields and is not changed, and a nil Transport is
+// net/http's default (0041-MADR D1, D2, D4).
+func TestWithHeadersClient(t *testing.T) {
+	headers := func(context.Context, string) (map[string]string, error) { return nil, nil }
+	base := func(t *testing.T, c *http.Client) http.RoundTripper {
+		t.Helper()
+		ht, ok := c.Transport.(headerTransport)
+		if !ok {
+			t.Fatalf("transport %T, want headerTransport", c.Transport)
+		}
+		return ht.base
+	}
+	t.Run("no client", func(t *testing.T) {
+		if got, want := base(t, withHeaders(nil, headers)), llmprovider.NewHTTPClient().Transport; got != want {
+			t.Errorf("base %T, want the SDK's shared transport, the same %T value", got, want)
+		}
+	})
+	t.Run("own transport", func(t *testing.T) {
+		rt := &cannedWire{}
+		c := &http.Client{Transport: rt, Timeout: 7 * time.Second}
+		out := withHeaders(c, headers)
+		if got := base(t, out); got != http.RoundTripper(rt) {
+			t.Errorf("base %T, want the caller's transport", got)
+		}
+		if out.Timeout != 7*time.Second {
+			t.Errorf("Timeout %v, want the caller's 7s", out.Timeout)
+		}
+		if out == c || c.Transport != http.RoundTripper(rt) {
+			t.Errorf("the caller's client was changed: transport %T", c.Transport)
+		}
+	})
+	t.Run("nil transport", func(t *testing.T) {
+		if got := base(t, withHeaders(&http.Client{}, headers)); got != http.DefaultTransport {
+			t.Errorf("base %T, want http.DefaultTransport", got)
+		}
+	})
 }
 
 // A key the provider's response refuses is llm.ErrAuth naming the provider

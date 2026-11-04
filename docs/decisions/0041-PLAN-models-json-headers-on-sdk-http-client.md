@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: in-progress
 date: 2026-11-03
 associated-madr: "0041-MADR-models-json-headers-on-sdk-http-client.md"
 ---
@@ -144,3 +144,62 @@ Files: this plan, the MADR if a fact changed, `docs/README.md`.
 ## Execution record
 
 Each phase appends its record here.
+
+**Approved 2026-11-03,** the owner's "committed, proceed to P1".
+
+### P0 record (2026-11-03): the records
+
+The pair and its two `docs/README.md` rows: `make check-records markdownlint` passed, and the identifier scan found
+nothing. The owner committed them as `f71cc4a`.
+
+### P1 record (2026-11-03): `withHeaders` over the SDK's client
+
+The base is `f71cc4a`. No deviation.
+
+1. **The facts** (step 1), re-read at the base, each as the plan states (the line numbers are the base's; P1's doc
+   lines move `provider.go`'s down by 3 to 6):
+   * `withHeaders` (`llm/provider/provider.go:150`) was as the MADR quotes it;
+   * its only caller is `sdkOptions` (`:113`), whose callers are `New` (`:188`), `List` (`list.go:73`) and `SignIn`
+     (`signin.go:175`);
+   * no production file sets `Options.HTTPClient` or `SignInOptions.HTTPClient`. `signin.go:182` passes `o.HTTPClient`
+     on, and `login.go:112` passes `LoginOptions.HTTPClient`, which `internal/cli/auth.go:302` leaves nil;
+   * `llmprovider.NewHTTPClient` is at the pinned tag's `llmprovider/options.go:69`.
+2. **The code** (step 2): `withHeaders` is the MADR's D3 listing, now at `provider.go:156`. `headerTransport`,
+   `requestModel`, `sdkOptions` and the imports are unchanged.
+3. **The docs in code** (step 3): `withHeaders`' doc names the SDK's own client for a nil `c` and `net/http`'s default
+   for a nil `Transport`, citing 0041-MADR D1 and D2. `Options.Headers` says the headers ride on the SDK's own client,
+   or on `HTTPClient` when set (0041-MADR D1). `Options.HTTPClient` adds "Headers, when set, wraps it." The citations
+   use the number, as the package's other comments do.
+4. **The test** (step 4): `TestWithHeadersClient` (`llm/provider/wire_test.go`, after `TestWireHeaders`), with its
+   subtests `no_client`, `own_transport` and `nil_transport`. `wire_test.go` imports `llmprovider`, in the SDK's group,
+   as `provider_test.go` does. `go test -count=1 -run 'TestWithHeadersClient|TestWireHeaders' -v ./llm/provider/`:
+   both pass.
+
+   **Seen failing (C9),** each break on a scratch copy of the tree (`git ls-files`, copied outside it), the copy
+   restored and passing after the last. The quoted lines are `go test`'s:
+   * the old code, `http.DefaultTransport` for a nil client: `--- FAIL: TestWithHeadersClient/no_client`,
+     `wire_test.go:377: base *http.Transport, want the SDK's shared transport, the same transport.scoped value`;
+   * a fresh `&http.Client{…}` in place of the copy of `*c`: `--- FAIL: TestWithHeadersClient/own_transport`,
+     `wire_test.go:388: Timeout 0s, want the caller's 7s`;
+   * the caller's client changed in place: `--- FAIL: TestWithHeadersClient/own_transport`,
+     `wire_test.go:391: the caller's client was changed: transport provider.headerTransport`;
+   * the MADR's option B, the SDK's transport for a nil `Transport`: `--- FAIL: TestWithHeadersClient/nil_transport`,
+     `wire_test.go:396: base transport.scoped, want http.DefaultTransport`.
+
+   The first run's message printed the whole `*http.Transport`; it now names the two types. The four breaks were run
+   again after that change, with the same results.
+5. **Assert by search** (step 5), in `llm/provider`'s non-test files: `NewHTTPClient` once (`provider.go:158`), and
+   `http.DefaultTransport` once (`:163`, the nil-`Transport` case).
+6. **`go doc -all ./llm/provider`** (step 6), diffed against a `git archive` of the base: two hunks, `Options.HTTPClient`'s
+   and `Options.Headers`' field docs. No exported name was added or removed.
+7. **The guide** (step 7): `docs/guides/models-json.md`'s `headers` item adds "A provider with headers keeps the same
+   connection and reply time limits as one without."
+8. **The records** (step 8): 0037-MADR's "What belongs elsewhere" item for go-llmprovider-sdk#10 and its D35 each
+   have a dated italic note naming this record; D35's also names 0040-MADR for acp-go-sdk2#13.
+9. **Nothing else changes** (step 9): `go test -count=1 ./llm/provider/ ./internal/cli/...` passed. After the gates,
+   `git status` showed only the phase's files, so no golden changed.
+10. **G-local:** `make pre-add-check FILES="llm/provider/provider.go llm/provider/wire_test.go"`: "2 file(s) clean
+    (gofmt, golint, govulncheck)"; `make preflight`: passed; `make race`: 38 ok.
+11. **G-hosts,** on the Linux machine and the Windows laptop, with 826 files shipped to each: `go test` and race passed
+    on both, 38 ok, the new test among them; `make check-records markdownlint` passed on both; preflight stops at
+    `verify-build-metadata`, as on every copy.

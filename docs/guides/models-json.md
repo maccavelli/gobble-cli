@@ -61,7 +61,8 @@ opencode-zen and opencode-go. Anything else skips the provider.
   base the request path is added to, so it carries the API version. **Claude's includes `/v1`**:
   `https://llm-proxy.example/anthropic/v1`, where Pi's file would say `https://api.anthropic.com`.
 - **`headers`** are added to each request: the provider's, then a model's override's, then its
-  definition's, a later one winning.
+  definition's, a later one winning. A provider with headers keeps the same connection and reply
+  time limits as one without.
 - **`models`** adds a model to the provider's model choice, after the listed ones. A field it
   leaves out takes Pi's default: name the id, no reasoning, text input, no cost, a 128000-token
   window and a 16384-token output cap. An entry with an id gobble already knows replaces it.

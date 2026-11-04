@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 date: 2026-11-03
 decision-makers: repository owner
 consulted: none
@@ -107,7 +107,8 @@ context, under `modelKey`, which `Stream` sets. Only the base it wraps is wrong.
 
 Chosen option: **"A. `withHeaders` starts from `llmprovider.NewHTTPClient()` when given no client"**, because it is the
 SDK's documented pattern, it gives the production path the SDK's own transport and nothing else, and it changes
-nothing for a client a caller chose.
+nothing for a client a caller chose. *Accepted 2026-11-03, by the owner's "committed, proceed to P1" after the records
+commit `f71cc4a`.*
 
 * **D1. The default client is the SDK's.** `withHeaders(nil, h)` wraps `llmprovider.NewHTTPClient()`'s `Transport` in
   `headerTransport`. Every provider built with `models.json` headers then sends over the transport the SDK shares with

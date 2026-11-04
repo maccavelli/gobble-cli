@@ -48,7 +48,8 @@ type Options struct {
 	// ClientName and ClientVersion lead the User-Agent (0003-MADR).
 	ClientName, ClientVersion string
 	Logger                    *slog.Logger
-	// HTTPClient replaces the provider's client, for tests.
+	// HTTPClient replaces the provider's client, for tests. Headers, when
+	// set, wraps it.
 	HTTPClient *http.Client
 	// ModelMetadataURL replaces List's model metadata document, for
 	// tests; New never fetches it.
@@ -62,7 +63,9 @@ type Options struct {
 	BaseURL string
 	// Headers, when set, gives the headers each request adds, resolved for
 	// that request and its model, "" for a listing; an error ends the
-	// request unsent (0005-PLAN F4-2b, deviation 1).
+	// request unsent (0005-PLAN F4-2b, deviation 1). They ride on the SDK's
+	// own client, or on HTTPClient when set, so a provider with headers keeps
+	// the SDK's transport and its limits (0041-MADR D1).
 	Headers func(ctx context.Context, model string) (map[string]string, error)
 	// Logins keeps OAuth logins. With no APIKey, a provider with an OAuth
 	// login (HasLogin) uses its stored login, and saves each rotation here
@@ -145,19 +148,22 @@ func (t headerTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	return t.base.RoundTrip(r)
 }
 
-// withHeaders is a copy of c, or of a default client, whose transport adds
-// headers.
+// withHeaders is a copy of c, or of the SDK's own client when c is nil,
+// whose transport adds headers. The SDK's client keeps its shared, bounded
+// transport, so a provider with headers has the limits of one without; a nil
+// Transport in c is net/http's default, as http.Client reads it (0041-MADR
+// D1, D2).
 func withHeaders(c *http.Client, headers func(ctx context.Context, model string) (map[string]string, error)) *http.Client {
-	out := &http.Client{}
-	base := http.DefaultTransport
-	if c != nil {
-		*out = *c
-		if c.Transport != nil {
-			base = c.Transport
-		}
+	if c == nil {
+		c = llmprovider.NewHTTPClient()
+	}
+	out := *c
+	base := out.Transport
+	if base == nil {
+		base = http.DefaultTransport
 	}
 	out.Transport = headerTransport{base: base, headers: headers}
-	return out
+	return &out
 }
 
 // New builds the SDK provider id with o, wrapped in the SDK's retry, as an
