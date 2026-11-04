@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: complete
 date: 2026-11-04
 associated-madr: "0012-MADR-tool-schemas-descriptions-and-loading.md"
 ---
@@ -576,3 +576,58 @@ answered the same day: (a) to each, Q5 with a Grok check in P4's probe.
   - The exception is F21's: a Responses load from a declined call is appended.
   - Every other wire sends the tools in P1's order, as before.
   - The cache saving itself is unmeasured here. P4's owner-run probe reads it.
+
+### P4 record (2026-11-04): the warning, the docs, and close-out
+
+- **D21.** 0036-PLAN P2 has not landed: `git grep -n Warning -- llm/provider agent` finds no SDK warning read. Under
+  step 1's second branch, nothing is coded here. 0036-PLAN P2's dated note of 2026-11-04 carries the Debug rule into
+  that phase.
+- **Docs:**
+  - `docs/architecture.md`:
+    - the `agent` row gains the list's order, `tool_search`'s rule, and `Deferred`/`Search`/`Loads`;
+    - the `llm` row names the fields;
+    - the `llm/provider` row says how each wire sends the tools, and when a loaded tool is sent as an ordinary one.
+  - The MADR gains "Observed — execution results (2026-11-04)". Its amendment's heading says `accepted`, with a note
+    that its earlier "proposed" marks predate the outcome.
+  - 0005-PLAN F8 gains its dated note.
+- **The owner-run probe.**
+  - **Where it is.** Written as `llm/provider/deferral_probe_test.go`, build tag `deferral_probe`. It was placed in a
+    scratch copy of the tree, never in the tree.
+  - **What it checks.**
+    - `TestProbeClaudeDeferral` sends three requests, with a system prompt long enough to cache: before a load, after
+      it, and with no deferred tools. It logs the usage of each, and the input tokens the deferred definitions cost. It
+      fails when the request after the load reads no cache.
+    - `TestProbeGrokDeferral` sends a history whose `tool_search` result loaded `request_permissions`. It checks the
+      model's next call comes back as `request_permissions` with that tool's own arguments, and that the repeated
+      request reads the cache.
+  - **What was run.**
+    - `go vet -tags deferral_probe ./llm/provider/` exited 0.
+    - Run with `ANTHROPIC_API_KEY` and `XAI_API_KEY` unset, both tests `SKIP`, through `llmtest.LiveCredential`.
+  - **Not exercised:** it has not run against a service, and so has not been seen to fail (C9). That needs the owner's
+    keys. Until it runs, the MADR's "[unverified]" on input tokens stands.
+- **Goldens:** `git diff --stat 1657e76..HEAD -- '*.golden' acpserver/testdata session/jsonl/testdata` is empty, and so
+  is the working tree's.
+- **#4,** the comment drafted for item 8. Posting it waits for the owner's word.
+
+  > Item 8, native tool deferral, is done, under `0012-MADR-tool-schemas-descriptions-and-loading.md`'s amendment of
+  > 2026-11-04 (D16–D21), carried out by `0012-PLAN-native-tool-deferral.md`.
+  >
+  > - **The list stays put** (2ff819e). A loaded tool keeps its place after `tool_search` at the next prompt, and
+  >   `tool_search` stays once everything has loaded. Before, each mid-session load broke the prompt cache a second
+  >   time on every provider.
+  > - **The SDK's native forms** (4ae9290, 3a50558).
+  >   - Every request names its deferred tools and search, and a result names what it loaded.
+  >   - go-llmprovider-sdk then sends a load in each wire's form, and the tools list does not change: `defer_loading`
+  >     and `tool_reference` on Claude 4.5 and later (and OpenCode Zen), the client `tool_search` on GPT-5.4 and later
+  >     (and both OpenCode gateways' Responses route), and `use_tool` on Grok.
+  >   - Every other wire appends, as before.
+  > - **A load the history no longer carries is sent as an ordinary tool.** That covers a compaction, a cancelled
+  >   turn, a session-start load, and a session from before.
+  > - **Loads are saved with their call,** so a resumed or forked session loads natively too.
+  > - **Today this covers `request_permissions`,** the one tool loaded mid-session. MCP servers' tools join when
+  >   0005-PLAN F8 defers them.
+  > - **The SDK's `deferral_emulated` warning** will be logged at Debug once 0036-PLAN P2 reads warnings.
+  >
+  > #4 stays open for items 5 (waiting on the SDK), 6 and 7 (0036).
+- **Status:** every Goal item is met. The last is conditional on 0036-PLAN P2, and is carried by its note. This plan is
+  `complete`, and the MADR's amendment is `accepted`.

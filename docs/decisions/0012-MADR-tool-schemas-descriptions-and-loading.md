@@ -548,7 +548,12 @@ The owner's proposals stand where the evidence supports them:
 
 The 1.x tools keep 0011-REPORT §5's drafts until their own MADRs settle them: the job tools, `monitor` (X2), `lsp` (X7) and `notebook` (X8). Each of those MADRs applies D1, D2 and D5, and states its tool's tier under D7.
 
-### Amendment (2026-11-04, proposed): native deferral through go-llmprovider-sdk (gobble-cli#4, item 8)
+### Amendment (2026-11-04, accepted): native deferral through go-llmprovider-sdk (gobble-cli#4, item 8)
+
+*(Proposed 2026-11-04, and accepted the same day when its plan,
+[0012-PLAN-native-tool-deferral.md](0012-PLAN-native-tool-deferral.md), was carried out. The notes elsewhere in this
+record that say "proposed" were written before then. Their outcome is "Observed — execution results
+(2026-11-04)".)*
 
 D13 asked go-llmprovider-sdk for native deferral, and said each adoption would be an amendment here. Item 8 of
 [gobble-cli#4](https://github.com/maccavelli/gobble-cli/issues/4) is that adoption. The SDK has shipped deferral since
@@ -1141,3 +1146,39 @@ So the defect it answered is this host's WSL, not code gobble runs (0013-REPORT,
 - **F20's nested case held:** todo is opted out by `priority`, below the top level.
 - **On every other wire that carries it,** `false` reaches the body once per tool, and `true` never does (`TestWireStrict`).
 - **Not yet exercised.** Whether Claude's Messages wire, Grok's and Gemini's services accept gobble's tools with these flags waits on the owner's `TestLiveClaude`, `TestLiveGrok` and `TestLiveGemini`. Until then, Messages' acceptance of `strict: false` stays **[unverified]** (V53).
+
+## Observed — execution results (2026-11-04)
+
+[0012-PLAN-native-tool-deferral.md](0012-PLAN-native-tool-deferral.md) P1–P4 ran on 2026-11-04, on go-llmprovider-sdk
+`v1.25.0`. Its execution record has the commits, the failures each check was seen to give, and the gates on macOS, the
+Linux machine and the Windows laptop.
+
+**Borne out:**
+
+- **D19.** A load keeps its place at the next prompt, byte for byte (`TestToolsStableAcrossPrompts`), and
+  `tool_search` stays once every deferred tool has loaded (`TestSearchStaysWhenAllLoaded`). F23 is closed on every
+  wire.
+- **D16.** The SDK sends the forms F21 lists. `TestWireDeferral` covers the ten ids and OpenCode Go's Responses route:
+  - the tools array is byte-identical before and after a load on `claude`, `opencode-zen`, `openai`,
+    `opencode-go/gpt-6-luna` and `grok`;
+  - it is appended on the other six cases.
+
+  A `use_tool` call on Grok reaches gobble as the tool's own call (`TestWireDeferralGrokCall`).
+- **D17,** as deviation 3 refined it. A loaded tool whose load the replayed history does not carry is sent as an
+  ordinary tool: after a compaction, for a session-start family, for an older session (`TestToRequestDeferral`), and
+  after a cancelled turn (`TestDeferralAfterCancelledTurn`).
+- **D18.** A load is recorded with its call. The next prompt, and a fork rebuilt from the file, send that call's result
+  naming it (`TestResumeReplaysLoads`, `TestReplayLoadsByCall`).
+
+**Contradicted, and amended in place by the plan's deviations:**
+
+- D19 as first written offered `tool_search` for the session-start families too (deviation 1).
+- F21's "OpenCode's messages route" is Zen's only (deviation 2).
+- D16 and D17 put the decision in the agent, which cannot see what `replay` drops (deviation 3).
+
+**Not yet exercised:**
+
+- **D21.** 0036-PLAN P2 has not landed, so gobble reads no SDK warning yet. Its dated note carries the Debug rule.
+- **The cache itself.** Neither the saving on Claude and Grok, nor whether Claude bills deferred definitions as input
+  tokens, has been measured, so the amendment's "[unverified]" on input tokens stands. The plan's owner-run probe, kept outside
+  the tree, measures both when the owner runs it with keys.

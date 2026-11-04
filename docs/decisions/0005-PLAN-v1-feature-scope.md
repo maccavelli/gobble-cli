@@ -285,6 +285,11 @@ API.
 
 *(2026-10-08, 0012-MADR D7: an MCP server with no `exposure` key is deferred.)*
 
+*(2026-11-04, from `0012-PLAN-native-tool-deferral.md`, P1–P3: once a server's tools are deferred, their loads are
+native from the first one on Claude 4.5 and later, GPT-5.4 and later and Grok. The tools list is unchanged across a
+load there, and appended elsewhere. Nothing in F8 needs to do more than mark them deferred. `acpserver`'s `searchFor`
+then offers `tool_search`, since an MCP tool is outside the session-start families.)*
+
 1. Pi's `mcp.json` schema, including `exposure` and the `toolExposure`
    globs, and the value interpolation.
 2. The 64-character names with a hash suffix. The 20 KB middle truncation
