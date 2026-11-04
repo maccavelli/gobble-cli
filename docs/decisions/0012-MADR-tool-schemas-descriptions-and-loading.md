@@ -215,7 +215,7 @@ What the probe also shows:
   - **Only provider-native deferral keeps the cache.**
     - Anthropic: "prompt caching is preserved" (Doc 2).
     - OpenAI: "designed to preserve the model's cache", but "changing the loaded tool set will break the model's cache from that point forward" (Doc 4).
-- **F10. gobble cannot use provider-native deferral or cache control today.** *(2026-10-13: cache control: gobble asks from 0021-PLAN P2 (`e385ca0`, 0021-MADR D2); deferral is still missing.)*
+- **F10. gobble cannot use provider-native deferral or cache control today.** *(2026-10-13: cache control: gobble asks from 0021-PLAN P2 (`e385ca0`, 0021-MADR D2); deferral is still missing.)* *(2026-11-04: go-llmprovider-sdk has carried native deferral since `v1.13.0`; gobble does not use it yet. See the amendment of 2026-11-04, F21–F22, proposed.)*
   - go-llmprovider-sdk v1.2.1 has no `defer_loading`, `tool_reference` or `cache_control` (0011 T6).
   - 0005-MADR already records that "The SDK sends no cache hints" (V20).
   - *Consequence:* a tool loaded mid-session can only be added to the `tools` list, which changes the prefix and breaks the cache from that request on.
@@ -286,6 +286,10 @@ There are four questions, each with its own options. Within each, the letter `A`
   - **V-A:** gobble writes the published schema itself, through one `jsontext.Encoder`, over D2's subset, with no nested `Marshal`.
   - **V-B:** keep jsonschema-go's `MarshalJSON`, as since commit `9826454`, and wait for Go to fix the defect.
   - **V-C:** change jsonschema-go upstream so its `MarshalJSON` does not nest, and adopt the release that does.
+- **VI. Native deferral** *(added 2026-11-04, proposed; the amendment of 2026-11-04)*
+  - **VI-A:** mark the deferred tools for go-llmprovider-sdk, beside today's tools list, record each load on the result that made it, and let the SDK choose each wire's form.
+  - **VI-B:** keep gobble's own appending, and fix only the reorder at the next prompt (F23).
+  - **VI-C:** put every deferred tool into `llm.Request.Tools`, with a flag on each.
 
 ## Decision Outcome
 
@@ -297,6 +301,7 @@ Chosen: **I-A, II-A, III-A and IV-A.**
 - **IV-A** matches what the three harnesses with search do (F14), and adds no module.
 - ~~**V-A** *(proposed 2026-10-09)* takes gobble's own code off a standard-library defect's path at the one place it nests (F19), with a writer bounded by D2's subset and held to today's bytes.~~ *(Rejected 2026-10-09: the defect it answered is this host's WSL, not code gobble runs (0013-REPORT, third amendment).)*
 - **V-B** *(chosen 2026-10-09)*: `tool.New` keeps jsonschema-go's `MarshalJSON`, since no defect on gobble's path needs it gone.
+- **VI-A** *(proposed 2026-11-04, the amendment of 2026-11-04)*: the SDK sends deferred tools in each wire's own form (F21), so a load stops changing the tools list where a native form exists. `Tools` keeps its meaning for any other provider.
 
 The owner's proposals stand where the evidence supports them:
 
@@ -461,6 +466,7 @@ The owner's proposals stand where the evidence supports them:
      - A loaded tool is appended after the tools already sent, in load order, and is never removed or reordered within the session.
      - The load is recorded in the transcript (V12). F3's frozen baseline treats the tools list as part of the baseline, which grows only by appending (V16).
      - Until the SDK carries native deferral (D13), each mid-session load breaks the prompt cache once, from that request on (F10). Never removing a tool means it never breaks it again for that tool.
+     *(2026-11-04: the code does not yet hold to this. A loaded tool moves ahead of `tool_search` at the next prompt, and `tool_search` drops out once nothing is left unloaded (F23). D19 of the amendment of 2026-11-04 restores the rule, and D16 makes a load leave the list unchanged on the native wires. Proposed.)*
 - **D10. Plain shell file commands are caught in the harness.** This lands in F6, with its `mvdan.cc/sh` parsing (V17, V27).
   *(2026-10-19, 0005-PLAN F6-3 decision 9, built: as written here, a call with its own `workdir` excepted, since the
   native tools resolve paths against the working directory; a native tool the session does not offer leaves the call to
@@ -499,7 +505,7 @@ The owner's proposals stand where the evidence supports them:
   - **Exact names first.** A query that names a tool exactly ranks that tool first.
 - **D12. bleve is not adopted for `tool_search`.** It stays the named candidate for a feature that needs a persistent full-text index over a large corpus: X1's session search and project-memory recall, and X8's documents. That feature's MADR names it, as AGENTS.md requires, and weighs Probe B's cost (F14).
 - **D13. A request to go-llmprovider-sdk, recorded here and not made in that repository.** gobble needs:
-  - native deferral: Anthropic's `defer_loading` with tool references, and OpenAI's `tool_search` with `defer_loading`;
+  - native deferral: Anthropic's `defer_loading` with tool references, and OpenAI's `tool_search` with `defer_loading`; *(2026-11-04: met at go-llmprovider-sdk `v1.13.0` (its 0040-MADR). Adopted by the amendment of 2026-11-04, D16–D21, proposed.)*
   - cache control: Anthropic `cache_control`; *(2026-10-13: met at go-llmprovider-sdk `v1.12.0` (0021-MADR D1, D2).)*
   - a per-tool strict flag. *(2026-10-08: this item is now a blocker for D3's opt-out, by the owner's choice. The other two remain requests.)*
 
@@ -542,6 +548,169 @@ The owner's proposals stand where the evidence supports them:
 
 The 1.x tools keep 0011-REPORT §5's drafts until their own MADRs settle them: the job tools, `monitor` (X2), `lsp` (X7) and `notebook` (X8). Each of those MADRs applies D1, D2 and D5, and states its tool's tier under D7.
 
+### Amendment (2026-11-04, proposed): native deferral through go-llmprovider-sdk (gobble-cli#4, item 8)
+
+D13 asked go-llmprovider-sdk for native deferral, and said each adoption would be an amendment here. Item 8 of
+[gobble-cli#4](https://github.com/maccavelli/gobble-cli/issues/4) is that adoption. The SDK has shipped deferral since
+`v1.13.0`, decided by its `0040-MADR-native-tool-deferral.md`. gobble pins `v1.25.0`. In `v1.26.0` the deferral code is
+unchanged: diffs of `internal/wire/deferral`, `Request.validateDeferral` and `Tool` against `v1.25.0` are empty. No
+gobble code uses any of it. The findings below were read on 2026-11-04 at `b4e1982`. SDK citations are to `v1.25.0`.
+
+**Findings**
+
+- **F21. The SDK's contract.**
+  - **What a request carries.**
+    - `Tool.Deferred` marks a deferred tool, and `Tool.Search` the caller's own search tool (`llmprovider/provider.go:49-60`).
+    - `ToolLoadItem{CallID, Name}` loads one deferred tool. It goes in `Input`, after the `FunctionCallOutputItem` of the
+      call that loaded it (`llmprovider/item.go:58-69`).
+    - Every deferred tool is in every request, loaded or not, and later requests carry the items that loaded them.
+  - **What is refused before the network** (`llmprovider/contract.go:365-403`):
+    - two search tools, or a deferred one;
+    - every tool deferred;
+    - a `ToolLoadItem` that names no deferred tool of the request, or has no earlier result for its call;
+    - a forced choice of a deferred tool that nothing has loaded.
+  - **The form is chosen by the SDK, per wire and model** (`llmprovider/internal/wire/deferral/deferral.go:90`, and each
+    provider's package doc):
+
+    | Wire | How deferred tools are sent | The tools list at a load |
+    | :--- | :--- | :--- |
+    | Messages, Claude 4.5 and later (`claude`; OpenCode's messages route) | every tool, the deferred ones with `defer_loading`; a load as a `tool_reference` in its result (`providers/claude/claude.go:101-107`) | unchanged |
+    | Responses with a key, GPT-5.4 and later (`openai`; OpenCode's responses route) | the search as a client `tool_search`, and the deferred tools only in its `tool_search_output`; the search result's own text is not sent (`providers/openai/openai.go:81-92`) | unchanged for the search's loads; a load from any other result is appended |
+    | Grok | the tools that are not deferred, plus one `use_tool` wrapper. A loaded tool's definition goes as JSON in its result, and a `use_tool` call naming a deferred tool comes back as that tool's call (`providers/grok/grok.go:64-74`) | unchanged |
+    | every other wire, and earlier models | each loaded tool appended after the others, in load order (`deferral.go:345`) | grows by one; the cache breaks once |
+
+  - **When a request was not sent natively,** whether appended or dispatched, its response carries
+    `WarningDeferralEmulated` (`deferral.go:302`). So does a Responses load that came from a result other than the
+    search's.
+- **F22. gobble sends none of it.**
+  - `toRequest` maps a tool's name, description, schema and strict flag (`llm/provider/provider.go:470`).
+  - The agent moves a loaded tool's spec into `Request.Tools` (`agent/agent.go:227-250`).
+  - So on every wire, every mid-session load changes the tools list (F10).
+- **F23. A load also changes the list a second time, at the next prompt, against D9 item 4.** This is pre-existing,
+  since 0005-PLAN F1d-2.
+  - **Within a turn, a load goes after `tool_search`.** `TestLoadInTurn` asserts `a, tool_search, b, c`
+    (`agent/agent_test.go:676`).
+  - **The next prompt puts it before `tool_search`.** `New` offers `Config.Loaded` first and `tool_search` after them.
+    `TestLoadedFromConfig` asserts `a, d, b, tool_search` (`:708`), and `acpserver/toolload_test.go:94` and `:108`
+    show the same move across two prompts of one session.
+  - **`tool_search` can also disappear.** It is offered only while an unloaded tool remains (`agent/agent.go:141`), so
+    a session whose last deferred tool has loaded drops it at the next prompt.
+- **F24. Today one deferred tool loads mid-session.**
+  - **`request_permissions` (`acpserver/grants.go:73`)** is the one. It loads through `tool_search` or on a declined
+    call (D9 item 3).
+  - **The three resource tools (`tool/builtin/resources.go:78`)** are loaded at session start (`acpserver/agent.go:885`),
+    so they are in the first prefix.
+  - **MCP servers' tools are direct** until 0005-PLAN F8 (`acpserver/mcp.go:147`).
+  - *Consequence:* today's saving is at most the cache breaks of one tool's load, per session. It widens when F8 defers
+    MCP servers' tools, which can be many (D7).
+- **F25. Loads are recorded per session, not per call.**
+  - The `gobble.tools` entry holds only names (`acpserver/agent.go:852-859`). It is written on `agent.Loaded{Names}`
+    (`:951-952`; `agent/event.go:55`).
+  - Nothing records which result loaded a tool, which a `ToolLoadItem` needs.
+- **F26. A load's change to the system prompt is already cache-safe.** A session's system prompt is its frozen
+  baseline, and a change is sent as a patch message at its place in the history (`acpserver/sysprompt.go:256-271`).
+
+**Questions for the owner**
+
+- **Q5. Grok's `use_tool` wrapper.**
+  - **(a) Recommended.** Take the SDK's form on every wire, Grok's included.
+    - On Grok the list never changes, which is the form grok-build uses itself (the SDK's 0040-MADR D5).
+    - Cost: a loaded tool's schema reaches the model as text in a result, and the service sees only the wrapper's
+      open object. Arguments are still checked by gobble's own validation, which refuses a bad call in the tool's words.
+  - **(b)** Leave Grok as it is today. The adapter sends no tool deferred to Grok, and each load breaks Grok's cache
+    once, as it does now.
+
+  *Answered 2026-11-04: (a), with a Grok check added to the plan's owner-run probe. The owner asked first for the
+  costs of a defined schema against text, and of per-provider choice. The assessment found three things:*
+
+  - *The service checks arguments in neither form. gobble never sends `strict: true` (`strictFor`,
+    `llm/provider/provider.go:476-485`; 0019-MADR D11), and `request_permissions` is sent with `strict: false`, since
+    all its arguments are optional. gobble's own validation is the only check either way. The two forms differ in
+    Grok's cache, which holds only under the wrapper (the SDK's 0040-MADR A4: cache reads of 5,248 and 5,376 tokens
+    on `grok-4.6` after a load), and in where the model reads the schema.*
+  - *The SDK hands every call back under its real tool name. Permissions, the journal, ACP clients and transcripts
+    are the same on every wire, so a provider's form shows only in its cache and its prompt.*
+  - *No switch is added. Each wire's form stays in the SDK, where 0040-MADR's Q3 chose it, so it cannot drift.
+    Because D16 keeps `Tools`, a per-provider or user opt-out to today's list is a small later amendment. It would
+    be added if a probe or a report shows a form misbehaving.*
+- **Q6. `WarningDeferralEmulated`, once gobble reads the SDK's warnings
+  (`0036-MADR-adopt-go-llmprovider-sdk-new-capabilities.md` D3).**
+  - **(a) Recommended.** Log it at Debug, once per session and model.
+    - It is expected on every request on most wires, since `request_permissions` is always deferred.
+    - At Warn it would appear in nearly every session, and tell the reader nothing they can act on.
+  - **(b)** Log it at Warn, once per session and model, as 0036's other warnings are.
+
+  *Answered 2026-11-04: (a), "Debug, once".*
+
+**Considered options** (group VI of "Considered Options"):
+
+- **VI-A:** gobble marks its deferred tools for the SDK, records each load on the result that made it, and lets the SDK
+  choose the form. The fields go beside today's tools list, which keeps its meaning.
+- **VI-B:** keep gobble's own appending, and fix only F23.
+- **VI-C:** put every deferred tool into `llm.Request.Tools`, with a flag on each.
+
+**The decisions** (VI-A, written to the recommended answers. Each answer that differs amends them before the plan's
+phase that it changes.)
+
+- **D16. Deferred tools reach the SDK as deferred, and the SDK chooses the form.**
+  - **`llm.Request` gains two fields.**
+    - `Deferred`: the spec of every deferred tool this request can load, loaded or not, in `Config.Tools` order.
+    - `Search`: the name, in `Tools`, of the search tool.
+    - `Tools` keeps its meaning. It is what a provider without deferral sends: the direct tools, `tool_search`, then
+      the loaded tools in load order. A provider that reads neither new field sends what it sends today, with D19's
+      order.
+  - **`llm.Content` gains `Loads`,** on a `ContentToolResult`: the deferred tools that result loaded, each family
+    expanded, in load order.
+  - **The adapter, `llm/provider`'s `toRequest`, builds the SDK's request:**
+    - the SDK's `Tools` are the entries of `Tools` that `Deferred` does not name, in order, then each `Deferred` spec
+      with `Deferred: true`, and the `Search` tool has `Search: true`;
+    - after each `FunctionCallOutputItem`, it adds one `ToolLoadItem` for each name in that result's `Loads` that
+      `Deferred` holds;
+    - with `Deferred` empty, the request is today's, field for field.
+  - **gobble has no per-provider switch.** The form is the SDK's (F21's table). Q5 (b) would add the only exception.
+- **D17. A load the request cannot replay is sent as an ordinary tool.**
+  - A loaded tool whose loading result is not in the request's history goes in `Tools`, not in `Deferred`. That is:
+    - a session-start family (D9 item 1);
+    - a tool loaded before a compaction that dropped its result;
+    - a load recorded before this amendment, which names no call.
+  - The turn works this out again after a compaction. The compaction has already started a new prefix, so the cache
+    loses nothing more.
+- **D18. A load is recorded with the call that made it.**
+  - `agent.Loaded` gains `CallID`, and the `gobble.tools` entry gains `callId`.
+  - When a session's history is rebuilt, `Loads` is set on the tool result with that id.
+  - An entry with no `callId` keeps its meaning today, and D17 sends its tools as ordinary tools.
+- **D19. The tools list does not change between compactions (closes F23).**
+  - `tool_search` is offered while the session has any deferred tool, loaded or not.
+  - On every prompt, `Tools` is in the order a turn already sends: the direct tools, `tool_search`, then the loaded
+    tools in load order.
+  - D9 item 4's "never removed or reordered within the session" then holds on every wire.
+- **D20. No newer go-llmprovider-sdk pin is needed.** Deferral is in every release from `v1.13.0`, and the plan runs on
+  whichever pin is current when it starts.
+- **D21. `WarningDeferralEmulated` is logged at Debug, once per session and model (Q6 (a)).**
+  - It is applied by whichever lands second: this record's plan, or 0036-PLAN P2, which first reads the SDK's
+    warnings.
+  - 0036-PLAN P2 gains a dated note that says so.
+
+**What it changes, and what it does not**
+
+- **Good:** on the native wires and Grok, a load no longer changes the tools list. This is the case the providers say
+  keeps the prompt cache (F9; Doc 2, Doc 4). The exception is a Responses load from a result other than the search's,
+  which the SDK appends (F21), and D9 item 3's load on a declined call is one. On every wire, the second change of F23
+  goes.
+- **Good:** F8's MCP deferral, when it lands, is native from its first load.
+- **Neutral:** on every other wire the tools sent are today's, apart from D19's order. The SDK appends as gobble does
+  now.
+- **Bad: the saving is small today** (F24). At most one tool's load per session is involved.
+- **Bad:** a Messages request carries every deferred definition, with `defer_loading`, from its first request.
+  **[unverified]** Whether those definitions count as input tokens; the plan's owner-run probe reads the usage.
+- **Bad:** `llm.Request` carries tools in two places. A provider outside gobble that reads only `Tools` keeps today's
+  behaviour and gains nothing. That is the price of VI-A over VI-C.
+- **Bad:** on Responses, the search result's text is replaced by `tool_search_output`. gobble's wording of what loaded,
+  and that the tools are callable from the next step, does not reach that wire.
+
+**The plan:** [0012-PLAN-native-tool-deferral.md](0012-PLAN-native-tool-deferral.md), `proposed`. It is this record's
+second plan.
+
 ### Consequences
 
 **Good**
@@ -558,7 +727,7 @@ The 1.x tools keep 0011-REPORT §5's drafts until their own MADRs settle them: t
 **Bad**
 
 - **Until the SDK has a per-tool strict flag, OpenAI models keep filling in optional arguments** (F17, D3). Calls still work, but a small model may read 20 lines where gobble would show 2000, and needs more calls to finish.
-- **Each mid-session load breaks the prompt cache once** until D13 is met (F10). Family loading, start-of-session loading and append-only lists limit how often. They do not remove it.
+- **Each mid-session load breaks the prompt cache once** until D13 is met (F10). Family loading, start-of-session loading and append-only lists limit how often. They do not remove it. *(2026-11-04: D13 is met. The amendment of 2026-11-04 removes the break on Claude 4.5 and later, GPT-5.4 and later and Grok, and the second break of F23 on every wire. Proposed.)*
 - **14 direct definitions are sent on every request.** At Probe A's mean of 855 bytes, that is about 12 KB, an estimate. The direct tier is larger than Anthropic's "fewer than 10" mark, which is that page's guidance for when to use tool search at all (Doc 2).
 - **D10 catches only exact simple commands.** `rm -f x` and `rm -r a && make` reach the shell, under F6's permission rules rather than the native tool's.
 - **Templated descriptions** add a file per tool and a rendering step. A template error is caught at construction and by the budget test, not at compile time.
@@ -745,6 +914,28 @@ make preflight                                                     -> exit 0, Wi
 - Bad: it is not in gobble's control or on its schedule, and the standard library's defect remains for every other nested `Marshal`.
 - Bad: proposing it is an outward action, which waits on the owner.
 
+### VI-A — mark deferred tools for the SDK, beside today's list, and record each load on its result (proposed 2026-11-04)
+
+- Good, because the SDK chooses each wire's native form, so gobble adds no per-provider code (F21).
+- Good, because a load no longer changes the tools list on Claude 4.5 and later, GPT-5.4 and later, and Grok (F21).
+- Good, because `Tools` keeps its meaning, so a provider that reads only `Tools` keeps working as it does today (D16).
+- Neutral, because every other wire sends what gobble sends today, apart from D19's order.
+- Bad, because the saving today is at most one tool's load per session (F24).
+- Bad, because `llm.Request` names tools in two places, and a load must now be recorded with its call (D18).
+
+### VI-B — keep gobble's own appending, and fix only F23
+
+- Good, because it is the smallest change: the order in `agent.New` and the rule for when `tool_search` is offered.
+- Bad, because every load still breaks the cache once on every wire, which D13 asked the SDK to remove, and which the
+  SDK now removes.
+- Bad, because F8's MCP deferral would inherit a break at each load.
+
+### VI-C — every deferred tool in `llm.Request.Tools`, with a flag on each
+
+- Good, because the tools are in one list, and the adapter reads one field.
+- Bad, because `Tools` would change its meaning. A provider outside gobble that ignores the flag would offer every
+  deferred tool as a direct one, from the first request.
+
 ## More Information
 
 ### Evidence index
@@ -847,6 +1038,8 @@ make preflight                                                     -> exit 0, Wi
 
 - [0005-MADR-v1-feature-scope.md](0005-MADR-v1-feature-scope.md): the tool line this record describes. It is amended here once this record is accepted.
 - [0005-PLAN-v1-feature-scope.md](0005-PLAN-v1-feature-scope.md): F1c, F1d, F6, F8 and X4 carry these decisions.
+- [0012-PLAN-native-tool-deferral.md](0012-PLAN-native-tool-deferral.md): carries the amendment of 2026-11-04 (D16–D21).
+- [0036-MADR-adopt-go-llmprovider-sdk-new-capabilities.md](0036-MADR-adopt-go-llmprovider-sdk-new-capabilities.md): D3, the SDK's warnings, which D21 depends on.
 - [0004-MADR-go-module-architecture.md](0004-MADR-go-module-architecture.md): the package map, whose `tool/toolsearch` row D11 builds.
 - [0011-REPORT-native-tools-survey.md](../reports/0011-REPORT-native-tools-survey.md): the evaluation this record decides from.
 - [0010-REPORT-harness-design-survey.md](../reports/0010-REPORT-harness-design-survey.md): the harness survey, including `apply_patch`'s envelope.

@@ -1364,6 +1364,86 @@ Files: `go.mod`, `go.sum`, `.github/workflows/ci.yml`, `README.md`, `docs/archit
 
 No check is added, so C9 has nothing to break.
 
+### P29 — acp-go-sdk2 `v1.32.0` (MADR D1, amended 2026-11-04; deviation 23)
+
+Files: `go.mod`, `go.sum`, `acpserver/agent_test.go`, `acpserver/auth_test.go`, `README.md`, `docs/architecture.md`.
+
+1. **Checked first:** `python3 scripts/check_libs.py --lib acp-go-sdk2 --tag v1.32.0`. On 2026-11-04 it reported 13
+   checks with 1 failing: `test`, on `TestErrors` (`agent_test.go:197`) and `TestAuthenticate` (`auth_test.go:91`)
+   alone, each `acp: methodId names no auth method the agent advertised, want a JSON-RPC error`. Any other failure is a
+   deviation. Re-read before editing, and record:
+   * `acp.ErrUnadvertisedAuthMethod` (`errors.go:188`);
+   * `ClientSideConnection.Connection()` (`client_gen.go:96`);
+   * `acp.SendRequest[T]` (`connection.go:2466`);
+   * `acp.AgentMethodAuthenticate` (`constants_gen.go:10`).
+2. **The pin:** `go get github.com/maccavelli/acp-go-sdk2@v1.32.0`, then `go mod tidy`.
+   * `go.mod` changes on that line alone.
+   * `go.sum` changes in acp-go-sdk2's lines alone.
+3. **The two tests (MADR D1's S8).** For the unadvertised id each sends, `"x"` and `"nope"`:
+   * the typed `c.Client.Authenticate` returns an error that `errors.Is` `acp.ErrUnadvertisedAuthMethod`;
+   * `acp.SendRequest[acp.AuthenticateResponse](c.Client.Connection(), ctx, acp.AgentMethodAuthenticate,
+     acp.AuthenticateRequest{MethodId: …})` is answered `-32602`, read by the test's existing `requestCode` or
+     `errText`.
+
+   Each comment says the SDK now refuses the id on both sides (acp-go-sdk2 0049-MADR S8), and that the wire answer
+   stays 0005-PLAN F4-3c decision 4's. The test's other assertions are unchanged.
+4. **No other source change.** `acpclient`, `acpclient/acptest`, `acpserver` and `internal/cli` pass. Unchanged are
+   `acpserver/testdata/session.golden`, `view-plain.golden`, `print-json.golden` and `print-stream-json.golden`. Any
+   other failing test, or a golden that moves, is a deviation: the MADR's amendment says S2 does not reach gobble.
+5. **Seen failing (C9),** on copies:
+   * **The typed refusal.** The test's agent advertises the id the test sends. The typed assertion fails, since nothing
+     refuses it.
+   * **The raw answer.** The same, and gobble's handler answers an unknown provider `-32000`. The raw assertion fails
+     with that code.
+6. **The docs:** `README.md:129` and `docs/architecture.md:176` name `v1.32.0`.
+7. G-local, and G-hosts. **Commit.**
+
+### P30 — go-llmprovider-sdk `v1.26.0`, and the refresh lock's 60 s (MADR D1, amended 2026-11-04; deviation 23)
+
+Files: `go.mod`, `go.sum`, `internal/auth/logins.go`, `internal/auth/logins_test.go`, `README.md`,
+`docs/architecture.md`.
+
+1. **Checked first:** `python3 scripts/check_libs.py --lib go-llmprovider-sdk --tag v1.26.0` reports every check ok.
+   On 2026-11-04 it did: 13 checks, 0 failing.
+2. **The pin:** `go get github.com/maccavelli/go-llmprovider-sdk@v1.26.0`, then `go mod tidy`.
+   * `go.mod` changes on that line alone.
+   * `go.sum` changes in go-llmprovider-sdk's lines alone.
+3. **The refresh lock (MADR D1's D3).**
+   * `refreshPolicy`'s `Deadline` becomes `60 * time.Second`. Its comment says this is the SDK's own store's 60 s,
+     past a refresh's longest hold of 45.6 s (go-llmprovider-sdk 0068-MADR D3).
+   * `LockRefresh`'s doc says "waiting up to 60 s".
+   * `First` and `Max` are unchanged.
+4. **The test.** `TestRefreshWaitOutlastsAHold`, in `logins_test.go`, asserts that `refreshPolicy.Deadline` is more
+   than a refresh's longest hold. That hold is written out in the test as three attempts of 15 s, plus 200 ms and
+   400 ms, with the SDK's record named.
+   * Seen failing (C9) on a copy with the deadline at 40 s.
+5. **No other source change.** `llm/provider`, `internal/auth`, `internal/cli` and `acpserver` pass, the sign-in tests
+   among them. `go test ./internal/auth` takes no longer: `TestRefreshLockSeparate`'s second wait has a short context
+   of its own (`logins_test.go:56-58`).
+6. **The docs:** `README.md:131` and `docs/architecture.md:178` name `v1.26.0`.
+7. G-local, and G-hosts. **Commit.**
+
+### P31 — go-tui-lib/v2 `v2.11.0` (MADR D1, amended 2026-11-04; deviation 23)
+
+Files: `go.mod`, `go.sum`, `README.md`, `docs/architecture.md`.
+
+1. **Checked first:** `python3 scripts/check_libs.py --lib go-tui-lib --tag v2.11.0` reports every check ok,
+   `archtest` among them. On 2026-11-04 it did: 14 checks, 0 failing.
+2. **The pin:** `go get github.com/maccavelli/go-tui-lib/v2@v2.11.0`, then `go mod tidy`.
+   * `go.mod` changes on that line alone.
+   * `go.sum` changes in go-tui-lib's lines alone.
+3. **No source change.**
+   * `internal/cli` and `internal/cli/editor` pass unchanged, including the permission prompt's tests, `glyph`'s,
+     `safetext`'s, the editor's reprint and resize tests, `TestViewReprintsAtTheNextLineEnd`, and `view-plain.golden`.
+   * gobble still passes the reply's `Idle` to `HandleTimeout` (`internal/cli/view.go:530-532`), so its reprints are
+     `v2.9.0`'s.
+   * A test whose expectation changes is a deviation.
+4. **The docs:** `README.md:137` and `docs/architecture.md:180` name `v2.11.0`.
+5. G-local with `make perf`, and G-hosts with `make perf` and `make probe-conhost`. **Commit.**
+
+No check is added, so C9 has nothing to break. Adopting A15, the reprint at a line's end, is not this phase's work; it is
+a record of its own (deviation 19).
+
 ## Verification
 
 Each phase's own steps are its acceptance criteria. Across the plan:
@@ -3277,3 +3357,48 @@ The base is P27's `eab3170`. No deviation.
      `print-stream-json.golden` are byte-identical to `ccd8aa8`'s (`git diff --quiet`).
 10. **Status:** P27's and P28's criteria are met. This plan is `complete` again; the MADR stays `accepted`. What
     P19's record left for other records is unchanged.
+
+### Deviation 23 (2026-11-04): three pins behind their current release
+
+- **Found,** on the owner's request "assess the pins for go-tui-lib go-selfupdate-lib, acp-go-sdk2, and
+  go-llmprovider-sdk there have been newer tagged releases. we need to update the pins." (`main` at `b4e1982`, equal to
+  `origin/main`). `git ls-remote --tags`, the Go module proxy (`go list -m -versions`) and the GitHub releases list
+  three newer tags:
+  - acp-go-sdk2 `v1.32.0` (2026-11-04), its release marked Latest, against `v1.31.2`;
+  - go-llmprovider-sdk `v1.26.0` (2026-11-04), its release marked Latest, against `v1.25.0`;
+  - go-tui-lib/v2 `v2.11.0` (2026-11-04), over `v2.10.0` the same day, against `v2.9.0`. It publishes no GitHub
+    release.
+
+  go-selfupdate-lib `v1.24.0` is still the newest.
+- **Measured** by `python3 scripts/check_libs.py` on a scratch clone, each library at its newest tag. The tree was not
+  changed.
+  - go-llmprovider-sdk: 13 checks, 0 failing.
+  - go-selfupdate-lib: 13, 0 failing.
+  - go-tui-lib: 14, 0 failing.
+  - acp-go-sdk2: 13, with 1 failing: `test`, `TestErrors` (`agent_test.go:197`) and `TestAuthenticate`
+    (`auth_test.go:91`), each `err = authenticate: methodId …: acp: methodId names no auth method the agent advertised,
+    want a JSON-RPC error`.
+  - For each, `get and tidy` and `modules` are ok, and `api` reports nothing incompatible.
+- **What reaches gobble,** read from the release notes, the tags' diffs and gobble's call sites. The MADR's D1
+  amendment has it in full:
+  - acp-go-sdk2: S8's refusal of an unadvertised auth method, which changes two tests and no code; S7's `"type":"stdio"`
+    MCP server, which now starts; S1's unknown-typed config option, now read as a value id. Nothing gobble sends falls
+    under S6's closed enumerations or S2's empty collections;
+  - go-llmprovider-sdk: the HTTP/2 ping and the narrower retries, with no change to gobble's code; and D3's 60 s
+    refresh-lock wait, which gobble's own `refreshPolicy`, at 40 s, mirrors for the same lock and the same refresh;
+  - go-tui-lib: nothing that changes gobble's output while it still passes the reply's `Idle`. `v2.11.0` carries
+    go-tui-lib#15's `Printer.Printed`, whose adoption deviation 19 left to a record of its own.
+- **Decision** (proposed with this deviation, for the owner's approval):
+  - MADR D1 has a dated amendment for the three tags;
+  - P29 (acp-go-sdk2 `v1.32.0`, with its two tests), P30 (go-llmprovider-sdk `v1.26.0`, with `refreshPolicy` at 60 s
+    and its test) and P31 (go-tui-lib/v2 `v2.11.0`) are new, each its own commit, in that order;
+  - this plan becomes `in-progress` on approval, until P31's record checks the Verification's first two items again and
+    returns it to `complete`;
+  - adopting go-tui-lib's A15 in gobble's view is not here. It is offered to the owner as a record of its own, after
+    P31.
+- **Files added to scope:**
+  - P29: `go.mod`, `go.sum`, `acpserver/agent_test.go`, `acpserver/auth_test.go`, `README.md` and
+    `docs/architecture.md`;
+  - P30: `go.mod`, `go.sum`, `internal/auth/logins.go`, `internal/auth/logins_test.go`, `README.md` and
+    `docs/architecture.md`;
+  - P31: `go.mod`, `go.sum`, `README.md` and `docs/architecture.md`.

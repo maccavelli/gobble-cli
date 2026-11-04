@@ -103,6 +103,8 @@ which `provider_test.go` already imports.
 
 ### P2 — the SDK's warnings (D3)
 
+*(2026-11-04, from `0012-MADR-tool-schemas-descriptions-and-loading.md` D21, proposed: once gobble defers tools natively, `WarningDeferralEmulated` is expected on every request on most wires. If `0012-PLAN-native-tool-deferral.md` P4 has landed first, this phase logs that kind at Debug, once per session and model, and its other kinds as written. If this phase lands first, that plan's P4 adds it.)*
+
 1. **Tests first:**
    - `llm/provider`, `TestWarningsYielded`: `Wrap` of an `llmtest.Fake` replying with `Warnings` of
      `effort_degraded` and an unknown kind yields two `llm.Warning` events, each with its kind, model and detail,

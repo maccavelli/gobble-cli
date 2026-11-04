@@ -478,6 +478,78 @@ policy. And one record keeps the order, and the cross-library facts (check-libs,
     its tag, not released; D1 pins tags, never a branch. go-tui-lib#15 is still open.*
   - *`python3 scripts/check_libs.py --lib <library> --tag <tag>`: acp-go-sdk2 `v1.31.2` and go-selfupdate-lib
     `v1.24.0`, 13 checks each, 0 failing, `staticcheck`, `lint` and `api` among them.*
+
+  *Amended 2026-11-04, by the PLAN's deviation 23, proposed for the owner's approval, from the owner's request "assess
+  the pins for go-tui-lib go-selfupdate-lib, acp-go-sdk2, and go-llmprovider-sdk there have been newer tagged
+  releases. we need to update the pins." Each tag is the newest of its major by `git ls-remote --tags`, the Go module
+  proxy (`go list -m -versions`) and the GitHub releases that day:*
+  - ***acp-go-sdk2 `v1.32.0`** (`9eeb57f95b98243ee6ee3ff3c8c389419d012624`, 2026-11-04), its GitHub release marked
+    Latest, in place of `v1.31.2`. The ACP schema is still `1.25.0`, and `make api` reports 26 compatible additions and
+    nothing incompatible. It fixes nine defects of the SDK's surface (acp-go-sdk2's
+    `docs/decisions/0049-MADR-remediate-the-2026-11-01-debugging-pass.md`, S1 to S9), most of them by refusing to send
+    what `v1.31.2` sent. What reaches gobble:*
+    - *S8, an unadvertised auth method: `Authenticate` with a `methodId` that the agent's `initialize` answer did not
+      advertise now returns `acp.ErrUnadvertisedAuthMethod` and sends nothing. Received, such a request is answered
+      `-32602` by the SDK, before gobble's handler. Two of gobble's tests send one through the typed client and expect
+      the agent's `-32602`: `TestErrors` (`acpserver/agent_test.go:197`) and `TestAuthenticate`
+      (`acpserver/auth_test.go:91`). `check_libs` fails on exactly these two. Each test is changed to assert both
+      sides: the typed client's refusal, and a raw `authenticate`, sent by `acp.SendRequest` over
+      `ClientSideConnection.Connection()`, answered `-32602`. That keeps the wire answer 0005-PLAN F4-3c decision 4
+      records. gobble's code does not change;*
+    - *S7, a key-less variant's own name: an `McpServer` sent with `"type":"stdio"` now decodes into `Stdio`, where it
+      fell to `Unknown`. `sessionServer` (`acpserver/mcp.go:96-114`) already starts a `Stdio` server, so such a server
+      now starts instead of being refused with "an MCP server has no transport";*
+    - *S6, closed enumerations, refused when sent: nothing gobble sends is outside them. Every `tool.Kind`
+      (`tool/tool.go:45-53`) is an ACP `ToolKind`. Every `agent.StopReason` (`agent/event.go:119-125`) is an ACP
+      `StopReason`. `todo` admits only ACP's three statuses and three priorities, and fills an empty priority with
+      `medium` (`tool/builtin/todo.go:16-17`, `:72-82`). Each error path's `PromptResponse{}` goes with an error, so it
+      is never sent;*
+    - *S2, an empty `content` or `locations` now sent as `[]`: gobble never sends one. `resultContent` always begins
+      with the summary (`acpserver/prompt.go:207-225`), the terminal update carries its reference, and the locations
+      are added only when there are some (`:137`). The goldens do not move;*
+    - *S1, received: a `session/set_config_option` of an unknown `type` with a string `value` now decodes as `ValueId`,
+      as the schema says. gobble's agent reads `ValueId` first (`acpserver/agent.go:1288-1291`), so it treats such a
+      request as a select of that value, checked against the option's values as any select is, where it refused it as
+      "only select options are offered";*
+    - *S5, received: a boolean option from a client that did not advertise `session.configOptions.boolean` is answered
+      `-32602` by the SDK, before gobble's handler, which answered `-32602` for it too;*
+    - *not reached: S3 (no unstable method, `plan_update` or NES); S4 (no timeline); S9 (gobble's client sends no block
+      of an unlisted type).*
+  - ***go-llmprovider-sdk `v1.26.0`** (`5ae1fe18d81167ca7f91d4f68064310c1504347e`, 2026-11-04), its GitHub release
+    marked Latest, in place of `v1.25.0`. It carries go-llmprovider-sdk's
+    `docs/decisions/0068-MADR-five-internal-fixes-from-the-0054-audit.md`, D1 to D4. What reaches gobble:*
+    - *D1, the shared transport pings an idle HTTP/2 connection and closes one that does not answer. Every provider
+      gobble builds sends over it (0041-MADR), so a connection whose peer went away during a sleep fails within 45 s
+      instead of 300 s;*
+    - *D2, HTTP 501 and 505, and a TLS certificate the client refuses, are no longer retried;*
+    - *D3, the SDK's refresh lock waits 60 s, where it waited 40 s, past a refresh's longest hold of 45.6 s (three
+      attempts of 15 s, and 200 ms and 400 ms between them). gobble's `auth.json` logins hold their own lock for the
+      same refresh: `Logins.LockRefresh`, which the SDK calls around its refresh, waits by `refreshPolicy`, 40 s, which
+      it describes as "the SDK's own store's 40 s" (`internal/auth/logins.go:12-14`, `:66-69`). So gobble's waiter has
+      the defect D3 fixes. **gobble's `refreshPolicy` deadline moves to 60 s with the pin**, and a test holds it past
+      a refresh's longest hold;*
+    - *not reached: D4's `CommandToken`, and `FileTokenStore`, which gobble does not use.*
+  - ***go-tui-lib/v2 `v2.11.0`** (`7830b0b1f7171afd077a486360f2a464ae9c5fc5`, 2026-11-04), in place of `v2.9.0`. It
+    passes over `v2.10.0` (`72b2a95d6f4e55a40388f83205f8e255ec4e686b`, the same day). It publishes no GitHub release. What
+    reaches gobble:*
+    - *`v2.10.0` adds a streaming content engine (`stream`'s `Doc`, `Renderer`, `Scanner`, `View` and `Writer`;
+      `stream/streamtea`), `frame` and `inputfilter`. gobble imports `stream` for its `Printer` alone, and none of the
+      new packages;*
+    - *`v2.11.0` carries go-tui-lib#15, filed on the owner's word by this PLAN's deviation 19: `Printer.Printed`, and a
+      `Transcript` that reprints while a reply's Printer holds a line (go-tui-lib's
+      `docs/decisions/0023-MADR-line-mode-components.md` A15). Its doc says "a host that still passes the reply's Idle
+      gets the same reprints as then". gobble still passes it (`internal/cli/view.go:530-532`), so its reprints are
+      unchanged by the pin. Adopting A15, a mid-turn reprint at a line's end and not a paragraph's, is a record of its
+      own, as deviation 19 decided. go-tui-lib#15 is still open;*
+    - *`api` reports no incompatible change, and `archtest` passes.*
+  - *go-selfupdate-lib `v1.24.0` is still the newest.*
+  - *`python3 scripts/check_libs.py`, every library at its newest tag, from a scratch clone:*
+    - *go-llmprovider-sdk `v1.26.0` and go-selfupdate-lib `v1.24.0`: 13 checks each, 0 failing;*
+    - *go-tui-lib `v2.11.0`: 14, `archtest` among them, 0 failing;*
+    - *acp-go-sdk2 `v1.32.0`: 13, of which 1 fails, `test`, on S8's two tests alone;*
+    - *for each, `get and tidy` and `modules` are ok, so no other module moves.*
+  - *magic-cli-remote pins acp-go-sdk2 `v1.31.2` (its `go.mod:11`). Moving it is magic-cli-remote's own record. S8
+    asks nothing of its planned `authenticate`, since its 0179-MADR D3 sends only the ids gobble advertises.*
 - **D2. `check-libs` sees what preflight sees.**
   - `scripts/check_libs.py` runs `make staticcheck` and `make lint` on its scratch module for each library, so that F2
     would have been reported.
