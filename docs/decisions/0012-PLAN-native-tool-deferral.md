@@ -92,7 +92,9 @@ plan stands alone.
   - a test assertion outside the ones a phase names as changed;
   - a file outside its list;
   - an API not as written here;
-  - an `apidiff` finding other than the compatible additions each phase names.
+  - an `apidiff` finding other than the compatible additions each phase names. *(2026-11-04: `apidiff` is a no-op
+    while the module is below v1.0.0 (`apidiff: no-op below v1.0.0`), so each phase's additions are checked by reading
+    its diff of the exported API, and the record says so.)*
 
   The owner is given:
   - the evidence: file, line, exact failure, and whether it is pre-existing;
@@ -176,16 +178,18 @@ Files: `llm/llm.go`, `llm/doc.go`, `llm/provider/provider.go`, `llm/provider/def
    - `TestWireDeferral`, over `wireIDs` (`llm/provider/wire_test.go:41`), through `cannedWire`. Each id gets two
      requests, before and after a `tool_search` result loads `request_permissions`. The expectation for each id is F21's
      form for that id and model:
-     - `claude`, `opencode-zen` and `opencode-go`, on `claude-haiku-5-5`, the Messages native form: the tools array is
-       byte-identical in both bodies, and holds `defer_loading`. The second body holds a `tool_reference` to
-       `request_permissions`;
+     - ~~`claude`, `opencode-zen` and `opencode-go`~~ `claude` and `opencode-zen` *(2026-11-04, deviation 2)*, on
+       `claude-haiku-5-5`, the Messages native form: the tools array is byte-identical in both bodies, and holds
+       `defer_loading`. The second body holds a `tool_reference` to `request_permissions`;
      - `openai`, on `gpt-6-luna`, the Responses native form: the tools array is byte-identical in both bodies, and the
-       second body has a `tool_search_output` naming `request_permissions`;
+       second body has a `tool_search_output` naming `request_permissions`. *(2026-11-04, deviation 2: so does an
+       added case, `opencode-go` on `gpt-6-luna`, OpenCode Go's Responses route.)*;
      - `grok`: the tools array is byte-identical in both bodies, holds `use_tool`, and does not hold
        `request_permissions`. A reply calling `use_tool` with `tool_name` `request_permissions` comes back as an
        `llm.ToolCallDone` named `request_permissions`;
      - every other id, the appended form: `request_permissions` is absent from the first body's tools and last in the
-       second's.
+       second's. *(2026-11-04, deviation 2: `opencode-go` on `claude-haiku-5-5` is one, since OpenCode Go sends
+       `claude-` over Chat Completions.)*
 
      An id whose body shows another form is a deviation (C8). The SDK chooses the form, so a mismatch means F21 is
      wrong.
@@ -283,7 +287,8 @@ Each phase's own steps are its acceptance criteria. Across the plan:
 - `TestWireDeferral` shows an unchanged tools array across a load on every native id and on Grok, and the appended form
   on every other id;
 - the goldens and `session/jsonl/testdata/` are byte-identical to P0's commit;
-- `apidiff` reports only the four compatible additions: `llm.Request.Deferred`, `llm.Request.Search`,
+- the exported API gains only the four compatible additions, by `apidiff` once the module is v1.0.0 and by reading
+  the diff until then (C8's note): `llm.Request.Deferred`, `llm.Request.Search`,
   `llm.Content.Loads` and `agent.Loaded.CallID`.
 
 ## Rollout and Rollback
@@ -377,3 +382,89 @@ answered the same day: (a) to each, Q5 with a Grok check in P4's probe.
 - **Goldens:** none changed.
 - **Not done in P1:** nothing D16–D18 or D21 needs. `llm.Request` is unchanged, so every provider receives the tools in
   D19's order and nothing else.
+
+### Deviation 2 (2026-11-04): P2, OpenCode Go has no Claude Messages route
+
+- **Found.**
+  - The adapter and the tests of steps 1–3 were written, and `TestToRequestDeferral`, `TestWireDeferralGrokCall` and
+    nine of `TestWireDeferral`'s ten ids passed. All of them had failed on the code before step 3.
+  - `TestWireDeferral/opencode-go` failed: `messages: the tools changed at the load`. Its bodies held Chat Completions
+    tools (`{"function":{...},"type":"function"}`), with `request_permissions` appended after the load.
+  - This was not pre-existing: the test is new.
+- **Cause.**
+  - The SDK has no Claude Messages route on OpenCode Go. Its `heuristicRoute` sends `claude-` to Messages on Zen only,
+    and everything else on Go to Chat Completions (`providers/opencode/route.go:116-143`).
+  - Step 2's expectation was the plan's error. F21's "OpenCode's messages route" stays true, of Zen.
+  - OpenCode Go's route table sends `gpt-6-luna` to `@ai-sdk/openai`, the Responses route, which is native from
+    GPT-5.4 on.
+- **Decision,** the owner's choice of two put ("Correct + add Go GPT case"):
+  - `opencode-go` on `claude-haiku-5-5` expects the appended form;
+  - a case is added, `opencode-go` on `gpt-6-luna`, which expects the Responses native form;
+  - F21 gains a note saying which gateway routes which family.
+  - The choice not taken was to correct the expectation alone, which leaves OpenCode Go's native path untested in
+    gobble.
+- **Also, before the test was trusted:** its two SDK checks used `llmprovider.Capabilities{}`, whose zero `Tools` is
+  `Unsupported`, and refused with `llmprovider: unsupported: the request needs tools`. They now pass
+  `Tools: llmprovider.Supported`. That was a defect in the new test, not in an assertion, and nothing was loosened.
+- **Scope:** no file is added.
+
+### P2 record (2026-11-04): the fields, and the adapter
+
+- **Files:** `llm/llm.go`, `llm/doc.go`, `llm/provider/provider.go`, and `llm/provider/deferral_test.go` (new), as
+  listed. No file was added.
+- **The API, read from the diff of `llm/llm.go`.** Three fields are added and nothing else changes:
+  - `Request.Deferred jsontext.Value` (`json:"deferred,omitzero"`);
+  - `Request.Search string` (`json:"search,omitzero"`);
+  - `Content.Loads []string` (`json:"loads,omitzero"`).
+
+  `apidiff` printed `apidiff: no-op below v1.0.0` (C8's note).
+- **The code:**
+  - `toRequest` decodes `Deferred` before the messages, and skips a `Tools` entry that `Deferred` names.
+  - It sends each deferred spec after the other tools with `Deferred: true`, and marks the `Search` tool, only when
+    something is deferred.
+  - After each `FunctionCallOutputItem`, it adds one `ToolLoadItem` for each name in `Loads` that `Deferred` holds.
+  - A small `toolSpecs` decoder replaces the inline struct.
+  - `llm/doc.go`'s SDK mapping gains a paragraph.
+- **Tests first,** on the fields with the adapter unchanged:
+  - `TestToRequestDeferral/loaded`: `tools ["read" "tool_search" "request_permissions"], want ["read"
+    "tool_search+search" "request_permissions+deferred" "lsp+deferred"]`;
+  - `TestToRequestDeferral/a_load_the_request_does_not_defer`: `loads [], want only request_permissions`;
+  - `TestWireDeferral`: `the tools changed at the load` for `openai`, `claude`, `grok`, `opencode-zen` and
+    `opencode-go`. That last expectation was wrong (deviation 2);
+  - `TestWireDeferralGrokCall`: `calls ["use_tool {...}"], want request_permissions with its input`.
+  - `TestToRequestDeferral/nothing_deferred` and the appended ids passed before and after the change, as they should,
+    since they assert today's behaviour.
+- **After the change, and deviation 2:** all pass.
+  - `TestToRequestDeferral` passes its three subtests.
+  - `TestWireDeferral` passes 11 cases: the ten ids, and `opencode-go/gpt-6-luna`.
+  - `TestWireDeferralGrokCall` passes.
+- **Planted breaks** (C2):
+  1. **`Deferred: false` on the SDK's deferred tools.**
+     - `TestToRequestDeferral/loaded`: `tools ["read" "tool_search+search" "request_permissions" "lsp"]`.
+     - Every `TestWireDeferral` case and `TestWireDeferralGrokCall` failed with `llmprovider: invalid request: input 3
+       loads "request_permissions", which is not a deferred tool of the request`. That includes the added
+       `opencode-go/gpt-6-luna`.
+  2. **No `ToolLoadItem`.**
+     - `TestToRequestDeferral/loaded`: `input [...] has no item after s1's result`.
+     - `TestToRequestDeferral/a_load_the_request_does_not_defer`: `loads [], want only request_permissions`.
+     - `TestWireDeferral`: the messages cases (`claude`, `opencode-zen`) failed on the missing `tool_reference`, and
+       the responses cases (`openai`, `opencode-go/gpt-6-luna`) on the missing `tool_search_output`.
+     - The appended cases failed too, since with no load the SDK appends nothing.
+  3. **An item for a name `Deferred` does not hold.**
+     - `TestToRequestDeferral/a_load_the_request_does_not_defer`: `loads ["request_permissions" "read"], want only
+       request_permissions`.
+     - `TestToRequestDeferral/nothing_deferred`: `with Search and Loads but nothing deferred:`. It failed before the
+       SDK's check was reached, so the step 4 wording ("the SDK refuses") describes where it would have failed next.
+- **G-local:**
+  - `make pre-add-check` on the four files: `go-precheck: 4 file(s) clean (gofmt, golint, govulncheck).`;
+  - `make preflight`: `preflight passed`;
+  - `make race`: exit 0, 38 packages `ok`.
+- **G-hosts:**
+  - Both hosts got 833 files, with no `._*` files. The Windows laptop is on `go1.27.3`.
+  - On the Linux machine and on the Windows laptop:
+    - `go test -count=1 ./...` exited 0, with 38 packages `ok`;
+    - `CGO_ENABLED=1 go test -race -count=1 ./...` exited 0;
+    - `make preflight` passed `gofmt` to `apidiff`, then stopped at `verify-build-metadata` (C5);
+    - `make check-records markdownlint` exited 0.
+- **Not done in P2:** nothing fills the new fields yet. Every request gobble sends is still the one P1 sends, which
+  P3 changes.

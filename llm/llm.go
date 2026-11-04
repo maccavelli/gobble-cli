@@ -69,6 +69,13 @@ type Request struct {
 	Model    string         `json:"model,omitzero"`
 	Messages []Message      `json:"messages,omitzero"`
 	Tools    jsontext.Value `json:"tools,omitzero"`
+	// Deferred are the specs of the deferred tools this request may load,
+	// loaded or not, in Tools' encoding, and Search is the name in Tools of
+	// the search that loads them. Tools stays what a provider without
+	// deferral sends: the direct tools, the search, then each loaded tool. A
+	// provider that reads neither field sends Tools as before (0012-MADR D16).
+	Deferred jsontext.Value `json:"deferred,omitzero"`
+	Search   string         `json:"search,omitzero"`
 	Thinking string         `json:"thinking,omitzero"`
 	// Cache asks the service to cache the prompt; CacheNone asks for nothing.
 	Cache CacheRetention `json:"cache,omitzero"`
@@ -118,7 +125,9 @@ type Origin struct {
 // A tool call is a ContentToolCall block in an assistant message: ToolCallID,
 // ToolName and ToolArgs (the arguments as JSON text), with any provider
 // signature in ProviderData. Its result is a ContentToolResult block in a
-// RoleTool message: ToolCallID, the output in Text, and IsError.
+// RoleTool message: ToolCallID, the output in Text, and IsError; a result
+// that loaded deferred tools names them in Loads, in load order
+// (0012-MADR D16).
 type Content struct {
 	Type         string         `json:"type"`
 	Text         string         `json:"text,omitzero"`
@@ -129,6 +138,7 @@ type Content struct {
 	ToolName     string         `json:"toolName,omitzero"`
 	ToolArgs     string         `json:"toolArgs,omitzero"`
 	IsError      bool           `json:"isError,omitzero"`
+	Loads        []string       `json:"loads,omitzero"`
 }
 
 // Content types.

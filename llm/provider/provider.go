@@ -422,10 +422,41 @@ func usageOf(r *llmprovider.Response, req *llmprovider.Request, output string) l
 	return llm.Usage{InputTokens: int64((in + 3) / 4), OutputTokens: int64((len(output) + 3) / 4), Estimated: true}
 }
 
-// toRequest maps llm's request onto the SDK's.
+// toolSpec is the part of a tool.Spec the SDK sends.
+type toolSpec struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	InputSchema any    `json:"inputSchema"`
+}
+
+// toolSpecs decodes a request's encoded specs; what names says is where
+// they came from.
+func toolSpecs(v jsontext.Value, what string) ([]toolSpec, error) {
+	if len(v) == 0 {
+		return nil, nil
+	}
+	var specs []toolSpec
+	if err := jsonx.Unmarshal(v, &specs); err != nil {
+		return nil, fmt.Errorf("provider: request %s: %w", what, err)
+	}
+	return specs, nil
+}
+
+// toRequest maps llm's request onto the SDK's. Deferred tools go as the
+// SDK's deferred tools, after the others, the Search tool as its search,
+// and each load a result names as a ToolLoadItem after that result; a
+// request that defers nothing is sent as Tools has it (0012-MADR D16).
 func toRequest(req *llm.Request) (*llmprovider.Request, error) {
 	out := &llmprovider.Request{Model: req.Model, Reasoning: reasoningFor(req.Thinking), Cache: llmprovider.CacheRetention(req.Cache),
 		MaxOutputTokens: req.MaxTokens}
+	deferred, err := toolSpecs(req.Deferred, "deferred tools")
+	if err != nil {
+		return nil, err
+	}
+	isDeferred := map[string]bool{}
+	for _, s := range deferred {
+		isDeferred[s.Name] = true
+	}
 	var system []string
 	for _, m := range req.Messages {
 		for _, c := range m.Content {
@@ -453,22 +484,31 @@ func toRequest(req *llm.Request) (*llmprovider.Request, error) {
 				out.Input = append(out.Input, llmprovider.FunctionCallItem{CallID: c.ToolCallID, Name: c.ToolName, Arguments: c.ToolArgs, Signature: r.Signature})
 			case c.Type == llm.ContentToolResult:
 				out.Input = append(out.Input, llmprovider.FunctionCallOutputItem{CallID: c.ToolCallID, Output: c.Text, IsError: c.IsError})
+				// A load the request does not defer was sent as an
+				// ordinary tool, and has nothing to load (0012-MADR D17).
+				for _, n := range c.Loads {
+					if isDeferred[n] {
+						out.Input = append(out.Input, llmprovider.ToolLoadItem{CallID: c.ToolCallID, Name: n})
+					}
+				}
 			}
 		}
 	}
 	out.Instructions = strings.Join(system, "\n\n")
-	if len(req.Tools) > 0 {
-		var specs []struct {
-			Name        string `json:"name"`
-			Description string `json:"description"`
-			InputSchema any    `json:"inputSchema"`
+	specs, err := toolSpecs(req.Tools, "tools")
+	if err != nil {
+		return nil, err
+	}
+	for _, s := range specs {
+		if isDeferred[s.Name] {
+			continue // sent below, as deferred
 		}
-		if err := jsonx.Unmarshal(req.Tools, &specs); err != nil {
-			return nil, fmt.Errorf("provider: request tools: %w", err)
-		}
-		for _, s := range specs {
-			out.Tools = append(out.Tools, llmprovider.Tool{Name: s.Name, Description: s.Description, Schema: s.InputSchema, Strict: strictFor(s.InputSchema)})
-		}
+		out.Tools = append(out.Tools, llmprovider.Tool{Name: s.Name, Description: s.Description, Schema: s.InputSchema,
+			Strict: strictFor(s.InputSchema), Search: len(deferred) > 0 && s.Name == req.Search})
+	}
+	for _, s := range deferred {
+		out.Tools = append(out.Tools, llmprovider.Tool{Name: s.Name, Description: s.Description, Schema: s.InputSchema,
+			Strict: strictFor(s.InputSchema), Deferred: true})
 	}
 	return out, nil
 }

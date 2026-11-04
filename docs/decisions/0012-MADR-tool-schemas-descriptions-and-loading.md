@@ -582,6 +582,10 @@ gobble code uses any of it. The findings below were read on 2026-11-04 at `b4e19
   - **When a request was not sent natively,** whether appended or dispatched, its response carries
     `WarningDeferralEmulated` (`deferral.go:302`). So does a Responses load that came from a result other than the
     search's.
+  - *(2026-11-04, 0012-PLAN-native-tool-deferral.md deviation 2.)* "OpenCode's messages route" is OpenCode Zen's
+    only. OpenCode Go has no Claude Messages route: the SDK sends a `claude-` model there over Chat Completions, which
+    appends (`providers/opencode/route.go:116-143`). Both gateways send a GPT model to their Responses route, which
+    is native from GPT-5.4 on (`routes_snapshot.json`, whose `opencode-go` section lists `gpt-6-luna`).
 - **F22. gobble sends none of it.**
   - `toRequest` maps a tool's name, description, schema and strict flag (`llm/provider/provider.go:470`).
   - The agent moves a loaded tool's spec into `Request.Tools` (`agent/agent.go:227-250`).

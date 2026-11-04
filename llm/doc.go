@@ -23,6 +23,12 @@
 // items, with no argument deltas, so ToolCallStart and ToolCallDelta stay in
 // the sealed set for a later stream and are not produced yet.
 //
+// A request's Deferred specs go to the SDK as its deferred tools, after the
+// others; its Search tool as the SDK's search; and each name a tool result's
+// Loads holds as a ToolLoadItem after that result. The SDK sends them in
+// each wire's own form (0012-MADR D16). A request with no Deferred is sent
+// as Tools has it.
+//
 // Sentinel mapping, most specific first because the SDK sentinels overlap:
 //
 //	ErrQuotaExhausted  → ErrQuota
