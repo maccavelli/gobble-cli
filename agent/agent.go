@@ -45,11 +45,13 @@ type Config struct {
 	// Queue gives the turn the messages queued while it runs. Nil queues
 	// nothing.
 	Queue Queue
-	// Search is tool_search, offered as a direct tool only while a tool is
-	// deferred (0012-MADR D9). Nil offers none.
+	// Search is tool_search, offered as a direct tool while any tool is
+	// deferred, loaded or not, after the other direct tools (0012-MADR D9,
+	// D19). Nil offers none.
 	Search tool.Tool
 	// Loaded names deferred tools an earlier prompt loaded, in load order.
-	// They are sent as direct tools, after the others (0012-MADR D9).
+	// They are sent as direct tools, after the others and tool_search, where
+	// the turn that loaded them sent them (0012-MADR D9, D19).
 	Loaded []string
 	// Retry is the session's retry settings, of which the turn reads Off
 	// and OfflineWait: the provider's own retries are the provider's. Nil
@@ -95,7 +97,8 @@ type Queue interface {
 // Tools are offered by exposure (0012-MADR D7): direct ones are sent with
 // every request, deferred ones wait behind tool_search until a call loads
 // them, and hidden ones are neither sent nor found. A load is append-only
-// and lasts the turn; the caller records it, and passes it back as Loaded.
+// and lasts the turn; the caller records it, and passes it back as Loaded,
+// which sends the tools in the order the loading turn did (0012-MADR D19).
 type Agent struct {
 	cfg      Config
 	tools    map[string]tool.Tool // the tools a call may name
@@ -122,10 +125,12 @@ func New(cfg Config) *Agent {
 	for _, n := range cfg.Loaded {
 		loaded[n] = true
 	}
+	deferring := false
 	for _, t := range cfg.Tools {
 		switch s := t.Spec(); s.Exposure {
 		case tool.ExposureHidden:
 		case tool.ExposureDeferred:
+			deferring = true
 			if !loaded[s.Name] {
 				a.deferred = append(a.deferred, t)
 			}
@@ -133,23 +138,26 @@ func New(cfg Config) *Agent {
 			a.offer(t)
 		}
 	}
-	for _, n := range cfg.Loaded {
-		if t, ok := byName[n]; ok && t.Spec().Exposure == tool.ExposureDeferred && a.tools[n] == nil {
-			a.offer(t)
-		}
-	}
-	if len(a.deferred) > 0 && cfg.Search != nil {
+	// tool_search goes before the loaded tools and stays while any tool is
+	// deferred, loaded or not, so a load made in a turn keeps its place at
+	// the next prompt (0012-MADR D19).
+	if deferring && cfg.Search != nil {
 		if _, dup := byName[cfg.Search.Spec().Name]; dup {
 			panic("agent: two tools are named " + cfg.Search.Spec().Name)
 		}
 		a.offer(cfg.Search)
 	}
+	for _, n := range cfg.Loaded {
+		if t, ok := byName[n]; ok && t.Spec().Exposure == tool.ExposureDeferred && a.tools[n] == nil {
+			a.offer(t)
+		}
+	}
 	return a
 }
 
 // Offered names the tools a turn's first request sends, in order: the
-// direct ones, then those Loaded names, then tool_search while a tool is
-// deferred. A caller names them in its system prompt.
+// direct ones, then tool_search while any tool is deferred, loaded or not,
+// then those Loaded names. A caller names them in its system prompt.
 func (a *Agent) Offered() []string {
 	out := make([]string, len(a.direct))
 	for i, s := range a.direct {

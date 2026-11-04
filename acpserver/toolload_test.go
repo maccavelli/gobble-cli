@@ -103,9 +103,9 @@ func TestToolLoadRecordedAndReplayed(t *testing.T) {
 	if _, err := prompt(t, c, id, "second"); err != nil {
 		t.Fatal(err)
 	}
-	// request_permissions stays deferred, so tool_search is offered
-	// (0005-PLAN F6-5 deviation 1).
-	llmtest.AssertTools(t, model.Requests()[3], "read", "widget_tool", "tool_search")
+	// tool_search is offered, and the loaded tool keeps its place after
+	// it (0005-PLAN F6-5 deviation 1; 0012-MADR D19).
+	llmtest.AssertTools(t, model.Requests()[3], "read", builtin.ToolSearchName, "widget_tool")
 
 	list, _ := slash(t, c, client, id, "/fork")
 	var second string
@@ -122,7 +122,7 @@ func TestToolLoadRecordedAndReplayed(t *testing.T) {
 	if _, err := prompt(t, c, forked, "in the fork"); err != nil {
 		t.Fatal(err)
 	}
-	llmtest.AssertTools(t, model.Requests()[4], "read", "widget_tool", "tool_search")
+	llmtest.AssertTools(t, model.Requests()[4], "read", builtin.ToolSearchName, "widget_tool")
 }
 
 // A server that offers resources makes the three resource tools load at

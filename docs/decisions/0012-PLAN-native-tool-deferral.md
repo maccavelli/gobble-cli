@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: in-progress
 date: 2026-11-04
 associated-madr: "0012-MADR-tool-schemas-descriptions-and-loading.md"
 ---
@@ -127,7 +127,8 @@ from that commit, as C1 has it.
 
 ### P1 — the list stays put across prompts (MADR D19)
 
-Files: `agent/agent.go`, `agent/agent_test.go`, `acpserver/toolload_test.go`.
+Files: `agent/agent.go`, `agent/agent_test.go`, `acpserver/toolload_test.go`. *(2026-11-04, deviation 1: and
+`acpserver/agent.go`.)*
 
 1. **Tests first,** in `agent/agent_test.go`:
    - `TestToolsStableAcrossPrompts`:
@@ -143,10 +144,15 @@ Files: `agent/agent.go`, `agent/agent_test.go`, `acpserver/toolload_test.go`.
    - `tool_search` is offered after the direct tools and before `Config.Loaded`;
    - it is offered while any tool of `Config.Tools` is deferred and not hidden, loaded or not, rather than only while an
      unloaded one remains (`:141`);
+   - *(2026-11-04, deviation 1)* `acpserver` passes `Search` only while a deferred tool outside the session-start
+     families is among the session's tools (`acpserver/agent.go`, where it builds `agent.Config`). This is MADR D19 as
+     narrowed;
    - the doc comments of `Config.Loaded`, `Agent` and `Offered` say the new order.
 4. **Planted breaks** (C9):
    - the old order, with `Loaded` before `tool_search`: `TestToolsStableAcrossPrompts` fails;
-   - the old rule at `:141`: `TestSearchStaysWhenAllLoaded` fails.
+   - the old rule at `:141`: `TestSearchStaysWhenAllLoaded` fails;
+   - *(2026-11-04, deviation 1)* `acpserver` passing `Search` whatever the tools: `TestToolFlagsSelectResourceTools`
+     fails at `internal/cli/mcp_test.go:273`.
 5. **Gates and commit.** G-local and G-hosts (C4, C5). `apidiff` reports nothing. Commit (C6).
 
 ### P2 — the fields, and the adapter (MADR D16)
@@ -293,4 +299,81 @@ Each phase's own steps are its acceptance criteria. Across the plan:
 
 ## Execution record
 
-Not started. The plan is `proposed`, waiting for the owner's approval. Q5 and Q6 were answered on 2026-11-04: (a) to each, Q5 with a Grok check in P4's probe.
+Approved by the owner on 2026-11-04: "committed, proceed to p1 0012". The records are `1657e76`. Q5 and Q6 were
+answered the same day: (a) to each, Q5 with a Grok check in P4's probe.
+
+### P0 record (2026-11-04): the records
+
+- `HEAD` was `1657e76` on `main`, with the tree clean.
+- `git rev-parse --path-format=absolute --git-path hooks` gave the global hooks directory, and `go version` gave
+  `go1.27.3`.
+
+### Deviation 1 (2026-11-04): P1, `tool_search` offered for tools that load at session start
+
+- **Found.**
+  - Steps 1–4 were done, and the pre-add check and `make preflight` passed. `make race` then failed one test outside
+    the phase's files: `--- FAIL: TestToolFlagsSelectResourceTools`, with
+    `mcp_test.go:273: -t: ["read" "tool_search" "list_mcp_resources"]`.
+  - Its session-start cases were run on a scratch copy, with each `Fatalf` made an `Errorf`. Both failed: `:273`, as
+    above, and `:282` (`--exclude-tools request_permissions`), whose tools ended in
+    `"tool_search" "list_mcp_resources" "list_mcp_resource_templates" "read_mcp_resource"`.
+  - This was not pre-existing: it was P1's rule.
+- **Cause.**
+  - MADR D19 offered `tool_search` while any tool was deferred, loaded or not.
+  - The MCP resource tools are deferred but load before the first request (`acpserver/agent.go:885`), so they never
+    sit behind a search.
+  - That broke `-t`'s promise to send the tools named, and 0005-PLAN F6-5 deviation 1's rule that a session without
+    `request_permissions` has no `tool_search`.
+- **Decision,** the owner's choice of three put ("Narrow in acpserver"):
+  - `tool_search` stays while a deferred tool outside the session-start families is among the session's tools,
+    loaded or not. `acpserver` passes no `Search` otherwise, and the agent keeps P1's rule.
+  - The two choices not taken:
+    - an `agent.Config.StartLoaded` field, the same behaviour with more API;
+    - keeping only the order fix, which leaves a cache break after `request_permissions` loads.
+- **Records:** MADR D19 is narrowed in place, with the original struck through.
+- **Scope:** `acpserver/agent.go` joins P1. `internal/cli/mcp_test.go` is unchanged, and becomes the narrowed rule's
+  check: step 4 gains its break.
+
+### P1 record (2026-11-04): the list stays put across prompts
+
+- **Files:** `agent/agent.go`, `agent/agent_test.go`, `acpserver/toolload_test.go`, and, by deviation 1,
+  `acpserver/agent.go`.
+- **The code:**
+  - `agent.New` offers `tool_search` after the direct tools and before `Config.Loaded`, while any tool of
+    `Config.Tools` is deferred, loaded or not.
+  - The doc comments of `Config.Search`, `Config.Loaded`, `Agent` and `Offered` say so.
+  - `acpserver`'s new `searchFor` passes `builtin.ToolSearch()` only while a deferred tool outside the session-start
+    families is among the session's tools (deviation 1).
+- **Tests first,** run on the code as it stood. Each failed as planned:
+  - `TestLoadedFromConfig`: `agent_test.go:709: request tools = ["a" "d" "b" "tool_search"], want ["a" "tool_search"
+    "d" "b"]`;
+  - `TestToolsStableAcrossPrompts`: `agent_test.go:735: the next prompt's tools`, with `b` sent before
+    `tool_search`;
+  - `TestSearchStaysWhenAllLoaded`: `agent_test.go:748: request tools = ["a" "b" "c" "d"], want ["a" "tool_search"
+    "b" "c" "d"]`;
+  - `TestToolLoadRecordedAndReplayed`: `toolload_test.go:108` and `:125`, `request tools = ["read" "widget_tool"
+    "tool_search"], want ["read" "tool_search" "widget_tool"]`.
+- **Planted breaks** (C2, each on its own scratch copy):
+  1. **The old order,** with `Loaded` before `tool_search`.
+     - `TestToolsStableAcrossPrompts` failed at `agent_test.go:735`. The next prompt's tools began
+       `[{"name":"a",...},{"name":"b",...`, and the last request's began `[{"name":"a",...},{"name":"tool_search",...`.
+     - `TestLoadedFromConfig` and `TestSearchStaysWhenAllLoaded` failed with it.
+  2. **The old rule,** with `tool_search` only while an unloaded tool remains.
+     - `TestSearchStaysWhenAllLoaded` failed: `request tools = ["a" "b" "c" "d"], want ["a" "tool_search" "b" "c" "d"]`.
+  3. **`acpserver` passing `tool_search` whatever the tools** (deviation 1).
+     - `TestToolFlagsSelectResourceTools` failed: `mcp_test.go:273: -t: ["read" "tool_search" "list_mcp_resources"]`.
+- **G-local:**
+  - `make pre-add-check` on the four files: `go-precheck: 4 file(s) clean (gofmt, golint, govulncheck).`;
+  - `make preflight`: `preflight passed`, with `apidiff: no-op below v1.0.0`;
+  - `make race`: exit 0, 38 packages `ok`.
+- **G-hosts:**
+  - Both hosts got the tree as 832 files, with no `._*` files, on `go1.27.3`.
+  - On the Linux machine and on the Windows laptop:
+    - `go test -count=1 ./...` exited 0, with 38 packages `ok`;
+    - `CGO_ENABLED=1 go test -race -count=1 ./...` exited 0;
+    - `make preflight` passed every gate from `gofmt` to `apidiff`, then stopped at `verify-build-metadata`, which
+      needs a commit (macOS-only, C5);
+    - `make check-records markdownlint` exited 0.
+- **Goldens:** none changed.
+- **Not done in P1:** nothing D16–D18 or D21 needs. `llm.Request` is unchanged, so every provider receives the tools in
+  D19's order and nothing else.

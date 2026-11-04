@@ -696,7 +696,8 @@ func TestLoadInTurn(t *testing.T) {
 }
 
 // Tools loaded by an earlier prompt are sent as direct tools, after the
-// others, in load order; a hidden tool cannot be called (0012-MADR D9).
+// others and tool_search, in load order; a hidden tool cannot be called
+// (0012-MADR D9, D19).
 func TestLoadedFromConfig(t *testing.T) {
 	var seen [][]string
 	s := llmtest.NewScript(llmtest.ToolCall("h1", "h", `{}`), llmtest.Text("ok"))
@@ -705,10 +706,46 @@ func TestLoadedFromConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	llmtest.AssertTools(t, s.Requests()[0], "a", "d", "b", "tool_search")
+	llmtest.AssertTools(t, s.Requests()[0], "a", "tool_search", "d", "b")
 	if res := end.Messages[2].Content[0]; !res.IsError || !strings.Contains(res.Text, `no tool named "h"`) {
 		t.Fatalf("a call to the hidden tool = %+v", res)
 	}
+}
+
+// A load keeps its place at the next prompt: the prompt after a turn that
+// loaded b, and with it c, sends the tools that turn's last request sent,
+// byte for byte (0012-MADR D19, F23).
+func TestToolsStableAcrossPrompts(t *testing.T) {
+	var seen [][]string
+	first := llmtest.NewScript(llmtest.ToolCall("s1", "tool_search", `{}`), llmtest.Text("done"))
+	a := agent.New(agent.Config{Provider: first, Tools: exposureTools(), Search: searchStub([]string{"b"}, &seen)})
+	if _, _, err := collect(t.Context(), t, a, tool.Env{}, "find it"); err != nil {
+		t.Fatal(err)
+	}
+	reqs := first.Requests()
+	last := reqs[len(reqs)-1]
+	llmtest.AssertTools(t, last, "a", "tool_search", "b", "c")
+
+	next := llmtest.NewScript(llmtest.Text("ok"))
+	b := agent.New(agent.Config{Provider: next, Tools: exposureTools(), Search: searchStub(nil, &seen), Loaded: []string{"b", "c"}})
+	if _, _, err := collect(t.Context(), t, b, tool.Env{}, "again"); err != nil {
+		t.Fatal(err)
+	}
+	if got := next.Requests()[0].Tools; string(got) != string(last.Tools) {
+		t.Fatalf("the next prompt's tools\n%s\nwant the last request's\n%s", got, last.Tools)
+	}
+}
+
+// tool_search stays while a tool is deferred, loaded or not, so a session
+// whose every deferred tool has loaded does not lose it (0012-MADR D19).
+func TestSearchStaysWhenAllLoaded(t *testing.T) {
+	var seen [][]string
+	s := llmtest.NewScript(llmtest.Text("ok"))
+	a := agent.New(agent.Config{Provider: s, Tools: exposureTools(), Search: searchStub(nil, &seen), Loaded: []string{"b", "c", "d"}})
+	if _, _, err := collect(t.Context(), t, a, tool.Env{}, "hi"); err != nil {
+		t.Fatal(err)
+	}
+	llmtest.AssertTools(t, s.Requests()[0], "a", "tool_search", "b", "c", "d")
 }
 
 // Every model call of a turn carries the config's cache hint, the tool

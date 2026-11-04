@@ -680,7 +680,15 @@ phase that it changes.)
   - When a session's history is rebuilt, `Loads` is set on the tool result with that id.
   - An entry with no `callId` keeps its meaning today, and D17 sends its tools as ordinary tools.
 - **D19. The tools list does not change between compactions (closes F23).**
-  - `tool_search` is offered while the session has any deferred tool, loaded or not.
+  - ~~`tool_search` is offered while the session has any deferred tool, loaded or not.~~ *(Narrowed 2026-11-04,
+    0012-PLAN-native-tool-deferral.md deviation 1, the owner's choice: as written, it also offered `tool_search`
+    when the only deferred tools were the MCP resource tools, which load at session start and never sit behind a
+    search. That broke `-t`'s list and 0005-PLAN F6-5 deviation 1's rule (`internal/cli/mcp_test.go:273`,
+    `:282`).)*
+  - `tool_search` is offered while the session has a deferred tool outside the session-start families (D9 item 1),
+    loaded or not. Such a tool was either behind the search at the first prompt or loaded by a call since, so the
+    search, once offered, stays. `acpserver`, which owns the session-start families, passes no `Search` when every
+    deferred tool is in one. The agent offers the `Search` it is given while any tool is deferred.
   - On every prompt, `Tools` is in the order a turn already sends: the direct tools, `tool_search`, then the loaded
     tools in load order.
   - D9 item 4's "never removed or reordered within the session" then holds on every wire.

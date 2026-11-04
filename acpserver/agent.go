@@ -696,7 +696,7 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 		Thinking: think,
 		Policy:   planPolicy{a: a, s: s, mcp: mcpTools, inner: &acpPolicy{conn: conn, session: p.SessionId}},
 		Queue:    s.queue,
-		Search:   builtin.ToolSearch(),
+		Search:   searchFor(tools),
 		Loaded:   loaded,
 		System:   system,
 		Cache:    s.cache,
@@ -878,6 +878,20 @@ func loadedTools(path []session.Entry) []string {
 		}
 	}
 	return out
+}
+
+// searchFor is tool_search when tools hold a deferred tool outside the
+// session-start families, loaded or not, and nil otherwise: such a tool was
+// behind the search at the first prompt or loaded by a call since, so the
+// search stays, while one of those families loads before the first request
+// and leaves the search nothing to find (0012-MADR D19).
+func searchFor(tools []tool.Tool) tool.Tool {
+	for _, t := range tools {
+		if s := t.Spec(); s.Exposure == tool.ExposureDeferred && !slices.Contains(sessionStartFamilies, s.Family) {
+			return builtin.ToolSearch()
+		}
+	}
+	return nil
 }
 
 // startLoads are the deferred tools of a session-start family that are not
