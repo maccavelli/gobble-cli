@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: complete
 date: 2026-11-04
 associated-madr: "0037-MADR-hardening-integrity-and-performance.md"
 ---
@@ -459,3 +459,44 @@ The owner committed P2 as `4e29ed4`.
    * `go test -count=1 ./...` and `CGO_ENABLED=1 go test -race -count=1 ./...` exited 0;
    * `make preflight` passed up to `verify-build-metadata`, which exited on `git rev-parse HEAD`'s 128, as expected;
    * `make check-records markdownlint` exited 0.
+
+The owner committed P3 as `319320d`.
+
+### P4 record (2026-11-04): close-out
+
+1. **Goldens.** `git diff --stat 38da632..HEAD -- '*.golden' session/jsonl/testdata` was empty.
+2. **The disclosure guard,** run over `origin/main..HEAD`, exited 0 with no findings. That range is seven commits:
+   `f71cc4a`, `9b5535a` and `67f72fb` (0041), then `38da632`, `7bd6800`, `4e29ed4` and `319320d` (this plan). Nothing
+   is pushed.
+3. **#7's closing comment,** drafted for the owner. It is posted, and #7 closed, on the owner's word after the push:
+
+   > U3, the `session/jsonl` store's hardening, is done:
+   > [0037-MADR](https://github.com/maccavelli/gobble-cli/blob/main/docs/decisions/0037-MADR-hardening-integrity-and-performance.md)'s
+   > amendment of 2026-11-04 (D36–D41), carried out by
+   > [0037-PLAN-session-store-durability.md](https://github.com/maccavelli/gobble-cli/blob/main/docs/decisions/0037-PLAN-session-store-durability.md).
+   > With U1, U2 (declined), U4 and U5 settled by 0039, every unit is closed.
+   >
+   > - **A failed write leaves the session as it was** (7bd6800). A write that fails, wholly or partly, is cut back to the
+   >   file's size before it. The cut goes through the path, since Windows refuses to truncate through an `O_APPEND`
+   >   handle, which was checked on the Windows laptop. When the cut fails too, the next line starts on its own. The
+   >   entry joins memory only once it is on disk, and a failed first write removes the new file. Tests:
+   >   `TestShortWriteIsCut`, `TestFailedCutMarksTorn` and `TestFailedCreateRetries`.
+   > - **A torn last line is cut on resume, and logged** (7bd6800). `Open` cuts a final line that has no newline and does
+   >   not decode as an entry, in a current-version file only, and logs the bytes cut. `Read` never cuts. Tests:
+   >   `TestMalformedAndTornLines`, `TestOpenKeepsCompleteLineWithoutNewline`, `TestOpenLeavesOlderFile` and
+   >   `TestReadDoesNotCut`.
+   > - **The acceptance test** (4e29ed4). `TestKilledWriterReopens` kills a writer mid-append, and one that left half a
+   >   line on disk, on macOS, Linux and Windows. Every entry the writer acknowledged is in the file after reopening, any
+   >   cut is logged with its size, and the next append reads back with nothing skipped.
+   > - **Reading** (319320d). `parse` iterates `bytes.Lines`: 49 KB and one allocation less per 2,000-entry read, with
+   >   the time unchanged within noise (`BenchmarkParse`).
+   > - **No write-side size cap** (D38). The 1 MiB in magic-cli-remote is its WebSocket frame to the phone, not a reader
+   >   of session files. gobble reads a file whole, and `read` can legitimately put a 20 MiB image into one entry. An
+   >   entry is bounded where it is made.
+   > - **No fsync** (D39). A process crash or kill loses no acknowledged entry. Power loss can lose the last ones, and the
+   >   next `Open` cuts the torn line that leaves.
+   >
+   > Every test was seen failing on a deliberately broken copy before it was trusted, and the records quote each
+   > failure.
+
+4. **Status.** Every Goal item is met, so this plan is `complete`. The MADR stays `accepted`.
