@@ -613,6 +613,9 @@ answered the same day: (a) to each, Q5 with a Grok check in P4's probe.
         case-sensitive matching. Grok's call itself was right.
     - With both fixed in the scratch copy, the second run passed. The MADR's Observed section has the numbers, and the
       one result the run does not explain.
+    - *(Later the same day.)* A third run gave each prompt a fresh nonce, and repeated the request after the load.
+      It passed. Claude's request after the load read the whole prompt the one before it wrote (8,494 tokens), and
+      wrote only the 258 that came after, which bears out D16. The MADR's "The probe's third run" has the numbers.
 - **Goldens:** `git diff --stat 1657e76..HEAD -- '*.golden' acpserver/testdata session/jsonl/testdata` is empty, and so
   is the working tree's.
 - **#4,** the comment drafted for item 8. Posting it waits for the owner's word.

@@ -1209,4 +1209,34 @@ row.
 - **Not explained by this run:** `CacheWriteTokens` was 0 on every row, though reads happened. The first request's read
   matches the failed run's request of a few minutes before. Where the second request's 8,738 cached tokens were
   written is not shown, so either the SDK reports writes where this field does not, or an earlier request wrote them.
-  The read is what D16 predicts. That it was caused by this run's first request is **[unverified]**.
+  The read is what D16 predicts. That it was caused by this run's first request is **[unverified]**. *(Settled
+  2026-11-04 by a third run, below.)*
+
+**The probe's third run (2026-11-04).** The owner asked why `CacheWriteTokens` was 0.
+
+- **The mapping is not the cause.** The SDK maps Anthropic's `cache_creation_input_tokens` to `CacheWriteTokens` on the
+  stream as well (`internal/wire/messages/messages.go:461-511`, `:678-682`), and gobble's adapter passes it on. So a 0
+  is Anthropic's own count.
+- **The second run's prompts matched the first run's,** so their reads could have come from the first run's writes.
+  The first run's usage was never printed.
+- **The third run** gave each prompt a fresh nonce, so no read could come from an earlier run, and repeated the request
+  after the load. It passed:
+
+| Request | Input tokens | Cache read | Cache write | Outcome |
+| :--- | ---: | ---: | ---: | :--- |
+| Claude `claude-haiku-5-5`, before the load | 8,498 | 0 | 8,494 | |
+| Claude, after the load | 8,756 | 8,494 | 258 | called `request_permissions`, `{"network":true,"reason":…}` |
+| Claude, the same request with no deferred tools | 8,405 | 0 | 0 | |
+| Claude, after the load again | 8,756 | 8,752 | 0 | |
+| Grok `grok-4.6`, first | 6,782 | 512 | 0 | `use_tool` came back as `request_permissions`, `{"network":true,"reason":…}` |
+| Grok, the same request again | 6,782 | 6,656 | 0 | |
+
+- **D16 is borne out on Claude, now from writes as well as reads.**
+  - The request after the load read the whole prompt that the request before it wrote: 8,494 tokens, with the tools
+    list. It wrote only the 258 tokens that came after: the call, its result and the `tool_reference`.
+  - A load leaves the cached prefix whole. Before this plan, a load rewrote the tools list, and so broke the cache from
+    that request on (F10).
+- **Deferred definitions cost 93 input tokens for two,** 8,498 against 8,405, as in the second run.
+- **Grok is as in the second run.** Its first request read 512 tokens despite the nonce, which is consistent with xAI
+  caching a prefix that comes before the system prompt. That is **[unverified]**, and changes nothing here.
+- **Where the second run's after-load read was written is still not shown.** The third run makes it moot.
