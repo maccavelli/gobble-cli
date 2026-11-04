@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: complete
 date: 2026-11-03
 associated-madr: "0035-MADR-pin-current-sibling-releases-and-remove-gobble-copies.md"
 ---
@@ -3246,3 +3246,34 @@ The base is `73bd6c2`, the records commit of deviation 22. No deviation.
 7. **G-hosts,** on the Linux machine and the Windows laptop, with 824 files shipped to each: `go test` and race passed
    on both, 38 ok; `make check-records markdownlint` passed on both; preflight stops at `verify-build-metadata`, as on
    every copy.
+
+### P28 record (2026-11-03): go-selfupdate-lib `v1.24.0`
+
+The base is P27's `eab3170`. No deviation.
+
+1. **C2:** `git ls-remote --tags` at the phase's start lists `v1.24.0` as go-selfupdate-lib's newest `v1` tag.
+2. **Checked first** (step 1): `python3 scripts/check_libs.py --lib go-selfupdate-lib --tag v1.24.0`, "pinned v1.23.1,
+   checking v1.24.0": 13 checks, "0 failing checks".
+3. **The pin** (step 2): `go get github.com/maccavelli/go-selfupdate-lib@v1.24.0` ("upgraded … v1.23.1 => v1.24.0"),
+   then `go mod tidy`. `go.mod` changed on the library's line alone; `go.sum` lost the two `v1.23.1` lines and gained
+   the two `v1.24.0` lines, the `go.mod` hash unchanged, and nothing else.
+4. **The workflow pins** (step 3): `ci.yml:166` and `:178` name
+   `74ab5dd376a4c864debb32b2d8abfc7856059ba3 # v1.24.0`, `refs/tags/v1.24.0^{}` by `git ls-remote --tags`. A search of
+   `.github/` for `c24f5919` finds nothing.
+5. **No source change** (step 4): `go test -count=1 ./internal/buildinfo/... ./internal/cli/` passed, both ok. After
+   the gates, `git status` showed only the phase's five files.
+6. **The docs** (step 5): `README.md:136` and `docs/architecture.md:179` name `v1.24.0`; neither names `v1.23.1`.
+7. **G-local:** no Go file changed, so `make pre-add-check` had none to check; `make preflight`: passed; `make race`: 38
+   ok. P28 touches nothing under `internal/cli`, so no `make perf`.
+8. **G-hosts,** on the Linux machine and the Windows laptop, with 824 files shipped to each: `go test` and race passed
+   on both, 38 ok; `make check-records markdownlint` passed on both; preflight stops at `verify-build-metadata`, as on
+   every copy.
+9. **The plan's Verification,** its first two items again, as deviation 22 decided:
+   * `go list -m` reports acp-go-sdk2 `v1.31.2`, go-llmprovider-sdk `v1.25.0`, go-selfupdate-lib `v1.24.0` and
+     go-tui-lib/v2 `v2.9.0`, the MADR's D1 as amended on 2026-11-03;
+   * `make check-libs`: each library "pinned …, checking" the same tag, its newest, every check ok and `api` "nothing
+     to compare"; "0 failing checks". `TestLastGoodOnDisk`'s teardown failure did not recur;
+   * the goldens: `acpserver/testdata/session.golden`, `view-plain.golden`, `print-json.golden` and
+     `print-stream-json.golden` are byte-identical to `ccd8aa8`'s (`git diff --quiet`).
+10. **Status:** P27's and P28's criteria are met. This plan is `complete` again; the MADR stays `accepted`. What
+    P19's record left for other records is unchanged.
