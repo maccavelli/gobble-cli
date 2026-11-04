@@ -733,7 +733,10 @@ phase that it changes.)
   now.
 - **Bad: the saving is small today** (F24). At most one tool's load per session is involved.
 - **Bad:** a Messages request carries every deferred definition, with `defer_loading`, from its first request.
-  **[unverified]** Whether those definitions count as input tokens; the plan's owner-run probe reads the usage.
+  ~~**[unverified]** Whether those definitions count as input tokens; the plan's owner-run probe reads the usage.~~
+  *(Measured 2026-11-04 by the owner-run probe on `claude-haiku-5-5`: they count, at about 93 input tokens for two
+  definitions, 8,484 against 8,391 for the same request without them. See "Observed — execution results
+  (2026-11-04)".)*
 - **Bad:** `llm.Request` carries tools in two places. A provider outside gobble that reads only `Tools` keeps today's
   behaviour and gains nothing. That is the price of VI-A over VI-C.
 - **Bad:** on Responses, the search result's text is replaced by `tool_search_output`. gobble's wording of what loaded,
@@ -1179,6 +1182,31 @@ Linux machine and the Windows laptop.
 **Not yet exercised:**
 
 - **D21.** 0036-PLAN P2 has not landed, so gobble reads no SDK warning yet. Its dated note carries the Debug rule.
-- **The cache itself.** Neither the saving on Claude and Grok, nor whether Claude bills deferred definitions as input
+- ~~**The cache itself.** Neither the saving on Claude and Grok, nor whether Claude bills deferred definitions as input
   tokens, has been measured, so the amendment's "[unverified]" on input tokens stands. The plan's owner-run probe, kept outside
-  the tree, measures both when the owner runs it with keys.
+  the tree, measures both when the owner runs it with keys.~~ *(Measured 2026-11-04, below.)*
+
+**The owner-run probe (2026-11-04).** The owner ran it with keys from the environment. The first run failed on two
+defects in the probe, not in gobble: an output cap of 256 tokens cut off Claude's first reply (`incomplete response:
+length`), and an untagged struct refused Grok's valid arguments. Both were fixed in the scratch copy, and the second
+run passed. The SDK's `InputTokens` includes the cached tokens: `CacheReadTokens` is at most `InputTokens` on every
+row.
+
+| Request | Input tokens | Cache read | Outcome |
+| :--- | ---: | ---: | :--- |
+| Claude `claude-haiku-5-5`, before the load | 8,484 | 8,480 | |
+| Claude, after the load | 8,742 | 8,738 | called `request_permissions`, `{"network":true,"reason":…}` |
+| Claude, the same request with no deferred tools | 8,391 | 0 | |
+| Grok `grok-4.6`, first | 6,773 | 512 | `use_tool` came back as `request_permissions`, `{"network":true,"reason":…}` |
+| Grok, the same request again | 6,773 | 6,656 | |
+
+- **Borne out on Claude:** the request after the load read all but 4 of its input tokens from the cache, and the
+  model called the loaded tool with arguments its schema allows.
+- **Borne out on Grok (Q5 (a)):** the wrapper's call reached gobble as `request_permissions`, with the tool's own
+  arguments, and the repeated request read 6,656 of 6,773 tokens from the cache.
+- **Deferred definitions are billed as input on Claude, cheaply:** 93 tokens for two (8,484 against 8,391). The probe's
+  own log line, "cost 8573", added the cached tokens to an input count that already holds them, and is wrong.
+- **Not explained by this run:** `CacheWriteTokens` was 0 on every row, though reads happened. The first request's read
+  matches the failed run's request of a few minutes before. Where the second request's 8,738 cached tokens were
+  written is not shown, so either the SDK reports writes where this field does not, or an earlier request wrote them.
+  The read is what D16 predicts. That it was caused by this run's first request is **[unverified]**.

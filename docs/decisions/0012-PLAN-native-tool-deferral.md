@@ -605,6 +605,14 @@ answered the same day: (a) to each, Q5 with a Grok check in P4's probe.
     - Run with `ANTHROPIC_API_KEY` and `XAI_API_KEY` unset, both tests `SKIP`, through `llmtest.LiveCredential`.
   - **Not exercised:** it has not run against a service, and so has not been seen to fail (C9). That needs the owner's
     keys. Until it runs, the MADR's "[unverified]" on input tokens stands.
+  - *(2026-11-04, after the commit.)* The owner ran it twice.
+    - **The first run failed,** both times on the probe:
+      - `TestProbeClaudeDeferral`: `llm: incomplete response: llmprovider: incomplete response: length`, from its
+        256-token cap;
+      - `TestProbeGrokDeferral`: `unknown object member name "network"`, from an untagged struct under JSON v2's
+        case-sensitive matching. Grok's call itself was right.
+    - With both fixed in the scratch copy, the second run passed. The MADR's Observed section has the numbers, and the
+      one result the run does not explain.
 - **Goldens:** `git diff --stat 1657e76..HEAD -- '*.golden' acpserver/testdata session/jsonl/testdata` is empty, and so
   is the working tree's.
 - **#4,** the comment drafted for item 8. Posting it waits for the owner's word.
