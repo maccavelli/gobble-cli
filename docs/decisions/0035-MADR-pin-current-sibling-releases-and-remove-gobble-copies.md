@@ -443,6 +443,41 @@ policy. And one record keeps the order, and the cross-library facts (check-libs,
     `TempDir RemoveAll cleanup: … directory not empty`. That is the teardown failure
     `0039-PLAN-one-json-v2-encoder-and-invalid-utf8-policy.md`'s deviations 14 and 18 recorded in another test, and
     nothing of go-selfupdate-lib's changed.*
+
+  *Amended 2026-11-03, by the PLAN's deviation 22, **proposed** for the owner's approval, from the owner's request
+  "assess go-llmprovider-sdk, acp-go-sdk2, go-selfupdate-lib and go-tui-lib and update our pins accordingly." Each tag
+  is the newest of its major by `git ls-remote --tags` and the Go module proxy that day:*
+  - ***acp-go-sdk2 `v1.31.2`** (`69eff662951c4e6457e55590d7d50e302dc395d3`, 2026-11-03), its GitHub release marked
+    Latest, in place of `v1.31.1`. The ACP schema is still `1.25.0`, `make api` reports no change against `v1.31.1`, and
+    its `go.mod` is unchanged. It fixes ten defects of the connection runtime (acp-go-sdk2's
+    `docs/decisions/0049-MADR-remediate-the-2026-11-01-debugging-pass.md`, R1 to R10). What reaches gobble:*
+    - *R1: a connection's reader no longer writes its own error answers, to an invalid line or to a request refused
+      over a limit or during `Shutdown`; a goroutine of their own writes them, in order. Two SDK peers over `io.Pipe`,
+      as `agentproc.InProcess` connects `acpclient` to the agent (`acpclient/conn.go:139`), could each block writing to
+      a reader that had stopped, and neither read again. A peer that leaves 1,024 answers unwritten is now closed;*
+    - *R4: at its context's end, `ServeAgent`, which `acpserver.Serve` and `acptest` call, now waits for the
+      notifications' handlers too, within the same 5 s, and wraps `acp.ErrHandlersRunning` when they pass. `Serve`'s
+      doc already says it returns once "the connection's handlers have returned, or 5 s have passed"; that now holds
+      for a notification's handler, such as `Agent.Cancel`, as well. `acpclient` already reads `ErrHandlersRunning`
+      (`acpclient/conn.go:191`);*
+    - *R5 to R7 and R9 bound the queue and message limits and drop the cancel of a request never sent. gobble sets
+      only `WithMaxQueuedNotifications`, to `Options.MaxQueued` (`acpclient/conn.go:136`);*
+    - *not reached: R2, an agent's `initialize` answer guarded against a receiving middleware; R3, a bridge's barrier;
+      R8, sending middleware. gobble installs no middleware, and its `WithInboundRewrite` hook rewrites requests'
+      params, not answers.*
+  - ***go-selfupdate-lib `v1.24.0`** (`74ab5dd376a4c864debb32b2d8abfc7856059ba3`, 2026-11-02), in place of `v1.23.1`. It
+    adds `String`, `GoString`, `Format` and `LogValue` to `service.Command`, `service.HandOff`, `service.ExecOptions` and
+    `ghattest.Options`, which print each `Env` value redacted, and documents `taskscheduler.Options.RequestStop`'s
+    timing:*
+    - *gobble's build reaches `buildinfo`, and its tests `selfupdate`, `selfupdate/archive`, `selfupdate/releasespec`
+      and `internal/winproc`. Between the tags, none of those, the module's `go.mod`, nor the reusable release
+      workflows changed (`git diff --stat v1.23.1..v1.24.0` is empty for each);*
+    - *the two `ci.yml` pins still move to `74ab5dd376a4c864debb32b2d8abfc7856059ba3 # v1.24.0`, so they name the
+      pinned tag. It publishes no GitHub release.*
+  - *go-llmprovider-sdk `v1.25.0` and go-tui-lib/v2 `v2.9.0` are still the newest. Each default branch has commits past
+    its tag, not released; D1 pins tags, never a branch. go-tui-lib#15 is still open.*
+  - *`python3 scripts/check_libs.py --lib <library> --tag <tag>`: acp-go-sdk2 `v1.31.2` and go-selfupdate-lib
+    `v1.24.0`, 13 checks each, 0 failing, `staticcheck`, `lint` and `api` among them.*
 - **D2. `check-libs` sees what preflight sees.**
   - `scripts/check_libs.py` runs `make staticcheck` and `make lint` on its scratch module for each library, so that F2
     would have been reported.

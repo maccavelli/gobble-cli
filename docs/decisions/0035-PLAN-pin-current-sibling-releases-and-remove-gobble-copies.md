@@ -1,6 +1,6 @@
 ---
-status: complete
-date: 2026-11-01
+status: in-progress
+date: 2026-11-03
 associated-madr: "0035-MADR-pin-current-sibling-releases-and-remove-gobble-copies.md"
 ---
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
@@ -130,6 +130,9 @@ and the owner chose to ask go-tui-lib for the composition it needs
 ([go-tui-lib#14](https://github.com/maccavelli/go-tui-lib/issues/14)). The MADR's D14 step 5 amendment, which splits P18
 into P18a and P18b, is proposed and waits for the owner's review. `0039-PLAN-one-json-v2-encoder-and-invalid-utf8-policy.md`'s
 P1 runs before P23 (0039-MADR Q1). See the execution record.*
+
+*Deviation 22 (2026-11-03), proposed: P27 pins acp-go-sdk2 `v1.31.2`, then P28 go-selfupdate-lib `v1.24.0`, each on
+the owner's word, after P19. See the execution record.*
 
 ## Questions this plan adds
 
@@ -1323,6 +1326,44 @@ Files: `go.mod`, `go.sum`, `README.md`, `docs/architecture.md`.
 
 No check is added, so C9 has nothing to break.
 
+### P27 — acp-go-sdk2 `v1.31.2` (MADR D1, amended 2026-11-03; deviation 22)
+
+Files: `go.mod`, `go.sum`, `README.md`, `docs/architecture.md`.
+
+1. **Checked first:** `python3 scripts/check_libs.py --lib acp-go-sdk2 --tag v1.31.2` reports every check ok. On
+   2026-11-03 it did: 13 checks, 0 failing.
+2. **The pin:** `go get github.com/maccavelli/acp-go-sdk2@v1.31.2`, then `go mod tidy`.
+   * `go.mod` changes on that line alone.
+   * `go.sum` changes in acp-go-sdk2's lines alone.
+3. **No source change.** `acpclient`, `acpclient/acptest`, `acpserver` and `internal/cli` build and pass their tests
+   unchanged; `acpserver/testdata/session.golden` and the `stream-json` goldens are unchanged. A failing test is a
+   deviation: the MADR's amendment says gobble sees only R1's error answers and R4's wait at `ServeAgent`'s context's
+   end.
+4. **The docs:** `README.md:129` and `docs/architecture.md:176` name `v1.31.2`.
+5. G-local, and G-hosts. **Commit.**
+
+No check is added, so C9 has nothing to break.
+
+### P28 — go-selfupdate-lib `v1.24.0` (MADR D1, amended 2026-11-03; deviation 22)
+
+Files: `go.mod`, `go.sum`, `.github/workflows/ci.yml`, `README.md`, `docs/architecture.md`.
+
+1. **Checked first:** `python3 scripts/check_libs.py --lib go-selfupdate-lib --tag v1.24.0` reports every check ok.
+   On 2026-11-03 it did: 13 checks, 0 failing.
+2. **The pin:** `go get github.com/maccavelli/go-selfupdate-lib@v1.24.0`, then `go mod tidy`.
+   * `go.mod` changes on that line alone, since the library's own `go.mod` is unchanged from `v1.23.1`'s.
+   * `go.sum` changes in go-selfupdate-lib's lines alone.
+3. **The workflow pins:** both `ci.yml` lines that name `c24f5919cd9e9e3ba3736e64bcf18a6e2a51489e # v1.23.1`
+   (`ci.yml:166` and `:178`) name `74ab5dd376a4c864debb32b2d8abfc7856059ba3 # v1.24.0`, the tag's commit by
+   `git ls-remote --tags` (`refs/tags/v1.24.0^{}`).
+   * Assert by search: no `c24f5919` remains in `.github/`.
+4. **No source change.** `buildinfo`, `selfupdate` and their tests pass unchanged, `internal/cli`'s version and release
+   tests among them.
+5. **The docs:** `README.md:136` and `docs/architecture.md:179` name `v1.24.0`.
+6. G-local, and G-hosts. **Commit.**
+
+No check is added, so C9 has nothing to break.
+
 ## Verification
 
 Each phase's own steps are its acceptance criteria. Across the plan:
@@ -1344,6 +1385,7 @@ Each phase's own steps are its acceptance criteria. Across the plan:
   - P14–P18 need P13;
   - P15–P18 need P14's requirement.
   - P12 needs P20, and P17 needs P21 (deviation 12). P22 needs nothing after P3.
+  - P27 needs P24, and P28 needs P22 (deviation 22).
 
   Reverting a pin phase reverts the phases that need it, newest first.
 - Nothing is pushed by this plan. The owner pushes, after the disclosure guard.
@@ -3155,3 +3197,31 @@ The base is P18b's `94aed06`. No deviation.
    * the teardown failure in `TestLoginAsksThroughQuestions` and `TestLastGoodOnDisk` (0039-PLAN's deviations 14 and
      18, and this plan's deviation 14), which waits for a record of its own;
    * 0031-PLAN P4b, the ChatGPT plan sign-in.
+
+### Deviation 22 (2026-11-03): two pins behind their current release
+
+- **Found,** on the owner's request "assess go-llmprovider-sdk, acp-go-sdk2, go-selfupdate-lib and go-tui-lib and update
+  our pins accordingly." (`main` at `dded45c`, equal to `origin/main`). `git ls-remote --tags`, the Go module proxy
+  (`go list -m <module>@latest`) and the libraries' GitHub releases list two newer tags:
+  - acp-go-sdk2 `v1.31.2` (2026-11-03), its release marked Latest, against the pin `v1.31.1`;
+  - go-selfupdate-lib `v1.24.0` (2026-11-02), against `v1.23.1`. It publishes no GitHub release.
+
+  go-llmprovider-sdk `v1.25.0` and go-tui-lib/v2 `v2.9.0` are still the newest. Both have commits past their tags on
+  their default branches, not released, which D1 does not pin.
+- **Measured,** by `python3 scripts/check_libs.py --lib <library> --tag <tag>` on scratch clones: acp-go-sdk2
+  `v1.31.2` 13 checks and go-selfupdate-lib `v1.24.0` 13, each 0 failing, `staticcheck`, `lint` and `api` among them.
+  The tree was not changed.
+- **What reaches gobble,** read from the release notes, the tags' diffs and gobble's call sites; the MADR's D1
+  amendment has it in full:
+  - acp-go-sdk2: R1, the in-process pair's error answers written by a goroutine of their own, not the reader; and R4,
+    `ServeAgent` waiting for the notifications' handlers at its context's end. gobble installs no middleware, so R2,
+    R3 and R8 are not reached;
+  - go-selfupdate-lib: nothing. `buildinfo` and the packages gobble's tests reach, its `go.mod` and its release
+    workflows are unchanged between the tags. Only the two `ci.yml` pins move, to name the pinned tag.
+- **Decision** (proposed with this deviation, for the owner's approval):
+  - MADR D1 has a dated amendment for the two tags;
+  - P27 (acp-go-sdk2 `v1.31.2`) and P28 (go-selfupdate-lib `v1.24.0`) are new, each its own commit, in that order;
+  - this plan is `in-progress` until P28's record, which checks the Verification's first two items again and returns
+    it to `complete`.
+- **Files added to scope:** P27's `go.mod`, `go.sum`, `README.md` and `docs/architecture.md`; P28's the same and
+  `.github/workflows/ci.yml`.
