@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: complete
 date: 2026-11-03
 associated-madr: "0041-MADR-models-json-headers-on-sdk-http-client.md"
 ---
@@ -203,3 +203,40 @@ The base is `f71cc4a`. No deviation.
 11. **G-hosts,** on the Linux machine and the Windows laptop, with 826 files shipped to each: `go test` and race passed
     on both, 38 ok, the new test among them; `make check-records markdownlint` passed on both; preflight stops at
     `verify-build-metadata`, as on every copy.
+
+The owner committed P1 as `9b5535a`.
+
+### P2 record (2026-11-03): close-out
+
+The base is `9b5535a`. No deviation.
+
+1. **A comment for gobble-cli#10** (step 1), for the owner to post. The commits it names resolve on GitHub only once
+   pushed, so posting it and closing the issue wait for the push and the owner's word:
+
+   ```text
+   Done in 9b5535a, under 0041-MADR and its PLAN
+   (docs/decisions/0041-MADR-models-json-headers-on-sdk-http-client.md).
+
+   - Step 1, the pin: go-llmprovider-sdk v1.25.0, by 0035-PLAN P25 (2b1b262).
+   - Step 2: withHeaders wraps llmprovider.NewHTTPClient() when it is given no client, which is
+     always the case in production. A provider with models.json headers now sends over the
+     SDK's shared, bounded transport, as every other provider does: a reply that sends no first
+     byte within the SDK's 300 s fails, instead of holding the turn until it is cancelled.
+     A caller's own client is copied, not changed, and a nil Transport keeps net/http's meaning
+     (the MADR's D2, where this issue's snippet would have used the SDK's transport there too).
+   - Step 3: TestWithHeadersClient, beside TestWireHeaders, checks the three clients. It failed
+     on four planted breaks, the old http.DefaultTransport base among them; the record quotes
+     each failure.
+   - Step 4: Options.Headers' doc says the headers ride on the SDK's own client;
+     docs/guides/models-json.md says a provider with headers keeps the same time limits;
+     0037-MADR's upstream item and D35 are marked adopted.
+   - Out of scope, as noted here: mcpclient's header client, which the MADR leaves for a
+     decision of its own.
+
+   This closes the issue.
+   ```
+2. **The disclosure guard** (step 2), as `AGENTS.md` gives it, over the outgoing commits, `origin/main` `04e1ea5` to
+   `9b5535a` (`f71cc4a`, `9b5535a`): exit 0, no output. This phase's commit is outgoing too; the pre-push hook runs the
+   same guard over it. Nothing was pushed.
+3. **Status** (step 3): the MADR's Confirmation 1 to 5 is met, by P1's record. This plan is `complete`; the MADR was
+   accepted on 2026-11-03.
