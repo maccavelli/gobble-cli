@@ -363,3 +363,44 @@ Approved by the owner on 2026-11-04: "proceed to p1".
    * `make preflight` passed every gate up to `verify-build-metadata`. That gate failed as expected: `git rev-parse
      HEAD` exited 128 in the uncommitted copy. It is macOS-only (C5);
    * `make check-records markdownlint` exited 0.
+
+The owner committed P1 as `7bd6800`.
+
+### P2 record (2026-11-04): a writer killed mid-append reopens with every acknowledged entry
+
+1. **The helper.** `session/jsonl/crash_test.go` holds the package's first `TestMain`, and `runWriter`. In mode `loop`,
+   the writer appends 256 KiB entries and stops at 200 with exit 3 if nothing kills it. In mode `torn`, it appends
+   three, then writes half of a fourth line past the store.
+2. **`TestKilledWriterReopens`,** with rounds `loop-3`, `loop-20` and `torn-4`, as step 2 says. As built:
+   * **Acknowledgements printed before the kill count too.** The writer keeps appending between the test's last read
+     and the kill. So after `Process.Kill` the test reads the writer's output to its end, then calls `Wait`, since
+     `os/exec` forbids `Wait` before the pipe's reads are done. Every `ok` line counts, which makes step 2.4's "at most
+     one past the last acknowledged" exact.
+   * **Checked on disk, not only in memory.** The first break run showed that step 2.3, checked against `Entries` alone,
+     missed a cut that removed an acknowledged entry from the file but not from memory. That break still failed the
+     test, but only at step 2.7's read-back (`read after the next append: 3 entries, 0 skipped, <nil>; want 4 and 0`).
+     The test now also reads the file right after `Open`. It asserts 0 skipped and as many entries as the log holds, and
+     looks for each acknowledged id there. This is stricter than step 2.3, in the phase's own file.
+3. **Seen failing (C9),** on copies, each old text asserted present once:
+   * **No cut in `Open`:** `torn-4` failed with
+     * `file after Open: 4 entries, 1 skipped, <nil>; the log holds 4`,
+     * `file does not end in a newline after Open`,
+     * `torn writer: no cut logged`,
+     * `read after the next append: 5 entries, 1 skipped, <nil>; want 5 and 0`.
+
+     The two `loop` rounds passed, since neither tore a line.
+   * **`Open` cutting the last line even when it has a newline:** this break had three edits: the newline check
+     removed, the last line taken before a final newline, and the decode check off. `loop-3` failed with `file after
+     Open: 2 entries, 0 skipped, <nil>; the log holds 3` and `acknowledged entry e0000002 missing at 2 in the file`.
+     `loop-20` failed the same way at `e0000019`.
+   * **Self-torn lines.** No `loop` round tore a line on its own on any host: each logged `torn tail cut: false`. Each
+     kill landed between writes, so the torn path is covered by the `torn` round on every host, as D40 intends.
+4. **Run time** of `TestKilledWriterReopens`: 0.08 s on macOS, 0.13 s on the Linux machine and 0.31 s on the Windows
+   laptop. That is under step 4's 10 s on every host. Whether C10's retry ever ran is not logged.
+5. **Unchanged.** `git status --short -- '*.golden' session/jsonl/testdata` was empty.
+6. **G-local.** `make pre-add-check FILES="session/jsonl/crash_test.go"` passed, `make preflight` printed "preflight
+   passed", and `make race` passed.
+7. **G-hosts.** 830 files on each host, as in P1:
+   * `go test -count=1 ./...` and `CGO_ENABLED=1 go test -race -count=1 ./...` exited 0;
+   * `make preflight` passed up to `verify-build-metadata`, which exited on `git rev-parse HEAD`'s 128, as expected;
+   * `make check-records markdownlint` exited 0.
