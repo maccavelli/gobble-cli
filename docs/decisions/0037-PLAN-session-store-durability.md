@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: in-progress
 date: 2026-11-04
 associated-madr: "0037-MADR-hardening-integrity-and-performance.md"
 ---
@@ -297,4 +297,69 @@ Each phase's own steps are its acceptance criteria. Across the plan:
 
 ## Execution record
 
-Not started. The plan is `proposed`, awaiting the owner's approval.
+Approved by the owner on 2026-11-04: "proceed to p1".
+
+### P0 record (2026-11-04): the records
+
+* The hooks directory is the global one (C1).
+* The owner committed the MADR amendment, this plan, 0039-MADR's note and the `docs/README.md` rows as `38da632`,
+  records only. `make check-records markdownlint` passed before it.
+
+### P1 record (2026-11-04): a failed write leaves the file and memory as they were
+
+1. **Facts re-read.** `store.go` and `TestMalformedAndTornLines` were at the lines the amendment quotes.
+   * **The Windows cut**, a scratch program. It opens a file `O_WRONLY|O_APPEND`, writes, then truncates through the
+     handle and then through the path.
+     * On the Windows laptop: `handle Truncate: … Access is denied.`, then `path Truncate: <nil>`. The open handle's
+       next append landed at the new end (`"line one\nnext\n"`).
+     * On macOS and the Linux machine, both truncates succeeded.
+
+     The amendment's fact holds; no deviation.
+2. **Built** in `session/jsonl/store.go`:
+   * the seam: `Store.openFile` and `Store.truncate`, and the unexported `appendFile`;
+   * `fileLog.size`;
+   * `Append` writing before it records;
+   * `write` cutting back by path, and marking torn when that fails;
+   * `create` closing and removing a file whose first write failed, and releasing its lock;
+   * `Open`'s `cutTornTail`.
+
+   `readFile` now returns the bytes it read in place of a `torn` flag. As built:
+   * **One rule for "an entry".** `decodeEntry` is the condition `parse` already used. It is shared so that `Open`'s cut
+     and `parse`'s skip agree on what an entry is.
+   * **The pending id.** Step 6's "the id is returned to `s.creating`" is built as: the id is removed only after the
+     first write succeeds. It is never removed and put back, so the observable result is the one step 6 names.
+   * **The tail.** `Open` does not cut a tail that is the file's first line, the header itself, when it has no newline.
+3. **Docs.** `doc.go`'s package comment and `docs/architecture.md`'s `session/jsonl` row, as step 8 says.
+4. **Tests**, in `store_test.go`:
+   * `TestMalformedAndTornLines` now expects 1 skipped where it expected 2. It also asserts that the torn bytes are gone
+     and that the log has `msg="session: torn last line cut"` with `bytes=<the torn line's length>`.
+   * New: `TestShortWriteIsCut`, `TestFailedCutMarksTorn`, `TestFailedCreateRetries`,
+     `TestOpenKeepsCompleteLineWithoutNewline`, `TestOpenLeavesOlderFile` and `TestReadDoesNotCut`. All pass.
+5. **Seen failing (C9).** A scratch script applies each break to a copy, with its old text asserted present once. Each
+   failed as expected:
+   1. no cut in `write`: `store_test.go:265: file after a failed append:`;
+   2. the entry added before the write: `store_test.go:262: Entries after a failed append: 2, want 1`;
+   3. no torn mark when the cut fails: `store_test.go:301: read: 1 entries, 1 skipped, <nil>; want 2 and 1`;
+   4. `create` as it was: `store_test.go:327: read after a failed create: session: not a valid session: …_s1.jsonl:
+      empty file, want ErrNotFound`;
+   5. no cut in `Open`: `store_test.go:171: file after Open keeps the torn line:`;
+   6. a cut without the decode check: `store_test.go:378: read: 2 entries, 0 skipped, <nil>; want 3 and 0`;
+   7. a cut without the version check: `store_test.go:404: Open changed an older file: 6550 bytes, want 6589`;
+   8. **added**, since step 10 named no break for `TestReadDoesNotCut`, `Read` cutting:
+      `store_test.go:416: Read changed the file: 8764 bytes, want 8803`.
+6. **Unchanged.** `git status --short -- '*.golden' session/jsonl/testdata` was empty.
+7. **G-local.**
+   * `make pre-add-check` first failed on `gofmt`: a comment's alignment in `fileLog`.
+   * `make preflight` then failed on gocritic's `typeDefFirst`, since `cutTornTail` sat above `fileLog`. It was moved
+     below the type.
+   * After both fixes, `make pre-add-check FILES=…` passed, `make preflight` printed "preflight passed", and `make race`
+     passed.
+   * The eight breaks were run again after the move, and all failed as before.
+   * `apidiff` printed `no-op below v1.0.0`, and nothing exported was added.
+8. **G-hosts.** The tree was copied to the Linux machine and the Windows laptop, 829 files each, both on `go1.27.3`.
+   The Windows laptop ran with `TMP` and `TEMP` set to a scratch directory. On both hosts:
+   * `go test -count=1 ./...` exited 0;
+   * `CGO_ENABLED=1 go test -race -count=1 ./...` exited 0;
+   * `make preflight` passed every gate up to `verify-build-metadata`. That gate failed as expected: `git rev-parse
+     HEAD` exited 128 in the uncommitted copy. It is macOS-only (C5);
+   * `make check-records markdownlint` exited 0.

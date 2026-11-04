@@ -1,14 +1,19 @@
 package jsonl
 
 import (
+	"bytes"
 	"context"
 	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/maccavelli/gobble-cli/internal/filelock"
 	"github.com/maccavelli/gobble-cli/session"
 )
 
@@ -143,30 +148,30 @@ func create(t *testing.T, s *Store, id session.ID, cwd string) session.Log {
 	return l
 }
 
-// A malformed middle line is skipped and counted; a torn last line is kept
-// apart from the next entry, which a reader then sees.
+// A malformed middle line is skipped and counted; a torn last line that is
+// not an entry is cut by Open, which logs the bytes it cut (0037-MADR D37),
+// and the next entry follows on a line of its own.
 func TestMalformedAndTornLines(t *testing.T) {
 	dir := t.TempDir()
 	ctx := t.Context()
-	s := New(dir, Options{})
+	var log bytes.Buffer
+	s := New(dir, Options{Logger: slog.New(slog.NewTextHandler(&log, nil))})
 	l := create(t, s, "s1", "/w")
 	path := l.(*fileLog).path
 	if err := l.Close(); err != nil {
 		t.Fatal(err)
 	}
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0o600)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := f.WriteString("{not json}\n" + `{"type":"message","id":"cccc0001","parentId":"bbbb0001","timestamp":"x","message":{"role":"user","content":"tor`); err != nil {
-		t.Fatal(err)
-	}
-	if err := f.Close(); err != nil {
-		t.Fatal(err)
-	}
+	const torn = `{"type":"message","id":"cccc0001","parentId":"bbbb0001","timestamp":"x","message":{"role":"user","content":"tor`
+	appendRaw(t, path, "{not json}\n"+torn)
 	w, err := s.Open(ctx, "s1")
 	if err != nil {
 		t.Fatal(err)
+	}
+	if b := readBytes(t, path); bytes.Contains(b, []byte(`"tor`)) || !bytes.HasSuffix(b, []byte("\n")) {
+		t.Fatalf("file after Open keeps the torn line:\n%s", b)
+	}
+	if !strings.Contains(log.String(), `msg="session: torn last line cut"`) || !strings.Contains(log.String(), "bytes="+strconv.Itoa(len(torn))) {
+		t.Fatalf("log %q, want the cut and bytes=%d", log.String(), len(torn))
 	}
 	if err := w.Append(ctx, userEntry("dddd0001", "bbbb0001", "after")); err != nil {
 		t.Fatal(err)
@@ -175,8 +180,240 @@ func TestMalformedAndTornLines(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, entries, skipped, err := s.Read(ctx, "s1")
-	if err != nil || skipped != 2 || len(entries) != 2 || entries[1].ID != "dddd0001" {
+	if err != nil || skipped != 1 || len(entries) != 2 || entries[1].ID != "dddd0001" {
 		t.Fatalf("read: %d entries, %d skipped, %v", len(entries), skipped, err)
+	}
+}
+
+// errNoSpace is the failure flakyFile gives a write.
+var errNoSpace = errors.New("no space left on device")
+
+// flakyFile writes half of each write while *fails is above zero, counting
+// it down, and reports errNoSpace, as a full disk leaves a write.
+type flakyFile struct {
+	appendFile
+	fails *int
+}
+
+func (f *flakyFile) Write(b []byte) (int, error) {
+	if *f.fails == 0 {
+		return f.appendFile.Write(b)
+	}
+	*f.fails--
+	n, err := f.appendFile.Write(b[:len(b)/2])
+	if err != nil {
+		return n, err
+	}
+	return n, errNoSpace
+}
+
+// failWrites makes s's session files flaky: each write fails while *fails is
+// above zero.
+func failWrites(s *Store, fails *int) {
+	s.openFile = func(name string, flag int, perm os.FileMode) (appendFile, error) {
+		f, err := openOSFile(name, flag, perm)
+		if err != nil {
+			return nil, err
+		}
+		return &flakyFile{appendFile: f, fails: fails}, nil
+	}
+}
+
+func readBytes(t *testing.T, path string) []byte {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
+}
+
+// appendRaw appends s to a file as another program, or a crash, leaves it.
+func appendRaw(t *testing.T, path, s string) {
+	t.Helper()
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteString(s); err != nil {
+		t.Fatal(errors.Join(err, f.Close()))
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A write cut short is cut back off the file, and the entry is not kept: the
+// file and Entries are as they were, and the next append reads back whole
+// (0037-MADR D37).
+func TestShortWriteIsCut(t *testing.T) {
+	ctx := t.Context()
+	s := New(t.TempDir(), Options{})
+	fails := 0
+	failWrites(s, &fails)
+	l := create(t, s, "s1", "/w")
+	path := l.(*fileLog).path
+	before := readBytes(t, path)
+	fails = 1
+	if err := l.Append(ctx, userEntry("cccc0001", "bbbb0001", "lost")); !errors.Is(err, errNoSpace) {
+		t.Fatalf("append: %v, want the write's error", err)
+	}
+	if n := len(l.Entries()); n != 1 {
+		t.Fatalf("Entries after a failed append: %d, want 1", n)
+	}
+	if after := readBytes(t, path); !bytes.Equal(after, before) {
+		t.Fatalf("file after a failed append:\n%s\nwant:\n%s", after, before)
+	}
+	if err := l.Append(ctx, userEntry("dddd0001", "bbbb0001", "kept")); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.Close(); err != nil {
+		t.Fatal(err)
+	}
+	_, entries, skipped, err := s.Read(ctx, "s1")
+	if err != nil || skipped != 0 || len(entries) != 2 || entries[1].ID != "dddd0001" {
+		t.Fatalf("read: %d entries, %d skipped, %v; want 2 and 0", len(entries), skipped, err)
+	}
+}
+
+// When a failed write cannot be cut back either, the log is marked torn: the
+// next entry starts on a line of its own, and only the broken line is lost.
+func TestFailedCutMarksTorn(t *testing.T) {
+	ctx := t.Context()
+	s := New(t.TempDir(), Options{})
+	fails := 0
+	failWrites(s, &fails)
+	l := create(t, s, "s1", "/w")
+	errCut := errors.New("cut refused")
+	s.truncate = func(string, int64) error { return errCut }
+	fails = 1
+	if err := l.Append(ctx, userEntry("cccc0001", "bbbb0001", "lost")); !errors.Is(err, errNoSpace) || !errors.Is(err, errCut) {
+		t.Fatalf("append: %v, want the write's and the cut's errors", err)
+	}
+	if err := l.Append(ctx, userEntry("dddd0001", "bbbb0001", "kept")); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.Close(); err != nil {
+		t.Fatal(err)
+	}
+	_, entries, skipped, err := s.Read(ctx, "s1")
+	if err != nil || skipped != 1 || len(entries) != 2 || entries[1].ID != "dddd0001" {
+		t.Fatalf("read: %d entries, %d skipped, %v; want 2 and 1", len(entries), skipped, err)
+	}
+}
+
+// A first write that fails leaves no file and no held lock; the log keeps
+// the entries before the failed one, and the next append creates the file
+// (0037-MADR D37).
+func TestFailedCreateRetries(t *testing.T) {
+	dir := t.TempDir()
+	ctx := t.Context()
+	s := New(dir, Options{})
+	fails := 1
+	failWrites(s, &fails)
+	h := header("s1", "/w")
+	l, err := s.Create(ctx, h)
+	if err != nil {
+		t.Fatal(err)
+	}
+	thinking := session.Entry{Type: session.TypeThinkingLevelChange, ID: "aaaa0001", Timestamp: "2024-12-03T14:00:00.100Z", ThinkingLevel: "high"}
+	if err := l.Append(ctx, thinking); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.Append(ctx, userEntry("bbbb0001", "aaaa0001", "lost")); !errors.Is(err, errNoSpace) {
+		t.Fatalf("first write: %v, want the write's error", err)
+	}
+	if _, _, _, err := s.Read(ctx, "s1"); !errors.Is(err, session.ErrNotFound) {
+		t.Fatalf("read after a failed create: %v, want ErrNotFound", err)
+	}
+	release, err := filelock.TryLock(filepath.Join(dir, EncodeCwd("/w"), FileName(h)) + ".lock")
+	if err != nil {
+		t.Fatalf("lock after a failed create: %v", err)
+	}
+	if err := release(); err != nil {
+		t.Fatal(err)
+	}
+	if es := l.Entries(); len(es) != 1 || es[0].ID != "aaaa0001" {
+		t.Fatalf("Entries after a failed create: %v", es)
+	}
+	if err := l.Append(ctx, userEntry("cccc0001", "aaaa0001", "kept")); err != nil {
+		t.Fatalf("retry: %v", err)
+	}
+	if err := l.Close(); err != nil {
+		t.Fatal(err)
+	}
+	_, entries, skipped, err := s.Read(ctx, "s1")
+	if err != nil || skipped != 0 || len(entries) != 2 || entries[0].ID != "aaaa0001" || entries[1].ID != "cccc0001" {
+		t.Fatalf("read: %v, %d skipped, %v", entries, skipped, err)
+	}
+}
+
+// A last line that is a whole entry and lacks only its newline is kept, and
+// the next entry goes on a line of its own.
+func TestOpenKeepsCompleteLineWithoutNewline(t *testing.T) {
+	ctx := t.Context()
+	s := New(t.TempDir(), Options{})
+	l := create(t, s, "s1", "/w")
+	path := l.(*fileLog).path
+	if err := l.Close(); err != nil {
+		t.Fatal(err)
+	}
+	whole, err := json.Marshal(userEntry("cccc0001", "bbbb0001", "whole"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	appendRaw(t, path, string(whole))
+	w, err := s.Open(ctx, "s1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Append(ctx, userEntry("dddd0001", "cccc0001", "next")); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	_, entries, skipped, err := s.Read(ctx, "s1")
+	if err != nil || skipped != 0 || len(entries) != 3 || entries[1].ID != "cccc0001" || entries[2].ID != "dddd0001" {
+		t.Fatalf("read: %d entries, %d skipped, %v; want 3 and 0", len(entries), skipped, err)
+	}
+}
+
+// tornCopy is a fixture with half a line after it, as a crash leaves it.
+func tornCopy(t *testing.T, name string) []byte {
+	t.Helper()
+	b := fixture(t, name)
+	if !bytes.HasSuffix(b, []byte("\n")) {
+		b = append(b, '\n')
+	}
+	return append(b, `{"type":"message","id":"zzzz0001","mess`...)
+}
+
+// Open never cuts an older file, which gobble does not write.
+func TestOpenLeavesOlderFile(t *testing.T) {
+	body := tornCopy(t, "v2.jsonl")
+	s, id, p := install(t, body, Options{})
+	l, err := s.Open(t.Context(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := l.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if got := readBytes(t, p); !bytes.Equal(got, body) {
+		t.Fatalf("Open changed an older file: %d bytes, want %d", len(got), len(body))
+	}
+}
+
+// Read holds no lock and never cuts.
+func TestReadDoesNotCut(t *testing.T) {
+	body := tornCopy(t, "v3.jsonl")
+	s, id, p := install(t, body, Options{})
+	if _, _, skipped, err := s.Read(t.Context(), id); err != nil || skipped != 1 {
+		t.Fatalf("read: %d skipped, %v", skipped, err)
+	}
+	if got := readBytes(t, p); !bytes.Equal(got, body) {
+		t.Fatalf("Read changed the file: %d bytes, want %d", len(got), len(body))
 	}
 }
 

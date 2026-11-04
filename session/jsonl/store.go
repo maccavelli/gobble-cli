@@ -34,6 +34,21 @@ type Store struct {
 
 	mu       sync.Mutex
 	creating map[session.ID]bool // ids created in this process, not yet written
+
+	// openFile and truncate are the store's writes to a session file. Tests
+	// replace them to make a write or a cut fail (0037-MADR D37).
+	openFile func(name string, flag int, perm os.FileMode) (appendFile, error)
+	truncate func(name string, size int64) error
+}
+
+// appendFile is what a log writes a session file through: an *os.File.
+type appendFile interface {
+	Write(b []byte) (int, error)
+	Close() error
+}
+
+func openOSFile(name string, flag int, perm os.FileMode) (appendFile, error) {
+	return os.OpenFile(name, flag, perm) //nolint:gosec // G304: a file of the store's own directory
 }
 
 var _ session.Store = (*Store)(nil)
@@ -44,7 +59,7 @@ func New(dir string, o Options) *Store {
 	if o.Logger == nil {
 		o.Logger = slog.New(slog.DiscardHandler)
 	}
-	return &Store{dir: dir, o: o, creating: map[session.ID]bool{}}
+	return &Store{dir: dir, o: o, creating: map[session.ID]bool{}, openFile: openOSFile, truncate: os.Truncate}
 }
 
 // Dir is the store's root directory.
@@ -140,13 +155,16 @@ func (s *Store) Open(_ context.Context, id session.ID) (session.Log, error) {
 		}
 		return nil, fmt.Errorf("session: lock: %w", err)
 	}
-	h, entries, _, torn, err := s.readFile(path)
+	h, entries, _, b, err := s.readFile(path)
 	if err != nil {
 		return nil, errors.Join(err, release())
 	}
-	l := &fileLog{s: s, header: h, entries: entries, path: path, written: true, torn: torn, release: release}
+	l := &fileLog{s: s, header: h, entries: entries, path: path, written: true, size: int64(len(b)), release: release}
 	if v := max(h.Version, 1); v < session.Version {
 		l.old = v
+	}
+	if err := l.cutTornTail(b); err != nil {
+		return nil, errors.Join(err, release())
 	}
 	return l, nil
 }
@@ -166,21 +184,31 @@ func (s *Store) Read(_ context.Context, id session.ID) (session.Header, []sessio
 }
 
 // readFile reads and parses a session file. It also reports the lines
-// skipped as malformed, and whether the last line lacks its newline (a
-// write cut short), so a writer starts its next line on a line of its own.
-func (s *Store) readFile(path string) (h session.Header, entries []session.Entry, skipped int, torn bool, err error) {
-	b, err := os.ReadFile(path) //nolint:gosec // G304: a file of the store's own directory
+// skipped as malformed, and returns the bytes it read, from which a writer
+// takes the file's size and finds a torn last line.
+func (s *Store) readFile(path string) (h session.Header, entries []session.Entry, skipped int, b []byte, err error) {
+	b, err = os.ReadFile(path) //nolint:gosec // G304: a file of the store's own directory
 	if err != nil {
-		return h, nil, 0, false, fmt.Errorf("session: read: %w", err)
+		return h, nil, 0, nil, fmt.Errorf("session: read: %w", err)
 	}
 	h, entries, skipped, err = parse(b)
 	if err != nil {
-		return h, nil, 0, false, fmt.Errorf("%w: %s: %w", session.ErrCorrupt, filepath.Base(path), err)
+		return h, nil, 0, nil, fmt.Errorf("%w: %s: %w", session.ErrCorrupt, filepath.Base(path), err)
 	}
 	if skipped > 0 {
 		s.o.Logger.Warn("session: malformed lines skipped", slog.String("file", filepath.Base(path)), slog.Int("lines", skipped))
 	}
-	return h, entries, skipped, len(b) > 0 && b[len(b)-1] != '\n', nil
+	return h, entries, skipped, b, nil
+}
+
+// decodeEntry decodes one line as an entry: valid JSON, with a type, and
+// not a header.
+func decodeEntry(line []byte) (session.Entry, bool) {
+	var e session.Entry
+	if err := jsonx.Unmarshal(line, &e); err != nil || e.Type == "" || e.Type == session.TypeHeader {
+		return e, false
+	}
+	return e, true
 }
 
 // parse reads a session file: the header, which must be a session header of
@@ -211,8 +239,8 @@ func parse(b []byte) (session.Header, []session.Entry, int, error) {
 		if len(bytes.TrimSpace(line)) == 0 {
 			continue
 		}
-		var e session.Entry
-		if err := jsonx.Unmarshal(line, &e); err != nil || e.Type == "" || e.Type == session.TypeHeader {
+		e, ok := decodeEntry(line)
+		if !ok {
 			skipped++
 			continue
 		}
@@ -266,11 +294,34 @@ type fileLog struct {
 	mu      sync.Mutex
 	header  session.Header
 	entries []session.Entry
-	file    *os.File
-	written bool // the file exists
-	torn    bool // its last line lacks a newline
-	old     int  // the file's version, when it is older than session.Version
+	file    appendFile
+	written bool  // the file exists
+	size    int64 // the file's size, after its last complete write
+	torn    bool  // its last line lacks a newline
+	old     int   // the file's version, when it is older than session.Version
 	release func() error
+}
+
+// cutTornTail handles a last line without its newline, which a write cut
+// short leaves. When it is an entry, it is kept, and the next line starts on
+// a line of its own. Otherwise, in a file of the current version, it is cut
+// off and logged; an older file is never written (0037-MADR D37).
+func (l *fileLog) cutTornTail(b []byte) error {
+	if len(b) == 0 || b[len(b)-1] == '\n' {
+		return nil
+	}
+	start := bytes.LastIndexByte(b, '\n') + 1
+	tail := b[start:]
+	if _, ok := decodeEntry(tail); ok || l.old > 0 || len(bytes.TrimSpace(b[:start])) == 0 {
+		l.torn = true // an entry, an older file, or the header itself
+		return nil
+	}
+	if err := l.s.truncate(l.path, int64(start)); err != nil {
+		return fmt.Errorf("session: cut torn line: %w", err)
+	}
+	l.s.o.Logger.Warn("session: torn last line cut", slog.String("file", filepath.Base(l.path)), slog.Int("bytes", len(tail)))
+	l.size = int64(start)
+	return nil
 }
 
 func (l *fileLog) Header() session.Header {
@@ -299,19 +350,25 @@ func (l *fileLog) Writable() error {
 // message it stays in memory; that message writes the header and every
 // entry so far to a new file, and each later entry is one write of one line
 // (0008-MADR D19 item 6). An older file is never written: its append is
-// refused with session.ErrOldVersion, and nothing is recorded.
+// refused with session.ErrOldVersion, and nothing is recorded. An entry
+// joins Entries only once it is wholly on disk; an append that fails leaves
+// the file and Entries as they were (0037-MADR D37).
 func (l *fileLog) Append(_ context.Context, e session.Entry) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if err := l.Writable(); err != nil {
 		return err
 	}
-	l.entries = append(l.entries, e)
 	if !l.written {
+		l.entries = append(l.entries, e)
 		if !session.HasConversation(l.entries) {
 			return nil
 		}
-		return l.create()
+		if err := l.create(); err != nil {
+			l.entries = l.entries[:len(l.entries)-1]
+			return err
+		}
+		return nil
 	}
 	line, err := jsonx.Marshal(e)
 	if err != nil {
@@ -319,13 +376,19 @@ func (l *fileLog) Append(_ context.Context, e session.Entry) error {
 	}
 	if l.torn {
 		line = append([]byte("\n"), line...) // keep a torn last line on its own
-		l.torn = false
 	}
-	return l.write(append(line, '\n'))
+	if err := l.write(append(line, '\n')); err != nil {
+		return err
+	}
+	l.torn = false
+	l.entries = append(l.entries, e)
+	return nil
 }
 
 // create writes a new file with the header and the entries so far, under the
-// writer lock.
+// writer lock. When that write fails, the file is removed and the lock
+// released: the log stays unwritten and its id pending, so the next Append
+// creates it again (0037-MADR D37).
 func (l *fileLog) create() error {
 	if err := os.MkdirAll(filepath.Dir(l.path), 0o700); err != nil {
 		return fmt.Errorf("session: %w", err)
@@ -345,15 +408,20 @@ func (l *fileLog) create() error {
 		}
 		buf.Write(append(b, '\n'))
 	}
-	f, err := os.OpenFile(l.path, os.O_CREATE|os.O_EXCL|os.O_WRONLY|os.O_APPEND, 0o600) //nolint:gosec // G304: the store's own new file
+	f, err := l.s.openFile(l.path, os.O_CREATE|os.O_EXCL|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
 		return errors.Join(fmt.Errorf("session: create: %w", err), release())
 	}
-	l.file, l.release, l.written = f, release, true
+	if _, err := f.Write(buf.Bytes()); err != nil {
+		// Close before Remove: Windows does not remove an open file.
+		cerr := f.Close()
+		return errors.Join(fmt.Errorf("session: write: %w", err), cerr, os.Remove(l.path), release())
+	}
+	l.file, l.release, l.written, l.size = f, release, true, int64(buf.Len())
 	l.s.mu.Lock()
 	delete(l.s.creating, l.header.ID)
 	l.s.mu.Unlock()
-	return l.write(buf.Bytes())
+	return nil
 }
 
 func entriesAny(es []session.Entry) []any {
@@ -364,17 +432,27 @@ func entriesAny(es []session.Entry) []any {
 	return out
 }
 
+// write appends b to the file. A write that fails, wholly or in part, is cut
+// back to the file's size before it, through the path: Windows refuses to
+// truncate through an O_APPEND handle. When the cut fails too, the log is
+// marked torn, so the next line starts on a line of its own (0037-MADR D37).
 func (l *fileLog) write(b []byte) error {
 	if l.file == nil {
-		f, err := os.OpenFile(l.path, os.O_WRONLY|os.O_APPEND, 0o600) //nolint:gosec // G304: the store's own file
+		f, err := l.s.openFile(l.path, os.O_WRONLY|os.O_APPEND, 0o600)
 		if err != nil {
 			return fmt.Errorf("session: open: %w", err)
 		}
 		l.file = f
 	}
 	if _, err := l.file.Write(b); err != nil {
-		return fmt.Errorf("session: write: %w", err)
+		err = fmt.Errorf("session: write: %w", err)
+		if cerr := l.s.truncate(l.path, l.size); cerr != nil {
+			l.torn = true
+			return errors.Join(err, fmt.Errorf("session: cut failed write: %w", cerr))
+		}
+		return err
 	}
+	l.size += int64(len(b))
 	return nil
 }
 
