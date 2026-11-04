@@ -366,6 +366,19 @@ Approved by the owner on 2026-11-04: "proceed to p1".
 
 The owner committed P1 as `7bd6800`.
 
+### Deviation 1 (2026-11-04): P3, step 6's break is not caught by the tests it names
+
+* **Found.** Step 6's break made `parse` stop at a final line that lacks its newline. Run on a copy,
+  `TestOpenKeepsCompleteLineWithoutNewline` passed (`ok … 0.599s`), and so did `FuzzParse`'s seeds (`ok … 0.281s`).
+  * `Open` dropped the entry from memory. `cutTornTail` kept it on disk, since it decodes as an entry. The next
+    `Append`'s leading newline then made it whole again, so the test's final `Read` saw every entry.
+  * The test never checks `Entries` after `Open`. `FuzzParse` checks invariants, which a dropped line does not break.
+  * The gap predates P3: the old `parse` was right, and nothing held it to that.
+* **Decided** by the owner, 2026-11-04, "Tighten the test". `session/jsonl/store_test.go` joins P3's files.
+  `TestOpenKeepsCompleteLineWithoutNewline` also asserts, right after `Open`, that `Entries` and a `Read` of the file
+  both hold the entry that lacks its newline. The break is run again against it.
+* **The MADR** is unchanged: no decision and no fact it asserts moves.
+
 ### P2 record (2026-11-04): a writer killed mid-append reopens with every acknowledged entry
 
 1. **The helper.** `session/jsonl/crash_test.go` holds the package's first `TestMain`, and `runWriter`. In mode `loop`,
@@ -401,6 +414,48 @@ The owner committed P1 as `7bd6800`.
 6. **G-local.** `make pre-add-check FILES="session/jsonl/crash_test.go"` passed, `make preflight` printed "preflight
    passed", and `make race` passed.
 7. **G-hosts.** 830 files on each host, as in P1:
+   * `go test -count=1 ./...` and `CGO_ENABLED=1 go test -race -count=1 ./...` exited 0;
+   * `make preflight` passed up to `verify-build-metadata`, which exited on `git rev-parse HEAD`'s 128, as expected;
+   * `make check-records markdownlint` exited 0.
+
+The owner committed P2 as `4e29ed4`.
+
+### P3 record (2026-11-04): `parse` reads line by line
+
+1. **The benchmark.** `session/jsonl/bench_test.go` adds `BenchmarkParse`, over a v3 header and 2,000 user messages of
+   512 bytes of text each. That is about 1.35 MB, from its own MB/s times its ns/op. Its result is checked once, after the
+   loop.
+2. **Before**, on `4e29ed4` with the benchmark added, on macOS (Apple M1 Pro), 10 runs: median 3,424,410 ns/op
+   (3,329,528–3,704,646), 6,256,267 B/op and 14,032 allocs/op.
+3. **The change.** `parse` iterates `bytes.Lines(b)`. A flag marks the header as read, and an all-blank file still gives
+   "empty file". Each error message is the same.
+4. **After.** The same command, run once, gave a median of 3,581,160 ns/op (3,471,140–3,641,950), 6,207,034 B/op and
+   14,031 allocs/op.
+   * Its median time sat inside the earlier run's spread, but two runs taken minutes apart cannot separate a 4% change
+     from drift. So both were measured again in alternation, from two scratch copies: the before copy took `store.go`
+     from `HEAD`, asserted to still split. Four rounds of 5 runs each gave:
+
+     | | ns/op, median (range) | B/op | allocs/op |
+     | :--- | :--- | :--- | :--- |
+     | before | 3,676,796 (3,426,487–4,878,679) | 6,256,314 | 14,032 |
+     | after | 3,623,556 (3,360,100–4,484,776) | 6,207,153 | 14,031 |
+
+   * `B/op` and `allocs/op` fell, and `ns/op` did not rise, which is step 4's condition. The change is kept.
+   * The gain is small: 49 KB less allocated (0.8%) per read of the 2,000-entry file, and one allocation fewer. The time is unchanged
+     within noise. The other 14,031 allocations, about 7 per entry, are outside line splitting. They were not
+     profiled.
+5. **Equivalence.**
+   * `go test ./session/...` passed, the fixture tests and P1's and P2's tests among them.
+   * `FuzzParse` ran 60 s on scratch copies with no failure: 1,517,416 execs, then 2,988,218 on the run after
+     deviation 1.
+6. **Seen failing (C9).** Step 6's break, `parse` stopping at a final line that lacks its newline, was not caught by
+   the tests it names. That is deviation 1. With `TestOpenKeepsCompleteLineWithoutNewline` tightened by it, the break
+   fails with `store_test.go:373: Entries after Open: 1, want 2 ending cccc0001`. `FuzzParse` still passes under the
+   break, as expected, since a dropped line breaks none of its invariants.
+7. **Unchanged.** `git status --short -- '*.golden' session/jsonl/testdata` was empty.
+8. **G-local.** `make pre-add-check` over the three Go files passed, `make preflight` printed "preflight passed", and
+   `make race` passed.
+9. **G-hosts.** 831 files on each host:
    * `go test -count=1 ./...` and `CGO_ENABLED=1 go test -race -count=1 ./...` exited 0;
    * `make preflight` passed up to `verify-build-metadata`, which exited on `git rev-parse HEAD`'s 128, as expected;
    * `make check-records markdownlint` exited 0.

@@ -215,28 +215,29 @@ func decodeEntry(line []byte) (session.Entry, bool) {
 // version 1 to 3, then each entry. A malformed entry line is skipped and
 // counted, as Pi skips it (0005-MADR "Sessions (changed)"). An older file's
 // entries are migrated in memory (session.Migrate); the header keeps its
-// version, so a log knows not to write the file.
+// version, so a log knows not to write the file. Lines are read in place, one
+// at a time (bytes.Lines), not sliced up first (0037-MADR D41).
 func parse(b []byte) (session.Header, []session.Entry, int, error) {
-	lines := bytes.Split(b, []byte("\n"))
-	var h session.Header
-	i := 0
-	for i < len(lines) && len(bytes.TrimSpace(lines[i])) == 0 {
-		i++
-	}
-	if i == len(lines) {
-		return h, nil, 0, errors.New("empty file")
-	}
-	if err := jsonx.Unmarshal(lines[i], &h); err != nil || h.Type != session.TypeHeader || h.ID == "" {
-		return h, nil, 0, errors.New("the first line is not a session header")
-	}
-	v := max(h.Version, 1)
-	if v > session.Version {
-		return h, nil, 0, fmt.Errorf("unsupported session version %d (gobble reads versions 1 to %d)", v, session.Version)
-	}
-	var entries []session.Entry
-	skipped := 0
-	for _, line := range lines[i+1:] {
+	var (
+		h       session.Header
+		header  bool // the header line has been read
+		v       int
+		entries []session.Entry
+		skipped int
+	)
+	for line := range bytes.Lines(b) {
 		if len(bytes.TrimSpace(line)) == 0 {
+			continue
+		}
+		if !header {
+			if err := jsonx.Unmarshal(line, &h); err != nil || h.Type != session.TypeHeader || h.ID == "" {
+				return h, nil, 0, errors.New("the first line is not a session header")
+			}
+			v = max(h.Version, 1)
+			if v > session.Version {
+				return h, nil, 0, fmt.Errorf("unsupported session version %d (gobble reads versions 1 to %d)", v, session.Version)
+			}
+			header = true
 			continue
 		}
 		e, ok := decodeEntry(line)
@@ -245,6 +246,9 @@ func parse(b []byte) (session.Header, []session.Entry, int, error) {
 			continue
 		}
 		entries = append(entries, e)
+	}
+	if !header {
+		return h, nil, 0, errors.New("empty file")
 	}
 	if v < session.Version {
 		migrated, err := session.Migrate(v, entries)

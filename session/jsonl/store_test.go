@@ -367,6 +367,14 @@ func TestOpenKeepsCompleteLineWithoutNewline(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Before the next append makes the line whole, the log and a reader both
+	// see the entry that lacks only its newline.
+	if es := w.Entries(); len(es) != 2 || es[1].ID != "cccc0001" {
+		t.Fatalf("Entries after Open: %d, want 2 ending cccc0001", len(es))
+	}
+	if _, es, skipped, err := s.Read(ctx, "s1"); err != nil || skipped != 0 || len(es) != 2 || es[1].ID != "cccc0001" {
+		t.Fatalf("read after Open: %d entries, %d skipped, %v; want 2 ending cccc0001", len(es), skipped, err)
+	}
 	if err := w.Append(ctx, userEntry("dddd0001", "cccc0001", "next")); err != nil {
 		t.Fatal(err)
 	}
