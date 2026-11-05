@@ -1364,19 +1364,24 @@ Files: `go.mod`, `go.sum`, `.github/workflows/ci.yml`, `README.md`, `docs/archit
 
 No check is added, so C9 has nothing to break.
 
-### P29 — acp-go-sdk2 `v1.32.0` (MADR D1, amended 2026-11-04; deviation 23)
+### P29 — acp-go-sdk2 ~~`v1.32.0`~~ `v1.33.0` (MADR D1, amended 2026-11-04 and 2026-11-05; deviations 23 and 24)
 
 Files: `go.mod`, `go.sum`, `acpserver/agent_test.go`, `acpserver/auth_test.go`, `README.md`, `docs/architecture.md`.
 
-1. **Checked first:** `python3 scripts/check_libs.py --lib acp-go-sdk2 --tag v1.32.0`. On 2026-11-04 it reported 13
+*(Amended 2026-11-05 by deviation 24, before approval: the tag is `v1.33.0`, whose root package and schema are
+`v1.32.0`'s. The files and steps are unchanged.)*
+
+1. **Checked first:** `python3 scripts/check_libs.py --lib acp-go-sdk2 --tag` ~~`v1.32.0`~~ `v1.33.0`. On 2026-11-04,
+   at `v1.32.0`, it reported 13
    checks with 1 failing: `test`, on `TestErrors` (`agent_test.go:197`) and `TestAuthenticate` (`auth_test.go:91`)
    alone, each `acp: methodId names no auth method the agent advertised, want a JSON-RPC error`. Any other failure is a
-   deviation. Re-read before editing, and record:
+   deviation. *(On 2026-11-05, at `v1.33.0`, the same: 13 checks, `test` failing on those two tests alone.)* Re-read
+   before editing, and record:
    * `acp.ErrUnadvertisedAuthMethod` (`errors.go:188`);
    * `ClientSideConnection.Connection()` (`client_gen.go:96`);
    * `acp.SendRequest[T]` (`connection.go:2466`);
    * `acp.AgentMethodAuthenticate` (`constants_gen.go:10`).
-2. **The pin:** `go get github.com/maccavelli/acp-go-sdk2@v1.32.0`, then `go mod tidy`.
+2. **The pin:** `go get github.com/maccavelli/acp-go-sdk2@`~~`v1.32.0`~~`v1.33.0`, then `go mod tidy`.
    * `go.mod` changes on that line alone.
    * `go.sum` changes in acp-go-sdk2's lines alone.
 3. **The two tests (MADR D1's S8).** For the unadvertised id each sends, `"x"` and `"nope"`:
@@ -1395,17 +1400,21 @@ Files: `go.mod`, `go.sum`, `acpserver/agent_test.go`, `acpserver/auth_test.go`, 
      refuses it.
    * **The raw answer.** The same, and gobble's handler answers an unknown provider `-32000`. The raw assertion fails
      with that code.
-6. **The docs:** `README.md:129` and `docs/architecture.md:176` name `v1.32.0`.
+6. **The docs:** `README.md:129` and `docs/architecture.md:176` name ~~`v1.32.0`~~ `v1.33.0`.
 7. G-local, and G-hosts. **Commit.**
 
-### P30 — go-llmprovider-sdk `v1.26.0`, and the refresh lock's 60 s (MADR D1, amended 2026-11-04; deviation 23)
+### P30 — go-llmprovider-sdk ~~`v1.26.0`~~ `v1.26.1`, and the refresh lock's 60 s (MADR D1, amended 2026-11-04 and 2026-11-05; deviations 23 and 24)
 
 Files: `go.mod`, `go.sum`, `internal/auth/logins.go`, `internal/auth/logins_test.go`, `README.md`,
 `docs/architecture.md`.
 
-1. **Checked first:** `python3 scripts/check_libs.py --lib go-llmprovider-sdk --tag v1.26.0` reports every check ok.
-   On 2026-11-04 it did: 13 checks, 0 failing.
-2. **The pin:** `go get github.com/maccavelli/go-llmprovider-sdk@v1.26.0`, then `go mod tidy`.
+*(Amended 2026-11-05 by deviation 24, before approval: the tag is `v1.26.1`, which carries `v1.26.0` and one fix to
+the SDK's SSE reader. The files and steps are unchanged.)*
+
+1. **Checked first:** `python3 scripts/check_libs.py --lib go-llmprovider-sdk --tag` ~~`v1.26.0`~~ `v1.26.1` reports
+   every check ok. On 2026-11-04, at `v1.26.0`, it did: 13 checks, 0 failing. *(On 2026-11-05, at `v1.26.1`, the
+   same.)*
+2. **The pin:** `go get github.com/maccavelli/go-llmprovider-sdk@`~~`v1.26.0`~~`v1.26.1`, then `go mod tidy`.
    * `go.mod` changes on that line alone.
    * `go.sum` changes in go-llmprovider-sdk's lines alone.
 3. **The refresh lock (MADR D1's D3).**
@@ -1420,16 +1429,20 @@ Files: `go.mod`, `go.sum`, `internal/auth/logins.go`, `internal/auth/logins_test
 5. **No other source change.** `llm/provider`, `internal/auth`, `internal/cli` and `acpserver` pass, the sign-in tests
    among them. `go test ./internal/auth` takes no longer: `TestRefreshLockSeparate`'s second wait has a short context
    of its own (`logins_test.go:56-58`).
-6. **The docs:** `README.md:131` and `docs/architecture.md:178` name `v1.26.0`.
+6. **The docs:** `README.md:131` and `docs/architecture.md:178` name ~~`v1.26.0`~~ `v1.26.1`.
 7. G-local, and G-hosts. **Commit.**
 
-### P31 — go-tui-lib/v2 `v2.11.0` (MADR D1, amended 2026-11-04; deviation 23)
+### P31 — go-tui-lib/v2 ~~`v2.11.0`~~ `v2.12.0` (MADR D1, amended 2026-11-04 and 2026-11-05; deviations 23 and 24)
 
 Files: `go.mod`, `go.sum`, `README.md`, `docs/architecture.md`.
 
-1. **Checked first:** `python3 scripts/check_libs.py --lib go-tui-lib --tag v2.11.0` reports every check ok,
-   `archtest` among them. On 2026-11-04 it did: 14 checks, 0 failing.
-2. **The pin:** `go get github.com/maccavelli/go-tui-lib/v2@v2.11.0`, then `go mod tidy`.
+*(Amended 2026-11-05 by deviation 24, before approval: the tag is `v2.12.0`, which carries `v2.11.0` and fewer
+copies in `stream`, with the same output. The files and steps are unchanged.)*
+
+1. **Checked first:** `python3 scripts/check_libs.py --lib go-tui-lib --tag` ~~`v2.11.0`~~ `v2.12.0` reports every
+   check ok, `archtest` among them. On 2026-11-04, at `v2.11.0`, it did: 14 checks, 0 failing. *(On 2026-11-05, at
+   `v2.12.0`, the same.)*
+2. **The pin:** `go get github.com/maccavelli/go-tui-lib/v2@`~~`v2.11.0`~~`v2.12.0`, then `go mod tidy`.
    * `go.mod` changes on that line alone.
    * `go.sum` changes in go-tui-lib's lines alone.
 3. **No source change.**
@@ -1438,7 +1451,7 @@ Files: `go.mod`, `go.sum`, `README.md`, `docs/architecture.md`.
    * gobble still passes the reply's `Idle` to `HandleTimeout` (`internal/cli/view.go:530-532`), so its reprints are
      `v2.9.0`'s.
    * A test whose expectation changes is a deviation.
-4. **The docs:** `README.md:137` and `docs/architecture.md:180` name `v2.11.0`.
+4. **The docs:** `README.md:137` and `docs/architecture.md:180` name ~~`v2.11.0`~~ `v2.12.0`.
 5. G-local with `make perf`, and G-hosts with `make perf` and `make probe-conhost`. **Commit.**
 
 No check is added, so C9 has nothing to break. Adopting A15, the reprint at a line's end, is not this phase's work; it is
@@ -3402,3 +3415,40 @@ The base is P27's `eab3170`. No deviation.
   - P30: `go.mod`, `go.sum`, `internal/auth/logins.go`, `internal/auth/logins_test.go`, `README.md` and
     `docs/architecture.md`;
   - P31: `go.mod`, `go.sum`, `README.md` and `docs/architecture.md`.
+
+### Deviation 24 (2026-11-05): three newer tags before P29 started
+
+- **Found,** on the owner's request "let's pin the sibling repos to current tags" (`main` at `627035c`, equal to
+  `origin/main`), before deviation 23 was approved. `git ls-remote --tags`, the Go module proxy
+  (`go list -m -versions`) and the GitHub releases list three tags newer than deviation 23's:
+  - acp-go-sdk2 `v1.33.0` (`6e04da6e3f733deb6f5044b6f1afa7e9784924bd`, 2026-11-04), its release marked Latest, over
+    `v1.32.0`;
+  - go-llmprovider-sdk `v1.26.1` (`204a356049dd3533c4b3ec4a19ce1cc55e9d6f75`, 2026-11-04), its release marked Latest,
+    over `v1.26.0`;
+  - go-tui-lib/v2 `v2.12.0` (`bbfd52fa403626f9528051227f442057bcb08c4b`, 2026-11-04), over `v2.11.0`. It publishes no
+    GitHub release.
+
+  go-selfupdate-lib `v1.24.0` is still the newest.
+- **Measured** by `python3 scripts/check_libs.py` on a scratch clone, each library at its newest tag. The tree was not
+  changed.
+  - acp-go-sdk2 `v1.33.0`: 13 checks, with 1 failing: `test`, on `TestErrors` (`agent_test.go:197`) and
+    `TestAuthenticate` (`auth_test.go:91`) alone, as at `v1.32.0`.
+  - go-llmprovider-sdk `v1.26.1`: 13, 0 failing.
+  - go-selfupdate-lib `v1.24.0`: 13, 0 failing.
+  - go-tui-lib `v2.12.0`: 14, `archtest` among them, 0 failing.
+  - For each, `get and tidy` and `modules` are ok, and `api` reports nothing incompatible.
+- **What reaches gobble,** read from the release notes, the tags' diffs and gobble's imports. The MADR's D1 amendment
+  of 2026-11-05 has it in full. In short, nothing past deviation 23's:
+  - acp-go-sdk2 `v1.33.0` changes none of the root package, which gobble imports, nor the schema. Its fixes are in
+    `remote`, `clienthost`, `acptest` and `agentproc`'s `LineTap` and `Transcript`. gobble imports `agentproc` for
+    `Command`, `Process`, `InProcess`, `ErrAbandoned` and `ErrKilled` alone;
+  - go-llmprovider-sdk `v1.26.1` ends a stream that stops inside an event with `ErrProviderUnavailable`, which gobble
+    already maps to `llm.ErrUnavailable` (`llm/provider/provider.go:593`), and which `WithStreamRetry` now asks once
+    more;
+  - go-tui-lib `v2.12.0` adds `Doc.RenderParts` and copies less in `stream`'s `Printer`, with the same output. `Idle`,
+    which gobble passes, is still true at the same points.
+- **Decision** (proposed with this deviation, for the owner's approval with deviation 23's):
+  - MADR D1 has a dated amendment for the three tags;
+  - P29, P30 and P31 take the new tags, struck through in place. Their files, steps, order and checks are unchanged;
+  - deviation 23's decision otherwise stands.
+- **Files added to scope:** none.

@@ -550,6 +550,42 @@ policy. And one record keeps the order, and the cross-library facts (check-libs,
     - *for each, `get and tidy` and `modules` are ok, so no other module moves.*
   - *magic-cli-remote pins acp-go-sdk2 `v1.31.2` (its `go.mod:11`). Moving it is magic-cli-remote's own record. S8
     asks nothing of its planned `authenticate`, since its 0179-MADR D3 sends only the ids gobble advertises.*
+
+  *Amended 2026-11-05, by the PLAN's deviation 24, proposed for the owner's approval with deviation 23's, from the
+  owner's request "let's pin the sibling repos to current tags". Three tags newer than the amendment above were
+  published on 2026-11-04, before its phases started. Each is the newest of its major by `git ls-remote --tags`, the Go
+  module proxy and the GitHub releases, and replaces the tag above in P29, P30 and P31:*
+  - ***acp-go-sdk2 `v1.33.0`** (`6e04da6e3f733deb6f5044b6f1afa7e9784924bd`), its GitHub release marked Latest, in place
+    of `v1.32.0`. The schema is still `1.25.0`, and the root package, which gobble imports, is unchanged. `make api`
+    reports two compatible additions, both in `remote`. It fixes the nine defects of the subpackages that acp-go-sdk2's
+    `docs/decisions/0049-MADR-remediate-the-2026-11-01-debugging-pass.md` found, P1 to P9. What reaches gobble:*
+    - *nothing. `remote` (P1, P2, P6, P8, P9), `clienthost` (P3 to P5) and the SDK's `acptest` are not imported. P7
+      fixes `agentproc`'s `LineTap` and `Transcript`, which gobble does not use: it imports `agentproc` for `Command`,
+      `Process`, `InProcess`, `ErrAbandoned` and `ErrKilled`;*
+    - *the amendment above's reading of `v1.32.0`, S8's two tests among it, holds unchanged.*
+  - ***go-llmprovider-sdk `v1.26.1`** (`204a356049dd3533c4b3ec4a19ce1cc55e9d6f75`), its GitHub release marked Latest, in
+    place of `v1.26.0`. It carries go-llmprovider-sdk's
+    `docs/decisions/0069-MADR-discard-an-sse-event-the-stream-ends-inside.md` D1: an event the stream ends inside, with
+    no blank line after it, is no longer read. The stream ends with `ErrProviderUnavailable`, which `WithRetry` and
+    `WithStreamRetry` ask again at most once. What reaches gobble:*
+    - *gobble maps `ErrProviderUnavailable` to `llm.ErrUnavailable` (`llm/provider/provider.go:589-593`) and wraps every
+      stream in `WithStreamRetry` (`:214`). So a reply cut short inside an event is asked once more, where it failed
+      with a decode error. gobble's code does not change, and its tests pass (`check_libs`, below);*
+    - *the amendment above's reading of `v1.26.0`, D3's `refreshPolicy` at 60 s among it, holds unchanged.*
+  - ***go-tui-lib/v2 `v2.12.0`** (`bbfd52fa403626f9528051227f442057bcb08c4b`), in place of `v2.11.0`. It publishes no
+    GitHub release. It carries go-tui-lib's `docs/decisions/0025-MADR-charm-free-stream-allocations.md`. What reaches
+    gobble:*
+    - *its `migrating.md` says "Every output is the same, byte for byte", and `make apicheck` reports 0 incompatible
+      changes. It adds `Doc.RenderParts`, which gobble does not call;*
+    - *a `Printer` copies less, and holds no sanitizer once flushed. `Idle`, which gobble passes to the Transcript
+      (`internal/cli/view.go:530-532`), drops a term for a buffer that no longer exists, so it is true at the same
+      points;*
+    - *the amendment above's reading of `v2.11.0` holds unchanged.*
+  - *go-selfupdate-lib `v1.24.0` is still the newest.*
+  - *`python3 scripts/check_libs.py`, every library at its newest tag, from a scratch clone: acp-go-sdk2 `v1.33.0` 13
+    checks, of which 1 fails, `test`, on S8's two tests alone; go-llmprovider-sdk `v1.26.1` 13 and go-selfupdate-lib
+    `v1.24.0` 13, 0 failing; go-tui-lib `v2.12.0` 14, `archtest` among them, 0 failing. For each, `get and tidy` and
+    `modules` are ok.*
 - **D2. `check-libs` sees what preflight sees.**
   - `scripts/check_libs.py` runs `make staticcheck` and `make lint` on its scratch module for each library, so that F2
     would have been reported.
