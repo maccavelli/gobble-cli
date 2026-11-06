@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: complete
 date: 2026-11-06
 associated-madr: "0042-MADR-acpext-extension-contract-module.md"
 ---
@@ -506,4 +506,47 @@ The base is `4d1eb01`, P1's commit, with P1's tag record uncommitted beside it. 
     ok and `make race` 39 ok, `make check-records markdownlint` passed, and preflight stopped at
     `verify-build-metadata`, as on every copy, past `check-acpext-deps: ok`. The Windows laptop ran on its own build
     cache, repaired in P1's record.
-13. **Not done:** the commit, and its push, P3's gate (C12), each on the owner's word.
+13. ~~**Not done:** the commit, and its push, P3's gate (C12), each on the owner's word.~~ *(Done: P3's record.)*
+
+### P3 record (2026-11-06): acceptance and close-out
+
+The base is `14201ed`. No deviation.
+
+1. **P2 committed and pushed** (P3's gate, C12), on the owner's "commit and push to main": the disclosure guard over
+   `14201ed` exited 0; `main` `4d1eb01..14201ed`. CI on `14201ed` passed every job: `validate` on Linux, macOS and
+   Windows, `sbom`, `build` and its five `identity` jobs; `release` skipped, as on any push but a `v*` tag.
+   - CI on P1's `4d1eb01` was marked failed by one job alone, `build / identity (gobble, darwin/arm64)`, cancelled
+     after 15 minutes with no step run, so with no runner; every test, preflight and build step had passed. The same
+     job passed on `14201ed`.
+2. **`go install`** (step 1): `go install github.com/maccavelli/gobble-cli/cmd/gobble@14201ed` with empty `GOPATH`,
+   `GOMODCACHE` and `GOCACHE` in a scratch directory, `GOFLAGS=-mod=mod`, `GOWORK=off`, through the public proxy:
+   exit 0. `go version -m` on the binary names `mod github.com/maccavelli/gobble-cli
+   v0.1.2-0.20261106165406-14201ed5073d` and `dep github.com/maccavelli/gobble-cli/acpext v0.1.0
+   h1:vdk8XDwqrEMor1YAz77soPCER8gQ+ik/QjsOe2hexBg=`, with no `=>` line.
+3. **The consumer** (step 2): a scratch module outside the tree, `example.com/consumer`, its own empty module cache.
+   `go get github.com/maccavelli/gobble-cli/acpext@v0.1.0` added it from the proxy, with the same two `go.sum` lines.
+   It decodes `testdata/retry.start.notice.json` into `RetryNotice` with `encoding/json` and unknown fields refused,
+   and prints `_gobble/retry {SessionID:00dc6acf-… Phase:start Cause:empty_reply Attempt:1 MaxAttempts:2 DelayMs:2000
+   Error:} ok=true`. `go list -m all` is `example.com/consumer` and `github.com/maccavelli/gobble-cli/acpext v0.1.0`:
+   no go-llmprovider-sdk, and, by A1, no acp-go-sdk2.
+4. **`go -C acpext list -m all`** (step 3): `github.com/maccavelli/gobble-cli/acpext`, alone.
+5. **The MADR's Confirmation** (step 4):
+
+   | # | Confirmation | Evidence |
+   | :--- | :--- | :--- |
+   | 1 | acpext's graph is acpext alone (A1) | step 4 above |
+   | 2 | `check-acpext-deps` passes, seen failing | P1 record, item 6: `jsonx`, `golang.org/x/sys/unix`, acp-go-sdk2 |
+   | 3 | the root requires acpext at a tag, no `replace`; `go install` works and `go version -m` names it | `go.mod:20`; no `replace` or `go.work`; step 2 above |
+   | 4 | `session.golden` and the extension tests pass with their frames unchanged | P2 record, item 8 |
+   | 5 | the root test passes, its three assertions seen failing | P2 record, item 6 |
+   | 6 | archtest's rule passes, seen failing | P2 record, item 7 |
+   | 7 | a consumer from the proxy decodes `_gobble/retry`, with no go-llmprovider-sdk | step 3 above |
+   | 8 | the strict round trip, each planted failure seen | P1 record, item 5 |
+6. **The note for magic-cli-remote** (step 5), on the owner's word, is its issue
+   [maccavelli/magic-cli-remote#36](https://github.com/maccavelli/magic-cli-remote/issues/36). It cites 0179 at
+   `0f595dc9`: acpext requires no module (`:234`, `:524`, `:590`, and gate 6 at `:578-580`); `ErrorData` has
+   `sessionId` (D3 `:390-391`, against D8's mid-turn refusal at `:465`); gate 3's `v1.31.2` (`:575`) is `v1.34.0` in
+   both; the `string` session ids and flat types; every D13 name as written, with D9's constants and the open
+   `RetryCause`; `acp.DecodeMeta` for `_meta.gobble`; the nine providers; acpext's own strict round trip; and that
+   gates 2 and 4 wait on a gobble release at or after `14201ed`, since `v0.1.1` predates acpext.
+7. **Status** (step 6): every Confirmation is met. This plan is `complete`; the MADR stays `accepted`.
