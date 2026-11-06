@@ -3546,3 +3546,38 @@ then to `v1.34.0`, before the commit; every step below was run again at `v1.34.0
    as on every copy. They ran at `v1.33.0` and at `v1.33.1` first, with the same results, before deviations 25 and 26.
 10. **Not done:** this plan's `docs/README.md` row (C7). `docs/README.md` holds another session's uncommitted change,
     which a phase commit cannot take, so the row waits for P31's record or for that change to land.
+
+### P30 record (2026-11-06): go-llmprovider-sdk `v1.26.1`, and the refresh lock's 60 s
+
+The base is `0c49161`, P29's commit. No deviation.
+
+1. **C2:** `git ls-remote --tags` at the phase's start lists `v1.26.1` as go-llmprovider-sdk's newest `v1` tag, and no
+   sibling has a tag newer than this plan names.
+2. **Checked first** (step 1): `python3 scripts/check_libs.py --lib go-llmprovider-sdk --tag v1.26.1`, "pinned
+   v1.25.0, checking v1.26.1": 13 checks, "0 failing checks".
+3. **The pin** (step 2): `go get github.com/maccavelli/go-llmprovider-sdk@v1.26.1` ("upgraded … v1.25.0 => v1.26.1"),
+   then `go mod tidy`. `go.mod` changed on that line alone; `go.sum` lost the two `v1.25.0` lines and gained the two
+   `v1.26.1` lines, the `go.mod` hash unchanged, and nothing else.
+4. **The refresh lock** (step 3). Re-read at `v1.26.1` first: the SDK's `lockWait` is `60 * time.Second`, "It outlasts
+   the longest refresh a holder may make, 45.6 s, and its save (0068-MADR D3)" (`llmprovider/auth/tokenstore_file.go:23-26`).
+   `refreshPolicy`'s `Deadline` is `60 * time.Second`, its comment naming that 60 s, the 45.6 s and the SDK's record;
+   `LockRefresh`'s doc says "waiting up to 60 s". `First` and `Max` are unchanged.
+5. **The test** (step 4). `TestRefreshWaitOutlastsAHold` asserts that `refreshPolicy.Deadline` is more than
+   `3*15*time.Second + 200*time.Millisecond + 400*time.Millisecond`, naming the SDK's record.
+   - **Seen failing** (C9), on a copy of the tree with the deadline at `40 * time.Second`, an asserted replacement:
+     exit 1, `logins_test.go:76: refreshPolicy.Deadline = 40s, want more than a refresh's longest hold, 45.6s`. An
+     unbroken copy passes.
+6. **No other source change** (step 5): `go test -count=1 ./llm/provider/... ./internal/auth/... ./internal/cli/...
+   ./acpserver/...` passed, 9 packages ok. `internal/auth` took 2.5 s, so no test waits on the longer deadline.
+   **The docs** (step 6): `README.md:131` and `docs/architecture.md:178` name `v1.26.1`; neither names `v1.25.0`.
+7. **G-local:** `make pre-add-check FILES="internal/auth/logins.go internal/auth/logins_test.go"`: 2 files clean;
+   `make race`: 38 ok. P30 touches nothing under `internal/cli`, so no `make perf`.
+   - `make preflight` in the tree passed every gate up to `markdownlint`, `verify-build-metadata` among them, and
+     failed there on `docs/reports/0042-REPORT-acpext-sdk-surface-and-magic-import.md:153` (MD040), another session's
+     untracked file, as in P29.
+   - On a copy of what this commit holds, `HEAD`'s files with the phase's seven from the tree, `make check-records
+     markdownlint` passed, 0 issues.
+8. **G-hosts,** on the Linux machine and the Windows laptop, that copy shipped to each, 833 files: `go test` and race
+   passed on both, 38 ok; `make check-records markdownlint` passed on both; preflight stops at `verify-build-metadata`,
+   as on every copy.
+9. **Not done:** this plan's `docs/README.md` row, as in P29.

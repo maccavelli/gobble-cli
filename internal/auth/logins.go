@@ -10,8 +10,9 @@ import (
 )
 
 // refreshPolicy is how long a refresh waits for its provider's refresh
-// lock: the SDK's own store's 40 s, backing off from 20 ms to 2 s.
-var refreshPolicy = filelock.Policy{First: 20 * time.Millisecond, Max: 2 * time.Second, Deadline: 40 * time.Second}
+// lock: the SDK's own store's 60 s, past a refresh's longest hold of 45.6 s
+// (go-llmprovider-sdk's 0068-MADR D3), backing off from 20 ms to 2 s.
+var refreshPolicy = filelock.Policy{First: 20 * time.Millisecond, Max: 2 * time.Second, Deadline: 60 * time.Second}
 
 // Logins are auth.json's oauth entries as provider.LoginStore: the file at
 // Path, each change under auth.json's lock, and each provider's refreshes
@@ -64,7 +65,7 @@ func (l Logins) Delete(ctx context.Context, id string) error {
 }
 
 // LockRefresh takes id's refresh lock, auth.json.<id>.refresh.lock beside
-// the file, waiting up to 40 s.
+// the file, waiting up to 60 s.
 func (l Logins) LockRefresh(ctx context.Context, id string) (func(), error) {
 	release, err := filelock.Lock(ctx, l.Path+"."+id+".refresh.lock", refreshPolicy)
 	if err != nil {

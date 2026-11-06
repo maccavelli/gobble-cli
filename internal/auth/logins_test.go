@@ -65,3 +65,14 @@ func TestRefreshLockSeparate(t *testing.T) {
 		other()
 	}
 }
+
+// A refresh waits for another's lock past the longest the SDK holds it:
+// three attempts of 15 s, with 200 ms and 400 ms between them
+// (go-llmprovider-sdk's 0068-MADR D3), so a waiter does not give up on a
+// refresh that is still running.
+func TestRefreshWaitOutlastsAHold(t *testing.T) {
+	const longestHold = 3*15*time.Second + 200*time.Millisecond + 400*time.Millisecond
+	if refreshPolicy.Deadline <= longestHold {
+		t.Errorf("refreshPolicy.Deadline = %v, want more than a refresh's longest hold, %v", refreshPolicy.Deadline, longestHold)
+	}
+}
