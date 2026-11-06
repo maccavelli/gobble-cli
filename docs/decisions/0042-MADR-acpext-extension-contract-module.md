@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 date: 2026-11-06
 decision-makers: repository owner
 consulted: "gobble-cli at 67f72fb, read from code; acp-go-sdk2 v1.31.2, read from source; magic-cli-remote at 6b331cf7, its 0179-MADR and 0179-REPORT; amended 2026-11-06 from gobble-cli at 08439b4, acp-go-sdk2 v1.34.0, and magic-cli-remote at e020cd54, its 0179-MADR D3, D8, D9, D11 to D13 and its acpagent Host"

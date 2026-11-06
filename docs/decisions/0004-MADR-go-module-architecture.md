@@ -173,6 +173,14 @@ real Go SDK (D4) while keeping one version, one `go.mod`, and one CI
 graph. It also puts each external SDK and each open protocol behind a
 single package that the import-boundary test can enforce.
 
+*Note (2026-11-06), from `0042-MADR-acpext-extension-contract-module.md`: that record adds a second module, nested at
+`acpext/`, `github.com/maccavelli/gobble-cli/acpext`, for gobble's ACP extension contract alone. It imports only the
+standard library, is tagged `acpext/vX.Y.Z`, and the root requires it by tag, with no `replace` and no committed
+`go.work`. The root is still one module: `go list -m` in it names one, so this record's Confirmation is unchanged.
+The rejected multi-module option below stays rejected for the SDK, providers, TUI and CLI; the nested module holds
+only names and types, and its cost, a tag before the root can use a change, is 0042-MADR D5's. The text above is
+unchanged.*
+
 ### Module
 
 ```

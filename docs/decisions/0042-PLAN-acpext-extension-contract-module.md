@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: in-progress
 date: 2026-11-06
 associated-madr: "0042-MADR-acpext-extension-contract-module.md"
 ---
@@ -295,3 +295,20 @@ Files: this plan, the MADR, `docs/README.md`.
 ## Execution record
 
 Each phase appends its record here.
+
+*Approved 2026-11-06 by the owner's "Commit to main and do p0", after the records commit `0c07a72`, the pair as
+amended on 2026-11-04 and 2026-11-06. The MADR is `accepted`; this plan is `in-progress`.*
+
+### P0 record (2026-11-06): the records
+
+The base is `0c07a72`, the amendment's commit. No deviation.
+
+1. **0004-MADR** has a dated italic note after its Decision Outcome's opening paragraph, before `### Module`. It
+   says that 0042-MADR adds the nested module `acpext/` for the extension contract alone, importing only the
+   standard library (A1), that the root is still one module, and that its Confirmation's `go list -m` is
+   unchanged. The text above it is unchanged: the diff adds lines only.
+2. **`docs/README.md`**'s two 0042 rows give the pair's status: the MADR accepted, this plan in progress, P0
+   complete.
+3. `make check-records markdownlint` passed, 0 issues.
+4. The identifier scan over the staged records found nothing.
+5. Committed on `main` on the owner's word in the same turn.
