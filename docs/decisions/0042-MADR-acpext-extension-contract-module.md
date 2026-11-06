@@ -1,8 +1,8 @@
 ---
 status: proposed
-date: 2026-11-03
+date: 2026-11-06
 decision-makers: repository owner
-consulted: "gobble-cli at 67f72fb, read from code; acp-go-sdk2 v1.31.2, read from source; magic-cli-remote at 6b331cf7, its 0179-MADR and 0179-REPORT"
+consulted: "gobble-cli at 67f72fb, read from code; acp-go-sdk2 v1.31.2, read from source; magic-cli-remote at 6b331cf7, its 0179-MADR and 0179-REPORT; amended 2026-11-06 from gobble-cli at 08439b4, acp-go-sdk2 v1.34.0, and magic-cli-remote at e020cd54, its 0179-MADR D3, D8, D9, D11 to D13 and its acpagent Host"
 informed: magic-cli-remote
 ---
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
@@ -70,7 +70,8 @@ Read at `67f72fb`.
 * **Error data.** Its keys are `reason` and `error` (`acpserver/agent.go:45-46`):
   * `authenticate`'s -32000 data is `{provider, reason, command}` (`acpserver/auth.go:80`);
   * a prompt without a credential gets -32000 with data `{error}` (`acpserver/prompt.go:285`);
-  * a request refused mid-turn gets -32600 with data `{reason}`.
+  * a request refused mid-turn gets -32600 with data ~~`{reason}`~~ `{sessionId, reason}`, as every `_gobble/*`
+    refusal does. *(Amended 2026-11-06, A3.)*
 * **gobble already keeps the contract twice.**
   * `acpclient` decodes the three notifications with its own constants and types (`acpclient/update.go:119-195`,
     constants at `:127`, `:159` and `:186`).
@@ -106,7 +107,7 @@ Read at `67f72fb`.
 
 * There is one definition of every `_gobble/*` name and shape. gobble serves from it, and `acpclient` and
   magic-cli-remote decode with it.
-* An importer gets acp-go-sdk2 and the standard library, nothing else.
+* An importer gets ~~acp-go-sdk2 and~~ the standard library, nothing else. *(Amended 2026-11-06, A1.)*
 * The wire does not change. Moving the types does not change a byte gobble sends; the golden and extension tests prove
   it.
 * `go install …/cmd/gobble@version` keeps working.
@@ -135,10 +136,10 @@ types. Its cost is the coordinated tag that 0004 named; D5 below sets the order 
   package `acpext`. It is one package, with no `internal/` and no sub-packages.
 * **`go.mod`:**
   * `go 1.27.3`, as the root module, for fleet lockstep (0004's accepted cost);
-  * a single requirement, `github.com/maccavelli/acp-go-sdk2`, at the lowest tag acpext needs. At creation that is
+  * ~~a single requirement, `github.com/maccavelli/acp-go-sdk2`, at the lowest tag acpext needs. At creation that is
     the root's pin, `v1.31.2`. A later SDK bump raises it only when acpext uses something new; MVS gives every
-    importer its own pin.
-* **Imports.** Only the standard library and acp-go-sdk2. A gate checks it (D6).
+    importer its own pin.~~ no requirement, and so no `go.sum`. *(Amended 2026-11-06, A1.)*
+* **Imports.** Only the standard library ~~and acp-go-sdk2~~. A gate checks it (D6). *(Amended 2026-11-06, A1.)*
 * **`acpext/LICENSE`** is a copy of the root `LICENSE`. A nested module's zip holds only its own directory, so the
   module proxy and pkg.go.dev do not see the root's file.
 
@@ -160,19 +161,21 @@ The contract as gobble serves it at the commit that creates acpext, with no addi
 * **Params and results.** Each of today's unexported structs becomes an exported type with the same fields, JSON
   names and `omitempty`/`omitzero` options. A type is named for its method (`SetSessionNameParams`, `CloneResult`,
   `RetryNotice`, …). A shape that several methods share keeps one name (`SessionParams`). The PLAN's P1 lists each
-  type against its source line.
+  type against its source line. *(Amended 2026-11-06, A2: each type is flat, its fields its own, with no embedded struct;
+  `SessionParams` is the type of the methods that take a session alone.)*
 * **The four fields that hold gobble's own types** become `jsontext.Value`, gobble's spelling of the SDK's
   `json.RawMessage` (the same type):
   * `CompactResult.Details`;
   * each element of `MessagesResult.Messages`;
   * each element of `EntriesResult.Entries`.
 
-  `ForkResult.SessionID` and `CloneResult.SessionID` become `acp.SessionId`, the same string on the wire. Their
+  `ForkResult.SessionID` and `CloneResult.SessionID` become ~~`acp.SessionId`~~ `string`, as every `SessionID` field
+  does, the same string on the wire *(Amended 2026-11-06, A1.)*. Their
   doc comments say the raw fields carry gobble's session-file shapes, which acpext does not freeze.
 * **String values** become typed constants:
   * the notification phases (`start`, `end`);
   * the compaction reasons (`manual`, `threshold`, `overflow`) and pauses (`turn`, `session`);
-  * the retry causes;
+  * the retry causes, an open set *(Amended 2026-11-06, A3.)*;
   * the queue modes (`one-at-a-time`, `all`);
   * the queue dispositions.
 
@@ -198,9 +201,10 @@ reader. Its types carry JSON tags only, which `encoding/json` and `encoding/json
   * acpext cannot import `llm/provider`, so the root module derives the same list at run time, from the SDK
     registry, as today. A root test asserts the two are equal (D4).
 * **`LoginSuffix = "-login"`**, the terminal method id's suffix.
-* **`ErrorData{Reason, Error, Provider, Command string}`.** These are the `data` members of gobble's errors, each
-  `omitzero`: -32000 from `authenticate`, -32000 from a prompt without a credential, and -32600 for a mid-turn
-  refusal. The code is the SDK's, and acpext adds no error constructor.
+* **~~`ErrorData{Reason, Error, Provider, Command string}`~~ `ErrorData{Command, Error, Provider, Reason, SessionID
+  string}`** *(Amended 2026-11-06, A3.)*. These are the `data` members of gobble's errors, each `omitzero`: -32000 from
+  `authenticate`, -32000 from a prompt without a credential, -32600 for a mid-turn refusal, and -32602 for a
+  `_gobble/*` request refused, its params or its session. The code is the SDK's, and acpext adds no error constructor.
 
 ### D4. gobble serves and reads from acpext
 
@@ -220,7 +224,8 @@ reader. Its types carry JSON tags only, which `encoding/json` and `encoding/json
   * `acpext.AuthProviders()` equals the list `internal/cli` builds from the registry.
 
   Each assertion is seen failing on a planted break.
-* **archtest.** acpext imports the SDK, so it is placed with it: only `acpserver`, `acpclient` and `internal/cli` may
+* **archtest.** ~~acpext imports the SDK, so it is placed with it:~~ acpext is the ACP edge's contract, so it is
+  placed with the edge *(Amended 2026-11-06, A1.)*: only `acpserver`, `acpclient` and `internal/cli` may
   import acpext. `internal/cli` is the place `AuthProviders` is compared against the registry. The rule is seen
   failing on a planted import from a core package.
 * **Not changed.** gobble's own `HandleExtensionMethod` dispatch stays. Moving it onto `acp.Handle` would change how
@@ -248,15 +253,100 @@ reader. Its types carry JSON tags only, which `encoding/json` and `encoding/json
   * gofmt, `go mod tidy`, vet, staticcheck for the three OSes, golangci-lint, govulncheck, `go fix -diff` and tests;
   * each in the module's own directory (`go -C acpext …`).
 
-  `gofmt -l .` and `pre-add-check` already reach `acpext/` files.
+  `gofmt -l .` and `pre-add-check` already reach `acpext/` files. *(Amended 2026-11-06, A3: the tools are the root's, run
+  against `acpext/`.)*
 * **`check-acpext-deps`,** in `preflight`, fails when `go -C acpext list -deps` names a non-standard package outside
-  acp-go-sdk2 and acpext itself. It is seen failing on a planted import.
+  ~~acp-go-sdk2 and~~ acpext itself *(Amended 2026-11-06, A1.)*. It is seen failing on a planted import.
 * **CI.** The existing jobs run the same per-module targets, so CI and `make preflight` agree.
 * **Documentation, updated in the phase that makes them true:**
   * AGENTS.md's "one module" sentence;
   * `docs/architecture.md`'s module and package map;
   * a dated note on 0004-MADR. Its Confirmation's `go list -m` still shows one module, since `acpext/` is outside
     the root.
+
+### Amendment of 2026-11-06
+
+Proposed with the pair, before its approval, on the owner's "Amend with both", after a read of gobble-cli at
+`08439b4`, acp-go-sdk2 `v1.34.0` and magic-cli-remote at `e020cd54`. A1 and A2 are the owner's two choices; A3 and A4
+correct facts the record asserted. The text above is struck where it changed.
+
+#### What the read found
+
+* **How magic-cli-remote calls.** Its providers see `acpagent.Host`, not the SDK's connection.
+  * `Host.CallExtension(ctx, method string, params, out any) error` marshals `params` through the SDK and decodes the
+    result with `encoding/json` (magic-cli-remote `internal/provider/acpagent/host.go:60`, `:211-224`).
+  * A notification handler is `func(ctx, Host, json.RawMessage)`, registered by name in `Spec.ExtensionNotifications`
+    (`acpagent/extensions.go:17`, `acpagent.go:189`).
+  * Its session ids are `string`: `Host.AgentSessionID() string` (`host.go:37`).
+* **What it names.** Its 0179-MADR D13 uses `AuthProviders()`, `ErrorData`, `MethodSetSessionName`,
+  `SetSessionNameParams`, `MethodClone`, `SessionParams`, `CloneResult`, `MethodRetry`, `RetryNotice`,
+  `MethodCompaction`, `CompactionNotice` and their constants, `CapabilitiesMeta` and `MetaKey`. Its PLAN's P1 checks
+  them with `go doc`, "as written", so these names are fixed.
+* **How strictly it decodes.** Its D11 item 9 decodes every captured `_gobble/*` frame with unknown members rejected,
+  and encodes it back with `encoding/json`, compared as values.
+* **Its pins.** Go 1.27.3 and acp-go-sdk2 `v1.34.0`, as gobble's root (0184-MADR D12's lockstep); no
+  go-llmprovider-sdk (0185-MADR).
+* **The SDK reads `_meta` already.** `acp.DecodeMeta[T](meta, key)` (`helpers.go:672`) decodes
+  `CapabilitiesMeta` from `initialize`'s `agentCapabilities._meta` under `MetaKey`, so acpext needs no reader.
+
+#### A1. acpext imports the standard library alone
+
+* The only SDK name acpext would use is `acp.SessionId`, a `string` type. Every `SessionID` field is `string`
+  instead: the same JSON string, and the type magic-cli-remote's `Host` already gives.
+* So acpext has no requirement and no `go.sum`. `check-acpext-deps` holds every dependency to the standard library.
+* magic-cli-remote's 0179 D12 gate 6, an acpext SDK requirement at or below its own pin, holds by construction, and
+  no acp-go-sdk2 release asks for an acpext tag.
+* `acpserver` converts at its edge: the extension decoder turns the params' `SessionID` into `acp.SessionId` once, and
+  each notification is built with `string(id)`.
+* The spelling of the raw fields stays `jsontext.Value`, the standard library's, which is `json.RawMessage`.
+* **Not added:** call wrappers on the SDK's `ClientSideConnection` (gobble-cli
+  `docs/reports/0042-REPORT-acpext-sdk-surface-and-magic-import.md`, §5.5). magic-cli-remote cannot use them, since
+  its providers see `Host`; gobble's client makes one such call; and they would bring the SDK back.
+
+#### A2. Flat types
+
+* Each params and result type holds its own fields, with no embedded struct. `SetSessionNameParams` is
+  `{SessionID, Name string}`, and a client writes `acpext.SetSessionNameParams{SessionID: id, Name: n}`.
+* A shape that several methods share is one type, named for the shape: `SessionParams` (`sessionId` alone),
+  `MessageParams` (steer, follow_up), `ModeParams` (the two queue modes), `EnabledParams` (auto-retry,
+  auto-compaction). A shape one method has is named for it (`CompactParams`, `ForkParams`, `GetEntriesParams`,
+  `SetPersonalityParams`).
+* **The wire is the same.** Go 1.27's two encoders both inline an embedded struct's fields, so today's embedded
+  `sessionParams` and a flat field encode and decode alike.
+* `acpserver`'s extension decoder reads the session from a second decode of the params into `SessionParams`, since
+  it can no longer give acpext's types its own method. The first decode's error stays the one answered, so a refusal
+  does not change.
+
+#### A3. Corrections
+
+* **`ErrorData` has `SessionID`.** Every refusal that goes through `invalidParams` carries `{sessionId, reason}`
+  (`acpserver/agent.go:417-418`): an unknown session, and each `_gobble/*` method's own refusals, such as an empty
+  name. So do the mid-turn refusal (`:786`) and an already-open session's (`:1054`, `:1063`). Params that do not
+  decode carry `{reason}` alone (`acpserver/extensions.go:129`). D3's list lacked `sessionId`.
+  * Its fields are declared in their JSON names' sorted order: `command`, `error`, `provider`, `reason`, `sessionId`.
+    gobble builds the data from maps today, which `jsonx` writes sorted (`json.Deterministic`), so data built from
+    `ErrorData` has the same bytes.
+* **The retry cause is an open set.** It is `offline` or `empty_reply` (`agent/event.go:91-92`), or a provider retry's
+  failure class, `llm/provider.FailureKind`: `workspace`, `quota`, `rate-limited`, `auth`, `not-permitted`,
+  `unavailable`, `timeout`, `canceled`, `empty` or `other` (`llm/provider/list.go:106-128`; `agent/agent.go:697`).
+  acpext names each as a `RetryCause` constant, and its doc says a client must take a cause it does not know.
+* **`CloneResult` is its own type,** `{SessionID}`. Clone's answer has never had `text`: `forkResult`'s `Text` is
+  `omitzero` and clone leaves it empty (`acpserver/extensions.go:433`).
+* **The nested result types are exported too:** `ModelRef`, `StateResult`, `UsageResult`, `SessionStats`,
+  `TokenStats`, `ContextUsage`, `ForkMessage`, `ForkMessagesResult`, `TextResult`, `ClearedResult`, `QueuedResult`,
+  `MessagesResult`, `EntriesResult`, `CompactResult`, `ForkResult` and `PersonalityResult`. Each keeps its source's
+  pointer, `null` and `omitzero` behaviour.
+* **The gates' tools are the root's.** `golint`, `govulncheck` and `staticcheck` come from the root's `tool`
+  directives, which `acpext/go.mod` must not carry: a tool's requirement would enter every importer's module graph.
+  So they run from the root against `acpext/`: `go tool govulncheck -C acpext ./...`, the staticcheck binary the
+  root builds, `go tool golint` over acpext's files, golangci-lint in `acpext/` with the root's configuration, and
+  `go -C acpext` for `vet`, `test`, `fix -diff` and `mod tidy -diff`.
+
+#### A4. archtest names acpext as another module
+
+`internal/archtest` maps an import path to a root package by its module prefix (`relOf`), so
+`github.com/maccavelli/gobble-cli/acpext` would read as a root package named `acpext`. The rule of D4 matches the
+path `github.com/maccavelli/gobble-cli/acpext` as a module of its own, before that mapping.
 
 ### Consequences
 
@@ -273,10 +363,15 @@ reader. Its types carry JSON tags only, which `encoding/json` and `encoding/json
 * Bad, because the static provider list must be updated with the registry. The equality test fails the root's build
   until it is, which turns an SDK provider addition into an acpext tag.
 * Bad, because the `jsontext.Value` fields leave those shapes to the client.
+* Good, because acpext has no requirement at all, so no SDK release asks for an acpext tag, and an importer's pin is
+  its own *(Amended 2026-11-06, A1.)*.
+* Bad, because acpext's session ids are `string`, not the SDK's `acp.SessionId`, so gobble converts at its edge *(Amended 2026-11-06, A1.)*.
+* Bad, because `acpserver` decodes a request's session in a second, small decode *(Amended 2026-11-06, A2.)*.
 
 ### Confirmation
 
-1. `go -C acpext list -m all` names acpext, acp-go-sdk2 and the SDK's own requirements, and nothing else.
+1. `go -C acpext list -m all` names ~~acpext, acp-go-sdk2 and the SDK's own requirements, and nothing else~~ acpext
+   alone *(Amended 2026-11-06, A1.)*.
 2. `make check-acpext-deps` passes, and was seen failing on a planted import.
 3. The root's `go.mod` requires `github.com/maccavelli/gobble-cli/acpext` at a tag, with no `replace`. `go install
    github.com/maccavelli/gobble-cli/cmd/gobble@<commit>` succeeds from an empty module cache, and `go version -m`
@@ -287,6 +382,9 @@ reader. Its types carry JSON tags only, which `encoding/json` and `encoding/json
 6. archtest's acpext rule passes, and was seen failing on a planted import.
 7. A scratch module outside the tree that requires `acpext@v0.1.0` from the proxy builds, decodes a recorded
    `_gobble/retry` frame into `RetryNotice`, and its `go list -m all` shows no go-llmprovider-sdk.
+8. Every recorded frame decodes into its acpext type with unknown members rejected, under `encoding/json` and
+   `encoding/json/v2`, and encodes back to the same JSON, compared canonically; each failure the PLAN plants is seen
+   *(Amended 2026-11-06, A3, for magic-cli-remote's D11 item 9.)*
 
 ## Pros and Cons of the Options
 
@@ -336,6 +434,7 @@ reader. Its types carry JSON tags only, which `encoding/json` and `encoding/json
 * **Freezing the shapes behind the `jsontext.Value` fields** (session messages and entries, compaction details).
 * **The other `_meta.gobble` members** (0039-MADR D15), should a client other than gobble's need them.
 * **acpext v1,** which waits for gobble's v1.0.0.
+* **Call wrappers on the SDK's connection** *(Amended 2026-11-06, A1.)*.
 
 ### Relationship to other records and issues
 
@@ -353,3 +452,7 @@ reader. Its types carry JSON tags only, which `encoding/json` and `encoding/json
   require acpext.
 * magic-cli-remote `docs/reports/0179-REPORT-gobble-native-acp-integration-assessment.md`: R3, the recommendation
   this record takes.
+* [0042-REPORT-acpext-sdk-surface-and-magic-import.md](../reports/0042-REPORT-acpext-sdk-surface-and-magic-import.md):
+  the SDK's surface against acpext's; its §5.5 call wrappers are not taken (A1).
+* For magic-cli-remote, two facts to carry into its 0179 (the owner's to pass on): its D3's `ErrorData` gains
+  `sessionId` (A3); its D12 gate 3's shared pin is now `v1.34.0` in both repositories, not `v1.31.2`.
