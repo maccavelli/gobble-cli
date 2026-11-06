@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 date: 2026-11-06
 decision-makers: repository owner
 consulted: "the repository's rulesets, rule suites, collaborators, invitations, deploy keys, environments, releases, immutable-release setting and Actions permissions (GitHub API, read 2026-11-06); proxy.golang.org's version lists; GitHub's documentation on rulesets and immutable releases (read 2026-11-06); prepare-commit-msg's 0025-MADR and 0025-PLAN, Amendment A1 and Phase 4; go-selfupdate-lib v1.24.0's building-releases guide and publish workflow"

@@ -177,6 +177,68 @@ tag is never filtered. Its jobs:
   request has none;
 - `release` publishes a GitHub release, only on a `v*` tag at `main`'s head.
 
+## Releasing
+
+### What GitHub protects
+
+No rule has a bypass actor, so a rule binds everyone, the owner and an agent under the owner's login
+included. [0043-MADR](../decisions/0043-MADR-protect-main-and-acpext-tags-without-bypass.md) has the
+reasons.
+
+| Ref | Protected by | Refused |
+| :--- | :--- | :--- |
+| `main` | the ruleset `gobble-cli-main` | a force-push, and deleting it |
+| `acpext/vX.Y.Z` tags | the ruleset `gobble-cli-acpext-tags` | moving the tag, to any commit, and deleting it |
+| a `v*` tag with a published release | immutable releases, a repository setting | moving the tag, and deleting it |
+| a `v*` tag with no published release | nothing | — |
+
+A fast-forward push to `main` passes. Creating a tag fires no rule: neither ruleset has a `creation`
+rule, and there is no `v*` ruleset.
+
+### Tagging
+
+- **A gobble release** is an annotated `vX.Y.Z` tag on `main`'s head, pushed on the owner's word. The
+  `release` job publishes it.
+- **An acpext version** is an annotated `acpext/vX.Y.Z` tag, pushed before the root requires it, in
+  the order [0042-MADR](../decisions/0042-MADR-acpext-extension-contract-module.md) D5 gives.
+
+### When a release goes wrong
+
+- **A `v*` tag whose release was never published** may be deleted and pushed again on the fixed
+  commit, but only if the module proxy does not list that version:
+
+  ```bash
+  curl -fsS https://proxy.golang.org/github.com/maccavelli/gobble-cli/@v/list
+  ```
+
+  Ask for `@v/list` alone. Asking for the version's `.info`, `.mod` or `.zip` can make the proxy
+  fetch it, and from then on that version is fixed.
+- **If the proxy lists it,** the tag stays, and the fix is the next patch version. `v0.1.0` is
+  listed, so it stays for good.
+- **A tag whose release was published** stays, since the release is immutable. The fix is the next
+  patch version.
+- **A wrong acpext tag** stays, because the ruleset refuses moving or deleting it. The fix is the next
+  patch version, with a `retract` in `acpext/go.mod` if the bad version must not be used.
+
+### After each `v*` release
+
+- The tag push prints no "Bypassed rule violations" line.
+- No rule suite for the tag records a bypass:
+
+  ```bash
+  gh api 'repos/maccavelli/gobble-cli/rulesets/rule-suites?ref=refs/tags/vX.Y.Z&time_period=day' \
+    --jq '[.[] | select(.result == "bypass")] | length'    # 0
+  ```
+
+- The release is immutable: `gh release view vX.Y.Z --json isImmutable` gives `true`.
+
+### When the tag rule comes back
+
+go-selfupdate-lib's release guide asks to restrict who can create `v*` tags. gobble-cli doesn't,
+because one account can write and it is the owner's, and no workflow pushes a tag that starts a
+release. If a second account ever gets write access, or a workflow gets a token that can push tags and
+start runs, that advice applies again, and restricting `v*` creation needs a new record.
+
 ## Decision records
 
 Mutating work follows a MADR and its PLAN in `docs/decisions/`. `AGENTS.md` has the workflow.

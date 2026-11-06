@@ -601,7 +601,9 @@ repository's `0018-MADR-apache-2-license.md`; `NOTICE` names it.
 * **Phase 4.** Read the original steps with these additions.
   * **Precondition, recorded with evidence before the first tag** (an owner action, not this plan's): on `maccavelli/gobble-cli`, *(2026-10-20: not met before the first tags; met after them. See the entry "Phase 4's release precondition, met after the first tags" of that date.)*
     * "immutable releases" is enabled;
-    * a tag ruleset restricts `v*` to the owner, with 2FA.
+    * a tag ruleset restricts `v*` to the owner, with 2FA. *(2026-11-06: superseded by
+      [0043-MADR](0043-MADR-protect-main-and-acpext-tags-without-bypass.md) D1. The ruleset is deleted; immutable releases are the protection
+      for published `v*` tags.)*
 
     Without immutable releases the reusable workflow publishes, waits 120 s, fails, and leaves a mutable release that every client refuses (`ErrMutableRelease`).
   * **The calling job declares `permissions: {contents: write, id-token: write, attestations: write}`**, which the snippet in step 2 omitted.
@@ -1326,6 +1328,10 @@ still unverified. Every fact below was read with `gh` or `git` on 2026-10-20; ti
   that enforces it. Nothing in `ci.yml` or `make preflight` reads either setting, so the first tags went out without
   them. Whether to add such a check (a `gh api` read in the tag run before `build`) is left to the owner; this entry
   adds none.
+* *2026-11-06: the tag ruleset `25481802` was deleted, superseded by [0043-MADR](0043-MADR-protect-main-and-acpext-tags-without-bypass.md) D1.
+  Its body, as GitHub returned it before the deletion, is in
+  [0043-PLAN](0043-PLAN-protect-main-and-acpext-tags-without-bypass.md)'s P2 record. P1 there saw each
+  no-bypass rule refuse the owner's account, the observation this entry could not make.*
 
 **2026-10-21 — the toolchain moves to Go 1.27.3 (0004-MADR's amendment of 2026-10-21; approved).** It starts after
 the owner approves it *(approved 2026-10-21, "accepted. approved to proceed.")*, on `main` at or after `978d38d`, as one commit.

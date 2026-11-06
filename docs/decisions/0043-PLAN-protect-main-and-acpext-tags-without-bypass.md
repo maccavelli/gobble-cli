@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: complete
 date: 2026-11-06
 associated-madr: "0043-MADR-protect-main-and-acpext-tags-without-bypass.md"
 ---
@@ -348,3 +348,29 @@ it were pushed, `2487444..c2daa78`, the disclosure guard exiting 0. Every expect
 7. **The record** (step 7) is this entry, committed and pushed on the same word.
 8. **Not done here:** Confirmation 6 (step 8), the rule suite of this record's push to `main`, is read after the push.
    P3's record quotes it.
+
+### P3 record (2026-11-06): the documents and close-out
+
+On the owner's "Do p3, commit and push to main, then comment and close #12".
+
+1. **Confirmation 6** (P2 step 8), for P2's push `c2daa78..7d13685` to `main`: the push printed no "Bypassed rule
+   violations" line. Rule suite `4961970095`, `refs/heads/main`, `c2daa78->7d13685`, `result=pass`:
+   * `non_fast_forward` from ruleset `26727621` `gobble-cli-main`, `enforcement=active`, `result=pass`;
+   * `deletion` from ruleset `26727621` `gobble-cli-main`, `enforcement=active`, `result=pass`;
+   * `secret_scanning`, GitHub's own, `result=pass`.
+2. **`docs/guides/developing.md`** (step 1) has "## Releasing", after "CI and the release rehearsal": which refs are
+   protected and by what, as a table; tagging a release and an acpext version; recovering a failed `v*` release, with
+   the `@v/list` check as a command and why not `.info`; a wrong acpext tag; the check after each `v*` release
+   (Confirmation 8); and when go-selfupdate-lib's advice applies again (D6).
+3. **`docs/README.md`** (step 2): the italic note after "A tag ruleset now restricts `v*` to the repository admin role,
+   the owner.", which stays; the two 0043 rows' status; the "I want to…" row on protected refs now points at the
+   guide's section first.
+4. **0004-PLAN** (step 3): the note after the precondition (`:604`); and the note at the end of the entry of 2026-10-20,
+   after its last line. Before these notes, that entry ran `:1307-1328`, not `:1307-1325` as step 3 cites it. The notes are after the
+   lines the step names, so nothing else changed.
+5. **The MADR** is `accepted`, and this plan `complete` (step 4). Confirmations 1 to 7 are met: 1 to 4 by P2 step 6, 5
+   by P1, 6 by item 1 here, and 7 by items 2 to 4. Confirmation 8 is not a gate on this plan. It is checked at the
+   next `v*` release, by the guide's "After each `v*` release".
+6. **Checks** (step 5, C7): `make check-records markdownlint`, 0 issues; the identifier scan found nothing.
+7. **Not in this record,** since each follows its commit: this record's push and its rule suite, and the comment on
+   gobble-cli#12 and its closing (step 6). The comment quotes the push's rule suite.
