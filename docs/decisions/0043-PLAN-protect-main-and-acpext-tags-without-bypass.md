@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: in-progress
 date: 2026-11-06
 associated-madr: "0043-MADR-protect-main-and-acpext-tags-without-bypass.md"
 ---
@@ -89,9 +89,10 @@ Files: this plan.
    * the target state with immutable releases off.
 
    It passes on the target state as the MADR writes it.
-2. **Start state (C1).** `git rev-parse HEAD origin/main` equal; `GET …/rulesets` lists only `25481802`;
-   `git ls-remote origin 'refs/*/ruleset-probe/*'` lists nothing. Record two commits for the probes: `A`, `HEAD~1`,
-   and `B`, `HEAD`. `B` descends from `A`.
+2. **Start state (C1).** ~~`git rev-parse HEAD origin/main` equal;~~ `GET …/rulesets` lists only `25481802`;
+   `git ls-remote origin 'refs/*/ruleset-probe/*'` lists nothing. Record two commits for the probes: `A`,
+   ~~`HEAD~1`~~ `origin/main~1`, and `B`, ~~`HEAD`~~ `origin/main`. `B` descends from `A`. *(Deviation 1: both
+   commits are already on GitHub, so no probe push sends a new commit.)*
 3. **The temporary tag ruleset,** `gobble-cli-probe-tags`, with the acpext ruleset's rules, no bypass, and a pattern
    of the acpext form:
 
@@ -240,3 +241,71 @@ Files: `docs/guides/developing.md`, `docs/README.md`, `docs/decisions/0004-PLAN-
 ## Execution record
 
 Each phase appends its record here.
+
+### P0 record (2026-11-06): the records
+
+The pair and `docs/README.md`'s rows, committed as `ed06112` on the owner's "Commit the records to main then do
+p1". `make check-records markdownlint` passed, 0 issues; the identifier scan found nothing. Not pushed.
+
+### Deviation 1 (2026-11-06): P1's probe commits come from `origin/main`
+
+- **Found** at P1 step 2. The step expects `HEAD` to equal `origin/main`, and takes `A` as `HEAD~1` and `B` as
+  `HEAD`. After P0, `HEAD` is `ed06112`, one commit ahead of `origin/main` (`2487444`) and unpushed. Pushing
+  `HEAD` to a probe ref would send that commit to GitHub.
+- **Decision,** the owner's ("Probe on origin/main"): `A` is `origin/main~1` (`14201ed`) and `B` is
+  `origin/main` (`2487444`), both already on GitHub. `B` descends from `A`, which is all the probes need. No
+  new commit leaves the machine. P0's commit stays local until the owner pushes it.
+- **Files added to scope:** none. The MADR does not change.
+
+### P1 record (2026-11-06): the probes
+
+On the owner's "Commit the records to main then do p1". The base is `ed06112`, unpushed; the probes used `origin/main`
+(deviation 1). Every expectation was met: 18 of 18.
+
+1. **The checker** (step 1), `check_rulesets.py`, scratch. Seen failing (C6), each exit 1, naming what differs:
+   - today's live state: "rulesets are ['release tags: owner only'] (ids [25481802]), want exactly gobble-cli-main and
+     gobble-cli-acpext-tags", and "rules/branches/main lists [], want deletion and non_fast_forward";
+   - a bypass actor on `gobble-cli-main`: "bypass_actors [{'actor_id': 5, …}], want []", and
+     "current_user_can_bypass 'always', want 'never'";
+   - `non_fast_forward` added to the acpext ruleset: "rules ['deletion', 'non_fast_forward', 'update'], want
+     ['deletion', 'update']";
+   - the pattern `refs/tags/acpext/**`: "ref_name {'include': ['refs/tags/acpext/**'], …}, want include
+     ['refs/tags/acpext/v*']";
+   - immutable releases off: "immutable-releases {'enabled': False, …}, want enabled true".
+
+   On the target state as the MADR writes it: exit 0.
+2. **Start state** (step 2): `GET …/rulesets` listed only `25481802`; `git ls-remote origin 'refs/*/ruleset-probe/*'`
+   listed nothing. `A` is `14201ed`, `B` is `2487444`, and `B` descends from `A`.
+3. **The temporary tag ruleset** (step 3): `gobble-cli-probe-tags`, id `26714934`, `bypass_actors: []`,
+   `current_user_can_bypass: never`.
+4. **The tag probes** (step 4), each from the owner's account:
+   - 4.1, `A` to `refs/tags/ruleset-probe/v0.0.1`: accepted, `[new tag]`, no "Bypassed rule violations";
+   - 4.2, `A` to `refs/tags/ruleset-probe/x/v0.0.1`: accepted;
+   - 4.3, a force-push of `B`, a descendant, to the probe tag: **refused**, `remote: error: GH013: Repository rule
+     violations found for refs/tags/ruleset-probe/v0.0.1.` and `- Cannot update this protected ref.`, `! [remote
+     rejected] … (push declined due to repository rule violations)`;
+   - 4.4, deleting the probe tag: **refused**, `GH013` and `- Cannot delete this tag`;
+   - 4.5, deleting `ruleset-probe/x/v0.0.1`: accepted, so `*` did not match `/`;
+   - 4.6, `ls-remote` listed the probe tag still at `A`.
+5. **The temporary branch ruleset** (step 5): `gobble-cli-probe-branch`, id `26714949`, `bypass_actors: []`,
+   `current_user_can_bypass: never`.
+6. **The branch probes** (step 6):
+   - 6.1, creating `refs/heads/ruleset-probe/main` at `A`: accepted;
+   - 6.2, a fast-forward to `B`: accepted, `14201ed..2487444`;
+   - 6.3, a force-push back to `A`: **refused**, `GH013` and `- Cannot force-push to this branch`;
+   - 6.4, deleting it: **refused**, `GH013` and `- Cannot delete this branch`;
+   - 6.5, `ls-remote` listed it still at `B`;
+   - 6.6, no workflow run had a `ruleset-probe/` ref.
+7. **The rule suites** (step 7), `time_period=hour`:
+   - the probe tag: `0000000->14201ed` `pass`, `14201ed->2487444` `fail`, `14201ed->0000000` `fail`;
+   - `ruleset-probe/x/v0.0.1`: none, since no ruleset matched it;
+   - the probe branch: `0000000->14201ed` `pass`, `14201ed->2487444` `pass`, `2487444->14201ed` `fail`,
+     `2487444->0000000` `fail`;
+   - no suite has the result `bypass`.
+8. **Cleanup** (step 8): `DELETE` of `26714934` and `26714949`, exit 0; then both probe refs deleted, exit 0. After it,
+   `ls-remote` listed no probe ref and `GET …/rulesets` listed `[25481802]`.
+9. **What it shows** (step 9): with no bypass actor, `update`, `deletion` and `non_fast_forward` each refused the
+   owner, an administrator; `update` refused a move to a descendant commit; a creation with no `creation` rule fired
+   nothing; and the acpext form of pattern matched one level only. MADR D7 holds, so P2 may follow on the owner's
+   word.
+10. **Not done:** the commit of this record, and the push of `ed06112` and it, each on the owner's word.
