@@ -194,8 +194,16 @@ func TestErrors(t *testing.T) {
 	if code := requestCode(t, err); code != -32602 {
 		t.Fatalf("session/set_mode on an unknown session: code %d, want -32602 (Phase 6 implements it)", code)
 	}
-	if _, err := c.Client.Authenticate(t.Context(), acp.AuthenticateRequest{MethodId: "x"}); requestCode(t, err) != -32602 {
-		t.Fatal("authenticate with an unknown method: want -32602 (0005-PLAN F4-3c decision 4)")
+	// The SDK refuses an id the agent did not advertise on both sides
+	// (acp-go-sdk2's 0049-MADR S8): the typed client sends nothing, and a
+	// raw request is answered -32602, the answer 0005-PLAN F4-3c decision 4
+	// records.
+	if _, err := c.Client.Authenticate(t.Context(), acp.AuthenticateRequest{MethodId: "x"}); !errors.Is(err, acp.ErrUnadvertisedAuthMethod) {
+		t.Fatalf("authenticate with an unknown method: %v, want the SDK's ErrUnadvertisedAuthMethod", err)
+	}
+	_, err = acp.SendRequest[acp.AuthenticateResponse](c.Client.Connection(), t.Context(), acp.AgentMethodAuthenticate, acp.AuthenticateRequest{MethodId: "x"})
+	if code := requestCode(t, err); code != -32602 {
+		t.Fatalf("a raw authenticate with an unknown method: code %d, want -32602 (0005-PLAN F4-3c decision 4)", code)
 	}
 }
 

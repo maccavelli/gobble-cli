@@ -88,8 +88,16 @@ func TestAuthenticate(t *testing.T) {
 	if re.Code != -32000 || data["provider"] != "grok" || data["command"] != "gobble auth login grok" || data["reason"] != "no credential" {
 		t.Errorf("grok, with none: %+v, want auth_required naming grok and its command", re)
 	}
-	if code, _ := errText(t, auth("nope")); code != -32602 {
-		t.Errorf("an unknown method: %d, want -32602", code)
+	// The SDK refuses an id the agent did not advertise on both sides
+	// (acp-go-sdk2's 0049-MADR S8): the typed client sends nothing, and a
+	// raw request is answered -32602, the answer 0005-PLAN F4-3c decision 4
+	// records.
+	if err := auth("nope"); !errors.Is(err, acp.ErrUnadvertisedAuthMethod) {
+		t.Errorf("an unknown method: %v, want the SDK's ErrUnadvertisedAuthMethod", err)
+	}
+	_, err = acp.SendRequest[acp.AuthenticateResponse](c.Client.Connection(), t.Context(), acp.AgentMethodAuthenticate, acp.AuthenticateRequest{MethodId: "nope"})
+	if code, _ := errText(t, err); code != -32602 {
+		t.Errorf("a raw authenticate with an unknown method: %d, want -32602", code)
 	}
 	if err := auth("grok-login"); !errors.Is(err, acp.ErrTerminalAuthMethod) {
 		t.Errorf("a terminal method: %v, want the SDK's ErrTerminalAuthMethod", err)

@@ -586,6 +586,47 @@ policy. And one record keeps the order, and the cross-library facts (check-libs,
     checks, of which 1 fails, `test`, on S8's two tests alone; go-llmprovider-sdk `v1.26.1` 13 and go-selfupdate-lib
     `v1.24.0` 13, 0 failing; go-tui-lib `v2.12.0` 14, `archtest` among them, 0 failing. For each, `get and tidy` and
     `modules` are ok.*
+
+  *Amended 2026-11-05, by the PLAN's deviation 25, the owner's "pin the latest acp-go-sdk2", while P29 was ready to
+  commit:*
+  - ***acp-go-sdk2 `v1.33.1`** (`b4ee2d4f423396ccf632bee150b0719e1e0c65a8`, published 2026-11-05), its GitHub release
+    marked Latest, in place of `v1.33.0`. The schema is still `1.25.0`, and `make api` reports no change to the
+    exported API. It fixes R11 of acp-go-sdk2's `docs/decisions/0049-MADR-remediate-the-2026-11-01-debugging-pass.md`,
+    and carries that pass's tooling fixes. What reaches gobble:*
+    - *R11, the notification queue. A notification is now admitted by the count received and not completed, up to
+      `n + 1`, or `2n + 1` on `OverflowBlock`'s read-on path, where it was admitted by a send to a channel of `n` or
+      `2n`, which failed one early when the SDK's loop had not yet taken the queue's head. gobble's client sets
+      `OverflowBlock`, and `WithMaxQueuedNotifications` when `Options.MaxQueued` is set (`acpclient/conn.go:133-136`).
+      So a burst at the limit during a request, `Initialize` or a prompt, no longer closes gobble's connection by an
+      ordering it does not control; it pauses the agent, as 0040-MADR D1 asks. No notification is refused earlier
+      than before;*
+    - *`TestBlockedUpdatesArriveInOrder` (`acpclient/conn_test.go:266`), a queue of 1 and four updates held by the
+      callback, still sees the prompt wait and every update arrive once, in order: three are admitted on the read-on
+      path, and the fourth waits;*
+    - *not reached: `agentproc`'s `attachTree`, an unexported test seam, and the generator's `gates`, which removes an
+      unexported, never-called method;*
+    - *the amendment above's reading of `v1.32.0` and `v1.33.0`, S8's two tests among it, holds unchanged.*
+  - *`python3 scripts/check_libs.py --lib acp-go-sdk2 --tag v1.33.1`, from a scratch clone: 13 checks, of which 1
+    fails, `test`, on S8's two tests alone; `get and tidy`, `modules` and `api` are ok.*
+
+  *Amended 2026-11-06, by the PLAN's deviation 26, the owner's "we need to ensure the sibling repo dependencies are all
+  pinned to latest. acp-go-sdk2 just updated.", while P29 was ready to commit:*
+  - ***acp-go-sdk2 `v1.34.0`** (`3013065de25788bf809e17763bb65558222c11af`, published 2026-11-06), its GitHub release
+    marked Latest, in place of `v1.33.1`. The schema is still `1.25.0`, and `make api` reports two compatible
+    additions, both in the root package. It answers acp-go-sdk2#14, by acp-go-sdk2's
+    `docs/decisions/0050-MADR-auth-method-ids-and-the-prompt-result-for-issue-14.md`. What reaches gobble:*
+    - *D4, the refusal's text: `Authenticate` with an unadvertised id still wraps `acp.ErrUnadvertisedAuthMethod`, and
+      its text now ends with the ids the agent accepts, as the `-32602` answer's `data.error` does. P29's two tests
+      assert `errors.Is` and the code, not the text, so they hold. No golden carries the text;*
+    - *D3, `AuthenticateMethodIDs` and `AuthMethod.ID`, added. gobble's client sends no `authenticate` outside these
+      tests, so neither is used. Adopting them is not here;*
+    - *D1, an auth method of a type the SDK does not know now counts only by a string `"id"`. gobble advertises only
+      `agent` and `terminal` methods (`acpserver/auth.go`), so nothing it sends or receives changes;*
+    - *D5, `PromptResponse`'s godoc: `StopReason` is required. The behaviour is `v1.33.1`'s. Every
+      `PromptResponse{}` gobble returns goes with an error (`acpserver/agent.go:582-668`, `acpclient/acptest/script.go:174-188`);*
+    - *the readings above of `v1.32.0` to `v1.33.1`, S8's two tests and R11 among them, hold unchanged.*
+  - *`python3 scripts/check_libs.py --lib acp-go-sdk2 --tag v1.34.0`, from a scratch clone: 13 checks, of which 1
+    fails, `test`, on S8's two tests alone; `get and tidy`, `modules` and `api` are ok.*
 - **D2. `check-libs` sees what preflight sees.**
   - `scripts/check_libs.py` runs `make staticcheck` and `make lint` on its scratch module for each library, so that F2
     would have been reported.

@@ -1,6 +1,6 @@
 ---
-status: complete
-date: 2026-11-03
+status: in-progress
+date: 2026-11-05
 associated-madr: "0035-MADR-pin-current-sibling-releases-and-remove-gobble-copies.md"
 ---
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
@@ -133,6 +133,10 @@ P1 runs before P23 (0039-MADR Q1). See the execution record.*
 
 *Deviation 22 (2026-11-03), approved by the owner's "committed, proceed": P27 pins acp-go-sdk2 `v1.31.2`, then P28 go-selfupdate-lib `v1.24.0`, each on
 the owner's word, after P19. See the execution record.*
+
+*Deviations 23 (2026-11-04) and 24 (2026-11-05), approved 2026-11-05 by the owner's "committed, proceed", after the
+records commit `333805e`: P29 pins acp-go-sdk2 ~~`v1.33.0`~~ ~~`v1.33.1`~~ `v1.34.0` (deviations 25 and 26), P30 go-llmprovider-sdk `v1.26.1` with the refresh lock's 60 s,
+and P31 go-tui-lib/v2 `v2.12.0`, each its own commit. See the execution record.*
 
 ## Questions this plan adds
 
@@ -1364,24 +1368,28 @@ Files: `go.mod`, `go.sum`, `.github/workflows/ci.yml`, `README.md`, `docs/archit
 
 No check is added, so C9 has nothing to break.
 
-### P29 — acp-go-sdk2 ~~`v1.32.0`~~ `v1.33.0` (MADR D1, amended 2026-11-04 and 2026-11-05; deviations 23 and 24)
+### P29 — acp-go-sdk2 ~~`v1.32.0`~~ ~~`v1.33.0`~~ ~~`v1.33.1`~~ `v1.34.0` (MADR D1, amended 2026-11-04, 2026-11-05 and 2026-11-06; deviations 23 to 26)
 
 Files: `go.mod`, `go.sum`, `acpserver/agent_test.go`, `acpserver/auth_test.go`, `README.md`, `docs/architecture.md`.
 
 *(Amended 2026-11-05 by deviation 24, before approval: the tag is `v1.33.0`, whose root package and schema are
-`v1.32.0`'s. The files and steps are unchanged.)*
+`v1.32.0`'s. The files and steps are unchanged.)* *(Amended again 2026-11-05 by deviation 25, during the phase: the
+tag is `v1.33.1`, the owner's "pin the latest acp-go-sdk2". The files and steps are unchanged.)* *(And again
+2026-11-06 by deviation 26: the tag is `v1.34.0`. The files and steps are unchanged; `SendRequest[T]` is at
+`connection.go:2517` there.)*
 
-1. **Checked first:** `python3 scripts/check_libs.py --lib acp-go-sdk2 --tag` ~~`v1.32.0`~~ `v1.33.0`. On 2026-11-04,
+1. **Checked first:** `python3 scripts/check_libs.py --lib acp-go-sdk2 --tag` ~~`v1.32.0`~~ ~~`v1.33.0`~~ ~~`v1.33.1`~~ `v1.34.0`. On 2026-11-04,
    at `v1.32.0`, it reported 13
    checks with 1 failing: `test`, on `TestErrors` (`agent_test.go:197`) and `TestAuthenticate` (`auth_test.go:91`)
    alone, each `acp: methodId names no auth method the agent advertised, want a JSON-RPC error`. Any other failure is a
-   deviation. *(On 2026-11-05, at `v1.33.0`, the same: 13 checks, `test` failing on those two tests alone.)* Re-read
+   deviation. *(On 2026-11-05, at `v1.33.0` and at `v1.33.1`, and on 2026-11-06 at `v1.34.0`, the same: 13 checks, `test` failing
+   on those two tests alone.)* Re-read
    before editing, and record:
    * `acp.ErrUnadvertisedAuthMethod` (`errors.go:188`);
    * `ClientSideConnection.Connection()` (`client_gen.go:96`);
    * `acp.SendRequest[T]` (`connection.go:2466`);
    * `acp.AgentMethodAuthenticate` (`constants_gen.go:10`).
-2. **The pin:** `go get github.com/maccavelli/acp-go-sdk2@`~~`v1.32.0`~~`v1.33.0`, then `go mod tidy`.
+2. **The pin:** `go get github.com/maccavelli/acp-go-sdk2@`~~`v1.32.0`~~ ~~`v1.33.0`~~ ~~`v1.33.1`~~`v1.34.0`, then `go mod tidy`.
    * `go.mod` changes on that line alone.
    * `go.sum` changes in acp-go-sdk2's lines alone.
 3. **The two tests (MADR D1's S8).** For the unadvertised id each sends, `"x"` and `"nope"`:
@@ -1400,7 +1408,7 @@ Files: `go.mod`, `go.sum`, `acpserver/agent_test.go`, `acpserver/auth_test.go`, 
      refuses it.
    * **The raw answer.** The same, and gobble's handler answers an unknown provider `-32000`. The raw assertion fails
      with that code.
-6. **The docs:** `README.md:129` and `docs/architecture.md:176` name ~~`v1.32.0`~~ `v1.33.0`.
+6. **The docs:** `README.md:129` and `docs/architecture.md:176` name ~~`v1.32.0`~~ ~~`v1.33.0`~~ ~~`v1.33.1`~~ `v1.34.0`.
 7. G-local, and G-hosts. **Commit.**
 
 ### P30 — go-llmprovider-sdk ~~`v1.26.0`~~ `v1.26.1`, and the refresh lock's 60 s (MADR D1, amended 2026-11-04 and 2026-11-05; deviations 23 and 24)
@@ -3415,6 +3423,7 @@ The base is P27's `eab3170`. No deviation.
   - P30: `go.mod`, `go.sum`, `internal/auth/logins.go`, `internal/auth/logins_test.go`, `README.md` and
     `docs/architecture.md`;
   - P31: `go.mod`, `go.sum`, `README.md` and `docs/architecture.md`.
+- **Approved** 2026-11-05 by the owner's "committed, proceed", with deviation 24, after the records commit `333805e`.
 
 ### Deviation 24 (2026-11-05): three newer tags before P29 started
 
@@ -3452,3 +3461,88 @@ The base is P27's `eab3170`. No deviation.
   - P29, P30 and P31 take the new tags, struck through in place. Their files, steps, order and checks are unchanged;
   - deviation 23's decision otherwise stands.
 - **Files added to scope:** none.
+- **Approved** 2026-11-05 by the owner's "committed, proceed", after the records commit `333805e`.
+
+### Deviation 25 (2026-11-05): acp-go-sdk2 `v1.33.1`, during P29
+
+- **Found** when P29 was ready to commit, on the owner's request "pin the latest acp-go-sdk2". `git ls-remote --tags`,
+  the Go module proxy and the GitHub releases list acp-go-sdk2 `v1.33.1`
+  (`b4ee2d4f423396ccf632bee150b0719e1e0c65a8`, published 2026-11-05), its release marked Latest, over `v1.33.0`.
+- **Measured:** `python3 scripts/check_libs.py --lib acp-go-sdk2 --tag v1.33.1 --from v1.31.2`, on a scratch clone of
+  `333805e`: 13 checks, of which 1 fails, `test`, on `TestErrors` (`agent_test.go:197`) and `TestAuthenticate`
+  (`auth_test.go:91`) alone, as at `v1.33.0`. `acpclient` and `acpclient/acptest` pass; `api` reports nothing
+  incompatible.
+- **What reaches gobble:** R11, the notification queue's limit counted, not read from the channel. gobble's client
+  sets `OverflowBlock` and, when asked, `WithMaxQueuedNotifications` (`acpclient/conn.go:133-136`). A burst that met
+  the limit before the SDK's loop took its head could close the connection during a request; it now pauses as
+  `OverflowBlock` says. `TestBlockedUpdatesArriveInOrder` (`acpclient/conn_test.go:266`), with a queue of 1 and four
+  updates, still pauses: three are admitted on the read-on path, and the fourth waits. The MADR's D1 amendment has
+  the rest. gobble's code does not change.
+- **Decision,** the owner's: P29 pins `v1.33.1`, struck through in place. Its files and steps are unchanged; its
+  record below is of `v1.33.1`, and of `v1.34.0` since deviation 26.
+- **Files added to scope:** the MADR, for its D1 amendment, in P29's commit.
+
+### Deviation 26 (2026-11-06): acp-go-sdk2 `v1.34.0`, during P29
+
+- **Found** with P29 ready to commit at `v1.33.1`, on the owner's "we need to ensure the sibling repo dependencies are
+  all pinned to latest. acp-go-sdk2 just updated." `git ls-remote --tags` and the GitHub releases list acp-go-sdk2
+  `v1.34.0` (`3013065de25788bf809e17763bb65558222c11af`, published 2026-11-06), its release marked Latest. The other
+  three are at P30's and P31's tags, and go-selfupdate-lib `v1.24.0` is still the newest.
+- **Measured:** `python3 scripts/check_libs.py --lib acp-go-sdk2 --tag v1.34.0 --from v1.31.2`, on a scratch clone of
+  `333805e`: 13 checks, of which 1 fails, `test`, on `TestErrors` and `TestAuthenticate` alone, their message now ending
+  "; authenticate accepts none" and "; authenticate accepts \"grok\", \"keyed\"". `api` reports nothing
+  incompatible.
+- **What reaches gobble:** nothing that changes its code or P29's tests. The MADR's D1 amendment of 2026-11-06 has it.
+- **Decision,** the owner's: P29 pins `v1.34.0`, struck through in place. Its files and steps are unchanged; its record
+  below is of `v1.34.0`.
+- **Files added to scope:** none past deviation 25's.
+
+### P29 record (2026-11-06): acp-go-sdk2 `v1.34.0`
+
+The base is `333805e`, the records commit of deviation 24. Deviations 25 and 26 moved the tag from `v1.33.0` to `v1.33.1`,
+then to `v1.34.0`, before the commit; every step below was run again at `v1.34.0`.
+
+1. **C2:** `git ls-remote --tags` lists `v1.34.0` as acp-go-sdk2's newest `v1` tag.
+2. **Checked first** (step 1): `python3 scripts/check_libs.py --lib acp-go-sdk2 --tag v1.34.0 --from v1.31.2`,
+   "pinned v1.31.2, checking v1.34.0": 13 checks, of which 1 fails, `test`, with `TestErrors` (`agent_test.go:197`)
+   and `TestAuthenticate` (`auth_test.go:91`) alone, each `acp: methodId names no auth method the agent advertised;
+   authenticate accepts …, want a JSON-RPC error`. Re-read at `v1.34.0`: `ErrUnadvertisedAuthMethod` (`errors.go:188`),
+   `ClientSideConnection.Connection()` (`client_gen.go:96`), `SendRequest[T]` (`connection.go:2517`, at `:2466` in
+   `v1.33.0`), `AgentMethodAuthenticate` (`constants_gen.go:10`).
+3. **The pin** (step 2): `go get github.com/maccavelli/acp-go-sdk2@v1.34.0` ("upgraded … v1.33.1 => v1.34.0", from
+   the `v1.33.1` of the second run), then `go mod tidy`. Against `HEAD`, `go.mod` changed on acp-go-sdk2's line alone;
+   `go.sum` lost the two `v1.31.2` lines and gained the two `v1.34.0` lines, the `go.mod` hash unchanged, and nothing
+   else.
+4. **The two tests** (step 3). `TestErrors` and `TestAuthenticate` each assert, for the id they send (`"x"`, `"nope"`),
+   that the typed `Authenticate` returns an error that `errors.Is` `acp.ErrUnadvertisedAuthMethod`, and that
+   `acp.SendRequest[acp.AuthenticateResponse]` over `c.Client.Connection()` is answered `-32602`, read by
+   `requestCode` and `errText` as before. Each says why, naming acp-go-sdk2's 0049-MADR S8 and 0005-PLAN F4-3c
+   decision 4. Their other assertions are unchanged.
+5. **No other source change** (step 4): `go test -count=1 ./acpclient/... ./acpserver/... ./internal/cli/...` passed,
+   9 packages ok. After the gates, `git status` showed only the phase's files among this session's, so no golden
+   changed.
+6. **Seen failing** (step 5, C9), at `v1.34.0`, on copies of the tree made by a scratch script, each break an
+   asserted replacement:
+   - **The typed refusal, `TestErrors`:** `connectWith`'s agent advertises an `"x"` provider. Exit 1:
+     `agent_test.go:203: authenticate with an unknown method: {"code":-32000,"message":"Authentication required",…},
+     want the SDK's ErrUnadvertisedAuthMethod`.
+   - **The raw answer, `TestErrors`:** the same, with the typed assertion removed so that the raw one runs. Exit 1:
+     `agent_test.go:204: a raw authenticate with an unknown method: code -32000, want -32602 (0005-PLAN F4-3c
+     decision 4)`.
+   - **Both, `TestAuthenticate`:** `testAuth` advertises a `"nope"` provider. Exit 1: `auth_test.go:96: an unknown
+     method: {"code":-32000,…}, want the SDK's ErrUnadvertisedAuthMethod` and `auth_test.go:100: a raw authenticate
+     with an unknown method: -32000, want -32602`.
+   - **The control,** an unbroken copy: both tests pass.
+7. **The docs** (step 6): `README.md:129` and `docs/architecture.md:176` name `v1.34.0`; neither names `v1.31.2`.
+8. **G-local,** at `v1.34.0`: `make pre-add-check FILES="acpserver/agent_test.go acpserver/auth_test.go"`: 2 files
+   clean; `make race`: 38 ok. P29 touches nothing under `internal/cli`, so no `make perf`.
+   - `make preflight` in the tree passed every gate up to `markdownlint`, `verify-build-metadata` among them, and
+     failed there on `docs/reports/0042-REPORT-acpext-sdk-surface-and-magic-import.md:153` (MD040). That file is
+     untracked, written by another session, and not in this commit, so it was left alone.
+   - The commit's own tree was therefore built as a copy: `HEAD`'s files with the phase's eight from the tree, and no
+     other session's change. On that copy `make check-records markdownlint` passed, 0 issues.
+9. **G-hosts,** on the Linux machine and the Windows laptop, that copy shipped to each, 833 files: `go test` and race
+   passed on both, 38 ok; `make check-records markdownlint` passed on both; preflight stops at `verify-build-metadata`,
+   as on every copy. They ran at `v1.33.0` and at `v1.33.1` first, with the same results, before deviations 25 and 26.
+10. **Not done:** this plan's `docs/README.md` row (C7). `docs/README.md` holds another session's uncommitted change,
+    which a phase commit cannot take, so the row waits for P31's record or for that change to land.
