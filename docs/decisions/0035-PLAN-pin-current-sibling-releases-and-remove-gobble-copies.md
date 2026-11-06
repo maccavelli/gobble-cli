@@ -1,6 +1,6 @@
 ---
-status: in-progress
-date: 2026-11-05
+status: complete
+date: 2026-11-06
 associated-madr: "0035-MADR-pin-current-sibling-releases-and-remove-gobble-copies.md"
 ---
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
@@ -3621,3 +3621,22 @@ The base is `578afea`, P30's commit. No deviation.
    23). `make check-libs` clones the last commit, so it reports every library at its own tag only once this commit
    lands; the Verification, the plan's `complete` status and its `docs/README.md` row follow in the next commit (C7).
    `go list -m` already reports MADR D1's four tags, and the goldens are unchanged (step 4).
+
+### Close-out record (2026-11-06): the Verification, after P31
+
+The base is `927d7bd`, P31's commit. No deviation.
+
+1. **C2:** `git ls-remote --tags` lists acp-go-sdk2 `v1.34.0`, go-llmprovider-sdk `v1.26.1`, go-tui-lib `v2.12.0` and
+   go-selfupdate-lib `v1.24.0` as each library's newest tag of its major.
+2. **The plan's Verification,** its first two items again, as deviation 23 decided:
+   * `go list -m` reports acp-go-sdk2 `v1.34.0`, go-llmprovider-sdk `v1.26.1`, go-selfupdate-lib `v1.24.0` and
+     go-tui-lib/v2 `v2.12.0`, the MADR's D1 as amended on 2026-11-04, 2026-11-05 and 2026-11-06;
+   * `make check-libs`, on a scratch clone of `927d7bd`: each library "pinned …, checking" the same tag, its newest,
+     every check ok and `api` "nothing to compare"; "0 failing checks";
+   * the goldens: `acpserver/testdata/session.golden`, `view-plain.golden`, `print-json.golden` and
+     `print-stream-json.golden` are byte-identical to `ccd8aa8`'s (`git diff --quiet`), as P31's step 4 found.
+3. **Status:** P29's, P30's and P31's criteria are met. This plan is `complete` again; the MADR stays `accepted`, and
+   its D1 amendments of deviations 23 and 24 are marked accepted. What P19's record left for other records is unchanged,
+   and so is deviation 23's offer of go-tui-lib's A15 as a record of its own.
+4. **The `docs/README.md` rows** (C7), held from P29's record on: the other session's change landed in `82c6c3b`, so
+   this commit updates the MADR's and this plan's rows for deviations 23 to 26 and this close-out.

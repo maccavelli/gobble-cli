@@ -479,7 +479,8 @@ policy. And one record keeps the order, and the cross-library facts (check-libs,
   - *`python3 scripts/check_libs.py --lib <library> --tag <tag>`: acp-go-sdk2 `v1.31.2` and go-selfupdate-lib
     `v1.24.0`, 13 checks each, 0 failing, `staticcheck`, `lint` and `api` among them.*
 
-  *Amended 2026-11-04, by the PLAN's deviation 23, proposed for the owner's approval, from the owner's request "assess
+  *Amended 2026-11-04, by the PLAN's deviation 23, ~~proposed for the owner's approval~~ accepted 2026-11-05 by the
+  owner's "committed, proceed", from the owner's request "assess
   the pins for go-tui-lib go-selfupdate-lib, acp-go-sdk2, and go-llmprovider-sdk there have been newer tagged
   releases. we need to update the pins." Each tag is the newest of its major by `git ls-remote --tags`, the Go module
   proxy (`go list -m -versions`) and the GitHub releases that day:*
@@ -551,7 +552,8 @@ policy. And one record keeps the order, and the cross-library facts (check-libs,
   - *magic-cli-remote pins acp-go-sdk2 `v1.31.2` (its `go.mod:11`). Moving it is magic-cli-remote's own record. S8
     asks nothing of its planned `authenticate`, since its 0179-MADR D3 sends only the ids gobble advertises.*
 
-  *Amended 2026-11-05, by the PLAN's deviation 24, proposed for the owner's approval with deviation 23's, from the
+  *Amended 2026-11-05, by the PLAN's deviation 24, ~~proposed for the owner's approval with deviation 23's~~ accepted
+  with it, from the
   owner's request "let's pin the sibling repos to current tags". Three tags newer than the amendment above were
   published on 2026-11-04, before its phases started. Each is the newest of its major by `git ls-remote --tags`, the Go
   module proxy and the GitHub releases, and replaces the tag above in P29, P30 and P31:*
