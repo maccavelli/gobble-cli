@@ -309,3 +309,42 @@ On the owner's "Commit the records to main then do p1". The base is `ed06112`, u
    nothing; and the acpext form of pattern matched one level only. MADR D7 holds, so P2 may follow on the owner's
    word.
 10. **Not done:** the commit of this record, and the push of `ed06112` and it, each on the owner's word.
+
+### P2 record (2026-11-06): the switch
+
+On the owner's "Commit and push to main, then do p2". P1's record was committed first as `c2daa78`, and `ed06112` and
+it were pushed, `2487444..c2daa78`, the disclosure guard exiting 0. Every expectation was met.
+
+1. **Start state** (step 1): the tree clean; `HEAD` and `origin/main` both `c2daa78`; `GET …/rulesets` listed
+   `[25481802]`; no `ruleset-probe/` ref. The checker against the live API: exit 1, "rulesets are ['release tags:
+   owner only'] (ids [25481802]), want exactly gobble-cli-main and gobble-cli-acpext-tags", and "rules/branches/main
+   lists [], want deletion and non_fast_forward".
+2. **The ruleset being deleted** (step 2), `GET …/rulesets/25481802`, matching 0004-PLAN's record (`:1310-1315`):
+   name "release tags: owner only", `target: tag`, `enforcement: active`, `ref_name` including `refs/tags/v*` and
+   excluding nothing, the rules `creation`, `update`, `deletion` and `non_fast_forward`, and one bypass actor,
+   `RepositoryRole` `5`, `bypass_mode: always`; `current_user_can_bypass: always`, created `2026-10-20T09:31:04`. The
+   body for Rollback, the fields `POST …/rulesets` takes:
+
+   ```json
+   {
+     "name": "release tags: owner only",
+     "target": "tag",
+     "enforcement": "active",
+     "conditions": {"ref_name": {"exclude": [], "include": ["refs/tags/v*"]}},
+     "rules": [{"type": "creation"}, {"type": "update"}, {"type": "deletion"}, {"type": "non_fast_forward"}],
+     "bypass_actors": [{"actor_id": 5, "actor_type": "RepositoryRole", "bypass_mode": "always"}]
+   }
+   ```
+
+3. **`gobble-cli-main`** (step 3), from D2's JSON: id `26727621`, `bypass_actors: []`, `current_user_can_bypass:
+   never`.
+4. **`gobble-cli-acpext-tags`** (step 4), from D3's JSON: id `26727622`, `bypass_actors: []`,
+   `current_user_can_bypass: never`.
+5. **`DELETE …/rulesets/25481802`** (step 5): exit 0, `HTTP/2.0 204 No Content`. It came after both creations.
+6. **Confirmation 1 to 4** (step 6): the checker against the live API, exit 0, "ok: the rulesets are 0043-MADR's
+   target". `GET …/rulesets` lists `26727622` `gobble-cli-acpext-tags` and `26727621` `gobble-cli-main`, and nothing
+   else. `GET …/rules/branches/main` lists `deletion` and `non_fast_forward`, each from `26727621`.
+   `immutable-releases` is `enabled: true`.
+7. **The record** (step 7) is this entry, committed and pushed on the same word.
+8. **Not done here:** Confirmation 6 (step 8), the rule suite of this record's push to `main`, is read after the push.
+   P3's record quotes it.
