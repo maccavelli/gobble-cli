@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	acp "github.com/maccavelli/acp-go-sdk2"
+	"github.com/maccavelli/gobble-cli/acpext"
 
 	"github.com/maccavelli/gobble-cli/acpclient/acptest"
 	"github.com/maccavelli/gobble-cli/jsonx"
@@ -32,7 +33,7 @@ func (a *nameAgent) HandleExtensionMethod(_ context.Context, method string, para
 	if method != "_gobble/set_session_name" {
 		return nil, acp.NewMethodNotFound(method)
 	}
-	var p setNameParams
+	var p acpext.SetSessionNameParams
 	if err := json.Unmarshal(params, &p); err != nil || p.Name == "" {
 		return nil, acp.NewInvalidParams(map[string]any{"reason": "Session name cannot be empty"})
 	}

@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	acp "github.com/maccavelli/acp-go-sdk2"
+	"github.com/maccavelli/gobble-cli/acpext"
 
 	"github.com/maccavelli/gobble-cli/compaction"
 	"github.com/maccavelli/gobble-cli/jsonx"
@@ -23,9 +24,9 @@ func (a *Agent) cmdCompact(ctx context.Context, t *cmdTurn, instructions string)
 		return promptError(err)
 	}
 	t.say(t.text(personality.CompactStart, nil) + "\n\n")
-	t.out.notify(methodCompaction, compactionNotice{SessionID: t.s.id, Phase: phaseStart, Reason: reasonManual})
+	t.out.notify(acpext.MethodCompaction, acpext.CompactionNotice{SessionID: string(t.s.id), Phase: acpext.PhaseStart, Reason: acpext.CompactionManual})
 	res, used, err := a.compactSession(ctx, t.s, instructions)
-	t.out.notify(methodCompaction, manualEnd(ctx, t.s.id, res, err))
+	t.out.notify(acpext.MethodCompaction, manualEnd(ctx, t.s.id, res, err))
 	var reqErr *acp.RequestError
 	switch {
 	case ctx.Err() != nil:
@@ -47,8 +48,8 @@ func (a *Agent) cmdCompact(ctx context.Context, t *cmdTurn, instructions string)
 
 // manualEnd is a manual compaction's _gobble/compaction end (0005-PLAN F5-2
 // decision 9): its tokens before, or its error.
-func manualEnd(ctx context.Context, id acp.SessionId, res compaction.Result, err error) compactionNotice {
-	n := compactionNotice{SessionID: id, Phase: phaseEnd, Reason: reasonManual}
+func manualEnd(ctx context.Context, id acp.SessionId, res compaction.Result, err error) acpext.CompactionNotice {
+	n := acpext.CompactionNotice{SessionID: string(id), Phase: acpext.PhaseEnd, Reason: acpext.CompactionManual}
 	switch {
 	case ctx.Err() != nil:
 		n.Error = "cancelled"
@@ -114,7 +115,7 @@ func (a *Agent) runCompaction(ctx context.Context, s *liveSession, prep *compact
 	}
 	details, err := jsonx.Marshal(res.Details)
 	if err != nil {
-		return compaction.Result{}, 0, acp.NewInternalError(jsonx.Strings(map[string]string{keyReason: err.Error()}))
+		return compaction.Result{}, 0, acp.NewInternalError(errData(acpext.ErrorData{Reason: err.Error()}))
 	}
 	e := session.Entry{Type: session.TypeCompaction, Summary: res.Summary, FirstKeptEntryID: res.FirstKeptEntryID,
 		TokensBefore: new(res.TokensBefore), Details: details, Usage: pricedUsage(res.Usage, a.modelOf(a.provOf(s), m.Model)), FromHook: new(false)}

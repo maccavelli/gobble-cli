@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	acp "github.com/maccavelli/acp-go-sdk2"
+	"github.com/maccavelli/gobble-cli/acpext"
 
 	"github.com/maccavelli/gobble-cli/agent"
 	"github.com/maccavelli/gobble-cli/jsonx"
@@ -77,17 +78,6 @@ func (u *updates) notify(method string, params any) {
 	u.err = u.conn.NotifyExtension(u.ctx, method, v)
 }
 
-// retryNotice is _gobble/retry's params (0005-PLAN F5-1 decision 5).
-type retryNotice struct {
-	SessionID   acp.SessionId `json:"sessionId"`
-	Phase       string        `json:"phase"`
-	Cause       string        `json:"cause"`
-	Attempt     int           `json:"attempt,omitzero"`
-	MaxAttempts int           `json:"maxAttempts,omitzero"`
-	DelayMs     int64         `json:"delayMs,omitzero"`
-	Error       string        `json:"error,omitzero"`
-}
-
 func (u *updates) flush() {
 	u.thought.flush()
 	u.text.flush()
@@ -114,7 +104,7 @@ func (u *updates) event(ev agent.Event, last *llm.Usage) {
 		u.send(acp.StartToolCall(acp.ToolCallId(ev.Call.ID), cutTitle(ev.Title), opts...))
 	case agent.Retry:
 		u.flush()
-		u.notify(methodRetry, retryNotice{SessionID: u.session, Phase: string(ev.Phase), Cause: string(ev.Cause),
+		u.notify(acpext.MethodRetry, acpext.RetryNotice{SessionID: string(u.session), Phase: acpext.Phase(ev.Phase), Cause: acpext.RetryCause(ev.Cause),
 			Attempt: ev.Attempt, MaxAttempts: ev.MaxAttempts, DelayMs: ev.Delay.Milliseconds(), Error: ev.Err})
 	case agent.ToolRun:
 		u.flush()
@@ -279,12 +269,12 @@ const workspaceAdvice = "claude needs an Anthropic workspace for this key: run /
 // message.
 func promptError(err error) error {
 	if errors.Is(err, llm.ErrWorkspace) { // the service's words are not shown (0035-MADR D5)
-		return acp.NewInternalError(jsonx.Strings(map[string]string{keyError: workspaceAdvice}))
+		return acp.NewInternalError(errData(acpext.ErrorData{Error: workspaceAdvice}))
 	}
 	if errors.Is(err, llm.ErrAuth) {
-		return acp.NewAuthRequired(jsonx.Strings(map[string]string{keyError: err.Error()}))
+		return acp.NewAuthRequired(errData(acpext.ErrorData{Error: err.Error()}))
 	}
-	return acp.NewInternalError(jsonx.Strings(map[string]string{keyError: err.Error()}))
+	return acp.NewInternalError(errData(acpext.ErrorData{Error: err.Error()}))
 }
 
 // acpUsage is the turn's usage for the prompt response.

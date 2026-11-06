@@ -433,4 +433,77 @@ The base is `8632eeb`, P0's commit. Deviations 1 and 2, above.
     - The cause was the host's build cache: 21 of its 45,132 output files were zero-filled from the start and did not
       hash to their names, the four test variants' export data among them. On the owner's word they were removed,
       each re-checked first, and the darwin pass then passed on the host's own cache. Nothing of P1's caused it.
-13. **Not done:** the commit, then the disclosure guard, the push and the tag (step 11), each on the owner's word.
+13. ~~**Not done:** the commit, then the disclosure guard, the push and the tag (step 11), each on the owner's
+    word.~~ *(Done 2026-11-06, below.)*
+14. **Committed** as `4d1eb01` on the owner's "Commit to main". **The disclosure guard** over the outgoing commits,
+    `0c07a72`, `8632eeb` and `4d1eb01`, exited 0 with no finding.
+15. **Pushed and tagged** on the owner's "push and tag" (C12): `main` `08439b4..4d1eb01`; the annotated tag
+    `acpext/v0.1.0` (`7ef324d`) on `4d1eb01`, in the form of the repository's `v*` tags, pushed as a new tag.
+16. **The module proxy** served it at 2026-11-06T16:00:25Z, from an empty module cache:
+    `go list -m -json github.com/maccavelli/gobble-cli/acpext@v0.1.0` gave `v0.1.0`, `Time` 2026-11-06T15:54:37Z,
+    `Origin` `4d1eb013…` at `refs/tags/acpext/v0.1.0`. `go mod download`, through the checksum database, gave
+    `h1:vdk8XDwqrEMor1YAz77soPCER8gQ+ik/QjsOe2hexBg=` (`go.mod` `h1:go2H/pww4XSwD3VOrUI7St71lhNSFuNuSmT2FgZAjFc=`).
+    Its zip holds acpext's 44 files and nothing of the root's, `LICENSE` among them (MADR D1).
+17. **P1 is complete.** P2's gate is met.
+
+### P2 record (2026-11-06): gobble serves and reads from acpext
+
+The base is `4d1eb01`, P1's commit, with P1's tag record uncommitted beside it. No deviation.
+
+1. **The facts** (step 1): `git diff --stat 8632eeb..HEAD` over `acpserver`, `acpclient`, `internal`, `agent` and `llm`
+   is empty, so P1 step 1's lines stand; the tag `acpext/v0.1.0` is P1's commit `4d1eb01`.
+2. **The requirement** (step 2): `go get github.com/maccavelli/gobble-cli/acpext@v0.1.0` ("added … v0.1.0"); its
+   `go.sum` lines are the proxy's (`h1:vdk8XDwq…`, `go.mod` `h1:go2H/pww…`). After the imports, `go mod tidy` made it a
+   direct requirement. No `replace`.
+3. **`acpserver`** (step 3):
+   - deleted: the param, result and notice structs, `methodRetry`, `methodCompaction`, `methodPersonality`, the phase
+     and reason constants, `compactPause`, `pauseTurn`, `pauseSession`, `capabilitiesMeta`, `AuthProvider`,
+     `loginSuffix`, `keyError` and `keySessionID`. Their uses name acpext's. No alias is left;
+   - the `extensions` table is keyed by `acpext.Method…`; `Capabilities` advertises `acpext.CapabilitiesMeta` under
+     `gobble`, now `acpext.MetaKey`;
+   - `extSession` decodes the params into their acpext type, then into `acpext.SessionParams` for the session, as MADR
+     A2 has it; each notification and result sets `SessionID` with `string(id)`;
+   - every error's data, 32 maps, is built from `acpext.ErrorData` by `errData`, which encodes it with `jsonx`; a struct
+     of strings cannot fail there, and its members are sorted as `jsonx.Strings` wrote them (0039-MADR D14);
+   - `CompactResult.Details`, and each of `MessagesResult.Messages` and `EntriesResult.Entries`, are encoded by
+     `jsonx`, one value each, as the whole result once was;
+   - kept: `pauseNone`, the zero `acpext.CompactionPause`; `queueOneAtATime` and `queueAll`, now defined from acpext's
+     values, since step 3 does not list them and `queue_test.go` and `settings_test.go` name them; and `keyReason`,
+     which `extensions_test.go`'s `errText` reads.
+4. **`acpclient`** (step 4): `update.go` decodes into `acpext.RetryNotice`, `CompactionNotice` and
+   `PersonalityNotice`, `conn.go` registers them by acpext's names, and `sessions.go` sends
+   `acpext.SetSessionNameParams` to `acpext.MethodSetSessionName`. `go doc -all ./acpclient`, 390 lines, is the same
+   as the base's (`diff` exit 0).
+5. **`internal/cli`** (step 5): `authProviders` returns `[]acpext.AuthProvider`.
+6. **The root test** (step 6), `internal/cli/acpext_test.go`, with no new exported API:
+   - `TestAcpextRequestsAreServed`: `acpserver.Capabilities()`'s `_meta.gobble`, decoded, is `acpext.Requests()`;
+   - `TestAcpextNotificationsAreSent`: read from `acpserver`'s source with `go/ast`, each `notify` names an acpext
+     notification constant, each acpext notification is sent, and `NotifyExtension` is called in `notify` alone;
+   - `TestAcpextAuthProvidersAreTheRegistry`: `acpext.AuthProviders()` equals `authProviders()`.
+
+   Seen failing (C9), each on a scratch copy: a twenty-first `"_gobble/twenty_first"` entry in the table only
+   (`acpserver serves […]`); acpext's last provider dropped, through a local `go.work` on the copy (C13)
+   (`acpext.AuthProviders() = […], the registry gives […]`); and `out.notify("_gobble/other", nil)` added
+   (`../../acpserver/commands.go:742:2: a notification not named by an acpext notification constant`).
+7. **archtest** (step 7): rule 12, only `acpserver`, `acpclient` and `internal/cli` import acpext, and `relOf` names
+   acpext's paths as another module's before it maps a root package (MADR A4). Four table cases: the module, `agent`
+   importing acpext, the three allowed, and `jsonx` importing acpext, which rule 10 does not count. `doc.go` says
+   twelve rules. Seen failing: an import of acpext in `agent/doc.go` (`rule 12: …/agent imports …/acpext`); and the
+   `relOf` line removed (`rule 10: …/jsonx imports …/acpext`, and the real-tree case of rule 12 too, since acpext's
+   own packages were then read as the root's).
+8. **The wire is unchanged** (step 8): `git diff --stat` lists no testdata or golden. The `_test.go` changes are step
+   6's new file, step 7's cases, and the six files' renames. The rename check (`renamecheck.py`, scratch) passed: 24
+   changed lines, each a rename, among them the four `string(id)` conversions of `personality_switch_test.go`. Seen
+   failing on a copy where a renamed line in `prompt_test.go` also changed `Level: 3` to `Level: 4` (`not a rename`,
+   quoting both lines). `go test` passed over `acpserver`, `acpclient` and `internal/cli`.
+9. **No `"_gobble/` literal** (step 9) is left in a non-test Go file outside acpext (`git grep` exit 1).
+10. **Documents** (step 10): AGENTS.md's module sentence names acpext, its tag form and the no-`replace`, no-`go.work`
+    rule. `docs/architecture.md` describes the nested module, adds rule 12, the lint exclusion for acpext's tests,
+    acpext's row in Dependencies, the per-module gates and `check-acpext-deps` in Checks, and `acpext/` in the Tree.
+11. **G-local:** `make pre-add-check` over the 23 changed Go files: clean; `make preflight`: passed, golangci-lint 0
+    issues in each module, `check-acpext-deps: ok`; `make race`: 39 ok.
+12. **G-hosts,** on a copy of the tree, 879 files, on the Linux machine and the Windows laptop: on each, `make test` 39
+    ok and `make race` 39 ok, `make check-records markdownlint` passed, and preflight stopped at
+    `verify-build-metadata`, as on every copy, past `check-acpext-deps: ok`. The Windows laptop ran on its own build
+    cache, repaired in P1's record.
+13. **Not done:** the commit, and its push, P3's gate (C12), each on the owner's word.

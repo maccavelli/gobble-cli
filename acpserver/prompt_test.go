@@ -19,6 +19,7 @@ import (
 	"unicode/utf8"
 
 	acp "github.com/maccavelli/acp-go-sdk2"
+	"github.com/maccavelli/gobble-cli/acpext"
 
 	"github.com/maccavelli/gobble-cli/acpclient/acptest"
 	"github.com/maccavelli/gobble-cli/llm"
@@ -463,10 +464,10 @@ func TestNotifyFramesUnchanged(t *testing.T) {
 			method string
 			params any
 		}{
-			{methodRetry, retryNotice{SessionID: "s1", Phase: "start", Cause: "rate-limited", Attempt: 1, MaxAttempts: 3, DelayMs: 2000, Error: text}},
-			{methodCompaction, compactionNotice{SessionID: "s1", Phase: phaseEnd, Reason: reasonManual, Error: text, Paused: pauseSession}},
-			{methodCompaction, compactionNotice{SessionID: "s1", Phase: phaseEnd, Reason: reasonManual, TokensBefore: 1234}},
-			{methodPersonality, personalityNotice{SessionID: "s1", Name: text, Level: 3}},
+			{acpext.MethodRetry, acpext.RetryNotice{SessionID: "s1", Phase: "start", Cause: "rate-limited", Attempt: 1, MaxAttempts: 3, DelayMs: 2000, Error: text}},
+			{acpext.MethodCompaction, acpext.CompactionNotice{SessionID: "s1", Phase: acpext.PhaseEnd, Reason: acpext.CompactionManual, Error: text, Paused: acpext.PauseSession}},
+			{acpext.MethodCompaction, acpext.CompactionNotice{SessionID: "s1", Phase: acpext.PhaseEnd, Reason: acpext.CompactionManual, TokensBefore: 1234}},
+			{acpext.MethodPersonality, acpext.PersonalityNotice{SessionID: "s1", Name: text, Level: 3}},
 		} {
 			want := frameOf(t, func(c *acp.AgentSideConnection) error { return c.NotifyExtension(t.Context(), n.method, n.params) })
 			if !strings.HasPrefix(want, `{"jsonrpc":"2.0","method":"`+n.method+`","params":{"sessionId":"s1"`) {

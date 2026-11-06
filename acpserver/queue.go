@@ -4,14 +4,15 @@ import (
 	"slices"
 	"sync"
 
+	"github.com/maccavelli/gobble-cli/acpext"
 	"github.com/maccavelli/gobble-cli/llm"
 )
 
 // The queue modes (Pi's QueueMode): a drain takes the first message, or all
-// of them.
+// of them. Their values are acpext's.
 const (
-	queueOneAtATime = "one-at-a-time"
-	queueAll        = "all"
+	queueOneAtATime = string(acpext.QueueOneAtATime)
+	queueAll        = string(acpext.QueueAll)
 )
 
 // queue is a session's steering and follow-up queues (0002-PLAN Phase 7).

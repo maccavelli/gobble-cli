@@ -6,6 +6,7 @@ import (
 	"time"
 
 	acp "github.com/maccavelli/acp-go-sdk2"
+	"github.com/maccavelli/gobble-cli/acpext"
 
 	"github.com/maccavelli/gobble-cli/jsonx"
 )
@@ -123,24 +124,13 @@ type Retry struct {
 	Error                string
 }
 
-// methodRetry is gobble's retry notification (0005-PLAN F5-1).
-const methodRetry = "_gobble/retry"
-
 // retryOf decodes _gobble/retry's params, with the session they name.
 func retryOf(params jsontext.Value) (acp.SessionId, Retry, error) {
-	var n struct {
-		SessionID   acp.SessionId `json:"sessionId"`
-		Phase       string        `json:"phase"`
-		Cause       string        `json:"cause"`
-		Attempt     int           `json:"attempt"`
-		MaxAttempts int           `json:"maxAttempts"`
-		DelayMs     int64         `json:"delayMs"`
-		Error       string        `json:"error"`
-	}
+	var n acpext.RetryNotice
 	if err := jsonx.Unmarshal(params, &n); err != nil {
-		return "", Retry{}, fmt.Errorf("%s: %w", methodRetry, err)
+		return "", Retry{}, fmt.Errorf("%s: %w", acpext.MethodRetry, err)
 	}
-	return n.SessionID, Retry{Phase: n.Phase, Cause: n.Cause, Attempt: n.Attempt, MaxAttempts: n.MaxAttempts,
+	return acp.SessionId(n.SessionID), Retry{Phase: string(n.Phase), Cause: string(n.Cause), Attempt: n.Attempt, MaxAttempts: n.MaxAttempts,
 		Delay: time.Duration(n.DelayMs) * time.Millisecond, Error: n.Error}, nil
 }
 
@@ -155,24 +145,15 @@ type Compaction struct {
 	Error, Paused string
 }
 
-// methodCompaction is gobble's compaction notification (0005-PLAN F5-2).
-const methodCompaction = "_gobble/compaction"
-
 // compactionOf decodes _gobble/compaction's params, with the session they
 // name.
 func compactionOf(params jsontext.Value) (acp.SessionId, Compaction, error) {
-	var n struct {
-		SessionID    acp.SessionId `json:"sessionId"`
-		Phase        string        `json:"phase"`
-		Reason       string        `json:"reason"`
-		TokensBefore int64         `json:"tokensBefore"`
-		Error        string        `json:"error"`
-		Paused       string        `json:"paused"`
-	}
+	var n acpext.CompactionNotice
 	if err := jsonx.Unmarshal(params, &n); err != nil {
-		return "", Compaction{}, fmt.Errorf("%s: %w", methodCompaction, err)
+		return "", Compaction{}, fmt.Errorf("%s: %w", acpext.MethodCompaction, err)
 	}
-	return n.SessionID, Compaction{Phase: n.Phase, Reason: n.Reason, TokensBefore: n.TokensBefore, Error: n.Error, Paused: n.Paused}, nil
+	return acp.SessionId(n.SessionID), Compaction{Phase: string(n.Phase), Reason: string(n.Reason), TokensBefore: n.TokensBefore, Error: n.Error,
+		Paused: string(n.Paused)}, nil
 }
 
 // Personality is a session's personality, as _gobble/personality reports
@@ -182,21 +163,14 @@ type Personality struct {
 	Level int
 }
 
-// methodPersonality is gobble's personality notification (0022-PLAN P3).
-const methodPersonality = "_gobble/personality"
-
 // personalityOf decodes _gobble/personality's params, with the session
 // they name.
 func personalityOf(params jsontext.Value) (acp.SessionId, Personality, error) {
-	var n struct {
-		SessionID acp.SessionId `json:"sessionId"`
-		Name      string        `json:"name"`
-		Level     int           `json:"level"`
-	}
+	var n acpext.PersonalityNotice
 	if err := jsonx.Unmarshal(params, &n); err != nil {
-		return "", Personality{}, fmt.Errorf("%s: %w", methodPersonality, err)
+		return "", Personality{}, fmt.Errorf("%s: %w", acpext.MethodPersonality, err)
 	}
-	return n.SessionID, Personality{Name: n.Name, Level: n.Level}, nil
+	return acp.SessionId(n.SessionID), Personality{Name: n.Name, Level: n.Level}, nil
 }
 
 // ToolCall is a tool call or an update to one. In an update, an empty

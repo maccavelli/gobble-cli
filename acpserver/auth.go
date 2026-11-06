@@ -5,33 +5,20 @@ import (
 	"fmt"
 
 	acp "github.com/maccavelli/acp-go-sdk2"
-
-	"github.com/maccavelli/gobble-cli/jsonx"
+	"github.com/maccavelli/gobble-cli/acpext"
 )
-
-// AuthProvider is a provider ACP authentication names: its id, which is
-// its agent method's; its label; the gobble command that stores its
-// credential; and whether it has a login rather than a key alone
-// (0016-MADR A2).
-type AuthProvider struct {
-	ID, Name, Command string
-	Login             bool
-}
 
 // AuthOptions are what ACP authentication offers. Without Providers, it
 // offers nothing.
 type AuthOptions struct {
 	// Providers are the providers that take a credential, in order.
-	Providers func() []AuthProvider
+	Providers func() []acpext.AuthProvider
 	// Has reports whether provider id has a credential now, from any source
 	// in gobble's order.
 	Has func(id string) bool
 }
 
-// loginSuffix ends a terminal method's id: <provider>-login.
-const loginSuffix = "-login"
-
-func (a *Agent) authProviders() []AuthProvider {
+func (a *Agent) authProviders() []acpext.AuthProvider {
 	if a.auth.Providers == nil {
 		return nil
 	}
@@ -58,7 +45,7 @@ func (a *Agent) authMethods(terminal bool) []acp.AuthMethod {
 		if p.Login {
 			name = "Sign in to " + p.Name
 		}
-		m := acp.NewAuthMethodTerminal(acp.AuthMethodId(p.ID+loginSuffix), name)
+		m := acp.NewAuthMethodTerminal(acp.AuthMethodId(p.ID+acpext.LoginSuffix), name)
 		m.Terminal.Args = []string{"--login", p.ID}
 		methods = append(methods, m)
 	}
@@ -77,7 +64,7 @@ func (a *Agent) Authenticate(_ context.Context, p acp.AuthenticateRequest) (acp.
 		if a.auth.Has != nil && a.auth.Has(ap.ID) {
 			return acp.AuthenticateResponse{}, nil
 		}
-		return acp.AuthenticateResponse{}, acp.NewAuthRequired(jsonx.Strings(map[string]string{"provider": ap.ID, keyReason: "no credential", "command": ap.Command}))
+		return acp.AuthenticateResponse{}, acp.NewAuthRequired(errData(acpext.ErrorData{Provider: ap.ID, Reason: "no credential", Command: ap.Command}))
 	}
-	return acp.AuthenticateResponse{}, acp.NewInvalidParams(jsonx.Strings(map[string]string{keyReason: fmt.Sprintf("unknown auth method %q", p.MethodId)}))
+	return acp.AuthenticateResponse{}, acp.NewInvalidParams(errData(acpext.ErrorData{Reason: fmt.Sprintf("unknown auth method %q", p.MethodId)}))
 }

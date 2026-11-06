@@ -14,6 +14,7 @@ import (
 
 	acp "github.com/maccavelli/acp-go-sdk2"
 	"github.com/maccavelli/acp-go-sdk2/agentproc"
+	"github.com/maccavelli/gobble-cli/acpext"
 
 	"github.com/maccavelli/gobble-cli/jsonx"
 )
@@ -439,7 +440,7 @@ func (h *handler) HandleExtensionMethod(ctx context.Context, method string, para
 
 // registerExtensions registers the three notifications on h.ext.
 func (h *handler) registerExtensions() {
-	acp.Notify(&h.ext, methodRetry, func(_ context.Context, params jsontext.Value) error {
+	acp.Notify(&h.ext, acpext.MethodRetry, func(_ context.Context, params jsontext.Value) error {
 		id, r, err := retryOf(params)
 		if err != nil {
 			return err
@@ -447,7 +448,7 @@ func (h *handler) registerExtensions() {
 		h.deliver(id, Update{Kind: KindRetry, Retry: r, Params: params})
 		return nil
 	})
-	acp.Notify(&h.ext, methodCompaction, func(_ context.Context, params jsontext.Value) error {
+	acp.Notify(&h.ext, acpext.MethodCompaction, func(_ context.Context, params jsontext.Value) error {
 		id, c, err := compactionOf(params)
 		if err != nil {
 			return err
@@ -455,7 +456,7 @@ func (h *handler) registerExtensions() {
 		h.deliver(id, Update{Kind: KindCompaction, Compaction: c, Params: params})
 		return nil
 	})
-	acp.Notify(&h.ext, methodPersonality, func(_ context.Context, params jsontext.Value) error {
+	acp.Notify(&h.ext, acpext.MethodPersonality, func(_ context.Context, params jsontext.Value) error {
 		id, p, err := personalityOf(params)
 		if err != nil {
 			return err

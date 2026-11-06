@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	acp "github.com/maccavelli/acp-go-sdk2"
+	"github.com/maccavelli/gobble-cli/acpext"
 
 	"github.com/maccavelli/gobble-cli/acpclient/acptest"
 	"github.com/maccavelli/gobble-cli/llm"
@@ -65,18 +66,18 @@ func (h *personalityHarness) savedSettings() []string {
 }
 
 // lastPersonality is the last _gobble/personality notification for id.
-func (h *personalityHarness) lastPersonality(t *testing.T, id acp.SessionId) personalityNotice {
+func (h *personalityHarness) lastPersonality(t *testing.T, id acp.SessionId) acpext.PersonalityNotice {
 	t.Helper()
-	var last personalityNotice
+	var last acpext.PersonalityNotice
 	for _, n := range h.client.Notices() {
-		if n.Method != methodPersonality {
+		if n.Method != acpext.MethodPersonality {
 			continue
 		}
-		var p personalityNotice
+		var p acpext.PersonalityNotice
 		if err := json.Unmarshal(n.Params, &p); err != nil {
 			t.Fatal(err)
 		}
-		if p.SessionID == id {
+		if p.SessionID == string(id) {
 			last = p
 		}
 	}
@@ -140,7 +141,7 @@ func TestPersonalitySwitch(t *testing.T) {
 	client := &acptest.Client{Allow: true}
 	h := newPersonalityHarness(t, t.TempDir(), SessionSettings{Personality: personality.Dry}, client, 8)
 	id := newSession(t, h.c, t.TempDir(), nil).SessionId
-	if got := h.lastPersonality(t, id); got != (personalityNotice{SessionID: id, Name: personality.Dry, Level: 3}) {
+	if got := h.lastPersonality(t, id); got != (acpext.PersonalityNotice{SessionID: string(id), Name: personality.Dry, Level: 3}) {
 		t.Fatalf("the start's notice %+v", got)
 	}
 	if _, err := prompt(t, h.c, id, "hello"); err != nil {
@@ -179,7 +180,7 @@ func TestPersonalitySwitch(t *testing.T) {
 		if !slices.Contains(v.Variants(personality.PersonalitySet, personality.Args{"name": step.want}), said) {
 			t.Errorf("/personality %s answered %q, want %s's", step.arg, said, step.want)
 		}
-		if got := h.lastPersonality(t, id); got != (personalityNotice{SessionID: id, Name: step.want, Level: v.Level()}) {
+		if got := h.lastPersonality(t, id); got != (acpext.PersonalityNotice{SessionID: string(id), Name: step.want, Level: v.Level()}) {
 			t.Errorf("/personality %s: notice %+v", step.arg, got)
 		}
 		if got := h.state(t, id); got != step.want {
@@ -245,7 +246,7 @@ func TestSetPersonalityResumed(t *testing.T) {
 	if _, err := r.c.Client.LoadSession(t.Context(), acp.LoadSessionRequest{SessionId: id, Cwd: cwd, McpServers: []acp.McpServer{}}); err != nil {
 		t.Fatal(err)
 	}
-	if got := r.lastPersonality(t, id); got != (personalityNotice{SessionID: id, Name: personality.Snarky, Level: 4}) {
+	if got := r.lastPersonality(t, id); got != (acpext.PersonalityNotice{SessionID: string(id), Name: personality.Snarky, Level: 4}) {
 		t.Fatalf("the resumed session's notice %+v", got)
 	}
 	if got := r.state(t, id); got != personality.Snarky {

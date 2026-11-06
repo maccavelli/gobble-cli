@@ -9,7 +9,11 @@ takes the best of several agent harnesses (Pi, opencode, Kilo, goose, codex and
 grok-build) and makes each piece its own; Pi compatibility is kept only for the
 read-only bridge (`docs/decisions/0005-MADR-v1-feature-scope.md`, amendment of
 2026-10-07). It is one module, `github.com/maccavelli/gobble-cli`, holding the `gobble`
-binary (`cmd/gobble`) and a contract-first Go SDK. Requires Go 1.27.3. gobble has
+binary (`cmd/gobble`) and a contract-first Go SDK. Beside it, nested at `acpext/`, is the module
+`github.com/maccavelli/gobble-cli/acpext`: gobble's ACP extension contract, imported by magic-cli-remote. It
+imports only the standard library, is tagged `acpext/vX.Y.Z`, and the root requires it at a tag, never
+through a `replace` directive or a committed `go.work`; a change to it is tagged before the root uses it
+(`docs/decisions/0042-MADR-acpext-extension-contract-module.md`). Requires Go 1.27.3. gobble has
 two terminal modes: a native CLI mode, the default, and an enhanced TUI mode. The
 command library is Kong. Core TUI is go-tui-lib and self-update is
 go-selfupdate-lib; gobble reimplements neither, and where a behaviour is not in

@@ -21,6 +21,11 @@ import (
 
 const modulePath = "github.com/maccavelli/gobble-cli"
 
+// acpextPath is the nested module of gobble's ACP extension contract. Its
+// path is under modulePath, but it is a module of its own, which the root
+// requires by tag (0042-MADR D1, A4).
+const acpextPath = modulePath + "/acpext"
+
 // Violation is one forbidden import edge, or, for rule 11, a forbidden
 // field, which Field names.
 type Violation struct {
@@ -133,6 +138,9 @@ func loadGraph(ctx context.Context, dir string) ([]modPkg, error) {
 }
 
 func relOf(importPath string) (string, bool) {
+	if pathUnder(importPath, acpextPath) { // another module, not a root package (0042-MADR A4)
+		return "", false
+	}
 	if importPath == modulePath {
 		return ".", true
 	}
@@ -539,6 +547,24 @@ func isByteSlice(t ast.Expr) bool {
 	return ok && (id.Name == "byte" || id.Name == "uint8")
 }
 
+// checkRule12: only acpserver, acpclient and internal/cli import acpext,
+// the ACP edge's contract; internal/cli to keep its provider list equal
+// to the registry's (0042-MADR D4).
+func checkRule12(pkgs []modPkg) []Violation {
+	var vs []Violation
+	for _, e := range edges(pkgs) {
+		if !pathUnder(e.to, acpextPath) {
+			continue
+		}
+		rel, ok := relOf(e.from)
+		if !ok || under(rel, "acpserver") || under(rel, "acpclient") || under(rel, "internal/cli") {
+			continue
+		}
+		vs = add(vs, 12, e)
+	}
+	return vs
+}
+
 func checkRule(rule int, pkgs []modPkg) []Violation {
 	switch rule {
 	case 1:
@@ -563,6 +589,8 @@ func checkRule(rule int, pkgs []modPkg) []Violation {
 		return checkRule10(pkgs)
 	case 11:
 		return checkRule11(pkgs)
+	case 12:
+		return checkRule12(pkgs)
 	default:
 		return []Violation{{Rule: rule, From: "archtest", To: "unknown rule"}}
 	}

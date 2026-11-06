@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/maccavelli/gobble-cli/acpclient"
+	"github.com/maccavelli/gobble-cli/acpext"
 	"github.com/maccavelli/gobble-cli/acpserver"
 	"github.com/maccavelli/gobble-cli/internal/config"
 	"github.com/maccavelli/gobble-cli/llm"
@@ -367,15 +368,15 @@ func (e *runEnv) defaultProvider() string { return e.processSettings("").Setting
 // authProviders are ACP authentication's providers: each that takes a
 // credential, in the SDK's order, with its label and the gobble command
 // that stores one (0016-MADR A2).
-func authProviders() []acpserver.AuthProvider {
-	var out []acpserver.AuthProvider
+func authProviders() []acpext.AuthProvider {
+	var out []acpext.AuthProvider
 	for _, id := range provider.KeyProviders() {
 		login := provider.HasLogin(id) || provider.HasKeyLogin(id)
 		command := "gobble auth login " + id + " --api-key -"
 		if login {
 			command = "gobble auth login " + id
 		}
-		out = append(out, acpserver.AuthProvider{ID: id, Name: provider.Label(id), Command: command, Login: login})
+		out = append(out, acpext.AuthProvider{ID: id, Name: provider.Label(id), Command: command, Login: login})
 	}
 	return out
 }

@@ -3,6 +3,7 @@ package acpserver
 import (
 	"cmp"
 	"context"
+	"encoding/json/jsontext"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -16,6 +17,7 @@ import (
 	"uuid"
 
 	acp "github.com/maccavelli/acp-go-sdk2"
+	"github.com/maccavelli/gobble-cli/acpext"
 
 	"github.com/maccavelli/gobble-cli/agent"
 	"github.com/maccavelli/gobble-cli/command"
@@ -33,19 +35,27 @@ import (
 )
 
 // gobble is the agent's name, and the _meta key of gobble's own members.
-const gobble = "gobble"
+const gobble = acpext.MetaKey
 
 // closeWait is how long session/close waits for a cancelled turn to
 // release before it closes the session's log (0005-PLAN F4-3c-1).
 var closeWait = 5 * time.Second
 
-// keyReason, keyError and keySessionID are keys of an error's JSON-RPC
-// data.
-const (
-	keyReason    = "reason"
-	keyError     = "error"
-	keySessionID = "sessionId"
-)
+// keyReason is the reason member of an error's data, acpext.ErrorData's
+// Reason, by which the tests read a refusal.
+const keyReason = "reason"
+
+// errData is d as an error's JSON-RPC data: its members sorted, each
+// invalid UTF-8 byte written as U+FFFD, as jsonx.Strings wrote the maps it
+// replaces (0039-MADR D14; 0042-MADR A3). A struct of strings cannot fail
+// to encode under jsonx's options; if it did, the data says why.
+func errData(d acpext.ErrorData) jsontext.Value {
+	b, err := jsonx.Value(d)
+	if err != nil {
+		return jsonx.Strings(map[string]string{keyReason: err.Error()})
+	}
+	return b
+}
 
 // ErrNoProvider is a prompt's error when Options.Provider is nil.
 var ErrNoProvider = errors.New("acpserver: no model provider configured")
@@ -240,7 +250,7 @@ type liveSession struct {
 	// not pauseNone, pauses its trigger after a failure, which pauseErr
 	// gives (0005-PLAN F5-2 decisions 10 and 11). The pause is not saved.
 	autoCompactOff bool
-	pause          compactPause
+	pause          acpext.CompactionPause
 	pauseErr       string
 	// streaming and compacting say what the running turn is: a model turn,
 	// or a compaction (_gobble/get_state).
@@ -368,7 +378,7 @@ var _ acp.AgentConnAware = (*Agent)(nil)
 // HTTP. Images, audio and embedded context are turned on by the phases
 // that implement them.
 func Capabilities() (acp.AgentCapabilities, error) {
-	meta, err := jsonx.SetMember(nil, gobble, capabilitiesMeta{Extensions: extensionNames()})
+	meta, err := jsonx.SetMember(nil, gobble, acpext.CapabilitiesMeta{Extensions: extensionNames()})
 	if err != nil {
 		return acp.AgentCapabilities{}, err
 	}
@@ -390,17 +400,12 @@ func Capabilities() (acp.AgentCapabilities, error) {
 	}, nil
 }
 
-// capabilitiesMeta is initialize's _meta.gobble (0039-MADR D15).
-type capabilitiesMeta struct {
-	Extensions []string `json:"extensions"`
-}
-
 // Initialize answers the handshake. It makes no network call (0008-MADR
 // D19 item 6).
 func (a *Agent) Initialize(_ context.Context, p acp.InitializeRequest) (acp.InitializeResponse, error) {
 	caps, err := Capabilities()
 	if err != nil {
-		return acp.InitializeResponse{}, acp.NewInternalError(jsonx.Strings(map[string]string{keyReason: err.Error()}))
+		return acp.InitializeResponse{}, acp.NewInternalError(errData(acpext.ErrorData{Reason: err.Error()}))
 	}
 	a.mu.Lock()
 	a.client = p.ClientCapabilities
@@ -415,7 +420,7 @@ func (a *Agent) Initialize(_ context.Context, p acp.InitializeRequest) (acp.Init
 }
 
 func invalidParams(id acp.SessionId, reason string) error {
-	return acp.NewInvalidParams(jsonx.Strings(map[string]string{keySessionID: string(id), keyReason: reason}))
+	return acp.NewInvalidParams(errData(acpext.ErrorData{Reason: reason, SessionID: string(id)}))
 }
 
 // NewSession opens a session in the client's working directory. Its file is
@@ -462,7 +467,7 @@ func (a *Agent) NewSession(ctx context.Context, p acp.NewSessionRequest) (acp.Ne
 		return acp.NewSessionResponse{}, invalidParams(acp.SessionId(id), "a session with this id exists")
 	}
 	if err != nil {
-		return acp.NewSessionResponse{}, acp.NewInternalError(jsonx.Strings(map[string]string{keyReason: err.Error()}))
+		return acp.NewSessionResponse{}, acp.NewInternalError(errData(acpext.ErrorData{Reason: err.Error()}))
 	}
 	ss := a.sessionSettings(p.Cwd)
 	// The run's override starts a new session, as defaultThinkingLevel does;
@@ -477,7 +482,7 @@ func (a *Agent) NewSession(ctx context.Context, p acp.NewSessionRequest) (acp.Ne
 	if len(forked) > 0 {
 		for _, e := range forked {
 			if err := log.Append(ctx, e); err != nil {
-				return acp.NewSessionResponse{}, errors.Join(acp.NewInternalError(jsonx.Strings(map[string]string{keyReason: err.Error()})), log.Close())
+				return acp.NewSessionResponse{}, errors.Join(acp.NewInternalError(errData(acpext.ErrorData{Reason: err.Error()})), log.Close())
 			}
 		}
 		a.restore(s, forked)
@@ -487,7 +492,7 @@ func (a *Agent) NewSession(ctx context.Context, p acp.NewSessionRequest) (acp.Ne
 	}
 	if meta.Name != "" {
 		if err := s.append(ctx, a.now(), session.Entry{Type: session.TypeSessionInfo, Name: new(oneLine(meta.Name))}); err != nil {
-			return acp.NewSessionResponse{}, errors.Join(acp.NewInternalError(jsonx.Strings(map[string]string{keyReason: err.Error()})), log.Close())
+			return acp.NewSessionResponse{}, errors.Join(acp.NewInternalError(errData(acpext.ErrorData{Reason: err.Error()})), log.Close())
 		}
 	}
 	s.mcp = a.startMCP(ctx, s.cwd, servers, notes, ss)
@@ -564,9 +569,9 @@ func (s *liveSession) state() state { return replayPath(s.tree.Entries(), s.tree
 // internal.
 func appendFailed(err error) error {
 	if old, ok := errors.AsType[*session.ErrOldVersion](err); ok {
-		return acp.NewInvalidRequest(jsonx.Strings(map[string]string{keyReason: old.Error()}))
+		return acp.NewInvalidRequest(errData(acpext.ErrorData{Reason: old.Error()}))
 	}
-	return acp.NewInternalError(jsonx.Strings(map[string]string{keyReason: err.Error()}))
+	return acp.NewInternalError(errData(acpext.ErrorData{Reason: err.Error()}))
 }
 
 // Prompt runs one turn of the session: the model, and the tools it asks
@@ -626,7 +631,7 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 	history := s.history
 	retry := s.retry
 	s.retryAbort, s.waiting = abort, false
-	if s.pause == pauseTurn { // a turn's pause ends with it (0005-PLAN F5-2 decision 11)
+	if s.pause == acpext.PauseTurn { // a turn's pause ends with it (0005-PLAN F5-2 decision 11)
 		s.pause, s.pauseErr = pauseNone, ""
 	}
 	a.mu.Unlock()
@@ -783,7 +788,7 @@ func (a *Agent) claimTurn(ctx context.Context, s *liveSession) (context.Context,
 	defer a.mu.Unlock()
 	if s.cancel != nil {
 		cancel()
-		return nil, nil, acp.NewInvalidRequest(jsonx.Strings(map[string]string{keySessionID: string(s.id), keyReason: "a prompt is already running"}))
+		return nil, nil, acp.NewInvalidRequest(errData(acpext.ErrorData{SessionID: string(s.id), Reason: "a prompt is already running"}))
 	}
 	idle := make(chan struct{})
 	s.cancel, s.idle = cancel, idle
@@ -812,7 +817,7 @@ func clearedMeta(s *liveSession) (map[string]any, error) {
 func withCleared(s *liveSession, resp acp.PromptResponse) (acp.PromptResponse, error) {
 	meta, err := clearedMeta(s)
 	if err != nil {
-		return acp.PromptResponse{}, acp.NewInternalError(jsonx.Strings(map[string]string{keyReason: err.Error()}))
+		return acp.PromptResponse{}, acp.NewInternalError(errData(acpext.ErrorData{Reason: err.Error()}))
 	}
 	resp.Meta = meta
 	return resp, nil
@@ -1051,7 +1056,7 @@ func (a *Agent) open(ctx context.Context, id acp.SessionId, cwd string, extra []
 	_, live := a.sessions[id]
 	a.mu.Unlock()
 	if live {
-		return nil, acp.NewInvalidRequest(jsonx.Strings(map[string]string{keySessionID: string(id), keyReason: "the session is already open"}))
+		return nil, acp.NewInvalidRequest(errData(acpext.ErrorData{SessionID: string(id), Reason: "the session is already open"}))
 	}
 	servers, notes, err := a.mcpServers(id, req)
 	if err != nil {
@@ -1060,7 +1065,7 @@ func (a *Agent) open(ctx context.Context, id acp.SessionId, cwd string, extra []
 	log, err := a.store.Open(ctx, session.ID(id))
 	if err != nil {
 		if locked, ok := errors.AsType[*session.ErrLocked](err); ok {
-			return nil, acp.NewInvalidRequest(jsonx.Strings(map[string]string{keySessionID: string(id), keyReason: locked.Error()}))
+			return nil, acp.NewInvalidRequest(errData(acpext.ErrorData{SessionID: string(id), Reason: locked.Error()}))
 		}
 		return nil, invalidParams(id, err.Error())
 	}
@@ -1107,7 +1112,7 @@ func (a *Agent) LoadSession(ctx context.Context, p acp.LoadSessionRequest) (acp.
 	}
 	meta, err := resumedMeta(st)
 	if err != nil {
-		return acp.LoadSessionResponse{}, acp.NewInternalError(jsonx.Strings(map[string]string{keyReason: err.Error()}))
+		return acp.LoadSessionResponse{}, acp.NewInternalError(errData(acpext.ErrorData{Reason: err.Error()}))
 	}
 	return acp.LoadSessionResponse{ConfigOptions: a.configOptions(s), Modes: modeState(s.mode, s.allowBypass), Meta: meta}, nil
 }
@@ -1152,7 +1157,7 @@ func (a *Agent) ResumeSession(ctx context.Context, p acp.ResumeSessionRequest) (
 	}
 	meta, err := resumedMeta(s.state())
 	if err != nil {
-		return acp.ResumeSessionResponse{}, acp.NewInternalError(jsonx.Strings(map[string]string{keyReason: err.Error()}))
+		return acp.ResumeSessionResponse{}, acp.NewInternalError(errData(acpext.ErrorData{Reason: err.Error()}))
 	}
 	return acp.ResumeSessionResponse{ConfigOptions: a.configOptions(s), Modes: modeState(s.mode, s.allowBypass),
 		Meta: meta}, nil
@@ -1172,7 +1177,7 @@ func (a *Agent) ListSessions(ctx context.Context, p acp.ListSessionsRequest) (ac
 	out := []acp.SessionInfo{}
 	for sum, err := range a.store.List(ctx, f) {
 		if err != nil {
-			return acp.ListSessionsResponse{}, acp.NewInternalError(jsonx.Strings(map[string]string{keyReason: err.Error()}))
+			return acp.ListSessionsResponse{}, acp.NewInternalError(errData(acpext.ErrorData{Reason: err.Error()}))
 		}
 		info := sessionInfo(sum)
 		if err := info.Validate(); err != nil {
@@ -1295,7 +1300,7 @@ func (a *Agent) CloseSession(ctx context.Context, p acp.CloseSessionRequest) (ac
 	a.closeMCP(s.mcp)
 	a.closeTitle(s)
 	if err := s.log.Close(); err != nil {
-		return acp.CloseSessionResponse{}, acp.NewInternalError(jsonx.Strings(map[string]string{keyReason: err.Error()}))
+		return acp.CloseSessionResponse{}, acp.NewInternalError(errData(acpext.ErrorData{Reason: err.Error()}))
 	}
 	return acp.CloseSessionResponse{}, nil
 }
@@ -1306,7 +1311,7 @@ func (a *Agent) CloseSession(ctx context.Context, p acp.CloseSessionRequest) (ac
 func (a *Agent) SetSessionConfigOption(ctx context.Context, p acp.SetSessionConfigOptionRequest) (acp.SetSessionConfigOptionResponse, error) {
 	v := p.ValueId
 	if v == nil {
-		return acp.SetSessionConfigOptionResponse{}, acp.NewInvalidParams(jsonx.Strings(map[string]string{keyReason: "only select options are offered"}))
+		return acp.SetSessionConfigOptionResponse{}, acp.NewInvalidParams(errData(acpext.ErrorData{Reason: "only select options are offered"}))
 	}
 	a.mu.Lock()
 	s, ok := a.sessions[v.SessionId]

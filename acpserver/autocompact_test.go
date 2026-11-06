@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	acp "github.com/maccavelli/acp-go-sdk2"
+	"github.com/maccavelli/gobble-cli/acpext"
 
 	"github.com/maccavelli/gobble-cli/acpclient/acptest"
 	"github.com/maccavelli/gobble-cli/compaction"
@@ -98,7 +99,7 @@ func (h *compactHarness) mustPrompt(id acp.SessionId, text string) {
 }
 
 // live is the session's state, for the pause, which no method reads.
-func (h *compactHarness) live(id acp.SessionId) (compactPause, bool) {
+func (h *compactHarness) live(id acp.SessionId) (acpext.CompactionPause, bool) {
 	h.ag.mu.Lock()
 	defer h.ag.mu.Unlock()
 	s := h.ag.sessions[id]
@@ -110,7 +111,7 @@ func (h *compactHarness) notices() []map[string]any {
 	h.t.Helper()
 	var out []map[string]any
 	for _, n := range h.client.Notices() {
-		if n.Method != methodCompaction {
+		if n.Method != acpext.MethodCompaction {
 			continue
 		}
 		var m map[string]any
@@ -449,7 +450,7 @@ func TestAutoCompactPauseTurn(t *testing.T) {
 	if len(h.summaries()) != 1 {
 		t.Fatalf("%d summaries in the failing turn, want 1", len(h.summaries()))
 	}
-	if p, _ := h.live(id); p != pauseTurn {
+	if p, _ := h.live(id); p != acpext.PauseTurn {
 		t.Fatalf("pause %q, want the turn's", p)
 	}
 	h.mustPrompt(id, "three")
@@ -475,7 +476,7 @@ func TestAutoCompactPauseSession(t *testing.T) {
 	id := h.session()
 	h.mustPrompt(id, p1)
 	h.mustPrompt(id, p2) // the compaction fails, and the call goes ahead
-	if p, _ := h.live(id); p != pauseSession {
+	if p, _ := h.live(id); p != acpext.PauseSession {
 		t.Fatalf("pause %q, want the session's", p)
 	}
 	if got := h.notices(); len(got) != 2 || got[1]["paused"] != "session" {
@@ -502,7 +503,7 @@ func TestAutoCompactPauseSession(t *testing.T) {
 		}},
 	} {
 		h.ag.mu.Lock()
-		h.ag.sessions[id].pause = pauseSession
+		h.ag.sessions[id].pause = acpext.PauseSession
 		h.ag.mu.Unlock()
 		c.end(id)
 		if p, _ := h.live(id); p != pauseNone {
@@ -515,7 +516,7 @@ func TestAutoCompactPauseSession(t *testing.T) {
 	m.mustPrompt(id, p1)
 	m.mustPrompt(id, p2)
 	m.ag.mu.Lock()
-	m.ag.sessions[id].pause = pauseSession
+	m.ag.sessions[id].pause = acpext.PauseSession
 	m.ag.mu.Unlock()
 	m.mustPrompt(id, "/compact")
 	if p, _ := m.live(id); p != pauseNone {

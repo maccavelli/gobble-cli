@@ -13,6 +13,7 @@ import (
 	"time"
 
 	acp "github.com/maccavelli/acp-go-sdk2"
+	"github.com/maccavelli/gobble-cli/acpext"
 
 	"github.com/maccavelli/gobble-cli/acpclient/acptest"
 	"github.com/maccavelli/gobble-cli/jsonx"
@@ -52,8 +53,8 @@ func connectWith(t *testing.T, p llm.Provider, client *acptest.Client) (*acptest
 // login and one with a key alone; only "keyed" has a credential (0005-PLAN
 // F4-3c-2 deviation 1).
 var testAuth = AuthOptions{
-	Providers: func() []AuthProvider {
-		return []AuthProvider{
+	Providers: func() []acpext.AuthProvider {
+		return []acpext.AuthProvider{
 			{ID: "grok", Name: "Grok (xAI)", Command: "gobble auth login grok", Login: true},
 			{ID: "keyed", Name: "Keyed", Command: "gobble auth login keyed --api-key -"},
 		}

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	acp "github.com/maccavelli/acp-go-sdk2"
+	"github.com/maccavelli/gobble-cli/acpext"
 
 	"github.com/maccavelli/gobble-cli/acpclient/acptest"
 	"github.com/maccavelli/gobble-cli/llm"
@@ -77,11 +78,11 @@ func (r *retryAgent) notices(t *testing.T) []map[string]any {
 	t.Helper()
 	var out []map[string]any
 	for _, n := range r.client.Notices() {
-		if n.Method == methodPersonality { // each session's start (0022-MADR D6)
+		if n.Method == acpext.MethodPersonality { // each session's start (0022-MADR D6)
 			continue
 		}
-		if n.Method != methodRetry {
-			t.Fatalf("notice %s, want only %s", n.Method, methodRetry)
+		if n.Method != acpext.MethodRetry {
+			t.Fatalf("notice %s, want only %s", n.Method, acpext.MethodRetry)
 		}
 		var m map[string]any
 		if err := json.Unmarshal(n.Params, &m); err != nil {

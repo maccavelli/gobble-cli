@@ -87,6 +87,14 @@ The tier is each package's `Stability:` line in its `doc.go`. **stable** package
 **internal** and **experimental** packages carry no promise. `internal/frontmatter` and
 `internal/config/genschema` have no `doc.go`; both are internal by their path.
 
+One package is a module of its own, nested at `acpext/`: `github.com/maccavelli/gobble-cli/acpext`, gobble's ACP
+extension contract. It holds the names and shapes of the `_gobble/*` requests and notifications, `initialize`'s
+`_meta.gobble`, the auth providers and the error data, and no behaviour, and imports only the standard library.
+`acpserver` serves from it, `acpclient` decodes with it, and `internal/cli` keeps its provider list equal to the
+registry's; magic-cli-remote imports it too. It is tagged `acpext/vX.Y.Z`, and the root requires it at a tag, with no
+`replace` and no committed `go.work`, so a change to it is tagged before the root uses it
+([0042-MADR](decisions/0042-MADR-acpext-extension-contract-module.md)). The root's `go list ./...` does not list it.
+
 | Package | Tier | What it is |
 | :--- | :--- | :--- |
 | `cmd/gobble` | internal | The `gobble` command: `main` prepares the console, then calls `internal/cli`. |
@@ -158,13 +166,16 @@ package only a test imports has its closure checked too:
 7. Only `cmd/gobble` imports `exp/...`.
 8. Only `internal/cli` imports go-selfupdate-lib, and `internal/buildinfo` its `buildinfo`.
 9. Only `internal/cli/...` imports Kong.
-10. `jsonx` imports no package of this module; its own tests may (0039-MADR D24).
+10. `jsonx` imports no package of this module; its own tests may (0039-MADR D24). `acpext` is another module, not one
+    of this one's packages.
 11. A struct field of type `[]byte` with a `json` tag is binary, and is allowed only where listed: today
     `llm.Content.Data`. Raw JSON is a `jsontext.Value` (0039-MADR D20, D24).
+12. Only `acpserver`, `acpclient/...` and `internal/cli/...` import `acpext` (0042-MADR D4).
 
 `golangci-lint` keeps `encoding/json` (v1) out of every file, tests included, by `depguard`, and v2's
 `Marshal`, `MarshalWrite`, `MarshalEncode`, `Unmarshal`, `UnmarshalRead` and `UnmarshalDecode` out of non-test
-code outside `jsonx`, by `forbidigo` (0039-MADR D24).
+code outside `jsonx`, by `forbidigo` (0039-MADR D24). acpext's tests may import `encoding/json`, as an importer of
+the contract decodes with it; acpext's own code may not (0042-PLAN deviation 2).
 
 ## Dependencies
 
@@ -174,6 +185,7 @@ The direct requirements in `go.mod`:
 | :--- | :--- |
 | `github.com/alecthomas/kong` | `v1.16.1` |
 | `github.com/maccavelli/acp-go-sdk2` | `v1.34.0` |
+| `github.com/maccavelli/gobble-cli/acpext` | `v0.1.0` |
 | `github.com/modelcontextprotocol/go-sdk` | `v1.8.0` |
 | `github.com/maccavelli/go-llmprovider-sdk` | `v1.26.1` |
 | `github.com/maccavelli/go-selfupdate-lib` | `v1.24.0` |
@@ -182,7 +194,8 @@ The direct requirements in `go.mod`:
 | `go.yaml.in/yaml/v3` | `v3.0.5` |
 | `golang.org/x/sys`, `golang.org/x/term`, `golang.org/x/text` | `v0.49.0`, `v0.47.0`, `v0.43.0` |
 
-`apidiff`, `golint`, `govulncheck` and `staticcheck` run from `tool` directives.
+`apidiff`, `golint`, `govulncheck` and `staticcheck` run from `tool` directives. `acpext/go.mod` has no requirement,
+and no `tool` directive: its gates run the root's tools.
 
 ## Checks
 
@@ -190,16 +203,19 @@ The direct requirements in `go.mod`:
   `FILES`, then govulncheck over the module; `GO_PRECHECK_SKIP_VULN=1` skips govulncheck.
 - `make preflight`: first `check-cgo-off`, then every gate — gofmt, `go mod tidy`, the pre-add
   check, `go vet`, staticcheck for linux, darwin and windows, golangci-lint, govulncheck,
-  `go fix -diff`, archtest, apidiff, build metadata, the records check and markdownlint.
-- `make race`: the tests under the race detector, with cgo on.
+  `check-acpext-deps`, `go fix -diff`, archtest, apidiff, build metadata, the records check and markdownlint.
+  The Go gates run over both modules, `MODULES := . acpext`, each in its own directory with the root's tools;
+  `check-acpext-deps` fails when acpext or its tests build from a package outside the standard library.
+- `make test` and `make race`: the tests of both modules, `race` under the race detector, with cgo on.
 - `make apidiff`: a no-op below `v1.0.0`. From a `v1.0.0` tag it fails until the comparison is
   written.
 - Outside `preflight`: `make check-libs` compares the sibling libraries with their latest tags, over
   the network; `make probe-conhost` and `make completion-shells` run checks that need a console or
   the real shells.
 - `.github/workflows/ci.yml`, on pushes to `main`, on `v*` tags and on pull requests: on Linux,
-  macOS and Windows, `go test`, `make preflight` and `make archtest`; `make race` on Linux and
-  macOS; on Linux, `go mod tidy -diff`, shellcheck and actionlint. A push or pull request whose
+  macOS and Windows, `go test` over both modules, `make preflight` and `make archtest`; `make race` on Linux and
+  macOS; on Linux, `go mod tidy -diff` over both modules, shellcheck and actionlint. An `acpext/v*` tag runs no
+  release. A push or pull request whose
   changes are all in the docs set (`*.md` at the root, `docs/**/*.md`, `.claude/rules/*.md`,
   `.grok/rules/*.md` and `.opencode/rules.md`) skips it, and `.github/workflows/docs.yml` runs
   `make check-records` and `make markdownlint` on one Linux runner instead. A Markdown file Go reads (a
@@ -226,6 +242,7 @@ AGENTS.md                 agent instructions
 opencode.json             opencode's project settings
 Makefile                  the gates above
 go.mod, go.sum            the module and its sums
+acpext/                   the nested module of gobble's ACP extension contract, tagged acpext/vX.Y.Z
 .github/workflows/ci.yml  CI
 .github/workflows/docs.yml  the docs-only check: records and markdownlint
 .golangci.yml             the lint set

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	acp "github.com/maccavelli/acp-go-sdk2"
+	"github.com/maccavelli/gobble-cli/acpext"
 
 	"github.com/maccavelli/gobble-cli/jsonx"
 )
@@ -102,22 +103,16 @@ func (c *Conn) NewSessionWith(ctx context.Context, cwd string, opts NewSessionOp
 	return &Session{id: resp.SessionId, c: c}, nil
 }
 
-// setNameParams are _gobble/set_session_name's params (0002-PLAN Phase 7).
-type setNameParams struct {
-	SessionID acp.SessionId `json:"sessionId"`
-	Name      string        `json:"name"`
-}
-
 // SetName names the session through gobble's _gobble/set_session_name, as
 // /name does. A refusal, such as an empty name, is ErrInvalidSession with
 // the agent's reason as its text.
 func (s *Session) SetName(ctx context.Context, name string) error {
-	params, err := jsonx.Value(setNameParams{SessionID: s.id, Name: name})
+	params, err := jsonx.Value(acpext.SetSessionNameParams{SessionID: string(s.id), Name: name})
 	if err != nil {
-		return fmt.Errorf("_gobble/set_session_name: %w", err)
+		return fmt.Errorf("%s: %w", acpext.MethodSetSessionName, err)
 	}
-	if _, err := s.c.conn.CallExtension(ctx, "_gobble/set_session_name", params); err != nil {
-		return sessionError("_gobble/set_session_name", err)
+	if _, err := s.c.conn.CallExtension(ctx, acpext.MethodSetSessionName, params); err != nil {
+		return sessionError(acpext.MethodSetSessionName, err)
 	}
 	return nil
 }

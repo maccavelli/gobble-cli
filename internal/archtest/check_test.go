@@ -213,6 +213,20 @@ func TestImportRules(t *testing.T) {
 			Imports:    []string{modulePath + "/jsonx"},
 		}}},
 		{name: "rule 11 module", rule: 11},
+		{name: "rule 12 module", rule: 12},
+		{name: "rule 12 agent acpext", rule: 12, want: "agent imports " + acpextPath, pkgs: []modPkg{{
+			ImportPath: modulePath + "/agent",
+			Imports:    []string{acpextPath},
+		}}},
+		{name: "rule 12 the ACP edge may import acpext", rule: 12, pkgs: []modPkg{
+			{ImportPath: modulePath + "/acpserver", Imports: []string{acpextPath}},
+			{ImportPath: modulePath + "/acpclient", Imports: []string{acpextPath}},
+			{ImportPath: modulePath + "/internal/cli", TestImports: []string{acpextPath}},
+		}},
+		{name: "rule 10 acpext is another module, not one of jsonx's", rule: 10, pkgs: []modPkg{{
+			ImportPath: modulePath + "/jsonx",
+			Imports:    []string{acpextPath},
+		}}},
 	}
 
 	for _, tc := range cases {

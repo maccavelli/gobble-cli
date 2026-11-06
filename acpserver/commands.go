@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	acp "github.com/maccavelli/acp-go-sdk2"
+	"github.com/maccavelli/gobble-cli/acpext"
 
 	"github.com/maccavelli/gobble-cli/command"
 	"github.com/maccavelli/gobble-cli/compaction"
@@ -708,15 +709,15 @@ func (a *Agent) copySession(ctx context.Context, s *liveSession, path []session.
 	}
 	log, err := a.store.Create(ctx, h)
 	if err != nil {
-		return "", acp.NewInternalError(jsonx.Strings(map[string]string{keyReason: err.Error()}))
+		return "", acp.NewInternalError(errData(acpext.ErrorData{Reason: err.Error()}))
 	}
 	for _, e := range path {
 		if err := log.Append(ctx, e); err != nil {
-			return "", acp.NewInternalError(jsonx.Strings(map[string]string{keyReason: errors.Join(err, log.Close()).Error()}))
+			return "", acp.NewInternalError(errData(acpext.ErrorData{Reason: errors.Join(err, log.Close()).Error()}))
 		}
 	}
 	if err := log.Close(); err != nil {
-		return "", acp.NewInternalError(jsonx.Strings(map[string]string{keyReason: err.Error()}))
+		return "", acp.NewInternalError(errData(acpext.ErrorData{Reason: err.Error()}))
 	}
 	return id, nil
 }
@@ -737,7 +738,7 @@ func (a *Agent) startFrames(ctx context.Context, conn *acp.AgentSideConnection, 
 	out.send(acp.UpdateAvailableCommands(availableCommands(templates)))
 	out.send(modeUpdate(a.modeOf(s)))
 	out.send(a.contextUpdate(s, used))
-	out.notify(methodPersonality, a.personalityNotice(s))
+	out.notify(acpext.MethodPersonality, a.personalityNotice(s))
 	return out.err
 }
 

@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	acp "github.com/maccavelli/acp-go-sdk2"
+	"github.com/maccavelli/gobble-cli/acpext"
 
 	"github.com/maccavelli/gobble-cli/command"
 	"github.com/maccavelli/gobble-cli/compaction"
@@ -23,34 +24,31 @@ import (
 // it decodes its params and gives its result.
 type extension func(a *Agent, ctx context.Context, params jsontext.Value) (any, error)
 
-// extensions are gobble's ACP extension methods. Every request carries
-// sessionId; the other fields keep Pi's RPC names (rpc-types.ts).
+// extensions are gobble's ACP extension methods, keyed by acpext's names
+// (0042-MADR D4). Every request carries sessionId; the other fields keep
+// Pi's RPC names (rpc-types.ts).
 var extensions = map[string]extension{
-	"_gobble/steer":                   (*Agent).extSteer,
-	"_gobble/follow_up":               (*Agent).extFollowUp,
-	"_gobble/clear_queue":             (*Agent).extClearQueue,
-	"_gobble/set_steering_mode":       (*Agent).extSetSteeringMode,
-	"_gobble/set_follow_up_mode":      (*Agent).extSetFollowUpMode,
-	"_gobble/compact":                 (*Agent).extCompact,
-	"_gobble/usage":                   (*Agent).extUsage,
-	"_gobble/set_session_name":        (*Agent).extSetSessionName,
-	"_gobble/fork":                    (*Agent).extFork,
-	"_gobble/clone":                   (*Agent).extClone,
-	"_gobble/get_state":               (*Agent).extGetState,
-	"_gobble/get_messages":            (*Agent).extGetMessages,
-	"_gobble/get_entries":             (*Agent).extGetEntries,
-	"_gobble/get_last_assistant_text": (*Agent).extGetLastAssistantText,
-	"_gobble/get_session_stats":       (*Agent).extGetSessionStats,
-	"_gobble/get_fork_messages":       (*Agent).extGetForkMessages,
-	"_gobble/set_auto_retry":          (*Agent).extSetAutoRetry,
-	"_gobble/abort_retry":             (*Agent).extAbortRetry,
-	"_gobble/set_auto_compaction":     (*Agent).extSetAutoCompaction,
-	"_gobble/set_personality":         (*Agent).extSetPersonality,
+	acpext.MethodSteer:                (*Agent).extSteer,
+	acpext.MethodFollowUp:             (*Agent).extFollowUp,
+	acpext.MethodClearQueue:           (*Agent).extClearQueue,
+	acpext.MethodSetSteeringMode:      (*Agent).extSetSteeringMode,
+	acpext.MethodSetFollowUpMode:      (*Agent).extSetFollowUpMode,
+	acpext.MethodCompact:              (*Agent).extCompact,
+	acpext.MethodUsage:                (*Agent).extUsage,
+	acpext.MethodSetSessionName:       (*Agent).extSetSessionName,
+	acpext.MethodFork:                 (*Agent).extFork,
+	acpext.MethodClone:                (*Agent).extClone,
+	acpext.MethodGetState:             (*Agent).extGetState,
+	acpext.MethodGetMessages:          (*Agent).extGetMessages,
+	acpext.MethodGetEntries:           (*Agent).extGetEntries,
+	acpext.MethodGetLastAssistantText: (*Agent).extGetLastAssistantText,
+	acpext.MethodGetSessionStats:      (*Agent).extGetSessionStats,
+	acpext.MethodGetForkMessages:      (*Agent).extGetForkMessages,
+	acpext.MethodSetAutoRetry:         (*Agent).extSetAutoRetry,
+	acpext.MethodAbortRetry:           (*Agent).extAbortRetry,
+	acpext.MethodSetAutoCompaction:    (*Agent).extSetAutoCompaction,
+	acpext.MethodSetPersonality:       (*Agent).extSetPersonality,
 }
-
-// methodRetry is the notification of a turn's retry wait (0005-PLAN F5-1
-// decision 5).
-const methodRetry = "_gobble/retry"
 
 // extensionNames are the methods initialize advertises, sorted.
 func extensionNames() []string { return slices.Sorted(maps.Keys(extensions)) }
@@ -71,80 +69,40 @@ func (a *Agent) HandleExtensionMethod(ctx context.Context, method string, params
 	}
 	b, err := jsonx.Marshal(res)
 	if err != nil {
-		return nil, acp.NewInternalError(jsonx.Strings(map[string]string{keyReason: err.Error()}))
+		return nil, acp.NewInternalError(errData(acpext.ErrorData{Reason: err.Error()}))
 	}
 	return jsontext.Value(b), nil
 }
 
-// sessionParams is every request's sessionId.
-type sessionParams struct {
-	SessionID acp.SessionId `json:"sessionId"`
-}
-
-func (p sessionParams) session() acp.SessionId { return p.SessionID }
-
-type messageParams struct {
-	sessionParams
-	Message string `json:"message"`
-}
-
-type modeParams struct {
-	sessionParams
-	Mode string `json:"mode"`
-}
-
-type compactParams struct {
-	sessionParams
-	CustomInstructions string `json:"customInstructions"`
-}
-
-type enabledParams struct {
-	sessionParams
-	Enabled *bool `json:"enabled"`
-}
-
-type nameParams struct {
-	sessionParams
-	Name string `json:"name"`
-}
-
-type forkParams struct {
-	sessionParams
-	EntryID string `json:"entryId"`
-}
-
-type entriesParams struct {
-	sessionParams
-	Since *string `json:"since"`
-}
-
-// extSession decodes params and finds their live session: bad params and
-// an unknown session are -32602, as for every session method.
-func extSession[P interface{ session() acp.SessionId }](a *Agent, params jsontext.Value) (P, *liveSession, error) {
+// extSession decodes params into their acpext type, and finds the live
+// session they name: bad params and an unknown session are -32602, as for
+// every session method. The session is read from a second decode into
+// acpext.SessionParams, since acpext's types carry no method of acpserver's
+// (0042-MADR A2); the first decode's error is the one answered.
+func extSession[P any](a *Agent, params jsontext.Value) (P, *liveSession, error) {
 	var p P
 	if len(params) == 0 {
 		params = jsontext.Value("{}")
 	}
 	if err := jsonx.Unmarshal(params, &p); err != nil {
-		return p, nil, acp.NewInvalidParams(jsonx.Strings(map[string]string{keyReason: err.Error()}))
+		return p, nil, acp.NewInvalidParams(errData(acpext.ErrorData{Reason: err.Error()}))
 	}
+	var sp acpext.SessionParams
+	if err := jsonx.Unmarshal(params, &sp); err != nil {
+		return p, nil, acp.NewInvalidParams(errData(acpext.ErrorData{Reason: err.Error()}))
+	}
+	id := acp.SessionId(sp.SessionID)
 	a.mu.Lock()
-	s, ok := a.sessions[p.session()]
+	s, ok := a.sessions[id]
 	a.mu.Unlock()
 	if !ok {
-		return p, nil, invalidParams(p.session(), "unknown session")
+		return p, nil, invalidParams(id, "unknown session")
 	}
 	return p, s, nil
 }
 
 // empty is the result of a method that answers nothing: {}.
 type empty struct{}
-
-// queuedResult is Pi's QueuedInputDisposition: gobble has no input
-// handlers before 0005-PLAN F7, so a message is always queued.
-type queuedResult struct {
-	Disposition string `json:"disposition"`
-}
 
 func (a *Agent) extSteer(_ context.Context, params jsontext.Value) (any, error) {
 	return a.enqueue(params, (*queue).steer)
@@ -158,7 +116,7 @@ func (a *Agent) extFollowUp(_ context.Context, params jsontext.Value) (any, erro
 // queued, as Pi refuses its agent-side ones (agent-session.ts:2183-2193):
 // they are prompts.
 func (a *Agent) enqueue(params jsontext.Value, add func(*queue, string)) (any, error) {
-	p, s, err := extSession[messageParams](a, params)
+	p, s, err := extSession[acpext.MessageParams](a, params)
 	if err != nil {
 		return nil, err
 	}
@@ -177,21 +135,18 @@ func (a *Agent) enqueue(params jsontext.Value, add func(*queue, string)) (any, e
 	text, _ = a.expand(s, text)
 	text = files + text
 	add(s.queue, text)
-	return queuedResult{Disposition: "queued"}, nil
-}
-
-type clearedResult struct {
-	Steering []string `json:"steering"`
-	FollowUp []string `json:"followUp"`
+	// Pi's QueuedInputDisposition: gobble has no input handlers before
+	// 0005-PLAN F7, so a message is always queued.
+	return acpext.QueuedResult{Disposition: acpext.DispositionQueued}, nil
 }
 
 func (a *Agent) extClearQueue(_ context.Context, params jsontext.Value) (any, error) {
-	_, s, err := extSession[sessionParams](a, params)
+	_, s, err := extSession[acpext.SessionParams](a, params)
 	if err != nil {
 		return nil, err
 	}
 	steering, followUp := s.queue.clear()
-	return clearedResult{Steering: steering, FollowUp: followUp}, nil
+	return acpext.ClearedResult{Steering: steering, FollowUp: followUp}, nil
 }
 
 func (a *Agent) extSetSteeringMode(_ context.Context, params jsontext.Value) (any, error) {
@@ -205,23 +160,15 @@ func (a *Agent) extSetFollowUpMode(_ context.Context, params jsontext.Value) (an
 // setQueueMode sets a queue's mode for this session; the modes are not
 // persisted before the configuration-surface record.
 func (a *Agent) setQueueMode(params jsontext.Value, set func(*queue, string)) (any, error) {
-	p, s, err := extSession[modeParams](a, params)
+	p, s, err := extSession[acpext.ModeParams](a, params)
 	if err != nil {
 		return nil, err
 	}
-	if !validQueueMode(p.Mode) {
+	if !validQueueMode(string(p.Mode)) {
 		return nil, invalidParams(s.id, fmt.Sprintf("unknown queue mode %q; the modes are %s and %s", p.Mode, queueAll, queueOneAtATime))
 	}
-	set(s.queue, p.Mode)
+	set(s.queue, string(p.Mode))
 	return empty{}, nil
-}
-
-// compactResult is Pi's CompactionResult.
-type compactResult struct {
-	Summary          string             `json:"summary"`
-	FirstKeptEntryID string             `json:"firstKeptEntryId"`
-	TokensBefore     int64              `json:"tokensBefore"`
-	Details          compaction.Details `json:"details"`
 }
 
 // extCompact is /compact's compaction (compactSession), answered as Pi's
@@ -229,7 +176,7 @@ type compactResult struct {
 // session's turn, so session/cancel stops it, and sends usage_update but no
 // message text, since it is no prompt turn.
 func (a *Agent) extCompact(ctx context.Context, params jsontext.Value) (any, error) {
-	p, s, err := extSession[compactParams](a, params)
+	p, s, err := extSession[acpext.CompactParams](a, params)
 	if err != nil {
 		return nil, err
 	}
@@ -239,15 +186,15 @@ func (a *Agent) extCompact(ctx context.Context, params jsontext.Value) (any, err
 	}
 	defer release()
 	out := newUpdates(ctx, a.connection(), s.id)
-	out.notify(methodCompaction, compactionNotice{SessionID: s.id, Phase: phaseStart, Reason: reasonManual})
+	out.notify(acpext.MethodCompaction, acpext.CompactionNotice{SessionID: string(s.id), Phase: acpext.PhaseStart, Reason: acpext.CompactionManual})
 	res, used, err := a.compactSession(turnCtx, s, p.CustomInstructions)
-	out.notify(methodCompaction, manualEnd(turnCtx, s.id, res, err))
+	out.notify(acpext.MethodCompaction, manualEnd(turnCtx, s.id, res, err))
 	var reqErr *acp.RequestError
 	switch {
 	case turnCtx.Err() != nil:
-		return nil, acp.NewInternalError(jsonx.Strings(map[string]string{keyError: "Compaction cancelled"}))
+		return nil, acp.NewInternalError(errData(acpext.ErrorData{Error: "Compaction cancelled"}))
 	case errors.Is(err, compaction.ErrAlreadyCompacted), errors.Is(err, compaction.ErrNothingToCompact):
-		return nil, acp.NewInvalidRequest(jsonx.Strings(map[string]string{keySessionID: string(s.id), keyReason: err.Error()}))
+		return nil, acp.NewInvalidRequest(errData(acpext.ErrorData{SessionID: string(s.id), Reason: err.Error()}))
 	case errors.As(err, &reqErr):
 		return nil, err
 	case err != nil:
@@ -257,7 +204,12 @@ func (a *Agent) extCompact(ctx context.Context, params jsontext.Value) (any, err
 	if out.err != nil {
 		return nil, out.err
 	}
-	return compactResult{Summary: res.Summary, FirstKeptEntryID: res.FirstKeptEntryID, TokensBefore: res.TokensBefore, Details: res.Details}, nil
+	// Pi's CompactionResult; its details are gobble's session-file shape.
+	details, err := jsonx.Value(res.Details)
+	if err != nil {
+		return nil, acp.NewInternalError(errData(acpext.ErrorData{Reason: err.Error()}))
+	}
+	return acpext.CompactResult{Summary: res.Summary, FirstKeptEntryID: res.FirstKeptEntryID, TokensBefore: res.TokensBefore, Details: details}, nil
 }
 
 func (a *Agent) connection() *acp.AgentSideConnection {
@@ -266,24 +218,19 @@ func (a *Agent) connection() *acp.AgentSideConnection {
 	return a.conn
 }
 
-type usageResult struct {
-	Text  string       `json:"text"`
-	Stats sessionStats `json:"stats"`
-}
-
 // extUsage is /usage's text, with the figures it is made from.
 func (a *Agent) extUsage(_ context.Context, params jsontext.Value) (any, error) {
-	_, s, err := extSession[sessionParams](a, params)
+	_, s, err := extSession[acpext.SessionParams](a, params)
 	if err != nil {
 		return nil, err
 	}
 	entries := s.log.Entries()
-	return usageResult{Text: a.usageText(s, nil, entries), Stats: a.statsOf(s, entries)}, nil // boring: a client's text (0022-MADR D2)
+	return acpext.UsageResult{Text: a.usageText(s, nil, entries), Stats: a.statsOf(s, entries)}, nil // boring: a client's text (0022-MADR D2)
 }
 
 // extSetSessionName is /name's path (setName), for a name that is given.
 func (a *Agent) extSetSessionName(ctx context.Context, params jsontext.Value) (any, error) {
-	p, s, err := extSession[nameParams](a, params)
+	p, s, err := extSession[acpext.SetSessionNameParams](a, params)
 	if err != nil {
 		return nil, err
 	}
@@ -308,7 +255,7 @@ func (a *Agent) extSetSessionName(ctx context.Context, params jsontext.Value) (a
 // SDK's own retries from the next session's provider (0005-PLAN F5-1
 // decision 6).
 func (a *Agent) extSetAutoRetry(_ context.Context, params jsontext.Value) (any, error) {
-	p, s, err := extSession[enabledParams](a, params)
+	p, s, err := extSession[acpext.EnabledParams](a, params)
 	if err != nil {
 		return nil, err
 	}
@@ -317,7 +264,7 @@ func (a *Agent) extSetAutoRetry(_ context.Context, params jsontext.Value) (any, 
 	}
 	if a.save != nil {
 		if err := a.save("retry.enabled", strconv.FormatBool(*p.Enabled)); err != nil {
-			return nil, acp.NewInternalError(jsonx.Strings(map[string]string{keyReason: err.Error()}))
+			return nil, acp.NewInternalError(errData(acpext.ErrorData{Reason: err.Error()}))
 		}
 	}
 	a.mu.Lock()
@@ -335,7 +282,7 @@ func (a *Agent) extSetAutoRetry(_ context.Context, params jsontext.Value) (any, 
 // on, it also ends a pause of the trigger (0005-PLAN F5-2 decisions 10 and
 // 11).
 func (a *Agent) extSetAutoCompaction(_ context.Context, params jsontext.Value) (any, error) {
-	p, s, err := extSession[enabledParams](a, params)
+	p, s, err := extSession[acpext.EnabledParams](a, params)
 	if err != nil {
 		return nil, err
 	}
@@ -344,7 +291,7 @@ func (a *Agent) extSetAutoCompaction(_ context.Context, params jsontext.Value) (
 	}
 	if a.save != nil {
 		if err := a.save("compaction.enabled", strconv.FormatBool(*p.Enabled)); err != nil {
-			return nil, acp.NewInternalError(jsonx.Strings(map[string]string{keyReason: err.Error()}))
+			return nil, acp.NewInternalError(errData(acpext.ErrorData{Reason: err.Error()}))
 		}
 	}
 	a.mu.Lock()
@@ -360,7 +307,7 @@ func (a *Agent) extSetAutoCompaction(_ context.Context, params jsontext.Value) (
 // one is under way; the turn then ends with the error that caused it
 // (0005-PLAN F5-1 decision 6).
 func (a *Agent) extAbortRetry(_ context.Context, params jsontext.Value) (any, error) {
-	_, s, err := extSession[sessionParams](a, params)
+	_, s, err := extSession[acpext.SessionParams](a, params)
 	if err != nil {
 		return nil, err
 	}
@@ -381,16 +328,11 @@ func (a *Agent) abortRetry(s *liveSession) {
 	}
 }
 
-type forkResult struct {
-	SessionID session.ID `json:"sessionId"`
-	Text      string     `json:"text,omitzero"`
-}
-
 // extFork is /fork <entry>'s path: a new session before that user message,
 // written and closed for the caller to load. Its text is the message's,
 // as Pi's RPC fork gives it for the editor.
 func (a *Agent) extFork(ctx context.Context, params jsontext.Value) (any, error) {
-	p, s, err := extSession[forkParams](a, params)
+	p, s, err := extSession[acpext.ForkParams](a, params)
 	if err != nil {
 		return nil, err
 	}
@@ -408,12 +350,12 @@ func (a *Agent) extFork(ctx context.Context, params jsontext.Value) (any, error)
 	if err != nil {
 		return nil, err
 	}
-	return forkResult{SessionID: id, Text: target.Message.Text()}, nil
+	return acpext.ForkResult{SessionID: string(id), Text: target.Message.Text()}, nil
 }
 
 // extClone is /clone's path: a new session holding the whole path.
 func (a *Agent) extClone(ctx context.Context, params jsontext.Value) (any, error) {
-	_, s, err := extSession[sessionParams](a, params)
+	_, s, err := extSession[acpext.SessionParams](a, params)
 	if err != nil {
 		return nil, err
 	}
@@ -430,38 +372,13 @@ func (a *Agent) extClone(ctx context.Context, params jsontext.Value) (any, error
 	if err != nil {
 		return nil, err
 	}
-	return forkResult{SessionID: id}, nil
+	return acpext.CloneResult{SessionID: string(id)}, nil
 }
 
-// modelRef is the model get_state names, until 0005-PLAN F4's catalog gives
-// Pi's Model.
-type modelRef struct {
-	Provider string `json:"provider,omitzero"`
-	ID       string `json:"id"`
-}
-
-// stateResult is Pi's RpcSessionState, with gobble's mode and cwd.
-type stateResult struct {
-	Model                 *modelRef     `json:"model,omitzero"`
-	ThinkingLevel         string        `json:"thinkingLevel"`
-	IsStreaming           bool          `json:"isStreaming"`
-	IsCompacting          bool          `json:"isCompacting"`
-	SteeringMode          string        `json:"steeringMode"`
-	FollowUpMode          string        `json:"followUpMode"`
-	SessionFile           string        `json:"sessionFile,omitzero"`
-	SessionID             acp.SessionId `json:"sessionId"`
-	SessionName           string        `json:"sessionName,omitzero"`
-	AutoCompactionEnabled bool          `json:"autoCompactionEnabled"`
-	MessageCount          int           `json:"messageCount"`
-	PendingMessageCount   int           `json:"pendingMessageCount"`
-	Mode                  string        `json:"mode"`
-	Cwd                   string        `json:"cwd"`
-	// Personality is the session's personality (0022-MADR D6).
-	Personality string `json:"personality"`
-}
-
+// extGetState is Pi's RpcSessionState, with gobble's mode and cwd; the
+// model is named until 0005-PLAN F4's catalog gives Pi's Model.
 func (a *Agent) extGetState(_ context.Context, params jsontext.Value) (any, error) {
-	_, s, err := extSession[sessionParams](a, params)
+	_, s, err := extSession[acpext.SessionParams](a, params)
 	if err != nil {
 		return nil, err
 	}
@@ -471,12 +388,13 @@ func (a *Agent) extGetState(_ context.Context, params jsontext.Value) (any, erro
 	a.mu.Lock()
 	streaming, compacting, auto := s.streaming, s.compacting, !s.autoCompactOff
 	a.mu.Unlock()
-	res := stateResult{ThinkingLevel: think, IsStreaming: streaming, IsCompacting: compacting, SteeringMode: steering, FollowUpMode: followUp,
-		SessionFile: a.fileOf(s), SessionID: s.id, SessionName: st.name, MessageCount: len(contextMessages(st)),
+	res := acpext.StateResult{ThinkingLevel: think, IsStreaming: streaming, IsCompacting: compacting,
+		SteeringMode: acpext.QueueMode(steering), FollowUpMode: acpext.QueueMode(followUp),
+		SessionFile: a.fileOf(s), SessionID: string(s.id), SessionName: st.name, MessageCount: len(contextMessages(st)),
 		PendingMessageCount: s.queue.pending(), Mode: a.modeOf(s), Cwd: s.cwd, AutoCompactionEnabled: auto,
 		Personality: a.voice(s).Name()}
 	if model != "" {
-		res.Model = &modelRef{Provider: a.models().Provider, ID: model}
+		res.Model = &acpext.ModelRef{Provider: a.models().Provider, ID: model}
 	}
 	return res, nil
 }
@@ -500,32 +418,27 @@ func contextMessages(st state) []*session.Message {
 	return out
 }
 
-type messagesResult struct {
-	Messages []*session.Message `json:"messages"`
-}
-
 func (a *Agent) extGetMessages(_ context.Context, params jsontext.Value) (any, error) {
-	_, s, err := extSession[sessionParams](a, params)
+	_, s, err := extSession[acpext.SessionParams](a, params)
 	if err != nil {
 		return nil, err
 	}
-	return messagesResult{Messages: contextMessages(s.state())}, nil
-}
-
-type entriesResult struct {
-	Entries []session.Entry `json:"entries"`
-	LeafID  *string         `json:"leafId"`
+	msgs, err := rawEach(contextMessages(s.state()))
+	if err != nil {
+		return nil, err
+	}
+	return acpext.MessagesResult{Messages: msgs}, nil
 }
 
 // extGetEntries is every entry in file order, or those after since, and
 // the tree's leaf (Pi's getLeafId), null when there is none.
 func (a *Agent) extGetEntries(_ context.Context, params jsontext.Value) (any, error) {
-	p, s, err := extSession[entriesParams](a, params)
+	p, s, err := extSession[acpext.GetEntriesParams](a, params)
 	if err != nil {
 		return nil, err
 	}
 	entries := s.log.Entries()
-	res := entriesResult{Entries: []session.Entry{}}
+	var res acpext.EntriesResult
 	if leaf := s.tree.Leaf(); leaf != "" {
 		res.LeafID = new(leaf)
 	}
@@ -536,19 +449,31 @@ func (a *Agent) extGetEntries(_ context.Context, params jsontext.Value) (any, er
 		}
 		entries = entries[i+1:]
 	}
-	res.Entries = append(res.Entries, entries...)
+	if res.Entries, err = rawEach(entries); err != nil {
+		return nil, err
+	}
 	return res, nil
 }
 
-type textResult struct {
-	Text *string `json:"text"`
+// rawEach is each of vs encoded as acpext's raw session-file shapes are,
+// by jsonx, as the whole result once was; [] when there are none.
+func rawEach[T any](vs []T) ([]jsontext.Value, error) {
+	out := make([]jsontext.Value, 0, len(vs))
+	for _, v := range vs {
+		b, err := jsonx.Marshal(v)
+		if err != nil {
+			return nil, acp.NewInternalError(errData(acpext.ErrorData{Reason: err.Error()}))
+		}
+		out = append(out, b)
+	}
+	return out, nil
 }
 
 // extGetLastAssistantText is Pi's getLastAssistantText: the last assistant
 // message in context, skipping an aborted one with no content, its text
 // blocks joined and trimmed; null when there is none.
 func (a *Agent) extGetLastAssistantText(_ context.Context, params jsontext.Value) (any, error) {
-	_, s, err := extSession[sessionParams](a, params)
+	_, s, err := extSession[acpext.SessionParams](a, params)
 	if err != nil {
 		return nil, err
 	}
@@ -567,88 +492,49 @@ func (a *Agent) extGetLastAssistantText(_ context.Context, params jsontext.Value
 			}
 		}
 		if text := strings.TrimSpace(b.String()); text != "" {
-			return textResult{Text: &text}, nil
+			return acpext.TextResult{Text: &text}, nil
 		}
-		return textResult{}, nil
+		return acpext.TextResult{}, nil
 	}
-	return textResult{}, nil
+	return acpext.TextResult{}, nil
 }
 
-// sessionStats is Pi's SessionStats: cost is the sum of each usage's cost,
-// and contextUsage is present when the model's window is known (0005-PLAN
-// F4-2a).
-type sessionStats struct {
-	SessionFile       string        `json:"sessionFile,omitzero"`
-	SessionID         acp.SessionId `json:"sessionId"`
-	UserMessages      int           `json:"userMessages"`
-	AssistantMessages int           `json:"assistantMessages"`
-	ToolCalls         int           `json:"toolCalls"`
-	ToolResults       int           `json:"toolResults"`
-	TotalMessages     int           `json:"totalMessages"`
-	Tokens            statsTokens   `json:"tokens"`
-	Cost              float64       `json:"cost"`
-	ContextUsage      *contextUsage `json:"contextUsage,omitzero"`
-}
-
-// contextUsage is Pi's ContextUsage: the context's tokens, as the last
-// usage_update said, of the model's window.
-type contextUsage struct {
-	Tokens        int     `json:"tokens"`
-	ContextWindow int     `json:"contextWindow"`
-	Percent       float64 `json:"percent"`
-}
-
-type statsTokens struct {
-	Input      int64 `json:"input"`
-	Output     int64 `json:"output"`
-	CacheRead  int64 `json:"cacheRead"`
-	CacheWrite int64 `json:"cacheWrite"`
-	Total      int64 `json:"total"`
-}
-
-// statsOf is /usage's totals in Pi's names.
-func (a *Agent) statsOf(s *liveSession, entries []session.Entry) sessionStats {
+// statsOf is /usage's totals in Pi's names, as Pi's SessionStats: cost is
+// the sum of each usage's cost, and contextUsage is present when the
+// model's window is known (0005-PLAN F4-2a).
+func (a *Agent) statsOf(s *liveSession, entries []session.Entry) acpext.SessionStats {
 	t := sessionTotals(entries)
-	st := sessionStats{SessionFile: a.fileOf(s), SessionID: s.id, UserMessages: t.user, AssistantMessages: t.assistant,
+	st := acpext.SessionStats{SessionFile: a.fileOf(s), SessionID: string(s.id), UserMessages: t.user, AssistantMessages: t.assistant,
 		ToolCalls: t.toolCalls, ToolResults: t.toolResults, TotalMessages: t.messages,
-		Tokens: statsTokens{Input: t.input, Output: t.output, CacheRead: t.cacheRead, CacheWrite: t.cacheWrite,
+		Tokens: acpext.TokenStats{Input: t.input, Output: t.output, CacheRead: t.cacheRead, CacheWrite: t.cacheWrite,
 			Total: t.input + t.output + t.cacheRead + t.cacheWrite}, Cost: t.cost}
 	model, _ := a.choices(s)
 	if window := a.modelOf(a.provOf(s), model).ContextWindow; window > 0 {
 		used := a.usedOf(s)
-		st.ContextUsage = &contextUsage{Tokens: used, ContextWindow: window, Percent: percentOf(used, window)}
+		st.ContextUsage = &acpext.ContextUsage{Tokens: used, ContextWindow: window, Percent: percentOf(used, window)}
 	}
 	return st
 }
 
 func (a *Agent) extGetSessionStats(_ context.Context, params jsontext.Value) (any, error) {
-	_, s, err := extSession[sessionParams](a, params)
+	_, s, err := extSession[acpext.SessionParams](a, params)
 	if err != nil {
 		return nil, err
 	}
 	return a.statsOf(s, s.log.Entries()), nil
 }
 
-type forkMessage struct {
-	EntryID string `json:"entryId"`
-	Text    string `json:"text"`
-}
-
-type forkMessagesResult struct {
-	Messages []forkMessage `json:"messages"`
-}
-
 // extGetForkMessages are the user messages with text, as /fork lists them.
 func (a *Agent) extGetForkMessages(_ context.Context, params jsontext.Value) (any, error) {
-	_, s, err := extSession[sessionParams](a, params)
+	_, s, err := extSession[acpext.SessionParams](a, params)
 	if err != nil {
 		return nil, err
 	}
-	res := forkMessagesResult{Messages: []forkMessage{}}
+	res := acpext.ForkMessagesResult{Messages: []acpext.ForkMessage{}}
 	for _, e := range s.log.Entries() {
 		if e.Type == session.TypeMessage && e.Message != nil && e.Message.Role == session.RoleUser {
 			if text := e.Message.Text(); text != "" {
-				res.Messages = append(res.Messages, forkMessage{EntryID: e.ID, Text: text})
+				res.Messages = append(res.Messages, acpext.ForkMessage{EntryID: e.ID, Text: text})
 			}
 		}
 	}

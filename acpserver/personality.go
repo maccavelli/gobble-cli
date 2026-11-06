@@ -11,22 +11,12 @@ import (
 	"unicode/utf8"
 
 	acp "github.com/maccavelli/acp-go-sdk2"
+	"github.com/maccavelli/gobble-cli/acpext"
 
 	"github.com/maccavelli/gobble-cli/jsonx"
 	"github.com/maccavelli/gobble-cli/personality"
 	"github.com/maccavelli/gobble-cli/session"
 )
-
-// methodPersonality is the notification of a session's personality, at its
-// start and at each change (0022-MADR D6).
-const methodPersonality = "_gobble/personality"
-
-// personalityNotice is _gobble/personality's params.
-type personalityNotice struct {
-	SessionID acp.SessionId `json:"sessionId"`
-	Name      string        `json:"name"`
-	Level     int           `json:"level"`
-}
 
 // personalityData is a gobble.personality entry's data: the personality a
 // switch chose, by its canonical name (0022-MADR D6).
@@ -107,9 +97,9 @@ func (a *Agent) accepted(s *liveSession) bool {
 }
 
 // personalityNotice is the session's _gobble/personality.
-func (a *Agent) personalityNotice(s *liveSession) personalityNotice {
+func (a *Agent) personalityNotice(s *liveSession) acpext.PersonalityNotice {
 	v := a.voice(s)
-	return personalityNotice{SessionID: s.id, Name: v.Name(), Level: v.Level()}
+	return acpext.PersonalityNotice{SessionID: string(s.id), Name: v.Name(), Level: v.Level()}
 }
 
 // askInsults asks the client, once per user, before a level-5 personality
@@ -144,7 +134,7 @@ func (a *Agent) askInsults(ctx context.Context, conn *acp.AgentSideConnection, s
 	}
 	if a.save != nil {
 		if err := a.save("bombasticAccepted", "true"); err != nil {
-			return false, acp.NewInternalError(jsonx.Strings(map[string]string{keyReason: err.Error()}))
+			return false, acp.NewInternalError(errData(acpext.ErrorData{Reason: err.Error()}))
 		}
 	}
 	a.mu.Lock()
@@ -184,7 +174,7 @@ func (a *Agent) switchPersonality(ctx context.Context, conn *acp.AgentSideConnec
 	a.mu.Lock()
 	s.voice = v
 	a.mu.Unlock()
-	out.notify(methodPersonality, a.personalityNotice(s))
+	out.notify(acpext.MethodPersonality, a.personalityNotice(s))
 	return v, true, out.err
 }
 
@@ -277,23 +267,11 @@ func (a *Agent) choose(ctx context.Context, t *cmdTurn, v *personality.Voice) er
 	return nil
 }
 
-type setPersonalityParams struct {
-	sessionParams
-	Name string `json:"name"`
-}
-
-// personalityResult is _gobble/set_personality's result: the session's
-// personality after it, which a declined question leaves as it was.
-type personalityResult struct {
-	Name  string `json:"name"`
-	Level int    `json:"level"`
-}
-
 // extSetPersonality is /personality NAME's path for a client: an unknown
 // name is invalid params; a declined level-5 question is no error, and the
 // result names the personality that stays (0022-MADR D6).
 func (a *Agent) extSetPersonality(ctx context.Context, params jsontext.Value) (any, error) {
-	p, s, err := extSession[setPersonalityParams](a, params)
+	p, s, err := extSession[acpext.SetPersonalityParams](a, params)
 	if err != nil {
 		return nil, err
 	}
@@ -306,5 +284,5 @@ func (a *Agent) extSetPersonality(ctx context.Context, params jsontext.Value) (a
 	if err != nil {
 		return nil, err
 	}
-	return personalityResult{Name: after.Name(), Level: after.Level()}, nil
+	return acpext.PersonalityResult{Name: after.Name(), Level: after.Level()}, nil
 }

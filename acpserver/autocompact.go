@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"slices"
 
-	acp "github.com/maccavelli/acp-go-sdk2"
+	"github.com/maccavelli/gobble-cli/acpext"
 
 	"github.com/maccavelli/gobble-cli/agent"
 	"github.com/maccavelli/gobble-cli/compaction"
@@ -15,40 +15,10 @@ import (
 	"github.com/maccavelli/gobble-cli/session"
 )
 
-// methodCompaction is the notification of a compaction's start and end
-// (0005-PLAN F5-2 decision 9).
-const methodCompaction = "_gobble/compaction"
-
-// A compaction's phases and reasons, as _gobble/compaction names them.
-const (
-	phaseStart      = "start"
-	phaseEnd        = "end"
-	reasonManual    = "manual"
-	reasonThreshold = "threshold"
-	reasonOverflow  = "overflow"
-)
-
-// compactionNotice is _gobble/compaction's params.
-type compactionNotice struct {
-	SessionID    acp.SessionId `json:"sessionId"`
-	Phase        string        `json:"phase"`
-	Reason       string        `json:"reason"`
-	TokensBefore int64         `json:"tokensBefore,omitzero"`
-	Error        string        `json:"error,omitzero"`
-	Paused       compactPause  `json:"paused,omitzero"`
-}
-
-// compactPause is how long a failed automatic compaction pauses the
-// automatic trigger (0005-PLAN F5-2 decision 11): for the rest of the
-// turn, or for the session.
-type compactPause string
-
-// The pauses.
-const (
-	pauseNone    compactPause = ""
-	pauseTurn    compactPause = "turn"
-	pauseSession compactPause = "session"
-)
+// pauseNone is no pause of the automatic trigger: acpext.CompactionPause's
+// zero value, beside its PauseTurn and PauseSession (0005-PLAN F5-2
+// decision 11).
+const pauseNone acpext.CompactionPause = ""
 
 // maxTurnCompactions bounds a turn's compactions, at the threshold and on
 // overflow together (Kilo's; 0005-PLAN F5-2 decision 4).
@@ -65,11 +35,11 @@ func overflowFailed(err error) error {
 // pauseOf is the pause a failed automatic compaction takes: the session's
 // when asking again with the same history and model cannot do better, the
 // turn's otherwise (0005-PLAN F5-2 decision 11).
-func pauseOf(err error) compactPause {
+func pauseOf(err error) acpext.CompactionPause {
 	if errors.Is(err, llm.ErrContextOverflow) || errors.Is(err, compaction.ErrSummaryRefused) {
-		return pauseSession
+		return acpext.PauseSession
 	}
-	return pauseTurn
+	return acpext.PauseTurn
 }
 
 // autoCompaction is one turn's agent.Config.Compact (0005-PLAN F5-2
@@ -97,10 +67,10 @@ func (c *autoCompaction) compact(ctx context.Context, overflow bool) (*agent.Com
 	if off {
 		return nil, nil
 	}
-	reason := reasonThreshold
+	reason := acpext.CompactionThreshold
 	if overflow {
-		reason = reasonOverflow
-		if pause == pauseSession {
+		reason = acpext.CompactionOverflow
+		if pause == acpext.PauseSession {
 			return nil, fmt.Errorf("the context is over the model's window, and automatic compaction is paused after it failed: %s; run /compact, or change the model", why)
 		}
 	} else {
@@ -124,18 +94,18 @@ func (c *autoCompaction) compact(ctx context.Context, overflow bool) (*agent.Com
 		return nil, nil //nolint:nilerr // at the threshold, a session Prepare refuses is left as it is, and the call goes ahead (decision 5)
 	}
 	c.out.flush()
-	c.out.notify(methodCompaction, compactionNotice{SessionID: s.id, Phase: phaseStart, Reason: reason})
+	c.out.notify(acpext.MethodCompaction, acpext.CompactionNotice{SessionID: string(s.id), Phase: acpext.PhaseStart, Reason: reason})
 	res, used, err := a.runCompaction(ctx, s, prep, a.summaryModel(s, c.provider, c.providerID), "")
 	if err != nil {
 		if ctx.Err() != nil {
-			c.out.notify(methodCompaction, compactionNotice{SessionID: s.id, Phase: phaseEnd, Reason: reason, Error: "cancelled"})
+			c.out.notify(acpext.MethodCompaction, acpext.CompactionNotice{SessionID: string(s.id), Phase: acpext.PhaseEnd, Reason: reason, Error: "cancelled"})
 			return nil, context.Cause(ctx)
 		}
 		p := pauseOf(err)
 		a.mu.Lock()
 		s.pause, s.pauseErr = p, err.Error()
 		a.mu.Unlock()
-		c.out.notify(methodCompaction, compactionNotice{SessionID: s.id, Phase: phaseEnd, Reason: reason, Error: err.Error(), Paused: p})
+		c.out.notify(acpext.MethodCompaction, acpext.CompactionNotice{SessionID: string(s.id), Phase: acpext.PhaseEnd, Reason: reason, Error: err.Error(), Paused: p})
 		if overflow {
 			return nil, overflowFailed(err)
 		}
@@ -143,7 +113,7 @@ func (c *autoCompaction) compact(ctx context.Context, overflow bool) (*agent.Com
 	}
 	c.done++
 	c.compacted = true
-	c.out.notify(methodCompaction, compactionNotice{SessionID: s.id, Phase: phaseEnd, Reason: reason, TokensBefore: res.TokensBefore})
+	c.out.notify(acpext.MethodCompaction, acpext.CompactionNotice{SessionID: string(s.id), Phase: acpext.PhaseEnd, Reason: reason, TokensBefore: res.TokensBefore})
 	c.out.send(a.contextUpdate(s, used))
 	a.mu.Lock()
 	history := slices.Clone(s.history)
