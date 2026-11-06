@@ -35,3 +35,7 @@ tmp/
 temp/
 .cache/
 .worktrees/
+
+# A local workspace over the root and acpext never lands (0042-MADR D5).
+go.work
+go.work.sum

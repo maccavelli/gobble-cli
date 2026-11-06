@@ -1,0 +1,20 @@
+{
+  "model": {
+    "provider": "fake",
+    "id": "m1"
+  },
+  "thinkingLevel": "off",
+  "isStreaming": false,
+  "isCompacting": false,
+  "steeringMode": "one-at-a-time",
+  "followUpMode": "one-at-a-time",
+  "sessionFile": "/work/sessions/2026-11-06T04-43-47-121Z_01a1af2b-8431-7737-8af1-265f5353d2f5.jsonl",
+  "sessionId": "01a1af2b-8431-7737-8af1-265f5353d2f5",
+  "sessionName": "Mine",
+  "autoCompactionEnabled": true,
+  "messageCount": 2,
+  "pendingMessageCount": 0,
+  "mode": "default",
+  "cwd": "/work/project",
+  "personality": "boring"
+}

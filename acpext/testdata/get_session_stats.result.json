@@ -1,0 +1,22 @@
+{
+  "sessionFile": "/work/sessions/2026-11-06T04-43-41-483Z_01a1af2b-6e2b-7506-9453-fc02bf6b155b.jsonl",
+  "sessionId": "01a1af2b-6e2b-7506-9453-fc02bf6b155b",
+  "userMessages": 1,
+  "assistantMessages": 1,
+  "toolCalls": 0,
+  "toolResults": 0,
+  "totalMessages": 2,
+  "tokens": {
+    "input": 10,
+    "output": 2,
+    "cacheRead": 0,
+    "cacheWrite": 0,
+    "total": 12
+  },
+  "cost": 0.00004,
+  "contextUsage": {
+    "tokens": 12,
+    "contextWindow": 1000,
+    "percent": 1.2
+  }
+}

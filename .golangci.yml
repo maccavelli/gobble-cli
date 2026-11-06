@@ -150,6 +150,12 @@ linters:
       - linters:
           - forbidigo
         path: cmd/gobble/main\.go
+      # acpext's tests decode with encoding/json, as an importer of the
+      # contract does; acpext cannot import jsonx (0042-PLAN deviation 2).
+      - linters:
+          - depguard
+        path: ^acpext/.*_test\.go$
+        text: 0039-MADR D24
       # jsonx is where encoding/json/v2 is called (0039-MADR D24).
       - linters:
           - forbidigo

@@ -1,0 +1,5 @@
+{
+  "command": "gobble auth login grok",
+  "provider": "grok",
+  "reason": "no credential"
+}

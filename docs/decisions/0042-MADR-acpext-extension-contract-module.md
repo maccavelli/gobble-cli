@@ -341,6 +341,9 @@ correct facts the record asserted. The text above is struck where it changed.
   So they run from the root against `acpext/`: `go tool govulncheck -C acpext ./...`, the staticcheck binary the
   root builds, `go tool golint` over acpext's files, golangci-lint in `acpext/` with the root's configuration, and
   `go -C acpext` for `vet`, `test`, `fix -diff` and `mod tidy -diff`.
+  * *(PLAN deviation 2, 2026-11-06.)* The root's `depguard` rule against `encoding/json` (0039-MADR D24) does not
+    apply to acpext's tests: they decode with `encoding/json` as an importer does, and acpext cannot import
+    `jsonx`. acpext's own code stays under the rule.
 
 #### A4. archtest names acpext as another module
 

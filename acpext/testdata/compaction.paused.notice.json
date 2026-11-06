@@ -1,0 +1,7 @@
+{
+  "sessionId": "01a1af2b-67b2-7778-a1b7-5e8694985bdd",
+  "phase": "end",
+  "reason": "threshold",
+  "error": "Summarization failed: llm: offline",
+  "paused": "turn"
+}

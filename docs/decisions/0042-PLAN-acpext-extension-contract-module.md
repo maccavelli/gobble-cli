@@ -103,7 +103,8 @@ Files: this pair; `docs/decisions/0004-MADR-go-module-architecture.md`; `docs/RE
 
 **Gate:** P0 committed.
 
-Files: `acpext/` (all of it), `Makefile`, `.github/workflows/ci.yml`, `.gitignore`, this plan, `docs/README.md`.
+Files: `acpext/` (all of it), `Makefile`, `.github/workflows/ci.yml`, `.gitignore`, this plan, `docs/README.md`;
+*(deviation 2)* `.golangci.yml` and the MADR.
 
 1. **The facts,** re-read; a difference is a deviation:
    * the twenty-entry `extensions` table, and each param and result struct it decodes or returns, with its fields,
@@ -144,6 +145,8 @@ Files: `acpext/` (all of it), `Makefile`, `.github/workflows/ci.yml`, `.gitignor
    * **Round trip.** `testdata/` holds one frame per method, copied from what gobble sends today. The source is
      `acpserver`'s and `acpclient`'s test expectations and `acpserver/testdata/session.golden`. A frame no test
      records yet is captured once from `gobble acp` at the base, with its identifiers replaced.
+     *(Deviation 1, 2026-11-06: captured from `acpserver`'s own test harness, not the
+     binary.)*
 
      Each frame decodes into its acpext type and encodes back to the same JSON, compared as values. The test runs
      with `encoding/json` and with `encoding/json/v2`. *(Amended 2026-11-06, MADR Confirmation 8: each decode
@@ -312,3 +315,122 @@ The base is `0c07a72`, the amendment's commit. No deviation.
 3. `make check-records markdownlint` passed, 0 issues.
 4. The identifier scan over the staged records found nothing.
 5. Committed on `main` on the owner's word in the same turn.
+
+### Deviation 1 (2026-11-06): P1 step 4's frames, captured through the harness
+
+- **Found** at P1 step 4, before any acpext file was written (`main` at `8632eeb`). Step 4 says a frame no test
+  records yet "is captured once from `gobble acp` at the base". `acpserver/testdata/session.golden` records only
+  `initialize`'s `_meta.gobble` and one `_gobble/personality`, and no test keeps a result's raw bytes: the extension
+  tests decode each into a map (`acpserver/extensions_test.go:92-104`). So nearly every frame needs capturing. The
+  `gobble acp` binary cannot give `_gobble/compact`'s or `_gobble/usage`'s without a live model and the owner's key,
+  and its ids, timestamps and token counts differ on every run.
+- **Decision,** the owner's ("Harness capture"): a scratch `_test.go`, on a scratch copy and never committed, drives
+  `acpserver`'s own `Agent` over `acptest`, with `llmtest`'s scripted model, as the extension tests do. It records:
+  - each result's raw bytes, as `ClientSideConnection.CallExtension` returns them;
+  - each notification's raw params (`acptest.Notice.Params`);
+  - each refusal's `data`.
+
+  It is the same server code and the same encoder as the binary's, with no key, and it is repeatable. The params
+  frames, which gobble receives and does not send, are written from `acpserver`'s own JSON tags. Ids and paths of
+  the scratch run are replaced with fixed values, as step 4 already asks.
+- **Files added to scope:** none. The capture test is scratch only. The MADR does not change.
+
+### Deviation 2 (2026-11-06): the root's JSON rule and acpext's tests
+
+- **Found** at P1 step 6, running golangci-lint in `acpext/` with the root's `.golangci.yml`, as MADR A3 has it:
+
+  ```text
+  acpext/example_test.go:4:2: import 'encoding/json' is not allowed from list 'json': use jsonx, on encoding/json/v2 (0039-MADR D24) (depguard)
+  acpext/roundtrip_test.go:5:2: import 'encoding/json' is not allowed from list 'json': use jsonx, on encoding/json/v2 (0039-MADR D24) (depguard)
+  ```
+
+  New with acpext; no root file imports `encoding/json`. acpext's tests need it: Confirmation 8's round trip is
+  under both encoders, and the examples show the encoder an importer (magic-cli-remote, the SDK) uses. acpext cannot
+  import `jsonx` (MADR A1). `forbidigo`'s `encoding/json/v2` rule is already excluded for `_test.go` files.
+- **Decision,** the owner's ("Exclude acpext tests"): one exclusion in the root `.golangci.yml`, `depguard` on
+  `^acpext/.*_test\.go$` for the text `0039-MADR D24`, with a comment citing this deviation. acpext's own code stays
+  under the rule. MADR A3 has a note.
+- **Files added to scope:** `.golangci.yml`, and the MADR for A3's note.
+
+### P1 record (2026-11-06): the module
+
+The base is `8632eeb`, P0's commit. Deviations 1 and 2, above.
+
+1. **The facts** (step 1), re-read at the base, each as the MADR's D2, D3 and A3 have it:
+
+   | acpext | source |
+   | :--- | :--- |
+   | `SessionParams`, `MessageParams`, `ModeParams`, `CompactParams`, `EnabledParams` | `acpserver/extensions.go:80`, `:86`, `:91`, `:96`, `:101` |
+   | `SetSessionNameParams`, `ForkParams`, `GetEntriesParams` | `:106` (`nameParams`), `:111`, `:116` (`entriesParams`) |
+   | `SetPersonalityParams`, `PersonalityResult` | `acpserver/personality.go:280`, `:287` |
+   | `QueuedResult`, `ClearedResult`, `CompactResult`, `UsageResult` | `acpserver/extensions.go:145`, `:183`, `:220`, `:269` |
+   | `ForkResult`, `CloneResult` | `:384` (`forkResult`; clone sets no `text`, `:433`) |
+   | `ModelRef`, `StateResult`, `MessagesResult`, `EntriesResult`, `TextResult` | `:438`, `:444`, `:503`, `:515`, `:543` |
+   | `SessionStats`, `ContextUsage`, `TokenStats` | `:580`, `:595`, `:601` (`statsTokens`) |
+   | `ForkMessage`, `ForkMessagesResult` | `:632`, `:637` |
+   | `RetryNotice`; `Phase`; `RetryCause` | `acpserver/prompt.go:81`; `acpserver/autocompact.go:24-25`; `agent/event.go:87-93` and `llm/provider/list.go:106-128` |
+   | `CompactionNotice`, `CompactionReason`, `CompactionPause` | `acpserver/autocompact.go:32`, `:26-28`, `:44-51` |
+   | `PersonalityNotice` | `acpserver/personality.go:25` |
+   | `QueueMode`, `Disposition` | `acpserver/queue.go:13-14`; `acpserver/extensions.go:180` |
+   | `CapabilitiesMeta`, `MetaKey` | `acpserver/agent.go:394`, `:36` |
+   | `AuthProvider`, `LoginSuffix` | `acpserver/auth.go:16`, `:32` |
+   | `ErrorData` | `acpserver/agent.go:44-47`, `:417-418`, `:786`; `auth.go:80`; `prompt.go:280-288` |
+
+   `authProviders()`, run on a scratch copy at go-llmprovider-sdk `v1.26.1`, gave the nine of MADR D3, in order, with
+   `Login` for grok and kilo; `AuthProviders()` and its test hold that list.
+2. **`acpext/go.mod`** (step 2): `module github.com/maccavelli/gobble-cli/acpext`, `go 1.27.3`, no requirement.
+   `go -C acpext mod tidy -diff` is empty and writes no `go.sum`. `acpext/LICENSE` is the root's (`cmp` equal).
+3. **The package** (step 3): `doc.go` (the method table, how a client calls and reads `CapabilitiesMeta` with
+   `acp.DecodeMeta`, the raw fields, versions), `methods.go` (the 23 constants, `Requests()`, `Notifications()`),
+   `types.go` and `auth.go`, as A1 to A3 have them. golint is clean on each file.
+4. **The tests** (step 4): `roundtrip_test.go`, `methods_test.go`, `auth_test.go` and `example_test.go`, 22 tests and
+   examples, passing. `testdata/` holds 34 frames: 20 results (the six `{}` results have no type and are not kept), 6
+   notifications, 4 errors' data, `initialize`'s `_meta.gobble` from `session.golden`, and 9 params frames written from
+   `acpserver`'s tags (deviation 1). The capture ran every `acpserver` test with a recorder on a scratch copy, 660
+   lines; the frames keep gobble's own number spelling, and their scratch paths are `/work/…`.
+5. **Seen failing** (C9), each on its own scratch copy, by a script; every expectation held:
+   - `name` to `title` in `SetSessionNameParams`: `set_session_name.params.json, encoding/json: decode: json: unknown
+     field "name"`, the v2 decode likewise, and `ExampleSetSessionNameParams` failed;
+   - `omitzero` dropped from `RetryNotice.Attempt`: `retry.end.notice.json, encoding/json: encodes back as …`, under
+     both encoders;
+   - `MethodUsage` dropped from `Requests()`: `TestRequests` and `TestCapabilitiesMetaIsRequests` failed;
+   - a provider dropped from `AuthProviders()`: `TestAuthProviders` failed;
+   - a member `jitterMs` added to `retry.start.notice.json`: `json: unknown field "jitterMs"`, and v2's `unknown object
+     member name "jitterMs"`;
+   - `SessionID` dropped from `ErrorData`: `invalid-params.error.json` and `mid-turn.error.json` refused `sessionId`
+     under both encoders;
+   - an unbroken copy passed.
+6. **`check-acpext-deps`** (step 5), in `preflight`. Seen failing: an import of `jsonx` (`check-acpext-deps: go list
+   failed: acpext does not build from the standard library alone`); `golang.org/x/sys/unix`, required and building
+   (`acpext imports outside the standard library: golang.org/x/sys/unix`); and `github.com/maccavelli/acp-go-sdk2`
+   (the same, naming it).
+   - *Found by C9:* the first run passed the `jsonx` copy. macOS's GNU Make 3.81 ignores `.SHELLFLAGS`, so a recipe
+     does not stop at a failing command: `go list` failed and the recipe went on. The gate now checks `go list`'s
+     status, and each per-module loop keeps every module's failure in `rc`, which a vet error planted in `jsonx`, the
+     root's, before acpext's passing turn, now shows (`make vet` exit 2).
+7. **Per-module gates** (step 6). `MODULES := . acpext`; `test`, `race`, `vet`, `lint`, `staticcheck`, `vulncheck`,
+   `tidy` and `fix-check` loop over it, each in the module's directory with the root's tools; `preflight`'s tidy check
+   runs `go -C acpext mod tidy -diff`. Seen failing, each passing with the root alone: an unused requirement in
+   `acpext/go.mod` (the tidy diff); `x = x` in an acpext file (`make vet`: `self-assignment of x`); a failing acpext
+   test (`make test`). The root's `go list ./...` names no acpext package.
+   - Deviation 2's exclusion is seen holding acpext's own code to the rule: `encoding/json` imported in
+     `acpext/types.go` is refused (`depguard`).
+8. **CI** (step 7): `go -C acpext mod download`, `go -C acpext test -count=1 ./...` and `go -C acpext mod tidy -diff`
+   join their steps. `actionlint` passed.
+9. **`.gitignore`** (step 8) has `go.work` and `go.work.sum`.
+10. **Nothing in the root changed** (step 9): the root's `go.mod` and `go.sum` are unchanged; `go list -m` prints one
+    module.
+11. **G-local:** `make pre-add-check` over acpext's 8 files: clean; `make preflight`: passed, with `go vet (acpext)`,
+    `golangci-lint (acpext)`, `govulncheck (acpext)` and `check-acpext-deps: ok`; `make race`: 39 ok, the root's 38 and
+    acpext.
+12. **G-hosts,** on a copy of the tree, 878 files: on each host `make test` 39 ok and `make race` 39 ok, `make
+    check-records markdownlint` passed, and preflight stopped at `verify-build-metadata`, as on every copy, past
+    `check-acpext-deps: ok`.
+    - On the Windows laptop the first run stopped in `staticcheck`'s darwin pass, in root packages: `could not import
+      github.com/maccavelli/gobble-cli/internal/cli/complete (can't find export data (bufio: buffer full))`, and the same
+      for `editor`, `render` and `term`. It failed the old way too, the binary run from the root. With an empty build
+      cache of its own it passed, and the run was repeated that way and passed.
+    - The cause was the host's build cache: 21 of its 45,132 output files were zero-filled from the start and did not
+      hash to their names, the four test variants' export data among them. On the owner's word they were removed,
+      each re-checked first, and the darwin pass then passed on the host's own cache. Nothing of P1's caused it.
+13. **Not done:** the commit, then the disclosure guard, the push and the tag (step 11), each on the owner's word.

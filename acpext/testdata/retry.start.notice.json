@@ -1,0 +1,8 @@
+{
+  "sessionId": "00dc6acf-ac00-7000-abce-ab0a84273d68",
+  "phase": "start",
+  "cause": "empty_reply",
+  "attempt": 1,
+  "maxAttempts": 2,
+  "delayMs": 2000
+}

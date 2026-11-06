@@ -1,0 +1,37 @@
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "hello",
+      "timestamp": 1793940221484
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "hi"
+        }
+      ],
+      "api": "go-llmprovider-sdk",
+      "provider": "fake",
+      "model": "m1",
+      "usage": {
+        "input": 10,
+        "output": 2,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "totalTokens": 12,
+        "cost": {
+          "input": 0.00002,
+          "output": 0.00002,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0.00004
+        }
+      },
+      "stopReason": "stop",
+      "timestamp": 1793940221485
+    }
+  ]
+}

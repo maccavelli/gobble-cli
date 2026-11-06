@@ -1,0 +1,20 @@
+{
+  "text": "Session usage\n\nInput: 0\nOutput: 0\nTotal: 0\nCost: unknown (no price for fake/m1 in the catalog)\nAccount and rate-limit figures are not reported by fake.\n",
+  "stats": {
+    "sessionFile": "/work/project",
+    "sessionId": "01a1af2b-6f5a-7214-ba78-49d4b4705227",
+    "userMessages": 0,
+    "assistantMessages": 0,
+    "toolCalls": 0,
+    "toolResults": 0,
+    "totalMessages": 0,
+    "tokens": {
+      "input": 0,
+      "output": 0,
+      "cacheRead": 0,
+      "cacheWrite": 0,
+      "total": 0
+    },
+    "cost": 0
+  }
+}

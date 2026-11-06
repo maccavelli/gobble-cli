@@ -2,6 +2,12 @@
 # Target names follow magic-cli-remote. apidiff is present and a no-op
 # below v1.0.0.
 MODULE := github.com/maccavelli/gobble-cli
+# The modules each Go gate runs over: the root, and the nested acpext, the
+# ACP extension contract (0042-MADR D6). Each runs in its own directory,
+# with the root's tools.
+MODULES := . acpext
+# A loop over them keeps each module's failure in rc: macOS's GNU Make 3.81
+# ignores .SHELLFLAGS, so a recipe does not stop at a failing command.
 # Recipes need bash (for pipefail) and grep, diff, cp and mv. On Windows
 # that is Git's bash, and Git's usr/bin goes on PATH because Git bash does
 # not put its coreutils there when make starts it from PowerShell. Set
@@ -88,7 +94,7 @@ BUILDINFO := github.com/maccavelli/go-selfupdate-lib/buildinfo
 LDFLAGS := -X $(BUILDINFO).version=$(VERSION) -X $(BUILDINFO).kind=$(BUILD_KIND)
 
 .PHONY: build install test race vet fmt lint staticcheck vulncheck tidy clean \
-	pre-add-check preflight check-cgo-off verify-build-metadata fix-check archtest apidiff \
+	pre-add-check preflight check-cgo-off verify-build-metadata fix-check archtest apidiff check-acpext-deps \
 	check-records check-libs markdownlint probe-conhost completion-shells perf $(BIN)
 
 # Shipped binaries are pure Go. check-cgo-off refuses CGO_ENABLED other than 0
@@ -107,10 +113,10 @@ install: check-cgo-off
 	CGO_ENABLED=$(CGO_ENABLED) go install ./...
 
 test:
-	go test ./...
+	@rc=0; for m in $(MODULES); do echo "go test ($$m)"; go -C $$m test ./... || rc=1; done; exit $$rc
 
 race:
-	CGO_ENABLED=1 go test -race ./...
+	@rc=0; for m in $(MODULES); do echo "go test -race ($$m)"; CGO_ENABLED=1 go -C $$m test -race ./... || rc=1; done; exit $$rc
 
 # The CLI mode's timings against their baselines, at most three times each
 # (0030-MADR D5). Not part of preflight: timing varies by host and by load.
@@ -118,7 +124,7 @@ perf:
 	go test -tags perf -run '^TestPerfBudget$$' -count=1 -v ./internal/cli/ ./internal/cli/editor/
 
 vet:
-	go vet ./...
+	@rc=0; for m in $(MODULES); do echo "go vet ($$m)"; go -C $$m vet ./... || rc=1; done; exit $$rc
 
 fmt:
 	gofmt -w .
@@ -129,7 +135,7 @@ lint:
 		echo "golangci-lint not found. Install: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0" >&2; \
 		exit 2; \
 	}
-	golangci-lint run ./...
+	@rc=0; for m in $(MODULES); do echo "golangci-lint ($$m)"; (cd $$m && golangci-lint run --config "$(CURDIR)/.golangci.yml" ./...) || rc=1; done; exit $$rc
 
 # staticcheck is pinned by the tool directive to the version magic-cli-remote
 # pins (v0.8.1). It is built once for THIS machine from that requirement.
@@ -148,16 +154,18 @@ staticcheck: $(STATICCHECK_BIN)
 	ver="$$(./$(STATICCHECK_BIN) -version)"; \
 	for goos in linux darwin windows; do \
 		echo "staticcheck $$ver GOOS=$$goos"; \
-		GOOS=$$goos CGO_ENABLED=0 ./$(STATICCHECK_BIN) ./... || rc=1; \
+		for m in $(MODULES); do \
+			(cd $$m && GOOS=$$goos CGO_ENABLED=0 "$(CURDIR)/$(STATICCHECK_BIN)" ./...) || rc=1; \
+		done; \
 		GOOS=$$goos CGO_ENABLED=0 $(PYTHON) scripts/check_staticcheck_ignored.py ./$(STATICCHECK_BIN) || rc=1; \
 	done; \
 	exit $$rc
 
 vulncheck:
-	go tool govulncheck ./...
+	@rc=0; for m in $(MODULES); do echo "govulncheck ($$m)"; go tool govulncheck -C $$m ./... || rc=1; done; exit $$rc
 
 tidy:
-	go mod tidy
+	@rc=0; for m in $(MODULES); do go -C $$m mod tidy || rc=1; done; exit $$rc
 
 clean:
 	rm -rf bin
@@ -181,12 +189,16 @@ preflight: check-cgo-off
 		echo "go.mod/go.sum not tidy - commit the result of 'make tidy'"; rc=1; \
 	fi; \
 	mv -f .go.mod.pre go.mod; mv -f .go.sum.pre go.sum; \
+	if ! go -C acpext mod tidy -diff; then \
+		echo "acpext/go.mod not tidy - commit the result of 'make tidy'"; rc=1; \
+	fi; \
 	exit $$rc
 	@echo "==> pre-add-check"; bash scripts/go-precheck.sh $(shell git ls-files '*.go'; git ls-files --others --exclude-standard '*.go')
-	@echo "==> go vet"; go vet ./...
+	@echo "==> go vet"; $(MAKE) --no-print-directory vet
 	@echo "==> staticcheck"; $(MAKE) --no-print-directory staticcheck
 	@echo "==> golangci-lint"; $(MAKE) --no-print-directory lint
-	@echo "==> govulncheck"; go tool govulncheck ./...
+	@echo "==> govulncheck"; $(MAKE) --no-print-directory vulncheck
+	@echo "==> check-acpext-deps"; $(MAKE) --no-print-directory check-acpext-deps
 	@echo "==> fix-check"; $(MAKE) --no-print-directory fix-check
 	@echo "==> archtest"; $(MAKE) --no-print-directory archtest
 	@echo "==> apidiff"; $(MAKE) --no-print-directory apidiff
@@ -215,12 +227,29 @@ verify-build-metadata:
 	$(PYTHON) scripts/verify_build_metadata.py
 
 fix-check:
-	@out="$$(go fix -diff ./...)"; \
-	if [ -n "$$out" ]; then \
-		printf '%s\n' "$$out"; \
-		echo "fix-check: go fix -diff ./... is not empty" >&2; \
+	@for m in $(MODULES); do \
+		out="$$(go -C $$m fix -diff ./...)" || { echo "fix-check: go fix -diff failed in $$m" >&2; exit 1; }; \
+		if [ -n "$$out" ]; then \
+			printf '%s\n' "$$out"; \
+			echo "fix-check: go fix -diff ./... is not empty in $$m" >&2; \
+			exit 1; \
+		fi; \
+	done
+
+# acpext imports only the standard library (0042-MADR D6, A1): every
+# package it and its tests build from is standard, or acpext's own.
+check-acpext-deps:
+	@deps="$$(go -C acpext list -deps -test -f '{{if not .Standard}}{{.ImportPath}}{{end}}' ./...)" || { \
+		echo "check-acpext-deps: go list failed: acpext does not build from the standard library alone" >&2; \
 		exit 1; \
-	fi
+	}; \
+	bad="$$(printf '%s\n' "$$deps" | grep -v -E '^(github\.com/maccavelli/gobble-cli/acpext([._ ].*)?)?$$' || true)"; \
+	if [ -n "$$bad" ]; then \
+		echo "check-acpext-deps: acpext imports outside the standard library:" >&2; \
+		printf '%s\n' "$$bad" >&2; \
+		exit 1; \
+	fi; \
+	echo "check-acpext-deps: ok"
 
 # Records and docs links (0007-MADR D6).
 check-records:

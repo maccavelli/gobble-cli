@@ -67,6 +67,8 @@ jobs:
           if (-not (Get-Command make -ErrorAction SilentlyContinue)) { choco install make --no-progress }
           make --version
       - run: go mod download
+      # acpext, the nested module, requires nothing (0042-MADR A1).
+      - run: go -C acpext mod download
       # make preflight runs golangci-lint, at the fleet pin.
       - name: golangci-lint
         shell: bash
@@ -80,6 +82,7 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/test-artifacts"
           go test -count=1 -artifacts -outputdir "$RUNNER_TEMP/test-artifacts" ./...
+          go -C acpext test -count=1 ./...
       - name: test artifacts
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -102,7 +105,9 @@ jobs:
         run: make race
       - name: go mod tidy -diff
         if: runner.os == 'Linux'
-        run: go mod tidy -diff
+        run: |
+          go mod tidy -diff
+          go -C acpext mod tidy -diff
       # shellcheck is pinned and checksum-verified, and first on PATH so
       # actionlint's embedded checks use it too, as the fleet runs it.
       - name: shellcheck, actionlint
