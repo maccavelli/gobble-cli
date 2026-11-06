@@ -3581,3 +3581,43 @@ The base is `0c49161`, P29's commit. No deviation.
    passed on both, 38 ok; `make check-records markdownlint` passed on both; preflight stops at `verify-build-metadata`,
    as on every copy.
 9. **Not done:** this plan's `docs/README.md` row, as in P29.
+
+### P31 record (2026-11-06): go-tui-lib/v2 `v2.12.0`
+
+The base is `578afea`, P30's commit. No deviation.
+
+1. **C2:** `git ls-remote --tags` at the phase's start lists `v2.12.0` as go-tui-lib's newest `v2` tag, and no sibling
+   has a tag newer than this plan names.
+2. **Checked first** (step 1): `python3 scripts/check_libs.py --lib go-tui-lib --tag v2.12.0`, "pinned v2.9.0, checking
+   v2.12.0": 14 checks, `archtest` and `api` among them, "0 failing checks".
+3. **The pin** (step 2): `go get github.com/maccavelli/go-tui-lib/v2@v2.12.0` ("upgraded … v2.9.0 => v2.12.0"), then
+   `go mod tidy`. `go.mod` changed on that line alone; `go.sum` lost the two `v2.9.0` lines and gained the two
+   `v2.12.0` lines, the `go.mod` hash unchanged, and nothing else.
+4. **No source change** (step 3): `go test -count=1 ./internal/cli/...` passed, 6 packages ok, the permission prompt's,
+   `glyph`'s, `safetext`'s, the editor's reprint and resize tests, `TestViewReprintsAtTheNextLineEnd`
+   (`internal/cli/reprint_test.go`) and `view-plain.golden` among them. gobble still passes the reply's `Idle` to
+   `HandleTimeout`, now at `internal/cli/view.go:530-534`, so its reprints are `v2.9.0`'s. The four goldens are
+   byte-identical to `ccd8aa8`'s (`git diff --quiet`).
+5. **The docs** (step 4): `README.md:137` and `docs/architecture.md:180` name `v2.12.0`; neither names `v2.9.0`.
+6. **G-local:** no Go file changed, so `make pre-add-check` had none to check; `make race`: 38 ok; `make perf` passed:
+   - `ReplyRender` 21.6 µs per op (baseline 30 µs), 174 allocs;
+   - `Reprint` 5.97 ms (baseline 9.4 ms), 44,185 allocs;
+   - `LineSessionStart` 1.05 ms (baseline 830 µs), 5,018 allocs, over its baseline and within its budget;
+   - `KeyDraw` 1.51 µs (baseline 1.5 µs), 5 allocs.
+
+   `make preflight` in the tree passed every gate up to `markdownlint`, and failed there on another session's untracked
+   `docs/reports/0042-REPORT-acpext-sdk-surface-and-magic-import.md:153` (MD040), as in P29. On a copy of what this
+   commit holds, `make check-records markdownlint` passed, 0 issues.
+7. **G-hosts,** on the Linux machine and the Windows laptop, that copy shipped to each, 833 files: `go test` and race
+   passed on both, 38 ok; `make check-records markdownlint` passed on both; preflight stops at `verify-build-metadata`,
+   as on every copy.
+   - `make perf` passed on both. The Linux machine: `ReplyRender` 74.2 µs (baseline 110 µs), `Reprint` 14.7 ms
+     (29 ms), `LineSessionStart` 2.89 ms (2.9 ms), `KeyDraw` 3.79 µs (5 µs). The Windows laptop: 24.7 µs (54 µs),
+     4.03 ms (12 ms), 2.00 ms (6.9 ms), 1.27 µs (1.4 µs).
+   - `make probe-conhost` passed on the Windows laptop: `TestConhost`, console window class "ConsoleWindowClass".
+   - On the Windows laptop the first run's SSH session timed out after preflight, so `make check-records
+     markdownlint`, `make perf` and `make probe-conhost` were run again on the same copy, with keep-alives, and passed.
+8. **Not done in this commit:** the plan's Verification, its first two items again, which closes the plan (deviation
+   23). `make check-libs` clones the last commit, so it reports every library at its own tag only once this commit
+   lands; the Verification, the plan's `complete` status and its `docs/README.md` row follow in the next commit (C7).
+   `go list -m` already reports MADR D1's four tags, and the goldens are unchanged (step 4).
