@@ -232,9 +232,13 @@ func (e *runEnv) stdinReader() io.Reader {
 }
 
 // lazyLog opens the logger on its first use, so commands that never log
-// (version, config path, help) create no state directory or log file.
+// (version, config path, help) create no state directory or log file. After
+// close it opens nothing and writes nothing: a record then is dropped
+// (0046-MADR D5). mu guards opened, closed, logger and closer.
 type lazyLog struct {
-	once   sync.Once
+	mu     sync.Mutex
+	opened bool
+	closed bool
 	level  slog.Level
 	out    *Output
 	stderr io.Writer // nil under `gobble acp`
@@ -242,37 +246,58 @@ type lazyLog struct {
 	closer io.Closer
 }
 
+// discardLogger is a closed log's: it writes nothing.
+var discardLogger = slog.New(slog.DiscardHandler)
+
 func (l *lazyLog) get() *slog.Logger {
-	l.once.Do(func() {
-		opts := logging.Options{Level: l.level, Stderr: l.stderr, Warn: l.stderr}
-		// On a terminal a record is a diagnostic, as D3's are (0024-MADR D6),
-		// shown through Output at the width of the moment and kept for a
-		// reprint (0030-MADR D4, as amended).
-		if l.stderr != nil && l.out.caps.Err.TTY {
-			opts.Show = l.out.logRecord
-			opts.Home, _ = os.UserHomeDir() //nolint:errcheck // with no home, paths are shown whole
-		}
-		if d, _, err := systemDirs(); err != nil {
-			l.out.Warnf("no log file: %v", err)
-		} else {
-			opts.File = filepath.Join(d.State, "logs", "gobble.log")
-		}
-		logger, closer, err := logging.Open(opts)
-		if err != nil {
-			// The default path failing is a warning, not a stop
-			// (magic-cli-remote 0157-MADR D8).
-			l.out.Warnf("no log file: %v", err)
-			opts.File = ""
-			if logger, closer, err = logging.Open(opts); err != nil {
-				logger, closer = slog.New(slog.DiscardHandler), nil
-			}
-		}
-		l.logger, l.closer = logger, closer
-	})
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.closed {
+		return discardLogger
+	}
+	if !l.opened {
+		l.opened = true
+		l.open()
+	}
 	return l.logger
 }
 
+// open opens the logger; l.mu is held.
+func (l *lazyLog) open() {
+	opts := logging.Options{Level: l.level, Stderr: l.stderr, Warn: l.stderr}
+	// On a terminal a record is a diagnostic, as D3's are (0024-MADR D6),
+	// shown through Output at the width of the moment and kept for a
+	// reprint (0030-MADR D4, as amended).
+	if l.stderr != nil && l.out.caps.Err.TTY {
+		opts.Show = l.out.logRecord
+		opts.Home, _ = os.UserHomeDir() //nolint:errcheck // with no home, paths are shown whole
+	}
+	if d, _, err := systemDirs(); err != nil {
+		l.out.Warnf("no log file: %v", err)
+	} else {
+		opts.File = filepath.Join(d.State, "logs", "gobble.log")
+	}
+	logger, closer, err := logging.Open(opts)
+	if err != nil {
+		// The default path failing is a warning, not a stop
+		// (magic-cli-remote 0157-MADR D8).
+		l.out.Warnf("no log file: %v", err)
+		opts.File = ""
+		if logger, closer, err = logging.Open(opts); err != nil {
+			logger, closer = slog.New(slog.DiscardHandler), nil
+		}
+	}
+	l.logger, l.closer = logger, closer
+}
+
+// close closes the log file, once; after it the log opens and writes nothing.
 func (l *lazyLog) close() error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.closed {
+		return nil
+	}
+	l.closed = true
 	if l.closer == nil {
 		return nil
 	}

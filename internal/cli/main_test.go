@@ -2,7 +2,10 @@ package cli
 
 import (
 	"bytes"
+	"errors"
 	"flag"
+	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
@@ -338,5 +341,32 @@ func golden(t *testing.T, name, got string) {
 	}
 	if string(want) != got {
 		t.Fatalf("%s differs from %s:\n--- got\n%s--- want\n%s", name, path, got, want)
+	}
+}
+
+// A log closed before it opened opens nothing after, and a log closed
+// after it opened writes nothing more: a record after close is dropped, not
+// written into whatever home is set by then (0046-MADR D5).
+func TestLogAfterCloseOpensNothing(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("GOBBLE_HOME", home)
+	out := &Output{out: &bytes.Buffer{}, err: &bytes.Buffer{}}
+	never := &lazyLog{level: slog.LevelInfo, out: out}
+	if err := never.close(); err != nil {
+		t.Fatal(err)
+	}
+	never.get().Info("after close")
+	if _, err := os.Stat(filepath.Join(home, "logs")); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("a record after close made %s/logs: %v", home, err)
+	}
+	used := &lazyLog{level: slog.LevelInfo, out: out}
+	used.get().Info("before close")
+	if err := used.close(); err != nil {
+		t.Fatal(err)
+	}
+	used.get().Info("after close")
+	b, err := os.ReadFile(filepath.Join(home, "logs", "gobble.log"))
+	if err != nil || !strings.Contains(string(b), "before close") || strings.Contains(string(b), "after close") {
+		t.Fatalf("the log %q (%v), want the record before close alone", b, err)
 	}
 }

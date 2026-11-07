@@ -434,3 +434,48 @@ cancelled and waited for, up to 6 s, before the log closes (0046-MADR D1)."
 * The identifier scan of the changed files found nothing.
 
 **Step 8** is this record. Staged; the owner commits.
+
+### P3 record (2026-11-07)
+
+On the owner's "committed, proceed" after P2 (`0d489ed`). Start state (C1): `main` at `0d489ed`, two ahead of
+`origin/main`, the tree clean. No deviation.
+
+**Step 1, the tests,** first:
+
+* `TestLogAfterCloseOpensNothing` (`main_test.go`) checks two logs. One is closed before it logged: a record after
+  `close` leaves no `logs` directory. The other logged, then was closed: a record after `close` is not in the file.
+* `TestReadKeptCreatesNothing` (`choice_test.go`): `readKept` in a fresh home finds nothing and leaves no `catalog`.
+  `writeKept` then writes one, and `readKept` reads it.
+
+**Step 2, the code.**
+
+* `internal/cli/main.go`:
+  * `lazyLog` loses its `sync.Once`, and takes a mutex over `opened`, `closed`, `logger` and `closer`.
+  * `get` returns `discardLogger` once `closed` is set, and otherwise opens on first use. Opening is `open`, the old
+    `once.Do` body.
+  * `close` sets `closed`, closes the file once, and returns `nil` when called again.
+* `internal/cli/choice.go`: `catalogPath(id)` resolves the path and creates nothing. `catalogFile` is `catalogPath`
+  with its directory created, which only `writeKept` uses now. `readKept` uses `catalogPath`.
+
+**Step 3, seen failing,** by `scratchpad/p3_seenfail.py` (not committed), each on a fresh scratch copy:
+
+| Case | Failure |
+| :--- | :--- |
+| `main.go` and `choice.go` at `HEAD`, the new tests kept | `readKept made <TMP>/TestReadKeptCreatesNothing<n>/001/catalog: <nil>`; `a record after close made <TMP>/TestLogAfterCloseOpensNothing<n>/001/logs: <nil>` |
+| `get` without its `closed` check | `a record after close made …/logs: <nil>` |
+| `readKept` on `catalogFile` again | `readKept made …/catalog: <nil>` |
+
+The same two failures first showed in the working tree, before step 2, with no planted change. They are quoted here
+from the scratch runs (C2).
+
+**Step 4, gates.**
+
+* `make pre-add-check FILES=` the four Go files: "4 file(s) clean (gofmt, golint, govulncheck)".
+* `make preflight`: "preflight passed".
+* `make race`: 39 ok.
+* `go test -count=1 ./internal/cli/`: ok, on the Linux dev host and on the Windows dev host, 890 files each.
+* The whole package passed with the network guard and the owner check quiet. `lazyLog.open` warns through `Output`
+  while holding the mutex, and no test deadlocked.
+* The identifier scan of the changed files found nothing.
+
+**Step 5** is this record. Staged; the owner commits. P4 waits for the push.

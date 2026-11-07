@@ -185,22 +185,31 @@ type kept struct {
 	at             time.Time
 }
 
-// catalogFile is <cache>/catalog/<id>.json, its directory created.
-func catalogFile(id string) (string, error) {
+// catalogPath is <cache>/catalog/<id>.json; nothing is created.
+func catalogPath(id string) (string, error) {
 	dirs, _, err := systemDirs()
 	if err != nil {
 		return "", err
 	}
-	dir := filepath.Join(dirs.Cache, "catalog")
-	if err := appdirs.EnsurePrivateDir(dir); err != nil {
-		return "", err
-	}
-	return filepath.Join(dir, id+".json"), nil
+	return filepath.Join(dirs.Cache, "catalog", id+".json"), nil
 }
 
-// readKept is provider id's kept listing, when one exists within a day.
+// catalogFile is catalogPath, its directory created, for a write.
+func catalogFile(id string) (string, error) {
+	path, err := catalogPath(id)
+	if err != nil {
+		return "", err
+	}
+	if err := appdirs.EnsurePrivateDir(filepath.Dir(path)); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+// readKept is provider id's kept listing, when one exists within a day. It
+// creates nothing (0046-MADR D6).
 func readKept(id string, now time.Time) kept {
-	path, err := catalogFile(id)
+	path, err := catalogPath(id)
 	if err != nil {
 		return kept{}
 	}

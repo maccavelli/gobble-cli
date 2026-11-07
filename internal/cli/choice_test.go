@@ -283,6 +283,23 @@ func TestSettledWaitsForAStaleListing(t *testing.T) {
 	}
 }
 
+// Reading a kept listing that is not there creates nothing: only writing
+// one makes <cache>/catalog (0046-MADR D6).
+func TestReadKeptCreatesNothing(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("GOBBLE_HOME", home)
+	if k := readKept("claude", time.Now()); k.models != nil || !k.at.IsZero() {
+		t.Fatalf("a kept listing %+v in a fresh home", k)
+	}
+	if _, err := os.Stat(filepath.Join(home, "catalog")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("readKept made %s/catalog: %v", home, err)
+	}
+	writeKept("claude", provider.Listing{Live: true, Source: "live", Models: []string{"c1"}, FetchedAt: time.Now()})
+	if k := readKept("claude", time.Now()); len(k.models) != 1 {
+		t.Fatalf("the kept listing written is read as %+v", k)
+	}
+}
+
 // recent-models.json as v1 wrote it, its \u escapes and a nil slice's null
 // included, loads as before, with no warning (0039-MADR D17).
 func TestRecentModelsV1File(t *testing.T) {
