@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: completed
 date: 2026-11-06
 ---
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
@@ -1117,3 +1117,55 @@ recorded in 0005-MADR and 0005-PLAN F10, and built by F10.
 **Rollout and rollback.** A new flag, and no change to an existing command's output; `gobble version`, and the release
 workflow's `gobble version --identity`, are unchanged. Reverting the commit removes the flag. `update --release` has no
 code until F10.
+
+### Execution record (2026-11-06)
+
+The base is `b04dbb4`, the records commit, on the owner's "Commit to main, then proceed, approved". No deviation.
+
+**Step 1, the tests** (`internal/cli/main_test.go`):
+
+- `fixedIdentity(t)` holds the identity `TestVersionJSONGolden` used, now shared with the new test.
+- `TestVersionFlag`: `--version`, `fix --version`, `-p hi --version`, `config get --version`, `completion --version`
+  and `acp --version` each exit 0 with stderr empty and stdout equal to `testdata/version.txt.golden`; `--help` lists
+  `--version`. `-p hi --version` is one case more than step 1 names.
+- `TestVersionCreatesNoFiles` runs `version` and `--version`, each with a `GOBBLE_HOME` of its own, and finds it empty.
+- The package's `TestMain` unsets every credential variable and lists offline, so a run that reached `chat` by mistake
+  ends at "no model credential" and reaches no service.
+
+**Step 2, seen failing,** by `scratchpad/ver_seenfail.py` (not committed), each on a copy of the tree:
+
+- today's code: exit 1, `main_test.go:209: [--version]: exit 2, stderr "Error: unknown flag --version, did you mean
+  \"--session\"?…"`, and `main_test.go:318: --version: exit 2`;
+- the hook writing to stderr: exit 1, `[--version]: exit 0, stderr "gobble 1.2.3\ncommit: 4e25c8a…", stdout ""; want
+  exit 0 and no stderr`;
+- the hook without `Exit`: exit 1, `[--version]: exit 2, stderr "Error: no prompt: give words, @path, --file or piped
+  input\n"`, the version text on stdout before it, and `TestVersionCreatesNoFiles` `--version: exit 2`.
+
+The two plants were run again on the final code, after the lint fix below, with the same failures.
+
+**Step 3, the code.**
+
+- `internal/cli/version.go`: `versionOf(buildinfo.Info) versionReport`, which the command and the flag share; and
+  `versionFlag bool`, whose `BeforeReset(app *kong.Kong) error` writes `versionText(versionOf(identity()))` to
+  `app.Stdout` and calls `app.Exit(ExitOK)`. A failed write is returned as `--version: <err>`, the parse's error:
+  `make lint`'s errcheck refused the first draft, which dropped `fmt.Fprint`'s error
+  (`version.go:48:12: Error return value of fmt.Fprint is not checked`).
+- `internal/cli/root.go`: `ShowVersion versionFlag` with `name:"version"`, help "Print version information and quit.".
+- A binary built from the tree: `gobble --version` and `gobble auth --version` print `gobble 0.0.0-dev+b04dbb4b0b09.dirty`
+  and the build lines, exit 0; `gobble --help` lists `--version  Print version information and quit.`.
+
+**Step 4, docs.** `README.md:89`: "`gobble version` (or `--version` on any command)". `docs/README.md`'s 0008 PLAN row.
+
+**Step 5, gates.**
+
+- `make pre-add-check FILES="internal/cli/version.go internal/cli/root.go internal/cli/main_test.go"`: "3 file(s)
+  clean (gofmt, golint, govulncheck)".
+- `make preflight`: "preflight passed", `markdownlint` 0 issues; `make race`: 39 ok.
+- `make perf` passed: `ReplyRender` 21.3 µs (baseline 30 µs), `Reprint` 5.96 ms (9.4 ms), `LineSessionStart` 1.03 ms
+  (830 µs, within its budget, as at 0035-PLAN P31), `KeyDraw` 1.48 µs (1.5 µs).
+- On the Linux machine and the Windows laptop, the tree shipped to each, 881 files, no `._*` file, Go 1.27.3: `go test`
+  and race passed on both, 38 ok each (the root module; `acpext` is its own); `make check-records markdownlint` passed
+  on both, 0 issues; preflight passed every gate through `apidiff` and stopped at `verify-build-metadata`, `git
+  rev-parse HEAD` exiting 128, as on every copy without a commit.
+
+**Step 6** is this commit. `update --release` has no code until 0005-PLAN F10, which builds `update`.

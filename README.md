@@ -86,7 +86,7 @@ Early, and built in the order [docs/README.md](docs/README.md#build-order) gives
 - **`@path` in a prompt** attaches that file, read inside the workspace, ahead of the text; ACP clients can attach
   resources and links as well.
 - **`gobble mcp add|remove|list`**, `gobble config path|get|set|unset|edit|init|update|validate|schema`,
-  `gobble trust` and `gobble untrust`, `gobble version` and `gobble completion`. Settings live in a commented `settings.yaml` in the config directory; `gobble config path`
+  `gobble trust` and `gobble untrust`, `gobble version` (or `--version` on any command) and `gobble completion`. Settings live in a commented `settings.yaml` in the config directory; `gobble config path`
   shows where.
 - **`models.json`** in the config directory, in Pi's schema: a provider's base URL and headers, added models, and
   corrections to a model's window, price and thinking levels ([guide](docs/guides/models-json.md)).

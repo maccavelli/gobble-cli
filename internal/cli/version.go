@@ -3,6 +3,8 @@ package cli
 import (
 	"fmt"
 
+	"github.com/alecthomas/kong"
+
 	"github.com/maccavelli/gobble-cli/internal/buildinfo"
 	"github.com/maccavelli/gobble-cli/jsonx"
 )
@@ -29,6 +31,28 @@ type versionReport struct {
 	Arch    string `json:"arch"`
 }
 
+// versionOf is the report of build identity i, which the version command
+// and the --version flag print.
+func versionOf(i buildinfo.Info) versionReport {
+	return versionReport{Name: "gobble", Version: i.Version, Commit: i.Commit, Date: i.Date, Go: i.Go, OS: i.OS, Arch: i.Arch}
+}
+
+// versionFlag is the root's --version: gobble's own flag type rather than
+// kong.VersionFlag, so its text is the version command's, read from the
+// build identity only when asked (0008-MADR D21).
+type versionFlag bool
+
+// BeforeReset writes what `gobble version` writes and ends the parse with
+// exit 0, before a command's arguments are checked or anything runs. A
+// failed write is the parse's error.
+func (versionFlag) BeforeReset(app *kong.Kong) error {
+	if _, err := fmt.Fprint(app.Stdout, versionText(versionOf(identity()))); err != nil {
+		return fmt.Errorf("--version: %w", err)
+	}
+	app.Exit(ExitOK)
+	return nil
+}
+
 // Run prints `gobble <version>` and the build details, one JSON object, or
 // the identity line.
 func (c *VersionCmd) Run(e *runEnv) error {
@@ -36,7 +60,7 @@ func (c *VersionCmd) Run(e *runEnv) error {
 	if c.Identity {
 		return e.out.Result([]byte(i.Lib.String() + "\n"))
 	}
-	r := versionReport{Name: "gobble", Version: i.Version, Commit: i.Commit, Date: i.Date, Go: i.Go, OS: i.OS, Arch: i.Arch}
+	r := versionOf(i)
 	if c.JSON {
 		b, err := jsonx.Marshal(r)
 		if err != nil {

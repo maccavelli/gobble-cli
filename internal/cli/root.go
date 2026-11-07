@@ -19,4 +19,5 @@ type Root struct {
 	Untrust     UntrustCmd     `cmd:"" help:"Stop trusting a project, or forget the decision saved for it."`
 	LogLevel    string         `name:"log-level" enum:"debug,info,warn,error" default:"info" help:"Log level: ${enum}."`
 	Set         []string       `name:"set" sep:"none" complete:"none" placeholder:"PATH=VALUE" help:"Override a setting for this run; repeatable."`
+	ShowVersion versionFlag    `name:"version" help:"Print version information and quit."`
 }

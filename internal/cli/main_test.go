@@ -172,7 +172,9 @@ func TestACPWritesNothingToStdout(t *testing.T) {
 	}
 }
 
-func TestVersionJSONGolden(t *testing.T) {
+// fixedIdentity makes the build identity the goldens' for t.
+func fixedIdentity(t *testing.T) {
+	t.Helper()
 	old := identity
 	t.Cleanup(func() { identity = old })
 	identity = func() buildinfo.Info {
@@ -180,12 +182,36 @@ func TestVersionJSONGolden(t *testing.T) {
 			Date: "2026-10-05T13:14:29Z", Go: "1.27.1", OS: "linux", Arch: "amd64", Release: true,
 			Lib: lib.Info{Version: "v1.2.3", Kind: lib.KindRelease}}
 	}
+}
+
+func TestVersionJSONGolden(t *testing.T) {
+	fixedIdentity(t)
 	for name, args := range map[string][]string{"version.json": {"version", "--json"}, "version.txt": {"version"}} {
 		r := runMain(t, nil, args...)
 		if r.code != ExitOK || r.stderr != "" {
 			t.Fatalf("%v: exit %d, stderr %q", args, r.code, r.stderr)
 		}
 		golden(t, name, r.stdout)
+	}
+}
+
+// --version prints what gobble version prints, on any command, while Kong
+// parses: no command runs, a missing argument is not reported, and nothing
+// reaches stderr. --help lists it (0008-MADR D21).
+func TestVersionFlag(t *testing.T) {
+	fixedIdentity(t)
+	for _, args := range [][]string{
+		{"--version"}, {"fix", "--version"}, {"-p", "hi", "--version"}, {"config", "get", "--version"},
+		{"completion", "--version"}, {"acp", "--version"},
+	} {
+		r := runMain(t, nil, args...)
+		if r.code != ExitOK || r.stderr != "" {
+			t.Fatalf("%v: exit %d, stderr %q, stdout %q; want exit 0 and no stderr", args, r.code, r.stderr, r.stdout)
+		}
+		golden(t, "version.txt", r.stdout)
+	}
+	if r := runMain(t, nil, "--help"); !strings.Contains(r.stdout, "--version") {
+		t.Fatalf("--help does not list --version:\n%s", r.stdout)
 	}
 }
 
@@ -284,14 +310,16 @@ func TestFileWithPipedStdinIsAUsageError(t *testing.T) {
 
 // Commands that do not log create no state: no logs directory.
 func TestVersionCreatesNoFiles(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("GOBBLE_HOME", home)
-	var out, errw bytes.Buffer
-	if code := Main(t.Context(), []string{"version"}, nil, &out, &errw); code != ExitOK {
-		t.Fatalf("exit %d", code)
-	}
-	if des, _ := os.ReadDir(home); len(des) != 0 {
-		t.Fatalf("version created %v", des)
+	for _, arg := range []string{"version", "--version"} {
+		home := t.TempDir()
+		t.Setenv("GOBBLE_HOME", home)
+		var out, errw bytes.Buffer
+		if code := Main(t.Context(), []string{arg}, nil, &out, &errw); code != ExitOK {
+			t.Fatalf("%s: exit %d", arg, code)
+		}
+		if des, _ := os.ReadDir(home); len(des) != 0 {
+			t.Fatalf("%s created %v", arg, des)
+		}
 	}
 }
 
