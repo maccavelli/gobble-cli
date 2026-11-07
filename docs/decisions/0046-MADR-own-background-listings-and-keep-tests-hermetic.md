@@ -219,6 +219,17 @@ Chosen option: **C**, because it removes each cause where it lives.
 * `runEnv`s built inside `Main` (`c.run`, `runIn`) get D1's call in `run`.
 * `settled` waits until every listing the `runEnv` has started has ended, not until the shown state stops being
   `StateListing`. The comment at `choice_test.go:239` then holds.
+* *Amended 2026-11-07, while writing the PLAN:* the tests build a `runEnv` directly in 24 places. So which of them
+  start a listing is found by a check, not by reading.
+  * A listing starts only on a `runEnv` whose listings are owned: something has promised to end them. `run` owns
+    them in production. A test owns them with `ownListings(t, e)`, which registers `e.endListings` with
+    `t.Cleanup`.
+  * After `endListings`, the `runEnv` starts no listing, as the SDK's closed `Cache` would start no fetch
+    (go-llmprovider-sdk#12).
+  * In the tests, a listing started on a `runEnv` nobody owns is recorded with its stack. `TestMain` then fails the
+    run and prints where it started. In production the check is off.
+  * This replaces Consequences' "a helper that forgets is caught only by D4 or a teardown failure": a helper that
+    forgets fails the run that first starts a listing through it.
 
 ### D3. Model facts in the tests make no request
 
@@ -258,8 +269,8 @@ Chosen option: **C**, because it removes each cause where it lives.
 * Good, because a command's background listings now end with it, instead of being cut off at exit.
 * Neutral, because a run's exit can wait for a listing to answer its cancellation, up to 6 s (Q1).
 * Bad, because the `runEnv` gains a group and a cancel function, and every test helper must register one more
-  cleanup. A helper that forgets is caught only by D4 or a teardown failure, so the PLAN lists the helpers and checks
-  each.
+  cleanup. ~~A helper that forgets is caught only by D4 or a teardown failure, so the PLAN lists the helpers and checks
+  each.~~ A helper that forgets fails the run that first starts a listing through it (D2, as amended).
 * Bad, because D4's guard depends on clients honouring the proxy variables.
 
 ### Confirmation
