@@ -32,6 +32,7 @@ func settingsEnv(t *testing.T, sets ...string) *runEnv {
 			t.Error(err)
 		}
 	})
+	ownListings(t, e)
 	return e
 }
 

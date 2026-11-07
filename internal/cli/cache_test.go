@@ -58,6 +58,7 @@ func TestProviderForBuildsNamed(t *testing.T) {
 			t.Error(err)
 		}
 	})
+	ownListings(t, e)
 	if _, err := providerFor(e)("claude", "sess-7", llm.DefaultRetry); err == nil || preferred != "claude" || session != "sess-7" || source != "ANTHROPIC_API_KEY" {
 		t.Fatalf("built %q for session %q with source %q (err %v), want claude, sess-7, ANTHROPIC_API_KEY", preferred, session, source, err)
 	}

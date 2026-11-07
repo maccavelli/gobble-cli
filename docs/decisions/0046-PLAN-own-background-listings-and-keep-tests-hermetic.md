@@ -341,3 +341,96 @@ the binary, the outside proxy sees nothing of that package, so the guard's own r
 empty in every run above.
 
 **Step 7** is this record. Staged; the owner commits.
+
+### Deviation 3 (2026-11-07): P2, how three of step 1's tests are seen failing
+
+* **Found** at P2 step 5. Step 1 says each test is seen failing "before the code". `TestSettledWaitsForAStaleListing`,
+  `TestEndListingsWaits` and `TestEndListingsBound` call what step 2 adds (`settledWithin`, `endListings`, `idle`,
+  `errListingsEnded`, `endListingsWait`). Against the code before step 2 they do not build, which shows nothing.
+* **Decision** (recorded, not prompted: it changes how a failure is shown, not what is checked). Each of the three is
+  seen failing against a planted break of the code that makes its claim: the old `settled` condition, an
+  `endListings` that does not wait, an `endListings` with no Warn record. `TestRunEndsListings` uses only helpers that
+  were already there, so it is also seen failing against `HEAD`'s code. Step 5's plants are unchanged. No file joins
+  the phase.
+
+### P2 record (2026-11-07)
+
+On the owner's "committed, proceed" after P1 (`6cf61d2`). Start state (C1): `main` at `6cf61d2`, one ahead of
+`origin/main`, the tree clean.
+
+**Step 2, the code.**
+
+* `internal/cli/models.go`:
+  * `listingOwner`: a mutex, a `sync.WaitGroup`, the listings' context and cancel, and `owned` and `ended`;
+  * `e.listingCtx()`, `e.goListing(f)`, `e.ownListings(cleanup)` and `e.endListings()`;
+  * `e.stillListing()` and `modelListing.idle()`;
+  * `errListingsEnded`, `endListingsWait` (6 s), and the hook `unownedListing`, nil in gobble.
+  * `newModelListing` takes the starter. `start` runs the first fetch through it, or in place when the run's
+    listings have ended, when `fetch` answers `errListingsEnded` at once. `get`'s retry goes through it.
+  * `fetch` lists under `e.listingCtx()`.
+* `internal/cli/main.go`:
+  * `runEnv.lists`;
+  * `run` calls `e.ownListings(nil)` before the command, and `e.endListings()` after it, before `logs.close`.
+
+**Step 3, the owner check** (`testmain_test.go`). The child sets `unownedListing = recordUnowned`, which keeps
+`debug.Stack()`. After `m.Run`, it prints `<n> listing(s) started on a runEnv nobody owns; call ownListings(t, e) where
+it is built (0046-MADR D2):` and the first five stacks, then exits 1.
+
+**Step 4, the helpers.**
+
+* `ownListings(t testing.TB, e)` (`models_test.go`). `modelEnv`, `envHere`, `startEnv`, `newLineHarness` and
+  `newModelHarness` call it right after their log-closing cleanup, so it runs before that cleanup, before
+  `GOBBLE_HOME` is restored, and before the home is removed.
+* The first run with the check failed: `10 listing(s) started on a runEnv nobody owns`. A scratch copy printing every
+  stack named seven sites in three tests:
+  * `cache_test.go:64`, in `TestProviderForBuildsNamed`, twice. That is the test whose log record came after its end
+    in the MADR's F5 probe;
+  * `modelflags_test.go:107`, `:114`, `:123` and `:133`, in `TestDefaultModel`, through its helper;
+  * `settings_test.go:291` and `:307`, in `TestDefaultProviderSetting`, two `runEnv`s, twice each.
+
+  Each `runEnv` there now calls `ownListings` after its log-closing cleanup. The three files join P2's list, as Scope
+  said they would.
+* `settled` is `settledWithin(e, 2 s)`. That waits until `e.stillListing()` is empty, as well as until no provider is
+  shown listing, and its failure names the listings not ended.
+* `TestModelListingRetries` passes a starter on a `WaitGroup` it waits for in its cleanup.
+
+**Step 1's tests,** written with step 2:
+
+* `TestSettledWaitsForAStaleListing` (`choice_test.go`);
+* `TestEndListingsWaits`, `TestEndListingsBound` and `TestRunEndsListings` (`models_test.go`).
+
+`TestRunEndsListings`' first draft passed against `HEAD`'s code. `Main` cancels its own context as it returns
+(`watchSignals`' `stop`), which also released claude's lister, and it marked itself done before the check. Its lister
+now takes 100 ms to unwind after cancellation, as a request does. Only a run that waits sees it finish.
+
+**Step 5, seen failing** (deviation 3), by `scratchpad/p2_seenfail.py` (not committed). Each case ran on a fresh copy
+of the final code; `before-run` on `HEAD`:
+
+| Case | Failure |
+| :--- | :--- |
+| `HEAD`'s code, with `TestRunEndsListings` added | `models_test.go:367: Main returned with claude's listing still running` |
+| `settledWithin` without `stillListing` (today's `settled`) | `settled while claude's listing ran: {ID:claude … State:stale … Models:[c1] Age:1h0m0…s …}` |
+| `endListings` returning after its cancel, without waiting | `endListings returned while claude's listing ran` |
+| `endListings` without its Warn record | `warnings "", want the record naming claude` |
+| `run` without `e.endListings()` | `Main returned with claude's listing still running` |
+| `modelEnv` without `ownListings` | `20 listing(s) started on a runEnv nobody owns; …`; the stacks name `auth_test.go:632`, `choice_test.go:40`, `:53`, `:54`, `:92` and `models_test.go:313` |
+
+**Step 6, `docs/architecture.md`.** `internal/cli`'s row: "A run's background model listings end with it: each is
+cancelled and waited for, up to 6 s, before the log closes (0046-MADR D1)."
+
+**Step 7, gates.**
+
+* `make pre-add-check FILES=` the ten Go files: "10 file(s) clean (gofmt, golint, govulncheck)".
+* `make preflight`: "preflight passed". The first run stopped at golangci-lint's gocritic: `typeDefFirst: definition
+  of type 'modelListing' should appear before its methods`. `idle` now follows `newModelListing`.
+* `make race`: 39 ok.
+* `make perf`: passed:
+  * `ReplyRender` 21.3 µs (baseline 30 µs);
+  * `Reprint` 6.03 ms (9.4 ms);
+  * `LineSessionStart` 1.13 ms (830 µs, within its budget; 1.03 ms at 0035-PLAN P31 and at 0008-PLAN's amendment);
+  * `KeyDraw` 1.52 µs (1.5 µs).
+* The Linux dev host and the Windows dev host, 890 files each: `go test -count=3 ./internal/cli/` ok, and `-race` ok.
+* No test in any run of the package failed the network guard or the owner check.
+* The identifier scan of the changed files found nothing.
+
+**Step 8** is this record. Staged; the owner commits.

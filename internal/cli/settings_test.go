@@ -287,6 +287,7 @@ func TestDefaultProviderSetting(t *testing.T) {
 			t.Error(err)
 		}
 	})
+	ownListings(t, e)
 	e.processSettings("") // as acp does
 	if c := e.modelChoice(); c.Provider != "opencode-go" || c.Default != "claude-haiku-5-5" || !slices.Equal(c.Models, provider.Models("opencode-go")) {
 		t.Fatalf("model choice %+v, want opencode-go's", c)
@@ -303,6 +304,7 @@ func TestDefaultProviderSetting(t *testing.T) {
 			t.Error(err)
 		}
 	})
+	ownListings(t, e2)
 	e2.processSettings("")
 	if c := e2.modelChoice(); c.Provider != "opencode-zen" || !strings.Contains(stderr.String(), "Warning: defaultProvider openai has no credential; the run starts on another provider") {
 		t.Fatalf("openai without its key: started on %q, warnings %q; want opencode-zen, the first with a key, and the warning", c.Provider, stderr.String())

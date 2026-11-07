@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"reflect"
+	"runtime/debug"
 	"slices"
 	"strings"
 	"sync"
@@ -104,7 +105,37 @@ func TestMain(m *testing.M) {
 	listModels = offlineList
 	modelFacts = offlineModelFacts
 	openURL, signInWith, logoutLogin = noBrowser, noSignIn, noLogout
-	os.Exit(m.Run()) //nolint:forbidigo // TestMain's exit
+	unownedListing = recordUnowned
+	code := m.Run()
+	if stacks := unownedStacks(); len(stacks) > 0 {
+		fmt.Fprintf(os.Stderr, "%d listing(s) started on a runEnv nobody owns; call ownListings(t, e) where it is built (0046-MADR D2):\n", //nolint:forbidigo // the test binary's own stderr
+			len(stacks))
+		for _, s := range stacks[:min(len(stacks), 5)] {
+			fmt.Fprintf(os.Stderr, "%s\n", s) //nolint:forbidigo // the test binary's own stderr
+		}
+		code = 1
+	}
+	os.Exit(code) //nolint:forbidigo // TestMain's exit
+}
+
+// unowned holds the stacks of the listings started on a runEnv nobody owns
+// (0046-MADR D2 as amended).
+var unowned struct {
+	sync.Mutex
+	stacks []string
+}
+
+// recordUnowned is the tests' unownedListing: it keeps the caller's stack.
+func recordUnowned() {
+	unowned.Lock()
+	defer unowned.Unlock()
+	unowned.stacks = append(unowned.stacks, string(debug.Stack()))
+}
+
+func unownedStacks() []string {
+	unowned.Lock()
+	defer unowned.Unlock()
+	return slices.Clone(unowned.stacks)
 }
 
 // netGuardChild marks the process that runs the tests behind the guard.

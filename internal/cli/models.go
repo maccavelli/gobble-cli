@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"cmp"
+	"context"
 	"errors"
 	"log/slog"
 	"slices"
@@ -22,6 +24,115 @@ const listRetry = time.Minute
 // resolve (0005-PLAN F4-3a deviation 3).
 var errNoListingKey = errors.New("the provider's key did not resolve, so its models were not listed")
 
+// errListingsEnded is a listing not made, because its run had ended its
+// listings (0046-MADR D1).
+var errListingsEnded = errors.New("the run has ended its listings, so its models were not listed")
+
+// endListingsWait bounds how long endListings waits for a listing that does
+// not end when cancelled (0046-MADR D1, Q1). Tests shorten it.
+var endListingsWait = 6 * time.Second
+
+// listingOwner holds a run's background listings: the goroutines that list,
+// the context they list under, and whether something has promised to end
+// them (0046-MADR D1, D2 as amended). mu guards the rest; once ended is set,
+// group gains no goroutine, so its Wait cannot race an Add.
+type listingOwner struct {
+	mu     sync.Mutex
+	group  sync.WaitGroup
+	ctx    context.Context
+	cancel context.CancelFunc
+	owned  bool
+	ended  bool
+}
+
+// unownedListing, when not nil, is called when a listing starts on a run
+// nobody owns: TestMain records where (0046-MADR D2 as amended). It is nil
+// in gobble itself.
+var unownedListing func()
+
+// listingCtx is the context the run's listings list under: the run's own,
+// cancelled by endListings.
+func (e *runEnv) listingCtx() context.Context {
+	o := &e.lists
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if o.ctx == nil {
+		o.ctx, o.cancel = context.WithCancel(cmp.Or[context.Context](e.ctx, context.Background()))
+	}
+	return o.ctx
+}
+
+// goListing runs f on the run's listing group, and reports false, running
+// nothing, once endListings has run.
+func (e *runEnv) goListing(f func()) bool {
+	o := &e.lists
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if o.ended {
+		return false
+	}
+	if !o.owned && unownedListing != nil {
+		unownedListing()
+	}
+	o.group.Go(f)
+	return true
+}
+
+// ownListings promises that the run's listings will be ended: run's own
+// call, or, with cleanup, a test's (t.Cleanup), which then calls endListings.
+func (e *runEnv) ownListings(cleanup func(func())) {
+	e.lists.mu.Lock()
+	e.lists.owned = true
+	e.lists.mu.Unlock()
+	if cleanup != nil {
+		cleanup(e.endListings)
+	}
+}
+
+// endListings ends the run's listings: none starts after it, the running
+// ones are cancelled, and it waits for them, up to endListingsWait, after
+// which it says which providers were still listing.
+func (e *runEnv) endListings() {
+	o := &e.lists
+	o.mu.Lock()
+	if o.ended {
+		o.mu.Unlock()
+		return
+	}
+	o.ended = true
+	if o.cancel != nil {
+		o.cancel()
+	}
+	o.mu.Unlock()
+	done := make(chan struct{})
+	go func() {
+		o.group.Wait()
+		close(done)
+	}()
+	t := time.NewTimer(endListingsWait)
+	defer t.Stop()
+	select {
+	case <-done:
+	case <-t.C:
+		e.log().Warn("model listings still running at the end of the run", slog.Any("providers", e.stillListing()))
+	}
+}
+
+// stillListing are the providers whose listing, first or retried, has not
+// ended.
+func (e *runEnv) stillListing() []string {
+	e.listingsMu.Lock()
+	defer e.listingsMu.Unlock()
+	var ids []string
+	for id, l := range e.listings {
+		if !l.idle() {
+			ids = append(ids, id)
+		}
+	}
+	slices.Sort(ids)
+	return ids
+}
+
 // modelListing is the process's listing of one provider's models
 // (0020-MADR D3): started once, waited for by the first reader, kept when
 // live, and retried in the background at most once per listRetry when it
@@ -29,6 +140,9 @@ var errNoListingKey = errors.New("the provider's key did not resolve, so its mod
 type modelListing struct {
 	fetch func() provider.Listing
 	now   func() time.Time
+	// spawn runs a listing's goroutine under its run's owner, or reports
+	// that the run's listings have ended and it ran nothing (0046-MADR D1).
+	spawn func(func()) bool
 	once  sync.Once
 	ready chan struct{} // closed when the first listing has ended
 
@@ -45,21 +159,37 @@ type modelListing struct {
 	kept kept
 }
 
-func newModelListing(fetch func() provider.Listing, now func() time.Time) *modelListing {
-	return &modelListing{fetch: fetch, now: now, ready: make(chan struct{})}
+func newModelListing(fetch func() provider.Listing, now func() time.Time, spawn func(func()) bool) *modelListing {
+	return &modelListing{fetch: fetch, now: now, spawn: spawn, ready: make(chan struct{})}
 }
 
-// start begins the first listing, once.
+// idle reports whether l's first listing has ended and no retry runs.
+func (l *modelListing) idle() bool {
+	select {
+	case <-l.ready:
+	default:
+		return false
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return !l.retrying
+}
+
+// start begins the first listing, once. When the run's listings have
+// ended, it lists here instead: fetch then answers at once, listing nothing.
 func (l *modelListing) start() {
 	l.once.Do(func() {
-		go func() {
+		first := func() {
 			r := l.fetch()
 			l.mu.Lock()
 			l.result, l.at = r, l.now()
 			l.attempts++
 			l.mu.Unlock()
 			close(l.ready)
-		}()
+		}
+		if !l.spawn(first) {
+			first()
+		}
 	})
 }
 
@@ -71,8 +201,7 @@ func (l *modelListing) get() provider.Listing {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if !l.result.Live && !l.retrying && l.now().Sub(l.at) >= listRetry {
-		l.retrying = true
-		go l.retry()
+		l.retrying = l.spawn(l.retry) // none once the run's listings have ended
 	}
 	return l.result
 }
@@ -144,12 +273,16 @@ func (e *runEnv) modelListing(sel provider.Selection) *modelListing {
 	k := readKept(sel.ID, time.Now())
 	o.LastGood, o.LastGoodAt = k.usable, k.at
 	l := newModelListing(func() provider.Listing {
+		ctx := e.listingCtx()
+		if ctx.Err() != nil { // the run's listings have ended (0046-MADR D1)
+			return provider.Listing{Models: provider.Models(sel.ID), Err: errListingsEnded}
+		}
 		if key == "" && !login && provider.CredentialVar(sel.ID) != "" { // Ollama takes no key (0025-MADR D5)
 			// A key that did not resolve, already warned of, lists nothing: no
 			// request goes without one (0005-PLAN F4-3a deviation 3).
 			return provider.Listing{Models: provider.Models(sel.ID), Err: errNoListingKey}
 		}
-		r, err := listModels(e.ctx, sel.ID, key, o)
+		r, err := listModels(ctx, sel.ID, key, o)
 		if err != nil {
 			r = provider.Listing{Models: provider.Models(sel.ID), Err: err}
 		}
@@ -160,7 +293,7 @@ func (e *runEnv) modelListing(sel provider.Selection) *modelListing {
 			writeKept(sel.ID, r)
 		}
 		return r
-	}, time.Now)
+	}, time.Now, e.goListing)
 	l.kept = k
 	if e.listings == nil {
 		e.listings = map[string]*modelListing{}

@@ -29,6 +29,7 @@ func envHere(t *testing.T) *runEnv {
 			t.Error(err)
 		}
 	})
+	ownListings(t, e)
 	e.processSettings("")
 	return e
 }
@@ -36,14 +37,25 @@ func envHere(t *testing.T) *runEnv {
 // settled is the model choice once no provider is still listing.
 func settled(t *testing.T, e *runEnv) acpserver.ModelChoice {
 	t.Helper()
-	var c acpserver.ModelChoice
-	if !waitFor(func() bool {
-		c = e.modelChoice()
-		return !slices.ContainsFunc(c.Providers, func(p acpserver.ProviderChoice) bool { return p.State == acpserver.StateListing })
-	}) {
-		t.Fatalf("still listing: %+v", c.Providers)
+	c, ok := settledWithin(e, 2*time.Second)
+	if !ok {
+		t.Fatalf("still listing: %+v; listings not ended: %q", c.Providers, e.stillListing())
 	}
 	return c
+}
+
+// settledWithin is the model choice once every listing e has started has
+// ended and none is shown listing, and whether that came within d. A
+// listing shown stale, from a kept listing, may still be running, so the
+// shown state alone is not enough (0046-MADR F1, D2).
+func settledWithin(e *runEnv, d time.Duration) (acpserver.ModelChoice, bool) {
+	var c acpserver.ModelChoice
+	ok := waitForWithin(d, func() bool {
+		c = e.modelChoice()
+		return len(e.stillListing()) == 0 &&
+			!slices.ContainsFunc(c.Providers, func(p acpserver.ProviderChoice) bool { return p.State == acpserver.StateListing })
+	})
+	return c, ok
 }
 
 func byID(c acpserver.ModelChoice) map[string]acpserver.ProviderChoice {
@@ -237,6 +249,38 @@ func TestLastGoodOnDisk(t *testing.T) {
 	}
 	close(release)
 	settled(t, e) // claude's listing ends before the home is removed
+}
+
+// A provider whose listing runs while a kept one is shown is shown stale,
+// not listing; settled still waits for its listing to end, so nothing of it
+// runs after the test (0046-MADR F1, D2).
+func TestSettledWaitsForAStaleListing(t *testing.T) {
+	modelEnv(t)
+	t.Setenv("OPENAI_API_KEY", "test-only")
+	t.Setenv("ANTHROPIC_API_KEY", "test-only")
+	writeKept("claude", provider.Listing{Live: true, Source: "live", Models: []string{"c1"}, Usable: []string{"c1"},
+		FetchedAt: time.Now().Add(-time.Hour)})
+	release := make(chan struct{})
+	withLister(t, func(ctx context.Context, id, _ string, _ provider.Options) (provider.Listing, error) {
+		if id == "claude" {
+			select {
+			case <-release:
+			case <-ctx.Done():
+			}
+		}
+		return provider.Listing{Live: true, Source: "live", Models: []string{id + "-1"}, FetchedAt: time.Now()}, nil
+	})
+	e := envHere(t)
+	if claude := byID(e.modelChoice())["claude"]; claude.State != acpserver.StateStale {
+		t.Fatalf("claude while listing: %+v, want it shown stale from its kept listing", claude)
+	}
+	if c, ok := settledWithin(e, 200*time.Millisecond); ok {
+		t.Fatalf("settled while claude's listing ran: %+v", byID(c)["claude"])
+	}
+	close(release)
+	if c, ok := settledWithin(e, 2*time.Second); !ok {
+		t.Fatalf("not settled once claude's listing ended: %+v", c.Providers)
+	}
 }
 
 // recent-models.json as v1 wrote it, its \u escapes and a nil slice's null

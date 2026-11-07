@@ -44,6 +44,7 @@ func startEnv(t *testing.T, settings string, keys []string, refused ...string) (
 			t.Error(err)
 		}
 	})
+	ownListings(t, e)
 	e.processSettings("")
 	return e, stderr
 }

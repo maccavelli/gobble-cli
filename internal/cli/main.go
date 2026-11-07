@@ -83,7 +83,9 @@ func run(ctx context.Context, k *kong.Kong, root *Root, args []string, stdin *os
 		logs.stderr = nil // stdio is the protocol (0004-PLAN Phase 2 step 4)
 	}
 	e := &runEnv{ctx: ctx, out: out, stdin: stdin, logs: logs, intr: intr, now: clock, overrides: overrides}
+	e.ownListings(nil)
 	code = exitCode(ctx, out, kctx.Run(e))
+	e.endListings() // before the log closes: a listing may still log (0046-MADR D1)
 	if err := logs.close(); err != nil {
 		out.Warnf("close log file: %v", err)
 	}
@@ -148,6 +150,9 @@ type runEnv struct {
 	// provider (0020-MADR D3).
 	listingsMu sync.Mutex
 	listings   map[string]*modelListing
+	// lists owns the listings' goroutines: run ends and waits for them
+	// (0046-MADR D1).
+	lists listingOwner
 	// recent and recentLoaded are recent-models.json's recent models, read once,
 	// under recentMu (0025-MADR D3).
 	recent       []string

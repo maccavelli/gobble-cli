@@ -61,9 +61,15 @@ func modelEnv(t *testing.T) (*runEnv, *syncBuffer) {
 			t.Error(err)
 		}
 	})
+	ownListings(t, e)
 	e.processSettings("")
 	return e, warnings
 }
+
+// ownListings makes t own e's listings: they end, and are waited for, in
+// t's cleanup, before its home is removed or its log closed, since it is
+// registered after both (0046-MADR D2 as amended).
+func ownListings(t testing.TB, e *runEnv) { e.ownListings(t.Cleanup) }
 
 // The tests' lister fails offline, so no test lists over the network
 // (0020-MADR D7).
@@ -147,13 +153,15 @@ func TestModelListingRetries(t *testing.T) {
 	fake := func() time.Time { return start.Add(time.Duration(now.Load()) * time.Second) }
 	var fetches atomic.Int64
 	release := make(chan struct{})
+	var group sync.WaitGroup // the listing's goroutines, ended before the test (0046-MADR D2)
+	t.Cleanup(group.Wait)
 	l := newModelListing(func() provider.Listing {
 		if fetches.Add(1) == 1 {
 			return provider.Listing{Models: []string{"static"}}
 		}
 		<-release
 		return provider.Listing{Live: true, Models: []string{"listed"}}
-	}, fake)
+	}, fake, func(f func()) bool { group.Go(f); return true })
 
 	// A retry runs in its own goroutine, so "none started" is only known
 	// after giving one the time to start.
@@ -185,6 +193,115 @@ func TestModelListingRetries(t *testing.T) {
 	now.Store(3600)
 	if r := l.get(); !r.Live || fetches.Load() != 2 {
 		t.Fatalf("an hour on: %+v after %d fetches, want the kept live listing after 2", r, fetches.Load())
+	}
+}
+
+// endListings cancels a run's listings and returns once they have ended: a
+// listing waiting on its context answers, and keeps its file, before it
+// returns. A listing started after it calls no lister (0046-MADR D1).
+func TestEndListingsWaits(t *testing.T) {
+	e, _ := modelEnv(t)
+	t.Setenv("ANTHROPIC_API_KEY", "test-only")
+	t.Setenv("OPENAI_API_KEY", "test-only")
+	var calls atomic.Int64
+	started := make(chan struct{}, 1)
+	withLister(t, func(ctx context.Context, id, _ string, _ provider.Options) (provider.Listing, error) {
+		calls.Add(1)
+		started <- struct{}{}
+		<-ctx.Done()
+		return provider.Listing{Live: true, Source: "live", Models: []string{id + "-late"}, FetchedAt: time.Now()}, nil
+	})
+	l := e.modelListing(provider.Selection{ID: "claude"})
+	l.start()
+	select {
+	case <-started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("claude's listing did not start")
+	}
+	e.endListings()
+	if !l.idle() {
+		t.Fatal("endListings returned while claude's listing ran")
+	}
+	path, err := catalogFile("claude")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b, err := os.ReadFile(path); err != nil || !strings.Contains(string(b), "claude-late") {
+		t.Fatalf("claude's kept listing %q (%v), want the listing's answer, written before endListings returned", b, err)
+	}
+	after := e.modelListing(provider.Selection{ID: "openai"})
+	after.start()
+	if r := after.get(); calls.Load() != 1 || !errors.Is(r.Err, errListingsEnded) {
+		t.Fatalf("a listing after endListings: %+v after %d lister calls, want errListingsEnded and 1 call", r, calls.Load())
+	}
+}
+
+// A listing that ignores its cancellation holds endListings for
+// endListingsWait at most, and is named in a Warn record (0046-MADR D1, Q1).
+func TestEndListingsBound(t *testing.T) {
+	e, warnings := modelEnv(t)
+	t.Setenv("ANTHROPIC_API_KEY", "test-only")
+	old := endListingsWait
+	endListingsWait = 50 * time.Millisecond
+	t.Cleanup(func() { endListingsWait = old })
+	release, started := make(chan struct{}), make(chan struct{}, 1)
+	withLister(t, func(context.Context, string, string, provider.Options) (provider.Listing, error) {
+		started <- struct{}{}
+		<-release // the context is ignored
+		return provider.Listing{}, errors.New("released")
+	})
+	l := e.modelListing(provider.Selection{ID: "claude"})
+	l.start()
+	<-started
+	begin := time.Now()
+	e.endListings()
+	took := time.Since(begin)
+	close(release)
+	if !waitFor(l.idle) {
+		t.Fatal("claude's listing did not end once released")
+	}
+	if took < endListingsWait || took > 2*time.Second {
+		t.Errorf("endListings took %s, want the bound, %s", took, endListingsWait)
+	}
+	if w := warnings.String(); !strings.Contains(w, "model listings still running at the end of the run") || !strings.Contains(w, "claude") {
+		t.Errorf("warnings %q, want the record naming claude", w)
+	}
+}
+
+// A run ends its background listings before Main returns: claude's, which
+// lists until it is cancelled and then takes 100 ms to unwind, as a request
+// does, while openai is the run's provider. Main's own context is cancelled
+// as it returns, so only the run's wait can see the unwind end
+// (0046-MADR D1).
+func TestRunEndsListings(t *testing.T) {
+	withModel(t, llmtest.NewScript(llmtest.Text("fine")))
+	home := t.TempDir()
+	t.Chdir(t.TempDir())
+	t.Setenv("OPENAI_API_KEY", "test-only")
+	t.Setenv("ANTHROPIC_API_KEY", "test-only")
+	claudeIn := make(chan struct{})
+	var once sync.Once
+	var returned atomic.Bool
+	withLister(t, func(ctx context.Context, id, _ string, _ provider.Options) (provider.Listing, error) {
+		if id == "claude" {
+			once.Do(func() { close(claudeIn) })
+			<-ctx.Done()
+			time.Sleep(100 * time.Millisecond) // the unwind
+			returned.Store(true)
+			return provider.Listing{}, ctx.Err()
+		}
+		select { // the run waits for openai's listing, so claude's has begun before the run can end
+		case <-claudeIn:
+		case <-time.After(5 * time.Second):
+		}
+		return provider.Listing{Live: true, Source: "live", Models: []string{id + "-1"}, FetchedAt: time.Now()}, nil
+	})
+	r := mustRun(t, home, "-p", "hi")
+	if r.stdout != "fine\n" {
+		t.Fatalf("stdout %q", r.stdout)
+	}
+	if !returned.Load() {
+		t.Fatal("Main returned with claude's listing still running")
 	}
 }
 

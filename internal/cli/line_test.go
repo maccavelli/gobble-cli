@@ -78,6 +78,7 @@ func newLineHarness(t testing.TB, agent *acptest.ScriptAgent) *lineHarness {
 			t.Error(err)
 		}
 	})
+	ownListings(t, h.e)
 	return h
 }
 
@@ -96,6 +97,7 @@ func newModelHarness(t *testing.T, s *llmtest.Script, cwd string) *lineHarness {
 			t.Error(err)
 		}
 	})
+	ownListings(t, h.e)
 	return h
 }
 
