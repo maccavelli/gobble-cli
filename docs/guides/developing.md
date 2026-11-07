@@ -103,7 +103,8 @@ It ends with `preflight passed`. In order, it runs:
 6. `apidiff`, a no-op below `v1.0.0`;
 7. `verify-build-metadata`, which builds `cmd/gobble` stamped and unstamped;
 8. `check-records`, the records' names, pairs and links;
-9. `markdownlint`.
+9. `check-icon`, which checks that `assets/gobble.svg` is what its generator writes;
+10. `markdownlint`.
 
 Any one of them fails the run. Each is also a target of its own (`make archtest`, `make lint`, …),
 for a quicker loop.
@@ -238,6 +239,26 @@ go-selfupdate-lib's release guide asks to restrict who can create `v*` tags. gob
 because one account can write and it is the owner's, and no workflow pushes a tag that starts a
 release. If a second account ever gets write access, or a workflow gets a token that can push tags and
 start runs, that advice applies again, and restricting `v*` creation needs a new record.
+
+## Change the icon
+
+gobble's icon, a cartoon turkey, is `assets/gobble.svg`. `scripts/gen_icon.py` generates it, and it
+is never edited by hand: `make check-icon`, part of preflight, fails when the two differ.
+
+1. Edit the constants at the top of `scripts/gen_icon.py`.
+2. Write the SVG and its previews. This needs `rsvg-convert` and ImageMagick's `magick`:
+
+   ```sh
+   python3 scripts/gen_icon.py --preview /tmp/gobble-icon
+   ```
+
+3. Look at `gobble-24-x.png` and `gobble-48-x.png`, the small sizes enlarged. The icon is one
+   colour, so its detail (the eye, the wing, the stripe in the tail) must stay visible as gaps.
+4. Commit the script and `assets/gobble.svg` together.
+
+Consumers fetch the file at a `v*` tag, so a change reaches them at the next release. Moving or
+renaming it breaks them, and needs a record that says so
+([0044-MADR](../decisions/0044-MADR-publish-gobbles-icon-and-its-generator.md), D4).
 
 ## Decision records
 

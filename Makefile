@@ -95,7 +95,7 @@ LDFLAGS := -X $(BUILDINFO).version=$(VERSION) -X $(BUILDINFO).kind=$(BUILD_KIND)
 
 .PHONY: build install test race vet fmt lint staticcheck vulncheck tidy clean \
 	pre-add-check preflight check-cgo-off verify-build-metadata fix-check archtest apidiff check-acpext-deps \
-	check-records check-libs markdownlint probe-conhost completion-shells perf $(BIN)
+	check-records check-icon check-libs markdownlint probe-conhost completion-shells perf $(BIN)
 
 # Shipped binaries are pure Go. check-cgo-off refuses CGO_ENABLED other than 0
 # and any `import "C"` in a .go file (0004-PLAN phase 0 accept).
@@ -204,6 +204,7 @@ preflight: check-cgo-off
 	@echo "==> apidiff"; $(MAKE) --no-print-directory apidiff
 	@echo "==> verify-build-metadata"; $(MAKE) --no-print-directory verify-build-metadata
 	@echo "==> check-records"; $(MAKE) --no-print-directory check-records
+	@echo "==> check-icon"; $(MAKE) --no-print-directory check-icon
 	@echo "==> markdownlint"; $(MAKE) --no-print-directory markdownlint
 	@echo "preflight passed"
 
@@ -254,6 +255,11 @@ check-acpext-deps:
 # Records and docs links (0007-MADR D6).
 check-records:
 	$(PYTHON) scripts/check_records.py --check-all
+
+# assets/gobble.svg is what scripts/gen_icon.py writes, byte for byte, on
+# every platform (0044-MADR D3).
+check-icon:
+	$(PYTHON) scripts/gen_icon.py --check
 
 # The sibling libraries against their latest tags (0019-MADR D14); needs the network, so not in preflight.
 check-libs:

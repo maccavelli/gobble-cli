@@ -30,6 +30,9 @@ on, and what keeps the two in step.
 ### Facts
 
 * **The icon,** as approved: 2,462 bytes, sha256 `8e136fa1585b183ffacd8d2cfe9bf9a0db2974c801d8f1ebc41078c900a6308b`.
+  *Amended 2026-11-07: those are the bytes macOS and Windows draw; Linux draws two points differently. The owner
+  re-approved the icon as sha256 `5c7e6c823f2d6ce65cb3d318d85c74378c40485b5fac6b7a6d81124103154685`, also 2,462 bytes,
+  the same on all three (see "Amendment (2026-11-07)").*
   * One `<svg>` with seven attributes, in this order: `fill="currentColor"`, `fill-rule="evenodd"`, `height="1em"`,
     `style="flex:none;line-height:1"`, `viewBox="0 0 24 24"`, `width="1em"` and
     `xmlns="http://www.w3.org/2000/svg"`. Then `<title>gobble</title>`, eight `<path>` elements, and nothing else.
@@ -92,7 +95,8 @@ leaves acpext and the build alone. The owner chose the location and Magic's impo
 
 ### D1. The file
 
-* `assets/gobble.svg`, byte for byte the approved icon (sha256 above).
+* `assets/gobble.svg`, byte for byte the ~~approved icon (sha256 above)~~ re-approved icon, sha256 `5c7e6c82…`
+  (amendment of 2026-11-07).
 * Its root element keeps the Lobe Icons monochrome form: the seven attributes above, in that order, then a `<title>`.
   Its detail stays as cut-outs.
 * It stays one line of ASCII with no newline at the end. `.gitattributes`' `eol=lf` then has nothing to convert, so a
@@ -113,7 +117,9 @@ leaves acpext and the build alone. The owner chose the location and Magic's impo
   needs `rsvg-convert` and ImageMagick's `magick`. When either is missing it exits 2 and names it, having written the
   SVG first. Without `--preview`, neither tool is needed.
 * The geometry `assert`s stay, so a change that breaks the fan or covers the eye or the wing fails loudly.
-* The constants keep their names and values, so the approved bytes come out unchanged.
+* The constants keep their names and values, so the ~~approved~~ re-approved bytes come out unchanged.
+* *Amended 2026-11-07:* Ramer-Douglas-Peucker keeps the first of the distances within 1e-9 of the largest, rather than
+  whichever the platform's maths library makes a bit larger. This is the one change to the session's geometry.
 
 ### D3. The gate
 
@@ -125,6 +131,8 @@ leaves acpext and the build alone. The owner chose the location and Magic's impo
   formats floats itself.) Such a difference changes the output only where it moves a value across an edge: a 0.01
   rounding boundary, Ramer-Douglas-Peucker's keep-or-drop test at 0.03, or the stripe's bounds test. That is unlikely
   but not proven. So the PLAN runs the script on all three before the gate is added, and CI then runs it on every push.
+  *Amended 2026-11-07: the run on all three found a fourth edge, a tie between two candidates in Ramer-Douglas-Peucker,
+  and Linux drew differently. D2's tie rule removes it (see "Amendment (2026-11-07)").*
 * `docs/guides/developing.md` lists the gate, and says how to change the icon: edit the constants, run with
   `--preview`, look at the PNGs, and commit the script and the SVG together.
 
@@ -152,7 +160,7 @@ leaves acpext and the build alone. The owner chose the location and Magic's impo
 
 ### Confirmation
 
-1. `assets/gobble.svg`'s sha256 is the approved one above.
+1. `assets/gobble.svg`'s sha256 is the ~~approved one above~~ re-approved one, `5c7e6c82…` (amendment of 2026-11-07).
 2. `python3 scripts/gen_icon.py --check` exits 0 on the tree. On a scratch copy, it exits 1 with the SVG changed by one
    byte, and again with one constant changed.
 3. `scripts/gen_icon.py` writes the same bytes on macOS, Linux and Windows, run on each before the gate is added.
@@ -198,6 +206,20 @@ leaves acpext and the build alone. The owner chose the location and Magic's impo
 * Bad, because it is the opposite of what the owner asked for.
 
 ## More Information
+
+### Amendment (2026-11-07): ties in the simplification
+
+Found at 0044-PLAN P1 step 4, its deviation 1, which holds the evidence. The session's script, ported unchanged,
+wrote the approved bytes on macOS and Windows, and different bytes on Linux under the same Python (3.14.10). The
+fan's scalloped edge is symmetric, so Ramer-Douglas-Peucker meets ties between candidate points, equal or within
+about 1e-14. `max` kept whichever the platform's `sin` and `cos` made a bit larger, and Linux's maths library chose
+two differently.
+
+No deterministic rule tried gave back the approved bytes. The owner chose the smallest change ("take option 1,
+continue"): keep the first of the distances within 1e-9 of the largest (D2). One point of the fan's upper edge moves,
+`6.85 8.31` to `6.82 8.33`. Rendered at 24 px the two icons are pixel-identical, and at 48 px one pixel differs by
+1/255. The icon is now sha256 `5c7e6c823f2d6ce65cb3d318d85c74378c40485b5fac6b7a6d81124103154685`, 2,462 bytes, the
+same on macOS, Linux and Windows. D3's cross-platform check stands unchanged.
 
 ### Owner answers, 2026-11-07
 
