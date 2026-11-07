@@ -1233,6 +1233,7 @@ The base is P4's `5a20d06`. Deviations 11 and 12 added `acpclient/conn_test.go`,
 * **Decision.** The failure is recorded as pre-existing and out of this plan's scope. Windows' `go test -count=1 ./...`
   was rerun on P6's copy: 37 ok. The flake waits for a record of its own; no assertion or test was changed.
 * **Files added:** none.
+* *Note (2026-11-07): the late writer is identified and removed by [0046-MADR-own-background-listings-and-keep-tests-hermetic.md](0046-MADR-own-background-listings-and-keep-tests-hermetic.md). A listing `settled` could not see wrote kept listings into the next test's home, or the user's cache, and the SDK's background model facts left an OAuth refresh lock. Its PLAN's P4 ran this test 60 times under `-race` on macOS and on the Windows laptop with no failure.*
 
 ### P6 record (2026-11-01): the local files and the providers output
 
@@ -1458,6 +1459,7 @@ The base is P7's `fe671d6`. No deviation; deviation 15's assertion is met here.
 * **Decision.** As deviation 14: recorded, out of this plan's scope, and left for a record of its own; no assertion or
   test changed. `make race` was rerun: 38 ok. The flake will recur in later runs until that record fixes it.
 * **Files added:** none.
+* *Note (2026-11-07): the late writer is identified and removed by [0046-MADR-own-background-listings-and-keep-tests-hermetic.md](0046-MADR-own-background-listings-and-keep-tests-hermetic.md). A listing `settled` could not see wrote kept listings into the next test's home, or the user's cache, and the SDK's background model facts left an OAuth refresh lock. Its PLAN's P4 ran this test 60 times under `-race` on macOS and on the Windows laptop with no failure.*
 
 ### Deviation 19 (2026-11-01): P9, `internal/archtest/doc.go`
 

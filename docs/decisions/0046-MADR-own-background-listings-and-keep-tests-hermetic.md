@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 date: 2026-11-07
 decision-makers: repository owner
 consulted: "this repository at b67cbbe (main, 2026-11-07); go-llmprovider-sdk v1.27.0's llmprovider/catalog (lookup.go, listing_cache.go, cache.go, discovery.go); Go 1.27.3's net/http and httpproxy; CI run 42387920951 (v0.3.0, attempt 1) and the eight earlier failed CI runs; 0035-, 0037- and 0039-PLAN's records of the same failure; probes on scratch copies of the tree, recorded under More Information"

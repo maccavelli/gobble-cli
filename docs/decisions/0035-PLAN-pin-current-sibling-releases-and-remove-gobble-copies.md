@@ -2859,7 +2859,7 @@ No deviation of its own. The base correction in item 1 changes no decision.
   tag, failed `test` once, in `TestLastGoodOnDisk`'s teardown (`TempDir RemoveAll cleanup: … directory not empty`).
   That is the failure 0039-PLAN's deviations 14 and 18 recorded in `TestLoginAsksThroughQuestions`, now in a second
   test. Both run model listings under a test's `GOBBLE_HOME`; the late writer is still not identified. It waits for its
-  own record, as they decided.
+  own record, as they decided. *Note (2026-11-07): that record is [0046-MADR-own-background-listings-and-keep-tests-hermetic.md](0046-MADR-own-background-listings-and-keep-tests-hermetic.md), which identifies both writers and removes them.*
 - **What reaches gobble,** read from the release notes, the tags' commits and gobble's call sites; the MADR's D1
   amendment has it in full:
   - acp-go-sdk2: the agent's default overflow policy moves from closing to pausing; the client names its own;

@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: complete
 date: 2026-11-07
 associated-madr: "0046-MADR-own-background-listings-and-keep-tests-hermetic.md"
 ---
@@ -479,3 +479,68 @@ from the scratch runs (C2).
 * The identifier scan of the changed files found nothing.
 
 **Step 5** is this record. Staged; the owner commits. P4 waits for the push.
+
+### P4 record (2026-11-07)
+
+On the owner's "committed and pushed, proceed." after P3 (`198ae13`). Start state (C1): `main` at `198ae13`, equal to
+`origin/main`, the tree clean. No deviation.
+
+**Step 1, the probes again,** each on a scratch copy with `HOME` and `XDG_*` in the scratch directory. Their anchors
+still matched the tree, so none needed updating.
+
+* `settled_probe.py`, 200 runs. After `TestLastGoodOnDisk`'s last `settled`, claude's listing had ended in all 200:
+  `136 x … claude stale, its listing ended: true` and `64 x … claude live, its listing ended: true`. Before P2 it had
+  not ended in 5 of 100 (MADR F1).
+* `late_probe.py`, at 2 ms and at 5 ms, four iterations each. `scratchpad/lp_check.py` checked the logs:
+  * each iteration made exactly four writes, one of them phase two's claude (`["claude-1"]`), all in that
+    iteration's own home;
+  * nothing but Go's telemetry was under the scratch `HOME`'s defaults.
+
+  `ok` at both delays. The same checker, on the 5 ms log from before P1, flags iterations 1 and 4 (`3 writes, 0 of
+  phase two's claude`) and `cache/gobble/catalog/claude.json` under the defaults (MADR F2).
+* `late_probe4.py` under `-race`, the whole package twice: `files under the fake default directories: none`, and no
+  late file. Before P1 it found `auth.json.grok.refresh.lock` in `TestLoginAsksThroughQuestions`' home (MADR F3).
+* MADR Confirmation 4 is the network guard's own report (deviation 2). No run of `internal/cli` in P1 to P4, here or
+  on CI, printed `tests tried to reach the network`. The outside proxy saw 0 connections from the rest of the module
+  in P1.
+
+**Step 2, the repetitions,** on the final code:
+
+* `CGO_ENABLED=1 go test -race -count=60 -run '^TestLoginAsksThroughQuestions$' ./internal/cli/`: ok on macOS, and ok
+  on the Windows dev host.
+* `go test -count=3 ./internal/cli/`: ok on macOS, on the Linux dev host and on the Windows dev host (890 files each).
+
+**Step 3, CI.** Run `42401401130` on `198ae13` passed every job:
+
+* `validate` on `ubuntu-24.04`, `macos-15` and `windows-2025`; `sbom`; `build`, and the identity check on all five
+  platforms. `release` was skipped, with no tag, and the Docs workflow passed.
+* In each `validate` job, `go test` gave `ok github.com/maccavelli/gobble-cli/internal/cli`, and `make preflight`
+  gave `preflight passed`. `make race` gave `internal/cli` ok on `ubuntu-24.04` and `macos-15`; CI runs no race job
+  on Windows.
+* No log has the guard's or the owner check's report.
+
+**Step 4, the records.**
+
+* This plan is `complete`, and the MADR `accepted`, with the `docs/README.md` rows to match.
+* Dated notes point here from 0039-PLAN's deviations 14 and 18, from 0037-PLAN's P7 G-local, and from 0035-PLAN's
+  sighting.
+
+**The MADR's Confirmations:**
+
+| # | Met by |
+| :--- | :--- |
+| 1 | P2 `TestSettledWaitsForAStaleListing`; P4 step 1, 200 of 200 |
+| 2 | P4 step 1, `late_probe.py` at 2 ms and 5 ms, and `lp_check.py` `ok` |
+| 3 | P4 step 1, `late_probe4.py` under `-race` twice, no late file |
+| 4 | The guard's report, empty in every run (deviation 2) |
+| 5 | P1 step 4: without the stub, the guard named the five hosts and failed the run |
+| 6 | P2 `TestEndListingsWaits` and `TestEndListingsBound`, each seen failing against a planted break |
+| 7 | P3 `TestLogAfterCloseOpensNothing` and `TestReadKeptCreatesNothing`, each seen failing |
+| 8 | P4 step 2 |
+| 9 | each phase's gates, and CI run `42401401130` |
+
+**Not done:**
+
+* The issue on the MCP Go SDK about reading the proxy variables at package initialisation (deviation 2), which waits
+  for the owner's word.
+* go-llmprovider-sdk#12 is the SDK's to build. gobble does not wait for it.

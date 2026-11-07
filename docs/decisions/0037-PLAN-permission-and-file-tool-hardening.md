@@ -1154,6 +1154,7 @@ The base is P6's `603bad6`. Deviation 7.
    teardown: `TempDir RemoveAll cleanup: … /catalog: directory not empty`. That is the late writer under a test's
    `GOBBLE_HOME` that 0039-PLAN's deviations 14 and 18 and 0035-PLAN's deviation 14 recorded, which waits for a record
    of its own; P7 changes nothing it runs. The second run: 38 ok.
+   *Note (2026-11-07): that record is [0046-MADR-own-background-listings-and-keep-tests-hermetic.md](0046-MADR-own-background-listings-and-keep-tests-hermetic.md). `TestLastGoodOnDisk`'s second phase ended while claude's listing still ran, which `settled` could not see; its PLAN's P2 makes every run end and wait for its listings.*
 6. **G-hosts,** 822 files shipped to each: `go test` and race passed on both, 38 ok; `make check-records markdownlint`
    passed on both; preflight stops at `verify-build-metadata`, as on every copy. `make perf` passed on both
    (`TestPerfBudget` in `internal/cli` and in `internal/cli/editor`), and `make probe-conhost` passed on the Windows
