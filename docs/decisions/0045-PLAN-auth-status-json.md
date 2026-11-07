@@ -267,3 +267,8 @@ are met: 1 to 6 and 8 at P1, and 7 here.
 
 **Step 3 waits for the owner's word.** A comment on gobble-cli#13 names `3717ab6`, and says the command reaches Magic
 at the next `v*` release. The issue closes when the owner's release carries it.
+
+*Done 2026-11-07, on the owner's "proceed with p2", after the close-out `9b3385d` was pushed:*
+[the comment](https://github.com/maccavelli/gobble-cli/issues/13#issuecomment-6709199439) names `3717ab6`, the
+fields, D5's error, where the shape is documented and pinned, and the release. gobble-cli#13 stays open until a `v*`
+release carries the command.
