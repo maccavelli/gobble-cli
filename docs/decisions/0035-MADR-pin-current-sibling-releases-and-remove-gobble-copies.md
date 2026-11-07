@@ -629,6 +629,36 @@ policy. And one record keeps the order, and the cross-library facts (check-libs,
     - *the readings above of `v1.32.0` to `v1.33.1`, S8's two tests and R11 among them, hold unchanged.*
   - *`python3 scripts/check_libs.py --lib acp-go-sdk2 --tag v1.34.0`, from a scratch clone: 13 checks, of which 1
     fails, `test`, on S8's two tests alone; `get and tidy`, `modules` and `api` are ok.*
+
+  *Amended 2026-11-06, by the PLAN's deviation 27, proposed for the owner's approval, from the owner's "I am about to
+  release a new version of go-llmprovider-sdk … When the release is out we will change the pin to it" and "amend 0035
+  for v1.27.0":*
+  - ***go-llmprovider-sdk `v1.27.0`** (`52ab75fa31131e2aee2b313a0a8cf923afbad26d`, published 2026-11-06), its GitHub
+    release marked Latest and listed by the module proxy's `@v/list`, in place of `v1.26.1`. It carries
+    go-llmprovider-sdk's `docs/decisions/0070-MADR-place-grok-4-20-by-date-and-split-model-labels.md`, and changes
+    the `catalog` package alone. Its `go.mod` adds no requirement. What reaches gobble:*
+    - *D1, the ranking. `catalog.Rank` read `grok-4.20-*` as generation 4.20, above `grok-4.7`, though xAI released
+      it before `grok-4.3`. A family's two-digit minor is now read as an integer or a decimal, from the family's
+      dates and siblings, so `grok-4.20` is 4.2, and `gemini-3.10` still follows `gemini-3.9`. The curation of a
+      live Gemini, Claude or Grok listing uses that reading. gobble takes the curated list from `catalog.List`
+      (`llm/provider/list.go:103`), and a provider's default model is its first (`internal/cli/models.go:192`). So
+      for a Grok account whose listing holds a `grok-4.20-*` model, that model no longer leads the listing or
+      becomes the default. This corrects the order; gobble's code does not change. The static fallbacks, Grok's
+      `grok-4.6` first among them, are unchanged;*
+    - *D2, the labels. Eight curated notes are reworded: `grok-4.6`'s no longer calls it the Grok CLI's default,
+      `grok-4.5`'s "previous flagship" is gone, notes no longer place a model in time, and `claude-opus-4-8`'s names
+      its generation. `Label` composes them as before, the name padded and the note in brackets, so `/model` and
+      `gobble models --search` show the new words in the same layout. No gobble test or golden asserts a label;*
+    - *added, not used: `catalog.SortByRank`, `catalog.LabelName` and `catalog.LabelNote`. gobble splits no label
+      and has no release dates to give `SortByRank`, so adopting them is not here. `catalog.Search` now takes a
+      match's name from `LabelName`, with the same result for every curated label;*
+    - *the readings above of `v1.25.0` to `v1.26.1`, D3's `refreshPolicy` at 60 s among them, hold unchanged.*
+  - *acp-go-sdk2 `v1.34.0`, go-tui-lib/v2 `v2.12.0` and go-selfupdate-lib `v1.24.0` are still the newest of their
+    majors, by `git ls-remote --tags`.*
+  - *`python3 scripts/check_libs.py --lib go-llmprovider-sdk --tag v1.27.0`, from a scratch clone of `d1d6a73`:
+    "pinned v1.26.1, checking v1.27.0", 13 checks, "0 failing checks", `staticcheck`, `lint` and `api` among them.
+    A second scratch clone moved by `go get` and `go mod tidy` changed `go.mod` on that line and `go.sum` on the
+    SDK's two lines alone; `go build ./...`, `go test ./...` and `make preflight` passed there.*
 - **D2. `check-libs` sees what preflight sees.**
   - `scripts/check_libs.py` runs `make staticcheck` and `make lint` on its scratch module for each library, so that F2
     would have been reported.

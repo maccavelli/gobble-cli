@@ -1,6 +1,6 @@
 ---
 status: in-progress
-date: 2026-10-29
+date: 2026-11-06
 associated-madr: "0036-MADR-adopt-go-llmprovider-sdk-new-capabilities.md"
 ---
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
@@ -43,7 +43,7 @@ Associated MADR: [0036-MADR-adopt-go-llmprovider-sdk-new-capabilities.md](0036-M
 ## Order
 
 - **Before P1:** gobble requires go-llmprovider-sdk `v1.24.1` with 0035's D3 row and D4 changes (MADR D1). P0 checks
-  it.
+  it. *(2026-11-06: `v1.24.1` or later; met at `v1.26.1`, see P0's record of that date.)*
 - **The phases:**
   - P1 first;
   - P2 before P3, and before P6, whose dropped-image warning it carries;
@@ -63,6 +63,7 @@ Associated MADR: [0036-MADR-adopt-go-llmprovider-sdk-new-capabilities.md](0036-M
   first.)*
 - **The index:** `docs/README.md` holds the other session's uncommitted 0035 row. The owner chose on 2026-10-29 that
   this pair's index rows wait until that row is committed, so this session stages none of that file's changes.
+  *(2026-11-06: that row is committed, and this pair's rows are in `docs/README.md`.)*
 - **Status:** this plan stays `proposed` until the owner approves execution. Q1–Q4 are answered (above).
   *(2026-10-29: approved by the owner's "committed, proceed"; `in-progress`, waiting at P0. See P0's record.)*
 
@@ -75,10 +76,23 @@ which `provider_test.go` already imports.
 
 ### P0 — the precondition (MADR D1)
 
-1. `go list -m github.com/maccavelli/go-llmprovider-sdk` prints `v1.24.1`.
+*(Amended 2026-11-06, to the tree as it is: 0035's go-llmprovider-sdk phases have landed and the pin has moved past
+`v1.24.1`, so step 1 reads the floor, not an exact tag, and steps 4 and 5 are added. The MADR's D1 note of that date
+says why.)*
+
+1. `go list -m github.com/maccavelli/go-llmprovider-sdk` prints ~~`v1.24.1`~~ `v1.24.1` or later: the tag
+   `0035-MADR-pin-current-sibling-releases-and-remove-gobble-copies.md` D1 names last.
 2. `go test -run TestWireOffline ./llm/provider/` passes.
 3. `git grep -n sdkEmptyAnswer` and `git grep -n 'func offline'` find nothing in `llm/provider`, as 0035's D4 has it.
-4. If any of these fails, stop: the MADR is amended (D1) before P1. Nothing is written in P0.
+4. **The SDK's surface,** read at the pinned tag in the module cache or a clone: each name in the MADR's table "What
+   the SDK added that gobble does not use" is still exported, `Response.Warnings` and its three kinds,
+   `ReasoningRefusal` and `WithReasoningRefusals`, `chatcompat.New`, `WithID`, `Descriptor` and `Discover`,
+   `Catalog.Search` and `Match.Why`, `ImageItem` and `Capabilities.Images`. And `git grep` over gobble's `*.go` finds
+   none of them used, other than the package function `catalog.Search` the MADR names as today's search.
+5. **The citations.** The MADR's and this plan's line numbers in gobble were measured at `ccd8aa8`. Each phase reads
+   its own again at its start, and records the lines it found. A line that has moved is not a deviation; a fact that no
+   longer holds is.
+6. If any of steps 1 to 4 fails, stop: the MADR is amended (D1) before P1. Nothing is written in P0 but its record.
 
 ### P1 — one registry, and models.json's table from it (D2)
 
@@ -330,3 +344,37 @@ P0 runs again once 0035-PLAN's P5 has landed. MADR D1 is unchanged: the wait is 
 
 Found at the same check: the owner's "committed" had not landed. `HEAD` was still `ccd8aa8`, the reflog's last entry
 was 08:29 that day, and this pair and the 0031 notes were still staged.
+
+### P0 record, run again (2026-11-06): the precondition is met
+
+On the owner's "update and fix 0036 P0 to current reality". Run in the tree at `d1d6a73`, equal to `origin/main`,
+with the steps as amended that day.
+
+1. `go list -m github.com/maccavelli/go-llmprovider-sdk`: `v1.26.1`, the tag 0035-MADR D1 names last as accepted. It
+   is `v1.24.1` or later. **Met.** If 0035-PLAN's P32 lands first, it is `v1.27.0`, which a scratch clone showed
+   changes none of this record's names (step 4) and none of gobble's tests.
+2. `go test -count=1 -run TestWireOffline ./llm/provider/`: `ok … llm/provider 0.805s`. The test is in
+   `llm/provider/offline_test.go:25`, and passes at a pin past `v1.24.1` because 0035's D3 row is in. **Met.**
+3. `git grep -n sdkEmptyAnswer -- llm/provider` and `git grep -n 'func offline' -- llm/provider`: both exit 1, nothing
+   found. 0035-PLAN's P4 (`bd79d2a`) and P5 (`43649b8`) landed on 2026-10-30. **Met.**
+4. **The SDK's surface,** by `git grep` in a clone of go-llmprovider-sdk at `v1.26.1` and at `v1.27.0`, each with the
+   same locations: `WarningEffortDegraded`, `WarningReasoningLearned`, `WarningImageDropped`
+   (`llmprovider/warning.go:28`, `:34`, `:38`) and `Response.Warnings` (`llmprovider/item.go:140`);
+   `ReasoningRefusal` (`refusal.go:32`) and `WithReasoningRefusals` (`:47`); `chatcompat.New`
+   (`providers/chatcompat/chatcompat.go:174`, `:170` at `v1.24.1`), `WithID` (`:140`, was `:136`), `Descriptor`
+   (`descriptor.go:9`) and `Discover` (`discover.go:65`, was `:63`); `Catalog.Search` (`catalog/search.go:205`) and
+   `Match.Why` (`catalog/model_matcher.go:44`); `ImageItem` (`item.go:79`) and `Capabilities.Images`
+   (`capabilities.go:48`). `git grep` over gobble's `*.go` for `Warnings`, `ReasoningRefusal`, `ImageItem`,
+   `chatcompat` and `.Why` finds none; `.Search(` finds `catalog.Search` (`llm/provider/list.go:54`) and gobble's own
+   tool search alone. **Met.**
+5. **The citations,** spot-read, each fact unchanged and some lines moved since `ccd8aa8`: the adapter's `EventDone`
+   is at `llm/provider/provider.go:348` (was `:337`); `ambient.go` still calls `providers.Default().Descriptors()` at
+   `:49`, `:61`, `:81`, `:93`, `:103`, `:152` and `:163`, and `signin.go` passes `providers.Default()` at `:177` (was
+   `:174`); models.json's skip message is `llm/catalog/modelsjson.go:201` (was `:196`); `toRequest`'s last case is
+   `ContentToolResult` at `provider.go:486` (was `:443`), with no `ContentImage` case; `llm.Capabilities.ImageInput`'s
+   comment (`llm/llm.go:45`) now names 0035-MADR D18 and 0036-MADR D7; `read`'s note is `tool/builtin/read.go:48`
+   (was `:31`); MCP's `[image … omitted]` is `mcpclient/tool.go:153` (was `:159`). P1 to P7 read theirs again (step 5).
+
+So P0 is met, and P1 may start on the owner's word. Nothing of P1 is written here. 0035-PLAN's P32 and this plan's P1
+share only `README.md` and `docs/architecture.md`, on different lines, so either may land first and the second
+rebases.

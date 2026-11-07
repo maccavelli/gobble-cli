@@ -1465,6 +1465,30 @@ copies in `stream`, with the same output. The files and steps are unchanged.)*
 No check is added, so C9 has nothing to break. Adopting A15, the reprint at a line's end, is not this phase's work; it is
 a record of its own (deviation 19).
 
+### P32 — go-llmprovider-sdk `v1.27.0` (MADR D1, amended 2026-11-06; deviation 27)
+
+Files: `go.mod`, `go.sum`, `README.md`, `docs/architecture.md`.
+
+1. **Checked first:** `python3 scripts/check_libs.py --lib go-llmprovider-sdk --tag v1.27.0` reports every check ok. On
+   2026-11-06 it did: 13 checks, 0 failing. And `git ls-remote --tags` lists no sibling tag newer than this plan names;
+   one that it lists is a new amendment (Rollout).
+2. **The pin:** `go get github.com/maccavelli/go-llmprovider-sdk@v1.27.0`, then `go mod tidy`.
+   * `go.mod` changes on that line alone.
+   * `go.sum` changes in go-llmprovider-sdk's lines alone: the two `v1.26.1` lines out, the two `v1.27.0` lines in.
+3. **No source change.** `llm/provider`, `llm/catalog`, `internal/cli` and `acpserver` pass their tests unchanged: the
+   listing, search and default-model tests among them (`llm/provider/list_test.go`, `internal/cli/modelscmd_test.go`,
+   `internal/cli/auth_test.go`'s `modelChoice`), and `ambient_test.go`'s static defaults, Grok's `grok-4.6` among them.
+   The four goldens are byte-identical to `ccd8aa8`'s (`git diff --quiet`). A test whose expectation changes is a
+   deviation: the MADR's amendment says only a live listing's order and the label notes move.
+4. **The docs:** `README.md:131` and `docs/architecture.md:190` name `v1.27.0`; neither names `v1.26.1`.
+5. G-local, and G-hosts. **Commit.** P32 touches nothing under `internal/cli`, so no `make perf`.
+6. **The close-out,** in the commit after P32's, since `make check-libs` clones the last commit: the Verification's
+   first two items again, which return this plan to `complete`, and the `docs/README.md` rows (C7), as the close-out
+   after P31 did.
+
+No check is added, so C9 has nothing to break. Adopting `catalog.SortByRank`, `LabelName` or `LabelNote` is not this
+phase's work.
+
 ## Verification
 
 Each phase's own steps are its acceptance criteria. Across the plan:
@@ -1487,6 +1511,7 @@ Each phase's own steps are its acceptance criteria. Across the plan:
   - P15–P18 need P14's requirement.
   - P12 needs P20, and P17 needs P21 (deviation 12). P22 needs nothing after P3.
   - P27 needs P24, and P28 needs P22 (deviation 22).
+  - P32 needs P30 (deviation 27).
 
   Reverting a pin phase reverts the phases that need it, newest first.
 - Nothing is pushed by this plan. The owner pushes, after the disclosure guard.
@@ -1496,7 +1521,9 @@ Each phase's own steps are its acceptance criteria. Across the plan:
   - P11, an interrupted `gobble acp` answering `cancelled`;
   - P14, the permission prompt's layout;
   - P15 and P18, terminal styling and cleaning;
-  - P17, the editor's multiline, paste and word moves.
+  - P17, the editor's multiline, paste and word moves;
+  - P32, a live Grok listing's order and default model when it holds a `grok-4.20-*` model, and eight label notes,
+    each from the SDK (deviation 27).
 
   Each is named in its commit's message by the hook, from the diff.
 
@@ -3640,3 +3667,30 @@ The base is `927d7bd`, P31's commit. No deviation.
    and so is deviation 23's offer of go-tui-lib's A15 as a record of its own.
 4. **The `docs/README.md` rows** (C7), held from P29's record on: the other session's change landed in `82c6c3b`, so
    this commit updates the MADR's and this plan's rows for deviations 23 to 26 and this close-out.
+
+### Deviation 27 (2026-11-06): go-llmprovider-sdk `v1.27.0`
+
+- **Found,** on the owner's "I am about to release a new version of go-llmprovider-sdk. … When the release is out we
+  will change the pin to it" (`main` at `d1d6a73`, equal to `origin/main`), after the close-out above. `git ls-remote
+  --tags`, the GitHub releases and the module proxy's `@v/list` list go-llmprovider-sdk `v1.27.0`
+  (`52ab75fa31131e2aee2b313a0a8cf923afbad26d`, published 2026-11-06T23:11:10Z), its release marked Latest and its tag's
+  CI run passed, against the pin `v1.26.1`. acp-go-sdk2 `v1.34.0`, go-tui-lib/v2 `v2.12.0` and go-selfupdate-lib
+  `v1.24.0` are still the newest.
+- **Measured,** on scratch clones of `d1d6a73`. The tree was not changed.
+  - `python3 scripts/check_libs.py --lib go-llmprovider-sdk --tag v1.27.0`: "pinned v1.26.1, checking v1.27.0", 13
+    checks, "0 failing checks".
+  - `go get …@v1.27.0` ("upgraded … v1.26.1 => v1.27.0") and `go mod tidy`: `go.mod` changed on that line, `go.sum` on
+    the SDK's two lines, and nothing else. `go build ./...`, `go test ./...` and `make preflight` ("preflight
+    passed") passed.
+- **What reaches gobble,** read from the SDK's `CHANGELOG.md` section `v1.27.0`, the tags' diff (`catalog` alone) and
+  gobble's call sites (`catalog.List` and `catalog.Search`, `llm/provider/list.go`). The MADR's D1 amendment has it in
+  full:
+  - a live Gemini, Claude or Grok listing is curated in a corrected order: a `grok-4.20-*` model ranks below
+    `grok-4.3`, so it no longer leads a Grok listing or becomes its default model;
+  - eight label notes read differently in `/model` and `gobble models --search`, in the same layout;
+  - `SortByRank`, `LabelName` and `LabelNote` are added and not used.
+- **Decision** (proposed with this deviation, for the owner's approval):
+  - MADR D1 has a dated amendment for the tag;
+  - P32 (go-llmprovider-sdk `v1.27.0`) is new, one commit, then the close-out commit;
+  - this plan becomes `in-progress` on approval, until P32's close-out returns it to `complete`.
+- **Files added to scope:** P32's `go.mod`, `go.sum`, `README.md` and `docs/architecture.md`.

@@ -19,7 +19,8 @@ efficient."
 
 Number 0035 was taken while this record was being researched. Another session wrote
 `0035-MADR-pin-current-sibling-releases-and-remove-gobble-copies.md` at 20:14 on 2026-10-29. That record is
-`proposed`, has no PLAN yet, and is not yet committed, so this record names it as code text, not as a link. It covers
+`proposed`, has no PLAN yet, and is not yet committed, so this record names it as code text, not as a link. *(2026-11-06:
+it is committed and `accepted`, [0035-MADR-pin-current-sibling-releases-and-remove-gobble-copies.md](0035-MADR-pin-current-sibling-releases-and-remove-gobble-copies.md), and its PLAN is too; More Information links them.)* It covers
 the four sibling libraries. For go-llmprovider-sdk it decides:
 
 - the pin, `v1.24.1` (its D1);
@@ -185,6 +186,12 @@ the owner split images out anyway.
   - If 0035 is rejected, or changes those decisions, this record is amended before its first phase, to carry the pin
     and the D3 row itself. The `TestWireOffline` failure above shows the pin cannot land without that row.
   - The workspace (0035's D5) is not a precondition: no phase here reads it.
+  - *2026-11-06, read again at the 0036-PLAN's P0 of that date: the precondition is met. 0035-PLAN's P4 (`bd79d2a`, the
+    pin and D3's offline row) and P5 (`43649b8`, D4's copies gone) landed on 2026-10-30. The pin has moved on since,
+    by 0035's later phases, to `v1.26.1`, and to `v1.27.0` by its P32 if approved. So "`v1.24.1`" above is the floor,
+    not an exact tag: this record needs `v1.24.1` or later with D3's row and D4 in. Every SDK name this record uses is
+    still exported, unchanged, at `v1.26.1` and at `v1.27.0`, and gobble still uses none of them. The lines this record
+    cites in gobble were measured at `ccd8aa8`; several have moved, and each phase reads its own again.*
   - [0031-PLAN-sdk-current-releases-and-adoption.md](0031-PLAN-sdk-current-releases-and-adoption.md) P4b, the ChatGPT
     plan sign-in, needs none of this record. Its `SignIn` change and D2's change of `SignIn`'s registry touch the
     same function, so whichever lands second rebases on the first.
@@ -374,8 +381,11 @@ phases (D1).
 ## More Information
 
 - [gobble-cli#4](https://github.com/maccavelli/gobble-cli/issues/4), and go-llmprovider-sdk issue 9, its source.
-- The other session's `0035-MADR-pin-current-sibling-releases-and-remove-gobble-copies.md` (proposed, uncommitted on
-  2026-10-29): D1, D3, D4, D5, D18. A link replaces this text once it is committed.
+- ~~The other session's `0035-MADR-pin-current-sibling-releases-and-remove-gobble-copies.md` (proposed, uncommitted on
+  2026-10-29): D1, D3, D4, D5, D18. A link replaces this text once it is committed.~~ *(2026-11-06: committed and
+  accepted.)* [0035-MADR-pin-current-sibling-releases-and-remove-gobble-copies.md](0035-MADR-pin-current-sibling-releases-and-remove-gobble-copies.md): D1, D3, D4, D5, D18; and its PLAN,
+  [0035-PLAN-pin-current-sibling-releases-and-remove-gobble-copies.md](0035-PLAN-pin-current-sibling-releases-and-remove-gobble-copies.md),
+  P4 and P5.
 - [0031-MADR-sdk-current-releases-and-adoption.md](0031-MADR-sdk-current-releases-and-adoption.md): D9 and its note of
   2026-10-29.
 - [0005-MADR-v1-feature-scope.md](0005-MADR-v1-feature-scope.md), [0008-MADR-native-cli-mode.md](0008-MADR-native-cli-mode.md)
