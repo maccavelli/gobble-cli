@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: complete
 date: 2026-11-07
 associated-madr: "0045-MADR-auth-status-json.md"
 ---
@@ -247,3 +247,23 @@ on the final code, after the lint fixes below:
 * The identifier scan of every changed file found nothing.
 
 **Step 6** is this record and the `docs/README.md` rows. Staged; the owner commits. P2 waits for the push.
+
+### P2 record (2026-11-07)
+
+On the owner's "committed and pushed": P1 is `3717ab6`, and `main` equals `origin/main` there.
+
+**Step 1, CI.** Run `42386197369` on `3717ab6` passed every job: `validate` on `ubuntu-24.04`, `macos-15` and
+`windows-2025`, `sbom`, `build` and the identity check on all five platforms; `release` skipped, with no tag. The Docs
+workflow passed. In each `validate` log:
+
+* `ubuntu-24.04`: `go test`, `ok github.com/maccavelli/gobble-cli/internal/cli 7.245s`; `make preflight`, `preflight
+  passed`; `make race`, `internal/cli` ok;
+* `macos-15`: the same: `internal/cli` ok, `preflight passed`, and `make race` ok;
+* `windows-2025`: `go test`, `internal/cli` ok; `preflight passed`. CI runs no race job on Windows (`ci.yml`, the
+  `make race` step's comment). The Windows dev host ran it in P1.
+
+**Step 2.** This plan is `complete`, the MADR `accepted`, and the `docs/README.md` rows match. Confirmations 1 to 8
+are met: 1 to 6 and 8 at P1, and 7 here.
+
+**Step 3 waits for the owner's word.** A comment on gobble-cli#13 names `3717ab6`, and says the command reaches Magic
+at the next `v*` release. The issue closes when the owner's release carries it.

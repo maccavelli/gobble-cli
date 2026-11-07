@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 date: 2026-11-07
 decision-makers: repository owner
 consulted: "gobble-cli#13 (opened 2026-11-07 for magic-cli-remote); this repository at 3dbf756 (main, 2026-11-07): internal/cli/auth.go, credentials.go, modelsjson.go, internal/auth/resolve.go and store.go, auth_test.go, acpext_test.go, docs/guides/credentials.md"
