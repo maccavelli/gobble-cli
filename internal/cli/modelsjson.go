@@ -26,47 +26,71 @@ const commandTimeout = 10 * time.Second
 // is read, and its diagnostics logged, once (0005-PLAN F4-2b).
 var modelsJSONs = struct {
 	sync.Mutex
-	byPath map[string]*catalog.ModelsJSON
-}{byPath: map[string]*catalog.ModelsJSON{}}
+	byPath map[string]modelsJSONRead
+}{byPath: map[string]modelsJSONRead{}}
+
+// modelsJSONRead is one read of a models.json: the file, or nil, and the
+// error that made it nil, if any.
+type modelsJSONRead struct {
+	mj  *catalog.ModelsJSON
+	err error
+}
 
 // modelsJSON is <config>/models.json, read once per process. No file, or a
 // config directory that cannot be resolved, is none; a file that cannot be
 // read or parsed is none, with one warning; each provider or field it skips
 // is a warning.
-func (e *runEnv) modelsJSON() *catalog.ModelsJSON {
+func (e *runEnv) modelsJSON() *catalog.ModelsJSON { return e.modelsJSONOnce().mj }
+
+// modelsJSONError is why models.json is none although it exists: it could
+// not be read or parsed. No file is no error (0045-MADR D5).
+func (e *runEnv) modelsJSONError() error { return e.modelsJSONOnce().err }
+
+func (e *runEnv) modelsJSONOnce() modelsJSONRead {
 	dirs, _, err := systemDirs()
 	if err != nil {
-		return nil
+		return modelsJSONRead{}
 	}
 	path := filepath.Join(dirs.Config, "models.json")
 	modelsJSONs.Lock()
 	defer modelsJSONs.Unlock()
-	if mj, ok := modelsJSONs.byPath[path]; ok {
-		return mj
+	if read, ok := modelsJSONs.byPath[path]; ok {
+		return read
 	}
-	mj := e.readModelsJSON(path)
-	modelsJSONs.byPath[path] = mj
-	return mj
+	mj, err := e.loadModelsJSON(path)
+	read := modelsJSONRead{mj: mj, err: err}
+	modelsJSONs.byPath[path] = read
+	return read
 }
 
 func (e *runEnv) readModelsJSON(path string) *catalog.ModelsJSON {
+	mj, err := e.loadModelsJSON(path)
+	if err != nil {
+		return nil // warned by loadModelsJSON
+	}
+	return mj
+}
+
+// loadModelsJSON is readModelsJSON, with the error of a file that exists but
+// cannot be read or parsed; the error is also warned.
+func (e *runEnv) loadModelsJSON(path string) (*catalog.ModelsJSON, error) {
 	data, err := fsx.ReadRegularFile(path, fsx.ConfigLimit)
 	if errors.Is(err, fs.ErrNotExist) {
-		return nil
+		return nil, nil
 	}
 	if err != nil {
 		e.log().Warn("models.json", slog.String("message", "cannot be read, so it is ignored: "+err.Error()), slog.String("file", path))
-		return nil
+		return nil, err
 	}
 	mj, diags, err := catalog.ParseModelsJSON(data, provider.SDKVersion())
 	if err != nil {
 		e.log().Warn("models.json", slog.String("message", err.Error()+"; the file is ignored"), slog.String("file", path))
-		return nil
+		return nil, err
 	}
 	for _, d := range diags {
 		e.log().Warn("models.json", slog.String("message", d), slog.String("file", path))
 	}
-	return mj
+	return mj, nil
 }
 
 // runCommand runs a models.json !command through the bash tool's shell,

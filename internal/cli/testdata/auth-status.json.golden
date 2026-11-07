@@ -1,0 +1,59 @@
+{
+  "providers": [
+    {
+      "provider": "gemini",
+      "source": "env",
+      "variable": "GEMINI_API_KEY",
+      "usable": true
+    },
+    {
+      "provider": "openai",
+      "source": "auth.json",
+      "authType": "api_key",
+      "usable": true
+    },
+    {
+      "provider": "claude",
+      "source": "auth.json",
+      "authType": "oauth",
+      "usable": false,
+      "reason": "oauth_unused",
+      "expires": "2026-06-09T10:13:20Z"
+    },
+    {
+      "provider": "grok",
+      "source": "auth.json",
+      "authType": "oauth",
+      "usable": true,
+      "expires": "2026-06-09T10:13:20Z"
+    },
+    {
+      "provider": "opencode-zen",
+      "source": "auth.json",
+      "authType": "api_key",
+      "usable": false,
+      "reason": "empty_key"
+    },
+    {
+      "provider": "opencode-go",
+      "source": "none",
+      "usable": false
+    },
+    {
+      "provider": "huggingface",
+      "source": "models.json",
+      "usable": true
+    },
+    {
+      "provider": "kilo",
+      "source": "none",
+      "usable": false
+    },
+    {
+      "provider": "together",
+      "source": "auth.json",
+      "usable": false,
+      "reason": "unknown_type"
+    }
+  ]
+}

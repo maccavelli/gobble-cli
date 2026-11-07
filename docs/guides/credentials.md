@@ -59,6 +59,57 @@ kilo          none
 together      none
 ```
 
+`gobble auth status --json` gives the same rows as data, for a program such as a remote client. It prints one
+object, sends no request, runs no `!command` key, and writes nothing to stderr:
+
+```text
+$ gobble auth status --json
+{
+  "providers": [
+    {
+      "provider": "gemini",
+      "source": "env",
+      "variable": "GEMINI_API_KEY",
+      "usable": true
+    },
+    {
+      "provider": "openai",
+      "source": "auth.json",
+      "authType": "api_key",
+      "usable": true
+    },
+    …
+  ]
+}
+```
+
+| Field | What it is |
+| :--- | :--- |
+| `provider` | gobble's id for the provider, one row for each provider that takes a key, in the order `auth status` lists them |
+| `source` | where the credential comes from: `auth.json`, `models.json`, `env` or `none` |
+| `variable` | with `env`, the variable's name |
+| `authType` | with `auth.json`, the entry's type: `api_key` or `oauth` |
+| `usable` | whether gobble would use it; a `!command` key counts without being run |
+| `reason` | why an `auth.json` entry is not usable: `oauth_unused` (a sign-in for a provider gobble has none for), `empty_key` or `unknown_type` |
+| `expires` | a sign-in's expiry, in UTC, as RFC 3339 |
+
+A field that does not apply is left out. If `auth.json` or `models.json` exists but cannot be read, gobble cannot say
+where any key comes from: `--json` prints an error naming the file, never a value from it, and exits 2:
+
+```text
+$ gobble auth status --json
+{
+  "error": {
+    "file": "auth.json",
+    "message": "<config>/auth.json: invalid auth.json: jsontext: unexpected EOF within \"/openai\" after offset 49"
+  }
+}
+```
+
+Without `--json`, gobble warns and lists the rest. A later release may add fields or values, and a program should
+ignore what it does not know; one is never renamed or removed without notice
+([0045-MADR](../decisions/0045-MADR-auth-status-json.md)).
+
 `gobble auth check` says whether a provider has a usable key, for scripts: it prints `ready`,
 `not_ready` or `invalid`, and exits 0, 1 or 2. `--json` gives the reason too:
 

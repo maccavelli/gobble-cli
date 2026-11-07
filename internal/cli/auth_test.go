@@ -104,6 +104,152 @@ func TestAuthStatus(t *testing.T) {
 	}
 }
 
+// statusFixture writes a home holding one provider of each row kind in
+// 0045-MADR D2, every value holding "secret", and returns auth.json as
+// written and the file huggingface's !command would create if it ran.
+func statusFixture(t *testing.T, c *cfgEnv) (authJSON, ran string) {
+	t.Helper()
+	ran = filepath.Join(c.home, "command-ran")
+	authJSON = `{"openai": {"type": "api_key", "key": "sk-secret-openai"},
+  "opencode-zen": {"type": "api_key", "key": ""},
+  "grok": {"type": "oauth", "access": "a-secret", "refresh": "r-secret", "expires": 1781000000000},
+  "claude": {"type": "oauth", "access": "a-secret", "refresh": "r-secret", "expires": 1781000000000},
+  "together": {"type": "wellknown", "key": "secret-together"}}`
+	c.write(c.authFile(), authJSON)
+	mj, err := json.Marshal(map[string]any{"providers": map[string]any{
+		"huggingface": map[string]any{"apiKey": "!touch '" + filepath.ToSlash(ran) + "' && echo secret"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.write(filepath.Join(c.home, "models.json"), string(mj))
+	t.Setenv("GEMINI_API_KEY", "env-secret")
+	return authJSON, ran
+}
+
+// gobble auth status --json reports every key provider's row as data:
+// where its credential comes from, whether it is usable, and never a value.
+// It runs no key's command, writes nothing to stderr, and leaves auth.json
+// alone (0045-MADR D2, D4).
+func TestAuthStatusJSON(t *testing.T) {
+	pkg, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := newCfgEnv(t)
+	authJSON, ran := statusFixture(t, c)
+	r := c.run("auth", "status", "--json")
+	if r.code != ExitOK || r.stderr != "" {
+		t.Fatalf("exit %d, stderr %q, stdout:\n%s", r.code, r.stderr, r.stdout)
+	}
+	if strings.Contains(r.stdout, "secret") {
+		t.Errorf("status --json printed a credential:\n%s", r.stdout)
+	}
+	if _, err := os.Stat(ran); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("huggingface's !command ran: %v", err)
+	}
+	if got := c.read(c.authFile()); got != authJSON {
+		t.Errorf("auth.json changed:\n%s", got)
+	}
+	t.Chdir(pkg) // newCfgEnv's directory has no testdata
+	golden(t, "auth-status.json", r.stdout)
+}
+
+// statusJSONRow is one row of gobble auth status --json (0045-MADR D2).
+type statusJSONRow struct {
+	Provider string `json:"provider"`
+	Source   string `json:"source"`
+	Variable string `json:"variable"`
+	Usable   bool   `json:"usable"`
+}
+
+// The text and the JSON come from one set of rows, so they name the same
+// providers, in KeyProviders' order, with the same source (0045-MADR D3).
+func TestAuthStatusJSONAgrees(t *testing.T) {
+	c := newCfgEnv(t)
+	statusFixture(t, c)
+	text, js := c.run("auth", "status"), c.run("auth", "status", "--json")
+	var got struct {
+		Providers []statusJSONRow `json:"providers"`
+	}
+	if err := json.Unmarshal([]byte(js.stdout), &got); err != nil {
+		t.Fatalf("status --json: %v:\n%s", err, js.stdout)
+	}
+	var ids []string
+	for _, row := range got.Providers {
+		ids = append(ids, row.Provider)
+		cell := strings.TrimSpace(strings.TrimPrefix(rowOf(text.stdout, row.Provider), row.Provider))
+		var agree bool
+		switch row.Source {
+		case "auth.json":
+			agree = strings.HasPrefix(cell, "auth.json")
+		case "models.json", "none":
+			agree = cell == row.Source
+		case "env":
+			agree = row.Variable != "" && cell == row.Variable
+		}
+		if !agree {
+			t.Errorf("%s: the JSON's source %q (variable %q), the text's %q", row.Provider, row.Source, row.Variable, cell)
+		}
+	}
+	if !slices.Equal(ids, provider.KeyProviders()) {
+		t.Errorf("providers %q, want KeyProviders' %q", ids, provider.KeyProviders())
+	}
+}
+
+// A file gobble cannot read or parse is not "no credential": --json writes
+// an error naming the file, never a value from it, and exits 2, with stderr
+// empty; models.json's diagnostics are no error (0045-MADR D5).
+func TestAuthStatusJSONError(t *testing.T) {
+	type statusError struct {
+		File    string `json:"file"`
+		Message string `json:"message"`
+	}
+	for _, tc := range []struct {
+		name, file string
+		plant      func(c *cfgEnv)
+	}{
+		{"auth.json not JSON", "auth.json", func(c *cfgEnv) {
+			c.write(c.authFile(), `{"openai": {"type": "api_key", "key": "sk-secret-openai"`)
+		}},
+		{"auth.json a directory", "auth.json", func(c *cfgEnv) {
+			if err := os.MkdirAll(c.authFile(), 0o750); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{"models.json not JSON", "models.json", func(c *cfgEnv) {
+			c.write(filepath.Join(c.home, "models.json"), `{"providers": {"huggingface": {"apiKey": "secret"`)
+		}},
+		{"models.json a directory", "models.json", func(c *cfgEnv) {
+			if err := os.MkdirAll(filepath.Join(c.home, "models.json"), 0o750); err != nil {
+				t.Fatal(err)
+			}
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := newCfgEnv(t)
+			tc.plant(c)
+			r := c.run("auth", "status", "--json")
+			var got struct {
+				Error *statusError `json:"error"`
+			}
+			if err := json.Unmarshal([]byte(r.stdout), &got); err != nil || got.Error == nil {
+				t.Fatalf("exit %d, stdout %q (%v), stderr %q", r.code, r.stdout, err, r.stderr)
+			}
+			if r.code != ExitUsage || r.stderr != "" || got.Error.File != tc.file || !strings.Contains(got.Error.Message, tc.file) {
+				t.Errorf("exit %d, stderr %q, error %+v; want exit %d and an error naming %s", r.code, r.stderr, *got.Error, ExitUsage, tc.file)
+			}
+			if strings.Contains(r.stdout+r.stderr, "secret") {
+				t.Errorf("the error holds a value:\n%s", r.stdout)
+			}
+		})
+	}
+	c := newCfgEnv(t)
+	c.write(filepath.Join(c.home, "models.json"), `{"providers": {"anthropic": {"apiKey": "a"}, "claude": {"apiKey": "b"}}}`)
+	if r := c.run("auth", "status", "--json"); r.code != ExitOK || r.stderr != "" || !strings.Contains(r.stdout, `"providers"`) {
+		t.Errorf("models.json with a diagnostic: exit %d, stderr %q, stdout:\n%s", r.code, r.stderr, r.stdout)
+	}
+}
+
 // rowOf is out's line for provider id, or "".
 func rowOf(out, id string) string {
 	for line := range strings.Lines(out) {

@@ -321,15 +321,22 @@ func (e *runEnv) logout(ctx context.Context, id string) (string, error) {
 }
 
 // AuthStatusCmd is gobble auth status.
-type AuthStatusCmd struct{}
+type AuthStatusCmd struct {
+	// JSON prints the rows as data, for a client such as magic-cli-remote
+	// (0045-MADR).
+	JSON bool `name:"json" help:"Print JSON: every key provider's credential source, never a credential."`
+}
 
 // Run lists each key provider and where its credential comes from, never
 // the credential itself.
 func (c *AuthStatusCmd) Run(e *runEnv) error {
+	if c.JSON {
+		return c.runJSON(e)
+	}
 	e.ensureSettingsFile()
 	rows := [][2]string{{"provider", "credential"}}
 	for _, id := range provider.KeyProviders() {
-		rows = append(rows, [2]string{id, e.credentialSource(id)})
+		rows = append(rows, [2]string{id, e.statusRow(id).text})
 	}
 	width := 0
 	for _, r := range rows {
@@ -342,29 +349,126 @@ func (c *AuthStatusCmd) Run(e *runEnv) error {
 	return e.out.Result([]byte(b.String()))
 }
 
-// credentialSource is where provider id's credential comes from, as status
-// shows it: auth.json's entry, models.json, its variable, or none.
-func (e *runEnv) credentialSource(id string) string {
-	r := e.credentials()
-	if r.File != nil {
-		if entry, ok := r.File.Entry(id); ok {
-			switch entry.Type {
-			case auth.TypeAPIKey:
-				return "auth.json"
-			case auth.TypeOAuth:
-				if provider.HasLogin(id) {
-					return "auth.json, an OAuth login" + expiry(entry.Expires)
-				}
-				return "auth.json, an OAuth login" + expiry(entry.Expires) + ", not used (0005-PLAN F4-3b)"
-			}
-			return fmt.Sprintf("auth.json, a %q entry gobble does not use", entry.Type)
+// runJSON prints every key provider's row as one JSON object, or, when a
+// file cannot be read, an error object and exit 2 (0045-MADR D1, D5).
+// stderr and the log's stderr lines are off, as with auth login --json;
+// the log file keeps them (D4).
+func (c *AuthStatusCmd) runJSON(e *runEnv) error {
+	e.out.err = io.Discard
+	e.logs.stderr = nil
+	e.ensureSettingsFile()
+	var report struct {
+		Providers []authStatusRow `json:"providers,omitzero"`
+		Error     *statusError    `json:"error,omitzero"`
+	}
+	if report.Error = e.statusError(); report.Error == nil {
+		report.Providers = []authStatusRow{}
+		for _, id := range provider.KeyProviders() {
+			report.Providers = append(report.Providers, e.statusRow(id))
 		}
 	}
-	if src, ok := r.Has(id); ok {
-		return string(src)
+	b, err := jsonx.Marshal(report, jsontext.WithIndent("  "))
+	if err != nil {
+		return failf("auth status: %v", err)
 	}
-	return "none"
+	if err := e.out.Result(append(b, '\n')); err != nil {
+		return err
+	}
+	if report.Error != nil {
+		return &exitError{code: ExitUsage}
+	}
+	return nil
 }
+
+// statusError is auth status --json's error: a file it cannot say anything
+// without. File is "auth.json", "models.json", or "" for the config
+// directory; Message is gobble's error, which names the file and the fault,
+// never a value (0045-MADR D5).
+type statusError struct {
+	File    string `json:"file"`
+	Message string `json:"message"`
+}
+
+// statusError is why auth status cannot answer, or nil.
+func (e *runEnv) statusError() *statusError {
+	if _, _, err := systemDirs(); err != nil {
+		return &statusError{File: "", Message: err.Error()}
+	}
+	if err := e.authJSONError(); err != nil {
+		return &statusError{File: statusAuthJSON, Message: err.Error()}
+	}
+	if err := e.modelsJSONError(); err != nil {
+		return &statusError{File: statusModelsJSON, Message: err.Error()}
+	}
+	return nil
+}
+
+// authStatusRow is one key provider's row of auth status: where its credential
+// comes from and whether gobble would use it, never the credential
+// (0045-MADR D2). The table prints text; --json prints the rest (D3).
+type authStatusRow struct {
+	Provider string `json:"provider"`
+	Source   string `json:"source"`
+	Variable string `json:"variable,omitempty"`
+	AuthType string `json:"authType,omitempty"`
+	Usable   bool   `json:"usable"`
+	Reason   string `json:"reason,omitempty"`
+	Expires  string `json:"expires,omitempty"`
+	text     string
+}
+
+// The sources a row names (0045-MADR D2).
+const (
+	statusAuthJSON   = "auth.json"
+	statusModelsJSON = "models.json"
+	statusEnv        = "env"
+	statusNone       = "none"
+)
+
+// statusRow is provider id's row, in Has's order: auth.json's entry, which
+// owns its provider, then models.json, then its variable. Nothing is run:
+// Has runs no command. No run's --api-key reaches auth status.
+func (e *runEnv) statusRow(id string) authStatusRow {
+	r := e.credentials()
+	src, ok := r.Has(id)
+	row := authStatusRow{Provider: id, Usable: ok}
+	if r.File != nil {
+		if entry, inFile := r.File.Entry(id); inFile {
+			row.Source = statusAuthJSON
+			switch entry.Type {
+			case auth.TypeAPIKey:
+				row.AuthType, row.text = auth.TypeAPIKey, statusAuthJSON
+				if !ok {
+					row.Reason = "empty_key"
+				}
+			case auth.TypeOAuth:
+				row.AuthType, row.text = auth.TypeOAuth, "auth.json, an OAuth login"+expiry(entry.Expires)
+				if entry.Expires > 0 {
+					row.Expires = time.UnixMilli(entry.Expires).UTC().Format(time.RFC3339)
+				}
+				if !provider.HasLogin(id) {
+					row.Reason, row.text = "oauth_unused", row.text+", not used (0005-PLAN F4-3b)"
+				}
+			default:
+				row.Reason, row.text = "unknown_type", fmt.Sprintf("auth.json, a %q entry gobble does not use", entry.Type)
+			}
+			return row
+		}
+	}
+	switch {
+	case !ok:
+		row.Source, row.text = statusNone, statusNone
+	case src == auth.SourceModelsJSON:
+		row.Source, row.text = statusModelsJSON, string(src)
+	default:
+		row.Source, row.Variable, row.text = statusEnv, string(src), string(src)
+	}
+	return row
+}
+
+// credentialSource is where provider id's credential comes from, as status
+// shows it: auth.json's entry, models.json, its variable, or none.
+func (e *runEnv) credentialSource(id string) string { return e.statusRow(id).text }
 
 // expiry is ", expires <time>" for an entry's milliseconds, or "".
 func expiry(ms int64) string {

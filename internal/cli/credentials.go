@@ -50,15 +50,26 @@ func (e *runEnv) newResolver(runtime map[string]string) *auth.Resolver {
 		Run:           func(command string) (string, error) { return e.runCommand(e.ctx, command) },
 		HasLogin:      provider.HasLogin,
 	}
+	e.authErr = nil
 	if path := authPath(); path != "" {
 		f, err := auth.Load(path)
 		if err != nil {
 			e.log().Warn("auth.json", slog.String("message", err.Error()+"; the file is not used"))
+			e.authErr = err
 		} else {
 			r.File = f
 		}
 	}
 	return r
+}
+
+// authJSONError is why the run's resolver has no auth.json although the
+// file exists: it could not be read or parsed (0045-MADR D5).
+func (e *runEnv) authJSONError() error {
+	e.credentials()
+	e.credsBuild.Lock()
+	defer e.credsBuild.Unlock()
+	return e.authErr
 }
 
 // refreshCredentials reads the credentials again after a sign-in or a

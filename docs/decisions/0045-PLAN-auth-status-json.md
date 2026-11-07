@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: in-progress
 date: 2026-11-07
 associated-madr: "0045-MADR-auth-status-json.md"
 ---
@@ -25,6 +25,7 @@ documented and pinned (D6). The plan is complete when the MADR's Confirmation 1 
   The text rendering from those rows, and the JSON writer and its error object.
 * `internal/cli/credentials.go`: `newResolver` keeps auth.json's load error, beside the resolver it builds, for D5.
 * `internal/cli/modelsjson.go`: the models.json cache keeps a read or parse error beside its value, for D5.
+* *Deviation 1 (2026-11-07):* `internal/cli/main.go`, where `runEnv` holds the field step 3 names.
 * `internal/cli/auth_test.go`: the new tests.
 * `internal/cli/testdata/auth-status.json.golden`: new.
 * `docs/guides/credentials.md`: the `--json` form.
@@ -154,4 +155,95 @@ Files: those in Scope.
 
 ## Execution record
 
-Not started.
+### Deviation 1 (2026-11-07): `internal/cli/main.go` joins the scope
+
+Step 3 keeps auth.json's load error "on the `runEnv`". `runEnv` is declared in `internal/cli/main.go`, which Scope did
+not list. The field, `authErr`, is three lines there, beside `creds`, and guarded by `credsBuild` as `creds` is. No
+decision or fact in the MADR changes, so the MADR is not amended. Recorded here rather than stopped for, since the
+step as written cannot be done without it; the owner may still refuse it at review.
+
+### P1 record (2026-11-07)
+
+On the owner's "committed, proceed" after P0 (`53d42fd`), with Q1 and Q2 answered. Start state (C1): `main` at
+`53d42fd`, `origin/main` at `3dbf756`, the tree clean.
+
+**Step 1, the tests** (`internal/cli/auth_test.go`), written first.
+
+* `statusFixture`: auth.json with openai's `api_key`, opencode-zen's empty key, grok's OAuth login, claude's OAuth
+  entry and together's `wellknown` entry; models.json with huggingface's `!touch '<home>/command-ran' && echo secret`;
+  `GEMINI_API_KEY` set; every value holding `secret`.
+* `TestAuthStatusJSON`: exit 0, stderr empty, no `secret`, the command's file absent, auth.json byte-identical, and
+  stdout equal to `testdata/auth-status.json.golden`. `newCfgEnv` changes directory, so the test changes back to the
+  package before `golden`.
+* `TestAuthStatusJSONAgrees`: the JSON's source agrees with the text's cell for every row, and the ids are
+  `KeyProviders()`.
+* `TestAuthStatusJSONError`: auth.json not JSON, auth.json a directory, models.json not JSON, models.json a directory.
+  Each gives exit 2, stderr empty, `error.file` naming the file, its message naming it, and no `secret`. A models.json
+  with a diagnostic (`anthropic` and `claude` both given) answers with exit 0 and stderr empty.
+* The golden file, written with `-update` and read in full: nine rows, in `KeyProviders()` order. gemini `env` with
+  `GEMINI_API_KEY`; openai `api_key`, usable; claude `oauth`, not usable, `oauth_unused`, `2026-06-09T10:13:20Z`;
+  grok `oauth`, usable, the same expiry; opencode-zen `api_key`, not usable, `empty_key`; huggingface `models.json`,
+  usable; together `auth.json`, not usable, `unknown_type`, no `authType`; opencode-go and kilo `none`. The first
+  write had `expires` before `reason`. The struct was reordered so the output follows MADR D2's example, and the file
+  was written again.
+
+**Step 2, seen failing,** by `scratchpad/status_seenfail.py` (not committed), each on a copy of the tree. It was run
+on the final code, after the lint fixes below:
+
+| Mode | Failure |
+| :--- | :--- |
+| today's code (the changed `.go` files at `HEAD`) | every new test: `exit 2, stderr "Error: unknown flag --json…"`, and `TestAuthStatusJSONAgrees` `status --json: jsontext: unexpected EOF` |
+| stderr left on, and a warning on the path | `TestAuthStatusJSON`: `exit 0, stderr "Warning: planted\n"` |
+| `Credential` in place of `Has` | `TestAuthStatusJSON`: `huggingface's !command ran: <nil>`; `TestAuthStatus`: no `grok          models.json` |
+| D5's check removed | each error case: `exit 0`, rows of `none` |
+| `expires` in local time (`TZ=Asia/Kolkata`) | `auth-status.json differs from testdata/auth-status.json.golden` |
+
+**Step 3, the code.**
+
+* `internal/cli/auth.go`:
+  * `AuthStatusCmd.JSON`;
+  * `runJSON`: stderr and the log's stderr lines off; then D5's checks; then the report, indented by two spaces;
+    exit 2 with the error;
+  * `statusError`, the type and the `runEnv` method;
+  * `authStatusRow` (`statusRow` was taken by a test's variable in `reprint_test.go`) and `e.statusRow(id)`, which
+    walks D2's order through `Has`;
+  * `credentialSource` is now the row's text, so `providers`' wording (`providerscmd.go:99`) is unchanged.
+* `internal/cli/credentials.go`: `newResolver` sets `e.authErr`. `authJSONError()` returns it once `credentials()`
+  has built the resolver.
+* `internal/cli/modelsjson.go`:
+  * the cache holds `modelsJSONRead{mj, err}`;
+  * `loadModelsJSON` returns the error it warns;
+  * `readModelsJSON` keeps its signature for `regular_test.go`;
+  * `modelsJSONError()` is new.
+* `internal/cli/main.go`: `authErr` (deviation 1).
+* The first `make preflight` stopped at golangci-lint with three findings. errcheck flagged `readModelsJSON`
+  discarding `loadModelsJSON`'s error; it now checks it. goconst flagged `"auth.json"`, a string with three
+  occurrences, twice; `auth.go` now uses `statusAuthJSON`, `statusModelsJSON` and `statusNone` for its literals.
+
+**Step 4, the guide.** `docs/guides/credentials.md`, after the `auth status` example:
+
+* `--json`'s example;
+* the fields' table;
+* D5's error, with `<config>` for the directory, as `models-json.md` writes it;
+* D6 in one sentence, linking the MADR.
+
+**Step 5, gates.**
+
+* `make pre-add-check FILES=` the five Go files: "5 file(s) clean (gofmt, golint, govulncheck)".
+* `make preflight`: "preflight passed"; golangci-lint 0 issues on both modules; markdownlint 0 issues.
+* `make race`: 39 ok, no failure.
+* The Linux dev host (Go 1.27.3, 888 files shipped, no `._*`): `go test ./internal/cli/` ok, and `-race` ok.
+* The Windows dev host (Go 1.27.3, `TMP` and `TEMP` set to a scratch directory, 888 files, no `._*`): the same, both ok.
+* A binary built from the tree, against scratch `GOBBLE_HOME`s:
+  * `auth status` prints the table as before;
+  * `--json` prints the rows, exit 0, stderr empty;
+  * a truncated auth.json gives `{"error": {"file": "auth.json", "message": "<home>/auth.json: invalid auth.json:
+    jsontext: unexpected EOF within \"/openai\" after offset 49"}}`, exit 2;
+  * a models.json directory gives `open <home>/models.json: not a regular file`, exit 2;
+  * a truncated models.json gives `models.json: jsontext: unexpected EOF within \"/providers/huggingface\" after
+    offset 49`, exit 2;
+  * no output holds a value;
+  * the text form with the truncated auth.json keeps today's warning on stderr, then rows without the file.
+* The identifier scan of every changed file found nothing.
+
+**Step 6** is this record and the `docs/README.md` rows. Staged; the owner commits. P2 waits for the push.

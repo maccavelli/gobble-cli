@@ -190,6 +190,9 @@ type runEnv struct {
 	// credGen, each provider's credential generation (0025-MADR D4).
 	credsBuild sync.Mutex
 	creds      *auth.Resolver
+	// authErr is why creds has no auth.json although the file exists: it
+	// could not be read or parsed (0045-MADR D5). credsBuild guards it.
+	authErr    error
 	credsMu    sync.Mutex
 	credWarned map[string]bool
 	knownKeys  map[string]auth.Credential
