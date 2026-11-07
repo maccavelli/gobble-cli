@@ -1,6 +1,6 @@
 ---
-status: completed
-date: 2026-10-19
+status: in-progress
+date: 2026-11-06
 ---
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
 
@@ -1068,3 +1068,52 @@ the tree passed every gate through `archtest` and `apidiff` (`apidiff: no-op bel
 `verify-build-metadata` with `git rev-parse HEAD` exiting 128, since a copy has no commit; the scratch clones above
 are that check's run on those hosts. `make check-records markdownlint` passed on all three (`Summary: 0 issues in 0
 files`, 54 files on the copies).
+
+## Amendment (2026-11-06): `gobble --version` (0008-MADR D21)
+
+*~~Proposed 2026-11-06 for the owner's approval~~ Approved 2026-11-06 by the owner's "Commit to main, then proceed,
+approved", after the owner's decision "Change update --version to --release then
+implement the root --version". This plan becomes `in-progress` on approval and `completed` again at this amendment's
+record.*
+
+**What.** `--version` on gobble's Kong root, so `gobble --version` and `gobble <any command> --version` print what
+`gobble version` prints and exit 0 (0008-MADR D21). The `update` command does not exist yet; its `--release` flag is
+recorded in 0005-MADR and 0005-PLAN F10, and built by F10.
+
+**Files.** `internal/cli/version.go`, `internal/cli/root.go`, `internal/cli/main_test.go`, `README.md`, this pair,
+`0004-MADR-go-module-architecture.md`, `0005-MADR-v1-feature-scope.md`, `0005-PLAN-v1-feature-scope.md`,
+`docs/README.md`.
+
+**Steps.**
+
+1. **Tests first,** in `internal/cli/main_test.go`, each with the fixed identity `TestVersionJSONGolden` uses:
+   - `TestVersionFlag`: `--version` exits 0 with stderr empty, and its stdout is byte-identical to the
+     `version.txt` golden. So are `fix --version`, `config get --version`, `completion --version` (its required
+     argument missing) and `acp --version`, each run through `Main`, so no command runs: stdout holds the version
+     text alone.
+   - `--help`'s stdout lists `--version`.
+   - `TestVersionCreatesNoFiles` runs `--version` as well as `version`, and neither creates a file under
+     `GOBBLE_HOME`.
+2. **Seen failing (C4),** on a scratch copy of the tree, never in it:
+   - the tests on today's code: each `--version` run exits 2, `unknown flag --version`;
+   - with the flag built, the hook planted to write to stderr: the stdout comparison fails;
+   - with the flag built, the hook planted without `Exit`: `fix --version` reaches `chat`, and the test fails on its
+     output or exit.
+3. **The code.**
+   - `version.go`: a `versionReport` built from `identity()` in one function the command and the flag share; a type
+     `versionFlag bool`, whose `BeforeReset(app *kong.Kong) error` writes `versionText` to `app.Stdout` and calls
+     `app.Exit(ExitOK)`. Its doc names D21.
+   - `root.go`: `ShowVersion versionFlag` with `name:"version"` and the help "Print version information and quit.".
+   - Nothing else: the parser's `Exit` panics with `exitPanic` (`internal/cli/main.go:68`), which `parse` recovers
+     into a return (`:96-105`).
+4. **Docs.** `README.md:89` names `gobble --version` beside `gobble version`. `docs/README.md`'s 0008, 0004 and 0005
+   rows note the change.
+5. **Gates.** `make pre-add-check FILES="internal/cli/version.go internal/cli/root.go internal/cli/main_test.go"`;
+   `make preflight`; `make race`; `make perf`, since `internal/cli` changes. On the Linux machine and the Windows
+   laptop: `go test`, race, `make check-records markdownlint`, and preflight up to `verify-build-metadata`, which a
+   copy without a commit cannot run.
+6. **Commit,** on the owner's word naming the branch.
+
+**Rollout and rollback.** A new flag, and no change to an existing command's output; `gobble version`, and the release
+workflow's `gobble version --identity`, are unchanged. Reverting the commit removes the flag. `update --release` has no
+code until F10.

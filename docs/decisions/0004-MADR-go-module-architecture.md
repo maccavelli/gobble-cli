@@ -424,6 +424,8 @@ ACP-native behaviour, beyond the method list in 0002:
   [0005-MADR-v1-feature-scope.md](0005-MADR-v1-feature-scope.md).
 * Kong supplies the command tree, help, errors, `--version`, man pages,
   and completions. Only `internal/cli` imports Kong. The config surface is undecided and will be either a native Kong facility or a surface we write.
+  *(2026-11-06: `--version` was not declared until
+  [0008-MADR](0008-MADR-native-cli-mode.md) D21, a root flag of gobble's own type.)*
 * Hook-registered and package-registered flags are declared from their
   manifests before Kong parses arguments, so they appear in `--help`. This answers
   0001-REPORT F14 without swallowing unknown flags.

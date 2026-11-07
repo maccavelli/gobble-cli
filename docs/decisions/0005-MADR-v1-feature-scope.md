@@ -592,7 +592,8 @@ Further 0001-REPORT errata are kept here rather than in the report, which record
 #### Self-update and distribution (from go-core-lib `v1.2.0`) **(changed)**
 
 * **Surface.**
-  * The command is `gobble update [--check] [--yes|-y] [--force] [--dry-run] [--json] [--version vX.Y.Z]`, which is the surface go-core-lib's 0004-MADR plans for `selfupdate/cli`.
+  * The command is `gobble update [--check] [--yes|-y] [--force] [--dry-run] [--json] ~~[--version vX.Y.Z]~~ [--release vX.Y.Z]`, which is the surface go-core-lib's 0004-MADR plans for `selfupdate/cli`.
+    *(2026-11-06, [0008-MADR](0008-MADR-native-cli-mode.md) D21, the owner's decision: `--version` is gobble's root flag on every command, so the exact release is `--release`, filling `selfupdate/cli.Flags.Version`. The rest of the surface is the library's.)*
     *(2026-10-13, 0019-MADR D12: go-core-lib is go-selfupdate-lib, renamed 2026-10-02 in `v1.5.0`; `gobble update` binds the newest go-selfupdate-lib at 0005-PLAN F10.)*
   * These flags are local to `update`. The global `--yes` (permissions) never reaches `Request.Yes`.
   * `--json` writes `Result.Document()` to stdout; reporter text goes to stderr.

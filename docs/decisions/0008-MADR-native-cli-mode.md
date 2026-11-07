@@ -1,6 +1,6 @@
 ---
 status: accepted
-date: 2026-10-19
+date: 2026-11-06
 decision-makers: repository owner
 consulted: goose-cli source (aaif-goose/goose 591edd4); Pi coding-agent source (earendil-works/pi f5d2004 and the fork at 312184e); go-tui-lib, go-selfupdate-lib, go-llmprovider-sdk, magic-cli-remote, mcp-server-magictools and prepare-commit-msg sources; Kong v1.16.1; golang.org/x/term v0.46.0
 informed: none
@@ -679,7 +679,8 @@ Copies from Apache-2.0 siblings carry a provenance comment naming the source fil
   - No `init()` with side effects.
   - The Kong model is built once per process.
   - Nothing before argument parsing touches the network or the disk beyond reading configuration.
-  - The PLAN records `gobble --version` and a completion request as wall-clock baselines on this host.
+  - The PLAN records `gobble --version` and a completion request as wall-clock baselines on this host. *(2026-11-06:
+    there was no `--version` until D21; the baseline taken was `gobble version`, `:927`.)*
 
 **D19. Native magic-cli-remote integration, at every level gobble owns (F22–F29).** These rules are gobble's side of the contract. They hold for every ACP client, because gobble selects behaviour by capability and never by client name (0002-MADR fifth amendment). They are tuned to what magic-cli-remote does today, as measured at `9778cbc1`.
 1. **Handshake.**
@@ -733,6 +734,37 @@ Copies from Apache-2.0 siblings carry a provenance comment naming the source fil
 - **Implement 0179 D6 and D7:** `ConfigureSession` after `session/load`, model catalog from `configOptions`, and `DangerousModeIDs`.
 - **The deferred items in 0179's "More Information":** the `!` gate, a steer path, stdio MCP, `clientInfo` in `initialize`, per-provider environment, and question delivery.
 - **Size checks on outbound broadcast and replay** (0181), and dedupe of replayed events by message identity rather than exact text (F25).
+
+**D21. `gobble --version`, on every command; `update`'s exact release is `--release`.** *(Added 2026-11-06, the
+owner's decision: "Change update --version to --release then implement the root --version".)*
+- **What was found.** [0004-MADR-go-module-architecture.md](0004-MADR-go-module-architecture.md) (`:425`),
+  [0005-MADR-v1-feature-scope.md](0005-MADR-v1-feature-scope.md) (`:201`) and D18 above take `--version` as one of the
+  things Kong supplies. No change ever declared it: `gobble 0.2.0` answers `gobble --version` with `Error: unknown flag
+  --version, did you mean "--session"?`, exit 2. D18's baseline was taken on `gobble version` (`:927`). And 0005-MADR's
+  self-update surface (`:595`) plans `gobble update … [--version vX.Y.Z]`, go-selfupdate-lib's own flag
+  (`selfupdate/cli/flags.go:37-38`, `:87` at `v1.24.0`).
+- **The collision, measured** on Kong `v1.16.1` with a scratch program (2026-11-06): a root flag `--version` is
+  inherited by every command, so `update --version v9.9.9` fails, `unexpected argument v9.9.9`. The same flag on the
+  default command alone leaves `update --version` free, but is missing from `gobble --help`, and `gobble config
+  --version` is an unknown flag.
+- **The decision.**
+  - `--version` is a root flag, long only. Every command accepts it: it writes exactly what `gobble version` writes
+    in text form to stdout and exits 0. It runs while Kong parses, before a command's own arguments are checked, and
+    before configuration, logging, the terminal session or any file, as `--help` does. `gobble --help` lists it.
+  - It is a flag type of gobble's own, whose `BeforeReset` hook writes `versionText` from the same build identity as
+    the `version` command, then calls Kong's `Exit(0)`. Not `kong.VersionFlag`, which prints a `version` variable
+    fixed when the parser is built: that would be a second copy of the text.
+  - `gobble version`, with `--json` and `--identity`, is unchanged. The release workflow keeps calling
+    `gobble version --identity`.
+  - `update`'s exact-release flag is `--release vX.Y.Z`, in place of 0005-MADR's `--version vX.Y.Z`. gobble declares
+    `update`'s flags in Kong, as D14 has every command's, and fills `selfupdate/cli.Flags.Version` from `--release`.
+    It does not use the library's `Flags.Bind`, `Parse` or `HelpText`, which name `--version`. That is the one place
+    gobble's surface departs from the library's.
+- **Considered and not chosen:** the flag on `chat` alone (above); `kong.VersionFlag` (above); keeping
+  `update --version` by making the root flag a value Kong could share, which Kong has no form for.
+- **Probes,** each on the scratch program: `--version`, `fix --version`, `completion --version` (a required argument
+  missing) and `update --version` each print the version and exit 0; `version` and `version --json` still run the
+  command; `-p hi` and `fix the test` still reach the default command; `update --release v9.9.9` sets the release.
 
 ### Consequences
 

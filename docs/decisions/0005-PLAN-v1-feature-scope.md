@@ -347,7 +347,8 @@ then offers `tool_search`, since an MCP tool is outside the session-start famili
 1. Print mode `-p`, piped stdin, `--output-format text|json|stream-json`.
 2. The usage ledger, `/usage` (session plus today), and `gobble usage`.
 3. `gobble doctor [--json]`.
-4. `gobble update [--check]` through
+4. `gobble update [--check]` through *(2026-11-06: its exact-release flag is `--release vX.Y.Z`, not the
+   library's `--version`; [0008-MADR](0008-MADR-native-cli-mode.md) D21)*
    `github.com/maccavelli/go-core-lib/selfupdate` `v1.1.0`
    (`96b30961180671ab3697585951219001ecbb1c90`). Bind it as
    `selfupdate/example_test.go` does for a standalone program:
