@@ -630,7 +630,8 @@ policy. And one record keeps the order, and the cross-library facts (check-libs,
   - *`python3 scripts/check_libs.py --lib acp-go-sdk2 --tag v1.34.0`, from a scratch clone: 13 checks, of which 1
     fails, `test`, on S8's two tests alone; `get and tidy`, `modules` and `api` are ok.*
 
-  *Amended 2026-11-06, by the PLAN's deviation 27, proposed for the owner's approval, from the owner's "I am about to
+  *Amended 2026-11-06, by the PLAN's deviation 27, ~~proposed for the owner's approval~~ accepted 2026-11-06 by the
+  owner's "committed proceed with p32", after the records commit `076763f`, from the owner's "I am about to
   release a new version of go-llmprovider-sdk … When the release is out we will change the pin to it" and "amend 0035
   for v1.27.0":*
   - ***go-llmprovider-sdk `v1.27.0`** (`52ab75fa31131e2aee2b313a0a8cf923afbad26d`, published 2026-11-06), its GitHub

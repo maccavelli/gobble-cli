@@ -1,5 +1,5 @@
 ---
-status: complete
+status: in-progress
 date: 2026-11-06
 associated-madr: "0035-MADR-pin-current-sibling-releases-and-remove-gobble-copies.md"
 ---
@@ -3694,3 +3694,33 @@ The base is `927d7bd`, P31's commit. No deviation.
   - P32 (go-llmprovider-sdk `v1.27.0`) is new, one commit, then the close-out commit;
   - this plan becomes `in-progress` on approval, until P32's close-out returns it to `complete`.
 - **Files added to scope:** P32's `go.mod`, `go.sum`, `README.md` and `docs/architecture.md`.
+- **Approved** 2026-11-06 by the owner's "committed proceed with p32", after the records commit `076763f`. This plan
+  is `in-progress` until P32's close-out.
+
+### P32 record (2026-11-06): go-llmprovider-sdk `v1.27.0`
+
+The base is `076763f`, the records commit of deviation 27. No deviation.
+
+1. **C2:** `git ls-remote --tags` at the phase's start lists `v1.27.0` as go-llmprovider-sdk's newest `v1` tag, and
+   acp-go-sdk2 `v1.34.0`, go-tui-lib `v2.12.0` and go-selfupdate-lib `v1.24.0` as theirs, so no sibling has a tag newer
+   than this plan names.
+2. **Checked first** (step 1): `python3 scripts/check_libs.py --lib go-llmprovider-sdk --tag v1.27.0`, "pinned v1.26.1,
+   checking v1.27.0": 13 checks ok, "0 failing checks".
+3. **The pin** (step 2): `go get github.com/maccavelli/go-llmprovider-sdk@v1.27.0` ("upgraded … v1.26.1 => v1.27.0"),
+   then `go mod tidy`. `go.mod` changed on that line alone (`go.mod:17`); `go.sum` lost the two `v1.26.1` lines and
+   gained `v1.27.0 h1:7tSn5DyOaGh+/eGC9wQe0xR497Vq2MtPPAMoCulTPfM=` and its `go.mod` line, the `go.mod` hash
+   unchanged, and nothing else.
+4. **No source change** (step 3): `go test -count=1 ./llm/provider/... ./llm/catalog/... ./internal/cli/...
+   ./acpserver/...` passed, 9 packages ok, `list_test.go`, `modelscmd_test.go`, `auth_test.go` and `ambient_test.go`
+   among them. `acpserver/testdata/session.golden` and `internal/cli/testdata/view-plain.golden`, `print-json.golden`
+   and `print-stream-json.golden` are byte-identical to `ccd8aa8`'s (`git diff --quiet`, each exit 0).
+5. **The docs** (step 4): `README.md:131` and `docs/architecture.md:190` name `v1.27.0`; neither file names `v1.26.1`.
+6. **G-local** (step 5): no Go file changed, so `make pre-add-check` had none to check; `make preflight`: "preflight
+   passed", `verify-build-metadata` and `markdownlint` (0 issues) among its gates; `make race`: 39 ok, P31's 38 and
+   `acpext`, which 0042-PLAN added since.
+7. **G-hosts,** on the Linux machine and the Windows laptop, the tree shipped to each, 881 files, no `._*` file, Go
+   1.27.3: `go test` and race passed on both, 38 ok each (the root module; `acpext` is its own module, which `make race`
+   adds locally and which this phase does not touch); `make check-records markdownlint` passed on both, 0 issues;
+   preflight stops at `verify-build-metadata`, as on every copy, on `git rev-parse HEAD` in a repository with no commit.
+8. **Not done in this commit:** the close-out (step 6), which runs `make check-libs` on this commit once it lands,
+   checks the Verification's first two items, returns this plan to `complete`, and updates the `docs/README.md` rows.
