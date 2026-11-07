@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: complete
 date: 2026-11-06
 associated-madr: "0035-MADR-pin-current-sibling-releases-and-remove-gobble-copies.md"
 ---
@@ -3724,3 +3724,21 @@ The base is `076763f`, the records commit of deviation 27. No deviation.
    preflight stops at `verify-build-metadata`, as on every copy, on `git rev-parse HEAD` in a repository with no commit.
 8. **Not done in this commit:** the close-out (step 6), which runs `make check-libs` on this commit once it lands,
    checks the Verification's first two items, returns this plan to `complete`, and updates the `docs/README.md` rows.
+
+### Close-out record (2026-11-06): the Verification, after P32
+
+The base is `63e72e5`, P32's commit, which the owner committed and pushed. No deviation.
+
+1. **C2:** `git ls-remote --tags` lists acp-go-sdk2 `v1.34.0`, go-llmprovider-sdk `v1.27.0`, go-tui-lib `v2.12.0` and
+   go-selfupdate-lib `v1.24.0` as each library's newest tag of its major.
+2. **The plan's Verification,** its first two items again, as deviation 27 decided:
+   * `go list -m` reports acp-go-sdk2 `v1.34.0`, go-llmprovider-sdk `v1.27.0`, go-selfupdate-lib `v1.24.0` and
+     go-tui-lib/v2 `v2.12.0`, the MADR's D1 as amended through 2026-11-06, deviation 27's amendment included;
+   * `make check-libs`, on a scratch clone of `63e72e5`: each library "pinned …, checking" the same tag, its newest,
+     every check ok and `api` "pinned at …; nothing to compare"; "0 failing checks";
+   * the goldens: `acpserver/testdata/session.golden`, `view-plain.golden`, `print-json.golden` and
+     `print-stream-json.golden` are byte-identical to `ccd8aa8`'s (`git diff --quiet`, exit 0).
+3. **Status:** P32's criteria are met. This plan is `complete` again; the MADR stays `accepted`, with deviation 27's D1
+   amendment accepted. What P19's record left for other records is unchanged, and so is deviation 23's offer of
+   go-tui-lib's A15 as a record of its own. Adopting `catalog.SortByRank`, `LabelName` or `LabelNote` is not here.
+4. **The `docs/README.md` rows** (C7): the MADR's and this plan's rows name deviation 27 and this close-out.
