@@ -65,6 +65,25 @@ git diff -- '*.golden'
 A mismatch without the variable fails the test and leaves the actual transcript as an artifact;
 run `go test -artifacts -outputdir <dir>` to keep it.
 
+### What the tests may touch
+
+`internal/cli`'s tests reach no network, and keep to their own temporary directories
+([0046-MADR](../decisions/0046-MADR-own-background-listings-and-keep-tests-hermetic.md)).
+
+- Its `TestMain` replaces everything that would reach a provider: the model lister, the model facts' listing,
+  the browser opener and the sign-ins.
+- The tests run behind a guard. `TestMain` starts a local proxy, then runs the test binary again with the proxy
+  variables naming it, because the MCP SDK reads them before any `TestMain` can set them. A request for a host
+  off the machine gets a 403, and the run fails after the tests, naming each host:
+
+  ```text
+  tests tried to reach the network (0046-MADR D4):
+    api.openai.com:443 x30
+  ```
+
+  `localhost` and loopback addresses are never proxied, so an `httptest` server works as usual.
+- Each test sets its own `GOBBLE_HOME`, and writes nothing outside it.
+
 ### Suites outside the default run
 
 | Target | What it runs | Where |

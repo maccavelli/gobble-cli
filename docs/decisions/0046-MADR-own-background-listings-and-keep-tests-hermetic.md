@@ -233,8 +233,9 @@ Chosen option: **C**, because it removes each cause where it lives.
 
 ### D3. Model facts in the tests make no request
 
-* `internal/cli` gets `modelInfo`, a package variable that is `provider.ModelInfo` by default. The `ModelInfo` hook
-  (`agent.go:93-99`) calls it.
+* `internal/cli` gets ~~`modelInfo`~~ `modelFacts` (renamed 2026-11-07, 0046-PLAN deviation 1: `modelscmd.go:218`
+  already has a function `modelInfo`), a package variable that is `provider.ModelInfo` by default. The `ModelInfo`
+  hook (`agent.go:93-99`) calls it.
 * `TestMain` replaces it with one that passes no key and no login. The SDK then reads only the snapshot and
   `models.json`, and starts no fetch (`lookup.go:134`).
 * A test pins the replacement by identity, as `TestNoBrowserOrSignIn` pins the others (`testmain_test.go:40-52`).
@@ -249,6 +250,29 @@ Chosen option: **C**, because it removes each cause where it lives.
 * After `m.Run`, if anything was recorded, `TestMain` prints each host and count and exits 1.
 * This catches a client that honours the proxy variables, as the SDK's does (F4's probe). A client that sets no
   proxy would go around it; none was found.
+* *Amended 2026-11-07, by 0046-PLAN deviation 2, accepted by the owner's "go with 1 and proceed":*
+  * ~~so `TestMain` sets them before any request~~ is false. The MCP Go SDK (`github.com/modelcontextprotocol/go-sdk`
+    v1.8.0, which gobble's MCP client uses) reads them while its package is initialised, before any `TestMain`
+    runs:
+
+    ```go
+    var defaultDiscoveryTransport = newDiscoveryTransport(http.DefaultTransport) // oauthex/oauth2.go:28
+    ```
+
+    `newDiscoveryTransport` calls `proxyConfigured`, which calls `http.DefaultTransport.Proxy`, which is
+    `http.ProxyFromEnvironment` (`oauth2.go:147`, `:180`). That runs net/http's `sync.Once` before `TestMain`. Measured:
+    inside the test binary, with `HTTPS_PROXY` set by `TestMain`, `http.ProxyFromEnvironment` gave `<nil>`. A planted
+    `GET https://example.com/` reached the site and the guard saw nothing. A stack printed from a scratch overlay of
+    `net/http/transport.go` named `oauthex.init` as the first read.
+  * **The guard therefore runs the tests in a child process.** `TestMain`, in the first process, starts the
+    listener and runs the same binary, with the same arguments, the proxy variables set, `NO_PROXY` cleared, and a
+    marker variable. The child reads the variables when its packages are initialised, as every process does.
+  * The child first checks that `http.ProxyFromEnvironment` names the guard for `https://example.com/`. If it does
+    not, it prints why and exits 2, so the guard's premise is itself a check.
+  * The parent passes stdin, stdout and stderr through and exits with the child's code, or with 1 when the guard
+    recorded a host, printing each host and count.
+  * The SDK's own guard (go-llmprovider-sdk `internal/localonly`, its 0065-MADR D2) sets the variables in its
+    `TestMain`. That works there because its test binaries do not link the MCP SDK.
 
 ### D5. A log opens nothing after `close`
 

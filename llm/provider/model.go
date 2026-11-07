@@ -54,8 +54,10 @@ func SnapshotErr() error {
 
 // ModelInfo is what the catalog knows of model on provider id, from the
 // embedded snapshot and, with apiKey, the provider's listing as the SDK has
-// it cached. It never waits and makes no request of its own; a listing not
-// yet cached is fetched in the background for a later call (0005-PLAN F4-2a).
+// it cached. It waits for no listing: one not yet cached is fetched in the
+// background for a later call (0005-PLAN F4-2a). With a login, the SDK first
+// asks it for a token, which may refresh at the issuer before ModelInfo
+// returns (go-llmprovider-sdk catalog.CachedModel; 0046-MADR).
 // A model nothing knows has only its provider and id. mj, when not nil, is
 // models.json: a layer above the snapshot, and its thinkingLevelMap
 // (0005-PLAN F4-2b). With no apiKey, a provider with an OAuth login uses

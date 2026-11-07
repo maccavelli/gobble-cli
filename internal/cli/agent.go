@@ -68,6 +68,12 @@ var providerFor = func(e *runEnv) func(id, sessionID string, retry llm.Retry) (l
 // the options it is given.
 var ambientProvider = provider.AmbientWith
 
+// modelFacts is what the catalog knows of a model, for the agent's ModelInfo
+// hook. With a key or a login, the SDK may ask for a token and list in the
+// background, so TestMain replaces it with one that passes neither: no test
+// reaches a provider through it (0046-MADR D3).
+var modelFacts = provider.ModelInfo
+
 // agentOptions are gobble's agent's options, for `gobble acp` and the
 // in-process agent alike: the ambient provider and its model choice, and
 // the session store in the data directory.
@@ -95,7 +101,7 @@ func (e *runEnv) agentOptions() acpserver.Options {
 			if e.knownLogin(id) {
 				logins = e.logins()
 			}
-			return provider.ModelInfo(id, e.knownKey(id), e.knownWorkspace(id), logins, model, e.modelsJSON())
+			return modelFacts(id, e.knownKey(id), e.knownWorkspace(id), logins, model, e.modelsJSON())
 		},
 		// --model and --thinking win over every session's own (0005-PLAN F4-2c).
 		Override: acpserver.Override{Provider: e.pick.Provider, Model: e.pick.Model, Thinking: e.pick.Thinking, Mode: e.mode},
