@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: complete
 date: 2026-11-07
 associated-madr: "0044-MADR-publish-gobbles-icon-and-its-generator.md"
 ---
@@ -233,3 +233,25 @@ section, "Change the icon", before "Decision records".
   and `scripts/gen_icon.py`: no Go file and nothing under `acpext/` (Confirmation 6).
 
 **Step 8** is this record and the `docs/README.md` rows. Staged; the owner commits. P2 waits for the push.
+
+### P2 record (2026-11-07)
+
+On the owner's "committed and pushed": P1 is `022e092`, and `main` equals `origin/main` there.
+
+**Step 1, CI.** Run `42380798584` on `022e092` passed every job: `validate` on `ubuntu-24.04`, `macos-15` and
+`windows-2025`, `sbom`, `build` and the identity check on all five platforms; `release` skipped, with no tag. The Docs
+workflow passed. Each `validate` job's `make preflight` log has, between `check-records` and `markdownlint`:
+
+* `ubuntu-24.04`: `==> check-icon`, then `python3 scripts/gen_icon.py --check`; `preflight passed`;
+* `macos-15`: the same, `python3`; `preflight passed`;
+* `windows-2025`: the same, `python` (the Makefile's `PYTHON` there); `preflight passed`.
+
+So the runners' own Pythons write the re-approved bytes too (Confirmation 4). The logs do not print those Pythons'
+versions.
+
+**Step 2.** This plan is `complete`, the MADR `accepted`, and the `docs/README.md` rows match. Confirmations 1 to 6
+are met: 1, 2, 3, 5 and 6 at P1, and 4 here.
+
+**Step 3 waits for the owner's next `v*` tag,** which this plan does not make (MADR D4). magic-cli-remote is then told
+which tag carries `assets/gobble.svg`, and its `0179-PLAN-gobble-native-acp-provider.md` pins it. Until then Magic
+shows its monogram for gobble.

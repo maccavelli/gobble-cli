@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 date: 2026-11-07
 decision-makers: repository owner
 consulted: "this repository at 90b015a (main, 2026-11-07); magic-cli-remote's tools/vendor-icons/sync.sh, its 67 bundled vendor icons and its 0179-MADR-gobble-native-acp-provider.md (the 2026-11-06 body, D11 and Q4); the icon drawn and approved in a magic-cli-remote session on 2026-11-06 and 2026-11-07"
