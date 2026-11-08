@@ -1,8 +1,8 @@
 ---
-status: proposed
-date: 2026-10-15
+status: accepted
+date: 2026-11-08
 decision-makers: repository owner
-consulted: none
+consulted: "2026-11-08 refresh: gobble-cli at 4970cca (main), acp-go-sdk2 at tag v1.34.2, magic-cli-remote at c87d22e4 (master), each read from code"
 informed: magic-cli-remote
 ---
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
@@ -14,6 +14,11 @@ informed: magic-cli-remote
 *(2026-10-15: amended; see "Amendment (2026-10-15)". acp-go-sdk2 `v1.14.0` is pinned and partly adopted (A1), and D11's auth bullets are replaced by A2, decided by the owner. The rest of this record stays `proposed`.)*
 
 *(2026-10-25: D4 and D5 were carried out by [0031-PLAN-sdk-current-releases-and-adoption.md](0031-PLAN-sdk-current-releases-and-adoption.md) P3 on acp-go-sdk2 `v1.20.0`. D13's request for `SessionUpdate` constructors is [acp-go-sdk2#11](https://github.com/maccavelli/acp-go-sdk2/issues/11), shipped in `v1.21.0`; gobble still pins `v1.20.0` until [gobble-cli#5](https://github.com/maccavelli/gobble-cli/issues/5). D8–D10 stay this record's, `proposed`. The `example/agent` comment D13 named is already fixed in the SDK.)*
+
+*(2026-11-08: refreshed against gobble-cli `4970cca`, acp-go-sdk2 `v1.34.2` and magic-cli-remote `c87d22e4`; see
+"Refresh (2026-11-08)" at the end. D4, D5, D12 and A1 to A3 are done; D1 to D3 stay superseded; D6 to D11 and D13 are
+re-proposed there, each with three options and a recommendation, for the owner's answers. The text above is kept as
+written on its dates. Answered the same day: D6 Option 2, the rest Option 1; the record is `accepted`.)*
 
 ## Context and Problem Statement
 
@@ -494,3 +499,342 @@ The owner decided each point on 2026-10-15. The facts were read at acp-go-sdk2 `
 - Bad: `authenticate` only checks that a credential exists. A credential the provider would refuse still answers `{}`,
   and fails at the first prompt with `auth_required`, as today.
 - Neutral: D4 to D10 and D12 to D13 stay `proposed`. F4-3c builds A1 to A3 only.
+
+## Refresh (2026-11-08): the record against today's three codebases
+
+*Proposed for the owner's answers, from the owner's "refresh 0016 to ensure it is accurate and reflects the current
+state of the codebases it is related to … provide 3 options for implementation of each item, include recommendations.
+focus on being idiomatic, standards adherent and following best practices." Nothing above is rewritten; this section
+supersedes the open decisions' wording where it differs, and its Q1 to Q7 are the owner's to answer.*
+
+**Read at:** gobble-cli `4970cca` (`main`, equal to `origin/main`), acp-go-sdk2 tag `v1.34.2` (`4c94d2e`, read with
+`git show v1.34.2:<path>`), and magic-cli-remote `c87d22e4` (`master`). Line numbers below are at those commits.
+
+### Where each decision stands
+
+| Item | Status at `4970cca` | Evidence |
+| :--- | :--- | :--- |
+| D1 pin `v0.15.0` | superseded (0019-MADR D3, then A1, then 0035) | `go.mod`: acp-go-sdk2 `v1.34.2` |
+| D2 `cwd` check | superseded (the SDK checks `cwd`) | 0019-MADR F5, D7 |
+| D3 elicitation fixture | superseded (0019-MADR D8) | `acpclient/elicitation_test.go` |
+| D4 SDK error constants | **done** | `acpclient/conn.go:317`, `acpclient/sessions.go:55`, `:57`; no code literal in non-test code |
+| D5 no hand-written discriminators | **done** (0031-PLAN P3; helpers by 0035-MADR D7) | no `SessionUpdate: "` literal; ten SDK helpers in use, e.g. `acpserver/prompt.go:304` `UpdateUsage` |
+| D6 conformance under goldens | **not done** | no `ValidateGolden` call; `acpclient/acptest/recorder.go:140` compares bytes only |
+| D7 capability view | **not done** | `acpserver/agent.go:198-201`, `:411` keep `a.client`; read only for `fs`, `terminal` (`:721-726`) and `auth.terminal` (`:418`); no `Negotiated()` call |
+| D8 notices | **not done** | the five diagnostics are logged only (R3) |
+| D9 compaction updates | **not done**; compaction goes out as `_gobble/compaction` and agent text (R4) | `acpserver/compact.go:22-46`, `autocompact.go:97-117` |
+| D10 client side | **not done** | `acpclient/conn.go:40-57` (no option), `:145-148` (no capability); `acpclient/update.go` maps `notice` and both compaction variants to `KindOther` |
+| D11 record notes | **not done** | R7 |
+| D12 no unstable surface | **done** | no unstable method or capability; `exp/*/doc.go` stubs only; fork and clone are `_gobble/*` (`acpserver/extensions.go:39-40`) |
+| D13 owners' surfaces | unchanged, facts moved (R8) | — |
+| A1 `v1.14.0` adoption | **done**; its `Close()` bullet superseded by the SDK's `ServeAgent` | `acpserver/agent.go:372-374`; `acpserver/serve.go:45-48`; `CloseSession` waits up to `closeWait` (`agent.go:42`, `:1276`) |
+| A2 ACP auth | **done** (0005-PLAN F4-3c) | `acpserver/auth.go:32-69`; `session.golden` lists `grok` and `keyed` |
+| A3 `auth login --json` | **done** (0005-PLAN F4-3c) | `internal/cli/auth.go` |
+
+### What changed since 2026-10-12 (grounded facts)
+
+**gobble-cli.**
+
+- **R1. Pins and boundaries.** acp-go-sdk2 `v1.34.2` and `github.com/maccavelli/gobble-cli/acpext v0.1.0`
+  (`go.mod`). Only `acpserver/...` and `acpclient/...` import the SDK (archtest rule 2, `internal/archtest/check.go:264-274`).
+  `acpext` imports the standard library alone (0042-MADR) and carries `_gobble/compaction`'s `CompactionNotice`
+  (`acpext/types.go:84-91`: `sessionId`, `phase` `start`/`end`, `reason` `manual`/`threshold`/`overflow`,
+  `tokensBefore`, `error`, `paused` `turn`/`session`). It has no notice type.
+- **R2. What the goldens record.** `acpserver/testdata/session.golden:1`'s client sends `"clientCapabilities":{"auth":{},"fs":{}}`,
+  so no golden exercises `session.notices` or `session.compaction`. The ACP goldens are that file
+  (`TestSession`, `acpserver/agent_test.go:80`, `:127`) and `acpclient/acptest/testdata/initialize.golden`
+  (`TestPairInitialize`, `acpclient/acptest/pair_test.go:93`, `:103`). No test runs the SDK's `Validate` on a recorded
+  frame.
+- **R3. The five diagnostics are logged, and reach no ACP client.**
+
+  | Diagnostic | Site | Record | Once per |
+  | :--- | :--- | :--- | :--- |
+  | MCP server failed or needs auth | `acpserver/mcp.go:160-161` | Warn `"mcp: server needs attention"` (server, state, first error line) | server per session (`l.reported`, `:159`) |
+  | MCP config error | `mcp.go:149` | Warn `"mcp: config error"` | first prompt (`first`, `:138-151`) |
+  | MCP exposure ignored | `mcp.go:147` | Warn `"mcp: exposure and toolExposure apply from 0005-PLAN F8; …"` | first prompt |
+  | MCP server still connecting | `mcp.go:164` | Warn `"mcp: server still connecting; its tools join a later prompt"` | first prompt |
+  | Prompt file not used | `acpserver/sysprompt.go:223` | Warn `"prompt: a file was not used"` (file, reason) | file and message per session (`s.noted`) |
+
+  `mcpTools(ctx, l *liveMCP)` (`mcp.go:133`) has no session id; its caller has the session (`acpserver/agent.go:675`).
+  gobble's own CLI runs write Warn records to stderr (`internal/cli/main.go:82`, `:275`); only `gobble acp` turns that
+  off (`:84`). So in gobble's CLI these five are already shown; under `gobble acp` no user sees them.
+- **R4. Compaction today.** Four paths share `runCompaction` (`acpserver/compact.go:102`), which appends a
+  `session.TypeCompaction` entry whose id the tree assigns on append (`compact.go:120`; `session/tree.go:219`):
+  - `/compact` (`compact.go:22`): agent text "Compacting the conversation…", `_gobble/compaction` start (manual), the
+    end notice (`manualEnd`, `:51`), then agent text "Compacted from N tokens." plus the summary, or "Compaction
+    failed: …", then `usage_update`;
+  - `_gobble/compact` (`acpserver/extensions.go:178`): the two notices and `usage_update`, no agent text, and its
+    `CompactResult`;
+  - automatic, at the threshold or on overflow (`acpserver/autocompact.go:62-117`): the two notices (reason
+    `threshold` or `overflow`, `paused` on a failure), no agent text, then `usage_update`.
+  - **Replay** on `session/load` is agent text, "Compacted from N tokens:" and the summary (`acpserver/history.go:359-360`,
+    `:397-403`).
+- **R5. gobble's client.** `acpclient.Options` has no capability field (`acpclient/conn.go:40-57`), and `initialize`
+  sets no client capability (`:145-148`). `_gobble/compaction` becomes `KindCompaction` (`conn.go:451`,
+  `acpclient/update.go:150`); the line view draws it on stderr (`internal/cli/view.go:182-189`, `:227`), skipping the
+  manual reason, which `/compact`'s agent text covers; print mode does the same (`internal/cli/print.go:92-104`), never
+  in stream-json.
+
+**acp-go-sdk2 `v1.34.2`.**
+
+- **R6. The stable surface, its gate, and the SDK's own helpers.**
+  - Schema `1.25.0`, protocol 1 (`schema/version`, `constants_gen.go:6`). `notice`, `compaction_update` and
+    `compaction_summary_chunk`, and `ClientSessionCapabilities.notices` and `.compaction`, are in the stable
+    `schema/schema.json` (`:3827`, `:3843`, `:3859`; `:4777`, `:4801`).
+  - **Types.** `SessionUpdateNotice` (`types_gen.go:15869`): `severity` (`info`, `warning`, `error`, open), a required
+    non-empty `title`, `description`. `SessionCompactionUpdate` (`:15943`): `compactionId`, `status` (`in_progress`,
+    `completed`, `failed`, `cancelled`, open), and `summary`, `error` and `_meta` with patch semantics.
+    `SessionUpdateCompactionSummaryChunk` (`:16015`): `compactionId` and one content block. No tokens field.
+  - **The gate is enforced on send.** `SessionUpdate.gates` (`types_gen.go:25695-25716`), called by
+    `AgentSideConnection.SessionUpdate` (`agent_gen.go:1002`), returns `*CapabilityError` ("session/update: capability
+    session.notices not advertised: variant notice") and writes nothing. A client that receives an ungated update drops
+    and logs it (`connection.go:2426-2439`).
+  - **Reading what was agreed.** `AgentSideConnection.Negotiated()` (`agent_gen.go:131`) returns a `Negotiation`;
+    `Negotiation.AllowsValue(method, params)` (`helpers.go:1069`) runs the variant gates without sending.
+  - **Helpers.** `UpdateNotice`, `UpdateCompaction`, `UpdateCompactionSummary`, `UpdateCompactionSummaryText`
+    (`helpers.go:260-292`). `PresentNotice`, `PresentCompaction`, `PresentCompactionSummary` (`:998-1060`) send the
+    update when the client advertised the capability, and otherwise an agent message ("Compaction <status>" for a
+    compaction) or, for a summary chunk, nothing. Their doc says: "To send the notice or nothing, call SessionUpdate
+    with UpdateNotice, which fails with a *CapabilityError without the capability."
+  - **Client side.** `CompactionTimeline` (`compaction.go:25-118`) folds compaction updates, live or replayed, by id.
+  - **Testing.** `acptest.ValidateGolden(tb, records)` (`acptest/golden.go:41`) checks JSON-RPC framing, decodes each
+    frame's params and results into the method's type and runs `Validate`; it does not check capability gates, which
+    the SDK enforces on send.
+  - **Semantics** (SDK `docs/decisions/0039-MADR-five-adopter-additions-on-schema-1-25-0.md:46-64`): notices are live
+    and "SHOULD NOT be included in session replay"; for compaction, "the v1 capability gate applies to replay as well
+    as live delivery", the first update for an id fixes its timeline position, and a reported compaction must end in a
+    terminal status.
+
+**Records.**
+
+- **R7. D11's notes were never written.** 0004-MADR `:45-47` still lists delete and elicitation as unstable; 0005-MADR
+  `:148` (`session/delete`), `:192` and `:629` (elicitation; the claim 0016 cited at `:614` has moved); 0002-MADR
+  `:977` (`usage_update` "not standard") and `:1030` (`session/delete`). None carries a note.
+- **R8. D13's surfaces, today.** `session/delete` is stable and gated on `sessionCapabilities.delete`; gobble does not
+  advertise it and `session.Store` has no `Delete` (`session/session.go:425-436`). Elicitation is stable; gobble's
+  client refuses it through `acp.ClientRefusals` (`acpclient/conn.go:358-361`), and Magic advertises form elicitation
+  (R9). Images: `llm` has `ContentImage`, unwired, and no audio (`llm/llm.go:121-149`). Config options are selects only
+  (`acpserver/agent.go:1314`), while Magic advertises boolean options. `session/list` has no cursor
+  (`acpserver/agent.go:1171-1198`).
+
+**magic-cli-remote `c87d22e4`.**
+
+- **R9. Magic advertises both capabilities to every ACP agent it hosts,** gobble included as planned.
+  `defaultClientCapabilities` (`internal/provider/acpagent/acpagent.go:1356-1370`) sets `session.notices`,
+  `session.compaction`, boolean config options and form elicitation; 0179 gives gobble "the default less
+  `fs.readTextFile`, `fs.writeTextFile` and `terminal`" (0179-MADR `:377-378`).
+- **R10. Magic already renders both updates, under accepted records of its own.**
+  - `notice` → `event.TypeAgentNotice` (`internal/provider/acpagent/session.go:2145-2163`) → a notice row on the phone
+    (`apps/mobile/lib/features/chat/chat_bubble.dart:615-650`), by magic-cli-remote
+    `docs/decisions/0188-MADR-show-agent-notices-on-the-phone.md` (accepted).
+  - `compaction_update` and `compaction_summary_chunk` → one fold per `compactionId`
+    (`internal/provider/acpagent/compaction.go:28-146`) → `event.TypeCompaction` → one compaction row, by
+    magic-cli-remote `docs/decisions/0190-MADR-show-agent-context-compaction-on-the-phone.md` (accepted). opencode
+    sends these today (magic-cli-remote 0214-MADR).
+  - `_meta` on these updates is declined silently: a Debug record, once per variant
+    (`session.go:2197-2218`; `compaction.go:104`, `:127`).
+- **R11. Magic's plan for gobble reads `_gobble/compaction`, into the same fold.** 0179-MADR D10 (`:515-516`) maps
+  `_gobble/compaction` into `Host.UpdateCompaction` with "one compaction id per start", ids Magic makes up; the host
+  path writes the same fold (`internal/provider/acpagent/host.go:255-268`). The fold reconciles by id string only, so a
+  standard update and a `_gobble/compaction` notice for one compaction, under two ids, show as two rows. 0179 does not
+  mention the standard updates or this record. `_gobble/retry` maps to Magic's own notice (0179-MADR `:508-514`).
+- **R12. Magic's capture waits on a gobble release.** 0179-MADR D14 gate 3 (amended 2026-11-08) requires both
+  repositories on one acp-go-sdk2 tag when fixtures are captured from an installed gobble release: Magic pins
+  `v1.34.2`, every gobble release pins `v1.34.0`, and gobble's `main` pins `v1.34.2`. The first gobble release cut from
+  `main` meets it. What gobble sends Magic about compaction should therefore be settled before that release.
+
+### Decision drivers for the refresh
+
+- **Standards first.** Where ACP's stable schema has a surface, gobble uses it rather than a `_gobble/*` equivalent;
+  the extension stays for what the schema lacks, or for a client that does not offer the capability.
+- **The SDK's vocabulary and gates.** Ask the SDK's gate (`Negotiation.AllowsValue`), use its constructors and its test
+  helpers, and copy nothing it ships (AGENTS.md, 0035-MADR).
+- **One channel per fact per connection.** A client never receives the same compaction twice through two channels.
+- **The wire is the contract.** Without the capabilities, every golden stays byte-identical (0014-MADR D5).
+- **Schema semantics.** Notices are live and not replayed; the compaction gate applies to replay; every reported
+  compaction ends in a terminal status; ids are agent-owned and unique within a session.
+- **Settle what Magic sees before the release Magic captures from** (R12).
+
+### The open items, each with three options
+
+#### D6. Conformance under the goldens
+
+* **Option 1 — Call the SDK's `acptest.ValidateGolden` on gobble's ACP goldens.** A helper in `acpclient/acptest`
+  reads a golden's `client→agent` / `agent→client` lines into the SDK's `acptest.Record`s; `TestSession` and
+  `TestPairInitialize` call `ValidateGolden` after their byte comparison.
+  * Good, because it is the SDK's own validator, used as shipped.
+  * Good, because the goldens and gobble's recorder are unchanged.
+  * Neutral, because it checks shape and types, not gates; the SDK already refuses an ungated send (R6).
+  * Bad, because a small adapter maps gobble's direction labels to the SDK's.
+* **Option 2 — Replace gobble's `acpclient/acptest` recorder and golden with the SDK's `acptest.Recorder` and
+  `acptest.Golden`, and validate with `ValidateGolden`.**
+  * Good, because it removes a gobble copy of what the SDK now ships (0035-MADR's direction).
+  * Bad, because both golden files are rewritten into the SDK's format, a larger review than the check itself.
+* **Option 3 — Write gobble's own decoder and validator** (D6 as written in 2026-10).
+  * Bad, because it copies what the SDK ships.
+
+*Recommended: Option 1.* Option 2 is a later clean-up once Option 1 shows the two formats agree.
+
+#### D7. How the agent knows what the client offered
+
+* **Option 1 — Ask the SDK's gate.** One helper, `offers(conn, sessionID, update) bool`, over
+  `conn.Negotiated()` and `Negotiation.AllowsValue(acp.ClientMethodSessionUpdate, …)`.
+  * Good, because the answer is by construction the gate the SDK applies on send, for every variant, including later
+    ones.
+  * Good, because gobble keeps no second copy of what was agreed.
+  * Neutral, because `Negotiated()` returns a deep copy per call; it is called once per diagnostic or compaction.
+* **Option 2 — Field accessors over `Negotiated()`,** `offersNotices()` and `offersCompaction()` reading
+  `Request.ClientCapabilities.Session` (D7 as amended by 0019-MADR D10).
+  * Good, because it is explicit and cheap to read.
+  * Bad, because it restates the gate's rule in gobble, one accessor per capability.
+* **Option 3 — Accessors over gobble's stored `a.client`** (D7 as first written; `acpserver/agent.go:198-201`).
+  * Bad, because it keeps a second source of truth beside the SDK's negotiation record.
+
+*Recommended: Option 1.*
+
+#### D8. Notices for the five diagnostics
+
+* **Option 1 — Notice or nothing.** When `offers` says yes, send `acp.UpdateNotice` with D8's severities (failed or
+  needs auth, config error, exposure ignored, prompt file not used: `warning`; still connecting: `info`), the log
+  message as title and its detail as description. Always log as today; keep each diagnostic's once-per-session rule;
+  never replay or store a notice. `mcpTools` takes the session from its caller (`acpserver/agent.go:675`).
+  * Good, because it follows the schema's MUST and the SDK's documented idiom for "the notice or nothing".
+  * Good, because a client that does not offer notices sees no change, and every golden stays byte-identical.
+  * Good, because Magic shows them through its accepted 0188 path, and an ACP editor through its own.
+* **Option 2 — `acp.PresentNotice`:** a notice when offered, otherwise an agent message.
+  * Good, because no client misses a diagnostic.
+  * Bad, because it injects diagnostic text into the conversation of clients that did not ask, and into gobble's CLI,
+    which already prints these on stderr (R3).
+* **Option 3 — A `_gobble/notice` extension in `acpext`.**
+  * Bad, because it duplicates a stable ACP surface and needs gobble-specific code in every client.
+
+*Recommended: Option 1.* `_gobble/retry` is not a diagnostic and stays as it is.
+
+#### D9. Compaction through the standard updates
+
+* **Option 1 — One channel per connection: the standard updates for a client that offered `session.compaction`,
+  `_gobble/compaction` and today's text for one that did not.**
+  * Live: `compaction_update` `in_progress` once the run is prepared (a refusal sends none), then
+    `compaction_summary_chunk` with the summary, then `completed`, or `failed` with the first line of the error, or
+    `cancelled`. The id is fresh per run (`Options.NewID`).
+  * gobble's own facts ride in `_meta.gobble` of the updates (`reason`, `tokensBefore`, `paused`), through the SDK's
+    `MetaObject`; Magic ignores `_meta` silently (R10).
+  * `/compact` sends neither of its two agent-text lines on such a connection; `_gobble/compact`'s result is
+    unchanged.
+  * Replay on `session/load`: a `compaction_update` `completed` with the entry's summary, its id the entry's id, for
+    such a client; today's agent text otherwise.
+  * Good, because any ACP client that offers the capability, Magic and editors alike, sees compaction as compaction,
+    with its summary, through its standard path (Magic's accepted 0190).
+  * Good, because no client receives one compaction twice.
+  * Good, because `acpext` and the extension stay for clients without the capability, so nothing is withdrawn.
+  * Bad, because the compaction path has two shapes, chosen per connection, and its tests cover both.
+  * Bad, because Magic's 0179 D10 mapping of `_gobble/compaction` then receives nothing from gobble, and 0179 needs an
+    amendment in that repository (R11).
+* **Option 2 — Both channels always:** the standard updates when offered, and `_gobble/compaction` regardless.
+  * Good, because 0179 works unchanged.
+  * Bad, because Magic folds both into one fold by id string, and the two carry different ids, so each compaction
+    shows twice (R11); every client that offers the capability receives every compaction twice.
+* **Option 3 — Keep `_gobble/compaction` only** (withdraw D9).
+  * Good, because nothing changes, in gobble or in 0179.
+  * Bad, because every standard client sees gobble's compaction as prose or not at all, without the summary, and Magic
+    needs gobble-specific code that invents ids.
+
+*Recommended: Option 1*, decided before the gobble release Magic captures from (R12). `PresentCompaction` is not used:
+its fallback, "Compaction <status>", would replace gobble's own text and the extension for clients without the
+capability.
+
+#### D10. gobble's own client
+
+* **Option 1 — Advertise `session.compaction` only, in line mode, and render it with the SDK's `CompactionTimeline`.**
+  `acpclient.Options` gains `Compaction bool`; `translate` folds `compaction_update` and `compaction_summary_chunk`
+  into the existing `KindCompaction` view lines; print mode advertises nothing, so stream-json is unchanged.
+  * Good, because gobble's own client exercises the standard path it serves, with the SDK's fold.
+  * Good, because notices are not advertised: the CLI already prints those diagnostics on stderr (R3), and would
+    otherwise show each twice.
+  * Bad, because `acpclient` and the view gain a second compaction source, the standard one, beside the extension
+    other clients' paths keep.
+* **Option 2 — Advertise both, as D10 was written:** notices become warning lines too.
+  * Bad, because each diagnostic then shows twice in gobble's CLI, unless the in-process agent's Warn records stop
+    reaching stderr, which changes every non-ACP run.
+* **Option 3 — No client change:** gobble's client advertises nothing and keeps reading `_gobble/compaction`, which
+  D9 Option 1 still sends it.
+  * Good, because it is the smallest change.
+  * Bad, because gobble never runs the standard path it serves, and its tests cover it only from the agent side.
+
+*Recommended: Option 1.*
+
+#### D11. The records that call stable surfaces unstable
+
+* **Option 1 — Dated notes at the current lines:** 0004-MADR `:45-47`; 0005-MADR `:148`, `:192`, `:629`; 0002-MADR
+  `:977`, `:1030`, each citing schema 1.25.0's stable lists (R6).
+  * Good, because the repository's rule is to annotate, never rewrite, and a reader meets the correction where the
+    claim is.
+* **Option 2 — One report of corrections,** with a pointer line in each record.
+  * Bad, because the false sentence is still read first, and the reader must follow a link.
+* **Option 3 — Leave them as history.**
+  * Bad, because plans built on them route stable surfaces to `exp/`.
+
+*Recommended: Option 1.*
+
+#### D13. The stable surfaces that stay with their owners
+
+* **Option 1 — Keep each with its owner, with R8's facts recorded here:** `session/delete` (0005-MADR "Archive and
+  delete"), elicitation (0005-MADR "Sampling and elicitation", "Ask the user"), images and audio (0005-MADR amendment
+  of 2026-10-10, item 2), boolean config options and `session/list` pagination.
+  * Good, because each still needs a product decision (a `Store.Delete` and its permission; a form renderer; image
+    input in `llm`), which a protocol record cannot make.
+* **Option 2 — A MADR per surface now.**
+  * Bad, because it opens five records without the product calls that would decide them.
+* **Option 3 — Build them in this record's PLAN.**
+  * Bad, because it is Option C of 2026-10, rejected for the same reason.
+
+*Recommended: Option 1.* Magic's advertising form elicitation and boolean options (R9) is noted for those owners.
+
+### Proposed outcome
+
+The recommended set, `proposed` until the owner answers Q1 to Q7: D6 Option 1, D7 Option 1, D8 Option 1, D9 Option
+1, D10 Option 1, D11 Option 1, D13 Option 1. Done items are not reopened. *(2026-11-08: answered; the decision is D6
+Option 2, and Option 1 for the rest. See the answers below.)*
+
+* **Q1 (D6)** Option 1, 2 or 3. **Q2 (D7)** Option 1, 2 or 3. **Q3 (D8)** Option 1, 2 or 3. **Q4 (D9)** Option 1, 2
+  or 3. **Q5 (D10)** Option 1, 2 or 3. **Q6 (D11)** Option 1, 2 or 3. **Q7 (D13)** Option 1, 2 or 3.
+
+*Answered 2026-11-08 by the owner:*
+
+| Question | Answer | Decision |
+| :--- | :--- | :--- |
+| Q1 (D6) | "Adopt SDK recorder" | **Option 2**: gobble's `acpclient/acptest` recorder and golden give way to the SDK's `acptest.Recorder`, `acptest.Golden` and `acptest.ValidateGolden`; both ACP goldens are rewritten once into the SDK's record format |
+| Q2 (D7) | "Ask the SDK gate" | Option 1 |
+| Q3 (D8) | "Notice or nothing" | Option 1 |
+| Q4 (D9) | "One channel/connection" | Option 1 |
+| Q5 (D10) | "Compaction only" | Option 1 |
+| Q6 (D11) | "Dated notes inline" | Option 1 |
+| Q7 (D13) | "Keep with owners" | Option 1 |
+
+*Found while writing the PLAN for Q1's answer, and kept by it: gobble's `Recorder.Golden` writes every JSON string
+that is a path under `Abs("/")` in slash form before comparing, so a golden recorded on macOS matches on Windows
+(`acpclient/acptest/recorder.go:165-189`, `hostIndependent`, 0019-MADR D4). The SDK's `acptest.Golden` canonicalizes
+each frame's key order only (`acptest/golden.go:91-130`). That normalizer stays in gobble, applied to the records
+before the SDK's `Golden`; everything else of the recorder and the golden comparison is the SDK's. The decision is
+accepted: D6 Option 2 and D7 to D11 and D13 Option 1.*
+
+### Consequences of the recommended set
+
+* Good, because MCP and prompt problems reach an ACP user, on Magic's phone and in editors, where today only a log has
+  them.
+* Good, because compaction reaches any standard client as compaction with its summary, through one channel.
+* Good, because every golden whose client offers neither capability stays byte-identical, and the goldens gain the
+  SDK's conformance check. *(2026-11-08, Q1 answered Option 2: the two ACP golden files are rewritten once, in the PLAN's
+  P1, into the SDK's record format; the frames they hold are the same, which P1 checks by comparing the frames before
+  and after the rewrite. From then on the rule holds for the new files.)*
+* Neutral, because `acpext` is unchanged: `_gobble/compaction` remains for clients without the capability.
+* Bad, because magic-cli-remote's 0179 D10 must change in that repository before Magic captures from the release that
+  carries D9, or Magic shows no compaction from gobble through its `_gobble/compaction` mapping. Telling Magic is an
+  outward action for the owner's word.
+
+### Confirmation of the refresh
+
+* Each item's status above cites the line that shows it; a reviewer can re-read each at `4970cca`, `v1.34.2` and
+  `c87d22e4`.
+* The PLAN, [0016-PLAN-acp-go-sdk2-v0.15.0-and-stable-surface.md](0016-PLAN-acp-go-sdk2-v0.15.0-and-stable-surface.md),
+  carries the recommended set as phases, and is amended by any other answer before it runs.
