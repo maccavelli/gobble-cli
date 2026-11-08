@@ -262,14 +262,16 @@ var agentServe = func(e *runEnv) acpclient.ServeFunc {
 // startAgentWith starts the agent and sends initialize, with permission
 // requests answered by permission: the line session's prompt, or print
 // mode's refusal (0008-MADR D16). params asks for each update's
-// Update.Params, which only stream-json reads (0039-MADR D16).
-func (e *runEnv) startAgentWith(ctx context.Context, permission func(context.Context, acpclient.PermissionRequest) acpclient.PermissionAnswer, params bool) (*acpclient.Conn, error) {
+// Update.Params, which only stream-json reads (0039-MADR D16). compaction
+// offers session.compaction, which only line mode draws (0016-MADR D10).
+func (e *runEnv) startAgentWith(ctx context.Context, permission func(context.Context, acpclient.PermissionRequest) acpclient.PermissionAnswer, params, compaction bool) (*acpclient.Conn, error) {
 	conn, err := acpclient.Start(ctx, agentServe(e), acpclient.Options{
 		Name:       appName,
 		Version:    identity().Version,
 		Logger:     e.log(),
 		Permission: permission,
 		Params:     params,
+		Compaction: compaction,
 	})
 	if err != nil {
 		return nil, failf("start the agent: %v", err)

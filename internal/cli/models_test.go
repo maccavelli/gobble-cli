@@ -350,7 +350,7 @@ func TestModelOptionOffersListedModels(t *testing.T) {
 	withModel(t, script)
 	// replies reads the config_option_update from its params, which the
 	// connection is asked for (0039-PLAN deviation 11).
-	conn, err := e.startAgentWith(t.Context(), nil, true)
+	conn, err := e.startAgentWith(t.Context(), nil, true, false)
 	if err != nil {
 		t.Fatal(err)
 	}

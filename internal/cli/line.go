@@ -124,7 +124,7 @@ func (ls *lineSession) run(first Prompt) error {
 		defer cancel()
 		go ls.route(ctx)
 	}
-	conn, err := e.startAgentWith(e.ctx, ls.askPermission, false)
+	conn, err := e.startAgentWith(e.ctx, ls.askPermission, false, true)
 	if err != nil {
 		return err
 	}

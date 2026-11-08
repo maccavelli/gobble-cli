@@ -33,7 +33,9 @@ const (
 	KindRetry
 	// KindCompaction is gobble's _gobble/compaction notification, not a
 	// session/update: Params holds the notification's params (0005-PLAN
-	// F5-2 decision 9).
+	// F5-2 decision 9). With Options.Compaction it is also ACP's
+	// compaction_update and compaction_summary_chunk, a session/update
+	// (gobble-cli 0016-MADR D10).
 	KindCompaction
 	// KindPersonality is gobble's _gobble/personality notification, not a
 	// session/update: Params holds the notification's params (0022-MADR
@@ -106,8 +108,8 @@ type Update struct {
 	// Params is the session/update params object as the SDK encodes it,
 	// for clients that pass the ACP stream through (0008-MADR D9). It is
 	// set only when Options.Params is (0039-MADR D16). For KindRetry,
-	// KindCompaction and KindPersonality it is the notification's params,
-	// as received.
+	// KindPersonality and a KindCompaction from _gobble/compaction it is the
+	// notification's params, as received.
 	Params jsontext.Value
 }
 
@@ -139,10 +141,48 @@ func retryOf(params jsontext.Value) (acp.SessionId, Retry, error) {
 // TokensBefore a successful end's; Error why an end is not a success, or
 // ""; Paused "turn" or "session" when the failure paused automatic
 // compaction (0005-PLAN F5-2 decisions 9 and 11).
+//
+// From ACP's compaction_update and compaction_summary_chunk, offered by
+// Options.Compaction, it is the compaction so far, as the SDK's
+// CompactionTimeline folds it: ID and Status are the protocol's, an
+// unknown status as it arrived; Summary is the summary's text so far;
+// Reason, TokensBefore and Paused come from _meta.gobble. An in_progress
+// update is a start and a completed, failed or cancelled one an end, a
+// cancelled one with the Error "cancelled", as _gobble/compaction says; a
+// chunk, and a status the protocol does not define, are neither. ID and
+// Status are "" for _gobble/compaction (gobble-cli 0016-MADR D9, D10).
 type Compaction struct {
 	Phase, Reason string
 	TokensBefore  int64
 	Error, Paused string
+	ID, Status    string
+	Summary       string
+}
+
+// compactionFrom is the compaction e as Compaction describes it; chunk
+// says a summary chunk changed it.
+func compactionFrom(e acp.CompactionEntity, chunk bool) Compaction {
+	c := Compaction{ID: string(e.Id), Status: string(e.Status), Error: e.Error}
+	for _, b := range e.Summary {
+		text, block := blockText(b)
+		if block != "" {
+			text = "[" + block + "]"
+		}
+		c.Summary += text
+	}
+	if meta, ok, err := acp.DecodeMeta[acpext.CompactionMeta](e.Meta, acpext.MetaKey); ok && err == nil {
+		c.Reason, c.TokensBefore, c.Paused = string(meta.Reason), meta.TokensBefore, string(meta.Paused)
+	}
+	switch {
+	case chunk:
+	case e.Status == acp.CompactionStatusInProgress:
+		c.Phase = string(acpext.PhaseStart)
+	case e.Status == acp.CompactionStatusCancelled:
+		c.Phase, c.Error = string(acpext.PhaseEnd), "cancelled"
+	case e.Status == acp.CompactionStatusCompleted, e.Status == acp.CompactionStatusFailed:
+		c.Phase = string(acpext.PhaseEnd)
+	}
+	return c
 }
 
 // compactionOf decodes _gobble/compaction's params, with the session they
@@ -221,8 +261,10 @@ type Cost struct {
 // translate makes an Update from a notification. With params, it encodes
 // the notification as Update.Params, with encoding/json/v2 and v1's
 // escaping of <, >, & and U+2028 and U+2029, so its bytes are those the SDK
-// writes (0039-MADR D16, Q4).
-func translate(n acp.SessionNotification, params bool) (Update, error) {
+// writes (0039-MADR D16, Q4). With tl, the session's compactions, a
+// compaction_update or compaction_summary_chunk is folded into it and is
+// KindCompaction; without it, both are KindOther.
+func translate(n acp.SessionNotification, params bool, tl *acp.CompactionTimeline) (Update, error) {
 	s := n.Update
 	u := Update{Variant: s.Kind()}
 	if params {
@@ -284,6 +326,10 @@ func translate(n acp.SessionNotification, params bool) (Update, error) {
 		if t, ok := s.SessionInfoUpdate.Title.Value(); ok {
 			u.Title = t
 		}
+	case tl != nil && (s.CompactionUpdate != nil || s.CompactionSummaryChunk != nil):
+		e, _ := tl.Apply(s)
+		u.Kind = KindCompaction
+		u.Compaction = compactionFrom(e, s.CompactionSummaryChunk != nil)
 	}
 	return u, nil
 }

@@ -64,6 +64,7 @@ type ScriptAgent struct {
 	prompts  []string
 	cwds     []string
 	cancels  int
+	clients  []acp.ClientCapabilities
 	waiting  map[acp.SessionId]chan struct{}
 }
 
@@ -119,10 +120,21 @@ func (a *ScriptAgent) record(method string) {
 	a.methods = append(a.methods, method)
 }
 
+// ClientCapabilities are the client capabilities of each initialize
+// received, in order.
+func (a *ScriptAgent) ClientCapabilities() []acp.ClientCapabilities {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return slices.Clone(a.clients)
+}
+
 // Initialize advertises protocol 1 and Capabilities, or by default session
-// close and Image.
-func (a *ScriptAgent) Initialize(context.Context, acp.InitializeRequest) (acp.InitializeResponse, error) {
+// close and Image, and keeps the client's capabilities.
+func (a *ScriptAgent) Initialize(_ context.Context, p acp.InitializeRequest) (acp.InitializeResponse, error) {
 	a.record(acp.AgentMethodInitialize)
+	a.mu.Lock()
+	a.clients = append(a.clients, p.ClientCapabilities)
+	a.mu.Unlock()
 	caps := acp.AgentCapabilities{
 		PromptCapabilities:  acp.PromptCapabilities{Image: a.Image},
 		SessionCapabilities: acp.SessionCapabilities{Close: &acp.SessionCloseCapabilities{}},

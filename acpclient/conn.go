@@ -54,6 +54,13 @@ type Options struct {
 	// through. Without it a session/update's Params is nil, and no update
 	// is encoded for nothing (0039-MADR D16).
 	Params bool
+	// Compaction offers session.compaction at initialize: the agent then
+	// reports a compaction by ACP's compaction_update and
+	// compaction_summary_chunk, which reach the callback as KindCompaction,
+	// folded by the SDK's CompactionTimeline. Without it, nothing is offered,
+	// and gobble's agent sends _gobble/compaction (gobble-cli 0016-MADR D9,
+	// D10).
+	Compaction bool
 }
 
 // metaGobble is gobble's key in an ACP _meta.
@@ -121,6 +128,9 @@ type Conn struct {
 func Start(ctx context.Context, serve ServeFunc, opts Options) (*Conn, error) {
 	c := &Conn{handler: &handler{sessions: map[acp.SessionId]func(Update){},
 		commands: map[acp.SessionId][]Command{}, permission: opts.Permission, params: opts.Params}}
+	if opts.Compaction {
+		c.handler.compactions = map[acp.SessionId]*acp.CompactionTimeline{}
+	}
 	logger := opts.Logger
 	if logger == nil {
 		logger = slog.New(slog.DiscardHandler)
@@ -142,10 +152,14 @@ func Start(ctx context.Context, serve ServeFunc, opts Options) (*Conn, error) {
 		return nil, fmt.Errorf("start agent: %w", err)
 	}
 	c.proc, c.conn = p, p.Conn()
-	resp, err := c.conn.Initialize(ctx, acp.InitializeRequest{
+	req := acp.InitializeRequest{
 		ProtocolVersion: acp.ProtocolVersionNumber,
 		ClientInfo:      &acp.Implementation{Name: opts.Name, Version: opts.Version},
-	})
+	}
+	if opts.Compaction {
+		req.ClientCapabilities.Session = &acp.ClientSessionCapabilities{Compaction: &acp.CompactionCapabilities{}}
+	}
+	resp, err := c.conn.Initialize(ctx, req)
 	// The SDK negotiates the version; its refusal keeps gobble's words
 	// (0019-MADR D7).
 	if pve, ok := errors.AsType[*acp.ProtocolVersionError](err); ok {
@@ -370,6 +384,9 @@ type handler struct {
 	permission func(context.Context, PermissionRequest) PermissionAnswer
 	// params is Options.Params.
 	params bool
+	// compactions are each session's compactions, folded by the SDK, when
+	// Options.Compaction offered session.compaction; nil otherwise.
+	compactions map[acp.SessionId]*acp.CompactionTimeline
 
 	// ext routes gobble's _gobble/* notifications, registered on first use
 	// (0039-MADR D12).
@@ -395,6 +412,23 @@ func (h *handler) remove(id acp.SessionId) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	delete(h.sessions, id)
+	delete(h.compactions, id)
+}
+
+// timeline is the session's compactions, started on first use, or nil when
+// the client did not offer session.compaction.
+func (h *handler) timeline(id acp.SessionId) *acp.CompactionTimeline {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.compactions == nil {
+		return nil
+	}
+	tl, ok := h.compactions[id]
+	if !ok {
+		tl = &acp.CompactionTimeline{}
+		h.compactions[id] = tl
+	}
+	return tl
 }
 
 // SessionUpdate delivers the update to its session's callback. An update
@@ -411,7 +445,7 @@ func (h *handler) SessionUpdate(_ context.Context, n acp.SessionNotification) er
 	if on == nil {
 		return nil
 	}
-	u, err := translate(n, h.params)
+	u, err := translate(n, h.params, h.timeline(n.SessionId))
 	if err != nil {
 		return err
 	}

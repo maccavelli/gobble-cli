@@ -26,3 +26,20 @@ func TestCompactionNotification(t *testing.T) {
 		t.Fatalf("bad params: updates %+v, log %q; want it logged and not delivered", got, logs)
 	}
 }
+
+// A client that did not offer session.compaction keeps compaction_update
+// and compaction_summary_chunk as KindOther, by their variant, as before
+// (0016-MADR D10).
+func TestStandardCompactionNotOffered(t *testing.T) {
+	var got []Update
+	h := &handler{sessions: map[acp.SessionId]func(Update){"s1": func(u Update) { got = append(got, u) }}}
+	for _, u := range []acp.SessionUpdate{acp.UpdateCompaction("c1", acp.CompactionStatusInProgress), acp.UpdateCompactionSummaryText("c1", "x")} {
+		if err := h.SessionUpdate(t.Context(), acp.SessionNotification{SessionId: "s1", Update: u}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(got) != 2 || got[0].Kind != KindOther || got[0].Variant != "compaction_update" || got[1].Kind != KindOther ||
+		got[1].Variant != "compaction_summary_chunk" {
+		t.Fatalf("updates %+v, want both KindOther by their variant", got)
+	}
+}

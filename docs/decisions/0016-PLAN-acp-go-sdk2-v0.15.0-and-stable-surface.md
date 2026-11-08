@@ -257,10 +257,19 @@ Magic captures from may carry it, with magic-cli-remote's 0179 amended or schedu
    * `internal/cli`: line mode offers it, and draws an automatic compaction with today's words ("compacting the
      conversation ({reason})", "compaction failed: {error}" and its paused forms); print mode offers nothing, and
      `print-json.golden` and `print-stream-json.golden` are byte-identical.
+   * *(2026-11-08, deviation 2)* `internal/cli`: line mode draws a **manual** compaction from its rows, in `/compact`'s
+     words and the session's voice, as reply text: `in_progress` gives "Compacting the conversation…"; `completed`
+     gives "Compacted from {tokens} tokens." and the summary; `failed` gives "Compaction failed: {error}". Its stdout
+     equals, byte for byte, what the same compaction drew as `/compact`'s agent text.
+     `acptest.ScriptAgent` records each `initialize`'s client capabilities, so the tests can show what each mode
+     offered.
 2. **The code:** `acpclient.Options.Compaction`; `initialize` sets `ClientCapabilities.Session.Compaction`; `translate`
    keeps one `CompactionTimeline` per session; line mode sets the option. Notices are not offered (MADR D10).
+   *(2026-11-08, deviation 2: the line view draws a manual compaction from its rows, since P3c sends a client that
+   offers `session.compaction` no `/compact` text.)*
 3. **Seen failing** (C2): each test against the code before step 2; then the planted breaks: the option not reaching
-   `initialize`; a chunk dropped from the fold; print mode offering it.
+   `initialize`; a chunk dropped from the fold; print mode offering it. *(Deviation 2 adds a fourth: the view drawing
+   nothing for a manual row.)*
 4. Gates (C5), with `make perf`, since the view changes. **Commit.**
 
 ### P5 — acceptance
@@ -670,3 +679,117 @@ The gate:
    * The live-run list, line 558: the fixtures should record the standard updates.
 
    Decoding `CompactionMeta` is offered as optional.
+
+### Deviation 2 (2026-11-08): P4, line mode's `/compact` would print nothing
+
+* **Found** at P4's start (`HEAD` `3d6fb65`, the tree clean), before any code:
+  * P3c sends a client that offers `session.compaction` only the compaction's rows for `/compact` (MADR P3-Q4,
+    `acpserver/compact.go`). That client gets no "Compacting the conversation…" text, no "Compacted from N tokens."
+    text and no summary as agent text.
+  * P4 makes line mode offer `session.compaction`.
+  * The line view's `compactionLine` (`internal/cli/view.go`) draws nothing for a manual compaction, "since /compact's
+    reply says so".
+  * P4's step 1 named only the automatic lines. MADR D10 (`:237`) and its open question (`:383`) already said that line
+    mode prints the progress and the summary "in the words `/compact` uses today".
+  * Line mode resumes with no replay (`acpclient/sessions.go:145`), so replay needs nothing here.
+* **Decision,** the owner's ("View draws it"):
+  * The line view draws a manual compaction from its rows, in `/compact`'s words (`personality.CompactStart`,
+    `CompactDone`, `CompactFailed`) and the session's voice, through the same reply path as agent text. A test checks
+    that its stdout matches what `/compact`'s agent text drew.
+  * One difference: a failure shows the error's first line, which is all the row carries.
+  * Not chosen: having the agent send `/compact`'s text to clients that offer `session.compaction` too (this would
+    revisit P3-Q4, and Magic would show both); D10 Option 3 (this would reverse Q5).
+* **Files added to scope:**
+  * `acpclient/acptest/script.go`: `ScriptAgent` records each `initialize`'s client capabilities. This is one new
+    method on a stable package, a compatible addition (`apidiff` itself checks nothing below `v1.0.0`).
+  * `internal/cli/view.go`'s manual drawing, with its test.
+
+  The MADR needs no amendment: D10 already states this behaviour.
+
+### P4 record (2026-11-08)
+
+The base is `3d6fb65`, P3c's commit. `origin/main` is at `253e366`, with P3b and P3c not yet pushed. The tree was clean
+(C1). The gate: P3 is committed. One deviation, 2 above, was found before any code.
+
+1. **The tests first** (step 1, with deviation 2):
+   * **`acpclient/standardcompaction_test.go`, `TestTranslateStandardCompaction`:** with `Options.Compaction`, the
+     scripted agent sees `session.compaction` and no `session.notices`. The agent sends three compactions:
+     * a manual one, whose summary arrives in two chunks;
+     * an automatic one that fails and pauses;
+     * one that is cancelled.
+
+     They reach the callback as eight `KindCompaction` updates, each carrying the ID, the status, the summary so far,
+     and `_meta.gobble`'s reason, tokens and pause. An `in_progress` update is a `start`; a terminal update is an
+     `end`, a cancelled one with the error "cancelled"; a chunk is neither. Without the option, the scripted agent
+     sees no session capabilities.
+   * **`acpclient/compaction_test.go`, `TestStandardCompactionNotOffered`:** without a timeline, both variants stay
+     `KindOther`, by their variant.
+   * **`internal/cli/compactionview_test.go`:**
+     * `TestLineCompactionRows`: line mode offers `session.compaction` alone. A manual compaction's rows draw the same
+       stdout as `/compact`'s agent text, for a success and for a failure. An automatic compaction's rows draw today's
+       stderr lines: "compacting the conversation (threshold)", and the failure with "(automatic compaction paused for
+       this turn)". A manual compaction draws nothing on stderr.
+     * `TestLineCompactThroughTheAgent`: `/compact` in line mode, against gobble's own agent, draws its progress, its
+       count and its summary once each, in the session's voice.
+     * `TestPrintOffersNoCompaction`: print mode's scripted agent sees no session capabilities.
+   * **Not offered:** `print-json.golden`, `print-stream-json.golden` and every other golden are unchanged
+     (`git diff --quiet`).
+   * **Against the code before step 2:**
+     * Both new test files fail to compile:
+       * `agent.ClientCapabilities undefined`;
+       * `unknown field Compaction in struct literal of type acpclient.Options`.
+     * With the `ScriptAgent` recorder alone added (a scratch copy with HEAD's `acpclient` and `internal/cli` code),
+       `TestLineCompactionRows` failed. Each turn timed out with "condition not met within 5 s", since the scripted
+       agent's SDK refused rows the client had not offered, and the test ended with
+       `client capabilities [{… Session:<nil> …}], want session.compaction alone`.
+2. **The code** (step 2):
+   * **`acpclient/acptest/script.go`:** `ScriptAgent.ClientCapabilities()`, recorded at `initialize` (deviation 2).
+   * **`acpclient/conn.go`:**
+     * `Options.Compaction` makes `initialize` send `ClientCapabilities.Session.Compaction`, and nothing else.
+     * The handler keeps one `acp.CompactionTimeline` per session, created on first use and dropped with the session,
+       and only when the option is set.
+   * **`acpclient/update.go`:**
+     * `translate` takes the session's timeline. With it, a `compaction_update` or `compaction_summary_chunk` is
+       applied and becomes `KindCompaction`.
+     * `compactionFrom` reads the entity: the status, the summary's text, the error, and `acpext.CompactionMeta` by
+       `acp.DecodeMeta`.
+     * `Compaction` gains `ID`, `Status` and `Summary`. These are additions, and the struct stays comparable.
+   * **`internal/cli`:**
+     * `startAgentWith` takes `compaction`. Line mode passes true; print mode and `models_test.go` pass false.
+     * `view.go`'s agent-text drawing moves into `reply`, unchanged.
+     * `manualCompaction` gives `/compact`'s words for a manual row, by `personality.CompactStart`, `CompactDone` and
+       `CompactFailed`, in the view's voice, and draws them through `reply`.
+     * `compactionLine` and `ambient.note` are unchanged, and read the folded rows as they read `_gobble/compaction`.
+   * Notices are not offered (MADR D10).
+3. **Seen failing** (step 3), each break planted on a scratch copy with C3's environment. The control passed.
+   * **The option not reaching `initialize`:**
+     * `standardcompaction_test.go:39: session/prompt: {"code":-32603,…,"data":{"error":"session/update: capability session.compaction not advertised: variant compaction_update"}}`;
+     * in `internal/cli`, `TestLineCompactionRows` timed out on each turn, then reported
+       `client capabilities [{… Session:<nil> …}]`.
+   * **A chunk dropped from the fold:**
+     * `standardcompaction_test.go:61: update 1: other {…}, want compaction {… Summary:## Goal …}`;
+     * `update 3: compaction {Phase:end … Summary:}, want … Summary:## Goal …`.
+   * **Print mode offering it:** `compactionview_test.go:119: print mode's client capabilities [{… Session:0x… …}], want none`.
+   * **The view drawing nothing for a manual row:**
+     * `compactionview_test.go:66: "SUMMARY-ONE" not drawn after "Compacting the conversation…"`;
+     * `TestLineCompactThroughTheAgent`: `condition not met within 5 s`, then `line mode's /compact drew …` without the
+       summary.
+4. **Gates** (step 4):
+   * `make pre-add-check` on the eleven Go files: "11 file(s) clean (gofmt, golint, govulncheck)". `view.go` was checked
+     again after the lint fix.
+   * `make lint`: the first run found one `goconst` finding, a third `"start"` literal in `view.go`. The new line now
+     uses `acpext.PhaseStart`, and lint finds 0 issues in both modules.
+   * `make preflight`: "preflight passed". Its `apidiff` step reports "no-op below v1.0.0".
+   * `make race`: 39 ok.
+   * `make perf`: within budget:
+     * ReplyRender 21.9 µs (baseline 30 µs);
+     * Reprint 5.86 ms (9.4 ms);
+     * LineSessionStart 984 µs (830 µs);
+     * KeyDraw 1.52 µs (1.5 µs).
+   * The new tests and their neighbours: 20 runs ok.
+   * The identifier scan of the diff and the new files found nothing.
+   * The Linux machine and the Windows laptop, with the tree shipped (908 files, no `._*`):
+     * `go test` and race: 38 ok each.
+     * `make check-records markdownlint`: 0 issues.
+     * Preflight was not run there this phase. On every copy it stops at `verify-build-metadata`, and C5 asks the hosts
+       for the tests and race.

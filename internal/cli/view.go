@@ -12,6 +12,7 @@ import (
 	"github.com/maccavelli/go-tui-lib/v2/stream"
 
 	"github.com/maccavelli/gobble-cli/acpclient"
+	"github.com/maccavelli/gobble-cli/acpext"
 	"github.com/maccavelli/gobble-cli/internal/cli/render"
 	"github.com/maccavelli/gobble-cli/internal/cli/term"
 	"github.com/maccavelli/gobble-cli/personality"
@@ -124,14 +125,7 @@ func (v *view) on(u acpclient.Update) {
 			v.line("[" + u.Block + "]")
 			return
 		}
-		v.replying = true
-		if v.thought {
-			v.thought = false
-			v.show(v.think.Flush())
-			v.thinking = nil
-			v.newline()
-		}
-		v.text(term.Clean(u.Text, v.caps.Out.TTY))
+		v.reply(u.Text)
 	case acpclient.KindThought:
 		v.clock.token(v.now())
 		if !v.opts.showThinking || u.Text == "" {
@@ -184,11 +178,50 @@ func (v *view) on(u acpclient.Update) {
 			v.out.Notef("%s", line)
 		}
 	case acpclient.KindCompaction:
+		if text, ok := manualCompaction(v.opts.voice, u.Compaction); ok {
+			v.clock.token(v.now())
+			v.reply(text)
+			return
+		}
 		if line, ok := compactionLine(v.opts.voice, u.Compaction); ok {
 			v.out.Notef("%s", line)
 		}
 	case acpclient.KindOther:
 	}
+}
+
+// reply draws text as the agent's reply, after any thinking.
+func (v *view) reply(text string) {
+	v.replying = true
+	if v.thought {
+		v.thought = false
+		v.show(v.think.Flush())
+		v.thinking = nil
+		v.newline()
+	}
+	v.text(term.Clean(text, v.caps.Out.TTY))
+}
+
+// manualCompaction is what /compact's reply says of a manual compaction
+// reported by its rows, which a client that offered session.compaction
+// gets in place of that reply: "Compacting the conversation…" at its
+// start, "Compacted from <n> tokens." and the summary when it completed,
+// and "Compaction failed: <error>" when it failed, in voice's words
+// (0016-MADR D10; 0016-PLAN deviation 2). A cancel, a chunk, and
+// _gobble/compaction, which comes with the reply itself, say nothing.
+func manualCompaction(voice *personality.Voice, c acpclient.Compaction) (string, bool) {
+	if c.Reason != "manual" || c.Status == "" {
+		return "", false
+	}
+	switch {
+	case c.Phase == string(acpext.PhaseStart):
+		return voice.Text(personality.CompactStart, nil) + "\n\n", true
+	case c.Status == "completed":
+		return voice.Text(personality.CompactDone, personality.Args{argTokens: strconv.FormatInt(c.TokensBefore, 10)}) + "\n\n" + c.Summary, true
+	case c.Status == "failed":
+		return voice.Text(personality.CompactFailed, personality.Args{argError: c.Error}), true
+	}
+	return "", false
 }
 
 // The placeholders the view's lines fill, by the boring catalog's names
@@ -199,6 +232,7 @@ const (
 	argCause   = "cause"
 	argReason  = "reason"
 	argError   = "error"
+	argTokens  = "tokens"
 )
 
 // retryLine is what the CLI shows on stderr for a retry wait's start, in

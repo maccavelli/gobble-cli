@@ -165,7 +165,7 @@ func runPrint(e *runEnv, c *ChatCmd, p Prompt, cwd, base string) (err error) {
 	// Nobody can answer a question: tool calls are declined, and the
 	// level-5 personality's question too (0022-MADR D10). Only stream-json
 	// reads each update's params.
-	conn, err := e.startAgentWith(ctx, e.printPermission, sink.stream)
+	conn, err := e.startAgentWith(ctx, e.printPermission, sink.stream, false)
 	if err != nil {
 		return err
 	}
