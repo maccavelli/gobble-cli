@@ -240,3 +240,73 @@ func TestBranchedMovesFirstKept(t *testing.T) {
 		t.Fatalf("the label entry %+v", got[len(got)-1])
 	}
 }
+
+// A reserved id is honoured: an entry Next stamps with it keeps it, its
+// parent the leaf as for any entry, and the reservation is spent; an entry
+// whose id was not reserved gets a fresh one, as before (0016-MADR D9,
+// P3-Q1).
+func TestReserveIsHonoured(t *testing.T) {
+	tr := NewTree(nil)
+	a := add(tr, msg("a"))
+	id := tr.Reserve()
+	if id == "" || id == a.ID {
+		t.Fatalf("Reserve gave %q beside the entry %q", id, a.ID)
+	}
+	e := msg("compaction")
+	e.ID = id
+	got := tr.Next(e)
+	if got.ID != id || got.ParentID == nil || *got.ParentID != a.ID {
+		t.Fatalf("Next kept id %q, parent %v; want %q under %q", got.ID, got.ParentID, id, a.ID)
+	}
+	tr.Add(got)
+	if tr.Leaf() != id {
+		t.Fatalf("leaf %q, want the reserved entry %q", tr.Leaf(), id)
+	}
+	again := msg("again")
+	again.ID = id
+	if n := tr.Next(again); n.ID == id {
+		t.Fatalf("the spent reservation %q was honoured twice", id)
+	}
+	stray := msg("stray")
+	stray.ID = "deadbeef"
+	if n := tr.Next(stray); n.ID == "deadbeef" {
+		t.Fatal("an id nobody reserved was kept")
+	}
+}
+
+// While reserved, an id is taken: no new id can be it (0016-MADR D9).
+func TestReserveIsNotReissued(t *testing.T) {
+	tr := NewTree(nil)
+	id := tr.Reserve()
+	tr.mu.Lock()
+	taken := tr.inUse(id)
+	tr.mu.Unlock()
+	if !taken {
+		t.Fatalf("the reserved id %q is not taken", id)
+	}
+	if other := tr.Reserve(); other == id {
+		t.Fatalf("Reserve gave %q twice", id)
+	}
+}
+
+// Release returns an unused reservation, which is then free again, and a
+// reservation alone writes nothing (0016-MADR D9).
+func TestReleaseFreesTheId(t *testing.T) {
+	tr := NewTree(nil)
+	id := tr.Reserve()
+	if n := len(tr.Entries()); n != 0 {
+		t.Fatalf("a reservation made %d entries", n)
+	}
+	tr.Release(id)
+	tr.mu.Lock()
+	taken := tr.inUse(id)
+	tr.mu.Unlock()
+	if taken {
+		t.Fatalf("the released id %q is still taken", id)
+	}
+	e := msg("after")
+	e.ID = id
+	if n := tr.Next(e); n.ID == id {
+		t.Fatalf("the released id %q was honoured", id)
+	}
+}

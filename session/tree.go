@@ -20,6 +20,9 @@ type Tree struct {
 	entries []Entry
 	byID    map[string]int // the last entry with each id, as Pi's index keeps it
 	leaf    int            // the leaf's index, or -1 when there is none
+	// reserved are ids Reserve handed out for entries not yet written; Next
+	// keeps one on the entry that carries it (0016-MADR D9, P3-Q1).
+	reserved map[string]bool
 }
 
 // Label is a target's label, as the label entries resolve it.
@@ -67,15 +70,45 @@ func (t *Tree) Path() []Entry {
 	return pathFrom(t.entries, t.byID, t.leaf)
 }
 
-// Next is e stamped as the leaf's child, with a new id. It is not added.
+// Next is e stamped as the leaf's child, with a new id, or with e's own id
+// when Reserve handed it out, which spends the reservation. It is not added.
 func (t *Tree) Next(e Entry) Entry {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	e.ID, e.ParentID = t.newID(nil), nil
+	if t.reserved[e.ID] {
+		delete(t.reserved, e.ID)
+	} else {
+		e.ID = t.newID(nil)
+	}
+	e.ParentID = nil
 	if t.leaf >= 0 {
 		e.ParentID = new(t.leafID())
 	}
 	return e
+}
+
+// Reserve returns an id for an entry not yet written: one no entry has and
+// no other reservation holds. An entry Next stamps with it keeps it, so a
+// caller can name the entry before it exists, as a compaction's id is named
+// while it runs (0016-MADR D9, P3-Q1). A reservation writes nothing; Release
+// returns one that will not be used.
+func (t *Tree) Reserve() string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	id := t.newID(nil)
+	if t.reserved == nil {
+		t.reserved = map[string]bool{}
+	}
+	t.reserved[id] = true
+	return id
+}
+
+// Release returns an unused reservation; a spent or unknown id is no
+// matter.
+func (t *Tree) Release(id string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	delete(t.reserved, id)
 }
 
 // Add records a written entry and makes it the leaf.
@@ -214,13 +247,20 @@ func (t *Tree) Branched(leaf string) []Entry {
 	return kept
 }
 
-// newID is an id not in taken, or, when taken is nil, not in the tree.
+// newID is an id not in taken, or, when taken is nil, not in use in the
+// tree.
 func (t *Tree) newID(taken map[string]bool) string {
 	return NewEntryID(func(id string) bool {
 		if taken != nil {
 			return taken[id]
 		}
-		_, ok := t.byID[id]
-		return ok
+		return t.inUse(id)
 	})
+}
+
+// inUse reports whether an entry has id or a reservation holds it. t.mu is
+// held.
+func (t *Tree) inUse(id string) bool {
+	_, ok := t.byID[id]
+	return ok || t.reserved[id]
 }

@@ -490,3 +490,42 @@ The base is `feee808` (P2's commit), the tree clean (C1). No deviation.
 5. **Not done here, the owner's:** the annotated tag `acpext/v0.2.0` on P3a's commit, in `acpext/v0.1.0`'s form (message
    `acpext/v0.2.0`), and its push, under 0043-MADR's ruleset for `acpext/*` tags; then the module proxy serving it,
    which is P3c's gate. The disclosure guard runs over the outgoing commits before the push.
+6. **Committed, tagged and pushed** by the owner: P3a is `253e366`. Before the push, the disclosure guard over the six
+   outgoing commits (`df5c21e` to `253e366`) exited 0, and a scan of their diff for the identifiers the repository
+   forbids found nothing. The annotated tag `acpext/v0.2.0` (tag object `cb6ab1f`, message `acpext/v0.2.0`) is on
+   `253e366`, locally and on `origin`; `origin/main` is `253e366`. **The module proxy** served it from an empty module
+   cache: `go list -m -json github.com/maccavelli/gobble-cli/acpext@v0.2.0` gave `v0.2.0`, `Time`
+   2026-11-08T18:44:37Z, `Origin` `253e366f…` at `refs/tags/acpext/v0.2.0`. acpext at `253e366`, from `git archive`:
+   `go mod tidy -diff` clean, `go vet` and `go test` ok, standard library only, 47 files. **CI** on `253e366` (run
+   `42511886550`): success, `validate` on macos-15, ubuntu-24.04 and windows-2025 and every `build / identity` job.
+   * **A correction:** during that check a run of `make markdownlint` reported MD010 in
+     `docs/reports/0047-REPORT-selfupdate-adoption.md:283`. The committed file holds no tab (`git show HEAD:… | grep -c
+     $'\t'` gives 0; it is 276 lines, and the linted copy was 292); the failure came from another session's uncommitted
+     edit to that file in the working tree, made between the status check and the lint. The pushed commit was clean, as
+     the Docs workflow's success on `253e366` agrees.
+
+### P3b record (2026-11-08)
+
+The base is `253e366` (P3a's commit, tagged `acpext/v0.2.0`), the tree clean (C1). No deviation.
+
+1. **The tests first** (step 1), in `session/tree_test.go`:
+   * `TestReserveIsHonoured`: an entry `Next` stamps with a reserved id keeps it, its parent the leaf, and becomes the
+     leaf when added; the spent reservation is not honoured again; an id nobody reserved is replaced, as before.
+   * `TestReserveIsNotReissued`: a reserved id is taken (`inUse`, the predicate `newID` asks), so no new id can be it,
+     and `Reserve` does not give it twice. The check is the predicate, since entry ids are random and a loop could not
+     show it.
+   * `TestReleaseFreesTheId`: a reservation writes no entry; a released id is no longer taken and is not honoured.
+   * **Against the code before step 2:** `tr.Reserve undefined`, `tr.inUse undefined`, `tr.Release undefined`.
+2. **The code** (step 2), `session/tree.go`: `Tree.reserved`, a set under the tree's mutex; `Reserve()` takes a
+   `newID` and holds it; `Release(id)` drops it; `Next` keeps an entry's id when it is a live reservation, and spends it,
+   and otherwise gives a new id as before; `newID` asks `inUse`, an entry's id or a reservation. No session-file change;
+   `session` is a stable package (`session/doc.go`), and both methods are additions.
+3. **Seen failing** (step 3), each break on a scratch copy, the control passing:
+   * `Next` overwriting a reserved id: `tree_test.go:259: Next kept id "…", parent …; want "…" under "…"`;
+   * `newID` not skipping reservations: `tree_test.go:285: the reserved id "…" is not taken`;
+   * `Next` not spending the reservation: `tree_test.go:268: the spent reservation "…" was honoured twice`;
+   * `Release` doing nothing: `tree_test.go:305: the released id "…" is still taken`.
+4. **Gates** (step 4): `make pre-add-check` on the two files, "2 file(s) clean (gofmt, golint, govulncheck)"; `make
+   lint` 0 issues; `make preflight` "preflight passed", its 15 gates; `make race` 39 ok; `session` and `acpserver`
+   tests ok. The Linux machine and the Windows laptop, the tree shipped (904 files, no `._*`): `go test` and race 38 ok
+   each, `make check-records markdownlint` 0 issues, preflight stopped at `verify-build-metadata` as on every copy.
