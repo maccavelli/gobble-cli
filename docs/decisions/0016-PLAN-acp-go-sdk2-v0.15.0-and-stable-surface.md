@@ -459,3 +459,34 @@ The base is `a233e3f` (P1's commit), the tree clean (C1). No deviation; the deli
    `acpserver/testdata/session.golden` byte-identical (`git diff --quiet`, C4). The Linux machine and the Windows laptop,
    the tree shipped (900 files, no `._*`): `go test` and race 38 ok each, the three notice tests `-count=5` ok on each,
    `make check-records markdownlint` 0 issues, preflight stopped at `verify-build-metadata` as on every copy.
+
+### P3a record (2026-11-08)
+
+The base is `feee808` (P2's commit), the tree clean (C1). No deviation.
+
+1. **The type** (step 1): `acpext.CompactionMeta{Reason CompactionReason, TokensBefore int64, Paused CompactionPause}`,
+   each `omitzero` (`acpext/types.go`), reusing `v0.1.0`'s `CompactionReason` and `CompactionPause`; its doc says the
+   protocol replaces an update's `_meta` whole, so each update carries all of it. `acpext/doc.go` gains "Compaction on
+   the standard updates": a client that offered `session.compaction` gets `compaction_update` with this type under
+   `_meta.gobble`, read with `acp.DecodeMeta[acpext.CompactionMeta](meta, acpext.MetaKey)`, and no `MethodCompaction`;
+   any other gets `MethodCompaction` as before. No `v0.1.0` name changed.
+2. **Tests** (step 2): three goldens, `acpext/testdata/compaction.meta.start.json` (`reason` `manual`), `.end.json`
+   (`threshold`, `tokensBefore` 110101) and `.paused.json` (`threshold`, `paused` `turn`), each an entry in
+   `roundtrip_test.go`'s `frames`, so `TestFramesRoundTrip` decodes it with unknown members refused under
+   `encoding/json` and `encoding/json/v2` and encodes it back canonically equal, and `TestFramesCoverEveryMethod` counts
+   it. **`apidiff`**, run with the module's tool on export data of `acpext/v0.1.0` and of the change: "Compatible
+   changes: - CompactionMeta: added", and nothing incompatible.
+3. **Seen failing** (step 3), each on a scratch copy of the module, the control passing:
+   * a misspelt member (`tokensBefor`): `roundtrip_test.go:125: compaction.meta.end.json, encoding/json: decode: json:
+     unknown field "tokensBefor"`, and under v2 `unknown object member name "tokensBefor"`;
+   * `tokensBefore` as a string: `cannot unmarshal string into Go struct field CompactionMeta.tokensBefore of type
+     int64`, and under v2 `cannot unmarshal JSON string into Go int64 within "/tokensBefore"`;
+   * the code before P3a: `undefined: acpext.CompactionMeta` at the three `frames` entries.
+4. **Gates** (step 4): `make pre-add-check` on `acpext/types.go`, `doc.go` and `roundtrip_test.go`, "3 file(s) clean";
+   `make check-acpext-deps` "ok" (the standard library only); `make lint` 0 issues; `make preflight` "preflight
+   passed", its 15 gates; `make race` 39 ok. The Linux machine and the Windows laptop, the tree shipped (903 files, no
+   `._*`): `go test` and race 38 ok each, acpext's own tests ok, `make check-records markdownlint` 0 issues, preflight
+   stopped at `verify-build-metadata` as on every copy.
+5. **Not done here, the owner's:** the annotated tag `acpext/v0.2.0` on P3a's commit, in `acpext/v0.1.0`'s form (message
+   `acpext/v0.2.0`), and its push, under 0043-MADR's ruleset for `acpext/*` tags; then the module proxy serving it,
+   which is P3c's gate. The disclosure guard runs over the outgoing commits before the push.

@@ -67,6 +67,15 @@
 // session/new's answer, so a client delivers it to the session it is
 // opening.
 //
+// # Compaction on the standard updates
+//
+// A client that offered ACP's session.compaction gets each compaction as the
+// protocol's compaction_update, and no MethodCompaction notification. gobble's
+// own facts about it ride in the update's _meta under MetaKey, as a
+// CompactionMeta, which acp-go-sdk2 reads with
+// acp.DecodeMeta[acpext.CompactionMeta](meta, acpext.MetaKey). A client that
+// did not offer it gets MethodCompaction as before.
+//
 // # Encoding
 //
 // The types carry JSON tags only, which encoding/json and

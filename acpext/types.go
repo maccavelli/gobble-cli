@@ -90,6 +90,19 @@ type CompactionNotice struct {
 	Paused       CompactionPause  `json:"paused,omitzero"`
 }
 
+// CompactionMeta is gobble's own facts about a compaction, sent under
+// _meta[MetaKey] of ACP's standard compaction_update when the client offered
+// session.compaction, where CompactionNotice is not sent (gobble-cli
+// 0016-MADR D9, P3-Q3). The protocol replaces an update's _meta whole, so
+// each update that carries it carries all of it: Reason on every update a
+// live compaction sends, TokensBefore on its completed update and on a
+// replayed one, and Paused on a failed one that paused automatic compaction.
+type CompactionMeta struct {
+	Reason       CompactionReason `json:"reason,omitzero"`
+	TokensBefore int64            `json:"tokensBefore,omitzero"`
+	Paused       CompactionPause  `json:"paused,omitzero"`
+}
+
 // PersonalityNotice is MethodPersonality's params: the session's
 // personality, by its canonical name, and its level, 1 to 5 (0022-MADR D6).
 type PersonalityNotice struct {

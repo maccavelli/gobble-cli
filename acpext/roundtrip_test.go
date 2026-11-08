@@ -61,6 +61,12 @@ var frames = map[string]frame{
 	"compaction.paused.notice.json": {acpext.MethodCompaction, of[acpext.CompactionNotice]()},
 	"personality.notice.json":       {acpext.MethodPersonality, of[acpext.PersonalityNotice]()},
 
+	// CompactionMeta rides in ACP's compaction_update, under _meta.gobble
+	// (0016-MADR D9, P3-Q3); written from its JSON tags, as P3c sends it.
+	"compaction.meta.start.json":  {"", of[acpext.CompactionMeta]()},
+	"compaction.meta.end.json":    {"", of[acpext.CompactionMeta]()},
+	"compaction.meta.paused.json": {"", of[acpext.CompactionMeta]()},
+
 	"authenticate.error.json":   {"", of[acpext.ErrorData]()},
 	"prompt-auth.error.json":    {"", of[acpext.ErrorData]()},
 	"invalid-params.error.json": {"", of[acpext.ErrorData]()},
