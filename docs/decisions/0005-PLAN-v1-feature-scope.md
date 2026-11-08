@@ -8216,3 +8216,61 @@ went on:
     have, and passed on macOS;
   - the identifier scan over the change: no account name, hostname or real-machine path.
 - **Not done, and why:** a sandbox for the network (`exp/sandbox`); saving grants beyond the session (not taken above).
+
+**2026-11-07 — F4-1b's record, F4-1b-1 made executable: its missing test, and the first-byte deadline closed**
+(proposed; the owner's "write the pairs, … F4-1b, live streaming: it was waiting on a go-llmprovider-sdk feature that
+shipped in v1.19.0. That's well behind the new pin, so it no longer waits on a pin."). It carries out 0005-MADR's
+amendment of 2026-11-07, "F4-1b's record, and the first-byte deadline", which has the evidence. *Proposed: not
+approved for execution.*
+
+**What is already true:**
+
+- F4-1b's live stream landed on 2026-10-22, by
+  [0031-PLAN-sdk-current-releases-and-adoption.md](0031-PLAN-sdk-current-releases-and-adoption.md) P2: `WithStreamRetry`,
+  `NativeStreaming` from the wrapped provider, the wire cases on each wire, and a failure after the first delta not
+  retried. go-llmprovider-sdk is pinned at `v1.28.0` (0035-PLAN P34), past `v1.19.0`'s `WithStreamRetry`.
+- What "The order" above calls the two pieces waiting on F4-1b: decision 5's SDK retries are done (0031-PLAN P2,
+  annotated there); decision 7's first-byte deadline is the one left.
+
+**The decisions:**
+
+1. **F4-1b-1 adds the one F4-1b test that was not added,** `TestMidStreamFailure`, as F4-1b specifies it, and nothing
+   else. No production code changes: the test pins behaviour 0031-PLAN P2 built.
+2. **The first-byte deadline is the SDK's** (0005-MADR Q6, answered A on 2026-11-07: "Q6. as recommended"). F5-1 decision 7 is closed by a dated note:
+   go-llmprovider-sdk bounds a generation's headers and its body's first byte at 300 s each, as Kilo's deadline does
+   at 300 s. gobble adds no deadline and no setting. If the owner answers Q6 with C, decision 2 becomes an SDK issue
+   filed on the owner's word, and its adoption a sub-phase made executable on its tag.
+3. **F4's accept list:** "live text over ACP and in the CLI" is met by F4-1b. F4 stays open for F4-3d, which this
+   amendment does not touch.
+
+**F4-1b-1's steps:**
+
+1. **C1.** `git status`, `HEAD` and `origin/main` re-read; a difference from `f4c0775` plus the records commit is a
+   deviation.
+2. **The test** (`agent/agent_test.go`): `TestMidStreamFailure`. An `llmtest` script whose turn yields
+   `llm.TextDelta{Text: "par"}`, then fails with `llm.ErrUnavailable`, with the agent's offline and empty-reply retries
+   as the defaults leave them. Through `collect`, it asserts: the collected events hold one `agent.TextDelta{Text: "par"}`;
+   the returned error matches `llm.ErrUnavailable`; neither an `agent.Message` nor an `agent.End` is among the events;
+   and the script saw one request.
+3. **Seen failing,** since the test passes on today's code, by planted breaks on scratch copies, one at a time, each
+   with its failure quoted:
+   - the agent drops a delta it has not yet completed into a message (the `"par"` event missing);
+   - the agent emits the partial reply as an `agent.Message` before returning the error;
+   - the agent resends the call after the delta (two requests), which `TestNoResendAfterShown` also catches;
+   - the control: an unbroken copy passes.
+
+   A break that no assertion catches is a gap in the test, fixed before the commit.
+4. **Records:**
+   - F4-1b (in F4's steps): a dated note, "2026-10-22: carried out by 0031-PLAN P2; 2026-11-07:
+     `TestMidStreamFailure` added by F4-1b-1";
+   - F5-1 decision 7 and "The order": a dated note that the deadline is the SDK's (decision 2);
+   - `docs/README.md`'s 0005 rows; the 0005-MADR amendment marked accepted.
+5. **Gates:** `make pre-add-check FILES="agent/agent_test.go"`; `make preflight`; `make race`; the tests and race on the
+   Linux machine and the Windows laptop. One commit, staged; the owner commits.
+
+**F4-1b-1's files:** changed: `agent/agent_test.go`; this plan; `docs/decisions/0005-MADR-v1-feature-scope.md`;
+`docs/README.md`.
+
+**Tests,** each seen failing on a scratch copy: step 3's breaks.
+
+**Not done here:** a bound under 300 s (Q6's C); F4-3d.

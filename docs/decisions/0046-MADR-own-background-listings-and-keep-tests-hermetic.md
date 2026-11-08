@@ -284,6 +284,126 @@ Chosen option: **C**, because it removes each cause where it lives.
 
 * `readKept` resolves the path without `EnsurePrivateDir`. Only `writeKept` creates `<cache>/catalog`.
 
+### Amendment of 2026-11-07: the SDK work a run starts gets an owner too (accepted)
+
+*~~Proposed for the owner's approval~~ Accepted 2026-11-07 by the owner's answers to Q3 to Q5, below, from the owner's "write the pairs, - Using Cache.Close and OAuthSession.Wait from
+go-llmprovider-sdk#12, written up as an amendment to the 0046 records." It decides the first item of "Not decided
+here", below. D1 to D6 stand unchanged.*
+
+**What changed.** go-llmprovider-sdk `v1.28.0` (pinned by
+[0035-PLAN-pin-current-sibling-releases-and-remove-gobble-copies.md](0035-PLAN-pin-current-sibling-releases-and-remove-gobble-copies.md)
+P34, `3483725`) ships go-llmprovider-sdk#12, which Q2 below filed, by the SDK's
+`docs/decisions/0071-MADR-give-a-cache-a-lifetime-and-wait-for-a-refresh.md`:
+
+* **`(*catalog.Cache).Close(ctx)`** (`llmprovider/catalog/cache.go:173-196`). A `Cache` given with `catalog.WithCache`
+  to `List`, the lookups, `CachedModel` and a provider's `New` is used by those calls in place of the process's cache
+  (`:46-58`). `Close` stops new background work (listing fetches, models.dev refreshes, probe runs), cancels the work
+  in flight, and waits for it, or returns `ctx.Err()` (`:21-26`). After it, `List`, `LookupModel` and
+  `LookupMetadataWith` refuse with `llmprovider.ErrInvalidRequest`, and `CachedModel` answers from what the cache holds.
+  The process's cache has no `Close`.
+* **`(*auth.OAuthSession).Wait(ctx)`** (`llmprovider/auth/oauth_session.go:206-239`). It waits for that session's
+  refresh in flight, and for a retried save of a rotated session, and cancels nothing. A caller that also owns a `Cache`
+  calls `Close` first, then `Wait` (`:215-218`).
+
+**How gobble works today (at `3483725`).**
+
+* **G1. The production `ModelInfo` hook starts SDK work nothing owns.** D3 stubbed it in the tests only. In a run, the
+  agent's `ModelInfo` hook (`internal/cli/agent.go:93-105`) calls `provider.ModelInfo` (`llm/provider/model.go:66`),
+  which passes `context.Background()` and a token source to `catalog.CachedModel` on the process's cache. That starts
+  a background listing fetch under the SDK's 10 s timeout. D1's `endListings` ends gobble's own listings
+  (`internal/cli/models.go:95-120`), not this one, so it is cut off at exit. It writes nothing to disk.
+* **G2. Each call makes its own OAuth session.** `Options.login` loads the stored login and builds a new
+  `*auth.OAuthSession` on every call (`llm/provider/provider.go:89-98`, `llm/provider/login.go:108-119`): for the
+  agent's provider (`provider.go:181`), each listing (`llm/provider/list.go:85`) and each `ModelInfo`
+  (`model.go:68`). Their refreshes coalesce only through the refresh lock and the SDK's re-read of the stored session
+  under it (`reloadOrRefresh`, `oauth_session.go:831`). A refresh's session is dropped by the caller that made it, so
+  nothing can `Wait` for it.
+* **G3. A rotation can be lost at exit.** A refresh runs detached from its callers (`oauth_session.go:192`). The
+  issuer rotates the refresh token before it answers. A rotated session that could not be saved "is kept in memory and
+  the save is retried" (`:339`), every 30 s (`oauthResaveInterval`, `:50`). If gobble exits while that refresh is still
+  running, or before the save succeeds, the rotation is lost, and the stored refresh token is already spent. The next
+  run's refresh then fails, and the user must sign in again. The window opens when a caller stops waiting during a
+  refresh (Ctrl+C, or a fetch cancelled by D1), or when the save fails. This is read from the code, not observed.
+* **G4. A refresh can outlast D1's bound.** gobble's refresh lock waits up to 60 s, past "a refresh's longest hold,
+  45.6 s" (`internal/auth/logins.go:15`; 0035-PLAN P30). D1's 6 s bound would cut such a refresh short.
+* **What is not wrong.** Each process builds one `runEnv` (`internal/cli/main.go:85`), so a run-owned cache warms no
+  less than the process's cache does today. `New` turns probes and the models.dev fetch off (`provider.go:173-176`),
+  so a provider starts no background work of its own through the cache.
+
+**Considered options.**
+
+* **E.** No change: the process's cache, and a session per call. The tests stay off the network by D3.
+* **F.** The run owns a `catalog.Cache`, given to every SDK call the run makes; `endListings` closes it.
+* **G.** F, plus one OAuth session per provider for the run, which `endListings` waits for after `Close`.
+* **H.** G's sessions, without F's cache.
+
+**Chosen option: G** (accepted 2026-11-07, Q3 to Q5 answered), because it is the only option that both ends G1's fetches and closes G3's window.
+H waits for a refresh but leaves G1's fetches running, and Close is what ends a fetch's wait for its token. F alone
+leaves G3 open.
+
+* Good, because a run ends every piece of SDK work it started, as D1 ended gobble's own.
+* Good, because a sign-in's rotation is saved before the process exits, where today it can be lost.
+* Good, because one session per provider coalesces the run's refreshes in the process, before the file lock.
+* Neutral, because a run waits at exit only while a refresh is actually running, which is rare, for up to Q3's bound.
+* Bad, because `llm/provider`'s `Options` gains two fields, and `ModelInfo` needs a form that takes options.
+* Bad, because a session held for the run must be dropped when the run's credentials change, or it would serve the
+  old login.
+
+#### D7. A run owns a `catalog.Cache`
+
+* `llm/provider.Options` gains `Cache *catalog.Cache`. `sdkOptions` adds `catalog.WithCache(o.Cache)` when it is set,
+  so `New`, `List` and the sign-in take it.
+* `ModelInfo` gains a form that takes `Options`, which passes `WithCache` to `CachedModel`. The agent's hook calls it
+  through `modelFacts`. `ModelInfoContext`, which passes no token source and starts no fetch, is unchanged.
+* `runEnv` holds the cache; its zero value is ready. `providerOptions` and every `provider.Options` the run builds
+  carry it.
+* `endListings`, after cancelling and waiting for gobble's own listings, calls `Close` under the rest of D1's bound
+  (Q4). A `Close` that returns `ctx.Err()` is named in D1's Warn record.
+
+#### D8. One OAuth session per provider for a run, waited for at its end
+
+* `llm/provider` gains a session set: one `*auth.OAuthSession` per provider, loaded from the login store on first use.
+  `Options` gains `Sessions`. With it, `Options.login` returns the set's session; without it, a new one, as today.
+* `runEnv` holds the set, and every `provider.Options` the run builds carries it.
+* `refreshCredentials` (`internal/cli/credentials.go:81`), which a sign-in or sign-out in the run calls, drops that
+  provider's session, as it already drops its listing. The next call loads the new login.
+* `endListings`, after D7's `Close`, calls each held session's `Wait`, under Q3's bound. A session still refreshing at
+  the bound is named in a Warn record that says its rotation may not be saved.
+
+#### D9. The tests
+
+* D3's `modelFacts` stub, which passes no key and no login, stays, so the tests start no fetch and no refresh.
+* Tests cover: `endListings` closes the run's cache (a fetch blocked on its context ends, and a later `List` given the
+  cache is refused); every `provider.Options` the run builds carries the cache and the set; one provider's calls share
+  one session; `refreshCredentials` drops it; `endListings` waits for a refresh in flight, and returns at Q3's bound
+  with its Warn record. Each is seen failing first.
+
+#### Questions for the owner
+
+* **Q3. `Wait`'s bound.** *Recommended: 60 s, gobble's `refreshPolicy.Deadline`,* applied only while a refresh is in
+  flight, so it outlasts the longest refresh (G4). Not chosen: D1's 6 s, which can lose the rotation G3 describes; no
+  bound, which lets a stuck issuer hold the exit.
+* **Q4. `Close`'s bound.** *Recommended: the rest of D1's 6 s,* since `Close` cancels and a cancelled fetch ends at its
+  next network wait. Not chosen: a bound of its own.
+* **Q5. The sessions' scope.** *Recommended: one set per run,* so the agent's provider, the listings and `ModelInfo`
+  share a provider's session. Not chosen: a session per provider instance, which leaves listings and `ModelInfo`
+  unowned.
+
+*Answered 2026-11-07: "Q3. 60s, Q4. as recommended, Q5. as recommended". `Wait`'s bound is 60 s, while a refresh is in
+flight; `Close` takes the rest of D1's 6 s; one session set per run. Option G and D7 to D9 are accepted. The PLAN's P5
+to P7 wait for the owner's word to execute.*
+
+#### Confirmation of D7 to D9
+
+10. A scratch copy whose `ModelInfo` hook passes a token source, against an `httptest` listing that blocks until its
+    request ends: after `run` returns, no request is in flight and the goroutine count is back to its start. Seen
+    failing first at `3483725`.
+11. A scratch copy with an OAuth login whose refresh blocks: `run` waits for it, and the stored login holds the rotated
+    refresh token afterwards. With the refresh blocked past Q3's bound, `run` returns at the bound with the Warn
+    record. Each seen failing first.
+12. D4's guard still finds no outside connection, and D9's tests pass.
+13. `make preflight` and `make race` pass on macOS, and the tests and race on the Linux machine and the Windows laptop.
+
 ### Consequences
 
 * Good, because the teardown failures in `TestRecentModelsV1File`, `TestLastGoodOnDisk` and
@@ -381,7 +501,8 @@ nothing reached the real gobble directories. The scripts are scratch files, not 
 ### Not decided here
 
 * Whether a production run's `ModelInfo` should own its background fetches too. In production they warm a cache and
-  write nothing to disk; the SDK times each out.
+  write nothing to disk; the SDK times each out. *(2026-11-07: decided by the amendment of that date, D7 to D9,
+  accepted.)*
 * D's per-`runEnv` directories.
 
 ### Related records

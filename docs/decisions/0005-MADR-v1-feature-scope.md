@@ -824,6 +824,7 @@ Earlier phases had set the precedent: 0002-PLAN copied Pi's MCP configuration me
      * a missing finish reason ends the step.
    * Offline detection that does not spend retries, and a first-byte deadline.
    * *(2026-10-16, 0005-PLAN "F5 re-made as five sub-phases, F5-1 made executable": offline detection probes only the provider's own host, never Kilo's public ones. The first-byte deadline waits for F4-1b's live stream, since a buffered stream's first byte is its whole reply. The repeated-call question counts a turn's model calls together, where opencode's sees one reply. Retry's schedule stays the SDK's.)*
+   * *(2026-11-07, accepted, amendment "F4-1b's record, and the first-byte deadline": F4-1b's live stream landed on 2026-10-22, by 0031-PLAN P2, short of one agent test. The first-byte deadline is met by go-llmprovider-sdk's own bounds, Kilo's at the same 300 s, and gobble adds none.)*
    * *(2026-10-18, the owner's choices, 0005-PLAN "F5-3 made executable: loop safety": the missing finish reason is not adopted, since gobble's loop ends a reply with no calls whatever its reason, and Kilo's breaker guards a loop that waited for "stop". A reply the service stops for safety or as a refusal ends the turn as ACP's refusal, an addition.)*
 8. **Prompt-cache stability (§5).** F3 builds a frozen per-session context baseline, appends changes as messages, and keeps per-turn state out of the system prompt. Later phases follow the same rule.
 9. **Compaction (§4).**
@@ -1168,3 +1169,69 @@ taken. Media placeholders wait until gobble sends images.
   The turn's error says what to do.
 - Neutral, because grok-build's 500-character floor and goose's removal steps are taken as their sources set them, not
   tuned for gobble's models.
+
+### Amendment (2026-11-07): F4-1b's record, and the first-byte deadline (accepted)
+
+*~~Proposed for the owner's approval~~ Accepted 2026-11-07 by the owner's "Q6. as recommended", from the owner's "write the pairs, … F4-1b, live streaming: it was waiting on a
+go-llmprovider-sdk feature that shipped in v1.19.0. That's well behind the new pin, so it no longer waits on a pin."
+(`main` at `f4c0775`, go-llmprovider-sdk pinned at `v1.28.0` by
+[0035-PLAN-pin-current-sibling-releases-and-remove-gobble-copies.md](0035-PLAN-pin-current-sibling-releases-and-remove-gobble-copies.md)
+P34).*
+
+**What the investigation found.**
+
+* **F4-1b is done.** It was carried out on 2026-10-22 by
+  [0031-PLAN-sdk-current-releases-and-adoption.md](0031-PLAN-sdk-current-releases-and-adoption.md) P2, on
+  go-llmprovider-sdk `v1.21.0`, under [0031-MADR-sdk-current-releases-and-adoption.md](0031-MADR-sdk-current-releases-and-adoption.md)
+  D2 and D3. `llm/provider` wraps each provider with `WithStreamRetry` (`llm/provider/provider.go:214`), and
+  `NativeStreaming` comes from the wrapped provider (`:272`). Its record (0031-PLAN, "P2 execution record") has
+  `TestStreamIsLive`, `TestFailureAfterFirstDeltaNotRetried` and `TestProviderRetryReported` on each of the four wires
+  the ten ids use, and the ten wire tests answering streamed requests as Server-Sent Events. Nothing of
+  F4-1b waits on a pin.
+* **One of F4-1b's tests was not added.** `TestMidStreamFailure` (`agent/agent_test.go`: a script yields
+  `TextDelta{Text: "par"}`, then `llm.ErrUnavailable`; the collected events hold that delta, the error is
+  `llm.ErrUnavailable`, and there is no `agent.Message` or `agent.End`) does not exist. 0031-PLAN P2's
+  `TestNoResendAfterShown` (`agent/retry_test.go:286-308`) asserts the error and a single request, not the delta's
+  delivery or the absence of a message and an end. `TestCutOffReply` covers the view, not the agent's events. The
+  0005-PLAN amendment of this date adds it.
+* **The first-byte deadline is the only item left waiting on F4-1b** (0005-PLAN F5-1 decision 7, "made with F4-1b's
+  live stream"). It was not made when F4-1b landed, and no record says so; the waits listed in later records
+  (0005-PLAN, F5-1 to F5-5's "Waiting, named") are as of their dates.
+* **What Kilo's deadline does** (Kilo at `58072bd696`, 2026-11-07): `wrapFirstByte`
+  (`packages/opencode/src/kilocode/provider/provider.ts:360-418`) bounds the wait for the response body's first byte,
+  because "a provider can answer 200 with SSE headers and then never send data" and the connection timeout is cleared
+  once headers arrive. Its bound is what is left of the request timeout, `REQUEST_TIMEOUT_MS = 300_000` (`:25`,
+  `:336-341`). Once any data arrives, it passes the stream through untouched.
+* **What go-llmprovider-sdk `v1.28.0` already bounds.** Its client gives a generation 300 s to its response headers
+  (`llmprovider/internal/transport/transport.go:30-44`, `:82`). Every generation body, event stream or JSON, is read
+  through a reader whose idle timer starts when the body does and is reset by each read; 300 s with no data cancels the
+  request with `ErrIdleTimeout` (`internal/transport/reply.go:10-14`, `:70-76`). That error matches
+  `llmprovider.ErrProviderUnavailable` (`internal/wire/post_test.go:110`), which gobble maps to `llm.ErrUnavailable`.
+  So a 200 with headers and no data ends after 300 s, as Kilo's does. The SDK exports no option to shorten either
+  bound; "callers wanting less set a context deadline" (`transport.go:39`), which bounds the whole reply, not its first
+  byte.
+
+**Considered options.**
+
+* **A.** The SDK's bounds are the deadline. Record it, and close the wait. No code.
+* **B.** gobble adds its own, shorter first-event deadline, a setting, by cancelling a call's context when no event has
+  come.
+* **C.** Ask go-llmprovider-sdk for a per-attempt first-event bound that `WithStreamRetry` retries, and adopt it on its
+  tag.
+
+**Chosen option: A** (accepted 2026-11-07, Q6), because the hang Kilo's deadline exists to stop cannot happen to gobble: the SDK
+bounds both the wait for headers and the wait for the first byte after them, at Kilo's own 300 s.
+
+- Good, because nothing is reimplemented that the SDK already does, as 0004-MADR asks of gobble's libraries.
+- Good, because F5-1 decision 7's wait is closed on evidence, not left open in the records.
+- Neutral, because the worst case is 300 s to headers and 300 s more to the first byte, where Kilo's counts both from
+  the request. Neither is a hang.
+- Bad, because a user cannot ask for less than 300 s. B would give that, but its cancellation is the caller's, which
+  `WithStreamRetry` does not retry, so a stalled first attempt would end the turn where a retry might succeed. C gives
+  it with the retry, and needs an SDK release.
+
+**Q6. The first-byte deadline.** *Recommended: A.* Not chosen: B, for the retry it loses; C, unless the owner wants a
+bound under 300 s, in which case C is filed as an issue and adopted on its tag, and B is not done.
+
+*Answered 2026-11-07: "Q6. as recommended". A: the SDK's bounds are the first-byte deadline. 0005-PLAN's F4-1b-1
+waits for the owner's word to execute.*

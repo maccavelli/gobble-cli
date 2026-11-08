@@ -39,11 +39,20 @@ The plan is complete when the MADR's Confirmation 1 to 9 is met.
   * `docs/architecture.md`: `internal/cli`'s row.
 * P3, the small fixes: `internal/cli/main.go` (`lazyLog`), `internal/cli/choice.go` (`readKept`), and their tests.
 * P4: the records.
+* *Added 2026-11-07 by the MADR's amendment of that date (D7 to D9, accepted; these phases proposed):*
+  * P5, the run's cache (D7): `llm/provider/provider.go` (`Options.Cache`, `sdkOptions`), `llm/provider/model.go`
+    (`ModelInfo`'s form that takes `Options`), `internal/cli/main.go` (`runEnv`'s field), `internal/cli/models.go`
+    (`endListings`), `internal/cli/agent.go`, `internal/cli/title.go` and `internal/cli/modelsjson.go` (the options the
+    run builds), and their tests;
+  * P6, the run's sessions (D8): a new `llm/provider/sessions.go`, `llm/provider/provider.go` (`Options.Sessions`,
+    `login`), `internal/cli/main.go`, `internal/cli/models.go`, `internal/cli/credentials.go`
+    (`refreshCredentials`), and their tests;
+  * P7: acceptance and the records; `docs/architecture.md`'s `internal/cli` and `llm/provider` rows.
 
 **Out of scope:**
 
 * MADR option D, the directories resolved per `runEnv`;
-* production `ModelInfo` fetches ("Not decided here");
+* ~~production `ModelInfo` fetches ("Not decided here")~~ *(2026-11-07: P5 to P7, by the MADR's amendment)*;
 * any package but `internal/cli` and the one comment in `llm/provider`. The whole module was measured: only
   `internal/cli` connects;
 * go-llmprovider-sdk#12's implementation, which is the SDK's;
@@ -221,6 +230,87 @@ The plan is complete when the MADR's Confirmation 1 to 9 is met.
    * The 0039-PLAN deviations 14 and 18, and the 0037- and 0035-PLAN sightings, each gain a dated note pointing to
      this record.
 
+### P5 — the run owns a `catalog.Cache` (MADR D7; amendment of 2026-11-07)
+
+**Gate:** the amendment approved, Q3 to Q5 answered, and its records commit landed. The plan is then `in-progress`.
+
+1. **The tests first,** each seen failing before the code (C2), against an `httptest` listing server, never a real
+   service (C5):
+   * `llm/provider`: `TestOptionsCacheReachesTheSDK`. `List` and the `Options` form of `ModelInfo` given
+     `Options{Cache: c}` list into `c`: after `c.Close`, a second `List` given `c` fails with an error matching
+     `llmprovider.ErrInvalidRequest`, while one without a cache still lists. Today `Options` has no `Cache`.
+   * `internal/cli`: `TestRunOptionsCarryTheCache`. `modelProvider`, `providerFor`, `smallProvider`, the listing's
+     options (`models.go:267`) and the login's options (`login.go:75`) each build `provider.Options` whose `Cache` is
+     the run's. It replaces `ambientProvider` and `listModels` to read the options, as the existing option tests do.
+   * `internal/cli`: `TestEndListingsClosesTheCache`. A `ModelInfo` fetch through the run's cache blocks until its
+     request's context is done. `endListings` returns only after that request has ended. With the server never
+     answering and the fetch made to ignore cancellation, `endListings` returns at D1's bound, with the Warn record
+     naming the cache.
+2. **The code:**
+   * `provider.Options` gains `Cache *catalog.Cache`; `sdkOptions` appends `catalog.WithCache(o.Cache)` when it is not
+     nil.
+   * `provider.ModelInfoWith(o Options, id, model string, mj *gcatalog.ModelsJSON) llm.Model` takes the key, the
+     workspace and the logins from `o`, and passes `WithCache` to `CachedModel`. `ModelInfo` calls it, with no cache,
+     so its behaviour and signature are unchanged. `modelFacts` keeps its type; its default becomes a closure the
+     `runEnv` builds over `ModelInfoWith`, and D3's stub replaces it as before.
+   * `runEnv` gains `cache catalog.Cache`. `providerOptions` sets `o.Cache = &e.cache`. `providerFor`,
+     `smallProvider`, the listing and the login call it on every path; `modelProvider` calls it only once a provider is
+     chosen (`agent.go:39-40`), so it sets the cache itself before that branch.
+   * `endListings`, after its group wait, calls `e.cache.Close` under a context ending at D1's bound (Q4), and adds
+     the cache to the Warn record when `Close` returns `ctx.Err()`.
+3. **Seen failing** (C2), on scratch copies: each step 1 test against the code before step 2; then each planted break:
+   `sdkOptions` without `WithCache`; `providerOptions` without the cache; `endListings` without `Close`.
+4. **Gates** (C6), with `make perf`, since `run`'s end changed; the dev hosts' `go test -count=3 ./internal/cli/
+   ./llm/provider/` and the race run.
+5. **Record.** Staged; the owner commits.
+
+### P6 — one OAuth session per provider for the run (MADR D8)
+
+**Gate:** P5 committed.
+
+1. **The tests first,** each seen failing before the code, with an `httptest` issuer and a scratch `auth.json` (C5):
+   * `llm/provider`: `TestSessionsShareOneSession`. Two `Options.login` calls for one provider through one
+     `Sessions` return the same `*auth.OAuthSession`; without `Sessions`, two different ones, as today. `Drop(id)` makes
+     the next call load the stored login again.
+   * `llm/provider`: `TestSessionsWait`. A refresh that blocks on the issuer: `Sessions.Wait(ctx)` returns only after
+     it, and the store then holds the rotated refresh token. With `ctx` ending first, it returns `ctx.Err()` naming the
+     provider.
+   * `internal/cli`: `TestRefreshCredentialsDropsTheSession`. After a sign-in's `refreshCredentials(id)`, the run's
+     next provider for `id` is built over the new login, not the held one.
+   * `internal/cli`: `TestEndListingsWaitsForARefresh`. A refresh blocked on the issuer when `endListings` runs:
+     `endListings` returns after it, after the cache's `Close`. With the issuer never answering and the wait bound set
+     to 50 ms for the test, it returns at the bound with a Warn record naming the provider and saying its rotation may
+     not be saved; the test's cleanup then releases the issuer and waits, so nothing is left running.
+2. **The code:**
+   * `llm/provider/sessions.go`: `Sessions`, a mutex and a map of provider id to `*auth.OAuthSession`; `get(id,
+     load)`, `Drop(id)`, and `Wait(ctx) error`, which waits for each held session in turn and joins the providers still
+     refreshing into its error.
+   * `Options` gains `Sessions *Sessions`. `login` returns `o.Sessions`' session for `id` when it is set, loading it
+     once from `o.Logins` as today.
+   * `runEnv` gains `sessions provider.Sessions`; `providerOptions` and the `ModelInfoWith` closure pass it.
+   * `refreshCredentials` calls `e.sessions.Drop(id)` beside its `delete(e.listings, id)`.
+   * `endListings`, after `Close`, calls `e.sessions.Wait` under its own bound, `refreshWaitBound` (Q3; 60 s, tests
+     shorten it), and writes the Warn record when it returns an error.
+3. **Seen failing** (C2): each step 1 test against the code before step 2; then each planted break: `login` ignoring
+   `Sessions`; `refreshCredentials` without `Drop`; `endListings` without `Wait`; `Wait` under D1's 6 s instead of
+   Q3's bound (`TestEndListingsWaitsForARefresh` with a refresh of 7 s on a scratch copy).
+4. **Gates** (C6), with `make perf`; the dev hosts as in P5.
+5. **Record.** Staged; the owner commits.
+
+### P7 — acceptance of D7 to D9
+
+**Gate:** P6 committed.
+
+1. **The probes** of the MADR's Confirmation 10 and 11, on scratch copies (C5), each first at `3483725` to see it fail:
+   * a `-p` run whose `ModelInfo` hook passes a token source to a blocking listing server: after `Main` returns, no
+     request in flight, and the goroutine count back to its start;
+   * a `-p` run with an OAuth login whose refresh blocks: `Main` waits for it, and `auth.json` holds the rotated token;
+     past the bound, `Main` returns with the Warn record.
+2. **D4's guard** still finds no outside connection across the module (Confirmation 12).
+3. **Records.** The MADR's amendment becomes accepted and its Confirmations 10 to 13 are mapped to their evidence; the
+   plan returns to `complete`; `docs/architecture.md`'s `internal/cli` row says a run's SDK cache and sign-in sessions
+   end with it, and `llm/provider`'s row names `Options.Cache` and `Sessions`; `docs/README.md`'s rows.
+
 ## Verification
 
 | MADR Confirmation | Where |
@@ -234,6 +324,10 @@ The plan is complete when the MADR's Confirmation 1 to 9 is met.
 | 7. D5 and D6 | P3 |
 | 8. The repetitions | P4 step 2 |
 | 9. Gates and CI | each phase's gates, P4 step 3 |
+| 10. A run's SDK fetches end with it | P5 step 1 (`TestEndListingsClosesTheCache`), P7 step 1 |
+| 11. A refresh in flight is waited for, and its rotation saved | P6 step 1 (`TestEndListingsWaitsForARefresh`), P7 step 1 |
+| 12. No test connects, D9's tests pass | P7 step 2 |
+| 13. Gates on the three platforms | P5's and P6's gates |
 
 ## Rollout and Rollback
 
@@ -244,6 +338,8 @@ The plan is complete when the MADR's Confirmation 1 to 9 is met.
   * P2 reverts with its test changes, and P3 reverts alone.
   * If `make perf` or a user's exit shows the 6 s bound being reached in normal use, that is a deviation (C4). The
     bound is not raised or removed to hide it.
+  * P5 reverts alone; P6 reverts alone, and reverting P5 reverts P6 first. Either brings back the SDK work `run`
+    does not wait for (MADR G1 to G3), not a failure.
 
 ## Execution record
 
@@ -544,3 +640,19 @@ still matched the tree, so none needed updating.
 * The issue on the MCP Go SDK about reading the proxy variables at package initialisation (deviation 2), which waits
   for the owner's word.
 * go-llmprovider-sdk#12 is the SDK's to build. gobble does not wait for it.
+
+### Amendment of 2026-11-07: P5 to P7, the SDK work a run starts (proposed)
+
+* **Found,** on the owner's "write the pairs, - Using Cache.Close and OAuthSession.Wait from go-llmprovider-sdk#12,
+  written up as an amendment to the 0046 records." (`main` at `f4c0775`, equal to `origin/main`). go-llmprovider-sdk
+  `v1.28.0`, pinned by 0035-PLAN P34 (`3483725`), ships go-llmprovider-sdk#12 as `(*catalog.Cache).Close` and
+  `(*auth.OAuthSession).Wait`. Read at that tag (`llmprovider/catalog/cache.go`, `llmprovider/auth/oauth_session.go`)
+  and against gobble's call sites; the MADR's amendment of 2026-11-07 has the findings, G1 to G4.
+* **Decision** (proposed, for the owner's approval with the MADR's Q3 to Q5):
+  * the MADR gains D7 to D9 and Confirmations 10 to 13, and its "Not decided here" item is marked decided;
+  * P5 (the run's cache), P6 (the run's sessions) and P7 (acceptance) are new, each its own commit, in that order;
+  * this plan becomes `in-progress` on approval, until P7 returns it to `complete`.
+* **Files added to scope:** Scope's P5 to P7 lists.
+* **Answered** 2026-11-07, the owner's "Q3. 60s, Q4. as recommended, Q5. as recommended": the MADR's amendment is
+  accepted. `refreshWaitBound` is 60 s (P6); `Close` takes the rest of D1's 6 s (P5); one `Sessions` per run (P6).
+  P5 to P7 wait for the owner's word to execute.
