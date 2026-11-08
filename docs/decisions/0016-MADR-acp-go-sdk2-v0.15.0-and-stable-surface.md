@@ -716,7 +716,9 @@ supersedes the open decisions' wording where it differs, and its Q1 to Q7 are th
   `_gobble/compaction` and today's text for one that did not.**
   * Live: `compaction_update` `in_progress` once the run is prepared (a refusal sends none), then
     `compaction_summary_chunk` with the summary, then `completed`, or `failed` with the first line of the error, or
-    `cancelled`. The id is fresh per run (`Options.NewID`).
+    `cancelled`. The id is fresh per run (`Options.NewID`). *(2026-11-08, "P3 re-assessment" below, P3-Q1 and P3-Q2:
+    the summary travels in the `completed` update's `summary` field, not a chunk; the id is the compaction entry's,
+    reserved before the run, and the same on replay; `Options.NewID` is not used.)*
   * gobble's own facts ride in `_meta.gobble` of the updates (`reason`, `tokensBefore`, `paused`), through the SDK's
     `MetaObject`; Magic ignores `_meta` silently (R10).
   * `/compact` sends neither of its two agent-text lines on such a connection; `_gobble/compact`'s result is
@@ -838,3 +840,176 @@ accepted: D6 Option 2 and D7 to D11 and D13 Option 1.*
   `c87d22e4`.
 * The PLAN, [0016-PLAN-acp-go-sdk2-v0.15.0-and-stable-surface.md](0016-PLAN-acp-go-sdk2-v0.15.0-and-stable-surface.md),
   carries the recommended set as phases, and is amended by any other answer before it runs.
+
+## P3 re-assessment (2026-11-08): how D9 is built
+
+*From the owner's "do better due-dilligence and research for P3. assess the magic-cli-remote codebase that relates to
+it. evaluate this codebase as relates to it. re-assess and evaluate the most idiomatic, stable, compatible, flexible,
+and extensible way to implement it." D9's choice, Option 1 (one channel per connection), stands. This section decides
+how it is built: five questions, P3-Q1 to P3-Q5, each answered by the owner on 2026-11-08 with the recommended
+option.* Read at gobble-cli `df5c21e`, acp-go-sdk2 `v1.34.2` and magic-cli-remote `c87d22e4`.
+
+### What the deeper reading found
+
+**magic-cli-remote.**
+
+* **M1. A standard compaction renders with no Magic change.** Traced from code: the SDK delivers
+  `compaction_update` → `internal/provider/acpagent/session.go:2164-2168` → the fold (`compaction.go:28-147`) →
+  `event.TypeCompaction` → the manager's per-id dedupe (`internal/session/manager.go:1639-1645`) → the phone's
+  `_upsertCompaction` (`apps/mobile/lib/data/chat/transcript_reducer.dart:864-901`) → one row
+  (`apps/mobile/lib/features/chat/chat_bubble.dart:288-330`): "Conversation compacted", "Compaction failed",
+  "Compaction cancelled", and "Compacting the conversation…" for `in_progress` **and for any unknown status**, with the
+  error (when failed) and "What the agent kept:" and the summary.
+* **M2. Chunks after the last update are never shown.** The fold emits on every update, but on a chunk only when the
+  chunk creates the id (`compaction.go:125-134`). A concrete `summary` replaces the accumulated text (`:108-110`).
+* **M3. Replay dedupe keys on the event, not the id.** On `session/load`, a replayed compaction event that matches one
+  already in the history ring for that agent session is dropped (`manager.go:330-332`, `:431-464`; inference from
+  code, no test found). A replayed id that differs from the live one can therefore show a second row, or none.
+* **M4. `_meta` is declined silently** (a Debug record once per variant, `session.go:2197-2218`;
+  `compaction.go:103-105`, `:126-128`), and processing continues. Nothing in Magic reads compaction facts beyond
+  status, summary and error; reading `_meta.gobble` later needs a Magic change and an amendment of magic-cli-remote
+  0214-MADR D14.
+* **M5. Magic triggers gobble's compaction by passing `/compact` through as prompt text.** magic-cli-remote 0179-MADR
+  D9 (`:490-502`) resolves gobble's commands `KindNative` and sets no `Ops.Compact`; no `_gobble/compact` call is
+  planned. The daemon's own "Compacting the conversation…" line runs only for an `OpCompact` provider
+  (`internal/session/commands.go:479-495`), so it never fires for gobble.
+* **M6. What 0179 would amend.** With gobble sending standard updates to Magic, which offers `session.compaction`
+  (0179-MADR `:377-378`), 0179's `_gobble/compaction` handler receives nothing: its D10 (`:515-516`), G3
+  (`:297-298`), D13 (`:597-598`), D12's fixture and item 5 (`:558`, `:569`), and its PLAN's Goal (`:28-29`), P2 steps
+  4, 9 and 10 (`:239`, `:273-275`, `:289`) and P3 (`:325`) would change; magic-cli-remote 0190-MADR `:84-86` and the
+  comment at `internal/provider/acpagent/compaction_test.go:13-15` are out of date. That is magic-cli-remote's to
+  amend.
+
+**acp-go-sdk2 `v1.34.2`.**
+
+* **S1. The update is an upsert with patch fields.** Schema `CompactionUpdate` (`schema/schema.json:4381`): "The first
+  notification fixes the compaction's timeline position. Later updates with the same ID patch that entity in place …
+  `summary`, `error`, and `_meta` have patch semantics: omission leaves the stored value unchanged, `null` clears it,
+  and a concrete value replaces it." `summary` is "Complete replacement user-displayable summary content" (`:4401`).
+  The SDK's `CompactionTimeline` replaces accumulated chunks with a concrete summary (`compaction.go:59-63`).
+* **S2. `_meta` is replaced whole, not merged** (schema `:4415`, "Extensible metadata patch"; the timeline's
+  `e.Meta = deepCopy(m)`, `compaction.go:70-74`). Each update that carries `_meta.gobble` must carry all of it.
+* **S3. Vendor data belongs in a namespaced `_meta`,** never at a type's root: "Implementations MUST NOT add custom
+  fields at the root of a specified type" (SDK 0039-MADR `:71-74`); "Implementations MUST NOT make assumptions about
+  values at these keys" (schema `_meta`, e.g. `:287`). The SDK reads such an entry with `MetaObject` and
+  `DecodeMeta[T]` (`helpers.go:661`, `:672`); gobble's key is already `gobble` (`acpext.MetaKey`).
+* **S4. Status is an open set** (`:4351-4375`); `_` values are implementation-specific, and "The Agent MUST report a
+  terminal status when a reported compaction ends" (SDK 0039-MADR `:54-65`).
+* **S5. The gate applies to replay** (one send path, `agent_gen.go:1002-1007`), and the SDK refuses an ungated
+  update with `*CapabilityError` before writing. `Patch` values are made with `acp.PatchValue` and `acp.PatchNull`
+  (`types_gen.go:24934`, `:24942`).
+* **S6. No guidance chooses a summary field over chunks,** nor fixes a replayed id; the schema asks only for an
+  "Agent-owned ID … unique within the session" (`:4385`).
+
+**gobble-cli.**
+
+* **G1. A failed update stops the turn.** `updates.send` keeps the first error and drops every later frame
+  (`acpserver/prompt.go:58-63`), and `Prompt` returns that error (`acpserver/agent.go:767-768`). An ungated standard
+  update must therefore never be sent: the choice is made before sending.
+* **G2. The summary is whole.** `compaction.Compact` collects the model's text and post-processes it
+  (`compaction/compaction.go:297-330`, `:495`, `:521-534`); there is no stream to forward.
+* **G3. Entry ids exist only after the write.** `Tree.Next` assigns a fresh id to every appended entry
+  (`session/tree.go:71-79`), and `runCompaction` writes a baseline before the compaction entry
+  (`acpserver/compact.go:125-129`). `Options.NewID` makes session ids only, and the tests' `counterIDs` would shift
+  if compaction drew from it (`acpserver/agent_test.go:30-36`).
+* **G4. Four paths, one runner, and today's outcome quirks.** `/compact` runs inside a prompt turn, `_gobble/compact`
+  claims its own, and the automatic path runs before a model call inside a turn (threshold) or on a refused call
+  (overflow); all reach `runCompaction` (`compact.go:102`), and `claimTurn` keeps them from overlapping in a session
+  (`agent.go:785-802`). A cancel that lands after the entry is written is reported "cancelled" by `/compact` and
+  `_gobble/compact` (`compact.go:32-33`, `:54-55`; `extensions.go:194-195`), though the compaction stands. On a
+  refusal, `/compact` sends its start text and both notices before the refusal is known (pinned by
+  `acpserver/autocompact_test.go:391-394`).
+* **G5. Only the newest compaction replays, first** (`compaction/estimate.go:126-164`; `acpserver/history.go:359-360`),
+  and the entry holds `TokensBefore` but not the reason.
+* **G6. Tests that bound the change:** `TestAcpextNotificationsAreSent` (`internal/cli/acpext_test.go:41`) requires
+  every `acpext.Notifications()` entry to be sent with a literal `notify(acpext.MethodX, …)`;
+  `TestExtensionCompact` (`acpserver/extensions_test.go:370`) expects one `usage_update` after a success;
+  `TestNotifyFramesUnchanged` (`acpserver/prompt_test.go:468`) pins the `_gobble/compaction` frames. Each uses a client
+  that offers no `session.compaction`, so each stays as it is.
+
+### The five questions
+
+#### P3-Q1. The compaction id
+
+* **Option 1 — Reserve the compaction entry's id before the run,** and use it live and on replay. `session.Tree`
+  gains a reservation that `Next` honours; an unused reservation is released.
+  * Good, because one id names the compaction live, on replay and in the session file, with no format change.
+  * Good, because it avoids M3's replay mismatch.
+  * Bad, because `session.Tree` gains a small API.
+* **Option 2 — A fresh id live, the entry's id on replay** (D9 Option 1 as first written, without `Options.NewID`).
+  * Bad, because live and replayed ids differ (M3).
+* **Option 3 — Persist a separate compaction id in the entry.**
+  * Bad, because it changes the session file for what the entry id already identifies.
+
+*Answered: Option 1.*
+
+#### P3-Q2. Where the summary travels
+
+* **Option 1 — The `summary` field of the terminal `completed` update.**
+  * Good, because the summary is whole (G2), the update is an upsert (S1), and one frame carries it, live and on replay.
+  * Good, because Magic shows it when the update arrives (M2).
+* **Option 2 — One `compaction_summary_chunk`, then `completed`.**
+  * Bad, because it is two frames for one fact, and replay must mirror it.
+* **Option 3 — Both.**
+  * Bad, because the field replaces the chunk (S1), so the chunk is waste, and order-dependent clients could double it.
+
+*Answered: Option 1.*
+
+#### P3-Q3. The contract for gobble's own facts
+
+* **Option 1 — A typed `acpext.CompactionMeta`** (`reason`, `tokensBefore`, `paused`), sent under `_meta.gobble`, added
+  to acpext and tagged `acpext/v0.2.0` before the root requires it (0042-MADR: a change to acpext is tagged before the
+  root uses it).
+  * Good, because the shape is a published, versioned contract any client decodes with `DecodeMeta` (S3).
+  * Good, because it is additive: acpext's `v0.1.0` types are unchanged, and `_gobble/compaction` stays.
+  * Bad, because it needs an acpext tag, which the owner pushes, before P3's code.
+* **Option 2 — An untyped `_meta.gobble` built in `acpserver`.**
+  * Bad, because the shape becomes an undocumented contract.
+* **Option 3 — No `_meta`.**
+  * Bad, because standard clients lose the reason, the token count and the pause.
+
+*Answered: Option 1.* Each update that carries it carries all of it (S2): `in_progress` and `cancelled` `{reason}`,
+`completed` `{reason, tokensBefore}`, `failed` `{reason, paused}` when it paused. Replay carries `{tokensBefore}`, since
+the entry keeps no reason (G5).
+
+#### P3-Q4. `/compact`'s text, and the outcome of a late cancel
+
+* **Option 1 — The row only.** On a connection that offered `session.compaction`, `/compact` sends no compaction agent
+  text; a refusal ("Nothing to compact …", "Already compacted") keeps its one-line reply and sends no compaction update.
+  A run whose entry was written reports `completed` even if a cancel came after; one that was not written reports
+  `cancelled`.
+  * Good, because one channel carries the compaction (D9), and the reported status is what the session holds.
+* **Option 2 — A short "Compacted from N tokens." line beside the row.**
+  * Bad, because the compaction is reported twice.
+* **Option 3 — Today's text in full beside the row.**
+  * Bad, because the summary appears twice.
+
+*Answered: Option 1.* The extension path keeps G4's behaviour as today, byte for byte.
+
+#### P3-Q5. How a client learns of a pause
+
+* **Option 1 — `failed`, `_meta.gobble.paused`, and a notice.** The failed update carries the error and the pause, and,
+  when the client offered `session.notices`, one `warning` notice says automatic compaction is paused and how it
+  resumes (D8's path).
+  * Good, because every part is standard, and Magic shows the notice today (its 0188).
+* **Option 2 — `failed` and `_meta.gobble.paused` only.**
+  * Bad, because no client reads that today (M4), so the pause is invisible.
+* **Option 3 — A `_gobble_paused` status, terminal later.**
+  * Bad, because Magic shows an unknown status as in progress (M1), and a terminal status is still owed (S4).
+
+*Answered: Option 1.*
+
+### Consequences
+
+* Good, because any ACP client that offers `session.compaction` sees each gobble compaction once, with its summary and
+  a stable id, through its standard path; Magic needs no code to render it (M1).
+* Good, because gobble's own facts are a typed, versioned contract that a client can read later without guessing.
+* Good, because the paths for a client without the capability, and their tests, are unchanged.
+* Neutral, because P3 now needs `acpext/v0.2.0` tagged and a `session.Tree` reservation first.
+* Bad, because magic-cli-remote's 0179 must be amended (M6) before Magic captures fixtures from a gobble release that
+  carries P3; telling Magic is the owner's.
+
+### Confirmation
+
+The PLAN's P3 tests each answer above, each seen failing first; the frames a capable client receives pass
+`ValidateGolden`; the extension path's frames stay byte-identical (`TestNotifyFramesUnchanged`).

@@ -39,8 +39,13 @@ another option amends this plan before the phase it touches runs.
   `acpserver/testdata/session.golden` and `acpclient/acptest/testdata/initialize.golden`.
 * P2, notices (D7, D8): `acpserver` (a gate helper; `mcp.go`, `sysprompt.go`, `agent.go`'s call to `mcpTools`), and
   their tests.
-* P3, compaction (D9): `acpserver/compact.go`, `extensions.go` (`_gobble/compact`), `autocompact.go`, `history.go`
-  (replay), and their tests.
+* ~~P3, compaction (D9): `acpserver/compact.go`, `extensions.go` (`_gobble/compact`), `autocompact.go`, `history.go`
+  (replay), and their tests.~~ *(2026-11-08, the MADR's "P3 re-assessment": P3 is three phases.)*
+  * P3a, the contract: `acpext/types.go` (`CompactionMeta`), `acpext/doc.go`, `acpext/roundtrip_test.go`,
+    `acpext/testdata/compaction.meta.*.json`; then the tag `acpext/v0.2.0`, which the owner pushes.
+  * P3b, the id: `session/tree.go` (a reservation `Next` honours), `session/tree_test.go`.
+  * P3c, the reporter: `go.mod` and `go.sum` (`acpext v0.2.0`), `acpserver/compact.go`, `extensions.go`
+    (`_gobble/compact`), `autocompact.go`, `history.go` (replay), `agent.go` (`liveSession.append`), and their tests.
 * P4, gobble's client (D10): `acpclient/conn.go`, `acpclient/update.go`, `internal/cli` (line mode's options and the
   view), and their tests.
 * P5, acceptance: the goldens, the docs (`docs/architecture.md`'s `acpserver` and `acpclient` rows), the records.
@@ -48,7 +53,8 @@ another option amends this plan before the phase it touches runs.
 **Out of scope:**
 
 * D13's surfaces: `session/delete`, elicitation, images and audio, boolean config options, `session/list` pagination.
-* Any change to `acpext`: `_gobble/compaction` and `CompactionNotice` stay as published at `v0.1.0`.
+* ~~Any change to `acpext`~~ *(2026-11-08, P3-Q3: P3a adds `CompactionMeta`)*. Any other change to `acpext`:
+  `_gobble/compaction` and `CompactionNotice` stay as published at `v0.1.0`.
 * magic-cli-remote: its 0179 D10 needs an amendment in that repository (MADR R11); telling Magic is the owner's.
 * A gobble release.
 
@@ -147,29 +153,97 @@ the steps below replace them.)*
    frame); a severity swapped; the once-per-session rule removed.
 4. Gates (C5). `session.golden` is byte-identical (C4). **Commit.**
 
-### P3 — compaction through the standard updates (D9, Option 1)
+### ~~P3 — compaction through the standard updates (D9, Option 1)~~
 
-**Gate:** P2 committed, and the owner's word that the release Magic captures from may carry it (MADR R11, R12).
+*(2026-11-08: replaced by P3a, P3b and P3c below, from the MADR's "P3 re-assessment", P3-Q1 to P3-Q5. The first
+version's chunk, its `Options.NewID` id, and its untyped `_meta` are withdrawn.)*
+
+### P3a — the contract: `acpext.CompactionMeta` (D9; P3-Q3)
+
+**Gate:** P2 committed.
+
+1. **The type,** in `acpext/types.go`, standard library only (`check-acpext-deps`):
+
+   ```go
+   // CompactionMeta is gobble's own facts about a compaction, sent under
+   // _meta[MetaKey] of ACP's compaction_update when the client offered
+   // session.compaction (0016-MADR D9, P3-Q3). _meta is replaced whole by
+   // each update that carries it, so each carries all of it.
+   type CompactionMeta struct {
+       Reason       CompactionReason `json:"reason,omitzero"`
+       TokensBefore int64            `json:"tokensBefore,omitzero"`
+       Paused       CompactionPause  `json:"paused,omitzero"`
+   }
+   ```
+
+   It reuses `CompactionReason` and `CompactionPause`; `CompactionNotice` and every `v0.1.0` name are unchanged.
+   `doc.go` says where it is sent and that `_gobble/compaction` remains for a client without the capability.
+2. **Tests:** `roundtrip_test.go` decodes three new goldens, `testdata/compaction.meta.{start,end,paused}.json`, with
+   unknown members refused, and re-encodes them byte for byte; `apidiff` reports one compatible addition.
+3. **Seen failing** (C2): a golden with a misspelt member (refused), and one with `tokensBefore` as a string.
+4. Gates (C5), `make check-acpext-deps` among them. **Commit.** The owner tags `acpext/v0.2.0` on that commit and
+   pushes the tag; the module proxy serving it is P3c's gate (0042-MADR, the tag before the root uses it).
+
+### P3b — the id: a reservation in `session.Tree` (D9; P3-Q1)
+
+**Gate:** P3a committed.
+
+1. **The tests first** (`session/tree_test.go`):
+   * `TestReserveIsHonoured`: `Reserve()` returns an id not in the tree; an entry appended with that id keeps it, with
+     its parent the leaf, as `Next` gives any entry;
+   * `TestReserveIsNotReissued`: while reserved, no `Next` hands the id out;
+   * `TestReleaseFreesTheId`: `Release(id)` returns an unused reservation; a reservation is never written by itself.
+2. **The code:** `Tree.Reserve() string` and `Tree.Release(id string)`, under the tree's mutex; `Next` keeps an entry's
+   id when it is a live reservation, and consumes it; `newID` skips reserved ids. No session file change.
+3. **Seen failing** (C2): each test against the code before step 2; then the breaks: `Next` overwriting a reserved id;
+   `newID` not skipping reservations.
+4. Gates (C5). **Commit.**
+
+### P3c — the reporter: one channel per connection (D9; P3-Q1 to P3-Q5)
+
+**Gate:** P3b committed; `acpext/v0.2.0` served by the module proxy; and the owner's word that the gobble release
+Magic captures from may carry it, with magic-cli-remote's 0179 amended or scheduled (MADR M6, R12).
 
 1. **The tests first,** for each path (`/compact`, `_gobble/compact`, automatic at the threshold, on overflow), with a
-   client that offers `session.compaction` and one that does not:
-   * offered: `compaction_update` `in_progress`, one `compaction_summary_chunk` with the summary, then `completed`
-     (with `_meta.gobble` `reason` and `tokensBefore`), or `failed` with the error's first line (and `paused` on an
-     automatic failure), or `cancelled`; one id across the run; **no `_gobble/compaction`**, and for `/compact` none
-     of its two agent-text lines;
-   * not offered: exactly today's frames, `_gobble/compaction` and agent text, byte for byte;
-   * a refusal ("Nothing to compact", "Already compacted") sends no compaction update in either case;
-   * replay: a `session/load` sends, for an offering client, one `compaction_update` `completed` with the entry's
-     summary and the entry's id; for any other, today's "Compacted from N tokens:" text.
-2. **The code:** one reporter the four paths share, chosen per connection by `offers`:
-   * the standard reporter sends `acp.UpdateCompaction` / `UpdateCompactionSummaryText` with an id from
-     `Options.NewID`, and `_meta.gobble` built with the SDK's `MetaObject`;
-   * the extension reporter is today's `_gobble/compaction` notices and text, unchanged;
-   * `replayMessage` (`acpserver/history.go:359-360`) chooses the same way.
-3. **Seen failing** (C2): each test against the code before step 2; then the planted breaks: both reporters at once (a
-   duplicate `_gobble/compaction`); no terminal status on failure; a fresh id per update; replay ungated (the SDK refuses
-   it, `*CapabilityError`).
-4. Gates (C5). `session.golden` is byte-identical (C4). **Commit.**
+   client that offers `session.compaction` (and `session.notices` where named) and one that does not:
+   * **offered, success:** `compaction_update` `in_progress` with `_meta.gobble {reason}` once the run is prepared, then
+     `completed` with the summary in its `summary` field and `_meta.gobble {reason, tokensBefore}`; one id, the
+     compaction entry's (`entries[len-1].ID` equals the id); then `usage_update` as today; **no `_gobble/compaction`**
+     and, for `/compact`, no compaction agent text;
+   * **offered, failure:** `failed`, its `error` the first line, `_meta.gobble {reason}`; on an automatic failure that
+     pauses, `_meta.gobble {reason, paused}` and, with `session.notices`, one `warning` notice saying automatic
+     compaction is paused and how it resumes (D8's path; none without `session.notices`);
+   * **offered, cancel:** before the entry is written, `cancelled`; after it, `completed` (P3-Q4);
+   * **offered, refusal** ("Nothing to compact …", "Already compacted"): no compaction update; `/compact` answers with
+     its one-line reply, `_gobble/compact` with -32600 as today;
+   * **not offered:** today's frames, `_gobble/compaction` and agent text, byte for byte; `TestExtensionCompact`,
+     `TestNotifyFramesUnchanged`, `TestAcpextNotificationsAreSent` and the autocompact tests pass unchanged;
+   * **replay:** a `session/load` sends, for an offering client, one `compaction_update` `completed` with the entry's
+     summary, the entry's id, and `_meta.gobble {tokensBefore}`; for any other, today's "Compacted from N tokens:" text;
+     the replayed id equals the id the live run sent;
+   * **conformance:** the offered frames pass `acptest.ValidateGolden`.
+2. **The code:**
+   * `go get github.com/maccavelli/gobble-cli/acpext@v0.2.0`, then `go mod tidy`.
+   * `runCompaction` reserves the compaction entry's id before `compaction.Compact` (`Tree.Reserve`), passes it to the
+     reporter, writes the entry with it, and releases it on any path that writes nothing.
+   * A small reporter interface, chosen once per call by D7's `offers`, before anything is sent (MADR G1):
+     * the standard reporter sends `acp.UpdateCompaction(id, status)` with `Summary` set by `acp.PatchValue` of one
+       text block, `Error` by `acp.PatchValue` of the first line, and `Meta` by `acp.PatchValue` of
+       `{"gobble": CompactionMeta{…}}` encoded through `jsonx`; it sends the pause notice through D8's helper;
+     * the extension reporter is today's `out.notify(acpext.MethodCompaction, …)` calls and text, unchanged, so
+       `TestAcpextNotificationsAreSent` still finds its literal `notify` calls.
+   * `/compact` and `_gobble/compact` choose `completed` over `cancelled` when the entry was written.
+   * `replayMessage` (`acpserver/history.go:359-360`) chooses the same way, with the entry's id.
+3. **Seen failing** (C2), each break a planted change on a scratch copy:
+   * both reporters at once: a `_gobble/compaction` reaches the offering client;
+   * the reporter chosen after sending: an ungated `compaction_update` fails the turn (`*CapabilityError`, MADR G1);
+   * the summary as a chunk instead of the field; `_meta` sent without `reason` on the terminal update (S2);
+   * a fresh id instead of the reservation: the live and replayed ids differ;
+   * a written-then-cancelled run reported `cancelled`;
+   * a pause without its notice when `session.notices` was offered;
+   * replay ungated: the SDK refuses it.
+4. Gates (C5). `session.golden` and `TestNotifyFramesUnchanged`'s frames byte-identical (C4). **Commit.**
+5. **For the owner, not posted:** a note for magic-cli-remote listing 0179's lines to amend (MADR M6).
 
 ### P4 — gobble's own client (D10, Option 1)
 
@@ -209,17 +283,21 @@ the steps below replace them.)*
 | D6: goldens conform | P1 step 2; P5 step 1 |
 | D7: the SDK's gate decides | P2 step 2; its gate-inverted break |
 | D8: notices when offered, nothing new otherwise, not replayed | P2 step 1 |
-| D9: one channel per connection; replay gated; terminal status | P3 step 1 |
+| D9: one channel per connection; replay gated; terminal status | ~~P3 step 1~~ P3c step 1 |
+| D9: `CompactionMeta` published and decoded strictly | P3a step 2 |
+| D9: one id live and on replay | P3b step 1; P3c step 1 (replay) |
 | D10: the line client offers compaction; print mode unchanged | P4 step 1 |
 | D11: the dated notes | P0 step 2 |
 | The wire without the capabilities | C4 in every phase; P5 step 1 |
 
 ## Rollout and Rollback
 
-* **Rollout.** Each phase is one commit on `main`. P3 changes what Magic receives from gobble, so it lands only with
-  the owner's word (its gate), ahead of or with the gobble release Magic captures from.
-* **Rollback.** P1, P2 and P4 each revert alone. P3 reverts alone, restoring `_gobble/compaction` and text for every
-  client; P4 reverts first if P3 is reverted.
+* **Rollout.** Each phase is one commit on `main`. P3a's commit is tagged `acpext/v0.2.0` by the owner before P3c
+  requires it. P3c changes what Magic receives from gobble, so it lands only with the owner's word (its gate), ahead
+  of or with the gobble release Magic captures from.
+* **Rollback.** P1, P2 and P4 each revert alone. P3c reverts alone, restoring `_gobble/compaction` and text for every
+  client; P4 reverts first if P3c is reverted. P3b reverts alone once P3c is reverted. P3a's tag is never moved or
+  deleted: a reverted P3c simply stops using `CompactionMeta`, which stays in `acpext/v0.2.0`.
 
 ## Execution record
 
@@ -233,3 +311,16 @@ Not started. The plan is `proposed` until the owner approves it.
   which the SDK's `acptest.Golden` does not. P1 keeps that normalizer, over the SDK's records. The MADR records it.
 * **Files added to scope:** P1's `acpclient/acptest/recorder.go`, `pair.go` and `pair_test.go`, and the two ACP
   goldens, rewritten once.
+
+### P3 re-assessment (2026-11-08)
+
+* **Found,** on the owner's request to research P3 more deeply across magic-cli-remote and this repository: the MADR's
+  "P3 re-assessment" records M1 to M6, S1 to S6 and G1 to G6, read at gobble-cli `df5c21e`, acp-go-sdk2 `v1.34.2` and
+  magic-cli-remote `c87d22e4`.
+* **Decided,** by the owner's answers to P3-Q1 to P3-Q5, each the recommended option: the id is the compaction entry's,
+  reserved before the run; the summary travels in the `completed` update's `summary` field; gobble's facts are a typed
+  `acpext.CompactionMeta` under `_meta.gobble`, published as `acpext/v0.2.0` first; `/compact` sends the row only, and
+  a run written before a cancel reports `completed`; a pause is `failed`, `_meta.gobble.paused`, and a `warning`
+  notice when notices are offered.
+* **Changed here:** P3 becomes P3a, P3b and P3c (the first version struck through); Scope gains acpext and
+  `session/tree.go`; Rollout orders the tag before P3c.
