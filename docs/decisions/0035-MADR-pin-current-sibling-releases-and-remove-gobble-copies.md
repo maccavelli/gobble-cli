@@ -661,7 +661,8 @@ policy. And one record keeps the order, and the cross-library facts (check-libs,
     A second scratch clone moved by `go get` and `go mod tidy` changed `go.mod` on that line and `go.sum` on the
     SDK's two lines alone; `go build ./...`, `go test ./...` and `make preflight` passed there.*
 
-  *Amended 2026-11-07, by the PLAN's deviation 28, **proposed** for the owner's approval, from the owner's
+  *Amended 2026-11-07, by the PLAN's deviation 28, ~~proposed for the owner's approval~~ accepted 2026-11-07 by the
+  owner's "i committed, proceed", after the records commit `54e664b`, from the owner's
   "go-llmprovider-sdk, acp-go-sdk2 both have new releases. we need to pin them.":*
   - ***acp-go-sdk2 `v1.34.2`** (`4c94d2ecd45eaee0eb990e53908754546c2347b1`, published 2026-11-07T23:57:55Z), its GitHub
     release marked Latest and its tag's CI run passed, in place of `v1.34.0`, over `v1.34.1`

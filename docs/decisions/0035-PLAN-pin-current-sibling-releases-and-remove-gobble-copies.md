@@ -1,6 +1,6 @@
 ---
-status: complete
-date: 2026-11-06
+status: in-progress
+date: 2026-11-07
 associated-madr: "0035-MADR-pin-current-sibling-releases-and-remove-gobble-copies.md"
 ---
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
@@ -3820,3 +3820,38 @@ The base is `63e72e5`, P32's commit, which the owner committed and pushed. No de
   - adopting `catalog.Cache.Close` or `auth.OAuthSession.Wait` is not here. It is offered to the owner as an amendment
     of `0046-MADR-own-background-listings-and-keep-tests-hermetic.md`, whose Q2 filed the issue.
 - **Files added to scope:** P33's and P34's `go.mod`, `go.sum`, `README.md` and `docs/architecture.md`.
+- **Approved** 2026-11-07 by the owner's "i committed, proceed", after the records commit `54e664b`. This plan is
+  `in-progress` until P34's close-out.
+
+### P33 record (2026-11-07): acp-go-sdk2 `v1.34.2`
+
+The base is `54e664b`, the records commit of deviation 28. No deviation.
+
+1. **C2:** `git ls-remote --tags` at the phase's start lists `v1.34.2` as acp-go-sdk2's newest `v1` tag, and
+   go-llmprovider-sdk `v1.28.0`, go-tui-lib `v2.12.0` and go-selfupdate-lib `v1.24.0` as theirs, so no sibling has a tag
+   newer than this plan names.
+2. **Checked first** (step 1): `python3 scripts/check_libs.py --lib acp-go-sdk2 --tag v1.34.2`, on a scratch clone of
+   `54e664b`, "pinned v1.34.0, checking v1.34.2": 13 checks ok, "0 failing checks".
+3. **The pin** (step 2): `go get github.com/maccavelli/acp-go-sdk2@v1.34.2` ("upgraded … v1.34.0 => v1.34.2"), then
+   `go mod tidy`. `go.mod` changed on that line alone (`go.mod:16`); `go.sum` lost the two `v1.34.0` lines and gained
+   `v1.34.2 h1:z7pceiYbNG91nghK5akWcGXgmJ8+qXK93CrFHKEZqRU=` and its `go.mod` line, the `go.mod` hash unchanged, and
+   nothing else.
+4. **No source change** (step 3): `go test -count=1 ./acpclient/... ./acpserver/... ./internal/cli/...` passed, 9
+   packages ok, `TestErrors`, `TestAuthenticate` and `TestBlockedUpdatesArriveInOrder` among them.
+   `acpserver/testdata/session.golden` and `internal/cli/testdata/view-plain.golden`, `print-json.golden` and
+   `print-stream-json.golden` are byte-identical to `ccd8aa8`'s (`git diff --quiet`, each exit 0).
+5. **The docs** (step 4): `README.md:129` and `docs/architecture.md:187` name `v1.34.2`; neither file names `v1.34.0`.
+6. **G-local** (step 5): no Go file changed, so `make pre-add-check` had none to check; `make preflight`: "preflight
+   passed", `verify-build-metadata` and `markdownlint` (0 issues) among its gates; `make race`: 39 ok.
+7. **G-hosts,** on the Linux machine and the Windows laptop, the tree shipped to each, 890 files, no `._*` file, Go
+   1.27.3: `go test` and race passed on both, 38 ok each; preflight stops at `verify-build-metadata`, as on every copy,
+   on `git rev-parse HEAD` in a repository with no commit.
+   - `make check-records markdownlint` passed on the Linux machine, 0 issues.
+   - On the Windows laptop its first run failed once: `docs/README.md:34:371 MD055/table-pipe-style … Missing trailing
+     pipe`. That line ends in ` |`, is unchanged since `90b015a`, and is not in this phase's files. The copy's
+     `docs/README.md` has the tree's MD5, LF endings, and no change after preflight (`git diff` empty); the laptop runs
+     the same `markdownlint-cli2 v0.23.2` (markdownlint `v0.41.1`), Node `v26.13.0` and `.markdownlint-cli2.jsonc` as
+     macOS. The file alone, `54e664b`'s and `63e72e5`'s copies passed; the whole run then passed seven times out of
+     seven on the same copy, 57 files, 0 issues. The one failure is not reproduced and not explained.
+   - The copy shipped was taken before this record was written; `make check-records markdownlint` with it passed on
+     macOS.
