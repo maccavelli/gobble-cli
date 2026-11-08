@@ -1489,6 +1489,47 @@ Files: `go.mod`, `go.sum`, `README.md`, `docs/architecture.md`.
 No check is added, so C9 has nothing to break. Adopting `catalog.SortByRank`, `LabelName` or `LabelNote` is not this
 phase's work.
 
+### P33 — acp-go-sdk2 `v1.34.2` (MADR D1, amended 2026-11-07; deviation 28)
+
+Files: `go.mod`, `go.sum`, `README.md`, `docs/architecture.md`.
+
+1. **Checked first:** `python3 scripts/check_libs.py --lib acp-go-sdk2 --tag v1.34.2` reports every check ok. On
+   2026-11-07 it did: 13 checks, 0 failing. And `git ls-remote --tags` lists no sibling tag newer than this plan names;
+   one that it lists is a new amendment (Rollout).
+2. **The pin:** `go get github.com/maccavelli/acp-go-sdk2@v1.34.2`, then `go mod tidy`.
+   * `go.mod` changes on that line alone.
+   * `go.sum` changes in acp-go-sdk2's lines alone: the two `v1.34.0` lines out, the two `v1.34.2` lines in.
+3. **No source change.** `acpclient`, `acpserver` and `internal/cli` pass their tests unchanged, `TestErrors` and
+   `TestAuthenticate` (S8's) and `TestBlockedUpdatesArriveInOrder` among them. The four goldens are byte-identical to
+   `ccd8aa8`'s (`git diff --quiet`). A test whose expectation changes is a deviation: the MADR's amendment says only a
+   received `null` item in a skip-invalid array moves, and no gobble test sends one.
+4. **The docs:** `README.md:129` and `docs/architecture.md:187` name `v1.34.2`; neither names `v1.34.0`.
+5. G-local, and G-hosts. **Commit.** P33 touches nothing under `internal/cli`, so no `make perf`.
+
+No check is added, so C9 has nothing to break.
+
+### P34 — go-llmprovider-sdk `v1.28.0` (MADR D1, amended 2026-11-07; deviation 28)
+
+Files: `go.mod`, `go.sum`, `README.md`, `docs/architecture.md`.
+
+1. **Checked first:** `python3 scripts/check_libs.py --lib go-llmprovider-sdk --tag v1.28.0` reports every check ok. On
+   2026-11-07 it did: 13 checks, 0 failing. And `git ls-remote --tags` lists no sibling tag newer than this plan names.
+2. **The pin:** `go get github.com/maccavelli/go-llmprovider-sdk@v1.28.0`, then `go mod tidy`.
+   * `go.mod` changes on that line alone.
+   * `go.sum` changes in go-llmprovider-sdk's lines alone: the two `v1.27.0` lines out, the two `v1.28.0` lines in.
+3. **No source change.** `llm/provider`, `llm/catalog`, `internal/auth`, `internal/cli` and `acpserver` pass their tests
+   unchanged: the listing, search and default-model tests (`llm/provider/list_test.go`,
+   `internal/cli/modelscmd_test.go`), 0046-PLAN's background-listing tests, and `TestRefreshWaitOutlastsAHold` among
+   them. The four goldens are byte-identical to `ccd8aa8`'s. A test whose expectation changes is a deviation.
+4. **The docs:** `README.md:131` and `docs/architecture.md:190` name `v1.28.0`; neither names `v1.27.0`.
+5. G-local, and G-hosts. **Commit.** P34 touches nothing under `internal/cli`, so no `make perf`.
+6. **The close-out,** in the commit after P34's, since `make check-libs` clones the last commit: the Verification's
+   first two items again, which return this plan to `complete`, and the `docs/README.md` rows (C7), as the close-out
+   after P32 did.
+
+No check is added, so C9 has nothing to break. Adopting `catalog.Cache.Close` or `auth.OAuthSession.Wait` is not this
+phase's work.
+
 ## Verification
 
 Each phase's own steps are its acceptance criteria. Across the plan:
@@ -1512,6 +1553,7 @@ Each phase's own steps are its acceptance criteria. Across the plan:
   - P12 needs P20, and P17 needs P21 (deviation 12). P22 needs nothing after P3.
   - P27 needs P24, and P28 needs P22 (deviation 22).
   - P32 needs P30 (deviation 27).
+  - P33 needs P29, and P34 needs P32 (deviation 28).
 
   Reverting a pin phase reverts the phases that need it, newest first.
 - Nothing is pushed by this plan. The owner pushes, after the disclosure guard.
@@ -1523,7 +1565,9 @@ Each phase's own steps are its acceptance criteria. Across the plan:
   - P15 and P18, terminal styling and cleaning;
   - P17, the editor's multiline, paste and word moves;
   - P32, a live Grok listing's order and default model when it holds a `grok-4.20-*` model, and eight label notes,
-    each from the SDK (deviation 27).
+    each from the SDK (deviation 27);
+  - P33, a peer's message whose skip-invalid array holds a `null` item is accepted, the `null` dropped, where it was
+    refused; P34, one listing request where two concurrent ones of a provider could go (deviation 28).
 
   Each is named in its commit's message by the hook, from the diff.
 
@@ -3742,3 +3786,37 @@ The base is `63e72e5`, P32's commit, which the owner committed and pushed. No de
    amendment accepted. What P19's record left for other records is unchanged, and so is deviation 23's offer of
    go-tui-lib's A15 as a record of its own. Adopting `catalog.SortByRank`, `LabelName` or `LabelNote` is not here.
 4. **The `docs/README.md` rows** (C7): the MADR's and this plan's rows name deviation 27 and this close-out.
+
+### Deviation 28 (2026-11-07): acp-go-sdk2 `v1.34.2` and go-llmprovider-sdk `v1.28.0`
+
+- **Found,** on the owner's "go-llmprovider-sdk, acp-go-sdk2 both have new releases. we need to pin them." (`main` at
+  `6f82468`, equal to `origin/main`), after the close-out above. `git ls-remote --tags`, the Go module proxy
+  (`go list -m -versions`) and the GitHub releases list three tags newer than the pins:
+  - acp-go-sdk2 `v1.34.1` (`753d7cadad86ccfdaf3dd3d6e27e3c07c5d844b0`, published 2026-11-07T16:04:02Z) and `v1.34.2`
+    (`4c94d2ecd45eaee0eb990e53908754546c2347b1`, published 2026-11-07T23:57:55Z), `v1.34.2`'s release marked Latest
+    and its tag's CI run passed, against the pin `v1.34.0`;
+  - go-llmprovider-sdk `v1.28.0` (`e98c24832115c5d4419d79d149a58643c9383e90`, published 2026-11-07T22:59:42Z), its
+    release marked Latest and its tag's CI run passed, against the pin `v1.27.0`.
+
+  go-tui-lib/v2 `v2.12.0` and go-selfupdate-lib `v1.24.0` are still the newest.
+- **Measured,** on scratch clones of `6f82468`. The tree was not changed.
+  - `python3 scripts/check_libs.py --lib acp-go-sdk2 --tag v1.34.2`: "pinned v1.34.0, checking v1.34.2", 13 checks,
+    "0 failing checks". S8's two tests pass unchanged, as their assertions are on `errors.Is` and the code.
+  - `python3 scripts/check_libs.py --lib go-llmprovider-sdk --tag v1.28.0`: "pinned v1.27.0, checking v1.28.0", 13
+    checks, "0 failing checks".
+  - For each, `get and tidy` and `modules` are ok, and `api` reports nothing incompatible.
+- **What reaches gobble,** read from acp-go-sdk2's release notes and the tags' diff (`types_gen.go`'s `skipInvalid`
+  outside `cmd/generate`), go-llmprovider-sdk's `CHANGELOG.md` section `v1.28.0` and its diff (`catalog`, `auth`, the
+  probe transport), and gobble's call sites. The MADR's D1 amendment of 2026-11-07 has it in full:
+  - acp-go-sdk2: G14, a received `null` item in a skip-invalid array dropped where the message was refused. `v1.34.2`
+    changes the generator alone;
+  - go-llmprovider-sdk: concurrent `List` calls of one key send one request; background work on the process cache is
+    `v1.27.0`'s; `Cache.Close` and `OAuthSession.Wait`, go-llmprovider-sdk#12's answer, are added and not used.
+- **Decision** (proposed with this deviation, for the owner's approval):
+  - MADR D1 has a dated amendment for the two tags;
+  - P33 (acp-go-sdk2 `v1.34.2`) and P34 (go-llmprovider-sdk `v1.28.0`) are new, each its own commit, in that order,
+    then the close-out commit;
+  - this plan becomes `in-progress` on approval, until P34's close-out returns it to `complete`;
+  - adopting `catalog.Cache.Close` or `auth.OAuthSession.Wait` is not here. It is offered to the owner as an amendment
+    of `0046-MADR-own-background-listings-and-keep-tests-hermetic.md`, whose Q2 filed the issue.
+- **Files added to scope:** P33's and P34's `go.mod`, `go.sum`, `README.md` and `docs/architecture.md`.

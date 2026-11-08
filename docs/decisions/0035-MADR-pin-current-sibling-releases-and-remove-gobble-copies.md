@@ -660,6 +660,48 @@ policy. And one record keeps the order, and the cross-library facts (check-libs,
     "pinned v1.26.1, checking v1.27.0", 13 checks, "0 failing checks", `staticcheck`, `lint` and `api` among them.
     A second scratch clone moved by `go get` and `go mod tidy` changed `go.mod` on that line and `go.sum` on the
     SDK's two lines alone; `go build ./...`, `go test ./...` and `make preflight` passed there.*
+
+  *Amended 2026-11-07, by the PLAN's deviation 28, **proposed** for the owner's approval, from the owner's
+  "go-llmprovider-sdk, acp-go-sdk2 both have new releases. we need to pin them.":*
+  - ***acp-go-sdk2 `v1.34.2`** (`4c94d2ecd45eaee0eb990e53908754546c2347b1`, published 2026-11-07T23:57:55Z), its GitHub
+    release marked Latest and its tag's CI run passed, in place of `v1.34.0`, over `v1.34.1`
+    (`753d7cadad86ccfdaf3dd3d6e27e3c07c5d844b0`, published 2026-11-07T16:04:02Z). The schema is still ACP `1.25.0`,
+    and `make api` reports no change to the exported API in either release. Both carry acp-go-sdk2's
+    `docs/decisions/0049-MADR-remediate-the-2026-11-01-debugging-pass.md`. What reaches gobble:*
+    - *`v1.34.1`, G14: a `null` item in an array the schema marks `x-deserialize-skip-invalid-items` is dropped, as an
+      item of the wrong type already was. Before, it decoded as its zero value and failed validation, so the whole
+      message was refused: a `session/update` whose tool call `content` held a `null` was answered `-32602`, and an
+      `initialize` or `session/list` answer holding one made `Initialize` or `ListSessions` fail. The change is one
+      `continue` in the generated `skipInvalid` (`types_gen.go`). It touches receiving only; what gobble sends is
+      unchanged. No gobble test sends a `null` array item, so no assertion moves;*
+    - *`v1.34.2`: the fixes to the code generator, `cmd/generate`, for 0049-MADR's G1 to G13 and G15 to G37. The
+      generated files, the schema, the `go` lines and the requirements are `v1.34.1`'s. gobble does not import
+      `cmd/generate`, so nothing in this release reaches it;*
+    - *the readings above of `v1.31.2` to `v1.34.0`, S8's two tests among them, hold unchanged.*
+  - ***go-llmprovider-sdk `v1.28.0`** (`e98c24832115c5d4419d79d149a58643c9383e90`, published 2026-11-07T22:59:42Z), its
+    GitHub release marked Latest and its tag's CI run passed, in place of `v1.27.0`. It carries go-llmprovider-sdk's
+    `docs/decisions/0071-MADR-give-a-cache-a-lifetime-and-wait-for-a-refresh.md`, which answers
+    [go-llmprovider-sdk#12](https://github.com/maccavelli/go-llmprovider-sdk/issues/12), the issue
+    `0046-MADR-own-background-listings-and-keep-tests-hermetic.md` filed under its Q2. Its `go.mod` adds no
+    requirement. What reaches gobble:*
+    - *the fix to concurrent `List` calls of one key. A caller that found no fresh listing claimed the key only after
+      the first fetch had stored its listing, so it could send a second listing request; the claim now checks again.
+      gobble's `catalog.List` (`llm/provider/list.go:92`) uses the process cache, so a background listing and a
+      `/model` of the same provider send one request where they could send two. gobble's code does not change;*
+    - *the background listing and metadata fetches now run under `store.detached`: the caller's context without its
+      cancel, bounded by the same timeout, and cancelled when the cache's life ends. The process cache's life never
+      ends, so for gobble's `catalog.List` and `catalog.CachedModel` (`llm/provider/model.go:144`) the work is
+      `v1.27.0`'s;*
+    - *added, not used: `(*catalog.Cache).Close(ctx)`, and `(*auth.OAuthSession).Wait(ctx)`. gobble owns no
+      `catalog.Cache` and never closes one, so `List`, `LookupModel` and `LookupMetadataWith` never meet the closed
+      cache's refusal. Adopting either, which 0046-MADR's D3 said gobble no longer needs, is not here;*
+    - *the readings above of `v1.25.0` to `v1.27.0`, D3's `refreshPolicy` at 60 s among them, hold unchanged.*
+  - *go-tui-lib/v2 `v2.12.0` and go-selfupdate-lib `v1.24.0` are still the newest of their majors, by
+    `git ls-remote --tags`.*
+  - *`python3 scripts/check_libs.py --lib acp-go-sdk2 --tag v1.34.2`, from a scratch clone of `6f82468`: "pinned
+    v1.34.0, checking v1.34.2", 13 checks, "0 failing checks", `test`, `staticcheck`, `lint` and `api` among them.
+    `python3 scripts/check_libs.py --lib go-llmprovider-sdk --tag v1.28.0`, from a scratch clone of `6f82468`:
+    "pinned v1.27.0, checking v1.28.0", 13 checks, "0 failing checks", with the same checks among them.*
 - **D2. `check-libs` sees what preflight sees.**
   - `scripts/check_libs.py` runs `make staticcheck` and `make lint` on its scratch module for each library, so that F2
     would have been reported.
