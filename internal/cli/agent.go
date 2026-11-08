@@ -35,7 +35,7 @@ const appName = "gobble"
 var modelProvider = func(e *runEnv) func(sessionID string, retry llm.Retry) (llm.Provider, error) {
 	return func(sessionID string, retry llm.Retry) (llm.Provider, error) {
 		o := provider.Options{ClientName: appName, ClientVersion: identity().Version, Logger: e.log(), SessionID: sessionID,
-			Logins: e.logins(), Retry: &retry, Cache: &e.cache} // the cache on every path (0046-MADR D7)
+			Logins: e.logins(), Retry: &retry, Cache: &e.cache, Sessions: &e.sessions} // on every path (0046-MADR D7, D8)
 		if sel, err := provider.ChooseWith(e.hasCredential, e.chosenProvider()); err == nil {
 			o = e.providerOptions(sel.ID, o) // models.json's base URL and headers (0005-PLAN F4-2b)
 			if src, ok := e.credentials().Has(sel.ID); ok {
@@ -99,7 +99,7 @@ func (e *runEnv) agentOptions() acpserver.Options {
 		// found as modelProvider finds it, for its listing (0005-PLAN F4-2a,
 		// F4-3a, F4-3b).
 		ModelInfo: func(id, model string) llm.Model {
-			o := provider.Options{APIKey: e.knownKey(id), Workspace: e.knownWorkspace(id), Cache: &e.cache}
+			o := provider.Options{APIKey: e.knownKey(id), Workspace: e.knownWorkspace(id), Cache: &e.cache, Sessions: &e.sessions}
 			if e.knownLogin(id) {
 				o.Logins = e.logins()
 			}

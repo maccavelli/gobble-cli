@@ -97,6 +97,7 @@ func (e *runEnv) refreshCredentials(id string) {
 	e.listingsMu.Lock()
 	delete(e.listings, id)
 	e.listingsMu.Unlock()
+	e.sessions.Drop(id) // the next use loads the new login (0046-MADR D8)
 	e.restart()
 }
 

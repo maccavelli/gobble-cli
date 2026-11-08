@@ -767,3 +767,81 @@ above.
      shipped copy, before the gate fixes, had failed `lint` on both with the same two findings.
 6. **Not done here:** P6 (the sessions) and P7 (acceptance), each its own commit; `docs/architecture.md`'s rows, which
    are P7's.
+
+### P6 record (2026-11-08)
+
+The base is `10c21c4` (P5's commit), one ahead of `origin/main` (`a0baf9d`), the tree clean. No deviation: the
+additions below change no decision.
+
+1. **The code** (step 2), written before its tests this time; C2 is met by step 3's runs against `HEAD`'s code and
+   planted breaks:
+   * `llm/provider/sessions.go`: `Sessions`, a mutex and a map of provider id to `*auth.OAuthSession`; `get(id,
+     load)`, `Drop(id)`, `Wait(ctx)`, which waits for each held session in turn and joins `"<id>: <ctx error>"` for
+     each still refreshing. **Added:** `Held() []string`, the providers held, sorted, so `internal/cli`'s tests can see
+     the set without naming the SDK's session type (archtest rule 4).
+   * `llm/provider/provider.go`: `Options.Sessions`; `login` returns the set's session when it is set, loading it once.
+     `llm/provider/model.go`: `ModelInfoWith` passes `o.Sessions` to `login`.
+   * `internal/cli`: `runEnv.sessions` (`main.go`); `providerOptions` sets it beside the cache (`modelsjson.go`);
+     `modelProvider` on every path and the `ModelInfo` hook carry it (`agent.go`); `refreshCredentials` drops the
+     provider's session (`credentials.go`); `endListings`, after the listings and the cache under D1's bound, waits for
+     the sessions under `refreshWaitBound`, 60 s (Q3), from the same caller's context without its cancellation, and
+     writes a Warn record, "a sign-in refresh was still running at the end of the run; its rotated login may not be
+     saved", with the providers, when that wait ends first (`models.go`).
+2. **The tests** (step 1), in `llm/provider/sessions_test.go` and `internal/cli/oauthsessions_test.go`
+   (`internal/cli/sessions_test.go` already exists, so the new file takes another name):
+   * `TestSessionsShareOneSession` and `TestSessionsWait`, as step 1 names them. **Added:**
+     `TestModelInfoWithUsesTheSessions` (a login looked up through `ModelInfoWith` is held in the run's set; the
+     cache is closed first, so the SDK asks for a token and starts no fetch), since no step 1 test would see
+     `ModelInfoWith` drop `Sessions`.
+   * `TestRefreshCredentialsDropsTheSession`, `TestEndListingsWaitsForARefresh` and `TestEndListingsRefreshBound` (the
+     plan's `TestEndListingsWaitsForARefresh` bound case, as a test of its own). **Added:** `TestRunOptionsCarryTheSessions`,
+     P5's options test for the sessions.
+   * The issuer is a loopback token endpoint whose refresh waits to be released, then rotates the refresh token to
+     `refresh-2`. A listing's transport passes the issuer's host to the real transport and fails every other request:
+     the SDK gives a session with no client the listing's (go-llmprovider-sdk `catalog/discovery.go:291`,
+     `UseDefaultHTTPClient`), so a transport that failed everything kept the refresh from the issuer, which the first run
+     showed (`no refresh reached the issuer`).
+   * **Fixed before the gates:** the first breaks run hung at "login ignores Sessions". A test that failed early left
+     the issuer's handler waiting, and `httptest.Server.Close` waits for it. The issuer's release is now a `sync.Once`
+     function its own cleanup calls before `Close`; the run was stopped (no process left behind) and run again, with
+     `-timeout=120s` per test run.
+3. **Seen failing** (step 3), by a scratch script copying the tree per case, every case with `HTTPS_PROXY` and
+   `HTTP_PROXY` at a closed loopback port (C5) from its first run:
+   * **the control:** both packages exit 0;
+   * **the code before P6** under P6's tests: both fail to build, `undefined: Sessions`, `e.sessions undefined`,
+     `o.Sessions undefined`;
+   * **`login` ignoring `Sessions`:** `sessions_test.go:62: second login through the same Sessions: 0x… , want the
+     first`, `:102: held [] after ModelInfoWith`, `:129: Wait with a refresh blocked: <nil>`; `oauthsessions_test.go:135:
+     held [] after a Grok listing`, `:177: endListings returned while the refresh was blocked at the issuer`, `:214`,
+     `:217`;
+   * **`ModelInfoWith` dropping `Sessions`:** `sessions_test.go:102: held [] after ModelInfoWith with a login`;
+   * **`Sessions.Wait` waiting for nothing:** `sessions_test.go:129: Wait with a refresh blocked: <nil>, want the
+     deadline, naming grok`;
+   * **`providerOptions` without the sessions:** `oauthsessions_test.go:109: provider 2 built with sessions 0x0`, `:113`,
+     `:135`, `:177`;
+   * **`modelProvider`'s unchosen path without them:** `oauthsessions_test.go:109: provider 0 built with sessions 0x0`;
+   * **the hook without them:** `oauthsessions_test.go:124: the ModelInfo hook's sessions 0x0`;
+   * **`refreshCredentials` without `Drop`:** `oauthsessions_test.go:139: held ["grok"] after refreshCredentials(grok),
+     want none`;
+   * **`endListings` without `Wait`:** `oauthsessions_test.go:177: endListings returned while the refresh was blocked`,
+     `:214: endListings took 4.167µs, want the refresh bound, 50ms`, `:217: warnings "", want the record naming grok`
+     (its first draft left `refreshing` unused and did not build; rewritten to keep it used);
+   * **the session built without its store** (added, so the rotation assertions fail alone): `sessions_test.go:138:
+     stored login … after Wait, want the rotated refresh token, refresh-2`, `oauthsessions_test.go:187: stored Grok login
+     … after endListings, want the rotated refresh token`;
+   * **Q3's bound against D1's**, step 3's 7 s refresh on scratch copies (the test's release delayed to 7 s, its
+     final wait to 15 s): with `refreshWaitBound` it passes, `ok … 7.926s`; with the wait under `endListingsWait`,
+     `oauthsessions_test.go:177: endListings returned while the refresh was blocked at the issuer` at 6.03 s.
+4. **Gates** (step 4): `make lint` 0 issues; `make pre-add-check` on the ten changed Go files: "10 file(s) clean
+   (gofmt, golint, govulncheck)".
+   * `make preflight`: "preflight passed", its 15 gates; `make race`: 39 ok; `make perf` passed: `ReplyRender` 22.8 µs
+     (baseline 30 µs), `Reprint` 5.77 ms (9.4 ms), `LineSessionStart` 1.09 ms (830 µs, within its budget), `KeyDraw`
+     1.54 µs (1.5 µs).
+   * The Linux machine and the Windows laptop, the tree shipped to each, 896 files, no `._*` file: `go test` and race 38
+     ok each; `go test -count=3 ./internal/cli/ ./llm/provider/` ok on both; `make check-records markdownlint` 0 issues
+     on both; `make perf` passed on both (the Linux machine: 77.9 µs of 110 µs, 19.1 ms of 29 ms, `LineSessionStart`
+     4.10 ms of 2.9 ms, over its baseline and within its budget, 4.29 µs of 5 µs; the Windows laptop: 24.9 µs of 54 µs,
+     3.98 ms of 12 ms, 5.14 ms of 6.9 ms, 1.28 µs of 1.4 µs); preflight stopped at `verify-build-metadata` on both, as on
+     every copy.
+5. **Not done here:** P7 (acceptance, the probes of Confirmation 10 and 11, `docs/architecture.md`'s rows, and the
+   records' close).

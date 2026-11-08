@@ -67,14 +67,15 @@ func ModelInfo(id, apiKey, workspace string, logins LoginStore, model string, mj
 	return ModelInfoWith(Options{APIKey: apiKey, Workspace: workspace, Logins: logins}, id, model, mj)
 }
 
-// ModelInfoWith is ModelInfo with o's key, workspace and logins, and o's
-// transport and cache: a listing it starts in the background runs through
-// o.Cache when set, so the run that owns the cache ends it (0046-MADR D7).
-// o's other fields are ignored.
+// ModelInfoWith is ModelInfo with o's key, workspace, logins and sessions,
+// and o's transport and cache: a listing it starts in the background runs
+// through o.Cache when set, so the run that owns the cache ends it, and a
+// login's refresh is on the run's session (0046-MADR D7, D8). o's other
+// fields are ignored.
 func ModelInfoWith(o Options, id, model string, mj *gcatalog.ModelsJSON) llm.Model {
 	ctx := context.Background()
 	sdk := Options{HTTPClient: o.HTTPClient, Headers: o.Headers, BaseURL: o.BaseURL, Cache: o.Cache}.sdkOptions()
-	login, err := Options{Logins: o.Logins}.login(ctx, id)
+	login, err := Options{Logins: o.Logins, Sessions: o.Sessions}.login(ctx, id)
 	if err == nil && login != nil && o.APIKey == "" {
 		return modelInfoFrom(ctx, id, login, "", model, mj, sdk...)
 	}

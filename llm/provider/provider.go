@@ -86,19 +86,30 @@ type Options struct {
 	// its model lookups and the sign-in's discovery use it in place of the
 	// process's, and the run closes it at its end (0046-MADR D7).
 	Cache *Cache
+	// Sessions, when set, holds the run's OAuth sessions: a stored login is
+	// loaded once per provider and shared, and the run waits for their
+	// refreshes at its end (0046-MADR D8).
+	Sessions *Sessions
 }
 
 // login is provider id's stored login, as the SDK's session, when o has no
-// key and id has an OAuth login; nil otherwise.
+// key and id has an OAuth login; nil otherwise. With o.Sessions, it is the
+// run's session for id, loaded on first use.
 func (o Options) login(ctx context.Context, id string) (*auth.OAuthSession, error) {
 	if o.APIKey != "" || o.Logins == nil || !HasLogin(id) {
 		return nil, nil
 	}
-	l, err := o.Logins.Load(ctx, id)
-	if err != nil || l == nil {
-		return nil, err
+	load := func() (*auth.OAuthSession, error) {
+		l, err := o.Logins.Load(ctx, id)
+		if err != nil || l == nil {
+			return nil, err
+		}
+		return l.session(id, o.Logins, nil, o.Logger), nil
 	}
-	return l.session(id, o.Logins, nil, o.Logger), nil
+	if o.Sessions != nil {
+		return o.Sessions.get(id, load)
+	}
+	return load()
 }
 
 // modelKey is the context key of a request's model, which Stream sets for

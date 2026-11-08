@@ -157,6 +157,10 @@ type runEnv struct {
 	// cache is the run's SDK cache, which every provider.Options the run
 	// builds carries and endListings closes (0046-MADR D7).
 	cache provider.Cache
+	// sessions are the run's OAuth sessions, one per provider, which every
+	// provider.Options the run builds carries, refreshCredentials drops one
+	// of, and endListings waits for (0046-MADR D8).
+	sessions provider.Sessions
 	// recent and recentLoaded are recent-models.json's recent models, read once,
 	// under recentMu (0025-MADR D3).
 	recent       []string

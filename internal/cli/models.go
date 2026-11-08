@@ -32,6 +32,13 @@ var errListingsEnded = errors.New("the run has ended its listings, so its models
 // not end when cancelled (0046-MADR D1, Q1). Tests shorten it.
 var endListingsWait = 6 * time.Second
 
+// refreshWaitBound bounds how long endListings waits for a sign-in refresh
+// in flight, so its rotation is saved: 60 s, the refresh lock's own wait,
+// past a refresh's longest hold of 45.6 s (0046-MADR D8, Q3;
+// internal/auth's refreshPolicy). It applies only while a refresh runs.
+// Tests shorten it.
+var refreshWaitBound = 60 * time.Second
+
 // listingOwner holds a run's background listings: the goroutines that list,
 // the context they list under, and whether something has promised to end
 // them (0046-MADR D1, D2 as amended). mu guards the rest; once ended is set,
@@ -91,8 +98,10 @@ func (e *runEnv) ownListings() {
 // cache, which ends the background work the SDK started for the run
 // (0046-MADR D7). Both share endListingsWait (Q4), after which it says which
 // providers were still listing, and whether the cache's work was not seen to
-// end. ctx is the caller's, which may already be done as the run ends; the
-// wait keeps its values and drops its cancellation.
+// end. Last it waits for the run's OAuth sessions' refreshes, up to
+// refreshWaitBound (D8, Q3), and says which were still refreshing. ctx is
+// the caller's, which may already be done as the run ends; the waits keep
+// its values and drop its cancellation.
 func (e *runEnv) endListings(ctx context.Context) {
 	o := &e.lists
 	o.mu.Lock()
@@ -105,7 +114,8 @@ func (e *runEnv) endListings(ctx context.Context) {
 		o.cancel()
 	}
 	o.mu.Unlock()
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), endListingsWait)
+	base := context.WithoutCancel(ctx)
+	bounded, cancel := context.WithTimeout(base, endListingsWait)
 	defer cancel()
 	done := make(chan struct{})
 	go func() {
@@ -115,18 +125,23 @@ func (e *runEnv) endListings(ctx context.Context) {
 	var still []string
 	select {
 	case <-done:
-	case <-ctx.Done():
+	case <-bounded.Done():
 		still = e.stillListing()
 	}
-	cacheErr := e.cache.Close(ctx)
-	if still == nil && cacheErr == nil {
-		return
+	cacheErr := e.cache.Close(bounded)
+	if still != nil || cacheErr != nil {
+		attrs := []any{slog.Any("providers", still)}
+		if cacheErr != nil {
+			attrs = append(attrs, slog.String("cache", "the SDK's background work was not seen to end"))
+		}
+		e.log().WarnContext(base, "model listings still running at the end of the run", attrs...)
 	}
-	attrs := []any{slog.Any("providers", still)}
-	if cacheErr != nil {
-		attrs = append(attrs, slog.String("cache", "the SDK's background work was not seen to end"))
+	refreshing, stop := context.WithTimeout(base, refreshWaitBound)
+	defer stop()
+	if err := e.sessions.Wait(refreshing); err != nil {
+		e.log().WarnContext(base, "a sign-in refresh was still running at the end of the run; its rotated login may not be saved",
+			slog.String("refreshing", err.Error()))
 	}
-	e.log().WarnContext(ctx, "model listings still running at the end of the run", attrs...)
 }
 
 // stillListing are the providers whose listing, first or retried, has not
