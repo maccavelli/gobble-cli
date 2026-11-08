@@ -17,7 +17,7 @@ require (
 	github.com/maccavelli/go-llmprovider-sdk v1.28.0
 	github.com/maccavelli/go-selfupdate-lib v1.24.0
 	github.com/maccavelli/go-tui-lib/v2 v2.12.0
-	github.com/maccavelli/gobble-cli/acpext v0.1.0
+	github.com/maccavelli/gobble-cli/acpext v0.2.0
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	go.yaml.in/yaml/v3 v3.0.5
 	golang.org/x/sys v0.49.0

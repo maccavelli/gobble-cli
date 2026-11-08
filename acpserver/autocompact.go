@@ -94,18 +94,18 @@ func (c *autoCompaction) compact(ctx context.Context, overflow bool) (*agent.Com
 		return nil, nil //nolint:nilerr // at the threshold, a session Prepare refuses is left as it is, and the call goes ahead (decision 5)
 	}
 	c.out.flush()
-	c.out.notify(acpext.MethodCompaction, acpext.CompactionNotice{SessionID: string(s.id), Phase: acpext.PhaseStart, Reason: reason})
-	res, used, err := a.runCompaction(ctx, s, prep, a.summaryModel(s, c.provider, c.providerID), "")
+	report := a.newCompactionReport(c.out, s, reason)
+	res, used, err := a.runCompaction(ctx, s, prep, a.summaryModel(s, c.provider, c.providerID), "", report)
 	if err != nil {
 		if ctx.Err() != nil {
-			c.out.notify(acpext.MethodCompaction, acpext.CompactionNotice{SessionID: string(s.id), Phase: acpext.PhaseEnd, Reason: reason, Error: "cancelled"})
+			report.ended(res, err, true, pauseNone)
 			return nil, context.Cause(ctx)
 		}
 		p := pauseOf(err)
 		a.mu.Lock()
 		s.pause, s.pauseErr = p, err.Error()
 		a.mu.Unlock()
-		c.out.notify(acpext.MethodCompaction, acpext.CompactionNotice{SessionID: string(s.id), Phase: acpext.PhaseEnd, Reason: reason, Error: err.Error(), Paused: p})
+		report.ended(res, err, false, p)
 		if overflow {
 			return nil, overflowFailed(err)
 		}
@@ -113,7 +113,7 @@ func (c *autoCompaction) compact(ctx context.Context, overflow bool) (*agent.Com
 	}
 	c.done++
 	c.compacted = true
-	c.out.notify(acpext.MethodCompaction, acpext.CompactionNotice{SessionID: string(s.id), Phase: acpext.PhaseEnd, Reason: reason, TokensBefore: res.TokensBefore})
+	report.ended(res, nil, false, pauseNone)
 	c.out.send(a.contextUpdate(s, used))
 	a.mu.Lock()
 	history := slices.Clone(s.history)

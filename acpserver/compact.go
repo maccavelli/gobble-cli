@@ -18,23 +18,34 @@ import (
 // cmdCompact is /compact [instructions]: Pi's manual compaction (0002-PLAN
 // Phase 6, owner's decision of 2026-10-06). It streams its progress,
 // writes Pi's compaction entry only when the summary succeeded, rebuilds
-// the context from it, and sends the new estimate as usage_update.
+// the context from it, and sends the new estimate as usage_update. To a
+// client that shows compactions as rows of their own, it says nothing of
+// a compaction that ran: the row carries the summary or the error, and a
+// compaction written before a cancel still sends its estimate (0016-MADR
+// P3-Q4).
 func (a *Agent) cmdCompact(ctx context.Context, t *cmdTurn, instructions string) error {
 	if _, err := a.sessionProvider(t.s); err != nil {
 		return promptError(err)
 	}
-	t.say(t.text(personality.CompactStart, nil) + "\n\n")
-	t.out.notify(acpext.MethodCompaction, acpext.CompactionNotice{SessionID: string(t.s.id), Phase: acpext.PhaseStart, Reason: acpext.CompactionManual})
-	res, used, err := a.compactSession(ctx, t.s, instructions)
-	t.out.notify(acpext.MethodCompaction, manualEnd(ctx, t.s.id, res, err))
+	report := a.newCompactionReport(t.out, t.s, acpext.CompactionManual)
+	if !report.rows() {
+		t.say(t.text(personality.CompactStart, nil) + "\n\n")
+	}
+	res, used, err := a.compactSession(ctx, t.s, instructions, report)
+	shown := report.ended(res, err, ctx.Err() != nil, pauseNone)
 	var reqErr *acp.RequestError
 	switch {
+	case shown && err == nil:
+		t.out.send(a.contextUpdate(t.s, used))
+		return context.Cause(ctx)
 	case ctx.Err() != nil:
 		return context.Cause(ctx)
 	case errors.Is(err, llm.ErrAuth):
 		return promptError(err)
 	case errors.As(err, &reqErr):
 		return err
+	case shown: // the failed row is the command's answer
+		return nil
 	case err != nil:
 		// A command's failure is its answer, not a JSON-RPC error: the turn
 		// ends normally, as Pi shows the failure and goes on.
@@ -46,33 +57,18 @@ func (a *Agent) cmdCompact(ctx context.Context, t *cmdTurn, instructions string)
 	return nil
 }
 
-// manualEnd is a manual compaction's _gobble/compaction end (0005-PLAN F5-2
-// decision 9): its tokens before, or its error.
-func manualEnd(ctx context.Context, id acp.SessionId, res compaction.Result, err error) acpext.CompactionNotice {
-	n := acpext.CompactionNotice{SessionID: string(id), Phase: acpext.PhaseEnd, Reason: acpext.CompactionManual}
-	switch {
-	case ctx.Err() != nil:
-		n.Error = "cancelled"
-	case err != nil:
-		n.Error = err.Error()
-	default:
-		n.TokensBefore = res.TokensBefore
-	}
-	return n
-}
-
 // compactSession is /compact's and _gobble/compact's compaction (0002-PLAN
 // Phase 7), with the session's model: prepareCompaction, then
-// runCompaction. Pi's failures are returned as they are; a failed write
-// is an *acp.RequestError.
-func (a *Agent) compactSession(ctx context.Context, s *liveSession, instructions string) (compaction.Result, int, error) {
+// runCompaction, which reports its start to report. Pi's failures are
+// returned as they are; a failed write is an *acp.RequestError.
+func (a *Agent) compactSession(ctx context.Context, s *liveSession, instructions string, report compactionReport) (compaction.Result, int, error) {
 	prep, model, err := a.prepareCompaction(s)
 	if err != nil {
 		return compaction.Result{}, 0, err
 	}
 	chosen, think := a.choices(s)
 	m := compaction.Model{Provider: model, Model: chosen, Thinking: think, MaxTokens: a.modelOf(a.provOf(s), chosen).MaxTokens}
-	return a.runCompaction(ctx, s, prep, m, instructions)
+	return a.runCompaction(ctx, s, prep, m, instructions, report)
 }
 
 // prepareCompaction finds what a compaction of s summarises, once its file
@@ -98,8 +94,12 @@ func (a *Agent) prepareCompaction(s *liveSession) (*compaction.Preparation, llm.
 // entry only when the summary succeeded, after a new system prompt
 // baseline; the context rebuilt from it; and the new estimate, returned
 // for the caller's usage_update. A success ends any pause of the automatic
-// trigger (0005-PLAN F5-2 decision 11).
-func (a *Agent) runCompaction(ctx context.Context, s *liveSession, prep *compaction.Preparation, m compaction.Model, instructions string) (compaction.Result, int, error) {
+// trigger (0005-PLAN F5-2 decision 11). The entry's id is reserved before
+// the summary is asked for, and report told it, so the client names the
+// compaction by the id the entry is written with and replayed by
+// (0016-MADR P3-Q1); the caller reports the end.
+func (a *Agent) runCompaction(ctx context.Context, s *liveSession, prep *compaction.Preparation, m compaction.Model, instructions string,
+	report compactionReport) (compaction.Result, int, error) {
 	a.mu.Lock()
 	s.compacting = true
 	a.mu.Unlock()
@@ -108,6 +108,9 @@ func (a *Agent) runCompaction(ctx context.Context, s *liveSession, prep *compact
 		s.compacting = false
 		a.mu.Unlock()
 	}()
+	id := s.tree.Reserve()
+	defer s.tree.Release(id) // nothing once the entry has spent it
+	report.started(id)
 	res, err := compaction.Compact(ctx, prep, m, compaction.Request{Instructions: instructions, PlanMode: a.modeOf(s) == modePlan,
 		Prompts: a.compactionPromptsOf(s)})
 	if err != nil {
@@ -117,7 +120,7 @@ func (a *Agent) runCompaction(ctx context.Context, s *liveSession, prep *compact
 	if err != nil {
 		return compaction.Result{}, 0, acp.NewInternalError(errData(acpext.ErrorData{Reason: err.Error()}))
 	}
-	e := session.Entry{Type: session.TypeCompaction, Summary: res.Summary, FirstKeptEntryID: res.FirstKeptEntryID,
+	e := session.Entry{Type: session.TypeCompaction, ID: id, Summary: res.Summary, FirstKeptEntryID: res.FirstKeptEntryID,
 		TokensBefore: new(res.TokensBefore), Details: details, Usage: pricedUsage(res.Usage, a.modelOf(a.provOf(s), m.Model)), FromHook: new(false)}
 	// The new baseline goes just before the compaction, which stays the
 	// path's last entry, as Prepare's "Already compacted" reads it (0005-PLAN

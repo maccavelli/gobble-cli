@@ -529,3 +529,144 @@ The base is `253e366` (P3a's commit, tagged `acpext/v0.2.0`), the tree clean (C1
    lint` 0 issues; `make preflight` "preflight passed", its 15 gates; `make race` 39 ok; `session` and `acpserver`
    tests ok. The Linux machine and the Windows laptop, the tree shipped (904 files, no `._*`): `go test` and race 38 ok
    each, `make check-records markdownlint` 0 issues, preflight stopped at `verify-build-metadata` as on every copy.
+
+### P3c record (2026-11-08)
+
+The base is `f555311`, P3b's commit. `origin/main` is at `253e366`, so P3b is committed but not yet pushed. The tree
+was clean (C1). No deviation.
+
+The gate:
+
+* P3b is committed.
+* The module proxy serves `acpext/v0.2.0` (P3a record).
+* The owner gave their word on 2026-11-08: "committed, proceed", in reply to the request to say "proceed with P3c" when
+  ready, a request that named this last condition.
+* magic-cli-remote's 0179 is unchanged at `254f996b` since `c87d22e4`. Amending it is the owner's job, with step 5's
+  note.
+
+1. **The tests first** (step 1), in `acpserver/compactupdate_test.go`. Each client offers `session.compaction`, or
+   `session.compaction` and `session.notices`.
+   * **`TestCompactionUpdateManual`:**
+     * `/compact` on an empty session sends no update, only its one-line reply.
+     * After two prompts, `/compact` sends `in_progress` with `{reason: manual}`, then `completed` with
+       `{manual, tokensBefore}` and the summary in its `summary` field. Both share one id: the compaction entry's id
+       (`_gobble/get_entries`). The summary is the entry's. `usage_update` comes last. There is no agent text and no
+       `_gobble/compaction`.
+     * A second `/compact` gives the "Already compacted" reply and no update.
+     * `session/close` then `session/load` replays one `completed` update with the live id, the entry's summary and
+       `{tokensBefore}` alone, and no "Compacted from" text.
+     * `ValidateGolden` passes on every frame of the connection.
+   * **`TestCompactionUpdateManualFailed`:** a summary that fails offline sends `in_progress`, then `failed` with
+     "Summarization failed: llm: offline" and `{manual}`. There is no agent text and no entry.
+   * **`TestCompactionUpdateExtension`:**
+     * `_gobble/compact` on an empty session returns -32600 "Nothing to compact (session too small)" and sends no
+       update.
+     * After two prompts it sends the same pair. The result's `summary` and `tokensBefore` match the update's.
+       `usage_update` comes last.
+   * **`TestCompactionUpdateAutomatic`:** at the threshold and on overflow, the pair carries its reason, and no notice
+     is sent.
+   * **`TestCompactionUpdatePaused`:** a summary that fails offline at the threshold sends `failed` with
+     `{threshold, paused: turn}`. With `session.notices` offered, one `warning` notice follows, titled "compaction:
+     automatic compaction paused", its description carrying the error. Without `session.notices`, none.
+   * **`TestCompactionUpdateCancelled`:** a provider in front of the script holds the summary request until the cancel.
+     * `/compact` cancelled before the write: `cancelled`, no entry, and the turn ends `cancelled`.
+     * `/compact` cancelled after the write: `completed` with the entry's id and summary, then `usage_update`. The turn
+       still ends `cancelled`.
+     * `_gobble/compact` cancelled after the write: it returns its result, and the row is `completed`.
+     * Automatic, cancelled before the write: `cancelled` with `{threshold}`.
+   * **Not offered:** the existing tests pass unchanged: `TestCompactShortensContext`, `TestCompactionLoads`,
+     `TestExtensionCompact`, `TestManualCompactionNotice`, the `TestAutoCompact*` tests, `TestNotifyFramesUnchanged`
+     and `TestAcpextNotificationsAreSent`.
+   * **Test helpers:**
+     * The compaction harness gained `harnessConfig` (the client's capabilities, and a provider in front of the
+       script). `newCompactHarness` passes the zero config, so its initialize request is unchanged.
+     * `session_test.go`'s two `replayUpdates` calls pass `rows` false.
+   * **Against the code before step 2:** the run was in the working tree with acpext `v0.2.0` required. Every new test
+     failed, each with "0 compaction_updates [], want 2". `_gobble/compact` written then cancelled answered
+     `{"code":-32603,…,"data":{"error":"Compaction cancelled"}}`.
+2. **The code** (step 2):
+   * **The module:** `go.mod` moves acpext from `v0.1.0` to `v0.2.0`, `go.sum` follows, and `go mod tidy` is clean.
+   * **`acpserver/compactreport.go`:**
+     * The interface `compactionReport` has three methods: `rows`, `started(id)`, and `ended(res, err, cancelled,
+       paused) (shown bool)`.
+     * `newCompactionReport` chooses one implementation per compaction, by `offersCompaction` (D7's gate), before
+       anything is sent.
+     * `compactionNotices` holds today's two literal `notify(acpext.MethodCompaction, …)` calls. A refusal is still a
+       start and an end.
+     * `compactionUpdates` sends `in_progress`, then one terminal update:
+       * `completed`, whenever the entry was written: the summary as one text block by `acp.PatchValue`;
+       * `cancelled`;
+       * `failed`: the error's first line, by the existing `firstLine`.
+
+       Each update carries its whole `_meta.gobble`, an `acpext.CompactionMeta` encoded by `jsonx.SetMember`. A pause
+       also goes through D8's `queueNotice` and `sendNotices`.
+   * **`compact.go`:**
+     * `runCompaction` reserves the entry's id (`Tree.Reserve`) before asking for the summary, and reports the start
+       with it. It writes the entry with that id, and releases it with a `defer`, which does nothing once the
+       reservation is spent.
+     * `compactSession` takes the report.
+     * `manualEnd` is removed. Its cases are now `compactionNotices.ended`.
+     * `cmdCompact` says the start text only when the report is not `rows`. After a run the client was shown:
+       * written: it sends `usage_update` and returns `context.Cause`, which is nil without a cancel;
+       * failed: it sends nothing more.
+
+       Refusals and the notices channel are unchanged.
+   * **`extensions.go`:** `extCompact` returns its result for a written run the client was shown, even after a cancel.
+   * **`autocompact.go`:** the report is chosen after the flush. It reports a cancel, a failure with its pause, and a
+     success.
+   * **`history.go`:**
+     * `replayUpdates` and `replayHistory` take `rows`.
+     * `replayCompaction` is a compaction as `completed`, with the entry's id, its summary and `{tokensBefore}`.
+     * `LoadSession` (`agent.go`) passes `offersCompaction`.
+   * **The frames:**
+     * The manual paths now prepare before the notices channel's start, which `runCompaction` sends. Prepare sends
+       nothing, so the frames are the same.
+     * `git diff --quiet` passes on every golden and testdata file, and `TestNotifyFramesUnchanged` passes (C4).
+3. **Seen failing** (step 3), each break planted on a scratch copy. Each run used `HTTPS_PROXY`/`HTTP_PROXY` set to
+   `127.0.0.1:9`, and `HOME` and `XDG_*` in the scratch directory (C3). The control passed.
+   * **Both reporters at once:**
+     `compactupdate_test.go:195: _gobble/compaction sent to a client that offered session.compaction: [map[phase:start reason:manual]]`,
+     and the same in every new test.
+   * **The reporter chosen without the gate:** each existing compaction test, including `TestCompactShortensContext`,
+     `TestExtensionCompact` and the `TestAutoCompact*` tests, failed with
+     `{"code":-32603,…,"data":{"error":"session/update: capability session.compaction not advertised: variant compaction_update"}}`.
+   * **The summary as a chunk:**
+     * `a compaction_summary_chunk was sent; the summary belongs in the completed update`;
+     * `compaction_update 1, completed: summary []`.
+   * **`_meta` without `reason`:**
+     `compaction_update 1: completed "" {Reason: TokensBefore:10 Paused:}, want completed "" {Reason:manual …}`, and
+     the same on `failed` and `cancelled`.
+   * **A fresh id instead of the reservation:**
+     `completed "1f948ebe" with summary "SUMMARY"; the entry is "0208dd02" with summary "SUMMARY"`.
+   * **A written-then-cancelled run reported `cancelled`:**
+     `compaction_update 1: cancelled "" {Reason:manual …}, want completed …`, for both `/compact` and
+     `_gobble/compact`.
+   * **A pause without its notice:** `compactupdate_test.go:329: 0 notices [], want 1`.
+   * **Replay ungated:** `TestCompactionLoads`, whose client offers nothing, failed with
+     `compact_test.go:128: {"code":-32603,…,"data":{"error":"session/update: capability session.compaction not advertised: variant compaction_update"}}`.
+4. **Gates** (step 4):
+   * `make pre-add-check` on the nine Go files: "9 file(s) clean (gofmt, golint, govulncheck)".
+   * `make lint`: 0 issues in both modules.
+   * `make preflight`: "preflight passed".
+   * `make race`: 39 ok.
+   * The new tests and the existing compaction tests: 30 runs ok.
+   * The identifier scan of the diff and the new files found nothing.
+   * **The full suite and C3:** the full suite, run with C3's environment, fails two packages P3c does not touch:
+     * `llm/provider` `TestWireOffline`: the probe dialed the proxy, `127.0.0.1:9`;
+     * `tool/builtin` `TestBash*`: the host's bash startup file resolves through `HOME`.
+
+     Both pass in the normal environment, where the full suite and race run. C3's environment is for the scratch runs,
+     which touch only `acpserver`.
+   * The Linux machine and the Windows laptop, with the tree shipped (906 files, no `._*`):
+     * `go test` and race: 38 ok each.
+     * `make check-records markdownlint`: 0 issues.
+     * preflight stopped at `verify-build-metadata`, as it does on every copy, since the copy has no commit.
+5. **For the owner, not posted** (step 5): a note for magic-cli-remote, kept outside the tree. It lists the 0179 lines to
+   amend:
+   * F7 G3, lines 297–298: the compaction half is closed.
+   * D10, lines 515–516: `_gobble/compaction` is no longer sent to Magic. The note recommends removing the handler,
+     which needs a stated minimum gobble release, or else keeping it only for releases before P3c.
+   * D11, line 524: `notify.go`.
+   * The live-run list, line 558: the fixtures should record the standard updates.
+
+   Decoding `CompactionMeta` is offered as optional.

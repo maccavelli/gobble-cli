@@ -47,12 +47,29 @@ var compactModels = map[string]llm.Model{
 
 func newCompactHarness(t *testing.T, settings SessionSettings, turns ...llmtest.Turn) *compactHarness {
 	t.Helper()
+	return newCompactHarnessWith(t, harnessConfig{}, settings, turns...)
+}
+
+// harnessConfig is what newCompactHarnessWith varies: the capabilities the
+// client offers, and a provider in front of the script.
+type harnessConfig struct {
+	caps acp.ClientCapabilities
+	wrap func(*llmtest.Script) llm.Provider
+}
+
+// newCompactHarnessWith is newCompactHarness with cfg.
+func newCompactHarnessWith(t *testing.T, cfg harnessConfig, settings SessionSettings, turns ...llmtest.Turn) *compactHarness {
+	t.Helper()
 	h := &compactHarness{t: t, client: &acptest.Client{}, script: llmtest.NewScript(turns...), cwd: t.TempDir(), offered: []string{"m1", "m2"}}
 	if settings.Compaction.KeepRecentTokens == 0 {
 		settings.Compaction.KeepRecentTokens = 50
 	}
+	var p llm.Provider = h.script
+	if cfg.wrap != nil {
+		p = cfg.wrap(h.script)
+	}
 	h.ag = New(Options{Version: "1.2.3", Store: jsonl.New(t.TempDir(), jsonl.Options{}),
-		Provider: func(string, llm.Retry) (llm.Provider, error) { return h.script, nil },
+		Provider: func(string, llm.Retry) (llm.Provider, error) { return p, nil },
 		Models: func() ModelChoice {
 			h.mu.Lock()
 			defer h.mu.Unlock()
@@ -77,7 +94,10 @@ func newCompactHarness(t *testing.T, settings SessionSettings, turns ...llmtest.
 			t.Error(err)
 		}
 	})
-	initialize(t, h.c.Client)
+	if _, err := h.c.Client.Initialize(t.Context(), acp.InitializeRequest{ProtocolVersion: acp.ProtocolVersionNumber, ClientCapabilities: cfg.caps,
+		ClientInfo: &acp.Implementation{Name: "test", Version: "0.0.0"}}); err != nil {
+		t.Fatal(err)
+	}
 	return h
 }
 

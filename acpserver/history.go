@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	acp "github.com/maccavelli/acp-go-sdk2"
+	"github.com/maccavelli/gobble-cli/acpext"
 
 	"github.com/maccavelli/gobble-cli/agent"
 	"github.com/maccavelli/gobble-cli/compaction"
@@ -332,23 +333,44 @@ func assistantContent(blocks []session.Block) []llm.Content {
 // execution the model sees as one user_message_chunk each, and a branch
 // summary as one agent_message_chunk (0005-PLAN F2); then the path's last
 // todo list as a plan, unless it is empty (0005-PLAN F1d-1). The
-// session-start frames follow them, sent by the caller.
-func replayUpdates(st state, tools map[string]tool.Tool, cwd string) []acp.SessionUpdate {
-	out := replayHistory(st, tools, cwd)
+// session-start frames follow them, sent by the caller. With rows, for a
+// client that offered session.compaction, a compaction is instead one
+// completed compaction_update (0016-MADR D9).
+func replayUpdates(st state, tools map[string]tool.Tool, cwd string, rows bool) []acp.SessionUpdate {
+	out := replayHistory(st, tools, cwd, rows)
 	if len(st.todos) > 0 {
 		out = append(out, planUpdate(st.todos))
 	}
 	return out
 }
 
-func replayHistory(st state, tools map[string]tool.Tool, cwd string) []acp.SessionUpdate {
+func replayHistory(st state, tools map[string]tool.Tool, cwd string, rows bool) []acp.SessionUpdate {
 	var out []acp.SessionUpdate
 	for _, p := range st.context {
 		for _, m := range p.Messages {
+			if rows && m.Role == session.RoleCompactionSummary {
+				if u, ok := replayCompaction(p.Entry); ok {
+					out = append(out, u)
+					continue
+				}
+			}
 			out = append(out, replayMessage(p.Entry, m, st, tools, cwd)...)
 		}
 	}
 	return out
+}
+
+// replayCompaction is the compaction entry e as the live compaction ended:
+// completed, by the entry's id, with its summary and its tokens before
+// under _meta.gobble (0016-MADR P3-Q1 to P3-Q3). It is false only when the
+// _meta does not encode, and the replay then shows the text.
+func replayCompaction(e session.Entry) (acp.SessionUpdate, bool) {
+	u := completedUpdate(acp.CompactionId(e.ID), e.Summary)
+	var meta acpext.CompactionMeta
+	if e.TokensBefore != nil {
+		meta.TokensBefore = *e.TokensBefore
+	}
+	return u, withMeta(u, meta) == nil
 }
 
 // replayMessage is one projected message's replay. A custom message whose

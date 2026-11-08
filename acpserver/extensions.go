@@ -186,11 +186,14 @@ func (a *Agent) extCompact(ctx context.Context, params jsontext.Value) (any, err
 	}
 	defer release()
 	out := newUpdates(ctx, a.connection(), s.id)
-	out.notify(acpext.MethodCompaction, acpext.CompactionNotice{SessionID: string(s.id), Phase: acpext.PhaseStart, Reason: acpext.CompactionManual})
-	res, used, err := a.compactSession(turnCtx, s, p.CustomInstructions)
-	out.notify(acpext.MethodCompaction, manualEnd(turnCtx, s.id, res, err))
+	report := a.newCompactionReport(out, s, acpext.CompactionManual)
+	res, used, err := a.compactSession(turnCtx, s, p.CustomInstructions, report)
+	shown := report.ended(res, err, turnCtx.Err() != nil, pauseNone)
 	var reqErr *acp.RequestError
 	switch {
+	case shown && err == nil:
+		// Written: its result, a cancel after the write included, as the
+		// completed row says (0016-MADR P3-Q4).
 	case turnCtx.Err() != nil:
 		return nil, acp.NewInternalError(errData(acpext.ErrorData{Error: "Compaction cancelled"}))
 	case errors.Is(err, compaction.ErrAlreadyCompacted), errors.Is(err, compaction.ErrNothingToCompact):

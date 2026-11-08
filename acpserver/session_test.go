@@ -483,7 +483,7 @@ func TestNewSessionMeta(t *testing.T) {
 // The replay of a failed call shows it failed, and a call with no recorded
 // result (a turn cut short) shows failed too.
 func TestReplayToolStatuses(t *testing.T) {
-	if len(replayUpdates(replayState(nil), nil, "")) != 0 {
+	if len(replayUpdates(replayState(nil), nil, "", false)) != 0 {
 		t.Fatal("empty entries replayed something")
 	}
 	ts := session.Timestamp(time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC))
@@ -493,7 +493,7 @@ func TestReplayToolStatuses(t *testing.T) {
 		{Type: session.TypeMessage, ID: "e2", ParentID: new("e1"), Message: toolResultMessage("c1", "bash", "boom", true, ts)},
 	}
 	var got []string
-	for _, u := range replayUpdates(replayState(entries), nil, "") {
+	for _, u := range replayUpdates(replayState(entries), nil, "", false) {
 		if u.ToolCall != nil {
 			got = append(got, string(u.ToolCall.ToolCallId)+":"+string(u.ToolCall.Status))
 		}

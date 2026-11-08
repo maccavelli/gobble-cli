@@ -1106,7 +1106,7 @@ func (a *Agent) LoadSession(ctx context.Context, p acp.LoadSessionRequest) (acp.
 	a.mu.Unlock()
 	out := newUpdates(ctx, conn, s.id)
 	st := s.state()
-	for _, u := range replayUpdates(st, a.byName, s.cwd) {
+	for _, u := range replayUpdates(st, a.byName, s.cwd, a.offersCompaction(s.id)) {
 		out.send(u)
 	}
 	if out.err != nil {
