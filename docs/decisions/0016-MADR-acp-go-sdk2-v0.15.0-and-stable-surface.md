@@ -1017,3 +1017,39 @@ the entry keeps no reason (G5).
 
 The PLAN's P3 tests each answer above, each seen failing first; the frames a capable client receives pass
 `ValidateGolden`; the extension path's frames stay byte-identical (`TestNotifyFramesUnchanged`).
+
+## Completion (2026-11-08): 0016-PLAN carried out
+
+[0016-PLAN-acp-go-sdk2-v0.15.0-and-stable-surface.md](0016-PLAN-acp-go-sdk2-v0.15.0-and-stable-surface.md) is
+complete. This section supersedes the refresh's "Where each decision stands" for the items below; that table stays as
+it was read at `4970cca`.
+
+| Item | Status | Commit | Evidence |
+| :--- | :--- | :--- | :--- |
+| D6 conformance under goldens (Option 2) | **done** | `a233e3f` (P1) | `acpserver/agent_test.go` `TestSession` and `acpclient/acptest/pair_test.go` `TestPairInitialize` compare by the SDK's `acptest.Golden` and check by its `ValidateGolden`; both goldens byte-identical to `a233e3f` at P5 |
+| D7 the SDK's gate (Option 1) | **done** | `feee808` (P2) | `acpserver/notice.go` `offers`, over `Negotiation.AllowsValue`; `offersCompaction` (`acpserver/compactreport.go`) asks it before any compaction frame |
+| D8 notices (Option 1) | **done** | `feee808` (P2) | `acpserver/notices_test.go`: four MCP notices and one prompt-file notice when offered, none otherwise, none replayed |
+| D9 compaction updates (Option 1; P3-Q1 to Q5) | **done** | `253e366` (P3a, `acpext/v0.2.0`), `f555311` (P3b), `3d6fb65` (P3c) | `acpserver/compactupdate_test.go` `TestCompactionUpdate*`; `acpext/roundtrip_test.go`; `session/tree_test.go` |
+| D10 gobble's client (Option 1) | **done**, with 0016-PLAN deviation 2 | `315cbe4` (P4) | `acpclient/standardcompaction_test.go`, `internal/cli/compactionview_test.go` |
+| D11 the dated notes (Option 1) | **done** | `5d482d9` (P0) | the notes in `0002-MADR-cli-acp-headless-mcp-v1.md`, `0004-MADR-go-module-architecture.md` and `0005-MADR-v1-feature-scope.md` |
+| D13 the owners' surfaces (Option 1) | kept with their owners | — | no phase touched `session/delete`, elicitation, images and audio, boolean config options or `session/list` pagination |
+
+**Acceptance** (0016-PLAN P5): a scratch run of the built `gobble acp`, driven over its stdio by the SDK's client offering
+`session.notices` and `session.compaction`, with a failing MCP server and `/compact`, received one `warning` notice
+("mcp: server needs attention"), one `compaction_update` `in_progress` and one `completed` with the summary and
+`_meta.gobble` `{"reason":"manual","tokensBefore":160}`, and no `_gobble/compaction` and no `/compact` text; its 24
+frames pass `ValidateGolden`. The run is in the PLAN's P5 record.
+
+**Found at acceptance,** facts about the SDK that change no decision here:
+
+* `ValidateGolden` reads `CompactionStatus` as an open set: a planted `completed` row with the status `"done"` passed
+  it (acp-go-sdk2 `v1.34.2`, `types_gen.go`, `SessionCompactionUpdate.validate` checks only the summary's blocks). The
+  four statuses gobble sends are held by its own tests (`TestCompactionUpdate*`), not by conformance.
+* The SDK checks a closed value on send: a planted summary block whose `annotations.audience` was `"robot"` failed the
+  `/compact` prompt with `… audience[0]: "robot" is not a Role`, so it never reached the wire. Through the SDK, such a
+  frame cannot leave gobble; `ValidateGolden` still catches a frame the SDK did not write, which a corrupted record
+  showed (`"jsonrpc" is not "2.0"`).
+
+**Still the owner's:** magic-cli-remote's
+`docs/decisions/0179-MADR-gobble-native-acp-provider.md` needs the amendment of R11 and M6 before Magic captures from a
+gobble release that carries P3c. A note for it was drafted at P5 and handed to the owner, not posted.

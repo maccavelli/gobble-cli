@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: complete
 date: 2026-11-08
 associated-madr: "0016-MADR-acp-go-sdk2-v0.15.0-and-stable-surface.md"
 ---
@@ -793,3 +793,71 @@ The base is `3d6fb65`, P3c's commit. `origin/main` is at `253e366`, with P3b and
      * `make check-records markdownlint`: 0 issues.
      * Preflight was not run there this phase. On every copy it stops at `verify-build-metadata`, and C5 asks the hosts
        for the tests and race.
+
+### P5 record (2026-11-08)
+
+The base is `315cbe4`, P4's commit. `origin/main` is at `253e366`, with P3b, P3c and P4 not yet pushed. The tree was
+clean (C1). The gate: P4 is committed. No deviation.
+
+1. **The goldens** (step 1):
+   * `git diff --quiet a233e3f HEAD -- acpserver/testdata/session.golden acpclient/acptest/testdata/initialize.golden`:
+     exit 0, byte-identical to P1's commit, their one rewrite.
+   * `git diff --quiet 4970cca HEAD -- internal/cli/testdata`: exit 0, all twelve files byte-identical to the base.
+   * `TestSession` and `TestPairInitialize`, which compare those goldens and check them with `ValidateGolden`: PASS.
+     `go test ./internal/cli/`: ok.
+2. **The scratch run** (step 2), on a copy of the tree with C3's environment, never in the working tree:
+   * **Set-up:** `gobble acp` built from the tree, with `GOBBLE_HOME` in the scratch directory and no model credential
+     in its environment. A `models.json` points `huggingface` at a local fake Chat Completions server, with a
+     placeholder key. `gobble config set` makes `huggingface` the default and `compaction.keepRecentTokens` 1. An
+     `mcp.json` names a server, `down`, at a closed loopback port.
+   * **The client:** the SDK's `ClientSideConnection` over the child's stdio, every frame recorded by the SDK's
+     `acptest.Recorder`, offering `session.notices` and `session.compaction`. It sent `initialize`, `session/new`, the
+     prompts "hello", "and again" and "/compact" (each `end_turn`), then `session/close`, and closed stdin; the agent
+     exited 0 with nothing on stderr.
+   * **Received:**
+
+     ```text
+     P5 notice: warning "mcp: server needs attention"
+     P5 compaction_update: id 45dbdddb status in_progress meta {"gobble":{"reason":"manual"}}
+     P5 compaction_update: id 45dbdddb status completed meta {"gobble":{"reason":"manual","tokensBefore":160}}
+     P5 frames 24; notices 1; compaction_update 2; summary chunks 0; agent text chunks 2; /compact text or _gobble/compaction 0
+     P5 ValidateGolden: passed
+     ```
+
+     The `completed` frame's `summary` field holds the fake model's summary, with the split turn's context after it.
+     The two agent text chunks are the two replies. The model server saw `GET /models` and four `POST
+     /chat/completions`, all on loopback.
+   * **Seen failing** (C2), each break on its own copy; the unbroken run above is the control:
+     * **The agent never offering compaction rows** (`offersCompaction` returns false): `compaction_update 0; … /compact
+       text or _gobble/compaction 4`, then `p5scratch_test.go:165: want notices, the compaction's rows, and no legacy
+       channel`.
+     * **No notice queued at all:** `notices 0`, then the same failure at `:165`.
+     * **A recorded `completed` frame corrupted before validation** (`"jsonrpc":"1.0"`): `p5scratch_test.go:172:
+       acptest: record 19, received: "jsonrpc" is not "2.0": {…"sessionUpdate":"compaction_update","status":"completed"…}`.
+     * **Two breaks the run did not fail on, recorded as findings, not gaps in gobble:**
+       * A `completed` row with the status `"done"` passed `ValidateGolden`. In acp-go-sdk2 `v1.34.2`,
+         `SessionCompactionUpdate.validate` checks only the summary's blocks: the status is an open set. gobble's own
+         tests (`TestCompactionUpdate*`) hold its four statuses.
+       * Notices queued without the gate still passed, as expected: this client offered notices. Without the
+         capability, `TestNoNoticeWithoutTheCapability` (P2) holds it.
+     * **A break the SDK stops before the wire:** a summary block with `annotations.audience` `"robot"` failed the
+       `/compact` prompt with `… audience[0]: \"robot\" is not a Role`, the SDK's check on send.
+3. **Records** (step 3):
+   * `0016-MADR-acp-go-sdk2-v0.15.0-and-stable-surface.md`: a "Completion (2026-11-08)" section. Each item gets its
+     status, its commit and its evidence, plus the acceptance run and the two SDK findings. The refresh's status table
+     is left as read at `4970cca`.
+   * `docs/architecture.md`: the `acpserver` row (one channel per compaction, the notices, the gate) and the
+     `acpclient` row (`Options.Compaction`, the fold, line mode and print mode).
+   * This plan: `complete`. `docs/README.md`: the MADR's and this plan's rows.
+   * The note for magic-cli-remote's `docs/decisions/0179-MADR-gobble-native-acp-provider.md` D10 was re-read against
+     magic-cli-remote `31e21118`: 0179 is unchanged since `c87d22e4`, and the cited lines still hold. It is handed to
+     the owner, not posted, and not committed.
+4. **Gates:**
+   * No Go file changed, so there was no pre-add check or lint run of new code.
+   * `go test ./...`: 38 ok. `make race`: 39 ok.
+   * `make preflight`: "preflight passed"; its `markdownlint` linted 58 files and found 0 issues.
+   * The identifier scan of the diff found nothing. It looked for the local account name, the hostname domain, the
+     hosts' names and real-machine paths.
+   * The Linux machine and the Windows laptop were not run this phase. The code is P4's, which both passed at P4 with
+     the tree shipped, and P5 changes only Markdown. Preflight's `check-records` checks the records' names and links,
+     and its `markdownlint` checks `docs/architecture.md` and `docs/README.md`; its globs skip MADR and PLAN files.
