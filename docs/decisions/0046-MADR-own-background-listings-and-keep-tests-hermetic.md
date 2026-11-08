@@ -238,6 +238,9 @@ Chosen option: **C**, because it removes each cause where it lives.
   hook (`agent.go:93-99`) calls it.
 * `TestMain` replaces it with one that passes no key and no login. The SDK then reads only the snapshot and
   `models.json`, and starts no fetch (`lookup.go:134`).
+* *2026-11-07, by 0046-PLAN deviation 4, the owner's "Take provider.Options": for D7, `modelFacts` takes
+  `provider.Options` and is `provider.ModelInfoWith` by default, so the hook can pass the run's cache; the stub passes
+  empty options, still no key and no login.*
 * A test pins the replacement by identity, as `TestNoBrowserOrSignIn` pins the others (`testmain_test.go:40-52`).
 
 ### D4. The test binary fails on any outside connection
@@ -351,8 +354,10 @@ leaves G3 open.
 
 #### D7. A run owns a `catalog.Cache`
 
-* `llm/provider.Options` gains `Cache *catalog.Cache`. `sdkOptions` adds `catalog.WithCache(o.Cache)` when it is set,
-  so `New`, `List` and the sign-in take it.
+* `llm/provider.Options` gains `Cache` ~~`*catalog.Cache`~~ `*provider.Cache`. `sdkOptions` adds
+  `catalog.WithCache` when it is set, so `New`, `List` and the sign-in take it. *(2026-11-08, by 0046-PLAN deviation
+  5, the owner's "provider.Cache wrapper": `provider.Cache` holds the SDK's `catalog.Cache` and has `Close`, since
+  archtest rule 4 lets only `llm/provider` import the SDK.)*
 * `ModelInfo` gains a form that takes `Options`, which passes `WithCache` to `CachedModel`. The agent's hook calls it
   through `modelFacts`. `ModelInfoContext`, which passes no token source and starts no fetch, is unchanged.
 * `runEnv` holds the cache; its zero value is ready. `providerOptions` and every `provider.Options` the run builds

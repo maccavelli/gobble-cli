@@ -138,12 +138,14 @@ func (e *runEnv) headersFor(mj *catalog.ModelsJSON, id string) func(context.Cont
 }
 
 // providerOptions are o with provider id's base URL and headers from
-// models.json, and its stored workspace (0035-MADR D5).
+// models.json, its stored workspace (0035-MADR D5), and the run's SDK cache
+// (0046-MADR D7).
 func (e *runEnv) providerOptions(id string, o provider.Options) provider.Options {
 	mj := e.modelsJSON()
 	o.BaseURL = mj.BaseURL(id)
 	o.Headers = e.headersFor(mj, id)
 	o.Workspace = e.knownWorkspace(id)
+	o.Cache = &e.cache
 	return o
 }
 

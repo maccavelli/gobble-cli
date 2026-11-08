@@ -69,7 +69,10 @@ func modelEnv(t *testing.T) (*runEnv, *syncBuffer) {
 // ownListings makes t own e's listings: they end, and are waited for, in
 // t's cleanup, before its home is removed or its log closed, since it is
 // registered after both (0046-MADR D2 as amended).
-func ownListings(t testing.TB, e *runEnv) { e.ownListings(t.Cleanup) }
+func ownListings(t testing.TB, e *runEnv) {
+	e.ownListings()
+	t.Cleanup(func() { e.endListings(t.Context()) }) // done by now; endListings drops the cancellation
+}
 
 // The tests' lister fails offline, so no test lists over the network
 // (0020-MADR D7).
@@ -218,7 +221,7 @@ func TestEndListingsWaits(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("claude's listing did not start")
 	}
-	e.endListings()
+	e.endListings(t.Context())
 	if !l.idle() {
 		t.Fatal("endListings returned while claude's listing ran")
 	}
@@ -254,7 +257,7 @@ func TestEndListingsBound(t *testing.T) {
 	l.start()
 	<-started
 	begin := time.Now()
-	e.endListings()
+	e.endListings(t.Context())
 	took := time.Since(begin)
 	close(release)
 	if !waitFor(l.idle) {

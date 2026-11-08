@@ -54,7 +54,7 @@ func TestModelInfoModelsJSON(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	full := lookupModel(t.Context(), "openai", nil, "full", "", meta, modelsJSONLayer{mj})
+	full := lookupModelWith(t.Context(), "openai", nil, "full", "", nil, meta, modelsJSONLayer{mj})
 	if full.Name != "Full" || full.ContextWindow != 999 || full.MaxTokens != 128000 || full.Cost.Input != 9 || full.Cost.Output != 10 || !full.Priced {
 		t.Errorf("full: %+v, want the override's window and input price over the snapshot's", full)
 	}
@@ -110,7 +110,7 @@ func TestModelInfo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := lookupModel(t.Context(), "openai", nil, "full", "", meta)
+	m := lookupModelWith(t.Context(), "openai", nil, "full", "", nil, meta)
 	if m.Name != "Full" || m.ContextWindow != 400000 || m.MaxTokens != 128000 || !slices.Equal(m.Input, []string{"text", "image"}) ||
 		!m.ReasoningKnown || !m.Reasoning || !slices.Equal(m.Efforts, []string{"none", "low", "high"}) {
 		t.Errorf("full: %+v", m)
@@ -121,10 +121,10 @@ func TestModelInfo(t *testing.T) {
 		m.Cost.CacheWrite != want.CacheWrite || !slices.Equal(m.Cost.Tiers, want.Tiers) {
 		t.Errorf("full: cost %+v priced %v, want %+v", m.Cost, m.Priced, want)
 	}
-	if b := lookupModel(t.Context(), "openai", nil, "bare", "", meta); b.Name != "Bare" || b.ContextWindow != 0 || b.Priced || b.ReasoningKnown {
+	if b := lookupModelWith(t.Context(), "openai", nil, "bare", "", nil, meta); b.Name != "Bare" || b.ContextWindow != 0 || b.Priced || b.ReasoningKnown {
 		t.Errorf("bare: %+v, want its name alone", b)
 	}
-	if u := lookupModel(t.Context(), "openai", nil, "absent", "", meta); u.Provider != "openai" || u.ID != "absent" || u.Name != "" || u.Priced {
+	if u := lookupModelWith(t.Context(), "openai", nil, "absent", "", nil, meta); u.Provider != "openai" || u.ID != "absent" || u.Name != "" || u.Priced {
 		t.Errorf("absent: %+v, want its provider and id alone", u)
 	}
 }

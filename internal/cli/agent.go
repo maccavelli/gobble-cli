@@ -35,7 +35,7 @@ const appName = "gobble"
 var modelProvider = func(e *runEnv) func(sessionID string, retry llm.Retry) (llm.Provider, error) {
 	return func(sessionID string, retry llm.Retry) (llm.Provider, error) {
 		o := provider.Options{ClientName: appName, ClientVersion: identity().Version, Logger: e.log(), SessionID: sessionID,
-			Logins: e.logins(), Retry: &retry}
+			Logins: e.logins(), Retry: &retry, Cache: &e.cache} // the cache on every path (0046-MADR D7)
 		if sel, err := provider.ChooseWith(e.hasCredential, e.chosenProvider()); err == nil {
 			o = e.providerOptions(sel.ID, o) // models.json's base URL and headers (0005-PLAN F4-2b)
 			if src, ok := e.credentials().Has(sel.ID); ok {
@@ -69,10 +69,12 @@ var providerFor = func(e *runEnv) func(id, sessionID string, retry llm.Retry) (l
 var ambientProvider = provider.AmbientWith
 
 // modelFacts is what the catalog knows of a model, for the agent's ModelInfo
-// hook. With a key or a login, the SDK may ask for a token and list in the
-// background, so TestMain replaces it with one that passes neither: no test
-// reaches a provider through it (0046-MADR D3).
-var modelFacts = provider.ModelInfo
+// hook, with the run's options: its key, workspace and login, and its cache,
+// so a listing it starts in the background ends with the run (0046-MADR D7;
+// 0046-PLAN deviation 4). With a key or a login, the SDK may ask for a token
+// and list in the background, so TestMain replaces it with one that passes
+// neither: no test reaches a provider through it (0046-MADR D3).
+var modelFacts = provider.ModelInfoWith
 
 // agentOptions are gobble's agent's options, for `gobble acp` and the
 // in-process agent alike: the ambient provider and its model choice, and
@@ -97,11 +99,11 @@ func (e *runEnv) agentOptions() acpserver.Options {
 		// found as modelProvider finds it, for its listing (0005-PLAN F4-2a,
 		// F4-3a, F4-3b).
 		ModelInfo: func(id, model string) llm.Model {
-			var logins provider.LoginStore
+			o := provider.Options{APIKey: e.knownKey(id), Workspace: e.knownWorkspace(id), Cache: &e.cache}
 			if e.knownLogin(id) {
-				logins = e.logins()
+				o.Logins = e.logins()
 			}
-			return modelFacts(id, e.knownKey(id), e.knownWorkspace(id), logins, model, e.modelsJSON())
+			return modelFacts(o, id, model, e.modelsJSON())
 		},
 		// --model and --thinking win over every session's own (0005-PLAN F4-2c).
 		Override: acpserver.Override{Provider: e.pick.Provider, Model: e.pick.Model, Thinking: e.pick.Thinking, Mode: e.mode},

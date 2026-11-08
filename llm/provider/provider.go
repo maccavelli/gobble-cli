@@ -82,6 +82,10 @@ type Options struct {
 	// Workspace is the Anthropic workspace a Claude key not scoped to one
 	// runs in; empty sends none. Other providers ignore it (0035-MADR D5).
 	Workspace string
+	// Cache, when set, is the run's SDK cache: the provider, its listings,
+	// its model lookups and the sign-in's discovery use it in place of the
+	// process's, and the run closes it at its end (0046-MADR D7).
+	Cache *Cache
 }
 
 // login is provider id's stored login, as the SDK's session, when o has no
@@ -108,7 +112,7 @@ func requestModel(ctx context.Context) string {
 }
 
 // sdkOptions are o's transport options for the SDK: its client, wrapped to
-// add o.Headers, and its base URL.
+// add o.Headers, its base URL, and its cache.
 func (o Options) sdkOptions() []llmprovider.Option {
 	var opts []llmprovider.Option
 	client := o.HTTPClient
@@ -120,6 +124,9 @@ func (o Options) sdkOptions() []llmprovider.Option {
 	}
 	if o.BaseURL != "" {
 		opts = append(opts, llmprovider.WithBaseURL(o.BaseURL))
+	}
+	if o.Cache != nil {
+		opts = append(opts, o.Cache.option())
 	}
 	return opts
 }

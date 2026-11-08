@@ -48,11 +48,12 @@ func noLogout(context.Context, string, provider.LoginOptions, provider.LoginStor
 	return nil, errNoSignIn
 }
 
-// offlineModelFacts is the tests' model facts: provider.ModelInfo with no
-// key, workspace or login, so the SDK reads the snapshot and models.json
-// alone, asks no token source and starts no listing (0046-MADR D3).
-func offlineModelFacts(id, _, _ string, _ provider.LoginStore, model string, mj *catalog.ModelsJSON) llm.Model {
-	return provider.ModelInfo(id, "", "", nil, model, mj)
+// offlineModelFacts is the tests' model facts: provider.ModelInfoWith with
+// no key, workspace, login or cache, so the SDK reads the snapshot and
+// models.json alone, asks no token source and starts no listing (0046-MADR
+// D3; 0046-PLAN deviation 4).
+func offlineModelFacts(_ provider.Options, id, model string, mj *catalog.ModelsJSON) llm.Model {
+	return provider.ModelInfoWith(provider.Options{}, id, model, mj)
 }
 
 // The tests' browser opener and sign-ins are TestMain's, which open and

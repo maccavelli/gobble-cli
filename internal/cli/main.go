@@ -20,6 +20,7 @@ import (
 	"github.com/maccavelli/gobble-cli/internal/cli/term"
 	"github.com/maccavelli/gobble-cli/internal/config"
 	"github.com/maccavelli/gobble-cli/internal/logging"
+	"github.com/maccavelli/gobble-cli/llm/provider"
 	"github.com/maccavelli/gobble-cli/personality"
 	"github.com/maccavelli/gobble-cli/session"
 	"github.com/maccavelli/gobble-cli/tool"
@@ -83,9 +84,9 @@ func run(ctx context.Context, k *kong.Kong, root *Root, args []string, stdin *os
 		logs.stderr = nil // stdio is the protocol (0004-PLAN Phase 2 step 4)
 	}
 	e := &runEnv{ctx: ctx, out: out, stdin: stdin, logs: logs, intr: intr, now: clock, overrides: overrides}
-	e.ownListings(nil)
+	e.ownListings()
 	code = exitCode(ctx, out, kctx.Run(e))
-	e.endListings() // before the log closes: a listing may still log (0046-MADR D1)
+	e.endListings(ctx) // before the log closes: a listing may still log (0046-MADR D1)
 	if err := logs.close(); err != nil {
 		out.Warnf("close log file: %v", err)
 	}
@@ -153,6 +154,9 @@ type runEnv struct {
 	// lists owns the listings' goroutines: run ends and waits for them
 	// (0046-MADR D1).
 	lists listingOwner
+	// cache is the run's SDK cache, which every provider.Options the run
+	// builds carries and endListings closes (0046-MADR D7).
+	cache provider.Cache
 	// recent and recentLoaded are recent-models.json's recent models, read once,
 	// under recentMu (0025-MADR D3).
 	recent       []string

@@ -78,21 +78,22 @@ func (e *runEnv) goListing(f func()) bool {
 	return true
 }
 
-// ownListings promises that the run's listings will be ended: run's own
-// call, or, with cleanup, a test's (t.Cleanup), which then calls endListings.
-func (e *runEnv) ownListings(cleanup func(func())) {
+// ownListings promises that the run's listings will be ended: by run, or by
+// a test's cleanup, which then calls endListings.
+func (e *runEnv) ownListings() {
 	e.lists.mu.Lock()
 	e.lists.owned = true
 	e.lists.mu.Unlock()
-	if cleanup != nil {
-		cleanup(e.endListings)
-	}
 }
 
 // endListings ends the run's listings: none starts after it, the running
-// ones are cancelled, and it waits for them, up to endListingsWait, after
-// which it says which providers were still listing.
-func (e *runEnv) endListings() {
+// ones are cancelled, and it waits for them; then it closes the run's SDK
+// cache, which ends the background work the SDK started for the run
+// (0046-MADR D7). Both share endListingsWait (Q4), after which it says which
+// providers were still listing, and whether the cache's work was not seen to
+// end. ctx is the caller's, which may already be done as the run ends; the
+// wait keeps its values and drops its cancellation.
+func (e *runEnv) endListings(ctx context.Context) {
 	o := &e.lists
 	o.mu.Lock()
 	if o.ended {
@@ -104,18 +105,28 @@ func (e *runEnv) endListings() {
 		o.cancel()
 	}
 	o.mu.Unlock()
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), endListingsWait)
+	defer cancel()
 	done := make(chan struct{})
 	go func() {
 		o.group.Wait()
 		close(done)
 	}()
-	t := time.NewTimer(endListingsWait)
-	defer t.Stop()
+	var still []string
 	select {
 	case <-done:
-	case <-t.C:
-		e.log().Warn("model listings still running at the end of the run", slog.Any("providers", e.stillListing()))
+	case <-ctx.Done():
+		still = e.stillListing()
 	}
+	cacheErr := e.cache.Close(ctx)
+	if still == nil && cacheErr == nil {
+		return
+	}
+	attrs := []any{slog.Any("providers", still)}
+	if cacheErr != nil {
+		attrs = append(attrs, slog.String("cache", "the SDK's background work was not seen to end"))
+	}
+	e.log().WarnContext(ctx, "model listings still running at the end of the run", attrs...)
 }
 
 // stillListing are the providers whose listing, first or retried, has not

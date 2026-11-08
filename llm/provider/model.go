@@ -64,16 +64,25 @@ func SnapshotErr() error {
 // logins' stored login, when logins is not nil (0005-PLAN F4-3b). workspace
 // is a Claude key's, for its listing (0035-MADR D5).
 func ModelInfo(id, apiKey, workspace string, logins LoginStore, model string, mj *gcatalog.ModelsJSON) llm.Model {
+	return ModelInfoWith(Options{APIKey: apiKey, Workspace: workspace, Logins: logins}, id, model, mj)
+}
+
+// ModelInfoWith is ModelInfo with o's key, workspace and logins, and o's
+// transport and cache: a listing it starts in the background runs through
+// o.Cache when set, so the run that owns the cache ends it (0046-MADR D7).
+// o's other fields are ignored.
+func ModelInfoWith(o Options, id, model string, mj *gcatalog.ModelsJSON) llm.Model {
 	ctx := context.Background()
-	login, err := Options{Logins: logins}.login(ctx, id)
-	if err == nil && login != nil && apiKey == "" {
-		return modelInfoFrom(ctx, id, login, "", model, mj)
+	sdk := Options{HTTPClient: o.HTTPClient, Headers: o.Headers, BaseURL: o.BaseURL, Cache: o.Cache}.sdkOptions()
+	login, err := Options{Logins: o.Logins}.login(ctx, id)
+	if err == nil && login != nil && o.APIKey == "" {
+		return modelInfoFrom(ctx, id, login, "", model, mj, sdk...)
 	}
 	var src llmprovider.TokenSource
-	if apiKey != "" {
-		src = llmprovider.NewStaticToken(apiKey)
+	if o.APIKey != "" {
+		src = llmprovider.NewStaticToken(o.APIKey)
 	}
-	return modelInfoFrom(ctx, id, src, workspace, model, mj)
+	return modelInfoFrom(ctx, id, src, o.Workspace, model, mj, sdk...)
 }
 
 // ModelInfoContext is ModelInfo for a caller with a context, which bounds
@@ -87,16 +96,17 @@ func ModelInfoContext(ctx context.Context, id, apiKey, model string, mj *gcatalo
 }
 
 // modelInfoFrom is ModelInfoContext with src, the credential's token source, or
-// nil for none, and a Claude key's workspace.
-func modelInfoFrom(ctx context.Context, id string, src llmprovider.TokenSource, workspace, model string, mj *gcatalog.ModelsJSON) llm.Model {
+// nil for none, a Claude key's workspace, and sdk, the SDK options a listing
+// it starts takes (0046-MADR D7).
+func modelInfoFrom(ctx context.Context, id string, src llmprovider.TokenSource, workspace, model string, mj *gcatalog.ModelsJSON, sdk ...llmprovider.Option) llm.Model {
 	var layers []catalog.Layer
 	if meta, err := snapshot(); err == nil {
 		layers = append(layers, *meta)
 	}
 	if mj == nil {
-		return lookupModel(ctx, id, src, model, workspace, layers...)
+		return lookupModelWith(ctx, id, src, model, workspace, sdk, layers...)
 	}
-	m := lookupModel(ctx, id, src, model, workspace, append(layers, modelsJSONLayer{mj})...)
+	m := lookupModelWith(ctx, id, src, model, workspace, sdk, append(layers, modelsJSONLayer{mj})...)
 	if f, ok := mj.Facts(id, model); ok && len(f.LevelMap) > 0 {
 		m.LevelMap = map[string]bool{}
 		for level, v := range f.LevelMap {
@@ -131,10 +141,12 @@ func toolModels(id string, meta *catalog.Metadata) []string {
 	return ids
 }
 
-// lookupModel is ModelInfo over layers, the later ranking above the earlier,
-// bounded by ctx; a listing it starts runs in workspace for Claude.
-func lookupModel(ctx context.Context, id string, src llmprovider.TokenSource, model, workspace string, layers ...catalog.Layer) llm.Model {
-	opts := []llmprovider.Option{llmprovider.WithoutModelMetadata()}
+// lookupModelWith is ModelInfo over layers, the later ranking above the
+// earlier, bounded by ctx; a listing it starts runs in workspace for Claude,
+// with sdk, its SDK options: the transport and the run's cache (0046-MADR
+// D7).
+func lookupModelWith(ctx context.Context, id string, src llmprovider.TokenSource, model, workspace string, sdk []llmprovider.Option, layers ...catalog.Layer) llm.Model {
+	opts := append([]llmprovider.Option{llmprovider.WithoutModelMetadata()}, sdk...)
 	if workspace != "" {
 		opts = append(opts, llmprovider.For(llmprovider.ProviderClaude, catalog.WithClaudeWorkspace(workspace)))
 	}

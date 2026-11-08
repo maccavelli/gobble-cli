@@ -1,5 +1,5 @@
 ---
-status: complete
+status: in-progress
 date: 2026-11-07
 associated-madr: "0046-MADR-own-background-listings-and-keep-tests-hermetic.md"
 ---
@@ -40,10 +40,11 @@ The plan is complete when the MADR's Confirmation 1 to 9 is met.
 * P3, the small fixes: `internal/cli/main.go` (`lazyLog`), `internal/cli/choice.go` (`readKept`), and their tests.
 * P4: the records.
 * *Added 2026-11-07 by the MADR's amendment of that date (D7 to D9, accepted; these phases proposed):*
-  * P5, the run's cache (D7): `llm/provider/provider.go` (`Options.Cache`, `sdkOptions`), `llm/provider/model.go`
+  * P5, the run's cache (D7): `llm/provider/cache.go` (deviation 5), `llm/provider/provider.go` (`Options.Cache`,
+    `sdkOptions`), `llm/provider/model.go`
     (`ModelInfo`'s form that takes `Options`), `internal/cli/main.go` (`runEnv`'s field), `internal/cli/models.go`
     (`endListings`), `internal/cli/agent.go`, `internal/cli/title.go` and `internal/cli/modelsjson.go` (the options the
-    run builds), and their tests;
+    run builds), `internal/cli/testmain_test.go` (deviation 4), and their tests;
   * P6, the run's sessions (D8): a new `llm/provider/sessions.go`, `llm/provider/provider.go` (`Options.Sessions`,
     `login`), `internal/cli/main.go`, `internal/cli/models.go`, `internal/cli/credentials.go`
     (`refreshCredentials`), and their tests;
@@ -247,13 +248,19 @@ The plan is complete when the MADR's Confirmation 1 to 9 is met.
      answering and the fetch made to ignore cancellation, `endListings` returns at D1's bound, with the Warn record
      naming the cache.
 2. **The code:**
-   * `provider.Options` gains `Cache *catalog.Cache`; `sdkOptions` appends `catalog.WithCache(o.Cache)` when it is not
-     nil.
+   * ~~`provider.Options` gains `Cache *catalog.Cache`; `sdkOptions` appends `catalog.WithCache(o.Cache)` when it is not
+     nil.~~ *(Deviation 5: `llm/provider` gains `Cache`, holding the SDK's `catalog.Cache`, with `Close(ctx) error`;
+     `provider.Options` gains `Cache *provider.Cache`; `sdkOptions` appends `catalog.WithCache` of the inner cache when
+     it is not nil.)*
    * `provider.ModelInfoWith(o Options, id, model string, mj *gcatalog.ModelsJSON) llm.Model` takes the key, the
      workspace and the logins from `o`, and passes `WithCache` to `CachedModel`. `ModelInfo` calls it, with no cache,
-     so its behaviour and signature are unchanged. `modelFacts` keeps its type; its default becomes a closure the
-     `runEnv` builds over `ModelInfoWith`, and D3's stub replaces it as before.
-   * `runEnv` gains `cache catalog.Cache`. `providerOptions` sets `o.Cache = &e.cache`. `providerFor`,
+     so its behaviour and signature are unchanged. ~~`modelFacts` keeps its type; its default becomes a closure the
+     `runEnv` builds over `ModelInfoWith`, and D3's stub replaces it as before.~~ *(Deviation 4: `modelFacts` becomes
+     `func(o provider.Options, id, model string, mj *catalog.ModelsJSON) llm.Model`, by default
+     `provider.ModelInfoWith`. The hook builds the run's options: the key, the workspace, the logins when the provider
+     has one, and the cache. D3's stub becomes `provider.ModelInfoWith(provider.Options{}, id, model, mj)`, pinned by
+     identity as before.)*
+   * `runEnv` gains `cache` ~~`catalog.Cache`~~ `provider.Cache` (deviation 5). `providerOptions` sets `o.Cache = &e.cache`. `providerFor`,
      `smallProvider`, the listing and the login call it on every path; `modelProvider` calls it only once a provider is
      chosen (`agent.go:39-40`), so it sets the cache itself before that branch.
    * `endListings`, after its group wait, calls `e.cache.Close` under a context ending at D1's bound (Q4), and adds
@@ -656,3 +663,107 @@ still matched the tree, so none needed updating.
 * **Answered** 2026-11-07, the owner's "Q3. 60s, Q4. as recommended, Q5. as recommended": the MADR's amendment is
   accepted. `refreshWaitBound` is 60 s (P6); `Close` takes the rest of D1's 6 s (P5); one `Sessions` per run (P6).
   P5 to P7 wait for the owner's word to execute.
+* **Approved** 2026-11-07 by the owner's "committed, approved to proceed", after the records commit `1677155`. This
+  plan is `in-progress` until P7.
+
+### Deviation 4 (2026-11-07): P5, `modelFacts` takes `provider.Options`
+
+* **Found** at P5's start (`HEAD` `a0baf9d`, the tree clean), before any code: step 2 said "`modelFacts` keeps its
+  type; its default becomes a closure the `runEnv` builds over `ModelInfoWith`". Both cannot hold. `modelFacts` is a
+  package variable, `func(id, apiKey, workspace string, logins provider.LoginStore, model string, mj
+  *catalog.ModelsJSON) llm.Model` (`internal/cli/agent.go:75`), so its default cannot close over one `runEnv`, and none
+  of its parameters can carry a cache. With its type kept, the `ModelInfo` hook (`agent.go:93-105`) cannot reach
+  `CachedModel` through the run's cache. A gap in this plan's wording, not in the code.
+* **Decision,** the owner's ("Take provider.Options"): `modelFacts` becomes `func(o provider.Options, id, model
+  string, mj *catalog.ModelsJSON) llm.Model`, by default `provider.ModelInfoWith`. The hook builds the run's options.
+  D3's stub becomes `provider.ModelInfoWith(provider.Options{}, id, model, mj)`, which passes no key, no login and no
+  cache, and is still pinned by identity. P6 adds `Sessions` to the same options with no further signature change.
+  Not chosen: a per-`runEnv` function, which `TestMain` could not replace for every run, weakening D3.
+* **Files added to scope:** `internal/cli/testmain_test.go` (the stub) joins P5's list. The MADR's D3 has a dated
+  note for its changed default.
+
+### Deviation 5 (2026-11-08): P5, the run's cache is a `provider.Cache`
+
+* **Found** while writing P5's tests, before any code: archtest rule 4 (`internal/archtest/check.go:308`) lets only
+  `llm/provider` import go-llmprovider-sdk. Step 2 and the MADR's D7 had `runEnv` hold the SDK's `catalog.Cache`, and
+  `Options.Cache` be a `*catalog.Cache`, which would put the SDK's type in `internal/cli`. `make archtest` refuses
+  that edge, and `AGENTS.md` says such an edge is fixed in the code, or by amending the record and the rule together.
+* **Decision,** the owner's ("provider.Cache wrapper"): `llm/provider` defines `Cache`, which holds the SDK's
+  `catalog.Cache` and has `Close(ctx) error`. `Options.Cache` is a `*provider.Cache`, `runEnv` holds a
+  `provider.Cache`, and `sdkOptions` passes the inner cache with `catalog.WithCache`. The boundary is unchanged. Not
+  chosen: widening rule 4, which would amend 0004-MADR's package map for one type.
+* **Files added to scope:** a new `llm/provider/cache.go`. The MADR's D7 has a dated note for the type.
+
+### P5 record (2026-11-08)
+
+The base is `a0baf9d` (F4-1b-1's commit), two ahead of `origin/main` (`f4c0775`), the tree clean. Deviations 4 and 5
+above.
+
+1. **The tests** (step 1), in two new files:
+   * `llm/provider/sdkcache_test.go`, `TestOptionsCacheReachesTheSDK`: on the canned OpenAI listing, `List` given a
+     `provider.Cache` lists live; after `Close`, `List` given it fails with an error matching
+     `llmprovider.ErrInvalidRequest`; without it, lists live. Then `ModelInfoWith` with a key, an open cache and a
+     transport whose requests wait for their context starts a background fetch, and after the cache's `Close` every
+     fetch that started has returned.
+   * `internal/cli/sdkcache_test.go`: `TestRunOptionsCarryTheCache` (`modelProvider` with no provider chosen and with
+     one, `providerFor`, `providerOptions`, the listing's options and the `ModelInfo` hook's each carry `&e.cache`);
+     `TestEndListingsClosesTheCache` (a fetch through the run's cache has returned when `endListings` does);
+     `TestEndListingsCacheBound` (a fetch that ignores cancellation holds `endListings` for the bound, 50 ms in the
+     test, and the Warn record names the cache).
+   * **A slip, corrected before any code:** the provider test was first written with the `Write` tool to
+     `llm/provider/cache_test.go`, which already existed (161 lines: `TestCacheWire`, `TestCacheUnknownRefused`,
+     `TestSessionIDPerProvider` and their `wire400` helper), replacing it. `go vet` failed on `undefined: wire400`.
+     The new test was copied to `sdkcache_test.go`, and the original restored from `HEAD`: `git diff --quiet HEAD --
+     llm/provider/cache_test.go` exit 0. No other existing file was written; the three new files show as untracked.
+2. **The code** (step 2, with deviations 4 and 5):
+   * `llm/provider/cache.go`: `Cache`, holding the SDK's `catalog.Cache`, with `Close` and the unexported `option`.
+   * `llm/provider/provider.go`: `Options.Cache`; `sdkOptions` appends the cache's `WithCache`.
+   * `llm/provider/model.go`: `ModelInfoWith(o Options, id, model, mj)`, which passes `o`'s transport and cache to the
+     lookup; `ModelInfo` calls it, its signature unchanged. `lookupModel` became `lookupModelWith`, taking the SDK
+     options (gate fix 2 below).
+   * `internal/cli`: `runEnv.cache` (`main.go`); `providerOptions` sets it (`modelsjson.go`); `modelProvider` sets it
+     on every path, and the `ModelInfo` hook builds its options with it (`agent.go`); `modelFacts` is
+     `provider.ModelInfoWith`, and `TestMain`'s stub passes empty options (`testmain_test.go`); `endListings` closes the
+     cache after its group wait, both under one `endListingsWait` context, and its one Warn record adds `cache` when
+     `Close` returns the context's error (`models.go`).
+3. **Seen failing** (step 3), by a scratch script copying the tree per case, every case run with `HTTPS_PROXY` and
+   `HTTP_PROXY` at a closed loopback port (C5):
+   * **the control:** both packages exit 0;
+   * **the code before P5,** `HEAD`'s files under P5's tests: both packages fail to build, `undefined: Cache`,
+     `undefined: provider.ModelInfoWith`, `e.cache undefined`, `too many arguments in call to e.endListings`;
+   * **`sdkOptions` without the cache:** `sdkcache_test.go:55: a listing given the closed cache: {… Live:true …},
+     want the SDK's refusal, ErrInvalidRequest`;
+   * **`ModelInfoWith` dropping its SDK options:** `sdkcache_test.go:69: the lookup started no background fetch`;
+   * **`providerOptions` without the cache:** `sdkcache_test.go:78: provider 2 built with cache 0x0`, `:85:
+     providerOptions' cache 0x0`, `:95: the listing's cache 0x0`;
+   * **`modelProvider`'s unchosen path without it:** `sdkcache_test.go:78: provider 0 built with cache 0x0`;
+   * **the hook without it:** `sdkcache_test.go:106: the ModelInfo hook's cache 0x0`;
+   * **`endListings` without `Close`:** `sdkcache_test.go:119: after endListings, 0 of 1 fetches had returned`, and
+     `:142: endListings took 8.625µs, want the bound, 50ms`, `:145: warnings "", want the record naming the cache`.
+   * **A C5 slip:** the script's first run set no proxy variables. Its `ModelInfoWith`-without-SDK-options case let
+     the SDK's background fetch use its default client towards `api.openai.com` with the test's fake key
+     (`sk-facts-…`); `llm/provider`'s test binary has no guard. Whether a connection was made is not known. The script
+     was changed to set the proxy variables for every case, and every case above is from that run.
+4. **Found by the gates and fixed in the phase** (`golangci-lint`):
+   * `contextcheck` at `main.go:89`: `endListings` built its bound from `context.Background()` while `run` has one.
+     `endListings` now takes the caller's context and drops its cancellation (`context.WithoutCancel`), since `run`'s
+     may be done as the run ends. `ownListings` only marks the listings owned; the tests' `ownListings(t, e)`
+     registers `e.endListings(t.Context())` itself. `sloglint` then asked for `WarnContext`, which the record uses.
+     Files: `internal/cli/models_test.go` (the helper and two calls) joins P5's.
+   * `unparam` at `model.go:146`: `lookupModel` was left with test callers only, all passing `"openai"`. It is
+     removed; `model_test.go`'s four calls use `lookupModelWith(…, nil, …)`. `llm/provider/model_test.go` joins P5's
+     files.
+5. **Gates** (step 4), after the fixes:
+   * `make pre-add-check` on the twelve changed Go files: "12 file(s) clean (gofmt, golint, govulncheck)";
+   * `make preflight`: "preflight passed", its 15 gates; `make race`: 39 ok;
+   * `make perf` passed: `ReplyRender` 21.8 µs (baseline 30 µs), `Reprint` 5.99 ms (9.4 ms), `LineSessionStart`
+     1.03 ms (830 µs, within its budget), `KeyDraw` 1.48 µs (1.5 µs).
+   * The Linux machine and the Windows laptop, the fixed tree shipped to each, 893 files, no `._*` file: `go test`
+     and race 38 ok each; `go test -count=3 ./internal/cli/ ./llm/provider/` ok on both; `make check-records
+     markdownlint` 0 issues on both; `make perf` passed on both (the Linux machine: `ReplyRender` 96.0 µs of 110 µs,
+     `Reprint` 18.7 ms of 29 ms, `LineSessionStart` 4.36 ms of 2.9 ms, over its baseline and within its budget,
+     `KeyDraw` 4.47 µs of 5 µs; the Windows laptop: 25.1 µs of 54 µs, 4.09 ms of 12 ms, 5.00 ms of 6.9 ms, 1.28 µs
+     of 1.4 µs); preflight passed `lint` and stopped at `verify-build-metadata` on both, as on every copy. The first
+     shipped copy, before the gate fixes, had failed `lint` on both with the same two findings.
+6. **Not done here:** P6 (the sessions) and P7 (acceptance), each its own commit; `docs/architecture.md`'s rows, which
+   are P7's.
