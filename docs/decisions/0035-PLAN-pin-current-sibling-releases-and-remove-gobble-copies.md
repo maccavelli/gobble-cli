@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: complete
 date: 2026-11-07
 associated-madr: "0035-MADR-pin-current-sibling-releases-and-remove-gobble-copies.md"
 ---
@@ -3883,3 +3883,23 @@ The base is `db5943d`, P33's commit, which the owner committed. No deviation.
    P33's one MD055 failure on the Windows laptop did not recur.
 8. **Not done in this commit:** the close-out (step 6), which runs `make check-libs` on this commit once it lands,
    checks the Verification's first two items, returns this plan to `complete`, and updates the `docs/README.md` rows.
+
+### Close-out record (2026-11-07): the Verification, after P34
+
+The base is `3483725`, P34's commit, which the owner committed. No deviation.
+
+1. **C2:** `git ls-remote --tags` lists acp-go-sdk2 `v1.34.2`, go-llmprovider-sdk `v1.28.0`, go-tui-lib `v2.12.0` and
+   go-selfupdate-lib `v1.24.0` as each library's newest tag of its major.
+2. **The plan's Verification,** its first two items again, as deviation 28 decided:
+   * `go list -m` reports acp-go-sdk2 `v1.34.2`, go-llmprovider-sdk `v1.28.0`, go-selfupdate-lib `v1.24.0` and
+     go-tui-lib/v2 `v2.12.0`, the MADR's D1 as amended through 2026-11-07, deviation 28's amendment included;
+   * `make check-libs`, on a scratch clone of `3483725`: each library "pinned …, checking" the same tag, its newest,
+     53 checks, every one ok and `api` "pinned at …; nothing to compare" for each; "0 failing checks";
+   * the goldens: `acpserver/testdata/session.golden`, `view-plain.golden`, `print-json.golden` and
+     `print-stream-json.golden` are byte-identical to `ccd8aa8`'s (`git diff --quiet`, exit 0).
+3. **Status:** P33's and P34's criteria are met. This plan is `complete` again; the MADR stays `accepted`, with
+   deviation 28's D1 amendment accepted. What P19's record left for other records is unchanged, and so is deviation
+   23's offer of go-tui-lib's A15 as a record of its own. Adopting `catalog.Cache.Close` or `auth.OAuthSession.Wait` is
+   not here; it is offered to the owner as an amendment of
+   `0046-MADR-own-background-listings-and-keep-tests-hermetic.md` (deviation 28).
+4. **The `docs/README.md` rows** (C7): the MADR's and this plan's rows name deviation 28 and this close-out.
