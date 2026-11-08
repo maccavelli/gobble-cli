@@ -3855,3 +3855,31 @@ The base is `54e664b`, the records commit of deviation 28. No deviation.
      seven on the same copy, 57 files, 0 issues. The one failure is not reproduced and not explained.
    - The copy shipped was taken before this record was written; `make check-records markdownlint` with it passed on
      macOS.
+
+### P34 record (2026-11-07): go-llmprovider-sdk `v1.28.0`
+
+The base is `db5943d`, P33's commit, which the owner committed. No deviation.
+
+1. **C2:** `git ls-remote --tags` at the phase's start lists `v1.28.0` as go-llmprovider-sdk's newest `v1` tag, and
+   acp-go-sdk2 `v1.34.2`, go-tui-lib `v2.12.0` and go-selfupdate-lib `v1.24.0` as theirs, so no sibling has a tag newer
+   than this plan names.
+2. **Checked first** (step 1): `python3 scripts/check_libs.py --lib go-llmprovider-sdk --tag v1.28.0`, on a scratch
+   clone of `db5943d`, "pinned v1.27.0, checking v1.28.0": 13 checks ok, "0 failing checks".
+3. **The pin** (step 2): `go get github.com/maccavelli/go-llmprovider-sdk@v1.28.0` ("upgraded … v1.27.0 => v1.28.0"),
+   then `go mod tidy`. `go.mod` changed on that line alone (`go.mod:17`); `go.sum` lost the two `v1.27.0` lines and
+   gained `v1.28.0 h1:Q1XMpmJzR8apF06whzRscIG2h3dRgLtvtJ65wWoaD34=` and its `go.mod` line, the `go.mod` hash unchanged,
+   and nothing else.
+4. **No source change** (step 3): `go test -count=1 ./llm/provider/... ./llm/catalog/... ./internal/auth/...
+   ./internal/cli/... ./acpserver/...` passed, 10 packages ok: `llm/provider/list_test.go`,
+   `internal/cli/modelscmd_test.go`, 0046-PLAN's background-listing tests in `internal/cli` (`models_test.go`,
+   `choice_test.go`, `main_test.go`), and `TestRefreshWaitOutlastsAHold` (run alone with `-v`: `--- PASS`) among them.
+   The four goldens are byte-identical to `ccd8aa8`'s (`git diff --quiet`, each exit 0).
+5. **The docs** (step 4): `README.md:131` and `docs/architecture.md:190` name `v1.28.0`; neither file names `v1.27.0`.
+6. **G-local** (step 5): no Go file changed, so `make pre-add-check` had none to check; `make preflight`: "preflight
+   passed", its 15 gates, `verify-build-metadata` and `markdownlint` (0 issues) among them; `make race`: 39 ok.
+7. **G-hosts,** on the Linux machine and the Windows laptop, the tree shipped to each, 890 files, no `._*` file, each
+   copy's `go.mod` naming `v1.28.0`: `go test` and race passed on both, 38 ok each; `make check-records markdownlint`
+   passed on both at the first run, 57 files, 0 issues; preflight stops at `verify-build-metadata`, as on every copy.
+   P33's one MD055 failure on the Windows laptop did not recur.
+8. **Not done in this commit:** the close-out (step 6), which runs `make check-libs` on this commit once it lands,
+   checks the Verification's first two items, returns this plan to `complete`, and updates the `docs/README.md` rows.
