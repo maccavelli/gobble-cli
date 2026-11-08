@@ -44,7 +44,9 @@ probed):
   `v0.13.6-mcr.1`, which adds a notification-overflow policy
   (magic-cli-remote MADR 0167). Stable in that schema: `session/list`,
   `session/resume`, `session/close`, `logout`. Unstable: fork, delete, NES,
-  documents, providers, elicitation, `mcp/*`. `session/set_model` is **not
+  documents, providers, elicitation, `mcp/*`. *(2026-11-08, 0016-MADR D11: of
+  these, `session/delete` and elicitation are stable in schema 1.25.0, which gobble speaks through acp-go-sdk2 `v1.34.2`; its unstable-only methods are `session/fork`, `document/*`, `nes/*`, `providers/*` and `mcp/message`.)*
+  `session/set_model` is **not
   in the schema**. The SDK's agent-side dispatcher sends only methods that
   begin with `_` to `ExtensionMethodHandler`, and answers every other
   unknown method with MethodNotFound (`agent_gen.go`, `extensions.go` at

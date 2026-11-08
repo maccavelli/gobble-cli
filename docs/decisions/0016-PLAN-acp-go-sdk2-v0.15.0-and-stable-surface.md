@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: in-progress
 date: 2026-11-08
 associated-madr: "0016-MADR-acp-go-sdk2-v0.15.0-and-stable-surface.md"
 ---
@@ -301,7 +301,8 @@ Magic captures from may carry it, with magic-cli-remote's 0179 amended or schedu
 
 ## Execution record
 
-Not started. The plan is `proposed` until the owner approves it.
+~~Not started. The plan is `proposed` until the owner approves it.~~ *Approved 2026-11-08 by the owner's "committed,
+proceed", after the records commit `ea4c179`. The plan is `in-progress`.*
 
 ### Answers (2026-11-08)
 
@@ -324,3 +325,23 @@ Not started. The plan is `proposed` until the owner approves it.
   notice when notices are offered.
 * **Changed here:** P3 becomes P3a, P3b and P3c (the first version struck through); Scope gains acpext and
   `session/tree.go`; Rollout orders the tag before P3c.
+
+### P0 record (2026-11-08)
+
+The base is `ea4c179`, equal to the tree (C1: `git status` clean; `origin/main` at `4970cca`, the records commits
+`df5c21e` and `ea4c179` ahead of it). No deviation.
+
+1. **The answers** (step 1) are recorded in the MADR's refresh (Q1 to Q7) and its P3 re-assessment (P3-Q1 to P3-Q5),
+   both committed before this phase (`df5c21e`, `ea4c179`).
+2. **D11's notes** (step 2), each dated 2026-11-08, citing 0016-MADR D11 and schema 1.25.0 through acp-go-sdk2
+   `v1.34.2`, each placed after the claim it corrects, the claim left as written. A script asserted each anchor occurs
+   once before writing; `grep -c '2026-11-08, 0016-MADR D11'` then counted 1, 3 and 2:
+   * `docs/decisions/0004-MADR-go-module-architecture.md` `:45-47`: delete and elicitation are stable;
+   * `docs/decisions/0005-MADR-v1-feature-scope.md` `:148` (`session/delete`, gated on `sessionCapabilities.delete`),
+     `:192` (elicitation, gated on `elicitation.form` and `.url`) and `:629` (free-text answers need not go to
+     `exp/`);
+   * `docs/decisions/0002-MADR-cli-acp-headless-mcp-v1.md` `:977` (`usage_update` is stable) and `:1030`
+     (`session/delete` is stable; gobble still does not advertise it, since `session.Store` has no `Delete`).
+3. **`docs/README.md`** (step 3): the 0016 PLAN row says `in-progress`, P0 complete.
+4. **Gates** (step 4): `make check-records markdownlint` passed, 0 issues; the identifier scan of the diff found
+   nothing. Staged for the owner's commit.

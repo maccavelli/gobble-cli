@@ -974,7 +974,7 @@ The magic-cli-remote half of the contract is now a record in that repository: ma
 
 #### Corrections to facts this record asserted
 
-1. **`usage_update` is not standard ACP.** Schema 0.13.5 marks `UsageUpdate` **UNSTABLE** (acp-go-sdk `types_gen.go:9201-9206`). gobble still emits it: mcremote stores it, and `OpContext` depends on it. The Confirmation's "standard ACP `usage_update`" reads "the schema's unstable `usage_update`". Clients that do not know it ignore it.
+1. **`usage_update` is not standard ACP.** Schema 0.13.5 marks `UsageUpdate` **UNSTABLE** (acp-go-sdk `types_gen.go:9201-9206`). gobble still emits it: mcremote stores it, and `OpContext` depends on it. The Confirmation's "standard ACP `usage_update`" reads "the schema's unstable `usage_update`". Clients that do not know it ignore it. *(2026-11-08, 0016-MADR D11: `usage_update` is stable in schema 1.25.0, which gobble speaks through acp-go-sdk2 `v1.34.2`; its unstable-only methods are `session/fork`, `document/*`, `nes/*`, `providers/*` and `mcp/message`.)*
 2. **Fourth amendment, "Events mcremote already maps", item 4, is partly false.** Today `acpagent` does the following:
    * drops `session_info_update` (`session.go:1784`, the default branch);
    * drops `usage_update.cost` (`:1757-1764`);
@@ -1027,7 +1027,7 @@ gobble's part:
   * no MCP connect (MCP servers connect on `session/new`, inside the 10 s wait).
 * **The daemon's environment is inherited**, with no per-provider env. gobble resolves credentials from its own store (`internal/auth`), so a service-launched `gobble acp` works without API keys in the service environment.
 * **`agentInfo.version` is read for `KnownGoodVersion`.** gobble always sends it.
-* **mcremote calls these methods when they are advertised:** `session/list` (`sessionCapabilities.list`), `session/load` (`loadSession`) and unstable `session/delete`. gobble advertises `sessionCapabilities.list` and `close` from Phase 4. It does not advertise unstable `delete` (0005 keeps that under `acp.unstable`).
+* **mcremote calls these methods when they are advertised:** `session/list` (`sessionCapabilities.list`), `session/load` (`loadSession`) and unstable `session/delete`. gobble advertises `sessionCapabilities.list` and `close` from Phase 4. It does not advertise unstable `delete` (0005 keeps that under `acp.unstable`). *(2026-11-08, 0016-MADR D11: `session/delete` is stable, gated on `sessionCapabilities.delete`, in schema 1.25.0, which gobble speaks through acp-go-sdk2 `v1.34.2`; its unstable-only methods are `session/fork`, `document/*`, `nes/*`, `providers/*` and `mcp/message`; gobble still does not advertise it, since `session.Store` has no `Delete` (0016-MADR D13).)*
 
 #### Confirmation changes
 

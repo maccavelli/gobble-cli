@@ -145,7 +145,7 @@ Tier definitions:
 | Pi import | 1.x | `gobble session list --pi` and `gobble session import`, through the 0003 bridge. |
 | Export | 1.x | `gobble session export --format jsonl|md|html` and `/export`. The HTML is self-contained, rendered server-side with a Go Markdown renderer, and needs no JavaScript. |
 | Share | 1.x | `/share` through `gh gist create` when `gh` is present. There is no hosted gateway. |
-| Archive and delete | 1.x | `/archive` hides a session from lists (`custom{gobble.archived}`). `/delete` removes the session file after an ACP permission request. `_gobble/delete`. The unstable ACP `session/delete` is advertised only under `acp.unstable`. |
+| Archive and delete | 1.x | `/archive` hides a session from lists (`custom{gobble.archived}`). `/delete` removes the session file after an ACP permission request. `_gobble/delete`. The unstable ACP `session/delete` is advertised only under `acp.unstable`. *(2026-11-08, 0016-MADR D11: `session/delete` is stable, gated on `sessionCapabilities.delete`, in schema 1.25.0, which gobble speaks through acp-go-sdk2 `v1.34.2`; its unstable-only methods are `session/fork`, `document/*`, `nes/*`, `providers/*` and `mcp/message`.)* |
 
 #### Context and prompts (`prompt`, `skill`, `command`)
 
@@ -189,7 +189,7 @@ Tier definitions:
 | Lifecycle | 1.0 | Start-up waits up to 10 s. HTTP 408, 429, and 5xx are retried twice; tool calls are never retried. `list_changed` is handled, and the server reconnects on its next use. For a stdio server, stop means close stdin, then SIGTERM, then SIGKILL to the process group. Roots are `cwd` plus the additional directories. Progress notifications reset the timeout. |
 | OAuth | 1.0 | Discovery, dynamic client registration, PKCE, a loopback callback guarded by `CrossOriginProtection`, and manual paste. Tokens are kept in the secret store. |
 | CLI | 1.0 | `gobble mcp add|remove|list|get|login|logout`. `/mcp [status|reconnect]`. |
-| Sampling and elicitation | 1.x | An MCP server's `sampling/createMessage` is served by the session's model after a permission request. Elicitation maps to ACP elicitation when the client advertises it (unstable), otherwise to `session/request_permission`. |
+| Sampling and elicitation | 1.x | An MCP server's `sampling/createMessage` is served by the session's model after a permission request. Elicitation maps to ACP elicitation when the client advertises it (unstable), otherwise to `session/request_permission`. *(2026-11-08, 0016-MADR D11: ACP elicitation is stable, gated on the client's `elicitation.form` and `elicitation.url`, in schema 1.25.0, which gobble speaks through acp-go-sdk2 `v1.34.2`; its unstable-only methods are `session/fork`, `document/*`, `nes/*`, `providers/*` and `mcp/message`.)* |
 | `gobble mcp serve` | 1.x | gobble as an MCP **server**. It exposes `gobble_run` (prompt to final text in a new session) and `gobble_session_prompt`, so any MCP host can delegate to gobble. *(2026-10-08, 0012-MADR D4: it also serves the native file tools, with the same schemas and rules.)* |
 
 #### Clients and modes (`acpserver`, `acpclient`, `internal/cli`, `internal/tui`)
@@ -626,7 +626,7 @@ Further 0001-REPORT errata are kept here rather than in the report, which record
 |---|---|---|
 | Commands before the first prompt | 1.0 | `session/new` and `session/load` send `available_commands_update`, `current_mode_update` and a first `usage_update` before they return (0002 fifth amendment). |
 | Prompt while busy | 1.0 | A `session/prompt` that arrives while a turn runs is queued as a follow-up (Pi's default `one-at-a-time`). With `_meta.gobble.streamingBehavior = "steer"` it is a steer. Each request is answered when its own turn ends, after retries, overflow compaction and the follow-ups it queued, which is Pi's `agent_settled`, not `agent_end`. |
-| Ask the user | 1.x | An `ask_user{question, options[]}` tool over `session/request_permission` with custom options, which is the only question path mcremote relays. Free-text answers need ACP elicitation (unstable): **exp**. Pi has this only as an example (`examples/extensions/question.ts`). |
+| Ask the user | 1.x | An `ask_user{question, options[]}` tool over `session/request_permission` with custom options, which is the only question path mcremote relays. Free-text answers need ACP elicitation (unstable): **exp**. *(2026-11-08, 0016-MADR D11: ACP elicitation is stable in schema 1.25.0, which gobble speaks through acp-go-sdk2 `v1.34.2`; its unstable-only methods are `session/fork`, `document/*`, `nes/*`, `providers/*` and `mcp/message`, so free-text answers need not go to `exp/`.)* Pi has this only as an example (`examples/extensions/question.ts`). |
 | Plan visible on the phone | 1.0 | Leaving plan mode also publishes the plan as an ACP `plan` update. mcremote cuts permission-card text to 400 runes until 0179 D5. |
 | Status notifications | 1.x | `_gobble/status{kind: retry\|compaction\|cache_warm, …}`, modelled on Pi's `auto_retry_*` and `compaction_*` events. mcremote shows them once its Spec subscribes. |
 | Readiness probe | 1.0 | `gobble auth check [--json]`, exit 0 (ready) / 1 (no credential) / 2 (error), as Pi does. `gobble doctor --json` is already 1.0. |
