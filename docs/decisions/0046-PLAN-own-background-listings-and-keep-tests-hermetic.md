@@ -1,6 +1,6 @@
 ---
-status: in-progress
-date: 2026-11-07
+status: complete
+date: 2026-11-08
 associated-madr: "0046-MADR-own-background-listings-and-keep-tests-hermetic.md"
 ---
 <!-- markdownlint-disable MD013 MD024 MD060 -->
@@ -845,3 +845,47 @@ additions below change no decision.
      every copy.
 5. **Not done here:** P7 (acceptance, the probes of Confirmation 10 and 11, `docs/architecture.md`'s rows, and the
    records' close).
+
+### Deviation 6 (2026-11-08): P7, Confirmation 10's probe has no baseline at `3483725`
+
+* **Found** running P7 step 1 (`HEAD` `b33799e`, P6's commit). Step 1 asks each probe to fail first at `3483725`.
+  Confirmation 10's cannot run there: at `3483725` `provider.ModelInfo` takes no options, so the probe cannot route
+  the hook's background fetch to its own transport. The fetch would go to the provider's real host, where the test
+  binary's guard answers it, which measures an escape, not a fetch in flight when `Main` returns. Confirmation 11's
+  probe uses only APIs present at both commits and runs at `3483725` as planned.
+* **Decision,** the owner's ("HEAD minus Close"): Confirmation 10's baseline is the same probe on `HEAD` with
+  `endListings`' `cache.Close` removed, the ownership `3483725` had, measured the same way.
+* **Files added to scope:** none.
+
+### P7 record (2026-11-08)
+
+The base is `b33799e` (P6's commit), one ahead of `origin/main` (`a0baf9d`), the tree clean. Deviation 6 above.
+
+1. **The probes** (step 1), scratch test files added to scratch trees extracted with `git archive`, never committed,
+   run with `HTTPS_PROXY` and `HTTP_PROXY` at a closed loopback port (C5) and under the test binary's guard:
+   * **Confirmation 11,** `TestProbeConfirmation11`: a `-p` run with OpenAI the run's provider and a Grok login whose
+     access token has expired. Grok's background listing asks for a token; its refresh blocks at a loopback issuer
+     until 300 ms after it began; the run ends, `endListings` cancels the listing, and the refresh goes on detached.
+     * at `3483725`: exit 1, `Main returned after 49.589375ms, stdout "fine\n"; stored refresh token "refresh-1"`, and
+       `when Main returned, auth.json held refresh token "refresh-1", want the rotated refresh-2: the run did not wait
+       for the refresh`;
+     * at `HEAD`: exit 0, `Main returned after 335.506333ms, stdout "fine\n"; stored refresh token "refresh-2"`.
+     * The bound's half, a refresh past the bound, is P6's `TestEndListingsRefreshBound` (50 ms, the Warn record
+       naming grok), and step 3's 7 s check in P6's record.
+   * **Confirmation 10,** `TestProbeConfirmation10`: a `-p` run whose `ModelInfo` hook looks the model up with a key
+     through the run's own options, against a listing whose requests wait for their context.
+     * at `HEAD`: exit 0, `fetches started 1, returned 1 when Main returned; goroutines 3 before, 3 after`;
+     * at `HEAD` with `cache.Close` removed (deviation 6): exit 1, `fetches started 1, returned 0 when Main returned;
+       goroutines 5 before, 7 after`, `when Main returned, 0 of 1 fetches had returned`.
+     * **The probe's own correction:** its first run at `HEAD` failed on the goroutine count, 2 before and 3 after. Its
+       stacks after `Main` returned were the test, the test runner and `os/signal.loop`, which `Main`'s
+       `signal.Notify` starts once and which lives for the process. The count before is now taken after one warm-up
+       `Main` run; no fetch, cache or session goroutine was among the stacks.
+2. **The guard** (step 2): `go test -count=1 ./...` on `HEAD`, 38 packages ok, the guard recording no outside
+   connection (Confirmation 12).
+3. **Records** (step 3): the MADR's amendment maps Confirmations 10 to 13 to this evidence; `docs/architecture.md`'s
+   `internal/cli` row says a run's SDK cache is closed in the same 6 s and a sign-in refresh waited for up to 60 s,
+   and `llm/provider`'s names `Options.Cache`, `Sessions` and `ModelInfoWith`; this plan is `complete`;
+   `docs/README.md`'s 0046 rows.
+4. **Status:** P5 to P7 are complete, and the MADR's Confirmations 10 to 13 are met (Verification above). The plan is
+   `complete` again.

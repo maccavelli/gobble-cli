@@ -409,6 +409,11 @@ to P7 wait for the owner's word to execute.*
 12. D4's guard still finds no outside connection, and D9's tests pass.
 13. `make preflight` and `make race` pass on macOS, and the tests and race on the Linux machine and the Windows laptop.
 
+*Met 2026-11-08, by 0046-PLAN P5 to P7 (`10c21c4`, `b33799e`, and P7's records commit):* 10 by P7's probe, 1 of 1
+fetches returned when `Main` did, and 0 of 1 with `Close` removed (0046-PLAN deviation 6); 11 by P7's probe, the
+rotated refresh token stored when `Main` returned, `refresh-1` at `3483725`, and P6's bound test; 12 by `go test
+./...`, 38 packages, the guard silent, and D9's tests; 13 by P5's and P6's gates on the three platforms.*
+
 ### Consequences
 
 * Good, because the teardown failures in `TestRecentModelsV1File`, `TestLastGoodOnDisk` and
