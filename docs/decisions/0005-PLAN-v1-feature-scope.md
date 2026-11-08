@@ -3439,7 +3439,7 @@ The pin and the truthful `NativeStreaming` are done (0019-PLAN P3); the rest is 
 | new | `llm/provider/wire_test.go`, `llm/provider/live_test.go`, `llm/provider/testdata/wire/` |
 | changed | `go.mod`, `go.sum`; `llm/provider/provider.go`, `llm/provider/provider_test.go`; `llm/llm.go`; `docs/architecture.md`; `README.md` |
 
-**F4-1b — live streaming.**
+**F4-1b — live streaming.** *(2026-10-22: carried out by [0031-PLAN-sdk-current-releases-and-adoption.md](0031-PLAN-sdk-current-releases-and-adoption.md) P2. 2026-11-07: `TestMidStreamFailure` added by F4-1b-1, the one item it left; see the Amendments entry "F4-1b's record, F4-1b-1 made executable".)*
 
 - **`go.mod`** requires the SDK release of decision 3, or a later tag, by decision 1.
 - **`New`** keeps the `WithRetry` result's capabilities, which on that release report `Supported`; `llm/llm.go:21` reads "NativeStreaming is true when text arrives as the model writes it."
@@ -5546,7 +5546,7 @@ owner's choices of 2026-10-16:
 
 **The order.** F1 to F10 run in order (this plan's "Order"), and F4 is not complete: F4-1b, live streaming, and F4-3d,
 the ChatGPT login, wait on go-llmprovider-sdk releases. By the owner's choice F5 starts now. F5-1 to F5-5 need neither.
-The two pieces that need F4-1b's live stream wait with it, named in decisions 5 and 7.
+The two pieces that need F4-1b's live stream wait with it, named in decisions 5 and 7. *(2026-11-07: F4-1b landed 2026-10-22 by 0031-PLAN P2; decision 5's piece with it; decision 7's first-byte deadline is the SDK's, by 0005-MADR Q6, answered A.)*
 
 **The facts,** measured on 2026-10-16 against `main` `e5ab039`, go-llmprovider-sdk `v1.13.0` (still its latest tag;
 its `origin/main` changes no retry or stream file since), acp-go-sdk2 `v1.14.0`, Pi `312184edb`, opencode `907b3bc518`
@@ -5717,7 +5717,10 @@ histories were rewritten; the report's line numbers match these heads within a f
    - `_gobble/abort_retry {sessionId}` ends a pending wait. The turn ends with the error that caused the wait, and
      `_gobble/retry`'s `end` carries `error: "retry cancelled"`.
 7. **The first-byte deadline waits for F4-1b.** While the stream is buffered, a first-byte deadline would be a
-   deadline on the whole reply. It is made with F4-1b's live stream.
+   deadline on the whole reply. It is made with F4-1b's live stream. *(2026-11-07: closed by 0005-MADR's
+   amendment of that date, Q6 answered A: go-llmprovider-sdk bounds a generation's headers and its body's first
+   byte at 300 s each, Kilo's own bound; gobble adds no deadline. See the Amendments entry "F4-1b's record,
+   F4-1b-1 made executable".)*
 8. **F5-2, automatic compaction (proposed):** *(2026-10-17: made executable, refined; see "F5-2 made executable: automatic compaction".)*
    - settings `compaction.enabled` (bool, true), `compaction.reserveTokens` (int, 16384, at least 1) and
      `compaction.thresholdPercent` (int, 0 to 100; 0, the default, is off);
@@ -8274,3 +8277,42 @@ approved for execution.*
 **Tests,** each seen failing on a scratch copy: step 3's breaks.
 
 **Not done here:** a bound under 300 s (Q6's C); F4-3d.
+
+*Approved 2026-11-07 by the owner's "committed, approved to proceed", after the records commit `1677155`, with Q6
+answered A ("Q6. as recommended").*
+
+**F4-1b-1's execution record (2026-11-07).** The base is `1677155`. No deviation.
+
+1. **C1:** `HEAD` `1677155`, one ahead of `origin/main` (`f4c0775`), the tree clean, as step 1 asks.
+2. **The test** (step 2): `TestMidStreamFailure`, at the end of `agent/agent_test.go`. The script's first turn yields
+   `llm.TextDelta{Text: "par"}` and fails with `llm.ErrUnavailable`; its second, `llmtest.Text("never")`, would show a
+   resend. The agent is `agent.New(agent.Config{Provider: s})`. It asserts, through `collect`: the error matches
+   `llm.ErrUnavailable` (`Fatalf`); no `agent.Message` and no `agent.End` among the events; the text deltas are exactly
+   `["par"]`; one request. It passes on today's code: `--- PASS: TestMidStreamFailure (0.00s)`.
+3. **Seen failing** (step 3), by a scratch script copying the tracked tree and the new test into a temporary directory
+   per break, each break an asserted replacement in `agent/agent.go`, the working tree untouched:
+   - **the control,** unbroken: exit 0;
+   - **the delta dropped** (the `TextDelta` emit at `agent.go:708` disabled): exit 1, `agent_test.go:896: text deltas
+     [], want ["par"]`;
+   - **the partial reply emitted as a message** (an `agent.Message` of the reply in the `shown` case, `agent.go:500`):
+     exit 1, `agent_test.go:890: an agent.Message after a failed stream: {Message:{Role:assistant Content:[{Type:text
+     Text:par …`;
+   - **the call resent after the delta** (the `shown` case continuing the loop): exit 1, `agent_test.go:882: err <nil>,
+     want llm.ErrUnavailable`, the resent turn having completed.
+
+   That run left two assertions unseen, since the resend stopped at the first `Fatalf`. Two further breaks, added in
+   the same step so that each assertion fails alone:
+   - **an end emitted** (an `agent.End` in the `shown` case): exit 1, `agent_test.go:892: an agent.End after a failed
+     stream: {StopReason: Messages:[] …}`;
+   - **an extra request, the error kept** (one more `Stream` ranged in the `shown` case): exit 1, `agent_test.go:899:
+     2 requests, want 1: a call that has shown text is not sent again`. Its first draft did not build (`Stream` returns
+     an iterator, not two values) and was rewritten before it ran.
+
+   Five breaks, five failures, each on a different assertion; the control passes.
+4. **Records** (step 4): F4-1b's heading, "The order" and F5-1 decision 7 each have a dated note; the 0005-MADR
+   amendment was accepted with Q6's answer in the records commit; `docs/README.md`'s 0005 rows say F4-1b-1 is complete.
+5. **Gates** (step 5): `make pre-add-check FILES="agent/agent_test.go"`: "1 file(s) clean (gofmt, golint,
+   govulncheck)"; `make preflight`: "preflight passed", its 15 gates; `make race`: 39 ok. On the Linux machine and the
+   Windows laptop, the tree shipped to each, 890 files, no `._*` file: `go test` and race 38 ok each, and
+   `TestMidStreamFailure` passed alone on each; `make check-records markdownlint` passed on both, 0 issues;
+   preflight stops at `verify-build-metadata` on both, as on every copy.

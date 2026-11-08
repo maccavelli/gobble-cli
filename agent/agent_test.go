@@ -868,3 +868,34 @@ func TestCacheOnEveryCall(t *testing.T) {
 		}
 	}
 }
+
+// A stream that fails after its first delta ends the turn with its error:
+// the delta has reached the consumer, no message or end follows it, and the
+// call is not sent again (0005-PLAN F4-1b, made executable as F4-1b-1;
+// 0031-MADR D3).
+func TestMidStreamFailure(t *testing.T) {
+	s := llmtest.NewScript(llmtest.Turn{Events: []llm.Event{llm.TextDelta{Text: "par"}}, Err: llm.ErrUnavailable},
+		llmtest.Text("never"))
+	a := agent.New(agent.Config{Provider: s})
+	evs, _, err := collect(t.Context(), t, a, tool.Env{}, "hi")
+	if !errors.Is(err, llm.ErrUnavailable) {
+		t.Fatalf("err %v, want llm.ErrUnavailable", err)
+	}
+	var deltas []string
+	for _, ev := range evs {
+		switch e := ev.(type) {
+		case agent.TextDelta:
+			deltas = append(deltas, e.Text)
+		case agent.Message:
+			t.Errorf("an agent.Message after a failed stream: %+v", e)
+		case agent.End:
+			t.Errorf("an agent.End after a failed stream: %+v", e)
+		}
+	}
+	if !slices.Equal(deltas, []string{"par"}) {
+		t.Errorf("text deltas %q, want [\"par\"]", deltas)
+	}
+	if n := len(s.Requests()); n != 1 {
+		t.Errorf("%d requests, want 1: a call that has shown text is not sent again", n)
+	}
+}
