@@ -345,3 +345,69 @@ The base is `ea4c179`, equal to the tree (C1: `git status` clean; `origin/main` 
 3. **`docs/README.md`** (step 3): the 0016 PLAN row says `in-progress`, P0 complete.
 4. **Gates** (step 4): `make check-records markdownlint` passed, 0 issues; the identifier scan of the diff found
    nothing. Staged for the owner's commit.
+
+### Deviation 1 (2026-11-08): P1, `acpclient/acptest` is a stable package
+
+* **Found** at P1's start (`HEAD` `5d482d9`, the tree clean), before any code: `acpclient/acptest` declares
+  "Stability: stable" (`acpclient/acptest/doc.go`), and 0004-MADR's package map lists it as stable, "In-memory
+  agent↔client pair and frame recorder for embedders' tests" (`docs/decisions/0004-MADR-go-module-architecture.md:251`).
+  Adopting the SDK's recorder (Q1) removes its exported recorder names and changes `Conn.Recorder`'s and `Pair`'s types.
+  `apidiff` is a no-op below `v1.0.0` (`Makefile:177`, `:294-300`), and no repository in the owner's workspace imports
+  `gobble-cli/acpclient` (magic-cli-remote does not require gobble-cli). Also found: replacing gobble's `Connect` with the
+  SDK's `ConnectRecorded` would change the cleanup 37 tests in 30 files rely on (a 10 s bound, and a failure for any end
+  but a close), so the pair keeps gobble's pipes and cleanup and records with the SDK's `Recorder.Writer` and `Reader` on
+  the client's side, as `ConnectRecorded` records — step 2 as written.
+* **Decision,** the owner's ("Replace, amend 0004"): the stable package's recorder API is replaced, and the change is
+  named in 0004-MADR (a dated note after its package map) and in the package doc. Not chosen: deprecated wrappers kept
+  to `v1.0.0`; reverting Q1.
+* **Files added to scope:** `docs/decisions/0004-MADR-go-module-architecture.md` (the note), `acpclient/acptest/doc.go`,
+  `acpserver/commands_test.go` (`assertFramesBefore` reads records), and a new `acpclient/acptest/hostindependent_test.go`
+  for `HostIndependent`, now exported, which had no test of its own.
+
+### P1 record (2026-11-08)
+
+The base is `5d482d9`, the tree clean (C1). Deviation 1 above.
+
+1. **Read first** (step 1), at acp-go-sdk2 `v1.34.2`: `acptest.Recorder` (`acptest/recorder.go`: `Writer` records
+   `Sent`, `Reader` records `Received`, in canonical encoding/json v1 form), `Record` (`direction`, `frame`), `Golden`
+   (`acptest/golden.go:91`, the `ACPTEST_UPDATE` and artifact behaviour kept), `ValidateGolden` (`:41`, which reads `Sent`
+   as client→agent and matches a response to its request wherever it is recorded), and `ConnectRecorded`
+   (`acptest/pair.go`), which records the client's side with `Writer` and `Reader`.
+2. **The pair** (step 2): `Connect` keeps gobble's pipes, logger and cleanup, and records with
+   `rec.Writer(toAgentW)` and `rec.Reader(toClientR)` on the client's side; `Conn.Recorder` and `Pair` return
+   `*sdkacptest.Recorder`.
+3. **The kept piece** (step 3): `recorder.go` holds only `HostIndependent(records)` and its helpers, the internal
+   `slashRecords(records, root)` taking the root so a test can run the Windows case anywhere. `filepath.ToSlash` is
+   followed by a backslash replacement, which changes nothing on Windows and lets that test run off it. Removed:
+   `Direction`, `ClientToAgent`, `AgentToClient`, `Frame`, `Recorder`, its `tap`, `observe`, `Frames`, `Wait`,
+   `Transcript`, `Golden` and `firstDiff`. `doc.go` says what the package now does.
+4. **The tests** (step 4): `TestSession` (`acpserver/agent_test.go:128`) and `TestPairInitialize`
+   (`acpclient/acptest/pair_test.go:104`) call `sdkacptest.Golden(t, path, acptest.HostIndependent(records))`, then
+   `sdkacptest.ValidateGolden(t, records)`. `TestConnectRecordsNotifications` looks for a `Received` `session/update`
+   and a `Sent` `session/prompt` among the records. `assertFramesBefore` (`acpserver/commands_test.go`) reads records.
+   Removed: `TestRecorderJoinsSplitLines` and `TestGoldenWritesArtifact` with its `fakeTB`, which tested the deleted code.
+   Added: `TestHostIndependent` (`acpclient/acptest/hostindependent_test.go`).
+5. **The goldens, rewritten once** (step 5) with `ACPTEST_UPDATE=1`: `acpserver/testdata/session.golden` (14 lines) and
+   `acpclient/acptest/testdata/initialize.golden` (2), each line now `{"direction":…,"frame":…}`. A scratch script read
+   `HEAD`'s files and the new ones, encoded each frame canonically, and compared them one for one, direction and frame:
+   "old 14 frames, new 14 frames — identical" and "old 2 frames, new 2 frames — identical", exit 0 each. The order held
+   under the SDK's read-time recording: `go test -count=50` of `TestSession` and `TestStartFramesPrecedeTheResponse`, and
+   of `TestPairInitialize`, `TestConnectRecordsNotifications` and `TestHostIndependent`, passed; `-race -count=10` of the
+   first two passed; `-count=20` passed on the Linux machine and the Windows laptop.
+6. **Seen failing** (step 6), each break on a scratch copy with the proxy variables at a closed port; the control passed:
+   * a `session/update` without `sessionId` among the records: `pair_test.go:106: acptest: record 2, received:
+     session/update params: SessionNotification: missing required property "sessionId"`;
+   * a string `protocolVersion`: `pair_test.go:106: acptest: record 0, sent: initialize params: InitializeRequest: json:
+     cannot unmarshal string into Go struct field .protocolVersion of type acp.ProtocolVersion`;
+   * a changed frame in the golden: `pair_test.go:104: acptest: record 0 differs from the golden
+     testdata/initialize.golden`;
+   * `HostIndependent` rewriting nothing: `hostindependent_test.go:23: record 0 = sent {"cwd":"C:\\work\\a.go",…}, want
+     sent {"cwd":"/work/a.go",…}`;
+   * **on the Windows laptop**, a copy with `HostIndependent` disabled: `agent_test.go:128: acptest: record 2 differs
+     from the golden testdata\session.golden` (`session/new`'s `cwd`); the unbroken copy passed there.
+7. **Found by the gates and fixed in the phase:** `gofmt` on `pair_test.go` (blank lines left by the removal), and
+   `revive`'s confusing-naming on `hostIndependent` beside `HostIndependent`, renamed `slashRecords`.
+8. **Gates** (step 7): `make pre-add-check` on the seven Go files, "7 file(s) clean (gofmt, golint, govulncheck)";
+   `make lint` 0 issues; `make preflight` "preflight passed", its 15 gates; `make race` 39 ok; `go test ./...` 38 ok. The
+   Linux machine and the Windows laptop, the tree shipped (898 files, no `._*`): `go test` and race 38 ok each, `make
+   check-records markdownlint` 0 issues, preflight stopped at `verify-build-metadata` as on every copy.

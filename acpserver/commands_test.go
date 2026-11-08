@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	acp "github.com/maccavelli/acp-go-sdk2"
+	sdkacptest "github.com/maccavelli/acp-go-sdk2/acptest"
 
 	"github.com/maccavelli/gobble-cli/acpclient/acptest"
 	"github.com/maccavelli/gobble-cli/llm"
@@ -121,7 +122,7 @@ func TestStartFramesPrecedeTheResponse(t *testing.T) {
 	c1, _ := sessionAgent(t, dir, llmtest.NewScript(llmtest.Text("one")), &acptest.Client{})
 	initialize(t, c1.Client)
 	id := newSession(t, c1, cwd, nil).SessionId
-	assertFramesBefore(t, c1.Recorder.Frames(), `"method":"session/new"`)
+	assertFramesBefore(t, c1.Recorder.Records(), `"method":"session/new"`)
 	if _, err := prompt(t, c1, id, "first"); err != nil {
 		t.Fatal(err)
 	}
@@ -133,21 +134,21 @@ func TestStartFramesPrecedeTheResponse(t *testing.T) {
 	if _, err := c2.Client.LoadSession(t.Context(), acp.LoadSessionRequest{SessionId: id, Cwd: cwd, McpServers: []acp.McpServer{}}); err != nil {
 		t.Fatal(err)
 	}
-	assertFramesBefore(t, c2.Recorder.Frames(), `"method":"session/load"`)
+	assertFramesBefore(t, c2.Recorder.Records(), `"method":"session/load"`)
 }
 
 // assertFramesBefore checks that, after the request whose frame contains
 // method, the commands, mode and usage frames arrive before its response.
-func assertFramesBefore(t *testing.T, frames []acptest.Frame, method string) {
+func assertFramesBefore(t *testing.T, frames []sdkacptest.Record, method string) {
 	t.Helper()
 	var reqID string
 	at := -1
 	for i, f := range frames {
-		if f.Dir == acptest.ClientToAgent && strings.Contains(string(f.Raw), method) {
+		if f.Direction == sdkacptest.Sent && strings.Contains(string(f.Frame), method) {
 			var m struct {
 				ID jsontextNumber `json:"id"`
 			}
-			if err := json.Unmarshal(f.Raw, &m); err != nil {
+			if err := json.Unmarshal(f.Frame, &m); err != nil {
 				t.Fatal(err)
 			}
 			reqID, at = string(m.ID), i
@@ -158,13 +159,13 @@ func assertFramesBefore(t *testing.T, frames []acptest.Frame, method string) {
 	}
 	seen := map[string]bool{}
 	for _, f := range frames[at+1:] {
-		raw := string(f.Raw)
+		raw := string(f.Frame)
 		for _, k := range []string{"available_commands_update", "current_mode_update", "usage_update"} {
 			if strings.Contains(raw, `"sessionUpdate":"`+k+`"`) {
 				seen[k] = true
 			}
 		}
-		if f.Dir == acptest.AgentToClient && strings.Contains(raw, `"id":`+reqID+`,`) && strings.Contains(raw, `"result"`) {
+		if f.Direction == sdkacptest.Received && strings.Contains(raw, `"id":`+reqID+`,`) && strings.Contains(raw, `"result"`) {
 			if len(seen) != 3 {
 				t.Fatalf("%s answered after only %v", method, seen)
 			}

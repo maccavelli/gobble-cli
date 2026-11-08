@@ -13,6 +13,7 @@ import (
 	"time"
 
 	acp "github.com/maccavelli/acp-go-sdk2"
+	sdkacptest "github.com/maccavelli/acp-go-sdk2/acptest"
 	"github.com/maccavelli/gobble-cli/acpext"
 
 	"github.com/maccavelli/gobble-cli/acpclient/acptest"
@@ -124,7 +125,8 @@ func TestSession(t *testing.T) {
 		updates[3].Update.AgentMessageChunk.Content.Text.Text != "hello gobble" || updates[4].Update.UsageUpdate == nil {
 		t.Fatalf("updates = %+v, want the session's frames, the reply's chunk, then usage_update", updates)
 	}
-	c.Recorder.Golden(t, filepath.Join("testdata", "session.golden"))
+	sdkacptest.Golden(t, filepath.Join("testdata", "session.golden"), acptest.HostIndependent(c.Recorder.Records()))
+	sdkacptest.ValidateGolden(t, c.Recorder.Records())
 }
 
 // The advertised set is exactly what is implemented. A later phase that

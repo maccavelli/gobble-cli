@@ -3,13 +3,14 @@ package acptest
 import (
 	"context"
 	"errors"
-	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	acp "github.com/maccavelli/acp-go-sdk2"
+	sdkacptest "github.com/maccavelli/acp-go-sdk2/acptest"
 )
 
 // stubAgent answers initialize, opens one session, and replies to a prompt
@@ -96,11 +97,12 @@ func TestPairInitialize(t *testing.T) {
 	if resp.AgentInfo == nil || resp.AgentInfo.Name != "stub" || resp.ProtocolVersion != acp.ProtocolVersionNumber {
 		t.Fatalf("initialize = %+v", resp)
 	}
-	frames := rec.Frames()
-	if len(frames) != 2 || frames[0].Dir != ClientToAgent || frames[1].Dir != AgentToClient {
-		t.Fatalf("frames = %+v, want one request and one response", frames)
+	records := rec.Records()
+	if len(records) != 2 || records[0].Direction != sdkacptest.Sent || records[1].Direction != sdkacptest.Received {
+		t.Fatalf("records = %+v, want one request and one response", records)
 	}
-	rec.Golden(t, filepath.Join("testdata", "initialize.golden"))
+	sdkacptest.Golden(t, filepath.Join("testdata", "initialize.golden"), HostIndependent(records))
+	sdkacptest.ValidateGolden(t, records)
 }
 
 // A prompt's session update reaches the default Client, and the recorder
@@ -127,13 +129,17 @@ func TestConnectRecordsNotifications(t *testing.T) {
 	if len(updates) != 1 || updates[0].Update.AgentMessageChunk == nil {
 		t.Fatalf("updates = %+v", updates)
 	}
-	tr := c.Recorder.Transcript()
-	for _, want := range []string{
-		`agent→client {"jsonrpc":"2.0","method":"session/update"`,
-		`client→agent {"id":3,"jsonrpc":"2.0","method":"session/prompt"`,
+	for _, want := range []struct {
+		dir   sdkacptest.Direction
+		frame string
+	}{
+		{sdkacptest.Received, `{"jsonrpc":"2.0","method":"session/update"`},
+		{sdkacptest.Sent, `{"id":3,"jsonrpc":"2.0","method":"session/prompt"`},
 	} {
-		if !strings.Contains(tr, want) {
-			t.Errorf("transcript lacks %s:\n%s", want, tr)
+		if !slices.ContainsFunc(c.Recorder.Records(), func(r sdkacptest.Record) bool {
+			return r.Direction == want.dir && strings.HasPrefix(string(r.Frame), want.frame)
+		}) {
+			t.Errorf("no %s record beginning %s among %d records", want.dir, want.frame, len(c.Recorder.Records()))
 		}
 	}
 }
@@ -150,56 +156,5 @@ func TestDefaultClientRefusals(t *testing.T) {
 	resp, err := c.RequestPermission(t.Context(), acp.RequestPermissionRequest{})
 	if err != nil || resp.Outcome.Cancelled == nil {
 		t.Fatalf("RequestPermission = %+v, %v; want the cancelled outcome", resp, err)
-	}
-}
-
-func TestRecorderJoinsSplitLines(t *testing.T) {
-	r := &Recorder{}
-	r.observe(ClientToAgent, []byte(`{"b":1,`))
-	r.observe(AgentToClient, []byte("{\"x\":true}\n"))
-	r.observe(ClientToAgent, []byte(`"a":2}`+"\n"+`{"c":3}`+"\n"))
-	want := "agent→client {\"x\":true}\nclient→agent {\"a\":2,\"b\":1}\nclient→agent {\"c\":3}\n"
-	if got := r.Transcript(); got != want {
-		t.Fatalf("transcript = %q\nwant         %q", got, want)
-	}
-}
-
-// fakeTB captures Golden's failure and supplies its artifact directory.
-type fakeTB struct {
-	testing.TB
-	dir    string
-	failed []string
-}
-
-func (*fakeTB) Helper()               { /* recorded failures need no helper frames */ }
-func (f *fakeTB) ArtifactDir() string { return f.dir }
-func (f *fakeTB) Errorf(format string, args ...any) {
-	f.failed = append(f.failed, format)
-	_ = args
-}
-
-// A wrong golden fails and leaves the actual transcript as an artifact
-// (0004-PLAN Phase 3 Accept).
-func TestGoldenWritesArtifact(t *testing.T) {
-	t.Setenv("ACPTEST_UPDATE", "") // the mismatch path, even inside an update run
-	client, rec := Pair(t, &stubAgent{})
-	initialize(t, client)
-	wrong := filepath.Join(t.TempDir(), "wrong.golden")
-	if err := os.WriteFile(wrong, []byte("client→agent {}\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	fake := &fakeTB{TB: t, dir: t.TempDir()}
-	rec.Golden(fake, wrong)
-	if len(fake.failed) != 1 || !strings.Contains(fake.failed[0], "differs") {
-		t.Fatalf("failures = %q, want one mismatch", fake.failed)
-	}
-	got, err := os.ReadFile(filepath.Join(fake.dir, "wrong.golden.got"))
-	if err != nil || string(got) != rec.Transcript() {
-		t.Fatalf("artifact = %q, %v; want the actual transcript", got, err)
-	}
-	fake.failed = nil
-	rec.Golden(fake, filepath.Join(t.TempDir(), "missing.golden"))
-	if len(fake.failed) != 1 || !strings.Contains(fake.failed[0], "creates the golden") {
-		t.Fatalf("a missing golden: failures = %q", fake.failed)
 	}
 }

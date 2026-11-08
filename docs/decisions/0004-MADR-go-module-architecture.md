@@ -268,6 +268,14 @@ exp/a2a/                          Agent2Agent agent card and task endpoint
 exp/sandbox/                      OS sandbox profiles for bash (Seatbelt, Landlock)
 ```
 
+*(2026-11-08, 0016-PLAN deviation 1, the owner's "Replace, amend 0004": `acpclient/acptest`, **stable** above as "frame
+recorder", now records with acp-go-sdk2's `acptest.Recorder`, compares goldens with its `acptest.Golden` and checks
+them with its `acptest.ValidateGolden` (0016-MADR D6, Option 2). Its own `Recorder`, `Frame`, `Direction`,
+`ClientToAgent`, `AgentToClient`, `Transcript` and `Golden` are removed, and `Conn.Recorder` and `Pair` return the SDK's
+`*acptest.Recorder`; it keeps the pair, the default `Client`, `Abs`, and `HostIndependent`, the host-path step before a
+golden comparison. A pre-v1.0.0 change to a stable package, named here since `apidiff` covers stable packages only from
+`v1.0.0`; no repository in the owner's workspace imported the removed names.)*
+
 *(2026-10-19, the owner's choice, 0005-PLAN "The docs brought up to date": the packages `go list ./...` prints that the
 map above leaves out, since they came later. `personality/` is **beta**: gobble's voice, the message catalog, the
 personalities' briefs and the user's and a trusted project's changes;

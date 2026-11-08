@@ -820,6 +820,10 @@ each frame's key order only (`acptest/golden.go:91-130`). That normalizer stays 
 before the SDK's `Golden`; everything else of the recorder and the golden comparison is the SDK's. The decision is
 accepted: D6 Option 2 and D7 to D11 and D13 Option 1.*
 
+*2026-11-08, 0016-PLAN deviation 1, the owner's "Replace, amend 0004": `acpclient/acptest` is a stable package
+(0004-MADR's package map), so D6 Option 2 is a pre-v1.0.0 change to a stable API: its recorder names are removed, and
+`Conn.Recorder` and `Pair` return the SDK's `*acptest.Recorder`. 0004-MADR carries the dated note.*
+
 ### Consequences of the recommended set
 
 * Good, because MCP and prompt problems reach an ACP user, on Magic's phone and in editors, where today only a log has
