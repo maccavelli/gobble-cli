@@ -260,6 +260,10 @@ type liveSession struct {
 	appendMu sync.Mutex
 	// noted are the prompt diagnostics logged for the session, once each.
 	noted map[string]bool
+	// notices are the diagnostics kept to send as notices with the
+	// session's next start frames or prompt, under the agent's mu
+	// (0016-MADR D8).
+	notices []acp.SessionUpdate
 	// templates are the prompt templates found when the session started
 	// (startFrames; 0005-PLAN F3-3).
 	templates []sysprompt.Template
@@ -672,7 +676,7 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 	if w.err != nil {
 		return acp.PromptResponse{}, appendFailed(w.err)
 	}
-	mcpTools := a.mcpTools(turnCtx, s.mcp)
+	mcpTools := a.mcpTools(turnCtx, s)
 	tools := append(a.toolsOf(s), mcpTools...)
 	if a.modeOf(s) == modePlan {
 		tools = append(tools, exitPlan{a: a, conn: conn, s: s})
@@ -713,6 +717,7 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 	ag := agent.New(cfg)
 	out := newUpdates(ctx, conn, p.SessionId)
 	auto.out = out
+	a.sendNotices(out, s) // the start-up and MCP diagnostics, as notices (0016-MADR D8)
 	var last llm.Usage
 	env := s.env()
 	env.Environ = markers(string(s.id), a.fileOf(s), w.provider, chosen, think)

@@ -739,6 +739,7 @@ func (a *Agent) startFrames(ctx context.Context, conn *acp.AgentSideConnection, 
 	out.send(modeUpdate(a.modeOf(s)))
 	out.send(a.contextUpdate(s, used))
 	out.notify(acpext.MethodPersonality, a.personalityNotice(s))
+	a.sendNotices(out, s) // the start's prompt diagnostics, as notices (0016-MADR D8)
 	return out.err
 }
 

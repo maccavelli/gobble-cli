@@ -8,6 +8,8 @@ import (
 	"runtime"
 	"slices"
 
+	acp "github.com/maccavelli/acp-go-sdk2"
+
 	"github.com/maccavelli/gobble-cli/compaction"
 	"github.com/maccavelli/gobble-cli/jsonx"
 	"github.com/maccavelli/gobble-cli/llm"
@@ -205,7 +207,8 @@ func (a *Agent) expand(s *liveSession, text string) (string, bool) {
 
 func isDir(p string) bool { info, err := os.Stat(p); return err == nil && info.IsDir() }
 
-// note logs each diagnostic once per session.
+// note logs each diagnostic once per session, and keeps it as a notice for
+// a client that offered notices (0016-MADR D8).
 func (a *Agent) note(s *liveSession, diags []sysprompt.Diagnostic) {
 	for _, d := range diags {
 		if d.Winner != "" {
@@ -221,6 +224,7 @@ func (a *Agent) note(s *liveSession, diags []sysprompt.Diagnostic) {
 		a.mu.Unlock()
 		if !seen {
 			a.logger.Warn("prompt: a file was not used", slog.String("file", d.Path), slog.String("reason", d.Message))
+			a.queueNotice(s, acp.NoticeSeverityWarning, "prompt: a file was not used", d.Path+": "+d.Message)
 		}
 	}
 }

@@ -411,3 +411,51 @@ The base is `5d482d9`, the tree clean (C1). Deviation 1 above.
    `make lint` 0 issues; `make preflight` "preflight passed", its 15 gates; `make race` 39 ok; `go test ./...` 38 ok. The
    Linux machine and the Windows laptop, the tree shipped (898 files, no `._*`): `go test` and race 38 ok each, `make
    check-records markdownlint` 0 issues, preflight stopped at `verify-build-metadata` as on every copy.
+
+### P2 record (2026-11-08)
+
+The base is `a233e3f` (P1's commit), the tree clean (C1). No deviation; the delivery mechanism below is how step 2's
+"send … when `offers` says yes" is built, with the decision unchanged.
+
+1. **The tests first** (step 1), `acpserver/notices_test.go`, each agent offering what its test names at initialize:
+   * `TestNoticesWhenOffered/mcp`: an `mcp.json` holding a config error (`autoEnableCodemode` not a boolean), a server
+     that fails (`down`, `127.0.0.1:1`), and a slow stdio server with an exposure set (`slow`, 1500 ms against a 200 ms
+     start-up wait). The first prompt delivers four notices: `warning` "mcp: config error", `warning` "mcp: exposure and
+     toolExposure apply …" (`slow`), `warning` "mcp: server needs attention" (`down: failed: …`) and `info` "mcp: server
+     still connecting …" (`slow`); a second prompt adds none.
+   * `TestNoticesWhenOffered/prompt_file`: a config directory whose `prompts/help.md` a built-in shadows; `session/new`
+     delivers one `warning` "prompt: a file was not used", its description the file and `name "/help" collision …`.
+   * `TestNoNoticeWithoutTheCapability`: both setups, the client offering nothing: no notice, the agent text only the
+     reply, and all five log records as before.
+   * `TestNoticesAreNotReplayed`: after a prompt that sent notices, a `session/load` on a second connection offering
+     notices sends none, and the session file holds no `"notice"`.
+   * **Against the code before step 2:** `notices_test.go:124: 0 notices, want 4`, `:150: notices [], want one warning
+     …`, `:196: no notice was sent live`; `TestNoNoticeWithoutTheCapability` passed, as today's code sends nothing.
+2. **The code** (step 2):
+   * `acpserver/notice.go`: `offers(sessionID, update)` (D7), `conn.Negotiated()` and `Negotiation.AllowsValue(
+     acp.ClientMethodSessionUpdate, …)`, false before initialize; `queueNotice(s, severity, title, description)`, which
+     keeps `acp.UpdateNotice` with its description on the session only when `offers` says yes; `sendNotices(out, s)`.
+   * **Delivery:** `note` (`acpserver/sysprompt.go`) runs from `sections`, `skills` and `templates`, which have neither a
+     context nor the connection, and `contextcheck` refuses a fresh `context.Background()` there (P5 of
+     0046-PLAN met the same rule). So the diagnostics are kept on the session (`liveSession.notices`, under the agent's
+     `mu`) and sent through the turn's or the start's own `updates`: from `startFrames` (`acpserver/commands.go`), so a
+     diagnostic found when a session starts goes out with its start frames, and from `Prompt` before the agent runs
+     (`acpserver/agent.go`), so the MCP diagnostics go out in the prompt that found them. A diagnostic found later in a
+     turn goes out with the next prompt. The once-per-session rules are the existing ones (`l.reported`, `first`,
+     `s.noted`).
+   * `mcpTools` takes the session (`acpserver/agent.go:675`); its four diagnostics and `note`'s keep their log records,
+     each beside its `queueNotice`.
+3. **Seen failing** (step 3), each break on a scratch copy, the proxy variables at a closed port; the control passed:
+   * **the gate inverted:** the three offered cases see no notice (`:124`, `:150`, `:196`), and the client that offered
+     nothing has its prompt fail: `{"code":-32603,…,"data":{"error":"session/update: capability session.notices not
+     advertised: variant notice"}}`, the SDK's refusal of an ungated update (the MADR's G1);
+   * **still connecting sent as a warning:** `:134: no info notice "mcp: server still connecting …"`;
+   * **the once-per-session rule removed:** `:141: 5 notices after a second prompt, want still 4`;
+   * **no notices sent from `Prompt`:** `:124: 0 notices, want 4`;
+   * **no notices sent from the start frames:** `:150: notices [], want one warning`;
+   * **a notice sent on load:** `:206: session/load sent notices […], want none`.
+4. **Gates** (step 4): `make pre-add-check` on the six Go files, "6 file(s) clean (gofmt, golint, govulncheck)"; `make
+   lint` 0 issues; `make preflight` "preflight passed", its 15 gates; `make race` 39 ok; `go test ./...` 38 ok;
+   `acpserver/testdata/session.golden` byte-identical (`git diff --quiet`, C4). The Linux machine and the Windows laptop,
+   the tree shipped (900 files, no `._*`): `go test` and race 38 ok each, the three notice tests `-count=5` ok on each,
+   `make check-records markdownlint` 0 issues, preflight stopped at `verify-build-metadata` as on every copy.

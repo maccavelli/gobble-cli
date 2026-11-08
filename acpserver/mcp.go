@@ -129,8 +129,10 @@ func (a *Agent) startMCP(ctx context.Context, cwd string, servers []mcpclient.Se
 // tools are the MCP tools for a prompt, then the MCP resource tools while
 // a connected server offers resources, each kept by the tool filter. The
 // session's first prompt waits for servers still connecting, up to the
-// start-up wait; then each problem is logged once, when first seen.
-func (a *Agent) mcpTools(ctx context.Context, l *liveMCP) []tool.Tool {
+// start-up wait; then each problem is logged once, when first seen, and kept
+// as a notice for a client that offered notices (0016-MADR D8).
+func (a *Agent) mcpTools(ctx context.Context, s *liveSession) []tool.Tool {
+	l := s.mcp
 	if l == nil {
 		return nil
 	}
@@ -144,9 +146,12 @@ func (a *Agent) mcpTools(ctx context.Context, l *liveMCP) []tool.Tool {
 		cancel()
 		for _, n := range l.notes {
 			if n.exposure {
-				a.logger.WarnContext(ctx, "mcp: exposure and toolExposure apply from 0005-PLAN F8; its tools are declared directly", slog.String("server", n.text))
+				const msg = "mcp: exposure and toolExposure apply from 0005-PLAN F8; its tools are declared directly"
+				a.logger.WarnContext(ctx, msg, slog.String("server", n.text))
+				a.queueNotice(s, acp.NoticeSeverityWarning, msg, n.text)
 			} else {
 				a.logger.WarnContext(ctx, "mcp: config error", slog.String("error", n.text))
+				a.queueNotice(s, acp.NoticeSeverityWarning, "mcp: config error", n.text)
 			}
 		}
 	}
@@ -157,11 +162,15 @@ func (a *Agent) mcpTools(ctx context.Context, l *liveMCP) []tool.Tool {
 		switch st.State {
 		case mcpclient.StateFailed, mcpclient.StateNeedsAuth:
 			l.reported[st.Name] = true
+			line := mcpclient.FirstLine(st.Error)
 			a.logger.WarnContext(ctx, "mcp: server needs attention", slog.String("server", st.Name),
-				slog.String("state", string(st.State)), slog.String("error", mcpclient.FirstLine(st.Error)))
+				slog.String("state", string(st.State)), slog.String("error", line))
+			a.queueNotice(s, acp.NoticeSeverityWarning, "mcp: server needs attention", st.Name+": "+string(st.State)+": "+line)
 		case mcpclient.StateConnecting:
 			if first {
-				a.logger.WarnContext(ctx, "mcp: server still connecting; its tools join a later prompt", slog.String("server", st.Name))
+				const msg = "mcp: server still connecting; its tools join a later prompt"
+				a.logger.WarnContext(ctx, msg, slog.String("server", st.Name))
+				a.queueNotice(s, acp.NoticeSeverityInfo, msg, st.Name)
 			}
 		}
 	}
