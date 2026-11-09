@@ -273,7 +273,7 @@ Checkpoints:
 |---|---|---|
 | GitHub releases | 1.0 | Six **raw binaries** named `gobble-<goos>-<goarch>[.exe]`, `SHA256SUMS`, SPDX SBOM extra asset, and provenance attestations, published by go-selfupdate-lib's reusable workflow (0004-PLAN Phase 4). Strict `vMAJOR.MINOR.PATCH` tags only. *(2026-10-13, 0019-MADR D12: five, since darwin/amd64 is not a target, by 0004-MADR's amendment of 2026-10-07.)* |
 | `go install` | 1.0 | `go install github.com/maccavelli/gobble-cli/cmd/gobble@latest`. |
-| Self-update | 1.0 | `gobble update [--check]` through `github.com/maccavelli/go-selfupdate-lib/selfupdate` at `v1.5.0` or later. gobble does not reimplement self-update. Product `gobble`. `Request.CheckOnly` for `--check`. `NewStandaloneInstaller`, `NewExactAssetSelector` for the six platforms *(five since 2026-10-07: darwin/amd64 is not a target, 0004-MADR amendment of that date)*, `NewGitHubSource` with the 0003-MADR User-Agent, `NewTextReporter` on stderr, `NewTerminalConfirmer`, `ExitCode` mapped to process status (0 current/declined/applied, 10 update available, 1 error). `--force` is `Request.Force`; `--yes` is `Request.Yes`. |
+| Self-update | 1.0 | `gobble update [--check]` through `github.com/maccavelli/go-selfupdate-lib/selfupdate` at `v1.5.0` or later. gobble does not reimplement self-update. Product `gobble`. `Request.CheckOnly` for `--check`. `NewStandaloneInstaller`, `NewExactAssetSelector` for the six platforms *(five since 2026-10-07: darwin/amd64 is not a target, 0004-MADR amendment of that date)*, `NewGitHubSource` with the 0003-MADR User-Agent, `NewTextReporter` on stderr, `NewTerminalConfirmer`, `ExitCode` mapped to process status (0 current/declined/applied, 10 update available, 1 error). `--force` is `Request.Force`; `--yes` is `Request.Yes`. *(2026-11-09, [0048-MADR](0048-MADR-gobble-update-command.md) D8: superseded; built by [0048-PLAN](0048-PLAN-gobble-update-command.md), which composes `selfupdate.New` from the embedded release spec and takes the exact tag as `--release`.)* |
 | Homebrew tap, container image | 1.x | A tap formula, and a `ko`-built distroless image for CI agents. |
 | magic-cli-remote `KnownGoodVersion` | 1.0 | Published in the release notes for the companion Spec. |
 
@@ -602,9 +602,11 @@ Further 0001-REPORT errata are kept here rather than in the report, which record
   * Apply uses `RunWith`, with `NewVersionProber` on `gobble version --json` for the staged and post-install probes, and `NewImageVerifier`.
   * The TUI uses `Start` / `Stream`.
 * **Pin.** The newest `v1.x` at F10, not "v1.1.0 current".
+  *(2026-11-09, [0048-MADR](0048-MADR-gobble-update-command.md) D8: superseded; built by [0048-PLAN](0048-PLAN-gobble-update-command.md), at go-selfupdate-lib `v1.24.0`.)*
 * **Install locations.**
   * selfupdate replaces only a regular, non-symlinked file under the home directory or an explicit allowed root, and it needs write access to that directory.
   * A Homebrew-managed binary (a symlink) is detected, and `gobble update` prints `brew upgrade gobble` instead.
+    *(2026-11-09, [0048-MADR](0048-MADR-gobble-update-command.md) D8: superseded; built by [0048-PLAN](0048-PLAN-gobble-update-command.md). The owner put the Homebrew line out of its scope; it waits for the tap, 0005-PLAN X5.)*
   * On Windows, a known go-core-lib defect makes later updates fail with "Access is denied" while an old `gobble.exe` (for example a long-lived `gobble acp`) still runs (go-core-lib `0004-PLAN-h4-running-copy-end-to-end.md`). `gobble update` explains this, and `CleanupPending` at start-up treats it as benign.
     *(2026-10-13, 0019-MADR D12: fixed in go-selfupdate-lib `v1.5.1` (its 0010-MADR B5, B6); gobble pins `v1.15.2` (0019-PLAN P2, `e8181b5`).)*
 * **No phone-home is kept.**

@@ -366,6 +366,7 @@ then offers `tool_search`, since an MCP tool is outside the session-start famili
    `go-core-lib` (0004-MADR import-boundary rule 8).
    *(2026-10-13, 0019-MADR D12: go-core-lib is go-selfupdate-lib, renamed 2026-10-02 in `v1.5.0`. F10 binds the newest go-selfupdate-lib at F10,
    `v1.15.2` today (0019-PLAN P2, `e8181b5`), whose Windows "Access is denied" defect is fixed from `v1.5.1`. The five binaries are noted above.)*
+   *(2026-11-09: superseded by [0048-MADR](0048-MADR-gobble-update-command.md) D8 and built by [0048-PLAN](0048-PLAN-gobble-update-command.md); this step is not executed here.)*
 5. The Pi bridge (0003): discovery sources, `session list --pi`,
    `session import`, ~~`config import --from-pi`~~ *(dropped 2026-10-12 by the owner; 0018-MADR D13)*, `auth import --from-pi`,
    and `--no-pi-bridge`.
@@ -386,6 +387,7 @@ then offers `tool_search`, since an MCP tool is outside the session-start famili
   missing asset). `go list -m github.com/maccavelli/go-core-lib`
   prints `v1.1.0`.
   *(2026-10-13, 0019-MADR D12: `go list -m github.com/maccavelli/go-selfupdate-lib` prints the newest tag at F10.)*
+  *(2026-11-09: superseded by [0048-PLAN](0048-PLAN-gobble-update-command.md)'s tests and acceptance; [0048-MADR](0048-MADR-gobble-update-command.md) D8.)*
 * The Pi-user smoke test from 0005-MADR Confirmation passes, and the
   `~/.pi` fixture hash is unchanged.
 * The gate table has no empty row.
