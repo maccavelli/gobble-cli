@@ -390,7 +390,8 @@ adds this section.
 * The library leaves `.gobble.selfupdate.lock` (`.gobble.exe.selfupdate.lock` on Windows) beside the binary, and on
   Windows a `.gobble.exe.selfupdate.cleanup` file with the pending backup.
 
-**Still the owner's:** ~~filing the drafted go-selfupdate-lib issue;~~ the first release tag that carries `update`.
+**Still the owner's:** ~~filing the drafted go-selfupdate-lib issue;~~ ~~the first release tag that carries
+`update`.~~ *(2026-11-09: `v0.5.0`, tagged by the owner on `8371b96` and published 2026-11-09T23:28:37Z, immutable, GitHub's Latest; its release run `42718701229` passed.)*
 The issue was filed on 2026-11-09, on the owner's word, as [maccavelli/go-selfupdate-lib#9](https://github.com/maccavelli/go-selfupdate-lib/issues/9).
 
 ## Amendment A2 (2026-11-09, accepted): pin go-selfupdate-lib `v1.25.0`
@@ -411,7 +412,9 @@ this pair's P3 found ("Amendment (2026-11-09)"). Read from the sibling clone at 
 * **The workflows.** `git diff --stat v1.24.0 v1.25.0 -- .github` is empty: the build and publish workflows
   `.github/workflows/ci.yml` calls are unchanged.
 * **The issue** is still open on GitHub at the time of writing; the fix's commit names it. Closing it is the
-  library's.
+  library's. *(2026-11-09 correction: the owner closed it as completed at 20:40:18Z, before A2's records were
+  committed, with a comment naming `v1.25.0`, the fix commit `b8a5bd0` and the tag's commit `875dec3`. The record
+  read the issue once, earlier, and did not read it again.)*
 
 `scripts/check_libs.py --lib go-selfupdate-lib` (2026-11-09), on a scratch clone: pinned `v1.24.0`, checking
 `v1.25.0`; get and tidy, version, modules, build, vet for linux, darwin and windows, test, staticcheck, lint, api,
@@ -491,4 +494,6 @@ Carried out by 0048-PLAN's "Amendment of 2026-11-09: P4"; its P4 record has the 
 | 11 Live | **done** | 11 of 11 on macOS, the Linux machine and the Windows laptop; the Linux symlink invocation refused with A2-3's hint |
 | 12 Gates | **done** | preflight, race, `check_libs.py`, and the tests and race tests on the two dev hosts |
 
-**Still the owner's:** closing go-selfupdate-lib#9 (the library's); the first release tag that carries `update`.
+**Still the owner's:** ~~closing go-selfupdate-lib#9 (the library's);~~ ~~the first release tag that carries
+`update`.~~ *(2026-11-09 correction: nothing is left.* [maccavelli/go-selfupdate-lib#9](https://github.com/maccavelli/go-selfupdate-lib/issues/9) *was already closed as completed at
+20:40:18Z, before this section was written. The first release that carries `update` is `v0.5.0`, tagged by the owner on `8371b96` and published 2026-11-09T23:28:37Z, immutable, GitHub's Latest; its release run `42718701229` passed.)*
