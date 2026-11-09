@@ -6,6 +6,7 @@ package cli
 type Root struct {
 	Chat        ChatCmd        `cmd:"" default:"withargs" help:"Start a session, or run one prompt with -p or piped input."`
 	Version     VersionCmd     `cmd:"" help:"Print version information."`
+	Update      UpdateCmd      `cmd:"" help:"Check for, and install, a newer gobble release."`
 	Completion  CompletionCmd  `cmd:"" help:"Print a shell completion script."`
 	Config      ConfigCmd      `cmd:"" help:"Inspect configuration."`
 	ACP         ACPCmd         `cmd:"" name:"acp" help:"Run the ACP agent on stdio."`

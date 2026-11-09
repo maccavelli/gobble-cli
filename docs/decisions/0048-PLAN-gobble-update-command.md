@@ -153,6 +153,73 @@ C1: `HEAD` and `origin/main` at `2e83cce`; the only changes were this pair, untr
    * `probeWant` keeping the `v`: `TestUpdateProbeWant` fails.
 6. **Gates (C6),** including the Linux machine and the Windows laptop. Staged; the owner commits.
 
+### P1 record (2026-11-09)
+
+C1: `HEAD` `b0bc207` (P0), one ahead of `origin/main` (`2e83cce`), clean. No deviation.
+
+1. **The command** (steps 1 and 2): `internal/cli/update.go` and the `Update` field in `internal/cli/root.go`, as step 1
+   says, with three details step 1 left open:
+   * **The hint's trigger.** go-selfupdate-lib `v1.24.0` has no sentinel for a refused target; its errors are
+     `fmt.Errorf` text (`selfupdate/target.go`). So `prepareTarget` calls the installer's `ResolveTarget` itself before
+     `CleanupPending`, and `Run` prints the hint when that failed and the run failed too, unless it was a dry run. The
+     run reports the refusal in the library's words; gobble does not match error text.
+   * **The post-install probe** is the same prober, as `InstallOptions.PostInstall`; `Config.Probes` runs it on the
+     staged file.
+   * **The guard** compares `AI_AGENT` with `appName`, the existing `"gobble"` constant; a third literal tripped
+     `goconst` in preflight.
+   `internal/cli/release_test.go`'s comment names 0048-MADR D2. `go mod tidy` left `go.mod` and `go.sum` unchanged
+   (`git diff --quiet` exit 0). `make archtest`: ok, unchanged.
+2. **The tests** (step 3): `internal/cli/update_test.go`, the eleven tests step 3 names. The fixture serves every spec
+   target; the running platform's asset is this test binary's bytes where a test installs. Two shapes differ from
+   step 3's text without changing what it checks: `TestUpdateRelease` runs as `v0.1.0` with `--check`, so selecting
+   `v0.2.0` needs no downgrade and no `--force`; `TestUpdateAgentGuard` also refuses `--yes --force`. What a run prints,
+   from the tests: `gobble: update available: v0.3.1 -> v0.4.0`, `gobble: up to date (v0.4.0)`,
+   `gobble: updated v0.3.1 -> v0.4.0`, and before them the library's event lines, such as
+   `selfupdate: selected product=gobble current=v0.3.1 target=v0.4.0 asset=gobble-darwin-arm64`. A symlink:
+   `update failed: selfupdate: gobble: selfupdate: refusing to update through a symlink`, then the hint.
+3. **Seen failing** (step 5, C2): `p1_0048_breaks.py` on a scratch copy per case, with C3's environment; the unbroken
+   copy is the control, exit 0. Each break, and what failed:
+   * `Update` removed from `Root`: all ten tests that run `update` fail; `TestUpdateHelp`:
+     `update_test.go:158: help lacks "--check":`.
+   * `update.go` removed, the tree before P1: the package does not build, `internal/cli/root.go:9:14: undefined:
+     UpdateCmd`, `update_test.go:53:15: undefined: releaseSpec`.
+   * The guard removed: `TestUpdateAgentGuard`, `update_test.go:314: []: exit 1, stderr "selfupdate:
+     resolving-target …"` and `update_test.go:318: the server saw 16 requests`.
+   * `Verifiers` emptied: `TestUpdateRefusesBadImage`, `update_test.go:283: exit 0, …`: the shell script was
+     installed.
+   * `--release` not passed: `TestUpdateRelease`, `--release v0.2.0: exit 10, … target=v0.3.0`.
+   * `probeWant` keeping the `v`: `TestUpdateProbeWant`, `probeWant(v0.4.0) = "\"version\":\"v0.4.0\""`, and
+     `TestUpdateApply`, exit 1, the probe failing.
+   * No post-install probe: `TestUpdateApply`, `probed ["<TMP>/.local/bin/.gobble.selfupdate-<n>"]; want the staged
+     file, then "<TMP>/.local/bin/gobble"`.
+   * No hint: `TestUpdateSymlink`, stderr ends at the library's `refusing to update through a symlink`.
+   * `--json` not given to the run: `TestUpdateJSON`, `update_test.go:208: not a JSON line: "": jsontext: unexpected EOF`.
+   * Exit code not returned: `TestUpdateCheck`, `TestUpdateJSON` (`exit 1, last line {Kind:result ExitCode:10}`),
+     `TestUpdateRelease`, `TestUpdateAgentGuard`.
+   * A contradiction as a failure: `TestUpdateContradiction`, `--check --yes: exit 1, stderr "Error: update:
+     selfupdate: --check and --yes are contradictory\n"`.
+   * No exit-status paragraph: `TestUpdateHelp`, `help lacks "Exit status:"`.
+   * `--release` without its completion tag: `TestCompletionCoverage`, `update release takes a value but has neither
+     enum nor complete tag`.
+   * **Not run: `Signals` left nil.** Both `Main` and the library would catch `os.Interrupt`; seeing which one ended
+     the run needs a signal to the test process, which every other test in the package shares. Step 5 allowed for
+     this. The code passes `Signals: []os.Signal{}`, which `cli.Options` documents as "none".
+   The first run of the probe break did not compile (`"strings" imported and not used`); the break was corrected to
+   keep the call, and all fourteen cases then ran as expected.
+4. **Gates** (step 6):
+   * `make pre-add-check FILES="internal/cli/update.go internal/cli/update_test.go internal/cli/root.go
+     internal/cli/release_test.go"`: `4 file(s) clean (gofmt, golint, govulncheck)`.
+   * `make preflight`: the first run failed in `golangci-lint` on two findings of this phase: `depguard`, the test's
+     `encoding/json` (gobble's is `jsonx`, 0039-MADR D24), and `goconst`, the guard's `"gobble"` literal. Both were
+     fixed. The second run printed `preflight passed`.
+   * macOS: `go test -count=1 ./...` 38 ok; `make race` 39 ok; both after the fixes.
+   * The Linux machine (amd64): the update tests all pass; `go test ./...` 38 ok; `-race` 38 ok.
+   * The Windows laptop (amd64): the update tests pass, `TestUpdateSymlink` skipped (`a symlink needs privileges on
+     Windows`); `TestUpdateApply` replaced `gobble.exe`; `go test ./...` 38 ok; `-race` 38 ok.
+   * The identifier scan of the diff, new files included (the local account name, the dev hosts' names, the org's mail
+     domain, and real-machine home and temporary paths): nothing found. Temporary paths in the quotes above are
+     `<TMP>`.
+
 ### P2 — the docs
 
 1. `README.md`: `gobble update` in the commands list, out of the not-yet-built list at line 110; a short "Updating"

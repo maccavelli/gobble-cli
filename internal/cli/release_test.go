@@ -12,8 +12,8 @@ import (
 // The release spec the build workflow reads (0004-PLAN Phase 4, amendment
 // of 2026-10-07) parses, and says what was decided: one product with its
 // identity command, five raw-binary targets with no darwin/amd64, the SBOM
-// as the one extra from the extras artifact, and stable tags only. 0005-PLAN
-// F10 embeds the same file for the updater.
+// as the one extra from the extras artifact, and stable tags only. The
+// updater embeds the same file (0048-MADR D2).
 func TestReleaseSpec(t *testing.T) {
 	b, err := os.ReadFile("selfupdate-release.json")
 	if err != nil {
