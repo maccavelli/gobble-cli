@@ -342,8 +342,36 @@ func TestUpdateSymlink(t *testing.T) {
 	}
 	updaterDeps.target.ExecutablePath = link
 	r := f.run(t, "--yes")
-	if r.code != ExitFailure || !strings.Contains(r.stderr, "symlink") || !strings.Contains(r.stderr, "hint: ") ||
-		!strings.Contains(r.stderr, link+" is not one") {
+	// The library names the link and its target; gobble's hint names neither,
+	// and is not D6's (0048-MADR A2-3).
+	if r.code != ExitFailure || !strings.Contains(r.stderr, "refusing to update through a symlink") ||
+		!strings.Contains(r.stderr, link+" links to ") || !strings.Contains(r.stderr, symlinkHint) ||
+		strings.Contains(r.stderr, "Install gobble there") {
+		t.Fatalf("exit %d, stderr %q", r.code, r.stderr)
+	}
+	f.unchanged(t)
+}
+
+// A binary outside the home directory gets D6's hint, naming it.
+func TestUpdateOutsideHome(t *testing.T) {
+	if !runningPlatform(t) {
+		t.Skipf("%s/%s is not a release target", runtime.GOOS, runtime.GOARCH)
+	}
+	bin, err := testBinary()
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := newUpdateFixture(t, "v0.3.1", gobbleRelease(t, "v0.4.0", bin))
+	f.probeVersion = "0.4.0"
+	f.target = filepath.Join(t.TempDir(), filepath.Base(f.target))
+	if err := os.WriteFile(f.target, f.old, 0o755); err != nil { //nolint:gosec // an executable's mode
+		t.Fatal(err)
+	}
+	updaterDeps.target.ExecutablePath = f.target
+	r := f.run(t, "--yes")
+	if r.code != ExitFailure || !strings.Contains(r.stderr, "outside allowed roots") ||
+		!strings.Contains(r.stderr, "hint: ") || !strings.Contains(r.stderr, f.target+" is not one") ||
+		strings.Contains(r.stderr, symlinkHint) {
 		t.Fatalf("exit %d, stderr %q", r.code, r.stderr)
 	}
 	f.unchanged(t)

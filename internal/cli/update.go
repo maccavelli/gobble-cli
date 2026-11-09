@@ -43,6 +43,11 @@ const (
 // own tool and was asked for more than --check (0048-MADR D5).
 const agentRefusal = "gobble update: refusing to install from inside gobble; run it in your own terminal"
 
+// symlinkHint follows the library's refusal of a symlink invocation
+// (0048-MADR A2-3).
+const symlinkHint = "hint: gobble does not update through a symlink; run the file the link points to, " +
+	"named above, as <that file> update."
+
 // UpdateCmd checks for, verifies and installs gobble's GitHub releases
 // through go-selfupdate-lib (0048-MADR D1). Its flags are its own, so the
 // root's --version and the chat's --yes never reach the request.
@@ -177,7 +182,7 @@ func (c *UpdateCmd) Run(e *runEnv) error {
 	})
 	code := sucli.Exit(e.out.err, res, err)
 	if err != nil && targetErr != nil && !req.DryRun {
-		e.out.diag("", "%s", targetHint(updaterDeps.target))
+		e.out.diag("", "%s", targetHint(updaterDeps.target, targetErr))
 	}
 	if code == ExitOK {
 		return nil
@@ -201,8 +206,13 @@ func prepareTarget(ctx context.Context, inst *selfupdate.StandaloneInstaller, ou
 }
 
 // targetHint is the line after the library's error when it refused the
-// binary as a target (0048-MADR D6).
-func targetHint(policy selfupdate.TargetPolicy) string {
+// binary as a target (0048-MADR D6). A refusal of a symlink invocation gets
+// its own line, naming no path: on Linux os.Executable is the link's target,
+// and the library's line already names both (0048-MADR A2-3).
+func targetHint(policy selfupdate.TargetPolicy, err error) string {
+	if errors.Is(err, selfupdate.ErrSymlinkInvocation) {
+		return symlinkHint
+	}
 	p := policy.ExecutablePath
 	if p == "" {
 		exe, err := os.Executable()

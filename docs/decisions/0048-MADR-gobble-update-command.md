@@ -74,6 +74,7 @@ Read from the module cache, `go-selfupdate-lib@v1.24.0/selfupdate`.
   directory or `TargetPolicy.AllowedRoots`. `CleanupPending(ctx)` takes and releases the target's lock, finishing a
   Windows leftover; `ErrConcurrentUpdate` from it is benign. *(2026-11-09: the symlink refusal sees only a path
   `os.Executable` returns as the symlink, which on Linux it never does; see "Amendment (2026-11-09)".)*
+  *(Closed by go-selfupdate-lib `v1.25.0`, Amendment A2: refused on Linux too.)*
 * **`GitHubOptions.Token`** empty falls back to `Credentials`, then `GH_TOKEN`, then `GITHUB_TOKEN`.
 * **`verify/ghattest`** verifies a release's provenance attestation by running `gh attestation verify`. It is
   opt-in, needs `gh` installed **and logged in** even for a public repository, and fails the update on any of those
@@ -176,7 +177,7 @@ yet (Q3).
 
 *(2026-11-09 amendment.)* On Linux, "non-symlinked" holds for the file replaced, not for the path invoked: a
 symlink invocation updates the file it points at when that file passes the policy, and gets no hint. On macOS it
-is refused, with the hint. See "Amendment (2026-11-09)".
+is refused, with the hint. See "Amendment (2026-11-09)". *(Closed by go-selfupdate-lib `v1.25.0`, Amendment A2: refused on Linux too.)* A symlink refusal gets A2-3's hint.
 
 ### D7. Tests stay on loopback
 
@@ -283,6 +284,7 @@ behaviour ([0004-MADR-go-module-architecture.md](0004-MADR-go-module-architectur
 * Bad, because on Linux a symlink invocation updates the file it points at (Amendment (2026-11-09)): a symlink
   into a tree another tool manages under the home directory, such as Homebrew on Linux in `~/.linuxbrew`, has that
   tool's copy replaced, where macOS refuses. Until go-selfupdate-lib sees the invoked path on Linux.
+  *(Closed by go-selfupdate-lib `v1.25.0`, Amendment A2: refused on Linux too.)*
 
 ### Confirmation
 
@@ -301,7 +303,8 @@ behaviour ([0004-MADR-go-module-architecture.md](0004-MADR-go-module-architectur
    *(2026-11-09 amendment)* Where `os.Executable` returns the symlink (macOS), a symlink invocation is refused
    with the library's error and gobble's hint, and nothing is replaced; a test that gives the installer the
    symlink's path shows the same on Linux. On Linux, invoked through a symlink, the file it points at is checked
-   and replaced.
+   and replaced. *(Closed by go-selfupdate-lib `v1.25.0`, Amendment A2: refused on Linux too.)* At `v1.25.0` a symlink invocation is refused on every platform, with the
+   library's error and A2-3's hint, and nothing is replaced (Confirmation 10 and 11).
 6. Each new test is seen failing against a planted break, on a scratch copy.
 7. On a scratch home on macOS, the Linux machine and the Windows laptop, a binary built from the tree and stamped
    `v0.3.1`/`release` reports `v0.4.0` from real GitHub with `--check` (exit 10), verifies it with `--dry-run`, installs
@@ -348,7 +351,7 @@ behaviour ([0004-MADR-go-module-architecture.md](0004-MADR-go-module-architectur
 * Prerelease channels and tagging release candidates.
 * Provenance verification (Q2 (a)).
 * The next release tag. The owner asks for it.
-* Seeing a symlink invocation on Linux: go-selfupdate-lib's, [maccavelli/go-selfupdate-lib#9](https://github.com/maccavelli/go-selfupdate-lib/issues/9) (Amendment (2026-11-09)).
+* Seeing a symlink invocation on Linux: go-selfupdate-lib's, [maccavelli/go-selfupdate-lib#9](https://github.com/maccavelli/go-selfupdate-lib/issues/9) (Amendment (2026-11-09)). *(Closed by go-selfupdate-lib `v1.25.0`, Amendment A2: refused on Linux too.)*
 
 ### Related records
 
@@ -389,3 +392,103 @@ adds this section.
 
 **Still the owner's:** ~~filing the drafted go-selfupdate-lib issue;~~ the first release tag that carries `update`.
 The issue was filed on 2026-11-09, on the owner's word, as [maccavelli/go-selfupdate-lib#9](https://github.com/maccavelli/go-selfupdate-lib/issues/9).
+
+## Amendment A2 (2026-11-09, accepted): pin go-selfupdate-lib `v1.25.0`
+
+### What changed
+
+go-selfupdate-lib `v1.25.0` (`875dec3c9d475ca47c4b012ca43742de832ef626`, tagged 2026-11-09) fixes [maccavelli/go-selfupdate-lib#9](https://github.com/maccavelli/go-selfupdate-lib/issues/9), which
+this pair's P3 found ("Amendment (2026-11-09)"). Read from the sibling clone at that tag:
+
+* **The fix.** `resolveTarget` (`selfupdate/target.go`) also checks the path the program was started by, `os.Args[0]`,
+  made absolute when it has a separator and looked up on `PATH` when it has none, when no `TargetPolicy.ExecutablePath`
+  is set. It refuses when that path is a symlink to the running binary. A symlinked directory on the way is still
+  followed. On macOS and Windows the result is as at `v1.24.0`.
+* **The API.** One exported addition, `ErrSymlinkInvocation`, which the refusal wraps; `make apicheck` there reports
+  `v1.25.0` compatible with `v1.24.0`. The `failed` event's class for it is `symlink-invocation`, not `error`.
+* **The message.** `selfupdate: refusing to update through a symlink: <link> links to <target>; run <target>, or set
+  TargetPolicy.ExecutablePath to it`, the old text its prefix.
+* **The workflows.** `git diff --stat v1.24.0 v1.25.0 -- .github` is empty: the build and publish workflows
+  `.github/workflows/ci.yml` calls are unchanged.
+* **The issue** is still open on GitHub at the time of writing; the fix's commit names it. Closing it is the
+  library's.
+
+`scripts/check_libs.py --lib go-selfupdate-lib` (2026-11-09), on a scratch clone: pinned `v1.24.0`, checking
+`v1.25.0`; get and tidy, version, modules, build, vet for linux, darwin and windows, test, staticcheck, lint, api,
+govulncheck and advisories all `ok`; `0 failing checks`. No other module moved.
+
+### What it breaks in gobble
+
+`targetHint` (`internal/cli/update.go`) names `TargetPolicy.ExecutablePath`, or else `os.Executable`'s path, as the
+file that "is not one", and says to install gobble under the home directory. At `v1.25.0` on Linux, a symlink
+invocation is refused, but `os.Executable` there is the link's **target**: the hint would name a file that is a
+regular file under the home directory, say it is not one, and tell the user to install gobble where it already is. On
+macOS it names the link, as now. And for any symlink refusal the library's own line now names the target and says to
+run it, so D6's "install gobble there" advice is wrong for that case on every platform.
+
+### Decisions
+
+* **A2-1. The pin.** `go.mod` requires go-selfupdate-lib `v1.25.0`; `go.sum` follows; nothing else moves. README's
+  Stack line and `docs/architecture.md`'s requirements table name it.
+* **A2-2. The workflows** (Q6). Both `uses:` lines in `.github/workflows/ci.yml` move to
+  `875dec3c9d475ca47c4b012ca43742de832ef626 # v1.25.0`, so the workflows and the module name one version, as
+  [0035-MADR-pin-current-sibling-releases-and-remove-gobble-copies.md](0035-MADR-pin-current-sibling-releases-and-remove-gobble-copies.md)
+  moved them at `v1.24.0` with no workflow change either.
+* **A2-3. The hint** (Q7). When the target's error wraps `selfupdate.ErrSymlinkInvocation`, gobble's line after the
+  library's is `hint: gobble does not update through a symlink; run the file the link points to, named above, as
+  <that file> update.` It names no path of its own. Every other refusal keeps D6's hint. gobble offers no way to set
+  `TargetPolicy.ExecutablePath`.
+* **A2-4. The records.** D6's dated note, Confirmation 5's amendment and the Linux Consequence of
+  "Amendment (2026-11-09)" each gain a note that `v1.25.0` closes them; README's Linux sentence goes; Confirmation 5
+  holds on every platform again.
+
+### Questions for the owner
+
+* **Q6. The CI workflow pins.**
+  * **(a) Move both to `875dec3 # v1.25.0`.** *(recommended, chosen)* One version named everywhere; no workflow
+    changed.
+  * (b) Leave them at `74ab5dd # v1.24.0`, since the workflows are identical; the comment then names an older version
+    than `go.mod`.
+* **Q7. The symlink hint.**
+  * **(a) A symlink-specific hint, chosen by `errors.Is(err, selfupdate.ErrSymlinkInvocation)`, naming no path.**
+    *(recommended, chosen)* Correct on every platform; the library's line names both paths.
+  * (b) No gobble hint after a symlink refusal: the library's line already says to run the target, but also says to
+    set `TargetPolicy.ExecutablePath`, which a gobble user cannot.
+  * (c) Keep D6's hint for every refusal. On Linux it names the wrong file (above).
+
+#### Answers (2026-11-09)
+
+The owner: "Q6 a, Q7 a, proceed". Q6 (a): both workflow pins move to `v1.25.0`'s commit. Q7 (a): the symlink hint, chosen by `ErrSymlinkInvocation`.
+
+### Consequences
+
+* Good, because a symlink invocation is refused on Linux too, so a link into a tree another tool manages under the
+  home directory, such as Homebrew on Linux in `~/.linuxbrew`, is never overwritten; the first amendment's Bad
+  Consequence is closed.
+* Good, because the hint is chosen by the library's sentinel, not by its text.
+* Neutral, because a Linux user who ran gobble through a link, and whose update worked at `v1.24.0`, is now refused and
+  told to run the target. No gobble release has shipped `update` yet, so no user has relied on it.
+
+### Confirmation
+
+9. `go list -m github.com/maccavelli/go-selfupdate-lib` gives `v1.25.0`; `git diff` of `go.mod` changes that one line.
+10. `TestUpdateSymlink` sees the library's `links to` line and A2-3's hint, and not D6's; a new test of a target
+    outside the home directory sees D6's hint naming it. Each is seen failing against a planted break.
+11. Live, on a scratch home, as P3: on the Linux machine and macOS a symlink invocation exits 1 with A2-3's hint and
+    replaces nothing; the direct steps (check, dry run, install, agent guard, and on the Windows laptop the install
+    beside `gobble acp`) pass as in P3 on all three hosts.
+12. `make preflight`, `make race`, `scripts/check_libs.py --lib go-selfupdate-lib`, and the tests and race tests on the
+    Linux machine and the Windows laptop pass.
+
+### Completion of A2 (2026-11-09)
+
+Carried out by 0048-PLAN's "Amendment of 2026-11-09: P4"; its P4 record has the evidence.
+
+| Item | Status | Evidence |
+| :--- | :--- | :--- |
+| 9 The pin | **done** | `go list -m` gives `v1.25.0`; `go.mod` changed one line; no other module moved |
+| 10 The tests | **done** | `TestUpdateSymlink` and `TestUpdateOutsideHome`; four planted breaks and a control, each as expected |
+| 11 Live | **done** | 11 of 11 on macOS, the Linux machine and the Windows laptop; the Linux symlink invocation refused with A2-3's hint |
+| 12 Gates | **done** | preflight, race, `check_libs.py`, and the tests and race tests on the two dev hosts |
+
+**Still the owner's:** closing go-selfupdate-lib#9 (the library's); the first release tag that carries `update`.

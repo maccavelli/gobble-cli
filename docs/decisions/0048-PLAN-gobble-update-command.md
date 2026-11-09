@@ -355,6 +355,109 @@ not posted, and filed later the same day on the owner's word as [maccavelli/go-s
    * After the records: `make check-records markdownlint` exit 0. The identifier scan of the diff (the local account
      name, the dev hosts' names, the org's mail domain, and real-machine home and temporary paths): nothing found.
 
+### Amendment of 2026-11-09: P4, the `v1.25.0` pin (approved 2026-11-09, "Q6 a, Q7 a, proceed")
+
+Carries out the MADR's "Amendment A2 (2026-11-09, accepted)". On approval, with the owner's answers to Q6 and Q7, this
+plan goes back to `in-progress`, and to `complete` after P4's record.
+
+**Base.** `main` at `03b7547`, equal to `origin/main`, clean, when this phase was written.
+
+**In scope:** `go.mod`, `go.sum`, `.github/workflows/ci.yml` (Q6 (a)), `internal/cli/update.go`,
+`internal/cli/update_test.go`, `README.md`, `docs/architecture.md`, this pair, `docs/README.md`. **Out of scope:** any
+other module's version (a move is a deviation); any other package; a tag; a push; closing go-selfupdate-lib#9.
+
+#### P4 — the pin, the hint, and acceptance
+
+1. C1. Record the answers to Q6 and Q7 in the MADR, set A2 accepted, and set this plan `in-progress`.
+2. `go get github.com/maccavelli/go-selfupdate-lib@v1.25.0`, then `go mod tidy`. `git diff go.mod` changes the one
+   requirement line; `go.sum` gains `v1.25.0`'s two lines and loses `v1.24.0`'s. Anything else is a deviation.
+3. With Q6 (a): the two `uses:` lines in `.github/workflows/ci.yml` name
+   `875dec3c9d475ca47c4b012ca43742de832ef626 # v1.25.0`.
+4. `internal/cli/update.go`: `targetHint` takes the target's error; when it wraps `selfupdate.ErrSymlinkInvocation` it
+   returns A2-3's hint, else D6's as now. Comments name A2-3.
+5. `internal/cli/update_test.go`:
+   * `TestUpdateSymlink` also requires `links to` in stderr and A2-3's hint, and that D6's `Install gobble there` is
+     absent;
+   * `TestUpdateOutsideHome` (new): `ExecutablePath` a regular file outside the fake home → exit 1, the library's
+     `outside allowed roots`, D6's hint naming that file; the file unchanged.
+6. C2, on scratch copies:
+   * the tree before P4 (`v1.24.0`, D6's hint for all) with only the new tests: `TestUpdateSymlink` fails, having no
+     `links to` and D6's hint; `TestUpdateOutsideHome` passes, since D6's hint is unchanged;
+   * the symlink branch removed (D6's hint for all): `TestUpdateSymlink` fails;
+   * the branch inverted: `TestUpdateSymlink` and `TestUpdateOutsideHome` fail;
+   * no hint at all after a refused target: both fail.
+7. Docs: README's Stack line `v1.25.0`; README's "Updating" loses the Linux sentence and says a symlink invocation is
+   refused, with the advice to run the file it points to; `docs/architecture.md`'s requirements table `v1.25.0`. In the
+   MADR, the notes of A2-4.
+8. Gates (C6): `make pre-add-check FILES=…`, `make preflight`, `make race`, `scripts/check_libs.py --lib
+   go-selfupdate-lib` (nothing newer to check, or the next tag reported); `go test ./...` and `-race` on the Linux
+   machine and the Windows laptop.
+9. Live (C5), `p3_0048_live.py` with the symlink step expecting exit 1 and A2-3's hint: macOS, the Linux machine and
+   the Windows laptop, as P3 step 2.
+10. Records: a P4 record here with the quoted failures and the live table; A2's Confirmation 9 to 12 in a Completion
+    note; `docs/README.md`'s rows. Staged; the owner commits.
+
+#### P4 record (2026-11-09)
+
+C1: `HEAD` and `origin/main` at `03b7547`; the only changes were this amendment's records, uncommitted. No deviation.
+
+1. The owner's answers, 2026-11-09: "Q6 a, Q7 a, proceed", in the MADR's A2 "Answers (2026-11-09)"; A2 accepted.
+2. `go get github.com/maccavelli/go-selfupdate-lib@v1.25.0`: `go: upgraded github.com/maccavelli/go-selfupdate-lib
+   v1.24.0 => v1.25.0`; `go mod tidy` exit 0. `git diff go.mod` changes that one line; `go.sum` swaps `v1.24.0`'s two
+   lines for `v1.25.0`'s. No other module moved. `go list -m github.com/maccavelli/go-selfupdate-lib` gives `v1.25.0`.
+3. Q6 (a): both `uses:` lines in `.github/workflows/ci.yml` name
+   `875dec3c9d475ca47c4b012ca43742de832ef626 # v1.25.0`.
+4. `internal/cli/update.go`: `symlinkHint`, A2-3's text; `targetHint(policy, err)` returns it when `err` wraps
+   `selfupdate.ErrSymlinkInvocation`, else D6's hint as before; `Run` passes the target's error.
+5. `internal/cli/update_test.go`: `TestUpdateSymlink` requires `refusing to update through a symlink`,
+   `<link> links to `, `symlinkHint`, and no `Install gobble there`; `TestUpdateOutsideHome` (new) sets
+   `ExecutablePath` to a regular file in a temporary directory outside the fake home and requires exit 1,
+   `outside allowed roots`, D6's hint naming that file, no `symlinkHint`, and the file unchanged.
+6. **Seen failing** (C2), `p4_0048_breaks.py` on a scratch copy per case, offline (`GOPROXY=off`, the proxies at
+   `127.0.0.1:9`); the unbroken copy is the control, exit 0:
+   * The tree before P4 (`HEAD`'s `go.mod`, `go.sum` and `update.go`, so `v1.24.0` and D6's hint for every refusal),
+     with the new tests and only `symlinkHint`'s text added so they compile: `TestUpdateSymlink` failed,
+     `update_test.go:350: exit 1, stderr "… update failed: selfupdate: gobble: selfupdate: refusing to update through a
+     symlink\nhint: gobble replaces only a regular, non-symlinked file under your home directory, and
+     <TMP>/…/gobble-link is not one. …"`; `TestUpdateOutsideHome` passed.
+   * The symlink branch removed: `TestUpdateSymlink` failed (`update_test.go:350`, the library's `… links to …; run
+     …` followed by D6's hint); `TestUpdateOutsideHome` passed.
+   * The branch inverted: both failed; `update_test.go:375: exit 1, stderr "… target <TMP>/…/gobble is outside
+     allowed roots\nhint: gobble does not update through a symlink; …"`.
+   * No hint after a refused target: both failed; `update_test.go:375: … is outside allowed roots\n"`, nothing after.
+   `cases not as expected: 0`. The `failed` event's class read `symlink-invocation` for the symlink and `error` for
+   the outside-home refusal, as the library's changelog says.
+7. Docs: README's Stack line and `docs/architecture.md`'s requirements table name `v1.25.0`; README's "Updating"
+   says a symlink invocation is refused, naming the file the link points to. The MADR's closing notes (A2-4).
+8. **Gates (C6):**
+   * `make pre-add-check FILES="internal/cli/update.go internal/cli/update_test.go"`: `2 file(s) clean (gofmt,
+     golint, govulncheck)`.
+   * macOS: `make preflight` exit 0, `preflight passed`; `make race` 39 ok; `go test -count=1 ./...` 38 ok.
+   * `scripts/check_libs.py --lib go-selfupdate-lib` exit 0: `api: pinned at v1.25.0; nothing to compare`,
+     `0 failing checks`.
+   * The Linux machine (amd64), a scratch copy at `v1.25.0`: `go test -count=1 ./...` 38 ok; `-race` 38 ok.
+   * The Windows laptop (amd64), a scratch copy, `TMP`/`TEMP` set: `go test -count=1 ./...` 38 ok; `-race` 38 ok.
+   * `make check-records markdownlint` after the records: exit 0. The identifier scan of the diff (the local account
+     name, the dev hosts' names, the org's mail domain, and real-machine home and temporary paths): nothing found.
+9. **Live** (C5), `p4_0048_live.py` (P3's script, the symlink step expecting exit 1, `<link> links to ` and A2-3's
+   hint, and no D6 hint), from the working tree at `v1.25.0`, GitHub Latest still `v0.4.0`:
+
+   | Step | macOS (darwin/arm64) | The Linux machine (linux/amd64) | The Windows laptop (windows/amd64) |
+   | :--- | :--- | :--- | :--- |
+   | 2 to 6, as P3 | all ok | all ok | all ok |
+   | 7 symlink | exit 1, refused, A2-3's hint, unchanged | **exit 1, refused, A2-3's hint, unchanged** | — |
+   | 8 beside `gobble acp` | — | — | exit 0, digest equal |
+   | checks | 11 of 11 | 11 of 11 | 11 of 11 |
+
+   The symlink step on the Linux machine, as printed: `update failed: selfupdate: gobble: selfupdate: refusing to
+   update through a symlink: <TMP>/home/link/gobble links to <TMP>/home/.local/bin/gobble; run
+   <TMP>/home/.local/bin/gobble, or set TargetPolicy.ExecutablePath to it`, then `hint: gobble does not update through
+   a symlink; run the file the link points to, named above, as <that file> update.` macOS printed the same two lines.
+   On the Windows laptop the second install again found the first one's backup gone, its own
+   `.gobble.exe.selfupdate-bak-1049727785` left.
+10. Records: this record; the MADR's A2 answers, closing notes and "Completion of A2"; `docs/README.md`'s 0048 rows.
+    The plan is `complete` again.
+
 ## Verification
 
 The MADR's Confirmation 1 to 8, as P1 step 3 and P3 step 2 map them: 1 to 5 by P1's tests, 6 by P1 step 5, 7 by P3

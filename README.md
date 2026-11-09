@@ -137,8 +137,8 @@ gobble update --release vX.Y.Z   # exactly this release
 ```
 
 - It replaces only a regular, non-symlinked file under your home directory, such as `~/.local/bin/gobble`. A binary
-  anywhere else is left alone, with a line saying where to install it. On Linux, run through a symlink, it updates
-  the file the symlink points at when that file qualifies; macOS refuses the symlink.
+  anywhere else is left alone, with a line saying where to install it. Run through a symlink, it refuses, and names
+  the file the link points to: run that one's `gobble update`.
 - `--force` replaces a local build, or reinstalls the same version. `--json` writes JSON Lines to stdout.
 - `GH_TOKEN` or `GITHUB_TOKEN`, when set, authenticates the requests to GitHub.
 - Inside gobble's own tools, only `--check` runs; install from your own terminal.
@@ -158,7 +158,7 @@ The design is [0048-MADR](docs/decisions/0048-MADR-gobble-update-command.md).
 - **Tool schemas:** JSON Schema 2020-12 from Go types, with [jsonschema-go](https://github.com/google/jsonschema-go) `v0.4.3`.
 - **Settings, skills and templates:** YAML through [go.yaml.in/yaml/v3](https://github.com/yaml/go-yaml) `v3.0.5`.
 - **Build identity and self-update:** [go-selfupdate-lib](https://github.com/maccavelli/go-selfupdate-lib)
-  `v1.24.0`. gobble does not reimplement self-update.
+  `v1.25.0`. gobble does not reimplement self-update.
 - **TUI:** [go-tui-lib](https://github.com/maccavelli/go-tui-lib) `/v2` `v2.12.0`. The CLI mode draws its permission
   prompt with its Charm-free `ask`. gobble does not reimplement core TUI; where a behaviour is not in the library
   yet, gobble waits rather than copying it.
