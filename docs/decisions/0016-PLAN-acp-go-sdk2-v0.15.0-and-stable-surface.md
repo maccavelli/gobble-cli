@@ -861,3 +861,10 @@ clean (C1). The gate: P4 is committed. No deviation.
    * The Linux machine and the Windows laptop were not run this phase. The code is P4's, which both passed at P4 with
      the tree shipped, and P5 changes only Markdown. Preflight's `check-records` checks the records' names and links,
      and its `markdownlint` checks `docs/architecture.md` and `docs/README.md`; its globs skip MADR and PLAN files.
+
+### Correction (2026-11-09): `docs/architecture.md`'s acpext row
+
+P3c (`3d6fb65`) moved `go.mod` from acpext `v0.1.0` to `v0.2.0` (P3c record, step 2) and left
+`docs/architecture.md`'s table of direct requirements at `v0.1.0`. Found while 0048-PLAN P4 edited the same table; the
+row was put right on the owner's word ("fix the acpext version in architecture.md"). `go.mod:20` requires
+`github.com/maccavelli/gobble-cli/acpext v0.2.0`; no other document outside the records names acpext's version.

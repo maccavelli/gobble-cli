@@ -185,7 +185,7 @@ The direct requirements in `go.mod`:
 | :--- | :--- |
 | `github.com/alecthomas/kong` | `v1.16.1` |
 | `github.com/maccavelli/acp-go-sdk2` | `v1.34.2` |
-| `github.com/maccavelli/gobble-cli/acpext` | `v0.1.0` |
+| `github.com/maccavelli/gobble-cli/acpext` | `v0.2.0` |
 | `github.com/modelcontextprotocol/go-sdk` | `v1.8.0` |
 | `github.com/maccavelli/go-llmprovider-sdk` | `v1.28.0` |
 | `github.com/maccavelli/go-selfupdate-lib` | `v1.25.0` |
