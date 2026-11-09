@@ -137,7 +137,8 @@ gobble update --release vX.Y.Z   # exactly this release
 ```
 
 - It replaces only a regular, non-symlinked file under your home directory, such as `~/.local/bin/gobble`. A binary
-  anywhere else is left alone, with a line saying where to install it.
+  anywhere else is left alone, with a line saying where to install it. On Linux, run through a symlink, it updates
+  the file the symlink points at when that file qualifies; macOS refuses the symlink.
 - `--force` replaces a local build, or reinstalls the same version. `--json` writes JSON Lines to stdout.
 - `GH_TOKEN` or `GITHUB_TOKEN`, when set, authenticates the requests to GitHub.
 - Inside gobble's own tools, only `--check` runs; install from your own terminal.

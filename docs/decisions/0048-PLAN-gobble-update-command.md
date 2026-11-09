@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: complete
 date: 2026-11-09
 associated-madr: "0048-MADR-gobble-update-command.md"
 ---
@@ -270,7 +270,9 @@ the error was the plan's. No file added to the phase.
    5. `gobble update --yes`: exit 0, `updated v0.3.1 -> v0.4.0`; `gobble version` prints `gobble 0.4.0`; the file's
       SHA-256 equals the release's digest for that platform.
    6. `AI_AGENT=gobble gobble update --yes` (with the old binary rebuilt): exit 1, D5's line.
-   7. macOS and Linux: a symlink to the binary, invoked: exit 1, refused, the hint.
+   7. ~~macOS and Linux: a symlink to the binary, invoked: exit 1, refused, the hint.~~ *(2026-11-09 deviation,
+      P3 record)* macOS: a symlink to the binary, invoked: exit 1, refused, the hint. The Linux machine: the same
+      run, recording what happens; there `os.Executable` resolves the symlink.
    8. Windows laptop only: rebuild the v0.3.1 binary, start `gobble acp` from it and keep it running, run
       `gobble update --yes` from the same file: exit 0, and the installed file is v0.4.0's; stop `gobble acp`; the
       record lists any `.gobble.exe.selfupdate-*` file left beside it.
@@ -281,6 +283,75 @@ the error was the plan's. No file added to the phase.
 3. **Records:** the MADR's Confirmation, item by item, in a "Completion" section with commits and evidence; this plan
    `complete` with a P-record per phase; `docs/README.md`'s rows.
 4. **Gates (C6).** Staged; the owner commits.
+
+### P3 record (2026-11-09)
+
+C1: `HEAD` at `38323b5` (P2), `origin/main` at `2e83cce`, the tree clean. GitHub Latest `v0.4.0`, published
+2026-11-08T23:57:12Z; its digests from `gh release view v0.4.0 --json assets`: `gobble-darwin-arm64` `f1b85799…`,
+`gobble-linux-amd64` `3c35fee6…`, `gobble-windows-amd64.exe` `e7d2aa8a…`.
+
+**Deviation (2026-11-09), step 2.7.** On the Linux machine the symlink invocation was not refused: exit 0,
+`gobble: updated v0.3.1 -> v0.4.0`, the target replaced. `os.Executable` on Linux returns the resolved path, so the
+library's `Lstat` check never sees the symlink; P1's test passes there because it sets `ExecutablePath`. The owner
+chose, the same day, "option 1, draft the issue, proceed": the MADR's "Amendment (2026-11-09)" records it, narrows D6
+and Confirmation 5, and adds a Consequence; README says it; an issue for go-selfupdate-lib was drafted for the owner,
+not posted. Step 2.7 is struck through and amended above. Files added to the phase: `README.md`.
+
+1. **Goldens:** `git diff --quiet 2e83cce HEAD -- internal/cli/testdata acpserver/testdata acpclient/acptest/testdata`
+   exit 0.
+2. **Live run** (C5), `p3_0048_live.py` from the scratchpad, with `HOME`, `USERPROFILE`, `XDG_*` (and on Windows
+   `APPDATA`, `LOCALAPPDATA`) in a scratch home, `GH_TOKEN`, `GITHUB_TOKEN`, `AI_AGENT` and the proxies unset, stdin
+   not a terminal. Requests were unauthenticated. Per host, the checks the script made:
+
+   | Step | macOS (darwin/arm64) | The Linux machine (linux/amd64) | The Windows laptop (windows/amd64) |
+   | :--- | :--- | :--- | :--- |
+   | 2 identity | `v0.3.1 (release) 38323b5e7b32` | `v0.3.1 (release)` | `v0.3.1 (release)` |
+   | 3 `--check` | exit 10 | exit 10 | exit 10 |
+   | 4 `--dry-run --yes` | exit 0, unchanged | exit 0, unchanged | exit 0, unchanged |
+   | 5 `--yes` | exit 0, digest equal | exit 0, digest equal | exit 0, digest equal |
+   | 5 `gobble version` | `gobble 0.4.0` | `gobble 0.4.0` | `gobble 0.4.0` |
+   | 6 `AI_AGENT=gobble` | exit 1, D5's line, unchanged | exit 1, D5's line, unchanged | exit 1, D5's line, unchanged |
+   | 7 symlink | exit 1, refused, the hint, unchanged | **exit 0, target replaced** (deviation) | — |
+   | 8 beside `gobble acp` | — | — | exit 0, digest equal |
+   | checks | 11 of 11 | 9 of 11 | 11 of 11 |
+
+   On the remote hosts the tree copy has no `.git`, so the build records no commit and step 2 prints none.
+
+   The lines, as printed (paths as `<TMP>`):
+   * `--check`: `selfupdate: selected product=gobble current=v0.3.1 target=v0.4.0 asset=gobble-darwin-arm64`,
+     `gobble: update available: v0.3.1 -> v0.4.0`.
+   * `--dry-run --yes`: `… downloading-binary … asset=gobble-darwin-arm64 bytes=20883746`, `… verified …`,
+     `gobble: dry run: v0.4.0 verified; nothing installed`. linux/amd64 `bytes=22184096`, windows/amd64
+     `bytes=22847488`.
+   * `--yes`: `… installing …`, `… complete … release asset integrity verified`, `gobble: updated v0.3.1 -> v0.4.0`.
+     On Windows the `complete` line ends `pending backup <TMP>\home\.local\bin\.gobble.exe.selfupdate-bak-2774772639
+     will be validated and removed before the next download`.
+   * `AI_AGENT=gobble`: `Error: gobble update: refusing to install from inside gobble; run it in your own terminal`.
+   * Symlink, macOS: `update failed: selfupdate: gobble: selfupdate: refusing to update through a symlink`, then
+     `hint: gobble replaces only a regular, non-symlinked file under your home directory, and <TMP>/home/link/gobble
+     is not one. …`.
+   * Symlink, the Linux machine: `… installing …`, `gobble: updated v0.3.1 -> v0.4.0`.
+   * Beside the target after the first install: `.gobble.selfupdate.lock` and `gobble` on macOS and Linux;
+     `.gobble.exe.selfupdate-bak-2774772639`, `.gobble.exe.selfupdate.cleanup`, `.gobble.exe.selfupdate.lock` and
+     `gobble.exe` on Windows.
+   * Step 8, Windows: `gobble acp` was running when the update started. After it: one leftover,
+     `.gobble.exe.selfupdate-bak-1903696905`, the second install's. The first install's `bak-2774772639` was gone:
+     the rebuilt binary's `CleanupPending` (D4) removed it before downloading. That is the cleanup this step said
+     could not run live before the first release carrying `update`; a binary built from the tree carries it.
+
+   The first Linux run stopped before building: the scratch path chosen already held an unrelated file from an earlier
+   session, left alone; the run used a fresh path.
+3. **Records:** the MADR's "Amendment (2026-11-09)" and "Completion (2026-11-09)"; this plan `complete`;
+   `docs/README.md`'s 0048 rows. The P1 row's "fourteen planted breaks" is corrected to thirteen and a control, as
+   the P1 record counts them. The go-selfupdate-lib issue is drafted in the scratchpad and handed to the owner.
+4. **Gates (C6):**
+   * macOS, at `38323b5` with no Go file changed since P1: `make preflight` exit 0, `preflight passed` (`go mod tidy`
+     clean, archtest ok, `apidiff: no-op below v1.0.0`); `make race` 39 ok; `go test -count=1 ./...` 38 ok.
+   * The Linux machine (amd64), a scratch copy: `go test -count=1 ./...` 38 ok, exit 0; `-race` 38 ok, exit 0.
+   * The Windows laptop (amd64), a scratch copy, `TMP`/`TEMP` set: `go test -count=1 ./...` 38 ok, exit 0; `-race`
+     38 ok, exit 0.
+   * After the records: `make check-records markdownlint` exit 0. The identifier scan of the diff (the local account
+     name, the dev hosts' names, the org's mail domain, and real-machine home and temporary paths): nothing found.
 
 ## Verification
 

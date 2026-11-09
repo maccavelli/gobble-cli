@@ -72,7 +72,8 @@ Read from the module cache, `go-selfupdate-lib@v1.24.0/selfupdate`.
 * **`NewStandaloneInstaller(InstallOptions{})`** resolves the target from `os.Executable`. It refuses a symlink
   invocation, a target that is not a regular file, a setuid or setgid target, and a target outside the home
   directory or `TargetPolicy.AllowedRoots`. `CleanupPending(ctx)` takes and releases the target's lock, finishing a
-  Windows leftover; `ErrConcurrentUpdate` from it is benign.
+  Windows leftover; `ErrConcurrentUpdate` from it is benign. *(2026-11-09: the symlink refusal sees only a path
+  `os.Executable` returns as the symlink, which on Linux it never does; see "Amendment (2026-11-09)".)*
 * **`GitHubOptions.Token`** empty falls back to `Credentials`, then `GH_TOKEN`, then `GITHUB_TOKEN`.
 * **`verify/ghattest`** verifies a release's provenance attestation by running `gh attestation verify`. It is
   opt-in, needs `gh` installed **and logged in** even for a public repository, and fails the update on any of those
@@ -173,6 +174,10 @@ path and saying to reinstall under the home directory, such as `~/.local/bin`, w
 Homebrew tap's own work (0005-MADR "Homebrew tap", 1.x; 0005-PLAN X5): there is no tap, so there is nothing to detect
 yet (Q3).
 
+*(2026-11-09 amendment.)* On Linux, "non-symlinked" holds for the file replaced, not for the path invoked: a
+symlink invocation updates the file it points at when that file passes the policy, and gets no hint. On macOS it
+is refused, with the hint. See "Amendment (2026-11-09)".
+
 ### D7. Tests stay on loopback
 
 `internal/cli` tests run `gobble update` through `Main` against `selfupdatetest.NewGitHubServer`. A package variable
@@ -231,6 +236,35 @@ proceed".
   itself stays.
 * **Q5:** (b), the probe runs `version --json`, as 0005-MADR said. D2 is written to it.
 
+### Amendment (2026-11-09): a symlink invocation on Linux
+
+Found at 0048-PLAN P3 step 2, the live run. A binary built from the tree, stamped `v0.3.1`/`release`, at
+`<scratch home>/.local/bin/gobble`, invoked through `<scratch home>/link/gobble`, a symlink to it:
+
+* **macOS (darwin/arm64):** exit 1, `update failed: selfupdate: gobble: selfupdate: refusing to update through a
+  symlink`, then gobble's hint; the file unchanged. As D6 and Confirmation 5 say.
+* **The Linux machine (linux/amd64):** exit 0, `gobble: updated v0.3.1 -> v0.4.0`, and the file the symlink points at
+  replaced with the release asset.
+
+**Why.** The installer takes the raw path from `os.Executable` (`selfupdate/replace.go`, `osExecutable`) and refuses
+it when `os.Lstat` reports a symlink (`selfupdate/target.go`, `resolveTarget`). On Linux, `os.Executable` reads
+`/proc/self/exe`, which the kernel has already resolved, so the raw path is never the symlink and that check cannot
+fire; Go's documentation says the result may be the symlink or its target, by operating system. The file replaced still
+passes every other check: a regular file, not setuid or setgid, under the home directory. P1's `TestUpdateSymlink`
+passes on Linux because it sets `TargetPolicy.ExecutablePath` to the symlink, which skips `os.Executable`.
+
+**The owner's decision** (2026-11-09: "option 1, draft the issue, proceed"): record it as the library's behaviour on
+Linux, and have the library fixed, rather than detect the invoked path in gobble, which would reimplement self-update
+behaviour ([0004-MADR-go-module-architecture.md](0004-MADR-go-module-architecture.md)). So:
+
+* D6 (above) gains a dated note; Confirmation 5 (below) is narrowed, struck through where the text changes; the facts on
+  `NewStandaloneInstaller` carry a note.
+* README's "Updating" section says that on Linux a symlink invocation updates the file it points at.
+* An issue for go-selfupdate-lib was drafted and handed to the owner, not posted. A later pair takes up the version that
+  fixes it.
+* A new Consequence names the risk: a symlink into a tree another tool manages under the home directory, such as
+  Homebrew on Linux in `~/.linuxbrew`.
+
 ### Consequences
 
 * Good, because users get `gobble update` from the next release, with the checks the library offers for raw
@@ -246,6 +280,9 @@ proceed".
   `SHA256SUMS`, which it publishes too. The tag rulesets of
   [0043-MADR-protect-main-and-acpext-tags-without-bypass.md](0043-MADR-protect-main-and-acpext-tags-without-bypass.md)
   are the control until Q2 (b) or (c) lands.
+* Bad, because on Linux a symlink invocation updates the file it points at (Amendment (2026-11-09)): a symlink
+  into a tree another tool manages under the home directory, such as Homebrew on Linux in `~/.linuxbrew`, has that
+  tool's copy replaced, where macOS refuses. Until go-selfupdate-lib sees the invoked path on Linux.
 
 ### Confirmation
 
@@ -260,7 +297,11 @@ proceed".
    `gobble-<os>-<arch>.tar.gz` is not selected.
 4. Under `AI_AGENT=gobble`, `update`, `update --yes` and `update --dry-run` exit 1 with the guard's line and the
    server records no request; `update --check` runs.
-5. A symlink invocation is refused with the library's error and gobble's hint, and nothing is replaced.
+5. ~~A symlink invocation is refused with the library's error and gobble's hint, and nothing is replaced.~~
+   *(2026-11-09 amendment)* Where `os.Executable` returns the symlink (macOS), a symlink invocation is refused
+   with the library's error and gobble's hint, and nothing is replaced; a test that gives the installer the
+   symlink's path shows the same on Linux. On Linux, invoked through a symlink, the file it points at is checked
+   and replaced.
 6. Each new test is seen failing against a planted break, on a scratch copy.
 7. On a scratch home on macOS, the Linux machine and the Windows laptop, a binary built from the tree and stamped
    `v0.3.1`/`release` reports `v0.4.0` from real GitHub with `--check` (exit 10), verifies it with `--dry-run`, installs
@@ -307,6 +348,7 @@ proceed".
 * Prerelease channels and tagging release candidates.
 * Provenance verification (Q2 (a)).
 * The next release tag. The owner asks for it.
+* Seeing a symlink invocation on Linux: go-selfupdate-lib's, by the issue drafted at P3 (Amendment (2026-11-09)).
 
 ### Related records
 
@@ -320,3 +362,29 @@ proceed".
 * [0046-MADR-own-background-listings-and-keep-tests-hermetic.md](0046-MADR-own-background-listings-and-keep-tests-hermetic.md)
   D3, D4: the tests' network guard.
 * [0048-PLAN-gobble-update-command.md](0048-PLAN-gobble-update-command.md): the implementation.
+
+## Completion (2026-11-09): 0048-PLAN carried out
+
+[0048-PLAN-gobble-update-command.md](0048-PLAN-gobble-update-command.md) is complete. Its P3 commit is the one that
+adds this section.
+
+| Item | Status | Commit | Evidence |
+| :--- | :--- | :--- | :--- |
+| 1 Help: six flags, the exit status, no `--channel` | **done** | `e22954f` (P1) | `TestUpdateHelp` |
+| 2 Check, JSON, contradiction, `--release` | **done** | `e22954f` (P1) | `TestUpdateCheck`, `TestUpdateJSON`, `TestUpdateContradiction`, `TestUpdateRelease` |
+| 3 Apply, a bad image, an archive | **done** | `e22954f` (P1) | `TestUpdateApply`, `TestUpdateRefusesBadImage`, `TestUpdateIgnoresArchive` |
+| 4 The agent guard | **done** | `e22954f` (P1), P3 | `TestUpdateAgentGuard`; live, exit 1 with the guard's line on all three hosts |
+| 5 A symlink invocation | **done as amended** | `e22954f` (P1), P3 | `TestUpdateSymlink`; live, refused on macOS; on the Linux machine the target was replaced (Amendment (2026-11-09)) |
+| 6 Seen failing | **done** | `e22954f` (P1) | the PLAN's P1 record: thirteen planted breaks and a control, each as expected; the `Signals` break not run, with the reason |
+| 7 Live from real GitHub | **done** | P3 | the PLAN's P3 record: `--check` exit 10, `--dry-run` unchanged, `--yes` installed v0.4.0's digest, `gobble version` `gobble 0.4.0`, on all three hosts; on the Windows laptop, installed beside a running `gobble acp` |
+| 8 Gates | **done** | P1, P3 | the PLAN's P1 and P3 records |
+
+**Found at acceptance,** besides the amendment:
+
+* The Windows leftover was cleaned live after all. The first `--yes` left `.gobble.exe.selfupdate-bak-<digits>`; the
+  next update that could install, from a rebuilt binary that has `update`, removed it before downloading, as D4 has
+  `CleanupPending` do. Confirmation 7's last sentence assumed only an installed release could show that.
+* The library leaves `.gobble.selfupdate.lock` (`.gobble.exe.selfupdate.lock` on Windows) beside the binary, and on
+  Windows a `.gobble.exe.selfupdate.cleanup` file with the pending backup.
+
+**Still the owner's:** filing the drafted go-selfupdate-lib issue; the first release tag that carries `update`.
