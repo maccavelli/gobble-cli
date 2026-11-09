@@ -251,6 +251,13 @@ rule, and there is no `v*` ruleset.
   ```
 
 - The release is immutable: `gh release view vX.Y.Z --json isImmutable` gives `true`.
+- `gobble update` finds it. From the previous release's binary, installed under your home directory,
+  `gobble update --check` exits 10 and names the new tag. On Windows, start `gobble acp` from that binary and
+  leave it running, run `gobble update --yes` from the same file, stop `gobble acp`, then run a plain
+  `gobble update` from the installed binary: it reports the release up to date and exits 0, and no
+  `.gobble.exe.selfupdate-*` file is left beside it. A plain run, not `--check`, because only a run that may
+  install finishes a leftover. Both need the previous release to have `update`, so they start with the release after the
+  first one that carries it ([0048-MADR](../decisions/0048-MADR-gobble-update-command.md)).
 
 ### When the tag rule comes back
 

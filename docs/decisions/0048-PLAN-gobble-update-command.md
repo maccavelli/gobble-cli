@@ -228,9 +228,32 @@ C1: `HEAD` `b0bc207` (P0), one ahead of `origin/main` (`2e83cce`), clean. No dev
 2. `docs/architecture.md`: `internal/cli`'s row names `update` and what it composes.
 3. `docs/guides/developing.md`: after a release, run `gobble update --check` from the previous release's binary and
    expect exit 10 naming the new tag; then, on Windows, `gobble update --yes` while another copy runs, and a second
-   `gobble update --check` from the installed binary that leaves no `.gobble.exe.selfupdate-*` file. Both need the
-   previous release to carry the command, so the first release with it is excepted.
+   ~~`gobble update --check`~~ plain `gobble update` *(2026-11-09 deviation, below)* from the installed binary that
+   leaves no `.gobble.exe.selfupdate-*` file. Both need the previous release to carry the command, so the first
+   release with it is excepted.
 4. `make check-records markdownlint` passes. Staged; the owner commits.
+
+### P2 record (2026-11-09)
+
+C1: `HEAD` at `e22954f` (P1), `origin/main` at `2e83cce`, the tree clean. No deviation at the start.
+
+**Deviation (2026-11-09).** Step 3 as written had a second `gobble update --check` finish the Windows leftover. The
+MADR's D4 runs `CleanupPending` only on a run that may install, never for `--check`, and `internal/cli/update.go`
+calls it only when the request is not check-only, so that check could never show the cleanup. The owner chose, the
+same day, to make the second run a plain `gobble update`: on an up-to-date binary it finishes the leftover, reports up
+to date and exits 0 without asking. Step 3 is struck through and amended above. The MADR is unchanged: D4 stands, and
+the error was the plan's. No file added to the phase.
+
+1. `README.md`: `gobble update` in the commands bullet; off the "Not built yet" line; a new "Updating" section after
+   the "I want to…" table: the four invocations, `--force` and `--json`, the home-directory rule and its hint, the
+   tokens, the agent guard, that v0.4.0 and earlier are replaced by hand once, and a link to the MADR.
+2. `docs/architecture.md`: `update` in the Commands bullet; `internal/cli`'s row says the spec is embedded by
+   `gobble update` and names what the command composes, and the agent guard.
+3. `docs/guides/developing.md`: a bullet under "After each `v*` release", with the amended second run, and why it is
+   not `--check`.
+4. Gates: `make check-records markdownlint` exit 0, `0 issues in 0 files` over 58 files. No Go file changed. The
+   identifier scan of the diff (the local account name, the dev hosts' names, the org's mail domain, and real-machine
+   home and temporary paths): nothing found.
 
 ### P3 — acceptance
 

@@ -86,7 +86,8 @@ Early, and built in the order [docs/README.md](docs/README.md#build-order) gives
 - **`@path` in a prompt** attaches that file, read inside the workspace, ahead of the text; ACP clients can attach
   resources and links as well.
 - **`gobble mcp add|remove|list`**, `gobble config path|get|set|unset|edit|init|update|validate|schema`,
-  `gobble trust` and `gobble untrust`, `gobble version` (or `--version` on any command) and `gobble completion`. Settings live in a commented `settings.yaml` in the config directory; `gobble config path`
+  `gobble trust` and `gobble untrust`, `gobble version` (or `--version` on any command), `gobble update` and
+  `gobble completion`. Settings live in a commented `settings.yaml` in the config directory; `gobble config path`
   shows where.
 - **`models.json`** in the config directory, in Pi's schema: a provider's base URL and headers, added models, and
   corrections to a model's window, price and thinking levels ([guide](docs/guides/models-json.md)).
@@ -106,8 +107,8 @@ Early, and built in the order [docs/README.md](docs/README.md#build-order) gives
   stored credential. With no credential at all, a session offers the sign-in before its first prompt, and
   `gobble setup` runs it at any time.
 
-Not built yet: `--offline`, which is refused until 0005-PLAN X3; the enhanced TUI
-mode; and `gobble update`. The full v1 line, tiered into
+Not built yet: `--offline`, which is refused until 0005-PLAN X3; and the enhanced TUI
+mode. The full v1 line, tiered into
 a v1.0.0 gate, a v1.x train and `exp/`, is in [0005-MADR](docs/decisions/0005-MADR-v1-feature-scope.md).
 
 | I want to… | Start here |
@@ -121,6 +122,29 @@ a v1.0.0 gate, a v1.x train and `exp/`, is in [0005-MADR](docs/decisions/0005-MA
 | see the build order | [docs/README.md](docs/README.md#build-order) |
 | build gobble, run the gates, or add a package | [developing.md](docs/guides/developing.md) |
 | know where the project started: the Go port feasibility study of Pi | [0001-REPORT](docs/reports/0001-REPORT-go-port-feasibility.md) |
+
+## Updating
+
+`gobble update` installs the latest release from GitHub over the running binary, after asking. Each download is
+checked against the release's `SHA256SUMS`, must be an executable for your platform, and runs `gobble version --json`
+before it replaces the old file and again after.
+
+```sh
+gobble update --check        # exit 10 when a newer release exists, 0 when up to date
+gobble update                # asks, then installs; -y or --yes skips the question
+gobble update --dry-run -y   # downloads and verifies, installs nothing
+gobble update --release vX.Y.Z   # exactly this release
+```
+
+- It replaces only a regular, non-symlinked file under your home directory, such as `~/.local/bin/gobble`. A binary
+  anywhere else is left alone, with a line saying where to install it.
+- `--force` replaces a local build, or reinstalls the same version. `--json` writes JSON Lines to stdout.
+- `GH_TOKEN` or `GITHUB_TOKEN`, when set, authenticates the requests to GitHub.
+- Inside gobble's own tools, only `--check` runs; install from your own terminal.
+- **v0.4.0 and earlier have no `update`.** Replace one of those once by hand with the release's binary for your
+  platform; from then on `gobble update` keeps it current.
+
+The design is [0048-MADR](docs/decisions/0048-MADR-gobble-update-command.md).
 
 ## Stack
 
