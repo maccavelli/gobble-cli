@@ -295,7 +295,7 @@ C1: `HEAD` at `38323b5` (P2), `origin/main` at `2e83cce`, the tree clean. GitHub
 library's `Lstat` check never sees the symlink; P1's test passes there because it sets `ExecutablePath`. The owner
 chose, the same day, "option 1, draft the issue, proceed": the MADR's "Amendment (2026-11-09)" records it, narrows D6
 and Confirmation 5, and adds a Consequence; README says it; an issue for go-selfupdate-lib was drafted for the owner,
-not posted. Step 2.7 is struck through and amended above. Files added to the phase: `README.md`.
+not posted, and filed later the same day on the owner's word as [maccavelli/go-selfupdate-lib#9](https://github.com/maccavelli/go-selfupdate-lib/issues/9). Step 2.7 is struck through and amended above. Files added to the phase: `README.md`.
 
 1. **Goldens:** `git diff --quiet 2e83cce HEAD -- internal/cli/testdata acpserver/testdata acpclient/acptest/testdata`
    exit 0.
@@ -344,6 +344,8 @@ not posted. Step 2.7 is struck through and amended above. Files added to the pha
 3. **Records:** the MADR's "Amendment (2026-11-09)" and "Completion (2026-11-09)"; this plan `complete`;
    `docs/README.md`'s 0048 rows. The P1 row's "fourteen planted breaks" is corrected to thirteen and a control, as
    the P1 record counts them. The go-selfupdate-lib issue is drafted in the scratchpad and handed to the owner.
+   After the P3 commit, on the owner's word, the disclosure guard passed over the four commits ahead of
+   `origin/main`, and the issue was filed as [maccavelli/go-selfupdate-lib#9](https://github.com/maccavelli/go-selfupdate-lib/issues/9), no earlier issue matching "symlink".
 4. **Gates (C6):**
    * macOS, at `38323b5` with no Go file changed since P1: `make preflight` exit 0, `preflight passed` (`go mod tidy`
      clean, archtest ok, `apidiff: no-op below v1.0.0`); `make race` 39 ok; `go test -count=1 ./...` 38 ok.

@@ -261,7 +261,7 @@ behaviour ([0004-MADR-go-module-architecture.md](0004-MADR-go-module-architectur
   `NewStandaloneInstaller` carry a note.
 * README's "Updating" section says that on Linux a symlink invocation updates the file it points at.
 * An issue for go-selfupdate-lib was drafted and handed to the owner, not posted. A later pair takes up the version that
-  fixes it.
+  fixes it. *(2026-11-09: filed on the owner's word as [maccavelli/go-selfupdate-lib#9](https://github.com/maccavelli/go-selfupdate-lib/issues/9).)*
 * A new Consequence names the risk: a symlink into a tree another tool manages under the home directory, such as
   Homebrew on Linux in `~/.linuxbrew`.
 
@@ -348,7 +348,7 @@ behaviour ([0004-MADR-go-module-architecture.md](0004-MADR-go-module-architectur
 * Prerelease channels and tagging release candidates.
 * Provenance verification (Q2 (a)).
 * The next release tag. The owner asks for it.
-* Seeing a symlink invocation on Linux: go-selfupdate-lib's, by the issue drafted at P3 (Amendment (2026-11-09)).
+* Seeing a symlink invocation on Linux: go-selfupdate-lib's, [maccavelli/go-selfupdate-lib#9](https://github.com/maccavelli/go-selfupdate-lib/issues/9) (Amendment (2026-11-09)).
 
 ### Related records
 
@@ -387,4 +387,5 @@ adds this section.
 * The library leaves `.gobble.selfupdate.lock` (`.gobble.exe.selfupdate.lock` on Windows) beside the binary, and on
   Windows a `.gobble.exe.selfupdate.cleanup` file with the pending backup.
 
-**Still the owner's:** filing the drafted go-selfupdate-lib issue; the first release tag that carries `update`.
+**Still the owner's:** ~~filing the drafted go-selfupdate-lib issue;~~ the first release tag that carries `update`.
+The issue was filed on 2026-11-09, on the owner's word, as [maccavelli/go-selfupdate-lib#9](https://github.com/maccavelli/go-selfupdate-lib/issues/9).
