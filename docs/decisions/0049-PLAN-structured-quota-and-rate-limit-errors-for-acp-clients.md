@@ -50,7 +50,7 @@ go-llmprovider-sdk `v1.28.0`; acp-go-sdk2 `v1.34.2`.
 * **P6, acceptance and the records;** `docs/architecture.md`'s rows for `acpext`, `llm`, `llm/provider` and `acpserver`.
   *Amended 2026-11-10 (P6 deviation 2):* and `acpclient`'s row, and `docs/guides/choosing-a-model.md`'s sentence on a
   turn's mark.
-* *Added 2026-11-10, by the MADR's amendment; proposed, each run on the owner's word after Q6 and Q7:*
+* *Added 2026-11-10, by the MADR's amendment, accepted the same day with Q6 (a) and Q7 (a); each phase runs on the owner's word:*
   * **P7, `GOBBLE_HOME` needs no platform directory** (MADR D11, Q7): `internal/appdirs/dirs.go` and its tests.
   * **P8, `gobble acp`'s model flags and misplaced chat flags** (MADR D12, Q6): `internal/cli/flags.go`,
     `internal/cli/acp.go`, `internal/cli/modelflags.go`, `internal/cli/main.go`, their tests, and the docs naming
@@ -799,9 +799,9 @@ amendment (F15, F16, D11, D12, Q6, Q7) and planned as P7 and P8, proposed. Neith
    * The identifier scan of the diff found nothing. It looked for the local account name, the dev hosts' names, the
      org's mail domain, and real-machine home and temporary paths.
 
-### P7 — `GOBBLE_HOME` needs no platform directory (MADR D11, Q7) — proposed
+### P7 — `GOBBLE_HOME` needs no platform directory (MADR D11, Q7)
 
-Runs on the owner's word after Q7. Under Q7 (b), step 1 gains the Windows flag, by amendment, before it runs.
+Q7 was answered (a), 2026-11-10: the steps run as written. Runs on the owner's word.
 
 1. **C1** as every phase, with P6 committed.
 2. **`internal/appdirs/dirs.go`:**
@@ -826,10 +826,9 @@ Runs on the owner's word after Q7. Under Q7 (b), step 1 gains the Windows flag, 
 6. **Gates** (C6), with the Linux machine and the Windows laptop running `go test ./...` and the race tests. Staged;
    the owner commits.
 
-### P8 — `gobble acp`'s model flags and misplaced chat flags (MADR D12, Q6) — proposed
+### P8 — `gobble acp`'s model flags and misplaced chat flags (MADR D12, Q6)
 
-Runs on the owner's word after Q6. The steps are written for Q6 (a). Q6 (b) or (c) amends them before the phase runs:
-(b) adds an `acpserver` option for a new session's model, and (c) drops step 2.
+Q6 was answered (a), 2026-11-10: the steps run as written. Runs on the owner's word, after P7.
 
 1. **C1**, and a probe on a scratch copy before any write. How Kong records a chat flag given before another
    command: its `kong.Context.Path` element, and whether `kctx.Command()` and the flag's owner tell them apart. If

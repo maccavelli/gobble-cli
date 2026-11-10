@@ -408,7 +408,7 @@ is the commit that adds this section.
 
 Items 11 and 12, which the amendment below adds, are open.
 
-### Amendment (2026-11-10, proposed): two defects found by P6's acceptance
+### Amendment (2026-11-10, accepted): two defects found by P6's acceptance
 
 P6's loopback acceptance found two defects that predate this record and are outside its decision. On 2026-11-10 the
 owner moved both into this record's scope, to be analysed and fixed: "add these to the current scope, they need to be
@@ -464,7 +464,7 @@ This holds on every OS. `Resolve`'s signature and its table (0003-MADR) are unch
 
 #### D12. gobble acp chooses its sessions' model as chat does, and a misplaced chat flag is refused (F15)
 
-As Q6 answers. Under Q6 (a):
+Q6 was answered (a), 2026-11-10:
 
 * `gobble acp` gains `--provider`, `--model` and `--thinking`, as chat's: same names, help, completion and resolution
   (`pickModel`, Pi's rules over the offline model set).
@@ -487,6 +487,19 @@ As Q6 answers. Under Q6 (a):
   * **(a) D11: read the base only when a role needs it.** *(recommended)*
   * (b) As (a), and on Windows ask for the known folders with `KF_FLAG_CREATE`, so that a profile without them gets
     them. Not recommended: it writes the OS profile, which no role asked for.
+  * (c) As (a), and when the directories cannot be resolved, `gobble acp` and chat stop at start with the error rather
+    than run with no config. Offered when the owner was asked; it changes a deliberate design (0005-PLAN F3-1) and would
+    need a decision of its own.
+
+#### Answers (2026-11-10)
+
+The owner was asked with three options for each question and chose the recommended one for both: Q6 "Flags +
+refusal", Q7 "Look up only when needed". The amendment is accepted.
+
+* **Q6:** (a). `gobble acp` gains `--provider`, `--model` and `--thinking` as chat's, winning over every session's own,
+  and a chat flag before any other command is refused (D12).
+* **Q7:** (a). The base is read only when a role needs it (D11). gobble creates no known folder, and the "no
+  directory" fallback stays.
 
 #### Confirmation of the amendment
 
@@ -494,7 +507,7 @@ As Q6 answers. Under Q6 (a):
     fails. A test injects a failing base and sees it pass, and sees it fail against today's order. The Windows laptop
     runs P6's acceptance without the driver's AppData folders and passes. With neither variable set, the base's error
     is returned as today.
-12. As Q6 answers. Under (a), `gobble acp --model P/M` starts a session on `P/M`, and `--thinking` sets its level.
+12. Q6 (a): `gobble acp --model P/M` starts a session on `P/M`, and `--thinking` sets its level.
     `gobble --model x version`, `gobble --print version` and `gobble --thinking high config path` each exit 2 naming
     the flag. Chat's own parsing (`gobble --model P/M -p hi`, `gobble -p hi --model P/M`) is unchanged. P6's acceptance
     sets the model by the flag in one case and passes on three hosts.
