@@ -283,6 +283,82 @@ its own.
   *`--api-key -` and `gobble auth logout` stay gobble's own. `HasLogin` and `HasKeyLogin` stay for choosing which
   stored logins gobble uses, while the menus come from the wizard's offered methods. So D8's amendment, which sent
   them with D7, holds for the menus only.*
+
+  *Amended 2026-11-10 (accepted the same day, answers below; P4b re-scoped, at the owner's word "scope and spec this, so it can ride on the
+  v0.4.0 tag of acpext"; [maccavelli/gobble-cli#3](https://github.com/maccavelli/gobble-cli/issues/3)):* P4b was
+  re-read against `main` at `6cee0af` and go-llmprovider-sdk `v1.29.0`.
+
+  **Facts.**
+  - **The SDK's sign-in.** `auth.LoginChatGPTPlan` (`llmprovider/auth/oauth_plan.go:94`) is OpenAI's "Sign in with
+    ChatGPT for agents".
+    - It is a browser authorization-code flow with PKCE on a loopback redirect at `127.0.0.1`, with no device flow.
+    - `InputCode` takes the pasted callback URL when the browser cannot reach the listener.
+    - It requires `AgentName`, the app's own name. The first sign-in registers a client for the app; `Previous`
+      signs in to it again.
+    - Its doc names what the terms leave to the app: requests from the user's own runtime, consent before any
+      background use, the plan used only for the app the user connected, no pooling or sharing, and no charge.
+  - **The wizard.** It offers the method `llmprovider.AuthChatGPTPlan` (`"chatgpt_plan"`,
+    `llmprovider/descriptor.go:24`; the openai descriptor's "Use your ChatGPT plan with this app",
+    `providers/openai/descriptor.go:53`) only when `wizard.Options.AgentName` is set (`wizard/configure.go:130-136`).
+    The descriptor's other two OAuth methods, "Sign in with ChatGPT" in a browser and by device code, sign in as
+    another app; gobble keeps skipping them.
+  - **The session.** A plan session is an `*auth.OAuthSession` with `Resource`, `Scope`, `IDToken` and `HostID`
+    (`llmprovider/auth/tokenstore.go:21-49`), and `PlanUsage()` is true. Its requests go to the platform's Responses
+    API, billed to the plan.
+  - **What gobble lacks.**
+    - `provider.Login` (`llm/provider/login.go:17-22`) and `auth.Entry` (`internal/auth/store.go:35-47`) carry none
+      of the four fields.
+    - `HasLogin` is Grok's alone (`login.go:62`); `methodIDs` (`signin.go:23`) has no plan method.
+    - `loginWith` refuses an OpenAI login (`internal/cli/auth.go:214`).
+  - **acpext.** `acpext.AuthProviders()` gives openai `Command: "gobble auth login openai --api-key -"` with no
+    `Login` (`acpext/auth.go:23`).
+    - `TestAcpextAuthProvidersAreTheRegistry` (`internal/cli/acpext_test.go:105`) holds that list equal to
+      `authProviders()` (`internal/cli/agent.go:381`). That function sets `Login` and the bare command from
+      `provider.HasLogin` or `HasKeyLogin`.
+    - So the acpext entry and `HasLogin("openai")` must change together in the root: the root commit that first
+      requires the new acpext must also give the plan sign-in.
+    - A client that offers `auth.terminal` gets an `openai-login` method running `gobble acp --login openai`
+      (0016-MADR A2).
+  - **The v0.4.0 tag.** `acpext/v0.4.0` is not yet tagged. 0049-PLAN P5a's commit `6cee0af`, which adds
+    `ErrorData.WindowMinutes`, is pushed. For the openai entry to ride on `v0.4.0`, its commit must land before the
+    owner tags, and the tag goes on that later commit.
+
+  **Questions for the owner** (P4b-Q1 to Q4), recorded with their answers before any code:
+  - **P4b-Q1. Where the plan sign-in is offered.**
+    - (a) In gobble's terminal (`gobble auth login openai`, `/login openai`, the first-run sign-in) and in an ACP
+      client's terminal method (`gobble acp --login openai`). *(recommended; the one that rides on `v0.4.0`)*
+    - (b) In gobble's terminal only. The acpext entry is unchanged, so nothing rides on `v0.4.0`.
+    - (c) Nowhere: #3's second half is closed unbuilt.
+  - **P4b-Q2. Consent to background use**, which the terms ask for before any.
+    - (a) Asked once, at the plan sign-in, and saved as a setting. Without it, no background request is made under
+      the plan: no session title from `smallModel`, and no automatic compaction. A manual `/compact` and the user's
+      own turns are unaffected. *(recommended; 0025-PLAN P6 step 2)*
+    - (b) No consent question: gobble never makes a background request under the plan.
+    - (c) Asked at every session's start.
+  - **P4b-Q3. The order with 0049's P5b,** given the registry test.
+    - (a) P4b-1 now: the acpext entry, committed after `6cee0af`, which the owner then tags `acpext/v0.4.0`. Then
+      P4b-2, the root's sign-in together with the pin to `v0.4.0`, in one commit. Then 0049-PLAN P5b, its pin
+      already made. *(recommended; what the owner asked)* Cost: P5b waits for P4b-2, the owner's live sign-in
+      included.
+    - (b) As (a), but P4b-2 and P5b run as one root phase and one commit.
+    - (c) Tag `v0.4.0` now on `6cee0af`, so P5b goes ahead, and the openai entry rides on `v0.5.0` with P4b-2.
+  - **P4b-Q4. A sign-in whose browser cannot reach the loopback,** such as a phone driving a remote host.
+    - (a) The callback URL may be pasted (`InputCode`) in gobble's terminal and in the ACP terminal method, with the
+      prompt saying which URL to paste. *(recommended)*
+    - (b) Loopback only, so the browser must run on gobble's host.
+    - (c) Paste in gobble's own terminal only; the ACP terminal method gives the API key alone.
+
+  **Answers (2026-11-10).** The owner was asked with three options each. They chose the recommended option for Q1,
+  Q2 and Q4, and (b) for Q3. The amendment is accepted.
+  - **P4b-Q1:** (a). The plan sign-in is offered in gobble's terminal and in an ACP client's terminal method.
+    acpext's openai entry becomes `Login: true`, with `gobble auth login openai`, and rides on `acpext/v0.4.0`.
+  - **P4b-Q2:** (a). Consent is asked once at the plan sign-in and saved as a setting. Without it, no title request
+    and no automatic compaction are made under the plan.
+  - **P4b-Q3:** (b). P4b-1, the acpext entry, is committed after `6cee0af`, and the owner tags that commit
+    `acpext/v0.4.0`. Then P4b-2 and 0049-PLAN P5b run as **one root phase and one commit**: the pin to `v0.4.0`, the
+    plan sign-in, and P5b's mapping of go-llmprovider-sdk `v1.29.0`'s fields.
+  - **P4b-Q4:** (a). The callback URL may be pasted in gobble's terminal and in the ACP terminal method, and the prompt
+    says which URL.
 - **D8. The smaller copies go.** `gobble models --search` uses `catalog.Search`; `llm/catalog.Price` uses
   `ModelCost.RatesFor`; `CacheWrite1hTokens` is counted; `HasLogin` and `HasKeyLogin` read `Descriptor.AuthMethods`;
   `acpserver/binary_test.go` uses `agentproc`.

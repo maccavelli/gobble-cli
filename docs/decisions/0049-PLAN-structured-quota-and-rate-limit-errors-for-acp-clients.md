@@ -733,6 +733,14 @@ C1: `HEAD` `b735778` (P5's amendment), `origin/main` `ece13c4`, the tree clean; 
    `acpext/v0.3.0`'s form, and its push. P5b starts when `go list -m github.com/maccavelli/gobble-cli/acpext@v0.4.0`
    succeeds through the proxy.
 
+*Amended 2026-11-10 (0031-MADR D7's amendment of this date; its P4b-Q3 answered (b)):*
+* The owner asked for 0031-PLAN P4b's acpext change, openai's `AuthProviders` entry, to ride on `v0.4.0`.
+* So the tag goes on P4b-1's commit, after `6cee0af`, not on `6cee0af`. Step 7's "on that commit" is read that way.
+* P5b then runs as one root phase, and one commit, with 0031-PLAN P4b-2:
+  * P4b-2's step 2 pin to `v0.4.0` is P5b's step 1 pin;
+  * both plans' tests, acceptance and gates run in that phase;
+  * its record is written in both PLANs, each for its own steps.
+
 #### P5b — the root on `v1.29.0`'s fields (MADR D10 as built, Q8, Q9)
 
 1. **C1,** and the gate. `go get github.com/maccavelli/gobble-cli/acpext@v0.4.0`, `go mod tidy`: one `go.mod` line and

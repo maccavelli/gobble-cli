@@ -251,6 +251,69 @@ is lifted, and P4 resumes at the owner's word.)*
 5. **Live check** by the owner's own sign-in, `gobble auth login openai --method chatgpt-plan`, then one turn on a
    plan model. It is recorded without any credential.
 
+*Amended 2026-11-10 (the MADR's D7 amendment of this date; P4b-Q1 (a), Q2 (a), Q3 (b), Q4 (a), answered the same
+day). The steps above stand as P4b's intent, carried out as P4b-1 and P4b-2 below. Under Q3 (b), P4b-2 runs as one
+root phase, and one commit, with 0049-PLAN P5b. P4b-2 step 2's pin serves both, and that phase's gates, record and
+live check cover both. Its record is written in both PLANs, each for its own steps.*
+
+#### P4b-1 — acpext: openai's entry (rides on `acpext/v0.4.0`)
+
+1. **C1.** `HEAD` is after `6cee0af`, and `acpext/v0.4.0` is not yet tagged. If the owner has tagged it, this is a
+   deviation: the entry then needs `v0.5.0` (P4b-Q3 (c)).
+2. `acpext/auth.go`: openai's entry becomes `{ID: "openai", Name: "OpenAI", Command: "gobble auth login openai",
+   Login: true}`. Its doc says that a `Login` provider may also take a key, through the same command's menu.
+3. `acpext/auth_test.go`'s `TestAuthProviders` wants the new entry. Seen failing on a scratch copy against the old one.
+4. apidiff from `acpext/v0.3.0`, together with 0049-PLAN P5a's change: compatible, since no exported type changes, and
+   the list's value is the contract's data. `acpext/doc.go`'s "Versions" paragraph already says a client takes what it
+   does not know.
+5. The root is not changed. It still requires acpext `v0.3.0`, so `TestAcpextAuthProvidersAreTheRegistry` passes
+   unchanged.
+6. Gates (C6), acpext's tests on the Linux machine and the Windows laptop. Staged; the owner commits, pushes, and tags
+   **this** commit `acpext/v0.4.0`, in `v0.3.0`'s form.
+
+#### P4b-2 — the root: the plan sign-in, and the pin to `acpext/v0.4.0`
+
+1. **Measure first**, as step 1 above says, against go-llmprovider-sdk `v1.29.0`:
+   - `LoginChatGPTPlan`'s options and errors;
+   - the wizard's offer with `AgentName`;
+   - the openai provider's requests under a plan session (the Responses API, billed to the plan);
+   - what `InputCode` is asked for;
+   - OpenAI's terms page, read again, with its date recorded.
+
+   A difference from the MADR's D7 amendment is a deviation.
+2. **The gate:** `go list -m github.com/maccavelli/gobble-cli/acpext@v0.4.0` succeeds through the proxy, then
+   `go get` and `go mod tidy` for that line alone.
+3. **The store.** `provider.Login`, `auth.Entry` and `sdkStore` carry `Resource`, `Scope`, `IDToken` and `HostID`.
+   `auth.json` writes them under names of gobble's, and keeps every other member's bytes. The `String` and `LogValue`
+   of `Login` show none of the secrets, `IDToken` included.
+4. **The sign-in.**
+   - `methodIDs` gains `chatgpt-plan` → `llmprovider.AuthChatGPTPlan`. `Methods("openai")` is `api-key` and
+     `chatgpt-plan`, and the wizard still skips the two ChatGPT sign-ins that sign in as another app.
+   - `wizard.Options.AgentName` is `"gobble"`.
+   - `HasLogin("openai")` is true for gobble's stored plan session.
+   - `loginWith`'s refusal is removed.
+   - `gobble acp --login openai` offers the plan and the API key.
+   - Under P4b-Q4 (a), `InputCode` reads the pasted callback URL in both terminals.
+5. **The provider.** An openai provider with a stored plan session is built on it, through the SDK. A second sign-in
+   passes `Previous`, so no second client is registered.
+6. **Consent** (P4b-Q2 (a)). A setting, its schema and its template entry, asked once at the plan sign-in. Without
+   it, under a plan session, no title request (`smallModel`) and no automatic compaction are made; a manual `/compact`
+   is.
+7. **Tests**, against a scripted issuer, each seen failing on a scratch copy:
+   - the menus offer the plan and the key only;
+   - the four fields go through `Login`, `Entry` and the store and back unchanged, and appear in no log;
+   - the provider is built with the session;
+   - a second sign-in reuses the client;
+   - the consent is asked once and saved, and without it no title or automatic compaction request is made;
+   - `TestAcpextAuthProvidersAreTheRegistry` passes against `v0.4.0`;
+   - `gobble acp --login openai` signs in with a pasted callback URL.
+8. **Records:** 0025-PLAN P6 and 0005-PLAN F4-3d noted as done here; 0005-MADR's ChatGPT row; `README.md`;
+   `docs/guides/credentials.md`; `docs/architecture.md`'s acpext requirement row at `v0.4.0`; `docs/README.md`.
+9. Gates (C6). Staged; the owner commits.
+10. **Live check** by the owner, as step 5 above, recorded without any credential. ~~Then 0049-PLAN P5b runs on the
+    pinned `v0.4.0`, and #3 can close.~~ *(Q3 (b): 0049-PLAN P5b's steps 2 to 8 are in this same phase and commit;
+    after it, #3 can close.)*
+
 ### P5 — the smaller copies, and the records (D8)
 
 *(2026-10-22, deviation 4: the search alone, and the records; see P5's record.)*
