@@ -1,0 +1,12 @@
+{
+  "error": "llm: api status 429: llm: rate limited: llmprovider: rate limited: openai HTTP 429 rate_limit_exceeded (retry-after 2m0s): Rate limit reached for requests",
+  "code": "rate_limit_exceeded",
+  "httpStatus": 429,
+  "kind": "rate-limited",
+  "limit": "rate",
+  "provider": "openai",
+  "providerMessage": "Rate limit reached for requests",
+  "resetAt": "2026-11-09T12:33:39Z",
+  "retryAfterMs": 120000,
+  "retryable": true
+}

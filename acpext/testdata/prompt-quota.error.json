@@ -1,0 +1,12 @@
+{
+  "code": "FreeUsageLimitError",
+  "error": "llm: api status 429: llm: quota exhausted: llmprovider: quota exhausted: opencode-zen/chat_completions HTTP 429 FreeUsageLimitError (retry-after 1h33m21s): Free usage limit reached. Free models work in OpenCode (https://opencode.ai); subscribe to OpenCode Go to keep going: https://opencode.ai/go",
+  "httpStatus": 429,
+  "kind": "quota",
+  "limit": "free_tier",
+  "provider": "opencode-zen",
+  "providerMessage": "Free usage limit reached. Free models work in OpenCode (https://opencode.ai); subscribe to OpenCode Go to keep going: https://opencode.ai/go",
+  "resetAt": "2026-11-09T14:05:00Z",
+  "retryAfterMs": 5601000,
+  "retryable": false
+}

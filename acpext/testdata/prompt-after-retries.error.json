@@ -1,0 +1,10 @@
+{
+  "attempts": 4,
+  "error": "llm: api status 503: llm: unavailable: llmprovider: claude failed after 4 attempts: llmprovider: provider unavailable: claude HTTP 503 overloaded_error: Overloaded",
+  "code": "overloaded_error",
+  "httpStatus": 503,
+  "kind": "unavailable",
+  "provider": "claude",
+  "providerMessage": "Overloaded",
+  "retryable": true
+}

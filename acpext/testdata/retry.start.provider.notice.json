@@ -1,0 +1,12 @@
+{
+  "sessionId": "00dc6acf-ac00-7000-abce-ab0a84273d68",
+  "phase": "start",
+  "cause": "rate-limited",
+  "attempt": 1,
+  "maxAttempts": 4,
+  "delayMs": 1100,
+  "retryAfterMs": 1000,
+  "serverDirected": true,
+  "code": "rate_limit_exceeded",
+  "httpStatus": 429
+}

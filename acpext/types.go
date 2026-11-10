@@ -46,14 +46,24 @@ const (
 // RetryNotice is MethodRetry's params (0005-PLAN F5-1 decision 5).
 // Attempt, MaxAttempts and DelayMs are a start's; Error is why an end is
 // not a success, and is empty for one that is.
+//
+// A start that a provider's own retry began also carries, when the provider
+// said them, RetryAfterMs, the wait the provider asked for, where DelayMs is
+// the wait gobble takes, jitter included; ServerDirected, that the provider
+// asked for the wait; Code, the provider's own code; and HTTPStatus
+// (gobble-cli 0049-MADR D2).
 type RetryNotice struct {
-	SessionID   string     `json:"sessionId"`
-	Phase       Phase      `json:"phase"`
-	Cause       RetryCause `json:"cause"`
-	Attempt     int        `json:"attempt,omitzero"`
-	MaxAttempts int        `json:"maxAttempts,omitzero"`
-	DelayMs     int64      `json:"delayMs,omitzero"`
-	Error       string     `json:"error,omitzero"`
+	SessionID      string     `json:"sessionId"`
+	Phase          Phase      `json:"phase"`
+	Cause          RetryCause `json:"cause"`
+	Attempt        int        `json:"attempt,omitzero"`
+	MaxAttempts    int        `json:"maxAttempts,omitzero"`
+	DelayMs        int64      `json:"delayMs,omitzero"`
+	Error          string     `json:"error,omitzero"`
+	RetryAfterMs   int64      `json:"retryAfterMs,omitzero"`
+	ServerDirected bool       `json:"serverDirected,omitzero"`
+	Code           string     `json:"code,omitzero"`
+	HTTPStatus     int        `json:"httpStatus,omitzero"`
 }
 
 // CompactionReason is why a compaction runs.
@@ -324,16 +334,80 @@ type PersonalityResult struct {
 	Level int    `json:"level"`
 }
 
+// ErrorKind is gobble's class of a failed turn: ErrorData.Kind. It is one
+// of the constants below, but a client should take a kind it does not know,
+// which a later gobble may add. Where a class is also a RetryCause, the
+// name is the same.
+type ErrorKind string
+
+// The kinds (gobble-cli 0049-MADR D3).
+const (
+	KindWorkspace       ErrorKind = "workspace"
+	KindQuota           ErrorKind = "quota"
+	KindRateLimited     ErrorKind = "rate-limited"
+	KindContextOverflow ErrorKind = "context-overflow"
+	KindEmptyReply      ErrorKind = "empty_reply"
+	KindIncomplete      ErrorKind = "incomplete"
+	KindAuth            ErrorKind = "auth"
+	KindNotPermitted    ErrorKind = "not-permitted"
+	KindOffline         ErrorKind = "offline"
+	KindUnavailable     ErrorKind = "unavailable"
+	KindUnsupported     ErrorKind = "unsupported"
+	KindTimeout         ErrorKind = "timeout"
+	KindCanceled        ErrorKind = "canceled"
+	KindOther           ErrorKind = "other"
+)
+
+// LimitScope is which limit a failed turn hit: ErrorData.Limit. It is set
+// only when a source states it, from the provider's own code, and never from
+// how long the wait is. It is one of the constants below, but a client should
+// take a scope it does not know. gobble sends LimitWindow and LimitWeekly only
+// when a source states the window.
+type LimitScope string
+
+// The scopes (gobble-cli 0049-MADR D1, D4).
+const (
+	LimitRate     LimitScope = "rate"      // throttling: a rate limit
+	LimitWindow   LimitScope = "window"    // a rolling window of stated length
+	LimitDaily    LimitScope = "daily"     // a per-day quota
+	LimitWeekly   LimitScope = "weekly"    // a per-week quota
+	LimitMonthly  LimitScope = "monthly"   // a per-month quota
+	LimitCredits  LimitScope = "credits"   // a balance or billing, which does not lift by itself
+	LimitFreeTier LimitScope = "free_tier" // a free tier's usage
+	LimitPlan     LimitScope = "plan"      // a plan's usage limit, its window not stated
+)
+
 // ErrorData is the data of gobble's JSON-RPC errors. A refusal through a
 // session carries SessionID and Reason; authenticate's -32000 carries
 // Provider, Reason and Command; a failed prompt or compaction carries Error,
 // or Reason when the session file could not be written.
+//
+// A failed prompt or compaction also carries Provider, gobble's id of the
+// session's provider, and Kind; and, when the provider answered, what it
+// said: HTTPStatus (absent for a failure inside a stream), Code, the
+// provider's own code, ProviderMessage, the provider's redacted message
+// without gobble's or its SDK's prefixes, RetryAfterMs, the wait it asked
+// for, ResetAt, when the limit lifts, in RFC 3339 in UTC to the second,
+// Retryable, whether the same request can succeed later (absent when gobble
+// does not know), Attempts, the tries made when the failure came after
+// retries, and Limit (gobble-cli 0049-MADR D1, D7). Error keeps the whole
+// text.
+//
 // Its fields are in their JSON names' sorted order, which is the order
 // gobble writes them.
 type ErrorData struct {
-	Command   string `json:"command,omitzero"`
-	Error     string `json:"error,omitzero"`
-	Provider  string `json:"provider,omitzero"`
-	Reason    string `json:"reason,omitzero"`
-	SessionID string `json:"sessionId,omitzero"`
+	Attempts        int        `json:"attempts,omitzero"`
+	Code            string     `json:"code,omitzero"`
+	Command         string     `json:"command,omitzero"`
+	Error           string     `json:"error,omitzero"`
+	HTTPStatus      int        `json:"httpStatus,omitzero"`
+	Kind            ErrorKind  `json:"kind,omitzero"`
+	Limit           LimitScope `json:"limit,omitzero"`
+	Provider        string     `json:"provider,omitzero"`
+	ProviderMessage string     `json:"providerMessage,omitzero"`
+	Reason          string     `json:"reason,omitzero"`
+	ResetAt         string     `json:"resetAt,omitzero"`
+	RetryAfterMs    int64      `json:"retryAfterMs,omitzero"`
+	Retryable       *bool      `json:"retryable,omitzero"`
+	SessionID       string     `json:"sessionId,omitzero"`
 }

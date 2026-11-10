@@ -34,6 +34,15 @@
 // -32600 for a writer refused while a prompt runs, and -32000 when a
 // provider has no credential.
 //
+// A failed turn, session/prompt's or a compaction's, answers -32000 when the
+// provider refused its credential and -32603 otherwise. Its ErrorData says
+// what failed as data: Provider and Kind always, and what the provider said
+// when it answered, such as Code, ProviderMessage, RetryAfterMs, ResetAt and
+// Limit. Error keeps the whole text, as before. A wait longer than gobble's
+// retry cap is not taken and sends no MethodRetry: the turn answers at once,
+// with Kind rate-limited, Retryable true and the RetryAfterMs the provider
+// asked for.
+//
 // # Methods
 //
 // Every request carries the session's id. Its params and result:

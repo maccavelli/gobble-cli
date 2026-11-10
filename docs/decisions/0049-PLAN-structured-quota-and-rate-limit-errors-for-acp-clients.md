@@ -158,6 +158,53 @@ P1 runs on the owner's word.
    form, and pushes the tag under 0043-MADR's ruleset. The record notes when
    `go list -m github.com/maccavelli/gobble-cli/acpext@v0.3.0` succeeds through the proxy. **Gate for P3.**
 
+### P1 record (2026-11-09)
+
+C1: `HEAD` `a6636fa` (P0), `origin/main` `74d7f66`, the tree clean; acpext `v0.2.0` and go-llmprovider-sdk `v1.28.0`
+required. No deviation.
+
+1. **`acpext/types.go`:** `ErrorKind` with its fourteen constants and `LimitScope` with its eight, each doc saying the
+   set is open; `ErrorData`'s fourteen members in sorted order, its doc naming what a failed turn carries;
+   `RetryNotice`'s `retryAfterMs`, `serverDirected`, `code` and `httpStatus` after `error`, its doc telling `delayMs`
+   from `retryAfterMs`.
+2. **`acpext/doc.go`:** a paragraph after the refused-request one: a failed turn's -32000 or -32603, its members, and the
+   wait over the cap.
+3. **Tests:** `TestErrorDataSortedMembers` with all fourteen members; `TestKindsAndLimits` (the names, and every retry
+   cause a kind of the same name); `ExampleErrorData_limit`; four frames in `frames`, `prompt-quota.error.json`,
+   `prompt-rate-over-cap.error.json`, `prompt-after-retries.error.json` and `retry.start.provider.notice.json`, which
+   `TestFramesRoundTrip` and `TestFramesCoverEveryMethod` take. `go -C acpext test` ok.
+4. **Seen failing** (C2), `p1_0049_breaks.py`, a scratch copy of the module per case, offline (`GOPROXY=off`); the
+   control passed, and `cases not as expected: 0`:
+   * HEAD's `types.go` with P1's tests: does not compile, `./example_test.go:55:16: e.Kind undefined (type
+     acpext.ErrorData has no field or method Kind)`, `undefined: acpext.KindQuota`, `undefined: acpext.LimitFreeTier`.
+   * `retryAfterMs` misspelt `retryAfterMS` in `ErrorData`: `TestFramesRoundTrip`, `roundtrip_test.go:136:
+     prompt-quota.error.json, encoding/json/v2: decode: … unknown object member name "retryAfterMs"`, and under
+     `encoding/json`, which matches names without case, `:145: … encodes back as`; `TestErrorDataSortedMembers`,
+     `:212: ErrorData encodes as {… "retryAfterMS":5601000 …}`.
+   * `Retryable` a `bool` with `omitzero`, the tests changed only to compile: `TestFramesRoundTrip`, `:145:
+     prompt-quota.error.json, encoding/json: encodes back as` (and v2), its `"retryable":false` dropped;
+     `TestErrorDataSortedMembers`, the encoding without `retryable`.
+   * `Limit` declared before `Kind`: `TestErrorDataSortedMembers`, `:212: ErrorData encodes as {…
+     "limit":"free_tier","kind":"quota" …}`.
+   * `LimitFreeTier` spelt `free-tier`: `TestKindsAndLimits`, `:235: limit 6 is "free-tier", want "free_tier"`;
+     `TestErrorDataSortedMembers`; `ExampleErrorData_limit`.
+5. **apidiff**, the root's `golang.org/x/exp/cmd/apidiff` built to the scratchpad, export data written in an extract of
+   `acpext/v0.2.0` (`git archive`) and in the tree's `acpext/`: exit 0, "Compatible changes:" only: the nine
+   `ErrorData` fields, the four `RetryNotice` fields, `ErrorKind`, `LimitScope` and their twenty-two constants, each
+   "added". Nothing incompatible.
+6. **Gates** (C6):
+   * `make pre-add-check FILES="acpext/types.go acpext/doc.go acpext/roundtrip_test.go acpext/example_test.go"`:
+     `4 file(s) clean (gofmt, golint, govulncheck)`.
+   * `make check-acpext-deps`: `ok`. `make lint`: `0 issues`, acpext's included.
+   * macOS: `make preflight` exit 0, `preflight passed`; `make race` 39 ok.
+   * The Linux machine (amd64) and the Windows laptop (amd64, `TMP`/`TEMP` set), a scratch copy of 918 files each:
+     acpext's tests ok; `go test -count=1 ./...` 38 ok; `-race` 38 ok.
+   * `make check-records markdownlint` after this record: exit 0. The identifier scan of the diff (the local account
+     name, the dev hosts' names, the org's mail domain, and real-machine home and temporary paths): nothing found.
+7. **The owner's, not done here:** the commit and its push; then the annotated tag `acpext/v0.3.0` on that commit, in
+   `acpext/v0.2.0`'s form, and its push. P3 starts when `go list -m github.com/maccavelli/gobble-cli/acpext@v0.3.0`
+   succeeds through the proxy; P2 may run before, on the owner's word.
+
 ### P2 — `llm` and `llm/provider` (MADR D3 to D6, D8)
 
 1. **`llm`:**

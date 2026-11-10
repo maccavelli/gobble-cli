@@ -42,3 +42,19 @@ func ExampleErrorData() {
 	fmt.Println(e.SessionID, e.Reason)
 	// Output: s1 a prompt is already running
 }
+
+// A failed turn's data says which limit it hit and when it lifts.
+func ExampleErrorData_limit() {
+	data := []byte(`{"code":"FreeUsageLimitError","kind":"quota","limit":"free_tier","provider":"opencode-zen",` +
+		`"providerMessage":"Free usage limit reached.","resetAt":"2026-11-09T14:05:00Z","retryAfterMs":5601000,"retryable":false}`)
+	var e acpext.ErrorData
+	if err := json.Unmarshal(data, &e); err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println(e.Kind == acpext.KindQuota, e.Limit == acpext.LimitFreeTier, e.Provider, e.ResetAt, *e.Retryable)
+	fmt.Println(e.ProviderMessage)
+	// Output:
+	// true true opencode-zen 2026-11-09T14:05:00Z false
+	// Free usage limit reached.
+}

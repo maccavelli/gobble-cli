@@ -61,6 +61,10 @@ var frames = map[string]frame{
 	"compaction.paused.notice.json": {acpext.MethodCompaction, of[acpext.CompactionNotice]()},
 	"personality.notice.json":       {acpext.MethodPersonality, of[acpext.PersonalityNotice]()},
 
+	// A provider retry's start with what the provider said (0049-MADR D2);
+	// written from the JSON tags, as 0049-PLAN P3 sends it.
+	"retry.start.provider.notice.json": {acpext.MethodRetry, of[acpext.RetryNotice]()},
+
 	// CompactionMeta rides in ACP's compaction_update, under _meta.gobble
 	// (0016-MADR D9, P3-Q3); written from its JSON tags, as P3c sends it.
 	"compaction.meta.start.json":  {"", of[acpext.CompactionMeta]()},
@@ -71,6 +75,13 @@ var frames = map[string]frame{
 	"prompt-auth.error.json":    {"", of[acpext.ErrorData]()},
 	"invalid-params.error.json": {"", of[acpext.ErrorData]()},
 	"mid-turn.error.json":       {"", of[acpext.ErrorData]()},
+
+	// A failed turn's data (0049-MADR D1, D7), written from the JSON tags, as
+	// 0049-PLAN P3 sends it: a free-tier limit, a wait over the cap, and a
+	// failure after retries.
+	"prompt-quota.error.json":         {"", of[acpext.ErrorData]()},
+	"prompt-rate-over-cap.error.json": {"", of[acpext.ErrorData]()},
+	"prompt-after-retries.error.json": {"", of[acpext.ErrorData]()},
 }
 
 // emptyResults are the requests whose result is {}, which has no type.
@@ -187,11 +198,49 @@ func TestCapabilitiesMetaIsRequests(t *testing.T) {
 // ErrorData's members are written in sorted order, as gobble writes the
 // maps it builds today, so data built from it has the same bytes.
 func TestErrorDataSortedMembers(t *testing.T) {
-	b, err := jsonv2.Marshal(acpext.ErrorData{Command: "c", Error: "e", Provider: "p", Reason: "r", SessionID: "s"})
+	retryable := false
+	b, err := jsonv2.Marshal(acpext.ErrorData{Attempts: 3, Code: "c", Command: "c", Error: "e", HTTPStatus: 429,
+		Kind: acpext.KindQuota, Limit: acpext.LimitFreeTier, Provider: "p", ProviderMessage: "m", Reason: "r",
+		ResetAt: "2026-11-09T14:05:00Z", RetryAfterMs: 5601000, Retryable: &retryable, SessionID: "s"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := `{"command":"c","error":"e","provider":"p","reason":"r","sessionId":"s"}`; string(b) != want {
+	const want = `{"attempts":3,"code":"c","command":"c","error":"e","httpStatus":429,"kind":"quota","limit":"free_tier",` +
+		`"provider":"p","providerMessage":"m","reason":"r","resetAt":"2026-11-09T14:05:00Z","retryAfterMs":5601000,` +
+		`"retryable":false,"sessionId":"s"}`
+	if string(b) != want {
 		t.Errorf("ErrorData encodes as %s, want %s", b, want)
+	}
+}
+
+// The kinds and the limit scopes are 0049-MADR's names, D3's and D1's, so
+// that gobble's own mapping can be held to them.
+func TestKindsAndLimits(t *testing.T) {
+	kinds := []acpext.ErrorKind{acpext.KindWorkspace, acpext.KindQuota, acpext.KindRateLimited,
+		acpext.KindContextOverflow, acpext.KindEmptyReply, acpext.KindIncomplete, acpext.KindAuth,
+		acpext.KindNotPermitted, acpext.KindOffline, acpext.KindUnavailable, acpext.KindUnsupported,
+		acpext.KindTimeout, acpext.KindCanceled, acpext.KindOther}
+	wantKinds := []string{"workspace", "quota", "rate-limited", "context-overflow", "empty_reply", "incomplete", "auth",
+		"not-permitted", "offline", "unavailable", "unsupported", "timeout", "canceled", "other"}
+	for i, k := range kinds {
+		if string(k) != wantKinds[i] {
+			t.Errorf("kind %d is %q, want %q", i, k, wantKinds[i])
+		}
+	}
+	limits := []acpext.LimitScope{acpext.LimitRate, acpext.LimitWindow, acpext.LimitDaily, acpext.LimitWeekly,
+		acpext.LimitMonthly, acpext.LimitCredits, acpext.LimitFreeTier, acpext.LimitPlan}
+	wantLimits := []string{"rate", "window", "daily", "weekly", "monthly", "credits", "free_tier", "plan"}
+	for i, l := range limits {
+		if string(l) != wantLimits[i] {
+			t.Errorf("limit %d is %q, want %q", i, l, wantLimits[i])
+		}
+	}
+	// Where a kind is also a retry cause, the name is the same (0049-MADR D3).
+	for _, c := range []acpext.RetryCause{acpext.RetryOffline, acpext.RetryEmptyReply, acpext.RetryWorkspace,
+		acpext.RetryQuota, acpext.RetryRateLimited, acpext.RetryAuth, acpext.RetryNotPermitted,
+		acpext.RetryUnavailable, acpext.RetryTimeout, acpext.RetryCanceled, acpext.RetryOther} {
+		if !slices.Contains(kinds, acpext.ErrorKind(c)) {
+			t.Errorf("retry cause %q has no kind of the same name", c)
+		}
 	}
 }
