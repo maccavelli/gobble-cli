@@ -806,25 +806,102 @@ Q7 was answered (a), 2026-11-10: the steps run as written. Runs on the owner's w
 1. **C1** as every phase, with P6 committed.
 2. **`internal/appdirs/dirs.go`:**
    * `System` reads the base through a package variable, `readBase = systemBase`, so that a test can make it fail.
-   * It calls `readBase` only when a role needs the platform default: `GOBBLE_HOME` is unset, and so is at least one
-     of the four `GOBBLE_<ROLE>_DIR` variables. Otherwise it passes `Resolve` a zero `Base`.
-   * `Resolve`, `platform`, both `systemBase` files and the 0003-MADR table are unchanged. The doc comment on `System`
-     says when the base is read.
+   * ~~It calls `readBase` only when a role needs the platform default: `GOBBLE_HOME` is unset, and so is at least one
+     of the four `GOBBLE_<ROLE>_DIR` variables. Otherwise it passes `Resolve` a zero `Base`.~~
+   * ~~`Resolve`, `platform`, both `systemBase` files and the 0003-MADR table are unchanged. The doc comment on `System`
+     says when the base is read.~~
+   * *Amended 2026-11-10 (P7 deviation 1):* `Resolve` takes the base as a function, `base func() (Base, error)`, and
+     calls it only when a role falls to the platform default: `GOBBLE_HOME` is unset, and so is at least one of the
+     four `GOBBLE_<ROLE>_DIR` variables. Its error is then `Resolve`'s, unchanged. `System` passes `readBase`.
+     `platform`, both `systemBase` files and the 0003-MADR table are unchanged. The doc comments on `Resolve` and
+     `System` say when the base is read.
 3. **Tests** (`internal/appdirs/dirs_test.go`):
    * `TestSystemGobbleHomeNeedsNoBase`: with `readBase` failing and `GOBBLE_HOME` set, `System` returns that
      directory for all four roles. With all four role variables set and no `GOBBLE_HOME`, it returns them.
    * `TestSystemBaseError`: with `readBase` failing and neither set, `System` returns the base's error unchanged.
    * `TestSystem` passes unchanged.
+   * *Amended 2026-11-10 (P7 deviation 1):* `TestResolveReadsBaseOnlyWhenNeeded`: a counting base function is called
+     zero times under `GOBBLE_HOME` and under all four role variables, and once with three of them set, or none.
+     With three set, its error is `Resolve`'s. Today's `Resolve` cases pass their `Base` through a test helper and
+     are otherwise unchanged.
 4. **Seen failing** (C2), on a scratch copy:
    * today's `System` (the base read first) with the new tests: `TestSystemGobbleHomeNeedsNoBase` fails on both
      cases;
    * the condition planted as "`GOBBLE_HOME` unset" alone: the four-role case fails;
-   * the base's error dropped: `TestSystemBaseError` fails.
+   * the base's error dropped: `TestSystemBaseError` fails;
+   * *amended 2026-11-10 (P7 deviation 1):* the base read on every call: `TestResolveReadsBaseOnlyWhenNeeded` fails.
 5. **Acceptance:** P6's driver without its Windows AppData folders, on the Windows laptop, with the binary built from
    the tree: 38 of 38. On macOS, `gobble config path` with `GOBBLE_HOME` set and `HOME` unset exits 0 and prints the
    directory; at `9eb22bc` it exited 1 (MADR F16).
 6. **Gates** (C6), with the Linux machine and the Windows laptop running `go test ./...` and the race tests. Staged;
    the owner commits.
+
+### P7 record (2026-11-10)
+
+C1: `HEAD` `2db8e83` (the amendment's answers), `origin/main` `ece13c4` (P2 onwards not yet pushed), the tree clean;
+acpext `v0.3.0` and go-llmprovider-sdk `v1.28.0` required.
+
+**Deviation 1 (2026-11-10), `Resolve` reads the base for every role.** Step 2 was written as planned, and
+`TestSystemGobbleHomeNeedsNoBase`'s second case failed: `dirs_test.go:194: System with the four role variables and no
+base = {Config: Data: State: Cache:}, appdirs: home directory "" is not an absolute path`. With `GOBBLE_HOME` unset,
+`Resolve` (`internal/appdirs/dirs.go:48-60`) builds every platform default before it applies the four role variables.
+So all four set still need the base, and step 2's "`Resolve` … unchanged" cannot meet D11's "or all four role
+variables". This predates 0049: at `9eb22bc`, `Resolve` fails the same way. The owner was offered three fixes:
+`Resolve` skipping the defaults when all four are set; D11 narrowed to `GOBBLE_HOME`; or `Resolve` taking the base as a
+function it calls only when a role needs it. The owner chose the third: "option 3 i want the most robust and
+comprehensive fix". Steps 2 to 4 are amended above, and the MADR's D11 is amended: `Resolve`'s signature changes. No
+file is added to the phase. `Resolve` is called only inside `internal/appdirs`.
+
+1. **C1** as above.
+2. **`internal/appdirs/dirs.go`:**
+   * `Resolve(env, goos, base func() (Base, error))` resolves `GOBBLE_HOME` first. With it unset, it calls `base` only
+     when a role has no variable of its own (`needsPlatform`), returns `base`'s error unchanged, and builds the
+     platform defaults from what it gives. The role variables are then applied as before.
+   * `System` is `Resolve(os.Getenv, runtime.GOOS, readBase)`, where `readBase = systemBase`.
+   * `platform`, both `systemBase` files and the 0003-MADR table are unchanged.
+   * One effect beyond the defect: with all four role variables set, a relative `XDG_*` value no longer produces a
+     diagnostic. It named a default that no role used.
+3. **Tests** (`internal/appdirs/dirs_test.go`):
+   * `TestSystemGobbleHomeNeedsNoBase`, `TestSystemBaseError` and `TestResolveReadsBaseOnlyWhenNeeded` (four subtests),
+     as amended. Each uses `failBase` or a counting base function that fails with `errBase`.
+   * Today's `Resolve` cases pass their `Base` through `fixed`; otherwise they are unchanged. `TestSystem` is
+     unchanged. All pass.
+4. **Seen failing** (C2), `p7_0049_breaks.py`, a scratch copy per case, `go test ./internal/appdirs/`. The control
+   passed; `cases not as expected: 0`:
+   * the tree before P7 (`dirs.go` at `HEAD`) with P7's tests: does not compile, `dirs_test.go:74:55: cannot use
+     fixed(base) (value of type func() (Base, error)) as Base value in argument to Resolve`, `undefined: readBase`;
+   * `System` reading the base first, as at `HEAD`, through the new `Resolve`: `TestSystemGobbleHomeNeedsNoBase`,
+     `dirs_test.go:181: System with GOBBLE_HOME and no base = {Config: Data: State: Cache:}, appdirs: known folder
+     RoamingAppData: the base is unreadable`. Its four-role case is not reached, since the test stops at the first
+     failure. The next break covers that case;
+   * the condition planted as "`GOBBLE_HOME` unset" alone: `TestSystemGobbleHomeNeedsNoBase`, `:194: System with the
+     four role variables and no base = {…}, appdirs: known folder RoamingAppData: the base is unreadable`; and
+     `TestResolveReadsBaseOnlyWhenNeeded/all_four_role_variables`, `:240: base read 1 times, want 0`;
+   * the base's error dropped: `TestSystemBaseError`, `:210: System with an unreadable base = appdirs: home directory
+     "" is not an absolute path, want … the base is unreadable`; and `TestResolveReadsBaseOnlyWhenNeeded`'s `none` and
+     `three role variables`, `:243: Resolve err = appdirs: RoamingAppData "" is not an absolute path`;
+   * the base read on every call: all four `TestResolveReadsBaseOnlyWhenNeeded` subtests, `:240: base read 1 times,
+     want 0` and `base read 2 times, want 1`.
+5. **Acceptance**, with the binary built from the tree:
+   * **The Windows laptop:** P6's driver with `--no-appdata`, a new option that gives the scratch home no AppData
+     folders. `checks: 38, failed: 0`, `accept exit 0`. Afterwards no case's home has an `AppData` folder: gobble
+     created none.
+   * **macOS:** `gobble config path` in an empty environment with `GOBBLE_HOME` set exits 0 and prints that directory
+     for all four roles; at `9eb22bc` it exited 1 (MADR F16). With only the four `GOBBLE_<ROLE>_DIR` variables set, it
+     exits 0 and prints each. With neither set, it exits 1 with `appdirs: home directory: $HOME is not defined`, as
+     before.
+6. **Gates** (C6):
+   * `make pre-add-check FILES="internal/appdirs/dirs.go internal/appdirs/dirs_test.go"`: `2 file(s) clean (gofmt,
+     golint, govulncheck)`.
+   * macOS: `make preflight` exit 0, `preflight passed`; `make race` exit 0, 39 ok.
+   * The Windows laptop (`TMP`/`TEMP` set), a scratch copy of 926 files: acpext's tests ok; `go test -count=1 ./...`
+     38 ok; `-race` 38 ok; exit 0 and no `FAIL`.
+   * The Linux machine, a scratch copy of 926 files: acpext's tests ok; `go test -count=1 ./...` 38 ok; `-race` 38
+     ok; exit 0 and no `FAIL`.
+   * `docs/architecture.md`'s `internal/appdirs` row and the developing guide's `GOBBLE_HOME` line stay accurate, so
+     neither changes.
+   * `make check-records markdownlint` after this record: exit 0. The identifier scan of the diff (the local account
+     name, the dev hosts' names, the org's mail domain, and real-machine home and temporary paths): nothing found.
 
 ### P8 — `gobble acp`'s model flags and misplaced chat flags (MADR D12, Q6)
 

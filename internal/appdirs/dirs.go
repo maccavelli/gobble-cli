@@ -45,22 +45,34 @@ var roleEnv = [...]struct {
 // $XDG_<ROLE>_HOME/gobble; on Windows it is %APPDATA%\gobble for config and
 // %LOCALAPPDATA%\gobble\{data,state,cache}, and XDG is ignored.
 //
+// base reads the platform base directories. Resolve calls it only when a
+// role falls to the platform default: with no GOBBLE_HOME, and a role with no
+// variable of its own. So GOBBLE_HOME, or all four role variables, resolve
+// where the home directory or a Known Folder is unusable (0049-MADR D11);
+// otherwise base's error is Resolve's.
+//
 // A relative GOBBLE_* value is an error. A relative XDG value is ignored
 // with a diagnostic, as the XDG Base Directory specification requires.
-func Resolve(env func(string) string, goos string, base Base) (Dirs, []Diagnostic, error) {
+func Resolve(env func(string) string, goos string, base func() (Base, error)) (Dirs, []Diagnostic, error) {
 	var (
 		d     Dirs
 		diags []Diagnostic
-		err   error
 	)
-	if home := env("GOBBLE_HOME"); home != "" {
+	switch home := env("GOBBLE_HOME"); {
+	case home != "":
 		h, err := absSetting("GOBBLE_HOME", home)
 		if err != nil {
 			return Dirs{}, nil, err
 		}
 		d = Dirs{Config: h, Data: h, State: h, Cache: h}
-	} else if d, diags, err = platform(env, goos, base); err != nil {
-		return Dirs{}, nil, err
+	case needsPlatform(env):
+		b, err := base()
+		if err != nil {
+			return Dirs{}, nil, err
+		}
+		if d, diags, err = platform(env, goos, b); err != nil {
+			return Dirs{}, nil, err
+		}
 	}
 	for _, r := range roleEnv {
 		v := env(r.name)
@@ -76,14 +88,24 @@ func Resolve(env func(string) string, goos string, base Base) (Dirs, []Diagnosti
 	return d, diags, nil
 }
 
-// System resolves the roles for this process: its environment, OS and
-// platform base directories.
-func System() (Dirs, []Diagnostic, error) {
-	base, err := systemBase()
-	if err != nil {
-		return Dirs{}, nil, err
+// needsPlatform reports whether a role, with GOBBLE_HOME unset, has no
+// variable of its own and so falls to the platform default.
+func needsPlatform(env func(string) string) bool {
+	for _, r := range roleEnv {
+		if env(r.name) == "" {
+			return true
+		}
 	}
-	return Resolve(os.Getenv, runtime.GOOS, base)
+	return false
+}
+
+// readBase reads the platform base directories; a test replaces it.
+var readBase = systemBase
+
+// System resolves the roles for this process: its environment and OS, and
+// the platform base directories when a role needs them (Resolve).
+func System() (Dirs, []Diagnostic, error) {
+	return Resolve(os.Getenv, runtime.GOOS, readBase)
 }
 
 func platform(env func(string) string, goos string, base Base) (Dirs, []Diagnostic, error) {

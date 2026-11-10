@@ -406,7 +406,7 @@ is the commit that adds this section.
 10. **Open.** P5 waits for the owner to name the go-llmprovider-sdk tag that carries #13's fields (Q4 (a)). The PLAN
     stays `in-progress` until P5's record meets this item (the PLAN's P6 deviation 1).
 
-Items 11 and 12, which the amendment below adds, are open.
+Of the items the amendment below adds, 11 is met by P7 (2026-11-10): the PLAN's P7 record has the tests, the five breaks seen failing, the Windows laptop's acceptance with no AppData folders, and the gates on three hosts. Item 12 is open until P8.
 
 ### Amendment (2026-11-10, accepted): two defects found by P6's acceptance
 
@@ -454,7 +454,11 @@ analyzed and remediated". Both were read at `9eb22bc` and probed with the binary
 
 `System` reads the platform's base only when a role falls to the platform default. That is, when `GOBBLE_HOME` is
 unset and at least one of `GOBBLE_CONFIG_DIR`, `GOBBLE_DATA_DIR`, `GOBBLE_STATE_DIR` and `GOBBLE_CACHE_DIR` is unset.
-This holds on every OS. `Resolve`'s signature and its table (0003-MADR) are unchanged.
+This holds on every OS. ~~`Resolve`'s signature and its table (0003-MADR) are unchanged.~~ *Amended 2026-11-10 (the
+PLAN's P7 deviation 1):* `Resolve` itself builds every platform default before it applies the role variables, so it
+too needed the base with all four set. It now takes the base as a function, `base func() (Base, error)`, and calls it
+only when a role falls to the platform default. `System` passes the platform's reader. The 0003-MADR table is
+unchanged, and `Resolve` is internal and called only inside `internal/appdirs`.
 
 * With `GOBBLE_HOME` set, a Windows profile without its AppData folders and a Unix process without `HOME` both
   resolve.
