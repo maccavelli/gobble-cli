@@ -265,6 +265,19 @@ type adapter struct {
 	offlineURL string
 }
 
+// providerRetry is n as llm's event: its try, the wait taken, and the
+// failure's class, with the wait the provider asked for, whether it asked,
+// and the failure's code and status (0031-MADR D4; 0049-MADR D6).
+func (a *adapter) providerRetry(n llmprovider.RetryNotice) llm.ProviderRetry {
+	mapped := mapErrorAt(a.id, n.Err, time.Now())
+	pr := llm.ProviderRetry{Attempt: n.Attempt, MaxAttempts: n.MaxAttempts, Wait: n.Wait, Kind: FailureKind(mapped),
+		ServerDirected: n.ServerDirected}
+	if ae, ok := errors.AsType[*llm.APIError](mapped); ok {
+		pr.RetryAfter, pr.Code, pr.Status = ae.RetryAfter, ae.Code, ae.Status
+	}
+	return pr
+}
+
 // rejected is mapped, err's llm form, led by "<provider> rejected the API
 // key from <source>" when the provider's response refused the key: an
 // APIError of ErrAuthFailure that is not ErrNotPermitted, as the SDK's
@@ -273,6 +286,12 @@ type adapter struct {
 // (0005-PLAN F4-3b decision 8). Anything else, or no source, is mapped
 // alone.
 func (a *adapter) rejected(mapped, err error) error {
+	// A quota some services send with HTTP 401, such as OpenCode's
+	// MonthlyLimitError, also unwraps to ErrAuthFailure; it is a quota, not a
+	// refused credential (0049-MADR D8).
+	if errors.Is(err, llmprovider.ErrQuotaExhausted) {
+		return mapped
+	}
 	if a.login && errors.Is(err, llmprovider.ErrAuthFailure) && !errors.Is(err, llmprovider.ErrNotPermitted) {
 		return fmt.Errorf("%s: %w", LoginRejected(string(a.id)), mapped)
 	}
@@ -315,14 +334,17 @@ func (a *adapter) attempt(ctx context.Context, req *llm.Request, msgs []llm.Mess
 	}
 	var out strings.Builder
 	calls, sent, stopped := false, false, false
+	// tried is the last retry notice's try, so a failure after retries says
+	// how many tries were made (0049-MADR D6).
+	tried := 0
 	ctx = context.WithValue(ctx, modelKey{}, req.Model) // for the header transport (0005-PLAN F4-2b)
 	// The provider's retries are yielded as they are made; a caller that
 	// stops at one ends the wait at once (0031-MADR D4).
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	ctx = context.WithValue(ctx, noticeKey{}, func(n llmprovider.RetryNotice) {
-		if !stopped && !yield(llm.ProviderRetry{Attempt: n.Attempt, MaxAttempts: n.MaxAttempts, Wait: n.Wait,
-			Kind: FailureKind(mapError(n.Err))}, nil) {
+		tried = n.Attempt
+		if !stopped && !yield(a.providerRetry(n), nil) {
 			stopped = true
 			cancel()
 		}
@@ -344,7 +366,11 @@ func (a *adapter) attempt(ctx context.Context, req *llm.Request, msgs []llm.Mess
 				yield(llm.Done{StopReason: llm.StopRefusal}, nil)
 				return false
 			}
-			yield(nil, a.rejected(mapError(err), err))
+			mapped := mapErrorAt(a.id, err, time.Now())
+			if ae, ok := errors.AsType[*llm.APIError](mapped); ok && tried > 0 {
+				ae.Attempts = tried + 1
+			}
+			yield(nil, a.rejected(mapped, err))
 			return false
 		}
 		sent = true
@@ -669,9 +695,18 @@ func (a *adapter) Probe(ctx context.Context) error {
 	return c.Close()
 }
 
-// mapError wraps an SDK error so llm's sentinel matches and the SDK's still
-// does. An APIError becomes an *llm.APIError with its status and RetryAfter.
+// mapError is mapErrorAt for an error no provider of this package made,
+// such as providers.New's.
 func mapError(err error) error {
+	return mapErrorAt("", err, time.Now())
+}
+
+// mapErrorAt wraps an SDK error so llm's sentinel matches and the SDK's
+// still does. An APIError becomes an *llm.APIError with its status and
+// RetryAfter, and what the service said: provider id's name, its code and
+// message, whether a retry can succeed, the limit its code states, and, at
+// now plus RetryAfter, when the limit lifts (0049-MADR D4 to D6).
+func mapErrorAt(id llmprovider.ProviderID, err error, now time.Time) error {
 	if err == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return err
 	}
@@ -686,7 +721,55 @@ func mapError(err error) error {
 		wrapped = fmt.Errorf("%w: %w", llm.ErrEmptyReply, wrapped)
 	}
 	if ae, ok := errors.AsType[*llmprovider.APIError](err); ok {
-		return &llm.APIError{Status: ae.Status, RetryAfter: ae.RetryAfter, Err: wrapped}
+		retryable := ae.Retryable()
+		out := &llm.APIError{Status: ae.Status, RetryAfter: ae.RetryAfter, Err: wrapped, Provider: string(id),
+			Code: ae.Code, Message: ae.Message, Retryable: &retryable, Limit: limitOf(id, ae)}
+		if ae.RetryAfter > 0 {
+			out.ResetAt = now.Add(ae.RetryAfter)
+		}
+		return out
 	}
 	return wrapped
+}
+
+// The provider codes that state which limit a quota is (0049-MADR D4;
+// go-llmprovider-sdk v1.28.0's classifyAPIError names them a quota).
+var (
+	freeTierCodes = []string{"FreeUsageLimitError", "PROMOTION_MODEL_LIMIT_REACHED"}
+	monthlyCodes  = []string{"MonthlyLimitError"}
+	creditsCodes  = []string{"CreditsError", "insufficient_quota", "insufficient_balance"}
+	planCodes     = []string{"GoUsageLimitError", "BlackUsageLimitError", "usage_limit_reached",
+		"subscription_sharing_usage_limit_exceeded"}
+)
+
+// limitOf is the limit ae states: from the provider's code, HTTP 402 for
+// credits, Gemini's exhausted quota on 429 for a day (the SDK makes a
+// Gemini 429 a quota only when it names a per-day one), and a rate limit for
+// any other ErrRateLimited. It is "" when nothing states the limit, and it
+// never reads RetryAfter: a long wait is not a window. id is the provider,
+// or "" when not known, when the SDK's own name for it is read.
+func limitOf(id llmprovider.ProviderID, ae *llmprovider.APIError) string {
+	if !errors.Is(ae, llmprovider.ErrQuotaExhausted) {
+		if errors.Is(ae, llmprovider.ErrRateLimited) {
+			return llm.LimitRate
+		}
+		return ""
+	}
+	service := string(id)
+	if service == "" {
+		service, _, _ = strings.Cut(ae.Provider, "/")
+	}
+	switch {
+	case slices.Contains(freeTierCodes, ae.Code):
+		return llm.LimitFreeTier
+	case slices.Contains(monthlyCodes, ae.Code):
+		return llm.LimitMonthly
+	case slices.Contains(creditsCodes, ae.Code), ae.Status == http.StatusPaymentRequired:
+		return llm.LimitCredits
+	case slices.Contains(planCodes, ae.Code):
+		return llm.LimitPlan
+	case service == string(llmprovider.ProviderGemini) && ae.Status == http.StatusTooManyRequests:
+		return llm.LimitDaily
+	}
+	return ""
 }

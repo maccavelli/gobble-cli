@@ -9,10 +9,20 @@ import (
 // events: the try that failed, of how many, the wait about to begin, and
 // the failure's class (0031-MADR D4). The call's events follow from the
 // try that succeeds.
+//
+// RetryAfter is the wait the provider asked for, where Wait is the one
+// taken, jitter included; ServerDirected reports that the provider asked for
+// it; Code and Status are the failure's code and HTTP status, each zero when
+// not known (0049-MADR D6).
 type ProviderRetry struct {
 	Attempt, MaxAttempts int
 	Wait                 time.Duration
 	Kind                 string
+
+	RetryAfter     time.Duration
+	ServerDirected bool
+	Code           string
+	Status         int
 }
 
 func (ProviderRetry) event() {}

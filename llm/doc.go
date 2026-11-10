@@ -42,6 +42,12 @@
 // or *IncompleteError. ErrIncomplete, ErrNotPermitted, ErrUnavailable, and
 // ErrUnsupported cover the cases those older types used to signal.
 //
+// A failure the service reported is an *APIError, which also carries what
+// the service said: its provider, code and message, whether a retry can
+// succeed, when the limit lifts, which limit it was, and the tries made
+// after retries. Kind names any error's class without its text
+// (0049-MADR D3, D6).
+//
 // Thinking levels map as:
 //
 //	off     → no reasoning

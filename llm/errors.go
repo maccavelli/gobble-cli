@@ -39,10 +39,27 @@ var (
 // APIError is a provider HTTP failure.
 // Status is the HTTP status. RetryAfter is the delay the provider asked
 // for, or zero when it did not. Err is the wrapped detail.
+//
+// The fields after Err say what the provider said, each zero when it is not
+// known, and only a provider adapter fills them (0049-MADR D6): Provider is
+// gobble's id of the provider; Code its own error code; Message its own
+// message, redacted, without gobble's or its SDK's prefixes; Retryable
+// whether the same request can succeed later, nil when not known; ResetAt
+// when the limit lifts; Limit which limit it was, one of the Limit
+// constants, set only when the provider's code or status states it; and
+// Attempts the tries made, when the failure came after retries.
 type APIError struct {
 	Status     int
 	RetryAfter time.Duration
 	Err        error
+
+	Provider  string
+	Code      string
+	Message   string
+	Retryable *bool
+	ResetAt   time.Time
+	Limit     string
+	Attempts  int
 }
 
 func (e *APIError) Error() string {

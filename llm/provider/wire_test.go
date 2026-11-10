@@ -426,6 +426,16 @@ func TestWireRejectedKey(t *testing.T) {
 	if err := stream("auth.json", http.StatusForbidden); err == nil || strings.Contains(err.Error(), "rejected the API key") {
 		t.Errorf("403: %v, want a refusal that does not say the key was rejected", err)
 	}
+	// OpenCode sends a monthly limit with HTTP 401: a quota, which says
+	// nothing of the key (0049-MADR D8).
+	w := &cannedWire{status: http.StatusUnauthorized, body: opencodeBody("MonthlyLimitError", "Monthly limit reached.")}
+	p, err := New("opencode-zen", Options{APIKey: "k", CredentialSource: "auth.json", Model: "claude-haiku-5-5", HTTPClient: &http.Client{Transport: w}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := drain(t, p, wireRequest()); !errors.Is(err, llm.ErrQuota) || strings.Contains(err.Error(), "rejected the API key") {
+		t.Errorf("401 MonthlyLimitError with a source: %v, want llm.ErrQuota that does not say the key was rejected", err)
+	}
 }
 
 // loginWire answers a refresh at /oauth2/token with refresh, or with

@@ -61,7 +61,9 @@ outputs (MADR D3); a gobble release tag; a push; posting on #14 or #13 without t
   record quotes each failure, with temporary paths as `<TMP>`.
 * **C3. Evidence.** Commands write to a scratch log, with their exit status taken before any filter. Scratch runs set
   `HOME`, `USERPROFILE` and `XDG_*` into the scratch directory, explicit `GOCACHE`/`GOMODCACHE`, and the proxies at
-  `127.0.0.1:9`.
+  `127.0.0.1:9`. *Amended 2026-11-09 (P2 deviation):* the HTTP proxies are set only for packages whose tests run under
+  a `TestMain` network guard (`acpserver`, `internal/cli`); `llm` and `llm/provider` run without them, with
+  `GOPROXY=off`, because `llm/provider`'s `TestWireOffline` checks the dial `Probe` makes with no proxy named.
 * **C4. Deviations stop the phase,** are recorded here with a date, and in the MADR when a decision or a fact changes,
   before work goes on.
 * **C5. No real effects.** Every test and probe stays on loopback: canned wires (`llm/provider/wire_test.go`'s
@@ -264,6 +266,86 @@ required. No deviation.
    * `ProviderRetry.RetryAfter` from `n.Wait`: `TestRetryNoticeCarriesServerWait` fails (the jittered wait is not 2 ms);
    * `rejected`'s quota guard removed: `TestWireRejectedKey` fails.
 9. **Gates** (C6), with `internal/archtest` unchanged and passing. Staged; the owner commits.
+
+### P2 record (2026-11-09)
+
+C1: `HEAD` `ece13c4` (P1), `origin/main` `ece13c4`, the tree clean; acpext `v0.2.0` and go-llmprovider-sdk `v1.28.0`
+required. The tag `acpext/v0.3.0` not yet pushed; P2 started before it on the owner's word ("start P2 while the ci
+runs"). The owner pushed it while P2 ran; it peels to `ece13c4`. P2 changes nothing in acpext and does not require it.
+
+**Deviation (2026-11-09), C3 and the proxies.** Step 8's first run set `HTTPS_PROXY` and `HTTP_PROXY` to `127.0.0.1:9`,
+as C3 said. Then `TestWireOffline` failed in every case, the unbroken control too: `offline_test.go:67: Probe dialed
+["tcp 127.0.0.1:9"], want tcp gobble-offline.invalid:80 alone`. The test predates 0049. It checks the dial `Probe` makes
+for a failed request, which goes to the proxy when the environment names one, and `llm/provider` has no `TestMain`
+network guard. Its tests stay off the network by canned transports, a refused loopback port and an `.invalid` host.
+`make test` and `make preflight` already run it with no proxy named. The owner chose to run `llm` and `llm/provider`
+without the HTTP proxies, `GOPROXY=off` kept, and to narrow C3 (amended above) rather than add a guard to the package.
+No file outside step 1 to 7's was added to the phase, and no MADR decision or fact changes.
+
+1. **`llm`:** `APIError` gains `Provider`, `Code`, `Message`, `Retryable *bool`, `ResetAt`, `Limit` and `Attempts`
+   after `Err`, each documented as zero when unknown and filled only by a provider adapter; `Error()` and `Unwrap()`
+   are unchanged. New `llm/kind.go`: `Kind` in D3's order, and the eight `Limit*` constants. `ProviderRetry` gains
+   `RetryAfter`, `ServerDirected`, `Code` and `Status`. `llm/doc.go`'s sentinel section gains a paragraph naming them.
+2. **The mapping:** `mapErrorAt(id, err, now)`, with `mapError(err)` kept as `mapErrorAt("", err, time.Now())`. The
+   stream path and the notice hook pass `a.id`. The SDK error's `Code`, `Message`, `Retryable()`, the limit and
+   `ResetAt` (`now.Add(RetryAfter)` when positive) are copied beside `Status` and `RetryAfter`.
+3. **`limitOf`,** beside `sentinels`, with D4's rows as four code sets (`freeTierCodes`, `monthlyCodes`,
+   `creditsCodes`, `planCodes`), HTTP 402 as credits, `daily` for a Gemini quota on 429 (the service from the id, or
+   the SDK's `Provider` before its `/`), `rate` for a rate limit that is not a quota. It never reads `RetryAfter`.
+4. **Attempts:** `attempt` keeps the last notice's `Attempt` in `tried`; an error after one or more notices sets
+   `Attempts` to `tried + 1`.
+5. **The retry notice:** the hook yields `a.providerRetry(n)`, a new `adapter` method that fills the four fields from
+   `n.ServerDirected` and the mapped `n.Err`. Placed after `type adapter`: preflight's `gocritic` refused it above the
+   type (`typeDefFirst`), and it was moved before the gates below.
+6. **`rejected`** returns `mapped` first when the SDK error is `ErrQuotaExhausted` (D8).
+7. **Tests**, as built, where they differ from step 7's text:
+   * `TestWireLimits` has twelve subtests, one per row. The credits row for OpenCode Zen is a 401 `CreditsError`. Both
+     Gemini rows carry `Code` `RESOURCE_EXHAUSTED`. The SDK's code is the first of a detail's `reason`, a string `code`,
+     `type` and `status` (`api_error.go:590-599` at `v1.28.0`). Gemini's `code` is the number 429 and these rows' details
+     (`QuotaFailure`, `RetryInfo`) carry no `reason`, so `status` wins, the same for a per-day and a per-minute 429. So a client cannot read the period from Gemini's `code`; only `limit` tells them apart. MADR D4 is
+     unaffected, since it reads Gemini's period from the SDK's kind, not the code.
+   * `TestRetryNoticeCarriesServerWait`: `RetryAfter` 1 ms (step 7 said 2 ms), `MaxAttempts` 2, `MaxDelay` 1 s.
+   * `TestAttemptsAfterRetries`: `MaxAttempts` 4, the SDK's name for step 7's "`MaxRetries` 3"; and a failure with no
+     retry keeps `Attempts` 0.
+   * The stored-login case is its own test, `TestQuotaIsNotARejectedLogin` in `limit_test.go`, not a case of
+     `TestWireRejectedKey`; `provider_test.go` is unchanged.
+   * `TestKind` and `TestKindAgreesWithFailureKind` as step 7; `TestWireLongWaitIsNotAWindow` gives `rate`, 5 h,
+     retryable.
+8. **Seen failing** (C2), `p2_0049_breaks.py`, a scratch copy of the tree per case, `go test ./llm/ ./llm/provider/`,
+   `GOPROXY=off`, no HTTP proxy (the deviation above). The control passed; `cases not as expected: 0`:
+   * the tree before P2 with only `TestWireRejectedKey`'s new case: `wire_test.go:437: 401 MonthlyLimitError with a
+     source: opencode-zen rejected the API key from auth.json: llm: api status 401: llm: quota exhausted: llmprovider:
+     quota exhausted: opencode-zen/messages HTTP 401 MonthlyLimitError: Monthly limit reached., want llm.ErrQuota that
+     does not say the key was rejected`. MADR F9, observed.
+   * `insufficient_quota`'s row removed: `TestWireLimits`, `limit_test.go:93: limit "" provider "openai" status 429
+     code "insufficient_quota", want "credits" …`.
+   * `RetryAfter > 4h` → `window` planted: `TestWireLongWaitIsNotAWindow`, `limit_test.go:126: err … (retry-after
+     5h0m0s): rate limited …, want a retryable rate li[mit] …`.
+   * `incomplete` before `empty_reply`: `TestKind`, `kind_test.go:38: an empty reply wrapping incomplete: Kind =
+     "incomplete", want "empty_reply"`.
+   * `ResetAt` left zero: `TestWireLimits`, four rows, e.g. `limit_test.go:106: ResetAt 0001-01-01 00:00:00 +0000 UTC,
+     want the call's time plus 1h33m21s` and `:102: … want …, the instant the provider named`.
+   * `Attempts` with no `+ 1`: `TestAttemptsAfterRetries`, `limit_test.go:171: err … openai failed after 4 attempts …`.
+   * `RetryAfter` from `n.Wait`: `TestRetryNoticeCarriesServerWait`, `limit_test.go:160: retry {Attempt:1
+     MaxAttempts:2 Wait:37.598071ms Kind:rate-limited RetryAfter:37.598071ms …}, want RetryAfter 1ms …`.
+   * `rejected`'s guard removed: `TestQuotaIsNotARejectedLogin`, `limit_test.go:199: opencode-zen rejected the OAuth
+     login in auth.json; sign in again …: … MonthlyLimitError: monthly, want llm.ErrQuota not led by the login's
+     refusal`, and `TestWireRejectedKey` as in the first case.
+9. **apidiff** of `llm` and `llm/provider`, `v0.5.0` (`git archive`) against the tree, with P1's build of
+   `golang.org/x/exp/cmd/apidiff` (preflight's own apidiff is a no-op below `v1.0.0`): `-incompatible` empty for both.
+   `llm`'s compatible changes are the seven `APIError` fields, the four `ProviderRetry` fields, `Kind` and the eight
+   `Limit*` constants, each "added". `llm/provider`'s exported API is unchanged.
+10. **Gates** (C6):
+    * `make pre-add-check FILES="llm/errors.go llm/event.go llm/kind.go llm/kind_test.go llm/doc.go
+      llm/provider/provider.go llm/provider/limit_test.go llm/provider/wire_test.go"`: `8 file(s) clean (gofmt,
+      golint, govulncheck)`.
+    * macOS: `make preflight`, first exit 2 on the `typeDefFirst` finding (step 5), then exit 0, `preflight passed`,
+      `archtest` included and `internal/archtest` unchanged; `make race` exit 0, 39 ok.
+    * The Linux machine and the Windows laptop (`TMP`/`TEMP` set), a scratch copy of 921 files each: acpext's tests ok;
+      `go test -count=1 ./...` 38 ok; `-race` 38 ok; on each host, exit 0 and no `FAIL`.
+    * `make check-records markdownlint` after this record: exit 0. The identifier scan of the diff and the three new
+      files (the local account name, the dev hosts' names, the org's mail domain, and real-machine home and temporary
+      paths): nothing found.
 
 ### P3 — `agent` and `acpserver` (MADR D2, D7)
 
