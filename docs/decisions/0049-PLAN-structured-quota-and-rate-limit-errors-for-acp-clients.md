@@ -917,6 +917,9 @@ Q6 was answered (a), 2026-11-10: the steps run as written. Runs on the owner's w
      `acpserver.Override` as chat's does. The checks chat makes on these flags apply here too, such as "--provider
      requires --model".
    * `pickModel` takes `*ModelFlags`; its callers and tests pass chat's.
+   * *2b, added 2026-11-10 (P8 deviation 1):* with `--login`, each of `--mode`, `--provider`, `--model` and
+     `--thinking` is a usage error, exit 2, naming the flag: it serves sessions, and `--login` serves none.
+     `TestACPLogin` gains the cases, and a break that drops the check is seen failing.
 3. **Misplaced flags:** in `run` (`internal/cli/main.go`), after parsing, a flag of chat's that was given while the
    command is not chat is a usage error, exit 2: "`--model` is a flag of gobble's chat command; put it after
    `gobble acp`" for the three model flags under acp, and "`--print` is a flag of gobble's chat command, not of
@@ -938,6 +941,126 @@ Q6 was answered (a), 2026-11-10: the steps run as written. Runs on the owner's w
    Linux machine and the Windows laptop.
 7. **Docs:** `docs/architecture.md`'s `internal/cli` row; any guide that names `gobble acp`'s flags.
 8. **Gates** (C6), with the remote tests. Staged; the owner commits.
+
+### P8 record (2026-11-10)
+
+C1: `HEAD` `ef6a870` (P7), `origin/main` `ece13c4` (P2 onwards not yet pushed), the tree clean; acpext `v0.3.0`,
+go-llmprovider-sdk `v1.28.0` and kong `v1.16.1` required.
+
+**Deviation 1 (2026-11-10), the serving flags beside `--login`.** With P8 staged, the hand-off named a silent drop the
+phase left. `gobble acp --login <provider>` signs in and exits before `choose`, so `--model`, `--provider` and
+`--thinking`, which P8 gave `gobble acp`, are accepted beside it and ignored. `--mode` beside `--login` already was,
+before 0049. MADR D12 says no flag is silently dropped. The owner chose option (a): `gobble acp` refuses each of
+`--mode`, `--provider`, `--model` and `--thinking` given with `--login`, a usage error, exit 2. This is step 2b, below
+step 2's list. The MADR's D12 gains the bullet. No file is added to the phase: `internal/cli/acp.go` and
+`internal/cli/acp_test.go` are P8's already.
+
+1. **The probe** (step 1), `p8_probe_test.go` on a scratch copy, never in the tree. It parsed nine command lines and
+   printed each `kong.Context.Path`:
+   * A chat flag before another command is a `Path` element whose `*kong.Flag` is one of chat's own node's
+     `Flags`, while `kctx.Selected()` is that other command. `--model x version` gave `app flag:model(chat)
+     cmd:version`; `--model x acp` gave `app flag:model(chat) cmd:acp`.
+   * Chat's own runs select chat, with the flag on either side: `--model x -p hi` and `-p hi --model x` both give
+     `cmd:chat`.
+   * A root flag is not chat's: `--log-level debug version` gave `flag:log-level`.
+   * Kong's `trace` (`context.go:399-404` at `v1.16.1`) matches flags at the root against the default command's when
+     it is `default:"withargs"`, which is why they parse.
+
+   So Kong tells a misplaced flag from chat's own, and step 3 runs as written.
+2. **`gobble acp`'s flags:**
+   * `ModelFlags` (`--provider`, `--model`, `--thinking`) is a new struct in `internal/cli/flags.go`. `SharedFlags`
+     embeds it where the three fields were, so chat's flags, help and completion are unchanged; the CLI's tests,
+     completion's included, pass unchanged.
+   * `ACPCmd` embeds it. A new `choose` sets the mode, refuses `--provider` without `--model`, and stores
+     `pickModel`'s result in `e.pick`, which `agentOptions` passes on as `acpserver.Override`.
+   * `pickModel` takes `*ModelFlags`. `chat.go` passes chat's, and six test calls construct `ModelFlags`.
+   * A custom model id under `gobble acp` gets Pi's warning on stderr, as chat's does; stdout stays the protocol's.
+3. **Misplaced flags:** `misplacedFlag` (`internal/cli/main.go`) runs right after parsing. A `Path` flag that is one of
+   chat's own, while the selected command is not chat, is a usage error, exit 2:
+   * when the selected command has a flag of that name: `--model is a flag of gobble's chat command; put it after
+     `gobble acp``. `--mode` before `acp` is refused the same way, since acp has `--mode` too;
+   * otherwise: `--print is a flag of gobble's chat command, not of `gobble version``.
+4. **Tests:**
+   * `TestACPModelFlags` (`acp_test.go`): `--model openai/gpt-zz:low --thinking high` gives the `Override` `openai`,
+     `gpt-zz:low`, `high`. An unknown model and `--provider` alone are usage errors with chat's messages.
+   * `TestMisplacedChatFlags` (`main_test.go`), nine command lines:
+     * refused: `--model x version`, `--print version`, `--thinking high config path`, `--model … acp` and
+       `--mode plan acp`;
+     * still running: chat with `--model` on either side of `-p hi`, which exits 3 for want of a credential as
+       before; `--log-level warn version`; and `acp --model openai/gpt-zz`, exit 0 with Pi's custom-id warning.
+   * Every other test in `internal/cli/...` passes, `TestPickModel` with `ModelFlags`.
+5. **Seen failing** (C2), `p8_0049_breaks.py`, a scratch copy per case, `go test ./internal/cli/`, the proxies at
+   `127.0.0.1:9`, `GOPROXY=off`. The control passed; `cases not as expected: 0`:
+   * the tree before P8 (`acp.go`, `main.go`, `flags.go`, `modelflags.go`, `chat.go` at `HEAD`) with P8's tests: does
+     not compile, `acp_test.go:43:15: unknown field Model in struct literal of type ACPCmd`, `undefined: ModelFlags`;
+   * `choose` not resolving the flags: `TestACPModelFlags`, `acp_test.go:48: override {Provider: Model: Thinking:
+     Mode:}, want openai/gpt-zz:low at high`; and `TestMisplacedChatFlags`, no custom-id warning;
+   * `choose` without `--provider`'s check: `TestACPModelFlags`, `:60: --provider alone: <nil>, want the usage error`;
+   * the refusal removed: `TestMisplacedChatFlags`, `main_test.go:81: gobble ["--model" "x" "version"]: exit 0, stderr
+     ""; want 2 …`, the same for all five refused lines;
+   * the refusal applied to chat too: 57 tests fail, `TestMisplacedChatFlags` among them, e.g. `gobble ["-p" "hi"
+     "--model" "openai/gpt-zz"]: exit 2, stderr "Error: --print is a flag of gobble's chat command; put it after
+     `gobble chat`"`;
+   * the put-after message never offered: `TestMisplacedChatFlags`, `--model is a flag of gobble's chat command, not
+     of `gobble acp``.
+6. **Acceptance:** P6's driver gained case 6. `gobble acp --model opencode-zen/accept-model` is followed by
+   `session/new` and the prompt, with no `session/set_config_option`. Its checks: `session/new`'s model option reads
+   `opencode-zen/accept-model`; the one request goes to `/zen/v1/chat/completions`; the answer's data is case 1's,
+   `resetAt` aside.
+
+   | Host | Checks | Failed | Exit |
+   | :--- | :--- | :--- | :--- |
+   | macOS (arm64) | 41 | 0 | 0 |
+   | The Linux machine (amd64) | 41 | 0 | 0 |
+   | The Windows laptop (amd64), with `--no-appdata` (P7) | 41 | 0 | 0 |
+
+   Seen failing: the driver against a binary built from `git archive ef6a870`, the tree before P8. Cases 1 to 5 pass.
+   Case 6's `gobble acp --model …` exits at once with `Error: unknown flag --model, did you mean "--mode"?`, and the
+   driver stops at `initialize: gobble exited`, exit 1.
+7. **Docs:**
+   * `README.md`'s `gobble acp` item and `docs/architecture.md`'s ACP agent item name the three flags.
+   * `docs/architecture.md`'s `internal/cli` row names the refusal and the shared flags.
+   * `docs/guides/choosing-a-model.md`'s first rule says `gobble acp --model` does the same, after `acp`, and that
+     `gobble --model … acp` is refused.
+   * `docs/guides/credentials.md` names only `gobble acp --login` and stays as it is.
+8. **Gates** (C6):
+   * `make pre-add-check FILES="internal/cli/flags.go internal/cli/acp.go internal/cli/modelflags.go
+     internal/cli/chat.go internal/cli/main.go internal/cli/acp_test.go internal/cli/main_test.go
+     internal/cli/modelflags_test.go internal/cli/choice_test.go"`: `9 file(s) clean (gofmt, golint, govulncheck)`.
+   * macOS: the first `make preflight` failed at `lint` with one finding in P8's own test, `acp_test.go:43:15: embedlit:
+     embedded field type can be removed from struct literal (modernize)`. The literal now names `Model` and `Thinking`
+     directly. After that, `make pre-add-check FILES="internal/cli/acp_test.go"` was clean, `make preflight` exit 0
+     (`preflight passed`) and `make race` exit 0 (39 ok). The breaks above were re-run on that file, and the compile
+     line quoted is from the re-run.
+   * The remote runs below used the test before that literal change. The change is in how one test's value is
+     written, not in what it checks, and no other file changed.
+   * `make check-records markdownlint` after this record: exit 0. The identifier scan of the diff (the local account
+     name, the dev hosts' names, the org's mail domain, and real-machine home and temporary paths): nothing found.
+   * The Linux machine and the Windows laptop (`TMP`/`TEMP` set), a scratch copy of 926 files each: acpext's tests
+     ok; `go test -count=1 ./...` 38 ok; `-race` 38 ok; on each host, exit 0 and no `FAIL`.
+
+**Deviation 1's change (step 2b):**
+
+1. `ACPCmd.Run` refuses `--login` beside any of `--mode`, `--provider`, `--model` and `--thinking`, before signing in,
+   with `servingFlag`: `--model is for the sessions gobble acp serves; --login serves none`, exit 2.
+2. `TestACPLogin` gains the four flags beside `acp --login grok`. Each exits 2 with the message, and the test's
+   stubbed sign-in runs once, for the first, unrefused call.
+3. **Seen failing**, two cases added to `p8_0049_breaks.py`; all eight breaks and the control re-run, `cases not as
+   expected: 0`:
+   * the check removed: `TestACPLogin`, `acp_test.go:38: exit 0, stdout "Logged in to grok\n", stderr ""; want 2, "",
+     "Error: --mode is for the sessions gobble acp serves; --login serves none"`. The sign-in is the test's stub, so
+     no real one ran;
+   * `--mode` alone checked: `TestACPLogin`, the same line for `--provider`.
+4. **Gates:**
+   * The first `make preflight` failed at `lint`. `goconst` found `"provider"` and `"thinking"` repeated, in
+     `servingFlag`'s list among others. The list now names each flag with its dashes (`"--mode"` and the rest), a
+     literal used nowhere else in `internal/cli`, and the message is unchanged.
+   * After that: `make pre-add-check FILES="internal/cli/acp.go internal/cli/acp_test.go"`, `2 file(s) clean`;
+     `make preflight` exit 0, `preflight passed`; `make race` exit 0, 39 ok.
+   * The Linux machine and the Windows laptop ran `go test ./...`, 38 ok, `-race`, 38 ok, and acpext's tests, each
+     with exit 0 and no `FAIL`. They ran the tree before the `goconst` change, which spells four literals differently
+     and changes no behaviour or message. The loopback acceptance does not reach `--login` and was not re-run.
+   * `make check-records markdownlint` after this entry: exit 0. The identifier scan of the diff found nothing.
 
 ## Verification
 

@@ -41,8 +41,9 @@ Early, and built in the order [docs/README.md](docs/README.md#build-order) gives
   commands, modes, compaction by `/compact` and on its own, MCP servers and gobble's `_gobble/` extension
   methods. A client that offers files has file tools read and write its editor's text; with
   `tools.bash.useClientTerminal: true`, one that offers terminals runs bash in its terminal; each tool
-  call names the files it touches. `gobble acp --login <provider>` is what an ACP client's terminal
-  sign-in runs.
+  call names the files it touches. `gobble acp --model <provider/id>`, with `--provider` and
+  `--thinking`, starts every session on that model, as chat's flags do. `gobble acp --login <provider>`
+  is what an ACP client's terminal sign-in runs.
 - **Tools:** `read`, `write` and `edit`, confined to the workspace roots; `grep`, `find` and `tree`,
   which follow the repository's `.gitignore` rules; `move`, `delete`, `copy` and `mkdir`, where every
   delete asks first; `todo`, a checklist the client shows as the plan; `tool_search`, which loads

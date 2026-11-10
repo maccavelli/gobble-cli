@@ -406,7 +406,7 @@ is the commit that adds this section.
 10. **Open.** P5 waits for the owner to name the go-llmprovider-sdk tag that carries #13's fields (Q4 (a)). The PLAN
     stays `in-progress` until P5's record meets this item (the PLAN's P6 deviation 1).
 
-Of the items the amendment below adds, 11 is met by P7 (2026-11-10): the PLAN's P7 record has the tests, the five breaks seen failing, the Windows laptop's acceptance with no AppData folders, and the gates on three hosts. Item 12 is open until P8.
+Of the items the amendment below adds, 11 is met by P7 (2026-11-10): the PLAN's P7 record has the tests, the five breaks seen failing, the Windows laptop's acceptance with no AppData folders, and the gates on three hosts. Item 12 is met by P8 (2026-11-10): `TestACPModelFlags`, `TestMisplacedChatFlags`, eight breaks seen failing, and the acceptance's sixth case on three hosts. Only item 10 remains open, until P5.
 
 ### Amendment (2026-11-10, accepted): two defects found by P6's acceptance
 
@@ -476,6 +476,9 @@ Q6 was answered (a), 2026-11-10:
   A client can still change the model afterwards with `session/set_config_option`.
 * A flag of chat's given with any other command is a usage error (exit 2), naming the flag and its command, not a
   value silently dropped.
+* *Amended 2026-11-10 (the PLAN's P8 deviation 1; the owner's option (a)):* `gobble acp --login` serves no session,
+  so `--mode`, `--provider`, `--model` and `--thinking` beside it are each a usage error (exit 2), not ignored.
+  `--mode` was ignored there before 0049.
 
 #### Questions for the owner on the amendment (Q6, Q7)
 

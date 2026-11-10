@@ -8,6 +8,14 @@ import (
 	"github.com/maccavelli/gobble-cli/acpserver"
 )
 
+// ModelFlags choose the run's model and thinking level: chat's, and gobble
+// acp's for the sessions it serves (0049-MADR D12).
+type ModelFlags struct {
+	Provider string `complete:"provider" help:"Provider; requires --model."`
+	Model    string `complete:"model" placeholder:"PROVIDER/ID[:THINKING]" help:"Model to use."`
+	Thinking string `enum:",off,minimal,low,medium,high,xhigh,max" default:"" help:"Thinking level: off, minimal, low, medium, high, xhigh or max."`
+}
+
 // SharedFlags is the default command's flag set (0008-MADR D12). Every
 // value-taking flag carries an enum or a complete:"<source>" tag for
 // completion (0008-MADR D17). Long forms only, apart from -p, -c, -n, -t.
@@ -30,9 +38,7 @@ type SharedFlags struct {
 	Name       string `short:"n" complete:"none" help:"Name the session."`
 
 	// Models.
-	Provider   string `complete:"provider" help:"Provider; requires --model."`
-	Model      string `complete:"model" placeholder:"PROVIDER/ID[:THINKING]" help:"Model to use."`
-	Thinking   string `enum:",off,minimal,low,medium,high,xhigh,max" default:"" help:"Thinking level: off, minimal, low, medium, high, xhigh or max."`
+	ModelFlags
 	APIKey     string `name:"api-key" complete:"none" placeholder:"-" help:"Read this run's API key from stdin, or ask for it: -. Needs --model."`
 	ListModels bool   `name:"list-models" help:"List models, as gobble models list; the prompt words are its search."`
 

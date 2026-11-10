@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -75,6 +76,9 @@ func run(ctx context.Context, k *kong.Kong, root *Root, args []string, stdin *os
 	if done {
 		return code
 	}
+	if err := misplacedFlag(k, kctx); err != nil {
+		return exitCode(ctx, out, err)
+	}
 	overrides, err := parseOverrides(root.Set)
 	if err != nil {
 		return exitCode(ctx, out, err)
@@ -91,6 +95,42 @@ func run(ctx context.Context, k *kong.Kong, root *Root, args []string, stdin *os
 		out.Warnf("close log file: %v", err)
 	}
 	return code
+}
+
+// misplacedFlag refuses a flag of chat's given before another command.
+// Kong takes the default command's flags ahead of any command, so
+// `gobble --model x acp` parses, and acp would never read the flag; a flag
+// is refused, never ignored (0008-MADR D12; 0049-MADR D12).
+func misplacedFlag(k *kong.Kong, kctx *kong.Context) error {
+	var chat *kong.Node
+	for _, n := range k.Model.Children {
+		if n.Name == "chat" {
+			chat = n
+		}
+	}
+	selected := kctx.Selected()
+	if chat == nil || selected == nil || selected == chat {
+		return nil
+	}
+	for _, p := range kctx.Path {
+		if p.Flag == nil || p.Resolved || !slices.Contains(chat.Flags, p.Flag) {
+			continue
+		}
+		var words []string
+		for _, q := range kctx.Path {
+			if q.Command != nil {
+				words = append(words, q.Command.Name)
+			}
+		}
+		command := "gobble " + strings.Join(words, " ")
+		for _, f := range selected.Flags {
+			if f.Name == p.Flag.Name {
+				return usageErrorf("--%s is a flag of gobble's chat command; put it after `%s`", p.Flag.Name, command)
+			}
+		}
+		return usageErrorf("--%s is a flag of gobble's chat command, not of `%s`", p.Flag.Name, command)
+	}
+	return nil
 }
 
 // parse runs Kong's parser. Kong's Exit panics with exitPanic, which stops

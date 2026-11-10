@@ -49,7 +49,7 @@ func (c *ChatCmd) Run(k *kong.Context, e *runEnv) error {
 	if mode == ModeLine && e.out.caps.In && e.out.caps.Err.TTY && e.stdin != nil {
 		e.decideTrustHere(cwd)
 	}
-	if e.pick, err = e.pickModel(&c.SharedFlags); err != nil {
+	if e.pick, err = e.pickModel(&c.ModelFlags); err != nil {
 		return err
 	}
 	if err := e.choosePersonality(c.Personality); err != nil {

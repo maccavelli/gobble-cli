@@ -57,6 +57,32 @@ func stdinFile(t *testing.T, s string) *os.File {
 	return f
 }
 
+// A flag of chat's given before another command is refused, not dropped:
+// put after the command when that command has it, else named as chat's.
+// Chat's own flags still go either side of its words (0049-MADR D12).
+func TestMisplacedChatFlags(t *testing.T) {
+	for _, tc := range []struct {
+		args   []string
+		code   int
+		stderr string
+	}{
+		{[]string{"--model", "x", "version"}, ExitUsage, "Error: --model is a flag of gobble's chat command, not of `gobble version`\n"},
+		{[]string{"--print", "version"}, ExitUsage, "Error: --print is a flag of gobble's chat command, not of `gobble version`\n"},
+		{[]string{"--thinking", "high", "config", "path"}, ExitUsage, "Error: --thinking is a flag of gobble's chat command, not of `gobble config path`\n"},
+		{[]string{"--model", "openai/gpt-zz", "acp"}, ExitUsage, "Error: --model is a flag of gobble's chat command; put it after `gobble acp`\n"},
+		{[]string{"--mode", "plan", "acp"}, ExitUsage, "Error: --mode is a flag of gobble's chat command; put it after `gobble acp`\n"},
+		{[]string{"--model", "openai/gpt-zz", "-p", "hi"}, ExitAuth, "no model credential"},
+		{[]string{"-p", "hi", "--model", "openai/gpt-zz"}, ExitAuth, "no model credential"},
+		{[]string{"--log-level", "warn", "version"}, ExitOK, ""},
+		{[]string{"acp", "--model", "openai/gpt-zz"}, ExitOK, `Warning: Model "gpt-zz" not found for provider "openai". Using custom model id.`},
+	} {
+		r := runMain(t, nil, tc.args...)
+		if r.code != tc.code || (tc.stderr == "" && r.stderr != "") || !strings.Contains(r.stderr, tc.stderr) {
+			t.Errorf("gobble %q: exit %d, stderr %q; want %d and %q", tc.args, r.code, r.stderr, tc.code, tc.stderr)
+		}
+	}
+}
+
 func TestMainExitCodes(t *testing.T) {
 	cases := []struct {
 		name   string

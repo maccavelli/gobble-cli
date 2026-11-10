@@ -2,10 +2,12 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strings"
 	"testing"
 
+	"github.com/maccavelli/gobble-cli/acpserver"
 	"github.com/maccavelli/gobble-cli/llm/provider"
 )
 
@@ -30,6 +32,43 @@ func TestACPLogin(t *testing.T) {
 	c.want(c.run("acp", "--device"), ExitUsage, "", "--device is for --login")
 	c.want(c.run("acp", "--login", "claude", "--device"), ExitUsage, "", "claude has no login; --device is for a login")
 	c.want(c.run("acp", "--login", "ollama"), ExitUsage, "", `unknown provider "ollama"`)
+	// The flags for served sessions are refused beside --login, which serves
+	// none, rather than ignored (0049-MADR D12, as amended).
+	for _, f := range [][]string{{"--mode", "plan"}, {"--provider", "openai"}, {"--model", "openai/gpt-zz"}, {"--thinking", "high"}} {
+		c.want(c.run(append([]string{"acp", "--login", "grok"}, f...)...), ExitUsage, "",
+			"Error: "+f[0]+" is for the sessions gobble acp serves; --login serves none")
+	}
+	if logins != 1 {
+		t.Errorf("%d logins after the refusals, want the first alone", logins)
+	}
+}
+
+// gobble acp's --provider, --model and --thinking choose the sessions'
+// model and level as chat's do: the pick reaches the agent's Override, and
+// chat's errors are usage errors here too (0049-MADR D12).
+func TestACPModelFlags(t *testing.T) {
+	e, _ := modelEnv(t)
+	t.Setenv("OPENAI_API_KEY", "test-only")
+	c := &ACPCmd{Model: "openai/gpt-zz:low", Thinking: "high"}
+	if err := c.choose(e); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.agentOptions().Override; got != (acpserver.Override{Provider: "openai", Model: "gpt-zz:low", Thinking: "high"}) {
+		t.Errorf("override %+v, want openai/gpt-zz:low at high", got)
+	}
+	for _, tc := range []struct {
+		name string
+		f    ModelFlags
+		msg  string
+	}{
+		{"an unknown model", ModelFlags{Model: "zzz-none"}, `Model "zzz-none" not found. Use --list-models to see available models.`},
+		{"--provider alone", ModelFlags{Provider: "openai"}, "--provider requires --model"},
+	} {
+		err := (&ACPCmd{ModelFlags: tc.f}).choose(e)
+		if ee, ok := errors.AsType[*exitError](err); !ok || ee.code != ExitUsage || ee.msg != tc.msg {
+			t.Errorf("%s: %v, want the usage error %q", tc.name, err, tc.msg)
+		}
+	}
 }
 
 // The agent's ACP authentication lists every provider that takes a key, in

@@ -17,22 +17,27 @@ import (
 // handler (0004-PLAN Phase 2 step 4). It exits 0 at stdin end of file.
 // With --login it serves nothing: it signs in, or stores a key, in the
 // terminal an ACP client's terminal auth method opened (0016-MADR A2).
+// --provider, --model and --thinking are chat's: they choose every
+// session's model and level, a loaded one's too (0049-MADR D12).
 type ACPCmd struct {
 	Login  string `name:"login" complete:"provider" placeholder:"PROVIDER" help:"Sign in to a provider, or store its API key, in this terminal, then exit: what an ACP client's terminal auth method runs."`
 	Device bool   `name:"device" help:"With --login, sign in with a device code."`
 	Mode   string `complete:"mode" placeholder:"MODE" help:"Mode the sessions start in: default, accept-edits, plan, or bypass (with permissions.allowBypass)."`
+	ModelFlags
 }
 
 // Run serves the agent until stdin closes or a signal arrives.
 func (c *ACPCmd) Run(e *runEnv) error {
 	e.ensureSettingsFile()
 	switch {
+	case c.Login != "" && c.servingFlag() != "":
+		return usageErrorf("%s is for the sessions gobble acp serves; --login serves none", c.servingFlag())
 	case c.Login != "":
 		return e.acpLogin(c.Login, c.Device)
 	case c.Device:
 		return usageErrorf("--device is for --login")
 	}
-	if err := e.chooseMode(c.Mode); err != nil {
+	if err := c.choose(e); err != nil {
 		return err
 	}
 	// The process keys come from the global file and --set only: a
@@ -49,6 +54,38 @@ func (c *ACPCmd) Run(e *runEnv) error {
 	if err != nil {
 		return failf("acp: %v", err)
 	}
+	return nil
+}
+
+// servingFlag is the first of the flags for served sessions that was given,
+// or "": --login serves none, so each is refused beside it rather than
+// ignored (0049-MADR D12, as amended).
+func (c *ACPCmd) servingFlag() string {
+	for _, f := range []struct{ name, value string }{
+		{"--mode", c.Mode}, {"--provider", c.Provider}, {"--model", c.Model}, {"--thinking", c.Thinking},
+	} {
+		if f.value != "" {
+			return f.name
+		}
+	}
+	return ""
+}
+
+// choose sets the sessions' starting mode, and their model and level from
+// --provider, --model and --thinking, resolved as chat resolves them
+// (0005-PLAN F4-2c; 0049-MADR D12).
+func (c *ACPCmd) choose(e *runEnv) error {
+	if err := e.chooseMode(c.Mode); err != nil {
+		return err
+	}
+	if c.Provider != "" && c.Model == "" {
+		return usageErrorf("--provider requires --model")
+	}
+	pick, err := e.pickModel(&c.ModelFlags)
+	if err != nil {
+		return err
+	}
+	e.pick = pick
 	return nil
 }
 

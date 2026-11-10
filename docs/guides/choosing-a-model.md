@@ -11,7 +11,8 @@ argument works unchanged.
 From the first that applies:
 
 1. **`--model`**, with `--provider` when you give one. Every session the run opens starts on the
-   model, a resumed one included. A model gobble cannot use is an error; the run does not fall to
+   model, a resumed one included. `gobble acp --model …` does the same for an ACP client's sessions;
+   the flag goes after `acp`, and `gobble --model … acp` is refused. A model gobble cannot use is an error; the run does not fall to
    another.
 2. **The `defaultProvider` and `defaultModel` settings.** `defaultModel` is a new session's model,
    its id exactly; it is used only with `defaultProvider`. When that provider has no credential, or

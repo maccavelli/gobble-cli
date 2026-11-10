@@ -361,7 +361,7 @@ func TestChoiceWiring(t *testing.T) {
 		t.Fatalf("recent %q", got)
 	}
 	static := provider.Models("openai")[0]
-	if _, err := e.pickModel(&SharedFlags{Model: "openai/" + static}); err != nil {
+	if _, err := e.pickModel(&ModelFlags{Model: "openai/" + static}); err != nil {
 		t.Fatal(err)
 	}
 	if got := e.recentModels(); len(got) == 0 || got[0] != "openai/"+static {

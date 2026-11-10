@@ -21,7 +21,7 @@ type modelPick struct {
 // pickModel resolves --provider and --model by Pi's rules over the offline
 // model set, with Pi's warning for a custom id. --thinking wins over a
 // ":level" suffix. A resolution error is a usage error.
-func (e *runEnv) pickModel(f *SharedFlags) (modelPick, error) {
+func (e *runEnv) pickModel(f *ModelFlags) (modelPick, error) {
 	if f.Model == "" {
 		return modelPick{Thinking: f.Thinking}, nil
 	}

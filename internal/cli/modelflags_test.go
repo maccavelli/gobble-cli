@@ -46,7 +46,7 @@ func TestPickModel(t *testing.T) {
 	e, _ := modelEnv(t)
 	t.Setenv("OPENAI_API_KEY", "test-only")
 	withLister(t, (&liveLister{ids: []string{"gpt-6-astra"}}).list)
-	pick, err := e.pickModel(&SharedFlags{Model: "openai/gpt-zz:low"})
+	pick, err := e.pickModel(&ModelFlags{Model: "openai/gpt-zz:low"})
 	if err != nil || pick != (modelPick{Provider: "openai", Model: "gpt-zz", Thinking: "low"}) {
 		t.Fatalf("pick %+v, %v; want openai/gpt-zz at low", pick, err)
 	}
@@ -60,18 +60,18 @@ func TestPickModel(t *testing.T) {
 	if c := e.modelChoice(); c.Provider != "openai" || !slices.Equal(c.Models, []string{"gpt-6-astra", "gpt-zz"}) {
 		t.Errorf("model choice %+v, want the listing and the pick", c)
 	}
-	if pick, err := e.pickModel(&SharedFlags{Model: "openai/gpt-zz:low", Thinking: "high"}); err != nil || pick.Model != "gpt-zz:low" || pick.Thinking != "high" {
+	if pick, err := e.pickModel(&ModelFlags{Model: "openai/gpt-zz:low", Thinking: "high"}); err != nil || pick.Model != "gpt-zz:low" || pick.Thinking != "high" {
 		t.Errorf("with --thinking: %+v, %v; want the suffix kept in the id and high", pick, err)
 	}
-	_, err = e.pickModel(&SharedFlags{Model: "zzz-none"})
+	_, err = e.pickModel(&ModelFlags{Model: "zzz-none"})
 	if ee, ok := errors.AsType[*exitError](err); !ok || ee.code != ExitUsage || ee.msg != `Model "zzz-none" not found. Use --list-models to see available models.` {
 		t.Errorf("not found: %v", err)
 	}
-	_, err = e.pickModel(&SharedFlags{Provider: "nope", Model: "x"})
+	_, err = e.pickModel(&ModelFlags{Provider: "nope", Model: "x"})
 	if ee, ok := errors.AsType[*exitError](err); !ok || ee.code != ExitUsage || ee.msg != `Unknown provider "nope". Use --list-models to see available providers/models.` {
 		t.Errorf("an unknown provider: %v", err)
 	}
-	if pick, err := e.pickModel(&SharedFlags{Thinking: "max"}); err != nil || pick != (modelPick{Thinking: "max"}) {
+	if pick, err := e.pickModel(&ModelFlags{Thinking: "max"}); err != nil || pick != (modelPick{Thinking: "max"}) {
 		t.Errorf("--thinking alone: %+v, %v", pick, err)
 	}
 }
