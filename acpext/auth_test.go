@@ -13,7 +13,7 @@ import (
 func TestAuthProviders(t *testing.T) {
 	want := []acpext.AuthProvider{
 		{ID: "gemini", Name: "Gemini (Google)", Command: "gobble auth login gemini --api-key -"},
-		{ID: "openai", Name: "OpenAI", Command: "gobble auth login openai --api-key -"},
+		{ID: "openai", Name: "OpenAI", Command: "gobble auth login openai", Login: true},
 		{ID: "claude", Name: "Claude (Anthropic)", Command: "gobble auth login claude --api-key -"},
 		{ID: "grok", Name: "Grok (xAI)", Command: "gobble auth login grok", Login: true},
 		{ID: "opencode-zen", Name: "OpenCode Zen", Command: "gobble auth login opencode-zen --api-key -"},

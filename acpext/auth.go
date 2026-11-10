@@ -3,7 +3,9 @@ package acpext
 // AuthProvider is a provider gobble's ACP authentication names: its id,
 // which is its agent auth method's id; its label; the gobble command that
 // stores its credential; and whether it has a sign-in rather than a key
-// alone (0016-MADR A2).
+// alone (0016-MADR A2). A provider with a sign-in may still take a key: its
+// command offers both, as OpenAI's offers its ChatGPT plan sign-in and its
+// API key (gobble-cli 0031-MADR D7, amended 2026-11-10).
 type AuthProvider struct {
 	ID, Name, Command string
 	Login             bool
@@ -20,7 +22,7 @@ const LoginSuffix = "-login"
 func AuthProviders() []AuthProvider {
 	return []AuthProvider{
 		{ID: "gemini", Name: "Gemini (Google)", Command: "gobble auth login gemini --api-key -"},
-		{ID: "openai", Name: "OpenAI", Command: "gobble auth login openai --api-key -"},
+		{ID: "openai", Name: "OpenAI", Command: "gobble auth login openai", Login: true},
 		{ID: "claude", Name: "Claude (Anthropic)", Command: "gobble auth login claude --api-key -"},
 		{ID: "grok", Name: "Grok (xAI)", Command: "gobble auth login grok", Login: true},
 		{ID: "opencode-zen", Name: "OpenCode Zen", Command: "gobble auth login opencode-zen --api-key -"},

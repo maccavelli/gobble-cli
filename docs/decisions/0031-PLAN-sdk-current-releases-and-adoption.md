@@ -271,6 +271,39 @@ live check cover both. Its record is written in both PLANs, each for its own ste
 6. Gates (C6), acpext's tests on the Linux machine and the Windows laptop. Staged; the owner commits, pushes, and tags
    **this** commit `acpext/v0.4.0`, in `v0.3.0`'s form.
 
+##### P4b-1 record (2026-11-10)
+
+C1: `HEAD` `34365d6` (P4b's re-scope), `origin/main` `6cee0af`, the tree clean; acpext `v0.3.0` required, and no
+`acpext/v0.4*` tag locally or on origin. No deviation.
+
+1. **`acpext/auth.go`:** openai's entry is `{ID: "openai", Name: "OpenAI", Command: "gobble auth login openai",
+   Login: true}`. `AuthProvider`'s doc says a provider with a sign-in may still take a key through its command, as
+   OpenAI's offers its ChatGPT plan sign-in and its API key.
+2. **`acpext/auth_test.go`:** `TestAuthProviders` wants the new entry. `go -C acpext test` ok. The root, still on
+   `v0.3.0` from the proxy, passes `TestAcpextAuthProvidersAreTheRegistry` unchanged.
+3. **Seen failing** (C2), `p4b1_0031_breaks.py`, a scratch copy of the module per case, `GOPROXY=off`. The control
+   passed; `cases not as expected: 0`. Each break fails `TestAuthProviders` at `auth_test.go:27`:
+   * `auth.go` before P4b-1, with the test: `{ID:openai Name:OpenAI Command:gobble auth login openai --api-key -
+     Login:false}`;
+   * `Login` set but the key's command kept: `… --api-key - Login:true}`;
+   * the bare command with `Login` unset: `… Command:gobble auth login openai Login:false}`.
+4. **apidiff** from `acpext/v0.3.0`, taking P5a's and this change together: `-incompatible` empty, and "Compatible
+   changes: - ErrorData.WindowMinutes: added". The entry is the list's data, not an exported type, so apidiff does not
+   see it. `TestAuthProviders` holds it, and the root's registry test will hold it at P4b-2's pin.
+5. **Not changed:** the root and its guides. `docs/guides/credentials.md` and `choosing-a-model.md` describe the root's
+   behaviour, and P4b-2 updates them.
+6. **Gates** (C6):
+   * `make pre-add-check FILES="acpext/auth.go acpext/auth_test.go"`: `2 file(s) clean (gofmt, golint,
+     govulncheck)`. `make check-acpext-deps`: `ok`.
+   * macOS: `make preflight` exit 0, `preflight passed`; `make race` exit 0, 39 ok.
+   * The Linux machine and the Windows laptop (`TMP`/`TEMP` set), a scratch copy each: acpext's tests ok; `go test
+     -count=1 ./...` 38 ok; `-race` 38 ok; on each host, exit 0 and no `FAIL`.
+   * `make check-records markdownlint` after this record: exit 0. The identifier scan of the diff (the local account
+     name, the dev hosts' names, the org's mail domain, and real-machine home and temporary paths): nothing found.
+7. **The owner's, not done here:** the commit and its push, then the annotated tag `acpext/v0.4.0` on **this** commit,
+   in `acpext/v0.3.0`'s form, and its push. P4b-2 with 0049-PLAN P5b starts when
+   `go list -m github.com/maccavelli/gobble-cli/acpext@v0.4.0` succeeds through the proxy.
+
 #### P4b-2 — the root: the plan sign-in, and the pin to `acpext/v0.4.0`
 
 1. **Measure first**, as step 1 above says, against go-llmprovider-sdk `v1.29.0`:
