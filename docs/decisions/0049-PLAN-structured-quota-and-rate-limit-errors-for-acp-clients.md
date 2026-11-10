@@ -46,7 +46,9 @@ go-llmprovider-sdk `v1.28.0`; acp-go-sdk2 `v1.34.2`.
   * Q3 (a) or (c): `acpclient/conn.go` (and a new `acpclient/error.go`), `acpclient/acptest/script.go`,
     `internal/cli/line.go`, `internal/cli/print.go`.
 * **P5, go-llmprovider-sdk's #13 fields** (Q4 (a)): `go.mod`/`go.sum`, `llm/provider/`, and the MADR's D10, when the
-  owner names the tag.
+  owner names the tag. *Amended 2026-11-10 (Q8 to Q10):* P5a, acpext `v0.4.0` (`acpext/types.go`, `doc.go`, its tests
+  and a frame); P5b, the root (`go.mod`/`go.sum`, `llm/errors.go`, `llm/doc.go`, `llm/provider/provider.go`,
+  `acpserver/prompt.go`, the tests named there, and the docs rows).
 * **P6, acceptance and the records;** `docs/architecture.md`'s rows for `acpext`, `llm`, `llm/provider` and `acpserver`.
   *Amended 2026-11-10 (P6 deviation 2):* and `acpclient`'s row, and `docs/guides/choosing-a-model.md`'s sentence on a
   turn's mark.
@@ -656,14 +658,83 @@ the fields by their purpose.
 
 1. ~~`scripts/check_libs.py --lib go-llmprovider-sdk --tag <tag>`: 0 failing checks (0035-MADR D2). `go get`, `go mod
    tidy`: only go-llmprovider-sdk moves.~~ Done by 0050-PLAN P1, at `v1.29.0` (above).
-2. `llm/provider`: `ResetAt` from the SDK's absolute instant when it is set, else D5's rebuild; `daily` from the SDK's
-   per-day flag, replacing the Gemini inference; a stream failure's wait and instant into the same fields.
-3. A stated window, if the tag gives one: `window` or `weekly`, and, if a length is wanted on the wire, a further acpext
-   minor tag by amendment of the MADR (its "Not decided here").
-4. Tests: the SDK's instant wins over the rebuild (a `resets_at` 3 hours ahead with a 1-hour `Retry-After`); a Gemini
+2. ~~`llm/provider`: `ResetAt` from the SDK's absolute instant when it is set, else D5's rebuild; `daily` from the SDK's
+   per-day flag, replacing the Gemini inference; a stream failure's wait and instant into the same fields.~~
+3. ~~A stated window, if the tag gives one: `window` or `weekly`, and, if a length is wanted on the wire, a further
+   acpext minor tag by amendment of the MADR (its "Not decided here").~~
+4. ~~Tests: the SDK's instant wins over the rebuild (a `resets_at` 3 hours ahead with a 1-hour `Retry-After`); a Gemini
    per-day 429 is `daily` by the flag; a stream failure carries `retryAfterMs` and `resetAt`. Seen failing: each with
-   the mapping removed.
-5. Gates (C6). Staged; the owner commits.
+   the mapping removed.~~
+5. ~~Gates (C6). Staged; the owner commits.~~
+
+*Amended 2026-11-10 (the MADR's Q8 to Q10, each (a); the owner reviews these steps before any code):* steps 2 to 5 are
+replaced by P5a and P5b, in the order P1 and P3 kept (C8). P5a is the acpext module alone. P5b is the root, once the
+owner has tagged `acpext/v0.4.0`.
+
+#### P5a — acpext `v0.4.0`: `windowMinutes` (MADR Q9)
+
+1. **C1.** Then `acpext/types.go`: `ErrorData` gains `WindowMinutes int` (`json:"windowMinutes,omitzero"`), declared
+   last, after `SessionID`. Its doc says it is the window's length as the service stated it, in whole minutes, sent
+   whatever the `limit`, and absent when not stated, never from the wait.
+2. `acpext/doc.go`'s failed-turn paragraph names it.
+3. **Tests:**
+   * `TestErrorDataSortedMembers` sets all fifteen members, `windowMinutes` last.
+   * A new frame `prompt-weekly.error.json` (`kind` `quota`, `limit` `weekly`, `code` `usage_limit_reached`,
+     `windowMinutes` 10080, `resetAt`, `retryable` false, `provider` `openai`, `error`) is in `frames`, under
+     `TestFramesRoundTrip` and `TestFramesCoverEveryMethod`.
+   * `ExampleErrorData_limit` prints `windowMinutes` too, or a second example does.
+4. **Seen failing** (C2), on scratch copies: the module before P5a with the tests (compile); the tag misspelt
+   `windowMinute` (round trip); the member declared before `sessionId` (sorted test).
+5. **apidiff** from `acpext/v0.3.0`: one compatible addition, the field.
+6. **Gates** (C6), acpext's tests on the Linux machine and the Windows laptop. Staged. The owner commits, pushes and
+   tags `acpext/v0.4.0` in `v0.3.0`'s form. **Gate for P5b:**
+   `go list -m github.com/maccavelli/gobble-cli/acpext@v0.4.0` succeeds through the proxy.
+
+#### P5b — the root on `v1.29.0`'s fields (MADR D10 as built, Q8, Q9)
+
+1. **C1,** and the gate. `go get github.com/maccavelli/gobble-cli/acpext@v0.4.0`, `go mod tidy`: one `go.mod` line and
+   its hashes. Before any write, a probe on a scratch copy settles two facts, and a different answer is a deviation:
+   * which canned-wire shapes reach a stream failure through `llm/provider.New`: an SSE body whose event is an error;
+   * for which provider ids `v1.29.0` reads ChatGPT's `resets_at` and `limit_window_minutes`, and OpenCode's
+     `metadata`.
+2. **`llm`:** `APIError` gains `Window time.Duration`, the window's stated length, zero when not stated, filled only by
+   a provider adapter. `llm/doc.go` names it.
+3. **`llm/provider/provider.go`:**
+   * `mapErrorAt`: `ResetAt` is `ae.ResetAt` when it is not zero, else `now.Add(ae.RetryAfter)` when that is positive.
+     `Window` is `ae.Limit.Window` when `Limit` is not nil.
+   * `limitOf`:
+     * `daily` when `ae.Limit != nil && ae.Limit.PerDay`, in place of the Gemini test on HTTP 429;
+     * `CreditLimitExceeded` joins `creditsCodes`;
+     * `BudgetLimitError` stays out of every set, so it gives none.
+     * Then Q8's refinement, applied only when the table gave `plan`: `weekly` for a `Window` of 7 days or a `Name` of
+       `"weekly"`; `monthly` for a `Name` of `"monthly"`; `window` for any other `Window` above 0. It never reads
+       `RetryAfter`.
+   * The comment above the code sets names `v1.29.0` and Q8.
+4. **`acpserver/prompt.go`'s `errorData`** sets `WindowMinutes` to `int(ae.Window / time.Minute)` when `Window` is
+   positive.
+5. **Tests** (`llm/provider/limit_test.go`, `wire_test.go`, `acpserver/errordata_test.go`, `acpserver/choice_test.go`),
+   each seen failing with its mapping removed:
+   * `TestWireResetAtFromProvider`: a ChatGPT-shaped 429 `usage_limit_reached` with `resets_at` 3 hours ahead and
+     `Retry-After: 3600` gives `ResetAt` the body's instant, to the second, not now plus 1 hour.
+   * `TestWirePerDay`: a Gemini per-day 429 gives `daily`, and so does the same `QuotaFailure` inside a stream.
+   * `TestWireStreamFailureDelay`: a stream failure whose error states `Retry-After` carries `RetryAfter`, `ResetAt` and,
+     through acpserver, `retryAfterMs` and `resetAt`.
+   * `TestWireStatedWindow`: `usage_limit_reached` with `limit_window_minutes` 10080 gives `weekly` and `Window` 7 days;
+     with 300 it gives `window` and 5 hours. `GoUsageLimitError` with `metadata.limitName` `"weekly"` gives `weekly`
+     and no `Window`. `FreeUsageLimitError` with a stated window keeps `free_tier` (Q8 (a)).
+   * `TestWireBudgetLimit`: `BudgetLimitError` with `metadata.resetsAt` gives that `ResetAt`, `Retryable` false and no
+     `limit`. `CreditLimitExceeded` inside a stream gives `credits`.
+   * `TestWireLongWaitIsNotAWindow` still passes: a 4-hour `Retry-After` with no `Limit` is never `window`.
+   * `TestErrorData` gains a weekly case. Its data equals `prompt-weekly.error.json`'s canonical encoding, and
+     `windowMinutes` is 10080.
+   * `TestQuotaMarkLapses` gains a case where `ResetAt` has already passed: the mark is gone at the next `/model`.
+   * `TestKindsAndLimitsMatchAcpext` unchanged, and passes.
+6. **Acceptance:** P6's driver gains case 7, `openai` 429 `usage_limit_reached` with `resets_at` and
+   `limit_window_minutes` 10080. Its -32603's data has `limit` `weekly`, `windowMinutes` 10080 and `resetAt` the body's
+   instant. Run on macOS, the Linux machine and the Windows laptop. If step 1's probe finds that `v1.29.0` reads these
+   members only for another provider id, the case uses that id, as a dated note.
+7. **Docs:** `docs/architecture.md`'s `llm` and `llm/provider` rows, and acpext's requirement row at `v0.4.0`.
+8. **Gates** (C6). Staged; the owner commits. The MADR's Completion item 10 is then met, and this plan is `complete`.
 
 ### P6 — acceptance
 

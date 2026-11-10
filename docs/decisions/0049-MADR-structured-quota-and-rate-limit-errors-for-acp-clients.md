@@ -330,6 +330,49 @@ in `llm/provider` only:
 * a stream failure's `RetryAfter` and reset into the same fields, which today are zero for a stream (F14);
 * ChatGPT's `plan_type` and Kilo's `metadata`: only if a later record decides a member for them; this record does not.
 
+#### D10 as built on `v1.29.0`: questions Q8 to Q10, answered 2026-11-10
+
+`v1.29.0`'s `*llmprovider.APIError` has the following (`llmprovider/api_error.go:103-131`,
+`llmprovider/api_limit.go:20-56`):
+
+* `ResetAt time.Time`, the instant the service named, in UTC, which may already have passed;
+* `Limit *Limit`, with `Name` (OpenCode Go's `"5 hour"`, `"weekly"`, `"monthly"`) and `Window time.Duration`. `Window`
+  is ChatGPT's `limit_window_minutes`, or a `Name` of the form `"<n> hour(s)"`, kept between 1 minute and 366 days; a
+  `Name` such as `"weekly"` gives no `Window`;
+* also `Plan`, `PerDay`, `Quotas` and `CreditsURL`;
+* and a stream failure classified by `ClassifyStreamFailureBody`, so it carries `RetryAfter`, `ResetAt` and `Limit`.
+
+[maccavelli/gobble-cli#15](https://github.com/maccavelli/gobble-cli/issues/15) asks for P5 and leaves the choices below
+to this repository. The owner was asked with three options each and chose the recommended one for every question.
+
+* **Q8. Which scopes a stated window refines.** Answer: **(a) `plan` only.** The other options were (b) every quota
+  scope, and (c) none, sending the length alone.
+  * When the code table (D4) gives `plan` and `Limit` states a window, the limit becomes `weekly` for a `Window` of
+    7 days or a `Name` of `"weekly"`, `monthly` for a `Name` of `"monthly"`, and `window` for any other `Window` above 0.
+  * `free_tier` and `credits` keep their names: they say what kind of allowance ran out.
+  * The window is read from `Limit` alone, never from `RetryAfter` (D4's rule stands).
+* **Q9. The window's length on the wire.** Answer: **(a) `windowMinutes` in acpext `v0.4.0`.** The other options were
+  (b) no member, and (c) a later record.
+  * `ErrorData` gains `windowMinutes` (`WindowMinutes int`, `omitzero`), last in sorted order after `sessionId`.
+  * It is sent whenever `Limit.Window` is above 0, whatever the scope: it is the service's stated fact.
+  * A `Name` with no `Window` sends none, so `"weekly"` is `weekly` with no minutes: gobble does not turn a name into a
+    number.
+  * `llm.APIError` gains `Window time.Duration` to carry it.
+  * acpext is tagged `acpext/v0.4.0` by the owner before the root requires it (0042-MADR D5), as P1 was. This closes
+    "Not decided here"'s first item.
+* **Q10. `Plan`, `CreditsURL`, `Quotas`.** Answer: **(a) none in this record.** The other options were (b) `plan` and
+  `creditsUrl`, and (c) all three. D10's last item stands: each waits for a record of its own, when a client asks.
+
+D10's bullets, at `v1.29.0`:
+
+* **The reset instant:** `ResetAt` is `ae.ResetAt` when set, else D5's rebuild from `RetryAfter`. A `ResetAt` already
+  passed is kept, and the quota mark built on it lapses at once (Q2 (a)).
+* **`daily`:** from `Limit.PerDay`, for an HTTP reply and a stream failure alike. This replaces D4's Gemini test on
+  HTTP 429.
+* **Codes:** `CreditLimitExceeded` joins D4's `credits` row. `BudgetLimitError` joins D4's empty row with
+  `UserLimitError`: it states a scope of models, not of time. Each takes a window only through Q8.
+* **Stream failures** fill the same fields, since the SDK now classifies them.
+
 ### Consequences
 
 * Good, because magic-cli-remote, and any ACP client, can say which limit was hit, from which provider, with its code,
@@ -367,7 +410,22 @@ in `llm/provider` only:
 7. Each new test is seen failing against a planted break, on a scratch copy.
 8. The answers to Q1 to Q3 are built as answered, each with its tests.
 9. `make preflight` and `make race` pass, and the tests and race tests on the Linux machine and the Windows laptop.
-10. Q4: when the SDK's tag is named, its phase's own confirmation, written into the PLAN before it runs.
+10. Q4: when the SDK's tag is named, its phase's own confirmation, written into the PLAN before it runs. *Written
+    2026-11-10, for `v1.29.0` (Q8 to Q10):*
+    * acpext `v0.4.0`'s `ErrorData` encodes `windowMinutes` last, round-trips, and passes apidiff from `v0.3.0` with one
+      compatible addition.
+    * Through `llm/provider` on canned wires:
+      * a ChatGPT 429 with `resets_at` 3 hours ahead and `Retry-After: 3600` gives that instant;
+      * a Gemini per-day 429, in a reply and in a stream, gives `daily`;
+      * a stream failure with a stated delay carries `retryAfterMs` and `resetAt`;
+      * `usage_limit_reached` with 10080 minutes gives `weekly` and `windowMinutes` 10080, and with 300 gives `window`
+        and 300;
+      * `GoUsageLimitError` with `"weekly"` gives `weekly` and no minutes;
+      * `BudgetLimitError` with `metadata.resetsAt` gives that instant, `retryable` false and no `limit`;
+      * `CreditLimitExceeded` in a stream gives `credits`;
+      * a 4-hour wait alone is still no `window`.
+    * A `ResetAt` already passed lapses the quota mark at once.
+    * Each is seen failing.
 
 ### Completion (2026-11-10)
 
@@ -562,7 +620,9 @@ refusal", Q7 "Look up only when needed". The amendment is accepted.
 
 ### Not decided here
 
-* A member for a window's length, and the `window` and `weekly` scopes in practice: with their first source (D10).
+* ~~A member for a window's length, and the `window` and `weekly` scopes in practice: with their first source (D10).~~
+  *Decided 2026-11-10 by Q8 and Q9:* `windowMinutes` in acpext `v0.4.0`, and `window`, `weekly` and `monthly` from a
+  stated window refining `plan`.
 * ChatGPT's `plan_type` and Kilo's `metadata` on the wire (D10, last item).
 * A remaining-quota reading from a successful reply's headers (#13 requirement 5).
 * `acpclient.Retry`'s new members in gobble's CLI retry line: Q3 covers the failed turn, not the retry line.
