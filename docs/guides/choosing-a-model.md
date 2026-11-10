@@ -160,7 +160,10 @@ gobble found it. `--check` lists each provider with a credential, and Ollama, an
 - **no credential**: none is set, with the variable to set and the `gobble auth login` to run.
 
 In a session, `/providers` shows the same table, each provider with its state, and a turn the
-provider refuses for its key, its quota or its permissions marks it so for the rest of the session.
+provider refuses for its key, its quota or its permissions marks it so for the rest of the session,
+or until you sign in again. A quota whose provider said when it lifts is marked until then: the
+mark reads, say, "quota exhausted (HTTP 429) — resets 14:05", and after that time the provider
+is offered again.
 
 ## Listing the models
 

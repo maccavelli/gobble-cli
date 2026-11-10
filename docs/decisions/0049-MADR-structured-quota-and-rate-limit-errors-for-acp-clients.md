@@ -365,6 +365,140 @@ D2 requires) and maps, in `llm/provider` only:
 9. `make preflight` and `make race` pass, and the tests and race tests on the Linux machine and the Windows laptop.
 10. Q4: when the SDK's tag is named, its phase's own confirmation, written into the PLAN before it runs.
 
+### Completion (2026-11-10)
+
+Items 1 to 9 are met; item 10 is open. The evidence is in the PLAN's P-records
+([0049-PLAN-structured-quota-and-rate-limit-errors-for-acp-clients.md](0049-PLAN-structured-quota-and-rate-limit-errors-for-acp-clients.md)).
+The commits are P0 `a6636fa`, P1 `ece13c4` (tagged `acpext/v0.3.0`), P2 `969b161`, P3 `36626fd` and P4 `9eb22bc`; P6
+is the commit that adds this section.
+
+1. **Met, P1.** `TestErrorDataSortedMembers` encodes all fourteen members in sorted order. The four new frames
+   round-trip under both encoders, with unknown members refused (`TestFramesRoundTrip`). apidiff from `acpext/v0.2.0`
+   reports compatible additions only.
+2. **Met, P3 and P6.** `TestPromptQuotaData`'s -32603 data is byte-equal to `prompt-quota.error.json`'s canonical
+   encoding. P6's loopback run of `gobble acp` on macOS, the Linux machine and the Windows laptop answered OpenCode Zen's
+   429 `FreeUsageLimitError` with every member as this item states, `resetAt` within a second of the request plus
+   5601 s.
+3. **Met, P2.** `TestWireLimits`'s twelve subtests cover every row of D4, with `UserLimitError` and Kilo's
+   message-only free usage giving none; `TestWireLongWaitIsNotAWindow` gives `rate` for a 5-hour wait. Gemini's `code` is
+   `RESOURCE_EXHAUSTED` for a per-day and a per-minute 429 alike, so only `limit` tells them apart. D4 reads the period
+   from the SDK's kind, not the code, and is unaffected.
+4. **Met, P2, P3 and P6.**
+   * `TestRetryNoticeCarriesServerWait` and `TestRetryNoticeServerMembers` cover the retry start's four members.
+   * `TestAttemptsAfterRetries` and the `prompt-after-retries.error.json` frame cover `attempts`.
+   * The `prompt-rate-over-cap.error.json` frame covers a wait over the cap.
+   * In P6's run, case 3's start carried `retryAfterMs` 1000, `serverDirected`, `code` and `httpStatus` 429. Case 4's
+     120 s wait sent no notice and answered -32603 with `retryable` true and `retryAfterMs` 120000.
+5. **Met, P2 and P6.** On the tree before P2, `TestWireRejectedKey`'s 401 `MonthlyLimitError` case failed with
+   "opencode-zen rejected the API key from auth.json: …", which is F9 observed. After D8 it is `llm.ErrQuota` and
+   names no rejected key; `TestQuotaIsNotARejectedLogin` covers a stored login. P6's case 2 ran through `gobble acp`
+   with the key in `auth.json`: `kind` `quota`, `limit` `monthly`, and no rejected key. gobble at `74d7f66` said the key
+   was rejected.
+6. **Met, P2 to P4.** `make preflight`'s `archtest` passed with `internal/archtest` unchanged; acpserver imports neither
+   `llm/provider` nor the SDK.
+7. **Met, every phase.** On scratch copies: five breaks at P1, eight at P2, ten at P3 and twelve at P4, each failing as
+   its record quotes. P6's acceptance driver failed 20 of its 38 checks against gobble at `74d7f66`.
+8. **Met, P4.** Q1 (a): nothing was built, as answered. Q2 (a): the quota mark keeps its reset time, shows it and
+   lapses after it. By P4's deviation 1 that is the quota mark alone, since a rate limit makes no mark (F11). Q3 (a):
+   `acpclient.PromptError`, the line session's limit line, and print mode's `errorData`.
+9. **Met, P1 to P4 and P6.** `make preflight` and `make race` passed at each phase. The Linux machine and the Windows
+   laptop ran acpext's tests, `go test ./...` and the race tests at P1 to P4, and P6's acceptance.
+10. **Open.** P5 waits for the owner to name the go-llmprovider-sdk tag that carries #13's fields (Q4 (a)). The PLAN
+    stays `in-progress` until P5's record meets this item (the PLAN's P6 deviation 1).
+
+Items 11 and 12, which the amendment below adds, are open.
+
+### Amendment (2026-11-10, proposed): two defects found by P6's acceptance
+
+P6's loopback acceptance found two defects that predate this record and are outside its decision. On 2026-11-10 the
+owner moved both into this record's scope, to be analysed and fixed: "add these to the current scope, they need to be
+analyzed and remediated". Both were read at `9eb22bc` and probed with the binary built from it, each in a scratch home.
+
+* **F15. A chat flag before another command is accepted and dropped.**
+  * `--provider`, `--model`, `--thinking` and every other flag in `SharedFlags` (`internal/cli/flags.go:14`) belong
+    to `chat`, the default command (`ChatCmd`, `internal/cli/chat.go:13-16`). `gobble acp` has `--login`, `--device`
+    and `--mode` (`internal/cli/acp.go:20-24`), so `gobble acp --model …` is refused as an unknown flag.
+  * Placed before a command, Kong accepts chat's flags and the command ignores them. In probes, each exits 0 and does
+    only the command's work:
+    * `gobble --model opencode-zen/x version`;
+    * `gobble --print version`;
+    * `gobble --thinking high config path`;
+    * `gobble --model opencode-zen/x acp --help`, which shows acp's help.
+  * After the command, the flag is refused: `gobble version --model x` exits 2 with `unknown flag --model`.
+  * Only `ChatCmd.Run` calls `pickModel`. That fills `e.pick`, which `agentOptions` passes on as
+    `acpserver.Override` (`internal/cli/agent.go:109`). Under `gobble acp`, `e.pick` is zero, so
+    `gobble --model X acp` serves sessions that start on the settings' model with no word of the flag. P6 saw this:
+    the session started on `opencode-zen`'s default model.
+  * An ACP client sets the model with `session/set_config_option` (`configId` `model`). A root `--set` reaches
+    `gobble acp`: `gobble --set defaultModel=x acp --help` exits 0. So the settings' `defaultProvider` and
+    `defaultModel` are a working route today.
+* **F16. `GOBBLE_HOME` does not spare the platform's directories.**
+  * `appdirs.System` (`internal/appdirs/dirs.go:80-87`) calls `systemBase()` before `Resolve`, and returns its error.
+    * On Windows, `systemBase` (`base_windows.go:16-30`) reads the RoamingAppData and LocalAppData known folders with
+      `KF_FLAG_DEFAULT`, which fails when a folder is missing, then `os.UserHomeDir`.
+    * Elsewhere it is `os.UserHomeDir` (`base_unix.go:10-16`), which fails with `HOME` unset.
+  * `Resolve` itself needs no base under `GOBBLE_HOME`: `TestResolveGobbleHomeNeedsNoBase` says "GOBBLE_HOME needs no
+    platform base, so it works where HOME is unusable". 0003-MADR keeps `GOBBLE_HOME` "for portable installs and
+    tests". `System` undoes both promises.
+  * On the Windows laptop, a profile without those folders failed with `appdirs: known folder RoamingAppData: The
+    system cannot find the path specified.` On macOS, `GOBBLE_HOME` set and `HOME` unset make `gobble config path`
+    exit 1 with `appdirs: home directory: $HOME is not defined`.
+  * Every caller of `systemDirs` treats the failure as "no directory".
+    * Under `gobble acp` that meant no `models.json`, so the providers' default hosts were dialled with the
+      environment's keys (the PLAN's P6 record). `gobble auth login` failed with `auth.json: the config directory
+      cannot be resolved`.
+    * This "no directory" fallback is deliberate (0005-PLAN F3-1; the log file, magic-cli-remote 0157-MADR D8). It is
+      not changed here.
+
+#### D11. `GOBBLE_HOME` and the role variables need no platform directory (F16)
+
+`System` reads the platform's base only when a role falls to the platform default. That is, when `GOBBLE_HOME` is
+unset and at least one of `GOBBLE_CONFIG_DIR`, `GOBBLE_DATA_DIR`, `GOBBLE_STATE_DIR` and `GOBBLE_CACHE_DIR` is unset.
+This holds on every OS. `Resolve`'s signature and its table (0003-MADR) are unchanged.
+
+* With `GOBBLE_HOME` set, a Windows profile without its AppData folders and a Unix process without `HOME` both
+  resolve.
+* With neither set, the base is read as today, and its error is unchanged.
+* gobble does not create the known folders (`KF_FLAG_CREATE`). They are the OS profile's to make, and the defect is
+  the order of reads, not their absence (Q7).
+
+#### D12. gobble acp chooses its sessions' model as chat does, and a misplaced chat flag is refused (F15)
+
+As Q6 answers. Under Q6 (a):
+
+* `gobble acp` gains `--provider`, `--model` and `--thinking`, as chat's: same names, help, completion and resolution
+  (`pickModel`, Pi's rules over the offline model set).
+* Like chat's, they win over every session's own, a loaded one included, through the existing `acpserver.Override`.
+  A client can still change the model afterwards with `session/set_config_option`.
+* A flag of chat's given with any other command is a usage error (exit 2), naming the flag and its command, not a
+  value silently dropped.
+
+#### Questions for the owner on the amendment (Q6, Q7)
+
+* **Q6. `gobble acp` and the model flags (F15).**
+  * **(a) Both: `gobble acp --provider/--model/--thinking` as chat's, winning over every session's own, and chat's flags
+    refused before any other command.** *(recommended)* An ACP client's launcher, such as magic-cli-remote's, can pin
+    the model on the command line, and no flag is ever silently dropped. Cost: `internal/cli` only. The flags'
+    struct is shared with chat, and a test per command family.
+  * (b) As (a), but the acp flags set only a new session's model, and a loaded session keeps its own. This needs a new
+    `acpserver` option beside `Override`, since `Override` applies to every session.
+  * (c) Refuse the misplaced flags only. `gobble acp`'s start model stays the settings' (`--set defaultModel=…`).
+* **Q7. The platform base under `GOBBLE_HOME` (F16).**
+  * **(a) D11: read the base only when a role needs it.** *(recommended)*
+  * (b) As (a), and on Windows ask for the known folders with `KF_FLAG_CREATE`, so that a profile without them gets
+    them. Not recommended: it writes the OS profile, which no role asked for.
+
+#### Confirmation of the amendment
+
+11. `appdirs.System` with `GOBBLE_HOME` set returns that directory for all four roles when the platform base
+    fails. A test injects a failing base and sees it pass, and sees it fail against today's order. The Windows laptop
+    runs P6's acceptance without the driver's AppData folders and passes. With neither variable set, the base's error
+    is returned as today.
+12. As Q6 answers. Under (a), `gobble acp --model P/M` starts a session on `P/M`, and `--thinking` sets its level.
+    `gobble --model x version`, `gobble --print version` and `gobble --thinking high config path` each exit 2 naming
+    the flag. Chat's own parsing (`gobble --model P/M -p hi`, `gobble -p hi --model P/M`) is unchanged. P6's acceptance
+    sets the model by the flag in one case and passes on three hosts.
+
 ## Pros and Cons of the Options
 
 ### A. Text only

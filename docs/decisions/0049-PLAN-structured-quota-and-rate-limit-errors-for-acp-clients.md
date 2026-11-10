@@ -1,6 +1,6 @@
 ---
 status: in-progress
-date: 2026-11-09
+date: 2026-11-10
 associated-madr: "0049-MADR-structured-quota-and-rate-limit-errors-for-acp-clients.md"
 ---
 <!-- markdownlint-disable MD013 MD024 MD060 -->
@@ -17,7 +17,8 @@ Associated MADR: [0049-MADR-structured-quota-and-rate-limit-errors-for-acp-clien
 * When go-llmprovider-sdk tags #13's fields, they replace gobble's reconstructions (D10, Q4).
 
 The plan is complete when the MADR's Confirmation 1 to 10 is met, Q4's phase included, or, if the owner closes Q4's
-phase without a tag, when 1 to 9 are met and the record says why 10 was not.
+phase without a tag, when 1 to 9 are met and the record says why 10 was not. *Amended 2026-11-10:* and when the
+amendment's Confirmation 11 and 12 are met (P7, P8).
 
 ## Scope
 
@@ -47,6 +48,13 @@ go-llmprovider-sdk `v1.28.0`; acp-go-sdk2 `v1.34.2`.
 * **P5, go-llmprovider-sdk's #13 fields** (Q4 (a)): `go.mod`/`go.sum`, `llm/provider/`, and the MADR's D10, when the
   owner names the tag.
 * **P6, acceptance and the records;** `docs/architecture.md`'s rows for `acpext`, `llm`, `llm/provider` and `acpserver`.
+  *Amended 2026-11-10 (P6 deviation 2):* and `acpclient`'s row, and `docs/guides/choosing-a-model.md`'s sentence on a
+  turn's mark.
+* *Added 2026-11-10, by the MADR's amendment; proposed, each run on the owner's word after Q6 and Q7:*
+  * **P7, `GOBBLE_HOME` needs no platform directory** (MADR D11, Q7): `internal/appdirs/dirs.go` and its tests.
+  * **P8, `gobble acp`'s model flags and misplaced chat flags** (MADR D12, Q6): `internal/cli/flags.go`,
+    `internal/cli/acp.go`, `internal/cli/modelflags.go`, `internal/cli/main.go`, their tests, and the docs naming
+    `gobble acp`'s flags.
 
 **Out of scope:** Q1's notice, unless the owner answers (b) or (c), which then adds a step to P3 by amendment; any
 member the MADR's "Not decided here" lists; magic-cli-remote's code; go-llmprovider-sdk's code; `llm/provider.FailureKind`'s
@@ -647,12 +655,213 @@ the fields by their purpose.
       `retryAfterMs` 120000 and `resetAt`;
    5. Q3 (a) only: `gobble -p hi --output-format json` against case 1: `errorData` as case 1's data, `error` its text.
    The record quotes each frame, with the session id and temporary paths replaced.
-3. **The records:** the MADR's Confirmation item by item in a "Completion" section with commits and evidence; this plan
-   `complete` with a P-record per phase; `docs/README.md`'s rows; `docs/architecture.md`'s rows for `acpext`, `llm`,
-   `llm/provider` and `acpserver`.
+3. **The records:** the MADR's Confirmation item by item in a "Completion" section with commits and evidence; ~~this
+   plan `complete` with a P-record per phase~~ *Amended 2026-11-10 (P6 deviation 1):* this plan stays `in-progress`
+   with P6's record, and the Completion section marks Confirmation 10 open while P5 waits on the SDK's tag; P5's record
+   fills item 10 and sets the plan `complete`; `docs/README.md`'s rows; `docs/architecture.md`'s rows for `acpext`,
+   `llm`, `llm/provider` and `acpserver`.
 4. **Hand-off, the owner's to send:** a note for magic-cli-remote's 0243 PLAN naming acpext `v0.3.0` and the first gobble
    release that carries P3, and a status comment for #14. Neither is posted without the owner's word.
 5. **Gates** (C6). Staged; the owner commits.
+
+### P6 record (2026-11-10)
+
+C1: `HEAD` `9eb22bc` (P4), `origin/main` `ece13c4` (P2 to P4 not yet pushed), the tree clean; acpext `v0.3.0` and
+go-llmprovider-sdk `v1.28.0` required. P5 has not run: the owner has not named the SDK's tag.
+
+**Deviation 1 (2026-11-10), the plan's status at P6.** Step 3 set this plan `complete` with a P-record per phase. The
+plan put P5 before P6 on the assumption that the SDK's tag would come first. It has not, so P5 has no record and
+Confirmation 10 is not met. The Goal allows completion without P5 only if the owner closes Q4's phase without a tag,
+and the owner has not. The owner chose option 1: P6 closes with its record, the architecture and README rows, and the
+MADR's Completion section for Confirmation 1 to 9, with item 10 marked open; this plan stays `in-progress`; P5's record
+fills item 10 and sets it `complete`. Step 3 is amended above. No file is added to the phase. The MADR gains only the
+Completion section step 3 named; no decision or fact changes.
+
+**Deviation 2 (2026-11-10), two lines outside step 3's list.** Writing the rows, two lines were read that P4 left
+behind. `docs/guides/choosing-a-model.md:161-162` said a turn's mark lasts "for the rest of the session", which P4a
+made untrue for a quota with a reset time. `docs/architecture.md`'s `acpclient` row did not name `PromptError`.
+The owner chose option (a): both are fixed in P6. The guide names the reset and the sign-in that lift a mark, and the
+`acpclient` row names `PromptError`, the limit line and `errorData`. Scope is amended above. No decision or fact in the
+MADR changes.
+
+**The two findings moved into scope (2026-11-10).** The owner moved F15 and F16 (step 2's driver notes below) into this
+record: "add these to the current scope, they need to be analyzed and remediated". They are analysed in the MADR's
+amendment (F15, F16, D11, D12, Q6, Q7) and planned as P7 and P8, proposed. Neither changes P6.
+
+1. **Goldens:** `git diff --quiet 74d7f66 -- acpserver/testdata acpclient/acptest/testdata internal/cli/testdata`
+   exit 0, and nothing untracked there.
+2. **Acceptance** (C5), `p6_0049_accept.py`, a scratchpad driver that is not committed:
+   * **The binary** is built from the tree at `9eb22bc`. **The server** is a Python `ThreadingHTTPServer` on
+     `127.0.0.1` that answers each case's scripted replies by path, the last one repeating, and records each
+     request's path and time. A `GET`, the model listing, gets 404.
+   * **Each case** has its own scratch home and working directory: `GOBBLE_HOME`, `HOME`, `USERPROFILE` and `XDG_*`
+     inside it, and the environment cleared but for `PATH` and the system's variables. `HTTPS_PROXY` and `HTTP_PROXY`
+     are at `127.0.0.1:9`. `models.json` points `opencode-zen`'s `baseUrl` at `<BASE>/zen/v1` (`api`
+     `openai-completions`) and `openai`'s at `<BASE>/openai/v1`, each with the model `accept-model`, and the keys are
+     dummy values.
+   * **The ACP client** speaks to `gobble acp` over stdio: `initialize`, `session/new`, `session/set_config_option`
+     setting the model (checked), then `session/prompt` with `hi`. It refuses every agent request with -32601 and
+     records each frame.
+   * Thirty-eight checks; the driver exits 1 on any failure.
+
+   | Host | Checks | Failed | Exit |
+   | :--- | :--- | :--- | :--- |
+   | macOS (arm64) | 38 | 0 | 0 |
+   | The Linux machine (amd64) | 38 | 0 | 0 |
+   | The Windows laptop (amd64) | 38 | 0 | 0, on the second run (below) |
+
+   The frames, from the macOS run, with the session id as `<SESSION>`:
+   1. **Case 1,** a 429 `FreeUsageLimitError` with `Retry-After: 5601`: one request and no `_gobble/retry`. The
+      answer is the frame below, with `resetAt` within a second of the request's time plus 5601 s:
+
+      ```json
+      {"jsonrpc":"2.0","id":4,"error":{"code":-32603,"message":"Internal error","data":{"code":"FreeUsageLimitError","error":"llm: api status 429: llm: quota exhausted: llmprovider: quota exhausted: opencode-zen/chat_completions HTTP 429 FreeUsageLimitError (retry-after 1h33m21s): Free usage limit reached. Free models work in OpenCode (https://opencode.ai); subscribe to OpenCode Go to keep going: https://opencode.ai/go","httpStatus":429,"kind":"quota","limit":"free_tier","provider":"opencode-zen","providerMessage":"Free usage limit reached. Free models work in OpenCode (https://opencode.ai); subscribe to OpenCode Go to keep going: https://opencode.ai/go","resetAt":"2026-11-10T06:45:41Z","retryAfterMs":5601000,"retryable":false}}}
+      ```
+
+   2. **Case 2,** a 401 `MonthlyLimitError`, the key stored by `gobble auth login opencode-zen --api-key -`: -32603,
+      not auth_required, and no word of a rejected key:
+
+      ```json
+      {"jsonrpc":"2.0","id":4,"error":{"code":-32603,"message":"Internal error","data":{"code":"MonthlyLimitError","error":"llm: api status 401: llm: quota exhausted: llmprovider: quota exhausted: opencode-zen/chat_completions HTTP 401 MonthlyLimitError: Monthly limit reached.","httpStatus":401,"kind":"quota","limit":"monthly","provider":"opencode-zen","providerMessage":"Monthly limit reached.","retryable":false}}}
+      ```
+
+   3. **Case 3,** `openai`: a 429 with `Retry-After: 1` once, then a reply. Two requests:
+
+      ```json
+      {"jsonrpc":"2.0","method":"_gobble/retry","params":{"sessionId":"<SESSION>","phase":"start","cause":"rate-limited","attempt":1,"maxAttempts":4,"delayMs":1063,"retryAfterMs":1000,"serverDirected":true,"code":"rate_limit_exceeded","httpStatus":429}}
+      {"jsonrpc":"2.0","method":"_gobble/retry","params":{"sessionId":"<SESSION>","phase":"end","cause":"rate-limited"}}
+      {"jsonrpc":"2.0","id":4,"result":{"stopReason":"end_turn","usage":{"inputTokens":12,"outputTokens":3,"totalTokens":15}}}
+      ```
+
+   4. **Case 4,** `openai`: a 429 with `Retry-After: 120`, over the 60 s cap. One request, no `_gobble/retry`, and
+      `resetAt` the request's time plus 120 s:
+
+      ```json
+      {"jsonrpc":"2.0","id":4,"error":{"code":-32603,"message":"Internal error","data":{"code":"rate_limit_exceeded","error":"llm: api status 429: llm: rate limited: llmprovider: rate limited: openai HTTP 429 rate_limit_exceeded (retry-after 2m0s): Rate limit reached for requests","httpStatus":429,"kind":"rate-limited","limit":"rate","provider":"openai","providerMessage":"Rate limit reached for requests","resetAt":"2026-11-10T05:14:22Z","retryAfterMs":120000,"retryable":true}}}
+      ```
+
+   5. **Case 5,** `gobble --model opencode-zen/accept-model -p hi --output-format json` against case 1's reply: exit 1.
+      Its stdout follows; `errorData` is case 1's data, and `resetAt` is within a second of its own request plus
+      5601 s:
+
+      ```json
+      {"text":"","stopReason":"error","usage":null,"cost":{"amount":0,"currency":"USD"},"sessionId":"<SESSION>","error":"llm: api status 429: llm: quota exhausted: llmprovider: quota exhausted: opencode-zen/chat_completions HTTP 429 FreeUsageLimitError (retry-after 1h33m21s): Free usage limit reached. Free models work in OpenCode (https://opencode.ai); subscribe to OpenCode Go to keep going: https://opencode.ai/go","errorData":{"code":"FreeUsageLimitError","error":"llm: api status 429: llm: quota exhausted: llmprovider: quota exhausted: opencode-zen/chat_completions HTTP 429 FreeUsageLimitError (retry-after 1h33m21s): Free usage limit reached. Free models work in OpenCode (https://opencode.ai); subscribe to OpenCode Go to keep going: https://opencode.ai/go","httpStatus":429,"kind":"quota","limit":"free_tier","provider":"opencode-zen","providerMessage":"Free usage limit reached. Free models work in OpenCode (https://opencode.ai); subscribe to OpenCode Go to keep going: https://opencode.ai/go","resetAt":"2026-11-10T06:45:43Z","retryAfterMs":5601000,"retryable":false}}
+      ```
+
+      Its stderr is `Error: session/prompt: llm: api status 429: …`, the agent's message after the prefix. Before it
+      is a `WARN` line, `model listing failed; offering the curated static list`, from the server's 404 to the
+      listing.
+
+   **How the driver came to its form.** Each change below was made to the driver, not to gobble, and before any run
+   was counted:
+   * Step 2 named three ACP calls. The first run passed `--model` to `gobble acp`, which Kong refused as an unknown
+     flag. The root's `--model` (`gobble --model opencode-zen/accept-model acp`) does not set an ACP session's model:
+     the session started on `opencode-zen`'s default, `claude-haiku-5-5`, and its request went to `/messages`. The
+     driver now sets the model as an ACP client does, with `session/set_config_option` (`configId` `model`), and
+     checks it.
+   * The Windows laptop's first run failed every case. gobble reads the `RoamingAppData` and `LocalAppData` known
+     folders before `GOBBLE_HOME` (`internal/appdirs/base_windows.go`; `dirs.go:80-86`). Those folders follow
+     `USERPROFILE`, and the scratch home had none, so each run failed with `appdirs: known folder RoamingAppData: The
+     system cannot find the path specified.` The scratch `models.json` and `auth.json` were not read, and gobble
+     dialled the real hosts (`opencode.ai/zen/v1/…`, `api.openai.com/v1/responses`). The proxy at `127.0.0.1:9` refused
+     every dial (`proxyconnect tcp: dial tcp 127.0.0.1:9: … No connection could be made`), so no request left the
+     laptop. The driver now gives the Windows scratch home `AppData\Roaming` and `AppData\Local`, and the second run
+     passed 38 of 38.
+   * Both are gobble's behaviour before 0049. Neither is changed in P6. The owner moved both into scope, as the MADR's
+     F15 and F16, and as P7 and P8.
+3. **Seen failing** (C2): the same driver against a binary built from `git archive 74d7f66`, the tree before 0049, in
+   the scratchpad, on macOS. `checks: 38, failed: 20`. The 18 that passed check what 0049 did not change: the setup, the
+   JSON-RPC codes, the requests and notices counted, the retry's `cause`, `error`'s text, and case 5's exit status.
+   Every new member was missing:
+   * case 1: `provider`, `kind`, `httpStatus`, `code`, `providerMessage`, `retryAfterMs`, `retryable`, `limit` and
+     `resetAt` each failed, with the data `{"error":"llm: api status 429: …"}` alone;
+   * case 2: `kind quota, limit monthly` and `error does not say the key was rejected`, with `error` `opencode-zen
+     rejected the API key from auth.json: llm: api status 401: llm: quota exhausted: … MonthlyLimitError: Monthly limit
+     reached.` (MADR F9);
+   * case 3: the start's `retryAfterMs`, `serverDirected`, `code` and `httpStatus`;
+   * case 4: `retryable true, retryAfterMs 120000, limit rate` and its `resetAt`;
+   * case 5: `errorData` and its `resetAt` absent, and `error` `session/prompt: {"code":-32603,"message":"Internal
+     error","data":{"error":"llm: api status 429: …"}}`.
+4. **The records:**
+   * The MADR's "Completion" section, with Confirmation 1 to 9 met and 10 open.
+   * `docs/architecture.md`: acpext's paragraph, its requirement row at `v0.3.0`, and the rows for `llm`,
+     `llm/provider`, `acpserver` and, by deviation 2, `acpclient`.
+   * `docs/guides/choosing-a-model.md`'s mark sentence, by deviation 2.
+   * `docs/README.md`'s two 0049 rows.
+5. **Hand-off:** the note for magic-cli-remote's 0243 PLAN and the status comment for #14 are drafted in the hand-off
+   to the owner and are not posted. No gobble release carries P3 yet: `v0.5.0` predates it. P2 to P4 are not yet
+   pushed, so the comment cannot link those commits until they are.
+6. **Gates** (C6). No Go file changed in P6, so there was no pre-add check. C6 runs the remote tests at P1 to P5, not
+   at P6; P6's acceptance ran on both remote hosts.
+   * macOS: `make preflight` exit 0, `preflight passed`, `check-records` and `markdownlint` included; `make race` exit
+     0, 39 ok.
+   * After deviation 2 and the amendment, which change docs alone, `make check-records markdownlint` exit 0.
+   * The identifier scan of the diff found nothing. It looked for the local account name, the dev hosts' names, the
+     org's mail domain, and real-machine home and temporary paths.
+
+### P7 — `GOBBLE_HOME` needs no platform directory (MADR D11, Q7) — proposed
+
+Runs on the owner's word after Q7. Under Q7 (b), step 1 gains the Windows flag, by amendment, before it runs.
+
+1. **C1** as every phase, with P6 committed.
+2. **`internal/appdirs/dirs.go`:**
+   * `System` reads the base through a package variable, `readBase = systemBase`, so that a test can make it fail.
+   * It calls `readBase` only when a role needs the platform default: `GOBBLE_HOME` is unset, and so is at least one
+     of the four `GOBBLE_<ROLE>_DIR` variables. Otherwise it passes `Resolve` a zero `Base`.
+   * `Resolve`, `platform`, both `systemBase` files and the 0003-MADR table are unchanged. The doc comment on `System`
+     says when the base is read.
+3. **Tests** (`internal/appdirs/dirs_test.go`):
+   * `TestSystemGobbleHomeNeedsNoBase`: with `readBase` failing and `GOBBLE_HOME` set, `System` returns that
+     directory for all four roles. With all four role variables set and no `GOBBLE_HOME`, it returns them.
+   * `TestSystemBaseError`: with `readBase` failing and neither set, `System` returns the base's error unchanged.
+   * `TestSystem` passes unchanged.
+4. **Seen failing** (C2), on a scratch copy:
+   * today's `System` (the base read first) with the new tests: `TestSystemGobbleHomeNeedsNoBase` fails on both
+     cases;
+   * the condition planted as "`GOBBLE_HOME` unset" alone: the four-role case fails;
+   * the base's error dropped: `TestSystemBaseError` fails.
+5. **Acceptance:** P6's driver without its Windows AppData folders, on the Windows laptop, with the binary built from
+   the tree: 38 of 38. On macOS, `gobble config path` with `GOBBLE_HOME` set and `HOME` unset exits 0 and prints the
+   directory; at `9eb22bc` it exited 1 (MADR F16).
+6. **Gates** (C6), with the Linux machine and the Windows laptop running `go test ./...` and the race tests. Staged;
+   the owner commits.
+
+### P8 — `gobble acp`'s model flags and misplaced chat flags (MADR D12, Q6) — proposed
+
+Runs on the owner's word after Q6. The steps are written for Q6 (a). Q6 (b) or (c) amends them before the phase runs:
+(b) adds an `acpserver` option for a new session's model, and (c) drops step 2.
+
+1. **C1**, and a probe on a scratch copy before any write. How Kong records a chat flag given before another
+   command: its `kong.Context.Path` element, and whether `kctx.Command()` and the flag's owner tell them apart. If
+   Kong gives no way to tell a misplaced flag from chat's own, that is a deviation: stop and prompt.
+2. **`gobble acp`'s flags:**
+   * `--provider`, `--model` and `--thinking` move from `SharedFlags` into a new embedded `ModelFlags` struct
+     (`internal/cli/flags.go`). `SharedFlags` embeds it, so chat's flags, help and completion are unchanged.
+   * `ACPCmd` embeds `ModelFlags`. Its `Run` resolves them with `pickModel` before `agentOptions`, so `e.pick` reaches
+     `acpserver.Override` as chat's does. The checks chat makes on these flags apply here too, such as "--provider
+     requires --model".
+   * `pickModel` takes `*ModelFlags`; its callers and tests pass chat's.
+3. **Misplaced flags:** in `run` (`internal/cli/main.go`), after parsing, a flag of chat's that was given while the
+   command is not chat is a usage error, exit 2: "`--model` is a flag of gobble's chat command; put it after
+   `gobble acp`" for the three model flags under acp, and "`--print` is a flag of gobble's chat command, not of
+   `gobble version`" otherwise.
+4. **Tests** (`internal/cli`):
+   * `TestACPModelFlags`: `gobble acp --model openai/gpt-zz:low --thinking high` gives agent options whose `Override`
+     is `openai`, `gpt-zz:low`, `high`. An unknown model is a usage error, as chat's is.
+   * `TestMisplacedChatFlags`: `gobble --model x version`, `gobble --print version` and
+     `gobble --thinking high config path` each exit 2 with the message. `gobble --model openai/gpt-zz -p hi` and
+     `gobble -p hi --model openai/gpt-zz` still run chat.
+   * Today's `modelflags_test.go`, `acp_test.go` and the chat flag tests pass.
+5. **Seen failing** (C2), on a scratch copy:
+   * the tree before P8 with the new tests: `ACPCmd` has no `Model`, so it does not compile;
+   * `Run` not calling `pickModel`: `TestACPModelFlags` fails;
+   * the refusal removed: `TestMisplacedChatFlags` fails;
+   * the refusal applied to chat too: its still-running cases fail.
+6. **Acceptance:** P6's driver gains a sixth case, `gobble acp --model opencode-zen/accept-model` with no
+   `session/set_config_option`. Its request goes to the scripted path, and its answer is case 1's. Run on macOS, the
+   Linux machine and the Windows laptop.
+7. **Docs:** `docs/architecture.md`'s `internal/cli` row; any guide that names `gobble acp`'s flags.
+8. **Gates** (C6), with the remote tests. Staged; the owner commits.
 
 ## Verification
 
@@ -670,6 +879,8 @@ The MADR's Confirmation, as the phases map it:
 | 8 Q1 to Q3 as answered | P3 step 4b, P4 |
 | 9 the gates on three hosts | each phase's gates (C6) |
 | 10 the SDK's fields | P5 |
+| 11 `GOBBLE_HOME` needs no platform directory (amendment) | P7 |
+| 12 `gobble acp`'s model flags, misplaced chat flags refused (amendment) | P8 |
 
 ## Rollout and Rollback
 
