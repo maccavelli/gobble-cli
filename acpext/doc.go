@@ -37,8 +37,9 @@
 // A failed turn, session/prompt's or a compaction's, answers -32000 when the
 // provider refused its credential and -32603 otherwise. Its ErrorData says
 // what failed as data: Provider and Kind always, and what the provider said
-// when it answered, such as Code, ProviderMessage, RetryAfterMs, ResetAt and
-// Limit. Error keeps the whole text, as before. A wait longer than gobble's
+// when it answered, such as Code, ProviderMessage, RetryAfterMs, ResetAt,
+// Limit and WindowMinutes, the window's length when the service stated one.
+// Error keeps the whole text, as before. A wait longer than gobble's
 // retry cap is not taken and sends no MethodRetry: the turn answers at once,
 // with Kind rate-limited, Retryable true and the RetryAfterMs the provider
 // asked for.

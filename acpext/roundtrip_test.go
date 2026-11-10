@@ -82,6 +82,9 @@ var frames = map[string]frame{
 	"prompt-quota.error.json":         {"", of[acpext.ErrorData]()},
 	"prompt-rate-over-cap.error.json": {"", of[acpext.ErrorData]()},
 	"prompt-after-retries.error.json": {"", of[acpext.ErrorData]()},
+	// A plan limit whose service stated a 7-day window: limit weekly, and the
+	// window's length in windowMinutes (0049-MADR Q8, Q9).
+	"prompt-weekly.error.json": {"", of[acpext.ErrorData]()},
 }
 
 // emptyResults are the requests whose result is {}, which has no type.
@@ -201,13 +204,14 @@ func TestErrorDataSortedMembers(t *testing.T) {
 	retryable := false
 	b, err := jsonv2.Marshal(acpext.ErrorData{Attempts: 3, Code: "c", Command: "c", Error: "e", HTTPStatus: 429,
 		Kind: acpext.KindQuota, Limit: acpext.LimitFreeTier, Provider: "p", ProviderMessage: "m", Reason: "r",
-		ResetAt: "2026-11-09T14:05:00Z", RetryAfterMs: 5601000, Retryable: &retryable, SessionID: "s"})
+		ResetAt: "2026-11-09T14:05:00Z", RetryAfterMs: 5601000, Retryable: &retryable, SessionID: "s",
+		WindowMinutes: 10080})
 	if err != nil {
 		t.Fatal(err)
 	}
 	const want = `{"attempts":3,"code":"c","command":"c","error":"e","httpStatus":429,"kind":"quota","limit":"free_tier",` +
 		`"provider":"p","providerMessage":"m","reason":"r","resetAt":"2026-11-09T14:05:00Z","retryAfterMs":5601000,` +
-		`"retryable":false,"sessionId":"s"}`
+		`"retryable":false,"sessionId":"s","windowMinutes":10080}`
 	if string(b) != want {
 		t.Errorf("ErrorData encodes as %s, want %s", b, want)
 	}

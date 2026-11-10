@@ -690,6 +690,49 @@ owner has tagged `acpext/v0.4.0`.
    tags `acpext/v0.4.0` in `v0.3.0`'s form. **Gate for P5b:**
    `go list -m github.com/maccavelli/gobble-cli/acpext@v0.4.0` succeeds through the proxy.
 
+#### P5a record (2026-11-10)
+
+C1: `HEAD` `b735778` (P5's amendment), `origin/main` `ece13c4`, the tree clean; acpext `v0.3.0` and go-llmprovider-sdk
+`v1.29.0` required; acpext's tags end at `acpext/v0.3.0`. No deviation.
+
+1. **`acpext/types.go`:** `ErrorData` gains `WindowMinutes int` (`json:"windowMinutes,omitzero"`), declared last. Its
+   doc says it is the service's stated window in whole minutes, whatever `Limit`, absent when no length was stated, and
+   never taken from the wait.
+2. **`acpext/doc.go`:** the failed-turn paragraph names `WindowMinutes`.
+3. **Tests:**
+   * `TestErrorDataSortedMembers` sets all fifteen members and wants `…,"sessionId":"s","windowMinutes":10080}`.
+   * The new frame `prompt-weekly.error.json` (`openai` `usage_limit_reached`, `limit` `weekly`, `windowMinutes`
+     10080, `resetAt`, `retryAfterMs` 7200000, `retryable` false) is in `frames`, under `TestFramesRoundTrip` and
+     `TestFramesCoverEveryMethod`.
+   * A second example, `ExampleErrorData_window`, prints `true 10080 2026-11-10T21:00:00Z`; `ExampleErrorData_limit`
+     is unchanged.
+   * `go -C acpext test` ok.
+4. **Seen failing** (C2), `p5a_0049_breaks.py`, a scratch copy of the module per case, `GOPROXY=off`; the control
+   passed, `cases not as expected: 0`:
+   * the module before P5a (`types.go`, `doc.go` at `HEAD`) with P5a's tests: does not compile,
+     `example_test.go:73:47: e.WindowMinutes undefined`, `roundtrip_test.go:208:3: unknown field WindowMinutes`;
+   * the tag misspelt `windowMinute`: `TestFramesRoundTrip`, `roundtrip_test.go:139: prompt-weekly.error.json,
+     encoding/json: decode: json: unknown field "windowMinutes"`, and the same under `encoding/json/v2`;
+     `TestErrorDataSortedMembers`, `…"windowMinute":10080}`; and `ExampleErrorData_window`. The first run expected
+     only the first two, which was the harness's error: the new example reads the member too. The expectation was
+     corrected and every case re-run;
+   * the member declared before `sessionId`: `TestErrorDataSortedMembers`, `:216: ErrorData encodes as
+     {…"retryable":false,"windowMinutes":10080,"sessio…`.
+5. **apidiff,** with P1's build of the tool, on export data of `git archive acpext/v0.3.0` and the tree's `acpext/`:
+   `-incompatible` empty, exit 0; "Compatible changes: - ErrorData.WindowMinutes: added".
+6. **Gates** (C6):
+   * `make pre-add-check FILES="acpext/types.go acpext/doc.go acpext/roundtrip_test.go acpext/example_test.go"`:
+     `4 file(s) clean (gofmt, golint, govulncheck)`. `make check-acpext-deps`: `ok`.
+   * macOS: `make preflight` exit 0, `preflight passed`; `make race` exit 0, 39 ok. The root still requires
+     `acpext v0.3.0` from the module proxy, so no root package builds against the change until P5b.
+   * The Linux machine and the Windows laptop (`TMP`/`TEMP` set), a scratch copy each: acpext's tests ok; `go test
+     -count=1 ./...` 38 ok; `-race` 38 ok; on each host, exit 0 and no `FAIL`.
+   * `make check-records markdownlint` after this record: exit 0. The identifier scan of the diff (the local account
+     name, the dev hosts' names, the org's mail domain, and real-machine home and temporary paths): nothing found.
+7. **The owner's, not done here:** the commit and its push, then the annotated tag `acpext/v0.4.0` on that commit, in
+   `acpext/v0.3.0`'s form, and its push. P5b starts when `go list -m github.com/maccavelli/gobble-cli/acpext@v0.4.0`
+   succeeds through the proxy.
+
 #### P5b — the root on `v1.29.0`'s fields (MADR D10 as built, Q8, Q9)
 
 1. **C1,** and the gate. `go get github.com/maccavelli/gobble-cli/acpext@v0.4.0`, `go mod tidy`: one `go.mod` line and

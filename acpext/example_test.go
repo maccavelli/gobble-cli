@@ -58,3 +58,19 @@ func ExampleErrorData_limit() {
 	// true true opencode-zen 2026-11-09T14:05:00Z false
 	// Free usage limit reached.
 }
+
+// A plan limit whose service stated its window: Limit is weekly, and
+// WindowMinutes is the length the service gave, here 7 days. A window is
+// never taken from RetryAfterMs.
+func ExampleErrorData_window() {
+	data := []byte(`{"code":"usage_limit_reached","kind":"quota","limit":"weekly","provider":"openai",` +
+		`"resetAt":"2026-11-10T21:00:00Z","retryAfterMs":7200000,"windowMinutes":10080}`)
+	var e acpext.ErrorData
+	if err := json.Unmarshal(data, &e); err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println(e.Limit == acpext.LimitWeekly, e.WindowMinutes, e.ResetAt)
+	// Output:
+	// true 10080 2026-11-10T21:00:00Z
+}

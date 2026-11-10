@@ -391,7 +391,9 @@ const (
 // Retryable, whether the same request can succeed later (absent when gobble
 // does not know), Attempts, the tries made when the failure came after
 // retries, and Limit (gobble-cli 0049-MADR D1, D7). Error keeps the whole
-// text.
+// text. WindowMinutes is the limit's window as the service stated it, in
+// whole minutes, whatever Limit is; it is absent when the service stated no
+// length, and is never taken from the wait (gobble-cli 0049-MADR Q9).
 //
 // Its fields are in their JSON names' sorted order, which is the order
 // gobble writes them.
@@ -410,4 +412,5 @@ type ErrorData struct {
 	RetryAfterMs    int64      `json:"retryAfterMs,omitzero"`
 	Retryable       *bool      `json:"retryable,omitzero"`
 	SessionID       string     `json:"sessionId,omitzero"`
+	WindowMinutes   int        `json:"windowMinutes,omitzero"`
 }

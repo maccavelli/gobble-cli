@@ -1,0 +1,13 @@
+{
+  "code": "usage_limit_reached",
+  "error": "llm: api status 429: llm: quota exhausted: llmprovider: quota exhausted: openai HTTP 429 usage_limit_reached (retry-after 2h0m0s): The usage limit has been reached",
+  "httpStatus": 429,
+  "kind": "quota",
+  "limit": "weekly",
+  "provider": "openai",
+  "providerMessage": "The usage limit has been reached",
+  "resetAt": "2026-11-10T21:00:00Z",
+  "retryAfterMs": 7200000,
+  "retryable": false,
+  "windowMinutes": 10080
+}
