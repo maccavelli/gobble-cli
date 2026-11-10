@@ -152,7 +152,7 @@ The design is [0048-MADR](docs/decisions/0048-MADR-gobble-update-command.md).
 
 - **Modes:** a native terminal CLI mode, the default, and an enhanced terminal TUI mode, not built yet.
 - **CLI:** [Kong](https://github.com/alecthomas/kong) `v1.16.1`.
-- **Protocols:** the [ACP Go SDK](https://github.com/maccavelli/acp-go-sdk2) `acp-go-sdk2` `v1.34.2`, and the
+- **Protocols:** the [ACP Go SDK](https://github.com/maccavelli/acp-go-sdk2) `acp-go-sdk2` `v1.35.0`, and the
   [MCP Go SDK](https://github.com/modelcontextprotocol/go-sdk) `v1.8.0`.
 - **Models:** [go-llmprovider-sdk](https://github.com/maccavelli/go-llmprovider-sdk) `v1.29.0`, behind
   gobble's own `llm` facade. Only `llm/provider` imports it.

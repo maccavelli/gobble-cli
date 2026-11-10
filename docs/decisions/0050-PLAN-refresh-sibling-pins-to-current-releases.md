@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: complete
 date: 2026-11-10
 associated-madr: "0050-MADR-refresh-sibling-pins-to-current-releases.md"
 ---
@@ -121,6 +121,38 @@ C1: `HEAD` `cdfaead`, `origin/main` `ece13c4`; go-llmprovider-sdk `v1.28.0`, go-
      -count=1 ./...` 38 ok; `-race` 38 ok; on each host, exit 0 and no `FAIL`.
    * `make check-records markdownlint` after this record: exit 0. The identifier scan of the diff (the local account
      name, the dev hosts' names, the org's mail domain, and real-machine home and temporary paths): nothing found.
+
+### P2 record (2026-11-10)
+
+C1: `HEAD` `87ab1da` (P0 and P1), `origin/main` `ece13c4`, the tree clean; go-llmprovider-sdk `v1.29.0`,
+go-selfupdate-lib `v1.26.0`, go-tui-lib `v2.12.0` and acp-go-sdk2 `v1.34.2` required. No deviation.
+
+1. **The tag:** acp-go-sdk2's tags listed `v1.35.0` (an annotated tag, `8e99166`), and
+   `go list -m github.com/maccavelli/acp-go-sdk2@v1.35.0` through the proxy succeeded. The owner tagged it while P1
+   ran.
+2. **Its notes and `check_libs.py`:**
+   * **The notes** (acp-go-sdk2's `docs/reports/0052-REPORT-release-notes-v1-35-0.md`): seven compatible additions and
+     nothing incompatible, all `ToolCallStream`. The ACP schema stays at `1.25.0`.
+   * **Two behaviour changes:** a prompt turn's unfinished tool-call streams are written before its answer, and the
+     default message size is 32 MiB, up from 10 MiB.
+   * **What gobble uses:** it starts no `ToolCallStream` and sets no message size anywhere; its `-32600` tests are
+     gobble's own refusals. So neither change reaches it.
+   * **`check_libs.py`:** `--lib acp-go-sdk2 --tag v1.35.0` gave `0 failing checks` before P1's commit, and again at
+     `87ab1da` with `--from v1.34.2`.
+3. **The pin:** `go get` printed `upgraded github.com/maccavelli/acp-go-sdk2 v1.34.2 => v1.35.0`, and `go mod tidy`
+   exit 0. That `go.mod` line alone changed, and two `go.sum` lines. The pin was moved before step 2's second check,
+   which read the committed base, not the tree.
+4. **Docs:** `README.md:155` and `docs/architecture.md:189` name `v1.35.0`. `v1.34.2` remains only in records, which
+   keep their history.
+5. **Gates:**
+   * No Go file changed, so there was no pre-add check.
+   * macOS: `make preflight` exit 0, `preflight passed`; `make race` exit 0, 39 ok.
+   * The Linux machine and the Windows laptop (`TMP`/`TEMP` set), a scratch copy each: acpext's tests ok; `go test
+     -count=1 ./...` 38 ok; `-race` 38 ok; on each host, exit 0 and no `FAIL`.
+   * `make check-records markdownlint` after this record: exit 0. The identifier scan of the diff found nothing.
+
+Every sibling pin is now its library's current release. The MADR's Confirmation 1 to 5 is met (its "Completion"
+section), and this plan is `complete`.
 
 ## Verification
 

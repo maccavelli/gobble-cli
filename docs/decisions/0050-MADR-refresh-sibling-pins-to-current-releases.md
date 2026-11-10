@@ -159,6 +159,22 @@ P5 adopts", Q2 "Keep the hint"; and to go on through P1 at once.
    Windows laptop.
 5. Under Q1 (a), 0049-PLAN P5 and 0049-MADR D10 are amended to start from the pin.
 
+### Completion (2026-11-10)
+
+Every item is met. The evidence is in the PLAN's P1 and P2 records. The commits are P0 and P1 `87ab1da`; P2 is the
+commit that adds this section.
+
+1. **Met.** `go.mod` requires go-llmprovider-sdk `v1.29.0`, go-selfupdate-lib `v1.26.0`, acp-go-sdk2 `v1.35.0` and
+   go-tui-lib `v2.12.0`. Each `go get` moved its own line alone; `go mod tidy` exit 0.
+2. **Met.** `check_libs.py`: `0 failing checks` for go-selfupdate-lib `v1.26.0` and go-llmprovider-sdk `v1.29.0`, each
+   twice. acp-go-sdk2 `v1.35.0` also passed twice, the second time at `87ab1da`.
+3. **Met.** `ci.yml`'s two workflow pins name `7c677842dface4b14b65b2e8b46aa0a7543bed13 # v1.26.0`. `README.md` and
+   `docs/architecture.md` name all four tags.
+4. **Met,** at P1 and at P2. `make preflight` and `make race` (39 ok) passed. The Linux machine and the Windows laptop
+   each passed `go test ./...` (38 ok), `-race` (38 ok) and acpext's tests.
+5. **Met.** 0049-PLAN P5 and 0049-MADR D10 are amended (P1 step 5). P5 now starts from the pin and is to be planned to
+   [maccavelli/gobble-cli#15](https://github.com/maccavelli/gobble-cli/issues/15)'s names before it runs.
+
 ## Pros and Cons of the Options
 
 ### A. One record pins all three
