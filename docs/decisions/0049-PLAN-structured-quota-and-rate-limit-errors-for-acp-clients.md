@@ -627,8 +627,35 @@ Starts when the owner names the go-llmprovider-sdk tag that carries #13's fields
 MADR's D10 are amended, with a date, to the tag's names and to what it actually carries; until then the steps below name
 the fields by their purpose.
 
-1. `scripts/check_libs.py --lib go-llmprovider-sdk --tag <tag>`: 0 failing checks (0035-MADR D2). `go get`, `go mod
-   tidy`: only go-llmprovider-sdk moves.
+*Amended 2026-11-10 (by 0050-PLAN P1; the owner's 0050-MADR Q1 (a)):*
+
+* **The tag** is go-llmprovider-sdk `v1.29.0`, which closed go-llmprovider-sdk#13. The owner's
+  [maccavelli/gobble-cli#15](https://github.com/maccavelli/gobble-cli/issues/15) names its fields and asks for this
+  phase.
+* **Step 1 is done by 0050-PLAN P1:** `check_libs.py` passed with 0 failing checks, and the pin was moved with
+  go-selfupdate-lib's. P5 starts from that pin.
+* **The fields** of `*llmprovider.APIError`:
+  * `ResetAt`, the service's own instant in UTC, which may already have passed;
+  * `Limit *Limit`: `Name`, `Window`, `Plan`, `PerDay`, `Quotas` and `CreditsURL`;
+  * and `ClassifyStreamFailureBody`, which gives a stream failure `RetryAfter`, `ResetAt` and `Limit`.
+* **What the bare pin changes until P5 lands:**
+  * OpenCode `BudgetLimitError` is a quota with no `limit`, where it was `rate`;
+  * a Gemini per-day quota inside a stream gets no `limit`, since `limitOf` requires HTTP 429;
+  * `CreditLimitExceeded` is `credits` only through HTTP 402.
+* **Steps 2 to 4 are amended to #15's "How to implement"** before P5 runs:
+  * `ResetAt` from `ae.ResetAt`, else D5's rebuild;
+  * `daily` from `Limit.PerDay`, in place of the HTTP 429 test;
+  * `CreditLimitExceeded` among the credits codes;
+  * `BudgetLimitError` left with no `limit` unless `Limit` states a window;
+  * stated windows from `Limit` alone, never from `RetryAfter`;
+  * #15's seven tests, each seen failing;
+  * and a test that a `ResetAt` already passed lapses the quota mark at once.
+* **Two choices #15 leaves to this repository go to the owner before P5 runs:** whether a stated window refines
+  `free_tier` or `credits` as well as `plan`; and whether acpext takes a `windowMinutes` member in a further minor tag,
+  which magic-cli-remote#38 waits for.
+
+1. ~~`scripts/check_libs.py --lib go-llmprovider-sdk --tag <tag>`: 0 failing checks (0035-MADR D2). `go get`, `go mod
+   tidy`: only go-llmprovider-sdk moves.~~ Done by 0050-PLAN P1, at `v1.29.0` (above).
 2. `llm/provider`: `ResetAt` from the SDK's absolute instant when it is set, else D5's rebuild; `daily` from the SDK's
    per-day flag, replacing the Gemini inference; a stream failure's wait and instant into the same fields.
 3. A stated window, if the tag gives one: `window` or `weekly`, and, if a length is wanted on the wire, a further acpext

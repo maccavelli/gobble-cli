@@ -733,7 +733,7 @@ func mapErrorAt(id llmprovider.ProviderID, err error, now time.Time) error {
 }
 
 // The provider codes that state which limit a quota is (0049-MADR D4;
-// go-llmprovider-sdk v1.28.0's classifyAPIError names them a quota).
+// go-llmprovider-sdk v1.29.0's classifyAPIError names them a quota).
 var (
 	freeTierCodes = []string{"FreeUsageLimitError", "PROMOTION_MODEL_LIMIT_REACHED"}
 	monthlyCodes  = []string{"MonthlyLimitError"}

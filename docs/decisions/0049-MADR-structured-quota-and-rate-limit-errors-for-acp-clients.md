@@ -316,8 +316,12 @@ The owner: "Q1: A, Q2: A, Q3: A, Q4: A, Q5: A". Each is the recommended option.
 
 ### D10. What the SDK's #13 changes, when tagged (Q4)
 
-When a go-llmprovider-sdk tag carries #13's fields, a phase of the PLAN pins it (`make check-libs` first, as 0035-MADR
-D2 requires) and maps, in `llm/provider` only:
+When a go-llmprovider-sdk tag carries #13's fields, ~~a phase of the PLAN pins it (`make check-libs` first, as
+0035-MADR D2 requires)~~ *(amended 2026-11-10: that tag is `v1.29.0`, and
+[0050-MADR-refresh-sibling-pins-to-current-releases.md](0050-MADR-refresh-sibling-pins-to-current-releases.md), Q1 (a),
+pins it after `check-libs` passed; the PLAN's P5 starts from that pin, amended to the tag's names, and
+[maccavelli/gobble-cli#15](https://github.com/maccavelli/gobble-cli/issues/15) lists them)* a phase of the PLAN maps,
+in `llm/provider` only:
 
 * the absolute reset instant into `llm.APIError.ResetAt`, in place of D5's rebuilt one;
 * the per-day flag (or `quotaId`) into `limit` `daily`, in place of D4's Gemini inference;

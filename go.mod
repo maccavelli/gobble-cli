@@ -14,8 +14,8 @@ require (
 	github.com/charmbracelet/x/ansi v0.11.8
 	github.com/google/jsonschema-go v0.4.3
 	github.com/maccavelli/acp-go-sdk2 v1.34.2
-	github.com/maccavelli/go-llmprovider-sdk v1.28.0
-	github.com/maccavelli/go-selfupdate-lib v1.25.0
+	github.com/maccavelli/go-llmprovider-sdk v1.29.0
+	github.com/maccavelli/go-selfupdate-lib v1.26.0
 	github.com/maccavelli/go-tui-lib/v2 v2.12.0
 	github.com/maccavelli/gobble-cli/acpext v0.3.0
 	github.com/modelcontextprotocol/go-sdk v1.8.0
