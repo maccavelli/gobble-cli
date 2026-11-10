@@ -32,6 +32,9 @@ type Turn struct {
 	// after the updates are sent.
 	ErrCode    int
 	ErrMessage string
+	// ErrData is that error's data as JSON, such as gobble's
+	// acpext.ErrorData, or empty for none (0049-MADR Q3 (a)).
+	ErrData string
 	// WaitCancel holds the turn open, after its updates, until
 	// session/cancel arrives; it then ends with "cancelled".
 	WaitCancel bool
@@ -189,7 +192,11 @@ func (a *ScriptAgent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.Prom
 		return acp.PromptResponse{}, err
 	}
 	if turn.ErrCode != 0 {
-		return acp.PromptResponse{}, &acp.RequestError{Code: turn.ErrCode, Message: turn.ErrMessage}
+		re := &acp.RequestError{Code: turn.ErrCode, Message: turn.ErrMessage}
+		if turn.ErrData != "" {
+			re.Data = jsontext.Value(turn.ErrData)
+		}
+		return acp.PromptResponse{}, re
 	}
 	resp := acp.PromptResponse{StopReason: acp.StopReason(cmp.Or(turn.StopReason, string(acp.StopReasonEndTurn)))}
 	if turn.Usage != "" {

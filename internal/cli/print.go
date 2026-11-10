@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/maccavelli/gobble-cli/acpclient"
+	"github.com/maccavelli/gobble-cli/acpext"
 	"github.com/maccavelli/gobble-cli/internal/cli/term"
 	"github.com/maccavelli/gobble-cli/jsonx"
 	"github.com/maccavelli/gobble-cli/personality"
@@ -21,15 +22,18 @@ const closeWait = 2 * time.Second
 // printResult is the json format's object and stream-json's last line
 // (0008-MADR D9, 0005-MADR "Print mode"). Error is set only when
 // session/prompt failed; stopReason is then "error" (owner's decision of
-// 2026-10-05).
+// 2026-10-05). When the agent's error carried gobble's data, Error is its
+// message and ErrorData the data: the provider, the limit and when it
+// lifts (0049-MADR Q3 (a)).
 type printResult struct {
-	Type       string           `json:"type,omitzero"`
-	Text       string           `json:"text"`
-	StopReason string           `json:"stopReason"`
-	Usage      *acpclient.Usage `json:"usage"`
-	Cost       *acpclient.Cost  `json:"cost"`
-	SessionID  string           `json:"sessionId"`
-	Error      string           `json:"error,omitzero"`
+	Type       string            `json:"type,omitzero"`
+	Text       string            `json:"text"`
+	StopReason string            `json:"stopReason"`
+	Usage      *acpclient.Usage  `json:"usage"`
+	Cost       *acpclient.Cost   `json:"cost"`
+	SessionID  string            `json:"sessionId"`
+	Error      string            `json:"error,omitzero"`
+	ErrorData  *acpext.ErrorData `json:"errorData,omitzero"`
 }
 
 // headerType and resultType are stream-json's own line types.
@@ -207,6 +211,9 @@ func finishPrint(e *runEnv, c *ChatCmd, sink *printSink, id string, res acpclien
 	r := printResult{Text: text, StopReason: res.StopReason, Usage: res.Usage, Cost: sink.cost, SessionID: id}
 	if perr != nil {
 		r.StopReason, r.Error = "error", perr.Error()
+		if pe, ok := errors.AsType[*acpclient.PromptError](perr); ok {
+			r.Error, r.ErrorData = pe.Error(), &pe.Data
+		}
 	}
 	switch c.OutputFormat {
 	case "json":

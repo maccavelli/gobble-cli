@@ -328,6 +328,7 @@ func (s *Session) Prompt(ctx context.Context, p Prompt) (Result, error) {
 		blocks = append(blocks, acp.ImageBlock(base64.StdEncoding.EncodeToString(img.Data), img.MIME))
 	}
 	resp, err := s.c.conn.Prompt(ctx, acp.PromptRequest{SessionId: s.id, Prompt: blocks})
+	err = promptError(err)
 	if re, ok := errors.AsType[*acp.RequestError](err); ok && re.Code == int(acp.ErrorCodeAuthenticationRequired) {
 		return Result{}, fmt.Errorf("session/prompt: %w: %w", ErrAuthRequired, err)
 	}

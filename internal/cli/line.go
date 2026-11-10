@@ -388,7 +388,17 @@ func (ls *lineSession) turn(p Prompt) error {
 			return err
 		}
 		e.out.Lead(ls.spoken(), personality.LeadTurnFailed)
-		e.out.Errorf("%v", perr)
+		pe, ok := errors.AsType[*acpclient.PromptError](perr)
+		if !ok {
+			e.out.Errorf("%v", perr)
+			return nil
+		}
+		// The agent's message, and the limit it names on a line of its own
+		// (0049-MADR Q3 (a)).
+		e.out.Errorf("%s", pe.Error())
+		if line, ok := limitLine(pe.Data, e.now()); ok {
+			e.out.Notef("%s", line)
+		}
 		return nil
 	}
 	if err := v.finish(res); err != nil {

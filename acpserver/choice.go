@@ -194,11 +194,19 @@ func (c ModelChoice) picks() []pick {
 }
 
 // choice is the model choice with the providers this process saw refused
-// marked (0025-MADR D4's lazy marking).
+// marked (0025-MADR D4's lazy marking). A mark whose quota has lifted by the
+// agent's clock is dropped, so its provider is offered again (0049-MADR
+// Q2 (a)).
 func (a *Agent) choice() ModelChoice {
 	c := a.models()
+	now := a.now()
 	a.marksMu.Lock()
 	defer a.marksMu.Unlock()
+	for id, m := range a.marks {
+		if !m.resetAt.IsZero() && !now.Before(m.resetAt) {
+			delete(a.marks, id)
+		}
+	}
 	if len(a.marks) == 0 {
 		return c
 	}
@@ -250,11 +258,13 @@ func stamped(msgs []llm.Message, origin llm.Origin, cancelled bool) []llm.Messag
 }
 
 // mark is a provider's state after a refused turn, under its credential's
-// generation then.
+// generation then; resetAt is when an exhausted quota lifts, or zero when
+// the provider did not say (0049-MADR Q2 (a)).
 type mark struct {
-	state  ProviderState
-	reason string
-	gen    uint64
+	state   ProviderState
+	reason  string
+	gen     uint64
+	resetAt time.Time
 }
 
 // generation is provider id's credential generation, or 0 when the
@@ -268,19 +278,27 @@ func (a *Agent) generation(id string) uint64 {
 
 // markFailure marks provider when a turn's err says its key was refused,
 // its quota is exhausted or it is not permitted; any other failure marks
-// nothing (0025-MADR D4).
+// nothing (0025-MADR D4). An exhausted quota whose provider said when it
+// lifts keeps that time, and its reason ends "— resets HH:MM" on the
+// agent's clock: gobble's datum, not the provider's text (0049-MADR Q2 (a);
+// 0049-PLAN P4 deviation 1).
 func (a *Agent) markFailure(provider string, err error) {
 	if !errors.Is(err, llm.ErrAuth) && !errors.Is(err, llm.ErrQuota) && !errors.Is(err, llm.ErrNotPermitted) {
 		return
 	}
 	state, reason := StateOf(provider, err)
+	var resetAt time.Time
+	if ae, ok := errors.AsType[*llm.APIError](err); ok && state == StateQuotaExhausted && !ae.ResetAt.IsZero() {
+		resetAt = ae.ResetAt
+		reason = joinReason(reason, "— resets "+resetAt.In(a.now().Location()).Format("15:04"))
+	}
 	gen := a.generation(provider)
 	a.marksMu.Lock()
 	defer a.marksMu.Unlock()
 	if a.marks == nil {
 		a.marks = map[string]mark{}
 	}
-	a.marks[provider] = mark{state, reason, gen}
+	a.marks[provider] = mark{state, reason, gen, resetAt}
 }
 
 // heading is a provider's line above its models: its label, its state, and

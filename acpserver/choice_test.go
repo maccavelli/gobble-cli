@@ -9,6 +9,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	acp "github.com/maccavelli/acp-go-sdk2"
 
@@ -284,6 +285,54 @@ func TestRefusedKeyMarksProvider(t *testing.T) {
 	text, _ := slash(t, c, client, id, "/model")
 	if !strings.Contains(text, "**Fake** — key rejected (HTTP 401)") || strings.Contains(text, "sk-pl") {
 		t.Fatalf("/model after a refused key:\n%s", text)
+	}
+}
+
+// An exhausted quota's mark says when it lifts, on the agent's clock, and
+// is dropped once that time has passed, so the provider is offered again;
+// a quota with no such time, such as credits, keeps its mark (0049-MADR
+// Q2 (a); 0049-PLAN P4 deviation 1).
+func TestQuotaMarkLapses(t *testing.T) {
+	cst := time.FixedZone("CST", -6*60*60)
+	for _, c := range []struct {
+		name  string
+		err   error
+		state string
+		after string
+	}{
+		// quotaErr lifts at 14:05:00.4 UTC, 08:05 on the agent's clock.
+		{"free tier", quotaErr(), "**Fake** — quota exhausted (HTTP 429) — resets 08:05", "**Fake** — live"},
+		{"credits", &llm.APIError{Status: 402, Err: fmt.Errorf("%w: top up", llm.ErrQuota), Limit: llm.LimitCredits},
+			"**Fake** — quota exhausted (HTTP 402)\n", "**Fake** — quota exhausted (HTTP 402)\n"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			var now atomic.Pointer[time.Time]
+			now.Store(new(time.Date(2026, 11, 9, 7, 0, 0, 0, cst)))
+			client := &acptest.Client{Allow: true}
+			ag := New(Options{Version: "1.2.3", Provider: func(string, llm.Retry) (llm.Provider, error) {
+				return llmtest.NewScript(llmtest.Turn{Err: c.err}), nil
+			}, Models: func() ModelChoice { return multiModels }, Store: jsonl.New(t.TempDir(), jsonl.Options{}),
+				Now: func() time.Time { return *now.Load() }})
+			conn := acptest.Connect(t, ag, client)
+			ag.SetConnection(conn.Agent)
+			t.Cleanup(func() {
+				if err := ag.Close(); err != nil {
+					t.Error(err)
+				}
+			})
+			initialize(t, conn.Client)
+			id := newSession(t, conn, t.TempDir(), nil).SessionId
+			if _, err := prompt(t, conn, id, "hello"); err == nil {
+				t.Fatal("the turn over quota answered")
+			}
+			if text, _ := slash(t, conn, client, id, "/model"); !strings.Contains(text, c.state) || strings.Contains(text, "top up") {
+				t.Fatalf("/model before the reset, want %q:\n%s", c.state, text)
+			}
+			now.Store(new(time.Date(2026, 11, 9, 8, 5, 1, 0, cst)))
+			if text, _ := slash(t, conn, client, id, "/model"); !strings.Contains(text, c.after) {
+				t.Fatalf("/model after the reset, want %q:\n%s", c.after, text)
+			}
+		})
 	}
 }
 

@@ -491,8 +491,10 @@ Each part runs only as answered; a part answered "not in this record" is recorde
 #### P4a — Q2 (a): the mark keeps its reset time
 
 1. `mark` gains `resetAt time.Time`, from the failure's `*llm.APIError.ResetAt`.
-2. `StateOf`'s reason for `StateQuotaExhausted` and a rate-limited mark gains " — resets HH:MM" in the local clock,
-   from the agent's `now`; nothing of the provider's text (0025-MADR D4).
+2. ~~`StateOf`'s reason for `StateQuotaExhausted` and a rate-limited mark gains " — resets HH:MM" in the local clock,
+   from the agent's `now`; nothing of the provider's text (0025-MADR D4).~~ *Amended 2026-11-09 (P4 deviation 1):* a
+   quota mark's reason gains " — resets HH:MM" in the local clock, added in `markFailure` from the agent's `now`;
+   nothing of the provider's text (0025-MADR D4). `StateOf` is unchanged, and a rate limit stays unmarked (MADR F11).
 3. A mark whose `resetAt` has passed, by the agent's `now`, is dropped when the provider list is built, so the provider
    is offered again.
 4. Tests, with `Options.Now` fixed: the reason before the time; the mark gone after it; a quota with no `resetAt` (credits)
@@ -514,6 +516,102 @@ Each part runs only as answered; a part answered "not in this record" is recorde
 5. Tests: a line session scripted with a quota error's data prints the provider's text and the limit line; print mode's
    JSON has `errorData` equal to the scripted object; an error with no data prints as today; the auth path is unchanged.
    Seen failing: the data not decoded (`Error()` is the JSON); the limit line missing; `errorData` absent.
+
+### P4 record (2026-11-09)
+
+C1: `HEAD` `36626fd` (P3), `origin/main` `ece13c4` (P2 and P3 not yet pushed), the tree clean; acpext `v0.3.0` and
+go-llmprovider-sdk `v1.28.0` required. An earlier "committed proceed" found P3 still staged with `HEAD` at `969b161`;
+nothing was written until the owner's commit landed.
+
+**Deviation 1 (2026-11-09), P4a and the rate-limited mark.** Step 2 put the reset time on "`StateQuotaExhausted` and
+a rate-limited mark". Read before any write: `markFailure` (`acpserver/choice.go:269-284`) marks a provider only on
+`llm.ErrAuth`, `llm.ErrQuota` or `llm.ErrNotPermitted`, so there is no rate-limited mark. MADR F11 says so, and Q2 (a)
+describes the quota mark alone. Step 2 also put the text in `StateOf(id, err)`, which has no clock and names listing
+failures too; `markFailure` makes the mark and has the agent's `now`. The owner chose option 1. A quota mark keeps
+`ResetAt`, its reason gains " — resets HH:MM" in `markFailure`, and it lapses after that time; `StateOf` is unchanged,
+and a rate limit stays unmarked. Step 2 is amended above. No file is added to the phase, and the MADR is unchanged.
+
+**P4a** (Q2 (a)):
+
+1. `mark` gains `resetAt`. `markFailure` sets it from the `*llm.APIError`'s `ResetAt` when the mark is
+   `StateQuotaExhausted` and the provider gave one. The reason then gains "— resets HH:MM", the time on the agent's
+   clock (`a.now().Location()`).
+2. `choice()` drops every mark whose `resetAt` is set and not after the agent's `now`, before it applies the rest. A
+   mark with no `resetAt` (credits, a refused key, not permitted) stays as before.
+3. `TestQuotaMarkLapses` (`acpserver/choice_test.go`), `Options.Now` fixed at 07:00 UTC-6. The free-tier subtest uses
+   P3's `quotaErr` (it lifts at 14:05:00.4 UTC). `/model` reads `**Fake** — quota exhausted (HTTP 429) — resets 08:05`,
+   then `**Fake** — live` at 08:05:01. The credits subtest, a 402 with no reset time, reads `quota exhausted (HTTP
+   402)` before and after, with nothing of the provider's text.
+
+**P4b** (Q3 (a)):
+
+1. New `acpclient/prompterror.go`: `PromptError{Code int; Data acpext.ErrorData}` over the `*acp.RequestError`
+   (`Unwrap`). `Error()` is `Data.Error`, or the request error's text when that is empty. `Session.Prompt` turns a
+   refused prompt into one when its data decodes as an `ErrorData` that is not zero. Unknown members are ignored, so a
+   newer agent's data decodes; data that names no member, such as another agent's, leaves the error as before. Under
+   auth_required it is still wrapped with `ErrAuthRequired`.
+2. `acptest.Turn` gains `ErrData`, the error's data as JSON, sent as the `RequestError`'s data.
+3. New `internal/cli/limit.go`: `limitWords`, the eight scopes in words, and `limitLine`, which builds "<words> on
+   <provider>; resets at HH:MM, in <wait>". The time is on the session's clock. The reset part is left out with no
+   time, and the wait once the time has passed. A limit not in the table is named as it is; "Limit" stands in when only
+   a time is given. `line.go`'s failed-turn branch prints a `PromptError`'s text as the error, then the limit line, if
+   any, as a note. Any other error prints as before.
+4. `print.go`: `printResult` gains `ErrorData *acpext.ErrorData` (`errorData`, `omitzero`), after `error`. For a
+   `PromptError`, `error` is its text and `errorData` its data. **Print mode's `error` text changes:** where it was
+   `session/prompt: {"code":-32603,"message":…,"data":{…}}`, it is now the agent's message alone. The process's
+   stderr line for a failed turn is now `Error: session/prompt: <message>`, not the JSON. An agent error with no
+   gobble data is printed as before, and the auth path still exits 3 with gobble's sign-in message.
+5. Tests: `TestPromptError` (`acpclient`) covers the quota frame's data, auth_required with data, no data, and another
+   agent's data. `TestLimitLine` covers seven cases and words for all eight scopes. `TestLineSessionLimitError`: stderr
+   has `Error: <the frame's error>` and `Free tier limit on opencode-zen; resets at 14:05, in 1h5m`, with no
+   `session/prompt:` and no JSON, and the session goes on. `TestPrintErrorData`: the JSON result's `error` is the
+   frame's message and its `errorData` the frame's data, decoded refusing unknown members. Today's
+   `TestPrintErrorResult`, `TestPrintAuthRequired`, `TestLineSessionTurnError`, `TestLineSessionNoCredential` and
+   `TestAuthRequired` pass unchanged.
+
+**Seen failing** (C2), `p4_0049_breaks.py`, a scratch copy per case, `go test ./acpserver/ ./acpclient/...
+./internal/cli/`, the proxies at `127.0.0.1:9`, `GOPROXY=off`. The control passed. Every line
+`cleanup_test.go:82: the cleanup reported …` in the logs is the `t.Logf` of `TestCleanupWaitsForHandlers`, which
+passes, the control's run included.
+
+* The tree before P4a (`choice.go` at `HEAD`) with its test: `TestQuotaMarkLapses/free_tier`, `choice_test.go:329:
+  /model before the reset, want "**Fake** — quota exhausted (HTTP 429) — resets 08:05"`.
+* The tree before P4 with P4's tests: does not compile, `acpclient/prompterror_test.go:33:51: unknown field ErrData in
+  struct literal of type …acptest".Turn`, `:56:37: undefined: acpclient.PromptError`.
+* P4a, the lapse not applied (the `delete` planted out): `TestQuotaMarkLapses/free_tier`, `choice_test.go:333:
+  /model after the reset, want "**Fake** — live"`.
+* P4a, the time from `ResetAt`'s zero value, and the time in UTC rather than the agent's clock: each
+  `TestQuotaMarkLapses/free_tier`, at `:329`.
+* P4a, a mark with no reset time lapses (`resetAt.IsZero()` dropped from the test): `TestQuotaMarkLapses/credits`,
+  `TestRefusedKeyMarksProvider` and `TestSignInLiftsMark` (`choice_test.go:269: /model after a refused key`). Every
+  mark with no reset time went.
+* P4b, the data not decoded: `TestPromptError` (`prompterror_test.go:59: quota: err "session/prompt:
+  {\"code\":-32603,…`), `TestLineSessionLimitError`, `TestPrintErrorData`.
+* P4b, the limit line missing: `TestLineSessionLimitError`. `errorData` absent: `TestPrintErrorData`.
+* Beyond the plan's list: another agent's data taken as gobble's, `TestPromptError` (`:74: another agent's data`);
+  whole hours as `2h0m`, `TestLimitLine/no_limit`; an unknown limit unnamed, `TestLimitLine/a_limit_not_in_the_table`.
+* The first run had two cases not as expected, both the harness's errors. Planting out the whole lapse loop left `now`
+  unused, so that copy did not compile; the break now replaces only the `delete`. The no-reset-time break expected
+  `TestQuotaMarkLapses` alone, but it also lifts the refused-key marks, which two older tests hold. Both cases were
+  corrected and re-run with the control: `cases not as expected: 0`.
+
+**apidiff** of `acpclient`, `acpclient/acptest` and `acpserver`, `v0.5.0` against the tree, as P2's: `-incompatible`
+empty for each. The compatible changes are `PromptError` and `Turn.ErrData`, each "added", and `acpserver`'s exported
+API is unchanged.
+
+**Gates** (C6):
+
+* `make pre-add-check FILES="acpserver/choice.go acpserver/choice_test.go acpclient/prompterror.go
+  acpclient/prompterror_test.go acpclient/conn.go acpclient/acptest/script.go internal/cli/limit.go
+  internal/cli/limit_test.go internal/cli/line.go internal/cli/print.go"`: `10 file(s) clean (gofmt, golint,
+  govulncheck)`.
+* macOS: `make preflight` exit 0, `preflight passed`, `archtest` ok with `internal/archtest` unchanged; `make race`
+  exit 0, 39 ok.
+* The Linux machine and the Windows laptop (`TMP`/`TEMP` set), a scratch copy of 926 files each: acpext's tests ok;
+  `go test -count=1 ./...` 38 ok; `-race` 38 ok; on each host, exit 0 and no `FAIL`.
+* `make check-records markdownlint` after this record: exit 0. The identifier scan of the diff and the four new files
+  (the local account name, the dev hosts' names, the org's mail domain, and real-machine home and temporary paths):
+  nothing found.
 
 ### P5 — go-llmprovider-sdk's #13 fields (MADR D10; Q4 (a))
 
