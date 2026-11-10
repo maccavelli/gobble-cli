@@ -65,6 +65,12 @@ type Loaded struct {
 // makes, the failure's class (0031-MADR D4, as amended). An offline wait has one
 // Start and one End, and no Attempt. Delay is the wait about to start, for
 // an empty reply; Err is why the End is not a success, or "".
+//
+// A provider's retry also carries what the provider said, on its Start:
+// RetryAfter is the wait it asked for, which Delay may exceed by jitter;
+// ServerDirected reports that it asked; Code and Status are the failure's
+// code and HTTP status. Each is zero when not known, and on every other
+// Retry (0049-MADR D2).
 type Retry struct {
 	Phase       RetryPhase
 	Cause       RetryCause
@@ -72,6 +78,11 @@ type Retry struct {
 	MaxAttempts int
 	Delay       time.Duration
 	Err         string
+
+	RetryAfter     time.Duration
+	ServerDirected bool
+	Code           string
+	Status         int
 }
 
 // RetryPhase is a Retry's place in its wait.

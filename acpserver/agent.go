@@ -627,7 +627,7 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 	}
 	model, err := a.sessionProvider(s)
 	if err != nil {
-		return acp.PromptResponse{}, promptError(err)
+		return acp.PromptResponse{}, promptError(a.provOf(s), err)
 	}
 	abort := make(chan struct{})
 	a.mu.Lock()
@@ -748,7 +748,7 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 				a.mu.Unlock()
 			}
 			a.markFailure(a.provOf(s), err)
-			return acp.PromptResponse{}, promptError(err)
+			return acp.PromptResponse{}, promptError(a.provOf(s), err)
 		}
 		w.event(ev)
 		if w.err != nil {

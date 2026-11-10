@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	acp "github.com/maccavelli/acp-go-sdk2"
@@ -105,7 +106,8 @@ func (u *updates) event(ev agent.Event, last *llm.Usage) {
 	case agent.Retry:
 		u.flush()
 		u.notify(acpext.MethodRetry, acpext.RetryNotice{SessionID: string(u.session), Phase: acpext.Phase(ev.Phase), Cause: acpext.RetryCause(ev.Cause),
-			Attempt: ev.Attempt, MaxAttempts: ev.MaxAttempts, DelayMs: ev.Delay.Milliseconds(), Error: ev.Err})
+			Attempt: ev.Attempt, MaxAttempts: ev.MaxAttempts, DelayMs: ev.Delay.Milliseconds(), Error: ev.Err,
+			RetryAfterMs: ev.RetryAfter.Milliseconds(), ServerDirected: ev.ServerDirected, Code: ev.Code, HTTPStatus: ev.Status})
 	case agent.ToolRun:
 		u.flush()
 		u.running = acp.ToolCallId(ev.Call.ID)
@@ -264,17 +266,44 @@ func cutBytes(s string, n int) string {
 // says (0035-MADR D5).
 const workspaceAdvice = "claude needs an Anthropic workspace for this key: run /login, or gobble auth login claude --api-key - --workspace ID"
 
-// promptError is the JSON-RPC error of a failed turn: auth_required for a
-// missing or refused credential, otherwise an internal error carrying the
-// message.
-func promptError(err error) error {
-	if errors.Is(err, llm.ErrWorkspace) { // the service's words are not shown (0035-MADR D5)
-		return acp.NewInternalError(errData(acpext.ErrorData{Error: workspaceAdvice}))
+// promptError is the JSON-RPC error of a failed turn on provider's model:
+// auth_required for a missing or refused credential, otherwise an internal
+// error, each carrying errorData (0049-MADR D7).
+func promptError(provider string, err error) error {
+	d := errData(errorData(provider, err))
+	if errors.Is(err, llm.ErrAuth) && !errors.Is(err, llm.ErrWorkspace) {
+		return acp.NewAuthRequired(d)
 	}
-	if errors.Is(err, llm.ErrAuth) {
-		return acp.NewAuthRequired(errData(acpext.ErrorData{Error: err.Error()}))
+	return acp.NewInternalError(d)
+}
+
+// errorData is a failed turn's error data: its message, provider and kind,
+// and from an *llm.APIError in the chain what the service said: its status,
+// code and message, the wait it asked for, when the limit lifts, whether a
+// retry can succeed, the tries made when more than one, and which limit it
+// was (0049-MADR D7). A refusal for want of a workspace says workspaceAdvice
+// and not the service's words (0035-MADR D5).
+func errorData(provider string, err error) acpext.ErrorData {
+	d := acpext.ErrorData{Error: err.Error(), Provider: provider, Kind: acpext.ErrorKind(llm.Kind(err))}
+	if errors.Is(err, llm.ErrWorkspace) {
+		d.Error = workspaceAdvice
+		return d
 	}
-	return acp.NewInternalError(errData(acpext.ErrorData{Error: err.Error()}))
+	ae, ok := errors.AsType[*llm.APIError](err)
+	if !ok {
+		return d
+	}
+	d.HTTPStatus, d.Code, d.ProviderMessage = ae.Status, ae.Code, ae.Message
+	d.RetryAfterMs = ae.RetryAfter.Milliseconds()
+	if !ae.ResetAt.IsZero() {
+		d.ResetAt = ae.ResetAt.UTC().Truncate(time.Second).Format(time.RFC3339)
+	}
+	d.Retryable = ae.Retryable
+	if ae.Attempts >= 2 {
+		d.Attempts = ae.Attempts
+	}
+	d.Limit = acpext.LimitScope(ae.Limit)
+	return d
 }
 
 // acpUsage is the turn's usage for the prompt response.

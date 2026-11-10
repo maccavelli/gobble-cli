@@ -15,9 +15,9 @@ import (
 // to name one, and never the service's own message (0035-MADR D5).
 func TestWorkspaceWords(t *testing.T) {
 	err := fmt.Errorf("%w: service said secret-ish things", llm.ErrWorkspace)
-	re, ok := errors.AsType[*acp.RequestError](promptError(err))
+	re, ok := errors.AsType[*acp.RequestError](promptError("claude", err))
 	if !ok {
-		t.Fatalf("promptError: %v", promptError(err))
+		t.Fatalf("promptError: %v", promptError("claude", err))
 	}
 	got := fmt.Sprint(re.Data)
 	if !strings.Contains(got, workspaceAdvice) || strings.Contains(got, "secret-ish") {

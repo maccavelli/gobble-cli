@@ -201,7 +201,7 @@ func (a *Agent) extCompact(ctx context.Context, params jsontext.Value) (any, err
 	case errors.As(err, &reqErr):
 		return nil, err
 	case err != nil:
-		return nil, promptError(err)
+		return nil, promptError(a.provOf(s), err)
 	}
 	out.send(a.contextUpdate(s, used))
 	if out.err != nil {

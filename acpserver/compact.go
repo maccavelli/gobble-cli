@@ -25,7 +25,7 @@ import (
 // P3-Q4).
 func (a *Agent) cmdCompact(ctx context.Context, t *cmdTurn, instructions string) error {
 	if _, err := a.sessionProvider(t.s); err != nil {
-		return promptError(err)
+		return promptError(a.provOf(t.s), err)
 	}
 	report := a.newCompactionReport(t.out, t.s, acpext.CompactionManual)
 	if !report.rows() {
@@ -41,7 +41,7 @@ func (a *Agent) cmdCompact(ctx context.Context, t *cmdTurn, instructions string)
 	case ctx.Err() != nil:
 		return context.Cause(ctx)
 	case errors.Is(err, llm.ErrAuth):
-		return promptError(err)
+		return promptError(a.provOf(t.s), err)
 	case errors.As(err, &reqErr):
 		return err
 	case shown: // the failed row is the command's answer

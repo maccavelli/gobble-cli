@@ -187,6 +187,33 @@ func TestSetAutoRetry(t *testing.T) {
 	})
 }
 
+// A provider's retry reaches the client with what the provider said: the
+// wait it asked for, that it asked, and the failure's code and status, as
+// acpext's retry.start.provider.notice.json has them (0049-MADR D2).
+func TestRetryNoticeServerMembers(t *testing.T) {
+	pr := llm.ProviderRetry{Attempt: 1, MaxAttempts: 4, Wait: 1100 * time.Millisecond, Kind: "rate-limited",
+		RetryAfter: time.Second, ServerDirected: true, Code: "rate_limit_exceeded", Status: 429}
+	r := newRetryAgent(t, llmtest.NewScript(llmtest.Turn{Events: []llm.Event{pr, llm.TextDelta{Text: "ok"},
+		llm.Done{StopReason: llm.StopEndTurn}}}), nil)
+	id := newSession(t, r.c, t.TempDir(), nil).SessionId
+	if resp, err := prompt(t, r.c, id, "go"); err != nil || resp.StopReason != acp.StopReasonEndTurn {
+		t.Fatalf("prompt %+v, %v", resp, err)
+	}
+	var raw [][]byte
+	for _, n := range r.client.Notices() {
+		if n.Method == acpext.MethodRetry {
+			raw = append(raw, n.Params)
+		}
+	}
+	if got := r.notices(t); len(got) != 2 || got[0]["phase"] != "start" || got[1]["phase"] != "end" {
+		t.Fatalf("notices %v, want a start and an end", got)
+	}
+	want := canonicalNotice(t, "retry.start.provider.notice.json", readFrame(t, "retry.start.provider.notice.json"), id)
+	if got := canonicalNotice(t, "the start", raw[0], ""); got != want {
+		t.Fatalf("retry start\n got %s\nwant %s", got, want)
+	}
+}
+
 // _gobble/abort_retry ends a wait under way, and the prompt fails with the
 // error that caused it; with no wait, it changes nothing (0005-PLAN F5-1
 // decision 6).

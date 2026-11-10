@@ -6,6 +6,7 @@ import (
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -15,6 +16,7 @@ import (
 	"time"
 
 	acp "github.com/maccavelli/acp-go-sdk2"
+	"github.com/maccavelli/gobble-cli/acpext"
 
 	"github.com/maccavelli/gobble-cli/acpclient/acptest"
 	"github.com/maccavelli/gobble-cli/compaction"
@@ -713,4 +715,61 @@ func TestExtensionParamsLoneSurrogate(t *testing.T) {
 	if code, reason := errText(t, err); code != -32602 || reason != "unknown session" {
 		t.Fatalf("error %d %q; want -32602, unknown session", code, reason)
 	}
+}
+
+// compactable is an agent on provider whose session has two long turns, so
+// its next model call, which fails with fail, is a compaction; and its model.
+func compactable(t *testing.T, provider string, fail error) (*acptest.Conn, acp.SessionId, *llmtest.Script) {
+	t.Helper()
+	model := llmtest.NewScript(llmtest.Text(big(100)), llmtest.Text(big(100)), llmtest.Turn{Err: fail})
+	c := limitAgent(t, provider, model)
+	id := newSession(t, c, t.TempDir(), nil).SessionId
+	for _, p := range []string{"one " + big(100), "two " + big(100)} {
+		if _, err := prompt(t, c, id, p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return c, id, model
+}
+
+// A compaction failing on a limit tells the client what a failed turn does:
+// _gobble/compact answers with the same data, the compaction's words before
+// the error. /compact answers a refused credential so, and any other
+// failure as its own text, with no JSON-RPC error (0049-MADR D7; 0049-PLAN
+// P3 deviation 1).
+func TestCompactQuotaData(t *testing.T) {
+	t.Run("_gobble/compact", func(t *testing.T) {
+		c, id, _ := compactable(t, "opencode-zen", quotaErr())
+		_, err := ext(t, c, acpext.MethodCompact, map[string]any{"sessionId": id})
+		code, got := wireData(t, err)
+		d := strictData(t, "the data", []byte(got))
+		want := strictData(t, "the frame", readFrame(t, "prompt-quota.error.json"))
+		if !strings.HasSuffix(d.Error, ": "+want.Error) {
+			t.Fatalf("error %q, want it to end with the turn's %q", d.Error, want.Error)
+		}
+		d.Error = want.Error
+		if code != -32603 || encodeData(t, d) != encodeData(t, want) {
+			t.Fatalf("_gobble/compact %d %s, want -32603 and the frame's data", code, got)
+		}
+	})
+	t.Run("/compact refused", func(t *testing.T) {
+		refused := fmt.Errorf("%w: key refused", llm.ErrAuth)
+		c, id, _ := compactable(t, "opencode-zen", refused)
+		_, err := prompt(t, c, id, "/compact")
+		code, got := wireData(t, err)
+		d := strictData(t, "the data", []byte(got))
+		if code != -32000 || !strings.HasSuffix(d.Error, refused.Error()) || d.Provider != "opencode-zen" || d.Kind != acpext.KindAuth ||
+			d.HTTPStatus != 0 || d.Limit != "" {
+			t.Fatalf("/compact %d %s, want -32000 naming opencode-zen and auth", code, got)
+		}
+	})
+	t.Run("/compact quota", func(t *testing.T) {
+		c, id, model := compactable(t, "opencode-zen", quotaErr())
+		if resp, err := prompt(t, c, id, "/compact"); err != nil || resp.StopReason != acp.StopReasonEndTurn {
+			t.Fatalf("/compact %+v, %v; want its answer, not an error", resp, err)
+		}
+		if n := len(model.Requests()); n != 3 {
+			t.Fatalf("%d model calls, want the compaction's, the third", n)
+		}
+	})
 }

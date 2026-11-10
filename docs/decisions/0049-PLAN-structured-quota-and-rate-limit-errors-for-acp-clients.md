@@ -61,9 +61,11 @@ outputs (MADR D3); a gobble release tag; a push; posting on #14 or #13 without t
   record quotes each failure, with temporary paths as `<TMP>`.
 * **C3. Evidence.** Commands write to a scratch log, with their exit status taken before any filter. Scratch runs set
   `HOME`, `USERPROFILE` and `XDG_*` into the scratch directory, explicit `GOCACHE`/`GOMODCACHE`, and the proxies at
-  `127.0.0.1:9`. *Amended 2026-11-09 (P2 deviation):* the HTTP proxies are set only for packages whose tests run under
-  a `TestMain` network guard (`acpserver`, `internal/cli`); `llm` and `llm/provider` run without them, with
-  `GOPROXY=off`, because `llm/provider`'s `TestWireOffline` checks the dial `Probe` makes with no proxy named.
+  `127.0.0.1:9`. *Amended 2026-11-09 (P2 deviation; corrected at P3):* `llm` and `llm/provider` run without the HTTP
+  proxies, with `GOPROXY=off`, because `llm/provider`'s `TestWireOffline` checks the dial `Probe` makes with no proxy
+  named. Every other package keeps them. (P2's wording said the proxies stay only for packages under a `TestMain`
+  network guard, naming `acpserver` and `internal/cli`; only `internal/cli`'s `TestMain` is that guard, from 0046, and
+  `acpserver`'s serves the MCP fixture.)
 * **C4. Deviations stop the phase,** are recorded here with a date, and in the MADR when a decision or a fact changes,
   before work goes on.
 * **C5. No real effects.** Every test and probe stays on loopback: canned wires (`llm/provider/wire_test.go`'s
@@ -371,7 +373,11 @@ No file outside step 1 to 7's was added to the phase, and no MADR decision or fa
    * `TestPromptQuotaData`: a connected agent whose `llmtest` provider fails with the quota `*llm.APIError` of
      Confirmation 2 (its `ResetAt` fixed at 2026-11-09T14:05:00Z): the prompt's -32603 data is byte-equal to
      `acpext/testdata/prompt-quota.error.json`'s canonical encoding; so are the over-cap and after-retries frames.
-   * `TestCompactQuotaData`: `/compact` and `_gobble/compact` failing on the same error carry the same data.
+   * ~~`TestCompactQuotaData`: `/compact` and `_gobble/compact` failing on the same error carry the same data.~~
+     *Amended 2026-11-09 (P3 deviation 1):* `TestCompactQuotaData`: `_gobble/compact` failing on the quota error answers
+     -32603 with every member, the session's provider and `kind` `quota`; `/compact` failing on `llm.ErrAuth`
+     (`compact.go:44`) answers -32000 with `provider` and `kind` `auth`; `/compact` failing on the quota stays the
+     command's answer, with no JSON-RPC error, as before.
    * `TestRetryNoticeServerMembers`: a scripted `llm.ProviderRetry` with the new fields gives a `_gobble/retry` start
      equal to `acpext/testdata/retry.start.provider.notice.json` but for the session id.
    * `TestKindsAndLimitsMatchAcpext`: `llm`'s `Limit*` constants equal acpext's `LimitScope` constants, and
@@ -389,6 +395,94 @@ No file outside step 1 to 7's was added to the phase, and no MADR decision or fa
    exit 0: no recorded session has a failed turn, so none changes. A change is a deviation.
 8. **Gates** (C6), archtest unchanged: `acpserver` imports neither `llm/provider` nor the SDK. Staged; the owner
    commits.
+
+### P3 record (2026-11-09)
+
+C1: `HEAD` `969b161` (P2), `origin/main` `ece13c4` (P2 not yet pushed), the tree clean; acpext `v0.2.0` and
+go-llmprovider-sdk `v1.28.0` required. `go list -m github.com/maccavelli/gobble-cli/acpext@v0.3.0` through the proxy:
+`github.com/maccavelli/gobble-cli/acpext v0.3.0`, exit 0. The gate is met.
+
+**Deviation 1 (2026-11-09), `/compact` and the data.** Step 5's `TestCompactQuotaData` asserted that `/compact` and
+`_gobble/compact` failing on the same error carry the same data. Read before any write: `_gobble/compact` answers every
+failure through `promptError` (`acpserver/extensions.go:204`). `/compact` (`cmdCompact`) calls it only with no provider
+for the session (`acpserver/compact.go:28`) or on `llm.ErrAuth` (`:44`). Any other failure, a quota included, is the
+command's answer, a failed row or text, and the command returns `nil` (`:50-53`: "A command's failure is its answer,
+not a JSON-RPC error … as Pi shows the failure and goes on"). The assertion was wrong when written. MADR D7 does not
+decide that `/compact` should answer with an error, and its F1 is accurate. The owner chose to test what the code does
+(step 5's bullet, amended above), not to change `/compact`'s answer. No file is added to the phase, and the MADR is
+unchanged.
+
+**Correction (2026-11-09), C3's amendment.** Writing the breaks, `acpserver/testmain_test.go` was read: its `TestMain`
+serves the stdio MCP fixture and is no network guard. P2's amendment of C3 named it as one; only `internal/cli`'s is
+(0046). C3's amendment is reworded to what was decided: `llm` and `llm/provider` without the HTTP proxies, every other
+package with them. P3's breaks ran `acpserver` and `agent` with the proxies at `127.0.0.1:9`.
+
+1. **The gate:** `go get github.com/maccavelli/gobble-cli/acpext@v0.3.0` (`upgraded … v0.2.0 => v0.3.0`) and `go mod
+   tidy`: `go.mod` one line, `go.sum` its two. The module the proxy serves is the tree's `acpext/` (`diff -r` of the
+   download against it: no difference).
+2. **`agent`:** `Retry` gains `RetryAfter`, `ServerDirected`, `Code` and `Status` after `Err`, documented as a
+   provider's retry's, on its start; `agent.go`'s `ProviderRetry` case copies them.
+3. **`acpserver/prompt.go`:** the `agent.Retry` case writes `RetryAfterMs`, `ServerDirected`, `Code` and `HTTPStatus`.
+   `promptError(provider, err)` is -32000 for `llm.ErrAuth` that is not `llm.ErrWorkspace`, -32603 otherwise, each with
+   `errData(errorData(provider, err))`. `errorData` sets `error`, `provider` and `kind` always. For the workspace
+   refusal it returns there, `error` the advice. Otherwise, from an `*llm.APIError`, it sets `httpStatus`, `code`,
+   `providerMessage`, `retryAfterMs`, `resetAt` (UTC, to the second, RFC 3339), `retryable`, `attempts` when 2 or more,
+   and `limit`.
+4. **The five callers** pass `a.provOf(s)` (`agent.go:630`, `:751`, `extensions.go:204`) or `a.provOf(t.s)`
+   (`compact.go:28`, `:44`). `acpserver/workspace_test.go`'s two calls of `promptError` take the provider `claude`:
+   the arity change of step 3 reaches them, and the test is otherwise unchanged and passes.
+5. **Tests**, `acpserver/errordata_test.go` (new) and additions to `retry_test.go` and `extensions_test.go`:
+   * `TestErrorData`, nine subtests over `errorData` and `promptError`'s code: step 5's eight, and an `Attempts` of 1
+     that sends no `attempts`. The quota's `ResetAt` is 08:05:00.4 at UTC-6, so the data's UTC and its second are both
+     checked.
+   * `TestPromptQuotaData`: a connected agent on `opencode-zen`, `openai` or `claude` whose `llmtest` script fails with
+     each failure. The -32603's data, decoded refusing unknown members and re-encoded, equals the frame's canonical
+     encoding: `prompt-quota.error.json`, `prompt-rate-over-cap.error.json` and `prompt-after-retries.error.json`.
+   * `TestCompactQuotaData`, as amended (deviation 1). `_gobble/compact` gives the quota frame's data, its `error`
+     `Summarization failed: ` before the turn's. `/compact` refused gives -32000 naming `opencode-zen` and `auth`.
+     `/compact` on the quota ends its turn with no error, after the compaction's model call (three calls).
+   * `TestRetryNoticeServerMembers`: a scripted `llm.ProviderRetry` gives a start equal to
+     `retry.start.provider.notice.json` but for the session id, and an end.
+   * `TestKindsAndLimitsMatchAcpext` as step 5.
+6. **Seen failing** (C2), `p3_0049_breaks.py`, a scratch copy per case, `go test ./acpserver/ ./agent/`, the proxies
+   at `127.0.0.1:9`, `GOPROXY=off`. The control passed; `cases not as expected: 0`. Each failing subtest is named:
+   * the tree before P3 (`agent`, `acpserver`'s four files, `go.mod`, `go.sum` at `HEAD`) with P3's tests: does not
+     compile, `errordata_test.go:158:4: unknown field Kind in struct literal of type acpext.ErrorData`, `undefined:
+     acpext.KindQuota`;
+   * `errorData` without the provider: `TestErrorData` (all nine), `TestPromptQuotaData` (all three),
+     `TestCompactQuotaData/_gobble/compact` and `/compact refused`;
+   * the failed turn's caller (`agent.go:751`) passing `""`: `TestPromptQuotaData`, its three frames, the data with no
+     `provider`;
+   * `ProviderMessage` set on the workspace refusal: `TestErrorData/workspace`, `got {… "provider":"claude",
+     "providerMessage":"secret-ish"}`. The first run also expected `TestWorkspaceWords` to fail. That expectation was
+     the harness's error: that test's error carries no `*llm.APIError`. The expectation was corrected and the whole
+     set re-run;
+   * `Retryable` dropped: `TestErrorData` (the four with a `retryable`), `TestPromptQuotaData` (all three),
+     `TestCompactQuotaData/_gobble/compact`;
+   * `ResetAt` in local time: `TestErrorData/quota`, `TestPromptQuotaData/prompt-quota.error.json`,
+     `TestCompactQuotaData/_gobble/compact`, the `resetAt` at UTC-6;
+   * `ServerDirected` unwritten: `TestRetryNoticeServerMembers`, `retry_test.go:213: retry start got {…
+     "retryAfterMs":1000,"code":"rate_limit_exceeded",…}`, want `… "serverDirected":true …`;
+   * `_gobble/compact`'s caller (`extensions.go:204`) passing `""`: `TestCompactQuotaData/_gobble/compact`;
+   * beyond step 6's list, `agent`'s copy without `RetryAfter`: `TestRetryNoticeServerMembers`; and `attempts` sent for
+     one attempt: `TestErrorData/one_attempt`.
+7. **Goldens:** `git diff --quiet 74d7f66 -- acpserver/testdata acpclient/acptest/testdata internal/cli/testdata`
+   exit 0, and nothing untracked there.
+8. **apidiff** of `agent` and `acpserver`, `v0.5.0` against the tree, as P2's: `-incompatible` empty for both;
+   `agent`'s compatible changes are `Retry`'s four fields, each "added"; `acpserver`'s exported API is unchanged.
+9. **Gates** (C6):
+   * `make pre-add-check FILES="agent/event.go agent/agent.go acpserver/prompt.go acpserver/agent.go
+     acpserver/compact.go acpserver/extensions.go acpserver/errordata_test.go acpserver/retry_test.go
+     acpserver/extensions_test.go acpserver/workspace_test.go"`: `10 file(s) clean (gofmt, golint, govulncheck)`.
+   * macOS: `make preflight` exit 0, `preflight passed`, `archtest` ok with `internal/archtest` unchanged: `acpserver`
+     imports neither `llm/provider` nor the SDK. `make race` exit 0, 39 ok.
+   * The Linux machine and the Windows laptop (`TMP`/`TEMP` set), a scratch copy of 922 files each: acpext's tests ok;
+     `go test -count=1 ./...` 38 ok; `-race` 38 ok; on each host, exit 0 and no `FAIL`.
+   * `make check-records markdownlint` after this record: exit 0. The identifier scan of the diff and the new test file
+     (the local account name, the dev hosts' names, the org's mail domain, and real-machine home and temporary paths):
+     nothing found.
+10. **Not done here:** `docs/architecture.md` still lists acpext `v0.2.0` among the direct requirements (`:188`). That
+    row, with those for `llm`, `llm/provider` and `acpserver`, is P6's by this plan's scope, so it is left for P6.
 
 ### P4 — the owner's answers to Q2 and Q3
 

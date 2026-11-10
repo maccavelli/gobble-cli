@@ -695,7 +695,8 @@ func (t *turn) call() (*reply, error) {
 			// are, its cause the failure's class (0031-MADR D4).
 			endRetry("")
 			retrying = RetryCause(pr.Kind)
-			if !t.emit(Retry{Phase: RetryStart, Cause: retrying, Attempt: pr.Attempt, MaxAttempts: pr.MaxAttempts, Delay: pr.Wait}) {
+			if !t.emit(Retry{Phase: RetryStart, Cause: retrying, Attempt: pr.Attempt, MaxAttempts: pr.MaxAttempts, Delay: pr.Wait,
+				RetryAfter: pr.RetryAfter, ServerDirected: pr.ServerDirected, Code: pr.Code, Status: pr.Status}) {
 				return r, nil
 			}
 			continue
