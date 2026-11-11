@@ -44,9 +44,9 @@
 //
 // A failure the service reported is an *APIError, which also carries what
 // the service said: its provider, code and message, whether a retry can
-// succeed, when the limit lifts, which limit it was, and the tries made
-// after retries. Kind names any error's class without its text
-// (0049-MADR D3, D6).
+// succeed, when the limit lifts, which limit it was, the limit's window as
+// the service stated it, and the tries made after retries. Kind names any
+// error's class without its text (0049-MADR D3, D6, Q9).
 //
 // Thinking levels map as:
 //

@@ -723,41 +723,48 @@ func mapErrorAt(id llmprovider.ProviderID, err error, now time.Time) error {
 	if ae, ok := errors.AsType[*llmprovider.APIError](err); ok {
 		retryable := ae.Retryable()
 		out := &llm.APIError{Status: ae.Status, RetryAfter: ae.RetryAfter, Err: wrapped, Provider: string(id),
-			Code: ae.Code, Message: ae.Message, Retryable: &retryable, Limit: limitOf(id, ae)}
-		if ae.RetryAfter > 0 {
+			Code: ae.Code, Message: ae.Message, Retryable: &retryable, Limit: limitOf(ae)}
+		// The provider's own instant wins; only a delay is rebuilt into one
+		// (0049-MADR D10 as built, D5). A passed instant is kept, as the SDK
+		// keeps it: the quota mark built on it lapses at once.
+		switch {
+		case !ae.ResetAt.IsZero():
+			out.ResetAt = ae.ResetAt
+		case ae.RetryAfter > 0:
 			out.ResetAt = now.Add(ae.RetryAfter)
+		}
+		if ae.Limit != nil {
+			out.Window = ae.Limit.Window
 		}
 		return out
 	}
 	return wrapped
 }
 
-// The provider codes that state which limit a quota is (0049-MADR D4;
+// The provider codes that state which limit a quota is (0049-MADR D4, and
+// D10 as built: CreditLimitExceeded joins credits; BudgetLimitError and
+// UserLimitError state no period, so they are in no set;
 // go-llmprovider-sdk v1.29.0's classifyAPIError names them a quota).
 var (
 	freeTierCodes = []string{"FreeUsageLimitError", "PROMOTION_MODEL_LIMIT_REACHED"}
 	monthlyCodes  = []string{"MonthlyLimitError"}
-	creditsCodes  = []string{"CreditsError", "insufficient_quota", "insufficient_balance"}
+	creditsCodes  = []string{"CreditsError", "CreditLimitExceeded", "insufficient_quota", "insufficient_balance"}
 	planCodes     = []string{"GoUsageLimitError", "BlackUsageLimitError", "usage_limit_reached",
 		"subscription_sharing_usage_limit_exceeded"}
 )
 
 // limitOf is the limit ae states: from the provider's code, HTTP 402 for
-// credits, Gemini's exhausted quota on 429 for a day (the SDK makes a
-// Gemini 429 a quota only when it names a per-day one), and a rate limit for
-// any other ErrRateLimited. It is "" when nothing states the limit, and it
-// never reads RetryAfter: a long wait is not a window. id is the provider,
-// or "" when not known, when the SDK's own name for it is read.
-func limitOf(id llmprovider.ProviderID, ae *llmprovider.APIError) string {
+// credits, the SDK's per-day flag for a day (a Gemini QuotaFailure, in a
+// reply or a stream), and a rate limit for any other ErrRateLimited. A plan
+// limit whose service stated its window is refined by planWindow (0049-MADR
+// Q8). It is "" when nothing states the limit, and it never reads
+// RetryAfter: a long wait is not a window.
+func limitOf(ae *llmprovider.APIError) string {
 	if !errors.Is(ae, llmprovider.ErrQuotaExhausted) {
 		if errors.Is(ae, llmprovider.ErrRateLimited) {
 			return llm.LimitRate
 		}
 		return ""
-	}
-	service := string(id)
-	if service == "" {
-		service, _, _ = strings.Cut(ae.Provider, "/")
 	}
 	switch {
 	case slices.Contains(freeTierCodes, ae.Code):
@@ -767,9 +774,30 @@ func limitOf(id llmprovider.ProviderID, ae *llmprovider.APIError) string {
 	case slices.Contains(creditsCodes, ae.Code), ae.Status == http.StatusPaymentRequired:
 		return llm.LimitCredits
 	case slices.Contains(planCodes, ae.Code):
-		return llm.LimitPlan
-	case service == string(llmprovider.ProviderGemini) && ae.Status == http.StatusTooManyRequests:
+		return planWindow(ae.Limit)
+	case ae.Limit != nil && ae.Limit.PerDay:
 		return llm.LimitDaily
 	}
 	return ""
+}
+
+// week is a 7-day window, as ChatGPT states it (10080 minutes).
+const week = 7 * 24 * time.Hour
+
+// planWindow is a plan limit refined by the window its service stated: a
+// week, or the name "weekly", is weekly; the name "monthly" is monthly; any
+// other stated window is window. With none stated it stays plan
+// (0049-MADR Q8). Only l is read, never a wait.
+func planWindow(l *llmprovider.Limit) string {
+	switch {
+	case l == nil:
+		return llm.LimitPlan
+	case l.Window == week, l.Name == "weekly":
+		return llm.LimitWeekly
+	case l.Name == "monthly":
+		return llm.LimitMonthly
+	case l.Window > 0:
+		return llm.LimitWindow
+	}
+	return llm.LimitPlan
 }

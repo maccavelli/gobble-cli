@@ -304,6 +304,12 @@ func TestQuotaMarkLapses(t *testing.T) {
 		{"free tier", quotaErr(), "**Fake** — quota exhausted (HTTP 429) — resets 08:05", "**Fake** — live"},
 		{"credits", &llm.APIError{Status: 402, Err: fmt.Errorf("%w: top up", llm.ErrQuota), Limit: llm.LimitCredits},
 			"**Fake** — quota exhausted (HTTP 402)\n", "**Fake** — quota exhausted (HTTP 402)\n"},
+		// The provider's own instant, kept as stated, has already passed at
+		// 06:00 on the agent's clock: the mark lapses at once (0049-MADR D10
+		// as built).
+		{"a reset already passed", &llm.APIError{Status: 429, Err: fmt.Errorf("%w: weekly", llm.ErrQuota),
+			Limit: llm.LimitWeekly, ResetAt: time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)},
+			"**Fake** — live", "**Fake** — live"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			var now atomic.Pointer[time.Time]

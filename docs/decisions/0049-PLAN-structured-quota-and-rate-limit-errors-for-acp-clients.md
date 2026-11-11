@@ -787,6 +787,107 @@ C1: `HEAD` `b735778` (P5's amendment), `origin/main` `ece13c4`, the tree clean; 
 7. **Docs:** `docs/architecture.md`'s `llm` and `llm/provider` rows, and acpext's requirement row at `v0.4.0`.
 8. **Gates** (C6). Staged; the owner commits. The MADR's Completion item 10 is then met, and this plan is `complete`.
 
+#### P5b split into P5b-1 and P5b-2 (2026-11-11)
+
+*Amended 2026-11-11.* The owner answered QA (a) on 2026-11-10, in
+`0052-MADR-finish-the-chatgpt-plan-sign-in-on-the-sdk-engine.md` (`proposed`): "Split it". The 2026-11-10 amendment
+above bound P5b to 0031-PLAN P4b-2, which is now folded into 0052-MADR. So P5b runs as two phases:
+
+* **P5b-1, the `llm` half, now, at `acpext/v0.3.0`.** It takes:
+  * step 2: `APIError.Window`, and `llm/doc.go` naming it;
+  * step 3: `mapErrorAt`'s reset rule and `Window`, and `limitOf`'s daily, credits and Q8 refinement (`planWindow`);
+  * step 5's `llm/provider` tests (`TestWireResetAtFromProvider`, `TestWirePerDay`, `TestWireStreamFailureDelay`'s
+    `llm` fields, `TestWireStatedWindow`, `TestWireBudgetLimit`, `TestWireLongWaitIsNotAWindow` unchanged) and
+    `TestQuotaMarkLapses`' passed-reset case;
+  * step 7's `llm/provider` row.
+
+  Step 1's pin is not taken. Step 1's probe is settled by the tests themselves: `TestWireStreamFailureDelay` sends an
+  SSE body whose event is an error, and `TestWireStatedWindow` reads ChatGPT's members for `openai` and OpenCode's
+  `metadata` for `opencode-go` and `opencode-zen`.
+* **P5b-2, the wire half, later.** It runs with 0051-PLAN P4's acpext pin, `acpext/v0.5.0`, in place of v0.4.0. It
+  takes step 1's pin, step 4 (`errorData`'s `WindowMinutes`), step 5's `TestErrorData` weekly case and
+  `prompt-weekly.error.json` frame, step 6's case 7, and step 7's acpext row.
+
+**The source.** The owner's work for both halves is kept on the local branch `wip/0031-p4b2-chatgpt-plan`
+(`1406bd6`), from which P5b-1 takes its hunks (0052-PLAN Deviation 1).
+
+#### P5b-1 — the `llm` half (QA (a))
+
+1. **C1.** `main` at `d6c10a5`; `go.mod` requires go-llmprovider-sdk v1.29.0 and acpext v0.3.0.
+2. **From the archive branch:** `llm/errors.go`, `llm/provider/limit_test.go` and `acpserver/choice_test.go` in whole;
+   `llm/provider/provider.go`'s `mapErrorAt`, `limitOf` and `planWindow` hunks, without its plan-session refusal (a
+   0052 part).
+3. `llm/doc.go`: `APIError` "also carries … the limit's window as the service stated it". `docs/architecture.md`'s
+   `llm/provider` row: the reset time is the provider's own instant, else the wait's, and the limit's window as stated.
+4. **C2, on a scratch copy,** each planted break seen failing:
+
+   | Planted break | Must fail |
+   | :--- | :--- |
+   | `mapErrorAt` rebuilds `ResetAt` from the wait even when the provider gave one | `TestWireResetAtFromProvider` |
+   | `limitOf`'s daily case removed (`ae.Limit.PerDay` ignored) | `TestWirePerDay` |
+   | `Window` never copied from `ae.Limit` | `TestWireStreamFailureDelay`, `TestWireStatedWindow` |
+   | `planWindow` always `plan` | `TestWireStatedWindow` |
+   | `CreditLimitExceeded` out of `creditsCodes` | `TestWireBudgetLimit` |
+   | the quota mark kept while its `ResetAt` has passed | `TestQuotaMarkLapses` |
+
+5. **Gates (C6):**
+   * `make pre-add-check FILES=…` on each changed Go file;
+   * `make preflight` and `make race`;
+   * the identifier scan of the diff;
+   * on the Linux machine and the Windows laptop: `go test ./...`, the race tests and acpext's own tests, on a scratch
+     copy.
+6. **Committed** on `main` by the agent, on the owner's word for 0052-PLAN Deviation 1 ("Proceed with the gobble
+   cleanup").
+
+#### P5b-1 record (2026-11-11)
+
+Scripts and logs are in the session scratchpad (`p5b1_apply.py`, `p5b1_planted.py`, `p5b1_gates.py`,
+`p5b1_hosts.py`, `p5b1_remote.py`, `p5b1_win_check.py`, `p5b1-*.log`).
+
+* **Step 1 (C1).** `main` at `d6c10a5`, level with `origin/main`. `go.mod` requires go-llmprovider-sdk v1.29.0 and
+  acpext v0.3.0. The tree held only this record's edit and the four untracked 0051 and 0052 drafts.
+* **Step 2.** Three files were taken whole from `1406bd6`. Of `llm/provider/provider.go`'s three hunks, two were
+  applied: `mapErrorAt`, and `limitOf` with `planWindow`. The third, the plan-session refusal, was left on the branch.
+  `go build ./...` exit 0.
+* **Step 3.** `llm/doc.go`'s `APIError` paragraph names the window. `docs/architecture.md`'s `llm/provider` row gives
+  the reset rule and the stated window.
+* **Step 4 (C2),** on a scratch clone with a scratch `HOME`, `GOCACHE` and `XDG_*`; `llm/provider` with
+  `GOPROXY=off` and no HTTP proxies; `acpserver` with its proxies at `127.0.0.1:9`.
+  * Unplanted, every named test passes.
+  * Each planted break failed what it targets:
+
+    | Planted break | Failed |
+    | :--- | :--- |
+    | `ResetAt` from the wait first | `TestWireResetAtFromProvider`, "ResetAt … RetryAfter 1h0m0s, want the body's …" (and `TestWireStreamFailureDelay`, which also checks it) |
+    | the daily case removed | `TestWirePerDay`, both `reply` and `stream`: "limit "" …, want daily and a quota" |
+    | `Window` never copied | `TestWireStreamFailureDelay` ("window 0s"), `TestWireStatedWindow` (four cases, "window 0s") |
+    | `planWindow` always `plan` | `TestWireStatedWindow` (five cases, `limit "plan"`) and `TestWireStreamFailureDelay` |
+    | `CreditLimitExceeded` out of `creditsCodes` | `TestWireBudgetLimit`: "a stream's CreditLimitExceeded: limit "" …, want credits" |
+    | the mark kept after its `ResetAt` | `TestQuotaMarkLapses`, `a_reset_already_passed` and `free_tier` |
+
+  * Restored, all pass. The scratch copy was removed.
+* **Step 5, the hosts (C6),** a scratch copy of 929 files plus this phase's six files:
+  * **The Linux machine,** `go1.27.4`: acpext's tests ok; `go test -count=1 ./...` 38 ok; `-race` 38 ok; exit 0, no
+    `FAIL`.
+  * **The Windows laptop,** `go1.27.4`, `TMP`/`TEMP` set: acpext's tests ok; `go test -count=1 ./...` 38 ok; `-race`
+    38 ok; exit 0, no `FAIL`. This run's scratch copy was on the system drive, outside the home directory.
+  * **The first Windows run failed five tests, none of them this phase's.** They were `TestAutoCompactSystemPrompt`,
+    `TestWorktreeShadowing`, `TestConfigFirstAndUnreadable`, `TestGoldenSystemPrompt` and
+    `TestGoldenSystemPromptDry`, with "a context file outside the fixture: `<home>`\AGENTS.md". That run put its
+    scratch copy and `TMP` under the user's home directory. `prompt`'s context-file walk climbs from the test's
+    temporary directory to the home's own `AGENTS.md`.
+  * **They predate this phase.** `HEAD` alone, with its copy under the home directory, fails the same five, in
+    `go test` and in `-race`.
+  * **A finding for its own record, not this phase's:** those `prompt` and `acpserver` tests are not isolated from a
+    real `AGENTS.md` above their temporary directory. The Linux machine has none in its home, so it passes there.
+* **Step 5, this Mac (C6):**
+  * `make pre-add-check FILES=…` on the five Go files: "5 file(s) clean (gofmt, golint, govulncheck)";
+  * `make preflight`: exit 0, "preflight passed";
+  * `make race`: exit 0, 39 ok, no FAIL, panic or data race;
+  * the identifier scan of the diff (the local account name, the dev hosts' names, the org's mail domain, and
+    real-machine home paths): nothing found.
+* **Step 6.** Committed on `main` by the agent (0052-PLAN Deviation 1).
+
 ### P6 — acceptance
 
 1. **Goldens:** P3 step 7's check, again at P6's base.

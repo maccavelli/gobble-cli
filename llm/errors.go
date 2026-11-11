@@ -46,8 +46,10 @@ var (
 // message, redacted, without gobble's or its SDK's prefixes; Retryable
 // whether the same request can succeed later, nil when not known; ResetAt
 // when the limit lifts; Limit which limit it was, one of the Limit
-// constants, set only when the provider's code or status states it; and
-// Attempts the tries made, when the failure came after retries.
+// constants, set only when the provider's code or status states it;
+// Attempts the tries made, when the failure came after retries; and Window
+// the limit's window as the provider stated it, never taken from the wait
+// (0049-MADR Q9).
 type APIError struct {
 	Status     int
 	RetryAfter time.Duration
@@ -60,6 +62,7 @@ type APIError struct {
 	ResetAt   time.Time
 	Limit     string
 	Attempts  int
+	Window    time.Duration
 }
 
 func (e *APIError) Error() string {

@@ -199,3 +199,123 @@ func TestQuotaIsNotARejectedLogin(t *testing.T) {
 		t.Fatalf("%v, want llm.ErrQuota not led by the login's refusal", got)
 	}
 }
+
+// limitErr streams a request through provider id over w and returns its
+// *llm.APIError, failing the test without one.
+func limitErr(t *testing.T, id, model string, w *cannedWire) *llm.APIError {
+	t.Helper()
+	o := wireStream(t, id, model, w, wireRequest())
+	ae, ok := errors.AsType[*llm.APIError](o.err)
+	if !ok {
+		t.Fatalf("err %v, want an *llm.APIError", o.err)
+	}
+	return ae
+}
+
+// near reports that got is within a second of want.
+func near(got, want time.Time) bool { d := got.Sub(want); return d > -time.Second && d < time.Second }
+
+// The provider's own reset instant wins over a rebuild from its wait: a
+// ChatGPT-shaped usage limit 3 hours off, sent with Retry-After: 3600,
+// lifts at the body's instant, not in an hour (0049-MADR D10 as built).
+func TestWireResetAtFromProvider(t *testing.T) {
+	resets := time.Now().Add(3 * time.Hour).Truncate(time.Second)
+	w := &cannedWire{status: http.StatusTooManyRequests, header: http.Header{"Retry-After": {"3600"}},
+		body: `{"error":{"type":"usage_limit_reached","message":"The usage limit has been reached","resets_at":` +
+			strconv.FormatInt(resets.Unix(), 10) + `}}`}
+	ae := limitErr(t, "openai", "gpt-6-luna", w)
+	if !near(ae.ResetAt, resets) || ae.RetryAfter != time.Hour {
+		t.Fatalf("ResetAt %s RetryAfter %s, want the body's %s and the header's 1h", ae.ResetAt, ae.RetryAfter, resets)
+	}
+}
+
+// A per-day Gemini quota is daily by the SDK's flag, in an HTTP reply and
+// inside a stream alike; with v1.28.0's rule, the stream's was no limit
+// (0049-MADR D10 as built).
+func TestWirePerDay(t *testing.T) {
+	day := geminiQuota("GenerateRequestsPerDayPerProjectPerModel-FreeTier", "120s")
+	for name, w := range map[string]*cannedWire{
+		"reply":  {status: http.StatusTooManyRequests, body: day},
+		"stream": {status: http.StatusOK, stream: sse("", day)},
+	} {
+		t.Run(name, func(t *testing.T) {
+			ae := limitErr(t, "gemini", "gemini-3.5-flash-lite", w)
+			if ae.Limit != llm.LimitDaily || !errors.Is(ae, llm.ErrQuota) {
+				t.Fatalf("limit %q (%v), want daily and a quota", ae.Limit, ae)
+			}
+			oneRequest(t, w)
+		})
+	}
+}
+
+// A failure inside a 200 stream carries the delay and the instant its error
+// states, and the window it names (0049-MADR D10 as built, Q8, Q9).
+func TestWireStreamFailureDelay(t *testing.T) {
+	resets := time.Now().Add(2 * time.Hour).Truncate(time.Second)
+	w := &cannedWire{status: http.StatusOK, stream: sse("", `{"type":"error","code":"usage_limit_reached",`+
+		`"message":"The usage limit has been reached","resets_at":`+strconv.FormatInt(resets.Unix(), 10)+
+		`,"limit_window_minutes":300,"headers":{"retry-after":"3600"}}`)}
+	ae := limitErr(t, "openai", "gpt-6-luna", w)
+	if ae.Status != 0 || ae.RetryAfter != time.Hour || !near(ae.ResetAt, resets) || ae.Limit != llm.LimitWindow ||
+		ae.Window != 5*time.Hour {
+		t.Fatalf("status %d RetryAfter %s ResetAt %s limit %q window %s, want 0, 1h, %s, window, 5h",
+			ae.Status, ae.RetryAfter, ae.ResetAt, ae.Limit, ae.Window, resets)
+	}
+	oneRequest(t, w)
+}
+
+// A plan limit is refined by the window its service stated, and only a plan
+// limit: free_tier keeps its name with a window beside it (0049-MADR Q8).
+func TestWireStatedWindow(t *testing.T) {
+	chatgpt := func(minutes int) string {
+		return `{"error":{"type":"usage_limit_reached","message":"The usage limit has been reached","limit_window_minutes":` +
+			strconv.Itoa(minutes) + `}}`
+	}
+	named := func(errType, name string) string {
+		return `{"type":"error","error":{"type":"` + errType + `","message":"Limit reached."},"metadata":{"limitName":"` +
+			name + `"}}`
+	}
+	for _, c := range []struct {
+		name, id, model, body string
+		limit                 string
+		window                time.Duration
+	}{
+		{"a week, in minutes", "openai", "gpt-6-luna", chatgpt(10080), llm.LimitWeekly, 7 * 24 * time.Hour},
+		{"five hours, in minutes", "openai", "gpt-6-luna", chatgpt(300), llm.LimitWindow, 5 * time.Hour},
+		{"weekly, by name", "opencode-go", "claude-haiku-5-5", named("GoUsageLimitError", "weekly"), llm.LimitWeekly, 0},
+		{"monthly, by name", "opencode-go", "claude-haiku-5-5", named("GoUsageLimitError", "monthly"), llm.LimitMonthly, 0},
+		{"5 hour, by name", "opencode-go", "claude-haiku-5-5", named("GoUsageLimitError", "5 hour"), llm.LimitWindow,
+			5 * time.Hour},
+		{"free tier keeps its name", "opencode-zen", "claude-haiku-5-5", named("FreeUsageLimitError", "5 hour"),
+			llm.LimitFreeTier, 5 * time.Hour},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			ae := limitErr(t, c.id, c.model, &cannedWire{status: http.StatusTooManyRequests, body: c.body})
+			if ae.Limit != c.limit || ae.Window != c.window {
+				t.Fatalf("limit %q window %s, want %q %s", ae.Limit, ae.Window, c.limit, c.window)
+			}
+		})
+	}
+}
+
+// OpenCode's BudgetLimitError states its reset only in metadata: it is a
+// terminal quota with that instant and no limit, since its coverage is of
+// models, not of time. CreditLimitExceeded is credits inside a stream too,
+// where no HTTP 402 says so (0049-MADR D10 as built).
+func TestWireBudgetLimit(t *testing.T) {
+	resets := time.Now().Add(6 * time.Hour).Truncate(time.Second).UTC()
+	w := &cannedWire{status: http.StatusTooManyRequests, body: `{"type":"error","error":{"type":"BudgetLimitError",` +
+		`"message":"Budget reached."},"metadata":{"resetsAt":"` + resets.Format(time.RFC3339) + `","coverage":"all"}}`}
+	ae := limitErr(t, "opencode-zen", "claude-haiku-5-5", w)
+	if ae.Limit != "" || !near(ae.ResetAt, resets) || ae.Retryable == nil || *ae.Retryable || !errors.Is(ae, llm.ErrQuota) {
+		t.Errorf("limit %q ResetAt %s retryable %v (%v), want none, %s, false, a quota", ae.Limit, ae.ResetAt,
+			ae.Retryable, ae, resets)
+	}
+	oneRequest(t, w)
+
+	s := &cannedWire{status: http.StatusOK, stream: sse("error",
+		`{"type":"error","error":{"type":"CreditLimitExceeded","message":"No credit left."}}`)}
+	if ae := limitErr(t, "opencode-zen", "claude-haiku-5-5", s); ae.Limit != llm.LimitCredits || ae.Status != 0 {
+		t.Errorf("a stream's CreditLimitExceeded: limit %q status %d, want credits and 0", ae.Limit, ae.Status)
+	}
+}
