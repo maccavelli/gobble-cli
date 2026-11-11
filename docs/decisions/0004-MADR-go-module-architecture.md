@@ -27,7 +27,7 @@ implementations and keeps every third-party SDK behind one package.
 What the fleet and toolchain provide on 2026-09-29 (read in source or
 probed):
 
-* **Toolchain.** `go1.27.1`. *(2026-10-08: `go1.27.2`; see the amendment of that date.)* *(2026-10-21: `go1.27.3`; see the amendment of that date.)* `$GOROOT/api/go1.27.txt` lists
+* **Toolchain.** `go1.27.1`. *(2026-10-08: `go1.27.2`; see the amendment of that date.)* *(2026-10-21: `go1.27.3`; see the amendment of that date.)* *(2026-11-11: `go1.27.4`, amending the "`go1.27.3`" of the note above, for GO-2026-6859 in `net/http`; see [0054-MADR-go-1-27-4-and-sibling-pin-refresh.md](0054-MADR-go-1-27-4-and-sibling-pin-refresh.md) D1.)* `$GOROOT/api/go1.27.txt` lists
   `encoding/json/v2` and `encoding/json/jsontext` as public API, and the
   `jsonv2` experiment is on by default in `internal/buildcfg`. The same
   file lists a new standard-library `uuid` package (`New`, `NewV7`),

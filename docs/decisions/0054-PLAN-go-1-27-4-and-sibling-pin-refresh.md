@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: in-progress
 date: 2026-11-11
 associated-madr: "0054-MADR-go-1-27-4-and-sibling-pin-refresh.md"
 ---
@@ -343,6 +343,8 @@ Each command's exit status is captured before any filter.
 
 Not started. The MADR was accepted by the owner on 2026-11-11; this PLAN awaits the owner's approval. Writing the pair
 changed no file but the pair's two: `docs/README.md` has no 0054 rows yet (P0 step 2).
+*(2026-11-11, later: the owner approved the plan, and P0 and P1 were run and staged together, as C7 allows; see
+their records at the end of this section. P2 and P3 are not started.)*
 
 ### Corrections of 2026-11-11 (records only; no phase has started)
 
@@ -355,3 +357,104 @@ beside the text it changes.
   section, the `gobble.system_prompt` entry, load and resume, gobble's own refusals, nine tests, and the one golden
   that changes. It is feature work, by the owner's choice.
 * **Verification** row 5's companion, and **the rollback of P2.**
+
+### P0 record (2026-11-11)
+
+C1: branch `main`, `HEAD` `f402dda` (the records commit), `origin/main` `17d1605`, one commit ahead, the tree clean, `go.mod`
+and `acpext/go.mod` at `go 1.27.3`. No deviation. P0 and P1 are staged together, as the owner chose (C7).
+
+1. **Status.** This PLAN's front matter `status` is `in-progress`, set by an assertion that the old line occurred once.
+2. **`docs/README.md`.** The 0054 MADR and PLAN rows follow 0053's PLAN row, in the form of its neighbours: the title as
+   a link to the file, then the status cell.
+3. **`make check-records markdownlint`:** exit 0, "Summary: 0 issues in 0 files".
+
+### P1 record (2026-11-11)
+
+C1: as P0's. Each command wrote to a scratch log, and its exit status was taken before any filter. Temporary paths are
+`<TMP>`.
+
+1. **Measured.** `go.dev/dl/?mode=json` lists `go1.27.4` first, with `stable` true: no newer patch. `go version`:
+   `go version go1.27.4 darwin/arm64` on macOS; `go version go1.27.4 linux/amd64` on the Linux machine;
+   `go version go1.27.4 windows/amd64` on the Windows laptop. No deviation. `GOTOOLCHAIN=go1.27.3 go version` printed
+   `go version go1.27.3 darwin/arm64`, so the 1.27.3 runs below used that toolchain.
+2. **Seen at the base** (C3), on `<TMP>/base`, made with `git archive HEAD` (`go.mod` and `acpext/go.mod` at `go 1.27.3`):
+   * `GOTOOLCHAIN=go1.27.3 go tool govulncheck ./...`: exit 3.
+
+     ```text
+     Vulnerability #1: GO-2026-6859
+         HTTP/1 server crash due to MaxBytesReader header race in net/http
+       Standard library
+         Found in: net/http@go1.27.3
+         Fixed in: net/http@go1.27.4
+     ...
+         #10: llm/provider/signin.go:176:41: provider.SignIn calls wizard.ResolveCredential, which eventually calls http.ServeMux.HandleFunc
+     ...
+     Your code is affected by 1 vulnerability from the Go standard library.
+     ```
+
+     45 example traces were listed.
+   * `GOTOOLCHAIN=go1.27.4 go tool govulncheck ./...`: exit 0, "No vulnerabilities found."
+3. **The two `go` lines.** `go mod edit -go=1.27.4`, `go mod tidy`, `go -C acpext mod edit -go=1.27.4` and `go -C acpext
+   mod tidy` all exited 0. `git diff go.mod acpext/go.mod`:
+
+   ```diff
+   --- a/acpext/go.mod
+   -go 1.27.3
+   +go 1.27.4
+   --- a/go.mod
+   -go 1.27.3
+   +go 1.27.4
+   ```
+
+   One line in each file. `go.sum` did not change, `acpext/go.sum` does not exist, and `grep -n toolchain go.mod
+   acpext/go.mod` found nothing.
+4. **The other places** (F5's "yes" rows), each edited after an assertion that its old text occurred once:
+   `scripts/check_libs.py:124` now `GOTOOLCHAIN="go1.27.4"`; `AGENTS.md:16` "Requires Go 1.27.4."; `docs/architecture.md:9`
+   "at Go 1.27.4"; `docs/guides/developing.md:9` "**Go 1.27.4.**" and "`go version go1.27.4 …`". F5's "no" rows were
+   not edited. `git grep -n '1\.27\.3' -- . ':!docs/decisions' ':!docs/reports'` now lists `internal/cli/update_test.go:82`
+   (F5's "no" row: a fixture) and `docs/README.md:25` and `:26`, the status cells of the 0004 rows, which name the
+   earlier move to Go 1.27.3 as history and are not an F5 row. Verification row 2's "shows only F5's 'no' row" does not
+   hold to the letter for those two index lines. They were left, since the PLAN does not name them.
+5. **The records,** each a dated 2026-11-11 note after the text it amends, read back after the edit:
+   * `0004-MADR-go-module-architecture.md`, the Toolchain line: a note after the 2026-10-21 one, "`go1.27.4`, amending the
+     "`go1.27.3`" of the note above, for GO-2026-6859 in `net/http`", linking `0054-MADR-go-1-27-4-and-sibling-pin-refresh.md`
+     D1;
+   * `0023-MADR-pin-current-releases.md`, the Go row: a note after the 2026-10-21 one, "`go1.27.4`, amending the
+     "`go1.27.3`" of the note above", linking the same MADR D1;
+   * `0042-MADR-acpext-extension-contract-module.md` D1, the line "`go 1.27.3`, as the root module, for fleet
+     lockstep": a note "now `go 1.27.4`, amending the "`go 1.27.3`" of this line, with the root module and with no
+     acpext tag of its own", linking the same MADR D2.
+6. **The old toolchain is refused** (C3), on `<TMP>/changed`, a copy of the changed tree:
+   * `GOTOOLCHAIN=go1.27.3 go build ./...`: exit 1, "go: go.mod requires go >= 1.27.4 (running go 1.27.3; GOTOOLCHAIN=go1.27.3)";
+   * `GOTOOLCHAIN=go1.27.3 go -C acpext build ./...`: exit 1, the same line, for acpext's `go.mod`.
+7. **Gates** (C6). No Go file changed, so `make pre-add-check` had nothing to check.
+   * macOS: `make preflight` exit 0, "preflight passed". It included "go-precheck: 636 file(s) clean (gofmt, golint,
+     govulncheck).", the `govulncheck` step "No vulnerabilities found." for both modules (`MODULES := . acpext`),
+     `staticcheck`, `golangci-lint` "0 issues." twice, `archtest` ok, `apidiff`, `check-records` and `markdownlint`.
+   * macOS: `make race` first returned exit 0 with 35 of its 39 `ok` lines "(cached)", so it was run again as
+     `GOFLAGS=-count=1 make race`: exit 0, 39 `ok`, none cached.
+   * macOS: `make check-test-isolation` exit 0, "== files written above the temp roots: 0", "check-test-isolation: ok".
+   * macOS: `python3 scripts/check_libs.py --self-test` exit 0, every line `: ok`.
+   * **The Linux machine and the Windows laptop,** each from a copy of the tree made from `git ls-files -co
+     --exclude-standard` (945 files, the count found on each host, no `._*` file), at `go1.27.4`:
+
+     | Host | `go test -count=1 ./...` | `CGO_ENABLED=1 go test -count=1 -race ./...` | `go -C acpext test -count=1 ./...` |
+     | :--- | :--- | :--- | :--- |
+     | the Linux machine | exit 0, 38 `ok`, no `FAIL` | exit 0, 38 `ok`, no `FAIL` | exit 0, `ok` |
+     | the Windows laptop | exit 0, 38 `ok`, no `FAIL` | exit 0, 38 `ok`, no `FAIL` | exit 0, `ok` |
+
+     * On the Windows laptop the copy and the default temp directory were under the home folder, with no `TMP` or
+       `TEMP` override, the case 0053-PLAN's P5 record passed; C6 as written asks for a temp directory outside the home
+       folder, which 0053 made unnecessary. The suite passed as it was.
+     * A first pair of host runs used a copy that held untracked and ignored files (a `node_modules` tree among them).
+       It was stopped, its remote processes and files removed, and the runs repeated from the tracked-file list above.
+       Only the second pair is reported.
+     * `make preflight` was not run on the hosts: it needs a git history for `verify-build-metadata`, so it is a
+       macOS gate here.
+   * `make check-records markdownlint` and the identifier scan of the diff are recorded below, after this entry.
+8. **Not done, by the PLAN.** Step 8's push and the CI reading of `main`'s next run (`validate` on three runners) are the
+   owner's; no commit, push or tag was made. P2 and P3 are not started. Staged: this phase's files only, by path.
+9. **Records and the identifier scan,** run after this entry was written. `make check-records markdownlint`: exit 0,
+   "Summary: 0 issues in 0 files"; `python3 -B scripts/check_records.py --check-all`: exit 0. The identifier scan of the
+   diff's added lines (the local account name, the dev hosts' names, the org's mail domain, and real-machine home,
+   drive and temporary paths): `grep` exit 1, nothing found.

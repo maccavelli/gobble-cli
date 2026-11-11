@@ -135,7 +135,7 @@ types. Its cost is the coordinated tag that 0004 named; D5 below sets the order 
 * **Path and layout.** The directory is `acpext/`, the module `github.com/maccavelli/gobble-cli/acpext`, and the
   package `acpext`. It is one package, with no `internal/` and no sub-packages.
 * **`go.mod`:**
-  * `go 1.27.3`, as the root module, for fleet lockstep (0004's accepted cost);
+  * `go 1.27.3`, as the root module, for fleet lockstep (0004's accepted cost); *(2026-11-11: now `go 1.27.4`, amending the "`go 1.27.3`" of this line, with the root module and with no acpext tag of its own, by [0054-MADR-go-1-27-4-and-sibling-pin-refresh.md](0054-MADR-go-1-27-4-and-sibling-pin-refresh.md) D2.)*
   * ~~a single requirement, `github.com/maccavelli/acp-go-sdk2`, at the lowest tag acpext needs. At creation that is
     the root's pin, `v1.31.2`. A later SDK bump raises it only when acpext uses something new; MVS gives every
     importer its own pin.~~ no requirement, and so no `go.sum`. *(Amended 2026-11-06, A1.)*
