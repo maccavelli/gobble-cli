@@ -72,6 +72,9 @@ linters:
         - pattern: ^json\.(Marshal|MarshalWrite|MarshalEncode|Unmarshal|UnmarshalRead|UnmarshalDecode)$
           pkg: ^encoding/json/v2$
           msg: encode and decode through jsonx, under its policies (0039-MADR D24)
+        - pattern: ^fsx\.SetWalkCeiling$
+          pkg: ^github\.com/maccavelli/gobble-cli/internal/fsx$
+          msg: only a test binary sets the walk ceiling (0053-MADR D1)
     sloglint:
       no-mixed-args: true
       attr-only: true

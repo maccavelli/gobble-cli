@@ -128,9 +128,13 @@ func trimTrailingSpaces(line string) string {
 }
 
 // repoTop is the nearest directory at or above dir holding a .git entry, a
-// directory or a worktree's file, or "" when there is none.
+// directory or a worktree's file, or "" when there is none below the walk
+// ceiling or the root (0053-MADR D1).
 func repoTop(dir string) string {
 	for d := filepath.Clean(dir); ; {
+		if AtWalkCeiling(d) {
+			return ""
+		}
 		if _, err := os.Lstat(filepath.Join(d, ".git")); err == nil {
 			return d
 		}

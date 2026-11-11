@@ -277,6 +277,22 @@ deviation 1. The owner chose "a ceiling at both roots".
   no ceiling. None of the binary tests failed under the plants. D4's check is what would show one that becomes
   exposed.
 
+### Amendment A2 (2026-11-11): the project's skills are one walk
+
+This amendment comes from
+[0053-PLAN-keep-tests-off-host-files-above-their-temp-root.md](0053-PLAN-keep-tests-off-host-files-above-their-temp-root.md)
+deviation 2. The owner chose "one loop, one check".
+
+* **The problem.** D1 had both of `ProjectSkillDirs`'s loops (F1) check the ceiling. The first loop only finds the
+  nearest `.git`, and with a ceiling the second loop's check alone bounds the result. So the first check could not be
+  seen to fail, and "the ceiling is never read" went unchecked there.
+* **The decision.** `ProjectSkillDirs` becomes one walk with one check.
+  * It stops at the ceiling, or the root, before reading.
+  * Otherwise it takes the directory's `.agents/skills`, except home's, and stops after a directory holding `.git`.
+  * The result is the same as the two loops' for every tree: the second loop also took the `.git` directory's own
+    skills before it stopped.
+* **What changes in F1.** F1's five walks are four, and four checks.
+
 ### Consequences
 
 * Good, because no planted file above the temp root changes a result, and no test writes above it (F3, F4). The host

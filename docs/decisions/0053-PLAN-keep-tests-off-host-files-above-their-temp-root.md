@@ -121,7 +121,7 @@ records, which are the owner's and are not touched, and this pair.
    * `fsx.repoTop` (`internal/fsx/ignore.go:132`) returns `""`;
    * `prompt.ContextFiles` (`prompt/context.go:77`) ends its walk;
    * in `prompt.ProjectSkillDirs`, the first loop (`prompt/trust.go:18`) ends with no stop found, and the second
-     (`:29`) ends before reading.
+     (`:29`) ends before reading. *(Replaced by deviation 2: the two loops become one walk with one check.)*
    * Under Q1 (b), only the two `prompt` walks check it, and the `fsx` walks are unchanged. Under Q1 (c), `repoTop`
      is unchanged.
 4. **Tests.** Each test sets the ceiling through a helper that restores the previous value with `t.Cleanup`. These
@@ -253,6 +253,113 @@ records, which are the owner's and are not touched, and this pair.
   D1, D2, D4 and Confirmation 3 and 5.
 * **Steps amended:** P1 step 2, P2 step 2, P3 steps 2 to 4. Each is annotated where it stands.
 * **Files added to the phase:** none.
+
+### Deviation 2 (2026-11-11, in P2, before any code): one walk for the project's skills
+
+* **Found.** P2 step 6's breaks were traced before step 3 was written, and one of them cannot fail as planned.
+  * `prompt.ProjectSkillDirs` (`prompt/trust.go:12-40`, at `6bcb898`) walks twice. The first loop (`:18-28`) only
+    finds `stop`, the nearest `.git`. The second (`:29-38`) collects `.agents/skills` from `cwd` up to `stop`, or to
+    the root.
+  * With a ceiling, the second loop's check alone ends the walk at the ceiling, whatever the first loop found.
+  * So removing the first loop's check changes no result. It only stats a `.git` above the ceiling. That break
+    could not fail, and the MADR D1's "the ceiling is never read" would go unchecked there.
+* **Decision.** The owner chose "one loop, one check", recorded in the MADR as amendment A2.
+  * `ProjectSkillDirs` becomes one walk from `cwd`. It stops at the ceiling before reading it. Otherwise it appends
+    the directory's `.agents/skills`, except home's, and stops after a directory holding `.git`, or at the root.
+  * That is the same result as the two loops: the second loop also took the `.git` directory's own `.agents/skills`
+    before it stopped.
+  * The existing `TestTrustFiles` and `TestProjectSkillDirsOutsideRepository` hold it.
+* **Steps amended:** P2 step 3's `ProjectSkillDirs` item, annotated where it stands.
+  * Step 4's `TestProjectSkillDirsStopAtCeiling` also puts a `.agents/skills` at the ceiling, which must not be
+    listed, and a `.git` above it.
+  * Step 6's breaks for `ProjectSkillDirs` are one: the walk's check removed.
+* **Files added to the phase:** none.
+
+### P2 record (2026-11-11)
+
+Scripts and logs are in the session scratchpad (`p2_0053_breaks.py`, `p2_0053_*.log`, `p2_*.log`).
+
+1. **C1.**
+   * `HEAD` was `6bcb898`, P1, committed by the owner.
+   * `origin/main` was `86ad4a7`.
+   * The tree held only the owner's untracked 0051 and 0052 records.
+   * Deviation 2 was found and answered before any code.
+2. **`internal/fsx/ceiling.go`,** as A1 amends it.
+   * **The value:** an unexported `atomic.Pointer` to a slice of `{path, os.FileInfo}`.
+   * **`SetWalkCeiling(dirs ...string) error`:**
+     * an empty value is skipped, and none clears the ceiling;
+     * each directory is made absolute and stat'ed, and a missing path or a non-directory is an error;
+     * every directory is checked before any is stored, so a refusal leaves the ceiling as it was.
+   * **`WalkCeiling() []string`** returns the set paths, or nil.
+   * **`AtWalkCeiling(dir) bool`** is one atomic load when none is set, and otherwise one `os.Stat` and `os.SameFile`
+     against each.
+3. **The walks.**
+   * `fsx.gitDirs` (`internal/fsx/git.go`) and `fsx.repoTop` (`internal/fsx/ignore.go`) check the ceiling first in
+     each step, and return "not found".
+   * `prompt.ContextFiles` (`prompt/context.go`) breaks before `fromDir`.
+   * `prompt.ProjectSkillDirs` (`prompt/trust.go`) is one walk, per deviation 2 and A2. The loop condition is
+     `!fsx.AtWalkCeiling(d)`. Each step takes the directory's `.agents/skills`, except home's, then ends after a
+     directory holding `.git`, or at the root.
+   * Each doc comment names 0053-MADR D1.
+   * The existing `TestTrustFiles`, `TestProjectSkillDirsOutsideRepository` and the rest of `prompt`'s tests pass on
+     the one walk.
+4. **Tests.** Each sets the ceiling through a `setCeiling` helper that restores the previous one with `t.Cleanup`.
+   The helper is in `internal/fsx/ceiling_test.go` and `prompt/ceiling_test.go`. None of the tests is parallel.
+   * **`TestWalkCeiling`:**
+     * two directories and an empty value are set;
+     * `<a>/x/..` and a trailing separator match;
+     * a child, the parent and a missing path do not;
+     * a file and a missing path are refused, and the ceiling is unchanged after each;
+     * clearing it gives nil and no match.
+   * **`TestGitRepoStopsAtCeiling`:**
+     * a repository above the ceiling is not found from below, by `GitRepo` and `GitBranch`;
+     * one at the ceiling is not found from it;
+     * with the ceiling at the root's parent, the repository is found.
+   * **`TestRepoTopStopsAtCeiling`:** a `.git` file at the ceiling is not read. With the ceiling above it, it is the
+     top.
+   * **`TestContextFilesStopAtCeiling`:** files above, at and below the ceiling. Only the cwd's file loads with the
+     ceiling. With the ceiling above them, all three load, root-most first.
+   * **`TestProjectSkillDirsStopAtCeiling`:** `.agents/skills` above, at and below the ceiling, and a `.git` at the
+     top. Only the cwd's parent's skills are listed with the ceiling. With the ceiling above them, all three are
+     listed, ending at the `.git` directory's own.
+   * All five ran and passed (`go test -run Ceiling -v`).
+5. **`.golangci.yml`:** `forbidigo` gained `^fsx\.SetWalkCeiling$` with pkg
+   `^github\.com/maccavelli/gobble-cli/internal/fsx$`. The message is "only a test binary sets the walk ceiling
+   (0053-MADR D1)". `_test.go` files are exempt through the existing exclusion.
+6. **Breaks** (C4, `p2_0053_breaks.py`, each on its own scratch copy). All 8 cases were as expected:
+
+   | Break | Failed | First failure |
+   | :--- | :--- | :--- |
+   | control | none | |
+   | `gitDirs`' check removed | `TestGitRepoStopsAtCeiling` | `ceiling_test.go:78: above the ceiling: found "<tmp>…"` |
+   | `repoTop`'s check removed | `TestRepoTopStopsAtCeiling` | `ceiling_test.go:106: with the ceiling: repoTop = "<tmp>…", want none` |
+   | `ContextFiles`' check removed | `TestContextFilesStopAtCeiling` | `ceiling_test.go:39: with the ceiling: [<tmp>… <tmp>… <tmp>…], want the cwd's file only` |
+   | `ProjectSkillDirs`' check removed | `TestProjectSkillDirsStopAtCeiling` | `ceiling_test.go:69: with the ceiling: [three paths], want [one]` |
+   | `os.SameFile` replaced by the path string | `TestWalkCeiling` | `ceiling_test.go:41: AtWalkCeiling("<tmp>…") = false, want true` |
+   | a file accepted as a ceiling | `TestWalkCeiling` | `ceiling_test.go:51: SetWalkCeiling("<tmp>…") accepted` |
+   | a non-test caller in `internal/config` | `golangci-lint` exit 1 | ``zz_ceiling_break.go:6:33: use of `fsx.SetWalkCeiling` forbidden because "only a test binary sets the walk ceiling (0053-MADR D1)" (forbidigo)`` |
+
+   * The `ProjectSkillDirs` break was first written as `; true; {`. That left `trust.go`'s `fsx` import unused, so
+     it failed to compile rather than fail the test. That was a fault in the break, not in the code. It was rewritten
+     as `; !fsx.AtWalkCeiling(d) || true; {` and run again, and the case was as expected.
+7. **`make check-test-isolation`:** exit 1, with the same 30 tests, a sorted list identical to P1's, and the same two
+   files. No `TestMain` sets the ceiling yet, as predicted.
+8. **Gates** (C5):
+   * `make pre-add-check` on the seven changed Go files: "7 file(s) clean", with `govulncheck` skipped there and run
+     by preflight.
+   * `make preflight`: "preflight passed".
+   * `make race`: exit 0.
+   * The Linux machine: `go test ./...` 38 `ok`, `acpext` `ok`, `go test -race ./...` exit 0.
+   * The Windows laptop, with `TMP` and `TEMP` at `C:\gtmp` as before, since its home folder's `AGENTS.md` still
+     leaks until P3: the same results.
+   * `make check-records markdownlint` and the identifier scan are below, before staging.
+9. **Not changed: two pre-existing workarounds in `prompt/trust_test.go`.** `TestProjectSkillDirsOutsideRepository`
+   (`:40-67`) has two:
+   * it skips when the temp directory is inside a repository;
+   * it filters out an ancestor's skills ("a real ancestor of root may hold its own").
+
+   Both work around the host, which is the exposure this record closes. Once P3 sets the ceiling, neither should be
+   needed. They are outside P2's scope and were left, to be raised with the owner.
 
 ### P1 record (2026-11-11)
 

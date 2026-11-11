@@ -60,7 +60,9 @@ func fromDir(dir string) (File, []Diagnostic, bool) {
 // loadProjectContextFiles finds them (resource-loader.ts:232-270): the
 // config directory's, then each directory's from the filesystem root down
 // to cwd, a path seen twice kept once, and the main repository's file left
-// out where a nested worktree has its own. No trust is needed.
+// out where a nested worktree has its own. No trust is needed. The walk
+// stops below a test binary's walk ceiling (fsx.SetWalkCeiling, 0053-MADR
+// D1), which no other code sets.
 func ContextFiles(configDir, cwd string) ([]File, []Diagnostic) {
 	var out []File
 	var diags []Diagnostic
@@ -75,6 +77,9 @@ func ContextFiles(configDir, cwd string) ([]File, []Diagnostic) {
 	shadowed := shadowedFile(cwd)
 	var ancestors []File
 	for dir := filepath.Clean(cwd); ; {
+		if fsx.AtWalkCeiling(dir) {
+			break
+		}
 		f, d, ok := fromDir(dir)
 		diags = append(diags, d...)
 		if ok && !seen[f.Path] && (shadowed == "" || canonical(f.Path) != shadowed) {

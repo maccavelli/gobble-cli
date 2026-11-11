@@ -18,9 +18,13 @@ func GitRepo(dir string) (repoDir, commonGitDir string, ok bool) {
 }
 
 // gitDirs is GitRepo's walk, with the git directory that holds the
-// checkout's own HEAD: .git, or a worktree's gitdir.
+// checkout's own HEAD: .git, or a worktree's gitdir. It stops at the walk
+// ceiling unread, as at the root (0053-MADR D1).
 func gitDirs(dir string) (repoDir, gitDir, commonGitDir string, ok bool) {
 	for d := filepath.Clean(dir); ; {
+		if AtWalkCeiling(d) {
+			return "", "", "", false
+		}
 		gp := filepath.Join(d, ".git")
 		if info, err := os.Stat(gp); err == nil {
 			if info.IsDir() {

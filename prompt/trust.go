@@ -3,35 +3,31 @@ package prompt
 import (
 	"os"
 	"path/filepath"
+
+	"github.com/maccavelli/gobble-cli/internal/fsx"
 )
 
 // ProjectSkillDirs are the project's own skill directories that exist: its
 // .gobble/skills, and each .agents/skills from cwd up to the repository
 // root, or the filesystem root outside one, but not home's, which is the
 // user's (Pi's collectAncestorAgentsSkillDirs, package-manager.ts:468-487).
+// One walk: a directory's skills are taken, and the walk ends after the
+// directory holding .git, at the root, or below a test binary's walk
+// ceiling (fsx.SetWalkCeiling; 0053-MADR D1, A2).
 func ProjectSkillDirs(cwd, home string) []string {
 	var out []string
 	if p := filepath.Join(cwd, ".gobble", "skills"); isDir(p) {
 		out = append(out, p)
 	}
-	stop := ""
-	for d := filepath.Clean(cwd); ; {
+	for d := filepath.Clean(cwd); !fsx.AtWalkCeiling(d); {
+		if p := filepath.Join(d, ".agents", "skills"); isDir(p) && (home == "" || filepath.Clean(d) != filepath.Clean(home)) {
+			out = append(out, p)
+		}
 		if _, err := os.Stat(filepath.Join(d, ".git")); err == nil {
-			stop = d
 			break
 		}
 		parent := filepath.Dir(d)
 		if parent == d {
-			break
-		}
-		d = parent
-	}
-	for d := filepath.Clean(cwd); ; {
-		if p := filepath.Join(d, ".agents", "skills"); isDir(p) && (home == "" || filepath.Clean(d) != filepath.Clean(home)) {
-			out = append(out, p)
-		}
-		parent := filepath.Dir(d)
-		if d == stop || parent == d {
 			break
 		}
 		d = parent
