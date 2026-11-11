@@ -34,19 +34,12 @@ func TestTrustFiles(t *testing.T) {
 	}
 }
 
-// Outside any repository the walk goes up to the filesystem's root: it
-// keeps an ancestor's .agents/skills, and passes home's own by, which is
-// the user's (0024-MADR D7).
+// Outside any repository the walk goes up to the filesystem's root, which
+// TestMain's walk ceiling stands in for, so no host file above the temp
+// root is seen: it keeps an ancestor's .agents/skills, and passes home's
+// own by, which is the user's (0024-MADR D7; 0053-MADR D2).
 func TestProjectSkillDirsOutsideRepository(t *testing.T) {
 	root := t.TempDir()
-	for d := filepath.Dir(root); ; d = filepath.Dir(d) {
-		if _, err := os.Stat(filepath.Join(d, ".git")); err == nil {
-			t.Skipf("the temporary directory is inside a repository, at %s", d)
-		}
-		if filepath.Dir(d) == d {
-			break
-		}
-	}
 	ancestor := filepath.Join(root, "outer")
 	home := filepath.Join(ancestor, "home")
 	cwd := filepath.Join(home, "proj", "sub")
@@ -56,14 +49,8 @@ func TestProjectSkillDirsOutsideRepository(t *testing.T) {
 	if err := os.MkdirAll(cwd, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	var got []string // only this test's: a real ancestor of root may hold its own
-	for _, d := range ProjectSkillDirs(cwd, home) {
-		if rel, err := filepath.Rel(root, d); err == nil && filepath.IsLocal(rel) {
-			got = append(got, d)
-		}
-	}
 	want := []string{filepath.Join(home, "proj", ".agents", "skills"), filepath.Join(ancestor, ".agents", "skills")}
-	if !slices.Equal(got, want) {
+	if got := ProjectSkillDirs(cwd, home); !slices.Equal(got, want) {
 		t.Fatalf("got %v\nwant %v", got, want)
 	}
 }

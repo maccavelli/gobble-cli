@@ -30,7 +30,8 @@ records, which are the owner's and are not touched, and this pair.
 * **P3, the `TestMain`s:**
   * `acpserver/testmain_test.go` and `internal/cli/testmain_test.go`;
   * a new `testmain_test.go` in `prompt`, `internal/config`, `internal/fsx` and `tool/builtin`;
-  * `TestWalksBounded` in each of the six.
+  * `TestWalksBounded` in each of the six;
+  * `prompt/trust_test.go`, whose host workarounds go (added 2026-11-11, see "P3 amended").
 * **P4:** `internal/cli/trust_test.go`.
 * **P5, CI, docs and records:**
   * `.github/workflows/ci.yml`, under Q4 (a);
@@ -169,9 +170,19 @@ records, which are the owner's and are not touched, and this pair.
 3. **`TestWalksBounded` in each of the six.** It fails unless `fsx.WalkCeiling()` is `filepath.Clean(os.TempDir())`
    made absolute, and its message names `TestMain`. *(Amended by deviation 1: it fails unless the ceiling holds
    `os.TempDir()`, and `GOTMPDIR` too when that is set.)*
+
+   3a. *(Added 2026-11-11, see "P3 amended".)* **`TestProjectSkillDirsOutsideRepository` loses its host
+   workarounds** (`prompt/trust_test.go:40-67`).
+   * The skip when the temp directory is inside a repository (`:42-49`) is removed.
+   * The filter that keeps only paths under the test's root (`:59-64`) is removed, so the test compares
+     `ProjectSkillDirs(cwd, home)` itself with its `want`, exactly.
+   * Its comment says the walk goes to the filesystem's root, which the test binary's ceiling stands in for.
 4. **Breaks** (C4): each package's `TestMain` call removed, one at a time, must fail that package's
    `TestWalksBounded`. That is six breaks. *(Added by deviation 1: in one package, `TestMain` passing `os.TempDir()`
-   alone, run with `GOTMPDIR` set to another directory, must fail `TestWalksBounded`.)*
+   alone, run with `GOTMPDIR` set to another directory, must fail `TestWalksBounded`.)* *(Added 2026-11-11, see "P3
+   amended": `prompt`'s `TestMain` call removed, run with an `.agents/skills` and a `.git` planted above both temp
+   roots, must fail `TestProjectSkillDirsOutsideRepository` rather than skip it. The same run with the call in place
+   passes.)*
 5. **`make check-test-isolation`:** MADR F3's 27 tests no longer fail, and no file is left above the temp root. F5's
    three trust tests still fail. Any other result is a deviation.
 6. **Gates** (C5), with `make archtest` confirming no import rule is crossed by the tests' new `internal/fsx` imports.
@@ -274,6 +285,99 @@ records, which are the owner's and are not touched, and this pair.
     listed, and a `.git` above it.
   * Step 6's breaks for `ProjectSkillDirs` are one: the walk's check removed.
 * **Files added to the phase:** none.
+
+### P3 record (2026-11-11)
+
+Scripts and logs are in the session scratchpad (`p3_0053_breaks.py`, `p3_0053_*.log`, `p3_*.log`).
+
+1. **C1.**
+   * `HEAD` was `957a943`, P2, committed by the owner. `origin/main` was `86ad4a7`.
+   * The tree held the owner's untracked 0051 and 0052 records and "P3 amended", unstaged.
+   * Of the six packages, only `acpserver` (`acpserver/testmain_test.go`) and `internal/cli`
+     (`internal/cli/testmain_test.go`) defined `TestMain`, as predicted. All six use in-package tests.
+2. **Each `TestMain`** calls `fsx.SetWalkCeiling(os.Getenv("GOTMPDIR"), os.TempDir())` before `m.Run()`, as A1 amends
+   it. On an error it prints `walk ceiling: <err>` and exits 2.
+   * `acpserver` does it after `mcptest.ServeStdioIfAsked()`.
+   * `internal/cli` does it in the child, after `checkNetGuard`. Its doc comment gained the sentence, citing 0053-MADR
+     F4, D2 and A1, and it carries the file's existing `forbidigo` directive form.
+   * `prompt`, `internal/config`, `internal/fsx` and `tool/builtin` gained a `testmain_test.go` that does only this.
+     `internal/fsx`'s calls `SetWalkCeiling` unqualified.
+3. **`TestWalksBounded` in each of the six.** It builds the absolute `GOTMPDIR`, when set, and `os.TempDir()`, and
+   fails unless `fsx.WalkCeiling()` equals them in that order. Its message ends "TestMain must call
+   fsx.SetWalkCeiling (0053-MADR D2)". All six ran and passed.
+
+   3a. **`TestProjectSkillDirsOutsideRepository`** (`prompt/trust_test.go`) lost its skip and its filter. It now
+   compares `ProjectSkillDirs(cwd, home)` itself with its `want`, and passes. Its comment names the ceiling as the
+   root's stand-in.
+4. **Breaks** (C4, `p3_0053_breaks.py`). All 10 cases were as expected:
+
+   | Break | Environment | Failed |
+   | :--- | :--- | :--- |
+   | control | the host's | none |
+   | `prompt`'s `TestMain` call removed | the host's | `TestWalksBounded` |
+   | `internal/config`'s | the host's | `TestWalksBounded` |
+   | `internal/fsx`'s | the host's | `TestWalksBounded` |
+   | `tool/builtin`'s | the host's | `TestWalksBounded` |
+   | `acpserver`'s | the host's | `TestWalksBounded` |
+   | `internal/cli`'s | the host's | `TestWalksBounded` |
+   | `prompt`'s with `os.TempDir()` alone | `GOTMPDIR` at another directory | `TestWalksBounded` |
+   | `prompt`, call in place (control) | `TMPDIR` and `GOTMPDIR` below a planted `.agents/skills` and `.git` | none |
+   | `prompt`'s call removed | the same | `TestProjectSkillDirsOutsideRepository` and `TestWalksBounded` |
+
+   * **The messages.** Each removal failed with `walk ceiling [], want ["<tmp>"…]: TestMain must call
+     fsx.SetWalkCeiling (0053-MADR D2)`. The `os.TempDir()`-alone case gave one directory where two were wanted.
+   * **The planted case:** `TestProjectSkillDirsOutsideRepository` failed rather than skipped, at `trust_test.go:54`,
+     with three directories where two were wanted. The third was the planted ancestor's.
+5. **`make check-test-isolation`:** exit 1, with **3** failing tests, all in `internal/cli`: `TestLineViewTrust`,
+   `TestTrustQuestion` and `TestTrustQuestionNoParent`, which are F5's and P4's. There were **0** files written above
+   the temp roots. MADR F3's 27 no longer fail, as predicted.
+6. **Gates** (C5):
+   * `make pre-add-check` on the seven changed Go files: "7 file(s) clean".
+   * `make preflight` failed in `golangci-lint` with deviation 3's G703. After the directive, `make lint` gave
+     "0 issues" for both modules, and `make preflight` passed, `archtest` `ok`.
+   * `make race`: exit 0.
+   * **The Linux machine:** `go test ./...` 38 `ok`, `acpext` `ok`, `go test -race ./...` exit 0.
+   * **The Windows laptop:** the same results, **with its default temp directory** (`%LOCALAPPDATA%\Temp`, under the
+     home folder), and with the home folder's own 35 KB `AGENTS.md` in place. This is the case gobble-cli#17
+     describes, and that the earlier gates avoided with `TMP` and `TEMP` at `C:\gtmp`.
+   * The hosts ran before deviation 3's directive, which is a comment and changes no code.
+   * `make check-records markdownlint` and the identifier scan are below, before staging.
+
+### Deviation 3 (2026-11-11, in P3): gosec follows `GOTMPDIR` into `SetWalkCeiling`
+
+* **Found.** P3 step 6's `make preflight` failed in `golangci-lint`:
+
+  ```text
+  internal/fsx/ceiling.go:41:23: G703: Path traversal via taint analysis (gosec)
+  		info, err := os.Stat(abs)
+  ```
+
+  * **It is new:** `ceiling.go` was committed in P2 (`957a943`), whose preflight passed.
+  * **The cause:** P3's `TestMain`s pass `os.Getenv("GOTMPDIR")` to `fsx.SetWalkCeiling`, and gosec's taint analysis
+    follows it across packages to the `os.Stat`, in a file that is not a `_test.go`. The repository's `_test.go`
+    exemption does not cover it.
+  * **A false positive:** the path is a test binary's own temp root. It is stat'ed and never opened, and P2's
+    `forbidigo` rule keeps every non-test caller out.
+* **Decision.** The owner chose "reasoned nolint". The `os.Stat` carries `//nolint:gosec // G703: a test binary's own
+  temp root, stat'ed and never opened; forbidigo keeps other callers out (0053-PLAN deviation 3)`. That is the same
+  form as `internal/fsx/git.go`'s existing G703 directive for a `.git` file's path.
+* **Seen failing:** the finding is above, without the directive. With it, `make lint` gives "0 issues" for both
+  modules.
+* **Files added to P3:** `internal/fsx/ceiling.go`.
+
+### P3 amended (2026-11-11, at the owner's word)
+
+* **Found.** P2's record, item 9, found two host workarounds in `TestProjectSkillDirsOutsideRepository`
+  (`prompt/trust_test.go:40-67`): a skip when the temp directory is inside a repository, and a filter that drops an
+  ancestor's skills.
+* **The owner's answer:** "scope removing those in p3".
+* **What P3 now includes:** step 3a removes both, and step 4 gains a break that shows the test fails, rather than
+  skips, without the ceiling.
+* **The only ones.** A search of every `_test.go` file for skips and filters of this kind found only these two. The
+  `no home directory` skips (`internal/fsx/resolve_test.go:14`, `tool/builtin/shellparse_test.go:277`, `:304`) are
+  about a missing home, not a host's files. `prompt/sections_test.go:55`'s "a context file outside the fixture" is an
+  assertion, which stays.
+* **Files added to P3:** `prompt/trust_test.go`.
 
 ### P2 record (2026-11-11)
 

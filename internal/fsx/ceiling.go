@@ -38,7 +38,7 @@ func SetWalkCeiling(dirs ...string) error {
 		if err != nil {
 			return fmt.Errorf("walk ceiling %q: %w", d, err)
 		}
-		info, err := os.Stat(abs)
+		info, err := os.Stat(abs) //nolint:gosec // G703: a test binary's own temp root, stat'ed and never opened; forbidigo keeps other callers out (0053-PLAN deviation 3)
 		if err != nil {
 			return fmt.Errorf("walk ceiling: %w", err)
 		}

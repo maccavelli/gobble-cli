@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"reflect"
 	"runtime/debug"
 	"slices"
@@ -20,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/maccavelli/gobble-cli/internal/fsx"
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/llm/catalog"
 	"github.com/maccavelli/gobble-cli/llm/provider"
@@ -73,13 +75,35 @@ func TestNoBrowserOrSignIn(t *testing.T) {
 	}
 }
 
+// The walks stop at the test binary's temp roots: TestMain set the ceiling
+// (0053-MADR D2, A1).
+func TestWalksBounded(t *testing.T) {
+	var want []string
+	for _, d := range []string{os.Getenv("GOTMPDIR"), os.TempDir()} {
+		if d == "" {
+			continue
+		}
+		abs, err := filepath.Abs(d)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want = append(want, abs)
+	}
+	if got := fsx.WalkCeiling(); !slices.Equal(got, want) {
+		t.Fatalf("walk ceiling %q, want %q: TestMain must call fsx.SetWalkCeiling (0053-MADR D2)", got, want)
+	}
+}
+
 // TestMain lets this test binary serve as the stdio MCP fixture (0002-PLAN
 // Phase 5), then clears every model credential variable before any test
 // runs, so no test reaches a real provider, however the host is set up
 // (0002-PLAN Phase 3), makes the model lister fail offline (0020-MADR D7)
 // and the model facts read no listing (0046-MADR D3), and replaces the
 // browser opener and the sign-ins with ones that open and call nothing
-// (0025-PLAN deviation 9).
+// (0025-PLAN deviation 9). It also sets the walk ceiling at the binary's
+// temp roots, GOTMPDIR's, where t.TempDir puts a directory when it is set,
+// and os.TempDir()'s, so no host file above them changes a test, and no
+// test writes a project's settings above them (0053-MADR F4, D2, A1).
 //
 // The tests run behind a network guard (0046-MADR D4, as amended). net/http
 // reads the proxy variables once, and the MCP SDK's oauthex package reads
@@ -96,6 +120,10 @@ func TestMain(m *testing.M) {
 	if err := checkNetGuard(); err != nil {
 		fmt.Fprintf(os.Stderr, "network guard: %v\n", err) //nolint:forbidigo // the test binary's own stderr
 		os.Exit(2)                                         //nolint:forbidigo // TestMain's exit
+	}
+	if err := fsx.SetWalkCeiling(os.Getenv("GOTMPDIR"), os.TempDir()); err != nil {
+		fmt.Fprintf(os.Stderr, "walk ceiling: %v\n", err) //nolint:forbidigo // the test binary's own stderr
+		os.Exit(2)                                        //nolint:forbidigo // TestMain's exit
 	}
 	for _, v := range provider.CredentialVars() {
 		if err := os.Unsetenv(v); err != nil {
