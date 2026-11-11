@@ -359,6 +359,49 @@ its own.
     plan sign-in, and P5b's mapping of go-llmprovider-sdk `v1.29.0`'s fields.
   - **P4b-Q4:** (a). The callback URL may be pasted in gobble's terminal and in the ACP terminal method, and the prompt
     says which URL.
+
+  **The terms, read 2026-11-10 (the PLAN's P4b-2 deviation 1).**
+  - **How they were read.** OpenAI's "Sign in with ChatGPT Terms" (`openai.com/policies/sign-in-with-chatgpt-terms/`)
+    answered HTTP 403 to an automated fetch. The owner read the page and pasted its text. It is effective
+    **2026-11-04**, after the SDK's reading of 2026-10-14.
+  - **What the spec already meets:**
+    - §1: the app's own name, `"gobble"`; tokens only through OpenAI's flow; no password or cookie asked for.
+    - §3.1:
+      - one login per provider, so no multiple accounts or rotation, and no pooling or resale;
+      - requests only for the signed-in user and their own turns;
+      - consent before background use (P4b-Q2);
+      - the plan used only for gobble, which exposes no general API;
+      - and no charge.
+    - §5: no OpenAI marks.
+    - §2.4's revocation: `gobble auth logout openai` already revokes, then deletes (`provider.Logout`,
+      `llm/provider/login.go:93-103`), and `v1.29.0` has a plan-session revoke.
+  - **Three points the spec did not settle.** The owner answered each (asked with three options):
+    - **§1 storage and a remote host** ("local and under the user's control, not in a remote or managed environment",
+      beside §3.1's "a remote runtime only that user controls"): **own host only, disclosed.**
+      - The plan session is stored only in `auth.json` on the host gobble runs on, an owner-only file.
+      - The sign-in and the guide say this must be a machine only the user controls, never a shared or managed one,
+        and that `auth.json` is not to be copied to another machine. Each host has its own host id, per OpenAI's
+        developer page.
+    - **§2.3 privacy notice:** **a notice at sign-in, before the browser opens.**
+      - It says what gobble stores: the access, refresh and ID tokens, the account id and the host id.
+      - It says where: the local `auth.json`, owner-only; that it is sent only to OpenAI; and how to remove it,
+        `gobble auth logout openai`, which revokes too. The guide repeats it.
+    - **§2.4 consent control:** **a setting, named in the notice.** The background-use consent is an ordinary
+      setting. The notice and the guide say how to turn it off, and turning it off stops background requests from the
+      next request.
+  - **The phone sign-in** (magic-cli-remote driving `gobble acp --login openai` on the user's host):
+    - The owner signs in to ChatGPT through Google. They asked for the real ChatGPT login page on the phone's own
+      browser, as Codex's phone flow gives.
+    - Codex's flow is OAuth's device-code grant under the Codex CLI's own client id. gobble using that id would sign
+      in as Codex, which §1 forbids. OpenAI's sign-in under an app's own name has no device flow (the SDK's
+      0017-REPORT; its 0043-MADR waits for one).
+    - So the phone flow is the browser flow with P4b-Q4's paste:
+      1. The phone's own browser opens OpenAI's login page, with its "Continue with Google". The browser must be the
+         phone's real one, since Google refuses sign-in in an app's embedded web view.
+      2. After the sign-in and the approval, the browser lands on the `127.0.0.1` callback, which does not load on
+         the phone.
+      3. The user pastes that URL into the card, and gobble on the host finishes and stores the session.
+    - The owner accepted this ("Yes, record and proceed").
 - **D8. The smaller copies go.** `gobble models --search` uses `catalog.Search`; `llm/catalog.Price` uses
   `ModelCost.RatesFor`; `CacheWrite1hTokens` is counted; `HasLogin` and `HasKeyLogin` read `Descriptor.AuthMethods`;
   `acpserver/binary_test.go` uses `agentproc`.

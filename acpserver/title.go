@@ -48,7 +48,7 @@ const usageKindTitle = "title"
 // was not given one to try, it has no name, and it has no conversation
 // yet (decision 4). It marks the attempt, so there is one a session.
 func (a *Agent) titleWanted(s *liveSession) bool {
-	if a.titles.Provider == nil {
+	if a.titles.Provider == nil || a.planGated(s, a.titles.ProviderID) {
 		return false
 	}
 	a.mu.Lock()
@@ -57,6 +57,24 @@ func (a *Agent) titleWanted(s *liveSession) bool {
 	a.mu.Unlock()
 	return !tried && s.state().name == "" && !session.HasConversation(s.tree.Path())
 }
+
+// planGated reports that provider id's credential is a ChatGPT plan
+// session and s has no consent to a background request under it: such a
+// request is not made (0031-MADR D7, amended 2026-11-10; the Sign in with
+// ChatGPT terms, section 3.1).
+func (a *Agent) planGated(s *liveSession, id string) bool {
+	if a.planSession == nil || !a.planSession(id) {
+		return false
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return !s.planBackground
+}
+
+// errPlanOverflow ends a turn whose context is over the window under a
+// ChatGPT plan session with no consent to automatic compaction.
+var errPlanOverflow = errors.New("the context is over the model's window, and automatic compaction runs under " +
+	"your ChatGPT plan only with your consent: run /compact, or set chatgptPlanBackground to true")
 
 // startTitle names s from its first prompt in the background, while the
 // turn runs (decision 4): its context keeps parent's values, not its end,

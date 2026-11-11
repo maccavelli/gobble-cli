@@ -36,6 +36,7 @@ permissions:
   allowBypass: false
 personality: dry
 bombasticAccepted: false
+chatgptPlanBackground: false
 compaction:
   enabled: true
   reserveTokens: 16384

@@ -115,6 +115,8 @@ func signInWords(id string) string {
 	switch {
 	case provider.CredentialVar(id) == "":
 		return "—"
+	case id == "openai":
+		return "API key; ChatGPT plan sign-in"
 	case provider.HasLogin(id):
 		return "API key; browser or device sign-in"
 	case provider.HasKeyLogin(id):

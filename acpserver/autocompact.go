@@ -67,6 +67,15 @@ func (c *autoCompaction) compact(ctx context.Context, overflow bool) (*agent.Com
 	if off {
 		return nil, nil
 	}
+	if a.planGated(s, c.providerID) {
+		// No automatic compaction under a plan session without consent; an
+		// overflow ends the turn and says how to go on (0031-MADR D7,
+		// amended 2026-11-10).
+		if overflow {
+			return nil, errPlanOverflow
+		}
+		return nil, nil
+	}
 	reason := acpext.CompactionThreshold
 	if overflow {
 		reason = acpext.CompactionOverflow

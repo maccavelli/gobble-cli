@@ -42,6 +42,16 @@ func overCapErr() *llm.APIError {
 		ResetAt: time.Date(2026, 11, 9, 12, 33, 39, 0, time.UTC), Limit: llm.LimitRate}
 }
 
+// weeklyErr is a plan limit whose service stated a 7-day window, as
+// llm/provider maps it on go-llmprovider-sdk v1.29.0 (0049-MADR Q8, Q9).
+func weeklyErr() *llm.APIError {
+	return &llm.APIError{Status: 429, RetryAfter: 2 * time.Hour,
+		Err: fmt.Errorf("%w: llmprovider: quota exhausted: openai HTTP 429 usage_limit_reached (retry-after 2h0m0s): The usage limit has been reached",
+			llm.ErrQuota),
+		Provider: "openai", Code: "usage_limit_reached", Message: "The usage limit has been reached", Retryable: new(false),
+		ResetAt: time.Date(2026, 11, 10, 21, 0, 0, 0, time.UTC), Limit: llm.LimitWeekly, Window: 7 * 24 * time.Hour}
+}
+
 func afterRetriesErr() *llm.APIError {
 	return &llm.APIError{Status: 503,
 		Err: fmt.Errorf("%w: llmprovider: claude failed after 4 attempts: llmprovider: provider unavailable: claude HTTP 503 overloaded_error: Overloaded",
@@ -163,6 +173,10 @@ func TestErrorData(t *testing.T) {
 		{"after retries", "claude", afterRetriesErr(), acpext.ErrorData{Error: afterRetriesErr().Error(), Provider: "claude",
 			Kind: acpext.KindUnavailable, HTTPStatus: 503, Code: "overloaded_error", ProviderMessage: "Overloaded",
 			Retryable: new(true), Attempts: 4}, -32603},
+		{"a stated weekly window", "openai", weeklyErr(), acpext.ErrorData{Error: weeklyErr().Error(), Provider: "openai",
+			Kind: acpext.KindQuota, HTTPStatus: 429, Code: "usage_limit_reached", ProviderMessage: "The usage limit has been reached",
+			RetryAfterMs: 7200000, ResetAt: "2026-11-10T21:00:00Z", Retryable: new(false), Limit: acpext.LimitWeekly,
+			WindowMinutes: 10080}, -32603},
 		{"one attempt", "claude", attemptOnce, acpext.ErrorData{Error: attemptOnce.Error(), Provider: "claude",
 			Kind: acpext.KindUnavailable, HTTPStatus: 503, Code: "overloaded_error", ProviderMessage: "Overloaded",
 			Retryable: new(true)}, -32603},
@@ -194,6 +208,7 @@ func TestPromptQuotaData(t *testing.T) {
 		{"prompt-quota.error.json", "opencode-zen", quotaErr()},
 		{"prompt-rate-over-cap.error.json", "openai", overCapErr()},
 		{"prompt-after-retries.error.json", "claude", afterRetriesErr()},
+		{"prompt-weekly.error.json", "openai", weeklyErr()},
 	} {
 		t.Run(c.frame, func(t *testing.T) {
 			conn := limitAgent(t, c.provider, llmtest.NewScript(llmtest.Turn{Err: c.err}))

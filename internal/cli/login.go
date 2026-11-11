@@ -90,6 +90,60 @@ func (e *runEnv) signInTo(ctx context.Context, p provider.Prompter, id string, o
 	return e.saved(ev, id, auth.TypeAPIKey)
 }
 
+// planBackgroundKey is the setting that records the user's consent to
+// background requests under their ChatGPT plan (0031-MADR D7, amended
+// 2026-11-10; the Sign in with ChatGPT terms, section 3.1).
+const planBackgroundKey = "chatgptPlanBackground"
+
+// planNoticeLines are what gobble stores for a ChatGPT plan sign-in, where, and
+// how to remove it, shown before the browser opens (the terms, sections 1,
+// 2.3 and 2.4).
+var planNoticeLines = []string{
+	`gobble signs in to your ChatGPT plan under its own name, "gobble".`,
+	"It stores the access, refresh and ID tokens, your account id and this host's id, in auth.json in gobble's " +
+		"config directory on this machine, readable by you alone, and sends them only to OpenAI.",
+	"This machine must be one only you control, never a shared or managed one. Do not copy auth.json to another machine.",
+	"To remove the sign-in, run gobble auth logout openai, which also revokes it at OpenAI.",
+	"Background requests, a session's title and automatic compaction, run under your plan only if you allow them; " +
+		"gobble config set " + planBackgroundKey + " false turns them off at any time.",
+	"On another device, open the address shown, sign in there, then paste here the address the browser lands on.",
+}
+
+// planNotice shows planNoticeLines on stderr, or as a notice event with --json.
+func (e *runEnv) planNotice(ev *loginEvents, id string) error {
+	if ev != nil {
+		return ev.emit(loginEvent{Event: "notice", Provider: id, Message: strings.Join(planNoticeLines, " ")})
+	}
+	for _, line := range planNoticeLines {
+		if _, err := fmt.Fprintln(e.out.err, line); err != nil {
+			return fmt.Errorf("write stderr: %w", err)
+		}
+	}
+	return nil
+}
+
+// askPlanBackground asks, once a plan sign-in has saved its session,
+// whether gobble may make background requests under the plan, and saves a
+// yes. With no terminal, or --json, it asks nothing and the consent stays
+// unset: no background request is made under the plan.
+func (e *runEnv) askPlanBackground(p provider.Prompter, ev *loginEvents) error {
+	if ev != nil {
+		return nil
+	}
+	if _, ok := p.(unasked); ok {
+		return nil
+	}
+	yes, err := p.Confirm("Allow gobble to make background requests under your ChatGPT plan: naming sessions and "+
+		"compacting them on its own?", false)
+	if err != nil || !yes {
+		return err
+	}
+	if err := saveGlobalSetting(planBackgroundKey, "true"); err != nil {
+		return failf("%s: %v", planBackgroundKey, err)
+	}
+	return nil
+}
+
 // storedCredentials are the key providers auth.json holds a credential
 // for, in the registry's order, each with its kind in words.
 func storedCredentials() ([]string, map[string]string, error) {

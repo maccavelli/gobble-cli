@@ -98,7 +98,7 @@ func TestProvidersJSON(t *testing.T) {
     "id": "openai",
     "name": "OpenAI",
     "credential": "auth.json, a \"a<b&c>\" entry gobble does not use",
-    "signIn": "API key"
+    "signIn": "API key; ChatGPT plan sign-in"
   },
 `
 	if r.code != 0 || !strings.Contains(r.stdout, want) {

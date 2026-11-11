@@ -21,13 +21,17 @@ type Settings struct {
 	Permissions          Permissions `yaml:"permissions" json:"permissions,omitzero"`
 	Personality          string      `yaml:"personality" json:"personality,omitempty"`
 	BombasticAccepted    bool        `yaml:"bombasticAccepted" json:"bombasticAccepted,omitempty"`
-	Compaction           Compaction  `yaml:"compaction" json:"compaction,omitzero"`
-	Retry                Retry       `yaml:"retry" json:"retry,omitzero"`
-	ShellPath            string      `yaml:"shellPath" json:"shellPath,omitempty"`
-	ShellCommandPrefix   string      `yaml:"shellCommandPrefix" json:"shellCommandPrefix,omitempty"`
-	Tools                Tools       `yaml:"tools" json:"tools,omitzero"`
-	MCP                  MCP         `yaml:"mcp" json:"mcp,omitzero"`
-	ExternalEditor       string      `yaml:"externalEditor" json:"externalEditor,omitempty"`
+	// ChatGPTPlanBackground is the user's consent to background requests
+	// under their ChatGPT plan: a session's title and automatic compaction
+	// (0031-MADR D7, amended 2026-11-10).
+	ChatGPTPlanBackground bool       `yaml:"chatgptPlanBackground" json:"chatgptPlanBackground,omitempty"`
+	Compaction            Compaction `yaml:"compaction" json:"compaction,omitzero"`
+	Retry                 Retry      `yaml:"retry" json:"retry,omitzero"`
+	ShellPath             string     `yaml:"shellPath" json:"shellPath,omitempty"`
+	ShellCommandPrefix    string     `yaml:"shellCommandPrefix" json:"shellCommandPrefix,omitempty"`
+	Tools                 Tools      `yaml:"tools" json:"tools,omitzero"`
+	MCP                   MCP        `yaml:"mcp" json:"mcp,omitzero"`
+	ExternalEditor        string     `yaml:"externalEditor" json:"externalEditor,omitempty"`
 }
 
 // Permissions is the permission settings (0005-PLAN F6-2).
@@ -127,6 +131,8 @@ func (s *Settings) field(path string) any {
 		return &s.Personality
 	case "bombasticAccepted":
 		return &s.BombasticAccepted
+	case "chatgptPlanBackground":
+		return &s.ChatGPTPlanBackground
 	case "compaction.enabled":
 		return &s.Compaction.Enabled
 	case "compaction.reserveTokens":

@@ -116,7 +116,7 @@ func TestProviderChoicesStates(t *testing.T) {
 	}
 	// Each carries its credential's source and how to sign in, and one that
 	// offers no model the models gobble knows of it (0025-MADR D5).
-	if p := got["openai"]; p.Source != "env: OPENAI_API_KEY" || p.Methods != "API key" || p.Known != nil {
+	if p := got["openai"]; p.Source != "env: OPENAI_API_KEY" || p.Methods != "API key; ChatGPT plan sign-in" || p.Known != nil {
 		t.Errorf("openai's source %q, methods %q, known %d", p.Source, p.Methods, len(p.Known))
 	}
 	if p := got["grok"]; p.Methods != "API key; browser or device sign-in" {

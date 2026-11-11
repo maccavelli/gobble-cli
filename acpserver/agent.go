@@ -91,6 +91,12 @@ type Options struct {
 	// it was set under (0025-MADR D4, D6). Nil keeps a mark for the
 	// agent's life.
 	CredentialGeneration func(id string) uint64
+	// PlanSession reports whether provider id's credential is a ChatGPT
+	// plan session, under which a background request, a title or an
+	// automatic compaction, is made only with the user's consent
+	// (SessionSettings.PlanBackground; 0031-MADR D7, amended 2026-11-10).
+	// Nil is none.
+	PlanSession func(id string) bool
 	// SearchModels is the SDK's matcher over a provider's models, for /model
 	// with words (0025-MADR D5). Nil matches words in each ref and name.
 	SearchModels func(provider string, models []string, query string) []string
@@ -166,18 +172,20 @@ type Agent struct {
 	// marksMu guards marks, the providers a turn saw refused (0025-MADR D4).
 	marksMu sync.Mutex
 	marks   map[string]mark
-	// credGen is Options.CredentialGeneration.
-	credGen  func(id string) uint64
-	info     func(provider, model string) llm.Model
-	override Override
-	tools    []tool.Tool
-	noGrants bool
-	byName   map[string]tool.Tool
-	store    session.Store
-	now      func() time.Time
-	mcp      MCPOptions
-	logger   *slog.Logger
-	prompt   PromptOptions
+	// credGen is Options.CredentialGeneration; planSession
+	// Options.PlanSession.
+	credGen     func(id string) uint64
+	planSession func(id string) bool
+	info        func(provider, model string) llm.Model
+	override    Override
+	tools       []tool.Tool
+	noGrants    bool
+	byName      map[string]tool.Tool
+	store       session.Store
+	now         func() time.Time
+	mcp         MCPOptions
+	logger      *slog.Logger
+	prompt      PromptOptions
 	// compaction is /compact's settings, the fallback of each session's.
 	compaction compaction.Settings
 	settings   func(cwd string) SessionSettings
@@ -273,6 +281,9 @@ type liveSession struct {
 	// insultsAccepted is the bombasticAccepted setting the session started
 	// with (0022-MADR D10).
 	insultsAccepted bool
+	// planBackground is the chatgptPlanBackground setting the session
+	// started with (0031-MADR D7, amended 2026-11-10).
+	planBackground bool
 	// titleTried says the session's title was tried; titleCancel and
 	// titleDone stop a title still running and tell when it stopped
 	// (0005-PLAN F5-5). nameMu makes a name's check and its write one step,
@@ -311,7 +322,8 @@ var (
 func New(opts Options) *Agent {
 	a := &Agent{version: opts.Version, newID: opts.NewID, provider: opts.Provider, providerFor: opts.ProviderFor, models: opts.Models, info: opts.ModelInfo,
 		rememberModel: opts.Remember, search: opts.SearchModels, credGen: opts.CredentialGeneration,
-		override: opts.Override, tools: opts.Tools, noGrants: opts.NoRequestPermissions, store: opts.Store, now: opts.Now, mcp: opts.MCP, logger: opts.Logger, prompt: opts.Prompt,
+		planSession: opts.PlanSession,
+		override:    opts.Override, tools: opts.Tools, noGrants: opts.NoRequestPermissions, store: opts.Store, now: opts.Now, mcp: opts.MCP, logger: opts.Logger, prompt: opts.Prompt,
 		settings: opts.Settings, auth: opts.Auth, save: opts.SaveSetting, personalities: opts.Personalities, compactionPrompts: opts.CompactionPrompts, titles: opts.Title,
 		trust: opts.Trust, perms: opts.Permissions, sessions: map[acp.SessionId]*liveSession{}}
 	if a.logger == nil {
@@ -481,7 +493,8 @@ func (a *Agent) NewSession(ctx context.Context, p acp.NewSessionRequest) (acp.Ne
 		allowBypass: ss.AllowBypass,
 		queue:       sessionQueue(ss), compaction: ss.Compaction, cache: cacheOf(ss.CacheRetention), retry: ss.Retry,
 		autoCompactOff: ss.AutoCompactionOff, voice: a.voiceOf(ss), insultsAccepted: ss.BombasticAccepted,
-		root: ss.ProjectRoot, trust: ss.Trust, project: projectOf(ss.Project),
+		planBackground: ss.PlanBackground,
+		root:           ss.ProjectRoot, trust: ss.Trust, project: projectOf(ss.Project),
 		rules: engineOf(ss, p.Cwd, a.storedRules(cmp.Or(ss.ProjectRoot, p.Cwd)))}
 	if len(forked) > 0 {
 		for _, e := range forked {
@@ -1080,7 +1093,8 @@ func (a *Agent) open(ctx context.Context, id acp.SessionId, cwd string, extra []
 		allowBypass: ss.AllowBypass,
 		queue:       sessionQueue(ss), compaction: ss.Compaction, cache: cacheOf(ss.CacheRetention), retry: ss.Retry,
 		autoCompactOff: ss.AutoCompactionOff, voice: a.voiceOf(ss), insultsAccepted: ss.BombasticAccepted,
-		root: ss.ProjectRoot, trust: ss.Trust, project: projectOf(ss.Project),
+		planBackground: ss.PlanBackground,
+		root:           ss.ProjectRoot, trust: ss.Trust, project: projectOf(ss.Project),
 		rules: engineOf(ss, cwd, a.storedRules(cmp.Or(ss.ProjectRoot, cwd)))}
 	a.restore(s, log.Entries())
 	// The run's override wins over the history's choice (0005-PLAN F4-2c).

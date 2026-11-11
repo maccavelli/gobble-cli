@@ -50,16 +50,20 @@ type titleHarness struct {
 	logs   *syncBuffer
 }
 
-func newTitleHarness(t *testing.T, dir string, main *llmtest.Script, small llm.Provider) *titleHarness {
+func newTitleHarness(t *testing.T, dir string, main *llmtest.Script, small llm.Provider, with ...func(*Options)) *titleHarness {
 	t.Helper()
 	h := &titleHarness{client: &acptest.Client{}, main: main, logs: &syncBuffer{}}
 	var title TitleOptions
 	if small != nil {
 		title = TitleOptions{Provider: func(string, llm.Retry) (llm.Provider, error) { return small, nil }, ProviderID: "small", Model: "s1"}
 	}
-	h.ag = New(Options{Version: "1.2.3", Store: jsonl.New(dir, jsonl.Options{}), Models: func() ModelChoice { return testModels },
+	o := Options{Version: "1.2.3", Store: jsonl.New(dir, jsonl.Options{}), Models: func() ModelChoice { return testModels },
 		Provider: func(string, llm.Retry) (llm.Provider, error) { return main, nil }, Title: title,
-		Logger: slog.New(slog.NewTextHandler(h.logs, nil))})
+		Logger: slog.New(slog.NewTextHandler(h.logs, nil))}
+	for _, f := range with {
+		f(&o)
+	}
+	h.ag = New(o)
 	h.c = acptest.Connect(t, h.ag, h.client)
 	h.ag.SetConnection(h.c.Agent)
 	t.Cleanup(func() {
@@ -142,6 +146,36 @@ func TestTitleFirstPrompt(t *testing.T) {
 	}
 	if n := len(small.Requests()); n != 1 {
 		t.Fatalf("%d title requests, want 1", n)
+	}
+}
+
+// Under a ChatGPT plan session, the small model's title is a background
+// request, asked only with the user's consent (0031-MADR D7, amended
+// 2026-11-10).
+func TestTitleUnderPlan(t *testing.T) {
+	for _, consent := range []bool{false, true} {
+		t.Run(map[bool]string{false: "no consent", true: "consent"}[consent], func(t *testing.T) {
+			small := llmtest.NewScript(llmtest.Text("Plan title"))
+			h := newTitleHarness(t, t.TempDir(), llmtest.NewScript(llmtest.Text("ok")), small, func(o *Options) {
+				o.PlanSession = func(id string) bool { return id == "small" }
+				o.Settings = func(string) SessionSettings { return SessionSettings{PlanBackground: consent} }
+			})
+			id := newSession(t, h.c, t.TempDir(), nil).SessionId
+			if _, err := prompt(t, h.c, id, "Name me"); err != nil {
+				t.Fatal(err)
+			}
+			if consent {
+				waitFor(t, func() bool { return h.titled("Plan title") })
+				return
+			}
+			h.ag.mu.Lock()
+			s := h.ag.sessions[id]
+			h.ag.mu.Unlock()
+			h.ag.closeTitle(s) // a title, had one started, is waited for
+			if n := len(small.Requests()); n != 0 {
+				t.Fatalf("%d title requests without consent, want none", n)
+			}
+		})
 	}
 }
 

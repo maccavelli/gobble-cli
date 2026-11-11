@@ -137,6 +137,12 @@
       "default": false,
       "x-gobble-global-only": true
     },
+    "chatgptPlanBackground": {
+      "type": "boolean",
+      "description": "Whether gobble may make background requests under your ChatGPT plan: a session's title and automatic compaction. gobble asks once, at the plan sign-in, and sets this when you agree; false turns them off.",
+      "default": false,
+      "x-gobble-global-only": true
+    },
     "compaction": {
       "type": "object",
       "properties": {

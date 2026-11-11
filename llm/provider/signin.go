@@ -17,13 +17,21 @@ const (
 	MethodAPIKey  = "api-key"
 	MethodBrowser = "browser"
 	MethodDevice  = "device"
+	// MethodChatGPTPlan is OpenAI's Sign in with ChatGPT for agents, under
+	// gobble's own name (0031-MADR D7, amended 2026-11-10).
+	MethodChatGPTPlan = "chatgpt-plan"
 )
+
+// AgentName is the name gobble signs in under, where a sign-in shows the
+// app's own: OpenAI's ChatGPT plan sign-in (its terms, section 1).
+const AgentName = "gobble"
 
 // methodIDs are gobble's methods as the SDK's.
 var methodIDs = map[string]llmprovider.AuthMethodID{
-	MethodAPIKey:  llmprovider.AuthAPIKey,
-	MethodBrowser: llmprovider.AuthBrowserOAuth,
-	MethodDevice:  llmprovider.AuthDeviceCode,
+	MethodAPIKey:      llmprovider.AuthAPIKey,
+	MethodBrowser:     llmprovider.AuthBrowserOAuth,
+	MethodDevice:      llmprovider.AuthDeviceCode,
+	MethodChatGPTPlan: llmprovider.AuthChatGPTPlan,
 }
 
 // Choice is one answer to a sign-in's question: its label and a detail
@@ -71,17 +79,21 @@ type Credential struct {
 
 // offers reports whether gobble offers the SDK's method m for provider id:
 // a key everywhere; a browser sign-in where gobble keeps the login (Grok's);
-// a device sign-in there, and Kilo's, which gives a key. OpenAI's browser
-// and device sign-ins are the Codex client's, and a token paste or a vendor
-// CLI's login is not gobble's (0031-MADR D7).
+// a device sign-in there, and Kilo's, which gives a key; and OpenAI's
+// ChatGPT plan sign-in. OpenAI's browser and device sign-ins are the Codex
+// client's, which sign in under another app's name, and a token paste or a
+// vendor CLI's login is not gobble's (0031-MADR D7, amended 2026-11-10).
 func offers(id string, m llmprovider.AuthMethodID) bool {
+	openai := id == string(llmprovider.ProviderOpenAI)
 	switch m {
 	case llmprovider.AuthAPIKey:
 		return true
 	case llmprovider.AuthBrowserOAuth:
-		return HasLogin(id)
+		return HasLogin(id) && !openai
 	case llmprovider.AuthDeviceCode:
-		return HasLogin(id) || HasKeyLogin(id)
+		return HasLogin(id) && !openai || HasKeyLogin(id)
+	case llmprovider.AuthChatGPTPlan:
+		return openai
 	}
 	return false
 }
@@ -186,6 +198,7 @@ func SignIn(ctx context.Context, id string, p Prompter, o SignInOptions, store L
 		SkipMethods:      skips(d, o.Method),
 		NoEndpointPrompt: true,
 		NoPastePrompt:    o.NoPaste,
+		AgentName:        AgentName,
 	}, d.ID)
 	if err != nil {
 		if own, ok := errors.AsType[*ownError](err); ok {

@@ -140,6 +140,18 @@
 # bombasticAccepted: false
 
 # ---------------------------------------------------------------------
+# ChatGPT plan
+# ---------------------------------------------------------------------
+
+# Whether gobble may make background requests under your ChatGPT plan,
+# once you sign in to it with gobble auth login openai: a session's
+# title from smallModel, and automatic compaction. gobble asks once, at
+# that sign-in, and sets this when you agree. Without it, no such request
+# is made under the plan; /compact and your own turns still are. Only
+# this file can set it, never a project's.
+# chatgptPlanBackground: false
+
+# ---------------------------------------------------------------------
 # Compaction
 # ---------------------------------------------------------------------
 

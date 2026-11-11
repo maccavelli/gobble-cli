@@ -3,11 +3,14 @@ package cli
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/maccavelli/gobble-cli/acpserver"
+	"github.com/maccavelli/gobble-cli/internal/config"
 	"github.com/maccavelli/gobble-cli/llm/provider"
 )
 
@@ -40,6 +43,44 @@ func TestACPLogin(t *testing.T) {
 	}
 	if logins != 1 {
 		t.Errorf("%d logins after the refusals, want the first alone", logins)
+	}
+}
+
+// An ACP client's terminal method for OpenAI, gobble acp --login openai,
+// is its ChatGPT plan sign-in, with the notice first (0031-MADR D7, amended
+// 2026-11-10).
+func TestACPLoginOpenAI(t *testing.T) {
+	c := newCfgEnv(t)
+	var method string
+	replace(t, &signInWith, func(ctx context.Context, id string, _ provider.Prompter, o provider.SignInOptions, store provider.LoginStore) (provider.Credential, error) {
+		method = o.Method
+		return provider.Credential{}, store.Save(ctx, id, &provider.Login{Access: "a", Refresh: "r", Resource: "https://api.openai.com/v1"})
+	})
+	r := c.run("acp", "--login", "openai")
+	if r.code != ExitOK || r.stdout != "Logged in to openai\n" || method != provider.MethodChatGPTPlan ||
+		!strings.Contains(r.stderr, planNoticeLines[0]) {
+		t.Errorf("acp --login openai: exit %d, stdout %q, method %q, stderr %q", r.code, r.stdout, method, r.stderr)
+	}
+}
+
+// The agent learns which credential is a ChatGPT plan session, OpenAI's
+// stored login and not a key, and a session takes the consent setting
+// (0031-MADR D7, amended 2026-11-10).
+func TestPlanSessionOption(t *testing.T) {
+	e, _ := modelEnv(t)
+	t.Setenv("OPENAI_API_KEY", "")
+	home := os.Getenv("GOBBLE_HOME")
+	if err := os.WriteFile(filepath.Join(home, "auth.json"), []byte(`{"openai": {"type": "oauth", "access": "a", `+
+		`"refresh": "r", "expires": 1, "resource": "https://api.openai.com/v1"}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	o := e.agentOptions()
+	if o.PlanSession == nil || !o.PlanSession("openai") || o.PlanSession("grok") {
+		t.Errorf("PlanSession: openai %v, grok %v; want true, false", o.PlanSession != nil && o.PlanSession("openai"),
+			o.PlanSession != nil && o.PlanSession("grok"))
+	}
+	if toSession(config.Settings{ChatGPTPlanBackground: true}).PlanBackground != true || toSession(config.Settings{}).PlanBackground {
+		t.Error("the consent setting does not reach the session's settings")
 	}
 }
 
@@ -85,7 +126,7 @@ func TestAgentAuthOptions(t *testing.T) {
 		if p.Login {
 			want = "gobble auth login " + p.ID
 		}
-		if p.Name != provider.Label(p.ID) || p.Command != want || p.Login != (p.ID == "grok" || p.ID == "kilo") {
+		if p.Name != provider.Label(p.ID) || p.Command != want || p.Login != (p.ID == "grok" || p.ID == "kilo" || p.ID == "openai") {
 			t.Errorf("%s: %+v", p.ID, p)
 		}
 	}

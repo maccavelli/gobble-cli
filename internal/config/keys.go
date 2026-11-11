@@ -101,6 +101,8 @@ var Keys = []Key{
 		Doc: "The personality gobble speaks in: boring (also plain or normal), dry, snarky, bombastic, or one of your own under personalities/ in this directory."},
 	{Path: "bombasticAccepted", Kind: KindBool, Default: boolFalse, Scope: ScopeGlobalOnly, Read: ReadSession,
 		Doc: "Whether you have agreed to bombastic, which insults you; gobble asks once, and sets this when you agree."},
+	{Path: "chatgptPlanBackground", Kind: KindBool, Default: boolFalse, Scope: ScopeGlobalOnly, Read: ReadSession,
+		Doc: "Whether gobble may make background requests under your ChatGPT plan: a session's title and automatic compaction. gobble asks once, at the plan sign-in, and sets this when you agree; false turns them off."},
 	{Path: "compaction.enabled", Kind: KindBool, Default: boolTrue, Read: ReadSession,
 		Doc: "Whether gobble compacts the conversation on its own: before a model call once it nears the model's window, and once when the model says it is over it."},
 	{Path: "compaction.reserveTokens", Kind: KindInt, Default: "16384", Min: 1, Read: ReadSession,

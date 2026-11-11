@@ -95,6 +95,10 @@ func (e *runEnv) agentOptions() acpserver.Options {
 		SearchModels: provider.Search,
 		// A sign-in or a sign-out lifts a refused turn's mark (0025-MADR D4, D6).
 		CredentialGeneration: e.credentialGeneration,
+		// OpenAI's stored login is a ChatGPT plan session, the only one
+		// gobble keeps for it; a key, when one is resolved first, is not
+		// (0031-MADR D7, amended 2026-11-10).
+		PlanSession: func(id string) bool { return id == "openai" && e.knownLogin(id) },
 		// What the catalog knows of a model, with the provider's key or login,
 		// found as modelProvider finds it, for its listing (0005-PLAN F4-2a,
 		// F4-3a, F4-3b).

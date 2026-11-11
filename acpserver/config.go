@@ -95,6 +95,10 @@ type SessionSettings struct {
 	// BombasticAccepted says the user has agreed to a level-5 personality,
 	// so it is not asked (0022-MADR D10).
 	BombasticAccepted bool
+	// PlanBackground says the user has agreed to background requests under
+	// a ChatGPT plan session: the title and automatic compaction, which are
+	// made under one only with it (0031-MADR D7, amended 2026-11-10).
+	PlanBackground bool
 	// ProjectRoot is the session's project root, and Trust whether it is
 	// trusted, with the step that decided; zero is not trusted, told no
 	// one (0005-PLAN F6-1 decisions 1 and 2).

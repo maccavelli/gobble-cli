@@ -55,6 +55,8 @@ func newCompactHarness(t *testing.T, settings SessionSettings, turns ...llmtest.
 type harnessConfig struct {
 	caps acp.ClientCapabilities
 	wrap func(*llmtest.Script) llm.Provider
+	// planSession is Options.PlanSession.
+	planSession func(id string) bool
 }
 
 // newCompactHarnessWith is newCompactHarness with cfg.
@@ -80,7 +82,7 @@ func newCompactHarnessWith(t *testing.T, cfg harnessConfig, settings SessionSett
 			m.Provider = provider
 			return m
 		},
-		Settings: func(string) SessionSettings { return settings },
+		Settings: func(string) SessionSettings { return settings }, PlanSession: cfg.planSession,
 		SaveSetting: func(path, value string) error {
 			h.mu.Lock()
 			defer h.mu.Unlock()
@@ -311,6 +313,41 @@ func TestAutoCompactOverflow(t *testing.T) {
 	}
 	if len(off.notices()) != 0 || len(off.summaries()) != 0 {
 		t.Fatalf("compaction off: notices %v, %d summaries; want none", off.notices(), len(off.summaries()))
+	}
+}
+
+// Under a ChatGPT plan session, automatic compaction is a background
+// request, made only with the user's consent: without it the threshold is
+// passed by and an overflow ends the turn, saying how to go on; with it,
+// the session compacts as any other (0031-MADR D7, amended 2026-11-10).
+func TestAutoCompactUnderPlan(t *testing.T) {
+	plan := harnessConfig{planSession: func(id string) bool { return id == "fake" }}
+	h := newCompactHarnessWith(t, plan, SessionSettings{}, full("r1", 110000), llmtest.Text("after"))
+	id := h.session()
+	h.mustPrompt(id, p1)
+	h.mustPrompt(id, p2)
+	if len(h.notices()) != 0 || len(h.summaries()) != 0 {
+		t.Fatalf("no consent, at the threshold: notices %v, %d summaries; want none", h.notices(), len(h.summaries()))
+	}
+
+	overflow := llmtest.Turn{Err: llm.ErrContextOverflow}
+	o := newCompactHarnessWith(t, plan, SessionSettings{}, full("r1", 10), overflow, llmtest.Text("never"))
+	id = o.session()
+	o.mustPrompt(id, p1)
+	if err := o.prompt(id, p2); err == nil || !strings.Contains(err.Error(), "only with your consent: run /compact, or set chatgptPlanBackground") {
+		t.Fatalf("no consent, an overflow: err %v, want the turn ended with how to go on", err)
+	}
+	if len(o.summaries()) != 0 {
+		t.Fatalf("no consent, an overflow: %d summaries, want none", len(o.summaries()))
+	}
+
+	with := newCompactHarnessWith(t, plan, SessionSettings{PlanBackground: true}, full("r1", 110000), llmtest.Text("SUMMARY"),
+		llmtest.Text("after"))
+	id = with.session()
+	with.mustPrompt(id, p1)
+	with.mustPrompt(id, p2)
+	if len(with.summaries()) != 1 {
+		t.Fatalf("with consent: %d summaries, want the threshold's one", len(with.summaries()))
 	}
 }
 

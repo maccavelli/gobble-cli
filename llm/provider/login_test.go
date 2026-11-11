@@ -8,9 +8,11 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json/v2"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -18,6 +20,8 @@ import (
 
 	"github.com/maccavelli/go-llmprovider-sdk/llmprovider"
 	"github.com/maccavelli/go-llmprovider-sdk/llmprovider/auth"
+
+	"github.com/maccavelli/gobble-cli/llm"
 )
 
 // memLogins is a LoginStore in memory, counting refresh locks.
@@ -72,6 +76,10 @@ type testIssuer struct {
 	// ti.URL when empty: a sign-in reaching the issuer through toIssuer
 	// sees the SDK's own.
 	origin string
+
+	// scope is the token response's scope, when set: a ChatGPT plan
+	// session's grant (0031-MADR D7, amended 2026-11-10).
+	scope string
 
 	mu        sync.Mutex
 	nonce     string
@@ -130,8 +138,12 @@ func newTestIssuer(t *testing.T) *testIssuer {
 		if r.FormValue("grant_type") == "authorization_code" {
 			claims["nonce"] = nonce
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"access_token": "access-1", "refresh_token": "refresh-1",
-			"expires_in": 3600, "id_token": ti.sign(t, claims)})
+		body := map[string]any{"access_token": "access-1", "refresh_token": "refresh-1",
+			"expires_in": 3600, "id_token": ti.sign(t, claims)}
+		if ti.scope != "" {
+			body["scope"] = ti.scope
+		}
+		writeJSON(w, http.StatusOK, body)
 	})
 	mux.HandleFunc("POST /oauth2/revoke", func(w http.ResponseWriter, r *http.Request) {
 		ti.mu.Lock()
@@ -238,7 +250,25 @@ func TestLoginStoreAdapter(t *testing.T) {
 	if strings.Contains(in.String(), "secret") {
 		t.Errorf("String shows a token: %s", in)
 	}
-	if got, _ := a.Load(t.Context(), llmprovider.ProviderOpenAI); got != nil {
+	// A ChatGPT plan session's four fields go to the SDK and back, and its
+	// ID token is as secret as its tokens (0031-MADR D7, amended 2026-11-10).
+	plan := &Login{Access: "secret-access", Refresh: "secret-refresh", Expires: time.UnixMilli(1781000000000),
+		Issuer: auth.DefaultOpenAIIssuer, ClientID: "oaiapp_gobbletest", Resource: "https://api.openai.com/v1",
+		Scope: "openid chatgpt.tokens.use.direct", IDToken: "secret-id-token", HostID: "urn:uuid:host"}
+	if err := a.Save(t.Context(), llmprovider.ProviderOpenAI, plan.session("openai", nil, nil, nil)); err != nil {
+		t.Fatal(err)
+	}
+	ps, err := a.Load(t.Context(), llmprovider.ProviderOpenAI)
+	if err != nil || ps == nil || !ps.PlanUsage() {
+		t.Fatalf("Load a plan session: %v, %v", ps, err)
+	}
+	if got := loginOf(ps); *got != *plan {
+		t.Errorf("a plan session's round trip: %v, want %v", got, plan)
+	}
+	if strings.Contains(plan.String(), "secret") {
+		t.Errorf("String shows a secret: %s", plan)
+	}
+	if got, _ := a.Load(t.Context(), llmprovider.ProviderClaude); got != nil {
 		t.Errorf("a provider with no login: %v", got)
 	}
 }
@@ -282,6 +312,60 @@ func TestLogout(t *testing.T) {
 	revoke, err = Logout(t.Context(), "grok", LoginOptions{}, store)
 	if revoke == nil || err != nil || store.logins["grok"] != nil {
 		t.Errorf("a failed revocation: %v, %v, stored %v; want it reported and the login deleted", revoke, err, store.logins["grok"])
+	}
+}
+
+// A ChatGPT plan session's logout revokes it at the issuer, as Grok's does
+// (the Sign in with ChatGPT terms, section 2.4).
+func TestLogoutPlan(t *testing.T) {
+	ti := newTestIssuer(t)
+	store := &memLogins{}
+	login := &Login{Access: "a", Refresh: "plan-r", Expires: time.Now().Add(time.Hour), Issuer: ti.URL,
+		ClientID: "oaiapp_gobbletest", TokenURL: ti.URL + "/oauth2/token", Resource: "https://api.openai.com/v1",
+		Scope: "openid chatgpt.tokens.use.direct", IDToken: "secret-id-token", HostID: "urn:uuid:host"}
+	if err := store.Save(t.Context(), "openai", login); err != nil {
+		t.Fatal(err)
+	}
+	revoke, err := Logout(t.Context(), "openai", LoginOptions{}, store)
+	if revoke != nil || err != nil || store.logins["openai"] != nil {
+		t.Fatalf("logout: %v, %v, stored %v", revoke, err, store.logins["openai"])
+	}
+	var revoked []string
+	ti.with(func() { revoked = append(revoked, ti.revoked...) })
+	if !slices.Contains(revoked, "plan-r") {
+		t.Errorf("revoked %q, want the plan session's refresh token", revoked)
+	}
+}
+
+// OpenAI's stored login is used only when it is a ChatGPT plan session:
+// any other is another app's, and is refused with gobble's words
+// (0031-MADR D7, amended 2026-11-10).
+func TestOpenAILoginIsAPlan(t *testing.T) {
+	store := &memLogins{}
+	codex := &Login{Access: "a", Refresh: "r", Expires: time.Now().Add(time.Hour), Issuer: auth.DefaultOpenAIIssuer,
+		ClientID: "app_codex"}
+	if err := store.Save(t.Context(), "openai", codex); err != nil {
+		t.Fatal(err)
+	}
+	if s, err := (Options{Logins: store}).login(t.Context(), "openai"); s != nil || !errors.Is(err, llm.ErrAuth) ||
+		!strings.Contains(err.Error(), "not a ChatGPT plan session") {
+		t.Fatalf("a login that is not a plan: %v, %v", s, err)
+	}
+	plan := *codex
+	plan.Resource, plan.ClientID, plan.HostID = "https://api.openai.com/v1", "oaiapp_gobbletest", "urn:uuid:host"
+	if err := store.Save(t.Context(), "openai", &plan); err != nil {
+		t.Fatal(err)
+	}
+	s, err := (Options{Logins: store}).login(t.Context(), "openai")
+	if err != nil || s == nil || !s.PlanUsage() || s.HostID != "urn:uuid:host" {
+		t.Fatalf("a plan session: %v, %v", s, err)
+	}
+	if !HasLogin("openai") || HasPiLogin("openai") || !HasPiLogin("grok") {
+		t.Errorf("HasLogin(openai) %v, HasPiLogin(openai) %v, HasPiLogin(grok) %v; want true, false, true",
+			HasLogin("openai"), HasPiLogin("openai"), HasPiLogin("grok"))
+	}
+	if l, ok := PiLogin("openai", "a", "r", time.Now()); ok || l != nil {
+		t.Errorf("Pi's OpenAI login imported: %v", l)
 	}
 }
 

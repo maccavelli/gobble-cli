@@ -41,6 +41,10 @@ type Entry struct {
 	// whether it sends X-OpenAI-Fedramp (0015-REPORT F5).
 	Issuer, ClientID, AccountID, TokenURL string
 	FedRAMP                               bool
+	// Resource, Scope, IDToken and HostID are a ChatGPT plan session's,
+	// written as resource, scope, idToken and hostId (0031-MADR D7, amended
+	// 2026-11-10). IDToken is a secret, as the tokens are.
+	Resource, Scope, IDToken, HostID string
 	// Workspace is the Anthropic workspace an api_key not scoped to one
 	// runs in, written as "workspace" (0035-MADR D5).
 	Workspace string
@@ -107,6 +111,10 @@ func parse(data []byte) (*File, error) {
 			AccountID string  `json:"accountId"`
 			TokenURL  string  `json:"tokenUrl"`
 			FedRAMP   bool    `json:"fedramp"`
+			Resource  string  `json:"resource"`
+			Scope     string  `json:"scope"`
+			IDToken   string  `json:"idToken"`
+			HostID    string  `json:"hostId"`
 			Workspace string  `json:"workspace"`
 		}
 		if value.Kind() != '{' || jsonx.UnmarshalStrict(value, &e) != nil || e.Type == nil {
@@ -114,7 +122,7 @@ func parse(data []byte) (*File, error) {
 		}
 		entry := Entry{Type: *e.Type, Key: e.Key, Expires: e.Expires, Access: e.Access, Refresh: e.Refresh,
 			Issuer: e.Issuer, ClientID: e.ClientID, AccountID: e.AccountID, TokenURL: e.TokenURL, FedRAMP: e.FedRAMP,
-			Workspace: e.Workspace}
+			Resource: e.Resource, Scope: e.Scope, IDToken: e.IDToken, HostID: e.HostID, Workspace: e.Workspace}
 		f.members = append(f.members, member{provider: provider, value: value.Clone(), entry: entry})
 	}
 	if _, err := d.ReadToken(); err != nil {
@@ -165,7 +173,8 @@ func SetKey(ctx context.Context, path, provider, key, workspace string) error {
 	if err != nil {
 		return fmt.Errorf("auth.json: %w", err)
 	}
-	remove := []string{"access", "refresh", "expires", "issuer", "clientId", "accountId", "tokenUrl", "fedramp"}
+	remove := []string{"access", "refresh", "expires", "issuer", "clientId", "accountId", "tokenUrl", "fedramp",
+		"resource", "scope", "idToken", "hostId"}
 	if key == "" {
 		remove = append(remove, "key")
 	}
@@ -251,6 +260,7 @@ func oauthFields(e Entry) (set []field, remove []string, err error) {
 	add("expires", e.Expires)
 	for _, f := range []struct{ name, v string }{
 		{"issuer", e.Issuer}, {"clientId", e.ClientID}, {"accountId", e.AccountID}, {"tokenUrl", e.TokenURL},
+		{"resource", e.Resource}, {"scope", e.Scope}, {"idToken", e.IDToken}, {"hostId", e.HostID},
 	} {
 		if f.v == "" {
 			remove = append(remove, f.name)

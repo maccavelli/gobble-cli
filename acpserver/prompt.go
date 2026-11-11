@@ -303,6 +303,10 @@ func errorData(provider string, err error) acpext.ErrorData {
 		d.Attempts = ae.Attempts
 	}
 	d.Limit = acpext.LimitScope(ae.Limit)
+	// The window as the provider stated it, in whole minutes (0049-MADR Q9).
+	if ae.Window > 0 {
+		d.WindowMinutes = int(ae.Window / time.Minute)
+	}
 	return d
 }
 

@@ -42,7 +42,7 @@ func piEntry(piID string, e auth.Entry) (id, skip string) {
 	switch {
 	case !ok || provider.CredentialVar(id) == "":
 		return "", "gobble has no provider " + piID
-	case e.Type == auth.TypeOAuth && provider.HasLogin(id):
+	case e.Type == auth.TypeOAuth && provider.HasPiLogin(id):
 		return id, ""
 	case e.Type == auth.TypeOAuth:
 		return "", "an OAuth login gobble does not use"

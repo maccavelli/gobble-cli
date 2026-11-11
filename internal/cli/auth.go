@@ -46,7 +46,7 @@ type AuthLoginCmd struct {
 	Provider string `arg:"" complete:"provider" help:"The provider."`
 	APIKey   string `name:"api-key" complete:"none" placeholder:"-" help:"Read the key from stdin, or ask for it: -."`
 	Device   bool   `name:"device" help:"Sign in with a device code, on a machine without a browser."`
-	Method   string `name:"method" complete:"none" help:"How to sign in, with no menu: api-key (the key from stdin), browser or device, as the provider offers."`
+	Method   string `name:"method" complete:"none" help:"How to sign in, with no menu: api-key (the key from stdin), browser, device or chatgpt-plan (OpenAI), as the provider offers."`
 	JSON     bool   `name:"json" help:"Print the login's events as JSON lines on stdout, and nothing on stderr."`
 	// Workspace is the Anthropic workspace a Claude key not scoped to one
 	// runs in, stored beside the key (0035-MADR D5, 0035-PLAN PQ1).
@@ -206,12 +206,16 @@ func (e *runEnv) loginWith(ctx context.Context, id string, device bool, ev *logi
 	switch {
 	case provider.HasKeyLogin(id):
 		o.Method = provider.MethodDevice
+	case id == "openai": // the ChatGPT plan, under gobble's own name (0031-MADR D7, amended 2026-11-10)
+		if device {
+			return usageErrorf("openai's ChatGPT plan sign-in has no device code: it is a browser sign-in, and on " +
+				"another device you paste the address the browser lands on here")
+		}
+		o.Method = provider.MethodChatGPTPlan
 	case provider.HasLogin(id):
 		if device {
 			o.Method = provider.MethodDevice
 		}
-	case id == "openai":
-		return usageErrorf("openai's ChatGPT sign-in is not in gobble yet (0031-PLAN P4b); use --api-key -")
 	default:
 		return usageErrorf("%s has no login; use --api-key -", id)
 	}
@@ -219,7 +223,16 @@ func (e *runEnv) loginWith(ctx context.Context, id string, device bool, ev *logi
 	if !o.NoPaste {
 		p = prompter{&questions{ctx: ctx, in: inline.NewReader(e.stdin), out: e.out.err}}
 	}
-	return e.signInTo(ctx, p, id, o, ev)
+	if o.Method != provider.MethodChatGPTPlan {
+		return e.signInTo(ctx, p, id, o, ev)
+	}
+	if err := e.planNotice(ev, id); err != nil {
+		return err
+	}
+	if err := e.signInTo(ctx, p, id, o, ev); err != nil {
+		return err
+	}
+	return e.askPlanBackground(p, ev)
 }
 
 // offersPaste reports whether a browser sign-in takes a pasted redirect
@@ -446,8 +459,12 @@ func (e *runEnv) statusRow(id string) authStatusRow {
 				if entry.Expires > 0 {
 					row.Expires = time.UnixMilli(entry.Expires).UTC().Format(time.RFC3339)
 				}
-				if !provider.HasLogin(id) {
+				switch {
+				case !provider.HasLogin(id):
 					row.Reason, row.text = "oauth_unused", row.text+", not used (0005-PLAN F4-3b)"
+				case id == "openai" && entry.Resource == "":
+					// Only a ChatGPT plan session is gobble's (0031-MADR D7, amended 2026-11-10).
+					row.Reason, row.text = "oauth_unused", row.text+", not a ChatGPT plan session gobble signed in, so not used"
 				}
 			default:
 				row.Reason, row.text = "unknown_type", fmt.Sprintf("auth.json, a %q entry gobble does not use", entry.Type)

@@ -47,7 +47,11 @@ func TestAuthLogin(t *testing.T) {
 		t.Errorf("auth.json:\n%s", got)
 	}
 	c.want(c.runStdin(stdinFile(t, "k2"), "auth", "login", "anthropic", "--api-key", "-"), ExitOK, "Saved API key for claude\n", "")
-	c.want(c.run("auth", "login", "openai"), ExitUsage, "", "openai's ChatGPT sign-in is not in gobble yet (0031-PLAN P4b); use --api-key -")
+	// OpenAI's is its ChatGPT plan sign-in: the notice first, then the
+	// sign-in, which this test's guard refuses (0031-MADR D7, amended
+	// 2026-11-10).
+	c.want(c.run("auth", "login", "openai"), ExitFailure, "", planNoticeLines[0])
+	c.want(c.run("auth", "login", "openai", "--device"), ExitUsage, "", "openai's ChatGPT plan sign-in has no device code")
 	c.want(c.run("auth", "login", "anthropic"), ExitUsage, "", "claude has no login; use --api-key -")
 	c.want(c.runStdin(stdinFile(t, "k"), "auth", "login", "grok", "--api-key", "-", "--device"), ExitUsage, "", "--device is for a login")
 	if r := c.run("auth", "login", "openai", "--api-key", "sk-literal"); r.code != ExitUsage ||
@@ -585,6 +589,65 @@ func TestAuthLoginJSON(t *testing.T) {
 		if err != nil || !slices.Equal(pasted, []bool{!j}) {
 			t.Errorf("--json %t on a terminal: %v, paste offered %v", j, err, pasted)
 		}
+	}
+}
+
+// gobble auth login openai is its ChatGPT plan sign-in. What is stored,
+// where, how to remove it and how to turn background requests off are
+// said before the sign-in; then, on a terminal, the consent to background
+// requests is asked once and saved on a yes. With --json the notice is an
+// event and nothing is asked (0031-MADR D7, amended 2026-11-10).
+func TestAuthLoginChatGPTPlan(t *testing.T) {
+	for _, tc := range []struct {
+		name, answer string
+		json, saved  bool
+	}{
+		{"yes", "y\n", false, true},
+		{"no", "n\n", false, false},
+		{"json", "", true, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := newCfgEnv(t)
+			var out, errw bytes.Buffer
+			o := &Output{out: &out, err: &errw, caps: term.Caps{In: true}}
+			e := &runEnv{ctx: t.Context(), out: o, stdin: stdinFile(t, tc.answer), logs: &lazyLog{out: o, stderr: &errw}}
+			var method string
+			var noticeFirst bool
+			replace(t, &signInWith, func(ctx context.Context, id string, _ provider.Prompter, so provider.SignInOptions, store provider.LoginStore) (provider.Credential, error) {
+				method = so.Method
+				said := errw.String() + out.String()
+				noticeFirst = strings.Contains(said, "gobble auth logout openai") && strings.Contains(said, planBackgroundKey) &&
+					strings.Contains(said, "only you control")
+				return provider.Credential{}, store.Save(ctx, id, &provider.Login{Access: "a", Refresh: "r",
+					Resource: "https://api.openai.com/v1"})
+			})
+			err := (&AuthLoginCmd{Provider: "openai", JSON: tc.json}).Run(e)
+			if cerr := e.logs.close(); cerr != nil {
+				t.Error(cerr)
+			}
+			if err != nil || method != provider.MethodChatGPTPlan || !noticeFirst {
+				t.Fatalf("err %v, method %q, notice before the sign-in %v; stderr %q stdout %q", err, method, noticeFirst,
+					errw.String(), out.String())
+			}
+			asked := strings.Contains(errw.String(), "Allow gobble to make background requests under your ChatGPT plan")
+			settings, _ := os.ReadFile(c.global()) //nolint:errcheck // an unread file is no consent, checked below
+			if asked == tc.json || strings.Contains(string(settings), "\nchatgptPlanBackground: true") != tc.saved {
+				t.Errorf("consent asked %v, settings:\n%s", asked, settings)
+			}
+			if tc.json && !strings.Contains(out.String(), `"event":"notice"`) {
+				t.Errorf("--json: no notice event in %q", out.String())
+			}
+		})
+	}
+}
+
+// An OpenAI login that is not a ChatGPT plan session gobble signed in is
+// shown as not used (0031-MADR D7, amended 2026-11-10).
+func TestAuthStatusOpenAINotAPlan(t *testing.T) {
+	c := newCfgEnv(t)
+	c.write(c.authFile(), `{"openai": {"type": "oauth", "access": "a", "refresh": "r", "expires": 1}}`)
+	if r := c.run("auth", "status"); !strings.Contains(r.stdout+r.stderr, "not a ChatGPT plan session gobble signed in, so not used") {
+		t.Errorf("auth status: stdout %q stderr %q", r.stdout, r.stderr)
 	}
 }
 
