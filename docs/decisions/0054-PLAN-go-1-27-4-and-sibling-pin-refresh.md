@@ -347,6 +347,7 @@ changed no file but the pair's two: `docs/README.md` has no 0054 rows yet (P0 st
 their records at the end of this section. P2 and P3 are not started.)*
 *(2026-11-11, later: the owner committed P0 and P1 as `88655c5`, and P2 was run and staged; see its record. P3 is not
 started.)*
+*(2026-11-11, later: the owner committed P2 as `f441c73`, and P3 was run and staged; see its record. P4 is not started.)*
 
 ### Corrections of 2026-11-11 (records only; no phase has started)
 
@@ -598,3 +599,100 @@ Temporary paths are `<TMP>`.
     "Summary: 0 issues in 0 files"; `python3 -B scripts/check_records.py --check-all`: exit 0. The identifier scan of
     the diff's added lines and the two new files (the local account name, the dev hosts' names, the org's mail domain,
     and real-machine home, drive and temporary paths): `grep` exit 1, nothing found.
+
+### P3 record (2026-11-11)
+
+C1: branch `main`, `HEAD` `f441c73` (P0 and P1 as `88655c5`, P2 as `f441c73`, committed by the owner), `origin/main`
+`17d1605`, three commits ahead, the tree clean, `go.mod` and `acpext/go.mod` at `go 1.27.4`, acp-go-sdk2 `v1.36.0`,
+go-selfupdate-lib `v1.26.0`. No deviation. Each command wrote to a scratch log, and its exit status was taken before
+any filter. Temporary paths are `<TMP>`.
+
+1. **The tag.** `gh api repos/maccavelli/go-selfupdate-lib/tags`: exit 0, `v1.26.2` first, with commit
+   `e62d77cddaf264cc6ec7bbc4f39b90322542f752` (`v1.26.1` `9fc9dd7`, `v1.26.0` `7c677842`). `gh api
+   repos/maccavelli/go-selfupdate-lib/git/ref/tags/v1.26.2`: exit 0, an annotated tag object `5df0abb`; `gh api
+   .../git/tags/5df0abb631ff0af957264a00db222611a29cfbb3`: exit 0, `tag` `v1.26.2`, `object.type` `commit`,
+   `object.sha` `e62d77cddaf264cc6ec7bbc4f39b90322542f752`, the commit step 3 requires and MADR D4 names: no deviation.
+   `go list -m github.com/maccavelli/go-selfupdate-lib@v1.26.2`, from `<TMP>/golist`: exit 0,
+   "github.com/maccavelli/go-selfupdate-lib v1.26.2".
+2. **`python3 scripts/check_libs.py --lib go-selfupdate-lib --tag v1.26.2`**, at `f441c73`: exit 0. "pinned v1.26.0,
+   checking v1.26.2"; every check `ok` (get and tidy, version, modules, build, vet for linux, darwin and windows, test,
+   staticcheck, lint, api, govulncheck, advisories), then "0 failing checks; scratch removed". The `api` check is
+   apidiff from `v1.26.0`, compatible.
+3. **The pin.** `go get github.com/maccavelli/go-selfupdate-lib@v1.26.2`: exit 0, "go: upgraded
+   github.com/maccavelli/go-selfupdate-lib v1.26.0 => v1.26.2"; `go mod tidy`: exit 0; `go -C acpext mod tidy -diff`:
+   exit 0. `git diff go.mod go.sum`:
+
+   ```diff
+   -	github.com/maccavelli/go-selfupdate-lib v1.26.0
+   +	github.com/maccavelli/go-selfupdate-lib v1.26.2
+   -github.com/maccavelli/go-selfupdate-lib v1.26.0 h1:giqUiSV90pDZErgh+fEWR10KnM6CdDKOgcjDonVa1xM=
+   -github.com/maccavelli/go-selfupdate-lib v1.26.0/go.mod h1:DIqb0hzmxkYhVTj6iyaHpntadoHkeOkHWyTsdw+MBHE=
+   +github.com/maccavelli/go-selfupdate-lib v1.26.2 h1:aOwfesbXTpI1GzqiXwpA0Jn9MPK7sONDZTPfCS/gJe8=
+   +github.com/maccavelli/go-selfupdate-lib v1.26.2/go.mod h1:DIqb0hzmxkYhVTj6iyaHpntadoHkeOkHWyTsdw+MBHE=
+   ```
+
+   That requirement's line alone, and its two `go.sum` lines; the `/go.mod` hash is the same at both tags, as F7 found
+   `go.mod` unchanged. The `go` line stays `1.27.4`, and no other module moved.
+4. **CI's workflow pins,** edited by a script that asserted the old text occurred twice, and read back with `git diff
+   -U0`: `.github/workflows/ci.yml:191` and `:203` now name
+   `maccavelli/go-selfupdate-lib/.github/workflows/build-selfupdate-release.yml@e62d77cddaf264cc6ec7bbc4f39b90322542f752 # v1.26.2`
+   and the same for `publish-selfupdate-release.yml`; `7c677842` appears in the file no more (`grep -c` 0). `go run
+   github.com/rhysd/actionlint/cmd/actionlint@v1.7.12`, as CI runs it: exit 0, no output.
+5. **The docs.** `README.md`'s Build identity bullet (`:163`, its continuation line, after P2's added line moved it from
+   `:162`) and `docs/architecture.md:193` name `v1.26.2`, each edit asserted to occur once. Verification row 6's `git
+   grep -n -E 'v1\.26\.[02]|v1\.3[56]\.0|7c677842|e62d77c' -- README.md docs/architecture.md .github`: exit 0, six
+   lines: `ci.yml:191` and `:203` at `e62d77c… # v1.26.2`, `README.md:156` acp-go-sdk2 `v1.36.0`, `README.md:163`
+   `v1.26.2`, `docs/architecture.md:189` `v1.36.0` and `:193` `v1.26.2`. No `v1.26.0` and no `v1.35.0` is left there.
+6. **The messages.** `go test -count=1 -run 'TestUpdate' -v ./internal/cli/`, with the proxies at `127.0.0.1:9`: exit
+   0, 12 `--- PASS`, no `FAIL`, "ok  github.com/maccavelli/gobble-cli/internal/cli". No test was edited.
+7. **Gates** (C6). No Go file changed, so `make pre-add-check` had nothing to check.
+   * macOS: `make preflight` exit 0, "preflight passed": "go-precheck: 638 file(s) clean", `go vet` for both modules,
+     `staticcheck` for linux, darwin and windows, `golangci-lint` "0 issues." twice, `govulncheck` "No vulnerabilities
+     found." for both modules, `check-acpext-deps` ok, `archtest` ok, `apidiff` "no-op below v1.0.0",
+     `verify-build-metadata` ok, `check-records`, `check-icon` and `markdownlint` "Summary: 0 issues in 0 files".
+   * macOS: `GOFLAGS=-count=1 make race`, **first run, exit 2.** It was started from a shell in which the step 6
+     proxy variables were still exported, in error: the shell of the run exported `HTTP_PROXY`, `HTTPS_PROXY` and
+     `ALL_PROXY` at `127.0.0.1:9`, and C2 and 0049-PLAN C3 exempt `llm` and `llm/provider` from the proxies. 38 packages
+     `ok`; the failure, as printed:
+
+     ```text
+     --- FAIL: TestWireOffline (0.00s)
+         --- FAIL: TestWireOffline/unknown_host (0.00s)
+             offline_test.go:67: Probe dialed ["tcp 127.0.0.1:9"], want tcp gobble-offline.invalid:80 alone
+     FAIL
+     FAIL	github.com/maccavelli/gobble-cli/llm/provider	10.079s
+     ```
+
+     The dial `Probe` made went to the proxy address, which is the exported variable and the case 0049-PLAN's deviation of
+     2026-11-09 records; the tree, the pin and the test are as P2 left them. It was not repeated until it passed: the
+     gate was run once more, as C6 words it, in a shell with no proxy variables (`env | grep -i proxy` printed nothing),
+     which C2 says `llm/provider` takes. **Second run, exit 0:** 39 `ok`, none cached, `llm/provider` `ok` (9.807s),
+     `permission` `ok`, acpext `ok`. The failed run does not go unrecorded, and the owner is asked to weigh whether
+     this reading of C2 and C5 stands: the failing test is one this plan does not touch, and its cause is the harness
+     environment, shown by its own message.
+     *(2026-11-11: **the owner accepted the second run** as P3's race gate. The first run is a misconfigured harness,
+     not a test failure, so C5's stop and record of its own do not apply; both runs stay recorded here.)*
+   * macOS: `make check-test-isolation`: exit 0, "== acpext module: go test exit 0; 0 failing in 0 package(s)", "==
+     files written above the temp roots: 0", "check-test-isolation: ok".
+   * macOS: `python3 scripts/check_libs.py --self-test`: exit 0, every line `: ok`.
+   * **The Linux machine and the Windows laptop,** each at `go1.27.4`, from a copy made from `git ls-files -co
+     --exclude-standard` (947 files, the count found on each host, no `._*` file; `go.mod` there names
+     go-selfupdate-lib `v1.26.2`). The Linux copy was streamed; the Windows copy went by `scp`, with `-o
+     ControlPath=none` on every Windows `ssh`, and no `TMP` or `TEMP` override, as in P1 and P2:
+
+     | Host | `go test -count=1 ./...` | `CGO_ENABLED=1 go test -count=1 -race ./...` | `go -C acpext test -count=1 ./...` |
+     | :--- | :--- | :--- | :--- |
+     | the Linux machine | exit 0, 38 `ok`, no `FAIL` | exit 0, 38 `ok`, no `FAIL` | exit 0, `ok` |
+     | the Windows laptop | exit 0, 38 `ok`, no `FAIL` | exit 0, 38 `ok`, no `FAIL` | exit 0, `ok` |
+
+     `TestRuleStoreConcurrent` passed on both, as part of `permission`'s `ok`. This run's remote copies and logs were
+     removed afterwards; older entries under the hosts' `~/tmp` were left.
+   * `make check-records markdownlint` and the identifier scan are recorded below, after this entry.
+8. **Not done, by the PLAN.** No commit, push or tag; the owner commits. P4 is the owner's: the push, and the reading of
+   `main`'s CI run (`validate` on three runners, `test-isolation`, `sbom`, `build`; `release` skipped) with the
+   close-out of the MADR's Completion section, this PLAN's status and `docs/README.md`'s status cells. Staged: this
+   phase's files only, by path.
+9. **Records and the identifier scan,** run after this entry was written. `make check-records markdownlint`: exit 0,
+   "Summary: 0 issues in 0 files"; `python3 -B scripts/check_records.py --check-all`: exit 0. The identifier scan of
+   the diff's added lines (the local account name, the dev hosts' names, the org's mail domain, and real-machine home,
+   drive and temporary paths): `grep` exit 1, nothing found.
