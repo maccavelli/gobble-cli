@@ -102,7 +102,7 @@ func (a *Agent) sections(s *liveSession) []sysprompt.Section {
 	if goos == "" {
 		goos = runtime.GOOS
 	}
-	return sysprompt.Build(sysprompt.Options{Custom: system, Append: appended, Tools: names, Deferred: families,
+	return sysprompt.Build(sysprompt.Options{Custom: system, Append: appended, Client: s.client.Text, Tools: names, Deferred: families,
 		ContextFiles: files, Skills: skills, Cwd: cmp.Or(o.cwd, s.cwd), GOOS: goos,
 		Personality: a.voice(s).Brief(), PersonalityRules: a.voice(s).Rules(),
 		ToolsSection: cmp.Or(s.project.ToolsSection, o.ToolsSection), RulesSection: cmp.Or(s.project.RulesSection, o.RulesSection)})

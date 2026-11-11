@@ -273,6 +273,10 @@ type liveSession struct {
 	// insultsAccepted is the bombasticAccepted setting the session started
 	// with (0022-MADR D10).
 	insultsAccepted bool
+	// client is the client's system prompt, from the request that opened
+	// the session or its path's last gobble.system_prompt entry, fixed
+	// before the session is live; zero is none (0054-MADR D7).
+	client systemPromptData
 	// titleTried says the session's title was tried; titleCancel and
 	// titleDone stop a title still running and tell when it stopped
 	// (0005-PLAN F5-5). nameMu makes a name's check and its write one step,
@@ -378,9 +382,10 @@ func (a *Agent) SetAgentConnection(c *acp.AgentSideConnection) { a.SetConnection
 var _ acp.AgentConnAware = (*Agent)(nil)
 
 // Capabilities is what is implemented, and nothing more: loading, listing,
-// resuming and closing sessions, and MCP servers over stdio and streamable
-// HTTP. Images, audio and embedded context are turned on by the phases
-// that implement them.
+// resuming and closing sessions, a client's system prompt in append mode
+// alone (0054-MADR D7, Q2), and MCP servers over stdio and streamable HTTP.
+// Images, audio and embedded context are turned on by the phases that
+// implement them.
 func Capabilities() (acp.AgentCapabilities, error) {
 	meta, err := jsonx.SetMember(nil, gobble, acpext.CapabilitiesMeta{Extensions: extensionNames()})
 	if err != nil {
@@ -397,6 +402,8 @@ func Capabilities() (acp.AgentCapabilities, error) {
 			Close:                 &acp.SessionCloseCapabilities{},
 			List:                  &acp.SessionListCapabilities{},
 			Resume:                &acp.SessionResumeCapabilities{},
+			// No Mode: append alone, so the SDK refuses override.
+			SystemPrompt: &acp.SessionSystemPromptCapabilities{},
 		},
 		// gobble's extension methods, as ACP's extensibility page has custom
 		// capabilities advertised (0002-PLAN Phase 7).
@@ -429,7 +436,8 @@ func invalidParams(id acp.SessionId, reason string) error {
 
 // NewSession opens a session in the client's working directory. Its file is
 // written with its first message. _meta.gobble may choose the id, fork an
-// existing session, and name it (0002-PLAN Phase 4).
+// existing session, and name it (0002-PLAN Phase 4); a system prompt
+// replaces a fork's (0054-MADR D7).
 func (a *Agent) NewSession(ctx context.Context, p acp.NewSessionRequest) (acp.NewSessionResponse, error) {
 	meta := readNewSessionMeta(p.Meta)
 	id := session.ID(a.newID())
@@ -440,6 +448,11 @@ func (a *Agent) NewSession(ctx context.Context, p acp.NewSessionRequest) (acp.Ne
 		}
 	}
 	dirs, err := additionalDirs(acp.SessionId(id), p.AdditionalDirectories)
+	if err != nil {
+		return acp.NewSessionResponse{}, err
+	}
+	// Checked before the store is touched, so a refusal writes nothing.
+	client, err := clientPrompt(acp.SessionId(id), p.SystemPrompt)
 	if err != nil {
 		return acp.NewSessionResponse{}, err
 	}
@@ -494,6 +507,9 @@ func (a *Agent) NewSession(ctx context.Context, p acp.NewSessionRequest) (acp.Ne
 			return acp.NewSessionResponse{}, errors.Join(err, log.Close())
 		}
 	}
+	if err := a.takeSystemPrompt(ctx, s, client); err != nil {
+		return acp.NewSessionResponse{}, errors.Join(acp.NewInternalError(errData(acpext.ErrorData{Reason: err.Error()})), log.Close())
+	}
 	if meta.Name != "" {
 		if err := s.append(ctx, a.now(), session.Entry{Type: session.TypeSessionInfo, Name: new(oneLine(meta.Name))}); err != nil {
 			return acp.NewSessionResponse{}, errors.Join(acp.NewInternalError(errData(acpext.ErrorData{Reason: err.Error()})), log.Close())
@@ -521,11 +537,12 @@ func oneLine(s string) string {
 // restore rebuilds a session's tree, context and choices from its entries,
 // its leaf on the last of them. The saved model is kept only when its
 // provider is the current one; the saved personality, when one has its
-// name (0022-MADR D6).
+// name (0022-MADR D6); the saved client's system prompt always (0054-MADR
+// D7).
 func (a *Agent) restore(s *liveSession, entries []session.Entry) {
 	s.tree = session.NewTree(entries)
 	st := replayPath(entries, s.tree.Path())
-	s.history, s.think = st.history, st.thinking
+	s.history, s.think, s.client = st.history, st.thinking, st.systemPrompt
 	// The session goes on with the provider it last used, the run's or one
 	// it switched to, while that one is usable (0025-MADR D1).
 	choice := a.choice()
@@ -1050,10 +1067,15 @@ func (a *Agent) Cancel(_ context.Context, p acp.CancelNotification) error {
 	return nil
 }
 
-// open opens a stored session for writing, rebuilds it, and starts its MCP
-// servers.
-func (a *Agent) open(ctx context.Context, id acp.SessionId, cwd string, extra []string, req []acp.McpServer) (*liveSession, error) {
+// open opens a stored session for writing, rebuilds it, takes the client's
+// system prompt when it differs from the stored one (0054-MADR D7), and
+// starts its MCP servers.
+func (a *Agent) open(ctx context.Context, id acp.SessionId, cwd string, extra []string, req []acp.McpServer, sp *acp.SystemPrompt) (*liveSession, error) {
 	dirs, err := additionalDirs(id, extra)
+	if err != nil {
+		return nil, err
+	}
+	client, err := clientPrompt(id, sp)
 	if err != nil {
 		return nil, err
 	}
@@ -1083,6 +1105,9 @@ func (a *Agent) open(ctx context.Context, id acp.SessionId, cwd string, extra []
 		root: ss.ProjectRoot, trust: ss.Trust, project: projectOf(ss.Project),
 		rules: engineOf(ss, cwd, a.storedRules(cmp.Or(ss.ProjectRoot, cwd)))}
 	a.restore(s, log.Entries())
+	if err := a.takeSystemPrompt(ctx, s, client); err != nil {
+		return nil, errors.Join(appendFailed(err), log.Close())
+	}
 	// The run's override wins over the history's choice (0005-PLAN F4-2c).
 	if err := a.applyOverride(ctx, s); err != nil {
 		return nil, errors.Join(err, log.Close())
@@ -1097,7 +1122,7 @@ func (a *Agent) open(ctx context.Context, id acp.SessionId, cwd string, extra []
 // LoadSession opens a stored session and replays it compactly (0008-MADR
 // D19 item 5), then sends the usage snapshot, before answering.
 func (a *Agent) LoadSession(ctx context.Context, p acp.LoadSessionRequest) (acp.LoadSessionResponse, error) {
-	s, err := a.open(ctx, p.SessionId, p.Cwd, p.AdditionalDirectories, p.McpServers)
+	s, err := a.open(ctx, p.SessionId, p.Cwd, p.AdditionalDirectories, p.McpServers, p.SystemPrompt)
 	if err != nil {
 		return acp.LoadSessionResponse{}, err
 	}
@@ -1150,7 +1175,7 @@ type resumedGobble struct {
 
 // ResumeSession opens a stored session with no replay.
 func (a *Agent) ResumeSession(ctx context.Context, p acp.ResumeSessionRequest) (acp.ResumeSessionResponse, error) {
-	s, err := a.open(ctx, p.SessionId, p.Cwd, p.AdditionalDirectories, p.McpServers)
+	s, err := a.open(ctx, p.SessionId, p.Cwd, p.AdditionalDirectories, p.McpServers, p.SystemPrompt)
 	if err != nil {
 		return acp.ResumeSessionResponse{}, err
 	}

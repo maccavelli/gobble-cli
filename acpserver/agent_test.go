@@ -133,7 +133,8 @@ func TestSession(t *testing.T) {
 // turns a capability on changes this test on purpose (0002-PLAN amendment
 // of 2026-10-05). Phase 4 turned on loading, listing and resuming; Phase 5
 // turned on MCP over streamable HTTP; 0005-PLAN F1a turned on additional
-// directories.
+// directories; 0054-PLAN P2 turned on a client's system prompt, in append
+// mode alone.
 func TestCapabilitiesAreHonest(t *testing.T) {
 	c, _ := connect(t)
 	got := initialize(t, c.Client).AgentCapabilities
@@ -146,6 +147,10 @@ func TestCapabilitiesAreHonest(t *testing.T) {
 		t.Error("session list and resume are implemented (Phase 4) and must be advertised")
 	case got.SessionCapabilities.Close == nil:
 		t.Error("session close is implemented and must be advertised")
+	case got.SessionCapabilities.SystemPrompt == nil:
+		t.Error("a client's system prompt is honoured in append mode (0054-MADR D7) and must be advertised")
+	case got.SessionCapabilities.SystemPrompt.Mode != nil && got.SessionCapabilities.SystemPrompt.Mode.Override != nil:
+		t.Error("systemPrompt.mode.override advertised; override is not offered (0054-MADR Q2)")
 	//lint:ignore SA1019 acp-go-sdk2 keeps this unstable-schema name under v1 (0035-MADR D6)
 	case got.SessionCapabilities.Fork != nil, got.SessionCapabilities.Delete != nil: //nolint:staticcheck // as the lint:ignore above
 		t.Error("session fork or delete advertised; neither is implemented")

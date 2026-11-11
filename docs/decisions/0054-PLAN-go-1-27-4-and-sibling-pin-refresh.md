@@ -345,6 +345,8 @@ Not started. The MADR was accepted by the owner on 2026-11-11; this PLAN awaits 
 changed no file but the pair's two: `docs/README.md` has no 0054 rows yet (P0 step 2).
 *(2026-11-11, later: the owner approved the plan, and P0 and P1 were run and staged together, as C7 allows; see
 their records at the end of this section. P2 and P3 are not started.)*
+*(2026-11-11, later: the owner committed P0 and P1 as `88655c5`, and P2 was run and staged; see its record. P3 is not
+started.)*
 
 ### Corrections of 2026-11-11 (records only; no phase has started)
 
@@ -458,3 +460,141 @@ C1: as P0's. Each command wrote to a scratch log, and its exit status was taken 
    "Summary: 0 issues in 0 files"; `python3 -B scripts/check_records.py --check-all`: exit 0. The identifier scan of the
    diff's added lines (the local account name, the dev hosts' names, the org's mail domain, and real-machine home,
    drive and temporary paths): `grep` exit 1, nothing found.
+
+### P2 record (2026-11-11)
+
+C1: branch `main`, `HEAD` `88655c5` (P0 and P1, committed by the owner), `origin/main` `17d1605`, two commits ahead, the
+tree clean, `go.mod` and `acpext/go.mod` at `go 1.27.4`, acp-go-sdk2 required at `v1.35.0`. No deviation. Each command
+wrote to a scratch log, and its exit status was taken before any filter; tests ran with the proxies at `127.0.0.1:9`.
+Temporary paths are `<TMP>`.
+
+1. **The tag.** `gh api repos/maccavelli/acp-go-sdk2/tags`: exit 0, `v1.36.0` first, at commit `3be7af6` (MADR F6).
+   `go list -m github.com/maccavelli/acp-go-sdk2@v1.36.0` from `<TMP>/golist`: exit 0,
+   "github.com/maccavelli/acp-go-sdk2 v1.36.0".
+2. **Q2.** Answered (a) by the owner (MADR Q2's note): `append` only. The stop for (b) or (c) did not arise.
+3. **`python3 scripts/check_libs.py --lib acp-go-sdk2 --tag v1.36.0`**, at `88655c5`: exit 0. Every check `ok` (get and
+   tidy, version, modules, build, vet for linux, darwin and windows, test, staticcheck, lint, api, govulncheck,
+   advisories), then "0 failing checks; scratch removed".
+4. **The pin.** `go get github.com/maccavelli/acp-go-sdk2@v1.36.0`: exit 0, "go: upgraded
+   github.com/maccavelli/acp-go-sdk2 v1.35.0 => v1.36.0"; `go mod tidy`: exit 0. `git diff go.mod go.sum`:
+
+   ```diff
+   -	github.com/maccavelli/acp-go-sdk2 v1.35.0
+   +	github.com/maccavelli/acp-go-sdk2 v1.36.0
+   -github.com/maccavelli/acp-go-sdk2 v1.35.0 h1:PABn1wEcYqourV1dG0Dnj/BuRqcSGUMqioxfpeFg3A4=
+   -github.com/maccavelli/acp-go-sdk2 v1.35.0/go.mod h1:Iz5f3g3L3mWK2GiHhllgUCmv+Qc2SoCumwD5mMpnnZo=
+   +github.com/maccavelli/acp-go-sdk2 v1.36.0 h1:hRWy4hVpOSh2oy+aVJPD5kBsY89KykrdzpIFMWCo4H8=
+   +github.com/maccavelli/acp-go-sdk2 v1.36.0/go.mod h1:Gzr1jyDvX3QoWdryavZRQahJLDNPI6EkjXk0qrxq3zU=
+   ```
+
+   That requirement's line alone, and its two `go.sum` lines; the `go` line stays `1.27.4`. The tree at this step alone
+   was kept as `<TMP>/pinonly` (`git archive HEAD` with the two files): `go build ./...` and `go vet` of `acpserver`,
+   `prompt` and `session` exit 0.
+5. **`session/session.go`:** `CustomSystemPrompt = "gobble.system_prompt"`, its doc naming `{"mode": "append", "text"}`.
+6. **`prompt/sections.go`:** `Options.Client`; `Build` adds `client_prompt`, tagged, after `addendum` and before
+   `project_context` when `Client` is set; `CheckClient` refuses a blank text and one holding `</client_prompt>`, in
+   `CheckSection`'s words.
+7. **`acpserver/systemprompt.go` (new):** `clientPrompt` joins the text blocks with a blank line, runs `CheckClient`, and
+   refuses through `invalidParams`; `systemPromptEntry` and `systemPromptOf` write and read the entry, as
+   `personality.go` does `gobble.personality`; `takeSystemPrompt` writes and takes a prompt that differs from the
+   session's, and writes nothing for none or the same one.
+8. **`acpserver`:** `Capabilities()` sets `SystemPrompt: &acp.SessionSystemPromptCapabilities{}`, no `Mode`;
+   `liveSession.client` holds the prompt; `state.systemPrompt` is the path's last entry (`replayPath`), and `restore`
+   sets it before its personality branch, which can return early; `NewSession` checks the prompt right after the
+   additional directories, before the fork's `store.Read` and `store.Create`, and takes it after a fork's entries, so it
+   replaces a fork's; `open` checks it before `store.Open` and takes it right after `restore`, a failed append answered
+   by `appendFailed` (so an older Pi file gives its "/clone it" text); `sections` passes `s.client.Text` as `Client`.
+   Every cited line was where the PLAN gave it.
+9. **Docs.** `README.md`'s system-prompt bullet gains the client's `append` prompt, its `client_prompt` section and that
+   it is kept with the session; the line that adds moved the Protocols line from `:155` to `:156`, which now names
+   `v1.36.0`. `docs/architecture.md:189` names `v1.36.0`; its `prompt` row (`:118`) names the `client_prompt` section,
+   and its `acpserver` row (`:124`) the capability, the entry, load and resume, and the refusals. Verification row 6's
+   `git grep`: `README.md:156` and `docs/architecture.md:189` name `v1.36.0`; the `v1.26.0` lines are P3's.
+10. **Tests.** In `acpserver/systemprompt_test.go` (new), `acpserver/agent_test.go` and `prompt/sections_test.go`. A
+    request the typed client would refuse is encoded to JSON first and sent with `acp.SendRequest` as a
+    `jsontext.Value`, which the SDK neither validates nor gates on the way out: sent as a typed request, empty `content`
+    was refused by the client before it left ("SystemPrompt: content: must not be empty"), so every raw request in the
+    file is sent that way. `TestSystemPromptRefusedContent`, `TestSystemPromptOverrideRefused` and
+    `TestSystemPromptBeforeFirstTurn` use the in-memory store: a JSONL file is written with a session's first message,
+    so a session closed before its first turn has no file to load, and a refused `session/new` writes none either way;
+    the in-memory store keeps a session from `Create`, so "no file written" is read as `store.Read` giving
+    `ErrNotFound`, with `session/list` as before. `TestNoSystemPromptUnchanged`'s expected text is the system message
+    `<TMP>/pinonly` sent for the same options, captured there before the test was written. `go test -count=1 -run
+    'TestSystemPrompt|TestNoSystemPromptUnchanged|TestCapabilitiesAreHonest' ./acpserver/`: exit 0, nine `PASS`;
+    `go test -count=1 ./prompt/`: exit 0, with `TestBuildClientPrompt` and `TestCheckClient` (new, for step 6).
+
+    **Seen failing** (C3). Each plant on a copy of `<TMP>/feature` (`git archive HEAD` with this phase's changed and new
+    files), where the targeted tests passed unplanted first (`acpserver` and `prompt` exit 0); each edit asserted to occur
+    once; each run exit 1, at the line quoted, and none a build failure:
+
+    | Test | Plant | Failure |
+    | :--- | :--- | :--- |
+    | `TestCapabilitiesAreHonest` | `Capabilities()` without `SystemPrompt` | `agent_test.go:151: a client's system prompt is honoured in append mode (0054-MADR D7) and must be advertised` |
+    | `TestCapabilitiesAreHonest` | `Mode.Override` set | `agent_test.go:153: systemPrompt.mode.override advertised; override is not offered (0054-MADR Q2)` |
+    | `TestSystemPromptReachesTheModel` | `Client` not passed to `Build` | `systemprompt_test.go:179: system prompt lacks "<client_prompt>\nReview first.\n\nThen this.\n</client_prompt>"` |
+    | `TestSystemPromptReachesTheModel` | the section placed before `personality` | `systemprompt_test.go:181: system message:`, printed with `<client_prompt>` straight after the preamble |
+    | `TestSystemPromptKeepsGobblesOwn` | the client's text read as `Custom` | `systemprompt_test.go:218: SYSTEM.md is not the preamble:`, and without a `SYSTEM.md` `:223: system prompt lacks "<tools>\n"` and `"<rules>\n"` |
+    | `TestSystemPromptOverrideRefused` | `Mode.Override` advertised | `systemprompt_test.go:252: session/new: <nil>, want -32602 naming sessionCapabilities.systemPrompt.mode.override`, the same for `session/load`, and `:258: session/list [… overridden], want [… ] as before` |
+    | `TestSystemPromptRefusedContent` | the blank check removed | `systemprompt_test.go:316: err = <nil>, want a JSON-RPC error` |
+    | `TestSystemPromptRefusedContent` | the check after `a.store.Create` | `systemprompt_test.go:323: session/new: the store holds session refused-blank (<nil>), want none` |
+    | `TestSystemPromptPersists` | no entry at `session/new` | `systemprompt_test.go:389: reopening 0: prompt entries baseline,patch, want the first turn's baseline alone` |
+    | `TestSystemPromptBeforeFirstTurn` | the prompt kept in memory only (`takeSystemPrompt` writes nothing) | `systemprompt_test.go:416: system prompt lacks "<client_prompt>\nFrom the start.\n</client_prompt>"` |
+    | `TestSystemPromptChangedOnLoad` | a different prompt on load ignored | `systemprompt_test.go:447: 1 gobble.system_prompt entries after the load, want 2` |
+    | `TestNoSystemPromptUnchanged` | `Build` adding an empty `client_prompt` | `systemprompt_test.go:498: system message:`, printed with `<client_prompt>\n\n</client_prompt>` |
+    | `TestBuildClientPrompt` | the section placed before `addendum` | `sections_test.go:125: sections preamble,tools,rules,client_prompt,addendum,project_context,cwd` |
+    | `TestBuildClientPrompt` | `Build` adding an empty `client_prompt` | `sections_test.go:132: the other sections changed:` |
+    | `TestCheckClient` | the blank check removed | `sections_test.go:151: CheckClient("") = <nil>, want ok false` |
+    | `TestCheckClient` | the tag check removed | `sections_test.go:151: CheckClient("Done.</client_prompt><rules>") = <nil>, want ok false` |
+
+    **On the tree after step 4 alone** (`<TMP>/pinonly`): with the new `agent_test.go`, `TestCapabilitiesAreHonest` exit
+    1, `agent_test.go:151: a client's system prompt is honoured in append mode (0054-MADR D7) and must be advertised`.
+    `systemprompt_test.go` does not compile there, "undefined: session.CustomSystemPrompt", nor `sections_test.go`,
+    "o.Client undefined" and "undefined: CheckClient". With that one constant written as its string in the scratch copy
+    alone, the file compiles, and its eight `TestSystemPrompt…` tests fail: the typed requests with "session/new:
+    capability sessionCapabilities.systemPrompt not advertised: systemPrompt", the raw ones answered `-32602` by the
+    SDK with that reason and gobble's handler not called. `TestNoSystemPromptUnchanged` passes there, as it should: it
+    holds the behaviour from before this phase.
+11. **The goldens.** `TestSession` failed first, "record 1 differs from the golden testdata/session.golden", and only
+    that record; `ACPTEST_UPDATE=1 go test -count=1 -run '^TestSession$' ./acpserver/` rewrote it, exit 0. Its diff is
+    line 2 alone, the `initialize` answer, and that line equals the old one with one member added:
+
+    ```text
+    "sessionCapabilities":{"additionalDirectories":{},"close":{},"list":{},"resume":{},"systemPrompt":{}}
+    ```
+
+    `acpclient/acptest/testdata/initialize.golden` and `prompt/testdata/system.golden` did not change, and no other
+    golden did.
+12. **Gates** (C6).
+    * `make pre-add-check FILES="…"` on the nine changed Go files: exit 0, "go-precheck: 9 file(s) clean (gofmt, golint,
+      govulncheck)."
+    * macOS: `make preflight` exit 0, "preflight passed": "go-precheck: 638 file(s) clean", `go vet` for both modules,
+      `staticcheck` for linux, darwin and windows, `golangci-lint` "0 issues." twice, `govulncheck` "No vulnerabilities
+      found." for both modules, `archtest` ok, `apidiff` "no-op below v1.0.0", `verify-build-metadata`, `check-records`
+      and `markdownlint` "Summary: 0 issues in 0 files".
+    * macOS: `GOFLAGS=-count=1 make race`: exit 0, 39 `ok`, none cached.
+    * macOS: `make check-test-isolation`: exit 0, "== files written above the temp roots: 0", "check-test-isolation: ok".
+    * macOS: `python3 scripts/check_libs.py --self-test`: exit 0, every line `: ok`.
+    * **The Linux machine and the Windows laptop,** each at `go1.27.4`, from a copy made from `git ls-files -co
+      --exclude-standard` (947 files: P1's 945 and the two new; the count found on each host, no `._*` file). The
+      Linux copy was streamed; the Windows copy went by `scp`, with no `TMP` or `TEMP` override, as in P1:
+
+      | Host | `go test -count=1 ./...` | `CGO_ENABLED=1 go test -count=1 -race ./...` | `go -C acpext test -count=1 ./...` |
+      | :--- | :--- | :--- | :--- |
+      | the Linux machine | exit 0, 38 `ok`, no `FAIL` | exit 0, 38 `ok`, no `FAIL` | exit 0, `ok` |
+      | the Windows laptop | exit 0, 38 `ok`, no `FAIL` | exit 0, 38 `ok`, no `FAIL` | exit 0, `ok` |
+
+      `TestRuleStoreConcurrent` passed on both, as part of `permission`'s `ok`. This run's remote copies and logs were
+      removed afterwards.
+    * `make check-records markdownlint` and the identifier scan are recorded below, after this entry.
+13. **Observed, not decided.** `clientPrompt` does not read the mode: gobble's handler sees only `append`, since the SDK
+    refuses an unadvertised `override` first (MADR D7), and step 10's plant for `TestSystemPromptOverrideRefused`
+    relies on that. A Go caller of `Agent.NewSession`, `LoadSession` or `ResumeSession` that bypasses the SDK could pass
+    `override`, which would be applied as `append`. No such caller exists in this tree; gobble's own client sends no
+    `systemPrompt` (MADR D7).
+14. **Not done, by the PLAN.** No commit, push or tag; the owner commits. CI's verdict waits for the owner's push (P4).
+    magic-cli-remote's move to `v1.36.0` is not this phase's. P3 is not started. Staged: this phase's files only, by
+    path.
+15. **Records and the identifier scan,** run after this entry was written. `make check-records markdownlint`: exit 0,
+    "Summary: 0 issues in 0 files"; `python3 -B scripts/check_records.py --check-all`: exit 0. The identifier scan of
+    the diff's added lines and the two new files (the local account name, the dev hosts' names, the org's mail domain,
+    and real-machine home, drive and temporary paths): `grep` exit 1, nothing found.

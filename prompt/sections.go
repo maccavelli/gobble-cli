@@ -97,6 +97,10 @@ type Options struct {
 	Personality, PersonalityRules string
 	// Append is the addendum, Pi's APPEND_SYSTEM.md.
 	Append string
+	// Client is a client's system prompt in ACP's append mode: the
+	// client_prompt section, after the addendum, checked by CheckClient
+	// (0054-MADR D7).
+	Client string
 	// Tools are the agent's own tools' names, which the rules depend on.
 	Tools []string
 	// Deferred are the families of deferred tools tool_search can find.
@@ -128,11 +132,28 @@ func CheckSection(name, text string) error {
 	return nil
 }
 
+// clientSection is the client_prompt section's name and tag.
+const clientSection = "client_prompt"
+
+// CheckClient checks a client's system prompt text, as CheckSection checks
+// the user's: it has words, and does not close its section's tag
+// (0054-MADR D7).
+func CheckClient(text string) error {
+	switch {
+	case strings.TrimSpace(text) == "":
+		return errors.New("it is empty")
+	case strings.Contains(text, "</"+clientSection+">"):
+		return fmt.Errorf("it closes the section's tag, </%s>", clientSection)
+	}
+	return nil
+}
+
 // Build is the system prompt's sections in Pi's order, without docs, which
 // gobble has none of yet: preamble, tools, rules, addendum,
 // project_context, skills, cwd (Pi's buildSystemPromptSections,
 // system-prompt.ts:121-180; 0005-PLAN F3-1). The personality and its house
-// rules follow the preamble, a custom one included (0022-MADR D4).
+// rules follow the preamble, a custom one included (0022-MADR D4); a
+// client's prompt follows the addendum (0054-MADR D7).
 func Build(o Options) []Section {
 	out := []Section{{Name: "preamble", Text: Preamble}}
 	if o.Custom != "" {
@@ -152,6 +173,9 @@ func Build(o Options) []Section {
 	}
 	if o.Append != "" {
 		out = append(out, tagged("addendum", o.Append))
+	}
+	if o.Client != "" {
+		out = append(out, tagged(clientSection, o.Client))
 	}
 	if len(o.ContextFiles) > 0 {
 		out = append(out, tagged("project_context", renderContext(o.ContextFiles)))

@@ -181,6 +181,7 @@ type state struct {
 	todos           []tool.PlanItem     // the path's last todo list
 	personality     string              // the path's last gobble.personality, or ""
 	loads           map[string][]string // tool call id → what its result loaded (0012-MADR D18)
+	systemPrompt    systemPromptData    // the path's last gobble.system_prompt, or zero (0054-MADR D7)
 }
 
 // replayState reads entries: model_change, thinking_level_change and the
@@ -212,6 +213,9 @@ func replayPath(entries, path []session.Entry) state {
 			}
 			if name, ok := personalityOf(e); ok {
 				st.personality = name
+			}
+			if sp, ok := systemPromptOf(e); ok {
+				st.systemPrompt = sp
 			}
 			if id, names, ok := loadOf(e); ok {
 				st.loads[id] = append(st.loads[id], names...)

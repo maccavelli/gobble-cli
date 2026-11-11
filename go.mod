@@ -13,7 +13,7 @@ require (
 	github.com/alecthomas/kong v1.16.1
 	github.com/charmbracelet/x/ansi v0.11.8
 	github.com/google/jsonschema-go v0.4.3
-	github.com/maccavelli/acp-go-sdk2 v1.35.0
+	github.com/maccavelli/acp-go-sdk2 v1.36.0
 	github.com/maccavelli/go-llmprovider-sdk v1.29.0
 	github.com/maccavelli/go-selfupdate-lib v1.26.0
 	github.com/maccavelli/go-tui-lib/v2 v2.12.0

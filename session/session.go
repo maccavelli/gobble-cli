@@ -52,6 +52,10 @@ const (
 	// CustomPersonality is a personality switch: data is {"name"}, the
 	// personality's canonical name (0022-MADR D6).
 	CustomPersonality = "gobble.personality"
+	// CustomSystemPrompt is a client's system prompt, given on session/new,
+	// session/load or session/resume: data is {"mode": "append", "text"},
+	// the text of its blocks joined by a blank line (0054-MADR D7).
+	CustomSystemPrompt = "gobble.system_prompt"
 )
 
 // Message roles gobble writes.

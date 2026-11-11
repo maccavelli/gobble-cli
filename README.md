@@ -57,7 +57,8 @@ Early, and built in the order [docs/README.md](docs/README.md#build-order) gives
 - **Sessions** as JSONL files in Pi's v3 shapes, with every Pi entry type in the model's context as Pi puts it there. Pi's v1 and v2 files load,
   migrated in memory and never rewritten; `/clone` continues one as a v3 session.
 - **The system prompt** in Pi's sections, from `AGENTS.md` and `CLAUDE.md` files, `SYSTEM.md` and `APPEND_SYSTEM.md`, or `--system-prompt`
-  and `--append-system-prompt`; it stays fixed for a session, and a change reaches the model as a message.
+  and `--append-system-prompt`; it stays fixed for a session, and a change reaches the model as a message. An ACP client's own
+  system prompt, in `append` mode, joins it as a `client_prompt` section after the addendum, and is kept with the session.
 - **Agent Skills** from the config directory's `skills/` and `~/.agents/skills`, listed in the prompt; `/skill:<name>` sends one, and
   `--no-skills` turns them off.
 - **Prompt templates** from the config directory's `prompts/`, as Pi writes them: `/review concurrency` sends `review.md` with
@@ -152,7 +153,7 @@ The design is [0048-MADR](docs/decisions/0048-MADR-gobble-update-command.md).
 
 - **Modes:** a native terminal CLI mode, the default, and an enhanced terminal TUI mode, not built yet.
 - **CLI:** [Kong](https://github.com/alecthomas/kong) `v1.16.1`.
-- **Protocols:** the [ACP Go SDK](https://github.com/maccavelli/acp-go-sdk2) `acp-go-sdk2` `v1.35.0`, and the
+- **Protocols:** the [ACP Go SDK](https://github.com/maccavelli/acp-go-sdk2) `acp-go-sdk2` `v1.36.0`, and the
   [MCP Go SDK](https://github.com/modelcontextprotocol/go-sdk) `v1.8.0`.
 - **Models:** [go-llmprovider-sdk](https://github.com/maccavelli/go-llmprovider-sdk) `v1.29.0`, behind
   gobble's own `llm` facade. Only `llm/provider` imports it.
