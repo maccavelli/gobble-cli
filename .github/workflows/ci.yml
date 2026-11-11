@@ -127,6 +127,26 @@ jobs:
           shellcheck scripts/*.sh
           go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
 
+  # The suite again, both modules, with every file a test was found to read
+  # from above its temp root planted above two long temp roots, one for
+  # TMPDIR and one for GOTMPDIR: it fails on a test that reads one, or
+  # writes above them
+  # (docs/decisions/0053-MADR-keep-tests-off-host-files-above-their-temp-root.md
+  # D4, A1).
+  test-isolation:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - run: go mod download
+      - run: go -C acpext mod download
+      - name: make check-test-isolation
+        run: make check-test-isolation
+
   # The SPDX SBOM is GitHub's dependency graph's, the extra asset
   # gobble.spdx.json (0004-MADR amendment of 2026-10-07). The graph describes
   # the default branch, so a tag must be main's head.

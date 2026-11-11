@@ -326,6 +326,48 @@ deviation 2. The owner chose "one loop, one check".
 6. **The gates pass:** `make preflight`, `make race`, and `go test ./...` on the three hosts. On the Windows laptop
    that includes a clone under the home folder, the case 0049-PLAN P5b-1 had to avoid.
 
+### Completion (2026-11-11)
+
+Each item below is checked against
+[0053-PLAN-keep-tests-off-host-files-above-their-temp-root.md](0053-PLAN-keep-tests-off-host-files-above-their-temp-root.md)'s
+phase records. All six are met.
+
+1. **Met** (P2 record, items 4 and 6).
+   * Four walk tests (A2 made the project's skills one walk): `TestGitRepoStopsAtCeiling`,
+     `TestRepoTopStopsAtCeiling`, `TestContextFilesStopAtCeiling` and `TestProjectSkillDirsStopAtCeiling`. With the
+     ceiling, each excludes what lies above it and at it.
+   * The control is not "cleared" as written here. A cleared ceiling would let the walk read the host's own files,
+     the exposure this record closes. So each control puts the ceiling one directory above the fixture, and the same
+     walk then finds the planted file.
+   * Each test failed on a scratch copy with its walk's check removed.
+2. **Met** (P2 record, item 6). `golangci-lint` reported ``use of `fsx.SetWalkCeiling` forbidden because "only a test
+   binary sets the walk ceiling (0053-MADR D1)" (forbidigo)`` for a scratch non-test file in `internal/config`. The
+   tree has no finding.
+3. **Met** (P3 record, item 4).
+   * `TestWalksBounded` failed in each of the six packages on a scratch copy whose `TestMain` omitted the call.
+   * Under A1, it also failed with `os.TempDir()` alone while `GOTMPDIR` named another directory.
+   * At the owner's word, `TestProjectSkillDirsOutsideRepository` lost its skip and its filter. It then failed,
+     rather than skipped, under planted files without the ceiling.
+4. **Met** (P4 record, items 4 and 5). The three trust tests passed with the default temp root and with a
+   201-character one. They failed with one expected label changed, with the expected layout at 80 columns, and with
+   the cancel answer dropped.
+5. **Met.**
+   * **Before the fix** (P1 record, item 4): `make check-test-isolation` reported F3's 27 tests, F5's 3 and F4's two
+     files at the base, on macOS, the Linux machine and the Windows laptop, as identical sorted lists. The Linux
+     machine needed A1's second root to see them.
+   * **After it:** 0 tests and 0 files on all three hosts, at P4 and again at P5 (P4 record, item 6; P5 record).
+6. **Met** (P5 record).
+   * `make preflight` and `make race` passed on macOS.
+   * `go test ./...`, `acpext`'s tests and `go test -race ./...` passed on the Linux machine and the Windows laptop.
+   * On the Windows laptop the copy, its default temp directory and the home folder's own 35 KB `AGENTS.md` were all
+     under the home folder: the case of gobble-cli#17, which no longer needs the system drive.
+
+**The records along the way:**
+
+* Three deviations: A1 for the second temp root, A2 for one walk for the project's skills, and a reasoned `nolint`
+  for gosec's G703.
+* One scope addition at the owner's word: the skills test's workarounds.
+
 ## Pros and Cons of the Options
 
 ### A. One ceiling in `internal/fsx`, set by each test binary, an exact trust layout, an isolation check

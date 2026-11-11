@@ -143,7 +143,7 @@ keeps its provider list equal to the registry's; magic-cli-remote imports it too
 | `internal/filelock` | internal | An exclusive lock file between processes, for session files, `mcp.json`, settings, `auth.json` and `trust.json`. |
 | `internal/proctree` | internal | A command as a tree that stops whole: its own process group on Unix, a kill-on-close Job object on Windows. |
 | `internal/frontmatter` | internal | The YAML frontmatter of skills and templates, as Pi reads it, through `go.yaml.in/yaml/v3`. |
-| `internal/fsx` | internal | Workspace confinement for file tools: Pi's path resolution, `os.Root` over the working and additional directories, atomic writes, and a per-path lock. A glob engine written to git's rules, the repository's ignore rules, and a confined walker that applies them. Renames, removals, copies and directories through the roots. The repository finder. |
+| `internal/fsx` | internal | Workspace confinement for file tools: Pi's path resolution, `os.Root` over the working and additional directories, atomic writes, and a per-path lock. A glob engine written to git's rules, the repository's ignore rules, and a confined walker that applies them. Renames, removals, copies and directories through the roots. The repository finder. The walk ceiling a test binary sets, where every upward walk stops ([0053-MADR](decisions/0053-MADR-keep-tests-off-host-files-above-their-temp-root.md) D1). |
 | `exp/a2a` | experimental | Agent2Agent endpoint (experimental placeholder). |
 | `exp/acpws` | experimental | ACP over WebSocket (experimental placeholder). |
 | `exp/codemode` | experimental | Code-mode sandbox (experimental placeholder). |
@@ -214,9 +214,19 @@ and no `tool` directive: its gates run the root's tools.
 - Outside `preflight`: `make check-libs` compares the sibling libraries with their latest tags, over
   the network; `make probe-conhost` and `make completion-shells` run checks that need a console or
   the real shells.
+- `make check-test-isolation`: the tests of both modules again, outside `preflight`. Every file a test was found to read
+  from above its temp root (`AGENTS.md`, `.agents/skills`, `.git`, a `.gitignore` of `*`) is planted above two temp
+  roots of 130 characters or more, one for `TMPDIR`, `TMP` and `TEMP` and one for `GOTMPDIR`. It fails on any failing
+  test, and on any file written above them. The tests that walk up from their directories, in `prompt`, `acpserver`,
+  `internal/cli`, `internal/config`, `internal/fsx` and `tool/builtin`, set the walk ceiling at those roots in
+  `TestMain`, and check it in `TestWalksBounded`. So a host's own files above its temp directory, such as a home
+  folder's `AGENTS.md`, change no test, and a host gate needs no clone outside the home folder
+  ([0053-MADR](decisions/0053-MADR-keep-tests-off-host-files-above-their-temp-root.md)). It runs in each host gate
+  and as CI's `test-isolation` job on Linux.
 - `.github/workflows/ci.yml`, on pushes to `main`, on `v*` tags and on pull requests: on Linux,
   macOS and Windows, `go test` over both modules, `make preflight` and `make archtest`; `make race` on Linux and
-  macOS; on Linux, `go mod tidy -diff` over both modules, shellcheck and actionlint. An `acpext/v*` tag runs no
+  macOS; on Linux, `go mod tidy -diff` over both modules, shellcheck and actionlint, and the `test-isolation` job's
+  `make check-test-isolation`. An `acpext/v*` tag runs no
   release. A push or pull request whose
   changes are all in the docs set (`*.md` at the root, `docs/**/*.md`, `.claude/rules/*.md`,
   `.grok/rules/*.md` and `.opencode/rules.md`) skips it, and `.github/workflows/docs.yml` runs

@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: complete
 date: 2026-11-11
 associated-madr: "0053-MADR-keep-tests-off-host-files-above-their-temp-root.md"
 ---
@@ -285,6 +285,66 @@ records, which are the owner's and are not touched, and this pair.
     listed, and a `.git` above it.
   * Step 6's breaks for `ProjectSkillDirs` are one: the walk's check removed.
 * **Files added to the phase:** none.
+
+### P5 record (2026-11-11)
+
+Logs are in the session scratchpad (`p5_*.log`).
+
+1. **C1.** `HEAD` was `ac757a0`, P4, committed by the owner. `origin/main` was `86ad4a7`. The tree held only the
+   owner's untracked 0051 and 0052 records.
+2. **`.github/workflows/ci.yml`** gained the `test-isolation` job, under Q4 (a).
+   * It runs on `ubuntu-24.04`, with the `validate` job's pinned `actions/checkout` (v7.0.1) and `actions/setup-go`
+     (v7.0.0, `go-version-file: go.mod`). It downloads both modules, then runs `make check-test-isolation`.
+   * Its comment cites 0053-MADR D4 and A1.
+   * `actionlint` v1.7.12, the version CI runs, passes on it.
+   * Its seen-failing evidence is P1 record item 4: the same target, at the base, exit 1 on three hosts. It was not
+     pushed to fail, since a push is the owner's.
+3. **`docs/architecture.md`:**
+   * `internal/fsx`'s row names the walk ceiling a test binary sets.
+   * A "Checks" entry for `make check-test-isolation` says what it plants, the two roots, the six packages'
+     `TestMain`s and `TestWalksBounded`, and that a host gate needs no clone outside the home folder.
+   * The CI entry names the `test-isolation` job.
+4. **Hosts**, each from a fresh copy of this phase's tree (943 files):
+
+   | Host | `go test ./...` | `acpext` | `go test -race ./...` | `make check-test-isolation` |
+   | :--- | :--- | :--- | :--- | :--- |
+   | the Linux machine | 38 `ok` | `ok` | exit 0 | `ok`: 0 tests, 0 files |
+   | the Windows laptop | 38 `ok` | `ok` | exit 0 | `ok`: 0 tests, 0 files |
+
+   * On the Windows laptop, the copy (`C:/Users/<user>/tmp/gobble-check`), its default temp directory
+     (`%LOCALAPPDATA%\Temp`) and the home folder's own `AGENTS.md` were all under the home folder. No `TMP` or `TEMP`
+     override was used.
+   * **macOS:** `make preflight` passed, `make race` 39 `ok`, and `make check-test-isolation` `ok` with 0 tests and
+     0 files.
+5. **The records:**
+   * the MADR's Completion section: Confirmation 1 to 6 met, with item 1's control stated as built;
+   * this plan is `complete`;
+   * `docs/README.md`'s rows.
+   * **A comment for gobble-cli#17,** drafted here for the owner to post. It is not posted.
+
+     > Fixed by the 0053 pair (`docs/decisions/0053-MADR-keep-tests-off-host-files-above-their-temp-root.md`), in
+     > four commits on `main`.
+     >
+     > * **Wider than reported.** Planting files above the temp root found more than the five context-file tests:
+     >   an ancestor `.agents/skills` (5 tests), and an ancestor `.git` (16–20 tests). With a `.git` above, the
+     >   `config` tests *wrote* `.gobble/settings.yaml` there. With the three trust-menu tests that fail under a
+     >   long temp path, 30 tests in six packages depended on the host.
+     > * **The fix.**
+     >   * `internal/fsx` has a walk ceiling that only a test binary sets. A `forbidigo` rule keeps it out of
+     >     non-test code.
+     >   * `ContextFiles`, `ProjectSkillDirs`, `GitRepo` and the ignore rules' repository finder stop at it.
+     >   * The six exposed packages set it in `TestMain` at `GOTMPDIR`, which `t.TempDir()` uses when it is set,
+     >     and at `os.TempDir()`. Each checks it in `TestWalksBounded`.
+     >   * The trust-menu tests compare the screen with `ask.Layout`'s rows, so a wrapped path is checked as it
+     >     wraps.
+     > * **The guard.** `make check-test-isolation` plants every such file above two long temp roots and fails on
+     >   any failing test, or on any file written above them. It runs in CI's new `test-isolation` job.
+     > * **Verified** on macOS, Linux and Windows. On Windows that includes a clone and temp root under a home folder
+     >   with its own `AGENTS.md`, so host gates no longer need the system drive.
+6. **Gates** (C5):
+   * no Go file changed in P5;
+   * `make preflight`, `make race` and `make check-test-isolation` above;
+   * `make check-records markdownlint` and the identifier scan are run before staging.
 
 ### P4 record (2026-11-11)
 
