@@ -42,7 +42,7 @@ Q1 asks whether it is in scope.
   * Walking to the root is the intended behaviour for users (Pi's `loadProjectContextFiles`, `findGitRoot`), and
     nothing here changes it.
 * **F2. Every test puts its directories in `t.TempDir()`,** under `os.TempDir()` (`TMPDIR`, or `TMP`/`TEMP` on
-  Windows). Nothing bounds a walk at that root. So whatever sits in an ancestor of the temp root is read as if it
+  Windows). *(Amended by A1: under `GOTMPDIR` when that is set.)* Nothing bounds a walk at that root. So whatever sits in an ancestor of the temp root is read as if it
   were the test's own.
   * `acpserver`'s `TestMain` (`acpserver/testmain_test.go:11`) serves the MCP fixture.
   * `internal/cli`'s `TestMain` (`internal/cli/testmain_test.go`) guards the network and the sign-ins (0046-MADR D4;
@@ -125,6 +125,8 @@ the library defines (F5, F6).
 
 ### D1. `internal/fsx` holds one walk ceiling; every upward walk stops before reading it
 
+*Amended by A1: the ceiling is a set of directories.*
+
 * **The hook:** `internal/fsx` gains an unexported ceiling, set by `SetWalkCeiling(dir string) error`, cleared by
   `""`, and read through `AtWalkCeiling(dir string) bool` and `WalkCeiling() string`.
 * **How a directory is matched:** `SetWalkCeiling` stats `dir` once. `AtWalkCeiling` is true when a ceiling is set and
@@ -143,6 +145,8 @@ the library defines (F5, F6).
 * **Under Q1 (b)** the hook is the same, and only the two `prompt` walks check it.
 
 ### D2. Each exposed package's `TestMain` sets the ceiling to the temp root
+
+*Amended by A1: to `GOTMPDIR` when it is set, and to `os.TempDir()`.*
 
 * **The value:** the ceiling is `os.TempDir()`, set before `m.Run()`. That is the narrowest directory that holds every
   `t.TempDir()`, including the worktree test's sibling (`prompt/context_test.go:65`).
@@ -173,6 +177,8 @@ the library defines (F5, F6).
   spaces, and stays.
 
 ### D4. An isolation check plants every known file above a long temp root
+
+*Amended by A1: two sibling temp roots, one for `TMPDIR`, `TMP` and `TEMP`, one for `GOTMPDIR`.*
 
 * **The script:** `scripts/check_test_isolation.py` creates its own root under the system's temp directory and plants
   in it:
@@ -229,6 +235,47 @@ The owner answered all four questions, each with (a):
 
 The decision is accepted as option A, with D1 to D4 as written. The alternatives under (b) and (c) in D1 to D3 do not
 apply.
+
+### Amendment A1 (2026-11-11): the test binary has two temp roots
+
+This amendment comes from
+[0053-PLAN-keep-tests-off-host-files-above-their-temp-root.md](0053-PLAN-keep-tests-off-host-files-above-their-temp-root.md)
+deviation 1. The owner chose "a ceiling at both roots".
+
+* **The finding.** P1's isolation check failed the same 30 tests, and found the same two stray files, on macOS and the
+  Windows laptop. On the Linux machine it reported none.
+  * That host exports `GOTMPDIR`.
+  * Go's `t.TempDir()` is `os.MkdirTemp(os.Getenv("GOTMPDIR"), …)` (Go 1.27 `src/testing/testing.go:1575-1615`). So
+    it is under `GOTMPDIR` when that is set, and under `os.TempDir()` only when it is not.
+  * A probe on a scratch copy there, with `TMPDIR` at a planted root, gave `t.TempDir()` under the host's `GOTMPDIR`.
+* **F2 as amended.** A test's `t.TempDir()` is under `GOTMPDIR` when it is set, and otherwise under `os.TempDir()`.
+  A directory made by `os.MkdirTemp("", …)` or under `os.TempDir()` is under `os.TempDir()` either way. Today those
+  are the two binary tests' build directories (`acpserver/binary_test.go:25`, `internal/cli/complete/binary_test.go:17`).
+  F2's sentence "under `os.TempDir()` (`TMPDIR`, or `TMP`/`TEMP` on Windows)" holds only where `GOTMPDIR` is unset.
+* **D1 as amended.**
+  * `SetWalkCeiling(dirs ...string) error` takes each non-empty directory, stat'ed once. With none given, the ceiling
+    is cleared.
+  * `AtWalkCeiling(dir)` is true when `os.SameFile` matches any of them.
+  * `WalkCeiling() []string` returns the set paths.
+  * Everything else in D1 holds.
+* **D2 as amended.**
+  * Each `TestMain` calls `fsx.SetWalkCeiling(os.Getenv("GOTMPDIR"), os.TempDir())`, and `SetWalkCeiling` skips an
+    empty value.
+  * `TestWalksBounded` fails unless the ceiling holds `os.TempDir()`, and `GOTMPDIR` too when it is set.
+  * A ceiling at `os.TempDir()` alone would match nothing that `t.TempDir()` makes on a host like the Linux machine,
+    and D2's check as first written would still have passed.
+* **D4 as amended.**
+  * The isolation check makes two sibling temp roots below its planted files, each of 130 to 160 characters. It sets
+    `TMPDIR`, `TMP` and `TEMP` to the first and `GOTMPDIR` to the second, overriding the host's own `GOTMPDIR`.
+  * Files under either root are the tests' own. Every other file not planted is a stray.
+  * So the check sees every host the same way, and it covers both roots of the ceiling.
+* **Confirmation as amended.**
+  * Item 3 adds a break in which `TestMain` passes `os.TempDir()` alone, run with `GOTMPDIR` set. It must fail
+    `TestWalksBounded`.
+  * Item 5's 30 tests and two files must be reported on the Linux machine too.
+* **Out of scope, observed.** A gobble binary that a test starts as a child process runs production code, so it has
+  no ceiling. None of the binary tests failed under the plants. D4's check is what would show one that becomes
+  exposed.
 
 ### Consequences
 

@@ -95,7 +95,7 @@ LDFLAGS := -X $(BUILDINFO).version=$(VERSION) -X $(BUILDINFO).kind=$(BUILD_KIND)
 
 .PHONY: build install test race vet fmt lint staticcheck vulncheck tidy clean \
 	pre-add-check preflight check-cgo-off verify-build-metadata fix-check archtest apidiff check-acpext-deps \
-	check-records check-icon check-libs markdownlint probe-conhost completion-shells perf $(BIN)
+	check-records check-icon check-libs check-test-isolation markdownlint probe-conhost completion-shells perf $(BIN)
 
 # Shipped binaries are pure Go. check-cgo-off refuses CGO_ENABLED other than 0
 # and any `import "C"` in a .go file (0004-PLAN phase 0 accept).
@@ -264,6 +264,11 @@ check-icon:
 # The sibling libraries against their latest tags (0019-MADR D14); needs the network, so not in preflight.
 check-libs:
 	$(PYTHON) scripts/check_libs.py
+
+# The suite with every file a test was found to read planted above a long temp root, failing on any test that
+# reads one or writes above it (0053-MADR D4); a second full test run, so not in preflight.
+check-test-isolation:
+	$(PYTHON) scripts/check_test_isolation.py
 
 # The fleet markdownlint config; records are excluded by its own globs
 # (0007-MADR D2).
