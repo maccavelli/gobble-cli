@@ -359,6 +359,90 @@ its own.
     plan sign-in, and P5b's mapping of go-llmprovider-sdk `v1.29.0`'s fields.
   - **P4b-Q4:** (a). The callback URL may be pasted in gobble's terminal and in the ACP terminal method, and the prompt
     says which URL.
+
+  **The terms, read 2026-11-10 (the PLAN's P4b-2 deviation 1).**
+  - **How they were read.** OpenAI's "Sign in with ChatGPT Terms" (`openai.com/policies/sign-in-with-chatgpt-terms/`)
+    answered HTTP 403 to an automated fetch. The owner read the page and pasted its text. It is effective
+    **2026-11-04**, after the SDK's reading of 2026-10-14.
+  - **What the spec already meets:**
+    - §1: the app's own name, `"gobble"`; tokens only through OpenAI's flow; no password or cookie asked for.
+    - §3.1:
+      - one login per provider, so no multiple accounts or rotation, and no pooling or resale;
+      - requests only for the signed-in user and their own turns;
+      - consent before background use (P4b-Q2);
+      - the plan used only for gobble, which exposes no general API;
+      - and no charge.
+    - §5: no OpenAI marks.
+    - §2.4's revocation: `gobble auth logout openai` already revokes, then deletes (`provider.Logout`,
+      `llm/provider/login.go:93-103`), and `v1.29.0` has a plan-session revoke.
+  - **Three points the spec did not settle.** The owner answered each (asked with three options):
+    - **§1 storage and a remote host** ("local and under the user's control, not in a remote or managed environment",
+      beside §3.1's "a remote runtime only that user controls"): **own host only, disclosed.**
+      - The plan session is stored only in `auth.json` on the host gobble runs on, an owner-only file.
+      - The sign-in and the guide say this must be a machine only the user controls, never a shared or managed one,
+        and that `auth.json` is not to be copied to another machine. Each host has its own host id, per OpenAI's
+        developer page.
+    - **§2.3 privacy notice:** **a notice at sign-in, before the browser opens.**
+      - It says what gobble stores: the access, refresh and ID tokens, the account id and the host id.
+      - It says where: the local `auth.json`, owner-only; that it is sent only to OpenAI; and how to remove it,
+        `gobble auth logout openai`, which revokes too. The guide repeats it.
+    - **§2.4 consent control:** **a setting, named in the notice.** The background-use consent is an ordinary
+      setting. The notice and the guide say how to turn it off, and turning it off stops background requests from the
+      next request.
+  - **The phone sign-in** (magic-cli-remote driving `gobble acp --login openai` on the user's host):
+    - The owner signs in to ChatGPT through Google. They asked for the real ChatGPT login page on the phone's own
+      browser, as Codex's phone flow gives.
+    - Codex's flow is OAuth's device-code grant under the Codex CLI's own client id. gobble using that id would sign
+      in as Codex, which §1 forbids. OpenAI's sign-in under an app's own name has no device flow (the SDK's
+      0017-REPORT; its 0043-MADR waits for one).
+    - So the phone flow is the browser flow with P4b-Q4's paste:
+      1. The phone's own browser opens OpenAI's login page, with its "Continue with Google". The browser must be the
+         phone's real one, since Google refuses sign-in in an app's embedded web view.
+      2. After the sign-in and the approval, the browser lands on the `127.0.0.1` callback, which does not load on
+         the phone.
+      3. The user pastes that URL into the card, and gobble on the host finishes and stores the session.
+    - The owner accepted this ("Yes, record and proceed").
+
+  *Superseded in part 2026-11-10 by the owner's answers of that date to magic-cli-remote's
+  `docs/reports/0245-REPORT-non-api-key-auth-across-magic-gobble-and-the-sdk.md` (Q2 to Q7, Q11, Q12, Q14, Q21, Q22).
+  The answers are carried out by `0051-MADR-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md` and
+  `0052-MADR-finish-the-chatgpt-plan-sign-in-on-the-sdk-engine.md`, both `proposed` and not yet committed, so they are
+  named here without links. The owner had this note made on 2026-11-11, with the gobble cleanup ("Proceed with the
+  gobble cleanup").*
+  - *P4b-2 is not committed as a phase of this plan (Q6, "Fold into the redesign. The WIP is not landed
+    separately").* The work is sorted hunk by hunk, as 0052-MADR D1's table says:
+    - its storage half is kept as it is;
+    - its predicates, notice, resolver check and gating are reworked onto the SDK's engine;
+    - its consent question and setting are discarded.
+
+    The defects found in it (the report's F30, F31, F52, F53 and F54) are fixed there, not as P4b-2 deviations.
+  - *P4b-Q1 (a)* stands, and widens: the plan sign-in is also offered to any ACP client through `authenticate`, by
+    request-scoped elicitation (0051-MADR D4).
+  - *P4b-Q2 (a),* "Consent is asked once at the plan sign-in and saved as a setting", *is superseded by 0052-MADR D2
+    and D3:*
+    - it is asked once, before the browser, as go-llmprovider-sdk's `confirm` step carrying gobble's wording (Q4);
+    - the answer is kept on the session in `auth.json` (Q3), with a "no" recorded as declined;
+    - it is read at every background request;
+    - `chatgptPlanBackground` is not landed, and `gobble auth consent openai background allow|deny` changes the
+      answer.
+  - *P4b-Q3 (b),* "P4b-2 and 0049-PLAN P5b run as one root phase and one commit", *is superseded by 0052-MADR QA,
+    answered (a) by the owner on 2026-11-10.* P5b's `llm` half lands now as 0049-PLAN P5b-1. Its wire half lands
+    with 0051-PLAN P4's acpext pin (its step 1) as P5b-2.
+  - *P4b-Q4 (a)* stands, and widens: the callback may also be pasted through an ACP client's elicitation form
+    (0051-MADR D4).
+  - *"The terms, read 2026-11-10":*
+    - *§1* ("own host only, disclosed") stands.
+    - *§2.3* ("a notice at sign-in, before the browser opens") stands; the notice is now the `confirm` step's text.
+    - *§2.4,* "The background-use consent is an ordinary setting. The notice and the guide say how to turn it off,
+      and turning it off stops background requests from the next request", *is superseded by 0052-MADR D2 and D3.*
+      The notice names a command, and the gate reads the session at every background request, so "from the next
+      request" holds in every process.
+  - *"The phone sign-in (magic-cli-remote driving `gobble acp --login openai` on the user's host)" is superseded by
+    0051-MADR D4.* magic-cli-remote drives the browser flow, with the pasted callback, through ACP `authenticate`,
+    since it never advertises `auth.terminal`. The flow itself stands: the phone's real browser and a pasted
+    `127.0.0.1` callback.
+  - *The host id is now the host's,* from gobble's state directory (0052-MADR D4; 0025-MADR D6 built), and the issued
+    client is kept apart from the session (0052-MADR D5).
 - **D8. The smaller copies go.** `gobble models --search` uses `catalog.Search`; `llm/catalog.Price` uses
   `ModelCost.RatesFor`; `CacheWrite1hTokens` is counted; `HasLogin` and `HasKeyLogin` read `Descriptor.AuthMethods`;
   `acpserver/binary_test.go` uses `agentproc`.
@@ -376,6 +460,11 @@ its own.
   `CacheWrite1hTokens` would still change no figure. `HasLogin` and `HasKeyLogin`
   stayed with P4a, as D7's amendment of 2026-10-23 says, and are still hard-coded, now at `llm/provider/login.go:62`
   and `:66`, not `:71` and `:75`.)*
+
+  *(2026-11-10: `HasLogin` and `HasKeyLogin` are to be derived from go-llmprovider-sdk's method facts through
+  gobble's one policy filter, `provider.Offered`, by D2 of
+  `0051-MADR-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md` (`proposed`). That decision carries out
+  this bullet; `offers`, the per-id checks and `signInWords`' cases go with them.)*
 - **D9. Not now, each with its reason:**
   - native tool deferral (`Tool.Deferred`, `ToolLoadItem`): it changes the prompt cache's design, which
     0012-MADR and 0021-MADR own;

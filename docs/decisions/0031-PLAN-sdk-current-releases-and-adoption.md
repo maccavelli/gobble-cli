@@ -306,6 +306,25 @@ C1: `HEAD` `34365d6` (P4b's re-scope), `origin/main` `6cee0af`, the tree clean; 
 
 #### P4b-2 — the root: the plan sign-in, and the pin to `acpext/v0.4.0`
 
+*Superseded 2026-11-10, and not carried out as written.* The owner's Q6 folds P4b-2 into
+`0051-PLAN-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md` and
+`0052-PLAN-finish-the-chatgpt-plan-sign-in-on-the-sdk-engine.md`. Both are `proposed` and not yet committed, so they
+are named without links. Steps 1 to 10 map there:
+
+- step 1's measurement is redone against the SDK minor that carries go-llmprovider-sdk's 0074 and 0075;
+- step 2's pin is 0051-PLAN P2 and P4 (acpext `v0.5.0`);
+- step 3, the store, is 0052-PLAN P1 and P2;
+- step 4, the sign-in (`HasLogin("openai")`, the menus, and `gobble acp --login openai` offering the plan and the API
+  key), is 0051-PLAN P4 and P7 with 0052-PLAN P3 and P4;
+- steps 5 and 6, the provider and the consent, are 0052-PLAN P3 and P4;
+- step 7's tests are those PLANs' tables;
+- step 8's records are 0052-PLAN P4 and P6;
+- step 10's live check is 0052-PLAN P6's L5. Its 0049-PLAN P5b part is P5b-1 (0049-PLAN, landed now) and P5b-2
+  (0051-PLAN P4 step 1).
+
+The work is archived on the local branch `wip/0031-p4b2-chatgpt-plan` (`1406bd6`) and as a patch, and is cleared from
+`main`'s tree. This is 0052-PLAN's Deviation 1, of 2026-11-11.
+
 1. **Measure first**, as step 1 above says, against go-llmprovider-sdk `v1.29.0`:
    - `LoginChatGPTPlan`'s options and errors;
    - the wizard's offer with `AgentName`;
@@ -346,6 +365,60 @@ C1: `HEAD` `34365d6` (P4b's re-scope), `origin/main` `6cee0af`, the tree clean; 
 10. **Live check** by the owner, as step 5 above, recorded without any credential. ~~Then 0049-PLAN P5b runs on the
     pinned `v0.4.0`, and #3 can close.~~ *(Q3 (b): 0049-PLAN P5b's steps 2 to 8 are in this same phase and commit;
     after it, #3 can close.)*
+
+##### P4b-2 record (2026-11-10, in progress)
+
+C1: `HEAD` `d6c10a5` (P4b-1), equal to `origin/main`, the tree clean. acpext `v0.3.0` and go-llmprovider-sdk `v1.29.0`
+are required. `acpext/v0.4.0` is an annotated tag that peels to `d6c10a5`, and the proxy serves it
+(`github.com/maccavelli/gobble-cli/acpext v0.4.0`, after four tries).
+
+**Step 1, measured** (go-llmprovider-sdk `v1.29.0`, read in the module cache):
+
+- `LoginChatGPTPlan` (`llmprovider/auth/oauth_plan.go:94`):
+  - it refuses a blank `AgentName`, and a `Previous` that is not a plan session with an issued client, as
+    `ErrInvalidRequest`;
+  - it refuses a grant without `chatgpt.tokens.use.direct` as `ErrNotPermitted`;
+  - the browser flow has a timeout, and `InputCode` races the loopback listener.
+- The wizard (`wizard/auth.go`):
+  - it offers `AuthChatGPTPlan` only with `AgentName` set (`:80-92`);
+  - `resolveChatGPTPlan` (`:258-299`) loads the stored OpenAI session and passes it as `Previous` when it is a plan
+    session;
+  - with none, it first asks OpenAI's notice, "You're using your ChatGPT plan: … Continue?";
+  - its paste prompt is "Paste the redirected URL if the browser does not return" unless `NoPastePrompt` is set
+    (`:747-771`).
+- The openai provider sends a plan session's requests to the platform's Responses API (`providers/openai/openai.go:1-4`).
+
+**Deviation 1 (2026-11-10), the terms page.**
+- **What was found.** Step 1 asked for OpenAI's terms page to be read again. It answered HTTP 403 to an automated
+  fetch. The developer page, `developers.openai.com/siwc/token-sharing-open-source` (undated), loaded. It scopes plan
+  usage to open-source and locally hosted apps, and says each host keeps its own opaque host id.
+- **The owner's reading.** The owner chose to read the page and record it, and pasted its text: "Sign in with ChatGPT
+  Terms", effective 2026-11-04.
+- **The answers.** Three points the spec had not settled were put to the owner, and the owner answered:
+  - §1 storage: own host only, disclosed;
+  - §2.3: a privacy notice at sign-in;
+  - §2.4: the consent is a setting, named in the notice.
+- **The phone sign-in.** The owner asked for the Codex-like phone sign-in. It was answered as the browser flow with a
+  pasted callback URL, since the device-code flow is the Codex client's.
+- **What changes here.** All of this is recorded in the MADR's D7 amendment ("The terms, read 2026-11-10"). Steps 4
+  and 6 gain:
+  - **the notice**, shown before the browser opens, through gobble's `Prompter`, by gobble's own code before it calls
+    the wizard. It names the stored items, where they are, that they go only to OpenAI, how to remove them, that the
+    host must be the user's own and the file not copied, and how to turn the background consent off;
+  - **the guide**, `docs/guides/credentials.md`: the same, and the phone flow, step by step;
+  - **a test** that the notice is shown before any browser URL, and that it names `gobble auth logout openai` and the
+    consent setting.
+
+  No other file is added to the phase.
+
+**Closed 2026-11-10, not completed.** The owner chose to fold P4b-2 into the redesign (Q6 of magic-cli-remote's
+`docs/reports/0245-REPORT-non-api-key-auth-across-magic-gobble-and-the-sdk.md`). What was built was archived on
+2026-11-11 on the local branch `wip/0031-p4b2-chatgpt-plan` (`1406bd6`), and as a patch whose SHA-256 is
+`8b89cbb7dc2da2d3caddb5f8148eede5084c668247ba510a0ce3cd8c08b71063`, then cleared from `main`'s tree. 0052-PLAN P1
+takes its parts from there.
+
+Deviation 1's reading of the terms is kept. The MADR's supersession of 2026-11-10 says which of its answers change.
+Not done here: steps 2 to 10.
 
 ### P5 — the smaller copies, and the records (D8)
 
