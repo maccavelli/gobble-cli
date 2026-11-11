@@ -4,9 +4,16 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/x/ansi"
+	"github.com/maccavelli/go-tui-lib/v2/ask"
+	"github.com/maccavelli/go-tui-lib/v2/glyph"
+
+	"github.com/maccavelli/gobble-cli/internal/cli/editor"
 	"github.com/maccavelli/gobble-cli/llm/llmtest"
 	"github.com/maccavelli/gobble-cli/permission"
 	"github.com/maccavelli/gobble-cli/personality"
@@ -15,6 +22,44 @@ import (
 
 // untrustedLine is decision 9's line (0005-PLAN F6-1).
 const untrustedLine = "this project is not trusted: its .gobble files and skills are not loaded; gobble trust trusts it"
+
+// trustMenu is the trust question about proj as a test expects it: its
+// title, its answers on one row, and cancel. It is written out here, not
+// built by permissionQuestion, so a test of the drawing is not a test of
+// the drawing against itself (0053-MADR D3).
+func trustMenu(proj string, answers ...ask.Answer) ask.Question {
+	return ask.Question{Title: "Trust " + proj + "?", Rows: []ask.Row{{Answers: answers}},
+		Cancel: ask.Answer{Key: "c", Label: "cancel"}}
+}
+
+// numbered are labels as answers keyed 1, 2, and on.
+func numbered(labels ...string) []ask.Answer {
+	out := make([]ask.Answer, len(labels))
+	for i, l := range labels {
+		out[i] = ask.Answer{Key: strconv.Itoa(i + 1), Label: l}
+	}
+	return out
+}
+
+// drawnRows is how many times screen shows q as go-tui-lib's ask lays it
+// out at width, every row of it but the prompt's, as one run of rows: a
+// path too long for a row is checked as it wraps, so no host's temp root
+// changes the result (0053-MADR D3).
+func drawnRows(screen string, q ask.Question, width int) int {
+	want := ask.Layout(q, width, ansi.WcWidth, glyph.For(false))
+	want = want[:len(want)-1]
+	rows := strings.Split(screen, "\n")
+	for i := range rows {
+		rows[i] = strings.TrimRight(rows[i], " ")
+	}
+	n := 0
+	for i := 0; i+len(want) <= len(rows); i++ {
+		if slices.Equal(rows[i:i+len(want)], want) {
+			n++
+		}
+	}
+	return n
+}
 
 // projectSystem is trustProject's SYSTEM.md.
 const projectSystem = "The project's own system prompt."
@@ -265,16 +310,12 @@ func TestTrustQuestion(t *testing.T) {
 			t.Errorf("%q: %+v", c.key, d)
 		}
 		// The question, drawn by ask as 0029-MADR D2 lays it out, once.
-		s := shownOn(t, errw.String(), 120)
+		s := shownOn(t, errw.String(), editor.MaxWidth)
+		menu := trustMenu(proj, numbered("Trust", "Trust the parent folder ("+parent+")", "Trust for this run",
+			"Do not trust", "Do not trust for this run")...)
 		if !strings.Contains(errw.String(), "Trusting "+proj+" lets gobble load the project's .gobble settings, SYSTEM.md, skills, prompts and personalities.") ||
-			strings.Count(s, "Trust "+proj+"?") != 1 {
-			t.Errorf("%q: stderr\n%s", c.key, s)
-		}
-		for _, want := range []string{"[1] Trust", "[2] Trust the parent folder (" + parent + ")", "[3] Trust for this run",
-			"[4] Do not trust", "[5] Do not trust for this run", "[c] cancel"} {
-			if !strings.Contains(s, want) {
-				t.Errorf("%q: %q not shown in\n%s", c.key, want, s)
-			}
+			drawnRows(s, menu, editor.MaxWidth) != 1 {
+			t.Errorf("%q: the question is not drawn once as ask lays it out at %d columns:\n%s", c.key, editor.MaxWidth, s)
 		}
 		m := saved(t, home)
 		at := proj
@@ -310,8 +351,9 @@ func TestTrustQuestionNoParent(t *testing.T) {
 		}
 	})
 	e.decideTrustHere(proj)
-	if s := shownOn(t, errw.String(), 120); !strings.Contains(s, "Trust "+proj+"?") ||
-		!strings.Contains(s, "[y] allow once  [a] always  [n] deny  [N] never") || !strings.Contains(s, "> allow once") {
+	menu := trustMenu(proj, ask.Answer{Key: "y", Label: "allow once"}, ask.Answer{Key: "a", Label: "always"},
+		ask.Answer{Key: "n", Label: "deny"}, ask.Answer{Key: "N", Label: "never"})
+	if s := shownOn(t, errw.String(), editor.MaxWidth); drawnRows(s, menu, editor.MaxWidth) != 1 || !strings.Contains(s, "> allow once") {
 		t.Fatalf("stderr\n%s", s)
 	}
 	if _, d := e.projectTrust(proj); !d.Trusted || d.Source != permission.SourceAnswer {
@@ -339,12 +381,10 @@ func TestLineViewTrust(t *testing.T) {
 	if n := strings.Count(h.stderr.String(), untrustedLine); n != 1 {
 		t.Fatalf("told %d times:\n%s", n, h.stderr.String())
 	}
-	shown := shownOn(t, h.stderr.String(), 120)
-	for _, want := range []string{"Trust " + proj + "?", "[1] Trust", "[2] Trust the parent folder (" + filepath.Dir(proj) + ")",
-		"[3] Do not trust", "> Trust"} {
-		if !strings.Contains(shown, want) {
-			t.Fatalf("%q not shown in\n%s", want, shown)
-		}
+	shown := shownOn(t, h.stderr.String(), editor.MaxWidth)
+	menu := trustMenu(proj, numbered("Trust", "Trust the parent folder ("+filepath.Dir(proj)+")", "Do not trust")...)
+	if drawnRows(shown, menu, editor.MaxWidth) != 1 || !strings.Contains(shown, "> Trust") {
+		t.Fatalf("/trust's question is not drawn once as ask lays it out at %d columns, then answered:\n%s", editor.MaxWidth, shown)
 	}
 	if m := saved(t, os.Getenv("GOBBLE_HOME")); !m[proj] || len(m) != 1 {
 		t.Fatalf("trust.json %v", m)

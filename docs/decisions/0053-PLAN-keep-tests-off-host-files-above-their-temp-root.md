@@ -286,6 +286,68 @@ records, which are the owner's and are not touched, and this pair.
   * Step 6's breaks for `ProjectSkillDirs` are one: the walk's check removed.
 * **Files added to the phase:** none.
 
+### P4 record (2026-11-11)
+
+Scripts and logs are in the session scratchpad (`p4_0053_breaks.py`, `p4_0053_long.py`, `p4_0053_*.log`, `p4_*.log`).
+
+1. **C1.**
+   * `HEAD` was `8a7262b`, P3, committed by the owner. `origin/main` was `86ad4a7`.
+   * The tree held only the owner's untracked 0051 and 0052 records.
+   * **`askOn`** (`internal/cli/permission.go:185`) builds its asker with `ask.WithGlyphs(glyph.For(unicodeOK))` and no
+     `WithMethod`, so it measures with go-tui-lib's default, `ansi.WcWidth`.
+   * **The answered frame** (go-tui-lib v2.12.0 `ask/asker.go:296-302`) is `Layout(q, width, …)` without its last row,
+     then the answer's row after the prompt, as step 1 needs. No deviation.
+   * **The two questions.** `askTrust` (`internal/cli/trust.go:167`) asks with no voice, five options of repeated
+     kinds, so they are keyed 1 to 5. `/trust` (`acpserver/trust.go:99-107`) goes through `askPermission` with three.
+     `TestTrustQuestionNoParent`'s four options repeat no kind, so they are keyed `y`, `a`, `n` and `N`.
+   * **The width.** All three are drawn at `promptWidth`'s `editor.MaxWidth`, 120. The line harness's stderr is not
+     a terminal.
+2. **The helpers in `internal/cli/trust_test.go`:**
+   * `trustMenu(proj, answers...) ask.Question` writes the question out: `Trust <proj>?`, one row of answers, and
+     `[c] cancel`;
+   * `numbered(labels...)` keys labels 1, 2 and on;
+   * `drawnRows(screen, q, width) int` counts the runs of `ask.Layout(q, width, ansi.WcWidth, glyph.For(false))`'s
+     rows, all but the prompt's, among the screen's rows, each trimmed on the right.
+3. **The three tests.** Each now checks `drawnRows(…, editor.MaxWidth) == 1` against its written-out question, in
+   place of the row-substring checks and the title count.
+   * The answer's row (`> allow once`, `> Trust`), the raw `Trusting … lets gobble load …` line, the
+     `untrustedLine` count and the saved-trust checks are unchanged.
+   * The screen is drawn at `editor.MaxWidth`, the width the question is laid out at, in place of a literal 120.
+4. **Breaks** (C4, `p4_0053_breaks.py`). All 4 cases were as expected:
+
+   | Break | Failed |
+   | :--- | :--- |
+   | control | none |
+   | one expected label changed ("for this run" to "for this time") | `TestTrustQuestion` |
+   | the expected layout taken at 80 columns | all three |
+   | the cancel answer dropped from the expected question | all three |
+
+   Each failed with `trust_test.go:318: "1": the question is not drawn once as ask lays it out at 120 columns:`,
+   followed by the screen, or the matching message of the other two tests.
+5. **Under a long temp root** (`p4_0053_long.py`): the three tests passed, as expected, both with the default temp
+   root and with `TMPDIR` and `GOTMPDIR` at a 201-character directory. The parent folder's label wraps there, and
+   `drawnRows` matched the wrapped rows.
+6. **`make check-test-isolation`:** exit 0. The macOS report:
+
+   ```text
+   == root module: go test exit 0; 0 failing in 0 package(s)
+   == acpext module: go test exit 0; 0 failing in 0 package(s)
+   == files written above the temp roots: 0
+   check-test-isolation: ok
+   ```
+
+   The Linux machine and the Windows laptop gave the same report. That is earlier than P5 step 4 asks, and does not
+   replace it.
+7. **Gates** (C5):
+   * `make pre-add-check` on `internal/cli/trust_test.go`: clean.
+   * `make preflight`: "preflight passed".
+   * `make race`: 39 `ok`.
+   * **Both hosts:** `go test ./...` 38 `ok`, `acpext` `ok`, `go test -race ./...` exit 0.
+   * **An interruption, not a deviation.** The first local `make preflight` and `make race` stopped at once with
+     `go1.27.4: not downloaded. Run 'go1.27.4 download'`. A go1.27.4 SDK was being unpacked on this machine at the
+     time, outside this work, and `GOTOOLCHAIN` named it. The unpack finished at 12:10:31. Both gates were run again
+     on the same tree and passed. Earlier phases' gates also ran go1.27.4, from the module cache's toolchain.
+
 ### P3 record (2026-11-11)
 
 Scripts and logs are in the session scratchpad (`p3_0053_breaks.py`, `p3_0053_*.log`, `p3_*.log`).
