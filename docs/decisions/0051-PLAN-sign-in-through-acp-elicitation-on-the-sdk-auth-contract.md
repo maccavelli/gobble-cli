@@ -646,3 +646,24 @@ asserted that its old text occurred once before it replaced it, and was read bac
      path and host name it found one line (exit 0).
 
 Acceptance: every note quotes what it amends, and `check-records` passes. Met. P1 is not started.
+*(2026-11-11, later: the owner committed P0 as `011b63a`.)*
+
+### P1 record (2026-11-11)
+
+Run by the cross-repository coordinator on the owner's approval of this PLAN, from `main` at `011b63a`, clean tree.
+
+1. `acpext/auth.go:3-8`, `AuthProvider`'s doc, now reads: "AuthProvider is a provider gobble's ACP authentication
+   names (0016-MADR A2). ID is the id of the agent auth method gobble advertises for it. Name is its label. Command runs
+   the provider's bare sign-in, or, ending in "--api-key -", reads a key from standard input. Login means the provider
+   has a way to sign in other than an API key; it never means a device code, and a provider with a sign-in may still
+   take a key, as OpenAI's offers its ChatGPT plan sign-in and its API key (gobble-cli 0031-MADR D7). A client reads
+   each sign-in method's facts from the agent's _meta.gobble.methods once connected (gobble-cli 0051-MADR D7)."
+2. No code, test or tag. The doc reaches pkg.go.dev with `acpext/v0.5.0` (P3).
+3. `make pre-add-check FILES="acpext/auth.go"`: exit 0, "go-precheck: 1 file(s) clean (gofmt, golint, govulncheck)."
+   `make check-acpext-deps`: exit 0, "check-acpext-deps: ok". `go -C acpext test -count=1 ./...`: exit 0,
+   "ok github.com/maccavelli/gobble-cli/acpext".
+4. `git diff -U0 -- acpext/auth.go`, filtered to changed lines that are not `//` comments: none (`grep` exit 1). The
+   diff is 9 lines added and 6 removed, all in the comment.
+
+Acceptance: `go -C acpext test` passes unchanged, and the diff touches `acpext/auth.go`'s comment only. Met. Staged
+with this record; the owner commits. P2 waits for the SDK's tags (the gate before P2).

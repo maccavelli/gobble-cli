@@ -1,11 +1,14 @@
 package acpext
 
-// AuthProvider is a provider gobble's ACP authentication names: its id,
-// which is its agent auth method's id; its label; the gobble command that
-// stores its credential; and whether it has a sign-in rather than a key
-// alone (0016-MADR A2). A provider with a sign-in may still take a key: its
-// command offers both, as OpenAI's offers its ChatGPT plan sign-in and its
-// API key (gobble-cli 0031-MADR D7, amended 2026-11-10).
+// AuthProvider is a provider gobble's ACP authentication names (0016-MADR
+// A2). ID is the id of the agent auth method gobble advertises for it. Name
+// is its label. Command runs the provider's bare sign-in, or, ending in
+// "--api-key -", reads a key from standard input. Login means the provider
+// has a way to sign in other than an API key; it never means a device code,
+// and a provider with a sign-in may still take a key, as OpenAI's offers
+// its ChatGPT plan sign-in and its API key (gobble-cli 0031-MADR D7). A
+// client reads each sign-in method's facts from the agent's
+// _meta.gobble.methods once connected (gobble-cli 0051-MADR D7).
 type AuthProvider struct {
 	ID, Name, Command string
 	Login             bool
