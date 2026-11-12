@@ -393,6 +393,10 @@ round trip through `Login` and `auth.json` loses, so the next SDK field is not d
 
 Run by the first `v0.6.0` process that resolves credentials, before it reads `auth.json`; idempotent by content, so each
 later run finds nothing to do and writes nothing.
+*(2026-11-12: "Run by the first `v0.6.0` process that resolves credentials" now reads `v0.7.0`, the release
+that carries this record's work. `v0.6.0` is the release of
+[0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md](0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md),
+cut before it.)*
 
 1. Under `auth.json`'s lock, re-read the file and compute the changes of steps 3 to 5. None: stop.
 2. **Back up** to `auth.json.bak-<UTC, YYYYMMDDTHHMMSSZ>` beside it, owner-only as `auth.json` is, before any write,

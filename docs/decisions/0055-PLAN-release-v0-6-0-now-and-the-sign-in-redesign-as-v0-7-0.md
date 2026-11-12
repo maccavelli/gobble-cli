@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: in-progress
 date: 2026-11-12
 associated-madr: "0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md"
 ---
@@ -295,3 +295,40 @@ Each command's exit status is captured before any filter.
 Not started. The MADR was accepted by the owner on 2026-11-12; this PLAN awaits the owner's approval. Writing the pair
 changed no file but the pair's two: `docs/README.md` has no 0055 rows yet (P0 step 3), and no record named in P0 has a
 note yet.
+*(2026-11-12: the coordinator committed the pair as `554f3f4`, and the owner approved this PLAN the same day; P0 was
+run and staged, see its record below. P1 to P3 are not started.)*
+
+### P0 record (2026-11-12)
+
+The coordinator committed this pair as `554f3f4`; the owner approved the PLAN the same day.
+
+C1: branch `main`, `HEAD` `554f3f4`, `origin/main` `cc1d55e`, one commit ahead, the tree clean; `git diff --stat cc1d55e
+HEAD -- . ':!docs'` empty. P0 is staged alone; P1 follows once it is committed (C7). No deviation.
+
+1. **Status.** This PLAN's front matter `status` is `in-progress`, set by an assertion that the old line occurred once.
+2. **The notes.** The line numbers of step 2's table are `cc1d55e`'s and hold at `554f3f4`, which changed only this
+   pair: `grep -n 'v0\.6\.0'` gives the same 32 lines in the six records, none moved. A script placed 24 note blocks, 27
+   notes, each dated 2026-11-12, quoting the text it amends and linking 0055-MADR, as new lines after it: after the
+   line that ends the quoted sentence where the paragraph runs on (0051-MADR `:180`), otherwise after the last line of
+   the paragraph or list item, and after that item's notes of 2026-11-11 where it has them. Before inserting, it
+   asserted that each anchor line held its text and that each quoted phrase occurred once in its record (0054-PLAN's
+   `:228` and `:269` close two acceptances with the same sentence, so that sentence was asserted to occur twice, each
+   anchored by line); after, that every original line survived in order. 0051-MADR 1 note, 0051-PLAN 6, 0052-MADR 1,
+   0052-PLAN 5, 0054-MADR 9, 0054-PLAN 5; 0054-MADR `:452` none, as step 2 says. `git diff --numstat` of the six
+   records: 4, 23, 4, 18, 37 and 16 lines added, 0 deleted. Read back in full after the edit.
+3. **`docs/README.md`.** The 0055 MADR and PLAN rows follow 0054's PLAN row, the title as a link, then the status cell;
+   in the 0054 MADR row, "(2026-11-12: `v0.6.0` cut early by 0055)" after "D6 no release tagged, no `v0.5.1`".
+4. **For the coordinator:** step 4's table, unchanged. No file outside this repository was edited.
+5. **Checks,** each to a scratch log, its exit status taken before any filter:
+   * `python3 -B scripts/check_records.py --check-all`: exit 0, no output.
+   * `make check-records markdownlint`: exit 0, "Summary: 0 issues in 0 files".
+   * The acceptance's `grep`: each of the nine "redesign → `v0.7.0`" rows (0051-PLAN `:527`, `:538`, `:544`, `:547`;
+     0052-MADR `:394`; 0052-PLAN `:372`, `:402`, `:417`, `:423`) has a note naming `v0.7.0`; `grep -c '2026-11-12'`
+     in each of the six records equals its note count.
+   * `git diff --numstat`: the six records add lines only; `docs/README.md` adds two rows and changes one, the 0054
+     MADR row, by step 3's words alone (numstat 3 and 1); this PLAN changes its `status` line and adds its records.
+   * The identifier scan of the diff's added lines (the local account name, the development hosts' names, the owner's
+     mail domain, and real-machine home and temporary paths): nothing found, exit 0. The scan was first seen to fail,
+     exit 1 with two hits, on a scratch copy of the diff with a planted account name and home path.
+
+   The two record checks and the scan were run again after this record was written, on the staged diff: exit 0 each.

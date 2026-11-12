@@ -221,11 +221,19 @@ D5)".)*
     gobble wire fixtures hold this `initialize` answer; they are recaptured at `v0.6.0` in any case (magic-cli-remote
     `docs/decisions/0246-PLAN-take-provider-auth-types-from-the-sdk-auth-contract-in-one-cut-over.md`, Gate G2 and P7's
     L4), and nothing here waits for them.
+    *(2026-11-12: "they are recaptured at `v0.6.0` in any case" is no longer true as written: the recapture of
+    magic-cli-remote `0246-PLAN-take-provider-auth-types-from-the-sdk-auth-contract-in-one-cut-over.md` reads its Gate G2 release, `v0.7.0`.
+    `v0.6.0`, the release of
+    [0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md](0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md),
+    is the first whose `initialize` advertises `systemPrompt`; a recapture at `v0.6.0` is magic-cli-remote's choice
+    (0055-MADR's F9).)*
 12. **Gates** (C6), with `make pre-add-check` on every changed Go file. Staged; the owner commits.
 
 Acceptance: `check_libs.py` passes; the pin moved its own line alone; the MADR records Q1's answer (D5's note) and D7;
 step 10's tests pass and each plant failed; `session.golden` changed by the one member; the gates pass on three hosts.
 magic-cli-remote's move to `v1.36.0` is not this phase's: MADR D3's lockstep is read at `v0.6.0`.
+*(2026-11-12: "MADR D3's lockstep is read at `v0.6.0`" stays true; `v0.6.0` is the release of
+[0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md](0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md).)*
 
 #### P2 as first written (superseded 2026-11-11, later; kept as it was written)
 
@@ -267,6 +275,8 @@ magic-cli-remote's move to `v1.36.0` is not this phase's: MADR D3's lockstep is 
 Acceptance: `check_libs.py` passes; the pin moved its own line alone; Q1's answer is in the MADR; its test passes and
 each plant failed; the gates pass on three hosts. magic-cli-remote's move to `v1.36.0` is not this phase's: MADR D3's
 lockstep is read at `v0.6.0`.
+*(2026-11-12: "MADR D3's lockstep is read at `v0.6.0`" stays true; `v0.6.0` is the release of
+[0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md](0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md).)*
 
 ### P3 — go-selfupdate-lib `v1.26.2` (MADR D3, D4)
 
@@ -328,12 +338,18 @@ Each command's exit status is captured before any filter.
 * **Rollout.** Three commits on `main`, each pushed by the owner. P1 alone turns CI green. The pins and the Go fix
   reach users with the next gobble release, `v0.6.0`; no tag is made here (MADR D6). 0051-PLAN's P2 and 0052-PLAN's
   phases then start from `main` as P3 leaves it.
+  *(2026-11-12: "The pins and the Go fix reach users with the next gobble release, `v0.6.0`" stays true; it is
+  the release of
+  [0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md](0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md),
+  cut from `main` with no change outside `docs/`.)*
 * **Rollback of P3:** revert its commit. `go.mod`, the two workflow pins and the docs return to `v1.26.0` together.
 * **Rollback of P2:** revert its commit, test included. gobble is back on `v1.35.0`. If magic-cli-remote has moved to
   `v1.36.0` by then, the two differ until one of them moves again, which matters at `v0.6.0` and not before (MADR D3).
   *(2026-11-11, later: the revert also takes the capability away. A session saved meanwhile with a client prompt
   keeps its `gobble.system_prompt` entry, which the reverted build does not read; its baseline still holds the
   `client_prompt` section, so that build's next turn sends a patch that removes it. Nothing else of the file is lost.)*
+  *(2026-11-12: "which matters at `v0.6.0` and not before" stays true; `v0.6.0` is the release of
+  [0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md](0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md).)*
 * **Rollback of P1:** reverting it returns `go.mod` to `go 1.27.3`, and CI's govulncheck fails again. It is reverted
   only to be replaced, for instance by a newer patch release of Go.
 * **Nothing published is undone.** No tag is made, and acpext's `go` line reaches a consumer only with

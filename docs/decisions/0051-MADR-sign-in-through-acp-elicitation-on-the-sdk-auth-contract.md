@@ -178,6 +178,10 @@ Read 2026-11-10 in `go list -m -f '{{.Dir}}' github.com/maccavelli/acp-go-sdk2` 
 
 *(2026-11-11: the pin moves to acp-go-sdk2 `v1.36.0`, and U8 holds there.)* On 2026-11-11 the owner approved moving
 gobble-cli and magic-cli-remote together from `v1.35.0` to `v1.36.0` before gobble's `v0.6.0`.
+*(2026-11-12: "moving gobble-cli and magic-cli-remote together from `v1.35.0` to `v1.36.0` before gobble's
+`v0.6.0`" stays true: both moved before it. `v0.6.0` is the release of
+[0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md](0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md),
+cut from `main` before this record's work; this record's release, the ACP sign-in redesign, is `v0.7.0`.)*
 [0054-MADR-go-1-27-4-and-sibling-pin-refresh.md](0054-MADR-go-1-27-4-and-sibling-pin-refresh.md)
 decides it for this repository, and its PLAN makes the move before this record's PLAN reaches P2. The lines above are
 `v1.35.0`'s and are kept. At `v1.36.0`, read with `git show v1.36.0:<file>` in a clone of acp-go-sdk2:

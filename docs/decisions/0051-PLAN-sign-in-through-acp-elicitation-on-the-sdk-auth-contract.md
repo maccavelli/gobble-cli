@@ -532,6 +532,15 @@ Each command's exit status is captured before any filter.
      acp-go-sdk2 tag as magic-cli-remote, which is its `docs/decisions/0179-MADR-gobble-native-acp-provider.md` gate 3,
      "Both repositories on one acp-go-sdk2 tag". If either repository's pin moves again before `v0.6.0`, it moves in
      both, or the release waits.)*
+     *(2026-11-12: "then gobble's next release, `v0.6.0`, tagged by the owner" now reads `v0.7.0`: gobble's
+     `v0.6.0` was cut earlier, from `main`, by
+     [0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md](0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md).)*
+     *(2026-11-12: "And `v0.6.0` pins acp-go-sdk2 `v1.36.0`, in step with magic-cli-remote" and "`v0.6.0` is the
+     gobble release that must pin the same acp-go-sdk2 tag" stay true, and are met by the `v0.6.0` of
+     [0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md](0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md).
+     `v0.7.0` must pin magic-cli-remote's tag again, read at the Gate G2 of magic-cli-remote `0246-PLAN-take-provider-auth-types-from-the-sdk-auth-contract-in-one-cut-over.md`,
+     and "If either repository's pin moves again before `v0.6.0`, it moves in both, or the release waits" runs on to
+     `v0.7.0` (0055-MADR's D2).)*
   3. magic-cli-remote: `acpext/v0.4.0` ~~now~~ with its gobble mapping patched (Q14; its
      `docs/decisions/0179-PLAN-gobble-native-acp-provider.md` P7); at its cut-over
      (`docs/decisions/0246-PLAN-take-provider-auth-types-from-the-sdk-auth-contract-in-one-cut-over.md`),
@@ -540,12 +549,22 @@ Each command's exit status is captured before any filter.
      *(2026-11-11: "now" has not happened. magic-cli-remote's `go.mod` requires acpext `v0.3.0` and acp-go-sdk2
      `v1.35.0` at its origin/master `eefb7c25`; the acpext bump is its 0179-PLAN P7, commit 7a, still `proposed`. It
      moves acp-go-sdk2 to `v1.36.0` by a record of its own, in step with 0054 here.)*
+     *(2026-11-12: "a gobble at or above `v0.6.0`" now reads `v0.7.0`, the redesign's release. `v0.6.0` is the
+     release of [0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md](0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md),
+     cut before it, and does not carry the redesign.)*
 * **Rollout.** A client that offers no elicitation sees today's ACP wire. `--json` changes at once for every consumer;
   Magic is the only known one, and moves with `v0.6.0`.
+  *(2026-11-12: "Magic is the only known one, and moves with `v0.6.0`" now reads `v0.7.0`, the redesign's
+  release. `v0.6.0` is the release of
+  [0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md](0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md),
+  and leaves `--json` as `v0.5.0` had it.)*
 * **Rollback before a tag:** revert the phase's commit.
 * **Rollback after `acpext/v0.5.0`:** a tag is never moved or deleted; a fix goes forward as `acpext/v0.5.1`.
 * **Rollback after gobble `v0.6.0`:** the previous binary still reads `auth.json` (unknown members round-trip,
   `internal/auth/store.go`'s `member.value`); Magic's cut-over is reverted with it.
+  *(2026-11-12: "Rollback after gobble `v0.6.0`: the previous binary still reads `auth.json`" now reads
+  `v0.7.0`; the previous binary is then `v0.6.0`'s, cut by
+  [0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md](0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md).)*
 
 ## Execution record
 
@@ -571,6 +590,10 @@ corrects.
 * **P6:** two tests and one count for the paste rules.
 * **Rollout:** 0054 first; the SDK's Go-floor record before its 0076 minor; `v0.6.0` pins acp-go-sdk2 `v1.36.0` in
   step with magic-cli-remote; magic-cli-remote has not taken `acpext/v0.4.0` yet.
+  *(2026-11-12: "`v0.6.0` pins acp-go-sdk2 `v1.36.0` in step with magic-cli-remote" stays true, as the
+  rollout's note of this date says: the `v0.6.0` of
+  [0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md](0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md)
+  meets it, and the lockstep runs on to `v0.7.0`, the redesign's release.)*
 
 **Later on 2026-11-11, the owner's rulings relayed by the cross-repository coordinator** (records only; no phase has
 started):

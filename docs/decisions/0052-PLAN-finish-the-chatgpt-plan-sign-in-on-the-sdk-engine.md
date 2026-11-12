@@ -370,6 +370,9 @@ Acceptance: the tests pass, each plant failed.
      generation on the owner's ChatGPT plan.*
 3. Notes at completion: `0005-PLAN-v1-feature-scope.md` F4-3d and `0025-PLAN-provider-choice-and-auth.md` P6 done here.
 4. The MADR's Completion section; this PLAN `complete`; the owner tags gobble `v0.6.0` with 0051's work.
+   *(2026-11-12: "the owner tags gobble `v0.6.0` with 0051's work" now reads `v0.7.0`; gobble `v0.6.0` was cut
+   earlier, from `main`, by
+   [0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md](0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md).)*
 
 Acceptance: Confirmation 1 to 8 met, or each unmet item named with its reason.
 
@@ -414,8 +417,19 @@ Each command's exit status is captured before any filter.
   `consentTerms`), shows them on the phone, changes a consent by running `gobble auth consent <provider> <consent>
   allow|deny` non-interactively, and maps a refused background request, kind `not_permitted` with acpext's
   `ErrorData.Consent`, to a prompt offering to allow it (MADR D2's, D3's and D8's notes of that date).)*
+  *(2026-11-12: "P4; P5; P6; gobble `v0.6.0`, tagged by the owner" now reads `v0.7.0`; gobble `v0.6.0` was cut
+  earlier, from `main`, by
+  [0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md](0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md).)*
+  *(2026-11-12: "`v0.6.0` pins acp-go-sdk2 `v1.36.0`, in step with magic-cli-remote" stays true, as 0051-PLAN's
+  rollout note of this date says: the `v0.6.0` of
+  [0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md](0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md)
+  meets it, and the lockstep runs on to `v0.7.0`.)*
 * **Rollout.** The migration runs once, at the first `v0.6.0` start. A plan session never existed in a release, so
   only a build of the uncommitted work could have one; the migration covers it.
+  *(2026-11-12: "The migration runs once, at the first `v0.6.0` start" now reads `v0.7.0`. "A plan session never
+  existed in a release" stays true at `v0.6.0`, the release of
+  [0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md](0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md),
+  which carries the four plan fields with no method that creates a plan session (0055-MADR's F5).)*
 * **Rollback before a commit:** the phase's edits reversed by the inverse edit (C9); P1's patch restores the
   uncommitted work exactly.
   *(2026-11-11: after Deviation 1 nothing of that work is uncommitted, so there is nothing of it to lose. It is
@@ -424,6 +438,10 @@ Each command's exit status is captured before any filter.
   allowed: `jsonx.StrictOptions`, `jsonx/jsonx.go:23-25`, rejects only invalid UTF-8 and duplicate names), ignores the
   state files, and keeps both members when it rewrites an entry (`merge` keeps unnamed fields). A dropped key is in the
   backup.
+  *(2026-11-12: "Rollback after `v0.6.0`: the previous binary reads `auth.json` with `kind` and `consents`" now
+  reads `v0.7.0`; the previous binary is then `v0.6.0`'s, cut by
+  [0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md](0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md),
+  whose store is `cc1d55e`'s.)*
 
 ## Execution record
 

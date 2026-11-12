@@ -20,6 +20,10 @@ would start from a red base. Two sibling libraries have also released since
 them. On 2026-11-11 the owner approved this record: move Go to 1.27.4, and refresh acp-go-sdk2 and go-selfupdate-lib,
 before 0051-PLAN's P2. The same day the owner approved moving gobble-cli and magic-cli-remote together from acp-go-sdk2
 `v1.35.0` to `v1.36.0` before gobble's `v0.6.0`.
+*(2026-11-12: "the owner approved moving gobble-cli and magic-cli-remote together from acp-go-sdk2 `v1.35.0` to
+`v1.36.0` before gobble's `v0.6.0`" stays true: both moved before it, and `v0.6.0` is the release of
+[0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md](0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md),
+cut now from `main`.)*
 
 ### What holds at `17d1605` (read 2026-11-11)
 
@@ -124,6 +128,9 @@ before 0051-PLAN's P2. The same day the owner approved moving gobble-cli and mag
   everywhere**: the module, the CI workflows and the docs (0048-MADR Q6 (a)).
 * **Lockstep with magic-cli-remote on acp-go-sdk2** (its 0179-MADR gate 3; the owner's ruling of 2026-11-11 that
   `v0.6.0` is the gobble release that must pin the same tag as magic-cli-remote).
+  *(2026-11-12: "the owner's ruling of 2026-11-11 that `v0.6.0` is the gobble release that must pin the same tag
+  as magic-cli-remote" stays true, and is met by the `v0.6.0` of
+  [0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md](0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md).)*
 * **Small steps that revert alone:** the toolchain, and each pin, in a commit of its own.
 * **No decision hidden in a pin:** the one behaviour `v1.36.0` changes is decided in the open, with a test.
 
@@ -186,6 +193,10 @@ acpext tag is made for it, and `acpext/v0.5.0` carries it.)*
 * **Lockstep.** gobble's `main` and magic-cli-remote both pin acp-go-sdk2 `v1.36.0` before gobble's `v0.6.0` is tagged;
   magic-cli-remote moves by its own record. If either repository's pin moves again before `v0.6.0`, it moves in both,
   or the release waits (0051-PLAN's rollout, note of 2026-11-11).
+  *(2026-11-12: "before gobble's `v0.6.0` is tagged" and "If either repository's pin moves again before
+  `v0.6.0`, it moves in both" stay true of `v0.6.0`, the release of
+  [0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md](0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md);
+  the rule runs on to `v0.7.0`, the ACP sign-in redesign's release.)*
 
 ### D4. CI and docs name the same versions
 
@@ -231,6 +242,16 @@ in `net/http`, which they reach through the OAuth loopback listener of a browser
 binary stays exposed until its user moves to `v0.6.0`, whenever that is tagged, and this record does nothing to
 shorten that. What F3 says of the exposure is unchanged: the listener binds a loopback address for the length of a
 sign-in.)*
+
+*(2026-11-12: "That release is `v0.6.0`, the owner's to tag after 0051-PLAN and 0052-PLAN" is no longer true.
+`v0.6.0` is cut before them, from `main`, by
+[0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md](0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md);
+the release after 0051-PLAN and 0052-PLAN is `v0.7.0`.)*
+
+*(2026-11-12: "No `v0.5.1` is cut; the fix reaches users in `v0.6.0`" and "until its user moves to `v0.6.0`,
+whenever that is tagged" stay true; `v0.6.0` is the release of
+[0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md](0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md),
+cut now.)*
 
 ### D7. gobble advertises client system prompts and honours them (the owner's answer to Q1)
 
@@ -306,6 +327,12 @@ choice the schema leaves open, `override`, is Q2, which awaits the owner.
   stub agent's and does not change. magic-cli-remote's gobble wire fixtures are recaptured against `v0.6.0` in any
   case (magic-cli-remote `docs/decisions/0246-PLAN-take-provider-auth-types-from-the-sdk-auth-contract-in-one-cut-over.md`,
   Gate G2 and P7's L4), so this adds no recapture there. magic-cli-remote sends no `systemPrompt` (F6).
+  *(2026-11-12: "magic-cli-remote's gobble wire fixtures are recaptured against `v0.6.0` in any case" is no longer
+  true as written: the recapture of magic-cli-remote `0246-PLAN-take-provider-auth-types-from-the-sdk-auth-contract-in-one-cut-over.md` reads its Gate G2
+  release, `v0.7.0`. `v0.6.0`, the release of
+  [0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md](0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md),
+  is the first whose `initialize` advertises `systemPrompt`, and a recapture at `v0.6.0` is magic-cli-remote's
+  choice (0055-MADR's F9).)*
 
 #### Q2. `override`: awaiting the owner
 
@@ -369,6 +396,10 @@ advertised. (b) or (c) is an amendment of D7 and of P2 before any of its code.
 * *(2026-11-11, later.)* Bad, because the `initialize` answer changes on the wire, and `session.golden` with it.
 * *(2026-11-11, later.)* Bad, because installed `v0.5.0` binaries stay exposed to GO-2026-6859 until their users move
   to `v0.6.0`: the owner chose no `v0.5.1` (D6's note).
+  *(2026-11-12: "installed `v0.5.0` binaries stay exposed to GO-2026-6859 until their users move to `v0.6.0`"
+  stays true; `v0.6.0` is the release of
+  [0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md](0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md),
+  cut now.)*
 
 ### Confirmation
 
@@ -510,6 +541,9 @@ the commit that adds this section.
 * **An earlier patch release for the Go fix.** `v0.5.0`'s binaries were built by CI with Go 1.27.3 (F2). Whether a
   `v0.5.1` should carry Go 1.27.4 ahead of `v0.6.0` is the owner's to ask; nothing here plans it.
   *(2026-11-11, later: decided by the owner, no `v0.5.1`; D6's note gives the decision and its consequence.)*
+  *(2026-11-12: "Whether a `v0.5.1` should carry Go 1.27.4 ahead of `v0.6.0`" stays true as it was asked and
+  answered; the release that carries Go 1.27.4 is `v0.6.0` itself, cut by
+  [0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md](0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md).)*
 * **Applying a client's system prompt** (Q1 (b)): a record of its own.
   *(2026-11-11, later: decided by the owner, in this record: D7. Whether `override` is offered stays open, as Q2.)*
 * **go-selfupdate-lib's sentinels** `ErrSpecialModeBits` and `ErrNoAllowedRoot` for more specific `gobble update`
@@ -533,6 +567,9 @@ Completion section.)*
   `override`, then awaiting the owner, since answered (a). Decision Outcome, Consequences, Confirmation 5 and "Not decided here" carry notes.
 * **No `v0.5.1`** (D6's note, "Not decided here", Consequences): the fix reaches users in `v0.6.0`, and installed
   `v0.5.0` binaries stay exposed until then.
+  *(2026-11-12: "the fix reaches users in `v0.6.0`, and installed `v0.5.0` binaries stay exposed until then"
+  stays true; `v0.6.0` is the release of
+  [0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md](0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md).)*
 * **D2 confirmed** as written.
 * **`consulted`:** what D7 was read from.
 
