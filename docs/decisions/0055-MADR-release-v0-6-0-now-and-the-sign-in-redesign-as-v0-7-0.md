@@ -225,12 +225,62 @@ repositories' to amend; the PLAN lists them for the cross-repository coordinator
 4. The Release `v0.6.0` is published, immutable and GitHub's Latest, with F1's seven asset names; `gh release verify
    v0.6.0` passes; each binary matches `SHA256SUMS` and its attestation verifies; the binary for macOS reports
    `v0.6.0 (release)` and Go `1.27.4`.
+   *(2026-11-12: "its attestation verifies" is checked as `gh attestation verify <asset> --repo maccavelli/gobble-cli --signer-repo maccavelli/go-selfupdate-lib`. The binaries are signed
+   by go-selfupdate-lib's reusable release workflow, so `--repo` alone, as the PLAN first worded the check, exits 1
+   with `Error: verifying with issuer "sigstore.dev"`. The release is unchanged; the command was incomplete. See the
+   PLAN's P2 record, deviation of 2026-11-12.)*
 5. Gate 3: `git show v0.6.0:go.mod` and magic-cli-remote's `go.mod` at its origin/master both pin acp-go-sdk2 `v1.36.0`.
 6. developing.md's "After each `v*` release" holds: no bypass in the tag's rule suites; `gobble update --check` from
    `v0.5.0`'s binary exits 10 naming `v0.6.0`, on macOS, the Linux machine and the Windows laptop; the Windows
    leftover check passes.
 7. The notes in 0051, 0052 and 0054, MADR and PLAN, are made, each quoting what it amends; `docs/README.md` indexes this
    pair; `make check-records` passes.
+
+### Completion (2026-11-12)
+
+Each item below is checked against
+[0055-PLAN-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md](0055-PLAN-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md)'s
+phase records. All seven are met. The commits are the pair `554f3f4`, P0 `7ee7591` and P1 `5dcd755`; the coordinator
+pushed `main` (`cc1d55e..5dcd755`) and the tag on the owner's word, and P2 and P3 are the commit that adds this section.
+The Release is <https://github.com/maccavelli/gobble-cli/releases/tag/v0.6.0>, published 2026-11-12T17:49:43Z by release
+run `43269895374`.
+
+1. **Met** (P1 record item 6; P2 record items 1 and 8). `git diff --stat cc1d55e v0.6.0 -- . ':!docs'` exit 0, empty.
+   `git show v0.6.0:go.mod` says `go 1.27.4`, has no `toolchain` line, and pins acp-go-sdk2 `v1.36.0`,
+   go-llmprovider-sdk `v1.29.0`, go-selfupdate-lib `v1.26.2`, go-tui-lib `v2.12.0` and acpext `v0.3.0`.
+2. **Met** (P2 record item 2). `git cat-file -p v0.6.0` gives object `5dcd755c5d432d7377d4e3ab8fecc6f828890eaf`, type
+   `commit`, tag `v0.6.0`, message `v0.6.0`, and the object is `main`'s head and `origin/main`. It was pushed on the
+   owner's word. `git ls-remote --tags origin 'acpext/*'` lists `v0.1.0` to `v0.4.0` alone: no acpext tag was made.
+3. **Met** (P2 record item 3). CI run `43269895374`, attempt 1, on `5dcd755`, concluded `success`: `validate` on
+   `ubuntu-24.04`, `macos-15` and `windows-2025`, `test-isolation`, `sbom`, `build / build`, the five `build /
+   identity` jobs and `release / publish` are `success`; `release / sign` is `skipped`, as in run `42718701229`.
+4. **Met,** by the corrected command (P2 record items 4 and 5, and its deviation). The Release is not a draft or a
+   prerelease, `isImmutable` is `true`, `releases/latest` gives `v0.6.0`, and it holds exactly the seven names of F1.
+   `gh release verify v0.6.0` exit 0, "Release v0.6.0 verified!". `shasum -a 256 -c SHA256SUMS` exit 0, `OK` for the
+   five binaries. `gh attestation verify <asset> --repo maccavelli/gobble-cli --signer-repo maccavelli/go-selfupdate-lib` exit 0 for each of the five binaries (and for `gobble.spdx.json`); the
+   PLAN's first wording, `--repo` alone, exit 1 on each, for a reason the deviation gives. The macOS binary prints
+   `v0.6.0 (release) 5dcd755c5d43` and `version --json` gives `"version":"0.6.0"` and `"go":"1.27.4"`.
+5. **Met** (P2 record item 6). `git show v0.6.0:go.mod` and magic-cli-remote's `go.mod` at its `origin/master`
+   (`d78d42ea64fe`, after a fetch) both pin acp-go-sdk2 `v1.36.0`.
+6. **Met** (P2 record items 7 and 8). The rule-suite query gives `0`. It is a count over an empty set: the
+   repository's two rulesets target `main` and `acpext/*` tags, none targets `v*`, so the tag has no rule suite. From
+   `v0.5.0`'s release binary in a scratch home, `gobble update --check` exits 10 and prints `update available: v0.5.0 ->
+   v0.6.0` on macOS, the Linux machine and the Windows laptop. The Windows sequence passes: with `gobble acp` running
+   from the `v0.5.0` binary, `gobble update --yes` exit 0 installed `v0.6.0` (the file's SHA-256 is the Release's);
+   after `gobble acp` stopped, a plain `gobble update` exit 0 reported `up to date (v0.6.0)` and no
+   `.gobble.exe.selfupdate-*` file was left.
+7. **Met** (P0 record items 2, 3 and 5; P3 record). The notes of 2026-11-12 in 0051, 0052 and 0054, MADR and PLAN, each
+   quote what they amend and link this record; no line of those records was deleted or reworded; `docs/README.md`
+   indexes this pair; `make check-records markdownlint` and `check_records.py --check-all` exit 0 after P3.
+
+**Beyond the Confirmation:** `go list -m github.com/maccavelli/gobble-cli@v0.6.0` resolves through the proxy (P2
+record item 9). The proxy's `@v/list` now lists `v0.6.0`.
+
+**The owner's decision during execution:**
+
+* **The attestation command (2026-11-12):** the check is `gh attestation verify <asset> --repo
+  maccavelli/gobble-cli --signer-repo maccavelli/go-selfupdate-lib`. The PLAN's `--repo` alone exits 1 against a
+  reusable-workflow signer. Recorded in the PLAN's P2 record and in Confirmation 4's note.
 
 ## Pros and Cons of the Options
 

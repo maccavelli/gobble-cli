@@ -253,6 +253,13 @@ whenever that is tagged" stay true; `v0.6.0` is the release of
 [0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md](0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md),
 cut now.)*
 
+*(2026-11-12, later: "An installed `v0.5.0` binary stays exposed until its user moves to `v0.6.0`, whenever that is
+tagged" now has its date. `v0.6.0` was published on 2026-11-12 (the Release's `publishedAt` is 2026-11-12T17:49:43Z),
+by release run `43269895374`, under
+[0055-PLAN-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md](0055-PLAN-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md)
+P2. Its binaries are built with Go 1.27.4 (`version --json` prints `"go":"1.27.4"`), and `gobble update` from `v0.5.0`
+finds it.)*
+
 ### D7. gobble advertises client system prompts and honours them (the owner's answer to Q1)
 
 *(Added 2026-11-11, later, by the owner's ruling.)* This is feature work inside a pin record, by the owner's choice.
@@ -385,6 +392,9 @@ advertised. (b) or (c) is an amendment of D7 and of P2 before any of its code.
 * Bad, because between gobble's pin and magic-cli-remote's, the two `main` branches name different acp-go-sdk2 tags.
   Gate 3 reads releases, and no gobble release pins `v1.35.0` or `v1.36.0` yet (`v0.5.0` pins `v1.34.2`), so the gap
   is on `main` only.
+  *(2026-11-12: "no gobble release pins `v1.35.0` or `v1.36.0` yet" is no longer true. gobble `v0.6.0`, published
+  2026-11-12 under [0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md](0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md), pins `v1.36.0`: `git show v0.6.0:go.mod` and magic-cli-remote's `go.mod` at its
+  `origin/master` both say acp-go-sdk2 `v1.36.0`, so gate 3 is met by a release.)*
 * Bad, under Q1 (a), because a client that sends `systemPrompt` to gobble is refused where it was served.
   *(2026-11-11, later: (a) was not chosen. Under D7 such a client is served, its prompt applied, unless it sends
   `override` (Q2) or content D7 refuses.)*

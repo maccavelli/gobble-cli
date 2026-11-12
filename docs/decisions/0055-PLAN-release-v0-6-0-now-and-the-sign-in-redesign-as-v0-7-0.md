@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: complete
 date: 2026-11-12
 associated-madr: "0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md"
 ---
@@ -208,6 +208,8 @@ empty after the commit.
    * `gh release verify v0.6.0`;
    * the assets downloaded with `gh release download v0.6.0 --dir <TMP>/v0.6.0`; there `shasum -a 256 -c SHA256SUMS`,
      and `gh attestation verify <asset> --repo maccavelli/gobble-cli` for each of the five binaries;
+     *(2026-11-12 deviation, P2 record: that command exits 1, because the binaries are signed by go-selfupdate-lib's
+     reusable release workflow. The check is `gh attestation verify <asset> --repo maccavelli/gobble-cli --signer-repo maccavelli/go-selfupdate-lib`. The text above is kept as it was written.)*
    * `<TMP>/v0.6.0/gobble-darwin-arm64 version --identity` and `version --json`, after `chmod +x`.
 8. **Gate 3** (MADR F8): `git show v0.6.0:go.mod` and `git -C <magic-cli-remote> show origin/master:go.mod`, after a
    fetch there, each give acp-go-sdk2 `v1.36.0`.
@@ -268,7 +270,7 @@ Each command's exit status is captured before any filter.
 | 1 the tree is `cc1d55e`'s, records apart; the pins | `git diff --stat cc1d55e v0.6.0 -- . ':!docs'`; `git show v0.6.0:go.mod` | P1 acceptance, P2 steps 1, 8 |
 | 2 the tag's form; no acpext tag | `git cat-file -p v0.6.0`; `git ls-remote --tags origin 'acpext/*'` lists `v0.1.0` to `v0.4.0` alone | P2 step 5 |
 | 3 the run | `gh run view <id> --json jobs` | P2 step 6 |
-| 4 the Release | `gh release view`; `gh release verify`; `shasum -a 256 -c`; `gh attestation verify`; `version --identity`, `version --json` | P2 step 7 |
+| 4 the Release | `gh release view`; `gh release verify`; `shasum -a 256 -c`; `gh attestation verify` *(2026-11-12: with `--signer-repo maccavelli/go-selfupdate-lib`, P2 record)*; `version --identity`, `version --json` | P2 step 7 |
 | 5 gate 3 | both `go.mod` files | P2 step 8 |
 | 6 the post-release checks | the rule-suite query; `gobble update --check` on three hosts; the Windows sequence | P2 step 9 |
 | 7 the records | `grep -n '0055-MADR'` in the six records; `git diff` additions only; `make check-records markdownlint` | P0 steps 2 to 5 |
@@ -299,6 +301,9 @@ note yet.
 run and staged, see its record below. P1 to P3 are not started.)*
 *(2026-11-12, later: the coordinator committed P0 as `7ee7591`; P1 was run and staged, see its record below. P2 and P3
 are not started.)*
+*(2026-11-12, later: the coordinator committed P1 as `5dcd755`, pushed `main` and the tag `v0.6.0`, and the release run
+passed; P2 was verified and P3 closed out, see the records below. This PLAN is `complete`. The first line of this
+section, "Not started", is the state before the PLAN was approved.)*
 
 ### P0 record (2026-11-12)
 
@@ -389,3 +394,143 @@ P1's commit changes this record alone.
 
 **Not done, by the PLAN.** No commit, push or tag. P2 (the push of `main`, the tag `v0.6.0` on the owner's word, the
 release run and the Release) and P3 (close-out) are not started. The freeze of C6 starts at P1's commit.
+
+### P2 record (2026-11-12)
+
+The coordinator ran the disclosure guard (exit 0), pushed `main` (`cc1d55e..5dcd755`) and pushed the annotated tag on
+the owner's word. The reads below were made afterwards, by an agent that pushed and tagged nothing and moved nothing.
+Steps 2 to 4 (the guard, the push's "Bypassed rule violations" line and the reads before the tag) were the
+coordinator's and are not re-read here. Logs went to a scratch directory, and each exit status was taken before any
+filter. Temporary paths are `<TMP>`.
+
+**Deviation (2026-11-12), step 7: the attestation command.** Step 7 words the check as `gh attestation verify <asset>
+--repo maccavelli/gobble-cli`. Run on each of the five binaries it exits 1 with only `Error: verifying with issuer
+"sigstore.dev"`. With `GH_DEBUG=api`, gh fetched the TUF roots and the attestation bundle and then failed at the
+verification; `gh attestation trusted-root` works and the repository is public, so it is not the network. The cause:
+the binaries are signed by a reusable workflow in the library, not by this repository. The certificate's
+`subjectAlternativeName` is `https://github.com/maccavelli/go-selfupdate-lib/.github/workflows/publish-selfupdate-release.yml@e62d77cddaf264cc6ec7bbc4f39b90322542f752`,
+while `sourceRepositoryURI` is `https://github.com/maccavelli/gobble-cli`, `sourceRepositoryRef` is `refs/tags/v0.6.0`,
+`sourceRepositoryDigest` is `5dcd755c5d432d7377d4e3ab8fecc6f828890eaf` and `runInvocationURI` ends
+`/actions/runs/43269895374/attempts/1`. gh's help says a reusable-workflow signer needs `--signer-repo` or
+`--signer-workflow`. The form `gh attestation verify <asset> --repo maccavelli/gobble-cli --signer-repo maccavelli/go-selfupdate-lib` exits 0 for each of the five
+binaries and for `gobble.spdx.json`, and `--owner maccavelli` exits 0 too. The owner chose the first as the check, the
+same day, on the coordinator's relay: it is recorded here and as a note on MADR Confirmation 4, and step 7 and the
+Verification row carry a note and are not rewritten. The release is unchanged; the PLAN's command was incomplete.
+Nothing else in the repository words this check. `docs/guides/developing.md`'s "After each `v*` release" does not name
+the command.
+
+1. **C1 and the freeze.** Branch `main`, `HEAD` `5dcd755c5d432d7377d4e3ab8fecc6f828890eaf`, equal to `origin/main`, the
+   tree clean. `git diff --stat cc1d55e HEAD -- . ':!docs'` exit 0, empty. `git log --oneline cc1d55e..HEAD` lists
+   `5dcd755`, `7ee7591` and `554f3f4` alone, all records. The Docs run of the push, `43269886197`, concluded `success`.
+2. **The tag** (step 5). `git cat-file -p v0.6.0`, the object, type, tag and message lines: `object
+   5dcd755c5d432d7377d4e3ab8fecc6f828890eaf`, `type commit`, `tag v0.6.0`, message `v0.6.0`. The tag object is
+   `006051bbc2732e20865e4cdc5a750c6ebf5e0197`, and `git ls-remote --tags origin v0.6.0 'v0.6.0^{}'` lists it and the
+   commit. `git ls-remote --tags origin 'acpext/*'` lists `v0.1.0` to `v0.4.0` alone.
+3. **The run** (step 6). `gh run list --workflow CI --branch v0.6.0` names one run, `43269895374`, event `push`,
+   `headSha` `5dcd755c5d432d7377d4e3ab8fecc6f828890eaf`. `gh run view 43269895374 --json jobs,conclusion,headSha,attempt`:
+   exit 0, `conclusion` `success`, `attempt` 1, `createdAt` 2026-11-12T17:29:01Z. Its jobs, in the order `gh` printed:
+
+   | Job | Conclusion |
+   | :--- | :--- |
+   | `test-isolation` | `success` |
+   | `validate (macos-15)` | `success` |
+   | `sbom` | `success` |
+   | `validate (ubuntu-24.04)` | `success` |
+   | `validate (windows-2025)` | `success` |
+   | `build / build` | `success` |
+   | `build / identity (gobble, linux/amd64)` | `success` |
+   | `build / identity (gobble, windows/amd64)` | `success` |
+   | `build / identity (gobble, windows/arm64)` | `success` |
+   | `build / identity (gobble, darwin/arm64)` | `success` |
+   | `build / identity (gobble, linux/arm64)` | `success` |
+   | `release / publish` | `success` |
+   | `release / sign` | `skipped` |
+
+   No job failed and none was re-run (`attempt` 1), so C4 and C5 did not arise.
+4. **The Release** (step 7). `gh release view v0.6.0 --json tagName,isDraft,isPrerelease,isImmutable,publishedAt,assets,url`:
+   exit 0, `tagName` `v0.6.0`, `isDraft` false, `isPrerelease` false, `isImmutable` true, `publishedAt`
+   2026-11-12T17:49:43Z, URL <https://github.com/maccavelli/gobble-cli/releases/tag/v0.6.0>.
+   `gh api repos/maccavelli/gobble-cli/releases/latest --jq .tag_name` gives `v0.6.0`. `gh release verify v0.6.0`: exit
+   0, "Resolved tag v0.6.0 to sha1:006051bbc2732e20865e4cdc5a750c6ebf5e0197", "Release v0.6.0 verified!". Exactly seven
+   assets, each `uploaded`:
+
+   | Asset | Bytes | SHA-256 |
+   | :--- | :--- | :--- |
+   | `gobble-darwin-arm64` | 22080738 | `ea802902acf04a63e93c3ab8eb7f4cf48da7e45a032ea6fe709b383adf1403f8` |
+   | `gobble-linux-amd64` | 23437472 | `47211259170b5d4d7452f32f0fb3b7df418e23a95a2c57f75c0e9f0779a18c89` |
+   | `gobble-linux-arm64` | 21430432 | `9dd1dba4ae0867283cd2d990d328f376d3e612d6aa12c93c643ce0ce6894bc3a` |
+   | `gobble-windows-amd64.exe` | 24156672 | `fbca93213202d0155617ea8f0d9a34257e6b2c9b950d29130cce672b40fa6403` |
+   | `gobble-windows-arm64.exe` | 21779968 | `7fc1ef3d43f64632e3bb6e328eb1f87dab186a5b29fd2808f30d173a1b81c428` |
+   | `gobble.spdx.json` | 34087 | `0a12426d77e5aa7e0c7e8456e05e293a9da07ffd0c98de69dde91a5093e1b8c4` |
+   | `SHA256SUMS` | 438 | `6fdf0db700faff314d3521cf71a47238581092e4dd9300bf9073593070038218` |
+
+   `gh release download v0.6.0 --dir <TMP>/v0.6.0` exit 0. There, `shasum -a 256 -c SHA256SUMS` exit 0: `OK` for the
+   five binaries. `gh attestation verify <asset> --repo maccavelli/gobble-cli`: exit 1 for each of the five (the
+   deviation above). `gh attestation verify <asset> --repo maccavelli/gobble-cli --signer-repo maccavelli/go-selfupdate-lib`: exit 0 for each of the five, and
+   for `gobble.spdx.json`. With `--format json` its verification result names the SLSA provenance predicate
+   (`https://slsa.dev/provenance/v1`) and a subject list that includes `SHA256SUMS`.
+5. **The macOS binary,** after `chmod +x` in `<TMP>`, not installed. `version --identity` prints `v0.6.0 (release)
+   5dcd755c5d43`. `version --json` prints `{"name":"gobble","version":"0.6.0","commit":"5dcd755c5d432d7377d4e3ab8fecc6f828890eaf","date":"2026-11-12T17:28:34Z","go":"1.27.4","os":"darwin","arch":"arm64"}`.
+6. **Gate 3** (step 8). `git show v0.6.0:go.mod`: `go 1.27.4`, no `toolchain` line, acp-go-sdk2 `v1.36.0`,
+   go-llmprovider-sdk `v1.29.0`, go-selfupdate-lib `v1.26.2`, go-tui-lib/v2 `v2.12.0`, acpext `v0.3.0`.
+   magic-cli-remote: `git fetch origin` exit 0, then `git show origin/master:go.mod` (`d78d42ea64fe`) gives acp-go-sdk2
+   `v1.36.0`; its working-tree `go.mod` says the same.
+7. **developing.md's "After each `v*` release"** (step 9):
+   * The rule-suite query gives `0`, exit 0. The unfiltered list for `refs/tags/v0.6.0` is `[]`: the repository's
+     rulesets are `gobble-cli-main` (branch) and `gobble-cli-acpext-tags` (tag, `acpext/*`), and none targets `v*`, so
+     the tag has no rule suite and the `0` is a count over an empty set. A month's suites list the acpext tags and a
+     probe tag, never a `v*` tag.
+   * `gobble update --check` from `v0.5.0`'s release binary (SHA-256 checked against its `SHA256SUMS`), in a scratch
+     home with `GH_TOKEN`, `GITHUB_TOKEN`, `AI_AGENT` and the proxy variables unset and stdin not a terminal:
+
+     | Host | Asset | `version --identity` | `--check` |
+     | :--- | :--- | :--- | :--- |
+     | macOS | `gobble-darwin-arm64` | `v0.5.0 (release) 8371b969eda4` | exit 10 |
+     | the Linux machine | `gobble-linux-amd64` | `v0.5.0 (release) 8371b969eda4` | exit 10 |
+     | the Windows laptop | `gobble-windows-amd64.exe` | `v0.5.0 (release) 8371b969eda4` | exit 10 |
+
+     Each prints `selfupdate: selected product=gobble current=v0.5.0 target=v0.6.0 asset=<asset>` and `gobble: update
+     available: v0.5.0 -> v0.6.0`. The Linux and Windows copies went by `scp` (Windows with `-o ControlPath=none` on
+     every `ssh` and `scp`); the remote scratch directories were removed after, and no `gobble` process was left.
+   * **The Windows sequence,** run twice with the same outcome; the second run added `tasklist` readings, which are the
+     ones quoted. From the `v0.5.0` binary at `<scratch home>\.local\bin\gobble.exe`: `gobble acp` started and left
+     running (`tasklist` showed one `gobble.exe`, its process alive); `gobble update --yes` from the same file: exit 0,
+     `gobble: updated v0.5.0 -> v0.6.0`, the file's SHA-256 `fbca93213202d0155617ea8f0d9a34257e6b2c9b950d29130cce672b40fa6403`,
+     the Release's, and `gobble version` printing `gobble 0.6.0`, the commit `5dcd755c5d432d7377d4e3ab8fecc6f828890eaf` and `go:
+     1.27.4 windows/amd64`. The `complete` line ended `pending backup <TMP>\home\.local\bin\.gobble.exe.selfupdate-bak-3250235933
+     will be validated and removed before the next download`. `gobble acp` was then stopped (`tasklist` showed none).
+     Beside the binary were `.gobble.exe.selfupdate.cleanup`, `.gobble.exe.selfupdate.lock` and the `bak` file. A plain
+     `gobble update` from the installed binary: exit 0, `gobble: up to date (v0.6.0)`. After it only
+     `.gobble.exe.selfupdate.lock` and `gobble.exe` remained: no `.gobble.exe.selfupdate-*` file. The first run's
+     process readings were unreliable, so the second was kept.
+8. **The proxy** (step 10), after the Release was published. `go list -m github.com/maccavelli/gobble-cli@v0.6.0` from
+   an empty directory, with `GOFLAGS` empty, `GOPROXY=https://proxy.golang.org` and a scratch module cache: exit 0,
+   `github.com/maccavelli/gobble-cli v0.6.0`. `curl -fsS https://proxy.golang.org/github.com/maccavelli/gobble-cli/@v/list`
+   exit 0 now lists `v0.6.0` with `v0.1.0` to `v0.5.0`.
+9. **The record.** This entry and P3's.
+
+Acceptance: the tag, the run, the Release, `gh release verify`, the checksums, the attestations (by the corrected
+command), the macOS binary, gate 3, the `0` bypasses, exit 10 naming `v0.6.0` on three hosts, the Windows sequence and
+the proxy are all as the acceptance lists. The one change is the attestation command's form (the deviation above).
+
+### P3 record (2026-11-12)
+
+1. **The records.** This PLAN's execution record holds P0 to P2's records, with the deviation of P2 dated.
+2. **The MADR's "Completion (2026-11-12)",** after its Confirmation: items 1 to 7, each met, each with its evidence.
+   Confirmation 4 carries a note of 2026-11-12 for the corrected attestation command. The MADR stays `accepted`.
+3. **This PLAN's `status`** is `complete`, set by an assertion that the old line occurred once. `docs/README.md`'s two
+   0055 status cells follow: the MADR's gains "Completion 2026-11-12: Confirmation 1 to 7 met"; the PLAN's is `complete
+   2026-11-12`, with run `43269895374` and the Release.
+4. **0054-MADR,** two dated notes, each after the text it amends and linking the 0055 records: after D6's notes, one
+   quoting "An installed `v0.5.0` binary stays exposed until its user moves to `v0.6.0`, whenever that is tagged"
+   (`v0.6.0` was published 2026-11-12, release run `43269895374`, by 0055-PLAN P2); and one after Consequences'
+   "no gobble release pins `v1.35.0` or `v1.36.0` yet" (`v0.6.0` pins `v1.36.0`).
+5. **Checks,** each to a scratch log, its exit status taken before any filter, run after the records were written:
+   `python3 -B scripts/check_records.py --check-all` and `make check-records markdownlint`: exit 0 each; the first prints nothing, the second "Summary: 0 issues in 0 files" over 58 files. The identifier scan of the diff's added lines (the local account name, the development hosts' names, the owner's mail domain, the tagger line and real-machine home, drive and temporary paths): 0 hits. It was first seen to fail on a scratch copy of the diff with two planted lines (a home path with a host name, and a drive path): 2 hits.
+6. **The handoff to the coordinator.** The Release is <https://github.com/maccavelli/gobble-cli/releases/tag/v0.6.0>,
+   run `43269895374`; gate 3 is met (both sides on acp-go-sdk2 `v1.36.0`); P0 step 4's table stands for the other
+   repositories' amendments and for magic-cli-remote's adoption decision. Two readings go with it: the `v*` tags have no
+   ruleset, so the bypass query is a count over an empty set; and the attestation check needs `--signer-repo
+   maccavelli/go-selfupdate-lib`, which any record of another repository that copies this PLAN's command should carry.
+7. **Not done, by the PLAN.** No commit, push or tag by this agent; the coordinator commits, and the push is docs-only,
+   on the owner's word. Staged, by path: this PLAN, the MADR, 0054-MADR and `docs/README.md`.
