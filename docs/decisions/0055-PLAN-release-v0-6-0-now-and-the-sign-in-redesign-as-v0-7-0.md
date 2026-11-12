@@ -297,6 +297,8 @@ changed no file but the pair's two: `docs/README.md` has no 0055 rows yet (P0 st
 note yet.
 *(2026-11-12: the coordinator committed the pair as `554f3f4`, and the owner approved this PLAN the same day; P0 was
 run and staged, see its record below. P1 to P3 are not started.)*
+*(2026-11-12, later: the coordinator committed P0 as `7ee7591`; P1 was run and staged, see its record below. P2 and P3
+are not started.)*
 
 ### P0 record (2026-11-12)
 
@@ -332,3 +334,58 @@ HEAD -- . ':!docs'` empty. P0 is staged alone; P1 follows once it is committed (
      exit 1 with two hits, on a scratch copy of the diff with a planted account name and home path.
 
    The two record checks and the scan were run again after this record was written, on the staged diff: exit 0 each.
+
+### P1 record (2026-11-12)
+
+The coordinator committed P0 as `7ee7591`.
+
+C1: branch `main`, `HEAD` `7ee7591`, `origin/main` `cc1d55e`, two commits ahead (`554f3f4`, `7ee7591`, both records),
+the tree clean; `git diff --stat cc1d55e HEAD -- . ':!docs'` exit 0, empty. C2: each command wrote to a scratch log,
+and its exit status was taken before any filter; every test shell had no `HTTP_PROXY`, `HTTPS_PROXY` or `ALL_PROXY`
+set (`env | grep -i proxy` printed nothing on macOS and the Linux machine, and `NO_PROXY` alone on the Windows laptop).
+No deviation.
+
+1. **C1** as above: `HEAD` is P0's commit.
+2. **Measure.** `go.dev/dl/?mode=json` (curl exit 0): the stable releases are `go1.27.4` and `go1.26.11`, so no Go
+   patch is newer than `go1.27.4`. `go version`: `go1.27.4 darwin/arm64` on macOS, `go1.27.4 linux/amd64` on the Linux
+   machine, `go1.27.4 windows/amd64` on the Windows laptop, exit 0 each. No stop.
+3. **macOS gates:**
+   * `make preflight`: exit 0, "preflight passed": "go-precheck: 638 file(s) clean (gofmt, golint, govulncheck)", `go
+     vet` for both modules, `staticcheck` 2026.2.2 for linux, darwin and windows (17 directives, 22 ignored findings,
+     each recorded and paired), `golangci-lint` "0 issues." for both modules, `govulncheck` "No vulnerabilities found."
+     for both modules, "check-acpext-deps: ok", `archtest` ok, "apidiff: no-op below v1.0.0", seven
+     `verify-build-metadata` lines ok, `check-records`, `check-icon`, and `markdownlint` "Summary: 0 issues in 0 files".
+   * `GOFLAGS=-count=1 make race`: exit 0, 39 `ok` (38 root packages and acpext), no `FAIL`, no line cached;
+     `llm/provider` ok (9.757s), `permission` ok (11.346s), so `TestRuleStoreConcurrent` passed.
+   * `make check-test-isolation`: exit 0, "== root module: go test exit 0; 0 failing in 0 package(s)", "== acpext
+     module: go test exit 0; 0 failing in 0 package(s)", "== files written above the temp roots: 0",
+     "check-test-isolation: ok".
+   * `python3 scripts/check_libs.py --self-test`: exit 0, 15 lines, each `: ok`.
+   * `python3 scripts/check_libs.py --lib <name> --tag <pin>`, each exit 0, "<name> advisories: ok" and "0 failing
+     checks; scratch removed": acp-go-sdk2 `v1.36.0`, go-llmprovider-sdk `v1.29.0`, go-selfupdate-lib `v1.26.2`,
+     go-tui-lib `v2.12.0`. The newest `vX.Y.Z` tag of each, from `git ls-remote --tags` (exit 0 each): acp-go-sdk2
+     `v1.36.0`, go-llmprovider-sdk `v1.30.0` (expected and not pinned, MADR F10), go-selfupdate-lib `v1.26.2`,
+     go-tui-lib `v2.12.0`.
+4. **The Linux machine and the Windows laptop,** each at `go1.27.4`, from a copy made from `git ls-files -co
+   --exclude-standard` at `7ee7591` (949 files, the count found on each host, no `._*` file), archived with `tar
+   --no-mac-metadata`. The Linux copy was streamed over `ssh`; the Windows copy went by `scp` and was unpacked by a
+   separate `ssh`, with `-o ControlPath=none` on every Windows `ssh`, and no `TMP` or `TEMP` override:
+
+   | Host | `go test -count=1 ./...` | `CGO_ENABLED=1 go test -count=1 -race ./...` | `go -C acpext test -count=1 ./...` |
+   | :--- | :--- | :--- | :--- |
+   | the Linux machine | exit 0, 38 `ok`, no `FAIL`, none cached | exit 0, 38 `ok`, no `FAIL`, none cached | exit 0, `ok` |
+   | the Windows laptop | exit 0, 38 `ok`, no `FAIL`, none cached | exit 0, 38 `ok`, no `FAIL`, none cached | exit 0, `ok` |
+
+   `TestRuleStoreConcurrent` passed on both, as part of `permission`'s `ok`. This run's remote copies were removed
+   afterwards and no process of it was left on either host; older entries under the hosts' `~/tmp` were left.
+5. **The identifier scan** of the staged diff's added lines (the local account name, the development hosts' names, the
+   owner's mail domain, and real-machine home and temporary paths): nothing found, exit 0.
+6. **The record.** `make check-records markdownlint` and `python3 -B scripts/check_records.py --check-all`: exit 0
+   each, after this record was written. Staged by path: this PLAN alone.
+
+Acceptance: no newer Go, every host on `go1.27.4`; every gate of steps 3 and 4 exit 0; the four `check_libs.py` runs
+`0 failing checks`; the scan found nothing; `git diff --stat cc1d55e HEAD -- . ':!docs'` is empty at `7ee7591`, and
+P1's commit changes this record alone.
+
+**Not done, by the PLAN.** No commit, push or tag. P2 (the push of `main`, the tag `v0.6.0` on the owner's word, the
+release run and the Release) and P3 (close-out) are not started. The freeze of C6 starts at P1's commit.
