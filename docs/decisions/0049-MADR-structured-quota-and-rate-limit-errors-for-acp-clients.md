@@ -200,8 +200,18 @@ says what happened: `kind` `rate-limited`, `retryable` true, `retryAfterMs` abov
 * `llm/provider.FailureKind` (`list.go:106-133`) is left as it is: it names log lines and retry causes, and changing
   what it returns for an offline or empty failure would change those. A test holds the two equal on every class both
   name.
+  *(2026-11-11: superseded by [0051-MADR-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md](0051-MADR-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md) D6, accepted that day. "`llm/provider.FailureKind`
+  (`list.go:106-133`) is left as it is" no longer holds: `FailureKind` retires, and `provider.ErrorKind` gives the
+  auth contract's word for `--json`, the log lines and a provider retry's cause. The test that held the two equal gives
+  way to one that every word `provider.ErrorKind` can return is an acpext constant.)*
 * acpext's `ErrorKind` constants are these names. A test in `acpserver`, which imports both, holds `llm.Kind`'s outputs
   inside acpext's constants.
+  *(2026-11-11: "acpext's `ErrorKind` constants are these names" holds, with the auth contract's spellings
+  ([0051-MADR-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md](0051-MADR-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md) D6, accepted that day): at `acpext/v0.5.0`, `rate-limited`, `not-permitted`,
+  `context-overflow` and `empty_reply` become `rate_limited`, `not_permitted`, `context_overflow` and `empty_answer`,
+  in `llm.Kind` and in acpext's `ErrorKind` and `RetryCause` alike, and acpext gains the contract's `denied`, `expired`,
+  `invalid_request` and `invalid_provider`. The names in this section's first paragraph and first bullet are read with
+  that record's table.)*
 
 ### D4. The limit, from the provider's code, in `llm/provider`
 

@@ -226,10 +226,16 @@ one strip-and-retry; cycling as P7. Every owner question is answered.)*
     sign-in: the SDK's Codex-client-id methods (its browser and device OAuth, the Codex CLI import) are not, by
     0005-MADR's rule. It is browser-only; with no browser, the URL is printed and the code pasted back (`OpenURL`,
     `InputCode`).
+    *(2026-11-11: "a stable `HostID` in the state directory" is built by [0052-MADR-finish-the-chatgpt-plan-sign-in-on-the-sdk-engine.md](0052-MADR-finish-the-chatgpt-plan-sign-in-on-the-sdk-engine.md) D4, accepted
+    that day: `<state>/host-id`, created once, owner-only, and passed on every plan sign-in.)*
   - **The terms, kept by gobble:** under a plan session, background calls (the session title, automatic compaction)
     wait for the user's consent, asked once at the first plan session and saved (the owner's Q2 answer); without it
     they are skipped (no title; compaction only on `/compact`). Requests go from the user's own process; nothing pools
     or shares the session.
+    *(2026-11-11: "consent, asked once at the first plan session and saved" is refined by [0052-MADR-finish-the-chatgpt-plan-sign-in-on-the-sdk-engine.md](0052-MADR-finish-the-chatgpt-plan-sign-in-on-the-sdk-engine.md)
+    D2 and D3, accepted that day: it is asked once, before the browser, as the sign-in's `confirm` step with gobble's
+    wording; the answer is kept on the session in `auth.json`, a "no" recorded as declined, read at every background
+    request, and changed with `gobble auth consent`.)*
   - Grok's sign-in is unchanged (0005-MADR, the owner's accepted risk) and joins `/login`. The Pi import still skips
     OpenAI OAuth, which Pi holds under Codex's client id.
 - **D7. First-run setup** (owner question Q3). When no provider has a credential, the line session offers the

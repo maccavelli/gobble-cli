@@ -477,6 +477,11 @@ The owner decided each point on 2026-10-15. The facts were read at acp-go-sdk2 `
   - **`authenticate`** with such an id answers `{}` when that provider has a credential from any source in gobble's
     order (0005-PLAN F4-3a decision 5). Otherwise it is `auth_required`, its data naming the provider and the command.
     No secret crosses ACP.
+    *(2026-11-11: "`authenticate` with such an id answers `{}` when that provider has a credential from any source
+    in gobble's order … Otherwise it is `auth_required`, its data naming the provider and the command. No secret
+    crosses ACP." is amended by [0051-MADR-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md](0051-MADR-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md) D4, accepted that day: absent a credential, a client
+    that offers elicitation is signed in, and a pasted callback crosses ACP as a secret, used once (D4's steps 1 to 4).
+    "No `logout` over ACP." below stands (that record's QD (a)).)*
   - **A `terminal` method for each such provider, only when the client sent `auth.terminal: true`.** Its id is
     `<provider>-login` and its `args` are `["--login", "<provider>"]`, which the client appends to its `gobble acp`
     invocation. `gobble acp --login <provider>` then runs the provider's login, or asks for its key, in that terminal,
@@ -487,6 +492,8 @@ The owner decided each point on 2026-10-15. The facts were read at acp-go-sdk2 `
     named here, as 0014-MADR D5 asks. Its client offers no `auth.terminal`, so no terminal method appears.
 - **A3. `gobble auth login … --json`** prints the login's events as JSON lines, for magic-cli-remote's phone flow to
   read instead of prose (0005-PLAN F4-3c).
+  *(2026-11-11: "prints the login's events as JSON lines" is amended by [0051-MADR-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md](0051-MADR-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md) D5, accepted
+  that day: it prints the auth contract's steps, one `method` line and then a `step` line for each, output-only.)*
 
 ### Consequences
 

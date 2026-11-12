@@ -5141,6 +5141,10 @@ go-llmprovider-sdk `v1.13.0` (still its latest tag), magic-cli-remote `c1d29a9d`
    - `{"event":"saved","provider","type":"api_key"|"oauth"}`;
    - on failure, `{"event":"error","provider","kind","message"}`. `kind` is `provider.FailureKind`'s, and `message` is
      the error gobble prints today, which holds no credential.
+   *(2026-11-11: superseded by [0051-MADR-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md](0051-MADR-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md) D5, accepted that day. "**`--json` events** are JSON lines on
+   stdout", and the four events above, `device_code`, `browser_url`, `saved` and `error`, retire: `--json` prints one
+   `method` line, then the auth contract's `step` lines, the last `done` or `failed`, whose kind is the contract's
+   (that record's D6), not `provider.FailureKind`'s. 0051-PLAN P5 builds it.)*
 7. **The import.**
    - **Location:** it reads Pi's `auth.json` from decision 4's location once, with no lock, and never writes there.
    - **Each entry, in the file's order:**

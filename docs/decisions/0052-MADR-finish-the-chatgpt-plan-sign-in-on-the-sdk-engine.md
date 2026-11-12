@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 date: 2026-11-11
 decision-makers: repository owner
 consulted: "magic-cli-remote's docs/reports/0245-REPORT-non-api-key-auth-across-magic-gobble-and-the-sdk.md (observed 2026-11-10, committed in that repository as 3e2f784b), its §6, §8.5, §9.2, ledger G1-G9 and G13-G16, and the owner's answers of 2026-11-10 (Q2-Q6, Q11, Q12, Q22, and SDK-1 to SDK-3 on the SDK drafts); go-llmprovider-sdk's proposed 0075-MADR-chatgpt-plan-consent-host-id-and-client-reuse.md and 0074-MADR-one-sign-in-handle-and-method-facts.md (untracked in that repository); this repository at d6c10a5 with the owner's uncommitted 0031-PLAN P4b-2 work, read and not changed; corrected on 2026-11-11 against this repository at 17d1605 and its branch wip/0031-p4b2-chatgpt-plan at 1406bd6, go-llmprovider-sdk's drafts as dated 2026-11-11, and the owner's rulings of 2026-11-11 as the cross-repository session relayed them; and, later on 2026-11-11, the owner's ruling that magic-cli-remote reads and can change the consent inside its 0246 cut-over, with acpext ErrorData's `consent` member, as the cross-repository coordinator relayed them"
@@ -156,8 +156,17 @@ name the v0 contract's types in the v1 `wizard` API (0051-MADR D3 is its caller,
 ## Decision Outcome
 
 Chosen option: "A. Fold the work onto the SDK engine", because the owner chose it (Q6), and because the work's storage
-half is what any design needs, while its CLI half is what 0051's policy and the SDK's consent replace. This record is
-`proposed`, awaiting the owner's review of this draft.
+half is what any design needs, while its CLI half is what 0051's policy and the SDK's consent replace. ~~This record is
+`proposed`, awaiting the owner's review of this draft.~~
+
+*(2026-11-11: accepted.)* On 2026-11-11 the owner typed, in this repository's own session, "accept and approve 0051 and
+0052 when required", and confirmed it to the cross-repository coordinator the same day: accept 0051-MADR and
+0052-MADR, and start their phases that do not wait on the SDK. This record is accepted as written, with its notes of 2026-11-11.
+The questions it put were answered by the owner on 2026-11-10, each as recommended, and are kept under "Questions
+answered by the owner (2026-11-10)": QA (a), QF (a) and QG (a). No question of this record is open. The records under
+"Records amended or superseded in part" are amended by
+[0052-PLAN-finish-the-chatgpt-plan-sign-in-on-the-sdk-engine.md](0052-PLAN-finish-the-chatgpt-plan-sign-in-on-the-sdk-engine.md)'s P0, and its "P0 record
+(2026-11-11)" says where.
 
 ### D1. What happens to each part of the uncommitted work
 
@@ -458,6 +467,10 @@ later run finds nothing to do and writes nothing.
 
 ### Records amended or superseded in part, applied by the 0052-PLAN's P0 on acceptance
 
+*(2026-11-11: applied by the 0052-PLAN's P0. The 0031 paste and 0049-PLAN's P5b split were already on `main`, in
+`86ad4a7` and `97f13a5` (the PLAN's Deviation 1), and were checked, not made again; the notes in 0025-MADR, 0045-MADR
+and 0005-MADR were added, each dated and beside the text it amends.)*
+
 * **`0031-MADR-sdk-current-releases-and-adoption.md`, D7** and its amendment of 2026-11-10: the owner pastes the
   text written to the scratch file the PLAN's P0 names (`gobble-0031-amendment.md`) *(2026-11-11: done, committed as
   `86ad4a7` by the PLAN's Deviation 1, step 3)*: P4b-2 folded here; P4b-Q2 (a),
@@ -568,6 +581,9 @@ stays `proposed`.
 * **D8:** the members a client reads and their values; `consentTerms`, new; the unreadable store's exit 2; what
   Magic does with them, where the PLAN's rollout said it "reads `sessionKind` and `consents`".
 * **Confirmation 3 and 5; "Records in other repositories"; `informed`; `consulted`.**
+
+**Accepted on 2026-11-11,** by the owner's word of that day (the note under Decision Outcome). The status is
+`accepted`; no decision and no note changed with it.
 
 ### Related
 

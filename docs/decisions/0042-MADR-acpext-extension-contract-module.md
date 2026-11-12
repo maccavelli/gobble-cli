@@ -205,6 +205,16 @@ reader. Its types carry JSON tags only, which `encoding/json` and `encoding/json
   string}`** *(Amended 2026-11-06, A3.)*. These are the `data` members of gobble's errors, each `omitzero`: -32000 from
   `authenticate`, -32000 from a prompt without a credential, -32600 for a mid-turn refusal, and -32602 for a
   `_gobble/*` request refused, its params or its session. The code is the SDK's, and acpext adds no error constructor.
+  *(2026-11-11: `acpext/v0.5.0`'s content, by [0051-MADR-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md](0051-MADR-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md) D6 and D7, accepted that day.
+  `AuthProvider` keeps its four fields, and its doc is corrected: `Command` runs the provider's bare sign-in or stores a
+  key from stdin, and `Login` means "has a method other than an API key", never "a device code".
+  `AuthenticateMeta{Method string; Fresh bool; Remote bool}`, the value of `_meta.gobble` on `authenticate`, and the
+  key names `MetaMethods` and `MetaStep` are added. "`ErrorData{Command, Error, Provider, Reason, SessionID string}`"
+  gains `Consent`, JSON `consent`, between `Command` and `Error`, set with kind `not_permitted` when a request is
+  refused because a consent is not granted. The `ErrorKind` and `RetryCause` values take the auth contract's
+  spellings, `RetryEmpty` goes, and four kinds are added (the note of this date on
+  [0049-MADR-structured-quota-and-rate-limit-errors-for-acp-clients.md](0049-MADR-structured-quota-and-rate-limit-errors-for-acp-clients.md)
+  D3). It is a wire change, named in 0051-MADR as D5 above asks.)*
 
 ### D4. gobble serves and reads from acpext
 
@@ -294,6 +304,10 @@ correct facts the record asserted. The text above is struck where it changed.
 * The only SDK name acpext would use is `acp.SessionId`, a `string` type. Every `SessionID` field is `string`
   instead: the same JSON string, and the type magic-cli-remote's `Host` already gives.
 * So acpext has no requirement and no `go.sum`. `check-acpext-deps` holds every dependency to the standard library.
+  *(2026-11-11: unchanged by [0051-MADR-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md](0051-MADR-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md), accepted that day. The owner answered its QC (i) on
+  2026-11-10, "provider list only, facts from the contract": acpext does not import go-llmprovider-sdk's
+  `authcontract`, names the contract's types only in its doc, and gains only ACP extension names (that record's D7).
+  "So acpext has no requirement and no `go.sum`" and `check-acpext-deps` stand.)*
 * magic-cli-remote's 0179 D12 gate 6, an acpext SDK requirement at or below its own pin, holds by construction, and
   no acp-go-sdk2 release asks for an acpext tag.
 * `acpserver` converts at its edge: the extension decoder turns the params' `SessionID` into `acp.SessionId` once, and

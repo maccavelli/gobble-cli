@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 date: 2026-11-11
 decision-makers: repository owner
 consulted: "magic-cli-remote's docs/reports/0245-REPORT-non-api-key-auth-across-magic-gobble-and-the-sdk.md (observed 2026-11-10, committed in that repository as 3e2f784b) and the owner's answers of 2026-11-10 to its Q1-Q22; go-llmprovider-sdk's proposed 0073-MADR-publish-an-auth-contract-module.md, 0074-MADR-one-sign-in-handle-and-method-facts.md, 0075-MADR-chatgpt-plan-consent-host-id-and-client-reuse.md and 0076-MADR-auth-error-kinds-and-doc-drift.md (untracked in that repository); this repository at d6c10a5 with the owner's uncommitted 0031-PLAN P4b-2 work; acp-go-sdk2 v1.35.0 read from the module cache; magic-cli-remote at 995d442b and its proposed `0246-MADR-take-provider-auth-types-from-the-sdk-auth-contract-in-one-cut-over.md`, whose O2 and O4 the owner answered on 2026-11-10; two independent reviews of these drafts, 2026-11-10; corrected on 2026-11-11 against this repository at 17d1605, go-llmprovider-sdk's four drafts as dated 2026-11-11, acp-go-sdk2 v1.36.0, and magic-cli-remote, whose origin/master is eefb7c25 (995d442b, cited here, is five commits behind it, and its local master is two ahead, bcde74ab and 14200b6e), with the owner's rulings of 2026-11-11 as the cross-repository session relayed them; and, later on 2026-11-11, the owner's rulings relayed by the cross-repository coordinator: go-llmprovider-sdk's 0074-MADR D4 reversed (NoLoopback is v1 API, with gobble its call site), `_meta.gobble.remote` on authenticate, and acpext ErrorData's `consent` member, with go-llmprovider-sdk's 0077-MADR-go-1-27-4-for-go-2026-6859.md, now a file there"
@@ -253,7 +253,17 @@ decides it for this repository, and its PLAN makes the move before this record's
 
 Chosen option: "A. ACP elicitation on `signin.Start`", because it is the owner's choice of 2026-11-10 (Q7, with Q8,
 Q10, Q14, Q15, Q21), U8 shows the pinned SDK carries it on the stable schema, and it gives one step model on every
-surface with no channel of gobble's own. This record is `proposed`, awaiting the owner's review of this draft.
+surface with no channel of gobble's own. ~~This record is `proposed`, awaiting the owner's review of this draft.~~
+
+*(2026-11-11: accepted.)* On 2026-11-11 the owner typed, in this repository's own session, "accept and approve 0051 and
+0052 when required", and confirmed it to the cross-repository coordinator the same day: accept 0051-MADR and
+0052-MADR, and start their phases that do not wait on the SDK. This record is accepted as written, with its notes of 2026-11-11.
+The questions it put were answered by the owner on 2026-11-10, each as recommended, and are kept under "Questions
+answered by the owner (2026-11-10)": QB (a), QC (i), QD (a) and QE (a), and O2 (a), which magic-cli-remote's
+`0246-MADR-take-provider-auth-types-from-the-sdk-auth-contract-in-one-cut-over.md` put. No question of this record is
+open. The records under "Records amended or superseded in part" are amended by
+[0051-PLAN-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md](0051-PLAN-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md)'s P0, and its
+"P0 record (2026-11-11)" says where.
 
 ### D1. Two new requirements, and the contract allowed at gobble's edge
 
@@ -663,6 +673,10 @@ answer channel.
 
 ### Records amended or superseded in part, applied by the 0051-PLAN's P0 on acceptance
 
+*(2026-11-11: applied by the 0051-PLAN's P0, each as a dated note beside the text it amends. 0031-MADR D8's note was
+already there, from the owner's paste in `86ad4a7` (0052-PLAN Deviation 1), and was not made again. 0042-MADR,
+unchanged under QC (i), gains a note of QC's answer and one of `acpext/v0.5.0`'s content.)*
+
 * **`0016-MADR-acp-go-sdk2-v0.15.0-and-stable-surface.md`, A2** (`:473-487`). Its bullets "**`authenticate`** with
   such an id answers `{}` when that provider has a credential from any source in gobble's order (0005-PLAN F4-3a
   decision 5). Otherwise it is `auth_required`, its data naming the provider and the command. No secret crosses ACP."
@@ -795,6 +809,9 @@ the text it changes; the record stays `proposed`.
   the sign-in's `confirm` step.
 * **The SDK's Go-floor record** is a file now: go-llmprovider-sdk `0077-MADR-go-1-27-4-for-go-2026-6859.md`.
 * **`consulted`:** these rulings.
+
+**Accepted on 2026-11-11,** by the owner's word of that day (the note under Decision Outcome). The status is
+`accepted`; no decision and no note changed with it.
 
 ### Related
 

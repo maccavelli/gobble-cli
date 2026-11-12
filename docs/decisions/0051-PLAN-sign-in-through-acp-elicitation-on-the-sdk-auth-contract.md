@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: in-progress
 date: 2026-11-11
 associated-madr: "0051-MADR-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md"
 ---
@@ -22,6 +22,10 @@ phase. The owner answered QB to QE on 2026-11-10, each as recommended: QB (a), Q
 same day O2 (a), put by magic-cli-remote `0246-MADR-take-provider-auth-types-from-the-sdk-auth-contract-in-one-cut-over.md`: `authenticate` takes `_meta.gobble.fresh` (MADR D4); and that record's O4, form only: Magic
 advertises `elicitation.form` alone, so it receives D4's right-hand column, with `open_url` and `show_code`
 acknowledged, not answered.
+*(2026-11-11: the owner accepted the MADR that day, and this PLAN is `in-progress`. The owner's words, "accept and
+approve 0051 and 0052 when required", were confirmed to the cross-repository coordinator as: start the phases that
+do not wait on the SDK, which this plan's rollout names as P0, P1 and 0052-PLAN P1. P0 is done (its record, under
+"Execution record"); it starts no other phase.)*
 
 ## Scope
 
@@ -545,7 +549,9 @@ Each command's exit status is captured before any filter.
 
 ## Execution record
 
-Not started. The MADR is `proposed`.
+~~Not started. The MADR is `proposed`.~~
+*(2026-11-11, later: the MADR is `accepted` and this PLAN `in-progress`. P0 is done; see "P0 record (2026-11-11)" at
+the end of this section. P1 and the later phases are not started.)*
 
 ### Corrections of 2026-11-11 (records only; no phase has started)
 
@@ -578,3 +584,65 @@ started):
 * **P8 L1:** sent as a remote sign-in.
 * **Verification:** the new tests.
 * **Rollout:** go-llmprovider-sdk's 0077 is cited by its file name.
+
+### P0 record (2026-11-11)
+
+C1: branch `main`, `HEAD` `834b6d1` (0054's close-out), `origin/main` `b6adb5a`, one commit ahead, the tree clean
+(`git status --short` printed nothing). This pair and the 0052 pair were `proposed`. Records only: no source, test,
+`go.mod` or CI file changed. P0 is staged with 0052-PLAN's P0 as one records change, and the owner commits. Every edit
+asserted that its old text occurred once before it replaced it, and was read back. Lines below are as they are now.
+
+1. **Acceptance.** The owner's word, typed in this repository's own session on 2026-11-11: "accept and approve 0051 and
+   0052 when required"; confirmed to the cross-repository coordinator the same day as: accept 0051-MADR and 0052-MADR,
+   and start their phases that do not wait on the SDK. The MADR's front matter is `status: accepted` (its `date` was
+   already 2026-11-11). Its Decision Outcome strikes "This record is `proposed`, awaiting the owner's review of this
+   draft." and states the acceptance in a dated note (`:258`), quoting the owner's words and naming the questions
+   answered on 2026-11-10: QB (a), QC (i), QD (a), QE (a) and O2 (a). "Revisions of 2026-11-11" gains one paragraph
+   (`:813`). This PLAN is `in-progress`, with a dated note under Goal (`:25`) and one at the head of this section. Both
+   records, and the 0052 pair, were read for any other question marked open or awaiting the owner: none was found.
+   Q14's "keep it as an open item in the gobble MADR" (Decision Drivers) is QC, answered (i).
+2. **Amendment notes,** each dated 2026-11-11, beside the text it amends and quoting it:
+
+   | Record | Where | The note |
+   | :--- | :--- | :--- |
+   | `0016-MADR-acp-go-sdk2-v0.15.0-and-stable-surface.md` | A2, the `authenticate` bullet, `:480` | quotes "`authenticate` with such an id answers `{}` … No secret crosses ACP."; amended by MADR D4: absent a credential, an eliciting client is signed in, and a pasted callback crosses ACP as a secret, used once; "No `logout` over ACP." stands (QD (a)) |
+   | the same | A3, `:495` | quotes "prints the login's events as JSON lines"; amended by D5: a `method` line, then the contract's `step` lines |
+   | `0005-PLAN-v1-feature-scope.md` | F4-3c decision 6, `:5144` | quotes "**`--json` events** are JSON lines on stdout"; superseded by D5: the four events retire, and the kind is the contract's |
+   | `0004-MADR-go-module-architecture.md` | the import-boundary rule 4, `:478` | quotes "Only `llm/provider` imports `github.com/maccavelli/go-llmprovider-sdk`"; amended by D1: `authcontract` may also be imported by `acpserver` and `internal/cli`, never by a rule-1 package |
+   | the same | Confirmation, the `go list -m` bullet, `:548` | quotes "After F4 it names … After F10 it names …"; from P2 the list names `authcontract`, `// indirect` until P4; D1 names it, as `AGENTS.md` ("Dependencies") asks |
+   | `0049-MADR-structured-quota-and-rate-limit-errors-for-acp-clients.md` | D3, the `FailureKind` bullet, `:203` | quotes "`llm/provider.FailureKind` (`list.go:106-133`) is left as it is"; superseded by D6 |
+   | the same | D3, the acpext bullet, `:209` | quotes "acpext's `ErrorKind` constants are these names"; holds, with the contract's spellings (D6's table) |
+   | `0042-MADR-acpext-extension-contract-module.md` | A1, `:307` | QC (i), answered 2026-11-10: A1 unchanged; quotes "So acpext has no requirement and no `go.sum`" |
+   | the same | D3, after the `ErrorData` bullet, `:208` | `acpext/v0.5.0`'s content: `AuthProvider`'s corrected doc, `AuthenticateMeta`, `MetaMethods`, `MetaStep`, `Consent` added to "`ErrorData{Command, Error, Provider, Reason, SessionID string}`", the contract's kind spellings |
+
+   Read against the list as P0 wrote it:
+   * **`0031-MADR-sdk-current-releases-and-adoption.md` D8: already done, so not repeated.** D8's text is at `:446-447`,
+     and its note of 2026-11-10 at `:464-467` reads: "`HasLogin` and `HasKeyLogin` are to be derived from
+     go-llmprovider-sdk's method facts through gobble's one policy filter, `provider.Offered`, by D2 of
+     `0051-MADR-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md` (`proposed`). That decision carries out
+     this bullet". `git blame` gives `86ad4a7` for each of its lines, the owner's 0031 paste
+     ([0052-PLAN-finish-the-chatgpt-plan-sign-in-on-the-sdk-engine.md](0052-PLAN-finish-the-chatgpt-plan-sign-in-on-the-sdk-engine.md)
+     Deviation 1, step 3). No 0031 file was edited; that note's "(`proposed`)" is the MADR's state on the day it was
+     written.
+   * **0004-MADR's "Dependencies".** 0004-MADR has no section of that name. "Dependencies" is `AGENTS.md`'s section, "No
+     module may be required without a MADR in this repository that names it", which MADR D1 cites. The note went to the
+     place where 0004-MADR names the modules gobble requires: its Confirmation's `go list -m` bullet.
+   * **Wording.** The MADR's "Records amended or superseded in part" gives the substance of the 0016, 0005-PLAN, 0004
+     rule 4 and 0049 notes. It gives none for 0042, which it calls "unchanged under QC (i)", nor for 0004's module list;
+     those three notes were written from MADR D1 and D7.
+   * The MADR's "Records amended or superseded in part" gains a dated note that this step applied them (`:676`).
+3. **`docs/README.md`:** the 0051 MADR and PLAN rows (`:117-118`), after 0050's PLAN row, in the form of their
+   neighbours: the MADR's or PLAN's title as a link to the file, then the status cell.
+4. **Checks,** each exit status taken before any filter, run once over both P0s with every file in place:
+   * `python3 -B scripts/check_records.py --check-all`: exit 0, no output.
+   * `make check-records markdownlint`: exit 0, "Summary: 0 issues in 0 files". markdownlint's globs leave out the
+     `*MADR*` and `*PLAN*` files; `check_records.py` checks their names, pairing and links.
+   * Seen failing: on a scratch copy of `docs/` and `scripts/`, the 0045-MADR note's link to 0052-MADR shortened to a
+     file that does not exist made `check_records.py --check-all` exit 1, with "broken relative link:
+     docs/decisions/0045-MADR-auth-status-json.md:118: 0052-MADR-finish-the-chatgpt-plan-sign-in.md". The copy's other
+     failures were the links to the root's `LICENSE` and `NOTICE`, which were not copied.
+   * The identifier scan of the diff's added lines, for the local account name, the host's names, the org mail domain
+     and real home and temporary paths: nothing found (`grep` exit 1). On a copy of those lines with a planted home
+     path and host name it found one line (exit 0).
+
+Acceptance: every note quotes what it amends, and `check-records` passes. Met. P1 is not started.

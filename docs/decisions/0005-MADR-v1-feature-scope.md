@@ -165,7 +165,7 @@ Tier definitions:
 | Capability | Tier | Behaviour |
 |---|---|---|
 | Anthropic Messages | 1.0 | `go-llmprovider-sdk` id `claude` (`llmprovider/providers/claude`). API key. Thinking and caching as that package sends them. |
-| OpenAI Responses | 1.0 | SDK id `openai` (`llmprovider/providers/openai`), including the ChatGPT/Codex backend the package already has. API key or that backend's OAuth. |
+| OpenAI Responses | 1.0 | SDK id `openai` (`llmprovider/providers/openai`), including the ChatGPT/Codex backend the package already has. API key or that backend's OAuth. *(2026-11-11: "API key or that backend's OAuth" now reads "API key, or the ChatGPT plan sign-in under gobble's own name", by [0052-MADR-finish-the-chatgpt-plan-sign-in-on-the-sdk-engine.md](0052-MADR-finish-the-chatgpt-plan-sign-in-on-the-sdk-engine.md) D7 (F55), accepted that day; the backend's Codex-client OAuth is not offered, by [0051-MADR-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md](0051-MADR-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md) D2's policy.)* |
 | Google Gemini | 1.0 | SDK id `gemini` (`llmprovider/providers/gemini`, Interactions wire). |
 | Grok (xAI) | 1.0 | SDK id `grok` (`llmprovider/providers/grok`, Responses wire). |
 | Other named SDK providers | 1.0 as each implements `llmprovider.Provider` | Ids already in the SDK: `opencode-zen`, `opencode-go`, `huggingface`, `kilo`, `together`, `ollama`. On 2026-09-30 those five still use the old `Generate*` API (0015-PLAN S7). gobble does not wrap that old API; each id joins 1.0 when `providers.New` returns it. |

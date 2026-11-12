@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: in-progress
 date: 2026-11-11
 associated-madr: "0052-MADR-finish-the-chatgpt-plan-sign-in-on-the-sdk-engine.md"
 ---
@@ -21,6 +21,9 @@ This record is `proposed`. Nothing below starts before the owner accepts the MAD
 phase. The owner answered QA, QF and QG on 2026-11-10, each as recommended: QA (a), QF (a) and QG (a). P1 changes the owner's uncommitted work, and starts only on the owner's explicit word for
 it.
 *(2026-11-11: after Deviation 1 there is no uncommitted work for P1 to change. P1 re-applies parts of `1406bd6` to `main`, and still starts only on the owner's word.)*
+*(2026-11-11, later: the owner accepted the MADR that day, and this PLAN is `in-progress`. The owner's words, "accept
+and approve 0051 and 0052 when required", were confirmed to the cross-repository coordinator as: start the phases
+that do not wait on the SDK. P0 is done (its record, under "Execution record"); it starts no other phase.)*
 
 ## Scope
 
@@ -441,6 +444,10 @@ out parts of P0 and P1, on the owner's word of 2026-11-11 ("Proceed with the gob
 | P1 steps 6 to 8: F25, the tests, the gates, the commit | not started | |
 | P2 to P6 | not started | |
 
+*(2026-11-11, later: the table is the state before acceptance. The owner accepted the MADR that day, and P0 is done:
+steps 1, 3, 4 and 5 by its record at the end of this section, and step 2 and step 3's 0049-PLAN split checked there as
+already done, not repeated. P1 and the later phases are not started.)*
+
 The verification output is recorded where the work was done: 0049-PLAN's "P5b-1 record (2026-11-11)" for `97f13a5`,
 and 0031-PLAN's closing note of P4b-2 for the archive and its hash.
 
@@ -469,3 +476,55 @@ and can change the consent (records only):
 * **P4:** `consentTerms`; `TestAuthStatusJSONPlan` extended.
 * **Verification:** the new tests.
 * **Rollout:** go-llmprovider-sdk's 0077 by its file name; what magic-cli-remote does with the consent.
+
+### P0 record (2026-11-11)
+
+C1: as [0051-PLAN-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md](0051-PLAN-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md)'s
+P0 record: branch `main`, `HEAD` `834b6d1`, `origin/main` `b6adb5a`, one commit ahead, the tree clean; this pair
+`proposed`. Records only. P0 is staged with 0051-PLAN's P0 as one records change, and the owner commits. Every edit
+asserted that its old text occurred once before it replaced it, and was read back. Lines below are as they are now.
+
+1. **Acceptance.** The owner's word, typed in this repository's own session on 2026-11-11: "accept and approve 0051 and
+   0052 when required"; confirmed to the cross-repository coordinator the same day as: accept 0051-MADR and 0052-MADR,
+   and start their phases that do not wait on the SDK. The MADR's front matter is `status: accepted` (its `date` was
+   already 2026-11-11). Its Decision Outcome strikes "This record is `proposed`, awaiting the owner's review of this
+   draft." and states the acceptance in a dated note (`:162`), quoting the owner's words and naming the questions
+   answered on 2026-11-10: QA (a), QF (a) and QG (a). "Revisions of 2026-11-11" gains one paragraph (`:585`). This PLAN
+   is `in-progress`, with dated notes under Goal (`:24`) and under the table of "Execution record" (`:447`). No other
+   question of this record is marked open or awaiting the owner. Two parts of it are the record's own proposals, which
+   its notes say the owner's rulings did not cover, and which are accepted with it: D2's "What the user is shown" for
+   an unreadable answer, and D3's "No `--json`" for `gobble auth consent`.
+2. **The owner's 0031 paste: already done, by Deviation 1, step 3; checked, not repeated.** `git show --numstat
+   86ad4a7` ("docs(decisions): supersede 0031 P4b-2 with 0051 and 0052 plans") adds 89 lines to
+   `0031-MADR-sdk-current-releases-and-adoption.md` and 73 to `0031-PLAN-sdk-current-releases-and-adoption.md`, and
+   changes 3 in `docs/README.md`. `git blame` gives `86ad4a7` for 0031-MADR D7's note "*Superseded in part 2026-11-10 by
+   the owner's answers …*" (`:406-445`) and D8's note (`:464-467`), and for 0031-PLAN P4b-2's "*Superseded 2026-11-10,
+   and not carried out as written.*" (`:309`) and its closing note with the archive's hash (`:416-417`). No 0031 file
+   was edited.
+3. **Amendment notes,** each dated 2026-11-11, beside the text it amends and quoting it:
+
+   | Record | Where | The note |
+   | :--- | :--- | :--- |
+   | `0025-MADR-provider-choice-and-auth.md` | D6, the ChatGPT plan bullet, `:229` | quotes "a stable `HostID` in the state directory"; built by MADR D4 |
+   | the same | D6, the terms bullet, `:235` | quotes "consent, asked once at the first plan session and saved"; refined by D2 and D3: on the session, read per request, changed by `gobble auth consent` |
+   | `0045-MADR-auth-status-json.md` | D2, the `oauth_unused` reason, `:118` | enforced by D8: an entry the resolver does not accept is `usable: false`; quotes "It is there only when `usable` is false" |
+   | the same | D6, `:157` | under "A field or a `source` or `reason` value may be added", D8 adds `sessionKind`, `consents` and `consentTerms` |
+   | `0005-MADR-v1-feature-scope.md` | the OpenAI row, `:168` | quotes "API key or that backend's OAuth"; now "API key, or the ChatGPT plan sign-in under gobble's own name" (D7, F55) |
+
+   * **0049-PLAN's P5b split: already done, checked, not repeated.** "#### P5b split into P5b-1 and P5b-2 (2026-11-11)"
+     (`0049-PLAN-structured-quota-and-rate-limit-errors-for-acp-clients.md:790-812`), every line of it from `97f13a5`
+     (`git blame`), names P5b-1, the `llm` half at `acpext/v0.3.0`, and P5b-2, the wire half with 0051-PLAN P4's
+     acpext pin, as QA (a) says. Its "(`proposed`)" for this MADR is the state on the day it was written; the file was
+     not edited.
+   * **Wording.** The MADR's "Records amended or superseded in part" gives each note's substance: the two quotations of
+     0025-MADR, 0045-MADR's "D2 enforced (D8); D6 admits `sessionKind` and `consents`", and 0005-MADR's row text. The
+     0045-MADR D6 note also names `consentTerms`, from D8's later note ("An addition under 0045-MADR D6"). None was
+     written without a source in the MADR.
+   * The MADR's "Records amended or superseded in part" gains a dated note that this step applied them (`:470`).
+4. **`docs/README.md`:** the 0052 MADR and PLAN rows (`:119-120`), after 0051's, in the form of their neighbours.
+5. **Checks:** run once over both P0s; their output is in 0051-PLAN's P0 record, step 4: `check_records.py
+   --check-all` exit 0; `make check-records markdownlint` exit 0, "Summary: 0 issues in 0 files"; the planted broken
+   link, in this MADR's link from the 0045-MADR note, seen failing; the identifier scan, nothing found.
+
+Acceptance: every note quotes what it amends; the 0031 text is Deviation 1's paste, made on the owner's word
+(`86ad4a7`). Met. P1 is not started.

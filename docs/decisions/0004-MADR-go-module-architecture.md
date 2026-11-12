@@ -475,6 +475,11 @@ ACP-native behaviour, beyond the method list in 0002:
 4. Only `llm/provider` imports `github.com/maccavelli/go-llmprovider-sdk`.
    No package imports `github.com/anthropics/anthropic-sdk-go`,
    `github.com/openai/openai-go`, or `google.golang.org/genai`.
+   *(2026-11-11: amended by [0051-MADR-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md](0051-MADR-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md) D1, accepted that day. "Only `llm/provider` imports
+   `github.com/maccavelli/go-llmprovider-sdk`" has one exception: the nested module
+   `github.com/maccavelli/go-llmprovider-sdk/authcontract`, a data module of the standard library alone, may also be
+   imported by `acpserver` and `internal/cli`, as they import acpext. No package of rule 1 imports it, and the rest of
+   go-llmprovider-sdk stays `llm/provider`'s alone. `internal/archtest`'s rule 4 gains the exception in 0051-PLAN P2.)*
 5. Only `internal/tui` imports `charm.land/...` and
    `github.com/maccavelli/go-tui-lib`. *(Amended 2026-10-22 by [0032-MADR-go-tui-lib-integration-boundary.md](0032-MADR-go-tui-lib-integration-boundary.md)
    D1: `internal/cli` and its packages may also import a go-tui-lib package whose whole import closure holds no
@@ -540,6 +545,12 @@ shown failing when those imports first exist (0002-PLAN Phase 3,
   `google.golang.org/genai`. After F4 it names
   `github.com/maccavelli/go-llmprovider-sdk`. After F10 it names
   `github.com/maccavelli/go-selfupdate-lib`.
+  *(2026-11-11: to "After F4 it names `github.com/maccavelli/go-llmprovider-sdk`. After F10 it names
+  `github.com/maccavelli/go-selfupdate-lib`." add: from 0051-PLAN P2 it names
+  `github.com/maccavelli/go-llmprovider-sdk/authcontract`, `// indirect` through go-llmprovider-sdk's minor until
+  0051-PLAN P4, the commit of gobble's first import of it, makes it direct.
+  [0051-MADR-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md](0051-MADR-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md) D1, accepted that day, names it, as `AGENTS.md` ("Dependencies") asks of every
+  module gobble requires.)*
 * `internal/archtest` passes, and it has been shown failing on a scratch
   clone with a planted `internal/cli → agent` edge and a planted
   `agent → charm.land/…` edge.

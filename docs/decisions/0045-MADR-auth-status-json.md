@@ -115,6 +115,9 @@ still runs key commands.
   the entry records one. An expired login can still be usable, since the provider refreshes it when it runs.
 * **`reason`** is a short code. It is there only when `usable` is false and `source` is not `none`:
   * `oauth_unused`: an OAuth entry for a provider gobble has no login for (0005-PLAN F4-3b);
+    *(2026-11-11: enforced by [0052-MADR-finish-the-chatgpt-plan-sign-in-on-the-sdk-engine.md](0052-MADR-finish-the-chatgpt-plan-sign-in-on-the-sdk-engine.md) D8, accepted that day. An `oauth` entry the resolver does
+    not accept, one whose session kind no offered method signs in to ([0051-MADR-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md](0051-MADR-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md) D2), is
+    `usable: false` with this reason, so "It is there only when `usable` is false" holds for it too (F54).)*
   * `empty_key`: an `api_key` entry with no key;
   * `unknown_type`: an entry of a type gobble does not use.
 * Fields that do not apply are left out, not written as `null` or `""`.
@@ -151,6 +154,9 @@ still runs key commands.
 * The shape is gobble's own. It is documented in `docs/guides/credentials.md` and pinned by a golden file,
   `internal/cli/testdata/auth-status.json.golden`.
 * A field or a `source` or `reason` value may be added in a release, and a consumer ignores what it does not know.
+  *(2026-11-11: [0052-MADR-finish-the-chatgpt-plan-sign-in-on-the-sdk-engine.md](0052-MADR-finish-the-chatgpt-plan-sign-in-on-the-sdk-engine.md) D8, accepted that day, adds three members to a row under this rule,
+  each only where it applies: `sessionKind`, `consents` and `consentTerms`. Each is an addition; no field or value is
+  renamed or removed, and the golden file changes by those members alone.)*
 * Renaming or removing a field or a value, or changing what one means, breaks consumers. It needs a record that says so.
 
 ### D7. Not in `acpext`
