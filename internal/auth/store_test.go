@@ -215,6 +215,102 @@ func TestStoreOAuthRoundTrip(t *testing.T) {
 	}
 }
 
+// A ChatGPT plan session's four fields are written as resource, scope,
+// idToken and hostId, read back unchanged, and removed when unset; an API
+// key written over the entry removes them too (0031-MADR D7, amended
+// 2026-11-10).
+func TestStoreOAuthPlanFields(t *testing.T) {
+	path := writeAuth(t, "{}\n")
+	e := Entry{Access: "a", Refresh: "r", Expires: 1781000000000, Issuer: "https://auth.openai.com", ClientID: "oaiapp_x",
+		Resource: "https://api.openai.com/v1", Scope: "openid chatgpt.tokens.use.direct", IDToken: "id-secret",
+		HostID: "urn:uuid:host"}
+	if err := SetOAuth(t.Context(), path, "openai", e); err != nil {
+		t.Fatal(err)
+	}
+	f, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := e
+	want.Type = TypeOAuth
+	if got, _ := f.Entry("openai"); got != want {
+		t.Errorf("openai after SetOAuth: %+v, want %+v", got, want)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range []string{`"resource": "https://api.openai.com/v1"`, `"scope": "openid chatgpt.tokens.use.direct"`,
+		`"idToken": "id-secret"`, `"hostId": "urn:uuid:host"`} {
+		if !strings.Contains(string(raw), s) {
+			t.Errorf("no %q in:\n%s", s, raw)
+		}
+	}
+	e.Resource, e.Scope, e.IDToken, e.HostID = "", "", "", ""
+	if err := SetOAuth(t.Context(), path, "openai", e); err != nil {
+		t.Fatal(err)
+	}
+	if raw, _ := os.ReadFile(path); strings.Contains(string(raw), "resource") || strings.Contains(string(raw), "idToken") {
+		t.Errorf("after a save without the plan's fields:\n%s", raw)
+	}
+	e.Resource, e.IDToken = "https://api.openai.com/v1", "id-secret"
+	if err := SetOAuth(t.Context(), path, "openai", e); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetKey(t.Context(), path, "openai", "sk-k", ""); err != nil {
+		t.Fatal(err)
+	}
+	if raw, _ := os.ReadFile(path); strings.Contains(string(raw), "idToken") || strings.Contains(string(raw), "resource") {
+		t.Errorf("a key over the plan session kept its fields:\n%s", raw)
+	}
+}
+
+// An oauth login written over an api_key entry leaves no key and no
+// workspace behind, and keeps every other field as written (0052-MADR F25).
+func TestSetOAuthDropsKey(t *testing.T) {
+	path := writeAuth(t, `{
+  "openai": {
+    "type": "api_key",
+    "key": "sk-dormant",
+    "workspace": "ws-dormant",
+    "note": "keep me"
+  },
+  "other": {
+    "type": "api_key",
+    "key": "sk-other",
+    "workspace": "ws-other"
+  }
+}
+`)
+	e := Entry{Access: "a", Refresh: "r", Expires: 1781000000000, Issuer: "https://auth.openai.com", ClientID: "oaiapp_x"}
+	if err := SetOAuth(t.Context(), path, "openai", e); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range []string{"sk-dormant", "ws-dormant"} {
+		if strings.Contains(string(raw), s) {
+			t.Errorf("%q survived SetOAuth:\n%s", s, raw)
+		}
+	}
+	for _, s := range []string{`"note": "keep me"`, `"access": "a"`, `"clientId": "oaiapp_x"`,
+		`"key": "sk-other"`, `"workspace": "ws-other"`} {
+		if !strings.Contains(string(raw), s) {
+			t.Errorf("no %q in:\n%s", s, raw)
+		}
+	}
+	f, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, _ := f.Entry("openai")
+	if got.Key != "" || got.Workspace != "" || got.Type != TypeOAuth {
+		t.Errorf("openai after SetOAuth: %+v", got)
+	}
+}
+
 // The file is the user's alone: 0600 on Unix, the user's DACL on Windows,
 // in a directory made 0700 when it is created.
 func TestStoreMode(t *testing.T) {

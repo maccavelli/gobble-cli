@@ -238,7 +238,25 @@ func TestLoginStoreAdapter(t *testing.T) {
 	if strings.Contains(in.String(), "secret") {
 		t.Errorf("String shows a token: %s", in)
 	}
-	if got, _ := a.Load(t.Context(), llmprovider.ProviderOpenAI); got != nil {
+	// A ChatGPT plan session's four fields go to the SDK and back, and its
+	// ID token is as secret as its tokens (0031-MADR D7, amended 2026-11-10).
+	plan := &Login{Access: "secret-access", Refresh: "secret-refresh", Expires: time.UnixMilli(1781000000000),
+		Issuer: auth.DefaultOpenAIIssuer, ClientID: "oaiapp_gobbletest", Resource: "https://api.openai.com/v1",
+		Scope: "openid chatgpt.tokens.use.direct", IDToken: "secret-id-token", HostID: "urn:uuid:host"}
+	if err := a.Save(t.Context(), llmprovider.ProviderOpenAI, plan.session("openai", nil, nil, nil)); err != nil {
+		t.Fatal(err)
+	}
+	ps, err := a.Load(t.Context(), llmprovider.ProviderOpenAI)
+	if err != nil || ps == nil || !ps.PlanUsage() {
+		t.Fatalf("Load a plan session: %v, %v", ps, err)
+	}
+	if got := loginOf(ps); *got != *plan {
+		t.Errorf("a plan session's round trip: %v, want %v", got, plan)
+	}
+	if strings.Contains(plan.String(), "secret") {
+		t.Errorf("String shows a secret: %s", plan)
+	}
+	if got, _ := a.Load(t.Context(), llmprovider.ProviderClaude); got != nil {
 		t.Errorf("a provider with no login: %v", got)
 	}
 }

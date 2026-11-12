@@ -38,6 +38,7 @@ func (l Logins) Load(_ context.Context, id string) (*provider.Login, error) {
 	login := &provider.Login{
 		Access: e.Access, Refresh: e.Refresh,
 		Issuer: e.Issuer, ClientID: e.ClientID, AccountID: e.AccountID, TokenURL: e.TokenURL, FedRAMP: e.FedRAMP,
+		Resource: e.Resource, Scope: e.Scope, IDToken: e.IDToken, HostID: e.HostID,
 	}
 	if e.Expires > 0 {
 		login.Expires = time.UnixMilli(e.Expires)
@@ -50,7 +51,7 @@ func (l Logins) Save(ctx context.Context, id string, login *provider.Login) erro
 	e := Entry{
 		Access: login.Access, Refresh: login.Refresh,
 		Issuer: login.Issuer, ClientID: login.ClientID, AccountID: login.AccountID, TokenURL: login.TokenURL,
-		FedRAMP: login.FedRAMP,
+		FedRAMP: login.FedRAMP, Resource: login.Resource, Scope: login.Scope, IDToken: login.IDToken, HostID: login.HostID,
 	}
 	if !login.Expires.IsZero() {
 		e.Expires = login.Expires.UnixMilli()

@@ -17,13 +17,21 @@ const (
 	MethodAPIKey  = "api-key"
 	MethodBrowser = "browser"
 	MethodDevice  = "device"
+	// MethodChatGPTPlan is OpenAI's Sign in with ChatGPT for agents, under
+	// gobble's own name (0031-MADR D7, amended 2026-11-10).
+	MethodChatGPTPlan = "chatgpt-plan"
 )
+
+// AgentName is the name gobble signs in under, where a sign-in shows the
+// app's own: OpenAI's ChatGPT plan sign-in (its terms, section 1).
+const AgentName = "gobble"
 
 // methodIDs are gobble's methods as the SDK's.
 var methodIDs = map[string]llmprovider.AuthMethodID{
-	MethodAPIKey:  llmprovider.AuthAPIKey,
-	MethodBrowser: llmprovider.AuthBrowserOAuth,
-	MethodDevice:  llmprovider.AuthDeviceCode,
+	MethodAPIKey:      llmprovider.AuthAPIKey,
+	MethodBrowser:     llmprovider.AuthBrowserOAuth,
+	MethodDevice:      llmprovider.AuthDeviceCode,
+	MethodChatGPTPlan: llmprovider.AuthChatGPTPlan,
 }
 
 // Choice is one answer to a sign-in's question: its label and a detail
@@ -186,6 +194,7 @@ func SignIn(ctx context.Context, id string, p Prompter, o SignInOptions, store L
 		SkipMethods:      skips(d, o.Method),
 		NoEndpointPrompt: true,
 		NoPastePrompt:    o.NoPaste,
+		AgentName:        AgentName,
 	}, d.ID)
 	if err != nil {
 		if own, ok := errors.AsType[*ownError](err); ok {

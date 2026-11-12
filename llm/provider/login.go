@@ -19,6 +19,11 @@ type Login struct {
 	Expires                               time.Time
 	Issuer, ClientID, AccountID, TokenURL string
 	FedRAMP                               bool
+	// Resource, Scope, IDToken and HostID are a ChatGPT plan session's:
+	// the resource its tokens are for, which marks it; its granted scopes;
+	// its last ID token, a secret String never shows; and the host id its
+	// client was registered with (0031-MADR D7, amended 2026-11-10).
+	Resource, Scope, IDToken, HostID string
 }
 
 // String renders the login without its tokens.
@@ -109,6 +114,7 @@ func (l *Login) session(id string, store LoginStore, client *http.Client, logger
 	s := &auth.OAuthSession{
 		Provider: llmprovider.ProviderID(id), Access: l.Access, Refresh: l.Refresh, Expiry: l.Expires,
 		Issuer: l.Issuer, ClientID: l.ClientID, AccountID: l.AccountID, FedRAMP: l.FedRAMP, TokenURL: l.TokenURL,
+		Resource: l.Resource, Scope: l.Scope, IDToken: l.IDToken, HostID: l.HostID,
 		HTTPClient: client, Logger: logger,
 	}
 	if store != nil {
@@ -122,6 +128,7 @@ func loginOf(s *auth.OAuthSession) *Login {
 	return &Login{
 		Access: s.Access, Refresh: s.Refresh, Expires: s.Expiry,
 		Issuer: s.Issuer, ClientID: s.ClientID, AccountID: s.AccountID, TokenURL: s.TokenURL, FedRAMP: s.FedRAMP,
+		Resource: s.Resource, Scope: s.Scope, IDToken: s.IDToken, HostID: s.HostID,
 	}
 }
 

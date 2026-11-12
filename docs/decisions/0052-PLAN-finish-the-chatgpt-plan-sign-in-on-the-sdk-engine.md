@@ -147,6 +147,8 @@ are kept as written. They no longer describe what happens:
 * **Step 8's two commits** are one now; its note says why.
 
 What P1 still has to do: re-apply step 2's first three bullets from the branch, then steps 6 to 8.
+*(2026-11-11, later: done, staged and not committed; see "P1 record (2026-11-11)" at the end of "Execution record".
+`TestSortedTreeIsThePatch` compares at the level of `git diff -U0` change groups, 99 of them, not whole hunks.)*
 
 1. **Keep a copy first.** `git diff --binary` written to `<scratch>/0052-wip.patch`, `git diff --stat` beside it, and
    ~~the patch's SHA-256 recorded here~~ *(2026-11-11: it was recorded only in 0031-PLAN until the note above)*.
@@ -448,6 +450,9 @@ out parts of P0 and P1, on the owner's word of 2026-11-11 ("Proceed with the gob
 steps 1, 3, 4 and 5 by its record at the end of this section, and step 2 and step 3's 0049-PLAN split checked there as
 already done, not repeated. P1 and the later phases are not started.)*
 
+*(2026-11-11, later still: P1's steps 2 (first three bullets), 6, 7 and 8's gates are done and staged, and the owner
+has not yet committed them; the "P1 record (2026-11-11)" below says what was run. P2 onward is not started.)*
+
 The verification output is recorded where the work was done: 0049-PLAN's "P5b-1 record (2026-11-11)" for `97f13a5`,
 and 0031-PLAN's closing note of P4b-2 for the archive and its hash.
 
@@ -528,3 +533,99 @@ asserted that its old text occurred once before it replaced it, and was read bac
 
 Acceptance: every note quotes what it amends; the 0031 text is Deviation 1's paste, made on the owner's word
 (`86ad4a7`). Met. P1 is not started.
+
+### P1 record (2026-11-11)
+
+C1: branch `main`, `HEAD` `5007c69`, three commits ahead of `origin/main` `b6adb5a`, the tree clean; the archive
+branch `wip/0031-p4b2-chatgpt-plan` at `1406bd6` locally and on origin, its parent `d6c10a5`. P1 is read against
+Deviation 1 and the note under P1's heading. The agent stages; the owner commits with `git commit --no-edit`. Nothing
+was committed, pushed or tagged. Scratch logs are under `<TMP>` (the session's scratch directory).
+
+1. **Step 2, first three bullets, re-applied from `1406bd6`.** `internal/auth` and `llm/provider` are unchanged
+   between `d6c10a5` and `HEAD` apart from `provider.go` and `limit_test.go` (97f13a5), so each hunk applied to
+   `main`'s code as it stands. No file was checked out from the branch.
+   * `internal/auth/store.go`, `logins.go`, `store_test.go`: all hunks of the archive's diff of those three files
+     (`git apply --check` exit 0, then applied): `Entry`'s `Resource, Scope, IDToken, HostID`; `parse`'s four JSON
+     members; `SetKey`'s removal list; `oauthFields`' four names; `Logins.Load` and `Save`; `TestStoreOAuthPlanFields`.
+   * `llm/provider/login.go`, three hunks by hand: `Login`'s four fields; `session`'s four; `loginOf`'s four.
+     `Login.Plan()`, `HasLogin`'s openai and `HasPiLogin` (steps 3 and 4) were not brought back.
+   * `llm/provider/login_test.go`, one hunk by hand: the plan half of `TestLoginStoreAdapter`. Its closing
+     "a provider with no login" probe asks about Claude in place of OpenAI, as in the archive, since OpenAI now has a
+     stored plan session in that test. The archive's imports, `testIssuer.scope`, `TestLogoutPlan` and
+     `TestOpenAILoginIsAPlan` stay on the branch (step 3).
+   * `llm/provider/signin.go`, four hunks by hand: `MethodChatGPTPlan`, `AgentName`, `methodIDs`' entry, and the
+     wizard's `AgentName: AgentName` (MADR D1's `:201`). `offers` is unchanged, so the method stays inert: it skips
+     `AuthChatGPTPlan`. `go build ./...` exit 0 and `go test -count=1 ./internal/auth/ ./llm/provider/` exit 0 followed.
+2. **Step 6, F25.** `oauthFields` ends with `remove = append(remove, "key", "workspace")`, with a comment naming F25,
+   and its doc comment says so. `SetOAuth` therefore leaves no key or workspace in an `oauth` entry.
+3. **Step 7, each test seen failing on a scratch copy (C2); the tree was never dirtied.**
+
+   | Test | Scratch copy | Failure seen |
+   | :--- | :--- | :--- |
+   | `TestSetOAuthDropsKey` (new, `internal/auth/store_test.go`) | the tree with `key` left out of `remove` | exit 1: `store_test.go:295: "sk-dormant" survived SetOAuth:`, the entry shown still holding `"key": "sk-dormant"`, and `store_test.go:310: openai after SetOAuth: {Type:oauth Key:sk-dormant …}`; passes in the tree |
+   | `TestStoreOAuthPlanFields` (re-applied) | `git archive HEAD` plus this one test, no fields | exit 1, build failed: `store_test.go:225:3: unknown field Resource in struct literal of type Entry`, then `IDToken`, `HostID`, and `e.Resource undefined (type Entry has no field or method Resource)`; passes in the tree |
+   | `TestSortedTreeIsThePatch` (a scratch script, not committed) | see below | see below |
+
+   `TestSetOAuthDropsKey` builds an `api_key` entry with `key`, `workspace` and a `note`, beside another provider's
+   entry with its own `key` and `workspace`; after `SetOAuth` neither dormant value is in the file, `note` and the
+   written fields are, and the other provider's entry is unchanged.
+
+   **The sort script** (`<TMP>/sort.py`; not in the repository). It reads every change group of
+   `git diff -U0 d6c10a5 1406bd6` (99 groups in 39 files) and looks for the archive's lines in `HEAD` and in the
+   tree. A group in both is "on main already", and the script checks that `97f13a5` or `86ad4a7` touched that file; a
+   group in the tree only is "re-applied in P1"; a group in neither must be claimed by one `ACCOUNTING` entry naming
+   the step that leaves it on the branch (3, 4 or 5), and an entry that claims no group, or a group no entry claims,
+   fails it. Markdown is compared with `* ` bullets read as `- `, since the owner's paste (`86ad4a7`) was linted to
+   dashes, and trailing space is ignored; with that, the archive's 0031 text is on `main` line for line.
+
+   * Run on the tree, exit 0: `files 39`, `re-applied in P1 16`, `on main already 14`, `left on the branch 69`,
+     `UNACCOUNTED 0`. The 14 are `llm/errors.go` (2), `provider.go` (8), `limit_test.go`, `choice_test.go` (97f13a5);
+     the 0031 MADR and the 0031 PLAN (86ad4a7). The 16 are the files and hunks of item 1.
+   * Planted break 1, one `ACCOUNTING` entry dropped (`offers`' guards, `--drop 4`), exit 1: `UNACCOUNTED 1` and
+     `PROBLEM: llm/provider/signin.go group 5 (-0 +1, archive line 87): not in the tree, no ACCOUNTING entry`.
+   * Planted break 2, on a scratch copy of the tree, the `AgentName: AgentName,` hunk removed, exit 1:
+     `re-applied in P1 15`, `UNACCOUNTED 1`, `PROBLEM: llm/provider/signin.go group 8 (-0 +1, archive line 201): not
+     in the tree, no ACCOUNTING entry`.
+   * What it does not prove: that a group present in the tree is in the right place, only that its lines are there.
+     The 69 left on the branch are the files and hunks that steps 3, 4 and 5 name: step 3 (reworked: `HasLogin`'s
+     openai, `Login.Plan()`, `offers`' guards, `provider.go`'s refusal, `loginWith`, the status row, `PlanSession`,
+     the gating in `acpserver`, their tests, and `planIssuer` and `planCallback` with `TestSignInChatGPTPlan` and
+     `TestSignInChatGPTPlanPasted`); step 4 (discarded: the notice and the consent prompt, `HasPiLogin`,
+     `piimport.go`, the `chatgptPlanBackground` setting in `internal/config` and its readers); step 5 (the wire half:
+     `prompt.go`'s `WindowMinutes`, `weeklyErr`, acpext `v0.4.0` in `go.mod` and `go.sum`).
+4. **Step 8, gates (C6), on the Mac.** Each exit status was taken before any filter; no proxy variable was set.
+   * `make pre-add-check FILES="internal/auth/store.go internal/auth/logins.go internal/auth/store_test.go
+     llm/provider/login.go llm/provider/signin.go llm/provider/login_test.go"`, exit 0: "No vulnerabilities found",
+     "go-precheck: 6 file(s) clean (gofmt, golint, govulncheck)".
+   * `make preflight`, exit 0, "preflight passed": gofmt, `go mod tidy`, pre-add-check, vet, staticcheck,
+     golangci-lint, govulncheck, `check-acpext-deps`, `go fix`, archtest, apidiff, build metadata, `check-records`,
+     `check-icon`, and markdownlint ("Summary: 0 issues in 0 files"). It ran before this record was written; the
+     record's own checks are below.
+   * `GOFLAGS=-count=1 make race`, exit 0, 39 `ok` lines (the root module and acpext); no failure, so
+     `TestRuleStoreConcurrent` and every untouched test passed.
+   * `make check-test-isolation`, exit 0: root and acpext modules `go test` exit 0, 0 failing, "files written above
+     the temp roots: 0".
+   * `go.mod`, `go.sum` and the `go` lines are unchanged; no golden file changed.
+5. **The other two hosts,** each on a copy of the tree (947 files from `git ls-files -co --exclude-standard`, none
+   missing, packed with `--no-mac-metadata`; the remote count was 947 and no `._*` file on each). Both hosts run Go
+   1.27.4. The Linux machine got the archive through ssh's standard input; the Windows laptop by `scp`, then `tar` on
+   the host, with `-o ControlPath=none` on every ssh. No proxy variable was set. Remote copies were removed
+   afterwards, older ones left.
+
+   | Host | `go test -count=1 ./...` | `CGO_ENABLED=1 go test -count=1 -race ./...` | `go -C acpext test -count=1 ./...` |
+   | :--- | :--- | :--- | :--- |
+   | Linux machine | exit 0, 38 `ok` | exit 0, 38 `ok` | exit 0, 1 `ok` |
+   | Windows laptop | exit 0, 38 `ok` | exit 0, 38 `ok` | exit 0, 1 `ok` |
+
+   `make preflight` is macOS-only and was not run there.
+6. **Records.** This record and the three dated notes above; `python3 -B scripts/check_records.py --check-all`
+   and `make check-records markdownlint` were run last, after this record was written: both exit 0, "Summary: 0
+   issues in 0 files". The identifier scan of the diff looked for the local account name, the hosts' names and
+   domain, the owner's e-mail address, `/Users/` and `/home/` paths and the scratch directory, and found nothing
+   (`grep -c` gave 0).
+7. **Not done.** The commit (the owner's); P2 onward; the archive's wire half, which waits for the SDK's tags and
+   0051-PLAN P4. No deviation was needed: no hunk had to be reworked, no existing test or golden changed, no
+   plant went uncaught.
+
+Staged: the six Go files above and this PLAN. P1's acceptance, "the sort script reports no hunk lost; `make preflight`
+and `make race` pass on three hosts", is met, with `make preflight` on the Mac alone as the PLAN says.
