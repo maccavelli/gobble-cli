@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: complete
 date: 2026-11-11
 associated-madr: "0054-MADR-go-1-27-4-and-sibling-pin-refresh.md"
 ---
@@ -348,6 +348,8 @@ their records at the end of this section. P2 and P3 are not started.)*
 *(2026-11-11, later: the owner committed P0 and P1 as `88655c5`, and P2 was run and staged; see its record. P3 is not
 started.)*
 *(2026-11-11, later: the owner committed P2 as `f441c73`, and P3 was run and staged; see its record. P4 is not started.)*
+*(2026-11-11, later: the owner committed P3 as `b6adb5a` and pushed P0 to P3 together; P4 was run and staged; see
+its record. This plan is `complete`.)*
 
 ### Corrections of 2026-11-11 (records only; no phase has started)
 
@@ -693,6 +695,61 @@ any filter. Temporary paths are `<TMP>`.
    close-out of the MADR's Completion section, this PLAN's status and `docs/README.md`'s status cells. Staged: this
    phase's files only, by path.
 9. **Records and the identifier scan,** run after this entry was written. `make check-records markdownlint`: exit 0,
+   "Summary: 0 issues in 0 files"; `python3 -B scripts/check_records.py --check-all`: exit 0. The identifier scan of
+   the diff's added lines (the local account name, the dev hosts' names, the org's mail domain, and real-machine home,
+   drive and temporary paths): `grep` exit 1, nothing found.
+
+### P4 record (2026-11-11)
+
+C1: branch `main`, `HEAD` `b6adb5a` (P0 and P1 as `88655c5`, P2 as `f441c73`, P3 as `b6adb5a`, committed by the
+owner), `origin/main` `b6adb5a`, level: the owner pushed P0 to P3 together. The tree clean (`git status --short`
+printed nothing). `go.mod` and `acpext/go.mod` at `go 1.27.4`, acp-go-sdk2 `v1.36.0`, go-selfupdate-lib `v1.26.2`. No
+deviation. As P1 step 8 allows for a joint push, one run is read for all three phases: `gh run list --branch main`
+lists no CI run between `43080286906` (`17d1605`) and this one. Each command wrote to a scratch log, and its exit
+status was taken before any filter.
+
+1. **The CI run.** `gh run view 43119674374 --json jobs,conclusion,headSha,createdAt`: exit 0. `headSha`
+   `b6adb5a4dcf40d89058cd38aebf3b943f8463c0f`, `createdAt` `2026-11-11T23:25:12Z`, `conclusion` `success`. A second
+   read, `--json attempt,jobs` with `name` and `event`: workflow `CI`, event `push`, `attempt` 1, and each job's steps.
+   Its jobs, in the order and with the names `gh` printed:
+
+   | Job | Conclusion |
+   | :--- | :--- |
+   | `test-isolation` | `success` |
+   | `validate (ubuntu-24.04)` | `success` |
+   | `sbom` | `success` |
+   | `validate (macos-15)` | `success` |
+   | `validate (windows-2025)` | `success` |
+   | `build / build` | `success` |
+   | `build / identity (gobble, darwin/arm64)` | `success` |
+   | `build / identity (gobble, windows/amd64)` | `success` |
+   | `build / identity (gobble, linux/amd64)` | `success` |
+   | `build / identity (gobble, windows/arm64)` | `success` |
+   | `build / identity (gobble, linux/arm64)` | `success` |
+   | `release` | `skipped` |
+
+   * On each of the three `validate` jobs the steps `go test` and `make preflight` concluded `success`. `make race` is
+     `success` on `ubuntu-24.04` and `macos-15` and `skipped` on `windows-2025`, as the workflow runs it.
+   * The same push's other runs at `b6adb5a`: `Docs`, run `43119673712`, `success`; the Dependency Graph's `Graph
+     Update: go_modules in /., /acpext #1696983557`, run `43119681741`, event `dynamic`, `success`.
+   * The CI runs before it on `main`, read again: `43042877946` (`86ad4a7`) and `43080286906` (`17d1605`), each
+     `failure`, on GO-2026-6859 (MADR F1).
+2. **No job failed,** so step 2 has no log to read, and no job was re-run (`attempt` 1). `validate (windows-2025)`'s
+   `go test` step, where run `43080286906` failed `TestRuleStoreConcurrent`, concluded `success`: C5 did not arise.
+3. **Close-out.**
+   * The MADR's "Completion (2026-11-11)", after its Confirmation: items 1 to 9, each met, each with its commit and the
+     record entry that meets it. The MADR stays `accepted`.
+   * This PLAN's front matter `status` is `complete`, set by an assertion that the old line occurred once.
+   * `docs/README.md`'s two 0054 status cells, in the form of 0050's and 0053's: the MADR's gains "Completion
+     2026-11-11: Confirmation 1 to 9 met"; the PLAN's is `complete 2026-11-11`, with each phase's outcome.
+4. **The owner's decisions during execution,** recorded in the MADR's Completion section too:
+   * **Q2 answered (a):** `override` is not advertised; P2 built `append` only (MADR Q2's note; P2 record item 2).
+   * **P3's race gate:** the owner accepted the second `make race` run, exit 0, as P3's gate. The first run, exit 2 at
+     `TestWireOffline` in a shell that still exported the proxy variables, is a misconfigured harness, not a test
+     failure, so C5's stop and record of its own did not apply; both runs stay in the P3 record (item 7).
+5. **Not done, by the PLAN.** No commit, push or tag; the owner commits. Staged: the MADR, this PLAN and
+   `docs/README.md`, by path.
+6. **Records and the identifier scan,** run after this entry was written. `make check-records markdownlint`: exit 0,
    "Summary: 0 issues in 0 files"; `python3 -B scripts/check_records.py --check-all`: exit 0. The identifier scan of
    the diff's added lines (the local account name, the dev hosts' names, the org's mail domain, and real-machine home,
    drive and temporary paths): `grep` exit 1, nothing found.

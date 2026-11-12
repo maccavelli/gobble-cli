@@ -390,6 +390,58 @@ advertised. (b) or (c) is an amendment of D7 and of P2 before any of its code.
    `test-isolation`, `sbom` and `build`; `release` is skipped, as on any untagged push.
 9. The notes in 0004-MADR, 0023-MADR and 0042-MADR are made, each quoting what it amends.
 
+### Completion (2026-11-11)
+
+Each item below is checked against
+[0054-PLAN-go-1-27-4-and-sibling-pin-refresh.md](0054-PLAN-go-1-27-4-and-sibling-pin-refresh.md)'s phase records. All
+nine are met. The commits are P0 and P1 `88655c5`, P2 `f441c73` and P3 `b6adb5a`, pushed by the owner together; P4 is
+the commit that adds this section.
+
+1. **Met** (`88655c5`; P1 record items 2, 3, 6 and 7). Both `go.mod` files say `go 1.27.4`, one line each, and neither
+   has a `toolchain` line. `go mod tidy` exit 0 in both modules, with `go.sum` unchanged, and `make preflight`'s tidy
+   check passed. On scratch copies, Go 1.27.3 refused each module ("go.mod requires go >= 1.27.4", exit 1), and the
+   base's tree under Go 1.27.3 reported GO-2026-6859 (govulncheck exit 3).
+2. **Met** (`88655c5`; P1 record items 4 and 7). `scripts/check_libs.py:124` sets `GOTOOLCHAIN="go1.27.4"`, and its
+   `--self-test` exit 0. `AGENTS.md:16`, `docs/architecture.md:9` and `docs/guides/developing.md:9` name Go 1.27.4.
+   The PLAN's Verification row 2 `git grep` also lists `docs/README.md:25` and `:26`, the 0004 rows' status cells that
+   name the earlier move as history; this item does not ask about them, and they were left (P1 record item 4).
+3. **Met** (`f441c73`, P2 record item 4; `b6adb5a`, P3 record item 3). `go.mod` requires acp-go-sdk2 `v1.36.0` and
+   go-selfupdate-lib `v1.26.2`; each `go get` moved its own requirement and its two `go.sum` lines alone.
+   go-llmprovider-sdk `v1.29.0`, go-tui-lib `v2.12.0` and acpext `v0.3.0` are unchanged: `git diff 17d1605 b6adb5a --
+   go.mod` shows the `go` line and the two requirements, and nothing else.
+4. **Met** (P2 record item 3, at `88655c5`; P3 record item 2, at `f441c73`). `check_libs.py`: `0 failing checks` for
+   acp-go-sdk2 `v1.36.0` and for go-selfupdate-lib `v1.26.2`, its `api` check `ok` in each.
+5. **Met,** in its amended form (`f441c73`; P2 record items 2, 10 and 11).
+   * Q1 is answered (D5's note) and carried out as D7. Q2 is answered (a) and recorded (Q2's note), so P2 built
+     `append` only.
+   * D7's nine tests pass, with `TestBuildClientPrompt` and `TestCheckClient` for `prompt`. Each failed on its planted
+     break on a scratch copy, sixteen plants in all, none a build failure.
+   * `acpserver/testdata/session.golden` changed by `"systemPrompt":{}` alone; no other golden changed.
+6. **Met** (`b6adb5a`, P3 record items 4 and 5; `f441c73`, P2 record item 9). `ci.yml:191` and `:203` name
+   `e62d77cddaf264cc6ec7bbc4f39b90322542f752 # v1.26.2`, `7c677842` is gone from the file, and actionlint exit 0.
+   `README.md:156` and `docs/architecture.md:189` name acp-go-sdk2 `v1.36.0`; `README.md:163` and
+   `docs/architecture.md:193` name go-selfupdate-lib `v1.26.2`. P2's added README line moved the cited lines by one.
+7. **Met,** at P1, P2 and P3 (P1 record item 7, P2 record item 12, P3 record item 7).
+   * macOS: `make preflight`, `GOFLAGS=-count=1 make race` (39 `ok`, none cached) and `make check-test-isolation`,
+     each exit 0.
+   * The Linux machine and the Windows laptop: `go test -count=1 ./...` and `CGO_ENABLED=1 go test -count=1 -race
+     ./...` (38 `ok` each) and acpext's tests, each exit 0.
+   * At P3, `make race`'s first run exited 2 at `TestWireOffline`, in a shell that still exported the proxy variables.
+     The owner accepted the second run, in a shell with none, exit 0, as P3's race gate. Both runs are in the P3
+     record.
+8. **Met** (P4 record items 1 and 2). CI run `43119674374`, the push of `b6adb5a`, concluded `success`.
+   `validate (ubuntu-24.04)`, `validate (macos-15)`, `validate (windows-2025)`, `test-isolation`, `sbom` and
+   `build / build`, with its five `build / identity` jobs, are `success`; `release` is `skipped`. The owner pushed P1
+   to P3 together, so one run reads all three (PLAN P1 step 8). Runs `43042877946` and `43080286906` had failed.
+9. **Met** (`88655c5`; P1 record item 5). 0004-MADR's Toolchain line, 0023-MADR's Go row and 0042-MADR D1 each carry
+   a 2026-11-11 note that quotes what it amends and links this record.
+
+**The owner's decisions during execution:**
+
+* **Q2 answered (a):** `override` is not advertised, and the SDK refuses it (Q2's note; PLAN P2 record item 2).
+* **P3's race gate:** the second run accepted. The first is a misconfigured harness, not a test failure, so the
+  PLAN's C5 stop and a record of its own did not apply (PLAN P3 record item 7's note).
+
 ## Pros and Cons of the Options
 
 ### A. One record, three steps
@@ -473,10 +525,12 @@ advertised. (b) or (c) is an amendment of D7 and of P2 before any of its code.
 ### Revisions of 2026-11-11
 
 The owner's rulings of 2026-11-11, given after this record was accepted and relayed by the cross-repository
-coordinator. Each is a dated note beside the text it changes, and the record stays `accepted`; Q2 is open.
+coordinator. Each is a dated note beside the text it changes, and the record stays `accepted`; Q2 was open when this
+paragraph was written. *(Later the same day: the owner answered Q2 (a), `append` only; see Q2's note and the
+Completion section.)*
 
 * **Q1 answered:** gobble advertises client system prompts and honours them (D5's note). **D7 added,** with **Q2**,
-  `override`, awaiting the owner. Decision Outcome, Consequences, Confirmation 5 and "Not decided here" carry notes.
+  `override`, then awaiting the owner, since answered (a). Decision Outcome, Consequences, Confirmation 5 and "Not decided here" carry notes.
 * **No `v0.5.1`** (D6's note, "Not decided here", Consequences): the fix reaches users in `v0.6.0`, and installed
   `v0.5.0` binaries stay exposed until then.
 * **D2 confirmed** as written.
