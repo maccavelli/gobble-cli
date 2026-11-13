@@ -1,8 +1,8 @@
 ---
 status: accepted
-date: 2026-11-11
+date: 2026-11-12
 decision-makers: repository owner
-consulted: "magic-cli-remote's docs/reports/0245-REPORT-non-api-key-auth-across-magic-gobble-and-the-sdk.md (observed 2026-11-10, committed in that repository as 3e2f784b) and the owner's answers of 2026-11-10 to its Q1-Q22; go-llmprovider-sdk's proposed 0073-MADR-publish-an-auth-contract-module.md, 0074-MADR-one-sign-in-handle-and-method-facts.md, 0075-MADR-chatgpt-plan-consent-host-id-and-client-reuse.md and 0076-MADR-auth-error-kinds-and-doc-drift.md (untracked in that repository); this repository at d6c10a5 with the owner's uncommitted 0031-PLAN P4b-2 work; acp-go-sdk2 v1.35.0 read from the module cache; magic-cli-remote at 995d442b and its proposed `0246-MADR-take-provider-auth-types-from-the-sdk-auth-contract-in-one-cut-over.md`, whose O2 and O4 the owner answered on 2026-11-10; two independent reviews of these drafts, 2026-11-10; corrected on 2026-11-11 against this repository at 17d1605, go-llmprovider-sdk's four drafts as dated 2026-11-11, acp-go-sdk2 v1.36.0, and magic-cli-remote, whose origin/master is eefb7c25 (995d442b, cited here, is five commits behind it, and its local master is two ahead, bcde74ab and 14200b6e), with the owner's rulings of 2026-11-11 as the cross-repository session relayed them; and, later on 2026-11-11, the owner's rulings relayed by the cross-repository coordinator: go-llmprovider-sdk's 0074-MADR D4 reversed (NoLoopback is v1 API, with gobble its call site), `_meta.gobble.remote` on authenticate, and acpext ErrorData's `consent` member, with go-llmprovider-sdk's 0077-MADR-go-1-27-4-for-go-2026-6859.md, now a file there"
+consulted: "magic-cli-remote's docs/reports/0245-REPORT-non-api-key-auth-across-magic-gobble-and-the-sdk.md (observed 2026-11-10, committed in that repository as 3e2f784b) and the owner's answers of 2026-11-10 to its Q1-Q22; go-llmprovider-sdk's proposed 0073-MADR-publish-an-auth-contract-module.md, 0074-MADR-one-sign-in-handle-and-method-facts.md, 0075-MADR-chatgpt-plan-consent-host-id-and-client-reuse.md and 0076-MADR-auth-error-kinds-and-doc-drift.md (untracked in that repository); this repository at d6c10a5 with the owner's uncommitted 0031-PLAN P4b-2 work; acp-go-sdk2 v1.35.0 read from the module cache; magic-cli-remote at 995d442b and its proposed `0246-MADR-take-provider-auth-types-from-the-sdk-auth-contract-in-one-cut-over.md`, whose O2 and O4 the owner answered on 2026-11-10; two independent reviews of these drafts, 2026-11-10; corrected on 2026-11-11 against this repository at 17d1605, go-llmprovider-sdk's four drafts as dated 2026-11-11, acp-go-sdk2 v1.36.0, and magic-cli-remote, whose origin/master is eefb7c25 (995d442b, cited here, is five commits behind it, and its local master is two ahead, bcde74ab and 14200b6e), with the owner's rulings of 2026-11-11 as the cross-repository session relayed them; and, later on 2026-11-11, the owner's rulings relayed by the cross-repository coordinator: go-llmprovider-sdk's 0074-MADR D4 reversed (NoLoopback is v1 API, with gobble its call site), `_meta.gobble.remote` on authenticate, and acpext ErrorData's `consent` member, with go-llmprovider-sdk's 0077-MADR-go-1-27-4-for-go-2026-6859.md, now a file there; and, on 2026-11-12, the owner's direction 'Where possible gobble auth would send gobble as the name/referrer not the sdk', go-llmprovider-sdk's 0079-MADR-name-the-app-on-refresh-revocation-and-the-chatgpt-originator.md (accepted 2026-11-12) and its PLAN (in progress), both read as committed there at f50466b, with that repository's code at the same commit, and this repository at c47f4a7; and the owner's rulings of 2026-11-12 on D9's Q1 to Q3, relayed by the cross-repository coordinator"
 informed: "magic-cli-remote, which relays gobble's sign-in steps and imports acpext; go-llmprovider-sdk, whose x/signin and authcontract this consumes; maccavelli/gobble-cli#16"
 ---
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
@@ -397,6 +397,9 @@ D2's note of 2026-11-11, later.)*
   openai` offers the plan and the API key" (`0031-PLAN-sdk-current-releases-and-adoption.md:328`; *2026-11-11: `:347` on `main` since `86ad4a7`, `:328` being the line at `d6c10a5` and on the archive branch*), for every
   provider (F53).
 
+*(2026-11-12; D9.)* The terminal surfaces and `--json` above name gobble to the identity provider as the ACP bullet
+does: `provider.SignIn` sets `wizard.Options.Identity` to the same value, which it does not at `c47f4a7` (D9, N1).
+
 ### D4. ACP `authenticate` signs in by elicitation (amends 0016-MADR A2)
 
 * **Advertised methods.** Each agent auth method keeps its id, name and description (`acpserver/auth.go:32-41`) and
@@ -600,6 +603,124 @@ carries the doc. The remote paste is answered by ACP elicitation inside authenti
 answer channel.
 ```
 
+### D9. gobble names itself on every auth request the SDK lets it name (added and accepted 2026-11-12)
+
+*(2026-11-12. Added by amendment; D1 to D8 stand as written. The direction is the owner's. The owner ruled the same
+day on the three questions this section first put, kept with their options under "Questions for the owner
+(2026-11-12), ruled the same day": Q1 "New phase P2a", Q2 "Amend SDK 0079", Q3 "No separate test". D9 is accepted
+2026-11-12 as it reads here. It was drafted and ruled on one day, before any commit, so its text is the ruled one;
+the draft's own choice for Q2, gobble naming the session itself, survives as that question's option (a).)*
+
+The owner, on 2026-11-12: "Where possible gobble auth would send gobble as the name/referrer not the sdk".
+
+go-llmprovider-sdk carries the SDK's half as `0079-MADR-name-the-app-on-refresh-revocation-and-the-chatgpt-originator.md`,
+accepted 2026-11-12, with its PLAN in progress; both are committed there at `f50466b`, and they ship in `v1.31.0`, the
+minor D1 requires, with that repository's 0074 and 0075. What it gives a consumer:
+
+* a sign-in keeps its `auth.Identity` on the session it returns, in memory, never stored (its D2);
+* `(*auth.OAuthSession).UseIdentity(auth.Identity)` names a session that has no identity; the first name given wins
+  (its D2);
+* a refresh, a revocation, and the discovery a Grok or plan revocation reads first send the session's identity as their
+  User-Agent (its D3);
+* the openai and grok providers and `catalog`'s listings hand `WithClientInfo`'s name and version to the session they
+  use (its D4);
+* the ChatGPT backend's `originator` is `WithClientInfo`'s name (its D1);
+* the wizard names its own requests and its logout with `Options.Identity` (its D5);
+* the User-Agent keeps the SDK as its trailing token, `<app>/<ver> (<os>; <arch>) go-llmprovider-sdk/<ver>`, by that
+  owner's ruling 3, the form [0003-MADR-gobble-product-identity.md](0003-MADR-gobble-product-identity.md) item 2
+  already records for provider requests.
+
+Its Consequences name one gobble-side gap: gobble's `Logout` builds its own session to revoke (its C38) and must call
+`UseIdentity` itself. Read against this repository at `c47f4a7`, that gap is one of three.
+
+**The name gobble passes.** `ClientName` is `appName`, `const appName = "gobble"` (`internal/cli/agent.go:26`), passed
+with `identity().Version` at `internal/cli/login.go:75`, `agent.go:37`, `agent.go:56`, `title.go:37` and
+`models.go:293`. `identity` is `buildinfo.Identity` (`internal/cli/version.go:13`), whose `Version` "always parses as
+SemVer" (`internal/buildinfo/buildinfo.go:24-26`).
+
+#### Every gobble site that reaches an SDK auth or identity surface, at `c47f4a7`
+
+| Id | Site | Where | Text at `c47f4a7` | Under `v1.31.0` |
+| :--- | :--- | :--- | :--- | :--- |
+| N1 | terminal and `--json` sign-ins, through the wizard (D3) | `llm/provider/signin.go:184` | `res, _, err := wizard.ResolveCredential(ctx, w, wizard.Options{` | **gobble acts.** The options (`:184-198`) set `AgentName` but no `Identity`, whose zero value names the SDK (go-llmprovider-sdk `wizard/configure.go:137-143`). Grok's authorize and device `referrer`, the User-Agent of every sign-in request, and the identity the session keeps are then the SDK's. The wizard's sign-ins take their name from `Options.Identity` alone (go-llmprovider-sdk `wizard/auth.go:292`, `:725`), never from `ProviderOptions` |
+| N2 | the wizard's own requests: the listing check, the Kilo profile, the Ollama check | `llm/provider/signin.go:181` | `llmprovider.WithClientInfo(o.ClientName, o.ClientVersion),` | **Covered, today and after.** `ProviderOptions` names gobble; 0079-MADR D5 puts `Identity` first and lets this option win, with the same name |
+| N3 | the ACP sign-in, planned | D3 above; the PLAN's P6 step 1 | `Identity: auth.Identity{Name: "gobble", Version}` | **Covered by the plan.** 0079-MADR D2 carries it into the session `Wait` saves. P6 gains a test that pins it |
+| N4 | a provider's refresh: every turn, title and session switch | `llm/provider/provider.go:194`, the session from `:107` | `llmprovider.WithClientInfo(o.ClientName, o.ClientVersion),` | **Covered automatically** by 0079-MADR D4: the grok provider, and the openai provider for a plan session, hands the name to the session |
+| N5 | a listing's refresh | `llm/provider/list.go:92`, its options at `:71` | `cat, err := catalog.List(ctx, llmprovider.ProviderID(id), src, opts...)` | **Covered automatically:** `catalog.List` reads the token through `listingToken` (go-llmprovider-sdk `llmprovider/catalog/discovery.go:259`), where 0079-MADR D4 hands the name over |
+| N6 | the agent's model facts, a lookup that can refresh | `llm/provider/model.go:157`, called through the hook at `internal/cli/agent.go:101-107` | `info, _ := catalog.CachedModel(ctx, llmprovider.ProviderID(id), src, model, opts...)` | **The SDK acts, and gobble passes the name.** At `f50466b`, `CachedModel` asks the session for its token itself (go-llmprovider-sdk `llmprovider/catalog/lookup.go:138`), not through `listingToken`, so 0079-MADR D4 does not reach it; by the owner's ruling on Q2, a pending amendment of go-llmprovider-sdk `0079-MADR-name-the-app-on-refresh-revocation-and-the-chatgpt-originator.md` puts it through D4's hand-off. That hand-off names the session only from a `WithClientInfo` among the call's options, and gobble passes none: the lookup's options are `WithoutModelMetadata`, `sdkOptions`' client and base URL, a workspace and the layers (`model.go:150-157`; `sdkOptions` holds no `WithClientInfo`), and the hook's `provider.Options` at `agent.go:102` sets no `ClientName`. Today a refresh it starts names gobble only when a provider sharing the run's `Sessions` named the session first, which nothing orders |
+| N7 | `gobble auth logout`: the revocation, and Grok's discovery before it | `llm/provider/login.go:104`, called from `internal/cli/auth.go:302` | `if rerr := auth.RevokeOAuthSession(ctx, l.session(id, nil, o.HTTPClient, nil)); rerr != nil {` | **gobble acts** (0079-MADR C38): the session is gobble's own, no provider uses it, and `LoginOptions` (`login.go:54-56`) carries no name |
+| N8 | sessions the SDK loads through gobble's store | `llm/provider/login.go:144` | `return l.session(string(p), a.s, nil, nil), nil` | **No action.** A refresh that adopts a sibling's rotation keeps the refreshing session's identity (0079-MADR D2, "Kept"); P6's `Previous` is read for its fields, and the sign-in's own `Identity` names its requests |
+| N9 | Pi's login, imported | `internal/cli/piimport.go:203` | `login, ok := provider.PiLogin(id, entry.Access, entry.Refresh, exp)` | **Nothing to name.** It writes `auth.json` and sends no request; its first refresh is N4's, N5's or N6's |
+| N10 | `auth status`, `auth check`, ACP `authenticate` | `internal/cli/auth.go:431`; `:548`; `acpserver/auth.go:59` | `func (e *runEnv) statusRow(id string) authStatusRow {`; `c, ok, err := e.credentials().Credential(id)`; `func (a *Agent) Authenticate(_ context.Context, p acp.AuthenticateRequest) (acp.AuthenticateResponse, error) {` | **Nothing to name.** Each reads `auth.json` and sends nothing; `internal/auth` makes no HTTP request. `authenticate`'s sign-in is N3 |
+| N11 | the ChatGPT `originator` | none | none | **Nothing to name at `c47f4a7`.** gobble keeps a login for Grok only (`llm/provider/login.go:67`) and offers OpenAI's plan, whose requests carry no `originator` (0079-MADR D1, D6). A Codex session, which D2's policy does not offer, would take `WithClientInfo`'s name with no change here |
+
+#### What gobble does
+
+* **N1. The wizard names gobble.** `provider.SignIn` sets `wizard.Options.Identity` to `auth.Identity{Name:
+  o.ClientName, Version: o.ClientVersion}`, the name and version that already lead its listing's User-Agent (N2). Every
+  terminal surface and `--json` (D3, D5) passes through it. With `internal/cli`'s values, above, that is `{Name:
+  "gobble", Version: <the build's>}`, the value D3 gives the ACP sign-in.
+* **N3 reads the same values.** D3's `Identity: auth.Identity{Name: "gobble", Version}` is built from `SignInOptions`'
+  `ClientName` and `ClientVersion`, so every gobble sign-in names one application at one version.
+* **N4, N5: nothing.** The SDK's hand-off names the session from the `WithClientInfo` gobble already passes.
+* **N6. gobble passes its name to the lookup; the SDK names the session.** `ModelInfoWith` passes `o.ClientName` and
+  `o.ClientVersion` to `lookupModelWith`, which adds `llmprovider.WithClientInfo(o.ClientName, o.ClientVersion)` to the
+  options of its `catalog.CachedModel` call (`llm/provider/model.go:150-157`) when `ClientName` is set, and the agent's `ModelInfo` hook
+  (`internal/cli/agent.go:102`) sets `ClientName` and `ClientVersion`, as the provider's options do. gobble calls no
+  `UseIdentity` for the model facts (the owner's ruling on Q2). With the SDK's pending amendment of its 0079-MADR D4,
+  `CachedModel` and `LookupModel`'s `listingModel` hand that name to the session before they read its token, and the
+  listing a lookup starts in the background names gobble too. If the minor gobble pins at P2 does not carry that
+  amendment, P2a's step 0 finds it, and it is a deviation (C4), not a reason for gobble to name the session itself.
+* **N7. The logout names gobble.** `LoginOptions` gains `ClientName` and `ClientVersion`; `Logout` calls `UseIdentity`
+  with them on the session it builds, before `RevokeOAuthSession`; `internal/cli/auth.go:302` passes `appName` and
+  `identity().Version`. D2's rule of which sessions are revoked, made in the PLAN's P4, keeps the call, so a plan
+  session revoked there is named the same way.
+* **Where in the PLAN.** The SDK minor is pinned by the PLAN's P2 (D1; the fleet sequence's pin table says the same),
+  not by its P4: P4 makes `authcontract` a direct requirement and pins acpext `v0.5.0`, committed with 0052-PLAN P3.
+  What D9 changes needs only P2's minor, and lands as one new phase, P2a, on its own commit after P2's and before
+  0052-PLAN P2 (the owner's ruling on Q1). From P2 on, gobble's providers and listings already name its refreshes (N4,
+  N5) with no change of gobble's; no release falls between P2 and P2a.
+
+#### What stays the SDK's, or borrowed, and why
+
+* **Grok's OAuth client id stays the Grok CLI's** (`auth.DefaultGrokOAuthClientID`, `llm/provider/login.go:83`). xAI
+  refuses a client id it has not registered, "Unknown or disabled client"
+  ([0005-MADR-v1-feature-scope.md](0005-MADR-v1-feature-scope.md) `:1096`, its amendments of 2026-10-14), and offers no
+  registration. It is the borrowed client D2 accepts as risk (`acceptedBorrowed`; Q10). Not possible.
+* **OpenAI's browser and device sign-ins keep Codex's client id,** and gobble does not offer them (D2's borrowed-client
+  rule; Q10, "refuses Codex's id"). gobble's OpenAI sign-in is the plan, whose client OpenAI issues to gobble under
+  `AgentName`, "gobble" (`llm/provider/signin.go:27`; go-llmprovider-sdk 0043-MADR D7, as 0079-MADR D6 cites it), and
+  which gobble keeps and reuses (0052-MADR D5). gobble borrows nothing of OpenAI's.
+* **The User-Agent's trailer,** `go-llmprovider-sdk/<ver>`, stays on every request (that owner's ruling 3; 0003-MADR
+  item 2).
+* **A refresh by another process that shares `auth.json`** names that process. Every gobble at or past P2a names
+  gobble. A gobble built before it, such as an installed `v0.6.0`, refreshes and revokes under the SDK's name, since the
+  identity is never stored (0079-MADR D2); that ends as hosts take `v0.7.0`. Pi shares no file with gobble: an import
+  copies its login (N9).
+* **The issuer's keys** are fetched under the sign-in that first misses the SDK's process-wide cache (0079-MADR D6).
+  Every gobble sign-in is named, so that is gobble's name too.
+* **gobble sends no `originator`** (N11), so no gobble test asserts one. Grok's `referrer` and the User-Agent are what
+  gobble's traffic shows.
+
+#### The live check
+
+go-llmprovider-sdk's `0079-PLAN-name-the-app-on-refresh-revocation-and-the-chatgpt-originator.md` Phase 5, owner-run
+before `v1.31.0`, signs in, lists, refreshes and revokes under "gobble" at xAI (a device sign-in) and at OpenAI (a
+Codex browser sign-in and the ChatGPT backend). It runs none of gobble's code, and it sends no plan refresh or plan
+revocation. By the owner's ruling on Q3, "No separate test", gobble adds no probe of its own: the PLAN's owner-run L1
+(P8) ends with `gobble auth logout grok`, a revocation through N7, and 0052-PLAN P6's L6 ends with its logout of a plan
+session; each records that the revocation was not refused. A refusal of the name on either is a deviation (C4).
+
+#### The SDK's part of N6, pending
+
+`catalog.CachedModel` (go-llmprovider-sdk `llmprovider/catalog/lookup.go:138`) and `LookupModel`'s `listingModel`
+(`:112`, `:187`) read the session's token directly, outside `listingToken`, so 0079-MADR D4's `catalog` hand-off does
+not reach a refresh they start, for any consumer. The owner ruled on 2026-11-12, "Amend SDK 0079": go-llmprovider-sdk
+fixes it at the source, by a dated amendment of
+`0079-MADR-name-the-app-on-refresh-revocation-and-the-chatgpt-originator.md` and its PLAN that puts both through D4's
+hand-off. That amendment is a later step in that repository and is pending; this record does not change it. gobble's
+part is to pass `WithClientInfo` on its call (N6, above).
+
 ### Consequences
 
 * Good, because every fact about a method is read from the SDK, and gobble's five openai checks [WIP], three
@@ -623,6 +744,15 @@ answer channel.
   another agent there for 1455 or 1457, and cannot wait on a listener its person can never reach.
 * *(2026-11-11, later.)* Bad, because a remote client cannot sign in to grok by browser: only its device method, until
   the SDK states a paste for grok (U1, its D12 probe); a client that names the browser method gets `unsupported`.
+* *(2026-11-12; D9.)* Good, because every request gobble sends to an identity provider names gobble where the vendor
+  lets it: Grok's `referrer`, and the User-Agent of every sign-in, refresh, revocation and revocation discovery.
+* *(2026-11-12; D9.)* Neutral, because Grok's client id stays the Grok CLI's, which xAI requires, and the User-Agent
+  keeps the SDK's trailer.
+* *(2026-11-12; D9.)* Bad, because a gobble built before the PLAN's P2a that shares `auth.json` still refreshes and
+  revokes under the SDK's name: the name is never stored.
+* *(2026-11-12; D9, the owner's ruling on Q2.)* Neutral, because a refresh the model facts start (N6) names gobble only
+  once go-llmprovider-sdk's pending amendment of its 0079 records ships in the minor gobble pins; gobble's part, the
+  `WithClientInfo` on the call, lands in P2a either way.
 
 ### Confirmation
 
@@ -647,6 +777,9 @@ answer channel.
 7. `make preflight` and `make race` pass on macOS, the Linux machine and the Windows laptop; `make check-acpext-deps`
    passes; apidiff of acpext from `acpext/v0.4.0` lists only D6's and D7's changes.
 8. The owner's live probes of the PLAN are recorded with their outcomes.
+9. *(2026-11-12; D9.)* A capturing transport sees `referrer=gobble` on Grok's authorize URL and device request, and a
+   User-Agent that begins `gobble/<the build's version> (` and names `go-llmprovider-sdk/` on every sign-in (N1, N3),
+   refresh (N4 to N6), revocation and revocation discovery (N7); each seen failing on the PLAN's planted breaks.
 
 ## Pros and Cons of the Options
 
@@ -817,6 +950,57 @@ the text it changes; the record stays `proposed`.
 **Accepted on 2026-11-11,** by the owner's word of that day (the note under Decision Outcome). The status is
 `accepted`; no decision and no note changed with it.
 
+### Revisions of 2026-11-12
+
+The owner's direction of 2026-11-12, "Where possible gobble auth would send gobble as the name/referrer not the sdk",
+with go-llmprovider-sdk `0079-MADR-name-the-app-on-refresh-revocation-and-the-chatgpt-originator.md`, read against this
+repository at `c47f4a7`. Each change is a dated note or a new section. No decision of D1 to D8 is reversed. The record
+stays `accepted`. ~~D9 is proposed until the owner answers Q1 to Q3 below and approves the PLAN's P2a.~~
+*(2026-11-12, later: the owner answered Q1 to Q3 that day, each noted under its question below, and D9 is accepted
+2026-11-12. D9's text, not yet committed, was brought to the rulings in place: N6's row and its bullet, the PLAN's
+place for P2a, the live check, and the SDK's part of N6.)*
+
+* **D9, new:** gobble's sites (N1 to N11), what gobble does at N1, N6 and N7, what stays the SDK's or borrowed, the
+  live check, and the SDK's part of N6, pending in go-llmprovider-sdk.
+* **D3:** a note that the wizard's sign-ins carry gobble's `Identity` too.
+* **Consequences:** four bullets. **Confirmation:** item 9.
+* **Front matter:** `date` and `consulted`.
+* **Lines kept in place.** Every insertion is below `:350`, which go-llmprovider-sdk's 0079-MADR cites (its C41,
+  pinned at `c47f4a7`).
+
+### Questions for the owner (2026-11-12), ruled the same day
+
+The recommended option of each is first. The options are kept as they were put; the owner's ruling follows each.
+
+* **Q1. Where the gobble change lands.** (a) *recommended:* a new phase, P2a, on P2's commit and before 0052-PLAN P2:
+  small, and right after the pin that provides `UseIdentity`; it costs one more commit, and a line in the fleet
+  sequence's stage 7 (`0006-PLAN-sequence-the-auth-contract-effort-across-four-repositories.md`, outside this
+  repository); (b) inside P2: no commit between the pin and the naming, but P2's acceptance, "no code change but
+  `internal/archtest/check.go`, its test and `scripts/check_libs.py`", is amended, and the pin commit carries behaviour;
+  (c) inside P4, committed with 0052-PLAN P3, where `Logout` is rewritten anyway: one pass fewer over `login.go`, but
+  the effort's largest commit grows, and `main` revokes under the SDK's name from P2 to P4.
+  *(2026-11-12, the owner's ruling: "New phase P2a", option (a). P2a lands after P2, on its own commit.)*
+* **Q2. The model-facts refresh (N6).** (a) *recommended:* gobble names the session in `Options.login`, and
+  `ModelInfoWith` passes `WithClientInfo`: one place names every session gobble builds, whatever the SDK hands over; it
+  costs a call that repeats the SDK's hand-off for N4 and N5; (b) go-llmprovider-sdk extends its 0079-MADR D4 to
+  `CachedModel` and `LookupModel`, and gobble passes `WithClientInfo` alone: nothing repeated, but it costs an SDK
+  record change and a phase on the `v1.31.0` chain, which is the effort's critical path; (c) N6 is left as it is, and
+  recorded: no work, but a refresh the model facts start can name the SDK.
+  *(2026-11-12, the owner's ruling: "Amend SDK 0079", option (b). The SDK fixes the gap at the source: `CachedModel`
+  and `LookupModel`'s `listingModel` go through its D4 hand-off, by a dated amendment of go-llmprovider-sdk
+  `0079-MADR-name-the-app-on-refresh-revocation-and-the-chatgpt-originator.md` and its PLAN, a later step there and
+  pending. gobble calls no `UseIdentity` for the model facts. The hand-off names the session only from a
+  `WithClientInfo` among the call's options, and gobble passes none at `llm/provider/model.go:150-157`, so gobble's
+  part is that option on the call (N6).)*
+* **Q3. The live check.** (a) *recommended:* none of gobble's own: L1 (the PLAN's P8) ends with a logout, and
+  0052-PLAN P6's L6 logs a plan session out, each under gobble's name and each recording that the revocation was not
+  refused; no extra sign-in and no quota; (b) a dedicated probe in P2a, at xAI and OpenAI: proves gobble's three sites
+  live before the rest of the effort, but costs the owner two more sign-ins and repeats the SDK's Phase 5; (c) none at
+  all, the SDK's Phase 5 standing and L1 and L6 unchanged: no cost, but a refusal of gobble's name on the plan's
+  revocation, which Phase 5 does not send, would show only as a warning that no record asks anyone to read.
+  *(2026-11-12, the owner's ruling: "No separate test", option (a). No dedicated gobble probe; L1 and L6 each end with
+  a logout and record that the revocation was not refused.)*
+
 ### Related
 
 * PLAN: [0051-PLAN-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md](0051-PLAN-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md).
@@ -827,3 +1011,6 @@ the text it changes; the record stays `proposed`.
   [0049-MADR-structured-quota-and-rate-limit-errors-for-acp-clients.md](0049-MADR-structured-quota-and-rate-limit-errors-for-acp-clients.md),
   [0016-MADR-acp-go-sdk2-v0.15.0-and-stable-surface.md](0016-MADR-acp-go-sdk2-v0.15.0-and-stable-surface.md).
 * maccavelli/gobble-cli#16.
+* *(2026-11-12)* The application's name past the sign-in (D9): go-llmprovider-sdk
+  `docs/decisions/0079-MADR-name-the-app-on-refresh-revocation-and-the-chatgpt-originator.md` and its PLAN; gobble's
+  name on its requests, [0003-MADR-gobble-product-identity.md](0003-MADR-gobble-product-identity.md).

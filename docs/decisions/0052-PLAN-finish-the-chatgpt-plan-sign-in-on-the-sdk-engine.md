@@ -1,6 +1,6 @@
 ---
 status: in-progress
-date: 2026-11-11
+date: 2026-11-12
 associated-madr: "0052-MADR-finish-the-chatgpt-plan-sign-in-on-the-sdk-engine.md"
 ---
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
@@ -363,6 +363,12 @@ Acceptance: the tests pass, each plant failed.
    * **L6, reuse after logout:** `gobble auth logout openai`, then L5 again; the record notes whether a new client was
      registered (the account's settings page), gated with SDK-2's probe. *Owner-run; asks first; scratch home; quota:
      none; may register a second client if OpenAI refuses reuse.*
+     *(2026-11-12;
+     [0051-MADR-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md](0051-MADR-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md)
+     D9's live check, the owner's ruling on its Q3, "No separate test".)* The logout revokes the plan session under gobble's name (0051-PLAN P2a, N7), a
+     revocation go-llmprovider-sdk's own
+     `0079-PLAN-name-the-app-on-refresh-revocation-and-the-chatgpt-originator.md` probe does not send. The record notes that no
+     "could not be revoked" warning was printed; a refusal is a deviation (C4).
    * **L7, the consent end to end:** `gobble auth consent openai background deny`, a short session: no title request
      (the run's log); `allow`, a new session: one title. *(2026-11-11, later: the `allow` is given by the id,
      `gobble auth consent openai chatgpt_plan.background_use allow`, as magic-cli-remote will run it, with no

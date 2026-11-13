@@ -1,6 +1,6 @@
 ---
 status: in-progress
-date: 2026-11-11
+date: 2026-11-12
 associated-madr: "0051-MADR-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md"
 ---
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
@@ -26,6 +26,9 @@ acknowledged, not answered.
 approve 0051 and 0052 when required", were confirmed to the cross-repository coordinator as: start the phases that
 do not wait on the SDK, which this plan's rollout names as P0, P1 and 0052-PLAN P1. P0 is done (its record, under
 "Execution record"); it starts no other phase.)*
+*(2026-11-12; MADR D9.)* And gobble names itself on every request it sends to an identity provider that the SDK lets
+it name: its sign-ins, its refreshes, its revocations. The new phase P2a does it, by the owner's rulings of that day
+on the MADR's Q1 to Q3; it is part of this PLAN, after P2 on its own commit.
 
 ## Scope
 
@@ -84,6 +87,9 @@ work, the branch is its source.
   (P6). Where `ErrorData.Consent` is set is
   [0052-PLAN-finish-the-chatgpt-plan-sign-in-on-the-sdk-engine.md](0052-PLAN-finish-the-chatgpt-plan-sign-in-on-the-sdk-engine.md)
   P3's.
+* *(2026-11-12, added; MADR D9.)* gobble's name past the sign-in (P2a): `llm/provider/signin.go` (the wizard's
+  `Identity`), `model.go` (`ModelInfoWith`, `lookupModelWith`), `login.go` (`LoginOptions`, `Logout`) and their tests; `internal/cli/auth.go` (the logout's options) and `internal/cli/agent.go` (the `ModelInfo` hook), with
+  their tests.
 
 **Out of scope:** the ChatGPT plan, its consent, host id, client and migration (0052); go-llmprovider-sdk's code and
 records (the owner's, in that repository); magic-cli-remote; `auth status --json` (0052); a release tag or push
@@ -183,6 +189,59 @@ Acceptance: archtest and `check_libs.py --self-test` pass, each plant failed; `m
 change but `internal/archtest/check.go`, its test and `scripts/check_libs.py`; `go.mod` names the contract
 `// indirect` only.
 
+### P2a — gobble's name past the sign-in (MADR D9; added 2026-11-12, the owner's)
+
+*Added on 2026-11-12 by MADR D9, on the owner's direction of that day: "Where possible gobble auth would send gobble as
+the name/referrer not the sdk". The owner ruled the same day on the MADR's Q1, "New phase P2a": this phase is part of
+this PLAN, `in-progress`, and lands after P2, on its own commit, before 0052-PLAN P2. Like every phase after P1, it
+waits for the gate before P2, the SDK's tags. It was drafted and ruled before any commit, so its text is the ruled
+one: by the ruling on Q2, "Amend SDK 0079", gobble calls no `UseIdentity` for the model facts.*
+
+Prerequisites: P2 committed, so `go.mod` requires go-llmprovider-sdk `v1.31.0`, which carries go-llmprovider-sdk
+`0079-PLAN-name-the-app-on-refresh-revocation-and-the-chatgpt-originator.md`: `(*auth.OAuthSession).UseIdentity`, the
+session's identity on a refresh and a revocation, and the providers' and listings' hand-offs. For N6 it must also
+carry that repository's pending amendment of
+`0079-MADR-name-the-app-on-refresh-revocation-and-the-chatgpt-originator.md` (the owner's ruling on Q2), which puts
+`catalog.CachedModel` and `LookupModel`'s `listingModel` through the hand-off. This phase moves no requirement.
+
+0. **The sites at the phase's base** (C1). MADR D9's N1 to N11 are read again at P2's commit; a line that moved is
+   recorded with its new place, and a site that changed in substance is a deviation (C4). go-llmprovider-sdk's
+   `wizard.Options.Identity`, `UseIdentity` and `catalog.CachedModel` are read at `v1.31.0` in the module cache, and
+   the record quotes the line where `CachedModel` hands `WithClientInfo`'s name to the session before it reads the
+   token. If `v1.31.0` has no such line, the SDK's amendment did not ship in it: that is a deviation (C4), and gobble
+   does not name the session itself in its place.
+1. **N1, N3:** `llm/provider/signin.go`: an unexported `identityOf(o Options) auth.Identity`, `{Name: o.ClientName,
+   Version: o.ClientVersion}`; `SignIn` sets `wizard.Options.Identity` to it. P6's `StartSignIn` takes
+   `signin.Options.Identity` from the same helper (P6 step 1's note).
+2. **N6:** `llm/provider/model.go`: `ModelInfoWith` passes `o.ClientName` and `o.ClientVersion` on to
+   `lookupModelWith`, which adds `llmprovider.WithClientInfo(o.ClientName, o.ClientVersion)` to the options of its
+   `catalog.CachedModel` call (`:150-157`) when `ClientName` is set; the doc of each names the two fields. No
+   `UseIdentity` is called: the SDK's hand-off names the session from that option. `internal/cli/agent.go:102`: the
+   `ModelInfo` hook's `provider.Options` gains `ClientName: appName, ClientVersion: identity().Version`.
+   `Options.login` (`provider.go:98-112`) is not changed (N4, N5 are the SDK's).
+3. **N7:** `llm/provider/login.go`: `LoginOptions` gains `ClientName, ClientVersion string`, documented as
+   `Options`' are; `Logout` calls `UseIdentity` with them on the session it builds, before `RevokeOAuthSession`.
+   `internal/cli/auth.go:302` passes `appName` and `identity().Version`.
+4. Tests, each seen failing (C2), every capturing transport given as the options' `HTTPClient`:
+
+   | Test | Asserts | Planted break |
+   | :--- | :--- | :--- |
+   | `TestSignInNamesGobble` (`llm/provider`) | grok's device sign-in through `SignIn` against `testIssuer`, with `ClientName` "gobble" and `ClientVersion` "1.2.3-test": the device request's form carries `referrer=gobble`; every request of the sign-in has a User-Agent that begins `gobble/1.2.3-test (` and names `go-llmprovider-sdk/`. Grok's browser sign-in, its URL taken from the `OpenURL` hook and the sign-in then cancelled: the authorize URL carries `referrer=gobble` | `Identity` left out of `wizard.Options`; `identityOf` giving an empty `Version`, so the User-Agent names another version |
+   | `TestStoredLoginNamedForRefresh` (`llm/provider`) | a stored grok login past its expiry, with `ClientName` "gobble" and `ClientVersion` "1.2.3-test": the refresh that `New`'s first request, `List`, and `ModelInfoWith` each start sends a User-Agent that begins `gobble/1.2.3-test (`; `ModelInfoWith` runs first on a fresh `Sessions`, with no provider built before it, so only the SDK's hand-off from the `WithClientInfo` gobble passes can name its refresh; the background listing it starts is named too; with `ClientName` empty, each is the SDK's own User-Agent | `WithClientInfo` left out of `lookupModelWith`'s options, so `ModelInfoWith`'s refresh and its background listing name the SDK (`New`'s and `List`'s stay named, and the record says so); `ModelInfoWith` not passing `ClientName` on to `lookupModelWith` |
+   | `TestLogoutRevokesAsGobble` (`llm/provider`) | `Logout` of a stored grok login against `testIssuer`, with `LoginOptions{ClientName: "gobble", ClientVersion: "1.2.3-test"}`: the discovery and the revocation each send a User-Agent that begins `gobble/1.2.3-test (` and names `go-llmprovider-sdk/`; their URLs and bodies equal those of the same logout with no name, which sends the SDK's User-Agent | `UseIdentity` removed; `UseIdentity` called after `RevokeOAuthSession` |
+   | `TestCLIPassesGobblesIdentity` (`internal/cli`) | with `signInWith`, `logoutLogin` and `modelFacts` replaced by recorders: `auth login grok`, `auth logout grok` and the agent's `ModelInfo` hook each pass `ClientName` "gobble" and `ClientVersion` equal to `identity().Version` | `internal/cli/auth.go:302` passing `provider.LoginOptions{}`; the hook built without `ClientName` |
+
+   No test asserts an `originator`: gobble sends none (MADR D9, N11). A failure of `TestStoredLoginNamedForRefresh`'s
+   `ModelInfoWith` case with no plant in place is the SDK's amendment missing (step 0), a deviation (C4); the case is
+   not loosened, and gobble does not call `UseIdentity` to pass it. Every existing test of `llm/provider` and
+   `internal/cli` passes unchanged; one that needs a change is named in the record with why, or is a deviation (C4).
+5. Gates (C6), with `make check-test-isolation`. Heavy runs go through
+   `~/.agents/skills/available-dev-hosts/scripts/run-heavy` or `run-on-host`, one at a time per host.
+
+Acceptance: the tests pass, each plant failed; outside tests, `RevokeOAuthSession` is called only in `Logout`, after
+`UseIdentity`, and `UseIdentity` is called nowhere else; `go.mod` and `go.sum` unchanged from P2. The commit is the
+owner's, its own, after P2's.
+
 ### P3 — acpext `v0.5.0` (MADR D6, D7; QB (a), QC (i) as recommended)
 
 *If the owner answers QB (b), step 2 is not done; if QC (ii) or (iii), this phase is rewritten by amendment before it
@@ -278,6 +337,10 @@ gobble's wording and gate.
    `(*OAuthSession).SessionKind()`, which the owner ruled the SDK exports, go-llmprovider-sdk `0074-MADR-one-sign-in-handle-and-method-facts.md`
    D5; gobble copies no inference rule. MADR D2's note of that date.)* `Logout`
    (`llm/provider/login.go:93-104` [HEAD]) revokes only an accepted, revocable session, and deletes any.
+   *(2026-11-12; MADR D9, N7.)* The rewrite keeps P2a's `UseIdentity` call before the revocation, for every session it
+   revokes. `TestLogoutRevokesAsGobble` (P2a) passes, and gains a case once this commit offers the plan: a stored plan
+   session's revocation, and the discovery before it, send a User-Agent that begins `gobble/`. **Planted break:** the
+   call moved inside a grok-only branch, so the plan session is revoked under the SDK's name.
 4. `llm/kind.go`: the contract's spellings (MADR D6's table). `llm/provider`: `ErrorKind(err) string`,
    `signin.ErrorKindOf` first, then `llm.Kind`; `FailureKind` and `failureKinds` (`list.go:106-133`) go; their callers
    (`provider.go:273` [HEAD], `signin.go:138` [HEAD], `internal/cli/auth.go:84`, `:307` [HEAD], `models.go:274`,
@@ -370,6 +433,10 @@ steps, and the rewrite is named in this record.
    *(2026-11-11, later; MADR D3's note.)* `SignInOptions.Remote bool` sets `signin.Options.NoLoopback`; nothing else
    sets it, and no terminal path sets `Remote`. `signin.Start` is called through a package variable, so a test can
    record the `signin.Options` it was given.
+   *(2026-11-12; MADR D9, N3.)* `signin.Options.Identity` is P2a's `identityOf(o)`: `{Name: "gobble", Version}` is
+   `SignInOptions`' `ClientName` and `ClientVersion`, which `internal/cli/agent.go` sets to `appName` and
+   `identity().Version` as every other caller does. go-llmprovider-sdk's 0079-MADR D2 keeps it on the session `Wait`
+   saves.
 2. `acpserver/auth.go`: `AuthOptions` gains `Methods func(id string) []authcontract.Method` (for `_meta.gobble.methods`)
    and `SignIn func(ctx context.Context, id, method string) (SignInRun, error)`, `SignInRun` an interface of
    `acpserver`'s with `StartSignIn`'s methods, `Wait` returning `provider.SignInResult`, so `acpserver` names no
@@ -448,6 +515,13 @@ steps, and the rewrite is named in this record.
 
    A failure of `TestStartSignInRemoteDevice` that comes from the SDK's `Start`, not from a plant, is a deviation (C4):
    MADR D3's note says why, and it is settled in go-llmprovider-sdk's 0074 record, not here.
+
+   *(2026-11-12, added; MADR D9, N3.)* One more test, seen failing:
+
+   | Test | Asserts | Planted break |
+   | :--- | :--- | :--- |
+   | `TestStartSignInNamesGobble` (`llm/provider`) | with `ClientName` "gobble" and `ClientVersion` "1.2.3-test": the recorded `signin.Options.Identity` is `{Name: "gobble", Version: "1.2.3-test"}`; a grok device sign-in against `testIssuer`, its requests recorded by a capturing transport, sends `referrer=gobble` in the device request's form and a User-Agent that begins `gobble/1.2.3-test (` on each request | `signin.Options.Identity` left zero; its `Version` a literal |
+
 6. `docs/guides/credentials.md`: "Signing in from an ACP client".
 7. Gates (C6), the two other hosts included.
 
@@ -484,6 +558,9 @@ Acceptance: the tests pass, each plant failed; `TestACPLogin` (`internal/cli/acp
      first; scratch home; quota: none (no generation).*
      *(2026-11-11, later: the client sends `_meta.gobble.remote: true`, as magic-cli-remote will, and the record notes
      that no port was bound on the host during the sign-in.)*
+     *(2026-11-12; MADR D9's live check, the owner's ruling on Q3, "No separate test".)* L1 ends with `gobble auth logout grok` in the same scratch home,
+     which revokes the probe's session under gobble's name (N7). The record notes that no "could not be revoked"
+     warning was printed. A refusal is a deviation (C4).
    * **L2, the same through a client offering `elicitation.url`.** *Owner-run; asks first; scratch home; quota: none.*
    * **L3, U1 recorded:** the SDK's own probe of grok's browser from another device (go-llmprovider-sdk `0074-MADR-one-sign-in-handle-and-method-facts.md`
      D12). gobble records its outcome and changes nothing; grok's browser stays `browser_loopback` until the SDK's
@@ -511,6 +588,9 @@ Each command's exit status is captured before any filter.
   `TestAuthenticateRemote` and `TestAuthenticateLocalKeepsListener` tests run in the line above
 * *(2026-11-11, added with P4 step 4b:)* `go test -count=1 -run 'TestRetryCausesAreAcpexts|TestRetryNotice' ./acpserver/`;
   `go test -count=1 -run 'TestRetryLines' ./internal/cli/`
+* *(2026-11-12, added with P2a; MADR D9:)* `go test -count=1 -run
+  'TestSignInNamesGobble|TestStoredLoginNamedForRefresh|TestLogoutRevokesAsGobble|TestStartSignInNamesGobble'
+  ./llm/provider/`; `go test -count=1 -run 'TestCLIPassesGobblesIdentity' ./internal/cli/`
 * `make check-records markdownlint`
 * Every plant of P2 to P7, quoted in the execution record.
 
@@ -523,7 +603,8 @@ Each command's exit status is captured before any filter.
      file there when this note was written, so it is named by number only.)*
      *(2026-11-11, later: it is a file now, go-llmprovider-sdk `0077-MADR-go-1-27-4-for-go-2026-6859.md`, with
      `0077-PLAN-go-1-27-4-for-go-2026-6859.md`.)*
-  2. gobble: P0, P1 and 0052-PLAN P1 at any time; P2 after step 1; 0052-PLAN P2; P3 and the owner's `acpext/v0.5.0`;
+  2. gobble: P0, P1 and 0052-PLAN P1 at any time; P2 after step 1; *(2026-11-12: P2a, MADR D9, after P2 on its own commit;)*
+     0052-PLAN P2; P3 and the owner's `acpext/v0.5.0`;
      P4 with 0052-PLAN P3, one commit; P5 to P7; 0052-PLAN P4 to P6; then gobble's next release, `v0.6.0`, tagged by
      the owner.
      *(2026-11-11: first of all, `0054-PLAN-go-1-27-4-and-sibling-pin-refresh.md`: Go 1.27.4, acp-go-sdk2 `v1.36.0`
@@ -690,3 +771,36 @@ Run by the cross-repository coordinator on the owner's approval of this PLAN, fr
 
 Acceptance: `go -C acpext test` passes unchanged, and the diff touches `acpext/auth.go`'s comment only. Met. Staged
 with this record; the owner commits. P2 waits for the SDK's tags (the gate before P2).
+
+### Amendment of 2026-11-12 (records only; no phase started)
+
+The owner's direction of 2026-11-12, "Where possible gobble auth would send gobble as the name/referrer not the sdk",
+carried here after go-llmprovider-sdk's
+`0079-MADR-name-the-app-on-refresh-revocation-and-the-chatgpt-originator.md` (accepted 2026-11-12) and its PLAN (in
+progress), both read at `f50466b` in that repository. Read against this repository at `c47f4a7`, `main`, a clean tree.
+Each change is a dated note beside the text it extends, or a new phase; nothing is struck.
+
+* **MADR D9, new:** gobble's eleven sites (N1 to N11); three need gobble's code: the wizard's sign-ins carry no
+  `Identity` (N1), the model facts' lookup passes no `WithClientInfo` for the SDK to hand over (N6), and the logout's
+  session is gobble's own (N7).
+* **The SDK pin is P2's, not P4's.** P2 step 1 runs `go get github.com/maccavelli/go-llmprovider-sdk@<minor>`, and the
+  fleet sequence's pin table gives the move from `v1.29.0` to `v1.31.0` to "gobble 0051 P2". P4, committed with
+  0052-PLAN P3, makes `authcontract` direct and pins acpext `v0.5.0`. So P2a follows P2.
+* **Goal, Scope:** a note and a bullet. **P2a, new:** a step 0, three steps, four tests with their planted breaks. **P4 step 3:**
+  the rewrite keeps the call, and a plan case. **P6 step 1:** the identity from P2a's helper, and
+  `TestStartSignInNamesGobble`. **P8 L1:** ends with a logout. **Verification:** the new tests. **Rollout:** P2a's
+  place.
+* **0052-PLAN P6's L6:** a note that its logout records the plan session's revocation under gobble's name.
+* ~~**Open:** MADR Q1 (P2a's place), Q2 (the model facts) and Q3 (the live check), each with a recommended option. P2a
+  starts only on the owner's approval of it.~~
+  *(2026-11-12, later: the owner ruled that day. Q1, "New phase P2a": P2a is part of this PLAN, after P2 on its own
+  commit. Q2, "Amend SDK 0079": go-llmprovider-sdk puts `CachedModel` and `LookupModel`'s `listingModel` through its
+  0079-MADR D4 hand-off, by a pending dated amendment of
+  `0079-MADR-name-the-app-on-refresh-revocation-and-the-chatgpt-originator.md`; gobble calls no `UseIdentity` for
+  the model facts and passes `WithClientInfo` on its lookup (P2a step 2, `TestStoredLoginNamedForRefresh` and its
+  plants reworked to it, step 0's check of the SDK's minor added). Q3, "No separate test": no gobble probe; L1 and L6
+  each end with a logout and record that the revocation was not refused. MADR D9 is accepted 2026-11-12. P2a's text,
+  not yet committed, was brought to the rulings in place.)*
+* **Not changed:** the fleet sequence's
+  `0006-PLAN-sequence-the-auth-contract-effort-across-four-repositories.md` stage 7, which lists 0051 P2 then
+  0052-PLAN P2; its owner adds P2a between them.
