@@ -1,6 +1,6 @@
 ---
 status: in-progress
-date: 2026-11-12
+date: 2026-11-13
 associated-madr: "0051-MADR-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md"
 ---
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
@@ -90,10 +90,16 @@ work, the branch is its source.
 * *(2026-11-12, added; MADR D9.)* gobble's name past the sign-in (P2a): `llm/provider/signin.go` (the wizard's
   `Identity`), `model.go` (`ModelInfoWith`, `lookupModelWith`), `login.go` (`LoginOptions`, `Logout`) and their tests; `internal/cli/auth.go` (the logout's options) and `internal/cli/agent.go` (the `ModelInfo` hook), with
   their tests.
+* *(2026-11-13, added; the owner's ruling of that day, 0052-PLAN's "P2 split into P2-1 and P2-2 (2026-11-13)".)* 0052-PLAN P2's
+  step 4, moved to P6 step 1a: `llm/provider/login.go`'s `sdkStore` as go-llmprovider-sdk's `auth.ClientStore` and
+  gobble's `ClientStore`; `llm/provider/signin.go`'s `SignInOptions.HostID` and `wizard.Options.HostID`; and
+  `TestClientStoreAdapter`.
 
 **Out of scope:** the ChatGPT plan, its consent, host id, client and migration (0052); go-llmprovider-sdk's code and
 records (the owner's, in that repository); magic-cli-remote; `auth status --json` (0052); a release tag or push
 without the owner's word; posting on #16 before P8.
+*(2026-11-13: but for 0052-PLAN P2's step 4, the host id's and the issued client's plumbing, which P6 step 1a now
+does.)*
 
 ## Conventions every phase follows
 
@@ -151,6 +157,7 @@ Acceptance: `go -C acpext test -count=1 ./...` passes unchanged; `git diff` touc
 `go list -m github.com/maccavelli/go-llmprovider-sdk/authcontract@v0.1.0` and `go list -m
 github.com/maccavelli/go-llmprovider-sdk@<the minor carrying 0074 and 0075>` both succeed through the proxy, run from a
 scratch directory. Until then P2 waits; P1 and 0052-PLAN P1 do not.
+*(2026-11-13: nor does 0052-PLAN P2-1, which is built on `v1.29.0` with no SDK move; 0052-PLAN's "P2 split into P2-1 and P2-2 (2026-11-13)".)*
 
 ### P2 — the pins and the boundary (MADR D1)
 
@@ -196,6 +203,9 @@ the name/referrer not the sdk". The owner ruled the same day on the MADR's Q1, "
 this PLAN, `in-progress`, and lands after P2, on its own commit, before 0052-PLAN P2. Like every phase after P1, it
 waits for the gate before P2, the SDK's tags. It was drafted and ruled before any commit, so its text is the ruled
 one: by the ruling on Q2, "Amend SDK 0079", gobble calls no `UseIdentity` for the model facts.*
+
+*(2026-11-13: "before 0052-PLAN P2" reads "before 0052-PLAN P2-2". The owner split that phase that day, and its
+P2-1 needs no SDK move, so it may land before P2; 0052-PLAN's "P2 split into P2-1 and P2-2 (2026-11-13)".)*
 
 Prerequisites: P2 committed, so `go.mod` requires go-llmprovider-sdk `v1.31.0`, which carries go-llmprovider-sdk
 `0079-PLAN-name-the-app-on-refresh-revocation-and-the-chatgpt-originator.md`: `(*auth.OAuthSession).UseIdentity`, the
@@ -302,6 +312,7 @@ Acceptance: the tests pass, each plant failed; apidiff as step 5; the tag served
 
 Prerequisites: P2 and P3's tag; 0052-PLAN P1 (the WIP sorted) and P2 (the session's `kind` and `consents` in
 `auth.json`, so no sign-in this phase enables can lose them).
+*(2026-11-13: 0052-PLAN P2 is now its P2-1 and P2-2, both before this phase; its step 4 is P6 step 1a.)*
 
 **Committed with 0052-PLAN P3, as one commit.** `acpext/v0.5.0` keeps openai's `Login: true` and its bare command
 (`acpext/auth.go:25`), so `TestAcpextAuthProvidersAreTheRegistry` holds only once openai's plan is offered, which the
@@ -437,6 +448,25 @@ steps, and the rewrite is named in this record.
    `SignInOptions`' `ClientName` and `ClientVersion`, which `internal/cli/agent.go` sets to `appName` and
    `identity().Version` as every other caller does. go-llmprovider-sdk's 0079-MADR D2 keeps it on the session `Wait`
    saves.
+   *(2026-11-13.)* "0052-PLAN P2 step 4" above reads "step 1a"; `o.HostID` is the value 0052-PLAN P2-1's
+   `HostID` returns.
+
+   **1a.** *(2026-11-13, added: 0052-PLAN P2's step 4, moved here whole, the wizard's part included, by the owner's ruling
+   of that day; 0052-PLAN's "P2 split into P2-1 and P2-2 (2026-11-13)".)* As that step wrote it: `llm/provider/login.go`: `sdkStore`
+   implements go-llmprovider-sdk's `auth.ClientStore` when its `LoginStore` also implements gobble's `ClientStore`,
+   whose records are 0052-PLAN P2-1's `internal/auth.Clients`; `SignInOptions.HostID` reaches `wizard.Options.HostID`,
+   in `SignIn` (`llm/provider/signin.go`, the terminal surfaces' wizard), and `signin.Options.HostID`, in step 1's
+   `StartSignIn`. The wizard finds the client store by asserting its `TokenStore`, which is `sdkStore`; `x/signin`
+   takes it only as `signin.Options.ClientStore` (step 1; go-llmprovider-sdk
+   `0075-MADR-chatgpt-plan-consent-host-id-and-client-reuse.md` D7).
+   *Prerequisites, checked 2026-11-13.* `auth.ClientRecord`, `auth.ClientStore`, `wizard.Options.HostID`, and
+   `signin.Options.HostID` and `ClientStore`, are in the exported-name table of go-llmprovider-sdk
+   `0075-PLAN-chatgpt-plan-consent-host-id-and-client-reuse.md` ("Exported names (R55)"), built by its Phase 4 and
+   released with 0074 in `v1.31.0` (its Phase 7; the fleet sequence's T3). P2 pins `v1.31.0` and this phase comes
+   after P2 (Rollout), so they hold; this phase also follows 0052-PLAN P2-1, whose `HostID` and `Clients` it uses.
+   None of these names was on go-llmprovider-sdk's `main` at `3f87e2b`; a `v1.31.0` without one is a deviation
+   (C4).
+
 2. `acpserver/auth.go`: `AuthOptions` gains `Methods func(id string) []authcontract.Method` (for `_meta.gobble.methods`)
    and `SignIn func(ctx context.Context, id, method string) (SignInRun, error)`, `SignInRun` an interface of
    `acpserver`'s with `StartSignIn`'s methods, `Wait` returning `provider.SignInResult`, so `acpserver` names no
@@ -522,6 +552,16 @@ steps, and the rewrite is named in this record.
    | :--- | :--- | :--- |
    | `TestStartSignInNamesGobble` (`llm/provider`) | with `ClientName` "gobble" and `ClientVersion` "1.2.3-test": the recorded `signin.Options.Identity` is `{Name: "gobble", Version: "1.2.3-test"}`; a grok device sign-in against `testIssuer`, its requests recorded by a capturing transport, sends `referrer=gobble` in the device request's form and a User-Agent that begins `gobble/1.2.3-test (` on each request | `signin.Options.Identity` left zero; its `Version` a literal |
 
+   *(2026-11-13, added with step 1a; moved from 0052-PLAN P2 step 5.)* One more test, seen failing:
+
+   | Test | Asserts | Planted break |
+   | :--- | :--- | :--- |
+   | `TestClientStoreAdapter` (`llm/provider`) | `sdkStore` is an `auth.ClientStore` exactly when its store has one, and passes records both ways | the type assertion inverted |
+
+   The wizard's `HostID` has no test of its own in this phase, as it had none in 0052-PLAN P2:
+   `TestStartSignInReusesClient` above asserts the host id on the ACP path, and 0052-PLAN P4's
+   `TestSignInChatGPTPlan` asserts it on a terminal plan sign-in, its plant "the host id not passed".
+
 6. `docs/guides/credentials.md`: "Signing in from an ACP client".
 7. Gates (C6), the two other hosts included.
 
@@ -591,6 +631,7 @@ Each command's exit status is captured before any filter.
 * *(2026-11-12, added with P2a; MADR D9:)* `go test -count=1 -run
   'TestSignInNamesGobble|TestStoredLoginNamedForRefresh|TestLogoutRevokesAsGobble|TestStartSignInNamesGobble'
   ./llm/provider/`; `go test -count=1 -run 'TestCLIPassesGobblesIdentity' ./internal/cli/`
+* *(2026-11-13, added with P6 step 1a:)* `go test -count=1 -run 'TestClientStoreAdapter' ./llm/provider/`
 * `make check-records markdownlint`
 * Every plant of P2 to P7, quoted in the execution record.
 
@@ -622,6 +663,8 @@ Each command's exit status is captured before any filter.
      `v0.7.0` must pin magic-cli-remote's tag again, read at the Gate G2 of magic-cli-remote `0246-PLAN-take-provider-auth-types-from-the-sdk-auth-contract-in-one-cut-over.md`,
      and "If either repository's pin moves again before `v0.6.0`, it moves in both, or the release waits" runs on to
      `v0.7.0` (0055-MADR's D2).)*
+     *(2026-11-13: "P0, P1 and 0052-PLAN P1 at any time" reads "P0, P1, 0052-PLAN P1 and 0052-PLAN P2-1 at any
+     time", and "0052-PLAN P2" after P2a reads "0052-PLAN P2-2". 0052-PLAN P2's step 4 is P6 step 1a; 0052-PLAN's "P2 split into P2-1 and P2-2 (2026-11-13)".)*
   3. magic-cli-remote: `acpext/v0.4.0` ~~now~~ with its gobble mapping patched (Q14; its
      `docs/decisions/0179-PLAN-gobble-native-acp-provider.md` P7); at its cut-over
      (`docs/decisions/0246-PLAN-take-provider-auth-types-from-the-sdk-auth-contract-in-one-cut-over.md`),
@@ -804,3 +847,23 @@ Each change is a dated note beside the text it extends, or a new phase; nothing 
 * **Not changed:** the fleet sequence's
   `0006-PLAN-sequence-the-auth-contract-effort-across-four-repositories.md` stage 7, which lists 0051 P2 then
   0052-PLAN P2; its owner adds P2a between them.
+
+### Amendment of 2026-11-13 (records only; no phase started)
+
+The owner's rulings of 2026-11-13, relayed by the cross-repository coordinator, on a read-only check of
+[0052-PLAN-finish-the-chatgpt-plan-sign-in-on-the-sdk-engine.md](0052-PLAN-finish-the-chatgpt-plan-sign-in-on-the-sdk-engine.md)
+P2 against go-llmprovider-sdk `v1.29.0` and that repository's `main` at `3f87e2b`. Read against this repository at
+`8fa0b73`, `main`, a clean tree. Each change is a dated note beside the text it extends, or a new step; nothing is
+struck. The evidence and the rulings are in 0052-PLAN's "P2 split into P2-1 and P2-2 (2026-11-13)".
+
+* **0052-PLAN P2 is split.** P2-1, the stored members, the host id and the client file, is built now on `v1.29.0`
+  with no SDK move. P2-2, the SDK session's `Kind` and `Consents` through `session` and `loginOf`, with
+  `TestLoginCarriesEverySessionField`, follows P2 and P2a. From P2's pin to P2-2 nothing guards that round trip, the
+  owner's accepted cost.
+* **0052-PLAN P2's step 4 is P6 step 1a,** the wizard's `HostID` included, with `TestClientStoreAdapter` and its
+  plant. Its prerequisites, go-llmprovider-sdk 0075's names in `v1.31.0`, were checked against P6's place.
+* **Here:** Scope (a bullet, and a note on Out of scope); the gate before P2; P2a's place; P4's prerequisite; P6 step
+  1's note, step 1a and one test; Verification; Rollout. **0051-MADR:** D9's "Where in the PLAN" and "Revisions of
+  2026-11-13".
+* **Not changed:** the fleet sequence's
+  `0006-PLAN-sequence-the-auth-contract-effort-across-four-repositories.md` stages 4G and 7; its owner amends them.

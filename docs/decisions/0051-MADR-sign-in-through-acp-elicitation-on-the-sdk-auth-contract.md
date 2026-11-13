@@ -680,6 +680,8 @@ SemVer" (`internal/buildinfo/buildinfo.go:24-26`).
   What D9 changes needs only P2's minor, and lands as one new phase, P2a, on its own commit after P2's and before
   0052-PLAN P2 (the owner's ruling on Q1). From P2 on, gobble's providers and listings already name its refreshes (N4,
   N5) with no change of gobble's; no release falls between P2 and P2a.
+  *(2026-11-13: "before 0052-PLAN P2" reads "before 0052-PLAN P2-2". The owner split that phase that day, and its
+  P2-1 needs no SDK move; 0052-PLAN's "P2 split into P2-1 and P2-2 (2026-11-13)". No decision changes.)*
 
 #### What stays the SDK's, or borrowed, and why
 
@@ -1000,6 +1002,13 @@ The recommended option of each is first. The options are kept as they were put; 
   revocation, which Phase 5 does not send, would show only as a warning that no record asks anyone to read.
   *(2026-11-12, the owner's ruling: "No separate test", option (a). No dedicated gobble probe; L1 and L6 each end with
   a logout and record that the revocation was not refused.)*
+
+### Revisions of 2026-11-13
+
+The owner's rulings of 2026-11-13, relayed by the cross-repository coordinator, which split
+[0052-PLAN-finish-the-chatgpt-plan-sign-in-on-the-sdk-engine.md](0052-PLAN-finish-the-chatgpt-plan-sign-in-on-the-sdk-engine.md)
+P2 into P2-1 and P2-2 and moved its step 4 into the PLAN's P6 as step 1a. One dated note, in D9's "Where in the
+PLAN". No decision changes; the record stays `accepted`.
 
 ### Related
 

@@ -1,6 +1,6 @@
 ---
 status: in-progress
-date: 2026-11-12
+date: 2026-11-13
 associated-madr: "0052-MADR-finish-the-chatgpt-plan-sign-in-on-the-sdk-engine.md"
 ---
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
@@ -200,15 +200,35 @@ compares `main`, with the re-applied parts, against `1406bd6`.)*
 
 Prerequisites: 0051-PLAN P2 (the SDK minor carrying its 0074 and 0075).
 
+*(2026-11-13; the owner's rulings of that day, relayed by the cross-repository coordinator, on three questions put
+by a read-only check of this phase against go-llmprovider-sdk. The text below is kept as written; this note and the
+notes under steps 1, 4 and 5 say what each part now is, and "P2 split into P2-1 and P2-2 (2026-11-13)", after this phase,
+gives the evidence and both parts in full.)* P2 is split. **P2-1** is built now on go-llmprovider-sdk `v1.29.0`,
+with no SDK move: the owner's chosen option reads "P2-1 … is built now on v1.29.0 with no SDK move". **P2-2**
+follows 0051-PLAN P2 and P2a, and the prerequisite above is P2-2's alone. Step 4 moves, whole, to
+[0051-PLAN-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md](0051-PLAN-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md)
+P6 step 1a.
+
 1. `internal/auth/store.go`: `Entry.Kind`, `Entry.Consents`, written `kind` and `consents` when set; `SetKey`'s removal
    list (`:176-177` [WIP]) gains both, so a key leaves no stale session member (MADR D6); `logins.go` and
    `llm/provider/login.go` carry them both ways.
+   *(2026-11-13.)* P2-1: `Entry.Kind` and `Entry.Consents`, their members, `oauthFields`, `SetKey`'s removal list
+   (`internal/auth/store.go:176-177` on `main` at `8fa0b73`), `Logins.Load` and `Save`, and `provider.Login`'s two
+   fields. P2-2: `llm/provider/login.go`'s `session` and `loginOf`, carrying them to and from the SDK's
+   `OAuthSession.Kind` and `Consents`.
 2. `internal/auth/hostid.go`: `HostID(dir string) (string, error)`, reading `<state>/host-id`, or creating it with
    `O_CREATE|O_EXCL`, owner-only (`securePrivate`, as `auth.json`), a random `urn:uuid`.
+   *(2026-11-13: P2-1's.)*
 3. `internal/auth/clients.go`: `Clients{Path}` with `Load(ctx, id) (ClientRecord, error)` and `Save(ctx, id,
    ClientRecord) error`, under `clients.json.lock`, with `auth.json`'s write; a zero record removes the member.
+   *(2026-11-13: P2-1's. `ClientRecord` is gobble's own type here; `internal/auth` imports no SDK package.)*
 4. `llm/provider/login.go`: `sdkStore` implements `auth.ClientStore` when its `LoginStore` also implements gobble's
    `ClientStore`; `SignInOptions.HostID` reaches `wizard.Options.HostID` and `signin.Options.HostID`.
+   *(2026-11-13: moved, whole, to 0051-PLAN P6 step 1a, with `TestClientStoreAdapter` and its plant, by the owner's
+   ruling of that day, the wizard's `HostID` included; neither P2-1 nor P2-2 does it. Its names are
+   go-llmprovider-sdk `0075-MADR-chatgpt-plan-consent-host-id-and-client-reuse.md`'s `auth.ClientStore` (D7) and
+   `wizard.Options.HostID` and `signin.Options.HostID` (D6), none of them in `v1.29.0`, and no gobble code calls
+   `signin.Start` before 0051-PLAN P6.)*
 5. Tests, each seen failing:
 
    | Test | Asserts | Planted break |
@@ -219,14 +239,98 @@ Prerequisites: 0051-PLAN P2 (the SDK minor carrying its 0074 and 0075).
    | `TestClientStoreAdapter` (`llm/provider`) | `sdkStore` is an `auth.ClientStore` exactly when its store has one, and passes records both ways | the type assertion inverted |
    | `TestSetKeyDropsSessionMembers` (`internal/auth`, beside `TestSetOAuthDropsKey`) | an `oauth` entry with `kind` and `consents`, then `SetKey`: neither remains in the `api_key` entry, every other field kept | `consents` left out of `SetKey`'s removal list |
 
+   *(2026-11-13.)* `TestHostIDIsStable`, `TestClientsRoundTrip` and `TestSetKeyDropsSessionMembers` are P2-1's, as
+   written. `TestLoginCarriesEverySessionField` is P2-2's, after the pin: its plant, "`consents` not written by
+   `oauthFields`", moves to P2-1's extension of `TestStoreOAuthPlanFields`, and in P2-2 its plants are `Consents` left
+   out of `loginOf` and `Kind` left out of `session`. `TestClientStoreAdapter` moves to 0051-PLAN P6 step 1a with
+   step 4.
+
 6. Gates (C6).
 
 Acceptance: the tests pass, each plant failed.
+
+#### P2 split into P2-1 and P2-2 (2026-11-13)
+
+**Found** by a read-only check of 2026-11-13, made for the cross-repository coordinator, of this phase against
+go-llmprovider-sdk as gobble pins it, `v1.29.0` (`go.mod:17`, read in the module cache), and as that repository's
+`main` stood at `3f87e2b`, read with `git show` and `git grep`:
+
+* `v1.29.0`'s `auth.OAuthSession` has no `Kind` and no `Consents` (`llmprovider/auth/tokenstore.go:21-78`); its
+  `wizard.Options` has no `HostID`; it has no `llmprovider/x/signin`.
+* At `3f87e2b`, `OAuthSession.Kind`, `auth.SessionKind` and `(*OAuthSession).SessionKind()` exist
+  (`tokenstore.go:49`, `:88`; `oauth_session.go:388`): go-llmprovider-sdk
+  `0074-MADR-one-sign-in-handle-and-method-facts.md` D5, committed there as `5d08770`, not released. None of the
+  names of go-llmprovider-sdk `0075-MADR-chatgpt-plan-consent-host-id-and-client-reuse.md` exists yet (`Consents`,
+  `Consent`, `StoredConsent`, `SetConsent`, `ClientRecord`, `ClientStore`, `ConsentText`, `wizard.Options.HostID`:
+  `git grep` exit 1), nor does `llmprovider/x/signin`.
+* Steps 2 and 3, and step 1's `internal/auth` half, name nothing of the SDK, which `internal/auth` may not import
+  (`internal/archtest/check.go:308`). Step 1's `session` and `loginOf` need `Kind` and `Consents`; step 4 needs 0075's
+  D6 and D7. The phase needs nothing of `authcontract`, nothing of 0051-PLAN P2 but its pin, and nothing of P2a.
+* No gobble code calls `signin.Start` before 0051-PLAN P6, whose step 1 already sets `signin.Options.HostID` and
+  `ClientStore`.
+
+**Decision** (the owner, 2026-11-13, relayed by the cross-repository coordinator):
+
+1. P2 is split into P2-1 and P2-2. P2-1 "is built now on v1.29.0 with no SDK move"; P2-2 follows 0051-PLAN P2 and
+   P2a.
+2. Step 4 moves wholesale to 0051-PLAN P6, the wizard's part included (that plan's P6 step 1a).
+3. `TestLoginCarriesEverySessionField` lands in P2-2, after the pin.
+
+**P2-1 — the stored members, the host id and the client file, on `v1.29.0`.** Prerequisites: P1, committed as
+`cc1d55e`. It is one of the phases that do not wait on the SDK, which the owner approved on 2026-11-11.
+
+1. `internal/auth/store.go`: `Entry.Kind` and `Entry.Consents`, strings, parsed from and written as `kind` and
+   `consents`; `oauthFields` writes each when set and removes it when not, as it does `hostId`; `SetKey`'s removal
+   list (`:176-177`) gains both. The values are the SDK's, kept as `scope` is: gobble does not read them here.
+2. `internal/auth/logins.go`: `Logins.Load` and `Save` carry both to and from `provider.Login`, which gains `Kind` and
+   `Consents` (the `Login` struct in `llm/provider/login.go` only; `session` and `loginOf` are P2-2's).
+3. P2's step 2: `internal/auth/hostid.go`, `HostID(dir string) (string, error)`.
+4. P2's step 3: `internal/auth/clients.go`, `Clients{Path}` with `Load` and `Save`, and gobble's `ClientRecord`.
+5. Tests, each seen failing (C2):
+
+   | Test | Asserts | Planted break |
+   | :--- | :--- | :--- |
+   | `TestStoreOAuthPlanFields` (`internal/auth`, extended) | also: `kind` and `consents` set on an `oauth` entry survive `SetOAuth` and `Load`, each written once; set empty by a later `SetOAuth`, they leave the file | `consents` left out of `oauthFields` |
+   | `TestLoginsLoadSave` (`internal/auth`, extended) | also: a `provider.Login` with `Kind` and `Consents` set comes back equal from `Logins.Save` and `Load` | `Consents` left out of `Logins.Save` |
+   | `TestHostIDIsStable` (`internal/auth`) | as P2's step 5 row | as P2's step 5 row |
+   | `TestClientsRoundTrip` (`internal/auth`) | as P2's step 5 row | as P2's step 5 row |
+   | `TestSetKeyDropsSessionMembers` (`internal/auth`) | as P2's step 5 row | as P2's step 5 row |
+
+6. Gates (C6).
+
+Acceptance: the tests pass, each plant failed; `go.mod` and `go.sum` unchanged; `git diff` leaves `session`,
+`loginOf`, `sdkStore` and `llm/provider/signin.go` as they were.
+
+What P2-1 leaves inert: nothing sets `Kind` or `Consents`, and nothing calls `HostID` or `Clients`, until later
+phases. At `v1.29.0` a refresh saves through `loginOf`, which carries neither, so `oauthFields` can remove only what
+nothing has set.
+
+**P2-2 — the SDK's session carries them, after the pin.** Prerequisites: 0051-PLAN P2 (`go.mod` requires
+go-llmprovider-sdk `v1.31.0`, with 0074 D5's `Kind` and 0075 D2's `Consents`) and P2a, each committed; P2-1.
+
+1. `llm/provider/login.go`: `session` sets `OAuthSession.Kind`, as `auth.SessionKind`, and `Consents` from `Login`;
+   `loginOf` reads both back.
+2. Test, seen failing (C2): `TestLoginCarriesEverySessionField` (`llm/provider`), as P2's step 5 row asserts it. Planted
+   breaks: `Consents` left out of `loginOf`; `Kind` left out of `session`.
+3. Gates (C6).
+
+Acceptance: the test passes, each plant failed; `go.mod` and `go.sum` unchanged from P2a.
+
+**The gap, the owner's accepted cost.** From 0051-PLAN P2's commit to P2-2's, nothing guards the round trip of the
+SDK's session through `Login` and `auth.json`. In that window `v1.31.0`'s sign-ins set `Kind` and gobble's `loginOf`
+drops it, as it would have without the split, and `SessionKind()` infers the kind of a session saved without one
+(0074 D5). No sign-in that answers a consent is offered in it: the first is 0051-PLAN P4, committed with P3, which
+needs P2-2.
+
+Files added to this phase: none. Moved out: step 4's (`llm/provider/login.go`'s `sdkStore` as `auth.ClientStore`;
+`llm/provider/signin.go`'s `SignInOptions.HostID` and `wizard.Options.HostID`; `TestClientStoreAdapter`), to
+0051-PLAN P6 step 1a.
 
 ### P3 — consent: wording, gating, the mark and the command (MADR D2, D3)
 
 Prerequisites: P2; 0051-PLAN P3's tag. **Staged with 0051-PLAN P4 and committed with it, as one commit** (that phase
 says why): the plan is offered only in the commit that honours its consent.
+*(2026-11-13: "P2" here is P2-1 and P2-2, "P2 split into P2-1 and P2-2 (2026-11-13)".)*
 
 First, `llm/provider/policy.go` (0051-PLAN P4): `honouredConsents` gains `openai.ConsentBackgroundUse`.
 
@@ -294,6 +398,9 @@ Acceptance: the tests pass, each plant failed.
 
 Prerequisites: P2, P3, 0051-PLAN P4 to P7. Between P3's commit and this phase, a first plan sign-in under `--json`
 fails closed until 0051-PLAN P5 refuses it with exit 2 (F52's behaviour, nothing saved).
+*(2026-11-13: "P2" here is P2-1 and P2-2. `TestSignInChatGPTPlan`'s host id and client, and
+`TestPlanAfterLogoutReusesClient`, also rest on P2's old step 4, now 0051-PLAN P6 step 1a, inside "0051-PLAN P4 to
+P7".)*
 
 1. Re-apply, reworked, what P1 step 3 took out: `TestSignInChatGPTPlan` and `TestSignInChatGPTPlanPasted` now pass the
    `confirm` step; `TestLogoutPlan`; `TestOpenAILoginIsAPlan` as `TestForeignOpenAISessionRefused`; the acpext pin is
@@ -395,6 +502,9 @@ Each command's exit status is captured before any filter.
 * `go test -count=1 -run 'TestSetOAuthDropsKey|TestSetKeyDropsSessionMembers|TestStoreOAuthPlanFields|TestHostID|TestClients|TestMigrate' ./internal/auth/`
 * `go test -count=1 -run 'TestImportRules' ./internal/archtest/`; `go test -count=1 -run 'TestConsentWordingOverACP' ./acpserver/`
 * `go test -count=1 -run 'TestLoginCarriesEverySessionField|TestClientStoreAdapter|TestMarkReachesTheSDK|TestSignInChatGPTPlan|TestPlanAfterLogout|TestLogoutPlan' ./llm/provider/`
+  *(2026-11-13: `TestClientStoreAdapter` is 0051-PLAN P6 step 1a's; `TestLoginCarriesEverySessionField` is P2-2's.
+  P2-1's extended `TestLoginsLoadSave` runs with the `./internal/auth/` line above, its pattern read with
+  `|TestLoginsLoadSave` added.)*
 * `go test -race -count=10 -run 'TestTitleUnderPlan|TestAutoCompactUnderPlan|TestConsentAppliesFromTheNextRequest|TestBackgroundRequestsAreMarked' ./acpserver/`
   *(2026-11-11: with `TestBackgroundRefusedWhenAnswerUnreadable` added to that run's pattern; P3's rows of that date.)*
 * `go test -count=1 -run 'TestAuthConsentCommand|TestConsentWordingOnEverySurface|TestAuthStatusJSONPlan|TestForeignOpenAISessionRefused' ./internal/cli/`
@@ -430,6 +540,9 @@ Each command's exit status is captured before any filter.
   rollout note of this date says: the `v0.6.0` of
   [0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md](0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md)
   meets it, and the lockstep runs on to `v0.7.0`.)*
+  *(2026-11-13: "this plan's P1 at any time after approval; 0051-PLAN P2; P2" now reads "this plan's P1 and P2-1 at
+  any time after approval; 0051-PLAN P2 and P2a; P2-2". P2's old step 4 is done in 0051-PLAN P6 step 1a
+  ("P2 split into P2-1 and P2-2 (2026-11-13)").)*
 * **Rollout.** The migration runs once, at the first `v0.6.0` start. A plan session never existed in a release, so
   only a build of the uncommitted work could have one; the migration covers it.
   *(2026-11-12: "The migration runs once, at the first `v0.6.0` start" now reads `v0.7.0`. "A plan session never
@@ -653,3 +766,19 @@ was committed, pushed or tagged. Scratch logs are under `<TMP>` (the session's s
 
 Staged: the six Go files above and this PLAN. P1's acceptance, "the sort script reports no hunk lost; `make preflight`
 and `make race` pass on three hosts", is met, with `make preflight` on the Mac alone as the PLAN says.
+
+### Amendment of 2026-11-13 (records only)
+
+The owner's rulings of 2026-11-13 on a read-only check of P2 against go-llmprovider-sdk, relayed by the
+cross-repository coordinator. Read against this repository at `8fa0b73`, `main`, a clean tree. Each change is a dated
+note beside the text it changes, or a new subsection; nothing is struck.
+
+* **P2:** notes under its heading and under steps 1 to 5; "P2 split into P2-1 and P2-2 (2026-11-13)", new: the evidence, the
+  rulings, P2-1, P2-2 and the gap between the pin and P2-2.
+* **P3, P4:** notes on their prerequisites. **Verification:** where two tests now run. **Rollout:** the order.
+* **0051-PLAN:** the gate before P2, P2a's place, P4's prerequisite, P6 step 1a (new, with `TestClientStoreAdapter`),
+  the scope, the Verification and the rollout. **0051-MADR:** D9's "Where in the PLAN", and its revisions.
+* **Not changed here:** the fleet sequence's `0006-PLAN-sequence-the-auth-contract-effort-across-four-repositories.md`,
+  outside this repository, which the cross-repository coordinator amends.
+
+P2-1 is not started.
