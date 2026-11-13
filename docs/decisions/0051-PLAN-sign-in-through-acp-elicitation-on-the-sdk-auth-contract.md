@@ -466,6 +466,33 @@ steps, and the rewrite is named in this record.
    after P2 (Rollout), so they hold; this phase also follows 0052-PLAN P2-1, whose `HostID` and `Clients` it uses.
    None of these names was on go-llmprovider-sdk's `main` at `3f87e2b`; a `v1.31.0` without one is a deviation
    (C4).
+   *(2026-11-13, later; the owner's ruling of that day on who reads the host id: "0051 P6 step 1a".)* `internal/cli` fills
+   `SignInOptions.HostID` from `auth.HostID(dirs.State)`, the state directory as `systemDirs`
+   (`internal/cli/configpath.go:14`) resolves it, on both paths:
+   * **the terminal path:** in `signInTo` (`internal/cli/login.go:70`), before it calls `signInWith`. Every terminal
+     sign-in reaches it: `auth login` through `loginWith` (`internal/cli/auth.go:222`), and `/login`, `gobble setup`,
+     the first run and, after P7, `gobble acp --login` through `signIn` (`internal/cli/login.go:62`). If P5 leaves
+     `auth login --json` on a path that does not reach `signInTo`, that path fills it the same way;
+   * **the ACP path:** in step 4's `AuthOptions.SignIn` (`internal/cli/agent.go`), before it calls
+     `provider.StartSignIn`, which it calls through a package variable, `startSignInWith`, as it calls `signInWith`.
+
+   `auth.HostID` is on `main` since 0052-PLAN P2-1 (`5147e09`): `func HostID(dir string) (string, error)`
+   (`internal/auth/hostid.go:23`). It reads `<dir>/host-id`, or creates it once, owner-only (0052-MADR D4). In
+   `llm/provider`, `SignIn` calls `wizard.ResolveCredential` (`llm/provider/signin.go:184`) through a package
+   variable, as step 1 calls `signin.Start`, so a test can record the `wizard.Options` it was given.
+   *Not ruled:* what a sign-in does when the state directory cannot be resolved or `auth.HostID` returns an error.
+   The owner rules on it before P6 starts; this step names no behaviour for it until then.
+   *(2026-11-13, later still; the owner's ruling of that day on the host id's failure case: "Proceed, warn once".)* The options, as put:
+   (a) *recommended:* sign in with no host id and log one warning; the SDK then mints a per-sign-in id (0052-MADR's
+   F24 behaviour) only in that failure case, and grok and kilo sign-ins never fail over a file they do not use; the
+   cost is that a plan session made in that state carries a one-off id;
+   (b) fail every sign-in, exit 1: strict, but a state directory that cannot be written blocks grok and kilo too;
+   (c) fail only when the method is a plan sign-in, and proceed for the others: the most precise, but `internal/cli`
+   would need the chosen method before the wizard's menu runs, or `llm/provider` would need to do the check itself.
+   The owner chose (a). When `systemDirs` fails or `auth.HostID` returns an error, the sign-in proceeds with
+   `SignInOptions.HostID` empty, and the failure is warned once for that sign-in, naming the error and never an id:
+   on the terminal path through the run's warning output (`e.out.Warnf`, as `internal/cli/login.go:266` warns), on
+   the ACP path in the agent's log at Warn. No sign-in, of grok, kilo or the plan, fails over the host-id file.
 
 2. `acpserver/auth.go`: `AuthOptions` gains `Methods func(id string) []authcontract.Method` (for `_meta.gobble.methods`)
    and `SignIn func(ctx context.Context, id, method string) (SignInRun, error)`, `SignInRun` an interface of
@@ -558,9 +585,18 @@ steps, and the rewrite is named in this record.
    | :--- | :--- | :--- |
    | `TestClientStoreAdapter` (`llm/provider`) | `sdkStore` is an `auth.ClientStore` exactly when its store has one, and passes records both ways | the type assertion inverted |
 
+   *(2026-11-13, later; the owner's ruling of that day on who reads the host id: "0051 P6 step 1a".)* Two more tests, each seen failing:
+
+   | Test | Asserts | Planted break |
+   | :--- | :--- | :--- |
+   | `TestHostIDReachesTheEngines` (`llm/provider`) | `SignInOptions{HostID: "urn:uuid:…-test"}`: the recorded `wizard.Options.HostID` of `SignIn` and the recorded `signin.Options.HostID` of `StartSignIn` both equal it | the id left empty: `SignInOptions.HostID` not copied, so both recorded options hold `""` |
+   | `TestCLIFillsHostID` (`internal/cli`) | in a scratch `GOBBLE_HOME` whose state directory holds a `host-id`: `auth login grok` and `/login grok`, through a recording `signInWith`, and an ACP `authenticate` for grok, through a recording `startSignInWith`, each pass `SignInOptions.HostID` equal to that file's id; with no `host-id`, the first call creates one and both paths pass the same id | the id left empty: `signInTo` not setting it, and, as a second plant, the ACP `SignIn` not setting it |
+   | *(2026-11-13, later still; the ruling "Proceed, warn once".)* `TestSignInWithoutHostID` (`internal/cli`) | a scratch `GOBBLE_HOME` whose state directory cannot be written (its parent made read-only on Unix; a deny-write ACE on Windows), and no `host-id`: `auth login grok` through a recording `signInWith`, and an ACP `authenticate` for grok through a recording `startSignInWith`, each complete the sign-in (the recorder is called once, the credential saved, exit 0 and `{}`) with `SignInOptions.HostID` empty, and each emits exactly one warning naming the host-id error | the error returned instead of warned, so the sign-in ends with the error, the recorder is never called and no warning is counted |
+
    The wizard's `HostID` has no test of its own in this phase, as it had none in 0052-PLAN P2:
    `TestStartSignInReusesClient` above asserts the host id on the ACP path, and 0052-PLAN P4's
    `TestSignInChatGPTPlan` asserts it on a terminal plan sign-in, its plant "the host id not passed".
+   *(2026-11-13, later: it has one now, `TestHostIDReachesTheEngines` above, by the owner's ruling of that day.)*
 
 6. `docs/guides/credentials.md`: "Signing in from an ACP client".
 7. Gates (C6), the two other hosts included.
@@ -632,6 +668,9 @@ Each command's exit status is captured before any filter.
   'TestSignInNamesGobble|TestStoredLoginNamedForRefresh|TestLogoutRevokesAsGobble|TestStartSignInNamesGobble'
   ./llm/provider/`; `go test -count=1 -run 'TestCLIPassesGobblesIdentity' ./internal/cli/`
 * *(2026-11-13, added with P6 step 1a:)* `go test -count=1 -run 'TestClientStoreAdapter' ./llm/provider/`
+  *(2026-11-13, later: with `|TestHostIDReachesTheEngines` added to that pattern; and `go test -count=1 -run
+  'TestCLIFillsHostID' ./internal/cli/`.)*
+  *(2026-11-13, later still: that `./internal/cli/` pattern reads `'TestCLIFillsHostID|TestSignInWithoutHostID'`.)*
 * `make check-records markdownlint`
 * Every plant of P2 to P7, quoted in the execution record.
 
@@ -867,3 +906,14 @@ struck. The evidence and the rulings are in 0052-PLAN's "P2 split into P2-1 and 
   2026-11-13".
 * **Not changed:** the fleet sequence's
   `0006-PLAN-sequence-the-auth-contract-effort-across-four-repositories.md` stages 4G and 7; its owner amends them.
+* *(2026-11-13, later.)* The owner's ruling on who reads the host id, "0051 P6 step 1a": `internal/cli` fills
+  `SignInOptions.HostID` from `auth.HostID` (`internal/auth/hostid.go:23`, on `main` since `5147e09`) on the terminal
+  path (`signInTo`) and the ACP path (step 4's `SignIn`), and `wizard.ResolveCredential` is called through a package
+  variable; `TestHostIDReachesTheEngines` and `TestCLIFillsHostID`, each with the plant "the id left empty"; the
+  Verification. P6's prerequisites, read again against `5147e09`, hold. What a sign-in does when the host id cannot
+  be had is not ruled. 0051-MADR needs no note: D3 already has `signin.Options.HostID` from `<state>/host-id`, and
+  0052-MADR D4 passes the id on every plan sign-in.
+* *(2026-11-13, later still.)* The owner's ruling on the host id's failure case, "Proceed, warn once", option (a):
+  recorded in P6 step 1a with the three options as put; the sign-in proceeds with no host id and one warning, and no
+  sign-in fails over the host-id file; `TestSignInWithoutHostID`, its plant "the error returned instead of warned";
+  the Verification.
