@@ -24,6 +24,9 @@ type Login struct {
 	// its last ID token, a secret String never shows; and the host id its
 	// client was registered with (0031-MADR D7, amended 2026-11-10).
 	Resource, Scope, IDToken, HostID string
+	// Kind and Consents are the SDK session's kind and recorded consents,
+	// stored as the SDK gives them (0052-PLAN P2-1).
+	Kind, Consents string
 }
 
 // String renders the login without its tokens.

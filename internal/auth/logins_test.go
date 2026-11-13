@@ -14,7 +14,8 @@ import (
 func TestLoginsLoadSave(t *testing.T) {
 	l := Logins{Path: filepath.Join(t.TempDir(), "auth.json")}
 	in := &provider.Login{Access: "a", Refresh: "r", Expires: time.UnixMilli(1781000000000), Issuer: "https://auth.x.ai",
-		ClientID: "cid", AccountID: "acct", TokenURL: "https://auth.x.ai/oauth2/token", FedRAMP: true}
+		ClientID: "cid", AccountID: "acct", TokenURL: "https://auth.x.ai/oauth2/token", FedRAMP: true,
+		Kind: "chatgpt_plan", Consents: "background_use"}
 	if err := l.Save(t.Context(), "grok", in); err != nil {
 		t.Fatal(err)
 	}

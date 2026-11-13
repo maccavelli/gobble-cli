@@ -223,7 +223,7 @@ func TestStoreOAuthPlanFields(t *testing.T) {
 	path := writeAuth(t, "{}\n")
 	e := Entry{Access: "a", Refresh: "r", Expires: 1781000000000, Issuer: "https://auth.openai.com", ClientID: "oaiapp_x",
 		Resource: "https://api.openai.com/v1", Scope: "openid chatgpt.tokens.use.direct", IDToken: "id-secret",
-		HostID: "urn:uuid:host"}
+		HostID: "urn:uuid:host", Kind: "chatgpt_plan", Consents: "background_use"}
 	if err := SetOAuth(t.Context(), path, "openai", e); err != nil {
 		t.Fatal(err)
 	}
@@ -241,16 +241,18 @@ func TestStoreOAuthPlanFields(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, s := range []string{`"resource": "https://api.openai.com/v1"`, `"scope": "openid chatgpt.tokens.use.direct"`,
-		`"idToken": "id-secret"`, `"hostId": "urn:uuid:host"`} {
-		if !strings.Contains(string(raw), s) {
-			t.Errorf("no %q in:\n%s", s, raw)
+		`"idToken": "id-secret"`, `"hostId": "urn:uuid:host"`, `"kind": "chatgpt_plan"`,
+		`"consents": "background_use"`} {
+		if n := strings.Count(string(raw), s); n != 1 {
+			t.Errorf("%q written %d times in:\n%s", s, n, raw)
 		}
 	}
-	e.Resource, e.Scope, e.IDToken, e.HostID = "", "", "", ""
+	e.Resource, e.Scope, e.IDToken, e.HostID, e.Kind, e.Consents = "", "", "", "", "", ""
 	if err := SetOAuth(t.Context(), path, "openai", e); err != nil {
 		t.Fatal(err)
 	}
-	if raw, _ := os.ReadFile(path); strings.Contains(string(raw), "resource") || strings.Contains(string(raw), "idToken") {
+	if raw, _ := os.ReadFile(path); strings.Contains(string(raw), "resource") || strings.Contains(string(raw), "idToken") ||
+		strings.Contains(string(raw), "kind") || strings.Contains(string(raw), "consents") {
 		t.Errorf("after a save without the plan's fields:\n%s", raw)
 	}
 	e.Resource, e.IDToken = "https://api.openai.com/v1", "id-secret"
@@ -262,6 +264,40 @@ func TestStoreOAuthPlanFields(t *testing.T) {
 	}
 	if raw, _ := os.ReadFile(path); strings.Contains(string(raw), "idToken") || strings.Contains(string(raw), "resource") {
 		t.Errorf("a key over the plan session kept its fields:\n%s", raw)
+	}
+}
+
+// A key over an oauth entry leaves none of the session's members, kind and
+// consents included, and keeps every other field (0052-PLAN P2-1).
+func TestSetKeyDropsSessionMembers(t *testing.T) {
+	path := writeAuth(t, `{
+  "openai": {
+    "type": "oauth",
+    "access": "a",
+    "refresh": "r",
+    "expires": 1781000000000,
+    "kind": "chatgpt_plan",
+    "consents": "background_use",
+    "note": "keep me"
+  }
+}
+`)
+	if err := SetKey(t.Context(), path, "openai", "sk-k", ""); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range []string{"kind", "consents", "chatgpt_plan", "background_use", "access", "refresh"} {
+		if strings.Contains(string(raw), s) {
+			t.Errorf("%q survived SetKey:\n%s", s, raw)
+		}
+	}
+	for _, s := range []string{`"type": "api_key"`, `"key": "sk-k"`, `"note": "keep me"`} {
+		if !strings.Contains(string(raw), s) {
+			t.Errorf("no %q in:\n%s", s, raw)
+		}
 	}
 }
 

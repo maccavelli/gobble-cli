@@ -781,4 +781,73 @@ note beside the text it changes, or a new subsection; nothing is struck.
 * **Not changed here:** the fleet sequence's `0006-PLAN-sequence-the-auth-contract-effort-across-four-repositories.md`,
   outside this repository, which the cross-repository coordinator amends.
 
-P2-1 is not started.
+~~P2-1 is not started.~~ *(2026-11-13: P2-1 is built and staged; see "P2-1 record (2026-11-13)" below.)*
+
+### P2-1 record (2026-11-13)
+
+C1: branch `main`, `HEAD` `4da8559`, the tree clean at the start. P2-1 is read against "P2 split into P2-1 and P2-2
+(2026-11-13)". The agent stages; the owner commits with `git commit --no-edit`. Nothing was committed, pushed or
+tagged. Scratch logs are under `<TMP>` (the session's scratch directory).
+
+1. **Step 1, `internal/auth/store.go`.** `Entry.Kind` and `Entry.Consents`, strings; `parse` reads `kind` and
+   `consents`; `oauthFields` writes each when set and removes it when not, as it does `hostId`; `SetKey`'s removal list
+   gains both.
+2. **Step 2, `internal/auth/logins.go` and `llm/provider/login.go`.** `Logins.Load` and `Save` carry both;
+   `provider.Login` gains `Kind` and `Consents`, in the struct only. `session`, `loginOf`, `sdkStore` and
+   `llm/provider/signin.go` are untouched; `go.mod` and `go.sum` are unchanged.
+3. **Step 3, `internal/auth/hostid.go`.** `HostID(dir)`: reads `<dir>/host-id`, or creates it with
+   `O_WRONLY|O_CREATE|O_EXCL`, `0o600` (`securePrivate` as well, for the Windows DACL), a random version 4
+   `urn:uuid` from `crypto/rand`. A caller that loses the race reads the winner's id, waiting up to 5 s for the first
+   byte, since the file exists before its content does. A file holding anything but a `urn:uuid` is an error and is
+   not replaced.
+4. **Step 4, `internal/auth/clients.go`.** `ClientRecord{ClientID, HostID}`, gobble's own type; `Clients{Path}` with
+   `Load` and `Save`, under `clients.json.lock`, written with auth.json's `write`; a zero record removes the member;
+   other providers' members are kept. `internal/auth` imports no SDK package.
+5. **Tests.** `TestStoreOAuthPlanFields` and `TestLoginsLoadSave` extended; `TestHostIDIsStable`,
+   `TestClientsRoundTrip` and `TestSetKeyDropsSessionMembers` new, as the table asks. Two further tests, not in the
+   table: `TestHostIDRefusesOtherContent` and `TestClientsBadFile`.
+6. **Plants, each seen failing on a scratch copy (C2); the tree was never dirtied.** Each plant built (exit 0) and
+   failed the one test:
+
+   | Test | Planted break | Failure seen |
+   | :--- | :--- | :--- |
+   | `TestStoreOAuthPlanFields` | `consents` left out of `oauthFields` | `store_test.go:247: "\"consents\": \"background_use\"" written 0 times in:` (and `:237`, `Consents:` empty against `Consents:background_use`) |
+   | `TestLoginsLoadSave` | `Consents` left out of `Logins.Save` | `logins_test.go:24: Load: Login{...}, <nil>; want Login{...}` (`Login.String` omits the two fields, so both sides print alike) |
+   | `TestHostIDIsStable` | `O_EXCL` dropped (`O_TRUNC` in its place) | `hostid_test.go:65: round 0: caller 1 got "urn:uuid:8de304f7-...", caller 0 got "urn:uuid:dd989827-..."; want one id` |
+   | `TestClientsRoundTrip` | `Delete` removing the client | `clients_test.go:58: after the session's Delete: {ClientID: HostID:}, <nil>; want {ClientID:oaiapp_x HostID:urn:uuid:host}` |
+   | `TestSetKeyDropsSessionMembers` | `consents` left out of `SetKey`'s removal list | `store_test.go:294: "consents" survived SetKey:` and `"background_use" survived SetKey:` |
+
+   The `TestHostIDIsStable` plant was run again after the change under item 8, against the final `hostid.go`; the
+   failure above is that run's. The restored copy passed.
+7. **Gates (C6).** `make pre-add-check FILES=<the nine Go files>`: exit 0, "9 file(s) clean (gofmt, golint,
+   govulncheck)", before and after item 8.
+8. **Deviation (2026-11-13): gosec G304 on the host id's `os.OpenFile`.**
+   * **Found:** the first `make preflight` on the Linux machine exited 2 at golangci-lint:
+     `internal/auth/hostid.go:35:12: G304: Potential file inclusion via variable (gosec)`, at
+     `os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)`. The finding was in the new file, so it did not
+     predate P2-1; `scripts/go-precheck.sh` does not run gosec. No test had run.
+   * **Resolutions put to the owner:** (1) create through a temp file and `os.Link`, which departs from the step's
+     `O_EXCL`; (2) a `//nolint:gosec` line, which the repository's own convention uses and the owner's rules forbid
+     for a gate failure; (3) route the create through an `fsx` helper, a file outside P2-1's list.
+   * **Ruling (the owner, 2026-11-13, relayed by the cross-repository coordinator):** "filepath.Clean the path".
+     `HostID` opens `filepath.Clean(path)`; `O_WRONLY|O_CREATE|O_EXCL` and `0o600` stand, so the step and the plant
+     ("`O_EXCL` dropped") stand. No `nolint` was added.
+   * **Seen to clear:** `golangci-lint run --config .golangci.yml ./internal/auth/...` exit 0, "0 issues", then the
+     full `make preflight` below.
+9. **Suites, after the last code change** (the `filepath.Clean` edit was the last):
+
+   | Host | Command | Result |
+   | :--- | :--- | :--- |
+   | Linux machine | `make preflight` | exit 0, "preflight passed", 721 s |
+   | Windows laptop | `go test -count=1 ./...` | exit 0, 38 `ok` |
+
+   `make preflight` has no test stage; its tests are `archtest` and the lint. `go test -race` was not run: P2-1 adds
+   no concurrency beyond `HostID`'s race test, which the plain run exercises.
+10. **Records.** This record and the dated notes: `python3 -B scripts/check_records.py --check-all`,
+    `make check-records`, the redaction dry run and an identifier scan of the added lines were run last; their results
+    are given in the hand-off.
+11. **Not done.** The commit (the owner's); P2-2; step 4's `sdkStore` and the wizard's `HostID` (0051-PLAN P6 step
+    1a); anything that sets `Kind` or `Consents` or calls `HostID` or `Clients`, which stay inert.
+
+Staged: the nine Go files and this PLAN. P2-1's acceptance, "the tests pass, each plant failed; `go.mod` and `go.sum`
+unchanged; `session`, `loginOf`, `sdkStore` and `signin.go` as they were", is met.
