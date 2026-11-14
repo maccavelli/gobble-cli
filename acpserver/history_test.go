@@ -12,6 +12,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/maccavelli/gobble-cli/acpclient/acptest"
+	"github.com/maccavelli/gobble-cli/agent"
+	"github.com/maccavelli/gobble-cli/jsonx"
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/session"
 	"github.com/maccavelli/gobble-cli/session/jsonl"
@@ -82,6 +84,74 @@ func TestWriterKeepsBuildError(t *testing.T) {
 	w.addEntry(session.Entry{Type: session.TypeCustom}, nil) // w.s is nil: an append would panic
 	if !errors.Is(w.err, boom) {
 		t.Fatalf("w.err = %v after a later entry, want the first error kept", w.err)
+	}
+}
+
+// A tool call's arguments, in jsonx.StoredArguments' form, are what the
+// session file gives back: the same text from assistantEntryMessage, from a
+// write and a read through the jsonl store, and from assistantContent
+// (0037-MADR D42, D44). The cases are the ones a model's own spacing or
+// escaping changes, and the ones the store keeps as raw text.
+func TestToolArgsAsStored(t *testing.T) {
+	cases := []struct{ name, args, want string }{
+		{"compact", `{"path":"a.go"}`, `{"path":"a.go"}`},
+		{"spaced", `{"path": "a.go"}`, `{"path":"a.go"}`},
+		{"multi-line", "{\n  \"path\": \"a.go\",\n  \"limit\": 5\n}", `{"path":"a.go","limit":5}`},
+		{"non-ASCII", `{"path":"café.go"}`, `{"path":"café.go"}`},
+		{"escaped slash", `{"path":"a\/b.go"}`, `{"path":"a/b.go"}`},
+		{"key order", `{"b":1,"a":2}`, `{"b":1,"a":2}`},
+		{"number", `{"n":1.0}`, `{"n":1.0}`},
+		{"empty", ``, `{}`},
+		{"blank", ` `, ` `},
+		{"array", `[1]`, `[1]`},
+		{"spaced array", `[ 1 ]`, `[ 1 ]`},
+		{"invalid", `{"path":`, `{"path":`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := jsonx.StoredArguments(tc.args)
+			if got != tc.want {
+				t.Fatalf("StoredArguments(%q) = %q, want %q", tc.args, got, tc.want)
+			}
+			ev := agent.Message{Message: llm.Message{Role: llm.RoleAssistant, Content: []llm.Content{
+				{Type: llm.ContentToolCall, ToolCallID: "c1", ToolName: "read", ToolArgs: tc.args}}}}
+			entry, err := assistantEntryMessage(ev, "claude", "m", llm.Model{}, "2026-11-14T12:00:00.000Z")
+			if err != nil {
+				t.Fatal(err)
+			}
+			blocks, err := entry.Blocks()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if back := assistantContent(blocks); len(back) != 1 || back[0].ToolArgs != got {
+				t.Fatalf("assistantContent(entry) = %+v, want arguments %q", back, got)
+			}
+			// And through a file: a write, and a read by a new store.
+			dir := t.TempDir()
+			h := session.Header{Type: session.TypeHeader, Version: session.Version, ID: "019a0000-0000-7000-8000-000000000001",
+				Timestamp: "2026-11-14T12:00:00.000Z", Cwd: dir}
+			log, err := jsonl.New(dir, jsonl.Options{}).Create(t.Context(), h)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := log.Append(t.Context(), session.Entry{Type: session.TypeMessage, ID: "aaaa0001", Timestamp: h.Timestamp, Message: entry}); err != nil {
+				t.Fatal(err)
+			}
+			if err := log.Close(); err != nil {
+				t.Fatal(err)
+			}
+			_, entries, _, err := jsonl.New(dir, jsonl.Options{}).Read(t.Context(), h.ID)
+			if err != nil || len(entries) != 1 {
+				t.Fatalf("read back %d entries, %v", len(entries), err)
+			}
+			blocks, err = entries[0].Message.Blocks()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if back := assistantContent(blocks); len(back) != 1 || back[0].ToolArgs != got {
+				t.Fatalf("assistantContent(file) = %+v, want arguments %q", back, got)
+			}
+		})
 	}
 }
 

@@ -869,6 +869,54 @@ func TestCacheOnEveryCall(t *testing.T) {
 	}
 }
 
+// argsSpy is a tool that keeps the arguments it was called with.
+type argsSpy struct{ got *string }
+
+func (argsSpy) Spec() tool.Spec {
+	return tool.Spec{Name: "spy", Description: "spy keeps its arguments.", InputSchema: jsontext.Value(`{"type":"object"}`)}
+}
+
+func (s argsSpy) Run(_ context.Context, c tool.Call, _ tool.Env) (tool.Result, error) {
+	*s.got = string(c.Args)
+	return tool.TextResult("kept"), nil
+}
+
+// A tool call's arguments take the session file's form as they arrive: the
+// tool is run with them, and the turn's next request carries them, in that
+// form, so the live session sends what a reload sends. Text that is not a
+// JSON object reaches both unchanged, except the empty text, which is "{}"
+// (0037-MADR D42, D44; Q13).
+func TestArgsTakeTheStoresForm(t *testing.T) {
+	for _, tc := range []struct{ name, given, want string }{
+		{"spaced object", `{"path": "x"}`, `{"path":"x"}`},
+		{"invalid", `{"path":`, `{"path":`},
+		{"empty", ``, `{}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var ran string
+			s := llmtest.NewScript(llmtest.ToolCall("s1", "spy", tc.given), llmtest.Text("done"))
+			a := agent.New(agent.Config{Provider: s, Tools: []tool.Tool{argsSpy{got: &ran}}})
+			if _, _, err := collect(t.Context(), t, a, tool.Env{}, "go"); err != nil {
+				t.Fatal(err)
+			}
+			if ran != tc.want {
+				t.Errorf("the tool ran with %q, want %q", ran, tc.want)
+			}
+			var sent []string
+			for _, m := range s.Requests()[1].Messages {
+				for _, c := range m.Content {
+					if c.Type == llm.ContentToolCall {
+						sent = append(sent, c.ToolArgs)
+					}
+				}
+			}
+			if !slices.Equal(sent, []string{tc.want}) {
+				t.Errorf("the next request carries the call's arguments %q, want [%q]", sent, tc.want)
+			}
+		})
+	}
+}
+
 // A stream that fails after its first delta ends the turn with its error:
 // the delta has reached the consumer, no message or end follows it, and the
 // call is not sent again (0005-PLAN F4-1b, made executable as F4-1b-1;

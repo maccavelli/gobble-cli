@@ -57,15 +57,32 @@ func ms(ts string) int64 {
 	return parseTimestamp(ts).UnixMilli()
 }
 
-// userEntryMessage is a prompt as Pi's user message: one text is a string.
-func userEntryMessage(m llm.Message, ts string) *session.Message {
+// userText is m's text blocks joined as a user entry holds them: with a
+// blank line between. The entry and the live prompt share this one join, so
+// the model gets the same bytes live and after a load (0037-MADR D42).
+func userText(m llm.Message) string {
 	var texts []string
 	for _, c := range m.Content {
 		if c.Type == llm.ContentText {
 			texts = append(texts, c.Text)
 		}
 	}
-	return &session.Message{Role: session.RoleUser, Content: jsonx.Quote(strings.Join(texts, "\n\n")), Timestamp: ms(ts)}
+	return strings.Join(texts, "\n\n")
+}
+
+// asEntry is the user message m as its entry gives it back: its text blocks
+// one block, joined by userText. A message of one block or none is m.
+func asEntry(m llm.Message) llm.Message {
+	if len(m.Content) < 2 {
+		return m
+	}
+	m.Content = []llm.Content{{Type: llm.ContentText, Text: userText(m)}}
+	return m
+}
+
+// userEntryMessage is a prompt as Pi's user message: one text is a string.
+func userEntryMessage(m llm.Message, ts string) *session.Message {
+	return &session.Message{Role: session.RoleUser, Content: jsonx.Quote(userText(m)), Timestamp: ms(ts)}
 }
 
 // assistantEntryMessage is an assistant message in Pi's shape, its usage

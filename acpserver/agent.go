@@ -668,12 +668,14 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 	if isExpanded {
 		prompt = llm.Message{Role: llm.RoleUser, Content: []llm.Content{{Type: llm.ContentText, Text: expanded}}}
 	}
-	// The files come first, then the text, as Pi's CLI orders them; the
-	// user entry holds them, so a resumed session gives the model what it
-	// had (0005-PLAN F3-4).
+	// The files come first, then the text, as Pi's CLI orders them. The
+	// prompt's text is then one block, joined as the user entry joins it, so
+	// the live session sends the bytes a resumed one sends from the entry
+	// (0005-PLAN F3-4; 0037-MADR D42).
 	if files := promptFiles(p.Prompt, s.cwd, fsx.Workspace{Roots: s.env().Roots}); files != "" {
 		prompt.Content = append([]llm.Content{{Type: llm.ContentText, Text: files}}, prompt.Content...)
 	}
+	prompt = asEntry(prompt)
 	chosen, think := a.choices(s)
 	think = catalog.Clamp(a.levelsOf(a.provOf(s), chosen), think) // as thought_level shows it
 	w := writer{a: a, s: s, ctx: context.WithoutCancel(ctx), provider: a.providerID(s, model), model: chosen, written: map[string]bool{}}

@@ -108,9 +108,10 @@ func TestPromptFiles(t *testing.T) {
 	}
 }
 
-// Through the agent: the model gets the files first, then the text with
-// its @path as typed, and the session's user entry holds both, so a
-// resumed session gives the model what it had (0005-PLAN F3-4).
+// Through the agent: the model gets one text, the files first, then a
+// blank line, then the text with its @path as typed, and the session's user
+// entry holds both, so a resumed session gives the model what it had
+// (0005-PLAN F3-4; 0037-MADR D42).
 func TestPromptCarriesFiles(t *testing.T) {
 	cwd, dir := mentionDir(t), t.TempDir()
 	model := llmtest.NewScript(llmtest.Text("ok"))
@@ -123,7 +124,7 @@ func TestPromptCarriesFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	files := "spec: https://example.com/spec\n" + fileBlock(filepath.Join(cwd, "a.txt"), "A\n")
-	if got := userTextsOf(model.Requests()[0]); !slices.Equal(got, []string{files, "explain @a.txt"}) {
+	if got := userTextsOf(model.Requests()[0]); !slices.Equal(got, []string{files + "\n\n" + "explain @a.txt"}) {
 		t.Fatalf("the user message %q", got)
 	}
 	var user string

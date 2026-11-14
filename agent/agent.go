@@ -723,6 +723,10 @@ func (t *turn) call() (*reply, error) {
 			}
 		case llm.ToolCallDone:
 			ev.Name = t.repair(ev.Name)
+			// The arguments take the form the session file gives back, from
+			// here on: the tool, the loop guard and every later request of
+			// the turn see what a reload would (0037-MADR D42).
+			ev.Args = jsonx.StoredArguments(ev.Args)
 			r.calls = append(r.calls, ev)
 		case llm.Usage:
 			t.usage = addUsage(t.usage, ev)

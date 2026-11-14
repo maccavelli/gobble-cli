@@ -166,6 +166,14 @@ this plan, `docs/README.md`.
    form the session store gives them back: when the text decodes as a JSON object, its encoding as a `jsontext.Value`
    through `jsonx.Marshal`; otherwise the text unchanged. Its name and doc are recorded here. `apidiff` reports an
    addition only.
+
+   *(2026-11-14, amendment, the owner's ruling "Yes, in this plan", from P1's execution: "otherwise the text unchanged"
+   holds for everything except the empty text, which is `{}`. At `cccef77`, `acpserver/history.go:96-106` stores any
+   text that does not decode as a JSON object as `Arguments` `{}` with `gobble.rawArguments` set to the text, and
+   `:316-321` returns `rawArguments` only when it is not empty, else `string(b.Arguments)`: so `""` comes back as
+   `{}`. The function returns `{}` for `""`; whitespace-only text and every other non-object text are unchanged, as
+   they come back. `TestToolArgsAsStored` and `TestArgsTakeTheStoresForm` each gain an empty case, and a sixth planted
+   break removes the empty-text rule.)*
 3. **Arguments at receipt (Q13 (a)).** In `agent/agent.go`, the `llm.ToolCallDone` case sets `ev.Args` through step
    2's function, beside `t.repair`. Tool execution, the loop guard's key and every later request of the turn then see
    the same bytes the file will hold.
@@ -213,6 +221,10 @@ this plan, `docs/README.md`.
 
 **Files:** `acpserver/resume_test.go`, with a test file for the harness if it is kept; this plan; `docs/README.md`.
 The ruling may name more files. Any it does not name is a deviation (C6).
+
+*(2026-11-14, carried out in P1's working tree, before P1's commit, at the coordinator's word: the owner's ruling on
+step 8's assessment, verbatim, "One wire per shape, 5 wires". `TestResumeKeepsPrefix` covers one wire per body shape,
+five in all; the harness stays a recorded one-off, its tables in P1's record. See "P1a record".)*
 
 1. Write the ruling here as a dated entry, verbatim.
 2. If the ruling widens `TestResumeKeepsPrefix` or keeps the harness as a test: make that change. Each newly covered
@@ -307,3 +319,284 @@ The plan is `in-progress`. It lands before 0051-PLAN's P2, and outside 0056-PLAN
      message" bullet;
    * [0021-MADR-prompt-caching-per-session.md](0021-MADR-prompt-caching-per-session.md), F5.
 4. **Not done:** the commit. It is the owner's, under the bootstrap exception, with these records only.
+
+<!-- p1-record-begin -->
+### P1 record (2026-11-14): a resumed session sends what the live session sent
+
+Run by a mainstream-tier agent at medium effort, from base `cccef77` (the plan names `512db99`; C1's re-read follows).
+
+**Facts re-read at `cccef77` (C1).** All as step 1 states, with these lines moved from `512db99`'s numbers: the files
+block is prepended at `acpserver/agent.go:674`, the comment citing 0005-PLAN F3-4 is `:671-673`, `userMessage` is
+`:1038-1046`, `userEntryMessage` is `acpserver/history.go:61`, the object-or-raw argument split is `:96-106`,
+`agent/agent.go:724` receives `llm.ToolCallDone` and `:416` copies `c.Args`, and `acpserver/mentions_test.go:126` expects
+two user blocks. `agent` already imports `jsonx`.
+
+**The change.**
+
+* `jsonx.StoredArguments(text string) string` (step 2): when `text` decodes as a JSON object (the predicate
+  `assistantEntryMessage` uses), its encoding by `jsonx.Marshal`; the empty text is `{}` (the owner's amendment, below); any other text unchanged.
+  `apidiff`: one addition.
+* `agent/agent.go`, the `llm.ToolCallDone` case: `ev.Args = jsonx.StoredArguments(ev.Args)`, beside `t.repair` (step 3).
+* `acpserver/history.go`: `userText` is the one join (`"\n\n"`), used by `userEntryMessage` and by the new `asEntry`,
+  which makes a message of two or more blocks one text block; a message of one block or none is returned as it is.
+  `acpserver/agent.go`'s `Prompt` calls `asEntry` after the files are prepended; the comment at `:671-673` is reworded
+  (step 4).
+* Tests: `TestResumeKeepsPrefix` (`acpserver/resume_test.go`, new; four cases on five wires after P1a), `TestToolArgsAsStored`
+  (`acpserver/history_test.go`; 12 cases), `TestArgsTakeTheStoresForm` (`agent/agent_test.go`; 3 cases), and `TestPromptCarriesFiles`' one changed assertion (the model's
+  first request holds one text, the files, `"\n\n"`, then `explain @a.txt`).
+
+**Deviation 1 (2026-11-14, resolved inside the phase; for the owner's notice).** Step 6's fourth planted break,
+"step 2's function compacting a non-object: `TestToolArgsAsStored` fails on `[1]`", cannot fail on `[1]`: it is already
+compact, so a function that compacts any valid JSON returns `[1]` unchanged. Run against the plan's nine cases, that
+break passed (`ok`, exit 0). The resolution added one case to `TestToolArgsAsStored`, `spaced array` (`[ 1 ]`, expected
+unchanged), which the break fails on (quoted below). No assertion was loosened, and the plan's other cases are as written.
+The plan's wording of that break should read "fails on `[ 1 ]`" when the owner next amends it.
+
+**Amendment 1: the empty argument text (2026-11-14, the owner's ruling "Yes, in this plan").** My hand-off of P1's first
+build found that a tool call whose argument text is empty is not given back as it was stored. At `cccef77`,
+`acpserver/history.go:96-106` (`assistantEntryMessage`) stores any text that does not decode as a JSON object as
+`Arguments` `{}` with `gobble.rawArguments` set to the text (`b.Arguments = jsontext.Value("{}")`, then
+`extra(map[string]string{"rawArguments": c.ToolArgs})`), and `:316-321` (`assistantContent`) returns `rawArguments` only
+`if ... raw.RawArguments != ""`, otherwise `args := string(b.Arguments)`: so `""` is given back as `{}`, while a live
+request carried `""`. Whitespace-only text is not empty and comes back unchanged. The PLAN's step 2 and the MADR's D42
+carry dated notes; `jsonx.StoredArguments` returns `{}` for `""` and is otherwise as before; `TestToolArgsAsStored` has
+`empty` (`""` to `{}`) and `blank` (`" "` unchanged); `TestArgsTakeTheStoresForm` has `empty`; `TestResumeKeepsPrefix` has
+`empty arguments`, which breaks on the two wires that carry arguments as a string. A tool whose call has no arguments
+now receives `{}` where it received nothing; no existing test depended on that (the suites pass). This changes the
+"unchanged" half of step 2's rule for one input and no other.
+
+#### Step 1a and step 7a: the one-time measurement, every wire
+
+Harness: a throwaway test in package `acpserver` of a scratch copy, never in the tree. Its scripted sessions are
+`TestResumeKeepsPrefix`'s three cases, each recorded once and rendered through every wire below: `provider.New` with a
+dummy key, `Retry: Off`, a recording transport that answers 400, `llm.CacheShort` on every request, so no live provider
+was called and no credential was used. The comparison removes every member whose name holds `cache` (any case, any
+depth) and compares the rest in order: all members except the message sequence ("tools/system held"), then each earlier
+request's message items against the post-reload request's, as a prefix. The "before" runs are at `cccef77`; the "after"
+runs are on the finished phase. Every id `provider.Providers()` returns was built (10 of 10); none is listed as
+unbuildable. Each gateway route was measured separately, with a model the route table sends there: the route is read
+from the path the body went to. Three facts about the choice of models: `ollama`'s catalog lists none, so `llama3` is an
+arbitrary name; `opencode-go`'s route table has no Google route, so none was measured for it; Kilo's two rows differ
+only in the `anthropic/` prefix, which adds a `cache_control` member. "Cause": (a) is the prompt's blocks, (b) the
+arguments' spacing; "none" after the change. The table's cells read before, then after.
+
+| wire (model) | route path | tools/system held | mention | two text blocks | spaced arguments | cause | cache markers in the body | session or cache headers |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| claude messages (claude-haiku-5-5) | /v1/messages | yes | breaks at request 0, item 0 -> holds | breaks at request 0, item 0 -> holds | holds -> holds | (a) blocks -> none | cache_control | none |
+| openai responses (gpt-6-luna) | /v1/responses | yes | breaks at request 0, item 0 -> holds | breaks at request 0, item 0 -> holds | breaks at request 1, item 1 -> holds | both -> none | prompt_cache_key | none |
+| gemini interactions (gemini-3.8-flash) | /v1beta/interactions | yes | breaks at request 0, item 0 -> holds | breaks at request 0, item 0 -> holds | holds -> holds | (a) blocks -> none | none | none |
+| grok (grok-4.6) | /v1/responses | yes | breaks at request 0, item 1 -> holds | breaks at request 0, item 1 -> holds | breaks at request 1, item 2 -> holds | both -> none | prompt_cache_key | none |
+| opencode-zen messages route (claude-haiku-5-5) | /zen/v1/messages | yes | breaks at request 0, item 0 -> holds | breaks at request 0, item 0 -> holds | holds -> holds | (a) blocks -> none | cache_control | X-Opencode-Session |
+| opencode-zen responses route (gpt-6-luna) | /zen/v1/responses | yes | breaks at request 0, item 1 -> holds | breaks at request 0, item 1 -> holds | breaks at request 1, item 2 -> holds | both -> none | prompt_cache_key | X-Opencode-Session |
+| opencode-zen chat route (deepseek-v4-flash) | /zen/v1/chat/completions | yes | breaks at request 0, item 1 -> holds | breaks at request 0, item 1 -> holds | breaks at request 1, item 2 -> holds | both -> none | none | X-Opencode-Session |
+| opencode-zen google route (gemini-3.5-flash) | /zen/v1/models/gemini-3.5-flash:streamGenerateContent | yes | breaks at request 0, item 0 -> holds | breaks at request 0, item 0 -> holds | holds -> holds | (a) blocks -> none | none | X-Opencode-Session |
+| opencode-go messages route (minimax-m3) | /zen/go/v1/messages | yes | breaks at request 0, item 0 -> holds | breaks at request 0, item 0 -> holds | holds -> holds | (a) blocks -> none | cache_control | X-Opencode-Session |
+| opencode-go responses route (gpt-6-luna) | /zen/go/v1/responses | yes | breaks at request 0, item 1 -> holds | breaks at request 0, item 1 -> holds | breaks at request 1, item 2 -> holds | both -> none | prompt_cache_key | X-Opencode-Session |
+| opencode-go chat route (deepseek-v4.1-flash) | /zen/go/v1/chat/completions | yes | breaks at request 0, item 1 -> holds | breaks at request 0, item 1 -> holds | breaks at request 1, item 2 -> holds | both -> none | none | X-Opencode-Session |
+| huggingface (deepseek-ai/DeepSeek-V4-Flash-0731) | /v1/chat/completions | yes | breaks at request 0, item 1 -> holds | breaks at request 0, item 1 -> holds | breaks at request 1, item 2 -> holds | both -> none | none | none |
+| kilo anthropic/ models (anthropic/claude-haiku-5-5) | /api/gateway/chat/completions | yes | breaks at request 0, item 1 -> holds | breaks at request 0, item 1 -> holds | breaks at request 1, item 2 -> holds | both -> none | cache_control | none |
+| kilo other models (deepseek/deepseek-v4.1-flash) | /api/gateway/chat/completions | yes | breaks at request 0, item 1 -> holds | breaks at request 0, item 1 -> holds | breaks at request 1, item 2 -> holds | both -> none | none | none |
+| together (zai-org/GLM-5.3-Flash) | /v1/chat/completions | yes | breaks at request 0, item 1 -> holds | breaks at request 0, item 1 -> holds | breaks at request 1, item 2 -> holds | both -> none | prompt_cache_key | none |
+| ollama (llama3) | /v1/chat/completions | yes | breaks at request 0, item 1 -> holds | breaks at request 0, item 1 -> holds | breaks at request 1, item 2 -> holds | both -> none | none | none |
+
+Reading the table, from the recorded bodies:
+
+* Before the change, every wire broke the prefix at the first request of `mention` and `two text blocks`: 16 of 16. The
+  first diverging item is the first user message (item 0, or item 1 on the wires that put the system prompt in the
+  sequence: `grok`, the OpenCode responses routes and every chat-completions wire). Its first form is the files block alone, or `first block`; its
+  post-reload form is the files block, a blank line and the text, or `first block` + a blank line + `second block`.
+* `spaced arguments` broke on the 11 wires that carry arguments as a string (the Responses wires: `openai`, `grok`, the
+  OpenCode Zen and Go responses routes; every chat-completions wire), at the assistant's tool call. It held on the 5 that
+  carry them as an object (`claude`, the two OpenCode messages routes, `gemini`, the OpenCode Zen Google route): they
+  re-encode the object and drop the spacing themselves.
+* Tools and system held on every wire, before and after.
+* Cache markers in the post-reload body under `cacheRetention: short`: `cache_control` on `claude`, both OpenCode
+  messages routes and Kilo's `anthropic/` models; `prompt_cache_key` on `openai`, `grok`, both OpenCode responses routes
+  and `together`; none on `gemini`, the OpenCode chat and Google routes, `huggingface`, Kilo's other models and `ollama`.
+  The OpenCode gateways also send an `X-Opencode-Session` header on every route.
+* After the change: 16 of 16 wires hold the prefix in all three cases, and tools and system still hold. None is left
+  breaking, so step 7a raises no deviation. The harness took about one second for 16 wires and three cases (mostly the
+  scripted sessions, not the renderers).
+
+#### Tests, seen failing at `cccef77` (C7), and passing
+
+Run on a scratch export of `cccef77` with the new test files copied in.
+
+* `TestResumeKeepsPrefix` with its five wires (P1a), at the base, `go test -count=1 -run TestResumeKeepsPrefix
+  ./acpserver/` exit 1:
+  * `mention` and `two text blocks` fail on all five wires, requests 0, 1 and 2: `Messages`, `Responses`, `Gemini
+    interactions` and `OpenCode Google route` at item 0, `chat-completions` at item 1 (the system prompt is item 0), e.g.
+    `Messages: request 0's item 0 of 2 is not the post-reload request's`;
+  * `spaced arguments` fails on `Responses` at item 1 (`request 1's item 1 of 3`, `request 2's item 1 of 5`) and on
+    `chat-completions` at item 2 (`request 1's item 2 of 4`, `request 2's item 2 of 6`); the other three hold, as the
+    measurement shows;
+  * `empty arguments` fails on the same two wires at the same items: at `cccef77` a live `""` is not the reloaded `{}`.
+* `TestArgsTakeTheStoresForm`, at the base, exit 1: `the tool ran with "{\"path\": \"x\"}", want "{\"path\":\"x\"}"` and
+  `the next request carries the call's arguments ["{\"path\": \"x\"}"], want ["{\"path\":\"x\"}"]`.
+* `TestToolArgsAsStored`, at the base: the package does not build, `acpserver/history_test.go:109:17: undefined:
+  jsonx.StoredArguments`; its failure is the planted breaks below.
+* On the finished phase: `go test -count=1 ./acpserver/ ./agent/ ./jsonx/` passes (exit 0), `TestPromptCarriesFiles`
+  included. No existing test other than the one named changed.
+
+#### Planted breaks (C2, C7), each on a scratch copy of the finished phase
+
+A build failure is not counted as a catch; each of these built.
+
+1. Step 4's call (`prompt = asEntry(prompt)`) removed, `TestResumeKeepsPrefix`, exit 1: `mention` and `two text blocks`
+   fail on all five wires at item 0 (item 1 on `chat-completions`), requests 0, 1 and 2: `Messages: request 0's item 0
+   of 2 is not the post-reload request's`, and likewise `Responses`, `Gemini interactions`, `OpenCode Google route`
+   and `chat-completions` (`request 0's item 1 of 3`).
+2. Step 3's call removed (`ev.Args = jsonx.StoredArguments(ev.Args)`): `TestResumeKeepsPrefix/spaced_arguments` exit 1,
+   `Responses: request 1's item 1 of 3 is not the post-reload request's` (and request 2, item 1 of 5) and
+   `chat-completions: request 1's item 2 of 4` (and request 2, item 2 of 6); `empty_arguments` the same two wires;
+   the other three wires hold; `TestArgsTakeTheStoresForm/spaced_object` exit 1, `the tool ran with
+   "{\"path\": \"x\"}", want "{\"path\":\"x\"}"`, and `/empty` exit 1 (`the tool ran with "", want "{}"`).
+3. `StoredArguments` built on `encoding/json`'s `Compact`, `TestToolArgsAsStored` exit 1:
+   `TestToolArgsAsStored/escaped_slash` fails, `StoredArguments("{\"path\":\"a\\/b.go\"}") = "{\"path\":\"a\\/b.go\"}", want
+   "{\"path\":\"a/b.go\"}"`.
+4. `StoredArguments` compacting a non-object (any valid JSON, not only an object): with the plan's nine cases it passed
+   (Deviation 1). With `spaced array` added it exits 1: `TestToolArgsAsStored/spaced_array` fails,
+   `StoredArguments("[ 1 ]") = "[1]", want "[ 1 ]"`.
+5. The empty-text rule removed (`if text == "" { return "{}" }`), exit 1 each: `TestToolArgsAsStored/empty` fails,
+   `StoredArguments("") = "", want "{}"`; `TestArgsTakeTheStoresForm/empty` fails, `the tool ran with "", want "{}"` and
+   `the next request carries the call's arguments [""], want ["{}"]`; `TestResumeKeepsPrefix/empty_arguments` fails on
+   `Responses` (`request 1's item 1 of 3`, `request 2's item 1 of 5`) and `chat-completions` (`request 1's item 2 of 4`,
+   `request 2's item 2 of 6`). The other plants were run again after P1a and the amendment, with the results above.
+
+#### Step 7: unchanged
+
+* `git diff --exit-code cccef77 -- '*.golden' session/jsonl/testdata acpserver/testdata` exit 0.
+* The session files of the `mention` and `spaced arguments` cases (two prompts each, a read call between), written by the
+  tree at `cccef77` and by the phase (before P1a and Amendment 1, which change neither case's file), each 8 lines, compared with ids and timestamps masked and the
+  temporary directory written `<tmp>`: `mention`: equal, `spaced arguments`: equal; exit 0.
+
+#### Step 8: the assessment for the owner
+
+*Facts from the two tables.* The 16 wires and routes fall into five body shapes: the Messages shape (`claude`, the two
+OpenCode messages routes), the Responses shape (`openai`, `grok`, the two OpenCode responses routes), the
+chat-completions shape (`huggingface`, `together`, `ollama`, Kilo twice, the two OpenCode chat routes), `gemini`'s
+interactions shape and the OpenCode Zen Google route's `generateContent` shape. Both causes sat in gobble's own layers
+(`acpserver` and `agent`), upstream of any wire: every wire showed the same first divergence for cause (a), and cause
+(b) showed only where the wire sends arguments as a string. No wire's own rendering introduced a divergence of its own,
+before or after. Two shapes, `claude` and `openai`, give both the string and the object form of arguments and both
+cache-marker styles (`cache_control`, `prompt_cache_key`). They leave uncovered: the chat-completions renderers (7 of
+the 16), whose system prompt is an item of the sequence, `gemini`'s and the Google route's renderers, and any later SDK
+change that makes one of those renderers re-encode a message or an argument text differently on its own. The harness's
+cost: about one second for the 16 wires and three cases, one model id per wire to keep current against the catalog and
+the OpenCode route tables, and a name-based marker stripper (`cache`, any case) that can hide a member added to a body
+for a non-cache reason.
+
+The two questions: which wires `TestResumeKeepsPrefix` renders permanently, and whether the harness is kept as a test.
+Options, without a recommendation, as the coordinator's brief asks:
+
+1. **Keep `claude` and `openai`; the harness stays a recorded one-off.** Cost: nothing added; test time stays near
+   0.03 s for the permanent test; no new fixtures. Leaves uncovered: the five-shape gap above. A regression that lives
+   in a chat-completions or Gemini renderer is found only by a user's cache missing.
+2. **Render one wire per body shape, five in all, and keep the harness as a one-off.** Add `together` or `huggingface`
+   (chat-completions), `gemini` and the OpenCode Zen Google route to the permanent test. Cost: three more model ids and
+   wire names in `resume_test.go`, about 0.05 s more, and a stripper that handles `prompt_cache_key` and the Google
+   shape's `parts` and `contents` sequences. Leaves uncovered: a divergence in one gateway's route table or header
+   handling, and a second renderer of an already-covered shape.
+3. **Keep the harness as a permanent table-driven test over all 16 wires and routes.** Cost: about 1 s added to the
+   `acpserver` package on every run, on three hosts and under `-race`; 16 model ids tied to the catalog and the OpenCode
+   route snapshot (a catalog or route change then fails a test that is not about the change); the name-based stripper
+   lives in the tree. Leaves uncovered: only what the scripted sessions do not exercise (thinking blocks, images,
+   compaction).
+
+**The ruling (2026-11-14), verbatim: "One wire per shape, 5 wires".** Option 2, with the harness a recorded one-off: this
+section's tables are its record, and no harness is in the tree. P1a is carried out below.
+
+#### P1a record (2026-11-14): one wire per shape
+
+`TestResumeKeepsPrefix` renders each case through `resumeWires`, five `wireCase`s of provider, model id and the end of
+the path the request must go to (a model id that a route table later sends elsewhere fails loudly on the path, not
+silently by covering one shape twice). Model ids, each the one least tied to a catalog or route table:
+
+| Shape | Provider and model id | Path asserted | Why this id |
+| :--- | :--- | :--- | :--- |
+| Messages | `claude`, `claude-haiku-5-5` | `/v1/messages` | the provider's own wire for any id |
+| Responses | `openai`, `gpt-6-luna` | `/v1/responses` | the provider's own wire for any id |
+| chat-completions | `ollama`, `llama3` | `/v1/chat/completions` | a local engine with no catalog, route table or prefix rule: the id is free text (together, huggingface and Kilo each tie the id to a catalog or a prefix) |
+| Gemini interactions | `gemini`, `gemini-3.8-flash` | `/v1beta/interactions` | the provider's own wire for a chat model id |
+| OpenCode Google route | `opencode-zen`, `gemini-3.5-flash` | `:streamGenerateContent` | the only provider with this route, and its embedded route table gives it to a Gemini id; the path check holds that table to this shape |
+
+`wireShape` now compares everything in the body but the message sequence (`messages`, `input` or `contents`), cache
+markers removed, as the measurement did, in place of only `tools`, `system` and `instructions`. Each wire is seen
+failing at `cccef77` and on plants 1, 2 and 5 as quoted above, at the items the measurement table names. The files this
+adds to P1's list: none (`acpserver/resume_test.go` is P1's).
+
+#### Gates (C5)
+
+Hosts are named by placeholder: host L is a Linux target, host L2 a second Linux target, host W the Windows laptop run
+natively. Every run was `run-on-host`, one at a time, queued. The gates ran twice: first on the build before P1a and
+Amendment 1 (round 1), then, after the last code change, again (round 2). Round 1 is kept because it is where
+Deviation 2 was found.
+
+**Round 1 (before P1a and Amendment 1).**
+
+1. `make pre-add-check` on the eight changed `.go` files: exit 0.
+2. `make preflight` on host L: first run exit 2, `acpserver/resume_test.go:144:1: cognitive complexity 53 of func
+   TestResumeKeepsPrefix is high (> 50) (gocognit)`, in this phase's own new test. Resolution: the test's session
+   script and its prefix check became two helpers, `resumedRequests` and `checkPrefix`, with no behaviour change and no
+   `nolint`. Second run exit 0, 438 s.
+3. `make race` on host L: exit 2, a data race outside this phase (Deviation 2).
+4. `go test -count=1 ./...`: host L exit 0 (38 packages `ok`, 32 s), host W exit 0 (38 `ok`, 56 s).
+5. `-race ./...` on hosts L and W: not run (Deviation 2).
+
+**Round 2 (after P1a and Amendment 1, the last code change).**
+
+6. `make pre-add-check` on the eight changed `.go` files: exit 0 (`go-precheck: 8 file(s) clean (gofmt, golint,
+   govulncheck)`); `golangci-lint run ./acpserver/... ./agent/... ./jsonx/...` on the session host: 0 issues.
+7. `go test -count=1 ./acpserver ./agent ./jsonx` on the session host: exit 0.
+8. `CGO_ENABLED=1 go test -race -count=1 ./acpserver ./agent ./jsonx` on host L2: exit 0 (`ok acpserver 54.9s`, `ok
+   agent 2.8s`, `ok jsonx 1.0s`). Only these three packages, per the owner's ruling on Deviation 2.
+9. `make preflight` on another host: exit 0 on host L2, after `pick-host`, 746 s with its queue wait; `golangci-lint` 0 issues, records and markdownlint clean. Run after the last code change, and before this record gained these lines.
+10. The race gates, on hosts whose race detector is sound (Deviation 2's resolution), all after the last code change
+    and with no code changed since. Host L2 is the Linux machine itself, which `run-on-host --need linux` cannot be told
+    to use: `pick-host` chooses between it and the laptop's WSL2 distro by score, and the two were within 0.003 of each
+    other. A wrapper started `run-on-host`, read the `target=` line, and killed and retried any run that landed on the
+    distro (four landings killed within seconds, before any command ran); only a run whose target was the Linux machine
+    was kept, so no `-race` result here is from a distro.
+    * `make race` on host L2: exit 0 (39 `ok`, 0 `FAIL`, 0 `DATA RACE`), 3 min 7 s.
+    * `CGO_ENABLED=1 go test -race -count=1 ./...` on host L2: exit 0 (38 `ok`, 0 `FAIL`, 0 `DATA RACE`), 4 min 55 s;
+      `internal/cli` included.
+    * `CGO_ENABLED=1 go test -race -count=1 ./...` on host W, natively through `sh -c` (on the laptop `bash` is WSL's):
+      exit 0 (38 `ok`, 0 `FAIL`; `internal/cli` 68.6 s, `acpserver` 50.5 s), 1 min 42 s.
+    * `make race` on host M, this Mac, through `run-heavy` (queued behind another agent's SDK gate for about ten
+      minutes): exit 0 (39 `ok`, 0 `FAIL`, 0 `DATA RACE`), 11 min 28 s including the wait.
+
+**Deviation 2 (2026-11-14; resolved 2026-11-14, no code change).** `make race` on host L (a WSL2 distro of the Windows
+laptop) failed in `internal/cli`, a package this phase does not touch, with data races between goroutines reading
+config and files while the test body sets up state (`internal/fsx.ReadRegularFile` and `internal/config.Resolve` against
+the test, and `yaml` parsing, from `internal/cli.(*runEnv).defaultTrust`): `--- FAIL` for `TestToolFlagsSelectMCPTools`,
+`TestRunEndsListings`, `TestCompactionPromptReachesModel`, `TestPrintSendsACP`, `TestSessionValues` and `TestUpdateJSON`,
+8 `WARNING: DATA RACE` blocks in the log; `acpserver`, `agent` and `jsonx` passed under `-race`. It was pre-existing: the
+same `-race` run of `./internal/cli/` on host L at base `cccef77`, with none of this phase's files, failed too, with a
+different set of failing tests (`TestAuthLogin`, `TestChoiceWiring`, `TestLineCompactThroughTheAgent`,
+`TestMainExitCodes`, `TestPrintModeTrust`, `TestProjectSettingsNeedTrust`, `TestToolFlagsSelectResourceTools` and
+`TestUpdateIgnoresArchive`) and 9 `DATA RACE` blocks, so it was nondeterministic and independent of this change.
+
+*(2026-11-14, the owner's ruling, "Root-cause it first", and its result. A separate agent root-caused the reports on
+scratch clones: 161 reports over 24 runs each name a single goroutine on both sides, which is not a data race, and the
+same test binary, byte for byte, is clean on the Linux machine and on Windows; it is red only inside the laptop's WSL2
+distro. The root cause is an environment fault of that distro's race detector, not a gobble defect, so nothing lands in
+`internal/cli` and there is no fix to wait for. The full evidence is going into a separate record,
+`0058-MADR-cli-race-reports-on-the-wsl2-distro-are-not-gobble-races.md`, which is proposed and not yet committed;
+this entry cites it as pending, and the race gates stand on this plan's own runs. The race gates were run on the Linux
+machine, Windows and macOS instead of the distro (round 2, item 10): all three exit 0, `internal/cli` included.
+`-race` on the three touched packages had already passed on the Linux machine (item 8). The WSL2 distro is not used
+for any `-race` gate of this plan.)*
+
+**Rulings and escalations in P1, in order.** Deviation 1 (the fourth plant's wording; resolved in the phase). The
+gocognit failure (fixed in the test). Q12's ruling on the assessment, "One wire per shape, 5 wires" (P1a, carried out in
+P1's tree). Amendment 1, "Yes, in this plan" (the empty argument text). Deviation 2 and its ruling, "Root-cause it
+first" (resolved: an environment fault of the WSL2 distro's race detector; the race gates passed on the Linux machine,
+Windows and macOS).
+
+*Provenance: mainstream model, medium effort. Outcome: P1's code, P1a and Amendment 1 built, seen failing at `cccef77`
+and on five planted breaks, passing; every round 2 gate green, the race gates on the Linux machine, Windows and macOS
+included; staged, not committed. Escalations: Deviation 1 (resolved in the phase), Deviation 2 (resolved, the
+owner's, ruled "Root-cause it first"). Rulings: Q12's "One wire per shape, 5 wires", "Yes, in this plan" for empty
+arguments.*
+
+<!-- p1-record-end -->

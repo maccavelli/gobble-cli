@@ -79,6 +79,29 @@ func Value(v any) (jsontext.Value, error) {
 	return From(b), nil
 }
 
+// StoredArguments is a tool call's argument text in the form a session file
+// gives it back: when text decodes as a JSON object, its encoding under the
+// data policy, which drops the model's spacing and its "\/" escapes; any
+// other text, such as an array or a truncated object, unchanged, except the
+// empty text, which is "{}". A session file keeps an object's arguments as a
+// JSON value and anything else as raw text, which it gives back only when
+// it is not empty, so a live session that holds this form sends what a
+// reload sends (0037-MADR D42, D44).
+func StoredArguments(text string) string {
+	if text == "" {
+		return "{}"
+	}
+	var obj map[string]jsontext.Value
+	if Unmarshal([]byte(text), &obj) != nil || obj == nil {
+		return text
+	}
+	b, err := Marshal(jsontext.Value(text))
+	if err != nil {
+		return text
+	}
+	return string(b)
+}
+
 // Quote is s as a JSON string literal, each invalid UTF-8 byte written as
 // U+FFFD. jsontext.AppendQuote's error says only that bytes were replaced,
 // which is the data policy, so Quote has none: its output equals Marshal's

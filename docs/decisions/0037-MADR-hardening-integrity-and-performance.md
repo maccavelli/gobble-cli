@@ -920,6 +920,18 @@ The owner ruled, 2026-11-14, that both are fixed now. The decisions, written to 
   *(2026-11-14, the rulings: memory takes the file's form (Q11 (a)), and a tool call's arguments take the store's form
   in `agent`, on arrival (Q13 (a)). For the wires, the plan's P1 measures every wire once before the permanent test's
   coverage is settled (Q12's ruling).)*
+
+  *(2026-11-14, from P1's execution, the owner's ruling "Yes, in this plan": a tool call whose argument text is
+  empty is stored as `{}`. `assistantEntryMessage` sets `Arguments` to `{}` and `gobble.rawArguments` to `""` for any
+  text that is not a JSON object, and `assistantContent` returns `rawArguments` only when it is not empty, so it gives
+  `{}` back. The stored form of `""` is therefore `{}`, not `""`. D42's "the file's form" for arguments is then: an
+  object as `jsonx.Marshal` encodes it, the empty text as `{}`, and any other text unchanged. `jsonx.StoredArguments`
+  follows.)*
+
+  *(2026-11-14, the owner's ruling on Q12's assessment, "One wire per shape, 5 wires": the permanent
+  `TestResumeKeepsPrefix` renders one wire per body shape, the Messages, Responses, chat-completions, Gemini
+  interactions and OpenCode Google route shapes. The all-wire harness stays a recorded one-off, its tables in
+  `0037-PLAN-resume-prefix-and-failed-turn-history.md`'s P1 record.)*
 * **D43. D15 is built now, with D42, in one plan.** The owner's timing: the plan is executed as soon as it is approved,
   ahead of `v0.7.0`, between phases of
   [0051-PLAN-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md](0051-PLAN-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md)
