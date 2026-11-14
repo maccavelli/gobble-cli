@@ -9,8 +9,9 @@ works unchanged.
 
 For each provider, gobble takes the first of these that has a key:
 
-1. **`--api-key -`**, for one run. gobble reads the key from stdin, or asks for it when stdin is a
-   terminal, and never writes it anywhere. It needs `--model`, which names the provider.
+1. **`--api-key -`**, for one run. The flag's value is the single dash `-`, always: gobble reads the
+   key from stdin, or asks for it when stdin is a terminal, and never writes it anywhere. It needs
+   `--model`, which names the provider.
 2. **`auth.json`** in gobble's config directory (`gobble config path` prints it on its `config:`
    line). An entry for a provider owns it: gobble then reads nothing further for that provider.
 3. **`models.json`'s `apiKey`** for the provider ([guide](models-json.md)).
@@ -32,16 +33,40 @@ $ gobble --model openai/gpt-6-luna --api-key sk-test-only -p hello
 Error: --api-key takes -: a key on the command line shows in process listings and shell history; pipe it, or type it when asked
 ```
 
+`--api-key` takes only `-`: the dash is the flag's whole value, and it means "read the key from
+stdin, or ask for it when stdin is a terminal". For one run, with `--model` naming the provider,
+pipe the key — stdin is the key, never the input, so the prompt's words go after `-p`:
+
+```text
+echo sk-test-only | gobble --model openai/gpt-6-luna --api-key - -p hello
+```
+
+The key is read from stdin, spent on that one run, and stored nowhere.
+
 ## Storing a key
 
-`gobble auth login <provider> --api-key -` stores a key in `auth.json`, read from stdin or typed
-when asked. The file is created readable by you alone, and every change to it is locked, so two
-gobble processes never lose each other's entries:
+`gobble auth login <provider> --api-key -` stores a key in `auth.json`. The flag's value is the
+single dash `-`: gobble reads the key from stdin, or, when stdin is a terminal, asks for it — and
+what is typed is not echoed. The file is created readable by you alone, and every change to it is
+locked, so two gobble processes never lose each other's entries.
+
+On a terminal, run it alone and type the key when asked:
+
+```text
+$ gobble auth login openai --api-key -
+API key for openai: 
+Saved API key for openai
+```
+
+In a script, or wherever the key can be piped from, pipe it:
 
 ```text
 $ echo sk-test-only | gobble auth login openai --api-key -
 Saved API key for openai
 ```
+
+Pi's provider names are accepted here too: `gobble auth login anthropic` stores claude's entry,
+`google` gemini's and `xai` grok's.
 
 `gobble auth status` shows where each provider's key comes from, and never a key:
 

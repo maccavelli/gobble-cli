@@ -100,9 +100,14 @@ Early, and built in the order [docs/README.md](docs/README.md#build-order) gives
   and `--all` show a provider's catalog, the models gobble knows of one with no credential marked so. In a
   session, `/providers` lists the same with each provider's state, and `/models [provider] [words]` lists
   one provider's models, or every provider's, numbered as `/model N` takes them.
-- **Credentials** in Pi's order: `--api-key -`, a Pi-style `auth.json`, `models.json`'s `apiKey`, then the
-  provider's variable; `gobble auth login --api-key -|logout|status|check`, signing in to Grok or Kilo with
-  `gobble auth login grok|kilo`, `--method api-key|browser|device` for no menu, and `gobble auth import --from-pi`
+- **Credentials** in Pi's order: a run's `--api-key`, a Pi-style `auth.json`, `models.json`'s `apiKey`, then the
+  provider's variable. `--api-key` takes only `-`, the dash meaning "read the key from stdin, or ask for it";
+  the key itself is refused on the command line, so pipe one in — `echo sk-test-only | gobble auth login openai --api-key -`
+  stores it in `auth.json`, `gobble auth login openai --api-key -` on a terminal asks for it instead of echoing, and
+  for one run only `echo sk-test-only | gobble --model openai/gpt-6-luna --api-key - -p hello` uses it without storing.
+  `gobble auth logout <provider>` removes a stored entry, `gobble auth status` shows where each key comes from and
+  `gobble auth check` whether one is usable. Grok and Kilo sign in with `gobble auth login grok|kilo`,
+  `--method api-key|browser|device` names a way with no menu, and `gobble auth import --from-pi` copies Pi's entries
   ([guide](docs/guides/credentials.md)).
 - **Signing in where you are:** `/login [provider]` in a session asks which provider and how, checks a typed key
   by listing the provider's models, stores it, and lists the models to switch to; `/logout [provider]` removes a
