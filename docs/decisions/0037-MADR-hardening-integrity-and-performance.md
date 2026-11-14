@@ -963,6 +963,10 @@ The owner ruled, 2026-11-14, that both are fixed now. The decisions, written to 
   [0051-PLAN-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md](0051-PLAN-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md)
   and [0052-PLAN-finish-the-chatgpt-plan-sign-in-on-the-sdk-engine.md](0052-PLAN-finish-the-chatgpt-plan-sign-in-on-the-sdk-engine.md),
   never inside one. D15 is unchanged: every error exit sets `s.history` from `s.state()`.
+
+  *(2026-11-14, annotation, as built and by the owner's ruling "Remove the two": D15's "every error exit" is every exit at which
+  the file can hold what the history lacks. The system-prompt-write and user-entry exits are not, since at most one append precedes
+  each and the history takes an entry only after its write succeeds, so they do not replay; see D15's notes.)*
 * **D44. A fifth plan, `0037-PLAN-resume-prefix-and-failed-turn-history.md`, carries D15 and D42.**
   * D34's plan 2, still unwritten, keeps D12–D14 and D17–D22. This follows D36's precedent.
   * The plan's regression tests are the probes made permanent: `TestResumeKeepsPrefix` from the prefix probe, and

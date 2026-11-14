@@ -519,9 +519,15 @@ func preTurnFailure(t *testing.T, warm, resources bool, match func(session.Entry
 }
 
 // After an append that fails before the turn starts, the live session holds
-// the history a fresh load of its file gives (0037-MADR D15): the system
-// prompt's baseline or patch, the user entry, and the gobble.tools entry are
-// the three appends before the turn, and each exit replays the file.
+// the history a fresh load of its file gives (0037-MADR D15). Three appends
+// come before the turn: the system prompt's baseline or patch, the user
+// entry, and the gobble.tools entry. At the first two exits the history
+// already equals the file's with no replay, because at most one append
+// precedes each and the history takes an entry only after its write
+// succeeds, so those cases check that equality: each fails when the history
+// is let run ahead there. At the gobble.tools exit the file holds the prompt
+// that the history lacks, and the replay there is what makes them equal, so
+// that case fails without it.
 func TestFailedPreTurnAppendHistoryIsTheFiles(t *testing.T) {
 	isPrompt := func(e session.Entry) bool {
 		return e.Type == session.TypeCustom && e.CustomType == session.CustomPrompt

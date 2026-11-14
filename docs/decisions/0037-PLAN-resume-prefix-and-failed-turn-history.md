@@ -686,6 +686,10 @@ hold entries that live history lacks there:
 did. The five exits marked "replays" call it, the model-error exit once for both branches (the non-compacted branch is
 now the same replay, step 2). It runs only on a failure.
 
+*(2026-11-14, annotation, by the owner's ruling "Remove the two" under P2a: three exits call it, not five: the model-error
+exit, the in-turn append failure and the `gobble.tools` exit. The system-prompt-write and user-entry exits do not, because the
+history already equals the file's there.)*
+
 **Tests** (`acpserver/resume_test.go`), each run once in one process and once with a close and a load into a second
 `Agent` over the same store before the second prompt, comparing the second prompt's request by roles and block types
 and by its message bytes on the `claude` and `openai` wires with the cache markers removed. They compare the messages
@@ -839,6 +843,49 @@ append or a failed turn.
 the two", the tools-entry replay kept and tested, five cases each seen failing on a plant; every gate green; staged, not
 committed. Escalations: the P2a finding (replays that cannot matter), ruled by the owner, relayed by the coordinator.
 Rulings carried: "Those 3 untested replays need tests", "Remove the two".*
+
+#### Addition (2026-11-14): the coordinator's review, and a second gate run
+
+The P2a set above was committed as `45a67a8` before these fixes; they are a further change on top of it.
+
+**What the review found.** (1) The doc comment above `TestFailedPreTurnAppendHistoryIsTheFiles` ended "...and each exit
+replays the file", false as built: only the `gobble.tools` exit replays. (2) The `docs/README.md` row for this plan,
+marked `complete`, still said "P1 executed ..., awaiting its commit and the owner's ruling on step 8's assessment", "P2
+executed ..., awaiting its commit" and "P2 every error exit replays the file". Reading the five staged files for the same
+assumption found two more statements with no dated note beside them: the 0037 MADR's D43, "every error exit sets
+`s.history` from `s.state()`", and the P2 record's "The change", "The five exits marked 'replays' call it".
+
+**What changed.** The test's comment now says what the test checks and why it holds at each exit: at the first two exits
+the history already equals the file's, so those cases check that equality and fail when the history is let run ahead; at the
+`gobble.tools` exit the replay is what makes them equal, so that case fails without it. The README row says P1 was committed
+as `a3b5c26`, the step-8 assessment was ruled "One wire per shape, 5 wires" and carried out as P1a, P2 was committed as
+`124213c` with replays at the model-error, in-turn append and `gobble.tools` exits only, the tests were seen failing at
+`cccef77` and `feafd65`, and P3 closed. D43 and "The change" carry a dated annotation. The comments of `preTurnFailure`,
+`preTurnAgent` and `historyOf` make no such assumption and are unchanged.
+
+**The pause.** The work stopped for a quota pause on 2026-11-14 while these fixes were being made, and resumed on the
+owner's word. On resuming, the tree was read: HEAD `45a67a8`, nothing staged, four files with unstaged changes
+(`acpserver/resume_test.go`, `docs/README.md`, the 0037 MADR, this plan), every hunk whole and none half-applied.
+
+**The gate run that counts.** Every file change was made by 20:03:11 UTC; this run started after it and its full output and
+exit statuses are held. Hosts by placeholder as above; UTC, queue waits included:
+
+1. `make pre-add-check` on `acpserver/resume_test.go`: exit 0 (`go-precheck: 1 file(s) clean (gofmt, golint,
+   govulncheck)`); `golangci-lint` on `acpserver`: 0 issues; `go test -count=1 ./acpserver`: exit 0.
+2. `make preflight` on host L (a plain gate): exit 0, 20:03:49 to 20:11:27.
+3. `make race` on host L2 (the Linux machine itself, `target` checked): exit 0 (39 `ok`, 0 `FAIL`, 0 `DATA RACE`), 20:11:27 to
+   20:14:34.
+4. `CGO_ENABLED=1 go test -race -count=1 ./...` on host L2: exit 0 (38 `ok`), 20:14:34 to 20:17:44.
+5. The same natively on host W through `sh -c`: exit 0 (38 `ok`), 20:17:44 to 20:19:20.
+6. `make race` on host M through `run-heavy`: exit 0 (39 `ok`, 0 `FAIL`) in the run above at 20:19:20 to 20:20:56, which may
+   have run after the pause began and so is not relied on; it was run again after the resume, exit 0 (39 `ok`, 0 `FAIL`,
+   0 `DATA RACE`; `acpserver` ran uncached, 29.5 s, the rest from the test cache), 22:42:36 to 22:43:23, no queue wait.
+   This second run is the one that counts for host M.
+7. Record checks after the last record change: exit 0 each (see the hand-off).
+
+*Provenance: mainstream model, medium effort. Outcome: the review's two findings and two further stale statements fixed or
+annotated; every gate green after the last file change; staged, not committed. Escalations: none. Rulings carried: "Remove
+the two", and the owner's "resume".*
 
 <!-- p2a-record-end -->
 
