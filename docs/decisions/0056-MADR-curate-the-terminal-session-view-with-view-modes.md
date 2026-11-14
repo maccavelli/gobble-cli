@@ -2,7 +2,7 @@
 status: accepted
 date: 2026-11-13
 decision-makers: repository owner
-consulted: "the owner's words of 2026-11-12 and 2026-11-13, quoted below; this repository at f078889 (main, level with origin/main, 2026-11-13), read for the audit below; a sample turn captured on 2026-11-13 from a scratch clone at f078889 with a throwaway test (never committed) that drove acpserver, through acpclient, into the line session's view, with llmtest's scripted model and no provider; go-tui-lib v2.12.0's inline, inline/inlinetest, transcript, frame and stream packages, read from the module cache; a read-only feasibility study of the live group row, 2026-11-13, under More Information; the owner's rulings of 2026-11-13 on Q1 to Q6 and on the type-ahead question, relayed by the coordinator"
+consulted: "the owner's words of 2026-11-12 and 2026-11-13, quoted below; this repository at f078889 (main, level with origin/main, 2026-11-13), read for the audit below; a sample turn captured on 2026-11-13 from a scratch clone at f078889 with a throwaway test (never committed) that drove acpserver, through acpclient, into the line session's view, with llmtest's scripted model and no provider; go-tui-lib v2.12.0's inline, inline/inlinetest, transcript, frame and stream packages, read from the module cache; a read-only feasibility study of the live group row, 2026-11-13, under More Information; the owner's rulings of 2026-11-13 on Q1 to Q6 and on the type-ahead question, relayed by the coordinator; the owner's ruling of 2026-11-13, \"Shared layer + go-tui-lib survey\", relayed by the coordinator, with this repository at 8fc4233 (main, clean) read for the amendment of that date; a read-only survey of go-tui-lib at its tag v2.12.0 against F9, 2026-11-13, relayed by the coordinator, under More Information"
 informed: "`0051-PLAN-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md` and `0052-PLAN-finish-the-chatgpt-plan-sign-in-on-the-sdk-engine.md`, whose v0.7.0 lands first and whose P4 edits internal/cli/view.go; magic-cli-remote, whose ACP stream this record leaves unchanged"
 ---
 <!-- markdownlint-disable MD013 MD024 MD060 -->
@@ -213,6 +213,11 @@ and `usage_update`.
 *(2026-11-13, the owner's ruling on Q1, "Staged hybrid". The draft's choice of A is kept below, struck through, with
 its reasoning; stage 1 is A as written.)*
 
+*(2026-11-13, the owner's ruling "Shared layer + go-tui-lib survey": the curation that D2 to D5 describe is a
+renderer-neutral layer, `internal/curate`, which the line view and the future TUI mode both draw from, and `/view`
+applies to both. See "Amendment 2026-11-13: a renderer-neutral curation layer", D11 to D16, after D10. The chosen
+option and D1 to D10 stand, each with a dated note where the amendment changes where it lives.)*
+
 Chosen option: "B. As A, but the open group is a live row redrawn in place while it grows, through go-tui-lib's
 `inline.Region`", **staged**:
 
@@ -236,7 +241,10 @@ leaves "every action, in full, on its own line".
 This record is `accepted` (2026-11-13, the owner). The owner ruled on Q1 to Q6 that day; each ruling is a dated note
 under its question below, and D1 to D10 are the decisions. **One question stays open:** Q7, how the live row meets
 type-ahead echo, owned by `0056-PLAN-curate-the-terminal-session-view-with-view-modes.md` P3b and decided there with the screen tests in hand (the owner's ruling of
-2026-11-13, "Decide in stage 2"); `0024-MADR-cli-mode-polish.md` D1 stands until then. Nothing is built before the owner approves the
+2026-11-13, "Decide in stage 2"); `0024-MADR-cli-mode-polish.md` D1 stands until then. *(2026-11-13, the amendment:
+Q8 to Q10, below Q7, are open too; they concern the TUI mode and go-tui-lib, and none blocks
+`0056-PLAN-curate-the-terminal-session-view-with-view-modes.md`.)* *(2026-11-13, later: the owner ruled on Q8 to
+Q10, each a dated note under its question; Q7 alone stays open.)* Nothing is built before the owner approves the
 execution of
 [0056-PLAN-curate-the-terminal-session-view-with-view-modes.md](0056-PLAN-curate-the-terminal-session-view-with-view-modes.md),
 and that plan starts only after `v0.7.0` is tagged.
@@ -247,13 +255,20 @@ and that plan starts only after `v0.7.0` is tagged.
   400-byte summary first, and the three updates per call stay as `0008-MADR-native-cli-mode.md` D19 has them; `acpserver/testdata/session.golden`
   does not change.
 * The view reads only what acpclient gives it. acpclient's translation gains the tool call's kind (D3), read from
-  updates the agent already sends; acpclient's handshake does not change.
+  updates the agent already sends; acpclient's handshake does not change. *(2026-11-13, the amendment, D12: the
+  curation layer reads what acpclient gives it, and the view reads the layer; acpclient also gains `Update.Method`,
+  the method it already receives for a `_gobble/*` notification.)*
 * A test runs one scripted turn through the line session in each of the four modes and finds the bytes each side
   wrote, client to agent and agent to client, equal across the modes.
 
 ### D2. Four modes, chosen per event
 
 `default` is the mode a session starts in. The modes differ only in what the terminal shows:
+
+*(2026-11-13, the amendment, D14: what this table decides per event, whether an item is made, how much of it is
+shown, what it groups with and what closes it, is the curation layer's contract, restated there in the layer's terms;
+the cells' typography below, a JSON line, dimmed, styled and wrapped, on stderr, a blank line, `▸`, is how the line
+renderer draws those items. The TUI draws the same items its own way.)*
 
 | Event | `raw` | `verbose` | `default` | `terse` |
 | :--- | :--- | :--- | :--- | :--- |
@@ -295,6 +310,8 @@ resize draws what was written, in the mode it was written in.
   ✓`, closed by the same events.
 * The words are the personality's: new keys for each kind's phrase, in all four built-in catalogs
   ([0022-MADR-gobble-voice-and-personalities.md](0022-MADR-gobble-voice-and-personalities.md)).
+  *(2026-11-13, the amendment, D13: the grouping and its closing rules are the curation layer's; each renderer phrases
+  the layer's items with these same keys, so the line view and the TUI use one set of words.)*
 
 ### D4. A command and its exit status: the title once, the status once, the output only when it failed
 
@@ -308,6 +325,8 @@ resize draws what was written, in the mode it was written in.
   `[stopped after …]`, `tool/builtin/shell.go:189`, `:194`), is left out of that tail, so the status is said once. When
   lines were cut above the tail, the personality's hidden-lines text says how many, naming `/view verbose`. The view
   recognises that line by the shell tool's format, which lives in this repository; a test holds the two together.
+  *(2026-11-13, the amendment, D11: the recogniser and the failure tail are the curation layer's, not the view's; the
+  test moves with them.)*
 * `verbose` shows a call's output block, unbounded, and leaves out its summary when it has one: the agent writes the
   summary from the output (`acpserver/prompt.go:197-215`; for a shell call, its exit status and first line), so the
   output says it all. A call with no output block (an edit's diffs, a result that is its summary alone) shows its
@@ -330,6 +349,8 @@ reply with colour off. `raw` prints their updates. The session file keeps them i
 * **`view: <mode>`** in `settings.yaml` ([0018-MADR-configuration-surface.md](0018-MADR-configuration-surface.md)) is
   the default for every run; an unknown value is a configuration diagnostic and `default` is used.
 * Precedence: `/view`, then `--view`, then the setting, then `default`.
+* *(2026-11-13, the amendment, D15: the three controls, with this precedence, set the mode of either renderer, the
+  line session's or the TUI's.)*
 
 ### D7. `--verbose` and `--show-thinking` retire into `--view`; `--stats` and `--log-level` stay (Q3)
 
@@ -350,11 +371,21 @@ acpclient's `Params` on (`internal/cli/line.go:127`), which encodes each update 
 the agent's bytes do not change. The status line still goes to stderr. Permission prompts are drawn as in every
 mode.
 
+*(2026-11-13, the amendment, D12 and D13: the layer makes one `Raw` item per update, which the line renderer writes as
+that JSON line; a notification's method comes from acpclient's new `Update.Method`, since neither the layer nor
+`internal/tui` may import acpext (rule 12).)*
+
 ### D9. Where it lives, and the records it amends on acceptance
 
-* The modes, the grouping and the closing rules live in `internal/cli` (the view); the pure layout of a group line, a
+* ~~The modes, the grouping and the closing rules live in `internal/cli` (the view);~~ the pure layout of a group line, a
   diff stat and the action line in `internal/cli/render`. acpclient gains `ToolCall.Kind`, an addition to a beta
-  package's type.
+  package's type. *(2026-11-13, the amendment, D11 to D13: the modes, the grouping, the closing rules, the failure
+  tail and the line diff's counts live in the curation layer, `internal/curate`; the view in `internal/cli` feeds it
+  and draws its items; `render` keeps the layout, `render.UnifiedDiff`'s hunks drawn over the layer's line diff, so
+  there is one diff implementation. acpclient also gains `Update.Method`. Amended on execution, besides the records
+  below: [0004-MADR-go-module-architecture.md](0004-MADR-go-module-architecture.md), its package map and its import
+  rules, which gain rule 13 (D11), written with the archtest change in
+  `0056-PLAN-curate-the-terminal-session-view-with-view-modes.md` P1b.)*
 * Amended on acceptance, each with a dated note beside the text it changes: `0008-MADR-native-cli-mode.md` D7 (rendering, by D2 to D5),
   D12 (the flag set, by D6 and D7) and D13 (the local commands, by D6); `0005-MADR-v1-feature-scope.md` "CLI flags" (`--verbose` at 1.x, by
   D7). `0056-PLAN-curate-the-terminal-session-view-with-view-modes.md` P0 writes these.
@@ -394,6 +425,168 @@ mode.
   the permission callback, the resize router, the settle timer (`view.go:547-551`), and the row's frame ticker, which
   replaces the spinner's goroutine. `make race` covers them.
 * **Open: Q7**, type-ahead echo, below; decided in `0056-PLAN-curate-the-terminal-session-view-with-view-modes.md` P3b.
+
+### Amendment 2026-11-13: a renderer-neutral curation layer
+
+*Accepted 2026-11-13. The owner's ruling, verbatim, relayed by the coordinator: "Shared layer + go-tui-lib survey".
+Read at `8fc4233`. D1 to D10 stand, except where a dated note beside them points here.*
+
+**The finding behind it.** D2 to D5, as first written, build the curation (grouping like actions, saying each exit
+status once, folding thinking, and the four modes) inside the line view's one `switch` on `acpclient.Kind`
+(`internal/cli/view.go:116-191`, unchanged at `8fc4233`), and D9 placed the modes, the grouping and the closing rules
+in `internal/cli`. The enhanced TUI mode, the full-screen mode of
+[0005-MADR-v1-feature-scope.md](0005-MADR-v1-feature-scope.md) F9 ("Enhanced terminal TUI") and
+[0032-MADR-go-tui-lib-integration-boundary.md](0032-MADR-go-tui-lib-integration-boundary.md) D6, needs the same
+decisions over the same ACP updates; `internal/tui` holds only its package doc. Built in the line view, the curation
+would be built a second time for the TUI, and the two copies could drift. That goes against 0032-MADR's driver "both
+modes, the line-mode CLI and the TUI, served by one implementation of each element".
+
+**The ruling.** The curation becomes a layer of its own, which both renderers draw from, and `/view` applies to both
+modes. The survey half of the ruling is under More Information, "go-tui-lib `v2.12.0` against F9".
+
+#### D11. The layer is `internal/curate`, and it imports only the standard library, `acpclient` and `jsonx`
+
+* **Package:** `github.com/maccavelli/gobble-cli/internal/curate`, internal by its path. It holds the modes, D14's
+  per-event contract, the grouping and its closing rules (D3), the failure tail and the shell status-line recogniser
+  (D4), thinking's fold (D5), `raw`'s items (D8), and the line diff with its `+a −d` counts.
+* **Allowed in non-test code:** the standard library, `acpclient` and `jsonx`. Nothing else.
+* **Refused, each for a reason the records already give:**
+  * go-tui-lib, and every Charm module, `x/ansi` included. Rule 5, as amended by 0032-MADR D1 and A1, admits them
+    only in `internal/cli` and `internal/tui`. A third package gets none, so the TUI's graph cannot reach the native
+    CLI through the layer, and the layer measures no width.
+  * Kong (rule 9); acpext (rule 12, hence D12's `Update.Method`); acp-go-sdk2 (rule 2); `agent` (rule 6's reason:
+    the renderers read ACP, never the agent).
+  * `internal/cli/...` and `internal/tui`: each renderer imports the layer, never the reverse, and `internal/cli`
+    still never reaches `internal/tui` (rule 5).
+  * `personality`, `render` and `term`: words, layout and terminal facts are the renderers' (D13).
+* **Its tests** may import `acpserver`, `llm/llmtest`, `acpclient/acptest` and `tool/builtin`, for the fixture of real
+  agent updates and the status-line test (`0056-PLAN-curate-the-terminal-session-view-with-view-modes.md` P1, P1b).
+* **It does no I/O, reads no clock and starts no goroutine.** One goroutine drives it, under its renderer's lock, as
+  go-tui-lib's `inline.Region` is driven (`inline/region.go:29-40` at `v2.12.0`).
+* **Enforced** by `internal/archtest` rule 13: "`internal/curate` imports, in non-test code, only the standard library,
+  `acpclient` and `jsonx`". A dated note in [0004-MADR-go-module-architecture.md](0004-MADR-go-module-architecture.md)
+  adds the rule to its import rules and the package to its package map. Both are written in the same phase as the test
+  (`0056-PLAN-curate-the-terminal-session-view-with-view-modes.md` P1b), since `AGENTS.md` has a rule and its record
+  change together.
+
+#### D12. Input: every ACP update, two client events, and a mode
+
+* **Updates.** Every `acpclient.Update`, in arrival order, of every kind, through `Feed`. That includes
+  `_gobble/personality`, which the line session hands on after setting the voice.
+* **Two acpclient fields.** `ToolCall.Kind` (D3), and `Update.Method`: the notification's method for `KindRetry`,
+  `KindPersonality` and a `KindCompaction` from `_gobble/compaction`, and empty for a `session/update`. With it, `raw`
+  writes `{"method":…,"params":…}` without acpext.
+* **Two events no update carries.**
+  * `Ask(callID)`: a permission request for that call, raised by the renderer before it draws its prompt or dialog.
+  * `End(acpclient.Result)`: the turn's end.
+* **The mode.** `curate.Mode` is one of `raw`, `verbose`, `default` or `terse`. `curate.ParseMode` and `curate.Modes`
+  serve `/view`, `--view` and `view:`. A renderer makes a `curate.Curator` per turn with the mode in force then, so a
+  mode changes from the next turn (D6).
+
+#### D13. Output: changes to typed items, one type per TUI component
+
+Each input returns a list of `Change` values, `{Op, ID, Item}`, where `Op` is `Open`, `Grow` or `Close`. An item is
+closed once and never changes after. `Curator.Status()` returns a snapshot of the status row.
+
+The item types match, one to one, the components the TUI will need. The survey under More Information finds each of
+those components absent from go-tui-lib `v2.12.0`, apart from the transcript. Typed this way, the TUI renderer is a
+thin consumer once go-tui-lib gains them, and the line renderer draws the same types its own way:
+
+| Item | What it carries | The TUI component it feeds | What the line renderer draws |
+| :--- | :--- | :--- | :--- |
+| `ToolCard` | one call: its ID, ACP kind, title, status, summary, output, `Diff`s and terminal IDs, and its `Fold` | a collapsible tool card | D2's `verbose` call block, or D4's failure detail |
+| `ActivityRow` | a run of finished calls: the count and failed count per kind, each call's title and diff stat, and the calls' `ToolCard`s | a grouped activity row | D3's group line, or `terse`'s action line |
+| `Diff` | a path, the old and new text, and `+a −d`; inside a `ToolCard` | a diff view | a unified diff in `verbose`; the stat on the group line in `default` |
+| `StatusRow` (from `Status()`) | thinking or not, the open `ActivityRow` so far, and the running call | a status row | the spinner's label (stage 1); D10's row (stage 2) |
+| `Thought` | the thought text, growing | a thought display | dimmed under a label, in `verbose` |
+| `Plan` | the entries, whether they changed, and a `Form`: a checklist or a summary | a plan checklist | D2's checklist, or `terse`'s plan line |
+| `Reply` | the reply text, growing, or a non-text block's name | the transcript | go-tui-lib's `stream.Printer`, as today |
+| `Note` | an `acpclient.Retry` or `acpclient.Compaction` | a notice in the transcript | today's retry and compaction lines |
+| `TurnEnd` | the last usage and the `acpclient.Result` | the footer | the status line on stderr |
+| `Raw` | an update's `Params`, or a notification's method and params | a raw line | one JSON line (D8) |
+
+* **`Fold`** is the mode's choice for an item's body. It is one of:
+  * `Hidden`;
+  * `Summary`;
+  * `Tail`: D4's summary, then the last five lines without the shell tool's status line, then the count of lines
+    above;
+  * `Full`.
+* **Every item carries its full detail, whatever its fold.** Q8 asks what the TUI may do with it. *(2026-11-13,
+  Q8's ruling: the mode sets each item's default fold, and in the TUI any item opens up to the full detail it
+  carries.)*
+* **`Sep`** asks for a gap before an item, such as D2 `default`'s blank line before a reply that follows an action
+  line.
+* **Neither renderer branches on the mode.** The items say what to show, fold, group and close; a renderer decides
+  only how to draw them.
+* **The layer carries no words, glyphs, colour or width.** Each renderer phrases the items with the personality's keys
+  (D3: one set of keys for both), sanitises what did not come from gobble
+  ([0008-MADR-native-cli-mode.md](0008-MADR-native-cli-mode.md) D8), and lays out.
+* **State-only updates make no item outside `raw`.** These are the commands, the mode, the session's info and its
+  config options. A renderer that shows that state, such as the TUI's footer or the line session's `/help`, reads it
+  from acpclient as today.
+
+#### D14. The per-event table is the layer's contract, not the line renderer's
+
+D2's table, restated in the layer's terms. A layer-level golden per mode holds it, together with a table test with one
+row per `acpclient.Kind` (`0056-PLAN-curate-the-terminal-session-view-with-view-modes.md` P1b).
+
+| Input | `raw` | `verbose` | `default` | `terse` |
+| :--- | :--- | :--- | :--- | :--- |
+| reply text, non-text block | `Raw` | `Reply` | `Reply`, `Sep` after an action line | as `default` |
+| thought | `Raw` | `Thought`, `Full` | `Thought`, `Hidden`; `StatusRow` thinking | as `default` |
+| `tool_call` `pending`, `in_progress` | `Raw` | no item; `StatusRow` names the call | as `verbose` | as `verbose` |
+| call `completed` | `Raw` | an `ActivityRow` of one call, its `ToolCard` `Full` (the output block, or else the summary, then diffs) | joins the open `ActivityRow` of its ACP kind; its `ToolCard` `Hidden`; its diff stats on the row | joins the run's one `ActivityRow`, whatever its kind; `Hidden` |
+| call `failed` | `Raw` | as `completed` | joins the row, which counts it failed; when the row closes, its `ToolCard` follows, `Tail` | joins the row; its `ToolCard` follows, `Summary` |
+| terminal reference | `Raw` | in the `ToolCard`, shown | in the `ToolCard`, `Hidden` | as `default` |
+| `plan` | `Raw` | `Plan`, checklist, each time | `Plan`, checklist, when it changed, after the open row closes | `Plan`, summary |
+| `usage_update`; `End` | `Raw`; `TurnEnd` | `TurnEnd` at `End` | as `verbose` | as `verbose` |
+| `_gobble/retry`, compaction | `Raw` | `Note` | `Note` | `Note` |
+| `_gobble/personality`, commands, mode, session info, config option, user message, a newer variant | `Raw` | no item | no item | no item |
+| `Ask` | no item | no item | closes the open row | as `default` |
+
+* **Closing.** In `default`, the open `ActivityRow` closes on a `Reply`, a `Plan`, an `Ask`, a finished call of
+  another kind, a `Note` or `End`, and never on a thought. In `terse`, the same, except that a call of another kind
+  joins the row (D3).
+* **Permission prompts.** The prompt or dialog itself is never an item. It is each renderer's own:
+  go-tui-lib's `ask` in the line session, a dialog in the TUI.
+
+#### D15. `/view`, `--view` and `view:` apply to both modes
+
+* The three controls, with D6's precedence, set the mode of whichever renderer runs: the line session or the TUI.
+* `/view` is a local command in both. `--view` is on the default command, and holds when the TUI is the mode chosen.
+  `view:` in `settings.yaml` is one default for both.
+* In both, a mode applies from the next turn. Q9 asks whether the TUI may re-curate earlier turns. *(2026-11-13,
+  Q9's ruling: it may not; `/view` applies from the next turn in both modes, with no replay.)*
+* D7's retirement of `--verbose` and `--show-thinking` holds for both.
+
+#### D16. What the TUI inherits, and what stays the line renderer's
+
+* **The TUI inherits, through the layer:**
+  * D1: no mode changes the ACP stream;
+  * D2's table, as D14;
+  * D3's grouping by ACP kind and its closing rules;
+  * D4's exit status said once, and its failure tail;
+  * D5's fold of thinking;
+  * D6's controls, as D15;
+  * D8's `Raw` items;
+  * the `StatusRow` snapshot, and the personality's keys.
+* **These stay the line renderer's:**
+  * stage 1's spinner, and its label cut to the terminal's width (D3);
+  * stage 2's status row drawn through `inline.Region`, every writer's yield to it, and its collapse and fallback
+    (D10);
+  * Q7, type-ahead echo during a turn in cooked mode;
+  * the transcript's reprint at a resize
+    ([0030-MADR-resize-and-performance.md](0030-MADR-resize-and-performance.md) D3;
+    `0035-MADR-pin-current-sibling-releases-and-remove-gobble-copies.md` D14 step 5b);
+  * stdout and stderr ([0008-MADR-native-cli-mode.md](0008-MADR-native-cli-mode.md) D3);
+  * the group line's one-row layout with `+n`, the blank lines, glyphs, colour, and wrapping
+    ([0028-MADR-reply-word-wrap.md](0028-MADR-reply-word-wrap.md)).
+* **Why the status row and Q7 stay behind.** A full-screen TUI owns its input and redraws whole frames, so neither
+  D10's yields nor Q7's echo arise there. The TUI draws `StatusRow` as one of its own components.
+* **The TUI's drawing is 0005-PLAN F9's.** `0005-PLAN-v1-feature-scope.md` F9, when it is made executable, takes the
+  layer as its input and carries Confirmation 15. This record builds no TUI code. 0005-MADR F9 and 0032-MADR are
+  unchanged: the TUI is still an ACP client over acpclient, with the layer in between, and the layer draws nothing, so
+  it is not core TUI.
 
 ### Questions for the owner, and the rulings
 
@@ -495,6 +688,57 @@ to be Unix's alone; that is unverified.
 (`inlinetest.Screen` with `Cooked` set, an echoed key written between frames), and records the owner's answer here as
 a dated note. `0024-MADR-cli-mode-polish.md` D1 stands until then.*
 
+*(2026-11-13, the amendment: Q8 to Q10 are added from it and from the go-tui-lib survey, each open. None blocks
+`0056-PLAN-curate-the-terminal-session-view-with-view-modes.md`; each is decided before
+`0005-PLAN-v1-feature-scope.md` F9 is made executable, and recorded here as a dated note.)* *(2026-11-13, later:
+the owner ruled on all three that day, relayed by the coordinator; each ruling follows its options, which stand as
+written.)*
+
+**Q8. May the TUI open a folded item beyond what the mode shows? ~~(Open.)~~ (Ruled 2026-11-13.)**
+
+* **(a) Yes.** Each item starts at the mode's fold, and a tool card or an activity row can be opened to the full detail
+  every item carries (D13). Cost: the TUI must draw and remember a fold state per item. A turn's items hold whole
+  outputs in memory, which they hold anyway for `verbose`. This meets 0005-MADR F9's "collapsible tool cards".
+* (b) No. The mode is a ceiling in the TUI as in the line view, and more detail takes `/view verbose`. Cost: F9's
+  collapsible cards open to nothing more than the mode shows; the TUI loses what it is best placed to give.
+* (c) Only failures open beyond the mode. Cost: a rule a person has to learn; a successful call's output stays out of
+  reach.
+
+*Ruling, 2026-11-13: "Yes, up to full detail". **Decision: (a)**: the mode sets each item's default fold (D13); in
+the TUI any item can be opened up to the full detail it carries, so the TUI keeps a fold state per item. The line
+view draws each item at its default fold.*
+
+**Q9. Does `/view` in the TUI re-curate the turns already shown? ~~(Open.)~~ (Ruled 2026-11-13.)**
+
+* **(a) No: from the next turn, as in the line view (D6, D15).** Cost: the TUI does less than a full-screen redraw
+  allows. One rule holds for both modes, and nothing is kept beyond each turn's items.
+* (b) Yes. The TUI keeps each turn's updates and replays them through a new `Curator` at `/view`, since the layer is
+  pure. Cost: the session's updates are kept in memory; the two modes then follow different rules for `/view`; and a
+  test must prove that a replay equals a live run.
+* (c) Only the running turn is re-curated. Cost: a partial rule, with the replay machinery of (b) all the same.
+
+*Ruling, 2026-11-13: "No, from the next turn". **Decision: (a)**: `/view` re-curates from the next turn in both
+modes (D6, D15); no turn is replayed, and no updates are kept for it.*
+
+**Q10. What happens to the components the TUI needs that go-tui-lib `v2.12.0` lacks? ~~(Open.)~~ (Ruled 2026-11-13.)**
+
+The six components are the tool card, the activity row, the diff view, the status row, the thought display and the plan
+checklist (More Information). This record decides nothing about go-tui-lib itself; the question is the owner's.
+
+* **(a) Request them from go-tui-lib, as `0032-MADR-go-tui-lib-integration-boundary.md` D3 and D5 do for its
+  elements, each shaped by D13's item types, while F9 waits for their tags (0005-MADR F9).** Cost: F9's activity
+  display waits on another repository's releases. The line view is unaffected, since it draws them itself.
+* (b) F9 starts on what exists (the workspace, `streamtea.DocPane`, `asktea.Dialog`, `palette`, `lineedit`) and shows
+  tool activity as plain transcript text until the components are tagged. Cost: an interim TUI that is plainer than
+  the line view. Whether that interim drawing counts as "copying" under 0005-MADR F9 needs the owner's reading.
+* (c) Defer F9 as a whole until the components exist. Cost: no TUI at all in the meantime; the layer waits for its
+  second consumer.
+
+*Ruling, 2026-11-13, given earlier that day: "Draft a go-tui-lib record now". **Decision: (a)**: the tool card, the
+activity row, the diff view, the status row, the thought display and the plan checklist are requested from
+go-tui-lib, each shaped like D13's item types, and F9 waits for their tags (0005-MADR F9). The request is a go-tui-lib agent-widgets record, to be drafted,
+in go-tui-lib; it has no number yet. This record still decides nothing about go-tui-lib's design.*
+
 ### Consequences
 
 * Good, because the phone's stream does not change: D1's test holds the bytes equal across modes.
@@ -517,6 +761,27 @@ a dated note. `0024-MADR-cli-mode-polish.md` D1 stands until then.*
 * Bad, because the row is not proven on Windows Console Host or under a terminal multiplexer by any test; both are
   checked by the owner's eye in P3b, and Q7 is open.
 
+*(2026-11-13, the amendment:)*
+
+* Good, because the curation is built once. The TUI inherits D1 to D8 through the layer and rebuilds none of it, and
+  the two modes cannot drift apart.
+* Good, because the layer is tested alone, with no terminal: a golden per mode over its change stream, and a table
+  test over D14.
+* Good, because the item types match the TUI's components one to one, so the TUI renderer is a thin consumer once
+  go-tui-lib gains them.
+* Good, because the line view becomes a thin consumer too. Its `switch` on `acpclient.Kind` goes; what it draws is a
+  function of the items.
+* Neutral, because every item carries its full detail whatever its fold, which costs memory for one turn's items.
+  `verbose` needs that detail anyway.
+* Bad, because the layer adds a package, archtest rule 13, an acpclient field (`Update.Method`), and an indirection in
+  the line view: updates, then changes, then drawing.
+* Bad, because the item types are fixed before the TUI exists. F9 may find them wrong and amend this record.
+* Bad, because `render`'s line diff moves into the layer, a move inside this repository that the `udiff-*` goldens
+  hold.
+* ~~Bad, because Q8 to Q10 stay open until F9 is made executable.~~ *(2026-11-13, the rulings on Q8 to Q10:)* Bad,
+  because the TUI keeps a fold state per item (Q8), and F9's activity display waits on go-tui-lib's tags of the
+  six components (Q10), requested by a go-tui-lib agent-widgets record, to be drafted.
+
 ### Confirmation
 
 1. Under each of the four modes, the same scripted turn through the line session writes byte-equal frames in both
@@ -537,6 +802,20 @@ a dated note. `0024-MADR-cli-mode-polish.md` D1 stands until then.*
 10. Stage 2: `make race` passes over the goroutines that share `v.mu`, run through `run-heavy` or `run-on-host`.
 11. Stage 2: the owner has looked at a grouped turn in Windows Terminal, in Console Host and under a terminal
     multiplexer, and Q7 is answered and recorded.
+
+*(2026-11-13, the amendment, D11 to D16:)*
+
+12. The layer alone: for each mode, the fixture of real agent updates through `internal/curate` gives a change stream
+    equal to its golden, written in a plain text form. A table test has one row per `acpclient.Kind` and mode, D14's,
+    and fails when a kind is added without a row. Each was seen to fail on a planted break. Confirmation 3's exit
+    status is checked here, at the layer.
+13. The line renderer is a thin consumer. The layer's recorded change stream, drawn by the line renderer alone, gives
+    the same stdout and stderr bytes as the fixture's updates through the line session's view. `internal/cli/view.go`
+    holds no `switch` on `acpclient.Kind`.
+14. `internal/archtest` rule 13 passes. It was seen failing in a scratch copy on a planted import, in `internal/curate`,
+    of `internal/cli/render`, of `x/ansi`, and of `personality`.
+15. *(Carried by `0005-PLAN-v1-feature-scope.md` F9, not by this record's PLAN.)* The TUI renderer passes 13's replay
+    test against the same goldens, and one turn fed to both renderers in each mode gives them equal change streams.
 
 ## Pros and Cons of the Options
 
@@ -625,6 +904,45 @@ Verdict at the time: **feasible with conditions**, the conditions being D10's.
   gobble "builds no copy". D10 drives the library's primitive directly, as the line editor does, and draws no cursor
   code of its own.
 
+### go-tui-lib `v2.12.0` against F9 (survey, 2026-11-13)
+
+A read-only survey of go-tui-lib at its tag `v2.12.0`, its latest, the half of the owner's ruling of 2026-11-13 that
+the amendment does not build, relayed by the coordinator. Paths are go-tui-lib's at that tag; every package named
+carries "Stability: stable".
+
+* **What F9 can build on today.**
+  * The full-screen shell: `workspace.Workspace` (`workspace/workspace.go:145`) and `launch.Run`
+    (`launch/run.go:49`).
+  * A transcript: `streamtea.DocPane` (`stream/streamtea/pane.go:26`) over `stream.Doc` (`stream/document.go:47`).
+    `transcript.Transcript` is line-mode only.
+  * A permission dialog: `asktea.Dialog` (`ask/asktea/dialog.go:30`).
+  * Pickers: `palette.Picker` (`palette/picker.go:33`).
+  * The editor: `lineedittea.ComposerPane` over `lineedit.Composer` (`lineedit/composer.go:44`).
+  * Completion: `lineedit.Completer`, `palette.Files` and `command.Registry`.
+  * Streamed Markdown: `stream.Printer` (`stream/printer.go:24`) and `stream.Doc`. There is no code highlighter, and
+    `stream/glamourmd` is planned.
+  * Theming and colour off: `theme.Theme` (`theme/theme.go:253`), `glyph.ASCII()`, and `NO_COLOR`
+    (`launch/colour.go:14-22`).
+  * Tests: `tuitest.Golden` (`tuitest/tuitest.go:105`), `inlinetest.Screen` and `launchtest.Terminal`.
+* **What is absent.**
+  * Collapsible tool cards. Only pieces exist: `stream.Bounded` (`stream/bounded.go:35`) and `stream.Interpret`
+    (`stream/interpret.go:63`). "ACP-shaped agent widgets" is a candidate in go-tui-lib's own reports, with no record.
+  * Grouped activity rows. Only glyphs exist: `glyph.Set`'s `Done`, `Failed`, `Running` and `Pending`
+    (`glyph/glyph.go:61-66`).
+  * A diff view. A `diffview` is only named, in a go-tui-lib report.
+  * A spinner or status-bar component. There are `frame`'s ticks, `layout.WithFooter` (`layout/presets.go:87`), and
+    the line-mode `inline.Region`; a spinner is listed as planned.
+  * A plan checklist component.
+  * A full-screen thought display.
+  * A virtualised full-screen transcript.
+* **What 0005-MADR says to do about it.** [0005-MADR-v1-feature-scope.md](0005-MADR-v1-feature-scope.md) F9: "Where a
+  core behaviour is not in the selected tag yet, F9 waits rather than copying it."
+* **The consequence for the layer.** D13's output types map one to one onto those six absent components, the tool
+  card, the activity row, the diff, the status row, the thought and the plan, and onto the transcript, which exists.
+  When go-tui-lib gains a component, the TUI renderer adapts the matching item to it and adds nothing else. Neither the
+  layer nor this record decides anything about go-tui-lib: Q10 asks the owner. *(2026-11-13, Q10's ruling: the six
+  components are requested from go-tui-lib, shaped like D13's types, by a go-tui-lib agent-widgets record, to be drafted; F9 waits for them.)*
+
 ### Not in scope
 
 * The ACP stream, the agent's titles and summaries, and `acpserver`. The shell summary's trailing `:` when a failed
@@ -632,7 +950,9 @@ Verdict at the time: **feasible with conditions**, the conditions being D10's.
   stream, and is a record of its own if wanted.
 * Print mode's formats ([0008-MADR-native-cli-mode.md](0008-MADR-native-cli-mode.md) D9); `--stats` keeps its
   meaning there.
-* The enhanced TUI mode (`internal/tui`, a package doc alone at `f078889`).
+* The enhanced TUI mode (`internal/tui`, a package doc alone at `f078889`). *(2026-11-13, the amendment: its drawing
+  is still out of scope, and is 0005-PLAN F9's; its curation is now in scope, as the layer it shares with the line
+  view, D11 to D16.)*
 * The permission prompt's layout ([0029-MADR-permission-prompt-layout.md](0029-MADR-permission-prompt-layout.md)); it
   keeps the full title.
 * The sign-in surfaces. `/login`, `/logout`, `gobble setup`, the first-run offer and the wizard's steps are `0051-MADR-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md`
@@ -659,6 +979,10 @@ Verdict at the time: **feasible with conditions**, the conditions being D10's.
 * [0008-MADR-native-cli-mode.md](0008-MADR-native-cli-mode.md): D5 the turn, D7 rendering, D12 flags, D13 slash
   commands, D19 the phone-legible stream.
 * [0022-MADR-gobble-voice-and-personalities.md](0022-MADR-gobble-voice-and-personalities.md): the view's words.
+* *(2026-11-13, the amendment:)* [0004-MADR-go-module-architecture.md](0004-MADR-go-module-architecture.md): the
+  package map and import rules that rule 13 joins; [0005-MADR-v1-feature-scope.md](0005-MADR-v1-feature-scope.md)
+  F9 and [0032-MADR-go-tui-lib-integration-boundary.md](0032-MADR-go-tui-lib-integration-boundary.md) D1, A1, D3, D5
+  and D6: the TUI mode, the Charm boundary, and the components asked of go-tui-lib.
 * [0028-MADR-reply-word-wrap.md](0028-MADR-reply-word-wrap.md), [0030-MADR-resize-and-performance.md](0030-MADR-resize-and-performance.md),
   [0035-MADR-pin-current-sibling-releases-and-remove-gobble-copies.md](0035-MADR-pin-current-sibling-releases-and-remove-gobble-copies.md)
   D14: wrapping, the transcript and the reprint.

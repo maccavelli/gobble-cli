@@ -334,6 +334,8 @@ then offers `tool_search`, since an MCP tool is outside the session-start famili
 
 *(2026-10-07: 0002-PLAN Phase 7 delivers the steering and follow-up queues, in `agent` and over ACP: `_gobble/steer`, `_gobble/follow_up`, `_gobble/clear_queue` and the two queue modes. Step 1's Enter-steers and Alt+Enter-follows-up keys stay here, by the owner's decision of that date. A cancelled turn's response carries the cleared texts in `_meta.gobble.cleared`, for the editor to restore, as Pi's terminal does.)*
 
+*(2026-11-13, a cross-reference: F9 consumes `internal/curate`, the curation layer of [0056-MADR-curate-the-terminal-session-view-with-view-modes.md](0056-MADR-curate-the-terminal-session-view-with-view-modes.md) D11 to D16, and carries that record's Confirmation 15.)*
+
 **Accept:**
 
 * `teatest`-style golden-frame tests for the transcript, a tool card, and
