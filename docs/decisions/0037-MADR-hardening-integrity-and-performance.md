@@ -1,6 +1,6 @@
 ---
 status: accepted
-date: 2026-10-30
+date: 2026-11-14
 decision-makers: repository owner
 consulted: none
 informed: none
@@ -352,6 +352,8 @@ sibling library provides: AGENTS.md's rule is that gobble waits for the library.
   * loaded tools are appended last;
   * the system prompt is a fixed baseline, with patch messages for changes;
   * the prompt has no time-varying text.
+
+  *(2026-11-14, by the amendment of that date: within one process. Across a resume it is not: F33.)*
 * Usage is not counted twice. Orphaned tool calls get a result.
 * The retry goroutines and timers end.
 * The ACP connection's shutdown and cancellation are sound (0035 P11).
@@ -526,6 +528,8 @@ plan may tune one only through a deviation.
 * **D15. Every way a turn can end leaves the live history equal to the file's (F15).** Each error exit sets
   `s.history` from `s.state()`, as the compacted branch already does. The replay costs about 10 ms at 300 steps, and
   runs only on failure.
+
+  *(2026-11-14: carried out by `0037-PLAN-resume-prefix-and-failed-turn-history.md`, with D42, not by plan 2 (D44).)*
 * **D16. A session entry is in memory only once it is wholly on disk (F16).**
   * `Append` and `create` note the file's size before writing. On an error they truncate back to it, or, when the
     truncate fails, mark the log torn.
@@ -638,6 +642,10 @@ plan may tune one only through a deviation.
   *(2026-11-04, by the amendment's D36 and Q8 (a): a fourth plan,
   [0037-PLAN-session-store-durability.md](0037-PLAN-session-store-durability.md), carries D16 and D37–D41 and needs
   none of the others. Plan 2 keeps D12–D15 and D17–D22.)*
+
+  *(2026-11-14, by the amendment's D44: a fifth plan,
+  [0037-PLAN-resume-prefix-and-failed-turn-history.md](0037-PLAN-resume-prefix-and-failed-turn-history.md), carries
+  D15 and D42 and needs none of the others. Plan 2 keeps D12–D14 and D17–D22.)*
 * **D35. The upstream items are the owner's issues, filed 2026-10-30:** [go-llmprovider-sdk#10](https://github.com/maccavelli/go-llmprovider-sdk/issues/10) for the header option, and [acp-go-sdk2#13](https://github.com/maccavelli/acp-go-sdk2/issues/13) for
   back-pressure (Q7). gobble adopts each when a tag carries it, through a record of its own.
 
@@ -809,6 +817,190 @@ The decisions, written to those answers:
   * `FuzzParse` and the fixture tests are unchanged and pass.
   * D24's streaming summaries for `List` stay plan 3's.
 
+### Amendment (2026-11-14): a resumed session's request prefix, and the failed turn's history
+
+*Accepted 2026-11-14 for what the owner ruled: F33 and F15 are fixed, and the fix is built as soon as its plan is
+approved, ahead of gobble `v0.7.0`. How F33 is fixed is open: Q11 to Q13 below. The plan,
+[0037-PLAN-resume-prefix-and-failed-turn-history.md](0037-PLAN-resume-prefix-and-failed-turn-history.md), is
+`proposed`.*
+
+*(2026-11-14, later: the owner ruled on Q11 to Q13, each a dated note under its question: Q11 (a) and Q13 (a); Q12 a
+one-time measurement across every wire, then an assessment. The owner also ruled "Approve and build" on the plan,
+which is now `in-progress`.)*
+
+**Where this comes from.** On 2026-11-14 a read-only analysis of gobble's prompt caching ran probes on a scratch clone
+of `main` at `512db99`, outside the repository. The owner then ruled, that day: the records to draft now are "Resume
+prefix + failed-turn history" and "Cache visibility + 1-hour pricing", and the timing is "Resume/failed-turn fix now;
+rest after v0.7.0". The second record is
+[0057-MADR-cache-visibility-and-one-hour-pricing.md](0057-MADR-cache-visibility-and-one-hour-pricing.md). This
+amendment is the first. It belongs here because it is this record's driver "One source of truth" ("The live session
+and its file never disagree, and memory never holds what the disk does not") failing in a second place, and because
+F15, which it also carries out, is this record's finding with no plan.
+
+**What was run.** The probes were throwaway tests in package `acpserver` of the scratch clone. Each drives a session
+through acpclient against llmtest's scripted model, closes it, loads it in a second `Agent` over the same store, and
+prompts again. Each request is then rendered through the real `claude` and `openai` wires of `llm/provider` with a
+transport that records the body and answers 400, so nothing reaches a service. Two prototype tests, which the plan
+turns into its regression tests, were then run at `512db99` and failed as quoted below. The evidence key is the one
+above.
+
+* **F33. A resumed session does not send the messages the live session sent, so the provider's cached prefix is lost
+  on resume (T, R).**
+  * **Cause (a): a prompt's blocks.** In memory, a prompt with an `@path` mention, an embedded resource or a resource
+    link is a files block followed by its text blocks: `prompt.Content = append([]llm.Content{{Type:
+    llm.ContentText, Text: files}}, prompt.Content...)` (`acpserver/agent.go:675`). `userMessage` makes one block per
+    ACP text block (`acpserver/agent.go:1038-1046`), so a prompt of two text blocks is two blocks without any mention.
+    On disk the user entry joins them into one string: `return &session.Message{Role: session.RoleUser, Content:
+    jsonx.Quote(strings.Join(texts, "\n\n")), Timestamp: ms(ts)}` (`acpserver/history.go:68`). A reload makes one block
+    of it (`acpserver/history.go:253-260`).
+  * **Cause (b): a tool call's arguments.** The assistant entry keeps the model's arguments as a JSON value:
+    `b.Arguments = jsontext.Value(c.ToolArgs)` (`acpserver/history.go:98`). Written and read back through the store,
+    the value is compacted: a probe on the scratch clone gave `{"path": "a.go"}` → `{"path":"a.go"}`,
+    `{\n  "path": "a.go"\n}` → `{"path":"a.go"}` and `{"path":"a\/b.go"}` → `{"path":"a/b.go"}`, and kept key order,
+    `1.0` and non-ASCII text as given. Live history holds the model's own bytes. Anthropic's Messages wire sends
+    arguments as a decoded object, so it is unaffected; OpenAI's Responses wire sends them as a string, so it differs
+    (T). Other string-argument wires are inferred to differ the same way (I).
+  * **Measured.** One session of two prompts: the first names `@notes.md` and is answered after a `read` call whose
+    arguments hold a space, the second is answered at once; then closed, loaded, and prompted once more. The last request before the close against the first after the load, with the
+    cache markers removed, item by item:
+
+    | Wire | Tools | System | Messages |
+    | :--- | :--- | :--- | :--- |
+    | `claude` | same (17,090 bytes) | same (876 bytes) | diverge at item 0 of 6 |
+    | `openai` | same (16,036 bytes) | same (851 bytes) | diverge at item 0 of 6 |
+
+    Item 0 before the close is the files block alone. After the load it is the files block, a blank line, and `look at
+    @notes.md please`. Aligned past that item, the `openai` wire's `function_call` differs again, `"{\"path\":
+    \"notes.md\"}"` against `"{\"path\":\"notes.md\"}"`, and the `claude` wire's items are equal.
+  * **The prototype test at `512db99`**, three cases, each prompting twice, reloading and prompting once more, and
+    asserting that every earlier request's message items are a byte prefix of the post-reload request's:
+    * `mention`: fails on both wires, `request 0's item 0 of 2 is not the post-reload request's`, and the same for
+      requests 1 and 2;
+    * `two text blocks`: fails on both wires, before `{"content":"first block","role":"user"}`, after
+      `{"content":"first block\n\nsecond block","role":"user"}`;
+    * `spaced arguments`: fails on `openai` only, `request 1's item 1 of 3`, before
+      `{"arguments":"{\"path\": \"notes.md\"}",…}`, after `{"arguments":"{\"path\":\"notes.md\"}",…}`; `claude` passes.
+  * **What it costs.** The tools and the system prompt still match, so the provider can read those back. From the
+    first message on, the prefix is new: the whole history is sent uncached and, on Anthropic's routes, written again
+    at the write premium ([0021-MADR-prompt-caching-per-session.md](0021-MADR-prompt-caching-per-session.md),
+    Consequences: 1.25 times the input with `short`, 2 times with `long`). It happens once per resume, for any session
+    whose history holds a prompt with a file, a resource, a link or two text blocks, or, on a string-argument wire, a
+    tool call whose arguments are not compact. How often models send arguments that are not compact is not measured
+    (I).
+  * **What the records say.** The comment at `acpserver/agent.go:671-673` says "the user entry holds them, so a resumed
+    session gives the model what it had", after 0005-PLAN F3-4's "The user entry holds the expanded message, so a
+    resumed session gives the model what it had"
+    ([0005-PLAN-v1-feature-scope.md](0005-PLAN-v1-feature-scope.md)). That holds for the text, not for the bytes.
+    "Prompt-cache stability is sound", under "Looked at and found sound" above, and 0021-MADR F5 ("Its bodies are
+    byte-identical across calls and provider instances") were measured within one process, never across a resume.
+* **F15, re-read at `512db99` (M, R).** It stands as surveyed, with the lines moved.
+  * On a model error with no compaction, only the prompt joins live history: `s.history = append(s.history, prompt)
+    // the file keeps the prompt too` (`acpserver/agent.go:764`). The compacted branch already replays the file
+    (`:755-761`). The append-failure exits (`:684`, `:694`, `:713`, `:773`) leave `s.history` as it was.
+  * A probe: a `read` call, then a scripted 400 on the next model call, then a second prompt. Its requests by role:
+    1. `[system:text user:text]`
+    2. `[system:text user:text assistant:tool_call tool:tool_result]`
+    3. after the failure, in the same process: `[system:text user:text user:text]`
+    4. after a reload: `[system:text user:text assistant:tool_call tool:tool_result user:text assistant:text user:text]`
+  * The prototype test, the next request in the same process against the next request after a reload, fails at
+    `512db99`: `live: [system:text user:text user:text]`, `reloaded: [system:text user:text assistant:tool_call
+    tool:tool_result user:text]`.
+  * F15 also feeds F33: after a failed turn, the live session's next request is not the file's, so the first request
+    after a reload breaks the prefix again, even with F33 fixed.
+
+The owner ruled, 2026-11-14, that both are fixed now. The decisions, written to that ruling:
+
+* **D42. Every request a session sends carries, as a byte prefix of its messages, the messages of every earlier
+  request of that session, live or reloaded (F33).**
+  * "Earlier" is since the last intended change of prefix: the three of 0021-MADR F6 (a deferred tool's load, an MCP
+    server's late tools, plan mode) and a compaction, which rewrites the history by design.
+  * The comparison is on the wire, with the cache markers removed, because the markers move by design.
+  * How it is met is Q11, with Q13 under Q11 (a). Which wires the test covers is Q12.
+
+  *(2026-11-14, the rulings: memory takes the file's form (Q11 (a)), and a tool call's arguments take the store's form
+  in `agent`, on arrival (Q13 (a)). For the wires, the plan's P1 measures every wire once before the permanent test's
+  coverage is settled (Q12's ruling).)*
+* **D43. D15 is built now, with D42, in one plan.** The owner's timing: the plan is executed as soon as it is approved,
+  ahead of `v0.7.0`, between phases of
+  [0051-PLAN-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md](0051-PLAN-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md)
+  and [0052-PLAN-finish-the-chatgpt-plan-sign-in-on-the-sdk-engine.md](0052-PLAN-finish-the-chatgpt-plan-sign-in-on-the-sdk-engine.md),
+  never inside one. D15 is unchanged: every error exit sets `s.history` from `s.state()`.
+* **D44. A fifth plan, `0037-PLAN-resume-prefix-and-failed-turn-history.md`, carries D15 and D42.**
+  * D34's plan 2, still unwritten, keeps D12–D14 and D17–D22. This follows D36's precedent.
+  * The plan's regression tests are the probes made permanent: `TestResumeKeepsPrefix` from the prefix probe, and
+    `TestFailedTurnHistoryIsTheFiles` from the failed-turn probe. Each was seen failing at `512db99` as quoted above.
+  * The notes in other records wait for Q11's answer, since their wording depends on it, and the plan's P0 writes
+    them: 0005-PLAN F3-4's "so a resumed session gives the model what it had", and 0021-MADR F5.
+
+    *(2026-11-14: Q11 is ruled, and both notes are written.)*
+
+### Questions for the owner (2026-11-14)
+
+*(2026-11-14, later: the owner ruled on all three. The options stand as written, and each ruling follows its options.
+Until then this heading read "open".)*
+
+* **Q11. How live history and the file come to agree (D42).**
+  * **(a) Recommended. Memory takes the file's form.** The prompt is joined into one text block, with the same
+    `"\n\n"` join as its user entry, before the turn's first request. A tool call's arguments are put in the store's
+    form when they arrive: an object compacted as the store writes it; anything else left raw, since the store already
+    keeps that raw under `gobble.rawArguments` (`acpserver/history.go:99-106`) and gives it back.
+    * Every resumed session already sends this form today, so the model sees nothing it has not seen.
+    * Cost: the live request changes shape (one block where there were several), so `TestPromptCarriesFiles`'s
+      expectation (`acpserver/mentions_test.go:126`) changes with it. The store's compaction rule gains a second user,
+      tested equal to the round trip.
+    * Old sessions: their files already hold this form, so a resume loads what it loads today. The first request after
+      resuming a session written before the fix misses the cache once, as today. A session written after the fix and
+      resumed within the cache's lifetime reads its prefix.
+  * **(b) The file keeps memory's form.** A user entry of several blocks is stored as an array of text blocks, which
+    the session format already reads (`session/session.go:231-244`) and the reload turns into blocks
+    (`acpserver/history.go:253-260`). The model's raw arguments
+    are stored beside `arguments`, in `gobble.rawArguments`, whenever the store's form differs.
+    * Cost: user entries change shape on disk. Every reformatted argument is stored twice. Two writers must stay in
+      step with two readers.
+    * Old sessions: their files hold the joined form, which is all a resume can load. The first request after the
+      resume misses once. Their older turns stay joined, and only turns written after the fix round-trip exactly.
+  * **(c) Live history is always the file's.** After every turn, `s.history` is replayed from `s.state()`.
+    * Cost: alone it is worse than today. Within a turn the agent sends the in-memory forms, and the next turn would
+      send the file's, so the prefix would break inside a live session at every such turn. It therefore needs (a)'s
+      shaping as well. It also adds the replay to every turn: F28 measured `s.state()` at 10 ms and 6 MB for 300 steps,
+      and 81 ms and 67 MB for 3,000.
+    * Good: it would cover F15 by construction.
+    * Old sessions: as (a).
+
+  *Ruling, 2026-11-14: "Memory takes the file's form". **Decision: (a).***
+* **Q12. Which wires `TestResumeKeepsPrefix` renders.**
+  * **(a) Recommended. `claude` and `openai`.** They are the two shapes of arguments on the wire, an object and a
+    string, and both were seen failing at `512db99`. Cost: the other wires (Together, xAI and the gateways' routes)
+    are covered by reading, not by the test.
+  * **(b) Every wire that caches:** `claude`, `openai`, `grok`, `together`, `kilo` and OpenCode Zen's two routes. Cost:
+    a longer test, and one more fixture to keep as each wire changes. The cause is in gobble's history, not in a wire.
+  * **(c) The `llm.Request` alone, compared message by message before any wire.** Cost: it tests gobble's structures,
+    not the bytes a provider caches. It flags argument spacing that the `claude` wire decodes away, and misses any
+    difference a wire's own encoding brings.
+
+  *Ruling, 2026-11-14, none of the three options, verbatim: "test resume-prefix across all providers. once. measure.
+  assess whether we should test every caching wire, or only the 2 going forward based on results and facts."*
+  **Decision:**
+  * The plan's P1 runs a one-time measurement of the resume-prefix check on every provider wire that gobble can
+    render offline. As in the probe, a recording transport answers 400, so no live provider is called.
+  * It records, per wire, whether the prefix held before the fix and after it, and which cause, (a) or (b), the wire
+    exposes.
+  * It ends with an assessment put to the owner: whether the permanent test covers every caching wire, or the two
+    shapes `claude` and `openai`. Whether the measurement harness is kept as a test, or recorded as a one-off, is part
+    of the same question.
+  * Until the owner rules on that assessment, the permanent `TestResumeKeepsPrefix` covers `claude` and `openai`.
+* **Q13. Under Q11 (a), where a tool call's arguments take the store's form.**
+  * **(a) Recommended. In `agent`, when a call arrives,** beside the name's repair (`agent/agent.go:724-726`). Every
+    later request of the turn, and the history kept at its end, carry the same bytes. Cost: `agent` applies the store's
+    rule, through one function in `jsonx` that both share. A test holds it equal to a write and read through the store.
+  * **(b) In `llm/provider`'s adapter, as it makes `llm.ToolCallDone`.** Cost: the rule lives beside the SDK, far from
+    the store. llmtest's scripted turns bypass the adapter, so the `acpserver` tests would not exercise it.
+  * **(c) In `acpserver`, when the turn's messages are kept at its end.** Cost: the turn's own later requests still send
+    the raw form, and the next turn the stored one, so the prefix breaks inside a live session. `TestResumeKeepsPrefix`
+    would catch it.
+
+  *Ruling, 2026-11-14: "In the agent, on arrival". **Decision: (a).***
+
 ### Consequences
 
 * Good, because the one finding that destroys data (F1) and the one that turns a write into code execution (F2) are
@@ -835,6 +1027,11 @@ The decisions, written to those answers:
   than built (D38). *(Added 2026-11-04.)*
 * Bad, because the store gains a test seam, two unexported function fields for opening and cutting a file, so that a
   short write can be made on every host (D37). *(Added 2026-11-04.)*
+* Good, because a resumed session reads back the prefix it wrote, and a failed turn leaves the live session sending
+  what its file holds (D42, D15). *(Added 2026-11-14.)*
+* Neutral, because under Q11 (a) a live prompt with a file is sent as one text block, as every resumed session already
+  sends it. *(Added 2026-11-14.)*
+* Bad, because a session written before the fix still misses the cache once on its first resume. *(Added 2026-11-14.)*
 
 ### Confirmation
 
@@ -862,6 +1059,9 @@ The decisions, written to those answers:
   * *(Added 2026-11-04:)* a short write, a failed cut, a failed first write, and a torn last line in a current and in
     an older file (D37); a writer killed mid-append, and one killed with half a line on disk (D40); `parse` before and
     after, by benchmark (D41).
+  * *(Added 2026-11-14:)* a prompt with a mention, a prompt of two text blocks, and spaced arguments, each across a
+    close and a load, on the wires Q12 names (D42); a failed model call after a tool call, and a failed append, each
+    against a reload (D15).
 * Each performance decision's benchmark shows its gain against the survey's figure, and is held to its budget by
   `make perf` on all three hosts (D33). D41's benchmark is measured and recorded, not held to a budget.
 * The gates at each phase are those of every plan here:
@@ -920,6 +1120,9 @@ The decisions, written to those answers:
     D22, whose store items the amendment receives;
     [0038-REPORT-json-v2-standardization-and-sdk-surface.md](../reports/0038-REPORT-json-v2-standardization-and-sdk-surface.md):
     section 8's U3 and its `bytes.Lines` item; [gobble-cli#7](https://github.com/maccavelli/gobble-cli/issues/7): U3.
+  * *(Added 2026-11-14:)* [0021-MADR-prompt-caching-per-session.md](0021-MADR-prompt-caching-per-session.md): F5 and
+    F6, the prefix and its intended changes; [0057-MADR-cache-visibility-and-one-hour-pricing.md](0057-MADR-cache-visibility-and-one-hour-pricing.md):
+    the same analysis's second record.
 * **Revisit:**
   * the cut values in D9, D10, D12, D13 and D17, once the plans' tests and real use show where they bind;
   * D24's summary cache, if a list is still slow at a user's real session count;

@@ -2949,6 +2949,7 @@ Choices made within the wording:
   - **A `resource_link`** is `<name>: <uri>`, as Pi renders a link in MCP content (`packages/mcp/src/protocol/content.ts:78-102`), for the model to read with its tools.
   - **An image block** is left out, as now.
 - **The user entry** holds the expanded message, so a resumed session gives the model what it had.
+  - *(2026-11-14, by [0037-MADR-hardening-integrity-and-performance.md](0037-MADR-hardening-integrity-and-performance.md) F33 and Q11's ruling, "Memory takes the file's form": it gave the model the same text, not the same bytes. The live prompt was a files block followed by its text blocks; the entry joins them with `"\n\n"` into one, so a resumed session's request differed from the live one and lost the provider's cached prefix. Under [0037-PLAN-resume-prefix-and-failed-turn-history.md](0037-PLAN-resume-prefix-and-failed-turn-history.md) P1 the live prompt is joined the same way before its first request, so a resumed session gives the model the same bytes.)*
 - **`initialize`** advertises `promptCapabilities{embeddedContext: true, image: false, audio: false}`.
 
 **F3-4's files:**

@@ -1,6 +1,6 @@
 ---
 status: accepted
-date: 2026-11-13
+date: 2026-11-14
 decision-makers: repository owner
 consulted: "the owner's words of 2026-11-12 and 2026-11-13, quoted below; this repository at f078889 (main, level with origin/main, 2026-11-13), read for the audit below; a sample turn captured on 2026-11-13 from a scratch clone at f078889 with a throwaway test (never committed) that drove acpserver, through acpclient, into the line session's view, with llmtest's scripted model and no provider; go-tui-lib v2.12.0's inline, inline/inlinetest, transcript, frame and stream packages, read from the module cache; a read-only feasibility study of the live group row, 2026-11-13, under More Information; the owner's rulings of 2026-11-13 on Q1 to Q6 and on the type-ahead question, relayed by the coordinator; the owner's ruling of 2026-11-13, \"Shared layer + go-tui-lib survey\", relayed by the coordinator, with this repository at 8fc4233 (main, clean) read for the amendment of that date; a read-only survey of go-tui-lib at its tag v2.12.0 against F9, 2026-11-13, relayed by the coordinator, under More Information"
 informed: "`0051-PLAN-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md` and `0052-PLAN-finish-the-chatgpt-plan-sign-in-on-the-sdk-engine.md`, whose v0.7.0 lands first and whose P4 edits internal/cli/view.go; magic-cli-remote, whose ACP stream this record leaves unchanged"
@@ -288,6 +288,12 @@ renderer draws those items. The TUI draws the same items its own way.)*
 
 The status line and `--stats` (D7) are the same in every mode. A mode changes nothing already printed: a reprint at a
 resize draws what was written, in the mode it was written in.
+
+*(2026-11-14, by [0057-MADR-cache-visibility-and-one-hour-pricing.md](0057-MADR-cache-visibility-and-one-hour-pricing.md)
+D5, the owner's rulings "--stats, plus /usage and /session split" and "Same in every mode": `--stats` also shows the
+turn's cache reads and writes, from the prompt response's `cachedReadTokens` and `cachedWriteTokens`, and does so in
+every mode. This sentence holds unchanged. D13's `TurnEnd` already carries the `acpclient.Result` those counts are in,
+so it needs no change. D1 holds: the ACP stream does not change.)*
 
 ### D3. Like actions group by the tool's ACP kind, written once when the group closes (Q1)
 

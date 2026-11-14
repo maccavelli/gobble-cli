@@ -1,6 +1,6 @@
 ---
 status: accepted
-date: 2026-10-13
+date: 2026-11-14
 decision-makers: repository owner
 consulted: none
 informed: magic-cli-remote
@@ -65,6 +65,7 @@ A prompt cache is the service's, not gobble's: the service keeps the processed p
 - **F3. Today every session in a process shares one cache identity.** The Agent's one provider has one random session id: Kilo's task id and OpenCode's session header are the same for every session, and once `Cache` is set, so is the routing key on OpenAI, xAI and Together. A second session's turns are then routed as the first's. 0004-MADR item 6 decided against this and was never built.
 - **F4. A session id must come with a provider per session,** since the SDK takes it only at construction. A provider costs about 7 µs and 15 KB to build, holds nothing to close, and shares the process's connections, so one per session costs nothing measurable.
 - **F5. gobble's prefix is already stable.** Its bodies are byte-identical across calls and provider instances; the system prompt is a session's baseline with patches sent as messages; the tools keep their order. So a cached prefix is read back on the next call of the same session, unless the tools change.
+  - *(2026-11-14, by [0037-MADR-hardening-integrity-and-performance.md](0037-MADR-hardening-integrity-and-performance.md) F33: within one process. Across a resume the messages were not byte-identical: a prompt's blocks were joined on disk and a tool call's arguments compacted, so the first request after a resume diverged at its first message on the `claude` and `openai` wires. [0037-PLAN-resume-prefix-and-failed-turn-history.md](0037-PLAN-resume-prefix-and-failed-turn-history.md) makes the live forms the file's.)*
 - **F6. The prefix changes in three known ways,** each a cache break from that request on, by design, since a service caches exact prefixes: a deferred tool's load (0012-MADR F10, D9), an MCP server's tools joining after start-up (`acpserver/mcp.go:153-166`), and entering or leaving plan mode (`exit_plan`). Anthropic also invalidates the message blocks when the thinking level or tool choice changes; D2's fixed breakpoint keeps the tools and system prompt cached across that.
 - **F7. A compaction request should not ask.** Its prefix is its own system prompt and the serialised conversation, never sent again; a write that is never read costs 1.25 times the input on Anthropic. Pi asks for `"none"` there too.
 - **F8. A single `-p` prompt still benefits.** One prompt's tool loop makes several model calls over the same prefix (`agent/agent.go:345-351`, per call), so the second call of a turn reads what the first wrote.
@@ -73,6 +74,7 @@ A prompt cache is the service's, not gobble's: the service keeps the processed p
 - **F11. A response cache would be wrong, and would never hit.** Each model call of a session carries a longer history than the last, so no two requests of a session are equal; the SDK's retry already re-sends a failed request. Serving a stored reply would also skip a model call that the agent loop and its tool side effects depend on.
 - **F12. Warming is unblocked by the SDK and blocked by gobble's catalog.** Pi's warmer needs each model's cache TTL and prices to decide whether a refresh pays; gobble has neither until 0005-PLAN F4-2's catalog (0019-MADR D11). Without them a warmer can only re-send at a fixed interval, spending money on sessions that never return.
 - **F13. `CacheWrite1hTokens` has no consumer in gobble yet.** Only Anthropic's Messages reports it, Pi's stored usage has no field for it, and its use is pricing a one-hour write at 2 times rather than 1.25 times, which needs F4-2's prices.
+  - *(2026-11-14, by [0057-MADR-cache-visibility-and-one-hour-pricing.md](0057-MADR-cache-visibility-and-one-hour-pricing.md) D3 and D4: the count gets its consumer. It is carried into `llm.Usage` and stored as the usage member `cacheWrite1h`. The catalog still has no one-hour rate, so the owner ruled "Catalog rate, flagged approximate": a one-hour write is priced at the catalog's one write rate, and a cost that includes one is marked approximate.)*
 
 ## Decision Drivers
 
@@ -126,6 +128,7 @@ Chosen option: "A", because it asks every provider that can through the SDK's on
   - The per-session state is the session: its provider and its retention live on `liveSession`. There is no separate provider cache, no ring buffer, no response cache and nothing on disk.
   - If 0005-PLAN X5's warming lands, it keeps one "last cacheable request" per session, as Pi's warmer does, on `liveSession` beside the provider.
 - **D7. Warming and one-hour pricing wait for the catalog** (F12, F13). 0005-PLAN X5's warming is no longer blocked by the SDK; it needs F4-2's per-model cache TTL and prices. `llm.Usage` gains no one-hour field until F4-2's cost work has a use for it.
+  - *(2026-11-14, by [0057-MADR-cache-visibility-and-one-hour-pricing.md](0057-MADR-cache-visibility-and-one-hour-pricing.md) D3 and D4: the field's deferral is lifted. `llm.Usage` gains `CacheWrite1hTokens`, counted from the SDK to the session file. The pricing half stays deferred until the catalog carries a one-hour rate. Until then a one-hour write is priced at the write rate, and a cost that includes one is marked approximate. Warming is unchanged.)*
 - **D8. The records are corrected by dated notes:** 0004-MADR's adapter item 6 (built here); 0005-MADR `:578-581` and 0005-PLAN X5 step 6 (`:725`) (the SDK's block is lifted; the catalog's remains); 0012-MADR F10 and D13 (the cache-control request is met at go-llmprovider-sdk `v1.12.0`, and deferral is still a request); 0018-MADR D19 (`cacheRetention` is added here); and `llm/doc.go`'s request description. The owner closes issue 2 when the work is committed.
 - **D9. One billed check against a live service,** approved by the owner: four requests to OpenAI `gpt-6-luna` through `gobble acp` with the owner's test key in the child's environment only, two turns of one session with `cacheRetention: short` and two of another with `none`. Claude's path rests on the SDK's recorded run.
 
