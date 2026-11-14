@@ -530,6 +530,23 @@ plan may tune one only through a deviation.
   runs only on failure.
 
   *(2026-11-14: carried out by `0037-PLAN-resume-prefix-and-failed-turn-history.md`, with D42, not by plan 2 (D44).)*
+
+  *(2026-11-14, as built, commit `124213c`: `(*Agent).replayFile` sets `s.history` from `s.state().history` under
+  `a.mu`, and `Prompt` calls it at the model-error exit (the compacted and the non-compacted branch alike, so the
+  `append(s.history, prompt)` form is gone), at the in-turn append failure, and at the three append failures before the
+  turn (the system-prompt write, the user entry, the `gobble.tools` entry). The exits that write nothing, the voice
+  cancel and the provider error, and the `out.err` exit after `End`, whose history already holds the turn, are left
+  as they were. `TestFailedTurnHistoryIsTheFiles` and `TestFailedAppendHistoryIsTheFiles` each fail at the base and on a
+  planted break. The three pre-turn replays have no test of their own. The replay took 10.9 to 19.0 microseconds for
+  a session of two or three messages.)*
+
+  *(2026-11-14, annotation to the note above, by the owner's ruling "Remove the two" under the plan's P2a: the replays at the
+  system-prompt write and at the user entry were removed, since the file cannot be ahead at those exits (at most one
+  append precedes each, and memory is updated only after a write succeeds); `Prompt` keeps the replay at the
+  `gobble.tools` entry, the in-turn append failure and the model error. "The three pre-turn replays have no test of their
+  own" no longer holds: `TestFailedPreTurnAppendHistoryIsTheFiles` tests the tools-entry replay, seen failing with it
+  removed, and keeps cases for the other two exits as checks that memory equals the file there, each seen failing on a
+  plant that lets memory run ahead.)*
 * **D16. A session entry is in memory only once it is wholly on disk (F16).**
   * `Append` and `create` note the file's size before writing. On an error they truncate back to it, or, when the
     truncate fails, mark the log torn.
@@ -932,6 +949,15 @@ The owner ruled, 2026-11-14, that both are fixed now. The decisions, written to 
   `TestResumeKeepsPrefix` renders one wire per body shape, the Messages, Responses, chat-completions, Gemini
   interactions and OpenCode Google route shapes. The all-wire harness stays a recorded one-off, its tables in
   `0037-PLAN-resume-prefix-and-failed-turn-history.md`'s P1 record.)*
+
+  *(2026-11-14, as built, commit `a3b5c26`, with the amendments above: a live prompt's text blocks are one block, joined
+  by `userText`, the join the user entry uses; a tool call's arguments pass through `jsonx.StoredArguments` as they
+  arrive in `agent`; and `TestResumeKeepsPrefix` runs four cases (`mention`, `two text blocks`, `spaced arguments`,
+  `empty arguments`) on the five wires. One consequence, ruled by the owner on 2026-11-14: for a call with empty argument text the
+  file no longer carries the redundant `"gobble":{"rawArguments":""}` member, since the call is now the object `{}`
+  when it is written. It reads back as `{}` as before, so the prefix holds, but the file is not byte-for-byte what
+  `512db99` wrote for that one case. The owner ruled "Amend the promise": the plan's Goal 5 and Rollout line carry a
+  dated amendment, and the earlier gobble reads the shorter entry back as `{}`. See the plan's P3 record.)*
 * **D43. D15 is built now, with D42, in one plan.** The owner's timing: the plan is executed as soon as it is approved,
   ahead of `v0.7.0`, between phases of
   [0051-PLAN-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md](0051-PLAN-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md)

@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: complete
 date: 2026-11-14
 associated-madr: "0037-MADR-hardening-integrity-and-performance.md"
 ---
@@ -33,6 +33,15 @@ When this plan is complete:
 * a live prompt that carries files, a resource, a link or several text blocks is one text block, joined as its user
   entry joins it, and a tool call's arguments are in the store's form from the moment they arrive (Q11 (a), Q13 (a));
 * the session files this plan's code writes are byte-for-byte what `512db99` would write for the same turns.
+
+  *(2026-11-14, amendment, the owner's ruling "Amend the promise", relayed by the coordinator: the session files are
+  byte-identical to what gobble wrote before, except a tool call with empty argument text, whose entry is written
+  `"arguments":{}` with no `gobble.rawArguments` member. The cause is the owner's ruling "Yes, in this plan": empty
+  argument text is treated as `{}` on arrival, so the entry builder sees an object and has nothing raw to keep. The
+  entry reads back as `{}`, as before. Verified in P3: the `512db99` code, given the file the finished phase wrote for such
+  a call, gives the arguments back as `{}`. Not verified by running Pi: the member is gobble's own, which Pi ignores
+  (`gobbleMember`'s comment in `acpserver/history.go`), so its absence is not a change Pi can see.)*
+
 
 ## Scope
 
@@ -259,6 +268,45 @@ five in all; the harness stays a recorded one-off, its tables in P1's record. Se
    budget is set.
 6. C5. Commit (C8).
 
+### P2a — a test for each of the three pre-turn replays (added 2026-11-14)
+
+*(2026-11-14, amendment, the owner's ruling, verbatim: "Those 3 untested replays need tests". It supersedes the
+coordinator's earlier instruction, "Keep the three untested replays as built", which was the coordinator's call and not
+the owner's. The step comes before P3's close-out, and P3's `complete` waits for it.)*
+
+**Files:** `acpserver/resume_test.go`, this plan, `docs/README.md`, and the 0037 MADR's dated note on the sentence it
+annotates. No production file: the step is test-only, and a test that exposes a defect in `Prompt` or `replayFile` stops
+it (C6).
+
+1. **Facts re-read (C1).** The three pre-turn calls of `a.replayFile(s)` in `Prompt` (`acpserver/agent.go`), in the order
+   `Prompt` reaches them: after the `writePrompt` failure (the baseline or patch entry of `gobble.prompt`), after the
+   user entry's failed append, and after the `gobble.tools` entry's failed append. Their lines are recorded in the P2a
+   record, read from the file.
+2. **One test for each,** in the style of `TestFailedAppendHistoryIsTheFiles`: make that one append fail, then assert that
+   the live session's history equals what a fresh load of the file gives, not that a function ran.
+3. **Each seen failing (C7),** on a scratch copy of the finished step: that site's `a.replayFile(s)` call removed, that
+   site's test fails and the other two still pass. A test that passes with its replay removed is a finding, not
+   something to force: the replay at that site is dead code, or the test cannot tell it from none, and the owner decides.
+4. **C5**, then the MADR's sentence "The three pre-turn replays have no test of their own" gets a dated note that they now
+   do. Commit (C8).
+
+*(2026-11-14, amendment, the owner's ruling on P2a's finding, relayed by the coordinator. The finding stands as it was
+found: with each call removed on a scratch copy of the tree at `124213c`, the test's cases for the system-prompt-write
+exit (`:698`) and the user-entry exit (`:709`) passed, and the case for the `gobble.tools` exit (`:729`) failed with
+`live: []`, `file: ["user{text|two|||}"]`. The three options put to the owner were "Keep as a safety net" (no code change,
+the two replays recorded as unprovable), "Keep and prove by double plant", and "Remove the two". The owner chose
+**"Remove the two"**: delete the two replay calls that cannot matter, keep the tools-entry replay with its proven test,
+and keep the cases for the other two exits as checks that memory equals the file there, each seen to fail on a plant that
+lets memory run ahead. Why the two cannot matter: at most one append precedes each of those exits, and memory is
+updated only after a write succeeds, so at those exits the file holds nothing that the history lacks.)*
+
+*(2026-11-14, amendment to P2a's scope, by the same ruling: the files are `acpserver/agent.go`, only the two
+`a.replayFile(s)` calls at the system-prompt-write exit and the user-entry exit of `Prompt`, each replaced by a comment
+saying why no replay is needed there, and nothing else in production code; and `acpserver/resume_test.go`. This widens P2a
+from test-only to a two-line production change. P2a's step 3 now reads: each of the four cases of the two exits is seen
+failing on a plant that lets memory and the file disagree at that exit; the tools-entry case is seen failing with its
+replay removed; a case that no plausible plant can make fail is a finding that stops the step.)*
+
 ### P3 — close-out
 
 1. **Goldens.** `git diff --stat <P0>..HEAD -- '*.golden' session/jsonl/testdata acpserver/testdata` is empty.
@@ -293,6 +341,10 @@ Each phase's own steps are its acceptance criteria. Across the plan:
   * P2: after a failed model call or a failed append, the model's next request holds the tool calls that ran and their
     results, as the file does.
 * The session file is unchanged in format and in bytes. Any earlier gobble, and Pi, read what this plan's code writes.
+
+  *(2026-11-14, amendment, as Goal 5's: the same exception. A tool call with empty argument text is written
+  `"arguments":{}` without the `gobble.rawArguments` member that `512db99` wrote beside it, and reads back the same.
+  Earlier gobble reads it (verified in P3); Pi is not run, and ignores the member by `gobbleMember`'s comment.)*
 
 ## Execution record
 
@@ -660,6 +712,13 @@ lacks, but a `gobble.tools` entry is written only for a deferred tool of a sessi
 sessions do not have (a default session's file holds only `gobble.prompt` custom entries). They are the same one-line
 call as the exits that are tested, and cost nothing when the file and memory agree. No plant is claimed for them.
 
+*(2026-11-14, annotation, by the owner's ruling "Remove the two" under P2a: the replays at `:686` and `:696` of the base,
+the system-prompt-write and user-entry exits, were removed, because the file cannot be ahead there: at most one append
+precedes each exit and memory is updated only after a write succeeds. `Prompt` replays at the in-turn append failure, the
+model error and the `gobble.tools` exit, not at "the three append failures before the turn". The third, `:715`, is
+kept and tested (`TestFailedPreTurnAppendHistoryIsTheFiles/tools_entry`, seen failing with its replay removed). The table
+above and the paragraph above stay as they were written.)*
+
 **Cost (step 5).** `s.state()` for the tests' sessions of 2 and 3 messages took 10.9 to 19.0 microseconds on the session
 host, measured by a timer in a scratch copy and not kept. No budget is set.
 
@@ -694,3 +753,174 @@ two planted breaks, passing; every gate green; staged, not committed. Escalation
 Deviation 2 (the race detector of the WSL2 distro is not used for `-race`).*
 
 <!-- p2-record-end -->
+
+<!-- p2a-record-begin -->
+### P2a record (2026-11-14): the pre-turn replays
+
+Run by a mainstream-tier agent at medium effort, from `124213c`.
+
+**Facts re-read (C1).** `Prompt`'s three pre-turn calls of `a.replayFile(s)` at `124213c`, read from `acpserver/agent.go`:
+`:698` after the `writePrompt` failure (the `gobble.prompt` baseline or patch entry), `:709` after the user entry's failed
+append, `:729` after the `gobble.tools` entry's failed append.
+
+**The finding.** One table test, `TestFailedPreTurnAppendHistoryIsTheFiles`, five cases, was written first: each fails the
+named append once, in a prompt that fails before its turn, then compares the live session's history (role, and each
+block's type, text, call id, tool and arguments) with the history of a second `Agent` that fresh-loads the file, an absent
+file giving none. With each call removed in turn on a scratch copy of `124213c`: the cases for `:698` (`system prompt
+baseline`, `system prompt patch`) and for `:709` (`user entry`, `user entry after a patch`) all passed, and `tools entry`
+(`:729`) failed with `live: []`, `file: ["user{text|two|||}"]`. The file cannot be ahead at the first two exits: at most one
+append precedes each, it failed whole, and memory takes the patch's update only after a write succeeds.
+
+**The ruling, and the options.** The three options put to the owner were "Keep as a safety net", "Keep and prove by double
+plant" and "Remove the two". The owner chose **"Remove the two"**, relayed by the coordinator (see P2a's amendments above).
+
+**What changed.** `acpserver/agent.go`: the two `a.replayFile(s)` calls at the system-prompt-write exit and the user-entry
+exit are removed, each replaced by a comment saying why no replay is needed there; the `gobble.tools` exit keeps its call;
+no other production change; `replayFile`'s comment is still true. `acpserver/resume_test.go`: the test above, with
+`preTurnAgent`, `historyOf` and `preTurnFailure` and the existing `failAt` store wrapper. No existing test's result changed:
+`go test ./acpserver ./agent ./jsonx` passes.
+
+**Each case seen failing (C7),** on a scratch copy of the finished step, one plant at a time, each built and failed
+(exit 1); the cases not named passed:
+
+1. *Memory runs ahead at the system-prompt-write exit:* `s.history = append(s.history, prompt)` before that exit's return.
+   `system prompt baseline` fails, `live: ["user{text|two|||}"]`, `file: []`; `system prompt patch` fails, live
+   `["user{text|one|||}" "assistant{text|a|||}" "user{text|two|||}"]`, file `["user{text|one|||}" "assistant{text|a|||}"]`.
+2. *The patch's update joins the history before its write is known to have succeeded:* the `s.history = append(s.history,
+   *update)` block moved above the `w.err` check. `system prompt patch` fails (live holds the `Updated system prompt
+   section "project_context"` message, the file does not); `user entry after a patch` also fails, because the update is then
+   in the history twice; `system prompt baseline` passes (no update).
+3. *Memory runs ahead at the user-entry exit:* the same `append(s.history, prompt)` before that exit's return.
+   `user entry` fails, `live: ["user{text|two|||}"]`, `file: []`; `user entry after a patch` fails, with the live
+   history holding the prompt that the file lacks.
+4. *The `gobble.tools` exit's replay removed:* `tools entry` fails, `live: []`, `file: ["user{text|two|||}"]`; the other
+   four pass.
+
+Every one of the five cases fails on at least one plant: `system prompt baseline` on 1, `system prompt patch` on 1 and 2,
+`user entry` on 3, `user entry after a patch` on 2 and 3, `tools entry` on 4.
+
+**Not verified.** Nothing is claimed for a failure inside `writePrompt` that leaves a partial write (it adds one entry,
+so it cannot).
+
+#### Gates (C5)
+
+Hosts by placeholder: L is a WSL2 distro of the Windows laptop, which a plain suite may use (the owner's note, P1's
+Deviation 2); L2 the Linux machine itself; W the Windows laptop run natively; M this Mac. Every gate ran after the last
+code change (the two removed calls and the plants' test file), and no code changed after it. Times are UTC, queue waits
+included.
+
+1. `make pre-add-check` on `acpserver/agent.go` and `acpserver/resume_test.go`: exit 0 (`go-precheck: 2 file(s) clean
+   (gofmt, golint, govulncheck)`); `golangci-lint run ./acpserver/... ./agent/... ./jsonx/...`: 0 issues. A first `gofmt -l`
+   named `acpserver/resume_test.go` before the new test's formatting was applied; it is clean.
+2. `go test -count=1 ./acpserver ./agent ./jsonx` on host M: exit 0. No existing test's result changed.
+3. `make preflight` on host L, a plain gate (`pick-host` chose the distro for it): exit 0, 19:43:27 to 19:51:08; the lint
+   reports 0 issues.
+4. The race gates on hosts whose race detector is sound only (0058-MADR). Host L2 was pinned by starting `run-on-host
+   --need linux --race`, reading the `target=` line, and killing a run that landed on the distro (none had to be killed):
+   * `make race` on host L2: exit 0 (39 `ok`, 0 `FAIL`, 0 `DATA RACE`), 19:51:08 to 19:54:19;
+   * `CGO_ENABLED=1 go test -race -count=1 ./...` on host L2: exit 0 (38 `ok`, 0 `FAIL`, 0 `DATA RACE`), 19:54:19 to
+     19:57:25;
+   * the same natively on host W through `sh -c`: exit 0 (38 `ok`, 0 `FAIL`), 19:57:25 to 19:59:07;
+   * `make race` on host M through `run-heavy`: exit 0 (39 `ok`, 0 `FAIL`, 0 `DATA RACE`), 19:59:07 to 19:59:53, no queue
+     wait. `make race` does not pass `-count=1`, so 36 of the 39 packages are Go test-cache hits (same inputs, same
+     host); `acpserver` (30.9 s) and the packages whose inputs changed ran. The uncached runs on hosts L2 and W cover
+     every package under `-race` after this change.
+
+**Documentation search (the owner's standing requirement, 2026-11-14).** Searched `README.md`, `docs/README.md`,
+`docs/architecture.md`, `docs/guides/*.md`, `AGENTS.md`, every `*.md` outside the 0037 records for "replayFile", "failed
+append", "failed turn", "live history", "s.history" and related words, and the doc comments of `acpserver/` and
+`agent/`. There is no repository `CHANGELOG.md` (the only ones are inside `.opencode/node_modules`). The doc comments of
+the files in this change are corrected here (`Prompt`'s exit comments, `replayFile`'s comment, which is still true). The
+outside findings are listed in the hand-off, not edited: `acpserver/doc.go:6-7` says the history is "held in memory until
+0002-PLAN Phase 4 persists it", stale since the history is the file's; nothing else states what `Prompt` does on a failed
+append or a failed turn.
+
+*Provenance: mainstream model, medium effort. Outcome: P2a done: two replay calls removed by the owner's ruling "Remove
+the two", the tools-entry replay kept and tested, five cases each seen failing on a plant; every gate green; staged, not
+committed. Escalations: the P2a finding (replays that cannot matter), ruled by the owner, relayed by the coordinator.
+Rulings carried: "Those 3 untested replays need tests", "Remove the two".*
+
+<!-- p2a-record-end -->
+
+<!-- p3-record-begin -->
+### P3 record (2026-11-14): close-out
+
+Run by a mainstream-tier agent at medium effort, from `124213c` (P1 is `a3b5c26`, P2 `124213c`; P0 and the plan's records
+are `cccef77`). This is a records phase: the only runs are the checks it lists and the Verification section's test
+commands.
+
+**The plan's status was set `complete` here, put back to `in-progress` the same day, and set `complete` again after P2a,** because the owner's ruling "Those
+3 untested replays need tests" adds P2a before this close-out (see P2a). Goal item 5 was not met for one case when this
+record was first written; with the owner's "Amend the promise" amendment it is. Every other Goal item and every Verification item is met. The
+evidence, item by item:
+
+| Item | Met | Evidence |
+| :--- | :--- | :--- |
+| Goal 1: every request carries its predecessors as a byte prefix, live and reloaded, cache markers removed | yes | `TestResumeKeepsPrefix`, four cases on five wires (P1, P1a); seen failing at `cccef77` and on plants 1, 2 and 5; passing at `124213c` on hosts M, L2 and W (P3's runs below) |
+| Goal 2: the one-time measurement is recorded and the owner has ruled on its assessment | yes | P1's record holds the 16-wire before and after tables; the ruling "One wire per shape, 5 wires" is carried out as P1a |
+| Goal 3: after a failed model call or append, the next request is a reload's | yes | `TestFailedTurnHistoryIsTheFiles` and `TestFailedAppendHistoryIsTheFiles` (P2), each seen failing at `feafd65` and on a planted break |
+| Goal 4: a prompt is one text block as its entry joins it, and arguments are in the store's form on arrival | yes | `TestPromptCarriesFiles`, `TestArgsTakeTheStoresForm`, `TestToolArgsAsStored`; `a3b5c26` |
+| Goal 5: the session files this plan's code writes are byte-for-byte what `512db99` would write for the same turns | yes, as amended for one case | see "Goal 5" and Deviation 3 below |
+| Verification 1: the `acpserver` test command passes on all three hosts, and under `-race` | yes | plain: 6 `PASS` (the five tests and `TestArgsTakeTheStoresForm`) on host M, host L2 (the Linux machine) and host W, 18:59 to 19:01 UTC at `124213c`; `-race`: the whole tree on hosts L2, W and M after P2's last code change (P2's record) |
+| Verification 2: `TestArgsTakeTheStoresForm` passes | yes | the same runs |
+| Verification 3: P1's record holds both tables and the owner's ruling, carried out by P1a | yes | P1's record, "Step 1a and step 7a", "P1a record" |
+| Verification 4: every named test has its quoted failure at its base and on each planted break | yes | P1's record (bases `cccef77`, five plants) and P2's record (base `feafd65`, two plants) |
+| Verification 5: goldens, `session/jsonl/testdata` and `acpserver/testdata` are identical to P0's commit | yes | `git diff --stat cccef77..HEAD -- '*.golden' session/jsonl/testdata acpserver/testdata` is empty |
+| Verification 6: `apidiff` reports one addition, in `jsonx`, and nothing else | yes, in its meaning | `make apidiff` is a no-op below `v1.0.0` (no stable tag); the exported identifiers added to non-test `.go` files from `cccef77` to `124213c` are `jsonx.StoredArguments` alone |
+| P3 step 1: goldens | yes | as Verification 5 |
+| P3 step 2: the disclosure guard over the plan's commits | yes | the guard run over `cccef77..124213c`, exit 0; this commit is covered when it is pushed |
+| P2a: a test for each pre-turn replay, by the owner's ruling "Those 3 untested replays need tests" | yes | P2a record: the tools-entry replay tested and seen failing without it; the two that cannot matter removed by "Remove the two"; five cases each seen failing on a plant |
+| P3 step 3: `complete` when every Goal item is met | yes | Goal 5 as amended; P2a done |
+
+**Goal 5, the item that was open.** The session files of `TestResumeKeepsPrefix`'s `mention` and `spaced arguments` cases are
+byte-for-byte equal (ids and timestamps masked) between an export of `512db99` and one of `124213c`; no source of
+`acpserver`, `agent`, `jsonx` or `session` changed between `512db99` and `cccef77` (`git log` over those paths is empty),
+so P1's comparison against `cccef77` was already this one. A third case, a call whose argument text is empty, differs on
+the assistant entry's one block:
+
+* at `512db99`: `"name":"read","arguments":{},"gobble":{"rawArguments":""}`
+* at `124213c`: `"name":"read","arguments":{}`
+
+The cause is the owner's ruling "Yes, in this plan": the empty text is now `{}` on arrival, so the entry builder sees an
+object and writes no `gobble.rawArguments` member. The file reads back as `{}` exactly as before, which is the point of
+the change; only the redundant member is gone. The Rollout section's "unchanged in format and in bytes" has the same exception. Nothing else differs.
+
+Options put to the owner, recommended first:
+
+1. **Amend Goal 5 and the Rollout sentence** to say "except a call with empty argument text, whose entry has no
+   `gobble.rawArguments` member". Cost: a dated PLAN amendment, no code; this plan then becomes `complete` in P3's
+   commit. Uncovered: nothing, since the reader's result is the same.
+2. **Keep the bytes exactly:** carry the model's original argument text beside the stored form so the entry builder
+   can write the old pair. Cost: a new field on `llm.ToolCallDone` or `agent.Message`, tests, and a re-run of P1's gates,
+   for a member that carries no information. It would widen Q13 (a), which the owner ruled as "in the agent, on arrival".
+3. **Withdraw the empty-text rule** (the "Yes, in this plan" ruling). Cost: the one-time prefix miss comes back for a
+   call with empty arguments on the Responses and chat-completions wires, which `TestResumeKeepsPrefix/empty_arguments`
+   measures, and the two empty-argument tests go.
+
+**Deviation 3 (2026-11-14, resolved; recorded by the mainstream model at medium effort).**
+
+* *Found:* the session file of a scripted session with one `read` call whose argument text is empty, written by an export
+  of `512db99` and by an export of `124213c` (a throwaway test in each, masked ids and timestamps, a stdlib comparison),
+  differs on the assistant entry: `"arguments":{},"gobble":{"rawArguments":""}` against `"arguments":{}`. `mention` and
+  `spaced arguments` are equal. No golden or committed test shows it, because no committed test writes a call with empty
+  arguments to a file and compares bytes; `TestResumeKeepsPrefix/empty_arguments` and `TestToolArgsAsStored/empty`
+  show the in-memory and read-back form.
+* *Options put to the owner:* (1) amend the promise; (2) keep the bytes exactly, by carrying the model's raw text beside
+  the stored form; (3) withdraw the empty-arguments rule.
+* *The owner's choice, relayed by the coordinator:* "Amend the promise", option 1. Goal 5 and the Rollout line carry a
+  dated amendment; no code changed. (`complete` followed P2a.)
+* *Verified here:* an export of `512db99`, given the file the finished phase wrote for that call (it has no
+  `rawArguments` member), gives the arguments back as `{}` through `assistantContent`. *Not verified:* Pi, which was not
+  run; the basis is `gobbleMember`'s comment that the member is gobble's own, which Pi ignores.
+
+**Changes in P3.** The MADR's D15 and D42 carry dated "as built" notes with the commits `124213c` and `a3b5c26`. The README
+rows are updated, with the amendment and Deviation 3 above, and, after P2a, the status set to `complete`. `0058-PLAN-cli-race-reports-on-the-wsl2-distro-are-not-gobble-races.md` cites nothing P3 changes, so it
+has no note. No code and no test changed.
+
+**Checks.** `scripts/check_records.py --check-all`, `make check-records`, markdownlint, the redact dry run and an
+identifier grep over the added lines: all exit 0 or clean, run after this record was written.
+
+*Provenance: mainstream model, medium effort. Outcome: P3's checks run; every Goal and Verification item met, Goal 5 as
+amended by the owner's ruling "Amend the promise"; the plan is `complete` after P2a; staged, not committed. Escalations: Goal 5's
+empty-arguments case, ruled by the owner (relayed by the coordinator). Rulings carried: "Amend the promise".*
+<!-- p3-record-end -->

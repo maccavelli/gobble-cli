@@ -695,7 +695,9 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 	// as Pi puts a system patch before it (0005-PLAN F3-1).
 	system, update := a.writePrompt(&w, s)
 	if w.err != nil {
-		a.replayFile(s)
+		// No replay: the one append before this exit failed whole, and the
+		// history takes the patch's update only after it, so the file holds
+		// nothing the history lacks (0037-PLAN P2a).
 		return acp.PromptResponse{}, appendFailed(w.err)
 	}
 	if update != nil {
@@ -706,7 +708,10 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 	}
 	w.add(session.Entry{Type: session.TypeMessage, Message: userEntryMessage(prompt, session.Timestamp(a.now()))})
 	if w.err != nil {
-		a.replayFile(s)
+		// No replay: the user entry failed whole, and the history holds the
+		// patch's update exactly as the file's patch entry does, so the file
+		// holds nothing the history lacks (0037-PLAN P2a). The exit after
+		// the gobble.tools entry replays, where the file holds the prompt.
 		return acp.PromptResponse{}, appendFailed(w.err)
 	}
 	mcpTools := a.mcpTools(turnCtx, s)

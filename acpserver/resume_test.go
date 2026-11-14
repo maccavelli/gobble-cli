@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -16,11 +17,15 @@ import (
 
 	acp "github.com/maccavelli/acp-go-sdk2"
 
+	"github.com/maccavelli/gobble-cli/acpclient/acptest"
 	"github.com/maccavelli/gobble-cli/jsonx"
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/llm/llmtest"
 	"github.com/maccavelli/gobble-cli/llm/provider"
 	"github.com/maccavelli/gobble-cli/session"
+	"github.com/maccavelli/gobble-cli/session/jsonl"
+	"github.com/maccavelli/gobble-cli/tool"
+	"github.com/maccavelli/gobble-cli/tool/builtin"
 )
 
 // bodyRecorder is an HTTP transport that keeps each request's path and
@@ -418,4 +423,127 @@ func TestFailedAppendHistoryIsTheFiles(t *testing.T) {
 		t.Errorf("the live request %v lacks the assistant's tool call that the file holds", roles)
 	}
 	sameRequest(t, live, reloaded)
+}
+
+// preTurnAgent is an Agent as promptAgent builds one, with the read tool and
+// a config directory of its own, and change applied to its options. It
+// returns the Agent too, so a test can read the history it holds.
+func preTurnAgent(t *testing.T, dir, cfg string, p llm.Provider, change func(*Options)) (*Agent, *acptest.Conn) {
+	t.Helper()
+	var logs bytes.Buffer
+	opts := Options{Version: "1.2.3", Provider: func(string, llm.Retry) (llm.Provider, error) { return p, nil },
+		Models: func() ModelChoice { return testModels }, Store: jsonl.New(dir, jsonl.Options{}),
+		Tools: []tool.Tool{builtin.Read()}, Prompt: PromptOptions{ConfigDir: cfg},
+		Logger: slog.New(slog.NewTextHandler(&logs, nil))}
+	if change != nil {
+		change(&opts)
+	}
+	ag := New(opts)
+	c := acptest.Connect(t, ag, &acptest.Client{Allow: true})
+	ag.SetConnection(c.Agent)
+	t.Cleanup(func() {
+		if err := ag.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	initialize(t, c.Client)
+	return ag, c
+}
+
+// historyOf is the history session id holds in memory, one string for each
+// message, with its role and each block's type, text, call id, tool and
+// arguments: what the model is sent, without what the file adds to it (usage,
+// cost, stamps).
+func historyOf(a *Agent, id acp.SessionId) []string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	var out []string
+	for _, m := range a.sessions[id].history {
+		var parts []string
+		for _, c := range m.Content {
+			parts = append(parts, strings.Join([]string{c.Type, c.Text, c.ToolCallID, c.ToolName, c.ToolArgs}, "|"))
+		}
+		out = append(out, string(m.Role)+"{"+strings.Join(parts, ";")+"}")
+	}
+	return out
+}
+
+// preTurnFailure fails the first append that match accepts, once the session
+// is armed, in a prompt that fails before its turn starts, and returns the
+// history the live session holds after it and the history a fresh load of
+// its file holds. A session whose file was never created holds none. When
+// warm, a first prompt succeeds and AGENTS.md changes before the failing
+// one, so that prompt writes a system-prompt patch; resources adds a
+// deferred tool of a session-start family, so that the first prompt loads it.
+func preTurnFailure(t *testing.T, warm, resources bool, match func(session.Entry) bool) (live, file []string) {
+	t.Helper()
+	dir, cwd, cfg := t.TempDir(), t.TempDir(), t.TempDir()
+	writeFile(t, filepath.Join(cwd, "AGENTS.md"), "First rule.")
+	var armed, fired atomic.Bool
+	script := llmtest.NewScript(llmtest.Text("a"), llmtest.Text("b"))
+	ag, c := preTurnAgent(t, dir, cfg, script, func(o *Options) {
+		o.Store = failAt{Store: o.Store, done: &fired, match: func(e session.Entry) bool { return armed.Load() && match(e) }}
+		if resources {
+			o.Tools = append(o.Tools, tool.New("resource_stub", "A deferred tool of a session-start family.",
+				func(context.Context, struct{}, tool.Env) (string, error) { return "ran", nil },
+				tool.WithExposure(tool.ExposureDeferred), tool.WithFamily(builtin.ResourceFamily),
+				tool.WithAnnotations(tool.Annotations{ReadOnlyHint: true})))
+		}
+	})
+	sid := newSession(t, c, cwd, nil).SessionId
+	if warm {
+		if _, err := prompt(t, c, sid, "one"); err != nil {
+			t.Fatal(err)
+		}
+		writeFile(t, filepath.Join(cwd, "AGENTS.md"), "Second rule.")
+	}
+	armed.Store(true)
+	if _, err := prompt(t, c, sid, "two"); err == nil || !strings.Contains(err.Error(), "scripted append failure") {
+		t.Fatalf("the failing prompt answered %v, want the scripted append failure", err)
+	}
+	if !fired.Load() {
+		t.Fatal("the append the test means to fail never ran")
+	}
+	live = historyOf(ag, sid)
+	if _, err := c.Client.CloseSession(t.Context(), acp.CloseSessionRequest{SessionId: sid}); err != nil {
+		t.Fatal(err)
+	}
+	if files, err := filepath.Glob(filepath.Join(dir, "*", "*_"+string(sid)+".jsonl")); err != nil || len(files) == 0 {
+		return live, nil // no file: nothing to load, so no history
+	}
+	ag2, c2 := preTurnAgent(t, dir, cfg, llmtest.NewScript(llmtest.Text("c")), nil)
+	if _, err := c2.Client.LoadSession(t.Context(), acp.LoadSessionRequest{SessionId: sid, Cwd: cwd, McpServers: []acp.McpServer{}}); err != nil {
+		t.Fatal(err)
+	}
+	return live, historyOf(ag2, sid)
+}
+
+// After an append that fails before the turn starts, the live session holds
+// the history a fresh load of its file gives (0037-MADR D15): the system
+// prompt's baseline or patch, the user entry, and the gobble.tools entry are
+// the three appends before the turn, and each exit replays the file.
+func TestFailedPreTurnAppendHistoryIsTheFiles(t *testing.T) {
+	isPrompt := func(e session.Entry) bool {
+		return e.Type == session.TypeCustom && e.CustomType == session.CustomPrompt
+	}
+	isUser := func(e session.Entry) bool { return e.Message != nil && e.Message.Role == session.RoleUser }
+	isTools := func(e session.Entry) bool { return e.Type == session.TypeCustom && e.CustomType == customTools }
+	for _, tc := range []struct {
+		name            string
+		warm, resources bool
+		match           func(session.Entry) bool
+	}{
+		{"system prompt baseline", false, false, isPrompt},
+		{"system prompt patch", true, false, isPrompt},
+		{"user entry", false, false, isUser},
+		{"user entry after a patch", true, false, isUser},
+		{"tools entry", false, true, isTools},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			live, file := preTurnFailure(t, tc.warm, tc.resources, tc.match)
+			if !slices.Equal(live, file) {
+				t.Errorf("after the failed append, the live history is not the file's:\n  live: %q\n  file: %q", live, file)
+			}
+		})
+	}
 }
