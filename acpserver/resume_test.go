@@ -2,13 +2,16 @@ package acpserver
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	acp "github.com/maccavelli/acp-go-sdk2"
@@ -17,6 +20,7 @@ import (
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/llm/llmtest"
 	"github.com/maccavelli/gobble-cli/llm/provider"
+	"github.com/maccavelli/gobble-cli/session"
 )
 
 // bodyRecorder is an HTTP transport that keeps each request's path and
@@ -267,4 +271,151 @@ func checkPrefix(t *testing.T, id string, bodies [][]byte) {
 			break
 		}
 	}
+}
+
+// roleSeq is req's messages as "role:type", the type of each message's first
+// content block, as a failure message reads them.
+func roleSeq(req *llm.Request) []string {
+	out := make([]string, 0, len(req.Messages))
+	for _, m := range req.Messages {
+		kind := "empty"
+		if len(m.Content) > 0 {
+			kind = m.Content[0].Type
+		}
+		out = append(out, string(m.Role)+":"+kind)
+	}
+	return out
+}
+
+// sameRequest fails unless live, the request a session sent after a failed
+// turn, is the request reloaded, which a session loaded from its file sent
+// for the same prompt: the same roles and block types, and the same bytes on
+// the claude and openai wires with the cache markers removed (0037-MADR D15).
+func sameRequest(t *testing.T, live, reloaded *llm.Request) {
+	t.Helper()
+	if lr, rr := roleSeq(live), roleSeq(reloaded); !slices.Equal(lr, rr) {
+		t.Errorf("after a failure, the live request is not the reloaded one:\n  live:     %v\n  reloaded: %v", lr, rr)
+		return
+	}
+	for _, w := range resumeWires[:2] { // claude and openai
+		lb, rb := wireBodies(t, w, []*llm.Request{live}), wireBodies(t, w, []*llm.Request{reloaded})
+		// Only the messages: the two sessions are two sessions, so their
+		// system prompts name their own directories and ids.
+		litems, _ := wireShape(t, lb[0])
+		ritems, _ := wireShape(t, rb[0])
+		if !slices.Equal(litems, ritems) {
+			t.Errorf("%s: after a failure, the live request's wire body is not the reloaded one's:\n  live:     %.300s\n  reloaded: %.300s", w.shape, strings.Join(litems, " "), strings.Join(ritems, " "))
+		}
+	}
+}
+
+// failedTurnRequests runs a turn that fails and then a second prompt, and
+// returns the second prompt's request: in one process when reload is false,
+// and with a close and a load into a second Agent over the same store before
+// the second prompt when it is true. first is the first prompt's script, and
+// change, when set, changes the first Agent's options, such as to wrap its
+// store; wantErr says whether the first prompt's error is the failure the
+// test scripted.
+func failedTurnRequests(t *testing.T, reload bool, first *llmtest.Script, change func(*Options), wantErr func(error) bool) *llm.Request {
+	t.Helper()
+	dir, cwd := t.TempDir(), t.TempDir()
+	if err := os.WriteFile(filepath.Join(cwd, "notes.md"), []byte("forty-two\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var logs bytes.Buffer
+	var changes []func(*Options)
+	if change != nil {
+		changes = append(changes, func(o *Options) { change(o) })
+	}
+	c := promptAgent(t, dir, first, PromptOptions{}, &logs, changes...)
+	sid := newSession(t, c, cwd, nil).SessionId
+	if _, err := prompt(t, c, sid, "read it"); err == nil || !wantErr(err) {
+		t.Fatalf("the failing turn answered %v", err)
+	}
+	second := first
+	if reload {
+		if _, err := c.Client.CloseSession(t.Context(), acp.CloseSessionRequest{SessionId: sid}); err != nil {
+			t.Fatal(err)
+		}
+		second = llmtest.NewScript(llmtest.Text("after"))
+		c = promptAgent(t, dir, second, PromptOptions{}, &logs)
+		if _, err := c.Client.LoadSession(t.Context(), acp.LoadSessionRequest{SessionId: sid, Cwd: cwd, McpServers: []acp.McpServer{}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := prompt(t, c, sid, "again"); err != nil {
+		t.Fatal(err)
+	}
+	reqs := second.Requests()
+	return reqs[len(reqs)-1]
+}
+
+// After a failed model call, the live session's next request is the request
+// a reload of its file sends: the failed turn's prompt, and the tool call
+// and result that ran before the failure, are in it, as the file holds them
+// (0037-MADR D15).
+func TestFailedTurnHistoryIsTheFiles(t *testing.T) {
+	script := func() *llmtest.Script {
+		return llmtest.NewScript(
+			llmtest.ToolCall("r1", "read", `{"path":"notes.md"}`),
+			llmtest.Turn{Err: &llm.APIError{Status: http.StatusBadRequest, Err: errors.New("scripted, not retried")}},
+			llmtest.Text("after"))
+	}
+	isAPI := func(err error) bool { return err != nil }
+	live := failedTurnRequests(t, false, script(), nil, isAPI)
+	reloaded := failedTurnRequests(t, true, script(), nil, isAPI)
+	sameRequest(t, live, reloaded)
+}
+
+// failAt is a store that fails the append of the first entry that match
+// accepts, and keeps every other append as the store it wraps does.
+type failAt struct {
+	session.Store
+	match func(session.Entry) bool
+	done  *atomic.Bool
+}
+
+type failAtLog struct {
+	session.Log
+	f failAt
+}
+
+func (f failAt) Create(ctx context.Context, h session.Header) (session.Log, error) {
+	l, err := f.Store.Create(ctx, h)
+	return failAtLog{Log: l, f: f}, err
+}
+
+func (f failAt) Open(ctx context.Context, id session.ID) (session.Log, error) {
+	l, err := f.Store.Open(ctx, id)
+	return failAtLog{Log: l, f: f}, err
+}
+
+func (l failAtLog) Append(ctx context.Context, e session.Entry) error {
+	if l.f.match(e) && l.f.done.CompareAndSwap(false, true) {
+		return errors.New("scripted append failure")
+	}
+	return l.Log.Append(ctx, e)
+}
+
+// After a failed append inside a turn, the live session's next request is
+// the request a reload of its file sends: the assistant's tool call, which
+// was written before its result failed to be, is in it (0037-MADR D15).
+func TestFailedAppendHistoryIsTheFiles(t *testing.T) {
+	run := func(reload bool) *llm.Request {
+		var done atomic.Bool
+		store := func(o *Options) {
+			o.Store = failAt{Store: o.Store, done: &done, match: func(e session.Entry) bool {
+				return e.Message != nil && e.Message.Role == session.RoleToolResult
+			}}
+		}
+		first := llmtest.NewScript(llmtest.ToolCall("r1", "read", `{"path":"notes.md"}`), llmtest.Text("after"))
+		return failedTurnRequests(t, reload, first, store, func(err error) bool {
+			return strings.Contains(err.Error(), "scripted append failure")
+		})
+	}
+	live, reloaded := run(false), run(true)
+	if roles := roleSeq(live); !slices.Contains(roles, "assistant:tool_call") {
+		t.Errorf("the live request %v lacks the assistant's tool call that the file holds", roles)
+	}
+	sameRequest(t, live, reloaded)
 }

@@ -608,3 +608,89 @@ owner's, ruled "Root-cause it first"). Rulings: Q12's "One wire per shape, 5 wir
 arguments.*
 
 <!-- p1-record-end -->
+
+<!-- p2-record-begin -->
+### P2 record (2026-11-14): a failed turn leaves the live session the file's
+
+Run by a mainstream-tier agent at medium effort, from base `feafd65` (P1 is `a3b5c26`; the records commit is
+`feafd65`).
+
+**Facts re-read at `feafd65` (C1),** the exits of `Prompt` in `acpserver/agent.go` at that base, and whether the file can
+hold entries that live history lacks there:
+
+| Line | Exit | The file can be ahead of live history | Handled |
+| :--- | :--- | :--- | :--- |
+| `:632` | `settleVoice` cancelled, before any entry | no: nothing is written yet | left as it is |
+| `:647` | `sessionProvider` failed, before any entry | no | left as it is |
+| `:686` | `writePrompt` failed | yes: the baseline or patch entry may be written | replays |
+| `:696` | the user entry failed to append | the prompt is absent from both; a patch entry is in both | replays (no observable change) |
+| `:715` | the `gobble.tools` entry failed | yes: the file holds the prompt, live history does not | replays |
+| `:757-770` | a model error, compacted or not | yes: the prompt, and every message and result written before the error | replays; the non-compacted branch was `append(s.history, prompt)` at `:766` |
+| `:775` | an append failed inside the turn | yes: the entries written before the failed one | replays |
+| `:791-792` | `out.err` after `End` | no: `s.history` already holds the turn's messages | left as it is |
+| `:802` | the trailing `cancelled(s)` | only if `Run` ended with neither `End` nor an error, which it does only after the consumer stops iterating, and `Prompt` never stops | left as it is |
+
+**The change.** `(*Agent).replayFile(s)` sets `s.history` from `s.state().history` under `a.mu`, as the compacted branch
+did. The five exits marked "replays" call it, the model-error exit once for both branches (the non-compacted branch is
+now the same replay, step 2). It runs only on a failure.
+
+**Tests** (`acpserver/resume_test.go`), each run once in one process and once with a close and a load into a second
+`Agent` over the same store before the second prompt, comparing the second prompt's request by roles and block types
+and by its message bytes on the `claude` and `openai` wires with the cache markers removed. They compare the messages
+only: the two runs are two sessions, whose system prompts name their own directories and ids.
+
+| Test | Scripted | Seen failing at `feafd65` |
+| :--- | :--- | :--- |
+| `TestFailedTurnHistoryIsTheFiles` | a `read` call, then a 400 on the next model call | `live: [system:text user:text user:text]`, `reloaded: [system:text user:text assistant:tool_call tool:tool_result user:text]` |
+| `TestFailedAppendHistoryIsTheFiles` | a store wrapper that fails the append of the first tool result (`failAt`, one shot): the first prompt answers the append failure | `the live request [system:text user:text] lacks the assistant's tool call that the file holds`, `live: [system:text user:text]`, `reloaded: [system:text user:text assistant:tool_call user:text]` |
+
+Both fail at `feafd65` (exit 1) and pass on the fix. `go test` on `acpserver`, `agent` and `jsonx`: exit 0.
+
+**Planted breaks (C2, C7),** each on a scratch copy of the finished phase, each built and failed (exit 1):
+
+1. The model-error exit restored to `s.history = append(s.history, prompt)`: `TestFailedTurnHistoryIsTheFiles`
+   fails, `live: [system:text user:text user:text]`, `reloaded: [system:text user:text assistant:tool_call
+   tool:tool_result user:text]`; the other test passes.
+2. The in-turn append-failure exit left without the replay: `TestFailedAppendHistoryIsTheFiles` fails, `the live request
+   [system:text user:text] lacks the assistant's tool call that the file holds`; the other test passes.
+
+**Not exercised by a test, and why.** The replays at `:686`, `:696` and `:715`. At `:686` and `:696` the file and live
+history agree after a failed append, so no request differs; at `:715` the file holds the prompt that live history
+lacks, but a `gobble.tools` entry is written only for a deferred tool of a session-start family, which the test
+sessions do not have (a default session's file holds only `gobble.prompt` custom entries). They are the same one-line
+call as the exits that are tested, and cost nothing when the file and memory agree. No plant is claimed for them.
+
+**Cost (step 5).** `s.state()` for the tests' sessions of 2 and 3 messages took 10.9 to 19.0 microseconds on the session
+host, measured by a timer in a scratch copy and not kept. No budget is set.
+
+**Goldens.** `git diff --exit-code HEAD -- '*.golden' session/jsonl/testdata acpserver/testdata` exit 0.
+
+#### Gates (C5)
+
+Hosts by placeholder: L2 is the Linux machine itself, W the Windows laptop run natively, M this Mac. Every gate ran
+after the last code change (the one-line `unconvert` fix in `resume_test.go`), and no code changed after it. Times are UTC,
+queue waits included.
+
+1. `make pre-add-check` on `acpserver/agent.go` and `acpserver/resume_test.go`: exit 0 (`go-precheck: 2 file(s) clean
+   (gofmt, golint, govulncheck)`); `golangci-lint run ./acpserver/... ./agent/... ./jsonx/...` on the session host:
+   0 issues, after the fix to the one finding it first made (`unconvert`, `string(m.Content[0].Type)` in `roleSeq`).
+2. `go test -count=1 ./acpserver ./agent ./jsonx` on the session host: exit 0.
+3. `make preflight` on host L2 after `pick-host`: exit 0, 18:36:11 to 18:48:41 (12 min 30 s); `golangci-lint` 0 issues,
+   records and markdownlint clean. It ran before this record gained these gate lines.
+4. The race gates, on hosts whose race detector is sound only (0058-MADR; Deviation 2 of P1). Host L2 was pinned by
+   starting `run-on-host --need linux --race`, reading the `target=` line, and killing a run that landed on the laptop's
+   WSL2 distro (none had to be killed this time):
+   * `make race` on host L2: exit 0 (39 `ok`, 0 `FAIL`, 0 `DATA RACE`), 18:48:41 to 18:51:54;
+   * `CGO_ENABLED=1 go test -race -count=1 ./...` on host L2: exit 0 (38 `ok`, 0 `FAIL`, 0 `DATA RACE`), 18:51:54 to
+     18:54:56;
+   * the same natively on host W through `sh -c`: exit 0 (38 `ok`, 0 `FAIL`), 18:54:56 to 18:56:33;
+   * `make race` on host M through `run-heavy`: exit 0 (39 `ok`, 0 `FAIL`, 0 `DATA RACE`), 18:56:33 to 18:57:18, no
+     queue wait. `make race` does not pass `-count=1`, so 36 of the 39 packages are Go test-cache hits from P1's run on
+     the same host with the same inputs; `acpserver` (29.8 s) and `internal/cli` (36.5 s), whose inputs changed, ran.
+     The uncached results on hosts L2 and W cover every package under `-race` after this change.
+
+*Provenance: mainstream model, medium effort. Outcome: P2's code and its two tests built, seen failing at `feafd65` and on
+two planted breaks, passing; every gate green; staged, not committed. Escalations: none in P2. Rulings carried: P1's
+Deviation 2 (the race detector of the WSL2 distro is not used for `-race`).*
+
+<!-- p2-record-end -->

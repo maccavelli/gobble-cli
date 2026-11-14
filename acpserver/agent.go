@@ -584,6 +584,18 @@ func (s *liveSession) append(ctx context.Context, now time.Time, e session.Entry
 // state is the session's replay state along its tree's path.
 func (s *liveSession) state() state { return replayPath(s.tree.Entries(), s.tree.Path()) }
 
+// replayFile sets the session's history to the file's: what a load of the
+// file would give the model. A prompt that fails with entries written that
+// the live history lacks calls it on its way out, so the session's next
+// request is the request a reload would send (0037-MADR D15). It runs only
+// on a failure.
+func (a *Agent) replayFile(s *liveSession) {
+	st := s.state()
+	a.mu.Lock()
+	s.history = st.history
+	a.mu.Unlock()
+}
+
 // appendFailed is a failed append as an ACP error: a session whose file
 // gobble does not rewrite, an older version's, is invalid request with
 // session.ErrOldVersion's text (0005-PLAN F2); any other failure is
@@ -683,6 +695,7 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 	// as Pi puts a system patch before it (0005-PLAN F3-1).
 	system, update := a.writePrompt(&w, s)
 	if w.err != nil {
+		a.replayFile(s)
 		return acp.PromptResponse{}, appendFailed(w.err)
 	}
 	if update != nil {
@@ -693,6 +706,7 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 	}
 	w.add(session.Entry{Type: session.TypeMessage, Message: userEntryMessage(prompt, session.Timestamp(a.now()))})
 	if w.err != nil {
+		a.replayFile(s)
 		return acp.PromptResponse{}, appendFailed(w.err)
 	}
 	mcpTools := a.mcpTools(turnCtx, s)
@@ -712,6 +726,7 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 	if fresh := startLoads(tools, loaded); len(fresh) > 0 {
 		w.addEntry(toolsEntry(fresh, ""))
 		if w.err != nil {
+			a.replayFile(s) // the file holds the prompt
 			return acp.PromptResponse{}, appendFailed(w.err)
 		}
 		loaded = append(loaded, fresh...)
@@ -754,24 +769,18 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 	for ev, err := range ag.Run(turnCtx, env, history, prompt) {
 		if err != nil {
 			out.flush()
-			if auto.compacted {
-				// The rebuilt history already holds the prompt, and the turn
-				// before its failure: the file's (0005-PLAN F5-2 decision 3).
-				st := s.state()
-				a.mu.Lock()
-				s.history = st.history
-				a.mu.Unlock()
-			} else {
-				a.mu.Lock()
-				s.history = append(s.history, prompt) // the file keeps the prompt too
-				a.mu.Unlock()
-			}
+			// The file holds the prompt, and every message and tool result
+			// the turn wrote before its failure, a compaction's rebuilt
+			// history included: the live session takes what a reload would
+			// (0005-PLAN F5-2 decision 3; 0037-MADR D15).
+			a.replayFile(s)
 			a.markFailure(a.provOf(s), err)
 			return acp.PromptResponse{}, promptError(a.provOf(s), err)
 		}
 		w.event(ev)
 		if w.err != nil {
 			out.flush()
+			a.replayFile(s) // the file holds the entries written before the failed one
 			return acp.PromptResponse{}, appendFailed(w.err)
 		}
 		if r, ok := ev.(agent.Retry); ok {
