@@ -65,9 +65,9 @@ lines were read at `f078889`; P0 re-reads each one this plan names at the base a
 * P3b only: a new `internal/cli/statusrow.go`; `internal/cli/output.go` (`diag`, `logRecord`);
   `internal/cli/permission.go` (`askPermission`'s yield); `internal/cli/render/spinner.go` (retired, or kept for its
   frames alone); their tests; and dated amendments of `0030-MADR-resize-and-performance.md` D2, `0035-MADR-pin-current-sibling-releases-and-remove-gobble-copies.md` D14 step 5b and
-  `0008-MADR-native-cli-mode.md` D5's spinner line (MADR D9), written in P3b and in no earlier phase. If Q7 is answered (b) or (c),
+  `0008-MADR-native-cli-mode.md` D5's spinner line (MADR D9), written in P3b and in no earlier phase. If Q7 is answered (b) ~~or (c)~~,
   `internal/cli/line.go`'s turn-time terminal mode and a dated amendment of `0024-MADR-cli-mode-polish.md` D1 join P3b by amendment of
-  this PLAN.
+  this PLAN. *(2026-11-14: (c) struck by the owner's ruling on the MADR's Q7, "Drop the third option".)*
 * *(2026-11-13, the amendment; P1b unless named otherwise:)*
   * a new package `internal/curate`, with its tests and `testdata/` (MADR D11 to D14). P1 creates it, with its doc and
     the fixture alone.
@@ -297,9 +297,11 @@ Stage 1's output is unchanged off a terminal and when a group closes; only the b
 inherits none of them. Nothing in `internal/curate` changes in this phase.)*
 
 0. **Q7, type-ahead echo.** Before step 1, write `TestStatusRowUnderEcho` (below) against a first, throwaway
-   status row in a scratch copy, show the owner its screens for the MADR's three options, and record the ruling as a
-   dated note under the MADR's Q7. Under (a) the steps stand; under (b) or (c) this PLAN is amended first (Scope
-   names the files), and `0024-MADR-cli-mode-polish.md` D1 is amended by a dated note in this phase.
+   status row in a scratch copy, show the owner its screens for the MADR's ~~three options~~ two remaining options, (a)
+   and (b), and record the ruling as a dated note under the MADR's Q7. Under (a) the steps stand; under (b) ~~or (c)~~
+   this PLAN is amended first (Scope names the files), and `0024-MADR-cli-mode-polish.md` D1 is amended by a dated note
+   in this phase. *(2026-11-14: the owner ruled on the MADR's Q7, "Drop the third option": (c), raw input during a
+   turn with typed keys held for the next prompt, is ruled out, and step 0 chooses between (a) and (b).)*
 1. `internal/cli/statusrow.go`: a `statusRow` owning one `inline.Region` on stderr, made with
    `inline.WithoutCursorQuery()`, `inline.WithHeight(1)` and the editor's reflow choice (`editor.go:153-156` at
    `f078889`); `Show(text)` (frame and text, cut to the width), `Hide()`, `Print(text)`, `Resize(width)`; a frame

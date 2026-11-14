@@ -687,12 +687,18 @@ to be Unix's alone; that is unverified.
 * (b) Echo off during a turn (`ECHO` cleared, `ICANON`, `ISIG` and output processing kept), restored before the
   prompt. Cost: amends `0024-MADR-cli-mode-polish.md` D1; type-ahead is no longer shown while it is typed; a mode change on every turn,
   on three systems.
-* (c) Raw mode during the turn, with the keys read and kept as type-ahead for the next prompt. Cost: the largest
-  change: amends `0024-MADR-cli-mode-polish.md` D1, takes over Ctrl+C handling during a turn, and changes the line editor's input path.
+* ~~(c) Raw mode during the turn, with the keys read and kept as type-ahead for the next prompt. Cost: the largest
+  change: amends `0024-MADR-cli-mode-polish.md` D1, takes over Ctrl+C handling during a turn, and changes the line editor's input path.~~
+  *(Struck 2026-11-14 by the owner's ruling below.)*
 
 *Ruling, 2026-11-13: "Decide in stage 2". **Open.** `0056-PLAN-curate-the-terminal-session-view-with-view-modes.md` P3b decides it with screen tests in hand
 (`inlinetest.Screen` with `Cooked` set, an echoed key written between frames), and records the owner's answer here as
 a dated note. `0024-MADR-cli-mode-polish.md` D1 stands until then.*
+
+*(2026-11-14, the owner's ruling, relayed by the coordinator: "Drop the third option". (c) is ruled out: no raw input
+during a turn, and no typed keys held for the next prompt. Q7 stays open between (a), the echo accepted with each frame
+drawn from the row's start, and (b), echo off during a turn; `0056-PLAN-curate-the-terminal-session-view-with-view-modes.md`
+P3b step 0 chooses between them.)*
 
 *(2026-11-13, the amendment: Q8 to Q10 are added from it and from the go-tui-lib survey, each open. None blocks
 `0056-PLAN-curate-the-terminal-session-view-with-view-modes.md`; each is decided before

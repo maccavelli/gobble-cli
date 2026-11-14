@@ -587,6 +587,14 @@ machine, Windows and macOS instead of the distro (round 2, item 10): all three e
 `-race` on the three touched packages had already passed on the Linux machine (item 8). The WSL2 distro is not used
 for any `-race` gate of this plan.)*
 
+*(2026-11-14, later: a correction, and the record now written. The reports this deviation describes as "data races
+between goroutines reading config and files while the test body sets up state" each name one goroutine on both sides,
+the access and the previous access alike: no report names a second goroutine, so none is a data race, and none is
+test-only sharing. The byte-for-byte check of one test binary was made on the Linux machine; Windows and macOS ran
+builds of their own, also clean. The evidence, the verdict and the owner's rulings of 2026-11-14 are in
+[0058-MADR-cli-race-reports-on-the-wsl2-distro-are-not-gobble-races.md](0058-MADR-cli-race-reports-on-the-wsl2-distro-are-not-gobble-races.md),
+now `accepted`, and its plan; it is no longer pending.)*
+
 **Rulings and escalations in P1, in order.** Deviation 1 (the fourth plant's wording; resolved in the phase). The
 gocognit failure (fixed in the test). Q12's ruling on the assessment, "One wire per shape, 5 wires" (P1a, carried out in
 P1's tree). Amendment 1, "Yes, in this plan" (the empty argument text). Deviation 2 and its ruling, "Root-cause it
