@@ -1065,6 +1065,7 @@ record; the owner commits. P2a and P3 are not started.
 *(2026-11-14, later: "Met, subject to the owner's word on Finding 1" is resolved by deviation 1 below: the two `--lib`
 runs are repeated against the owner's local commit, and the push waits for both to report 0 failing. Until then
 that part of the acceptance is open, not met.)*
+*(2026-11-14, later still: met. Both `--lib` runs reported 0 failing against `7120c3b`; see deviation 1.)*
 
 **Deviations of P2 (2026-11-14, the owner's rulings, relayed by the cross-repository coordinator).**
 
@@ -1073,6 +1074,17 @@ that part of the acceptance is open, not met.)*
    failing. If either fails, the commit stays local and it comes back to you. The gate is run as designed; only the
    order changes." Rejected: accepting the scratch rehearsal; changing the checker. The gate is not edited. The
    results of the two runs against the commit are recorded here when they are made (not yet made).
+   *(2026-11-14, later: the commit was not the owner's own. P2 is committed locally as `7120c3b`, one commit ahead of
+   `origin/main` (`35fda07`), made by the cross-repository coordinator under the owner's standing approval of
+   2026-11-12 for commits of approved phases; so "I commit P2" in the option's text above, and "the owner's local
+   commit" in the note under P2's acceptance, read: the coordinator. The two runs, each through `run-heavy`, one after
+   the other, the exit status taken before the output was read, against `7120c3b`: `python3 -B scripts/check_libs.py
+   --lib go-llmprovider-sdk --keep`, exit 0, 21:03:21 to 21:04:18, "0 failing checks"; `python3 -B
+   scripts/check_libs.py --lib authcontract --keep`, exit 0, 21:04:18 to 21:05:13, "0 failing checks". Each ran get and
+   tidy, version, modules, build, vet on linux, darwin and windows, test, staticcheck, lint, govulncheck and advisories,
+   all ok, and api "pinned at ...; nothing to compare" (v1.31.0 and v0.1.0). The clone each checked was at `7120c3b`:
+   `--keep` left the scratch clones, and `git rev-parse --short HEAD` in each printed `7120c3b`, its origin this
+   repository. The scratch was then removed. The push is the coordinator's, after this record is committed.)*
 2. **Two version statements join P2's scope.** The owner chose "In this commit": "Add the two lines to P2's scope by a
    dated deviation and correct them to v1.31.0 before the commit, so the docs move with the code. The Markdown checks
    are rerun; no code changes." Rejected: leaving them to gobble's docs plan. `README.md:163` (Stack, "Models") now
