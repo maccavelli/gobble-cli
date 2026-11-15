@@ -12,8 +12,11 @@ import (
 // nothing else; being a _test file, it adds nothing to the built package
 // (0052-PLAN P2-2, deviation 2).
 
-// SessionOf is l as the SDK's session for provider id, with no store.
-func SessionOf(l *Login, id string) *auth.OAuthSession { return l.session(id, nil, nil, nil) }
+// The names differ from session's and loginOf's by more than capitalization,
+// which revive's confusing-naming refuses.
 
-// LoginOf is the SDK session s as a Login.
-func LoginOf(s *auth.OAuthSession) *Login { return loginOf(s) }
+// SDKSessionOf is l as the SDK's session for provider id, with no store.
+func SDKSessionOf(l *Login, id string) *auth.OAuthSession { return l.session(id, nil, nil, nil) }
+
+// LoginFromSDKSession is the SDK session s as a Login.
+func LoginFromSDKSession(s *auth.OAuthSession) *Login { return loginOf(s) }

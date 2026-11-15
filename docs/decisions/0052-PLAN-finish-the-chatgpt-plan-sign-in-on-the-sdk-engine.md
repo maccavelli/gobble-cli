@@ -926,7 +926,7 @@ logs are under `<TMP>`.
    | Gate | Where | Exit | Start to end |
    | :--- | :--- | :--- | :--- |
    | `make pre-add-check FILES=` the three Go files | this Mac | 0, "3 file(s) clean (gofmt, golint, govulncheck)" | 10:06:55 to 10:07:03 |
-   | `make preflight` | the Linux machine, by `run-on-host` | 0, "preflight passed" | 10:07:20 to 10:19:09 |
+   | `make preflight` | the Linux machine, by `run-on-host` | 0, "preflight passed" | 10:07:20 to 10:19:09 *(2026-11-15, later: this line does not show that lint was clean; revive's `confusing-naming` finding is intermittent, Deviation 4, and this was one lint draw. Superseded by the gates of "P2-2 fix record" below.)* |
    | `make race` | this Mac, by `run-on-host --race` | 0, `llm/provider` and `acpserver` ran, the rest cached | 10:19:09 to 10:19:56 |
    | `make check-test-isolation` | the Linux machine, by `run-on-host` | 0, "0 failing", "files written above the temp roots: 0" | 10:19:56 to 10:21:24 |
 
@@ -950,3 +950,59 @@ logs are under `<TMP>`.
 Last-modified times of the changed Go files: `llm/provider/login.go` 09:51:33, `llm/provider/export_test.go` 09:51:21,
 `llm/provider/login_fields_test.go` 10:06:08. Staged: those three, this PLAN and `docs/README.md`. Provenance:
 mainstream model, medium effort.
+
+### P2-2 fix record (2026-11-15, after CI on `d82abd0`)
+
+#### Deviation 4 (2026-11-15): `export_test.go`'s names differ from production names only by capitalization
+
+* **Found** by CI on `d82abd0`, the commit of the five staged files above: `validate (ubuntu-24.04)` and `validate
+  (macos-15)` failed in `make preflight` at lint with `llm/provider/login.go:142:6: confusing-naming: Method 'loginOf'
+  differs only by capitalization to function 'LoginOf' in llm/provider/export_test.go (revive)`, then `make[1]: ***
+  [lint] Error 1` and `make: *** [preflight] Error 2`. `validate (windows-2025)`, `test-isolation`, `sbom` and the Docs
+  workflow passed.
+* **Root cause.** The finding is intermittent: revive's `confusing-naming` reports against whichever of the two names
+  it sees second, and files are linted concurrently, so the same tree is clean on some runs and red on others. The
+  preflights recorded above each ran one lint and printed "0 issues"; each was one draw.
+  * On this Mac at `d82abd0`, `make lint` through `run-heavy` exited 0, "0 issues", on a warm cache, and again with a
+    fresh `GOLANGCI_LINT_CACHE`.
+  * With a fresh `GOLANGCI_LINT_CACHE` for every run, `golangci-lint run --config .golangci.yml ./llm/provider/...` on
+    the same tree gave 4 red runs of 6, each printing the CI line above and `1 issues: * revive: 1`, and 2 clean.
+  * The Linux machine's lint is the CI pin: golangci-lint 2.14.0 built with go1.27.4, `make lint` reading the same
+    `.golangci.yml`, with `run.tests: true`. `run-on-host` copies the whole working directory with `rsync -a --delete`
+    (`node_modules` excluded), so the new files were in the copy. The record cannot say whether the Linux lint cache
+    was warm for the package; either way that run was a single draw. The `.golangci.yml` exclusion for revive covers
+    `_test.go` paths only, and this finding is reported at `login.go`, so it is not excluded.
+  * `validate (windows-2025)` ran the same lint and was clean: one draw, with no more cause than that.
+  * What the gate checked: that one lint run reported nothing. It does not check that the lint result is stable, and a
+    warm cache returns an earlier result for a package whose files have not changed. A single clean `make preflight`
+    is not evidence about a finding of this kind. The dev-host scripts, the Makefile and the lint config are
+    unchanged.
+* **Fix,** inside the phase's files: `export_test.go`'s two exports are renamed so that no name differs from a
+  production name by capitalization alone: `SessionOf` is now `SDKSessionOf` and `LoginOf` is now
+  `LoginFromSDKSession` (the production `session` and `loginOf` are unchanged), and `login_fields_test.go`'s two calls
+  follow. No `nolint`.
+  * Red, before: the loop above, 4 of 6 runs with the finding. Green, after: the same loop, 12 of 12 runs exit 0 with
+    no `confusing-naming`.
+* **Plants, run again on scratch copies after the rename** (the tree before the phase now means `login.go` as of
+  `4497fad`, since `HEAD` holds the fix): the pre-phase `login.go` fails with `login_fields_test.go:123:
+  OAuthSession.Kind: set vKind, came back ` and `:123: OAuthSession.Consents: set vConsents, came back `; the other
+  four plants (`Consents` out of `loginOf`, `Kind` out of `session`, `consents` out of `oauthFields`, `Scope` out of
+  `loginOf`) fail as before, each naming its field at `login_fields_test.go:123`.
+* **Gates (C6), every one after the last file change** (`export_test.go` and `login_fields_test.go`, 10:42:39; the
+  PLAN's own text came after, and `make check-records markdownlint` ran last):
+
+  | Gate | Where | Exit | Start to end |
+  | :--- | :--- | :--- | :--- |
+  | `make pre-add-check FILES=` the three Go files | this Mac | 0, "3 file(s) clean" | 10:45:03 to 10:45:10 |
+  | the lint loop, fresh cache each run | this Mac | 12 of 12 exit 0 | about 10:42 to 10:44 |
+  | `make preflight` | this Mac, by `run-heavy` | 0, "preflight passed", golangci-lint "0 issues" | 10:47:13 to 10:55:21 |
+  | `make race` | the Windows laptop (native, not a WSL distro), by `run-on-host --race` | 0, `llm/provider` ok | 10:55:21 to 10:59:49 |
+  | `make check-test-isolation` | the Linux machine, by `run-on-host` | 0, "0 failing", "files written above the temp roots: 0" | 10:59:49 to 11:01:28 |
+  | `make check-records markdownlint` | this Mac | 0, "Summary: 0 issues" | 11:01:28 to 11:01:32 |
+
+  The Linux machine's preflight is not used as evidence for this change. The preflight's one lint draw is not the
+  evidence either: the 12 fresh-cache runs are.
+* **Last-modified times:** `llm/provider/login.go` 09:51:33 (unchanged by this fix), `llm/provider/export_test.go`
+  10:42:39, `llm/provider/login_fields_test.go` 10:42:39.
+* **Not verified:** whether a lint run of the whole tree, not `./llm/provider/...`, is stable 12 of 12; whether the
+  Linux lint cache was warm on 2026-11-15 at 10:07; CI on the fixed commit, which a push is needed to show.

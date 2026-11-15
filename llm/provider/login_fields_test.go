@@ -103,14 +103,14 @@ func TestLoginCarriesEverySessionField(t *testing.T) {
 
 	// The chain, through the real store and a real auth.json.
 	logins := gauth.Logins{Path: filepath.Join(t.TempDir(), "auth.json")}
-	if err := logins.Save(t.Context(), id, provider.LoginOf(&in)); err != nil {
+	if err := logins.Save(t.Context(), id, provider.LoginFromSDKSession(&in)); err != nil {
 		t.Fatal(err)
 	}
 	got, err := logins.Load(t.Context(), id)
 	if err != nil || got == nil {
 		t.Fatalf("Load: %v, %v", got, err)
 	}
-	out := reflect.ValueOf(provider.SessionOf(got, id)).Elem()
+	out := reflect.ValueOf(provider.SDKSessionOf(got, id)).Elem()
 	for _, name := range carried {
 		want, have := v.FieldByName(name).Interface(), out.FieldByName(name).Interface()
 		if wt, ok := want.(time.Time); ok {
