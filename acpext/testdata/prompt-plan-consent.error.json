@@ -1,0 +1,6 @@
+{
+  "consent": "chatgpt_plan.background_use",
+  "error": "llm: not permitted: the ChatGPT plan's background use is not granted",
+  "kind": "not_permitted",
+  "provider": "openai"
+}

@@ -85,6 +85,13 @@ var frames = map[string]frame{
 	// A plan limit whose service stated a 7-day window: limit weekly, and the
 	// window's length in windowMinutes (0049-MADR Q8, Q9).
 	"prompt-weekly.error.json": {"", of[acpext.ErrorData]()},
+	// A turn refused because a consent is not granted: kind not_permitted,
+	// and consent, the consent's id (0051-MADR D7).
+	"prompt-plan-consent.error.json": {"", of[acpext.ErrorData]()},
+
+	// The value of _meta.gobble on an authenticate request (0051-MADR D4,
+	// D7), written from its JSON tags.
+	"authenticate-meta.request.json": {"authenticate", of[acpext.AuthenticateMeta]()},
 }
 
 // emptyResults are the requests whose result is {}, which has no type.
@@ -202,14 +209,14 @@ func TestCapabilitiesMetaIsRequests(t *testing.T) {
 // maps it builds today, so data built from it has the same bytes.
 func TestErrorDataSortedMembers(t *testing.T) {
 	retryable := false
-	b, err := jsonv2.Marshal(acpext.ErrorData{Attempts: 3, Code: "c", Command: "c", Error: "e", HTTPStatus: 429,
-		Kind: acpext.KindQuota, Limit: acpext.LimitFreeTier, Provider: "p", ProviderMessage: "m", Reason: "r",
+	b, err := jsonv2.Marshal(acpext.ErrorData{Attempts: 3, Code: "c", Command: "c",
+		Consent: "chatgpt_plan.background_use", Error: "e", HTTPStatus: 429, Kind: acpext.KindQuota, Limit: acpext.LimitFreeTier, Provider: "p", ProviderMessage: "m", Reason: "r",
 		ResetAt: "2026-11-09T14:05:00Z", RetryAfterMs: 5601000, Retryable: &retryable, SessionID: "s",
 		WindowMinutes: 10080})
 	if err != nil {
 		t.Fatal(err)
 	}
-	const want = `{"attempts":3,"code":"c","command":"c","error":"e","httpStatus":429,"kind":"quota","limit":"free_tier",` +
+	const want = `{"attempts":3,"code":"c","command":"c","consent":"chatgpt_plan.background_use","error":"e","httpStatus":429,"kind":"quota","limit":"free_tier",` +
 		`"provider":"p","providerMessage":"m","reason":"r","resetAt":"2026-11-09T14:05:00Z","retryAfterMs":5601000,` +
 		`"retryable":false,"sessionId":"s","windowMinutes":10080}`
 	if string(b) != want {
@@ -223,9 +230,11 @@ func TestKindsAndLimits(t *testing.T) {
 	kinds := []acpext.ErrorKind{acpext.KindWorkspace, acpext.KindQuota, acpext.KindRateLimited,
 		acpext.KindContextOverflow, acpext.KindEmptyReply, acpext.KindIncomplete, acpext.KindAuth,
 		acpext.KindNotPermitted, acpext.KindOffline, acpext.KindUnavailable, acpext.KindUnsupported,
-		acpext.KindTimeout, acpext.KindCanceled, acpext.KindOther}
-	wantKinds := []string{"workspace", "quota", "rate-limited", "context-overflow", "empty_reply", "incomplete", "auth",
-		"not-permitted", "offline", "unavailable", "unsupported", "timeout", "canceled", "other"}
+		acpext.KindTimeout, acpext.KindCanceled, acpext.KindOther, acpext.KindDenied, acpext.KindExpired,
+		acpext.KindInvalidRequest, acpext.KindInvalidProvider}
+	wantKinds := []string{"workspace", "quota", "rate_limited", "context_overflow", "empty_answer", "incomplete", "auth",
+		"not_permitted", "offline", "unavailable", "unsupported", "timeout", "canceled", "other", "denied", "expired",
+		"invalid_request", "invalid_provider"}
 	for i, k := range kinds {
 		if string(k) != wantKinds[i] {
 			t.Errorf("kind %d is %q, want %q", i, k, wantKinds[i])

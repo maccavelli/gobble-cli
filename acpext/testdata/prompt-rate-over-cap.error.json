@@ -2,7 +2,7 @@
   "error": "llm: api status 429: llm: rate limited: llmprovider: rate limited: openai HTTP 429 rate_limit_exceeded (retry-after 2m0s): Rate limit reached for requests",
   "code": "rate_limit_exceeded",
   "httpStatus": 429,
-  "kind": "rate-limited",
+  "kind": "rate_limited",
   "limit": "rate",
   "provider": "openai",
   "providerMessage": "Rate limit reached for requests",

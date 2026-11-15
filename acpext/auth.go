@@ -35,3 +35,27 @@ func AuthProviders() []AuthProvider {
 		{ID: "together", Name: "Together AI", Command: "gobble auth login together --api-key -"},
 	}
 }
+
+// AuthenticateMeta is the value of _meta.gobble on an authenticate request
+// (gobble-cli 0051-MADR D4, D7). Method names a sign-in method by its
+// contract id, such as chatgpt_plan or device_code; absent, gobble chooses.
+// Fresh, when true, asks for a sign-in whatever is stored; absent or false,
+// it does not. Remote, when true, says that the person completing the
+// sign-in is not on the agent's host; absent or false means they are.
+type AuthenticateMeta struct {
+	Method string `json:"method,omitzero"`
+	Fresh  bool   `json:"fresh,omitzero"`
+	Remote bool   `json:"remote,omitzero"`
+}
+
+// The members of _meta.gobble that carry the auth contract's types, which
+// this package names and never imports (gobble-cli 0051-MADR D7).
+const (
+	// MetaMethods is the member of _meta.gobble on each agent auth method in
+	// initialize: the provider's offered methods, a JSON array of
+	// go-llmprovider-sdk's authcontract.Method.
+	MetaMethods = "methods"
+	// MetaStep is the member of _meta.gobble on each elicitation of a
+	// sign-in: the step relayed, a go-llmprovider-sdk authcontract.Step.
+	MetaStep = "step"
+)

@@ -1,6 +1,6 @@
 ---
 status: accepted
-date: 2026-11-12
+date: 2026-11-15
 decision-makers: repository owner
 consulted: "magic-cli-remote's docs/reports/0245-REPORT-non-api-key-auth-across-magic-gobble-and-the-sdk.md (observed 2026-11-10, committed in that repository as 3e2f784b) and the owner's answers of 2026-11-10 to its Q1-Q22; go-llmprovider-sdk's proposed 0073-MADR-publish-an-auth-contract-module.md, 0074-MADR-one-sign-in-handle-and-method-facts.md, 0075-MADR-chatgpt-plan-consent-host-id-and-client-reuse.md and 0076-MADR-auth-error-kinds-and-doc-drift.md (untracked in that repository); this repository at d6c10a5 with the owner's uncommitted 0031-PLAN P4b-2 work; acp-go-sdk2 v1.35.0 read from the module cache; magic-cli-remote at 995d442b and its proposed `0246-MADR-take-provider-auth-types-from-the-sdk-auth-contract-in-one-cut-over.md`, whose O2 and O4 the owner answered on 2026-11-10; two independent reviews of these drafts, 2026-11-10; corrected on 2026-11-11 against this repository at 17d1605, go-llmprovider-sdk's four drafts as dated 2026-11-11, acp-go-sdk2 v1.36.0, and magic-cli-remote, whose origin/master is eefb7c25 (995d442b, cited here, is five commits behind it, and its local master is two ahead, bcde74ab and 14200b6e), with the owner's rulings of 2026-11-11 as the cross-repository session relayed them; and, later on 2026-11-11, the owner's rulings relayed by the cross-repository coordinator: go-llmprovider-sdk's 0074-MADR D4 reversed (NoLoopback is v1 API, with gobble its call site), `_meta.gobble.remote` on authenticate, and acpext ErrorData's `consent` member, with go-llmprovider-sdk's 0077-MADR-go-1-27-4-for-go-2026-6859.md, now a file there; and, on 2026-11-12, the owner's direction 'Where possible gobble auth would send gobble as the name/referrer not the sdk', go-llmprovider-sdk's 0079-MADR-name-the-app-on-refresh-revocation-and-the-chatgpt-originator.md (accepted 2026-11-12) and its PLAN (in progress), both read as committed there at f50466b, with that repository's code at the same commit, and this repository at c47f4a7; and the owner's rulings of 2026-11-12 on D9's Q1 to Q3, relayed by the cross-repository coordinator"
 informed: "magic-cli-remote, which relays gobble's sign-in steps and imports acpext; go-llmprovider-sdk, whose x/signin and authcontract this consumes; maccavelli/gobble-cli#16"
@@ -279,7 +279,7 @@ open. The records under "Records amended or superseded in part" are amended by
   `0073-PLAN-publish-an-auth-contract-module.md` makes (`authcontract/v0.1.0`). It becomes a direct requirement in the
   0051-PLAN's P4, the commit of gobble's first import of it (`llm/provider/policy.go`), as `AGENTS.md`
   "Dependencies" asks: a requirement is added in the commit that adds its first import, and `go mod tidy` is clean at
-  every commit. This record names both modules, as `AGENTS.md` asks. No `replace`, no committed `go.work`.
+  every commit. This record names both modules, as `AGENTS.md` asks. No `replace`, no committed `go.work`. *(2026-11-15: the owner kept this rule; "Revisions of 2026-11-15". The first import of `authcontract` is also the respelling's own `llm/provider` code and tests, so the direct requirement still lands in P4's commit.)*
 * **0004-MADR rule 4 is amended:** `authcontract` is a data module with no dependency, so `llm/provider`,
   `acpserver` and `internal/cli` may import it, as they import acpext; no core package (rule 1) may, and the rest of
   go-llmprovider-sdk stays `llm/provider`'s alone. In archtest, rule 4's check (`internal/archtest/check.go:308`)
@@ -524,7 +524,7 @@ does: `provider.SignIn` sets `wizard.Options.Identity` to the same value, which 
 | `empty` (`FailureKind` and `RetryEmpty` only: a listing that recommended nothing) | `other` |
 | `workspace`, `quota`, `incomplete`, `auth`, `offline`, `unavailable`, `unsupported`, `timeout`, `canceled`, `other` | unchanged |
 
-* **acpext's `ErrorKind` and `RetryCause` take the contract's values** at `acpext/v0.5.0` (QB). acpext's `ErrorKind`
+* **acpext's `ErrorKind` and `RetryCause` take the contract's values** at `acpext/v0.5.0` (QB). *(2026-11-15: first served as the candidate `acpext/v0.5.0-rc.1`; "Revisions of 2026-11-15".)* acpext's `ErrorKind`
   holds every one of the contract's eighteen words, since `ErrorData.Kind` now also carries a sign-in's failure (D4):
   its fourteen, respelled as the table says, and four new constants, `KindDenied` (`denied`), `KindExpired`
   (`expired`), `KindInvalidRequest` (`invalid_request`) and `KindInvalidProvider` (`invalid_provider`).
@@ -558,7 +558,7 @@ does: `provider.SignIn` sets `wizard.Options.Identity` to the same value, which 
   string; Fresh bool}` for `_meta.gobble.method` and `_meta.gobble.fresh` (O2), and the key names of
   `_meta.gobble.methods` and `_meta.gobble.step`. The facts
   are `authcontract.Method`, which acpext never names, so 0042-MADR A1's standard-library rule and
-  `check-acpext-deps` stand. These, A1 and D6's values tag `acpext/v0.5.0` (report A3).
+  `check-acpext-deps` stand. These, A1 and D6's values tag `acpext/v0.5.0` (report A3). *(2026-11-15: they are first tagged as the candidate `acpext/v0.5.0-rc.1`, and the final `acpext/v0.5.0` follows at the PLAN's P8a; "Revisions of 2026-11-15".)*
 * *(2026-11-11, later; the owner's rulings of that day, with the two names the cross-repository coordinator fixed.)*
   `acpext/v0.5.0` also carries two members. `AuthenticateMeta` gains `Remote bool`, JSON `remote`, for
   `_meta.gobble.remote` (D4 step 1), so it is `AuthenticateMeta{Method string; Fresh bool; Remote bool}`. The members
@@ -676,7 +676,7 @@ SemVer" (`internal/buildinfo/buildinfo.go:24-26`).
   `identity().Version`. D2's rule of which sessions are revoked, made in the PLAN's P4, keeps the call, so a plan
   session revoked there is named the same way.
 * **Where in the PLAN.** The SDK minor is pinned by the PLAN's P2 (D1; the fleet sequence's pin table says the same),
-  not by its P4: P4 makes `authcontract` a direct requirement and pins acpext `v0.5.0`, committed with 0052-PLAN P3.
+  not by its P4: P4 makes `authcontract` a direct requirement and pins acpext `v0.5.0`, committed with 0052-PLAN P3. *(2026-11-15: P4 pins `v0.5.0-rc.1`; the final `v0.5.0` is pinned by one commit at the PLAN's P8a; "Revisions of 2026-11-15".)*
   What D9 changes needs only P2's minor, and lands as one new phase, P2a, on its own commit after P2's and before
   0052-PLAN P2 (the owner's ruling on Q1). From P2 on, gobble's providers and listings already name its refreshes (N4,
   N5) with no change of gobble's; no release falls between P2 and P2a.
@@ -777,7 +777,7 @@ part is to pass `WithClientInfo` on its call (N6, above).
 6. A test asserts every acpext `Command` and every offered method's word is accepted by `gobble auth login`
    (issue #16's criterion), seen failing on a planted `--method device` for openai.
 7. `make preflight` and `make race` pass on macOS, the Linux machine and the Windows laptop; `make check-acpext-deps`
-   passes; apidiff of acpext from `acpext/v0.4.0` lists only D6's and D7's changes.
+   passes; apidiff of acpext from `acpext/v0.4.0` lists only D6's and D7's changes. *(2026-11-15: run at P3 on the tree and again at P8a on the commit the final tag names; "Revisions of 2026-11-15".)*
 8. The owner's live probes of the PLAN are recorded with their outcomes.
 9. *(2026-11-12; D9.)* A capturing transport sees `referrer=gobble` on Grok's authorize URL and device request, and a
    User-Agent that begins `gobble/<the build's version> (` and names `go-llmprovider-sdk/` on every sign-in (N1, N3),
@@ -857,7 +857,7 @@ O2 (a), which magic-cli-remote's draft put to this repository. The options are k
 
 * **QB. acpext's kind values.** (a) *recommended:* acpext's `ErrorKind` and `RetryCause` constants take the
   contract's values at `acpext/v0.5.0`, released with Magic's cut-over, which requires a gobble at or above this
-  release; (b) keep acpext's hyphenated values on the wire, and hold a mapping to the contract by a root test, so
+  release *(2026-11-15: the final tag is cut at the PLAN's P8a, before that gobble release and so before Magic's cut-over; the candidate `v0.5.0-rc.1` is for gobble's own build, not for Magic; "Revisions of 2026-11-15")*; (b) keep acpext's hyphenated values on the wire, and hold a mapping to the contract by a root test, so
   only `--json` uses the contract's words; (c) add the contract's spellings as new constants beside the old,
   emitting the new and deprecating the old for one minor — a compatibility path the owner's lockstep rule does not
   ask for.
@@ -1009,6 +1009,54 @@ The owner's rulings of 2026-11-13, relayed by the cross-repository coordinator, 
 [0052-PLAN-finish-the-chatgpt-plan-sign-in-on-the-sdk-engine.md](0052-PLAN-finish-the-chatgpt-plan-sign-in-on-the-sdk-engine.md)
 P2 into P2-1 and P2-2 and moved its step 4 into the PLAN's P6 as step 1a. One dated note, in D9's "Where in the
 PLAN". No decision changes; the record stays `accepted`.
+
+### Revisions of 2026-11-15
+
+The owner's ruling of 2026-11-15, relayed by the cross-repository coordinator, on how acpext `v0.5.0` is tagged. No
+decision of D1 to D9 changes; the record stays `accepted`. What changes is the order of tags and commits, and one fact
+this record asserted by omission.
+
+* **What was found.** The PLAN's P3 changes only `acpext/`, and the PLAN and this record's order (0042-MADR D5: tagged,
+  served by the proxy, then required by the root) took it that those changes do not reach the root module's build or
+  tests. They reach its tests. `acpserver/errordata_test.go:75` (`readFrame`) reads `../acpext/testdata/<name>` from the
+  tree, so with P3's frames rewritten (`prompt-rate-over-cap.error.json`, `retry.start.provider.notice.json`) two root
+  tests fail, `TestPromptQuotaData/prompt-rate-over-cap.error.json` and `TestRetryNoticeServerMembers`, while the root's
+  code still sends `rate-limited` (`make race`, 2026-11-15, exit 2). And a respelling alone cannot stand on its own in
+  the root: on a scratch copy with the in-tree `acpext` in place of the tag, 37 packages passed and
+  `TestAcpextAuthProvidersAreTheRegistry` failed, because any requirement past `v0.3.0` brings in `acpext/v0.4.0`'s
+  openai entry (`Login: true`, the bare command, `d6c10a5`), which the registry matches only once the plan is offered
+  (D2, 0052-MADR D2 and the PLAN's P4 steps 2 and 5, with 0052-PLAN P3).
+* **The owner's rulings.** First, asked to choose between a branch with an early tag and a split-out respelling step, or P3
+  and all of P4 on one branch, the owner answered: "fix the shit, on main. in place. completely. no tag until the full
+  repo codebase is stable and correct. why not this?" That needs the root to build against the in-tree `acpext` without a
+  tag, which 0042-MADR D5 ("The root requires acpext by tag. It never uses a `replace` directive, and no `go.work` is
+  committed.") and `AGENTS.md` forbid; asked to authorise a temporary `replace`, the owner chose "No: keep the tag-first
+  rule": "0042 stands unchanged." Then, on the finding above, the owner chose "Release-candidate tag, final tag last":
+  "P3 is committed on a branch and, on your word, tagged acpext/v0.5.0-rc.1. P4 whole with 0052's consent phase is built
+  on the branch against that candidate; main moves once, when every gate is green; the remaining phases continue on main.
+  The final acpext/v0.5.0 is tagged only on your word when the plan's acceptance shows the repo stable, followed by one
+  small commit moving the root from the candidate to the final tag. 0042's rule is kept. Cost: a candidate tag exists
+  publicly, one extra commit at the end, and the branch's P3 commit alone fails two root tests." Rejected: "Final tag
+  early, as the plan says"; "Revert the openai entry in v0.5.0".
+* **What the statements now read.**
+  * D1: "No `replace`, no committed `go.work`" stands. `authcontract` becomes direct in P4's commit.
+  * D6, D7 and the Confirmation's apidiff item, wherever `acpext/v0.5.0` is the tag these values or members are "tagged
+    in" or "carried by" (D6's `ErrorKind` and `RetryCause` bullet, D7's "These, A1 and D6's values tag", its note of
+    2026-11-11 on `Remote` and `Consent`, the diagram's "acpext/v0.5.0 carries the doc", and the Revisions of 2026-11-11):
+    the version line is `v0.5.0`, first tagged as the candidate `acpext/v0.5.0-rc.1` on the branch's P3 commit, then as
+    `acpext/v0.5.0` on the commit the PLAN's P8a names. Go orders `v0.4.0 < v0.5.0-rc.1 < v0.5.0`, and no gate of this
+    repository refuses a pre-release requirement (PLAN, "P3 record (2026-11-15)", deviation 4).
+  * D9's "Where in the PLAN": P4 pins `v0.5.0-rc.1`, committed with 0052-PLAN P3 on the branch, and the PLAN's P8a pins
+    `v0.5.0` in one commit after P8.
+  * QB's "released with Magic's cut-over": the final tag is cut at P8a, before the gobble release Magic requires, so it
+    precedes Magic's cut-over as QB asked. Magic takes the final tag, not the candidate.
+  * The branch's P3 commit, checked out alone, fails the two root tests above, by construction. This is the owner's
+    accepted cost. `main` holds P3 only together with P4.
+* **Where.** [0051-PLAN-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md](0051-PLAN-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md): C8, P3 step 7 and its acceptance, P4's prerequisites and step 1, P8a, the Rollout and
+  rollback notes, and "P3 record (2026-11-15)".
+* **Searched, nothing else asserts it:** every occurrence of `v0.5.0`, `tagged`, `proxy`, `replace`, `go.work`, `reach`,
+  `testdata` and `v0.4.0` in this record; the lines not annotated above (the context's `acpext/v0.4.0` facts, D7's "Now",
+  the Revisions of 2026-11-11's "magic-cli-remote has not taken `acpext/v0.4.0` yet") state facts the sequence does not change.
 
 ### Related
 

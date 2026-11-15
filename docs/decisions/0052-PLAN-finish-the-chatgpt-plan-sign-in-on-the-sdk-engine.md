@@ -334,6 +334,10 @@ Files added to this phase: none *(2026-11-15: P2-2 adds `llm/provider/export_tes
 
 Prerequisites: P2; 0051-PLAN P3's tag. **Staged with 0051-PLAN P4 and committed with it, as one commit** (that phase
 says why): the plan is offered only in the commit that honours its consent.
+*(2026-11-15, the owner's ruling; 0051-PLAN's "P3 record (2026-11-15)".)* "0051-PLAN P3's tag" is `acpext/v0.5.0-rc.1`, the
+candidate, served by the proxy; the final `acpext/v0.5.0` is 0051-PLAN P8a's. This phase's commit is the one 0051-PLAN P4
+makes, on the branch `p3-acpext-v0.5.0` after 0051-PLAN P3's commit, and `main` moves to the branch's tip when every
+gate is green on it.
 *(2026-11-13: "P2" here is P2-1 and P2-2, "P2 split into P2-1 and P2-2 (2026-11-13)".)*
 
 First, `llm/provider/policy.go` (0051-PLAN P4): `honouredConsents` gains `openai.ConsentBackgroundUse`.
@@ -522,7 +526,8 @@ Each command's exit status is captured before any filter.
 
 * **Order.** go-llmprovider-sdk's `authcontract/v0.1.0` and the minor carrying its 0074 and 0075 (released only after
   SDK-2's probe); this plan's P1 at any time after approval; 0051-PLAN P2; P2; 0051-PLAN P3 and the owner's
-  `acpext/v0.5.0`; 0051-PLAN P4 with this plan's P3, one commit; 0051-PLAN P5 to P7; P4; P5; P6; gobble `v0.6.0`,
+  `acpext/v0.5.0` *(2026-11-15: its candidate, `acpext/v0.5.0-rc.1`, here; the final tag is 0051-PLAN P8a's, after its
+  P8)*; 0051-PLAN P4 with this plan's P3, one commit; 0051-PLAN P5 to P7; P4; P5; P6; gobble `v0.6.0`,
   tagged by the owner; then magic-cli-remote's cut-over, which relays the `confirm` step and reads
   `sessionKind` and `consents`.
   *(2026-11-11: before all of it, in this repository, `0054-PLAN-go-1-27-4-and-sibling-pin-refresh.md`: Go 1.27.4,

@@ -92,7 +92,10 @@ One package is a module of its own, nested at `acpext/`: `github.com/maccavelli/
 extension contract. It holds the names and shapes of the `_gobble/*` requests and notifications, `initialize`'s
 `_meta.gobble`, the auth providers and the error data, a failed turn's kind, limit and reset time among it
 ([0049-MADR](decisions/0049-MADR-structured-quota-and-rate-limit-errors-for-acp-clients.md)), and no behaviour,
-and imports only the standard library. `acpserver` serves from it, `acpclient` decodes with it, and `internal/cli`
+and imports only the standard library. Its error kinds and retry causes are, in the tree and in the `v0.5.0` version line (first tagged as
+`acpext/v0.5.0-rc.1`), the eighteen words of the SDK's auth contract, copied and not imported, and `AuthenticateMeta` is the `_meta.gobble` of an `authenticate`
+request ([0051-MADR](decisions/0051-MADR-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md) D6, D7).
+`acpserver` serves from it, `acpclient` decodes with it, and `internal/cli`
 keeps its provider list equal to the registry's; magic-cli-remote imports it too. It is tagged `acpext/vX.Y.Z`, and the root requires it at a tag, with no
 `replace` and no committed `go.work`, so a change to it is tagged before the root uses it
 ([0042-MADR](decisions/0042-MADR-acpext-extension-contract-module.md)). The root's `go list ./...` does not list it.

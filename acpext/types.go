@@ -22,24 +22,24 @@ const (
 )
 
 // RetryCause is why a turn waits to retry. It is one of the constants
-// below, but a client should take a cause it does not know, which a later
-// gobble may add.
+// below, each a value of the auth contract's ErrorKind (see ErrorKind), but
+// a client should take a cause it does not know, which a later gobble may
+// add.
 type RetryCause string
 
 // The causes: the network gone, an empty reply, or a provider retry's
 // failure class (0031-MADR D4).
 const (
 	RetryOffline      RetryCause = "offline"
-	RetryEmptyReply   RetryCause = "empty_reply"
+	RetryEmptyReply   RetryCause = "empty_answer"
 	RetryWorkspace    RetryCause = "workspace"
 	RetryQuota        RetryCause = "quota"
-	RetryRateLimited  RetryCause = "rate-limited"
+	RetryRateLimited  RetryCause = "rate_limited"
 	RetryAuth         RetryCause = "auth"
-	RetryNotPermitted RetryCause = "not-permitted"
+	RetryNotPermitted RetryCause = "not_permitted"
 	RetryUnavailable  RetryCause = "unavailable"
 	RetryTimeout      RetryCause = "timeout"
 	RetryCanceled     RetryCause = "canceled"
-	RetryEmpty        RetryCause = "empty"
 	RetryOther        RetryCause = "other"
 )
 
@@ -334,28 +334,37 @@ type PersonalityResult struct {
 	Level int    `json:"level"`
 }
 
-// ErrorKind is gobble's class of a failed turn: ErrorData.Kind. It is one
-// of the constants below, but a client should take a kind it does not know,
-// which a later gobble may add. Where a class is also a RetryCause, the
-// name is the same.
+// ErrorKind is gobble's class of a failure: ErrorData.Kind, a failed turn's
+// or a failed sign-in's. Its values are the eighteen of the auth contract's
+// ErrorKind (go-llmprovider-sdk's authcontract package, which this package
+// does not import), in snake_case, so one vocabulary runs from the SDK to
+// the wire. It is one of the constants below, but a client should take a
+// kind it does not know, which a later gobble may add. Where a class is also
+// a RetryCause, the name is the same.
 type ErrorKind string
 
-// The kinds (gobble-cli 0049-MADR D3).
+// The kinds (gobble-cli 0049-MADR D3, 0051-MADR D6). KindDenied,
+// KindExpired, KindInvalidRequest and KindInvalidProvider are the four a
+// sign-in's failure can carry that a turn's cannot.
 const (
 	KindWorkspace       ErrorKind = "workspace"
 	KindQuota           ErrorKind = "quota"
-	KindRateLimited     ErrorKind = "rate-limited"
-	KindContextOverflow ErrorKind = "context-overflow"
-	KindEmptyReply      ErrorKind = "empty_reply"
+	KindRateLimited     ErrorKind = "rate_limited"
+	KindContextOverflow ErrorKind = "context_overflow"
+	KindEmptyReply      ErrorKind = "empty_answer"
 	KindIncomplete      ErrorKind = "incomplete"
 	KindAuth            ErrorKind = "auth"
-	KindNotPermitted    ErrorKind = "not-permitted"
+	KindNotPermitted    ErrorKind = "not_permitted"
 	KindOffline         ErrorKind = "offline"
 	KindUnavailable     ErrorKind = "unavailable"
 	KindUnsupported     ErrorKind = "unsupported"
 	KindTimeout         ErrorKind = "timeout"
 	KindCanceled        ErrorKind = "canceled"
 	KindOther           ErrorKind = "other"
+	KindDenied          ErrorKind = "denied"
+	KindExpired         ErrorKind = "expired"
+	KindInvalidRequest  ErrorKind = "invalid_request"
+	KindInvalidProvider ErrorKind = "invalid_provider"
 )
 
 // LimitScope is which limit a failed turn hit: ErrorData.Limit. It is set
@@ -391,7 +400,11 @@ const (
 // Retryable, whether the same request can succeed later (absent when gobble
 // does not know), Attempts, the tries made when the failure came after
 // retries, and Limit (gobble-cli 0049-MADR D1, D7). Error keeps the whole
-// text. WindowMinutes is the limit's window as the service stated it, in
+// text. Consent is set, with Kind not_permitted, when the request is refused
+// because a consent is not granted: its value is the consent's id, such as
+// chatgpt_plan.background_use for the ChatGPT plan's background use. It is
+// set only when granting that consent would let the request through, and
+// never when the stored answer could not be read. WindowMinutes is the limit's window as the service stated it, in
 // whole minutes, whatever Limit is; it is absent when the service stated no
 // length, and is never taken from the wait (gobble-cli 0049-MADR Q9).
 //
@@ -401,6 +414,7 @@ type ErrorData struct {
 	Attempts        int        `json:"attempts,omitzero"`
 	Code            string     `json:"code,omitzero"`
 	Command         string     `json:"command,omitzero"`
+	Consent         string     `json:"consent,omitzero"`
 	Error           string     `json:"error,omitzero"`
 	HTTPStatus      int        `json:"httpStatus,omitzero"`
 	Kind            ErrorKind  `json:"kind,omitzero"`

@@ -1,6 +1,6 @@
 ---
 status: in-progress
-date: 2026-11-14
+date: 2026-11-15
 associated-madr: "0051-MADR-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md"
 ---
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
@@ -130,6 +130,11 @@ does.)*
 * **C7. Identifiers.** No hostname, account name, email address or real-machine path in a committed file.
 * **C8. Order of the modules** (0042-MADR D5). P3's acpext change is committed, pushed and tagged `acpext/v0.5.0` by
   the owner, and served by the module proxy, before P4 requires it.
+  *(2026-11-15, the owner's ruling after P3's finding; see "P3 record (2026-11-15)", "The sequence".)* C8 stands, 0042-MADR
+  D5's rule unchanged, with the tag in two parts. P3's commit is on the branch `p3-acpext-v0.5.0`, not on `main`. The
+  owner tags it `acpext/v0.5.0-rc.1` there, on the owner's own word. The root requires `acpext@v0.5.0-rc.1` (P4 step 1),
+  by tag, with no `replace` and no `go.work`. The final `acpext/v0.5.0` is the owner's, after P8 (P8a). `main` moves
+  once, to the branch's tip, when every C6 gate is green on that tip.
 * **C9. Docs in the same phase.** *(2026-11-14, added; the owner's ruling on P2a's hand-back, relayed by the
   cross-repository coordinator. Asked what happens when a phase's docs step finds user docs outside the phase's own
   files that the phase makes false or leaves incomplete, the owner chose "Always in the same commit": "The agent fixes
@@ -320,21 +325,39 @@ starts.*
 6. `make check-acpext-deps`: `ok`. acpext's tests on the Linux machine and the Windows laptop.
 7. **The owner's:** commit, push, annotated tag `acpext/v0.5.0` on that commit, push; then `go list -m
    github.com/maccavelli/gobble-cli/acpext@v0.5.0` succeeds through the proxy.
+   *(2026-11-15, the owner's ruling; "P3 record (2026-11-15)".)* Step 7 reads: the P3 commit is made on the branch
+   `p3-acpext-v0.5.0`, and pushed there; on the owner's own word the owner tags it, annotated, `acpext/v0.5.0-rc.1`,
+   pushes the tag, and then `go list -m github.com/maccavelli/gobble-cli/acpext@v0.5.0-rc.1` succeeds through the
+   proxy. `acpext/v0.5.0` is not tagged in this phase (P8a). **The branch's P3 commit, checked out alone, fails two
+   root tests, by construction:** `TestPromptQuotaData/prompt-rate-over-cap.error.json` and
+   `TestRetryNoticeServerMembers` (both `acpserver`) read acpext's rewritten frames from `../acpext/testdata`, and the
+   root's code still sends `rate-limited` until P4. This is the owner's accepted cost of the sequence. The commit
+   fails `make race` and `make test`, and CI, until P4's commit follows it on the branch; `main` never holds it alone.
 
 Acceptance: the tests pass, each plant failed; apidiff as step 5; the tag served.
+*(2026-11-15: "the tag served" reads `acpext/v0.5.0-rc.1` served by the proxy; and "the tests pass" is acpext's own, on
+every host, the root's two named tests excepted as step 7's note says.)*
 
 ### P4 — the policy, the resolver and the vocabulary in the root (MADR D2, D6)
 
 Prerequisites: P2 and P3's tag; 0052-PLAN P1 (the WIP sorted) and P2 (the session's `kind` and `consents` in
 `auth.json`, so no sign-in this phase enables can lose them).
 *(2026-11-13: 0052-PLAN P2 is now its P2-1 and P2-2, both before this phase; its step 4 is P6 step 1a.)*
+*(2026-11-15, the owner's ruling; "P3 record (2026-11-15)".)* "P3's tag" reads `acpext/v0.5.0-rc.1`, served by the
+proxy: the prerequisite is the candidate, not the final tag. This phase is built on the branch `p3-acpext-v0.5.0`,
+after P3's commit, whole and committed with 0052-PLAN P3 as one commit, as the header below says. Its evidence: P4's
+steps 1 to 6 cannot be split. A respelling alone (steps 1, 4 and 4b) was tried on a scratch copy with the in-tree
+`acpext` in place of the tag: 37 packages passed and `TestAcpextAuthProvidersAreTheRegistry` failed, because any
+requirement past `v0.3.0` brings in `acpext/v0.4.0`'s openai entry (`Login: true`, the bare command), which the registry
+matches only once the plan is offered (steps 2 and 5, with 0052-PLAN P3). `main` is fast-forwarded to the branch's tip
+when every C6 gate is green on it; the later phases (P5 onward) continue on `main`.
 
 **Committed with 0052-PLAN P3, as one commit.** `acpext/v0.5.0` keeps openai's `Login: true` and its bare command
 (`acpext/auth.go:25`), so `TestAcpextAuthProvidersAreTheRegistry` holds only once openai's plan is offered, which the
 consent rule allows only once 0052-PLAN P3 honours `chatgpt_plan.background_use`. No commit offers the plan without
 gobble's wording and gate.
 
-1. `go get github.com/maccavelli/gobble-cli/acpext@v0.5.0`, `go mod tidy`. With step 2's import, `tidy` makes
+1. *(2026-11-15: `@v0.5.0-rc.1`; the final tag is P8a's.)* `go get github.com/maccavelli/gobble-cli/acpext@v0.5.0`, `go mod tidy`. With step 2's import, `tidy` makes
    `github.com/maccavelli/go-llmprovider-sdk/authcontract` a direct requirement (MADR D1): the commit of its first
    import.
    * **0049-PLAN P5b-2, the wire half (the owner's QA, 2026-11-10).** Re-applied from the archive branch
@@ -693,6 +716,29 @@ Acceptance: the question of step 1 answered in the record; the case passes and i
 
 Acceptance: Confirmation 1 to 8 met, or each unmet item named with its reason.
 
+### P8a — the final acpext tag (added 2026-11-15; the owner's ruling, "P3 record (2026-11-15)")
+
+After P8 is accepted and before any gobble release (`v0.7.0`). Prerequisites: P8 recorded, the owner's word that the
+repository is stable and correct.
+
+1. **The owner tags `acpext/v0.5.0`**, annotated, message the tag name, pushed, on the commit `main` has then, if
+   `git diff acpext/v0.5.0-rc.1 HEAD -- acpext/` is empty. If `acpext/` has changed since the candidate, on the commit
+   that made the last such change, or on a commit after it, which the record names. Either way the tag names what
+   `main` ships, and `go list -m github.com/maccavelli/gobble-cli/acpext@v0.5.0` succeeds through the proxy.
+2. **apidiff from `acpext/v0.4.0` is re-run** then, as P3 step 5 ran it, on export data of `git archive acpext/v0.4.0`
+   and of the commit tagged: the lists are P3 step 5's, with whatever `acpext/` gained since the candidate named as an
+   addition or a deviation.
+3. **One commit moves the root from the candidate to the final tag:** `go get
+   github.com/maccavelli/gobble-cli/acpext@v0.5.0`, `go mod tidy`, then `docs/architecture.md`'s acpext row, and the
+   gates of C6 (`make preflight`, `make race`, `make check-test-isolation`, and the two other hosts' `go test ./...`).
+   The commit changes `go.mod` and `go.sum` and no Go file.
+
+Acceptance: the tag served; the root requires `v0.5.0`; every C6 gate green; no `v0.5.0-rc.1` left in `go.mod` or in
+a document that states what the root requires.
+
+Rollback: a tag is never moved or deleted (P3's note under "Rollback after `acpext/v0.5.0`"); a fault in either tag
+goes forward as the next patch, `acpext/v0.5.1`.
+
 ## Verification
 
 Each command's exit status is captured before any filter.
@@ -768,6 +814,8 @@ Each command's exit status is captured before any filter.
   and leaves `--json` as `v0.5.0` had it.)*
 * **Rollback before a tag:** revert the phase's commit.
 * **Rollback after `acpext/v0.5.0`:** a tag is never moved or deleted; a fix goes forward as `acpext/v0.5.1`.
+  *(2026-11-15: the same for `acpext/v0.5.0-rc.1`, which stays public whatever follows; a fault in it goes forward as
+  `acpext/v0.5.0` or `v0.5.1`. Before the candidate is tagged, the branch's commit is reverted or amended.)*
 * **Rollback after gobble `v0.6.0`:** the previous binary still reads `auth.json` (unknown members round-trip,
   `internal/auth/store.go`'s `member.value`); Magic's cut-over is reverted with it.
   *(2026-11-12: "Rollback after gobble `v0.6.0`: the previous binary still reads `auth.json`" now reads
@@ -1313,3 +1361,207 @@ status taken from its log before anything read it: `make preflight` under `run-h
 diff's added lines for the local account name, the host names, home, temporary and dev-host scratch paths, run-heavy
 ticket shapes and mail addresses found nothing (`grep` exit 1), and found the one line of a copy with planted values
 (count 1). The only text added after preflight began is this paragraph.
+
+### P3 record (2026-11-15)
+
+Run by a mainstream model at medium effort, on the owner's approval of this PLAN's P3 (steps 1 to 6), from `main`, then
+moved to the branch `p3-acpext-v0.5.0` by the owner's ruling below. Times are the session machine's local time. Staged,
+not committed; the coordinator commits on the branch under the owner's standing approval. Step 7 is the owner's, and
+the tag waits for the owner's own word.
+
+**C1, the start state.** Branch `main`, `HEAD` `9e21c8f`, the tree clean, `origin/main` equal to it, CI green on it.
+`go.mod` requires acpext `v0.3.0`. The latest `acpext/` tag is `acpext/v0.4.0` (commit `d6c10a5`). The owner's answers
+to QB and QC are in the MADR, "Questions answered by the owner (2026-11-10)": "The owner chose the recommended option of
+each question below on 2026-11-10: QB (a), QC (i), QD (a) and QE (a), and O2 (a)"; QB (a) is "acpext's `ErrorKind` and
+`RetryCause` constants take the contract's values at `acpext/v0.5.0`", and QC (i) is "provider list only, facts from
+the contract (D7)". Neither is (b) nor (ii), so the phase runs as written.
+
+**The kinds table.** Read from go-llmprovider-sdk `0073-MADR-publish-an-auth-contract-module.md` D3 and compared with
+`authcontract@v0.1.0`'s `errorkind.go` in the module cache: the same eighteen values in the same order (canceled,
+timeout, denied, expired, auth, quota, rate_limited, not_permitted, workspace, context_overflow, empty_answer,
+incomplete, invalid_request, invalid_provider, offline, unavailable, unsupported, other). The table and the tagged code
+agree. The list is copied into `acpext/types_test.go` (`contractKinds`); acpext imports no SDK.
+
+**What changed (staged).**
+
+1. `acpext/auth.go`: `AuthenticateMeta{Method string; Fresh bool; Remote bool}`, JSON `method`, `fresh`, `remote`, each
+   `omitzero`; `MetaMethods = "methods"` and `MetaStep = "step"`; documented. `AuthProvider` unchanged.
+2. `acpext/types.go`: `KindRateLimited`, `KindContextOverflow`, `KindEmptyReply`, `KindNotPermitted` and
+   `RetryRateLimited`, `RetryEmptyReply`, `RetryNotPermitted` respelled (`rate_limited`, `context_overflow`,
+   `empty_answer`, `not_permitted`); `RetryEmpty` removed; `KindDenied`, `KindExpired`, `KindInvalidRequest`,
+   `KindInvalidProvider` added, so the kinds are the contract's eighteen; `ErrorData.Consent string`, JSON `consent`,
+   `omitzero`, between `Command` and `Error`; the docs of `RetryCause`, `ErrorKind` and `ErrorData` say so.
+3. `acpext/doc.go`: the first paragraph names `authenticate`'s `_meta.gobble`; the failed-turn paragraph names the
+   contract's `ErrorKind` as the vocabulary, `Consent` and `rate_limited`.
+4. Frames: `retry.start.notice.json` (`empty_answer`), `retry.start.provider.notice.json` and
+   `prompt-rate-over-cap.error.json` (`rate_limited`); new `authenticate-meta.request.json` (`method`, `fresh` and
+   `remote`) and `prompt-plan-consent.error.json` (`kind` `not_permitted`, `consent` `chatgpt_plan.background_use`,
+   `provider` `openai`).
+5. Tests: `roundtrip_test.go` (the two frames in the map; `TestErrorDataSortedMembers` lists `consent` between `command`
+   and `error`; `TestKindsAndLimits` rewritten to the eighteen values, in the order of the old fourteen and then
+   `denied`, `expired`, `invalid_request`, `invalid_provider`: its `kinds` and `wantKinds` lists, diff in the commit);
+   `auth_test.go` (`TestAuthenticateMetaRoundTrip`: both codecs decode strictly, `method`, `fresh` and `remote`
+   round-trip, an unknown member, a string or number `fresh` or `remote` and a number `method` are refused, `fresh` and
+   `remote` false are not sent); `types_test.go`, new (`TestKindsAreTheContractsSpelling`: it reads the string constants
+   of `ErrorKind` and of `RetryCause` from `types.go` with `go/parser`, so a constant missing from a list is still
+   found; every value is `snake_case`; the `ErrorKind` set equals the table's eighteen; every `RetryCause` is in the
+   table). The PLAN allows `types_test.go` "or puts its tests in" `roundtrip_test.go`; this is the first.
+6. `docs/architecture.md`: one sentence in the acpext paragraph (see "Docs step").
+
+**Deviations of P3.**
+
+1. **`acpext/example_test.go` joins the scope (C9, dated 2026-11-15).** `ExampleRetryNotice` decodes `"cause":"rate-limited"`
+   and compares it with `acpext.RetryRateLimited`; it prints `false` once the constant is respelled. An example is
+   documentation. Changed to `rate_limited`; no assertion touched. Not named in the PLAN's scope or step 4.
+2. **The root's tests read acpext's frames from the tree, so P3's commit alone fails two root tests.** Evidence: `make
+   race` on the working tree, under `run-heavy`, this Mac, 12:08:11 to 12:08:57, exit 2:
+   * `acpserver/errordata_test.go:203`, `TestPromptQuotaData/prompt-rate-over-cap.error.json`: the prompt error's data has
+     `"kind":"rate-limited"`; the frame, read by `readFrame` (`errordata_test.go:75`, `../acpext/testdata/<name>`), says
+     `rate_limited`;
+   * `acpserver/retry_test.go:213`, `TestRetryNoticeServerMembers`: got `"cause":"rate-limited"`, want `"cause":"rate_limited"`
+     (frame `retry.start.provider.notice.json`, read the same way).
+   Every other package passed, and acpext's `-race` passed in the same run. Not pre-existing: CI was green on `9e21c8f`.
+   Two more readers of `../acpext/testdata` (`internal/cli/limit_test.go:21`, `acpclient/prompterror_test.go:23`) read
+   `prompt-quota.error.json`, which this phase does not change. The PLAN (Scope, and the coordinator's brief) said P3's
+   `acpext/` changes "do not reach the root module's build". That holds for code (the root requires `v0.3.0`), not for the
+   frames: **the coordinator's error, repeated from the PLAN's premise as fact; the finding refutes it for the frames.**
+3. **The owner's rulings, in sequence.** Recorded as they happened.
+   * The coordinator first offered two sequences: P3 on a branch with the tag there, and a small respelling step split
+     out of P4 before `main` moves; or P3 and all of P4 on one branch.
+   * The owner answered neither, in these words: "fix the shit, on main. in place. completely. no tag until the full
+     repo codebase is stable and correct. why not this?"
+   * The coordinator answered that this needs the root to build against the in-tree `acpext` without a tag, which
+     `0042-MADR-acpext-extension-contract-module.md` ("The root requires acpext by tag. It never uses a `replace`
+     directive, and no `go.work` is committed.") and `AGENTS.md:15` forbid, and asked whether the owner authorises a
+     temporary `replace` as a dated exception. The owner chose "No: keep the tag-first rule": "0042 stands unchanged. Then
+     main can only stay green by building P3 on a branch, tagging acpext/v0.5.0 early on that branch commit, and moving
+     main once the root's respelling is in, which is the sequence you rejected." Rejected: "Yes: temporary replace, tag
+     last".
+   * The agent was asked whether the respelling (P4's steps 1, 4 and 4b) is separable. It was not: on a scratch copy with the
+     in-tree `acpext` standing in for the tag (a `replace` in the scratch `go.mod` only, never in the tree), 37 packages
+     passed and `internal/cli`'s `TestAcpextAuthProvidersAreTheRegistry` failed, 12:19:51 to 12:20:15, exit 1. Any
+     requirement past `v0.3.0` brings in `acpext/v0.4.0`'s openai entry (`Login: true`, the bare command, commit
+     `d6c10a5`), which the registry matches only once the plan is offered: P4 steps 2 and 5, with 0052-PLAN P3. P4's own
+     header says so ("Committed with 0052-PLAN P3, as one commit"). **The coordinator had recommended a respelling-only
+     step without reading that header: the coordinator's second error, beside its error about the frames.** Without
+     step 2's import, `go mod tidy` still made `authcontract` a direct requirement, because the respelling's own
+     code and tests import it (`llm/provider/list.go`, `TestErrorKindIsTheContracts`).
+   * The owner's ruling on that finding: "Release-candidate tag, final tag last": "P3 is committed on a branch and, on your
+     word, tagged acpext/v0.5.0-rc.1. P4 whole with 0052's consent phase is built on the branch against that candidate;
+     main moves once, when every gate is green; the remaining phases continue on main. The final acpext/v0.5.0 is
+     tagged only on your word when the plan's acceptance shows the repo stable, followed by one small commit moving the
+     root from the candidate to the final tag. 0042's rule is kept. Cost: a candidate tag exists publicly, one extra
+     commit at the end, and the branch's P3 commit alone fails two root tests." Rejected: "Final tag early, as the plan
+     says"; "Revert the openai entry in v0.5.0".
+   * Effect: the notes under C8, P3 step 7, P4's prerequisites and step 1, the new P8a, the Rollout and 0052-PLAN P3 (and
+     its order line). **The branch's P3 commit, checked out alone, fails those two `acpserver` tests, by construction;
+     the owner's accepted cost.**
+4. **Does the tooling accept a pre-release tag of the nested module?** Yes; checked on a scratch copy, no tag created.
+   * Go orders `v0.5.0-rc.1` after `v0.4.0` and before `v0.5.0` (semver: a pre-release is lower than its release, and
+     higher than every earlier release). `golang.org/x/mod/semver.Compare` gave 1 for `v0.5.0-rc.1` against `v0.4.0`, -1
+     against `v0.5.0`, and `IsValid` true. `@latest` of the module stays `v0.4.0` until a release tag is served, so a
+     module that takes `@latest` is not moved by the candidate.
+   * `scripts/check_libs.py` does not list acpext (`grep -c acpext scripts/check_libs.py` is 0): its `LIBRARIES` are the
+     SDKs. Its `SEMVER` (`^v(\d+)\.(\d+)\.(\d+)$`) and `newest` skip pre-releases, which matters only for the SDKs'
+     tags; `--self-test` exits 0.
+   * `make check-acpext-deps` reads `go -C acpext list -deps -test`, not tags or `require`. `make apidiff` lists
+     `git tag -l 'v*'` for `v1` or later, which no `acpext/` tag matches. `verify_build_metadata.py`'s `RELEASE_RE` reads
+     `vX.Y.Z` tags only. `ci.yml` runs on `v*` tags and no `acpext/` tag matches. No `Makefile`, script or workflow reads
+     the root's `require` line for acpext.
+   * Not new: `make build`'s `git describe --tags` (`Makefile:91`) already sees `acpext/` tags.
+
+**Seen failing (C2), on a scratch copy of the tree** (`<TMP>`, no `.git`; `HOME`, `USERPROFILE`, `XDG_*` and
+`GOBBLE_HOME` in the scratch; `GOPROXY=off`; `go test -count=1 ./...` of acpext), run after the last Go change. Unbroken:
+exit 0. Each plant, exit 1:
+
+* `KindRateLimited` left `rate-limited`: `roundtrip_test.go:240: kind 2 is "rate-limited", want "rate_limited"`;
+  `roundtrip_test.go:256: retry cause "rate_limited" has no kind of the same name`; `types_test.go:70: kind "rate-limited" is not
+  snake_case`; and the `ErrorKind` constants differ from the contract's list (`types_test.go:75`).
+* `KindDenied` removed: `FAIL ... [build failed]`, `./roundtrip_test.go:233:69: undefined: acpext.KindDenied` (the test
+  lists name it). Plant 2b, the constant removed and the test's own references to it too: `TestKindsAreTheContractsSpelling`
+  fails, the constants lacking `denied` against the contract's list.
+* `AuthenticateMeta.Method` tagged `methodId`: `auth_test.go:51: encoding/json: decode the frame: json: unknown field
+  "method"` (and the v2 codec's `unknown object member name "method"`); `TestFramesRoundTrip`: `authenticate-meta.request.json,
+  encoding/json: decode: json: unknown field "method"`.
+* `AuthenticateMeta.Fresh` tagged `force`: the same failures, `unknown field "fresh"`.
+* `AuthenticateMeta.Remote` tagged `isRemote`: the same failures, `unknown field "remote"`.
+* `ErrorData.Consent` declared after `Error`: `TestErrorDataSortedMembers`, `roundtrip_test.go:223: ErrorData encodes as
+  {"attempts":3,"code":"c","command":"c","error":"e","consent":"chatgpt_plan.background_use",...`, want `consent`
+  before `error`.
+* `ErrorData.Consent` tagged `consentId`: `TestFramesRoundTrip`, `prompt-plan-consent.error.json, encoding/json: decode:
+  json: unknown field "consent"` (and the v2 codec's); `TestErrorDataSortedMembers`, `"consentId":...`.
+
+On the tree before the phase (HEAD's `acpext` with the new tests and frames added): it does not compile, `undefined:
+acpext.AuthenticateMeta`, `unknown field Consent in struct literal of type acpext.ErrorData`, `undefined: acpext.KindDenied`.
+
+**apidiff (step 5),** the root's `golang.org/x/exp/cmd/apidiff` built to scratch, export data of `git archive acpext/v0.4.0`
+and of the tree's `acpext/`, exit 0, run after the last Go change.
+
+* Incompatible changes: `KindContextOverflow`, `KindEmptyReply`, `KindNotPermitted`, `KindRateLimited`, `RetryEmptyReply`,
+  `RetryNotPermitted`, `RetryRateLimited`: value changed; `RetryEmpty`: removed. Exactly step 2's constant values and
+  `RetryEmpty`'s removal.
+* Compatible changes: `AuthenticateMeta` (with `Remote`), `ErrorData.Consent`, `KindDenied`, `KindExpired`,
+  `KindInvalidProvider`, `KindInvalidRequest`, `MetaMethods`, `MetaStep`. Step 1's additions, step 2's four kinds, and the
+  two members of the 2026-11-11 note. Nothing on one side only. A wire change named here (0042-MADR D5).
+
+**Gates (C6),** each exit status taken from the file its output was redirected to before anything read it. The changed
+Go files were last modified at 11:21:11 (`types.go`, `example_test.go`), 11:21:28 (`auth.go`), 11:22:19 (`auth_test.go`,
+`roundtrip_test.go`), 11:23:13 (`types_test.go`) and 11:24:22 (`doc.go`), before every gate below.
+
+| Gate | Where | Start to end | Exit |
+| :--- | :--- | :--- | :--- |
+| `make pre-add-check FILES=` the seven changed Go files | this Mac | 11:24:57 to 11:25:07 | 0 ("7 file(s) clean (gofmt, golint, govulncheck)") |
+| `go -C acpext test -count=1 ./...` and `go vet`, `run-on-host --need linux`, no `--race` (pick-host chose a WSL distro) | Linux WSL distro on the Windows laptop, scratch copy | 11:28:53 to 11:29:21 | 0 |
+| `go -C acpext test -count=1 ./...`, then with `-race`, `run-on-host --need linux --race`, `sh -c` | the Linux machine, scratch copy | 11:29:44 to 11:30:02 | 0, 0 |
+| the same two, `run-on-host --need windows --race`, `sh -c` | the Windows laptop, scratch copy | 11:30:13 to 11:30:37 | 0, 0 |
+| `golangci-lint run --config .golangci.yml ./...` in `acpext`, six runs, each with a new `GOLANGCI_LINT_CACHE`, under `run-heavy` | this Mac | 12:03:11 to 12:03:39 | 0 six times, "0 issues." each; no finding |
+| `make check-acpext-deps` | this Mac | 11:46:45 to 11:46:47 | 0 ("check-acpext-deps: ok") |
+| `make race` | this Mac, under `run-heavy` | 12:08:11 to 12:08:57 | 2: the two `acpserver` tests of deviation 2; acpext's `-race` ok |
+| `make check-test-isolation` | this Mac, under `run-heavy` | 12:40:48 to 12:41:10 (queued from 12:25:08) | 2: "root module: go test exit 1; 2 failing in 1 package(s)", `TestPromptQuotaData` and `TestRetryNoticeServerMembers` (deviation 2); "acpext module: go test exit 0"; "files written above the temp roots: 0" |
+| `make preflight` | this Mac, under `run-heavy` | 12:43:29 to 12:51:45 (queued behind the isolation run) | 0 ("preflight passed"; `golangci-lint` "0 issues." for both modules, `apidiff` "no-op below v1.0.0", `check-records` and `markdownlint` ok) |
+
+No Go file changed after those times, so the cross-host runs, the lint runs, `pre-add-check` and `check-acpext-deps` stand.
+The root's `make race` is recorded red for the two tests as the intermediate state, by the owner's ruling; it was not
+rerun, and no test was skipped or edited. The Linux WSL run is a non-race run; no WSL race result is used. The six lint
+runs waited in the queue behind another job; the lint rule found intermittent on this repository on 2026-11-15
+(`confusing-naming`) lives in the root module, which this phase does not change; acpext was clean six of six.
+`make check-test-isolation` runs `go test` over both modules and so fails on the same two root tests and on nothing else; it also reports that nothing was written above the temp roots. `make preflight` runs no tests, and passed. `make check-records markdownlint` ran before and after this record was written, exit 0 ("Summary: 0 issues in 0 files"); the identifier scan of the staged diff's added lines is in the last line of this record.
+
+**Acceptance.**
+
+* The tests pass (acpext's, on this Mac, the Linux machine and the Windows laptop, with `-race` on the last two) and each
+  plant failed. Met.
+* apidiff as step 5, nothing on one side only. Met.
+* "The tag served": not met, and not this phase's alone: the owner's, on the owner's own word, as
+  `acpext/v0.5.0-rc.1` on the branch's P3 commit (step 7's note), with the final `acpext/v0.5.0` at P8a.
+
+**Docs step (C9).** Searched `acpext/*.go`, `README.md`, `AGENTS.md`, `docs/architecture.md`, `docs/README.md`,
+`docs/guides/` for the old kind and cause spellings, `RetryEmpty`, the count of kinds, and acpext's version and surface;
+each hit checked against the code.
+
+* `acpext/doc.go`, `acpext/types.go` (`RetryCause`, `ErrorKind`, the kinds' comment, `ErrorData`), `acpext/auth.go`: fixed
+  or written.
+* `acpext/example_test.go:12`: fixed (deviation 1).
+* `docs/architecture.md:91-98` (the acpext paragraph): a sentence added, the contract's eighteen words and
+  `AuthenticateMeta`.
+* `docs/architecture.md:190`, the root's acpext requirement `v0.3.0`: open for P4 (it reads `v0.5.0-rc.1` there), and for
+  P8a (`v0.5.0`).
+* `docs/guides/credentials.md:320`, `--json`'s kinds `rate-limited` and `not-permitted`: open for P4 (`llm.Kind`'s
+  respelling) and P5 (`--json` prints the contract's steps).
+* `0051-MADR-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md` joins the scope (C9, 2026-11-15, at the coordinator's review): dated notes at D1, D6, D7, D9's "Where in the PLAN", Confirmation 7 and QB, and a "Revisions of 2026-11-15" section with the owner's rulings and the finding. `0042-MADR` is not edited: the owner kept its rule.
+* `docs/architecture.md:95`'s sentence reads "in the tree and in the `v0.5.0` version line (first tagged as `acpext/v0.5.0-rc.1`)", true before the candidate, after it and after the final tag.
+* `AGENTS.md`, `README.md`, `docs/guides/developing.md`: nothing names a changed spelling, a kind count or an acpext
+  version. This repository keeps no changelog.
+
+**Not verified.** The two other hosts ran scratch copies of the working tree, not a commit. Plants ran with the tree's
+`acpext` alone; the root's two tests above are the only root failure of `make race`, and no other root gate was run at
+this commit but those in the table. A candidate's `go list` through the proxy waits for the owner's tag.
+
+**What the owner must do for step 7** (on the branch, after the coordinator's commit, on the owner's own word): `git tag -a
+acpext/v0.5.0-rc.1 -m acpext/v0.5.0-rc.1 <the branch's P3 commit>`, `git push origin acpext/v0.5.0-rc.1`, then `go list -m
+github.com/maccavelli/gobble-cli/acpext@v0.5.0-rc.1` through the proxy. The tag form is that of `acpext/v0.4.0`:
+annotated, its message the tag name.
+
+The identifier scan of the staged diff's added lines, for the local account name, the host names, home, temporary and
+dev-host scratch paths, run-heavy ticket shapes and mail addresses, found nothing (`grep` exit 1), and found the one line
+of a copy with planted values (count 1). It ran after every text of this record was written but this paragraph.

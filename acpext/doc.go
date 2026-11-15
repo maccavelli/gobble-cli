@@ -1,7 +1,8 @@
 // Package acpext is gobble's ACP extension contract: the names and shapes of
 // the _gobble/* requests and notifications gobble's agent serves, the
-// _meta.gobble member of its initialize answer, and the auth providers and
-// error data a client reads. gobble's own server and client use these types,
+// _meta.gobble member of its initialize answer, the _meta.gobble member of
+// an authenticate request, and the auth providers and error data a client
+// reads. gobble's own server and client use these types,
 // and so may any other client (gobble-cli
 // docs/decisions/0042-MADR-acpext-extension-contract-module.md).
 //
@@ -32,17 +33,24 @@
 // A refused request's JSON-RPC error carries ErrorData as its data. Its
 // code is the protocol's: -32602 for bad params or an unknown session,
 // -32600 for a writer refused while a prompt runs, and -32000 when a
-// provider has no credential.
+// provider has no credential. An authenticate request's _meta.gobble is an
+// AuthenticateMeta, and the members MetaMethods and MetaStep of _meta.gobble
+// carry the auth contract's types, which this package names and does not
+// import.
 //
 // A failed turn, session/prompt's or a compaction's, answers -32000 when the
 // provider refused its credential and -32603 otherwise. Its ErrorData says
 // what failed as data: Provider and Kind always, and what the provider said
 // when it answered, such as Code, ProviderMessage, RetryAfterMs, ResetAt,
 // Limit and WindowMinutes, the window's length when the service stated one.
-// Error keeps the whole text, as before. A wait longer than gobble's
-// retry cap is not taken and sends no MethodRetry: the turn answers at once,
-// with Kind rate-limited, Retryable true and the RetryAfterMs the provider
-// asked for.
+// Error keeps the whole text, as before. Kind is one of the auth contract's
+// eighteen ErrorKind words (go-llmprovider-sdk's authcontract package, which
+// this package does not import): ErrorKind lists them, and a sign-in's
+// failure carries the same vocabulary. A turn refused because a consent is not
+// granted answers with Kind not_permitted and Consent, the consent's id. A
+// wait longer than gobble's retry cap is not taken and sends no MethodRetry:
+// the turn answers at once, with Kind rate_limited, Retryable true and the
+// RetryAfterMs the provider asked for.
 //
 // # Methods
 //

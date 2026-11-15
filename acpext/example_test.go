@@ -9,7 +9,7 @@ import (
 
 // A client decodes a _gobble/retry notification's params into RetryNotice.
 func ExampleRetryNotice() {
-	params := []byte(`{"sessionId":"s1","phase":"start","cause":"rate-limited","attempt":1,"maxAttempts":3,"delayMs":2000}`)
+	params := []byte(`{"sessionId":"s1","phase":"start","cause":"rate_limited","attempt":1,"maxAttempts":3,"delayMs":2000}`)
 	var n acpext.RetryNotice
 	if err := json.Unmarshal(params, &n); err != nil {
 		fmt.Println(err)
