@@ -21,6 +21,13 @@ import (
 
 const modulePath = "github.com/maccavelli/gobble-cli"
 
+// authcontractPath is go-llmprovider-sdk's auth-contract module: data types
+// with no dependency, which rule 4 lets acpserver and internal/cli import
+// besides llm/provider (0051-MADR D1). The rest of the SDK stays
+// llm/provider's, and rule 1 still refuses the contract in every core
+// package.
+const authcontractPath = "github.com/maccavelli/go-llmprovider-sdk/authcontract"
+
 // acpextPath is the nested module of gobble's ACP extension contract. Its
 // path is under modulePath, but it is a module of its own, which the root
 // requires by tag (0042-MADR D1, A4).
@@ -303,6 +310,9 @@ func checkRule4(pkgs []modPkg) []Violation {
 		}
 		if isVendorSDK(e.to) {
 			vs = add(vs, 4, e)
+			continue
+		}
+		if pathUnder(e.to, authcontractPath) && (under(rel, "acpserver") || under(rel, "internal/cli")) {
 			continue
 		}
 		if pathUnder(e.to, "github.com/maccavelli/go-llmprovider-sdk") && !under(rel, "llm/provider") {

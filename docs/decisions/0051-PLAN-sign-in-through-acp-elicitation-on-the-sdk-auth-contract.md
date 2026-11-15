@@ -1,6 +1,6 @@
 ---
 status: in-progress
-date: 2026-11-13
+date: 2026-11-14
 associated-madr: "0051-MADR-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md"
 ---
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
@@ -94,6 +94,9 @@ work, the branch is its source.
   step 4, moved to P6 step 1a: `llm/provider/login.go`'s `sdkStore` as go-llmprovider-sdk's `auth.ClientStore` and
   gobble's `ClientStore`; `llm/provider/signin.go`'s `SignInOptions.HostID` and `wizard.Options.HostID`; and
   `TestClientStoreAdapter`.
+* *(2026-11-14, added by P2's deviations 1 and 2, and P7a; the owner's rulings of that day.)* `README.md:163` and
+  `docs/architecture.md:192`, the SDK's version in each (P2, deviation 2); and P7a's `scripts/check_libs.py`
+  (advisories by package).
 
 **Out of scope:** the ChatGPT plan, its consent, host id, client and migration (0052); go-llmprovider-sdk's code and
 records (the owner's, in that repository); magic-cli-remote; `auth status --json` (0052); a release tag or push
@@ -624,7 +627,37 @@ Acceptance: the tests pass, each plant failed, `go test -race -count=20 -run Tes
 Acceptance: the tests pass, each plant failed; `TestACPLogin` (`internal/cli/acp_test.go`) and the 14 tests of
 `internal/cli/login_test.go` pass, any changed one named here with why.
 
+### P7a — check_libs.py's advisories by package (added 2026-11-14; the owner's ruling on P2's observation)
+
+Not started. Its file: `scripts/check_libs.py`, and its record in this PLAN. No Go code changes.
+
+1. **A question first, for the executor.** `check_library` reads the repository's published security advisories
+   (`advisories` and the loop in `check_library`, `scripts/check_libs.py`) and tests each vulnerable version range
+   against the tag being checked, whatever package the advisory names. The script reads only `state` and
+   `vulnerabilities[].vulnerable_version_range`; this PLAN has not read what the response carries for the package.
+   Before writing code, read one real response, or the API's schema, and answer: does each `vulnerabilities[]` entry
+   carry `package.name`, and for a Go module advisory is it the module path (for the contract,
+   `.../go-llmprovider-sdk/authcontract`)? If it does not, stop and put the question to the owner: the step below cannot
+   be written as it stands.
+2. **If it does,** an advisory entry counts against a library only when its package name equals `lib.module`, so the
+   SDK's advisories no longer fail the contract's entry and the contract's none fail the SDK's. What an entry that names
+   no package does (counted for every library of the repository, as today, or not) is also the executor's question.
+3. **`--self-test` gains a case** over fixed advisory data naming two packages of one repository, a range `< 1.2.0`
+   for the SDK's path only: the contract at `v0.1.0` has no hit, and the SDK at `v1.1.0` has one. **Planted break:** the
+   package filter removed, so the contract at `v0.1.0` reads the SDK's range as covering it; the case fails. Seen
+   failing on a scratch copy (C2), quoted.
+4. **Gates (C6):** `python3 scripts/check_libs.py --self-test`; `check_libs.py --lib go-llmprovider-sdk` and
+   `--lib authcontract` against a commit (the checker clones the commit); `make check-records markdownlint`;
+   `make preflight`, which lints the PLAN. The Go race and cross-host runs are not rerun for a Python-only change; the
+   record says so with the files' last-modified times.
+5. **P8's close-out waits for P7a.**
+
+Acceptance: the question of step 1 answered in the record; the case passes and its plant failed; both `--lib` runs report
+0 failing on the committed step.
+
 ### P8 — acceptance and close-out (MADR Confirmation)
+
+0. *(2026-11-14.)* Not before P7a is done and recorded.
 
 1. Every Confirmation item checked and recorded with its evidence.
 2. **Owner-run probes**, each asked first, each in a scratch `GOBBLE_HOME` on the host, nothing of the owner's real
@@ -917,3 +950,146 @@ struck. The evidence and the rulings are in 0052-PLAN's "P2 split into P2-1 and 
   recorded in P6 step 1a with the three options as put; the sign-in proceeds with no host id and one warning, and no
   sign-in fails over the host-id file; `TestSignInWithoutHostID`, its plant "the error returned instead of warned";
   the Verification.
+
+### P2 record (2026-11-14)
+
+Run by a mainstream model at medium effort, on the owner's approval of this PLAN's P2, from `main`. Times are the
+session machine's local time; the Linux machine's clock is UTC, shown as local in brackets.
+
+**C1, the start state.** Branch `main`, `HEAD` and `origin/main` both `35fda07`, the tree clean (`git status
+--short` printed nothing). `go.mod` required go-llmprovider-sdk `v1.29.0`, acpext `v0.3.0`, `go 1.27.4`
+(0054-PLAN's moves already in).
+
+**The gate before P2,** from a scratch directory, through the proxy: `go list -m
+github.com/maccavelli/go-llmprovider-sdk/authcontract@v0.1.0` printed `github.com/maccavelli/go-llmprovider-sdk/authcontract v0.1.0`
+(exit 0); `go list -m github.com/maccavelli/go-llmprovider-sdk@v1.31.0` printed `github.com/maccavelli/go-llmprovider-sdk v1.31.0`
+(exit 0). Met.
+
+1. **The requirement move.** `go get github.com/maccavelli/go-llmprovider-sdk@v1.31.0` (`go: upgraded
+   github.com/maccavelli/go-llmprovider-sdk v1.29.0 => v1.31.0`), then `go mod tidy`, both exit 0. The `go.mod` diff is
+   exactly two lines: the SDK's `v1.29.0` to `v1.31.0` in the direct block, and
+   `github.com/maccavelli/go-llmprovider-sdk/authcontract v0.1.0 // indirect` added. No other requirement moved; the
+   `go` line stays `1.27.4`. `go.sum` gains the SDK's `v1.31.0` pair and the contract's `v0.1.0` pair, and loses the
+   `v1.29.0` pair. No deviation.
+2. **`internal/archtest/check.go`.** `authcontractPath` (a constant with its doc), and rule 4's check skips an edge to
+   a path under it from `acpserver` and `internal/cli`; every other edge to the SDK, and to the contract from any other
+   package, is refused as before. Rule 1 is not edited.
+3. **`internal/archtest/check_test.go`.** `TestImportRules` gains six cases: the three planted breaks (`rule 1 agent
+   authcontract`, `rule 4 acpclient authcontract`, `rule 4 acpserver signin`, the last importing
+   `go-llmprovider-sdk/llmprovider/x/signin`) and the three allowed imports (`llm/provider`, `acpserver`,
+   `internal/cli`, each importing the contract, rule 4).
+4. **`scripts/check_libs.py`.** `Library` gains `tag_prefix` and `name`; `name` defaults to `repo` (in
+   `__post_init__`) and is the `--lib` choice and the key of the report, the clone, the logs and the API paths, while
+   `repo` stays the key of the git URL and the advisories. `newest(tags, major, prefix)` keeps the tags under the
+   prefix and strips it. The entry `Library("go-llmprovider-sdk", …, path=…/authcontract, tag_prefix="authcontract/",
+   name="authcontract")` follows the SDK's. `--self-test` gains two cases: "the contract's tags and the SDK's are read
+   apart" (`v1.40.0`, `authcontract/v0.2.0` give `v0.2.0` and `v1.40.0`) and "the --lib choices are unique and name the
+   SDK and its contract". The module docstring names the contract.
+5. **Seen failing (C2), on a scratch copy of the tree** (`<TMP>/tree`, the working tree untouched, `HOME`, `XDG_*` and
+   `GOBBLE_HOME` in the scratch, `GOPROXY=off`):
+   * archtest, `go test -count=1 ./internal/archtest/`, each exit 1; unbroken, exit 0:
+     * `check.go` as at `HEAD` (the tree before the phase): `--- FAIL: TestImportRules/rule_4_acpserver_may_import_authcontract`,
+       `check_test.go:268: unexpected edge: rule 4: github.com/maccavelli/gobble-cli/acpserver imports github.com/maccavelli/go-llmprovider-sdk/authcontract`,
+       and the same for `rule_4_cli_may_import_authcontract` (`internal/cli`). The three break cases and the
+       `llm/provider` case pass there: the refusals and that allowance already existed.
+     * plant "rule 1 lets the contract through" (`return !under(rel, "llm/provider") && !pathUnder(imp, authcontractPath)`
+       in `rule1Forbidden`): `--- FAIL: TestImportRules/rule_1_agent_authcontract`, `check_test.go:271: missing
+       "go-llmprovider-sdk/authcontract" in:` (an empty violation list).
+     * plant "rule 4's exception for every package" (the exception's condition made `true`): `--- FAIL:
+       TestImportRules/rule_4_acpclient_authcontract`, `missing "go-llmprovider-sdk/authcontract" in:`.
+     * plant "rule 4's exception admits the whole SDK" (its path test made the SDK's root): `--- FAIL:
+       TestImportRules/rule_4_acpserver_signin`, `missing "go-llmprovider-sdk/llmprovider/x/signin" in:`.
+   * `check_libs.py --self-test`, each exit 1; unbroken, exit 0 (17 cases ok):
+     * plant "the prefix ignored" (`own = set(tags)` in `newest`): `self-test the contract's tags and the SDK's are
+       read apart: FAIL`.
+     * plant "the contract entry given no name": `self-test two libraries at one version do not share API paths:
+       FAIL` and `self-test the --lib choices are unique and name the SDK and its contract: FAIL`.
+     * extra, `api_paths` keyed by `repo` again: `self-test two libraries at one version do not share API paths: FAIL`.
+     The existing case "two libraries at one version do not share API paths" compares `LIBRARIES[1]` and `[2]`, now the
+     SDK and its contract, which one repository holds.
+6. **`check_libs.py --lib go-llmprovider-sdk` and `--lib authcontract`** (network). `check_library` clones the
+   repository's **committed** state (`git clone <repo>`), so run on the working tree before the owner commits, the SDK
+   entry ends `go-llmprovider-sdk modules: FAIL new or changed module: github.com/maccavelli/go-llmprovider-sdk/authcontract`,
+   exit 1 (the clone's `go.mod` still has `v1.29.0`; the contract is the move step 1 makes), every other check ok
+   (19:05 to 19:09). That is **Finding 1** below. On a scratch clone of this repository with this phase's five files
+   committed (commit made in the scratch only, hooks off), the verdicts are: `--lib go-llmprovider-sdk`, exit 0,
+   19:11:20 to 19:16:45, "pinned v1.31.0, checking v1.31.0 … 0 failing checks"; `--lib authcontract`, exit 0, 19:16:45
+   to 19:18:08, "pinned v0.1.0, checking v0.1.0 … 0 failing checks". Each: get and tidy, version, modules, build, vet
+   (linux, darwin, windows), test, `make staticcheck`, `make lint`, govulncheck and advisories ok; api "pinned at …;
+   nothing to compare". `make staticcheck` is clean with the SDK's deprecations in place, as step 5 expected.
+7. **Gates (C6),** each exit status taken from the file it was redirected to before anything read it; the Go files were
+   last modified 19:07:11, `scripts/check_libs.py` 19:09:02, `go.mod` and `go.sum` 19:22:41 (`make preflight`'s tidy
+   check restores them with the same bytes), all before every gate below:
+
+   | Gate | Where | Start to end | Exit |
+   | :--- | :--- | :--- | :--- |
+   | `make pre-add-check FILES="internal/archtest/check.go internal/archtest/check_test.go"` | this Mac | 19:18:24 to 19:18:32 | 0 ("2 file(s) clean (gofmt, golint, govulncheck)") |
+   | `make preflight` | this Mac, under `run-heavy` | 19:22:39 to 19:32:16 (queued from 19:18:42 behind another repository's gate) | 0 ("preflight passed"; includes `make archtest`, `staticcheck` on three GOOS, `lint`, `govulncheck`, `go mod tidy` and acpext's `-diff`) |
+   | `make race` | this Mac, under `run-heavy` | 19:32:16 to 19:33:08 | 0 (most packages `(cached)`, the race binaries' inputs unchanged since preflight; acpext `(cached)`) |
+   | `make check-test-isolation` | this Mac, under `run-heavy` | 19:33:08 to 19:33:32 | 0 ("files written above the temp roots: 0") |
+   | `go test -count=1 ./...`, `CGO_ENABLED=1 go test -race -count=1 ./...`, `go -C acpext test -count=1 ./...` | the Linux machine itself (`pick-host` excluded the WSL distro for a race run), scratch copy, `run-on-host --need linux --race` | 19:22:28 to 19:26:20 (UTC 01:22:28 to 01:26:20) | 0, 0, 0 |
+   | the same three | the Windows laptop, scratch copy, `run-on-host --need windows --race`, command `sh -c` | 19:22:36 to 19:24:27 | 0, 0, 0 |
+   | `python3 -B scripts/check_libs.py --self-test` | this Mac | 19:34:26 to 19:34:26, after the script's last edit (19:09:02) | 0 (17 cases ok) |
+
+   The identifier scan and `make check-records markdownlint` ran last, over the staged diff with this record in it:
+   `make check-records markdownlint` exit 0 ("Summary: 0 issues in 0 files"), run again after the record's last edit; the scan of the
+   diff's added lines for the local account name, the host names, home, temporary and dev-host scratch paths,
+   run-heavy ticket shapes and mail addresses found nothing (`grep` exit 1), and found the one line of a copy with a
+   planted home path, host name and ticket (exit 0).
+8. **Docs step.** `grep` over `README.md`, `docs/` (outside `docs/decisions/`), `AGENTS.md`, `scripts/` and the
+   Makefile for the SDK pin, the import rules and `check_libs.py`'s choices. Two statements are false once this lands
+   and lie outside the phase's files; they are open for the commit that carries them: `README.md:163` ("go-llmprovider-sdk
+   `v1.29.0`") and `docs/architecture.md:192` (the same version, in the requirements table). Two more turn from true to
+   false only with P4's first import, so they wait for it: `README.md:164` ("Only `llm/provider` imports it") and
+   `docs/architecture.md:164` (rule 4's sentence); `docs/architecture.md:214`'s `make check-libs` sentence stays true.
+   This repository keeps no changelog.
+   *(2026-11-14, later: the first two are fixed in this commit, by deviation 2.)*
+
+**Finding 1 (not foreseen by the PLAN).** `scripts/check_libs.py` takes its clone from the committed state, so P2's own
+`go.mod` move, uncommitted, makes the SDK entry's `modules` check fail with the contract as "new or changed module".
+The check is right on the committed tree and wrong about an uncommitted one: the step 5 acceptance reads "0 failing",
+which holds on the committed phase (step 6). Resolutions, recommended first: (a) the owner commits P2, then reruns both
+`--lib` commands, which is what the verdicts above rehearse on a scratch commit (no cost beyond the rerun); (b) the
+script clones the working tree, which a change to the script's design would make and which this PLAN does not name;
+(c) nothing: P2 is accepted on the scratch rehearsal. Not a workaround of the gate: the gate is not edited, and the
+failing run is reported above.
+
+**Observation (not a deviation).** The contract's entry reads the repository's security advisories, whose version ranges
+are the SDK's; a range written for the SDK's `v1` would read as covering the contract's `v0.1.0`. None exists today
+(the check passes). Filtering a vulnerability by its package would close it; this PLAN does not name it.
+
+Acceptance: archtest and `check_libs.py --self-test` pass, each plant failed (items 5); `make preflight` passes with no
+code change but `internal/archtest/check.go`, its test and `scripts/check_libs.py` (item 7); `go.mod` names the contract
+`// indirect` only (item 1). Met, subject to the owner's word on Finding 1 for the two `--lib` runs. Staged with this
+record; the owner commits. P2a and P3 are not started.
+*(2026-11-14, later: "Met, subject to the owner's word on Finding 1" is resolved by deviation 1 below: the two `--lib`
+runs are repeated against the owner's local commit, and the push waits for both to report 0 failing. Until then
+that part of the acceptance is open, not met.)*
+
+**Deviations of P2 (2026-11-14, the owner's rulings, relayed by the cross-repository coordinator).**
+
+1. **Order of step 5 against the commit (Finding 1).** The owner chose "Commit locally, check, then push": "I commit
+   P2 without pushing, the two checker runs are repeated against that commit, and I push only if both report 0
+   failing. If either fails, the commit stays local and it comes back to you. The gate is run as designed; only the
+   order changes." Rejected: accepting the scratch rehearsal; changing the checker. The gate is not edited. The
+   results of the two runs against the commit are recorded here when they are made (not yet made).
+2. **Two version statements join P2's scope.** The owner chose "In this commit": "Add the two lines to P2's scope by a
+   dated deviation and correct them to v1.31.0 before the commit, so the docs move with the code. The Markdown checks
+   are rerun; no code changes." Rejected: leaving them to gobble's docs plan. `README.md:163` (Stack, "Models") now
+   reads "go-llmprovider-sdk `v1.31.0`, behind gobble's own `llm` facade. Only `llm/provider` imports it."; the
+   `docs/architecture.md:192` row of the "Dependencies" table, which lists the direct requirements in `go.mod`, reads
+   `github.com/maccavelli/go-llmprovider-sdk` `v1.31.0`. The table claims direct requirements only, and the contract is
+   `// indirect`, so it gains no row. `README.md:164` and `docs/architecture.md:164` ("Only `llm/provider` imports
+   it") stay: they turn false with P4's first import.
+3. **An open item, and its step.** The owner chose "Record it, fix in its own step": "Note it in the plan as an open
+   item and fix it as a small separate step with its own test and planted break (filter each advisory by the package
+   it names), before the plan's close-out. P2 stays as the plan wrote it." Rejected: fixing it in P2; recording it
+   only. The step is P7a, added below; it is not done.
+4. **After the deviations' file changes,** `make check-records markdownlint`, `make preflight` (under `run-heavy`) and
+   the identifier scan of the staged diff are rerun, below. No Go or Python file changed after the gates of item 7:
+   `go.mod` and `go.sum` 19:22:41 (the same bytes), `internal/archtest/check.go` and `check_test.go` 19:07:11,
+   `scripts/check_libs.py` 19:09:02; so the race and cross-host runs stand. Results: `make preflight` under
+   `run-heavy`, exit 0 ("preflight passed"), 20:54:53 to 21:02:05; `make check-records markdownlint` exit 0 (20:54:50
+   to 20:54:53, and again after this line); the identifier scan of the staged diff's added lines, nothing found
+   (`grep` exit 1).
+

@@ -46,8 +46,10 @@ github.com/lucasb-eyer/go-colorful v1.4.1 h1:1EO+WB73+EH8EVbzlrG3KLAfEypQWVHIBql
 github.com/lucasb-eyer/go-colorful v1.4.1/go.mod h1:R4dSotOR9KMtayYi1e77YzuveK+i7ruzyGqttikkLy0=
 github.com/maccavelli/acp-go-sdk2 v1.36.0 h1:hRWy4hVpOSh2oy+aVJPD5kBsY89KykrdzpIFMWCo4H8=
 github.com/maccavelli/acp-go-sdk2 v1.36.0/go.mod h1:Gzr1jyDvX3QoWdryavZRQahJLDNPI6EkjXk0qrxq3zU=
-github.com/maccavelli/go-llmprovider-sdk v1.29.0 h1:KVuUfHpx6TtKwjH+XjSSkBU+PRRKg9aWa6p69iaOzy0=
-github.com/maccavelli/go-llmprovider-sdk v1.29.0/go.mod h1:dE+W7oDyvVmAxpSOuIJO3qSD3bDTh/olLt/TbByBE1M=
+github.com/maccavelli/go-llmprovider-sdk v1.31.0 h1:YhPayIZxQpe9s9KytD/QRHA5ZEMFGyQwIJFkHPTlDPo=
+github.com/maccavelli/go-llmprovider-sdk v1.31.0/go.mod h1:TJCiC19cUke8ho7lDDAmFNiNMT0fYFip64VbW7AbFUQ=
+github.com/maccavelli/go-llmprovider-sdk/authcontract v0.1.0 h1:CTT0MX7awBzOMfuAo32vdF4Lj1m4rvyvW98A83ogABo=
+github.com/maccavelli/go-llmprovider-sdk/authcontract v0.1.0/go.mod h1:xwd9YePix/SG+RErPL4hU85uI8R04uXt6duJ0ZbY5b0=
 github.com/maccavelli/go-selfupdate-lib v1.26.2 h1:aOwfesbXTpI1GzqiXwpA0Jn9MPK7sONDZTPfCS/gJe8=
 github.com/maccavelli/go-selfupdate-lib v1.26.2/go.mod h1:DIqb0hzmxkYhVTj6iyaHpntadoHkeOkHWyTsdw+MBHE=
 github.com/maccavelli/go-tui-lib/v2 v2.12.0 h1:JPPl1/wxmX2IamirzR5SvnnIyHmi/L/ikbTOEkOK2q8=

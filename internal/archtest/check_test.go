@@ -60,6 +60,33 @@ func TestImportRules(t *testing.T) {
 			ImportPath: modulePath + "/llm/provider",
 			Imports:    []string{"github.com/maccavelli/go-llmprovider-sdk/llmprovider"},
 		}}},
+		// 0051-MADR D1: the contract module may also be imported by acpserver
+		// and internal/cli, never by a core package; the rest of the SDK
+		// stays llm/provider's.
+		{name: "rule 1 agent authcontract", rule: 1, want: "go-llmprovider-sdk/authcontract", pkgs: []modPkg{{
+			ImportPath: modulePath + "/agent",
+			Imports:    []string{"github.com/maccavelli/go-llmprovider-sdk/authcontract"},
+		}}},
+		{name: "rule 4 acpclient authcontract", rule: 4, want: "go-llmprovider-sdk/authcontract", pkgs: []modPkg{{
+			ImportPath: modulePath + "/acpclient",
+			Imports:    []string{"github.com/maccavelli/go-llmprovider-sdk/authcontract"},
+		}}},
+		{name: "rule 4 acpserver signin", rule: 4, want: "go-llmprovider-sdk/llmprovider/x/signin", pkgs: []modPkg{{
+			ImportPath: modulePath + "/acpserver",
+			Imports:    []string{"github.com/maccavelli/go-llmprovider-sdk/llmprovider/x/signin"},
+		}}},
+		{name: "rule 4 provider may import authcontract", rule: 4, pkgs: []modPkg{{
+			ImportPath: modulePath + "/llm/provider",
+			Imports:    []string{"github.com/maccavelli/go-llmprovider-sdk/authcontract"},
+		}}},
+		{name: "rule 4 acpserver may import authcontract", rule: 4, pkgs: []modPkg{{
+			ImportPath: modulePath + "/acpserver",
+			Imports:    []string{"github.com/maccavelli/go-llmprovider-sdk/authcontract"},
+		}}},
+		{name: "rule 4 cli may import authcontract", rule: 4, pkgs: []modPkg{{
+			ImportPath: modulePath + "/internal/cli",
+			Imports:    []string{"github.com/maccavelli/go-llmprovider-sdk/authcontract"},
+		}}},
 		{name: "rule 5 module", rule: 5},
 		{name: "rule 5 agent lipgloss", rule: 5, want: "charm.land/lipgloss/v2", pkgs: []modPkg{{
 			ImportPath: modulePath + "/agent",
