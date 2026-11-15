@@ -7,6 +7,7 @@ import (
 	"slices"
 	"sync"
 
+	"github.com/maccavelli/go-llmprovider-sdk/authcontract"
 	"github.com/maccavelli/go-llmprovider-sdk/llmprovider"
 	"github.com/maccavelli/go-llmprovider-sdk/llmprovider/auth"
 	"github.com/maccavelli/go-llmprovider-sdk/llmprovider/providers"
@@ -78,52 +79,28 @@ type Credential struct {
 	Workspace string
 }
 
-// offers reports whether gobble offers the SDK's method m for provider id:
-// a key everywhere; a browser sign-in where gobble keeps the login (Grok's);
-// a device sign-in there, and Kilo's, which gives a key. OpenAI's browser
-// and device sign-ins are the Codex client's, and a token paste or a vendor
-// CLI's login is not gobble's (0031-MADR D7).
-func offers(id string, m llmprovider.AuthMethodID) bool {
-	switch m {
-	case llmprovider.AuthAPIKey:
-		return true
-	case llmprovider.AuthBrowserOAuth:
-		return HasLogin(id)
-	case llmprovider.AuthDeviceCode:
-		return HasLogin(id) || HasKeyLogin(id)
-	}
-	return false
-}
-
-// Methods are provider id's ways to sign in, as --method names them, in the
-// SDK's order; none for a provider that takes no key.
+// Methods are provider id's offered ways to sign in (Offered), as --method
+// names them, in the SDK's order; none for a provider that takes no key.
 func Methods(id string) []string {
-	d, ok := keyProvider(id)
-	if !ok {
-		return nil
-	}
-	if len(d.AuthMethods) == 0 {
-		return []string{MethodAPIKey}
-	}
 	var out []string
-	for _, m := range d.AuthMethods {
-		for word, sdk := range methodIDs {
-			if sdk == m.ID && offers(id, m.ID) {
-				out = append(out, word)
-			}
+	for _, m := range Offered(id) {
+		if w := wordOf(m.ID); w != "" {
+			out = append(out, w)
 		}
 	}
 	return out
 }
 
 // skips are the SDK's methods SignIn leaves out of provider id's menu: those
-// gobble does not offer, and, when method is forced, every other one. The
-// option applies to every provider of a call, so it is computed for id
+// the policy does not offer, and, when method is forced, every other one.
+// The option applies to every provider of a call, so it is computed for id
 // alone (0031-PLAN deviation 5).
 func skips(d llmprovider.Descriptor, method string) []llmprovider.AuthMethodID {
+	have := Offered(string(d.ID))
 	var out []llmprovider.AuthMethodID
 	for _, m := range d.AuthMethods {
-		if !offers(string(d.ID), m.ID) || method != "" && m.ID != methodIDs[method] {
+		keep := slices.ContainsFunc(have, func(o authcontract.Method) bool { return o.ID == string(m.ID) })
+		if !keep || method != "" && m.ID != methodIDs[method] {
 			out = append(out, m.ID)
 		}
 	}
@@ -144,7 +121,7 @@ func (e *SignInError) Error() string {
 	if e.Keys > 0 {
 		return fmt.Sprintf("%s refused %d keys; none was saved", e.ID, e.Keys)
 	}
-	return fmt.Sprintf("%s sign-in failed (%s)", e.ID, FailureKind(e.err))
+	return fmt.Sprintf("%s sign-in failed (%s)", e.ID, ErrorKind(e))
 }
 
 func (e *SignInError) Unwrap() error { return e.err }
@@ -205,6 +182,7 @@ func SignIn(ctx context.Context, id string, p Prompter, o SignInOptions, store L
 		NoEndpointPrompt: true,
 		NoPastePrompt:    o.NoPaste,
 		AgentName:        AgentName,
+		ConsentText:      ConsentText,
 		Identity:         identityOf(o.Options),
 	}, d.ID)
 	if err != nil {

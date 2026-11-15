@@ -39,10 +39,10 @@ func TestProvidersCommand(t *testing.T) {
 		t.Fatalf("providers %q, want the ten %q", ids, provider.Providers())
 	}
 	for id, want := range map[string][]string{
-		"openai": {"OpenAI", "env: OPENAI_API_KEY", "API key"},
+		"openai": {"OpenAI", "env: OPENAI_API_KEY", "API key; Use your ChatGPT plan with this app"},
 		"claude": {"none — gobble auth login claude"},
-		"grok":   {"API key; browser or device sign-in"},
-		"kilo":   {"API key; device sign-in"},
+		"grok":   {"API key; Sign in with xAI; Sign in with xAI (device code)"},
+		"kilo":   {"API key; Sign in with Kilo (device code)"},
 		"ollama": {"runs on your machine, no key"},
 	} {
 		for _, w := range want {
@@ -98,7 +98,7 @@ func TestProvidersJSON(t *testing.T) {
     "id": "openai",
     "name": "OpenAI",
     "credential": "auth.json, a \"a<b&c>\" entry gobble does not use",
-    "signIn": "API key"
+    "signIn": "API key; Use your ChatGPT plan with this app"
   },
 `
 	if r.code != 0 || !strings.Contains(r.stdout, want) {

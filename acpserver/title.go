@@ -53,16 +53,87 @@ func (a *Agent) titleWanted(s *liveSession) bool {
 	}
 	a.mu.Lock()
 	tried := s.titleTried
+	a.mu.Unlock()
+	if tried || s.state().name != "" || session.HasConversation(s.tree.Path()) {
+		a.mu.Lock()
+		s.titleTried = true
+		a.mu.Unlock()
+		return false
+	}
+	// A title is asked: under a ChatGPT plan session it is a background
+	// request, made only with the user's consent. The answer is read only
+	// now, when a request would otherwise be made; with none, the title
+	// shows nothing and the attempt is not used, and an answer that cannot
+	// be read leaves one line in the log (0052-MADR D2).
+	if _, gated, err := a.backgroundGate(a.titles.ProviderID); gated {
+		if err != nil {
+			a.logger.Warn("title: the stored consent could not be read; no title was asked",
+				slog.String("provider", a.titles.ProviderID), slog.String("error", err.Error()))
+		}
+		return false
+	}
+	a.mu.Lock()
 	s.titleTried = true
 	a.mu.Unlock()
-	return !tried && s.state().name == "" && !session.HasConversation(s.tree.Path())
+	return true
+}
+
+// ConsentState is provider id's background-use consent as Options.PlanConsent
+// answers it: Consent is the consent's id, the SDK's; Plan is true when the
+// stored session needs it; Granted when the user granted it (0052-MADR D2).
+type ConsentState struct {
+	Consent       string
+	Plan, Granted bool
+}
+
+// backgroundGate asks Options.PlanConsent whether a background request, a
+// title or an automatic compaction, may be made under provider id's
+// credential. It is gated when the credential is a session that needs the
+// consent and none is granted, and when the answer cannot be read, which is
+// err: an answer that cannot be read is not a grant. The state is the one
+// asked, for the id the refusal names. Nothing is gated with no
+// Options.PlanConsent (0052-MADR D2).
+func (a *Agent) backgroundGate(id string) (st ConsentState, gated bool, err error) {
+	if a.planConsent == nil {
+		return ConsentState{}, false, nil
+	}
+	st, err = a.planConsent(id)
+	return st, err != nil || st.Plan && !st.Granted, err
+}
+
+// refusal is an error of gobble's own that matches llm.ErrNotPermitted and
+// says msg, which is all it says.
+type refusal struct{ msg string }
+
+func (r refusal) Error() string { return r.msg }
+func (refusal) Unwrap() error   { return llm.ErrNotPermitted }
+
+// errPlanOverflow ends a turn whose context is over the window under a
+// ChatGPT plan session with no consent to automatic compaction: it names
+// /compact, which is the user's own request and is not gated, and the
+// command that allows the consent. It is a ConsentError, so the turn's error
+// carries the consent's id (0052-MADR D2).
+func errPlanOverflow(id string, st ConsentState) error {
+	return &llm.ConsentError{Consent: st.Consent, Err: refusal{"the context is over the model's window, and automatic " +
+		"compaction runs under your ChatGPT plan only with your consent: run /compact, or allow it with gobble auth consent " +
+		id + " " + st.Consent + " allow"}}
+}
+
+// errPlanUnreadable ends a turn whose context is over the window when the
+// stored answer for background use could not be read, with the store's error.
+// It names /compact and not the consent command: the answer may already be
+// granted, and the command would meet the same store. It is no ConsentError,
+// so the turn's error carries no consent id (0052-MADR D2).
+func errPlanUnreadable(cause error) error {
+	return refusal{"the context is over the model's window, and the stored answer for background use under your " +
+		"ChatGPT plan could not be read (" + cause.Error() + "): run /compact"}
 }
 
 // startTitle names s from its first prompt in the background, while the
 // turn runs (decision 4): its context keeps parent's values, not its end,
 // since the title outlives the prompt's request. closeTitle stops it.
 func (a *Agent) startTitle(parent context.Context, s *liveSession, prompt string) {
-	ctx, cancel := context.WithCancel(context.WithoutCancel(parent))
+	ctx, cancel := context.WithCancel(llm.WithBackground(context.WithoutCancel(parent)))
 	done := make(chan struct{})
 	a.mu.Lock()
 	s.titleCancel, s.titleDone = cancel, done

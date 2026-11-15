@@ -77,9 +77,9 @@ func TestRetryNotification(t *testing.T) {
 	var got []Update
 	h := &handler{sessions: map[acp.SessionId]func(Update){"s1": func(u Update) { got = append(got, u) }}}
 	send, logs := notifyPair(t, h)
-	params := jsontext.Value(`{"sessionId":"s1","phase":"start","cause":"empty_reply","attempt":1,"maxAttempts":2,"delayMs":2000}`)
+	params := jsontext.Value(`{"sessionId":"s1","phase":"start","cause":"empty_answer","attempt":1,"maxAttempts":2,"delayMs":2000}`)
 	send("_gobble/retry", params, jsontext.Value(`{"sessionId":"other","phase":"end","cause":"offline"}`))
-	want := Retry{Phase: "start", Cause: "empty_reply", Attempt: 1, MaxAttempts: 2, Delay: 2 * time.Second}
+	want := Retry{Phase: "start", Cause: "empty_answer", Attempt: 1, MaxAttempts: 2, Delay: 2 * time.Second}
 	if len(got) != 1 || got[0].Kind != KindRetry || got[0].Retry != want || string(got[0].Params) != string(params) {
 		t.Fatalf("updates %+v, want one KindRetry %+v with its params", got, want)
 	}

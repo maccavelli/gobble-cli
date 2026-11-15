@@ -28,12 +28,12 @@ var kinds = []struct {
 }{
 	{ErrWorkspace, "workspace"},
 	{ErrQuota, "quota"},
-	{ErrRateLimited, "rate-limited"},
-	{ErrContextOverflow, "context-overflow"},
-	{ErrEmptyReply, "empty_reply"},
+	{ErrRateLimited, "rate_limited"},
+	{ErrContextOverflow, "context_overflow"},
+	{ErrEmptyReply, "empty_answer"},
 	{ErrIncomplete, "incomplete"},
 	{ErrAuth, "auth"},
-	{ErrNotPermitted, "not-permitted"},
+	{ErrNotPermitted, "not_permitted"},
 	{ErrOffline, "offline"},
 	{ErrUnavailable, "unavailable"},
 	{ErrUnsupported, "unsupported"},
@@ -41,11 +41,12 @@ var kinds = []struct {
 	{context.Canceled, "canceled"},
 }
 
-// Kind names err's class by this package's errors: workspace, quota,
-// rate-limited, context-overflow, empty_reply, incomplete, auth,
-// not-permitted, offline, unavailable, unsupported, timeout, canceled, or
-// other. It never carries err's text. Where a class is also a turn's retry
-// cause, the name is the same (0049-MADR D3).
+// Kind names err's class by this package's errors, in the words of the
+// SDK's auth contract (0051-MADR D6): workspace, quota, rate_limited,
+// context_overflow, empty_answer, incomplete, auth, not_permitted, offline,
+// unavailable, unsupported, timeout, canceled, or other. It never carries
+// err's text. Where a class is also a turn's retry cause, the name is the
+// same (0049-MADR D3).
 func Kind(err error) string {
 	for _, k := range kinds {
 		if errors.Is(err, k.err) {

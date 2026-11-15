@@ -271,7 +271,7 @@ func (l *modelListing) unwarned() (provider.Listing, bool) {
 // at start (0020-MADR D6; 0025-MADR D4).
 func (e *runEnv) warnListing(id string, l *modelListing) {
 	if r, ok := l.unwarned(); ok {
-		e.log().WarnContext(e.ctx, listingFailed, slog.String("provider", id), slog.String("kind", provider.FailureKind(r.Err)))
+		e.log().WarnContext(e.ctx, listingFailed, slog.String("provider", id), slog.String("kind", provider.ErrorKind(r.Err)))
 	}
 }
 
@@ -313,7 +313,7 @@ func (e *runEnv) modelListing(sel provider.Selection) *modelListing {
 			r = provider.Listing{Models: provider.Models(sel.ID), Err: err}
 		}
 		if !r.Live { // the log file's record; warnListing warns of the run's (0025-MADR D4)
-			e.log().InfoContext(e.ctx, listingFailed, slog.String("provider", sel.ID), slog.String("kind", provider.FailureKind(r.Err)))
+			e.log().InfoContext(e.ctx, listingFailed, slog.String("provider", sel.ID), slog.String("kind", provider.ErrorKind(r.Err)))
 		}
 		if r.Live && r.Source == "live" {
 			writeKept(sel.ID, r)

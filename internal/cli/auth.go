@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 	"unicode"
@@ -24,11 +25,12 @@ import (
 // AuthCmd stores, removes and checks model credentials (0005-MADR's CLI
 // surface; 0005-PLAN F4-3a).
 type AuthCmd struct {
-	Login  AuthLoginCmd  `cmd:"" help:"Store a provider's API key in auth.json, or sign in to Grok or Kilo."`
-	Logout AuthLogoutCmd `cmd:"" help:"Remove a provider's credential from auth.json."`
-	Status AuthStatusCmd `cmd:"" help:"List where each provider's credential comes from, never the credential."`
-	Check  AuthCheckCmd  `cmd:"" help:"Report whether a provider has a usable credential: exit 0, 1 without one, 2 on error."`
-	Import AuthImportCmd `cmd:"" help:"Copy credentials from Pi's auth.json."`
+	Login   AuthLoginCmd   `cmd:"" help:"Store a provider's API key in auth.json, or sign in to Grok, Kilo or your ChatGPT plan."`
+	Logout  AuthLogoutCmd  `cmd:"" help:"Remove a provider's credential from auth.json."`
+	Status  AuthStatusCmd  `cmd:"" help:"List where each provider's credential comes from, never the credential."`
+	Check   AuthCheckCmd   `cmd:"" help:"Report whether a provider has a usable credential: exit 0, 1 without one, 2 on error."`
+	Consent AuthConsentCmd `cmd:"" help:"List, allow or deny a consent of a provider's stored sign-in, such as background requests under a ChatGPT plan."`
+	Import  AuthImportCmd  `cmd:"" help:"Copy credentials from Pi's auth.json."`
 }
 
 // keyProvider is a provider argument as gobble's id: an SDK id or Pi's name
@@ -46,7 +48,7 @@ type AuthLoginCmd struct {
 	Provider string `arg:"" complete:"provider" help:"The provider."`
 	APIKey   string `name:"api-key" complete:"none" placeholder:"-" help:"Read the key from stdin, or ask for it: -."`
 	Device   bool   `name:"device" help:"Sign in with a device code, on a machine without a browser."`
-	Method   string `name:"method" complete:"none" help:"How to sign in, with no menu: api-key (the key from stdin), browser or device, as the provider offers."`
+	Method   string `name:"method" complete:"none" help:"How to sign in, with no menu: api-key (the key from stdin), browser, device or chatgpt-plan, as the provider offers."`
 	JSON     bool   `name:"json" help:"Print the login's events as JSON lines on stdout, and nothing on stderr."`
 	// Workspace is the Anthropic workspace a Claude key not scoped to one
 	// runs in, stored beside the key (0035-MADR D5, 0035-PLAN PQ1).
@@ -81,7 +83,7 @@ func (c *AuthLoginCmd) Run(e *runEnv) error {
 	if ee, ok := errors.AsType[*exitError](err); ok {
 		code = ee.code
 	}
-	if werr := ev.emit(loginEvent{Event: "error", Provider: id, Kind: provider.FailureKind(err), Message: err.Error()}); werr != nil {
+	if werr := ev.emit(loginEvent{Event: "error", Provider: id, Kind: provider.ErrorKind(err), Message: err.Error()}); werr != nil {
 		return werr
 	}
 	return &exitError{code: code}
@@ -153,7 +155,7 @@ func checkWorkspace(id, workspace string) error {
 type loginEvents struct{ out *Output }
 
 // loginEvent is one event: device_code, browser_url, saved or error.
-// Expires is RFC 3339, in UTC; Kind is provider.FailureKind's, and Message
+// Expires is RFC 3339, in UTC; Kind is provider.ErrorKind's, and Message
 // the error gobble prints without --json, which holds no credential.
 type loginEvent struct {
 	Event    string `json:"event"`
@@ -190,30 +192,28 @@ func (e *runEnv) saved(ev *loginEvents, id, typ string) error {
 func (e *runEnv) login(id string, device bool) error { return e.loginWith(e.ctx, id, device, nil) }
 
 // loginWith signs in to provider id with no menu (0005-PLAN F4-3b decision
-// 6; 0031-MADR D7): Grok's browser sign-in, or its device sign-in with
-// device; Kilo's device sign-in, which gives a key. Any other provider has
-// none. ev, when not nil, takes what it shows. On a terminal, and never
-// with --json, a browser sign-in also takes the URL its browser ends on,
-// pasted. ctx ends the sign-in. Its own error is returned as is: Main prints
-// it and exits 1, as failf would, and --json's error event names its kind.
+// 6; 0031-MADR D7; 0051-MADR D2): by the provider's default offered method,
+// the first that is not an API key, or by its device sign-in with device. A
+// provider with none offered is a usage error naming --api-key -. ev, when
+// not nil, takes what it shows. On a terminal, and never with --json, a
+// browser sign-in also takes the URL its browser ends on, pasted. ctx ends
+// the sign-in. Its own error is returned as is: Main prints it and exits 1,
+// as failf would, and --json's error event names its kind.
 func (e *runEnv) loginWith(ctx context.Context, id string, device bool, ev *loginEvents) error {
+	method := provider.DefaultMethod(id)
+	switch {
+	case method == "":
+		return usageErrorf("%s has no login; use --api-key -", id)
+	case device && !slices.Contains(provider.Methods(id), provider.MethodDevice):
+		return usageErrorf("%s has no device sign-in; --device is for one", id)
+	case device:
+		method = provider.MethodDevice
+	}
 	o := provider.SignInOptions{
-		Method:         provider.MethodBrowser,
+		Method:         method,
 		NoPaste:        !e.offersPaste(ev),
 		ShowDeviceCode: func(d provider.DeviceCode) error { return e.showDeviceCode(ev, id, d) },
 		OpenURL:        func(u string) error { return e.openLoginURL(ev, id, u) },
-	}
-	switch {
-	case provider.HasKeyLogin(id):
-		o.Method = provider.MethodDevice
-	case provider.HasLogin(id):
-		if device {
-			o.Method = provider.MethodDevice
-		}
-	case id == "openai":
-		return usageErrorf("openai's ChatGPT sign-in is not in gobble yet (0031-PLAN P4b); use --api-key -")
-	default:
-		return usageErrorf("%s has no login; use --api-key -", id)
 	}
 	var p provider.Prompter = unasked{out: e.out.err}
 	if !o.NoPaste {
@@ -304,7 +304,7 @@ func (e *runEnv) logout(ctx context.Context, id string) (string, error) {
 			return "", failf("%v", err)
 		}
 		if revoke != nil {
-			e.out.Warnf("%s's session could not be revoked (%s); it was removed from auth.json", id, provider.FailureKind(revoke))
+			e.out.Warnf("%s's session could not be revoked (%s); it was removed from auth.json", id, provider.ErrorKind(revoke))
 		}
 		return "Logged out of " + id, nil
 	}
@@ -318,6 +318,95 @@ func (e *runEnv) logout(ctx context.Context, id string) (string, error) {
 		return "Logged out of " + id, nil
 	}
 	return fmt.Sprintf("Removed stored API key for %s. Environment variables and models.json config are unchanged.", id), nil
+}
+
+// consentStore is the store gobble auth consent reads and writes; a test
+// replaces it.
+var consentStore = func(path string) provider.LoginStore { return auth.Logins{Path: path} }
+
+// AuthConsentCmd is gobble auth consent: it lists the consents of a
+// provider's stored sign-in with their answers, or stores one (0052-MADR D3).
+// It asks nothing and reads no stdin, so a program may run it: exit 0 when
+// the answer is stored or the list printed, 2 for a usage error (an unknown
+// provider, no stored sign-in, a consent the sign-in has not, a consent with
+// no allow or deny, or any other third word), 1 when auth.json cannot be
+// read, parsed or locked. A result is on stdout, an error one line on stderr
+// with stdout empty.
+type AuthConsentCmd struct {
+	Provider string `arg:"" complete:"provider" help:"The provider."`
+	Consent  string `arg:"" optional:"" complete:"none" help:"A consent of the provider's stored sign-in: its id, such as chatgpt_plan.background_use, or its word, background."`
+	Answer   string `arg:"" optional:"" complete:"none" help:"allow or deny. With neither a consent nor an answer, the consents are listed."`
+}
+
+// Run lists the consents, or stores the answer to one.
+func (c *AuthConsentCmd) Run(e *runEnv) error {
+	id, err := keyProvider(c.Provider)
+	if err != nil {
+		return err
+	}
+	var granted bool
+	if c.Consent != "" {
+		switch c.Answer {
+		case "allow":
+			granted = true
+		case "deny":
+		case "":
+			return usageErrorf("%s %s needs allow or deny", id, c.Consent)
+		default:
+			return usageErrorf("%q is not allow or deny", c.Answer)
+		}
+	}
+	path := authPath()
+	if path == "" {
+		return failf("auth.json: the config directory cannot be resolved")
+	}
+	store := consentStore(path)
+	answers, err := provider.Consents(e.ctx, store, id)
+	if err != nil {
+		return consentError(id, c.Consent, err)
+	}
+	if c.Consent == "" {
+		var b strings.Builder
+		for _, a := range answers {
+			fmt.Fprintf(&b, "%s %s %s\n", id, a.ID, a.Answer)
+		}
+		if b.Len() == 0 {
+			return nil
+		}
+		return e.out.Result([]byte(b.String()))
+	}
+	// The consent's id is found before anything is written, so that nothing
+	// read afterwards can fail a stored answer.
+	consent := ""
+	for _, a := range answers {
+		if c.Consent == a.ID || a.Word != "" && c.Consent == a.Word {
+			consent = a.ID
+		}
+	}
+	if consent == "" {
+		return consentError(id, c.Consent, provider.ErrUnknownConsent)
+	}
+	if err := provider.SetConsent(e.ctx, store, id, consent, granted); err != nil {
+		return consentError(id, c.Consent, err)
+	}
+	answer := provider.AnswerDeclined
+	if granted {
+		answer = provider.AnswerGranted
+	}
+	return e.out.Resultf("%s %s %s\n", id, consent, answer)
+}
+
+// consentError is err, from a consent function, as the command's error: a
+// usage error for the provider having no stored sign-in or the sign-in not
+// having the consent, exit 1 with the store's own words for anything else.
+func consentError(id, consent string, err error) error {
+	switch {
+	case errors.Is(err, provider.ErrNoStoredSession):
+		return usageErrorf("%s has no stored sign-in to answer a consent for", id)
+	case errors.Is(err, provider.ErrUnknownConsent):
+		return usageErrorf("%s's stored sign-in has no consent %q", id, consent)
+	}
+	return failf("%s", oneLine(err.Error()))
 }
 
 // AuthStatusCmd is gobble auth status.
@@ -446,7 +535,7 @@ func (e *runEnv) statusRow(id string) authStatusRow {
 				if entry.Expires > 0 {
 					row.Expires = time.UnixMilli(entry.Expires).UTC().Format(time.RFC3339)
 				}
-				if !provider.HasLogin(id) {
+				if !ok {
 					row.Reason, row.text = "oauth_unused", row.text+", not used (0005-PLAN F4-3b)"
 				}
 			default:

@@ -203,6 +203,15 @@ answered by the owner (2026-11-10)": QA (a), QF (a) and QG (a). No question of t
   withdrawal applies from the next request in every process (0031-MADR's "from the next request" made true). Without a
   grant: no title; no automatic compaction; an overflow ends the turn with `errPlanOverflow`, reworded to name `/compact`
   and D3's command.
+  *(2026-11-15, the owner's ruling "Keep it, and document it", relayed by the coordinator.)* The gate stays as decided, keyed on the stored session, not on the
+  credential a run uses. Consequence: with `--api-key` for openai and a plan session stored, titles and automatic compactions are held back until the plan
+  consent is granted, although those requests would go out with the key. Checked against the code, for each way a key reaches a run: only `--api-key` does this.
+  `--api-key` sets the run's key (`internal/cli/chat.go:69`, `setRuntimeKey`), and the resolver takes it first (`internal/auth/resolve.go:77`; `Has`, `:109`), so the
+  provider is built with the key (`llm/provider/provider.go:99`, `Options.login` returns none for a key); the gate is built from the stored session alone
+  (`internal/cli/credentials.go:22`, `provider.PlanConsent`, wired at `internal/cli/agent.go:103`). An environment variable or `models.json`'s `apiKey` is reached only when
+  `auth.json` has no entry for the provider (`resolve.go:80-82` returns the entry's verdict before `:83` and `:94`, and `Has` the same at `:112`, `:115`, `:123`), so with a plan
+  session stored they are not used, the requests go out under the plan, and the gate governs them as it should. `settings.yaml` has no key that carries a credential
+  (`internal/config/keys.go`). `docs/guides/credentials.md` says it where the consent is explained.
 * **Enforcement, the SDK's, as well.** `llm` gains `WithBackground(ctx)` and `IsBackground(ctx)` (standard library, rule 1
   holds); the title and the automatic compaction mark their context; `llm/provider`'s adapter turns the mark into
   `llmprovider.WithBackground`, so a request that gobble's gate missed is refused before the network

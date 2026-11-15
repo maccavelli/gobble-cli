@@ -70,20 +70,12 @@ type DeviceCode struct {
 	Expires   time.Time
 }
 
-// HasLogin reports whether provider id has an OAuth login gobble keeps and
-// refreshes: Grok's, through the SDK's flows (0005-PLAN F4-3b decision 1).
-func HasLogin(id string) bool { return id == string(llmprovider.ProviderGrok) }
-
-// HasKeyLogin reports whether provider id has a device login that gives an
-// API key: Kilo's (0005-PLAN F4-3b).
-func HasKeyLogin(id string) bool { return id == string(llmprovider.ProviderKilo) }
-
 // PiLogin is Pi's stored login for provider id as gobble's. Pi keeps no
 // issuer or client id, so Grok's takes the SDK's, which are the ones Pi
 // signs in with; a refresh sends them (0005-PLAN F4-3c decision 7). Any
 // other id is false: gobble imports no other login.
 func PiLogin(id, access, refresh string, expires time.Time) (*Login, bool) {
-	if !HasLogin(id) {
+	if !ImportsPiLogin(id) {
 		return nil, false
 	}
 	return &Login{
@@ -99,8 +91,10 @@ func LoginRejected(id string) string {
 	return id + " rejected the OAuth login in auth.json; sign in again with gobble auth login " + id
 }
 
-// Logout revokes provider id's stored login, then deletes it from store,
-// whether or not revocation succeeded: the SDK leaves the stored copy to its
+// Logout revokes provider id's stored login when gobble accepts its kind
+// and the method that signed it in, as the stored session's kind names it,
+// is revocable (never another application's session), then
+// deletes any login from store, whether or not revocation succeeded: the SDK leaves the stored copy to its
 // caller (0005-PLAN F4-3b decision 7). revoke is revocation's error; err is
 // the store's. The session it revokes is given o's ClientName and
 // ClientVersion as its identity before the revocation, so the revocation and
@@ -110,7 +104,7 @@ func Logout(ctx context.Context, id string, o LoginOptions, store LoginStore) (r
 	if err != nil {
 		return nil, err
 	}
-	if l != nil && HasLogin(id) {
+	if m, ok := storedMethod(id, l); ok && m.Revocable {
 		s := l.session(id, nil, o.HTTPClient, nil)
 		s.UseIdentity(auth.Identity{Name: o.ClientName, Version: o.ClientVersion})
 		if rerr := auth.RevokeOAuthSession(ctx, s); rerr != nil {

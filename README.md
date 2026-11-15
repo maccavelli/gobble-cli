@@ -106,11 +106,15 @@ Early, and built in the order [docs/README.md](docs/README.md#build-order) gives
   stores it in `auth.json`, `gobble auth login openai --api-key -` on a terminal asks for it instead of echoing, and
   for one run only `echo sk-test-only | gobble --model openai/gpt-6-luna --api-key - -p hello` uses it without storing.
   `gobble auth logout <provider>` removes a stored entry, `gobble auth status` shows where each key comes from and
-  `gobble auth check` whether one is usable. Grok and Kilo sign in with `gobble auth login grok|kilo`,
-  `--method api-key|browser|device` names a way with no menu, and `gobble auth import --from-pi` copies Pi's entries.
+  `gobble auth check` whether one is usable. Grok, Kilo and OpenAI's ChatGPT plan sign in with
+  `gobble auth login grok|kilo|openai`, `--method api-key|browser|device|chatgpt-plan` names a way with no menu,
+  `gobble auth consent` lists and changes the one consent a ChatGPT plan sign-in asks, and
+  `gobble auth import --from-pi` copies Pi's entries.
   Grok's sign-in, a stored login's refresh, a model lookup's refresh and `gobble auth logout grok` name gobble and its
   version in their requests' User-Agent, and the sign-in's authorize and device requests carry `referrer=gobble`;
-  gobble sends no `originator` ([guide](docs/guides/credentials.md)).
+  gobble sends no `originator` ([guide](docs/guides/credentials.md)). A ChatGPT plan sign-in asks first, in
+  gobble's own words, whether gobble may make background requests, a session's title and its automatic
+  compaction, under your plan; unless you allow it, gobble makes none.
 - **Signing in where you are:** `/login [provider]` in a session asks which provider and how, checks a typed key
   by listing the provider's models, stores it, and lists the models to switch to; `/logout [provider]` removes a
   stored credential. With no credential at all, a session offers the sign-in before its first prompt, and
@@ -163,7 +167,8 @@ The design is [0048-MADR](docs/decisions/0048-MADR-gobble-update-command.md).
 - **Protocols:** the [ACP Go SDK](https://github.com/maccavelli/acp-go-sdk2) `acp-go-sdk2` `v1.36.0`, and the
   [MCP Go SDK](https://github.com/modelcontextprotocol/go-sdk) `v1.8.0`.
 - **Models:** [go-llmprovider-sdk](https://github.com/maccavelli/go-llmprovider-sdk) `v1.31.0`, behind
-  gobble's own `llm` facade. Only `llm/provider` imports it.
+  gobble's own `llm` facade. Only `llm/provider` imports it, but for its data-only `authcontract` module, which
+  `internal/cli` and `acpserver` may import too.
 - **Tool schemas:** JSON Schema 2020-12 from Go types, with [jsonschema-go](https://github.com/google/jsonschema-go) `v0.4.3`.
 - **Settings, skills and templates:** YAML through [go.yaml.in/yaml/v3](https://github.com/yaml/go-yaml) `v3.0.5`.
 - **Build identity and self-update:** [go-selfupdate-lib](https://github.com/maccavelli/go-selfupdate-lib)

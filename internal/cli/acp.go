@@ -98,7 +98,7 @@ func (e *runEnv) acpLogin(name string, device bool) error {
 	if err != nil {
 		return err
 	}
-	if provider.HasLogin(id) || provider.HasKeyLogin(id) {
+	if provider.HasSignIn(id) {
 		return e.login(id, device)
 	}
 	if device {

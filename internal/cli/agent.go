@@ -97,6 +97,10 @@ func (e *runEnv) agentOptions() acpserver.Options {
 		SearchModels: provider.Search,
 		// A sign-in or a sign-out lifts a refused turn's mark (0025-MADR D4, D6).
 		CredentialGeneration: e.credentialGeneration,
+		// A title and an automatic compaction under a ChatGPT plan session are
+		// made only with the user's consent, read now from auth.json
+		// (0052-MADR D2).
+		PlanConsent: e.planConsent,
 		// What the catalog knows of a model, with the provider's key or login,
 		// found as modelProvider finds it, for its listing (0005-PLAN F4-2a,
 		// F4-3a, F4-3b).
@@ -380,11 +384,13 @@ func (e *runEnv) defaultProvider() string { return e.processSettings("").Setting
 
 // authProviders are ACP authentication's providers: each that takes a
 // credential, in the SDK's order, with its label and the gobble command
-// that stores one (0016-MADR A2).
+// that stores one (0016-MADR A2). Login is an offered sign-in other than an
+// API key, and the command is then the bare sign-in, which takes the
+// provider's default method (0051-MADR D2).
 func authProviders() []acpext.AuthProvider {
 	var out []acpext.AuthProvider
 	for _, id := range provider.KeyProviders() {
-		login := provider.HasLogin(id) || provider.HasKeyLogin(id)
+		login := provider.HasSignIn(id)
 		command := "gobble auth login " + id + " --api-key -"
 		if login {
 			command = "gobble auth login " + id

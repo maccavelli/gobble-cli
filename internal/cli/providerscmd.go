@@ -8,6 +8,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/maccavelli/go-llmprovider-sdk/authcontract"
+
 	"github.com/maccavelli/gobble-cli/jsonx"
 	"github.com/maccavelli/gobble-cli/llm/provider"
 )
@@ -110,17 +112,19 @@ func (e *runEnv) credentialWords(id string) string {
 	return src
 }
 
-// signInWords is how provider id is signed in to (0025-MADR D5, D6).
+// signInWords is how provider id is signed in to (0025-MADR D5, D6): an API
+// key, then the label of each other offered method (0051-MADR D2).
 func signInWords(id string) string {
-	switch {
-	case provider.CredentialVar(id) == "":
+	if provider.CredentialVar(id) == "" {
 		return "—"
-	case provider.HasLogin(id):
-		return "API key; browser or device sign-in"
-	case provider.HasKeyLogin(id):
-		return "API key; device sign-in"
 	}
-	return "API key"
+	words := []string{"API key"}
+	for _, m := range provider.Offered(id) {
+		if m.Kind != authcontract.KindAPIKey {
+			words = append(words, m.Label)
+		}
+	}
+	return strings.Join(words, "; ")
 }
 
 // columns lays cells out two spaces apart, each column as wide as its

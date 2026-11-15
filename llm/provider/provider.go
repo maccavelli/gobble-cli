@@ -231,7 +231,8 @@ func New(id string, o Options) (llm.Provider, error) {
 	if !r.Off {
 		w = llmprovider.WithStreamRetry(p, policyOf(r), notice)
 	}
-	return &adapter{p: w, id: p.ID(), caps: w.Capabilities(), source: o.CredentialSource, login: login != nil}, nil
+	return &adapter{p: w, id: p.ID(), caps: w.Capabilities(), source: o.CredentialSource, login: login != nil,
+		consent: planConsentOf(id, login)}, nil
 }
 
 // noticeKey carries a call's hook for the retry notices of its stream.
@@ -259,6 +260,10 @@ type adapter struct {
 	// login reports that the credential is a stored OAuth login (0005-PLAN
 	// F4-3b).
 	login bool
+	// consent is the id of the consent a background request needs, when the
+	// credential is a stored session of the kind that has one, else ""
+	// (0052-MADR D2).
+	consent string
 	// mu guards offlineURL: the URL of the last request the network could
 	// not carry, whose host Probe dials (0005-PLAN F5-1, deviation 1).
 	mu         sync.Mutex
@@ -270,7 +275,7 @@ type adapter struct {
 // and the failure's code and status (0031-MADR D4; 0049-MADR D6).
 func (a *adapter) providerRetry(n llmprovider.RetryNotice) llm.ProviderRetry {
 	mapped := mapErrorAt(a.id, n.Err, time.Now())
-	pr := llm.ProviderRetry{Attempt: n.Attempt, MaxAttempts: n.MaxAttempts, Wait: n.Wait, Kind: FailureKind(mapped),
+	pr := llm.ProviderRetry{Attempt: n.Attempt, MaxAttempts: n.MaxAttempts, Wait: n.Wait, Kind: ErrorKind(mapped),
 		ServerDirected: n.ServerDirected}
 	if ae, ok := errors.AsType[*llm.APIError](mapped); ok {
 		pr.RetryAfter, pr.Code, pr.Status = ae.RetryAfter, ae.Code, ae.Status
@@ -338,6 +343,11 @@ func (a *adapter) attempt(ctx context.Context, req *llm.Request, msgs []llm.Mess
 	// how many tries were made (0049-MADR D6).
 	tried := 0
 	ctx = context.WithValue(ctx, modelKey{}, req.Model) // for the header transport (0005-PLAN F4-2b)
+	if llm.IsBackground(ctx) {
+		// The SDK refuses a marked request under a plan session without the
+		// consent, before the network (0052-MADR D2).
+		ctx = llmprovider.WithBackground(ctx)
+	}
 	// The provider's retries are yielded as they are made; a caller that
 	// stops at one ends the wait at once (0031-MADR D4).
 	ctx, cancel := context.WithCancel(ctx)
@@ -370,6 +380,11 @@ func (a *adapter) attempt(ctx context.Context, req *llm.Request, msgs []llm.Mess
 			if ae, ok := errors.AsType[*llm.APIError](mapped); ok && tried > 0 {
 				ae.Attempts = tried + 1
 			}
+			if a.consent != "" && llm.IsBackground(ctx) && refusedBeforeSending(err) {
+				// The SDK's refusal of a marked request names the consent only in
+				// its text; the error carries its id (0052-MADR D2).
+				mapped = &llm.ConsentError{Consent: a.consent, Err: mapped}
+			}
 			yield(nil, a.rejected(mapped, err))
 			return false
 		}
@@ -400,6 +415,29 @@ func (a *adapter) attempt(ctx context.Context, req *llm.Request, msgs []llm.Mess
 		}
 	}
 	return false
+}
+
+// refusedBeforeSending reports that err is the SDK's own refusal of a
+// request, not the service's: a "not permitted" with no HTTP response behind
+// it, as the SDK gives a marked request on a plan session that has no
+// consent.
+func refusedBeforeSending(err error) bool {
+	ae, response := errors.AsType[*llmprovider.APIError](err)
+	return errors.Is(err, llmprovider.ErrNotPermitted) && (!response || ae == nil)
+}
+
+// planConsentOf is the id of the consent that session s of provider id
+// needs for a background request, or "" when s is none or of a kind that has
+// none.
+func planConsentOf(id string, s *auth.OAuthSession) string {
+	if s == nil {
+		return ""
+	}
+	m, c, ok := consentMethod(id)
+	if !ok || sessionKinds[sessionKey{id, m.ClientIdentity}] != s.SessionKind() {
+		return ""
+	}
+	return c.ID
 }
 
 // reasoning is a ReasoningItem as ProviderData carries it for replay.

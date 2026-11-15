@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"slices"
 
 	"github.com/maccavelli/gobble-cli/acpext"
@@ -30,6 +31,28 @@ var errCompactionsExhausted = fmt.Errorf("compaction did not bring the context u
 // (0005-PLAN F5-2 decision 5).
 func overflowFailed(err error) error {
 	return fmt.Errorf("the context is over the model's window, and compacting it failed: %w", err)
+}
+
+// afterRefusal is err, an automatic compaction's failure, when the SDK
+// refused its marked request for a consent: such a refusal comes back as an
+// llm.ConsentError, and gobble's own read of the answer then decides which
+// it was. An answer that cannot be read is no ConsentError and names no
+// consent; an answer still not granted gives errPlanOverflow's text and its
+// consent, so a client may offer to allow it; an answer that is granted leaves the refusal with no consent to
+// offer, since allowing it again would change nothing (0052-MADR D2).
+func (a *Agent) afterRefusal(id string, err error) error {
+	ce, ok := errors.AsType[*llm.ConsentError](err)
+	if !ok || a.planConsent == nil {
+		return err
+	}
+	st, gated, gerr := a.backgroundGate(id)
+	switch {
+	case gerr != nil:
+		return errPlanUnreadable(gerr)
+	case gated:
+		return errPlanOverflow(id, st) // the stale grant let it through; the answer now reads no grant
+	}
+	return ce.Err
 }
 
 // pauseOf is the pause a failed automatic compaction takes: the session's
@@ -83,6 +106,23 @@ func (c *autoCompaction) compact(ctx context.Context, overflow bool) (*agent.Com
 			return nil, nil
 		}
 	}
+	if st, gated, gerr := a.backgroundGate(c.providerID); gated {
+		// Automatic compaction under a ChatGPT plan session is a background
+		// request, made only with the user's consent: with none, the
+		// threshold is passed by, and an overflow ends the turn saying how
+		// to go on (0052-MADR D2).
+		switch {
+		case !overflow:
+			if gerr != nil {
+				a.logger.WarnContext(ctx, "compaction: the stored consent could not be read; no automatic compaction was made",
+					slog.String("provider", c.providerID), slog.String("error", gerr.Error()))
+			}
+			return nil, nil
+		case gerr != nil:
+			return nil, errPlanUnreadable(gerr)
+		}
+		return nil, errPlanOverflow(c.providerID, st)
+	}
 	if c.done == maxTurnCompactions {
 		return nil, errCompactionsExhausted
 	}
@@ -95,8 +135,9 @@ func (c *autoCompaction) compact(ctx context.Context, overflow bool) (*agent.Com
 	}
 	c.out.flush()
 	report := a.newCompactionReport(c.out, s, reason)
-	res, used, err := a.runCompaction(ctx, s, prep, a.summaryModel(s, c.provider, c.providerID), "", report)
+	res, used, err := a.runCompaction(llm.WithBackground(ctx), s, prep, a.summaryModel(s, c.provider, c.providerID), "", report)
 	if err != nil {
+		err = a.afterRefusal(c.providerID, err)
 		if ctx.Err() != nil {
 			report.ended(res, err, true, pauseNone)
 			return nil, context.Cause(ctx)
@@ -106,6 +147,10 @@ func (c *autoCompaction) compact(ctx context.Context, overflow bool) (*agent.Com
 		s.pause, s.pauseErr = p, err.Error()
 		a.mu.Unlock()
 		report.ended(res, err, false, p)
+		var own refusal
+		if errors.As(err, &own) && overflow {
+			return nil, err // the overflow's own refusal says all it has to (0052-MADR D2)
+		}
 		if overflow {
 			return nil, overflowFailed(err)
 		}

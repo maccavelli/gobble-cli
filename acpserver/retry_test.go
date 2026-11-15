@@ -119,8 +119,8 @@ func TestRetryNotice(t *testing.T) {
 		want := []map[string]any{
 			notice(id, "start", "offline", nil),
 			notice(id, "end", "offline", nil),
-			notice(id, "start", "empty_reply", map[string]any{"attempt": 1.0, "maxAttempts": 2.0, "delayMs": 2000.0}),
-			notice(id, "end", "empty_reply", nil),
+			notice(id, "start", "empty_answer", map[string]any{"attempt": 1.0, "maxAttempts": 2.0, "delayMs": 2000.0}),
+			notice(id, "end", "empty_answer", nil),
 		}
 		if got := r.notices(t); !sameNotices(got, want) {
 			t.Fatalf("notices %v, want %v", got, want)
@@ -191,7 +191,7 @@ func TestSetAutoRetry(t *testing.T) {
 // wait it asked for, that it asked, and the failure's code and status, as
 // acpext's retry.start.provider.notice.json has them (0049-MADR D2).
 func TestRetryNoticeServerMembers(t *testing.T) {
-	pr := llm.ProviderRetry{Attempt: 1, MaxAttempts: 4, Wait: 1100 * time.Millisecond, Kind: "rate-limited",
+	pr := llm.ProviderRetry{Attempt: 1, MaxAttempts: 4, Wait: 1100 * time.Millisecond, Kind: "rate_limited",
 		RetryAfter: time.Second, ServerDirected: true, Code: "rate_limit_exceeded", Status: 429}
 	r := newRetryAgent(t, llmtest.NewScript(llmtest.Turn{Events: []llm.Event{pr, llm.TextDelta{Text: "ok"},
 		llm.Done{StopReason: llm.StopEndTurn}}}), nil)

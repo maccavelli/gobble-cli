@@ -285,6 +285,9 @@ func promptError(provider string, err error) error {
 // and not the service's words (0035-MADR D5).
 func errorData(provider string, err error) acpext.ErrorData {
 	d := acpext.ErrorData{Error: err.Error(), Provider: provider, Kind: acpext.ErrorKind(llm.Kind(err))}
+	if ce, ok := errors.AsType[*llm.ConsentError](err); ok {
+		d.Consent = ce.Consent
+	}
 	if errors.Is(err, llm.ErrWorkspace) {
 		d.Error = workspaceAdvice
 		return d
@@ -303,6 +306,10 @@ func errorData(provider string, err error) acpext.ErrorData {
 		d.Attempts = ae.Attempts
 	}
 	d.Limit = acpext.LimitScope(ae.Limit)
+	// The window as the provider stated it, in whole minutes (0049-MADR Q9).
+	if ae.Window > 0 {
+		d.WindowMinutes = int(ae.Window / time.Minute)
+	}
 	return d
 }
 

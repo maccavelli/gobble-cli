@@ -1,7 +1,6 @@
 package provider
 
 import (
-	"context"
 	"errors"
 	"net/http"
 	"strconv"
@@ -156,8 +155,8 @@ func TestRetryNoticeCarriesServerWait(t *testing.T) {
 	}
 	pr := retries[0]
 	if pr.RetryAfter != time.Millisecond || !pr.ServerDirected || pr.Code != "rate_limit_exceeded" || pr.Status != 429 ||
-		pr.Kind != "rate-limited" || pr.Attempt != 1 || pr.MaxAttempts != 2 {
-		t.Errorf("retry %+v, want RetryAfter 1ms, server-directed, rate_limit_exceeded, 429, rate-limited, 1 of 2", pr)
+		pr.Kind != "rate_limited" || pr.Attempt != 1 || pr.MaxAttempts != 2 {
+		t.Errorf("retry %+v, want RetryAfter 1ms, server-directed, rate_limit_exceeded, 429, rate_limited, 1 of 2", pr)
 	}
 }
 
@@ -174,17 +173,6 @@ func TestAttemptsAfterRetries(t *testing.T) {
 	_, err = drain(t, adapterOver(once, llmprovider.RetryPolicy{MaxAttempts: 4, BaseDelay: time.Millisecond}), wireRequest())
 	if ae, ok := errors.AsType[*llm.APIError](err); !ok || ae.Attempts != 0 {
 		t.Fatalf("a failure with no retry: %v (%+v), want no Attempts", err, ae)
-	}
-}
-
-// For every class FailureKind names, llm.Kind names it the same
-// (0049-MADR D3).
-func TestKindAgreesWithFailureKind(t *testing.T) {
-	for _, err := range []error{llm.ErrWorkspace, llm.ErrQuota, llm.ErrRateLimited, llm.ErrAuth, llm.ErrNotPermitted,
-		llm.ErrUnavailable, context.DeadlineExceeded, context.Canceled} {
-		if got, want := llm.Kind(err), FailureKind(err); got != want {
-			t.Errorf("%v: llm.Kind %q, FailureKind %q", err, got, want)
-		}
 	}
 }
 

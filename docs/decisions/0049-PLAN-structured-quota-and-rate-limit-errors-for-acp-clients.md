@@ -888,6 +888,24 @@ Scripts and logs are in the session scratchpad (`p5b1_apply.py`, `p5b1_planted.p
     real-machine home paths): nothing found.
 * **Step 6.** Committed on `main` by the agent (0052-PLAN Deviation 1).
 
+#### P5b-2 record (2026-11-15)
+
+Built with 0051-PLAN P4 step 1, as that step says ("0049-PLAN's record gains its P5b-2 entry"); the file joins that phase's
+scope by C9. Staged on the branch `p3-acpext-v0.5.0` with 0051-PLAN P4 and 0052-PLAN P3, as one commit, against
+`acpext/v0.5.0-rc.1`, the candidate tag, which stands for step 1's pin (the final tag is 0051-PLAN's P8a).
+
+* **The wire half, re-applied from `1406bd6` unchanged.** `acpserver/prompt.go`'s `errorData` sets `WindowMinutes` to
+  `int(ae.Window / time.Minute)` when `Window` is positive; `acpserver/errordata_test.go`'s `weeklyErr`, its case in
+  `TestErrorData` ("a stated weekly window") and its frame in `TestPromptQuotaData` (`prompt-weekly.error.json`, which acpext's
+  testdata has had since 0051-PLAN P3, `windowMinutes` 10080).
+* **Seen failing (C2),** on a scratch copy of the tree with the three `WindowMinutes` lines removed, `go test -count=1` of
+  `acpserver`, exit 1: `TestErrorData/a_stated_weekly_window`, "errordata_test.go:193: errorData", the `got` without
+  `windowMinutes` against the `want` with it, and `TestPromptQuotaData/prompt-weekly.error.json`, "errordata_test.go:220: prompt error
+  -32603 {…}" without it. Unbroken, both pass in the tree.
+* **The issue.** #15, "Adopt go-llmprovider-sdk v1.29.0: provider reset instants and stated limits (0049-PLAN P5)", may close
+  after this commit lands, on the owner's word (0051-PLAN P4 step 1's note of 2026-11-11).
+* The gates are 0051-PLAN's "P4 record (2026-11-15)".
+
 ### P6 — acceptance
 
 1. **Goldens:** P3 step 7's check, again at P6's base.

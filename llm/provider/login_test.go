@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/maccavelli/go-llmprovider-sdk/authcontract"
 	"github.com/maccavelli/go-llmprovider-sdk/llmprovider"
 	"github.com/maccavelli/go-llmprovider-sdk/llmprovider/auth"
 
@@ -284,7 +285,7 @@ func TestLogout(t *testing.T) {
 	ti := newTestIssuer(t)
 	store := &memLogins{}
 	login := &Login{Access: "a", Refresh: "r-1", Expires: time.Now().Add(time.Hour), Issuer: ti.URL,
-		ClientID: auth.DefaultGrokOAuthClientID, TokenURL: ti.URL + "/oauth2/token"}
+		ClientID: auth.DefaultGrokOAuthClientID, TokenURL: ti.URL + "/oauth2/token", Kind: string(auth.SessionGrok)}
 	if err := store.Save(t.Context(), "grok", login); err != nil {
 		t.Fatal(err)
 	}
@@ -433,43 +434,131 @@ func TestStoredLoginNamedForRefresh(t *testing.T) {
 	}
 }
 
-// Logout of a stored Grok login names gobble on the discovery and the
-// revocation, whose paths and forms are those of a logout with no name, which
-// sends the SDK's User-Agent (0051-MADR D9, N7).
+// Logout of a stored Grok login, and of a stored ChatGPT plan session, names
+// gobble on the discovery and the revocation, whose paths and forms are those
+// of a logout with no name, which sends the SDK's User-Agent (0051-MADR D9,
+// N7).
 func TestLogoutRevokesAsGobble(t *testing.T) {
-	run := func(o LoginOptions) []seenRequest {
-		t.Helper()
-		ti := newTestIssuer(t) // one issuer for each run: the SDK caches discovery by issuer
-		rec := &uaRecorder{}
-		o.HTTPClient = &http.Client{Transport: rec}
-		store := &memLogins{}
-		login := &Login{Access: "a", Refresh: "r-1", Expires: time.Now().Add(time.Hour), Issuer: ti.URL,
-			ClientID: auth.DefaultGrokOAuthClientID, TokenURL: ti.URL + "/oauth2/token"}
-		if err := store.Save(t.Context(), "grok", login); err != nil {
-			t.Fatal(err)
+	logins := map[string]func(ti *testIssuer) *Login{
+		"grok": func(ti *testIssuer) *Login {
+			return &Login{Access: "a", Refresh: "r-1", Expires: time.Now().Add(time.Hour), Issuer: ti.URL,
+				ClientID: auth.DefaultGrokOAuthClientID, TokenURL: ti.URL + "/oauth2/token", Kind: string(auth.SessionGrok)}
+		},
+		"openai": func(ti *testIssuer) *Login {
+			return &Login{Access: "a", Refresh: "plan-r", Expires: time.Now().Add(time.Hour), Issuer: ti.URL,
+				ClientID: "oaiapp_gobbletest", TokenURL: ti.URL + "/oauth2/token", Resource: "https://api.openai.com/v1",
+				Scope: "openid chatgpt.tokens.use.direct", HostID: "urn:uuid:host", Kind: string(auth.SessionChatGPTPlan)}
+		},
+	}
+	for id, login := range logins {
+		t.Run(id, func(t *testing.T) {
+			run := func(o LoginOptions) []seenRequest {
+				t.Helper()
+				ti := newTestIssuer(t) // one issuer for each run: the SDK caches discovery by issuer
+				rec := &uaRecorder{}
+				o.HTTPClient = &http.Client{Transport: rec}
+				store := &memLogins{}
+				if err := store.Save(t.Context(), id, login(ti)); err != nil {
+					t.Fatal(err)
+				}
+				if revoke, err := Logout(t.Context(), id, o, store); revoke != nil || err != nil {
+					t.Fatalf("logout: %v, %v", revoke, err)
+				}
+				return rec.requests()
+			}
+			named := run(LoginOptions{ClientName: "gobble", ClientVersion: "1.2.3-test"})
+			plain := run(LoginOptions{})
+			wantNamed(t, "the named logout", named)
+			wantUnnamed(t, "the unnamed logout", plain)
+			var paths []string
+			for _, r := range named {
+				paths = append(paths, r.method+" "+r.path+" "+r.form)
+			}
+			var want []string
+			for _, r := range plain {
+				want = append(want, r.method+" "+r.path+" "+r.form)
+			}
+			if !slices.Equal(paths, want) {
+				t.Errorf("the named logout sent %q, the unnamed %q; want the same requests", paths, want)
+			}
+			if !slices.ContainsFunc(named, func(r seenRequest) bool { return r.path == "/oauth2/revoke" }) ||
+				!slices.ContainsFunc(named, func(r seenRequest) bool { return r.path == "/.well-known/openid-configuration" }) {
+				t.Errorf("the named logout sent %+v, want a discovery and a revocation", named)
+			}
+		})
+	}
+}
+
+// Logout revokes only a session gobble accepts: a stored OpenAI login of
+// another application's kind (the Codex client's ChatGPT login) is deleted
+// and never revoked, as gobble holds no right to revoke it; a Grok session
+// and a ChatGPT plan session are revoked, then deleted (0051-MADR D2).
+func TestLogoutRevokesOnlyAccepted(t *testing.T) {
+	for _, c := range []struct {
+		name, id string
+		login    func(ti *testIssuer) *Login
+		revoked  bool
+	}{
+		{"another application's ChatGPT login", "openai", func(ti *testIssuer) *Login {
+			return &Login{Access: "a", Refresh: "codex-r", Expires: time.Now().Add(time.Hour), Issuer: ti.URL, ClientID: "app_codex",
+				TokenURL: ti.URL + "/oauth2/token", Kind: string(auth.SessionChatGPT)}
+		}, false},
+		{"a Grok session", "grok", func(ti *testIssuer) *Login {
+			return &Login{Access: "a", Refresh: "grok-r", Expires: time.Now().Add(time.Hour), Issuer: ti.URL,
+				ClientID: auth.DefaultGrokOAuthClientID, TokenURL: ti.URL + "/oauth2/token", Kind: string(auth.SessionGrok)}
+		}, true},
+		{"a ChatGPT plan session", "openai", func(ti *testIssuer) *Login {
+			return &Login{Access: "a", Refresh: "plan-r", Expires: time.Now().Add(time.Hour), Issuer: ti.URL, ClientID: "oaiapp_gobbletest",
+				TokenURL: ti.URL + "/oauth2/token", Resource: "https://api.openai.com/v1", Kind: string(auth.SessionChatGPTPlan)}
+		}, true},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			ti := newTestIssuer(t)
+			store := &memLogins{}
+			login := c.login(ti)
+			if err := store.Save(t.Context(), c.id, login); err != nil {
+				t.Fatal(err)
+			}
+			revoke, err := Logout(t.Context(), c.id, LoginOptions{}, store)
+			if revoke != nil || err != nil || store.logins[c.id] != nil {
+				t.Fatalf("logout: %v, %v, stored %v; want it deleted", revoke, err, store.logins[c.id])
+			}
+			var revoked []string
+			ti.with(func() { revoked = append(revoked, ti.revoked...) })
+			if got := slices.Contains(revoked, login.Refresh); got != c.revoked || !c.revoked && len(revoked) != 0 {
+				t.Errorf("revoked %q, want %s revoked: %v", revoked, login.Refresh, c.revoked)
+			}
+		})
+	}
+}
+
+// Logout reads revocability from the method that signed the stored session in,
+// as its kind names it, not from the provider's other methods: a stored
+// ChatGPT plan session whose method is not revocable is deleted and never
+// revoked, though the provider offers another method that is (0051-MADR D2).
+func TestLogoutReadsTheStoredMethod(t *testing.T) {
+	ti := newTestIssuer(t)
+	store := &memLogins{}
+	login := &Login{Access: "a", Refresh: "plan-r", Expires: time.Now().Add(time.Hour), Issuer: ti.URL, ClientID: "oaiapp_gobbletest",
+		TokenURL: ti.URL + "/oauth2/token", Resource: "https://api.openai.com/v1", Kind: string(auth.SessionChatGPTPlan)}
+	if err := store.Save(t.Context(), "openai", login); err != nil {
+		t.Fatal(err)
+	}
+	saved := offeredFor
+	t.Cleanup(func() { offeredFor = saved })
+	offeredFor = func(id string) []authcontract.Method {
+		return []authcontract.Method{
+			{ID: "chatgpt_plan", Yields: authcontract.YieldsOAuthSession, ClientIdentity: authcontract.ClientAppRegistered, Revocable: false},
+			{ID: "browser_oauth", Yields: authcontract.YieldsOAuthSession, ClientIdentity: authcontract.ClientVendorBorrowed, Revocable: true},
 		}
-		if revoke, err := Logout(t.Context(), "grok", o, store); revoke != nil || err != nil {
-			t.Fatalf("logout: %v, %v", revoke, err)
-		}
-		return rec.requests()
 	}
-	named := run(LoginOptions{ClientName: "gobble", ClientVersion: "1.2.3-test"})
-	plain := run(LoginOptions{})
-	wantNamed(t, "the named logout", named)
-	wantUnnamed(t, "the unnamed logout", plain)
-	var paths []string
-	for _, r := range named {
-		paths = append(paths, r.method+" "+r.path+" "+r.form)
+	if !Revocable("openai") {
+		t.Fatal("the fixture's provider offers no revocable method")
 	}
-	var want []string
-	for _, r := range plain {
-		want = append(want, r.method+" "+r.path+" "+r.form)
-	}
-	if !slices.Equal(paths, want) {
-		t.Errorf("the named logout sent %q, the unnamed %q; want the same requests", paths, want)
-	}
-	if !slices.ContainsFunc(named, func(r seenRequest) bool { return r.path == "/oauth2/revoke" }) ||
-		!slices.ContainsFunc(named, func(r seenRequest) bool { return r.path == "/.well-known/openid-configuration" }) {
-		t.Errorf("the named logout sent %+v, want a discovery and a revocation", named)
+	revoke, err := Logout(t.Context(), "openai", LoginOptions{}, store)
+	var revoked []string
+	ti.with(func() { revoked = append(revoked, ti.revoked...) })
+	if revoke != nil || err != nil || store.logins["openai"] != nil || len(revoked) != 0 {
+		t.Errorf("logout: %v, %v, stored %v, revoked %q; want it deleted and never revoked", revoke, err, store.logins["openai"], revoked)
 	}
 }

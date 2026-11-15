@@ -115,7 +115,7 @@ $ gobble auth status --json
 | `variable` | with `env`, the variable's name |
 | `authType` | with `auth.json`, the entry's type: `api_key` or `oauth` |
 | `usable` | whether gobble would use it; a `!command` key counts without being run |
-| `reason` | why an `auth.json` entry is not usable: `oauth_unused` (a sign-in for a provider gobble has none for), `empty_key` or `unknown_type` |
+| `reason` | why an `auth.json` entry is not usable: `oauth_unused` (a sign-in gobble does not use: one for a provider gobble has none for, or one of a kind it does not sign in to, such as another application's ChatGPT login), `empty_key` or `unknown_type` |
 | `expires` | a sign-in's expiry, in UTC, as RFC 3339 |
 
 A field that does not apply is left out. If `auth.json` or `models.json` exists but cannot be read, gobble cannot say
@@ -149,8 +149,8 @@ $ gobble auth check --provider claude --json
 }
 ```
 
-`--method api-key` does the same: `--method` names how to sign in, with no menu, `api-key`, `browser` or
-`device`, as the provider offers them. A way the provider does not offer is refused, naming its ways:
+`--method api-key` does the same: `--method` names how to sign in, with no menu, `api-key`, `browser`,
+`device` or `chatgpt-plan`, as the provider offers them. A way the provider does not offer is refused, naming its ways:
 
 ```text
 $ echo sk-test-only | gobble auth login anthropic --method api-key
@@ -186,7 +186,7 @@ read. A turn refused for want of a workspace says how to name one, and does not 
 
 ## Signing in
 
-Two providers let you sign in with your account instead of pasting a key:
+Three providers let you sign in with your account instead of pasting a key:
 
 - **Grok.** `gobble auth login grok` signs in with your SuperGrok or X Premium subscription. gobble
   prints the sign-in URL, then opens it in your browser; on a machine whose browser cannot reach
@@ -197,13 +197,25 @@ Two providers let you sign in with your account instead of pasting a key:
   restricts that id, the login stops working, and a key still works.
 - **Kilo.** `gobble auth login kilo` shows a code to enter at Kilo. Kilo answers with a key, which
   gobble stores as Kilo's API key and says `Saved API key for kilo`.
+- **OpenAI, with your ChatGPT plan.** `gobble auth login openai` signs in under gobble's own name,
+  `gobble`, and not as the Codex client; `--method chatgpt-plan` names it with no menu. Before the
+  browser opens, gobble shows what it stores and where, how to remove the sign-in, and what a
+  background request is, and asks whether gobble may make background requests under your plan: allow
+  them, do not allow them (the default), or cancel the sign-in. Then it prints the sign-in URL and
+  opens it; on a machine whose browser cannot reach gobble, paste the address the browser ends on when
+  asked. The question is the same wherever the sign-in runs on a terminal: `/login openai`,
+  `gobble setup`, the first-run offer, and `gobble acp --login openai`. With no terminal, or with
+  `--json`, the question cannot be asked: the sign-in stops before the browser opens, saves nothing and
+  says `this sign-in asks a question, and there is no terminal to ask it on`. gobble keeps the login
+  and your answer in `auth.json`'s `openai` entry, and refreshes it as it runs.
 
 gobble names itself to xAI's sign-in service in the requests it makes for a Grok login, as
 `gobble/<version>`, the running build's version, ahead of the SDK's own name: such a request's
 User-Agent reads `gobble/<version> (<os>; <arch>) go-llmprovider-sdk/<version>`. That covers each
 request of the sign-in, whose authorize and device requests also carry `referrer=gobble`; the
 refresh of a stored login, whether a request to Grok, a model listing or a model lookup starts it;
-and `gobble auth logout grok`'s discovery and revocation. gobble sends no `originator`.
+and `gobble auth logout grok`'s discovery and revocation. gobble sends no `originator`. A ChatGPT plan
+session's logout names gobble the same way.
 
 A login owns its provider in `auth.json`, as a stored key does; `--api-key -` still wins for one
 run. `gobble auth status` shows when a login's access expires, and `gobble auth check` reports it as
@@ -230,7 +242,9 @@ $ gobble auth check --provider grok --json
 ```
 
 `gobble auth logout grok` revokes the login at xAI, then removes it. If xAI cannot be reached, gobble
-warns that the login was not revoked, and removes it anyway. The discovery and the revocation it
+warns that the login was not revoked, and removes it anyway. `gobble auth logout openai` does the same
+for a ChatGPT plan session, at the issuer that signed it in; an OpenAI entry of another kind, another
+application's ChatGPT login, is removed and never revoked. The discovery and the revocation it
 sends name gobble and its version, as a sign-in's requests do:
 
 ```text
@@ -238,25 +252,61 @@ $ gobble auth logout grok
 Logged out of grok
 ```
 
-Signing in to ChatGPT comes later, with 0031-PLAN P4b: go-llmprovider-sdk has had OpenAI's sign-in for
-third-party agents since `v1.15.0`, and gobble does not offer it yet. Until then, use an OpenAI API key. Any
-other provider takes a key:
+Any other provider takes a key:
 
 ```text
-$ gobble auth login openai
-Error: openai's ChatGPT sign-in is not in gobble yet (0031-PLAN P4b); use --api-key -
 $ gobble auth login anthropic
 Error: claude has no login; use --api-key -
 ```
 
-An OAuth entry for any other provider, such as one copied from Pi, is kept, and gobble says it does
-not use it.
+An OAuth entry gobble does not sign in to, for another provider such as one copied from Pi, or an
+OpenAI entry of another application's ChatGPT login, is kept, and gobble says it does not use it.
+
+### Allowing background requests under a ChatGPT plan
+
+A session's title, which a small model writes from your first prompt, and an automatic compaction are
+background requests: gobble makes them, and you did not ask for them. Your own turns and `/compact` are
+not. Under a ChatGPT plan session gobble makes a background request only when your answer to the
+sign-in's question is "allow". With the answer declined, or never given:
+
+- no title is asked, and no compaction is made at its threshold, with nothing shown;
+- a turn whose context outgrows the model's window ends with an error that names `/compact` and the
+  command that allows the requests, `gobble auth consent openai chatgpt_plan.background_use allow`.
+
+gobble reads the answer from `auth.json` at each such request, so a change applies from the next
+request, in a running session too. It is the stored sign-in's answer, whichever credential a run uses: with `--api-key -` for OpenAI
+while a ChatGPT plan sign-in is stored, titles and automatic compactions are held back until the consent is granted, although those
+requests would go out with the key. An OpenAI key in the environment or in `models.json` is not used while that sign-in is stored,
+since `auth.json`'s entry owns the provider, so those requests go out under the plan and the consent governs them as above. An answer that cannot be read, because `auth.json` does not parse,
+counts as not granted: nothing is made, the log says so, and a turn that must end gives the error of
+the store and names `/compact` alone.
+
+`gobble auth consent` changes the answer, or lists it, with no question and no read of stdin, so a
+program may run it:
+
+```text
+$ gobble auth consent openai
+openai chatgpt_plan.background_use not asked
+$ gobble auth consent openai background allow
+openai chatgpt_plan.background_use granted
+$ gobble auth consent openai chatgpt_plan.background_use deny
+openai chatgpt_plan.background_use declined
+```
+
+The consent is named by its id, `chatgpt_plan.background_use`, or by gobble's word for it,
+`background`; the third word is `allow` or `deny`. With no consent and no third word it lists the
+consents of the stored sign-in, one line each, with `granted`, `declined` or `not asked`. A change
+prints one line naming the provider, the consent's id and the answer stored. Exit 0 is a stored answer
+or a list; exit 2 is a usage error: an unknown provider, a provider with no stored sign-in, a consent
+the stored sign-in does not have, a consent with no `allow` or `deny`, or any other third word; exit 1
+is an `auth.json` that cannot be read, parsed or locked, with nothing written. Every error is one line
+on stderr, with nothing on stdout.
 
 ## Signing in from a session
 
 In a session, `/login` asks which provider to sign in to, each shown with where its credential comes
 from now, then how, when the provider offers more than a key: Grok's browser and device sign-in,
-Kilo's device sign-in. `/login claude` asks no provider. A typed key echoes a `*` for each character,
+Kilo's device sign-in, OpenAI's ChatGPT plan. `/login claude` asks no provider. A typed key echoes a `*` for each character,
 and gobble checks it by listing the provider's models, which spends nothing: a key the provider
 refuses is asked for again, up to three keys, and a key the listing cannot check is saved with a
 note. Then gobble lists the provider's models, numbered for `/model N`. Ctrl+C leaves the sign-in,
@@ -297,8 +347,8 @@ one, gobble answers from the credentials it already has, in the order above; it 
 to run when it has none. No key or token crosses ACP.
 
 A client that can open a terminal also sees a sign-in for each provider, which runs
-`gobble acp --login <provider>` there: a login for Grok and Kilo, a key typed for any other. Run it
-yourself the same way:
+`gobble acp --login <provider>` there: a login for Grok, Kilo and OpenAI, which asks the ChatGPT plan's
+question on that terminal, a key typed for any other. Run it yourself the same way:
 
 ```text
 $ echo sk-test-only | gobble acp --login anthropic
@@ -316,9 +366,10 @@ event, naming its `provider`:
   provider gives one;
 - `browser_url`: the `url` of a browser login. gobble still opens it, and asks for no pasted URL;
 - `saved`: the credential is stored, its `type` `api_key` or `oauth`;
-- `error`: the login failed. `kind` is its class: `auth`, `timeout`, `canceled`, `unavailable`,
-  `quota`, `rate-limited`, `not-permitted`, or `other`. `message` is what gobble prints without
-  `--json`.
+- `error`: the login failed. `kind` is its class, in the words of the SDK's auth contract: `auth`,
+  `denied`, `expired`, `timeout`, `canceled`, `unavailable`, `quota`, `rate_limited`, `not_permitted`,
+  or `other`. `message` is what gobble prints without `--json`. A ChatGPT plan sign-in under `--json`
+  stops at its question: `other`, with the no-terminal message above.
 
 With `--api-key -` on a terminal, the key is still read without echo, but with no `API key for`
 prompt:

@@ -11,9 +11,18 @@ import (
 
 	xterm "golang.org/x/term"
 
+	"github.com/maccavelli/gobble-cli/acpserver"
 	"github.com/maccavelli/gobble-cli/internal/auth"
 	"github.com/maccavelli/gobble-cli/llm/provider"
 )
+
+// planConsent is provider id's background-use consent, read from auth.json
+// now: acpserver asks it at each title and each automatic compaction, so a
+// withdrawal applies from the next request (0052-MADR D2).
+func (e *runEnv) planConsent(id string) (acpserver.ConsentState, error) {
+	st, err := provider.PlanConsent(id, auth.Logins{Path: authPath()})
+	return acpserver.ConsentState{Consent: st.Consent, Plan: st.Plan, Granted: st.Granted}, err
+}
 
 // authPath is <config>/auth.json, or "" when the config directory cannot be
 // resolved (0003-MADR; 0005-PLAN F4-3a).
@@ -48,7 +57,7 @@ func (e *runEnv) newResolver(runtime map[string]string) *auth.Resolver {
 		Var:           provider.CredentialVar,
 		LookupEnv:     os.LookupEnv,
 		Run:           func(command string) (string, error) { return e.runCommand(e.ctx, command) },
-		HasLogin:      provider.HasLogin,
+		Accepts:       auth.AcceptsLogin,
 	}
 	e.authErr = nil
 	if path := authPath(); path != "" {

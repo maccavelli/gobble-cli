@@ -50,16 +50,20 @@ type titleHarness struct {
 	logs   *syncBuffer
 }
 
-func newTitleHarness(t *testing.T, dir string, main *llmtest.Script, small llm.Provider) *titleHarness {
+func newTitleHarness(t *testing.T, dir string, main *llmtest.Script, small llm.Provider, with ...func(*Options)) *titleHarness {
 	t.Helper()
 	h := &titleHarness{client: &acptest.Client{}, main: main, logs: &syncBuffer{}}
 	var title TitleOptions
 	if small != nil {
 		title = TitleOptions{Provider: func(string, llm.Retry) (llm.Provider, error) { return small, nil }, ProviderID: "small", Model: "s1"}
 	}
-	h.ag = New(Options{Version: "1.2.3", Store: jsonl.New(dir, jsonl.Options{}), Models: func() ModelChoice { return testModels },
+	o := Options{Version: "1.2.3", Store: jsonl.New(dir, jsonl.Options{}), Models: func() ModelChoice { return testModels },
 		Provider: func(string, llm.Retry) (llm.Provider, error) { return main, nil }, Title: title,
-		Logger: slog.New(slog.NewTextHandler(h.logs, nil))})
+		Logger: slog.New(slog.NewTextHandler(h.logs, nil))}
+	for _, f := range with {
+		f(&o)
+	}
+	h.ag = New(o)
 	h.c = acptest.Connect(t, h.ag, h.client)
 	h.ag.SetConnection(h.c.Agent)
 	t.Cleanup(func() {

@@ -120,14 +120,14 @@ func labels(t *testing.T, id string, ms ...llmprovider.AuthMethodID) []string {
 }
 
 // Methods are gobble's ways to sign in to each provider: Grok's key, browser
-// and device sign-ins; Kilo's key and device sign-in; a key alone for the
-// rest, OpenAI's included until its plan sign-in (0031-PLAN P4a); none for
-// a provider that takes no key.
+// and device sign-ins; Kilo's key and device sign-in; OpenAI's key and ChatGPT
+// plan sign-in; a key alone for the rest; none for a provider that takes no
+// key (0051-MADR D2).
 func TestSignInMethods(t *testing.T) {
 	for id, want := range map[string][]string{
 		"grok":   {MethodAPIKey, MethodBrowser, MethodDevice},
 		"kilo":   {MethodAPIKey, MethodDevice},
-		"openai": {MethodAPIKey},
+		"openai": {MethodAPIKey, MethodChatGPTPlan},
 		"claude": {MethodAPIKey},
 		"ollama": nil,
 	} {
@@ -160,7 +160,7 @@ func TestSignInMenu(t *testing.T) {
 		t.Errorf("grok's menu %q, want %q", got, want)
 	}
 
-	for _, tc := range []struct{ id, method string }{{"openai", ""}, {"grok", MethodAPIKey}} {
+	for _, tc := range []struct{ id, method string }{{"openai", MethodAPIKey}, {"grok", MethodAPIKey}} {
 		s := &script{t: t, secrets: []string{"sk-good-key-0123456789"}}
 		o := o
 		o.Method = tc.method
@@ -213,6 +213,11 @@ func TestSignInGrokBrowser(t *testing.T) {
 	if s.inputs != 1 || time.Since(start) > 4*time.Second {
 		t.Errorf("the paste prompt was read %d times in %s, want once, given up", s.inputs, time.Since(start))
 	}
+	// The session the SDK saved is one gobble accepts, by the kind the SDK
+	// stored (0051-MADR D2).
+	if !Accepts("grok", store.logins["grok"]) {
+		t.Errorf("Accepts(grok) refused the session the SDK stored: %+v", store.logins["grok"])
+	}
 
 	o.NoPaste = true
 	quiet := &script{t: t}
@@ -239,6 +244,9 @@ func TestSignInDevice(t *testing.T) {
 	c, err := SignIn(t.Context(), "kilo", &script{t: t}, o, store)
 	if err != nil || c.Key != "kilo-token-0123456789" || !c.Device || store.logins["kilo"] != nil {
 		t.Fatalf("kilo's device sign-in: %+v, %v, saved %v", c, err, store.logins)
+	}
+	if !Accepts("grok", store.logins["grok"]) {
+		t.Errorf("Accepts(grok) refused the session the SDK stored: %+v", store.logins["grok"])
 	}
 	if len(shown) != 2 || shown[0].Code != "ABCD-1234" || shown[0].URL != ti.URL+"/device" || shown[0].Expires.IsZero() ||
 		shown[1].Code != "KILO-1" || shown[1].Expires.IsZero() {

@@ -19,8 +19,8 @@ func TestWireWorkspace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := drain(t, p, wireRequest()); !errors.Is(err, llm.ErrWorkspace) || FailureKind(err) != "workspace" {
-		t.Fatalf("err %v (%s), want llm.ErrWorkspace", err, FailureKind(err))
+	if _, err := drain(t, p, wireRequest()); !errors.Is(err, llm.ErrWorkspace) || ErrorKind(err) != "workspace" {
+		t.Fatalf("err %v (%s), want llm.ErrWorkspace", err, ErrorKind(err))
 	}
 	for _, c := range []struct{ id, model, want string }{
 		{"claude", "claude-haiku-5-5", "wrkspc_1"},

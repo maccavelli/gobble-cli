@@ -115,7 +115,7 @@ type Update struct {
 
 // Retry is a wait the agent's turn takes before calling the model again,
 // as _gobble/retry reports it: Phase start or end, Cause offline,
-// empty_reply, or a provider retry's failure class, such as rate-limited
+// empty_answer, or a provider retry's failure class, such as rate_limited
 // (0031-MADR D4, as amended). Attempt, MaxAttempts and Delay are an empty
 // reply's or a provider retry's; Error
 // is why an End is not a success, or "".

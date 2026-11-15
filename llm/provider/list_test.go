@@ -173,8 +173,8 @@ func TestListFallsBack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if l.Live || !slices.Equal(l.Models, Models("openai")) || !errors.Is(l.Err, llm.ErrAuth) || FailureKind(l.Err) != "auth" {
-		t.Fatalf("refused: %+v (kind %s), want the static models and auth", l, FailureKind(l.Err))
+	if l.Live || !slices.Equal(l.Models, Models("openai")) || !errors.Is(l.Err, llm.ErrAuth) || ErrorKind(l.Err) != "auth" {
+		t.Fatalf("refused: %+v (kind %s), want the static models and auth", l, ErrorKind(l.Err))
 	}
 
 	_, o = cannedClient(map[string]route{openaiModels: {hang: true}})
@@ -185,8 +185,8 @@ func TestListFallsBack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if took := time.Since(start); l.Live || !slices.Equal(l.Models, Models("openai")) || FailureKind(l.Err) != "timeout" || took > 2*time.Second {
-		t.Fatalf("hung: %+v (kind %s) after %s, want the static models and timeout within 2s", l, FailureKind(l.Err), took)
+	if took := time.Since(start); l.Live || !slices.Equal(l.Models, Models("openai")) || ErrorKind(l.Err) != "timeout" || took > 2*time.Second {
+		t.Fatalf("hung: %+v (kind %s) after %s, want the static models and timeout within 2s", l, ErrorKind(l.Err), took)
 	}
 
 	if _, err := List(t.Context(), "nope", "k", Options{}); err == nil {
@@ -252,23 +252,5 @@ func TestSearch(t *testing.T) {
 	got := Search("openai", []string{"gpt-6-luna", "gpt-5-mini", "gpt-5-nano"}, "mini")
 	if len(got) == 0 || got[0] != "gpt-5-mini" || slices.Contains(got, "gpt-6-luna") {
 		t.Fatalf("Search mini = %q, want gpt-5-mini first and no gpt-6-luna", got)
-	}
-}
-
-// FailureKind names each class, wrapped or not, and never an error's
-// text (0020-MADR D6).
-func TestFailureKind(t *testing.T) {
-	for _, k := range failureKinds {
-		if got := FailureKind(fmt.Errorf("x: %w", k.err)); got != k.kind {
-			t.Errorf("FailureKind(%v) = %q, want %q", k.err, got, k.kind)
-		}
-	}
-	if got := FailureKind(errors.New("sk-pl***nt")); got != "other" {
-		t.Errorf("FailureKind of an unknown error = %q, want other", got)
-	}
-	for _, k := range failureKinds {
-		if strings.Contains(k.kind, "sk-") || strings.Contains(k.kind, " ") {
-			t.Errorf("kind %q is not a bare class name", k.kind)
-		}
 	}
 }

@@ -91,6 +91,13 @@ type Options struct {
 	// it was set under (0025-MADR D4, D6). Nil keeps a mark for the
 	// agent's life.
 	CredentialGeneration func(id string) uint64
+	// PlanConsent is provider id's background-use consent, read now from the
+	// stored session: whether it is a session that needs the consent, and
+	// whether the user granted it. It is asked at each title and each
+	// automatic compaction, so a withdrawal applies from the next request in
+	// every process; an error is no grant, and nothing is made (0052-MADR
+	// D2). Nil gates nothing.
+	PlanConsent func(id string) (ConsentState, error)
 	// SearchModels is the SDK's matcher over a provider's models, for /model
 	// with words (0025-MADR D5). Nil matches words in each ref and name.
 	SearchModels func(provider string, models []string, query string) []string
@@ -166,18 +173,20 @@ type Agent struct {
 	// marksMu guards marks, the providers a turn saw refused (0025-MADR D4).
 	marksMu sync.Mutex
 	marks   map[string]mark
-	// credGen is Options.CredentialGeneration.
-	credGen  func(id string) uint64
-	info     func(provider, model string) llm.Model
-	override Override
-	tools    []tool.Tool
-	noGrants bool
-	byName   map[string]tool.Tool
-	store    session.Store
-	now      func() time.Time
-	mcp      MCPOptions
-	logger   *slog.Logger
-	prompt   PromptOptions
+	// credGen is Options.CredentialGeneration; planConsent
+	// Options.PlanConsent.
+	credGen     func(id string) uint64
+	planConsent func(id string) (ConsentState, error)
+	info        func(provider, model string) llm.Model
+	override    Override
+	tools       []tool.Tool
+	noGrants    bool
+	byName      map[string]tool.Tool
+	store       session.Store
+	now         func() time.Time
+	mcp         MCPOptions
+	logger      *slog.Logger
+	prompt      PromptOptions
 	// compaction is /compact's settings, the fallback of each session's.
 	compaction compaction.Settings
 	settings   func(cwd string) SessionSettings
@@ -315,7 +324,8 @@ var (
 func New(opts Options) *Agent {
 	a := &Agent{version: opts.Version, newID: opts.NewID, provider: opts.Provider, providerFor: opts.ProviderFor, models: opts.Models, info: opts.ModelInfo,
 		rememberModel: opts.Remember, search: opts.SearchModels, credGen: opts.CredentialGeneration,
-		override: opts.Override, tools: opts.Tools, noGrants: opts.NoRequestPermissions, store: opts.Store, now: opts.Now, mcp: opts.MCP, logger: opts.Logger, prompt: opts.Prompt,
+		planConsent: opts.PlanConsent,
+		override:    opts.Override, tools: opts.Tools, noGrants: opts.NoRequestPermissions, store: opts.Store, now: opts.Now, mcp: opts.MCP, logger: opts.Logger, prompt: opts.Prompt,
 		settings: opts.Settings, auth: opts.Auth, save: opts.SaveSetting, personalities: opts.Personalities, compactionPrompts: opts.CompactionPrompts, titles: opts.Title,
 		trust: opts.Trust, perms: opts.Permissions, sessions: map[acp.SessionId]*liveSession{}}
 	if a.logger == nil {

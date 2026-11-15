@@ -464,7 +464,7 @@ func TestNotifyFramesUnchanged(t *testing.T) {
 			method string
 			params any
 		}{
-			{acpext.MethodRetry, acpext.RetryNotice{SessionID: "s1", Phase: "start", Cause: "rate-limited", Attempt: 1, MaxAttempts: 3, DelayMs: 2000, Error: text}},
+			{acpext.MethodRetry, acpext.RetryNotice{SessionID: "s1", Phase: "start", Cause: "rate_limited", Attempt: 1, MaxAttempts: 3, DelayMs: 2000, Error: text}},
 			{acpext.MethodCompaction, acpext.CompactionNotice{SessionID: "s1", Phase: acpext.PhaseEnd, Reason: acpext.CompactionManual, Error: text, Paused: acpext.PauseSession}},
 			{acpext.MethodCompaction, acpext.CompactionNotice{SessionID: "s1", Phase: acpext.PhaseEnd, Reason: acpext.CompactionManual, TokensBefore: 1234}},
 			{acpext.MethodPersonality, acpext.PersonalityNotice{SessionID: "s1", Name: text, Level: 3}},

@@ -122,7 +122,7 @@ func TestResolveLogin(t *testing.T) {
   "grok": {"type": "oauth", "access": "a", "refresh": "r", "expires": 1},
   "openai": {"type": "oauth", "access": "a", "refresh": "r", "expires": 1}
 }`, nil, map[string]string{"XAI_API_KEY": "env-grok", "OPENAI_API_KEY": "env-openai"})
-	r.HasLogin = func(id string) bool { return id == "grok" }
+	r.Accepts = func(id string, _ Entry) bool { return id == "grok" }
 
 	if got, ok, err := r.Credential("grok"); err != nil || !ok || got != (Credential{Source: SourceFile, Login: true}) {
 		t.Errorf("grok: %+v, %v, %v; want its login from auth.json", got, ok, err)
@@ -142,5 +142,38 @@ func TestResolveLogin(t *testing.T) {
 	}
 	if *ran != 0 {
 		t.Errorf("ran %d commands", *ran)
+	}
+}
+
+// The resolver accepts a stored session only of a kind an offered method
+// signs in to: an OpenAI oauth entry of the Codex client's ChatGPT kind is
+// not usable, however it is found (Kind set, or inferred from its issuer);
+// a ChatGPT plan session and a Grok session are; a Kilo key is, as any key
+// (0051-MADR D2).
+func TestResolverAcceptsOnlyOfferedKinds(t *testing.T) {
+	for _, c := range []struct {
+		name, id, entry string
+		usable          bool
+	}{
+		{"a ChatGPT (Codex) session", "openai", `{"type": "oauth", "access": "a", "refresh": "r", "expires": 1, "kind": "chatgpt"}`, false},
+		{"an old ChatGPT session with no kind", "openai", `{"type": "oauth", "access": "a", "refresh": "r", "expires": 1, "issuer": "https://auth.openai.com"}`, false},
+		{"a ChatGPT plan session", "openai", `{"type": "oauth", "access": "a", "refresh": "r", "expires": 1, "kind": "chatgpt_plan", "resource": "https://api.openai.com/v1"}`, true},
+		{"an old plan session with no kind", "openai", `{"type": "oauth", "access": "a", "refresh": "r", "expires": 1, "resource": "https://api.openai.com/v1"}`, true},
+		{"a Grok session", "grok", `{"type": "oauth", "access": "a", "refresh": "r", "expires": 1}`, true},
+		{"a Grok session of an explicit kind", "grok", `{"type": "oauth", "access": "a", "refresh": "r", "expires": 1, "kind": "grok"}`, true},
+		{"a session of a provider with no sign-in", "claude", `{"type": "oauth", "access": "a", "refresh": "r", "expires": 1}`, false},
+		{"a Kilo key", "kilo", `{"type": "api_key", "key": "kilo-key"}`, true},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			r, _ := resolverFor(t, `{"`+c.id+`": `+c.entry+`}`, nil, map[string]string{"OPENAI_API_KEY": "env-openai"})
+			r.Accepts = AcceptsLogin
+			_, ok, err := r.Credential(c.id)
+			if ok != c.usable || (err == nil) != c.usable {
+				t.Errorf("Credential(%s) = ok %v, err %v; want usable %v", c.id, ok, err, c.usable)
+			}
+			if _, has := r.Has(c.id); has != c.usable {
+				t.Errorf("Has(%s) = %v, want %v", c.id, has, c.usable)
+			}
+		})
 	}
 }

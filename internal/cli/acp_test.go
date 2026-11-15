@@ -85,7 +85,7 @@ func TestAgentAuthOptions(t *testing.T) {
 		if p.Login {
 			want = "gobble auth login " + p.ID
 		}
-		if p.Name != provider.Label(p.ID) || p.Command != want || p.Login != (p.ID == "grok" || p.ID == "kilo") {
+		if p.Name != provider.Label(p.ID) || p.Command != want || p.Login != (p.ID == "grok" || p.ID == "kilo" || p.ID == "openai") {
 			t.Errorf("%s: %+v", p.ID, p)
 		}
 	}

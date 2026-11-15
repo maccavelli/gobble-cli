@@ -8,7 +8,9 @@ import (
 	"time"
 
 	"github.com/maccavelli/go-llmprovider-sdk/llmprovider"
+	"github.com/maccavelli/go-llmprovider-sdk/llmprovider/auth"
 	"github.com/maccavelli/go-llmprovider-sdk/llmprovider/catalog"
+	"github.com/maccavelli/go-llmprovider-sdk/llmprovider/x/signin"
 
 	"github.com/maccavelli/gobble-cli/llm"
 )
@@ -103,31 +105,26 @@ func List(ctx context.Context, id, apiKey string, o Options) (Listing, error) {
 	return Listing{Models: cat.Recommended, Live: true, Source: string(cat.Source), FetchedAt: cat.FetchedAt, Usable: cat.Usable}, nil
 }
 
-// failureKinds name the errors FailureKind knows, most specific first.
-var failureKinds = []struct {
-	err  error
-	kind string
-}{
-	{llm.ErrWorkspace, "workspace"},
-	{llm.ErrQuota, "quota"},
-	{llm.ErrRateLimited, "rate-limited"},
-	{llm.ErrAuth, "auth"},
-	{llm.ErrNotPermitted, "not-permitted"},
-	{llm.ErrUnavailable, "unavailable"},
-	{context.DeadlineExceeded, "timeout"},
-	{context.Canceled, "canceled"},
-	{errNothingListed, "empty"},
-}
-
-// FailureKind names err's class for a log line, and never carries its
-// text, which a provider may fill with part of the credential
-// (0020-MADR F5): workspace, quota, rate-limited, auth, not-permitted,
-// unavailable, timeout, canceled, empty, or other.
-func FailureKind(err error) string {
-	for _, k := range failureKinds {
-		if errors.Is(err, k.err) {
-			return k.kind
+// ErrorKind names err's class in the words of the SDK's auth contract
+// (0051-MADR D6): the SDK's signin.ErrorKindOf for an error of the SDK's
+// sign-ins, else llm.Kind's. A sign-in's error is a *SignInError, which
+// SignIn returns for every failure of the SDK's, or an error that holds the
+// SDK's denied or expired marker (auth.ErrSignInDenied, ErrSignInExpired).
+// Any other error, a provider's reply included, is llm.Kind's, so a quota
+// the service sends with HTTP 401 is still "quota" (0049-MADR D8). It never
+// carries err's text, which a provider may fill with part of the credential
+// (0020-MADR F5). A nil error is "other".
+func ErrorKind(err error) string {
+	if isSignInError(err) {
+		if k := signin.ErrorKindOf(err); k != "" {
+			return string(k)
 		}
 	}
-	return "other"
+	return llm.Kind(err)
+}
+
+// isSignInError reports whether err is an error of the SDK's sign-ins.
+func isSignInError(err error) bool {
+	var se *SignInError
+	return errors.As(err, &se) || errors.Is(err, auth.ErrSignInDenied) || errors.Is(err, auth.ErrSignInExpired)
 }

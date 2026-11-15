@@ -110,7 +110,7 @@ does.)*
 ## Conventions every phase follows
 
 * **C1. Start state.** Each phase re-reads `git status`, `HEAD`, `origin/main`, and the versions `go.mod` requires. A
-  difference from this plan is a deviation.
+  difference from this plan is a deviation. *(2026-11-15, the owner's ruling "Keep it on the branch until those phases land": while `main` waits, the start state of a phase on the branch is read against the branch's tip and `origin/p3-acpext-v0.5.0`, not `origin/main`; "P4 record (2026-11-15)", the question on `main`.)*
 * **C2. Seen failing.** Every new test, assertion and gate is seen failing on a scratch copy of the tree, never in the
   working tree: on each planted break the phase names, and, where it compiles, on the tree before the phase. The
   record quotes each failure, temporary paths as `<TMP>`.
@@ -134,7 +134,7 @@ does.)*
   D5's rule unchanged, with the tag in two parts. P3's commit is on the branch `p3-acpext-v0.5.0`, not on `main`. The
   owner tags it `acpext/v0.5.0-rc.1` there, on the owner's own word. The root requires `acpext@v0.5.0-rc.1` (P4 step 1),
   by tag, with no `replace` and no `go.work`. The final `acpext/v0.5.0` is the owner's, after P8 (P8a). `main` moves
-  once, to the branch's tip, when every C6 gate is green on that tip.
+  once, to the branch's tip, when every C6 gate is green on that tip. *(2026-11-15, the owner's ruling relayed by the coordinator, "Keep it on the branch until those phases land": the coordinator commits each approved phase on the branch `p3-acpext-v0.5.0` and pushes the branch; `main` stays at `9e21c8f` and is fast-forwarded only after 0051-PLAN P6 and 0052-PLAN P4 have landed on the branch and every gate is green, because until then a plan sign-in passes no host id and does not reuse its registered client. Consequence told to and accepted by the owner: CI runs on pushes to `main`, so until `main` moves the phases on the branch have only the local gates and the Linux and Windows runs behind them; `.github/workflows/ci.yml` also runs on `pull_request` and on `v*` tags, which a pull request from the branch would use.)* *(2026-11-15, later: the owner's ruling "Open a draft PR now", relayed by the coordinator. The coordinator's statement that CI runs only on pushes to `main` and tags was wrong: `.github/workflows/ci.yml` also runs on `pull_request`, which the review's finding showed. After P4 is committed and pushed the coordinator opens one draft pull request from `p3-acpext-v0.5.0` to `main`, so every later push to the branch runs CI; `main` does not move and nothing merges until the owner's word, and `main` is still fast-forwarded only after 0051 P6 and 0052 P4 land. The sentence above that the phases on the branch have only the local gates behind them holds only until that pull request is open.)*
 * **C9. Docs in the same phase.** *(2026-11-14, added; the owner's ruling on P2a's hand-back, relayed by the
   cross-repository coordinator. Asked what happens when a phase's docs step finds user docs outside the phase's own
   files that the phase makes false or leaves incomplete, the owner chose "Always in the same commit": "The agent fixes
@@ -350,7 +350,8 @@ steps 1 to 6 cannot be split. A respelling alone (steps 1, 4 and 4b) was tried o
 `acpext` in place of the tag: 37 packages passed and `TestAcpextAuthProvidersAreTheRegistry` failed, because any
 requirement past `v0.3.0` brings in `acpext/v0.4.0`'s openai entry (`Login: true`, the bare command), which the registry
 matches only once the plan is offered (steps 2 and 5, with 0052-PLAN P3). `main` is fast-forwarded to the branch's tip
-when every C6 gate is green on it; the later phases (P5 onward) continue on `main`.
+when every C6 gate is green on it; the later phases (P5 onward) continue on `main`. *(2026-11-15, the owner's ruling relayed by the coordinator, "Keep it on the branch until those phases land": the coordinator commits each approved phase on the branch `p3-acpext-v0.5.0` and pushes the branch; `main` stays at `9e21c8f` and is fast-forwarded only after 0051-PLAN P6 and 0052-PLAN P4 have landed on the branch and every gate is green, because until then a plan sign-in passes no host id and does not reuse its registered client. Consequence told to and accepted by the owner: CI runs on pushes to `main`, so until `main` moves the phases on the branch have only the local gates and the Linux and Windows runs behind them; `.github/workflows/ci.yml` also runs on `pull_request` and on `v*` tags, which a pull request from the branch would use.)* *(2026-11-15, later: the owner's ruling "Open a draft PR now", relayed by the coordinator. The coordinator's statement that CI runs only on pushes to `main` and tags was wrong: `.github/workflows/ci.yml` also runs on `pull_request`, which the review's finding showed. After P4 is committed and pushed the coordinator opens one draft pull request from `p3-acpext-v0.5.0` to `main`, so every later push to the branch runs CI; `main` does not move and nothing merges until the owner's word, and `main` is still fast-forwarded only after 0051 P6 and 0052 P4 land. The sentence above that the phases on the branch have only the local gates behind them holds only until that pull request is open.)*
+*(Its "P5 onward continue on `main`" is annotated by that ruling: P5 and P6 continue on the branch, and so does 0052-PLAN P4.)*
 
 **Committed with 0052-PLAN P3, as one commit.** `acpext/v0.5.0` keeps openai's `Login: true` and its bare command
 (`acpext/auth.go:25`), so `TestAcpextAuthProvidersAreTheRegistry` holds only once openai's plan is offered, which the
@@ -422,7 +423,7 @@ gobble's wording and gate.
    | :--- | :--- | :--- |
    | `TestOfferedMethods` (`llm/provider`) | per provider, the offered method ids: grok `api_key`, `browser_oauth`, `device_code`; kilo `api_key`, `device_code`; openai `api_key`, `chatgpt_plan` (its consent honoured by 0052-PLAN P3, committed with this phase); the six key-only providers `api_key`; ollama none | the borrowed-client rule dropped (openai gains `browser_oauth`); `acceptedBorrowed` emptied (grok loses two); `honouredConsents` emptied (openai loses `chatgpt_plan`) |
    | `TestPredicatesFromOffered` | `HasLogin`, `HasKeyLogin`, `Login`, `Revocable`, `DefaultMethod` and the Pi rule equal what `Offered` says, for every key provider | `HasKeyLogin` reading `oauth_session` |
-   | *(2026-11-11, later, added)* `TestRemoteMethods` (`llm/provider`) | per provider, the offered methods other than `api_key` that `Remote` accepts: grok `device_code`; kilo `device_code`; openai `chatgpt_plan`; grok's `browser_oauth` refused | `Remote` reading `Completion` alone, so grok's `browser_oauth` is accepted; `Remote` refusing every browser completion, so openai loses `chatgpt_plan` |
+   | *(2026-11-11, later, added)* `TestRemoteMethods` (`llm/provider`) | per provider, the offered methods other than `api_key` that `Remote` accepts: grok `device_code`; kilo `device_code`; openai `chatgpt_plan`; grok's `browser_oauth` refused *(2026-11-15, the owner's ruling "Amend the records to the SDK's facts": grok's `browser_oauth` accepted at `v1.31.0`, where the row says refused; "P4 record (2026-11-15)", deviation 4)* | `Remote` reading `Completion` alone, so grok's `browser_oauth` is accepted; `Remote` refusing every browser completion, so openai loses `chatgpt_plan` *(2026-11-15: the first plant cannot fail the test at the pinned facts, `browser_oauth` being accepted by the rule; the plants run were `Remote` reading `Completion` alone, so a loopback-only method of the contract's own shape is accepted, and `Remote` refusing every browser completion, so grok loses `browser_oauth` and openai `chatgpt_plan`; "P4 record (2026-11-15)")* |
    | `TestEveryCommandAndWordIsAccepted` (`internal/cli`) | each `acpext.AuthProviders()` `Command` parses with Kong and its provider and method pass `methodOf`; each offered method's word passes `methodOf` (issue #16's criterion) | openai's word list given `device`; kilo's command given `--method browser` |
    | `TestResolverAcceptsOnlyOfferedKinds` (`internal/auth`) | an openai `oauth` entry of the ChatGPT (Codex) kind is not usable; a grok session is; a kilo `api_key` is | `Accepts` ignoring the kind |
    | `TestLogoutRevokesOnlyAccepted` (`llm/provider`) | a foreign-kind openai entry is deleted and never revoked (the `testIssuer` sees no revoke); a grok session is revoked then deleted | revocation by `HasLogin` alone |
@@ -439,6 +440,11 @@ gobble's wording and gate.
 
 Acceptance: the tests pass, each plant failed; `grep -rn 'FailureKind\|id == "openai"\|HasPiLogin' --include=*.go`
 finds nothing outside the records. The commit is the owner's, after 0052-PLAN P3's acceptance.
+*(2026-11-15: built, staged with 0052-PLAN P3 on the branch `p3-acpext-v0.5.0`; see "P4 record (2026-11-15)". Two wordings
+could not be followed as written and are deviations there: `provider.Login(id)` is `HasSignIn(id)` (1), and `Accepts` is
+`provider.Accepts(id, *Login)` with `auth.AcceptsLogin` as the resolver's (2). One fact the PLAN's test row states does not hold at
+go-llmprovider-sdk `v1.31.0`, Grok's `browser_oauth` being `browser_paste` with a paste, so `TestRemoteMethods` expects it accepted
+(4, awaiting the owner's word).)*
 *(2026-11-11: and `git grep -n '"empty_reply"\|"rate-limited"\|"not-permitted"\|"context-overflow"' -- '*.go'
 'acpext/testdata'` finds nothing. `retry.empty_reply`, the personality key, stays and is not matched by it.)*
 
@@ -447,7 +453,7 @@ finds nothing outside the records. The commit is the owner's, after 0052-PLAN P3
 1. `llm/provider/signin.go`: `SignInOptions.Steps func(authcontract.Step) error` replaces `ShowDeviceCode` and
    `OpenURL` for a non-terminal caller; `SignIn` passes `wizard.Options.Driver` = a driver that calls it and returns a
    zero answer, or, for `paste`, `confirm` and `form`, an error marked `unsupported`. `NoPastePrompt` stays set.
-2. `internal/cli/auth.go`: `loginEvent` and its five events go; `jsonSteps` writes the `method` line, then each step;
+2. `internal/cli/auth.go`: `loginEvent` and its five events go; `jsonSteps` writes the `method` line, then each step; *(2026-11-15, carried from the review: a `failed` step's kind is `provider.ErrorKind` of the error `SignIn` returns, which wraps the SDK's errors in `provider.SignInError`; a caller of the SDK's sign-in that passed a raw SDK error to `ErrorKind` would get `other`, so a test in this phase holds that every error it reads is wrapped first, as 0051-MADR D6 reads it.)*
    `--api-key -` writes `method` and a `done` step with `yields: "api_key"`; a usage error is one `failed` step of
    `invalid_request`. Before a sign-in starts, a method whose `Consents` hold a required one the stored session has not
    answered (0052-MADR) is refused, exit 2, a `failed` step of `unsupported` naming a terminal and an ACP client.
@@ -472,11 +478,18 @@ steps, and the rewrite is named in this record.
 
 ### P6 — ACP `authenticate` by elicitation (MADR D4)
 
+*(2026-11-15.)* **Open question for the owner, before P6 runs:** the three rows annotated below (`TestAuthenticateOnlyRemoteMethods`,
+`TestAuthenticateGrokBrowserHasNoPaste`, `TestAuthenticateRemoteRefusesLoopbackOnly`) cannot pass as written at go-llmprovider-sdk `v1.31.0`, where Grok's
+`browser_oauth` is `browser_paste` with a paste, so `Remote` accepts it (the owner's ruling "Amend the records to the SDK's facts"). What replaces them is
+undecided: (a) keep the loopback-only rule's tests through a stand-in method of that shape offered to the relay, or (b) drop the rows because no offered method has
+that shape, the rule staying in D4 untested. The plant of the first row, "the loopback method chosen by default", needs replacing under either. Recommended: (b) is
+smaller and (a) holds the rule; the choice is the owner's.
+
 1. `llm/provider/signinrun.go`: `StartSignIn(ctx, id, method string, o SignInOptions, store LoginStore) (*SignInRun,
    error)` over `signin.Start`, with `signin.Options` as MADR D3 lists it: `Identity: {Name: "gobble", Version}`,
    `AgentName: "gobble"`, `HostID` from `o.HostID` (0052-PLAN P2's `<state>/host-id`), `ClientStore` the `sdkStore`
    adapter when `store` has a client store (0052-PLAN P2 step 4; nil otherwise, which `x/signin` reads as none),
-   `ConsentText` gobble's wording (0052-PLAN P3), and `Previous` the session `store` holds for `id` when its kind is the
+   `ConsentText` gobble's wording (0052-PLAN P3) *(2026-11-15, the owner's ruling "Accept; P6 builds the site", relayed by the coordinator: this is the `signin.Options` half of 0052-PLAN P3 step 1, which that phase could not build because this site is built here; 0052-PLAN P4's `TestConsentWordingOverACP` guards it. A second pointer, carried from the review of 2026-11-15: an error from `signin.Start` or `Wait` is wrapped in `provider.SignInError` before `ErrorKind` reads it, because `ErrorKind` takes the SDK's word only for a `*SignInError` or the SDK's denied and expired markers (0051-MADR D6), and a test in this phase holds it.)*, and `Previous` the session `store` holds for `id` when its kind is the
    one the method signs in to. `Wait` returns `provider.SignInResult{Key string; Yields authcontract.Yields}` (MADR
    D3): it saves the session through `store` (`sdkStore`) or returns the key, then runs the listing check.
    *(2026-11-11, later; MADR D3's note.)* `SignInOptions.Remote bool` sets `signin.Options.NoLoopback`; nothing else
@@ -572,7 +585,7 @@ steps, and the rewrite is named in this record.
    | `TestAuthenticateFresh` | a grok session stored and `_meta.gobble.fresh: true`: the device sign-in runs; the stored session is replaced only once the new one saves | `fresh` ignored, so `{}` with no elicitation |
    | `TestAuthenticateFreshKeepsOldOnFailure` | the same, with the sign-in failing, declined, and cancelled by `$/cancel_request`: `auth.json` is byte for byte as before, and the issuer sees no revoke | the stored session deleted when the fresh sign-in starts (MADR D4 step 3) |
    | `TestAuthenticateFreshRefusesNonBoolean` | `_meta.gobble.fresh: "yes"` is -32602, and nothing starts | the value read as truthy |
-   | `TestAuthenticateOnlyRemoteMethods` | grok with no method named: the device sign-in, never `browser_oauth`; `browser_oauth` when named | the loopback method chosen by default |
+   | `TestAuthenticateOnlyRemoteMethods` | grok with no method named: the device sign-in, never `browser_oauth`; `browser_oauth` when named *(2026-11-15, the owner's ruling "Amend the records to the SDK's facts": at go-llmprovider-sdk `v1.31.0` Grok's `browser_oauth` is `Completion` `browser_paste` with `Paste` `url_or_code`, so `Remote` accepts it and it is not a loopback-only method, so with no method named a remote sign-in no longer has the device sign-in as the only method it can drive, and the row as written, "never `browser_oauth`", cannot pass at those facts. Its planted break, "the loopback method chosen by default", names a method that no longer exists among the offered ones. What replaces the row and its plant is an open question for the owner before P6 runs; see "Open question (2026-11-15)" under P6.)* | the loopback method chosen by default |
    | `TestAuthenticateOneAtATime` | a second `authenticate` for a provider while one runs is -32600; another provider's runs | no lock |
    | `TestAuthenticateWithCancelPending` | a `session/cancel` for an open session sent while an elicitation waits is handled, and the elicitation's answer then completes the sign-in within 5 s (MADR U8 (e)) | `a.mu` held across `CreateElicitation` |
    | `TestAuthenticateClientCancels` | the client's `$/cancel_request` cancels the sign-in and the pending elicitation | the handler's context not passed to `CreateElicitation` |
@@ -590,7 +603,7 @@ steps, and the rewrite is named in this record.
    | Test | Asserts | Planted break |
    | :--- | :--- | :--- |
    | `TestAuthenticatePastedDenialEnds` | a pasted URL with this sign-in's `state` and `error=access_denied` ends the sign-in at once: no further `paste` form, and `auth_required` with `ErrorData.Kind` `denied` | the relay answering `auth_required` with a fixed kind `auth` in place of the `failed` step's own |
-   | `TestAuthenticateGrokBrowserHasNoPaste` | grok's `browser_oauth`, named: one `open_url` elicitation whose `_meta.gobble.step` has no `accepts`, no `paste` form after its `accept`, and the loopback's finish completes it | the relay sending a `paste` form after every acknowledged `open_url` |
+   | `TestAuthenticateGrokBrowserHasNoPaste` | grok's `browser_oauth`, named: one `open_url` elicitation whose `_meta.gobble.step` has no `accepts`, no `paste` form after its `accept`, and the loopback's finish completes it *(2026-11-15, the owner's ruling "Amend the records to the SDK's facts": at go-llmprovider-sdk `v1.31.0` Grok's `browser_oauth` is `Completion` `browser_paste` with `Paste` `url_or_code`, so `Remote` accepts it and it is not a loopback-only method, so the row as written, a Grok browser sign-in with no `accepts` and no `paste` form, cannot pass at those facts: its `browser_oauth` has both. Whether the no-paste shape keeps a test, through a stand-in method, or the row is dropped because no offered method has that shape is an open question for the owner before P6 runs; see "Open question (2026-11-15)" under P6.)* | the relay sending a `paste` form after every acknowledged `open_url` |
 
    `TestAuthenticateBadPasteAsksAgain` also counts: exactly two re-asks, three `paste` forms in all, before the
    `failed` step.
@@ -602,7 +615,7 @@ steps, and the rewrite is named in this record.
    | :--- | :--- | :--- |
    | `TestAuthenticateRemoteBindsNoPort` | a form-only client's `authenticate` for openai with `_meta.gobble.method: "chatgpt_plan"` and `remote: true`, against `planIssuer`, while the test holds `127.0.0.1:1455` and `:1457` (binding each, or finding it already bound, either of which leaves it unavailable): the sign-in starts, its authorize URL's `redirect_uri` names port 1455, a pasted callback completes it, and `{}` follows; the recorded `signin.Options.NoLoopback` is true | `remote` not passed on to `StartSignIn`, so the listener's bind fails on the held ports and no `open_url` form is sent |
    | `TestAuthenticateLocalKeepsListener` | the same `authenticate` with `remote` absent, and again with `remote: false`: the recorded `signin.Options.NoLoopback` is false. A recorder stands in for `signin.Start` here, so the test binds no real port on the host | `NoLoopback` set for every ACP sign-in |
-   | `TestAuthenticateRemoteRefusesLoopbackOnly` | grok with `method: "browser_oauth"` and `remote: true`: `auth_required` with `ErrorData.Kind` `unsupported`, a `Reason`, and `Command` `gobble auth login grok --method browser`; no elicitation; the `signin.Start` variable never called; and the same request without `remote` reaches the recorder, which stands in for `Start`, with `NoLoopback` false | the relay's remote filter dropped, so `Start` is called (the recorded calls count one) |
+   | `TestAuthenticateRemoteRefusesLoopbackOnly` *(2026-11-15, the owner's ruling "Amend the records to the SDK's facts": at go-llmprovider-sdk `v1.31.0` Grok's `browser_oauth` is `Completion` `browser_paste` with `Paste` `url_or_code`, so `Remote` accepts it and it is not a loopback-only method, so grok with `method: "browser_oauth"` and `remote: true` is not refused and the row as written cannot pass at those facts. Whether the refusal keeps a test, through a stand-in method, or the row is dropped because no offered method has that shape is an open question for the owner before P6 runs; see "Open question (2026-11-15)" under P6.)* | grok with `method: "browser_oauth"` and `remote: true`: `auth_required` with `ErrorData.Kind` `unsupported`, a `Reason`, and `Command` `gobble auth login grok --method browser`; no elicitation; the `signin.Start` variable never called; and the same request without `remote` reaches the recorder, which stands in for `Start`, with `NoLoopback` false | the relay's remote filter dropped, so `Start` is called (the recorded calls count one) |
    | `TestAuthenticateRemoteDefault` | grok with no method named and `remote: true`: the device sign-in, and the recorded `NoLoopback` true | the default taken from `Offered` without `Remote` |
    | `TestAuthenticateRemoteRefusesNonBoolean` | `_meta.gobble.remote: "yes"` is -32602, and nothing starts | the value read as truthy |
    | `TestStartSignInRemoteSetsNoLoopback` (`llm/provider`) | `SignInOptions{Remote: true}` gives `signin.Options.NoLoopback` true, for `chatgpt_plan` and for `device_code`; without `Remote`, false; the terminal paths' `SignIn` never sets it | the option left false whatever `Remote` says |
@@ -708,7 +721,7 @@ Acceptance: the question of step 1 answered in the record; the case passes and i
    * **L2, the same through a client offering `elicitation.url`.** *Owner-run; asks first; scratch home; quota: none.*
    * **L3, U1 recorded:** the SDK's own probe of grok's browser from another device (go-llmprovider-sdk `0074-MADR-one-sign-in-handle-and-method-facts.md`
      D12). gobble records its outcome and changes nothing; grok's browser stays `browser_loopback` until the SDK's
-     fact changes. *Owner-run; asks first; scratch store; quota: none.*
+     fact changes. *Owner-run; asks first; scratch store; quota: none.* *(2026-11-15, the owner's ruling "Amend the records to the SDK's facts": the SDK's fact changed at `v1.31.0`, Grok's browser sign-in is `browser_paste`; L3 records the probe's outcome as written, and nothing else in this row changes.)*
 3. `docs/architecture.md`'s rows; `README.md`'s sign-in section; `docs/README.md`'s status cells.
 4. On the owner's word: #16 closed with the MADR D8 text (`gh issue close 16 --repo maccavelli/gobble-cli --comment
    …`).
@@ -1452,7 +1465,7 @@ agree. The list is copied into `acpext/types_test.go` (`contractKinds`); acpext 
      tagged only on your word when the plan's acceptance shows the repo stable, followed by one small commit moving the
      root from the candidate to the final tag. 0042's rule is kept. Cost: a candidate tag exists publicly, one extra
      commit at the end, and the branch's P3 commit alone fails two root tests." Rejected: "Final tag early, as the plan
-     says"; "Revert the openai entry in v0.5.0".
+     says"; "Revert the openai entry in v0.5.0". *(2026-11-15, the owner's ruling relayed by the coordinator, "Keep it on the branch until those phases land": the coordinator commits each approved phase on the branch `p3-acpext-v0.5.0` and pushes the branch; `main` stays at `9e21c8f` and is fast-forwarded only after 0051-PLAN P6 and 0052-PLAN P4 have landed on the branch and every gate is green, because until then a plan sign-in passes no host id and does not reuse its registered client. Consequence told to and accepted by the owner: CI runs on pushes to `main`, so until `main` moves the phases on the branch have only the local gates and the Linux and Windows runs behind them; `.github/workflows/ci.yml` also runs on `pull_request` and on `v*` tags, which a pull request from the branch would use.)* *(2026-11-15, later: the owner's ruling "Open a draft PR now", relayed by the coordinator. The coordinator's statement that CI runs only on pushes to `main` and tags was wrong: `.github/workflows/ci.yml` also runs on `pull_request`, which the review's finding showed. After P4 is committed and pushed the coordinator opens one draft pull request from `p3-acpext-v0.5.0` to `main`, so every later push to the branch runs CI; `main` does not move and nothing merges until the owner's word, and `main` is still fast-forwarded only after 0051 P6 and 0052 P4 land. The sentence above that the phases on the branch have only the local gates behind them holds only until that pull request is open.)*
    * Effect: the notes under C8, P3 step 7, P4's prerequisites and step 1, the new P8a, the Rollout and 0052-PLAN P3 (and
      its order line). **The branch's P3 commit, checked out alone, fails those two `acpserver` tests, by construction;
      the owner's accepted cost.**
@@ -1565,3 +1578,598 @@ annotated, its message the tag name.
 The identifier scan of the staged diff's added lines, for the local account name, the host names, home, temporary and
 dev-host scratch paths, run-heavy ticket shapes and mail addresses, found nothing (`grep` exit 1), and found the one line
 of a copy with planted values (count 1). It ran after every text of this record was written but this paragraph.
+
+*(2026-11-15, later: the candidate tag.)* On 2026-11-15 the coordinator asked the owner for the word on `acpext/v0.5.0-rc.1`; the
+owner said "You may tag and push the tag". The coordinator created the annotated tag `acpext/v0.5.0-rc.1` (its message the tag
+name) on `c1e9100`, the branch's P3 commit, and pushed it. `git ls-remote --tags origin 'acpext/v0.5.0-rc.1*'` lists the tag
+object `0926ac244a8e3cd52f7835314b5937f16c1138b6` at `refs/tags/acpext/v0.5.0-rc.1` and its commit
+`c1e9100a825f46ed98539785cdb969b48d69fc1f` at `refs/tags/acpext/v0.5.0-rc.1^{}`. `go list -m
+github.com/maccavelli/gobble-cli/acpext@v0.5.0-rc.1`, run from a scratch directory through the module proxy, printed `… v0.5.0-rc.1`
+on the first try, and `@latest` still printed `v0.4.0`. "The tag served", an acceptance item above, is met by the candidate; the
+final tag is P8a's.
+
+### P4 record (2026-11-15)
+
+Run by a mainstream model at medium effort, on the owner's approval of this PLAN's P4 (steps 1 to 8, with 4a and 4b) and of
+0052-PLAN's P3, as ONE change set: P4's header says "Committed with 0052-PLAN P3, as one commit", and
+[0052-PLAN-finish-the-chatgpt-plan-sign-in-on-the-sdk-engine.md](0052-PLAN-finish-the-chatgpt-plan-sign-in-on-the-sdk-engine.md)
+has the same commit's other half, "P3 record (2026-11-15)". Built on the branch `p3-acpext-v0.5.0`, after P3's commit.
+Times are the session machine's local time. Staged, not committed. **The commit is made on the branch by the coordinator,
+under the owner's standing approval, and `main` is fast-forwarded to the branch's tip by the coordinator alone, only
+after it has verified the gates.** `main` and `origin/main` stayed at `9e21c8f`; no tag, push or merge was made. *(2026-11-15, the owner's ruling relayed by the coordinator, "Keep it on the branch until those phases land": the coordinator commits each approved phase on the branch `p3-acpext-v0.5.0` and pushes the branch; `main` stays at `9e21c8f` and is fast-forwarded only after 0051-PLAN P6 and 0052-PLAN P4 have landed on the branch and every gate is green, because until then a plan sign-in passes no host id and does not reuse its registered client. Consequence told to and accepted by the owner: CI runs on pushes to `main`, so until `main` moves the phases on the branch have only the local gates and the Linux and Windows runs behind them; `.github/workflows/ci.yml` also runs on `pull_request` and on `v*` tags, which a pull request from the branch would use.)* *(2026-11-15, later: the owner's ruling "Open a draft PR now", relayed by the coordinator. The coordinator's statement that CI runs only on pushes to `main` and tags was wrong: `.github/workflows/ci.yml` also runs on `pull_request`, which the review's finding showed. After P4 is committed and pushed the coordinator opens one draft pull request from `p3-acpext-v0.5.0` to `main`, so every later push to the branch runs CI; `main` does not move and nothing merges until the owner's word, and `main` is still fast-forwarded only after 0051 P6 and 0052 P4 land. The sentence above that the phases on the branch have only the local gates behind them holds only until that pull request is open.)*
+
+**C1, the start state.** Branch `p3-acpext-v0.5.0`, `HEAD` `c1e9100` (P3's acpext changes), pushed, the tree clean; `main` and
+`origin/main` at `9e21c8f`. `go.mod` required acpext `v0.3.0`, go-llmprovider-sdk `v1.31.0`, `authcontract` `v0.1.0`
+`// indirect`. The candidate tag exists (the note under "P3 record (2026-11-15)"); from a scratch directory, through the
+module proxy, `go list -m github.com/maccavelli/gobble-cli/acpext@v0.5.0-rc.1` printed `… v0.5.0-rc.1` on the first try and
+`@latest` printed `v0.4.0`, both run again before step 1. `git ls-remote --tags origin 'acpext/v0.5.0-rc.1*'` lists the tag
+object `0926ac244a8e3cd52f7835314b5937f16c1138b6` and, peeled, `c1e9100a825f46ed98539785cdb969b48d69fc1f`.
+The two `acpserver` tests that read `../acpext/testdata` fail at `c1e9100`, as P3's deviation 2 says: on an unchanged
+`git archive` of it, `TestPromptQuotaData/prompt-rate-over-cap.error.json` (`errordata_test.go:203`, the prompt error's data
+`"kind":"rate-limited"` against the frame's `rate_limited`) and `TestRetryNoticeServerMembers` (`retry_test.go:213`) fail; they
+pass in this tree, and neither was edited to pass. *(2026-11-15, the review: `acpserver/retry_test.go:194`, which `TestRetryNoticeServerMembers` uses, changes its input literal by one word, as step 4 lists; neither's expectation or frame changed. See "Review of 2026-11-15".)*
+The lines each phase cites, re-read at this base: moved, with no change in substance, `llm/provider/signin.go`'s `offers` (`:77`
+in the PLAN, `func offers` at `:86`, its comment above), the `SignInError` text (`:138`, now `:147`), `Logout`
+(`login.go:93-104`, `func Logout` at `:108`), `authProviders` (`agent.go:381-392`, `func` at `:384`), and `prompt.go:308`'s
+`WindowMinutes` place (after `d.Limit = …` at `:305`). At the PLAN's own lines, unchanged: `provider.go:273`, `list.go:106-133`,
+`resolve.go:52`, `credentials.go:51`, `auth.go:199-223` and `:213`, `:84`, `:307`, `models.go:274` and `:316`, `piimport.go:45`,
+`providerscmd.go:114`, `agent/event.go:103`, `agent/agent.go:697`, `view.go:247` and `:249`, `acpclient/update.go:118`,
+`acpserver/prompt.go:108` and `:286`, `errordata_test.go:211`, `list_test.go:176-177`, `:188-189` and `:260`,
+`workspace_test.go:22-23`, `limit_test.go:159-160` and `:182`, `acpserver/retry_test.go:122-123` and `:194`,
+`prompt_test.go:467`, `acpclient/retry_test.go:80-82`, `internal/cli/retry_test.go:22-24` and `:33`. No site changed in substance.
+
+**What changed (staged).**
+
+1. **Step 1.** `go get github.com/maccavelli/gobble-cli/acpext@v0.5.0-rc.1`, `go mod tidy`. The whole `go.mod` diff is two lines:
+   `github.com/maccavelli/gobble-cli/acpext v0.3.0` becomes `v0.5.0-rc.1`, and `github.com/maccavelli/go-llmprovider-sdk/authcontract
+   v0.1.0` moves from the indirect block to the direct one, as step 1 says (the first import is `llm/provider/list.go`'s). `go.sum`
+   changes only acpext's two lines. No other requirement moved; no `replace` and no `go.work`. 0049-PLAN P5b-2's wire half:
+   `acpserver/prompt.go`'s `errorData` sets `WindowMinutes`; `errordata_test.go`'s `weeklyErr`, its case in `TestErrorData` and
+   its frame in `TestPromptQuotaData` (`prompt-weekly.error.json`, in acpext's testdata since P3), re-applied from `1406bd6`
+   unchanged.
+2. **Step 2.** `llm/provider/policy.go` (new): `acceptedBorrowed`, `honouredConsents` (0052-PLAN P3 fills it: both here, in one
+   commit), `Offered`, `kept`, `Remote`, and `HasLogin`, `HasKeyLogin`, `HasSignIn`, `Revocable`, `DefaultMethod`,
+   `ImportsPiLogin`, `Accepts`, all derived from `Offered`. `offers`, `HasPiLogin`'s place and the `openai` checks are gone;
+   `methodIDs` stays the word table, `Methods` reads `Offered`, and `skips` skips what `Offered` does not give.
+3. **Step 3.** `internal/auth/resolve.go`: `Resolver.Accepts func(id string, e Entry) bool`, in place of `HasLogin`; `AcceptsLogin`
+   (deviation 2); `credentials.go` passes it. `Logout` revokes only an accepted, revocable session and deletes any, and keeps
+   P2a's `UseIdentity` before the revocation.
+4. **Step 4.** `llm/kind.go` in the contract's spellings; `provider.ErrorKind` (in `list.go`) in place of `FailureKind` and
+   `failureKinds`; every caller (`provider.go`, `signin.go`, `auth.go`, `models.go`) uses it. The three tests that called
+   `FailureKind` assert `ErrorKind` with the same word (`list_test.go:176-177` `auth`, `:188-189` `timeout`, `workspace_test.go:22-23`
+   `workspace`); `TestKindAgreesWithFailureKind` and `TestFailureKind` are removed with it, `TestErrorKindIsTheContracts` takes
+   their place. **4a:** `loginWith` reads `DefaultMethod`, with a usage error naming `--api-key -` for none, and `--device`
+   picks the offered device method; no per-id case remains. **4b:** `agent.RetryEmptyReply` is `"empty_answer"`; `retryLine`
+   compares `string(acpext.RetryOffline)` and `string(acpext.RetryEmptyReply)`; `acpclient/update.go`'s doc names the new
+   words. The tests that held an old word change with their values, each a one-word diff: `acpserver/retry_test.go:122-123`
+   (`empty_answer`), `:194` (`rate_limited`), `acpserver/prompt_test.go:467`, `acpclient/retry_test.go:80-82`,
+   `internal/cli/retry_test.go:22-24`, `llm/provider/limit_test.go:159-160`, and `llm/kind_test.go`'s four values.
+5. **Steps 5 and 6.** `authProviders` sets `Login` from `provider.HasSignIn(id)` and the command from the default method; `acp.go`'s
+   `--login` and `piimport.go` read `HasSignIn` and `ImportsPiLogin`; `signInWords` renders `Offered`'s labels.
+
+Test values that changed with the offer, each named: `llm/provider/signin_test.go`'s `TestSignInMethods` (openai `api-key`,
+`chatgpt-plan`) and `TestSignInMenu` (openai's forced `api-key` in place of the bare menu); `login_test.go`'s `TestLogout` and
+`TestLogoutRevokesAsGobble` fixtures carry `Kind` `grok`, as a real sign-in's session does (a test issuer's URL is no issuer the SDK
+infers a kind from), and `TestLogoutRevokesAsGobble` runs for `openai`'s plan session too; `internal/cli/auth_test.go`'s
+`TestAuthLogin` loses its "not in gobble yet" line, which `TestLoginWithReadsTheDefaultMethod` replaces; `acp_test.go`'s
+`TestAgentAuthOptions` and `choice_test.go`, `providerscmd_test.go` take openai's `Login` and the labels as `signInWords` gives them.
+
+**Tests (C2): each seen failing on a scratch copy of the tree** (`<TMP>`, no `.git`; `HOME`, `USERPROFILE`, `XDG_*` and
+`GOBBLE_HOME` in the scratch; `GOPROXY=off`; one `go test -count=1 -run '^(Test…)$' <package>` each, run after the last Go
+change; unbroken, each passes). Each plant exits 1:
+
+| Test | Planted break | Failure seen (exit 1 each; `<TMP>` is the scratch copy) |
+| :--- | :--- | :--- |
+| `TestOfferedMethods` (P4) | the borrowed-client rule dropped (`kept` no longer refuses a vendor-borrowed client) | `policy_test.go:41: Offered(openai) = ["api_key" "browser_oauth" "device_code" "chatgpt_plan"], want ["api_key" "chatgpt_plan"]` |
+| `TestOfferedMethods` (P4) | `acceptedBorrowed` emptied | `policy_test.go:41: Offered(grok) = ["api_key"], want ["api_key" "browser_oauth" "device_code"]` |
+| `TestOfferedMethods` (P4) | `honouredConsents` emptied | `policy_test.go:41: Offered(openai) = ["api_key"], want ["api_key" "chatgpt_plan"]` |
+| `TestPredicatesFromOffered` (P4) | `HasKeyLogin` reading `oauth_session` | `policy_test.go:71: openai: HasLogin true, HasKeyLogin true, Revocable true, ImportsPiLogin false; Offered says true, false, true, false` |
+| `TestRemoteMethods` (P4) | `Remote` reading `Completion` alone, so a loopback-only browser method is accepted | `policy_test.go:132: Remote(a loopback-only browser sign-in) = true, want false` |
+| `TestRemoteMethods` (P4) | `Remote` refusing every browser completion | `policy_test.go:115: grok: Remote accepts ["device_code"], want ["browser_oauth" "device_code"]` |
+| `TestEveryCommandAndWordIsAccepted` (P4) | openai's word list given `device` | `defaultmethod_test.go:119: openai: 3 method words for 2 offered methods` |
+| `TestEveryCommandAndWordIsAccepted` (P4) | kilo's command given `--method browser` | `defaultmethod_test.go:78: kilo: "gobble auth login kilo --method browser" names a method gobble does not offer: kilo signs in with --method api-key or device, not "browser"` |
+| `TestResolverAcceptsOnlyOfferedKinds` (P4) | `Accepts` ignoring the kind | `resolve_test.go:172: Credential(openai) = ok true, err <nil>; want usable false` |
+| `TestLogoutRevokesOnlyAccepted` (P4) | revocation by `HasLogin` alone | `login_test.go:523: logout: oauth: revoke failed: 404 Not Found: 404 page not found, <nil>, stored Login(nil); want it deleted` |
+| `TestErrorKindIsTheContracts` (P4) | `llm/kind.go` keeping `rate-limited` | `errorkind_test.go:53: ErrorKind(llm: rate limited) = "rate-limited", not a word of the contract` |
+| `TestKindsAndLimitsMatchAcpext` (P4) | acpext pinned back to `v0.4.0` in the scratch copy | `acpserver/prompt.go:289:5: d.Consent undefined (type acpext.ErrorData has no field or method Consent)` |
+| `TestKindsAndLimitsMatchAcpext` (P4) | `KindDenied` deleted from the scratch copy's acpext (a `replace` to its `acpext/`, in the scratch `go.mod` only) | `acpserver/errordata_test.go:245:10: undefined: acpext.KindDenied` |
+| `TestLoginWithReadsTheDefaultMethod` (P4) | the `id == "openai"` case restored | `defaultmethod_test.go:39: gobble auth login openai: exit 2, stderr "Error: openai's ChatGPT sign-in is not in gobble yet (0031-PLAN P4b); use --api-key -\n", signed in by []; want "chatgpt-plan"` |
+| `TestRetryCausesAreAcpexts` (P4) | `agent.RetryEmptyReply` left `"empty_reply"` | `retrycause_test.go:23: agent causes "offline" and "empty_reply", acpext's "offline" and "empty_answer"` |
+| `TestRetryLines` (P4) | `retryLine` left comparing the literal `"empty_reply"` | `retry_test.go:40: view: stdout "", stderr "waiting for the network\nretrying: empty answer (attempt 1 of 2)\n"; want nothing and "waiting for the network\nretrying: empty reply (attempt 1 of 2)\n"` |
+| `TestLogoutRevokesAsGobble` (P4) | the `UseIdentity` call moved inside a grok-only branch | `login_test.go:470: the named logout: GET /.well-known/openid-configuration sent User-Agent "go-llmprovider-sdk/v1.31.0 (darwin; arm64) go-llmprovider-sdk/v1.31.0", want gobble/1.2.3-test ( ... go-llmprovider-sdk/` |
+| `TestErrorData` (the weekly case) and `TestPromptQuotaData` (`prompt-weekly.error.json`) (P4) | the `WindowMinutes` lines removed | `errordata_test.go:193: errorData` |
+
+On the tree before the phase (HEAD's `acpext` and sources, with the new and changed test files added): `llm` does not compile,
+`undefined: ConsentError`; `llm/provider`, `undefined: ErrorKind`; `internal/auth`, `r.Accepts undefined (type *Resolver has no
+field or method Accepts)` and `undefined: AcceptsLogin`; `internal/cli`, `undefined: provider.DefaultMethod`,
+`undefined: provider.Offered`, `undefined: provider.ConsentText`; `acpserver`, `undefined: ConsentState` and `unknown field
+PlanConsent in struct literal of type Options`. `acpclient` and `agent` compile and pass there too: their tests change one
+literal each, which each decodes or compares with itself.
+
+**Gates (C6),** each exit status taken from the file its output was redirected to before anything read it. `make race`,
+`make check-test-isolation`, `make preflight` and the lint runs went through `run-heavy`; the other two hosts through
+`run-on-host --race`, `sh -c`, which kept the Linux run off the WSL distros.
+
+| Gate | Where | Start to end | Exit |
+| :--- | :--- | :--- | :--- |
+| `make pre-add-check FILES=` the 51 changed Go files | this Mac | 14:02:17 to 14:03:06 | 0 ("51 file(s) clean (gofmt, golint, govulncheck)") |
+| `golangci-lint run --config .golangci.yml` over the seven changed packages, six runs, each with a new `GOLANGCI_LINT_CACHE`, under `run-heavy` | this Mac | 14:03:20 to 14:04:33 | 0, 0, 0, 0, 0, 0; "0 issues." each |
+| `make check-acpext-deps` | this Mac | 14:04:55 to 14:04:55 | 0 |
+| `make race`, then `GOFLAGS=-count=1 make race`, under `run-heavy` | this Mac | 14:04:55 to 14:05:38, then 14:06:50 to 14:07:31 | 0, 0 (the root's packages and acpext; no test cache read in the second) |
+| `make check-test-isolation`, under `run-heavy` | this Mac | 14:05:38 to 14:05:57 | 0 ("root module: go test exit 0; 0 failing", "acpext module: go test exit 0", "files written above the temp roots: 0") |
+| `go test -count=1 ./...`, `CGO_ENABLED=1 go test -count=1 -race ./...`, `go -C acpext test -count=1 ./...`, one `run-on-host --need linux --race` | the Linux machine, scratch copy | 14:04:55 to 14:09:14 | 0 (`GOTEST-OK`, `RACE-OK`, `ACPEXT-OK`) |
+| the same three, `run-on-host --need windows --race`, `sh -c` | the Windows laptop, scratch copy, Go 1.27.4 | 14:04:55 to 14:07:13 | 0 (`GOTEST-OK`, `RACE-OK`, `ACPEXT-OK`) |
+| `make preflight`, under `run-heavy` | this Mac | 14:15:36 to 14:23:11 | 0 ("preflight passed") |
+
+The six lint runs: run 1 14:03:20 to 14:03:33 exit 0, run 2 14:03:33 to 14:03:44 exit 0, run 3 14:03:45 to 14:03:57 exit 0, run 4 14:03:57 to 14:04:09 exit 0, run 5 14:04:10 to 14:04:21 exit 0, run 6 14:04:21 to 14:04:33 exit 0; **six of six clean, no finding of any
+kind**, so there was nothing to fix. Besides the lint runs, no identifier this change adds differs from another in its package only by
+capitalization: a scan of every top-level name of the seven packages, test files included, finds only five pairs, each
+older than this change (`Selection`/`selection`, `RequestPermissionsTool`/`requestPermissionsTool`, `PromptError`/`promptError`,
+`Start`/`start`, `ToolContent`/`toolContent`); the one pair this change touched, `Resolver`'s field `Accepts` and a method, was
+renamed apart (`usesLogin`).
+
+The changed Go files were last modified at the times below, before every gate in the table above ran (the gates started at
+14:02:17 and later; the last Go edit was before 14:02:17):
+
+```text
+13:09:12  acpclient/update.go
+13:09:12  internal/cli/view.go
+13:09:12  llm/kind.go
+13:09:12  llm/kind_test.go
+13:09:30  agent/event.go
+13:09:54  acpclient/retry_test.go
+13:09:54  acpserver/prompt_test.go
+13:09:54  acpserver/retry_test.go
+13:09:54  internal/cli/retry_test.go
+13:10:22  internal/cli/models.go
+13:10:22  llm/provider/list.go
+13:10:49  llm/provider/list_test.go
+13:10:49  llm/provider/workspace_test.go
+13:11:02  llm/provider/limit_test.go
+13:18:45  llm/background.go
+13:18:45  llm/consent.go
+13:19:46  llm/provider/login.go
+13:19:46  llm/provider/signin.go
+13:20:28  llm/provider/consent.go
+13:20:43  llm/provider/policy.go
+13:22:22  internal/cli/acp.go
+13:22:22  internal/cli/piimport.go
+13:22:28  internal/cli/providerscmd.go
+13:24:32  internal/cli/acp_test.go
+13:24:32  internal/cli/auth_test.go
+13:24:32  internal/cli/choice_test.go
+13:24:32  internal/cli/providerscmd_test.go
+13:24:32  llm/provider/signin_test.go
+13:26:12  llm/provider/policy_test.go
+13:26:38  llm/provider/errorkind_test.go
+13:27:13  llm/provider/login_test.go
+13:27:47  internal/auth/resolve_test.go
+13:29:37  acpserver/retrycause_test.go
+13:30:13  acpserver/errordata_test.go
+13:31:02  acpserver/prompt.go
+13:31:09  acpserver/agent.go
+13:31:09  acpserver/title.go
+13:33:21  acpserver/autocompact.go
+13:33:21  internal/cli/agent.go
+13:33:34  internal/cli/credentials.go
+13:35:54  acpserver/autocompact_test.go
+13:35:54  acpserver/title_test.go
+13:38:41  llm/provider/mark_test.go
+13:39:34  internal/cli/consent_test.go
+13:48:29  llm/consent_test.go
+13:48:33  internal/cli/auth.go
+13:48:33  internal/cli/consentwording_test.go
+13:49:47  llm/provider/provider.go
+13:51:56  internal/cli/defaultmethod_test.go
+14:00:35  acpserver/plan_test.go
+14:01:50  internal/auth/resolve.go
+```
+
+The Linux and Windows copies hold the working tree, not a commit.
+
+**Deviations.**
+
+1. **`provider.Login(id)` cannot be declared.** Steps 2 and 5 name a predicate `Login`, "acpext's `Login` … from `provider.Login(id)`";
+   `Login` is the stored login's type in `llm/provider` (`login.go:17`). The predicate is `HasSignIn(id)`: an offered method that is
+   not an API key. Equivalent.
+2. **`Accepts` takes a `*provider.Login`, and the bridge is `auth.AcceptsLogin`.** Step 3 has `credentials.go:51` pass
+   `provider.Accepts`, with the resolver's `Accepts func(id string, e Entry) bool`. `internal/auth` imports `llm/provider` (`logins.go`), so
+   `provider.Accepts` cannot take an `auth.Entry`. `provider.Accepts(id, *Login)` calls the SDK's `SessionKind()` on the session the
+   `Login` builds, as the MADR says; `auth.AcceptsLogin(id, Entry)` (in `resolve.go`, which the PLAN names) builds a `Login` from the entry's `Kind`,
+   `Issuer` and `Resource`, the three members the SDK's rules read, and `credentials.go` passes it.
+3. **The pairing of an offered method with the session it signs in to is gobble's table** (`sessionKinds`, `policy.go`, three rows,
+   keyed by provider and the method's client identity). The PLAN says "a session kind an offered method signs in to" and the
+   SDK has no accessor for what a method will leave. Within the step; named because it is a table the PLAN does not show.
+4. **The SDK's fact under `TestRemoteMethods` has changed. *(2026-11-15, later: ruled by the owner, "Amend the records to the SDK's facts", relayed by the coordinator; see "Review of 2026-11-15" below.)*** *Evidence.* The PLAN's row for `TestRemoteMethods`
+   expects "grok's `browser_oauth` refused", and its plant "`Remote` reading `Completion` alone, so grok's `browser_oauth` is
+   accepted". At go-llmprovider-sdk `v1.31.0` (module cache, `llmprovider/providers/grok/descriptor.go`) Grok's `browser_oauth`
+   is `Completion` `browser_paste`, `Paste` `url_or_code`, not `browser_loopback` with no `Paste` as MADR D2's note says; the SDK's
+   `0074-MADR-one-sign-in-handle-and-method-facts.md` has it as its table row C62, "now `browser_paste`, Phase 8 step 1", with C56 and
+   C57 ("`NoLoopback` is refused for Grok") also removed by that step. `Remote`, which reads those two facts and no provider id,
+   therefore accepts it, and the PLAN's row cannot pass as written whatever `Remote` does short of a provider-id rule. *Done,
+   pending the owner's word:* `Remote` is the MADR's rule unchanged; `TestRemoteMethods` expects grok `browser_oauth` and `device_code`,
+   kilo `device_code`, openai `chatgpt_plan`, and holds the rule's refusal on methods of the contract's own shape, a
+   loopback-only browser method and a paste-marked one with no paste, which no built-in method has; its two plants are the
+   PLAN's second (every browser completion refused) and the PLAN's first made to bite on that loopback method. MADR 0051 D2 carries a
+   dated note. *Resolutions:* (a) recommended: accept this, amending D2's sentence "it refuses one" (cost: one note, already
+   written; P6's relay may then drive Grok's browser sign-in for a remote client, which the SDK now supports); (b) refuse Grok's
+   browser sign-in for a remote client by a provider-id rule (a workaround: the per-id check D2 exists to avoid, and a refusal the
+   SDK's facts no longer state). *Doing nothing:* the PLAN's test row and the MADR's sentence state a fact the pinned SDK does not have.
+5. **`auth status`'s `oauth_unused` reason** read `!provider.HasLogin(id)` (`auth.go`'s `statusRow`); `HasLogin("openai")` is now true,
+   so an OpenAI entry of another application's login would be `usable: false` with no reason. It reads `!ok`, the resolver's own verdict.
+   Not named by the PLAN (0052-PLAN P4 step 2 owns the rest of the status row).
+6. **Tests the PLAN did not name:** `TestUnhonouredConsentKeepsMethodOut` (`policy_test.go`: the rules of `kept`, one plant), and
+   `TestLoginWithReadsTheDefaultMethod` also asserts the `--device` refusal's generic text.
+7. **Observation, no change: the provider build and a foreign OpenAI session.** `Options.login` (`provider.go`) loads whatever
+   `auth.json` holds for an id whose `HasLogin` is true, as before; the resolver (`Accepts`) never hands a foreign session to it, so the
+   CLI builds none, and 0052-PLAN P4's `TestForeignOpenAISessionRefused` owns the provider build's own refusal. Until then the
+   window is a caller that builds a provider from a `Logins` store without the resolver.
+
+**Docs step (C9),** with the docs of 0052-PLAN P3 in the same commit. Searched `README.md`, `AGENTS.md`, `docs/architecture.md`,
+`docs/README.md`, `docs/guides/` for the old kind and cause spellings, `FailureKind`, "sign in", `auth login`, `acpext`, the
+requirement table, rule 4, the `providers` table and `--method`'s words; each hit checked against the code and the tests. This
+repository keeps no changelog.
+
+Files that join the scope by C9, by this dated deviation (2026-11-15), without asking: `docs/guides/choosing-a-model.md` (the `providers`
+table's sign-in words, which `signInWords` changes); `0051-MADR` (a dated note under D2, deviation 4); and
+`0049-PLAN-structured-quota-and-rate-limit-errors-for-acp-clients.md`, whose "P5b-2 record (2026-11-15)" step 1 of this phase
+names. `README.md`, `docs/architecture.md`, `docs/guides/credentials.md` and `docs/README.md` are in the scope already.
+
+The rows, one a finding; lines are as of this change (the brief's earlier numbers moved with the edits above them):
+
+* `README.md:170` ("Only `llm/provider` imports it", the brief's `README.md:164`) — fixed: it says "but for its data-only `authcontract` module", which `acpserver` and `internal/cli` may import.
+* `docs/architecture.md:167` (rule 4, the brief's `docs/architecture.md:164`) — fixed, the same sentence.
+* `docs/architecture.md:194` (the root's acpext requirement, the brief's `:190`) — fixed: `v0.5.0-rc.1`.
+* `docs/architecture.md:194` — open: P8a makes it `v0.5.0`.
+* `docs/guides/credentials.md:366-369` (the `--json` error kinds, the brief's `:320`) — fixed: respelled, with `denied` and `expired`, and the plan sign-in's stop at its question under `--json`.
+* `docs/guides/credentials.md:338-376` (`--json`'s events, and ACP `authenticate`) — open: P5 makes `--json` print the contract's steps and refuse a first plan sign-in with exit 2, and P6 makes `authenticate` sign in by elicitation.
+* `README.md:109-120` (the credentials bullet) — fixed: ChatGPT plan offered, `--method chatgpt-plan`, `gobble auth consent`, the question and what it gates.
+* `docs/architecture.md:24`, `:109`, `:110` and `:127` (the command list, the `llm`, `llm/provider` and `acpserver` rows) — fixed: `auth consent`, the contract's words, `WithBackground` and `ConsentError`, the policy, `ErrorKind`, `ConsentText`, the consent functions, the gate and `ErrorData.Consent`.
+* `docs/guides/credentials.md:118` (`oauth_unused`) — fixed: a session of a kind gobble does not sign in to is not used.
+* `docs/guides/credentials.md:152-153` (`--method`'s words) — fixed: `chatgpt-plan` added.
+* `docs/guides/credentials.md:189-217` (Signing in: the third provider, its consent wording and where it is asked) — fixed; `:245-300` (logout of a plan session, "Allowing background requests under a ChatGPT plan", `gobble auth consent`) — fixed, new; `:306` (`/login`'s methods) and `:347-348` (`gobble acp --login`) — fixed.
+* `docs/guides/credentials.md:189-300` (the ChatGPT section) — open: 0052-PLAN P4 step 3 adds the files it keeps, the host id and the issued client, and the phone through an ACP client; P6 the elicitation.
+* `docs/guides/credentials.md:86-132` (`auth status --json`) — open: 0052-PLAN P4 step 2 adds `sessionKind`, `consents` and `consentTerms`.
+* `docs/guides/choosing-a-model.md:137`, `:139` and `:143` (the `providers` table's sign-in words) — fixed.
+* `AGENTS.md`, `docs/guides/developing.md`, `docs/guides/models-json.md`, `docs/guides/` otherwise — nothing names a changed spelling, a kind count, the offered methods or acpext's requirement; no change. This repository keeps no changelog.
+
+`docs: searched README.md, AGENTS.md, docs/architecture.md, docs/README.md, docs/guides/*.md` (for `rate-limited`, `not-permitted`, `empty_reply`, `FailureKind`, `sign in`, `sign-in`, `auth login`, `ChatGPT`, `chatgpt`, `acpext`, `v0.3.0`, `Only llm/provider`, `--method`, `device sign-in`).
+
+
+**Acceptance.**
+
+* The tests pass and each plant failed: the table above, and every gate. Met.
+* `grep -rn 'FailureKind\|id == "openai"\|HasPiLogin' --include=*.go .` finds nothing (exit 1). Met.
+* `git grep -n '"empty_reply"\|"rate-limited"\|"not-permitted"\|"context-overflow"' -- '*.go' 'acpext/testdata'` finds nothing (exit 1);
+  `retry.empty_reply`, the personality key, is not matched by it. Met.
+* `TestAcpextAuthProvidersAreTheRegistry` passes unchanged. Met.
+* The commit is the coordinator's, after 0052-PLAN P3's acceptance.
+
+**Not verified.** The two other hosts ran scratch copies of the working tree, not a commit. Nothing was run against a live
+service: C5, and the live sign-in is P8's. A real `auth.json` was never read: every test uses a scratch `GOBBLE_HOME`. The
+SDK's behaviour on a ChatGPT plan sign-in past the consent question (the browser, the paste, the token exchange) is covered
+by the SDK's own tests and by 0052-PLAN P4's `TestSignInChatGPTPlan`, not here: this change's tests end the sign-in at the question.
+
+The identifier scan of the staged diff's added lines, for the local account name, the host names, home, temporary and
+dev-host scratch paths, run-heavy ticket shapes and mail addresses, found nothing (`grep` exit 1), and found the one line of a copy with planted values (count 1). It ran after every text of this
+record was written but this paragraph; `make check-records markdownlint` ran after it too, exit 0.
+
+#### Review of 2026-11-15
+
+An independent review of this change set found gaps against the plans and the MADRs; the coordinator relayed eleven findings and three questions.
+This entry is this phase's: findings 2, 4, 6 (the `defaultmethod_test.go` half and the `retrycause_test.go` half), 8 and 11, deviation 6's
+evidence, the question on the provider build (Q-b), and the rulings; the "Review of 2026-11-15" under 0052-PLAN's "P3 record (2026-11-15)"
+has the rest. It annotates the record above and rewrites none of it, but for one sentence the review corrects: the record's C1 paragraph
+says of the two `acpserver` tests that fail at `c1e9100` that neither "was edited to pass"; `acpserver/retry_test.go:194` changes
+`TestRetryNoticeServerMembers`'s input literal, `Kind: "rate-limited"` to `"rate_limited"`, one word, as step 4 of "What changed" lists. Neither
+test's expectation or frame was changed; the sentence is not repeated.
+
+**The owner's rulings of 2026-11-15, relayed by the coordinator,** recorded in the same change set as the review's fixes:
+
+* **Deviation 4** (Grok's `browser_oauth` and `Remote`): "Amend the records to the SDK's facts". D2's rule stays as decided; `Remote` and
+  `TestRemoteMethods` stay as built; no code change. The note under 0051-MADR D2 says the owner ruled, and each passage of the MADR and the PLAN
+  that still said Grok's browser sign-in is loopback-only with no paste is annotated with the ruling and the facts. The passages, verified
+  line by line in this tree: 0051-MADR D2's note (`:331-337`); D3's note (`:365`) and its bullet on what cannot complete that way (`:384`);
+  D4 step 1's refused-method bullet (`:426`); step 3's list of driven methods (`:445`), its rule (1) (`:451-454`) and its table row (`:470`);
+  Confirmation 3's `_meta.gobble.remote` line (`:778`); the Not-verified question on D12 (`:919`); in this PLAN, P4's `TestRemoteMethods` row
+  (`:425`), P6's rows `TestAuthenticateOnlyRemoteMethods` (`:580`), `TestAuthenticateGrokBrowserHasNoPaste` (`:598`) and
+  `TestAuthenticateRemoteRefusesLoopbackOnly` (`:610`), and P8's L3 (`:715`). The coordinator's list was complete but for D3's two passages
+  (`:365`, `:384`), the Not-verified question (`:919`), P4's own row (`:425`) and L3 (`:715`); the passages that say only "a method that only the loopback
+  completes" (`:376`, `:382`, `:388`, `:948`) are generic and hold; 0052's pair has none (0052-MADR's one mention of Grok's browser, that it and
+  its device sign-in yield one kind of session, holds). The three P6 rows cannot pass as written at the pinned facts, and what replaces them is an open question for the owner, recorded under P6 ("Open question (2026-11-15)"); no replacement is decided here.
+* **The other deviations:** "Accept the eight; I check 6 and 9". Counting this record's and the "P3 record (2026-11-15)"'s numbers, the
+  coordinator's list is 1, 2, 3, 5, 8, 10, 11, 12 (eight deviations) and 7 (an observation, not a deviation), nine numbers in all; accepted by the
+  owner on the independent review, 8 subject to review finding 5, closed below. Deviation 4 is ruled above. Deviations 6 and 9 are not accepted
+  yet: 6 is answered below (each test the plans did not name), and 9 is withdrawn below, its stated reason being false, and built as the PLAN
+  says (see the "Review of 2026-11-15" of the "P3 record (2026-11-15)").
+* **When `main` moves:** "Keep it on the branch until those phases land". The coordinator commits each approved phase on the branch
+  `p3-acpext-v0.5.0` and pushes the branch; `main` stays at `9e21c8f` until 0051 P6 and 0052 P4 have landed on the branch and every gate is
+  green. This replaces what "P4 record (2026-11-15)" and the "P3 record (2026-11-15)" say about the coordinator fast-forwarding `main` after P4.
+  The consequence the owner was told and accepted: CI runs on pushes to `main`, so until then the phases on the branch have only the local
+  gates and the Linux and Windows runs behind them. Evidence for the record: `.github/workflows/ci.yml` runs on `push` to `main` and `v*` tags
+  and also on `pull_request`, so a pull request from the branch would run it. *(2026-11-15, later: the owner's ruling "Open a draft PR now", relayed by the coordinator. The coordinator's statement that CI runs only on pushes to `main` and tags was wrong: `.github/workflows/ci.yml` also runs on `pull_request`, which the review's finding showed. After P4 is committed and pushed the coordinator opens one draft pull request from `p3-acpext-v0.5.0` to `main`, so every later push to the branch runs CI; `main` does not move and nothing merges until the owner's word, and `main` is still fast-forwarded only after 0051 P6 and 0052 P4 land. The sentence above that the phases on the branch have only the local gates behind them holds only until that pull request is open.)*
+  *Does any later phase, gate, script or doc assume it starts from `main`?* Found, each annotated or to be read with the ruling:
+  (1) C1 ("re-reads `git status`, `HEAD`, `origin/main`"): annotated; the start state is read against the branch's tip and
+  `origin/p3-acpext-v0.5.0`. (2) C8 and P4's header ("the later phases (P5 onward) continue on `main`"): annotated; P5, P6 and 0052-PLAN P4 continue
+  on the branch. (3) The P3 record's quotation of the owner's earlier ruling ("the remaining phases continue on main") and 0051-MADR's
+  "Revisions of 2026-11-15" ("`main` holds P3 only together with P4"): annotated. (4) P8a ("on the commit `main` has then",
+  `git diff acpext/v0.5.0-rc.1 HEAD -- acpext/`): holds, since `main` holds P4 by P8a. (5) P7a, `scripts/check_libs.py`, `make check-libs`, the
+  archtest and `make check-acpext-deps` read the tree and the network, never `main`: no annotation. (6) The verify-build-metadata gate names HEAD,
+  not `main`: no annotation. (7) CI: no row of any acceptance names it; its absence on the branch is the consequence above. No gate or script changes.
+
+**Finding 2, `ErrorKind` called the SDK first for every error: true.** 0051-MADR D6: "`provider.ErrorKind(err error) string` returns the contract's
+word: `signin.ErrorKindOf` for an error of the SDK's sign-ins, else `llm.Kind`'s." The code (`llm/provider/list.go`) called `signin.ErrorKindOf` first
+for every error and fell back on `llm.Kind` only for "other" and "". Probe: `mapError(&llmprovider.APIError{Status: 401, Kind: ErrQuotaExhausted,
+Code: "MonthlyLimitError"})` gave `auth`, `llm.Kind` `quota` (0049-MADR D8's case). *Built as D6 says,* with one reading it fixes: an error of the SDK's
+sign-ins is a `*SignInError`, which `SignIn` returns for every failure of the SDK's, or an error holding the SDK's denied or expired marker
+(`auth.ErrSignInDenied`, `ErrSignInExpired`, the two the SDK's own doc says `ErrorKindOf` tells apart); any other error is `llm.Kind`'s. The step 4
+sentence "`signin.ErrorKindOf` first, then `llm.Kind`" is read as D6 reads it. The criterion is the code's own types and the SDK's two markers,
+so D6 could be built as written and no option was picked between readings; if the owner reads "an error of the SDK's sign-ins" more widely, the
+criterion is `isSignInError`, one function. `SignInError`'s text takes `ErrorKind(e)`, so a denied sign-in still reads `(denied)`. New
+`TestErrorKindAgreesWithLlmKind` (the agreement test the removed `TestKindAgreesWithFailureKind` was): for every class of `llm`, the 401 quota, an invalid
+request and a plain error, `ErrorKind` equals `llm.Kind`; the 401 quota is `quota`; a sign-in error holding the denied marker is `denied`, one over an
+invalid request `invalid_request` (which `llm.Kind` has no word for), one over a refusal `auth`.
+
+**Finding 4, nothing tied `sessionKinds` to what the SDK stores: true.** `TestSignInGrokBrowser` and `TestSignInDevice` now assert
+`Accepts("grok", <the login the SDK stored>)` after each real sign-in (`signin_test.go`); no test stores a plan session through the SDK before 0052-PLAN P4's
+`TestSignInChatGPTPlan`, so the plan's row is not tied here, and `sessionKinds`'s `chatgpt_plan` word is held by the tests that hand-write it and by that
+phase's test when it lands.
+
+**Finding 6, vacuous assertions: true, both.** `defaultmethod_test.go`'s loop re-checked membership in the list it iterated; it now compares each
+provider's `Methods` with the `--method` words of its offered methods from a table in the test, in the SDK's order (`api_key` `api-key`, `browser_oauth` `browser`,
+`device_code` `device`, `chatgpt_plan` `chatgpt-plan`). `retrycause_test.go` fed the literal `"rate_limited"`; it now feeds `provider.ErrorKind` of a rate-limited
+error, the word the adapter's `providerRetry` computes, so a respelling in `llm/kind.go` fails it.
+
+**Finding 8, Logout read revocability per provider: true.** 0051-MADR D2: "The logout revokes when the stored session's method is `Revocable`, and
+only for a session gobble accepts (D2's last bullet), never another app's (F54)." `Logout` now reads `storedMethod(id, l)`, the offered session method
+whose kind the stored session's kind names, and revokes when that method is `Revocable`. Where several offered methods share a kind (Grok's browser
+and device) the first is read; the SDK keeps no method id on a session (0052-MADR, "Where the report … differ"). A seam, `offeredFor`, lets
+`TestLogoutReadsTheStoredMethod` offer a plan method that is not revocable beside a revocable method of another kind: the plan session is deleted and never revoked.
+
+**Finding 11, `docs/architecture.md:110`: true.** It said `Remote` is "read from" `Offered`; it now says `Remote` reads the facts of one method
+`Offered` gives, and the `ErrorKind` sentence says which words come from where.
+
+**Q-b, which phase owns the refusal of a foreign session at provider build (`Options.login`, `provider.go:99`)?** 0052-MADR D1's table: "`HasLogin` gaining
+openai, `offers`' guards, the `provider.go:107-112` refusal, … | **reworked** onto 0051-MADR D2's policy and the SDK's session kind". 0052-PLAN P4 step 1:
+"Re-apply, reworked, what P1 step 3 took out: … `TestOpenAILoginIsAPlan` as `TestForeignOpenAISessionRefused`", and its row: "`TestForeignOpenAISessionRefused` | status,
+`auth check`, `authenticate`, provider choice and the provider build all refuse it; the logout deletes and does not revoke | the provider build refusing while status
+accepts". So 0052-PLAN P4 owns it, and no phase before it: until then `Options.login` loads what `auth.json` holds for an id whose `HasLogin` is true. On the resolver
+reading a snapshot while `New` loads fresh: both are written nowhere in the plans; P4's test is the first to hold the two to the same verdict, and the plans'
+wording ("the resolver … logout then agree (F54)", 0051-MADR D2) assumes it. Not a deviation of this change; deviation 7 stands as an observation.
+
+**Deviation 6, the tests the plans did not name** (each with what it asserts and the plant that fails it, in the table below):
+`TestUnhonouredConsentKeepsMethodOut` (the rules of `kept`: an unhonoured required consent, a token paste, a vendor import, a host-only method and an unaccepted borrowed
+client keep a method out; plant `kept-ignores-consent`); `TestErrorKindAgreesWithLlmKind` (finding 2); `TestLogoutReadsTheStoredMethod` (finding 8);
+the added assertions in `TestSignInGrokBrowser` and `TestSignInDevice` (finding 4); the generic-text assertion in `TestLoginWithReadsTheDefaultMethod` (the `--device`
+refusal names only the id given and no ChatGPT sentence; plant `defaultmethod-openai-case`); and, 0052 P3's, `TestPlanConsentIsReadFromAuthJSON`,
+`TestTitleNotMadeSendsNothing`, `TestTitleGateReadsOnlyWhenATitleIsAsked`, `TestAuthConsentNeverFailsAfterTheWrite` (its record). Each exists because a plan row or a MADR
+sentence has no test of its own or a stronger one was needed; none loosens or replaces a named test.
+
+**The plants of this review, each on a scratch copy of the tree** (`<TMP>`, `GOPROXY=off`, scratch `HOME`; each exits 1; the plants of the
+earlier record were run again on this tree, all 53 failing, the list in this table being the new ones):
+
+| Finding | Test | Planted break | Failure seen (exit 1) |
+| :--- | :--- | :--- | :--- |
+| 1 | `TestPlanConsentIsReadFromAuthJSON` | `PlanConsent` reading `Granted: granted || true` (the reviewer's plant) | `consentstore_test.go:89: the run's method: {Consent:chatgpt_plan.background_use Plan:true Granted:true}, <nil>; want plan true, granted false, error false, consent "chatgpt_plan.background_use"` |
+| 1 | `TestPlanConsentIsReadFromAuthJSON` | `internal/cli`'s `planConsent` giving `Granted: true` | `consentstore_test.go:89: the run's method: {Consent:chatgpt_plan.background_use Plan:true Granted:true}, <nil>; want plan true, granted false, error false, consent "chatgpt_plan.background_use"` |
+| 1 | `TestPlanConsentIsReadFromAuthJSON` | `agentOptions` not setting `PlanConsent` | `consentstore_test.go:84: the agent is given no PlanConsent` |
+| 2 | `TestErrorKindAgreesWithLlmKind` | `ErrorKind` calling `signin.ErrorKindOf` first for every error (the earlier code) | `errorkind_test.go:93: ErrorKind(llm: workspace needed) = "other", llm.Kind "workspace"` |
+| 2 | `TestErrorKindAgreesWithLlmKind, TestErrorKindIsTheContracts` | `ErrorKind` never using the SDK's word | `errorkind_test.go:76: a denied sign-in: ErrorKind = "other", want "denied"` |
+| 3 | `TestRefusedBackgroundCarriesConsent` | `afterRefusal` keeping the SDK's text when the answer reads no grant | `plan_test.go:421: error -32603 {"consent":"chatgpt_plan.background_use","error":"Summarization failed: openai: a background request needs the consent","kind":"not_permitted","provider":"fake"}, want kind not_permitted, c…` |
+| 4 | `TestSignInGrokBrowser, TestSignInDevice` | a wrong word in `sessionKinds` (Grok's row `chatgpt`) | `signin_test.go:219: Accepts(grok) refused the session the SDK stored: Login{Issuer:https://auth.x.ai ClientID:b1a00492-073a-47ea-816f-4c329264a828 AccountID: TokenURL:https://auth.x.ai/oauth2/token FedRAMP:false Expires:…` |
+| 5 | `TestConsentWordingOnEverySurface` | `prompter.Choose` replacing the wording with "Allow?" | `consentwording_test.go:139: condition not met within 5 s` |
+| 6 | `TestRetryCausesAreAcpexts` | `llm/kind.go` keeping `rate-limited`, so a provider retry's class is the old word | `retrycause_test.go:48: retry causes ["empty_answer" "rate-limited"], want "empty_answer" and "rate_limited"` |
+| 6 | `TestEveryCommandAndWordIsAccepted` | openai's word list given `device` | `defaultmethod_test.go:118: openai: method words ["api-key" "chatgpt-plan" "device"], want ["api-key" "chatgpt-plan"] for its offered methods` |
+| 7 | `TestOfferedConsentTextIsGobbles` | `ConsentText` dropped from the wizard options (the confirm step shows the SDK's text) | `policy_test.go:182: the confirm step asked "You're using your ChatGPT plan: this app's requests count toward its usage, which you can manage on the usage page. Allow this app to also use your plan for background requests…` |
+| 8 | `TestLogoutReadsTheStoredMethod` | `Logout` reading `Revocable(id)` for the provider | `login_test.go:562: logout: <nil>, <nil>, stored Login(nil), revoked ["plan-r"]; want it deleted and never revoked` |
+| 9 | `TestTitleGateReadsOnlyWhenATitleIsAsked` | the gate asked before the title's conditions | `plan_test.go:482: the gate was read 4 times over three prompts, want once` |
+| 3 | `TestTitleNotMadeSendsNothing` | the gate reading a grant | `plan_test.go:447: 1 title requests, want none` |
+| 10 | `TestAuthConsentNeverFailsAfterTheWrite` | `Consents` read again after `SetConsent` | `consentstore_test.go:44: allow by background: exit 1, stdout "", stderr "Error: auth.json: the file went bad after the write\n"; want the stored answer reported, exit 0` |
+
+**Gates after the last code change** (the code changed after the first pass only by lint's `errcheck`: two `errors.AsType` calls read with `errors.As`; the
+ten plants on `ErrorKind` and on the overflow's refusals were run again after it, all failing). The first gate started at 15:23:43 (the `pre-add-check` of the final tree, after an earlier pass at 15:20:27
+that found the two `errcheck` findings below); every Go file below was last modified before it.
+
+| Gate | Where | Start to end | Exit |
+| :--- | :--- | :--- | :--- |
+| `make pre-add-check FILES=` the 52 changed Go files | this Mac | 15:23:43 to 15:24:37 | 0 ("52 file(s) clean") |
+| `golangci-lint run --config .golangci.yml`, seven packages, six runs, a new `GOLANGCI_LINT_CACHE` each, `run-heavy` | this Mac | 15:24:37 to 15:25:57 | 0, 0, 0, 0, 0, 0; "0 issues." each |
+| `make check-acpext-deps` | this Mac | 15:26:14 to 15:26:14 | 0 |
+| `make race`, then `GOFLAGS=-count=1 make race`, `run-heavy` | this Mac | 15:26:14 to 15:27:02, then 15:27:23 to 15:28:04 | 0, 0 |
+| `make check-test-isolation`, `run-heavy` | this Mac | 15:27:02 to 15:27:23 | 0 |
+| `go test ./...`, `-race ./...`, acpext's tests, `run-on-host --need linux --race` | the Linux machine, scratch copy | 15:26:13 to 15:30:05 | 0 |
+| the same three, `--need windows --race`, `sh -c` | the Windows laptop, scratch copy | 15:26:13 to 15:28:37 | 0 |
+| `make preflight`, `run-heavy` | this Mac | 15:30:18 to 15:38:19 | 0 ("preflight passed") |
+
+The first lint pass of this round, before the final tree, found two `errcheck` findings (an `errors.AsType` result discarded in `list.go` and in
+`autocompact.go`), in six runs of six; both were fixed in the files, without `nolint` and without touching the config, and the six runs above are the
+final tree's, six of six clean. The changed Go files, by last-modified time:
+
+```text
+13:09:12  acpclient/update.go
+13:09:12  internal/cli/view.go
+13:09:12  llm/kind.go
+13:09:12  llm/kind_test.go
+13:09:30  agent/event.go
+13:09:54  acpclient/retry_test.go
+13:09:54  acpserver/prompt_test.go
+13:09:54  acpserver/retry_test.go
+13:09:54  internal/cli/retry_test.go
+13:10:22  internal/cli/models.go
+13:10:49  llm/provider/list_test.go
+13:10:49  llm/provider/workspace_test.go
+13:11:02  llm/provider/limit_test.go
+13:18:45  llm/background.go
+13:18:45  llm/consent.go
+13:22:22  internal/cli/acp.go
+13:22:22  internal/cli/piimport.go
+13:22:28  internal/cli/providerscmd.go
+13:24:32  internal/cli/acp_test.go
+13:24:32  internal/cli/auth_test.go
+13:24:32  internal/cli/choice_test.go
+13:24:32  internal/cli/providerscmd_test.go
+13:27:47  internal/auth/resolve_test.go
+13:30:13  acpserver/errordata_test.go
+13:31:02  acpserver/prompt.go
+13:31:09  acpserver/agent.go
+13:33:21  internal/cli/agent.go
+13:33:34  internal/cli/credentials.go
+13:35:54  acpserver/autocompact_test.go
+13:35:54  acpserver/title_test.go
+13:38:41  llm/provider/mark_test.go
+13:39:34  internal/cli/consent_test.go
+13:48:29  llm/consent_test.go
+13:49:47  llm/provider/provider.go
+14:01:50  internal/auth/resolve.go
+14:49:18  acpserver/title.go
+14:49:18  internal/cli/auth.go
+14:49:18  llm/provider/consent.go
+14:49:18  llm/provider/login.go
+14:49:18  llm/provider/policy.go
+14:49:18  llm/provider/signin.go
+14:51:34  acpserver/plan_test.go
+14:52:15  acpserver/retrycause_test.go
+14:52:15  internal/cli/defaultmethod_test.go
+14:52:40  llm/provider/policy_test.go
+14:52:40  llm/provider/signin_test.go
+14:53:27  llm/provider/errorkind_test.go
+14:53:39  llm/provider/login_test.go
+14:54:27  internal/cli/consentstore_test.go
+14:54:27  internal/cli/consentwording_test.go
+15:23:05  acpserver/autocompact.go
+15:23:05  llm/provider/list.go
+```
+
+The identifier scan of the staged diff's added lines after this review (the same patterns as above) found nothing (`grep` exit 1) and found the one line of a
+copy with planted values (count 1); it ran after every text of this entry but this paragraph, and `make check-records markdownlint` ran after it, exit 0.
+
+#### Second review of 2026-11-15
+
+The independent second-pass review closed every first-round finding and raised five items; the owner ruled on three more points. This entry is this phase's share; the
+"Review of 2026-11-15" under 0052-PLAN's "P3 record (2026-11-15)" has the rest, and nothing above is rewritten but the sentence on the P6 rows the first entry had
+(item 5).
+
+**The coordinator's check under the owner's ruling "Accept the eight; I check 6 and 9"** (relayed by the coordinator): deviation 6 stands, checked against the list of the
+unnamed tests and the reviewer's plants; deviation 9 is withdrawn on the evidence of Q-c, and so is not a deviation.
+
+**The owner's rulings of 2026-11-15, relayed by the coordinator, recorded here and in 0051-MADR's "Revisions of 2026-11-15" (its second part), each with its annotations:**
+
+* **CI on the branch:** "Open a draft PR now". The coordinator's earlier statement that CI runs only on pushes to `main` and tags was wrong: `.github/workflows/ci.yml`
+  also runs on `pull_request` (the first review's finding). After P4 is committed and pushed the coordinator opens one draft pull request from `p3-acpext-v0.5.0` to
+  `main`, so every later push to the branch runs CI; `main` does not move and nothing merges until the owner's word, and `main` is still fast-forwarded only after 0051 P6 and
+  0052 P4 land. Every sentence of the first review that says the phases on the branch have only local gates behind them is annotated, dated, with this ruling (0051-MADR,
+  this PLAN, 0052-PLAN: ten sites, each ending "holds only until that pull request is open").
+* **Deviation 13**, `ConsentText` to `signin.Options`: "Accept; P6 builds the site". Written in both places: 0052-PLAN P3 step 1 and this PLAN's P6 step 1.
+* **A key for the run with a plan session stored:** "Keep it, and document it". 0052-MADR D2 has the dated note, with the code lines; `docs/guides/credentials.md` the sentence,
+  where the consent is explained.
+
+**Item 4, annotations inside quotations: true, two.** The annotation about `main` sat inside the owner's quoted words at 0051-MADR's "Revisions of 2026-11-15" ("Release-candidate tag,
+final tag last") and at this PLAN's "P3 record (2026-11-15)", where the same words are quoted. Both quotations are restored to `c1e9100`'s text and the annotation follows
+each. Every annotation added in the three rounds was checked by script: for each paragraph of 0051-MADR, this PLAN, 0052-PLAN and 0049-PLAN, no annotation of 2026-11-15 is
+preceded by an odd number of quotation marks in its paragraph (0 of them), and the diff against `c1e9100` of the two restored quotations is the one appended annotation.
+
+**Item 5, the P6 row annotations decided more than the ruling: true.** The ruling covers facts. Rewritten in place: the annotations on `TestAuthenticateOnlyRemoteMethods`,
+`TestAuthenticateGrokBrowserHasNoPaste` and `TestAuthenticateRemoteRefusesLoopbackOnly` now state only the pinned facts, the ruling, that the row as written cannot pass at
+them and why; what replaces them (keep the loopback-only rule's tests through a stand-in method, or drop the rows because no offered method has that shape) is an open question
+for the owner before P6 runs, added under P6 in the PLAN's form ("Open question (2026-11-15)", with the two options and no choice made). The first plant of `TestAuthenticateOnlyRemoteMethods`,
+"the loopback method chosen by default", is annotated as needing replacement under either option. P4's `TestRemoteMethods` row names the plants actually run (`Remote` reading
+`Completion` alone, so a loopback-only method of the contract's own shape is accepted; `Remote` refusing every browser completion), and says the row's own first plant cannot fail the
+test at the pinned facts. The stand-in, "P6 builds to this annotation" and "`Command` the host command" phrases are gone; so is the first entry's sentence that P6's step 1 adds a seam or
+its test builds the relay's offer directly.
+
+**Item 7, nothing guarded `storedMethod`'s first-match choice: true.** New `TestSameKindMethodsAgreeOnRevocable` (`llm/provider/policy_test.go`) takes, for every built-in provider,
+the offered session methods that share a session kind and requires them to agree on `Revocable` (a method with no kind in `sessionKinds` fails it too). Plant, through the `offeredFor`
+seam (Grok's `browser_oauth` made non-revocable, `device_code` staying revocable): `policy_test.go:232: grok: browser_oauth (Revocable false) and device_code (Revocable true) sign in to the same grok session`.
+
+**Item 8, `offeredFor` is half a seam: true; the reviewer's list of readers is right.** Its doc comment (`llm/provider/policy.go:40`) now says exactly which functions read it and that a
+swap changes only those. The readers are `yields` (`policy.go:111`), which `HasLogin`, `HasKeyLogin`, `Revocable`, `ImportsPiLogin` (`:122`, `:126`, `:135`, `:157`) and `consent.go`'s
+`consentMethod` and `storedMethod` (`:81`, `:101`) call, and through them `Accepts`, `Logout`, `PlanConsent`, `Consents`, `SetConsent` and the adapter's `planConsentOf`. `Offered`,
+`DefaultMethod` (`:142`), `HasSignIn`, `Methods` and `skips` (`signin.go:86`, `:99`) read `Offered` directly. Not widened.
+
+**Item 9, carried to P5 and P6, no code now.** `ErrorKind` takes the SDK's word only for a `*SignInError` (or the SDK's denied and expired markers), as 0051-MADR D6 reads
+"an error of the SDK's sign-ins". At `v1.31.0` the SDK's sign-ins also return errors wrapping `llmprovider`'s sentinels, and plain errors; today every one reaches `ErrorKind`
+wrapped by `signin.go`'s `SignIn`. A later direct caller that passed a raw SDK error, P5's `--json` driver or P6's `signin.Start`, would get `other`. It is D6 carried out, not
+a new decision: dated pointers are at P5 step 2 and P6 step 1, saying that errors from those calls are wrapped in `SignInError` before `ErrorKind` reads them and that a test in
+the phase holds it.
+
+**Item 6 (the review's granted-yet-refused case) is 0052 P3's, in its record.** Its plant, every overflow error returned unwrapped, is in the table below.
+
+**Plants of this round, each on a scratch copy** (each exits 1; the plants on `afterRefusal`, the overflow's refusals and `ErrorKind` were run again on this tree):
+
+| Item | Test | Planted break | Failure seen |
+| :--- | :--- | :--- | :--- |
+| 6 | `TestRefusedBackgroundCarriesConsent` | every overflow error returned unwrapped (`autocompact.go`) | `plan_test.go:431: error -32603 {"error":"llm: not permitted: llmprovider: not permitted: openai: a background request on a ChatGPT plan session needs the consent chatgpt_plan.background_use, which the user has not granted (0075-MADR D5)",…}, want … naming "a background request on a ChatGPT plan session needs the consent"` |
+| 7 | `TestSameKindMethodsAgreeOnRevocable` | two same-kind methods that disagree, through the `offeredFor` seam | `policy_test.go:232: grok: browser_oauth (Revocable false) and device_code (Revocable true) sign in to the same grok session` |
+
+**Gates after the last code change** (test files are code; no Go file changed after the first, `pre-add-check`, at 16:11:44):
+
+| Gate | Where | Start to end | Exit |
+| :--- | :--- | :--- | :--- |
+| `make pre-add-check FILES=` the 52 changed Go files | this Mac | 16:11:44 to 16:12:39 | 0 ("52 file(s) clean") |
+| `golangci-lint run --config .golangci.yml`, seven packages, six runs, a new `GOLANGCI_LINT_CACHE` each, `run-heavy` | this Mac | 16:12:45 to 16:14:09 | 0, 0, 0, 0, 0, 0; "0 issues." each |
+| `make check-acpext-deps` | this Mac | 16:14:17 to 16:14:17 | 0 |
+| `make race`, then `GOFLAGS=-count=1 make race`, `run-heavy` | this Mac | 16:14:17 to 16:15:01, then 16:15:20 to 16:16:01 | 0, 0 |
+| `make check-test-isolation`, `run-heavy` | this Mac | 16:15:01 to 16:15:20 | 0 |
+| `go test ./...`, `-race ./...`, acpext's tests, `run-on-host --need linux --race` | the Linux machine, scratch copy | 16:14:17 to 16:18:31 | 0 |
+| the same three, `--need windows --race`, `sh -c` | the Windows laptop, scratch copy | 16:14:17 to 16:16:35 | 0 |
+| `make preflight`, `run-heavy` | this Mac | 16:18:47 to 16:26:48 | 0 ("preflight passed") |
+
+The changed Go files' last-modified times, all before the first gate's start (16:11:44):
+
+```text
+13:09:12  acpclient/update.go
+13:09:12  internal/cli/view.go
+13:09:12  llm/kind.go
+13:09:12  llm/kind_test.go
+13:09:30  agent/event.go
+13:09:54  acpclient/retry_test.go
+13:09:54  acpserver/prompt_test.go
+13:09:54  acpserver/retry_test.go
+13:09:54  internal/cli/retry_test.go
+13:10:22  internal/cli/models.go
+13:10:49  llm/provider/list_test.go
+13:10:49  llm/provider/workspace_test.go
+13:11:02  llm/provider/limit_test.go
+13:18:45  llm/background.go
+13:18:45  llm/consent.go
+13:22:22  internal/cli/acp.go
+13:22:22  internal/cli/piimport.go
+13:22:28  internal/cli/providerscmd.go
+13:24:32  internal/cli/acp_test.go
+13:24:32  internal/cli/auth_test.go
+13:24:32  internal/cli/choice_test.go
+13:24:32  internal/cli/providerscmd_test.go
+13:27:47  internal/auth/resolve_test.go
+13:30:13  acpserver/errordata_test.go
+13:31:02  acpserver/prompt.go
+13:31:09  acpserver/agent.go
+13:33:21  internal/cli/agent.go
+13:33:34  internal/cli/credentials.go
+13:35:54  acpserver/autocompact_test.go
+13:35:54  acpserver/title_test.go
+13:38:41  llm/provider/mark_test.go
+13:39:34  internal/cli/consent_test.go
+13:48:29  llm/consent_test.go
+13:49:47  llm/provider/provider.go
+14:01:50  internal/auth/resolve.go
+14:49:18  acpserver/title.go
+14:49:18  internal/cli/auth.go
+14:49:18  llm/provider/consent.go
+14:49:18  llm/provider/login.go
+14:49:18  llm/provider/signin.go
+14:52:15  acpserver/retrycause_test.go
+14:52:15  internal/cli/defaultmethod_test.go
+14:52:40  llm/provider/signin_test.go
+14:53:27  llm/provider/errorkind_test.go
+14:53:39  llm/provider/login_test.go
+14:54:27  internal/cli/consentstore_test.go
+14:54:27  internal/cli/consentwording_test.go
+15:23:05  acpserver/autocompact.go
+15:23:05  llm/provider/list.go
+16:07:49  acpserver/plan_test.go
+16:08:15  llm/provider/policy.go
+16:08:15  llm/provider/policy_test.go
+```
+
+The identifier scan of the staged diff's added lines after this round (the same patterns) found nothing (`grep` exit 1) and found the one line of a copy with planted values
+(count 1); it ran after every text of this entry but this paragraph, and `make check-records markdownlint` ran after it, exit 0.

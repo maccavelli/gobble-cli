@@ -337,14 +337,14 @@ says why): the plan is offered only in the commit that honours its consent.
 *(2026-11-15, the owner's ruling; 0051-PLAN's "P3 record (2026-11-15)".)* "0051-PLAN P3's tag" is `acpext/v0.5.0-rc.1`, the
 candidate, served by the proxy; the final `acpext/v0.5.0` is 0051-PLAN P8a's. This phase's commit is the one 0051-PLAN P4
 makes, on the branch `p3-acpext-v0.5.0` after 0051-PLAN P3's commit, and `main` moves to the branch's tip when every
-gate is green on it.
+gate is green on it. *(2026-11-15, the owner's ruling relayed by the coordinator, "Keep it on the branch until those phases land": the coordinator commits each approved phase on the branch `p3-acpext-v0.5.0` and pushes the branch; `main` stays at `9e21c8f` and is fast-forwarded only after 0051-PLAN P6 and 0052-PLAN P4 have landed on the branch and every gate is green, because until then a plan sign-in passes no host id and does not reuse its registered client. Consequence told to and accepted by the owner: CI runs on pushes to `main`, so until `main` moves the phases on the branch have only the local gates and the Linux and Windows runs behind them; `.github/workflows/ci.yml` also runs on `pull_request` and on `v*` tags, which a pull request from the branch would use.)* *(2026-11-15, later: the owner's ruling "Open a draft PR now", relayed by the coordinator. The coordinator's statement that CI runs only on pushes to `main` and tags was wrong: `.github/workflows/ci.yml` also runs on `pull_request`, which the review's finding showed. After P4 is committed and pushed the coordinator opens one draft pull request from `p3-acpext-v0.5.0` to `main`, so every later push to the branch runs CI; `main` does not move and nothing merges until the owner's word, and `main` is still fast-forwarded only after 0051 P6 and 0052 P4 land. The sentence above that the phases on the branch have only the local gates behind them holds only until that pull request is open.)*
 *(2026-11-13: "P2" here is P2-1 and P2-2, "P2 split into P2-1 and P2-2 (2026-11-13)".)*
 
 First, `llm/provider/policy.go` (0051-PLAN P4): `honouredConsents` gains `openai.ConsentBackgroundUse`.
 
 1. `llm/provider/consent.go`: `ConsentText`, gobble's wording for `openai.ConsentBackgroundUse` (the WIP's six lines,
    the fifth naming `gobble auth consent openai background deny`, and the question), passed to `wizard.Options` and
-   `signin.Options`; `PlanConsent(id string, store LoginStore) (plan, granted bool)`, from the stored session's kind and
+   `signin.Options` *(2026-11-15, the owner's ruling "Accept; P6 builds the site", relayed by the coordinator: this phase builds `wizard.Options`' half; the `signin.Options` half is built with its call site in 0051-PLAN P6 step 1, whose `StartSignIn` sets `ConsentText`, and `TestConsentWordingOverACP` of P4 guards it)*; `PlanConsent(id string, store LoginStore) (plan, granted bool)`, from the stored session's kind and
    `Consent`; `SetConsent(ctx, store LoginStore, id, consent string, granted bool) error` over the SDK's
    `auth.SetConsent` through `sdkStore`, and `Consents(ctx, store LoginStore, id string)` listing the answered ones
    (MADR D3). They are `llm/provider`'s, the one package that may import the SDK beyond `authcontract`.
@@ -401,6 +401,8 @@ First, `llm/provider/policy.go` (0051-PLAN P4): `honouredConsents` gains `openai
 6. Gates (C6).
 
 Acceptance: the tests pass, each plant failed.
+*(2026-11-15: built, staged with 0051-PLAN P4 on the branch `p3-acpext-v0.5.0`; see "P3 record (2026-11-15)", and 0051-PLAN's
+"P4 record (2026-11-15)" for the gates.)*
 
 ### P4 — the plan sign-in on every surface, and the status (MADR D1, D7, D8)
 
@@ -1011,3 +1013,182 @@ mainstream model, medium effort.
   10:42:39, `llm/provider/login_fields_test.go` 10:42:39.
 * **Not verified:** whether a lint run of the whole tree, not `./llm/provider/...`, is stable 12 of 12; whether the
   Linux lint cache was warm on 2026-11-15 at 10:07; CI on the fixed commit, which a push is needed to show.
+
+### P3 record (2026-11-15)
+
+Run by a mainstream model at medium effort, on the owner's approval of this PLAN's P3, as ONE change set with
+[0051-PLAN-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md](0051-PLAN-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md)
+P4 ("P4 record (2026-11-15)"), which holds the start state, the gates, the six lint runs, the files' times and the deviations
+of both: the plan is offered only in the commit that honours its consent, and the two are staged together on the branch
+`p3-acpext-v0.5.0`, after 0051-PLAN P3's commit and against `acpext/v0.5.0-rc.1`. Staged, not committed: the commit is made on
+the branch by the coordinator, and `main` is fast-forwarded by the coordinator alone, only after it has verified the gates. *(2026-11-15, the owner's ruling relayed by the coordinator, "Keep it on the branch until those phases land": the coordinator commits each approved phase on the branch `p3-acpext-v0.5.0` and pushes the branch; `main` stays at `9e21c8f` and is fast-forwarded only after 0051-PLAN P6 and 0052-PLAN P4 have landed on the branch and every gate is green, because until then a plan sign-in passes no host id and does not reuse its registered client. Consequence told to and accepted by the owner: CI runs on pushes to `main`, so until `main` moves the phases on the branch have only the local gates and the Linux and Windows runs behind them; `.github/workflows/ci.yml` also runs on `pull_request` and on `v*` tags, which a pull request from the branch would use.)* *(2026-11-15, later: the owner's ruling "Open a draft PR now", relayed by the coordinator. The coordinator's statement that CI runs only on pushes to `main` and tags was wrong: `.github/workflows/ci.yml` also runs on `pull_request`, which the review's finding showed. After P4 is committed and pushed the coordinator opens one draft pull request from `p3-acpext-v0.5.0` to `main`, so every later push to the branch runs CI; `main` does not move and nothing merges until the owner's word, and `main` is still fast-forwarded only after 0051 P6 and 0052 P4 land. The sentence above that the phases on the branch have only the local gates behind them holds only until that pull request is open.)*
+
+**What changed (staged),** by step.
+
+1. **Policy.** `honouredConsents` is `openai.ConsentBackgroundUse` (`llm/provider/policy.go`), so `Offered("openai")` gives `chatgpt_plan`
+   and `HasLogin("openai")` is true; `Offered` sets the consent's `Text` to `ConsentText`'s wording and keeps the SDK's usage link.
+2. **Step 1.** `llm/provider/consent.go` (new): `ConsentText` (the WIP's six lines, the fifth naming `gobble auth consent openai background deny`,
+   then the question), passed to `wizard.Options`; `ConsentState{Consent; Plan, Granted}` and `PlanConsent(id, store) (ConsentState, error)`,
+   the id read from the offered method's `Consent` fact; `SetConsent(ctx, store, id, consent, granted)` over the SDK's `auth.SetConsent`
+   through `sdkStore`, taking the SDK's id or gobble's word `background`; `Consents(ctx, store, id)` listing the stored session's
+   method's consents with `granted`, `declined` or `not asked`; `ErrNoStoredSession` and `ErrUnknownConsent`.
+3. **Step 2.** `llm/background.go` (new): `WithBackground`, `IsBackground`; `llm/consent.go` (new): `ConsentError{Consent; Err}`, whose `Unwrap`
+   gives `Err`. The provider adapter adds `llmprovider.WithBackground` to a marked request's context, and wraps the SDK's refusal of
+   a marked request (a `ErrNotPermitted` with no HTTP response behind it) on a plan session in `llm.ConsentError` with the
+   consent's id.
+4. **Step 3.** `acpserver`: `Options.PlanConsent func(id string) (ConsentState, error)` and acpserver's `ConsentState`;
+   `backgroundGate` asks it at each title (`titleWanted`) and each automatic compaction; both mark their context with
+   `llm.WithBackground`; `errPlanOverflow` is an `llm.ConsentError` naming `/compact` and
+   `gobble auth consent <provider> chatgpt_plan.background_use allow`; an error is no grant (a title and a threshold compaction
+   make nothing and log one line; an overflow ends the turn with `errPlanUnreadable`, which gives the store's error, names `/compact`
+   and not the command, and is no `ConsentError`); `afterRefusal` reads the answer again when the SDK's refusal of an
+   automatic compaction comes back, and decides the table's row; `errorData` sets `ErrorData.Consent` from a `ConsentError`.
+   No per-session copy of the answer; no `chatgptPlanBackground` setting.
+5. **Step 4.** `internal/cli/auth.go`: `AuthConsentCmd`, `gobble auth consent <provider> [<consent> allow|deny]`: exit 0 stored or
+   listed, 2 for each usage error the MADR's note lists, 1 for a store that cannot be read, parsed or locked; one stdout line;
+   every error one line on stderr with stdout empty; no prompt, no read of stdin, no `--json`. `credentials.go`'s `planConsent`
+   answers `Options.PlanConsent` from `auth.json` through `provider.PlanConsent`; `internal/cli` imports no SDK package for it.
+
+**Tests (C2): each seen failing on a scratch copy,** as 0051-PLAN's "P4 record (2026-11-15)" says for all of them:
+
+| Test | Planted break | Failure seen (exit 1 each; `<TMP>` is the scratch copy) |
+| :--- | :--- | :--- |
+| `TestTitleUnderPlan` (P3) | the gate reading `true` (the answer taken as granted) | `plan_test.go:88: 1 title requests without consent, want none` |
+| `TestAutoCompactUnderPlan` (P3) | `errPlanOverflow`'s old text (`or set chatgptPlanBackground to true`) | `plan_test.go:121: no consent, an overflow: err {"code":-32603,"message":"Internal error","data":{"consent":"chatgpt_plan.background_use","error":"the context is over the model's window, and automatic compaction runs under your Cha…` |
+| `TestConsentAppliesFromTheNextRequest` (P3) | the answer cached at the session's start (read once) | `plan_test.go:157: after the withdrawal: 3 summaries, want still one` |
+| `TestBackgroundRequestsAreMarked` (P3) | the title's context unmarked | `plan_test.go:218: the title's requests [{summary:false marked:false}], want one, marked` |
+| `TestBackgroundRequestsAreMarked` (P3) | the automatic compaction's context unmarked | `plan_test.go:247: summaries: 0 marked and 2 unmarked, want the automatic one marked and /compact's not: [{summary:false marked:false} {summary:true marked:false} {summary:false marked:false} {summary:false marked:false} {summary:t…` |
+| `TestMarkReachesTheSDK` (P3) | the adapter dropping the mark | `mark_test.go:86: err llm: api status 400: llmprovider: invalid request: openai HTTP 400: bad request (consent error false), 1 requests sent; want llm.ErrNotPermitted carrying chatgpt_plan.background_use and nothing sent` |
+| `TestMarkReachesTheSDK` (P3) | the session handed to the SDK with no `Store` | `mark_test.go:86: err llm: api status 400: llmprovider: invalid request: openai HTTP 400: bad request (consent error false), 1 requests sent; want llm.ErrNotPermitted carrying chatgpt_plan.background_use and nothing sent` |
+| `TestAuthConsentCommand` (P3) | `deny` writing nothing (F31's bug) | `consent_test.go:49: exit 0, stdout "openai chatgpt_plan.background_use granted\n", stderr ""; want 0, "openai chatgpt_plan.background_use declined\n", ""` |
+| `TestAuthConsentCommand` (P3) | the id not accepted, so `chatgpt_plan.background_use` exits 2 | `consent_test.go:39: allow by id: exit 2, stdout "", stderr "Error: openai's stored sign-in has no consent \"chatgpt_plan.background_use\"\n"` |
+| `TestAuthConsentCommand` (P3) | an error printed on stdout | `consent_test.go:79: a provider with none, listed: exit 2, stdout "provider: no stored sign-in to answer a consent for: kilo\n", stderr ""; want exit 2, nothing on stdout, one line naming "has no stored sign-in"` |
+| `TestAuthConsentCommand` (P3) | the list printing "not asked" and exiting 0 on an unreadable store | `consent_test.go:79: a provider with none, listed: exit 0, stdout "kilo chatgpt_plan.background_use not asked\n", stderr ""; want exit 2, nothing on stdout, one line naming "has no stored sign-in"` |
+| `TestConsentWordingOnEverySurface` (P3) | `ConsentText` dropped from the wizard's options, so the SDK's default text is shown | `consentwording_test.go:135: condition not met within 5 s` |
+| `TestBackgroundRefusedWhenAnswerUnreadable` (P3) | an error from `PlanConsent` read as a grant | `plan_test.go:272: 1 title requests with an unreadable answer, want none` |
+| `TestBackgroundRefusedWhenAnswerUnreadable` (P3) | the overflow reported with `errPlanOverflow`'s text | `plan_test.go:303: an unreadable answer, an overflow: err {"code":-32603,"message":"Internal error","data":{"consent":"chatgpt_plan.background_use","error":"the context is over the model's window, and automatic compaction runs unde…` |
+| `TestConsentErrorIsNotPermitted` (P3) | `Unwrap` dropped, so `Kind` gives `other` | `consent_test.go:15: errors.Is(the turn: llm: not permitted: needs the consent, ErrNotPermitted) is false` |
+| `TestRefusedBackgroundCarriesConsent` (P3) | `errorData` not reading `ConsentError`, so `consent` is absent | `plan_test.go:375: error -32603 {"error":"the context is over the model's window, and automatic compaction runs under your ChatGPT plan only with your consent: run /compact, or allow it with gobble auth consent fake chatgpt_plan.ba…` |
+| `TestRefusedBackgroundCarriesConsent` (P3) | `errPlanOverflow` a plain error, so `kind` is `other` | `plan_test.go:375: error -32603 {"error":"the context is over the model's window, and automatic compaction runs under your ChatGPT plan only with your consent: run /compact, or allow it with gobble auth consent fake chatgpt_plan.ba…` |
+| `TestRefusedBackgroundCarriesConsent` (P3) | the unreadable-answer error built as a `ConsentError`, so `consent` is set | `plan_test.go:375: error -32603 {"consent":"chatgpt_plan.background_use","error":"the context is over the model's window, and the stored answer for background use under your ChatGPT plan could not be read (auth.json: unreadable): r…` |
+| `TestOfferedConsentTextIsGobbles` (P3) | `Offered` passing the SDK's default text through | `policy_test.go:153: the consent {ID:chatgpt_plan.background_use Required:true Text:You're using your ChatGPT plan: this app's requests count toward its usage, which you can manage on the usage page. Allow this app to also use your…` |
+| `TestUnhonouredConsentKeepsMethodOut` (P3 (extra)) | `kept` ignoring a required consent | `policy_test.go:175: a method requiring a consent gobble does not honour was kept` |
+
+`TestTitleUnderPlan` and `TestAutoCompactUnderPlan` run with and without a grant; `TestConsentAppliesFromTheNextRequest` for a compaction
+and a title; `TestBackgroundRequestsAreMarked` for a title, an automatic compaction (marked), a user's turn and `/compact` (unmarked);
+`TestBackgroundRefusedWhenAnswerUnreadable` for a title, a threshold compaction and an overflow, with `auth.json`'s stand-in
+unchanged; `TestRefusedBackgroundCarriesConsent` for the table's two rows and the three variants of an SDK refusal;
+`TestAuthConsentCommand` with stdin closed (`Main` is given no stdin) and no terminal, over `allow` and `deny` by id and by word, each usage
+error, and an `auth.json` that does not parse; `TestMarkReachesTheSDK` over no answer, declined, granted, a grant whose store then
+fails, an unmarked request and an API key; `TestConsentWordingOnEverySurface` below. On the tree before the phase, none of these
+packages compiles with the new tests (0051-PLAN's record quotes the errors).
+
+**Deviations** (0051-PLAN's "P4 record (2026-11-15)" has 1 to 7; these are this phase's).
+
+8. **`TestConsentWordingOnEverySurface` against a recording issuer, not `planIssuer`, and each terminal surface cancels at the question.**
+   `planIssuer` is `llm/provider`'s test helper and no other package can import it. The test uses a recording transport (`planRun`) that
+   answers every request with an error, so the wizard goes on from the SDK's built-in endpoints for OpenAI, and asserts that nothing but a
+   discovery request was made. `gobble auth login` and `gobble acp --login` are driven on a terminal stdin through `loginWith` and
+   `acpLogin`, `gobble setup` through `signIn` with a scripted `questions` (what `SetupCmd.Run` calls after its terminal check), `/login`
+   and the first run through the line harness. Each answers "Cancel the sign-in" at the consent's question, so no URL opens: an
+   attempt to let one sign-in go on to its URL left the SDK's loopback listener and the paste read waiting. The test asserts
+   gobble's wording was asked, as the wizard's title, on each, with no URL, and with no terminal, the same two commands put the
+   wording to their prompter, which refuses with the no-terminal error, and `auth.json` is not written. The PLAN's plant,
+   "`/login` built without `ConsentText`", has no such form: all five surfaces call `signInTo`, so the wording is set in one place,
+   `provider.SignIn`; the plant is `ConsentText` dropped there, which fails the test.
+9. **`TestConsentAppliesFromTheNextRequest`'s "second `Logins` on the same file".** `acpserver` imports no `internal/auth`, so the
+   test's `PlanConsent` reads a file the test changes through another writer: the same property, the answer read at each
+   request and in every process, with the plant "cached at the session's start".
+10. **The consent command in the overflow's text is the SDK's id,** `gobble auth consent openai chatgpt_plan.background_use allow`, not gobble's word
+    `background`: `acpserver` holds no alias table, and the id is accepted wherever the word is.
+11. **`gobble auth consent` lists nothing for a stored session whose method has no consent** (Grok's), exit 0, as "one line per consent
+    of the method" says; and it does not call `ensureSettingsFile`, so a failed run writes nothing.
+12. **The gate is asked when an automatic compaction would otherwise be made,** not at every model call: the threshold is
+    evaluated first. `afterRefusal`'s read is the MADR's "fresh `PlanConsent` read when it comes back".
+
+**Docs step (C9),** with 0051-PLAN's: the same list, in "P4 record (2026-11-15)". `docs/guides/credentials.md` gained the ChatGPT plan
+sign-in, its consent wording and where it is asked, the background requests it gates, `gobble auth consent`, and the `--json`
+error kinds, and lost the sentence that said the sign-in came later.
+
+**Acceptance.** The tests pass and each plant failed (above); every C6 gate is in 0051-PLAN's table. Met.
+
+#### Review of 2026-11-15
+
+The independent review's findings that are this phase's, with the owner's rulings in 0051-PLAN's "P4 record (2026-11-15)", "Review of 2026-11-15" (its plants,
+gates and the files' times are there too). Nothing above is rewritten.
+
+**Finding 1, no test exercised the real consent read: true.** The reviewer's plant, `Granted: granted || true` in `PlanConsent`, passed nine tests. New
+`TestPlanConsentIsReadFromAuthJSON` (`internal/cli/consentstore_test.go`) writes a real `auth.json` under a scratch `GOBBLE_HOME` and reads it through
+`runEnv.planConsent` and through `agentOptions().PlanConsent`, which must be set: a plan session with a granted, a declined and no answer, an `auth.json` that
+does not parse (an error), a key entry, another application's OpenAI session that holds a granted answer (not a plan), and a provider with no such consent. Plants: the
+reviewer's, `credentials.go`'s `planConsent` giving `Granted: true`, and `agentOptions` not setting `PlanConsent`; each fails it.
+
+**Finding 3, one overflow refusal lacked the MADR's text: true.** 0052-MADR D2's table, row 1: "the gate refused an overflow's compaction for want of a grant (`errPlanOverflow`),
+or the SDK refused one the gate let through and gobble's own read then finds no grant | `not_permitted` | `chatgpt_plan.background_use` | `errPlanOverflow`'s text: it
+names `/compact` and the command". `afterRefusal`'s no-grant branch returned the SDK's error, wrapped by `overflowFailed`; it now returns `errPlanOverflow`, and the
+overflow's own refusals (`errPlanOverflow`, `errPlanUnreadable`) are returned unwrapped, so `ErrorData.Error` is exactly the text. `TestRefusedBackgroundCarriesConsent`'s second
+case asserts that text, in full, where it asserted the SDK's. *Does the row ask for a title case?* Yes: the row ends "a title not made sends the client nothing"; I had put it
+in `TestTitleUnderPlan`. New `TestTitleNotMadeSendsNothing` holds it for a declined and an unreadable answer (the prompt ends as it would without a title, no title request, no
+`session_info_update`).
+
+**Finding 5, the wording test did not prove what `auth login` and `acp --login` write: true.** With `prompter.Choose` replacing the wording by "Allow?", only `/login`, the first
+run and `setup` failed. The two surfaces' subtests now read what the surface wrote to its stderr (`wrote`) and require gobble's wording in it; they fail under the plant. The "no
+terminal" subtest stays as it was: with no terminal the surface's `unasked` prompter writes nothing and fails closed, which the subtest asserts, and no wording is claimed
+for it. No real terminal was needed: `loginWith` and `acpLogin` run on a terminal stdin and the test's stderr buffer.
+
+**Finding 7, `TestOfferedConsentTextIsGobbles` lacked its row's second half: true.** Built: a first plan sign-in is run through `SignIn` against a transport that answers
+nothing, the test cancels at the confirm step, and the question the wizard asked is required to be `Offered`'s consent text plus its usage link, which is where the wizard puts
+the step's text and link. Plant: `ConsentText` dropped from the wizard options. *What step 1 says, what was built, whether it is a deviation:* step 1 says "`ConsentText` …
+passed to `wizard.Options` and `signin.Options`". Built: `wizard.Options` only. `signin.Options` is constructed nowhere in this tree: its site is 0051-PLAN P6 step 1
+(`StartSignIn`'s `signin.Options`, whose line there already names "`ConsentText` gobble's wording (0052-PLAN P3)"). So it is a deviation by omission, **deviation 13**: the second
+site cannot exist before P6, which builds it; `TestConsentWordingOverACP` of 0052-PLAN P4 is its guard. Resolutions: (a) recommended: accept, P6 builds the site (cost: none); (b) a
+stand-in `signin.Options` constructor here (code nothing calls, no test can fail). Doing nothing: none, while P6 does its step. For the owner, through the coordinator.
+
+**Finding 9, the title gate read `auth.json` on every prompt: true.** `titleWanted` asked the gate before it checked the attempt and the name. It now checks them first and
+asks the gate only when a title would otherwise be asked, so a gated first prompt does not use the attempt and the prompts after the first read nothing. New
+`TestTitleGateReadsOnlyWhenATitleIsAsked` counts the gate's reads across three prompts of a session, for a granted and a declined answer: once. Plant: the gate asked first, 3 reads.
+
+**Finding 10, `auth consent` could exit 1 after the answer was stored: true.** 0052-MADR D3: exit 1 is "the store cannot be read, parsed or locked … nothing written". The command read
+`Consents` again after `SetConsent` only to map the word to the id. It now reads the consents once, before the write, finds the id there, writes by it and prints it. The store is a
+seam (`consentStore`) so `TestAuthConsentNeverFailsAfterTheWrite` can make the file unreadable once a login was saved: exit 0, one stdout line, the answer stored. Plant: the second read restored, exit 1.
+
+**Q-a, what does 0052-MADR D2 say the gate keys on?** "`acpserver.Options.PlanConsent func(id string) (plan, granted bool)` replaces `PlanSession` [WIP] and the per-session setting;
+`internal/cli` answers it from the stored session (`provider.PlanConsent`, reading `auth.json` through `Logins` and the SDK's `Consent`). `planGated` asks it at every background
+request". It keys on the stored session, not on the credential the request will use. The WIP's `PlanSession` keyed on the resolved credential (`id == "openai" && e.knownLogin(id)`) and
+the MADR's table lists it as reworked, so that is a decision, and the code matches it: with `--api-key` and a plan session stored, the gate still reads the session. The SDK's own refusal
+is narrower (a marked request on a plan session only). The MADR is silent on the key case itself; nothing changes.
+
+**Q-c, deviation 9: is it a fact that `acpserver` may not import `internal/auth`?** No. `internal/archtest/check.go` has no rule that keeps `acpserver` from `internal/auth` (its rules for
+`acpserver` are 2, ACP SDK; 4, the `authcontract` exception; and 12, acpext), and there is no import cycle: `go list -deps ./internal/auth` names `internal/filelock`, `internal/fsx`,
+`jsonx`, `llm`, `llm/catalog` and `llm/provider`, none of which imports `acpserver`; `acpserver`'s tests already import `llm/provider`. Deviation 9's stated reason, "acpserver imports no
+`internal/auth`", described what was imported, not a rule. **Deviation 9 is withdrawn:** `TestConsentAppliesFromTheNextRequest` now does what the PLAN says, with a real `auth.json`
+under `auth.Logins`, `provider.PlanConsent` as the gate and a second `auth.Logins` withdrawing the answer (`provider.SetConsent`), for a compaction and a title; plant: the answer cached,
+3 summaries where one is expected. It is not accepted as a deviation because it no longer exists.
+
+**Deviations of this review:** 13, above. Deviation 8 (accepted subject to finding 5) is closed by finding 5. Deviations 10, 11 and 12: accepted by the owner on the independent review, as
+the "Review of 2026-11-15" of 0051-PLAN's P4 record lists. Deviation 12 now also holds for the title (finding 9).
+
+**Docs step (C9).** `docs/architecture.md` (`Remote`, `ErrorKind`) fixed; no guide or README sentence says Grok's browser sign-in is unavailable to a remote client or needs the agent's host:
+`docs/guides/credentials.md:192` and `:205` say, for Grok and the ChatGPT plan, that on a machine whose browser cannot reach gobble the address the browser ends on is pasted, which is true at the
+pinned facts. `gobble auth consent`'s section is unchanged (the id is mapped before the write, the exits and the output are as written).
+
+#### Second review of 2026-11-15
+
+The second-pass review's items that are this phase's, with the rulings, the plants and the gates in 0051-PLAN's "P4 record (2026-11-15)", "Second review of 2026-11-15". Nothing above is rewritten.
+
+**Rulings** (the owner's, relayed by the coordinator): deviation 13, `ConsentText` to `signin.Options`: "Accept; P6 builds the site", written at step 1 above and at 0051-PLAN's P6 step 1; a key for the run
+with a plan session stored: "Keep it, and document it", at 0052-MADR D2's dated note and in `docs/guides/credentials.md`; CI on the branch: "Open a draft PR now", and the annotations of the
+sentences in this record that said the branch had only local gates behind it. The coordinator's check of deviations 6 and 9 under "Accept the eight; I check 6 and 9": 6 stands, 9 is withdrawn.
+
+**Item 6, the granted-yet-refused overflow case was tested with gobble's own `refusal`: true.** In `TestRefusedBackgroundCarriesConsent` the stand-in is now the shape production gives acpserver for an
+SDK refusal of a marked request: the SDK's text (go-llmprovider-sdk's `openai.checkBackground`: "not permitted: openai: a background request on a ChatGPT plan session needs the consent
+chatgpt_plan.background_use, which the user has not granted (0075-MADR D5)"), wrapped by `llm/provider`'s `mapErrorAt` as `llm.ErrNotPermitted` ("llm: not permitted: …"), and by the adapter's `attempt` in an
+`llm.ConsentError` with the consent's id (`llm/provider/provider.go`). The case asserts the whole text production gives for it, "the context is over the model's window, and compacting it failed: llm: not
+permitted: llmprovider: not permitted: openai: …", where the substring check was. Plant: every overflow error returned unwrapped, which fails it (0051-PLAN's table).
+
+**Q-a, the sentence in `docs/guides/credentials.md`** (in "Allowing background requests under a ChatGPT plan", after the paragraph on reading the answer at each request), verbatim: "It is the stored
+sign-in's answer, whichever credential a run uses: with `--api-key -` for OpenAI while a ChatGPT plan sign-in is stored, titles and automatic compactions are held back until the consent is granted, although
+those requests would go out with the key. An OpenAI key in the environment or in `models.json` is not used while that sign-in is stored, since `auth.json`'s entry owns the provider, so those requests go
+out under the plan and the consent governs them as above." The code behind it, checked for each way a key reaches a run, is in 0052-MADR D2's note: `internal/cli/chat.go:69`, `internal/auth/resolve.go:77`, `:80-82`,
+`:83`, `:94` and `Has` at `:109`, `:112`, `:115`, `:123`, `llm/provider/provider.go:99`, `internal/cli/credentials.go:22`, `internal/cli/agent.go:103`. The behaviour differs only for `--api-key`; an environment
+variable and `models.json`'s key are not reached while an `auth.json` entry owns the provider; `settings.yaml` has no key that carries a credential.

@@ -97,10 +97,12 @@ const (
 // RetryCause is why the turn waits.
 type RetryCause string
 
-// The causes.
+// The causes, in the words of the auth contract's error kinds (0051-MADR
+// D6). agent may not import acpext (archtest rule 12), so each is a literal;
+// acpserver's TestRetryCausesAreAcpexts holds them equal to acpext's.
 const (
 	RetryOffline    RetryCause = "offline"
-	RetryEmptyReply RetryCause = "empty_reply"
+	RetryEmptyReply RetryCause = "empty_answer"
 )
 
 // End is the turn's last event. Messages are the turn's messages, the

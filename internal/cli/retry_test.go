@@ -19,9 +19,9 @@ func retryUpdates() []acpclient.Update {
 	return []acpclient.Update{
 		{Kind: acpclient.KindRetry, Retry: acpclient.Retry{Phase: "start", Cause: "offline"}, Params: []byte(`{"phase":"start"}`)},
 		{Kind: acpclient.KindRetry, Retry: acpclient.Retry{Phase: "end", Cause: "offline"}, Params: []byte(`{"phase":"end"}`)},
-		{Kind: acpclient.KindRetry, Retry: acpclient.Retry{Phase: "start", Cause: "empty_reply", Attempt: 1, MaxAttempts: 2, Delay: 2 * time.Second},
+		{Kind: acpclient.KindRetry, Retry: acpclient.Retry{Phase: "start", Cause: "empty_answer", Attempt: 1, MaxAttempts: 2, Delay: 2 * time.Second},
 			Params: []byte(`{"phase":"start"}`)},
-		{Kind: acpclient.KindRetry, Retry: acpclient.Retry{Phase: "end", Cause: "empty_reply", Error: "retry cancelled"}, Params: []byte(`{"phase":"end"}`)},
+		{Kind: acpclient.KindRetry, Retry: acpclient.Retry{Phase: "end", Cause: "empty_answer", Error: "retry cancelled"}, Params: []byte(`{"phase":"end"}`)},
 	}
 }
 

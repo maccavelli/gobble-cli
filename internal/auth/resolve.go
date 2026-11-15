@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/maccavelli/gobble-cli/llm/catalog"
+	"github.com/maccavelli/gobble-cli/llm/provider"
 )
 
 // Source is where a credential came from: one of the constants, or the
@@ -30,6 +31,14 @@ type Credential struct {
 	Workspace string
 }
 
+// AcceptsLogin is Resolver.Accepts as gobble sets it: provider.Accepts for
+// entry e's session. Its kind is read from the entry's own members, by the
+// SDK's rules (0051-MADR D2); provider cannot take an Entry, which this
+// package's Logins already makes it import.
+func AcceptsLogin(id string, e Entry) bool {
+	return provider.Accepts(id, &provider.Login{Kind: e.Kind, Issuer: e.Issuer, Resource: e.Resource})
+}
+
 // Resolver finds a provider's credential in Pi's order (ai/src/auth/
 // resolve.ts): the run's --api-key, then auth.json's entry, which owns its
 // provider, then models.json's apiKey, then the provider's variable
@@ -47,9 +56,10 @@ type Resolver struct {
 	LookupEnv func(string) (string, bool)
 	// Run runs a value's !command and returns its output.
 	Run func(string) (string, error)
-	// HasLogin reports whether a provider uses an oauth entry as its login;
-	// nil uses none (0005-PLAN F4-3b).
-	HasLogin func(id string) bool
+	// Accepts reports whether provider id uses oauth entry e as its login:
+	// its session is of a kind an offered sign-in method yields; nil uses
+	// none (0005-PLAN F4-3b; 0051-MADR D2).
+	Accepts func(id string, e Entry) bool
 
 	mu       sync.Mutex
 	commands map[string]commandResult // a stored key's !command, run once
@@ -100,7 +110,7 @@ func (r *Resolver) Has(id string) (Source, bool) {
 		return SourceFlag, true
 	}
 	if e, ok := r.entry(id); ok {
-		return SourceFile, (e.Type == TypeAPIKey && e.Key != "") || (e.Type == TypeOAuth && r.hasLogin(id))
+		return SourceFile, (e.Type == TypeAPIKey && e.Key != "") || (e.Type == TypeOAuth && r.usesLogin(id, e))
 	}
 	if raw := r.modelsJSONKey(id); raw != "" {
 		if strings.HasPrefix(raw, "!") {
@@ -124,7 +134,7 @@ func (r *Resolver) Has(id string) (Source, bool) {
 // error for any other; any other type, or an empty key, is none.
 func (r *Resolver) stored(id string, e Entry) (Credential, bool, error) {
 	switch {
-	case e.Type == TypeOAuth && r.hasLogin(id):
+	case e.Type == TypeOAuth && r.usesLogin(id, e):
 		return Credential{Source: SourceFile, Login: true}, true, nil
 	case e.Type == TypeOAuth:
 		return Credential{}, false, fmt.Errorf("provider %s has an OAuth login in auth.json, which gobble does not use (0005-PLAN F4-3b)", id)
@@ -152,7 +162,7 @@ func (r *Resolver) cachedRun(command string) (string, error) {
 	return out, err
 }
 
-func (r *Resolver) hasLogin(id string) bool { return r.HasLogin != nil && r.HasLogin(id) }
+func (r *Resolver) usesLogin(id string, e Entry) bool { return r.Accepts != nil && r.Accepts(id, e) }
 
 func (r *Resolver) entry(id string) (Entry, bool) {
 	if r.File == nil {

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	acp "github.com/maccavelli/acp-go-sdk2"
+	"github.com/maccavelli/go-llmprovider-sdk/authcontract"
 	"github.com/maccavelli/gobble-cli/acpext"
 
 	"github.com/maccavelli/gobble-cli/acpclient/acptest"
@@ -19,6 +20,7 @@ import (
 	"github.com/maccavelli/gobble-cli/jsonx"
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/llm/llmtest"
+	"github.com/maccavelli/gobble-cli/llm/provider"
 	"github.com/maccavelli/gobble-cli/session"
 )
 
@@ -40,6 +42,16 @@ func overCapErr() *llm.APIError {
 			llm.ErrRateLimited),
 		Provider: "openai", Code: "rate_limit_exceeded", Message: "Rate limit reached for requests", Retryable: new(true),
 		ResetAt: time.Date(2026, 11, 9, 12, 33, 39, 0, time.UTC), Limit: llm.LimitRate}
+}
+
+// weeklyErr is a plan limit whose service stated a 7-day window, as
+// llm/provider maps it on go-llmprovider-sdk v1.29.0 (0049-MADR Q8, Q9).
+func weeklyErr() *llm.APIError {
+	return &llm.APIError{Status: 429, RetryAfter: 2 * time.Hour,
+		Err: fmt.Errorf("%w: llmprovider: quota exhausted: openai HTTP 429 usage_limit_reached (retry-after 2h0m0s): The usage limit has been reached",
+			llm.ErrQuota),
+		Provider: "openai", Code: "usage_limit_reached", Message: "The usage limit has been reached", Retryable: new(false),
+		ResetAt: time.Date(2026, 11, 10, 21, 0, 0, 0, time.UTC), Limit: llm.LimitWeekly, Window: 7 * 24 * time.Hour}
 }
 
 func afterRetriesErr() *llm.APIError {
@@ -163,6 +175,10 @@ func TestErrorData(t *testing.T) {
 		{"after retries", "claude", afterRetriesErr(), acpext.ErrorData{Error: afterRetriesErr().Error(), Provider: "claude",
 			Kind: acpext.KindUnavailable, HTTPStatus: 503, Code: "overloaded_error", ProviderMessage: "Overloaded",
 			Retryable: new(true), Attempts: 4}, -32603},
+		{"a stated weekly window", "openai", weeklyErr(), acpext.ErrorData{Error: weeklyErr().Error(), Provider: "openai",
+			Kind: acpext.KindQuota, HTTPStatus: 429, Code: "usage_limit_reached", ProviderMessage: "The usage limit has been reached",
+			RetryAfterMs: 7200000, ResetAt: "2026-11-10T21:00:00Z", Retryable: new(false), Limit: acpext.LimitWeekly,
+			WindowMinutes: 10080}, -32603},
 		{"one attempt", "claude", attemptOnce, acpext.ErrorData{Error: attemptOnce.Error(), Provider: "claude",
 			Kind: acpext.KindUnavailable, HTTPStatus: 503, Code: "overloaded_error", ProviderMessage: "Overloaded",
 			Retryable: new(true)}, -32603},
@@ -194,6 +210,7 @@ func TestPromptQuotaData(t *testing.T) {
 		{"prompt-quota.error.json", "opencode-zen", quotaErr()},
 		{"prompt-rate-over-cap.error.json", "openai", overCapErr()},
 		{"prompt-after-retries.error.json", "claude", afterRetriesErr()},
+		{"prompt-weekly.error.json", "openai", weeklyErr()},
 	} {
 		t.Run(c.frame, func(t *testing.T) {
 			conn := limitAgent(t, c.provider, llmtest.NewScript(llmtest.Turn{Err: c.err}))
@@ -206,8 +223,9 @@ func TestPromptQuotaData(t *testing.T) {
 	}
 }
 
-// llm's limits are acpext's, and every kind llm.Kind gives is one of
-// acpext's (0049-MADR D3, D4).
+// llm's limits are acpext's; every kind llm.Kind and provider.ErrorKind give
+// is one of acpext's eighteen; and each of acpext's is a word of the auth
+// contract (0049-MADR D3, D4; 0051-MADR D6).
 func TestKindsAndLimitsMatchAcpext(t *testing.T) {
 	for _, p := range []struct {
 		llm    string
@@ -223,12 +241,30 @@ func TestKindsAndLimitsMatchAcpext(t *testing.T) {
 	}
 	kinds := []acpext.ErrorKind{acpext.KindWorkspace, acpext.KindQuota, acpext.KindRateLimited, acpext.KindContextOverflow,
 		acpext.KindEmptyReply, acpext.KindIncomplete, acpext.KindAuth, acpext.KindNotPermitted, acpext.KindOffline,
-		acpext.KindUnavailable, acpext.KindUnsupported, acpext.KindTimeout, acpext.KindCanceled, acpext.KindOther}
+		acpext.KindUnavailable, acpext.KindUnsupported, acpext.KindTimeout, acpext.KindCanceled, acpext.KindOther,
+		acpext.KindDenied, acpext.KindExpired, acpext.KindInvalidRequest, acpext.KindInvalidProvider}
+	contract := []authcontract.ErrorKind{authcontract.FailureCanceled, authcontract.FailureTimeout, authcontract.FailureDenied,
+		authcontract.FailureExpired, authcontract.FailureAuth, authcontract.FailureQuota, authcontract.FailureRateLimited,
+		authcontract.FailureNotPermitted, authcontract.FailureWorkspace, authcontract.FailureContextOverflow,
+		authcontract.FailureEmptyAnswer, authcontract.FailureIncomplete, authcontract.FailureInvalidRequest,
+		authcontract.FailureInvalidProvider, authcontract.FailureOffline, authcontract.FailureUnavailable,
+		authcontract.FailureUnsupported, authcontract.FailureOther}
+	if len(kinds) != len(contract) {
+		t.Errorf("acpext lists %d kinds here, the contract %d", len(kinds), len(contract))
+	}
+	for _, k := range kinds {
+		if !slices.Contains(contract, authcontract.ErrorKind(k)) {
+			t.Errorf("acpext kind %q is not a word of the auth contract", k)
+		}
+	}
 	for _, err := range []error{llm.ErrWorkspace, llm.ErrQuota, llm.ErrRateLimited, llm.ErrContextOverflow, llm.ErrEmptyReply,
 		llm.ErrIncomplete, llm.ErrAuth, llm.ErrNotPermitted, llm.ErrOffline, llm.ErrUnavailable, llm.ErrUnsupported,
 		context.DeadlineExceeded, context.Canceled, errors.New("plain")} {
 		if k := acpext.ErrorKind(llm.Kind(err)); !slices.Contains(kinds, k) {
 			t.Errorf("llm.Kind(%v) = %q, not an acpext ErrorKind", err, k)
+		}
+		if k := acpext.ErrorKind(provider.ErrorKind(err)); !slices.Contains(kinds, k) {
+			t.Errorf("provider.ErrorKind(%v) = %q, not an acpext ErrorKind", err, k)
 		}
 	}
 }

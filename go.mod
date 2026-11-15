@@ -15,9 +15,10 @@ require (
 	github.com/google/jsonschema-go v0.4.3
 	github.com/maccavelli/acp-go-sdk2 v1.36.0
 	github.com/maccavelli/go-llmprovider-sdk v1.31.0
+	github.com/maccavelli/go-llmprovider-sdk/authcontract v0.1.0
 	github.com/maccavelli/go-selfupdate-lib v1.26.2
 	github.com/maccavelli/go-tui-lib/v2 v2.12.0
-	github.com/maccavelli/gobble-cli/acpext v0.3.0
+	github.com/maccavelli/gobble-cli/acpext v0.5.0-rc.1
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	go.yaml.in/yaml/v3 v3.0.5
 	golang.org/x/sys v0.49.0
@@ -31,7 +32,6 @@ require (
 	github.com/clipperhouse/displaywidth v0.11.0 // indirect
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.4.1 // indirect
-	github.com/maccavelli/go-llmprovider-sdk/authcontract v0.1.0 // indirect
 	github.com/mattn/go-runewidth v0.0.27 // indirect
 	github.com/segmentio/asm v1.1.3 // indirect
 	github.com/segmentio/encoding v0.5.4 // indirect

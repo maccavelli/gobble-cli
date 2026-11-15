@@ -55,6 +55,8 @@ func newCompactHarness(t *testing.T, settings SessionSettings, turns ...llmtest.
 type harnessConfig struct {
 	caps acp.ClientCapabilities
 	wrap func(*llmtest.Script) llm.Provider
+	// planConsent is Options.PlanConsent.
+	planConsent func(id string) (ConsentState, error)
 }
 
 // newCompactHarnessWith is newCompactHarness with cfg.
@@ -80,7 +82,7 @@ func newCompactHarnessWith(t *testing.T, cfg harnessConfig, settings SessionSett
 			m.Provider = provider
 			return m
 		},
-		Settings: func(string) SessionSettings { return settings },
+		Settings: func(string) SessionSettings { return settings }, PlanConsent: cfg.planConsent,
 		SaveSetting: func(path, value string) error {
 			h.mu.Lock()
 			defer h.mu.Unlock()

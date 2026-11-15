@@ -330,6 +330,12 @@ what completes without the host's listener.** `provider.Remote(m authcontract.Me
 and no provider id. When `authenticate` carries `_meta.gobble.remote: true`, the methods the relay may drive (D4 step
 3) are those of `Offered` that `Remote` accepts. Of the built-in offered methods it refuses one, grok's `browser_oauth`
 (`browser_loopback`, no `Paste`; go-llmprovider-sdk `0074-MADR-one-sign-in-handle-and-method-facts.md` D1, D3).
+*(2026-11-15, found at P4's build; "P4 record (2026-11-15)", deviation 4; the owner ruled the same day, see the annotation below.)* At go-llmprovider-sdk
+`v1.31.0` Grok's `browser_oauth` is `Completion` `browser_paste` with `Paste` `url_or_code` (`llmprovider/providers/grok/descriptor.go`;
+go-llmprovider-sdk `0074-MADR-one-sign-in-handle-and-method-facts.md`, its table row C62, "now `browser_paste`, Phase 8 step 1", and rows
+C56 and C57, where `NoLoopback` was refused for Grok), not `browser_loopback` with no `Paste`. `Remote`, which reads those two facts and
+no provider id, accepts it, and of the built-in offered methods it refuses none: the sentence "it refuses one, grok's `browser_oauth`"
+holds of the SDK's earlier proposal, not of the pinned version. *(2026-11-15, later: the owner ruled on this deviation, "Amend the records to the SDK's facts", relayed by the coordinator. D2's rule stays as decided; `Remote` and `TestRemoteMethods` stay as built; the records that state the loopback-only fact are annotated with the same ruling, each at its place: D3's note, D4 steps 1 and 3 and their table row, the questions of D12 and the PLAN's P4 and P6 rows and P8's L3.)*
 `Offered`, and so `_meta.gobble.methods` (D4), does not change with it: `initialize` comes before any `authenticate`,
 so gobble cannot know there whether a later sign-in is remote, and a client reads the same two facts, `completion` and
 `paste`, from each method. What a client that names a refused method gets is D4 step 1's note. *(Also of this date:
@@ -357,7 +363,7 @@ D2's note of 2026-11-11, later.)*
   in to, so a re-sign-in with an answer asks no consent again and sends `id_token_hint`.
   *(2026-11-11: that is the whole list. gobble sets `signin.Options.NoLoopback` nowhere: over ACP it drives a `device`
   or a `browser_paste` sign-in, or grok's `browser_loopback` when named (D4 step 3), and the last has no paste that
-  could complete it without a listener. By the owner's ruling of 2026-11-11 the option stays, experimental with
+  could complete it without a listener. *(2026-11-15, the owner's ruling relayed by the coordinator, "Amend the records to the SDK's facts"; 0051-PLAN's "P4 record (2026-11-15)", deviation 4: at go-llmprovider-sdk `v1.31.0` Grok's `browser_oauth` is `browser_paste` with `Paste` `url_or_code`, so it has `accepts` and a `paste` step and `Remote` accepts it; this passage holds for a method of the contract's own shape, `browser_loopback` with no `Paste`, which no built-in method has.)* By the owner's ruling of 2026-11-11 the option stays, experimental with
   `x/signin`, and the two v1 option fields of go-llmprovider-sdk `0074-MADR-one-sign-in-handle-and-method-facts.md` D4 are
   dropped; nothing here used them. `wizard.Options.OAuthClients` is dropped from
   go-llmprovider-sdk `0076-MADR-auth-error-kinds-and-doc-drift.md` D4 by the same ruling; gobble never set it. `auth.Identity`,
@@ -377,7 +383,7 @@ D2's note of 2026-11-11, later.)*
   * **What cannot complete that way is the SDK's to say** (its D4): in `x/signin`, `NoLoopback` with a method whose
     `Paste` fact is empty is `ErrUnsupported`, as for grok's `browser_oauth`, and with `NoPaste` as well
     `ErrInvalidRequest`, each returned by `Start` before any request. gobble meets neither: D2's remote rule and D4
-    step 1 refuse such a method before `Start` is called, and the ACP path never sets `NoPaste`.
+    step 1 refuse such a method before `Start` is called, and the ACP path never sets `NoPaste`. *(2026-11-15, the owner's ruling relayed by the coordinator, "Amend the records to the SDK's facts"; 0051-PLAN's "P4 record (2026-11-15)", deviation 4: at go-llmprovider-sdk `v1.31.0` Grok's `browser_oauth` is `browser_paste` with `Paste` `url_or_code`, so it has `accepts` and a `paste` step and `Remote` accepts it; this passage holds for a method of the contract's own shape, `browser_loopback` with no `Paste`, which no built-in method has.)*
   * **One reading to confirm with the SDK.** Its D4 states the `ErrUnsupported` rule for "a method whose `Paste` fact
     is empty", in a bullet about browser sign-ins; a device method has no `Paste` fact either, and binds no listener
     in any case. gobble sets `NoLoopback` on a remote device sign-in too, as the ruling says, and reads that rule as
@@ -425,7 +431,7 @@ does: `provider.SignIn` sets `wizard.Options.Identity` to the same value, which 
        `0073-MADR-publish-an-auth-contract-module.md` D3), the one `signin.ErrorKindOf` gives the SDK's own
        `ErrUnsupported` for the same case (its 0074-MADR D4, D8). A method not offered at all stays -32602, as above:
        that request names nothing gobble signs in with, where this one names a method that cannot complete from
-       where its person is.
+       where its person is. *(2026-11-15, the owner's ruling relayed by the coordinator, "Amend the records to the SDK's facts"; 0051-PLAN's "P4 record (2026-11-15)", deviation 4: at go-llmprovider-sdk `v1.31.0` Grok's `browser_oauth` is `browser_paste` with `Paste` `url_or_code`, so it has `accepts` and a `paste` step and `Remote` accepts it; this passage holds for a method of the contract's own shape, `browser_loopback` with no `Paste`, which no built-in method has.)*
      * **With no method named,** a remote sign-in takes the first offered method `Remote` accepts, and step 3's enum
        lists only those.
   2. **A credential is present** (gobble's order, as today), **`_meta.gobble.fresh` is not `true`, and** no method
@@ -438,14 +444,14 @@ does: `provider.SignIn` sets `wizard.Options.Identity` to the same value, which 
      cancelled changes nothing stored. The replaced session is not revoked (a revocation is a logout's, QD). The methods driven are those whose `Completion` is `device` or
      `browser_paste`; `browser_loopback` (grok's browser, go-llmprovider-sdk `0074-MADR-one-sign-in-handle-and-method-facts.md` D1) only when named, since
      it completes only where the browser reaches gobble's host *(2026-11-11, later: and only for a local sign-in;
-     step 1's note)*. With several, gobble asks with a form whose one
+     step 1's note)*. *(2026-11-15, the owner's ruling relayed by the coordinator, "Amend the records to the SDK's facts"; 0051-PLAN's "P4 record (2026-11-15)", deviation 4: at go-llmprovider-sdk `v1.31.0` Grok's `browser_oauth` is `browser_paste` with `Paste` `url_or_code`, so it has `accepts` and a `paste` step and `Remote` accepts it; this passage holds for a method of the contract's own shape, `browser_loopback` with no `Paste`, which no built-in method has.)* With several, gobble asks with a form whose one
      field is an enum of their labels. An API key is never asked over ACP.
      *(2026-11-11, stated outright; three rules of go-llmprovider-sdk `0074-MADR-one-sign-in-handle-and-method-facts.md`
      D3 and D4 that the owner confirmed that day.)*
      **(1) Grok's `browser_loopback` sign-in has no `accepts` and no `paste` step.** A browser sign-in offers a paste
      only when its method's `Paste` fact is set, and grok's `browser_oauth` has none, whatever `NoPaste` says. A named
      grok browser sign-in is therefore the table's "`open_url` without `accepts`" row and nothing more: only the
-     loopback completes it, and an answer sent for it is refused (`ErrInvalidRequest`).
+     loopback completes it, and an answer sent for it is refused (`ErrInvalidRequest`). *(2026-11-15, the owner's ruling relayed by the coordinator, "Amend the records to the SDK's facts"; 0051-PLAN's "P4 record (2026-11-15)", deviation 4: at go-llmprovider-sdk `v1.31.0` Grok's `browser_oauth` is `browser_paste` with `Paste` `url_or_code`, so it has `accepts` and a `paste` step and `Remote` accepts it; this passage holds for a method of the contract's own shape, `browser_loopback` with no `Paste`, which no built-in method has.)*
      **(2) The cap is three pastes in all, two re-asks.** Each of the first two bad pastes brings a new `paste` step;
      a third bad one ends the sign-in `failed`, `invalid_request`.
      **(3) A pasted denial is not a bad paste.** A pasted URL that carries this sign-in's `state` and
@@ -461,7 +467,7 @@ does: `provider.SignIn` sets `wizard.Options.Identity` to the same value, which 
 | Step | Client offers `elicitation.url` | Client offers `elicitation.form` only |
 | :--- | :--- | :--- |
 | `open_url` with `accepts` | URL mode to the authorize URL; on its `accept`, the `paste` step's form | a form with no fields, the URL and the paste instruction in `message`; on its `accept`, the `paste` step's form |
-| `open_url` without `accepts` (named loopback) *(2026-11-11: grok's `browser_oauth`, which never has `accepts`)* | URL mode; `elicitation/complete` when the loopback finishes | a form with no fields, the URL in `message` |
+| `open_url` without `accepts` (named loopback) *(2026-11-11: grok's `browser_oauth`, which never has `accepts`)* *(2026-11-15, the owner's ruling "Amend the records to the SDK's facts": at `v1.31.0` it has `accepts`; this row is a method with no `Paste` fact)* | URL mode; `elicitation/complete` when the loopback finishes | a form with no fields, the URL in `message` |
 | `show_code` | URL mode to the verification URL, the code and expiry in `message`; `elicitation/complete` when the poll finishes | a form with no fields, URL, code and expiry in `message` |
 | `paste` (a re-ask after a bad paste included) *(2026-11-11: two re-asks at most, three pastes in all)* | a form, one required string `callback`, its title the step's `text` | the same |
 | `confirm` | a form, one boolean `allow`, default false (consent must be express), `message` the step's `text` and links | the same |
@@ -770,7 +776,7 @@ part is to pass `WithClientInfo` on its call (N6, above).
    sign-in starts.
    *(2026-11-11, later.)* With `_meta.gobble.remote: true`, a browser sign-in binds no port and completes by a paste,
    and a named grok `browser_oauth` is refused `unsupported` before `signin.Start` is called; with `remote` absent or
-   `false`, `NoLoopback` is not set; a non-boolean `remote` is -32602; each seen failing on the PLAN's planted breaks.
+   `false`, `NoLoopback` is not set; a non-boolean `remote` is -32602; each seen failing on the PLAN's planted breaks. *(2026-11-15, the owner's ruling relayed by the coordinator, "Amend the records to the SDK's facts"; 0051-PLAN's "P4 record (2026-11-15)", deviation 4: at go-llmprovider-sdk `v1.31.0` Grok's `browser_oauth` is `browser_paste` with `Paste` `url_or_code`, so it has `accepts` and a `paste` step and `Remote` accepts it; this passage holds for a method of the contract's own shape, `browser_loopback` with no `Paste`, which no built-in method has.)*
 4. `gobble auth login --json` prints only `method` and `step` lines whose steps decode with the contract's golden
    vectors' types, and never one of the five old events.
 5. No `FailureKind` remains; every word `provider.ErrorKind` and `llm.Kind` return is an `authcontract.ErrorKind`.
@@ -910,7 +916,7 @@ O2 (a), which magic-cli-remote's draft put to this repository. The options are k
 * Whether acp-go-sdk2 logs a request's params at any level gobble sets (`acpserver/serve.go:45`): the PLAN's test
   greps the run's log for a planted callback.
 * Whether accounts.x.ai offers a paste (U1): go-llmprovider-sdk `0074-MADR-one-sign-in-handle-and-method-facts.md` D12's owner-run probe; until it does,
-  grok's browser stays `browser_loopback`.
+  grok's browser stays `browser_loopback`. *(2026-11-15, the owner's ruling "Amend the records to the SDK's facts": the SDK's fact changed at `v1.31.0`, Grok's browser sign-in is `browser_paste`; go-llmprovider-sdk's own run had verified the paste, its row C57.)*
 
 ### Revisions of 2026-11-11
 
@@ -1037,7 +1043,7 @@ this record asserted by omission.
   The final acpext/v0.5.0 is tagged only on your word when the plan's acceptance shows the repo stable, followed by one
   small commit moving the root from the candidate to the final tag. 0042's rule is kept. Cost: a candidate tag exists
   publicly, one extra commit at the end, and the branch's P3 commit alone fails two root tests." Rejected: "Final tag
-  early, as the plan says"; "Revert the openai entry in v0.5.0".
+  early, as the plan says"; "Revert the openai entry in v0.5.0". *(2026-11-15, the owner's ruling relayed by the coordinator, "Keep it on the branch until those phases land": the coordinator commits each approved phase on the branch `p3-acpext-v0.5.0` and pushes the branch; `main` stays at `9e21c8f` and is fast-forwarded only after 0051-PLAN P6 and 0052-PLAN P4 have landed on the branch and every gate is green, because until then a plan sign-in passes no host id and does not reuse its registered client. Consequence told to and accepted by the owner: CI runs on pushes to `main`, so until `main` moves the phases on the branch have only the local gates and the Linux and Windows runs behind them; `.github/workflows/ci.yml` also runs on `pull_request` and on `v*` tags, which a pull request from the branch would use.)* *(2026-11-15, later: the owner's ruling "Open a draft PR now", relayed by the coordinator. The coordinator's statement that CI runs only on pushes to `main` and tags was wrong: `.github/workflows/ci.yml` also runs on `pull_request`, which the review's finding showed. After P4 is committed and pushed the coordinator opens one draft pull request from `p3-acpext-v0.5.0` to `main`, so every later push to the branch runs CI; `main` does not move and nothing merges until the owner's word, and `main` is still fast-forwarded only after 0051 P6 and 0052 P4 land. The sentence above that the phases on the branch have only the local gates behind them holds only until that pull request is open.)*
 * **What the statements now read.**
   * D1: "No `replace`, no committed `go.work`" stands. `authcontract` becomes direct in P4's commit.
   * D6, D7 and the Confirmation's apidiff item, wherever `acpext/v0.5.0` is the tag these values or members are "tagged
@@ -1051,12 +1057,43 @@ this record asserted by omission.
   * QB's "released with Magic's cut-over": the final tag is cut at P8a, before the gobble release Magic requires, so it
     precedes Magic's cut-over as QB asked. Magic takes the final tag, not the candidate.
   * The branch's P3 commit, checked out alone, fails the two root tests above, by construction. This is the owner's
-    accepted cost. `main` holds P3 only together with P4.
+    accepted cost. `main` holds P3 only together with P4. *(2026-11-15, the owner's ruling relayed by the coordinator, "Keep it on the branch until those phases land": the coordinator commits each approved phase on the branch `p3-acpext-v0.5.0` and pushes the branch; `main` stays at `9e21c8f` and is fast-forwarded only after 0051-PLAN P6 and 0052-PLAN P4 have landed on the branch and every gate is green, because until then a plan sign-in passes no host id and does not reuse its registered client. Consequence told to and accepted by the owner: CI runs on pushes to `main`, so until `main` moves the phases on the branch have only the local gates and the Linux and Windows runs behind them; `.github/workflows/ci.yml` also runs on `pull_request` and on `v*` tags, which a pull request from the branch would use.)* *(2026-11-15, later: the owner's ruling "Open a draft PR now", relayed by the coordinator. The coordinator's statement that CI runs only on pushes to `main` and tags was wrong: `.github/workflows/ci.yml` also runs on `pull_request`, which the review's finding showed. After P4 is committed and pushed the coordinator opens one draft pull request from `p3-acpext-v0.5.0` to `main`, so every later push to the branch runs CI; `main` does not move and nothing merges until the owner's word, and `main` is still fast-forwarded only after 0051 P6 and 0052 P4 land. The sentence above that the phases on the branch have only the local gates behind them holds only until that pull request is open.)*
 * **Where.** [0051-PLAN-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md](0051-PLAN-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md): C8, P3 step 7 and its acceptance, P4's prerequisites and step 1, P8a, the Rollout and
   rollback notes, and "P3 record (2026-11-15)".
 * **Searched, nothing else asserts it:** every occurrence of `v0.5.0`, `tagged`, `proxy`, `replace`, `go.work`, `reach`,
   `testdata` and `v0.4.0` in this record; the lines not annotated above (the context's `acpext/v0.4.0` facts, D7's "Now",
   the Revisions of 2026-11-11's "magic-cli-remote has not taken `acpext/v0.4.0` yet") state facts the sequence does not change.
+
+**Later on 2026-11-15, three rulings of the owner, relayed by the coordinator,** on 0051-PLAN's P4 with 0052-PLAN's P3.
+
+* **Deviation 4, Grok's `browser_oauth` and `Remote`:** "Amend the records to the SDK's facts". D2's rule stays as decided, and `Remote`
+  and `TestRemoteMethods` stay as built. At go-llmprovider-sdk `v1.31.0` Grok's `browser_oauth` is `browser_paste` with `Paste`
+  `url_or_code`, so it has `accepts` and a `paste` step, a remote client is offered it, and the `unsupported` refusal of D4 holds for a
+  method of the contract's own shape (`browser_loopback`, no `Paste`), which no built-in method has. Annotated, each dated, at D2's
+  note, D3's note and its bullet on what cannot complete that way, D4 step 1's refused-method bullet, D4 step 3's list of driven methods and
+  its rule (1) and table row, Confirmation 3's `_meta.gobble.remote` line, and the Not-verified question on D12; and in 0051-PLAN at P4's
+  `TestRemoteMethods` row, P6's rows `TestAuthenticateOnlyRemoteMethods`, `TestAuthenticateGrokBrowserHasNoPaste` and
+  `TestAuthenticateRemoteRefusesLoopbackOnly`, and P8's L3. No passage of 0052's pair says it: 0052-MADR's one mention of Grok's browser
+  (that it and its device sign-in yield one kind of session) holds.
+* **The other deviations of "P4 record (2026-11-15)" and "P3 record (2026-11-15)":** "Accept the eight; I check 6 and 9". Deviations 1,
+  2, 3, 5, 8, 10, 11 and 12 are accepted, on the independent review's judgement (8 subject to its finding 5), and 7 as an observation.
+  Deviations 6 and 9 are not yet accepted: the review's records give the evidence the owner's coordinator checks.
+* **When `main` moves:** "Keep it on the branch until those phases land". The coordinator commits each approved phase on the branch
+  `p3-acpext-v0.5.0` and pushes the branch; `main` stays at `9e21c8f` until 0051-PLAN P6 and 0052-PLAN P4 have landed on the branch and
+  every gate is green, because until then a plan sign-in passes no host id and does not reuse its registered client. This replaces
+  the fast-forward after P4 that C8, P4's prerequisites and the "P3 record (2026-11-15)" say. The consequence the owner was told and accepted:
+  CI runs on pushes to `main`, so until then the phases on the branch have only the local gates and the Linux and Windows runs behind them
+  (`.github/workflows/ci.yml` also lists `pull_request` and `v*` tags). *(2026-11-15, later: the owner's ruling "Open a draft PR now", relayed by the coordinator. The coordinator's statement that CI runs only on pushes to `main` and tags was wrong: `.github/workflows/ci.yml` also runs on `pull_request`, which the review's finding showed. After P4 is committed and pushed the coordinator opens one draft pull request from `p3-acpext-v0.5.0` to `main`, so every later push to the branch runs CI; `main` does not move and nothing merges until the owner's word, and `main` is still fast-forwarded only after 0051 P6 and 0052 P4 land. The sentence above that the phases on the branch have only the local gates behind them holds only until that pull request is open.)*
+
+**Further, on 2026-11-15, three rulings of the owner, relayed by the coordinator,** on the same change set.
+
+* **CI on the branch:** "Open a draft PR now". The coordinator had told the owner that CI runs only on pushes to `main` and tags; that was wrong, `.github/workflows/ci.yml`
+  also runs on `pull_request`. After P4 is committed and pushed the coordinator opens one draft pull request from `p3-acpext-v0.5.0` to `main`, so every later push to the
+  branch runs CI; `main` does not move and nothing merges until the owner's word, and `main` is still fast-forwarded only after 0051 P6 and 0052 P4 land.
+* **Deviation 13**, `ConsentText` to `signin.Options`: "Accept; P6 builds the site". The `signin.Options` half of 0052-PLAN P3 step 1 is built with its call site in 0051-PLAN
+  P6 step 1, and 0052-PLAN P4's `TestConsentWordingOverACP` guards it; both steps are annotated.
+* **A key for the run with a plan session stored:** "Keep it, and document it". 0052-MADR D2's gate stays keyed on the stored session; D2 carries a dated note with the
+  consequence, and `docs/guides/credentials.md` a sentence.
 
 ### Related
 

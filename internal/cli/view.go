@@ -244,9 +244,9 @@ func retryLine(voice *personality.Voice, r acpclient.Retry) (string, bool) {
 	switch {
 	case r.Phase != "start":
 		return "", false
-	case r.Cause == "offline":
+	case r.Cause == string(acpext.RetryOffline):
 		return voice.Text(personality.RetryOffline, nil), true
-	case r.Cause == "empty_reply":
+	case r.Cause == string(acpext.RetryEmptyReply):
 		return voice.Text(personality.RetryEmptyReply, attempts), true
 	}
 	attempts[argCause] = strings.ReplaceAll(r.Cause, "_", " ")

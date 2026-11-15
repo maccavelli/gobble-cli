@@ -134,13 +134,13 @@ you can sign in. It asks no provider anything:
 $ gobble providers
 provider      name                credential                             sign-in
 gemini        Gemini (Google)     none — gobble auth login gemini        API key
-openai        OpenAI              none — gobble auth login openai        API key
+openai        OpenAI              none — gobble auth login openai        API key; Use your ChatGPT plan with this app
 claude        Claude (Anthropic)  none — gobble auth login claude        API key
-grok          Grok (xAI)          none — gobble auth login grok          API key; browser or device sign-in
+grok          Grok (xAI)          none — gobble auth login grok          API key; Sign in with xAI; Sign in with xAI (device code)
 opencode-zen  OpenCode Zen        none — gobble auth login opencode-zen  API key
 opencode-go   OpenCode Go         none — gobble auth login opencode-go   API key
 huggingface   Hugging Face        none — gobble auth login huggingface   API key
-kilo          Kilo Gateway        none — gobble auth login kilo          API key; device sign-in
+kilo          Kilo Gateway        none — gobble auth login kilo          API key; Sign in with Kilo (device code)
 together      Together AI         none — gobble auth login together      API key
 ollama        Ollama (local)      runs on your machine, no key           —
 ```
