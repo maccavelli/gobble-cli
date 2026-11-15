@@ -107,8 +107,10 @@ Early, and built in the order [docs/README.md](docs/README.md#build-order) gives
   for one run only `echo sk-test-only | gobble --model openai/gpt-6-luna --api-key - -p hello` uses it without storing.
   `gobble auth logout <provider>` removes a stored entry, `gobble auth status` shows where each key comes from and
   `gobble auth check` whether one is usable. Grok and Kilo sign in with `gobble auth login grok|kilo`,
-  `--method api-key|browser|device` names a way with no menu, and `gobble auth import --from-pi` copies Pi's entries
-  ([guide](docs/guides/credentials.md)).
+  `--method api-key|browser|device` names a way with no menu, and `gobble auth import --from-pi` copies Pi's entries.
+  Grok's sign-in, a stored login's refresh, a model lookup's refresh and `gobble auth logout grok` name gobble and its
+  version in their requests' User-Agent, and the sign-in's authorize and device requests carry `referrer=gobble`;
+  gobble sends no `originator` ([guide](docs/guides/credentials.md)).
 - **Signing in where you are:** `/login [provider]` in a session asks which provider and how, checks a typed key
   by listing the provider's models, stores it, and lists the models to switch to; `/logout [provider]` removes a
   stored credential. With no credential at all, a session offers the sign-in before its first prompt, and

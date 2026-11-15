@@ -299,7 +299,7 @@ func (e *runEnv) logout(ctx context.Context, id string) (string, error) {
 	if was.Type == auth.TypeOAuth && provider.HasLogin(id) {
 		// Revoked, then removed whether or not revocation succeeded
 		// (0005-PLAN F4-3b decision 7).
-		revoke, err := logoutLogin(ctx, id, provider.LoginOptions{}, auth.Logins{Path: path})
+		revoke, err := logoutLogin(ctx, id, provider.LoginOptions{ClientName: appName, ClientVersion: identity().Version}, auth.Logins{Path: path})
 		if err != nil {
 			return "", failf("%v", err)
 		}

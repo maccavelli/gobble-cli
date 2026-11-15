@@ -56,6 +56,11 @@ type LoginStore interface {
 // for tests.
 type LoginOptions struct {
 	HTTPClient *http.Client
+	// ClientName and ClientVersion name the application to the identity
+	// provider, as Options' do: the revocation, and the discovery before it,
+	// lead their User-Agent with them. Empty names the SDK (0051-MADR D9,
+	// N7).
+	ClientName, ClientVersion string
 }
 
 // DeviceCode is what a device login shows: where to go, the code to enter
@@ -97,14 +102,18 @@ func LoginRejected(id string) string {
 // Logout revokes provider id's stored login, then deletes it from store,
 // whether or not revocation succeeded: the SDK leaves the stored copy to its
 // caller (0005-PLAN F4-3b decision 7). revoke is revocation's error; err is
-// the store's.
+// the store's. The session it revokes is given o's ClientName and
+// ClientVersion as its identity before the revocation, so the revocation and
+// the discovery before it name the application (0051-MADR D9, N7).
 func Logout(ctx context.Context, id string, o LoginOptions, store LoginStore) (revoke, err error) {
 	l, err := store.Load(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 	if l != nil && HasLogin(id) {
-		if rerr := auth.RevokeOAuthSession(ctx, l.session(id, nil, o.HTTPClient, nil)); rerr != nil {
+		s := l.session(id, nil, o.HTTPClient, nil)
+		s.UseIdentity(auth.Identity{Name: o.ClientName, Version: o.ClientVersion})
+		if rerr := auth.RevokeOAuthSession(ctx, s); rerr != nil {
 			revoke = mapError(rerr)
 		}
 	}

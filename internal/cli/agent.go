@@ -73,7 +73,9 @@ var ambientProvider = provider.AmbientWith
 // so a listing it starts in the background ends with the run (0046-MADR D7;
 // 0046-PLAN deviation 4). With a key or a login, the SDK may ask for a token
 // and list in the background, so TestMain replaces it with one that passes
-// neither: no test reaches a provider through it (0046-MADR D3).
+// neither: no test reaches a provider through it (0046-MADR D3). The hook
+// passes gobble's name and version, which the lookup names to the SDK for a
+// login's refresh (0051-MADR D9, N6).
 var modelFacts = provider.ModelInfoWith
 
 // agentOptions are gobble's agent's options, for `gobble acp` and the
@@ -99,7 +101,8 @@ func (e *runEnv) agentOptions() acpserver.Options {
 		// found as modelProvider finds it, for its listing (0005-PLAN F4-2a,
 		// F4-3a, F4-3b).
 		ModelInfo: func(id, model string) llm.Model {
-			o := provider.Options{APIKey: e.knownKey(id), Workspace: e.knownWorkspace(id), Cache: &e.cache, Sessions: &e.sessions}
+			o := provider.Options{APIKey: e.knownKey(id), Workspace: e.knownWorkspace(id), Cache: &e.cache, Sessions: &e.sessions,
+				ClientName: appName, ClientVersion: identity().Version}
 			if e.knownLogin(id) {
 				o.Logins = e.logins()
 			}

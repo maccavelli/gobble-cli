@@ -198,6 +198,13 @@ Two providers let you sign in with your account instead of pasting a key:
 - **Kilo.** `gobble auth login kilo` shows a code to enter at Kilo. Kilo answers with a key, which
   gobble stores as Kilo's API key and says `Saved API key for kilo`.
 
+gobble names itself to xAI's sign-in service in the requests it makes for a Grok login, as
+`gobble/<version>`, the running build's version, ahead of the SDK's own name: such a request's
+User-Agent reads `gobble/<version> (<os>; <arch>) go-llmprovider-sdk/<version>`. That covers each
+request of the sign-in, whose authorize and device requests also carry `referrer=gobble`; the
+refresh of a stored login, whether a request to Grok, a model listing or a model lookup starts it;
+and `gobble auth logout grok`'s discovery and revocation. gobble sends no `originator`.
+
 A login owns its provider in `auth.json`, as a stored key does; `--api-key -` still wins for one
 run. `gobble auth status` shows when a login's access expires, and `gobble auth check` reports it as
 `oauth`:
@@ -223,7 +230,8 @@ $ gobble auth check --provider grok --json
 ```
 
 `gobble auth logout grok` revokes the login at xAI, then removes it. If xAI cannot be reached, gobble
-warns that the login was not revoked, and removes it anyway:
+warns that the login was not revoked, and removes it anyway. The discovery and the revocation it
+sends name gobble and its version, as a sign-in's requests do:
 
 ```text
 $ gobble auth logout grok

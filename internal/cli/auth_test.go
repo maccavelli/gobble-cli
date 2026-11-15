@@ -652,3 +652,44 @@ func TestLoginMessage(t *testing.T) {
 		t.Errorf("a refused login: exit %d, stderr %q", r.code, r.stderr)
 	}
 }
+
+// gobble auth login, gobble auth logout and the agent's ModelInfo hook each
+// pass gobble's name and the build's version on to the provider package,
+// which names them to the identity provider (0051-MADR D9, N1, N6, N7).
+func TestCLIPassesGobblesIdentity(t *testing.T) {
+	c := newCfgEnv(t)
+	var signed provider.SignInOptions
+	replace(t, &signInWith, func(ctx context.Context, id string, _ provider.Prompter, o provider.SignInOptions, store provider.LoginStore) (provider.Credential, error) {
+		signed = o
+		return provider.Credential{}, store.Save(ctx, id, &provider.Login{Access: "a", Refresh: "r"})
+	})
+	var revoked provider.LoginOptions
+	replace(t, &logoutLogin, func(ctx context.Context, id string, o provider.LoginOptions, store provider.LoginStore) (error, error) {
+		revoked = o
+		return nil, store.Delete(ctx, id)
+	})
+	c.want(c.run("auth", "login", "grok"), ExitOK, "Logged in to grok\n", "")
+	c.want(c.run("auth", "logout", "grok"), ExitOK, "Logged out of grok\n", "")
+
+	var facts provider.Options
+	replace(t, &modelFacts, func(o provider.Options, id, model string, _ *catalog.ModelsJSON) llm.Model {
+		facts = o
+		return llm.Model{Provider: id, ID: model}
+	})
+	e, _ := modelEnv(t)
+	_ = e.agentOptions().ModelInfo("grok", "grok-4.6")
+
+	version := identity().Version
+	if version == "" {
+		t.Fatal("the build's version is empty")
+	}
+	for what, got := range map[string][2]string{
+		"auth login":         {signed.ClientName, signed.ClientVersion},
+		"auth logout":        {revoked.ClientName, revoked.ClientVersion},
+		"the ModelInfo hook": {facts.ClientName, facts.ClientVersion},
+	} {
+		if got != [2]string{"gobble", version} {
+			t.Errorf("%s passed name %q and version %q, want %q and %q", what, got[0], got[1], "gobble", version)
+		}
+	}
+}

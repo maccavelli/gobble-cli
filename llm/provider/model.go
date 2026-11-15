@@ -70,20 +70,23 @@ func ModelInfo(id, apiKey, workspace string, logins LoginStore, model string, mj
 // ModelInfoWith is ModelInfo with o's key, workspace, logins and sessions,
 // and o's transport and cache: a listing it starts in the background runs
 // through o.Cache when set, so the run that owns the cache ends it, and a
-// login's refresh is on the run's session (0046-MADR D7, D8). o's other
-// fields are ignored.
+// login's refresh is on the run's session (0046-MADR D7, D8). With a
+// ClientName, the lookup names that application and ClientVersion to the SDK,
+// which names a login's session with them before it reads its token, so a
+// refresh the lookup starts, and the listing it starts in the background,
+// name it (0051-MADR D9, N6). o's other fields are ignored.
 func ModelInfoWith(o Options, id, model string, mj *gcatalog.ModelsJSON) llm.Model {
 	ctx := context.Background()
 	sdk := Options{HTTPClient: o.HTTPClient, Headers: o.Headers, BaseURL: o.BaseURL, Cache: o.Cache}.sdkOptions()
 	login, err := Options{Logins: o.Logins, Sessions: o.Sessions}.login(ctx, id)
 	if err == nil && login != nil && o.APIKey == "" {
-		return modelInfoFrom(ctx, id, login, "", model, mj, sdk...)
+		return modelInfoFrom(ctx, id, login, "", model, mj, o.ClientName, o.ClientVersion, sdk...)
 	}
 	var src llmprovider.TokenSource
 	if o.APIKey != "" {
 		src = llmprovider.NewStaticToken(o.APIKey)
 	}
-	return modelInfoFrom(ctx, id, src, o.Workspace, model, mj, sdk...)
+	return modelInfoFrom(ctx, id, src, o.Workspace, model, mj, o.ClientName, o.ClientVersion, sdk...)
 }
 
 // ModelInfoContext is ModelInfo for a caller with a context, which bounds
@@ -93,21 +96,22 @@ func ModelInfoContext(ctx context.Context, id, apiKey, model string, mj *gcatalo
 	if apiKey != "" {
 		src = llmprovider.NewStaticToken(apiKey)
 	}
-	return modelInfoFrom(ctx, id, src, "", model, mj)
+	return modelInfoFrom(ctx, id, src, "", model, mj, "", "")
 }
 
 // modelInfoFrom is ModelInfoContext with src, the credential's token source, or
-// nil for none, a Claude key's workspace, and sdk, the SDK options a listing
-// it starts takes (0046-MADR D7).
-func modelInfoFrom(ctx context.Context, id string, src llmprovider.TokenSource, workspace, model string, mj *gcatalog.ModelsJSON, sdk ...llmprovider.Option) llm.Model {
+// nil for none, a Claude key's workspace, the application's name and version
+// (clientName empty names none), and sdk, the SDK options a listing it starts
+// takes (0046-MADR D7).
+func modelInfoFrom(ctx context.Context, id string, src llmprovider.TokenSource, workspace, model string, mj *gcatalog.ModelsJSON, clientName, clientVersion string, sdk ...llmprovider.Option) llm.Model {
 	var layers []catalog.Layer
 	if meta, err := snapshot(); err == nil {
 		layers = append(layers, *meta)
 	}
 	if mj == nil {
-		return lookupModelWith(ctx, id, src, model, workspace, sdk, layers...)
+		return lookupModelWith(ctx, id, src, model, workspace, clientName, clientVersion, sdk, layers...)
 	}
-	m := lookupModelWith(ctx, id, src, model, workspace, sdk, append(layers, modelsJSONLayer{mj})...)
+	m := lookupModelWith(ctx, id, src, model, workspace, clientName, clientVersion, sdk, append(layers, modelsJSONLayer{mj})...)
 	if f, ok := mj.Facts(id, model); ok && len(f.LevelMap) > 0 {
 		m.LevelMap = map[string]bool{}
 		for level, v := range f.LevelMap {
@@ -145,9 +149,16 @@ func toolModels(id string, meta *catalog.Metadata) []string {
 // lookupModelWith is ModelInfo over layers, the later ranking above the
 // earlier, bounded by ctx; a listing it starts runs in workspace for Claude,
 // with sdk, its SDK options: the transport and the run's cache (0046-MADR
-// D7).
-func lookupModelWith(ctx context.Context, id string, src llmprovider.TokenSource, model, workspace string, sdk []llmprovider.Option, layers ...catalog.Layer) llm.Model {
+// D7). When clientName is set, the call carries llmprovider.WithClientInfo
+// with clientName and clientVersion, which the SDK's CachedModel hands to a
+// session src as its identity before it reads the token, so a refresh the
+// lookup starts names the application (0051-MADR D9, N6). gobble calls no
+// UseIdentity itself.
+func lookupModelWith(ctx context.Context, id string, src llmprovider.TokenSource, model, workspace, clientName, clientVersion string, sdk []llmprovider.Option, layers ...catalog.Layer) llm.Model {
 	opts := append([]llmprovider.Option{llmprovider.WithoutModelMetadata()}, sdk...)
+	if clientName != "" {
+		opts = append(opts, llmprovider.WithClientInfo(clientName, clientVersion))
+	}
 	if workspace != "" {
 		opts = append(opts, llmprovider.For(llmprovider.ProviderClaude, catalog.WithClaudeWorkspace(workspace)))
 	}

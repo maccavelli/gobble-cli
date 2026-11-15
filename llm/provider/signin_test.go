@@ -1,9 +1,11 @@
 package provider
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"slices"
@@ -272,5 +274,145 @@ func TestSignInRefusedKeys(t *testing.T) {
 		if strings.Contains(n, serviceText) {
 			t.Errorf("a notice shows the service's text: %q", n)
 		}
+	}
+}
+
+// seenRequest is one request a uaRecorder saw: what the tests read of it,
+// and what a named run and an unnamed one must share.
+type seenRequest struct {
+	method, path, userAgent string
+	form                    string // the form body and the query, sorted
+}
+
+// uaRecorder is an http.RoundTripper that records each request's method,
+// path, User-Agent and form, then sends it on to next.
+type uaRecorder struct {
+	next http.RoundTripper
+	mu   sync.Mutex
+	seen []seenRequest
+}
+
+func (u *uaRecorder) RoundTrip(r *http.Request) (*http.Response, error) {
+	form := r.URL.Query()
+	if r.Body != nil {
+		b, err := io.ReadAll(r.Body)
+		if err != nil {
+			return nil, err
+		}
+		r.Body = io.NopCloser(bytes.NewReader(b))
+		if v, err := url.ParseQuery(string(b)); err == nil {
+			for k, vs := range v {
+				form[k] = append(form[k], vs...)
+			}
+		}
+	}
+	u.mu.Lock()
+	u.seen = append(u.seen, seenRequest{method: r.Method, path: r.URL.Path, userAgent: r.Header.Get("User-Agent"), form: form.Encode()})
+	u.mu.Unlock()
+	next := u.next
+	if next == nil {
+		next = http.DefaultTransport
+	}
+	return next.RoundTrip(r)
+}
+
+// atIssuer makes rec see each request that reaches ti, whatever client sent
+// it: a session's refresh goes through the SDK's own client when no listing
+// gave it one, so a transport in an option does not see it. Call it before
+// the first request.
+func (u *uaRecorder) atIssuer(ti *testIssuer) {
+	next := ti.Config.Handler
+	ti.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = r.ParseForm() //nolint:errcheck // a malformed form is recorded as it parsed
+		u.mu.Lock()
+		u.seen = append(u.seen, seenRequest{method: r.Method, path: r.URL.Path, userAgent: r.Header.Get("User-Agent"), form: r.Form.Encode()})
+		u.mu.Unlock()
+		next.ServeHTTP(w, r)
+	})
+}
+
+// requests is a copy of what the recorder has seen.
+func (u *uaRecorder) requests() []seenRequest {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return slices.Clone(u.seen)
+}
+
+// wantNamed fails t for a request among reqs whose User-Agent does not begin
+// "gobble/1.2.3-test (" and name the SDK's token, and for no request at all.
+func wantNamed(t *testing.T, what string, reqs []seenRequest) {
+	t.Helper()
+	if len(reqs) == 0 {
+		t.Errorf("%s: no request seen", what)
+	}
+	for _, r := range reqs {
+		if !strings.HasPrefix(r.userAgent, "gobble/1.2.3-test (") || !strings.Contains(r.userAgent, "go-llmprovider-sdk/") {
+			t.Errorf("%s: %s %s sent User-Agent %q, want gobble/1.2.3-test ( ... go-llmprovider-sdk/", what, r.method, r.path, r.userAgent)
+		}
+	}
+}
+
+// wantUnnamed fails t for a request among reqs whose User-Agent is not the
+// SDK's own, and for no request at all.
+func wantUnnamed(t *testing.T, what string, reqs []seenRequest) {
+	t.Helper()
+	if len(reqs) == 0 {
+		t.Errorf("%s: no request seen", what)
+	}
+	for _, r := range reqs {
+		if !strings.HasPrefix(r.userAgent, "go-llmprovider-sdk/") {
+			t.Errorf("%s: %s %s sent User-Agent %q, want the SDK's own", what, r.method, r.path, r.userAgent)
+		}
+	}
+}
+
+// A sign-in through SignIn names gobble: Grok's device request carries
+// referrer=gobble, its browser sign-in's authorize URL does, and every
+// request of the device sign-in leads its User-Agent with gobble and the
+// build's version, the SDK's token last. No originator is asserted: gobble
+// sends none (0051-MADR D9, N11).
+func TestSignInNamesGobble(t *testing.T) {
+	_, o := signInIssuer(t)
+	o.ClientVersion = "1.2.3-test"
+	rec := &uaRecorder{next: o.HTTPClient.Transport}
+	o.HTTPClient = &http.Client{Transport: rec}
+
+	o.Method = MethodDevice
+	o.ShowDeviceCode = func(DeviceCode) error { return nil }
+	if _, err := SignIn(t.Context(), "grok", &script{t: t}, o, &memLogins{}); err != nil {
+		t.Fatalf("grok's device sign-in: %v", err)
+	}
+	reqs := rec.requests()
+	wantNamed(t, "the device sign-in", reqs)
+	var device bool
+	for _, r := range reqs {
+		if r.path == "/oauth2/device/code" {
+			device = true
+			if v, _ := url.ParseQuery(r.form); v.Get("referrer") != "gobble" {
+				t.Errorf("the device request's form %q, want referrer=gobble", r.form)
+			}
+		}
+	}
+	if !device {
+		t.Errorf("no device request among %+v", reqs)
+	}
+
+	// The browser sign-in, cancelled once its URL is shown.
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	var authorize string
+	o.Method, o.NoPaste = MethodBrowser, true
+	o.OpenURL = func(u string) error {
+		authorize = u
+		cancel()
+		return nil
+	}
+	_, _ = SignIn(ctx, "grok", &script{t: t}, o, &memLogins{}) //nolint:errcheck // cancelled on purpose: only the URL is read
+	u, err := url.Parse(authorize)
+	if err != nil || authorize == "" {
+		t.Fatalf("the browser sign-in gave no authorize URL: %q, %v", authorize, err)
+	}
+	if got := u.Query().Get("referrer"); got != "gobble" {
+		t.Errorf("the authorize URL %q has referrer %q, want gobble", authorize, got)
 	}
 }

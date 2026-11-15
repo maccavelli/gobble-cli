@@ -8,9 +8,11 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json/v2"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -18,6 +20,8 @@ import (
 
 	"github.com/maccavelli/go-llmprovider-sdk/llmprovider"
 	"github.com/maccavelli/go-llmprovider-sdk/llmprovider/auth"
+
+	"github.com/maccavelli/gobble-cli/llm"
 )
 
 // memLogins is a LoginStore in memory, counting refresh locks.
@@ -338,5 +342,134 @@ func TestPiLogin(t *testing.T) {
 		if l, ok := PiLogin(id, "a", "r", exp); ok || l != nil {
 			t.Errorf("%s: %v, %t; want none", id, l, ok)
 		}
+	}
+}
+
+// refreshes are the requests among reqs that refresh a token.
+func refreshes(reqs []seenRequest) []seenRequest {
+	var out []seenRequest
+	for _, r := range reqs {
+		if v, _ := url.ParseQuery(r.form); r.path == "/oauth2/token" && v.Get("grant_type") == "refresh_token" {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// A stored Grok login past its expiry is refreshed under gobble's name by
+// each of New's first request, List and ModelInfoWith, with the options'
+// ClientName and ClientVersion, and under the SDK's with none. ModelInfoWith
+// runs first on a fresh Sessions, no provider built before it, so only the
+// SDK's hand-off from the WithClientInfo gobble passes can name its refresh;
+// the listing it starts in the background is named too (0051-MADR D9, N6).
+func TestStoredLoginNamedForRefresh(t *testing.T) {
+	// each runs one call over a fresh expired login whose requests, all sent
+	// to one in-process issuer, a recorder sees.
+	calls := map[string]func(t *testing.T, o Options, rec *uaRecorder){
+		"New": func(t *testing.T, o Options, _ *uaRecorder) {
+			p, err := New("grok", o)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, _ = drain(t, p, &llm.Request{Model: "grok-4.6", Messages: []llm.Message{text(llm.RoleUser, "hi")}}) //nolint:errcheck // the refresh is what is read
+		},
+		"List": func(t *testing.T, o Options, _ *uaRecorder) {
+			_, _ = List(t.Context(), "grok", "", o) //nolint:errcheck // the refresh is what is read
+		},
+		"ModelInfoWith": func(t *testing.T, o Options, rec *uaRecorder) {
+			c := &Cache{}
+			o.Cache, o.Sessions = c, &Sessions{}
+			_ = ModelInfoWith(o, "grok", "grok-4.6", nil)
+			// The listing it started in the background reaches the issuer
+			// before the cache's close ends it.
+			listed := func() bool {
+				return slices.ContainsFunc(rec.requests(), func(r seenRequest) bool { return r.method == "GET" && r.path == "/v1/models" })
+			}
+			for deadline := time.Now().Add(5 * time.Second); !listed() && time.Now().Before(deadline); {
+				time.Sleep(10 * time.Millisecond)
+			}
+			if err := o.Sessions.Wait(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			if err := c.Close(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+		},
+	}
+	for _, name := range []string{"New", "List", "ModelInfoWith"} {
+		for _, named := range []bool{true, false} {
+			t.Run(fmt.Sprintf("%s named %t", name, named), func(t *testing.T) {
+				ti := newTestIssuer(t)
+				u, err := url.Parse(ti.URL)
+				if err != nil {
+					t.Fatal(err)
+				}
+				rec := &uaRecorder{}
+				rec.atIssuer(ti)
+				o := Options{Logins: expiredGrok(ti.URL + "/oauth2/token"), HTTPClient: &http.Client{Transport: toIssuer{u}},
+					Retry: &llm.Retry{Off: true}}
+				if named {
+					o.ClientName, o.ClientVersion = "gobble", "1.2.3-test"
+				}
+				calls[name](t, o, rec)
+				reqs := rec.requests()
+				ref := refreshes(reqs)
+				if len(ref) == 0 {
+					t.Fatalf("%s: no refresh among %+v", name, reqs)
+				}
+				if named {
+					wantNamed(t, name+"'s refresh", ref)
+					if name == "ModelInfoWith" {
+						wantNamed(t, name+"'s requests, its background listing among them", reqs)
+						if !slices.ContainsFunc(reqs, func(r seenRequest) bool { return r.method == "GET" && r.path == "/v1/models" }) {
+							t.Errorf("%s started no listing among %+v", name, reqs)
+						}
+					}
+				} else {
+					wantUnnamed(t, name+"'s refresh with no name", ref)
+				}
+			})
+		}
+	}
+}
+
+// Logout of a stored Grok login names gobble on the discovery and the
+// revocation, whose paths and forms are those of a logout with no name, which
+// sends the SDK's User-Agent (0051-MADR D9, N7).
+func TestLogoutRevokesAsGobble(t *testing.T) {
+	run := func(o LoginOptions) []seenRequest {
+		t.Helper()
+		ti := newTestIssuer(t) // one issuer for each run: the SDK caches discovery by issuer
+		rec := &uaRecorder{}
+		o.HTTPClient = &http.Client{Transport: rec}
+		store := &memLogins{}
+		login := &Login{Access: "a", Refresh: "r-1", Expires: time.Now().Add(time.Hour), Issuer: ti.URL,
+			ClientID: auth.DefaultGrokOAuthClientID, TokenURL: ti.URL + "/oauth2/token"}
+		if err := store.Save(t.Context(), "grok", login); err != nil {
+			t.Fatal(err)
+		}
+		if revoke, err := Logout(t.Context(), "grok", o, store); revoke != nil || err != nil {
+			t.Fatalf("logout: %v, %v", revoke, err)
+		}
+		return rec.requests()
+	}
+	named := run(LoginOptions{ClientName: "gobble", ClientVersion: "1.2.3-test"})
+	plain := run(LoginOptions{})
+	wantNamed(t, "the named logout", named)
+	wantUnnamed(t, "the unnamed logout", plain)
+	var paths []string
+	for _, r := range named {
+		paths = append(paths, r.method+" "+r.path+" "+r.form)
+	}
+	var want []string
+	for _, r := range plain {
+		want = append(want, r.method+" "+r.path+" "+r.form)
+	}
+	if !slices.Equal(paths, want) {
+		t.Errorf("the named logout sent %q, the unnamed %q; want the same requests", paths, want)
+	}
+	if !slices.ContainsFunc(named, func(r seenRequest) bool { return r.path == "/oauth2/revoke" }) ||
+		!slices.ContainsFunc(named, func(r seenRequest) bool { return r.path == "/.well-known/openid-configuration" }) {
+		t.Errorf("the named logout sent %+v, want a discovery and a revocation", named)
 	}
 }

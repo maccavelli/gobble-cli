@@ -94,6 +94,9 @@ work, the branch is its source.
   step 4, moved to P6 step 1a: `llm/provider/login.go`'s `sdkStore` as go-llmprovider-sdk's `auth.ClientStore` and
   gobble's `ClientStore`; `llm/provider/signin.go`'s `SignInOptions.HostID` and `wizard.Options.HostID`; and
   `TestClientStoreAdapter`.
+* *(2026-11-14, added by P2a's deviation 2 and C9; the owner's ruling of that day.)* `README.md`'s Credentials bullet,
+  `docs/guides/credentials.md`'s "Signing in" and logout paragraphs, and the `llm/provider` row of
+  `docs/architecture.md`: what name and version gobble sends, and where.
 * *(2026-11-14, added by P2's deviations 1 and 2, and P7a; the owner's rulings of that day.)* `README.md:163` and
   `docs/architecture.md:192`, the SDK's version in each (P2, deviation 2); and P7a's `scripts/check_libs.py`
   (advisories by package).
@@ -127,6 +130,15 @@ does.)*
 * **C7. Identifiers.** No hostname, account name, email address or real-machine path in a committed file.
 * **C8. Order of the modules** (0042-MADR D5). P3's acpext change is committed, pushed and tagged `acpext/v0.5.0` by
   the owner, and served by the module proxy, before P4 requires it.
+* **C9. Docs in the same phase.** *(2026-11-14, added; the owner's ruling on P2a's hand-back, relayed by the
+  cross-repository coordinator. Asked what happens when a phase's docs step finds user docs outside the phase's own
+  files that the phase makes false or leaves incomplete, the owner chose "Always in the same commit": "The agent fixes
+  or adds the doc text in the same phase, the files joining the phase's scope by a dated deviation, without asking you
+  each time. Docs never lag the code." Rejected: "False now; missing in the docs phase"; "Ask me each time". It binds
+  every later phase of this PLAN.)* A phase's docs step names every document its change makes false, missing or
+  incomplete, whatever file it lies in, and the phase fixes or adds the text in the same commit; each such file joins
+  the phase's scope by a dated deviation in the record. Each sentence added is checked against the code and the
+  phase's tests before it is kept.
 
 ## Implementation Steps
 
@@ -1105,3 +1117,199 @@ that part of the acceptance is open, not met.)*
    to 20:54:53, and again after this line); the identifier scan of the staged diff's added lines, nothing found
    (`grep` exit 1).
 
+
+### P2a record (2026-11-14)
+
+Run by a mainstream model at medium effort, on the owner's approval of this PLAN's P2a, from `main`. Times are the
+session machine's local time. Staged, not committed; the owner (or the coordinator under the standing approval) commits.
+
+**C1, the start state.** Branch `main`, `HEAD` and `origin/main` both `1e0a912`, the tree clean. `go.mod` requires
+go-llmprovider-sdk `v1.31.0`, `authcontract v0.1.0` indirect (P2's `7120c3b`).
+
+**Step 0, the sites at the base.** MADR D9's N1 to N11 read at `1e0a912`. Nothing changed in substance. Lines that
+moved since `c47f4a7`, where `llm/provider/login.go` gained three lines above N7 (no commit since `35fda07` touched
+`llm/` or `internal/cli/`):
+
+| Site | MADR's place | Place at `1e0a912` |
+| :--- | :--- | :--- |
+| N7 `RevokeOAuthSession` call | `login.go:104` | `login.go:107` |
+| N8 `l.session(string(p), a.s, nil, nil)` | `login.go:144` | `login.go:147` |
+| `LoginOptions` | `login.go:54-56` | `login.go:57-59` |
+| `HasLogin` (N11's "keeps a login for Grok only") | `login.go:67` | `login.go:70` |
+
+Unmoved: N1 `signin.go:184`, N2 `signin.go:181`, N4 `provider.go:194`, N5 `list.go:71`, `:92`, N6 `model.go:157`, the hook
+`agent.go:101-107` (`:102` the options line), `appName` `agent.go:26`, N7's caller `auth.go:302`, N9 `piimport.go:203`, N10
+`auth.go:431`, `:548` and `acpserver/auth.go:59`.
+
+The SDK at `v1.31.0` (module cache, `go list -m -f '{{.Dir}}'`):
+
+* `wizard.Options.Identity` (`wizard/configure.go:139-151`): "Identity names the consumer's application to the identity
+  providers on every sign-in the wizard runs ... The zero value names this module."
+* `(*auth.OAuthSession).UseIdentity` (`llmprovider/auth/oauth_session.go:657`): `func (s *OAuthSession) UseIdentity(id Identity)`;
+  a zero id changes nothing, and the first name given wins.
+* `catalog.CachedModel` (`llmprovider/catalog/lookup.go:121-160`) has the line that hands the name over before the
+  token is read, `lookup.go:141`, immediately before `lookup.go:142`'s `src.Token(ctx)`:
+
+  ```go
+  		nameSession(src, cfg)
+  		if token, err := src.Token(ctx); err == nil {
+  ```
+
+  `nameSession` (`llmprovider/catalog/discovery.go:486-493`) calls `UseIdentity(auth.Identity{Name: cfg.clientName,
+  Version: cfg.clientVersion})` on a source that takes one, when `WithClientInfo` named an application other than the
+  module. `LookupModel`'s `listingModel` (`lookup.go:193`) and `CachedFacts` (`lookup.go:179`) have it too. So the
+  SDK's amendment shipped in `v1.31.0`; no deviation.
+
+**What changed (staged).**
+
+1. `llm/provider/signin.go`: `identityOf(o Options) auth.Identity` (documented), and `SignIn` sets
+   `wizard.Options.Identity` to `identityOf(o.Options)`; `SignIn`'s doc says every request names `ClientName` and
+   `ClientVersion`. The `auth` import is added.
+2. `llm/provider/model.go`: `ModelInfoWith` passes `o.ClientName` and `o.ClientVersion` to `modelInfoFrom` and so to
+   `lookupModelWith`, which adds `llmprovider.WithClientInfo(clientName, clientVersion)` to the `catalog.CachedModel`
+   call's options when `clientName` is set; `ModelInfoContext` passes none. Docs of `ModelInfoWith`, `modelInfoFrom` and
+   `lookupModelWith` name the two fields. No `UseIdentity` is called there.
+   `internal/cli/agent.go`: the `ModelInfo` hook's `provider.Options` gains `ClientName: appName, ClientVersion:
+   identity().Version`; `modelFacts`' doc says so.
+3. `llm/provider/login.go`: `LoginOptions.ClientName`, `ClientVersion` (documented as `Options`' are); `Logout` builds the
+   session, calls `UseIdentity` on it, then `RevokeOAuthSession`; `Logout`'s doc says so. `internal/cli/auth.go`: the
+   logout passes `LoginOptions{ClientName: appName, ClientVersion: identity().Version}`.
+4. Tests: `TestSignInNamesGobble` (`signin_test.go`, with the shared `uaRecorder`, `wantNamed`, `wantUnnamed`),
+   `TestStoredLoginNamedForRefresh` and `TestLogoutRevokesAsGobble` (`login_test.go`), `TestCLIPassesGobblesIdentity`
+   (`auth_test.go`). No test asserts an `originator`.
+
+**Names in the record, not deviations.**
+
+* `lookupModelWith` and `modelInfoFrom` each gained two parameters (`clientName`, `clientVersion`), as step 2 words it
+  ("passes ... on to `lookupModelWith`"). The four calls of `lookupModelWith` in the existing `llm/provider/model_test.go`
+  (`:57`, `:113`, `:124`, `:127`) needed `"", ""` added for them: a compile change only, with no assertion touched. That
+  file is one the phase's tests live beside; the PLAN lists "the test files the four tests live in", and this is the
+  one named change to an existing test. Every other existing test of `llm/provider` and `internal/cli` is unchanged and
+  passes.
+* `TestStoredLoginNamedForRefresh` records its requests at the in-process issuer's handler (`uaRecorder.atIssuer`),
+  and gives the options' `HTTPClient` a redirecting transport only. The table says each capturing transport is the
+  options' `HTTPClient`; for `ModelInfoWith` that cannot see the refresh: the SDK refreshes a login's session that
+  `CachedModel` names through the session's own client (the first run, with a recording `HTTPClient`, saw the listing's
+  `GET /v1/models` and no `POST /oauth2/token`: `no refresh among [{method:GET path:/v1/models userAgent:gobble/1.2.3-test (...`).
+  A handler at the issuer sees every request whatever sent it, which is the same evidence.
+  *(2026-11-14, later: this is a deviation, not a name; see "Deviations of P2a", 1.)*
+* `TestSignInNamesGobble`'s `Identity`-omitted plant also makes the Grok referrer `go-llmprovider-sdk`, the SDK's.
+
+**Seen failing (C2), on a scratch copy of the tree** (`<TMP>/tree`, no `.git`, the working tree untouched; `HOME`,
+`USERPROFILE`, `XDG_*` and `GOBBLE_HOME` in the scratch; `GOPROXY=off`; `go test -count=1 -run <test> <pkg>`). Unbroken:
+`llm/provider` (the three) exit 0, `internal/cli` (the fourth) exit 0. Each plant, exit 1:
+
+* `TestSignInNamesGobble`
+  * `Identity: identityOf(o.Options),` removed: `signin_test.go:386: the device sign-in: GET /.well-known/openid-configuration sent User-Agent "go-llmprovider-sdk/v1.31.0 (darwin; arm64) go-llmprovider-sdk/v1.31.0", want gobble/1.2.3-test ( ... go-llmprovider-sdk/`
+    (and the same for `POST /oauth2/device/code`, `POST /oauth2/token`, `GET /jwks`); `signin_test.go:392: the device request's form "client_id=...&referrer=go-llmprovider-sdk&scope=...", want referrer=gobble`;
+    `signin_test.go:416: the authorize URL "https://auth.x.ai/oauth2/authorize?client_id=...&referrer=go-ll...` has referrer `go-llmprovider-sdk`, want gobble.
+  * `identityOf` with an empty `Version`: `signin_test.go:386: the device sign-in: GET /.well-known/openid-configuration sent User-Agent "gobble/(devel) (darwin; arm64) go-llmprovider-sdk/v1.31.0", want gobble/1.2.3-test ( ... go-llmprovider-sdk/`
+    (and the same for the other three requests).
+* `TestStoredLoginNamedForRefresh`
+  * `WithClientInfo` left out of `lookupModelWith`: only `ModelInfoWith_named_true` fails (`New` and `List` stay named, as the table
+    says): `login_test.go:421: ModelInfoWith's refresh: POST /oauth2/token sent User-Agent "go-llmprovider-sdk/v1.31.0 (darwin; arm64) go-llmprovider-sdk/v1.31.0", want gobble/1.2.3-test ( ... go-llmprovider-sdk/`;
+    `login_test.go:423: ... its background listing among them: GET /v1/models sent User-Agent "go-llmprovider-sdk/v1.31.0 ...`.
+  * `ModelInfoWith` passing `"", ""` to `modelInfoFrom` (both calls): the same two failures, `ModelInfoWith_named_true` alone.
+* `TestLogoutRevokesAsGobble`
+  * `UseIdentity` removed: `login_test.go:458: the named logout: GET /.well-known/openid-configuration sent User-Agent "go-llmprovider-sdk/v1.31.0 (darwin; arm64) go-llmprovider-sdk/v1.31.0", want gobble/1.2.3-test ( ... go-llmprovider-sdk/`
+    and the same for `POST /oauth2/revoke`.
+  * `UseIdentity` after `RevokeOAuthSession`: the same two failures.
+* `TestCLIPassesGobblesIdentity`
+  * `auth.go`'s `provider.LoginOptions{}`: `auth_test.go:692: auth logout passed name "" and version "", want "gobble" and "0.0.0-dev"`.
+  * the hook built without `ClientName`: `auth_test.go:692: the ModelInfo hook passed name "" and version "", want "gobble" and "0.0.0-dev"`.
+  * extra, `internal/cli/login.go`'s `provider.Options{ClientName: ...}` made `provider.Options{}` (a pass-through that
+    existed before the phase, which the test now pins): `auth_test.go:692: auth login passed name "" and version "", want "gobble" and "0.0.0-dev"`.
+
+On the tree before the phase (`HEAD`'s five sources and `model_test.go`, with the new tests), where it compiles:
+`TestSignInNamesGobble` fails, exit 1, with the same lines as the `Identity` plant (the sign-in's four requests named
+`go-llmprovider-sdk/v1.31.0`, `referrer=go-llmprovider-sdk`, the authorize URL's referrer); `TestStoredLoginNamedForRefresh`
+fails, exit 1, only in `ModelInfoWith_named_true`, as under the plant. `TestLogoutRevokesAsGobble` and
+`TestCLIPassesGobblesIdentity` do not compile there (`unknown field ClientName in struct literal of type LoginOptions`;
+`revoked.ClientName undefined (type provider.LoginOptions has no field or method ClientName)`), so the package's
+other tests could not run until the first was dropped from the scratch copy.
+
+**Gates (C6),** each exit status taken from the file it was redirected to before anything read it. The Go files were last
+modified 21:24:37 (`login.go`, `model.go`, `agent.go`, `auth.go`), 21:24:56 (`signin.go`), 21:24:42 (`model_test.go`),
+21:26:58 (`signin_test.go`), 21:27:46 (`login_test.go`), 21:27:27 (`auth_test.go`), all before every gate below:
+
+| Gate | Where | Start to end | Exit |
+| :--- | :--- | :--- | :--- |
+| `make pre-add-check FILES=` the nine changed Go files | this Mac | 21:29:38 to 21:30:07 | 0 ("9 file(s) clean (gofmt, golint, govulncheck)") |
+| `make preflight` | this Mac, under `run-heavy` | 21:30:30 to 21:37:58 | 0 ("preflight passed") |
+| `make race` | this Mac, under `run-heavy` | 21:37:58 to 21:38:41 | 0 (`internal/cli` 35.2 s and `llm/provider` 12.1 s ran, not cached) |
+| `make check-test-isolation` | this Mac, under `run-heavy` | 21:38:41 to 21:39:02 | 0 ("files written above the temp roots: 0") |
+| `go test -count=1 ./...`, `CGO_ENABLED=1 go test -race -count=1 ./...`, `go -C acpext test -count=1 ./...` | the Linux machine itself (`pick-host` excluded the WSL distro for a race run), scratch copy, `run-on-host --need linux --race`, `sh -c` | 21:30:30 to 21:34:23 | 0, 0, 0 |
+| the same three | the Windows laptop, scratch copy, `run-on-host --need windows --race`, `sh -c` | 21:30:30 to 21:32:38 | 0, 0, 0 |
+
+C6 names the two cross-host runs for P2, P4, P6 and P8, not P2a. This phase edits `llm/provider` and `internal/cli`,
+whose tests start loopback servers and a process-wide SDK cache, so both were run and both are recorded: they are extra,
+not required by C6 for this phase. Heavy runs on this Mac went through `run-heavy` one at a time. The scratch plant
+runs and one `-race` run of the three provider tests (before the plants) were single-package runs on this Mac.
+*(2026-11-14, later: that `-race` run was a process deviation. By the global rules any `-race` run is a heavy run and
+goes through `run-heavy` or `run-on-host`; this one did not. It is not repeated; see "Deviations of P2a", 3.)*
+
+The identifier scan and `make check-records markdownlint` ran last, over the staged diff with this record in it; see the
+results line at the end of this record.
+
+**Acceptance.**
+
+* The four tests pass and each plant failed, above. Met.
+* Outside tests, `RevokeOAuthSession` is called only in `Logout`, after `UseIdentity`, and `UseIdentity` is called
+  nowhere else: `grep -rn 'RevokeOAuthSession\|UseIdentity' --include=*.go .`, test files left out, finds
+  `llm/provider/login.go:115` (`s.UseIdentity(...)`), `:116` (`auth.RevokeOAuthSession(ctx, s)`) and a doc comment at
+  `llm/provider/model.go:156` ("UseIdentity itself", saying gobble calls none). Met.
+* `go.mod` and `go.sum` unchanged from P2: `git diff --stat 1e0a912 -- go.mod go.sum` printed nothing. Met.
+
+**Docs step.** `grep -rniE 'user-agent|referrer|client ?name|ClientInfo|revok|originator'` over `README.md`, `AGENTS.md`
+and `docs/` outside `docs/decisions/`, and a read of `docs/guides/credentials.md` and the `llm/provider` row of
+`docs/architecture.md`. Nothing states what name gobble sends on a sign-in, a refresh, a lookup or a revocation, so
+nothing is made false; the user-facing description is missing, not wrong, and the credentials guide and the
+architecture row are in the PLAN's docs phase's files, not this one's. This repository keeps no changelog.
+*(2026-11-14, later: superseded by C9 and "Deviations of P2a", 2: the three documents are fixed in this phase.)*
+The doc comments of every name added or changed are in the phase's files and written (items 1 to 3).
+
+**Not verified.** A live refusal of the name by xAI is the owner-run L1's (P8), not this phase's. The Windows laptop's and
+Linux machine's results are from scratch copies of the working tree, not of a commit.
+
+**Deviations of P2a (2026-11-14, the owner's rulings on the hand-back, relayed by the cross-repository coordinator).**
+
+1. **The capture in `TestStoredLoginNamedForRefresh`.** The step 4 table says "every capturing transport given as the
+   options' `HTTPClient`". The test records at the in-process issuer's handler instead (`uaRecorder.atIssuer`, in
+   `signin_test.go`), and gives the options' `HTTPClient` only a redirecting transport. The owner chose "Accept, as a
+   recorded deviation": "Keep the issuer-side recording for that one test and relabel it in the plan as a dated
+   deviation with the evidence (the failed first attempt, and the line that builds the session with no client). No code
+   changes; it observes every request, so the evidence is at least as strong." Rejected: "Make the session use the
+   options' client". Evidence: the first attempt, with a recording `HTTPClient`, failed `ModelInfoWith_named_true` with
+   `login_test.go:410: ModelInfoWith: no refresh among [{method:GET path:/v1/models userAgent:gobble/1.2.3-test (darwin; arm64) go-llmprovider-sdk/v1.31.0 form:}]`:
+   the listing went through the options' client and the refresh did not. The line that builds a stored login's session
+   with no client is `llm/provider/provider.go:107`, `return l.session(id, o.Logins, nil, o.Logger), nil`, in
+   `Options.login`, which `ModelInfoWith`, `New` and `List` all use; `(*Login).session` sets `HTTPClient` from that
+   argument (`login.go`), so the session has none, and the SDK refreshes it through its own client. `grep -rn
+   HTTPClient --include=*.go .` with the test files and `llm/provider/` left out finds nothing: no non-test code outside
+   `llm/provider` passes a custom `HTTPClient` to these options.
+2. **Three user documents join P2a's scope (C9).** The owner chose "Always in the same commit" (C9 above). The docs step
+   found three places that did not say what name gobble sends, which this phase makes true; each is now added, checked
+   against the code and the four tests: the sign-in, a stored login's refresh, a model lookup and a sign-out's discovery
+   and revocation name gobble and the build's version in their User-Agent; the sign-in's authorize and device requests
+   carry `referrer=gobble` (`TestSignInNamesGobble`); gobble sends no `originator` (0051-MADR D9, N11). Nothing is said
+   of a vendor accepting the name: that is P8's owner-run probe.
+   * `README.md`, the Credentials bullet of the stack list: three lines after "copies Pi's entries.".
+   * `docs/guides/credentials.md`, "Signing in": a paragraph after the Kilo bullet; and the logout paragraph's sentence.
+   * `docs/architecture.md`, the `llm/provider` row of the packages table: three sentences after "a `LoginStore` adapted
+     to the SDK's token store.".
+   The rows of the docs step are in the hand-back. The Kilo sign-in's requests are said nowhere: only Grok's were seen
+   under test.
+3. **A `-race` run outside the queue.** The single-package `-race` run of the three provider tests on this Mac, before
+   the plants, did not go through `run-heavy` or `run-on-host`, which the global rules require of any `-race` run. It
+   is recorded here as a process deviation and is not repeated; the `-race` evidence of the phase is `make race` under
+   `run-heavy` and the Linux machine's and the Windows laptop's `run-on-host --race` runs.
+
+**Results of the last gates (after the deviations' file changes).** No Go file changed after the gates above: the Go files'
+last-modified times are those listed there (21:24:37 to 21:27:46), all before the race and cross-host runs, so
+`make race`, `make check-test-isolation` and the Linux machine's and the Windows laptop's runs stand. Reran, each exit
+status taken from its log before anything read it: `make preflight` under `run-heavy`, exit 0 ("preflight passed"),
+22:03:41 to 22:10:57 (tracked Markdown changed; preflight lints it); `make check-records markdownlint`, exit 0
+("Summary: 0 issues in 0 files"), run once before and once after this paragraph; the identifier scan of the staged
+diff's added lines for the local account name, the host names, home, temporary and dev-host scratch paths, run-heavy
+ticket shapes and mail addresses found nothing (`grep` exit 1), and found the one line of a copy with planted values
+(count 1). The only text added after preflight began is this paragraph.
