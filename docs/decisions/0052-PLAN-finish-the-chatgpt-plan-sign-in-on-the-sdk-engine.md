@@ -1,6 +1,6 @@
 ---
 status: in-progress
-date: 2026-11-13
+date: 2026-11-15
 associated-madr: "0052-MADR-finish-the-chatgpt-plan-sign-in-on-the-sdk-engine.md"
 ---
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
@@ -321,8 +321,12 @@ SDK's session through `Login` and `auth.json`. In that window `v1.31.0`'s sign-i
 drops it, as it would have without the split, and `SessionKind()` infers the kind of a session saved without one
 (0074 D5). No sign-in that answers a consent is offered in it: the first is 0051-PLAN P4, committed with P3, which
 needs P2-2.
+*(2026-11-15: the gap is closed by P2-2's commit. `loginOf` and `session` carry `Kind` and `Consents`, and
+`TestLoginCarriesEverySessionField` guards the round trip of every stored field of the SDK's session, through
+`auth.json`; see "P2-2 record (2026-11-15)".)*
 
-Files added to this phase: none. Moved out: step 4's (`llm/provider/login.go`'s `sdkStore` as `auth.ClientStore`;
+Files added to this phase: none *(2026-11-15: P2-2 adds `llm/provider/export_test.go` and the test's file, by
+"Deviation 2 (2026-11-15)" in its record)*. Moved out: step 4's (`llm/provider/login.go`'s `sdkStore` as `auth.ClientStore`;
 `llm/provider/signin.go`'s `SignInOptions.HostID` and `wizard.Options.HostID`; `TestClientStoreAdapter`), to
 0051-PLAN P6 step 1a.
 
@@ -851,3 +855,98 @@ tagged. Scratch logs are under `<TMP>` (the session's scratch directory).
 
 Staged: the nine Go files and this PLAN. P2-1's acceptance, "the tests pass, each plant failed; `go.mod` and `go.sum`
 unchanged; `session`, `loginOf`, `sdkStore` and `signin.go` as they were", is met.
+
+### P2-2 record (2026-11-15)
+
+C1: branch `main`, `HEAD` `4497fad`, the tree clean at the start, `origin/main` equal to it; `go.mod` requires
+go-llmprovider-sdk `v1.31.0`. The agent stages; the owner commits. Nothing was committed, pushed or tagged. Scratch
+logs are under `<TMP>`.
+
+#### Deviation 2 (2026-11-15): the test needs a test-only export file
+
+* **Found,** before any edit, when P2-2's step 2 was read against the tree. P2's step 5 row asks
+  `TestLoginCarriesEverySessionField` (`llm/provider`) to carry every stored field through `loginOf`, `Logins.Save`,
+  `auth.json`, `Logins.Load` and `session`. `Logins` is in `internal/auth`, and `internal/auth/logins.go:9` imports
+  `llm/provider`, so a test in `package provider` that imports `internal/auth` is an import cycle. `session` and
+  `loginOf` are unexported (`llm/provider/login.go`), so a test in `package provider_test`, which may import
+  `internal/auth`, cannot call them. No exported function gives the round trip: `session` is reached only through
+  `Logout`, `provider.go`'s session builder and `sdkStore`; `loginOf` only through `sdkStore.Save`, which is unexported.
+  `llm/provider` had no `export_test.go`. The PLAN did not foresee it.
+* **Resolutions put to the owner:** (1) a test-only `llm/provider/export_test.go` exposing `session` and `loginOf` to
+  the external test package, the test written there against the real `internal/auth` store; (2) an in-package test
+  over `memLogins`, which leaves `Logins` and `auth.json` out of the chain; (3) the test in `internal/auth`, which still
+  needs the two functions exposed.
+* **Ruling (the owner, 2026-11-15, put by the coordinator):** "Test-only export file": "Add
+  llm/provider/export_test.go, a test-only file that exposes session and loginOf to the external test package, and
+  write the test there against the real internal/auth store over a scratch auth.json. The plan's full chain is tested
+  as written; one test-support file joins the phase's scope by a dated deviation; no production effect. The agent first
+  confirms the import-rule check and the test-isolation check accept it." Rejected: "In-package test, no auth.json";
+  "Put the test in internal/auth".
+* **Files added to this phase:** `llm/provider/export_test.go`, and the test's own file in `llm/provider`.
+
+1. **The SDK's declarations, read at `v1.31.0` (`llmprovider/auth/tokenstore.go`).** `:49` `Kind SessionKind`; `:56`
+   `Consents   string`; `:101` `type SessionKind string`, with the constants at `:109-112` (`"chatgpt"`,
+   `"chatgpt_plan"`, `"grok"`, `"kilo_device"`). `Consents` is a plain string, "space-separated `<id>=granted` or
+   `<id>=declined` entries sorted by id", kept a string so the struct stays comparable. `provider.Login.Consents` is a
+   `string`, so the mapping is a copy both ways, with no parsing; `Login.Kind` is a `string` and `OAuthSession.Kind` an
+   `auth.SessionKind`, so it is a conversion both ways.
+2. **Step 1, `llm/provider/login.go`.** `session` sets `Kind: auth.SessionKind(l.Kind)` and `Consents: l.Consents`;
+   `loginOf` sets `Kind: string(s.Kind)` and `Consents: s.Consents`; the doc comments say so. No other production code
+   changed; `sdkStore` and `signin.go` are untouched.
+3. **Step 2, the test.** `TestLoginCarriesEverySessionField`, in `llm/provider/login_fields_test.go`
+   (`package provider_test`), with `llm/provider/export_test.go` (`SessionOf` and `LoginOf`, the two unexported
+   functions the external package needs; nothing else). The test:
+   * reads the exported fields of `auth.OAuthSession` by reflection and sets each to a value of its own (a string
+     `v<Field>`, `true`, a distinct millisecond time); `Provider` is set to the store key, since it is stored as the key;
+   * saves that session through the SDK's own `FileTokenStore` and reads the file's members. **A field is "stored" when
+     its member is in that file** (names compared lower case without underscores), so the SDK's code, not a list kept
+     here, says which fields are stored. The collaborators `Store`, `HTTPClient` and `Logger` are interfaces and
+     pointers and are not filled, by kind and not by name; any other exported field of a kind the test cannot fill fails
+     it, and so does a file member that matches no field;
+   * checks `Kind`, `Consents`, `Access` and `HostID` are among the stored fields, so the reflection cannot pass by
+     finding nothing;
+   * runs the stored fields through `LoginOf`, the real `internal/auth` `Logins.Save`, an `auth.json` in a temporary
+     directory, `Logins.Load` and `SessionOf`, and fails naming each field that differs.
+   `make archtest` and `make check-test-isolation` accepted a `provider_test` file importing `internal/auth`, on a scratch
+   copy with a minimal such file, before the test was built on it (both exit 0; archtest reads `XTestImports`).
+4. **Plants, each seen failing on a scratch copy (C2); the tree was never dirtied.** Each built (exit 0) and failed the
+   one test, run again after the last edit to the test file; paths in the output are `<TMP>`-relative:
+
+   | Planted break | Failure seen |
+   | :--- | :--- |
+   | the tree before the phase (`login.go` as committed) | `login_fields_test.go:123: OAuthSession.Kind: set vKind, came back ` and `:123: OAuthSession.Consents: set vConsents, came back ` |
+   | `Consents` left out of `loginOf` | `login_fields_test.go:123: OAuthSession.Consents: set vConsents, came back ` |
+   | `Kind` left out of `session` | `login_fields_test.go:123: OAuthSession.Kind: set vKind, came back ` |
+   | `consents` left out of `oauthFields` (`internal/auth/store.go`, P2's row) | `login_fields_test.go:123: OAuthSession.Consents: set vConsents, came back ` |
+   | the reflection's own job: `Scope` left out of `loginOf` | `login_fields_test.go:123: OAuthSession.Scope: set vScope, came back ` |
+
+   Every existing test of `llm/provider` passes unchanged (`make race` ran the package).
+5. **Gates (C6),** every one after the last Go file change (the last edit was `login_fields_test.go` at 10:06:08):
+
+   | Gate | Where | Exit | Start to end |
+   | :--- | :--- | :--- | :--- |
+   | `make pre-add-check FILES=` the three Go files | this Mac | 0, "3 file(s) clean (gofmt, golint, govulncheck)" | 10:06:55 to 10:07:03 |
+   | `make preflight` | the Linux machine, by `run-on-host` | 0, "preflight passed" | 10:07:20 to 10:19:09 |
+   | `make race` | this Mac, by `run-on-host --race` | 0, `llm/provider` and `acpserver` ran, the rest cached | 10:19:09 to 10:19:56 |
+   | `make check-test-isolation` | the Linux machine, by `run-on-host` | 0, "0 failing", "files written above the temp roots: 0" | 10:19:56 to 10:21:24 |
+
+   No WSL distro ran anything. No cross-host run of C6's P2, P4, P6 and P8 kind was named for this phase, and none was
+   run: the change is two fields in two functions and a test, and the full-suite hosts above ran the package.
+6. **Deviation 3 (2026-11-15): a gate failure in the new test, fixed in the file.** The first `make preflight` (the
+   Linux machine, 09:54:05 to 10:05:36, exit 2) failed at golangci-lint:
+   `llm/provider/login_fields_test.go:4:2: import 'encoding/json' is not allowed from list 'json': use jsonx, on
+   encoding/json/v2 (0039-MADR D24) (depguard)`. The finding was in this phase's new file. It was fixed by importing
+   `jsonx` and calling `jsonx.Unmarshal`, the repository's own rule, with no `nolint`; every gate above ran after it, and
+   the plants were run again after it.
+7. **Acceptance.** The test passes, and the tree before the phase and each of four planted breaks failed it, as above;
+   `git diff --stat 4497fad -- go.mod go.sum` is empty (exit 0, no output).
+8. **Docs (C9).** No user document is affected: nothing yet sets `Kind` or `Consents`, and `README.md`,
+   `docs/architecture.md`, `docs/guides/credentials.md` and `AGENTS.md` do not describe either member, `loginOf`,
+   `session` or `OAuthSession`. This repository keeps no changelog. This record, the note closing "The gap, the owner's
+   accepted cost", the PLAN's date and `docs/README.md`'s row are the docs changed.
+9. **Not done.** The commit (the owner's); step 4's `sdkStore` and the wizard's `HostID` (0051-PLAN P6 step 1a);
+   anything that sets `Kind` or `Consents` outside the SDK's own sign-ins.
+
+Last-modified times of the changed Go files: `llm/provider/login.go` 09:51:33, `llm/provider/export_test.go` 09:51:21,
+`llm/provider/login_fields_test.go` 10:06:08. Staged: those three, this PLAN and `docs/README.md`. Provenance:
+mainstream model, medium effort.

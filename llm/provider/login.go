@@ -121,12 +121,14 @@ func Logout(ctx context.Context, id string, o LoginOptions, store LoginStore) (r
 }
 
 // session is l as the SDK's session for provider id, saving each rotation
-// to store when it is not nil.
+// to store when it is not nil. Kind becomes the SDK's auth.SessionKind and
+// Consents, which the SDK keeps as a string, is copied (0052-PLAN P2-2).
 func (l *Login) session(id string, store LoginStore, client *http.Client, logger *slog.Logger) *auth.OAuthSession {
 	s := &auth.OAuthSession{
 		Provider: llmprovider.ProviderID(id), Access: l.Access, Refresh: l.Refresh, Expiry: l.Expires,
 		Issuer: l.Issuer, ClientID: l.ClientID, AccountID: l.AccountID, FedRAMP: l.FedRAMP, TokenURL: l.TokenURL,
 		Resource: l.Resource, Scope: l.Scope, IDToken: l.IDToken, HostID: l.HostID,
+		Kind: auth.SessionKind(l.Kind), Consents: l.Consents,
 		HTTPClient: client, Logger: logger,
 	}
 	if store != nil {
@@ -135,12 +137,14 @@ func (l *Login) session(id string, store LoginStore, client *http.Client, logger
 	return s
 }
 
-// loginOf is the SDK session s as a Login.
+// loginOf is the SDK session s as a Login, with its Kind and Consents, so a
+// refresh's save keeps both (0052-PLAN P2-2).
 func loginOf(s *auth.OAuthSession) *Login {
 	return &Login{
 		Access: s.Access, Refresh: s.Refresh, Expires: s.Expiry,
 		Issuer: s.Issuer, ClientID: s.ClientID, AccountID: s.AccountID, TokenURL: s.TokenURL, FedRAMP: s.FedRAMP,
 		Resource: s.Resource, Scope: s.Scope, IDToken: s.IDToken, HostID: s.HostID,
+		Kind: string(s.Kind), Consents: s.Consents,
 	}
 }
 
