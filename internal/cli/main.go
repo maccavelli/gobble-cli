@@ -133,6 +133,42 @@ func misplacedFlag(k *kong.Kong, kctx *kong.Context) error {
 	return nil
 }
 
+// jsonLoginParseFailure writes a command line Kong refused as the failed step
+// gobble auth login --json prints for a usage error, and nothing on stderr,
+// and returns the exit code, when the parser's own context shows that the
+// selected command is auth login and that --json was read as true before
+// Kong stopped (0051-MADR D5; 0051-PLAN P5 step 2; the owner's ruling,
+// relayed by the coordinator, "Emit the failed step from the parser's own
+// context"). A --json after the argument Kong rejects is never read, so such
+// a command line gets Kong's text on stderr. The step is written by
+// jsonSteps.fail, as every other failed step is. The provider the person
+// named is not known to the context at a parse error, so the line's provider
+// is empty.
+func jsonLoginParseFailure(err error, out *Output) (code int, ok bool) {
+	pe, isParse := errors.AsType[*kong.ParseError](err)
+	if !isParse || pe.Context == nil {
+		return 0, false
+	}
+	sel := pe.Context.Selected()
+	if sel == nil || sel.FullPath() != "gobble auth login" {
+		return 0, false
+	}
+	for _, f := range sel.Flags {
+		if f.Name != "json" {
+			continue
+		}
+		if set, isBool := pe.Context.FlagValue(f).(bool); !isBool || !set {
+			return 0, false
+		}
+		end := (&jsonSteps{out: out}).fail(usageErrorf("%v", err))
+		if ee, isExit := errors.AsType[*exitError](end); isExit {
+			return ee.code, true
+		}
+		return ExitFailure, true
+	}
+	return 0, false
+}
+
 // parse runs Kong's parser. Kong's Exit panics with exitPanic, which stops
 // parsing at once (after --help, say); parse recovers its code. done
 // reports that Main should return code without running a command.
@@ -148,6 +184,9 @@ func parse(k *kong.Kong, args []string, out *Output) (kctx *kong.Context, code i
 	}()
 	kctx, err := k.Parse(args)
 	if err != nil {
+		if code, ok := jsonLoginParseFailure(err, out); ok {
+			return nil, code, true
+		}
 		out.Errorf("%v", err)
 		out.Errorf("run 'gobble --help' for usage")
 		return nil, ExitUsage, true

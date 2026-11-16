@@ -204,10 +204,12 @@ Three providers let you sign in with your account instead of pasting a key:
   them, do not allow them (the default), or cancel the sign-in. Then it prints the sign-in URL and
   opens it; on a machine whose browser cannot reach gobble, paste the address the browser ends on when
   asked. The question is the same wherever the sign-in runs on a terminal: `/login openai`,
-  `gobble setup`, the first-run offer, and `gobble acp --login openai`. With no terminal, or with
-  `--json`, the question cannot be asked: the sign-in stops before the browser opens, saves nothing and
-  says `this sign-in asks a question, and there is no terminal to ask it on`. gobble keeps the login
-  and your answer in `auth.json`'s `openai` entry, and refreshes it as it runs.
+  `gobble setup`, the first-run offer, and `gobble acp --login openai`. With no terminal the question
+  cannot be asked: the sign-in stops before the browser opens, saves nothing and says
+  `this sign-in asks a question, and there is no terminal to ask it on`. With `--json` it is refused
+  before it starts, exit 2, unless the stored plan session already holds an answer
+  ([below](#signing-in-from-an-editor-or-magic-cli-remote)). gobble keeps the login and your answer
+  in `auth.json`'s `openai` entry, and refreshes it as it runs.
 
 gobble names itself to xAI's sign-in service in the requests it makes for a Grok login, as
 `gobble/<version>`, the running build's version, ahead of the SDK's own name: such a request's
@@ -358,27 +360,71 @@ Saved API key for claude
 gobble does not sign out over ACP; use `gobble auth logout <provider>`.
 
 A program that drives a login, as magic-cli-remote's phone flow does, runs
-`gobble auth login <provider> --json`. gobble then prints what the login shows as JSON lines on
-stdout, and nothing on stderr; the exit code is the same as without `--json`. Each line is one
-event, naming its `provider`:
+`gobble auth login <provider> --json`. gobble then prints the sign-in as the SDK's auth contract
+states it, as JSON lines on stdout, and nothing on stderr. A command line gobble cannot parse,
+such as no provider, is a usage error: one `failed` step of kind `invalid_request`, exit 2, with an
+empty `provider`, when `--json` was read before the argument the parser refused. A `--json` after
+that argument is never read, so that command line gets the parser's text on stderr and no JSON
+line. gobble opens no browser on the host and asks no question, so what a person must do, open an
+address or enter a code, is a line the program shows them. Each line names its `provider` and is
+one of two events:
 
-- `device_code`: the `url` to open, the `code` to enter there, and `expires`, in UTC, when the
-  provider gives one;
-- `browser_url`: the `url` of a browser login. gobble still opens it, and asks for no pasted URL;
-- `saved`: the credential is stored, its `type` `api_key` or `oauth`;
-- `error`: the login failed. `kind` is its class, in the words of the SDK's auth contract: `auth`,
-  `denied`, `expired`, `timeout`, `canceled`, `unavailable`, `quota`, `rate_limited`, `not_permitted`,
-  or `other`. `message` is what gobble prints without `--json`. A ChatGPT plan sign-in under `--json`
-  stops at its question: `other`, with the no-terminal message above.
+- `method`: first, the method the sign-in uses, as the contract's `method` object: its `id`, `kind`,
+  `completion`, what it `yields`, and, for a method that asks a consent, the consent and its text;
+- `step`: then one line for each step, the contract's `step` object, whose `seq` counts up from 1:
+  - `open_url`: a browser sign-in's authorize address, in `url`, for the program to show. gobble
+    opens none and asks for no pasted address, so there is no `accepts`; the sign-in ends when the
+    browser reaches the address gobble listens on, on this machine;
+  - `show_code`: a device sign-in's `url` to open and `code` to enter there, and `expires_at`
+    (RFC 3339, in this machine's time zone) when the provider gives one;
+  - `waiting`: the sign-in waits for the person;
+  - `done`: the last step of a sign-in that worked, with what it `yields`, as the sign-in's own last
+    step states it: `oauth_session` (Grok, a ChatGPT plan), `device_key` (Kilo) or `api_key`. It is
+    printed after the credential is in `auth.json`, so a `done` means it is stored;
+  - `failed`: the last step of one that did not. Its `error` has `kind`, the failure's class in the
+    words of the auth contract, `message`, the text gobble prints without `--json`, and
+    `retryable`, whether the same sign-in can succeed later: the service's own word when the failure
+    was a reply that states one, otherwise true for `rate_limited`, `offline` and `unavailable`.
+
+The earlier lines, `device_code`, `browser_url`, `saved` and `error`, are not printed any more: a
+program reads `show_code`, `open_url`, `done` and `failed` in their places. Read each line as the
+contract's `method` or `step` object: ignore a member or a word you do not know, and do not
+depend on a member being absent (a step carries `"secret":false`, and a URL's `&`, `<` and `>` are
+not escaped, so the bytes are not those of the contract's golden vectors, whose meaning they keep).
+
+A `failed` step's `kind` is one of the contract's words, which are an open set of eighteen at this
+version: gobble prints `denied`, `expired`, `canceled`, `timeout`, `auth`, `offline`, `unavailable`,
+`rate_limited`, `quota`, `not_permitted`, `workspace`, `context_overflow`, `empty_answer`,
+`incomplete`, `invalid_request`, `invalid_provider`, `unsupported` or `other`, whichever the
+failure is, and a program keeps a word it does not know. A sign-in refused or ended by the person is
+`denied`, `expired` or `canceled`. The exit code is 0 for `done`. It is 2 for two failures: a usage
+error, an unknown provider, a provider with no login, a `--method` it does not offer, no key
+given to `--api-key -` or a command line the parser refused, which is `invalid_request` with `seq`
+1 and no `method` line; and a sign-in that would ask a question, which is `unsupported`. A sign-in
+ended by a signal prints a `failed` step of kind `canceled` and exits 128 plus the signal's number:
+on Unix SIGINT, SIGTERM or SIGHUP, 130, 143 or 129; on Windows an interrupt, 130. Every other
+`failed` step exits 1. A failure that is not a usage error can also come before a method is chosen,
+such as a standard input that cannot be read under `--api-key -`: it is one `failed` step, `seq`
+1, exit 1, and no `method` line, since the `method` line comes first only in a sign-in that
+starts. The first ChatGPT plan sign-in asks its consent, and `--json` cannot answer it, so it is
+refused before it starts, after its `method` line, with nothing written and a message that names a
+terminal and an ACP client; once the plan session in `auth.json` holds an answer, granted or
+declined, `--json` signs in again without asking. Answer the question first, at a terminal with `gobble auth login openai`, or through an ACP client.
 
 With `--api-key -` on a terminal, the key is still read without echo, but with no `API key for`
-prompt:
+prompt. A device sign-in, as gobble prints it, with the address shortened:
 
 ```text
+$ gobble auth login grok --device --json
+{"event":"method","provider":"grok","method":{"schema_version":1,"id":"device_code","kind":"device_code","label":"Sign in with xAI (device code)","completion":"device","yields":"oauth_session","client_identity":"vendor_borrowed","refreshable":true,"revocable":true,"slot":"grok"}}
+{"event":"step","provider":"grok","step":{"schema_version":1,"seq":1,"kind":"show_code","url":"https://accounts.x.ai/device","code":"ABCD-1234","expires_at":"2026-11-15T17:46:09.48804-06:00","secret":false}}
+{"event":"step","provider":"grok","step":{"schema_version":1,"seq":2,"kind":"waiting","secret":false}}
+{"event":"step","provider":"grok","step":{"schema_version":1,"seq":3,"kind":"done","secret":false,"yields":"oauth_session"}}
 $ echo sk-test-only | gobble auth login anthropic --api-key - --json
-{"event":"saved","provider":"claude","type":"api_key"}
+{"event":"method","provider":"claude","method":{"schema_version":1,"id":"api_key","kind":"api_key","label":"Claude (Anthropic) API key","completion":"value","yields":"api_key","client_identity":"none","refreshable":false,"revocable":false}}
+{"event":"step","provider":"claude","step":{"schema_version":1,"seq":1,"kind":"done","secret":false,"yields":"api_key"}}
 $ gobble auth login anthropic --json
-{"event":"error","provider":"claude","kind":"other","message":"claude has no login; use --api-key -"}
+{"event":"step","provider":"claude","step":{"schema_version":1,"seq":1,"kind":"failed","secret":false,"error":{"kind":"invalid_request","message":"claude has no login; use --api-key -","retryable":false}}}
 ```
 
 ## Importing Pi's credentials

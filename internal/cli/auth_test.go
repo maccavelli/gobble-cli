@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"iter"
-	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -485,69 +484,29 @@ func TestAuthLoginKilo(t *testing.T) {
 	}
 }
 
-// gobble auth login --json prints decision 6's events, one JSON object a
-// line on stdout, and nothing on stderr: the device and browser events,
-// then saved; a failure is the error event, with its kind, the message
-// gobble prints without --json, and the exit unchanged; a browser login
-// offers no paste (0005-PLAN F4-3c decision 6).
+// gobble auth login --json prints the contract's method and steps, one JSON
+// object a line on stdout, and nothing on stderr, whatever the log level and
+// even when the log file cannot be opened; a settings warning goes to the log
+// file, never stderr; and on a terminal a browser sign-in offers a paste only
+// without --json (0051-MADR D5, which amends 0005-PLAN F4-3c decision 6).
+// The lines themselves are held by TestAuthLoginJSONSteps and its siblings,
+// against the real wizard; the retired events are held by their strict decode.
 func TestAuthLoginJSON(t *testing.T) {
-	c := newCfgEnv(t)
-	replace(t, &openURL, func(context.Context, string) error { return errors.New("no browser") })
-	const authorize = "https://auth.x.ai/oauth2/authorize?state=s"
-	var pasted []bool
-	replace(t, &signInWith, browserThenDevice(authorize, &pasted))
+	c, _, _ := issuerEnv(t)
 	// A state directory that is a file fails the log file, whose warning
 	// would reach stderr.
 	c.write(filepath.Join(c.dir, "state-file"), "")
 	t.Setenv("GOBBLE_STATE_DIR", filepath.Join(c.dir, "state-file"))
-	for _, tc := range []struct {
-		args  []string
-		stdin string
-		code  int
-		lines []string
-	}{
-		{[]string{"grok", "--device"}, "", ExitOK, []string{
-			`{"event":"device_code","provider":"grok","url":"https://accounts.x.ai/device","code":"ABCD-1234","expires":"2026-10-15T12:00:00Z"}`,
-			`{"event":"saved","provider":"grok","type":"oauth"}`}},
-		{[]string{"grok"}, "", ExitOK, []string{
-			`{"event":"browser_url","provider":"grok","url":"` + authorize + `"}`,
-			`{"event":"saved","provider":"grok","type":"oauth"}`}},
-		{[]string{"kilo"}, "", ExitOK, []string{
-			`{"event":"device_code","provider":"kilo","url":"https://app.kilo.ai/device","code":"KILO-1"}`,
-			`{"event":"saved","provider":"kilo","type":"api_key"}`}},
-		{[]string{"anthropic", "--api-key", "-"}, "sk-test-only\n", ExitOK, []string{`{"event":"saved","provider":"claude","type":"api_key"}`}},
-		{[]string{"anthropic"}, "", ExitUsage, []string{`{"event":"error","provider":"claude","kind":"other","message":"claude has no login; use --api-key -"}`}},
-		{[]string{"ollama"}, "", ExitUsage, []string{`{"event":"error","provider":"ollama","kind":"other","message":"unknown provider \"ollama\": one of ` +
-			strings.Join(provider.KeyProviders(), ", ") + `"}`}},
-	} {
-		args := append([]string{"--log-level", "debug", "auth", "login", "--json"}, tc.args...)
-		r := c.runStdin(stdinFile(t, tc.stdin), args...)
-		if want := strings.Join(tc.lines, "\n") + "\n"; r.code != tc.code || r.stdout != want || r.stderr != "" {
-			t.Errorf("%q: exit %d, stdout %q, stderr %q; want %d, %q, nothing", tc.args, r.code, r.stdout, r.stderr, tc.code, want)
-		}
+	r := c.run("--log-level", "debug", "auth", "login", "--json", "grok", "--device")
+	if r.code != ExitOK || r.stderr != "" || len(jsonLines(t, r.stdout)) != 4 {
+		t.Errorf("a device login at debug level: exit %d, stdout %q, stderr %q; want 0, four lines, nothing on stderr", r.code, r.stdout, r.stderr)
 	}
-	if got := c.read(c.authFile()); !strings.Contains(got, `"access": "a-browser"`) || !strings.Contains(got, `"key": "sk-test-only"`) {
+	r = c.runStdin(stdinFile(t, "sk-test-only\n"), "--log-level", "debug", "auth", "login", "--json", "anthropic", "--api-key", "-")
+	if r.code != ExitOK || r.stderr != "" || len(jsonLines(t, r.stdout)) != 2 {
+		t.Errorf("a key at debug level: exit %d, stdout %q, stderr %q; want 0, two lines, nothing on stderr", r.code, r.stdout, r.stderr)
+	}
+	if got := c.read(c.authFile()); !strings.Contains(got, `"access": "access-1"`) || !strings.Contains(got, `"key": "sk-test-only"`) {
 		t.Errorf("auth.json:\n%s", got)
-	}
-
-	// A failed login's message is what gobble prints without --json.
-	replace(t, &signInWith, func(context.Context, string, provider.Prompter, provider.SignInOptions, provider.LoginStore) (provider.Credential, error) {
-		return provider.Credential{}, fmt.Errorf("grok sign-in: %w", llm.ErrAuth)
-	})
-	text := c.run("auth", "login", "grok")
-	msg, ok := strings.CutPrefix(strings.TrimSuffix(text.stderr, "\n"), "Error: ")
-	if text.code != ExitFailure || !ok {
-		t.Fatalf("without --json: exit %d, stderr %q", text.code, text.stderr)
-	}
-	want, err := json.Marshal(map[string]string{"event": "error", "provider": "grok", "kind": "auth", "message": msg})
-	if err != nil {
-		t.Fatal(err)
-	}
-	r := c.run("auth", "login", "grok", "--json")
-	var got, wantMap map[string]string
-	if r.code != ExitFailure || r.stderr != "" || strings.Count(r.stdout, "\n") != 1 ||
-		json.Unmarshal([]byte(r.stdout), &got) != nil || json.Unmarshal(want, &wantMap) != nil || !maps.Equal(got, wantMap) {
-		t.Errorf("a failed login: exit %d, stdout %q, stderr %q; want 1 and %s", r.code, r.stdout, r.stderr, want)
 	}
 
 	// A settings warning goes to the log file, never stderr.
@@ -567,22 +526,23 @@ func TestAuthLoginJSON(t *testing.T) {
 		t.Errorf("a settings warning: exit %d, stderr %q, log %q", r.code, r.stderr, log)
 	}
 
-	// On a terminal, the browser login offers a paste only without --json.
+	// On a terminal, the browser login offers a paste, and prints no steps,
+	// only without --json.
 	for _, j := range []bool{false, true} {
 		var out, errw bytes.Buffer
 		o := &Output{out: &out, err: &errw, caps: term.Caps{In: true}}
 		e := &runEnv{ctx: t.Context(), out: o, stdin: stdinFile(t, ""), logs: &lazyLog{out: o, stderr: &errw}}
-		pasted = nil
+		var pasted, stepped []bool
 		replace(t, &signInWith, func(ctx context.Context, id string, _ provider.Prompter, o provider.SignInOptions, store provider.LoginStore) (provider.Credential, error) {
-			pasted = append(pasted, !o.NoPaste)
+			pasted, stepped = append(pasted, !o.NoPaste), append(stepped, o.Steps != nil)
 			return provider.Credential{}, store.Save(ctx, id, &provider.Login{Access: "a", Refresh: "r"})
 		})
 		err := (&AuthLoginCmd{Provider: "grok", JSON: j}).Run(e)
 		if cerr := e.logs.close(); cerr != nil {
 			t.Error(cerr)
 		}
-		if err != nil || !slices.Equal(pasted, []bool{!j}) {
-			t.Errorf("--json %t on a terminal: %v, paste offered %v", j, err, pasted)
+		if err != nil || !slices.Equal(pasted, []bool{!j}) || !slices.Equal(stepped, []bool{j}) {
+			t.Errorf("--json %t on a terminal: %v, paste offered %v, steps asked for %v", j, err, pasted, stepped)
 		}
 	}
 }

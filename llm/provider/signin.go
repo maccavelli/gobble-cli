@@ -66,6 +66,16 @@ type SignInOptions struct {
 	ShowDeviceCode func(DeviceCode) error
 	// OpenURL is given a browser sign-in's URL, after the Prompter was told it.
 	OpenURL func(string) error
+	// Steps is given each step of the sign-in as the SDK's auth contract
+	// states it, for a caller with no terminal, such as one that prints them:
+	// the steps that show something (open_url, show_code, waiting), in order,
+	// never the last one, done or failed, which the caller states once it has
+	// stored the result. It takes the place of ShowDeviceCode and OpenURL,
+	// which are then not called. No paste is asked, and a step that asks
+	// (paste, confirm or form) ends the sign-in with ErrAsks, as an error of
+	// the kind unsupported. An error from Steps ends the sign-in and is
+	// returned as it is (0051-MADR D3, D5).
+	Steps func(authcontract.Step) error
 }
 
 // Credential is what a sign-in gives: an API key to store, or none when it
@@ -77,6 +87,10 @@ type Credential struct {
 	// Workspace is the Anthropic workspace the wizard asked for, for a
 	// Claude key not scoped to one (0035-MADR D5).
 	Workspace string
+	// Yields is what the SDK's last step, done, says the sign-in left, when
+	// SignIn ran with Steps: the caller states it in its own done step. Empty
+	// otherwise.
+	Yields authcontract.Yields
 }
 
 // Methods are provider id's offered ways to sign in (Offered), as --method
@@ -118,13 +132,138 @@ type SignInError struct {
 }
 
 func (e *SignInError) Error() string {
-	if e.Keys > 0 {
+	switch {
+	case e.Keys > 0:
 		return fmt.Sprintf("%s refused %d keys; none was saved", e.ID, e.Keys)
+	case errors.Is(e.err, ErrAsks):
+		return fmt.Sprintf("%s sign-in: %s", e.ID, asksText)
 	}
 	return fmt.Sprintf("%s sign-in failed (%s)", e.ID, ErrorKind(e))
 }
 
 func (e *SignInError) Unwrap() error { return e.err }
+
+// asksText is why a sign-in that asks a question cannot run for a caller that
+// only reads its steps: gobble's words, naming the ways that can ask
+// (0051-MADR D5).
+const asksText = "this sign-in asks a question, which a program that reads its steps cannot answer; " +
+	"sign in at a terminal (gobble auth login), or from an ACP client"
+
+// Retryable reports whether the same sign-in can succeed later, as the SDK's
+// own failed step states it for the same error: the API error's Retryable
+// when err holds one, which honours the service's x-should-retry and a final
+// reply, and otherwise whether the kind is rate_limited, offline or
+// unavailable (signinflow.Failure at go-llmprovider-sdk v1.31.0).
+func Retryable(err error) bool {
+	if ae, ok := errors.AsType[*llmprovider.APIError](err); ok {
+		return ae.Retryable()
+	}
+	switch ErrorKind(err) {
+	case string(authcontract.FailureRateLimited), string(authcontract.FailureOffline), string(authcontract.FailureUnavailable):
+		return true
+	}
+	return false
+}
+
+// ErrAsks is a sign-in that must ask a question (a consent's confirm, a
+// form, a paste) of a caller that only reads steps, SignInOptions.Steps'.
+// It is an error of the SDK's kind unsupported, and SignIn returns it inside
+// a *SignInError whose text is asksText, so ErrorKind reads it as the
+// contract does.
+var ErrAsks = fmt.Errorf("%w: a sign-in asks a question", llmprovider.ErrUnsupported)
+
+// asked is the *SignInError of provider id's sign-in refused for ErrAsks.
+func asked(id string) error {
+	return &SignInError{ID: id, err: mapError(ErrAsks)}
+}
+
+// stepDriver is the wizard's step driver for SignInOptions.Steps: it gives
+// each step that shows something to steps, answers none, refuses the steps
+// that ask, and swallows the last step, which the caller states after the
+// result is stored (0051-MADR D3).
+type stepDriver struct {
+	steps func(authcontract.Step) error
+	// done, when not nil, is given what the SDK's done step says the sign-in
+	// yielded.
+	done func(authcontract.Yields)
+}
+
+func (d stepDriver) SignInStep(_ context.Context, _ llmprovider.ProviderID, s authcontract.Step) (authcontract.Answer, error) {
+	switch s.Kind {
+	case authcontract.StepPaste, authcontract.StepConfirm, authcontract.StepForm:
+		return authcontract.Answer{}, ErrAsks
+	case authcontract.StepDone:
+		if d.done != nil {
+			d.done(s.Yields)
+		}
+		return authcontract.Answer{}, nil
+	case authcontract.StepFailed:
+		return authcontract.Answer{}, nil
+	}
+	if err := d.steps(s); err != nil {
+		return authcontract.Answer{}, &ownError{err}
+	}
+	return authcontract.Answer{}, nil
+}
+
+// OfferedMethod is provider id's offered method that --method's word names,
+// as the SDK's facts give it.
+func OfferedMethod(id, word string) (authcontract.Method, bool) {
+	sdk, ok := methodIDs[word]
+	if !ok {
+		return authcontract.Method{}, false
+	}
+	for _, m := range Offered(id) {
+		if m.ID == string(sdk) {
+			return m, true
+		}
+	}
+	return authcontract.Method{}, false
+}
+
+// CheckNoQuestion refuses, before it starts, a sign-in of provider id by
+// --method's word method that would ask a consent the stored session has
+// not answered, for a caller that only reads steps and cannot answer
+// (0051-MADR D5; 0052-MADR D2): the offered method has a required consent
+// that provider id's stored session of that method holds no answer to, a
+// session the SDK would otherwise carry the answer from. The refusal is a
+// *SignInError holding ErrAsks. A method with no such consent, an
+// unoffered one, and a sign-in the stored session has answered pass. A store
+// that cannot be read is its error.
+func CheckNoQuestion(ctx context.Context, id, method string, store LoginStore) error {
+	m, ok := OfferedMethod(id, method)
+	if !ok {
+		return nil
+	}
+	for _, c := range m.Consents {
+		if !c.Required {
+			continue
+		}
+		answered, err := consentAnswered(ctx, store, id, m, c.ID)
+		if err != nil {
+			return err
+		}
+		if !answered {
+			return asked(id)
+		}
+	}
+	return nil
+}
+
+// consentAnswered reports whether provider id's stored session, signed in by
+// method m, holds an answer, granted or declined, to consent.
+func consentAnswered(ctx context.Context, store LoginStore, id string, m authcontract.Method, consent string) (bool, error) {
+	l, err := store.Load(ctx, id)
+	if err != nil {
+		return false, err
+	}
+	stored, ok := storedMethod(id, l)
+	if !ok || stored.ID != m.ID {
+		return false, nil
+	}
+	_, answered := l.session(id, nil, nil, nil).Consent(consent)
+	return answered, nil
+}
 
 // identityOf is the application o names to the identity providers: its
 // ClientName and ClientVersion as the SDK's auth.Identity. SignIn gives it to
@@ -138,9 +277,16 @@ func identityOf(o Options) auth.Identity {
 // (0031-MADR D7): its methods, as gobble offers them, asked through p; a
 // session saved in store; a typed key checked by a listing and asked for
 // again while refused. gobble's own provider menu chooses id. An error of
-// p's, ShowDeviceCode's or OpenURL's is returned as it is; any other is a
-// *SignInError. Every request of the sign-in, and the session it keeps, name
-// o's ClientName and ClientVersion (identityOf; 0051-MADR D9).
+// p's, ShowDeviceCode's, OpenURL's or Steps' is returned as it is; any other
+// is a *SignInError, so ErrorKind reads the SDK's word for it (0051-MADR D6).
+// Four errors are not: the context's own error when it ended the sign-in, which
+// ErrorKind words canceled or timeout; a Prompter's error, such as a sign-in
+// that asks with no terminal, which is whatever llm.Kind says of it, other
+// for most; and two errors before the wizard starts, a provider that takes no
+// key and a method it does not offer, which are other and which a caller that
+// checks Methods first never meets. Every request of the sign-in, and the
+// session it keeps, name o's ClientName and ClientVersion (identityOf;
+// 0051-MADR D9).
 func SignIn(ctx context.Context, id string, p Prompter, o SignInOptions, store LoginStore) (Credential, error) {
 	d, ok := keyProvider(id)
 	if !ok {
@@ -164,6 +310,18 @@ func SignIn(ctx context.Context, id string, p Prompter, o SignInOptions, store L
 	if o.OpenURL != nil {
 		open = func(u string) error { return w.mark(o.OpenURL(u)) }
 	}
+	var driver wizard.StepDriver
+	var yielded authcontract.Yields
+	if o.Steps != nil {
+		// The SDK calls ShowDeviceCode for a device sign-in only without a
+		// driver, so a show_code step is what says the key came from one.
+		driver = stepDriver{func(s authcontract.Step) error {
+			if s.Kind == authcontract.StepShowCode {
+				device = true
+			}
+			return o.Steps(s)
+		}, func(y authcontract.Yields) { yielded = y }}
+	}
 	listing := append([]llmprovider.Option{
 		llmprovider.WithClientInfo(o.ClientName, o.ClientVersion),
 		llmprovider.WithoutModelMetadata(),
@@ -180,7 +338,8 @@ func SignIn(ctx context.Context, id string, p Prompter, o SignInOptions, store L
 		ShowDeviceCode:   show,
 		SkipMethods:      skips(d, o.Method),
 		NoEndpointPrompt: true,
-		NoPastePrompt:    o.NoPaste,
+		NoPastePrompt:    o.NoPaste || o.Steps != nil,
+		Driver:           driver,
 		AgentName:        AgentName,
 		ConsentText:      ConsentText,
 		Identity:         identityOf(o.Options),
@@ -199,9 +358,9 @@ func SignIn(ctx context.Context, id string, p Prompter, o SignInOptions, store L
 		return Credential{}, e
 	}
 	if res.Kind == wizard.CredOAuth {
-		return Credential{}, nil
+		return Credential{Yields: yielded}, nil
 	}
-	return Credential{Key: res.APIKey, Device: device, Workspace: res.Workspace}, nil
+	return Credential{Key: res.APIKey, Device: device, Workspace: res.Workspace, Yields: yielded}, nil
 }
 
 // ownError is an error of the caller's, a Prompter's or a callback's, which

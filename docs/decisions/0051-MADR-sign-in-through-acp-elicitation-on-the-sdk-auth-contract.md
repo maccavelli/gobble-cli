@@ -506,13 +506,18 @@ does: `provider.SignIn` sets `wizard.Options.Identity` to the same value, which 
 
 * One JSON line first, `{"event":"method","provider":<id>,"method":<authcontract.Method>}`, then one per step,
   `{"event":"step","provider":<id>,"step":<authcontract.Step>}`, the last `done` or `failed`. A failure's
-  `step.error.kind` is the contract's (D6). A usage error is one `failed` step, `invalid_request`.
+  `step.error.kind` is the contract's (D6). A usage error is one `failed` step, `invalid_request`. *(2026-11-16: a command line the parser refuses is one too, under the note at the end of this section.)*
 * `--api-key -` with `--json` prints the method line for `api_key` and a `done` step with `yields: "api_key"`.
 * **No answer channel** (Q7 chose elicitation over `--answers`). `--json` runs with no paste (`NoPaste`), so no
   `paste` step is emitted. A method whose sign-in would ask a `confirm` or a `form` is refused before it starts, exit
   2, with a `failed` step of kind `unsupported` whose message names the ways that can ask (a terminal, an ACP client).
 * **The five old events retire** (Q21): `device_code`, `browser_url`, `saved`, `error` and [WIP] `notice`.
 * Nothing goes to stderr, the host's browser is not opened, and exit codes are unchanged.
+  *(2026-11-16, the owner's ruling of 2026-11-15, relayed by the coordinator, "Emit the failed step from the parser's own context"; 0051-PLAN's "Review of 2026-11-15 (P5), second part", deviation 2.
+  The text above stays as written. On a parse error where the selected command is `auth login` and `--json` was seen, gobble prints one `failed` step of kind `invalid_request`, with nothing on
+  stderr, exit 2. One case stays outside the sentence "Nothing goes to stderr" as written: a `--json` that comes after the argument the parser rejects is never seen, so that invocation gets
+  the parser's text on stderr and exit 2. The owner was shown, and did not choose: leaving it and amending D5 to start the guarantee once the command line parses; and inspecting the raw
+  arguments. The guide states the residue, `docs/guides/credentials.md`.)*
 
 ### D6. One error vocabulary (Q15; amends 0049-MADR D3)
 
@@ -1094,6 +1099,16 @@ this record asserted by omission.
   P6 step 1, and 0052-PLAN P4's `TestConsentWordingOverACP` guards it; both steps are annotated.
 * **A key for the run with a plan session stored:** "Keep it, and document it". 0052-MADR D2's gate stays keyed on the stored session; D2 carries a dated note with the
   consequence, and `docs/guides/credentials.md` a sentence.
+
+**Also on 2026-11-15, one ruling of the owner, relayed by the coordinator (recorded 2026-11-16),** on 0051-PLAN's P5.
+
+* **A command line the parser refuses, under `auth login --json`:** "Emit the failed step from the parser's own context". On a parse error where the selected command is `auth login` and
+  `--json` was seen, gobble prints one `failed` step of kind `invalid_request` and nothing on stderr, exit 2, written by the code that writes every other `failed` step, in
+  `internal/cli/main.go`. A `--json` that comes after the argument the parser rejects is never seen, so that invocation gets the parser's text on stderr and exit 2; the guide says so.
+  Rejected, as shown to the owner: leave it and amend D5 to start the guarantee once the command line parses; inspect the raw arguments. D5 carries a dated note, and its line on
+  usage errors a pointer; 0051-PLAN's P5 carries the record ("Review of 2026-11-15 (P5), second part", deviation 2). No decision of D1 to D9 changes.
+* **Searched, nothing else asserts it:** every occurrence of `stderr`, `usage error`, `parse` and `output-only` in this record; the context's facts about the old events (`:45-55`), Confirmation 4
+  ("prints only `method` and `step` lines") and the Neutral consequence ("`--json` stays output-only") hold as written, since the residue prints neither a line nor a question.
 
 ### Related
 

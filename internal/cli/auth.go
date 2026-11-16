@@ -14,6 +14,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/maccavelli/go-llmprovider-sdk/authcontract"
 	"github.com/maccavelli/go-tui-lib/v2/inline"
 
 	"github.com/maccavelli/gobble-cli/internal/auth"
@@ -49,7 +50,7 @@ type AuthLoginCmd struct {
 	APIKey   string `name:"api-key" complete:"none" placeholder:"-" help:"Read the key from stdin, or ask for it: -."`
 	Device   bool   `name:"device" help:"Sign in with a device code, on a machine without a browser."`
 	Method   string `name:"method" complete:"none" help:"How to sign in, with no menu: api-key (the key from stdin), browser, device or chatgpt-plan, as the provider offers."`
-	JSON     bool   `name:"json" help:"Print the login's events as JSON lines on stdout, and nothing on stderr."`
+	JSON     bool   `name:"json" help:"Print the method and the sign-in's steps as JSON lines on stdout, and nothing on stderr; a command line that fails to parse is one failed step, unless --json follows the argument that failed."`
 	// Workspace is the Anthropic workspace a Claude key not scoped to one
 	// runs in, stored beside the key (0035-MADR D5, 0035-PLAN PQ1).
 	Workspace string `name:"workspace" complete:"none" placeholder:"ID" help:"With --api-key -, the Anthropic workspace a Claude key not scoped to one runs in."`
@@ -61,36 +62,30 @@ var logoutLogin = provider.Logout
 
 // Run stores the key read for --api-key - as the provider's api_key entry,
 // or, without --api-key, signs in to the provider (0005-PLAN F4-3b). With
-// --json, its output is loginEvents' events alone: stderr's diagnostics and
-// log lines are dropped, the log file keeps the latter, and a failure is an
-// error event with the exit code unchanged (0005-PLAN F4-3c decision 6).
+// --json, its output is jsonSteps' lines alone, the contract's method and
+// steps: stderr's diagnostics and log lines are dropped, the log file keeps
+// the latter, and a failure is a failed step with the exit code unchanged
+// (0051-MADR D5, which amends 0005-PLAN F4-3c decision 6).
 func (c *AuthLoginCmd) Run(e *runEnv) error {
 	if !c.JSON {
 		return c.runWith(e, nil)
 	}
 	e.out.err = io.Discard
 	e.logs.stderr = nil
-	ev := &loginEvents{out: e.out}
-	err := c.runWith(e, ev)
-	if err == nil || errors.Is(err, errBrokenPipe) {
-		return err
-	}
 	id, ierr := keyProvider(c.Provider)
 	if ierr != nil {
 		id = c.Provider
 	}
-	code := ExitFailure
-	if ee, ok := errors.AsType[*exitError](err); ok {
-		code = ee.code
+	js := &jsonSteps{out: e.out, provider: id}
+	err := c.runWith(e, js)
+	if err == nil || errors.Is(err, errBrokenPipe) {
+		return err
 	}
-	if werr := ev.emit(loginEvent{Event: "error", Provider: id, Kind: provider.ErrorKind(err), Message: err.Error()}); werr != nil {
-		return werr
-	}
-	return &exitError{code: code}
+	return js.fail(err)
 }
 
-// runWith is Run, showing what it shows through ev when ev is not nil.
-func (c *AuthLoginCmd) runWith(e *runEnv, ev *loginEvents) error {
+// runWith is Run, showing what it shows through js when js is not nil.
+func (c *AuthLoginCmd) runWith(e *runEnv, js *jsonSteps) error {
 	e.ensureSettingsFile()
 	id, err := keyProvider(c.Provider)
 	if err != nil {
@@ -114,7 +109,7 @@ func (c *AuthLoginCmd) runWith(e *runEnv, ev *loginEvents) error {
 	}
 	switch c.APIKey {
 	case "":
-		return e.loginWith(e.ctx, id, c.Device, ev)
+		return e.loginWith(e.ctx, id, c.Device, js)
 	case "-":
 		if c.Device {
 			return usageErrorf("--device is for a login; --api-key - stores a key")
@@ -122,8 +117,13 @@ func (c *AuthLoginCmd) runWith(e *runEnv, ev *loginEvents) error {
 	default:
 		return usageErrorf("%s", apiKeyLiteral)
 	}
+	// A key that is not given is a usage error, which is one failed step and
+	// no method line (0051-PLAN P5 step 2), so the method line follows the read.
 	key, err := e.readAPIKey(id)
 	if err != nil {
+		return err
+	}
+	if err := js.method(id, provider.MethodAPIKey); err != nil {
 		return err
 	}
 	path := authPath()
@@ -133,7 +133,7 @@ func (c *AuthLoginCmd) runWith(e *runEnv, ev *loginEvents) error {
 	if err := auth.SetKey(e.ctx, path, id, key, c.Workspace); err != nil {
 		return failf("%v", err)
 	}
-	return e.saved(ev, id, auth.TypeAPIKey)
+	return e.saved(js, id, auth.TypeAPIKey)
 }
 
 // checkWorkspace refuses --workspace for any provider but Claude, and a
@@ -150,38 +150,104 @@ func checkWorkspace(id, workspace string) error {
 	return nil
 }
 
-// loginEvents writes gobble auth login --json's events to stdout, one JSON
-// object a line (0005-PLAN F4-3c decision 6). A nil *loginEvents is text.
-type loginEvents struct{ out *Output }
-
-// loginEvent is one event: device_code, browser_url, saved or error.
-// Expires is RFC 3339, in UTC; Kind is provider.ErrorKind's, and Message
-// the error gobble prints without --json, which holds no credential.
-type loginEvent struct {
-	Event    string `json:"event"`
-	Provider string `json:"provider"`
-	URL      string `json:"url,omitempty"`
-	Code     string `json:"code,omitempty"`
-	Expires  string `json:"expires,omitempty"`
-	Type     string `json:"type,omitempty"`
-	Kind     string `json:"kind,omitempty"`
-	Message  string `json:"message,omitempty"`
+// jsonSteps writes gobble auth login --json's lines to stdout, one JSON
+// object a line (0051-MADR D5): a method line, `{"event":"method",
+// "provider":...,"method":<authcontract.Method>}`, then a step line,
+// `{"event":"step","provider":...,"step":<authcontract.Step>}`, for each step
+// of the sign-in, the last done or failed. The steps that show something come
+// from the SDK, with its seq; the last is gobble's, with the next seq, stated
+// once the result is stored or the failure known. A nil *jsonSteps is text.
+type jsonSteps struct {
+	out      *Output
+	provider string
+	// seq is the last step's; yields is the method's, which done states.
+	seq    int
+	yields authcontract.Yields
 }
 
-func (l *loginEvents) emit(e loginEvent) error {
-	b, err := jsonx.Marshal(e)
+type methodLine struct {
+	Event    string              `json:"event"`
+	Provider string              `json:"provider"`
+	Method   authcontract.Method `json:"method"`
+}
+
+type stepLine struct {
+	Event    string            `json:"event"`
+	Provider string            `json:"provider"`
+	Step     authcontract.Step `json:"step"`
+}
+
+func (j *jsonSteps) emit(v any) error {
+	b, err := jsonx.Marshal(v)
 	if err != nil {
-		return fmt.Errorf("login event: %w", err)
+		return fmt.Errorf("login step: %w", err)
 	}
-	return l.out.Result(append(b, '\n'))
+	return j.out.Result(append(b, '\n'))
+}
+
+// method writes the method line for provider id's offered method word. A
+// nil *jsonSteps writes nothing. A word the provider does not offer is a
+// usage error, which methodOf has refused already.
+func (j *jsonSteps) method(id, word string) error {
+	if j == nil {
+		return nil
+	}
+	m, ok := provider.OfferedMethod(id, word)
+	if !ok {
+		return usageErrorf("%s offers no %s sign-in", id, word)
+	}
+	j.yields = m.Yields
+	return j.emit(methodLine{Event: "method", Provider: j.provider, Method: m})
+}
+
+// step writes a step of the sign-in as the SDK states it.
+func (j *jsonSteps) step(s authcontract.Step) error {
+	j.seq = s.Seq
+	return j.emit(stepLine{Event: "step", Provider: j.provider, Step: s})
+}
+
+// last writes the sign-in's last step, with the next seq.
+func (j *jsonSteps) last(s authcontract.Step) error {
+	j.seq++
+	s.SchemaVersion, s.Seq = authcontract.SchemaVersion, j.seq
+	return j.emit(stepLine{Event: "step", Provider: j.provider, Step: s})
+}
+
+// done writes the done step, with what the method yields.
+func (j *jsonSteps) done() error {
+	return j.last(authcontract.Step{Kind: authcontract.StepDone, Yields: j.yields})
+}
+
+// fail writes err as the failed step and returns the error that ends the
+// command, with the code it exits by. The step's kind is provider.ErrorKind's
+// of err, read from an error SignIn returned, which holds the SDK's errors
+// wrapped in a *provider.SignInError, as 0051-MADR D6 reads it; a usage error
+// is invalid_request, exit 2, and so is a sign-in refused for ErrAsks, kind
+// unsupported (D5). The message is the text gobble prints without --json.
+func (j *jsonSteps) fail(err error) error {
+	code, kind := ExitFailure, provider.ErrorKind(err)
+	if ee, ok := errors.AsType[*exitError](err); ok {
+		code = ee.code
+		if code == ExitUsage {
+			kind = string(authcontract.FailureInvalidRequest)
+		}
+	}
+	if errors.Is(err, provider.ErrAsks) {
+		code = ExitUsage
+	}
+	f := authcontract.Failure{Kind: authcontract.ErrorKind(kind), Message: err.Error(), Retryable: provider.Retryable(err)}
+	if werr := j.last(authcontract.Step{Kind: authcontract.StepFailed, Error: &f}); werr != nil {
+		return werr
+	}
+	return &exitError{code: code}
 }
 
 // saved says provider id's credential, of type typ, is stored: in Pi's
-// words, or the saved event.
-func (e *runEnv) saved(ev *loginEvents, id, typ string) error {
+// words, or the done step.
+func (e *runEnv) saved(js *jsonSteps, id, typ string) error {
 	switch {
-	case ev != nil:
-		return ev.emit(loginEvent{Event: "saved", Provider: id, Type: typ})
+	case js != nil:
+		return js.done()
 	case typ == auth.TypeOAuth:
 		return e.out.Resultf("Logged in to %s\n", id)
 	}
@@ -194,12 +260,15 @@ func (e *runEnv) login(id string, device bool) error { return e.loginWith(e.ctx,
 // loginWith signs in to provider id with no menu (0005-PLAN F4-3b decision
 // 6; 0031-MADR D7; 0051-MADR D2): by the provider's default offered method,
 // the first that is not an API key, or by its device sign-in with device. A
-// provider with none offered is a usage error naming --api-key -. ev, when
-// not nil, takes what it shows. On a terminal, and never with --json, a
-// browser sign-in also takes the URL its browser ends on, pasted. ctx ends
-// the sign-in. Its own error is returned as is: Main prints it and exits 1,
-// as failf would, and --json's error event names its kind.
-func (e *runEnv) loginWith(ctx context.Context, id string, device bool, ev *loginEvents) error {
+// provider with none offered is a usage error naming --api-key -. js, when
+// not nil, takes what it shows as the contract's steps, in place of the
+// terminal's text and the host's browser, and a sign-in that would ask a
+// question is refused before it starts (CheckNoQuestion). On a terminal, and
+// never with --json, a browser sign-in also takes the URL its browser ends
+// on, pasted. ctx ends the sign-in. Its own error is returned as is: Main
+// prints it and exits 1, as failf would, and --json's failed step names its
+// kind.
+func (e *runEnv) loginWith(ctx context.Context, id string, device bool, js *jsonSteps) error {
 	method := provider.DefaultMethod(id)
 	switch {
 	case method == "":
@@ -209,51 +278,51 @@ func (e *runEnv) loginWith(ctx context.Context, id string, device bool, ev *logi
 	case device:
 		method = provider.MethodDevice
 	}
-	o := provider.SignInOptions{
-		Method:         method,
-		NoPaste:        !e.offersPaste(ev),
-		ShowDeviceCode: func(d provider.DeviceCode) error { return e.showDeviceCode(ev, id, d) },
-		OpenURL:        func(u string) error { return e.openLoginURL(ev, id, u) },
+	o := provider.SignInOptions{Method: method}
+	if js != nil {
+		if err := js.method(id, method); err != nil {
+			return err
+		}
+		path := authPath()
+		if path == "" {
+			return failf("auth.json: the config directory cannot be resolved")
+		}
+		if err := provider.CheckNoQuestion(ctx, id, method, auth.Logins{Path: path}); err != nil {
+			return err
+		}
+		o.Steps, o.NoPaste = js.step, true
+		return e.signInTo(ctx, unasked{out: e.out.err}, id, o, js)
 	}
+	o.NoPaste = !e.offersPaste()
+	o.ShowDeviceCode = e.showDeviceCode
+	o.OpenURL = e.openLoginURL
 	var p provider.Prompter = unasked{out: e.out.err}
 	if !o.NoPaste {
 		p = prompter{&questions{ctx: ctx, in: inline.NewReader(e.stdin), out: e.out.err}}
 	}
-	return e.signInTo(ctx, p, id, o, ev)
+	return e.signInTo(ctx, p, id, o, nil)
 }
 
 // offersPaste reports whether a browser sign-in takes a pasted redirect
-// URL: on a terminal, and never with --json (0005-PLAN F4-3c decision 6).
-func (e *runEnv) offersPaste(ev *loginEvents) bool {
-	return ev == nil && e.out.caps.In && e.stdin != nil
+// URL: on a terminal. It is asked only without --json, which prints steps
+// and takes no paste (0051-MADR D5).
+func (e *runEnv) offersPaste() bool {
+	return e.out.caps.In && e.stdin != nil
 }
 
-// showDeviceCode tells the user where to enter provider id's device code,
-// or emits the device_code event, with when the code expires.
-func (e *runEnv) showDeviceCode(ev *loginEvents, id string, d provider.DeviceCode) error {
-	if ev != nil {
-		c := loginEvent{Event: "device_code", Provider: id, URL: d.URL, Code: d.Code}
-		if !d.Expires.IsZero() {
-			c.Expires = d.Expires.UTC().Format(time.RFC3339)
-		}
-		return ev.emit(c)
-	}
+// showDeviceCode tells the user where to enter a device code.
+func (e *runEnv) showDeviceCode(d provider.DeviceCode) error {
 	if _, err := fmt.Fprintf(e.out.err, "Open %s and enter the code %s\n", d.URL, d.Code); err != nil {
 		return fmt.Errorf("write stderr: %w", err)
 	}
 	return nil
 }
 
-// openLoginURL emits a browser sign-in's browser_url event with --json, then
-// opens the URL; the wizard has already shown it, so a machine whose
-// browser does not open still has it (0005-PLAN F4-3b decision 6). A
-// browser that does not open is not an error.
-func (e *runEnv) openLoginURL(ev *loginEvents, id, u string) error {
-	if ev != nil {
-		if err := ev.emit(loginEvent{Event: "browser_url", Provider: id, URL: u}); err != nil {
-			return err
-		}
-	}
+// openLoginURL opens a browser sign-in's URL; the wizard has already shown
+// it, so a machine whose browser does not open still has it (0005-PLAN F4-3b
+// decision 6). A browser that does not open is not an error. A sign-in under
+// --json never reaches it: it prints the URL as a step and opens nothing.
+func (e *runEnv) openLoginURL(u string) error {
 	if err := openURL(e.ctx, u); err != nil {
 		e.log().Debug("open browser", slog.String("error", err.Error()))
 	}

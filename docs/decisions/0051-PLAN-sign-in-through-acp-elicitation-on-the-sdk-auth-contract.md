@@ -475,6 +475,7 @@ go-llmprovider-sdk `v1.31.0`, Grok's `browser_oauth` being `browser_paste` with 
 
 Acceptance: the tests pass, each plant failed; `TestAuthLoginJSON` (`internal/cli/auth_test.go`) is rewritten for the
 steps, and the rewrite is named in this record.
+*(2026-11-15: built, staged on the branch `p3-acpext-v0.5.0` for the coordinator to commit; see "P5 record (2026-11-15)". One deviation was ruled by the owner, "Accept the bytes as built": the SDK's types written by `jsonx` carry a `"secret":false` and unescaped `&`, `<`, `>` (deviation 1); `docs/guides/credentials.md`'s `--json` section, the P4 record's open row, is rewritten.)* *(2026-11-16: a second review; the owner's ruling "Emit the failed step from the parser's own context" adds `internal/cli/main.go` to P5's files by deviation 2 of "Review of 2026-11-15 (P5), second part".)*
 
 ### P6 — ACP `authenticate` by elicitation (MADR D4)
 
@@ -484,6 +485,8 @@ steps, and the rewrite is named in this record.
 undecided: (a) keep the loopback-only rule's tests through a stand-in method of that shape offered to the relay, or (b) drop the rows because no offered method has
 that shape, the rule staying in D4 untested. The plant of the first row, "the loopback method chosen by default", needs replacing under either. Recommended: (b) is
 smaller and (a) holds the rule; the choice is the owner's.
+
+*(2026-11-15, the owner's ruling, relayed by the coordinator, answering the question above: "Keep the tests through a stand-in".)* Option (a). P6 tests the loopback-only refusal and the no-paste flow with a stand-in method of the contract's shape, offered to the relay through its options, and one row is restated for Grok's browser sign-in by paste for a remote client. The stand-in is not designed here and no row is rewritten here: P6's brief designs the stand-in and words the rows. Until then the three rows below keep their annotations of this date, each with the pointer that follows it.
 
 1. `llm/provider/signinrun.go`: `StartSignIn(ctx, id, method string, o SignInOptions, store LoginStore) (*SignInRun,
    error)` over `signin.Start`, with `signin.Options` as MADR D3 lists it: `Identity: {Name: "gobble", Version}`,
@@ -553,7 +556,7 @@ smaller and (a) holds the rule; the choice is the owner's.
    `acpext.AuthenticateMeta`, and `Fresh` skipping case 2 while leaving the stored credential untouched until `Wait`
    saves; the relay reads
    `acp.RequestIDFromContext`, decodes it into `acp.RequestId`, builds `ElicitationRequestScope`, and maps each step
-   by the MADR's table; an `open_url` or `show_code` elicitation is acknowledged, not answered (MADR D4): its
+   by the MADR's table *(2026-11-15, the owner's ruling, relayed by the coordinator, "Accept the bytes as built", "P5 record (2026-11-15)", deviation 1: a step written to a client by `jsonx` carries `"secret":false` and does not escape `&`, `<` and `>`, unlike the SDK's own encoding and its vectors; it is accepted for this path too, and a test of the steps' bytes here must not hold them to the vectors' bytes)*; an `open_url` or `show_code` elicitation is acknowledged, not answered (MADR D4): its
    `accept` builds no `Answer`, and for an `open_url` with `accepts` the relay then sends the `paste` step's form,
    whose answer carries the `paste` step's `seq`; URL mode only when `a.client.Elicitation.Url` is set; `elicitation/complete` after a URL
    elicitation whose step ended without an answer; one sign-in per provider (a map under `a.mu`); a client's
@@ -585,7 +588,7 @@ smaller and (a) holds the rule; the choice is the owner's.
    | `TestAuthenticateFresh` | a grok session stored and `_meta.gobble.fresh: true`: the device sign-in runs; the stored session is replaced only once the new one saves | `fresh` ignored, so `{}` with no elicitation |
    | `TestAuthenticateFreshKeepsOldOnFailure` | the same, with the sign-in failing, declined, and cancelled by `$/cancel_request`: `auth.json` is byte for byte as before, and the issuer sees no revoke | the stored session deleted when the fresh sign-in starts (MADR D4 step 3) |
    | `TestAuthenticateFreshRefusesNonBoolean` | `_meta.gobble.fresh: "yes"` is -32602, and nothing starts | the value read as truthy |
-   | `TestAuthenticateOnlyRemoteMethods` | grok with no method named: the device sign-in, never `browser_oauth`; `browser_oauth` when named *(2026-11-15, the owner's ruling "Amend the records to the SDK's facts": at go-llmprovider-sdk `v1.31.0` Grok's `browser_oauth` is `Completion` `browser_paste` with `Paste` `url_or_code`, so `Remote` accepts it and it is not a loopback-only method, so with no method named a remote sign-in no longer has the device sign-in as the only method it can drive, and the row as written, "never `browser_oauth`", cannot pass at those facts. Its planted break, "the loopback method chosen by default", names a method that no longer exists among the offered ones. What replaces the row and its plant is an open question for the owner before P6 runs; see "Open question (2026-11-15)" under P6.)* | the loopback method chosen by default |
+   | `TestAuthenticateOnlyRemoteMethods` | grok with no method named: the device sign-in, never `browser_oauth`; `browser_oauth` when named *(2026-11-15, the owner's ruling "Amend the records to the SDK's facts": at go-llmprovider-sdk `v1.31.0` Grok's `browser_oauth` is `Completion` `browser_paste` with `Paste` `url_or_code`, so `Remote` accepts it and it is not a loopback-only method, so with no method named a remote sign-in no longer has the device sign-in as the only method it can drive, and the row as written, "never `browser_oauth`", cannot pass at those facts. Its planted break, "the loopback method chosen by default", names a method that no longer exists among the offered ones. What replaces the row and its plant is an open question for the owner before P6 runs; see "Open question (2026-11-15)" under P6.)* *(2026-11-15, the owner's ruling, relayed by the coordinator: "Keep the tests through a stand-in". The row is kept and tested through a stand-in method of the contract's shape; see the answer under "Open question (2026-11-15)" under P6. Its wording is for P6's brief.)* | the loopback method chosen by default |
    | `TestAuthenticateOneAtATime` | a second `authenticate` for a provider while one runs is -32600; another provider's runs | no lock |
    | `TestAuthenticateWithCancelPending` | a `session/cancel` for an open session sent while an elicitation waits is handled, and the elicitation's answer then completes the sign-in within 5 s (MADR U8 (e)) | `a.mu` held across `CreateElicitation` |
    | `TestAuthenticateClientCancels` | the client's `$/cancel_request` cancels the sign-in and the pending elicitation | the handler's context not passed to `CreateElicitation` |
@@ -603,7 +606,7 @@ smaller and (a) holds the rule; the choice is the owner's.
    | Test | Asserts | Planted break |
    | :--- | :--- | :--- |
    | `TestAuthenticatePastedDenialEnds` | a pasted URL with this sign-in's `state` and `error=access_denied` ends the sign-in at once: no further `paste` form, and `auth_required` with `ErrorData.Kind` `denied` | the relay answering `auth_required` with a fixed kind `auth` in place of the `failed` step's own |
-   | `TestAuthenticateGrokBrowserHasNoPaste` | grok's `browser_oauth`, named: one `open_url` elicitation whose `_meta.gobble.step` has no `accepts`, no `paste` form after its `accept`, and the loopback's finish completes it *(2026-11-15, the owner's ruling "Amend the records to the SDK's facts": at go-llmprovider-sdk `v1.31.0` Grok's `browser_oauth` is `Completion` `browser_paste` with `Paste` `url_or_code`, so `Remote` accepts it and it is not a loopback-only method, so the row as written, a Grok browser sign-in with no `accepts` and no `paste` form, cannot pass at those facts: its `browser_oauth` has both. Whether the no-paste shape keeps a test, through a stand-in method, or the row is dropped because no offered method has that shape is an open question for the owner before P6 runs; see "Open question (2026-11-15)" under P6.)* | the relay sending a `paste` form after every acknowledged `open_url` |
+   | `TestAuthenticateGrokBrowserHasNoPaste` | grok's `browser_oauth`, named: one `open_url` elicitation whose `_meta.gobble.step` has no `accepts`, no `paste` form after its `accept`, and the loopback's finish completes it *(2026-11-15, the owner's ruling "Amend the records to the SDK's facts": at go-llmprovider-sdk `v1.31.0` Grok's `browser_oauth` is `Completion` `browser_paste` with `Paste` `url_or_code`, so `Remote` accepts it and it is not a loopback-only method, so the row as written, a Grok browser sign-in with no `accepts` and no `paste` form, cannot pass at those facts: its `browser_oauth` has both. Whether the no-paste shape keeps a test, through a stand-in method, or the row is dropped because no offered method has that shape is an open question for the owner before P6 runs; see "Open question (2026-11-15)" under P6.)* *(2026-11-15, the owner's ruling, relayed by the coordinator: "Keep the tests through a stand-in". The row is kept and tested through a stand-in method of the contract's shape; see the answer under "Open question (2026-11-15)" under P6. Its wording is for P6's brief.)* | the relay sending a `paste` form after every acknowledged `open_url` |
 
    `TestAuthenticateBadPasteAsksAgain` also counts: exactly two re-asks, three `paste` forms in all, before the
    `failed` step.
@@ -615,7 +618,7 @@ smaller and (a) holds the rule; the choice is the owner's.
    | :--- | :--- | :--- |
    | `TestAuthenticateRemoteBindsNoPort` | a form-only client's `authenticate` for openai with `_meta.gobble.method: "chatgpt_plan"` and `remote: true`, against `planIssuer`, while the test holds `127.0.0.1:1455` and `:1457` (binding each, or finding it already bound, either of which leaves it unavailable): the sign-in starts, its authorize URL's `redirect_uri` names port 1455, a pasted callback completes it, and `{}` follows; the recorded `signin.Options.NoLoopback` is true | `remote` not passed on to `StartSignIn`, so the listener's bind fails on the held ports and no `open_url` form is sent |
    | `TestAuthenticateLocalKeepsListener` | the same `authenticate` with `remote` absent, and again with `remote: false`: the recorded `signin.Options.NoLoopback` is false. A recorder stands in for `signin.Start` here, so the test binds no real port on the host | `NoLoopback` set for every ACP sign-in |
-   | `TestAuthenticateRemoteRefusesLoopbackOnly` *(2026-11-15, the owner's ruling "Amend the records to the SDK's facts": at go-llmprovider-sdk `v1.31.0` Grok's `browser_oauth` is `Completion` `browser_paste` with `Paste` `url_or_code`, so `Remote` accepts it and it is not a loopback-only method, so grok with `method: "browser_oauth"` and `remote: true` is not refused and the row as written cannot pass at those facts. Whether the refusal keeps a test, through a stand-in method, or the row is dropped because no offered method has that shape is an open question for the owner before P6 runs; see "Open question (2026-11-15)" under P6.)* | grok with `method: "browser_oauth"` and `remote: true`: `auth_required` with `ErrorData.Kind` `unsupported`, a `Reason`, and `Command` `gobble auth login grok --method browser`; no elicitation; the `signin.Start` variable never called; and the same request without `remote` reaches the recorder, which stands in for `Start`, with `NoLoopback` false | the relay's remote filter dropped, so `Start` is called (the recorded calls count one) |
+   | `TestAuthenticateRemoteRefusesLoopbackOnly` *(2026-11-15, the owner's ruling "Amend the records to the SDK's facts": at go-llmprovider-sdk `v1.31.0` Grok's `browser_oauth` is `Completion` `browser_paste` with `Paste` `url_or_code`, so `Remote` accepts it and it is not a loopback-only method, so grok with `method: "browser_oauth"` and `remote: true` is not refused and the row as written cannot pass at those facts. Whether the refusal keeps a test, through a stand-in method, or the row is dropped because no offered method has that shape is an open question for the owner before P6 runs; see "Open question (2026-11-15)" under P6.)* *(2026-11-15, the owner's ruling, relayed by the coordinator: "Keep the tests through a stand-in". The row is kept and tested through a stand-in method of the contract's shape; see the answer under "Open question (2026-11-15)" under P6. Its wording is for P6's brief.)* | grok with `method: "browser_oauth"` and `remote: true`: `auth_required` with `ErrorData.Kind` `unsupported`, a `Reason`, and `Command` `gobble auth login grok --method browser`; no elicitation; the `signin.Start` variable never called; and the same request without `remote` reaches the recorder, which stands in for `Start`, with `NoLoopback` false | the relay's remote filter dropped, so `Start` is called (the recorded calls count one) |
    | `TestAuthenticateRemoteDefault` | grok with no method named and `remote: true`: the device sign-in, and the recorded `NoLoopback` true | the default taken from `Offered` without `Remote` |
    | `TestAuthenticateRemoteRefusesNonBoolean` | `_meta.gobble.remote: "yes"` is -32602, and nothing starts | the value read as truthy |
    | `TestStartSignInRemoteSetsNoLoopback` (`llm/provider`) | `SignInOptions{Remote: true}` gives `signin.Options.NoLoopback` true, for `chatgpt_plan` and for `device_code`; without `Remote`, false; the terminal paths' `SignIn` never sets it | the option left false whatever `Remote` says |
@@ -2173,3 +2176,445 @@ The changed Go files' last-modified times, all before the first gate's start (16
 
 The identifier scan of the staged diff's added lines after this round (the same patterns) found nothing (`grep` exit 1) and found the one line of a copy with planted values
 (count 1); it ran after every text of this entry but this paragraph, and `make check-records markdownlint` ran after it, exit 0.
+
+### P5 record (2026-11-15)
+
+Run by a mainstream model at medium effort, on the coordinator's brief, under the owner's approval of 2026-11-15, relayed by the coordinator:
+"Run P5 then P6 without stopping". This entry is P5's only: the coordinator reviews and commits it on the branch `p3-acpext-v0.5.0`, and briefs P6
+separately. Times are the session machine's local time. Staged, not committed; **the coordinator commits on the branch.** `main` and `origin/main`
+stayed at `9e21c8f`; no tag, push or merge was made (the owner's ruling "Keep it on the branch until those phases land", C8). The same brief had one
+record task, the owner's answer to P6's open question, which is under P6 ("Open question (2026-11-15)" and the pointer at each of its three rows).
+
+**C1, the start state.** Branch `p3-acpext-v0.5.0`, `HEAD` `c4c5ec0`, the tree clean; `git ls-remote origin` gave `refs/heads/p3-acpext-v0.5.0` at
+`c4c5ec0` and `refs/heads/main` at `9e21c8f`; draft pull request 18 open on that head (`gh pr view 18`, read; the checks `gh pr checks 18` listed first,
+the build, five identity jobs, docs, sbom, test-isolation and both validate jobs, pass, and `release` is skipped). `go.mod` requires acpext `v0.5.0-rc.1`,
+go-llmprovider-sdk `v1.31.0` and `authcontract` `v0.1.0`, direct; no `replace`, no `go.work`. The lines this phase cites, re-read at this base: `openLoginURL`
+is at `internal/cli/auth.go:251` (the PLAN's `:251-261`), its `--json` branch inside it; `loginEvent`, `loginEvents`, `showDeviceCode` and `saved` carried the four
+events (`device_code`, `browser_url`, `saved`, `error`); the PLAN's fifth, `notice`, was `[WIP]` and no committed code prints it. No site changed in substance.
+
+**What changed (staged).**
+
+1. **Step 1, `llm/provider/signin.go`.** `SignInOptions.Steps func(authcontract.Step) error`; `SignIn` passes `wizard.Options.Driver`, `stepDriver`, which gives
+   each step that shows something (`open_url`, `show_code`, `waiting`, and a kind the contract does not know yet) to `Steps`, answers none, returns `ErrAsks` for
+   `paste`, `confirm` and `form`, and swallows the SDK's last step, `done` or `failed`, which the caller states once it has stored the result (the SDK's `done` comes
+   before the wizard's listing check and before the caller's `SetKey`). `ErrAsks` is an error of the SDK's kind `unsupported`; `SignIn` returns it inside a
+   `*SignInError` whose text is gobble's own (`asksText`, naming a terminal and an ACP client). `NoPastePrompt` is set when `NoPaste` is or `Steps` is, so no
+   paste step is printed. `ShowDeviceCode` and `OpenURL` stay for the terminal paths; the PLAN's "replaces ... for a non-terminal caller" is that, and the SDK
+   does not call them when a driver is set. A caller's own error from `Steps` is marked `ownError`, so `SignIn` returns it as it is (`errBrokenPipe` reaches the
+   command). **One defect the real-wizard test found in this step:** `SignIn` took a device sign-in's `Credential.Device` from `ShowDeviceCode`, which the SDK
+   does not call under a driver, so Kilo's key would have come back with `Device` false and been stored unquoted; a `show_code` step now sets it
+   (`TestSignInStepsDevice`, the first plant).
+2. **Step 2, `internal/cli/auth.go`, `login.go`.** `loginEvent`, `loginEvents` and their four events are gone. `jsonSteps` writes the `method` line
+   (`{"event":"method","provider":ID,"method":<authcontract.Method>}`), then each `step` line (`{"event":"step","provider":ID,"step":<authcontract.Step>}`),
+   by `jsonx.Marshal`. The steps the SDK states keep its `seq`; the last, `done` or `failed`, is gobble's, with the next `seq`: `done` after the key or session is
+   stored (`saved`), `failed` from the error the command ends with (`fail`). `Run` clears stderr and the log's stderr as before; `runWith` reads the key, a missing
+   one being a usage error and so one failed step, then writes the method line for `--api-key -`, and `done` with `yields: "api_key"` after `SetKey`; `loginWith` resolves the method as before, then, under
+   `--json`, writes its method line, runs `provider.CheckNoQuestion`, and signs in with `Steps` set and `NoPaste` true. A failed step's kind is `provider.ErrorKind` of
+   the error `signInWith` returned, which is what `provider.SignIn` returns, a `*provider.SignInError` (the carried item of the review: `TestSignInStepsErrorsAreSignInErrors`
+   holds it in `llm/provider`, `TestAuthLoginJSONFailureKind` through the command). A usage error is `invalid_request`, exit 2, `seq` 1, and no method line, as its
+   command refused it before a method was chosen; a refusal for `ErrAsks` is `unsupported`, exit 2, after the method line. Before a sign-in starts,
+   `provider.CheckNoQuestion` (new) refuses a method with a required consent the stored session of that method holds no answer to, which the SDK would ask as a
+   `confirm`: today the ChatGPT plan's first sign-in. `provider.OfferedMethod` (new) is the offered method a `--method` word names, so the method line is the SDK's
+   fact. `saved` takes `*jsonSteps`, and `signInTo` too.
+3. **Step 3.** `openLoginURL`'s `--json` branch is gone, and so is `showDeviceCode`'s: `--json` calls neither, because it sets `Steps`, not the two hooks.
+4. **Step 4.** The tests below. `TestAuthLoginJSON` is rewritten for the steps: it keeps the old test's three other checks (nothing on stderr, even at debug level
+   and with a log file that cannot open; a settings warning goes to the log, never stderr; a paste is offered on a terminal only without `--json`), adds that `Steps`
+   is asked for exactly under `--json`, and its table of expected events, which fed the old test a fake `signInWith` that called the hooks, goes to the tests below,
+   which run the real wizard.
+5. **Step 5, docs.** See the docs step below.
+6. **Step 6.** The gates, below.
+
+**Tests (C2): each seen failing on a scratch copy of the tree** (`<TMP>`, no `.git`; `HOME`, `USERPROFILE`, `XDG_*` and `GOBBLE_HOME` in the scratch; `GOPROXY=off`;
+`GOFLAGS=-mod=mod`; the module and build caches the real ones, read only; one `go test -count=1 -timeout 120s -run '^(Test...)$' <package>` each, run after the last
+Go change; unbroken, each passes: `clean.out`'s sixteen runs, exit 0 each). The tests the PLAN names are `TestAuthLoginJSONSteps`, `TestAuthLoginJSONKiloKey`,
+`TestAuthLoginJSONAPIKey`, `TestAuthLoginJSONUsageError`, `TestAuthLoginJSONRefusesAQuestion`, `TestAuthLoginJSONNoHostBrowser` and `TestAuthLoginJSONMatchesVectors`,
+all in `internal/cli/loginjson_test.go`; the real wizard runs in them against an issuer in process (`internal/cli/loginissuer_test.go`), Grok's and Kilo's device
+endpoints and Grok's browser callback, `planSignIn` for the plan's first sign-in, and the contract's vectors are read from the module's source (`go list -m -f
+{{.Dir}}`, at the pinned tag). Each asserts what the PLAN's row says; the lines are decoded strictly (`RejectUnknownMembers`) into the contract's own types, so a
+line of an old event, or a member the contract does not have, fails first. Each plant exits 1; a plant that failed to compile or hung was replaced before this table.
+
+| Test | Planted break | Failure seen (exit 1 each; `<TMP>` is the scratch copy) |
+| :--- | :--- | :--- |
+| `TestSignInStepsDevice` (P5) | `SignIn` not setting its device flag on a `show_code` step, so Kilo's key comes back with `Device` false | `steps_test.go:76: kilo's device sign-in: {Key:kilo-token-0123456789 Device:false Workspace:}, <nil>` |
+| `TestSignInStepsDevice` (P5) | the driver not passed to the wizard (`Driver` nil), so the SDK calls `ShowDeviceCode` and `Steps` is given nothing | `steps_test.go:45: ShowDeviceCode was called with Steps set` |
+| `TestSignInStepsBrowserAsksNoPaste` (P5) | `NoPastePrompt` not set by `Steps` | `steps_test.go:104: grok's browser sign-in: grok sign-in: this sign-in asks a question, which a program that reads its steps cannot answer; sign in at a terminal (gobble auth login), or from an ACP client, saved map[]` |
+| `TestSignInStepsRefuseWhatAsks` (P5) | the driver answering a `paste`, `confirm` or `form` step with no answer in place of `ErrAsks` | `steps_test.go:140: a first plan sign-in: context deadline exceeded (kind timeout), want a *SignInError holding ErrAsks, unsupported` |
+| `TestSignInStepsRefuseWhatAsks`, `TestSignInStepsErrorsAreSignInErrors`, `TestSignInStepsDevice` (P5) | the driver giving `Steps` the last step, `done` or `failed` | `steps_test.go:65: grok's steps [show_code waiting done], want show_code then waiting, and no done / steps_test.go:166: Steps was given [done failed open_url show_code waiting a_kind_not_known_yet], want the four steps that show something` |
+| `TestSignInStepsErrorsAreSignInErrors` (P5) | `SignIn` returning the SDK's error unwrapped, not the `*SignInError` | `steps_test.go:211: the error *fmt.wrapErrors llm: authentication failed: llmprovider: authentication failed: oauth: Grok device authorization denied is not a *SignInError` |
+| `TestSignInStepsErrorsAreSignInErrors` (P5) | `Steps`' own error not marked as the caller's, so `SignIn` wraps it | `steps_test.go:206: Steps' error came back as grok sign-in failed (other), want it as it is` |
+| `TestSignInStepsRefuseWhatAsks` (P5) | `SignInError`'s text not special-casing `ErrAsks` | `steps_test.go:143: the refusal's text "openai sign-in failed (unsupported)", want gobble's, naming a terminal and an ACP client` |
+| `TestCheckNoQuestion` (P5) | `CheckNoQuestion` returning nil for a consent with no answer | `steps_test.go:269: CheckNoQuestion = <nil>, refused false, want refused true` |
+| `TestCheckNoQuestion` (P5) | the stored session's method not compared, so another application's answered session counts | `steps_test.go:269: CheckNoQuestion = <nil>, refused false, want refused true` |
+| `TestOfferedMethodByWord` (P5) | `OfferedMethod` giving the first offered method for any word it knows | `steps_test.go:301: OfferedMethod(grok, device) = "api_key" "value", true; want "device_code" "device"` |
+| `TestAuthLoginJSONSteps` | the old `device_code` event emitted beside the step | `loginjson_test.go:106: the line {"event":"device_code","provider":"grok","url":"http://127.0.0.1:<port>/device","code":"ABCD-1234"} does not decode into the contract's types: json: cannot unmarshal JSON string into Go cli.jsonLine: unknown object member name "url"` |
+| `TestAuthLoginJSONKiloKey` | `yields` left empty | `loginjson_test.go:142: kilo's steps [{SchemaVersion:1 Seq:1 Kind:show_code URL:http://127.0.0.1:<port>/kilo Code:KILO-1 ExpiresAt:2026-11-15 18:01:52. ... alse ConfirmID: Text: Default:<nil> Links:[] Fields:[] Yields: Error:<nil> Meta:map[]}], want its code at the issuer and a done that yields device_key` |
+| `TestAuthLoginJSONAPIKey` | the `saved` event kept | `loginjson_test.go:165: the line {"event":"saved","provider":"claude","type":"api_key"} does not decode into the contract's types: json: cannot unmarshal JSON string into Go cli.jsonLine: unknown object member name "type"` |
+| `TestAuthLoginJSONUsageError` | exit 1 | `loginjson_test.go:198: ["ollama"]: exit 1, stdout "{\"event\":\"step\",\"provider\":\"ollama\",\"step\":{\"schema_version\":1,\"seq\":1,\"kind\":\"fai ...  claude, grok, opencode-zen, opencode-go, huggingface, kilo, together\",\"retryable\":false}}}\n", stderr ""; want exit 2, one line, nothing on stderr` |
+| `TestAuthLoginJSONUsageError` | a usage error's kind left as `ErrorKind` gives it, `other` | `loginjson_test.go:204: ["ollama"]: the line {Event:step Provider:ollama Method:<nil> Step:0x21e927734000}, want one failed step, seq 1, invalid_request, a message that begins "unknown provider \"ollama\": one of "` |
+| `TestAuthLoginJSONRefusesAQuestion` | the check before the sign-in dropped, so the refusal is left to the driver's backstop (the SDK asks the consent before it opens a URL, so "after the `open_url` step" cannot be built; this is the refusal after the sign-in has started) | `loginjson_test.go:246: the sign-in started 1 times and did [], want it refused before it began` |
+| `TestAuthLoginJSONNoHostBrowser` | the old `openLoginURL` branch restored: `OpenURL` set and `Steps` not | `loginjson_test.go:287: the URL was shown [] and opened ["https://auth.x.ai/oauth2/authorize?client_id=b1a00492-073a-47ea-816f-4c329264a828&code_challe ... email+offline_access+grok-cli%3Aaccess+api%3Aaccess&state=mrENfAxcvgLUVHJXdZwS7rAde_GdCPk7HSczxebzT9o"]; want it shown once as a step and never opened` |
+| `TestAuthLoginJSONSteps`, `TestAuthLoginJSONMatchesVectors` | a step's `expires_at` written as `expires` | `loginjson_test.go:106: the line {"event":"step","provider":"grok","step":{"schema_version":1,"seq":1,"kind":"show_code","url":"http://127.0.0.1:<port> ... ot decode into the contract's types: json: cannot unmarshal JSON string into Go authcontract.Step: unknown object member name "expires" within "/step" / loginjson_test.go:379: the show_code step {"event":"step","provider":"grok","step":{"schema_version":1,"seq":1,"kind":"show_code","url":"http://127.0.0.1:<port>/device","code":"ABCD-1234","expires":"<time>","secret":false}} has members [expires] that step-show-code.json does not` |
+| `TestAuthLoginJSONFailureKind` (P5) | the failed step's kind read with `llm.Kind` in place of `provider.ErrorKind` | `loginjson_test.go:319: the last step is failed, seq 3, error {Kind:auth Message:grok sign-in failed (denied) Retryable:false}; want failed, seq 3, kind denied, the message "grok sign-in failed (denied)"` |
+| `TestAuthLoginJSON` (rewritten) | the log lines left on stderr (`e.logs.stderr` not cleared) | `auth_test.go:526: a settings warning: exit 0, stderr "", log ""` |
+| `TestAuthLoginJSON` (rewritten) | a paste offered under `--json` on a terminal | `auth_test.go:545: --json true on a terminal: <nil>, paste offered [true], steps asked for [true]` |
+
+On the tree before the phase (HEAD's sources with the new and changed test files added): `llm/provider` does not compile, `o.Steps undefined (type SignInOptions
+has no field or method Steps)`, `undefined: ErrAsks`, `undefined: stepDriver`, `undefined: CheckNoQuestion`; `internal/cli`, `o.Steps undefined (type
+provider.SignInOptions has no field or method Steps)` (`before.out`: exit 1, 1).
+
+The plants of the PLAN's rows that differ from the PLAN's wording: `TestAuthLoginJSONRefusesAQuestion`'s "the refusal after the `open_url` step" cannot be built as
+worded, because the SDK asks the consent before it opens a URL; the plant is the check before the sign-in dropped, so the refusal comes from the driver after the
+sign-in has started, which the test sees as the wizard having been run. `TestAuthLoginJSONNoHostBrowser`'s "the old `openLoginURL` branch restored" is the old
+branch's two hooks set and `Steps` not: with a driver set the SDK calls neither, so that is the only way the opener is reached.
+
+**Gates (C6),** each exit status taken from the file its output was redirected to before anything read it. `make race`, `make check-test-isolation`, `make
+preflight` and the lint runs went through `run-heavy`; the other two hosts through `run-on-host --race`, `sh -c`, which kept the Linux run off the WSL distros (the
+probe's own lines say so). **The first cross-host run found a failure the Mac's package runs had not:** `internal/archtest`'s `TestImportRules/rule_4_module`,
+`rule 4: github.com/maccavelli/gobble-cli/internal/cli imports github.com/maccavelli/go-llmprovider-sdk/llmprovider/auth`: `loginissuer_test.go` imported the SDK's
+`llmprovider/auth` for one constant. Both hosts failed the same way, so it was not the hosts; the test now states the constant (`loginGrokIssuer`), and every gate
+and plant below ran after that edit, the first run's results discarded (I stopped the runs in flight and removed their files).
+
+| Gate | Where | Start to end | Exit |
+| :--- | :--- | :--- | :--- |
+| `make pre-add-check FILES=` the 7 changed Go files | this Mac | 17:54:20 to 17:54:32 | 0 |
+| `golangci-lint run --config .golangci.yml ./internal/cli/ ./llm/provider/`, six runs, a new `GOLANGCI_LINT_CACHE` each, under `run-heavy` | this Mac | 17:54:32 to 17:55:22 | 0, 0, 0, 0, 0, 0 |
+| `make check-acpext-deps` | this Mac | 17:55:23 to 17:55:23 | 0 |
+| `make race`, then `GOFLAGS=-count=1 make race`, under `run-heavy` | this Mac | 17:55:23 to 17:56:17, then 17:56:17 to 17:57:09 | 0, 0 |
+| `make check-test-isolation`, under `run-heavy` | this Mac | 17:57:09 to 17:57:40 | 0 |
+| `go test -count=1 ./...`, `CGO_ENABLED=1 go test -count=1 -race ./...`, `go -C acpext test -count=1 ./...`, one `run-on-host --need linux --race`, `sh -c` | the Linux machine, scratch copy | 17:54:20 to 17:58:29 | 0 (GOTEST-OK, RACE-OK, ACPEXT-OK) |
+| the same three, `run-on-host --need windows --race`, `sh -c` | the Windows laptop, scratch copy | 17:54:20 to 17:57:04 | 0 (GOTEST-OK, RACE-OK, ACPEXT-OK) |
+| `make preflight`, under `run-heavy` | this Mac | 18:01:44 to 18:09:17 | 0 |
+
+The six lint runs: run 1 17:54:32 to 17:54:40 exit 0, run 2 17:54:40 to 17:54:48 exit 0, run 3 17:54:49 to 17:54:57 exit 0, run 4 17:54:57 to 17:55:05 exit 0, run 5 17:55:06 to 17:55:14 exit 0, run 6 17:55:14 to 17:55:22 exit 0; **six of six clean, no finding of any kind**, so there was nothing to fix. No identifier this change adds differs from another in its
+package only by capitalization: the lint's `confusing-naming` ran six times, and a scan of every top-level name of the two packages, test files included
+(`casecheck.py`, which does not read methods), finds one pair, `Selection` and `selection` in `llm/provider/ambient.go`, older than this change.
+
+The changed Go files were last modified at the times below, before every gate in the table above ran (the first gate started at 17:54:20):
+
+```text
+17:28:21  internal/cli/auth.go
+17:28:21  internal/cli/login.go
+17:33:07  llm/provider/signin.go
+17:36:30  internal/cli/auth_test.go
+17:47:18  llm/provider/steps_test.go
+17:48:56  internal/cli/loginjson_test.go
+17:53:54  internal/cli/loginissuer_test.go
+```
+
+The Linux and Windows copies hold the working tree, not a commit.
+
+**Deviations.**
+
+1. **Ruled by the owner, "Accept the bytes as built": the SDK's types written by `jsonx` differ from the SDK's own bytes.** *Evidence,* each run on a step whose URL holds `&`, with the encoders
+   compared: `encoding/json` v1, `jsonx.Marshal`, `jsonx.Marshal` with `OmitEmptyWithLegacySemantics(true)`, and that with `jsontext.EscapeForHTML(true)` too. (i)
+   `jsonx.Marshal` is `encoding/json/v2`; the contract's types carry v1 tags, and v2's `omitempty` omits only a value that encodes as an empty JSON value, which `false`
+   is not, so the two `omitempty` bools of the contract's types print `false` under v2: `Step.Secret`, so every printed step line carries `"secret":false`, and
+   `Field.Required` (form fields, which gobble never prints; run on a field: `{"key":"k","label":"L","type":"text","required":false}` under `jsonx`, without `required`
+   under v1). The pointers `Step.Default`, `Answer.Secret` and `Answer.Confirm` are omitted when nil under both. (ii) `jsonx` does not escape `&`, `<` and `>` in strings,
+   where v1 does, and the contract's README says its vectors are in Go's encoding, which escapes them: the URL `https://a.example/x?a=1&b=<2>` prints as
+   `a=1&b=<2>` under `jsonx` and as `a=1\u0026b=\u003c2\u003e` under v1, and every printed `open_url` URL holds an `&`. (iii) With `OmitEmptyWithLegacySemantics(true)` alone, (i) is
+   gone and (ii) is not; with `jsontext.EscapeForHTML(true)` as well, the bytes equal v1's for both samples. The lines decode strictly into the contract's types and mean the
+   same (evolution rule 1: an absent member is its zero, and a JSON string reads `&` either way); only the bytes differ. `TestAuthLoginJSONMatchesVectors` first failed on (i).
+   *Ruling (2026-11-15, the owner's ruling, relayed by the coordinator): "Accept the bytes as built".* The `--json` lines stay as `jsonx` writes them: they carry the contract's types and
+   meanings, which is what 0051-MADR D5 and the PLAN's row require, and their bytes differ from the SDK's own encoding in the two ways above, `"secret":false` on every step and `&`, `<`, `>`
+   not HTML-escaped. No `jsonx` change, no mirror struct, no SDK change. The owner was shown, and did not choose: the SDK-side `omitzero` on `Step.Secret` and `Field.Required` in an
+   `authcontract` v0.1.1 (resolution (c)), and a `jsonx` option with legacy omit-empty semantics and HTML escaping (resolution (a)); resolution (d), the mirror struct, was counted a workaround. The
+   same holds for P6's ACP path, where steps are written to a client: a pointer is at P6 step 3. In the tree: the encoder is as `jsonx` writes it; the vector test tolerates exactly a `"secret":false`
+   at a step's top level (`memberDiff`) and nothing else, a plant of any other `false` member failing it; the guide says to read each line as the contract's `method` or `step` object, to ignore a member it
+   does not know and not to depend on a member being absent. (The first version of this entry built resolution (b) before it stopped, and said so afterwards; "Review of 2026-11-15", item 9: a deviation stops
+   the item. The ruling is the same as (b).) *Resolutions, as put:* (a) `jsonx` gains one option wrapping `encoding/json`'s `OmitEmptyWithLegacySemantics(true)`, and `jsonSteps.emit` passes it with
+   `jsontext.EscapeForHTML(true)`; cost: a change in `jsonx` (outside this phase's files), one `depguard` exclusion for `^jsonx/` in `.golangci.yml`, a test; it gives the SDK's bytes; (b) accept it as
+   built (chosen): cost: `"secret":false`, and unescaped `&`, `<` and `>`, on the wire, harmless to a decoder of either; (c) `omitzero` on `Step.Secret` and `Field.Required` in the contract module itself,
+   an SDK release: it removes (i) at the source for every consumer and not (ii); cost: an SDK change and release, gobble's pin moving; (d) write the steps through a mirror struct of gobble's with `omitzero` tags:
+   a workaround, a second copy of the contract's types that drifts from it. **0051-MADR asserts no byte equality with the SDK's vectors:** the sentences checked are the context's list of the contract's parts
+   ("a schema, golden vectors and additive-only rules", `:80`), D5 (`:505-515`: "One JSON line first ... then one per step ... the last `done` or `failed`", nothing of bytes), and Confirmation 4
+   (`:780-781`: "steps decode with the contract's golden vectors' types"), which decoding holds; no amendment is made.
+2. **Tests the PLAN did not name,** each because a row or a sentence has no test of its own or a stronger one was needed; none loosens or replaces a named test:
+   `TestSignInStepsDevice`, `TestSignInStepsBrowserAsksNoPaste`, `TestSignInStepsRefuseWhatAsks`, `TestSignInStepsErrorsAreSignInErrors` (the carried item, in
+   `llm/provider/steps_test.go`), `TestCheckNoQuestion` (step 2's refusal, which row 5 tests only through the command), `TestOfferedMethodByWord`, and
+   `TestAuthLoginJSONFailureKind` (a failure's kind and message through the real wizard). Also new, not tests: `internal/cli/loginissuer_test.go`, an issuer in
+   process, the subset of `llm/provider`'s `testIssuer` that these tests use, because that one is in a package's tests and cannot be imported (a shared test package
+   would move `testIssuer` out of `login_test.go`, outside this phase); `signInAtIssuer` is `provider.SignIn` with the HTTP client pointed at it and the browser played.
+3. **Names the PLAN does not give,** in `llm/provider`: `ErrAsks`, `OfferedMethod` and `CheckNoQuestion` (step 2 needs the refusal and the offered method's facts where the
+   SDK is imported, and `internal/cli` may not import the SDK, 0004-MADR rule 4, but for `authcontract`). Within the steps.
+4. **Readings, each in the code and held by a test:** the last step's `seq` is the last printed step's plus one; `retryable` is the SDK's for the same error, `provider.Retryable`: the API
+   error's own `Retryable()` when the error holds one (the service's `x-should-retry` and a final reply honoured), otherwise true for `rate_limited`, `offline` and `unavailable`
+   (signinflow's `Failure`, unexported; "Review of 2026-11-15", item 3); the method line comes before a refusal for a question (the client knows which method was refused), after
+   the key is read for `--api-key -`, and never before a usage error, a missing key being one ("Review of 2026-11-15", item 1); a failed step's `message` is the error's text, which
+   gobble prints without `--json` and which holds nothing of the service's (`SignInError`'s own text, or a usage error's).
+
+**Docs step (C9).** Searched `README.md`, `AGENTS.md`, `docs/architecture.md`, `docs/README.md`, `docs/guides/*.md` and the doc comments of the changed files for `--json`,
+`auth login`, `device_code`, `browser_url`, `saved`, `ShowDeviceCode`, `OpenURL`, `SignInOptions`, `loginEvent`, `wizard` and the sign-in's no-terminal message; each hit
+was checked against the code and the tests. Every sentence added was checked against the tests' output, which `docs/guides/credentials.md`'s example lines are, minus the
+issuer's address and a time. No file joins the scope: both are in P5's list or C9's (`docs/architecture.md`, `docs/README.md`).
+
+* `docs/guides/credentials.md:362-412` (the `--json` section, the P4 record's open row `:338-376`) rewritten, fixed: the `method` and `step` lines, each step kind, `done` after the
+  store, `failed`'s `error`, the retired lines, the kinds, the exit codes (0; 2 for a usage error and for a refused question; 128 plus the signal for a sign-in a signal ended; 1 otherwise), the failure kinds as the open set they are, `retryable`, the plan sign-in's
+  refusal and that an answered consent lets `--json` sign in, a command line that does not parse (text on stderr, exit 2, no JSON line) *(2026-11-16: now one `failed` step when `--json` is read first; second part, deviation 2)*, and example lines as gobble prints them; the guide says nothing of
+  `"secret":false` while deviation 1 is open.
+* `docs/guides/credentials.md:200-213` (the ChatGPT plan bullet said `--json` stops at the question with the no-terminal message) fixed: that is the no-terminal case; `--json` is refused before it starts, exit 2, unless the stored session holds an answer.
+* `docs/architecture.md:110` (the `llm/provider` row) fixed: `SignInOptions.Steps`, the driver, `ErrAsks`, `CheckNoQuestion`, `OfferedMethod`.
+* `internal/cli/auth.go:53` (`--json`'s help text, "Print the login's events as JSON lines") fixed: "Print the method and the sign-in's steps as JSON lines on stdout, and nothing on stderr."
+* `docs/guides/credentials.md:189-300` (the ChatGPT section) and `:86-132` (`auth status --json`) stay open, as the P4 record says: 0052-PLAN P4 and P6 own them.
+* `README.md`, `AGENTS.md`, `docs/README.md`'s matrices and the other guides: nothing names `auth login --json`, the retired lines or the hooks; no change. This repository keeps no changelog.
+
+`docs: searched README.md, AGENTS.md, docs/architecture.md, docs/README.md, docs/guides/*.md` (for `--json`, `auth login`, `device_code`, `browser_url`, `saved`, `ShowDeviceCode`, `OpenURL`, `SignInOptions`, `wizard`, `no terminal`).
+
+**Acceptance.**
+
+* The tests pass and each plant failed: the table above, and every gate. Met.
+* `TestAuthLoginJSON` is rewritten for the steps, and the rewrite is named in this record: step 4 above. Met.
+* The commit is the coordinator's, on the branch.
+
+**Not verified.** Nothing was run against a live service (C5; the live sign-ins are P8's). The two other hosts ran scratch copies of the working tree, not a commit. A real
+`auth.json` was never read: every test uses a scratch `GOBBLE_HOME`. A first ChatGPT plan sign-in past its consent, the browser, the paste and the token exchange are not run
+here (0052-PLAN P4's `TestSignInChatGPTPlan`); `TestAuthLoginJSONRefusesAQuestion` runs the sign-in of a plan session that holds an answer only as far as its `open_url` step,
+which shows the SDK asked no `confirm` first, and no further. The method line's `consents` carry gobble's wording as `Offered` gives it; no reader of the lines
+(magic-cli-remote) was run against them. `gobble auth login --json` was not run against a built binary here; the tests call `Main`.
+
+The identifier scan of the staged diff's added lines, for the local account name, the host names, home, temporary and dev-host scratch paths, run-heavy ticket shapes and mail
+addresses, found nothing (`grep` exit 1) and found the one line of a copy with planted values (count 1). A script found no annotation of 2026-11-15 preceded by an odd number of
+quotation marks in its paragraph in this PLAN (0 before this change, 0 after). Both ran, and `make check-records markdownlint` (exit 0), after every text of this record but this
+paragraph, and ran again after it.
+
+#### Review of 2026-11-15 (P5)
+
+An independent review of the staged P5 found no blocker in the sign-in or storage behaviour, and twelve items, relayed by the coordinator. Each was verified first; this entry says what it
+found, what changed, and the plant of each new or changed test, run on a scratch copy (`<TMP>`, `GOPROXY=off`, `HOME`, `XDG_*` and `GOBBLE_HOME` in the scratch; one `go test -count=1 -run
+'^(Test...)$'` each; exit 1 each). It annotates the record above and rewrites only the sentences that were false, each named below; deviation 1 is corrected in place, as the coordinator said,
+because it is uncommitted. The coordinator's ruling on how deviation 1 was handled: a deviation stops the item and is not built one way and reported afterwards. The owner then ruled, relayed by the coordinator, "Accept the bytes as built": the encoder stays as `jsonx` writes it, recorded in deviation 1 with the evidence of item 9 and a pointer at P6 step 3;
+items 5 and 9 below stand as written.
+
+1. **A usage error has a method line: true, and the PLAN decides it the other way.** `gobble auth login openai --api-key - --json` with empty stdin is a usage error
+   (`internal/cli/credentials.go:229`), exit 2, and its `failed` step came after a `method` line because `js.method` ran before `readAPIKey`. Step 2 reads: "`--api-key -` writes `method` and a
+   `done` step with `yields: "api_key"`; a usage error is one `failed` step of `invalid_request`." A missing key is a usage error, so it is one `failed` step. *Changed:* `runWith`
+   reads the key, then writes the method line (`internal/cli/auth.go:122-129`); `TestAuthLoginJSONAPIKey` asserts one line and no method line for the empty key; the guide's exit-code
+   paragraph names the missing key as a usage error with no method line; the record's step 2 and reading 4 are corrected. Plant: the method line before the key is read (table).
+2. **"Exit 1 for any failed step but two" is false for a signal: true.** I ran it, by the path `Main` takes (`watchSignals`' context cancelled with the signal as its cause, `run`, then
+   `signalExit`): the sign-in prints a `failed` step of kind `canceled`, `seq` 3, not retryable; the command's own code is 1 and the process's is 143 for SIGTERM (130 for SIGINT, by
+   `exitForSignal`; only SIGTERM is run, SIGINT being the same path with another number). *Changed:* `TestAuthLoginJSONEndedBySignal` (`loginjson_test.go`), and the guide says 128 plus the signal's number
+   (`docs/guides/credentials.md:391-405`). Plant: no failed step when the context ended (table).
+3. **`retryable` is held by no test and the rule is not the SDK's: true.** The contract's `Failure` says only "why a sign-in failed" and the PLAN names no rule; the SDK's `signinflow.Failure` (v1.31.0,
+   `internal/signinflow/signinflow.go:560-572`) documents it as "whether the same sign-in can succeed later": the API error's own `Retryable()` when the error holds one (the service's `x-should-retry`
+   and a final reply honoured), the kind table (`rate_limited`, `offline`, `unavailable`) otherwise. *Changed:* `provider.Retryable(err)` (`llm/provider/signin.go`) does that on the error `mapError` kept
+   in the chain, and `jsonSteps.fail` calls it (`internal/cli/auth.go:238`); `TestRetryable` (`llm/provider`: a 503, a 503 marked final, offline, an auth failure, a cancelled sign-in) and
+   `TestAuthLoginJSONRetryable` (through the command). *(Corrected 2026-11-16; "Review of 2026-11-15 (P5), second part", item 1: the text here first said no sign-in ends with an API error, which was false.)* I first tried a 503: with the issuer answering `503`
+   marked final (`x-should-retry: false`) to the listing (`/api/gateway/models`, `/v1/models`), Kilo's device sign-in and Grok's both ended `done`, exit 0, and a 503 at Grok's device endpoint ends `other`, not an
+   API error; a 503 is not a refusal of the credential. What does end a sign-in with an API error is the listing that checks the new credential refusing it with HTTP 401, which the wizard wraps in its refusal
+   (`wizard/configure.go:499`, `:706-725` of go-llmprovider-sdk `v1.31.0`): a failed step of kind `auth`, the error a `*provider.SignInError` holding the API error. `TestAuthLoginJSONRetryable` runs the real wizard
+   against that, for Grok and Kilo (second part). The first version used a stand-in `signInWith` returning what `provider.List` returns for a 503. Plants of `TestRetryable` (table): the API error not read,
+   so the final 503 is read by its kind; the kind table cut, so offline is not retryable. The two plants of the first version of `TestAuthLoginJSONRetryable` are removed from the table, the test being replaced.
+4. **"`done` after the credential is stored" had no test: true.** `TestAuthLoginJSONDoneFollowsTheStore`: `auth.json.lock` is a directory, so `SetKey` and the session's save cannot take the lock; for Kilo's key
+   and for Grok's session the last step is `failed`, exit 1, and no `done` was printed. Plants: `done` before `SetKey` (key); the SDK's `done` given to `Steps` (session) (table). The first fails the key
+   case and passes the session's, the second the reverse, each for its own reason.
+5. **`membersBeyond` forgave any `false` at any depth: true** (`"default":false` on every step passed). *Changed:* `memberDiff` forgives one thing, a `"secret":false` at the step's top level (the owner's ruling "Accept the bytes as built" keeps it), and a missing top-level `text`, and is two-way. From the contract's types (`requiredMembers` reads the tags): required are `schema_version`, `seq` and `kind` of
+   a `Step` and `kind`, `message` and `retryable` of its `Failure`; every other member is optional by type, and the vector's other members (`url`, `code`, `expires_at`, `yields`, `error`,
+   `error.*`) are the facts of the step that the sign-in states, so gobble must print them: the test fails a step that lacks any member of its kind's vector but `text`, which gobble does not
+   print because the SDK's steps from a real sign-in set none. Plants: `"default":false` on every step; `code` not printed (table).
+6. **The guide's closed list of thirteen kinds: true.** `provider.ErrorKind` gives the SDK's word for a `SignInError` (`signin.ErrorKindOf`: all eighteen of the contract's, `invalid_request` and
+   `invalid_provider` included) and `llm.Kind`'s otherwise (fourteen, `workspace`, `context_overflow`, `empty_answer` and `incomplete` among them); a usage error is `invalid_request`. The guide
+   now lists the eighteen as what gobble can print, says which a person's refusal is, and that a program keeps a word it does not know (`docs/guides/credentials.md:391-399`).
+7. **`done`'s `yields` came from the method line: true.** The contract's `StepDone` says "ends a sign-in that succeeded; Yields says what it left"; the SDK's own `done` carries
+   `r.method.Yields` (`signinflow.go:348`), so at v1.31.0 the two are equal and no offered method differs; the PLAN says only `yields: "api_key"` for `--api-key -`. *Changed:* the driver captures the
+   SDK's `done` yields (`Credential.Yields`), `signInTo` carries it into `jsonSteps` when it states one (`internal/cli/login.go:80-82`), and the method's is the default. `TestSignInStepsDevice`
+   asserts the real wizard's `done` yields for Grok and Kilo; `TestAuthLoginJSONDoneYieldsWhatTheSignInSays` runs a stand-in `signInWith` that returns `access_only` against a method whose fact is
+   `oauth_session`. Plants: the yields not captured; `done` stating the method's (table).
+8. **A Kong parse error under `--json` prints text on stderr and no JSON line, exit 2: true** (`gobble auth login --json` with no provider: stdout empty, stderr `Error: expected "<provider>"`; run). **Stopped:
+   the PLAN does not decide it.** *(2026-11-16: ruled by the owner, relayed by the coordinator, "Emit the failed step from the parser's own context"; built in "Review of 2026-11-15 (P5), second part", deviation 2, which also changes the guide's and the help text's wording quoted at the end of this item.)* Step 2: "a usage error is one `failed` step of `invalid_request`" speaks of the command's own usage errors, which `Run` produces after Kong has bound `--json`;
+   a parse error happens before any `Run`, and whether `--json` is known then is a decision. Options: (a) after a parse failure `Main` looks in the arguments for `auth login` and `--json` and prints
+   the failed step; cost: grammar knowledge in `main.go` (outside P5's files) that Kong already has, with edge cases (global flags between the words, `--json=false`, abbreviations, `--` ); (b) read
+   the partial context Kong returns with its error to see whether `auth login` was selected and `--json` set; cost: unverified against Kong's behaviour on the error path, and the same file; (c) leave it
+   and say so, which is the tree now. *Changed, whatever is ruled:* the guide says a command line gobble cannot parse is a usage error as text on stderr, exit 2, with no JSON line, and the help text says
+   "and nothing on stderr once the command line parses" (`internal/cli/auth.go:53`, `docs/guides/credentials.md:362-368`). Recommended: (a) only if the owner wants it; (c) costs nothing and is true.
+9. **Deviation 1's evidence was incomplete: true; corrected in place** (deviation 1 above). Each was run on a step whose URL is `https://a.example/x?a=1&b=<2>` and a field, by `encoding/json` v1, `jsonx.Marshal`, `jsonx.Marshal`
+   with `OmitEmptyWithLegacySemantics(true)`, and that with `jsontext.EscapeForHTML(true)`: `jsonx` writes `"secret":false` and `&b=<2>`; v1 writes neither (`&`, `<`, `>`); the legacy option alone removes
+   the `false` and not the escaping; both options give v1's bytes; `Field.Required` prints `"required":false` under `jsonx`, absent under v1. The contract's two `omitempty` bools are `Step.Secret` and
+   `Field.Required` (the others, `Answer.Secret`, `Answer.Confirm` and `Step.Default`, are pointers). Resolution (c), `omitzero` in the contract module, is added, and (a) now includes the escaping option. The guide says to read each line as the contract's `method` or `step` object, to ignore a member it does not know and not to depend on one being absent, and that the bytes are not the vectors'.
+10. **The carried item's record understated the exceptions: true.** `SignIn` with `Steps` returns unwrapped, besides Steps' own error: `ctx.Err()` (`signin.go`, after the wizard returns), which
+    `ErrorKind` words `canceled` or `timeout` through `llm.Kind`, the words of the contract, right under 0051-MADR D6 ("`signin.ErrorKindOf` for an error of the SDK's sign-ins, else `llm.Kind`'s"), and
+    held through the command by `TestAuthLoginJSONEndedBySignal`; a Prompter's own error, such as `errNoTerminal`, `llm.Kind` `other`, which is D6's reading (no SDK error is in it) and which `--json`
+    never reaches, the driver refusing a question first; and the two errors before the wizard starts (`provider %s takes no key and has no sign-in`, `has no %s sign-in`), `other`, which
+    `internal/cli` cannot reach (`keyProvider` and `methodOf` refuse first). *Changed:* `SignIn`'s doc comment lists them (`llm/provider/signin.go:276-289`), and the comment of
+    `TestSignInStepsErrorsAreSignInErrors` says exactly what it holds (the wizard's errors once it has started, `ErrAsks`, and Steps' own) and what it does not; the record's step 2 paragraph says "the
+    carried item" holds the first and not the others.
+11. **`CheckNoQuestion` is looser than the SDK in two edges, known and backed by the driver.** (i) The SDK carries a stored answer only when the previous session is a plan session with a client id
+    (`wizard/auth.go:279`); `CheckNoQuestion` reads the stored session's kind and answer. A plan session that holds an answer and no client id passes the check, the SDK asks, and the driver's backstop
+    refuses it with `ErrAsks`: `TestAuthLoginJSONBackstopMatchesTheCheck` runs both and holds that the lines, exit and stderr are byte for byte the same, the wizard having started once in the second (plant:
+    the driver answering the confirm, table). I found no case where the output differs. (ii) The SDK asks every consent of the method and `CheckNoQuestion` only the required ones; no offered method has a consent that is not
+    required, so there is no run of it, and `TestSignInStepsRefuseWhatAsks` holds that the driver refuses any step that asks. No code change.
+12. **One line of `SignIn`'s doc comment ran past the wrap: true; wrapped** (`llm/provider/signin.go:276-289`, with item 10's text).
+
+The new and changed tests' plants (each exit 1):
+
+| Test (the item) | Planted break | Failure seen (`<TMP>` is the scratch copy) |
+| :--- | :--- | :--- |
+| `TestRetryable` (3) | `Retryable` not reading the API error, so the final 503 is read by its kind | `steps_test.go:358: Retryable = true, want false (the kind unavailable)` |
+| `TestRetryable` (3) | the kind table cut to `rate_limited`, so offline is not retryable | `steps_test.go:358: Retryable = false, want true (the kind offline)` |
+| `TestAuthLoginJSONAPIKey`, `TestAuthLoginJSONUsageError` (1) | the method line written before the key is read | `loginjson_test.go:186: no key given: exit 2, stdout "{\"event\":\"method\",\"provider\":\"openai\",\"method\":{\"schema_version\":1,\"id\":\"api_key\" ... \",\"message\":\"--api-key -: no key was given\",\"retryable\":false}}}\n", stderr ""; want exit 2 and one failed invalid_request step, no method line` |
+| `TestAuthLoginJSONEndedBySignal` (2) | no failed step when the context ended | `loginjson_test.go:589: 3 lines, want a method line and 3 steps: [{Event:method Provider:grok Method:0x51f0588fc360 Step:<nil>} {Event:step Provider:grok Method:<nil> Step:0x51f0588e40f0} {Event:step Provider:grok Method:<nil> Step:0x51f0588e41e0}]` |
+| `TestAuthLoginJSONDoneFollowsTheStore` (4, a key) | `done` written before `SetKey` | `loginjson_test.go:541: a done step was printed though the store failed: {"event":"method","provider":"kilo","method":{"schema_version":1,"id":"device_ ... in with Kilo (device code)","completion":"device","yields":"device_key","client_identity":"none","refreshable":false,"revocable":false,"slot":"kilo"}}` |
+| `TestAuthLoginJSONDoneFollowsTheStore` (4, a session) | the SDK's `done` step given to `Steps`, which prints it before the wizard saves | `loginjson_test.go:541: a done step was printed though the store failed: {"event":"method","provider":"kilo","method":{"schema_version":1,"id":"device_ ... in with Kilo (device code)","completion":"device","yields":"device_key","client_identity":"none","refreshable":false,"revocable":false,"slot":"kilo"}}` |
+| `TestAuthLoginJSONMatchesVectors` (5) | `"default":false` printed on every step | `loginjson_test.go:351: the show_code step {"event":"step","provider":"grok","step":{"schema_version":1,"default":false,"seq":1,"kind":"show_code","url":"http://127.0.0.1:<port>/device","code":"ABCD-1234","expires_at":"<time>","secret":false}} has members [default] that step-show-code.json does not, and lacks [] that it has` |
+| `TestAuthLoginJSONMatchesVectors` (5) | a `show_code` step's `code` not printed | `loginjson_test.go:351: the show_code step {"event":"step","provider":"grok","step":{"schema_version":1,"seq":1,"kind":"show_code","url":"http://127.0.0.1:<port>/device","expires_at":"<time>","secret":false}} has members [] that step-show-code.json does not, and lacks [code] that it has` |
+| `TestSignInStepsDevice` (7) | the SDK's `done` yields not carried in `Credential.Yields` | `steps_test.go:65: grok's device sign-in: {Key: Device:false Workspace: Yields:}, <nil>, saved map[grok:Login{Issuer:https://auth.x.ai ClientID:b1a00492-073a-47ea-816f-4c329264a828 AccountID: TokenURL:https://auth.x.ai/oauth2/token FedRAMP:false Expires:<time>}]` |
+| `TestAuthLoginJSONDoneYieldsWhatTheSignInSays` (7) | `done` stating the method's yields, not the credential's | `loginjson_test.go:626: the last line {Event:step Provider:grok Method:<nil> Step:0x30643a4d4000}, want a done step that yields access_only` |
+| `TestAuthLoginJSONBackstopMatchesTheCheck` (11) | the driver answering a `confirm` with no answer: no backstop | `loginjson_test.go:671: the backstop printed exit 1, stdout "{\"event\":\"method\",\"provider\":\"openai\",\"method\":{\"schema_version\":1,\"id\":\"ch ... rogram that reads its steps cannot answer; sign in at a terminal (gobble auth login), or from an ACP client\",\"retryable\":false}}}\n"; want the same` |
+
+All 35 plants of the record, the earlier ones too, were run again on the final tree, each exit 1, and the unbroken runs of their tests exit 0 (`plants-final.out`, `clean.out`). On the tree before the phase the new test
+files do not compile, as before.
+
+**First lint of this round,** run before the last code change: four findings, each in a file of this review (`gocognit` on `TestAuthLoginJSONMatchesVectors`, `gocritic` singleCaseSwitch in `signInTo`,
+`modernize` `Type.Fields`, `staticcheck` QF1001), six of six alike. Fixed in the files (the vector test split into `compareWithVectors` and `requireMembers`), no `nolint`, no config change; the gates
+below are the final tree's.
+
+**Docs step (C9).** Searched the same files and words as the record, and for `exit`, `signal`, `retryable`, `kind`, `failed`: the rows are `docs/guides/credentials.md:362-421` (the `--json` section: no
+method line for a usage error, the exit codes with a signal, the open set of kinds, `retryable`, the parse error, `"secret":false` removed) fixed; `docs/guides/credentials.md:200-213` unchanged since the record;
+`internal/cli/auth.go:53` (the help text) fixed; `docs/architecture.md:110` (the `llm/provider` row) fixed: `Retryable` and the carried `Yields`; `README.md`, `AGENTS.md`, `docs/README.md`: no change but its row's
+wording stays true. `docs: searched README.md, AGENTS.md, docs/architecture.md, docs/README.md, docs/guides/*.md`.
+
+**Gates after the last code change** (test files are code); the first gate started at 20:00:42, every Go file below was last modified before it *(2026-11-16: the tree of the first part; the second part's table is the final tree's)*:
+
+| Gate | Where | Start to end | Exit |
+| :--- | :--- | :--- | :--- |
+| `make pre-add-check FILES=` the 7 changed Go files | this Mac | 20:00:42 to 20:00:51 | 0 |
+| `golangci-lint run --config .golangci.yml ./internal/cli/ ./llm/provider/`, six runs, a new `GOLANGCI_LINT_CACHE` each, under `run-heavy` | this Mac | 20:00:51 to 20:01:40 | 0, 0, 0, 0, 0, 0 |
+| `make check-acpext-deps` | this Mac | 20:01:40 to 20:01:40 | 0 |
+| `make race`, then `GOFLAGS=-count=1 make race`, under `run-heavy` | this Mac | 20:01:40 to 20:02:40, then 20:02:40 to 20:03:39 | 0, 0 |
+| `make check-test-isolation`, under `run-heavy` | this Mac | 20:03:39 to 20:04:14 | 0 |
+| `go test -count=1 ./...`, `CGO_ENABLED=1 go test -count=1 -race ./...`, `go -C acpext test -count=1 ./...`, one `run-on-host --need linux --race`, `sh -c` | the Linux machine, scratch copy | 20:00:42 to 20:05:27 | 0 (GOTEST-OK, RACE-OK, ACPEXT-OK) |
+| the same three, `run-on-host --need windows --race`, `sh -c` | the Windows laptop, scratch copy | 20:00:42 to 20:03:37 | 0 (GOTEST-OK, RACE-OK, ACPEXT-OK) |
+| `make preflight`, under `run-heavy` | this Mac | 20:09:48 to 20:17:01 | 0 |
+
+The six lint runs: run 1 20:00:51 to 20:00:59 exit 0, run 2 20:01:00 to 20:01:08 exit 0, run 3 20:01:08 to 20:01:15 exit 0, run 4 20:01:16 to 20:01:23 exit 0, run 5 20:01:24 to 20:01:31 exit 0, run 6 20:01:32 to 20:01:40 exit 0, each "0 issues."
+
+```text
+17:36:30  internal/cli/auth_test.go
+19:44:10  llm/provider/signin.go
+19:52:17  internal/cli/loginissuer_test.go
+19:52:49  internal/cli/auth.go
+19:53:09  llm/provider/steps_test.go
+19:59:57  internal/cli/login.go
+19:59:57  internal/cli/loginjson_test.go
+```
+
+**Not verified.** As the record, and: SIGINT was not run (the same path as SIGTERM with another number); the Kong parse error is built in the second part; the reviewer's Kilo-listing case with a 503 does not end
+a sign-in, and a listing that refuses the credential with HTTP 401 does, which the second part's test runs through the real wizard.
+
+The identifier scan of the staged diff's added lines (the same patterns as the record) found nothing (`grep` exit 1) and found the one line of a copy with planted values (count 1); a script found no
+annotation of 2026-11-15 preceded by an odd number of quotation marks in its paragraph in this PLAN; both ran, with `make check-records markdownlint` (exit 0), after every text of this entry
+but this paragraph, and again after it. The guide, the architecture row and the README row changed after the last gate, which read Go files and the markdown gates only.
+
+#### Review of 2026-11-15 (P5), second part
+
+A second review of the staged P5 asked for four things, and the owner ruled on item 8 of the first part. Relayed by the coordinator; built and proved on 2026-11-16 by a mainstream model at medium effort
+(an earlier agent built the code and was stopped for a host reboot before it ran the plants, the gates or wrote this entry; every plant and gate below was run again by this one). It annotates the entry
+above and rewrites only the sentences that were false: item 3, item 8's "Stopped", its table of plants and its "Not verified", each marked in place.
+
+**The owner's ruling on item 8, relayed by the coordinator (2026-11-15): "Emit the failed step from the parser's own context".** On a parse error where the selected command is `auth login` and `--json`
+was seen, gobble prints one `failed` step of kind `invalid_request` and nothing on stderr, exit 2, as 0051-MADR D5 and the PLAN's step 2 say ("a usage error is one `failed` step of `invalid_request`").
+The options the owner was shown and did not choose: leave it and amend D5; inspect the raw arguments. What Kong gives (read, Kong `v1.16.1`, `go.mod`; `kong.go:323-356`): every error `Parse` returns is
+a `*kong.ParseError` whose `Context` is set, and `Context.Selected()` and `Context.FlagValue` give the selected command and the traced value of `--json`. What gobble prints, run on a binary built from this
+tree with `HOME`, `XDG_*` and `GOBBLE_HOME` in the scratch: `auth login --json` exit 2, one `failed` line (`provider` empty, `invalid_request`, `expected "<provider>"`), stderr empty; `--json auth login`,
+`auth login --json=false`, `auth login grok extra --json` and `auth login --bogus --json grok` exit 2, stdout empty, Kong's text on stderr. The context does not give the provider the person named (the
+positional's target is empty at a parse error, even for `grok --method`), so the line's `provider` is empty.
+
+**Deviation 2 (a file outside P5's list): `internal/cli/main.go` joins this phase,** by this dated deviation, whose resolution is the ruling. `parse` calls `jsonLoginParseFailure`
+(`internal/cli/main.go:147`, called at `:187`) before it prints Kong's text: for a `*kong.ParseError` whose context selects `gobble auth login` with `--json` true, it writes the failed step through
+`jsonSteps.fail`, the code every other failed step is written by (same `schema_version`, `seq` 1, `kind`, `message`, `retryable`; one encoder), and returns exit 2; every other parse error is printed
+as before. The residue is stated, not hidden: a `--json` that comes after the argument Kong rejects is never read, so that command line still gets the text on stderr
+(`docs/guides/credentials.md:362-368` says so in one sentence, and the help text for `--json`, `internal/cli/auth.go:53`, says what is true). **0051-MADR D5 says "Nothing goes to stderr":** the residue is a
+case where something does. *(2026-11-16, the coordinator's instruction: the MADR joins this phase's files by this note. The owner's ruling stated the residue in the option it chose, so no new ruling is
+needed; 0051-MADR carries a dated note at D5, after that sentence (`docs/decisions/0051-MADR-…md:516-520`), a pointer at D5's line on usage errors (`:509`), and the ruling in its "Revisions of 2026-11-15" section
+(`:1103-1111`); D5's text stays as written. Searched there and found nothing else that asserts it: `stderr`, `usage error`, `parse`, `output-only`; Confirmation 4 and the Neutral consequence hold as written.)*
+
+The commands that have a `--json` flag, and what each does on a parse error, which this change leaves as it was (exit 2, nothing on stdout, Kong's text and the `run 'gobble --help' for usage` line on
+stderr), held by `TestAuthLoginJSONParseFailureLeavesTheRest` (`internal/cli/loginjson_test.go:701`):
+
+| Command | `--json` | On a parse error |
+| :--- | :--- | :--- |
+| `auth login` | the steps as JSON lines | with `--json` read first: one `failed` step, exit 2, nothing on stderr (this change); otherwise Kong's text |
+| `config get`, `config path`, `version`, `update`, `auth status`, `auth check`, `mcp list`, `providers` | JSON of the command's own | Kong's text on stderr, exit 2, nothing on stdout |
+
+**The items of the second pass.**
+
+1. **`TestAuthLoginJSONRetryable` used the wrong error shape, and the first part's premise was false: true.** I tried a 503, which is not a refusal of the credential: a listing that answers 503 does not end a
+   sign-in (both ended `done`, exit 0), and a 503 at Grok's device endpoint ends `other`, not an API error. What does end a sign-in with an API error is the listing that checks the new credential refusing it with
+   HTTP 401: the wizard wraps the listing's error in its refusal (`wizard/configure.go:499`, `:706-725` of go-llmprovider-sdk `v1.31.0`), so the failed step is kind `auth` and the error is a `*provider.SignInError`
+   that holds the API error. *Changed:* the test (`internal/cli/loginjson_test.go:479`) runs the real wizard against the issuer whose listings answer 401 (`loginIssuer.refusing`,
+   `internal/cli/loginissuer_test.go:162`), for Grok's device sign-in with no `x-should-retry`, `true` and `false`, and Kilo's with `true`; the failed step is `auth`, and `retryable` is the reply's word: false, true,
+   false, true. The first part's item 3 and its "Not verified" are corrected in place, and its two plants of the old test are removed from its table. `TestRetryable` (`llm/provider`) stays, for the kinds that
+   hold no API error.
+2. **The signal sentence was incomplete: true.** `internal/cli/term/signals_unix.go:13` watches SIGINT, SIGTERM and SIGHUP, so 130, 143 and 129 (`internal/cli/exit.go:19`); `signals_windows.go` only an
+   interrupt, 130. The guide says both (`docs/guides/credentials.md:404-405`). Not changed in code; the Windows run of the suite is among the gates. SIGINT and SIGHUP are not run: `TestAuthLoginJSONEndedBySignal`
+   runs SIGTERM.
+3. **A failure that is not a usage error can come before the method line: true.** A stdin that cannot be read under `--api-key -` (`internal/cli/credentials.go:215-226`) is one `failed` step, `seq` 1,
+   exit 1, and no `method` line, the key being read first. The PLAN's step 2 says "`jsonSteps` writes the `method` line, then each step" and "`--api-key -` writes `method` and a `done` step": the order of a
+   sign-in that starts, which this holds; it says nothing of a failure before a method is chosen. The guide now says so (`docs/guides/credentials.md:406-409`). New `TestAuthLoginJSONStdinReadError`
+   (`internal/cli/loginjson_test.go:733`, stdin a directory): one failed step, `seq` 1, exit 1, no method line. Plant: the method line written before the key is read, which fails it with
+   `TestAuthLoginJSONAPIKey` and `TestAuthLoginJSONUsageError` (table).
+4. **Is `TestRetryable` isolated: yes, and what the check shows is limited.** `make check-test-isolation` on the final tree (08:35:42 to 08:36:25, exit 0) planted `AGENTS.md`, `.agents/skills/anc/SKILL.md`, `.git/HEAD` and `.gitignore` above two temp roots (`TMPDIR`, `TMP` and `TEMP`,
+and `GOTMPDIR`, 131 characters each), ran both modules' suites (`go test` exit 0, 0 failing in each), and printed `files written above the temp roots: 0`. That script looks at its own root and the temp roots, not
+at `HOME`. I looked there: `llm/provider`'s test binary, compiled by `go test -c`, run for `TestRetryable` alone (five cases, PASS) with `HOME`, `USERPROFILE`, `XDG_*` and `TMPDIR` in an empty scratch and its working
+directory in another, left 0 files (`iso2.sh`); through `go test` in the same setting 7 files appear, all the go tool's own telemetry (`Library/Application Support/go/telemetry/local/`: `compile`, `vet`, `asm`, `go`
+and `link` counters, `upload.token`, `weekends`), none the test's (`iso.sh`). What `provider.List` would write, and where: nothing. It passes no `LastGood`, so nothing of a listing is kept; with an API key it
+loads no stored login (`llm/provider/provider.go:99`), so `auth.json` is not read; the SDK's catalog cache is in memory, the test passing no `Options.Cache` (`llm/provider/cache.go:10-17`); the only code in
+go-llmprovider-sdk `v1.31.0` that writes a file is its token store (`llmprovider/auth/tokenstore_file.go`) and `ownerperm`, neither of which `List` reaches. Every request goes through the test's transport
+(`Options.HTTPClient`): the replies are its 503s, which the test asserts the kind of (`unavailable`), a reply a real service would not give to a made-up key.
+
+**The plants of this part, each on a scratch copy** (exit 1 each; `<TMP>` is the scratch copy):
+
+| Test | Planted break | Failure seen |
+| :--- | :--- | :--- |
+| `TestAuthLoginJSONParseFailure` | the parse failure not written as a step: Kong's text only | `loginjson_test.go:682: stdout "" is not whole lines` |
+| `TestAuthLoginJSONParseFailureLeavesTheRest` | `--json` read as true whatever its value (`--json=false` gets the step) | `loginjson_test.go:723: ["auth" "login" "--json=false"]: exit 2, stdout "{\"event\":\"step\",\"provider\":\"\",\"step\":{\"schema_version\":1,\"seq\":1 ... cted \\\"<provider>\\\"\",\"retryable\":false}}}\n", stderr ""; want exit 2, nothing on stdout, Kong's text beginning "Error: expected \"<provider>\""` |
+| `TestAuthLoginJSONParseFailureLeavesTheRest` | the step written for the parse error of any command with a `--json` | `loginjson_test.go:723: ["config" "get" "--json" "--bogus"]: exit 2, stdout "{\"event\":\"step\",\"provider\":\"\",\"step\":{\"schema_version\":1,\"seq ... e\":\"unknown flag --bogus\",\"retryable\":false}}}\n", stderr ""; want exit 2, nothing on stdout, Kong's text beginning "Error: unknown flag --bogus"` |
+| `TestAuthLoginJSONStdinReadError`, `TestAuthLoginJSONAPIKey`, `TestAuthLoginJSONUsageError` | the method line written before the key is read | `loginjson_test.go:184: no key given: exit 2, stdout "{\"event\":\"method\",\"provider\":\"openai\",\"method\":{\"schema_version\":1,\"id\":\"api_key\" ... \",\"message\":\"--api-key -: no key was given\",\"retryable\":false}}}\n", stderr ""; want exit 2 and one failed invalid_request step, no method line / loginjson_test.go:743: exit 1, stdout "{\"event\":\"method\",\"provider\":\"openai\",\"method\":{\"schema_version\":1,\"id\":\"api_key\",\"kind\":\"ap ... uthLoginJSONStdinReadError164700739/002: is a directory\",\"retryable\":false}}}\n", stderr ""; want exit 1 and one failed step, seq 1, no method line` |
+| `TestAuthLoginJSONRetryable` (real wizard, refusing listing) | `retryable` always false | `loginjson_test.go:506: the last step is failed with error {Kind:auth Message:kilo sign-in failed (auth) Retryable:false}, want a failed step of kind auth with retryable true` |
+| `TestAuthLoginJSONRetryable` (real wizard, refusing listing) | the kind table alone: `auth` is in none | `loginjson_test.go:506: the last step is failed with error {Kind:auth Message:kilo sign-in failed (auth) Retryable:false}, want a failed step of kind auth with retryable true` |
+| `TestAuthLoginJSONRetryable` (real wizard, refusing listing) | `provider.Retryable` not reading the API error's own `Retryable()` | `loginjson_test.go:506: the last step is failed with error {Kind:auth Message:kilo sign-in failed (auth) Retryable:false}, want a failed step of kind auth with retryable true` |
+
+All 39 plants of the record, the earlier ones too, were run again on the final tree, each exit 1, and the unbroken runs of their tests (26 runs) exit 0 (`plants-final.out`, `clean.out`).
+On the tree before the phase (HEAD's sources with the new and changed test files added) neither `llm/provider` nor `internal/cli` compiles: `steps_test.go:47:4: o.Steps undefined (type SignInOptions has no field or method Steps)`, `undefined: ErrAsks`, `undefined: stepDriver`,
+`c.Yields undefined (type Credential has no field or method Yields)`; `internal/cli`, `auth_test.go:537:68: o.Steps undefined (type provider.SignInOptions has no field or method Steps)` (`before.out`: exit 1, 1).
+
+**Docs step (C9).** Searched `README.md`, `AGENTS.md`, `docs/architecture.md`, `docs/README.md`, `docs/guides/*.md` and the doc comments of the changed files for `--json`, `auth login`, `SIGHUP`, `parse`, `stderr`,
+`signal`, `failed`: `docs/guides/credentials.md:362-368` (the parse failure and its residue), `:398-409` (the kinds' exit codes, the signals, a failure before a method), `internal/cli/auth.go:53` (the help text)
+and `docs/README.md`'s row for this PLAN (the plant count) fixed; `docs/architecture.md:132` (the `internal/cli` row) names nothing of `--json`'s parse failure, and `:110` (the `llm/provider` row) is as the
+record above left it, no change; `README.md`, `AGENTS.md`: no change. `docs: searched README.md, AGENTS.md, docs/architecture.md, docs/README.md, docs/guides/*.md`.
+
+**Gates after the last code change** (the first started at 08:32:20; every Go file below was last modified before it):
+
+| Gate | Where | Start to end | Exit |
+| :--- | :--- | :--- | :--- |
+| `make pre-add-check FILES=` the 8 changed Go files | this Mac | 08:32:20 to 08:32:35 | 0 |
+| `golangci-lint run --config .golangci.yml ./internal/cli/ ./llm/provider/`, six runs, a new `GOLANGCI_LINT_CACHE` each, under `run-heavy` | this Mac | 08:32:35 to 08:33:24 | 0, 0, 0, 0, 0, 0 |
+| `make check-acpext-deps` | this Mac | 08:33:25 to 08:33:25 | 0 |
+| `make race`, then `GOFLAGS=-count=1 make race`, under `run-heavy` | this Mac | 08:33:25 to 08:34:34, then 08:34:34 to 08:35:42 | 0, 0 |
+| `make check-test-isolation`, under `run-heavy` | this Mac | 08:35:42 to 08:36:25 | 0 |
+| `go test -count=1 ./...`, `CGO_ENABLED=1 go test -count=1 -race ./...`, `go -C acpext test -count=1 ./...`, one `run-on-host --need linux --race`, `sh -c` | the Linux machine, scratch copy | 08:32:21 to 08:37:16 | 0 (GOTEST-OK, RACE-OK, ACPEXT-OK) |
+| the same three, `run-on-host --need windows --race`, `sh -c` | the Windows laptop, scratch copy | 08:32:21 to 08:35:39 | 0 (GOTEST-OK, RACE-OK, ACPEXT-OK) |
+| `make preflight`, under `run-heavy` | this Mac | 08:37:27 to 08:44:30 | 0 |
+
+The six lint runs: run 1 08:32:35 to 08:32:44 exit 0, run 2 08:32:44 to 08:32:52 exit 0, run 3 08:32:53 to 08:33:01 exit 0, run 4 08:33:01 to 08:33:09 exit 0, run 5 08:33:09 to 08:33:16 exit 0, run 6 08:33:17 to 08:33:24 exit 0, each "0 issues." No identifier this change adds differs from another in its package only by capitalization (`confusing-naming` ran six times).
+
+```text
+11-15 17:36:30  internal/cli/auth_test.go
+11-15 19:44:10  llm/provider/signin.go
+11-15 19:53:09  llm/provider/steps_test.go
+11-15 19:59:57  internal/cli/login.go
+11-16 07:20:22  internal/cli/auth.go
+11-16 07:21:27  internal/cli/loginissuer_test.go
+11-16 07:22:07  internal/cli/loginjson_test.go
+11-16 07:24:51  internal/cli/main.go
+```
+
+**Not verified.** The residue (a `--json` after the argument Kong rejects) is stated and held as it behaves, not changed. SIGINT and SIGHUP exits are by the same path as SIGTERM's, which is run; the Windows run
+covers the Windows signal and parse paths only as the suite does. The provider's name at a parse error is not known to the context. No live service, and no reader of the lines (magic-cli-remote) was run
+against them.
+
+The identifier scan of the staged diff's added lines (the same patterns as the record: the local account name, host names, home, temporary and dev-host scratch paths, queue ticket shapes and mail addresses) found
+nothing (`grep` exit 1) and found the one line of a copy with planted values (count 1). A script found no annotation of 2026-11-15 or 2026-11-16 preceded by an odd number of quotation marks in its
+paragraph in this PLAN (0 at `HEAD`, 0 now). Both ran, with `make check-records markdownlint` (exit 0, 08:45:29 to 08:45:31), after every text of this entry but this paragraph, and again after it. No Go file
+changed after the first gate started (08:32:20). The MADR note of 2026-11-16 (deviation 2) and its record changed no Go file, so no gate that reads Go files was run again for them; `make check-records markdownlint`, the
+identifier scan and the quotation check were run again after them. The guide was rewrapped at 08:33, after the first gate started and before `make preflight` (08:37:27); the README row and this record changed after the last gate,
+which reads Go files and, in preflight, the markdown gates only.

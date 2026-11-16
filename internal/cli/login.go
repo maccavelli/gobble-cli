@@ -65,20 +65,24 @@ func (e *runEnv) signIn(ctx context.Context, q *questions, want string) (string,
 // signInTo signs in to provider id through the SDK's wizard, asking p, with
 // o's method and callbacks (0031-MADR D7), and stores what it gives: a key
 // in auth.json, a device's escaped so Pi's grammar gives it back unchanged;
-// a login, which the wizard saved there through the login store. ev, when
-// not nil, takes the saved event.
-func (e *runEnv) signInTo(ctx context.Context, p provider.Prompter, id string, o provider.SignInOptions, ev *loginEvents) error {
+// a login, which the wizard saved there through the login store. js, when
+// not nil, takes the done step.
+func (e *runEnv) signInTo(ctx context.Context, p provider.Prompter, id string, o provider.SignInOptions, js *jsonSteps) error {
 	path := authPath()
 	if path == "" {
 		return failf("auth.json: the config directory cannot be resolved")
 	}
 	o.Options = e.providerOptions(id, provider.Options{ClientName: appName, ClientVersion: identity().Version})
 	c, err := signInWith(ctx, id, p, o, auth.Logins{Path: path})
-	switch {
-	case err != nil:
+	if err != nil {
 		return err
+	}
+	if js != nil && c.Yields != "" {
+		js.yields = c.Yields // what the SDK's done step says the sign-in left
+	}
+	switch {
 	case c.Key == "":
-		return e.saved(ev, id, auth.TypeOAuth)
+		return e.saved(js, id, auth.TypeOAuth)
 	case c.Device:
 		c.Key = catalog.QuoteValue(c.Key)
 	case provider.PublicListing(id):
@@ -87,7 +91,7 @@ func (e *runEnv) signInTo(ctx context.Context, p provider.Prompter, id string, o
 	if err := auth.SetKey(ctx, path, id, c.Key, c.Workspace); err != nil {
 		return failf("%v", err)
 	}
-	return e.saved(ev, id, auth.TypeAPIKey)
+	return e.saved(js, id, auth.TypeAPIKey)
 }
 
 // storedCredentials are the key providers auth.json holds a credential
