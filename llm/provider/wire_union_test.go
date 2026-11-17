@@ -179,9 +179,14 @@ func TestWireRootUnionSchema(t *testing.T) {
 	}
 	oneRequest(t, c)
 	_, bodies := c.requests()
-	// The SDK writes the schema again with its keys sorted, so the bytes
-	// match once both are canonical (RFC 8785): the same members, values and
-	// order of every list.
+	// The schema on the wire is the spec's, byte for byte: mcpclient writes
+	// it with its keys sorted, and so does the SDK.
+	sent := sentParameters(t, bodies[0])
+	if string(sent) != string(spec.InputSchema) {
+		t.Fatalf("the schema on the wire is not the spec's, byte for byte:\n got %s\nwant %s", sent, spec.InputSchema)
+	}
+	// The hand-indented file is the same schema once both are canonical
+	// (RFC 8785).
 	canon := func(v jsontext.Value) string {
 		v = bytes.Clone(v)
 		if err := v.Canonicalize(); err != nil {
@@ -189,11 +194,7 @@ func TestWireRootUnionSchema(t *testing.T) {
 		}
 		return string(v)
 	}
-	got := canon(sentParameters(t, bodies[0]))
-	if want := canon(spec.InputSchema); got != want {
-		t.Fatalf("the schema on the wire is not the spec's:\n got %s\nwant %s", got, want)
-	}
-	if want := canon(read("magictools-execute-pipeline.rewritten.json")); got != want {
+	if got, want := canon(sent), canon(read("magictools-execute-pipeline.rewritten.json")); got != want {
 		t.Fatalf("the schema on the wire is not the expected rewrite:\n got %s\nwant %s", got, want)
 	}
 }

@@ -444,3 +444,128 @@ gated P4 (Q4 (b)) or a text exclusion (Q7 (b)); none applies.
   `AGENTS.md`, `mcpclient/`, `acpserver/` for `inputSchema`, input schema, tool schema, `exclude-tools` and `mcp__`; nothing
   else it makes false.
 * **Staged, not committed.** The changed and new files of P1 and this record staged by path for the coordinator.
+
+### P2 (2026-11-17): the independent review of `cde93be`
+
+* **Who and what.** An independent review by the strongest-class model, as this plan prices P2, which was given D2, the
+  diff of P1, the two testdata files and the shapes, and not P1's conclusions; the coordinator committed and pushed P1
+  as `cde93be` first, after its own preflight and ten race rounds.
+* **Verdict.** The commit does what 0060 decided: the notices, the remedies, the aliasing (the SDK's map is not written
+  to) and the call path work. The rule is not input-preserving for three kinds of schema it rewrites, which D2's
+  argument and its conditions did not cover (B1, in the MADR's amendment of this date): `unevaluatedProperties` in a
+  union branch (180 objects newly accepted), a `$ref` anywhere but a branch's top level, including one into the union
+  (up to 1,948 newly refused), and `$id` or `$anchor` in the properties it copies (duplicates make the rewritten schema
+  invalid for one of two validators). The real magictools schema has none and is preserved exactly. Smaller findings:
+  S1, a surviving plant ("copy each missing keyword instead of none-of-the-three" survived, since no case had a branch
+  with its own `properties` under a root with `additionalProperties`); S2, the live test should log the refusal's text;
+  S3, a test for a tool hidden and then shown; N1, the wire test should compare the spec's bytes to the wire's raw; N2,
+  the guide should show what a terminal prints and the notice should say a deny rule "with no pattern"; N3,
+  `NewUnionServer`'s doc should say how `pick_one` is registered; N4, the guide should say a root with no type is typed
+  first.
+* **The eight deviations of P1.** P1's entry lists eight notes on the plan as written, headed "none stopping the phase".
+  They were built without stopping: the rule is that a deviation from the plan stops the step and is put to the
+  coordinator first, and P1 built each one way and reported it afterwards. The review found each sound, so none is
+  undone; the entry above is kept as it stands, and this is its correction.
+* **The owner's rulings of 2026-11-17,** relayed by the coordinator, by label: R-1, "Refuse the rule whenever any of
+  those keywords appears anywhere in the union or the copied properties (Recommended)", which amends D2 (the MADR's
+  amendment of this date); R-2, "Keep it, and add a test for hidden-then-shown (Recommended)", for the deny-rule
+  behaviour P1 added (note 6 of P1's entry).
+
+### P1 fixes (2026-11-17)
+
+* **Provenance.** A mainstream-class model at high effort, on the coordinator's brief after P2; base `cde93be` (tree
+  clean at the start); nothing committed, pushed or tagged. The review's probes and scratch fix were read, not copied:
+  the walk below is not the scratch fix's, which looked at member names anywhere and so would refuse a property called
+  `$ref`.
+* **Built.**
+  1. **B1, the walk.** `mcpclient/schema.go:52` `scopeKeywords` (the nine); `:121`, in `ruleApplies`, searches the union
+     and the three copied keywords with `scopeKeywordAt` (`:134`) and `scopeKeywordIn` (`:165`), and refuses with
+     `the union or the keywords it would copy hold "<keyword>", which the rule does not cover`. It looks only where a
+     schema is, with the lists `stripSchema` already uses: a schema's own keys are tested against the nine; a key that
+     holds a schema (`items`, `additionalItems`, `contains`, `propertyNames`, `not`, `if`, `then`, `else`,
+     `additionalProperties`, `unevaluatedProperties`, `unevaluatedItems`, `contentSchema`), a list of schemas (`allOf`,
+     `anyOf`, `oneOf`, `prefixItems`) or a map of names to schemas (`properties`, `patternProperties`, `$defs`,
+     `definitions`, `dependentSchemas`, `dependencies`) is walked. In a map of names the keys are never tested, only
+     their values, which is how a property called `$ref` is told from the keyword; `enum`, `const`, `default`,
+     `examples`, `required` and `type` are not walked, so data holding a `$ref` key is not a keyword either. A keyword
+     the 2020-12 applicator vocabulary (and the older drafts' `definitions`, `dependencies` and `additionalItems`) does
+     not list is not walked.
+  2. **S1.** Cases and a plant only; the rule was right.
+  3. **S2.** `llm/provider/live_grok_union_test.go` logs the redacted error text when the original is refused (still
+     compiled only).
+  4. **S3 and R-2.** `acpserver/mcp_test.go` `TestMCPUnionSchemaHiddenThenShown`; the deny-rule behaviour is kept.
+  5. **Notes.** N1: `TestWireRootUnionSchema` compares the schema on the wire to the spec raw, byte for byte (they are
+     identical, the SDK and mcpclient both write sorted keys), and canonicalises only the hand-indented file. N2: the
+     notice's and the log's remedy says "a permission rule that denies it with no pattern" (`acpserver/mcp.go:219`), and
+     the guide quotes what a terminal prints, run through the terminal handler (`internal/logging`'s `Show` and `Wrap`,
+     at 80 columns) with this record's fields. N3: `NewUnionServer`'s doc says how `pick_one` is registered and swapped.
+     N4: the guide says a root with no type is typed first.
+  6. **Docs and records.** `docs/guides/mcp-servers.md`, `docs/architecture.md` (the `mcpclient` row),
+     `mcpclient/doc.go`; the MADR's dated amendment, with pointers on its Context step 6 and D2's list.
+* **Tests, red first on `cde93be`** (the outputs are kept with the session's records):
+  * `mcpclient/schema_scope_test.go` `TestScopeKeywordsRefusedEverywhere`: each of the nine keywords in each of 38
+    positions of the union or of the copied keywords (including three deep, and a `oneOf` root), each position also with
+    a harmless title as its control, which must be rewritten. 341 of its 342 subtests failed (`schema_scope_test.go:116`,
+    "rewritten true"); the one that passed is a `$ref` at a branch's top level, which `cde93be` already refused.
+  * `TestRewriteRootUnion/R1` to `R7` failed (`schema_test.go:282`, "rewritten true"): R1 `unevaluatedProperties` in a
+    branch, R2 a root property `$ref` into the union, R3 a nested `$ref` shifted by a removed branch, R4 `$anchor`, R5
+    `$id`, R6 `$dynamicAnchor`, R7 the known cost `"$ref": "#"`, now flagged. `TestRewritePreservesInputs/R1`, `/R2`,
+    `/R3` failed at `schema_test.go:465` with the review's instance (`map[a:x]`: R1 the original false, the rewrite
+    true; R2 and R3 the original true, the rewrite false); `/R4` to `/R7` failed at `:474`, "the rewrite holds
+    "$anchor"" and so on, the check that no rewritten schema carries any of the nine names, searched as member names
+    anywhere with a list of its own. `TestRefusedShapesAreUntouched` failed at `:495` (R1 rewritten).
+  * Already green on `cde93be`, so held by plants alone: `TestScopeKeywordNamesAreNotKeywords` (a property, a name in a
+    branch, deep, in `required`, and data in `default`, `enum`, `const` and `examples`, called each of the nine; rewritten
+    and preserved), cases `N1` to `N3`, `X17` (S1), `TestCounterExamplesAreReal` (each counter-example's hand-written
+    pre-amendment rewrite changes the verdict on the review's instance), `TestMCPUnionSchemaHiddenThenShown`, and the
+    raw wire comparison.
+  * `TestMCPUnionSchemaFlaggedOnce` failed on `cde93be` for the new remedy wording (`mcp_test.go:605` the log, `:614` the
+    notice lack "a permission rule that denies it with no pattern").
+* **Plants (K2),** on a scratch copy of `git archive HEAD` plus the uncommitted files copied, each file asserted to occur
+  once, gofmt clean, the copy built with its tests; each red as a test failure:
+
+  | # | Plant | Red | First failing line |
+  | :--- | :--- | :--- | :--- |
+  | F1 | the walk skips nested positions | `TestScopeKeywordsRefusedEverywhere` (e.g. `root_property_items`) | `schema_scope_test.go:116` |
+  | F2 | `$dynamicAnchor` dropped from the list | the matrix for it, `TestRewriteRootUnion/R6` | `schema_scope_test.go:116` |
+  | F3 | a property named like a keyword taken for it | `TestScopeKeywordNamesAreNotKeywords` (all nine) | `schema_scope_test.go:138` |
+  | F4 | copy each missing keyword instead of none-of-the-three | `TestRewriteRootUnion/X17`, `TestRewritePreservesInputs/X17` | `schema_test.go:294`; `:465`: instance 14 `map[a:x c:true]`, the original true, the rewrite false |
+  | F5 | the reported-once key recorded while hidden | `TestMCPUnionSchemaHiddenThenShown` | `mcp_test.go:645`: after prompt "shown", 0 warning records, want 1 |
+  | F6 | the spec written indented | `TestWireRootUnionSchema`, `TestInputSchemaAdditionsThenRule` | `wire_union_test.go:186`: not the spec's, byte for byte |
+  | F7 | the remedy without "with no pattern" | `TestMCPUnionSchemaFlaggedOnce` | `mcp_test.go:605` |
+  | F8 | the union's own keyword not searched | the matrix, the branch positions | `schema_scope_test.go:116` |
+  | F9 | data in `default`, `enum`, `const` walked as schemas | `TestScopeKeywordNamesAreNotKeywords` | `schema_scope_test.go:138` |
+
+  No plant survived. The three the brief names are F1, F2 and F3; F4 is the S1 plant; F5 the S3 plant.
+* **Input preservation.** The plan's corpus (seed `20261117`; every subset of the names plus `zz`, 2,000 random objects,
+  nine non-objects) with jsonschema-go `v0.4.3`: 0 differences over every rewritten case, 38,891 instances in all in
+  19 cases (the 15 of P1, X17 and N1 to N3), the real schema 2,265 instances with 91 accepted by both, as before; and
+  0 differences in each of the nine generated cases of `TestScopeKeywordNamesAreNotKeywords`. The counter-examples R1 to
+  R7 are not rewritten, so have none to preserve. One validator: `santhosh-tekuri/jsonschema`, which the review used, is not in `go.mod`, and
+  `AGENTS.md` requires a MADR naming a module before it is required, so it is not added here; the amendment says so. The
+  corpus cannot show a duplicate `$id` or `$anchor` invalid (jsonschema-go accepts the copies), so those are held by
+  the search of every rewritten schema for the nine names, and by the matrix.
+* **Gates** (each exit status taken before any filter; host clock, queue waits included):
+
+  | Gate | Host | Start | End | Exit |
+  | :--- | :--- | :--- | :--- | :--- |
+  | `make pre-add-check` over the 9 changed `.go` files | session host | 15:34:34 | 15:34:46 | 0 |
+  | `make preflight` | session host, `run-heavy` | 15:34:56 | 15:43:26 | 0, "preflight passed" |
+  | `make race` | the Linux machine, `run-on-host --race --need linux` | 15:34:56 | 15:39:35 | 0 |
+  | `make race` | the Windows laptop, `run-on-host --race --need windows -- sh -c "make race"` | 15:34:56 | 15:41:15 | 0 |
+  | `go test -race -count=20 -timeout 30m ./mcpclient/...` | session host, `run-heavy` | 15:34:56 (queued) | 15:46:29 | 0 (180 s of run) |
+  | `make check-test-isolation` | session host, `run-heavy` | 15:35:02 (queued) | 15:47:55 | 0 |
+  | `go vet -tags live_grok ./llm/provider/` | session host | 15:35 | 15:35 | 0 |
+
+  After the last record edit, each exit status taken before any filter: `make check-records` 0 and `make markdownlint` 0 (59 files, 0 issues); and an identifier scan of the staged diff for the local account name, the hosts' names and real-machine paths, no hits.
+* **Docs rows.** `docs/guides/mcp-servers.md` (the rule's conditions, the terminal and notice forms, hidden-then-shown):
+  fixed. `docs/architecture.md:131` fixed. `mcpclient/doc.go` fixed. `mcpclient/mcptest/mcptest.go` doc fixed.
+  `AGENTS.md` unchanged. docs: searched `README.md`, `docs/`, `AGENTS.md`, `mcpclient/`, `acpserver/` for the rule's
+  conditions, `accepts exactly`, `$ref`, `with no pattern` and `Warning:`; nothing else it makes false.
+* **Removed lines in the staged record diff:** none. The MADR gains two pointer lines (Context step 6, D2's list) and
+  an appended amendment; this plan gains the three entries above; no committed record line is rewritten or removed.
+* **Not verified.** That any provider route accepts the rewritten form (P3); the second validator's agreement on this
+  pass's cases (not in the tree, above); a keyword an MCP server invents that holds a schema, which the walk does not
+  look into, since no validator would; the terminal form of the warning for this
+  record as printed by `gobble` itself, rather than by its handler with this record's fields.
+* **Staged, not committed.** The fix pass's files staged by path for the coordinator.

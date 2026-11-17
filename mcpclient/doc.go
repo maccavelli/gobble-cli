@@ -16,7 +16,10 @@
 // "object" and given the root's properties, patternProperties and
 // additionalProperties when it has none of its own, which keeps the
 // arguments the schema accepts and is the form Grok accepts of a root union
-// (0060-MADR D2). A root union the rule does not cover, with a branch that is
+// (0060-MADR D2). The rule does not apply when the union, or the keywords it
+// copies, hold a reference, an id or anchor, or unevaluatedProperties or
+// unevaluatedItems at any depth (the amendment of 2026-11-17). A root union
+// the rule does not cover, with a branch that is
 // not typed object, is sent as the server gave it; Manager.FlaggedTools
 // reports it, and Manager.RewrittenTools reports each rewritten one.
 // docs/guides/mcp-servers.md says what a user sees and can do.

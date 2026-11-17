@@ -216,7 +216,7 @@ func (a *Agent) reportSchemas(ctx context.Context, s *liveSession, offered []too
 			continue
 		}
 		l.reported[key] = true
-		remedy := "leave the tool out with --exclude-tools " + n.Name + ", or add a permission rule that denies it"
+		remedy := "leave the tool out with --exclude-tools " + n.Name + ", or add a permission rule that denies it with no pattern"
 		a.logger.WarnContext(ctx, schemaWarning, slog.String("server", n.Server), slog.String("tool", n.Tool),
 			slog.String("reason", n.Reason), slog.String("remedy", remedy))
 		a.queueNotice(s, acp.NoticeSeverityWarning, schemaWarning, n.Server+"/"+n.Tool+": "+n.Reason+". To avoid a refusal, "+remedy+".")

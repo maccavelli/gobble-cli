@@ -205,6 +205,14 @@ func (u *UnionCalls) Args() []string {
 // written: ExecutePipelineTool with ExecutePipelineSchema, and PickOneTool
 // with NullableUnionSchema. Both are added through Server.AddTool, so the
 // go-sdk validates nothing against them. NewServer's tools are not here.
+//
+// ExecutePipelineTool is registered with its schema. PickOneTool cannot be:
+// AddTool panics unless a root's type is exactly "object", and
+// NullableUnionSchema's is ["object", "null"]. It is registered with the
+// schema {"type":"object"}, and a receiving middleware swaps
+// NullableUnionSchema in, on a copy of the tool, in each tools/list result,
+// so that a client is sent the schema as written. The server's own
+// registration is never changed.
 func NewUnionServer() (*mcp.Server, *UnionCalls) {
 	calls := &UnionCalls{}
 	s := mcp.NewServer(&mcp.Implementation{Name: "gobble-mcptest-union", Version: "1.0.0"}, nil)

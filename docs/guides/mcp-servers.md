@@ -52,15 +52,21 @@ The model is sent each tool's `inputSchema`, with these changes, made on a copy 
    each such branch its own `properties`; a branch that only says which properties are required may leave its
    arguments unconstrained there. gobble gives each branch `"type": "object"` and the root's `properties`,
    `patternProperties` and `additionalProperties`, when the branch has none of its own, with the descriptions left
-   out of the copies. A branch that is `false`, or whose type cannot be an object, is removed. The rewritten schema
-   accepts exactly the arguments the original accepts
-   ([0060-MADR](../decisions/0060-MADR-normalise-root-level-unions-in-mcp-tool-schemas.md), D2): it states the same
-   contract in the form Grok takes, and it is larger, since each branch repeats the properties.
+   out of the copies. A branch that is `false`, or whose type cannot be an object, is removed. When the rule applies,
+   the rewritten schema accepts exactly the arguments the original accepts
+   ([0060-MADR](../decisions/0060-MADR-normalise-root-level-unions-in-mcp-tool-schemas.md), D2 and its amendment of
+   2026-11-17): it states the same contract in the form Grok takes, and it is larger, since each branch repeats the
+   properties.
 
-The rule applies only when the root is typed exactly `object`, has one union, holds besides it only `type`,
-`properties`, `required`, `additionalProperties`, `patternProperties` and annotations such as `description`, and no
-branch uses `$ref`. A root's own keywords, descriptions included, are left as the server wrote them, and a nested union
-inside a branch is not touched.
+The rule applies only when the root is typed exactly `object` (a root with no type is given `object` first, by the
+first change above, so it is covered), has one union, holds besides it only `type`, `properties`, `required`,
+`additionalProperties`, `patternProperties` and annotations such as `description`, and neither the union nor the
+properties it copies hold, at any depth, a reference (`$ref`, `$dynamicRef`, `$recursiveRef`), an id or an anchor
+(`$id`, `$anchor`, `$dynamicAnchor`, `$recursiveAnchor`), `unevaluatedProperties` or `unevaluatedItems`: copying
+properties into a branch, or removing a branch, can change what they mean. A property that is merely called `$ref` or
+`$id` is not one of them. A schema with one of them is sent as given and warned of, as below, even when it is
+harmless, such as a `$ref` to `#`. A root's own keywords, descriptions included, are left as the server wrote them,
+and a nested union inside a branch is not touched.
 
 An example is the `execute_pipeline` tool of the magictools server, whose schema is an object with seven properties and
 
@@ -78,22 +84,33 @@ record, `mcp: tool schema rewritten`, naming the server and the tool, for each t
 A schema outside the rule is sent as the server gave it, and nothing is dropped. When its root union has a branch that
 is not an object schema typed `object`, some providers refuse the request, and then every prompt on that model fails
 until the tool is left out, since gobble sends every tool each time. gobble says so once per session for each such tool,
-as a warning in the log, which a terminal shows as a `Warning:` line, and as a notice to an ACP client that offered
-notices:
+as a warning in the log, which a terminal prints as a `Warning:` line (here wrapped at 80 columns, as gobble's terminal
+handler does), and as a notice to an ACP client that offered notices. A terminal prints:
 
 ```text
-mcp: tool schema sent as the server gave it
-fx/pick_one: its root anyOf has a branch that is not an object, which some providers refuse; left as given because the root type is not exactly "object". To avoid a refusal, leave the tool out with --exclude-tools mcp__fx__pick_one, or add a permission rule that denies it.
+Warning: mcp: tool schema sent as the server gave it (server: fx; tool:
+  pick_one; reason: its root anyOf has a branch that is not an object, which
+  some providers refuse; left as given because the root type is not exactly
+  "object"; remedy: leave the tool out with --exclude-tools mcp__fx__pick_one,
+  or add a permission rule that denies it with no pattern)
+```
+
+and the notice, titled `mcp: tool schema sent as the server gave it`, says:
+
+```text
+fx/pick_one: its root anyOf has a branch that is not an object, which some providers refuse; left as given because the root type is not exactly "object". To avoid a refusal, leave the tool out with --exclude-tools mcp__fx__pick_one, or add a permission rule that denies it with no pattern.
 ```
 
 The text after "because" says why the rule did not apply: the root type is not exactly `object`, the root has both
-`anyOf` and `oneOf`, the root has a keyword the rule does not cover (named), the union is not a list, a branch uses
-`$ref`, a branch is not a schema, a branch's type is not a type name or a list of them, or no branch can match an
-object. There are three ways to stop the warning and the refusal:
+`anyOf` and `oneOf`, the root has a keyword the rule does not cover (named), the union or the properties it would copy
+hold a reference, an id, an anchor or an `unevaluated` keyword (named), the union is not a list, a branch uses `$ref`,
+a branch is not a schema, a branch's type is not a type name or a list of them, or no branch can match an object.
+There are three ways to stop the warning and the refusal:
 
 - Leave the tool out of the run with `--exclude-tools mcp__<server>__<tool>`, or `-t` without it.
 - Deny it with a permission rule (`deny: mcp__<server>__<tool>` under `permissions.rules`). A tool a rule hides is not
-  sent, so it is not warned of either.
+  sent, so it is not warned of either; if the rule is lifted during the session, the warning comes once, with the
+  first prompt that sends the tool.
 - Ask the server's author to type each branch of the union `"type": "object"`.
 
 A provider that does not refuse the shape takes the tool as the server gave it, and the warning is then only

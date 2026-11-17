@@ -59,6 +59,9 @@ type ruleCase struct {
 	id, name string
 	in, want string
 	flag     string
+	// named marks a case with a property called like a scope keyword: its
+	// rewrite carries the name, which is not the keyword.
+	named bool
 }
 
 func ruleCases() []ruleCase {
@@ -181,6 +184,64 @@ func ruleCases() []ruleCase {
 		{id: "X16", name: "a root with no properties: a branch gets none",
 			in:   `{"type":"object","anyOf":[{"required":["a"]}]}`,
 			want: `{"type":"object","anyOf":[{"type":"object","required":["a"]}]}`},
+
+		// The review of 2026-11-17 (0060-MADR, amendment): a branch with its
+		// own properties under a root with additionalProperties keeps its own
+		// and gets none of the root's three keywords, however many it lacks.
+		{id: "X17", name: "own properties under a root with additionalProperties false: nothing copied into that branch",
+			in: `{"type":"object","properties":{"a":{"type":"string"},"b":{"type":"string"},"c":{"type":"boolean"}},"additionalProperties":false,` +
+				`"anyOf":[{"properties":{"a":{"const":"x"}},"required":["a"]},{"required":["b"]}]}`,
+			want: `{"type":"object","properties":{"a":{"type":"string"},"b":{"type":"string"},"c":{"type":"boolean"}},"additionalProperties":false,"anyOf":[` +
+				`{"type":"object","properties":{"a":{"const":"x"}},"required":["a"]},` +
+				`{"type":"object","properties":{"a":{"type":"string"},"b":{"type":"string"},"c":{"type":"boolean"}},"additionalProperties":false,"required":["b"]}]}`},
+
+		// The review's counter-examples: with these keywords in the union or
+		// in what the rule copies, a typed branch with copied properties
+		// changes a verdict (TestCounterExamplesAreReal). They are left as
+		// given and flagged, by name.
+		{id: "R1", name: "unevaluatedProperties in a branch",
+			in:   `{"type":"object","properties":{"a":{"type":"string"},"b":{"type":"integer"},"c":{"type":"boolean"}},"anyOf":[{"unevaluatedProperties":false,"required":["a"]},{"required":["b"]}]}`,
+			flag: `"unevaluatedProperties"`},
+		{id: "R2", name: "a root property whose $ref points into the union",
+			in:   `{"type":"object","properties":{"a":{"$ref":"#/anyOf/0"}},"anyOf":[{"required":["a"]},{"required":["zz"]}]}`,
+			flag: `"$ref"`},
+		{id: "R3", name: "a nested $ref that a removed branch shifts",
+			in:   `{"type":"object","properties":{"a":{}},"anyOf":[{"type":"string"},{"properties":{"a":{"$ref":"#/anyOf/0"}},"required":["a"]}]}`,
+			flag: `"$ref"`},
+		{id: "R4", name: "$anchor in a root property",
+			in:   `{"type":"object","properties":{"a":{"type":"string","$anchor":"x"}},"anyOf":[{"required":["a"]},{"required":["b"]}]}`,
+			flag: `"$anchor"`},
+		{id: "R5", name: "$id in a root property",
+			in:   `{"type":"object","properties":{"a":{"type":"string","$id":"urn:a"}},"anyOf":[{"required":["a"]},{"required":["b"]}]}`,
+			flag: `"$id"`},
+		{id: "R6", name: "$dynamicAnchor in a root property",
+			in:   `{"type":"object","properties":{"a":{"type":"string","$dynamicAnchor":"x"}},"anyOf":[{"required":["a"]},{"required":["b"]}]}`,
+			flag: `"$dynamicAnchor"`},
+		{id: "R7", name: "the known cost: a harmless self-reference is declined too",
+			in:   `{"type":"object","properties":{"a":{"type":"string"},"n":{"$ref":"#"}},"anyOf":[{"required":["a"]},{"required":["n"]}]}`,
+			flag: `"$ref"`},
+
+		// A property called like a scope keyword is a name, not the keyword:
+		// the rule applies, and the name goes into the copies.
+		{id: "N1", name: "root properties called $ref, $id, $anchor and $dynamicRef", named: true,
+			in: `{"type":"object","properties":{"$ref":{"type":"string"},"$id":{"type":"string"},"$anchor":{"type":"integer"},"$dynamicRef":{"type":"string"}},` +
+				`"additionalProperties":false,"anyOf":[{"required":["$ref"]},{"required":["$id","$anchor"]}]}`,
+			want: `{"type":"object","properties":{"$ref":{"type":"string"},"$id":{"type":"string"},"$anchor":{"type":"integer"},"$dynamicRef":{"type":"string"}},` +
+				`"additionalProperties":false,"anyOf":[` +
+				`{"type":"object","properties":{"$ref":{"type":"string"},"$id":{"type":"string"},"$anchor":{"type":"integer"},"$dynamicRef":{"type":"string"}},"additionalProperties":false,"required":["$ref"]},` +
+				`{"type":"object","properties":{"$ref":{"type":"string"},"$id":{"type":"string"},"$anchor":{"type":"integer"},"$dynamicRef":{"type":"string"}},"additionalProperties":false,"required":["$id","$anchor"]}]}`},
+		{id: "N2", name: "a branch's own properties called $ref and unevaluatedProperties", named: true,
+			in: `{"type":"object","properties":{"a":{"type":"string"}},"anyOf":[` +
+				`{"properties":{"$ref":{"type":"string"},"unevaluatedProperties":{"type":"boolean"}},"required":["$ref"]},{"required":["a"]}]}`,
+			want: `{"type":"object","properties":{"a":{"type":"string"}},"anyOf":[` +
+				`{"type":"object","properties":{"$ref":{"type":"string"},"unevaluatedProperties":{"type":"boolean"}},"required":["$ref"]},` +
+				`{"type":"object","properties":{"a":{"type":"string"}},"required":["a"]}]}`},
+		{id: "N3", name: "scope keywords as data inside default, enum and const are not keywords", named: true,
+			in: `{"type":"object","properties":{"p":{"type":"object","default":{"$ref":"#","$id":"x"},"enum":[{"$anchor":"y"}],"const":{"unevaluatedProperties":false}}},` +
+				`"anyOf":[{"required":["p"]},{"required":["q"]}]}`,
+			want: `{"type":"object","properties":{"p":{"type":"object","default":{"$ref":"#","$id":"x"},"enum":[{"$anchor":"y"}],"const":{"unevaluatedProperties":false}}},"anyOf":[` +
+				`{"type":"object","properties":{"p":{"type":"object","default":{"$ref":"#","$id":"x"},"enum":[{"$anchor":"y"}],"const":{"unevaluatedProperties":false}}},"required":["p"]},` +
+				`{"type":"object","properties":{"p":{"type":"object","default":{"$ref":"#","$id":"x"},"enum":[{"$anchor":"y"}],"const":{"unevaluatedProperties":false}}},"required":["q"]}]}`},
 	}
 }
 
@@ -404,6 +465,14 @@ func TestRewritePreservesInputs(t *testing.T) {
 			n, acc := preserved(t, in, out)
 			t.Logf("%s: %d instances, %d accepted by both", c.name, n, acc)
 			total += n
+			// No schema the rule rewrites holds a keyword whose meaning depends
+			// on where a schema sits or on its neighbours' annotations, named
+			// here again, apart from the rule's own list, and searched for as a
+			// member name anywhere. Only a case with a property called like one
+			// may hold the name.
+			if kw := memberAnywhere(out, testScopeNames); kw != "" && !c.named {
+				t.Errorf("%s: the rewrite holds %q", c.name, kw)
+			}
 		})
 	}
 	t.Logf("%d instances in all", total)

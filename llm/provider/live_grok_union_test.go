@@ -61,7 +61,8 @@ func TestLiveGrokUnionSchema(t *testing.T) {
 	case err == nil:
 		t.Logf("the schema as the server sends it: accepted")
 	case status != 0:
-		t.Logf("the schema as the server sends it: refused, status %d", status)
+		// The text, so that a refusal naming the tool is told from any other 400.
+		t.Logf("the schema as the server sends it: refused, status %d: %s", status, liveRedact(err.Error(), key))
 	default:
 		t.Fatalf("the schema as the server sends it: %s", liveRedact(err.Error(), key))
 	}

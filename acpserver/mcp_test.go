@@ -432,6 +432,23 @@ func refusalText(tool string) string {
 // logging at debug level, with a session that has the fixture.
 func unionAgent(t *testing.T, p llm.Provider, ss SessionSettings, mo MCPOptions) (*acptest.Conn, *acptest.Client, *syncBuffer, acp.SessionId, *mcptest.UnionCalls) {
 	t.Helper()
+	r := newUnionRig(t, p, ss, mo)
+	return r.conn, r.client, r.logs, r.id, r.calls
+}
+
+// unionRig is unionAgent's parts, and the agent, for a test that changes the
+// session's rules while it runs.
+type unionRig struct {
+	conn   *acptest.Conn
+	client *acptest.Client
+	logs   *syncBuffer
+	id     acp.SessionId
+	calls  *mcptest.UnionCalls
+	agent  *Agent
+}
+
+func newUnionRig(t *testing.T, p llm.Provider, ss SessionSettings, mo MCPOptions) unionRig {
+	t.Helper()
 	url, calls := mcptest.UnionHTTPServer(t)
 	logs := &syncBuffer{}
 	a := New(Options{Version: "1.2.3", NewID: counterIDs(), Provider: func(string, llm.Retry) (llm.Provider, error) { return p, nil },
@@ -449,7 +466,7 @@ func unionAgent(t *testing.T, p llm.Provider, ss SessionSettings, mo MCPOptions)
 		ClientInfo: &acp.Implementation{Name: "test", Version: "0.0.0"}}); err != nil {
 		t.Fatal(err)
 	}
-	return c, client, logs, mcpSession(t, c, httpServer("fx", url)), calls
+	return unionRig{conn: c, client: client, logs: logs, id: mcpSession(t, c, httpServer("fx", url)), calls: calls, agent: a}
 }
 
 // schemaOf is the input schema a request carries for tool name.
@@ -583,7 +600,7 @@ func TestMCPUnionSchemaFlaggedOnce(t *testing.T) {
 	if n := strings.Count(logs.String(), unionWarning); n != 1 {
 		t.Fatalf("%d warning records over two prompts, want 1:\n%s", n, logs)
 	}
-	for _, w := range []string{"level=WARN", "server=fx", "tool=pick_one", "its root anyOf has a branch that is not an object", "--exclude-tools mcp__fx__pick_one"} {
+	for _, w := range []string{"level=WARN", "server=fx", "tool=pick_one", "its root anyOf has a branch that is not an object", "--exclude-tools mcp__fx__pick_one", "a permission rule that denies it with no pattern"} {
 		if !strings.Contains(logs.String(), w) {
 			t.Errorf("the log lacks %q:\n%s", w, logs)
 		}
@@ -592,9 +609,43 @@ func TestMCPUnionSchemaFlaggedOnce(t *testing.T) {
 	if len(got) != 1 || got[0].Severity != acp.NoticeSeverityWarning || got[0].Title != unionWarning {
 		t.Fatalf("notices %+v, want one warning titled %q", got, unionWarning)
 	}
-	for _, w := range []string{"fx/pick_one", "its root anyOf has a branch that is not an object, which some providers refuse", "--exclude-tools mcp__fx__pick_one", "permission rule"} {
+	for _, w := range []string{"fx/pick_one", "its root anyOf has a branch that is not an object, which some providers refuse", "--exclude-tools mcp__fx__pick_one", "a permission rule that denies it with no pattern"} {
 		if !strings.Contains(descriptionOf(got[0]), w) {
 			t.Errorf("the notice lacks %q: %q", w, descriptionOf(got[0]))
+		}
+	}
+}
+
+// A tool a deny rule hides is not warned of, and when the rule is lifted
+// within the session, the first prompt that sends the tool gets exactly one
+// warning and one notice, and the next prompts none: hidden is not reported,
+// and so not counted as reported (0060-MADR D4; the owner's ruling R-2 of
+// 2026-11-17).
+func TestMCPUnionSchemaHiddenThenShown(t *testing.T) {
+	model := newRootUnionRefuser(t, llmtest.NewScript(llmtest.Text("done")))
+	r := newUnionRig(t, model, SessionSettings{Rules: []permission.Spec{rule(t, permission.ModeDeny, "mcp__fx__pick_one", 3)}}, MCPOptions{})
+	if resp, err := prompt(t, r.conn, r.id, "hidden"); err != nil || resp.StopReason != acp.StopReasonEndTurn {
+		t.Fatalf("the prompt with the tool hidden = %+v, %v", resp, err)
+	}
+	if strings.Contains(r.logs.String(), unionWarning) || len(notices(r.client)) != 0 {
+		t.Fatalf("a warning while the tool is hidden:\n%s\n%+v", r.logs, notices(r.client))
+	}
+	// Lift the rule, as /permissions would.
+	r.agent.mu.Lock()
+	s := r.agent.sessions[r.id]
+	s.rules = engineOf(SessionSettings{}, t.TempDir(), nil)
+	r.agent.mu.Unlock()
+	for _, p := range []string{"shown", "shown again"} {
+		_, err := prompt(t, r.conn, r.id, p)
+		var re *acp.RequestError
+		if !errors.As(err, &re) || !strings.Contains(fmt.Sprint(re.Data), refusalText("mcp__fx__pick_one")) {
+			t.Fatalf("prompt %q: %v, want the provider's refusal of mcp__fx__pick_one now that it is sent", p, err)
+		}
+		if n := strings.Count(r.logs.String(), unionWarning); n != 1 {
+			t.Fatalf("after prompt %q: %d warning records, want exactly 1:\n%s", p, n, r.logs)
+		}
+		if got := notices(r.client); len(got) != 1 || got[0].Title != unionWarning {
+			t.Fatalf("after prompt %q: notices %+v, want exactly one", p, got)
 		}
 	}
 }

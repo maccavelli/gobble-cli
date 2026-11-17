@@ -11,7 +11,10 @@ import (
 // carries the root's object keywords, which is what xAI's Grok accepts of a
 // root union, and which accepts exactly the arguments the original does.
 // A schema outside the rule is left as given, and flagged when it is the
-// shape Grok refuses (D3).
+// shape Grok refuses (D3). The rule does not apply when the union, or the
+// keywords it copies, hold a keyword whose meaning depends on where a schema
+// sits or on its neighbours' annotations, at any depth (scopeKeywords; the
+// amendment of 2026-11-17 to D2, after the review).
 
 const (
 	// typeObject is the type name of an object schema.
@@ -38,6 +41,16 @@ var objectKeywords = []string{kwProperties, kwPatternProperties, kwAdditionalPro
 
 // unionKeywords are the keywords that make a root a union.
 var unionKeywords = []string{"anyOf", "oneOf"}
+
+// scopeKeywords are the keywords the rule does not rewrite around: a
+// reference or a dynamic reference resolves against the position or the
+// resources of a schema, so that moving or copying schemas, or removing a
+// branch, can change what it points at; an id or an anchor named twice by a
+// copy is a duplicate; and unevaluatedProperties and unevaluatedItems look at
+// the annotations of the schemas beside them, which copied properties change.
+// They are the keywords of JSON Schema 2020-12 and its drafts that act so.
+var scopeKeywords = []string{"$ref", "$dynamicRef", "$recursiveRef", "$id", "$anchor", "$dynamicAnchor", "$recursiveAnchor",
+	"unevaluatedProperties", "unevaluatedItems"}
 
 // rewriteRootUnion applies the rule of 0060-MADR D2 to the input schema s
 // of a tool. It returns a schema that shares nothing with s, whether the
@@ -104,7 +117,75 @@ func ruleApplies(s map[string]any) (key string, branches []any, refusal string) 
 			return "", nil, why
 		}
 	}
+	for _, k := range append([]string{have[0]}, objectKeywords...) {
+		if kw := scopeKeywordAt(k, s[k]); kw != "" {
+			return "", nil, `the union or the keywords it would copy hold "` + kw + `", which the rule does not cover`
+		}
+	}
 	return have[0], branches, ""
+}
+
+// scopeKeywordAt is the first of scopeKeywords that v, the value of the
+// keyword kw of a schema, holds as a keyword of a schema at any depth, or "".
+// It looks only where a schema is: in the keywords that hold one, a list of
+// them, or a map of them by name. A name in such a map is never a keyword, so
+// a property called $ref is not one; and what a keyword holds as data (enum,
+// const, default, examples, required, type) is not looked into.
+func scopeKeywordAt(kw string, v any) string {
+	switch {
+	case slices.Contains(schemaMapKeywords, kw):
+		m, ok := v.(map[string]any)
+		if !ok {
+			return ""
+		}
+		for _, name := range slices.Sorted(maps.Keys(m)) {
+			if found := scopeKeywordIn(m[name]); found != "" {
+				return found
+			}
+		}
+	case slices.Contains(schemaListKeyword, kw):
+		l, ok := v.([]any)
+		if !ok {
+			return ""
+		}
+		for _, sub := range l {
+			if found := scopeKeywordIn(sub); found != "" {
+				return found
+			}
+		}
+	default:
+		return scopeKeywordIn(v)
+	}
+	return ""
+}
+
+// scopeKeywordIn is the first of scopeKeywords that v, a schema, or a list
+// of them as items is in the older drafts, holds as one of its own keywords
+// or in any schema inside it, or "".
+func scopeKeywordIn(v any) string {
+	switch v := v.(type) {
+	case map[string]any:
+		keys := slices.Sorted(maps.Keys(v))
+		for _, k := range keys {
+			if slices.Contains(scopeKeywords, k) {
+				return k
+			}
+		}
+		for _, k := range keys {
+			if slices.Contains(schemaKeywords, k) || slices.Contains(schemaListKeyword, k) || slices.Contains(schemaMapKeywords, k) {
+				if found := scopeKeywordAt(k, v[k]); found != "" {
+					return found
+				}
+			}
+		}
+	case []any:
+		for _, sub := range v {
+			if found := scopeKeywordIn(sub); found != "" {
+				return found
+			}
+		}
+	}
+	return ""
 }
 
 // objectBranch classifies one branch of a root union: whether it can match

@@ -110,6 +110,8 @@ instance is valid against the root exactly when it is valid against `R` and agai
    arguments are always an object (G6b), so a missing root type is not a loss in practice; a type list is left alone.
 6. Keywords that collect annotations across branches (`unevaluatedProperties`, `unevaluatedItems`) and dynamic
    references are outside the argument; the rule does not rewrite a root that carries them.
+   *(Amended 2026-11-17, see "Amendment (2026-11-17)" below: this spoke of the root only; the review found these
+   keywords, and ids, anchors and `$ref` at any depth, inside the union or the copied properties, change verdicts.)*
 
 ### Is the rewrite input-preserving? Measured
 
@@ -322,6 +324,10 @@ It applies only when all hold:
 * the root's other keywords are among `type`, `properties`, `required`, `additionalProperties`, `patternProperties`,
   and the annotations `description`, `title`, `examples`, `default`, `deprecated`, `$comment`, `$schema`;
 * every branch is `true`, `false`, or an object schema with no `$ref`.
+* *(Added by the amendment of 2026-11-17 below.)* None of `$ref`, `$dynamicRef`, `$recursiveRef`, `$id`, `$anchor`,
+  `$dynamicAnchor`, `$recursiveAnchor`, `unevaluatedProperties` and `unevaluatedItems` appears as a keyword anywhere in
+  the union (any depth of any branch) or anywhere in the root's `properties`, `patternProperties` and
+  `additionalProperties`. A property called one of them is a name, not the keyword.
 
 Then, in order:
 
@@ -594,3 +600,59 @@ session's records, not committed.
 * [0042-MADR-acpext-extension-contract-module.md](0042-MADR-acpext-extension-contract-module.md)
 * [0051-PLAN-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md](0051-PLAN-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md)
 * [0052-PLAN-finish-the-chatgpt-plan-sign-in-on-the-sdk-engine.md](0052-PLAN-finish-the-chatgpt-plan-sign-in-on-the-sdk-engine.md)
+
+## Amendment (2026-11-17): the rule refuses scope keywords anywhere in the union or the copied properties
+
+*Accepted by the owner the same day, relayed by the coordinator, after the independent review (0060-PLAN P2) of
+commit `cde93be`. Nothing above is rewritten; the lines this changes carry a pointer here.*
+
+**What the review found.** `cde93be` implements D2 as written, and the notices, the remedies, the aliasing and the
+call path work. D2's argument (Context, steps 1 to 6) holds for what it names, but its conditions looked only at the
+root's own keywords and at a `$ref` at a branch's top level. Measured with two validators outside the tree
+(`github.com/google/jsonschema-go` `v0.4.3` and `github.com/santhosh-tekuri/jsonschema` v6, which agreed on the
+originals everywhere), the rule changed verdicts, or made the schema invalid, for three kinds of schema it rewrote:
+
+1. **`unevaluatedProperties` in a union branch.** `{"type":"object","properties":{"a":{"type":"string"},"b":{"type":"integer"},"c":{"type":"boolean"}},"anyOf":[{"unevaluatedProperties":false,"required":["a"]},{"required":["b"]}]}`
+   rejects `{"a":"x"}`; copying the root's properties into the branch makes `a` evaluated, and the rewrite accepts it
+   (180 of that shape's objects newly accepted; 303 with the root's `additionalProperties: false`).
+2. **A `$ref` anywhere but a branch's top level.** `{"type":"object","properties":{"a":{"$ref":"#/anyOf/0"}},"anyOf":[{"required":["a"]},{"required":["zz"]}]}`
+   accepts `{"a":"x"}`; once the branch is typed `object` and given the properties, `#/anyOf/0` is that branch and `a`
+   must be an object (up to 1,948 objects newly refused). A branch removed ahead of a `$ref` into the union shifts what
+   it points at the same way (`{"type":"object","properties":{"a":{}},"anyOf":[{"type":"string"},{"properties":{"a":{"$ref":"#/anyOf/0"}},"required":["a"]}]}`,
+   1,197 newly refused).
+3. **`$id` or `$anchor` (and `$dynamicAnchor`) inside the properties the rule copies.** A copy repeats the name once
+   per branch; the duplicates made the rewritten schema invalid for one of the two validators.
+
+The real magictools schema has none of these and is preserved exactly (R1, R2, and this pass's corpus).
+
+**The owner's ruling R-1:** "Refuse the rule whenever any of those keywords appears anywhere in the union or the copied
+properties (Recommended)". As put: such a schema is sent as given and flagged, like every other shape the rule does not
+handle; the cost is that it also declines a harmless self-reference (`$ref: "#"`), which is merely flagged.
+
+**D2 as amended.** A fifth condition (added to the list above): none of `$ref`, `$dynamicRef`, `$recursiveRef`, `$id`,
+`$anchor`, `$dynamicAnchor`, `$recursiveAnchor`, `unevaluatedProperties` and `unevaluatedItems` appears as a keyword
+anywhere in the union (any depth of any branch) or anywhere in the root's `properties`, `patternProperties` and
+`additionalProperties`. "Anywhere" means in a schema position of JSON Schema 2020-12 (and the draft names `definitions`,
+`dependencies`, `additionalItems`): `properties`, `patternProperties`, `additionalProperties`, `items`, `prefixItems`,
+`allOf`, `anyOf`, `oneOf`, `not`, `if`, `then`, `else`, `dependentSchemas`, `propertyNames`, `contains`, `contentSchema`,
+`$defs`, looked into through lists and through the maps of names to schemas. The names in such a map are never keywords,
+so a tool with an argument called `$ref` or `$id` is rewritten, not refused; and what a keyword holds as data (`enum`,
+`const`, `default`, `examples`, `required`) is not looked into. A refused schema takes D3's path: sent as given, and
+flagged when its root union has a branch that is not typed `object`, with the reason `the union or the keywords it would
+copy hold "<keyword>", which the rule does not cover`. Context step 6 and "Not verified"'s last bullet (the keywords
+"argued outside the rule, not measured") are answered by this: they are now measured, and refused.
+
+**The owner's ruling R-2:** "Keep it, and add a test for hidden-then-shown (Recommended)". The behaviour built beyond
+the plan in P1, that a tool the session's permission rules hide is neither sent nor warned of (D4's remedy "a permission
+rule that denies it" has to end the warning), stays; a tool hidden and then shown within one session is warned of once,
+at the first prompt that sends it. D4's notice names the remedy as a rule that denies the tool "with no pattern", which
+is what hides it (`permission.Engine.Hidden`).
+
+**Measured and held.** The preservation corpus of the plan, with jsonschema-go, over every rewritten case, now with the
+review's counter-examples as cases the rule leaves as given; a matrix of the nine keywords in each of 38 positions of a
+union or of the copied keywords, each refused and each position's control rewritten; and the property-named cases. One
+validator is in the tree's tests: `santhosh-tekuri/jsonschema` is not in `go.mod`, and `AGENTS.md` requires a MADR that
+names a module before it is required; this amendment does not add it, so the second validator's agreement is the
+review's, outside the tree. jsonschema-go accepts the duplicate `$id` and `$anchor` copies, so the tree's test holds
+those by the rule's own refusal (a search of every rewritten schema for the nine names), not by a verdict.
+
