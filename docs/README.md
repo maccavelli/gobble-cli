@@ -10,7 +10,8 @@
 - **guides/** — task-shaped walkthroughs: [developing.md](guides/developing.md), on building, testing, the gates and adding a package;
   [models-json.md](guides/models-json.md), on pointing providers at a proxy and correcting models;
   [choosing-a-model.md](guides/choosing-a-model.md), on `--model`, `--thinking`, `defaultModel` and `gobble models`;
-  [credentials.md](guides/credentials.md), on where keys come from, `auth.json` and `gobble auth`.
+  [credentials.md](guides/credentials.md), on where keys come from, `auth.json` and `gobble auth`;
+  [mcp-servers.md](guides/mcp-servers.md), on adding MCP servers, their tools' names, choosing tools, and what gobble changes in a tool's schema.
 - **[decisions/](decisions/)** — numbered MADR/PLAN pairs.
 - **[reports/](reports/)** — what was observed, deciding nothing.
 
@@ -310,6 +311,8 @@ The plans:
 | point a provider at a proxy, add headers or models, or correct a model's window or price | [guides/models-json.md](guides/models-json.md) |
 | choose a run's model and thinking level, or see the models gobble knows | [guides/choosing-a-model.md](guides/choosing-a-model.md) |
 | store, check or remove an API key, or see where a key comes from | [guides/credentials.md](guides/credentials.md) |
+| add, list or remove an MCP server, or choose which of its tools a run offers | [guides/mcp-servers.md](guides/mcp-servers.md) |
+| know why gobble changes an MCP tool's schema, or warns about one | [guides/mcp-servers.md](guides/mcp-servers.md), [0060-MADR](decisions/0060-MADR-normalise-root-level-unions-in-mcp-tool-schemas.md) |
 | see which operations gobble runs as native tools rather than shell commands, and why | [0011-REPORT](reports/0011-REPORT-native-tools-survey.md), [0005-MADR](decisions/0005-MADR-v1-feature-scope.md) (amendment of 2026-10-08) |
 | know why the race gate can fail in `internal/cli` once in a few hundred runs, and what gobble does about it | [0013-REPORT](reports/0013-REPORT-go-json-nested-marshal-race.md) |
 | know which go-llmprovider-sdk, go-selfupdate-lib and acp-go-sdk2 releases gobble pins, what each next release changes, in what order gobble takes them, and whether to adopt them now | [0015-REPORT](reports/0015-REPORT-sibling-library-pins-and-order.md) |

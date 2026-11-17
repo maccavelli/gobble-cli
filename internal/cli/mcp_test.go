@@ -176,6 +176,35 @@ func TestMCPAddRemove(t *testing.T) {
 	}
 }
 
+// A tool whose root union gobble cannot rewrite is warned of on stderr,
+// once, naming the tool and the remedy; the tool whose union it rewrote is
+// not (0060-MADR D4). The harness's stderr is not a terminal, so the record
+// shows as slog text; on a terminal the same record is the "Warning:" line
+// of 0024-MADR D6's handler, which this harness cannot be given.
+func TestChatWarnsOfAFlaggedToolSchema(t *testing.T) {
+	home := t.TempDir()
+	url, _ := mcptest.UnionHTTPServer(t)
+	writeHomeMCP(t, home, "fx", httpEntry(url))
+	s := llmtest.NewScript(llmtest.Text("done"))
+	withModel(t, s)
+	r := mustRun(t, home, "--no-session", "-p", "go")
+	const title = `level=WARN msg="mcp: tool schema sent as the server gave it"`
+	if n := strings.Count(r.stderr, title); n != 1 {
+		t.Fatalf("%d warnings on stderr, want 1:\n%s", n, r.stderr)
+	}
+	for _, w := range []string{"server=fx", "tool=pick_one", "its root anyOf has a branch that is not an object", "--exclude-tools mcp__fx__pick_one"} {
+		if !strings.Contains(r.stderr, w) {
+			t.Errorf("stderr lacks %q:\n%s", w, r.stderr)
+		}
+	}
+	if strings.Contains(r.stderr, "execute_pipeline") {
+		t.Errorf("a warning names the rewritten tool:\n%s", r.stderr)
+	}
+	if got := requestToolNames(t, s.Requests()[0]); !slices.Contains(got, "mcp__fx__execute_pipeline") || !slices.Contains(got, "mcp__fx__pick_one") {
+		t.Errorf("request tools %q", got)
+	}
+}
+
 // requestToolNames are the tool names a request declares.
 func requestToolNames(t *testing.T, req *llm.Request) []string {
 	t.Helper()

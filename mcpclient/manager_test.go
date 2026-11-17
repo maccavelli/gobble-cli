@@ -14,6 +14,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/maccavelli/gobble-cli/jsonx"
 	"github.com/maccavelli/gobble-cli/mcpclient/mcptest"
 	"github.com/maccavelli/gobble-cli/tool"
 )
@@ -116,6 +117,72 @@ func TestStdioAndHTTP(t *testing.T) {
 		if st.State != StateConnected || len(st.Tools) != 4 || st.Exposure != "direct" {
 			t.Errorf("status %+v", st)
 		}
+	}
+}
+
+// A Manager reports each tool whose schema the rule met (0060-MADR D4): the
+// real schema is rewritten, the nullable one flagged, each once however
+// often the tools are listed, none for the plain fixture, and only a tool
+// the filter offers.
+func TestSchemaNotes(t *testing.T) {
+	url, _ := mcptest.UnionHTTPServer(t)
+	m := connectAll(t, Options{}, httpFixture("fx", url), httpFixture("plain", mcptest.HTTPServer(t, "")))
+	var tools []tool.Tool
+	for range 3 { // each listing gives the same tools, so nothing is noted twice
+		tools = m.Tools(nil)
+	}
+	wantFlagged := []SchemaNote{{Server: "fx", Tool: mcptest.PickOneTool, Name: "mcp__fx__pick_one"}}
+	got := m.FlaggedTools(nil)
+	if len(got) != 1 || got[0].Server != wantFlagged[0].Server || got[0].Tool != wantFlagged[0].Tool || got[0].Name != wantFlagged[0].Name ||
+		!strings.Contains(got[0].Reason, "its root anyOf has a branch that is not an object") {
+		t.Fatalf("flagged %+v, want one: %+v with the reason", got, wantFlagged)
+	}
+	rewritten := m.RewrittenTools(nil)
+	if len(rewritten) != 1 || rewritten[0].Server != "fx" || rewritten[0].Tool != mcptest.ExecutePipelineTool ||
+		rewritten[0].Name != "mcp__fx__execute_pipeline" || rewritten[0].Reason != "" {
+		t.Fatalf("rewritten %+v, want only fx's execute_pipeline", rewritten)
+	}
+	for _, n := range append(slices.Clone(got), rewritten...) {
+		if n.Server == "plain" {
+			t.Errorf("a plain tool was noted: %+v", n)
+		}
+	}
+	// The spec of each: the rewrite, and the nullable shape as given.
+	var spec map[string]any
+	if err := jsonx.Unmarshal(byName(t, tools, "mcp__fx__execute_pipeline").Spec().InputSchema, &spec); err != nil ||
+		!equalJSON(spec, readData(t, "magictools-execute-pipeline.rewritten.json")) {
+		t.Fatalf("execute_pipeline's schema: %v\n%v", err, spec)
+	}
+	var pick map[string]any
+	if err := jsonx.Unmarshal(byName(t, tools, "mcp__fx__pick_one").Spec().InputSchema, &pick); err != nil ||
+		!equalJSON(pick, decode(t, mcptest.NullableUnionSchema)) {
+		t.Fatalf("pick_one's schema: %v\n%v", err, pick)
+	}
+	// A tool the filter leaves out is not noted: the remedy silences it.
+	if n := m.FlaggedTools(func(name string) bool { return name != "mcp__fx__pick_one" }); len(n) != 0 {
+		t.Errorf("flagged after the filter left it out: %+v", n)
+	}
+	if n := m.RewrittenTools(func(name string) bool { return name == "mcp__fx__pick_one" }); len(n) != 0 {
+		t.Errorf("rewritten after the filter left it out: %+v", n)
+	}
+	// A server with no union notes nothing.
+	plain := connectAll(t, Options{}, httpFixture("plain", mcptest.HTTPServer(t, "")))
+	if f, r := plain.FlaggedTools(nil), plain.RewrittenTools(nil); len(f) != 0 || len(r) != 0 {
+		t.Errorf("plain server: flagged %+v, rewritten %+v", f, r)
+	}
+}
+
+// A call of the rewritten tool reaches the server with its arguments as
+// the model gave them: the schema the model reads changed, the call did not.
+func TestRewrittenToolIsCalledAsGiven(t *testing.T) {
+	url, calls := mcptest.UnionHTTPServer(t)
+	m := connectAll(t, Options{}, httpFixture("fx", url))
+	const args = `{"target":"/tmp/x","intent":"preview","dry_run":true}`
+	if res := call(t, byName(t, m.Tools(nil), "mcp__fx__execute_pipeline"), args); res.IsError || res.Text() != "ran" {
+		t.Fatalf("call = %+v", res)
+	}
+	if got := calls.Args(); len(got) != 1 || got[0] != args {
+		t.Fatalf("the server received %q, want %q", got, args)
 	}
 }
 

@@ -2,6 +2,7 @@ package mcptest
 
 import (
 	"context"
+	"encoding/json/jsontext"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -9,6 +10,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"strconv"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -108,6 +110,143 @@ func NewResourceServer() *mcp.Server {
 			return &mcp.ReadResourceResult{Contents: []*mcp.ResourceContents{{URI: r.Params.URI, Text: "page " + r.Params.URI}}}, nil
 		})
 	return s
+}
+
+// The union fixture's tools (0060-MADR).
+const (
+	// ExecutePipelineTool is the tool that carries ExecutePipelineSchema.
+	ExecutePipelineTool = "execute_pipeline"
+	// PickOneTool is the tool that carries NullableUnionSchema.
+	PickOneTool = "pick_one"
+)
+
+// ExecutePipelineSchema is the inputSchema of the execute_pipeline tool of
+// mcp-server-magictools, copied verbatim from its internal/handler/inventory.go,
+// lines 289-336, at commit 368ac6a: a root anyOf of two required-only
+// branches beside a root "type": "object", properties and
+// additionalProperties false. mcpclient's testdata holds the same copy as a
+// file, and a test there keeps the two equal.
+const ExecutePipelineSchema = `{
+  "type": "object",
+  "properties": {
+    "session_id": {
+      "type": "string",
+      "description": "Optional CSSA session correlation ID. Auto-generated if omitted. For CONTINUATION MODE: pass session_id WITHOUT target/intent to resume a paused pipeline after human approval."
+    },
+    "target": {
+      "type": "string",
+      "description": "Absolute path to the project root or package to analyze and refactor."
+    },
+    "intent": {
+      "type": "string",
+      "description": "The goal/objective of the pipeline run."
+    },
+    "plan_hash": {
+      "type": "string",
+      "description": "Optional SHA-256 hash of an approved implementation plan for MUTATOR integrity verification."
+    },
+    "dry_run": {
+      "type": "boolean",
+      "description": "When true, return the DAG plan as markdown without executing. Equivalent to the old compose_pipeline preview."
+    },
+    "target_roles": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Optional role filter (e.g. ['ANALYZER', 'CRITIC']). Only tools matching these roles enter the DAG."
+    },
+    "reject": {
+      "type": "boolean",
+      "description": "Set to true when continuing a paused pipeline to reject the plan and abort without mutations."
+    }
+  },
+  "additionalProperties": false,
+  "anyOf": [
+    {
+      "required": [
+        "target",
+        "intent"
+      ]
+    },
+    {
+      "required": [
+        "session_id"
+      ]
+    }
+  ]
+}
+`
+
+// NullableUnionSchema is a schema the rule of 0060-MADR D2 does not
+// rewrite: a root typed ["object", "null"] over a union of required-only
+// branches (the MADR's S8). The go-sdk's Server.AddTool refuses a root that
+// is not exactly "object", so the union server offers PickOneTool with an
+// object root and swaps this schema in when it lists its tools.
+const NullableUnionSchema = `{
+  "type": ["object", "null"],
+  "properties": {"a": {"type": "string"}, "b": {"type": "string"}},
+  "anyOf": [{"required": ["a"]}, {"required": ["b"]}]
+}`
+
+// UnionCalls records the arguments each call of ExecutePipelineTool carried
+// to a union server, as the server received them.
+type UnionCalls struct {
+	mu   sync.Mutex
+	args []string
+}
+
+// Args returns the arguments received, as JSON text, in order.
+func (u *UnionCalls) Args() []string {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return append([]string(nil), u.args...)
+}
+
+// NewUnionServer is a server whose tools carry root-level unions, sent as
+// written: ExecutePipelineTool with ExecutePipelineSchema, and PickOneTool
+// with NullableUnionSchema. Both are added through Server.AddTool, so the
+// go-sdk validates nothing against them. NewServer's tools are not here.
+func NewUnionServer() (*mcp.Server, *UnionCalls) {
+	calls := &UnionCalls{}
+	s := mcp.NewServer(&mcp.Implementation{Name: "gobble-mcptest-union", Version: "1.0.0"}, nil)
+	s.AddTool(&mcp.Tool{Name: ExecutePipelineTool, Description: "Run a pipeline.", InputSchema: jsontext.Value(ExecutePipelineSchema)},
+		func(_ context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			calls.mu.Lock()
+			calls.args = append(calls.args, string(req.Params.Arguments))
+			calls.mu.Unlock()
+			return text("ran"), nil
+		})
+	s.AddTool(&mcp.Tool{Name: PickOneTool, Description: "Pick a or b.", InputSchema: jsontext.Value(`{"type":"object"}`)},
+		func(context.Context, *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return text("picked"), nil
+		})
+	s.AddReceivingMiddleware(func(next mcp.MethodHandler) mcp.MethodHandler {
+		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+			res, err := next(ctx, method, req)
+			list, ok := res.(*mcp.ListToolsResult)
+			if err != nil || !ok {
+				return res, err
+			}
+			out := *list
+			out.Tools = make([]*mcp.Tool, len(list.Tools))
+			for i, t := range list.Tools {
+				c := *t
+				if c.Name == PickOneTool {
+					c.InputSchema = jsontext.Value(NullableUnionSchema)
+				}
+				out.Tools[i] = &c
+			}
+			return &out, nil
+		}
+	})
+	return s, calls
+}
+
+// UnionHTTPServer serves NewUnionServer over streamable HTTP until the
+// test ends, and returns its URL and the calls it receives.
+func UnionHTTPServer(t testing.TB) (url string, calls *UnionCalls) {
+	t.Helper()
+	srv, calls := NewUnionServer()
+	return serveHTTP(t, srv, ""), calls
 }
 
 // ServeStdioIfAsked serves the fixture on stdin and stdout, then exits,

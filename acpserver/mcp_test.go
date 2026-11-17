@@ -2,15 +2,21 @@ package acpserver
 
 import (
 	"context"
+	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"errors"
 	"fmt"
+	"io"
+	"iter"
 	"log/slog"
 	"maps"
+	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -19,7 +25,9 @@ import (
 	"github.com/maccavelli/gobble-cli/acpclient/acptest"
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/llm/llmtest"
+	"github.com/maccavelli/gobble-cli/llm/provider"
 	"github.com/maccavelli/gobble-cli/mcpclient/mcptest"
+	"github.com/maccavelli/gobble-cli/permission"
 )
 
 // fileServer is one mcp.json entry a test writes.
@@ -305,5 +313,316 @@ func TestConfigErrorsLogged(t *testing.T) {
 func TestDefaultStartupWait(t *testing.T) {
 	if DefaultStartupWait != 10*time.Second {
 		t.Fatalf("DefaultStartupWait %v; internal/config's mcp.startupWaitMs says 10s", DefaultStartupWait)
+	}
+}
+
+// xaiRefusal is an in-process transport that answers every request with
+// xAI's recorded 400 for a tool schema it refuses, naming the tool last set.
+type xaiRefusal struct {
+	mu   sync.Mutex
+	tool string
+}
+
+func (x *xaiRefusal) name(tool string) {
+	x.mu.Lock()
+	defer x.mu.Unlock()
+	x.tool = tool
+}
+
+func (x *xaiRefusal) RoundTrip(r *http.Request) (*http.Response, error) {
+	x.mu.Lock()
+	tool := x.tool
+	x.mu.Unlock()
+	body := fmt.Sprintf(`{"code":"invalid-argument","error":"Failed to start sampling: [invalid_client_tool_schema] %s: `+
+		`tool parameter root must be an object type (root schema is an anyOf/oneOf union with a non-object branch)"}`, tool)
+	return &http.Response{StatusCode: http.StatusBadRequest, Header: http.Header{"Content-Type": {"application/json"}},
+		Body: io.NopCloser(strings.NewReader(body)), Request: r}, nil
+}
+
+// refusedUnion is the first tool of a request whose root holds a union with
+// a branch that is not typed object, the shape xAI refuses (0060-MADR P1,
+// X1), or "".
+func refusedUnion(t *testing.T, tools jsontext.Value) string {
+	t.Helper()
+	if len(tools) == 0 {
+		return ""
+	}
+	var specs []struct {
+		Name        string         `json:"name"`
+		InputSchema map[string]any `json:"inputSchema"`
+	}
+	if err := json.Unmarshal(tools, &specs); err != nil {
+		t.Errorf("request tools: %v", err)
+		return ""
+	}
+	for _, s := range specs {
+		for _, kw := range []string{"anyOf", "oneOf"} {
+			branches, ok := s.InputSchema[kw].([]any)
+			if !ok {
+				continue // no list, no union
+			}
+			for _, b := range branches {
+				if m, ok := b.(map[string]any); !ok || m["type"] != "object" {
+					return s.Name
+				}
+			}
+		}
+	}
+	return ""
+}
+
+// rootUnionRefuser is a provider over a script that refuses, as xAI does, a
+// request whose tools carry a root union with a branch not typed object,
+// with the error gobble's grok provider makes of xAI's body, and otherwise
+// plays the script. The refusal goes through llm/provider's real adapter and
+// the SDK's error mapping over an in-process transport (acpserver may not
+// import the SDK, 0004-MADR rule 4).
+type rootUnionRefuser struct {
+	t     *testing.T
+	inner *llmtest.Script
+	wire  *xaiRefusal
+	grok  llm.Provider
+
+	mu      sync.Mutex
+	refused []string
+}
+
+var _ llm.Provider = (*rootUnionRefuser)(nil)
+
+// newRootUnionRefuser is a rootUnionRefuser that plays inner.
+func newRootUnionRefuser(t *testing.T, inner *llmtest.Script) *rootUnionRefuser {
+	t.Helper()
+	wire := &xaiRefusal{}
+	grok, err := provider.New("grok", provider.Options{APIKey: "k", Model: "grok-4.6", HTTPClient: &http.Client{Transport: wire}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &rootUnionRefuser{t: t, inner: inner, wire: wire, grok: grok}
+}
+
+func (r *rootUnionRefuser) ID() string                     { return "grok" }
+func (r *rootUnionRefuser) Capabilities() llm.Capabilities { return r.inner.Capabilities() }
+
+func (r *rootUnionRefuser) Stream(ctx context.Context, req *llm.Request) iter.Seq2[llm.Event, error] {
+	if name := refusedUnion(r.t, req.Tools); name != "" {
+		r.mu.Lock()
+		r.refused = append(r.refused, name)
+		r.mu.Unlock()
+		r.wire.name(name)
+		return r.grok.Stream(ctx, &llm.Request{Model: "grok-4.6", Messages: []llm.Message{{Role: llm.RoleUser, Content: []llm.Content{{Type: llm.ContentText, Text: "x"}}}}})
+	}
+	return r.inner.Stream(ctx, req)
+}
+
+func (r *rootUnionRefuser) refusals() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.refused)
+}
+
+// refusalText is the tail of the owner's paste of 2026-11-16 (0060-MADR P1),
+// with tool in place of the magictools one.
+func refusalText(tool string) string {
+	return "grok HTTP 400 invalid-argument: Failed to start sampling: [invalid_client_tool_schema] " + tool +
+		": tool parameter root must be an object type (root schema is an anyOf/oneOf union with a non-object branch)"
+}
+
+// unionAgent is an agent over p with the union fixture served on HTTP as
+// server fx, settings ss and MCP options mo, whose client offers notices,
+// logging at debug level, with a session that has the fixture.
+func unionAgent(t *testing.T, p llm.Provider, ss SessionSettings, mo MCPOptions) (*acptest.Conn, *acptest.Client, *syncBuffer, acp.SessionId, *mcptest.UnionCalls) {
+	t.Helper()
+	url, calls := mcptest.UnionHTTPServer(t)
+	logs := &syncBuffer{}
+	a := New(Options{Version: "1.2.3", NewID: counterIDs(), Provider: func(string, llm.Retry) (llm.Provider, error) { return p, nil },
+		Settings: func(string) SessionSettings { return ss }, MCP: mo,
+		Logger: slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug}))})
+	client := &acptest.Client{Allow: true}
+	c := acptest.Connect(t, a, client)
+	a.SetConnection(c.Agent)
+	t.Cleanup(func() {
+		if err := a.Close(); err != nil {
+			t.Logf("close: %v", err)
+		}
+	})
+	if _, err := c.Client.Initialize(t.Context(), acp.InitializeRequest{ProtocolVersion: acp.ProtocolVersionNumber, ClientCapabilities: offersNotices,
+		ClientInfo: &acp.Implementation{Name: "test", Version: "0.0.0"}}); err != nil {
+		t.Fatal(err)
+	}
+	return c, client, logs, mcpSession(t, c, httpServer("fx", url)), calls
+}
+
+// schemaOf is the input schema a request carries for tool name.
+func schemaOf(t *testing.T, req *llm.Request, name string) map[string]any {
+	t.Helper()
+	var specs []struct {
+		Name        string         `json:"name"`
+		InputSchema map[string]any `json:"inputSchema"`
+	}
+	if err := json.Unmarshal(req.Tools, &specs); err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range specs {
+		if s.Name == name {
+			return s.InputSchema
+		}
+	}
+	t.Fatalf("no tool %s in the request", name)
+	return nil
+}
+
+// dataSchema is a schema of mcpclient's testdata, decoded.
+func dataSchema(t *testing.T, name string) map[string]any {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join("..", "mcpclient", "testdata", name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		t.Fatal(err)
+	}
+	return m
+}
+
+const unionWarning = "mcp: tool schema sent as the server gave it"
+
+// The provider double refuses the original real schema with the owner's
+// text and accepts the expected rewrite: the test of the test double, with no
+// MCP server, so the end-to-end tests below mean what they say.
+func TestMCPUnionSchemaProviderRefusal(t *testing.T) {
+	spec := func(schema map[string]any) jsontext.Value {
+		b, err := json.Marshal([]map[string]any{{"name": "mcp__fx__execute_pipeline", "inputSchema": schema}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return b
+	}
+	model := newRootUnionRefuser(t, llmtest.NewScript(llmtest.Text("ok")))
+	var got error
+	for _, err := range model.Stream(t.Context(), &llm.Request{Tools: spec(dataSchema(t, "magictools-execute-pipeline.json"))}) {
+		got = err
+	}
+	// The owner's paste reads "llm: api status 400: … grok HTTP 400 …"; the
+	// ellipsis is the SDK's own words.
+	want := "llm: api status 400: llmprovider: invalid request: " + refusalText("mcp__fx__execute_pipeline")
+	if got == nil || got.Error() != want {
+		t.Fatalf("the original schema: %v\nwant text %q", got, want)
+	}
+	got = nil
+	for _, err := range model.Stream(t.Context(), &llm.Request{Tools: spec(dataSchema(t, "magictools-execute-pipeline.rewritten.json"))}) {
+		got = err
+	}
+	if got != nil || len(model.refusals()) != 1 {
+		t.Fatalf("the expected rewrite: %v, %d refusals, want none and the one", got, len(model.refusals()))
+	}
+}
+
+// 0060-MADR Confirmation 2: a session with the real schema from an MCP
+// server, over a provider that refuses the un-normalised shape as xAI does,
+// completes its prompt; the request carries the rewrite; a call of the tool
+// reaches the server with its arguments intact; the rewrite is noted once at
+// debug level, and nothing is warned. The tool filter leaves out the tool
+// the rule cannot rewrite.
+func TestMCPUnionSchemaRewritten(t *testing.T) {
+	const args = `{"target":"/tmp/x","intent":"preview","dry_run":true}`
+	model := newRootUnionRefuser(t, llmtest.NewScript(
+		llmtest.ToolCall("c1", "mcp__fx__execute_pipeline", args), llmtest.Text("done"), llmtest.Text("again")))
+	c, client, logs, id, calls := unionAgent(t, model, SessionSettings{}, MCPOptions{Allow: func(n string) bool { return n != "mcp__fx__pick_one" }})
+	for _, p := range []string{"run it", "once more"} {
+		resp, err := prompt(t, c, id, p)
+		if err != nil || resp.StopReason != acp.StopReasonEndTurn {
+			t.Fatalf("prompt %q = %+v, %v", p, resp, err)
+		}
+	}
+	reqs := model.inner.Requests()
+	if len(reqs) != 3 || len(model.refusals()) != 0 {
+		t.Fatalf("%d requests, refused %q", len(reqs), model.refusals())
+	}
+	if got := requestTools(t, reqs[0]); !hasAll(got, "mcp__fx__execute_pipeline") || slices.Contains(got, "mcp__fx__pick_one") {
+		t.Fatalf("request tools %q", got)
+	}
+	want := dataSchema(t, "magictools-execute-pipeline.rewritten.json")
+	for i, r := range reqs {
+		if got := schemaOf(t, r, "mcp__fx__execute_pipeline"); !reflect.DeepEqual(got, want) {
+			t.Errorf("request %d: the schema is\n%v\nwant the expected rewrite\n%v", i, got, want)
+		}
+	}
+	if got := calls.Args(); len(got) != 1 || got[0] != args {
+		t.Errorf("the server received %q, want %q", got, args)
+	}
+	if got := lastText(reqs[1]); got != "ran" {
+		t.Errorf("the tool's result %q", got)
+	}
+	if n := strings.Count(logs.String(), "mcp: tool schema rewritten"); n != 1 || !strings.Contains(logs.String(), "tool=execute_pipeline") {
+		t.Errorf("%d rewrite records over two prompts, want 1 naming the tool:\n%s", n, logs)
+	}
+	if strings.Contains(logs.String(), unionWarning) || len(notices(client)) != 0 {
+		t.Errorf("a warning or notice for a tool the rule rewrote:\n%s\n%+v", logs, notices(client))
+	}
+}
+
+// A tool the rule cannot rewrite, offered, is flagged: the log gets one
+// warning and the client one notice for the session however many prompts,
+// each naming the server and tool, the reason and the remedy, and the
+// provider's refusal that follows is the one the flag predicts (0060-MADR
+// D3, D4).
+func TestMCPUnionSchemaFlaggedOnce(t *testing.T) {
+	model := newRootUnionRefuser(t, llmtest.NewScript())
+	c, client, logs, id, _ := unionAgent(t, model, SessionSettings{}, MCPOptions{})
+	for _, p := range []string{"one", "two"} {
+		_, err := prompt(t, c, id, p)
+		var re *acp.RequestError
+		if !errors.As(err, &re) || !strings.Contains(fmt.Sprint(re.Data), refusalText("mcp__fx__pick_one")) {
+			t.Fatalf("prompt %q: %v, want the provider's refusal of mcp__fx__pick_one", p, err)
+		}
+	}
+	if got := model.refusals(); !slices.Equal(got, []string{"mcp__fx__pick_one", "mcp__fx__pick_one"}) {
+		t.Fatalf("refused %q: the real schema was rewritten, the other is what xAI refuses", got)
+	}
+	if n := strings.Count(logs.String(), unionWarning); n != 1 {
+		t.Fatalf("%d warning records over two prompts, want 1:\n%s", n, logs)
+	}
+	for _, w := range []string{"level=WARN", "server=fx", "tool=pick_one", "its root anyOf has a branch that is not an object", "--exclude-tools mcp__fx__pick_one"} {
+		if !strings.Contains(logs.String(), w) {
+			t.Errorf("the log lacks %q:\n%s", w, logs)
+		}
+	}
+	got := notices(client)
+	if len(got) != 1 || got[0].Severity != acp.NoticeSeverityWarning || got[0].Title != unionWarning {
+		t.Fatalf("notices %+v, want one warning titled %q", got, unionWarning)
+	}
+	for _, w := range []string{"fx/pick_one", "its root anyOf has a branch that is not an object, which some providers refuse", "--exclude-tools mcp__fx__pick_one", "permission rule"} {
+		if !strings.Contains(descriptionOf(got[0]), w) {
+			t.Errorf("the notice lacks %q: %q", w, descriptionOf(got[0]))
+		}
+	}
+}
+
+// The remedies the warning names work: a tool the filter leaves out, and a
+// tool a deny rule hides, are neither sent, nor warned of, so the prompt
+// completes (0060-MADR D4).
+func TestMCPUnionSchemaRemedies(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		ss   SessionSettings
+		mo   MCPOptions
+	}{
+		{"the tool filter", SessionSettings{}, MCPOptions{Allow: func(n string) bool { return n != "mcp__fx__pick_one" }}},
+		{"a deny rule", SessionSettings{Rules: []permission.Spec{rule(t, permission.ModeDeny, "mcp__fx__pick_one", 3)}}, MCPOptions{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			model := newRootUnionRefuser(t, llmtest.NewScript(llmtest.Text("done")))
+			c, client, logs, id, _ := unionAgent(t, model, tc.ss, tc.mo)
+			if resp, err := prompt(t, c, id, "go"); err != nil || resp.StopReason != acp.StopReasonEndTurn {
+				t.Fatalf("prompt = %+v, %v", resp, err)
+			}
+			if got := requestTools(t, model.inner.Requests()[0]); slices.Contains(got, "mcp__fx__pick_one") || !slices.Contains(got, "mcp__fx__execute_pipeline") {
+				t.Fatalf("request tools %q", got)
+			}
+			if strings.Contains(logs.String(), unionWarning) || len(notices(client)) != 0 {
+				t.Errorf("a warning for a tool that is not sent:\n%s\n%+v", logs, notices(client))
+			}
+		})
 	}
 }

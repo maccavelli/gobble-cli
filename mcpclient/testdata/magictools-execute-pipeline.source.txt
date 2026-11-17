@@ -1,0 +1,18 @@
+magictools-execute-pipeline.json
+
+  The inputSchema of the execute_pipeline tool, copied verbatim (the object
+  only, re-indented four spaces) from the repository mcp-server-magictools,
+  path internal/handler/inventory.go, lines 289-336, at commit 368ac6a.
+  It is a root anyOf of two required-only branches beside a root
+  "type": "object", properties and additionalProperties: false.
+
+magictools-execute-pipeline.rewritten.json
+
+  What 0060-MADR-normalise-root-level-unions-in-mcp-tool-schemas.md D2 makes
+  of it, written by hand from that rule: each branch typed "object", with the
+  root's seven properties (descriptions removed), the root's
+  additionalProperties: false, and its own required.
+
+mcptest.ExecutePipelineSchema holds the same schema as a Go constant, for
+the fixture server; TestFixtureSchemaIsTheCopy (schema_test.go) keeps the
+two equal.

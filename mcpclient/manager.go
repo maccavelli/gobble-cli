@@ -58,9 +58,20 @@ func (m *Manager) Wait(ctx context.Context) error {
 // order each server lists them, named by ToolName across the whole set.
 // allow, when not nil, keeps only the names it accepts.
 func (m *Manager) Tools(allow func(name string) bool) []tool.Tool {
+	listed := m.listed(allow)
+	out := make([]tool.Tool, len(listed))
+	for i, t := range listed {
+		out[i] = t
+	}
+	return out
+}
+
+// listed is Tools' tools, as the type that holds what the rule of
+// 0060-MADR D2 did to each schema.
+func (m *Manager) listed(allow func(name string) bool) []*mcpTool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	var out []tool.Tool
+	var out []*mcpTool
 	current := map[string]bool{}
 	for _, c := range m.conns {
 		state, _, tools := c.status()
@@ -83,6 +94,40 @@ func (m *Manager) Tools(allow func(name string) bool) []tool.Tool {
 			if allow == nil || allow(name) {
 				out = append(out, mt)
 			}
+		}
+	}
+	return out
+}
+
+// SchemaNote is one tool whose input schema the rule of 0060-MADR D2 met:
+// the server and tool as the server names them, the name gobble gives the
+// tool (what --exclude-tools and a permission rule take), and, for a
+// flagged tool, the reason (D3).
+type SchemaNote struct {
+	Server, Tool, Name, Reason string
+}
+
+// FlaggedTools are the tools allow keeps, in Tools' order, whose schema is a
+// root union with a branch that is not an object, which the rule could not
+// rewrite, so that gobble sends it as the server gave it and some providers
+// refuse it (0060-MADR D3). A tool is listed on each call, for as long as
+// it is connected; the caller reports each once.
+func (m *Manager) FlaggedTools(allow func(name string) bool) []SchemaNote {
+	return m.notes(allow, func(t *mcpTool) (bool, string) { return t.flag != "", t.flag })
+}
+
+// RewrittenTools are the tools allow keeps, in Tools' order, whose schema
+// the rule changed (0060-MADR D2).
+func (m *Manager) RewrittenTools(allow func(name string) bool) []SchemaNote {
+	return m.notes(allow, func(t *mcpTool) (bool, string) { return t.rewritten, "" })
+}
+
+// notes are the tools of listed(allow) that pick selects, with its reason.
+func (m *Manager) notes(allow func(name string) bool, pick func(*mcpTool) (bool, string)) []SchemaNote {
+	var out []SchemaNote
+	for _, t := range m.listed(allow) {
+		if ok, reason := pick(t); ok {
+			out = append(out, SchemaNote{Server: t.conn.server.Name, Tool: t.tool.Name, Name: t.spec.Name, Reason: reason})
 		}
 	}
 	return out

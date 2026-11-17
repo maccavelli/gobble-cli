@@ -1,0 +1,70 @@
+{
+  "type": "object",
+  "properties": {
+    "session_id": {
+      "type": "string",
+      "description": "Optional CSSA session correlation ID. Auto-generated if omitted. For CONTINUATION MODE: pass session_id WITHOUT target/intent to resume a paused pipeline after human approval."
+    },
+    "target": {
+      "type": "string",
+      "description": "Absolute path to the project root or package to analyze and refactor."
+    },
+    "intent": {
+      "type": "string",
+      "description": "The goal/objective of the pipeline run."
+    },
+    "plan_hash": {
+      "type": "string",
+      "description": "Optional SHA-256 hash of an approved implementation plan for MUTATOR integrity verification."
+    },
+    "dry_run": {
+      "type": "boolean",
+      "description": "When true, return the DAG plan as markdown without executing. Equivalent to the old compose_pipeline preview."
+    },
+    "target_roles": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Optional role filter (e.g. ['ANALYZER', 'CRITIC']). Only tools matching these roles enter the DAG."
+    },
+    "reject": {
+      "type": "boolean",
+      "description": "Set to true when continuing a paused pipeline to reject the plan and abort without mutations."
+    }
+  },
+  "additionalProperties": false,
+  "anyOf": [
+    {
+      "type": "object",
+      "properties": {
+        "session_id": { "type": "string" },
+        "target": { "type": "string" },
+        "intent": { "type": "string" },
+        "plan_hash": { "type": "string" },
+        "dry_run": { "type": "boolean" },
+        "target_roles": { "type": "array", "items": { "type": "string" } },
+        "reject": { "type": "boolean" }
+      },
+      "additionalProperties": false,
+      "required": [
+        "target",
+        "intent"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "session_id": { "type": "string" },
+        "target": { "type": "string" },
+        "intent": { "type": "string" },
+        "plan_hash": { "type": "string" },
+        "dry_run": { "type": "boolean" },
+        "target_roles": { "type": "array", "items": { "type": "string" } },
+        "reject": { "type": "boolean" }
+      },
+      "additionalProperties": false,
+      "required": [
+        "session_id"
+      ]
+    }
+  ]
+}

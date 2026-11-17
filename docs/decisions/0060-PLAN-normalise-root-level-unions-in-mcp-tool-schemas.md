@@ -317,3 +317,130 @@ gated P4 (Q4 (b)) or a text exclusion (Q7 (b)); none applies.
   the pair, MD004 (`*` list markers) only, the class the accepted 0059 records give; an identifier scan of the pair and
   the README diff, no hits.
 * The pair and `docs/README.md` staged by path for the coordinator's commit (P0 step 4).
+
+### P1 (2026-11-17)
+
+* **Provenance.** Built by a mainstream-class model at high effort, as this plan prices P1, on the coordinator's brief; the
+  coordinator reads the diff and runs its own gate. Base `0592367` on `p3-acpext-v0.5.0` (level with
+  `origin/p3-acpext-v0.5.0`, tree clean, `go1.27.4`; K1). The hooks path is the global hooks directory. Nothing is
+  committed, pushed or tagged.
+* **Built.** `mcpclient/schema.go`: the rule `rewriteRootUnion` (`:49`) with its conditions in D2's order (`ruleApplies`,
+  `:77`), each branch's kind (`objectBranch`, `:113`), the typed copy with the root's keywords (`objectify`, `:147`), the
+  flag's condition and text (`hasUntypedBranch`, `:171`; `flagText`, `:189`), and a schema-aware removal of descriptions
+  (`stripDescriptions`, `:220`; a property named `description` and a `description` inside `enum`, `const`, `default` or
+  `examples` are kept). `mcpclient/tool.go:78`: `inputSchema` works on a deep copy of the SDK's map, adds `type` and
+  `properties`, then applies the rule; `newTool` keeps whether it rewrote and the flag (`:43`). `mcpclient/manager.go`:
+  `SchemaNote` (`:106`), `FlaggedTools` (`:115`) and `RewrittenTools` (`:121`) over `listed` (`:71`), which `Tools` now
+  uses, each limited by the tool filter. `acpserver/mcp.go`: `reportSchemas` (`:198`, called at `:178`), once per
+  session for each tool: a debug record for a rewritten tool, and for a flagged one a warning record and a notice, title
+  `mcp: tool schema sent as the server gave it`, naming `<server>/<tool>`, the reason and the remedy
+  (`--exclude-tools mcp__<server>__<tool>`, or a permission rule). `mcpclient/mcptest/mcptest.go`: `NewUnionServer`
+  (`:208`), `UnionHTTPServer` (`:246`), `ExecutePipelineSchema` (`:129`) and `NullableUnionSchema` (`:184`), without
+  changing `NewServer`'s tools. Data: `mcpclient/testdata/magictools-execute-pipeline.json` (the object of
+  `mcp-server-magictools` `internal/handler/inventory.go:289-336` at `368ac6a`, read there with `git show`, that
+  repository untouched), `.rewritten.json` (by hand from D2), `.source.txt` (the note). The live test
+  `llm/provider/live_grok_union_test.go` (`//go:build live_grok`), compiled by `go vet -tags live_grok ./llm/provider/`
+  (exit 0) and never run. Docs: `docs/guides/mcp-servers.md` (new), `docs/README.md` (guides list and two "I want to…"
+  rows), `docs/architecture.md` (the `mcpclient`, `mcpclient/mcptest` and `acpserver` rows), `mcpclient/doc.go`,
+  `mcpclient/mcptest/doc.go`.
+* **Tests.** `mcpclient/schema_test.go`: `TestRewriteRootUnion` (S0 to S12, S6b and X1 to X16: expected JSON, or the schema
+  as given with its flag), `TestRewritePreservesInputs` (every rewritten case: the same verdict from jsonschema-go on the
+  corpus of the plan, 2,265 instances for the real schema with 91 accepted by both, 30,783 over all fifteen rewritten
+  cases, each corpus checked to accept some and refuse some), `TestRewrittenBranchesAreObjects`, `TestRootIsUntouched`,
+  `TestRewriteIsIdempotent`, `TestRewriteSharesNothing`, `TestNewToolDoesNotWriteTheSDKsMap`,
+  `TestInputSchemaAdditionsThenRule`, `TestRefusedShapesAreUntouched`, `TestFlagReasonWording`,
+  `TestFixtureSchemaIsTheCopy`, `TestFixtureShapes`. `mcpclient/manager_test.go`: `TestSchemaNotes`,
+  `TestRewrittenToolIsCalledAsGiven`. `acpserver/mcp_test.go`: `TestMCPUnionSchemaProviderRefusal` (the test double
+  refuses the original with the owner's text and passes the rewrite), `TestMCPUnionSchemaRewritten` (the end-to-end
+  prompt: completes, the request's schema equals the rewrite, the call reaches the server with its arguments intact, one
+  debug record over two prompts), `TestMCPUnionSchemaFlaggedOnce` (S8's shape served by the fixture, two prompts, one
+  warning record and one notice, and the provider's refusal is of that tool), `TestMCPUnionSchemaRemedies` (the filter
+  and a deny rule: nothing warned, the prompt completes). `llm/provider/wire_union_test.go`: `TestWireRootUnionSchema`.
+  `internal/cli/mcp_test.go`: `TestChatWarnsOfAFlaggedToolSchema`.
+* **Red first (K3).** Run against a `schema.go` that returned its input, with `FlaggedTools` and `RewrittenTools` stubs
+  returning nothing and no `acpserver` code: `go test ./mcpclient/` failed `TestSchemaNotes` (`manager_test.go:138`:
+  flagged `[]`), `TestRewriteRootUnion` (`schema_test.go:233`: the real schema, `rewritten false`),
+  `TestFlagReasonWording`, `TestRewritePreservesInputs` ("not rewritten"), `TestRewrittenBranchesAreObjects`
+  (`:451`: `anyOf[0]` not typed), `TestRewriteSharesNothing`, `TestNewToolDoesNotWriteTheSDKsMap` (two subcases, the SDK's
+  map written), `TestInputSchemaAdditionsThenRule` and `TestFixtureShapes`; `go test ./acpserver/ -run TestMCPUnionSchema`
+  failed the end-to-end, flagged-once and remedies tests with the owner's refusal text (the provider-double test passed:
+  it tests the double); `TestWireRootUnionSchema` failed with the same 400 on the loaded tool; and
+  `TestChatWarnsOfAFlaggedToolSchema` failed with 0 warnings on stderr. Tests that pass against the stub by their
+  nature (`TestRootIsUntouched`, `TestRefusedShapesAreUntouched`, `TestRewriteIsIdempotent`, `TestFixtureSchemaIsTheCopy`)
+  are held by plants 8, 15, 3 and 9 below. The outputs are kept with the session's records.
+* **Green (step 5).** `go test ./mcpclient/... ./acpserver/ ./llm/provider/` exit 0.
+* **Planted breaks (K2),** on one scratch copy of `git archive HEAD` plus the uncommitted files copied, each file
+  asserted to occur once, `gofmt` clean, the copy built with its tests (so a red is a test failure, never a build failure),
+  run again on the final code. Failing line is the first the test prints:
+
+  | # | Plant | Red tests | First failing line |
+  | :--- | :--- | :--- | :--- |
+  | 1 | the rule returns its input | `TestRewriteRootUnion/S0`; `TestWireRootUnionSchema`; `TestMCPUnionSchemaRewritten` | `schema_test.go:233` (rewritten false); `wire_union_test.go:178` (the 400); `mcp_test.go:535` (the prompt fails with the 400) |
+  | 2 | branches typed, root's keywords not copied | `TestRewriteRootUnion/S0`, `TestRewrittenBranchesAreObjects` | `schema_test.go:233`; `schema_test.go:460` (`anyOf[0]` has no object keyword) |
+  | 3 | the union dropped | `TestRewritePreservesInputs/S0` and `/S2` | `schema_test.go:404`: instance 9 `map[]`, the original false, the rewrite true |
+  | 4 | a branch's own properties overwritten | `TestRewritePreservesInputs/S7` | `schema_test.go:404`: instance 10 `map[mode:x]`, the original false, the rewrite true |
+  | 5 | the rule applied to a root typed `["object","null"]` | `TestRewriteRootUnion/S8`, `TestRewritePreservesInputs/S8` | `schema_test.go:221` (rewritten true); `schema_test.go:404`: instance 5 `null`, the original true, the rewrite false |
+  | 6 | the SDK's map written in place | `TestNewToolDoesNotWriteTheSDKsMap` (two subcases) | `schema_test.go:607` |
+  | 7 | the warning on every prompt | `TestMCPUnionSchemaFlaggedOnce` | `mcp_test.go:584`: 2 warning records over two prompts, want 1 |
+  | 8 | descriptions removed from the root's properties too | `TestRootIsUntouched`, `TestRewriteRootUnion/S0` | `schema_test.go:524` |
+
+  Beyond the eight, seven more, all red: 9 the fixture's copy of the schema drifts (`TestFixtureSchemaIsTheCopy`); 10 the
+  provider double never refuses (`TestMCPUnionSchemaProviderRefusal`, `TestMCPUnionSchemaFlaggedOnce`); 11 descriptions
+  removed by name (`TestRewriteRootUnion/X1`); 12 a denied tool still warned of (`TestMCPUnionSchemaRemedies/a_deny_rule`);
+  13 the rewrite noted on every prompt (`TestMCPUnionSchemaRewritten`); 14 the filter ignored when noting tools
+  (`TestSchemaNotes`); 15 a `true` branch removed (`TestRewritePreservesInputs/S9`). No plant survived.
+* **Gates** (each exit status taken before any filter; times are the host clock, queue waits included):
+
+  | Gate | Host | Start | End | Exit |
+  | :--- | :--- | :--- | :--- | :--- |
+  | `make pre-add-check` over the 13 changed `.go` files | session host | 13:09:49 | 13:10:05 | 0 |
+  | `make preflight`, first run | session host, through `run-heavy` | 13:10:09 | 13:18:56 | 2: `markdownlint` MD004, `*` list markers in the new guide; every earlier step passed. The guide's markers were changed to `-`, nothing else |
+  | `make preflight`, second run | session host, through `run-heavy` | 13:19:35 | 13:29:28 | 0, "preflight passed" |
+  | `make race` | the Linux machine, `run-on-host --race --need linux` | 13:10:19 | 13:28:01 | 0 |
+  | `make race` | the Windows laptop, `run-on-host --race --need windows -- sh -c "make race"` | 13:10:25 | 13:17:14 | 0 |
+  | `go test -race -count=20 -timeout 15m -run TestMCPUnionSchema ./acpserver/` | session host, through `run-heavy` | 13:10:44 | 13:19:40 | 0 |
+  | `make check-test-isolation` | session host | 13:18:00 | 13:19:25 | 0 |
+  | `make preflight` | a Linux target (the picker chose a WSL distro of the Windows laptop), `run-on-host --need linux` | 13:29:39 | 13:39:41 | 0, "preflight passed" |
+
+  After the last record edit, each exit status taken before any filter: `make check-records` 0 and `make markdownlint` 0
+  (59 files, 0 issues; it excludes records by its globs), and an identifier scan of the staged diff for the local account
+  name, the hosts' names and real-machine absolute paths, no hits.
+* **Notes on the plan as written, none stopping the phase** (each keeps the step's intent; the owner may disagree):
+  1. S8's shape cannot be registered with the go-sdk's `Server.AddTool`, which panics unless a root's `type` is exactly
+     `"object"` (`mcp/server.go`, `AddTool`, v1.8.0). The fixture registers `pick_one` with an object root and a
+     receiving middleware swaps S8's schema in when it lists its tools, so the client is sent S8 as written.
+  2. The end-to-end provider double cannot call `llmprovider.ClassifyHTTPError`: `internal/archtest` rule 4 lets only
+     `llm/provider` import the SDK, tests included. The double sends a request through gobble's own `grok` provider over an
+     in-process transport that answers xAI's recorded 400, so the SDK's classification and gobble's mapping both run, and
+     the text asserted is the owner's paste with the SDK's own words in its ellipsis: `llm: api status 400: llmprovider:
+     invalid request: grok HTTP 400 invalid-argument: Failed to start sampling: [invalid_client_tool_schema] <tool>: …`.
+  3. "Sent byte-identical to the spec" holds up to key order: the SDK writes a schema again with its keys sorted, so the
+     wire test compares the schema on the wire with the spec's and with the rewrite file after RFC 8785 canonicalising both.
+  4. The wire test takes its spec from the tool as `mcpclient` loads it from the union fixture (the test imports
+     `mcpclient` and `mcptest`, which no archtest rule forbids), so that plant 1 turns it red as the plan expects; the
+     original schema is handed to the provider as the server sends it.
+  5. `internal/cli`: the harness starts a session and shows the record, but its stderr is not a terminal, so it is
+     slog text (`level=WARN msg="mcp: tool schema sent as the server gave it" server=fx tool=pick_one …`); the `Warning:` line
+     is 0024-MADR D6's handler on a terminal, which `Main` cannot be given here. The test asserts the record once, naming the
+     tool and the remedy. The MADR's "terminal shows a `Warning:` line" stays not verified for this record.
+  6. D4's remedy "a permission rule that denies it" would not end the warning if a hidden tool were still reported, so
+     `reportSchemas` reports only tools the session's rules leave visible (`visible(withDefaults(…))`, as the prompt does);
+     `TestMCPUnionSchemaRemedies` holds it, plant 12 breaks it. `l.reported` keys are `tool schema rewritten: <name>` and
+     `tool schema flagged: <name>`, so they cannot meet a server's name.
+  7. S6 as the MADR writes it has `$defs` at the root, so D2's order refuses it for the root keyword, not the `$ref`;
+     S6b has a `$ref` branch alone.
+  8. A refused shape is flagged only when its root union has a branch not typed `object` (D3); one whose branches are all typed
+     objects (X7) is sent as given and not flagged.
+* **Not done, and why.** No outside request, no real credential, no real port beyond the in-process `httptest`
+  servers the existing fixtures use; the live test was compiled, not run (P3). The typed-error fallback, the `signature`
+  misfire and the `mcp-server-magictools` findings are other records. `AGENTS.md` read: it does not describe MCP
+  schemas, no change. No `//nolint`, no skipped test, no `replace`, no `go.work`, no pin change.
+* **Not verified.** Whether Grok or any other route accepts the rewritten form (P3); that a terminal shows the warning as a
+  `Warning:` line (note 5); `$dynamicRef` or `$id` inside a branch or inside the properties the rule copies, which D2 does
+  not name and the corpus does not cover; `unevaluatedProperties` and dependent keywords inside a branch.
+* **Docs rows.** `docs/guides/mcp-servers.md:1` fixed (new); `docs/README.md:10-14` fixed (guides list); `docs/README.md`
+  "I want to…" two rows fixed; `docs/architecture.md:128`, `:131`, `:132` fixed; `mcpclient/doc.go` and
+  `mcpclient/mcptest/doc.go` fixed; `AGENTS.md` unchanged (no MCP-schema text). docs: searched `README.md`, `docs/`,
+  `AGENTS.md`, `mcpclient/`, `acpserver/` for `inputSchema`, input schema, tool schema, `exclude-tools` and `mcp__`; nothing
+  else it makes false.
+* **Staged, not committed.** The changed and new files of P1 and this record staged by path for the coordinator.

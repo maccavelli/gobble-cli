@@ -175,12 +175,52 @@ func (a *Agent) mcpTools(ctx context.Context, s *liveSession) []tool.Tool {
 		}
 	}
 	tools := l.m.Tools(a.mcp.Allow)
+	a.reportSchemas(ctx, s, tools)
 	for _, t := range l.m.ResourceTools() {
 		if a.mcp.Allow == nil || a.mcp.Allow(t.Spec().Name) {
 			tools = append(tools, t)
 		}
 	}
 	return tools
+}
+
+// schemaWarning is the title of the warning and notice for a tool whose
+// root union gobble could not rewrite (0060-MADR D4).
+const schemaWarning = "mcp: tool schema sent as the server gave it"
+
+// reportSchemas tells of what the rule of 0060-MADR D2 did to the schemas of
+// offered, the session's MCP tools after the tool filter, once per session
+// for each tool: a debug record for a tool whose schema was rewritten, and
+// for one it could not rewrite that some providers refuse, a warning record
+// and, for a client that offered notices, a notice, naming the remedy (D4).
+// A tool the session's permission rules hide is not sent, so it is not
+// reported: that remedy ends the warning, as leaving the tool out does.
+func (a *Agent) reportSchemas(ctx context.Context, s *liveSession, offered []tool.Tool) {
+	l := s.mcp
+	sent := map[string]bool{}
+	for _, t := range visible(withDefaults(a.rulesOf(s), offered, a.modeOf(s)), offered) {
+		sent[t.Spec().Name] = true
+	}
+	for _, n := range l.m.RewrittenTools(a.mcp.Allow) {
+		key := "tool schema rewritten: " + n.Name
+		if l.reported[key] || !sent[n.Name] {
+			continue
+		}
+		l.reported[key] = true
+		a.logger.DebugContext(ctx, "mcp: tool schema rewritten", slog.String("server", n.Server), slog.String("tool", n.Tool),
+			slog.String("rule", "each branch of the root union typed object, with the root's object keywords"))
+	}
+	for _, n := range l.m.FlaggedTools(a.mcp.Allow) {
+		key := "tool schema flagged: " + n.Name
+		if l.reported[key] || !sent[n.Name] {
+			continue
+		}
+		l.reported[key] = true
+		remedy := "leave the tool out with --exclude-tools " + n.Name + ", or add a permission rule that denies it"
+		a.logger.WarnContext(ctx, schemaWarning, slog.String("server", n.Server), slog.String("tool", n.Tool),
+			slog.String("reason", n.Reason), slog.String("remedy", remedy))
+		a.queueNotice(s, acp.NoticeSeverityWarning, schemaWarning, n.Server+"/"+n.Tool+": "+n.Reason+". To avoid a refusal, "+remedy+".")
+	}
 }
 
 // closeMCP closes a session's servers. A server's exit status is logged,

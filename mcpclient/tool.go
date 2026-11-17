@@ -21,6 +21,11 @@ type mcpTool struct {
 	conn *conn
 	tool *mcp.Tool
 	spec tool.Spec
+	// rewritten reports that the rule of 0060-MADR D2 changed the schema;
+	// flag is the reason it left a shape alone that some providers refuse,
+	// or "".
+	rewritten bool
+	flag      string
 }
 
 var (
@@ -35,10 +40,11 @@ func newTool(c *conn, t *mcp.Tool, name string) *mcpTool {
 		a.DestructiveHint = an.DestructiveHint != nil && *an.DestructiveHint
 		a.OpenWorldHint = an.OpenWorldHint != nil && *an.OpenWorldHint
 	}
-	return &mcpTool{conn: c, tool: t, spec: tool.Spec{
+	schema, rewritten, flag := inputSchema(t.InputSchema)
+	return &mcpTool{conn: c, tool: t, rewritten: rewritten, flag: flag, spec: tool.Spec{
 		Name:        name,
 		Description: description(c.server.Name, t),
-		InputSchema: inputSchema(t.InputSchema),
+		InputSchema: schema,
 		Annotations: a,
 		Kind:        tool.KindOther,
 		Exposure:    tool.ExposureDirect,
@@ -60,25 +66,32 @@ func description(server string, t *mcp.Tool) string {
 	return fmt.Sprintf("MCP tool %s from server %s", t.Name, server)
 }
 
-// inputSchema is the tool's schema with "type": "object" and
-// "properties": {} added when missing, as Pi adds them: some providers
-// reject an object schema without properties.
-func inputSchema(s any) jsontext.Value {
-	m, _ := s.(map[string]any) //nolint:errcheck // a non-object schema becomes an empty one
-	if m == nil {
-		m = map[string]any{}
+// inputSchema is the schema the model is sent for a tool, as JSON, made on
+// a deep copy of s, the go-sdk's own: "type": "object" and "properties": {}
+// are added when missing, as Pi adds them, since some providers reject an
+// object schema without properties; a schema that is not a JSON object
+// becomes an empty one; then the rule of 0060-MADR D2 gives each branch of a
+// root anyOf or oneOf the root's object keywords (see rewriteRootUnion).
+// rewritten reports that the rule changed the schema, and flag, when the
+// schema is a root union the rule did not cover, that some providers
+// refuse, why (D3, D4).
+func inputSchema(s any) (spec jsontext.Value, rewritten bool, flag string) {
+	m := map[string]any{}
+	if src, ok := s.(map[string]any); ok && src != nil {
+		m = cloneMap(src)
 	}
 	if m["type"] == nil {
-		m["type"] = "object"
+		m["type"] = typeObject
 	}
 	if _, ok := m["properties"]; !ok {
 		m["properties"] = map[string]any{}
 	}
+	m, rewritten, flag = rewriteRootUnion(m)
 	b, err := jsonx.Marshal(m, json.Deterministic(true))
 	if err != nil {
-		return jsontext.Value(`{"type":"object","properties":{}}`)
+		return jsontext.Value(`{"type":"object","properties":{}}`), false, ""
 	}
-	return b
+	return b, rewritten, flag
 }
 
 func (t *mcpTool) Spec() tool.Spec { return t.spec }
