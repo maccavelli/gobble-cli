@@ -21,7 +21,17 @@ branch), and on a scratch clone of this repository outside the working tree:
      status is not its verdict, so its text is read; a library pinned at
      the tag has nothing to compare;
   4. govulncheck, and the library's GitHub security advisories, which
-     govulncheck does not see.
+     govulncheck does not see. Every page of the repository's advisories is
+     read (the API's Link header, 100 to a page, at most 20 pages); a page
+     that fails to load fails the check. An advisory is matched by module
+     path: a vulnerabilities[] entry counts against a library when its
+     package name is that library's module path (for the contract,
+     github.com/maccavelli/go-llmprovider-sdk/authcontract), and not against
+     the other library of the repository. An entry that names no known
+     module (no package, no name, or a name that is no listed module's path;
+     the comparison is exact) counts against every library of its
+     repository, and the report says to fix the advisory's package name. So
+     to have an advisory matched, write its package name as the module path.
 
 A library gobble does not require yet (go-tui-lib, before its first
 import) is probed: the scratch clone gains a file importing the packages
@@ -53,6 +63,7 @@ import subprocess
 import sys
 import tempfile
 import urllib.request
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -62,6 +73,11 @@ GOOSES = ("linux", "darwin", "windows")
 SEMVER = re.compile(r"^v(\d+)\.(\d+)\.(\d+)$")
 SECRET = re.compile(r"KEY|TOKEN|SECRET|PASSWORD", re.IGNORECASE)
 REQUIRE = re.compile(r"^\s*([^\s()]+)\s+(v[^\s]+)")
+LINK = re.compile(r'<([^>]*)>\s*;\s*rel="([^"]*)"')
+API = "https://api.github.com"
+PER_PAGE = 100
+MAX_PAGES = 20
+Fetch = Callable[[str], tuple[list[dict], "str | None"]]
 
 
 @dataclass(frozen=True)
@@ -235,11 +251,90 @@ def covers(range_text: str, version: str) -> bool:
     return True
 
 
-def advisories(lib: Library) -> list[dict]:
-    req = urllib.request.Request(f"https://api.github.com/repos/{OWNER}/{lib.repo}/security-advisories",
-                                 headers={"Accept": "application/vnd.github+json", "User-Agent": "gobble-check-libs"})
-    with urllib.request.urlopen(req, timeout=60) as resp:  # noqa: S310 - a fixed https URL
-        return json.load(resp)
+def next_link(header: str) -> str | None:
+    """The URL a Link header gives for rel="next", or None on the last page."""
+    for url, rel in LINK.findall(header):
+        if "next" in rel.split():
+            return url
+    return None
+
+
+def fetch_page(url: str) -> tuple[list[dict], str | None]:
+    """One page of advisories and the URL of the next page, if any. Any
+    failure (the network, a status, unreadable JSON) raises."""
+    req = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json",  # noqa: S310 - as the urlopen below
+                                               "User-Agent": "gobble-check-libs"})
+    with urllib.request.urlopen(req, timeout=60) as resp:  # noqa: S310 - advisories() passes only https://api.github.com URLs
+        body = json.load(resp)
+        link = resp.headers.get("Link") or ""
+    if not isinstance(body, list):
+        raise ValueError(f"{url}: expected a list of advisories")
+    return body, next_link(link)
+
+
+def advisories(lib: Library, fetch: Fetch = fetch_page) -> list[dict]:
+    """Every security advisory of lib's repository: the first page, then each
+    page the Link header's rel="next" names, at most MAX_PAGES. A page that
+    fails to load raises, so the advisories are never read as fewer than
+    there are."""
+    url: str | None = f"{API}/repos/{OWNER}/{lib.repo}/security-advisories?per_page={PER_PAGE}"
+    found: list[dict] = []
+    for _ in range(MAX_PAGES):
+        page, url = fetch(url)
+        found += page
+        if url is None:
+            return found
+        if not url.startswith(f"{API}/"):
+            raise ValueError(f"the next page is not on {API}: {url}")
+    raise RuntimeError(f"more than {MAX_PAGES} pages of advisories for {lib.repo}")
+
+
+def advisory_scope(lib: Library, entry: dict) -> str:
+    """How a vulnerabilities[] entry relates to lib: "named" when its package
+    name is lib's module, "other" when it is another module of the same
+    repository, "unnamed" when it names no module the script lists for the
+    repository (no package, no name, or a name that equals none): an
+    unnamed entry counts against every library of the repository, so a
+    mis-typed advisory cannot hide a vulnerability (0051-PLAN P7a, the owner's
+    ruling of 2026-11-16). The comparison is exact: a Go advisory's name is
+    the module path, as the data shows."""
+    package = entry.get("package")
+    name = package.get("name") if isinstance(package, dict) else None
+    if name == lib.module:
+        return "named"
+    if isinstance(name, str) and name in {other.module for other in LIBRARIES if other.repo == lib.repo}:
+        return "other"
+    return "unnamed"
+
+
+def advisory_hits(lib: Library, tag: str, found: list[dict]) -> list[str]:
+    """The published advisories whose vulnerable range covers tag, for lib's
+    module alone, or for every module of the repository when the entry names
+    none of them."""
+    modules = ", ".join(sorted({other.module for other in LIBRARIES if other.repo == lib.repo}))
+    hits: list[str] = []
+    for a in found:
+        if a.get("state", "published") != "published":
+            continue
+        for v in a.get("vulnerabilities") or []:
+            scope = advisory_scope(lib, v)
+            if scope == "other" or not v.get("vulnerable_version_range") or not covers(v["vulnerable_version_range"], tag):
+                continue
+            hit = f"advisory {a.get('ghsa_id')} covers {tag}"
+            if scope == "unnamed":
+                hit += (f"; its entry names no known module of {lib.repo}, so it counts against every library there:"
+                        f" fix the advisory's package name to the module path ({modules})")
+            hits.append(hit)
+    return list(dict.fromkeys(hits))
+
+
+def check_advisories(report: Report, lib: Library, tag: str, fetch: Fetch = fetch_page) -> None:
+    """The advisories check: a failure to read any page fails it."""
+    try:
+        hits = advisory_hits(lib, tag, advisories(lib, fetch))
+        report.check("advisories", not hits, "; ".join(hits))
+    except (OSError, ValueError, RuntimeError) as err:
+        report.check("advisories", False, f"could not read all the advisories, so none is taken as absent: {err}")
 
 
 def api_paths(lib: Library, version: str, work: Path) -> tuple[Path, Path]:
@@ -341,14 +436,7 @@ def check_library(lib: Library, tag: str, base: str, work: Path) -> Report:
     else:
         check_api(report, lib, base, tag, work, logs)
     report.check("govulncheck", run(["go", "tool", "govulncheck", "./..."], clone, logs / f"{lib.name}-vuln.log") == 0)
-    try:
-        hits = [f"advisory {a.get('ghsa_id')} covers {tag}" for a in advisories(lib)
-                if a.get("state", "published") == "published"
-                for v in a.get("vulnerabilities") or [] if v.get("vulnerable_version_range")
-                and covers(v["vulnerable_version_range"], tag)]
-        report.check("advisories", not hits, "; ".join(hits))
-    except (OSError, ValueError) as err:
-        report.check("advisories", False, f"could not read: {err}")
+    check_advisories(report, lib, tag)
     return report
 
 
@@ -368,6 +456,91 @@ def api_paths_distinct() -> bool:
     work = Path("work")
     a, b = api_paths(LIBRARIES[1], "v1.17.0", work), api_paths(LIBRARIES[2], "v1.17.0", work)
     return not set(a) & set(b)
+
+
+def advisory_cases() -> list[tuple[str, bool]]:
+    """The advisory cases over fixed data and an injected fetch: no network."""
+    sdk = next(lib for lib in LIBRARIES if lib.name == "go-llmprovider-sdk")
+    contract = next(lib for lib in LIBRARIES if lib.name == "authcontract")
+
+    def entry(package: object, rng: str = "< 1.2.0") -> dict:
+        return {"package": package, "vulnerable_version_range": rng}
+
+    def adv(ghsa: str, *entries: dict) -> dict:
+        return {"ghsa_id": ghsa, "state": "published", "vulnerabilities": list(entries)}
+
+    def pkg(module: str) -> dict:
+        return {"ecosystem": "go", "name": module}
+
+    def hits(lib: Library, tag: str, *found: dict) -> list[str]:
+        return advisory_hits(lib, tag, list(found))
+
+    def pages(*data: list[dict]) -> Fetch:
+        urls = [f"{API}/page{i}" for i in range(len(data))]
+
+        def fetch(url: str) -> tuple[list[dict], str | None]:
+            i = 0 if "per_page=" in url else urls.index(url)
+            return data[i], urls[i + 1] if i + 1 < len(urls) else None
+        return fetch
+
+    def failing_second(url: str) -> tuple[list[dict], str | None]:
+        if "per_page=" in url:
+            return [], f"{API}/page1"
+        raise OSError("page 2 did not load")
+
+    def endless(_url: str) -> tuple[list[dict], str | None]:
+        return [], f"{API}/again"
+
+    def off_host(_url: str) -> tuple[list[dict], str | None]:
+        return [], "https://example.com/page1"
+
+    def check_with(fetch: Fetch) -> Report:
+        report = Report("self-test")
+        with contextlib.redirect_stdout(io.StringIO()):
+            check_advisories(report, sdk, "v1.1.0", fetch)
+        return report
+
+    both = adv("GHSA-two", entry(pkg(sdk.module)), entry(pkg(contract.module), "< 0.0.1"))
+    unnamed = [adv("GHSA-nopkg", entry(None)), adv("GHSA-noname", entry({"ecosystem": "go"})),
+               adv("GHSA-empty", entry(pkg(""))), adv("GHSA-other", entry({"ecosystem": "", "name": "go-llmprovider-sdk"}))]
+    second = adv("GHSA-page2", entry(pkg(sdk.module)))
+    read = check_with(pages([], [second]))
+    return [
+        ("an advisory range for the SDK's path alone does not hit the contract at v0.1.0", hits(contract, "v0.1.0", both) == []),
+        ("an advisory range for the SDK's path hits the SDK at v1.1.0", hits(sdk, "v1.1.0", both) == ["advisory GHSA-two covers v1.1.0"]),
+        ("an entry naming the contract does not hit the SDK, and hits the contract",
+         hits(sdk, "v1.1.0", adv("GHSA-c", entry(pkg(contract.module)))) == []
+         and hits(contract, "v0.1.0", adv("GHSA-c", entry(pkg(contract.module)))) == ["advisory GHSA-c covers v0.1.0"]),
+        ("an entry with no package, no name, an empty name or a name matching no library hits both libraries, with the message",
+         all(len(hits(lib, tag, a)) == 1 and "names no known module" in hits(lib, tag, a)[0]
+             and "fix the advisory's package name" in hits(lib, tag, a)[0]
+             for a in unnamed for lib, tag in ((sdk, "v1.1.0"), (contract, "v0.1.0")))),
+        ("a named entry's hit carries no unknown-module message", "names no known module" not in " ".join(hits(sdk, "v1.1.0", both))),
+        ("the name is compared exactly: a differently cased path names no known module",
+         "names no known module" in " ".join(hits(sdk, "v1.1.0", adv("GHSA-case", entry(pkg(sdk.module.upper())))))),
+        ("a name that is no module of the repository (another repository's path) names no known module",
+         len(hits(sdk, "v1.1.0", adv("GHSA-x", entry(pkg("example.com/x"))))) == 1),
+        ("a draft advisory is not counted", hits(sdk, "v1.1.0", {**both, "state": "draft"}) == []),
+        ("the advisory on the second page is found",
+         [a["ghsa_id"] for a in advisories(sdk, pages([], [second]))] == ["GHSA-page2"]
+         and len(read.failures) == 1 and "GHSA-page2 covers v1.1.0" in read.failures[0]),
+        ("a second page that fails to load fails the check and is not read as empty",
+         len(check_with(failing_second).failures) == 1 and "could not read" in check_with(failing_second).failures[0]),
+        ("an endless chain of next links stops at the bound", _raises(RuntimeError, lambda: advisories(sdk, endless))),
+        ("a next link off api.github.com is refused", _raises(ValueError, lambda: advisories(sdk, off_host))),
+        ("the Link header's rel=\"next\" is read",
+         next_link(f'<{API}/a?after=x>; rel="next", <{API}/a?after=y>; rel="last"') == f"{API}/a?after=x"
+         and next_link(f'<{API}/a>; rel="prev"') is None and next_link("") is None),
+    ]
+
+
+def _raises(exc: type[Exception], call: Callable[[], object]) -> bool:
+    """Whether call raises exc, and nothing else."""
+    try:
+        call()
+    except Exception as err:  # noqa: BLE001 - any other error is a failed case, not a crash
+        return type(err) is exc
+    return False
 
 
 def self_test() -> int:
@@ -414,13 +587,19 @@ def self_test() -> int:
          len(choices) == len(set(choices)) and {"go-llmprovider-sdk", "authcontract"} <= set(choices)),
         ("the probe file is exact", probe_source(Library("x", (), path="example.com/x/v2", probe=("b", "a"))) == probe_want),
     ]
+    cases += advisory_cases()
     for name, ok in cases:
         print(f"self-test {name}: {'ok' if ok else 'FAIL'}")
     return 0 if all(ok for _, ok in cases) else 1
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Check gobble against the latest tags of its sibling libraries.")
+    ap = argparse.ArgumentParser(
+        description="Check gobble against the latest tags of its sibling libraries.",
+        epilog="Advisories: every page of the repository's GitHub security advisories is read. An entry counts against a "
+               "library when its package name is that library's module path (the contract's is the SDK's path plus "
+               "/authcontract); an entry that names no known module counts against every library of its repository, "
+               "so write an advisory's package name as the module path to have it matched.")
     ap.add_argument("--lib", choices=[lib.name for lib in LIBRARIES], help="one library; default all of them")
     ap.add_argument("--tag", help="the version to check; default the latest semver tag")
     ap.add_argument("--from", dest="base", help="the version to diff from; default the pinned one")

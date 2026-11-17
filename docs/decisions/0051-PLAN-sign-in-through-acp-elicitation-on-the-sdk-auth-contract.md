@@ -710,6 +710,13 @@ Acceptance: the tests pass, each plant failed; `TestACPLogin` (`internal/cli/acp
 ### P7a — check_libs.py's advisories by package (added 2026-11-14; the owner's ruling on P2's observation)
 
 Not started. Its file: `scripts/check_libs.py`, and its record in this PLAN. No Go code changes.
+*(2026-11-16, "Yes, in P7a, by a dated amendment": the owner's ruling, relayed by the coordinator, on the 30-advisory page
+limit. `advisories` asks GitHub's API for one page, 30 advisories by default, with no pagination, so a repository with more
+than 30 advisories would have its later ones unread. As put to the owner: the function follows the API's pages until it
+has every advisory, with a self-test case over fixed two-page data and a planted break (the second page dropped); same
+function, same phase, one commit. P7a's scope grows by this one item: `advisories` reads every page, steps 3 and 4 cover
+it, and the docs that describe the check say so (C9). Options not chosen: record it and fix it later; leave it. See "P7a
+record (2026-11-16)".)*
 
 1. **A question first, for the executor.** `check_library` reads the repository's published security advisories
    (`advisories` and the loop in `check_library`, `scripts/check_libs.py`) and tests each vulnerable version range
@@ -722,6 +729,13 @@ Not started. Its file: `scripts/check_libs.py`, and its record in this PLAN. No 
 2. **If it does,** an advisory entry counts against a library only when its package name equals `lib.module`, so the
    SDK's advisories no longer fail the contract's entry and the contract's none fail the SDK's. What an entry that names
    no package does (counted for every library of the repository, as today, or not) is also the executor's question.
+   *(2026-11-16, "Count it against every library of that repository": the owner's ruling, relayed by the coordinator.
+   As put to the owner: fail closed, as today: an advisory that does not say which module it covers is tested against
+   both the SDK's and the contract's pinned tag, and the message says the entry names no known module, so the owner knows
+   to fix the advisory's package name; a mis-typed advisory can never hide a vulnerability. Options not chosen: ignore
+   it; fail the check outright whatever the version. "Names no known module" means: `package` or `package.name`
+   missing, null or empty, or a name that equals the `module` of no library the script lists for that repository. Step
+   1's answer is in "P7a record (2026-11-16)".)*
 3. **`--self-test` gains a case** over fixed advisory data naming two packages of one repository, a range `< 1.2.0`
    for the SDK's path only: the contract at `v0.1.0` has no hit, and the SDK at `v1.1.0` has one. **Planted break:** the
    package filter removed, so the contract at `v0.1.0` reads the SDK's range as covering it; the case fails. Seen
@@ -3083,5 +3097,125 @@ The staged Go files and the golden, by modification time: `acpserver/agent.go` 0
 
 **Not verified.** No live service: the real endpoints of Grok, Kilo and OpenAI, whether real Kilo answers a 401 to a valid device key with no organisation (the owner's ruling B rests on the wizard's rule and Kilo's source, not on a
 run), a real client's rendering, the phone flow. The plan sign-in's byte proof runs against an in-process issuer that grants the plan scope, not OpenAI's.
+
+**Staged, not committed; the coordinator commits on the branch.**
+
+### P7a record (2026-11-16)
+
+Built by a mainstream model at medium effort, on the coordinator's brief. Step 1's question was answered earlier the same day by a lightweight agent, read-only, and
+re-checked by the coordinator; this entry re-read that agent's evidence files before recording the answer, and corrects what they do not bear out (below). The phases
+were approved by the owner; P7a was added on 2026-11-14 by the owner's ruling on P2's observation; on 2026-11-16 the owner said "proceed" to having step 1's question
+answered, then ruled on the two points that answer raised, each "the owner's ruling, relayed by the coordinator": **"Count it against every library of that repository"**
+(an entry that names no known module; dated note at step 2) and **"Yes, in P7a, by a dated amendment"** (the 30-advisory page limit; dated amendment at P7a's head). Times
+are the session machine's local time. Staged, not committed; **the coordinator commits on the branch `p3-acpext-v0.5.0`.** `main` and `origin/main` stayed at `9e21c8f`;
+no tag, push or merge was made. No Go file changed, and the `Library` table's entries are as they were.
+
+**C1, the start state.** Branch `p3-acpext-v0.5.0`, `HEAD` `a25aacf`, level with `origin/p3-acpext-v0.5.0` (`git branch -vv`, ran), the tree clean (`git status --short`
+printed nothing); `main` at `9e21c8f`.
+
+**Step 1's answer (the question of step 1, answered).** Read from the evidence files of the earlier agent (`otel_advisories.json`, 13 advisories, 25 `vulnerabilities[]`
+entries; `prom_advisories.json`, 6 advisories, 6 entries; `owner_sdk_advisories.json`, `gin_advisories.json`, `k8s_advisories.json`, each `[]`; `global_go_advisories.json`, 5
+advisories, 6 entries) with a script of my own (ran), and the script's code (read):
+
+* `advisories()` called `GET https://api.github.com/repos/<owner>/<repo>/security-advisories`, unauthenticated, with no query string and no pagination; GitHub's default is
+  30 a page ("per_page", default 30, read on the endpoint's documentation page, below).
+* In the public multi-module Go repository `open-telemetry/opentelemetry-go` (`otel_advisories.json`), all 25 entries carry `package.ecosystem: "go"` and a non-empty
+  `package.name` that is a Go module path, and different entries of one advisory name different paths (`go.opentelemetry.io/otel/sdk`, `.../otel/trace`, `.../otel/baggage`,
+  `.../otel/schema/v1.1`). None of the 25 names has a trailing slash, an upper-case letter or surrounding space. The 5 entries of `global_go_advisories.json` (GitHub's
+  global advisory listing, not a repository's: no `state` key) are the same, e.g. `github.com/filebrowser/filebrowser/v2`.
+* In `prometheus/prometheus` (`prom_advisories.json`) all 6 entries carry `package.ecosystem: ""` and a free-text name (`prometheus` or `Prometheus`, which differ by case between
+  entries). GitHub's published schema marks `vulnerabilities`, `package` and `package.name` nullable: "`package`: required, object or null", "`vulnerabilities`: required,
+  array of objects or null", "`name`: required, string or null" (`https://docs.github.com/en/rest/security-advisories/repository-advisories`, fetched 2026-11-16). No entry
+  with a null package, a null name or null `vulnerabilities` occurs in any of the evidence files; that case is built from the schema, not seen in data.
+* The SDK repository's own advisories are `[]` (`owner_sdk_advisories.json`; the two `--lib` runs below read the same empty list live), so nothing was observed for the contract's
+  module. The two `module` values in the script's table are the SDK's path and its `/authcontract` path.
+* So each entry normally carries `package.name`, and for a Go advisory it is the module path; the name is whatever the author typed and can be missing. Step 2 is built as
+  written, with the owner's ruling for an entry that names no known module.
+* The brief's version of this answer is borne out by the files, with two precisions: the "empty ecosystem and a free-text product name" project is `prometheus/prometheus`, whose names differ
+  by case between entries (so a case-folding tolerance would have matched some and not others, a reason to count such names as unnamed rather than guess); and the null cases are the
+  schema's, not observed.
+
+**What changed (staged).** `scripts/check_libs.py` (line numbers at the staged file):
+
+1. **Step 2, by package, with the ruling.** `advisory_scope` (`:292`) returns `"named"` when the entry's `package.name` equals `lib.module`, `"other"` when it equals the module
+   of another library of the same repository, `"unnamed"` otherwise (`package` missing, null or not an object; `name` missing, null, empty or not a string; or a name that equals the
+   module of no library the script lists for that repository). `advisory_hits` (`:310`) skips an `"other"` entry (`:321`), keeps the existing rules (state `published`, a
+   `vulnerable_version_range` that `covers` the tag), and for an `"unnamed"` entry appends the message (`:324-326`):
+   `advisory <GHSA> covers <tag>; its entry names no known module of <repo>, so it counts against every library there: fix the advisory's package name to the module path (<the repository's modules, sorted, comma-separated>)`.
+   The same GHSA hit twice for one library (two entries) is listed once. **Exact comparison, no tolerance:** the data shows Go names are module paths, written exactly (none of the 25
+   Go names has a trailing slash or a capital), and Go module paths are case-sensitive, so `github.com/Maccavelli/...` is a different path. A mis-typed name (an upper-case letter, a
+   trailing slash) is therefore "names no known module", counted against both libraries with the message telling the owner to fix it: the fail-closed rule is the safety net, and a
+   tolerance would be a rule the data does not call for and could match the wrong module. `check_library`'s inline loop is now `check_advisories(report, lib, tag)` (`:439`); `check_advisories`
+   (`:331`) is the same try/except as before for the report's line.
+2. **Ruling 2, every page.** `fetch_page` (`:262`) returns one page and the URL its `Link` header gives for `rel="next"` (`next_link`, `:254`); it raises on a network error, a bad status, unreadable
+   JSON, or a body that is not a list. `advisories(lib, fetch=fetch_page)` (`:275`) starts at `.../security-advisories?per_page=100` (`PER_PAGE`, `:78`), follows each next link, at most
+   `MAX_PAGES = 20` pages (`:79`; 2000 advisories), refuses a next link that is not under `https://api.github.com/` (`:287`), and raises `RuntimeError` when the bound is passed (`:289`).
+   `fetch` is the one injected thing; there is no other production path for the test. **A failed page:** the exception of any page, the first or a later one, goes out of `advisories`
+   (no `try` in it), and `check_advisories` (`:331-337`) turns `OSError`, `ValueError` (JSON, a non-list body, an off-host link, an unreadable range) and `RuntimeError` (the bound) into a failing
+   `advisories` check: `could not read all the advisories, so none is taken as absent: <error>`. A partial list is never used: the first page's advisories are dropped with the failure, because the
+   check fails whatever they held.
+3. **Docs in the script.** The module docstring's step 4 and `--help`'s epilog (`:599`) say: every page is read; advisories are matched by module path; an entry that names no known module counts
+   against every library of its repository; to have an advisory matched, write the package name as the module path.
+4. **A suppression added, with its reason (the brief's rule).** `# noqa: S310` on the `urllib.request.Request` line (`:266`): with the URL now a variable, ruff's S310 flags it as it flags the
+   `urlopen` below it, which already carried the same suppression; the URLs are guarded by `advisories()` (https://api.github.com only). The repository runs no Python linter (`Makefile` has no ruff; `make preflight`
+   runs some `scripts/*.py` as checks and lints none), so this keeps the file's findings under `ruff check --select S,BLE,ANN,E,F --line-length 140` (ran; ruff is on this machine, not a gate) at the 7 it had at `HEAD`.
+   `_raises` (`:537`) carries a `# noqa: BLE001` for the same reason as `pinned_at_tag_not_compared`'s.
+
+**The pagination facts, with their source.** The endpoint's page (`https://docs.github.com/en/rest/security-advisories/repository-advisories`, fetched 2026-11-16): "per_page: The number of
+advisories to return per page", default 30, no maximum stated; "before", "after": "A cursor, as given in the Link header. If specified, the query only searches for results before/after
+this cursor"; no `page` parameter for this endpoint. The guide (`https://docs.github.com/en/rest/using-the-rest-api/using-pagination-in-the-rest-api`, fetched 2026-11-16): "You can use the `link`
+header from the response to request additional pages of data."; "The URL for the next page is followed by `rel="next"`."; "In some cases, only a subset of these links are available."; "For most
+endpoints, the maximum value of `per_page` is `100`." A real response (`gh api -i "repos/open-telemetry/opentelemetry-go/security-advisories?per_page=2"`, ran, read-only, 200) carried
+`Link: <https://api.github.com/repositories/<id>/security-advisories?per_page=2&after=<cursor>>; rel="next"` and no `rel="last"`: the script follows `next` until it is absent, and never builds a
+cursor itself. The documentation does not state that 100 is allowed for this endpoint, so `per_page=100` is a request GitHub may reduce; the script follows `next` either way. **A live multi-page run**
+(ran, anonymous, read-only, `scratchpad/gobble-p7a/live.py`): `advisories()` against `open-telemetry/opentelemetry-go` with `PER_PAGE` set to 5 read pages of 5, 5 and 3 advisories, 13 distinct GHSA ids,
+the count of `otel_advisories.json`.
+
+**Self-test (`--self-test`, `advisory_cases`, `:461`; fixed data, no network).** 13 new cases, 30 in all, all `ok` (`st-final.txt`, 19:27:03, exit 0): (a) the SDK's range `< 1.2.0` for the SDK's path
+alone does not hit the contract at `v0.1.0` and hits the SDK at `v1.1.0`; (c) an entry naming the contract does not hit the SDK and hits the contract; (b) entries with no package, no name, an empty name,
+and the name `go-llmprovider-sdk` each hit both libraries with the message; a named entry's hit carries no such message; a differently cased path names no known module; another repository's path names no known module;
+a draft advisory is not counted; (d) the advisory on the second page is found, through `check_advisories` as well as `advisories`; (e) a second page that fails to load fails the check ("could not read"),
+and is not read as empty; an endless chain of next links stops at the bound; a next link off `api.github.com` is refused; the `Link` header's `rel="next"` is read (and `prev`, and an empty header, give none).
+
+**Plants (C2), each on a scratch copy of the final script, `<TMP>` the scratch directory** (`plant.py` applies one replacement with an `assert` that it matches once, runs `python3 <TMP>/check_libs.py --self-test`; all exit 1, no traceback;
+the unbroken script's 30 cases pass):
+
+| Plant | Failing lines |
+| :--- | :--- |
+| the package filter removed (`scope == "other" or` dropped, `:321`): the contract at `v0.1.0` reads the SDK's range as covering it | `self-test an advisory range for the SDK's path alone does not hit the contract at v0.1.0: FAIL`; `self-test an entry naming the contract does not hit the SDK, and hits the contract: FAIL` |
+| the unknown-module rule turned into "ignore" (`advisory_scope` ends `return "other"`) | `self-test an entry with no package, no name, an empty name or a name matching no library hits both libraries, with the message: FAIL`; `...the name is compared exactly: a differently cased path names no known module: FAIL`; `...a name that is no module of the repository (another repository's path) names no known module: FAIL` |
+| the second page dropped (`advisories` returns after the first page) | `self-test the advisory on the second page is found: FAIL`; `...a second page that fails to load fails the check and is not read as empty: FAIL`; `...an endless chain of next links stops at the bound: FAIL`; `...a next link off api.github.com is refused: FAIL` |
+| a failed page read as empty (`fetch` wrapped in `except OSError: return found`) | `self-test a second page that fails to load fails the check and is not read as empty: FAIL` |
+| the page bound removed (`return found` for the `RuntimeError`) | `self-test an endless chain of next links stops at the bound: FAIL` |
+| the off-host check removed | `self-test a next link off api.github.com is refused: FAIL` |
+
+A first run of the last plant crashed the self-test with a traceback (the unrefused endless chain raised `RuntimeError` where the case expects `ValueError`); `_raises` now returns false for any other exception, so the plant
+fails the case line as shown, and all six plants were rerun after that change.
+
+**Gates (C6).** The script was last modified at 19:21:50, before the first row; each exit status was taken from the command's own `$?` before any filter. `--lib` runs went through `run-heavy`, which queues on the session machine.
+The checker clones the committed `HEAD` (`a25aacf`), not the working tree (P2's Finding 1): the Go checks therefore test the committed gobble at the pinned tag, and the script that ran is the staged one. P7a changes no Go file, so
+the staged script's `--lib` verdicts rest on that commit; the owner's "on the committed step" acceptance is met again by the coordinator's rerun after the commit, if wanted.
+
+| Gate | Start | End | Exit |
+| :--- | :--- | :--- | :--- |
+| `python3 scripts/check_libs.py --self-test` (30 cases) | 19:27:03 | 19:27:03 | 0 |
+| `run-heavy -- python3 scripts/check_libs.py --lib go-llmprovider-sdk`: `0 failing checks; scratch removed`; `go-llmprovider-sdk advisories: ok` (pinned and checking `v1.31.0`) | 19:21:57 | 19:24:16 | 0 |
+| `run-heavy -- python3 scripts/check_libs.py --lib authcontract`: `0 failing checks; scratch removed`; `authcontract advisories: ok` (pinned and checking `v0.1.0`) | 19:24:16 | 19:26:33 | 0 |
+| `run-heavy -- make preflight` (includes `check-records` and `markdownlint`; run before the two gate rows of this table were added to this record) | 19:28:07 | 19:41:10 | 0 |
+| `make check-records markdownlint`, rerun after the last edit of this PLAN (the two gate rows) | 19:41:38 | 19:41:40 | 0 |
+
+The Go race and the cross-host runs (Linux, Windows) were not rerun: the change is a Python script, two docs and this PLAN; no Go file, `go.mod` or `go.sum` changed, so the Go tests' inputs are the same as at `a25aacf`. The staged
+files' modification times: `scripts/check_libs.py` 19:21:50; `docs/architecture.md` 19:22:13 (not read by any Go test; `docs/` is read by `make check-records` and markdownlint, which ran after it).
+
+**Docs (C9).** Searched `README.md`, `AGENTS.md`, `Makefile`, `docs/architecture.md`, `docs/README.md`, `docs/guides/*.md` and `.github` for `check_libs`, `check-libs` and `advisor`. Rows:
+`docs/architecture.md` (the `make check-libs` bullet of the preflight list): **fixed**, it now says every page is read, a failed page fails the check, matching is by module path, an entry that names no known
+module counts against every library of its repository with a message to fix the advisory's package name, and how to write an advisory so it is matched. `docs/README.md`'s 0051 PLAN row: **fixed** (P7a built and staged).
+The other hits are records (`docs/decisions/0004`, `0019`, `0021`, `0023`, `0031`, `0049`, `0050`, `0055`, and the PLAN's own earlier records) that describe what the script did when they were written, and stay as they are; the `Makefile`'s
+`check-libs` target and `README.md`, `AGENTS.md` and the guides do not describe what it checks.
+
+**Not verified.** The SDK repository has no published advisory, so nothing live matched the SDK's or the contract's module path: the matching rule is held by the self-test over fixed data built from the real shape of other repositories'
+entries, and the live path was exercised against the SDK repository (an empty list) and, for several pages, against `open-telemetry/opentelemetry-go`, not against an advisory naming the contract. The null `package` and null `name`
+cases come from the schema, not from an observed response. Whether GitHub honours `per_page=100` on this endpoint is not stated in its documentation (the 5-per-page run shows `per_page` is honoured below the default). An authenticated
+caller would also see draft and triage advisories; the script is anonymous and filters on `state`, as before.
 
 **Staged, not committed; the coordinator commits on the branch.**

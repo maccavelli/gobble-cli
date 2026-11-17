@@ -220,8 +220,14 @@ and no `tool` directive: its gates run the root's tools.
 - `make apidiff`: a no-op below `v1.0.0`. From a `v1.0.0` tag it fails until the comparison is
   written.
 - Outside `preflight`: `make check-libs` compares the sibling libraries with their latest tags, over
-  the network; `make probe-conhost` and `make completion-shells` run checks that need a console or
-  the real shells.
+  the network, and reads each library's GitHub security advisories, every page of them; a page that fails to
+  load fails the check. An advisory entry is matched by module path: it counts against a library when its
+  package name is that library's module path (the contract's is the SDK's path plus `/authcontract`, so an
+  advisory for one does not count against the other). An entry that names no known module (no package, no
+  name, or a name that is no listed module's path) counts against every library of its repository, and the
+  report says to fix the advisory's package name. To have an advisory matched, write its package name as the
+  module path. `make probe-conhost` and `make completion-shells` run checks that need a console or the real
+  shells.
 - `make check-test-isolation`: the tests of both modules again, outside `preflight`. Every file a test was found to read
   from above its temp root (`AGENTS.md`, `.agents/skills`, `.git`, a `.gitignore` of `*`) is planted above two temp
   roots of 130 characters or more, one for `TMPDIR`, `TMP` and `TEMP` and one for `GOTMPDIR`. It fails on any failing
