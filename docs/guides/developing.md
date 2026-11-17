@@ -128,6 +128,16 @@ It ends with `preflight passed`. In order, it runs:
 Any one of them fails the run. Each is also a target of its own (`make archtest`, `make lint`, …),
 for a quicker loop.
 
+`golangci-lint` does not run `errcheck`, `gosec`, `unparam`, `gocritic`, `goconst` or `forbidigo` on test files
+(`_test.go`), and it runs revive on them for `confusing-naming` alone: `.golangci.yml` excludes every other rule
+under `revive.rules` there, by the finding's text. `confusing-naming` is checked in test files because revive keeps
+one name table per package and reports the second name of a pair that differs only by capitalization, so the finding
+lands on either file of the pair from run to run, and an exclusion that dropped it on one of them would make the
+verdict depend on that order. One cold `make lint` decides it, and a warm cache cannot keep a green. The finding may
+name either file of the pair; read both names. It is fixed by renaming one of them, never by `//nolint`, which would
+silence only the runs that report it on that file (0059-MADR D3). A rule added to `revive.rules` is added to the
+exclusion's list in the same change, and `confusing-naming` is never added to it.
+
 ## Add a package
 
 1. **Choose its tier.**

@@ -182,7 +182,10 @@ package only a test imports has its closure checked too:
 `golangci-lint` keeps `encoding/json` (v1) out of every file, tests included, by `depguard`, and v2's
 `Marshal`, `MarshalWrite`, `MarshalEncode`, `Unmarshal`, `UnmarshalRead` and `UnmarshalDecode` out of non-test
 code outside `jsonx`, by `forbidigo` (0039-MADR D24). acpext's tests may import `encoding/json`, as an importer of
-the contract decodes with it; acpext's own code may not (0042-PLAN deviation 2).
+the contract decodes with it; acpext's own code may not (0042-PLAN deviation 2). The other test-file exclusions in
+`.golangci.yml` (`errcheck`, `gosec`, `unparam`, `gocritic`, `goconst`, and every revive rule but `confusing-naming`)
+leave `confusing-naming` on, so a pair of names that differs only by capitalization is reported wherever it lands
+(0059-MADR D1).
 
 ## Dependencies
 

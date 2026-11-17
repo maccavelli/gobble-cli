@@ -1013,6 +1013,12 @@ mainstream model, medium effort.
   10:42:39, `llm/provider/login_fields_test.go` 10:42:39.
 * **Not verified:** whether a lint run of the whole tree, not `./llm/provider/...`, is stable 12 of 12; whether the
   Linux lint cache was warm on 2026-11-15 at 10:07; CI on the fixed commit, which a push is needed to show.
+* **Note (2026-11-16): the root cause is completed in
+  [0059-MADR-stop-excluding-confusing-naming-in-test-files.md](0059-MADR-stop-excluding-confusing-naming-in-test-files.md).**
+  The finding is dropped, not only intermittent, when revive reports it on the test file: `.golangci.yml`'s exclusion of
+  revive from `_test.go` paths removed it in the runs where the second name was the test file's, and a warm cache keeps
+  whichever outcome its first run had. 0059-MADR D1 stops excluding `confusing-naming` in test files, which makes the
+  verdict order-independent. The text above is unchanged.
 
 ### P3 record (2026-11-15)
 

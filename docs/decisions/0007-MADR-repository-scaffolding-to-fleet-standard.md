@@ -194,6 +194,8 @@ The REPORT edit is formatting only. A normalised-text comparison must show that 
 
 The PLAN proves `whitespace` and `goimports` on planted defects that each one actually reports, because measurement 5 did not see either fail.
 
+*(2026-11-16: revive's entry in the test-file exclusion that D7 left unchanged is superseded by [0059-MADR-stop-excluding-confusing-naming-in-test-files.md](0059-MADR-stop-excluding-confusing-naming-in-test-files.md) D1: `.golangci.yml` now excludes revive from `_test.go` files by the finding's text, for every revive rule but `confusing-naming`. The rest of D7 stands.)*
+
 **D8. Amend 0004-PLAN by dated entry, and leave the original text in place.** The amendment does three things:
 1. Strike `.editorconfig` from Scope (F9).
 2. Note under Phase 0 step 7 that the set is now mcplib's 20 linters plus formatters (D7).

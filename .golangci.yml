@@ -139,14 +139,27 @@ linters:
   exclusions:
     generated: lax
     rules:
+      # Test files are not checked by these linters.
       - linters:
           - errcheck
           - gosec
           - unparam
-          - revive
           - gocritic
           - goconst
         path: _test\.go
+      # Nor by revive, but for confusing-naming. revive compares a package's
+      # names in whatever order it reads the files, so a pair split between a
+      # test file and another file is reported on either one; dropping it in
+      # test files made the verdict depend on that order (0059-MADR). The text
+      # is golangci-lint's "<rule>: <message>". It names every rule under
+      # revive.rules except confusing-naming, in that order: add or remove a
+      # rule in both places together, and never add confusing-naming here
+      # (0059-MADR D2). A change of the golangci-lint pin repeats 0059-PLAN
+      # P1's plants (0059-MADR D5).
+      - linters:
+          - revive
+        path: _test\.go
+        text: '^(atomic|blank-imports|constant-logical-expr|context-as-argument|context-keys-type|dot-imports|empty-block|error-naming|error-return|error-strings|errorf|if-return|increment-decrement|indent-error-flow|range|receiver-naming|redefines-builtin-id|superfluous-else|time-naming|unexported-return|unreachable-code|var-declaration): '
       - linters:
           - forbidigo
         path: _test\.go
