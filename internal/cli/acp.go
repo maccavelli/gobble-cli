@@ -20,7 +20,7 @@ import (
 // --provider, --model and --thinking are chat's: they choose every
 // session's model and level, a loaded one's too (0049-MADR D12).
 type ACPCmd struct {
-	Login  string `name:"login" complete:"provider" placeholder:"PROVIDER" help:"Sign in to a provider, or store its API key, in this terminal, then exit: what an ACP client's terminal auth method runs."`
+	Login  string `name:"login" complete:"provider" placeholder:"PROVIDER" help:"Sign in to a provider, or store its API key, in this terminal, then exit: what an ACP client's terminal auth method runs. Shows /login's menu of the provider's methods on a terminal."`
 	Device bool   `name:"device" help:"With --login, sign in with a device code."`
 	Mode   string `complete:"mode" placeholder:"MODE" help:"Mode the sessions start in: default, accept-edits, plan, or bypass (with permissions.allowBypass)."`
 	ModelFlags
@@ -89,17 +89,27 @@ func (c *ACPCmd) choose(e *runEnv) error {
 	return nil
 }
 
-// acpLogin is gobble acp --login: what gobble auth login does, in the
-// terminal the client opened. A provider with a login signs in; any other
-// provider's key is asked for without echo and stored (0005-PLAN F4-3c
-// decision 5).
+// acpLogin is gobble acp --login: /login's sign-in, in the terminal the
+// client opened. A provider with a login shows the wizard's menu of its
+// offered methods, the API key among them, and signs in by the one chosen
+// (0051-MADR D3, F53); with --device, or with no terminal to ask on, it signs
+// in as gobble auth login does, by the provider's default method, with no
+// menu. Any other provider's key is asked for without echo and stored
+// (0005-PLAN F4-3c decision 5).
 func (e *runEnv) acpLogin(name string, device bool) error {
 	id, err := keyProvider(name)
 	if err != nil {
 		return err
 	}
 	if provider.HasSignIn(id) {
-		return e.login(id, device)
+		if device || !e.onTerminal() {
+			return e.login(id, device)
+		}
+		_, err := e.signIn(e.ctx, e.terminalQuestions(e.ctx), id)
+		if errors.Is(err, errCancelled) {
+			return failf("sign-in cancelled; nothing was saved")
+		}
+		return err
 	}
 	if device {
 		return usageErrorf("%s has no login; --device is for a login", id)

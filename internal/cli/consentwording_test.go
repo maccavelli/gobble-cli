@@ -206,7 +206,8 @@ func TestConsentWordingOnEverySurface(t *testing.T) {
 		run := &planRun{}
 		replace(t, &signInWith, planSignIn(run))
 		e, _ := modelEnv(t)
-		e.out.caps.In, e.stdin = true, answers(t, "3\n")
+		// The menu first (0051-PLAN P7): the plan, then the consent's cancel.
+		e.out.caps.In, e.stdin = true, answers(t, "2\n3\n")
 		if err := e.acpLogin("openai", false); !signInDeclined(err) {
 			t.Fatalf("acp --login openai on a terminal: %v, want the sign-in declined", err)
 		}

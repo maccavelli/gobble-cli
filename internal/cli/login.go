@@ -67,7 +67,10 @@ func (e *runEnv) signInHint(id string) string {
 // signIn is /login's flow (0025-MADR D6; 0031-MADR D7): want, or a provider
 // chosen from those that take a key, each with its credential's source;
 // then the SDK's wizard, through q, asks how and signs in. It returns the
-// provider signed in to.
+// provider signed in to. The sign-in opens a browser sign-in's URL in the
+// host's browser and shows a device code with its expiry, as gobble auth
+// login does (0051-MADR D3; 0051-PLAN P7): /login, gobble setup, the first
+// run and gobble acp --login all come through here.
 func (e *runEnv) signIn(ctx context.Context, q *questions, want string) (string, error) {
 	id := want
 	if id == "" {
@@ -82,8 +85,19 @@ func (e *runEnv) signIn(ctx context.Context, q *questions, want string) (string,
 		}
 		id = ids[i]
 	}
-	return id, e.signInTo(ctx, prompter{q}, id, provider.SignInOptions{}, nil)
+	o := provider.SignInOptions{ShowDeviceCode: e.showDeviceCode, OpenURL: e.openLoginURL}
+	return id, e.signInTo(ctx, prompter{q}, id, o, nil)
 }
+
+// terminalQuestions are the questions a sign-in asks on e's terminal, read
+// through the reader that owns stdin, a secret in raw mode; the caller has
+// checked that there is a terminal (onTerminal).
+func (e *runEnv) terminalQuestions(ctx context.Context) *questions {
+	return &questions{ctx: ctx, in: inline.NewReader(e.stdin), out: e.out.err, raw: func() (func() error, error) { return editor.Raw(e.stdin) }}
+}
+
+// onTerminal reports whether e can ask a question: a terminal on stdin.
+func (e *runEnv) onTerminal() bool { return e.out.caps.In && e.stdin != nil }
 
 // signInTo signs in to provider id through the SDK's wizard, asking p, with
 // o's method and callbacks (0031-MADR D7), and stores what it gives: a key
@@ -308,11 +322,10 @@ type SetupCmd struct{}
 // Run asks which provider to sign in to and how, on the terminal.
 func (c *SetupCmd) Run(e *runEnv) error {
 	e.ensureSettingsFile()
-	if !e.out.caps.In || e.stdin == nil {
+	if !e.onTerminal() {
 		return usageErrorf("gobble setup asks its questions on a terminal; gobble auth login <provider> --method signs in without one")
 	}
-	q := &questions{ctx: e.ctx, in: inline.NewReader(e.stdin), out: e.out.err, raw: func() (func() error, error) { return editor.Raw(e.stdin) }}
-	id, err := e.signIn(e.ctx, q, "")
+	id, err := e.signIn(e.ctx, e.terminalQuestions(e.ctx), "")
 	switch {
 	case errors.Is(err, errCancelled):
 		return failf("setup cancelled; nothing was saved")

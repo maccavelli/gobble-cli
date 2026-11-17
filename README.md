@@ -43,7 +43,7 @@ Early, and built in the order [docs/README.md](docs/README.md#build-order) gives
   `tools.bash.useClientTerminal: true`, one that offers terminals runs bash in its terminal; each tool
   call names the files it touches. `gobble acp --model <provider/id>`, with `--provider` and
   `--thinking`, starts every session on that model, as chat's flags do. `gobble acp --login <provider>`
-  is what an ACP client's terminal sign-in runs; a client that offers `elicitation.form` is signed in
+  is what an ACP client's terminal sign-in runs, with `/login`'s menu of methods; a client that offers `elicitation.form` is signed in
   by `authenticate`, as forms, with no terminal ([the credentials guide](docs/guides/credentials.md#signing-in-from-an-acp-client)).
 - **Tools:** `read`, `write` and `edit`, confined to the workspace roots; `grep`, `find` and `tree`,
   which follow the repository's `.gitignore` rules; `move`, `delete`, `copy` and `mkdir`, where every
@@ -116,7 +116,8 @@ Early, and built in the order [docs/README.md](docs/README.md#build-order) gives
   gobble sends no `originator` ([guide](docs/guides/credentials.md)). A ChatGPT plan sign-in asks first, in
   gobble's own words, whether gobble may make background requests, a session's title and its automatic
   compaction, under your plan; unless you allow it, gobble makes none.
-- **Signing in where you are:** `/login [provider]` in a session asks which provider and how, checks a typed key
+- **Signing in where you are:** `/login [provider]` in a session asks which provider and how, opens a browser
+  sign-in in your browser, names a device code's expiry, checks a typed key
   by listing the provider's models, stores it, and lists the models to switch to; `/logout [provider]` removes a
   stored credential. With no credential at all, a session offers the sign-in before its first prompt, and
   `gobble setup` runs it at any time.

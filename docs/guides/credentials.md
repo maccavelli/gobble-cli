@@ -191,11 +191,13 @@ Three providers let you sign in with your account instead of pasting a key:
 - **Grok.** `gobble auth login grok` signs in with your SuperGrok or X Premium subscription. gobble
   prints the sign-in URL, then opens it in your browser; on a machine whose browser cannot reach
   gobble, paste the URL the browser ends on when asked. `gobble auth login grok --device` shows a
-  code to enter at xAI instead, for a machine with no browser at all. Either way gobble says
+  code to enter at xAI instead, for a machine with no browser at all; the line that shows the code
+  names when it stops working, `(expires 14:05)`, in your machine's local time. `/login grok`,
+  `gobble setup` and the first-run offer open the browser and show the code the same way. Either way gobble says
   `Logged in to grok`, keeps the login in `auth.json`, and refreshes it as it runs. gobble signs in
   with the Grok CLI's public client id: xAI offers third-party tools no id of their own, so if xAI
   restricts that id, the login stops working, and a key still works.
-- **Kilo.** `gobble auth login kilo` shows a code to enter at Kilo. Kilo answers with a key, which
+- **Kilo.** `gobble auth login kilo` shows a code to enter at Kilo, with its expiry as Grok's does. Kilo answers with a key, which
   gobble stores as Kilo's API key and says `Saved API key for kilo`.
 - **OpenAI, with your ChatGPT plan.** `gobble auth login openai` signs in under gobble's own name,
   `gobble`, and not as the Codex client; `--method chatgpt-plan` names it with no menu. Before the
@@ -315,7 +317,8 @@ on stderr, with nothing on stdout.
 
 In a session, `/login` asks which provider to sign in to, each shown with where its credential comes
 from now, then how, when the provider offers more than a key: Grok's browser and device sign-in,
-Kilo's device sign-in, OpenAI's ChatGPT plan. `/login claude` asks no provider. A typed key echoes a `*` for each character,
+Kilo's device sign-in, OpenAI's ChatGPT plan. A browser sign-in is opened in your browser, as `gobble auth login`
+opens it, and a device code is shown with its expiry. `/login claude` asks no provider. A typed key echoes a `*` for each character,
 and gobble checks it by listing the provider's models, which spends nothing: a key the provider
 refuses is asked for again, up to three keys, and a key the listing cannot check is saved with a
 note. Then gobble lists the provider's models, numbered for `/model N`. Ctrl+C leaves the sign-in,
@@ -358,8 +361,11 @@ the order above; with none, a client that can show a form is signed in
 crosses ACP but what a person types or pastes into a form, which goes to the sign-in alone.
 
 A client that can open a terminal also sees a sign-in for each provider, which runs
-`gobble acp --login <provider>` there: a login for Grok, Kilo and OpenAI, which asks the ChatGPT plan's
-question on that terminal, a key typed for any other. Run it yourself the same way:
+`gobble acp --login <provider>` there. For Grok, Kilo and OpenAI it shows the menu `/login` shows, the provider's
+offered methods with the API key among them, asks the ChatGPT plan's question on that terminal, and opens a browser
+sign-in in the browser; `--device`, or a run with no terminal to ask on, signs in by the provider's default method
+with no menu, as `gobble auth login` does. Any other provider's key is typed on that terminal. (No key is asked over ACP
+itself; this is a terminal.) Run it yourself the same way:
 
 ```text
 $ echo sk-test-only | gobble acp --login anthropic

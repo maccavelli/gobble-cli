@@ -310,9 +310,16 @@ func (e *runEnv) offersPaste() bool {
 	return e.out.caps.In && e.stdin != nil
 }
 
-// showDeviceCode tells the user where to enter a device code.
+// showDeviceCode tells the user where to enter a device code, and until
+// when: "Open <url> and enter the code <code> (expires 14:05)", the time on
+// e's clock (0051-MADR D3, F56). The SDK's code always carries one; a code
+// with none, as a test's may, names none.
 func (e *runEnv) showDeviceCode(d provider.DeviceCode) error {
-	if _, err := fmt.Fprintf(e.out.err, "Open %s and enter the code %s\n", d.URL, d.Code); err != nil {
+	until := ""
+	if !d.Expires.IsZero() {
+		until = " (expires " + d.Expires.In(e.now().Location()).Format("15:04") + ")"
+	}
+	if _, err := fmt.Fprintf(e.out.err, "Open %s and enter the code %s%s\n", d.URL, d.Code, until); err != nil {
 		return fmt.Errorf("write stderr: %w", err)
 	}
 	return nil

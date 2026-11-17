@@ -425,6 +425,12 @@ D2's note of 2026-11-11, later.)*
   bare login (`internal/cli/acp.go:101-103`). This restores what 0031-PLAN P4b-2 step 4 asked, "`gobble acp --login
   openai` offers the plan and the API key" (`0031-PLAN-sdk-current-releases-and-adoption.md:328`; *2026-11-11: `:347` on `main` since `86ad4a7`, `:328` being the line at `d6c10a5` and on the archive branch*), for every
   provider (F53).
+  *(2026-11-16, the coordinator's application of 0051-PLAN P7's acceptance, not a ruling of the owner's. "For every
+  provider" holds where a terminal can be asked. With `--device`, which names the method, and with no terminal to ask on,
+  `gobble acp --login <id>` signs in by the provider's default method with no menu, as `gobble auth login` does, because a
+  menu cannot be asked without a terminal. The plan's acceptance requires `TestACPLogin` to pass, which runs
+  `acp --login grok` with no terminal, and `TestConsentWordingOnEverySurface`'s "no terminal" subtest requires
+  `acp --login openai` to fail closed with the no-terminal error.)*
 
 *(2026-11-12; D9.)* The terminal surfaces and `--json` above name gobble to the identity provider as the ACP bullet
 does: `provider.SignIn` sets `wizard.Options.Identity` to the same value, which it does not at `c47f4a7` (D9, N1).
@@ -504,7 +510,25 @@ does: `provider.SignIn` sets `wizard.Options.Identity` to the same value, which 
      a failed anonymous retry is "unauthorized"; the token is not deleted. A question against go-llmprovider-sdk, where the
      rule lives, to settle it for both paths at once, is open on the coordinator's ledger; it is not filed from here.
      Options the owner was shown and did not choose: do as Kilo's client does, retry without the key and save if that
-     works; do not check a Kilo device key. No code changes.)*. The replaced session is not revoked (a revocation is a logout's, QD). The methods driven are those whose `Completion` is `device` or
+     works; do not check a Kilo device key. No code changes.)*
+     *(2026-11-16, the coordinator's verification, relayed; not a ruling of the owner's. The coordinator checked the Kilo
+     question live that day, at the owner's request, "verify this", with made-up tokens only. Kilo's public models listing, the
+     address the SDK's Kilo provider lists at with no organisation (`https://api.kilo.ai/api/gateway/models`;
+     go-llmprovider-sdk `v1.31.0`, `llmprovider/internal/kiloendpoint/kiloendpoint.go:15` and `Resolve`), answers 200 with no
+     credential, 200 with a made-up bearer token and 200 with a made-up expired token shaped like a JWT, and the three bodies
+     are byte-identical. The same holds at `https://ai-gateway.kilo.ai/api/v1/models`, the default in Kilo's own client
+     (`kilocode` at `58072bd696`, `packages/kilo-gateway/src/api/constants.ts`). That endpoint does not look at the
+     Authorization header. An organisation's listing (`.../api/gateway/organizations/<id>/models`) answers 401 to a made-up
+     bearer token ("User not authenticated"). What follows: with no organisation the listing cannot answer 401 to a device
+     key, valid or not, so the case the note above worried about, a valid key with no organisation refused by the 401 rule,
+     does not arise there; and, for the same reason, the listing check cannot detect a bad Kilo key without an organisation,
+     since it passes any key. With an organisation the check is real, and Kilo's own client does not retry anonymously there
+     either (`packages/kilo-gateway/src/api/models.ts:240-243`: the anonymous retry is only for a 401 with a token and no
+     organisation), so gobble, the wizard and Kilo's client agree. Kilo's anonymous retry is a fallback that the default
+     endpoint does not exercise today. Not verified: a real device key was not used, as the owner's credentials were not read;
+     what the gateway does with a key on a chat request is not part of this. The open question against go-llmprovider-sdk is
+     narrowed to this: its wizard's listing check does not verify a Kilo device key when no organisation is set, and whether it
+     should verify the key another way is the SDK's to decide.)*. The replaced session is not revoked (a revocation is a logout's, QD). The methods driven are those whose `Completion` is `device` or
      `browser_paste`; `browser_loopback` (grok's browser, go-llmprovider-sdk `0074-MADR-one-sign-in-handle-and-method-facts.md` D1) only when named, since
      it completes only where the browser reaches gobble's host *(2026-11-11, later: and only for a local sign-in;
      step 1's note)*. *(2026-11-15, the owner's ruling relayed by the coordinator, "Amend the records to the SDK's facts"; 0051-PLAN's "P4 record (2026-11-15)", deviation 4: at go-llmprovider-sdk `v1.31.0` Grok's `browser_oauth` is `browser_paste` with `Paste` `url_or_code`, so it has `accepts` and a `paste` step and `Remote` accepts it; this passage holds for a method of the contract's own shape, `browser_loopback` with no `Paste`, which no built-in method has.)* With several, gobble asks with a form whose one

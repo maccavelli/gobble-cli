@@ -19,7 +19,7 @@ The binary has these surfaces:
 - **The ACP agent.** `gobble acp` serves the agent on stdio, for editors and magic-cli-remote.
   `--model`, `--provider` and `--thinking` choose its sessions' model and level, as chat's do.
   `gobble acp --login <provider>` signs in, or stores a key, in a terminal an ACP client opens for
-  its terminal auth method. A client that offers `elicitation.form` is signed in by `authenticate`
+  its terminal auth method, showing `/login`'s menu of the provider's methods. A client that offers `elicitation.form` is signed in by `authenticate`
   itself, which gobble relays to it as elicitations, with no terminal.
 - **Commands.** `version`, `update`, `completion`, `config path|get|set|unset|edit|init|update|validate|schema`,
   `mcp add|remove|list`, `models list|info`, `providers`, `setup`, `auth login|logout|status|check|consent|import`,

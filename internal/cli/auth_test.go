@@ -437,8 +437,11 @@ func TestAuthLoginGrok(t *testing.T) {
 	if got := c.read(c.authFile()); !strings.Contains(got, `"access": "a-browser"`) || !strings.Contains(got, `"key": "keep"`) {
 		t.Errorf("auth.json after the browser login:\n%s", got)
 	}
+	// The code expires at 13:00 at +01:00, which is 12:00 on a clock in UTC
+	// (0051-PLAN P7: the text names the expiry, on the clock's zone).
+	replace(t, &clock, func() time.Time { return time.Date(2026, 10, 15, 11, 45, 0, 0, time.UTC) })
 	c.want(c.run("auth", "login", "grok", "--device"), ExitOK, "Logged in to grok\n",
-		"Open https://accounts.x.ai/device and enter the code ABCD-1234\n")
+		"Open https://accounts.x.ai/device and enter the code ABCD-1234 (expires 12:00)\n")
 	if got := c.read(c.authFile()); !strings.Contains(got, `"access": "a-device"`) || len(opened) != 1 {
 		t.Errorf("auth.json after the device login, %d opened:\n%s", len(opened), got)
 	}

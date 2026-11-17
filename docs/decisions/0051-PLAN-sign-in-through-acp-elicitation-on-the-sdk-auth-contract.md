@@ -707,6 +707,8 @@ Acceptance: the tests pass, each plant failed, `go test -race -count=20 -run Tes
 Acceptance: the tests pass, each plant failed; `TestACPLogin` (`internal/cli/acp_test.go`) and the 14 tests of
 `internal/cli/login_test.go` pass, any changed one named here with why.
 
+*(2026-11-16: built and staged; see "P7 record (2026-11-16)".)*
+
 ### P7a — check_libs.py's advisories by package (added 2026-11-14; the owner's ruling on P2's observation)
 
 Not started. Its file: `scripts/check_libs.py`, and its record in this PLAN. No Go code changes.
@@ -3217,5 +3219,141 @@ The other hits are records (`docs/decisions/0004`, `0019`, `0021`, `0023`, `0031
 entries, and the live path was exercised against the SDK repository (an empty list) and, for several pages, against `open-telemetry/opentelemetry-go`, not against an advisory naming the contract. The null `package` and null `name`
 cases come from the schema, not from an observed response. Whether GitHub honours `per_page=100` on this endpoint is not stated in its documentation (the 5-per-page run shows `per_page` is honoured below the default). An authenticated
 caller would also see draft and triage advisories; the script is anonymous and filters on `state`, as before.
+
+**Staged, not committed; the coordinator commits on the branch.**
+
+### P7 record (2026-11-16)
+
+Built by a mainstream model at medium effort, on the coordinator's brief. The phases were approved by the owner: P7 follows under the approval of 2026-11-11 for the phases
+that do not wait on the SDK, the SDK's `v1.31.0` being released; the phases on this branch run in order, the coordinator committing each after review. This record quotes no
+new owner statement. Times are the session machine's local time. Staged, not committed; **the coordinator commits on the branch `p3-acpext-v0.5.0`.** `main` and
+`origin/main` stayed at `9e21c8f`; no tag, push or merge was made. No change in `acpext/`, the SDK, `go.mod` or `go.sum`.
+
+**C1, the start state.** Branch `p3-acpext-v0.5.0`, `HEAD` `1305a61`, level with `origin/p3-acpext-v0.5.0` (`git rev-parse`, ran), the tree clean (`git status --short` printed
+nothing); `main` at `9e21c8f`. `go.mod` requires acpext `v0.5.0-rc.1` and go-llmprovider-sdk `v1.31.0`, no `replace`, no `go.work`.
+
+**What was already true at `1305a61`** (the brief's question 1; read at that commit, `git show 1305a61:<path>`):
+
+* The plan's `internal/cli/acp.go:96-125` is `acpLogin`, at `acp.go:96` still; the plan's `internal/cli/login.go:48-63` is `signIn`, at `login.go:71` (P6 added `hostSignIn` above it).
+* **Step 1 was not true.** `acpLogin` took the sign-in with `e.login(id, device)` (`acp.go:102`), which is `auth login`'s no-menu path (`loginWith`, the provider's default method); it did not call
+  `signIn`. That is F53.
+* **Step 2 was half true.** `gobble auth login` already passed the opener and the device code's text: `o.ShowDeviceCode = e.showDeviceCode` and `o.OpenURL = e.openLoginURL`
+  (`auth.go:297-298`). `signIn` did not: `provider.SignInOptions{}` (`login.go:85`), so `/login`, `gobble setup` and the first run opened no browser and showed the device code
+  through the SDK wrapper's default notice (`llm/provider/signin.go:320`), with no expiry. `showDeviceCode` (`auth.go:314`) printed no expiry either.
+* Already true and relied on: `provider.DeviceCode.Expires` and its fill from the wizard's code (`signin.go:318`, `Expires: dc.Expiry`); `signInTo` fills `HostID` on the terminal path (P6).
+
+**What was built (staged).**
+
+1. **Step 1, `internal/cli/acp.go:99-112`.** `acpLogin` for a provider with a sign-in, on a terminal (`e.onTerminal()`, `login.go:100`), runs `e.signIn(e.ctx, e.terminalQuestions(e.ctx), id)` (`:108`):
+   `/login`'s path, so the wizard asks its menu of the offered methods, the API key among them, through the terminal's questions. `errCancelled` is "sign-in cancelled; nothing was saved"
+   (exit 1, as `gobble setup`'s). **Two cases keep the earlier path, `e.login(id, device)`:** `--device`, which names the method, and a run with no terminal to ask on (`:105`). This is
+   not a loosening: with no terminal a menu cannot be asked, `TestACPLogin` runs `acp --login grok` with none and the "no terminal" subtest of `TestConsentWordingOnEverySurface` requires
+   `acp --login openai` to fail closed with `errNoTerminal`, both as at `1305a61`. A provider with no sign-in keeps its key path (`readAPIKey`, `readWorkspace`, `auth.SetKey`), which F53 does not
+   concern: its key was never lost. `terminalQuestions` (`login.go:95`) and `onTerminal` (`login.go:100`) are `gobble setup`'s construction of its questions, moved out of `SetupCmd.Run`
+   (`login.go:325-328`) so both use it; unexported, no new seam. The `--login` flag's help (`acp.go:23`) says it shows `/login`'s menu on a terminal.
+2. **Step 2, `internal/cli/login.go:88`.** `signIn` passes `provider.SignInOptions{ShowDeviceCode: e.showDeviceCode, OpenURL: e.openLoginURL}`: `/login`, `gobble setup`, the first run
+   and now `acp --login` all come through `signIn`, so the four open the host's browser and show a device code as `auth login` does. **The device code's text**, `internal/cli/auth.go:317-325`:
+   `Open <url> and enter the code <code> (expires 14:05)`, the time `d.Expires.In(e.now().Location()).Format("15:04")`; a code with a zero `Expires` names none (the SDK's never has one: question 2).
+
+**Answers to the brief's questions 2 to 4.**
+
+* **Question 2, the expiry.** The SDK's device step carries an absolute time and no duration: `wizard.DeviceCode.Expiry time.Time`, "when the code stops being accepted. It is never zero: a provider that gives none has a
+  default, and OpenAI's is this module's own wait" (go-llmprovider-sdk `v1.31.0`, `wizard/device.go:24-27`, read), built from `DeviceLogin.Expiry` (`llmprovider/auth/oauth_device.go:88`, `:289`, `:379`: the deadline,
+  from the issuer's `expires_in`, else `defaultDeviceExpiry`, 300 s, `:24`, `:326`). So there is an expiry to name for every provider that signs in by device code (Grok, Kilo); none is invented, and the zero case
+  (a test's code) names none. `llm/provider` hands it on in `DeviceCode.Expires` (`signin.go:318`; `TestSignInDevice`'s `shown[0].Expires.IsZero()` check, `signin_test.go:251`, holds that it arrives non-zero from a real
+  in-process issuer). **Local time, made testable:** the time is written in the zone of `runEnv.now`, gobble's clock (`main.go:90`, `clock = time.Now`, replaced by tests: `main.go:217`; `limitLine` writes its reset time the
+  same way, `limit.go:48`), so in production it is the machine's local zone and a test that sets the clock's zone gets the same words on any machine. No new seam, no new exported name. (`modelEnv`'s `runEnv` has no
+  `now`; a test that reaches `showDeviceCode` with an expiry sets one, as `TestDeviceCodeTextNamesExpiry` and `TestAuthLoginGrok` do through `clock` and `h.e.now`.)
+* **Question 3, F53 and the key's path.** F53 is `0052-MADR`'s: `acpLogin` took the sign-in when `HasLogin`, so `acp --login openai` lost its key path (0031-PLAN P4b-2 step 4, "offers the plan and the API key"). **The key is stored
+  by gobble's `signInTo`, not by the wizard**: `provider.SignIn` returns `Credential{Key: res.APIKey}` for a key chosen (`signin.go:380`) and `signInTo` calls `auth.SetKey` (`login.go:133`), escaping a device's. **The
+  order on the terminal path is the wizard's already:** the wizard lists with a typed key and asks again while the listing refuses it ("a typed key checked by a listing and asked for again while refused", `signin.go:294-295`),
+  and only a key it accepts comes back for `signInTo` to store. P6's "check first, save only if accepted" is `StartSignIn`'s `Wait` (the ACP path), which does the same on its side. No save order was changed.
+* **Question 4, `acp --login` and the key.** MADR D3 says it: "**`gobble acp --login <id>` shows the wizard's menu** of the offered methods, the API key included, instead of the bare login
+  (`internal/cli/acp.go:101-103`). This restores what 0031-PLAN P4b-2 step 4 asked, "`gobble acp --login openai` offers the plan and the API key" ... for every provider (F53)" (`0051-MADR` `:424-427`), and D3's terminal-surfaces
+  bullet lists `gobble acp --login` among the terminal surfaces (`:419-420`). D4's "no key over ACP" is about `authenticate`, a request on the wire; `acp --login` is the terminal an ACP client opens, where a key is typed.
+
+**Tests (C2), each seen failing on a scratch copy of the tree** (`<scratch>/gobble-p7/plants.py`; `git ls-files -co` copy with no `.git`; `HOME`, `USERPROFILE`, `XDG_*` and `GOBBLE_HOME` in the scratch;
+`GOPROXY=off`; `GOFLAGS=-mod=mod`; the module and build caches the real ones; one `go test -count=1 -timeout 240s -run '^(<test>)$' ./internal/cli/` each, on the final tree). The unbroken runs of the same tests
+are 5, exit 0 each (`clean.out`). Each plant exits 1 with a `--- FAIL`, none a build failure.
+
+| Test | Asserts | Planted break | Failure seen |
+| :--- | :--- | :--- | :--- |
+| `TestACPLoginOffersMenu` (`acp_test.go:54`), "the menu": the real wizard (`provider.SignIn`, through `planSignIn`) over the test's plan issuer | `acp --login openai` on a terminal prints the wizard's menu, `1  OpenAI API key` and `2  Use your ChatGPT plan with this app`, and choosing the plan goes on to its consent | the bare login restored (`acp-bare-login-restored`: the terminal branch replaced by `e.login`) | `acp_test.go:64: acp --login openai on a terminal: context deadline exceeded, want the sign-in declined at the plan's consent` (the bare path asks no menu, so the test's answers do not fit and its 15 s bound ends it) |
+| `TestACPLoginOffersMenu`, "the key" | on a terminal the sign-in is asked with no method forced, the opener and the device code's text set, and a key the menu's first choice gives is stored in `auth.json` by `signInTo` (F53) | the same plant | the same test fails in the same run (one `--- FAIL`); a stand-in is used here because a typed key needs the terminal's raw mode, which a pipe cannot give (below) |
+| `TestLoginOpensBrowser` | `gobble auth login grok`, `/login grok`, `gobble setup` and the first run each call the opener once, with the authorize URL | `/login` passing no opener (`login-no-opener`) | `loginsurfaces_test.go:80: /login grok opened [], want the authorize URL once` |
+| `TestLoginOpensBrowser` | the same | `auth login` passing no opener (`auth-login-no-opener`) | `loginsurfaces_test.go:68: gobble auth login grok opened [], want the authorize URL once` |
+| `TestLoginOpensBrowser` | once, not twice | `/login`'s opener called twice (`login-opener-twice`) | `loginsurfaces_test.go:80: /login grok opened ["https://auth.x.ai/oauth2/authorize?state=s" "https://auth.x.ai/oauth2/authorize?state=s"], want the authorize URL once` |
+| `TestDeviceCodeTextNamesExpiry` | `auth login grok --device` and `/login grok` name `(expires HH:MM)` in the clock's zone: 14:05 for a clock in UTC, 16:05 at +02:00, 09:05 at -05:00; a code with no expiry names none | the expiry dropped (`expiry-dropped`) | `loginsurfaces_test.go:130: a clock in UTC: exit 0, stderr "Open https://accounts.x.ai/device and enter the code ABCD-1234\n", want "... (expires 14:05)\n"` |
+| `TestDeviceCodeTextNamesExpiry` | the zone is the clock's | the time written in UTC (`expiry-in-utc`) | `loginsurfaces_test.go:130: a clock in +02:00: exit 0, stderr "... (expires 14:05)\n", want "... (expires 16:05)\n"` |
+| `TestDeviceCodeTextNamesExpiry` | `/login` shows the text too | `/login` given no device-code text (`login-no-device-text`) | `loginsurfaces_test.go:146: /login's stderr lacks "... (expires 09:05)\n"` |
+| `TestDeviceCodeTextNamesExpiry` | no expiry, none named | the zero time printed (`expiry-printed-when-zero`) | `loginsurfaces_test.go:155: a code with no expiry: exit 0, stderr "... (expires 18:09)\n", want the words and no expiry` |
+
+The stand-ins are shaped as production's: `opensBrowser` calls `o.OpenURL` only when the caller set one, as `provider.SignIn` gives the wizard an opener only then (`signin.go:326-328`), after telling the prompter the
+URL; `showsDeviceCode` gives `o.ShowDeviceCode` a `provider.DeviceCode` with an `Expires` as `signin.go:318` builds it, or the default notice when none is set (`signin.go:319-322`). The opener is the test's
+(`replace(t, &openURL, ...)`); no browser is opened and no port bound. `TestACPLoginOffersMenu`'s "the key" stand-in returns a fixed key after the menu's choice: what it holds is that the terminal path asks the
+menu with no method forced, that `signInTo` stores what the sign-in gives (production code), and that the opener and the device text are passed; it does not hold the key's checking, which is the wizard's own (above),
+nor its typing, since `terminalQuestions`'s raw mode needs a terminal and `editor.Raw` fails on a pipe: that gap is named under "Not verified".
+
+**Tests changed, and why (none loosened).**
+
+* `TestAuthLoginGrok` (`auth_test.go:~440`): its device assertion `... ABCD-1234\n` became `... ABCD-1234 (expires 12:00)\n`, with `clock` replaced by an instant in UTC. The stand-in's code expires at 13:00 at +01:00,
+  which is 12:00 in UTC; without the clock the words depend on the machine's zone (it printed `07:00` here). The assertion is stricter.
+* `TestConsentWordingOnEverySurface`, subtest "gobble acp --login" (`consentwording_test.go:210`): its answers `"3\n"` became `"2\n3\n"`. `acp --login openai` on a terminal now shows the menu first (the plan, "2"), then the
+  consent's cancel ("3"). It asserts what it did: the wording asked before any URL, the sign-in declined, nothing saved. This test is 0052's (`c4c5ec0`), outside the brief's list of 14 login tests and `TestACPLogin`;
+  with `"3\n"` alone it waited for an answer to the menu until the 10 minute bound.
+* `TestACPLogin` and the 14 tests of `login_test.go`: unchanged, pass (`go test -count=1 ./internal/cli`, exit 0, and the race run below).
+* Added: `TestACPLoginOffersMenu`, `TestLoginOpensBrowser`, `TestDeviceCodeTextNamesExpiry`, in `acp_test.go` and the new `loginsurfaces_test.go`.
+
+**P6's plants that touch `internal/cli/login.go`, re-run** (P6's driver read; `llm/provider/signin.go` is unchanged, so its plants are not re-run): `terminal-host-id-not-set` (`TestCLIFillsHostID`) failed,
+`agentauth_test.go:78: the terminal sign-in's options [...`, and `terminal-host-id-error-fails` (`TestSignInWithoutHostID`) failed, `agentauth_test.go:121: exit 1, stderr "Error: no host id: host-id: open <TMP>/...state-file/host-id: not a
+directory; ...`; both unbroken, exit 0. P7 did not undo what they hold.
+
+**What 0052-PLAN P4 expects of P7.** Its prerequisites are "P2, P3, 0051-PLAN P4 to P7", and step 4's `TestConsentWordingOnEverySurface` is the test of the five terminal surfaces (`/login`, `gobble setup`, the first run,
+`gobble auth login`, `gobble acp --login`) that "covers" the consent's wording; that test exists (0052's `c4c5ec0`) and passes with `acp --login` through the menu. P7 delivers the terminal surfaces it rests on: `acp --login`
+through `signIn`'s wizard path with the consent asked in gobble's wording, and the browser opened after it on all five. It does not deliver the ACP half (`TestConsentWordingOverACP`), which is P4 step 4's own, built on P6's `StartSignIn`.
+
+**Gates (C6)**, after the last change to any Go file (the last write of a Go file is at 20:01:25, before the first gate started at 20:04:20; `make lint` is inside `make preflight`, the lint plan 0059 being complete: no six cold
+runs). Each with its start and end time and its exit status taken before any filter. The two cross-host rows are the coordinator's addition to C6 for this phase (C6 names those hosts at P2, P4, P6 and P8; this phase changes how a browser is
+opened and how a local time is printed, which differ by platform).
+
+| Gate | Start | End | Exit |
+| :--- | :--- | :--- | :--- |
+| `make pre-add-check FILES=` the 7 Go files (gofmt, golint, govulncheck) | 20:04:20 | 20:04:30 | 0 |
+| `make race` (both modules, `-race`), through `run-heavy` | 20:04:30 | 20:05:48 | 0 |
+| `make check-test-isolation` | 20:05:48 | 20:07:12 | 0 |
+| `make check-acpext-deps` | 20:07:13 | 20:07:13 | 0 |
+| `go test -race -count=1 ./...` and acpext's, `run-on-host --race --need linux` (the coordinator's addition to C6): the Linux machine, not a WSL distro | 20:07:13 | 20:14:08 | 0 |
+| `go test -race -count=1 ./...` and acpext's, `run-on-host --race --need windows` under `sh -c` (the coordinator's addition to C6): the Windows laptop, native | 20:14:08 | 20:17:39 | 0 |
+| `make preflight`, through `run-heavy` (gofmt, tidy, pre-add-check, vet, staticcheck, one cold golangci-lint, govulncheck, check-acpext-deps, fix-check, archtest, apidiff, verify-build-metadata, check-records, check-icon, markdownlint) | 20:17:39 | 20:25:20 | 0 |
+| `make check-records markdownlint`, after the last record edit | 20:25:32 | 20:25:34 | 0, and again after this row was filled |
+
+**Docs (C9).** Rows:
+
+* `docs/guides/credentials.md:192-196` (the Grok bullet) — fixed: the device code's line names its expiry in local time, and `/login`, `gobble setup` and the first-run offer open the browser and show the code as `auth login` does.
+* `docs/guides/credentials.md:200` (the Kilo bullet) — fixed: the code is shown with its expiry as Grok's is.
+* `docs/guides/credentials.md:~318` ("Signing in from a session") — fixed: a browser sign-in is opened in the browser; a device code is shown with its expiry.
+* `docs/guides/credentials.md:~364` ("Signing in from an editor or magic-cli-remote") — fixed: `gobble acp --login` shows `/login`'s menu of methods on a terminal, `--device` or no terminal signs in with no menu, no key is asked over ACP itself.
+* `docs/architecture.md:21` — fixed: `acp --login` shows `/login`'s menu.
+* `README.md:45-47`, `README.md:119-122` — fixed: the same, and `/login` opens a browser sign-in and names a device code's expiry.
+* `internal/cli/acp.go:23` (the `--login` help) and the doc comments of `acpLogin`, `signIn`, `showDeviceCode`, `terminalQuestions`, `onTerminal` — fixed; nothing exported was touched.
+* `docs/guides/credentials.md:119` (`expires`, in UTC, RFC 3339: `auth status --json`'s row) and `:~533` (`--json`'s `show_code` step with `expires_at`) — not made false: both are machine output and stay in UTC/RFC 3339; the local time is the text form's.
+* `docs/decisions/0051-MADR-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md` (D4's note, above) — fixed: added.
+* `docs/README.md`'s hooks row ("extend gobble (hooks, ...)") — left, as the brief says. `docs/README.md`'s 0051 PLAN row — fixed (P7 built and staged).
+* open: none.
+* docs: searched `README.md`, `AGENTS.md`, `docs/architecture.md`, `docs/README.md`, `docs/guides/*.md`, for `acp --login`, `/login`, `gobble setup`, `first run`, `first-run`, `expires`, `device code`, `browser`, `OpenURL`.
+
+**A note added at MADR D4, outside P7's steps, on the coordinator's instruction.** One dated note (2026-11-16) in `0051-MADR`, at D4, directly after P6's note recording the owner's ruling "Keep the wizard's rule: a 401 refuses" (which stays as written). It is the coordinator's live verification, relayed, not a ruling of the owner's: Kilo's models listing with no organisation answers 200 whatever the Authorization header holds, so without an organisation the listing check cannot refuse a Kilo device key (and cannot detect a bad one), the case P6's note worried about does not arise there, and the open question against go-llmprovider-sdk is narrowed to whether the wizard should verify the key another way. The facts are the coordinator's and were not re-run here. `docs/guides/credentials.md` says nowhere that a Kilo device key is checked against the listing (searched for `kilo` with `list`, `check`, `refus`), so it is left. No code changed.
+
+**Deviation (2026-11-16): the menu is not shown with `--device` or with no terminal.** MADR D3 says `acp --login` shows the wizard's menu "for every provider"; as built, with `--device` and with no terminal it signs in by the provider's default method with no menu (`acp.go:105`). This was built before it was put to the coordinator, who then recorded it as the coordinator's application of the plan's acceptance, not a ruling of the owner's, in a dated note at MADR D3's `acp --login` bullet. Reason: a menu cannot be asked without a terminal; `--device` names the method; `TestACPLogin` and the "no terminal" subtest of `TestConsentWordingOnEverySurface` have no terminal to ask on.
+
+**The typed key's path through `signIn`.** An existing test holds it: `TestLoginSlash` (`login_test.go:226`) runs `/login claude` through the line session's `questions` (whose `raw` is the harness's), types a key at the secret prompt, and asserts the key is stored in `auth.json` (`:240`, `storedKey`) and never shown; `TestFirstRunSetup` (`:415`) does so from the provider menu's choice, and `TestLoginAsksThroughQuestions` (`:315`, `:351`) for Kilo. They use a stand-in for the wizard, as the new key subtest does. `acp --login` now reaches the same `signIn`, so only `terminalQuestions`' construction (three lines, `login.go:95`) is not exercised on a pipe.
+
+**Not verified.** No real browser was opened and no live provider was signed in to: every opener and sign-in is the test's, and the menu is the real wizard over the test's plan issuer with every request refused but discovery.
+A key typed through `acp --login`'s raw-mode `Secret` on a real terminal was not exercised: `editor.Raw` needs a terminal, so the key subtest's stand-in returns the key after the menu's choice (a seam for the raw mode in
+`terminalQuestions` would be a name the plan does not give; not added). The expiry's wall-clock rendering was held for UTC, +02:00 and -05:00 clocks and the machine's own zone was not relied on; a zone with a half-hour or
+daylight-saving offset was not tried. Whether Grok's or Kilo's real issuer sends `expires_in` was not checked (the SDK falls back to 300 s, `oauth_device.go:24`).
+
+**Files (staged), with modification times** (the first gate started at 20:04:20): `internal/cli/acp.go` 20:01:25, `internal/cli/acp_test.go` 20:01:25, `internal/cli/auth.go` 19:51:52, `internal/cli/auth_test.go` 19:56:54,
+`internal/cli/consentwording_test.go` 19:56:11, `internal/cli/login.go` 19:51:52, `internal/cli/loginsurfaces_test.go` 20:01:25; the text files, which only `check-records` and `markdownlint` read: `README.md` 19:59:10, `docs/README.md` 20:10:55, `docs/architecture.md` 19:59:10, `docs/guides/credentials.md` 19:59:10, `docs/decisions/0051-MADR-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md` 20:10:35; this PLAN, written after the gates.
 
 **Staged, not committed; the coordinator commits on the branch.**
