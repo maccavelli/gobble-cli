@@ -211,6 +211,9 @@ type Agent struct {
 	// unlisted are the stored sessions session/list leaves out, each
 	// logged once (0019-MADR D5).
 	unlisted map[acp.SessionId]bool
+	// signing is the method of each provider's running sign-in, one at a
+	// time (0051-MADR D4).
+	signing map[string]string
 	// insultsAccepted says the user agreed to a level-5 personality in this
 	// process (0022-MADR D10).
 	insultsAccepted bool

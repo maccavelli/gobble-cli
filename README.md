@@ -43,7 +43,8 @@ Early, and built in the order [docs/README.md](docs/README.md#build-order) gives
   `tools.bash.useClientTerminal: true`, one that offers terminals runs bash in its terminal; each tool
   call names the files it touches. `gobble acp --model <provider/id>`, with `--provider` and
   `--thinking`, starts every session on that model, as chat's flags do. `gobble acp --login <provider>`
-  is what an ACP client's terminal sign-in runs.
+  is what an ACP client's terminal sign-in runs; a client that offers `elicitation.form` is signed in
+  by `authenticate`, as forms, with no terminal ([the credentials guide](docs/guides/credentials.md#signing-in-from-an-acp-client)).
 - **Tools:** `read`, `write` and `edit`, confined to the workspace roots; `grep`, `find` and `tree`,
   which follow the repository's `.gitignore` rules; `move`, `delete`, `copy` and `mkdir`, where every
   delete asks first; `todo`, a checklist the client shows as the plan; `tool_search`, which loads

@@ -488,6 +488,18 @@ smaller and (a) holds the rule; the choice is the owner's.
 
 *(2026-11-15, the owner's ruling, relayed by the coordinator, answering the question above: "Keep the tests through a stand-in".)* Option (a). P6 tests the loopback-only refusal and the no-paste flow with a stand-in method of the contract's shape, offered to the relay through its options, and one row is restated for Grok's browser sign-in by paste for a remote client. The stand-in is not designed here and no row is rewritten here: P6's brief designs the stand-in and words the rows. Until then the three rows below keep their annotations of this date, each with the pointer that follows it.
 
+*(2026-11-16, P6's run; the owner's ruling "Keep the tests through a stand-in", relayed by the coordinator, carried out. Written before anything was built; "P6 record (2026-11-16)" says what was built.)* **The stand-in and the rows.**
+
+* **How the stand-in reaches the relay.** Through `AuthOptions.Methods`, `AuthOptions.Remote`, `AuthOptions.Command` and `AuthOptions.SignIn`, which step 2 makes injectable; `provider.Offered` is not changed and no production path exists for the test. The test's `Methods` returns Grok's `browser_oauth` taken from `provider.Offered("grok")` and rewritten to the contract's own loopback-only shape (`Completion` `browser_loopback`, `Paste` empty, no `paste` feature), then Grok's `device_code` unchanged; its `Remote` is `provider.Remote` and its `Command` is `provider.MethodCommand`, both production; its `SignIn` returns a scripted run (a type of the test) whose steps have the shape `signinflow` gives a browser sign-in with no paste: `open_url` with no `accepts`, then `done` when the test lets the loopback finish. A scripted run is a stand-in for the engine, not for the relay: every test of the relay's decisions uses it, and the real `x/signin` runs against an in-process issuer in `llm/provider` and in `internal/cli` (which, like `llm/provider`, may import what rule 4 allows there; `acpserver` may not import `x/signin`).
+* **What `Remote` and D4 give for the default.** Grok's offered methods, in the SDK's order, are `api_key`, `browser_oauth`, `device_code` (`llmprovider/providers/grok/descriptor.go` at `v1.31.0`). D4 step 1: "With no method named, a remote sign-in takes the first offered method `Remote` accepts". `Remote(api_key)` is false (`Completion` `value`), and `Remote(browser_oauth)` is true (`browser_paste`, `Paste` `url_or_code`). The default for a remote Grok client is therefore `browser_oauth`, completed by a paste (`NoLoopback` set), not the device sign-in the row said. A local client with no method named is asked, by the enum of step 3, to choose between `browser_oauth` and `device_code`, and a local `browser_oauth` completes by the loopback or a paste.
+* **The rows, restated at those facts.** Each keeps what it held.
+  * `TestAuthenticateOnlyRemoteMethods`, restated for Grok's browser sign-in by paste for a remote client (the one row restated that the owner's "Keep the tests through a stand-in" allows): grok, `_meta.gobble.remote: true`, no method named, through `provider.Offered` and `provider.Remote`: `SignIn` is called for `browser_oauth` with `remote` true; the first elicitation is the `open_url` step with `accepts` `url_or_code`, then the paste form, and the pasted callback completes the sign-in and answers `{}`; `browser_oauth` named gives the same and `device_code` named gives the device sign-in. Planted break: `remote` not passed on to `SignIn` (the recorded call holds false).
+  * `TestAuthenticateRemoteDefault`, which the 2026-11-15 annotation did not name and which cannot pass as written either ("grok ... the device sign-in"): through the stand-in, offered `[browser_oauth (loopback-only), device_code]`, `remote: true` and no method named: the device sign-in, never the loopback-only method, with `remote` true; with grok's real methods the same request drives `browser_oauth`. Planted break: `remote` ignored in the choice, so the client is asked to choose between the methods in the enum form that only a local client gets. *(Written first as "the default taken from `Offered` without `Remote`"; with the stand-in, a loopback-only method is never driven unless named, whatever the filter, so that break does not fail and was replaced as the run's reading of D4 step 3 settled the order of the checks.)*
+  * `TestAuthenticateGrokBrowserHasNoPaste`, renamed `TestAuthenticateLoopbackHasNoPaste` because no Grok sign-in has that shape: the stand-in named by a local client: one `open_url` elicitation whose `_meta.gobble.step` has no `accepts`, no `paste` form after its `accept`, and the loopback's finish (the scripted run's `done`) completes it with `{}`; and, for a client with `elicitation.url`, URL mode then `elicitation/complete`. Planted break: the relay sending a `paste` form after every acknowledged `open_url`.
+  * `TestAuthenticateRemoteRefusesLoopbackOnly`, through the stand-in: `method: "browser_oauth"` and `remote: true`: `auth_required` with `ErrorData.Kind` `unsupported`, a `Reason` saying the method completes only in a browser on the agent's host, and `Command` `gobble auth login grok --method browser` (what `provider.MethodCommand` gives for that method id); no elicitation; `SignIn` never called; the same request without `remote` reaches `SignIn` with `remote` false. Planted break: the relay's remote filter dropped, so `SignIn` is called.
+* *(2026-11-16, later, the owner's ruling relayed by the coordinator: "Ask the client to choose". The two bullets above that read D4 step 1 as "take the first, no question" are amended, not rewritten: with no method named and `remote: true`, a client is sent the one-field enum form of step 3 when more than one offered method `Remote` accepts, the enum listing only those methods in the offered order, and with exactly one the relay starts that one with no question; a method named is never asked about. At `v1.31.0` Grok has two such methods, `browser_oauth` by paste and `device_code`, so a remote Grok client is asked. `TestAuthenticateOnlyRemoteMethods` and `TestAuthenticateRemoteDefault` hold this: the enum's members are exactly the remote-capable methods, in the offered order, each choice starts its method with `remote` true, a provider with one remote-capable method is not asked, and a remote client that did not advertise `elicitation.form` gets `auth_required` with the command, as a local one does (MADR D4 step 3). Planted breaks: `remote-takes-first` (the choice dropped for a remote client), `enum-not-remote-filtered`, `remote-no-form-signs-in`.)*
+* **A name the PLAN did not give.** The host command of a refused method needs the CLI's word for the method (`--method browser`), which only `llm/provider` holds (`methodIDs`): `AuthOptions.Command func(id string, m authcontract.Method) string`, which `internal/cli/agent.go` points at the new `provider.MethodCommand(id, methodID string) string`. It is a seam of the same kind as `Remote`, and within step 2.
+
 1. `llm/provider/signinrun.go`: `StartSignIn(ctx, id, method string, o SignInOptions, store LoginStore) (*SignInRun,
    error)` over `signin.Start`, with `signin.Options` as MADR D3 lists it: `Identity: {Name: "gobble", Version}`,
    `AgentName: "gobble"`, `HostID` from `o.HostID` (0052-PLAN P2's `<state>/host-id`), `ClientStore` the `sdkStore`
@@ -495,6 +507,17 @@ smaller and (a) holds the rule; the choice is the owner's.
    `ConsentText` gobble's wording (0052-PLAN P3) *(2026-11-15, the owner's ruling "Accept; P6 builds the site", relayed by the coordinator: this is the `signin.Options` half of 0052-PLAN P3 step 1, which that phase could not build because this site is built here; 0052-PLAN P4's `TestConsentWordingOverACP` guards it. A second pointer, carried from the review of 2026-11-15: an error from `signin.Start` or `Wait` is wrapped in `provider.SignInError` before `ErrorKind` reads it, because `ErrorKind` takes the SDK's word only for a `*SignInError` or the SDK's denied and expired markers (0051-MADR D6), and a test in this phase holds it.)*, and `Previous` the session `store` holds for `id` when its kind is the
    one the method signs in to. `Wait` returns `provider.SignInResult{Key string; Yields authcontract.Yields}` (MADR
    D3): it saves the session through `store` (`sdkStore`) or returns the key, then runs the listing check.
+   *(2026-11-16, the owner's ruling, relayed by the coordinator: "Check first, save only if accepted". The order of that
+   sentence is reversed: `Wait` runs the listing check with the new credential first, listing through the new session itself (or with the key
+   as the listing's key), and saves the session through `store`, or returns the key, only when the listing accepts. A
+   refusal (the listing's `401`, kind `auth`, not retryable) fails the sign-in and leaves what was stored byte for byte,
+   with no revocation; a listing that fails otherwise (a `403`, a `503`, a failed renewal) does not, as in the wizard
+   (`refusedCredential`), which saves after its listing loop; and, as the wizard's save does, `Wait` waits for any
+   renewal the listing started and saves the renewed tokens, and saves nothing once its context is done. (The first
+   build did none of those three; "P6 record (2026-11-16)", part "Review and fixes", says what was fixed.) The sentence's
+   order contradicted MADR D4 step 3, "a sign-in that fails, is declined or is cancelled changes nothing stored", under
+   `fresh`. Options not chosen: save, then restore the old credential on a refusal; keep the order and amend D4. "P6
+   record (2026-11-16)" says what was built.)*
    *(2026-11-11, later; MADR D3's note.)* `SignInOptions.Remote bool` sets `signin.Options.NoLoopback`; nothing else
    sets it, and no terminal path sets `Remote`. `signin.Start` is called through a package variable, so a test can
    record the `signin.Options` it was given.
@@ -626,6 +649,12 @@ smaller and (a) holds the rule; the choice is the owner's.
 
    A failure of `TestStartSignInRemoteDevice` that comes from the SDK's `Start`, not from a plant, is a deviation (C4):
    MADR D3's note says why, and it is settled in go-llmprovider-sdk's 0074 record, not here.
+
+   *(2026-11-16, the review of P6; the owner's ruling, relayed by the coordinator, "Assert what gobble passes; use no real ports". The first row of this table,
+   `TestAuthenticateRemoteBindsNoPort`, which holds ports 1455 and 1457, and the dial of the redirect's port that "P6 record (2026-11-16)" built in its place, are dropped: a probe of a
+   real port could not fail on its defect. The row is restated: a remote sign-in sets `NoLoopback` for every offered method, held by `TestStartSignInRemoteSetsNoLoopback` at the seam where
+   gobble starts the sign-in, and that a remote `authenticate` reaches that start with `Remote` true, held at the `AuthOptions.SignIn` seam in `acpserver` and in `internal/cli`
+   (`TestAgentRemoteReachesTheEngine`); whether the engine then binds no port is the SDK's own test. Its planted break: `NoLoopback` not set for one method.)*
 
    *(2026-11-12, added; MADR D9, N3.)* One more test, seen failing:
 
@@ -1825,13 +1854,13 @@ The rows, one a finding; lines are as of this change (the brief's earlier number
 * `docs/architecture.md:194` (the root's acpext requirement, the brief's `:190`) — fixed: `v0.5.0-rc.1`.
 * `docs/architecture.md:194` — open: P8a makes it `v0.5.0`.
 * `docs/guides/credentials.md:366-369` (the `--json` error kinds, the brief's `:320`) — fixed: respelled, with `denied` and `expired`, and the plan sign-in's stop at its question under `--json`.
-* `docs/guides/credentials.md:338-376` (`--json`'s events, and ACP `authenticate`) — open: P5 makes `--json` print the contract's steps and refuse a first plan sign-in with exit 2, and P6 makes `authenticate` sign in by elicitation.
+* `docs/guides/credentials.md:338-376` (`--json`'s events, and ACP `authenticate`) — open: P5 makes `--json` print the contract's steps and refuse a first plan sign-in with exit 2, and P6 makes `authenticate` sign in by elicitation. *(2026-11-16: closed by P6, see its record.)*
 * `README.md:109-120` (the credentials bullet) — fixed: ChatGPT plan offered, `--method chatgpt-plan`, `gobble auth consent`, the question and what it gates.
 * `docs/architecture.md:24`, `:109`, `:110` and `:127` (the command list, the `llm`, `llm/provider` and `acpserver` rows) — fixed: `auth consent`, the contract's words, `WithBackground` and `ConsentError`, the policy, `ErrorKind`, `ConsentText`, the consent functions, the gate and `ErrorData.Consent`.
 * `docs/guides/credentials.md:118` (`oauth_unused`) — fixed: a session of a kind gobble does not sign in to is not used.
 * `docs/guides/credentials.md:152-153` (`--method`'s words) — fixed: `chatgpt-plan` added.
 * `docs/guides/credentials.md:189-217` (Signing in: the third provider, its consent wording and where it is asked) — fixed; `:245-300` (logout of a plan session, "Allowing background requests under a ChatGPT plan", `gobble auth consent`) — fixed, new; `:306` (`/login`'s methods) and `:347-348` (`gobble acp --login`) — fixed.
-* `docs/guides/credentials.md:189-300` (the ChatGPT section) — open: 0052-PLAN P4 step 3 adds the files it keeps, the host id and the issued client, and the phone through an ACP client; P6 the elicitation.
+* `docs/guides/credentials.md:189-300` (the ChatGPT section) — open: 0052-PLAN P4 step 3 adds the files it keeps, the host id and the issued client, and the phone through an ACP client; P6 the elicitation. *(2026-11-16: P6 part closed, see its record; 0052-PLAN P4 step 3 still open.)*
 * `docs/guides/credentials.md:86-132` (`auth status --json`) — open: 0052-PLAN P4 step 2 adds `sessionKind`, `consents` and `consentTerms`.
 * `docs/guides/choosing-a-model.md:137`, `:139` and `:143` (the `providers` table's sign-in words) — fixed.
 * `AGENTS.md`, `docs/guides/developing.md`, `docs/guides/models-json.md`, `docs/guides/` otherwise — nothing names a changed spelling, a kind count, the offered methods or acpext's requirement; no change. This repository keeps no changelog.
@@ -2618,3 +2647,441 @@ paragraph in this PLAN (0 at `HEAD`, 0 now). Both ran, with `make check-records 
 changed after the first gate started (08:32:20). The MADR note of 2026-11-16 (deviation 2) and its record changed no Go file, so no gate that reads Go files was run again for them; `make check-records markdownlint`, the
 identifier scan and the quotation check were run again after them. The guide was rewrapped at 08:33, after the first gate started and before `make preflight` (08:37:27); the README row and this record changed after the last gate,
 which reads Go files and, in preflight, the markdown gates only.
+
+### P6 record (2026-11-16)
+
+Built by one mainstream model at medium effort and finished by a second, also at medium effort, each on the coordinator's brief; the first ran out of working
+budget after the code, its tests and a first run of the plants, and the second verified what was there, built the owner's two rulings of 2026-11-16, ran the
+plants, the security checks and the gates, and wrote this entry. The owner's approval of 2026-11-15, relayed by the coordinator, is "Run P5 then P6 without
+stopping". Three rulings bind P6, each the owner's, relayed by the coordinator: "Keep the tests through a stand-in" (2026-11-15; the amendment at the top of
+P6), "Check first, save only if accepted" and "Ask the client to choose" (both 2026-11-16; dated notes at P6 step 1, at the amendment's bullets, and at MADR D3
+and D4). Times are the session machine's local time. Staged, not committed; **the coordinator commits on the branch `p3-acpext-v0.5.0`.** `main` and
+`origin/main` stayed at `9e21c8f`; no tag, push or merge was made (the owner's ruling "Keep it on the branch until those phases land", C8).
+
+**C1, the start state.** Branch `p3-acpext-v0.5.0`, `HEAD` `4410333`, level with origin; nothing staged; the working tree held the first agent's unstaged work
+(twelve modified files, nine new). `go.mod` requires acpext `v0.5.0-rc.1` and go-llmprovider-sdk `v1.31.0`, no `replace`, no `go.work`.
+
+**What changed (staged).**
+
+1. **Step 1, `llm/provider/signinrun.go`.** `StartSignIn` (`:75`) over `signin.Start` (the package variable `startSignIn`, `:19`) with `signin.Options` as MADR D3
+   lists it: `Identity` from `identityOf`, `AgentName` `gobble`, `HostID`, `ClientStore` when the store has one, `ConsentText` gobble's wording, `NoLoopback` from
+   `SignInOptions.Remote`, and `Previous` the stored session of the kind the method signs in to. Every error is a `*SignInError` (`NewSignInError`, `:48`).
+   `SignInRun` has `Steps`, `Answer`, `Cancel` and `Wait`; **`Wait` (`finish`) is the owner's "Check first, save only if accepted":** the engine's credential
+   is tried against the provider's listing first, a session listed through itself and a key as the listing's key (`checkListing`, `listWith`); only when the listing does not
+   refuse it is the session saved through the store in one write, or the key returned for the caller to store. A refusal fails the sign-in with kind `auth`, not retryable, and
+   nothing stored has changed, byte for byte, with no revocation. **What the wizard does on a listing failure that is no refusal**, read at go-llmprovider-sdk `v1.31.0`,
+   `wizard/configure.go`: `stepRefusal(listErr)` is `refusedCredential(err) || refusedWorkspace(err)` (`:680`), and `refusedCredential` is
+   `errors.Is(err, llmprovider.ErrAuthFailure) && !errors.Is(err, llmprovider.ErrNotPermitted)` (`:667-669`); the loop `for keys, workspaces := 1, 0; stepRefusal(listErr); {` (`:499`)
+   is not entered for any other error, so the code after it, `credential.save(ctx, d)` and `return res, cat, nil` (`:508-513`), runs: a 403, a 503, a timeout or an empty list leaves
+   the sign-in a success and the credential saved. *(The first build did not do this: it refused a 403, failed on `List`'s own error, listed through a copy of the session and
+   saved the original, and saved after a cancel; "Review and fixes" below.)* Kilo's device key is returned for `internal/cli` to store and is listed with, since the SDK sends the
+   key Kilo's listing is given. `MethodCommand` (`:56`) and `SignedInMethod` (`:66`) are the
+   two helpers `internal/cli` needs. **Step 1a:** `llm/provider/login.go` (`ClientRecord`, `ClientStore`, `sdkClientStore`, `tokenStore`), `SignInOptions.HostID` and `Remote`
+   (`signin.go:84`, `:89`) and the wizard's `HostID`; `internal/auth/clients.go:111` `ClientLogins` is the store with the issued clients beside the logins.
+2. **Step 2, `acpserver`.** `AuthOptions` (`auth.go:19`: `Providers`, `Has`, `Methods`, `Holds`, `Remote`, `Command`, `SignIn`, `Signed`); `authMeta` (`auth.go:118`) decodes
+   `_meta.gobble` strictly (`RejectUnknownMembers`, -32602 for an unknown member or a wrong type); `authenticateProvider` (`:161`) is D4's four cases; **ruling 2,
+   "Ask the client to choose", is `chooseMethod` (`:248`)**: with no method named, one driven method (for a remote client, one `Remote` accepts) starts with no
+   question, and more than one are asked by the enum form of step 3 (`askMethod`, `authsignin.go:61`) listing exactly those methods in the offered order; a method named
+   is never asked; a client with no `elicitation.form` is asked nothing (`auth.go:190`, the same answer as for a local one, MADR D4 step 3). `refuseRemote` (`:210`) is the
+   `unsupported` refusal of a named method `Remote` does not accept. `acpserver/authsignin.go`: `Agent.signIn` (`:127`) keeps one sign-in per provider; `relay.serve`
+   (`:207`) reads the run's steps and sends each as a request-scoped elicitation, one at a time, acknowledges the steps that only show something (`reply`, `:315`),
+   answers `paste`, `confirm` and `form` from the accepts with `Secret` taken from the step, ends the open request before it answers, sends `elicitation/complete` for URL
+   mode (`completeURLs`, `:293`), caps a bad paste at three, and turns a decline or cancel into `canceled`; `failure` (`:117`) is `auth_required` with the SDK's kind and
+   `retryable`.
+3. **Step 4, `internal/cli`.** `agentauth.go`: `authOptions` (`:25`), `holds` (`:45`), `startSignIn` (`:65`, the host id and the clients through `hostSignIn`, `login.go:34`),
+   `keyRun` (`:94`, a device key stored through `auth.SetKey`, escaped, and returned to no one). `signInTo` fills `HostID` on the terminal path too ("Proceed, warn once").
+4. **Tests, docs and the record.** Below.
+
+**The stand-in** is as the amendment at the top of P6 wrote it and was built that way: `standIn` in `acpserver/authsignin_test.go` is Grok's real `browser_oauth` from
+`provider.Offered("grok")` rewritten to `browser_loopback` with no `Paste`, supplied through `AuthOptions.Methods`, with `Remote` `provider.Remote` and `Command`
+`provider.MethodCommand`, both production; its scripted run (`scriptRun`) has the shape `signinflow` gives a browser sign-in with no paste. The relay's decisions are
+tested through it and through scripted runs; the real `x/signin` engine runs against in-process issuers in `llm/provider` (`signinrun_test.go`), in `acpserver`
+(`authreal_test.go`, through `provider.StartSignIn`) and in `internal/cli` (`agentauth_test.go`).
+
+**Tests (C2): each seen failing on a scratch copy of the tree** (`<TMP>`, no `.git`; `HOME`, `USERPROFILE`, `XDG_*` and `GOBBLE_HOME` in the scratch; `GOPROXY=off`;
+`GOFLAGS=-mod=mod`; the module and build caches the real ones; one `go test -count=1 -timeout 240s -run '^(...)$' <package>` each, with `-count=3` or `5` for the two plants
+that need the repetition; four shards at a time, then the plants whose failures were port probes were not trusted and none depends on one; the unbroken runs of the same tests
+on a scratch copy of the final tree, `clean.out`, are 14 runs, exit 0 each). Every plant's log holds a `--- FAIL`. Fifty plants were run in the first build; 49 failed as intended and one,
+`form-never-cancelled`, did not (corrected below: the review's test fails it). The plants of the first agent's run that failed to compile (`acp-host-id-error-fails`, `kilo-key-unquoted`) were rewritten as behavioural
+breaks that compile (the unused import kept by `_ = slog.String` and `_ = catalog.QuoteValue`); the unbroken tree changed after two plants' anchors (`scope-counter`,
+`nonboolean-truthy`), which failed to compile once `json` left two files, and they were rewritten and re-run.
+
+| Test | Planted break | Failure seen (exit 1 each; `<TMP>` is the scratch copy) |
+| :--- | :--- | :--- |
+| `TestSignInWithoutHostID` (P6) | the ACP sign-in failing over the host-id error (`acp-host-id-error-fails`) | `agentauth_test.go:144: an ACP sign-in with no host id: no host id: host-id: open <TMP>/TestSignInWithoutHostID1330353681/002/state-file/host-id: not a direct` |
+| `TestCLIFillsHostID` (P6) | the ACP path not filling the host id (`acp-host-id-not-set`) | `agentauth_test.go:91: the ACP sign-in's options [{Options:{APIKey: CredentialSource: Model: ClientName:gobble ClientVersion:0.0.0-dev Logger:<nil> HTTPClient:<nil> ModelM ...` |
+| `TestClientStoreAdapter` (P6) | the client-store adapter chosen when the store has none (`adapter-inverted`) | `signinrun_test.go:159: the client kept {ClientID: HostID:}, want the issued one and the host id` (3 tests failed) |
+| `TestAuthenticateNeverLogsPaste` (P6) | the answer built without Secret (`answer-secret-nil`) | `authsignin_test.go:742: answers [Answer{SchemaVersion:1 Seq:2 Secret:<nil> Paste:[redacted]}], want one for the paste step's seq 2, secret` (2 tests failed) |
+| `TestAuthenticateSharesAuthJSON` (P6) | auth.json's lock released before the read-modify-write, with a pause in it (`auth-json-unlocked`) | `authreal_test.go:385: the sign-in's session is lost` (3 tests failed) |
+| `TestAuthenticateClientCancels` (P6) | the client's $/cancel_request not reaching the sign-in (`client-cancel-not-honoured`) | `authsignin_test.go:1292: timed out waiting for the pending elicitation to be cancelled` |
+| `TestStartSignInReusesClient` (P6) | ClientStore not passed (`client-store-nil`) | `signinrun_test.go:159: the client kept {ClientID: HostID:}, want the issued one and the host id` (2 tests failed) |
+| `TestAuthenticateConfirm` (P6) | a declined consent answered as allow false instead of ending the sign-in as canceled (`confirm-decline-as-false`) | `authsignin_test.go:875: err = <nil>, want a JSON-RPC error` |
+| `TestStartSignInPassesConsentText` (P6) | ConsentText not passed to signin.Options (`consent-text-omitted`) | `signinrun_test.go:217: ConsentText map[], want gobble's wording` (2 tests failed) |
+| `TestAuthenticateFreshKeepsOldOnFailure` (P6) | a declined form treated as an accept with no answer (`decline-ignored`) | `authreal_test.go:249: err = <nil>, want a JSON-RPC error` (3 tests failed) |
+| `TestAuthenticateOnlyRemoteMethods` (P6) | the enum not filtered to what Remote accepts (`enum-not-remote-filtered`) | `authsignin_test.go:1049: {"code":-32000,"message":"Authentication required","data":{"command":"gobble auth login grok","kind":"canceled","provider":"grok","reason":"grok  ...` |
+| `TestAuthenticateRelayEndsItsFormWithoutTheSDK` (the review's) | the open form not cancelled by the relay when the poll ends (`form-never-cancelled`; first built as `TestAuthenticateDeviceCodeForm`'s plant, which exited 0) | `authsignin_test.go:1677: timed out waiting for the open form to be cancelled by the relay` (3 of 3 runs) |
+| `TestAuthenticateDeviceCodeForm` (P6) | the elicitation request detached from the sign-in's cancellation and never ended by the relay (`form-never-ended`) | `authreal_test.go:265: timed out waiting for the open form to be cancelled` (12 tests failed) |
+| `TestAuthenticateFresh` (P6) | _meta.gobble.fresh ignored (`fresh-ignored`) | `authreal_test.go:240: err = <nil>, want a JSON-RPC error` (2 tests failed) |
+| `TestAuthenticateGolden` (P6) | the golden's request id changed (`golden-requestid`) | `authsignin_test.go:1445: acptest: record 3 differs from the golden testdata/authenticate-elicitation.golden` |
+| `TestAgentHolds` (P6) | a key credential never holding a key method (`holds-key-false`) | `agentauth_test.go:219: a key held is a key's, not a session's` |
+| `TestHostIDReachesTheEngines` (P6) | HostID not passed to the wizard or the engine (`host-id-not-copied`) | `signinrun_test.go:346: wizard options [{Registry:<ptr> Providers:[] Existing:Result{Provider:openai} AllowEnv:false Discover:true DiscoverLimit:0s NeedFallbacks:false Pro ...` |
+| `TestStartSignInNamesGobble` (P6) | Identity not set (`identity-zero`) | `signinrun_test.go:360: recorded options [{HTTPClient:<ptr> ClientID: Issuer: Identity:{Name: Version:} AgentName:gobble Previous:OAuthSession(nil) HostID: ClientStore:<ni ...` |
+| `TestAuthenticateKeyNeverLeaks` (P6) | the relay logging the finished sign-in's result, which holds a device key (`key-logged`) | `authsignin_test.go:1374: the agent's log holds the key:` |
+| `TestAgentSignInStoresKiloKey` (P6) | the device key stored unescaped (`kilo-key-unquoted`) | `agentauth_test.go:194: kilo's entry {Type:api_key Key:!kilo$token-0123456789 Expires:0 Access: Refresh: Issuer: ClientID: AccountID: TokenURL: FedRAMP:false Resource: Sco ...` |
+| `TestAuthenticateRealFailureKinds and the kind tests` (P6) | every failure's kind fixed to auth (`kind-fixed-auth`) | `authreal_test.go:185: error = code -32000 {Attempts:0 Code: Command:gobble auth login grok Consent: Error: HTTPStatus:0 Kind:auth Limit: Provider:grok ProviderMessage: Re ...` (7 tests failed) |
+| `TestAuthenticateRealFailureKinds` (P6) | a refused listing not failing the sign-in (`listing-refusal-ignored`) | `authreal_test.go:285: err = <nil>, want a JSON-RPC error` (2 tests failed) |
+| `TestAuthenticateWithCancelPending` (P6) | the agent's lock held while the client is awaited (`lock-held-across-wait`) | `authsignin_test.go:1268: session/new while an elicitation waits: {"code":-32603,"message":"Internal error","data":{"error":"context deadline exceeded"}}` |
+| `TestAuthenticatePresent` (P6) | a present credential answering {} whatever method is named (`method-ignored`) | `authreal_test.go:423: err = <nil>, want a JSON-RPC error` (2 tests failed) |
+| `TestAuthMethodsMeta` (P6) | the methods member under another key (`methods-meta-wrong-key`) | `authsignin_test.go:1417: gemini: methods` (2 tests failed) |
+| `TestAuthenticateDeviceCodeURL` (P6) | elicitation/complete never sent after a URL-mode step (`no-elicitation-complete`) | `authsignin_test.go:672: timed out waiting for elicitation/complete` (3 tests failed) |
+| `TestAuthenticateNoElicitation` (P6) | a client with no elicitation.form signed in anyway (`no-elicitation-signs-in`) | `authsignin_test.go:886: error = code -32000 {Attempts:0 Code: Command:gobble auth login grok Consent: Error: HTTPStatus:0 Kind:unsupported Limit: Provider:grok ProviderMe ...` (2 tests failed) |
+| `TestStartSignInRemoteSetsNoLoopback` (P6) | NoLoopback false for a remote sign-in (`no-loopback-false`) | `signinrun_test.go:257: openai chatgpt_plan remote true: recorded [{HTTPClient:<nil> ClientID: Issuer: Identity:{Name: Version:} AgentName:gobble Previous:OAuthSession(nil ...` (3 tests failed) |
+| `TestAuthenticateOneAtATime` (P6) | a second sign-in for a provider allowed while one runs (`no-one-at-a-time`) | `authsignin_test.go:517: authenticate grok map[method:device_code]: no answer within 20s` |
+| `TestAuthenticateFreshRefusesNonBoolean` (P6) | _meta.gobble decoded loosely, any value of fresh or remote truthy (`nonboolean-truthy`) | `authsignin_test.go:951: fresh false: {"code":-32000,"message":"Authentication required","data":{"command":"gobble auth login grok","kind":"canceled","provider":"grok","re ...` (3 tests failed) |
+| `TestAuthenticateBrowserPasteForm` (P6) | an acknowledged open_url answered to the engine (`open-url-seq-answered`) | `authsignin_test.go:745: the engine refused answers [Answer{SchemaVersion:1 Seq:1 Secret:<nil>}]: an open_url's seq was answered` |
+| `TestAuthenticateLoopbackHasNoPaste` (P6) | a paste form sent after every acknowledged open_url (`paste-after-every-open-url`) | `authreal_test.go:149: 3 elicitations, want the open_url's and one paste form` (9 tests failed) |
+| `TestAuthenticateBadPasteAsksAgain` (P6) | the bad paste echoed in the re-ask's message (`paste-echoed-in-reask`) | `authreal_test.go:209: paste form 2's message holds the paste: "That did not complete the sign-in (http://127.0.0.1:<port>/callback?code=c1&state=BADSTATE-SECRET-5). That  ...` (2 tests failed) |
+| `TestAuthenticateBrowserPasteForm` (P6) | the paste step not relayed (`paste-form-skipped`) | `authsignin_test.go:517: authenticate grok map[method:browser_oauth remote:true]: no answer within 20s` (7 tests failed) |
+| `TestAuthenticateNeverLogsPaste` (P6) | the pasted callback logged at debug (`paste-logged`) | `authreal_test.go:213: the agent's log holds the paste:` (2 tests failed) |
+| `TestStartSignInPassesPrevious` (P6) | Previous never set (`previous-never`) | `signinrun_test.go:185: the second sign-in's steps [{1 1 confirm   0001-01-01 00:00:00 +0000 UTC  false chatgpt_plan.background_use gobble signs in to your ChatGPT plan un ...` |
+| `TestAuthenticateRemoteRefusesLoopbackOnly` (P6) | the remote filter on a named method dropped (`remote-filter-dropped`) | `authsignin_test.go:517: authenticate grok map[method:browser_oauth remote:true]: no answer within 20s` |
+| `TestAuthenticateRemoteDefault` (P6) | a remote client with no elicitation.form asked or signed in (`remote-no-form-signs-in`) | `authsignin_test.go:1132: a remote client with no form: error code -32000 {Attempts:0 Code: Command:gobble auth login grok Consent: Error: HTTPStatus:0 Kind:unsupported Li ...` |
+| `TestAuthenticateOnlyRemoteMethods` (P6) | remote not passed on to the sign-in (`remote-not-passed`) | `authreal_test.go:156: calls [{grok browser_oauth false}], want browser_oauth, remote` (3 tests failed) |
+| `TestAuthenticateOnlyRemoteMethods` (P6) | a remote client with several remote-capable methods given the first, not asked (`remote-takes-first`) | `authsignin_test.go:1035: grok at the pinned facts: the choice {String:<nil> Number:<nil> Integer:<nil> Boolean:<nil> Array:<nil> Other:<nil>}, want an enum of exactly the ...` |
+| `TestAuthenticateRefusedListingStoresNothing` (P6) | Wait saving the session before the listing check (`save-before-listing-acp`) | `authreal_test.go:428: auth.json changed:` |
+| `TestStartSignInChecksListingBeforeSaving` (P6) | Wait saving the session before the listing check (`save-before-listing-provider`) | `signinrun_test.go:591: a refused sign-in stored Login{Issuer:https://auth.x.ai ClientID:b1a00492-073a-47ea-816f-4c329264a828 AccountID: TokenURL:https://auth.x.ai/oauth2/ ...` |
+| `TestAuthenticateRequestScope` (P6) | every elicitation scoped to a request id other than the authenticate request's (`scope-counter`) | `authsignin_test.go:649: elicitation 0: requestId 424242 (<nil>), want the authenticate request's 2` (2 tests failed) |
+| `TestStartSignInStoresOnlyInWait` (P6) | Start deleting the stored login (`start-deletes-stored`) | `signinrun_test.go:485: the stored login is gone` (2 tests failed) |
+| `TestSignInWithoutHostID` (P6) | the terminal sign-in failing over the host-id error (`terminal-host-id-error-fails`) | `agentauth_test.go:120: exit 1, stderr "Error: no host id: host-id: open <TMP>/TestSignInWithoutHostID1287939981/002/state-file/host-id: not a directory; the ` |
+| `TestCLIFillsHostID` (P6) | the terminal path not filling the host id (`terminal-host-id-not-set`) | `agentauth_test.go:77: the terminal sign-in's options [{Options:{APIKey: CredentialSource: Model: ClientName:gobble ClientVersion:0.0.0-dev Logger:<nil> HTTPClient:<nil> M ...` |
+| `TestAuthenticateRefusedListingStoresNothing` (P6) | a listing that fails otherwise (503) failing the sign-in (`unavailable-listing-fails-acp`) | `authreal_test.go:447: a 503 listing failed the sign-in: {"code":-32000,"message":"Authentication required","data":{"command":"gobble auth login grok","kind":"unavailable" ...` |
+| `TestStartSignInChecksListingBeforeSaving` (P6) | a listing that fails otherwise (503) failing the sign-in (`unavailable-listing-fails-provider`) | `signinrun_test.go:609: a 503 listing failed the sign-in: grok sign-in failed (unavailable)` |
+| `TestAuthenticateRealGrokDevice and the form-only tests` (P6) | URL mode sent to a client that offers only elicitation.form (`url-mode-to-form-only`) | `authreal_test.go:120: {"code":-32000,"message":"Authentication required","data":{"command":"gobble auth login grok","kind":"unsupported","provider":"grok","reason":"the c ...` (27 tests failed) |
+| `TestStartSignInErrorsAreSignInErrors` (P6) | Wait's error returned as the SDK's, not a *SignInError (`wait-error-unwrapped`) | `signinrun_test.go:436: a denied sign-in: *auth.signInError (llmprovider: authentication failed: oauth: Grok device authorization denied) is not a *SignInError` |
+
+**`form-never-cancelled`, and how it is held.** The relay's `stop` (`authsignin.go`, in `serve`) cancels the open elicitation's request and waits for its goroutine before the relay
+answers; the plant removes both. The first build found that the plant exited 0 when run against `TestAuthenticateDeviceCodeForm` and the other tests, because in production the ACP SDK
+cancels a child request when its handler returns, so the two cannot be told apart *there*. That is true of production and of every test through the SDK's own connection; it is not
+true of the relay's own guarantee, that every request it opened has ended when `serve` returns. The review showed a test can hold that guarantee with no production seam: the ACP
+SDK's public receiving middleware (`acp.WithReceivingMiddleware`) runs `authenticate` under `context.WithoutCancel(ctx)`, so the SDK's cancel of the handler's children no longer reaches
+the relay's request, and a form-only client that leaves the device code's form open sees it cancelled only if the relay cancels it. `TestAuthenticateRelayEndsItsFormWithoutTheSDK` is that
+test; unbroken it passed 3 of 3, with `stop`'s cancel and wait removed it failed 3 of 3. Deviation 10 records the coordinator's decision on it. The earlier reading, that a cancel-order
+assertion fails on the unbroken tree and a goroutine count passes with the plant, stands for tests that run through the SDK's own cancel.
+
+**Security checks (the first brief's), each held by a named test that a plant fails.**
+
+* *A secret is in no log line, error, error data or step beyond what the contract's step carries:* `TestAuthenticateNeverLogsPaste` and `TestAuthenticateRealBadPasteCap` (a pasted
+  code: never in the log, a frame but the client's answer, an error, a re-ask; every paste step says `secret`; the answer is built with `Secret` true), plants `paste-logged`,
+  `paste-echoed-in-reask`, `answer-secret-nil`; `TestAuthenticateKeyNeverLeaks` (a device key the run returns: in no log line and no frame), plant `key-logged`;
+  `TestAgentSignInStoresKiloKey` (the key stored escaped, the result holding none), plant `kilo-key-unquoted`. A session's tokens never reach `acpserver`: `SignInResult` carries a
+  key or nothing, so no test can assert their absence from a type that cannot hold them.
+* *`fresh` leaves the stored credential untouched until the save, which is now after the listing:* `TestAuthenticateFreshKeepsOldOnFailure` (denied, declined, cancelled: `auth.json`
+  byte-identical, no revocation) with plants `decline-ignored`, `fresh-ignored`; `TestAuthenticateRefusedListingStoresNothing` and `TestStartSignInChecksListingBeforeSaving` (a 401
+  listing: kind `auth`, not retryable, the file as it was, no revocation, for a device and a browser-by-paste sign-in, with and without `fresh`, with a credential stored and none),
+  plants `save-before-listing-acp`, `save-before-listing-provider`, `unavailable-listing-fails-acp`, `unavailable-listing-fails-provider`.
+* *A cancelled or abandoned elicitation ends the sign-in and leaves no goroutine, listener or half-saved session:* `TestAuthenticateClientCancels`, `TestAuthenticateAbandonedLeavesNothing`
+  (the loopback port freed, nothing stored), `TestAuthenticateDeviceCodeForm` (`noRelayGoroutines`), plants `client-cancel-not-honoured`, `form-never-ended`, `lock-held-across-wait`.
+* *`_meta.gobble` decoded strictly:* `TestAuthenticateFreshRefusesNonBoolean` and `TestAuthenticateFresh`, plant `nonboolean-truthy`.
+* *A remote client drives only methods `provider.Remote` accepts:* `TestAuthenticateRemoteRefusesLoopbackOnly` (`remote-filter-dropped`), `TestAuthenticateOnlyRemoteMethods` (`enum-not-remote-filtered`,
+  `remote-takes-first`, `remote-not-passed`), `TestAuthenticateRemoteDefault` (`remote-no-form-signs-in`), `TestAuthenticateRealGrokBrowserPasteRemote` (the remote
+  browser sign-in by paste completes, started remote) and `TestStartSignInRemoteSetsNoLoopback` (what gobble passes: no-loopback for every offered method; `no-loopback-false` and
+  `no-loopback-not-set-for-device`; the owner's ruling "Assert what gobble passes; use no real ports" removed the two probes of real ports).
+* *Concurrent `authenticate` calls do not corrupt the store:* `TestAuthenticateOneAtATime` (one sign-in per provider, by any method, plants `no-one-at-a-time` and
+  `guard-per-method`) and `TestAuthenticateSharesAuthJSON`, which the review made deterministic: from the listing, which runs between the sign-in's token and its save, another writer
+  takes `auth.json`'s lock, reads the file, holds it until `authenticate` has answered or 3 s pass, and writes from that earlier read; a save that skips the lock completes while the lock is held, however late, and the
+  writer's write loses the session every time (plants `auth-json-unlocked` and `auth-json-unlocked-delayed`, ten of ten runs fail each; "Second review and last fixes" below). (The first build's version had a writer retaking the lock after 1 ms against a waiter that backs off up to 2 s, and
+  its plant failed two of three runs.)
+* *The teardown race the first agent noted.* Verdict: **in the tests and the ACP SDK, not in gobble.** Evidence: with the two waits for the client to have seen the cancel removed from
+  `TestAuthenticateClientCancels` on a scratch copy, 21 of 60 runs failed with `acptest: a connection or its handlers did not stop within 5s of its pipe closing`. The cause, found by
+  the review and checked against the code: when the input of a connection ends cleanly, the ACP SDK lets the requests already received run, under contexts that stay live, for up to
+  `notificationQueueDrainTimeout`, 5 s (acp-go-sdk2 `connection.go:23`, `drainInput` at `:1768-1790`), and the test harness's cleanup waits `closeTimeout`, also 5 s
+  (`acpclient/acptest/pair.go:16`, `:60`), for the connection to stop; the test client's hanging handler (`hangReply`) ends only when its request's context is cancelled, so a
+  test that closes the pipes first leaves it blocked for the whole of the SDK's drain, which equals the harness's bound, and the cleanup fails or passes by a hair. (The first build's
+  reading, that the SDK sends `$/cancel_request` after the handler's response, is the same fact seen from the other side.) Every test that uses `hangReply` waits for `endedCount`
+  before it ends. Nothing in gobble's relay is involved; whether the SDK should cancel in-flight handlers when a pipe closes is for the SDK's owner.
+
+**Deviations (dated 2026-11-16; each reason checked).**
+
+1. **`planIssuer` did not exist.** The reason is true: `git grep planIssuer` at `HEAD` finds it only in this PLAN and in 0052-MADR's table ("kept"), in no `.go` file. It was built as
+   `planIssuer` in `llm/provider/signinrun_test.go:53`, a `testIssuer` answering as OpenAI's issuer with the scope the plan sign-in is granted. C5's sentence that it exists was
+   false at `HEAD`.
+2. **`TestAuthenticateRemoteBindsNoPort` is held as `TestStartSignInRemoteBindsNoPort` in `llm/provider`.** True: `internal/archtest/check_test.go` ("rule 4 acpserver signin")
+   fails an `acpserver` import of `x/signin`, and the plan's row needs the plan issuer's real engine. *(Corrected 2026-11-16, the owner's ruling "Assert what gobble passes; use no real ports": neither the row's holding of ports 1455 and 1457 nor `TestAuthenticateRealGrokBrowserPasteRemote`'s dial of the redirect's port is a test any more; the row is `TestStartSignInRemoteSetsNoLoopback` for every offered method and the `AuthOptions.SignIn` seam's `remote` true in `acpserver`.)*
+3. **`TestSignInWithoutHostID` makes the state directory a regular file** where the row said a read-only parent and a deny-write ACE. True and no weaker: a read-only parent does not
+   stop a process running as root, and the ACE is a Windows-only construct; a regular file fails `MkdirAll` the same way on every platform and the test still proves the sign-in
+   goes on, warns once, names the host-id error and no id (plants `terminal-host-id-error-fails`, `acp-host-id-error-fails`).
+4. **New names.** `AuthOptions.Holds` (needed: step 2's "the stored credential is what the named method yields" is read from the CLI's credential kind, which `acpserver` cannot read),
+   `AuthOptions.Command` and `provider.MethodCommand` (needed: the refusal's command word is `llm/provider`'s `methodIDs`), `provider.SignedInMethod` (needed by `internal/cli`'s `holds`;
+   first named `StoredMethod`, renamed because `revive`'s `confusing-naming` rejects an exported name that differs from `storedMethod` only by capitalization), `provider.NewSignInError`
+   (needed: `SignInError.err` is unexported and `acpserver` builds `canceled`). Exported and unused by production: `SignInRun.Method()`, which MADR D3 names and the `acpserver`
+   interface lists; the relay does not call it.
+5. **Tests are in new files, not `auth_test.go`.** No rule requires either; `auth_test.go`'s three tests are unchanged and the new ones are 1,500 lines in `authsignin_test.go`,
+   `authreal_test.go`, `authissuer_test.go`.
+6. **`TestAuthenticateRemoteDefault` restated** though the 2026-11-15 annotation did not name it: true, its row said "the device sign-in" and cannot pass at `v1.31.0`; restated again for
+   "Ask the client to choose".
+7. **The first agent never ran a lint.** `make lint` found 23 findings on its code: `forbidigo` (`json.Unmarshal` in two places, now `jsonx`), `sloglint` (key-value logging; attrs, and
+   `WarnContext` where a context is in scope), `contextcheck` (the relay's `start` now takes the context: `relay()` is `serve(ctx)`), `revive`'s `confusing-naming`
+   (`authenticate` is `authenticateProvider`, `wait` is `finish`, `StoredMethod` is `SignedInMethod`), `unparam` (`chooseMethod`'s `caps`), `unused` (`openaiOrigin`), `modernize`
+   (embedded literals, `maps.Copy`, a `strings.Builder`), `noctx` (the probes use `Dialer.DialContext`, the held port `ListenConfig.Listen`), `errcheck` (`errors.AsType`'s value used). Its
+   `//nolint` comments in new test code were removed; none is left in what this phase adds.
+8. **Defects in the first agent's tests, found by the plants and the gates and fixed:** `TestAuthenticateSharesAuthJSON` (above); `TestAuthenticateAbandonedLeavesNothing` read the
+   redirect host the client's script set after `waitRequests(1)` returned, which the client's handler reaches first (a data race, an empty host under load; now a channel);
+   `siEnv.authenticate` had no bound, so a planted break hung the package to its timeout and gave no `--- FAIL` (now 20 s); `TestStartSignInStoresOnlyInWait`'s snapshot dereferenced a
+   deleted login (a panic; now a failed assertion). The three tests of a remote browser sign-in with no method named (`{"remote": true}`) now name `browser_oauth`, because the
+   owner's ruling asks such a client to choose.
+9. **The probes of a loopback port were removed.** *(Corrected 2026-11-16.)* The first build kept `TestAuthenticateRealGrokBrowserPasteRemote`'s dial of the redirect's port and
+   `TestStartSignInRemoteBindsNoPort`'s holding of ports 1455 and 1457, and said they were as the PLAN's row asked and only sensitive to another process on the machine. The review found
+   the worse defect: the dial passed three of three with `NoLoopback` forced false, because the redirect's port is one nothing listens on whether or not the engine bound it, so the
+   probe could not fail on its defect and could fail with none. By the owner's ruling, relayed by the coordinator, "Assert what gobble passes; use no real ports", both are gone; the
+   mechanism is held at the seam where gobble starts the sign-in (deviation 2's correction).
+10. **The relay's explicit cancel of an open form (`stop`).** *(Corrected 2026-11-16; the coordinator's decision, not the owner's.)* The first build said `stop` "cannot be told from the SDK's
+    cancel of a handler's children" and put the question to the owner, with options (a) keep it, (b) delete it, (c) a seam in `AuthOptions`. That was true of every test through the SDK's own
+    connection and false of the relay's own guarantee: in production the SDK's cancel also ends the request, so `stop` is belt-and-braces there, but the relay's contract is that every request
+    it opened has ended when `serve` returns, and `TestAuthenticateRelayEndsItsFormWithoutTheSDK` holds that with no seam, by running `authenticate` under a context the SDK does not cancel
+    (the SDK's public receiving middleware). The coordinator, on the reviewer's evidence and the owner's standing rule that a check is unused until seen to fail, decided: keep `stop`,
+    adopt the test, make the plant `form-never-cancelled` fail against it (it does, 3 of 3). Option (a) of the first build, with a test; no `AuthOptions` field.
+
+**Gates (C6), the first build's; the review's are in "Review and fixes" below.** Each with its start and end time and its exit status taken before any filter; no Go file changed after the first started.
+
+| Gate | Start | End | Exit |
+| :--- | :--- | :--- | :--- |
+| `make pre-add-check` on the 17 Go files (gofmt, golint, govulncheck) | 12:28:22 | 12:28:44 | 0 |
+| cold `golangci-lint` run 1 of six (`make lint`, a fresh `GOLANGCI_LINT_CACHE`), through `run-heavy`: 0 issues in the root module and in acpext | 12:28:44 | 12:29:12 | 0 |
+| cold `golangci-lint` run 2 of six (`make lint`, a fresh `GOLANGCI_LINT_CACHE`), through `run-heavy`: 0 issues in the root module and in acpext | 12:29:13 | 12:29:39 | 0 |
+| cold `golangci-lint` run 3 of six (`make lint`, a fresh `GOLANGCI_LINT_CACHE`), through `run-heavy`: 0 issues in the root module and in acpext | 12:29:40 | 12:30:07 | 0 |
+| cold `golangci-lint` run 4 of six (`make lint`, a fresh `GOLANGCI_LINT_CACHE`), through `run-heavy`: 0 issues in the root module and in acpext | 12:30:07 | 12:30:35 | 0 |
+| cold `golangci-lint` run 5 of six (`make lint`, a fresh `GOLANGCI_LINT_CACHE`), through `run-heavy`: 0 issues in the root module and in acpext | 12:30:36 | 12:31:02 | 0 |
+| cold `golangci-lint` run 6 of six (`make lint`, a fresh `GOLANGCI_LINT_CACHE`), through `run-heavy`: 0 issues in the root module and in acpext | 12:31:03 | 12:31:29 | 0 |
+| `make race` (both modules, `-race`), through `run-heavy` | 12:31:30 | 12:32:46 | 0 |
+| `make check-test-isolation` | 12:32:46 | 12:33:34 | 0 |
+| `make check-acpext-deps` | 12:33:34 | 12:33:35 | 0 |
+| `go test -race -count=1 ./...` and acpext's, `run-on-host --race --need linux`: the Linux machine, linux/amd64, not a WSL distro | 12:33:35 | 12:38:45 | 0 |
+| `go test -race -count=1 ./...` and acpext's, `run-on-host --race --need windows` under `sh -c`: the Windows laptop, windows/amd64, native | 12:38:45 | 12:42:44 | 0 |
+| `make preflight`, through `run-heavy` (gofmt, tidy, pre-add-check, vet, staticcheck, golangci-lint, govulncheck, check-acpext-deps, fix-check, archtest, apidiff, verify-build-metadata, check-records, check-icon, markdownlint) | 12:42:44 | 12:49:49 | 0 |
+
+**Docs (C9).** `docs/guides/credentials.md`: "Signing in from an ACP client" (the `_meta.gobble` members, the answer order with both rulings, the steps' elicitations, the error kinds and
+`retryable`, one sign-in at a time, cancel, the golden) and the ChatGPT passage (the host id, `clients.json`, the warning); `docs/architecture.md`'s `acpserver`, `internal/auth` and
+`llm/provider` rows; `acpserver/doc.go`. Rows returned to the PLAN's list at its end:
+
+* `docs/guides/credentials.md:371` ("Signing in from an ACP client", new) — fixed: the `_meta.gobble` members, the answer order with both rulings, the steps' elicitations, the error kinds and `retryable`, one sign-in at a time, cancel and the golden.
+* `docs/guides/credentials.md:350-369` (the editor and magic-cli-remote section's opening) — fixed: the methods each agent method lists, and that a form client is signed in by `authenticate`; no key or token crosses ACP but what a person types or pastes.
+* `docs/guides/credentials.md:338-376` (the P4 record's row, "`--json`'s events, and ACP `authenticate`") — fixed: P6 made `authenticate` sign in by elicitation.
+* `docs/guides/credentials.md:200-215` (the ChatGPT passage) — fixed for P6: the question as a form for an ACP client, the host id, `clients.json`, and the one warning when the state directory cannot be used; open for 0052-PLAN P4 step 3: the plan's consent through the phone and `TestConsentWordingOverACP`.
+* `docs/architecture.md:19-23`, `:111` (`llm/provider`), `:128` (`acpserver`), `:144` (`internal/auth`) — fixed: `authenticate` by elicitation, `StartSignIn`, `ClientLogins` and `clients.json`.
+* `README.md:45-47` — fixed: a client that offers `elicitation.form` is signed in by `authenticate`.
+* `acpserver/doc.go` — fixed: the relay and where its engine lives.
+* `docs/architecture.md:194` (the acpext requirement) — open: P8a makes it `v0.5.0`.
+* `AGENTS.md`, `docs/README.md`'s other rows and the other guides — searched for `authenticate`, `elicit`, `sign in`, `acp --login`, `remote`; nothing else this phase makes false.
+* Still open for 0052-PLAN P4: the phone's consent and `TestConsentWordingOverACP`, which hold `ConsentText` over ACP; this phase built the site (step 1) and `TestStartSignInPassesConsentText` holds that the engine is given gobble's wording.
+
+**Not verified.** No live service: every sign-in ran against an issuer in process, so Grok's, Kilo's and OpenAI's real endpoints, a real client's rendering of the forms (Magic, an
+editor) and the phone flow of magic-cli-remote were not run. The ChatGPT plan's listing check (the Codex backend) is exercised against the in-process plan issuer by `TestStartSignInChecksPlanListing` (a 401 refuses, a 403 saves); the real backend's answers were not seen. The Windows run
+covers Windows' path and permission behaviour only as the suite does.
+
+**Files (staged).** Modified: `README.md`, `acpserver/agent.go`, `acpserver/auth.go`, `acpserver/doc.go`, `docs/README.md`, `docs/architecture.md`,
+`docs/decisions/0051-MADR-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md`, `docs/decisions/0051-PLAN-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md`,
+`docs/guides/credentials.md`, `internal/auth/clients.go`, `internal/cli/agent.go`, `internal/cli/login.go`, `llm/provider/login.go`, `llm/provider/login_test.go`,
+`llm/provider/signin.go`. New: `acpserver/authsignin.go`, `acpserver/authsignin_test.go`, `acpserver/authissuer_test.go`, `acpserver/authreal_test.go`,
+`acpserver/testdata/authenticate-elicitation.golden`, `internal/cli/agentauth.go`, `internal/cli/agentauth_test.go`, `llm/provider/signinrun.go`, `llm/provider/signinrun_test.go`.
+
+The identifier scan of the staged diff's added lines (the local account name, host names and aliases, home, temporary and dev-host scratch paths, queue ticket shapes, mail addresses) found nothing (`grep` exit 1). The modification times of the staged files: every Go file and the golden at or before 12:21:57, the first gate having started at 12:28:22; `README.md`, `docs/architecture.md`, this PLAN and `docs/README.md` after the gates (12:50:24 to 12:51:27), which read no Go file after it; `make check-records markdownlint` ran (exit 0, 12:51:27 to 12:51:29) after every text of this entry but this paragraph, and again after it.
+
+#### Review and fixes (2026-11-16)
+
+**Provenance.** An independent reviewer, a strongest-tier model at high effort, read the staged P6 on the coordinator's brief and found it **must not be committed as it was staged**: five
+blockers and a list of should-fix findings, each with a reproduction as a test. A mainstream agent at medium effort, on a second brief, adopted the reproductions as regression tests,
+fixed the findings, built the owner's three rulings of the same day, re-ran every plant, and ran the gates again. Three rulings of the owner, relayed by the coordinator, and one decision
+of the coordinator's, bind this part; each is named below by its exact label. Times are the session machine's local time. Staged, not committed.
+
+**Each reproduction run against the staged production code** (the working tree's new tests, with the five staged production files and `list.go` as at `HEAD` on a scratch copy; logs
+`repro-staged-*.log`): the regression tests for B1, B2, B3, the plan listing, Kilo's key, a `null` member, the guard order, a remote `api_key` and a cancel after the save all fail there
+(for example `signinrun_test.go:691: stored Login{...}, want the rotated pair`, `:609: a 403 listing failed the sign-in`, `:762: a sign-in cancelled during its listing succeeded`,
+`authsignin_test.go:988: fresh null: error code -32000 ...`, `:1507: a second request while the first is asked`, `:1552: a key held: remote {"code":-32000 ...`), and pass on the fixed tree.
+
+| Finding | Fix | Test | Plant (failure seen) |
+| :--- | :--- | :--- | :--- |
+| **B1**, a spent refresh token saved | `llm/provider/signinrun.go:171` lists through the engine's own session (`checkListing`, `list.go:85` `listWith`), `:178` waits for the session's token as the wizard's `save` does, and `:187` saves that session | `TestStartSignInSavesTheRenewedSession` (rotated, renewal 503, renewal refused) | `b1-save-original-session` |
+| **B2**, the refusals are not the wizard's | `signinrun.go:198` `refusedCredential`, applied to `List`'s error and to the listing's, `:209` | `TestStartSignInChecksListingBeforeSaving` and `TestAuthenticateRefusedListingStoresNothing` (the table below) | `b2-refuse-403`, `b2-acp-403-refused`, `b2-fail-on-list-error`, `b2-fail-on-any-listing-error`, `b2-refusal-ignored` |
+| **B3**, a cancelled sign-in saves | `signinrun.go:182` `ctx.Err()` before the save; `internal/cli/agentauth.go:104` before `SetKey`; `acpserver/authsignin.go:274` and `:300`, the relay's cancel branches | `TestStartSignInCancelledDuringListingSavesNothing`, `TestAuthenticateCancelledDuringListingStoresNothing` (with and without `fresh`, stored and none), `TestKeyRunStoresNothingOnceCancelled`, `TestAuthenticateCancelAfterSaveTellsTheAgent` | `b3-no-ctx-check-before-save`, `b3-no-ctx-check-at-all`, `b3-acp-no-ctx-check`, `b3-keyrun-no-ctx-check`, `b3-cancel-branch-never-signed` |
+| **B4**, the port probe cannot fail on its defect | both probes removed (ruling 3); `TestStartSignInRemoteSetsNoLoopback` over every offered method; the `AuthOptions.SignIn` seam's `remote` and `TestAgentRemoteReachesTheEngine` | those tests | `no-loopback-false`, `no-loopback-not-set-for-device`, `remote-not-passed`, `remote-not-passed-seam` |
+| **B5**, statements the code did not make true | the `Wait` and `checkListing` comments, MADR D3's note, P6 step 1's note, `docs/architecture.md`'s `llm/provider` row, `docs/guides/credentials.md` (the `fresh` row, the cancel sentence, the `auth` kind), this record | `make check-records markdownlint` | none |
+| `null` members | `acpserver/auth.go:128` | `TestAuthenticateFreshRefusesNonBoolean` (`fresh` and `remote` null) | `null-fresh-accepted` |
+| Kilo's key not checked | `signinrun.go:209`: the skip only without a key | `TestStartSignInChecksKiloDeviceKey` (401 refuses, no key comes back; 403 saves) | `kilo-skip-restored` |
+| the plan's listing untested | none needed | `TestStartSignInChecksPlanListing` (401 refuses, 403 saves) | `plan-listing-skipped` |
+| `store.Load`'s error not a `*SignInError` | `signinrun.go:92` wraps it; the doc and the architecture row were already true of it | `TestStartSignInErrorsAreSignInErrors` (an unreadable store) | `load-error-unwrapped` |
+| the form asked before the guard | `acpserver/auth.go:211` `reserve` before `chooseMethod`; `authsignin.go:130`, `:150`; released on every path | `TestAuthenticateGuardComesBeforeTheMethodForm` (the second request refused before any form; a declined form frees the provider) | `guard-after-form` |
+| the guard is the agent process's | the guide says so | none | none |
+| `TestAuthenticateOneAtATime` blind to a per-method guard | a second Grok request naming another method | `TestAuthenticateOneAtATime` | `guard-per-method`, `no-one-at-a-time` |
+| `TestAuthenticateRemoteRefusesLoopbackOnly` lacks the phone's shape | `{method, fresh: true, remote: true}` added | that test | `remote-filter-skipped-under-fresh`, `remote-filter-dropped` |
+| `stop` | kept; the test adopted | `TestAuthenticateRelayEndsItsFormWithoutTheSDK` | `form-never-cancelled` (fails 3 of 3) |
+| timing: shared `auth.json` | a writer takes the lock from the listing, reads, holds it until `authenticate` answers or 3 s pass, writes from the read | `TestAuthenticateSharesAuthJSON` | `auth-json-unlocked` (the save's lock skipped: 10 of 10 runs fail) |
+| timing: `noRelayGoroutines` | polls up to 5 s for the frame to go | the tests that call it | `form-never-ended` |
+| timing: `TestAuthenticateLoopbackHasNoPaste` | asserts the step has no `accepts`, an answer for it is refused, and the elicitations at the sign-in's end are one | that test | `paste-after-every-open-url` |
+| timing: `TestAuthenticateAbandonedLeavesNothing` | asserts the run has ended, canceled, and its steps closed, and, from the stacks, that the SDK's callback server is running while the sign-in does and gone after the abandon; no port is dialled ("Second review and last fixes" below) | that test | `abandon-not-ended` |
+| the PLAN's amendment quoted a paraphrase | corrected in place | none | none |
+
+**The rulings and the decision.**
+
+* **Ruling 1, "The same answer as a local client"** (the owner, relayed by the coordinator). A remote client that names `api_key` gets `{}` when a key is held, otherwise the same
+  `auth_required` a local client gets ("… is not a sign-in gobble drives from an ACP client"); step 1's remote refusal is limited to methods gobble drives (`acpserver/auth.go:192`),
+  with a dated note at MADR D4 step 1. `TestAuthenticateRemoteAPIKeyIsAsLocal` (held and not held, remote against local, the two answers equal); plant `remote-api-key-refused-as-before`.
+* **Ruling 2, "Accept it and say so in D4"** (the owner, relayed by the coordinator). "Nothing stored" means credentials; a dated note at D4 step 3; the guide says where a reader looks
+  (`clients.json`). `TestStartSignInPlanFailureKeepsCredentialsAndMayKeepClient`: a plan sign-in refused by the listing, and one cancelled during it, leave the login store untouched and the
+  issued client record in the client store. The test holds the stores' own state; the byte-level proof is `TestStartSignInPlanFailureLeavesAuthJSON`, built in the second review (below).
+* **Ruling 3, "Assert what gobble passes; use no real ports"** (the owner, relayed by the coordinator). Both probes are gone; `TestStartSignInRemoteSetsNoLoopback` runs for every method
+  `provider.Offered` gives openai, grok, kilo and claude, remote and local, each with a planted break; the row is restated by a dated note at MADR D3; deviations 2 and 9 are corrected above.
+* **The coordinator's decision on `stop`** (not the owner's): keep `stop()`, adopt the test, make the plant fail against it, amend deviation 10. In production the ACP SDK's cancel also ends the
+  request; the test holds the relay's own guarantee that every request it opened has ended when `serve` returns.
+
+**The refusal table, as built** (`TestStartSignInChecksListingBeforeSaving`, `TestAuthenticateRefusedListingStoresNothing`, and for the plan and Kilo their own tests): a listing status **401
+refuses** (kind `auth`, not retryable, the store as it was); **403, 503, 400, 404 and 429 save**; a renewal the issuer answers with a 503 saves the session as signed in (`List` returns that
+error, which is no refusal); a renewal refused with a 400 `invalid_grant` refuses (the listing carries the authentication failure). **The workspace refusal cannot arise on this path:**
+`ErrWorkspaceRequired` and `ErrWorkspaceNotFound` are Anthropic's alone (`llmprovider/api_error.go:603-618`, `providers/claude/claude.go:167` at go-llmprovider-sdk `v1.31.0`), and
+`provider.Offered("claude")` offers no session sign-in that `authenticate` drives, so the wizard's prompt for a workspace has nowhere to be asked and `refusedWorkspace` is not applied.
+
+**A cancel that arrives after the save completed.** The credential is stored, so the relay's cancel branch returns success (`authsignin.go:300`), which makes `signIn` call `Signed` and the
+agent drop its stale shared session; the client, which has cancelled, has no answer to act on. D4's line is "After a sign-in gobble drops the run's shared session for that provider and moves its
+credential generation", and step 3's "a sign-in that fails, is declined or is cancelled changes nothing stored" describes a cancel *before* the save. The reviewer's fix, call `Signed` when the run
+reports success, is this. `TestAuthenticateCancelAfterSaveTellsTheAgent`; plant `b3-cancel-branch-never-signed`.
+
+**The corrected statements.** MADR D3's note (order and "does the same as the wizard"); P6 step 1's note; this record's account of step 1 (the in-memory login, "no listing can refuse" Kilo's
+key); `form-never-cancelled` and its table row; the security checks for the probes and `TestAuthenticateSharesAuthJSON`; the teardown race's cause (the ACP SDK's 5 s drain,
+`connection.go:23`, `:1768-1790`, against the harness's 5 s, `acptest/pair.go:16`, `:60`); deviations 2, 9 and 10; "Not verified"; `docs/architecture.md`'s `llm/provider` row;
+`docs/guides/credentials.md`'s `fresh` and `remote` rows, its answer order, its one-sign-in and cancel paragraph and the `auth` kind; `acpserver/doc.go`; `docs/README.md`'s row.
+
+**New tests.** `TestStartSignInSavesTheRenewedSession`, `TestStartSignInCancelledDuringListingSavesNothing`, `TestStartSignInChecksPlanListing`, `TestStartSignInChecksKiloDeviceKey`,
+`TestStartSignInPlanFailureKeepsCredentialsAndMayKeepClient` (`llm/provider`); `TestAuthenticateCancelledDuringListingStoresNothing`, `TestAuthenticateGuardComesBeforeTheMethodForm`,
+`TestAuthenticateRemoteAPIKeyIsAsLocal`, `TestAuthenticateCancelAfterSaveTellsTheAgent`, `TestAuthenticateRelayEndsItsFormWithoutTheSDK` (`acpserver`); `TestKeyRunStoresNothingOnceCancelled`,
+`TestAgentRemoteReachesTheEngine` (`internal/cli`). **Tests changed, and why:** `TestStartSignInChecksListingBeforeSaving` and `TestAuthenticateRefusedListingStoresNothing` (the one status
+became the table); `TestStartSignInRemoteSetsNoLoopback` (every offered method); `TestStartSignInErrorsAreSignInErrors` (the store's error); `TestAuthenticateFreshRefusesNonBoolean`
+(`null`); `TestAuthenticateRemoteRefusesLoopbackOnly` and `TestAuthenticateOneAtATime` (the added shapes); `TestAuthenticateSharesAuthJSON`, `noRelayGoroutines`,
+`TestAuthenticateLoopbackHasNoPaste`, `TestAuthenticateAbandonedLeavesNothing` (timing); `TestAuthenticateRealGrokBrowserPasteRemote` (the probe removed). **Removed:** `TestStartSignInRemoteBindsNoPort`.
+No assertion was loosened, and no test skipped. One production refactor for a test's sake: `keyRun` embeds the `acpserver.SignInRun` interface instead of `*provider.SignInRun`, so the
+key-storing path can be tested with a stand-in of the shape `provider.SignInRun.Wait` returns (`signinrun.go`, `finish`); no new exported name.
+
+**Plants of this round, run on scratch copies of the final tree** (`HOME`, `XDG_*`, `GOBBLE_HOME` in the scratch, `GOPROXY=off`, two shards at a time, no HTTP proxy variable for `llm/provider`).
+The 45 plants of the previous round whose breaks still exist (`wait-error-unwrapped` re-anchored) and 22 new ones were run: **67 run, 66 seen failing with a `--- FAIL`, none a build failure, and one
+that does not fail, `b2-renewal-refusal-ignored`** (below); the unbroken runs of the same tests, `clean.out`, are 33 runs, exit 0 each. Five plants of the previous round were replaced because the
+code they broke no longer exists (`save-before-listing-provider`, `save-before-listing-acp`, `unavailable-listing-fails-provider`, `unavailable-listing-fails-acp` and `listing-refusal-ignored`); the
+`b2-` and `b3-` plants above break the new code in their places. `auth-json-unlocked` was rewritten: the first build's break (the lock released just after it is taken) cannot fail the deterministic test,
+because the save still waits for the writer's lock; the new break skips the lock (ten of ten fail), which is what the brief's test is for. Where the old plants' failure lines in the table above name an
+`authreal_test.go` line, the line is as of the first build.
+
+| Test | Planted break | Failure seen (exit 1 each) |
+| :--- | :--- | :--- |
+| `TestStartSignInSavesTheRenewedSession` | the listing run through a copy of the session, so the original, spent, session is saved (B1) (`b1-save-original-session`) | `signinrun_test.go:691: stored Login{Issuer:https://auth.x.ai ClientID:b1a00492-073a-47ea-816f-4c329264a828 AccountID: TokenURL:https://auth.x.ai/oauth ...` (1 `--- FAIL` lines) |
+| `TestStartSignInChecksListingBeforeSaving` | a 403 (not permitted) refused as an authentication failure (B2) (`b2-refuse-403`) | `signinrun_test.go:609: a 403 listing failed the sign-in: grok sign-in failed (auth)` (1 `--- FAIL` lines) |
+| `TestAuthenticateRefusedListingStoresNothing` | a 403 refused, through the relay and the real engine (B2) (`b2-acp-403-refused`) | `authreal_test.go:519: a 403 listing failed the sign-in: {"code":-32000,"message":"Authentication required","data":{"command":"gobble auth login grok", ...` (1 `--- FAIL` lines) |
+| `TestStartSignInChecksListingBeforeSaving, TestStartSignInSavesTheRenewedSession` | any error of List failing the sign-in (B2) (`b2-fail-on-list-error`) | `signinrun_test.go:698: a renewal that failed with a 503 failed the sign-in: grok sign-in failed (unavailable)` (1 `--- FAIL` lines) |
+| `TestStartSignInChecksListingBeforeSaving` | any error the listing carries failing the sign-in (B2) (`b2-fail-on-any-listing-error`) | `signinrun_test.go:609: a 403 listing failed the sign-in: grok sign-in failed (auth)` (1 `--- FAIL` lines) |
+| `TestStartSignInChecksListingBeforeSaving` | a refusal the listing carries ignored (B2) (`b2-refusal-ignored`) | `signinrun_test.go:574: a sign-in whose listing was refused succeeded` (1 `--- FAIL` lines) |
+| `TestStartSignInSavesTheRenewedSession` | a session the issuer refuses to renew saved (B1, B2) (`b2-renewal-refusal-ignored`) | `` (0 `--- FAIL` lines) |
+| `TestStartSignInCancelledDuringListingSavesNothing` | no context check immediately before the save (B3) (`b3-no-ctx-check-before-save`) | `signinrun_test.go:762: a sign-in cancelled during its listing succeeded` (1 `--- FAIL` lines) |
+| `TestStartSignInCancelledDuringListingSavesNothing` | no context check before the save and none in the renewal wait (B3) (`b3-no-ctx-check-at-all`) | `signinrun_test.go:762: a sign-in cancelled during its listing succeeded` (1 `--- FAIL` lines) |
+| `TestAuthenticateCancelledDuringListingStoresNothing` | no context check before the save, through the relay and the real engine (B3) (`b3-acp-no-ctx-check`) | `authreal_test.go:573: auth.json changed:` (1 `--- FAIL` lines) |
+| `TestKeyRunStoresNothingOnceCancelled` | no context check before SetKey (B3) (`b3-keyrun-no-ctx-check`) | `agentauth_test.go:258: a cancelled key sign-in gave {Key: Yields:device_key}, <nil>, want a canceled error and no key` (1 `--- FAIL` lines) |
+| `TestAuthenticateCancelAfterSaveTellsTheAgent` | the relay's cancel branch never calling Signed for a sign-in that saved first (B3) (`b3-cancel-branch-never-signed`) | `authsignin_test.go:1591: timed out waiting for Signed` (1 `--- FAIL` lines) |
+| `TestAuthenticateFreshRefusesNonBoolean` | a null fresh or remote read as absent (`null-fresh-accepted`) | `authsignin_test.go:988: fresh null: error code -32000 {Attempts:0 Code: Command:gobble auth login grok Consent: Error: HTTPStatus:0 Kind:canceled Limi ...` (1 `--- FAIL` lines) |
+| `TestStartSignInChecksKiloDeviceKey` | Kilo's device key not listed with (the skip restored) (`kilo-skip-restored`) | `signinrun_test.go:868: the listing was not sent with the device key: the test holds nothing` (1 `--- FAIL` lines) |
+| `TestStartSignInChecksPlanListing` | the ChatGPT plan's listing not checked (`plan-listing-skipped`) | `signinrun_test.go:810: the plan's sign-in was not listed: the test holds nothing` (1 `--- FAIL` lines) |
+| `TestStartSignInErrorsAreSignInErrors` | StartSignIn's store.Load error not a *SignInError (`load-error-unwrapped`) | `signinrun_test.go:448: an unreadable store: *fmt.wrapError (provider grok: the stored sign-in: disk) is not a *SignInError` (1 `--- FAIL` lines) |
+| `TestAuthenticateGuardComesBeforeTheMethodForm` | the one-sign-in guard taken after the method form (`guard-after-form`) | `authsignin_test.go:1507: a second request while the first is asked: code -32000 {Attempts:0 Code: Command:gobble auth login grok Consent: Error: HTTPS ...` (1 `--- FAIL` lines) |
+| `TestAuthenticateOneAtATime` | the guard kept per method, not per provider (`guard-per-method`) | `authsignin_test.go:519: authenticate grok map[method:device_code]: no answer within 20s` (1 `--- FAIL` lines) |
+| `TestAuthenticateRemoteRefusesLoopbackOnly` | the remote filter skipped under fresh (`remote-filter-skipped-under-fresh`) | `authsignin_test.go:519: authenticate grok map[fresh:true method:browser_oauth remote:true]: no answer within 20s` (1 `--- FAIL` lines) |
+| `TestAuthenticateRemoteAPIKeyIsAsLocal` | a remote client naming api_key refused as unsupported (ruling 1) (`remote-api-key-refused-as-before`) | `authsignin_test.go:1552: a key held: remote {"code":-32000,"message":"Authentication required","data":{"command":"gobble auth login grok --method api- ...` (1 `--- FAIL` lines) |
+| `TestStartSignInRemoteSetsNoLoopback` | no-loopback not set for one method (ruling 3) (`no-loopback-not-set-for-device`) | `signinrun_test.go:262: grok device_code remote true: recorded [{HTTPClient:<nil> ClientID: Issuer: Identity:{Name: Version:} AgentName:gobble Previous ...` (1 `--- FAIL` lines) |
+| `TestAgentRemoteReachesTheEngine` | internal/cli not passing Remote to the engine (ruling 3) (`remote-not-passed-seam`) | `agentauth_test.go:281: remote true: the engine was started with [{Options:{APIKey: CredentialSource: Model: ClientName:gobble ClientVersion:0.0.0-dev  ...` (1 `--- FAIL` lines) |
+| `TestAuthenticateRelayEndsItsFormWithoutTheSDK` | the relay not cancelling the form it opened (stop() removed) (`form-never-cancelled`) | `authsignin_test.go:1677: timed out waiting for the open form to be cancelled by the relay` (3 `--- FAIL` lines) |
+| `TestAuthenticateSharesAuthJSON` | auth.json's lock released before the read-modify-write; ten runs (`auth-json-unlocked`) | `authreal_test.go:422: the sign-in's session is lost` (10 `--- FAIL` lines) |
+
+**A plant that did not fail, and the panic note.** *(Corrected in the second review, below.)* `b2-renewal-refusal-ignored` removed the `errors.Is(err, llmprovider.ErrAuthFailure)` half of the token wait before the save
+(`signinrun.go:178`), which mirrors the wizard's `save`, and exited 0 against this round's tests; the reviewer reached the half with an issuer whose token endpoint answers `invalid_grant` after 11 s, and
+`TestStartSignInRenewalOutlivesTheListing` now fails the plant. A panic in the `Wait` goroutine is not recovered: the code in it (`finish`, `checkListing`, `listWith`, `keyRun.Wait`) does no indexing, conversion or
+parsing of anything a client sends, and a pasted callback or a form answer goes to the SDK's own goroutine through `Answer`, which I did not audit.
+
+**Gates (C6), after the last change to any Go file** (`acpserver/authsignin.go`'s `switch` to an `if` and the test's middleware helper, after a first lint run of the gates found two findings,
+`depguard` on an `encoding/json` import in the new test and `gocritic` `singleCaseSwitch`; that run, `lint-1` to `lint-3` of the first attempt, exit 2, was stopped and the two fixed, and the gates
+began again). Each with its start and end time and its exit status taken before any filter.
+
+| Gate | Start | End | Exit |
+| :--- | :--- | :--- | :--- |
+| `make pre-add-check` on the changed Go files (gofmt, golint, govulncheck) | 14:38:05 | 14:38:27 | 0 |
+| cold `golangci-lint` run 1 of six (`make lint`, a fresh `GOLANGCI_LINT_CACHE`), through `run-heavy`: 0 issues in the root module and in acpext | 14:38:27 | 14:38:56 | 0 |
+| cold `golangci-lint` run 2 of six (`make lint`, a fresh `GOLANGCI_LINT_CACHE`), through `run-heavy`: 0 issues in the root module and in acpext | 14:38:56 | 14:39:24 | 0 |
+| cold `golangci-lint` run 3 of six (`make lint`, a fresh `GOLANGCI_LINT_CACHE`), through `run-heavy`: 0 issues in the root module and in acpext | 14:39:24 | 14:39:53 | 0 |
+| cold `golangci-lint` run 4 of six (`make lint`, a fresh `GOLANGCI_LINT_CACHE`), through `run-heavy`: 0 issues in the root module and in acpext | 14:39:54 | 14:40:22 | 0 |
+| cold `golangci-lint` run 5 of six (`make lint`, a fresh `GOLANGCI_LINT_CACHE`), through `run-heavy`: 0 issues in the root module and in acpext | 14:40:23 | 14:40:51 | 0 |
+| cold `golangci-lint` run 6 of six (`make lint`, a fresh `GOLANGCI_LINT_CACHE`), through `run-heavy`: 0 issues in the root module and in acpext | 14:40:51 | 14:41:20 | 0 |
+| `make race` (both modules, `-race`), through `run-heavy` | 14:41:20 | 14:42:39 | 0 |
+| `make check-test-isolation` | 14:42:39 | 14:43:39 | 0 |
+| `make check-acpext-deps` | 14:43:39 | 14:43:39 | 0 |
+| `go test -race -count=1 ./...` and acpext's, `run-on-host --race --need linux`: the Linux machine, linux/amd64, not a WSL distro | 14:43:39 | 14:51:45 | 0 |
+| `go test -race -count=1 ./...` and acpext's, `run-on-host --race --need windows` under `sh -c`: the Windows laptop, windows/amd64, native | 14:51:45 | 14:54:07 | 0 |
+| `go test -race -count=20 ./llm/provider ./acpserver ./internal/cli`, through `run-heavy` on the session machine, with the default 10 m `-timeout`: `panic: test timed out after 10m0s` in all three packages, no test failed; 20 rounds of each take longer than the bound (a gate that did not run, not one that passed) | 14:54:07 | 15:04:09 | 1 |
+| `make preflight`, through `run-heavy` (gofmt, tidy, pre-add-check, vet, staticcheck, golangci-lint, govulncheck, check-acpext-deps, fix-check, archtest, apidiff, verify-build-metadata, check-records, check-icon, markdownlint) | 15:04:09 | 15:11:23 | 0 |
+| the same, with `-timeout 60m` (the measured bound: one round of the three is 35, 22 and 46 s without `-race`) | 15:11:52 | 15:34:24 | 0 |
+
+The 20-round race run: `llm/provider` (1114.258s); `acpserver` (910.212s); `internal/cli` (1350.514s), no `--- FAIL`, exit 0.
+
+**Modification times of the staged files** (against the first gate, `pre-add-check`, started 14:38:05): the last Go or golden file, `acpserver/authsignin_test.go`, was written at 14:33:22, before the first gate.
+Every Go file and the golden: `acpserver/agent.go` 09:36:26, `acpserver/auth.go` 13:59:53, `acpserver/authissuer_test.go` 14:04:52, `acpserver/authreal_test.go` 14:05:55, `acpserver/authsignin.go` 14:33:22, `acpserver/authsignin_test.go` 14:33:22, `acpserver/doc.go` 14:30:16, `acpserver/testdata/authenticate-elicitation.golden` 09:42:51, `internal/auth/clients.go` 09:37:12, `internal/cli/agent.go` 09:38:13, `internal/cli/agentauth.go` 14:06:22, `internal/cli/agentauth_test.go` 14:09:53, `internal/cli/login.go` 09:37:20, `llm/provider/list.go` 13:57:39, `llm/provider/login.go` 09:33:11, `llm/provider/login_test.go` 11:04:30, `llm/provider/signin.go` 14:30:43, `llm/provider/signinrun.go` 14:30:43, `llm/provider/signinrun_test.go` 14:08:05.
+The text files, which no gate but `check-records` and `markdownlint` reads: `README.md` 12:50:24, `docs/README.md` 14:40:01, `docs/architecture.md` 14:11:42, `docs/decisions/0051-MADR-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md` 14:13:43, `docs/decisions/0051-PLAN-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md` 14:40:18, `docs/guides/credentials.md` 14:43:44; `make check-records markdownlint` ran after the last record edit (see the return).
+
+**Not verified (first review round).** No live service; the real endpoints of Grok, Kilo and OpenAI; a real client's rendering; the phone flow. (The plan sign-in's bytes, the `null` question and the token wait that were listed here are dealt with below.)
+
+#### Second review and last fixes (2026-11-16)
+
+**The second verdict.** The reviewer's second round found the code correct: B1, B2 and B3 are fixed, its own breaks of those fixes fail as they should, and its 20 race rounds passed. It was not yet
+fit to commit: three false statements, three test items and, from the owner, three rulings remained. A mainstream agent at medium effort, on the coordinator's brief, fixed them. The review round's
+own mistake is among them: this record said no `//nolint` was left in what the phase adds, and `llm/provider/signinrun_test.go` held two (`:639`, `:641`); they are gone and the staged Go diff's added lines
+hold none (`grep -c nolint`, 0).
+
+| Item | What was done | Test | Plant (failure seen) |
+| :--- | :--- | :--- | :--- |
+| 1, MADR D3's "no test dials a port" was false | `TestAuthenticateAbandonedLeavesNothing` (`acpserver/authreal_test.go`) no longer dials: `callbackServers` counts goroutines whose stack holds `serveCallbackListeners.func1` (the SDK's `llmprovider/auth/oauth_loopback.go:530` at `v1.31.0`, the function's first closure, seen in a real dump as present while the sign-in runs); present while it runs, gone, polled, after the abandon | that test | `abandon-not-ended`: `authreal_test.go:363: the abandoned sign-in's run has not ended` (1 `--- FAIL` lines) |
+| 2, two `//nolint:errcheck` | the `RoundTripper` of `renewingIssuer` returns the read and parse errors (`signinrun_test.go`); count 0 | `make lint` | none |
+| 3, the guide's "the one thing" | the guide names `host-id` (created by `hostSignIn`, `internal/cli/login.go:34`, through `auth.HostID`, before the engine starts) and `clients.json`, neither holding a credential; the D4 step 3 note corrected to match; `TestCLIFillsHostID` (`internal/cli/agentauth_test.go`) already holds that `host-id` exists after a sign-in that is then recorded as failing, so no assertion was added | `TestCLIFillsHostID` | `acp-host-id-not-set` (first round) |
+| 4, `TestAuthenticateSharesAuthJSON` could pass with its defect | the writer holds the lock until `authenticate` has answered or 3 s pass, then writes from its earlier read (`authreal_test.go`, `otherWriter`) | that test | `auth-json-unlocked`: `authreal_test.go:416: the sign-in's session is lost` (10 `--- FAIL` lines); `auth-json-unlocked-delayed` (lock skipped and a 400 ms delay): `authreal_test.go:416: the sign-in's session is lost` (10 `--- FAIL` lines) |
+| 5, the token-wait clause untested | `TestStartSignInRenewalOutlivesTheListing` (the reviewer's `TestR2RenewalOutlivesTheListing`, both cases, about 12 s each, `listingBound` + 1 s: the SDK bounds a listing at 10 s) | that test | `b2-renewal-refusal-ignored`: `signinrun_test.go:998: a renewal the issuer refused gave <nil> (kind other), want an auth failure` (1 `--- FAIL` lines) |
+| 6, architecture row | `docs/architecture.md`'s `llm/provider` row: `Wait` fails only when the provider refuses the credential (a refused renewal is one) or its context is done, and saves nothing then (`signinrun.go`, `finish`) | `make check-records markdownlint` | none |
+| 7, "had already completed" | the guide says "had begun", and the neighbouring sentences are the code's: the save is checked at `signinrun.go:182` and written after it; D4 step 3's note says the same | none | none |
+| 8, byte proof for a failed plan sign-in | `TestStartSignInPlanFailureLeavesAuthJSON` (`authreal_test.go`): the issuer answers as OpenAI's with the plan grant's scope, every host routed to it (`toOne`), `provider.StartSignIn` over file-backed `auth.ClientLogins`, a stored `openai` session; a 401 on the listing, and separately a cancel during it: `auth.json` byte-identical, no revoke, and `clients.json` logged as present, holding no credential | that test | `plan-login-deleted-before-save`: `authreal_test.go:660: auth.json changed:` (1 `--- FAIL` lines) |
+| A, `null` | `method`, `fresh` and `remote` refuse `null` (`acpserver/auth.go:128`); `_meta.gobble: null` is an absent container | `TestAuthenticateFreshRefusesNonBoolean` (`method null`), `TestAuthenticateNullContainerIsAbsent` | `null-method-accepted`: `authsignin_test.go:988: method null: error code -32000 {Attempts:0 Code: Command:gobble auth login grok Consent: Error: HTTPStatus:0 Kind:ca ...` (1 `--- FAIL` lines); `null-container-refused`: `authsignin_test.go:1688: _meta.gobble null: {"code":-32602,"message":"Invalid params","data":{"reason":"_meta.gobble is not an authenticate  ...` (1 `--- FAIL` lines) |
+| B, Kilo's 401 | no code change; D4's dated note records the wizard's rule, the difference from Kilo's client (`packages/kilo-gateway/src/api/models.ts:227-245` at `58072bd696`, read) as not verified live, and that a question against go-llmprovider-sdk is open on the coordinator's ledger, not filed from here | none | none |
+| C, the guard | no code change (the guard is taken after step 2, so a request that needs no sign-in is answered `{}`); D4's dated note; the guide says so | `TestAuthenticateGuardAppliesToSignInsOnly` | `guard-on-every-request`: `authsignin_test.go:1709: a request that needs no sign-in, while one runs: {"code":-32600,"message":"Invalid request","data":{"provider":"gro ...` (1 `--- FAIL` lines) |
+
+**The owner's rulings, each the owner's ruling, relayed by the coordinator:** "Refuse `method: null`; read `gobble: null` as absent" (A); "Keep the wizard's rule: a 401 refuses" (B); "Keep `{}` for a request that needs no sign-in" (C). Dated notes at MADR D4 step 1,
+step 3 and "One sign-in per provider", and the answered question in the MADR's "Revisions of 2026-11-16"; the guide's `_meta.gobble` section, one-sign-in paragraph and cancel paragraph say each.
+The reservation's being held for as long as a client leaves the method form unanswered is said in the guide's one-sign-in paragraph and the D4 bullet.
+
+**Plants of this round, on scratch copies of the final tree** (two shards at a time, `HOME`, `XDG_*`, `GOBBLE_HOME` in the scratch, `GOPROXY=off`, no HTTP proxy variable): **73 plants run, all 73 seen failing with a `--- FAIL`, none a build failure, none that does not fail** (the 67 of the first review round, `b2-renewal-refusal-ignored` now failing, and six new: `abandon-not-ended`, `auth-json-unlocked-delayed`, `null-method-accepted`, `null-container-refused`, `guard-on-every-request`, `plan-login-deleted-before-save`; `auth-json-unlocked` as before, now against the new test); the unbroken runs of the same tests, `clean2.out`, are 37, exit 0 each. `abandon-not-ended` (the sign-in started detached from the request and never cancelled by the relay) fails the test on the run still being open (`authreal_test.go:363`), before it reaches the final wait for the frame to go. That wait was then seen to fail on its own, on a scratch copy only (no Go file of the tree changed): under the same plant, with the run-ended assertions removed from the copy, `TestAuthenticateAbandonedLeavesNothing` failed 3 of 3 with `authreal_test.go:357: timed out waiting for the callback server's goroutine to end`; the same copy without the plant passed 3 of 3. So the frame tracks the engine's life, not the request's: it stays while the sign-in is not ended. The two assertions fail together under any break of gobble's that leaves the sign-in running, which is why the tree keeps one plant for both; the frame is real and counted (the assertion that it is present while the sign-in runs passes on the unbroken tree and on this plant).
+
+
+
+**Gates (C6), after the last change to any Go file** (the last write of a Go file is at `llm/provider/signinrun_test.go` at 16:42:36, before the first gate (`pre-add-check`, started 17:09:01)), each with its start and end time and its exit status taken before any filter:
+
+| Gate | Start | End | Exit |
+| :--- | :--- | :--- | :--- |
+| `make pre-add-check` on the changed Go files (gofmt, golint, govulncheck) | 17:09:01 | 17:09:26 | 0 |
+| cold `golangci-lint` run 1 of six (`make lint`, a fresh `GOLANGCI_LINT_CACHE`), through `run-heavy`: 0 issues in the root module and in acpext | 17:09:26 | 17:09:52 | 0 |
+| cold `golangci-lint` run 2 of six (`make lint`, a fresh `GOLANGCI_LINT_CACHE`), through `run-heavy`: 0 issues in the root module and in acpext | 17:09:52 | 17:10:19 | 0 |
+| cold `golangci-lint` run 3 of six (`make lint`, a fresh `GOLANGCI_LINT_CACHE`), through `run-heavy`: 0 issues in the root module and in acpext | 17:10:20 | 17:10:48 | 0 |
+| cold `golangci-lint` run 4 of six (`make lint`, a fresh `GOLANGCI_LINT_CACHE`), through `run-heavy`: 0 issues in the root module and in acpext | 17:10:48 | 17:11:16 | 0 |
+| cold `golangci-lint` run 5 of six (`make lint`, a fresh `GOLANGCI_LINT_CACHE`), through `run-heavy`: 0 issues in the root module and in acpext | 17:11:16 | 17:11:44 | 0 |
+| cold `golangci-lint` run 6 of six (`make lint`, a fresh `GOLANGCI_LINT_CACHE`), through `run-heavy`: 0 issues in the root module and in acpext | 17:11:45 | 17:12:10 | 0 |
+| `make race` (both modules, `-race`), through `run-heavy` | 17:12:11 | 17:13:38 | 0 |
+| `make check-test-isolation` | 17:13:38 | 17:15:02 | 0 |
+| `make check-acpext-deps` | 17:15:02 | 17:15:02 | 0 |
+| `go test -race -count=1 ./...` and acpext's, `run-on-host --race --need linux`: the Linux machine, linux/amd64, not a WSL distro | 17:15:02 | 17:22:27 | 0 |
+| `go test -race -count=1 ./...` and acpext's, `run-on-host --race --need windows` under `sh -c`: the Windows laptop, windows/amd64, native | 17:22:27 | 17:24:49 | 0 |
+| `go test -race -count=20 -timeout 60m ./llm/provider ./acpserver ./internal/cli`, through `run-heavy` on the session machine | 17:24:49 | 17:51:25 | 0 |
+| `make preflight`, through `run-heavy` | 17:51:25 | 17:58:59 | 0 |
+
+The 20-round race run: `llm/provider` (1595.159s); `acpserver` (971.973s); `internal/cli` (1344.086s), no `--- FAIL`, no data race.
+
+The staged Go files and the golden, by modification time: `acpserver/agent.go` 09:36:26, `acpserver/auth.go` 16:40:47, `acpserver/authissuer_test.go` 16:40:47, `acpserver/authreal_test.go` 16:42:36, `acpserver/authsignin.go` 14:33:22, `acpserver/authsignin_test.go` 16:40:47, `acpserver/doc.go` 14:30:16, `acpserver/testdata/authenticate-elicitation.golden` 09:42:51, `internal/auth/clients.go` 09:37:12, `internal/cli/agent.go` 09:38:13, `internal/cli/agentauth.go` 14:06:22, `internal/cli/agentauth_test.go` 14:09:53, `internal/cli/login.go` 09:37:20, `llm/provider/list.go` 13:57:39, `llm/provider/login.go` 09:33:11, `llm/provider/login_test.go` 11:04:30, `llm/provider/signin.go` 14:30:43, `llm/provider/signinrun.go` 14:30:43, `llm/provider/signinrun_test.go` 16:42:36. The text files, which only `check-records` and `markdownlint` read: `README.md` 12:50:24, `docs/README.md` 14:40:01, `docs/architecture.md` 16:41:40, `docs/decisions/0051-MADR-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md` 16:41:40, `docs/decisions/0051-PLAN-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md` 16:45:00, `docs/guides/credentials.md` 16:41:40; `make check-records markdownlint` ran after the last record edit.
+
+**Not verified.** No live service: the real endpoints of Grok, Kilo and OpenAI, whether real Kilo answers a 401 to a valid device key with no organisation (the owner's ruling B rests on the wizard's rule and Kilo's source, not on a
+run), a real client's rendering, the phone flow. The plan sign-in's byte proof runs against an in-process issuer that grants the plan scope, not OpenAI's.
+
+**Staged, not committed; the coordinator commits on the branch.**

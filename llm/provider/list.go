@@ -68,6 +68,21 @@ func Search(id string, models []string, query string) []string {
 // Model and Logger are ignored. With no apiKey, a provider with an OAuth
 // login lists with o.Logins' stored login (0005-PLAN F4-3b).
 func List(ctx context.Context, id, apiKey string, o Options) (Listing, error) {
+	var src llmprovider.TokenSource = llmprovider.NewStaticToken(apiKey)
+	o.APIKey, o.Logger = apiKey, nil
+	login, err := o.login(ctx, id) // with no key, id's stored login (0005-PLAN F4-3b decision 9)
+	if err != nil {
+		return Listing{}, fmt.Errorf("provider %s: list models: %w", id, err)
+	}
+	if login != nil {
+		src = login
+	}
+	return listWith(ctx, id, src, o)
+}
+
+// listWith is List with the token source it signs with: o's key and logins
+// are not consulted.
+func listWith(ctx context.Context, id string, src llmprovider.TokenSource, o Options) (Listing, error) {
 	opts := []llmprovider.Option{
 		catalog.WithProfile(catalog.ProfileCapable),
 		llmprovider.WithClientInfo(o.ClientName, o.ClientVersion),
@@ -81,15 +96,6 @@ func List(ctx context.Context, id, apiKey string, o Options) (Listing, error) {
 	}
 	if o.Workspace != "" {
 		opts = append(opts, llmprovider.For(llmprovider.ProviderClaude, catalog.WithClaudeWorkspace(o.Workspace)))
-	}
-	var src llmprovider.TokenSource = llmprovider.NewStaticToken(apiKey)
-	o.APIKey, o.Logger = apiKey, nil
-	login, err := o.login(ctx, id) // with no key, id's stored login (0005-PLAN F4-3b decision 9)
-	if err != nil {
-		return Listing{}, fmt.Errorf("provider %s: list models: %w", id, err)
-	}
-	if login != nil {
-		src = login
 	}
 	cat, err := catalog.List(ctx, llmprovider.ProviderID(id), src, opts...)
 	if err != nil {

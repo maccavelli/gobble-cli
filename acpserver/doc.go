@@ -11,4 +11,14 @@
 // allow runs it, and an ask asks the client with
 // session/request_permission (0008-MADR D19 items 2 and 3; 0005-PLAN
 // F6-2).
+//
+// authenticate signs in to a provider for a client that offers
+// elicitation.form: it relays the steps of the SDK's sign-in as
+// request-scoped elicitations, acknowledges the steps that only show
+// something, answers the ones that ask from the forms' accepts, and answers
+// {} once the credential is saved (0051-MADR D4). One sign-in per provider
+// runs at a time in the agent process, reserved before the client is asked
+// which method to use, and a request cancelled before the save stores nothing.
+// The engine is AuthOptions.SignIn's, through the SignInRun interface, since
+// only llm/provider imports the SDK's x/signin.
 package acpserver

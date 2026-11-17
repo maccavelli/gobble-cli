@@ -353,7 +353,25 @@ D2's note of 2026-11-11, later.)*
   session through `store` and returns `Yields` `oauth_session` with no key, or returns the key with `Yields`
   `device_key` for the caller to store (as `signInTo` does, `internal/cli/login.go:70-91` [HEAD]), then runs the
   listing check the wizard runs (`Discover`, `llm/provider/signin.go:179` [HEAD]). It never opens a browser on the
-  host (F56). `signin.Options` carries `Identity: auth.Identity{Name: "gobble", Version}` (go-llmprovider-sdk
+  host (F56). *(2026-11-16, the owner's ruling, relayed by the coordinator: "Check first, save only if accepted". The
+  order of this bullet, save and then the listing check, is reversed: `Wait` tries the new credential against the
+  provider's listing first, through the new session itself (the key as the listing's key), and saves the session
+  (or returns the key for the caller to store) only when the listing does not refuse it. A refused sign-in fails
+  with the listing's error and changes nothing stored, which D4 step 3 states and the order here broke. The wizard
+  does the same: it saves after its listing loop (`wizard/configure.go` at go-llmprovider-sdk `v1.31.0`, the
+  `credential.save` after the `for … stepRefusal(listErr)` loop), and a listing that fails for any reason that is
+  not a refusal (a 403, a 503, an empty list) does not end that loop, so the credential is saved. `Wait` does the
+  same and no more or less: a refusal is the wizard's `refusedCredential`, an authentication failure that is not a
+  refusal to permit something (`wizard/configure.go:667-669`), whether `List` returns it or the listing carries it;
+  it lists through the engine's own session, waits for any renewal that listing started and saves that session's
+  current tokens, as the wizard's `save` does (`wizard/auth.go`), and a session whose renewal the issuer refuses
+  is not saved; and it saves nothing once its context is done. *(Corrected 2026-11-16, the review of P6: the first
+  build listed through a copy of the session and saved the original, so a renewal's rotated tokens were lost;
+  refused a 403; failed on `List`'s own error; and saved after a cancel. The workspace refusal
+  (`refusedWorkspace`) is Anthropic's alone, `llmprovider/api_error.go:603-618` and
+  `providers/claude/claude.go:167`, and gobble drives no Claude sign-in over ACP, so it cannot arise here.)*
+  Options the owner was shown and did not choose: save, then restore the old credential on a refusal; keep the
+  order and amend D4.)* `signin.Options` carries `Identity: auth.Identity{Name: "gobble", Version}` (go-llmprovider-sdk
   `0076-MADR-auth-error-kinds-and-doc-drift.md` D3), `AgentName: "gobble"`, and what the SDK's plan sign-in needs to
   treat an ACP sign-in as the same host and client as a terminal one (go-llmprovider-sdk
   `0075-MADR-chatgpt-plan-consent-host-id-and-client-reuse.md` D4, D6, D7): `HostID` from `<state>/host-id`
@@ -377,7 +395,12 @@ D2's note of 2026-11-11, later.)*
   member and from nothing else, and `provider.StartSignIn` then sets `NoLoopback`, which `x/signin` passes to
   `OAuthFlowOptions.NoLoopback` or `ChatGPTPlanOptions.NoLoopback`: no listener is bound, the redirect URI names the
   method's first registered port, and only a paste completes the sign-in. Ports 1455 and 1457 stay free for other
-  agents on the host. Everything else keeps the listener: every terminal sign-in (the wizard's, below), and an ACP
+  agents on the host. *(2026-11-16, the owner's ruling, relayed by the coordinator: "Assert what gobble passes; use
+  no real ports". What gobble owns is that every remote sign-in sets `NoLoopback` for every method it offers; whether
+  the engine then binds nothing is the SDK's own test. `TestStartSignInRemoteSetsNoLoopback` holds it for each offered
+  method, and `TestAuthenticateOnlyRemoteMethods` and `TestAgentRemoteReachesTheEngine` hold that a remote
+  `authenticate` reaches the start with `Remote` true. No test of gobble's dials a port or holds ports 1455 and 1457.)*
+  Everything else keeps the listener: every terminal sign-in (the wizard's, below), and an ACP
   `authenticate` with `remote` absent or `false`, a local client's, whose browser sign-in still completes by the
   loopback or by a paste.
   * **What cannot complete that way is the SDK's to say** (its D4): in `x/signin`, `NoLoopback` with a method whose
@@ -432,8 +455,28 @@ does: `provider.SignIn` sets `wizard.Options.Identity` to the same value, which 
        `ErrUnsupported` for the same case (its 0074-MADR D4, D8). A method not offered at all stays -32602, as above:
        that request names nothing gobble signs in with, where this one names a method that cannot complete from
        where its person is. *(2026-11-15, the owner's ruling relayed by the coordinator, "Amend the records to the SDK's facts"; 0051-PLAN's "P4 record (2026-11-15)", deviation 4: at go-llmprovider-sdk `v1.31.0` Grok's `browser_oauth` is `browser_paste` with `Paste` `url_or_code`, so it has `accepts` and a `paste` step and `Remote` accepts it; this passage holds for a method of the contract's own shape, `browser_loopback` with no `Paste`, which no built-in method has.)*
+       *(2026-11-16, the owner's ruling, relayed by the coordinator: "The same answer as a local client". This refusal is
+       limited to the methods gobble drives from an ACP client, by step 3's rule (`device`, `browser_paste`, and a
+       `browser_loopback` when named). A remote client that names `api_key`, which gobble never drives over ACP, is not
+       refused as unsupported: step 2 answers `{}` when a key is held, else step 3 answers the same `auth_required` a
+       local client gets, "… is not a sign-in gobble drives from an ACP client". Options the owner was shown and did
+       not choose: keep the `unsupported` refusal with a true reason; leave it as built.)* *(2026-11-16, the review of
+       P6: a `null` for `fresh` or `remote` is a value other than `true`, `false` or absence, so it is -32602 as the
+       first bullet says. `method: null` and `_meta.gobble: null` were not settled by this text and were put to the
+       owner.)* *(2026-11-16, the owner's ruling, relayed by the coordinator: "Refuse `method: null`; read `gobble: null`
+       as absent". One rule for every member gobble defines: `method`, `fresh` and `remote` each refuse `null`
+       (-32602); the `_meta.gobble` container follows ACP's convention, where a null container is an absent one, so a
+       request with `_meta.gobble: null` behaves as one with no `_meta.gobble`. Options the owner was shown and did not
+       choose: read both as absent, as built; refuse both.)*
      * **With no method named,** a remote sign-in takes the first offered method `Remote` accepts, and step 3's enum
-       lists only those.
+       lists only those. *(2026-11-16, the owner's ruling, relayed by the coordinator: "Ask the client to choose". When
+       this was written Grok had one method `Remote` accepts; at go-llmprovider-sdk `v1.31.0` it has two, the browser
+       sign-in by paste and the device code, so "the first" is no longer the only one. With more than one method
+       `Remote` accepts, gobble sends the one-field enum form of step 3 that a local client gets, listing only the
+       remote-capable methods, in the offered order; with exactly one, it starts that one with no question; a client
+       that named a method is not asked. A client that did not advertise `elicitation.form` is not asked either: step
+       3's own answer holds, `auth_required` with the provider and the command. Options the owner was shown and did
+       not choose: take the first offered method; prefer the device code for a remote client.)*
   2. **A credential is present** (gobble's order, as today), **`_meta.gobble.fresh` is not `true`, and** no method
      was named, or the stored credential is what the named method yields (a key for a key; a session of the kind it
      signs in to, so grok's browser and device sign-ins count as one): `{}`, as A2 decided.
@@ -441,7 +484,27 @@ does: `provider.SignIn` sets `wizard.Options.Identity` to the same value, which 
      answers `{}` once the credential is saved. **With `fresh`, the stored credential is left exactly as it is until
      the new one saves** (O2): the sign-in neither deletes nor revokes it first; `Wait`'s save through `store`, or
      the key's `auth.SetKey`, replaces it in one locked write of `auth.json`; a sign-in that fails, is declined or is
-     cancelled changes nothing stored. The replaced session is not revoked (a revocation is a logout's, QD). The methods driven are those whose `Completion` is `device` or
+     cancelled changes nothing stored *(2026-11-16, the owner's ruling "Check first, save only if accepted": that includes
+     a sign-in whose new credential the provider's listing refuses; see D3's note of this date)* *(2026-11-16, the owner's
+     ruling, relayed by the coordinator: "Accept it and say so in D4". "Nothing stored" means credentials: the issued
+     OAuth client record in `<state>/clients.json`, which the SDK writes when a ChatGPT plan sign-in is issued its
+     client, may be written by a sign-in that is then refused or cancelled, and the next sign-in reuses it; the host id
+     in `<state>/host-id`, which gobble creates before the engine starts (`hostSignIn`, `internal/cli/login.go:34`, through
+     `auth.HostID`; `TestCLIFillsHostID` holds its creation), is left the same way. Neither holds a credential. A refused
+     or cancelled plan sign-in leaves `auth.json` as it was. Options the owner was shown and did not choose: ask the
+     SDK to save the client only on success; remove a record the failed sign-in created. A sign-in cancelled before
+     the save changes no credential; one whose save had completed when the cancel arrived has stored it, so gobble
+     tells the run of the change as after any sign-in ("After a sign-in", below). The same holds when the cancel arrives after
+     the context check and the save has begun. *(2026-11-16, the owner's ruling, relayed by the coordinator: "Keep the
+     wizard's rule: a 401 refuses". The terminal path and the ACP path agree: a 401 on the listing refuses the new
+     credential, Kilo's device key included, and nothing is stored. Kilo's own client differs, and the difference is not
+     verified live: in the `kilocode` checkout at `58072bd696` (read 2026-11-16, current with upstream by the owner's
+     statement), `packages/kilo-gateway/src/api/models.ts:227-245` sends the token as a Bearer on the listing; a 401 with no
+     organisation is retried without the token and reported as nothing if that works; a 403, a 401 with an organisation or
+     a failed anonymous retry is "unauthorized"; the token is not deleted. A question against go-llmprovider-sdk, where the
+     rule lives, to settle it for both paths at once, is open on the coordinator's ledger; it is not filed from here.
+     Options the owner was shown and did not choose: do as Kilo's client does, retry without the key and save if that
+     works; do not check a Kilo device key. No code changes.)*. The replaced session is not revoked (a revocation is a logout's, QD). The methods driven are those whose `Completion` is `device` or
      `browser_paste`; `browser_loopback` (grok's browser, go-llmprovider-sdk `0074-MADR-one-sign-in-handle-and-method-facts.md` D1) only when named, since
      it completes only where the browser reaches gobble's host *(2026-11-11, later: and only for a local sign-in;
      step 1's note)*. *(2026-11-15, the owner's ruling relayed by the coordinator, "Amend the records to the SDK's facts"; 0051-PLAN's "P4 record (2026-11-15)", deviation 4: at go-llmprovider-sdk `v1.31.0` Grok's `browser_oauth` is `browser_paste` with `Paste` `url_or_code`, so it has `accepts` and a `paste` step and `Remote` accepts it; this passage holds for a method of the contract's own shape, `browser_loopback` with no `Paste`, which no built-in method has.)* With several, gobble asks with a form whose one
@@ -490,7 +553,15 @@ does: `provider.SignIn` sets `wizard.Options.Identity` to the same value, which 
   `decline` and `cancel` cancel the sign-in, which answers `auth_required` with kind `canceled`. A loopback that wins
   while a paste form waits cancels the form (its context ends, U8 (e)).
 * **One sign-in per provider at a time;** a second `authenticate` for it while one runs is -32600 naming the
-  running one. A client's `$/cancel_request` cancels the sign-in.
+  running one. *(2026-11-16, the review of P6: the guard is the agent process's, not the host's; it is taken before
+  the client is asked which method, so a second request is refused before any form is sent, and it is released on
+  every path out, a declined or cancelled form included; it is held for as long as a client leaves the method form
+  unanswered, as an open form is during a sign-in.)* *(2026-11-16, the owner's ruling, relayed by the coordinator:
+  "Keep `{}` for a request that needs no sign-in". The guard exists to stop two sign-ins racing; the -32600 applies to a
+  request that would start a second sign-in. A request that would not, because a credential is held and `fresh` is not
+  `true`, has nothing to race and is answered `{}` at once, which is true. `TestAuthenticateGuardAppliesToSignInsOnly`
+  holds it. Options the owner was shown and did not choose: refuse any second request while one runs; hold the second
+  request until the first ends.)* A client's `$/cancel_request` cancels the sign-in.
 * **No lock is held while the client is awaited.** The relay takes `a.mu` only to read the client's capabilities and
   to register or remove its provider's sign-in, never across `CreateElicitation` (U8 (e)).
 * **Secrets.** A pasted callback is never logged, never written but to the provider's flow, and never echoed in a
@@ -1109,6 +1180,20 @@ this record asserted by omission.
   usage errors a pointer; 0051-PLAN's P5 carries the record ("Review of 2026-11-15 (P5), second part", deviation 2). No decision of D1 to D9 changes.
 * **Searched, nothing else asserts it:** every occurrence of `stderr`, `usage error`, `parse` and `output-only` in this record; the context's facts about the old events (`:45-55`), Confirmation 4
   ("prints only `method` and `step` lines") and the Neutral consequence ("`--json` stays output-only") hold as written, since the residue prints neither a line nor a question.
+
+### Revisions of 2026-11-16 (the review of P6)
+
+An independent review of 0051-PLAN's P6, by a strongest-tier reviewer at high effort on the coordinator's brief, found the staged build not fit to commit as it stood. The
+fixes are built and the PLAN's "P6 record (2026-11-16)", part "Review and fixes", says each with its test and plant. What this record now says that it did not:
+
+* **D3's note on the order of the check and the save is corrected in place** (above): the check is the wizard's, listing through the session that is saved and waiting for its renewal.
+* **D4 step 1:** a `null` `fresh` or `remote` is -32602; a remote client that names `api_key` gets a local client's answer, by the owner's ruling "The same answer as a local client".
+* **D4 step 3:** "nothing stored" means credentials, by the owner's ruling "Accept it and say so in D4"; a sign-in cancelled before its save stores nothing, and one whose save completed first has stored the credential and tells the run.
+* **D3's loopback note:** the row "binds no port" is held by what gobble passes, by the owner's ruling "Assert what gobble passes; use no real ports".
+* **Answered on the second review (2026-11-16): `method: null` and `_meta.gobble: null`**, by the owner's ruling "Refuse `method: null`; read `gobble: null` as absent" (D4 step 1's note). The question as put: D4 step 1 says `method`, "when present, names a method by its contract id; one not offered is -32602", and
+  says nothing of a `null`; it says nothing of `_meta.gobble: null` either. The build reads both as absent. Options: (a) read both as absent, as built (recommended: a client that
+  sends `null` for "no method" is understood, and D4 step 1's strictness is about wrong *types*); (b) refuse both as -32602, as for `fresh` and `remote`; (c) refuse `method: null`
+  only, since a present `method` must name an offered one, and read `_meta.gobble: null` as absent.
 
 ### Related
 

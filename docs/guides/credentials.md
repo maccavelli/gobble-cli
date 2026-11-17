@@ -209,7 +209,14 @@ Three providers let you sign in with your account instead of pasting a key:
   `this sign-in asks a question, and there is no terminal to ask it on`. With `--json` it is refused
   before it starts, exit 2, unless the stored plan session already holds an answer
   ([below](#signing-in-from-an-editor-or-magic-cli-remote)). gobble keeps the login and your answer
-  in `auth.json`'s `openai` entry, and refreshes it as it runs.
+  in `auth.json`'s `openai` entry, and refreshes it as it runs. An ACP client that can show a form is
+  asked the same question as a form ([below](#signing-in-from-an-acp-client)). gobble also keeps this
+  installation's host id, a random `urn:uuid`, in `host-id` in its state directory (`gobble config path`
+  shows the directory), registers the plan's client under it, and keeps the issued client in
+  `clients.json` beside it, so that signing out and in again reuses the client instead of registering
+  another. When the state directory cannot be read or written, the sign-in goes on with no host id of
+  gobble's own, the SDK makes one for that sign-in, and gobble warns once: on stderr for a terminal
+  sign-in, in the agent's log for an ACP one. Neither warning names an id.
 
 gobble names itself to xAI's sign-in service in the requests it makes for a Grok login, as
 `gobble/<version>`, the running build's version, ahead of the SDK's own name: such a request's
@@ -344,9 +351,11 @@ Error: gobble setup asks its questions on a terminal; gobble auth login <provide
 
 An ACP client, such as an editor or magic-cli-remote, runs gobble as `gobble acp`. gobble tells it,
 when they connect, which credentials it can use: one method per provider that takes a key, named
-after the provider, with the gobble command that stores its credential. Asked to authenticate with
-one, gobble answers from the credentials it already has, in the order above; it says which command
-to run when it has none. No key or token crosses ACP.
+after the provider, with the gobble command that stores its credential, and the sign-in methods the
+provider offers. Asked to authenticate with one, gobble answers from the credentials it already has, in
+the order above; with none, a client that can show a form is signed in
+([below](#signing-in-from-an-acp-client)), and any other is told which command to run. No key or token
+crosses ACP but what a person types or pastes into a form, which goes to the sign-in alone.
 
 A client that can open a terminal also sees a sign-in for each provider, which runs
 `gobble acp --login <provider>` there: a login for Grok, Kilo and OpenAI, which asks the ChatGPT plan's
@@ -358,6 +367,111 @@ Saved API key for claude
 ```
 
 gobble does not sign out over ACP; use `gobble auth logout <provider>`.
+
+### Signing in from an ACP client
+
+Each agent method `initialize` advertises carries `_meta.gobble.methods`: the provider's offered sign-in
+methods, each the auth contract's `method` object (`id`, `kind`, `completion`, `paste`, `yields`,
+`client_identity` and, for a method that asks one, its `consents`, in gobble's wording). A client reads
+from them, before it asks, how a method completes, what it leaves and whose client it signs in as. A
+provider that takes a key alone lists its `api_key` method, which gobble never asks for over ACP.
+
+`authenticate` with a provider's id reads `_meta.gobble`, strictly: a member gobble does not know, or a
+value of the wrong type, is -32602 with the reason in the error's data, and nothing starts. `method`,
+`fresh` and `remote` each refuse `null`: a value or leaving the member out is accepted. A `null`
+`_meta.gobble` is an absent one, as ACP reads a null container, so the request behaves as one with no
+`_meta.gobble`.
+
+| Member | Meaning |
+| :--- | :--- |
+| `method` | A method's contract id from that list: `browser_oauth`, `device_code`, `chatgpt_plan`. One the provider does not offer is -32602. |
+| `fresh` | `true` signs in whatever is stored; absent or `false` does not. The stored credential stays exactly as it is until the new one is saved, in one write of `auth.json`, and gobble saves only after the provider's model listing has not refused the new credential: a sign-in that fails, is declined, is cancelled, or whose credential the provider refuses (a 401, or a refresh the issuer refuses) leaves the stored credentials as they were, and the replaced session is not revoked. A listing that fails for another reason, a 403, an outage, a rate limit or a bad request, does not stop the save, as in the terminal's sign-in. If the listing renewed the new session, the renewed tokens are the ones saved. |
+| `remote` | `true` says that the person completing the sign-in is not on the machine gobble runs on. gobble then starts every sign-in with the SDK's no-loopback option, so the engine binds no listener, and drives only methods that complete by a code entered elsewhere or by a paste. A named method gobble drives from an ACP client that only a browser on gobble's machine can complete is refused before anything starts: `auth_required` of kind `unsupported`, a `reason`, and the `command` that runs it on that machine, `gobble auth login <provider> --method <word>`. No method gobble offers has that shape now: Grok's `browser_oauth` completes by a paste. A method gobble does not drive over ACP at all, an `api_key`, gets a remote client the answer a local client gets (below), not that refusal. |
+
+gobble answers, in this order:
+
+0. For a `remote` client that names a method gobble drives but that completes only on gobble's machine,
+   the `unsupported` refusal above, before anything else. A remote client that names a method gobble does
+   not drive over ACP, an `api_key`, is not refused: it goes on to the next step, as a local client does.
+1. `{}`, when a credential is present, `fresh` is not `true`, and either no method is named or the
+   stored credential is what the named method leaves: a key for a key method, a session of the kind the
+   method signs in to for a session method, so Grok's browser and device sign-ins count as one.
+2. For a client that advertised `elicitation.form`, a sign-in, relayed as below, and `{}` once the
+   credential is saved. A named `api_key` is not a sign-in gobble drives from an ACP client, so with no key
+   held it is answered as step 3, whoever asks. With no method named and more than one method to drive, the client is asked, by
+   a form with one `method` field whose enum is the methods' labels in the offered order, which it wants;
+   with exactly one, that one starts and nothing is asked. For a `remote` client the methods are those it
+   can complete (for Grok, `browser_oauth` by paste and `device_code`, so a remote Grok client is asked);
+   a client that names a method is never asked. A browser method only the host's loopback completes is
+   driven only when named. A client that did not advertise `elicitation.form` is asked nothing, remote or
+   not, and gets step 3.
+3. Otherwise, `auth_required` (-32000) with `provider`, `reason` and `command`, as before.
+
+Each step the sign-in states is an `elicitation/create`, scoped to the `authenticate` request, never to
+a session: its `requestId` is that request's own. Its `_meta.gobble.step` is the contract's `step`
+object, so a client that reads the contract draws the step itself, and reads from its `secret` that the
+answer is one. A client that offered `elicitation.url` gets URL mode where the table says so, and any
+other gets a form:
+
+| Step | With `elicitation.url` | With `elicitation.form` only |
+| :--- | :--- | :--- |
+| `open_url` | URL mode to the address | A form with no fields, the address in `message` |
+| `show_code` | URL mode to the verification address, the code and its expiry in `message` | A form with no fields, address, code and expiry in `message` |
+| `paste` | A form with one required string, `callback` | The same |
+| `confirm` | A form with one boolean, `allow`, default false, `message` the consent's text and links | The same |
+| `form` | A form whose properties are the fields, a `select` as an enum | The same |
+| `waiting` | Nothing | Nothing |
+
+An `open_url` and a `show_code` ask the client to show something, not to answer it. Its `accept` sends
+nothing to the sign-in, which goes on; a `decline` or `cancel` cancels the sign-in, and `authenticate`
+answers `auth_required` of kind `canceled`. When the poll or the loopback finishes while the elicitation
+is still open, gobble sends `elicitation/complete` for URL mode and ends the request of a form, which
+sends `$/cancel_request`. A browser sign-in by paste is an `open_url` whose step has `accepts`: once its
+`accept` arrives, gobble sends the `paste` form, and a callback typed there, or a code alone where the
+method allows it, completes the sign-in; the `open_url` itself is never answered. A paste the sign-in
+cannot use is asked for again in a new form, at most twice, and never echoed; a third ends it `failed`
+with kind `invalid_request`. A pasted URL that carries this sign-in's `state` and `error=access_denied`
+ends it at once with kind `denied`, with no further question. A `confirm`, `paste` or `form` answer is the
+`accept` of its form: `allow` as the answer's `confirm`, `callback` as its `paste`, the properties as its
+`fields`; a `decline` or `cancel` of any of them cancels the sign-in.
+
+A sign-in that ends badly is `auth_required` with `provider`, `kind`, `reason`, `command` and
+`retryable`. `kind` is one of the contract's eighteen words, the ones gobble produces here being an open
+set: `canceled`, `timeout`, `denied`, `expired`, `auth` (the provider's listing refused the new credential with an authentication failure that is
+not a refusal to permit something, or the issuer refused to renew the new session),
+`invalid_request`, `offline`, `unavailable`, `unsupported`, `other`. `reason` is gobble's own text and
+holds nothing of the service's; `retryable` is the SDK's for the same failure. No pasted callback or key
+is in a log line, a `reason`, an error's data or a step gobble sends: only the client's one answer carries
+it.
+
+Only one sign-in per provider runs at a time within one agent process: a second `authenticate` that
+would start a sign-in for it, by any method, is -32600, naming the one running (or saying that the client
+is being asked which method), and another provider's runs. The guard stops two sign-ins racing, so a
+request that needs none, a credential being held and no `fresh`, is still answered `{}` at once. The
+provider is reserved before the client is asked anything, so the second request is refused before any
+form is sent; the reservation is held for as long as a client leaves the method form unanswered, ended
+only by the request's cancel or the connection's end, as an open form during a sign-in is. The guard is
+the agent process's: two `gobble acp` processes on one machine are coordinated only by `auth.json`'s
+lock, not by it. A client's `$/cancel_request` cancels the sign-in and its pending elicitation, ends the
+sign-in's own listener and run, and stores no credential: a sign-in is saved only while its request is
+still live. If the save had begun when the cancel arrived, the credential is stored, so gobble tells its
+run of the change as for any sign-in, and the client, which has cancelled, gets no answer to act on. A
+sign-in that does not complete can leave two files, neither holding a credential: `host-id` in the state
+directory, which gobble creates before the engine starts, and `clients.json` beside it, the issued OAuth
+client record that a ChatGPT plan sign-in writes when the provider issues its client, which the next
+sign-in reuses; so "changes nothing" above means `auth.json`, not those files. gobble holds no lock while the client is
+answering, so other requests, `session/cancel` included, are served meanwhile. When the sign-in
+completes, gobble drops the run's shared session for the provider and moves its credential generation,
+as a sign-in at a terminal does, so the next prompt uses the new credential. A device sign-in that
+yields a key, Kilo's, stores it in `auth.json` as `gobble auth login kilo` does, and the key is in no
+reply.
+
+The frames of a sign-in by paste, for a form-only client, are
+`acpserver/testdata/authenticate-elicitation.golden`.
+
+The steps gobble writes to a client are the contract's `step` objects as gobble's JSON encoder writes
+them, as for `--json`: read each as the object the contract describes, ignore a member you do not know,
+and do not depend on a member being absent.
 
 A program that drives a login, as magic-cli-remote's phone flow does, runs
 `gobble auth login <provider> --json`. gobble then prints the sign-in as the SDK's auth contract

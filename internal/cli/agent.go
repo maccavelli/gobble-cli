@@ -136,11 +136,9 @@ func (e *runEnv) agentOptions() acpserver.Options {
 			return ss
 		},
 		// An agent method per provider that takes a credential, answered from
-		// gobble's credentials as gobble auth check finds them (0016-MADR A2).
-		Auth: acpserver.AuthOptions{Providers: authProviders, Has: func(id string) bool {
-			_, ok := e.credential(id)
-			return ok
-		}},
+		// gobble's credentials as gobble auth check finds them (0016-MADR A2),
+		// and signed in to by elicitation (0051-MADR D4).
+		Auth:          e.authOptions(),
 		SaveSetting:   saveGlobalSetting,
 		Personalities: e.personalities(),
 		// The user's compaction prompts (0005-PLAN F5-4 decision 8).

@@ -76,7 +76,23 @@ type SignInOptions struct {
 	// the kind unsupported. An error from Steps ends the sign-in and is
 	// returned as it is (0051-MADR D3, D5).
 	Steps func(authcontract.Step) error
+	// HostID is this installation's host id, which the ChatGPT plan's
+	// sign-in registers its client with and keeps for the host's life; the
+	// caller reads it from <state>/host-id (0051-PLAN P6 step 1a, 0052-MADR
+	// D4). Empty lets the SDK make a one-off id, which a caller that could
+	// not read the file warns of.
+	HostID string
+	// Remote says that the person completing StartSignIn's sign-in is not
+	// on the agent's host: the engine is told to bind no listener, so a paste
+	// alone completes a browser sign-in (0051-MADR D3's note of 2026-11-11;
+	// whether it binds none is the SDK's). No terminal
+	// path sets it, and SignIn ignores it.
+	Remote bool
 }
+
+// resolveCredential is the wizard's sign-in; a test replaces it to record
+// the options it was given.
+var resolveCredential = wizard.ResolveCredential
 
 // Credential is what a sign-in gives: an API key to store, or none when it
 // saved a login in the store.
@@ -326,12 +342,13 @@ func SignIn(ctx context.Context, id string, p Prompter, o SignInOptions, store L
 		llmprovider.WithClientInfo(o.ClientName, o.ClientVersion),
 		llmprovider.WithoutModelMetadata(),
 	}, o.sdkOptions()...)
-	res, _, err := wizard.ResolveCredential(ctx, w, wizard.Options{
+	res, _, err := resolveCredential(ctx, w, wizard.Options{
 		Registry:         providers.Default(),
 		Existing:         wizard.Result{Provider: d.ID, BaseURL: o.BaseURL, Workspace: o.Workspace},
 		Discover:         true,
 		ProviderOptions:  listing,
-		TokenStore:       sdkStore{store},
+		TokenStore:       tokenStore(store),
+		HostID:           o.HostID,
 		HTTPClient:       o.HTTPClient,
 		OpenURL:          open,
 		KiloDeviceKey:    true,

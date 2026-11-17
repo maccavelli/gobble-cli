@@ -14,6 +14,7 @@ import (
 	"github.com/maccavelli/gobble-cli/internal/filelock"
 	"github.com/maccavelli/gobble-cli/internal/fsx"
 	"github.com/maccavelli/gobble-cli/jsonx"
+	"github.com/maccavelli/gobble-cli/llm/provider"
 )
 
 // ClientRecord is the OAuth client a provider issued this installation, and
@@ -101,4 +102,29 @@ func (c Clients) read() (map[string]ClientRecord, error) {
 		return nil, fmt.Errorf("%s: %w", c.Path, err)
 	}
 	return m, nil
+}
+
+// ClientLogins is auth.json's logins with the issued clients beside them in
+// clients.json: the store a sign-in takes when it can reuse a client, so that
+// provider.StartSignIn and the wizard see a provider.ClientStore
+// (0051-PLAN P6 step 1a).
+type ClientLogins struct {
+	Logins
+	Clients Clients
+}
+
+var (
+	_ provider.LoginStore  = ClientLogins{}
+	_ provider.ClientStore = ClientLogins{}
+)
+
+// LoadClient is id's record from clients.json.
+func (c ClientLogins) LoadClient(ctx context.Context, id string) (provider.ClientRecord, error) {
+	r, err := c.Clients.Load(ctx, id)
+	return provider.ClientRecord{ClientID: r.ClientID, HostID: r.HostID}, err
+}
+
+// SaveClient stores r as id's record in clients.json.
+func (c ClientLogins) SaveClient(ctx context.Context, id string, r provider.ClientRecord) error {
+	return c.Clients.Save(ctx, id, ClientRecord{ClientID: r.ClientID, HostID: r.HostID})
 }

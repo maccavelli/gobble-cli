@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -21,6 +22,28 @@ import (
 // signInWith signs in through the SDK's wizard; a test replaces it
 // (0031-MADR D7).
 var signInWith = provider.SignIn
+
+// hostSignIn is what a sign-in on this host takes of the state directory
+// (0051-PLAN P6 step 1a): the login store, with the issued clients beside it
+// in <state>/clients.json, and the host id from <state>/host-id, created
+// owner-only on first use. When the state directory cannot be resolved or the
+// id cannot be read or made, the sign-in goes on with no host id and the
+// logins alone, and warn says why, naming the error and never an id: the
+// owner's ruling "Proceed, warn once", so no sign-in of grok, kilo or the
+// plan fails over a file it may not use.
+func hostSignIn(authFile string) (store provider.LoginStore, hostID string, warn error) {
+	logins := auth.Logins{Path: authFile}
+	dirs, _, err := systemDirs()
+	if err != nil {
+		return logins, "", fmt.Errorf("no host id: %w; the sign-in goes on without one", err)
+	}
+	store = auth.ClientLogins{Logins: logins, Clients: auth.Clients{Path: filepath.Join(dirs.State, "clients.json")}}
+	hostID, err = auth.HostID(dirs.State)
+	if err != nil {
+		return store, "", fmt.Errorf("no host id: %w; the sign-in goes on without one", err)
+	}
+	return store, hostID, nil
+}
 
 // methodOf is --method's word as one of provider id's methods; another is
 // a usage error naming them.
@@ -73,7 +96,12 @@ func (e *runEnv) signInTo(ctx context.Context, p provider.Prompter, id string, o
 		return failf("auth.json: the config directory cannot be resolved")
 	}
 	o.Options = e.providerOptions(id, provider.Options{ClientName: appName, ClientVersion: identity().Version})
-	c, err := signInWith(ctx, id, p, o, auth.Logins{Path: path})
+	store, hostID, warn := hostSignIn(path)
+	if warn != nil {
+		e.out.Warnf("%s", warn)
+	}
+	o.HostID = hostID
+	c, err := signInWith(ctx, id, p, o, store)
 	if err != nil {
 		return err
 	}

@@ -166,7 +166,53 @@ func (a sdkStore) LockRefresh(ctx context.Context, p llmprovider.ProviderID) (fu
 	return a.s.LockRefresh(ctx, string(p))
 }
 
+// ClientRecord is the OAuth client a provider issued this installation, and
+// the host id it was registered with: gobble's own type, which the SDK's
+// auth.ClientRecord is read from and written to (0052-MADR D5).
+type ClientRecord struct{ ClientID, HostID string }
+
+// ClientStore is what a LoginStore also implements when it keeps the issued
+// clients apart from the sessions, so that a sign-out leaves them
+// (0052-MADR D5; internal/auth's ClientLogins). The methods are named so
+// that one type can be both a LoginStore and a ClientStore.
+type ClientStore interface {
+	// LoadClient is provider id's record; the zero record when there is
+	// none.
+	LoadClient(ctx context.Context, id string) (ClientRecord, error)
+	// SaveClient keeps provider id's record; the zero record removes it.
+	SaveClient(ctx context.Context, id string, r ClientRecord) error
+}
+
+// sdkClientStore is an sdkStore whose LoginStore is also a ClientStore, so
+// it is the SDK's auth.ClientStore too: the wizard and signin.Start take the
+// client store from the token store only by that assertion (go-llmprovider-sdk
+// 0075-MADR D7).
+type sdkClientStore struct {
+	sdkStore
+	c ClientStore
+}
+
+func (a sdkClientStore) LoadClient(ctx context.Context, p llmprovider.ProviderID) (auth.ClientRecord, error) {
+	r, err := a.c.LoadClient(ctx, string(p))
+	return auth.ClientRecord{ClientID: r.ClientID, HostID: r.HostID}, err
+}
+
+func (a sdkClientStore) SaveClient(ctx context.Context, p llmprovider.ProviderID, r auth.ClientRecord) error {
+	return a.c.SaveClient(ctx, string(p), ClientRecord{ClientID: r.ClientID, HostID: r.HostID})
+}
+
+// tokenStore is store as the SDK's token store: an auth.ClientStore as well
+// exactly when store is a ClientStore (0051-PLAN P6 step 1a).
+func tokenStore(store LoginStore) auth.TokenStore {
+	if c, ok := store.(ClientStore); ok {
+		return sdkClientStore{sdkStore{store}, c}
+	}
+	return sdkStore{store}
+}
+
 var (
 	_ auth.TokenStore    = sdkStore{}
 	_ auth.RefreshLocker = sdkStore{}
+	_ auth.ClientStore   = sdkClientStore{}
+	_ auth.RefreshLocker = sdkClientStore{}
 )

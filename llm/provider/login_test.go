@@ -77,6 +77,9 @@ type testIssuer struct {
 	// ti.URL when empty: a sign-in reaching the issuer through toIssuer
 	// sees the SDK's own.
 	origin string
+	// scope, when set, is the scope its token responses grant: a ChatGPT plan
+	// sign-in is refused a grant without chatgpt.tokens.use.direct.
+	scope string
 
 	mu        sync.Mutex
 	nonce     string
@@ -84,6 +87,8 @@ type testIssuer struct {
 	revokeErr bool
 	revoked   []string
 	kiloPolls int
+	// listStatus, when set, is the status every model listing answers with.
+	listStatus int
 }
 
 // issuerKey is every test issuer's signing key: the SDK caches an issuer's
@@ -135,8 +140,12 @@ func newTestIssuer(t *testing.T) *testIssuer {
 		if r.FormValue("grant_type") == "authorization_code" {
 			claims["nonce"] = nonce
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"access_token": "access-1", "refresh_token": "refresh-1",
-			"expires_in": 3600, "id_token": ti.sign(t, claims)})
+		resp := map[string]any{"access_token": "access-1", "refresh_token": "refresh-1",
+			"expires_in": 3600, "id_token": ti.sign(t, claims)}
+		if ti.scope != "" {
+			resp["scope"] = ti.scope
+		}
+		writeJSON(w, http.StatusOK, resp)
 	})
 	mux.HandleFunc("POST /oauth2/revoke", func(w http.ResponseWriter, r *http.Request) {
 		ti.mu.Lock()
@@ -166,6 +175,13 @@ func newTestIssuer(t *testing.T) *testIssuer {
 	// A provider's model listing: refused, with the service's own text, for a
 	// key that begins "refused"; otherwise one model.
 	mux.HandleFunc("GET /v1/", func(w http.ResponseWriter, r *http.Request) {
+		ti.mu.Lock()
+		status := ti.listStatus
+		ti.mu.Unlock()
+		if status != 0 {
+			writeJSON(w, status, map[string]any{"error": map[string]string{"message": serviceText}})
+			return
+		}
 		if strings.HasPrefix(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "), "refused") {
 			writeJSON(w, http.StatusUnauthorized, map[string]any{"error": map[string]string{"message": serviceText}})
 			return
