@@ -234,13 +234,19 @@ The plan confirms the decision; each check is seen to fail first where it can fa
 
 1. A planted `error-strings` violation in a test file fails `make lint` with revive removed from the exclusion, and
    passes with today's configuration and with D1's (closes the gap of batch 11).
+   **Met** (P1 step 3, record of 2026-11-16): `none.yml` 5 of 5 red, each with the `error-strings` line at `llm/provider/zz_other_test.go:6:43`; `today.yml` and `new.yml` 5 of 5 green, "0 issues." for both modules.
 2. The `d82abd0` collision, planted on a scratch clone, fails 20 of 20 cold `make lint` runs with D1's configuration,
    the command the gate runs (batch 9 used the package command).
+   **Met** (P1 step 4, record of 2026-11-16): `new.yml` 20 of 20 red, one `confusing-naming` line each, split 11 at `llm/provider/login.go` and 9 at `llm/provider/export_test.go`; acpext "0 issues." each time.
 3. With the collision planted and D1's configuration, a warm cache gives a red run every time.
+   **Met** (P1 step 6, record of 2026-11-16): 9 of 9 red on three caches, one `confusing-naming` line each.
 4. The unplanted tip of the branch passes 10 of 10 cold `make lint` runs with D1's configuration, both modules
    "0 issues.".
+   **Met** (P1 step 7 at `4410333`, 10 of 10 cold runs exit 0 with `new.yml`, "0 issues." for both modules; P2 step 1, one cold run at `b78503d` with D1, exit 0; CI on `aff572a`, the three `validate` jobs with "0 issues." for both modules, record of 2026-11-16).
 5. The list in D1 equals `revive.rules` minus `confusing-naming`, checked by script.
+   **Met** (P1 step 2, and P2 step 1's one-off check of the committed file, record of 2026-11-16): the assertion passes on `new.yml` and fails on both broken copies; the file as committed passes, exit 0, and fails on its two broken copies, exit 1.
 6. CI on draft pull request 18 is green on the commit that carries D1, on all three `validate` runners.
+   **Met** (P3 step 1, record of 2026-11-16): the commit carrying D1 is `aff572a`; `CI` run `43990126887` on it has `validate (ubuntu-24.04)`, `validate (macos-15)` and `validate (windows-2025)` each `success`, and `gh pr checks 18` shows every check `pass` except `release`, `skipping`.
 
 ## Pros and Cons of the Options
 

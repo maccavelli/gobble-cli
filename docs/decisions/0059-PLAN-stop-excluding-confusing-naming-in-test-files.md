@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: complete
 date: 2026-11-16
 associated-madr: "0059-MADR-stop-excluding-confusing-naming-in-test-files.md"
 ---
@@ -240,6 +240,7 @@ Files: this file, the MADR, `docs/README.md`.
    "six cold lint runs" and "no capitalization-only names". The coordinator changes the ledger (the docs repository's
    `0006-PLAN-sequence-the-auth-contract-effort-across-four-repositories.md`, rows `S-gobble` and `S-gobble-lint`);
    this plan records the date and the ledger commit. Under (b) or (c), record what stays and until when.
+   *Dated note, 2026-11-16:* the ledger is a plain file outside version control, so no ledger commit exists to cite. Per the owner's ruling, relayed by the coordinator ("Record the date and say the ledger is unversioned"), this plan records the date and states that the ledger is unversioned. See the execution record, "P3", step 2, and its dated deviation.
 3. Delete the P1 run files under `<scratch>`, once their counts are in the execution record.
 4. This plan `complete`, the MADR's Confirmation marked with where each item was met, both README rows updated. Gates
    as P0 step 2.
@@ -375,3 +376,28 @@ not load; a flood of test-file findings after a golangci-lint upgrade that the p
 * Last-modified times, against the first gate's start (18:16:23): `.golangci.yml` 18:14:31, `docs/architecture.md` 18:15:00, `docs/guides/developing.md` 18:15:00, the 0007 MADR and the 0052 PLAN 18:15:14, `docs/README.md` 18:15:28. This file's execution record was written at 18:15 to 18:16 and its gate table and the rows after the records gates came after the gates (as the gates paragraph says); the preflights, `make race` and `make check-test-isolation` ran on the other files as they stand.
 * Not done: the commit, the push and CI on pull request 18 (step 4, the coordinator's); P3 (the brief rules stay until P3); no Go file, `Makefile`, script or workflow changed.
 * Staged, not committed; the coordinator commits on the branch and watches CI on pull request 18.
+
+### P3 — close-out and the brief rules (2026-11-16)
+
+* Provenance: run by a lightweight model at low effort, on the coordinator's brief, steps 1 to 4 only. No Go file, config, workflow or script changed; no heavy run; no commit, push or tag.
+* Start state (K1): branch `p3-acpext-v0.5.0`, `HEAD` `aff572a`, level with `origin/p3-acpext-v0.5.0`, `git status` clean. This phase ran no lint, so `golangci-lint` was not re-read.
+* Step 1, CI on `aff572a` (read with `gh`, read-only). `gh pr checks 18`: every check `pass`, except `release`, which is `skipping`. The `CI` run is `43990126887` and the `Docs` run is `43990126524`; both `completed` with conclusion `success` and head SHA `aff572a99c54857bb8314ff499f67dd9b65f4244`. URLs: `https://github.com/<owner>/gobble-cli/actions/runs/<run id>`.
+  * `CI` run `43990126887` jobs, conclusion `success` unless stated: `validate (ubuntu-24.04)` (job `133728286286`), `validate (macos-15)` (`133728285826`), `validate (windows-2025)` (`133728286270`), `sbom` (`133728286313`), `test-isolation` (`133728286490`), `build / build` (`133734781960`), `build / identity` for darwin/arm64, linux/amd64, linux/arm64, windows/amd64 and windows/arm64 (`133736116419`, `133736116475`, `133736116477`, `133736116593`, `133736116556`), and `release` `skipped` (`133736212504`).
+  * `Docs` run `43990126524`: job `docs` (`133728284216`) `success`.
+  * The `golangci-lint` lines of the three `validate` logs (`gh run view <run id> --job <job id> --log`, saved under `<scratch>`), timestamp prefixes removed. Each log has the same lint sequence: "golangci-lint (.)", "0 issues.", "golangci-lint (acpext)", "0 issues.", and then, after the markdownlint summary "Summary: 0 issues in 0 files", the line "preflight passed":
+    * `validate (ubuntu-24.04)`: "golangci-lint (.)", "0 issues.", "golangci-lint (acpext)", "0 issues.", "preflight passed".
+    * `validate (macos-15)`: the same sequence.
+    * `validate (windows-2025)`: the same sequence.
+  * Every job in the acceptance is green, so no stop.
+* Step 2, the owner's Q1 ruling and what follows. Q1 is answered option (a), in the owner's words, label "Both, once the fix is proven" (the owner's ruling, relayed by the coordinator; the MADR's Q1 and this plan's Q1). Under (a), from 2026-11-16, with P2 committed as `aff572a` and its CI green (step 1), briefs for this repository stop carrying "six cold lint runs" and "no capitalization-only names".
+  * The coordinator changed the ledger's rows `S-gobble` and `S-gobble-lint` on 2026-11-16, as the coordinator reports. This phase did not read the ledger.
+  * Dated deviation, 2026-11-16: step 2 says this plan records "the ledger commit". The ledger is a plain file outside version control, so no commit exists to cite. Per the owner's ruling, relayed by the coordinator, "Record the date and say the ledger is unversioned", this plan records the date the rules retire (2026-11-16) and states that the ledger is unversioned. Nothing else changes now. Options not chosen: put the ledger under git first; drop the citation from the plan. Open item for the owner: putting the ledger under git. The committed step text is left as written; the dated note at step 2 points here.
+* Step 3, P1's run files. The counts are in P1's record above (steps 3 to 7; the counts files `counts-s3.txt` to `counts-s7.txt` are kept under `<scratch>`). Deleted with `rm -rf` on exactly these paths, after `ls -d` and `du -sh`:
+  * `<scratch>/gobble-0059-p1/runs`, 948K;
+  * `<scratch>/gobble-0059-p1/caches`, 0 B (empty);
+  * `<scratch>/gobble-0059-p1/p1`, the scratch clone, 131M.
+  After the delete, `ls -d` on the three paths printed "No such file or directory" for each. Kept under `<scratch>/gobble-0059-p1`: the counts files, `bin`, `variants`, `ref`, the logs, `golangci-version.txt` and `P1-record.md`. Nothing in the repository or in the `~/.cache` session folder was touched.
+* Step 4, completion. This plan's `status` is `complete` (2026-11-16). The MADR's Confirmation items 1 to 6 are marked with their evidence (MADR, Confirmation). Both `docs/README.md` rows are updated. The MADR's status stays `accepted`, as the step does not change it.
+  * Step 5 (a dated note after the branch's fast-forward to `main`, with `main`'s CI run) is NOT done. It remains for after the fast-forward and is not a completion criterion.
+  * The gates of P0 step 2 were run after the last edit to these three files. Their exit statuses are in the phase's handoff, not written here, because a record edit after the gates would leave them stale.
+* Not verified in this phase: no lint or test ran here. Confirmation 4's ten cold runs were measured at `4410333` (P1 step 7), with the same configuration as at `aff572a`. At `aff572a` the evidence is CI's three `validate` jobs and P2 step 1's cold run at `b78503d`.
