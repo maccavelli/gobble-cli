@@ -94,12 +94,12 @@ func storedMethod(id string, l *Login) (authcontract.Method, bool) {
 	if l == nil {
 		return authcontract.Method{}, false
 	}
-	kind := l.session(id, nil, nil, nil).SessionKind()
+	kind := SessionKindOf(id, l)
 	if kind == "" {
 		return authcontract.Method{}, false
 	}
 	for _, m := range yields(id, authcontract.YieldsOAuthSession) {
-		if sessionKinds[sessionKey{id, m.ClientIdentity}] == kind {
+		if string(sessionKinds[sessionKey{id, m.ClientIdentity}]) == kind {
 			return m, true
 		}
 	}

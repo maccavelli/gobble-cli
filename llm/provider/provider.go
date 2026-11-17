@@ -104,12 +104,28 @@ func (o Options) login(ctx context.Context, id string) (*auth.OAuthSession, erro
 		if err != nil || l == nil {
 			return nil, err
 		}
+		if !Accepts(id, l) {
+			// The resolver's refusal, in its words: a stored session of a
+			// kind no offered method signs in to is not gobble's, whoever
+			// builds the provider (0052-PLAN P4, the owner's ruling of
+			// 2026-11-16).
+			return nil, &foreignLoginError{id}
+		}
 		return l.session(id, o.Logins, nil, o.Logger), nil
 	}
 	if o.Sessions != nil {
 		return o.Sessions.get(id, load)
 	}
 	return load()
+}
+
+// foreignLoginError is a stored session of a kind no offered method signs in
+// to, which gobble does not use: the resolver's refusal, in its words
+// (internal/auth's Resolver.stored), so every surface says it alike.
+type foreignLoginError struct{ id string }
+
+func (e *foreignLoginError) Error() string {
+	return "provider " + e.id + " has an OAuth login in auth.json, which gobble does not use (0005-PLAN F4-3b)"
 }
 
 // modelKey is the context key of a request's model, which Stream sets for
@@ -198,6 +214,9 @@ func New(id string, o Options) (llm.Provider, error) {
 	}
 	login, err := o.login(context.Background(), id)
 	if err != nil {
+		if foreign, ok := errors.AsType[*foreignLoginError](err); ok {
+			return nil, foreign // names the provider already
+		}
 		return nil, fmt.Errorf("provider %s: %w", id, err)
 	}
 	if login != nil {
@@ -434,7 +453,7 @@ func planConsentOf(id string, s *auth.OAuthSession) string {
 		return ""
 	}
 	m, c, ok := consentMethod(id)
-	if !ok || sessionKinds[sessionKey{id, m.ClientIdentity}] != s.SessionKind() {
+	if !ok || string(sessionKinds[sessionKey{id, m.ClientIdentity}]) != kindOfSession(s) {
 		return ""
 	}
 	return c.ID

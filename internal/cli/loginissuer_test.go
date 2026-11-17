@@ -27,6 +27,11 @@ import (
 // discovery.
 const loginGrokIssuer = "https://auth.x.ai"
 
+// loginOpenAIIssuer is OpenAI's issuer as the SDK's ChatGPT sign-in names it
+// (auth.DefaultOpenAIIssuer), which a ChatGPT plan sign-in discovers, stated
+// here for the same reason.
+const loginOpenAIIssuer = "https://auth.openai.com"
+
 // loginIssuer is an xAI-shaped OIDC issuer in process, for a sign-in that runs
 // the SDK's real wizard from gobble auth login: discovery, an ES256 JWKS,
 // device and token endpoints whose ID tokens it signs, Kilo's device
@@ -49,6 +54,11 @@ type loginIssuer struct {
 	// shouldRetry is not empty, with that x-should-retry.
 	refuseListing bool
 	shouldRetry   string
+	// scope, when set, is the scope its token responses grant: a ChatGPT
+	// plan sign-in is refused a grant without chatgpt.tokens.use.direct.
+	scope string
+	// revoked are the tokens the revocation endpoint was sent.
+	revoked []string
 }
 
 // loginIssuerKey is every loginIssuer's signing key: the SDK caches an
@@ -57,11 +67,26 @@ var loginIssuerKey = sync.OnceValues(func() (*ecdsa.PrivateKey, error) { return 
 
 func newLoginIssuer(t *testing.T) *loginIssuer {
 	t.Helper()
+	return newLoginIssuerAs(t, loginGrokIssuer, "")
+}
+
+// newPlanLoginIssuer is the issuer answering as OpenAI's, granting a ChatGPT
+// plan's scope: a plan sign-in's discovery, token and revocation endpoints
+// and model listing.
+func newPlanLoginIssuer(t *testing.T) *loginIssuer {
+	t.Helper()
+	return newLoginIssuerAs(t, loginOpenAIIssuer, "openid chatgpt.tokens.use.direct")
+}
+
+// newLoginIssuerAs is a loginIssuer answering as origin, its tokens granting
+// scope when it is not empty.
+func newLoginIssuerAs(t *testing.T, origin, scope string) *loginIssuer {
+	t.Helper()
 	key, err := loginIssuerKey()
 	if err != nil {
 		t.Fatal(err)
 	}
-	ti := &loginIssuer{key: key, kiloToken: "!kilo$token-0123456789"}
+	ti := &loginIssuer{key: key, kiloToken: "!kilo$token-0123456789", scope: scope}
 	mux := http.NewServeMux()
 	ti.Server = httptest.NewServer(mux)
 	t.Cleanup(ti.Close)
@@ -72,7 +97,6 @@ func newLoginIssuer(t *testing.T) *loginIssuer {
 			t.Error(err)
 		}
 	}
-	origin := loginGrokIssuer
 	mux.HandleFunc("/.well-known/openid-configuration", func(w http.ResponseWriter, _ *http.Request) {
 		write(w, http.StatusOK, map[string]any{
 			"issuer": origin, "authorization_endpoint": origin + "/oauth2/authorize", "token_endpoint": origin + "/oauth2/token",
@@ -101,8 +125,18 @@ func newLoginIssuer(t *testing.T) *loginIssuer {
 		if r.FormValue("grant_type") == "authorization_code" {
 			claims["nonce"] = nonce
 		}
-		write(w, http.StatusOK, map[string]any{"access_token": "access-1", "refresh_token": "refresh-1",
-			"expires_in": 3600, "id_token": ti.sign(t, claims)})
+		resp := map[string]any{"access_token": "access-1", "refresh_token": "refresh-1",
+			"expires_in": 3600, "id_token": ti.sign(t, claims)}
+		if ti.scope != "" {
+			resp["scope"] = ti.scope
+		}
+		write(w, http.StatusOK, resp)
+	})
+	mux.HandleFunc("POST /oauth2/revoke", func(w http.ResponseWriter, r *http.Request) {
+		ti.mu.Lock()
+		ti.revoked = append(ti.revoked, r.FormValue("token"))
+		ti.mu.Unlock()
+		w.WriteHeader(http.StatusOK)
 	})
 	mux.HandleFunc("POST /api/device-auth/codes", func(w http.ResponseWriter, _ *http.Request) {
 		write(w, http.StatusOK, map[string]any{"code": "KILO-1", "verificationUrl": ti.URL + "/kilo", "expiresIn": 60})

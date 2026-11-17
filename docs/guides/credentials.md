@@ -84,6 +84,15 @@ kilo          none
 together      none
 ```
 
+A sign-in's row also says what gobble keeps of its consent. A ChatGPT plan session ends with
+`background use allowed`, `background use declined` or `background use not asked`, the answer to the question
+[below](#allowing-background-requests-under-a-chatgpt-plan) asks; another application's ChatGPT login says
+`not used` and has no such words:
+
+```text
+openai        auth.json, an OAuth login, expires 2026-06-09 05:13, background use not asked
+```
+
 `gobble auth status --json` gives the same rows as data, for a program such as a remote client. It prints one
 object, sends no request, runs no `!command` key, and writes nothing to stderr:
 
@@ -117,6 +126,29 @@ $ gobble auth status --json
 | `usable` | whether gobble would use it; a `!command` key counts without being run |
 | `reason` | why an `auth.json` entry is not usable: `oauth_unused` (a sign-in gobble does not use: one for a provider gobble has none for, or one of a kind it does not sign in to, such as another application's ChatGPT login), `empty_key` or `unknown_type` |
 | `expires` | a sign-in's expiry, in UTC, as RFC 3339 |
+| `sessionKind` | with `authType` `oauth`, the stored session's kind, as go-llmprovider-sdk gives it, inferred for a session saved without one: `chatgpt_plan`, `grok`, `chatgpt` (another application's ChatGPT login) or `kilo_device`; a kind a program does not know is shown, not refused; absent when the SDK names no kind for the session, such as an OAuth entry for Claude |
+| `consents` | only when the session holds an answer: an object from a consent's id to `granted` or `declined`, such as `{"chatgpt_plan.background_use": "declined"}`; a consent with no member is not asked |
+| `consentTerms` | only when the stored session is of the kind an offered sign-in method with consents signs in to, which is the ChatGPT plan's alone: an array of that method's consents, answered or not, each with its `id`, `required`, `text`, gobble's wording, the words the sign-in's question uses, and `links`, `rel` and `url`, the usage page |
+
+A ChatGPT plan session's row, answered `declined`:
+
+```text
+{
+  "provider": "openai",
+  "source": "auth.json",
+  "authType": "oauth",
+  "usable": true,
+  "expires": "2026-06-09T10:13:20Z",
+  "sessionKind": "chatgpt_plan",
+  "consents": {"chatgpt_plan.background_use": "declined"},
+  "consentTerms": [{"id": "chatgpt_plan.background_use", "required": true, "text": "…", "links": [{"rel": "usage", "url": "…"}]}]
+}
+```
+
+A client that shows the consent reads `consentTerms` for the words and the link, and changes the answer with
+`gobble auth consent` ([below](#allowing-background-requests-under-a-chatgpt-plan)). An OpenAI entry of another
+application's ChatGPT login is `usable: false`, `reason: "oauth_unused"`, with `sessionKind` `chatgpt` and neither
+`consents` nor `consentTerms`; a Grok session has its `sessionKind` and neither.
 
 A field that does not apply is left out. If `auth.json` or `models.json` exists but cannot be read, gobble cannot say
 where any key comes from: `--json` prints an error naming the file, never a value from it, and exits 2:
@@ -211,8 +243,9 @@ Three providers let you sign in with your account instead of pasting a key:
   `this sign-in asks a question, and there is no terminal to ask it on`. With `--json` it is refused
   before it starts, exit 2, unless the stored plan session already holds an answer
   ([below](#signing-in-from-an-editor-or-magic-cli-remote)). gobble keeps the login and your answer
-  in `auth.json`'s `openai` entry, and refreshes it as it runs. An ACP client that can show a form is
-  asked the same question as a form ([below](#signing-in-from-an-acp-client)). gobble also keeps this
+  in `auth.json`'s `openai` entry, and refreshes it as it runs; `gobble auth status` shows the session's kind
+  and your answer. An ACP client that can show a form, such as a phone, is asked the same question, in the same
+  words, as a form before it is shown any address ([below](#signing-in-from-an-acp-client)). gobble also keeps this
   installation's host id, a random `urn:uuid`, in `host-id` in its state directory (`gobble config path`
   shows the directory), registers the plan's client under it, and keeps the issued client in
   `clients.json` beside it, so that signing out and in again reuses the client instead of registering
@@ -272,6 +305,10 @@ Error: claude has no login; use --api-key -
 
 An OAuth entry gobble does not sign in to, for another provider such as one copied from Pi, or an
 OpenAI entry of another application's ChatGPT login, is kept, and gobble says it does not use it.
+
+Gobble refuses such an entry when it loads one. A session a running gobble already holds can still adopt one
+that another program writes into gobble's own `auth.json` while gobble runs, at its next refresh, and then
+sends that login's token.
 
 ### Allowing background requests under a ChatGPT plan
 
@@ -427,6 +464,12 @@ other gets a form:
 | `confirm` | A form with one boolean, `allow`, default false, `message` the consent's text and links | The same |
 | `form` | A form whose properties are the fields, a `select` as an enum | The same |
 | `waiting` | Nothing | Nothing |
+
+For OpenAI's ChatGPT plan the `confirm` is the first step, before the address to open, and its `message` and
+`_meta.gobble.step.text` are gobble's wording, the words the terminal's question uses, not the SDK's default:
+what gobble stores and where, how to remove the sign-in, what a background request is and the command that
+withdraws the consent. Answering `allow` stores the consent granted. A sign-in over a stored session that
+holds an answer asks nothing.
 
 An `open_url` and a `show_code` ask the client to show something, not to answer it. Its `accept` sends
 nothing to the sign-in, which goes on; a `decline` or `cancel` cancels the sign-in, and `authenticate`

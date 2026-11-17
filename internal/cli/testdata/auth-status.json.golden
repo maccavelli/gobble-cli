@@ -25,7 +25,8 @@
       "source": "auth.json",
       "authType": "oauth",
       "usable": true,
-      "expires": "2026-06-09T10:13:20Z"
+      "expires": "2026-06-09T10:13:20Z",
+      "sessionKind": "grok"
     },
     {
       "provider": "opencode-zen",

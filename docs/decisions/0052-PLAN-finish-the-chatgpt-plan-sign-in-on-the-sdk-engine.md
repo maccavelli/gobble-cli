@@ -439,6 +439,18 @@ P7".)*
 
 Acceptance: the tests pass, each plant failed; `grep -rn 'chatgptPlanBackground\|askPlanBackground\|planNotice'
 --include=*.go` finds nothing.
+*(2026-11-16: built, staged on the branch `p3-acpext-v0.5.0`; see "P4 record (2026-11-16)". The tests pass and each plant failed; the grep finds three lines, all `planNoticeLines`, which is a question for the owner in the record.)*
+*(2026-11-16, later; the owner's ruling, relayed by the coordinator, "Amend the acceptance to a whole-word grep": the pattern is matched as whole words,
+`grep -rnw -e chatgptPlanBackground -e askPlanBackground -e planNotice --include=*.go .`, which finds nothing (exit 1, run on the staged tree); `planNoticeLines`
+is the kept wording of the consent's notice (P3), not the removed `planNotice`. No code changes for it.)*
+*(2026-11-16, later; two more rulings of the owner's, relayed by the coordinator, amend P4's steps.)* **Step 1a, one place reads the kind.** "Keep it, and make it
+the single place the kind is read": `provider.SessionKindOf` stays exported and is the one call into the SDK's `SessionKind()`; `storedMethod`, the adapter's
+`planConsentOf` and `StartSignIn`'s `Previous` call it. `internal/auth` has no inference of its own (`AcceptsLogin` calls `provider.Accepts`), so no layering rule bends.
+**Step 1b, the provider build refuses a foreign session.** "Add the check now, in P4": `Options.login` refuses a stored session `!Accepts(id, l)`, with the resolver's error and
+words (`provider openai has an OAuth login in auth.json, which gobble does not use (0005-PLAN F4-3b)`, a plain error: the kind `auth check` gives it, `invalid_state`, is
+`llm.Kind`'s `other`), so a resolver built before another process replaced the entry cannot hand a foreign session to the build. Tests: `TestNewRefusesAForeignLogin`
+(`llm/provider`) and `TestStaleResolverCannotBuildAForeignSession` (`internal/cli`), each with its planted break.
+*(2026-11-17, the second review; the owner's rulings, relayed by the coordinator.)* **Step 1c, the terminal tests keep the SDK's callback ports.** "Keep them until the SDK offers a no-listener option": `TestSignInChatGPTPlanTerminal` and `TestPlanAfterLogoutReusesClientTerminal` bind the wizard's callback port 1455, on both loopback families, or 1457 when 1455 is taken (the SDK's own ports), until go-llmprovider-sdk offers a wizard option to skip the listener; when both are in use they fail at once with a message that says so (`signInFailed`); they switch after the SDK release that has the option, a step for the phase that bumps the pin. **Step 1d, a held session is refused at the point of use, later.** The owner's rulings, relayed by the coordinator: "Refuse at the point of use", and then, when the builder stopped on it, "Ask the SDK for interfaces, then build as ruled". Step 1b's kind check is met at the load only; no code was written for the held session in P4. The point-of-use refusal waits for a go-llmprovider-sdk release in which its three concrete-type checks (`llmprovider/internal/chatgpt/chatgpt.go:50` and `:58`, `llmprovider/providers/openai/openai.go:380`, at `v1.31.0`) are interfaces, and is a named step of the gobble phase that bumps the SDK pin to it: a small gobble token source wraps the held session; on each token request it checks the session's current kind under the session's lock and, if the policy no longer accepts it, returns the resolver's error and drops the session; the reproduction, whose text is in "third review" below (not in the tree, because it fails by design today), is adopted into the tree by that phase. Until then a held session can adopt a foreign entry written into `auth.json` during the run (documented in `docs/architecture.md` and `docs/guides/credentials.md`). The request to the SDK is on the coordinator's ledger; it is not filed anywhere by this phase. See "second review and fixes", R2-B2. *(2026-11-17, later; the owner's ruling, relayed by the coordinator, on the SDK's draft record for the held session, "The SDK refuses to adopt another sign-in (Recommended)": the SDK's own session would refuse to adopt a stored session that is not the same sign-in, at the places it adopts from its store, and the token request would fail with the existing auth-failure error, with no interfaces and no new exports. That record is a proposed draft, not accepted and not released. If it is accepted and released, gobble's later step becomes a pin bump and a test that a held session fails, sends no foreign token and stays `chatgpt_plan`, with no wrapper; until then the documented limit stands as written.)*
 
 ### P5 — the one-time migration (MADR D9)
 
@@ -515,9 +527,18 @@ Each command's exit status is captured before any filter.
   *(2026-11-13: `TestClientStoreAdapter` is 0051-PLAN P6 step 1a's; `TestLoginCarriesEverySessionField` is P2-2's.
   P2-1's extended `TestLoginsLoadSave` runs with the `./internal/auth/` line above, its pattern read with
   `|TestLoginsLoadSave` added.)*
+  *(2026-11-16, P4's review: the pattern's `TestSignInChatGPTPlan`, `TestPlanAfterLogout` and `TestLogoutPlan` match nothing in
+  `./llm/provider/`: `go test -list` of that pattern prints no test, so the line ran only the other three. Those tests are in
+  `internal/cli` (below) or are `TestLogoutRevokesAsGobble`, `TestLogoutRevokesOnlyAccepted` and `TestLogoutReadsTheStoredMethod`
+  here. The pattern that runs this phase's tests there is `go test -count=1 -run
+  'TestLoginCarriesEverySessionField|TestClientStoreAdapter|TestMarkReachesTheSDK|TestLogoutRevokes|TestLogoutReadsTheStoredMethod|TestStartSignIn|TestNewRefusesAForeignLogin|TestSessionKindOf' ./llm/provider/`;
+  `go test -list` of it prints 24 tests, each name in it among them.)*
 * `go test -race -count=10 -run 'TestTitleUnderPlan|TestAutoCompactUnderPlan|TestConsentAppliesFromTheNextRequest|TestBackgroundRequestsAreMarked' ./acpserver/`
   *(2026-11-11: with `TestBackgroundRefusedWhenAnswerUnreadable` added to that run's pattern; P3's rows of that date.)*
 * `go test -count=1 -run 'TestAuthConsentCommand|TestConsentWordingOnEverySurface|TestAuthStatusJSONPlan|TestForeignOpenAISessionRefused' ./internal/cli/`
+  *(2026-11-16, P4's review: it lacked the plan sign-in tests. The pattern that runs this phase's is `go test -count=1 -run
+  'TestAuthConsentCommand|TestConsentWordingOnEverySurface|TestAuthStatusJSON|TestForeignOpenAISessionRefused|TestSignInChatGPTPlanACP|TestSignInChatGPTPlanTerminal|TestPlanAfterLogoutReusesClientACP|TestPlanAfterLogoutReusesClientTerminal|TestStaleResolverCannotBuildAForeignSession|TestAdvertisedPlanConsentIsGobbles' ./internal/cli/`
+  (`TestAuthStatusJSON` also matches `TestAuthStatusJSONPlan`, `TestAuthStatusJSONAgrees` and `TestAuthStatusJSONError`); `go test -list` of it prints 13 tests, each name in it among them. `TestConsentWordingOverACP` keeps its own line above.)*
 * *(2026-11-11, later:)* `go test -count=1 -run 'TestConsentErrorIsNotPermitted' ./llm/`; `go test -count=1 -run
   'TestOfferedConsentTextIsGobbles' ./llm/provider/`; `TestRefusedBackgroundCarriesConsent` joins the `acpserver` race
   run's pattern above
@@ -1198,3 +1219,521 @@ those requests would go out with the key. An OpenAI key in the environment or in
 out under the plan and the consent governs them as above." The code behind it, checked for each way a key reaches a run, is in 0052-MADR D2's note: `internal/cli/chat.go:69`, `internal/auth/resolve.go:77`, `:80-82`,
 `:83`, `:94` and `Has` at `:109`, `:112`, `:115`, `:123`, `llm/provider/provider.go:99`, `internal/cli/credentials.go:22`, `internal/cli/agent.go:103`. The behaviour differs only for `--api-key`; an environment
 variable and `models.json`'s key are not reached while an `auth.json` entry owns the provider; `settings.yaml` has no key that carries a credential.
+
+### P4 record (2026-11-16)
+
+Run by a mainstream model at medium effort, on the coordinator's brief, on the owner's approval of this PLAN's phases (the owner's statements this
+PLAN and 0051-PLAN already quote; none is added here). Base: the branch `p3-acpext-v0.5.0` at `cecc892`, level with origin, tree clean; `go.mod`
+requires acpext `v0.5.0-rc.1` and go-llmprovider-sdk `v1.31.0`, no `replace`, no `go.work`; `main` at `9e21c8f`. Staged, not committed; the
+coordinator commits on the branch. P4 starts from P2, P3 and 0051-PLAN P4 to P7, all committed on the branch.
+
+**Question 1, the acpext pin.** Settled by the records, so nothing here touches `go.mod` or `go.sum`. Step 1's "the acpext pin is 0051's `v0.5.0`"
+was written before the candidate: 0051-PLAN C8's note of 2026-11-15 ("The root requires `acpext@v0.5.0-rc.1` (P4 step 1), by tag, with no `replace`
+and no `go.work`. The final `acpext/v0.5.0` is the owner's, after P8 (P8a)", 0051-PLAN lines 131 to 136), the owner's ruling quoted at 0051-PLAN
+`:1511-1512` ("P4 whole with 0052's consent phase is built on the branch against that candidate"), and P8a (`:780-796`: "One commit moves the root
+from the candidate to the final tag") make the pin `v0.5.0-rc.1` until P8a, and 0051-PLAN P4 step 1 already made it (this PLAN's P3 note at the head
+of "P3 — consent" says the same). The pin is not a step of this phase. `git diff` shows no change to `go.mod`, `go.sum` or `acpext/`.
+
+**What was already true at `cecc892`** (each found by reading, then by running):
+
+* `TestConsentWordingOnEverySurface`: `internal/cli/consentwording_test.go:132` (the five terminal surfaces, against a recording issuer; deviation 8 of the P3 record).
+* The engine-level half of `TestSignInChatGPTPlan`, `TestSignInChatGPTPlanPasted` and `TestPlanAfterLogoutReusesClient`, over `planIssuer` and the real engine: `llm/provider/signinrun_test.go:149`
+  (`TestStartSignInReusesClient`: after a logout that keeps `clients.json` the next sign-in names the stored client and the host id and sends no `agent_name_hint`), `:174` (`TestStartSignInPassesPrevious`: a second sign-in
+  holds no `confirm`), `:204`, `:232` (`TestStartSignInConfirmIsGobblesWording`), `:323` (`TestHostIDReachesTheEngines`). `drive` (`:76`) completes `StartSignIn`'s engine, the ACP path's, by paste. *(2026-11-16, corrected in the review below: the first text said that `drive` "is `TestSignInChatGPTPlanPasted`'s sign-in". It is not: the archived tests ran `SignIn`, the terminal wizard behind `gobble auth login openai`, which no test completed; see "Review and fixes", B-1.)*
+  What no test held was the surface above them: the host id read from `<state>/host-id`, the client in `<state>/clients.json`, and the logout of the CLI.
+* `TestLogoutPlan`'s content: `llm/provider/login_test.go:457` (`TestLogoutRevokesAsGobble`, the openai case: discovery and revocation under gobble's name), `:512` (`TestLogoutRevokesOnlyAccepted`: a plan session revoked then deleted, a foreign OpenAI login deleted and never revoked),
+  `:555` (`TestLogoutReadsTheStoredMethod`). Not rebuilt.
+* `TestOpenAILoginIsAPlan`'s content, at the resolver: `internal/auth/resolve_test.go:153` (`TestResolverAcceptsOnlyOfferedKinds`), `llm/provider/policy.go:172` (`Accepts`). The WIP's refusal inside `Options.login` is not there and is not coming back (question 3).
+* The status row already had `oauth_unused` for a session the resolver does not accept (`internal/cli/auth.go` `statusRow`, golden: `claude`), and the text form's "not used (0005-PLAN F4-3b)". It had none of `sessionKind`, `consents` or `consentTerms`.
+* `auth consent`, `provider.Consents`, `SetConsent`, `PlanConsent`, `ConsentText`: P3.
+* `TestConsentWordingOverACP` did not exist.
+
+**What was built (staged),** by step.
+
+1. **Step 1, the tests re-applied.** *(Renamed in the review: the ACP path's are `TestSignInChatGPTPlanACP` and `TestPlanAfterLogoutReusesClientACP`, `internal/cli/plansignin_test.go:130`, `:192`; the terminal's `TestSignInChatGPTPlanTerminal` and `TestPlanAfterLogoutReusesClientTerminal` are new, below.)* The ACP path's two tests are built on the CLI's own `startSignIn` (`internal/cli/agentauth.go`, `hostSignIn` in `login.go`) so the host id and the client store are
+   production's; the engine is `provider.StartSignIn` over an issuer in process answering as OpenAI's (`loginissuer_test.go`: `newPlanLoginIssuer`, `newLoginIssuerAs`, and a revocation endpoint that records the token), the browser's side a paste (`planSignInRun`), remote, so no listener and no port but the issuer's own `httptest` one.
+   `TestForeignOpenAISessionRefused` (`internal/cli/statusplan_test.go:266`). `TestLogoutPlan`: already true, above. *(`TestSignInChatGPTPlanPasted` was recorded here as already true; that was false, see "Review and fixes", B-1: its terminal form is `TestSignInChatGPTPlanTerminal`.)* The acpext pin: question 1.
+2. **Step 2, the status row.** `internal/cli/auth.go`: `authStatusRow` gains `SessionKind`, `Consents`, `ConsentTerms` (`:587`), set by `sessionFacts` (`:648`, called from the oauth case, `:625`) from the stored session. `llm/provider/signinrun.go:71` `SessionKindOf(id, *Login) string`, `(*OAuthSession).SessionKind()`'s value (see "Questions for the owner": the one new exported name).
+   A session the resolver does not accept is `usable: false`, `oauth_unused` as before, with `sessionKind` and no consent. The text form ends a plan session's cell with "background use allowed", "background use declined" or "background use not asked" (`consentWords`, from the consent's id). The golden `auth-status.json.golden` regenerated by `go test ./internal/cli -run '^TestAuthStatusJSON$' -update` (`main_test.go:23`, `golden`), and a second golden, `auth-status-plan.json.golden`, new.
+3. **Step 3, docs.** `internal/cli/auth.go`'s help for `auth status` and `--json`; `docs/guides/credentials.md` (the status section: the text form's consent words, `sessionKind`, `consents`, `consentTerms`, an example row; the ChatGPT passage: the status and the phone; the ACP table: the `confirm` is first and is gobble's wording); `README.md`; `docs/architecture.md` (`llm/provider`'s `SessionKindOf`; `internal/cli`'s status row). Rows below.
+4. **Step 4, tests.** `TestAuthStatusJSONPlan` (`statusplan_test.go:90`), `TestConsentWordingOverACP` (`acpserver/authconsent_test.go:28`), the three above.
+
+**Question 3, `TestForeignOpenAISessionRefused`: where is each decision made?** One predicate. `provider.Accepts` (`llm/provider/policy.go:172`, `storedMethod`: the session's kind is the kind an offered method signs in to) is set as `Resolver.Accepts` (`internal/cli/credentials.go:60`, `auth.AcceptsLogin`, `internal/auth/resolve.go:38`), and read in `Resolver.Has` (`resolve.go:113`) and `Resolver.stored` (`:137-140`).
+Status (`statusRow`: `Has`), `auth check` (`check`: `Credential`, an error for a foreign entry, so `invalid`, exit 2), `authenticate`'s present credential (`authOptions().Has`, `agentauth.go`: `credential`), the choice of provider (`ChooseWith(e.hasCredential)`) and the provider build (`modelProvider` and `providerFor`: `AmbientWith(e.credentialKey, ...)`, which finds no credential) all go through it. The logout is the sixth reader: `provider.Logout` (`login.go:102`) revokes only when `storedMethod` finds a revocable method.
+What does not share it: `provider.New` / `Options.login` (`llm/provider/provider.go:98`) checks `HasLogin(id)` and loads whatever session is stored, with no kind check; the WIP's check there (`1406bd6:llm/provider/provider.go`) was taken out by P1 and its job moved to the resolver by 0051-MADR D2. Every route into `New` from gobble's code is gated by the resolver, so this is no gap for gobble; a caller outside the CLI that builds `New` with a `LoginStore` holding a foreign session would not be refused.
+Making `New` share it is code beyond P4's steps (a new check in `llm/provider/provider.go` and its test), so it is not built; see the questions. The test holds the six surfaces as production wires them, and the plant "status accepts while the build refuses" fails it.
+
+**Question 4, `consentTerms` and the words.** One source. `provider.ConsentText` (`llm/provider/consent.go:37`) is set on `Offered`'s consent (`policy.go:73`), on the wizard's options (`signin.go:361`) and on `StartSignIn`'s (`signinrun.go:95`). `consentTerms` is `provider.SignedInMethod(id, l).Consents` (`auth.go` `sessionFacts`), which is `Offered`'s method, so its `text` is `ConsentText`'s with the SDK's links kept. The `confirm` step of a sign-in carries `ConsentText` directly. The tests hold that they are the same words:
+`TestAuthStatusJSONPlan` compares the status row's `text` with `provider.ConsentText` and requires the command that withdraws the consent, which the SDK's default lacks; `TestOfferedConsentTextIsGobbles` (P3) holds `Offered`'s against the real `confirm` step; `TestSignInChatGPTPlan` holds the first sign-in's `confirm` step `Text` against `ConsentText`; `TestConsentWordingOverACP` holds the ACP `confirm` form's message and `_meta.gobble.step.text`.
+Plants: `terms-text-sdk-default` (below) fails the status test, `start-sign-in-without-consent-text` the ACP test.
+
+**Question 5, the golden.** Regenerated by `go test ./internal/cli -run '^TestAuthStatusJSON$' -update`, the repository's own flag (`internal/cli/main_test.go:23`). The diff of `internal/cli/testdata/auth-status.json.golden`, whole:
+
+```diff
+@@ -25,7 +25,8 @@
+       "source": "auth.json",
+       "authType": "oauth",
+       "usable": true,
+-      "expires": "2026-06-09T10:13:20Z"
++      "expires": "2026-06-09T10:13:20Z",
++      "sessionKind": "grok"
+     },
+```
+
+Line by line: the first `+` line is the old line with a comma, since a member follows it; the second is the Grok row's `sessionKind`, `grok`, inferred by the SDK because the fixture's entry stores no `kind` (step 2). The Claude row, which the resolver does not accept, gains nothing: the SDK infers no kind for it. Nothing else changed. The second golden, `auth-status-plan.json.golden`, is new: a plan session with no answer (`sessionKind`, `consentTerms` with gobble's wording and the usage link, no `consents`) and a Grok session (`sessionKind` alone), the other rows `none`.
+
+**Tests, each seen failing on a scratch copy** (`git ls-files -co`, no `.git`; `HOME`, `USERPROFILE`, `XDG_*`, `GOBBLE_HOME` inside the scratch; `GOPROXY=off`; no proxy variable; the module and build caches the real ones; driver `~/.cache/claude-session-5a7234fa/scratch/gobble-0052-p4/plants.py`). Exit 1 and a `--- FAIL` each, never a build failure; the unbroken runs of four of the plants' test sets exit 0 (`.clean` rows).
+
+| Test | Planted break | Failure seen (`<scratch>` is the scratch copy) |
+| :--- | :--- | :--- |
+| `TestSignInChatGPTPlanACP` | the host id not passed (`agentauth.go`: `HostID: hostID[:0]`) | `plansignin_test.go:151: the first authorize query map[agent_name_hint:[gobble] client_id:[dynamic_agent_client] … ext_agent_host_id:[urn:uuid:…]] (the SDK made an id of its own), want gobble's name and the host id` |
+| `TestPlanAfterLogoutReusesClientACP` | `clients.json` cleared by the logout (`auth.go`) | `plansignin_test.go:226: clients.json after the logout holds {ClientID: HostID:}, <nil>; want the issued client kept` |
+| `TestAuthStatusJSONPlan` | `Usable` from `Has` without `Accepts` (`row.Usable = true` in the oauth case) | `statusplan_test.go:178: the foreign row {… Usable:true Reason:oauth_unused …}, want usable false, oauth_unused, sessionKind chatgpt` |
+| `TestAuthStatusJSONPlan` | `consentTerms` left out while the consent is unanswered | `statusplan_test.go:111: consentTerms [], want the one consent of the plan's method` |
+| `TestAuthStatusJSONPlan` | its `text` the SDK's default (`Offered` not setting `Text`) | `statusplan_test.go:115: consentTerms[0] {ID:chatgpt_plan.background_use Required:true Text:You're using your ChatGPT plan: this app's requests count …` |
+| `TestAuthStatusJSON` (golden) | `SessionKindOf` returning the stored `Kind` only, not the SDK's inferred kind | `auth_test.go:152: auth-status.json differs from testdata/auth-status.json.golden` |
+| `TestForeignOpenAISessionRefused` | the provider build refusing while status accepts (status's `Usable` forced true) | `statusplan_test.go:253: status: usable true, reason ""; want not usable, oauth_unused` |
+| `TestForeignOpenAISessionRefused` | every surface accepting (`Accepts` always true): six `Errorf`s, status, `auth check` (exit 0), authenticate, choice, run build, session build | `statusplan_test.go:253, :256, :259, :262, :265, :268` |
+| `TestForeignOpenAISessionRefused` | the logout revoking a foreign session (`provider.Logout`) | `statusplan_test.go:283: the logout of a foreign session sent ["POST https://auth.openai.com/oauth/revoke"], want nothing` |
+| `TestConsentWordingOverACP` | `StartSignIn` built without `ConsentText` | `authconsent_test.go:73: _meta.gobble.step.text "You're using your ChatGPT plan: this app's requests count toward its usage, …" (the SDK's default), want gobble's wording` |
+
+The tests of the table's six rows are `TestSignInChatGPTPlan`, `TestPlanAfterLogoutReusesClient`, `TestAuthStatusJSONPlan` (twice: its first row and its extension), `TestForeignOpenAISessionRefused` and `TestConsentWordingOverACP`; the first two are `...ACP` and `...Terminal` in the review below, and `TestAuthStatusJSON` is the golden's test, not a row. Line numbers are those of the tree at the plant run after the lint fix (the first run, before `TestAuthStatusJSONPlan`'s subtests were moved into functions, gave the same failures at lines 5 earlier). Unbroken runs of the tests in four of the plants, on the same copy, exit 0.
+
+**Earlier plants re-run** (this phase changed `llm/provider/signinrun.go` and `internal/cli/auth.go`; the drivers of 0051-PLAN P6's fix and P7, with their scratch path changed; each plant whose edit touches either file):
+
+| Plant (driver) | Exit | Test that failed |
+| :--- | :--- | :--- |
+| `consent-text-omitted` (0051 P6 fix) | 1 | TestStartSignInPassesConsentText |
+| `client-store-nil` (0051 P6 fix) | 1 | TestStartSignInReusesClient |
+| `previous-never` (0051 P6 fix) | 1 | TestStartSignInPassesPrevious |
+| `no-loopback-false` (0051 P6 fix) | 1 | TestStartSignInRemoteSetsNoLoopback |
+| `identity-zero` (0051 P6 fix) | 1 | TestStartSignInNamesGobble |
+| `host-id-not-copied` (0051 P6 fix) | 1 | TestHostIDReachesTheEngines |
+| `start-deletes-stored` (0051 P6 fix) | 1 | TestStartSignInStoresOnlyInWait |
+| `b1-save-original-session` (0051 P6 fix) | 1 | TestStartSignInSavesTheRenewedSession |
+| `b2-refuse-403` (0051 P6 fix) | 1 | TestStartSignInChecksListingBeforeSaving |
+| `b2-fail-on-list-error` (0051 P6 fix) | 1 | TestStartSignInSavesTheRenewedSession |
+| `b2-fail-on-any-listing-error` (0051 P6 fix) | 1 | TestStartSignInChecksListingBeforeSaving |
+| `b2-acp-403-refused` (0051 P6 fix) | 1 | TestAuthenticateRefusedListingStoresNothing |
+| `b2-refusal-ignored` (0051 P6 fix) | 1 | TestStartSignInChecksListingBeforeSaving |
+| `b2-renewal-refusal-ignored` (0051 P6 fix) | 1 | TestStartSignInRenewalOutlivesTheListing |
+| `b3-no-ctx-check-before-save` (0051 P6 fix) | 1 | TestStartSignInCancelledDuringListingSavesNothing |
+| `b3-no-ctx-check-at-all` (0051 P6 fix) | 1 | TestStartSignInCancelledDuringListingSavesNothing |
+| `b3-acp-no-ctx-check` (0051 P6 fix) | 1 | TestAuthenticateCancelledDuringListingStoresNothing |
+| `kilo-skip-restored` (0051 P6 fix) | 1 | TestStartSignInChecksKiloDeviceKey |
+| `plan-listing-skipped` (0051 P6 fix) | 1 | TestStartSignInChecksPlanListing |
+| `load-error-unwrapped` (0051 P6 fix) | 1 | TestStartSignInErrorsAreSignInErrors |
+| `no-loopback-not-set-for-device` (0051 P6 fix) | 1 | TestStartSignInRemoteSetsNoLoopback |
+| `wait-error-unwrapped` (0051 P6 fix) | 1 | TestStartSignInErrorsAreSignInErrors |
+| `plan-login-deleted-before-save` (0051 P6 fix) | 1 | TestStartSignInPlanFailureLeavesAuthJSON |
+| `auth-login-no-opener` (0051 P7) | 1 | loginsurfaces_test.go:68: |
+| `expiry-dropped` (0051 P7) | 1 | loginsurfaces_test.go:130: |
+| `expiry-in-utc` (0051 P7) | 1 | loginsurfaces_test.go:130: |
+| `expiry-printed-when-zero` (0051 P7) | 1 | loginsurfaces_test.go:155: |
+
+All 27 exit 1 with a `--- FAIL`, none a build failure; 23 of 0051-PLAN's P6 fix plants (each whose edit touches `llm/provider/signinrun.go`) and 4 of its P7 plants (each whose edit touches `internal/cli/auth.go`). The other P6 and P7 plants touch neither file.
+
+**The acceptance's grep,** `grep -rn 'chatgptPlanBackground\|askPlanBackground\|planNotice' --include=*.go .`: exit 0, three lines, all `llm/provider/consent.go`'s `planNoticeLines` (`:15`, `:20`, `:39`), a P3 name for the notice's lines that contains `planNotice` and is not the WIP's `planNotice`. `chatgptPlanBackground` and `askPlanBackground` are found nowhere. As the acceptance is written it is not met; see the questions.
+
+**Gates (C6),** after the last change to a Go file; each with start, end and exit status taken before any filter; `<scratch>` is this phase's scratch folder:
+
+| Gate | Start | End | Exit |
+| :--- | :--- | :--- | :--- |
+| pre-add-check | 21:27:15 | 21:27:24 | 0 |
+| race | 21:27:24 | 21:28:42 | 0 |
+| check-test-isolation | 21:28:42 | 21:30:05 | 0 |
+| check-acpext-deps | 21:30:05 | 21:30:05 | 0 |
+| linux-race | 21:30:06 | 21:37:06 | 0 |
+| windows-race | 21:37:06 | 21:39:33 | 0 |
+| preflight | 21:39:33 | 21:47:20 | 0 |
+
+The Linux and Windows rows are `run-on-host --race --need linux` and `--need windows` of `go test -race -count=1 ./...` and `go -C acpext test -race -count=1 ./...` (the Windows laptop's native shell, no WSL distro); `make preflight` is one cold lint run. A first run of every gate, 20:58 to 21:26, ended with preflight exit 2: `gocognit` on `TestAuthStatusJSONPlan` (cognitive complexity 56 of 50, `statusplan_test.go:90`) and `modernize` `embedlit` at `authconsent_test.go:32`, both in this phase's own tests. Fixed by moving two subtests into functions and by naming the `auth.Logins` value, no `//nolint`; the plants of those tests were run again, and every gate above was run again after that last change to a Go file (the first run's other gates were exit 0). Between the two runs the acceptance packages `go test ./internal/cli ./acpserver ./llm/provider ./internal/auth ./internal/archtest` passed.
+
+**Files and times.** Staged files' modification times against the first gate's start:
+
+All staged files were last written before the first gate of the second (final) run, which began at 21:27:15 on 2026-11-16 (the first run began at 20:58:58); the latest is 21:26:36.
+
+| File | Modified |
+| :--- | :--- |
+| `acpserver/authconsent_test.go` | 21:26:36 |
+| `internal/cli/statusplan_test.go` | 21:26:36 |
+| `internal/cli/auth.go` | 20:48:02 |
+| `docs/architecture.md` | 20:47:55 |
+| `README.md`, `docs/guides/credentials.md` | 20:47:36 |
+| `internal/cli/plansignin_test.go` | 20:43:49 |
+| `internal/cli/testdata/auth-status-plan.json.golden` | 20:42:57 |
+| `internal/cli/loginissuer_test.go` | 20:42:06 |
+| `internal/cli/testdata/auth-status.json.golden` | 20:40:49 |
+| `llm/provider/signinrun.go` | 20:40:08 |
+
+The records (this PLAN, `docs/README.md`) were written after the gates and are checked by `make check-records markdownlint` below.
+
+**Docs rows (C9).**
+
+* `docs/guides/credentials.md` status section (the text form's consent words, the `sessionKind`, `consents` and `consentTerms` rows and an example row) — fixed; this is 0051-PLAN's row "`credentials.md:86-132` (`auth status --json`) — open: 0052-PLAN P4 step 2", which this phase closes (the dated note at that row in 0051-PLAN was added in the review below).
+* `docs/guides/credentials.md`, the ChatGPT passage (`gobble auth status` shows the kind and the answer; the phone is asked the same question in the same words before any address; the `confirm`'s message and `_meta.gobble.step.text` are gobble's wording) — fixed; closes 0051-PLAN's rows "`credentials.md:189-300` — open: 0052-PLAN P4 step 3" and "`:200-215` — open for 0052-PLAN P4 step 3: the plan's consent through the phone and `TestConsentWordingOverACP`" (its P6 record, "Still open for 0052-PLAN P4"). The notice's content, the files (`auth.json`, `host-id`, `clients.json`), the command (`gobble auth consent`) and the host id were already there from P3, 0051-PLAN P6 and P7.
+* `README.md` (the status sentence) — fixed.
+* `docs/architecture.md` (`llm/provider`'s `SessionKindOf`; `internal/cli`'s status row) — fixed. The acpext requirement row stays open for 0051-PLAN P8a.
+* `internal/cli/auth.go`'s help for `auth status` and `--json` — fixed. The `auth login` help already names the plan.
+* `docs/README.md` rows 0052 PLAN — updated for this record.
+* Searched: `README.md`, `AGENTS.md`, `docs/architecture.md`, `docs/guides/` (`credentials.md`, `developing.md`, `models-json.md`), `docs/README.md`; no other statement names the status row's members or contradicts them.
+
+**Not verified.** No live provider, no real browser and no phone: every sign-in here runs against an issuer in process, the browser's part a paste or a scripted elicitation, so the real OpenAI sign-in, its listing check and the real phone are L4 to L6 of P6. The Windows run is the laptop's `go test -race ./...` of the root and `acpext`, not a WSL distro's.
+
+**Questions for the owner** (each with evidence and three options in the phase's return): a new exported name, `provider.SessionKindOf`; the acceptance's grep against `planNoticeLines`; `provider.New` having no kind check.
+
+Staged, not committed; the coordinator commits on the branch.
+
+#### Review and fixes (2026-11-16)
+
+**Provenance and verdict.** An independent strongest-tier reviewer at high effort, on the coordinator's brief, read the staged P4. It found the status row correct for every credential shape,
+the foreign session refused on every surface, four of five wording surfaces held, ten race rounds clean, and ten of its twelve own breaks caught; two blockers (B-1, B-2), four should-fixes
+(S-1 to S-4) and notes (N-2, N-4, N-5), and put three questions to the owner. This part was written by a mainstream model at medium effort on the coordinator's follow-up brief, base `cecc892`,
+the same 13 files staged plus what is listed here. Staged, not committed. *(2026-11-17: the fixes of the second review are below.)*
+
+**Two corrections the coordinator made, recorded plainly.**
+
+1. *A new exported name was built before it was put to the coordinator.* The brief said to stop on a new exported name the plan does not call for; `provider.SessionKindOf` was built first and reported
+   afterwards, on the reading that the plan's step 2 required the value. That reading was the agent's, not the plan's; the rule was to stop. The owner then ruled on it (ruling 1, below).
+2. *The "already true" list held a false claim.* It said `drive` (`llm/provider/signinrun_test.go:76`) "is `TestSignInChatGPTPlanPasted`'s sign-in". It is not: the archived tests
+   (`git show 1406bd6:llm/provider/signin_test.go`, `TestSignInChatGPTPlan` near `:287` and the pasted one near `:351`) ran `SignIn`, the wizard behind `gobble auth login openai`; `drive` runs `StartSignIn`,
+   the engine the ACP path uses. It was found by the reviewer, who broke client reuse on the terminal (`llm/provider/signin.go`, `TokenStore: tokenStore(store)` replaced by a store without the client
+   store) and saw both packages pass. The text above is corrected in place, with a dated note at it.
+
+**The owner's three rulings of 2026-11-16, each the owner's ruling, relayed by the coordinator.**
+
+1. "Keep it, and make it the single place the kind is read". Done: `git grep -n 'SessionKind()' -- '*.go' ':!*_test.go'` gives one line, `llm/provider/signinrun.go:79`, in `SessionKindOf` (`:75`).
+   The other reads now call it: `storedMethod` (`llm/provider/consent.go:97`), the adapter's `planConsentOf` (`llm/provider/provider.go:444`, through `loginOf`) and `StartSignIn`'s `Previous`
+   (`llm/provider/signinrun.go:111`). `internal/auth` holds no inference of its own: `AcceptsLogin` (`internal/auth/resolve.go:38`) builds a `provider.Login` and calls `provider.Accepts`,
+   so no layering rule (archtest rule 4) is bent and no stop arose. Plants of 0051 P4, P6 and P7 that touch these files re-run: below. Test: `TestSessionKindOf` (`llm/provider/sessionkind_test.go:13`).
+2. "Amend the acceptance to a whole-word grep". Done: a dated note on P4's acceptance line. `grep -rnw -e chatgptPlanBackground -e askPlanBackground -e planNotice --include=*.go .`: exit 1, nothing found.
+3. "Add the check now, in P4". Done: `Options.login` refuses a stored session `!Accepts(id, l)` (`llm/provider/provider.go:107`) with the resolver's error and words, `provider openai has an OAuth login in auth.json,
+   which gobble does not use (0005-PLAN F4-3b)`, a plain error, the resolver's own (`auth check` maps the resolver's error to `invalid` / `invalid_state` directly and never consults `llm.Kind`); `New` returns it as it is, naming the provider once *(2026-11-17: the first text had `New` prefix it with `provider openai: `, which named the provider twice)*. Tests:
+   `TestNewRefusesAForeignLogin` (`llm/provider/foreignlogin_test.go:17`: another application's ChatGPT login, a login stored with no kind, a plan session accepted) and
+   `TestStaleResolverCannotBuildAForeignSession` (`internal/cli/staleresolver_test.go:16`: a resolver built over a plan session, `auth.json`'s entry then replaced by a foreign one, the run's provider and a
+   session's provider refused). Plants: the check removed, which fails both. The whole suite passes with it (`go test ./internal/cli ./acpserver ./llm/... ./internal/auth ./internal/archtest`, then the gates
+   below): no test needed changing. *(2026-11-17, corrected in the second review: the first text said here that a provider built first, over a session a run's `Sessions` holds, and the entry replaced afterwards, "is not refused, since the run keeps the session it loaded; that is the cache's design", and treated the ruling as met. That was false and the ruling was only partly met: at the held session's next refresh the SDK reloads `auth.json` under the refresh lock and adopts a stored session whose refresh token differs, its kind included (go-llmprovider-sdk `v1.31.0` `llmprovider/auth/oauth_session.go:971`, `loadRotated` `:1007-1022`), so the held session becomes the foreign one and a build over it is not refused. The check refuses at the load; it does not refuse a session a run already holds.)* Dated amendments: P4's steps 1a and 1b, and a note at
+   0051-MADR D2.
+
+**Items.**
+
+* **B-1, no test completed the plan sign-in in the terminal.** Built: `TestSignInChatGPTPlanTerminal` (`internal/cli/plansignin_test.go:307`) and `TestPlanAfterLogoutReusesClientTerminal` (`:356`), through
+  `terminalPlan` (`:253`): `gobble auth login openai` on a terminal (`loginWith`, `signInTo`, `hostSignIn`: production's), `provider.SignIn` the real wizard against the plan issuer, a pipe for stdin, the
+  consent allowed by typing `1`, the callback pasted when the browser opens (`openURL` replaced by a function that writes it); the SDK's own loopback listener is opened by the wizard and the paste wins it.
+  They assert the consent's wording shown before the browser, the authorize query (gobble's name, `ext_agent_host_id` equal to `<state>/host-id`), the saved session's kind, the consent `granted`, the host id,
+  `clients.json`'s record, a second sign-in over the stored session that asks nothing and signs in to the issued client with `id_token_hint` and no `agent_name_hint`, and after a logout (revoked, deleted) a
+  new sign-in naming the stored client and the host with no `agent_name_hint` and the consent asked again. The ACP path's tests are renamed `TestSignInChatGPTPlanACP` (`:130`) and
+  `TestPlanAfterLogoutReusesClientACP` (`:192`). Which of the plan's rows each holds: the plan's row `TestSignInChatGPTPlan` is held on both paths, by `...ACP` (the engine `StartSignIn`, what an ACP client's
+  `authenticate` runs) and `...Terminal` (the wizard `SignIn`, what `gobble auth login`, `/login`, setup, the first run and `acp --login` run); `TestPlanAfterLogoutReusesClient` likewise; the archived
+  `TestSignInChatGPTPlanPasted` is `...Terminal`'s paste, and the ACP path completes by paste only. Plants: the reviewer's (`wizard-client-store-dropped`) and the plan's (`terminal-host-id-not-passed`), below.
+* **B-2, `docs/architecture.md`'s `internal/cli` row.** It now reads "a stored session of a kind no offered method signs in to (another application's ChatGPT login, not Grok's or the plan's) is `usable: false`,
+  `oauth_unused`". The guide's `reason` row and the README say the same or less: `docs/guides/credentials.md`'s `reason` row names "another application's ChatGPT login", and its line 290 says "an OpenAI entry of another kind,
+  another application's ChatGPT login"; neither says a Grok session is unusable.
+* **S-1, the advertised method's wording.** `TestAdvertisedPlanConsentIsGobbles` (`internal/cli/advertised_test.go:17`): `authOptions().Methods("openai")`'s `chatgpt_plan` consent equals `provider.Offered("openai")`'s
+  and `provider.ConsentText`'s, text and links. Plant `advertised-method-text-altered` (the wiring replaced by a function that alters the text).
+* **S-2, `SessionKindOf`'s comment.** `llm/provider/signinrun.go:66-74`: a stored `Kind` comes back as it is, even one the SDK does not know; "" only for no login or one the SDK infers no kind for.
+  `TestSessionKindOf` covers no login, a stored plan kind, an unknown stored kind, openai's and grok's login with none, and a provider with none. Plants `kind-unknown-dropped`, `kind-not-inferred-unit`.
+* **S-3, record details.** The six-tests sentence, the `statusplan_test.go:266` citation, every `path:line` below re-checked at the end of this pass, and the dated notes at four rows of 0051-PLAN
+  (`:1879`, `:1880`, `:2885`, `:2891`) saying each is closed by this phase and where. The record's "now closed" is therefore true.
+* **S-4, the Verification lines.** Dated notes at the `./llm/provider/` and `./internal/cli/` lines: the old pattern's `TestSignInChatGPTPlan|TestPlanAfterLogout|TestLogoutPlan` matched no test in `./llm/provider/`
+  (`go test -list` of it printed none); the patterns that run this phase's tests are given there, each checked with `go test -list` to match every name it claims (24 in `./llm/provider/`, 13 in `./internal/cli/`).
+* **N-2, the `sessionKind` row** in `docs/guides/credentials.md` says it is absent when the SDK names no kind (the golden's `claude` row).
+* **N-4, the foreign stand-in.** `statusPlanForeignNoKind` (`internal/cli/statusplan_test.go:191`): an `auth.json` written as text with no `kind`, the fields of Pi's entry shape and gobble's own recorded issuer
+  and client (`internal/auth/store.go`'s `Entry`; no real file was read): `sessionKind` `chatgpt` by the SDK's inference, `usable: false`, `oauth_unused`, no consent. Plant `usable-from-has-without-accepts` fails it too.
+* **N-5, the leak assertion.** `noTokens` and `textRow` (`internal/cli/statusplan_test.go:70`, `:80`): the subtests that print a session's row check the JSON and the text form for the fixtures' token strings (`secret`, `id-token`; the plan fixture stores an
+  ID token); *(2026-11-17, corrected: the first text said every subtest checked both; the unreadable-store subtest, whose file holds no token, checks only the JSON.)* Plants `token-leaked-in-source` (a token appended to the row's `source`) and `token-leaked-in-text` (a refresh token appended to the text row).
+
+**Plants of this phase, every one, on the final tree** (scratch copies, `GOPROXY=off`, no proxy variable; each exit 1 with a `--- FAIL`, none a build failure; the unbroken runs exit 0):
+
+| Plant | Test | Break | Exit | Failing line |
+| :--- | :--- | :--- | :--- | :--- |
+| `host-id-not-passed` | `TestSignInChatGPTPlanACP`, `TestPlanAfterLogoutReusesClientACP` | the host id not passed (ACP path, `agentauth.go`) | 1 | `plansignin_test.go:153: the first authorize query map[agent_name_hint:[gobble] client_id:[dynamic_agent_client] code_challenge:[9907gqFV3ZUxyQ2o6lAtzi` |
+| `clients-cleared-by-logout` | `TestPlanAfterLogoutReusesClientACP` | `clients.json` cleared by the logout | 1 | `plansignin_test.go:221: clients.json after the logout holds {ClientID: HostID:}, <nil>; want the issued client kept` |
+| `usable-from-has-without-accepts` | `TestAuthStatusJSONPlan` | `Usable` from `Has` without `Accepts` | 1 | `statusplan_test.go:222: the foreign row {Provider:openai Usable:true Reason:oauth_unused AuthType:oauth SessionKind:chatgpt Consents:map[] ConsentTerm` |
+| `terms-left-out-while-unanswered` | `TestAuthStatusJSONPlan` | `consentTerms` left out while unanswered | 1 | `statusplan_test.go:132: consentTerms [], want the one consent of the plan's method` |
+| `terms-text-sdk-default` | `TestAuthStatusJSONPlan` | `text` the SDK's default | 1 | `statusplan_test.go:136: consentTerms[0] {ID:chatgpt_plan.background_use Required:true Text:You're using your ChatGPT plan: this app's requests count t` |
+| `kind-not-inferred` | `TestAuthStatusJSON` (golden) | `SessionKindOf` returning the stored `Kind` only | 1 | `auth_test.go:152: auth-status.json differs from testdata/auth-status.json.golden:` |
+| `status-accepts-build-refuses` | `TestForeignOpenAISessionRefused` | status accepts while the build refuses | 1 | `statusplan_test.go:298: status: usable true, reason ""; want not usable, oauth_unused` |
+| `every-surface-accepts-foreign` | `TestForeignOpenAISessionRefused` | `Accepts` always true | 1 | `statusplan_test.go:298: status: usable true, reason ""; want not usable, oauth_unused` |
+| `logout-revokes-foreign` | `TestForeignOpenAISessionRefused` | the logout revoking a foreign session | 1 | `statusplan_test.go:328: the logout of a foreign session sent ["POST https://auth.openai.com/oauth/revoke"], want nothing: it was not gobble's to revok` |
+| `start-sign-in-without-consent-text` | `TestConsentWordingOverACP` | `StartSignIn` without `ConsentText` | 1 | `authconsent_test.go:73: _meta.gobble.step.text "You're using your ChatGPT plan: this app's requests count toward its usage, which you can manage on th` |
+| `terminal-host-id-not-passed` | `TestSignInChatGPTPlanTerminal`, `TestPlanAfterLogoutReusesClientTerminal` | the host id not passed (terminal, `login.go`: the plan's) | 1 | `plansignin_test.go:325: the first authorize query map[agent_name_hint:[gobble] client_id:[dynamic_agent_client] code_challenge:[et8aAm8KOOSBkIb2_Pt_Ke` |
+| `wizard-client-store-dropped` | `TestSignInChatGPTPlanTerminal`, `TestPlanAfterLogoutReusesClientTerminal` | the client store dropped on the wizard path (`signin.go`: the reviewer's) | 1 | `plansignin_test.go:337: clients.json holds {ClientID: HostID:}, <nil>; want the issued client and the host id` |
+| `advertised-method-text-altered` | `TestAdvertisedPlanConsentIsGobbles` | the advertised `Methods` replaced by one that alters the text | 1 | `advertised_test.go:35: the advertised consent {ID:chatgpt_plan.background_use Required:true Text:altered Links:[{Rel:usage URL:https://chatgpt.com/set` |
+| `new-accepts-foreign-login` | `TestNewRefusesAForeignLogin` | the `Options.login` check removed | 1 | `foreignlogin_test.go:39: the build gave <nil>, want the resolver's refusal of a foreign login` |
+| `stale-resolver-builds-foreign` | `TestStaleResolverCannotBuildAForeignSession` | the `Options.login` check removed | 1 | `staleresolver_test.go:30: the run's provider over a foreign session gave <nil>, want the refusal "has an OAuth login in auth.json, which gobble does n` |
+| `kind-unknown-dropped` | `TestSessionKindOf` | an unknown stored kind dropped | 1 | `sessionkind_test.go:32: SessionKindOf(openai) = "", want "a_future_kind"` |
+| `kind-not-inferred-unit` | `TestSessionKindOf` | no inference (the stored `Kind` only) | 1 | `sessionkind_test.go:32: SessionKindOf(openai) = "", want "chatgpt"` |
+| `token-leaked-in-source` | `TestAuthStatusJSONPlan` | a token appended to the row's `source` | 1 | `statusplan_test.go:120: auth status --json printed a credential:` |
+| `token-leaked-in-text` | `TestAuthStatusJSONPlan` | a refresh token appended to the text row | 1 | `statusplan_test.go:147: auth status printed a credential:` |
+| `kind-read-twice` | `TestStartSignInPassesPrevious` | `StartSignIn`'s `Previous` taken for the wrong kind | 1 | `signinrun_test.go:184: the second sign-in's steps [{1 1 confirm   0001-01-01 00:00:00 +0000 UTC  false chatgpt_plan.background_use gobble signs in to ` |
+
+Twenty plants, twenty exit 1 with a `--- FAIL`, none a build failure. Unbroken runs on a scratch copy, nine of them (`host-id-not-passed`, `terminal-host-id-not-passed`, `usable-from-has-without-accepts`, `status-accepts-build-refuses`, `start-sign-in-without-consent-text`, `advertised-method-text-altered`, `new-accepts-foreign-login`, `kind-unknown-dropped`, `token-leaked-in-source`, covering every new or renamed test): exit 0 each. The driver is `~/.cache/claude-session-5a7234fa/scratch/gobble-0052-p4/plants.py`.
+
+**Earlier plants re-run** (this pass changed `llm/provider/consent.go`, `provider.go` and `signinrun.go`; *(2026-11-17, corrected: the first text also named `internal/cli/auth.go`, which this pass did not change)* each plant of 0051-PLAN P4's, P6's, P6-fix's and P7's drivers whose edit touches `consent.go`, `provider.go`,
+`signinrun.go`, `policy.go`, `login.go`, `resolve.go` or `internal/cli/auth.go`): 0051 P4: 24 of 24, 0051 P6 fix: 24 of 24, 0051 P7: 4 of 4, each exit 1 with a `--- FAIL`, none a build failure (drivers `p4plants.py`, `p6plants.py`, `p7plants.py`, the earlier phases' with their scratch path changed and, for `previous-never` and `start-deletes-stored` of the P6 fix, their anchors moved to the lines as step 1a leaves them: the same breaks). The five plants of the original P6 driver that are not in the P6 fix driver (`listing-refusal-ignored`, `save-before-listing-provider`, `save-before-listing-acp`, `unavailable-listing-fails-provider`, `unavailable-listing-fails-acp`) anchor on `signinrun.go` text the P6 fix removed (`if l.Err != nil && errors.Is(l.Err, llm.ErrAuth) {`, 0 matches): they are superseded by the fix's `b2-*` plants and were not run; the anchor check says so.
+
+**Gates (C6),** after the last change to a Go file, each with start, end and exit status taken before any filter. A first start of this run (23:07:59) used the unstaged files only for its pre-add list and was stopped by the agent
+before its `make race` ended; its rows are not counted. The list below is `git diff HEAD --name-only` plus the untracked files, `.go` only.
+
+| Gate | Start | End | Exit |
+| :--- | :--- | :--- | :--- |
+| pre-add-check | 23:08:38 | 23:08:52 | 0 |
+| race | 23:08:52 | 23:10:15 | 0 |
+| check-test-isolation | 23:10:15 | 23:11:39 | 0 |
+| check-acpext-deps | 23:11:39 | 23:11:40 | 0 |
+| linux-race | 23:11:40 | 23:15:56 | 0 |
+| windows-race | 23:15:56 | 23:20:37 | 0 |
+| preflight | 23:20:37 | 23:28:50 | 0 |
+
+The Linux and Windows rows are `run-on-host --race --need linux` and `--need windows` of `go test -race -count=1 ./...` and `go -C acpext test -race -count=1 ./...` (the laptop's native shell, no WSL distro); preflight is one cold lint run. The final `make check-records markdownlint` is below the table of files.
+
+**Files and times.** Staged Go and golden files' modification times against the first gate's start (23:08:38): the latest is 22:48:15; none is later.
+
+| File | Modified |
+| :--- | :--- |
+| `llm/provider/sessionkind_test.go` | 22:48:15 |
+| `internal/cli/statusplan_test.go` | 22:48:15 |
+| `internal/cli/advertised_test.go` | 22:48:15 |
+| `internal/cli/staleresolver_test.go` | 22:47:30 |
+| `llm/provider/foreignlogin_test.go` | 22:46:39 |
+| `internal/cli/plansignin_test.go` | 22:46:17 |
+| `llm/provider/signinrun.go` | 22:45:10 |
+| `llm/provider/provider.go` | 22:45:10 |
+| `llm/provider/consent.go` | 22:45:10 |
+| `acpserver/authconsent_test.go` | 21:26:36 |
+| `internal/cli/auth.go` | 20:48:02 |
+| `internal/cli/testdata/auth-status-plan.json.golden` | 20:42:57 |
+| `internal/cli/loginissuer_test.go` | 20:42:06 |
+| `internal/cli/testdata/auth-status.json.golden` | 20:40:49 |
+
+The docs and records were last written after the gates (the README, `docs/architecture.md` and `docs/guides/credentials.md` before them); `make check-records markdownlint` ran after the last of them.
+
+**Docs rows.** `docs/architecture.md` (B-2, the `New` check, the single place for the kind) and `docs/guides/credentials.md` (N-2) fixed; 0051-PLAN's four rows annotated (S-3); 0051-MADR D2 annotated (ruling 3);
+0052-PLAN's Verification and acceptance annotated (S-4, ruling 2). Searched: `README.md`, `AGENTS.md`, `docs/architecture.md`, `docs/guides/`, `docs/README.md`, `docs/decisions/0051-*`, `0052-*`.
+
+**Not verified.** No live provider, real browser or phone. The terminal tests run the SDK's real wizard against an issuer in process; the wizard still binds its own loopback listener, which a paste beats.
+The reviewer's break driver and outputs (`gobble-0052-p4-review/breaks.py`, `breaks.out`) were read, not run.
+
+**Deviations or questions:** none open. The two corrections above are the agent's.
+
+#### Second review and fixes (2026-11-17)
+
+**Provenance and verdict.** A second independent strongest-tier reviewer at high effort, on the coordinator's brief, read the re-staged P4. Every first-round finding was fixed and each new test failed its own break; the pass had
+introduced a data race (R2-B1), one ruling was only half met (R2-B2), and the new terminal tests bind real ports (R2-B3); three should-fixes (R2-S1, R2-S2 and the doubled provider name). The fixes were begun by one mainstream-tier
+agent at medium effort, which ran out of working budget before the proof, the gates and the record, and finished by a second mainstream-tier agent at medium effort, each on the coordinator's brief; base `cecc892`, 21 files staged before
+this pass. Staged, not committed.
+
+**The correction the coordinator named.** The first review's record said of a provider built over a session a run's `Sessions` already holds, with `auth.json`'s entry replaced afterwards, that it "is not refused ... the cache's
+design", and treated the owner's ruling "Add the check now, in P4" as met. That was false. The ruling was met at the load and not at use: at a held session's next refresh the SDK reloads the store under the refresh lock and adopts
+a stored session whose refresh token differs, its kind included (go-llmprovider-sdk `v1.31.0`, `llmprovider/auth/oauth_session.go:971` `reloadOrRefresh` calling `loadRotated`, `:1007-1022`). The statement is corrected in place above,
+at 0051-MADR D2's note and in `docs/architecture.md`; a ruling met in part is reported as met in part.
+
+**The owner's rulings of 2026-11-17, each "the owner's ruling, relayed by the coordinator".**
+
+1. "Refuse at the point of use" (a small gobble token source wraps the held session; on each token request it checks the session's current kind under the session's lock and, if the policy no longer accepts it, returns the
+   resolver's error and drops the session; not chosen: checking when the held session is handed out; accepting it and documenting it). The builder stopped, because the SDK asserts its concrete session type and a wrapper would hide a
+   plan session from it. Then, put the stop, the owner ruled: "Ask the SDK for interfaces, then build as ruled" (a go-llmprovider-sdk change replaces the concrete-type checks with interfaces, in its next release; gobble then builds the
+   wrapper exactly as ruled; until that release a held session can still adopt a foreign entry, and the docs say so). This was not the option the coordinator recommended; the coordinator recommended refusing in gobble's own store adapter now.
+   Not chosen: refusing in gobble's own store (the adapter refuses to hand the SDK a foreign entry on a reload and to overwrite one on a save); refusing in the store now and asking the SDK too.
+   *(2026-11-17, later; the owner's ruling, relayed by the coordinator, on the SDK's draft record for the held session, "The SDK refuses to adopt another sign-in (Recommended)": the SDK's own session would refuse to adopt a stored session that is not the same sign-in, at the places it adopts from its store, and the token request would fail with the existing auth-failure error, with no interfaces and no new exports. That record is a proposed draft, not accepted and not released. If it is accepted and released, gobble's later step becomes a pin bump and a test that a held session fails, sends no foreign token and stays `chatgpt_plan`, with no wrapper; until then the documented limit stands as written.)*
+2. "Keep them until the SDK offers a no-listener option" (the two terminal plan sign-in tests keep binding the SDK wizard's callback port, 1455, or 1457 when 1455 is taken). This was not the coordinator's recommendation.
+
+**R2-B1, the data race.** Reproduced first by the reviewer: the `planConsentOfRacesARefresh` reproduction, run with `-race` on the staged tree, reported `DATA RACE` (14 lines: `loginOf` read by `planConsentOf` against `Invalidate`'s write).
+`planConsentOf` called `SessionKindOf(id, loginOf(s))`, and `loginOf` copies a live session's fields with no lock. Fixed: `kindOfSession(s)` (`llm/provider/signinrun.go:87`) is the one call into the SDK's `SessionKind()`, which takes the
+session's lock (`oauth_session.go:403`); `SessionKindOf` (`:75`) calls it through the login's own session, and `planConsentOf` (`llm/provider/provider.go:456`) calls it directly on the live session.
+`git grep -n 'SessionKind()' -- '*.go' ':!*_test.go'`: one line, `llm/provider/signinrun.go:87`. The other caller of `loginOf` is `sdkStore.Save` (`llm/provider/login.go:157`), which the SDK calls with the refresh's own `next` session
+(`oauth_session.go:352` and `:995`, a value the refresh built, not shared). Test: `TestPlanConsentOfReadsTheKindUnderTheSessionLock` (`llm/provider/planconsentrace_test.go:14`), run under `-race` by `make race` and the ten-round run below.
+Plant `plan-consent-of-unlocked-read` (the unlocked read restored): `go test -race` exits 1 with 14 `DATA RACE` lines; unbroken: exit 0.
+
+**R2-B2, the held session: not built; recorded.** No code is written for it in P4, by the owner's rulings above. Today a stored session of a kind no offered method signs in to is refused when gobble loads it; a session a run already holds can,
+if another process writes another application's ChatGPT login into gobble's own `auth.json` while the run goes on, adopt it at its next refresh and send its token. The SDK asserts its own concrete session type in three places, in two
+files, at `v1.31.0` (read with `git show v1.31.0:<path>`): `llmprovider/internal/chatgpt/chatgpt.go:50` and `:58`, and `llmprovider/providers/openai/openai.go:380`; the reload that adopts a foreign entry (`oauth_session.go`
+`reloadOrRefresh`, `loadRotated`) asks the token store, not the token source. *(The first draft of this part also named `llmprovider/catalog/discovery.go:481`; at `v1.31.0` that line is an interface, `identityUser`, in `nameSession`, not a
+concrete-type check, and is not one of the places.)* The point-of-use refusal is a named step of the gobble phase that bumps the SDK pin to the release with the interfaces. The request to the SDK is on the coordinator's ledger; it is not
+filed in any record of that repository. The reviewer's reproduction, `TestReviewCachedSessionAdoptsAForeignEntry`, fails on this tree by design and is therefore not in it; its text, rewritten to use the in-process issuer, is in "third review" below, and the later phase adopts it. Recorded at 0052-PLAN P4's step 1d, 0051-MADR D2's note, `docs/architecture.md` (the `llm/provider` row) and `docs/guides/credentials.md`
+(after the unused-sign-in sentence).
+
+*(2026-11-17, later; the owner's ruling, relayed by the coordinator, on the SDK's draft record for the held session, "The SDK refuses to adopt another sign-in (Recommended)": the SDK's own session would refuse to adopt a stored session that is not the same sign-in, at the places it adopts from its store, and the token request would fail with the existing auth-failure error, with no interfaces and no new exports. That record is a proposed draft, not accepted and not released. If it is accepted and released, gobble's later step becomes a pin bump and a test that a held session fails, sends no foreign token and stays `chatgpt_plan`, with no wrapper; until then the documented limit stands as written.)*
+
+**R2-B3, the terminal tests keep the SDK's ports.** `TestSignInChatGPTPlanTerminal` (`internal/cli/plansignin_test.go:313`) and `TestPlanAfterLogoutReusesClientTerminal` (`:359`) stay, by the second ruling above. When both ports are held the
+failure surfaces from the SDK as `openai sign-in failed (other)`, whose `errors.Unwrap` chain holds `oauth: registered callback ports unavailable; use device-code login: listen tcp4 127.0.0.1:1455: bind: address already in use` and three more
+`listen` lines; `signInFailed` (`:394`) tells a collision from any other failure by that text, after the failure and with no probe, and fails the test (never skips) with: "the first plan sign-in on the terminal failed because both callback
+ports, 1455 and 1457, are in use on this machine: the SDK's wizard binds them for a terminal sign-in ... Nothing is wrong with gobble; free the ports and run again." Run here on a scratch copy of the final tree (`ports2.sh`): ports free,
+both tests pass (listeners before: 0); with 1455 and 1457 held by `holdports.py` on both address families, both fail at once with that message (exit 1, FAIL 2), and the ports are free again afterwards. The reviewer measured: alone, 20 of 20 pass, and a listener census over those 20 runs saw only 1455 bound; with 1455 held, the wizard falls back to 1457 and passes. That a real Codex login starting while a test holds 1455 cannot bind it is reasoned, not measured. The wizard binds 1455 on both loopback families and 1457 only when 1455 is taken (`oauth_loopback.go`, `listenOpenAILoopback`, `v1.31.0`). The tests switch to a no-listener option in the phase that bumps the SDK pin to the release that has it; the request is on the
+coordinator's ledger and filed nowhere. Written at P4's step 1c, at 0051-PLAN's note on the P6 ruling "Assert what gobble passes; use no real ports", and in `docs/guides/developing.md:86`.
+
+**R2-S1, the consent comes first.** `terminalPlan` (`plansignin_test.go:255`) records the output written when the browser first opens, and the first-sign-in assertions require gobble's wording in that prefix. Plant `consent-after-browser`
+(the browser opened once before the wizard asks): fails at `plansignin_test.go:322`.
+
+**R2-S2, three false claims, corrected in place** (each with a dated note above): "this pass changed ... `internal/cli/auth.go`" (it did not); that `llm.Kind` `other` is what `auth check` derives `invalid` / `invalid_state` from
+(`check` maps the resolver's error directly); and "every subtest checks the JSON and the text form" (the unreadable-store subtest, whose file holds no token, checks the JSON only).
+
+**The error named the provider twice.** `New` returns the refusal as it is (`llm/provider/provider.go:217`; `foreignLoginError` `:125`, built at `:112`): `provider openai has an OAuth login in auth.json, which gobble does not use
+(0005-PLAN F4-3b)`, once. `TestNewRefusesAForeignLogin` (`foreignlogin_test.go`) and `TestStaleResolverCannotBuildAForeignSession` (`staleresolver_test.go`) require that exact text. Plant `new-prefix-doubled`: fails at `foreignlogin_test.go:39`.
+
+**Smaller items.** The comments of `statusPlanForeignNoKind` and `statusPlanForeign` (`internal/cli/statusplan_test.go:190`, `:212`) are each their own; the `sessionKind` row of `docs/guides/credentials.md` says "such as an OAuth entry for Claude".
+
+**Plants, every one of this phase, on the final tree** (scratch copies of the staged tree; `HOME`, `XDG_*`, `GOBBLE_HOME` in the scratch, `GOPROXY=off`, no proxy variable; the race plant under `-race`): 23 plants, 23 exit 1 with a `--- FAIL` or, for
+`plan-consent-of-unlocked-read`, `DATA RACE`; none a build failure. The 23: `host-id-not-passed`, `clients-cleared-by-logout`, `usable-from-has-without-accepts`, `terms-left-out-while-unanswered`, `terms-text-sdk-default`,
+`status-accepts-build-refuses`, `every-surface-accepts-foreign`, `logout-revokes-foreign`, `kind-not-inferred`, `terminal-host-id-not-passed`, `wizard-client-store-dropped`, `advertised-method-text-altered`, `new-accepts-foreign-login`,
+`stale-resolver-builds-foreign`, `kind-unknown-dropped`, `kind-not-inferred-unit`, `token-leaked-in-source`, `token-leaked-in-text`, `kind-read-twice`, `consent-after-browser`, `plan-consent-of-unlocked-read`, `new-prefix-doubled`,
+`start-sign-in-without-consent-text`. The unbroken runs of each plant's tests: 23 of 23 exit 0. The plant driver broke on the way: three plants anchored on `return string(l.session(id, nil, nil, nil).SessionKind())`, which this pass changed
+to `return kindOfSession(l.session(id, nil, nil, nil))`, so the driver's assertion on the anchor stopped it at the ninth plant; the three were re-anchored on the new line (the same breaks), and the driver now reports an anchor that does not match
+and carries on. No test was changed for it. Driver: `~/.cache/claude-session-5a7234fa/scratch/gobble-0052-p4/plants.py`.
+
+**Earlier plants re-run** (this pass changed `llm/provider/provider.go` and `signinrun.go`, and tests): 0051 P4: 24 of 24, 0051 P6 fix: 24 of 24, each exit 1 with a `--- FAIL`, none a build failure; they ran after
+the last change to any Go file but the two lint fixes under "Gates" (the newest staged Go file was then written at 06:47:38, the two runs ended at 06:49:18 and 06:58:46; the lint fixes touched `New` in `provider.go` and the new race test,
+no 0051 P6-fix or P7 plant breaks either, and the two 0051 P4 plants that break `provider.go` elsewhere were re-run after them). 0051 P7: 10 of 10 exit 1, none a build failure, and its five unbroken runs exit 0. Drivers `p4plants.py`,
+`p6plants.py`, `p7plants.py` in the same folder.
+
+**Gates (C6),** after the last change to a Go file, each with start, end and exit status taken before any filter, and the number of listeners on ports 1455 to 1457 on this Mac before it. `linux-race` and `windows-race` are
+`run-on-host --race --need linux` and `--need windows` of `go test -race -count=1 ./...` and `go -C acpext test -race -count=1 ./...` (the laptop's native shell, no WSL distro), so the listeners' count before them is this Mac's, and what
+those hosts' own runs showed is under "Not verified"; `race-10` is `go test -race -count=10 -timeout 60m ./internal/cli ./acpserver ./llm/provider` through `run-heavy` on this Mac; `preflight` is one cold lint run. The list for pre-add-check
+is `git diff HEAD --name-only` plus untracked, `.go` only. The first two full runs of the gates were not counted: each ended with `make preflight` exit 2 on the cold lint, and the Go files changed after them. The
+first: `llm/provider/provider.go:217` `errcheck` (`_, foreign := errors.AsType[*foreignLoginError](err)`) and `llm/provider/planconsentrace_test.go:30` `modernize` (`waitgroupgo`: a goroutine with its own `WaitGroup`). The second, after
+the first fix (`errors.As` with a variable): `provider.go:218` `modernize` `errorsastype`. Fixed properly, no `//nolint`: `if foreign, ok := errors.AsType[*foreignLoginError](err); ok { return nil, foreign }` and `wg.Go(func() {...})`;
+`make lint` then reported 0 issues, the plants touching those lines re-ran (`new-accepts-foreign-login`, `stale-resolver-builds-foreign`, `new-prefix-doubled`, `plan-consent-of-unlocked-read`, and 0051 P4's `mark-dropped` and
+`mark-no-store`, which break `provider.go` elsewhere), all exit 1 with a `--- FAIL`, the race plant with 14 `DATA RACE` lines, and their unbroken runs exit 0; `new-prefix-doubled`'s anchor and break were adapted to the new code (it
+wraps `foreign` in the doubled prefix) and, before that, the anchor miss produced a build failure which the re-run caught. The table below is the third run, which began after the last Go change. Its first `preflight` row ended exit 2 on
+`markdownlint` alone (`docs/guides/credentials.md:309`, line length, a sentence of this pass's own, since wrapped); `preflight-2` is the whole of `make preflight` again, with `check-records` and `markdownlint` in it, after the wrap.
+
+| Gate | Start | End | Exit | Listeners on 1455-1457 before |
+| :--- | :--- | :--- | :--- | :--- |
+| pre-add-check | 08:30:28 | 08:30:43 | 0 | 0 |
+| race | 08:30:43 | 08:32:11 | 0 | 0 |
+| check-test-isolation | 08:32:11 | 08:33:36 | 0 | 0 |
+| check-acpext-deps | 08:33:36 | 08:33:36 | 0 | 0 |
+| linux-race | 08:33:36 | 08:41:34 | 0 | 0 |
+| windows-race | 08:41:34 | 08:44:02 | 0 | 0 |
+| race-10 | 08:44:02 | 08:57:23 | 0 | 0 |
+| preflight | 08:57:23 | 09:07:21 | 2 | 0 |
+| preflight-2 | 09:07:52 | 09:17:49 | 0 | 0 |
+
+**Files and times.** Staged Go and golden files' modification times against the first gate's start (08:30:28): the newest is 08:28:40.
+
+| File | Modified |
+| :--- | :--- |
+| `llm/provider/provider.go` | 08:28:40 |
+| `llm/provider/planconsentrace_test.go` | 07:52:39 |
+| `internal/cli/plansignin_test.go` | 06:47:38 |
+| `internal/cli/staleresolver_test.go` | 06:46:09 |
+| `llm/provider/foreignlogin_test.go` | 06:46:03 |
+| `internal/cli/statusplan_test.go` | 06:45:51 |
+| `llm/provider/signinrun.go` | 06:42:52 |
+| `llm/provider/sessionkind_test.go` | 22:48:15 |
+| `internal/cli/advertised_test.go` | 22:48:15 |
+| `llm/provider/consent.go` | 22:45:10 |
+| `acpserver/authconsent_test.go` | 21:26:36 |
+| `internal/cli/auth.go` | 20:48:02 |
+| `internal/cli/testdata/auth-status-plan.json.golden` | 20:42:57 |
+| `internal/cli/loginissuer_test.go` | 20:42:06 |
+| `internal/cli/testdata/auth-status.json.golden` | 20:40:49 |
+
+**Docs rows.** `docs/guides/developing.md:86` (the two tests' ports), `docs/architecture.md` (the `llm/provider` row: `New`'s check at load, and the open item), `docs/guides/credentials.md` (the `sessionKind` row, and the sentence after the unused-sign-in
+paragraph) fixed; 0051-PLAN's note on the P6 ruling (the later note, now its own paragraph), 0051-MADR D2's notes and 0052-PLAN's step 1c and 1d written; the false statements above corrected in place. Searched: `README.md`, `AGENTS.md`,
+`docs/architecture.md`, `docs/guides/`, `docs/README.md`, `docs/decisions/0051-*`, `0052-*`.
+
+**Not verified.** The port behaviour was measured on this Mac only; the Linux and Windows host runs are in the table (both exit 0, so the two terminal tests passed there; their output, run without `-v`, did not say whether the ports were free). The Linux run waited in the host queue behind another
+agent's measurement. No live provider, real browser or phone. The held-session
+refusal is not built (the owner's rulings above), so a held session that adopts a foreign entry is not refused today.
+
+**Stops and questions:** none open. Deviations: the corrections the coordinator named and listed above; the first draft's `discovery.go` cite. The held-session item waits for the SDK's interfaces by the owner's ruling.
+
+#### Third review (2026-11-17)
+
+**Verdict.** A third independent strongest-tier reviewer read the third staging and found it committable, with no blocker: the race fixed and held by a race test, the owner's rulings built, the held-session limit stated truthfully, every
+one of its breaks failing, and its own ten race rounds clean. It left four small items and one note, done by the same mainstream-tier agent at medium effort, on the coordinator's brief.
+
+1. **A measurement the reviewer did not make.** The text said the reviewer measured that "a real Codex login starting while a test holds 1455 cannot bind it"; the reviewer reasoned it. Corrected in place, as "reasoned, not measured", in
+   0051-PLAN's note on the P6 ruling (the "2026-11-17, later" paragraph) and in R2-B3 above; `docs/guides/developing.md` and the other places do not repeat it.
+2. **Which ports the wizard binds.** The text said the wizard binds ports 1455 and 1457. It binds 1455 on both loopback address families, and 1457 only when 1455 is taken (go-llmprovider-sdk `v1.31.0`, `llmprovider/auth/oauth_loopback.go`,
+   `listenOpenAILoopback` and `listenLoopbackBothFamilies`; the reviewer's listener census over 20 runs saw only 1455). Corrected in `docs/guides/developing.md:86`, 0051-PLAN's note, 0052-PLAN's step 1c, R2-B3 and the second ruling's line.
+   The failure message ("both callback ports, 1455 and 1457, are in use on this machine", `internal/cli/plansignin_test.go:401`) is true as it stands: it fires only when both are taken.
+3. **The held-session reproduction is in the record, and calls no real service.** The reviewer's `cachedadopt_test.go` lived only in a cache folder, and pointed the plan session's token URL at OpenAI's real issuer: one of the reviewer's scratch
+   probes, with a guard in place, made a single request to a real token endpoint, carrying only fake values. That is why the test below is rewritten to use the in-process issuer (`newTestIssuer`, `llm/provider/login_test.go:98`), every token URL
+   being the issuer's own. It stays out of the tree because it fails today by design. It is the test the later phase, the one that bumps the SDK pin, makes pass, whatever mechanism that phase finds (the SDK-side refusal of the owner's later ruling below, or gobble's own point-of-use refusal). Before pasting it, it was run on a scratch copy of the
+   final tree (`heldverify.py`) with `http.DefaultTransport` replaced by a transport that fails any request to a host other than the in-process issuer and counts it: requests outside the issuer 0 (and 0 to the issuer, since the session's token was current);
+   the test fails, as intended, at its three assertions (the held plan session sent the foreign login's token; its kind became `chatgpt`; a provider was built over it).
+
+```go
+package provider
+
+import (
+	"context"
+	"testing"
+	"time"
+
+	"github.com/maccavelli/go-llmprovider-sdk/llmprovider/auth"
+)
+
+// A run's Sessions holds the plan session it loaded; another process then
+// replaces auth.json's entry with another application's ChatGPT login; at the
+// held session's next refresh the SDK reloads the store under the refresh lock
+// and adopts what it finds. The held session must not become the foreign one:
+// when the point-of-use refusal is built, a provider built afterwards from the
+// same Sessions is refused, and the held session's kind stays the plan's.
+func TestHeldSessionRefusesAForeignEntry(t *testing.T) {
+	ti := newTestIssuer(t) // in-process: every token URL below is its own
+	tokenURL := ti.URL + "/oauth2/token"
+	plan := &Login{Access: "plan-a", Refresh: "plan-r", Expires: time.Now().Add(time.Hour), Issuer: ti.URL,
+		ClientID: "oaiapp_gobbletest", TokenURL: tokenURL, Resource: "https://api.openai.com/v1",
+		Kind: string(auth.SessionChatGPTPlan)}
+	store := &memLogins{logins: map[string]*Login{"openai": plan}}
+	sessions := &Sessions{}
+	if _, err := New("openai", Options{Logins: store, Sessions: sessions}); err != nil {
+		t.Fatalf("the first build over the plan session: %v", err)
+	}
+	// Another process replaces the entry: another application's ChatGPT login, its access current.
+	foreign := &Login{Access: "codex-a", Refresh: "codex-r", Expires: time.Now().Add(time.Hour), Issuer: ti.URL,
+		ClientID: "app_codex", TokenURL: tokenURL, Kind: string(auth.SessionChatGPT)}
+	if err := store.Save(context.Background(), "openai", foreign); err != nil {
+		t.Fatal(err)
+	}
+	held, err := (Options{Logins: store, Sessions: sessions}).login(context.Background(), "openai")
+	if err != nil || held == nil {
+		t.Fatalf("the held session: %v, %v", held, err)
+	}
+	// A 401 on the plan token makes the provider invalidate it; the next Token refreshes.
+	held.Invalidate()
+	tok, err := held.Token(context.Background())
+	if err == nil && tok.Value == "codex-a" {
+		t.Errorf("the held plan session sent the foreign login's token")
+	}
+	if held.SessionKind() != auth.SessionChatGPTPlan {
+		t.Errorf("the held session is now of kind %q, want %q", held.SessionKind(), auth.SessionChatGPTPlan)
+	}
+	if _, err := New("openai", Options{Logins: store, Sessions: sessions}); err == nil && held.SessionKind() == auth.SessionChatGPT {
+		t.Errorf("a provider was built over the held session, now another application's ChatGPT login")
+	}
+}
+```
+
+4. **A gap in a test (the reviewer's N-2).** Nothing held that an error of the store that is not the foreign refusal is still wrapped by `New` with its `provider <id>: ` prefix: the reviewer's break (every error returned unwrapped) passed
+   `llm/provider` and the `internal/cli` foreign tests. `TestNewWrapsAStoreError` (`llm/provider/foreignlogin_test.go:60`), with a login store whose `Load` fails with a fixed error, requires the error to start with `provider openai: ` and to match the
+   store's error with `errors.Is`. Plant `new-error-unwrapped` (`return nil, fmt.Errorf("provider %s: %w", id, err)` becomes `return nil, err`): exit 1, failing at `foreignlogin_test.go:67`: the build's error is "auth.json is unreadable",
+   want the prefix "provider openai: "; unbroken: exit 0.
+5. **N-3, one plain note.** 0051-MADR D2's note of this phase read as an annotation inside an annotation. It was never committed, so it is rewritten as one dated note (2026-11-17) that says what is true today: refused at load; a held session
+   can adopt a foreign entry at its next refresh.
+
+**Gates, after the last change to a Go file** (item 4's test file; each with start, end and exit status taken before any filter, and the listeners on ports 1455 to 1457 on this Mac before it). The ten-round race run is not repeated: the change
+since the second staging's ten clean rounds is one added deterministic test case with no goroutine, and the third reviewer's own ten rounds on the third staging were clean.
+
+| Gate | Start | End | Exit | Listeners on 1455-1457 before |
+| :--- | :--- | :--- | :--- | :--- |
+| pre-add-check | 09:46:58 | 09:47:11 | 0 | 0 |
+| race | 09:47:11 | 09:48:36 | 0 | 0 |
+| check-test-isolation | 09:48:36 | 09:49:59 | 0 | 0 |
+| check-acpext-deps | 09:49:59 | 09:50:00 | 0 | 0 |
+| linux-race | 09:50:00 | 09:54:34 | 0 | 0 |
+| windows-race | 09:54:34 | 09:57:55 | 0 | 0 |
+| preflight | 09:57:55 | 10:05:17 | 0 | 0 |
+
+`pre-add-check` took the changed Go files (`git diff HEAD --name-only` plus untracked, `.go` only). `linux-race` and `windows-race` are `run-on-host --race --need linux` and `--need windows` of `go test -race -count=1 ./...` and
+`go -C acpext test -race -count=1 ./...` (the laptop's native shell, no WSL distro). The newest Go file written in this part, `llm/provider/foreignlogin_test.go`, is dated 09:44:28, before the first gate's start (09:46:58). The record edits after
+the gates (the owner's later ruling, below) touch no Go file. `make check-records markdownlint` ran after the last record edit.
+
+6. **The owner's ruling on the SDK's draft record (2026-11-17), records only.** The owner chose, for the SDK's draft record for the held session, that the SDK itself refuses the adoption ("The SDK refuses to adopt another sign-in (Recommended)"). That
+   record is a proposed draft, not accepted and not released. One dated note beside each statement that a later gobble phase wraps the token source: 0052-PLAN step 1d (the P4 step amendments), the second ruling's list item 1 and R2-B2 in "second review and fixes",
+   and 0051-MADR D2's note. The earlier rulings are not rewritten. Two documents promised a mechanism and now state only the limit: `docs/architecture.md` (the `llm/provider` row: gobble "has no refusal for it yet, and the fix is not released") and
+   `docs/guides/credentials.md` (the sentence ends at "sends that login's token"). "Third review", item 3, now says the test is the one the later phase makes pass, "whatever mechanism that phase finds".

@@ -63,6 +63,29 @@ func MethodCommand(id, methodID string) string {
 // signed in by, as its kind names it (0051-MADR D4 step 2).
 func SignedInMethod(id string, l *Login) (authcontract.Method, bool) { return storedMethod(id, l) }
 
+// SessionKindOf is the kind of stored login l of provider id, as the SDK's
+// (*OAuthSession).SessionKind gives it: l's own Kind when set, returned as
+// stored even when it is not a kind the SDK knows, else the kind the SDK
+// infers, so a session saved before kind existed still has one; "" for l nil
+// or a login the SDK infers no kind for. It is the one place gobble asks the
+// SDK for a session's kind: storedMethod, and through it Accepts and the
+// resolver, the adapter's planConsentOf and StartSignIn's Previous all read
+// it here, and gobble copies no inference rule; auth status --json's
+// sessionKind is this value (0052-MADR D8).
+func SessionKindOf(id string, l *Login) string {
+	if l == nil {
+		return ""
+	}
+	return kindOfSession(l.session(id, nil, nil, nil))
+}
+
+// kindOfSession is the SDK's kind of live session s, read under the session's
+// own lock, as the SDK's SessionKind does: a run's Sessions share one session
+// among its providers while a refresh rewrites its fields. It is the one call
+// into the SDK's SessionKind, and what SessionKindOf and the adapter's
+// planConsentOf both read.
+func kindOfSession(s *auth.OAuthSession) string { return string(s.SessionKind()) }
+
 // StartSignIn begins provider id's sign-in by the method whose contract id
 // is method (one of Offered), for a caller that relays its steps, such as an
 // ACP client: signin.Start with the options MADR D3 lists. It opens no
@@ -92,8 +115,8 @@ func StartSignIn(ctx context.Context, id, method string, o SignInOptions, store 
 		return nil, NewSignInError(id, fmt.Errorf("the stored sign-in: %w", err))
 	}
 	if l != nil {
-		if s := l.session(id, nil, o.HTTPClient, nil); s.SessionKind() != "" && s.SessionKind() == sessionKinds[sessionKey{id, m.ClientIdentity}] {
-			so.Previous = s
+		if kind := SessionKindOf(id, l); kind != "" && kind == string(sessionKinds[sessionKey{id, m.ClientIdentity}]) {
+			so.Previous = l.session(id, nil, o.HTTPClient, nil)
 		}
 	}
 	run, err := startSignIn(ctx, llmprovider.ProviderID(id), llmprovider.AuthMethodID(method), so)

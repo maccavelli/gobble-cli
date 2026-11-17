@@ -106,7 +106,8 @@ Early, and built in the order [docs/README.md](docs/README.md#build-order) gives
   the key itself is refused on the command line, so pipe one in — `echo sk-test-only | gobble auth login openai --api-key -`
   stores it in `auth.json`, `gobble auth login openai --api-key -` on a terminal asks for it instead of echoing, and
   for one run only `echo sk-test-only | gobble --model openai/gpt-6-luna --api-key - -p hello` uses it without storing.
-  `gobble auth logout <provider>` removes a stored entry, `gobble auth status` shows where each key comes from and
+  `gobble auth logout <provider>` removes a stored entry, `gobble auth status` shows where each key comes from, and for a sign-in its kind and what it holds of
+  the consent, and
   `gobble auth check` whether one is usable. Grok, Kilo and OpenAI's ChatGPT plan sign in with
   `gobble auth login grok|kilo|openai`, `--method api-key|browser|device|chatgpt-plan` names a way with no menu,
   `gobble auth consent` lists and changes the one consent a ChatGPT plan sign-in asks, and

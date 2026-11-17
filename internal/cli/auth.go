@@ -28,7 +28,7 @@ import (
 type AuthCmd struct {
 	Login   AuthLoginCmd   `cmd:"" help:"Store a provider's API key in auth.json, or sign in to Grok, Kilo or your ChatGPT plan."`
 	Logout  AuthLogoutCmd  `cmd:"" help:"Remove a provider's credential from auth.json."`
-	Status  AuthStatusCmd  `cmd:"" help:"List where each provider's credential comes from, never the credential."`
+	Status  AuthStatusCmd  `cmd:"" help:"List where each provider's credential comes from and, for a sign-in, its kind and consents, never the credential."`
 	Check   AuthCheckCmd   `cmd:"" help:"Report whether a provider has a usable credential: exit 0, 1 without one, 2 on error."`
 	Consent AuthConsentCmd `cmd:"" help:"List, allow or deny a consent of a provider's stored sign-in, such as background requests under a ChatGPT plan."`
 	Import  AuthImportCmd  `cmd:"" help:"Copy credentials from Pi's auth.json."`
@@ -489,7 +489,7 @@ func consentError(id, consent string, err error) error {
 type AuthStatusCmd struct {
 	// JSON prints the rows as data, for a client such as magic-cli-remote
 	// (0045-MADR).
-	JSON bool `name:"json" help:"Print JSON: every key provider's credential source, never a credential."`
+	JSON bool `name:"json" help:"Print JSON: every key provider's credential source and, for a sign-in, sessionKind, consents and consentTerms, never a credential."`
 }
 
 // Run lists each key provider and where its credential comes from, never
@@ -579,7 +579,15 @@ type authStatusRow struct {
 	Usable   bool   `json:"usable"`
 	Reason   string `json:"reason,omitempty"`
 	Expires  string `json:"expires,omitempty"`
-	text     string
+	// SessionKind is an oauth entry's kind, the SDK's word for it
+	// (provider.SessionKindOf); Consents are the answers a session holds, by
+	// consent id, granted or declined, and ConsentTerms every consent of the
+	// method a stored session of an offered kind signs in to, in gobble's
+	// wording, answered or not (0052-MADR D8).
+	SessionKind  string                 `json:"sessionKind,omitempty"`
+	Consents     map[string]string      `json:"consents,omitempty"`
+	ConsentTerms []authcontract.Consent `json:"consentTerms,omitempty"`
+	text         string
 }
 
 // The sources a row names (0045-MADR D2).
@@ -614,6 +622,7 @@ func (e *runEnv) statusRow(id string) authStatusRow {
 				if !ok {
 					row.Reason, row.text = "oauth_unused", row.text+", not used (0005-PLAN F4-3b)"
 				}
+				e.sessionFacts(&row, id)
 			default:
 				row.Reason, row.text = "unknown_type", fmt.Sprintf("auth.json, a %q entry gobble does not use", entry.Type)
 			}
@@ -629,6 +638,58 @@ func (e *runEnv) statusRow(id string) authStatusRow {
 		row.Source, row.Variable, row.text = statusEnv, string(src), string(src)
 	}
 	return row
+}
+
+// sessionFacts adds to an oauth row what the stored session says of itself:
+// its kind; for a session of the kind an offered method signs in to, each
+// consent that method has with its terms, and the answers the session holds,
+// which the text form puts in words. A store that cannot be read adds
+// nothing: runJSON has reported it as the error object (0052-MADR D8).
+func (e *runEnv) sessionFacts(row *authStatusRow, id string) {
+	store := e.logins()
+	if store == nil {
+		return
+	}
+	l, err := store.Load(e.ctx, id)
+	if err != nil || l == nil {
+		return
+	}
+	row.SessionKind = provider.SessionKindOf(id, l)
+	m, ok := provider.SignedInMethod(id, l)
+	if !ok || len(m.Consents) == 0 {
+		return
+	}
+	row.ConsentTerms = m.Consents
+	answers, err := provider.Consents(e.ctx, store, id)
+	if err != nil {
+		return
+	}
+	var words []string
+	for _, a := range answers {
+		words = append(words, consentWords(a))
+		switch a.Answer {
+		case provider.AnswerGranted, provider.AnswerDeclined:
+			if row.Consents == nil {
+				row.Consents = map[string]string{}
+			}
+			row.Consents[a.ID] = a.Answer
+		}
+	}
+	row.text += ", " + strings.Join(words, ", ")
+}
+
+// consentWords is a consent's answer in the status text: "background use
+// allowed", "background use declined" or "background use not asked", the
+// consent's name being its id after the dot.
+func consentWords(a provider.ConsentAnswer) string {
+	name := strings.ReplaceAll(a.ID[strings.LastIndex(a.ID, ".")+1:], "_", " ")
+	switch a.Answer {
+	case provider.AnswerGranted:
+		return name + " allowed"
+	case provider.AnswerDeclined:
+		return name + " declined"
+	}
+	return name + " " + a.Answer
 }
 
 // credentialSource is where provider id's credential comes from, as status
