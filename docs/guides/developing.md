@@ -11,8 +11,8 @@ they are that way is in the [decision records](../README.md).
   Git's bash either way. In PowerShell a bare `bash` is WSL, not Git Bash.
 - **Python 3**, for the records and build-metadata checks. The Makefile runs `python3`; set
   `PYTHON=python` where the interpreter has that name.
-- **golangci-lint v2.14.0** on `PATH`:
-  `go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0`.
+- **golangci-lint v2.15.0** on `PATH`:
+  `go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0`.
 - **Node**, for `npx markdownlint-cli2`.
 
 `golint`, `govulncheck`, `staticcheck` and `apidiff` come from the `tool` directives in `go.mod`, so

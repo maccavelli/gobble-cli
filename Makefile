@@ -129,10 +129,10 @@ vet:
 fmt:
 	gofmt -w .
 
-# golangci-lint v2.14.0 is the fleet pin (0007-MADR D5).
+# golangci-lint v2.15.0 is the fleet pin (0007-MADR D5).
 lint:
 	@command -v golangci-lint >/dev/null 2>&1 || { \
-		echo "golangci-lint not found. Install: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0" >&2; \
+		echo "golangci-lint not found. Install: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0" >&2; \
 		exit 2; \
 	}
 	@rc=0; for m in $(MODULES); do echo "golangci-lint ($$m)"; (cd $$m && golangci-lint run --config "$(CURDIR)/.golangci.yml" ./...) || rc=1; done; exit $$rc

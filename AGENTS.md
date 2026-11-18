@@ -137,7 +137,7 @@ that fails is not committed.
 
 Before every commit, run `make preflight`. It runs every gate: gofmt drift,
 `go mod tidy`, the pre-add check, `go vet`, `staticcheck` for linux, darwin and
-windows, `golangci-lint` (v2.14.0), `govulncheck`, `go fix -diff`, `archtest`,
+windows, `golangci-lint` (v2.15.0), `govulncheck`, `go fix -diff`, `archtest`,
 `apidiff`, `verify-build-metadata`, `check-records`, and `markdownlint`.
 
 Run `make` from Git Bash, or from PowerShell. The Makefile uses Git's bash when

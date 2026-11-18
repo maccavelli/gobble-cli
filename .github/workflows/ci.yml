@@ -73,7 +73,7 @@ jobs:
       - name: golangci-lint
         shell: bash
         run: |
-          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0
+          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0
           echo "$(go env GOPATH)/bin" >>"$GITHUB_PATH"
       # The tests, which make preflight does not run. A failing golden
       # transcript is written to the test's ArtifactDir (acpclient/acptest).
