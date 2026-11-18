@@ -382,3 +382,5 @@ The working tree was busy with another phase, so nothing was run in it. These ra
 * [0052-PLAN-finish-the-chatgpt-plan-sign-in-on-the-sdk-engine.md](0052-PLAN-finish-the-chatgpt-plan-sign-in-on-the-sdk-engine.md), Deviation 4.
 * [0051-PLAN-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md](0051-PLAN-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md), C6 and C8, the branch and its gates.
 * [0023-MADR-pin-current-releases.md](0023-MADR-pin-current-releases.md), the golangci-lint pin.
+
+*(2026-11-18: D5's sentence "The golangci-lint pin stays `v2.14.0`" is superseded for the version by [0061-MADR-move-golangci-lint-to-v2-15-0.md](0061-MADR-move-golangci-lint-to-v2-15-0.md): the pin is now `v2.15.0`. D5's rule that a change of the pin repeats the plan's plants was followed for that move; the results are in the execution record of [0061-PLAN-move-golangci-lint-to-v2-15-0.md](0061-PLAN-move-golangci-lint-to-v2-15-0.md).)*

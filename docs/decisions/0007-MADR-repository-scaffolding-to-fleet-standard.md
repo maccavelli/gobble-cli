@@ -348,3 +348,5 @@ These are execution questions. Every decision above is settled.
 ## Amendment (2026-10-04): lint set beyond the fleet's
 
 [0008-MADR-native-cli-mode.md](0008-MADR-native-cli-mode.md) D18 adds sloglint, depguard, forbidigo, modernize, intrange, copyloopvar, usestdlibvars, perfsprint, usetesting, noctx, contextcheck and fatcontext to `.golangci.yml`. This record's D7 aligned the file to mcplib's set. The additions are a deliberate divergence. Proposing them fleet-wide is a separate record.
+
+*(2026-11-18: the golangci-lint pin of this record is now `v2.15.0`, by [0061-MADR-move-golangci-lint-to-v2-15-0.md](0061-MADR-move-golangci-lint-to-v2-15-0.md).)*

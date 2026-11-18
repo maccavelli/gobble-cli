@@ -251,3 +251,5 @@ Chosen: pin the three newest tags, with the workflows, and fix the check that fo
   fallback.
 * **Leave `check-libs` and check the libraries one at a time:** bad, because `make check-libs`, the documented command,
   fails on the next run.
+
+*(2026-11-18: D3's outcome, golangci-lint kept at `v2.14.0`, is superseded for the version by [0061-MADR-move-golangci-lint-to-v2-15-0.md](0061-MADR-move-golangci-lint-to-v2-15-0.md): the pin is now `v2.15.0`.)*
