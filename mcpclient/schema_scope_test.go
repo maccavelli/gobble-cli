@@ -14,13 +14,15 @@ import (
 // annotations, wherever it is in them, and does not mistake a property of
 // that name for the keyword.
 
-// testScopeNames are the nine keywords of the amendment, written out again
-// here so that the tests do not take the rule's list on trust.
-var testScopeNames = []string{"$ref", "$dynamicRef", "$recursiveRef", "$id", "$anchor", "$dynamicAnchor", "$recursiveAnchor",
+// testScopeNames are the ten keywords of the amendments (the nine of
+// 2026-11-17, and draft-04's id, added the same day after the second review),
+// written out again here so that the tests do not take the rule's list on
+// trust.
+var testScopeNames = []string{"$ref", "$dynamicRef", "$recursiveRef", "$id", "id", "$anchor", "$dynamicAnchor", "$recursiveAnchor",
 	"unevaluatedProperties", "unevaluatedItems"}
 
 // scopeValue is a value each of testScopeNames takes, in its own keyword.
-var scopeValue = map[string]string{"$ref": `"#/properties/p"`, "$dynamicRef": `"#x"`, "$recursiveRef": `"#"`, "$id": `"urn:x"`,
+var scopeValue = map[string]string{"$ref": `"#/properties/p"`, "$dynamicRef": `"#x"`, "$recursiveRef": `"#"`, "$id": `"urn:x"`, "id": `"urn:y"`,
 	"$anchor": `"x"`, "$dynamicAnchor": `"x"`, "$recursiveAnchor": `true`, "unevaluatedProperties": `false`, "unevaluatedItems": `false`}
 
 // memberAnywhere is the first of names that v, a decoded schema, has as a
@@ -96,10 +98,10 @@ var scopePositions = []struct{ name, tmpl string }{
 	{"branch of a oneOf root", `{"type":"object","properties":{"p":{}},"oneOf":[{"required":["p"]},{"properties":{"q":%s}}]}`},
 }
 
-// Each of the nine keywords, in each position of a union or of the keywords
+// Each of the ten keywords, in each position of a union or of the keywords
 // the rule copies, at any depth, leaves the schema as given and flagged by
 // the keyword's name; the same schema with a harmless title in its place is
-// rewritten, so that the position is one the rule reaches. The nine sit at
+// rewritten, so that the position is one the rule reaches. The ten sit at
 // the keyword of a schema, as {"keyword": value}: every position holds that
 // schema (0060-MADR D2, amendment of 2026-11-17).
 func TestScopeKeywordsRefusedEverywhere(t *testing.T) {
@@ -115,7 +117,10 @@ func TestScopeKeywordsRefusedEverywhere(t *testing.T) {
 				if rewritten || !equalJSON(out, decode(t, in)) {
 					t.Fatalf("rewritten %v, out\n%v\nwant the schema as given\n%s", rewritten, out, in)
 				}
-				if !strings.Contains(flag, kw) || !strings.Contains(flag, "its root ") {
+				// The keyword is named in quotes, or, for a $ref that is a
+				// branch itself, by the older reason "a branch uses $ref".
+				named := strings.Contains(flag, `"`+kw+`"`) || strings.Contains(flag, "a branch uses "+kw)
+				if !named || !strings.Contains(flag, "its root ") {
 					t.Fatalf("flag %q, want one naming %q", flag, kw)
 				}
 			})
@@ -123,7 +128,7 @@ func TestScopeKeywordsRefusedEverywhere(t *testing.T) {
 	}
 }
 
-// A property called like one of the nine, at the root, in a branch or deep,
+// A property called like one of the ten, at the root, in a branch or deep,
 // in a name list, or data in a default, an enum, a const or an example, is
 // not the keyword: the rule applies, and the name is carried into the copies.
 func TestScopeKeywordNamesAreNotKeywords(t *testing.T) {

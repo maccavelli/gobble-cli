@@ -62,10 +62,12 @@ The rule applies only when the root is typed exactly `object` (a root with no ty
 first change above, so it is covered), has one union, holds besides it only `type`, `properties`, `required`,
 `additionalProperties`, `patternProperties` and annotations such as `description`, and neither the union nor the
 properties it copies hold, at any depth, a reference (`$ref`, `$dynamicRef`, `$recursiveRef`), an id or an anchor
-(`$id`, `$anchor`, `$dynamicAnchor`, `$recursiveAnchor`), `unevaluatedProperties` or `unevaluatedItems`: copying
-properties into a branch, or removing a branch, can change what they mean. A property that is merely called `$ref` or
-`$id` is not one of them. A schema with one of them is sent as given and warned of, as below, even when it is
-harmless, such as a `$ref` to `#`. A root's own keywords, descriptions included, are left as the server wrote them,
+(`$id`, draft-04's `id`, `$anchor`, `$dynamicAnchor`, `$recursiveAnchor`), `unevaluatedProperties` or
+`unevaluatedItems`: copying properties into a branch, or removing a branch, can change what they mean. A property
+that is merely called `$ref`, `$id` or `id` is not one of them, so a tool with an argument called `id` is rewritten as
+usual. A schema with one of them is sent as given, even when it is harmless, such as a `$ref` to `#`, and a modern
+schema that happens to carry a stray `id` keyword in such a place is not rewritten either. It is warned of, as below,
+only when its root union has a branch that is not an object schema typed `object`; otherwise nothing is said. A root's own keywords, descriptions included, are left as the server wrote them,
 and a nested union inside a branch is not touched.
 
 An example is the `execute_pipeline` tool of the magictools server, whose schema is an object with seven properties and

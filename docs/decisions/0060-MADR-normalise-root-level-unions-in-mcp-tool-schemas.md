@@ -656,3 +656,41 @@ names a module before it is required; this amendment does not add it, so the sec
 review's, outside the tree. jsonschema-go accepts the duplicate `$id` and `$anchor` copies, so the tree's test holds
 those by the rule's own refusal (a search of every rewritten schema for the nine names), not by a verdict.
 
+## Amendment (2026-11-17, second): a tenth keyword, draft-04's `id`
+
+*Accepted by the owner the same day, relayed by the coordinator, after the second independent review of `650a335`.
+Nothing above is rewritten.*
+
+**The second review's verdict.** `650a335` closes B1 and every finding of the first review: 36 planted breaks, each
+caught, no test missing, and the real schema's rewrite byte-identical to `cde93be`'s. It left one gap and one sentence.
+
+**The gap.** `scopeKeywords` held `$id` but not draft-04's `id`. `{"$schema":"http://json-schema.org/draft-04/schema#","type":"object","properties":{"a":{"id":"http://example.invalid/a","type":"string"}},"anyOf":[{"required":["a"]},{"required":["zz"]}]}`
+was still rewritten, and one validator then refused to compile the rewrite (`duplicate id … at
+"/anyOf/1/properties/a" and "/anyOf/0/properties/a"`); no verdict changes. The sentence was in the guide, which said a
+schema with one of the keywords is "warned of" always; it is warned of only when its union has a branch not typed
+`object` (D3).
+
+**The owner's ruling:** "Add `id` to the refused keywords (Recommended)". As put: ten keywords instead of nine; a schema
+using `id` as a keyword in a copied position is sent as given and flagged; the cost is that a modern schema that happens
+to carry a stray `id` keyword there is flagged, not rewritten; a tool argument merely named `id` is not affected, since
+argument names (the keys of a `properties` map) are never tested as keywords, nor are `id` keys inside `default`,
+`enum`, `const` or `examples`.
+
+**D2's fifth condition as amended twice:** the list reads `$ref`, `$dynamicRef`, `$recursiveRef`, `$id`, `id`, `$anchor`,
+`$dynamicAnchor`, `$recursiveAnchor`, `unevaluatedProperties`, `unevaluatedItems`. Nothing else changes: the real
+schema's rewrite is byte-identical before and after (1,736 bytes, the same SHA-256).
+
+**Confirmation 5, met (dated 2026-11-17).** The owner ran the live step at `650a335` and reported "it was all
+successful"; the outputs are recorded in 0060-PLAN's P3 entry. In short: the schema as the server sends it was refused
+by `grok-4.6` with status 400 naming `mcp__magictools__execute_pipeline`, the rewrite was accepted, a prompt on
+`grok/grok-4.6` listed all eighteen magictools tools with no `invalid_client_tool_schema`, and a call of
+`execute_pipeline` reached the server and returned its own refusal message, `pipeline_disabled` (the pipeline's
+servers were not all available), which is the server's answer, not the pipeline running. That the live result stands
+for the commit carrying this amendment rests on the coordinator's application, recorded in the PLAN: the real schema's
+rewritten bytes are identical before and after the tenth keyword. Whether any route other than Grok accepts the rewritten
+form is still not established (the optional step 6 was not reported).
+
+**Follow-ups, updated.** The server-side record now exists in that repository:
+`docs/decisions/0005-MADR-make-execute-pipeline-schema-and-handler-agree.md` of `mcp-server-magictools`, accepted there
+(Q5). The typed-error fallback and the `signature` misfire remain a future gobble record, as above.
+

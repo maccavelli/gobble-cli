@@ -236,6 +236,21 @@ func ruleCases() []ruleCase {
 			want: `{"type":"object","properties":{"a":{"type":"string"}},"anyOf":[` +
 				`{"type":"object","properties":{"$ref":{"type":"string"},"unevaluatedProperties":{"type":"boolean"}},"required":["$ref"]},` +
 				`{"type":"object","properties":{"a":{"type":"string"}},"required":["a"]}]}`},
+		// The second review's gap: draft-04 names the id keyword "id". With
+		// it in a copied position the rewrite repeats the id, and a validator
+		// refuses to compile it (no verdict changes). Left as given, flagged.
+		{id: "R8", name: "draft-04 id in a root property",
+			in:   `{"$schema":"http://json-schema.org/draft-04/schema#","type":"object","properties":{"a":{"id":"http://example.invalid/a","type":"string"}},"anyOf":[{"required":["a"]},{"required":["zz"]}]}`,
+			flag: `"id"`},
+		// The commonest shape there is: a tool with an argument called id.
+		// Argument names are never tested as keywords, so it is rewritten,
+		// and the preservation test holds it with 0 differences.
+		{id: "N4", name: "an argument called id: a property, in required, and id keys in default, enum, const and examples", named: true,
+			in: `{"type":"object","properties":{"id":{"type":"string"},"p":{"type":"object","default":{"id":"d"},"enum":[{"id":"e"}],"const":{"id":"c"},"examples":[{"id":"x"}]}},` +
+				`"additionalProperties":false,"anyOf":[{"required":["id"]},{"required":["p"]}]}`,
+			want: `{"type":"object","properties":{"id":{"type":"string"},"p":{"type":"object","default":{"id":"d"},"enum":[{"id":"e"}],"const":{"id":"c"},"examples":[{"id":"x"}]}},"additionalProperties":false,"anyOf":[` +
+				`{"type":"object","properties":{"id":{"type":"string"},"p":{"type":"object","default":{"id":"d"},"enum":[{"id":"e"}],"const":{"id":"c"},"examples":[{"id":"x"}]}},"additionalProperties":false,"required":["id"]},` +
+				`{"type":"object","properties":{"id":{"type":"string"},"p":{"type":"object","default":{"id":"d"},"enum":[{"id":"e"}],"const":{"id":"c"},"examples":[{"id":"x"}]}},"additionalProperties":false,"required":["p"]}]}`},
 		{id: "N3", name: "scope keywords as data inside default, enum and const are not keywords", named: true,
 			in: `{"type":"object","properties":{"p":{"type":"object","default":{"$ref":"#","$id":"x"},"enum":[{"$anchor":"y"}],"const":{"unevaluatedProperties":false}}},` +
 				`"anyOf":[{"required":["p"]},{"required":["q"]}]}`,

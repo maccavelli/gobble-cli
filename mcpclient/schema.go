@@ -48,8 +48,10 @@ var unionKeywords = []string{"anyOf", "oneOf"}
 // branch, can change what it points at; an id or an anchor named twice by a
 // copy is a duplicate; and unevaluatedProperties and unevaluatedItems look at
 // the annotations of the schemas beside them, which copied properties change.
-// They are the keywords of JSON Schema 2020-12 and its drafts that act so.
-var scopeKeywords = []string{"$ref", "$dynamicRef", "$recursiveRef", "$id", "$anchor", "$dynamicAnchor", "$recursiveAnchor",
+// They are the keywords of JSON Schema 2020-12 and its drafts that act so,
+// "id" among them, which draft-04 names its "$id". Only a member name that is
+// a keyword of a schema is tested: a property called id is not one.
+var scopeKeywords = []string{"$ref", "$dynamicRef", "$recursiveRef", "$id", "id", "$anchor", "$dynamicAnchor", "$recursiveAnchor",
 	"unevaluatedProperties", "unevaluatedItems"}
 
 // rewriteRootUnion applies the rule of 0060-MADR D2 to the input schema s

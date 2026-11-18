@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: complete
 date: 2026-11-17
 associated-madr: "0060-MADR-normalise-root-level-unions-in-mcp-tool-schemas.md"
 ---
@@ -569,3 +569,125 @@ gated P4 (Q4 (b)) or a text exclusion (Q7 (b)); none applies.
   look into, since no validator would; the terminal form of the warning for this
   record as printed by `gobble` itself, rather than by its handler with this record's fields.
 * **Staged, not committed.** The fix pass's files staged by path for the coordinator.
+
+### Second review of `650a335` (2026-11-17)
+
+* The owner committed and pushed the fix pass as `650a335`; since that day the owner makes every commit and push from
+  the coordinator's staged list. A second independent review passed it, as relayed by the coordinator: B1 closed, every
+  finding of the first review closed, 36 planted breaks with no test missing, one equivalent survivor (a plant whose
+  change no test can tell from the code, so it needs no test), and the real schema's rewrite byte-identical to
+  `cde93be`'s.
+* **The one gap.** `mcpclient/schema.go` `scopeKeywords` held `$id` but not draft-04's `id`:
+  `{"$schema":"http://json-schema.org/draft-04/schema#","type":"object","properties":{"a":{"id":"http://example.invalid/a","type":"string"}},"anyOf":[{"required":["a"]},{"required":["zz"]}]}`
+  was rewritten, and one validator then refused to compile the rewrite (a duplicate id); no verdict changes.
+* **The one sentence.** `docs/guides/mcp-servers.md` said a schema with one of the keywords "is sent as given and warned
+  of … even when it is harmless"; it is warned of only when its union has a branch not typed `object` (D3).
+* **The owner's ruling,** relayed by the coordinator, by label: "Add `id` to the refused keywords (Recommended)": ten
+  keywords; the MADR's second amendment of this date records it.
+
+### P1, the tenth keyword (2026-11-17)
+
+* **Provenance.** A mainstream-class model at high effort, on the coordinator's brief; base `650a335` (tree clean at the
+  start; branch `p3-acpext-v0.5.0`); nothing committed, pushed or tagged. No deviation, nothing stopped.
+* **Red first, on `650a335`.** `go test ./mcpclient/` failed `TestScopeKeywordsRefusedEverywhere` in 38 subtests, the
+  38 positions with `id` (`schema_scope_test.go:118`, "rewritten true"), and no other matrix subtest; `TestRewriteRootUnion/R8`
+  (`schema_test.go:297`, the reviewer's schema, "rewritten true"), `TestRewritePreservesInputs/R8` (`:480`, the
+  draft-04 original accepts 0 of 2,013 corpus instances under jsonschema-go, so the corpus cannot test it, and the
+  rewrite is the one thing it flags) and `TestRefusedShapesAreUntouched` (`:510`, R8 rewritten). The name side, green on
+  `650a335` by design and held by plant G2: `TestScopeKeywordNamesAreNotKeywords/id` and the new case `N4`, its own row
+  in `TestRewriteRootUnion` and `TestRewritePreservesInputs`: an argument called `id`, `required: ["id"]`, and `id` keys
+  in `default`, `enum`, `const` and `examples`, rewritten, 2,017 instances, 30 accepted by both, 0 differences.
+  `TestScopeKeywordsRefusedEverywhere` now checks the flag names the keyword in quotes (a bare "id" would match
+  "providers"), or the older "a branch uses $ref" for a `$ref` that is a branch itself.
+* **The change.** `"id"` in `scopeKeywords` (`mcpclient/schema.go:52`), with its comment; the guide's sentence and list
+  (`docs/guides/mcp-servers.md:61-71`): it names draft-04's `id`, says an argument called `id` is rewritten as usual,
+  and that the warning comes only when the root union has a branch not typed `object`.
+* **Plants** on a scratch copy (`git archive HEAD` plus the uncommitted files), gofmt clean, built with its tests, each
+  red as a test failure:
+
+  | # | Plant | Red | First failing line |
+  | :--- | :--- | :--- | :--- |
+  | G1 | `id` dropped from the list again | the 38 `id` matrix subtests, `TestRewriteRootUnion/R8`, `TestRefusedShapesAreUntouched` | `schema_scope_test.go:118`; `schema_test.go:297` |
+  | G2 | names tested as keywords | `TestScopeKeywordNamesAreNotKeywords` (all ten, `id` among them), `TestRewriteRootUnion/N4`, `TestRewritePreservesInputs/N4` | `schema_scope_test.go:142`; `schema_test.go:309`: "an argument called id … rewritten false"; `:476` "not rewritten" |
+
+  No plant survived.
+* **The real schema's rewrite, before and after.** `inputSchema` over `testdata/magictools-execute-pipeline.json`, written
+  to a file by a temporary test (removed) at `650a335` and again with the change: 1,736 bytes each, SHA-256
+  `b89dc14412bdf0c00d702fdc6778676f7e769757913a7d66a30bac98c6657577` both, `cmp` identical.
+* **Gates** (each exit status taken before any filter; host clock, queue waits included):
+
+  | Gate | Host | Start | End | Exit |
+  | :--- | :--- | :--- | :--- | :--- |
+  | `make pre-add-check` over the 3 changed `.go` files (rerun after the edit) | session host | 17:55:57 | 17:56:03 | 0 (first run 17:42:10 to 17:42:17, 0) |
+  | `make preflight`, first run | session host, `run-heavy` | 17:42:18 | 17:54:47 | 2: golangci-lint (staticcheck QF1001, De Morgan) on my new test condition in `schema_scope_test.go:122`; every earlier step passed. The condition was rewritten with a local boolean (a test-file edit), the first run's remaining gates were cancelled, and every Go gate below was rerun in full on the edited file |
+  | `make preflight`, second run | session host, `run-heavy` | 17:56:03 | 18:12:35 | 0, "preflight passed" |
+  | `make race` | the Linux machine, `run-on-host --race --need linux` | 17:56:03 | 18:00:32 | 0 |
+  | `make race` | the Windows laptop, `run-on-host --race --need windows -- sh -c "make race"` | 17:56:03 | 18:02:54 | 0 |
+  | `go test -race -count=20 -timeout 30m ./mcpclient/...` | session host, `run-heavy` | 17:56:03 (queued) | 18:15:41 | 0 |
+  | `make check-test-isolation` | session host, `run-heavy` | 17:56:03 (queued) | 18:17:07 | 0 |
+  | `go vet -tags live_grok ./llm/provider/` (compiled, never run) | session host | 17:56:03 | 17:56:03 | 0 |
+
+  After the last record edit, each exit status taken before any filter: `make check-records` 0 and `make markdownlint` 0 (59 files, 0 issues); an identifier scan of the staged diff for the local account name, the hosts' names and real-machine paths, no hits. The plants of this entry ran on the test file before its one-line boolean rewrite for the lint finding above; the rewrite changes no behaviour, and the whole test run was repeated after it (the gates).
+* **Docs rows.** `docs/guides/mcp-servers.md` fixed (the sentence and the list); `docs/architecture.md` and
+  `mcpclient/doc.go` say "an id" generically and stay true; the MADR's second amendment and this plan's entries are
+  additions. docs: searched `README.md`, `docs/`, `AGENTS.md`, `mcpclient/`, `acpserver/` for `nine`, `$id`, `warned of`,
+  `accepts exactly` and the keyword list; the test comments' "nine" are now "ten".
+* **Not verified.** The second validator's agreement on `R8` and `N4` (not in the tree: `santhosh-tekuri/jsonschema` is
+  not in `go.mod`); whether jsonschema-go refuses the duplicate draft-04 id (not measured: it accepts duplicate `$id`
+  copies, and on the draft-04 original it accepted none of the corpus), so `R8` is held by the keyword's refusal and
+  by the matrix, not by a verdict.
+
+### P3: the owner's live step (2026-11-17)
+
+The owner ran P3 steps 1 to 5 at `650a335` on 2026-11-17, in the owner's shell with the owner's own key, and reported,
+verbatim: "it was all successful." The owner pasted three outputs, with no key in any; they are the owner's outputs,
+quoted exactly:
+
+* **Step 3**, the live test:
+
+  ```text
+  === RUN   TestLiveGrokUnionSchema
+      live_grok_union_test.go:65: the schema as the server sends it: refused, status 400: llm: api status 400: llmprovider: invalid request: grok HTTP 400 invalid-argument: Failed to start sampling: [invalid_client_tool_schema] mcp__magictools__execute_pipeline: tool parameter root must be an object type (root schema is an anyOf/oneOf union with a non-object branch)
+      live_grok_union_test.go:74: the rewritten schema: accepted
+  --- PASS: TestLiveGrokUnionSchema (1.37s)
+  PASS
+  ok      github.com/maccavelli/gobble-cli/llm/provider   2.008s
+  ```
+
+  The original was refused as expected, 400 naming the tool, and the rewrite was accepted: Grok accepts D2's form
+  (the stop condition of this phase did not arise).
+* **Step 4**, `bin/gobble -p --model grok/grok-4.6 "Do not call any tool. List, one per line, the names of your tools
+  that start with mcp__magictools__."`: eighteen lines, in this order: `mcp__magictools__align_tools`,
+  `mcp__magictools__analyze_system_logs`, `mcp__magictools__call_proxy`, `mcp__magictools__cross_server_quality_gate`,
+  `mcp__magictools__execute_pipeline`, `mcp__magictools__generate_audit_report`, `mcp__magictools__get_health_report`,
+  `mcp__magictools__get_internal_logs`, `mcp__magictools__get_session_stats`, `mcp__magictools__list_tools`,
+  `mcp__magictools__query_compliance`, `mcp__magictools__reload_servers`, `mcp__magictools__self_check`,
+  `mcp__magictools__semantic_similarity`, `mcp__magictools__sync_servers`, `mcp__magictools__update_config`,
+  `mcp__magictools__validate_pipeline_step`, `mcp__magictools__wake_servers`; no `invalid_client_tool_schema`.
+* **Step 5**, interactive, `grok/grok-4.6`, the plan's prompt: the call shown as `▸ magictools/execute_pipeline …` then
+  `▸ magictools/execute_pipeline ✓`, and the result `pipeline_disabled: Active code generation pipeline is offline.
+  Required servers (recall, brainstorm, go-modernizer) are not all available.` That is the server's own refusal message,
+  which this plan's step 5 accepts as a result. It shows that the call reached the server and its answer came back; it
+  does not show the pipeline running.
+* **Steps 1 and 2** (build; `mcp list`): outputs not pasted; they rest on the owner's sentence. **Step 6** (the other
+  providers, optional): not run, or not reported.
+* **What the outcome decides.** Steps 3 to 5 pass: the MADR's Confirmation 5 is met (the MADR's second amendment says so
+  by a dated note); no route other than Grok has been shown to accept the rewritten form, which Q1's ruling keeps open.
+* **The coordinator's application, recorded as the coordinator's and not the owner's.** The live step ran at `650a335`,
+  before the tenth keyword. The live result stands for the commit that carries the tenth keyword if and only if the real
+  schema's rewritten bytes are identical before and after it: they are (the byte comparison above, 1,736 bytes, one
+  SHA-256), so the schema Grok accepted is the schema that commit sends. The owner is told.
+* **Acceptance, checked.** P0: records gates and pair on the branch, accepted with the answers (the record above). P1:
+  step 3's tests seen red before the change and green after (the P1 entry); the eight plants each red as named; every
+  gate exit 0; the commit on the branch (`cde93be`, and its fix `650a335`); CI on the draft pull request 19 at
+  `650a335`: `validate` on `macos-15`, `ubuntu-24.04` and `windows-2025` and the other jobs pass, read with `gh pr
+  checks` on 2026-11-17 (CI for the commit that carries the tenth keyword has not run). P2: both reviews' findings fixed
+  or answered by the owner (R-1, R-2, the `id` ruling). P3: steps 3 to 5 pass; the MADR's Confirmation 1 to 5 hold.
+  This plan is `complete`.
+* **Still future, not this plan's:** the typed-error fallback and the `signature` misfire, one gobble record, drafted when
+  go-llmprovider-sdk tags the release with `ErrToolSchemaRefused` and `APIError.Tool` (the MADR's Follow-ups); the
+  magictools server's own record now exists in that repository, `docs/decisions/0005-MADR-make-execute-pipeline-schema-and-handler-agree.md`,
+  accepted there (outside this plan). The `main` fast-forward is the owner's word, asked by the coordinator.
+* **Not verified.** That any route other than Grok accepts the rewritten form; steps 1 and 2 beyond the owner's sentence;
+  the live step against the commit that carries the tenth keyword, which rests on the byte comparison.
+* **Staged, not committed.** This pass's files staged by path for the coordinator.
