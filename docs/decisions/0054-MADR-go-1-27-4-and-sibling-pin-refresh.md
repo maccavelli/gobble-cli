@@ -600,3 +600,5 @@ Completion section.)*
   U8, re-read at `v1.36.0`.
 * magic-cli-remote `docs/decisions/0179-MADR-gobble-native-acp-provider.md`: gate 3.
 * acp-go-sdk2 `docs/reports/0054-REPORT-release-notes-v1-36-0.md`; go-selfupdate-lib `CHANGELOG.md`.
+
+*(2026-11-18: the go-selfupdate-lib pin of this record is now `v1.26.3`, and go-tui-lib `v2.12.1`, by [0062-MADR-pin-go-selfupdate-lib-v1-26-3-and-go-tui-lib-v2-12-1.md](0062-MADR-pin-go-selfupdate-lib-v1-26-3-and-go-tui-lib-v2-12-1.md).)*
