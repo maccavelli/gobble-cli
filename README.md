@@ -175,8 +175,8 @@ The design is [0048-MADR](docs/decisions/0048-MADR-gobble-update-command.md).
 - **Tool schemas:** JSON Schema 2020-12 from Go types, with [jsonschema-go](https://github.com/google/jsonschema-go) `v0.4.3`.
 - **Settings, skills and templates:** YAML through [go.yaml.in/yaml/v3](https://github.com/yaml/go-yaml) `v3.0.5`.
 - **Build identity and self-update:** [go-selfupdate-lib](https://github.com/maccavelli/go-selfupdate-lib)
-  `v1.26.2`. gobble does not reimplement self-update.
-- **TUI:** [go-tui-lib](https://github.com/maccavelli/go-tui-lib) `/v2` `v2.12.0`. The CLI mode draws its permission
+  `v1.26.3`. gobble does not reimplement self-update.
+- **TUI:** [go-tui-lib](https://github.com/maccavelli/go-tui-lib) `/v2` `v2.12.1`. The CLI mode draws its permission
   prompt with its Charm-free `ask`. gobble does not reimplement core TUI; where a behaviour is not in the library
   yet, gobble waits rather than copying it.
 

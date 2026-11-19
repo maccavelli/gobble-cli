@@ -50,10 +50,10 @@ github.com/maccavelli/go-llmprovider-sdk v1.31.0 h1:YhPayIZxQpe9s9KytD/QRHA5ZEMF
 github.com/maccavelli/go-llmprovider-sdk v1.31.0/go.mod h1:TJCiC19cUke8ho7lDDAmFNiNMT0fYFip64VbW7AbFUQ=
 github.com/maccavelli/go-llmprovider-sdk/authcontract v0.1.0 h1:CTT0MX7awBzOMfuAo32vdF4Lj1m4rvyvW98A83ogABo=
 github.com/maccavelli/go-llmprovider-sdk/authcontract v0.1.0/go.mod h1:xwd9YePix/SG+RErPL4hU85uI8R04uXt6duJ0ZbY5b0=
-github.com/maccavelli/go-selfupdate-lib v1.26.2 h1:aOwfesbXTpI1GzqiXwpA0Jn9MPK7sONDZTPfCS/gJe8=
-github.com/maccavelli/go-selfupdate-lib v1.26.2/go.mod h1:DIqb0hzmxkYhVTj6iyaHpntadoHkeOkHWyTsdw+MBHE=
-github.com/maccavelli/go-tui-lib/v2 v2.12.0 h1:JPPl1/wxmX2IamirzR5SvnnIyHmi/L/ikbTOEkOK2q8=
-github.com/maccavelli/go-tui-lib/v2 v2.12.0/go.mod h1:GDnV1CL70qUJCRDDzF/KD+HSZllb/fpO8a2+i+DPbqs=
+github.com/maccavelli/go-selfupdate-lib v1.26.3 h1:sfEYQa6jG28Q673gH4f0HYgW7V+4UEg4Ng1dlK5zQjA=
+github.com/maccavelli/go-selfupdate-lib v1.26.3/go.mod h1:Qf2InWG+0zntqBGvZurHLUn+zjf/BYK6duk1ux6OcJI=
+github.com/maccavelli/go-tui-lib/v2 v2.12.1 h1:CF1/kh1z9RTIOf+zB31KAErbDLbIQM6XqEhaThuYjRc=
+github.com/maccavelli/go-tui-lib/v2 v2.12.1/go.mod h1:u3Cycs72YG2EaCTyuDK0dgNDIJtdT+HOLy86uiy9cu8=
 github.com/maccavelli/gobble-cli/acpext v0.5.0-rc.1 h1:s0/BKI7FwgYgd6OUtIQ0K3KL2QrAhZxLP76S+9Jl8fs=
 github.com/maccavelli/gobble-cli/acpext v0.5.0-rc.1/go.mod h1:yNoZruhuuNrybUQHCPtIZfRKGUDc7Hho/jHGqRFE6Cs=
 github.com/mattn/go-runewidth v0.0.27 h1:Feg/Oou5zI/wnpgDF6omIU0OokC9GxLC/WRknhVlIR0=

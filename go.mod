@@ -16,8 +16,8 @@ require (
 	github.com/maccavelli/acp-go-sdk2 v1.36.0
 	github.com/maccavelli/go-llmprovider-sdk v1.31.0
 	github.com/maccavelli/go-llmprovider-sdk/authcontract v0.1.0
-	github.com/maccavelli/go-selfupdate-lib v1.26.2
-	github.com/maccavelli/go-tui-lib/v2 v2.12.0
+	github.com/maccavelli/go-selfupdate-lib v1.26.3
+	github.com/maccavelli/go-tui-lib/v2 v2.12.1
 	github.com/maccavelli/gobble-cli/acpext v0.5.0-rc.1
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	go.yaml.in/yaml/v3 v3.0.5
