@@ -1,6 +1,6 @@
 ---
-status: in-progress
-date: 2026-11-18
+status: complete
+date: 2026-11-19
 associated-madr: "0062-MADR-pin-go-selfupdate-lib-v1-26-3-and-go-tui-lib-v2-12-1.md"
 ---
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
@@ -83,3 +83,24 @@ commit.
 * 2026-11-18, after this entry `make check-records`, `make markdownlint` and the disclosure scan of the changed files
   were run again. The plan stays `in-progress` until the commit, the push and CI's result are recorded.
 * Deviations: none. Not done: no commit, push, tag or release, as scoped; no live test and no `-race` run.
+* 2026-11-19, close-out. The coordinator's gate on the tree: `make lint` 0; `make check-records` 0;
+  `make markdownlint` 0; `go mod tidy -diff` 0 in the root and in `acpext`; `make vulncheck` 0; `make preflight` through
+  `run-heavy` 0; `go test -race -count=1 -timeout 30m ./...` through `run-heavy` 0, 38 packages ok, the tree unchanged
+  by the gate (the `-race` run is the one the 2026-11-18 entry lists as not done). The records are `2d17e31` and the
+  change `080205f` on `p3-acpext-v0.5.0`; `main` was fast-forwarded `a3a2d7c..080205f`, no force, the pre-push guard run.
+  CI on `080205f` on `main`, attempt 1, success: `validate` on ubuntu-24.04, macos-15 and windows-2025 (17 steps each),
+  `test-isolation`, `sbom`, `build / build` (18 steps), `build / identity` for windows/arm64, linux/amd64, linux/arm64,
+  darwin/arm64 and windows/amd64; `release` skipped (no tag); Docs and Dependency Graph success. The two reusable-workflow
+  pins at the `v1.26.3` commit therefore ran in the `build` job, which the 2026-11-18 entries could not show.
+* 2026-11-19, acceptance, each criterion against that evidence:
+  * Goal and Confirmation 1, `go.mod`, `go.sum`, `ci.yml`, `README.md` and `docs/architecture.md` name the two tags and
+    nothing else changed: met; `080205f` changes those five files alone, 12 lines each way, and no Go file.
+  * Confirmation 2, `make preflight` passes and `golangci-lint` v2.15.0 reports "0 issues." on both modules: met;
+    preflight and `make lint` 0 in this record's run and in the coordinator's.
+  * Confirmation 3, `check_libs.py` reports "0 failing checks" for each library, advisories included: met by this
+    record's own runs (2026-11-18, both exit 0); the coordinator did not repeat them.
+  * Confirmation 4, CI green after the push: met; the run above.
+  * Out of scope and unchanged: `acpext`, tags, a release, an install, magic-cli-remote.
+* 2026-11-19, status: `in-progress` becomes `complete`, the value of 0053-PLAN, 0054-PLAN, 0055-PLAN and 0059-PLAN.
+  `scripts/check_records.py` does not check a status value; `complete` is the skill's word and the repository's
+  majority, `completed` being used by eight older plans.

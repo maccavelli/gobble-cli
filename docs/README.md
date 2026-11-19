@@ -139,7 +139,7 @@
 | 0061 | MADR | [Move golangci-lint from v2.14.0 to v2.15.0, the fleet standard](decisions/0061-MADR-move-golangci-lint-to-v2-15-0.md) | accepted 2026-11-18 (the owner's ruling of 2026-11-18, "standardize on golangci-lint v2.15.0"; supersedes the pin of 0007-MADR and 0023-MADR D3 for the version only) |
 | 0061 | PLAN | [Implement moving golangci-lint to v2.15.0](decisions/0061-PLAN-move-golangci-lint-to-v2-15-0.md) | in-progress 2026-11-18 |
 | 0062 | MADR | [Pin go-selfupdate-lib v1.26.3 and go-tui-lib v2.12.1](decisions/0062-MADR-pin-go-selfupdate-lib-v1-26-3-and-go-tui-lib-v2-12-1.md) | accepted 2026-11-18 (the owner's choice of 2026-11-18, "One record pair per repository, approved now through CI; magic-cli-remote after its lint phases (Recommended)"; both releases raise only their own Go floor and change no API or behaviour; `acpext` is not affected; moves on from 0054-MADR F7 and D3) |
-| 0062 | PLAN | [Implement pinning go-selfupdate-lib v1.26.3 and go-tui-lib v2.12.1](decisions/0062-PLAN-pin-go-selfupdate-lib-v1-26-3-and-go-tui-lib-v2-12-1.md) | in-progress 2026-11-18 |
+| 0062 | PLAN | [Implement pinning go-selfupdate-lib v1.26.3 and go-tui-lib v2.12.1](decisions/0062-PLAN-pin-go-selfupdate-lib-v1-26-3-and-go-tui-lib-v2-12-1.md) | complete 2026-11-19 (approved 2026-11-18; the records in `2d17e31` and the pins in `080205f`, `main` fast-forwarded `a3a2d7c..080205f`; every acceptance criterion met; CI on `080205f` green, the two workflow pins run in the `build` job) |
 
 0003-MADR has no PLAN of its own. 0004-PLAN Phase 2 and 0005-PLAN F10 implement it.
 
