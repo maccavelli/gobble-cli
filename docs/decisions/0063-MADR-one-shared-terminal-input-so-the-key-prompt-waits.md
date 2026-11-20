@@ -134,9 +134,10 @@ Chosen option: "B. One shared terminal input per process", because the owner cho
 Context): it fixes the report and weakness (a) in one place, and gives every reader of the terminal
 one line-end rule rather than one more special case in `readSecret`. The decision is the owner's; the design below is
 this record's. Its open questions Q1 to Q8 were answered by the owner on 2026-11-19 ("Owner questions" below): Q1 to Q4,
-Q6 and Q7 as recommended, Q5 and Q8 not. Q5's answer adds the first-run loop (D8); the one point of it the answer does
-not settle is Q9, still open. Nothing is built until the owner approves
-[0063-PLAN-one-shared-terminal-input-so-the-key-prompt-waits.md](0063-PLAN-one-shared-terminal-input-so-the-key-prompt-waits.md).
+Q6 and Q7 as recommended, Q5 and Q8 not. Q5's answer adds the first-run loop (D8); the one point of it that answer
+did not settle, Q9, the owner answered the same day as recommended. The owner approved
+[0063-PLAN-one-shared-terminal-input-so-the-key-prompt-waits.md](0063-PLAN-one-shared-terminal-input-so-the-key-prompt-waits.md)
+on 2026-11-19; nothing is built yet.
 
 - **D1. One terminal input per process** (the owner's decision). A new type in a new file,
   `internal/cli/terminput.go`:
@@ -231,7 +232,7 @@ not settle is Q9, still open. Nothing is built until the owner approves
     method menu when the provider has one, the key.
   - **The loop ends** on:
     - a successful sign-in, which goes on as today (credentials read again, the provider listed, its models shown);
-    - `n` or `no` at the offer, or Enter alone at a repeated offer whose default is no (Q9 (b));
+    - `n` or `no` at the offer, or Enter alone at a repeated offer, whose default is no (Q9);
     - Ctrl+C at the offer, which is the user declining the offer itself, as today's code takes it (`login.go:307-310`);
     - the end of input, at the offer or inside a round (below);
     - the process's own context ending, whose error is returned as today.
@@ -241,7 +242,7 @@ not settle is Q9, still open. Nothing is built until the owner approves
     or while offline; the owner's answer repeats the offer all the same, and the user leaves with `n`.
   - **Between rounds** gobble prints the round's own line, as `/login` prints it: `Sign-in cancelled; nothing was
     saved.`, or `Error: ` and the sign-in's error in gobble's words (for example `claude refused 3 keys; none was
-    saved`, or the listing's failure kind). Then the offer again, with the same question; its default is Q9. The
+    saved`, or the listing's failure kind). Then the offer again, with the same question, as `[y/N]` (Q9). The
     no-credential warning is not printed between rounds: the question itself says no provider has a credential.
   - **Read-ahead between rounds is dropped:** `termIn.discard()` runs before each repeated offer (not before the
     first). What was typed during a round was meant for that round's questions, and the user has not seen the new
@@ -306,7 +307,7 @@ not settle is Q9, still open. Nothing is built until the owner approves
   of input) and must never repeat without a person's answer. D8 settles each, and the PLAN pins each with a test and a
   planted break.
 * Bad, because a user who is offline, or whose provider is down, is offered the same sign-in again, which cannot help
-  until that changes; they leave with `n` (and the default of Q9).
+  until that changes; they leave with `n`, or Enter, since the repeated offer defaults to no (Q9).
 * Users can see: on Windows, the key prompt waits; in the first run, the offer again after a cancelled or failed
   sign-in, and the warning once when they decline; on macOS and Linux, a workspace or other line question after a key
   accepts the first Enter.
@@ -351,8 +352,7 @@ not settle is Q9, still open. Nothing is built until the owner approves
       **Fail** if `Sign-in cancelled; nothing was saved.` appears without a key typed.
    5. **The key is read masked, and the offer comes back after Ctrl+C.** Type `not-a-real-key` (14 characters):
       fourteen `*` appear, never the letters. Press Ctrl+C. Expect `Sign-in cancelled; nothing was saved.`, then the
-      offer again: `No provider has a credential yet. Sign in to one now?`, ending `[y/N]:` with Q9 (b), `[Y/n]:` with
-      (a), as the owner answers Q9.
+      offer again: `No provider has a credential yet. Sign in to one now? [y/N]:` (Q9).
    6. **The offer comes back after an empty key.** Type `y`, Enter; type `1`, Enter; at the key prompt press Enter
       alone. Expect `Sign-in cancelled; nothing was saved.` (Q4), then the offer again.
    7. **Declining ends it.** Type `n`, Enter. Expect the no-credential lead and
@@ -420,8 +420,9 @@ not settle is Q9, still open. Nothing is built until the owner approves
 
 Each was put with three options and a recommendation. The owner answered Q1 to Q8 on 2026-11-19, relayed by the
 coordinator; each answer is quoted as the option's label. Q1 to Q4, Q6 and Q7 took the recommended option. Q5 and Q8
-did not: the record gives the owner's choice as it was put, and no reason the owner did not give. Q9 arises from Q5's
-answer and is open. The PLAN is written for these answers, and for Q9's recommendation.
+did not: the record gives the owner's choice as it was put, and no reason the owner did not give. Q9 arose from Q5's
+answer and was answered the same day, as recommended. No owner question is open. The PLAN is written for these
+answers, and the owner approved it on 2026-11-19 (its execution record).
 
 * **Q1. The line-end rule (D3).**
   * (a) `\r`, `\n` and `\r\n` each end a line; after a `\r` that ended a line read out of raw mode, the next `\n` is
@@ -505,6 +506,7 @@ answer and is open. The PLAN is written for these answers, and for Q9's recommen
     key.
   * (c) `[Y/n]` after a cancelled sign-in, `[y/N]` after a failed one (refused keys, offline, an outage), where
     retrying at once is less likely to help.
+  * **Answer (2026-11-19): (b),** "The repeated offer is `[y/N]`: Enter ends the loop, `y` tries again (Recommended)".
 
 ## More Information
 
