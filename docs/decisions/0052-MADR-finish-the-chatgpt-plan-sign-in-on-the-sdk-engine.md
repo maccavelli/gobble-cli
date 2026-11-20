@@ -421,6 +421,16 @@ cut before it.)*
    settings file is not edited; gobble reports the key as "not used by this gobble" (`internal/config/diag.go:44`).
 6. Every other member and field is kept byte for byte (`member.value`).
 
+*(2026-11-20, re-grounded at `9332cef` before P5. The six steps above are unchanged.)*
+
+* `internal/auth/migrate.go` is not in the tree. The pins are go-llmprovider-sdk `v1.31.0`, acp-go-sdk2 `v1.36.0` and acpext `v0.5.0-rc.1`. Remote tags end at those two SDK versions. magic-cli-remote requires the same acp-go-sdk2 tag. There is no gobble `v0.7.0` tag, and `v0.6.0` is an ancestor of `9332cef`.
+* `internal/config/diag.go:44` is still `textUnknown = "not used by this gobble"`. The typed loader ignores an unknown key, and a diagnostic never carries the value (`internal/config/merge.go`, `internal/config/diag.go`), so `Settings` reads the global `settings.yaml` scalar itself. `(true, true)` means that file holds `chatgptPlanBackground: true`. A missing file is `(false, true)`. A file that cannot be read or parsed is `(false, false)`, and `Migrate` returns an error and writes nothing: the PLAN's existing error rule.
+* F25 is already applied when an oauth entry is written: `oauthFields` removes `key` and `workspace` (`internal/auth/store.go`). Step 3 still removes them from an entry already stored.
+* `HostID` creates a new id when `<state>/host-id` is absent (`internal/auth/hostid.go`). Step 4 writes the plan entry's `hostId` and does not call `HostID`. `Clients.Save` replaces a record (`internal/auth/clients.go`); an existing client record is left.
+* `filelock` is not re-entrant (`internal/filelock`). `provider.SetConsent` locks the provider's refresh file, then `Logins.Save` locks `auth.json.lock` (`internal/auth/logins.go`, `internal/auth/store.go`). The re-read, the backup and the dormant-key write hold `auth.json.lock`, and that lock is released before `CarryConsent`.
+* At go-llmprovider-sdk `v1.31.0`, a stored answer is `id=granted` or `id=declined` in `consents`, separated by spaces (`llmprovider/auth/consent.go`). The plan consent id is `chatgpt_plan.background_use`. No answer means that id has neither entry. `internal/auth` reads the stored string and does not import the SDK. `CarryConsent` is `provider.SetConsent` with that id and `granted` true.
+* Archtest rule 4 rejects a go-llmprovider-sdk import outside `llm/provider` in `checkRule4` (`internal/archtest/check.go`). The PLAN's `:308` is that function; the rejection is the later line of the same function.
+
 ### Consequences
 
 * Good, because the plan sign-in ships with one disclosure on every surface, asked once, withdrawn from the next

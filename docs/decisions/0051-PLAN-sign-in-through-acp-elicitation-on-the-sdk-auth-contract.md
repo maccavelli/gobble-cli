@@ -1,6 +1,6 @@
 ---
 status: in-progress
-date: 2026-11-15
+date: 2026-11-20
 associated-madr: "0051-MADR-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md"
 ---
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
@@ -755,6 +755,8 @@ Acceptance: the question of step 1 answered in the record; the case passes and i
 
 ### P8 — acceptance and close-out (MADR Confirmation)
 
+*(2026-11-20, before this phase starts. P7a's code is on `main` at `1305a61` (`feat(check-libs): match advisories by package and read all pages`), an ancestor of `9332cef`. The P7a record's "staged, not committed" described 2026-11-16. Step 0 is met. Probes L1 to L3 have not been run. Grok's `browser_oauth` at the go-llmprovider-sdk `v1.31.0` tag is still `Completion` `browser_paste` (`llmprovider/providers/grok/descriptor.go`). Issue #16 is open. This note does not close it. The gates are this repository's Makefile, as 0052-PLAN P5's tooling note of this date lists them. The sibling go-tui-lib `tools/verify` default gates are not these. P8a's pin commit is that phase's `go get`, not the fleet `scripts/bump-libs.sh`, which commits a pin in every dependent it finds.)*
+
 0. *(2026-11-14.)* Not before P7a is done and recorded.
 
 1. Every Confirmation item checked and recorded with its evidence.
@@ -780,6 +782,8 @@ Acceptance: the question of step 1 answered in the record; the case passes and i
 Acceptance: Confirmation 1 to 8 met, or each unmet item named with its reason.
 
 ### P8a — the final acpext tag (added 2026-11-15; the owner's ruling, "P3 record (2026-11-15)")
+
+*(2026-11-20: `git diff acpext/v0.5.0-rc.1 HEAD -- acpext/` is empty at `9332cef`, so a tag made on that commit names the same `acpext/` as the candidate. The root still requires `v0.5.0-rc.1`. The owner tags `acpext/v0.5.0`. The pin commit waits until that tag is fetchable.)*
 
 After P8 is accepted and before any gobble release (`v0.7.0`). Prerequisites: P8 recorded, the owner's word that the
 repository is stable and correct.

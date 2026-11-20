@@ -1,6 +1,6 @@
 ---
 status: in-progress
-date: 2026-11-15
+date: 2026-11-20
 associated-madr: "0052-MADR-finish-the-chatgpt-plan-sign-in-on-the-sdk-engine.md"
 ---
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
@@ -454,6 +454,18 @@ words (`provider openai has an OAuth login in auth.json, which gobble does not u
 
 ### P5 — the one-time migration (MADR D9)
 
+*(2026-11-20, re-grounded at `9332cef` before this phase starts. The steps below are unchanged. The facts the executor uses are the dated note on MADR D9 of the same day.)*
+
+* The call is `run` in `internal/cli/main.go`, after `runEnv` is built and before `kctx.Run`. Completion mode returns in `Main` before `run`. No `auth.Load` runs before `kctx.Run`. An error from `Migrate` is a warning and the command continues with the file as it is.
+* Kept fields stay the raw `member.value` bytes: remove `key` and `workspace` from an `oauth` entry, and do not rewrite that entry through `SetOAuth`. The consent write is only `CarryConsent`, after `auth.json.lock` is released.
+* The backup uses the same owner-only write as `auth.json` (`securePrivate`), including the Windows DACL. C6 still runs on the two other hosts for that reason.
+* Not this phase: the held-session refusal and the wizard's no-listener option. Both SDK records are accepted and neither is in the `v1.31.0` tag this repository requires (MADR D9's note of this date, and 0051-MADR's note of this date). 0060 is on `main` (`cde93be` and its fixes) and does not block this phase.
+* **Tooling already in the tree, checked 2026-11-20.** This phase uses it and adds no script.
+  * Gates stay this repository's. `make pre-add-check` is `scripts/go-precheck.sh`: gofmt, golangci-lint over both modules, and `go tool govulncheck`. The per-file golint step is retired (0064). `make preflight` is the gate list in the Makefile, including `scripts/check_staticcheck_ignored.py`, `scripts/verify_build_metadata.py`, `scripts/check_records.py --check-all` and `scripts/gen_icon.py --check`. `make check-test-isolation` is `scripts/check_test_isolation.py` and is not inside preflight; 0051's C6 still runs it. `make check-libs` is this repository's `scripts/check_libs.py`. There is no `check_libs.json` here, so the sibling go-shared `scripts/check_libs.py` is not this phase's library check, and this phase does not bump a library pin. `scripts/gen_catalog.py` refreshes the embedded catalog and is not a gate of this phase. 0033-PLAN, which would add `scripts/check_disclosure.py` here, is still proposed; this phase does not start it. The fleet `scripts/bump-libs.sh` finds every dependent and commits the pin itself; P8a's pin commit stays the `go get` that phase names.
+  * Plants, once the code exists, go through the sibling go-llmprovider-sdk `tools/plant.py --root` pointed at this repository. It scratch-clones the working tree, untracked files included, and does not edit this tree. The red before `Migrate` exists is `go test` here: that sibling's `tools/redgreen.py` counts a package that does not build as a finding, not as the expected failure.
+  * The identifier scan of the diff is that sibling's `tools/denyscan.py --root --changed`. It prints the kind of hit, not the identifier. A home-path scan of tracked files is the sibling go-shared `scripts/check_disclosure.py --repo .`. This repository's Makefile calls neither; both already implement the scan. On this date that whole-tree scan reports four findings already in the tree, none in this phase's diff: `docs/decisions/0024-PLAN-cli-mode-polish.md` lines 272 and 273, `permission/rules_test.go:178`, and `session/jsonl/store_test.go:99`. Each is a fixture or a quoted temporary path. This phase does not change those files. The scan this phase must pass is the diff scan.
+  * The sibling go-tui-lib `tools/verify` default gates are that library's own targets (`modernize`, `release-check`, `apicheck`). This repository has none of them. This phase does not run that package. This repository has no `tools/` directory; this phase does not add one. The SDK's `tools/records.py` is that repository's index shape and is not used on `docs/README.md`.
+
 1. `internal/auth/migrate.go`: `Migrate(ctx, MigrateOptions{AuthPath, StateDir, Settings func() (bool, bool),
    CarryConsent func(ctx context.Context) error, Log *slog.Logger}) (Report, error)`, MADR D9's steps in order; the
    backup named in UTC; `Report` names what it did. Step 5 calls `CarryConsent`, never the SDK: `internal/auth` may not
@@ -479,6 +491,8 @@ words (`provider openai has an OAuth login in auth.json, which gobble does not u
 Acceptance: the tests pass, each plant failed.
 
 ### P6 — acceptance and close-out (MADR Confirmation)
+
+*(2026-11-20, before this phase starts. Probes L4 to L7 have not been run. There is no gobble `v0.7.0` tag. `v0.6.0` is an ancestor of `9332cef`. magic-cli-remote requires acp-go-sdk2 `v1.36.0`, the same tag this repository requires, which is what 0055-MADR D2 asks `v0.7.0` to meet. The owner tags; this note does not.)*
 
 1. Every Confirmation item checked and recorded with its evidence.
 2. **Owner-run probes**, each asked first, each on the host with a scratch `GOBBLE_HOME` (a copy of nothing real), no
