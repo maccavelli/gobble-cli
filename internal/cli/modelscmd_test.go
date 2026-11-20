@@ -1,6 +1,11 @@
 package cli
 
 import (
+	"context"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -144,7 +149,7 @@ func TestModelsSearchIsTheSDKs(t *testing.T) {
 			}
 		}
 		var got []string
-		for _, m := range searchModels(rows, q) {
+		for _, m := range searchModels(rows, q, nil) {
 			got = append(got, m.Provider+"/"+m.ID)
 		}
 		slices.Sort(want)
@@ -153,8 +158,67 @@ func TestModelsSearchIsTheSDKs(t *testing.T) {
 			t.Errorf("search %q: %q, want the SDK's %q", q, got, want)
 		}
 	}
-	if got := searchModels(rows, "  "); len(got) != len(rows) {
+	if got := searchModels(rows, "  ", nil); len(got) != len(rows) {
 		t.Errorf("an empty search kept %d rows, want all %d", len(got), len(rows))
+	}
+}
+
+// factWire answers one OpenAI listing and its models.dev document, and
+// nothing else, so the test never dials (0036-PLAN P5).
+type factWire struct {
+	meta string
+}
+
+func (w factWire) RoundTrip(r *http.Request) (*http.Response, error) {
+	body, status := "{}", http.StatusNotFound
+	switch r.URL.Host + r.URL.Path {
+	case "api.openai.com/v1/models":
+		body, status = `{"object":"list","data":[{"id":"gpt-6-luna","object":"model"},{"id":"gpt-6-astra","object":"model"}]}`, http.StatusOK
+	case w.meta:
+		body, status = `{"openai":{"id":"openai","models":{
+"gpt-6-luna":{"name":"Luna","limit":{"context":128000},"modalities":{"input":["text","image"],"output":["text"]},"tool_call":true},
+"gpt-6-astra":{"name":"Astra","limit":{"context":400000},"modalities":{"input":["text"],"output":["text"]},"tool_call":true}}}}`, http.StatusOK
+	}
+	return &http.Response{StatusCode: status, Header: http.Header{"Content-Type": {"application/json"}},
+		Body: io.NopCloser(strings.NewReader(body)), Request: r}, nil
+}
+
+// factList lists openai through factWire. Any other id is not live.
+func factList(meta string) func(context.Context, string, string, provider.Options) (provider.Listing, error) {
+	return func(ctx context.Context, id, key string, _ provider.Options) (provider.Listing, error) {
+		if id != "openai" {
+			return provider.Listing{Models: provider.Models(id)}, nil
+		}
+		return provider.List(ctx, id, key, provider.Options{
+			HTTPClient: &http.Client{Transport: factWire{meta: meta}}, ModelMetadataURL: "https://" + meta,
+		})
+	}
+}
+
+// gobble models list vision, and the picker's search, return the live
+// listing's fact match first, then an id match the listing does not hold
+// (0036-MADR D6). aaa-vision sorts ahead of gpt-6-luna, so a sorted table
+// would show it first.
+func TestModelsSearchListsFactsFirst(t *testing.T) {
+	meta := fmt.Sprintf("metadata.test/%s-%d.json", t.Name(), os.Getpid())
+	withLister(t, factList(meta))
+	t.Setenv("OPENAI_API_KEY", fmt.Sprintf("sk-facts-%d", os.Getpid()))
+	c := newCfgEnv(t)
+	c.write(filepath.Join(c.home, "models.json"), `{"providers":{"openai":{"models":[{"id":"aaa-vision"}]}}}`)
+	r := c.run("models", "list", "vision")
+	var ids []string
+	for _, row := range rowsOf(r.stdout)[1:] {
+		if len(row) > 1 {
+			ids = append(ids, row[1])
+		}
+	}
+	if r.code != ExitOK || !slices.Equal(ids, []string{"gpt-6-luna", "aaa-vision"}) {
+		t.Fatalf("models list vision: exit %d, ids %q, stdout %q, stderr %q", r.code, ids, r.stdout, r.stderr)
+	}
+	e, _ := modelEnv(t)
+	got := e.agentOptions().SearchModels("openai", []string{"aaa-vision", "gpt-6-luna", "gpt-6-astra"}, "vision")
+	if !slices.Equal(got, []string{"gpt-6-luna", "aaa-vision"}) {
+		t.Fatalf("picker search %q, want the listing's match then the id match", got)
 	}
 }
 

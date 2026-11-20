@@ -36,6 +36,11 @@ type Listing struct {
 	// Usable are every usable id of a live listing, uncapped, as the SDK's
 	// WithLastGood takes them back.
 	Usable []string
+	// catalog is the SDK's listing when this one is live, so a search can
+	// read its facts. held says it was stored. Both are empty when the
+	// listing is not live (0036-MADR D6).
+	catalog catalog.Catalog
+	held    bool
 }
 
 // publicListings are the providers whose listing needs no key
@@ -58,6 +63,26 @@ func Search(id string, models []string, query string) []string {
 	}
 	return out
 }
+
+// SearchListing is the ids of l's models that match query, best first, by
+// the listing's facts: its name, its family, and the features those facts
+// state (0036-MADR D6). A listing with no catalog matches nothing, as does
+// an empty query.
+func SearchListing(l Listing, query string) []string {
+	if !l.held {
+		return nil
+	}
+	var out []string
+	for _, m := range l.catalog.Search(query) {
+		out = append(out, m.ID)
+	}
+	return out
+}
+
+// HasCatalog reports whether l keeps a live listing's catalog, so a search
+// can read its facts (0036-MADR D6). A listing a test builds with no
+// catalog does not.
+func HasCatalog(l Listing) bool { return l.held }
 
 // List lists the built-in provider id's models with apiKey, through the
 // SDK's catalog.List with the capable profile, model metadata on and no
@@ -111,7 +136,7 @@ func listWith(ctx context.Context, id string, src llmprovider.TokenSource, o Opt
 		}
 		return Listing{Models: Models(id), Err: reason}, nil
 	}
-	return Listing{Models: cat.Recommended, Live: true, Source: string(cat.Source), FetchedAt: cat.FetchedAt, Usable: cat.Usable}, nil
+	return Listing{Models: cat.Recommended, Live: true, Source: string(cat.Source), FetchedAt: cat.FetchedAt, Usable: cat.Usable, catalog: cat, held: true}, nil
 }
 
 // listChat lists a Chat Completions server through catalog.List, with its id
@@ -135,7 +160,7 @@ func listChat(ctx context.Context, id, apiKey string, o Options) (Listing, error
 		}
 		return Listing{Err: reason}, nil
 	}
-	return Listing{Models: cat.Recommended, Live: true, Source: string(cat.Source), FetchedAt: cat.FetchedAt, Usable: cat.Usable}, nil
+	return Listing{Models: cat.Recommended, Live: true, Source: string(cat.Source), FetchedAt: cat.FetchedAt, Usable: cat.Usable, catalog: cat, held: true}, nil
 }
 
 // ErrorKind names err's class in the words of the SDK's auth contract

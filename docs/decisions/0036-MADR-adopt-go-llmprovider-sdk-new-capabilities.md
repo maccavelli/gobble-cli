@@ -277,6 +277,18 @@ the owner split images out anyway.
   - `Match.Why` is not shown. Showing it changes the picker's and the table's layout, for a later record.
   - Search results change: `claude vision 200k` finds the Claude models with image input and a window of at least
     200k, where today it finds none.
+  - *(Amended 2026-11-20, when P5 landed.)* The search is `SearchListing` (`llm/provider/list.go:71`),
+    the name the plan wrote. `Listing` keeps the SDK catalog unexported (`catalog`, `:42`); `held`
+    (`:43`) says it was stored. `List` stores both on a live built-in (`:139`) and `listChat` on a
+    live Chat Completions server (`:163`). A listing that failed stores neither. `HasCatalog`
+    (`:85`) tells a catalog-bearing listing from one a test marks live with no catalog, which stays
+    the id search. `provider.Search` is unchanged. `Match.Why` is not shown. The two callers are
+    the picker's `SearchModels` (`internal/cli/agent.go:99`), which reads the run's cached listing
+    (`cachedListing`, `internal/cli/models.go:283`), and `searchModels` (`internal/cli/modelscmd.go:214`).
+    Both use `listedSearch` (`:241`). A non-empty `gobble models list` is not sorted again
+    (`printModels`, `:137`): the listing's matches come first, then the id matches among the models
+    it does not hold. A list with no search words stays sorted by provider, then id. The numbered
+    picker keeps its order; the callback's returned ids are the search's order.
 
 ### Images
 

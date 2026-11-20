@@ -105,8 +105,10 @@ thinks. Then:
 - **`/model provider/id`**, such as `/model claude/claude-sonnet-5-5`, or an id only one provider
   offers, switches to it.
 - **`/model claude`** switches to the model you last used of that provider, else its first.
-- **`/model` with other words**, such as `/model sonnet`, lists the entries that match, keeping
-  their numbers, so `/model N` picks one.
+- **`/model` with other words**, such as `/model sonnet` or `/model vision`, lists the entries that
+  match, keeping their numbers, so `/model N` picks one. Where that provider's listing is live, a
+  word matches its facts: `vision` finds a model that takes images, and `200k` one whose window is
+  at least 200k. Models the listing does not hold match by id.
 
 The conversation goes on, on the new model, another provider's included. The new model is sent the
 conversation's text and tool calls; the earlier model's thinking, and the data a provider keeps
@@ -169,14 +171,16 @@ is offered again.
 ## Listing the models
 
 `gobble models list` lists the models of the providers whose credential is set: the models gobble
-knows, and those the provider's own listing adds. Words after it filter the list, each matching
-the provider and id in order, as Pi's search does. `--list-models` does the same:
+knows, and those the provider's own listing adds. Words after it filter the list. Where a listing
+is live, its matches come first, facts included: `vision` finds a model that takes images, and
+`200k` one whose window is at least 200k. Models that listing does not hold then match by id.
+With no words, the table is sorted by provider, then id. `--list-models` does the same:
 
 ```text
 $ gobble models list luna
 provider  model         context  max-out  thinking  images
-openai    gpt-5.6-luna  1.1M     128K     yes       yes
 openai    gpt-6-luna    1.1M     128K     yes       yes
+openai    gpt-5.6-luna  1.1M     128K     yes       yes
 ```
 
 A fact gobble does not know prints as `-`. With no credential set, the list says which variables to
@@ -193,11 +197,11 @@ shows the models gobble knows of it, and says so:
 ```text
 $ gobble models list --provider claude sonnet
 provider  model                       context  max-out  thinking  images
+claude    claude-sonnet-5-5           1M       128K     yes       yes
+claude    claude-sonnet-5             1M       128K     yes       yes
 claude    claude-sonnet-4-5           200K     64K      yes       yes
 claude    claude-sonnet-4-5-20250929  200K     64K      yes       yes
 claude    claude-sonnet-4-6           1M       128K     yes       yes
-claude    claude-sonnet-5             1M       128K     yes       yes
-claude    claude-sonnet-5-5           1M       128K     yes       yes
 
 claude has no credential: these are the models gobble knows of it. gobble auth login claude sets one.
 ```

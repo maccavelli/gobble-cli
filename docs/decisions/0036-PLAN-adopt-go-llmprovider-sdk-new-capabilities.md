@@ -609,3 +609,31 @@ P4 to P7 have not started. The pre-existing uncommitted edit of
 
 P5 to P7 have not started. The pre-existing uncommitted edit of
 `0063-MADR-one-shared-terminal-input-so-the-key-prompt-waits.md` is not part of this phase.
+
+### P5 record (2026-11-20): the facts search
+
+1. **Tests first,** seen failing before the code.
+   - `llm/provider` `TestListingSearchByFacts`: `undefined: SearchListing`.
+   - `internal/cli` `TestModelsSearchListsFactsFirst`: `models list vision: exit 0, ids ["aaa-vision"]`, the id
+     match only.
+2. **The code.** The owner confirmed the three choices the phase asked: the name is `SearchListing`, as the plan
+   wrote; a non-empty search is not sorted again, so the listing's matches come first and a list with no search
+   words stays sorted; the CLI test calls `provider.List` through a canned `RoundTripper` and a local
+   `ModelMetadataURL`. `Listing` keeps the SDK catalog unexported (`catalog`, `llm/provider/list.go:42`; `held`,
+   `:43`). `List` stores both on a live built-in (`:139`) and `listChat` on a live Chat Completions server
+   (`:163`). `SearchListing` is `:71`. `HasCatalog` (`:85`) is how a caller tells that listing from one a test
+   marks live with no catalog, which stays `provider.Search`. `provider.Search` is unchanged. `Match.Why` is not
+   shown. The picker's `SearchModels` (`internal/cli/agent.go:99`) reads the run's cached listing
+   (`cachedListing`, `internal/cli/models.go:283`). `searchModels` (`internal/cli/modelscmd.go:214`) and that
+   callback both use `listedSearch` (`:241`). `printModels` sorts only when the search is empty (`:137`). The
+   numbered picker keeps its order.
+3. **Planted break,** on a scratch copy, applied with `go test -overlay`, so the tree was not edited. The listing
+   search replaced by the id search: `TestListingSearchByFacts` failed, `vision [], want the model whose input holds image`.
+   The same test then passed on the tree.
+4. **Checks.** Package tests on the session host: `go test -count=1 ./llm/provider/` passed (`ok`, 79.634s) and
+   `go test -count=1 ./internal/cli/` passed (`ok`, 47.055s), both before the guide and the records.
+   `docs/guides/choosing-a-model.md` says what a search word matches, and its `luna` and `sonnet` examples are
+   the search's order.
+
+P6 and P7 have not started. The pre-existing uncommitted edit of
+`0063-MADR-one-shared-terminal-input-so-the-key-prompt-waits.md` is not part of this phase.

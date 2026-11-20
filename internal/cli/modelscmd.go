@@ -22,7 +22,7 @@ type ModelsCmd struct {
 
 // ModelsListCmd is gobble models list, and --list-models.
 type ModelsListCmd struct {
-	Search   []string `arg:"" optional:"" complete:"none" help:"Search words, each matched against the provider and id."`
+	Search   []string `arg:"" optional:"" complete:"none" help:"Search words. A live listing matches its facts; other models match by id."`
 	Provider string   `complete:"provider" help:"Only this provider's models, its known ones when it has no credential."`
 	All      bool     `help:"Every provider's models, the known ones of those with no credential."`
 }
@@ -66,8 +66,10 @@ func (c *ModelsInfoCmd) Run(e *runEnv) error {
 
 // printModels prints Pi's --list-models table (cli/list-models.ts) for the
 // providers with a credential: each one's offline set and live listing,
-// each model once, its facts from the catalog with no request; search's
-// the SDK's search filters it. only keeps one provider; all,
+// each model once, its facts from the catalog with no request. A search
+// takes a live listing's fact matches first, then the id matches among the
+// models that listing does not hold; with no search words the table is
+// sorted. only keeps one provider; all,
 // and only for a provider with no credential, add the known models of those
 // with none, named in a note after the table; both take Ollama, which takes
 // no key (0025-MADR D5).
@@ -128,13 +130,15 @@ func (e *runEnv) printModels(search, only string, all bool) error {
 			rows = append(rows, provider.ModelInfoContext(e.ctx, p, "", id, mj))
 		}
 	}
-	rows = searchModels(rows, search)
+	rows = searchModels(rows, search, liveListings(listings, sels))
 	if len(rows) == 0 {
 		return e.out.Resultf("No models matching %q\n", search)
 	}
-	slices.SortFunc(rows, func(a, b llm.Model) int {
-		return cmp.Or(catalog.CompareIDs(a.Provider, b.Provider), catalog.CompareIDs(a.ID, b.ID))
-	})
+	if strings.TrimSpace(search) == "" { // a search keeps the listing's matches first (0036-MADR D6)
+		slices.SortFunc(rows, func(a, b llm.Model) int {
+			return cmp.Or(catalog.CompareIDs(a.Provider, b.Provider), catalog.CompareIDs(a.ID, b.ID))
+		})
+	}
 	out := modelTable(rows)
 	switch {
 	case only != "" && len(unkeyed) == 1:
@@ -204,25 +208,80 @@ func yesNo(known, v bool) string {
 	return "no"
 }
 
-// searchModels are the rows the SDK's search finds among each provider's
-// models, as the ACP picker searches (0031-MADR D8); every row for a blank
-// search.
-func searchModels(rows []llm.Model, search string) []llm.Model {
+// searchModels are the rows a search keeps, each provider's listing matches
+// first, then its id matches; every row for a blank search (0036-MADR D6).
+// live is that provider's listing when it carries a catalog.
+func searchModels(rows []llm.Model, search string, live map[string]provider.Listing) []llm.Model {
 	search = strings.TrimSpace(search)
 	if search == "" {
 		return rows
 	}
 	ids := map[string][]string{}
+	var providers []string
+	byID := map[string]llm.Model{}
 	for _, m := range rows {
+		if _, ok := ids[m.Provider]; !ok {
+			providers = append(providers, m.Provider)
+		}
 		ids[m.Provider] = append(ids[m.Provider], m.ID)
+		byID[m.Provider+"/"+m.ID] = m
 	}
-	found := map[string]bool{}
-	for p, ms := range ids {
-		for _, id := range provider.Search(p, ms, search) {
-			found[p+"/"+id] = true
+	var out []llm.Model
+	for _, p := range providers {
+		for _, id := range listedSearch(live[p], p, ids[p], search) {
+			out = append(out, byID[p+"/"+id])
 		}
 	}
-	return slices.DeleteFunc(slices.Clone(rows), func(m llm.Model) bool { return !found[m.Provider+"/"+m.ID] })
+	return out
+}
+
+// listedSearch is the listing's fact matches among models, in that order,
+// then the id matches among the models the listing does not hold. Without
+// a catalog it is the id search over every model (0036-MADR D6).
+func listedSearch(l provider.Listing, id string, models []string, query string) []string {
+	if !provider.HasCatalog(l) {
+		return provider.Search(id, models, query)
+	}
+	held := make(map[string]bool, len(l.Models))
+	for _, m := range l.Models {
+		held[m] = true
+	}
+	want := make(map[string]bool, len(models))
+	for _, m := range models {
+		want[m] = true
+	}
+	var out []string
+	seen := map[string]bool{}
+	for _, m := range provider.SearchListing(l, query) {
+		if want[m] && !seen[m] {
+			out = append(out, m)
+			seen[m] = true
+		}
+	}
+	var rest []string
+	for _, m := range models {
+		if !held[m] {
+			rest = append(rest, m)
+		}
+	}
+	for _, m := range provider.Search(id, rest, query) {
+		if !seen[m] {
+			out = append(out, m)
+			seen[m] = true
+		}
+	}
+	return out
+}
+
+// liveListings are the listings that carry a catalog, keyed by provider id.
+func liveListings(listings []*modelListing, sels []provider.Selection) map[string]provider.Listing {
+	live := map[string]provider.Listing{}
+	for i, sel := range sels {
+		if l := listings[i].get(); provider.HasCatalog(l) {
+			live[sel.ID] = l
+		}
+	}
+	return live
 }
 
 // modelInfo is a model's facts, one aligned line each, "unknown" for what

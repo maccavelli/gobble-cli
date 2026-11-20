@@ -278,6 +278,18 @@ func (e *runEnv) warnListing(id string, l *modelListing) {
 // listingFailed is a failed listing's record.
 const listingFailed = "model listing failed; offering the curated static list"
 
+// cachedListing is the listing this run already started for id, or none
+// when it started no listing. It waits for the one it started.
+func (e *runEnv) cachedListing(id string) provider.Listing {
+	e.listingsMu.Lock()
+	l := e.listings[id]
+	e.listingsMu.Unlock()
+	if l == nil {
+		return provider.Listing{}
+	}
+	return l.get()
+}
+
 // modelListing is the listing of sel's models for this process, made with
 // sel's credential. A failed listing is the static models, and a record in
 // the log file names the provider and the failure's kind, never its text

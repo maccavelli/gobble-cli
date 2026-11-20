@@ -254,3 +254,45 @@ func TestSearch(t *testing.T) {
 		t.Fatalf("Search mini = %q, want gpt-5-mini first and no gpt-6-luna", got)
 	}
 }
+
+// factWire is two chat models. Neither id contains "vision" or "200k".
+// The document gives one an image input and a window under 200k, and the
+// other text only and a window of 400k (0036-MADR D6).
+const factModels = `{"object":"list","data":[{"id":"gpt-6-luna","object":"model"},{"id":"gpt-6-astra","object":"model"}]}`
+
+const factDoc = `{"openai":{"id":"openai","models":{
+"gpt-6-luna":{"name":"Luna","limit":{"context":128000},"modalities":{"input":["text","image"],"output":["text"]},"tool_call":true},
+"gpt-6-astra":{"name":"Astra","limit":{"context":400000},"modalities":{"input":["text"],"output":["text"]},"tool_call":true}}}}`
+
+// A live listing's search reads the document's facts. vision finds the model
+// whose input holds image, and 200k the one whose window is at least
+// 200,000. The id search over the same ids finds neither (0036-MADR D6).
+func TestListingSearchByFacts(t *testing.T) {
+	run := metadataRuns.Add(1)
+	metadata := fmt.Sprintf("metadata.test/%s-%d-%d.json", t.Name(), os.Getpid(), run)
+	_, o := cannedClient(map[string]route{
+		openaiModels: {status: http.StatusOK, body: factModels},
+		metadata:     {status: http.StatusOK, body: factDoc},
+	})
+	o.ModelMetadataURL = "https://" + metadata
+	l, err := List(t.Context(), "openai", fmt.Sprintf("sk-facts-%d-%d", os.Getpid(), run), o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	orders := !slices.Equal(l.Models, []string{"gpt-6-luna", "gpt-6-astra"}) && !slices.Equal(l.Models, []string{"gpt-6-astra", "gpt-6-luna"})
+	if !l.Live || orders {
+		t.Fatalf("listing %+v, want both chat models live", l)
+	}
+	if got := SearchListing(l, "vision"); !slices.Equal(got, []string{"gpt-6-luna"}) {
+		t.Fatalf("vision %q, want the model whose input holds image", got)
+	}
+	if got := SearchListing(l, "200k"); !slices.Equal(got, []string{"gpt-6-astra"}) {
+		t.Fatalf("200k %q, want the model whose window is at least 200000", got)
+	}
+	if got := Search("openai", l.Models, "vision"); len(got) != 0 {
+		t.Fatalf("id search vision %q, want none", got)
+	}
+	if got := Search("openai", l.Models, "200k"); len(got) != 0 {
+		t.Fatalf("id search 200k %q, want none", got)
+	}
+}
