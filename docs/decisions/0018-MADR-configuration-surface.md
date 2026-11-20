@@ -159,7 +159,7 @@ Comments survived all three. Only the splice kept the file's layout.
   | bash timeout cap | 10 min | `tool/builtin/builtin.go:40-41`, `:55-61` | `:1204` |
   | `tools.bash.useClientTerminal` | `false` | `tool/builtin/builtin.go:46-49` | `:959` |
   | additional directories from the CLI | none: `acpclient.NewSessionOptions` has only `ID`, `ForkFrom` and `Name` | `acpclient/sessions.go:57-59` | `:959` |
-  | `images.autoResize` | no consumer; waits on `llm` carrying images | — | `:959` |
+  | `images.autoResize` | no consumer; waits on `llm` carrying images *(2026-11-20, [0036-PLAN-adopt-go-llmprovider-sdk-new-capabilities.md](0036-PLAN-adopt-go-llmprovider-sdk-new-capabilities.md) P7: unparked, default true, read per session)* | — | `:959` |
 
 - **Defaults not yet parked:**
   - The MCP start-up wait, 10 s (`acpserver/mcp.go:19`).
@@ -222,7 +222,7 @@ No merge, trust gate, write path or schema exists in it, and a setting with no f
 - **F8.** Some keys are dangerous from a project file even when the project is trusted: what runs every command, where sessions are written, and what decides trust or bypass.
 - **F9.** Mapping every key to an environment variable, as Viper's `AutomaticEnv` does in both owner projects, invites collisions. A one-run override is still needed, and gobble's `-c` is `--continue`.
 - **F10.** The org rule (LKQ ADR 007) keeps secrets out of configuration files. Credentials belong in `auth.json` (F4-3).
-- **F11.** Of the parked and unparked defaults, eight have consumers today. `compaction.reserveTokens` and `images.autoResize` have none until F5 and image support land, so they are not keys yet. `--add-dir` needs the CLI client to send additional directories, which it cannot today.
+- **F11.** Of the parked and unparked defaults, eight have consumers today. `compaction.reserveTokens` and `images.autoResize` have none until F5 and image support land, so they are not keys yet. `--add-dir` needs the CLI client to send additional directories, which it cannot today. *(2026-11-20, [0036-PLAN-adopt-go-llmprovider-sdk-new-capabilities.md](0036-PLAN-adopt-go-llmprovider-sdk-new-capabilities.md) P7: `images.autoResize` is a key, default true, read per session. Off sends an image unchanged within 4.5 MB of base64 and a larger one as the size note. The key is pinned by `TestImagesAutoResize`; the behaviour by `TestReadImageAutoResize`.)*
 - **F12.** The owner is not concerned with importing Pi's settings, and has dropped it. Three records and one PLAN step name `config import --from-pi`.
 - **F13.** The records disagree in three places this surface touches:
   - 0003-MADR `:111` names `PI_AGENT_DIR`, which its own erratum (`:266`) corrects to `PI_CODING_AGENT_DIR`;
@@ -572,7 +572,7 @@ Chosen: **A**. In the probe it kept the file exactly apart from the edited value
   - F7: `hooks`;
   - F9: `theme`, the TUI keys and `keybindings.yaml`;
   - F10: `bridge.pi`, which 0003-MADR names to turn the Pi bridge off (`:138`);
-  - when `llm` carries images: `images.autoResize`;
+  - when `llm` carries images: `images.autoResize`; *(2026-11-20, [0036-PLAN-adopt-go-llmprovider-sdk-new-capabilities.md](0036-PLAN-adopt-go-llmprovider-sdk-new-capabilities.md) P7: added, default true, read per session.)*
   - 0017-MADR: the reminder settings its D15 deferred.
 
   D9's tests make each change carry its template block.

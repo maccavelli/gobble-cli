@@ -8,6 +8,8 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
+	"image"
+	"image/png"
 	"io"
 	"iter"
 	"log/slog"
@@ -131,6 +133,83 @@ func TestPromptImage(t *testing.T) {
 	if img == nil || img.MediaType != "image/png" || !bytes.Equal(img.Data, raw) {
 		t.Fatalf("image %+v, want the ACP block's png bytes", img)
 	}
+}
+
+// The agent's @path expansion sends an image file as image content when the
+// model takes images, and leaves it typed when the model does not
+// (0036-MADR D8).
+func TestMentionImage(t *testing.T) {
+	cwd := t.TempDir()
+	png := tinyPNG(t)
+	if err := os.WriteFile(filepath.Join(cwd, "pic.png"), png, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	vision := func(provider, model string) llm.Model {
+		return llm.Model{Provider: provider, ID: model, Input: []string{"text", "image"}}
+	}
+	textOnly := func(provider, model string) llm.Model {
+		return llm.Model{Provider: provider, ID: model, Input: []string{"text"}}
+	}
+	for _, tc := range []struct {
+		name  string
+		info  func(string, string) llm.Model
+		image bool
+	}{
+		{"vision", vision, true},
+		{"text-only", textOnly, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			script := llmtest.NewScript(llmtest.Text("seen")).WithCapabilities(llm.Capabilities{ImageInput: true})
+			agent := New(Options{
+				Version: "1.2.3", NewID: counterIDs(),
+				Provider: func(string, llm.Retry) (llm.Provider, error) { return script, nil },
+				Models: func() ModelChoice {
+					return ModelChoice{Provider: "openai", Default: "m", Models: []string{"m"}}
+				},
+				ModelInfo: tc.info,
+			})
+			c := acptest.Connect(t, agent, &acptest.Client{})
+			agent.SetConnection(c.Agent)
+			id := openSession(t, c, cwd)
+			pr, err := prompt(t, c, id, "see @pic.png")
+			if err != nil || pr.StopReason != acp.StopReasonEndTurn {
+				t.Fatalf("prompt %+v, %v", pr, err)
+			}
+			var img *llm.Content
+			for _, m := range script.Requests()[0].Messages {
+				if m.Role != llm.RoleUser {
+					continue
+				}
+				for i := range m.Content {
+					if m.Content[i].Type == llm.ContentImage {
+						got := m.Content[i]
+						img = &got
+					}
+				}
+			}
+			if tc.image {
+				if img == nil || (img.MediaType != "image/png" && img.MediaType != "image/jpeg") {
+					t.Fatalf("image %+v, want the file as png or jpeg", img)
+				}
+				if _, _, err := image.Decode(bytes.NewReader(img.Data)); err != nil {
+					t.Fatalf("image bytes: %v", err)
+				}
+				return
+			}
+			if img != nil {
+				t.Fatalf("text-only model got an image %+v", img)
+			}
+		})
+	}
+}
+
+func tinyPNG(t *testing.T) []byte {
+	t.Helper()
+	var b bytes.Buffer
+	if err := png.Encode(&b, image.NewNRGBA(image.Rect(0, 0, 2, 2))); err != nil {
+		t.Fatal(err)
+	}
+	return b.Bytes()
 }
 
 // The tool calls of a turn, keyed by id, with each update in order.

@@ -45,7 +45,7 @@ Early, and built in the order [docs/README.md](docs/README.md#build-order) gives
   `--thinking`, starts every session on that model, as chat's flags do. `gobble acp --login <provider>`
   is what an ACP client's terminal sign-in runs, with `/login`'s menu of methods; a client that offers `elicitation.form` is signed in
   by `authenticate`, as forms, with no terminal ([the credentials guide](docs/guides/credentials.md#signing-in-from-an-acp-client)).
-- **Tools:** `read`, `write` and `edit`, confined to the workspace roots; `grep`, `find` and `tree`,
+- **Tools:** `read` (an image, when the model takes one), `write` and `edit`, confined to the workspace roots; `grep`, `find` and `tree`,
   which follow the repository's `.gitignore` rules; `move`, `delete`, `copy` and `mkdir`, where every
   delete asks first; `todo`, a checklist the client shows as the plan; `tool_search`, which loads
   deferred tools; the MCP resource tools; `bash`, and `powershell` on Windows, run as process trees
@@ -86,8 +86,8 @@ Early, and built in the order [docs/README.md](docs/README.md#build-order) gives
   `/personality`, `--personality` and `gobble personality list|show|check|path|reset`. The messages in its catalog, and
   the system prompt's tools and rules sections, compaction's prompts and the built-in tools' descriptions, can be
   replaced from files.
-- **`@path` in a prompt** attaches that file, read inside the workspace, ahead of the text; ACP clients can attach
-  resources and links as well.
+- **`@path` in a prompt** attaches that file, read inside the workspace, ahead of the text. An image is attached as
+  an image when the model takes one. ACP clients can attach resources and links as well.
 - **`gobble mcp add|remove|list`**, `gobble config path|get|set|unset|edit|init|update|validate|schema`,
   `gobble trust` and `gobble untrust`, `gobble version` (or `--version` on any command), `gobble update` and
   `gobble completion`. Settings live in a commented `settings.yaml` in the config directory; `gobble config path`

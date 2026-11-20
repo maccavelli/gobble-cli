@@ -793,14 +793,20 @@ func (t *turn) runTools(calls []llm.ToolCallDone) (llm.Message, bool) {
 			break
 		}
 		m.Content = append(m.Content, llm.Content{Type: llm.ContentToolResult, ToolCallID: c.ID, ToolName: c.Name, Text: res.Text(), IsError: res.IsError})
+		at := len(m.Content) - 1
+		// The image follows that call's output (0036-MADR D7, D8).
+		if !res.IsError {
+			for _, im := range res.Images {
+				m.Content = append(m.Content, llm.Content{Type: llm.ContentImage, MediaType: im.MediaType, Data: im.Data})
+			}
+		}
 		// A load is named on the result that made it, and its event names
 		// the call, so a later request can replay it (0012-MADR D16, D18).
 		loads := func(names []string) bool {
 			if len(names) == 0 {
 				return true
 			}
-			last := &m.Content[len(m.Content)-1]
-			last.Loads = append(last.Loads, names...)
+			m.Content[at].Loads = append(m.Content[at].Loads, names...)
 			return t.emit(Loaded{Names: names, CallID: c.ID})
 		}
 		if len(res.Load) > 0 && !res.IsError && !loads(t.load(res.Load)) {

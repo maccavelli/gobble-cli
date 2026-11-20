@@ -58,6 +58,8 @@ mcp:
   startupWaitMs: 10000
   stopGraceMs: 100
   stopTimeoutMs: 2000
+images:
+  autoResize: true
 externalEditor: ""
 `
 	if got := string(Render(r, "", false)); got != want {

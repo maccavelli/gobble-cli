@@ -1,6 +1,7 @@
 package agent_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
@@ -107,6 +108,37 @@ func TestToolRoundTrip(t *testing.T) {
 	}
 	if end.StopReason != agent.StopEndTurn || len(end.Messages) != 4 {
 		t.Fatalf("end = %+v", end)
+	}
+}
+
+// imageTool returns one image after its text.
+type imageTool struct{}
+
+func (imageTool) Spec() tool.Spec {
+	return tool.Spec{Name: "snap", InputSchema: jsontext.Value(`{"type":"object"}`)}
+}
+
+func (imageTool) Run(context.Context, tool.Call, tool.Env) (tool.Result, error) {
+	r := tool.TextResult("a picture")
+	r.Images = []tool.Image{{MediaType: "image/png", Data: []byte{0x89, 'P', 'N', 'G'}}}
+	return r, nil
+}
+
+// A tool result's images reach the next request after its output (0036-PLAN P7).
+func TestToolResultImage(t *testing.T) {
+	s := llmtest.NewScript(llmtest.ToolCall("c1", "snap", "{}"), llmtest.Text("seen"))
+	a := agent.New(agent.Config{Provider: s, Tools: []tool.Tool{imageTool{}}})
+	if _, _, err := collect(t.Context(), t, a, tool.Env{}, "look"); err != nil {
+		t.Fatal(err)
+	}
+	reqs := s.Requests()
+	if len(reqs) < 2 {
+		t.Fatalf("%d requests, want the call and the result", len(reqs))
+	}
+	content := reqs[1].Messages[len(reqs[1].Messages)-1].Content
+	if len(content) < 2 || content[0].Type != llm.ContentToolResult || content[0].Text != "a picture" ||
+		content[1].Type != llm.ContentImage || content[1].MediaType != "image/png" || !bytes.Equal(content[1].Data, []byte{0x89, 'P', 'N', 'G'}) {
+		t.Fatalf("tool message %+v", content)
 	}
 }
 

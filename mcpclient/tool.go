@@ -14,6 +14,7 @@ import (
 
 	"github.com/maccavelli/gobble-cli/jsonx"
 	"github.com/maccavelli/gobble-cli/tool"
+	"github.com/maccavelli/gobble-cli/tool/builtin"
 )
 
 // mcpTool is one server tool as a gobble tool.
@@ -104,7 +105,7 @@ func (t *mcpTool) Describe(tool.Call, tool.Env) string {
 // Run calls the tool within the server's timeout. The server's errors, and
 // a timeout, are error results the model reads; only a done ctx is an
 // error.
-func (t *mcpTool) Run(ctx context.Context, call tool.Call, _ tool.Env) (tool.Result, error) {
+func (t *mcpTool) Run(ctx context.Context, call tool.Call, env tool.Env) (tool.Result, error) {
 	label := t.Describe(call, tool.Env{})
 	args := call.Args
 	if len(args) == 0 {
@@ -129,21 +130,56 @@ func (t *mcpTool) Run(ctx context.Context, call tool.Call, _ tool.Env) (tool.Res
 	case err != nil:
 		return tool.ErrorResult(fmt.Sprintf("MCP tool %s failed: %v", label, err)), nil
 	}
-	text := resultText(res)
-	if res.IsError && text == "" {
-		text = fmt.Sprintf("MCP tool %s returned an error", label)
+	out := preparedResult(res, env)
+	if res.IsError && out.Text() == "" {
+		out = tool.ErrorResult(fmt.Sprintf("MCP tool %s returned an error", label))
 	}
-	return tool.Result{Output: jsonx.Quote(text), IsError: res.IsError}, nil
+	out.IsError = res.IsError
+	return out, nil
+}
+
+// preparedResult is a tool result as the model reads it. An image is prepared
+// the same way read prepares one, or replaced by the same note (0036-MADR D8).
+func preparedResult(r *mcp.CallToolResult, env tool.Env) tool.Result {
+	if len(r.Content) == 0 && r.StructuredContent != nil {
+		return tool.Result{Output: jsonx.Quote(resultText(r))}
+	}
+	var parts []string
+	var images []tool.Image
+	for _, c := range r.Content {
+		img, ok := c.(*mcp.ImageContent)
+		if !ok {
+			parts = append(parts, blockText(c))
+			continue
+		}
+		if !env.Images {
+			parts = append(parts, tool.ImageNotSent)
+			continue
+		}
+		prepared, note, err := builtin.PrepareImage(img.Data, img.MIMEType, !env.NoAutoResize)
+		if err != nil || len(prepared.Data) == 0 {
+			if note == "" {
+				note = tool.ImageOmitted
+			}
+			parts = append(parts, note)
+			continue
+		}
+		images = append(images, prepared)
+		if note != "" {
+			parts = append(parts, note)
+		}
+	}
+	return tool.Result{Output: jsonx.Quote(strings.Join(parts, "\n")), Images: images}
 }
 
 func seconds(d time.Duration) string {
 	return strconv.FormatFloat(d.Seconds(), 'f', -1, 64)
 }
 
-// resultText is a result as the model reads it: each block as Pi's
-// toLlmContent and tools.ts convert it, joined by newlines. gobble's tool
-// results are text, so an image is a note until 0005-PLAN F1 carries
-// images.
+// resultText is a result's text, each block as Pi's toLlmContent and
+// tools.ts convert it, joined by newlines. An image here is the text-only
+// note; preparedResult carries the image when the model takes one
+// (0036-MADR D8).
 func resultText(r *mcp.CallToolResult) string {
 	if len(r.Content) == 0 && r.StructuredContent != nil {
 		b, err := jsonx.Marshal(r.StructuredContent, json.Deterministic(true), jsontext.WithIndent("  "))
@@ -163,7 +199,7 @@ func blockText(c mcp.Content) string {
 	case *mcp.TextContent:
 		return c.Text
 	case *mcp.ImageContent:
-		return fmt.Sprintf("[image %s omitted]", c.MIMEType)
+		return tool.ImageNotSent
 	case *mcp.AudioContent:
 		return fmt.Sprintf("[audio %s omitted]", c.MIMEType)
 	case *mcp.ResourceLink:

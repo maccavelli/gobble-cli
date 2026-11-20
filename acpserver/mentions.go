@@ -10,6 +10,9 @@ import (
 
 	"github.com/maccavelli/gobble-cli/internal/fsx"
 	"github.com/maccavelli/gobble-cli/jsonx"
+	"github.com/maccavelli/gobble-cli/llm"
+	"github.com/maccavelli/gobble-cli/tool"
+	"github.com/maccavelli/gobble-cli/tool/builtin"
 )
 
 // The user message's files (0005-PLAN F3-4): what a prompt's resource
@@ -81,20 +84,51 @@ func mentionsIn(text string) []mention {
 // file of valid UTF-8 with no NUL byte, and an empty file gives nothing,
 // as Pi's CLI skips one. Anything else is left as typed.
 func mentionFiles(text, cwd string, ws fsx.Workspace, seen map[string]bool) string {
+	out, _ := mentionAttachments(text, cwd, ws, seen, false, true)
+	return out
+}
+
+// mentionAttachments are mentionFiles, and, when images is set, each image
+// file as prepared image content. A model that does not take images leaves
+// an image path as typed (0036-MADR D8).
+func mentionAttachments(text, cwd string, ws fsx.Workspace, seen map[string]bool, images, autoResize bool) (string, []llm.Content) {
 	var b strings.Builder
+	var pics []llm.Content
 	for _, m := range mentionsIn(text) {
 		abs, ok := mentionPath(m, cwd, ws)
 		if !ok || seen[abs] {
 			continue
 		}
 		data, err := ws.ReadFile(abs)
-		if err != nil || len(data) == 0 || !utf8.Valid(data) || bytes.IndexByte(data, 0) >= 0 {
+		if err != nil || len(data) == 0 {
+			continue
+		}
+		if mime := builtin.ImageMIME(data); mime != "" && images {
+			seen[abs] = true
+			b.WriteString(imageMention(abs, data, mime, autoResize, &pics))
+			continue
+		}
+		if !utf8.Valid(data) || bytes.IndexByte(data, 0) >= 0 {
 			continue
 		}
 		seen[abs] = true
 		b.WriteString(fileBlock(abs, string(bytes.TrimPrefix(data, bom))))
 	}
-	return b.String()
+	return b.String(), pics
+}
+
+// imageMention prepares one image file. The bytes go to pics. The text is
+// Pi's file tag: the dimension note, the omit message, or empty.
+func imageMention(abs string, data []byte, mime string, autoResize bool, pics *[]llm.Content) string {
+	img, note, err := builtin.PrepareImage(data, mime, autoResize)
+	if err != nil || len(img.Data) == 0 {
+		if note == "" {
+			note = tool.ImageOmitted
+		}
+		return `<file name="` + abs + `">` + note + `</file>` + "\n"
+	}
+	*pics = append(*pics, llm.Content{Type: llm.ContentImage, MediaType: img.MediaType, Data: img.Data})
+	return `<file name="` + abs + `">` + note + `</file>` + "\n"
 }
 
 // mentionPath is the regular file a mention names inside ws's roots,
@@ -128,6 +162,13 @@ func unscanned(b *acp.ContentBlockText) bool {
 // words of its unmarked text blocks name. An image block stays in the user
 // message, so it is not copied here. An audio block is left out.
 func promptFiles(blocks []acp.ContentBlock, cwd string, ws fsx.Workspace) string {
+	text, _ := promptAttachments(blocks, cwd, ws, false, true)
+	return text
+}
+
+// promptAttachments are promptFiles, plus image content for an image @path
+// when the model takes images (0036-MADR D8).
+func promptAttachments(blocks []acp.ContentBlock, cwd string, ws fsx.Workspace, images, autoResize bool) (string, []llm.Content) {
 	var b strings.Builder
 	for _, c := range blocks {
 		switch {
@@ -138,12 +179,15 @@ func promptFiles(blocks []acp.ContentBlock, cwd string, ws fsx.Workspace) string
 		}
 	}
 	seen := map[string]bool{}
+	var pics []llm.Content
 	for _, c := range blocks {
 		if c.Text != nil && !unscanned(c.Text) {
-			b.WriteString(mentionFiles(c.Text.Text, cwd, ws, seen))
+			text, more := mentionAttachments(c.Text.Text, cwd, ws, seen, images, autoResize)
+			b.WriteString(text)
+			pics = append(pics, more...)
 		}
 	}
-	return b.String()
+	return b.String(), pics
 }
 
 // resourceText is an embedded resource in the message: a text resource as

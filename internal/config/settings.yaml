@@ -212,6 +212,16 @@
 #   stopTimeoutMs: 2000
 
 # ---------------------------------------------------------------------
+# Images
+# ---------------------------------------------------------------------
+
+# Whether an image is resized before it is sent, to at most 2000 by 2000
+# pixels and 4.5 MB of base64, as PNG or JPEG. Off sends an image
+# unchanged when it is within that size, and a note when it is not.
+# images:
+#   autoResize: true
+
+# ---------------------------------------------------------------------
 # Editor
 # ---------------------------------------------------------------------
 

@@ -1,9 +1,17 @@
 package builtin
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
+	"encoding/binary"
 	"encoding/json/jsontext"
 	"fmt"
+	"image"
+	"image/color"
+	"image/gif"
+	"image/jpeg"
+	"image/png"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -145,6 +153,97 @@ func TestReadDirectory(t *testing.T) {
 	if got := call(t, Read(), tool.Env{Cwd: empty}, map[string]any{"path": "."}).Text(); got != "(empty directory)" {
 		t.Fatalf("empty listing %q", got)
 	}
+}
+
+// An image the model takes is prepared: resized, oriented, and sent as PNG
+// or JPEG (0036-PLAN P7). A text-only model gets the note.
+func TestReadImage(t *testing.T) {
+	dir := t.TempDir()
+	writeImage(t, dir, "wide.png", pngSize(3000, 1000))
+	r := call(t, Read(), tool.Env{Cwd: dir, Images: true}, map[string]any{"path": "wide.png"})
+	if r.IsError || len(r.Images) != 1 {
+		t.Fatalf("wide png: error %v, %d images, text %q", r.IsError, len(r.Images), r.Text())
+	}
+	got := decodeImage(t, r.Images[0])
+	if got.Bounds().Dx() != 2000 {
+		t.Fatalf("wide png width %d, want 2000", got.Bounds().Dx())
+	}
+	if n := base64.StdEncoding.EncodedLen(len(r.Images[0].Data)); n >= maxImageBase64 {
+		t.Fatalf("base64 length %d, want under %d", n, maxImageBase64)
+	}
+
+	writeImage(t, dir, "turn.jpg", jpegOriented(t, 6))
+	r = call(t, Read(), tool.Env{Cwd: dir, Images: true}, map[string]any{"path": "turn.jpg"})
+	if r.IsError || len(r.Images) != 1 {
+		t.Fatalf("jpeg: error %v, %d images, text %q", r.IsError, len(r.Images), r.Text())
+	}
+	turned := decodeImage(t, r.Images[0])
+	if turned.Bounds().Dx() != 8 || turned.Bounds().Dy() != 16 {
+		t.Fatalf("oriented jpeg bounds %v, want 8x16", turned.Bounds())
+	}
+	if !redPixel(turned.At(1, 1)) || !bluePixel(turned.At(1, 14)) {
+		t.Fatalf("oriented jpeg pixels top %v bottom %v, want red then blue", turned.At(1, 1), turned.At(1, 14))
+	}
+
+	writeImage(t, dir, "dot.bmp", bmp2x2())
+	r = call(t, Read(), tool.Env{Cwd: dir, Images: true}, map[string]any{"path": "dot.bmp"})
+	if r.IsError || len(r.Images) != 1 || r.Images[0].MediaType != "image/png" {
+		t.Fatalf("bmp: error %v, images %+v, text %q", r.IsError, r.Images, r.Text())
+	}
+
+	writeImage(t, dir, "anim.gif", gifFrames())
+	r = call(t, Read(), tool.Env{Cwd: dir, Images: true}, map[string]any{"path": "anim.gif"})
+	if r.IsError || len(r.Images) != 1 {
+		t.Fatalf("gif: error %v, %d images, text %q", r.IsError, len(r.Images), r.Text())
+	}
+	if r.Images[0].MediaType != "image/png" && r.Images[0].MediaType != "image/jpeg" {
+		t.Fatalf("gif media %s, want png or jpeg", r.Images[0].MediaType)
+	}
+	frame := decodeImage(t, r.Images[0])
+	if !redPixel(frame.At(0, 0)) {
+		t.Fatalf("gif first frame pixel %v, want red", frame.At(0, 0))
+	}
+
+	writeImage(t, dir, "wide.png", pngSize(3000, 1000))
+	r = call(t, Read(), tool.Env{Cwd: dir}, map[string]any{"path": "wide.png"})
+	if r.IsError || len(r.Images) != 0 || !strings.Contains(r.Text(), tool.ImageNotSent) {
+		t.Fatalf("text-only: error %v, %d images, text %q", r.IsError, len(r.Images), r.Text())
+	}
+}
+
+// A truncated PNG is an error naming the file, never a panic (0036-PLAN P7).
+func TestReadImageBroken(t *testing.T) {
+	dir := t.TempDir()
+	png := pngSize(2, 2)
+	writeImage(t, dir, "pic.png", png[:len(png)/2])
+	r := call(t, Read(), tool.Env{Cwd: dir, Images: true}, map[string]any{"path": "pic.png"})
+	if !r.IsError || !strings.Contains(r.Text(), "pic.png") {
+		t.Fatalf("broken png: error %v, text %q", r.IsError, r.Text())
+	}
+}
+
+// images.autoResize off sends a small image unchanged, and one over 4.5 MB
+// of base64 as the note (0036-MADR D8).
+func TestReadImageAutoResize(t *testing.T) {
+	dir := t.TempDir()
+	small := pngSize(2, 2)
+	writeImage(t, dir, "small.png", small)
+	r := call(t, Read(), tool.Env{Cwd: dir, Images: true, NoAutoResize: true}, map[string]any{"path": "small.png"})
+	if r.IsError || len(r.Images) != 1 || r.Images[0].MediaType != "image/png" || !bytes.Equal(r.Images[0].Data, small) {
+		t.Fatalf("small off: error %v, images %d, type %s", r.IsError, len(r.Images), mediaOf(r))
+	}
+	writeImage(t, dir, "big.png", append(pngSize(2, 2), bytes.Repeat([]byte{0}, 4<<20)...))
+	r = call(t, Read(), tool.Env{Cwd: dir, Images: true, NoAutoResize: true}, map[string]any{"path": "big.png"})
+	if r.IsError || len(r.Images) != 0 || !strings.Contains(r.Text(), tool.ImageTooLarge) {
+		t.Fatalf("large off: error %v, %d images, text %q", r.IsError, len(r.Images), r.Text())
+	}
+}
+
+func mediaOf(r tool.Result) string {
+	if len(r.Images) == 0 {
+		return ""
+	}
+	return r.Images[0].MediaType
 }
 
 // An image is found by its magic bytes, not its name, and gets the note.
@@ -304,4 +403,111 @@ func TestReadStreamsLimit(t *testing.T) {
 	if r.IsError || !strings.HasSuffix(r.Text(), want) {
 		t.Fatalf("output ends %q, want %q", r.Text()[max(0, len(r.Text())-len(want)-20):], want)
 	}
+}
+
+func writeImage(t *testing.T, dir, name string, data []byte) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(dir, name), data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func pngSize(w, h int) []byte {
+	var b bytes.Buffer
+	if err := png.Encode(&b, image.NewNRGBA(image.Rect(0, 0, w, h))); err != nil {
+		panic(err)
+	}
+	return b.Bytes()
+}
+
+func decodeImage(t *testing.T, img tool.Image) image.Image {
+	t.Helper()
+	got, _, err := image.Decode(bytes.NewReader(img.Data))
+	if err != nil {
+		t.Fatalf("decode %s: %v", img.MediaType, err)
+	}
+	return got
+}
+
+func redPixel(c color.Color) bool {
+	r, g, b, _ := c.RGBA()
+	return r > 0xC000 && g < 0x4000 && b < 0x4000
+}
+
+func bluePixel(c color.Color) bool {
+	r, g, b, _ := c.RGBA()
+	return b > 0xC000 && r < 0x4000 && g < 0x4000
+}
+
+// jpegOriented is a 16x8 JPEG, red on the left and blue on the right, with
+// an EXIF orientation tag. Orientation 6 turns it to 8x16, red above blue.
+func jpegOriented(t *testing.T, orient int) []byte {
+	t.Helper()
+	img := image.NewNRGBA(image.Rect(0, 0, 16, 8))
+	for y := range 8 {
+		for x := range 16 {
+			if x < 8 {
+				img.Set(x, y, color.RGBA{255, 0, 0, 255})
+			} else {
+				img.Set(x, y, color.RGBA{0, 0, 255, 255})
+			}
+		}
+	}
+	var b bytes.Buffer
+	if err := jpeg.Encode(&b, img, &jpeg.Options{Quality: 100}); err != nil {
+		t.Fatal(err)
+	}
+	return withExifOrientation(b.Bytes(), orient)
+}
+
+func withExifOrientation(jpeg []byte, orient int) []byte {
+	tiff := []byte{
+		'I', 'I', 0x2a, 0x00,
+		0x08, 0x00, 0x00, 0x00,
+		0x01, 0x00,
+		0x12, 0x01,
+		0x03, 0x00,
+		0x01, 0x00, 0x00, 0x00,
+		byte(orient), 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+	}
+	payload := append([]byte("Exif\x00\x00"), tiff...)
+	seglen := len(payload) + 2
+	seg := append([]byte{0xff, 0xe1, byte(seglen >> 8), byte(seglen)}, payload...)
+	out := make([]byte, 0, len(jpeg)+len(seg))
+	out = append(out, jpeg[:2]...)
+	out = append(out, seg...)
+	out = append(out, jpeg[2:]...)
+	return out
+}
+
+func gifFrames() []byte {
+	pal := color.Palette{color.RGBA{255, 0, 0, 255}, color.RGBA{0, 0, 255, 255}}
+	a := image.NewPaletted(image.Rect(0, 0, 2, 2), pal)
+	b := image.NewPaletted(image.Rect(0, 0, 2, 2), pal)
+	for i := range b.Pix {
+		b.Pix[i] = 1
+	}
+	var buf bytes.Buffer
+	_ = gif.EncodeAll(&buf, &gif.GIF{Image: []*image.Paletted{a, b}, Delay: []int{1, 1}})
+	return buf.Bytes()
+}
+
+// bmp2x2 is a 2x2 24-bit BMP, red on the first pixel.
+func bmp2x2() []byte {
+	const w, h, row = 2, 2, 8
+	pix := make([]byte, row*h)
+	// Bottom-up. Top row is the second row of the file.
+	pix[row+0], pix[row+1], pix[row+2] = 0, 0, 255
+	b := make([]byte, 54+len(pix))
+	copy(b, "BM")
+	binary.LittleEndian.PutUint32(b[2:], uint32(len(b)))
+	binary.LittleEndian.PutUint32(b[10:], 54)
+	binary.LittleEndian.PutUint32(b[14:], 40)
+	binary.LittleEndian.PutUint32(b[18:], w)
+	binary.LittleEndian.PutUint32(b[22:], h)
+	binary.LittleEndian.PutUint16(b[26:], 1)
+	binary.LittleEndian.PutUint16(b[28:], 24)
+	copy(b[54:], pix)
+	return b
 }

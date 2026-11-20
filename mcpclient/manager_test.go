@@ -284,7 +284,7 @@ func TestResultText(t *testing.T) {
 		&mcp.EmbeddedResource{Resource: &mcp.ResourceContents{URI: "file:///d.bin", Blob: []byte{0}}},
 	}}
 	want := strings.Join([]string{
-		"one", "[image image/png omitted]", "[audio audio/wav omitted]",
+		"one", tool.ImageNotSent, "[audio audio/wav omitted]",
 		`[Resource file:///a.txt "a" (text/plain, 2.0KB): notes]`, "embedded", `{"x":1}`,
 		"[binary resource file:///d.bin (unknown type) omitted]",
 	}, "\n")

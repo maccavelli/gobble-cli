@@ -99,7 +99,7 @@ func toSession(s config.Settings) acpserver.SessionSettings {
 			ThresholdPercent: int(s.Compaction.ThresholdPercent), ThresholdTokens: int(s.Compaction.ThresholdTokens),
 		},
 		MCPStartupWait: s.MCPStartupWait(), MCPStopGrace: s.MCPStopGrace(), MCPStopTimeout: s.MCPStopTimeout(),
-		Retry: retryOf(s.Retry), AutoCompactionOff: !s.Compaction.Enabled, Personality: s.Personality,
+		Retry: retryOf(s.Retry), AutoCompactionOff: !s.Compaction.Enabled, NoAutoResize: !s.Images.AutoResize, Personality: s.Personality,
 		BombasticAccepted: s.BombasticAccepted, Rules: rulesOf(s.Permissions.Rules), AllowBypass: s.Permissions.AllowBypass,
 	}
 }

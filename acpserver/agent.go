@@ -270,8 +270,10 @@ type liveSession struct {
 	// not pauseNone, pauses its trigger after a failure, which pauseErr
 	// gives (0005-PLAN F5-2 decisions 10 and 11). The pause is not saved.
 	autoCompactOff bool
-	pause          acpext.CompactionPause
-	pauseErr       string
+	// noAutoResize is images.autoResize off. Zero resizes (0036-MADR D8).
+	noAutoResize bool
+	pause        acpext.CompactionPause
+	pauseErr     string
 	// streaming and compacting say what the running turn is: a model turn,
 	// or a compaction (_gobble/get_state).
 	streaming, compacting bool
@@ -532,7 +534,7 @@ func (a *Agent) NewSession(ctx context.Context, p acp.NewSessionRequest) (acp.Ne
 		think: cmp.Or(a.override.Thinking, ss.Thinking), model: cmp.Or(a.override.Model, a.models().Default), mode: a.startMode(ss.AllowBypass),
 		allowBypass: ss.AllowBypass,
 		queue:       sessionQueue(ss), compaction: ss.Compaction, cache: cacheOf(ss.CacheRetention), retry: ss.Retry,
-		autoCompactOff: ss.AutoCompactionOff, voice: a.voiceOf(ss), insultsAccepted: ss.BombasticAccepted,
+		autoCompactOff: ss.AutoCompactionOff, noAutoResize: ss.NoAutoResize, voice: a.voiceOf(ss), insultsAccepted: ss.BombasticAccepted,
 		root: ss.ProjectRoot, trust: ss.Trust, project: projectOf(ss.Project),
 		rules: engineOf(ss, p.Cwd, a.storedRules(cmp.Or(ss.ProjectRoot, p.Cwd)))}
 	if len(forked) > 0 {
@@ -719,15 +721,18 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 	if isExpanded {
 		prompt = llm.Message{Role: llm.RoleUser, Content: []llm.Content{{Type: llm.ContentText, Text: expanded}}}
 	}
-	// The files come first, then the text, as Pi's CLI orders them. The
+	// The files come first, then the text, as Pi's CLI orders them. An image
+	// @path is image content when the model takes images (0036-MADR D8). The
 	// prompt's text is then one block, joined as the user entry joins it, so
 	// the live session sends the bytes a resumed one sends from the entry
 	// (0005-PLAN F3-4; 0037-MADR D42).
-	if files := promptFiles(p.Prompt, s.cwd, fsx.Workspace{Roots: s.env().Roots}); files != "" {
+	chosen, think := a.choices(s)
+	files, pics := promptAttachments(p.Prompt, s.cwd, fsx.Workspace{Roots: s.env().Roots}, takesImages(a.info(a.providerID(s, model), chosen), model), !s.noAutoResize)
+	if files != "" {
 		prompt.Content = append([]llm.Content{{Type: llm.ContentText, Text: files}}, prompt.Content...)
 	}
+	prompt.Content = append(prompt.Content, pics...)
 	prompt = asEntry(prompt)
-	chosen, think := a.choices(s)
 	think = catalog.Clamp(a.levelsOf(a.provOf(s), chosen), think) // as thought_level shows it
 	w := writer{a: a, s: s, ctx: context.WithoutCancel(ctx), provider: a.providerID(s, model), model: chosen, written: map[string]bool{}}
 	// The system prompt's baseline or patch comes before the user's message,
@@ -801,6 +806,7 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 	a.sendNotices(out, s) // the start-up and MCP diagnostics, as notices (0016-MADR D8)
 	var last llm.Usage
 	env := s.env()
+	env.Images = takesImages(a.info(w.provider, chosen), model)
 	env.Environ = markers(string(s.id), a.fileOf(s), w.provider, chosen, think)
 	env.Instructions = a.instructions(s)
 	a.mu.Lock()
@@ -1044,7 +1050,7 @@ func (w *writer) event(ev agent.Event) {
 		w.addEntry(session.Entry{Type: session.TypeMessage, Message: m}, err)
 	case agent.ToolEnd:
 		w.written[ev.Call.ID] = true
-		w.add(session.Entry{Type: session.TypeMessage, Message: toolResultMessage(ev.Call.ID, ev.Call.Name, ev.Result.Text(), ev.Result.IsError, ts())})
+		w.add(session.Entry{Type: session.TypeMessage, Message: toolResultWithImages(ev.Call.ID, ev.Call.Name, ev.Result, ts())})
 		if ev.Result.Plan != nil {
 			w.addEntry(todoEntry(ev.Result.Plan))
 		}
@@ -1190,7 +1196,7 @@ func (a *Agent) open(ctx context.Context, id acp.SessionId, cwd string, extra []
 	s := &liveSession{id: id, cwd: cwd, dirs: dirs, log: log, think: thinkingOff, model: a.models().Default, mode: a.startMode(ss.AllowBypass),
 		allowBypass: ss.AllowBypass,
 		queue:       sessionQueue(ss), compaction: ss.Compaction, cache: cacheOf(ss.CacheRetention), retry: ss.Retry,
-		autoCompactOff: ss.AutoCompactionOff, voice: a.voiceOf(ss), insultsAccepted: ss.BombasticAccepted,
+		autoCompactOff: ss.AutoCompactionOff, noAutoResize: ss.NoAutoResize, voice: a.voiceOf(ss), insultsAccepted: ss.BombasticAccepted,
 		root: ss.ProjectRoot, trust: ss.Trust, project: projectOf(ss.Project),
 		rules: engineOf(ss, cwd, a.storedRules(cmp.Or(ss.ProjectRoot, cwd)))}
 	a.restore(s, log.Entries())
@@ -1352,7 +1358,20 @@ func (s *liveSession) env() tool.Env {
 	if s.cwd != "" {
 		roots = append(roots, s.cwd)
 	}
-	return tool.Env{Cwd: s.cwd, Roots: append(roots, s.dirs...)}
+	return tool.Env{Cwd: s.cwd, Roots: append(roots, s.dirs...), NoAutoResize: s.noAutoResize}
+}
+
+// takesImages is whether a model accepts an image: its facts' input holds
+// image, or the facts are unknown and the provider takes images
+// (0036-MADR D8).
+func takesImages(info llm.Model, p llm.Provider) bool {
+	if slices.Contains(info.Input, "image") {
+		return true
+	}
+	if len(info.Input) > 0 {
+		return false
+	}
+	return p != nil && p.Capabilities().ImageInput
 }
 
 // markers are the 0003-MADR markers a session's commands see: AI_AGENT, and

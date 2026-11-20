@@ -20,6 +20,7 @@ require (
 	github.com/maccavelli/gobble-cli/acpext v0.5.0-rc.1
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	go.yaml.in/yaml/v3 v3.0.5
+	golang.org/x/image v0.45.0
 	golang.org/x/sys v0.49.0
 	golang.org/x/term v0.47.0
 	golang.org/x/text v0.43.0

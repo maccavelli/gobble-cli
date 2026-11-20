@@ -70,10 +70,11 @@ var queueModes = []string{"one-at-a-time", "all"}
 // Keys are 0018-MADR D14's thirteen, 0019-MADR D15's defaultProvider,
 // 0021-MADR D3's cacheRetention, 0005-PLAN F4-2c's defaultModel, F5-1's
 // retry keys, F5-2's compaction keys, F5-5's smallModel, F6-1's
-// defaultProjectTrust, F6-2's permissions.rules and 0022-PLAN P3's
-// personality keys, in the template's order. Every other part
-// of the package reads them; a key added here without its template block,
-// schema or Settings field fails the package's tests.
+// defaultProjectTrust, F6-2's permissions.rules, 0022-PLAN P3's
+// personality keys and 0036-PLAN P7's images.autoResize, in the template's
+// order. Every other part of the package reads them; a key added here
+// without its template block, schema or Settings field fails the package's
+// tests.
 var Keys = []Key{
 	{Path: "defaultProvider", Kind: KindEnum, Enum: []string{"", "gemini", "openai", "claude", "grok", "opencode-zen", "opencode-go", "huggingface", "kilo", "together"},
 		Read: ReadProcess, Doc: "The provider gobble uses, with its first model; it needs a credential, from any source gobble auth status lists. Empty takes the first provider, in this order, with a credential."},
@@ -135,6 +136,8 @@ var Keys = []Key{
 		Doc: "How long, in milliseconds, a stdio MCP server has to exit once its input closes."},
 	{Path: "mcp.stopTimeoutMs", Kind: KindInt, Default: "2000", Min: 1, Read: ReadSession,
 		Doc: "How long, in milliseconds, after the grace before a stdio MCP server is killed."},
+	{Path: "images.autoResize", Kind: KindBool, Default: boolTrue, Read: ReadSession,
+		Doc: "Whether an image is resized before it is sent: at most 2000 by 2000 pixels and 4.5 MB of base64, as PNG or JPEG. Off sends an image unchanged when it is within that size, and a note when it is not."},
 	{Path: "externalEditor", Kind: KindCommand, Read: ReadProcess,
 		Doc: "The editor /edit and gobble config edit open. GOBBLE_EDITOR wins over it; it wins over VISUAL and EDITOR."},
 }

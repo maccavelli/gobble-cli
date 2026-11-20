@@ -43,9 +43,9 @@ type readIn struct {
 	Limit  int    `json:"limit,omitzero" jsonschema:"how many lines (or entries) to show"`
 }
 
-// imageNotSent is read's note for an image: the provider SDK carries text
-// only (0005-PLAN F1, owner's decision 3 of 2026-10-07).
-const imageNotSent = "[The image was not sent: gobble cannot send images to models yet.]"
+// imageNotSent is read's note for an image when the model does not take
+// images (0036-MADR D8).
+const imageNotSent = tool.ImageNotSent
 
 // Read is the read tool with the default options.
 func Read() tool.Tool { return readWith(Options{}.withDefaults()) }
@@ -77,9 +77,7 @@ func readWith(o Options) tool.Tool {
 				return tool.Result{}, fmt.Errorf("read %s: %w", name, unwrapPath(err))
 			}
 			if mime := imageType(head); mime != "" {
-				r := tool.TextResult(fmt.Sprintf("Read image file [%s]\n%s", mime, imageNotSent))
-				r.Summary = summary(fmt.Sprintf("read %s (%s, not sent)", name, mime))
-				return r, nil
+				return readImage(name, mime, src, env)
 			}
 			if binaryContent(head) {
 				return tool.Result{}, fmt.Errorf("read %s: a binary file; read cannot show it", name)

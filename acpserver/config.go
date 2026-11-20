@@ -109,6 +109,8 @@ type SessionSettings struct {
 	Rules []permission.Spec
 	// AllowBypass offers the bypass mode (0005-PLAN F6-4 decision 2).
 	AllowBypass bool
+	// NoAutoResize is images.autoResize off. Zero resizes (0036-MADR D8).
+	NoAutoResize bool
 	// Home and ConfigDir place gobble's protected paths, ~/.ssh and the
 	// config directory's files (decision 5); "" is the user's home and
 	// PromptOptions.ConfigDir.

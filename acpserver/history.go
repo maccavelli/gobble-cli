@@ -176,10 +176,47 @@ func pricedUsage(u llm.Usage, m llm.Model) *session.Usage {
 	return out
 }
 
+// imageContent is a message's image blocks as model content (0036-MADR D8).
+func imageContent(blocks []session.Block) []llm.Content {
+	var out []llm.Content
+	for _, b := range blocks {
+		if b.Type != session.BlockImage {
+			continue
+		}
+		data, err := base64.StdEncoding.DecodeString(b.Data)
+		if err != nil {
+			continue
+		}
+		out = append(out, llm.Content{Type: llm.ContentImage, MediaType: b.MimeType, Data: data})
+	}
+	return out
+}
+
 // toolResultMessage is one tool call's result in Pi's shape.
 func toolResultMessage(id, name, text string, isError bool, ts string) *session.Message {
 	m := &session.Message{Role: session.RoleToolResult, ToolCallID: id, ToolName: name, IsError: new(isError), Timestamp: ms(ts)}
 	m.SetText(text)
+	return m
+}
+
+// toolResultWithImages is toolResultMessage with the result's images after
+// its text, so a resumed session sends them again (0036-MADR D8).
+func toolResultWithImages(id, name string, res tool.Result, ts string) *session.Message {
+	m := toolResultMessage(id, name, res.Text(), res.IsError, ts)
+	if len(res.Images) == 0 {
+		return m
+	}
+	blocks, err := m.Blocks()
+	if err != nil {
+		return m
+	}
+	for _, im := range res.Images {
+		blocks = append(blocks, session.Block{Type: session.BlockImage, MimeType: im.MediaType,
+			Data: base64.StdEncoding.EncodeToString(im.Data)})
+	}
+	if err := m.SetBlocks(blocks); err != nil {
+		return toolResultMessage(id, name, res.Text(), res.IsError, ts)
+	}
 	return m
 }
 
@@ -322,12 +359,13 @@ func (st *state) addMessage(m *session.Message) {
 	case session.RoleToolResult:
 		c := llm.Content{Type: llm.ContentToolResult, ToolCallID: m.ToolCallID, ToolName: m.ToolName, Text: m.Text(), IsError: m.IsError != nil && *m.IsError,
 			Loads: st.loads[m.ToolCallID]}
+		content := append([]llm.Content{c}, imageContent(blocks)...)
 		// Consecutive results are one tool message, as the agent sends them.
 		if n := len(st.history); n > 0 && st.history[n-1].Role == llm.RoleTool {
-			st.history[n-1].Content = append(st.history[n-1].Content, c)
+			st.history[n-1].Content = append(st.history[n-1].Content, content...)
 			return
 		}
-		st.history = append(st.history, llm.Message{Role: llm.RoleTool, Content: []llm.Content{c}})
+		st.history = append(st.history, llm.Message{Role: llm.RoleTool, Content: content})
 	}
 }
 

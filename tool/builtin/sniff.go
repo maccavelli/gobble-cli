@@ -9,6 +9,11 @@ import (
 // sniffBytes is how much of a file decides what it is.
 const sniffBytes = 4096
 
+const (
+	mimeJPEG = "image/jpeg"
+	mimePNG  = "image/png"
+)
+
 var pngSignature = []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'}
 
 // imageType is the MIME type of an image read can name, by its magic bytes
@@ -18,9 +23,9 @@ func imageType(b []byte) string {
 	b = b[:min(len(b), sniffBytes)]
 	switch {
 	case bytes.HasPrefix(b, []byte{0xff, 0xd8, 0xff}):
-		return "image/jpeg"
+		return mimeJPEG
 	case bytes.HasPrefix(b, pngSignature) && isPNG(b):
-		return "image/png"
+		return mimePNG
 	case bytes.HasPrefix(b, []byte("GIF87a")), bytes.HasPrefix(b, []byte("GIF89a")):
 		return "image/gif"
 	case bytes.HasPrefix(b, []byte("RIFF")) && len(b) >= 12 && string(b[8:12]) == "WEBP":

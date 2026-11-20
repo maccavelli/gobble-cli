@@ -155,7 +155,25 @@ type Env struct {
 	Terminal     Terminal                        `json:"-"`
 	Instructions func(path string) []Instruction `json:"-"`
 	Rerouted     string                          `json:"-"`
+	// Images says the session's model takes images (0036-MADR D8).
+	Images bool `json:"-"`
+	// NoAutoResize is images.autoResize off. Zero resizes.
+	NoAutoResize bool `json:"-"`
 }
+
+// Image is one image a tool result carries to the model (0036-MADR D8).
+type Image struct {
+	MediaType string
+	Data      []byte
+}
+
+// Notes a prepared image leaves when it is not sent (Pi's read and
+// image-process, as 0036-MADR D8 rewords the text-only note).
+const (
+	ImageNotSent  = "[Current model does not support images. The image will be omitted from this request.]"
+	ImageTooLarge = "[Image omitted: could not be resized below the inline image size limit.]"
+	ImageOmitted  = "[Image omitted: could not be converted to a supported inline image format.]"
+)
 
 // Instruction is a context file a read brings in: its path, and its text as
 // the model reads it.
@@ -187,6 +205,9 @@ type Result struct {
 	// in (Env.Instructions).
 	Instructions []string `json:"instructions,omitzero"`
 	BadArguments bool     `json:"badArguments,omitzero"`
+	// Images are the image content of the result, after its text
+	// (0036-MADR D8). They are not part of Output.
+	Images []Image `json:"-"`
 }
 
 // PlanItem is one step of a plan. Status is pending, in_progress or

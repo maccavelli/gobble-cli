@@ -27,7 +27,15 @@ type Settings struct {
 	ShellCommandPrefix   string      `yaml:"shellCommandPrefix" json:"shellCommandPrefix,omitempty"`
 	Tools                Tools       `yaml:"tools" json:"tools,omitzero"`
 	MCP                  MCP         `yaml:"mcp" json:"mcp,omitzero"`
+	Images               Images      `yaml:"images" json:"images,omitzero"`
 	ExternalEditor       string      `yaml:"externalEditor" json:"externalEditor,omitempty"`
+}
+
+// Images is how an image is sent to a model (0036-MADR D8).
+type Images struct {
+	// AutoResize fits an image to 2000×2000 and 4.5 MB of base64. Off sends
+	// it unchanged within that size.
+	AutoResize bool `yaml:"autoResize" json:"autoResize,omitempty"`
 }
 
 // Permissions is the permission settings (0005-PLAN F6-2).
@@ -171,6 +179,8 @@ func (s *Settings) field(path string) any {
 		return &s.CacheRetention
 	case "externalEditor":
 		return &s.ExternalEditor
+	case "images.autoResize":
+		return &s.Images.AutoResize
 	}
 	return nil
 }

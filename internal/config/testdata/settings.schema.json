@@ -267,6 +267,17 @@
       },
       "additionalProperties": false
     },
+    "images": {
+      "type": "object",
+      "properties": {
+        "autoResize": {
+          "type": "boolean",
+          "description": "Whether an image is resized before it is sent: at most 2000 by 2000 pixels and 4.5 MB of base64, as PNG or JPEG. Off sends an image unchanged when it is within that size, and a note when it is not.",
+          "default": true
+        }
+      },
+      "additionalProperties": false
+    },
     "externalEditor": {
       "type": "string",
       "description": "The editor /edit and gobble config edit open. GOBBLE_EDITOR wins over it; it wins over VISUAL and EDITOR.",
