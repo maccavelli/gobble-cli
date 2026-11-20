@@ -247,6 +247,25 @@ the owner split images out anyway.
     happens to be configured.
   - `Discover` is not used here. Offering the servers running now in `gobble setup` is a product change for its own
     record.
+  - *(Amended 2026-11-20, when P4 landed.)* A kept server is `ChatServer` (`llm/catalog/modelsjson.go:27`).
+    `chatServer` (`:278`) is true when the key is not a caller id and not a wire-table built-in, `baseUrl` is set,
+    and `api` is empty or `openai-completions`. `unknownProvider` (`:265`) skips any other unknown api with
+    `gobble has no generic wire for api %q`, and skips a key with no base URL with the same not-a-provider reason
+    as before. `ChatServers` (`:200`) returns them sorted by id. The label is `name` when it is set, else the key.
+    `AddChatServers` (`llm/provider/set.go:99`) registers each on the run's set with `chatcompat.Descriptor` and a
+    factory of `chatcompat.New`, `WithID` and `WithBaseURL`. `listChat` (`llm/provider/list.go:120`) lists with
+    `catalog.List`, `chatOptions` (`set.go:138`: `WithID`, and `WithBaseURL` when the caller did not set one) and
+    does not send `WithProfile`, `WithLimit` or `WithLastGood`. `ModelInfoWith` (`llm/provider/model.go:78`) adds
+    the same options (`:81`). `ChooseWith` (`llm/provider/ambient.go:39`) returns a server on the set when it is the
+    preferred id, with or without a credential (`:48`); an empty preference still scans only key-taking built-ins
+    (`:53`). `KeyProviders` and `Providers` stay the built-ins. The CLI registers the servers once per run
+    (`bindChat`, `internal/cli/modelsjson.go:117`, `chatOnce` at `internal/cli/main.go:249`) after `chooseWith`
+    reads models.json (`:49`). The picker adds one choice per server (`internal/cli/choice.go:77`). `knownProvider`
+    (`internal/cli/modelscmd.go:32`) accepts one, and `printModels` lists it when `--provider` names it (`:81`).
+    `offlineModels` includes each server's models.json models (`internal/cli/modelflags.go:49`). A credential is
+    the same path as any id: `auth.json`, then models.json's `apiKey`, then the variable, which is empty here.
+    `New` adds `WithAPIKey` only when a key is set (`llm/provider/provider.go:219`). `Discover` is not called.
+    `providerOptions`, cited at `internal/cli/modelsjson.go:158` when P3 landed, is now `:172`.
 
 ### The search
 
@@ -349,6 +368,7 @@ The precondition was run again, as the PLAN's P0. `go test -count=1 -run TestWir
 `llm.ReasoningRefusal` is gobble's own type (`llm/event.go:79`) and `New` passes `Options.Refusals` to
 `WithReasoningRefusals` (`llm/provider/provider.go:234`). `WarningImageDropped` has been a constant since P2.
 `ImageItem` and `chatcompat` are still unused.
+*(Amended 2026-11-20, when P4 landed.)* `chatcompat` is used, by `AddChatServers`. `ImageItem` is still unused.
 
 What is still true, at the lines read this date:
 
@@ -365,6 +385,9 @@ What is still true, at the lines read this date:
   (`signin.go:346`). `ParseModelsJSON` takes the caller's ids (`llm/catalog/modelsjson.go:149`). `providerAPIs`
   keeps Pi's wire names. An id the caller passes that the table does not name is kept only with no `api`.
   `name` is still reported unused.
+  *(Amended 2026-11-20, when P4 landed.)* That sentence is the measurement before this phase. `name` is now the
+  label of a Chat Completions server (`ChatServers`, `llm/catalog/modelsjson.go:207`). On a built-in it is not
+  reported.
 - `Listing` still drops the catalog (`llm/provider/list.go:111`). `Search` is still the id and label matcher (`:54`).
   The ACP picker passes that function (`internal/cli/agent.go:97`). `gobble models --search` uses it
   (`internal/cli/modelscmd.go:209`).

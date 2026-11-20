@@ -45,7 +45,7 @@ func TestModelsJSONLoad(t *testing.T) {
 	})
 	t.Run("a skipped provider", func(t *testing.T) {
 		e, warnings := modelEnv(t)
-		writeModelsJSON(t, `{"providers": {"mystery": {"baseUrl": "https://x.example"}, "openai": {"baseUrl": "https://y.example/v1"}}}`)
+		writeModelsJSON(t, `{"providers": {"mystery": {"api": "anthropic-messages", "baseUrl": "https://x.example"}, "openai": {"baseUrl": "https://y.example/v1"}}}`)
 		mj := e.modelsJSON()
 		if mj == nil || mj.BaseURL("openai") != "https://y.example/v1" || !strings.Contains(warnings.String(), `provider \"mystery\"`) {
 			t.Errorf("models.json %v, warnings %q", mj, warnings)

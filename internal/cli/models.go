@@ -332,7 +332,7 @@ func (e *runEnv) modelListing(sel provider.Selection) *modelListing {
 // first, so the first session rarely waits for it (0020-MADR D3) and the
 // others' states are ready soon after (0025-MADR D4).
 func (e *runEnv) startModelListing() {
-	if sel, err := provider.ChooseWith(e.hasCredential, e.chosenProvider()); err == nil {
+	if sel, err := e.chooseWith(e.chosenProvider()); err == nil {
 		e.modelListing(sel).start()
 	}
 	for _, id := range provider.KeyProviders() {

@@ -238,7 +238,7 @@ func (e *runEnv) readAPIKey(id string) (string, error) {
 // no key, noCredentialMessage (0005-PLAN F4-3a deviations 1 and 3). A
 // login has its own sentence (0005-PLAN F4-3b decision 8).
 func (e *runEnv) authMessage() string {
-	sel, err := provider.ChooseWith(e.hasCredential, e.chosenProvider())
+	sel, err := e.chooseWith(e.chosenProvider())
 	if err != nil {
 		return e.noCredentialMessage()
 	}

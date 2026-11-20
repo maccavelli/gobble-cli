@@ -66,16 +66,16 @@ func TestChooseWith(t *testing.T) {
 	only := func(ids ...string) func(string) bool {
 		return func(id string) bool { return slices.Contains(ids, id) }
 	}
-	if s, err := ChooseWith(only("claude"), ""); err != nil || s.ID != "claude" {
+	if s, err := ChooseWith(nil, only("claude"), ""); err != nil || s.ID != "claude" {
 		t.Errorf("a stored claude key: %+v, %v; want claude", s, err)
 	}
-	if s, err := ChooseWith(only("opencode-go"), ""); err != nil || s.ID != "opencode-go" {
+	if s, err := ChooseWith(nil, only("opencode-go"), ""); err != nil || s.ID != "opencode-go" {
 		t.Errorf("an opencode-go key alone: %+v, %v; want opencode-go", s, err)
 	}
-	if _, err := ChooseWith(only("claude"), "openai"); !IsNoCredential(err) {
+	if _, err := ChooseWith(nil, only("claude"), "openai"); !IsNoCredential(err) {
 		t.Errorf("openai preferred, no credential: %v, want the missing-credential error", err)
 	}
-	if _, err := ChooseWith(only(), ""); !IsNoCredential(err) {
+	if _, err := ChooseWith(nil, only(), ""); !IsNoCredential(err) {
 		t.Errorf("no credential at all: %v, want the missing-credential error", err)
 	}
 }

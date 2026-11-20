@@ -43,7 +43,7 @@ func TestParseModelsJSON(t *testing.T) {
   // a comment
   "providers": {
     "anthropic": {"baseUrl": "https://proxy.example/v1", "headers": {"x-a": "1",},},
-    "mystery": {"baseUrl": "https://x.example"},
+    "mystery": {},
     "openai": {"api": "openai-completions", "baseUrl": "https://y.example"},
     "grok": {},
     "kilo": {"models": [{"id": "m", "contextWindow": 0}]},
@@ -143,6 +143,38 @@ func TestModelsJSONHeaders(t *testing.T) {
 	}
 	if !mj.HasHeaders("openai") || mj.HasHeaders("claude") {
 		t.Error("HasHeaders")
+	}
+}
+
+// A key that is neither a built-in nor a Pi alias is a Chat Completions
+// server when it has a base URL and an api that is openai-completions or
+// absent. Its name is its label. Another api is skipped, and a key with no
+// base URL is skipped as an unknown provider (0036-PLAN P4).
+func TestModelsJSONChatServer(t *testing.T) {
+	mj, diags, err := ParseModelsJSON([]byte(`{"providers": {
+		"local": {"name": "Local", "baseUrl": "http://127.0.0.1:1/v1"},
+		"box": {"api": "openai-completions", "baseUrl": "http://127.0.0.1:2/v1"},
+		"weird": {"api": "anthropic-messages", "baseUrl": "http://127.0.0.1:3/v1"},
+		"bare": {}
+	}}`), "v1.31.0", ProviderIDs())
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]ChatServer{}
+	for _, s := range mj.ChatServers() {
+		got[s.ID] = s
+	}
+	if got["local"].Label != "Local" || got["local"].BaseURL != "http://127.0.0.1:1/v1" {
+		t.Errorf("local: %+v, want the Chat Completions server labelled Local", got["local"])
+	}
+	if got["box"].BaseURL != "http://127.0.0.1:2/v1" || got["box"].Label != "box" {
+		t.Errorf("box: %+v, want it kept, its key as the label", got["box"])
+	}
+	if _, ok := got["weird"]; ok || !hasDiag(diags, `"weird"`, `api "anthropic-messages"`, "no generic wire", "skipped") {
+		t.Errorf("weird: kept %v, diagnostics %q; want it skipped, gobble has no generic wire for its api", ok, diags)
+	}
+	if _, ok := got["bare"]; ok || !hasDiag(diags, `"bare"`, "not a provider", "go-llmprovider-sdk v1.31.0", "skipped") {
+		t.Errorf("bare: kept %v, diagnostics %q; want it skipped as an unknown provider", ok, diags)
 	}
 }
 

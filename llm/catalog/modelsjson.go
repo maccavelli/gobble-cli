@@ -19,6 +19,14 @@ import (
 // F4-2b). Its providers are the ones gobble can use, by their SDK ids.
 type ModelsJSON struct {
 	providers map[string]mjProvider
+	// chat are the keys kept as Chat Completions servers (0036-MADR D5).
+	chat map[string]bool
+}
+
+// ChatServer is a models.json provider gobble does not build, kept as a
+// Chat Completions server (0036-MADR D5). Label is its name, or its key.
+type ChatServer struct {
+	ID, Label, BaseURL string
 }
 
 // The fields of Pi's schema gobble reads; a field it does not use is kept
@@ -176,9 +184,33 @@ func ParseModelsJSON(data []byte, sdk string, ids []string) (*ModelsJSON, []stri
 		if unused := unusedFields(p); len(unused) > 0 {
 			diags = append(diags, fmt.Sprintf("provider %q: %s not used by gobble; ignored", key, strings.Join(unused, ", ")))
 		}
+		if chatServer(id, p, ids) {
+			if mj.chat == nil {
+				mj.chat = map[string]bool{}
+			}
+			mj.chat[id] = true
+		}
 		mj.providers[id] = p
 	}
 	return mj, diags, nil
+}
+
+// ChatServers are the providers kept as Chat Completions servers, by key
+// (0036-MADR D5).
+func (mj *ModelsJSON) ChatServers() []ChatServer {
+	if mj == nil || len(mj.chat) == 0 {
+		return nil
+	}
+	out := make([]ChatServer, 0, len(mj.chat))
+	for _, id := range slices.Sorted(maps.Keys(mj.chat)) {
+		p := mj.providers[id]
+		label := id
+		if p.Name != nil && *p.Name != "" {
+			label = *p.Name
+		}
+		out = append(out, ChatServer{ID: id, Label: label, BaseURL: p.BaseURL})
+	}
+	return out
 }
 
 // checkDefinitions is Pi's schema for what a definition requires: an id,
@@ -204,7 +236,9 @@ func unusable(id string, p mjProvider, sdk string, ids []string) string {
 	apis, wired := providerAPIs[id]
 	switch {
 	case !slices.Contains(ids, id):
-		return fmt.Sprintf("not a provider go-llmprovider-sdk %s builds (one of %s)", sdk, joinIDs(ids))
+		if reason := unknownProvider(id, p, sdk, ids); reason != "" {
+			return reason
+		}
 	case p.API != "" && !wireAllows(wired, apis, p.API):
 		return apiReason(id, "", p.API, wired, apis, sdk)
 	case p.BaseURL == "" && len(p.Headers) == 0 && len(p.Compat) == 0 && len(p.ModelOverrides) == 0 && len(p.Models) == 0 &&
@@ -222,6 +256,33 @@ func unusable(id string, p mjProvider, sdk string, ids []string) string {
 		}
 	}
 	return ""
+}
+
+// unknownProvider is why a key the caller does not build is skipped, or ""
+// when it is kept as a Chat Completions server (0036-MADR D5). A built-in,
+// a key with no base URL, and a key whose api is not the Chat Completions
+// wire are skipped. The last says gobble has no generic wire for that api.
+func unknownProvider(id string, p mjProvider, sdk string, ids []string) string {
+	if chatServer(id, p, ids) {
+		return ""
+	}
+	if _, builtin := providerAPIs[id]; !builtin && p.BaseURL != "" && p.API != "" && p.API != apiCompletions {
+		return fmt.Sprintf("gobble has no generic wire for api %q", p.API)
+	}
+	return fmt.Sprintf("not a provider go-llmprovider-sdk %s builds (one of %s)", sdk, joinIDs(ids))
+}
+
+// chatServer reports whether id, which the caller does not build, is a Chat
+// Completions server: a base URL, and an api that is openai-completions or
+// absent (0036-MADR D5).
+func chatServer(id string, p mjProvider, ids []string) bool {
+	if slices.Contains(ids, id) {
+		return false
+	}
+	if _, builtin := providerAPIs[id]; builtin {
+		return false
+	}
+	return p.BaseURL != "" && (p.API == "" || p.API == apiCompletions)
 }
 
 // wireAllows reports whether api is one this provider may name. A provider
@@ -260,7 +321,6 @@ func unusedFields(p mjProvider) []string {
 			set[name] = true
 		}
 	}
-	mark("name", p.Name != nil)
 	mark("compat", len(p.Compat) > 0)
 	mark("oauth", len(p.OAuth) > 0)
 	mark("authHeader", p.AuthHeader != nil)

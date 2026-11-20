@@ -13,6 +13,7 @@ import (
 	"github.com/maccavelli/gobble-cli/acpserver"
 	"github.com/maccavelli/gobble-cli/internal/appdirs"
 	"github.com/maccavelli/gobble-cli/jsonx"
+	"github.com/maccavelli/gobble-cli/llm/catalog"
 	"github.com/maccavelli/gobble-cli/llm/provider"
 )
 
@@ -65,7 +66,35 @@ func (e *runEnv) providerChoices(run string, runModels []string) []acpserver.Pro
 		}
 		out = append(out, withKnown(p))
 	}
+	for _, srv := range e.modelsJSON().ChatServers() {
+		out = append(out, e.chatProviderChoice(srv, run, runModels))
+	}
 	return out
+}
+
+// chatProviderChoice is a Chat Completions server in the picker, under its
+// models.json label. It needs no credential (0036-MADR D5).
+func (e *runEnv) chatProviderChoice(srv catalog.ChatServer, run string, runModels []string) acpserver.ProviderChoice {
+	p := acpserver.ProviderChoice{ID: srv.ID, Label: srv.Label}
+	l := e.modelListing(provider.Selection{ID: srv.ID})
+	if srv.ID == run {
+		p.State, p.Reason, p.Age = listingState(srv.ID, l.get(), time.Now())
+		p.Models = runModels
+		return withKnown(p)
+	}
+	r, ok := l.peek()
+	switch {
+	case ok:
+		p.State, p.Reason, p.Age = listingState(srv.ID, r, time.Now())
+		if p.State.Usable() {
+			p.Models = r.Models
+		}
+	case len(l.kept.models) > 0:
+		p.State, p.Models, p.Age = acpserver.StateStale, l.kept.models, time.Since(l.kept.at)
+	default:
+		p.State = acpserver.StateListing
+	}
+	return withKnown(p)
 }
 
 // withKnown is p with the models gobble knows of it when it offers none, for

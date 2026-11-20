@@ -28,14 +28,13 @@ starts, so restart gobble after you edit it.
 }
 ```
 
-`//` comments and trailing commas are accepted, as in Pi. Run with no credential set and no `pass`
-installed, gobble reports the entry it cannot use, then tries openai's `apiKey` command, and stops
-when it fails, sending nothing (each line's timestamp is left out here, and `<sdk-version>` is the
-go-llmprovider-sdk version gobble was built with, which the warning names):
+`//` comments and trailing commas are accepted, as in Pi. `openrouter` has a base URL and no `api`,
+so it is a Chat Completions server. This run does not name it, so gobble does not choose it. With no
+credential set and no `pass` installed, gobble tries openai's `apiKey` command, and stops when it
+fails, sending nothing (each line's timestamp is left out here):
 
 ```text
 $ gobble -p hello
-level=WARN msg=models.json message="provider \"openrouter\": not a provider go-llmprovider-sdk <sdk-version> builds (one of claude, gemini, grok, huggingface, kilo, ollama, openai, opencode-go, opencode-zen, together); skipped" file=<config>/models.json
 level=WARN msg=credentials message="models.json: provider openai: apiKey: the command \"pass show openai\" failed: exit status 127"
 Error: openai's API key from models.json could not be resolved: models.json: provider openai: apiKey: the command "pass show openai" failed: exit status 127
 ```
@@ -48,12 +47,17 @@ warning naming the error.
 A key under `providers` is one of gobble's provider ids: `openai`, `claude`, `gemini`, `grok`,
 `opencode-zen`, `opencode-go`, `huggingface`, `kilo`, `together` and `ollama`. Pi's `anthropic`,
 `google` and `xai` mean `claude`, `gemini` and `grok`; if both spellings are given, gobble's is used.
-Any other key is skipped with a warning, since gobble has no wire for it.
+Any other key with a `baseUrl`, and an `api` of `openai-completions` or none, is a Chat Completions
+server. Its `name`, when set, is the label; otherwise the key is. gobble chooses it only when
+something names it: `--model`, `defaultProvider`, or the picker. A key with no `baseUrl` is skipped,
+with a warning that it is not a provider go-llmprovider-sdk builds. A key whose `api` is anything
+else is skipped, with a warning that gobble has no generic wire for that api.
 
-`api` may be left out. When given, it must be Pi's name for the provider's own wire:
-`openai-responses` for openai and grok, `anthropic-messages` for claude, `google-generative-ai` for
-gemini, `openai-completions` for huggingface, kilo, together and ollama, and any of those four for
-opencode-zen and opencode-go. Anything else skips the provider.
+`api` may be left out. When given for one of gobble's own providers, it must be Pi's name for that
+provider's wire: `openai-responses` for openai and grok, `anthropic-messages` for claude,
+`google-generative-ai` for gemini, `openai-completions` for huggingface, kilo, together and ollama,
+and any of those four for opencode-zen and opencode-go. Anything else skips that provider. For a
+key that is not one of those providers, `api` may be left out or be `openai-completions`.
 
 ## What each field does
 
@@ -89,7 +93,10 @@ command, never the value.
 
 ## What is not used
 
-- **`compat`, `oauth`, `authHeader`, `name`, `inputLimits`, `promptCache`, `samplingParams`** and a
+- **`compat`, `oauth`, `authHeader`, `inputLimits`, `promptCache`, `samplingParams`** and a
   model's own **`baseUrl`** are reported once per provider, and ignored.
-- Providers other than gobble's ten, Pi's `opencode` among them (gobble's is `opencode-zen`), are
-  skipped.
+- **`name`** is the label of a Chat Completions server. On one of gobble's own providers it is not used.
+- A key that is not one of gobble's ten, and not a Pi alias of one, is skipped when it has no
+  `baseUrl`, or when its `api` is set to something other than `openai-completions`. Pi's `opencode`
+  is not an alias of `opencode-zen`. With a `baseUrl` and no other `api`, it is a Chat Completions
+  server, like any other such key.

@@ -77,7 +77,8 @@ func ModelInfo(id, apiKey, workspace string, logins LoginStore, model string, mj
 // name it (0051-MADR D9, N6). o's other fields are ignored.
 func ModelInfoWith(o Options, id, model string, mj *gcatalog.ModelsJSON) llm.Model {
 	ctx := context.Background()
-	sdk := Options{HTTPClient: o.HTTPClient, Headers: o.Headers, BaseURL: o.BaseURL, Cache: o.Cache}.sdkOptions()
+	sdk := Options{HTTPClient: o.HTTPClient, Headers: o.Headers, BaseURL: o.BaseURL, Cache: o.Cache, Set: o.Set}.sdkOptions()
+	sdk = append(sdk, Options{BaseURL: o.BaseURL, Set: o.Set}.chatOptions(id)...)
 	login, err := Options{Logins: o.Logins, Sessions: o.Sessions}.login(ctx, id)
 	if err == nil && login != nil && o.APIKey == "" {
 		return modelInfoFrom(ctx, id, login, "", model, mj, o.ClientName, o.ClientVersion, sdk...)

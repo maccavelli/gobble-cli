@@ -244,6 +244,9 @@ type runEnv struct {
 	// (0036-MADR D2). provOnce guards it.
 	provOnce sync.Once
 	provSet  *provider.Set
+	// chatOnce registers models.json's Chat Completions servers on provSet
+	// once (0036-MADR D5).
+	chatOnce sync.Once
 	// recent and recentLoaded are recent-models.json's recent models, read once,
 	// under recentMu (0025-MADR D3).
 	recent       []string

@@ -27,10 +27,19 @@ type ModelsListCmd struct {
 	All      bool     `help:"Every provider's models, the known ones of those with no credential."`
 }
 
+// knownProvider reports whether id is a built-in or a Chat Completions
+// server models.json kept (0036-MADR D5).
+func (e *runEnv) knownProvider(id string) bool {
+	if slices.Contains(provider.Providers(), id) {
+		return true
+	}
+	return slices.ContainsFunc(e.modelsJSON().ChatServers(), func(s catalog.ChatServer) bool { return s.ID == id })
+}
+
 // Run prints the list.
 func (c *ModelsListCmd) Run(e *runEnv) error {
 	e.ensureSettingsFile()
-	if c.Provider != "" && !slices.Contains(provider.Providers(), c.Provider) {
+	if c.Provider != "" && !e.knownProvider(c.Provider) {
 		return usageErrorf("unknown provider %q; gobble providers lists them", c.Provider)
 	}
 	return e.printModels(strings.Join(c.Search, " "), c.Provider, c.All)
@@ -69,6 +78,9 @@ func (e *runEnv) printModels(search, only string, all bool) error {
 	if only != "" || all {
 		ids = provider.Providers()
 	}
+	if only != "" && !slices.Contains(ids, only) {
+		ids = []string{only}
+	}
 	for _, p := range ids {
 		if only != "" && p != only {
 			continue
@@ -83,7 +95,7 @@ func (e *runEnv) printModels(search, only string, all bool) error {
 			}
 			continue
 		}
-		if sel, err := provider.ChooseWith(e.hasCredential, p); err == nil {
+		if sel, err := e.chooseWith(p); err == nil {
 			sels = append(sels, sel)
 		}
 	}

@@ -68,6 +68,9 @@ func Search(id string, models []string, query string) []string {
 // Model and Logger are ignored. With no apiKey, a provider with an OAuth
 // login lists with o.Logins' stored login (0005-PLAN F4-3b).
 func List(ctx context.Context, id, apiKey string, o Options) (Listing, error) {
+	if _, ok := o.Set.chatBase(id); ok {
+		return listChat(ctx, id, apiKey, o)
+	}
 	var src llmprovider.TokenSource = llmprovider.NewStaticToken(apiKey)
 	o.APIKey, o.Logger = apiKey, nil
 	login, err := o.login(ctx, id) // with no key, id's stored login (0005-PLAN F4-3b decision 9)
@@ -107,6 +110,30 @@ func listWith(ctx context.Context, id string, src llmprovider.TokenSource, o Opt
 			reason = errNothingListed
 		}
 		return Listing{Models: Models(id), Err: reason}, nil
+	}
+	return Listing{Models: cat.Recommended, Live: true, Source: string(cat.Source), FetchedAt: cat.FetchedAt, Usable: cat.Usable}, nil
+}
+
+// listChat lists a Chat Completions server through catalog.List, with its id
+// and base URL. WithProfile and WithLimit are not sent: the SDK refuses both
+// for an id that is not built in (0036-PLAN P4).
+func listChat(ctx context.Context, id, apiKey string, o Options) (Listing, error) {
+	opts := []llmprovider.Option{llmprovider.WithClientInfo(o.ClientName, o.ClientVersion)}
+	opts = append(opts, o.sdkOptions()...)
+	opts = append(opts, o.chatOptions(id)...)
+	if o.ModelMetadataURL != "" {
+		opts = append(opts, llmprovider.WithModelMetadataURL(o.ModelMetadataURL))
+	}
+	cat, err := catalog.List(ctx, llmprovider.ProviderID(id), llmprovider.NewStaticToken(apiKey), opts...)
+	if err != nil {
+		return Listing{}, fmt.Errorf("provider %s: list models: %w", id, mapError(err))
+	}
+	if !cat.Live || len(cat.Recommended) == 0 {
+		reason := mapError(cat.Err)
+		if reason == nil {
+			reason = errNothingListed
+		}
+		return Listing{Err: reason}, nil
 	}
 	return Listing{Models: cat.Recommended, Live: true, Source: string(cat.Source), FetchedAt: cat.FetchedAt, Usable: cat.Usable}, nil
 }

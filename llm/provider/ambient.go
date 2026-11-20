@@ -28,22 +28,27 @@ type Selection struct {
 // naming that variable, never another provider (0019-MADR D15). Either way
 // with its first curated model. env reads the environment.
 func Choose(env func(string) string, preferred string) (Selection, error) {
-	return ChooseWith(func(id string) bool { return env(CredentialVar(id)) != "" }, preferred)
+	return ChooseWith(nil, func(id string) bool { return env(CredentialVar(id)) != "" }, preferred)
 }
 
 // ChooseWith is Choose over a credential lookup: has reports whether the
 // built-in provider id has a credential from any source, such as auth.json
-// (0005-PLAN F4-3a).
-func ChooseWith(has func(id string) bool, preferred string) (Selection, error) {
+// (0005-PLAN F4-3a). set is the run's providers. A preferred id that is a
+// Chat Completions server on set is chosen, with or without a credential; it
+// is never chosen when preferred is empty (0036-MADR D5).
+func ChooseWith(set *Set, has func(id string) bool, preferred string) (Selection, error) {
 	if preferred != "" {
 		d, ok := keyProvider(preferred)
 		switch {
-		case !ok:
-			return Selection{}, fmt.Errorf("provider: defaultProvider %q is not a built-in provider that takes a key", preferred)
-		case !has(preferred):
+		case ok && !has(preferred):
 			return Selection{}, fmt.Errorf("%w: defaultProvider is %s; set %s", ErrNoCredential, preferred, d.EnvVar)
+		case ok:
+			return selection(d), nil
 		}
-		return selection(d), nil
+		if d, ok := set.chatDescriptor(preferred); ok {
+			return selection(d), nil
+		}
+		return Selection{}, fmt.Errorf("provider: defaultProvider %q is not a built-in provider that takes a key", preferred)
 	}
 	for _, d := range builtinDescs() {
 		if takesKey(d) && has(string(d.ID)) {
@@ -127,7 +132,7 @@ func Ambient(env func(string) string, preferred string, o Options) (llm.Provider
 // provider id's credential, from any source (0005-PLAN F4-3a). o's
 // CredentialSource is kept; its APIKey and Model are not.
 func AmbientWith(key func(id string) (string, bool), preferred string, o Options) (llm.Provider, Selection, error) {
-	s, err := ChooseWith(func(id string) bool {
+	s, err := ChooseWith(o.Set, func(id string) bool {
 		_, ok := key(id)
 		return ok
 	}, preferred)

@@ -44,11 +44,22 @@ func (e *runEnv) providerSet() *provider.Set {
 	return e.provSet
 }
 
+// chooseWith is ChooseWith over this run's set, after models.json's Chat
+// Completions servers are registered on it (0036-MADR D5).
+func (e *runEnv) chooseWith(preferred string) (provider.Selection, error) {
+	_ = e.modelsJSON()
+	return provider.ChooseWith(e.providerSet(), e.hasCredential, preferred)
+}
+
 // modelsJSON is <config>/models.json, read once per process. No file, or a
 // config directory that cannot be resolved, is none; a file that cannot be
 // read or parsed is none, with one warning; each provider or field it skips
 // is a warning.
-func (e *runEnv) modelsJSON() *catalog.ModelsJSON { return e.modelsJSONOnce().mj }
+func (e *runEnv) modelsJSON() *catalog.ModelsJSON {
+	read := e.modelsJSONOnce()
+	e.bindChat(read.mj)
+	return read.mj
+}
 
 // modelsJSONError is why models.json is none although it exists: it could
 // not be read or parsed. No file is no error (0045-MADR D5).
@@ -99,6 +110,16 @@ func (e *runEnv) loadModelsJSON(path string) (*catalog.ModelsJSON, error) {
 		e.log().Warn("models.json", slog.String("message", d), slog.String("file", path))
 	}
 	return mj, nil
+}
+
+// bindChat registers models.json's Chat Completions servers on this run's
+// set, once (0036-MADR D5).
+func (e *runEnv) bindChat(mj *catalog.ModelsJSON) {
+	e.chatOnce.Do(func() {
+		if err := e.providerSet().AddChatServers(mj); err != nil {
+			e.log().Warn("models.json", slog.String("message", err.Error()))
+		}
+	})
 }
 
 // runCommand runs a models.json !command through the bash tool's shell,

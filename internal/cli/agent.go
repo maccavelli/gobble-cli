@@ -37,7 +37,7 @@ var modelProvider = func(e *runEnv) func(sessionID string, retry llm.Retry) (llm
 		o := provider.Options{ClientName: appName, ClientVersion: identity().Version, Logger: e.log(), SessionID: sessionID,
 			Logins: e.logins(), Retry: &retry, Cache: &e.cache, Sessions: &e.sessions, // on every path (0046-MADR D7, D8)
 			Set: e.providerSet()}
-		if sel, err := provider.ChooseWith(e.hasCredential, e.chosenProvider()); err == nil {
+		if sel, err := e.chooseWith(e.chosenProvider()); err == nil {
 			o = e.providerOptions(sel.ID, o) // models.json's base URL and headers (0005-PLAN F4-2b)
 			if src, ok := e.credentials().Has(sel.ID); ok {
 				o.CredentialSource = string(src) // a rejected key names it (0005-PLAN F4-3a)
@@ -206,7 +206,7 @@ func mcpConfigPath() string {
 // --model's model and the default join the models when the listing lacks
 // them (0005-PLAN F4-2c).
 func (e *runEnv) modelChoice() acpserver.ModelChoice {
-	sel, err := provider.ChooseWith(e.hasCredential, e.chosenProvider())
+	sel, err := e.chooseWith(e.chosenProvider())
 	if err != nil {
 		return acpserver.ModelChoice{}
 	}

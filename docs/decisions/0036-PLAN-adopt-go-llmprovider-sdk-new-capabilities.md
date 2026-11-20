@@ -552,3 +552,60 @@ P3 to P7 have not started. The pre-existing uncommitted edit of
 
 P4 to P7 have not started. The pre-existing uncommitted edit of
 `0063-MADR-one-shared-terminal-input-so-the-key-prompt-waits.md` is not part of this phase.
+
+### P4 record (2026-11-20): Chat Completions servers from models.json
+
+1. **Tests first,** seen failing before the code.
+   - `llm/catalog` `TestModelsJSONChatServer`: `ChatServer` and `ChatServers` undefined.
+   - `llm/provider`: `AddChatServers` undefined, and `ChooseWith` called with a set, a function and a string where it
+     took a function and a string.
+   - `internal/cli` `TestChatServerPickerAndModels`: `picker label "", want Local`.
+   - `TestParseModelsJSON`'s `mystery` entry is now `{}`. With a `baseUrl` and no `api` it would be kept, so the
+     unknown-key assertion would no longer describe a skip. `TestModelsJSONLoad`'s skipped provider now sets
+     `api` to `anthropic-messages` and a `baseUrl`, so the warning still names `provider "mystery"`.
+2. **The code:**
+   - `ChatServer` is `llm/catalog/modelsjson.go:27`. `chatServer` (`:278`) keeps a key that is not a caller id and
+     not a wire-table built-in when `baseUrl` is set and `api` is empty or `openai-completions`. `unknownProvider`
+     (`:265`) skips any other unknown api with `gobble has no generic wire for api %q`, and a key with no base URL
+     with the not-a-provider reason. `ChatServers` (`:200`) returns them sorted by id. The label is `name` when set
+     (`:207`), else the key. `name` is no longer an unused field.
+   - `AddChatServers` (`llm/provider/set.go:99`) registers each on the run's set with `chatcompat.Descriptor` and a
+     factory of `chatcompat.New`, `WithID` and `WithBaseURL`. A server already on the set is left. The built-in set
+     takes none. `listChat` (`llm/provider/list.go:120`) lists through `catalog.List` with `chatOptions`
+     (`set.go:138`) and does not send `WithProfile`, `WithLimit` or `WithLastGood`. `ModelInfoWith`
+     (`llm/provider/model.go:78`) appends the same options (`:81`).
+   - `ChooseWith` (`llm/provider/ambient.go:39`) takes the run's set. A preferred id that is a server on that set is
+     chosen with or without a credential (`:48`). An empty preference still scans only key-taking built-ins (`:53`).
+     `KeyProviders` and `Providers` stay the built-ins. `Choose` passes a nil set.
+   - The CLI registers the servers once per run (`bindChat`, `internal/cli/modelsjson.go:117`, `chatOnce` at
+     `internal/cli/main.go:249`). `chooseWith` (`modelsjson.go:49`) reads models.json first, then calls `ChooseWith`.
+     The picker adds one choice per server (`internal/cli/choice.go:77`). `knownProvider`
+     (`internal/cli/modelscmd.go:32`) accepts one, and `printModels` lists it when `--provider` names it (`:81`).
+     `offlineModels` includes each server's models.json models (`internal/cli/modelflags.go:49`). A credential is
+     the same path as any id. `New` adds `WithAPIKey` only when a key is set (`llm/provider/provider.go:219`), so a
+     request with no key has no `Authorization` header. `Discover` is not called.
+3. **Planted breaks,** on scratch copies, applied with `go test -overlay`, so the tree was not edited.
+   - The server not registered: `TestChatServerStreams` failed, `key "": provider local: llmprovider: no provider "local" in the registry: llmprovider: invalid provider id`.
+   - Ambient picking allowed: `TestChatServerNotAmbient` failed, `no defaultProvider: {ID:local Model: EnvVar:}, <nil>; want it never to pick local`.
+   - The bearer header dropped: `TestChatServerStreams` failed, `key: "POST /v1/chat/completions ", want Bearer sk-test`.
+4. **Checks.** `go test -count=1 ./llm/catalog/` passed (`ok`, 0.279s). `go test -count=1 ./llm/provider/` passed
+   (`ok`, 79.714s). `go test -count=1 ./internal/cli/` passed (`ok`, 47.441s). `docs/guides/models-json.md` treats
+   the `openrouter` example as a Chat Completions server and rewords the skip. 0005-MADR's unnamed-endpoints row
+   has the dated note. `docs/architecture.md`'s `llm/catalog`, `llm/provider` and `internal/cli` rows describe the
+   phase. `make preflight`, on a Linux dev host, exited 0 (`preflight passed`): gofmt, `go mod tidy`, pre-add-check,
+   `go vet`, staticcheck for linux, darwin and windows, golangci-lint (0 issues), govulncheck, check-acpext-deps,
+   fix-check, archtest, `apidiff` (no-op below v1.0.0), verify-build-metadata, check-records, check-icon and
+   markdownlint (0 issues in 59 files).
+
+### Deviation 1 (2026-11-20): P4's stream test does not use httptest
+
+* **Found** while writing `TestChatServerStreams`. The plan says an httptest server. The SDK fetches model metadata
+  from a URL that is not that server, and `httptest.Server.Client` does not send other hosts there. A metadata
+  fetch would dial out.
+* **Decision.** The test uses an in-package `RoundTripper`, `chatWire`, which records the method, path and
+  `Authorization` and answers `/chat/completions`, `/models` and every other path. `ModelMetadataURL` is a URL on
+  `127.0.0.1` that the transport answers. No dial. The assertions are the plan's: the text is `hello`, no key sends
+  no `Authorization` header, and a key sends `Bearer` plus that key.
+
+P5 to P7 have not started. The pre-existing uncommitted edit of
+`0063-MADR-one-shared-terminal-input-so-the-key-prompt-waits.md` is not part of this phase.

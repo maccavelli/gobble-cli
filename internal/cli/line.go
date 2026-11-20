@@ -135,7 +135,7 @@ func (ls *lineSession) run(first Prompt) error {
 	// at all, the sign-in is offered before the first prompt (0025-MADR
 	// D7); otherwise the warning names the variables.
 	setup := e.out.caps.In && !slices.ContainsFunc(provider.KeyProviders(), e.hasCredential)
-	if _, err := provider.ChooseWith(e.hasCredential, e.chosenProvider()); err != nil && !setup {
+	if _, err := e.chooseWith(e.chosenProvider()); err != nil && !setup {
 		e.out.Lead(ls.spoken(), personality.LeadNoCredential)
 		e.out.Warnf("%s", e.noCredentialMessage())
 	}

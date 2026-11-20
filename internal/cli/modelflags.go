@@ -46,6 +46,11 @@ func offlineModels(ctx context.Context, mj *catalog.ModelsJSON) []llm.Model {
 			out = append(out, provider.ModelInfoContext(ctx, p, "", id, mj))
 		}
 	}
+	for _, srv := range mj.ChatServers() {
+		for _, id := range mj.Models(srv.ID) {
+			out = append(out, provider.ModelInfoContext(ctx, srv.ID, "", id, mj))
+		}
+	}
 	return out
 }
 
