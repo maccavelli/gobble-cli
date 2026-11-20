@@ -551,3 +551,5 @@ shows text arriving as it is written.
   the process starts, the race acp-go-sdk2 `v1.20.0` fixed in its own `agentproc` (a child leaked in 20 of 20 of its
   trials). It is a gobble defect for a record of its own.
   *(2026-10-29: it still has no record of its own.)*
+
+*(2026-11-19: D7's prompter, through which the SDK's wizard asks, is to read through the shared terminal input of [0063-MADR-one-shared-terminal-input-so-the-key-prompt-waits.md](0063-MADR-one-shared-terminal-input-so-the-key-prompt-waits.md), accepted that day and not yet built. go-llmprovider-sdk, its wizard and gobble's pin of it are unchanged.)*

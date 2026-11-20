@@ -181,3 +181,5 @@ owner's look on Windows; the gates on macOS, the Linux machine and the Windows l
 - [0008-MADR-native-cli-mode.md](0008-MADR-native-cli-mode.md) D6 and F7: the editor this replaces.
 - [0004-MADR-go-module-architecture.md](0004-MADR-go-module-architecture.md) rule 5.
 - The plan: [0027-PLAN-native-line-editor-word-wrap.md](0027-PLAN-native-line-editor-word-wrap.md).
+
+*(2026-11-19: D5's one reader that owns stdin and reads only when asked is kept, and extended by [0063-MADR-one-shared-terminal-input-so-the-key-prompt-waits.md](0063-MADR-one-shared-terminal-input-so-the-key-prompt-waits.md), accepted that day and not yet built: the line editor, the sign-in questions, the permission prompt and the trust question are to read through one terminal input above it, which never reads ahead. That record assumes D5's Windows console behaviour, and its plan measures a console's line ends.)*

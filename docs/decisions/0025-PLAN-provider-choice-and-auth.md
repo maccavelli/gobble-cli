@@ -653,3 +653,5 @@ check.
   files". An earlier round on both, on the tree before the pseudo-terminal's fixes, passed the same.
 
 **Not done in P5, as the plan says:** ChatGPT's plan sign-in (P6), cycling (P7).
+
+*(2026-11-19: deviation 7's questions skip the key prompt when a menu's answer ends `\r\n`, as a Windows console's line read gives it; P5's tests fed `\r` alone, and its pseudo-terminal run was on macOS. The fix is [0063-MADR-one-shared-terminal-input-so-the-key-prompt-waits.md](0063-MADR-one-shared-terminal-input-so-the-key-prompt-waits.md) and [0063-PLAN-one-shared-terminal-input-so-the-key-prompt-waits.md](0063-PLAN-one-shared-terminal-input-so-the-key-prompt-waits.md), proposed.)*
