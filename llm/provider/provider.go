@@ -92,6 +92,10 @@ type Options struct {
 	// Set is the run's providers. Nil is the built-ins, built once for the
 	// process (0036-MADR D2).
 	Set *Set
+	// Refusals are reasoning settings this provider's models refused on an
+	// earlier run. New passes them back, so the first request does not send
+	// them (0036-MADR D4).
+	Refusals []llm.ReasoningRefusal
 }
 
 // login is provider id's stored login, as the SDK's session, when o has no
@@ -226,6 +230,9 @@ func New(id string, o Options) (llm.Provider, error) {
 	}
 	if o.Model != "" {
 		opts = append(opts, llmprovider.WithModel(o.Model))
+	}
+	if len(o.Refusals) > 0 {
+		opts = append(opts, llmprovider.WithReasoningRefusals(reasoningRefusals(o.Refusals)...))
 	}
 	if o.Logger != nil {
 		opts = append(opts, llmprovider.WithLogger(o.Logger))
@@ -506,11 +513,25 @@ func yieldWarnings(resp *llmprovider.Response, yield func(llm.Event, error) bool
 		return true
 	}
 	for _, w := range resp.Warnings {
-		if !yield(llm.Warning{Kind: string(w.Kind), Model: w.Model, Detail: w.Detail}, nil) {
+		if !yield(llm.Warning{Kind: string(w.Kind), Model: w.Model, Detail: w.Detail, Refused: refusalOf(w.Refused)}, nil) {
 			return false
 		}
 	}
 	return true
+}
+
+// refusalOf is the SDK's refusal as llm's, which does not import the SDK.
+func refusalOf(r llmprovider.ReasoningRefusal) llm.ReasoningRefusal {
+	return llm.ReasoningRefusal{Model: r.Model, Effort: string(r.Effort), Shape: string(r.Shape)}
+}
+
+// reasoningRefusals is gobble's saved refusals as the SDK's option takes them.
+func reasoningRefusals(in []llm.ReasoningRefusal) []llmprovider.ReasoningRefusal {
+	out := make([]llmprovider.ReasoningRefusal, len(in))
+	for i, r := range in {
+		out[i] = llmprovider.ReasoningRefusal{Model: r.Model, Effort: llmprovider.Effort(r.Effort), Shape: llmprovider.ThinkingShape(r.Shape)}
+	}
+	return out
 }
 
 // usageOf is the response's token count. An all-zero report is replaced by

@@ -77,6 +77,9 @@ type Config struct {
 	// Agent's own, which lasts as long as the Agent does. A caller that
 	// builds an Agent for each prompt of one session passes the same log.
 	Warned *WarningLog
+	// SaveRefusal records a learned reasoning refusal. Nil records none
+	// (0036-MADR D4).
+	SaveRefusal func(llm.ReasoningRefusal)
 }
 
 // Compacted is the session after a compaction (Config.Compact): its

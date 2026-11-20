@@ -74,12 +74,22 @@ type ToolCallDone struct {
 
 func (ToolCallDone) event() {}
 
+// ReasoningRefusal is a thinking setting a model refused: its model, and an
+// effort or a shape, one of the two (0036-MADR D4).
+type ReasoningRefusal struct {
+	Model  string `json:"model,omitzero"`
+	Effort string `json:"effort,omitzero"`
+	Shape  string `json:"shape,omitzero"`
+}
+
 // Warning is a note that the request was answered, but not as asked
 // (0036-MADR D3). Kind is the SDK's string. Model and Detail are its own.
+// Refused is set on a reasoning_learned warning (0036-MADR D4).
 type Warning struct {
-	Kind   string `json:"kind,omitzero"`
-	Model  string `json:"model,omitzero"`
-	Detail string `json:"detail,omitzero"`
+	Kind    string           `json:"kind,omitzero"`
+	Model   string           `json:"model,omitzero"`
+	Detail  string           `json:"detail,omitzero"`
+	Refused ReasoningRefusal `json:"refused,omitzero"`
 }
 
 func (Warning) event() {}

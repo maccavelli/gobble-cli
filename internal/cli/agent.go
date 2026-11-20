@@ -95,6 +95,7 @@ func (e *runEnv) agentOptions() acpserver.Options {
 		// The recent models, and the SDK's matcher for /model with words
 		// (0025-MADR D3, D5).
 		Remember:     e.rememberModel,
+		SaveRefusal:  e.rememberRefusal,
 		SearchModels: provider.Search,
 		// A sign-in or a sign-out lifts a refused turn's mark (0025-MADR D4, D6).
 		CredentialGeneration: e.credentialGeneration,

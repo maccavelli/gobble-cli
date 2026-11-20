@@ -248,6 +248,10 @@ type runEnv struct {
 	// under recentMu (0025-MADR D3).
 	recent       []string
 	recentLoaded bool
+	// refusals and refusalsLoaded are reasoning-refusals.json, read once,
+	// under refusalMu (0036-MADR D4).
+	refusals       refusalLists
+	refusalsLoaded bool
 	// tools are the in-process agent's tools; nil is the built-ins.
 	tools []tool.Tool
 	// mcpOff and mcpAllow are the MCP tools the tool flags select, and

@@ -85,6 +85,9 @@ type Options struct {
 	// by /model or the model option, for the recent models (0025-MADR D3).
 	// Nil remembers nothing.
 	Remember func(ref string)
+	// SaveRefusal records a learned reasoning refusal for provider id
+	// (0036-MADR D4). Nil records none.
+	SaveRefusal func(providerID string, refusal llm.ReasoningRefusal)
 	// CredentialGeneration is provider id's credential generation, which
 	// advances when its credential changes, by a sign-in or a sign-out; a
 	// mark a refused turn set holds only while the generation is the one
@@ -169,6 +172,7 @@ type Agent struct {
 	providerFor   func(id, sessionID string, retry llm.Retry) (llm.Provider, error)
 	models        func() ModelChoice
 	rememberModel func(ref string)
+	saveRefusal   func(providerID string, refusal llm.ReasoningRefusal)
 	search        func(provider string, models []string, query string) []string
 	// marksMu guards marks, the providers a turn saw refused (0025-MADR D4).
 	marksMu sync.Mutex
@@ -325,6 +329,15 @@ var (
 	_ acp.AgentLoader = (*Agent)(nil)
 )
 
+// savedRefusal is the turn's saver for provider id, or nil when the run
+// records none (0036-MADR D4).
+func savedRefusal(a *Agent, id string) func(llm.ReasoningRefusal) {
+	if a.saveRefusal == nil {
+		return nil
+	}
+	return func(r llm.ReasoningRefusal) { a.saveRefusal(id, r) }
+}
+
 // warningLog is the session's warning log, created on the first prompt.
 func (s *liveSession) warningLog() *agent.WarningLog {
 	if s.warned == nil {
@@ -337,7 +350,7 @@ func (s *liveSession) warningLog() *agent.WarningLog {
 // the first request, so it can send session updates.
 func New(opts Options) *Agent {
 	a := &Agent{version: opts.Version, newID: opts.NewID, provider: opts.Provider, providerFor: opts.ProviderFor, models: opts.Models, info: opts.ModelInfo,
-		rememberModel: opts.Remember, search: opts.SearchModels, credGen: opts.CredentialGeneration,
+		rememberModel: opts.Remember, saveRefusal: opts.SaveRefusal, search: opts.SearchModels, credGen: opts.CredentialGeneration,
 		planConsent: opts.PlanConsent,
 		override:    opts.Override, tools: opts.Tools, noGrants: opts.NoRequestPermissions, store: opts.Store, now: opts.Now, mcp: opts.MCP, logger: opts.Logger, prompt: opts.Prompt,
 		settings: opts.Settings, auth: opts.Auth, save: opts.SaveSetting, personalities: opts.Personalities, compactionPrompts: opts.CompactionPrompts, titles: opts.Title,
@@ -773,11 +786,12 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 		System:   system,
 		Cache:    s.cache,
 		// The session's retry settings, as the turn starts (0005-PLAN F5-1).
-		Retry:      &retry,
-		RetryAbort: abort,
-		Compact:    auto.compact,
-		Logger:     a.logger,
-		Warned:     s.warningLog(),
+		Retry:       &retry,
+		RetryAbort:  abort,
+		Compact:     auto.compact,
+		Logger:      a.logger,
+		Warned:      s.warningLog(),
+		SaveRefusal: savedRefusal(a, w.provider),
 	}
 	ag := agent.New(cfg)
 	out := newUpdates(ctx, conn, p.SessionId)

@@ -35,8 +35,12 @@ func (w *WarningLog) first(kind, model string) bool {
 }
 
 // note logs w once per kind and model. deferral_emulated is Debug; every
-// other kind is Warn (0036-MADR D3, 0012-MADR D21).
+// other kind is Warn (0036-MADR D3, 0012-MADR D21). A reasoning_learned
+// refusal is saved on every sighting; the store keeps it once (0036-MADR D4).
 func (t *turn) note(w llm.Warning) {
+	if w.Kind == llm.WarningReasoningLearned && t.a.cfg.SaveRefusal != nil && refusalToSave(w.Refused) {
+		t.a.cfg.SaveRefusal(w.Refused)
+	}
 	if !t.a.cfg.Warned.first(w.Kind, w.Model) {
 		return
 	}
@@ -49,4 +53,10 @@ func (t *turn) note(w llm.Warning) {
 		level = slog.LevelDebug
 	}
 	log.LogAttrs(t.ctx, level, "model warning", slog.String("kind", w.Kind), slog.String("model", w.Model), slog.String("detail", w.Detail))
+}
+
+// refusalToSave reports that r is one refusal the SDK would accept back:
+// a model, and an effort or a shape, not both.
+func refusalToSave(r llm.ReasoningRefusal) bool {
+	return r.Model != "" && (r.Effort == "") != (r.Shape == "")
 }

@@ -19,6 +19,8 @@ func TestWarningsYielded(t *testing.T) {
 		Warnings: []llmprovider.Warning{
 			{Kind: llmprovider.WarningEffortDegraded, Model: "m", Detail: "sent low"},
 			{Kind: "no_such_kind", Model: "m2", Detail: "unknown"},
+			{Kind: llmprovider.WarningReasoningLearned, Model: "m", Detail: "refused high",
+				Refused: llmprovider.ReasoningRefusal{Model: "m", Effort: llmprovider.EffortHigh}},
 		},
 	})
 	evs, err := drain(t, Wrap(f), &llm.Request{Messages: []llm.Message{text(llm.RoleUser, "hi")}})
@@ -43,7 +45,7 @@ func TestWarningsYielded(t *testing.T) {
 	if !sawUsage || !sawDone {
 		t.Fatalf("events %+v", evs)
 	}
-	if len(warnings) != 2 {
+	if len(warnings) != 3 {
 		t.Fatalf("warnings %+v in %+v", warnings, evs)
 	}
 	if warnings[0] != (llm.Warning{Kind: llm.WarningEffortDegraded, Model: "m", Detail: "sent low"}) {
@@ -51,5 +53,9 @@ func TestWarningsYielded(t *testing.T) {
 	}
 	if warnings[1] != (llm.Warning{Kind: "no_such_kind", Model: "m2", Detail: "unknown"}) {
 		t.Fatalf("second warning %+v", warnings[1])
+	}
+	if warnings[2] != (llm.Warning{Kind: llm.WarningReasoningLearned, Model: "m", Detail: "refused high",
+		Refused: llm.ReasoningRefusal{Model: "m", Effort: "high"}}) {
+		t.Fatalf("learned warning %+v", warnings[2])
 	}
 }

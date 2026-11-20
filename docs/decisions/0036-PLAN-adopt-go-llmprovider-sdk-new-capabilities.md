@@ -517,3 +517,38 @@ P2 to P7 have not started. The pre-existing uncommitted edit of
 
 P3 to P7 have not started. The pre-existing uncommitted edit of
 `0063-MADR-one-shared-terminal-input-so-the-key-prompt-waits.md` is not part of this phase.
+
+### P3 record (2026-11-20): learned refusals across runs
+
+1. **Tests first,** seen failing to compile.
+   - `internal/cli` `TestRefusalsSaved`: `unknown field Refused` and `undefined: llm.ReasoningRefusal`.
+   - `llm/provider` `TestRefusalsPassedBack`: `unknown field Refusals`.
+   - `TestRefusalsFileUnreadable`: `undefined: refusalFileName`.
+2. **The code:**
+   - `llm.ReasoningRefusal` is `llm/event.go:79`. `llm.Warning.Refused` is `:92`. `llm` does not import the SDK.
+   - `Options.Refusals` is `llm/provider/provider.go:98`. `New` passes a non-empty list to `WithReasoningRefusals`
+     (`:234`). `yieldWarnings` (`:511`) copies the SDK's refusal onto the warning (`refusalOf`, `:524`).
+   - The file is `<state>/reasoning-refusals.json` (`internal/cli/refusal.go:17`), beside `recent-models.json`,
+     one list per provider. It is written atomically and owner-only, the way `recent-models.json` is. A refusal
+     is kept once. Each provider's list keeps ten, the same bound `recent-models.json` keeps (`refusalsKept`,
+     `:21`); the MADR says bounded and does not name the number. `providerOptions` passes that provider's list
+     (`internal/cli/modelsjson.go:158`). A file that cannot be read warns once and is none, and the provider is
+     still built.
+   - P2's `note` (`agent/warning.go:40`) saves a `reasoning_learned` refusal on every sighting, before the
+     log-once gate, so a repeated turn still reaches the file and the file's own deduplication is what keeps it
+     once. `Config.SaveRefusal` is `agent/agent.go:82`. `acpserver` binds it to the session's provider
+     (`savedRefusal`, `acpserver/agent.go:334`, set at `:794`). The CLI sets it (`internal/cli/agent.go:98`).
+     A forced-choice warning is still logged at Warn and is not saved. `ProbeReasoning` is not called.
+3. **Planted breaks,** on scratch copies, applied with `go test -overlay`, so the tree was not edited.
+   - The option not passed: `TestRefusalsPassedBack` failed, `first request effort "high", want a lower effort, never high`.
+   - No deduplication: `TestRefusalsSaved` failed, `saved 2 refusals of m at high, want 1`.
+4. **Checks.** `go test -count=1 ./llm/` passed (`ok`, 0.363s). `go test -count=1 ./llm/provider/` passed (`ok`,
+   79.916s). `go test -count=1 ./agent/` passed (`ok`, 0.550s). `go test -count=1 ./internal/cli/` passed (`ok`,
+   47.745s). `go test -count=1 -run '^$' ./acpserver/` compiled and ran no tests (`ok`, 0.710s). `docs/architecture.md`'s
+   `agent`, `llm`, `llm/provider` and `internal/cli` rows describe the phase, including `<state>/reasoning-refusals.json`.
+   `make preflight`, on a Windows dev host, exited 0 (`preflight passed`): gofmt, `go mod tidy`, pre-add-check,
+   `go vet`, staticcheck for linux, darwin and windows, golangci-lint (0 issues), govulncheck, archtest, `apidiff`
+   (no-op below v1.0.0), verify-build-metadata, check-records and markdownlint (0 issues in 59 files).
+
+P4 to P7 have not started. The pre-existing uncommitted edit of
+`0063-MADR-one-shared-terminal-input-so-the-key-prompt-waits.md` is not part of this phase.

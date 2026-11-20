@@ -155,6 +155,7 @@ func (e *runEnv) providerOptions(id string, o provider.Options) provider.Options
 	o.Headers = e.headersFor(mj, id)
 	o.Workspace = e.knownWorkspace(id)
 	o.Cache, o.Sessions = &e.cache, &e.sessions
+	o.Refusals = e.providerRefusals(id)
 	return o
 }
 

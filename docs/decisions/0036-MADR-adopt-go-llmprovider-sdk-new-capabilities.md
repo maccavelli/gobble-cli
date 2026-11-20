@@ -345,6 +345,10 @@ The precondition was run again, as the PLAN's P0. `go test -count=1 -run TestWir
 (`ok`, 0.668s; the test is `llm/provider/offline_test.go:25`). `git grep` finds neither `sdkEmptyAnswer` nor
 `func offline` under `llm/provider`. Gobble's `*.go` uses none of `ReasoningRefusal`, `ImageItem`, `chatcompat`,
 `WithReasoningRefusals` or `WarningImageDropped`.
+*(Amended 2026-11-20, when P3 landed.)* That sentence is the measurement before the phase. After it,
+`llm.ReasoningRefusal` is gobble's own type (`llm/event.go:79`) and `New` passes `Options.Refusals` to
+`WithReasoningRefusals` (`llm/provider/provider.go:234`). `WarningImageDropped` has been a constant since P2.
+`ImageItem` and `chatcompat` are still unused.
 
 What is still true, at the lines read this date:
 
@@ -372,6 +376,16 @@ What is still true, at the lines read this date:
   `WarningDeferralEmulated`. The agent logs every other kind at Warn, once per kind and model in the session, and
   logs `deferral_emulated` at Debug. Each prompt of a session shares one `WarningLog`. A forced-choice warning is
   logged at Warn and is not saved.
+  *(Amended 2026-11-20, when P3 landed.)* A `WarningReasoningLearned`'s `Refused` is now saved.
+  `yieldWarnings` (`llm/provider/provider.go:511`) copies it onto `llm.Warning` (`llm/event.go:92`). The agent's
+  `note` (`agent/warning.go:40`) saves one on every sighting, through `Config.SaveRefusal` (`agent/agent.go:82`),
+  which `acpserver` binds to the session's provider (`acpserver/agent.go:334`, set at `:794`). The CLI writes
+  `<state>/reasoning-refusals.json` beside `recent-models.json` (`internal/cli/refusal.go:17`), one list per
+  provider, ten kept, the same bound `recent-models.json` keeps, deduplicated, owner-only. `providerOptions`
+  passes that provider's list (`internal/cli/modelsjson.go:158`). A file that cannot be read is ignored with one
+  warning, and the provider is still built. `ProbeReasoning` is not called. A forced-choice warning is still
+  logged at Warn and is not saved. The registry `New` call the P1 amendment cites at `:240` is now `:247`, and P2's
+  `EventDone` citation `:428` is now `:435`.
 - `toRequest` still has no `ContentImage` case. Its tool-result case is `ContentToolResult` at `:587`, and since
   0012-MADR it appends `ToolLoadItem`s after that output. An image in a tool message is an `ImageItem` immediately
   after the `FunctionCallOutputItem`, and those loads stay after the image. The probe of 2026-10-29 had no loads.
