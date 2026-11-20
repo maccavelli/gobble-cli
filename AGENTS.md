@@ -130,9 +130,10 @@ make pre-add-check FILES="a.go b.go"
 ```
 
 It runs `scripts/go-precheck.sh`: plain `gofmt` (not `gofumpt`) on the files,
-`golint` per file, and `govulncheck ./...` (`GO_PRECHECK_SKIP_VULN=1` skips it
-offline). `golint` and `govulncheck` run from the `tool` directives in `go.mod`
-(`go tool golint`, `go tool govulncheck`), not from a global install. A file
+`golangci-lint` over both modules whole (the exact `make lint` command, so the
+two cannot drift), and `govulncheck ./...` (`GO_PRECHECK_SKIP_VULN=1` skips it
+offline). `govulncheck` runs from the `tool` directives in `go.mod`
+(`go tool govulncheck`), not from a global install. A file
 that fails is not committed.
 
 Before every commit, run `make preflight`. It runs every gate: gofmt drift,

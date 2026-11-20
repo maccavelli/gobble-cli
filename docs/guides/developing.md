@@ -15,7 +15,7 @@ they are that way is in the [decision records](../README.md).
   `go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0`.
 - **Node**, for `npx markdownlint-cli2`.
 
-`golint`, `govulncheck`, `staticcheck` and `apidiff` come from the `tool` directives in `go.mod`, so
+`govulncheck`, `staticcheck` and `apidiff` come from the `tool` directives in `go.mod`, so
 they need no install.
 
 ## Build and run
@@ -106,7 +106,7 @@ Before you stage a Go file, run the pre-add check on it:
 ```console
 $ make pre-add-check FILES="internal/archtest/check.go internal/archtest/check_test.go"
 …
-go-precheck: 2 file(s) clean (gofmt, golint, govulncheck).
+go-precheck: 2 file(s) clean (gofmt, golangci-lint, govulncheck).
 ```
 
 With no `FILES` it checks every tracked Go file. `GO_PRECHECK_SKIP_VULN=1` skips govulncheck when

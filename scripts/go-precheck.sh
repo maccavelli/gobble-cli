@@ -1,15 +1,21 @@
 #!/usr/bin/env bash
-# Go pre-add checks: gofmt (not gofumpt), per-file golint, and govulncheck.
+# Go pre-add checks: gofmt (not gofumpt), golangci-lint, and govulncheck.
 #
 # Same contract as the fleet script and the global pre-add hook: called from
 # `make pre-add-check`. govulncheck runs from the module tool directive
 # (`go tool govulncheck`), not from a global install.
 #
+# The lint step is the exact command `make lint` runs over both modules, so
+# the two cannot drift; whole-tree, not per-file (0064-MADR; the per-file
+# golint step is retired fleet-wide — dotfiles 0028-MADR).
+#
 # Usage:
 #   scripts/go-precheck.sh [file.go ...]
 #
-# With no arguments it checks every tracked Go file; with arguments, only those
-# (non-Go arguments are ignored, so callers can pass a whole changed-file list).
+# With no arguments it checks the whole tree; with arguments, only those
+# (non-Go arguments are ignored, so callers can pass a whole changed-file
+# list). Lint runs over both modules whole regardless of the argument list;
+# gofmt still scopes to the files.
 #
 # Exit codes: 0 all clear · 1 a check failed · 2 a required tool is missing.
 #
@@ -29,8 +35,8 @@ if [ "$#" -gt 0 ]; then
     esac
   done
   # Arguments that contain no Go files are not an error: a mixed `git add` of
-  # docs and other files has nothing for this script to say.
-  [ "${#files[@]}" -eq 0 ] && exit 0
+  # docs and other files has nothing for gofmt to say, though lint still runs.
+  [ "${#files[@]}" -eq 0 ] && echo "go-precheck: no Go files to format." >&2
 else
   while IFS= read -r f; do
     [ -n "$f" ] && files+=("$f")
@@ -45,9 +51,7 @@ need() {
 
 failed=0
 
-if [ "${#files[@]}" -eq 0 ]; then
-  echo "go-precheck: no Go files to format or lint." >&2
-else
+if [ "${#files[@]}" -gt 0 ]; then
   # 1. gofmt. Plain gofmt, not gofumpt.
   need gofmt || exit 2
   unformatted="$(gofmt -l "${files[@]}")"
@@ -56,23 +60,21 @@ else
     printf '%s\n' "$unformatted" | sed 's/^/  /' >&2
     failed=1
   fi
+fi
 
-  # 2. golint, per file so the output names what to fix.
-  # The binary is the module tool directive, not a global install.
-  if ! go tool golint -h >/dev/null 2>&1; then
-    echo "go-precheck: go tool golint is not available (tool directive golang.org/x/lint/golint)." >&2
-    exit 2
-  fi
-  lint_out=""
-  for f in "${files[@]}"; do
-    out="$(go tool golint "$f" 2>&1)" || true
-    [ -n "$out" ] && lint_out+="$out"$'\n'
-  done
-  if [ -n "$lint_out" ]; then
-    echo "golint:" >&2
-    printf '%s' "$lint_out" | sed 's/^/  /' >&2
-    failed=1
-  fi
+# 2. golangci-lint, the `make lint` command over both modules: whole-tree per
+# module, config by absolute path, host GOOS — so a commit cannot pass a
+# weaker check than the tree's own lint gate (0064-MADR; the per-file golint
+# step is retired — dotfiles 0028-MADR + its amendment).
+need golangci-lint || exit 2
+lint_out=""
+for m in . acpext; do
+  out="$( (cd "$m" && golangci-lint run --config "$REPO_ROOT/.golangci.yml" ./...) 2>&1)" || failed=1
+  [ -n "$out" ] && lint_out+="$out"$'\n'
+done
+if [ -n "$lint_out" ]; then
+  echo "golangci-lint:" >&2
+  printf '%s' "$lint_out" | tail -40 | sed 's/^/  /' >&2
 fi
 
 # 3. govulncheck, over the module. It is a property of the whole build rather
@@ -92,6 +94,6 @@ else
 fi
 
 if [ "$failed" -eq 0 ]; then
-  echo "go-precheck: ${#files[@]} file(s) clean (gofmt, golint, govulncheck)."
+  echo "go-precheck: ${#files[@]} file(s) clean (gofmt, golangci-lint, govulncheck)."
 fi
 exit "$failed"
