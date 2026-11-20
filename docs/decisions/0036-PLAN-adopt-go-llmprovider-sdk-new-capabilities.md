@@ -633,7 +633,12 @@ P5 to P7 have not started. The pre-existing uncommitted edit of
 4. **Checks.** Package tests on the session host: `go test -count=1 ./llm/provider/` passed (`ok`, 79.634s) and
    `go test -count=1 ./internal/cli/` passed (`ok`, 47.055s), both before the guide and the records.
    `docs/guides/choosing-a-model.md` says what a search word matches, and its `luna` and `sonnet` examples are
-   the search's order.
+   the search's order. `make pre-add-check` reported 695 files clean. markdownlint reported 0 issues in 59
+   files. `scripts/check_records.py --check-all` exited 0. `make preflight` exited 0 (`preflight passed`):
+   gofmt, `go mod tidy`, pre-add-check, `go vet`, staticcheck for linux, darwin and windows, golangci-lint
+   (0 issues), govulncheck, check-acpext-deps, fix-check, archtest, `apidiff` (no-op below v1.0.0),
+   verify-build-metadata, check-records, check-icon and markdownlint (0 issues in 59 files). The fleet copy
+   did not match the tree, so that run was the session host under the heavy queue.
 
 P6 and P7 have not started. The pre-existing uncommitted edit of
 `0063-MADR-one-shared-terminal-input-so-the-key-prompt-waits.md` is not part of this phase.
