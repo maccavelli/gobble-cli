@@ -132,7 +132,8 @@ make pre-add-check FILES="a.go b.go"
 It runs `scripts/go-precheck.sh`: plain `gofmt` (not `gofumpt`) on the files,
 `golangci-lint` over both modules whole (the exact `make lint` command, so the
 two cannot drift), and `govulncheck ./...` (`GO_PRECHECK_SKIP_VULN=1` skips it
-offline). `govulncheck` runs from the `tool` directives in `go.mod`
+offline; `GO_PRECHECK_SKIP_LINT=1` skips lint, and `make preflight` sets both). `FILES` that name no Go file
+exit 0 at once. `govulncheck` runs from the `tool` directives in `go.mod`
 (`go tool govulncheck`), not from a global install. A file
 that fails is not committed.
 

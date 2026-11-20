@@ -92,3 +92,27 @@ func TestRefusalsFileUnreadable(t *testing.T) {
 		t.Fatalf("%d warnings, want 1; stderr %q", n, stderr.String())
 	}
 }
+
+// A corrupt file warns once for the run, not once for each provider built:
+// the second build reads no file again (0036-PLAN, gap G3).
+func TestRefusalsFileUnreadableWarnsOncePerRun(t *testing.T) {
+	e, _ := modelEnv(t)
+	t.Setenv("OPENAI_API_KEY", "test-key")
+	path, err := stateFile(refusalFileName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("{not json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, session := range []string{"s1", "s2"} {
+		p, err := modelProvider(e)(session, llm.Retry{Off: true})
+		if err != nil || p == nil {
+			t.Fatalf("provider %s: %v, %v; want it built", session, p, err)
+		}
+	}
+	stderr := e.out.err.(*bytes.Buffer)
+	if n := strings.Count(stderr.String(), "Warning: "+refusalFileName); n != 1 {
+		t.Fatalf("%d warnings across two builds, want 1; stderr %q", n, stderr.String())
+	}
+}

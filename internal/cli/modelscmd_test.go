@@ -222,6 +222,31 @@ func TestModelsSearchListsFactsFirst(t *testing.T) {
 	}
 }
 
+// An id-only query for a model the live listing holds finds it, once, in
+// the table and in the picker's search: the listing's own search ranks ids
+// as well as facts (0036-PLAN, gap G6). gpt-6-astra is held by the listing.
+func TestModelsSearchFindsHeldModelByID(t *testing.T) {
+	meta := fmt.Sprintf("metadata.test/%s-%d.json", t.Name(), os.Getpid())
+	withLister(t, factList(meta))
+	t.Setenv("OPENAI_API_KEY", fmt.Sprintf("sk-facts-%d", os.Getpid()))
+	c := newCfgEnv(t)
+	r := c.run("models", "list", "gpt-6-astra")
+	n := 0
+	for _, row := range rowsOf(r.stdout)[1:] {
+		if len(row) > 1 && row[0] == "openai" && row[1] == "gpt-6-astra" {
+			n++
+		}
+	}
+	if r.code != ExitOK || n != 1 {
+		t.Fatalf("models list gpt-6-astra: exit %d, %d rows of it, want 1; stdout %q, stderr %q", r.code, n, r.stdout, r.stderr)
+	}
+	e, _ := modelEnv(t)
+	got := e.agentOptions().SearchModels("openai", []string{"gpt-6-luna", "gpt-6-astra"}, "gpt-6-astra")
+	if n := slices.Index(got, "gpt-6-astra"); n < 0 || slices.Index(got[n+1:], "gpt-6-astra") >= 0 {
+		t.Fatalf("picker search %q, want gpt-6-astra once", got)
+	}
+}
+
 // Counts print as Pi's formatTokenCount prints them; unknown is "-".
 func TestTokenCount(t *testing.T) {
 	for n, want := range map[int]string{0: "-", 999: "999", 1000: "1K", 1500: "1.5K", 8192: "8.2K", 200000: "200K", 1000000: "1M", 1050000: "1.1M"} {

@@ -168,7 +168,87 @@ MADR's state table, amendment A1); none waits on an answer.*
   fails (Recommended)"; R4 (S1, S11) "Exit 0 at once, as before 0064 (Recommended)"; R5 (S12) "Preflight tells the
   script to skip lint and vuln (Recommended)".
 * Phase P2 approved: "Approve P2; build it after I commit the records (Recommended)". Nothing in P2 is built until the
-  owner has committed these records and says to proceed. P2 has had no pass yet; each pass will be numbered here.
+  owner has committed these records and says to proceed. ~~P2 has had no pass yet; each pass will be numbered here.~~ *(2026-11-20: pass 1 is recorded below.)*
 * Row-to-step map checked 2026-11-20: S1, S11 to P2-4; S3 to P2-3 (output) and the P1 gates (exit); S5, S6 to P2-2;
   S12 to P2-5; S2, S4, S7, S9, S10 to P2-6. Each step names its plant. S8 is `out of scope`. No decided row lacks a
   step. R1 (the docs) is P2-1.
+
+### Execution record, P2 pass 1 (2026-11-20)
+
+* **P2-0, re-ground at `f7677e2`.** Every cited line holds: `scripts/go-precheck.sh:37-39` (the "no Go files to
+  format." line, then lint), `:69` (`need golangci-lint || exit 2`), `:72-78` (`lint_out`, `tail -40`),
+  `Makefile:196`, `:199`, `:200`, `docs/architecture.md:207`, `:212`. None moved.
+* **Files changed (unstaged):** `scripts/go-precheck.sh`, `Makefile`, `docs/architecture.md`, `AGENTS.md`,
+  `docs/guides/developing.md`, this plan, the MADR's pin cells, `docs/README.md`'s two 0064 rows.
+* **What the script now does.** Arguments with no Go file `exit 0` at once (S1, S11). The lint step prints a module's
+  output whole, under `golangci-lint (<module>):`, only when that module's run fails (S3, S5, S6; no `tail`). A new
+  environment variable, `GO_PRECHECK_SKIP_LINT=1`, skips the lint step and prints `golangci-lint: skipped
+  (GO_PRECHECK_SKIP_LINT=1)`; the Makefile's preflight line sets it with `GO_PRECHECK_SKIP_VULN=1` (S12).
+* **Method.** Every check and plant ran on a copy of `git archive HEAD` under `<scratch>` with only these files
+  copied over (the scratch copy given its own throwaway `git init`); `BASH_ENV` was unset for the runs because the
+  host's value re-orders `PATH` and defeats a stub. Full output is in `<scratch>` files named for the row.
+* **P2-1 (R1).** `docs/architecture.md:207` no longer lists `golint`; `:212` now says gofmt on the named files,
+  golangci-lint over both modules whole, then govulncheck, with the two skip variables and the no-Go-file exit.
+  `grep -rn golint --exclude-dir=.git --exclude-dir=decisions --exclude-dir=reports .` lists exactly four hits:
+  `docs/README.md:145` and `:146` (the 0064 rows) and `scripts/go-precheck.sh:10` and `:72` (the history comments).
+  Plant: `golint` appended to `docs/guides/developing.md` on a scratch copy: the same grep also lists
+  `docs/guides/developing.md:315:golint`, which fails the check.
+* **P2-2 (S5, S6).** 30 planted missing-comment findings in `.` and 30 in `acpext`: exit 1; stderr has
+  `golangci-lint (.):` and `golangci-lint (acpext):`, 30 `plant_R.go:<line>:<col>` and 30 `plant_A.go:<line>:<col>`
+  lines. Plant (the old joined `lint_out` and `tail -40` restored): 0 `plant_R.go` and 12 `plant_A.go` lines, so the
+  root module's findings are the ones dropped; the check, which requires 30 and 30, fails.
+* **P2-3 (S3, output).** Clean copy, one Go file, `GO_PRECHECK_SKIP_VULN=1`: exit 0; stderr is only
+  `govulncheck: skipped (GO_PRECHECK_SKIP_VULN=1)`, no `golangci-lint` and no `0 issues.`; stdout's last line is
+  `go-precheck: 1 file(s) clean (gofmt, golangci-lint, govulncheck).` Plant (unconditional print restored): stderr
+  gains `golangci-lint (.):` / `0 issues.` and the same for `acpext`; the check fails.
+* **P2-4 (S1, S11).** `scripts/go-precheck.sh README.md`, a stub `golangci-lint` first on `PATH` writing a marker,
+  `HTTPS_PROXY` at a closed local port: exit 0, no marker, no `govulncheck` line. Plant (`:39`'s old line, go on to
+  lint): exit 1, marker written, `govulncheck: fetching vulnerabilities: ... connection refused`.
+* **P2-5 (S12).** The command `make -n preflight` prints for the pre-add step
+  (`GO_PRECHECK_SKIP_LINT=1 GO_PRECHECK_SKIP_VULN=1 bash scripts/go-precheck.sh <every Go file>`), with a counting stub
+  first on `PATH`: exit 0, the stub counted 0 calls; `make lint` alone counted 2. Plant (the variable dropped from the
+  Makefile line): the script's count is 2.
+* **P2-6 (S2, S4, S7, S9, S10).**
+  * S2: no arguments, clean copy, real network: exit 0, `go-precheck: 700 file(s) clean (gofmt, golangci-lint,
+    govulncheck).` With one unformatted Go file added and lint skipped (so only the gofmt step can speak): exit 1,
+    `gofmt: these files are not formatted` and the file named. Plant (the `git ls-files '*.go'` loop emptied): exit 0.
+    *(Without the lint skip the plant still exits 1, because golangci-lint's own gofmt formatter flags the file; the
+    skip isolates the step the plant removes.)*
+  * S4: one file with two planted exported functions: exit 1, `plant_R.go:3:1: exported: exported function
+    PlantedRN1 should have comment or be unexported (revive)` under `golangci-lint (.):`. Plant (`failed=1` removed
+    from the failure block): exit 0.
+  * S7: `PATH` of symlinks to git, gofmt, go, sed, bash and a few coreutils, no golangci-lint:
+    `go-precheck: golangci-lint not found in PATH.`, exit 2, no `govulncheck` line. Plant (the `need` line removed):
+    exit 1, `golangci-lint: command not found` per module.
+  * S9: `.golangci.yml` replaced by an unparseable file in the copy: exit 1, `Error: can't load config: ... yaml:
+    line 1: did not find expected ',' or ']'` under `golangci-lint (.):` and `(acpext):`. Plant (`failed=1`
+    removed): exit 0 with the same message printed.
+  * S10: one Go file, `HTTPS_PROXY` closed: exit 1, `govulncheck: fetching vulnerabilities: ... connection
+    refused`; with `GO_PRECHECK_SKIP_VULN=1`: `govulncheck: skipped`, exit 0. Plant (the `case` arm that sets `failed`
+    emptied): exit 0 offline, the message still shown.
+* **P2-7 (records).** The ten "not yet run" pins in the MADR's state table now read "run 2026-11-20, P2 pass 1"; each
+  names the step that ran it (rows and steps as mapped in the approval record above, unchanged). The
+  `docs/README.md` 0064 rows are updated. `AGENTS.md` ("Pre-add checks") and `docs/guides/developing.md` say the same
+  as the script (the no-Go-file exit, per-module output on failure, `GO_PRECHECK_SKIP_LINT`).
+* **Not done:** S8 is out of scope by the MADR. The script's closing line still reads "(gofmt, golangci-lint,
+  govulncheck)" when a skip variable was set; the decided rows do not cover its wording, so it is left as P1 wrote it.
+* **P2-8, gates (pass 1).** `bash -n scripts/go-precheck.sh` exit 0. In a `git clone` of `f7677e2` with the files above
+  copied over (so the other builder's test files were not in it): `make lint` exit 0, "0 issues." for `.` and
+  `acpext`; `make preflight` through `run-heavy` with `PYTHON=/opt/homebrew/bin/python3.12` (the host's default
+  `python3` drift recorded in P1) exit 0, "preflight passed", its pre-add step printing `golangci-lint: skipped` and
+  `govulncheck: skipped`, and `lint` and `vulncheck` running once each after it. In the tree: `make check-records`
+  exit 0; `make markdownlint` "0 issues in 0 files" over 59 files.
+* **Docs step.** `grep -rn golint --exclude-dir=.git --exclude-dir=decisions --exclude-dir=reports .` after the
+  change lists only `docs/README.md:145`, `docs/README.md:146`, `scripts/go-precheck.sh:10` and `scripts/go-precheck.sh:72`
+  (the two index rows and the two history comments), which is the P2-1 allowance; the MADR's Confirmation item 3 is
+  met. *(Line `:72` is `:67` of the earlier amendment's count; the comment moved when the header grew.)*
+
+### P2 pass 2 (2026-11-20): the independent review of pass 1, and two record corrections
+
+* **Review verdict on pass 1: FAIL, on two record statements; no code finding.** The reviewer exercised every decided row S1 to S7 and S9 to S12 on its own scratch copy of `f7677e2` plus the eight P2 files, under bash 3.2, without the builder's harness. Every row's observed exit status and output matched its decided outcome, and one break of the reviewer's own per row was detected. No behaviour change in `scripts/go-precheck.sh` or the `Makefile` lacks a row. No shell defect new in P2. `make -n preflight` shows both skip variables on the pre-add line, followed by preflight's own `lint` and `vulncheck`, so nothing is skipped overall; CI runs `make preflight`; no other caller of the script exists.
+* **B1 (corrected in this pass).** 0064-MADR rows S4 and S9 said findings and errors print "under `golangci-lint:`". Since P2-2 the header is `golangci-lint (<module>):`, as R2 and row S6 decide. Both Outcome cells carry a dated A1 annotation; the pass-1 record built the new header without saying those two rows' wording was superseded.
+* **B2 (corrected in this pass).** `docs/README.md`'s 0064 PLAN row said every row S1 to S12 was tested. S8 is out of scope and was not tested. The row now says every decided row.
+* **Gates seen by the reviewer:** `bash -n scripts/go-precheck.sh` exit 0 under bash 5 and 3.2; `scripts/check_records.py --check-all` exit 0; `make lint` on its scratch copy exit 0, "0 issues." for both modules. `make preflight` was not re-run by the reviewer; pass 1's run stands. The script was not run under Git-bash on Windows.
+* **Host note.** On a machine whose shell start-up file rebuilds `PATH`, a caller cannot hide or replace `golangci-lint` through `PATH`; the scratch runs unset that start-up variable. This comes from the host's setup, not from the script, and the script behaves the same for a user there.
+* **Follow-ups, not built in P2 (no decided row covers them; they wait for the owner):** (1) `scripts/go-precheck.sh:62` ignores gofmt's own exit status, as it did before 0064: with both skip variables set, a file that does not parse gives exit 0 and "1 file(s) clean"; preflight still catches it later through vet and lint. (2) The closing line (about `:105`) still lists "(gofmt, golangci-lint, govulncheck)" when steps were skipped. (3) `AGENTS.md` says `FILES` that name no Go file exit 0; a path to a deleted `.go` file also exits 0, which it does not say.
+* **Pass count:** this is the second build pass of P2. It changes records only. The plan stays `in-progress` until the owner's commit is pushed and CI is green.

@@ -14,7 +14,9 @@
 #
 # With no arguments it checks the whole tree; with arguments, only those
 # (non-Go arguments are ignored, so callers can pass a whole changed-file
-# list). Lint runs over both modules whole regardless of the argument list;
+# list). Arguments that hold no Go file exit 0 at once, before lint and
+# govulncheck, so a docs-only add needs no network (0064-MADR, state table S1).
+# Otherwise lint runs over both modules whole regardless of the argument list;
 # gofmt still scopes to the files.
 #
 # Exit codes: 0 all clear · 1 a check failed · 2 a required tool is missing.
@@ -22,6 +24,9 @@
 # Env:
 #   GO_PRECHECK_SKIP_VULN=1   skip govulncheck (offline work; the pre-commit
 #                             hook still runs it)
+#   GO_PRECHECK_SKIP_LINT=1   skip the golangci-lint step; `make preflight` sets
+#                             it because its own `lint` step follows
+#                             (0064-MADR, state table S12)
 set -uo pipefail
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
@@ -35,8 +40,8 @@ if [ "$#" -gt 0 ]; then
     esac
   done
   # Arguments that contain no Go files are not an error: a mixed `git add` of
-  # docs and other files has nothing for gofmt to say, though lint still runs.
-  [ "${#files[@]}" -eq 0 ] && echo "go-precheck: no Go files to format." >&2
+  # docs and other files has nothing for this script to say.
+  [ "${#files[@]}" -eq 0 ] && exit 0
 else
   while IFS= read -r f; do
     [ -n "$f" ] && files+=("$f")
@@ -66,15 +71,18 @@ fi
 # module, config by absolute path, host GOOS — so a commit cannot pass a
 # weaker check than the tree's own lint gate (0064-MADR; the per-file golint
 # step is retired — dotfiles 0028-MADR + its amendment).
-need golangci-lint || exit 2
-lint_out=""
-for m in . acpext; do
-  out="$( (cd "$m" && golangci-lint run --config "$REPO_ROOT/.golangci.yml" ./...) 2>&1)" || failed=1
-  [ -n "$out" ] && lint_out+="$out"$'\n'
-done
-if [ -n "$lint_out" ]; then
-  echo "golangci-lint:" >&2
-  printf '%s' "$lint_out" | tail -40 | sed 's/^/  /' >&2
+if [ "${GO_PRECHECK_SKIP_LINT:-0}" = "1" ]; then
+  echo "golangci-lint: skipped (GO_PRECHECK_SKIP_LINT=1)" >&2
+else
+  need golangci-lint || exit 2
+  for m in . acpext; do
+    out="$( (cd "$m" && golangci-lint run --config "$REPO_ROOT/.golangci.yml" ./...) 2>&1)" || {
+      failed=1
+      # A module's output is printed whole, and only when its run fails.
+      echo "golangci-lint ($m):" >&2
+      printf '%s\n' "$out" | sed 's/^/  /' >&2
+    }
+  done
 fi
 
 # 3. govulncheck, over the module. It is a property of the whole build rather

@@ -204,13 +204,14 @@ The direct requirements in `go.mod`:
 | `go.yaml.in/yaml/v3` | `v3.0.5` |
 | `golang.org/x/sys`, `golang.org/x/term`, `golang.org/x/text` | `v0.49.0`, `v0.47.0`, `v0.43.0` |
 
-`apidiff`, `golint`, `govulncheck` and `staticcheck` run from `tool` directives. `acpext/go.mod` has no requirement,
+`apidiff`, `govulncheck` and `staticcheck` run from `tool` directives. `acpext/go.mod` has no requirement,
 and no `tool` directive: its gates run the root's tools.
 
 ## Checks
 
-- `make pre-add-check`: gofmt and golint on the named Go files, or on every tracked one with no
-  `FILES`, then govulncheck over the module; `GO_PRECHECK_SKIP_VULN=1` skips govulncheck.
+- `make pre-add-check`: gofmt on the named Go files, or on every tracked one with no `FILES`; golangci-lint over
+  both modules whole (the `make lint` command); then govulncheck over the module. Arguments that name no Go file
+  exit 0 at once. `GO_PRECHECK_SKIP_VULN=1` skips govulncheck and `GO_PRECHECK_SKIP_LINT=1` skips golangci-lint.
 - `make preflight`: first `check-cgo-off`, then every gate — gofmt, `go mod tidy`, the pre-add
   check, `go vet`, staticcheck for linux, darwin and windows, golangci-lint, govulncheck,
   `check-acpext-deps`, `go fix -diff`, archtest, apidiff, build metadata, the records check and markdownlint.

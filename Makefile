@@ -193,7 +193,7 @@ preflight: check-cgo-off
 		echo "acpext/go.mod not tidy - commit the result of 'make tidy'"; rc=1; \
 	fi; \
 	exit $$rc
-	@echo "==> pre-add-check"; bash scripts/go-precheck.sh $(shell git ls-files '*.go'; git ls-files --others --exclude-standard '*.go')
+	@echo "==> pre-add-check"; GO_PRECHECK_SKIP_LINT=1 GO_PRECHECK_SKIP_VULN=1 bash scripts/go-precheck.sh $(shell git ls-files '*.go'; git ls-files --others --exclude-standard '*.go')
 	@echo "==> go vet"; $(MAKE) --no-print-directory vet
 	@echo "==> staticcheck"; $(MAKE) --no-print-directory staticcheck
 	@echo "==> golangci-lint"; $(MAKE) --no-print-directory lint

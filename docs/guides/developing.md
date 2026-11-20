@@ -109,8 +109,10 @@ $ make pre-add-check FILES="internal/archtest/check.go internal/archtest/check_t
 go-precheck: 2 file(s) clean (gofmt, golangci-lint, govulncheck).
 ```
 
-With no `FILES` it checks every tracked Go file. `GO_PRECHECK_SKIP_VULN=1` skips govulncheck when
-you are offline.
+With no `FILES` it checks every tracked Go file; `FILES` that name no Go file exit 0 at once. Lint output
+prints only for a module whose run fails, whole, under `golangci-lint (<module>):`. `GO_PRECHECK_SKIP_VULN=1`
+skips govulncheck when you are offline; `GO_PRECHECK_SKIP_LINT=1` skips golangci-lint (`make preflight` sets both,
+because its own `lint` and `vulncheck` steps follow).
 
 Before you commit, run every gate:
 

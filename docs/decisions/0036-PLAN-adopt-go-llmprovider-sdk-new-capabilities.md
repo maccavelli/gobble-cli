@@ -743,3 +743,37 @@ Exit criterion: no blocker, every gap tested, plants caught.
 * A new test that exposes a real defect in production code stops the step and goes to the owner; the step does not fix
   the defect, loosen the test or skip it.
 * The step has not been started. The plan's status stays `in-progress`.
+
+#### Execution record of the test-only step, build pass 1 (2026-11-20)
+
+The step was built from `f7677e2`; the last bullet of the approval entry above ("has not been started") is superseded
+by this entry. Test files only: no production file changed. Each plant was applied to a scratch export of `HEAD` with
+the new test files copied over, one at a time, the production file restored before the next. Failure lines are the
+test's own first line; each output is a saved file in the session's scratch directory.
+
+| Gap | Test, and where it lives | Plant, and the first line of the failure |
+| --- | --- | --- |
+| G1 | `TestChatServerModelsListMerges`, `internal/cli/chatserver_test.go`: models.json's `local` holds `mine`, the live listing holds `listed-1`; `models list --provider local` runs through `Main` and the ids of the `local` rows, sorted, must be `[listed-1 mine]`. | The live-listing merge loop in `printModels` removed: `local's ids ["mine"], want models.json's mine and the listing's listed-1, each once`. `withModelsJSON(…)` replaced by `provider.KnownModels(sel.ID)`: `local's ids ["listed-1"], want …`. |
+| G2 | `TestChatServerModelFlagResolves`, `internal/cli/chatserver_test.go`: with models.json's `local` holding `m`, `pickModel` on `--model local/m` gives provider `local`, model `m`, and `gobble models info local/m` through `Main` prints `provider  local` then `model     m`. | The `mj.ChatServers()` loop in `offlineModels` removed: `--model local/m: Model "local/m" not found. Use --list-models to see available models.` |
+| G3 | `TestRefusalsFileUnreadableWarnsOncePerRun`, `internal/cli/refusal_test.go`: a corrupt `reasoning-refusals.json`, two `modelProvider(e)` builds in one run, exactly one `Warning: reasoning-refusals.json` on stderr. | The `refusalsLoaded` guard in `loadRefusals` removed: `2 warnings across two builds, want 1`. |
+| G4 | `TestSessionWarningLogIsPerSession`, `acpserver/warninglog_test.go`: a scripted provider warns `effort_degraded` for one model on every turn; two prompts in session one give one `model warning` Warn record, a prompt in a second session makes two. | `warningLog` returning a new `agent.WarningLog` on every call: `after two prompts of one session: 2 Warn records, want 1`. |
+| G6 | `TestModelsSearchFindsHeldModelByID`, `internal/cli/modelscmd_test.go`: over the fact-carrying listing that holds `gpt-6-astra`, `gobble models list gpt-6-astra` has exactly one `openai` row of it, and the picker's `SearchModels` returns it once. | The `provider.SearchListing` loop in `listedSearch` removed (`_ = want` kept so it compiles): `models list gpt-6-astra: exit 0, 0 rows of it, want 1`. |
+
+* G1's old parser check (`TestChatServerLists`, `llm/provider/chatserver_test.go`) stays where it is and is relabelled:
+  its comment and its failure text now say it is a parser check, and its comment names
+  `TestChatServerModelsListMerges` as the test of the merge. The assertion is unchanged.
+* All five new tests, and `TestChatServerLists`, pass on the unplanted tree. `internal/cli`, `acpserver` and
+  `llm/provider` each pass in full; `gofmt -l`, `go vet` and `golangci-lint` are clean on the three packages.
+* G6's plant was not run against `TestModelsSearchListsFactsFirst`; the entry above says it also turns that test red,
+  and this pass did not check it. The independent review (2026-11-20) ran that plant against it and saw it go red: `modelscmd_test.go:216: models list vision: exit 0, ids ["aaa-vision"]`.
+* No defect was found in production code, and the stop rule was not used. Nothing outside the test files and this
+  record changed; `docs/README.md`'s 0036 row is left to the coordinator.
+
+#### Independent review of the test-only step, build pass 1 (2026-11-20)
+
+* Verdict: PASS on the first build pass. No blocker; every gap G1 to G4 and G6 has a test that pins its row; every plant was caught.
+* The reviewer applied each plant on its own scratch copy of `f7677e2` plus the five test files, without the builder's script: G1 (both plants), G2, G3, G4 and G6 each turned the gap's test red with the failure text recorded above.
+* The five new tests ran with `-count=20` in their packages: exit 0. Full single-package runs of `llm/provider`, `internal/cli` and `acpserver`: exit 0. `gofmt -l`, `go vet` and golangci-lint v2.15.0 on the three packages: clean.
+* No production Go file changed. The tests use temp homes, fake keys and loopback or in-memory transports only.
+* Not shown separately: that the second assertion of G2 (`models info`) and of G6 (the picker's `SearchModels`) fails on its own under the plant; the first assertion fails first. No `-race` run was made.
+* The plan stays `in-progress`: P6 and P7 are not started.

@@ -111,8 +111,10 @@ func TestChatServerStreams(t *testing.T) {
 	}
 }
 
-// List returns the server's /v1/models ids, and models.json's models are
-// among the known ones (0036-PLAN P4).
+// List returns the server's /v1/models ids. The second check is a parser
+// check only: models.json's parser reads the file's models for local. The
+// merge of those models with the listing is printModels', and is pinned by
+// internal/cli's TestChatServerModelsListMerges (0036-PLAN P4, gap G1).
 func TestChatServerLists(t *testing.T) {
 	wire := &chatWire{list: `{"data":[{"id":"a"},{"id":"b"}]}`}
 	set, mj := chatSet(t, `{"providers":{"local":{"baseUrl":"http://127.0.0.1:1/v1","models":[{"id":"mine"}]}}}`)
@@ -125,7 +127,7 @@ func TestChatServerLists(t *testing.T) {
 		t.Fatalf("listing %+v, want live [a b]", l)
 	}
 	if len(mj.Models("local")) != 1 || mj.Models("local")[0] != "mine" {
-		t.Fatalf("known %q, want models.json's mine among them", mj.Models("local"))
+		t.Fatalf("parser: models.json's models for local %q, want [mine]", mj.Models("local"))
 	}
 }
 
