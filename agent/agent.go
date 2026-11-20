@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"iter"
+	"log/slog"
 	"maps"
 	"slices"
 	"strings"
@@ -69,6 +70,13 @@ type Config struct {
 	// with no error, ends the turn with the overflow. Its error ends the
 	// turn; a cancelled compaction returns ctx's. Nil never compacts.
 	Compact func(ctx context.Context, overflow bool) (*Compacted, error)
+	// Logger receives a model warning, once per kind and model in Warned.
+	// Nil discards them (0036-MADR D3).
+	Logger *slog.Logger
+	// Warned is the session's record of warnings already said. Nil is this
+	// Agent's own, which lasts as long as the Agent does. A caller that
+	// builds an Agent for each prompt of one session passes the same log.
+	Warned *WarningLog
 }
 
 // Compacted is the session after a compaction (Config.Compact): its
@@ -116,6 +124,9 @@ type Agent struct {
 func New(cfg Config) *Agent {
 	if cfg.MaxCalls <= 0 {
 		cfg.MaxCalls = DefaultMaxCalls
+	}
+	if cfg.Warned == nil {
+		cfg.Warned = &WarningLog{}
 	}
 	a := &Agent{cfg: cfg, tools: map[string]tool.Tool{}}
 	byName := map[string]tool.Tool{}
@@ -734,6 +745,8 @@ func (t *turn) call() (*reply, error) {
 			if !t.emit(Usage{Usage: ev}) {
 				return r, nil
 			}
+		case llm.Warning:
+			t.note(ev)
 		case llm.Done:
 			r.stop = ev.StopReason
 		}

@@ -15,7 +15,7 @@
 //	text_delta      → TextDelta
 //	reasoning_delta → ThinkingDelta
 //	item            → ToolCallDone when the item is a function call
-//	done            → Usage, then Done
+//	done            → one Warning for each of the response's warnings, then Usage, then Done
 //	a retry notice  → ProviderRetry, before the call's first event
 //
 // The stream is live where the provider streams natively, through the SDK's

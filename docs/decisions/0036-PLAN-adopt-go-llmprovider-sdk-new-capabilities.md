@@ -479,3 +479,41 @@ called `providers.Default().Descriptors()` at `:49`, `:61`, `:81`, `:93`, `:103`
 
 P2 to P7 have not started. The pre-existing uncommitted edit of
 `0063-MADR-one-shared-terminal-input-so-the-key-prompt-waits.md` is not part of this phase.
+
+### P2 record (2026-11-20): the SDK's warnings
+
+1. **Tests first,** seen failing to compile.
+   - `TestWarningsYielded`: `undefined: llm.Warning`.
+   - `TestWarningLoggedOnce`: `undefined: llm.Warning`, and `unknown field Logger in struct literal of type agent.Config`.
+2. **The code:**
+   - `llm.Warning` is `llm/event.go:79`, with `WarningEffortDegraded`, `WarningReasoningLearned`,
+     `WarningImageDropped` and `WarningDeferralEmulated`. The phase's note names the first three. The fourth is the
+     kind this phase logs at Debug, so the agent compares a named constant (0012-MADR D21). `llm/doc.go` maps `done`
+     onto one `Warning` for each of the response's warnings, then `Usage`, then `Done`.
+   - `EventDone` (`llm/provider/provider.go:428`) calls `yieldWarnings` (`:504`), which yields those warnings before
+     usage and done. The helper keeps `attempt` within the complexity limit. `Kind` is the SDK's string, so an
+     unknown kind passes through. The log message is the constant `model warning`; kind, model and detail are
+     attributes.
+   - The agent logs them in `note` (`agent/warning.go:39`). `Config.Logger` is `agent.go:75` and `Config.Warned` is
+     `:79`. A nil `Warned` is the Agent's own log, so two turns of one Agent share it. `acpserver` builds an Agent
+     per prompt and passes the session's log (`acpserver/agent.go:329`, set at `:780`) with the run's logger.
+   - `deferral_emulated` is Debug. Every other kind, including the two forced-choice kinds and an unknown kind, is
+     Warn. Nothing is saved. `TestDeferralLoggedAtDebug` pins the Debug rule beside `TestWarningLoggedOnce`.
+   - `compaction/compaction.go` and `acpserver/title.go` leave `llm.Warning` unmatched. An empty case fails revive's
+     `empty-block` rule, and an unmatched type is ignored. The test switches do the same.
+3. **Planted breaks,** on scratch copies, applied with `go test -overlay`, so the tree was not edited.
+   - The yield removed: `TestWarningsYielded` failed, `warnings []` in a text, usage and done stream.
+   - The deduplication removed: `TestWarningLoggedOnce` failed, `after two turns of one model: 2 Warn records, want 1`.
+4. **Checks.** `go test -count=1 ./llm/` passed (`ok`, 0.451s). `go test -count=1 ./llm/provider/` passed (`ok`,
+   80.004s). `go test -count=1 ./agent/` passed (`ok`, 0.516s). `go test -count=1 ./compaction/` passed (`ok`,
+   0.663s). `go test -count=1 -run '^$' ./acpserver/` compiled and ran no tests (`ok`, 0.718s). `docs/architecture.md`'s
+   `agent`, `llm` and `llm/provider` rows describe the phase. `make apidiff` is a no-op below v1.0.0, so it does not
+   report `llm.Warning`. The change adds a type to the stable package `llm`. The first `make preflight`, on a
+   Windows dev host, failed at golangci-lint: gocognit on `(*adapter).attempt` (52, over 50) and sloglint on a
+   log message that was not a constant. The yield moved to `yieldWarnings`, and the message is `model warning`.
+   The next `make preflight`, on a Linux dev host, exited 0 (`preflight passed`): gofmt, `go mod tidy`,
+   pre-add-check, `go vet`, staticcheck for linux, darwin and windows, golangci-lint (0 issues), govulncheck,
+   archtest, `apidiff` (no-op below v1.0.0), verify-build-metadata, check-records and markdownlint (0 issues).
+
+P3 to P7 have not started. The pre-existing uncommitted edit of
+`0063-MADR-one-shared-terminal-input-so-the-key-prompt-waits.md` is not part of this phase.

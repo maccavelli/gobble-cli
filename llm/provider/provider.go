@@ -426,6 +426,9 @@ func (a *adapter) attempt(ctx context.Context, req *llm.Request, msgs []llm.Mess
 				e = llm.ThinkingDelta{ProviderData: reasoningData(it)}
 			}
 		case llmprovider.EventDone:
+			if !yieldWarnings(ev.Response, yield) {
+				return false
+			}
 			if !yield(usageOf(ev.Response, sreq, out.String()), nil) {
 				return false
 			}
@@ -494,6 +497,20 @@ func stopOf(r *llmprovider.Response, calls bool) llm.StopReason {
 		return llm.StopRefusal // every wire's safety and refusal stops (0005-PLAN F5-3 decision 5)
 	}
 	return llm.StopEndTurn
+}
+
+// yieldWarnings yields one llm.Warning for each of the response's warnings.
+// A nil response has none (0036-MADR D3).
+func yieldWarnings(resp *llmprovider.Response, yield func(llm.Event, error) bool) bool {
+	if resp == nil {
+		return true
+	}
+	for _, w := range resp.Warnings {
+		if !yield(llm.Warning{Kind: string(w.Kind), Model: w.Model, Detail: w.Detail}, nil) {
+			return false
+		}
+	}
+	return true
 }
 
 // usageOf is the response's token count. An all-zero report is replaced by

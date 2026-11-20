@@ -74,6 +74,28 @@ type ToolCallDone struct {
 
 func (ToolCallDone) event() {}
 
+// Warning is a note that the request was answered, but not as asked
+// (0036-MADR D3). Kind is the SDK's string. Model and Detail are its own.
+type Warning struct {
+	Kind   string `json:"kind,omitzero"`
+	Model  string `json:"model,omitzero"`
+	Detail string `json:"detail,omitzero"`
+}
+
+func (Warning) event() {}
+
+const (
+	// WarningEffortDegraded is the SDK's effort_degraded.
+	WarningEffortDegraded = "effort_degraded"
+	// WarningReasoningLearned is the SDK's reasoning_learned.
+	WarningReasoningLearned = "reasoning_learned"
+	// WarningImageDropped is the SDK's image_dropped.
+	WarningImageDropped = "image_dropped"
+	// WarningDeferralEmulated is the SDK's deferral_emulated. The agent logs
+	// it at Debug, once per model (0012-MADR D21).
+	WarningDeferralEmulated = "deferral_emulated"
+)
+
 // Usage is the token accounting for a turn.
 // Estimated is true when the counts were not reported by the provider.
 type Usage struct {

@@ -366,6 +366,12 @@ What is still true, at the lines read this date:
   (`internal/cli/modelscmd.go:209`).
 - `Capabilities` still sets only native streaming (`provider.go:332`). `EventDone` (`:426`) still yields usage and the
   finish reason, and does not read `Response.Warnings`.
+  *(Amended 2026-11-20, when P2 landed.)* That sentence is the measurement before the phase. After it, `EventDone`
+  (`llm/provider/provider.go:428`) yields one `llm.Warning` for each of the response's warnings, then usage and the
+  finish reason. `llm` names `WarningEffortDegraded`, `WarningReasoningLearned`, `WarningImageDropped` and
+  `WarningDeferralEmulated`. The agent logs every other kind at Warn, once per kind and model in the session, and
+  logs `deferral_emulated` at Debug. Each prompt of a session shares one `WarningLog`. A forced-choice warning is
+  logged at Warn and is not saved.
 - `toRequest` still has no `ContentImage` case. Its tool-result case is `ContentToolResult` at `:587`, and since
   0012-MADR it appends `ToolLoadItem`s after that output. An image in a tool message is an `ImageItem` immediately
   after the `FunctionCallOutputItem`, and those loads stay after the image. The probe of 2026-10-29 had no loads.

@@ -257,7 +257,10 @@ type liveSession struct {
 	// turn; waiting says a wait is under way (0005-PLAN F5-1).
 	retry      llm.Retry
 	retryAbort chan struct{}
-	waiting    bool
+	// warned is the warnings this session has already logged, shared by
+	// the Agent each prompt builds (0036-MADR D3).
+	warned  *agent.WarningLog
+	waiting bool
 	// autoCompactOff turns the automatic compaction off; pause, while it is
 	// not pauseNone, pauses its trigger after a failure, which pauseErr
 	// gives (0005-PLAN F5-2 decisions 10 and 11). The pause is not saved.
@@ -321,6 +324,14 @@ var (
 	_ acp.Agent       = (*Agent)(nil)
 	_ acp.AgentLoader = (*Agent)(nil)
 )
+
+// warningLog is the session's warning log, created on the first prompt.
+func (s *liveSession) warningLog() *agent.WarningLog {
+	if s.warned == nil {
+		s.warned = &agent.WarningLog{}
+	}
+	return s.warned
+}
 
 // New returns an Agent. Bind it to its connection with SetConnection before
 // the first request, so it can send session updates.
@@ -765,6 +776,8 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 		Retry:      &retry,
 		RetryAbort: abort,
 		Compact:    auto.compact,
+		Logger:     a.logger,
+		Warned:     s.warningLog(),
 	}
 	ag := agent.New(cfg)
 	out := newUpdates(ctx, conn, p.SessionId)
