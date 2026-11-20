@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: complete
 date: 2026-11-20
 associated-madr: "0064-MADR-retire-pre-add-golint-add-the-trio.md"
 ---
@@ -252,3 +252,13 @@ MADR's state table, amendment A1); none waits on an answer.*
 * **Host note.** On a machine whose shell start-up file rebuilds `PATH`, a caller cannot hide or replace `golangci-lint` through `PATH`; the scratch runs unset that start-up variable. This comes from the host's setup, not from the script, and the script behaves the same for a user there.
 * **Follow-ups, not built in P2 (no decided row covers them; they wait for the owner):** (1) `scripts/go-precheck.sh:62` ignores gofmt's own exit status, as it did before 0064: with both skip variables set, a file that does not parse gives exit 0 and "1 file(s) clean"; preflight still catches it later through vet and lint. (2) The closing line (about `:105`) still lists "(gofmt, golangci-lint, govulncheck)" when steps were skipped. (3) `AGENTS.md` says `FILES` that name no Go file exit 0; a path to a deleted `.go` file also exits 0, which it does not say.
 * **Pass count:** this is the second build pass of P2. It changes records only. The plan stays `in-progress` until the owner's commit is pushed and CI is green.
+
+### Close-out (2026-11-20)
+
+* P2 landed in `93ecb5e`, the owner's commit and push of 2026-11-20, together with the 0036 test-only step.
+* Before the commit the coordinator ran its own gate on the staged tree: 20 checks, all passing (the exact file set, test files only among Go changes, no committed record line lost, no identifier, `gofmt`, `go vet`, `make lint` on both modules, `go test` of `llm/provider`, `internal/cli` and `acpserver`, the records check, markdown lint). The coordinator also ran `make preflight` on a scratch clone of the staged tree through the heavy-run queue: exit 0, "preflight passed".
+* CI on `93ecb5e`: workflow CI, run `44830571357`, concluded success: `validate` on ubuntu-24.04, macos-15 and windows-2025, `test-isolation`, `sbom`, `build` and its five identity jobs all succeeded; `release` was skipped (no tag). Workflow Docs, run `44830570773`, succeeded.
+* Not run anywhere by hand: the pre-add script under Git-bash on Windows. CI's windows-2025 `validate` job runs `make preflight`.
+* The phase exit criterion "no blocker, every row tested, plants caught" is met: pass 1 built it, the independent review confirmed every decided row and failed two record statements (B1, B2), pass 2 corrected them; two passes in all.
+* The three follow-ups listed in "P2 pass 2" remain open and are not part of this plan unless the owner pulls them in.
+* The plan is complete.

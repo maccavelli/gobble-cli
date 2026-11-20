@@ -777,3 +777,4 @@ test's own first line; each output is a saved file in the session's scratch dire
 * No production Go file changed. The tests use temp homes, fake keys and loopback or in-memory transports only.
 * Not shown separately: that the second assertion of G2 (`models info`) and of G6 (the picker's `SearchModels`) fails on its own under the plant; the first assertion fails first. No `-race` run was made.
 * The plan stays `in-progress`: P6 and P7 are not started.
+* Landed in `93ecb5e` (the owner's commit, 2026-11-20). CI run `44830571357` on that commit: `validate` green on ubuntu-24.04, macos-15 and windows-2025, and `test-isolation` green.
