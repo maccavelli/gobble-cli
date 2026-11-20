@@ -325,7 +325,7 @@ func (c *ConfigValidateCmd) Run(e *runEnv) error {
 	if err != nil {
 		return err
 	}
-	return e.printDiagnostics(append(ds, jsonDiagnostics(jsonConfigFiles())...), c.Strict)
+	return e.printDiagnostics(append(ds, jsonDiagnostics(jsonConfigFiles(), e.providerSet().IDs())...), c.Strict)
 }
 
 // jsonConfigFile is a JSON configuration or state file, read as gobble
@@ -357,7 +357,7 @@ func jsonConfigFiles() []jsonConfigFile {
 // the path, and never a value, since auth.json holds credentials; then
 // models.json's and mcp.json's own errors, which make gobble ignore the file
 // or an entry of it.
-func jsonDiagnostics(files []jsonConfigFile) []config.Diagnostic {
+func jsonDiagnostics(files []jsonConfigFile, ids []string) []config.Diagnostic {
 	var ds []config.Diagnostic
 	for _, f := range files {
 		if f.path == "" {
@@ -381,7 +381,7 @@ func jsonDiagnostics(files []jsonConfigFile) []config.Diagnostic {
 		}
 		switch {
 		case f.models:
-			if _, _, err := catalog.ParseModelsJSON(data, ""); err != nil {
+			if _, _, err := catalog.ParseModelsJSON(data, "", ids); err != nil {
 				ds = append(ds, config.Diagnostic{File: f.path, Severity: config.SeverityError, Text: err.Error()})
 			}
 		case f.mcp:

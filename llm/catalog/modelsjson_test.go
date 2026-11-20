@@ -12,7 +12,7 @@ import (
 // parse is ParseModelsJSON of doc, failing t on a whole-file error.
 func parse(t *testing.T, doc string) (*ModelsJSON, []string) {
 	t.Helper()
-	mj, diags, err := ParseModelsJSON([]byte(doc), "v1.12.0")
+	mj, diags, err := ParseModelsJSON([]byte(doc), "v1.12.0", ProviderIDs())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +87,7 @@ func TestParseModelsJSON(t *testing.T) {
 		"model id":     `{"providers": {"openai": {"models": [{"name": "x"}]}}}`,
 		"cost rates":   `{"providers": {"openai": {"models": [{"id": "x", "cost": {"input": 1}}]}}}`,
 	} {
-		if _, _, err := ParseModelsJSON([]byte(doc), "v1.12.0"); err == nil {
+		if _, _, err := ParseModelsJSON([]byte(doc), "v1.12.0", ProviderIDs()); err == nil {
 			t.Errorf("%s: no whole-file error", name)
 		}
 	}
@@ -146,10 +146,35 @@ func TestModelsJSONHeaders(t *testing.T) {
 	}
 }
 
+// The caller's ids decide which providers models.json may name. An id the
+// wire table does not list is kept when it has a base URL and no api, and a
+// built-in the table does name is still checked against Pi's wire names
+// (0036-PLAN P1).
+func TestModelsJSONTakesTheCallersIDs(t *testing.T) {
+	ids := append(ProviderIDs(), "newprov")
+	mj, diags, err := ParseModelsJSON([]byte(`{"providers": {
+		"newprov": {"baseUrl": "https://new.example/v1"},
+		"openai": {"api": "openai-completions", "baseUrl": "https://bad.example"},
+		"together": {"api": "openai-completions", "baseUrl": "https://t.example"}
+	}}`), "v1.31.0", ids)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mj.BaseURL("newprov") != "https://new.example/v1" || hasDiag(diags, `"newprov"`) {
+		t.Errorf("newprov base %q, diagnostics %q", mj.BaseURL("newprov"), diags)
+	}
+	if mj.BaseURL("openai") != "" || !hasDiag(diags, `"openai"`, `api "openai-completions"`, "skipped") {
+		t.Errorf("openai's wire was not checked: base %q, diagnostics %q", mj.BaseURL("openai"), diags)
+	}
+	if mj.BaseURL("together") != "https://t.example" {
+		t.Errorf("together base %q, diagnostics %q", mj.BaseURL("together"), diags)
+	}
+}
+
 // models.json is configuration: an invalid byte is refused, never repaired
 // (0039-MADR D3; Confirmation 8).
 func TestModelsJSONStrict(t *testing.T) {
-	if _, _, err := ParseModelsJSON([]byte("{\"providers\":{\"x\xff\":{}}}"), ""); err == nil {
+	if _, _, err := ParseModelsJSON([]byte("{\"providers\":{\"x\xff\":{}}}"), "", nil); err == nil {
 		t.Fatal("ParseModelsJSON accepted an invalid byte")
 	}
 }

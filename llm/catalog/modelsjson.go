@@ -80,8 +80,9 @@ const (
 	apiCompletions = "openai-completions"
 )
 
-// providerAPIs are the SDK's ids, each with Pi's names for the wires it
-// speaks: an api a models.json entry may name for it.
+// providerAPIs are Pi's names for the wires a built-in speaks: an api a
+// models.json entry may name for it. An id the caller passes that is not
+// here takes models.json only with no api (0036-MADR D2).
 var providerAPIs = map[string][]string{
 	"openai":       {apiResponses},
 	"grok":         {apiResponses},
@@ -98,7 +99,8 @@ var providerAPIs = map[string][]string{
 // piAliases are Pi's provider ids that name an SDK id (0004-MADR's table).
 var piAliases = map[string]string{"anthropic": "claude", "google": "gemini", "xai": "grok"}
 
-// ProviderIDs are the SDK ids models.json may name, sorted.
+// ProviderIDs are the built-ins whose wires providerAPIs names, sorted.
+// models.json may also name an id the caller passes that is not among them.
 func ProviderIDs() []string { return slices.Sorted(maps.Keys(providerAPIs)) }
 
 // Pi's defaults for a model models.json defines (provider-composer.ts).
@@ -136,12 +138,15 @@ func stripJSON(data []byte) []byte {
 	})
 }
 
-// ParseModelsJSON reads a models.json. A file that is not JSON, has no
-// providers object, or has a field of the wrong type is an error, and is
-// ignored whole, as Pi ignores it. Otherwise each provider gobble cannot use
-// is skipped, and each is named in a diagnostic, as is each field gobble
-// does not use; sdk is the SDK's version, for the diagnostics.
-func ParseModelsJSON(data []byte, sdk string) (*ModelsJSON, []string, error) {
+// ParseModelsJSON reads a models.json. ids are the provider ids the caller
+// builds; a key among them, or a Pi alias of one, is kept. A file that is
+// not JSON, has no providers object, or has a field of the wrong type is an
+// error, and is ignored whole, as Pi ignores it. Otherwise each provider
+// gobble cannot use is skipped, and each is named in a diagnostic, as is
+// each field gobble does not use. sdk is the SDK's version, for the
+// diagnostics. An id in ids that providerAPIs does not name is kept only
+// with no api (0036-MADR D2).
+func ParseModelsJSON(data []byte, sdk string, ids []string) (*ModelsJSON, []string, error) {
 	var f mjFile
 	if err := jsonx.UnmarshalStrict(stripJSON(data), &f); err != nil {
 		return nil, nil, fmt.Errorf("models.json: %w", err)
@@ -164,7 +169,7 @@ func ParseModelsJSON(data []byte, sdk string) (*ModelsJSON, []string, error) {
 				continue
 			}
 		}
-		if reason := unusable(id, p, sdk); reason != "" {
+		if reason := unusable(id, p, sdk, ids); reason != "" {
 			diags = append(diags, fmt.Sprintf("provider %q: %s; skipped", key, reason))
 			continue
 		}
@@ -193,22 +198,23 @@ func checkDefinitions(providers map[string]mjProvider) error {
 	return nil
 }
 
-// unusable is why gobble cannot use p as provider id, or "".
-func unusable(id string, p mjProvider, sdk string) string {
-	apis, known := providerAPIs[id]
+// unusable is why gobble cannot use p as provider id, or "". ids are the
+// provider ids the caller builds.
+func unusable(id string, p mjProvider, sdk string, ids []string) string {
+	apis, wired := providerAPIs[id]
 	switch {
-	case !known:
-		return fmt.Sprintf("not a provider go-llmprovider-sdk %s builds (one of %s)", sdk, strings.Join(ProviderIDs(), ", "))
-	case p.API != "" && !slices.Contains(apis, p.API):
-		return fmt.Sprintf("api %q is not %s's wire (%s) in go-llmprovider-sdk %s", p.API, id, strings.Join(apis, ", "), sdk)
+	case !slices.Contains(ids, id):
+		return fmt.Sprintf("not a provider go-llmprovider-sdk %s builds (one of %s)", sdk, joinIDs(ids))
+	case p.API != "" && !wireAllows(wired, apis, p.API):
+		return apiReason(id, "", p.API, wired, apis, sdk)
 	case p.BaseURL == "" && len(p.Headers) == 0 && len(p.Compat) == 0 && len(p.ModelOverrides) == 0 && len(p.Models) == 0 &&
 		p.APIKey == nil && len(p.OAuth) == 0 && p.AuthHeader == nil:
 		return `must specify "baseUrl", "headers", "compat", "modelOverrides", or "models"`
 	}
 	for _, m := range p.Models {
 		switch {
-		case m.API != "" && !slices.Contains(apis, m.API):
-			return fmt.Sprintf("model %q: api %q is not %s's wire (%s)", m.ID, m.API, id, strings.Join(apis, ", "))
+		case m.API != "" && !wireAllows(wired, apis, m.API):
+			return apiReason(id, m.ID, m.API, wired, apis, sdk)
 		case m.ContextWindow != nil && *m.ContextWindow <= 0:
 			return fmt.Sprintf("model %q: invalid contextWindow", m.ID)
 		case m.MaxTokens != nil && *m.MaxTokens <= 0:
@@ -216,6 +222,33 @@ func unusable(id string, p mjProvider, sdk string) string {
 		}
 	}
 	return ""
+}
+
+// wireAllows reports whether api is one this provider may name. A provider
+// the wire table does not name may name none.
+func wireAllows(wired bool, apis []string, api string) bool {
+	return wired && slices.Contains(apis, api)
+}
+
+// apiReason is why provider id, or its model, may not name api.
+func apiReason(id, model, api string, wired bool, apis []string, sdk string) string {
+	if model != "" {
+		if !wired {
+			return fmt.Sprintf("model %q: api %q: %s is not in the wire table, so models.json names no api", model, api, id)
+		}
+		return fmt.Sprintf("model %q: api %q is not %s's wire (%s)", model, api, id, strings.Join(apis, ", "))
+	}
+	if !wired {
+		return fmt.Sprintf("api %q: %s is not in the wire table, so models.json names no api", api, id)
+	}
+	return fmt.Sprintf("api %q is not %s's wire (%s) in go-llmprovider-sdk %s", api, id, strings.Join(apis, ", "), sdk)
+}
+
+// joinIDs is ids sorted, each once, as a diagnostic lists them.
+func joinIDs(ids []string) string {
+	listed := slices.Clone(ids)
+	slices.Sort(listed)
+	return strings.Join(slices.Compact(listed), ", ")
 }
 
 // unusedFields are the fields of p gobble does not use, named as Pi names

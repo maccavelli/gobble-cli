@@ -240,6 +240,10 @@ type runEnv struct {
 	// provider.Options the run builds carries, refreshCredentials drops one
 	// of, and endListings waits for (0046-MADR D8).
 	sessions provider.Sessions
+	// provSet is the run's provider set, built once beside models.json
+	// (0036-MADR D2). provOnce guards it.
+	provOnce sync.Once
+	provSet  *provider.Set
 	// recent and recentLoaded are recent-models.json's recent models, read once,
 	// under recentMu (0025-MADR D3).
 	recent       []string

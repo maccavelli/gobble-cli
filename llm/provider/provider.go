@@ -17,7 +17,6 @@ import (
 
 	"github.com/maccavelli/go-llmprovider-sdk/llmprovider"
 	"github.com/maccavelli/go-llmprovider-sdk/llmprovider/auth"
-	"github.com/maccavelli/go-llmprovider-sdk/llmprovider/providers"
 	"github.com/maccavelli/go-llmprovider-sdk/llmprovider/providers/claude"
 
 	"github.com/maccavelli/gobble-cli/jsonx"
@@ -90,6 +89,9 @@ type Options struct {
 	// loaded once per provider and shared, and the run waits for their
 	// refreshes at its end (0046-MADR D8).
 	Sessions *Sessions
+	// Set is the run's providers. Nil is the built-ins, built once for the
+	// process (0036-MADR D2).
+	Set *Set
 }
 
 // login is provider id's stored login, as the SDK's session, when o has no
@@ -235,7 +237,7 @@ func New(id string, o Options) (llm.Provider, error) {
 	if o.SessionID != "" {
 		opts = append(opts, llmprovider.WithSessionID(o.SessionID))
 	}
-	p, err := providers.New(llmprovider.ProviderID(id), opts...)
+	p, err := o.Set.registry().New(llmprovider.ProviderID(id), opts...)
 	if err != nil {
 		return nil, fmt.Errorf("provider %s: %w", id, mapError(err))
 	}
@@ -753,7 +755,7 @@ func (a *adapter) Probe(ctx context.Context) error {
 }
 
 // mapError is mapErrorAt for an error no provider of this package made,
-// such as providers.New's.
+// such as the registry's New.
 func mapError(err error) error {
 	return mapErrorAt("", err, time.Now())
 }

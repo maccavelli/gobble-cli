@@ -1,6 +1,6 @@
 ---
 status: in-progress
-date: 2026-11-06
+date: 2026-11-20
 associated-madr: "0036-MADR-adopt-go-llmprovider-sdk-new-capabilities.md"
 ---
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
@@ -43,7 +43,8 @@ Associated MADR: [0036-MADR-adopt-go-llmprovider-sdk-new-capabilities.md](0036-M
 ## Order
 
 - **Before P1:** gobble requires go-llmprovider-sdk `v1.24.1` with 0035's D3 row and D4 changes (MADR D1). P0 checks
-  it. *(2026-11-06: `v1.24.1` or later; met at `v1.26.1`, see P0's record of that date.)*
+  it. *(2026-11-06: `v1.24.1` or later; met at `v1.26.1`, see P0's record of that date.)* *(2026-11-20: met again at
+  `v1.31.0`, the latest published tag. See P0's record of that date. P1 has not started.)*
 - **The phases:**
   - P1 first;
   - P2 before P3, and before P6, whose dropped-image warning it carries;
@@ -110,6 +111,11 @@ says why.)*
      - `Options` and `SignInOptions` carry the set.
    - `llm/catalog`: `ParseModelsJSON` takes the SDK ids from its caller. `providerAPIs` keeps Pi's wire names only.
    - `internal/cli`: the set built once per run, beside `e.modelsJSON()`, and passed down.
+   *(2026-11-20, the MADR's re-ground.)* `New` (`provider.go:238`) calls `providers.New`, which builds a registry of
+   its own. It uses the once-built registry's `New` instead. The wizard's `Registry` (`signin.go:346`) is the run's
+   set when the run has one, and the built-ins otherwise. `SignIn` is read as it stands, including the options
+   0051-PLAN and 0052-PLAN added. The picker's search is `SearchModels: provider.Search` at `internal/cli/agent.go:97`,
+   not `choice.go`.
 3. **Planted breaks:**
    - `Label` back on `providers.Default()`: `TestRegistryBuiltOnce` fails;
    - the parser keyed by the old table: `TestModelsJSONTakesTheCallersIDs` fails.
@@ -118,6 +124,12 @@ says why.)*
 ### P2 — the SDK's warnings (D3)
 
 *(2026-11-04, from `0012-MADR-tool-schemas-descriptions-and-loading.md` D21, proposed: once gobble defers tools natively, `WarningDeferralEmulated` is expected on every request on most wires. If `0012-PLAN-native-tool-deferral.md` P4 has landed first, this phase logs that kind at Debug, once per session and model, and its other kinds as written. If this phase lands first, that plan's P4 adds it.)*
+
+*(2026-11-20: 0012-PLAN's native deferral has landed, so the condition is settled. `deferral_emulated` is logged at
+Debug, once per session and model. The SDK's `warning.go` at `v1.31.0` has six kinds. This phase names
+`effort_degraded`, `reasoning_learned` and `image_dropped`, logs `deferral_emulated` at Debug, and logs
+`forced_tool_choice_degraded` and `forced_tool_choice_learned` at Warn like any other kind. It does not persist the
+forced-choice warning. `EventDone` is `provider.go:426`.)*
 
 1. **Tests first:**
    - `llm/provider`, `TestWarningsYielded`: `Wrap` of an `llmtest.Fake` replying with `Warnings` of
@@ -182,6 +194,10 @@ says why.)*
    - `New`, `List` and `ModelInfo` resolve the id through the set;
    - `ChooseWith` and `KeyProviders` keep to key-taking built-ins, and an id that is named resolves through the set;
    - `internal/cli`: each server's credential, as for any id: `auth.json`, then models.json's `apiKey`.
+   *(2026-11-20.)* A Chat Completions id is listed with `catalog.List`, `chatcompat.WithID` and its base URL, or with
+   `ListCatalog` once the provider is built. `catalog.WithProfile` and `catalog.WithLimit` are not sent: the SDK
+   refuses both for an id that is not built in (`catalog/lister.go`, `v1.25.0`). `listWith`'s `WithProfile` stays on
+   the built-ins.
 3. **Planted breaks:**
    - the server not registered: `TestChatServerStreams` fails with an unknown provider;
    - ambient picking allowed: `TestChatServerNotAmbient` fails;
@@ -202,6 +218,8 @@ says why.)*
    - `provider.SearchListing(l Listing, query string) []string`, a name for the phase to confirm;
    - `internal/cli`'s listing cache hands its `Listing` to both searches;
    - `provider.Search` stays.
+   *(2026-11-20.)* The two callers are `SearchModels: provider.Search` (`internal/cli/agent.go:97`) and
+   `searchModels` (`internal/cli/modelscmd.go:209`). `choice.go` no longer holds the search.
 3. **Planted break:** the listing search replaced by the id search: `TestListingSearchByFacts` fails.
 4. **Records:** `docs/guides/choosing-a-model.md`, the search's words. Gates. Commit.
 
@@ -224,7 +242,9 @@ says why.)*
      - `TestHistoryImageRoundTrip`: `session.BlockImage` round-trips through `history.go`.
      - `session.golden` unchanged.
 2. **The code:**
-   - `toRequest`'s image cases, and `Capabilities`;
+   - `toRequest`'s image cases, and `Capabilities`. *(2026-11-20.)* A tool message's `ImageItem` is inserted immediately
+     after its `FunctionCallOutputItem`. The `ToolLoadItem`s 0012-MADR appends stay after the image. The tool-result
+     case is `provider.go:587`.
    - `llm.go`'s comment;
    - `userMessage`, and `promptFiles` keeping image blocks;
    - `history.go` both ways;
@@ -378,3 +398,84 @@ with the steps as amended that day.
 So P0 is met, and P1 may start on the owner's word. Nothing of P1 is written here. 0035-PLAN's P32 and this plan's P1
 share only `README.md` and `docs/architecture.md`, on different lines, so either may land first and the second
 rebases.
+
+### P0 record, run again (2026-11-20): the precondition still holds at v1.31.0
+
+On the owner's request to evaluate this pair against the code and the SDK's current tag, and to bring the records up
+to date. Run in the tree at `32bc0e7`, equal to `origin/main`, except one unrelated uncommitted edit in
+`0063-MADR-one-shared-terminal-input-so-the-key-prompt-waits.md`, which these checks do not read. The SDK was read at
+tag `v1.31.0`, commit `0fbb761` (2026-11-14). Nothing of P1 is written.
+
+1. `go list -m github.com/maccavelli/go-llmprovider-sdk`: `github.com/maccavelli/go-llmprovider-sdk v1.31.0`. It is
+   `v1.24.1` or later. **Met.** `v1.31.0` is the latest published tag. The SDK's `main` is ahead of the tag; the diff
+   of this record's files from the tag to that `main` is empty.
+2. `go test -count=1 -run TestWireOffline ./llm/provider/`: `ok github.com/maccavelli/gobble-cli/llm/provider 0.668s`.
+   The test is `llm/provider/offline_test.go:25`. **Met.**
+3. `git grep -n sdkEmptyAnswer -- llm/provider` and `git grep -n 'func offline' -- llm/provider`: both exit 1, nothing
+   found. **Met.**
+4. **The SDK's surface,** by `git grep` at `v1.31.0`. The names P0 listed on 2026-11-06 are still exported at the same
+   lines: `WarningEffortDegraded`, `WarningReasoningLearned`, `WarningImageDropped` (`llmprovider/warning.go:28`,
+   `:34`, `:38`); `ReasoningRefusal` (`refusal.go:32`) and `WithReasoningRefusals` (`:47`); `chatcompat.New`
+   (`providers/chatcompat/chatcompat.go:174`), `WithID` (`:140`), `Descriptor` (`descriptor.go:9`) and `Discover`
+   (`discover.go:65`); `Catalog.Search` (`catalog/search.go:205`) and `Match.Why` (`catalog/model_matcher.go:44`);
+   `ImageItem` (`item.go:79`) and `Capabilities.Images` (`capabilities.go:48`). The same file also declares
+   `WarningForcedChoiceDegraded` (`warning.go:12`), `WarningForcedChoiceLearned` (`:17`) and `WarningDeferralEmulated`
+   (`:23`). `git grep` over gobble's `*.go` for `ReasoningRefusal`, `ImageItem`, `chatcompat`,
+   `WithReasoningRefusals` and `WarningImageDropped` finds none. **Met.** The MADR's re-ground of this date records
+   what those extra kinds change in P2, and what `catalog.Lister` changes in P4. Neither fails this step.
+5. **The citations.** The facts of 2026-11-06 hold. Lines that moved are in the MADR's re-ground: `EventDone` is
+   `provider.go:426`, the wizard registry is `signin.go:346`, `ContentToolResult` is `provider.go:587`, and the MCP
+   image note is `mcpclient/tool.go:166`. `New` also rebuilds a registry, through `providers.New` at
+   `provider.go:238`. A moved line is not a deviation.
+
+So P0 is met at `v1.31.0`, and P1 may start on the owner's word. Nothing of P1 is written here.
+
+### P1 record (2026-11-20): one registry, and models.json's ids from the caller
+
+On the owner's `proceed`. The lines at the start of the phase, before the edit, were the re-ground's: `ambient.go`
+called `providers.Default().Descriptors()` at `:49`, `:61`, `:81`, `:93`, `:103`, `:152` and `:163`; `New` called
+`providers.New` at `provider.go:238`; the wizard took `Registry: providers.Default()` at `signin.go:346`;
+`ParseModelsJSON` was `func ParseModelsJSON(data []byte, sdk string)` at `llm/catalog/modelsjson.go:144`.
+
+1. **Tests first, seen failing.**
+   - `TestRegistryBuiltOnce`: `Label` and `CredentialVar` each allocated 85 times a call. The test wants at most 2.
+   - `TestSetHoldsBuiltIns`: the package did not compile. `undefined: Set` and `undefined: NewSet`.
+   - `TestModelsJSONTakesTheCallersIDs`: the package did not compile. `too many arguments in call to
+     ParseModelsJSON`, have `([]byte, string, []string)`, want `([]byte, string)`.
+2. **The code, then the same tests passing.**
+   - `llm/provider/set.go`: `builtins = sync.OnceValue(providers.Default)` at `:12`. `Descriptors` copies every
+     descriptor, so a lookup that called it each time would still allocate. The descriptors are copied once
+     (`builtinDescs`, `:16`), which is what keeps `Label` and `CredentialVar` inside the bound. `ambient.go` reads
+     that copy at `:48`, `:60`, `:80`, `:92`, `:102`, `:151` and `:162`.
+   - `Set` has `IDs`, `Descriptor` and unexported `register`. A nil `*Set` is the built-ins. `NewSet` builds a
+     registry of its own for the run, so a later `register` cannot change the process's built-ins.
+     `TestRegisterStaysOnTheRun` pins that. The phase's three tests do not call `register`, and an uncalled
+     unexported function would fail staticcheck.
+   - `Options.Set` is `provider.go:94`. `SignInOptions` embeds `Options`, so it carries the set. `New` calls
+     `o.Set.registry().New` at `provider.go:240`. The wizard's registry is `o.Set.registry()` at `signin.go:346`.
+   - `ParseModelsJSON(data []byte, sdk string, ids []string)` is `llm/catalog/modelsjson.go:149`. `providerAPIs`
+     keeps Pi's wire names. An id in `ids` that the table does not name is kept only with no `api`.
+   - `internal/cli` builds the set once per run in `providerSet` (`internal/cli/modelsjson.go:42`), beside
+     `modelsJSON`. `providerOptions` sets `o.Set` at `:153`. `loadModelsJSON` passes `e.providerSet().IDs()`.
+     `modelProvider` and the model-info hook set `Set` in `agent.go`. Completion has no run, so it passes the
+     built-ins' ids, `(*provider.Set)(nil).IDs()`. Config validate passes the run's ids.
+   - `List` and `ModelInfo` already take `Options`, which now has `Set`. Neither reads it: both call the SDK by
+     provider id, and that call has no registry. `Methods` has no options parameter and still reads the built-ins,
+     which is what a nil set is. A run whose set holds more than the built-ins is P4.
+3. **Planted breaks,** on scratch copies, applied with `go test -overlay`, so the tree was not edited.
+   - `Label` scanning `providers.Default().Descriptors()`: `TestRegistryBuiltOnce` failed, `Label allocates 85
+     times a call, want at most 2`.
+   - `unusable` skipping an id the wire table does not name, even when the caller passed it:
+     `TestModelsJSONTakesTheCallersIDs` failed, `newprov base ""`, with a diagnostic that skips `newprov`.
+4. **Checks.** `go test -count=1 ./llm/provider/` passed (`ok`, 80.021s). `go test -count=1 ./llm/catalog/` passed
+   (`ok`, 0.226s). `go test -count=1 ./internal/cli/` passed (`ok`, 48.086s). `docs/architecture.md`'s
+   `llm/provider` and `llm/catalog` rows describe the phase. `ParseModelsJSON` gained a parameter, which is an
+   incompatible change for an external caller of the beta package `llm/catalog`. Every caller in this module was
+   updated. The first `make preflight`, on a Linux dev host, failed at golangci-lint: perfsprint on
+   `fmt.Errorf` in `llm/provider/set.go`. That call is `errors.New`. The next `make preflight`, on a Windows
+   dev host, exited 0 (`preflight passed`): gofmt, `go mod tidy`, pre-add-check, `go vet`, staticcheck for
+   linux, darwin and windows, golangci-lint (0 issues), govulncheck, archtest, `apidiff` (no-op below
+   v1.0.0), verify-build-metadata, check-records and markdownlint (0 issues).
+
+P2 to P7 have not started. The pre-existing uncommitted edit of
+`0063-MADR-one-shared-terminal-input-so-the-key-prompt-waits.md` is not part of this phase.

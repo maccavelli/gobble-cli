@@ -36,6 +36,14 @@ type modelsJSONRead struct {
 	err error
 }
 
+// providerSet is the run's providers, built once, beside models.json
+// (0036-MADR D2). A nil set is the built-ins; this one is the run's own
+// registry, so a later registration stays on this run.
+func (e *runEnv) providerSet() *provider.Set {
+	e.provOnce.Do(func() { e.provSet = provider.NewSet() })
+	return e.provSet
+}
+
 // modelsJSON is <config>/models.json, read once per process. No file, or a
 // config directory that cannot be resolved, is none; a file that cannot be
 // read or parsed is none, with one warning; each provider or field it skips
@@ -82,7 +90,7 @@ func (e *runEnv) loadModelsJSON(path string) (*catalog.ModelsJSON, error) {
 		e.log().Warn("models.json", slog.String("message", "cannot be read, so it is ignored: "+err.Error()), slog.String("file", path))
 		return nil, err
 	}
-	mj, diags, err := catalog.ParseModelsJSON(data, provider.SDKVersion())
+	mj, diags, err := catalog.ParseModelsJSON(data, provider.SDKVersion(), e.providerSet().IDs())
 	if err != nil {
 		e.log().Warn("models.json", slog.String("message", err.Error()+"; the file is ignored"), slog.String("file", path))
 		return nil, err
@@ -142,6 +150,7 @@ func (e *runEnv) headersFor(mj *catalog.ModelsJSON, id string) func(context.Cont
 // and OAuth sessions (0046-MADR D7, D8).
 func (e *runEnv) providerOptions(id string, o provider.Options) provider.Options {
 	mj := e.modelsJSON()
+	o.Set = e.providerSet()
 	o.BaseURL = mj.BaseURL(id)
 	o.Headers = e.headersFor(mj, id)
 	o.Workspace = e.knownWorkspace(id)

@@ -145,7 +145,7 @@ func completionModelsJSON() *catalog.ModelsJSON {
 	if err != nil {
 		return nil
 	}
-	mj, _, err := catalog.ParseModelsJSON(data, provider.SDKVersion())
+	mj, _, err := catalog.ParseModelsJSON(data, provider.SDKVersion(), (*provider.Set)(nil).IDs())
 	if err != nil {
 		return nil
 	}

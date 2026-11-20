@@ -296,9 +296,16 @@ the owner split images out anyway.
   - Argument deltas: the SDK declined them.
   - Headers: the SDK declined a hook, so `headerTransport` stays as the SDK recommends.
   - `Discover` in `gobble setup`; `ProbeReasoning`; `Match.Why`; image output; 0031-PLAN P4b.
+    *(2026-11-20: `Discover` here is `chatcompat.Discover`. `wizard.Options.Discover`, which gobble already sets, is a
+    live listing check and is not that function. Keeping a `forced_tool_choice_learned` warning across runs with
+    `WithModelForcedChoice` is the same shape as D4 and is not this record. The one-hour cache-write price is still
+    absent from the SDK through `v1.31.0`; showing cache figures is
+    [0057-PLAN-cache-visibility-and-one-hour-pricing.md](0057-PLAN-cache-visibility-and-one-hour-pricing.md), which is
+    proposed and decides nothing here. 0031-PLAN P4b is now
+    [0052-PLAN-finish-the-chatgpt-plan-sign-in-on-the-sdk-engine.md](0052-PLAN-finish-the-chatgpt-plan-sign-in-on-the-sdk-engine.md).)*
   - Two things gobble still hard-codes that the SDK's descriptors do not say: which listings need no key
     (`llm/provider/list.go:42`), and Pi's wire names (D2). Each could become a request to the SDK. None is filed by
-    this record.
+    this record. *(2026-11-20: the key-less list is `publicListings` at `list.go:41`.)*
 
 ### Questions for the owner
 
@@ -324,6 +331,75 @@ owner chose the recommended one each time:
 
 So this record is accepted. Its PLAN waits for the owner's approval of execution, and for 0035's go-llmprovider-sdk
 phases (D1).
+
+### Re-grounded 2026-11-20
+
+Read again at gobble `main` `32bc0e7` and go-llmprovider-sdk tag `v1.31.0` (commit `0fbb761`, 2026-11-14). `go list -m`
+prints `v1.31.0`. That tag is the latest published one. The SDK's `main` is ahead of it; a diff of `warning.go`,
+`refusal.go`, `item.go`, `capabilities.go`, `providers/chatcompat`, `catalog/search.go`, `catalog/model_matcher.go`,
+`providers/providers.go`, `catalog/lister.go` and `forcing.go` from the tag to that `main` is empty, so those commits
+do not change this record's surface. D1's floor is unchanged: `v1.24.1` or later, with 0035's D3 row and D4 in. The
+pin today is `v1.31.0`. Q1 to Q4 are not reopened.
+
+The precondition was run again, as the PLAN's P0. `go test -count=1 -run TestWireOffline ./llm/provider/` passed
+(`ok`, 0.668s; the test is `llm/provider/offline_test.go:25`). `git grep` finds neither `sdkEmptyAnswer` nor
+`func offline` under `llm/provider`. Gobble's `*.go` uses none of `ReasoningRefusal`, `ImageItem`, `chatcompat`,
+`WithReasoningRefusals` or `WarningImageDropped`.
+
+What is still true, at the lines read this date:
+
+- The registry is still built per call. `ambient.go` still calls `providers.Default().Descriptors()` at `:49`, `:61`,
+  `:81`, `:93`, `:103`, `:152` and `:163`. `New` calls `providers.New` (`llm/provider/provider.go:238`), and the SDK's
+  `providers.New` calls `Default()` (`providers/providers.go:54` at the tag). The wizard is given
+  `Registry: providers.Default()` at `signin.go:346`.
+- models.json's table is still the ten ids in `providerAPIs` (`llm/catalog/modelsjson.go:85`). An unknown key is still
+  skipped at `unusable` (`:200`). `name` is still reported unused.
+  *(Amended 2026-11-20, when P1 landed.)* The two bullets above are that measurement, at `32bc0e7`, before the phase.
+  After it, the built-ins' registry is built once (`sync.OnceValue(providers.Default)` in `llm/provider/set.go`),
+  and the functions in `ambient.go` read the descriptors copied once from it. `New` uses that registry's `New`,
+  or the run's `Set` when `Options` carries one (`provider.go:240`). `SignIn` gives the wizard that registry
+  (`signin.go:346`). `ParseModelsJSON` takes the caller's ids (`llm/catalog/modelsjson.go:149`). `providerAPIs`
+  keeps Pi's wire names. An id the caller passes that the table does not name is kept only with no `api`.
+  `name` is still reported unused.
+- `Listing` still drops the catalog (`llm/provider/list.go:111`). `Search` is still the id and label matcher (`:54`).
+  The ACP picker passes that function (`internal/cli/agent.go:97`). `gobble models --search` uses it
+  (`internal/cli/modelscmd.go:209`).
+- `Capabilities` still sets only native streaming (`provider.go:332`). `EventDone` (`:426`) still yields usage and the
+  finish reason, and does not read `Response.Warnings`.
+- `toRequest` still has no `ContentImage` case. Its tool-result case is `ContentToolResult` at `:587`, and since
+  0012-MADR it appends `ToolLoadItem`s after that output. An image in a tool message is an `ImageItem` immediately
+  after the `FunctionCallOutputItem`, and those loads stay after the image. The probe of 2026-10-29 had no loads.
+- `promptCapabilities.image` is still unset (`acpserver/agent.go:412`). `acpserver/agent_test.go:164` still asserts it
+  false. `promptFiles` still leaves image blocks out (`acpserver/mentions.go:128`). History still carries `BlockText`
+  only (`acpserver/history.go:273`, `:329`).
+- `read`'s note is still `tool/builtin/read.go:48`. An MCP image is still `[image %s omitted]`
+  (`mcpclient/tool.go:166`). `session.BlockImage` (`session/session.go:204`) and the compaction estimate
+  (`compaction/estimate.go:67`) are unchanged. `golang.org/x/image` is not required.
+- Rule 4 still keeps the SDK's root module behind `llm/provider`. The check is `internal/archtest/check.go:318` (the
+  citation `:265` has moved). `authcontract` is the exception 0051-MADR added; this record does not widen it.
+- `headerTransport` stays. When the caller passes no client it already wraps `llmprovider.NewHTTPClient()`
+  (`provider.go:185`), which is the wrapping `v1.25.0` documents. D9 does not move it.
+- Grok still refuses a GIF or a WebP before the network (`providers/grok/grok.go:266` at the tag). D7's sentence holds.
+
+What `v1.25.0` through `v1.31.0` added that this record uses or leaves out:
+
+- `warning.go` is unchanged since the lines P0 recorded on 2026-11-06. It has six kinds, not the three the table above
+  names: `forced_tool_choice_degraded` (`:12`), `forced_tool_choice_learned` (`:17`), `deferral_emulated` (`:23`),
+  `effort_degraded` (`:28`), `reasoning_learned` (`:34`), `image_dropped` (`:38`). D3 already passes any other kind
+  through and logs it. The two forced-choice kinds are logged that way. Persisting `forced_tool_choice_learned` is
+  D9. 0012-PLAN's native deferral has landed, so `deferral_emulated` is logged at Debug, once per session and model,
+  as that plan's note of 2026-11-04 said once its P4 had landed.
+- `catalog.Lister` (`catalog/lister.go:14`) and `chatcompat`'s `ListCatalog` (`chatcompat.go:455`) are `catalog.List`
+  for a provider already built. They refuse `catalog.WithProfile` and `catalog.WithLimit`. D5's listing stays
+  `catalog.List` with `chatcompat.WithID` and a base URL. A Chat Completions id is not sent those two options.
+  `ListCatalog` is the same listing when the provider is already built.
+- `chatcompat.New` is `:174`, `WithID` `:140`, `Discover` `:65`, `Descriptor` `descriptor.go:9`, `Catalog.Search`
+  `catalog/search.go:205`, `Match.Why` `catalog/model_matcher.go:44`, `ImageItem` `item.go:79`,
+  `Capabilities.Images` `capabilities.go:48`. Those are the lines at `v1.31.0`, the same ones P0 recorded at
+  `v1.26.1` on 2026-11-06.
+- Lines that moved in gobble since that P0 record, with the fact unchanged: `EventDone` `:426` (was `:348`); the
+  wizard registry `:346` (was `:177`); `ContentToolResult` `:587` (was `:486`); the MCP image note `:166` (was
+  `:153`).
 
 ### Consequences
 

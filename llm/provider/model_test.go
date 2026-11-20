@@ -50,7 +50,7 @@ func TestModelInfoModelsJSON(t *testing.T) {
 	}
 	mj, _, err := gcatalog.ParseModelsJSON([]byte(`{"providers": {"openai": {
   "modelOverrides": {"full": {"contextWindow": 999, "cost": {"input": 9}}},
-  "models": [{"id": "mine", "reasoning": true, "thinkingLevelMap": {"max": "max", "minimal": null}}]}}}`), SDKVersion())
+  "models": [{"id": "mine", "reasoning": true, "thinkingLevelMap": {"max": "max", "minimal": null}}]}}}`), SDKVersion(), (*Set)(nil).IDs())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,7 +91,7 @@ func TestKnownModels(t *testing.T) {
 	}
 }
 
-// The providers models.json may name are the SDK's built-in ids.
+// The wire table names every built-in the SDK registers, so each may name an api.
 func TestModelsJSONIDs(t *testing.T) {
 	var ids []string
 	for _, d := range providers.Default().Descriptors() {

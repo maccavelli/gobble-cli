@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/maccavelli/go-llmprovider-sdk/llmprovider"
-	"github.com/maccavelli/go-llmprovider-sdk/llmprovider/providers"
 
 	"github.com/maccavelli/gobble-cli/llm"
 )
@@ -46,7 +45,7 @@ func ChooseWith(has func(id string) bool, preferred string) (Selection, error) {
 		}
 		return selection(d), nil
 	}
-	for _, d := range providers.Default().Descriptors() {
+	for _, d := range builtinDescs() {
 		if takesKey(d) && has(string(d.ID)) {
 			return selection(d), nil
 		}
@@ -58,7 +57,7 @@ func takesKey(d llmprovider.Descriptor) bool { return d.RequiresAPIKey && d.EnvV
 
 // keyProvider is the descriptor of the built-in provider id that takes a key.
 func keyProvider(id string) (llmprovider.Descriptor, bool) {
-	for _, d := range providers.Default().Descriptors() {
+	for _, d := range builtinDescs() {
 		if string(d.ID) == id && takesKey(d) {
 			return d, true
 		}
@@ -78,7 +77,7 @@ func selection(d llmprovider.Descriptor) Selection {
 // registry order: the values defaultProvider may name (0019-MADR D15).
 func KeyProviders() []string {
 	var ids []string
-	for _, d := range providers.Default().Descriptors() {
+	for _, d := range builtinDescs() {
 		if takesKey(d) {
 			ids = append(ids, string(d.ID))
 		}
@@ -90,7 +89,7 @@ func KeyProviders() []string {
 // which takes no key, among them (0025-MADR D5).
 func Providers() []string {
 	var ids []string
-	for _, d := range providers.Default().Descriptors() {
+	for _, d := range builtinDescs() {
 		ids = append(ids, string(d.ID))
 	}
 	return ids
@@ -100,7 +99,7 @@ func Providers() []string {
 // its SDK descriptor, or id itself for one the SDK does not know
 // (0005-PLAN F4-3c).
 func Label(id string) string {
-	for _, d := range providers.Default().Descriptors() {
+	for _, d := range builtinDescs() {
 		if string(d.ID) == id && d.Label != "" {
 			return d.Label
 		}
@@ -149,7 +148,7 @@ func AmbientWith(key func(id string) (string, bool), preferred string, o Options
 // reaches a real provider.
 func CredentialVars() []string {
 	var vars []string
-	for _, d := range providers.Default().Descriptors() {
+	for _, d := range builtinDescs() {
 		if d.EnvVar != "" && !slices.Contains(vars, d.EnvVar) {
 			vars = append(vars, d.EnvVar)
 		}
@@ -160,7 +159,7 @@ func CredentialVars() []string {
 // Models are the curated models of the built-in provider id, in the SDK's
 // order, or none for an unknown id.
 func Models(id string) []string {
-	for _, d := range providers.Default().Descriptors() {
+	for _, d := range builtinDescs() {
 		if string(d.ID) == id {
 			return slices.Clone(d.StaticModels)
 		}

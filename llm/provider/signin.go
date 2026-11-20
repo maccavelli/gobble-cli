@@ -10,7 +10,6 @@ import (
 	"github.com/maccavelli/go-llmprovider-sdk/authcontract"
 	"github.com/maccavelli/go-llmprovider-sdk/llmprovider"
 	"github.com/maccavelli/go-llmprovider-sdk/llmprovider/auth"
-	"github.com/maccavelli/go-llmprovider-sdk/llmprovider/providers"
 	"github.com/maccavelli/go-llmprovider-sdk/wizard"
 )
 
@@ -51,9 +50,10 @@ type Prompter interface {
 	Notify(format string, args ...any)
 }
 
-// SignInOptions configure SignIn. The embedded Options carry the listing
-// that checks the credential: its client name and version, its HTTP client,
-// headers and base URL; HTTPClient also carries the sign-in's own requests.
+// SignInOptions configure SignIn. The embedded Options carry the run's
+// provider set (nil is the built-ins) and the listing that checks the
+// credential: its client name and version, its HTTP client, headers and
+// base URL; HTTPClient also carries the sign-in's own requests.
 type SignInOptions struct {
 	Options
 	// Method is one of Methods(id); "" lets the user choose.
@@ -343,7 +343,7 @@ func SignIn(ctx context.Context, id string, p Prompter, o SignInOptions, store L
 		llmprovider.WithoutModelMetadata(),
 	}, o.sdkOptions()...)
 	res, _, err := resolveCredential(ctx, w, wizard.Options{
-		Registry:         providers.Default(),
+		Registry:         o.Set.registry(),
 		Existing:         wizard.Result{Provider: d.ID, BaseURL: o.BaseURL, Workspace: o.Workspace},
 		Discover:         true,
 		ProviderOptions:  listing,
