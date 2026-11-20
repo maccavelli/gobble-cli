@@ -1,6 +1,6 @@
 ---
-status: in-progress
-date: 2026-11-18
+status: implemented
+date: 2026-11-20
 associated-madr: "0061-MADR-move-golangci-lint-to-v2-15-0.md"
 ---
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
@@ -81,3 +81,11 @@ Commit and push by the coordinator; CI is the check. Rollback: revert the commit
 * 0023-MADR D3 also decided the pin: it received a dated pointer line to 0061-MADR, as 0007-MADR did.
   0059-MADR D5's sentence "The golangci-lint pin stays `v2.14.0`" is now out of date; it has no pointer line, since
   none was asked for.
+* 2026-11-20, close-out: the pin move landed as push `a3a2d7c` ("chore(lint): bump golangci-lint pin from v2.14.0 to
+  v2.15.0"), an ancestor of `origin/main`. CI ran on that exact commit and passed: run `44358064517` (the CI workflow,
+  18 m 51 s) and `44358063294` (Docs, 14 s), both success, 2026-11-18T17:23. Every later push carries the move and
+  stayed green (the `chore(deps)` bump at 2026-11-19T14:35, run `44545387817`, 20 m 39 s; the 0062 close-out and 0063
+  docs pushes of 2026-11-19T15:19 and 2026-11-20T00:40). All four Scope files read `v2.15.0` at the tip (`Makefile`
+  comment and install hint, `.github/workflows/ci.yml`, `AGENTS.md`, `docs/guides/developing.md`), and 0007-MADR and
+  0023-MADR carry their dated pointer lines. Goal met; nothing in Scope remains. `docs/README.md`'s 0061 PLAN row moves
+  to implemented in the same working tree; that update rides the repository's next docs change, which is in flight.
