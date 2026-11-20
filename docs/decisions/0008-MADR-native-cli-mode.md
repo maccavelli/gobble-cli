@@ -689,6 +689,8 @@ Copies from Apache-2.0 siblings carry a provenance comment naming the source fil
      - `loadSession: true`;
      - `sessionCapabilities.list` and `close`;
      - `promptCapabilities.image` follows 0005-MADR: false until the SDK's image input lands, then true when the configured default model accepts images. `initialize` precedes any session, so this cannot be per model. An image sent to a model that cannot take one ends the turn with a readable error and is never dropped silently. `audio: false`. `embeddedContext: true`;
+
+       *(2026-11-20, 0036-PLAN P6.)* From here `promptCapabilities.image` follows the configured default model. It is true when that model's facts' input holds `image`, or when those facts are unknown and the provider takes images, and false when the facts name an input without `image`. `initialize` still precedes any session and makes no network call. A model whose facts say text only ends the turn with `llm.ErrUnsupported`, and nothing is sent.
      - `mcpCapabilities.http: true`, `sse: false`.
 
      The rest is 0002-MADR and 0005-MADR as they stand.

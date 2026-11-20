@@ -2,6 +2,7 @@ package acpserver
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json/v2"
 	"errors"
 	"log/slog"
@@ -60,6 +61,44 @@ func savedToolResult(t *testing.T, entries []session.Entry, id string) string {
 	}
 	t.Fatalf("no saved result for %s", id)
 	return ""
+}
+
+// session.BlockImage survives the history both ways, and a text-only user
+// entry stays one quoted string (0036-MADR D8).
+func TestHistoryImageRoundTrip(t *testing.T) {
+	raw := []byte("PNG")
+	b64 := base64.StdEncoding.EncodeToString(raw)
+	msg := &session.Message{Role: session.RoleUser}
+	if err := msg.SetBlocks([]session.Block{
+		{Type: session.BlockText, Text: "look"},
+		{Type: session.BlockImage, MimeType: "image/png", Data: b64},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	st := &state{}
+	st.addMessage(msg)
+	if len(st.history) != 1 || len(st.history[0].Content) != 2 {
+		t.Fatalf("history %+v, want the text and the image", st.history)
+	}
+	img := st.history[0].Content[1]
+	if img.Type != llm.ContentImage || img.MediaType != "image/png" || !bytes.Equal(img.Data, raw) {
+		t.Fatalf("content %+v, want the image's raw bytes", st.history[0].Content)
+	}
+	back := userEntryMessage(st.history[0], "2026-10-31T12:00:00.000Z")
+	blocks, err := back.Blocks()
+	if err != nil || len(blocks) != 2 || blocks[0].Type != session.BlockText || blocks[0].Text != "look" ||
+		blocks[1].Type != session.BlockImage || blocks[1].MimeType != "image/png" || blocks[1].Data != b64 {
+		t.Fatalf("blocks %+v, %v", blocks, err)
+	}
+	again := &state{}
+	again.addMessage(back)
+	if len(again.history) != 1 || len(again.history[0].Content) != 2 || !bytes.Equal(again.history[0].Content[1].Data, raw) {
+		t.Fatalf("again %+v, want the same bytes", again.history)
+	}
+	only := userEntryMessage(llm.Message{Role: llm.RoleUser, Content: []llm.Content{{Type: llm.ContentText, Text: "look"}}}, "2026-10-31T12:00:00.000Z")
+	if string(only.Content) != string(jsonx.Quote("look")) {
+		t.Fatalf("text-only content %s, want one quoted string", only.Content)
+	}
 }
 
 // A tool result that is not valid UTF-8 is saved with U+FFFD for each

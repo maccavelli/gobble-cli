@@ -427,6 +427,17 @@ What is still true, at the lines read this date:
 - `promptCapabilities.image` is still unset (`acpserver/agent.go:412`). `acpserver/agent_test.go:164` still asserts it
   false. `promptFiles` still leaves image blocks out (`acpserver/mentions.go:128`). History still carries `BlockText`
   only (`acpserver/history.go:273`, `:329`).
+  *(2026-11-20, when P6 landed.)* `toRequest` carries an image: a user image in place (`llm/provider/provider.go:615`)
+  and a tool message's image immediately after its `FunctionCallOutputItem` (`:638`), with the `ToolLoadItem`s after
+  it. `imageItem` is `:691`. `Capabilities` sets `ImageInput` when `Images` is not `Unsupported` (`:343`).
+  `llm.Capabilities` says so (`llm/llm.go:45`). `userMessage` keeps an image block (`acpserver/agent.go:1096`).
+  `promptFiles` leaves that block in the user message (`acpserver/mentions.go:126`). `asEntry` keeps a message that
+  holds an image (`acpserver/history.go:77`). `userEntryMessage` writes its blocks (`:88`). `addMessage` reads
+  `BlockImage` (`:307`). `Initialize` sets `promptCapabilities.image` from the default model
+  (`acpserver/agent.go:459`, `promptImage` at `:1118`). When the model's input is unknown, that asks the provider
+  with retry off; an error leaves image false and the handshake still succeeds. The build is not kept as a
+  session's provider. `TestCapabilitiesAreHonest` asserts image for a default that takes images and not for a
+  text-only one. `session.golden` is unchanged.
 - `read`'s note is still `tool/builtin/read.go:48`. An MCP image is still `[image %s omitted]`
   (`mcpclient/tool.go:166`). `session.BlockImage` (`session/session.go:204`) and the compaction estimate
   (`compaction/estimate.go:67`) are unchanged. `golang.org/x/image` is not required.

@@ -125,8 +125,8 @@ func unscanned(b *acp.ContentBlockText) bool {
 
 // promptFiles are a prompt's files, ahead of its text: each embedded
 // resource and resource link in block order, then the files the @path
-// words of its unmarked text blocks name. An image or audio block is left
-// out, as gobble advertises neither.
+// words of its unmarked text blocks name. An image block stays in the user
+// message, so it is not copied here. An audio block is left out.
 func promptFiles(blocks []acp.ContentBlock, cwd string, ws fsx.Workspace) string {
 	var b strings.Builder
 	for _, c := range blocks {

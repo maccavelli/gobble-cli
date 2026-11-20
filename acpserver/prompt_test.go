@@ -2,7 +2,9 @@ package acpserver
 
 import (
 	"bufio"
+	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json/v2"
 	"errors"
 	"fmt"
@@ -85,6 +87,50 @@ func openSession(t *testing.T, c *acptest.Conn, cwd string) acp.SessionId {
 func prompt(t *testing.T, c *acptest.Conn, id acp.SessionId, text string) (acp.PromptResponse, error) {
 	t.Helper()
 	return c.Client.Prompt(t.Context(), acp.PromptRequest{SessionId: id, Prompt: []acp.ContentBlock{acp.TextBlock(text)}})
+}
+
+// An ACP image block reaches the provider as the image's bytes (0036-MADR D8).
+func TestPromptImage(t *testing.T) {
+	raw := []byte("PNG")
+	script := llmtest.NewScript(llmtest.Text("seen")).WithCapabilities(llm.Capabilities{ImageInput: true})
+	agent := New(Options{
+		Version: "1.2.3", NewID: counterIDs(),
+		Provider: func(string, llm.Retry) (llm.Provider, error) { return script, nil },
+		Models: func() ModelChoice {
+			return ModelChoice{Provider: "openai", Default: "vision", Models: []string{"vision"}}
+		},
+		ModelInfo: func(provider, model string) llm.Model {
+			return llm.Model{Provider: provider, ID: model, Input: []string{"text", "image"}}
+		},
+	})
+	c := acptest.Connect(t, agent, &acptest.Client{})
+	agent.SetConnection(c.Agent)
+	id := openSession(t, c, t.TempDir())
+	pr, err := c.Client.Prompt(t.Context(), acp.PromptRequest{SessionId: id, Prompt: []acp.ContentBlock{
+		acp.TextBlock("look"), acp.ImageBlock(base64.StdEncoding.EncodeToString(raw), "image/png"),
+	}})
+	if err != nil || pr.StopReason != acp.StopReasonEndTurn {
+		t.Fatalf("prompt %+v, %v", pr, err)
+	}
+	reqs := script.Requests()
+	if len(reqs) != 1 {
+		t.Fatalf("%d requests, want 1", len(reqs))
+	}
+	var img *llm.Content
+	for _, m := range reqs[0].Messages {
+		if m.Role != llm.RoleUser {
+			continue
+		}
+		for i := range m.Content {
+			if m.Content[i].Type == llm.ContentImage {
+				got := m.Content[i]
+				img = &got
+			}
+		}
+	}
+	if img == nil || img.MediaType != "image/png" || !bytes.Equal(img.Data, raw) {
+		t.Fatalf("image %+v, want the ACP block's png bytes", img)
+	}
 }
 
 // The tool calls of a turn, keyed by id, with each update in order.

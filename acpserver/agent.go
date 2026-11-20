@@ -3,6 +3,7 @@ package acpserver
 import (
 	"cmp"
 	"context"
+	"encoding/base64"
 	"encoding/json/jsontext"
 	"errors"
 	"fmt"
@@ -421,8 +422,8 @@ var _ acp.AgentConnAware = (*Agent)(nil)
 // Capabilities is what is implemented, and nothing more: loading, listing,
 // resuming and closing sessions, a client's system prompt in append mode
 // alone (0054-MADR D7, Q2), and MCP servers over stdio and streamable HTTP.
-// Images, audio and embedded context are turned on by the phases that
-// implement them.
+// Image input is set by Initialize from the default model (0036-MADR D8).
+// Audio stays off. Embedded context is on.
 func Capabilities() (acp.AgentCapabilities, error) {
 	meta, err := jsonx.SetMember(nil, gobble, acpext.CapabilitiesMeta{Extensions: extensionNames()})
 	if err != nil {
@@ -431,8 +432,8 @@ func Capabilities() (acp.AgentCapabilities, error) {
 	return acp.AgentCapabilities{
 		LoadSession:     true,
 		McpCapabilities: acp.McpCapabilities{Http: true},
-		// Resource blocks are read; images wait for llm to carry them
-		// (0005-MADR, amendment of 2026-10-10, item 2).
+		// Resource blocks are read (0005-PLAN F3-4). Initialize sets image
+		// from the default model (0036-MADR D8).
 		PromptCapabilities: acp.PromptCapabilities{EmbeddedContext: true},
 		SessionCapabilities: acp.SessionCapabilities{
 			AdditionalDirectories: &acp.SessionAdditionalDirectoriesCapabilities{},
@@ -455,6 +456,7 @@ func (a *Agent) Initialize(_ context.Context, p acp.InitializeRequest) (acp.Init
 	if err != nil {
 		return acp.InitializeResponse{}, acp.NewInternalError(errData(acpext.ErrorData{Reason: err.Error()}))
 	}
+	caps.PromptCapabilities.Image = a.promptImage()
 	a.mu.Lock()
 	a.client = p.ClientCapabilities
 	a.mu.Unlock()
@@ -1089,16 +1091,47 @@ func (a *Agent) sessionProvider(s *liveSession) (llm.Provider, error) {
 	return p, nil
 }
 
-// userMessage is the prompt's text blocks as one user message. Images are
-// not advertised, so none arrive.
+// userMessage is the prompt's text, and its images, as one user message
+// (0036-MADR D8). An image block's data is base64.
 func userMessage(blocks []acp.ContentBlock) llm.Message {
 	m := llm.Message{Role: llm.RoleUser}
 	for _, b := range blocks {
-		if b.Text != nil {
+		switch {
+		case b.Text != nil:
 			m.Content = append(m.Content, llm.Content{Type: llm.ContentText, Text: b.Text.Text})
+		case b.Image != nil && b.Image.Data != "":
+			data, err := base64.StdEncoding.DecodeString(b.Image.Data)
+			if err != nil {
+				continue
+			}
+			m.Content = append(m.Content, llm.Content{Type: llm.ContentImage, MediaType: b.Image.MimeType, Data: data})
 		}
 	}
 	return m
+}
+
+// promptImage reports whether initialize advertises image input. The
+// configured default model's facts decide: input holding image, or input
+// known without it. Unknown facts follow the provider, and a provider that
+// cannot be built advertises nothing. The call does not fail the handshake
+// (0036-MADR D8; 0008-MADR D19).
+func (a *Agent) promptImage() bool {
+	choice := a.models()
+	info := a.info(choice.Provider, cmp.Or(a.override.Model, choice.Default))
+	if slices.Contains(info.Input, "image") {
+		return true
+	}
+	if len(info.Input) > 0 {
+		return false
+	}
+	if a.provider == nil {
+		return false
+	}
+	p, err := a.provider("", llm.Retry{Off: true})
+	if err != nil || p == nil {
+		return false
+	}
+	return p.Capabilities().ImageInput
 }
 
 // promptText is the prompt's text blocks, as its user message joins them.

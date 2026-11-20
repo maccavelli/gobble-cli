@@ -161,9 +161,59 @@ func TestCapabilitiesAreHonest(t *testing.T) {
 		t.Error("MCP over SSE or ACP advertised; neither is offered")
 	case !got.PromptCapabilities.EmbeddedContext:
 		t.Error("resource blocks are read (0005-PLAN F3-4) and embeddedContext must be advertised")
-	case got.PromptCapabilities.Image, got.PromptCapabilities.Audio:
-		t.Error("image or audio advertised; llm carries neither")
+	case got.PromptCapabilities.Audio:
+		t.Error("audio advertised; audio stays false")
+	case got.PromptCapabilities.Image:
+		t.Error("image advertised; this default model does not take images")
 	}
+	t.Run("a default that takes images", func(t *testing.T) {
+		caps := promptCaps(t, []string{"text", "image"}, true, nil)
+		if !caps.Image || caps.Audio {
+			t.Fatalf("image %v audio %v, want image true and audio false", caps.Image, caps.Audio)
+		}
+	})
+	t.Run("text only", func(t *testing.T) {
+		caps := promptCaps(t, []string{"text"}, true, nil)
+		if caps.Image || caps.Audio {
+			t.Fatalf("image %v audio %v, want both false", caps.Image, caps.Audio)
+		}
+	})
+	t.Run("unknown facts on a provider that takes images", func(t *testing.T) {
+		caps := promptCaps(t, nil, true, nil)
+		if !caps.Image || caps.Audio {
+			t.Fatalf("image %v audio %v, want image true and audio false", caps.Image, caps.Audio)
+		}
+	})
+	t.Run("no credential", func(t *testing.T) {
+		caps := promptCaps(t, nil, true, fmt.Errorf("%w: no model credential", llm.ErrAuth))
+		if caps.Image || caps.Audio {
+			t.Fatalf("image %v audio %v, want both false", caps.Image, caps.Audio)
+		}
+	})
+}
+
+// promptCaps is initialize's prompt capabilities for a default model whose
+// facts input is input. images is the provider's ImageInput. provErr, when
+// set, is what building the provider returns (0036-MADR D8).
+func promptCaps(t *testing.T, input []string, images bool, provErr error) acp.PromptCapabilities {
+	t.Helper()
+	script := llmtest.NewScript(llmtest.Text("hello")).WithCapabilities(llm.Capabilities{ImageInput: images})
+	agent := New(Options{
+		Version: "1.2.3", NewID: counterIDs(),
+		Provider: func(string, llm.Retry) (llm.Provider, error) {
+			if provErr != nil {
+				return nil, provErr
+			}
+			return script, nil
+		},
+		Models: func() ModelChoice { return ModelChoice{Provider: "openai", Default: "m", Models: []string{"m"}} },
+		ModelInfo: func(provider, model string) llm.Model {
+			return llm.Model{Provider: provider, ID: model, Input: input}
+		},
+	})
+	conn := acptest.Connect(t, agent, &acptest.Client{})
+	agent.SetConnection(conn.Agent)
+	return initialize(t, conn.Client).AgentCapabilities.PromptCapabilities
 }
 
 var semver = regexp.MustCompile(`^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$`)

@@ -55,7 +55,9 @@ func TestSessionProvidersHaveTheirIDs(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if got, want := built(), []string{string(s1), string(s2)}; !slices.Equal(got, want) {
+	// The leading "" is initialize asking whether the default model takes
+	// images, when its facts are unknown (0036-MADR D8). It is not a session.
+	if got, want := built(), []string{"", string(s1), string(s2)}; !slices.Equal(got, want) {
 		t.Fatalf("providers built for %q, want %q: one per session, kept", got, want)
 	}
 	if _, err := c.Client.CloseSession(t.Context(), acp.CloseSessionRequest{SessionId: s1}); err != nil {
@@ -67,7 +69,7 @@ func TestSessionProvidersHaveTheirIDs(t *testing.T) {
 	if _, err := prompt(t, c, s1, "again"); err != nil {
 		t.Fatal(err)
 	}
-	if got, want := built(), []string{string(s1), string(s2), string(s1)}; !slices.Equal(got, want) {
+	if got, want := built(), []string{"", string(s1), string(s2), string(s1)}; !slices.Equal(got, want) {
 		t.Fatalf("after a reload, providers built for %q, want %q", got, want)
 	}
 }

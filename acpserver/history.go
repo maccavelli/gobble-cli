@@ -1,6 +1,7 @@
 package acpserver
 
 import (
+	"encoding/base64"
 	"encoding/json/jsontext"
 	"fmt"
 	"strings"
@@ -71,9 +72,10 @@ func userText(m llm.Message) string {
 }
 
 // asEntry is the user message m as its entry gives it back: its text blocks
-// one block, joined by userText. A message of one block or none is m.
+// one block, joined by userText. A message of one block or none is m, and so
+// is one that holds an image, which stays where it was (0036-MADR D8).
 func asEntry(m llm.Message) llm.Message {
-	if len(m.Content) < 2 {
+	if len(m.Content) < 2 || messageHasImage(m) {
 		return m
 	}
 	m.Content = []llm.Content{{Type: llm.ContentText, Text: userText(m)}}
@@ -81,8 +83,37 @@ func asEntry(m llm.Message) llm.Message {
 }
 
 // userEntryMessage is a prompt as Pi's user message: one text is a string.
+// A message that holds an image is its blocks, the image's bytes base64
+// (0036-MADR D8).
 func userEntryMessage(m llm.Message, ts string) *session.Message {
-	return &session.Message{Role: session.RoleUser, Content: jsonx.Quote(userText(m)), Timestamp: ms(ts)}
+	if !messageHasImage(m) {
+		return &session.Message{Role: session.RoleUser, Content: jsonx.Quote(userText(m)), Timestamp: ms(ts)}
+	}
+	var blocks []session.Block
+	for _, c := range m.Content {
+		switch c.Type {
+		case llm.ContentText:
+			blocks = append(blocks, session.Block{Type: session.BlockText, Text: c.Text})
+		case llm.ContentImage:
+			blocks = append(blocks, session.Block{Type: session.BlockImage, MimeType: c.MediaType,
+				Data: base64.StdEncoding.EncodeToString(c.Data)})
+		}
+	}
+	msg := &session.Message{Role: session.RoleUser, Timestamp: ms(ts)}
+	if err := msg.SetBlocks(blocks); err != nil {
+		return &session.Message{Role: session.RoleUser, Content: jsonx.Quote(userText(m)), Timestamp: ms(ts)}
+	}
+	return msg
+}
+
+// messageHasImage reports whether m holds an image.
+func messageHasImage(m llm.Message) bool {
+	for _, c := range m.Content {
+		if c.Type == llm.ContentImage {
+			return true
+		}
+	}
+	return false
 }
 
 // assistantEntryMessage is an assistant message in Pi's shape, its usage
@@ -270,8 +301,15 @@ func (st *state) addMessage(m *session.Message) {
 	case session.RoleUser:
 		var c []llm.Content
 		for _, b := range blocks {
-			if b.Type == session.BlockText {
+			switch b.Type {
+			case session.BlockText:
 				c = append(c, llm.Content{Type: llm.ContentText, Text: b.Text})
+			case session.BlockImage:
+				data, err := base64.StdEncoding.DecodeString(b.Data)
+				if err != nil {
+					continue
+				}
+				c = append(c, llm.Content{Type: llm.ContentImage, MediaType: b.MimeType, Data: data})
 			}
 		}
 		st.history = append(st.history, llm.Message{Role: llm.RoleUser, Content: c})

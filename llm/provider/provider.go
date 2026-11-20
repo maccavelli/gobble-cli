@@ -339,7 +339,10 @@ func (a *adapter) rejected(mapped, err error) error {
 func (a *adapter) ID() string { return string(a.id) }
 
 func (a *adapter) Capabilities() llm.Capabilities {
-	return llm.Capabilities{NativeStreaming: a.caps.NativeStreaming == llmprovider.Supported}
+	return llm.Capabilities{
+		ImageInput:      a.caps.Images != llmprovider.Unsupported,
+		NativeStreaming: a.caps.NativeStreaming == llmprovider.Supported,
+	}
 }
 
 // Stream maps the SDK's stream onto llm's sealed events, as llm's package
@@ -583,11 +586,14 @@ func toolSpecs(v jsontext.Value, what string) ([]toolSpec, error) {
 	return specs, nil
 }
 
-// toRequest maps llm's request onto the SDK's. Deferred tools go as the
-// SDK's deferred tools, after the others, the Search tool as its search,
-// and each load a result names as a ToolLoadItem after that result; a
-// loaded tool whose load no result here carries stays an ordinary tool; a
-// request that defers nothing is sent as Tools has it (0012-MADR D16, D17).
+// toRequest maps llm's request onto the SDK's. An image in a user message
+// stays where it was. An image in a tool message is the item after that
+// call's output, and a load stays after the image (0036-MADR D7). Deferred
+// tools go as the SDK's deferred tools, after the others, the Search tool
+// as its search, and each load a result names as a ToolLoadItem after that
+// result; a loaded tool whose load no result here carries stays an ordinary
+// tool; a request that defers nothing is sent as Tools has it (0012-MADR
+// D16, D17).
 func toRequest(req *llm.Request) (*llmprovider.Request, error) {
 	out := &llmprovider.Request{Model: req.Model, Reasoning: reasoningFor(req.Thinking), Cache: llmprovider.CacheRetention(req.Cache),
 		MaxOutputTokens: req.MaxTokens}
@@ -601,10 +607,13 @@ func toRequest(req *llm.Request) (*llmprovider.Request, error) {
 	}
 	var system []string
 	for _, m := range req.Messages {
-		for _, c := range m.Content {
+		for i := 0; i < len(m.Content); i++ {
+			c := m.Content[i]
 			switch {
 			case m.Role == llm.RoleSystem:
 				system = append(system, c.Text)
+			case c.Type == llm.ContentImage:
+				out.Input = append(out.Input, imageItem(c))
 			case c.Type == llm.ContentText:
 				role := llmprovider.RoleUser
 				if m.Role == llm.RoleAssistant {
@@ -626,6 +635,10 @@ func toRequest(req *llm.Request) (*llmprovider.Request, error) {
 				out.Input = append(out.Input, llmprovider.FunctionCallItem{CallID: c.ToolCallID, Name: c.ToolName, Arguments: c.ToolArgs, Signature: r.Signature})
 			case c.Type == llm.ContentToolResult:
 				out.Input = append(out.Input, llmprovider.FunctionCallOutputItem{CallID: c.ToolCallID, Output: c.Text, IsError: c.IsError})
+				for i+1 < len(m.Content) && m.Content[i+1].Type == llm.ContentImage {
+					i++
+					out.Input = append(out.Input, imageItem(m.Content[i]))
+				}
 				// A load the request does not defer was sent as an
 				// ordinary tool, and has nothing to load (0012-MADR D17).
 				for _, n := range c.Loads {
@@ -672,6 +685,11 @@ func toRequest(req *llm.Request) (*llmprovider.Request, error) {
 		}
 	}
 	return out, nil
+}
+
+// imageItem is c as the user's image (0036-MADR D7).
+func imageItem(c llm.Content) llmprovider.ImageItem {
+	return llmprovider.ImageItem{Role: llmprovider.RoleUser, MediaType: c.MediaType, Data: c.Data}
 }
 
 // strictFor is a tool's strict flag (0012-MADR D3): false when its schema

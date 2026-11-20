@@ -142,8 +142,11 @@ func TestRetrySettingsReachSession(t *testing.T) {
 		if code, text := errText(t, err); code != -32603 || text != errOffline.Error() || time.Since(start) != 0 {
 			t.Fatalf("prompt: %d %q after %s, want -32603 with the offline error at once", code, text, time.Since(start))
 		}
-		if len(r.built) != 1 || r.built[0] != off || len(r.notices(t)) != 0 {
-			t.Fatalf("built with %+v, notices %v; want %+v once and none", r.built, r.notices(t), off)
+		// initialize builds one provider with retry off when the default
+		// model's input is unknown (0036-MADR D8). The session's build is
+		// the one that carries its settings.
+		if len(r.built) != 2 || r.built[0] != (llm.Retry{Off: true}) || r.built[1] != off || len(r.notices(t)) != 0 {
+			t.Fatalf("built with %+v, notices %v; want the handshake, then %+v, and no notice", r.built, r.notices(t), off)
 		}
 	})
 }

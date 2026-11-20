@@ -642,3 +642,23 @@ P5 to P7 have not started. The pre-existing uncommitted edit of
 
 P6 and P7 have not started. The pre-existing uncommitted edit of
 `0063-MADR-one-shared-terminal-input-so-the-key-prompt-waits.md` is not part of this phase.
+
+### P6 record (2026-11-20): images in the adapter and the ACP prompt
+
+1. **Tests first,** seen failing before the code.
+   - `llm/provider` `TestImagesToRequest`: `user items around the image: [{Role:user Text:look} {Role:user Text:please} {CallID:s1 Name:tool_search Arguments:{"query":"permissions"} Signature:} {CallID:s1 Output:Loaded request_permissions. IsError:false} {CallID:s1 Name:request_permissions}]`.
+   - `TestImageWires` on claude, openai, gemini and the Chat Completions server: `body has no image bytes`.
+   - `TestCapabilitiesImageInput`: `ImageInput false, want true` for supported and for best effort.
+   - `TestTextOnlyModelImage`: `err <nil>, want llm.ErrUnsupported`.
+   - `acpserver` `TestCapabilitiesAreHonest`: `image false audio false, want image true and audio false` for a default that takes images, and the same for unknown facts on a provider that takes images.
+   - `TestPromptImage`: `session/prompt: capability promptCapabilities.image not advertised: prompt[1]`.
+   - `TestHistoryImageRoundTrip`: `history [{Role:user Content:[{Type:text Text:look ...}]}], want the text and the image`.
+2. **The code.** `toRequest` appends an `ImageItem` for a user image and, in a tool message, immediately after the `FunctionCallOutputItem`, then the loads. `Capabilities.ImageInput` is true when `Images` is not `Unsupported`. A text-only model is the SDK's refusal, through `Wrap` of a provider given a text-only layer: `llm.ErrUnsupported`, and the canned transport saw no request. No production option was added for that layer. An ACP image block becomes `ContentImage` bytes. `asEntry` leaves a message that holds an image unchanged, so the image stays where it was. A text-only user entry stays one quoted string. `promptCapabilities.image` follows the default model's facts, and when those facts are unknown it follows the provider. That build uses retry off, is not kept for a session, and an error does not fail `initialize`. `TestSessionProvidersHaveTheirIDs` and `TestRetrySettingsReachSession` record that build. `session.golden` is unchanged. Audio stays false.
+3. **Planted breaks,** one at a time, on a scratch copy, applied with `go test -overlay`, so the tree was not edited.
+   - The image dropped from `toRequest`: `TestImagesToRequest` failed with the same user-items line as before the code.
+   - The image put before the tool output: `TestImageWires` failed on Messages, `"type":"tool_result" at 256, "type":"image" at 198`.
+   - `image` advertised for a text-only default: `TestCapabilitiesAreHonest` failed, `image true audio false, want both false`.
+   The same tests then passed on the tree.
+4. **Checks.** Package tests on the session host, before the records: `go test -count=1 ./llm/provider/` passed (`ok`, 79.636s) and `go test -count=1 ./acpserver/` passed (`ok`, 35.683s). `make preflight` exited 0 (`preflight passed`) on a Windows dev host: gofmt, `go mod tidy`, pre-add-check (307 files clean, no vulnerabilities), `go vet`, staticcheck for linux, darwin and windows, golangci-lint (0 issues in both modules), govulncheck, check-acpext-deps, fix-check, archtest, `apidiff` (no-op below v1.0.0), verify-build-metadata, check-records, check-icon and markdownlint (0 issues in 59 files).
+
+P7 has not started.
