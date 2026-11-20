@@ -1,5 +1,5 @@
 ---
-status: implemented
+status: complete
 date: 2026-11-20
 associated-madr: "0061-MADR-move-golangci-lint-to-v2-15-0.md"
 ---
@@ -81,6 +81,11 @@ Commit and push by the coordinator; CI is the check. Rollback: revert the commit
 * 0023-MADR D3 also decided the pin: it received a dated pointer line to 0061-MADR, as 0007-MADR did.
   0059-MADR D5's sentence "The golangci-lint pin stays `v2.14.0`" is now out of date; it has no pointer line, since
   none was asked for.
+  *(2026-11-20 correction: wrong when written. The same commit that wrote this entry, `0fa97f3`, added a dated
+  pointer line to
+  [0059-MADR-stop-excluding-confusing-naming-in-test-files.md](0059-MADR-stop-excluding-confusing-naming-in-test-files.md)
+  (line 386 at `09a6adf`), which supersedes D5's sentence for the version and points to this plan's execution record.
+  0059-MADR, like 0007-MADR and 0023-MADR, carries its pointer line.)*
 * 2026-11-20, close-out: the pin move landed as push `a3a2d7c` ("chore(lint): bump golangci-lint pin from v2.14.0 to
   v2.15.0"), an ancestor of `origin/main`. CI ran on that exact commit and passed: run `44358064517` (the CI workflow,
   18 m 51 s) and `44358063294` (Docs, 14 s), both success, 2026-11-18T17:23. Every later push carries the move and
@@ -89,3 +94,9 @@ Commit and push by the coordinator; CI is the check. Rollback: revert the commit
   comment and install hint, `.github/workflows/ci.yml`, `AGENTS.md`, `docs/guides/developing.md`), and 0007-MADR and
   0023-MADR carry their dated pointer lines. Goal met; nothing in Scope remains. `docs/README.md`'s 0061 PLAN row moves
   to implemented in the same working tree; that update rides the repository's next docs change, which is in flight.
+  *(2026-11-20 correction: the row did not ride a docs change. It landed inside the feature commit `365159e`
+  ("feat(models): search live listings by their facts", 0036-PLAN P5), beside that phase's own rows; this plan's
+  close-out entry and status landed in `5060b51`.)*
+* 2026-11-20, status word: `implemented` is not in the plan vocabulary of the records skill, and this repository's
+  finished plans say `complete` (27 plans; `implemented` is used by this plan and 0064-PLAN only). The front matter
+  now says `complete`, which is what the close-out above records; no other fact changes.

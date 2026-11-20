@@ -1,6 +1,6 @@
 ---
-status: proposed
-date: 2026-11-19
+status: in-progress
+date: 2026-11-20
 associated-madr: "0063-MADR-one-shared-terminal-input-so-the-key-prompt-waits.md"
 ---
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
@@ -12,6 +12,9 @@ Associated MADR: [0063-MADR-one-shared-terminal-input-so-the-key-prompt-waits.md
 *Proposed: nothing here is built until the owner approves this plan. It is written for the owner's answers of
 2026-11-19 to the MADR's Q1 to Q8, and for the recommended answer, (b), to Q9, which is still open: if the owner
 answers Q9 otherwise, the answer is recorded in the MADR and here, as a dated amendment, before P2b starts.*
+
+*(2026-11-20: this banner is out of date. The owner answered Q9 with (b), the recommended answer this plan is written
+for, and approved this plan, both on 2026-11-19; see the execution record. No step changes. Nothing is built yet.)*
 
 ## Goal
 
@@ -369,9 +372,70 @@ before it is made.
 
 * The MADR's Confirmation items 1 to 5 met.
 * Q9 answered by the owner and recorded in the MADR, and this plan amended if the answer is not (b).
+  *(2026-11-20: met. Q9 was answered (b) on 2026-11-19, recorded in the MADR's "Owner questions" and in the execution
+  record below; no amendment of the steps is needed.)*
 * `docs/guides/credentials.md`, `docs/architecture.md`, `README.md` and `docs/README.md` current.
 * This plan's status `complete`; the release left to the owner's decision after P6 (Q8).
 
 ## Execution record
 
 *Empty: nothing has been executed.*
+
+*(2026-11-20: still true of the phases: none has started and nothing is built. The entries below are records only:
+the owner's rulings, and a re-grounding of this plan's citations.)*
+
+### Owner rulings (2026-11-19, recorded 2026-11-20)
+
+Both relayed by the coordinator; each is quoted as the label of the option the owner chose.
+
+* **Q9:** "The repeated offer is `[y/N]`: Enter ends the loop, `y` tries again (Recommended)". That is the MADR's Q9
+  (b), the answer this plan was written for (P1 step 5, P2b step 2, P3 mutation 13, P5 step 1), so no step changes.
+* **Approval of this plan:** "Approve the whole plan; I commit the records now and each phase as you hand it to me
+  (Recommended)". Every phase, P1 to P6, is approved; each phase's commit is the owner's.
+* **Status.** The front matter went from `proposed` to `in-progress`, with the date 2026-11-20. That follows the
+  records skill (a plan is `proposed` until approved, `in-progress` while its phases land) and this repository's own
+  precedent for an approved plan with no phase started: 0051-PLAN and 0052-PLAN went from `proposed` to
+  `in-progress` at their approval, in commit `011b63a`, before any phase was built.
+
+### Re-grounding note (2026-11-20, at `09a6adf`)
+
+The plan's base, named in the MADR (`consulted`, "Evidence index", Confirmation item 1) and in `docs/README.md`, is
+`21be074`. `main` is now `09a6adf`, 14 commits later. Between them, `prompt.go`, `login.go`, `auth.go`, `trust.go`,
+`permission.go`, `internal/cli/editor/`, `login_test.go`, `line_test.go` and `cmd/gobble/` have no change at all;
+`line.go` and `credentials.go` have one line changed each, and `main.go`'s `runEnv` gained fields (0036-PLAN P1 to
+P4). P1 records the commit it runs at; this note does not change what "the base" means.
+
+| Citation in this plan | At `09a6adf` |
+| --- | --- |
+| `login.go:95-97`, `terminalQuestions` over `inline.NewReader(e.stdin)` and `editor.Raw` | holds |
+| `line.go:86`, `newLineSession`'s `raw` | holds |
+| `trust.go:211`, `trustRaw` | holds |
+| `login.go:226`, `ls.ask` makes `questions` over `ls.keys` | holds |
+| `auth.go:301`, `questions` over `inline.NewReader(e.stdin)` | holds |
+| `trust.go:184`, the trust question reads `e.stdin.Read` | holds |
+| `permission.go:249`, `askPermission` takes `ls.keys` | holds |
+| `login.go:300-316`, `firstRun` | holds (`firstRunQuestion` is `:295`, `signInWith` `:24`) |
+| go-llmprovider-sdk `wizard/configure.go:794`, `Enter your %s API key` | holds; the pin is still `v1.31.0` |
+| `golang.org/x/sys` `v0.49.0` (P1b) | holds, a direct requirement in `go.mod` |
+| `Makefile`'s `probe-conhost` (P1b's neighbour) | holds (`:281`) |
+| Tests and helpers named: `lineHarness`, `rawCheckedInput`, `asked`, `typedKeySignIn`, `keyLister`, `TestLineSessionReadsOnlyWhenAsked`, `TestLoginInterrupt`, `TestFirstRunSetup`, `TestLoginMenuAndRefusals`, `TestLoginAsksThroughQuestions`, `h.e.intr.take()` | all present (`line_test.go:25`, `:54`, `:194`; `login_test.go:40`, `:184`, `:203`, `:262`, `:285`, `:315`, `:415`) |
+| `questions`' `pending` and `afterCR` (P2 step 4) | hold (`prompt.go:37-40`) |
+| `editor.New(in *inline.Reader, …)` (P2 step 7) | holds (`internal/cli/editor/editor.go:146`) |
+| `docs/guides/credentials.md`, "Signing in from a session", its `Claude (Anthropic) API key:` example and "Yes runs `/login`; no goes on as before" (P5 step 1) | hold (`:353`, `:366`, `:382`) |
+| `README.md`, "Signing in where you are" (P5 step 3) | holds (`:120`, a list item) |
+| `docs/architecture.md`'s `internal/cli` and `internal/cli/editor` rows (P5 step 2) | present; the `internal/cli` row was reworded since `21be074` by 0036's phases, so P5 edits it as it then stands |
+
+Lines changed since `21be074` that this plan does not cite, but the MADR's evidence does: `line.go:138`, inside the
+MADR's `line.go:137-141`, and `credentials.go:241`, inside its `credentials.go:240-243`, each now call
+`e.chooseWith(…)` where they called `provider.ChooseWith(e.hasCredential, …)` (0036-PLAN P4: models.json's Chat
+Completions servers are registered on the run's set before the choice). The first run's condition, `setup` at
+`line.go:137`, is unchanged, so the offer is made in the same cases. The line numbers the MADR gives still hold.
+
+### State table (2026-11-20 ruling: to be added before P1)
+
+* The MADR `0063-MADR-one-shared-terminal-input-so-the-key-prompt-waits.md` carries no state table, which the records
+  skill requires before a MADR that changes behaviour is `accepted`.
+* The owner, relayed by the coordinator, ruled on 2026-11-20: "Add the table before P1, when 0063 is released
+  (Recommended)". The table is added in a records pass before P1 starts, when 0063 is released for building. Any row
+  of it that is `open` goes to the owner in one prompt before P1.
+* 0063 is not released for building. Nothing else about this plan or the MADR changes, and no phase has started.

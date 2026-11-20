@@ -606,6 +606,10 @@ P4 to P7 have not started. The pre-existing uncommitted edit of
   `Authorization` and answers `/chat/completions`, `/models` and every other path. `ModelMetadataURL` is a URL on
   `127.0.0.1` that the transport answers. No dial. The assertions are the plan's: the text is `hello`, no key sends
   no `Authorization` header, and a key sends `Bearer` plus that key.
+* *(2026-11-20 correction, from the review recorded under "Verification gaps" below: `TestChatServerStreams` sets no
+  `ModelMetadataURL` (`llm/provider/chatserver_test.go:75-76`). It makes no metadata fetch because `New` passes
+  `WithoutModelMetadata` (`llm/provider/provider.go:215`). The `127.0.0.1` `ModelMetadataURL` is set by
+  `TestChatServerLists` (`:120`). The `chatWire` transport and the stream test's assertions are as written above.)*
 
 P5 to P7 have not started. The pre-existing uncommitted edit of
 `0063-MADR-one-shared-terminal-input-so-the-key-prompt-waits.md` is not part of this phase.
@@ -682,3 +686,60 @@ P7 has not started.
 5. **Checks.** The first `make pre-add-check` failed: goconst on the repeated PNG and JPEG type strings, and govulncheck GO-2026-6222 in `golang.org/x/image` v0.43.0, fixed in v0.45.0. After `mimePNG`, `mimeJPEG` and v0.45.0, the session host reported 696 files clean and no vulnerabilities. The image tests passed again (`ok`, 0.976s). `make preflight` exited 0 (`preflight passed`) on a Linux dev host: gofmt, `go mod tidy`, pre-add-check (700 files clean, no vulnerabilities), `go vet`, staticcheck for linux, darwin and windows, golangci-lint (0 issues in both modules), govulncheck, check-acpext-deps, fix-check, archtest, `apidiff` (no-op below v1.0.0), verify-build-metadata, check-records, check-icon and markdownlint (0 issues in 59 files). The identifier scan of the diff found no host name, account name or real-machine path.
 
 The owner's live checks remain: one image turn on Claude and one on an OpenAI vision model, each with an image after a tool result, and one Chat Completions server's listing and turn. Each is recorded without any credential.
+
+### Verification gaps (2026-11-20): P1 to P5's tests are weaker than these records say
+
+A read-only review at `b6d0fc5` found tests that pass whatever the code they name does. Each point was confirmed again
+at `09a6adf`; line numbers are those at `09a6adf`. No phase's status changes here, and nothing in the tree outside the
+records changes until the owner approves the step below (approved 2026-11-20; see the entry at the end of this section).
+
+* **G1 (P4, `TestChatServerLists`).** P4 step 1 says the listing returns the server's ids "with models.json's models
+  among the known ones". The test's second check (`llm/provider/chatserver_test.go:127-129`) reads
+  `mj.Models("local")`, the parser's output, not the listing nor any list built from it, so it cannot fail if the
+  listing's caller drops models.json's models. The merge is in `internal/cli`, not in `llm/provider`: `printModels`
+  joins `withModelsJSON(…)` and the live listing (`internal/cli/modelscmd.go:115-123`).
+  `TestChatServerPickerAndModels` (`internal/cli/chatserver_test.go:24-26`) checks models.json's `mine` but not the
+  listing's `listed-1` beside it.
+* **G2 (P4, `TestChatServerNotAmbient`).** "`--model local/m` resolves" (`chatserver_test.go:144`) calls
+  `ResolveModel` with a list the test builds by hand. Neither the run's set nor the CLI's path is exercised: the CLI
+  resolves `--model` over `offlineModels` (`internal/cli/modelflags.go:28`), which adds each server's models.json
+  models (`:49-53`). The review's further point, that `chatserver_test.go:100` is near-vacuous, does not hold: a
+  `chatWire` entry ends in a space exactly when `Authorization` is empty, so `:100` fails on any non-empty
+  `Authorization` value, and `:103` only on one holding `Bearer`.
+* **G3 (P3, `TestRefusalsFileUnreadable`).** One provider build (`internal/cli/refusal_test.go:86`). "Warns once" is
+  never tried across a second build in the run, which is what `loadRefusals`' guard (`internal/cli/refusal.go:45`)
+  is for.
+* **G4 (P2, the per-session warning log).** `acpserver` gives each prompt's Agent the session's log
+  (`acpserver/agent.go:345`, `warningLog`; passed at `:800`). No test runs two prompts in one session;
+  `TestWarningLoggedOnce` (`agent/warning_test.go:49`) covers one Agent only, and no `acpserver` test names the log.
+* **G5 (Deviation 1's record).** Corrected beside it above.
+* **G6 (P5, `listedSearch`).** Built in this plan's P5 (`365159e`), `internal/cli/modelscmd.go:241`. It returns the
+  listing's own matches first, then id matches only among the models the listing does not hold. A model the listing
+  holds is found by an id-only query only through `SearchListing`, which ranks ids as well as facts (the SDK's
+  `Catalog.Search`, `llmprovider/catalog/search.go:192-205` at `v1.31.0`). No test runs an id-only query against a
+  model the listing holds: `TestModelsSearchListsFactsFirst` (`internal/cli/modelscmd_test.go:202`) searches `vision`
+  only.
+
+#### Test-only step (proposed 2026-11-20; approved 2026-11-20, see the entry below)
+
+Tests only; no production code changes. Each plant is one change to production code, made on a scratch copy (or with
+`go test -overlay`) and never on the tree, that must turn the test red; the test must pass on the unplanted copy.
+Exit criterion: no blocker, every gap tested, plants caught.
+
+| Gap | The test must assert | Plant that must turn it red |
+| --- | --- | --- |
+| G1 | `gobble models list --provider local`, with models.json's `local` holding `mine` and a live listing of `listed-1`, prints both ids. `TestChatServerLists`' parser check (`:127-129`) is relabelled as a parser check, or moved to `llm/catalog`. | The live-listing merge loop in `printModels` (`internal/cli/modelscmd.go:117-123`) removed: `listed-1` is missing. A second plant, `withModelsJSON(…)` replaced by `provider.KnownModels(sel.ID)` at `:115`: `mine` is missing. |
+| G2 | Through the CLI, with models.json's `local` holding model `m`, `--model local/m` resolves to provider `local` and model `m` (through `pickModel`, `internal/cli/modelflags.go:28`, or `gobble models info local/m`). | The `mj.ChatServers()` loop in `offlineModels` (`internal/cli/modelflags.go:49-53`) removed: `--model local/m` fails to resolve. |
+| G3 | Two provider builds in one run, with a corrupt `reasoning-refusals.json`, print `Warning: reasoning-refusals.json` once. | The `refusalsLoaded` guard in `loadRefusals` (`internal/cli/refusal.go:45-47`) removed: two warnings. |
+| G4 | An `acpserver` session whose provider warns `effort_degraded` for one model on two prompts gives one Warn record; a second session gives its own. | `warningLog` (`acpserver/agent.go:345-349`) returns a new `agent.WarningLog` on every call: two Warn records in one session. |
+| G6 | `gobble models list gpt-6-astra` (or the picker's `SearchModels`) over a live listing that holds `gpt-6-astra` returns it, once. | `listedSearch`'s listing loop (`internal/cli/modelscmd.go`, the `provider.SearchListing` loop after `:241`) removed: the held model is not returned. This plant also turns `TestModelsSearchListsFactsFirst` red; the new test is the one that pins the id route. |
+
+#### Approval of the test-only step (2026-11-20)
+
+* The owner, relayed by the coordinator, approved the test-only step above (gaps G1 to G4 and G6) on 2026-11-20:
+  "Approve; build with 0064 P2 (Recommended)".
+* It is built alongside 0064-PLAN's phase P2, after the owner commits the records. Test files only: no production code
+  changes, and each plant is made on a scratch copy, never on the tree.
+* A new test that exposes a real defect in production code stops the step and goes to the owner; the step does not fix
+  the defect, loosen the test or skip it.
+* The step has not been started. The plan's status stays `in-progress`.
