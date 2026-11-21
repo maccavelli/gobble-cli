@@ -359,28 +359,84 @@ opens it, and a device code is shown with its expiry. `/login claude` asks no pr
 and gobble checks it by listing the provider's models, which spends nothing: a key the provider
 refuses is asked for again, up to three keys, and a key the listing cannot check is saved with a
 note. Then gobble lists the provider's models, numbered for `/model N`. Ctrl+C leaves the sign-in,
-not gobble. Here gobble had no credential, and no network:
+not gobble. Here gobble had no credential, and no network, and a key was typed at the key prompt:
 
 ```text
-> /login claude
-Claude (Anthropic) API key: *************
-The key could not be checked: not listed (listing failed); it is saved all the same.
+Enter your Claude (Anthropic) API key: ******************
+live model listing for Claude (Anthropic) is unavailable (the request failed); search covers the built-in catalog only
 Saved API key for claude
 ```
+
+Every question is read through one terminal input for the whole session, so what one answer leaves is
+the next question's. An answer may end with any Enter a terminal sends: `\r`, `\n` or `\r\n` is one
+end. The key prompt waits for the key, whichever Enter ended the menu's answer. Keys typed ahead
+answer the next question of the same sign-in; what is still unread when the session's prompt comes
+back is dropped, and so is what was typed into a prompt gobble gave up, such as a paste prompt that
+a browser sign-in finished while it waited: on Linux and macOS gobble also clears the terminal's own
+queue then, so that text is never a turn, an answer, or the shell's input after gobble exits. An
+empty key cancels the sign-in.
+
+On Linux and macOS gobble waits for a prompt's keys without reading the terminal until a prompt
+asks, so a key typed while a sign-in finishes is kept for the question that asks. When a terminal
+cannot be waited on that way, gobble reads it as it did before and says so once, before the next
+prompt's text:
+
+```text
+Warning: gobble cannot wait on this terminal without reading it (<error>); keys typed while a sign-in finishes may be lost.
+```
+
+On a Windows console, Ctrl+C at a key prompt is the key itself: it cancels the sign-in and gobble
+goes on. A menu or an offer is read a line at a time, and the console ends that read with nothing;
+gobble, having taken the interrupt, reads again within a tenth of a second, so Ctrl+C there cancels
+the question, as it does on other systems, and does not end the session.
 
 `/logout` lists only the credentials `auth.json` holds and removes the one chosen, as
 `gobble auth logout` does; it says when the provider's variable is still set, since that still gives
 it a credential. A provider with no credential is offered as `/login <provider>` in `/providers`,
 `/model` and `/login`'s own list.
 
-With no credential at all, a session on a terminal asks first:
+With no credential at all, a session on a terminal asks first. A sign-in that is cancelled or fails,
+an empty key or Ctrl+C included, brings the offer back, `[y/N]` this time, until a sign-in succeeds or
+the offer is declined with `n`, Enter or Ctrl+C; the end of input ends it too. Here the first round
+was cancelled with an empty key, and the second saved a key:
 
 ```text
 No provider has a credential yet. Sign in to one now? [Y/n]:
+Sign in to which provider?
+  1  Gemini (Google) (gemini)     none — /login gemini
+  2  OpenAI (openai)              none — /login openai
+  3  Claude (Anthropic) (claude)  none — /login claude
+  4  Grok (xAI) (grok)            none — /login grok
+  5  OpenCode Zen (opencode-zen)  none — /login opencode-zen
+  6  OpenCode Go (opencode-go)    none — /login opencode-go
+  7  Hugging Face (huggingface)   none — /login huggingface
+  8  Kilo Gateway (kilo)          none — /login kilo
+  9  Together AI (together)       none — /login together
+Number [1]: 3
+Enter your Claude (Anthropic) API key:
+Sign-in cancelled; nothing was saved.
+No provider has a credential yet. Sign in to one now? [y/N]: y
+Sign in to which provider?
+  1  Gemini (Google) (gemini)     none — /login gemini
+  2  OpenAI (openai)              none — /login openai
+  3  Claude (Anthropic) (claude)  none — /login claude
+  4  Grok (xAI) (grok)            none — /login grok
+  5  OpenCode Zen (opencode-zen)  none — /login opencode-zen
+  6  OpenCode Go (opencode-go)    none — /login opencode-go
+  7  Hugging Face (huggingface)   none — /login huggingface
+  8  Kilo Gateway (kilo)          none — /login kilo
+  9  Together AI (together)       none — /login together
+Number [1]: 3
+Enter your Claude (Anthropic) API key: ******************
+live model listing for Claude (Anthropic) is unavailable (the request failed); search covers the built-in catalog only
+Saved API key for claude
 ```
 
-Yes runs `/login`; no goes on as before, naming the variables. `gobble setup` asks the same
-questions at any time, on a terminal; without one it says to use `gobble auth login`:
+Declined, the session goes on as before, with the warning naming the variables, once. What was typed
+before a repeated offer is dropped, and the terminal's own queue is
+cleared after the offer's text is written. `/login` and `gobble setup` ask once: a sign-in cancelled
+there ends with its cancel line and the session's prompt, or setup's error. `gobble setup` asks the
+same questions at any time, on a terminal; without one it says to use `gobble auth login`:
 
 ```text
 $ gobble setup < /dev/null

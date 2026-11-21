@@ -120,8 +120,10 @@ Early, and built in the order [docs/README.md](docs/README.md#build-order) gives
 - **Signing in where you are:** `/login [provider]` in a session asks which provider and how, opens a browser
   sign-in in your browser, names a device code's expiry, checks a typed key
   by listing the provider's models, stores it, and lists the models to switch to; `/logout [provider]` removes a
-  stored credential. With no credential at all, a session offers the sign-in before its first prompt, and
-  `gobble setup` runs it at any time.
+  stored credential. With no credential at all, a session offers the sign-in before its first prompt, and offers it again after
+  one that is cancelled or fails, until one succeeds or the offer is declined; `/login` asks once, and
+  `gobble setup` runs the sign-in at any time. Every prompt reads one terminal input, so keys typed ahead answer
+  the next question and a prompt gobble gives up never leaves its keys for another.
 
 Not built yet: `--offline`, which is refused until 0005-PLAN X3; and the enhanced TUI
 mode. The full v1 line, tiered into

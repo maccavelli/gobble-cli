@@ -9,6 +9,8 @@ informed: none
 
 # One shared terminal input for every prompt in a session, so a menu answered with CR+LF no longer skips the API key prompt
 
+*(2026-11-21, status note: accepted 2026-11-19; built through P5 of the plan, ready for P6, the owner's check on a Windows console. No decision or asserted fact changes.)*
+
 ## Context and Problem Statement
 
 The owner reported on 2026-11-19: "gobble-cli, or llmprovider-sdk has a bad bug in initial setup. if a user has no env

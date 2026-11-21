@@ -7,6 +7,8 @@ associated-madr: "0063-MADR-one-shared-terminal-input-so-the-key-prompt-waits.md
 
 # Implement one shared terminal input for every prompt in a session
 
+*(2026-11-21, status: built through P5, ready for P6. P1 to P4 are committed (`3de8310`), P5's docs are written and gated; what remains is P6, the owner's check on a Windows console. `in-progress` stays until the owner's check has passed; the plan is not `complete`.)*
+
 Associated MADR: [0063-MADR-one-shared-terminal-input-so-the-key-prompt-waits.md](0063-MADR-one-shared-terminal-input-so-the-key-prompt-waits.md)
 
 *Proposed: nothing here is built until the owner approves this plan. It is written for the owner's answers of
@@ -3374,3 +3376,64 @@ This Mac, and the Linux machine that is not WSL (identical, compared with `diff`
 ```
 
 No gate failed, none was loosened or skipped, and no failing run was repeated to pass.
+
+### P5, the docs (2026-11-21)
+
+**Outcome: written; every gate passes.** On the branch after `3de8310` (P3 and P4 committed by the owner), the tree clean
+at the start; nothing staged or committed. P6 is not started.
+
+**The example is pasted, not typed.** From gobble's own output: this tree built with `CGO_ENABLED=0 go build -o
+<scratch>/gobble ./cmd/gobble`, run on a pseudo terminal by a scratch Python driver (`pty.fork`) with `GOBBLE_HOME`
+and `HOME` and the `XDG_*` directories in a fresh temporary directory, no credential (`GEMINI_API_KEY`,
+`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `OPENCODE_API_KEY`, `HF_TOKEN`, `TOGETHER_API_KEY`, `XAI_API_KEY`,
+`GROK_API_KEY`, `KILO_API_KEY` and `GOOGLE_API_KEY` set empty, and nothing else in the environment but `PATH`, `TERM`
+and `NO_COLOR`), and `HTTP_PROXY`, `HTTPS_PROXY` and `ALL_PROXY` (and the lower-case forms) naming `127.0.0.1:9`, a
+closed port. The driver pressed Enter at the first offer, `3` (Claude) at the menu, Enter alone at the key prompt,
+`y` at the repeated offer, `3` again, then a made-up key; the screen text, with escape sequences taken out, is what the
+guide's blocks hold, line for line: the guide's script (`docs/guides/credentials.md`) cuts nothing from a block it
+shows. The key typed is not in the output (a `*` for each character); the made-up key was never sent (no network).
+
+**What the scratch run showed against the MADR:** the offer `[Y/n]`, the provider menu, `Enter your Claude (Anthropic)
+API key:` waiting, `Sign-in cancelled; nothing was saved.` after the empty key, then the offer again, `[y/N]`, and a
+second round that saved the key: as D8, Q9 and R62 to R66 say. No difference: P5's stop does not apply. The guide's old
+example differed from gobble's output (the key prompt's words, and a note the listing no longer prints), which is what
+step 1 had planned to take again. The listing's own line in this run, `live model listing for Claude (Anthropic) is
+unavailable (the request failed); search covers the built-in catalog only`, is gobble's, and is shown as it came.
+
+**Docs rows** (lines as after this pass):
+
+* `docs/guides/credentials.md:362-391` — fixed: the key prompt's words as the SDK's, the example pasted; one terminal
+  input, any Enter (`\r`, `\n`, `\r\n`), type-ahead answering the same sign-in's next question and dropped at the
+  session's prompt, a given-up prompt's text cleared from the terminal's queue on Linux and macOS (D22, D23), Q24's
+  warning in its approved words, written before the next prompt's text (R156), the empty key, and Windows Ctrl+C at a
+  key prompt, a menu and an offer (D19, D20).
+* `docs/guides/credentials.md:398-441` — fixed: the first run's repeated `[y/N]` offer after a cancelled or failed
+  round, until a sign-in succeeds or the offer is declined (`n`, Enter, Ctrl+C), the end of input too; the warning once;
+  type-ahead dropped and the queue cleared before the repeated offer; `/login` and `gobble setup` ask once.
+* `docs/architecture.md:133` — fixed: one terminal input per process, which every prompt reads through; the cancellable
+  reader; the first run's offer until it succeeds or is declined.
+* `docs/architecture.md:135` — fixed: the editor reads through an `Input`.
+* `docs/architecture.md:137` — fixed: `FlushInput`, `ConsoleInput` and `Gated`/`OpenGated` in the `internal/cli/term` row
+  (Deviation 2).
+* `internal/cli/term/doc.go:1-7` — fixed: the package summary names them (Deviation 2).
+* `README.md:120-127` — fixed: the first run offers the sign-in again after one that is cancelled or fails; `/login`
+  asks once; one terminal input.
+* `docs/README.md:143`, `:144` — fixed: the 0063 rows' status (built through P5; P6, the owner's Windows console check,
+  remains).
+* `docs/architecture.md:17` — searched: "with no credential at all it offers the sign-in first" still holds; no change.
+
+`docs: searched` (the guides, `docs/architecture.md`, `docs/README.md`, `README.md` and `internal/cli/term/doc.go`, for
+the first run, the key prompt, type-ahead and the terminal's input; the other guides name none).
+
+**Gate:**
+
+| Command | Exit | Output |
+| --- | --- | --- |
+| `make check-records` | 0 | no output |
+| `make markdownlint` | 0 | `Summary: 0 issues in 0 files` |
+| the disclosure guard's `redact` (no `--apply`) | 0 | `redact: would edit 0 file(s), 0 path(s) need a rename by hand; nothing renamed, staged or committed` |
+| `go vet ./internal/cli/term/` | 0 | no output |
+| `make pre-add-check FILES=internal/cli/term/doc.go` | 0 | `go-precheck: 1 file(s) clean (gofmt, golangci-lint, govulncheck).` |
+
+**Status:** the PLAN's status note and the MADR's now say the build is complete through P5 and P6, the owner's Windows
+console check, is next; the PLAN is not `complete`.
