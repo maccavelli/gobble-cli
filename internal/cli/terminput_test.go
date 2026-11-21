@@ -357,6 +357,7 @@ func TestTerminalInputConcurrentReads(t *testing.T) {
 		chunks = append(chunks, s[:n])
 		s = s[n:]
 	}
+	orig := slices.Clone(chunks)
 	ti := newTerminalInput(&countedChunks{c: chunks}, nil)
 	var mu sync.Mutex
 	var got []string
@@ -404,6 +405,69 @@ func TestTerminalInputConcurrentReads(t *testing.T) {
 	for b, n := range count {
 		if n != 0 {
 			t.Fatalf("byte %q given %+d times more than it was read", b, n)
+		}
+	}
+
+	// (2026-11-21, P3-2, the owner's "As above, plus tighten the P1 test"
+	// ruling on plant 35: a third goroutine calls discard() and ended() while
+	// the two read. Every reader holds the turn, a hand-off the race detector
+	// sees, so only these methods, which do not take it, can race with a read
+	// of pending taken without the lock. discard drops bytes, so here no byte
+	// may be given more often than it was read.)
+	ti = newTerminalInput(&countedChunks{c: orig}, nil)
+	got = nil
+	stop := make(chan struct{})
+	var side sync.WaitGroup
+	side.Go(func() {
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				ti.discard()
+				_ = ti.ended()
+			}
+		}
+	})
+	var wg2 sync.WaitGroup
+	wg2.Go(func() {
+		for {
+			s, err := ti.line(t.Context())
+			if err != nil {
+				return
+			}
+			mu.Lock()
+			got = append(got, s+"\n")
+			mu.Unlock()
+		}
+	})
+	wg2.Go(func() {
+		buf := make([]byte, 3)
+		for {
+			n, err := ti.Read(t.Context(), buf)
+			if err != nil {
+				return
+			}
+			mu.Lock()
+			got = append(got, string(buf[:n]))
+			mu.Unlock()
+		}
+	})
+	wg2.Wait()
+	close(stop)
+	side.Wait()
+	count = map[byte]int{}
+	for _, s := range got {
+		for i := range len(s) {
+			count[s[i]]++
+		}
+	}
+	for i := range len(all) {
+		count[all[i]]--
+	}
+	for b, n := range count {
+		if n > 0 {
+			t.Fatalf("with discard and ended called alongside, byte %q was given %+d times more than it was read", b, n)
 		}
 	}
 }

@@ -840,7 +840,7 @@ time, under the session's scratch directory, built from nothing with `GOPROXY=of
 | --- | --- | --- |
 | 1 | the owed `\n` not dropped | `TestLineEndsBeforeEachQuestion/CRLF/*-secret`, `TestFirstRunKeyOnlyProviderWaits/CRLF`; (2026-11-20, the owner's ruling at P1) `TestFirstRunSetup/CRLF` |
 | 2 | `rawEnd` sets `lfOwed` | `TestEnterAfterSecretAnswersTheNextLine` |
-| 3 | `\n` then `\r` folded as one end | `TestLFThenCRIsTwoEnds` |
+| 3 | `\n` then `\r` folded as one end | `TestLFThenCRIsTwoEnds` (2026-11-21, P3, the owner's ruling, Deviation 3: the test's assertion tightened so the secret must be cancelled by the empty answer, not by the end of input; plant 3 fails it. Plant 3b, the already-read form, is `TestTerminalInputRule`'s "LF then CR" rows) |
 | 4 | `ls.ask` makes a new `terminalInput` per ask | `TestFirstRunTypeAhead` |
 | 5 | `discard` does nothing at the session prompt | `TestSignInTypeAheadNotSentAsPrompt` |
 | 6 | `terminalInput` reads ahead after a line | `terminput_test`'s read count, `TestLineSessionReadsOnlyWhenAsked` |
@@ -889,7 +889,7 @@ typed-ahead case (A14), run by `make probe-conpty` on the Windows test laptop.
 | 32 | `closed` is set only for `io.EOF` | `terminput_test` row (iv) (A15) | R43 |
 | 33 | `terminalInput` replaces bytes that are not valid UTF-8 | `terminput_test` row (v) (A15) | R44 |
 | 34 | `auth.go:301` keeps `inline.NewReader(e.stdin)` | `TestOneReaderOfStdin` (A18) | R45 |
-| 35 | `Read` takes `pending` without the lock | `TestTerminalInputConcurrentReads` (A19), under `-race` | R48 |
+| 35 | `Read` takes `pending` without the lock | `TestTerminalInputConcurrentReads` (A19), under `-race` (2026-11-21, P3, the owner's ruling, Deviation 3: A19 gains a third goroutine calling `discard()` and `ended()`; plant 35 now fails it with `WARNING: DATA RACE`) | R48 |
 | 36 | `line` ends a line only at `\r` | the `LF` forms of `TestLineEndsBeforeEachQuestion` | R1, R32 |
 | 37 | `line` ends a line only at `\n`, keeping a `\r` in the text | the `CR` forms of `TestLineEndsBeforeEachQuestion`, its `-input`, `-choose` and `-confirm` cases among them | R2, R19 |
 | 38 | a no at the first offer starts a round | `TestFirstRunDeclineEnds` | R62 |
@@ -958,7 +958,7 @@ The gate and the stop rule above cover 62 and 63 as they cover 1 to 14.
 | 67 | `watchSignals` treats every interrupt as taken once it sets the mark | `TestInterruptDuringTurn` (existing); `setup-menu-ctrlc` (P1b) | R113, R120 |
 | 68 | the byte `0x03` is taken as an interrupt and the read made again | `TestConsoleRawCtrlCIsAByte` (A34) | R115 |
 | 69 | the rule applied when standard input is not a console | `TestConsoleRuleOnlyOnAConsole` (A35) | R117 |
-| 70 | the rule applied on every system | `pty-ctrlc-ctrld` (P1b, Linux), by the harness's bound | R118 |
+| 70 | the rule applied on every system | ~~`pty-ctrlc-ctrld` (P1b, Linux), by the harness's bound~~ (2026-11-21, P3, the owner's ruling, Deviation 3: `TestIsConsoleInputOffWindows` (new, `term/consolein_test.go`); since D22 a POSIX terminal never reaches `ConsoleInput`, so the pty case cannot see the plant) | R118 |
 
 Mutation 60 (a Ctrl+C give-up dropped too) must also fail `menu-ctrlc`'s `warned-once` (row R119). The gate and the
 stop rule above cover 64 to 70 as they cover 1 to 14.
@@ -988,7 +988,7 @@ The gate and the stop rule above cover 75 as they cover 1 to 14.
 | --- | --- | --- | --- |
 | 76 | the layer reads before readiness (a blocking read, as built) | `TestCancelableWait` (A41), `pty-abandoned` (A43) | R126, R130 (2026-11-21, D22 second draft: and `pty-gaveup-held` (A43, added), which does not depend on timing) |
 | 77 | closing the gate does not wake the wait | `TestCancelableWait` (A41), by its 100 ms bound | R127 (2026-11-21, D22 second draft: observable through A41's seam reporting each return from the wait, since a close returns only after the waiter left select(2)) |
-| 78 | closing the gate does not wait for a read in progress, or reports none | `TestCancelableWait` (A41), `TestCancelableGiveUp` (A42) | R127, R129 (2026-11-21, D22 second draft: staged through the read(2) seam) |
+| 78 | closing the gate does not wait for a read in progress, or reports none | `TestCancelableWait` (A41), ~~`TestCancelableGiveUp` (A42)~~ | R127, R129 (2026-11-21, D22 second draft: staged through the read(2) seam) (2026-11-21, P3, the owner's ruling, Deviation 3: A41 alone: A42's race cases run over the `tookGate` stub, so no `internal/cli` test sees `Gated.Close`'s report) |
 | 79 | `EINTR` ends the wait as an error | `TestCancelableWait` (A41); ~~`pty-menu-ctrlc-typed` (A44) on Linux~~ (2026-11-21, D22 second draft: A44 cannot catch it; A41's seam pins it) | R125, R133 |
 | 80 | a give-up with nothing read marks a drop, as D13 did | `TestCancelableGiveUp` (A42); `pty-abandoned-empty-typed`, `-pasted` (A40) | R128 |
 | 81 | a program's give-up gives a completion read before the close to the next prompt | `TestCancelableGiveUp` (A42) | R129 |
@@ -1006,7 +1006,7 @@ answers.
 | # | Mutation | Must fail | Row |
 | --- | --- | --- | --- |
 | 87 | a read that gives 0 bytes returns `(0, nil)` | `TestCancelableWait` (A41, exactly `(0, io.EOF)`), A45 as moved | R134 |
-| 88 | the layer returns an error, or `(0, nil)`, when the gate closes | `TestCancelableGiveUp` (A42) | R145 |
+| 88 | the layer returns an error, or `(0, nil)`, when the gate closes | ~~`TestCancelableGiveUp` (A42)~~ (2026-11-21, P3, the owner's ruling, Deviation 3: `TestCancelableWait` (A41): `inline.Reader` reads again on `(0, nil)`, so A42 cannot see it) | R145 |
 | 89 | `fill` asks `inline.Reader` with the caller's size | `TestCancelableGiveUp` (A42, the 512-then-256 case) | R147 (2026-11-21, D22 third draft: on the gated path; with no gate the caller's size is as built, plant 63) |
 | 90 | with no gate, `waiting` is never set | A28 (existing); `TestCancelableGiveUp` (A42, gateless) | R151 |
 | 91 | the wake pipe's write end blocking, or not drained before a wait | `TestCancelableWakePipe` (A54) | R146 (2026-11-21, D23: the credit fixed: A54 catches the blocking write end; the pipe not drained is caught by A42's closed-gate case, `TestCancelableGiveUp`) |
@@ -1030,7 +1030,7 @@ The gate and the stop rule above cover 92 as they cover 1 to 14.
 
 | # | Mutation | Must fail | Row |
 | --- | --- | --- | --- |
-| 93 | the fallback warns at every cause, or its words changed | `TestCancelableFallbackWarnsOnce` (A50) | R138 |
+| 93 | the fallback warns at every cause, or its words changed | `TestCancelableFallbackWarnsOnce` (A50) (2026-11-21, P3, the owner's ruling, Deviation 3: "at every cause" is an equivalent mutant, as plant R is: `Gated.fallBack` is entered only while `fellBack` is false and `OnFallback` can fire once; the plant is 93b, the words changed) | R138 |
 | 94 | no flush at the program's give-up | `TestFlushAtGiveUp` (A49) | R80, R84, R132 |
 | 95 | a Ctrl+C give-up flushes too | `TestFlushAtGiveUp` (A49) | R81, R132 |
 | 96 | the layer reads standard input itself, not the private descriptor | `TestPrivateDescriptor` (A55); `TestCancelableWait` (A41, `EAGAIN`) | R126 |
@@ -3016,3 +3016,361 @@ No test shows the no-credential warning more than once; no bound was raised; no 
 
 **Docs:** `login.go`'s comments for `login`, `signInRound`, `firstRun` and `noCredential`. The guides' account of the
 first run (the offer made again after a failed or cancelled sign-in) is P5's.
+
+### P3, the planted breaks (2026-11-21)
+
+**Outcome: stopped on P3's own stop rule: six plants were not caught by a test their row names** (findings P3-1 to
+P3-6 below). Of the 106 plants (1 to 107 but 86, dropped), 15 passed as expected and 99 were caught by every test their
+row names, each with its first failure line quoted in the table. On the branch at `19306d5`, the tree clean at the
+start and at the end; nothing staged or committed; no file changed but this record. P4 was not started (the stop rule
+sends P3's gaps back to P1; a change there changes the tree P4 would gate).
+
+**Method.** Each plant on a fresh copy of the P2b tree made for it alone (`cp -Rc` of the working tree without `.git`,
+a scratch directory, never the tree), one at a time; the plant's old text found exactly once, by an assertion in the
+runner, or the plant is not run (a first batch had several plants fail to build for a missing line end in the
+runner's new text, each fixed and run again; a build failure is never counted as caught); `GOPROXY=off`. Each run is
+narrowed to the tests the row names (`go test -count=1 -timeout 100s -v -run '^(…)$' <package>`), output to a scratch
+file, the exit status taken from the run itself; a test counts as caught when its `--- FAIL` line is printed (for a
+run ended by the harness's bound, the test named by the failure line or by the timeout's list of running tests). The
+`-race` plants (35, 85) ran through `run-heavy`. The pseudo-terminal cases ran on this Mac, in the scratch copy, with
+the line `make probe-pty` runs (`go test -tags pty -run '^TestPty' -count=1 -v ./internal/cli/`, with `-timeout 5m`
+added; not `make` itself); a case with no line in a run that exited non-zero is read as hung, caught by the
+harness's bound, and marked so. The Windows cases ran as `make probe-conpty` through `run-on-host --need windows`, in
+the scratch copy, for plants 42, 43, 44, 46, 47, 60, 64 and 67. Variants, where one reading of a row did not
+catch and another did: **3b** (3, with the `\r` dropped only when already read), **22b** (22 with the loop's after-round
+check dropped too and each pass paced 1 ms, which is how `TestFirstRunClosedInputEnds` and
+`TestFirstRunInstantFailureClosedInputEnds` are caught, by the bound), **76b** (76 on a blocking descriptor with no
+wait, the form that leaves a read waiting, which `pty-abandoned` and `pty-gaveup-held` need; plant 76 as a
+non-blocking read in a loop spins and is caught by `TestCancelableWait` and `pty-gaveup-held`), **78b** (78 as a close
+that does not wait for the waiter), **91b** (91 as the wake pipe not drained), **93b** (93 as the warning's words
+changed) and **96b** (96 as `EAGAIN` not waited on again; `pty-private-descriptor` catches 96 itself).
+
+**The unmutated copy** (a fresh copy, run before the plants): `go test -count=1 ./internal/cli/
+./internal/cli/term/ ./internal/cli/editor/` exit 0 (`ok … internal/cli 56.298s`, `… term 2.382s`, `… editor
+2.079s`); the same `go test -tags pty` line exit 0, 13 cases, every one `pass`. The Windows cases were not run on the
+unmutated copy again: P2b's build pass 2 ran all 24 `pass` on this tree. Plant 15 (plant 1 with the line ends cut to `CR` alone
+in `endForms` and `eachEnter`): the four tests of plant 1 pass, exit 0, as the row says.
+
+**Not run, with their records:** 86 (dropped, D22 second draft: M14 shows a flush out of raw mode empties half a line
+too); plant R (`queueWaitWarn` without its `sync.Once`: an equivalent mutant, decided at P2's build pass 5);
+plant M (the `Rdev` mismatch leaving a descriptor open: untested, recorded at the same pass); the review's other plants
+A to Q, which build pass 5 ran and are not P3's table. `./internal/cli/editor/` for plant 6, as the row says, passes
+on the mutated copy: `terminalInput` lives in `internal/cli`, so the editor package cannot see the plant; plant 6 is
+caught in `internal/cli` by the two tests the table names.
+
+**The table.** `#` is the plant; `row` is the MADR state-table row the plan's table gives it (plants 1 to 15 have
+none). A failure line that carries a temporary path shows `<tmp>`; a long line is cut at 150 characters. A Windows
+or pseudo-terminal case shows its `0063 case=` line.
+
+| # | row | test(s) failed | exit | result | first failure line |
+| --- | --- | --- | --- | --- | --- |
+| 1 | - | TestLineEndsBeforeEachQuestion/CRLF/.*-secret, TestFirstRunKeyOnlyProviderWaits/CRLF, TestFirstRunSetup/CRLF, TestLoginProviderMethodMenuWaits/CRLF | 1 | caught | lineend_test.go:119: secret = "", <nil>; want "the-key" |
+| 2 | - | TestEnterAfterSecretAnswersTheNextLine | 1 | caught | lineend_test.go:137: input = "", cancelled (EOF); want "" at once |
+| 3 | - | - | 0 | NOT CAUGHT: TestLFThenCRIsTwoEnds | - |
+| 3b | - | - | 0 | NOT CAUGHT: TestLFThenCRIsTwoEnds | - |
+| 4 | - | TestFirstRunTypeAhead | 1 | caught | login_test.go:835: condition not met within 5 s |
+| 5 | - | TestSignInTypeAheadNotSentAsPrompt | 1 | caught | login_test.go:864: the agent received the typed-ahead keys as a prompt: ["{\"prompt\":[{\"text\":\"/models claude\",\"type\":\"text\"}],\"sessionId\": |
+| 6 | - | TestTerminalInputReadsOnlyWhenAsked, TestLineSessionReadsOnlyWhenAsked | 1 | caught | line_test.go:299: condition not met within 5 s |
+| 7 | - | TestPastedKeyEndingCRLF | 1 | caught | lineend_test.go:159: input = "", <nil>; want "x" |
+| 8 | - | TestTrustReadsTerminalInput | 1 | caught | readers_test.go:70: the decision not trusted, saved for <tmp> want trusted, the key the terminal input gave |
+| 9 | - | TestFirstRunDeclineOnRepeatEnds, TestFirstRunRepeatedOfferDefaultsNo | 1 | caught | firstrun_test.go:216: the warning: not within 5 s; stderr: |
+| 10 | - | TestFirstRunEndOfInputInRoundEnds | 1 | caught | firstrun_test.go:314: the offer was made 2 times; want 1 |
+| 11 | - | TestFirstRunOfferAgainAfterKeyCancel, TestFirstRunOfferAgainAfterEmptyKey, TestFirstRunOfferAgainAfterMenuInterrupt | 1 | caught | firstrun_test.go:131: the offer again, [y/N]: not before the session's prompt; stderr: |
+| 12 | - | TestFirstRunTypeAheadDroppedBeforeRepeatedOffer | 1 | caught | firstrun_test.go:250: the offer again, [y/N]: not within 5 s; stderr: |
+| 13 | - | TestFirstRunRepeatedOfferDefaultsNo | 1 | caught | firstrun_test.go:214: the offer again, [y/N]: not within 5 s; stderr: |
+| 14 | - | TestFirstRunOfferAgainAfterKeyCancel | 1 | caught | firstrun_test.go:135: the warning was printed 2 times; want 1 |
+| 15 | - | (none: all pass) | 0 | passes, as expected | - |
+| 16 | R4, R5 | TestLineEndsBeforeEachQuestion/CR|LF/.*-secret, TestCRLFSplitAcrossReads | 1 | caught | lineend_test.go:119: secret = "", <nil>; want "the-key" |
+| 17 | R23 | TestLineEndsBeforeEachQuestion/one_chunk_[A-Z]+/.*-secret | 1 | caught | lineend_test.go:119: secret = "", cancelled (EOF); want "the-key" |
+| 18 | R16 | TestLineEndOfInputMidLine | 1 | caught | lineend_test.go:179: input = "abc", <nil>; want cancelled |
+| 19 | R28 | TestSecretRawFailureReadsNothing | 1 | caught | lineend_test.go:204: secret = cancelled (countingIn has nothing); want the raw mode's error |
+| 20 | R30 | TestSecretRestoredWhenContextEnds | 1 | caught | lineend_test.go:238: raw mode entered 1, restored 0; want once each |
+| 21 | R56, R57, R58 | TestEditorKeepsKeysTypedWithLogin, TestTerminalInputBytesInOnePlace, TestAskOnKeysPastAnswerNotShared | 1 | caught | login_test.go:898: the provider menu took the keys typed with /login: |
+| 22 | R15, R68, R69 | TestFirstRunEndOfInputAtOfferEnds | 1 | caught | firstrun_test.go:445: the provider menu was shown |
+| 22b | R15, R68, R69 | TestFirstRunClosedInputEnds, TestFirstRunInstantFailureClosedInputEnds, TestFirstRunEndOfInputAtOfferEnds | 1 | caught | firstrun_test.go:355: the line session did not end; stdout "", stderr "No provider has a credential yet. Sign in to one now? [Y/n]: Sign in to which p |
+| 23 | R38 | TestFirstRunInterruptAtRepeatedOfferEnds | 1 | caught | firstrun_test.go:272: the warning: not within 5 s; stderr: |
+| 24 | R65 | TestFirstRunYesOnRepeatStartsAnotherRound | 1 | caught | firstrun_test.go:286: the provider menu again: not before the session's prompt; stderr: |
+| 25 | R61 | TestFirstRunEnterAtFirstOfferSignsIn | 1 | caught | firstrun_test.go:457: condition not met within 5 s |
+| 26 | R42 | TestFirstRunContextEndReturns | 1 | caught | firstrun_test.go:479: the offer was made 2 times; want once |
+| 27 | R71 | TestFirstRunSetup | 1 | caught | login_test.go:448: the line session did not end; stdout "Saved API key for claude\n\n**Claude (Anthropic)** — live\n\n\| # \| Model \| Context \| In $ |
+| 28 | R72 | TestAcpLoginMethodMenuWaits | 1 | caught | login_test.go:810: the command did not end; stderr "Choose how to authenticate with OpenAI:\n  1  OpenAI API key                       Platform billin |
+| 29 | R9 | TestTerminalInputRule/raw_LF_then_LF | 1 | caught | terminput_test.go:171: step 3, read: "", EOF; want "\n" |
+| 30 | R10 | TestTerminalInputRule/owed_LF_in_a_later_read,_Read, TestTerminalInputRule/owed_LF_in_the_same_read,_Read | 1 | caught | terminput_test.go:171: step 1, read: "\nxy", <nil>; want "xy" |
+| 31 | R11 | TestTerminalInputRule/CR_then_the_end_of_input | 1 | caught | terminput_test.go:171: step 1, line: "", EOF; want "b" |
+| 32 | R43 | TestTerminalInputEnds | 1 | caught | terminput_test.go:191: a failed read: cancelled (the terminal broke), ended false; want cancelled, the read's error, ended |
+| 33 | R44 | TestTerminalInputRule/bytes_unchanged,_line | 1 | caught | terminput_test.go:171: step 0, line: "��\x00\x1b", <nil>; want "\xff\xc3\x00\x1b" |
+| 34 | R45 | TestOneReaderOfStdin | 1 | caught | terminput_test.go:341: inline.NewReader is called at ["auth.go:302:58" "terminput.go:101:31"]; want once, in terminput.go |
+| 35 | R48 | - | 0 | NOT CAUGHT: TestTerminalInputConcurrentReads | - |
+| 36 | R1, R32 | TestLineEndsBeforeEachQuestion/LF/, TestLineEndsBeforeEachQuestion/one_chunk_LF/ | 1 | caught | lineend_test.go:116: choose = "0", cancelled (EOF); want "1" |
+| 37 | R2, R19 | TestLineEndsBeforeEachQuestion/CR/.*-input, TestLineEndsBeforeEachQuestion/CR/.*-choose, TestLineEndsBeforeEachQuestion/CR/.*-confirm | 1 | caught | lineend_test.go:116: choose = "0", cancelled (EOF); want "1" |
+| 38 | R62 | TestFirstRunDeclineEnds | 1 | caught | firstrun_test.go:327: condition not met within 5 s |
+| 39 | R63 | TestFirstRunInterruptAtOfferEnds | 1 | caught | firstrun_test.go:342: condition not met within 5 s |
+| 40 | R14 | TestTerminalInputEnds | 1 | caught | terminput_test.go:183: the end of input: EOF, ended false; want io.EOF, ended |
+| 41 | R41 | TestTerminalInputEnds | 1 | caught | terminput_test.go:202: an ended context: context canceled, ended true; want context.Canceled, not ended |
+| 42 | R22, R35, R77, R80, R81 | TestFlushPoints, typeahead | 1, 2 | caught | flushpoints_test.go:89: after two turns: 5 flushes; want 1 <br> 0063 case=typeahead result=fail observed=no-key-prompt |
+| 43 | R25, R51, R74, R76, R80 | TestFlushPoints, pty-flush-prompt, flush-prompt | 1, 1, 2 | caught | flushpoints_test.go:78: condition not met within 5 s <br> 0063 case=pty-flush-prompt result=fail observed=turn <br> 0063 case=flush-prompt result=fail observed=turn |
+| 44 | R69, R74, R76, R80 | TestFlushPoints, pty-flush-offer, flush-offer | 1, 1, 2 | caught | flushpoints_test.go:412: condition not met within 5 s <br> 0063 case=pty-flush-offer result=fail observed=offer-answered <br> 0063 case=flush-offer result=fail observed=offer-answered |
+| 45 | R79 | TestFlushPoints | 1 | caught | flushpoints_test.go:415: the repeated offer's flush came at stderr 702, before its text ended at 763: |
+| 46 | R83 | TestAbandonedRead, TestCancelableGiveUp, abandoned | 1, 2 | caught | gated_unix_test.go:175: the next line = "hello", <nil>; want "next" <br> 0063 case=abandoned result=fail observed=reached-turn |
+| 47 | R84, R85 | TestAbandonedRead, TestCancelableGiveUp, abandoned | 1, 2 | caught | gated_unix_test.go:175: the next line = "hello", <nil>; want "next" <br> 0063 case=abandoned result=fail observed=reached-turn |
+| 48 | R87 | TestAbandonedRead/timed_wait_keeps_its_bytes | 1 | caught | terminput_test.go:558: the same caller's next read = "", context deadline exceeded; want "kept" |
+| 49 | R88 | TestAbandonedRead/two_give-ups_drop_one | 1 | caught | terminput_test.go:570: the line was not read |
+| 50 | R89 | TestAbandonedRead/the_end_of_input_is_not_dropped | 1 | caught | terminput_test.go:586: after the input ended: "more", <nil>, ended false; want io.EOF, ended |
+| 51 | R46 | TestTerminalInMadeOnce | 1 | caught | terminput_test.go:417: a second call made another terminal input |
+| 52 | R60 | TestPermissionReadsTerminalInput | 1 | caught | readers_test.go:127: the answer {OptionID:reject_once Feedback:} after 0 reads; want allow_once, read once from the terminal input |
+| 53 | R17 | TestLongAnswerHasNoBound | 1 | caught | terminput_test.go:439: input of 65536 bytes, <nil>; want 1048576 |
+| 54 | R31 | TestSecretRestoredOnPanic | 1 | caught | lineend_test.go:260: raw mode entered 1, restored 0; want once each |
+| 55 | R50 | TestTrustReadsWithoutDeadline | 1 | caught | readers_test.go:92: read 2 had a deadline; want none (Q12) |
+| 56 | R105, R106, R107 | TestFlushPoints | 1 | caught | flushpoints_test.go:89: after two turns: 3 flushes; want 1 |
+| 57 | R103 | TestFlushPoints | 1 | caught | flushpoints_test.go:142: condition not met within 5 s |
+| 58 | R104 | TestFlushPoints | 1 | caught | flushpoints_test.go:78: condition not met within 5 s |
+| 59 | R78 | TestFlushFailureWarnsOnce | 1 | caught | flushpoints_test.go:379: the warning "Warning: could not clear what was typed ahead on this terminal (not a terminal after all); it may answer the nex |
+| 60 | R86 | TestAbandonedRead/Ctrl+C_keeps_it, TestLoginInterrupt, menu-ctrlc | 1, 2 | caught | login_test.go:279: the line session did not end; stdout "\x1b[?2004h\x1b[?2026h\x1b[?25l\r\x1b[J\r001\n\r> \r\x1b[2C\x1b[?25h\x1b[?2026l\x1b[?2026h\x1 <br> 0063 case=menu-ctrlc result=fail observed=offer-again-no-warning |
+| 61 | R108 | TestFlushPoints | 1 | caught | flushpoints_test.go:89: after two turns: 2 flushes; want 1 |
+| 62 | R101 | TestFlushFailureWarnsOnce | 1 | caught | flushpoints_test.go:379: the warning "Warning: could not clear what was typed ahead on this terminal (not a terminal after all); it may answer the nex |
+| 63 | R86, R102 | TestAbandonedRead/taken_whole_with_the_read's_own_size | 1 | caught | terminput_test.go:615: a waiting 256-byte read = "pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp |
+| 64 | R109, R121 | TestConsoleReadAgainAfterInterrupt, menu-ctrlc, offer-ctrlc | 1, 2 | caught | consolein_test.go:100: no read of the console started <br> 0063 case=menu-ctrlc result=fail observed=ended <br> 0063 case=offer-ctrlc result=fail observed=ended |
+| 65 | R110 | TestWatchSignalsMarksInterrupt | 1 | caught | signal_test.go:166: the empty read after the interrupt gave "", EOF; want it read again |
+| 66 | R112 | TestConsoleCtrlZAfterInterruptEnds | 1 | caught | consolein_test.go:117: the console was read again: an empty read was excused |
+| 67 | R113, R120 | TestInterruptDuringTurn, setup-menu-ctrlc, auth-paste-ctrlc | 1, 2 | caught | panic: test timed out after 1m40s <br> 0063 case=setup-menu-ctrlc result=fail observed=not-ended <br> 0063 case=auth-paste-ctrlc result=fail observed=not-ended |
+| 68 | R115 | TestConsoleRawCtrlCIsAByte | 1 | caught | consolein_test.go:129: the console was read again: an empty read was excused |
+| 69 | R117 | TestConsoleRuleOnlyOnAConsole | 1 | caught | consolein_test.go:144: the console was read again: an empty read was excused |
+| 70 | R118 | - | 0 | NOT CAUGHT: pty-ctrlc-ctrld | 0063 case=pty-ctrlc-ctrld result=pass observed=warned-once |
+| 71 | R111 | TestConsoleMarkExcusesOneRead | 1 | caught | consolein_test.go:181: the console was read again: an empty read was excused |
+| 72 | R114 | TestConsoleNoMarkWithoutWaitingRead | 1 | caught | consolein_test.go:198: the console was read again: an empty read was excused |
+| 73 | R116 | TestConsoleWaitsForLateMark | 1 | caught | consolein_test.go:219: the reader gave "", EOF before the late mark; want the read made again |
+| 74 | R116, R122 | TestConsoleWaitBound | 1 | caught | consolein_test.go:244: the end of input came after 1.000955083s; want at least 100 ms and under 500 ms |
+| 75 | R103, R105, R123 | TestFlushPoints/keys_held_across_a_sign-in | 1 | caught | flushpoints_test.go:273: when the held keys' turn runs: 0 flushes; want 1 |
+| 76 | R126, R130 | TestCancelableWait, pty-gaveup-held | 1, 1 | NOT CAUGHT: pty-abandoned | cancelin_test.go:104: 136438 reads before any data; want none <br> 0063 case=pty-abandoned result=pass observed=dropped <br> 0063 case=pty-gaveup-held result=fail observed=taken |
+| 76b | R126, R130 | TestCancelableWait, pty-abandoned, pty-gaveup-held (hung) | 1, 1 | caught | cancelin_test.go:104: 151538 reads before any data; want none <br> 0063 case=pty-abandoned result=fail observed=no-loopback <br> 0063 case=pty-gaveup-held: no line, the run ended in its bound |
+| 77 | R127 | TestCancelableWait | 1 | caught | panic: test timed out after 1m40s |
+| 78 | R127, R129 | TestCancelableWait | 1, 0 | NOT CAUGHT: TestCancelableGiveUp | cancelin_test.go:174: the close did not report the read |
+| 78b | R127, R129 | TestCancelableWait | 1, 0 | NOT CAUGHT: TestCancelableGiveUp | cancelin_test.go:148: the close returned before the wait did |
+| 79 | R125, R133 | TestCancelableWait | 1 | caught | cancelin_test.go:194: read "", EOF; want "i": EINTR retried |
+| 80 | R128 | TestCancelableGiveUp, pty-abandoned-empty-typed, pty-abandoned-empty-pasted | 1, 1 | caught | gated_unix_test.go:88: the line was not read <br> 0063 case=pty-abandoned-empty-typed result=fail observed=first-key-dropped <br> 0063 case=pty-abandoned-empty-pasted result=fail observed=other-turns |
+| 81 | R129 | TestCancelableGiveUp | 1 | caught | gated_unix_test.go:175: the next line = "hello", <nil>; want "next" |
+| 82 | R129 | TestCancelableGiveUp | 1 | caught | gated_unix_test.go:205: the next line = "next", <nil>; want "raced" |
+| 83 | R137 | TestTerminalInChoosesLayer | 1 | caught | gated_unix_test.go:655: a pipe warned: |
+| 84 | R127 | TestCancelableGiveUp | 1 | caught | gated_unix_test.go:88: the line was not read |
+| 85 | R142 | TestCancelableConcurrent | 1 | caught | WARNING: DATA RACE |
+| 87 | R134 | TestCancelableWait, pty-menu-ctrld | 1, 1 | caught | cancelin_test.go:222: read "", <nil>; want exactly (0, io.EOF) <br> 0063 case=pty-menu-ctrld result=fail observed=not-ended |
+| 88 | R145 | - | 0 | NOT CAUGHT: TestCancelableGiveUp | - |
+| 89 | R147 | TestCancelableGiveUp | 1 | caught | gated_unix_test.go:163: after discard the read gave "ppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp |
+| 90 | R151 | TestAbandonedRead, TestCancelableGiveUp | 1 | caught | gated_unix_test.go:175: the next line = "hello", <nil>; want "next" |
+| 91 | R146 | TestCancelableWakePipe | 1 | caught | cancelin_test.go:299: wake pipe end 7: flags 0x1, <nil>; want O_NONBLOCK |
+| 91b | R146 | TestCancelableGiveUp | 1 | caught | gated_unix_test.go:140: the closed gate's wait returned 640702 times in 200 ms with bytes ready; want none |
+| 92 | R145 | TestCancelableGiveUp | 1 | caught | gated_unix_test.go:140: the closed gate's wait returned 304500 times in 200 ms with bytes ready; want none |
+| 93 | R138 | - | 0 | NOT CAUGHT: TestCancelableFallbackWarnsOnce | - |
+| 93b | R138 | TestCancelableFallbackWarnsOnce | 1 | caught | gated_unix_test.go:294: the warning shown 0 times; want once: |
+| 94 | R80, R84, R132 | TestFlushAtGiveUp | 1 | caught | giveup_test.go:56: 0 flushes at the withdrawal; want one |
+| 95 | R81, R132 | TestFlushAtGiveUp | 1 | caught | giveup_test.go:93: 1 flushes at the person's give-up; want none |
+| 96 | R126 | pty-private-descriptor | 1 | caught | 0063 case=pty-private-descriptor result=fail observed=standard-input |
+| 96b | R126 | TestCancelableWait | 1 | caught | cancelin_test.go:211: read "", resource temporarily unavailable; want "e" after EAGAIN |
+| 97 | R138 | TestCancelableFallbackWarnsOnce | 1 | caught | gated_unix_test.go:308: the prompt read "", cancelled (bad file descriptor); want "y" from standard input as built |
+| 98 | R132, R143 | TestGiveUpFlushBySystem | 1 | caught | gated_unix_test.go:360: 1 flushes at the program's give-up; want 0 |
+| 99 | R138 | TestGatedRefusals | 1, 1 | caught | cancelin_test.go:380: NewGated(1024) = &{1024 4 7 { <nil> <nil> 0x104407ce0 0x104404610 <nil> <nil>} {{} {0 0}} 0x518093b8c9c0 false false false 0 fal <br> gated_unix_test.go:398: NewGated took the descriptor; want it refused |
+| 100 | R124 | TestTerminalInWiresGate | 1 | caught | gated_unix_test.go:463: the input's gate is <nil>; want the gated reader openGated gave |
+| 101 | R126 | pty-not-controlling | 1 | caught | 0063 case=pty-not-controlling result=fail observed=dev-tty-opened |
+| 102 | R147 | TestGatedRaceDropSize | 1 | caught | gated_unix_test.go:629: the next 256-byte read gave "ppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp |
+| 103 | R153 | TestCancelableWait | 1 | caught | cancelin_test.go:244: read "", interrupted system call after 1 reads; want "r" after EINTR, then a read |
+| 104 | R154 | TestGatedRefusals | 1, 1 | caught | cancelin_test.go:403: NewGated of a blocking pipe = &{6 4 7 { <nil> <nil> 0x1023f7d40 0x1023f4610 <nil> <nil>} {{} {0 0}} 0x1ca7fa8649c0 false false f <br> gated_unix_test.go:398: NewGated took the descriptor; want it refused |
+| 105 | R155 | pty-same-terminal | 1 | caught | 0063 case=pty-same-terminal result=fail observed=other-terminal |
+| 106 | R156 | TestFallbackWarningOnMainFlow | 1 | caught | gated_unix_test.go:486: the warning was written while the read that fell back ran: |
+| 107 | R80, R157 | TestGiveUpFlushBySystem | 1 | caught | gated_unix_test.go:360: 0 flushes at the program's give-up; want 1 |
+
+
+**Findings, each a plant not caught by a test its row names** (the stop rule: the test checks nothing the plant
+changes; back to P1 for its rule). Each was checked further on the whole of `./internal/cli/` and `./internal/cli/term/`
+with the plant applied, to find what does catch it.
+
+* **P3-1, plant 3 (`\n` then `\r` folded as one end), `TestLFThenCRIsTwoEnds` (`lineend_test.go:165`), row R6.**
+  Plants 3 and 3b (the fold across reads, and the fold of bytes already read) both pass it. The test reads `y\n`
+  and then `\r` as two reads, and asserts only that the secret `errors.Is(err, errCancelled)`; a `\r` read as an empty
+  secret and a `\r` dropped (the secret then meets the end of input) are both `errCancelled`, so the test cannot tell
+  one end from two. What does catch plant 3: `TestTerminalInputRule/LF_then_CR,_line` and `/LF_then_CR,_key`,
+  `TestQuestionsConfirmAndInput` and `TestFirstRunOfferAgainAfterEmptyKey`. Resolutions: (1, recommended) tighten
+  `TestLFThenCRIsTwoEnds` so the two cases differ: the secret must be cancelled by the empty answer itself, not by the
+  end of input (`err == errCancelled`, or not `io.EOF`); one line in `lineend_test.go`, a P1 test, which needs the
+  owner's word, plus a dated note; plant 3 is then caught as the table names it. (2) Move plant 3's row to
+  `TestTerminalInputRule`, which pins R6 already: records only; `TestLFThenCRIsTwoEnds` stays, checking less than
+  its name says. (3) Nothing: R6 is pinned by the table test alone and the named test is decoration.
+* **P3-2, plant 35 (`Read` takes `pending` without the lock), `TestTerminalInputConcurrentReads` under `-race`, row
+  R48.** Exit 0, no race reported, on the mutated copy. Every reader holds `turn`, a channel hand-off, which is a
+  happens-before edge for the race detector, so `Read` and `line`, which A19 runs at once, never touch `pending` at the
+  same time whatever the mutex does; the mutex guards `pending` only against the methods that do not take the turn
+  (`discard`, `rawEnd`, `abandon`, `flushNext`, `signedInRound`, `ended`), and A19 calls none of them while it reads.
+  The terminal-input tests of `./internal/cli/` as a group (`TestTerminalInput*`, `TestAbandonedRead`,
+  `TestOneReaderOfStdin`, `TestAskOn*`, `TestLongAnswer*`, `TestEditorKeeps*`, `TestOwedLF*`, `TestFlushNext`), run under
+  `-race` with the plant, also exit 0.
+  Resolutions: (1, recommended) extend A19 so a third goroutine calls `discard()` and `ended()` while the two read; the
+  plant then races; one test change in `terminput_test.go` and a dated note on A19. (2) Record plant 35 as an equivalent
+  mutant for what A19 can see, R48 pinned by the turn and by a read of the code: records only, R48 half-tested.
+  (3) Nothing.
+* **P3-3, plant 70 (the rule applied on every system: `isConsoleInput` true outside Windows), `pty-ctrlc-ctrld`,
+  row R118.** The case reads `pass observed=warned-once` with the plant. Since D22, `terminalSource` returns the
+  gated reader on a POSIX terminal, so the console rule is never in that path; the rule would apply only to a pipe or
+  a file and to the fallbacks, where it costs a 100 ms wait at each end of input (`MarkWait`). The two whole packages
+  pass with the plant (exit 0, 0): no test sees it. Resolutions: (1, recommended) one small test in
+  `internal/cli/term/consolein_test.go`: `isConsoleInput` is false for a file, a pipe and a nil file off Windows
+  (`runtime.GOOS`); plant 70 is then caught; a dated note moves plant 70's must-fail to it and drops
+  `pty-ctrlc-ctrld` from the row. (2) Record R118 as pinned by a read of the build tags (`consolein_other.go`), plant 70
+  untested. (3) Nothing.
+* **P3-4, plant 78 (closing the gate reports no read in progress, or does not wait for the waiter),
+  `TestCancelableGiveUp` (A42), rows R127, R129.** Both forms (78, and 78b: the wait loop in `Close` removed) are
+  caught by `TestCancelableWait` (A41): `cancelin_test.go:174: the close did not report the read` and
+  `cancelin_test.go:148: the close returned before the wait did`; A42 passes both (exit 0). A42's race cases run over
+  `tookGate`, a stub whose `Close` always reports a read (`giveup_test.go`), and its real-`Gated` cases are those
+  where nothing was read; so no `internal/cli` test sees `Gated.Close`'s report. Resolutions: (1, recommended) amend
+  row 78's must-fail to A41 alone, with a dated note that A42's race cases use a stub: records only. (2) Add a case to
+  A42 over a real `Gated` with a read(2) seam that completes just before the close, as the second draft staged it: a
+  test change in `gated_unix_test.go`. (3) Nothing.
+* **P3-5, plant 88 (the layer returns `(0, nil)` when the gate closes), `TestCancelableGiveUp` (A42), row R145.**
+  A42 passes it (exit 0): `inline.Reader` reads again on `(0, nil)`, so a closed-gate wait that returns it is not seen
+  through the terminal input. `TestCancelableWait` catches it (`cancelin_test.go:131: read "", <nil>; want "xyz"`, the
+  case "a close before data reads nothing; what comes after is read whole after the next opening"). Resolutions:
+  (1, recommended) amend row 88's must-fail to A41; records only. (2) Add a term-level assertion to A42; a test
+  change. (3) Nothing.
+* **P3-6, plant 93 (the fallback warns at every cause), `TestCancelableFallbackWarnsOnce`, row R138.** The plant
+  removes `first &&` in `Gated.fallBack`; the test passes (exit 0), and so do both whole packages. It is an equivalent
+  mutant, as plant R is: `fallBack` is entered only while `g.fellBack` is false (`Read` returns `fallbackRead` once it
+  is set, at `term/cancelin_unix.go:290`), `fellBack` is set under `g.mu` in the same call, and the one reader
+  goroutine of `inline.Reader` calls `Read` one at a time, so `OnFallback` cannot be called twice with or without
+  `first`; `queueWaitWarn`'s `sync.Once` is a second guard. The row's other half, the words changed (93b), is caught:
+  `gated_unix_test.go:294: the warning shown 0 times; want once:`. Resolutions: (1, recommended) record 93's "every
+  cause" half as an equivalent mutant with this evidence, as R was, and keep 93b as the plant: records only. (2)
+  Remove the dead `first` in production: a code change outside P3, for no behaviour. (3) Nothing.
+
+Doing nothing on all six leaves R6, R48, R118, R127, R129 and R145 without the test the plan credits, and leaves P3's
+gate ("mutations 1 to 107 each fail the named test") unmet.
+
+**Not done, and why:** P4 (stopped by the rule above); a Windows run on the unmutated copy (P2b's 24 lines stand for
+this tree, and P4 runs it); the Linux machine ran no
+pseudo-terminal plant (plants run on this Mac, as the brief says, and the two systems share the file the cases are in).
+
+#### P3, after the owner's ruling (2026-11-21)
+
+**The ruling** (the owner, relayed by the coordinator): "As above, plus tighten the P1 test", "As above" being the
+recommended resolution of each finding: P3-1 (plant 3) the test tightened; P3-2 (plant 35) A19 extended; P3-3
+(plant 70) a test in `term`; P3-4 and P3-5 (plants 78, 88) the rows' must-fail lists amended to A41, by dated
+annotation; P3-6 (plant 93) recorded as an equivalent mutant, as plant R was, with 93b the plant. The rows of the P3
+table above carry a dated annotation each.
+
+#### Deviation 3 (2026-11-21, P3's findings P3-1 to P3-6): three test files changed after P2b
+
+* **Found.** P3-1 to P3-6 above: six plants not caught by a test their row names.
+* **Ruling.** The owner's label, quoted: "As above, plus tighten the P1 test". The owner's word covers changing the P1
+  test `TestLFThenCRIsTwoEnds` (`internal/cli/lineend_test.go`), its assertion only.
+* **Files changed, tests only, no production code:**
+  * `internal/cli/lineend_test.go`: `TestLFThenCRIsTwoEnds` now requires that the secret is cancelled by the empty
+    answer, not by the end of input (`!errors.Is(err, errCancelled) || errors.Is(err, io.EOF)` is a failure). A first
+    form with `err != errCancelled` was refused by `errorlint` in the pre-add check and replaced by this one.
+  * `internal/cli/terminput_test.go`: `TestTerminalInputConcurrentReads` (A19) gains a second phase over a fresh input
+    from a copy of the same chunks, with a third goroutine calling `discard()` and `ended()` in a loop while the two
+    read; `discard` drops bytes, so that phase's check is that no byte is given more often than it was read.
+  * `internal/cli/term/consolein_test.go`: `TestIsConsoleInputOffWindows` (new; row R118): off Windows,
+    `isConsoleInput` is false for a pipe and for a file, and `ConsoleInput` gives the file itself; it skips on Windows.
+* **Dated annotations** on plants 3, 35, 70, 78, 88 and 93 in the P3 table above; plant 70's must-fail is now
+  `TestIsConsoleInputOffWindows`, and `pty-ctrlc-ctrld` leaves its row.
+* **MADR:** no decision or asserted fact changes.
+
+**The plants again**, each on a fresh copy of the changed tree, one at a time, with the run that names the test:
+
+```text
+3   TestLFThenCRIsTwoEnds: exit 1: lineend_test.go:175: secret = "", cancelled (EOF); want cancelled by the empty answer, not by the end of input
+35  TestTerminalInputConcurrentReads, -race, run-heavy: exit 1: WARNING: DATA RACE
+70  TestIsConsoleInputOffWindows: exit 1: consolein_test.go:174: isConsoleInput(a file) is true off Windows
+78  TestCancelableWait (A41): exit 1: cancelin_test.go:174: the close did not report the read
+78b TestCancelableWait (A41): exit 1: cancelin_test.go:148: the close returned before the wait did
+88  TestCancelableWait (A41): exit 1: cancelin_test.go:131: read "", <nil>; want "xyz"
+93b TestCancelableFallbackWarnsOnce: exit 1: gated_unix_test.go:294: the warning shown 0 times; want once:
+```
+
+Plant 3b (the `\r` dropped only when already read) passes the tightened test, exit 0: its input comes in two reads, so
+it never meets that form; the already-read form is the row of `TestTerminalInputRule` ("LF then CR, line" and "key"),
+caught in the first pass. Plant 3, the plant the row names, is caught. Plant 93's "every cause" half is an equivalent
+mutant, as plant R is (P3-6's evidence), and is not tested; 93b is its plant.
+
+**The unmutated copy** of the changed tree: `go test -count=1 ./internal/cli/ ./internal/cli/term/
+./internal/cli/editor/` exit 0 (`ok … internal/cli 57.253s`, `… term 2.344s`, `… editor 1.925s`); the extended A19 under
+`-race`, exit 0 (`ok … internal/cli 3.447s`).
+
+**P3 outcome, after the ruling: every plant of the table is caught by a test its row now names, plant 15 passes as
+expected, and plants R, 93's first half, M and 86 are recorded and not tested.** The gate and the stop rule are met.
+
+### P4, the gates (2026-11-21)
+
+**Not started.** P3 stopped on six plants its tests do not catch (P3-1 to P3-6 above); P4's step list is unchanged and
+waits for the owner's ruling on them, since the resolutions that change a test change the tree P4 gates.
+
+*(2026-11-21, after the owner's ruling on P3's findings and Deviation 3.)* **Outcome: every gate passed, exit 0.** On
+the branch at `19306d5` with Deviation 3's three test files uncommitted in the tree; nothing staged or committed. Each
+exit status was taken from the command itself before any filter. P5 and P6 are not started.
+
+| Step | Command | Exit | Decisive line |
+| --- | --- | --- | --- |
+| 1 | `make pre-add-check FILES="<the 44 .go files 0063 changed>"` (`git diff --name-only fa35986 19306d5 -- '*.go'`, with the three files of Deviation 3) | 0 | `go-precheck: 44 file(s) clean (gofmt, golangci-lint, govulncheck).` A first run, before the tightened assertion was written with `errors.Is`, stopped on `errorlint` at `lineend_test.go:174` (`!=` on an error): fixed, and plant 3 run again. |
+| 2 | `make lint` | 0 | `0 issues.` for `.` and for `acpext`; `golangci-lint has version 2.15.0 built with go1.27.4` |
+| 3 | `run-heavy -- make preflight` | 0 | `preflight passed` (its markdownlint: `Summary: 0 issues in 0 files`) |
+| 4 | `go test -count=1 ./...` in `.` and in `acpext`, through `run-on-host --need darwin`, `--need linux`, `--need windows` | 0, 0, 0 | `rc1=0 rc2=0` on each; 39 `ok` package lines on the first two |
+| 5 | `run-on-host --race --need linux -- make race`; `run-heavy -- make race` on this Mac | 0, 0 | 39 `ok` lines each, no `FAIL`, no `WARNING: DATA RACE` |
+| 6 | `run-on-host --need windows -- go test -count=1 ./internal/cli/...`, **without a console** | 0 | `ok … internal/cli 77.149s`, `… complete 2.525s`, `… editor 1.739s`, `… render 0.055s`, `… term 1.293s`, `… term/termtest 0.014s` |
+| 6 | `run-on-host --need windows -- make probe-conpty` | 0 | 24 cases, below |
+| 6 | `run-on-host --need linux --race -- make probe-pty` (`--race` only keeps a run out of a WSL distro) | 0 | 13 cases, below |
+| 6 | `make probe-pty`, this Mac | 0 | 13 cases, the same lines as Linux's |
+| 7 | `run-heavy -- make check-test-isolation` | 0 | `check-test-isolation: ok` (`files written above the temp roots: 0`) |
+| 8 | `make check-records` | 0 | no output |
+| 8 | `make markdownlint` | 0 | `Summary: 0 issues in 0 files` |
+| 8 | the disclosure guard's `redact` (no `--apply`) | 0 | `redact: would edit 0 file(s), 0 path(s) need a rename by hand; nothing renamed, staged or committed` |
+
+Step 4's Windows run is the first command of the step with `sh -c`: a command that starts with `bash` is refused for
+that host. The Windows run of step 6's first row is a run **without a console**: it checks the code on Windows, not a
+console's line ends. The `0063 case=` lines, verbatim, each as its "After P2b" word (`key-ctrlc`, `empty-key` and
+`menu-ctrlc` `offer-again`; `decline` and `pty-ctrlc-ctrld` `warned-once`; `flush-offer` and `pty-flush-offer`
+`offer-waits`; the rest as P2 left them). The Windows test laptop:
+
+```text
+0063 case=probe-crlf result=pass observed=crlf
+0063 case=probe-typeahead result=pass observed=one-line-per-read
+0063 case=probe-ctrlc result=pass observed=eof first=read
+0063 case=probe-ctrlz-line result=pass observed=eof
+0063 case=probe-ctrlz-raw result=pass observed=eof
+0063 case=report result=pass observed=waits
+0063 case=masked result=pass observed=masked
+0063 case=key-ctrlc result=pass observed=offer-again
+0063 case=empty-key result=pass observed=offer-again
+0063 case=menu-ctrlc result=pass observed=offer-again
+0063 case=decline result=pass observed=warned-once
+0063 case=typeahead result=pass observed=waits
+0063 case=login-no-loop result=pass observed=no-offer
+0063 case=method-menu result=pass observed=waits
+0063 case=key-ctrlz result=pass observed=ended
+0063 case=setup result=pass observed=cancelled
+0063 case=acp-login result=pass observed=cancelled
+0063 case=offer-ctrlc result=pass observed=warned-once
+0063 case=setup-menu-ctrlc result=pass observed=ended
+0063 case=nothing-saved result=pass observed=none
+0063 case=flush-prompt result=pass observed=no-turn
+0063 case=flush-offer result=pass observed=offer-waits
+0063 case=abandoned result=pass observed=dropped
+0063 case=auth-paste-ctrlc result=pass observed=ended
+```
+
+This Mac, and the Linux machine that is not WSL (identical, compared with `diff`):
+
+```text
+0063 case=pty-flush-prompt result=pass observed=no-turn
+0063 case=pty-flush-offer result=pass observed=offer-waits
+0063 case=pty-abandoned result=pass observed=dropped
+0063 case=pty-ctrlc-ctrld result=pass observed=warned-once
+0063 case=pty-abandoned-empty-typed result=pass observed=none-lost
+0063 case=pty-abandoned-empty-pasted result=pass observed=none-lost
+0063 case=pty-menu-ctrlc-typed result=pass observed=no-ab
+0063 case=pty-menu-ctrld result=pass observed=ended-at-prompt
+0063 case=pty-gaveup-held result=pass observed=held
+0063 case=pty-private-descriptor result=pass observed=private
+0063 case=pty-dev-tty-fallback result=pass observed=dev-tty
+0063 case=pty-not-controlling result=pass observed=refused
+0063 case=pty-same-terminal result=pass observed=own-terminal
+```
+
+No gate failed, none was loosened or skipped, and no failing run was repeated to pass.

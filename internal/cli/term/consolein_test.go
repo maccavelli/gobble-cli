@@ -3,6 +3,8 @@ package term
 import (
 	"errors"
 	"io"
+	"os"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -147,6 +149,33 @@ func TestConsoleRuleOnlyOnAConsole(t *testing.T) {
 	}
 	if d := r.at.Sub(start); d >= MarkWait {
 		t.Fatalf("the end of input took %v: a pipe or a file waits for no mark", d)
+	}
+}
+
+// (2026-11-21, P3-3, the owner's "As above, plus tighten the P1 test"
+// ruling on plant 70; row R118): off Windows, isConsoleInput is false for any
+// file, so ConsoleInput gives the file itself, with no rule over it.
+func TestIsConsoleInputOffWindows(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("a Windows handle may be a console")
+	}
+	pr, pw, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = pr.Close(); _ = pw.Close() })
+	plain, err := os.Open(os.DevNull)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = plain.Close() })
+	for name, f := range map[string]*os.File{"a pipe": pr, "a file": plain} {
+		if isConsoleInput(f) {
+			t.Fatalf("isConsoleInput(%s) is true off Windows", name)
+		}
+		if got := ConsoleInput(f, &InterruptMark{}); got != io.Reader(f) {
+			t.Fatalf("ConsoleInput(%s) = %T; want the file itself", name, got)
+		}
 	}
 }
 

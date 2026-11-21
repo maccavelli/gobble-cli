@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 	"sync"
@@ -167,8 +168,11 @@ func TestLFThenCRIsTwoEnds(t *testing.T) {
 	if ok, err := q.confirm("Go?", false); err != nil || !ok {
 		t.Fatalf("confirm = %v, %v", ok, err)
 	}
-	if s, err := (prompter{q}).Secret("Key"); !errors.Is(err, errCancelled) {
-		t.Fatalf("secret = %q, %v; want cancelled", s, err)
+	// (2026-11-21, P3-1, the owner's "As above, plus tighten the P1 test"):
+	// the secret is cancelled by the empty answer itself, not by the end of
+	// input, which a \r dropped from the input would also give.
+	if s, err := (prompter{q}).Secret("Key"); !errors.Is(err, errCancelled) || errors.Is(err, io.EOF) {
+		t.Fatalf("secret = %q, %v; want cancelled by the empty answer, not by the end of input", s, err)
 	}
 }
 
