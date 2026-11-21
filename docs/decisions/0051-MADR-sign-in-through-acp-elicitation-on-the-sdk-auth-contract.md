@@ -892,6 +892,41 @@ part is to pass `WithClientInfo` on its call (N6, above).
    User-Agent that begins `gobble/<the build's version> (` and names `go-llmprovider-sdk/` on every sign-in (N1, N3),
    refresh (N4 to N6), revocation and revocation discovery (N7); each seen failing on the PLAN's planted breaks.
 
+### Completion (2026-11-21)
+
+Every item is met, and each cell names its evidence. The evidence is 0051-PLAN's "P8 record (2026-11-21)", run at
+`fa35986` on `main` with a clean tree. The owner's live probes L1 to L3 are recorded there. The PLAN stays
+`in-progress`: P8a, the owner's `acpext/v0.5.0` tag and the pin commit, is still to come. Issue #16 is to be closed by the
+owner, with D8's text, which that record drafts as a command.
+
+1. **Met.** `make archtest` and the archtest step of `make preflight`: `ok .../internal/archtest`, exit 0. The planted
+   imports are the P2 record's three plants (`rule 1 agent authcontract`, `rule 4 acpclient authcontract`,
+   `rule 4 acpserver signin`), each seen failing.
+2. **Met.** `TestOfferedMethods`, `TestPredicatesFromOffered`, `TestRemoteMethods` and `TestResolverAcceptsOnlyOfferedKinds` pass,
+   run again with `-v`; the P4 record's plants, each seen failing, hold each rule.
+3. **Met.** The loopback ACP tests, `TestAuthenticate*` in `acpserver`, pass in the full suite on three hosts and
+   `-race -count=20` over `TestAuthenticate|TestAuthMethods|TestNoACPLogout` is exit 0; the P6 record's 73 plants, all seen
+   failing, are the breaks the item names. Live, L1 (form) and L2 (`elicitation.url`) signed in through the real
+   `authenticate` of `gobble acp` with `_meta.gobble.remote: true`, and no port was bound (`ports_bound=none` over
+   351 and 74 polls).
+4. **Met.** `TestAuthLoginJSON*` pass; the P5 record's 39 plants, each seen failing.
+5. **Met.** No Go identifier `FailureKind` remains (the only matches of the word are two test names, `TestAuthLoginJSONFailureKind`
+   and `TestAuthenticateRealFailureKinds`); `TestErrorKind`, `TestKindsAndLimits` and `TestErrorData` pass.
+6. **Met.** `TestEveryCommandAndWordIsAccepted` passes; the P4 record's plants, a `--method device` given to openai
+   and a `--method browser` given to kilo, each seen failing.
+7. **Met on the tree at `fa35986`.** `make preflight` and `make race` pass on this Mac; `go test -count=1 ./...`,
+   `-race` and acpext's tests pass on the Linux machine and the Windows test laptop; `make check-acpext-deps` passes;
+   apidiff of acpext from `acpext/v0.4.0` lists D6's and D7's changes and nothing else, the P3 record's list.
+   P8a re-runs the gates and the apidiff on the commit the final tag names, as the item's note says.
+8. **Met.** L1, L2 and L3 are recorded in the PLAN with their outcomes: L1 and L2 signed in and logged out with no
+   revoke warning, L3 passed on its second run. The first L3 run's failure is recorded with its cause.
+9. **Met (D9).** `TestSignInNamesGobble`, `TestStoredLoginNamedForRefresh`, `TestLogoutRevokesAsGobble`,
+   `TestStartSignInNamesGobble` and `TestCLIPassesGobblesIdentity` pass; the P2a record's plants, each seen failing. Live,
+   `gobble auth logout grok` after L1 and after L2 printed no revoke warning (C4 not triggered).
+
+Not part of the items, kept as they were: D8 is the owner's to run, and the `acpext` row of `docs/architecture.md`
+stays `v0.5.0-rc.1` until P8a's pin commit.
+
 ## Pros and Cons of the Options
 
 ### A. ACP elicitation on `signin.Start`
@@ -1020,6 +1055,7 @@ O2 (a), which magic-cli-remote's draft put to this repository. The options are k
   greps the run's log for a planted callback.
 * Whether accounts.x.ai offers a paste (U1): go-llmprovider-sdk `0074-MADR-one-sign-in-handle-and-method-facts.md` D12's owner-run probe; until it does,
   grok's browser stays `browser_loopback`. *(2026-11-15, the owner's ruling "Amend the records to the SDK's facts": the SDK's fact changed at `v1.31.0`, Grok's browser sign-in is `browser_paste`; go-llmprovider-sdk's own run had verified the paste, its row C57.)*
+  *(2026-11-21, 0051-PLAN's "P8 record (2026-11-21)": L3, the SDK's own `TestLive_0074GrokPaste` at `v1.31.0`, passed on the owner's second run, completed by a paste of a bare code, listed 12 models, revoked with the refresh refused. Its first run failed `paste_refused_locally`: the kit told the owner to paste a `127.0.0.1` address while xAI's page shows a code, the coordinator's error and not the SDK's or gobble's. gobble changes nothing; Grok's browser stays `browser_paste` as the SDK has it.)*
 
 ### Revisions of 2026-11-11
 

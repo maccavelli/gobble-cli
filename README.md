@@ -44,7 +44,8 @@ Early, and built in the order [docs/README.md](docs/README.md#build-order) gives
   call names the files it touches. `gobble acp --model <provider/id>`, with `--provider` and
   `--thinking`, starts every session on that model, as chat's flags do. `gobble acp --login <provider>`
   is what an ACP client's terminal sign-in runs, with `/login`'s menu of methods; a client that offers `elicitation.form` is signed in
-  by `authenticate`, as forms, with no terminal ([the credentials guide](docs/guides/credentials.md#signing-in-from-an-acp-client)).
+  by `authenticate`, as forms, with no terminal; a client on another device sends `_meta.gobble.remote: true`, and a browser sign-in is then finished by pasting
+  the code or address the browser ends on ([the credentials guide](docs/guides/credentials.md#signing-in-from-an-acp-client)).
 - **Tools:** `read` (an image, when the model takes one), `write` and `edit`, confined to the workspace roots; `grep`, `find` and `tree`,
   which follow the repository's `.gitignore` rules; `move`, `delete`, `copy` and `mkdir`, where every
   delete asks first; `todo`, a checklist the client shows as the plan; `tool_search`, which loads

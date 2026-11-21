@@ -3363,3 +3363,122 @@ daylight-saving offset was not tried. Whether Grok's or Kilo's real issuer sends
 `internal/cli/consentwording_test.go` 19:56:11, `internal/cli/login.go` 19:51:52, `internal/cli/loginsurfaces_test.go` 20:01:25; the text files, which only `check-records` and `markdownlint` read: `README.md` 19:59:10, `docs/README.md` 20:10:55, `docs/architecture.md` 19:59:10, `docs/guides/credentials.md` 19:59:10, `docs/decisions/0051-MADR-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md` 20:10:35; this PLAN, written after the gates.
 
 **Staged, not committed; the coordinator commits on the branch.**
+
+### P8 record (2026-11-21)
+
+Built by a mainstream model at medium effort, on the coordinator's brief; steps 1, 3 and 5 of P8, and step 4's text drafted. Step 2's probes were run by the owner and are recorded here, not
+run by this phase. Times are the session machine's local time. Nothing staged or committed by the phase's checks; the records and docs below are edited in the working tree, **the owner commits**.
+No tag, push, merge, issue close or branch change was made. No Go file changed.
+
+**C1, the start state.** Branch `main`, `HEAD` `fa35986`, `git status --porcelain` printed nothing, before and after the checks. `go.mod` requires acpext `v0.5.0-rc.1` and
+go-llmprovider-sdk `v1.31.0`.
+
+**Step 2, the owner's live probes (recorded, not run here).** The kit is a scratch form-only ACP client, `acp-signin-client`, built from acp-go-sdk2 `v1.36.0`, at `<scratch>/live-0051`,
+driving `gobble acp` built from `main` at `fa35986` (`gobble_version=0.6.0-56-gfa35986`). Each check ran in a fresh scratch `GOBBLE_HOME`, deleted at its end; the owner's own `auth.json` was never
+read or written; the client sent `_meta.gobble.remote: true`; a port watch ran during each sign-in. The result files hold fixed words and numbers only. Read from them:
+
+| Check | Mode and date | Outcome | Facts |
+| :--- | :--- | :--- | :--- |
+| L1, a grok device sign-in, form | `form`, 2026-11-21 06:57 | `signed-in` | `elicit_shown_form=1`, `elicit_shown_url=0`, `gobble_exit=0`, `client_exit=0`, `ports_bound=none` over `port_polls=351`; `gobble auth logout grok`: `logout_exit=0`, `logout_result=logged-out`, `revoke_warning=no` (C4 not triggered); `scratch_home_deleted=yes` |
+| L2, the same, through a client offering `elicitation.url` | `url`, 2026-11-21 06:59 | `signed-in` | `elicit_shown_url=1`, `elicit_shown_form=0`, `url_complete=1`, `ports_bound=none` over `port_polls=74`; `logout_result=logged-out`, `revoke_warning=no`; `scratch_home_deleted=yes` |
+| L3, U1 recorded | `sdk-probe`, 2026-11-21 07:43 | `passed` | the SDK's own `TestLive_0074GrokPaste` at go-llmprovider-sdk `v1.31.0`, commit `0fbb7613e9ac2e3420542a75b2f4ebffbe83854b`, from a scratch copy: `vet_exit=0`, `compile_exit=0`, `probe_exit=0`, `probe_test_result=PASS`, `probe_sign_in=completed-by-paste`, `probe_paste_shape=a bare code`, `probe_use=listed-12-models`, `probe_revocation=revoked-refresh-refused`, `probe_refusal_is_auth_failure=true` |
+
+In both L1 and L2 `initialize=ok`, `device_method=found` and `authenticate=sent`, and `elicit_method_enum=0` and `elicit_declined_other=0`. L1 and L2 ran under a client with no request timeout, which is
+what the MADR's "Not verified" first bullet says acceptance does; a client's own timeout is Magic's to measure.
+
+**L3's first run failed, and why.** The first run ended `paste_refused_locally`. The coordinator's kit told the owner to paste a `127.0.0.1` address while xAI's page shows a code. The SDK's own 0074 record already said a bare
+code; the error was the coordinator's, and the kit's wording was corrected before the second run, `L3.txt` as it stands. Grok's browser fact stays as the SDK has it, `browser_paste` at `v1.31.0` (the P4 record's deviation 4);
+gobble changes nothing. No gobble code was involved in L3.
+
+**Step 1, the commands, each run at `fa35986` with its exit status taken from the command itself before any filter** (output in scratch files; the decisive line quoted). Heavy runs ran one at a time, through `run-heavy` on this
+Mac and `run-on-host --race` on the other two, which kept the Linux run off the WSL distros (`pick-host`: "excluded: race run; WSL distros report false data races").
+
+| Command | Where | Start to end | Exit | Decisive line |
+| :--- | :--- | :--- | :--- | :--- |
+| `make archtest` | this Mac | 12:53:55 to 12:53:57 | 0 | `ok  	github.com/maccavelli/gobble-cli/internal/archtest` |
+| `make check-acpext-deps` | this Mac | 12:53:57 | 0 | `check-acpext-deps: ok` |
+| `python3 scripts/check_libs.py --self-test` | this Mac | 12:53:57 to 12:53:58 | 0 | `self-test a next link off api.github.com is refused: ok` (the last of the cases) |
+| `make check-libs` (network) | this Mac | 12:53:58 to 13:02:38 | 0 | `0 failing checks; scratch removed`; each of acp-go-sdk2 `v1.36.0`, go-llmprovider-sdk `v1.31.0`, authcontract, go-selfupdate-lib and go-tui-lib `v2.12.1` ends `advisories: ok` |
+| `go -C acpext test -count=1 ./...` | this Mac | 13:02:38 | 0 | `ok  	github.com/maccavelli/gobble-cli/acpext` |
+| the verification's long `-run` pattern (`TestOffered\|TestPredicates\|TestEveryCommand\|TestResolverAccepts\|TestLogoutRevokes\|TestErrorKind\|TestKindsAndLimits\|TestLoginWithReadsTheDefaultMethod\|TestErrorData\|TestPromptQuotaData\|TestStartSignIn`) over `./llm/... ./internal/... ./acpserver/` | this Mac | 13:02:39 to 13:03:40 | 0 | `ok  	github.com/maccavelli/gobble-cli/llm/provider	59.669s`, `internal/cli`, `acpserver` ok |
+| `-run 'TestAuthLoginJSON' ./internal/cli/` | this Mac | 13:03:40 to 13:04:09 | 0 | `ok  	github.com/maccavelli/gobble-cli/internal/cli	29.015s` |
+| `-run 'TestRemoteMethods\|TestStartSignInRemote' ./llm/provider/` | this Mac | 13:04:09 | 0 | `ok` |
+| `-run 'TestRetryCausesAreAcpexts\|TestRetryNotice' ./acpserver/`; `-run 'TestRetryLines' ./internal/cli/` | this Mac | 13:04:11 to 13:04:13 | 0, 0 | `ok`, `ok` |
+| the D9 tests: `TestSignInNamesGobble\|TestStoredLoginNamedForRefresh\|TestLogoutRevokesAsGobble\|TestStartSignInNamesGobble` (`./llm/provider/`), `TestCLIPassesGobblesIdentity` (`./internal/cli/`) | this Mac | 13:04:13 to 13:04:17 | 0, 0 | `ok`, `ok` |
+| the P6 step 1a tests: `TestClientStoreAdapter\|TestHostIDReachesTheEngines` (`./llm/provider/`), `TestCLIFillsHostID\|TestSignInWithoutHostID` (`./internal/cli/`) | this Mac | 13:04:17 to 13:04:20 | 0, 0 | `ok`, `ok` |
+| `go test -race -count=20 -run 'TestAuthenticate\|TestAuthMethods\|TestNoACPLogout' ./acpserver/`, `run-heavy` | this Mac | 13:04:20 to 13:12:41 | 0 | `ok  	github.com/maccavelli/gobble-cli/acpserver	494.758s` |
+| `make preflight`, `run-heavy` | this Mac | 13:12:41 to 13:13:12 | 0 | `preflight passed`; `golangci-lint` `0 issues.` for both modules, `govulncheck` `No vulnerabilities found.` for both, `apidiff: no-op below v1.0.0`, `markdownlint` `0 issues in 0 files` |
+| `make race` (both modules, `-race`), `run-heavy` | this Mac | 13:13:12 to 13:14:41 | 0 | 39 `ok` lines; `ok  	github.com/maccavelli/gobble-cli/acpext	(cached)` |
+| `make check-test-isolation`, `run-heavy` | this Mac | 13:14:42 to 13:16:05 | 0 | `check-test-isolation: ok` (`files written above the temp roots: 0`) |
+| `go test -count=1 ./...`, `CGO_ENABLED=1 go test -count=1 -race ./...`, `go -C acpext test -count=1 ./...`, `run-on-host --need linux --race`, `sh -c` | the Linux machine (linux/amd64), scratch copy removed after | 13:16:05 to 13:22:58 | 0 | 77 `ok` lines, no `FAIL` |
+| the same three, `run-on-host --need windows --race`, `sh -c` | the Windows test laptop (windows/amd64), scratch copy | 13:22:58 to 13:27:57 | 0 | 77 `ok` lines, no `FAIL` |
+| `-v -run 'TestEveryCommand\|TestOffered\|TestPredicates\|TestResolverAccepts\|TestRemoteMethods' ./llm/provider/ ./internal/cli/` | this Mac | after the gates | 0 | `--- PASS: TestEveryCommandAndWordIsAccepted`, `TestOfferedMethods`, `TestPredicatesFromOffered`, `TestRemoteMethods`, `TestOfferedConsentTextIsGobbles`, `TestOfferedMethodByWord` |
+| apidiff of acpext from `acpext/v0.4.0`: the root's `golang.org/x/exp/cmd/apidiff` built to scratch, export data of `git archive acpext/v0.4.0` and of the tree's `acpext/` | this Mac | after the gates | build, archive, both exports and the diff all 0 | the list below |
+
+`make preflight`'s `pre-add-check` step printed "golangci-lint: skipped (GO_PRECHECK_SKIP_LINT=1)" and "govulncheck: skipped (GO_PRECHECK_SKIP_VULN=1)": the Makefile sets both because preflight runs
+`golangci-lint` and `govulncheck` as their own steps, and each of those printed its result above. `make preflight` took 31 s, not the 8 minutes of earlier records, because the build and lint caches were warm;
+its output lists every step. `go test -count=1`'s own runs are uncached; `make race` shows acpext `(cached)`, as `make race` does not pass `-count=1`, and the Linux and Windows runs and the 20-count run above did.
+
+**apidiff from `acpext/v0.4.0`** (exit 0), the P3 record's list exactly:
+
+* Incompatible: `KindContextOverflow`, `KindEmptyReply`, `KindNotPermitted`, `KindRateLimited`, `RetryEmptyReply`, `RetryNotPermitted`, `RetryRateLimited`: value changed; `RetryEmpty`: removed.
+* Compatible: `AuthenticateMeta`, `ErrorData.Consent`, `KindDenied`, `KindExpired`, `KindInvalidProvider`, `KindInvalidRequest`, `MetaMethods`, `MetaStep`: added.
+
+**Confirmation, item by item** (the MADR's "Completion (2026-11-21)" carries the same cells; the plants are the earlier records', not run again here, and no new test or gate was added by this phase):
+
+| Item | Verdict | Evidence |
+| :--- | :--- | :--- |
+| 1. archtest refuses `authcontract` in a core package and in `acpclient` | met | `make archtest` exit 0; the P2 record's plants `rule 1 agent authcontract` and `rule 4 acpclient authcontract` (and `rule 4 acpserver signin`), each seen failing |
+| 2. `provider.Offered`, the predicates, the word table | met | `TestOfferedMethods`, `TestPredicatesFromOffered`, `TestRemoteMethods`, `TestResolverAcceptsOnlyOfferedKinds` pass; the P4 record's plants |
+| 3. loopback ACP tests, `fresh`, `remote` | met | `TestAuthenticate*` pass in the three full suites; `-race -count=20` exit 0; the P6 record's 73 plants; L1 and L2 live, `ports_bound=none` |
+| 4. `auth login --json` | met | `TestAuthLoginJSON*` pass (exit 0); the P5 record's 39 plants |
+| 5. no `FailureKind`, every kind an `authcontract.ErrorKind` | met | `grep -rn FailureKind --include=*.go .` matches two test names only (`TestAuthLoginJSONFailureKind`, `TestAuthenticateRealFailureKinds`), no type; `TestErrorKind`, `TestKindsAndLimits`, `TestErrorData` pass |
+| 6. every acpext `Command` and offered word accepted by `gobble auth login` (issue #16's criterion) | met | `TestEveryCommandAndWordIsAccepted` passes; the P4 record's plants (openai given `device`, kilo given `--method browser`) |
+| 7. `make preflight`, `make race` on three hosts; `make check-acpext-deps`; apidiff | met on the tree | the rows above; P8a repeats the gates and apidiff on the tagged commit, as the item's note says |
+| 8. the owner's live probes recorded | met | L1, L2, L3 above |
+| 9. (D9) gobble's name on every auth request | met | `TestSignInNamesGobble`, `TestStoredLoginNamedForRefresh`, `TestLogoutRevokesAsGobble`, `TestStartSignInNamesGobble`, `TestCLIPassesGobblesIdentity` pass; live, `revoke_warning=no` after L1 and L2 |
+
+Items 1 to 8 are met. None is unmet.
+
+**Step 5, the MADR's Completion.** "Completion (2026-11-21)" is added to the MADR after "Confirmation". It states that this PLAN stays `in-progress`. **This PLAN is not `complete`**: P8a is still to come, the owner's
+`acpext/v0.5.0` tag and then one pin commit that moves the root from `v0.5.0-rc.1` to `v0.5.0`, after which this PLAN is set `complete` with P8a's record. The MADR's U1 bullet gains a dated note on L3.
+
+**Step 4, issue #16, the owner's to run** (MADR D8's text, verbatim; the single quotes inside it are escaped for `sh`). Not run by this phase:
+
+```sh
+gh issue close 16 --repo maccavelli/gobble-cli --comment 'Closing as superseded by docs/decisions/0051-MADR-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md,
+from magic-cli-remote'\''s docs/reports/0245-REPORT-non-api-key-auth-across-magic-gobble-and-the-sdk.md.
+
+What carries forward: clients get each provider'\''s methods as data, how each completes, what it yields, whose
+client it signs in as and the consents it asks, as go-llmprovider-sdk'\''s authcontract.Method in each ACP agent
+auth method'\''s _meta.gobble.methods, and gobble auth login --json'\''s first line. Not as
+AuthProvider.Methods []string, which would make AuthProvider incomparable, and not as --method words alone.
+A test asserts every acpext Command and every method gobble offers is accepted by gobble auth login.
+acpext'\''s Login stays, documented as "has a method other than an API key", not "device code"; acpext/v0.5.0
+carries the doc. The remote paste is answered by ACP elicitation inside authenticate, not by a --json
+answer channel.'
+```
+
+**Docs (C9).** Rows:
+
+* `docs/README.md:119` (0051 MADR row) — fixed: the 2026-11-21 acceptance, Confirmation 1 to 9 met and the Completion section.
+* `docs/README.md:120` (0051 PLAN row) — fixed: "probes L1 to L3 not run" is struck and the 2026-11-21 state added (P8 run at `fa35986`, L1 to L3 passed, P8a still to come, issue #16 still open for the owner).
+* `README.md:46-47` (the `gobble acp --login` bullet, the sign-in section) — fixed: a remote client's browser sign-in for Grok completes by a pasted code or address, as the credentials guide says.
+* `docs/architecture.md:198` (the acpext row of the version table) — open: stays `v0.5.0-rc.1`, true until P8a's pin commit, which changes it (P8a step 3).
+* `docs/architecture.md:17-23`, `:97-98`, `:128`, `:133` (sign-in rows) — checked, true now: no change.
+* docs: searched `README.md`, `docs/architecture.md`, `docs/README.md` and `docs/guides/credentials.md` for `sign-in`, `authenticate`, `elicit`, `paste`, `127.0.0.1`, `bare code`, `url_or_code`, `acpext/v0.5.0`, `0051`.
+
+**Not verified.** The final tag's gates and apidiff, P8a's. Magic's own client and its request timeout. No real console of the owner's was used; no token, code, address, account or e-mail was read: only
+the three result files under `<scratch>/live-0051` were opened.
+
+**Follow-ups (outside the records' cases).**
+
+* The MADR's Consequences bullet of 2026-11-11, "a remote client cannot sign in to grok by browser: only its device method", is still as written; the line-882 annotation and the U1 note give the SDK's later fact. A dated note at that bullet is a one-line
+  follow-up for the owner's next records pass.
+* `make preflight`'s pre-add step reports lint and vulnerability skips by design; nothing to do.
+
+**Gates after the last record edit (C6).** `make check-records markdownlint`: see the row filled below.
+
+| Gate | Start | End | Exit |
+| :--- | :--- | :--- | :--- |
+| `make check-records markdownlint`, after the last record edit | 13:30:12 | 13:30:14 | 0 ("Summary: 0 issues in 0 files"; `check_records.py --check-all` printed nothing), and again after this row was filled |
