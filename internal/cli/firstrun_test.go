@@ -480,3 +480,30 @@ func TestFirstRunContextEndReturns(t *testing.T) {
 		}
 	})
 }
+
+// (2026-11-21, P2b build pass 2; 0063-MADR D23, row R156, in the loop.) A
+// fallback warning queued during a round is written once, before the
+// repeated offer's text: not between the cancel line and nothing, not after
+// the offer, and not again at the session prompt.
+func TestFirstRunWarningBeforeRepeatedOffer(t *testing.T) {
+	h, _ := firstRunHarness(t, "\r")
+	h.tell = true
+	h.start(Prompt{})
+	toKeyPrompt(t, h)
+	cause := errors.New("the wait failed")
+	h.e.queueWaitWarn(cause) // as a fallback on inline.Reader's goroutine queues it
+	h.press("\x03")
+	expect(t, h, "the offer again, [y/N]", offeredAgain(h, 2))
+	h.press("n\r")
+	toPrompt(t, h)
+	shown := strings.Join(strings.Fields(h.stderr.String()), " ")
+	warn := strings.Join(strings.Fields("Warning: "+fmt.Sprintf(waitWarning, cause)), " ")
+	if n := strings.Count(shown, warn); n != 1 {
+		t.Fatalf("the fallback warning shown %d times; want once:\n%s", n, h.stderr)
+	}
+	cancelLine := strings.Index(shown, "Sign-in cancelled; nothing was saved.")
+	repeated := strings.LastIndex(shown, firstRunQuestion+" [y/N]:")
+	if i := strings.Index(shown, warn); i < cancelLine || i > repeated {
+		t.Fatalf("the fallback warning at %d; want it after the cancel line (%d) and before the repeated offer (%d):\n%s", i, cancelLine, repeated, h.stderr)
+	}
+}

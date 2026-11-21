@@ -18,7 +18,8 @@ import (
 // Where the terminal's own input queue is flushed (0063-PLAN P2 step 9, A24
 // as extended, A29; 0063-MADR D12, D17, D18; rows R77 to R82, R101, R103 to
 // R108). The repeated offer's flush, after its text is written, is P2b's
-// (its step 4): A24's case for it waits for P2b.
+// (its step 4): A24's case for it waits for P2b. (2026-11-21, P2b: added,
+// "repeated offer".)
 
 // flushLog records each call of the stubbed termFlush, with stderr's length
 // at that moment.
@@ -90,6 +91,12 @@ func TestFlushPoints(t *testing.T) {
 			t.Fatalf("prompts %q; want one, then two", p)
 		}
 	})
+
+	// Rows R79, R80 (P2b step 4): a cancelled round, then the repeated offer:
+	// no flush at the first offer or inside the round; one at the repeated
+	// offer, after its text is written and before its read; one more at the
+	// first prompt after the first run (R104).
+	t.Run("repeated offer", flushAtRepeatedOffer)
 
 	// Row R104, R81: the first run signed in: no flush inside the round,
 	// one at the first prompt, after the /models turn (R106).
@@ -389,4 +396,29 @@ func permissionHarness(t *testing.T) *lineHarness {
 	}
 	model := llmtest.NewScript(llmtest.ToolCall("w1", "write", string(args)), llmtest.Text("done"))
 	return newModelHarness(t, model, t.TempDir())
+}
+
+// flushAtRepeatedOffer is TestFlushPoints's case "repeated offer" (rows R79,
+// R80; P2b step 4).
+func flushAtRepeatedOffer(t *testing.T) {
+	h, _ := firstRunHarness(t, "\r")
+	h.flushes = true
+	fl := stubFlush(t, h, nil)
+	h.start(Prompt{})
+	toKeyPrompt(t, h)
+	wantFlushes(t, fl, 0, "at the first offer and inside the round")
+	h.press("\x03")
+	expect(t, h, "the offer again, [y/N]", offeredAgain(h, 2))
+	waitUntil(t, func() bool { return fl.count() == 1 })
+	repeated := firstRunQuestion + " [y/N]: "
+	if at, end := fl.calls()[0], strings.LastIndex(h.stderr.String(), repeated)+len(repeated); at < end {
+		t.Fatalf("the repeated offer's flush came at stderr %d, before its text ended at %d:\n%s", at, end, h.stderr)
+	}
+	h.press("n\r")
+	waitUntil(t, func() bool { return fl.count() == 2 })
+	h.press("\x04")
+	if err := h.wait(); err != nil {
+		t.Fatal(err)
+	}
+	wantFlushes(t, fl, 2, "at the end")
 }

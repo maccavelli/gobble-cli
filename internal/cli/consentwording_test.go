@@ -169,6 +169,12 @@ func TestConsentWordingOnEverySurface(t *testing.T) {
 		waitUntil(t, func() bool { return strings.Contains(h.stderr.String(), "Allow gobble to make background requests") })
 		h.press(cancel)
 		waitUntil(t, func() bool { return strings.Contains(h.stderr.String(), "openai sign-in failed (other)") })
+		// (2026-11-21, 0063-PLAN P2b, F5, the owner's answer "Answer the
+		// repeated offer (Recommended)": the failed round brings the offer
+		// again, 0063-MADR D8; n, Enter declines it.)
+		waitUntil(t, func() bool { return strings.HasSuffix(h.stderr.String(), "Sign in to one now? [y/N]: ") })
+		h.press("n\r")
+		waitUntil(t, func() bool { return strings.Contains(h.stdout.String(), sessionPrompt) })
 		h.press("\x04")
 		if err := h.wait(); err != nil {
 			t.Fatal(err)

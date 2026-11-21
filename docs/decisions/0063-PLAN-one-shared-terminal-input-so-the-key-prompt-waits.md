@@ -812,6 +812,14 @@ reviews and reverts apart from the line-end fix.
 4. *(Added 2026-11-20, second records pass; MADR D12.)* From the second round on, with `discard()`, the loop calls
    `ls.keys.flushNext()`, so the terminal's queue is emptied after the repeated offer is written and before its read
    (row R79). `flush-offer`, `pty-flush-offer` and A24 pass after this step.
+5. *(2026-11-21, F5, the owner, relayed by the coordinator: "Answer the repeated offer (Recommended)".)* **Files, added:**
+   `internal/cli/consentwording_test.go`, its case "the first run" alone: after the failure's line it waits for the
+   repeated offer and answers `n`, Enter, then sends `\x04` at the session prompt; its assertions are unchanged. It
+   is the only existing test this phase changes.
+6. *(2026-11-21, deviation on step 1, accepted by the same answer.)* `ls.signInRound(want, turn) (signedIn bool, err
+   error)` in place of `ls.signInRound(want string) bool`: it also returns the after-steps' error, the `/models`
+   turn's, which `ls.login` returns today and `firstRun` passes on to the session, so step 3's "nothing else changes"
+   holds.
 
 **Gate:** every P1 test passes, the loop's included; `go test -count=1 -timeout 2m ./internal/cli/` exit 0;
 `make pre-add-check FILES="internal/cli/login.go"` exit 0.
@@ -2836,3 +2844,175 @@ R    (cli): not caught (exit 1 from the 33 loop leaves alone, no new one): queue
 this path differently (its vet is above), and the session prompt's write is common code. P2b to P6 are not started.
 
 *(2026-11-21, after the fix-only check, which found no blocker.)* Plant R, `queueWaitWarn` without its `sync.Once`, is recorded as an equivalent mutant, decided by the coordinator on evidence: `OnFallback` is called only from `Gated.fallBack`, for the first fallback only, under `g.mu` (`term/cancelin_unix.go:348-357`); `terminalIn` makes one input, so there is one `Gated` (`gatedOn`, `term/cancelin_unix.go:91-105`); and `warnWait` is called only when `openGated` fails, when there is no `Gated` (`terminput.go:132-134`). So `OnFallback` can neither fire twice nor follow `warnWait`; the coordinator's trace and the independent check found the same. It is not tested.
+
+### P2b, build pass 1 (2026-11-21)
+
+**Outcome: stopped on a finding (F5), before P2b's own tests and plants.** On the branch at `d2cc403`, nothing staged
+or committed. The coordinator sent the phase after P2's commit: steps 1 to 4, the mark moved into `ls.signInRound`
+(R103), every item P2's records list as waiting for P2b, and D22 and D23 where they touch the loop.
+
+**What was built** (steps 1, 2 and 4, `internal/cli/login.go` alone):
+
+* `ls.signInRound(want, turn) (signedIn bool, err error)`: `ls.login`'s body, with the mark (R103). Step 1 writes
+  its result as `bool`; it also returns the after-steps' error, the `/models` turn's, which `ls.login` returns today
+  and `firstRun` passes on to the session, so step 3's "nothing else changes" holds. `ls.login` keeps its refusal of
+  an unknown provider before any question, and calls the round once.
+* `firstRun`: the loop of step 2, in its order, with step 4's `flushNext()` beside `discard()` from the second round
+  on; the offer's default true in the first round only (Q9); `ended()` or not yes after the offer, and `ended()`
+  after a round, end it with the lead and the warning once (a helper, `noCredential`); a round that signed in
+  returns its error; the run's own end returns `context.Cause(e.ctx)`. No round counter. `firstRun` still marks the
+  first prompt however it ends (R104).
+
+**First run of the package** (`go test -count=1 -timeout 2m -json ./internal/cli/`, exit 1): the 33 loop leaves
+pass; 830 passes; one leaf fails, outside P2b's file list:
+
+```text
+TestConsentWordingOnEverySurface/the_first_run
+    consentwording_test.go:173: the line session did not end; stdout "", stderr "No provider has a credential yet.
+    Sign in to one now? [Y/n]: Sign in to which provider? [...] Sign in to one now? [y/N]: "
+```
+
+#### F5 (2026-11-21, P2b's build pass 1): a test outside the file list assumes one round
+
+* **Evidence.** `internal/cli/consentwording_test.go:160-177` (0052's, last changed in `cecc892`), its case "the
+  first run": the first offer answered with Enter, OpenAI's plan chosen, the wizard's consent cancelled, so the
+  round fails (`openai sign-in failed (other)`); then `\x04`, meant for the session prompt. With D8's loop the
+  repeated offer, `[y/N]`, comes first; on the harness's pipe `\x04` is a byte, not the end of input, so the offer's
+  line read waits and the harness's 10 s bound ends the test. It passed at `d2cc403` (not among P2's 33 leaves), so
+  the loop alone turns it red. It is not a loop test and not in P2b's file list (`login.go`, `firstrun_test.go`),
+  and no record names it: the stop rule's "anything unexpected".
+* **Resolutions**, recommended first:
+  1. Answer the repeated offer in that case: after the failure's line, wait for `Sign in to one now? [y/N]: ` and
+     press `n`, Enter, then `\x04` at the session prompt. About three lines; the case's assertions (the wording
+     asked before any URL, no URL opened, no request beyond discovery) are unchanged; the file is added to P2b's
+     list by a dated note. Cost: one records amendment.
+  2. End the case's input (`h.keys.Close()`) in place of `\x04`: the loop ends at the offer as the end of input.
+     Also about three lines, but the case then ends through R68's path rather than a person's answer.
+* **Doing nothing:** the package cannot pass its gate (`go test ./internal/cli/` exit 0), so P2b cannot finish.
+
+**Not done, and why:** A24's repeated-offer case, the test for the warning before the repeated offer's text, the
+plants (9 to 14, 22, 44, 45, 57), the gate and the probe cases on the three hosts: they wait for the ruling on F5.
+
+### P2b, build pass 2 (2026-11-21)
+
+*Opened, records first.* The owner ruled on F5, the owner, relayed by the coordinator: "Answer the repeated offer (Recommended)": `consentwording_test.go`'s case "the
+first run" answers the repeated offer (P2b's item 5 above), and the same answer accepts `signInRound`'s signature
+(item 6). This pass finishes P2b as briefed: A24's repeated-offer flush case; a test that a queued fallback warning
+is written before the repeated offer's text (D23, row R156, in the loop), with a harness option that gives the
+harness's input the session's warning writer; plants 9 to 14, 22, 44, 45 and 57 on a scratch copy; the full gate;
+and the probe cases on the Windows test laptop, this Mac and the Linux machine that is not WSL.
+
+*(2026-11-21, the build.)*
+
+**Outcome: built; every gate passes; P2b is done.** On the branch at `d2cc403`, nothing staged or committed.
+
+**What this pass did:**
+
+* `internal/cli/login.go`: as build pass 1 left it (steps 1, 2 and 4; item 6's signature); no change in this pass.
+* `internal/cli/consentwording_test.go`: F5's resolution (item 5): the first run's case waits for the repeated offer,
+  answers `n`, Enter, and sends `\x04` at the session prompt; its assertions unchanged.
+* `internal/cli/flushpoints_test.go`: A24's case "repeated offer" (rows R79, R80): no flush at the first offer or
+  inside the round; one at the repeated offer, after its text is written; one more at the first prompt; two in all.
+  Its body is the named function `flushAtRepeatedOffer`, since `TestFlushPoints` passed `gocognit`'s limit (54 of
+  50) with it inline; the pre-add check and the gate were run again after the move.
+* `internal/cli/firstrun_test.go`: `TestFirstRunWarningBeforeRepeatedOffer` (D23, row R156, in the loop): a warning
+  queued during a round is shown once, after the cancel line and before the repeated offer's text, and not again at
+  the session prompt.
+* `internal/cli/line_test.go`: the harness option the brief named, `lineHarness.tell`, which gives the harness's
+  input the warning writer `terminalIn` gives the process's (`tellWaitWarn`); a helper, no test changed.
+
+**Each plant red**, one at a time on a scratch copy, never the tree (44 and 45 again after the `gocognit` move): P3's
+plants 9 to 14, 22, 44, 45 and 57, and two of this pass's (X3, the repeated offer's question writing no queued
+warning; X4, F5's case as it was). Plant 22 spins, each spin paced by 1 ms so its output stays small; the harness's
+bound catches it.
+
+```text
+9 a no at the repeated offer starts another round: exit 1: firstrun_test.go:216: the warning: not within 5 s; stderr:
+10 ended() ignored: exit 1: firstrun_test.go:314: the offer was made 2 times; want 1
+11 the loop ends on a cancelled round: exit 1: firstrun_test.go:131: the offer again, [y/N]: not before the session's prompt; stderr:
+12 no discard before a repeated offer: exit 1: firstrun_test.go:250: the offer again, [y/N]: not within 5 s; stderr:
+13 the repeated offer defaults to yes: exit 1: firstrun_test.go:214: the offer again, [y/N]: not within 5 s; stderr:
+14 the warning printed between rounds: exit 1: firstrun_test.go:135: the warning was printed 2 times; want 1
+22 the end of input at an offer taken as a cancelled round (each spin paced 1 ms, so the buffer stays small): exit 1: firstrun_test.go:355: the line session did not end; stdout "", stderr "No provider has a credential yet. Sign in to one now? [Y/n]: Sign in to which provider?\n  1  Gemini (Google) (gemini)     none — /login gemini\n  2  OpenAI (openai)    
+44 no flush before a repeated offer: exit 1: flushpoints_test.go:412: condition not met within 5 s
+45 the repeated offer's flush before its text: exit 1: flushpoints_test.go:415: the repeated offer's flush came at stderr 702, before its text ended at 763:
+57 a cancelled or failed round sets no mark: exit 1: flushpoints_test.go:163: condition not met within 5 s
+X3 the question writes no queued warning before its text: exit 1: firstrun_test.go:507: the fallback warning at 849; want it after the cancel line (586) and before the repeated offer (624):
+X4 F5's case as it was (no answer to the repeated offer): exit 1: consentwording_test.go:177: the line session did not end; stdout "", stderr "No provider has a credential yet. Sign in to one now? [Y/n]: Sign in to which provider?\n  1  Gemini (Google) (gemini)     none — /login gemini\n  2  OpenAI (opena
+```
+
+**Gates:**
+
+| Command | Exit | Output line |
+| --- | --- | --- |
+| `go test -count=1 -timeout 2m -json ./internal/cli/` | 0 | `ok github.com/maccavelli/gobble-cli/internal/cli 55.709s`; no failing leaf; 834 passes, the 33 loop leaves among them |
+| `go test -count=1 ./internal/cli/term/` | 0 | `ok github.com/maccavelli/gobble-cli/internal/cli/term 2.129s` |
+| `go test -count=1 ./internal/cli/editor/` | 0 | `ok github.com/maccavelli/gobble-cli/internal/cli/editor 1.807s` |
+| `make archtest` | 0 | `ok github.com/maccavelli/gobble-cli/internal/archtest` (cached: no package it reads changed since the uncached run of this pass, `1.276s`) |
+| `make pre-add-check FILES="<the 5 changed .go files>"` | 0 | `go-precheck: 5 file(s) clean (gofmt, golangci-lint, govulncheck).` |
+| `CGO_ENABLED=0 go vet ./internal/cli/... ./cmd/gobble/`; with `-tags pty` | 0, 0 | no output |
+| `CGO_ENABLED=0 GOOS=linux go vet -tags pty ./internal/cli/...` | 0 | no output |
+| `CGO_ENABLED=0 GOOS=windows go vet -tags conpty ./internal/cli/... ./cmd/gobble/` | 0 | no output |
+| `CGO_ENABLED=0 GOOS=freebsd go vet ./internal/cli/term/` | 0 | no output |
+| `make check-records` | 0 | after this entry |
+| `run-heavy -- go test -race -count=1 ./internal/cli/term/`, this Mac | 0 | `ok github.com/maccavelli/gobble-cli/internal/cli/term 3.292s` |
+| `run-on-host --need windows -- make probe-conpty` | 0 | 24 lines, every one `pass` |
+| `make probe-pty`, this Mac | 0 | 13 lines, every one `pass` |
+| `run-on-host --need linux --race -- make probe-pty` (the Linux machine that is not WSL) | 0 | 13 lines, every one `pass`, the same as this Mac's |
+
+The Windows and Linux runs were made before the `gocognit` move, which only moved a test's body into a function;
+this Mac's after it. The Windows test laptop:
+
+```text
+0063 case=probe-crlf result=pass observed=crlf
+0063 case=probe-typeahead result=pass observed=one-line-per-read
+0063 case=probe-ctrlc result=pass observed=eof first=read
+0063 case=probe-ctrlz-line result=pass observed=eof
+0063 case=probe-ctrlz-raw result=pass observed=eof
+0063 case=report result=pass observed=waits
+0063 case=masked result=pass observed=masked
+0063 case=key-ctrlc result=pass observed=offer-again
+0063 case=empty-key result=pass observed=offer-again
+0063 case=menu-ctrlc result=pass observed=offer-again
+0063 case=decline result=pass observed=warned-once
+0063 case=typeahead result=pass observed=waits
+0063 case=login-no-loop result=pass observed=no-offer
+0063 case=method-menu result=pass observed=waits
+0063 case=key-ctrlz result=pass observed=ended
+0063 case=setup result=pass observed=cancelled
+0063 case=acp-login result=pass observed=cancelled
+0063 case=offer-ctrlc result=pass observed=warned-once
+0063 case=setup-menu-ctrlc result=pass observed=ended
+0063 case=nothing-saved result=pass observed=none
+0063 case=flush-prompt result=pass observed=no-turn
+0063 case=flush-offer result=pass observed=offer-waits
+0063 case=abandoned result=pass observed=dropped
+0063 case=auth-paste-ctrlc result=pass observed=ended
+```
+
+This Mac, and the Linux machine that is not WSL (the same lines):
+
+```text
+0063 case=pty-flush-prompt result=pass observed=no-turn
+0063 case=pty-flush-offer result=pass observed=offer-waits
+0063 case=pty-abandoned result=pass observed=dropped
+0063 case=pty-ctrlc-ctrld result=pass observed=warned-once
+0063 case=pty-abandoned-empty-typed result=pass observed=none-lost
+0063 case=pty-abandoned-empty-pasted result=pass observed=none-lost
+0063 case=pty-menu-ctrlc-typed result=pass observed=no-ab
+0063 case=pty-menu-ctrld result=pass observed=ended-at-prompt
+0063 case=pty-gaveup-held result=pass observed=held
+0063 case=pty-private-descriptor result=pass observed=private
+0063 case=pty-dev-tty-fallback result=pass observed=dev-tty
+0063 case=pty-not-controlling result=pass observed=refused
+0063 case=pty-same-terminal result=pass observed=own-terminal
+```
+
+Every case reads its word for after P2b: `flush-offer` and `pty-flush-offer` `offer-waits`; `key-ctrlc`,
+`empty-key` and `menu-ctrlc` `offer-again`; `decline` and `pty-ctrlc-ctrld` `warned-once`; the rest as P2 left them.
+No test shows the no-credential warning more than once; no bound was raised; no loop test changed.
+
+**Not done, and why:** P3 to P6 are not started.
+
+**Docs:** `login.go`'s comments for `login`, `signInRound`, `firstRun` and `noCredential`. The guides' account of the
+first run (the offer made again after a failed or cancelled sign-in) is P5's.

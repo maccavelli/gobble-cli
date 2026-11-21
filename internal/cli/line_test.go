@@ -49,6 +49,10 @@ type lineHarness struct {
 	// tty, when set, is the session's input in place of the pipe: a
 	// terminal's queue, which a stubbed termFlush can empty.
 	tty *ttyQueue
+	// tell gives the session's terminal input the warning writer the
+	// process's has, so a queued fallback warning is written before a
+	// question's text (0063-MADR D23, row R156; P2b build pass 2).
+	tell bool
 
 	mu             sync.Mutex
 	raws, restores int
@@ -197,6 +201,9 @@ func (h *lineHarness) start(first Prompt) {
 		flush = h.e.flushTerminal
 	}
 	h.e.termIn = newTerminalInput(inline.NewReader(&rawCheckedInput{h: h, r: keysR}), flush)
+	if h.tell {
+		h.e.termIn.tell = h.e.tellWaitWarn
+	}
 	ls := &lineSession{e: h.e, cwd: cwd, base: cwd, raw: h.raw, voice: h.voice,
 		resize: h.resize, termWidth: h.termWidth}
 	if h.noResize {
