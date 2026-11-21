@@ -38,6 +38,20 @@ Windows Terminal. The plan stops there: the release is decided after that check 
   (MADR D8); a release, a tag or any `v0.6.1` work (Q8); `AGENTS.md`, which does not describe the prompt layer (read
   2026-11-19); a changelog, which this repository does not keep.
 
+*(2026-11-20, second records pass: In gains `internal/cli/conpty_windows_test.go` (`//go:build windows && conpty`)
+and `internal/cli/pty_linux_test.go` (`//go:build linux && pty`), for the cases that need a stubbed sign-in on a
+pseudo console or a pseudo-terminal, and a `Makefile` target `probe-pty` beside `probe-conpty`, outside `preflight`
+and CI; and, in P2, the flush seam and `abandon()` in `terminput.go`, the deferred restore in `prompt.go`, and the
+trust question's read in `trust.go` with no deadline (MADR D12 to D15). Out gains every reader in rows R91 to R96
+(Q10). Who runs the live checks: MADR D16; an agent, through `run-on-host`, except the owner's short real-console
+confirmation in P6.)*
+
+*(2026-11-20, fourth records pass: In also gains the flush call of MADR D18, in `internal/cli/term`:
+`flush_linux.go`, `flush_darwin.go`, `flush_windows.go`, `flush_other.go` and their test, `flush_test.go`. The
+package already imports `golang.org/x/sys` (`console_windows.go:11`), `v0.49.0` is already required (`go.mod:24`),
+and `internal/archtest` has no rule on `golang.org/x/sys` or against `internal/cli/term` importing it, so no record
+and no rule changes; P2's `make archtest` gate confirms it.)*
+
 ## Implementation Steps
 
 Work on a topic branch from `main`, named by the owner. Each step's command output goes to a scratch file, its exit
@@ -55,6 +69,48 @@ the paths are easy to cover in a way that passes on the broken code.*
 
 **Files:** `internal/cli/lineend_test.go` (new), `internal/cli/firstrun_test.go` (new), `internal/cli/login_test.go`,
 `internal/cli/line_test.go`, and one behaviour-neutral seam in `internal/cli/login.go`.
+
+**Step 0, added 2026-11-20 (records pass): re-ground at the phase's start commit.** Before step 1, at the commit P1
+starts from, check every file and line the MADR cites (its evidence index, D1 to D10, Confirmation, the state table
+and Q10 to Q14) and every one this plan cites (the re-grounding tables in the execution record), and record each as
+holding or moved, with the commit. A moved line is corrected by a dated annotation in the MADR and here before step 1;
+a changed behaviour, or a new reader of the terminal, is a stop, put to the owner. Also confirm that every `open` row
+of the MADR's state table has the owner's answer recorded; P1 does not start with an open row.
+
+**Step 0b, added 2026-11-20 (second records pass): the Windows measurements first, agent-run.** Before step 1, and
+before any other test is written, the measurements that can stop the plan are made, since a stop costs least here.
+They need no P1 test and no code change: they are P1b's probe mode (`cmd/gobble/conpty_windows_test.go`), written
+first, with five cases, `probe-crlf`, `probe-typeahead`, `probe-ctrlc`, `probe-ctrlz-line`, `probe-ctrlz-raw` (the
+MADR's Confirmation item 5 (A)). An agent runs them, from the repository root of the topic branch, as
+
+```text
+run-on-host --need windows --label 0063-probe -- make probe-conpty PROBE=1
+```
+
+(`run-on-host` is the fleet's host tooling, from the `available-dev-hosts` skill: it copies the working tree to the
+Windows test laptop, runs the command there in Git's bash under the host's queue, and passes back the output and the
+exit status.) The run prints one line per case, `0063 case=<name> result=<pass|fail> observed=<word>`, and nothing of
+the screen. The agent reads only those lines:
+
+* every one of the five lines is present (a missing line is a fail: for example a run that fell back to the session
+  host, where the test does not build);
+* `probe-crlf` observed `crlf`, `probe-typeahead` observed `one-line-per-read`, both `probe-ctrlz-*` observed `eof`:
+  otherwise the MADR's D6 or D14 premise is wrong, a stop, and the MADR is amended before step 1;
+* `probe-ctrlc` observed `waiting`: the build goes on. Observed `eof` or `error`: the named stop of row R40; the
+  coordinator puts row R40's three options to the owner, and nothing further is built until the answer is recorded.
+* *(2026-11-20, fourth pass.)* The probe child takes the interrupt itself (`signal.Notify` for `os.Interrupt`, as
+  gobble does; P1b's probe mode), so each word means one thing. `waiting`: the child recorded `signal` and its read
+  went on waiting until `x`, Enter (the build goes on). `eof`: it recorded `signal`, and the read returned nothing, the
+  end of input (the R40 stop). `error`: it recorded `signal`, and the read returned another error (the R40 stop).
+  `killed`: the child ended without writing its result, which means the probe did not take the interrupt; that is a
+  fault in the probe, not R40's stop: the probe is fixed and run again.
+
+*(2026-11-20, third records pass: what waits for what.)* Step 0b does not wait for step 0's check of open rows, nor
+for row R40: it is the measurement R40 awaits, and it changes no code. Step 1 waits for step 0 (no `open` row) and for
+step 0b's result (R40's `waiting`, or the owner's answer to R40's stop). The one row left `open` after the third pass,
+R101, is the words of a warning, not a behaviour: step 0 lets step 1 start with it open, and it must be approved before
+P2 step 9 writes the message and A29 asserts it; neither is written while it is open. *(2026-11-20, fourth pass: R101's
+words are approved; no row is `open`. Step 1 waits for step 0 and for step 0b's result only.)*
 
 1. **A raw-mode seam,** so a sign-in outside the line session can be tested on a pipe: a package variable
    `termRaw = func(f *os.File) (func() error, error) { return editor.Raw(f) }`, used by `terminalQuestions`
@@ -141,6 +197,64 @@ test passes; `go vet ./internal/cli/` exit 0.
 **Stop if:** a red test fails for another reason, or passes; a guard fails at the base (a finding: record it and put it
 to the owner); the seam changes any existing test's result.
 
+**Additions, 2026-11-20 (records pass): tests for the state table's decided rows that had none.** Each is P1's, with
+its kind; its plant (the one production change that must turn it red, on a scratch copy) joins P3 under the number
+given.
+
+* **A1 (rows R5, R23):** `TestLineEndsBeforeEachQuestion` gains two forms. `CR|LF`: K1's answer and `\r` in one chunk,
+  then `\n` opening K2's chunk. "one chunk": K1's answer, E and K2's answer in one chunk. Red for the defect where K2
+  is `secret` (`CR|LF`, and "one chunk" with `CRLF`); guards otherwise. Plants: P3 16 (R5), P3 17 (R23).
+* **A2 (row R16):** `TestLineEndOfInputMidLine` (`lineend_test.go`): an `input` given `abc` and then the end of
+  input is `errCancelled`. Guard. Plant: P3 18.
+* **A3 (row R28):** `TestSecretRawFailureReadsNothing` (`lineend_test.go`): `raw` fails; `secret` returns its error,
+  writes no prompt, and a stub that counts reads is not read. Guard. Plant: P3 19.
+* **A4 (row R30):** `TestSecretRestoredWhenContextEnds` (`lineend_test.go`): the context ends while a secret reads;
+  `errCancelled`, raw mode entered once and restored once. Guard. Plant: P3 20.
+* **A5 (row R21):** `TestLoginProviderMethodMenuWaits` (`login_test.go`, over `eachEnter`): the offer declined;
+  `/login openai\r`; the API key item + E; the key recorded. Red for the defect, `CRLF`. Plant: P3 mutation 1, whose
+  must-fail list gains it.
+* **A6 (row R56):** `TestEditorKeepsKeysTypedWithLogin` (`login_test.go`): the offer declined; `/login\r1\r` in one
+  press; the provider menu waits and does not take `1`; Gemini's number + E and the key complete the sign-in; the next
+  prompt the agent receives is `1`. Guard. Plant: P3 21.
+* **A7 (row R15):** `TestFirstRunEndOfInputAtOfferEnds` (`firstrun_test.go`, `noAnswer`): the pipe closed with the
+  first offer unanswered; the session ends within the bound, the warning at most once, no menu. Guard. Plant: P3 22.
+* **A8 (row R38):** `TestFirstRunInterruptAtRepeatedOfferEnds`: one round cancelled at the key prompt, then the
+  interrupt at the repeated offer; the warning once, no menu again. Red for the loop. Plant: P3 23.
+* **A9 (row R65):** `TestFirstRunYesOnRepeatStartsAnotherRound`: one round cancelled, then `y`+E at the repeated
+  offer; `Sign in to which provider?` shown a second time; the interrupt at that menu, then `n`+E. Red for the loop.
+  Plant: P3 24.
+* **A10 (row R61):** `TestFirstRunEnterAtFirstOfferSignsIn`: E alone at the first offer shows the provider menu.
+  Guard. Plant: P3 25.
+* **A11 (row R42):** `TestFirstRunContextEndReturns`: `e.ctx` ended while the key prompt reads; the session returns
+  its cause, and `firstRunQuestion` is counted once. Guard. Plant: P3 26.
+* **A12 (row R71):** `TestFirstRunSetup` (already in step 2) also counts `firstRunQuestion` once after the sign-in
+  succeeds. Guard. Plant: P3 27.
+* **A13 (row R72):** `TestAcpLoginMethodMenuWaits` gains a case: Ctrl+C at the key prompt gives
+  `sign-in cancelled; nothing was saved`, and no `firstRunQuestion`. Guard. Plant: P3 28.
+
+*Exit criterion (2026-11-20): no blocker, every row tested, plants caught. For P1, "tested" is each row's test written
+and seen at the base with the kind it is given; its plant is caught in P3.*
+
+**Additions, 2026-11-20 (second records pass).**
+
+* **A3 and A17 wait** for the owner's answers to Q18 (row R28) and Q19 (row R57): their rows are open again; each is
+  written, and its plant (P3 19 and 21) run, only as the answer decides.
+  *(2026-11-20, third pass: answered, Q18 (a) and Q19 (a). A3 and A17 are written as first specified, with plants 19
+  and 21. Q16 was answered (a), so the interrupt tests below type as first written; none changes.)*
+* **Tests that interrupt a read and then type** (`TestLoginInterrupt`, existing; `TestFirstRunOfferAgainAfterMenuInterrupt`,
+  `TestFirstRunInterruptAtOfferEnds`, A8, A9) leave a read waiting that D13 may drop. What each types after the
+  interrupt is set by the owner's answer to Q16 (row R86) at step 0, before they are written; under Q16 (a) none
+  changes.
+* **A20 (row R69):** `TestFirstRunEndOfInputInRoundEnds` (`firstrun_test.go`): `y`+E, Gemini's number + E, then the
+  pipe closed while the key prompt reads; the cancel line, `firstRunQuestion` counted once, the warning once, the
+  session ends within the bound. Red for the loop (at the base the warning is not printed). Plant: P3 mutation 10,
+  whose must-fail list gains it.
+* **A26 (row R31):** `TestSecretRestoredOnPanic` (`lineend_test.go`): a reader stub that panics while a secret reads;
+  the test recovers it; raw mode entered once and restored once. Red at the base (the restore is not deferred); passes
+  after P2 step 4. Plant: P3 54.
+
+*Exit criterion (2026-11-20, unchanged): no blocker, every row tested, plants caught.*
+
 ### P1b — a pseudo-console test on Windows (Q7)
 
 *Class: strongest; effort: high. Windows process and console APIs, run remotely.*
@@ -155,6 +269,10 @@ beside `probe-conhost`, not in `preflight` or CI).
    - **probe:** one read of stdin in the console's default line mode, its bytes written with `%q` to a file the parent
      names. The parent types `1` and Enter (`1\r` into the pseudo console's input). This measures MADR D6's third
      assumption: expected `"1\r\n"`.
+     *(2026-11-20, fourth pass): before any read, the probe child calls `signal.Notify` for `os.Interrupt`, as gobble does
+     (`main.go:54`, `term.ShutdownSignals`), so Ctrl+C reaches it as a signal and the console's default handler does not
+     end it (inferred from Go 1.27.4 `runtime/os_windows.go:1047-1069`: with no `Notify`, the handler returns 0 and
+     the default one ends the process). The child writes `signal` to its result file when the interrupt arrives.)*
    - **gobble:** `main()`, with `GOBBLE_HOME` a temp directory, no credential variable, and `HTTPS_PROXY` and
      `HTTP_PROXY` set to a closed local port so nothing leaves the host. The parent reads the console's output, answers
      `y`, Enter, `1`, Enter, and waits for `Enter your Gemini (Google) API key: `; it then requires that
@@ -170,6 +288,62 @@ beside `probe-conhost`, not in `preflight` or CI).
 on the Windows test laptop: record the error and stop, and the coordinator puts Q7 to the owner again (the MADR's
 (b) and (c) remain). Stop too if the probe's bytes are not `"1\r\n"`: the MADR's premise is wrong for a pseudo
 console, and the MADR is amended before P2.
+
+**Addition A14, 2026-11-20 (records pass), row R35:** the gobble mode gains a typed-ahead case: the parent writes `y`,
+Enter, `1`, Enter into the pseudo console before the offer is shown, and requires
+`Enter your Gemini (Google) API key: ` with nothing more written. It measures the second half of MADR D6's third
+assumption (keys typed past a line-mode read stay in the console's buffer). Expected at the base: the menu waits, the
+typed-ahead answer lost with the first ask (weakness (a)); after P2, the key prompt. Plant: P3 mutation 4, run through
+`make probe-conpty` on the Windows test laptop as well as by `go test`.
+
+*(2026-11-20, second records pass: A14's expectation and plant above are wrong, as the review found. On a console a
+line read returns `y\r\n` and leaves `1\r` in the console's buffer, so at the base A14 shows the CRLF defect (the
+cancel line), not a waiting menu: it is red for the defect, passing after P2. Mutation 4 cannot fail it, since a new
+`terminalInput` per ask still reads `1\r` from the console and drops the owed `\n` inside `/login`'s ask. Its plant is
+P3 42, "flush before every question", which drops the typed-ahead `1\r` and leaves the menu waiting. Mutation 4's
+must-fail list loses A14. A14 is the case `typeahead` below.)*
+
+*Exit criterion (2026-11-20): no blocker, every row tested, plants caught.*
+
+**Amendment, 2026-11-20 (second records pass): who runs P1b, what it prints, and the cases it gains.**
+
+* **Who runs it** (MADR D16; the earlier answer to Q7 stands): an agent, never the owner. The probe cases run at P1
+  step 0b. The rest run, at the base after P1 and again on the P2 and P2b trees, as
+
+  ```text
+  run-on-host --need windows --label 0063-conpty -- make probe-conpty
+  run-on-host --need linux --label 0063-pty -- make probe-pty
+  ```
+
+  Each prints only `0063 case=<name> result=<pass|fail> observed=<word>` lines; the agent passes a run when every
+  case named for that tree is present with its expected word, and stops on any other line, a missing line or a
+  non-zero exit. No screen text, key or path is printed or recorded. The second run is on the Linux machine (the
+  pseudo-terminal cases need a POSIX terminal; a WSL distro is a Linux target too, and any is taken, as no race is
+  run).
+* **Files:** the gobble-mode cases that need a stubbed sign-in cannot run from `cmd/gobble` (the stubs are
+  `internal/cli`'s), so they are in `internal/cli/conpty_windows_test.go` (`//go:build windows && conpty`), whose
+  child runs `Main` under `internal/cli`'s `TestMain`, which already stubs the browser opener and the sign-ins; and in
+  `internal/cli/pty_linux_test.go` (`//go:build linux && pty`), which opens a pseudo-terminal with
+  `golang.org/x/sys/unix` (already required; no new module). `make probe-conpty` runs both Windows files; `make
+  probe-pty` the Linux one; neither is in `preflight` or CI.
+* **Cases** (the MADR's Confirmation item 5 (A) gives each one's words; expected at the base, then after P2b):
+
+  | Case | File | At the base | After P2b |
+  | --- | --- | --- | --- |
+  | `probe-crlf`, `probe-typeahead`, `probe-ctrlc`, `probe-ctrlz-line`, `probe-ctrlz-raw` | `cmd/gobble` | as step 0b | the same |
+  | `report`, `method-menu`, `setup`, `acp-login`, `typeahead` (A14) | `cmd/gobble` | fail: the cancel line before a key | pass, `waits` or `cancelled` |
+  | `masked`, `key-ctrlc`, `empty-key`, `decline`, `login-no-loop`, `nothing-saved` | `cmd/gobble` | `masked`, `no-offer`, `none` pass; the three that expect the offer again fail (no loop) | pass |
+  | `menu-ctrlc` | `cmd/gobble` | fails (no loop), or `ended`: the R40 stop | `offer-again`, or `ended`: the R40 stop |
+  | `key-ctrlz` | `cmd/gobble` | `ended` | `ended` |
+  | `flush-prompt`, `flush-offer` (A21) | `internal/cli` | fail: the held line becomes a turn; the repeated offer is answered | pass (`flush-prompt` after P2, `flush-offer` after P2b) |
+  | `abandoned` (A21) | `internal/cli` | fail: `partial` or `hello` reaches a turn | pass after P2 |
+  | `pty-flush-prompt`, `pty-flush-offer`, `pty-abandoned` (A21) | `internal/cli` | as their Windows twins | as their Windows twins |
+
+  The stubbed sign-ins: `flush-offer`'s round waits one second without reading and then fails, while the parent
+  writes `y`, Enter; `abandoned`'s is a browser sign-in whose paste prompt reads through the prompter until the stub's
+  own "loopback" ends its context after the parent has typed `partial`. Neither opens a browser or reaches a network.
+* **Gate, added:** every case as the table says for its tree. **Stop, added:** `probe-ctrlc` or `menu-ctrlc` gives the
+  R40 stop word, or any case's observed word is not one the table names.
 
 ### P2 — the shared terminal input
 
@@ -214,6 +388,106 @@ exit 0; `make pre-add-check FILES="<every changed .go file>"` exit 0.
 any existing test fails; `TestLineSessionReadsOnlyWhenAsked` counts a different number of cooked reads; `archtest`
 reports a new edge.
 
+**Additions, 2026-11-20 (records pass): tests for decided rows that had none.** Each is written in P2 (it needs
+`terminalInput`), passes after P2, and its plant joins P3.
+
+* **A15 (rows R9, R10, R11, R43, R44):** `terminput_test`'s table gains rows: (i) a raw read ended by `\n`, then
+  `\n`: the second `\n` is given (R9; plant P3 29); (ii) the owed `\n` driven through each entry point, `line`, `key`
+  and `Read`, dropped at each (R10; plant P3 30); (iii) `a\r` then the end of input: `a`, then the end of input, and
+  `ended()` true (R11; plant P3 31); (iv) a stub whose read fails with an error that is not `io.EOF`: the question is
+  `errCancelled` and `ended()` is true (R43; plant P3 32); (v) `\xff`, a lone `\xc3` and `\x00`, through `line`,
+  `key` and `Read`, given unchanged (R44; plant P3 33).
+* **A16 (row R58):** `TestTerminalInputBytesInOnePlace`: one stub chunk `a\rbc`; `line` gives `a`, `Read` gives `bc`,
+  and the next `Read` makes a new read of the stub. Plant: P3 21.
+* **A17 (row R57):** `TestAskOnKeysPastAnswerNotShared`: `askOn` over `terminalInput.Read`, given `y` and `hello\r`
+  in one read, is answered; the next `line` makes a new read of the stub and does not see `hello`. Plant: P3 21.
+* **A18 (rows R45, and D10's `gobble auth login` row):** `TestOneReaderOfStdin`: the package's non-test Go files
+  call `inline.NewReader` only in `terminput.go`. Plant: P3 34.
+* **A19 (row R48):** `TestTerminalInputConcurrentReads`: two goroutines read through `line` and `Read` at once from a
+  stub of a known byte string; every byte is given once. Run under `-race` in P4 step 5. Plant: P3 35, red under
+  `-race`.
+
+*Exit criterion (2026-11-20): no blocker, every row tested, plants caught.*
+
+**Additions, 2026-11-20 (second records pass): steps for MADR D12, D13 and D15, and their tests.**
+
+* **Step 9, the flush seam** (D12): `termFlush = func(f *os.File) error`, the POSIX flush of pending input on Linux
+  and macOS and `FlushConsoleInputBuffer` on Windows, each in a file of its own build tag; `terminalInput` gains
+  `flushNext()`, which marks that the next read of `in` is preceded by `termFlush` on a terminal (never on a pipe or
+  a file). Before each session prompt, with `discard()`, the line session calls it (when, is Q20's answer, row R82);
+  what a failed flush does is Q17's answer (row R78). Both are answered at P1 step 0.
+* **Step 10, `abandon()`** (D13): a prompt that returns while its read may still be waiting calls it: `questions` when
+  `line` or `key` ends on its context; `askPermission` and `askTrust` when `askOn` returns cancelled; the line session
+  when `ReadPrompt` ends on its context. A read so marked has its completion dropped as Q16's answer says (row R86),
+  and the prompt then waiting reads again. A timed wait inside a prompt that reads again calls nothing.
+* **Step 11, D15:** `secret` restores the terminal in a deferred call; `askTrust`'s read is
+  `e.terminalIn().Read(e.ctx, p)`, ignoring `askOn`'s deadline contexts, as its comment says today.
+* **A21 (rows R25, R51, R69, R74, R76, R83, R84, R85):** the pseudo-console and pseudo-terminal cases of P1b's
+  amendment, `flush-prompt`, `flush-offer`, `abandoned` and their `pty-` twins, written in P1 and run on each tree.
+  Plants: P3 43, 44, 46, 47.
+* **A22 (row R46):** `TestTerminalInMadeOnce`: `e.terminalIn()` called twice, and from two goroutines at once, gives
+  one value. Plant: P3 51.
+* **A23 (row R60):** `TestPermissionReadsTerminalInput`: the session's `terminalInput` over a stub that counts reads;
+  a permission prompt answered by one key; the stub counted the read. Plant: P3 52.
+* **A24 (rows R77, R79, R80, R81):** `TestFlushPoints`: the harness stubs `termFlush` and records each call with
+  stderr's length at that moment. It is called before the session prompt's read and, at a repeated offer, after the
+  offer's text is written; never at the first offer, inside a round, in `gobble setup`, `gobble acp --login`, the
+  trust question or a permission prompt; and the pipe's later bytes still come in order. Plants: P3 42, 43, 44, 45.
+* **A25 (row R17):** `TestLongAnswerHasNoBound`: an `input` answered with 1 MiB and `\n`, and a secret with 1 MiB and
+  `\r`, each read whole. Plant: P3 53.
+* **A27 (row R50):** `TestTrustReadsWithoutDeadline`: `e.termIn` over a stub that records each read's context; the
+  trust question answered; no read had a deadline. Plant: P3 55.
+* **A28 (rows R84, R87, R88, R89):** `terminput_test` rows over a stub whose read blocks until the test gives it bytes:
+  a read abandoned, then `hello\n` given: the next `line` does not see `hello` and reads anew; a read whose wait ended
+  by a deadline and that the same caller reads again keeps its bytes; two prompts give up on one read: one completion
+  dropped; a read abandoned, then the end of input: `ended()` true, the waiting prompt sees the end of input. Plants:
+  P3 47, 48, 49, 50.
+
+**Additions, 2026-11-20 (third records pass): the owner's answers to Q16 to Q20 (MADR D17).**
+
+* **Step 9, as answered:** `terminalInput` keeps a mark, `flushAtPrompt`. `ls.signInRound` sets it when it returns,
+  whatever the outcome; `firstRun` sets it when it returns, however it ends; a `/login` refused before any question
+  sets nothing. Before each `ReadPrompt` the line session calls `discard()` and, only when the mark is set,
+  `flushNext()`, and clears the mark (rows R82, R103 to R108). The repeated offer's `flushNext()` (P2b step 4) is
+  unchanged. A failed `termFlush` is skipped, and the first failure in the process writes one warning on stderr, in
+  the words row R101 holds once the owner approves them (row R78).
+* **Step 10, as answered:** `abandon()` is called only for a read the program gave up: by `questions` when the
+  context that ended is not `ls.ask`'s interrupt cancel (the SDK's `Input` context, a browser sign-in's loopback), and
+  by `askPermission` when the request was withdrawn without the person's Ctrl+C. Its completion is dropped whole, a line
+  or keys (rows R86, R102). A read the person interrupted is not marked and goes to the next prompt.
+* **A24, extended (rows R82, R103 to R108):** `TestFlushPoints` also checks: a flush at the first `ReadPrompt` after a
+  `/login` that signed in, one that was cancelled and one that failed, and none after `/login nosuch`; a flush at the
+  first `ReadPrompt` after a first run declined at the first offer, and after one signed in; keys written while the
+  `/models` turn after `/login` runs are not the next prompt's text; no flush at the `ReadPrompt` after a turn, after
+  `/logout`, after a permission prompt, or at a resumed session's first prompt with a credential; none when the
+  session ends by Ctrl+D with the mark set. Plants: P3 56, 57, 58, 61.
+* **A28, extended (row R86):** a read the program gave up, completed by keys with no line end, is dropped whole; a
+  read given up by `ls.ask`'s interrupt cancel and then completed is given to the next prompt. Plants: P3 47, 60.
+* **A29 (rows R78, R101):** `TestFlushFailureWarnsOnce`: `termFlush` stubbed to fail; two flush points reached; one
+  warning on stderr, in R101's approved words, and both prompts still read. Written once R101's words are approved.
+  Plant: P3 59.
+
+**Additions, 2026-11-20 (fourth records pass): MADR D18's plumbing, and R101's words.**
+
+* **Step 1, as amended:** `newTerminalInput(in keysIn, flush func() error)`; `flush` is nil for a pipe, a file or a
+  test's input that has no terminal, and `flushNext()` then marks nothing. **Step 3, as amended:** `e.terminalIn()`
+  passes, when `caps.In` is true, a function that calls `termFlush(e.stdin)` and on the first failure in the process
+  writes, through `e.out`, `Warning: could not clear what was typed ahead on this terminal (<error>); it may answer the
+  next prompt.` (R101, approved). `termFlush` is a package variable, `term.FlushInput` in production, which the line
+  harness and A24 stub.
+* **Step 12, `term.FlushInput`:** the four files named in Scope's fourth-pass note; `flush_test.go` checks, on a pipe,
+  that it returns an error and never blocks. Gate, added: `make archtest` exit 0 with the new import of
+  `golang.org/x/sys/unix` in `internal/cli/term`; a new edge reported there is a stop, put to the owner, not worked
+  around.
+* **Step 10, as amended:** when a read a program gave up completes, `terminalInput` takes the completion from
+  `inline.Reader` with a buffer of that read's own size (512 bytes for a question), whichever prompt is waiting, and
+  drops it whole; the waiting prompt then reads with its own buffer.
+* **A28, extended (MADR D18):** a question's read (512 bytes) abandoned by the program; 400 bytes then given; a
+  waiting `askOn` reading through a 256-byte buffer receives none of them and its next read is a new one. Plant: P3 63.
+* **A29, as approved:** `TestFlushFailureWarnsOnce` asserts R101's approved words exactly. Plants: P3 59, 62.
+
+*Exit criterion (2026-11-20, unchanged): no blocker, every row tested, plants caught.*
+
 ### P2b — the first-run loop (MADR D8)
 
 *Class: strongest; effort: medium. A small change, but every way out of a loop must be right, and a wrong one spins.*
@@ -235,12 +509,17 @@ reviews and reverts apart from the line-end fix.
    - `ls.signInRound("")`: signed in returns; if `e.ctx` ended, return its cause; if `ls.keys.ended()`, the lead and
      the warning once, and return; otherwise the next round.
 3. Nothing else changes: `gobble setup` and `gobble acp --login` call `e.signIn` directly.
+4. *(Added 2026-11-20, second records pass; MADR D12.)* From the second round on, with `discard()`, the loop calls
+   `ls.keys.flushNext()`, so the terminal's queue is emptied after the repeated offer is written and before its read
+   (row R79). `flush-offer`, `pty-flush-offer` and A24 pass after this step.
 
 **Gate:** every P1 test passes, the loop's included; `go test -count=1 -timeout 2m ./internal/cli/` exit 0;
 `make pre-add-check FILES="internal/cli/login.go"` exit 0.
 
 **Stop if:** a loop test needs changing to pass; any test needs the harness's bound raised; the warning appears more
 than once in any test.
+
+*Exit criterion (2026-11-20): no blocker, every row tested, plants caught.*
 
 ### P3 — planted breaks
 
@@ -260,7 +539,7 @@ time, under the session's scratch directory, built from nothing with `GOPROXY=of
 | 7 | `rawEnd` leaves a `\n` already read | `TestPastedKeyEndingCRLF` |
 | 8 | `askTrust` reads `e.stdin` again | `TestTrustReadsTerminalInput` |
 | 9 | the loop never ends on a decline (a no at the repeated offer starts another round) | `TestFirstRunDeclineOnRepeatEnds`, `TestFirstRunRepeatedOfferDefaultsNo` |
-| 10 | the loop never ends on closed input (`ended()` ignored, the end of input taken as a cancelled round) | `TestFirstRunClosedInputEnds`, `TestFirstRunInstantFailureClosedInputEnds`, by the harness's bound |
+| 10 | the loop never ends on closed input (`ended()` ignored~~, the end of input taken as a cancelled round~~) | ~~`TestFirstRunClosedInputEnds`, `TestFirstRunInstantFailureClosedInputEnds`, by the harness's bound~~ (2026-11-20, fourth pass) `TestFirstRunEndOfInputInRoundEnds` (A20) alone, by its count of the offer; the two tests struck here pass under it and move to mutation 22 |
 | 11 | no repeat after a cancel (the loop ends on a cancelled round) | `TestFirstRunOfferAgainAfterKeyCancel`, `…AfterEmptyKey`, `…AfterMenuInterrupt` |
 | 12 | no `discard` before a repeated offer | `TestFirstRunTypeAheadDroppedBeforeRepeatedOffer` |
 | 13 | the repeated offer defaults to yes | `TestFirstRunRepeatedOfferDefaultsNo` |
@@ -268,13 +547,100 @@ time, under the session's scratch directory, built from nothing with `GOPROXY=of
 | 15 | mutation 1, with `eachEnter` cut to `CR` alone | expected to pass: recorded, to show the `CRLF` form is what catches it |
 
 Each run: `go test -count=1 -timeout 2m ./internal/cli/` (and `./internal/cli/editor/` for 6), output to a scratch
-file, the exit status before any filter, the failing test's message quoted. Mutation 10 is expected to spin until the
-harness's bound; its CPU use ends with the test binary. Then the unmutated copy passes.
+file, the exit status before any filter, the failing test's message quoted. ~~Mutation 10 is expected to spin until the
+harness's bound; its CPU use ends with the test binary.~~ (2026-11-20, fourth pass) Mutation 22 is the one that spins until the harness's bound,
+its CPU use ending with the test binary; mutation 10 fails A20 by its count, without spinning. Then the unmutated copy passes.
 
 **Gate:** mutations 1 to 14 each fail the named test, with its message recorded; 15 passes; the restored copy passes.
 
 **Stop if:** a mutation from 1 to 14 passes (that test checks nothing: back to P1 for its rule), or the tree is
 changed.
+
+**Additions, 2026-11-20 (records pass): the plants of the tests added to P1, P1b and P2, and of decided rows whose
+tests had none (36 to 41).** Run as mutations 1 to 14 are. Mutation 1's must-fail list gains `TestLoginProviderMethodMenuWaits/CRLF` (A5); mutation 4's gains P1b's
+typed-ahead case (A14), run by `make probe-conpty` on the Windows test laptop.
+
+| # | Mutation | Must fail | Row |
+| --- | --- | --- | --- |
+| 16 | the owed `\n` dropped only when it is already in `pending`, not when it arrives in a later read | `TestLineEndsBeforeEachQuestion/CR\|LF/*-secret` (A1), `TestCRLFSplitAcrossReads` | R4, R5 |
+| 17 | `secret` empties `pending` when raw mode starts | `TestLineEndsBeforeEachQuestion/one chunk/*-secret` (A1) | R23 |
+| 18 | `line` returns the partial text at the end of input | `TestLineEndOfInputMidLine` (A2) | R16 |
+| 19 | `secret` reads a line when raw mode fails | `TestSecretRawFailureReadsNothing` (A3) | R28 |
+| 20 | `secret` returns before restoring when its read fails | `TestSecretRestoredWhenContextEnds` (A4) | R30 |
+| 21 | `terminalInput.Read` leaves a copy of what it gave in `pending` | `TestEditorKeepsKeysTypedWithLogin` (A6), `TestTerminalInputBytesInOnePlace` (A16), `TestAskOnKeysPastAnswerNotShared` (A17) | R56, R57, R58 |
+| 22 | the loop takes the end of input at an offer as a cancelled round | `TestFirstRunEndOfInputAtOfferEnds` (A7), (2026-11-20, fourth pass) `TestFirstRunClosedInputEnds` and `TestFirstRunInstantFailureClosedInputEnds`, each by the harness's bound | R15, R68, R69 |
+| 23 | an interrupt at a repeated offer is taken as a cancelled round | `TestFirstRunInterruptAtRepeatedOfferEnds` (A8) | R38 |
+| 24 | a yes at a repeated offer ends the loop | `TestFirstRunYesOnRepeatStartsAnotherRound` (A9) | R65 |
+| 25 | the first offer's default is no | `TestFirstRunEnterAtFirstOfferSignsIn` (A10) | R61 |
+| 26 | the loop does not check `e.ctx` after a round | `TestFirstRunContextEndReturns` (A11) | R42 |
+| 27 | the loop goes on after a successful round | `TestFirstRunSetup` (A12) | R71 |
+| 28 | `acpLogin` asks `firstRunQuestion` again after a cancelled sign-in | `TestAcpLoginMethodMenuWaits` (A13) | R72 |
+| 29 | `rawEnd` drops a `\n` after a `\n`, as after a `\r` | `terminput_test` row (i) (A15) | R9 |
+| 30 | `Read` gives bytes without applying the rule | `terminput_test` row (ii) (A15) | R10 |
+| 31 | a line ended by `\r` is held until the next byte arrives | `terminput_test` row (iii) (A15) | R11 |
+| 32 | `closed` is set only for `io.EOF` | `terminput_test` row (iv) (A15) | R43 |
+| 33 | `terminalInput` replaces bytes that are not valid UTF-8 | `terminput_test` row (v) (A15) | R44 |
+| 34 | `auth.go:301` keeps `inline.NewReader(e.stdin)` | `TestOneReaderOfStdin` (A18) | R45 |
+| 35 | `Read` takes `pending` without the lock | `TestTerminalInputConcurrentReads` (A19), under `-race` | R48 |
+| 36 | `line` ends a line only at `\r` | the `LF` forms of `TestLineEndsBeforeEachQuestion` | R1, R32 |
+| 37 | `line` ends a line only at `\n`, keeping a `\r` in the text | the `CR` forms of `TestLineEndsBeforeEachQuestion`, its `-input`, `-choose` and `-confirm` cases among them | R2, R19 |
+| 38 | a no at the first offer starts a round | `TestFirstRunDeclineEnds` | R62 |
+| 39 | an interrupt at the first offer starts a round | `TestFirstRunInterruptAtOfferEnds` | R63 |
+| 40 | `closed` is never set | `terminput_test` "`ended()` true after the end of input" | R14 |
+| 41 | `closed` is set for a context's error too | `terminput_test` "`ended()` false after an ended context" | R41 |
+
+The gate and the stop rule above cover 16 to 41 as they cover 1 to 14.
+
+**Additions, 2026-11-20 (second records pass).** Mutation 4's must-fail list loses P1b's typed-ahead case (A14), which
+it cannot fail (P1b, A14's note). Mutation 10's gains `TestFirstRunEndOfInputInRoundEnds` (A20), the only test that
+reaches the `ended()` check after a round; `TestFirstRunClosedInputEnds` pins row R68 through mutation 22 instead.
+*(2026-11-20, fourth pass): mutation 10's must-fail is A20 alone, and both `TestFirstRunClosedInputEnds` and
+`TestFirstRunInstantFailureClosedInputEnds` are in mutation 22's table row, as struck and amended above.)*
+Mutations 19 and 21 run only as the owner's answers to Q18 and Q19 decide. The cases of P1b run on the Windows test
+laptop or the Linux machine, through `run-on-host`, on the mutated scratch copy.
+
+| # | Mutation | Must fail | Row |
+| --- | --- | --- | --- |
+| 42 | the terminal's queue flushed before every question | `typeahead` (A14), `TestFlushPoints` (A24) | R22, R35, R77, R80, R81 |
+| 43 | no flush before the session prompt | `flush-prompt`, `pty-flush-prompt` (A21), `TestFlushPoints` | R25, R51, R74, R76, R80 |
+| 44 | no flush before a repeated offer | `flush-offer`, `pty-flush-offer` (A21), `TestFlushPoints` | R69, R74, R76, R80 |
+| 45 | the repeated offer's flush runs before its text is written | `TestFlushPoints` (A24) | R79 |
+| 46 | after a flush, a waiting read's completion is given to the prompt | `abandoned`, `pty-abandoned` (A21) | R83 |
+| 47 | the line of a prompt that gave up is given to the next taker | `terminput_test` abandoned row (A28), `abandoned`, `pty-abandoned` | R84, R85 |
+| 48 | every read whose wait ended is dropped, a timed wait's included | `terminput_test` timed-wait row (A28); the editor's Esc tests | R87 |
+| 49 | each prompt that gave up drops a completion of its own | `terminput_test` two-give-ups row (A28) | R88 |
+| 50 | the end of input after a give-up is dropped too | `terminput_test` end-of-input row (A28), by the bound | R89 |
+| 51 | `terminalIn()` makes a new value on each call | `TestTerminalInMadeOnce` (A22) | R46 |
+| 52 | `askPermission` reads `e.stdin` directly | `TestPermissionReadsTerminalInput` (A23) | R60 |
+| 53 | an answer is cut at 64 KiB | `TestLongAnswerHasNoBound` (A25) | R17 |
+| 54 | `secret`'s restore not deferred (today's code) | `TestSecretRestoredOnPanic` (A26) | R31 |
+| 55 | `askTrust` reads with `askOn`'s deadline contexts | `TestTrustReadsWithoutDeadline` (A27) | R50 |
+
+The gate and the stop rule above cover 42 to 55 as they cover 1 to 14.
+
+**Additions, 2026-11-20 (third records pass).** Mutations 19 and 21 now run (Q18 and Q19 answered).
+
+| # | Mutation | Must fail | Row |
+| --- | --- | --- | --- |
+| 56 | the mark is never cleared: every `ReadPrompt` flushes | `TestFlushPoints` (A24, as extended) | R105, R106, R107 |
+| 57 | a sign-in round that was cancelled or failed sets no mark | `TestFlushPoints` | R103 |
+| 58 | a first run that was declined sets no mark | `TestFlushPoints` | R104 |
+| 59 | a failed flush warns at every point, not once per process | `TestFlushFailureWarnsOnce` (A29) | R78 |
+| 60 | a read given up by `ls.ask`'s interrupt cancel is dropped too | `terminput_test` Ctrl+C give-up row (A28, as extended); `TestLoginInterrupt` | R86 |
+| 61 | the session flushes on its way out when the mark is set | `TestFlushPoints` | R108 |
+
+The gate and the stop rule above cover 56 to 61 as they cover 1 to 14.
+
+**Additions, 2026-11-20 (fourth records pass).**
+
+| # | Mutation | Must fail | Row |
+| --- | --- | --- | --- |
+| 62 | the warning's words changed (the consequence clause left out) | `TestFlushFailureWarnsOnce` (A29) | R101 |
+| 63 | an abandoned completion is taken with the waiting prompt's buffer, not its own read's size | `terminput_test` 512-through-256 row (A28, extended) | R86, R102 |
+
+The gate and the stop rule above cover 62 and 63 as they cover 1 to 14.
+
+*Exit criterion (2026-11-20): no blocker, every row tested, plants caught.*
 
 ### P4 — gates
 
@@ -292,6 +658,8 @@ changed.
 6. `run-on-host --need windows -- go test -count=1 ./internal/cli/...`, recorded as a run **without a console**: it
    checks the code on Windows, not a console's line ends; and `run-on-host --need windows -- make probe-conpty` on the
    P2b tree: the probe `"1\r\n"`, the gobble mode passing.
+   *(2026-11-20, second records pass: and `run-on-host --need linux -- make probe-pty`; both runs read as P1b's
+   amendment says, by their `0063 case=` lines only, every case as its "After P2b" column, run by an agent.)*
 7. `run-heavy -- make check-test-isolation` (0053-MADR D4): the new tests read no host file above their temp root.
 8. `make check-records`, `make markdownlint`, and the disclosure guard's `redact` over the changed files.
 
@@ -299,6 +667,8 @@ changed.
 
 **Stop if:** any gate fails. Record the file, line and failure, whether it fails on the base too, and stop; no gate is
 loosened or skipped.
+
+*Exit criterion (2026-11-20): no blocker, every row tested, plants caught.*
 
 ### P5 — docs
 
@@ -328,6 +698,8 @@ example is pasted from the scratch run, not typed.
 
 **Stop if:** the scratch run's output differs from what the MADR says a user sees.
 
+*Exit criterion (2026-11-20): no blocker, every row tested, plants caught.*
+
 ### P6 — the owner's check on a Windows console, and the stop
 
 *Class: the owner, at the Windows laptop; the build by a mid-tier agent, effort low; the record by the coordinator.*
@@ -347,6 +719,25 @@ example is pasted from the scratch run, not typed.
 **Stop if:** any step differs. Record the screen text, no key, and stop; a fix is a deviation, recorded and approved
 before it is made.
 
+*Exit criterion (2026-11-20): no blocker, every row tested, plants caught.*
+
+**Amendment, 2026-11-20 (second records pass; MADR D16).** Step 2 is superseded by the MADR's Confirmation item 5 as
+amended. Its (A) list is agent-run, in P1 step 0b, P1b and P4 step 6, and is not repeated here. P6 is now:
+
+1. **The build,** by an agent: as step 1, from P5's commit, placed on the Windows laptop at
+   `%USERPROFILE%\gobble-check\gobble.exe`. The agent reports the commit and the file's SHA-256; nothing else.
+2. **The owner's real-console confirmation,** the MADR's item 5 (B), steps 1 to 8: Console Host with PowerShell 5.1,
+   then Windows Terminal with PowerShell 7. The owner reports one word per step, as each step says. No step needs a
+   provider key or a sign-in; the key typed is made up and is never sent, and the proxy variables point at a closed
+   local port.
+3. **The record,** by the coordinator: each step's word per terminal, the PowerShell versions and the Windows build;
+   never a key or screen text beyond what the owner reports.
+
+**Gate (amended):** every step's word as item 5 (B) expects. **Stop (amended):** any other word. Step (B) 4 giving
+"gobble ended" is row R40's named stop, which the agent-run `menu-ctrlc` should already have shown; if it did not,
+the pseudo console and Console Host differ, and that difference is recorded in the MADR before the stop goes to the
+owner.
+
 **Then the plan stops.** The release is decided by the owner after this check has passed (MADR Q8); no release, tag or
 `v0.6.1` work is part of this plan.
 
@@ -355,6 +746,8 @@ before it is made.
 * P1's red tests seen failing at the base, quoted; the defect's passing after P2 and the loop's after P2b.
 * P1b's probe and gobble mode on the Windows test laptop, at the base and after P2b.
 * P3's fourteen mutations each failing its test, quoted, and the fifteenth passing.
+  *(2026-11-20: and mutations 16 to 41 each failing theirs; every decided row of the MADR's state table pinned by the
+  test its row names.)* *(2026-11-20, second pass: and 42 to 55; P1b's cases by their `0063 case=` lines.)*
 * P4's gates, each exit 0, with their summaries.
 * P6's owner check, in both terminals.
 
@@ -431,6 +824,10 @@ MADR's `line.go:137-141`, and `credentials.go:241`, inside its `credentials.go:2
 Completions servers are registered on the run's set before the choice). The first run's condition, `setup` at
 `line.go:137`, is unchanged, so the offer is made in the same cases. The line numbers the MADR gives still hold.
 
+*(2026-11-20: not all of them. `internal/cli/modelflags.go` also changed between `21be074` and `09a6adf` (`4b10e0b`,
+five lines inserted at `:49`), so the MADR's `modelflags.go:82-92` is `:87-97`. Annotated in the MADR's evidence
+index; see "Re-grounding at `b1994a0`" below.)*
+
 ### State table (2026-11-20 ruling: to be added before P1)
 
 * The MADR `0063-MADR-one-shared-terminal-input-so-the-key-prompt-waits.md` carries no state table, which the records
@@ -439,3 +836,212 @@ Completions servers are registered on the run's set before the choice). The firs
   (Recommended)". The table is added in a records pass before P1 starts, when 0063 is released for building. Any row
   of it that is `open` goes to the owner in one prompt before P1.
 * 0063 is not released for building. Nothing else about this plan or the MADR changes, and no phase has started.
+  *(2026-11-20, later: the owner released 0063 the same day; the records pass below added the table. No phase has
+  started.)*
+
+### Records pass before P1 (2026-11-20)
+
+On the owner's ruling "Add the table before P1, when 0063 is released (Recommended)", relayed by the coordinator.
+Documents only: no code, no test, nothing run but the records check and markdownlint.
+
+**What was added.** The MADR's "State table" (after Confirmation): 73 rows, R1 to R73; 61 `decided`, 6 `out of
+scope` (R24, R36, R49, R54, R55, R73), 6 `open` (R17, R31, R40, R50, R52, R53), put to the owner as the MADR's Q10 to
+Q14. In this plan: step 0 of P1 (re-ground at the phase's start commit, and no start with an open row); the additions
+A1 to A19 in P1, P1b and P2; mutations 16 to 41 in P3; and each phase's exit criterion, "no blocker, every row tested,
+plants caught".
+
+**Decided rows and the tests that pin them.** "existing" is a test in the tree at `b1994a0`; "A*n*" an addition of
+this pass; a mutation number is P3's.
+
+| Row | Test | Phase | Plant |
+| --- | --- | --- | --- |
+| R1, R32 | `TestLineEndsBeforeEachQuestion/LF/*`; `terminput_test` table; the existing sign-in tests answered with each E (P1 step 2) | P1, P2 | 36 |
+| R2 | `TestLineEndsBeforeEachQuestion/CR/*`; `terminput_test` table | P1, P2 | 37 |
+| R3 | `TestLineEndsBeforeEachQuestion/CRLF/*-secret` | P1 | 1 |
+| R4 | `TestCRLFSplitAcrossReads`; `terminput_test` "owed `\n` in a later read" | P1, P2 | 16 |
+| R5 | `TestLineEndsBeforeEachQuestion/CR\|LF/*-secret` (A1) | P1 | 16 |
+| R6 | `TestLFThenCRIsTwoEnds` | P1 | 3 |
+| R7 | `TestEnterAfterSecretAnswersTheNextLine` | P1 | 2 |
+| R8 | `TestPastedKeyEndingCRLF` | P1 | 7 |
+| R9 | `terminput_test` row (i) (A15) | P2 | 29 |
+| R10 | `terminput_test` "a byte that clears `lfOwed`" and row (ii) (A15) | P2 | 30 |
+| R11 | `terminput_test` row (iii) (A15) | P2 | 31 |
+| R12, R67 | `TestQuestionsChoose`, `TestQuestionsConfirmAndInput` (existing) | P2 step 4 | planted in 0025-PLAN P5 |
+| R13 | `TestEmptyKeyCancels`; `TestFirstRunOfferAgainAfterEmptyKey` | P1 | 11 |
+| R14 | `TestQuestionsChoose` (existing); `terminput_test` "`ended()` true after the end of input" | P2 | 40 |
+| R15 | `TestFirstRunEndOfInputAtOfferEnds` (A7) | P1 | 22 |
+| R16 | `TestQuestionsSecret` (existing); `TestLineEndOfInputMidLine` (A2) | P1 | 18 |
+| R18 | the five `*Waits` tests, `CRLF`; P1b gobble mode; P6 steps 4, 8, 9, 12, 13 | P1, P1b, P6 | 1 |
+| R19 | `TestLineEndsBeforeEachQuestion/*/*-input`, `-choose`, `-confirm` | P1 | 37 |
+| R20 | `TestLoginNoArgumentMenuWaits`, its `/login gemini` case | P1 | none (see below) |
+| R21 | `TestLoginProviderMethodMenuWaits` (A5) | P1 | 1 |
+| R22 | `TestFirstRunTypeAhead` | P1 | 4 |
+| R23 | `TestLineEndsBeforeEachQuestion/one chunk/*-secret` (A1) | P1 | 17 |
+| R25, R51 | `TestFirstRunTypeAhead`; `TestSignInTypeAheadNotSentAsPrompt`; `terminput_test` "`discard` keeps `lfOwed`" | P1, P2 | 4, 5 |
+| R26, R27, R29 | `TestLoginSlash`, `TestQuestionsConfirmAndInput`, `TestQuestionsSecret` (existing); P6 step 5 | P2 step 4, P6 | planted in 0025-PLAN P5 |
+| R28 | `TestSecretRawFailureReadsNothing` (A3) | P1 | 19 |
+| R30 | `TestSecretRestoredWhenContextEnds` (A4) | P1 | 20 |
+| R33 | the owner's check in Console Host | P6 | none: a check on a real console |
+| R34 | P1b probe and gobble mode; the owner's check in Windows Terminal | P1b, P6 | none: a measurement |
+| R35 | P1b gobble mode, typed ahead (A14) | P1b | 4 |
+| R37 | `TestFirstRunOfferAgainAfterMenuInterrupt`; `TestLoginInterrupt` (existing) | P1 | 11 |
+| R38 | `TestFirstRunInterruptAtRepeatedOfferEnds` (A8) | P1 | 23 |
+| R39 | `TestFirstRunOfferAgainAfterKeyCancel`; `TestQuestionsSecret` (existing) | P1 | 11 |
+| R41 | `TestQuestionsPrompter` (existing); `terminput_test` "`ended()` false after an ended context" | P2 | 41 |
+| R42 | `TestFirstRunContextEndReturns` (A11) | P1 | 26 |
+| R43 | `terminput_test` row (iv) (A15) | P2 | 32 |
+| R44 | `terminput_test` row (v) (A15) | P2 | 33 |
+| R45 | `TestFirstRunTypeAhead`; `TestTrustReadsTerminalInput`; `TestOneReaderOfStdin` (A18) | P1, P2 | 4, 8, 34 |
+| R46 | `TestTrustReadsTerminalInput`; the harness's `e.termIn` | P2 | 8 |
+| R47 | `terminput_test` read count; `TestLineSessionReadsOnlyWhenAsked` (existing) | P2 | 6 |
+| R48 | `TestTerminalInputConcurrentReads` (A19), under `-race` | P2, P4 | 35 |
+| R56 | `TestEditorKeepsKeysTypedWithLogin` (A6) | P1 | 21 |
+| R57 | `TestAskOnKeysPastAnswerNotShared` (A17) | P2 | 21 |
+| R58 | `TestTerminalInputBytesInOnePlace` (A16) | P2 | 21 |
+| R59 | `TestLogoutSlash` (existing) | P2 | planted in 0025-PLAN P5 |
+| R60 | `TestPermissionPrompt`, `TestPermissionPromptOnceOnly` (existing) | P2 step 5 | none: the type change is checked by the compiler |
+| R61 | `TestFirstRunEnterAtFirstOfferSignsIn` (A10) | P1 | 25 |
+| R62 | `TestFirstRunDeclineEnds` | P1 | 38 |
+| R63 | `TestFirstRunInterruptAtOfferEnds` | P1 | 39 |
+| R64 | `TestFirstRunRepeatedOfferDefaultsNo` | P1 | 13 |
+| R65 | `TestFirstRunYesOnRepeatStartsAnotherRound` (A9) | P1 | 24 |
+| R66 | `TestFirstRunDeclineOnRepeatEnds` | P1 | 9 |
+| R68 | `TestFirstRunClosedInputEnds` | P1 | 10 |
+| R69 | `TestFirstRunTypeAheadDroppedBeforeRepeatedOffer`; `TestFirstRunInstantFailureClosedInputEnds` | P1 | 10, 12 |
+| R70 | `TestFirstRunOfferAgainAfterFailure` | P1 | 14 |
+| R71 | `TestFirstRunSetup`, its offer counted once (A12) | P1 | 27 |
+| R72 | `TestLoginDoesNotLoop`; `TestSetupDoesNotLoop`; `TestAcpLoginMethodMenuWaits`'s cancel case (A13) | P1 | 28 |
+
+Mutations 36 to 41 (in P3's additions) were added by this pass for decided rows whose tests had no plant.
+
+**(a) Decided rows that had no test,** each now with an addition and its plant: R5 and R23 (A1), R16's line case
+(A2), R28 (A3), R30 (A4), R21 (A5), R56 (A6), R15 (A7), R38 (A8), R65 (A9), R61 (A10), R42 (A11), R71's count (A12),
+R72's `acp --login` case (A13), R35 (A14), R9, R10's entry points, R11, R43 and R44 (A15), R58 (A16), R57 (A17), R45's
+`auth login` and `setup` readers (A18), R48 (A19). Rows whose test still has no plant: R20 (the `/login gemini`
+guard: no single change reaches it that the CRLF tests do not already catch), R33 and R34 (a check and a measurement
+on a real or pseudo console), and R60 (the permission prompt's reader is a type the compiler checks).
+
+**(b) Tests in this plan that map to no row:** P3 mutation 15 (`eachEnter` cut to `CR`, expected to pass): it checks
+that the `CRLF` form is what catches mutation 1, a property of the tests, not of a row. Every other test in P1 to P6
+maps to a row above.
+
+### Re-grounding at `b1994a0` (2026-11-20, records pass)
+
+`main` is `b1994a0`, 17 commits after `21be074` and 4 after `09a6adf`. Since `09a6adf` only test files changed under
+`internal/` (`internal/cli/chatserver_test.go`, `modelscmd_test.go`, `refusal_test.go`; `acpserver/warninglog_test.go`),
+none of them cited. The feature commits `7ee9a94` (image prompts in `acpserver`) and `9332cef` (images from `read`
+and `@path`) and the test commit `93ecb5e` add or change no reader of standard input.
+
+* Every citation in this plan's re-grounding table at `09a6adf` holds at `b1994a0`, by the same lines.
+* The MADR's citations hold, except `modelflags.go:82-92`, now `:87-97` (annotated in the MADR and above).
+* **The MADR's list of readers is not complete.** D1 is right that only `line.go:163`, `login.go:96` and `auth.go:301`
+  call `inline.NewReader` on stdin, and it lists the trust question's direct read and `gobble acp --login`'s
+  `ReadPassword` and `bufio` read. It does not list: `ReadPassword` reached from `gobble --api-key -` in the line
+  session's process (`chat.go:64-66`, after the trust question at `:49-50`) and from `gobble auth login --api-key -`
+  (`auth.go:122`); `gobble auth import --from-pi`'s questions (`piimport.go:61-94`); `gobble update`'s confirmation
+  (`update.go:143`, `:166-181`, through go-selfupdate-lib `v1.26.3`); and the external editor that inherits stdin
+  (`slash.go:226-230`, `config.go:284-291`). Each can share the input or is another process, so the decision holds;
+  which of them join it is the MADR's Q10 (rows R52, R53). No reader was added after the plan's base.
+  *(2026-11-20, second pass: Q10 answered; they stay outside it, rows R91 to R96.)*
+
+### Second records pass (2026-11-20)
+
+On a record review's findings and the owner's rulings of 2026-11-20, relayed by the coordinator: the review's cases 1
+to 3 and Q10 to Q14 (MADR D12 to D15), and who runs the live checks (MADR D16). Documents only; nothing run but the
+records check and markdownlint. Each finding was checked at its cited lines in the tree and the module cache before it
+was applied; every statement the review makes about a Windows console is inferred from source, and the record keeps
+it marked so.
+
+**The review's findings, each checked:**
+
+* Case 1 (input the terminal holds, never seen by `discard()`): holds; ctrl+j submits (go-tui-lib
+  `lineedit/keys.go:93`). Applied: D12, rows R74 to R83.
+* Case 2 (the read a browser sign-in leaves waiting): holds (go-llmprovider-sdk `wizard/auth.go:916-962`,
+  `llm/provider/signin.go:441-446`, `inline/reader.go:59-70`). Applied: D13, rows R84 to R89; what the ruling's words
+  leave is Q16.
+* Case 3 (Ctrl+Z on a Windows console): holds by reading (`fd_windows.go:710-715`, `os/file_windows.go:110`,
+  `inline/reader.go:72-73`, `:90-91`; `prompt.go:287` on POSIX). Applied: D14, row R90, R44 annotated.
+* The suggested exclusions: applied, rows R97 to R100; R54's reason corrected.
+* R28, R57: hold; both are open again (Q18, Q19). R44: holds; corrected, still decided, from D3 and D6, with R90.
+* R35, A14 and mutation 4: holds; A14's expectation corrected, its plant now 42. R68, R69 and mutation 10: holds;
+  A20 added, R68 pinned by 22. R25, R51, R69 on a pipe only: holds; A21. R46: holds; A22. R44's stubs: R90's probes.
+  R60: holds; A23.
+
+**Decided rows added or changed, and the tests that pin them** (the rest as the first pass's table above, except R28
+and R57, open again, whose A3 and A17 wait):
+
+| Row | Test | Phase | Plant |
+| --- | --- | --- | --- |
+| R17 | `TestLongAnswerHasNoBound` (A25) | P2 | 53 |
+| R22, R35 | `typeahead` (A14, corrected); `probe-typeahead` measures R35 | P1 step 0b, P1b | 42 |
+| R25, R51 | `flush-prompt`, `pty-flush-prompt` (A21), beside their pipe tests | P1b | 43 |
+| R31 | `TestSecretRestoredOnPanic` (A26) | P1, passing after P2 | 54 |
+| R46 | `TestTerminalInMadeOnce` (A22) | P2 | 51 |
+| R50 | `TestTrustReadsWithoutDeadline` (A27) | P2 | 55 |
+| R60 | `TestPermissionReadsTerminalInput` (A23) | P2 | 52 |
+| R68 | `TestFirstRunClosedInputEnds` | P1 | 22 |
+| R69 | `TestFirstRunEndOfInputInRoundEnds` (A20); `flush-offer`, `pty-flush-offer` | P1, P1b | 10, 44 |
+| R74, R76 | `pty-flush-prompt`, `pty-flush-offer`; `flush-prompt`, `flush-offer` (A21) | P1b | 43, 44 |
+| R75 | the owner's step (B) 5 | P6 | none: a real console |
+| R77, R80, R81 | `TestFlushPoints` (A24) | P2 | 42, 43, 44 |
+| R79 | `TestFlushPoints` (A24), `flush-offer` | P2, P1b | 45 |
+| R83 | `abandoned`, `pty-abandoned` (A21) | P1b | 46 |
+| R84 | `terminput_test` abandoned row (A28); `pty-abandoned` | P2, P1b | 47 |
+| R85 | `abandoned` (A21): the pseudo-console test only | P1b | 47 |
+| R87 | `terminput_test` timed-wait row (A28); the editor's Esc tests | P2 | 48 |
+| R88 | `terminput_test` two-give-ups row (A28) | P2 | 49 |
+| R89 | `terminput_test` end-of-input row (A28) | P2 | 50 |
+| R90 | `probe-ctrlz-line`, `probe-ctrlz-raw`, `key-ctrlz`; the owner's step (B) 6 | P1 step 0b, P1b, P6 | none: the runtime's behaviour; another word is a deviation |
+
+**Not decided, and where each is settled:** R40 awaits live evidence, measured first by `probe-ctrlc` at P1 step 0b
+(before any code), then `menu-ctrlc` in P1b and the owner's step (B) 4 in P6. R28, R57, R78, R82 and R86 are the MADR's
+Q18, Q19, Q17, Q20 and Q16, which P1 step 0 requires answered.
+
+**Re-check of the rows this pass added or changed, against the review's three questions.** Missing cases: three
+found and put as Q16 (a read the user gave up with Ctrl+C, and completions that are not lines), Q17 (a failing flush)
+and Q20 (a flush before every prompt would drop typing during a turn); the permission prompt's typed-ahead keys are
+recorded in R81 as outside this record. Rows decided only by a ruling's or D8's words: R79 rests on D8 holding "as
+written", which the ruling says; R81 on the ruling naming two points; R87 to R89 on D13's "a read belonging to an
+abandoned prompt" and on D8. Tests that cannot pin: R75 is pinned by the owner's step only, R85 by the pseudo console
+only, and R90 by measurement only; each says so in its row.
+
+**Who runs what (MADR D16).** Agent-run: P1 step 0b's probes, P1b's cases, P3's mutations of them, and P4 step 6, all
+through `run-on-host`, read by their `0063 case=` lines. Owner-only: the MADR's item 5 (B), eight steps in two
+windows, because a pseudo console does not show what a classic console window does with real key events, or how
+PowerShell 5.1 and 7 leave the console's mode. No check needs a provider key, a sign-in or a browser.
+
+### Third records pass (2026-11-20)
+
+The owner answered Q16 to Q20, relayed by the coordinator (MADR D17): "Only reads the program gave up (Recommended)",
+"Go on, with one warning on stderr (Recommended)", "Keep that, recorded and tested (Recommended)", "Dropped, as today
+(Recommended)", "Only the first prompt after a sign-in or the first run (Recommended)". Documents only.
+
+* Rows R28, R57, R78, R82 and R86 are decided; rows R101 to R108 added: R101 the warning's words, R102 Q16's stated
+  consequence, R103 to R108 the mark of Q20. Every case of the mark is settled by the ruling's words or by D4.
+* Final counts: 108 rows; R52 and R53 replaced; of the other 106, 88 `decided`, 16 `out of scope`, R40 awaiting live
+  evidence (measured first at P1 step 0b), and R101 `open` for its words only.
+* Tests: A3 and A17 run as first written; A24 and A28 extended; A29 added; plants 56 to 61.
+* What waits for what: P1 step 0b runs before step 0's check and before R40 is settled; step 1 waits for step 0 and
+  step 0b; R101 blocks only P2 step 9's message and A29.
+
+### Fourth records pass (2026-11-20)
+
+On the owner's approval of R101's words, relayed by the coordinator ("Plain words, with the consequence
+(Recommended)"), and an independent check of the third pass, each item verified at its cited lines first.
+
+* **Mutation 10 (rows R68, R69):** its must-fail is now A20 alone; `TestFirstRunClosedInputEnds` and
+  `TestFirstRunInstantFailureClosedInputEnds` move to mutation 22, which is the one that spins to the bound; the spin
+  sentence is struck and corrected (P3).
+* **R40's probe:** verified: with no `signal.Notify`, Go's console handler lets the default one end the process
+  (`runtime/os_windows.go:1047-1069`, inferred for a console). The probe child now takes `os.Interrupt`, as gobble does
+  (`main.go:54`), records it, and each observed word has one meaning; `killed` is a fault in the probe (P1b, step 0b).
+* **Stale check references:** R18, R27, R33 and R34 now name the cases and the owner's (B) steps.
+* **D12's plumbing:** verified: D1's struct and `terminalIn()` carry no file or writer. MADR D18 places
+  `term.FlushInput` in `internal/cli/term` (four per-OS files), binds it in `terminalIn()` with the warning writer, and
+  P2 gains step 12 and amended steps 1 and 3. `internal/archtest` (`internal/archtest/check.go`) has no rule on
+  `golang.org/x/sys`, and the package already imports it, so there is no stop; P2's `make archtest` gate confirms it.
+* **Pass-2 text against D17:** D12, D13 and the owner's step (B) 5 each carry a dated "narrowed by D17" note.
+* **The whole drop:** verified (`prompt.go:201`, `permission.go:206`, `inline/reader.go:75-77`); step 10 takes an
+  abandoned completion with its own read's size; A28 gains the 512-through-256 case; mutation 63.
+* **Counts:** 108 rows; R52 and R53 replaced; of the other 106, 89 `decided`, 16 `out of scope`, R40 awaiting live
+  evidence, none `open`.
