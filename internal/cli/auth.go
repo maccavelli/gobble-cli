@@ -15,7 +15,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/maccavelli/go-llmprovider-sdk/authcontract"
-	"github.com/maccavelli/go-tui-lib/v2/inline"
 
 	"github.com/maccavelli/gobble-cli/internal/auth"
 	"github.com/maccavelli/gobble-cli/jsonx"
@@ -265,7 +264,8 @@ func (e *runEnv) login(id string, device bool) error { return e.loginWith(e.ctx,
 // terminal's text and the host's browser, and a sign-in that would ask a
 // question is refused before it starts (CheckNoQuestion). On a terminal, and
 // never with --json, a browser sign-in also takes the URL its browser ends
-// on, pasted. ctx ends the sign-in. Its own error is returned as is: Main
+// on, pasted, read through the process's one terminal input (0063-MADR D1).
+// ctx ends the sign-in. Its own error is returned as is: Main
 // prints it and exits 1, as failf would, and --json's failed step names its
 // kind.
 func (e *runEnv) loginWith(ctx context.Context, id string, device bool, js *jsonSteps) error {
@@ -298,7 +298,7 @@ func (e *runEnv) loginWith(ctx context.Context, id string, device bool, js *json
 	o.OpenURL = e.openLoginURL
 	var p provider.Prompter = unasked{out: e.out.err}
 	if !o.NoPaste {
-		p = prompter{&questions{ctx: ctx, in: inline.NewReader(e.stdin), out: e.out.err}}
+		p = prompter{&questions{ctx: ctx, in: e.terminalIn(), out: e.out.err}}
 	}
 	return e.signInTo(ctx, p, id, o, nil)
 }

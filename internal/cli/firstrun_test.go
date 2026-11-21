@@ -361,13 +361,19 @@ func TestFirstRunClosedInputEnds(t *testing.T) {
 	})
 }
 
-// A sign-in that fails at once, and the input closed after y: the session
-// ends within the bound.
+// A sign-in that fails at once, and the input closed after y and the
+// provider menu's answer: the session ends within the bound. (2026-11-21,
+// P2, the P1 review's follow-up 2: the menu is answered first, so the
+// sign-in that fails at once is reached; before, the menu read the end of
+// input.)
 func TestFirstRunInstantFailureClosedInputEnds(t *testing.T) {
 	eachEnter(t, func(t *testing.T, enter string) {
 		h, _ := firstRunHarness(t, enter)
 		replace(t, &signInWith, noSignIn)
 		h.start(Prompt{})
+		expect(t, h, "the provider menu", has(h, "Number [1]: "))
+		h.press(strconv.Itoa(providerNumber("gemini")) + enter)
+		waitUntil(t, has(h, "Error: "+errNoSignIn.Error()))
 		if err := endSession(t, h); err != nil {
 			t.Fatal(err)
 		}

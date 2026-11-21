@@ -371,8 +371,9 @@ measured; the measurements are named where they are made.*
     whatever completes it, a line or keys. A read the person interrupted with Ctrl+C is not dropped and goes to the next
     prompt, as D4 says. So `abandon()` is called only for a program's give-up: `questions` when the context that
     ended is not `ls.ask`'s interrupt cancel, and `askOn`'s callers when the request was withdrawn without the
-    person's Ctrl+C. The consequence, row R102: the first key (POSIX) or line (Windows) typed after such a browser
-    sign-in is lost.
+    person's Ctrl+C. The consequence, row R102: the first ~~key (POSIX) or~~ line (Windows) typed after such a browser
+    sign-in is lost. *(2026-11-21, D21: on POSIX, what was typed into the abandoned prompt is lost, measured on
+    Linux; the first key only when nothing was typed there, inferred.)*
   - **Q17, "Go on, with one warning on stderr (Recommended)":** a flush that fails is skipped, and one warning is
     written on stderr, once per process (row R78). Its words are proposed in row R101 and await the owner's approval.
   - **Q18, "Keep that, recorded and tested (Recommended)":** when raw mode cannot be switched on for the key prompt,
@@ -437,6 +438,132 @@ measured; the measurements are named where they are made.*
   - **R120,** "Yes, widen the row to include it (Recommended)": Ctrl+C at `gobble auth login`'s paste prompt, where
     no prompt takes the interrupt, ends gobble too.
   - With these, no row is `open`.
+- **D21. F1 and F2 of P2's build pass 1 answered** (amendment, 2026-11-21; the owner, relayed by the coordinator).
+  - **F1, "Amend R86/R102 to what Linux does (Recommended)":** measured at the PLAN's P2, build pass 1, on a Linux
+    pseudo-terminal (the case `pty-abandoned`, and a diagnostic of it that named the turns: `hello` and `again`, no
+    `partial`): on POSIX, a read started out of raw mode by a prompt the program gave up is completed, when the session
+    prompt puts the terminal in raw mode, by what was typed into that prompt and not ended; D13 drops it with the
+    read, and what is then typed at the session prompt is read by the line editor whole. macOS is inferred from the
+    BSD terminal driver, not measured. The earlier statement (Q16, D17's Q16 bullet, rows R86 and R102), that such a
+    read completes with the first key typed after raw mode is on, holds only when nothing was typed into the
+    abandoned prompt (inferred, not measured). Windows is unchanged: the console keeps the read in line mode, and the
+    first line typed is dropped (`abandoned` read `dropped`). The build stands; rows R86 and R102 are amended, and
+    `pty-abandoned` passes when no turn holds `partial` and `again` is one.
+  - **F2, "Flush at once at that first prompt (Recommended)":** when D17's mark is set, the terminal's queue is flushed
+    at the session prompt itself, before `ReadPrompt`, whether or not the line editor then reads the terminal, and the
+    mark is cleared there; not at the editor's first read of the terminal, which keys the editor holds across a
+    sign-in (row R56) put off to a later prompt. With it R103 and R105 hold in that case, which row R123 decides. R108
+    is unchanged, nothing is flushed on the way out; its test is re-worded for the flush made at the prompt.
+- **D22. On Linux and macOS a read the prompt gave up is cancelled, not left waiting** (amendment, 2026-11-21;
+  ~~**proposed**: the owner's direction is decided, this design is a draft for review;~~ **accepted** (2026-11-21, D22 accepted,
+  the owner's answers to Q23 to Q26, below); the front matter is unchanged).
+  - **The owner's answer** to F3 and F4 of the PLAN's P2, build pass 2, relayed by the coordinator: "Make reads cancellable on POSIX".
+    The options shown were "Flush before raw mode; third pass (Recommended)", "Make reads cancellable on POSIX" and "Keep this tree; record the race"; the owner chose the second, which was not the recommendation.
+    Its cost, as stated with it: it replaces D13's mechanism for Linux and macOS, so it needs a new decision, a
+    records pass, new tests and plants; Windows is unchanged; 0063 is delayed by at least one records pass and a build.
+  - **What it decides.** On a POSIX terminal no read of standard input is outstanding after a prompt returns: a read
+    is started only when a prompt waits, and only once the terminal has bytes ready, ~~so it never waits in the kernel~~
+    *(2026-11-21, D22 second draft: not so on standard input itself: a line reported ready and then emptied by Ctrl+C leaves the read
+    waiting, M11; how it cannot wait is Q25)*; when the prompt stops waiting, nothing is read. Nothing typed is taken by a read nobody waits for, so a later mode
+    change cannot hand it to one: F4's race is impossible by construction, not by timing.
+  - **Where.** A layer under `inline.NewReader`, beside `term.ConsoleInput`: on POSIX (`unix` build tag), when
+    standard input is a terminal, `terminalIn()` reads it through the layer; on Windows through `term.ConsoleInput`,
+    as built; a pipe or a file through neither (rows R124, R137, R143).
+  - **The wait** (measured on this Mac, PLAN execution record "Records draft for D22"): select(2) on standard input
+    and a close-on-exec wake pipe, with no timeout, retried on `EINTR`. Not poll(2): on macOS it refused the terminal
+    opened as `/dev/tty` (`revents=0x20`, `POLLNVAL`) where select(2) waited (M8), though it served the pseudo
+    terminal's slave (M1). Not the runtime poller through a deadline: it worked (M4), but needs `O_NONBLOCK` on the
+    terminal's open file description, which the shell and every process on that terminal share and which a crash
+    would leave set (row R125). ~~Linux is not measured yet: step 0 of the PLAN's amendment.~~ *(2026-11-21, D22 second draft:
+    measured on a WSL distro and a Linux machine that is not WSL, M0 to M14; on Linux poll(2) accepts `/dev/tty` too
+    (M8), and no `EINTR` was seen on any host (M6, M9).)*
+  - **The gate.** `terminalInput` opens the layer's gate when a prompt's read of the input waits and closes it when
+    that read returns, with bytes, the end of input or its context. A read(2) runs only with the gate open, after
+    readiness, under the gate's lock; closing takes the lock, so it waits for a read(2) in progress and reports
+    whether one completed since the gate opened (rows R126, R127). *(2026-11-21, D22 second draft: holding the lock across a read
+    of standard input can hang a close, M11; Q25. The gate's mechanics are completed below.)*
+  - **D13 on POSIX.** With nothing read for a prompt that gave up, there is nothing to drop. The drop applies only to a
+    completion read before the gate closed, the race of a give-up with a byte's arrival: the program's give-up drops
+    it (D13, D17), the person's Ctrl+C gives it to the next prompt (Q16) (rows R128, R129). `abandon()` marks a drop
+    only when the close reported a completed read. Windows keeps D13, D18, D19 and D20 unchanged (row R143).
+  - **With F2 (D21).** The first prompt after a sign-in or the first run flushes as it starts, after raw mode is on;
+    no read is outstanding then, so what was typed into the sign-in's prompts and left unread is emptied, every time
+    (rows R130, R131). What a program gives up outside a sign-in is Q23. A wait that cannot be used is Q24.
+  - **Second draft (2026-11-21), after an independent record review and the measurements M9 to M14** on this Mac, a
+    WSL distro and a Linux machine that is not WSL (the PLAN's execution record, "Records draft for D22, second
+    draft"). Still proposed. What the review found missing, and its decision:
+    - *The read can still wait* (M11, every host): select(2) reports a line ready, Ctrl+C empties it, and a read(2)
+      of standard input then waits for the next line. A read through a private non-blocking descriptor on the
+      terminal's own path gives `EAGAIN` there instead (M12, every host). Which way is Q25; until it is answered, R126
+      is `open`.
+    - *A closed gate* (row R145): the layer's Read does not return; it waits on the wake pipe alone, standard input
+      out of the set, until the gate opens; it returns only bytes, `io.EOF` or a read error, never for a close
+      (inline.Reader's goroutine ends on an error and reads again at once on `(0, nil)`).
+    - *The wake pipe* (row R146): both ends non-blocking and close-on-exec; the waiter drains it to `EAGAIN` before
+      each wait; `EAGAIN` on a write is not an error; it lives for the process; a test's layer is ended by `stop()`
+      in `t.Cleanup`. A close returns only after the waiter has left select(2).
+    - ~~*One read per opening* (row R127): the gate closes itself after a read(2) returns, so no read follows without
+      a new opening; `fill`'s close is then idempotent.~~ *(2026-11-21, D22 third draft: dropped: inline.Reader makes one inner
+      read per ask, so a self-close changes nothing a test can see; the gate stays open until `fill` closes it.)*
+    - *The ask's size* (row R147): `fill` asks `inline.Reader` with `lineBuf` always; what the caller's buffer
+      cannot take stays in `pending`, where `discard()` and the flush's rules reach it. *(2026-11-21, D22 third draft: on the
+      gated path only, a POSIX terminal; with no gate, the caller's buffer, as built, so R143 holds as decided.)*
+    - *No gate* (row R151): where there is no gate (a Windows console, a pipe, a test's input), `fill` sets
+      `waiting` on every read that ended on its context, as built (D13).
+    - *Hang-up* (row R148, M10): select(2) reports it ready; a read gives 0, the end of input, or `EIO` on Linux in a
+      read already waiting, the input's error; D8 applies either way. A background start is out of scope (R149).
+    - *Other readers of standard input* (row R150): with the gate closed, no read of gobble's waits when another
+      reader or a child reads; R95's risk returns only with Q24's fallback.
+    - *A queued Ctrl+D* (row R89's latest, M13): typed out of raw mode while nothing reads, it is not the end of
+      input once raw mode is on: it is read as one byte, `0x04` on macOS and `0x00` on Linux.
+    - *The flush and raw mode* (M14): a flush out of raw mode empties half a line too; R131 needs no "after raw mode".
+    - *The BSDs* (row R144): `flush_other.go` cannot flush (R78), so R131 does not hold there.
+    - *Sign-ins outside the session* (`gobble auth login`, `gobble acp --login`, `gobble setup`): what was typed into
+      an abandoned paste prompt stays in the terminal after gobble exits; folded into Q23, as rewritten.
+    - *Statuses.* Rows that rest on D22's mechanism read "decided (D22, proposed)"; the counts separate them.
+  - **Third draft (2026-11-21), after the delta confirmation, on the coordinator's dispositions, and M15** (this Mac,
+    a WSL distro and a Linux machine that is not WSL; the PLAN's execution record, "Records draft for D22, third
+    draft"). Still proposed. Every row whose POSIX outcome needs the layer reads "decided (D22, proposed)" (R83, R84,
+    R88, R89, R128, R130, R137, R148). R127's self-close is dropped: it cannot be tested. R147 holds on the gated path
+    only, so R143 stays literally true. Q25 (a) gains `O_NOCTTY` and a `/dev/tty` fallback before Q24's. Through a
+    private descriptor, M15 shows Ctrl+D on an empty line and a hang-up each read once as 0, the end of input, and
+    `O_NOCTTY` changes nothing seen. R89 takes the review's text. R145 gains a case that shows its wait cannot spin.
+  - **Accepted (2026-11-21).** On the owner's direction, the owner, relayed by the coordinator: "Make reads cancellable on POSIX", and the owner's answers to the
+    four questions its drafts left open, the owner, relayed by the coordinator: each quoted as the option's label:
+    - **Q23:** "Flush at gobble's give-up (Recommended)". On POSIX, the terminal's queue is flushed at the program's give-up itself:
+      `askPermission`'s withdrawn branch and `questions.cancelled`'s program branch, inside the session and out of it.
+      Three flush points, not two (R80, R81, R84, R132).
+    - **Q24:** "Old reads plus one warning (Recommended)". When the readiness wait or its descriptor cannot be used, the process reads standard
+      input as built (a blocking read, D13's drop), with one warning on stderr, the owner's approved words:
+      `Warning: gobble cannot wait on this terminal without reading it (<error>); keys typed while a sign-in finishes may be lost.` (R138, R150).
+    - **Q25:** "Private non-blocking descriptor (Recommended)". The layer reads a private descriptor on the terminal's own path, opened
+      `O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_NOCTTY`; when that open fails and standard input is the controlling terminal
+      (the same foreground process group on standard input and on `/dev/tty`), `/dev/tty` with the same flags; only
+      then Q24's fallback (R125, R126, R127, R134, R138, R146, R148).
+    - **Q26:** "Move them to a shared file (Recommended)", the owner's word for restructuring P1b's `pty_linux_test.go` beyond D21's one line:
+      the cases move word for word to `pty_unix_test.go` (`(linux || darwin) && pty`), with the openers in
+      `pty_linux_test.go` and a new `pty_darwin_test.go`, and the Makefile's comment updated (R130, R131, R152).
+    Every row that read "decided (D22, proposed)" reads "decided (D22)"; no row is open.
+- **D23. After P2's build pass 3: the review's unpinned rows, one undecided case, and four hardenings**
+  (amendment, 2026-11-21; the owner, relayed by the coordinator: each quoted as the option's label). An independent review of build pass 3
+  found no blocker; five plants survived (rows R124, R126, R132 with R143, R138, R147) and one case was undecided.
+  - "Fourth pass, tests only (Recommended)": a fourth P2 build pass adds the tests that pin those rows, and no production change beyond what
+    the next two answers add.
+  - "Always flush on a POSIX terminal (Recommended)": the flush at gobble's give-up (D22, Q23) applies on any Linux or macOS terminal, whether its reads
+    go through the gate or through Q24's fallback, whichever fallback: at start-up or later. It is keyed on "a POSIX
+    terminal", not on "has a gate". Windows keeps D13's drop and no give-up flush (R143). This settles the case the
+    review found undecided: as built, a start-up fallback did not flush and a later one did (rows R80, R132, R138,
+    R157).
+  - "Retry EINTR on the read (Recommended)": `EINTR` from read(2) on the private descriptor returns to the wait, as `EAGAIN` does (row R153).
+  - "Refuse a blocking descriptor (Recommended)": `NewGated` reads the descriptor's `F_GETFL` and refuses one without `O_NONBLOCK`, with an error;
+    `OpenGated` takes that as a failed open: `/dev/tty`, then R138 (row R154).
+  - "Check it's the same terminal": after opening the terminal's path, `OpenGated` compares `fstat`'s `Rdev` of standard input and of
+    the opened descriptor; on a mismatch it closes it and goes on to the `/dev/tty` step, which keeps its
+    foreground-process-group check (M15: `/dev/tty` reports its own device), then R138 (row R155).
+  - "Write the warning safely": Q24's warning is never written from `inline.Reader`'s goroutine. It is queued, and written once, on
+    the main flow, at the next point where gobble writes a prompt's or a question's text, before that text, with the
+    terminal in its cooked state; or at exit if no such point comes. Its words are unchanged: `Warning: gobble cannot wait on this terminal without reading it (<error>); keys typed while a sign-in finishes may be lost.` (row
+    R156).
 
 ### Consequences
 
@@ -573,6 +700,11 @@ measured; the measurements are named where they are made.*
    end the child (inferred, `runtime/os_windows.go:1047-1069`), which would read as `error`. The child records that
    the signal came; a child that ends without its result reads `killed`, a fault in the probe, not R40's stop. The
    PLAN's P1 step 0b gives each word's meaning.)*
+
+   *(2026-11-21, D21: `pty-abandoned`'s pass is not its Windows twin's. On a Linux pseudo-terminal it reads
+   `dropped` when no turn holds `partial` and a turn is `again`; `hello` may be a turn, since on POSIX what was typed
+   into the paste prompt completes the abandoned read and nothing typed at gobble's prompt is lost (row R102, as
+   amended). `abandoned`, on the Windows test laptop, keeps the words in the table.)*
 
    Every case runs with `GOBBLE_HOME` a temporary directory, no credential variable, and `HTTPS_PROXY` and
    `HTTP_PROXY` pointing at a closed local port; every key typed is made up, and none is sent. The sign-in in
@@ -746,21 +878,21 @@ that measures it is named. The `0063 case=` names are Confirmation item 5 (A), a
 | R77 | A pipe or a file | decided | No flush: there is no terminal queue to empty, and questions are never asked off a terminal (R36). In tests, the flush is the `termFlush` seam the harness stubs; a pipe's unread bytes stay in the pipe and come, in order, to the next read, since the shared input never reads ahead | D12 ("the terminal's own input queue"); R36 | proposed: `TestFlushPoints` (A24, P2), plant 42 |
 | R78 | The flush call fails (not a terminal after all, a console handle under another program, an I/O error); also a system with no flush call (`flush_other.go`) | ~~open (Q17)~~ decided (2026-11-20, third pass) | ~~Today: no flush exists~~ gobble goes on without the flush and writes one warning on stderr, once per process, whichever point failed; its words are R101's | D17; Q17, the owner, relayed by the coordinator: "Go on, with one warning on stderr (Recommended)" | proposed: `TestFlushFailureWarnsOnce` (A29, P2), plant 59 |
 | R79 | Input that arrives between the flush and the read | decided | It is kept and answers the prompt shown: at a repeated offer the flush runs after the offer is written, so only what was typed before it was shown is dropped | D12; D8 ("nothing typed before it may answer it"), which the ruling says holds as written | `TestFlushPoints` (A24: the flush is called after the offer's text is written); `flush-offer`; plant 45 |
-| R80 | Which points flush | decided | Exactly two: with `discard()` before the session prompt reads, and after a repeated offer is written, before its read | D12; the same ruling | `TestFlushPoints` (A24); plants 42, 43, 44 |
-| R81 | Points that do not flush | decided | The first offer (D8 keeps read-ahead from the offer to the key in the first round); every question inside a round (D4); `gobble setup`, `gobble acp --login` and `gobble auth login` (no session prompt and no repeated offer; the process ends after); the trust question (before the session; not one of the two points); the permission prompt (not one of the two points: keys typed while a turn runs can answer it, as today, a matter outside this record) | D12: the ruling names two points and no other | `TestFlushPoints` (A24, no call at each); plant 42 |
+| R80 | Which points flush | decided | Exactly two: with `discard()` before the session prompt reads, and after a repeated offer is written, before its read | D12; the same ruling | `TestFlushPoints` (A24); plants 42, 43, 44 (2026-11-21, D22 accepted: see its accepted latest row, after the third draft's count) |
+| R81 | Points that do not flush | decided | The first offer (D8 keeps read-ahead from the offer to the key in the first round); every question inside a round (D4); `gobble setup`, `gobble acp --login` and `gobble auth login` (no session prompt and no repeated offer; the process ends after); the trust question (before the session; not one of the two points); the permission prompt (not one of the two points: keys typed while a turn runs can answer it, as today, a matter outside this record) | D12: the ruling names two points and no other | `TestFlushPoints` (A24, no call at each); plant 42 (2026-11-21, D22 second draft: a flush at the program's give-up is Q23 (a), as rewritten, which would amend this row) (2026-11-21, D22 accepted: see its accepted latest row, after the third draft's count) |
 | R82 | The session-prompt flush: before every `ReadPrompt`, or only the first after a sign-in | ~~open (Q20)~~ decided (2026-11-20, third pass) | ~~Not settled: "at the session prompt" with D4's "before each `ReadPrompt`" would also drop keys typed while a turn runs, which no ruling asked for~~ Only before the first `ReadPrompt` after a sign-in or the first run, by a mark: rows R103 to R108; keys typed while a turn runs are kept for the next prompt, as today | D17; Q20, the owner, relayed by the coordinator: "Only the first prompt after a sign-in or the first run (Recommended)" | `TestFlushPoints` (A24, as extended), plants 56, 57, 58 |
-| R83 | A flush while a read of a prompt that gave up is still waiting | decided | The flush runs first; the waiting read's completion is then dropped by D13; the prompt that waits reads again. On a Windows console, whether the flush also empties the line being edited in a waiting line-mode read is inferred, and measured by `abandoned` | D12; D13 | `abandoned`, `pty-abandoned` (A21, P1b); plant 46 |
+| R83 | A flush while a read of a prompt that gave up is still waiting | decided | The flush runs first; the waiting read's completion is then dropped by D13; the prompt that waits reads again. On a Windows console, whether the flush also empties the line being edited in a waiting line-mode read is inferred, and measured by `abandoned` | D12; D13 | `abandoned`, `pty-abandoned` (A21, P1b); plant 46 (2026-11-21, D22 second draft: on POSIX, see its D22 latest row, after R152) |
 
 **The read of a prompt that gave up (D13)**
 
 | Row | Input or state | Status | Outcome (what a test checks) | Decided by | Test (PLAN phase) |
 | --- | --- | --- | --- | --- | --- |
-| R84 | A read started out of raw mode by a prompt that gave up (a browser sign-in's paste prompt), on POSIX, completed by a line while the terminal is still out of raw mode | decided | The line is dropped: never a turn, never an answer; the prompt waiting reads again | D13; review case 2, the owner, relayed by the coordinator: "Drop the abandoned prompt's line when it arrives (Recommended)" | proposed: `terminput_test` abandoned rows (A28, P2); `pty-abandoned` (A21); plant 47 |
+| R84 | A read started out of raw mode by a prompt that gave up (a browser sign-in's paste prompt), on POSIX, completed by a line while the terminal is still out of raw mode | decided | The line is dropped: never a turn, never an answer; the prompt waiting reads again | D13; review case 2, the owner, relayed by the coordinator: "Drop the abandoned prompt's line when it arrives (Recommended)" | proposed: `terminput_test` abandoned rows (A28, P2); `pty-abandoned` (A21); plant 47 (2026-11-21, D22 second draft: on POSIX, see its D22 latest row, after R152) |
 | R85 | The same read on a Windows console, which keeps it in line mode | decided | The console echoes and edits what is typed at the next prompt until Enter (inferred); that line, ending `\r\n`, is dropped; the prompt's own read follows in its own mode | D13; the same ruling | `abandoned` (A21, P1b, a stubbed browser sign-in): pinned by the pseudo-console test only; the owner makes no sign-in for a test |
-| R86 | A completion that is not a line: a read started in raw mode by a prompt that gave up, or a POSIX read started out of raw mode that completes after raw mode is on; and a read the user gave up with Ctrl+C rather than the program | ~~open (Q16)~~ decided (2026-11-20, third pass) | ~~Not settled by the ruling's words ("the abandoned prompt's line")~~ Whatever completes a read the program gave up (a browser sign-in's loopback; any read whose context the program, not the person, ended) is dropped, line or keys. A read the person gave up with Ctrl+C is not dropped and goes to the next prompt, as D4 says | D17; Q16, the owner, relayed by the coordinator: "Only reads the program gave up (Recommended)" | `terminput_test` (A28, as extended): a program give-up dropped, keys included; a Ctrl+C give-up kept; `TestLoginInterrupt` (existing) unchanged; plants 47, 60; (2026-11-20, fourth pass) "whole" by D18: the 512-through-256 row of A28, plant 63 |
+| R86 | A completion that is not a line: a read started in raw mode by a prompt that gave up, or a POSIX read started out of raw mode that completes after raw mode is on; and a read the user gave up with Ctrl+C rather than the program | ~~open (Q16)~~ decided (2026-11-20, third pass) | ~~Not settled by the ruling's words ("the abandoned prompt's line")~~ Whatever completes a read the program gave up (a browser sign-in's loopback; any read whose context the program, not the person, ended) is dropped, line or keys. A read the person gave up with Ctrl+C is not dropped and goes to the next prompt, as D4 says | D17; Q16, the owner, relayed by the coordinator: "Only reads the program gave up (Recommended)" | `terminput_test` (A28, as extended): a program give-up dropped, keys included; a Ctrl+C give-up kept; `TestLoginInterrupt` (existing) unchanged; plants 47, 60; (2026-11-20, fourth pass) "whole" by D18: the 512-through-256 row of A28, plant 63. (2026-11-21, D21: what completes such a read on POSIX, measured; see R86's latest row, after R122) |
 | R87 | A timed wait inside a prompt that is still reading (the editor's Esc timer, `askOn`'s timers) | decided | Not a prompt that gave up: the same prompt's next read takes the read, as D4 says | D13 ("a read belonging to an abandoned prompt"); D4 | proposed: `terminput_test` (A28); the editor's own tests (existing); plant 48 |
-| R88 | A second prompt gives up while the first one's read still waits | decided | `inline.Reader` has one read in flight, so both belong to it; its completion is dropped once, and the next prompt reads anew | D13 | proposed: `terminput_test` (A28); plant 49 |
-| R89 | The input ends while a prompt that gave up has its read waiting | decided | The end of input is not a line and is not dropped: `closed` is set, `ended()` is true, and D8 applies | D13 (lines only); D8 | proposed: `terminput_test` (A28); plant 50 |
+| R88 | A second prompt gives up while the first one's read still waits | decided | `inline.Reader` has one read in flight, so both belong to it; its completion is dropped once, and the next prompt reads anew | D13 | proposed: `terminput_test` (A28); plant 49 (2026-11-21, D22 second draft: on POSIX, see its D22 latest row, after R152) |
+| R89 | The input ends while a prompt that gave up has its read waiting | decided | The end of input is not a line and is not dropped: `closed` is set, `ended()` is true, and D8 applies | D13 (lines only); D8 | proposed: `terminput_test` (A28); plant 50 (2026-11-21, D22 second draft: on POSIX, see its D22 latest row, after R152) |
 
 **Ctrl+Z on a Windows console (D14)**
 
@@ -776,7 +908,7 @@ that measures it is named. The `0063 case=` names are Confirmation item 5 (A), a
 | R92 | `ReadPassword` for `gobble auth login --api-key -` and `--method api-key` (`auth.go:122`) | out of scope | Alone in its process: no other prompt reads the terminal there | Q10 | — |
 | R93 | `gobble auth import --from-pi`'s `[y/N]` questions (`piimport.go:61-94`) | out of scope | Alone in its process; it reads a byte at a time, so nothing past an answer is taken | Q10 | — |
 | R94 | `gobble update`'s confirmation, through go-selfupdate-lib (`update.go:143`, `:166-181`) | out of scope | Alone in its process; the library reads a byte at a time | Q10 | — |
-| R95 | The external editor of `/edit` and ctrl+x ctrl+e, which inherits stdin (`slash.go:226-230`) | out of scope | It runs while the line editor is not reading and `terminalInput` holds nothing (D4); a read of a prompt that gave up, if one waits, would take its first keys, which D13 then drops: a rare case left as it is | Q10 | — |
+| R95 | The external editor of `/edit` and ctrl+x ctrl+e, which inherits stdin (`slash.go:226-230`) | out of scope | It runs while the line editor is not reading and `terminalInput` holds nothing (D4); a read of a prompt that gave up, if one waits, would take its first keys, which D13 then drops: a rare case left as it is | Q10 | — (2026-11-21, D22 second draft: on POSIX, see its D22 latest row, after R152) |
 | R96 | `gobble config edit`'s editor (`config.go:284-291`) | out of scope | Alone in its process; no prompt reads the terminal before it | Q10 | — |
 
 **Excluded on the review's suggestion**
@@ -799,13 +931,13 @@ evidence, and R28, R57, R78, R82 and R86, open as Q18, Q19, Q17, Q20 and Q16.~~
 | Row | Input or state | Status | Outcome (what a test checks) | Decided by | Test (PLAN phase) |
 | --- | --- | --- | --- | --- | --- |
 | R101 | The words of R78's warning | ~~open (wording only)~~ decided (2026-11-20, fourth pass) | Proposed, then approved unchanged: `Warning: could not clear what was typed ahead on this terminal (<error>); it may answer the next prompt.` ~~The behaviour around it is decided (R78); only the words await the owner~~ | ~~Q17 decides that a warning is written, not its words~~ D17; the owner, relayed by the coordinator: "Plain words, with the consequence (Recommended)" | `TestFlushFailureWarnsOnce` (A29) asserts these words; plants 59, 62 |
-| R102 | The first key or line typed after a browser sign-in whose loopback came first | decided | Lost: on POSIX the first key typed at the next prompt completes the read the program gave up, and is dropped with it; on a Windows console the first line (inferred: the console keeps that read in line mode, R85). The prompt then reads again | D17; Q16, the owner, relayed by the coordinator: "Only reads the program gave up (Recommended)", whose stated consequence this is | `pty-abandoned`, `abandoned` (A21), plant 47 |
-| R103 | A sign-in inside the session: `/login`, or one another command starts through the same round (`ls.signInRound`), whatever its outcome (signed in, cancelled, failed) | decided | Sets the mark: the next `ReadPrompt` flushes. A `/login` refused before any question (an unknown provider) is no sign-in and sets none | D17; Q20, the owner, relayed by the coordinator: "Only the first prompt after a sign-in or the first run (Recommended)"; D4 ("Nothing typed or pasted during a sign-in becomes a turn", whatever the sign-in's end) | `TestFlushPoints` (A24, as extended); plant 57 |
+| R102 | The first key or line typed after a browser sign-in whose loopback came first | decided | ~~Lost: on POSIX the first key typed at the next prompt completes the read the program gave up, and is dropped with it;~~ (2026-11-21, D21: measured otherwise on Linux; see R102's latest row, after R122) on a Windows console the first line (inferred: the console keeps that read in line mode, R85). The prompt then reads again | D17; Q16, the owner, relayed by the coordinator: "Only reads the program gave up (Recommended)", whose stated consequence this is | `pty-abandoned`, `abandoned` (A21), plant 47 |
+| R103 | A sign-in inside the session: `/login`, or one another command starts through the same round (`ls.signInRound`), whatever its outcome (signed in, cancelled, failed) | decided | Sets the mark: the next `ReadPrompt` flushes. A `/login` refused before any question (an unknown provider) is no sign-in and sets none. (2026-11-21, D21: "flushes" made precise, at once at that prompt; see R103's latest row, after R122) | D17; Q20, the owner, relayed by the coordinator: "Only the first prompt after a sign-in or the first run (Recommended)"; D4 ("Nothing typed or pasted during a sign-in becomes a turn", whatever the sign-in's end) | `TestFlushPoints` (A24, as extended); plant 57 |
 | R104 | The first run, however it ends: declined at the first offer, Ctrl+C at an offer, a round signed in, the loop ended by a decline after rounds | decided | Sets the mark: the first `ReadPrompt` flushes | D17; Q20 ("or the first run") | `TestFlushPoints` (A24, as extended); plant 58 |
-| R105 | The prompts after that first one: after a turn, a local command, `/edit` | decided | The mark is cleared by the flush it causes; later `ReadPrompt`s do not flush, so keys typed while a turn runs are the next prompt's text, as today | D17; Q20 ("Only the first prompt") | `TestFlushPoints` (A24, as extended); plant 56 |
+| R105 | The prompts after that first one: after a turn, a local command, `/edit` | decided | The mark is cleared by the flush it causes; later `ReadPrompt`s do not flush, so keys typed while a turn runs are the next prompt's text, as today. (2026-11-21, D21: with keys the editor holds, see R105's latest row and R123, after R122) | D17; Q20 ("Only the first prompt") | `TestFlushPoints` (A24, as extended); plant 56 |
 | R106 | A turn that runs before that first prompt: the `/models` turn after `/login` signs in (`login.go:262`), or a prompt given on the command line after the first run (`line.go:224-228`) | decided | Keys typed while it runs are flushed at the first `ReadPrompt` that follows: the mark is consumed by the prompt read, not by a turn | D17; Q20 ("the first prompt after a sign-in or the first run": the session prompt) | `TestFlushPoints` (A24, as extended); plant 56 |
 | R107 | `/logout`, the trust question, a permission prompt, a resumed session with a credential (no first run, no sign-in) | decided | Set no mark: no flush at the prompt after them | D17; Q20 ("Only … after a sign-in or the first run") | `TestFlushPoints` (A24, as extended: no call after each); plant 56 |
-| R108 | The process ends, or the session ends, with the mark set | decided | Nothing: the mark lives in the session's `terminalInput` and nothing is flushed on the way out | D17; Q20 (a flush belongs to a prompt read) | `TestFlushPoints` (A24, as extended: a session ended by Ctrl+D with the mark set counts no flush); plant 61 |
+| R108 | The process ends, or the session ends, with the mark set | decided | Nothing: the mark lives in the session's `terminalInput` and nothing is flushed on the way out | D17; Q20 (a flush belongs to a prompt read) | `TestFlushPoints` (A24, as extended: ~~a session ended by Ctrl+D with the mark set counts no flush~~ (2026-11-21, D21: re-worded for the flush made at the prompt; see R108's latest row, after R122)); plant 61 |
 
 ~~Counts (2026-11-20, third pass): 108 rows. R52 and R53 are replaced by R91 to R96 and not counted. Of the other 106:~~
 ~~88 `decided`, 16 `out of scope` (R24, R36, R49, R54, R55, R73, R91 to R100), 1 awaiting live evidence (R40, measured~~
@@ -847,6 +979,200 @@ them), 16 `out of scope`, 3 `open` (R111 and R114 as Q21, R116 as Q22); none awa
 
 Counts (2026-11-20, Q21 and Q22): 122 rows. R52 and R53 are replaced and not counted. Of the other 120: 104 `decided`, 16 `out of
 scope`, none `open`, none awaiting live evidence.
+
+*Rows changed and added (2026-11-21, D21: the owner's answers to F1 and F2 of the PLAN's P2, build pass 1). Each
+changed row keeps its first text above, annotated; the row here is its latest.*
+
+**Latest rows: what completes an abandoned read on POSIX, and the session prompt's flush (D21)**
+
+| Row | Input or state | Status | Outcome (what a test checks) | Decided by | Test (PLAN phase) |
+| --- | --- | --- | --- | --- | --- |
+| R86 | A completion that is not a line: a read started in raw mode by a prompt that gave up, or a POSIX read started out of raw mode that completes after raw mode is on; and a read the user gave up with Ctrl+C rather than the program | decided (2026-11-21, latest) | Whatever completes a read the program gave up is dropped, line or keys, taken whole with the read's own size (D18); a read the person gave up with Ctrl+C is not dropped and goes to the next prompt, as D4 says. On POSIX the completion of a read started out of raw mode by such a prompt is, when the session prompt puts the terminal in raw mode, what was typed into that prompt and not ended (measured on Linux; macOS inferred from the BSD terminal driver); when nothing was typed there, the first key typed after raw mode is on (inferred) | D17; Q16, "Only reads the program gave up (Recommended)"; D21; F1, the owner, relayed by the coordinator: "Amend R86/R102 to what Linux does (Recommended)" | `terminput_test` (A28, as extended): a program give-up dropped, keys included, whole; a Ctrl+C give-up kept; `TestLoginInterrupt` (existing); `pty-abandoned` (A21, as amended 2026-11-21); plants 47, 60, 63 (2026-11-21: D22, proposed, restates this row; see its D22 row, after R144) |
+| R102 | The first key or line typed after a browser sign-in whose loopback came first | decided (2026-11-21, latest) | On POSIX, what was typed into the paste prompt is dropped as the session prompt's raw mode goes on, and nothing typed at the session prompt is lost (measured on Linux at P2's build pass 1; macOS inferred from the BSD terminal driver); when nothing was typed into the paste prompt, the first key typed at the session prompt completes the read and is dropped with it (inferred, not measured). On a Windows console, the first line typed (inferred: the console keeps that read in line mode, R85; `abandoned` reads `dropped`). The prompt then reads again | D17; Q16, "Only reads the program gave up (Recommended)"; D21; F1, the owner, relayed by the coordinator: "Amend R86/R102 to what Linux does (Recommended)" | `pty-abandoned` (A21, as amended 2026-11-21: no turn holds `partial`; a turn `again`), `abandoned` (A21), plant 47; (2026-11-21, P2 build pass 2, the coordinator's records gate) the branch with nothing typed into the paste prompt: `pty-abandoned-empty` (A40), `first-key-dropped`, plant 47 (2026-11-21: D22, proposed, restates this row; see its D22 row, after R144) |
+| R103 | A sign-in inside the session: `/login`, or one another command starts through the same round (`ls.signInRound`), whatever its outcome (signed in, cancelled, failed) | decided (2026-11-21, latest) | Sets the mark. The next `ReadPrompt` flushes at once, at that prompt and before it reads, whether or not the line editor then reads the terminal, and clears the mark there (R123). A `/login` refused before any question (an unknown provider) is no sign-in and sets none | D17; Q20, "Only the first prompt after a sign-in or the first run (Recommended)"; D4; D21; F2, the owner, relayed by the coordinator: "Flush at once at that first prompt (Recommended)" | `TestFlushPoints` (A24, as extended and as amended 2026-11-21); plants 57, 75 |
+| R105 | The prompts after that first one: after a turn, a local command, `/edit` | decided (2026-11-21, latest) | The mark is cleared by the flush made at the first prompt (R103), whether or not that prompt read the terminal; later `ReadPrompt`s do not flush, so keys typed while a turn runs are the next prompt's text, as today, the turn of keys the editor held included (R123) | D17; Q20, "Only the first prompt"; D21; F2, the owner, relayed by the coordinator: "Flush at once at that first prompt (Recommended)" | `TestFlushPoints` (A24, as extended and as amended 2026-11-21); plants 56, 75 |
+| R108 | The process ends, or the session ends, with the mark set | decided (2026-11-21, latest) | Nothing: the mark lives in the session's `terminalInput` and nothing is flushed on the way out. Since the flush is made as the first prompt after a sign-in or the first run starts, the mark can be set at the end only when the run ends before that prompt (the process's context ending during the `/models` turn after `/login`) | D17; Q20 (a flush belongs to a prompt read); D21 | `TestFlushPoints` (A24, as amended 2026-11-21): a session ended by Ctrl+D at the first prompt after a sign-in counts that prompt's one flush and none after; the run's context ended during the `/models` turn after `/login` counts none; plant 61, as amended |
+
+**Added (2026-11-21, D21): keys the line editor holds across a sign-in**
+
+| Row | Input or state | Status | Outcome (what a test checks) | Decided by | Test (PLAN phase) |
+| --- | --- | --- | --- | --- | --- |
+| R123 | Keys the line editor decoded with `/login`'s Enter and holds across the sign-in (R56), which the first prompt after the sign-in submits without a read of the terminal | decided | That prompt flushes at once, before it reads, and clears the mark (R103); the held keys are its submission, as R56 says; keys typed while their turn runs are the next prompt's text (R105) | D21; F2, the owner, relayed by the coordinator: "Flush at once at that first prompt (Recommended)"; R56; R103; R105 | `TestFlushPoints` (A24, as amended 2026-11-21): `/login gemini` and `1`, Enter in one press, the key prompt answered with Enter: one flush, at the prompt that submits `1`, before its turn; keys typed while that turn runs reach the next prompt; plant 75 (2026-11-21: D22, proposed, restates this row; see its D22 row, after R144) |
+
+Counts (2026-11-21, D21): 123 rows. R52 and R53 are replaced and not counted. Of the other 121: 105 `decided`, 16 `out of
+scope`, none `open`, none awaiting live evidence. R86, R102, R103, R105 and R108 have a latest row above; their first
+rows are kept, annotated.
+
+*Rows added (2026-11-21, D22, **proposed**: drafted for review on the owner's answer "Make reads cancellable on POSIX"). "Decided" here
+is decided by that answer, an earlier decision or a measurement named in the row; the mechanism follows D22 as
+drafted. M1 to M8 are the measurements on this Mac in the PLAN's execution record, "Records draft for D22".*
+
+**A POSIX read that is never left waiting (D22)**
+
+| Row | Input or state | Status | Outcome (what a test checks) | Decided by | Test (PLAN phase) |
+| --- | --- | --- | --- | --- | --- |
+| R124 | Where a POSIX terminal's reads are made | ~~decided~~ decided (D22, proposed) | A layer under `inline.NewReader`, beside `term.ConsoleInput`, used by `terminalIn()` when standard input is a terminal on a `unix` system | the owner, relayed by the coordinator: "Make reads cancellable on POSIX"; D22 | `TestTerminalInChoosesLayer` (A46) (2026-11-21, D22 second draft: see its latest row, after R152) |
+| R125 | How the layer waits for the terminal | ~~decided~~ decided (D22, proposed) | select(2) on standard input and a close-on-exec wake pipe, no timeout, `EINTR` retried. Not poll(2) (macOS: `POLLNVAL` on `/dev/tty`, M8); not the runtime poller (needs `O_NONBLOCK` on the terminal's shared open file description, M4) | D22; M1, M2, M4, M8 | `TestCancelableWait` (A41); step 0 re-measures (2026-11-21, D22 second draft: see its latest row, after R152) |
+| R126 | A read(2) of the terminal | ~~decided~~ open (Q25) | Made only with the gate open, after select(2) reports the terminal ready, under the gate's lock, so it never waits in the kernel | D22 | `TestCancelableWait` (A41); plant 76 (2026-11-21, D22 second draft: see its latest row, after R152) |
+| R127 | The gate | ~~decided~~ decided (D22, proposed) | Opened by `terminalInput` when a prompt's read of the input waits; closed when that read returns. Closing wakes the wait at once, waits for a read(2) in progress, and reports whether one completed since the gate opened | D22 | `TestCancelableWait` (A41); plants 77, 78, 84 (2026-11-21, D22 second draft: see its latest row, after R152) |
+| R128 | A prompt gives up, by the program or by the person, before anything was read | decided | Nothing is read; what was typed stays in the terminal and is read by the next prompt that waits, in that prompt's mode; nothing is dropped | the owner's answer; D22 | `TestCancelableGiveUp` (A42); `pty-abandoned-empty-typed`, `pty-abandoned-empty-pasted` (A40, as split); plant 80 (2026-11-21, D22 third draft: see its third-draft latest row, after R152's second-draft rows) |
+| R129 | A give-up racing a byte's arrival: a read(2) completed before the gate closed | ~~decided~~ decided (D22, proposed) | That completion was typed while the abandoned prompt was shown. A program's give-up drops it (D13, D17), taken whole (D18); the person's Ctrl+C gives it to the next prompt (Q16) | D13; D17; D18; D22 | `TestCancelableGiveUp` (A42), a stub layer that reports a completed read; plants 81, 82 (2026-11-21, D22 second draft: see its latest row, after R152) |
+| R130 | Raw mode switched on or off after a give-up | decided | No read is outstanding, so nothing typed into the abandoned prompt is handed to a waiting read: F4's race cannot happen (M5: half a line left in the kernel is readable once raw mode is on) | the owner's answer; D22; M5 | `pty-abandoned` (A43, as amended), on Linux and on this Mac; plant 76 (2026-11-21, D22 second draft: see its latest row, after R152) |
+| R131 | The first prompt after a sign-in or the first run (D21) | ~~decided~~ decided (D22, proposed) | Its flush, after raw mode is on, empties what was typed into the sign-in's prompts and left unread, every time (M5: nothing ready after the flush); what is typed at that prompt after it is read whole | D21; D22; M5 | `pty-abandoned` (A43): no turn holds `partial`; `hello` and `again` are turns; plant 86 (2026-11-21, D22 second draft: see its latest row, after R152) |
+| R132 | Keys typed into a prompt the program gave up outside a sign-in (a withdrawn permission request), left unread in the terminal | ~~open (Q23)~~ open (Q23, as rewritten) | Not settled: D13 dropped them by dropping the read; with no read they reach the next prompt unless flushed | — | waits for Q23 (A49) (2026-11-21, D22 second draft: see its latest row, after R152) |
+| R133 | Ctrl+C at a prompt read out of raw mode, during the wait | ~~decided~~ decided (D22, proposed) | The signal, as D4 and D8 say; the terminal discards the half line (M6: nothing ready after it); select(2) is not ended by it on macOS (M6: it waited out its 2 s), and `EINTR` from it on Linux is retried; `ls.ask`'s cancel closes the gate | D4; D8; D22; M6 | `TestCancelableWait` (A41, `EINTR`); `pty-menu-ctrlc-typed` (A44); plant 79 (2026-11-21, D22 second draft: see its latest row, after R152) |
+| R134 | Ctrl+D on an empty line, read out of raw mode | ~~decided~~ decided (D22, proposed) | select(2) reports it ready and the read gives nothing: the end of input, kept for good (M7; D8) | D8; D22; M7 | `TestCancelableWait` (A41, the end of input); `pty-ctrld-prompt` (A45) (2026-11-21, D22 second draft: see its latest row, after R152) |
+| R135 | Ctrl+Z on POSIX (`SIGTSTP`), during the wait | out of scope | As R99: gobble handles no suspend; in raw mode it is a byte (R44) | — | — |
+| R136 | The interrupt mark (D19, D20) on POSIX | decided | Not read: the mark is a Windows console's; the layer never consults it | D19 ("on Windows only"); D22 | `TestWatchSignalsMarksInterrupt` (existing, unchanged) (2026-11-21, D22 second draft: see its latest row, after R152) |
+| R137 | Standard input a pipe or a file | decided | No layer: read as today; no question is asked off a terminal (R36) | R36; R77; D22 | `TestTerminalInChoosesLayer` (A46); plant 83 (2026-11-21, D22 third draft: see its third-draft latest row, after R152's second-draft rows) |
+| R138 | The readiness wait cannot be used: select(2) fails with an error other than `EINTR`, the wake pipe cannot be made, or a descriptor is at or above `FD_SETSIZE` | ~~open (Q24)~~ open (Q24, as updated) | Not settled | — | waits for Q24 (A50) (2026-11-21, D22 second draft: see its latest row, after R152) |
+| R139 | A system neither POSIX nor Windows | out of scope | No release target (Linux, macOS, Windows); standard input is read as built, with D13's drop, as `flush_other.go` reports no flush (R78) | — | — |
+| R140 | The line editor's timed waits (the Esc timer, a resize, the reprint) | ~~decided~~ decided (D22, proposed) | Each wait that ends closes the gate; the editor's next read opens it; nothing is read in between, nothing is lost, and no read runs across the line session's switches out of raw mode | D13 (R87); D22 | `TestCancelableGiveUp` (A47, a timed wait); the editor's tests (existing) (2026-11-21, D22 second draft: see its latest row, after R152) |
+| R141 | The trust question and the permission prompt | ~~decided~~ decided (D22, proposed) | The trust question reads with no deadline (R50); the permission prompt's timed waits open and close the gate as the editor's do; a withdrawn request is R132 | D15; D22 | `TestTrustReadsWithoutDeadline`, `TestPermissionReadsTerminalInput` (existing) (2026-11-21, D22 second draft: see its latest row, after R152) |
+| R142 | Two goroutines and the gate | ~~decided~~ decided (D22, proposed) | The gate's state is under its lock; the wake pipe is written by the closer and drained by the waiter; no data race | R48; D22 | `TestCancelableConcurrent` (A48) under `-race` (P4); plant 85 (2026-11-21, D22 second draft: see its latest row, after R152) |
+| R143 | Windows | decided | Unchanged: D13, D18, D19 and D20 as built; the layer is not used | the owner, relayed by the coordinator: "Make reads cancellable on POSIX" ("on POSIX"); the stated cost "Windows is unchanged" | the Windows cases (P1b), unchanged (2026-11-21, D23: see its latest row, after the accepted count) |
+| R144 | The BSDs and other `unix` systems | decided | The layer applies (`unix` build tag); not measured there: inferred from select(2)'s POSIX semantics | the owner's answer ("POSIX"); D22 | none: no release target; noted (2026-11-21, D22 second draft: see its latest row, after R152) |
+
+**Latest rows: R86, R102 and R123 under D22 (proposed)**
+
+| Row | Input or state | Status | Outcome (what a test checks) | Decided by | Test (PLAN phase) |
+| --- | --- | --- | --- | --- | --- |
+| R86 | A completion that is not a line: a read started in raw mode by a prompt that gave up, or a POSIX read started out of raw mode that completes after raw mode is on; and a read the user gave up with Ctrl+C rather than the program | ~~decided (2026-11-21, D22, proposed)~~ decided (D22) | On POSIX no read is left waiting, so nothing completes after a give-up; only a completion read before the gate closed (R129) is dropped, for a program's give-up. On Windows, as D13, D17 and D18 say | D17; D21; D22; the owner, relayed by the coordinator: "Make reads cancellable on POSIX" | A42; A43; on Windows, A28 and `abandoned` (2026-11-21, D22 accepted) |
+| R102 | The first key or line typed after a browser sign-in whose loopback came first | ~~decided (2026-11-21, D22, proposed)~~ decided (D22) | On POSIX nothing typed at the session prompt is lost, typed or pasted: what was typed into the paste prompt stays unread and is emptied by the first prompt's flush (R131). On a Windows console, as before: the first line (inferred, R85; `abandoned` reads `dropped`) | D21; D22; the owner, relayed by the coordinator: "Make reads cancellable on POSIX" | `pty-abandoned` (A43), `pty-abandoned-empty-typed` and `pty-abandoned-empty-pasted` (A40, as split: `none-lost` each), on Linux and on this Mac; `abandoned` (Windows) (2026-11-21, D22 accepted) |
+| R123 | Keys the line editor decoded with `/login`'s Enter and holds across the sign-in (R56) | ~~decided (2026-11-21, D22, proposed)~~ decided (D22) | As before (the prompt flushes at once and clears the mark); with D22, every key typed before that prompt and not read is in the terminal when it flushes, none in a waiting read | D21; D22 | `TestFlushPoints` (A24); plant 75 (2026-11-21, D22 accepted) |
+
+~~Counts (2026-11-21, D22 drafted): 144 rows. R52 and R53 are replaced and not counted. Of the other 142: 122 `decided`~~
+~~(the 17 rows D22 adds among them, by the owner's answer and the measurements; D22 itself is proposed), 18 `out of~~
+~~scope`, 2 `open` (R132 as Q23, R138 as Q24).~~
+*(2026-11-21, D22 third draft: superseded by the third draft's count, recomputed from each row's latest status.)*
+
+*Rows added and changed (2026-11-21, D22 second draft, after the independent record review and M9 to M14; still proposed). The
+first draft's rows above are kept, annotated; each row here is its latest. "decided (D22, proposed)" rests on D22's
+mechanism, not yet accepted; "inferred" marks what no measurement shows.*
+
+**D22, second draft: latest rows**
+
+| Row | Input or state | Status | Outcome (what a test checks) | Decided by | Test (PLAN phase) |
+| --- | --- | --- | --- | --- | --- |
+| R124 | Where a POSIX terminal's reads are made | ~~decided (D22, proposed)~~ decided (D22) | A layer under `inline.NewReader`, beside `term.ConsoleInput`, used by `terminalIn()` when standard input is a terminal on a `unix` system | the owner, relayed by the coordinator: "Make reads cancellable on POSIX"; D22 | `TestTerminalInChoosesLayer` (A46); plant 83 (2026-11-21, D22 accepted) (2026-11-21, D23: see its latest row, after the accepted count) |
+| R125 | How the layer waits for the terminal | decided (D22, proposed) | select(2) on the descriptor it reads and the wake pipe, no timeout. `EINTR` is retried as a guard only: none was seen on any host, for Ctrl+C or a signal to the process (M6, M9). Not poll(2): macOS refuses `/dev/tty` (M8; Linux accepts it). Not the runtime poller: it needs `O_NONBLOCK` on standard input's shared open file description (M4). Which descriptor is read is Q25 | D22; M1, M2, M4, M6, M8, M9 on three hosts | `TestCancelableWait` (A41), its select(2) seam giving `EINTR`; plant 79 (2026-11-21, D22 accepted: see its accepted latest row, after the third draft's count) |
+| R126 | A read(2) after select(2) reported the terminal ready | open (Q25) | Not settled: on standard input it can still wait (M11: a line reported ready, Ctrl+C, and the read waits for the next line); on a private non-blocking descriptor it gives `EAGAIN` (M12) | — | waits for Q25 (A41, step 19) (2026-11-21, D22 accepted: see its accepted latest row, after the third draft's count) |
+| R127 | The gate | decided (D22, proposed) | Opened by `fill` for one read of the input; it closes itself when a read(2) returns, and `fill` closes it when its read returns, whatever the cause. A close wakes the wait, returns only after the waiter has left select(2), and reports whether a read completed since the opening | D22 | `TestCancelableWait` (A41), a seam reporting each return from the wait; `TestCancelableGiveUp` (A42), a read(2) seam; plants 77, 78, 84 (2026-11-21, D22 third draft: see its third-draft latest row, after R152's second-draft rows) |
+| R129 | A give-up racing a byte's arrival: a read(2) completed before the gate closed | ~~decided (D22, proposed)~~ decided (D22) | As the first draft: the program's give-up drops it (D13, D17, D18); the person's Ctrl+C gives it to the next prompt (Q16). Staged through the read(2) seam | D13; D17; D18; D22 | `TestCancelableGiveUp` (A42), the read(2) seam holding a read between readiness and its return; plants 78, 81, 82 (2026-11-21, D22 accepted) |
+| R130 | Raw mode switched on or off after a give-up | ~~decided~~ decided (D22, proposed) | As the first draft (no read is outstanding: F4's race cannot happen). Pinned by a case that does not depend on timing | the owner's answer; D22; M5 | `pty-gaveup-held` (A43, added): a line read given up with `partial` typed, raw mode on, 200 ms: the terminal still holds the bytes (select ready; `FIONREAD` 7 on Linux) and the layer reports no completed read; on Linux and, by Q26, on this Mac; plant 76 (2026-11-21, D22 third draft: status, item 1) (2026-11-21, D22 accepted: see its accepted latest row, after the third draft's count) |
+| R131 | The first prompt after a sign-in or the first run (D21) | decided (D22, proposed) | Its flush empties what was typed into the sign-in's prompts and left unread, on Linux and macOS, every time (M5, M14: out of raw mode too); not on the BSDs, where nothing flushes (R78, R144) | D21; D22; M5; M14 | `pty-abandoned` (A43); plant 86 dropped (M14: a flush out of raw mode empties half a line as well, so it changes nothing) (2026-11-21, D22 accepted: see its accepted latest row, after the third draft's count) |
+| R132 | Keys typed into a prompt the program gave up, left unread: a withdrawn permission request; the paste prompt of a sign-in outside the session (`gobble auth login`, `gobble acp --login`, `gobble setup`) | open (Q23, as rewritten) | Not settled | — | waits for Q23 (A49) (2026-11-21, D22 accepted: see its accepted latest row, after the third draft's count) |
+| R133 | Ctrl+C at a prompt read out of raw mode, during the wait | ~~decided (D22, proposed)~~ decided (D22) | The signal, as D4 and D8 say; the terminal empties the half line (M6, M11); select(2) is not ended by it on any host (M6); `ls.ask`'s cancel closes the gate. A line already reported ready is Q25 | D4; D8; D22; M6; M11 | `pty-menu-ctrlc-typed` (A44); `TestCancelableWait` (A41, `EINTR` from the seam) (2026-11-21, D22 accepted) |
+| R134 | Ctrl+D on an empty line, read out of raw mode | decided (D22, proposed) | The wait reports it ready and the read gives nothing: the layer returns exactly `(0, io.EOF)`, never `(0, nil)`, and the input ends for good (M7; D8) | D8; D22; M7 | `TestCancelableWait` (A41, exactly `(0, io.EOF)`); A45, as moved to a prompt read out of raw mode; plant 87 (2026-11-21, D22 third draft: see its third-draft latest row, after R152's second-draft rows) |
+| R136 | The interrupt mark (D19, D20) on POSIX | decided | Not read by the layer | D19 ("on Windows only"); D22 | none: by construction (the layer has no mark) |
+| R138 | The readiness wait or its descriptor cannot be used: select(2) fails with an error other than `EINTR`, the wake pipe cannot be made, a descriptor is at or above `FD_SETSIZE` (checked before `FdSet.Set`, which panics past it), or, under Q25 (a), the private descriptor cannot be opened | open (Q24, as updated) | Not settled | — | waits for Q24 (A50) (2026-11-21, D22 accepted: see its accepted latest row, after the third draft's count) |
+| R140 | The line editor's timed waits | ~~decided (D22, proposed)~~ decided (D22) | As the first draft | D13 (R87); D22 | `TestCancelableGiveUp` (A47, a timed wait over the layer); plant 84 (2026-11-21, D22 accepted) |
+| R141 | The trust question and the permission prompt | ~~decided (D22, proposed)~~ decided (D22) | As the first draft | D15; D22 | `TestPermissionTimedWaitOverLayer` (A51, added): the permission prompt's timed wait over the layer: nothing read, and the key typed after it answers (2026-11-21, D22 accepted) |
+| R142 | Two goroutines and the gate | ~~decided (D22, proposed)~~ decided (D22) | As the first draft | R48; D22 | `TestCancelableConcurrent` (A48) under `-race`, in P4 step 5: plant 85 is caught there, not in P2 (2026-11-21, D22 accepted) |
+| R144 | The BSDs and other `unix` systems | decided | The layer applies (`unix` build tag), inferred from select(2)'s POSIX semantics, not measured. R131 does not hold there: `flush_other.go` cannot flush (R78), so what was typed into an abandoned prompt reaches the first prompt | the owner's answer ("POSIX"); D22; R78 | none: no release target; noted |
+
+**D22, second draft: added rows**
+
+| Row | Input or state | Status | Outcome (what a test checks) | Decided by | Test (PLAN phase) |
+| --- | --- | --- | --- | --- | --- |
+| R145 | The layer's Read while the gate is closed | decided (D22, proposed) | It stays in the call and waits on the wake pipe alone, the terminal not in the set, so type-ahead cannot make it spin; it returns only bytes, `io.EOF` or a read error, never because of a close (an error would end inline.Reader's goroutine for good; `(0, nil)` would make it read again at once) | D22 | `TestCancelableGiveUp` (A42); plant 88 (2026-11-21, D22 third draft: see its third-draft latest row, after R152's second-draft rows) |
+| R146 | The wake pipe | decided (D22, proposed) | Both ends non-blocking and close-on-exec; drained to `EAGAIN` before each wait; `EAGAIN` on a close's write is not an error; one pipe for the process; a test's layer ended by `stop()` (wakes the waiter, returns `io.EOF`, closes the pipe), in `t.Cleanup` | D22 | `TestCancelableWakePipe` (A54, added): both ends' flags; a hundred closes with no waiter do not block; `stop()` ends a waiting Read with `io.EOF`; plant 91 (2026-11-21, D22 accepted: see its accepted latest row, after the third draft's count) |
+| R147 | The size `fill` asks `inline.Reader` for | decided (D22, proposed) | Always `lineBuf`; what the caller's buffer cannot take stays in `pending`, where `discard()` and the rules of D3 and D4 reach it, not in `inline.Reader`'s own store | D22; D4 | `TestCancelableGiveUp` (A42): a parked 512-byte ask, a 256-byte read, `discard()`, and only bytes typed after it arrive; plant 89 (2026-11-21, D22 third draft: see its third-draft latest row, after R152's second-draft rows) |
+| R148 | The terminal hangs up (its master closed) during the wait | ~~decided~~ decided (D22, proposed) | select(2) reports it ready and the read gives 0: `io.EOF`; a read of standard input already waiting gives `EIO` on Linux, the input's error (0 on macOS); either way the input ends for good and D8 applies; nothing spins (M10, three hosts) | D8; R43; M10 | `TestCancelableWait` (A41, the read seam giving 0 and `EIO`); A52 (added) (2026-11-21, D22 third draft: status, item 1; see its third-draft latest row) |
+| R149 | gobble started in the background of a job-control shell | out of scope | As R99 and R135: a background read is the shell's job control, not a prompt's | — | — |
+| R150 | Other readers of the same standard input: acpserver after `--login` (`acp.go:50`), `readWorkspace` (`acp.go:145`), `ReadPassword` (`credentials.go:213`), and the children handed it (`slash.go:228`, `config.go:287`; R95) | decided (D22, proposed) | With the gate closed no read of gobble's waits, so each gets every byte typed while it reads; under Q24's fallback, R95's risk returns | D22; R95 | `TestCancelableGiveUp` (A42): no read(2) through the seam between a prompt's return and the next opening (2026-11-21, D22 accepted: see its accepted latest row, after the third draft's count) |
+| R151 | No gate: a Windows console, a pipe, a test's input (the harness, the A28 stubs) | decided | `fill` sets `waiting` on every read that ended on its context, as built, so D13's drop holds there; with a gate, only when the close reported a completed read | D13; D18; R143 | A28 (existing); `TestCancelableGiveUp` (A42, a gateless case); plant 90 |
+| R152 | The pseudo-terminal cases on this Mac | open (Q26) | Not settled: the cases and the Linux opener share one `linux && pty` file | — | waits for Q26 (step 20) (2026-11-21, D22 accepted: see its accepted latest row, after the third draft's count) |
+
+**D22, second draft: rows D22 changes on POSIX (review 2.2)**
+
+| Row | Input or state | Status | Outcome (what a test checks) | Decided by | Test (PLAN phase) |
+| --- | --- | --- | --- | --- | --- |
+| R83 | A flush while a read of a prompt that gave up is still waiting | ~~decided (Windows); D22, proposed (POSIX)~~ ~~decided (D22, proposed)~~ decided (D22) | On POSIX no such read waits (R128); the flush empties what is in the terminal. On Windows, as before | D12; D13; D22 | Windows: `abandoned`; POSIX: `pty-gaveup-held` (A43) (2026-11-21, D22 third draft: status, item 1) (2026-11-21, D22 accepted) |
+| R84 | A read started out of raw mode by a prompt that gave up, completed by a line, on POSIX | decided (D22, proposed) | On POSIX it is not read at all: the line stays in the terminal, emptied by the first prompt's flush after a sign-in (R131), or as Q23 decides; a completion in the race of R129 is dropped | D13; D22 | A42; A43 (2026-11-21, D22 third draft: counted under D22, proposed) (2026-11-21, D22 accepted: see its accepted latest row, after the third draft's count) |
+| R88 | A second prompt gives up while the first one's read still waits | ~~decided (Windows); D22, proposed (POSIX)~~ ~~decided (D22, proposed)~~ decided (D22) | On POSIX no read waits; at most one race completion (R129), dropped once. On Windows, as before | D13; D22 | A28 (Windows, gateless); A42 (2026-11-21, D22 third draft: status, item 1) (2026-11-21, D22 accepted) |
+| R89 | The input ends while a prompt that gave up has its read waiting | decided (Windows); D22, proposed (POSIX) | On POSIX nothing reads, so a Ctrl+D typed out of raw mode stays queued: once raw mode is on it is one byte, `0x04` on macOS and `0x00` on Linux (M13), not the end of input; after a sign-in the first prompt's flush empties it and the session goes on; without a flush (Q23 (c)), the next raw prompt reads the byte, which at gobble's empty prompt on macOS is Ctrl+D | D8; D13; D22; M13 | A42 (a stub layer); `pty-gaveup-held` (A43) with Ctrl+D (2026-11-21, D22 third draft: see its third-draft latest row, after R152's second-draft rows) |
+| R95 | The external editor of `/edit`, which inherits standard input | ~~decided (D22, proposed, POSIX); out of scope elsewhere~~ decided (D22) | On POSIX no read of gobble's waits while the gate is closed, so the editor gets every key; on Windows and under Q24's fallback, as R95 says | Q10; D22 | R150's case (A42) (2026-11-21, D22 accepted) |
+
+~~Counts (2026-11-21, D22 second draft): 152 rows. R52 and R53 are replaced and not counted. Of the other 150: 113 `decided`, 14~~
+~~`decided (D22, proposed)` (R124, R125, R127, R129, R131, R133, R134, R140 to R142, R145 to R147, R150), 4 `open`~~
+~~(R126 as Q25, R132 as Q23, R138 as Q24, R152 as Q26), 19 `out of scope`. Of the 113, eight earlier rows rest on D22~~
+~~for their POSIX part, each with a latest row: R83, R84, R86, R88, R89, R95, R102, R123.~~
+*(2026-11-21, D22 third draft: superseded by the third draft's count, recomputed from each row's latest status.)*
+
+*Rows changed (2026-11-21, D22 third draft). Each earlier row is kept, annotated; each row here is its latest.*
+
+**D22, third draft: latest rows**
+
+| Row | Input or state | Status | Outcome (what a test checks) | Decided by | Test (PLAN phase) |
+| --- | --- | --- | --- | --- | --- |
+| R89 | The input ends while a prompt that gave up has its read waiting; on POSIX, a Ctrl+D typed into a prompt the program gave up | ~~decided (D22, proposed)~~ decided (D22) | On POSIX nothing reads, so the Ctrl+D stays queued. Read next out of raw mode, it is the end of input (D8). Read next in raw mode, it is one byte, `0x04` on macOS or `0x00` on Linux (M13): at `readSecret`, `0x04` cancels and `0x00` is ignored; at the line editor, `0x00` is ignored and `0x04` at an empty prompt ends the session. R131's flush after a sign-in, or Q23's answer, empties it; the `gobble acp --login` route, where acpserver would read the end of input, is Q23's. On Windows, as before | D8; D13; D22; M13 | `TestCancelableGiveUp` (A42): a stub layer giving `0x04`, then `0x00`, to `readSecret` (cancelled; ignored); `pty-gaveup-held` (A43) with Ctrl+D (2026-11-21, D22 accepted) |
+| R127 | The gate | ~~decided (D22, proposed)~~ decided (D22) | Opened by `fill` for one read of the input; it stays open until `fill` closes it when its read returns, whatever the cause ~~; it closes itself when a read(2) returns~~ (2026-11-21, D22 third draft: the self-close is dropped: one inner read per ask, so nothing a test can see). A close wakes the wait, returns only after the waiter has left select(2), and reports whether a read completed since the opening. Under Q25 (a), `EAGAIN` from the private descriptor returns to the wait | D22 | `TestCancelableWait` (A41), the wait's seam; `TestCancelableGiveUp` (A42), the read(2) seam; plants 77, 78, 84 (2026-11-21, D22 accepted) |
+| R128 | A prompt gives up, by the program or by the person, before anything was read | ~~decided (D22, proposed)~~ decided (D22) | As the first draft: nothing is read; what was typed stays in the terminal for the next prompt that waits, in its mode; nothing is dropped | the owner's answer; D22 | as the first draft; plant 80 (2026-11-21, D22 accepted) |
+| R137 | Standard input a pipe or a file | ~~decided (D22, proposed)~~ decided (D22) | No layer: read as today; no question is asked off a terminal (R36) | R36; R77; D22 | `TestTerminalInChoosesLayer` (A46); plant 83 (2026-11-21, D22 accepted) |
+| R145 | The layer's Read while the gate is closed | ~~decided (D22, proposed)~~ decided (D22) | As the second draft: it waits on the wake pipe alone, so type-ahead cannot make it spin, and returns only bytes, `io.EOF` or a read error | D22 | `TestCancelableGiveUp` (A42), and a case added: the gate closed with bytes ready, the select seam sees no return of the wait over 200 ms; plants 88, 92 (2026-11-21, D22 accepted) |
+| R147 | The size `fill` asks `inline.Reader` for | ~~decided (D22, proposed)~~ decided (D22) | With a gate (a POSIX terminal), `lineBuf` always, what the caller cannot take kept in `pending`. With no gate (Windows, a pipe, a test's input), the caller's buffer, as built, so R143 holds and plant 63 keeps A28's 512-then-256 row | D22; D4; R143 | `TestCancelableGiveUp` (A42, the gated 512-then-256 case), plant 89; A28 (no gate), plant 63 (2026-11-21, D22 accepted) (2026-11-21, D23: see its latest row, after the accepted count) |
+
+**D22, third draft: rows resting on M15**
+
+| Row | Input or state | Status | Outcome (what a test checks) | Decided by | Test (PLAN phase) |
+| --- | --- | --- | --- | --- | --- |
+| R134 | Ctrl+D on an empty line, read out of raw mode | ~~decided (D22, proposed)~~ decided (D22) | As the second draft, and measured through the private descriptor of Q25 (a): select(2) reports it ready, the read gives 0 once, the end of input, and `EAGAIN` after (M15, three hosts); the layer returns exactly `(0, io.EOF)` and the input ends for good | D8; D22; M7; M15 | A41; A45 (both cases); plant 87 (2026-11-21, D22 accepted) |
+| R148 | The terminal hangs up during the wait | ~~decided (D22, proposed)~~ decided (D22) | As the second draft, and measured through the private descriptor and through `/dev/tty`: select(2) reports it ready and every read gives 0, the end of input (M15, three hosts); `EIO` was seen only in a read of standard input already waiting on Linux (M10) | D8; R43; M10; M15 | A41; A52 (2026-11-21, D22 accepted) (2026-11-21, D23: see its latest row, after the accepted count) |
+
+~~Counts (2026-11-21, D22 third draft, recomputed from each row's latest status): 152 rows. 2 are replaced and not counted (R52, R53). Of the other 150: 102 `decided`; 26 `decided (D22, proposed)` (R83, R84, R86, R88, R89, R95, R102, R123, R124, R125, R127, R128, R129, R130, R131, R133, R134, R137, R140, R141, R142, R145, R146, R147, R148, R150); 4 `open` (R126, R132, R138, R152); 18 `out of scope`. These four, with `replaced`, are every status the table uses.~~ *(2026-11-21, D22 accepted: superseded by the count below.)*
+
+*Rows changed (2026-11-21, D22 accepted: the owner's answers to Q23 to Q26). Each earlier row is kept, annotated; each row
+here is its latest. Rows that read "decided (D22, proposed)" and need no new text read "decided (D22)" where they
+stand.*
+
+**D22 accepted: latest rows**
+
+| Row | Input or state | Status | Outcome (what a test checks) | Decided by | Test (PLAN phase) |
+| --- | --- | --- | --- | --- | --- |
+| R80 | Which points flush | decided (D22) | Three: with `discard()` before the session prompt reads (the first after a sign-in or the first run, D17); after a repeated offer is written, before its read; and, on POSIX, at the program's give-up itself: a withdrawn permission request (`askPermission`) and a question whose context the program ended (`questions.cancelled`), inside the session and out of it | D12; D17; D22; Q23, the owner, relayed by the coordinator: "Flush at gobble's give-up (Recommended)" | `TestFlushPoints` (A24); `TestFlushAtGiveUp` (A49); plants 42 to 44, 94, 95 (2026-11-21, D23: see its latest row, after the accepted count) |
+| R81 | Points that do not flush | decided (D22) | As R81 says, except that on POSIX a program's give-up flushes (R80): at a withdrawn permission request, and at a paste prompt a browser sign-in's loopback ended, in the session and in `gobble setup`, `gobble acp --login` and `gobble auth login`. A person's Ctrl+C give-up does not flush | D12; D22; Q23, the owner, relayed by the coordinator: "Flush at gobble's give-up (Recommended)" | `TestFlushPoints` (A24); `TestFlushAtGiveUp` (A49); plant 95 |
+| R84 | A read started out of raw mode by a prompt that gave up, completed by a line, on POSIX | decided (D22) | It is not read: what was typed into that prompt is flushed at the give-up itself (R80); keys typed in the instant before it are lost | D13; D22; Q23, the owner, relayed by the coordinator: "Flush at gobble's give-up (Recommended)" | `TestFlushAtGiveUp` (A49); A42; A43; plant 94 |
+| R125 | How the layer waits for the terminal | decided (D22) | select(2) on the private descriptor (R126) and the wake pipe, no timeout; `EINTR` retried as a guard only (no `EINTR` seen, M6, M9). Not poll(2) (macOS refuses `/dev/tty`, M8); not the runtime poller on standard input (its shared open file description, M4) | D22; Q25, the owner, relayed by the coordinator: "Private non-blocking descriptor (Recommended)"; M1, M2, M4, M6, M8, M9, M12, M15 | `TestCancelableWait` (A41); plant 79 |
+| R126 | A read(2) after select(2) reported the terminal ready | decided (D22) | Made on a private descriptor on the terminal's own path, opened `O_RDONLY\|O_NONBLOCK\|O_CLOEXEC\|O_NOCTTY` (or `/dev/tty` with the same flags, when the path cannot be opened and standard input is the controlling terminal, by the same foreground process group): `EAGAIN` returns to the wait, so the read never waits, even after Ctrl+C has emptied a line reported ready (M11, M12, M15); raw mode and the flush stay on standard input and apply to it (M12). Both opens failing is R138; `su` or `sudo -u` (`EACCES`, inferred, not measured) reaches `/dev/tty` or R138 | D22; Q25, the owner, relayed by the coordinator: "Private non-blocking descriptor (Recommended)"; M11, M12, M15 | `TestCancelableWait` (A41, the read seam giving `EAGAIN`); `TestPrivateDescriptor` (A55, added); plant 96 (2026-11-21, D23: see its latest row, after the accepted count) |
+| R130 | Raw mode switched on or off after a give-up | decided (D22) | As the second draft (no read is outstanding: F4's race cannot happen), pinned on Linux and on this Mac by the shared pseudo-terminal cases | the owner's answer "Make reads cancellable on POSIX"; D22; M5; Q26, the owner, relayed by the coordinator: "Move them to a shared file (Recommended)" | `pty-gaveup-held` (A43), in `pty_unix_test.go`, on Linux and on this Mac; plant 76 |
+| R131 | The first prompt after a sign-in or the first run (D21) | decided (D22) | As the second draft: its flush empties what was typed into the sign-in's prompts and left unread, on Linux and macOS, every time; not on the BSDs (R78, R144). Pinned on both systems by the shared cases | D21; D22; M5; M14; Q26, the owner, relayed by the coordinator: "Move them to a shared file (Recommended)" | `pty-abandoned` (A43), in `pty_unix_test.go`, on Linux and on this Mac |
+| R132 | Keys typed into a prompt the program gave up, left unread: a withdrawn permission request; the paste prompt of a sign-in outside the session | decided (D22) | On POSIX they are flushed at the give-up itself (R80): never a turn, never an answer, never the shell's or acpserver's input; keys typed in the instant before the give-up are lost. A person's Ctrl+C give-up does not flush (Q16). Windows keeps D13's drop | D13; D22; Q23, the owner, relayed by the coordinator: "Flush at gobble's give-up (Recommended)" | `TestFlushAtGiveUp` (A49): a withdrawn permission request, and `gobble auth login`'s paste prompt ended by a stub loopback, each flush once; a Ctrl+C give-up does not; plants 94, 95 (2026-11-21, D23: see its latest row, after the accepted count) |
+| R138 | The readiness wait or its descriptor cannot be used: select(2) fails other than with `EINTR`, the wake pipe cannot be made, a descriptor is at or above `FD_SETSIZE`, or neither the private descriptor nor `/dev/tty` can be opened | decided (D22) | For the rest of the process, standard input is read as built (a blocking read, D13's drop), and one warning is written on stderr, once, in the owner's approved words: `Warning: gobble cannot wait on this terminal without reading it (<error>); keys typed while a sign-in finishes may be lost.` | D22; Q24, the owner, relayed by the coordinator: "Old reads plus one warning (Recommended)"; Q25 | `TestCancelableFallbackWarnsOnce` (A50): each cause through the seams; the words asserted exactly; one warning for two causes; the prompts still read; plants 93, 97 (2026-11-21, D23: see its latest row, after the accepted count) |
+| R146 | The wake pipe, and the private descriptor | decided (D22) | The wake pipe as the second draft says. The private descriptor (R126) is opened once, with the pipe, for the process, close-on-exec, and lives as long; a test's layer closes both in `stop()` | D22; Q25, the owner, relayed by the coordinator: "Private non-blocking descriptor (Recommended)" | `TestCancelableWakePipe` (A54); `TestPrivateDescriptor` (A55); plant 91 (2026-11-21, D23: see its latest row, after the accepted count) |
+| R150 | Other readers of the same standard input | decided (D22) | With the gate closed no read of gobble's waits, so each gets every byte typed while it reads. Under R138's fallback, R95's risk returns, which the warning names | D22; R95; Q24, the owner, relayed by the coordinator: "Old reads plus one warning (Recommended)" | `TestCancelableGiveUp` (A42); `TestCancelableFallbackWarnsOnce` (A50) |
+| R152 | The pseudo-terminal cases on this Mac | decided (D22) | The cases move word for word to `internal/cli/pty_unix_test.go` (`(linux \|\| darwin) && pty`); the Linux opener stays in `pty_linux_test.go`, the macOS opener (`/dev/ptmx`, `TIOCPTYGRANT`, `TIOCPTYUNLK`, `TIOCPTYGNAME`) is in a new `pty_darwin_test.go`; `make probe-pty` runs on either system, outside `preflight` and CI, and the Makefile's comment says so | Q26, the owner, relayed by the coordinator: "Move them to a shared file (Recommended)", the owner's word for the move beyond D21's one line | `make probe-pty` on Linux and on this Mac (step 20); the cases' words as on Linux |
+
+~~Counts (2026-11-21, D22 accepted, recomputed from each row's latest status): 152 rows. 2 are replaced and not counted (R52, R53). Of the other 150: 100 `decided`; 32 `decided (D22)` (R80, R81, R83, R84, R86, R88, R89, R95, R102, R123, R124, R125, R126, R127, R128, R129, R130, R131, R132, R133, R134, R137, R138, R140, R141, R142, R145, R146, R147, R148, R150, R152); 18 `out of scope`; none `open`. These, with `replaced`, are every status the table uses.~~ *(2026-11-21, D23: superseded by the count below.)*
+
+*Rows changed and added (2026-11-21, D23: the owner's rulings after build pass 3's review). Each earlier row is
+kept, annotated; each row here is its latest.*
+
+**D23: latest rows**
+
+| Row | Input or state | Status | Outcome (what a test checks) | Decided by | Test (PLAN phase) |
+| --- | --- | --- | --- | --- | --- |
+| R80 | Which points flush | decided (D22) | As D22's latest row, with the give-up flush keyed on a POSIX terminal: with `discard()` before the session prompt reads (the first after a sign-in or the first run); after a repeated offer is written, before its read; and, on a Linux or macOS terminal, gated or fallen back to reading as built, at the program's give-up itself (`askPermission`'s withdrawn branch, `questions.cancelled`'s program branch), inside the session and out of it | D12; D17; D22; Q23; D23, the owner, relayed by the coordinator: "Always flush on a POSIX terminal (Recommended)" | `TestFlushPoints` (A24); `TestFlushAtGiveUp` (A49); `TestGiveUpFlushBySystem` (A56); plants 94, 95, 98, 107 |
+| R124 | Where a POSIX terminal's reads are made | decided (D22) | As D22's latest row; pinned in the default suite, not only under `pty` | D22 | `TestTerminalInChoosesLayer` (A46); `TestTerminalInWiresGate` (A58, added); plants 83, 100 |
+| R126 | A read(2) after select(2) reported the terminal ready | decided (D22) | As D22's latest row. `/dev/tty` is opened only when standard input is the controlling terminal, by the same foreground process group: a pseudo terminal that is not the controlling terminal, its path failing, gives R138, not `/dev/tty` | D22; Q25; M15 | `TestCancelableWait` (A41); `TestPrivateDescriptor` (A55); `pty-not-controlling` (A59, added); plants 96, 101 |
+| R132 | Keys typed into a prompt the program gave up, left unread | decided (D22) | On a Linux or macOS terminal, gated or fallen back, they are flushed at the give-up itself (R80): never a turn, never an answer, never the shell's or acpserver's input; keys typed in the instant before the give-up are lost. A person's Ctrl+C give-up does not flush (Q16). Windows keeps D13's drop and does not flush (R143) | D13; D22; Q23; D23, the owner, relayed by the coordinator: "Always flush on a POSIX terminal (Recommended)" | `TestFlushAtGiveUp` (A49); `TestGiveUpFlushBySystem` (A56): a gateless input that is not a POSIX terminal counts no flush; a start-up fallback and a later fallback each flush once; plants 94, 95, 98, 107 |
+| R138 | The readiness wait or its descriptor cannot be used: select(2) fails other than with `EINTR`, the wake pipe cannot be made, a descriptor is at or above `FD_SETSIZE`, or neither the private descriptor nor `/dev/tty` can be opened (a blocking descriptor, R154, or a different terminal, R155, counting as not opened) | decided (D22) | As D22's latest row: standard input read as built for the rest of the process, with the warning once, now written on the main flow (R156); on a POSIX terminal the give-up flush still applies (R80) | D22; Q24; D23, the owner, relayed by the coordinator: "Always flush on a POSIX terminal (Recommended)"; "Refuse a blocking descriptor (Recommended)"; "Check it's the same terminal"; "Write the warning safely" | `TestCancelableFallbackWarnsOnce` (A50); `TestGatedRefusals` (A57, added): the wake pipe failing and a descriptor at or above `FD_SETSIZE`, through seams; plants 93, 97, 99 |
+| R143 | Windows | decided (D22) | Unchanged: D13, D18, D19 and D20 as built; the layer is not used; no flush at a give-up | the owner's answer "Make reads cancellable on POSIX"; D23 | the Windows cases (P1b), unchanged; `TestGiveUpFlushBySystem` (A56, the gateless input that is not a POSIX terminal); plant 98 |
+| R146 | The wake pipe, and the private descriptor | decided (D22) | As D22's latest row. A pipe not drained before a wait is caught by the closed gate's case, not by A54 | D22; Q25 | `TestCancelableWakePipe` (A54: the ends' flags, closes with no waiter); `TestCancelableGiveUp` (A42, the closed gate's case: the pipe drained); plant 91 |
+| R147 | The size `fill` asks `inline.Reader` for, and the size of a race completion's drop | decided (D22) | As D22's latest row; and on the gated path a read that ended on its context is marked with the size asked, `lineBuf`, not the caller's: a race completion abandoned by a 512-byte ask and then met by `askOn`'s 256-byte read is dropped whole (D18) | D18; D22; R143 | `TestCancelableGiveUp` (A42); `TestGatedRaceDropSize` (A61, added); plants 89, 102 |
+| R148 | The terminal hangs up during the wait | decided (D22) | As D22's latest row; through the terminal input, `EIO` from the read closes the input: `ended()` is true | D8; R43; M10; M15 | `TestCancelableHangUp` (A52), with a case through `terminalInput`; A41 |
+
+**D23: added rows**
+
+| Row | Input or state | Status | Outcome (what a test checks) | Decided by | Test (PLAN phase) |
+| --- | --- | --- | --- | --- | --- |
+| R153 | `EINTR` from read(2) on the private descriptor | decided (D22) | Returns to the wait, as `EAGAIN` does; never an error and never the end of input | D23, the owner, relayed by the coordinator: "Retry EINTR on the read (Recommended)" | `TestCancelableWait` (A62, added: the read seam gives `EINTR` once, then the bytes); plant 103 |
+| R154 | A descriptor without `O_NONBLOCK` given to the layer | decided (D22) | `NewGated` reads `F_GETFL` and refuses it with an error; `OpenGated` takes that as a failed open: `/dev/tty`, then R138 | D23, the owner, relayed by the coordinator: "Refuse a blocking descriptor (Recommended)" | `TestGatedRefusals` (A63, added: a blocking pipe refused); plant 104 |
+| R155 | The terminal's path opens a different terminal than standard input's | decided (D22) | `OpenGated` compares `fstat`'s `Rdev` of standard input and of the opened descriptor; on a mismatch it closes it and goes on to `/dev/tty`, which keeps its foreground-process-group check (M15), then R138 | D23, the owner, relayed by the coordinator: "Check it's the same terminal"; M15 | `pty-same-terminal` (A64, added): a child whose controlling terminal is one pseudo terminal, given the path of another: what is typed on its own is read; plant 105 |
+| R156 | Q24's warning, when the fallback happens on `inline.Reader`'s goroutine | decided (D22) | It is queued, never written there, and written once on the main flow: before the next prompt's or question's text, with the terminal in its cooked state, or at exit if no such text comes; the words unchanged | D23, the owner, relayed by the coordinator: "Write the warning safely" | `TestFallbackWarningOnMainFlow` (A60, added): no warning while the failing read runs; once before the next question's text; once at the run's end when no text comes; plant 106 (2026-11-21, build pass 5, the owner, relayed by the coordinator: "Fifth pass, this fix only (Recommended)": at the session prompt the warning is written out of raw mode, through `outOfRaw`, before the editor's prompt; `TestFallbackWarningOnMainFlow` gains the case at the session prompt, with raw mode stubbed: the terminal is not raw when the warning is written; and the case written once: a fallback, then two later questions, the warning counted once; plants: the warning written while raw, and the queue not cleared) |
+| R157 | The give-up flush, by kind of input | decided (D22) | On a Linux or macOS terminal it flushes whatever reads it: the gate, a start-up fallback, a later fallback. A pipe or a file has nothing to flush; Windows does not flush (R143) | D23, the owner, relayed by the coordinator: "Always flush on a POSIX terminal (Recommended)" | `TestGiveUpFlushBySystem` (A56); plants 98, 107 |
+
+Counts (2026-11-21, D23, recomputed from each row's latest status): 157 rows. 2 are replaced and not counted (R52, R53). Of the other 155: 99 `decided`; 38 `decided (D22)` (R80, R81, R83, R84, R86, R88, R89, R95, R102, R123, R124, R125, R126, R127, R128, R129, R130, R131, R132, R133, R134, R137, R138, R140, R141, R142, R143, R145, R146, R147, R148, R150, R152, R153, R154, R155, R156, R157); 18 `out of scope`; none `open`. These, with `replaced`, are every status the table uses.
 
 ## Pros and Cons of the Options
 
@@ -1079,18 +1405,21 @@ below, put to the owner as one prompt before P1. None changes the decision or an
 option is listed first.*
 
 * **Q16. Which reads of a prompt that gave up are dropped, and what is dropped (row R86).** D13 drops "the abandoned
-  prompt's line". Not every case is a line: a read started in raw mode returns keys, and on POSIX a read started out
+  prompt's line". Not every case is a line: a read started in raw mode returns keys, and ~~on POSIX a read started out
   of raw mode returns at the first key once raw mode is on (the terminal's mode is shared), which on the session
-  prompt after a browser sign-in is what was typed into the paste prompt plus the first key typed. And a read the user
+  prompt after a browser sign-in is what was typed into the paste prompt plus the first key typed~~ *(2026-11-21, D21:
+  measured on Linux, such a read returns as raw mode goes on, with what was typed into the paste prompt alone; the
+  first key completes it only when nothing was typed there, inferred)*. And a read the user
   gave up with Ctrl+C at a menu completes with the user's answer to the next prompt: dropping it means the repeated
   offer's first answer, or the session prompt's first line or key, is lost and must be typed again. The existing
   `TestLoginInterrupt` sends Ctrl+D after an interrupt and would wait for ever under (b).
   * (a) Drop whatever completes a read the program gave up (a browser sign-in's loopback; any `Input` whose context
     the program ended), line or keys; a read the user gave up with Ctrl+C is not dropped and goes to the next prompt,
     as D4 says today. *Recommended:* it stops what the review found, text from the paste prompt reaching a turn,
-    without losing an answer the user typed to a prompt they could see. Cost: on POSIX the first key typed at the
-    prompt after a browser sign-in is lost, on Windows the first line; the questions must tell the two kinds of give-up
-    apart (they know which context ended).
+    without losing an answer the user typed to a prompt they could see. Cost: ~~on POSIX the first key typed at the
+    prompt after a browser sign-in is lost,~~ *(2026-11-21, D21: on POSIX, what was typed into the paste prompt is
+    lost, and the first key at the next prompt only when nothing was typed there)* on Windows the first line; the
+    questions must tell the two kinds of give-up apart (they know which context ended).
   * (b) Drop whatever completes any read of a prompt that gave up, Ctrl+C's included: the ruling's words read
     literally. Cost: after Ctrl+C at a menu the next answer is lost and typed again; `TestLoginInterrupt`, the menu
     interrupt tests and the owner's step (B) 4 need a sacrificial input.
@@ -1174,6 +1503,95 @@ Each is open; the recommended option is listed first.*
 only if a read is waiting; excuses one empty read (Recommended)", rows R111, R114. **Q22:** "Wait up to 100 ms for the
 mark; the probe reports the order (Recommended)", rows R116, R122. **R120:** "Yes, widen the row to include it
 (Recommended)". No owner question is open.
+
+*Added 2026-11-21, D22 (proposed): the rows its draft leaves open. Each is open; the recommended option is listed
+first.*
+
+* ~~**Q23. Keys typed into a prompt the program gave up outside a sign-in (row R132).**~~ *(2026-11-21, D22 second draft:
+  superseded by Q23, as rewritten, below.)* Under D13 a withdrawn permission
+  request's read was dropped with what completed it. Under D22 nothing is read, so the keys stay in the terminal, and
+  no sign-in mark flushes them.
+  * (a) A program's give-up sets the same mark a sign-in sets, so the next session prompt flushes them. *Recommended:*
+    D13's "never a turn, never an answer" kept by the same deterministic flush as D21, one rule for every give-up of
+    the program. Cost: keys typed between the withdrawal and the next prompt are lost; `askPermission` sets the mark;
+    a test and a plant.
+  * (b) Leave them for the next prompt, where they show as typed text, sent only on Enter. Cost: a half-typed reason
+    for a withdrawn permission request can start the next prompt's text.
+  * (c) Read and drop, at the give-up, what the terminal already holds, without waiting. Cost: out of raw mode a half
+    line cannot be read before its Enter, so it works for raw-mode prompts only; a read at give-up is what D22 removes.
+* **Q24. The readiness wait cannot be used (row R138):** select(2) fails with an error other than `EINTR`, the wake
+  pipe cannot be made, or a descriptor is at or above `FD_SETSIZE`.
+  * (a) For the rest of the process, read as built (a blocking read, D13's drop), with one warning on stderr naming
+    the error. *Recommended:* every prompt still works, and the warning names the cost, F4's race. Cost: a second
+    warning's words for the owner to approve; a fallback path, its test and its plant.
+  * (b) Take it as a read failure: the input is closed (`ended()`), a question cancels, the session ends at the
+    editor's next read. Cost: gobble cannot be used on that terminal.
+  * (c) Read as built, silently. Cost: the race comes back with no word to anyone.
+
+*2026-11-21, D22 second draft: Q23 rewritten as the record review proposed (its 2.3), Q24 updated, and Q25 and Q26 added. Each is
+open; the recommended option is listed first; each names the rows it amends.*
+
+* **Q23, as rewritten. Keys typed into a prompt the program gave up (row R132).** On POSIX, under D22, they stay in
+  the terminal, unread: at a withdrawn permission request inside the session; and at the paste prompt of a sign-in
+  outside it (`gobble auth login`, `gobble acp --login`, `gobble setup`), where gobble then exits, so the shell runs a
+  line typed there or keeps a pasted redirect URL, its code included, in its history, and under `gobble acp --login`
+  acpserver reads it as protocol input (`acp.go:50`). *(2026-11-21, D22 third draft: a Ctrl+D typed there would reach acpserver as
+  the end of input, R89.)*
+  * (a) On POSIX, flush the terminal's queue at the program's give-up itself: `askPermission`'s withdrawn branch and
+    `questions.cancelled`'s program branch. *Recommended:* one rule wherever the program gives up, inside the session
+    or out of it. Cost: a third flush point; keys typed in the instant before the give-up are lost; a test and a
+    plant. Amends R80 ("exactly two"), R81, R84's latest row and R132.
+  * (b) A program's give-up sets the mark a sign-in sets, so the next session prompt flushes (the first draft's (a)).
+    Cost: keys typed for the rest of the turn are lost too; nothing helps outside the session, where there is no next
+    prompt. Amends R105, R107 ("a permission prompt ... set no mark") and R132.
+  * (c) Leave them (the first draft's (b)). Cost: a half-typed reason can start the next prompt's text; outside the
+    session, the shell runs it or keeps it in history, and acpserver reads it. Amends R132.
+* **Q24, as updated. The readiness wait or its descriptor cannot be used (row R138).** It now also covers a private
+  descriptor that cannot be opened, under Q25 (a).
+  * (a) For the rest of the process, read standard input as built (a blocking read, D13's drop), with one warning on
+    stderr naming the error. *Recommended:* every prompt still works, and the warning names the cost. Cost: F4's race
+    and R95's risk come back there (R150); the warning's words for the owner to approve; a fallback path, its test and
+    its plant. Amends R138, R150.
+  * (b) Take it as a read failure: the input is closed (`ended()`), a question cancels, the session ends at the
+    editor's next read. Cost: gobble cannot be used on that terminal. Amends R138, R43's reach.
+  * (c) Read as built, silently. Cost: the race comes back with no word. Amends R138.
+* **Q25. How the layer's read(2) cannot wait (row R126).** select(2) reported a line ready, Ctrl+C emptied it, and a
+  read(2) of standard input then waited for the next line, on every host (M11); with the gate's lock held across that
+  read, the close that Ctrl+C causes would wait with it.
+  * (a) Read through a private descriptor: the terminal's own path (`ttyname` of standard input: `/proc/self/fd/0` on
+    Linux, `F_GETPATH` on macOS), opened ~~`O_RDONLY|O_NONBLOCK|O_CLOEXEC`~~ `O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_NOCTTY`
+    *(2026-11-21, D22 third draft)*, its own open file description, so R125's
+    objection does not apply; `EAGAIN` returns to the wait; raw mode and the flush stay on standard input.
+    *(2026-11-21, D22 third draft: if the path cannot be opened and standard input is the controlling terminal, `/dev/tty` is
+    opened with the same flags (M15: it sees what is typed); only then Q24's fallback. Standard input is known to be
+    the controlling terminal by its foreground process group, the same read on standard input and on `/dev/tty`
+    (M15); not by device numbers, since `/dev/tty` reports its own (M15). `O_NOCTTY` changed nothing seen (M15 against
+    M12).)*
+    *Recommended:* measured on every host (M12): it sees what is typed, gives `EAGAIN` with nothing queued and after
+    Ctrl+C empties a ready line, leaves standard input blocking, and follows standard input's raw mode and flush.
+    Cost: a second open of the terminal, whose failure is Q24; the path read per system. Amends R125, R126, R138, R146.
+    *(2026-11-21, D22 third draft: also the case of `su` or `sudo -u`, where the terminal's path is not the user's and the open
+    fails with `EACCES` (inferred, not measured): `/dev/tty` or Q24's fallback then applies. Also amends R127, R134 and
+    R148.)*
+  * (b) Keep standard input, and do not hold the lock across read(2): a read that waits after a close is an
+    outstanding read, dropped by D13 when it completes. Cost: F4's race comes back in the window between readiness and
+    the read (M11 shows Ctrl+C opens it). Amends R126, R127, R129, R130. *(2026-11-21, D22 third draft: also R150.)*
+  * (c) Keep the draft and record the window. Cost: Ctrl+C after a line is ready, at a prompt read out of raw mode,
+    hangs that prompt until another line is typed (M11). Amends R126, R133.
+* **Q26. The pseudo-terminal cases on this Mac (row R152).** `internal/cli/pty_linux_test.go` is `linux && pty`, holds
+  both the cases and the Linux opener, and the Makefile says `probe-pty` is Linux only; D21 allowed one line of it to
+  change.
+  * (a) Move the cases, word for word, to `pty_unix_test.go` (`(linux || darwin) && pty`), with the openers in
+    `pty_linux_test.go` and a new `pty_darwin_test.go`, and update the Makefile's comment. *Recommended:* one copy of
+    the cases, run on both systems. Cost: P1b's file restructured beyond D21's one line, which needs the owner's word.
+    Amends R130, R131, R152 and the PLAN's P1b files.
+  * (b) A macOS copy of the cases in a `darwin && pty` file. Cost: two copies that can drift. Amends R152.
+  * (c) No pseudo-terminal run on macOS: R130 and R131 rest there on the probe's measurements alone. Cost: macOS
+    untested end to end. Amends R130, R131, R152.
+
+*Answers (2026-11-21, D22 accepted), the owner, relayed by the coordinator: each quoted as the option's label:* **Q23:** "Flush at gobble's give-up (Recommended)". **Q24:**
+"Old reads plus one warning (Recommended)", with the warning's words `Warning: gobble cannot wait on this terminal without reading it (<error>); keys typed while a sign-in finishes may be lost.` **Q25:** "Private non-blocking descriptor (Recommended)". **Q26:** "Move them to a shared file (Recommended)". No owner
+question is open.
 
 ## More Information
 

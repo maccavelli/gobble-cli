@@ -10,8 +10,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/maccavelli/go-tui-lib/v2/inline"
-
 	"github.com/maccavelli/gobble-cli/internal/auth"
 	"github.com/maccavelli/gobble-cli/internal/cli/editor"
 	"github.com/maccavelli/gobble-cli/llm/catalog"
@@ -90,10 +88,10 @@ func (e *runEnv) signIn(ctx context.Context, q *questions, want string) (string,
 }
 
 // terminalQuestions are the questions a sign-in asks on e's terminal, read
-// through the reader that owns stdin, a secret in raw mode; the caller has
-// checked that there is a terminal (onTerminal).
+// through the process's one terminal input, a secret in raw mode; the
+// caller has checked that there is a terminal (onTerminal) (0063-MADR D1).
 func (e *runEnv) terminalQuestions(ctx context.Context) *questions {
-	return &questions{ctx: ctx, in: inline.NewReader(e.stdin), out: e.out.err, raw: func() (func() error, error) { return termRaw(e.stdin) }}
+	return &questions{ctx: ctx, in: e.terminalIn(), out: e.out.err, raw: func() (func() error, error) { return termRaw(e.stdin) }}
 }
 
 // termRaw puts the terminal on f into raw mode for a sign-in's secret; tests
@@ -214,9 +212,10 @@ const (
 	pasteOn  = "\x1b[?2004h"
 )
 
-// ask runs f with the line session's questions: through the reader that
-// owns stdin, with bracketed paste off, and with the first Ctrl+C ending f
-// rather than gobble. A Ctrl+C is errCancelled.
+// ask runs f with the line session's questions: through the session's one
+// terminal input, whose read-ahead and line-end state outlive the ask
+// (0063-MADR D2, D4), with bracketed paste off, and with the first Ctrl+C
+// ending f rather than gobble. A Ctrl+C is errCancelled.
 func (ls *lineSession) ask(f func(context.Context, *questions) error) error {
 	e := ls.e
 	ctx, cancel := context.WithCancel(e.ctx)
@@ -237,7 +236,10 @@ func (ls *lineSession) ask(f func(context.Context, *questions) error) error {
 
 // login is /login [provider] in the line session (0025-MADR D6): the
 // sign-in; then the credentials read again, the provider listed, and its
-// models shown by the agent's /models, numbered for /model N.
+// models shown by the agent's /models, numbered for /model N. A sign-in,
+// whatever its outcome, marks the session's next prompt to flush the
+// terminal's queue; one refused before any question marks nothing
+// (0063-MADR D17, rows R103, R106).
 func (ls *lineSession) login(arg string, turn func(Prompt) error) error {
 	e := ls.e
 	want := ""
@@ -254,6 +256,7 @@ func (ls *lineSession) login(arg string, turn func(Prompt) error) error {
 		id, err = e.signIn(ctx, q, want)
 		return err
 	})
+	ls.keys.signedInRound()
 	switch {
 	case errors.Is(err, errCancelled):
 		e.out.Notef("Sign-in cancelled; nothing was saved.")
@@ -302,8 +305,11 @@ const firstRunQuestion = "No provider has a credential yet. Sign in to one now?"
 // firstRun is the line session's offer when no provider has a credential
 // (0025-MADR D7): /login's sign-in, before the first prompt. Declined, the
 // session goes on as before, with the warning naming the variables.
+// However it ends, it marks the session's first prompt to flush the
+// terminal's queue (0063-MADR D17, row R104).
 func (ls *lineSession) firstRun() error {
 	e := ls.e
+	defer ls.keys.signedInRound()
 	var yes bool
 	err := ls.ask(func(_ context.Context, q *questions) (err error) {
 		yes, err = q.confirm(firstRunQuestion, true)

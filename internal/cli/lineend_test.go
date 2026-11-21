@@ -16,12 +16,13 @@ import (
 // test builds its questions through asked or askedFrom, so that P2's change
 // of the reader they read through is made in one place.
 
-// askedFrom is questions over in, writing to a buffer, with a raw mode that
-// counts its entries and restores.
+// askedFrom is questions over in, through a terminal input with no
+// terminal to flush (0063-PLAN P2 step 4), writing to a buffer, with a raw
+// mode that counts its entries and restores.
 func askedFrom(t *testing.T, in keysIn) (*questions, *bytes.Buffer, *[2]int) {
 	t.Helper()
 	q, out, raws := asked(t)
-	q.in = in
+	q.in = newTerminalInput(in, nil)
 	return q, out, raws
 }
 

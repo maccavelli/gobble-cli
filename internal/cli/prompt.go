@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -17,7 +16,8 @@ import (
 // an empty answer where one is needed.
 var errCancelled = errors.New("cancelled")
 
-// keysIn is the reader that owns stdin: go-tui-lib's inline.Reader.
+// keysIn is the reader that owns stdin: go-tui-lib's inline.Reader, which
+// the terminal input reads (0063-MADR D1).
 type keysIn interface {
 	Read(ctx context.Context, p []byte) (int, error)
 }
@@ -25,19 +25,17 @@ type keysIn interface {
 // questions asks the user what a sign-in needs, on the terminal (0025-MADR
 // D6, deviations 6 and 7): a choice, a yes or no, or a line, each read a
 // line at a time out of raw mode; a secret, read in raw mode with each
-// character echoed as *. Input comes through in, the reader that owns
-// stdin; questions are written to out.
+// character echoed as *. Input comes through in, the process's one
+// terminal input, which keeps what was read past an answer for the next
+// question, across asks, and reads every line end one way (0063-MADR D2,
+// D3); questions are written to out.
 type questions struct {
 	ctx context.Context
-	in  keysIn
+	in  *terminalInput
 	out io.Writer
 	// raw puts the terminal in raw mode and returns the restore; nil reads
 	// a secret as a line, as when stdin is not a terminal.
 	raw func() (restore func() error, err error)
-	// pending is what was read past the last answer; afterCR is whether
-	// that answer ended with \r, so a \n after it is not an empty answer.
-	pending []byte
-	afterCR bool
 }
 
 // option is one answer to a choice: its label and a detail shown beside it.
@@ -59,8 +57,10 @@ func (p prompter) Choose(title string, choices []provider.Choice, def int) (int,
 // Confirm implements provider.Prompter.
 func (p prompter) Confirm(question string, def bool) (bool, error) { return p.q.confirm(question, def) }
 
-// Input implements provider.Prompter: the read gives up when ctx ends, and
-// the reader that owns stdin serves what it read then to the next question.
+// Input implements provider.Prompter: the read gives up when ctx ends.
+// When ctx ends while the question's own context goes on, the program gave
+// the read up (a browser sign-in's loopback came first), and what completes
+// it is dropped, never an answer or a turn (0063-MADR D13, D17).
 func (p prompter) Input(ctx context.Context, prompt string) (string, error) {
 	return p.q.inputContext(ctx, prompt)
 }
@@ -113,6 +113,7 @@ func (q *questions) choose(title string, opts []option, def int) (int, error) {
 	for _, o := range opts {
 		width = max(width, utf8.RuneCountInString(o.label))
 	}
+	q.in.warnQueued() // before the question's text (0063-MADR D23, row R156)
 	var b strings.Builder
 	b.WriteString(title + "\n")
 	for i, o := range opts {
@@ -123,6 +124,7 @@ func (q *questions) choose(title string, opts []option, def int) (int, error) {
 		return 0, fmt.Errorf("write the question: %w", err)
 	}
 	for {
+		q.in.warnQueued()
 		fmt.Fprintf(q.out, "Number [%d]: ", def+1) //nolint:errcheck // the answer is read all the same
 		s, err := q.line()
 		if err != nil {
@@ -145,6 +147,8 @@ func (q *questions) confirm(question string, def bool) (bool, error) {
 		hint = "[Y/n]"
 	}
 	for {
+		// Before the question's text (0063-MADR D23, row R156).
+		q.in.warnQueued()
 		fmt.Fprintf(q.out, "%s %s: ", question, hint) //nolint:errcheck // the answer is read all the same
 		s, err := q.line()
 		if err != nil {
@@ -167,6 +171,8 @@ func (q *questions) input(prompt string) (string, error) { return q.inputContext
 
 // inputContext is input, read until ctx ends.
 func (q *questions) inputContext(ctx context.Context, prompt string) (string, error) {
+	// Before the question's text (0063-MADR D23, row R156).
+	q.in.warnQueued()
 	fmt.Fprintf(q.out, "%s: ", prompt) //nolint:errcheck // the answer is read all the same
 	return q.lineContext(ctx)
 }
@@ -177,34 +183,27 @@ func (q *questions) line() (string, error) { return q.lineContext(q.ctx) }
 
 // lineContext is line, read until ctx ends.
 func (q *questions) lineContext(ctx context.Context) (string, error) {
-	for {
-		if q.afterCR && len(q.pending) > 0 && q.pending[0] == '\n' {
-			q.pending = q.pending[1:]
-		}
-		if len(q.pending) > 0 {
-			q.afterCR = false
-		}
-		if i := bytes.IndexAny(q.pending, "\r\n"); i >= 0 {
-			s := string(q.pending[:i])
-			q.afterCR = q.pending[i] == '\r'
-			q.pending = q.pending[i+1:]
-			return plainLine(s), nil
-		}
-		if err := q.fill(ctx); err != nil {
-			return "", err
-		}
+	s, err := q.in.line(ctx)
+	if err != nil {
+		return "", q.cancelled(ctx, err)
 	}
+	return plainLine(s), nil
 }
 
-// fill reads the next chunk into pending, until ctx ends.
-func (q *questions) fill(ctx context.Context) error {
-	buf := make([]byte, 512)
-	n, err := q.in.Read(ctx, buf)
-	q.pending = append(q.pending, buf[:n]...)
-	if n == 0 && err != nil {
-		return fmt.Errorf("%w (%w)", errCancelled, err)
+// cancelled is a question's read that ended with err: errCancelled, with
+// err. A read that ended on ctx while the question's own context goes on
+// was given up by the program (a browser sign-in's loopback came first), so
+// its completion is dropped when it comes; one the person gave up with
+// Ctrl+C ends the question's own context and is not (0063-MADR D13, D17).
+// On a POSIX terminal the program's give-up also flushes the terminal's
+// queue, so what was typed into the prompt is never a later prompt's, nor
+// the shell's after gobble exits (0063-MADR D22, Q23).
+func (q *questions) cancelled(ctx context.Context, err error) error {
+	if ctx.Err() != nil && q.ctx.Err() == nil {
+		q.in.abandon()
+		q.in.flushGiveUp()
 	}
-	return nil
+	return fmt.Errorf("%w (%w)", errCancelled, err)
 }
 
 // plainLine is s trimmed, without bracketed-paste markers.
@@ -228,8 +227,12 @@ const (
 // cancels, as Ctrl+D does on an empty answer. An escape sequence, a
 // bracketed-paste marker among them, is not part of it. The value is never
 // written anywhere (0025-MADR D6, deviation 7). Raw mode is on before the
-// prompt is written, so nothing typed after it is echoed by the terminal.
-func (q *questions) secret(prompt string) (string, error) {
+// prompt is written, so nothing typed after it is echoed by the terminal;
+// it is restored in a deferred call, so a panic restores it before it goes
+// on (0063-MADR D15). When raw mode cannot be switched on, its error is
+// returned, no prompt is written and nothing is read (row R28).
+func (q *questions) secret(prompt string) (s string, err error) {
+	q.in.warnQueued() // before raw mode and the question's text (0063-MADR D23, row R156)
 	if q.raw == nil {
 		fmt.Fprintf(q.out, "%s: ", prompt) //nolint:errcheck // the answer is read all the same
 		return q.line()
@@ -238,27 +241,26 @@ func (q *questions) secret(prompt string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	defer func() {
+		if rerr := restore(); rerr != nil && err == nil {
+			err = fmt.Errorf("restore the terminal: %w", rerr)
+		}
+		fmt.Fprintln(q.out) //nolint:errcheck // the line end is best effort
+	}()
 	fmt.Fprintf(q.out, "%s: ", prompt) //nolint:errcheck // the answer is read all the same
-	s, err := q.readSecret()
-	if rerr := restore(); rerr != nil && err == nil {
-		err = fmt.Errorf("restore the terminal: %w", rerr)
-	}
-	fmt.Fprintln(q.out) //nolint:errcheck // the line end is best effort
-	return s, err
+	return q.readSecret()
 }
 
-// readSecret reads the secret's bytes up to Enter; q.raw's mode is on.
+// readSecret reads the secret's bytes up to Enter; q.raw's mode is on. The
+// Enter that ends it is the terminal input's raw line end (0063-MADR D3).
 func (q *questions) readSecret() (string, error) {
 	var b []byte
 	esc := 0 // 1 after ESC, 2 inside a control sequence
 	for {
-		if len(q.pending) == 0 {
-			if err := q.fill(q.ctx); err != nil {
-				return "", err
-			}
+		c, err := q.in.key(q.ctx)
+		if err != nil {
+			return "", q.cancelled(q.ctx, err)
 		}
-		c := q.pending[0]
-		q.pending = q.pending[1:]
 		switch {
 		case esc == 1:
 			esc = 0
@@ -270,7 +272,7 @@ func (q *questions) readSecret() (string, error) {
 				esc = 0
 			}
 		case c == '\r' || c == '\n':
-			q.afterCR = c == '\r'
+			q.in.rawEnd(c)
 			return strings.TrimSpace(string(b)), nil
 		case c == keyCtrlC, c == keyCtrlD && len(b) == 0:
 			return "", errCancelled

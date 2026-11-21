@@ -752,6 +752,18 @@ func (g *gobbleRun) cancelledEarly(line string) bool {
 	return g.seen(line)
 }
 
+// keyPromptLast names whether the key prompt is the last thing on the
+// screen: "waits", or "after-key-prompt" when anything follows it, as when a
+// stray line end answered the provider menu with its default, Gemini, and
+// the next answer was then taken as the key (2026-11-21, P2, the P1
+// review's follow-up 1).
+func (g *gobbleRun) keyPromptLast(prompt string) string {
+	if !strings.HasSuffix(g.pc.text(), prompt) {
+		return "after-key-prompt"
+	}
+	return "waits"
+}
+
 // warnedOnce names how many times the warning was printed.
 func (g *gobbleRun) warnedOnce() string {
 	g.pause(time.Second)
@@ -778,7 +790,7 @@ var gobbleCases = []gobbleCase{
 		if g.cancelledEarly(cancelLine) {
 			return "cancel-line-before-key"
 		}
-		return "waits"
+		return g.keyPromptLast(geminiKey)
 	}},
 	{name: "masked", want: "masked", drive: func(g *gobbleRun) string {
 		if !g.declineFirst() {
@@ -844,7 +856,10 @@ var gobbleCases = []gobbleCase{
 			}
 			time.Sleep(25 * time.Millisecond)
 		}
-		return "other"
+		// gobble goes on with no repeated offer: the round was cancelled and
+		// the session's prompt follows, as on the P2 tree, before P2b's loop
+		// (2026-11-21, P2, the P1 review's follow-up 4).
+		return "no-offer-again"
 	}},
 	{name: "decline", want: "warned-once", drive: func(g *gobbleRun) string {
 		if !g.toGeminiKey() {
@@ -874,7 +889,7 @@ var gobbleCases = []gobbleCase{
 		if g.cancelledEarly(cancelLine) {
 			return "cancel-line-before-key"
 		}
-		return "waits"
+		return g.keyPromptLast(geminiKey)
 	}},
 	{name: "login-no-loop", want: "no-offer", drive: func(g *gobbleRun) string {
 		if !g.declineFirst() {

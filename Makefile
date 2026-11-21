@@ -289,9 +289,10 @@ probe-conhost:
 probe-conpty:
 	$(if $(PROBE),go test -tags conpty -run '^TestConptyProbe$$' -count=1 -v ./cmd/gobble/,go test -tags conpty -run '^TestConpty' -count=1 -v ./cmd/gobble/ ./internal/cli/)
 
-# The pseudo-terminal tests (0063-PLAN P1b). Linux only: the cases of
-# internal/cli/pty_linux_test.go, each on a pseudo-terminal of its own, printed
-# as probe-conpty prints them. Not part of preflight or CI.
+# The pseudo-terminal tests (0063-PLAN P1b; 0063-MADR D22, Q26). Linux and
+# macOS: the cases of internal/cli/pty_unix_test.go, with each system's opener
+# in pty_linux_test.go and pty_darwin_test.go, each on a pseudo-terminal of its
+# own, printed as probe-conpty prints them. Not part of preflight or CI.
 probe-pty:
 	go test -tags pty -run '^TestPty' -count=1 -v ./internal/cli/
 

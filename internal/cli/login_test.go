@@ -39,13 +39,14 @@ func (r *chunks) Read(ctx context.Context, p []byte) (int, error) {
 	return n, nil
 }
 
-// asked is questions over chunks, writing to a buffer, with a raw mode
-// that counts its entries and restores.
+// asked is questions over chunks, through a terminal input with no
+// terminal to flush (0063-PLAN P2 step 4), writing to a buffer, with a raw
+// mode that counts its entries and restores.
 func asked(t *testing.T, in ...string) (*questions, *bytes.Buffer, *[2]int) {
 	t.Helper()
 	var out bytes.Buffer
 	var raws [2]int
-	q := &questions{ctx: t.Context(), in: &chunks{in}, out: &out, raw: func() (func() error, error) {
+	q := &questions{ctx: t.Context(), in: newTerminalInput(&chunks{in}, nil), out: &out, raw: func() (func() error, error) {
 		raws[0]++
 		return func() error { raws[1]++; return nil }, nil
 	}}
@@ -819,16 +820,23 @@ func TestAcpLoginMethodMenuWaits(t *testing.T) {
 // Weakness (a): the offer's answer and the menu's, typed ahead in one
 // press, both count: the key prompt appears with no second press. Red for
 // the defect with every line end: the menu waits, the typed-ahead answer
-// dropped with the first ask.
+// dropped with the first ask. (2026-11-21, P2, the P1 review's follow-up 1:
+// the menu is answered with Claude, not its default, Gemini, so a stray
+// line end answering the menu shows; and nothing follows the key prompt.)
 func TestFirstRunTypeAhead(t *testing.T) {
 	eachEnter(t, func(t *testing.T, enter string) {
 		var o provider.SignInOptions
 		replace(t, &signInWith, typedKeySignIn(&o))
 		h := newModelHarness(t, llmtest.NewScript(), t.TempDir())
 		h.enter = enter
-		h.answer = "y" + enter + strconv.Itoa(providerNumber("gemini")) + enter
+		h.answer = "y" + enter + strconv.Itoa(providerNumber("claude")) + enter
 		h.start(Prompt{})
-		waitUntil(t, func() bool { return strings.Contains(h.stderr.String(), "Enter your Gemini (Google) API key: ") })
+		const keyPrompt = "Enter your Claude (Anthropic) API key: "
+		waitUntil(t, func() bool { return strings.Contains(h.stderr.String(), keyPrompt) })
+		time.Sleep(300 * time.Millisecond)
+		if s := h.stderr.String(); !strings.HasSuffix(s, keyPrompt) {
+			t.Errorf("something followed the key prompt:\n%s", s)
+		}
 		_ = endSession(t, h)
 	})
 }
