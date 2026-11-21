@@ -104,6 +104,19 @@ the screen. The agent reads only those lines:
   end of input (the R40 stop). `error`: it recorded `signal`, and the read returned another error (the R40 stop).
   `killed`: the child ended without writing its result, which means the probe did not take the interrupt; that is a
   fault in the probe, not R40's stop: the probe is fixed and run again.
+* *(2026-11-20, after step 0b's build pass 1: the gate amended by the deviation entry "Deviation 1" below.)*
+  `probe-ctrlc` measures the raw console, not gobble's reader, so it keeps observing `eof`: that is the console's
+  behaviour, which MADR D19 now handles, and it no longer stops the build. Its expected word is `eof` from here on (a
+  one-line change in `cmd/gobble/conpty_windows_test.go`, P1b's, so its result reads `pass`); until that change, the
+  agent reads `probe-ctrlc` by its observed word: `eof` goes on; `waiting` also goes on (the console then never gives
+  the empty read D19 excuses), recorded in the MADR; `error` is a stop, put to the owner; `killed` is a fault in the
+  probe. Once Q22 is answered (a), the probe's word also says which came first, the signal or the read's return. The
+  gobble-mode case `menu-ctrlc` (P1b) is the one that must show `offer-again` after P2.
+* *(2026-11-20, Q22 answered, MADR D20.)* `probe-ctrlc`'s line gains one word after `observed=`: `first=signal` (the
+  child recorded the interrupt before its read returned) or `first=read` (the read returned first; the 100 ms wait of
+  D20 is what keeps D19 working). For example `0063 case=probe-ctrlc result=pass observed=eof first=signal`. Neither
+  value stops the build; the agent records each run's value in the execution record. A line with no `first=` word
+  after the probe file's change is a fault in the probe.
 
 *(2026-11-20, third records pass: what waits for what.)* Step 0b does not wait for step 0's check of open rows, nor
 for row R40: it is the measurement R40 awaits, and it changes no code. Step 1 waits for step 0 (no `open` row) and for
@@ -344,6 +357,18 @@ must-fail list loses A14. A14 is the case `typeahead` below.)*
   own "loopback" ends its context after the parent has typed `partial`. Neither opens a browser or reaches a network.
 * **Gate, added:** every case as the table says for its tree. **Stop, added:** `probe-ctrlc` or `menu-ctrlc` gives the
   R40 stop word, or any case's observed word is not one the table names.
+* *(2026-11-20, Deviation 1, MADR D19.)* The table's `probe-ctrlc` and `menu-ctrlc` rows are amended: `probe-ctrlc`
+  expects `eof` on every tree (the raw console's behaviour); `menu-ctrlc` gives `ended` at the base (expected there)
+  and must give `offer-again` after P2, then `warned-once` when `n`, Enter answers the repeated offer; `ended` after P2
+  is a failure of D19, not the R40 stop. New cases, each with its expected words at the base and after P2:
+
+  | Case | File | At the base | After P2 |
+  | --- | --- | --- | --- |
+  | `offer-ctrlc`: Ctrl+C at the first offer, then `/exit` | `cmd/gobble` | `ended` (the input closed) | `warned-once`, and the prompt takes `/exit` |
+  | `setup-menu-ctrlc`: `gobble setup`, Ctrl+C at the provider menu | `cmd/gobble` | `ended`, `auth.json` empty | the same |
+  | `pty-ctrlc-ctrld`: the first run; `y`, Enter; Ctrl+C at the provider menu; Ctrl+D at the repeated offer | `internal/cli` (Linux) | the menu interrupt not yet a loop: no repeated offer | `warned-once` |
+  | *(2026-11-20, D20)* `probe-ctrlc`'s `first=` word | `cmd/gobble` | `signal` or `read`, recorded | the same; neither stops |
+  | *(2026-11-20, D20)* `auth-paste-ctrlc`: `gobble auth login` with a stubbed browser sign-in; Ctrl+C at its paste prompt | `internal/cli` | `ended`, `auth.json` empty | the same (R120) |
 
 ### P2 — the shared terminal input
 
@@ -485,6 +510,43 @@ reports a new edge.
 * **A28, extended (MADR D18):** a question's read (512 bytes) abandoned by the program; 400 bytes then given; a
   waiting `askOn` reading through a 256-byte buffer receives none of them and its next read is a new one. Plant: P3 63.
 * **A29, as approved:** `TestFlushFailureWarnsOnce` asserts R101's approved words exactly. Plants: P3 59, 62.
+
+**Additions, 2026-11-20 (Deviation 1, MADR D19): the console read again after an interrupt.** Steps 13 and 14 wait
+for the owner's answers to Q21 and Q22; P2 does not start before them (P1 step 0).
+
+* **Step 13, `term.ConsoleInput`:** `internal/cli/term/consolein.go` (the portable rule: given a reader, whether it is
+  a console, and the interrupt mark, a read that gives nothing with the mark set reads again, as Q21 and Q22
+  settle), `consolein_windows.go` (a console is a handle `GetConsoleMode` accepts), `consolein_other.go` (standard
+  input unchanged), and `consolein_test.go` (the stub tests below, on every system). `e.terminalIn()` passes
+  `term.ConsoleInput(e.stdin, …)` to `inline.NewReader` in place of `e.stdin` (`main.go`).
+* **Step 14, the mark:** `watchSignals` (`signal.go:60-89`) sets the mark on each `os.Interrupt`, before
+  `intr.take()`; the mark is the process's, read by `term.ConsoleInput`.
+* **A30 (row R109):** `TestConsoleReadAgainAfterInterrupt`: a console stub; the mark set; the stub's read gives
+  nothing, then `n\r\n`; the reader gives `n\r\n` and no end of input. Plant: P3 64.
+* **A31 (row R110):** `TestWatchSignalsMarksInterrupt`: `os.Interrupt` through the captured `notify`, once with a
+  prompt taking it and once with none; the mark set both times. Plant: P3 65.
+* **A32 (row R112):** `TestConsoleCtrlZAfterInterruptEnds`: the mark set; the stub gives nothing twice; the first is
+  excused, the second is the end of input. Plant: P3 66.
+* **A33 (row R113):** the existing `TestInterruptDuringTurn` and `TestInterruptReleased`, run after step 14. Plant:
+  P3 67.
+* **A34 (row R115):** `TestConsoleRawCtrlCIsAByte`: no mark; the stub gives `\x03`; the reader gives `\x03`. Plant:
+  P3 68.
+* **A35 (row R117):** `TestConsoleRuleOnlyOnAConsole`: not a console; the mark set; the stub gives nothing; the end of
+  input. Plant: P3 69.
+* **Rows R111, R114 and R116** get their tests with the owner's answers to Q21 and Q22.
+  *(2026-11-20, answered, MADR D20; steps 13 and 14 no longer wait.)* Step 13's rule: the reader notes when its read
+  of the console is waiting; an empty read with the mark set is excused and clears it; an empty read with no mark
+  waits up to 100 ms for one; any read that returns bytes clears it. Step 14: `watchSignals` sets the mark only while
+  that read is waiting.
+* **A36 (row R111):** `TestConsoleMarkExcusesOneRead`: the mark set while a read waits; that read gives nothing and
+  is excused; the next gives nothing and is the end of input; in a second case, bytes come between the interrupt and
+  an empty read, which is then the end of input. Plant: P3 71.
+* **A37 (row R114):** `TestConsoleNoMarkWithoutWaitingRead`: an interrupt while no read waits; a later empty read is
+  the end of input after the wait. Plant: P3 72.
+* **A38 (row R116):** `TestConsoleWaitsForLateMark`: the stub's read gives nothing; the mark is set 30 ms later; the
+  read is excused and the next bytes arrive. Plant: P3 73.
+* **A39 (rows R116, R122):** `TestConsoleWaitBound`: an empty read and no mark: the end of input after at least
+  100 ms and under 500 ms; a mark set at 600 ms excuses nothing. Plant: P3 74.
 
 *Exit criterion (2026-11-20, unchanged): no blocker, every row tested, plants caught.*
 
@@ -640,6 +702,32 @@ The gate and the stop rule above cover 56 to 61 as they cover 1 to 14.
 
 The gate and the stop rule above cover 62 and 63 as they cover 1 to 14.
 
+**Additions, 2026-11-20 (Deviation 1, MADR D19).**
+
+| # | Mutation | Must fail | Row |
+| --- | --- | --- | --- |
+| 64 | a console read that gives nothing after an interrupt is passed on as the end of input | `TestConsoleReadAgainAfterInterrupt` (A30); `menu-ctrlc`, `offer-ctrlc` (P1b) | R109, R121 |
+| 65 | `watchSignals` sets no mark | `TestWatchSignalsMarksInterrupt` (A31) | R110 |
+| 66 | the mark is never cleared | `TestConsoleCtrlZAfterInterruptEnds` (A32) | R112 |
+| 67 | `watchSignals` treats every interrupt as taken once it sets the mark | `TestInterruptDuringTurn` (existing); `setup-menu-ctrlc` (P1b) | R113, R120 |
+| 68 | the byte `0x03` is taken as an interrupt and the read made again | `TestConsoleRawCtrlCIsAByte` (A34) | R115 |
+| 69 | the rule applied when standard input is not a console | `TestConsoleRuleOnlyOnAConsole` (A35) | R117 |
+| 70 | the rule applied on every system | `pty-ctrlc-ctrld` (P1b, Linux), by the harness's bound | R118 |
+
+Mutation 60 (a Ctrl+C give-up dropped too) must also fail `menu-ctrlc`'s `warned-once` (row R119). The gate and the
+stop rule above cover 64 to 70 as they cover 1 to 14.
+
+**Additions, 2026-11-20 (MADR D20).** Mutation 67's must-fail list gains `auth-paste-ctrlc` (P1b, row R120).
+
+| # | Mutation | Must fail | Row |
+| --- | --- | --- | --- |
+| 71 | the mark is cleared only by an empty read, not by a read that returns bytes | `TestConsoleMarkExcusesOneRead` (A36) | R111 |
+| 72 | the mark is set whether or not a read is waiting | `TestConsoleNoMarkWithoutWaitingRead` (A37) | R114 |
+| 73 | an empty read with no mark does not wait | `TestConsoleWaitsForLateMark` (A38) | R116 |
+| 74 | the wait is 1 s, not 100 ms | `TestConsoleWaitBound` (A39) | R116, R122 |
+
+The gate and the stop rule above cover 71 to 74 as they cover 1 to 14.
+
 *Exit criterion (2026-11-20): no blocker, every row tested, plants caught.*
 
 ### P4 — gates
@@ -776,6 +864,9 @@ owner.
 
 *(2026-11-20: still true of the phases: none has started and nothing is built. The entries below are records only:
 the owner's rulings, and a re-grounding of this plan's citations.)*
+
+*(2026-11-20, later: P1 steps 0 and 0b have run; see "P1 step 0, pass 1" and "P1 step 0b, build pass 1" at the end.
+Step 0b stopped on row R40: `probe-ctrlc` observed `eof`. Nothing after step 0b is built.)*
 
 ### Owner rulings (2026-11-19, recorded 2026-11-20)
 
@@ -1045,3 +1136,109 @@ On the owner's approval of R101's words, relayed by the coordinator ("Plain word
   abandoned completion with its own read's size; A28 gains the 512-through-256 case; mutation 63.
 * **Counts:** 108 rows; R52 and R53 replaced; of the other 106, 89 `decided`, 16 `out of scope`, R40 awaiting live
   evidence, none `open`.
+
+### P1 step 0, pass 1: re-grounding at `fa35986` (2026-11-20)
+
+On the branch `feature/0063-shared-terminal-input`, created from `main` at `fa35986`, named by the owner. Read-only:
+no code, nothing run but reading. Between `b1994a0` (the last re-grounding) and `fa35986` the only commit is `fa35986`
+itself, which changes this plan, the MADR and `docs/README.md` and nothing else; so no cited code line can have moved.
+Each citation was read again at `fa35986` all the same.
+
+| Citations | At `fa35986` |
+| --- | --- |
+| The MADR's evidence index: `prompt.go:30-41`, `:68-75`, `:178-197`, `:199-208`, `:251-294` (`:272-274`); `login.go:74-90`, `:95-97`, `:212-231` (`:226`), `:252-255`, `:300-316`, `:323-336`; `credentials.go:204-232`, `:240-243`; `modelflags.go:87-97` (as annotated); `line.go:137-141`, `:163-171`; `acp.go:99-114`, `:117-125`, `:138-151`; `auth.go:301`; `trust.go:180-184`; `permission.go:185-230`, `:248-274`; `editor/editor.go:105-146` | hold |
+| D1 to D18, Confirmation and the state table: `prompt.go:201`, `:237-244`, `:287`; `permission.go:206`, `:249`, `:257-263`; `trust.go:164-167`, `:184`, `:211`; `line.go:86`, `:137`, `:224-228`; `line_test.go:126`; `login.go:24`, `:100`, `:205-225`, `:262`, `:295`, `:307-310`, `:325`; `auth.go:122`, `:310`; `chat.go:49-50`, `:64-66`; `credentials.go:213`, `:222`; `main.go:54` (`term.ShutdownSignals`), `:175-184`; `term/console_windows.go:11`; `go.mod:24` | hold |
+| Q10 to Q14 and rows R36, R54, R91 to R96: `piimport.go:61-94`, `:78`; `update.go:143`, `:166-181`; `slash.go:226-230`; `config.go:284-291`; `browser.go:14-24`; `tool/builtin/shell.go:85`; `input.go:53-56`; `mode.go:23-24`; `acp.go:49-53`, `:145`; `llm/provider/signin.go:441-446` | hold |
+| This plan's tables: `Makefile`'s `probe-conhost` (`:281`); `lineHarness`, `rawCheckedInput`, `TestLineSessionReadsOnlyWhenAsked` (`line_test.go:25`, `:54`, `:194`); `asked`, `keyLister`, `typedKeySignIn`, `TestLoginInterrupt`, `TestLoginMenuAndRefusals`, `TestLoginAsksThroughQuestions`, `TestFirstRunSetup` (`login_test.go:40`, `:184`, `:203`, `:262`, `:285`, `:315`, `:415`); `h.e.intr.take()` | hold |
+| Pins and their lines: go-llmprovider-sdk `v1.31.0` (`wizard/configure.go:463`, `:794`; `wizard/auth.go:528`, `:916-962`); go-tui-lib `v2.12.1` (`inline/reader.go:9-21`, `:49-78`, `:72-73`, `:75-77`, `:90-91`; `termkey/input.go:35-41`; `lineedit/keys.go:93`); `golang.org/x/term` `v0.47.0` (`terminal.go:849-851`); `golang.org/x/sys` `v0.49.0`; Go 1.27.4 (`internal/poll/fd_windows.go:653-720`, `:672`, `:710-715`; `os/file_windows.go:110`; `runtime/os_windows.go:1047-1069`) | hold |
+
+* **Moved:** none; no annotation was needed in either record.
+* **Behaviour or readers:** no change. `inline.NewReader` is called on stdin at `login.go:96`, `auth.go:301` and
+  `line.go:163` only; `ReadPassword` at `credentials.go:213` and the trust question's `e.stdin.Read` at `trust.go:184`,
+  as D1 and rows R91 to R96 record. No new reader of the terminal.
+* **State table:** 89 `decided`, 16 `out of scope`, R52 and R53 replaced, R40 awaiting live evidence; no row `open`.
+
+### P1 step 0b, build pass 1 (2026-11-20)
+
+**What was built** (uncommitted, unstaged, on the branch at `fa35986`): `cmd/gobble/conpty_windows_test.go`
+(`//go:build windows && conpty`): the pseudo-console parent (`CreatePseudoConsole`, `PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE`)
+and the probe child mode only, with the five probe cases; and the `Makefile` target `probe-conpty`, beside
+`probe-conhost`, outside `preflight` and CI, where `PROBE=1` runs `^TestConptyProbe$` alone. The gobble-mode cases,
+`internal/cli/conpty_windows_test.go` and the Linux file are P1b's and were not written. The parent drains the pseudo
+console's output unread and prints one `0063 case=` line per case.
+
+Three details the plan's words do not name, none changing what a case measures:
+
+* The child is started with `STARTF_USESTDHANDLES` and no handles, so it takes the pseudo console's standard handles,
+  not the parent's pipes under ssh; if its stdin is still not a console it reads `CONIN$`, the same console input.
+* Before `signal.Notify`, the child calls `SetConsoleCtrlHandler(NULL, FALSE)`, which undoes an ignore-Ctrl+C state
+  inherited from the process that started it (as a process group's first process has); a program started from a shell
+  in a console window has no such state.
+* `probe-typeahead` types one extra Enter only if the second read is still waiting after 5 s (a first read that took
+  both lines); the case then reads `two-lines-in-one-read`. It was not needed: the run below gave one line per read.
+
+**Builds and lints, on the session host:** `GOOS=windows go vet -tags conpty ./cmd/gobble/` exit 0;
+`GOOS=windows go test -tags conpty -c -o /dev/null ./cmd/gobble/` exit 0; `gofmt -l cmd/gobble/` exit 0, no file;
+`GOOS=windows golangci-lint run --config .golangci.yml --build-tags conpty ./cmd/gobble/` (v2.15.0) exit 0,
+`0 issues.` (a first run reported one `modernize` `embedlit` finding, fixed before the runs below).
+
+**The harness seen to fail first,** on a scratch clone of the branch with the two files copied in, never the tree: the
+child's line `log.line("read " + word + " " + strconv.Quote(string(buf[:n])))` was changed, for `probe-crlf` only, to
+quote the read with its trailing `\n` cut. Run from the clone's root as
+`run-on-host --need windows --label 0063-probe -- make probe-conpty PROBE=1`, on the Windows test laptop: exit 2, and
+
+```text
+0063 case=probe-crlf result=fail observed=cr
+```
+
+The clone was then restored (the file compared equal to the tree's). That run's other four lines matched the run
+below, `probe-ctrlc` among them (`observed=eof`).
+
+**The run,** from the repository root of the branch, the tree at `fa35986` with the probe file and the `Makefile`
+change uncommitted: `run-on-host --need windows --label 0063-probe -- make probe-conpty PROBE=1`. It reached the
+Windows test laptop (copied to `<scratch>` there). Exit status 2. The five lines, verbatim:
+
+```text
+0063 case=probe-crlf result=pass observed=crlf
+0063 case=probe-typeahead result=pass observed=one-line-per-read
+0063 case=probe-ctrlc result=fail observed=eof
+0063 case=probe-ctrlz-line result=pass observed=eof
+0063 case=probe-ctrlz-raw result=pass observed=eof
+```
+
+**What each word means, per step 0b:**
+
+* `probe-crlf` `crlf`: a line-mode read of `1`, Enter on a pseudo console gives `1\r\n`. MADR D6's third assumption,
+  first half, holds there (row R34).
+* `probe-typeahead` `one-line-per-read`: two lines typed before two line-mode reads come one per read; the second stays
+  in the console's buffer (row R35).
+* `probe-ctrlz-line`, `probe-ctrlz-raw` `eof`: Ctrl+Z is the end of input in both modes, as D14 inferred (row R90).
+* `probe-ctrlc` `eof`: the child recorded `signal` (the interrupt reached a handler taken as gobble takes it), and the
+  line-mode read that was waiting returned nothing, the end of input. **This is row R40's named stop.** Measured twice,
+  in the plant run and in this run. Nothing was changed to make it pass. Under step 0b the coordinator puts row R40's
+  three options to the owner, and nothing further is built (P1 step 1 included) until the answer is recorded here and
+  in the MADR.
+
+### Deviation 1 (2026-11-20, P1 step 0b): Ctrl+C at a line-mode read on a Windows console ends the input
+
+* **Found.** P1 step 0b's run on the Windows test laptop, as recorded in "P1 step 0b, build pass 1" above, gave
+  `0063 case=probe-ctrlc result=fail observed=eof`, in the plant run and in the real run: after the probe child took
+  the interrupt (it recorded `signal`), the line-mode read that was waiting returned nothing, which Go reports as the
+  end of input. The other four probes gave the expected words (`crlf`, `one-line-per-read`, `eof`, `eof`). This is row
+  R40's named stop. With no change, `inline.Reader` would keep that end of input for good and Ctrl+C at a menu would
+  close the input for the process on Windows.
+* **Ruling.** The owner, relayed by the coordinator: "(a) After an interrupt gobble took, read again (Recommended)",
+  row R40's option (a). Recorded in the MADR as D19, with rows R109 to R121 and R40 `decided`; two points of the new
+  mechanism are open there as Q21 (rows R111, R114) and Q22 (row R116).
+* **Where the code lands.** P2, with the shared input, as its steps 13 and 14: `internal/cli/term/consolein.go`,
+  `consolein_windows.go`, `consolein_other.go`, `consolein_test.go` (new); `internal/cli/signal.go` and
+  `internal/cli/main.go` (changed); `internal/cli/signal_test.go` (A31). P1b gains the cases `offer-ctrlc`,
+  `setup-menu-ctrlc` and `pty-ctrlc-ctrld`, and `probe-ctrlc`'s expected word becomes `eof` in
+  `cmd/gobble/conpty_windows_test.go`. P3 gains mutations 64 to 70. `golang.org/x/sys/windows` is already imported by
+  `internal/cli/term`; no new module, no archtest rule touched (P2's `make archtest` gate confirms it).
+* **Gate.** Step 0b's gate is amended so `probe-ctrlc`'s `eof`, the console's behaviour, no longer stops the build;
+  `menu-ctrlc` is the case that must show `offer-again` after P2.
+* **What waits.** P1 step 1 waits for step 0: no row `open`, so for the owner's answers to Q21 and Q22.
+  *(2026-11-20: answered, MADR D20; with R120 widened to `gobble auth login`'s paste prompt. Rows R111, R114 and
+  R116 are decided and R122 added; P2 gains A36 to A39, P1b the `first=` word and `auth-paste-ctrlc`, P3 mutations 71
+  to 74. No row is `open`; step 1 waits only for step 0's re-check.)*

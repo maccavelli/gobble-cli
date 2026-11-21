@@ -351,6 +351,9 @@ measured; the measurements are named where they are made.*
   - Ctrl+C during a read out of raw mode on a Windows console awaits live evidence (row R40). If the measurement
     shows the read still waiting, the build goes on. If it shows the end of input, or an error, the build stops and the
     owner chooses among the options recorded on row R40.
+  - *(2026-11-20, after P1 step 0b: measured. On the Windows test laptop's pseudo console, `probe-ctrlc` observed
+    `eof` twice: the waiting line-mode read returned nothing, the end of input, after the probe child had taken the
+    interrupt. The build stopped as designed; the owner chose row R40's option (a), recorded as D19.)*
 - **D15. Q12 to Q14 answered** (the owner, 2026-11-20): the trust question reads the shared input with the run's
   context and no deadline, as it reads stdin today ("No deadline, as today (Recommended)"); an answer's length has no
   bound ("No bound; record it (Recommended)"); `secret` restores the terminal in a deferred call, so a panic restores
@@ -401,6 +404,39 @@ measured; the measurements are named where they are made.*
     with a buffer of that size, whichever prompt is waiting, and drops it. `inline.Reader` gives at most the asker's
     buffer (`inline/reader.go:75-77`), so a waiting `askOn` (256 bytes, `permission.go:206`) asking for it directly
     would get its tail.
+- **D19. After an interrupt gobble took, a Windows console read that gives nothing is read again** (amendment,
+  2026-11-20, a deviation found at P1 step 0b; the owner, relayed by the coordinator: "(a) After an interrupt gobble
+  took, read again (Recommended)", option (a) of row R40).
+  - **What was found.** On a pseudo console, Ctrl+C during a read out of raw mode ends that read with nothing, which Go
+    reports as the end of input (`probe-ctrlc` observed `eof`, twice; the PLAN's deviation entry quotes the lines).
+    `inline.Reader` keeps the end of input for good (`inline/reader.go:72-73`, `:90-91`), so with no change Ctrl+C at a
+    menu would close the input for the process, and D8's "the offer comes back after Ctrl+C at the provider menu"
+    would not hold on Windows.
+  - **The decision.** On Windows only, a console read that gives nothing right after gobble received Ctrl+C is not
+    the end of input: the shared input reads again. The behaviour then matches POSIX: Ctrl+C at the provider menu
+    cancels that round and the offer comes again (R37); Ctrl+C at an offer declines it (D8) and the session goes on.
+  - **Where it lives** (this record's design; no further ruling): below `inline.Reader`, so go-tui-lib does not change
+    (Decision drivers). `e.terminalIn()` gives `inline.NewReader` not `e.stdin` itself but a reader of it,
+    `term.ConsoleInput`, which on Windows, when standard input is a console, applies the rule, and elsewhere is
+    standard input unchanged. The mark it reads is set where gobble receives the interrupt: `watchSignals`
+    (`signal.go:60-89`), when it receives an `os.Interrupt`, before it hands the interrupt on (when the mark is kept, Q21). The rows R109 to R121 decide what
+    the ruling and the existing decisions settle; when the mark is set and cleared (Q21) and how long a read waits
+    for a mark that has not yet arrived (Q22) are open.
+  - **What it does not change.** Ctrl+Z is still the end of input (D14, R90); a second Ctrl+C still follows 0008-MADR
+    D5; a read in raw mode never sees Ctrl+C as an interrupt (R115); pipes, files and POSIX are as before.
+- **D20. Q21 and Q22 answered, and R120 widened** (amendment, 2026-11-20; the owner, relayed by the coordinator).
+  - **Q21, "Set only if a read is waiting; excuses one empty read (Recommended)":** `term.ConsoleInput` notes when
+    its read of the console is waiting; `watchSignals`' mark is set only then. The mark excuses only the next read
+    that gives nothing, and is cleared by that read or by any read that returns bytes. So Ctrl+C then Ctrl+Z still ends
+    the input (R90, R112), and a Ctrl+C with no read waiting excuses nothing (R114). Rows R111, R114.
+  - **Q22, "Wait up to 100 ms for the mark; the probe reports the order (Recommended)":** an empty console read with
+    no mark waits up to 100 ms for one before it counts as the end of input (R116); a real Ctrl+Z on a console ends
+    the input up to 100 ms late (R122). The probe `probe-ctrlc` adds one word to its line, `first=signal` (the
+    interrupt reached the child before the read returned) or `first=read` (the read returned first, so the wait is
+    what makes D19 work). Neither value stops the build; each run's value is recorded.
+  - **R120,** "Yes, widen the row to include it (Recommended)": Ctrl+C at `gobble auth login`'s paste prompt, where
+    no prompt takes the interrupt, ends gobble too.
+  - With these, no row is `open`.
 
 ### Consequences
 
@@ -649,7 +685,7 @@ in P3. "E" is each line end the PLAN's `eachEnter` gives (`\r`, `\n`, `\r\n`). O
 | R37 | Ctrl+C (the signal) at a menu out of raw mode in the line session | decided | The question is cancelled through `ls.ask`; in a first-run round the offer comes back; in `/login` the cancel line | D4; D8 | `TestFirstRunOfferAgainAfterMenuInterrupt`, red for the loop (P1); `TestLoginInterrupt` (existing) |
 | R38 | Ctrl+C at a repeated offer | decided | The loop ends as a decline: the warning once, no menu | D8 ("Ctrl+C at the offer") | proposed: `TestFirstRunInterruptAtRepeatedOfferEnds` (P1) |
 | R39 | Ctrl+C (byte `0x03`) at the key prompt | decided | The sign-in is cancelled; in the first run the offer comes back | D4; D8 | `TestFirstRunOfferAgainAfterKeyCancel` (P1); `TestQuestionsSecret` (existing) |
-| R40 | Ctrl+C during a read out of raw mode on a Windows console | ~~open (Q11)~~ open: awaits live evidence (2026-11-20) | Inferred, not measured: by reading Go 1.27.4, a console read that gives no characters is the end of input (`internal/poll/fd_windows.go` `readConsole`, `os/file_windows.go:110`). Observation "the read still waits" (`probe-ctrlc` `waiting`, `menu-ctrlc` `offer-again`): the build goes on, and R37 holds on Windows. Observation "end of input" or an error (`eof`, `error`, `ended`): a named stop; the owner chooses among (a) a console read that gives nothing right after an interrupt gobble took is not the end of input, and `terminalInput` reads again (Windows only; a stubbed test and a plant), (b) menus on a Windows console read in raw mode with gobble's own line echo (option C, rejected once), (c) accept it and amend D8 and the checks: on a Windows console Ctrl+C at a menu ends the input | D14; Q11, the owner, relayed by the coordinator: "Measure both in your Windows check; stop if Ctrl+C ends input (Recommended)" | `probe-ctrlc` (P1 step 0, before any code); `menu-ctrlc` (P1b); the owner's step (B) 4 (P6) |
+| R40 | Ctrl+C during a read out of raw mode on a Windows console | ~~open (Q11)~~ ~~open: awaits live evidence (2026-11-20)~~ decided (2026-11-20, after P1 step 0b) | Inferred, not measured: by reading Go 1.27.4, a console read that gives no characters is the end of input (`internal/poll/fd_windows.go` `readConsole`, `os/file_windows.go:110`). Observation "the read still waits" (`probe-ctrlc` `waiting`, `menu-ctrlc` `offer-again`): the build goes on, and R37 holds on Windows. Observation "end of input" or an error (`eof`, `error`, `ended`): a named stop; the owner chooses among (a) a console read that gives nothing right after an interrupt gobble took is not the end of input, and `terminalInput` reads again (Windows only; a stubbed test and a plant), (b) menus on a Windows console read in raw mode with gobble's own line echo (option C, rejected once), (c) accept it and amend D8 and the checks: on a Windows console Ctrl+C at a menu ends the input | D14; Q11, the owner, relayed by the coordinator: "Measure both in your Windows check; stop if Ctrl+C ends input (Recommended)" | `probe-ctrlc` (P1 step 0, before any code); `menu-ctrlc` (P1b); the owner's step (B) 4 (P6). (2026-11-20, after P1 step 0b) Measured: `probe-ctrlc` observed `eof`, twice. Option (a) chosen, the owner, relayed by the coordinator: "(a) After an interrupt gobble took, read again (Recommended)": D19, rows R109 to R121 |
 | R41 | A read the context gave up on (Ctrl+C's cancel; `Input`'s context) | decided | The wait ends; the read stays `inline.Reader`'s and is taken by the next read; `ended()` is false | D4, last bullet. (2026-11-20) Narrowed by D13: it holds for a wait inside a prompt that reads again (R87); the line of a prompt that gave up is dropped (R84 to R89) | `TestQuestionsPrompter` (existing); `terminput_test` "`ended()` false after an ended context" (P2) |
 | R42 | The process's context ends during a first-run round | decided | Its cause is returned; no further offer | D8 ("the process's own context ending, whose error is returned as today") | proposed: `TestFirstRunContextEndReturns` (P1) |
 | R43 | A read fails with an error that is not the end of input | decided | The question is cancelled; `closed` is set and `ended()` is true; the loop ends as a decline | D8 ("the end of input, or a read failure") | proposed: `terminput_test` row (P2) |
@@ -778,6 +814,39 @@ evidence, and R28, R57, R78, R82 and R86, open as Q18, Q19, Q17, Q20 and Q16.~~
 
 Counts (2026-11-20, fourth pass): R101 decided on the owner's approval of its words. Of the 106 counted rows, 89
 `decided`, 16 `out of scope`, 1 awaiting live evidence (R40), and none `open`.
+
+*Rows added (2026-11-20, after P1 step 0b): D19, the deviation at P1 step 0b. "Stub" tests run on every system over a stubbed console
+reader, through the portable part of `term.ConsoleInput`; the plants are the PLAN's P3 64 to 70.*
+
+**Ctrl+C on a Windows console after the measurement (D19)**
+
+| Row | Input or state | Status | Outcome (what a test checks) | Decided by | Test (PLAN phase) |
+| --- | --- | --- | --- | --- | --- |
+| R109 | Ctrl+C during a read out of raw mode on a Windows console, gobble having received the interrupt | decided | The read that gives nothing is not the end of input: the shared input reads again. At the provider menu the round is cancelled and the offer comes again; `n`, Enter then answers it | D19; the owner, relayed by the coordinator: "(a) After an interrupt gobble took, read again (Recommended)"; D8 | stub `TestConsoleReadAgainAfterInterrupt` (A30, P2); `menu-ctrlc` (P1b): `offer-again` then `warned-once`; plant 64 |
+| R110 | How gobble knows an interrupt came | decided | A mark in the process (one, as there is one terminal input per process, D1), set by `watchSignals` when it receives an `os.Interrupt`, before it hands the interrupt on, whether a prompt takes it or not; when the mark is kept and cleared is Q21 | D19 ("right after gobble received Ctrl+C": where gobble receives it); D1 | `TestWatchSignalsMarksInterrupt` (A31, P2); plant 65 |
+| R111 | When the mark is set and cleared, and which read that gives nothing it excuses ("right after") | ~~open (Q21)~~ decided (2026-11-20, Q21 and Q22) | ~~Not settled by the ruling's words~~ The mark is set when gobble receives Ctrl+C while a console read is waiting; it excuses only the next read that gives nothing, and is cleared by that read or by any read that returns bytes | D20; Q21, the owner, relayed by the coordinator: "Set only if a read is waiting; excuses one empty read (Recommended)" | stub `TestConsoleMarkExcusesOneRead` (A36, P2); plant 71 |
+| R112 | Ctrl+C, then Ctrl+Z, at the same read | decided | The first read that gives nothing is excused; the next, with no new interrupt, is the end of input, so Ctrl+Z still ends the input. Each interrupt excuses one such read at most, however Q21 is answered (its option (b) would break this, and says so) | D14; R90; D19 | stub `TestConsoleCtrlZAfterInterruptEnds` (A32, P2); plant 66 |
+| R113 | Two Ctrl+C in a row | decided | The first is taken by the prompt reading (a menu's round is cancelled); a second that a prompt takes is that prompt's (at a repeated offer, a decline, D8); a second that no prompt takes ends gobble with 130 (0008-MADR D5). The mark changes neither | D8; 0008-MADR D5; D19 | `TestInterruptDuringTurn`, `TestInterruptReleased` (existing); plant 67 |
+| R114 | Ctrl+C while no read of the console is waiting (during a turn, between prompts) | ~~open (Q21)~~ decided (2026-11-20, Q21 and Q22) | ~~Not settled: whether that interrupt's mark may excuse a read that gives nothing later~~ No mark is set: a read that gives nothing later is the end of input | D20; Q21, the owner, relayed by the coordinator: "Set only if a read is waiting; excuses one empty read (Recommended)" | stub `TestConsoleNoMarkWithoutWaitingRead` (A37, P2); plant 72 |
+| R115 | Ctrl+C at a prompt read in raw mode (the key prompt, the line editor, a permission or trust prompt) | decided | Unaffected: raw mode turns processed input off (`golang.org/x/term` `v0.47.0` `term_windows.go:30`), so Ctrl+C is the byte `0x03`, no interrupt is raised and no read gives nothing | D4 ("byte `0x03` in a secret"); D19 ("a read out of raw mode") | stub `TestConsoleRawCtrlCIsAByte` (A34, P2); `key-ctrlc` (P1b); plant 68 |
+| R116 | The read gives nothing before `watchSignals` has set the mark (the console's handler runs on a thread of its own; inferred from Go 1.27.4 `runtime/os_windows.go:1047-1069`) | ~~open (Q22)~~ decided (2026-11-20, Q21 and Q22) | ~~Not settled: whether the read waits for the mark, and for how long~~ An empty console read with no mark waits up to 100 ms for one: a mark that arrives in time excuses it; none in time, and it is the end of input. The probe reports which came first (`first=signal` or `first=read`) | D20; Q22, the owner, relayed by the coordinator: "Wait up to 100 ms for the mark; the probe reports the order (Recommended)" | stub `TestConsoleWaitsForLateMark` (A38, P2), plant 73; stub `TestConsoleWaitBound` (A39, P2), plant 74; `probe-ctrlc`'s `first=` word (P1 step 0b, P1b) |
+| R117 | Standard input on Windows that is a pipe or a file | decided | No change: the rule applies only when standard input is a console; a read that gives nothing there is the end of input | D19 ("a console read") | stub `TestConsoleRuleOnlyOnAConsole` (A35, P2); plant 69 |
+| R118 | POSIX | decided | No change: `term.ConsoleInput` is standard input unchanged; a read out of raw mode goes on waiting after Ctrl+C, and Ctrl+D after it is still the end of input | D19 ("on Windows only") | `pty-ctrlc-ctrld` (P1b, Linux): Ctrl+C at the provider menu, then Ctrl+D at the repeated offer, `warned-once`; plant 70 |
+| R119 | The read issued again after an excused read, and D17 | decided | It is a read the person gave up with Ctrl+C, so it is not dropped (D17): what completes it answers the prompt then waiting, the repeated offer | D17; D19 | `menu-ctrlc` (P1b): `n`, Enter after `offer-again` is taken at once; plant 60 |
+| R120 | Ctrl+C at a menu read out of raw mode in `gobble setup` or `gobble acp --login`, where no prompt takes the interrupt; (2026-11-20, Q21 and Q22) and at `gobble auth login`'s paste prompt | decided | gobble ends, as an interrupt no prompt takes does (0008-MADR D5); nothing is saved | 0008-MADR D5; D10; R72; the owner, relayed by the coordinator: "Yes, widen the row to include it (Recommended)" | `setup-menu-ctrlc` (P1b): `ended`, `auth.json` empty; (2026-11-20, Q21 and Q22) `auth-paste-ctrlc` (P1b, `internal/cli`, a stubbed browser sign-in): `ended`, `auth.json` empty; plant 67 |
+| R121 | Ctrl+C at the first offer, or at a repeated one, on a Windows console | decided | A decline: the lead and the warning once, and the session's prompt goes on (the input is not closed) | D8 ("Ctrl+C at the offer"); D19 | `offer-ctrlc` (P1b): `warned-once`, then a prompt that takes `/exit`; plant 64 |
+
+~~Counts (2026-11-20, after P1 step 0b): 121 rows. R52 and R53 are replaced and not counted. Of the other 119: 100 `decided` (R40 among
+them), 16 `out of scope`, 3 `open` (R111 and R114 as Q21, R116 as Q22); none awaits live evidence.~~
+
+*Row added (2026-11-20, Q21 and Q22), Q22's stated consequence:*
+
+| Row | Input or state | Status | Outcome (what a test checks) | Decided by | Test (PLAN phase) |
+| --- | --- | --- | --- | --- | --- |
+| R122 | A real end of input on a Windows console with no mark (Ctrl+Z; Ctrl+Z, Enter) | decided | It ends the input up to 100 ms late: the read waits that long for a mark that does not come | D20; Q22, the owner, relayed by the coordinator: "Wait up to 100 ms for the mark; the probe reports the order (Recommended)"; D14 | stub `TestConsoleWaitBound` (A39, P2): the end of input after at least 100 ms and well under 1 s; plant 74 |
+
+Counts (2026-11-20, Q21 and Q22): 122 rows. R52 and R53 are replaced and not counted. Of the other 120: 104 `decided`, 16 `out of
+scope`, none `open`, none awaiting live evidence.
 
 ## Pros and Cons of the Options
 
@@ -1074,6 +1143,37 @@ option is listed first.*
 * **Q19:** "Dropped, as today (Recommended)". Row R57; Q2's answer narrowed by a dated note.
 * **Q20:** "Only the first prompt after a sign-in or the first run (Recommended)". Rows R82, R103 to R108; every case
   of the mark is settled by the ruling's words or by D4, so none is put to the owner.
+
+*Added 2026-11-20, after P1 step 0b: Q11's measurement gave the end of input, and the owner chose row R40's option
+(a), "(a) After an interrupt gobble took, read again (Recommended)" (D19). Two points of that new mechanism are open.
+Each is open; the recommended option is listed first.*
+
+* **Q21. The interrupt mark's life (rows R111, R114).** D19 excuses a console read that gives nothing "right after"
+  gobble received Ctrl+C. When the mark is set, which such read it excuses, and when it is cleared, the words do not
+  say; nor whether a Ctrl+C with no read waiting (during a turn) may excuse one later.
+  * (a) Set only when gobble receives Ctrl+C while a read of the console is waiting; it excuses the first read that
+    then gives nothing, and is cleared by that read or by any read that returns bytes. *Recommended:* one interrupt
+    excuses at most one empty read, so Ctrl+Z after it, or later, is still the end of input (R90), and a Ctrl+C during
+    a turn excuses nothing. Cost: the shared input must know whether a read is waiting when the mark is set.
+  * (b) Set on every Ctrl+C gobble receives; it excuses every read that gives nothing until a read returns bytes.
+    Cost: Ctrl+C then Ctrl+Z with no key between is not the end of input, against R90 and R112.
+  * (c) Excuses a read that gives nothing within a fixed time of the interrupt (for example 500 ms), with no clearing.
+    Cost: a timing rule; a Ctrl+Z pressed soon after Ctrl+C is not the end of input, and a slow machine can miss the
+    window.
+* **Q22. A read that gives nothing before the mark is set (row R116).** The console runs its Ctrl+C handler on a
+  thread of its own (inferred), so the empty read can reach the shared input before `watchSignals` has set the mark.
+  * (a) An empty console read with no mark waits up to 100 ms for one before it is taken as the end of input; P1b's
+    probe adds which came first, the signal or the read's return, to its observed word, to show whether the wait is
+    ever needed. *Recommended:* it closes the race at a cost no person notices, and the probe shows whether it
+    matters. Cost: Ctrl+Z ends the input up to 100 ms later; one more probe word.
+  * (b) No wait: the mark is taken as it stands. Cost: when the race is lost, Ctrl+C at a menu closes the input, the
+    stop the ruling removed.
+  * (c) Wait up to 1 s. Cost: Ctrl+Z on a console ends the input up to a second late.
+
+*Answers, 2026-11-20, the owner, relayed by the coordinator, each quoted as the option's label (D20):* **Q21:** "Set
+only if a read is waiting; excuses one empty read (Recommended)", rows R111, R114. **Q22:** "Wait up to 100 ms for the
+mark; the probe reports the order (Recommended)", rows R116, R122. **R120:** "Yes, widen the row to include it
+(Recommended)". No owner question is open.
 
 ## More Information
 
