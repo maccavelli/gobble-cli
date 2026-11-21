@@ -52,6 +52,13 @@ package already imports `golang.org/x/sys` (`console_windows.go:11`), `v0.49.0` 
 and `internal/archtest` has no rule on `golang.org/x/sys` or against `internal/cli/term` importing it, so no record
 and no rule changes; P2's `make archtest` gate confirms it.)*
 
+*(2026-11-21, after P1 and P1b's build pass 1 and its review: In also gains two docs edits made with P1b, which adds
+the make targets `probe-conpty` and `probe-pty`. `docs/guides/developing.md`, in no part of this Scope before, gains a
+row for each target in its "Suites outside the default run" table, and the sentence under it reads "None of them";
+`docs/architecture.md`, P5's file, has both targets named in its sentence on the checks that need a console. They
+belong with P1b because the targets are P1b's, and the repository describes every make target where it lands. P5
+edits `docs/architecture.md` as it then stands.)*
+
 ## Implementation Steps
 
 Work on a topic branch from `main`, named by the owner. Each step's command output goes to a scratch file, its exit
@@ -112,6 +119,7 @@ the screen. The agent reads only those lines:
   the empty read D19 excuses), recorded in the MADR; `error` is a stop, put to the owner; `killed` is a fault in the
   probe. Once Q22 is answered (a), the probe's word also says which came first, the signal or the read's return. The
   gobble-mode case `menu-ctrlc` (P1b) is the one that must show `offer-again` after P2.
+  *(2026-11-21: after P2b; it needs the loop. See the correction under P1b's amendment.)*
 * *(2026-11-20, Q22 answered, MADR D20.)* `probe-ctrlc`'s line gains one word after `observed=`: `first=signal` (the
   child recorded the interrupt before its read returned) or `first=read` (the read returned first; the 100 ms wait of
   D20 is what keeps D19 working). For example `0063 case=probe-ctrlc result=pass observed=eof first=signal`. Neither
@@ -128,6 +136,10 @@ words are approved; no row is `open`. Step 1 waits for step 0 and for step 0b's 
 1. **A raw-mode seam,** so a sign-in outside the line session can be tested on a pipe: a package variable
    `termRaw = func(f *os.File) (func() error, error) { return editor.Raw(f) }`, used by `terminalQuestions`
    (`login.go:95-97`) and `newLineSession` (`line.go:86`), as `trustRaw` is (`trust.go:211`). No behaviour changes.
+   *(2026-11-20, amended at P1's build pass 1; the owner, relayed by the coordinator: "`login.go` only; amend step 1
+   (Recommended)".)* The seam is used by `terminalQuestions` alone. `line.go:86` keeps its direct call to
+   `editor.Raw`, because the line-session tests set raw mode another way: the line harness gives the session its own
+   `raw` (`line_test.go`, `lineHarness.raw`).
 2. **The harness's line ends.** `lineHarness` gains `enter string` (default `"\r"`); the first-run answer becomes
    `"n" + h.enter` unless a test sets `h.answer`. A helper `eachEnter(t, func(t *testing.T, enter string))` runs a
    subtest per form, named `CR`, `LF` and `CRLF`, for `"\r"`, `"\n"` and `"\r\n"`. `TestFirstRunSetup`,
@@ -136,6 +148,10 @@ words are approved; no row is `open`. Step 1 waits for step 0 and for step 0b's 
    and records what each `Secret` returned, so a test can run the real `provider.SignIn` and see the key it was
    given. A helper counts `firstRunQuestion` and `Warning: no model credential` in stderr. `lineHarness` gains
    `noAnswer bool`, which leaves the first offer unanswered for a test that answers it itself.
+   *(2026-11-20, amended at P1's build pass 1; the owner, relayed by the coordinator: "Red for the defect in CR+LF;
+   guard in CR and LF (Recommended)".)* Answered with each form, `TestFirstRunSetup` meets the defect in `CRLF`: its
+   `CRLF` subtest is red for the defect at the base and passes after P2; its `CR` and `LF` subtests are guards.
+   `TestLoginMenuAndRefusals` and `TestLoginAsksThroughQuestions` stay guards in every form.
 3. **The question reader, by bytes** (`lineend_test.go`, over `asked`, so they build at the base):
    - `TestLineEndsBeforeEachQuestion`: for each form E, each first question K1 (`choose` of two, `confirm`, `input`)
      answered with its text and E in one chunk, and each next question K2 (`secret`, `choose`, `confirm`, `input`)
@@ -242,6 +258,9 @@ given.
   its cause, and `firstRunQuestion` is counted once. Guard. Plant: P3 26.
 * **A12 (row R71):** `TestFirstRunSetup` (already in step 2) also counts `firstRunQuestion` once after the sign-in
   succeeds. Guard. Plant: P3 27.
+  *(2026-11-20, amended at P1's build pass 1; the owner, relayed by the coordinator: "Red for the defect in CR+LF;
+  guard in CR and LF (Recommended)".)* The count is a guard in `CR` and `LF`; in `CRLF` the sign-in does not succeed
+  at the base, so the count is checked there from P2 on.
 * **A13 (row R72):** `TestAcpLoginMethodMenuWaits` gains a case: Ctrl+C at the key prompt gives
   `sign-in cancelled; nothing was saved`, and no `firstRunQuestion`. Guard. Plant: P3 28.
 
@@ -369,6 +388,26 @@ must-fail list loses A14. A14 is the case `typeahead` below.)*
   | `pty-ctrlc-ctrld`: the first run; `y`, Enter; Ctrl+C at the provider menu; Ctrl+D at the repeated offer | `internal/cli` (Linux) | the menu interrupt not yet a loop: no repeated offer | `warned-once` |
   | *(2026-11-20, D20)* `probe-ctrlc`'s `first=` word | `cmd/gobble` | `signal` or `read`, recorded | the same; neither stops |
   | *(2026-11-20, D20)* `auth-paste-ctrlc`: `gobble auth login` with a stubbed browser sign-in; Ctrl+C at its paste prompt | `internal/cli` | `ended`, `auth.json` empty | the same (R120) |
+* *(2026-11-21, correction after P1 and P1b's build pass 1 and its review.)* The base words of five cases, as
+  measured (execution record, "P1 and P1b, build pass 1"), and each case's word on the P2 tree and after P2b. The
+  table's "fail (no loop)" and "the repeated offer is answered" give the reason those cases fail once the defect is
+  gone; at the base another reason comes first.
+
+  | Case | At the base | On the P2 tree | After P2b |
+  | --- | --- | --- | --- |
+  | `key-ctrlc` | `cancel-line-before-key`: the CR+LF defect cancels the key prompt before any key | `no-offer-again` | `offer-again` |
+  | `empty-key` | `cancel-line-before-key`, as above | `no-offer-again` | `offer-again` |
+  | `decline` | `cancel-line-before-key`, as above | `no-offer-again` | `warned-once` |
+  | `flush-offer` | `no-offer-again`: no repeated offer exists | `no-offer-again` | `offer-waits` |
+  | `pty-flush-offer` | `no-offer-again`, as above | `no-offer-again` | `offer-waits` |
+
+  Deviation 1's words above are corrected too. `menu-ctrlc`'s `offer-again`, and `warned-once` after `n`, Enter,
+  need P2b's loop, not P2 alone: on the P2 tree D19 keeps the input open, so the round is cancelled and the session's
+  prompt follows with no repeated offer, and the case as written reads `other` there (the word `no-offer-again` for
+  it is a P2 follow-up, execution record); `ended` on the P2 tree or later is still D19's failure. The same holds for
+  `pty-ctrlc-ctrld`, whose `warned-once` comes after P2b; on the P2 tree it reads `no-offer-again`. `offer-ctrlc`'s
+  `warned-once` needs only P2: Ctrl+C at the first offer is a decline already, and D19 keeps the input open for the
+  prompt that takes `/exit`.
 
 ### P2 — the shared terminal input
 
@@ -592,7 +631,7 @@ time, under the session's scratch directory, built from nothing with `GOPROXY=of
 
 | # | Mutation | Must fail |
 | --- | --- | --- |
-| 1 | the owed `\n` not dropped | `TestLineEndsBeforeEachQuestion/CRLF/*-secret`, `TestFirstRunKeyOnlyProviderWaits/CRLF` |
+| 1 | the owed `\n` not dropped | `TestLineEndsBeforeEachQuestion/CRLF/*-secret`, `TestFirstRunKeyOnlyProviderWaits/CRLF`; (2026-11-20, the owner's ruling at P1) `TestFirstRunSetup/CRLF` |
 | 2 | `rawEnd` sets `lfOwed` | `TestEnterAfterSecretAnswersTheNextLine` |
 | 3 | `\n` then `\r` folded as one end | `TestLFThenCRIsTwoEnds` |
 | 4 | `ls.ask` makes a new `terminalInput` per ask | `TestFirstRunTypeAhead` |
@@ -1237,8 +1276,209 @@ Windows test laptop (copied to `<scratch>` there). Exit status 2. The five lines
   `cmd/gobble/conpty_windows_test.go`. P3 gains mutations 64 to 70. `golang.org/x/sys/windows` is already imported by
   `internal/cli/term`; no new module, no archtest rule touched (P2's `make archtest` gate confirms it).
 * **Gate.** Step 0b's gate is amended so `probe-ctrlc`'s `eof`, the console's behaviour, no longer stops the build;
-  `menu-ctrlc` is the case that must show `offer-again` after P2.
+  `menu-ctrlc` is the case that must show `offer-again` after P2. *(2026-11-21: after P2b, which brings the loop; on
+  the P2 tree it must not give `ended`. Corrected under P1b's amendment.)*
 * **What waits.** P1 step 1 waits for step 0: no row `open`, so for the owner's answers to Q21 and Q22.
   *(2026-11-20: answered, MADR D20; with R120 widened to `gobble auth login`'s paste prompt. Rows R111, R114 and
   R116 are decided and R122 added; P2 gains A36 to A39, P1b the `first=` word and `auth-paste-ctrlc`, P3 mutations 71
   to 74. No row is `open`; step 1 waits only for step 0's re-check.)*
+
+### P1 and P1b, build pass 1 (2026-11-20): P1 built and run at the base; stopped on a guard red at the base
+
+**Step 0, re-checked at `473a29e`** (the records commit after `fa35986`): it changes `docs/README.md`, this plan and the
+MADR only, so every citation of "P1 step 0, pass 1" still holds. The MADR's state table: 104 `decided`, 16 `out of
+scope`, R52 and R53 replaced, none `open`, none awaiting live evidence.
+
+**The base.** P1's tests run on the tree itself: P2's code does not exist, so the tree at `473a29e` plus P1's test files
+and step 1's seam is the base. Nothing was reverted to show a test red.
+
+**What was built** (uncommitted, unstaged):
+
+* Step 1: `termRaw` in `internal/cli/login.go` (`var termRaw = editor.Raw`; a literal first, shortened as the linter
+  asked), used by `terminalQuestions`. `line.go:86` was left as it is: the coordinator's boundary names the seam in
+  `login.go` alone, and the line harness sets `ls.raw` directly, so no test needs it there. A difference from step 1's
+  words ("used by `terminalQuestions` and `newLineSession`"), for the owner to confirm or amend.
+* Step 2 (`line_test.go`, `login_test.go`): `lineHarness.enter` and `noAnswer`, the first-run answer `"n" + enter`
+  unless `answer` is set; `eachEnter`; `recordingPrompter`, which records each `Secret` and then ends the real
+  `provider.SignIn` with `errKeyRecorded` so nothing is listed or saved; `offerCount` and `warningCount`;
+  `TestFirstRunSetup`, `TestLoginMenuAndRefusals` and `TestLoginAsksThroughQuestions` over `eachEnter`.
+* Steps 3 to 5 and A1 to A13, A20, A26: `internal/cli/lineend_test.go`, `internal/cli/firstrun_test.go` (new), and
+  `login_test.go`. A10 ends by closing the input, not Ctrl+D, so it ends at every phase.
+* Docs: `make probe-conpty` added to `docs/guides/developing.md`'s "Suites outside the default run" and to
+  `docs/architecture.md`'s sentence on the console checks. `make probe-pty` does not exist yet and is not described.
+
+**Run at the base** (session host, one package): `go test -count=1 -timeout 8m -v ./internal/cli/`, exit 1, 54 leaf
+tests failing, the same 54 before and after the lint fixes; no test reached the network or left a listing unowned.
+Each test, its kind, and its red line at the base:
+
+| Test | Kind | At the base |
+| --- | --- | --- |
+| `TestLineEndsBeforeEachQuestion` (with A1's `CR\|LF` and `one chunk` forms) | red for the defect where K2 is the secret; guards otherwise | red: `CRLF/*-secret`, `CR\|LF/*-secret`, `one_chunk_CRLF/*-secret`, nine subtests, each `secret = "", <nil>; want "the-key"`; the other 75 pass |
+| `TestEnterAfterSecretAnswersTheNextLine` | red for the defect | `input = "", cancelled (EOF); want "" at once` |
+| `TestCRLFSplitAcrossReads`, `TestPastedKeyEndingCRLF`, `TestLFThenCRIsTwoEnds` | guards | pass |
+| `TestLineEndOfInputMidLine` (A2), `TestSecretRawFailureReadsNothing` (A3), `TestSecretRestoredWhenContextEnds` (A4) | guards | pass |
+| `TestSecretRestoredOnPanic` (A26) | red at the base | `raw mode entered 1, restored 0; want once each` |
+| `TestFirstRunKeyOnlyProviderWaits`, `TestFirstRunMethodMenuProviderWaits`, `TestLoginNoArgumentMenuWaits`, `TestLoginProviderMethodMenuWaits` (A5), `TestSetupKeyWaits`, `TestAcpLoginMethodMenuWaits` | red for the defect, `CRLF` | each `CRLF` subtest: `secret = "", cancelled; want "sk-test-typed"`; `CR`, `LF`, `/named` and `/cancel` (A13) pass |
+| `TestFirstRunTypeAhead` | red for the defect, every form | `CR`, `LF`, `CRLF`: `condition not met within 5 s` (the key prompt never shown: the menu waits) |
+| `TestSignInTypeAheadNotSentAsPrompt`, `TestEmptyKeyCancels`, `TestEditorKeepsKeysTypedWithLogin` (A6) | guards | pass |
+| `TestFirstRunOfferAgainAfterKeyCancel`, `…AfterEmptyKey`, `…AfterMenuInterrupt`, `…AfterFailure` (refused, offline), `TestFirstRunRepeatedOfferDefaultsNo`, `TestFirstRunDeclineOnRepeatEnds`, `TestFirstRunTypeAheadDroppedBeforeRepeatedOffer`, `TestFirstRunInterruptAtRepeatedOfferEnds` (A8), `TestFirstRunYesOnRepeatStartsAnotherRound` (A9) | red for the loop | every subtest: `the offer again, [y/N]: not before the session's prompt` |
+| `TestFirstRunEndOfInputInRoundEnds` (A20) | red for the loop | every subtest: `the warning was printed 0 times; want 1` |
+| `TestFirstRunDeclineEnds`, `TestFirstRunInterruptAtOfferEnds`, `TestFirstRunClosedInputEnds`, `TestFirstRunInstantFailureClosedInputEnds`, `TestLoginDoesNotLoop`, `TestSetupDoesNotLoop`, `TestFirstRunEndOfInputAtOfferEnds` (A7), `TestFirstRunEnterAtFirstOfferSignsIn` (A10), `TestFirstRunContextEndReturns` (A11) | guards | pass |
+| `TestLoginMenuAndRefusals`, `TestLoginAsksThroughQuestions` (step 2, each E) | existing | pass |
+| `TestFirstRunSetup` (step 2, each E; A12's count) | existing; A12 a guard | **`CRLF` red**: `login_test.go:444: condition not met within 5 s`, the wait for `claude/claude-x1` after the key; `CR` and `LF` pass, A12's count holds in them |
+| `TestLineSessionReadsOnlyWhenAsked` | existing | pass |
+
+**The stop.** `TestFirstRunSetup/CRLF` is red at the base. Answered with CRLF, it is the report's own path: the menu
+answer's `\n` reaches the key prompt, which cancels before the key is pressed, as `TestFirstRunKeyOnlyProviderWaits/CRLF`
+records (`secret = "", cancelled`). Step 6's gate says "every guard and every existing test passes", and A12 calls
+the test a guard; its stop rule says a guard red at the base is a finding put to the owner. Not pre-existing: CRLF was
+not in the test before step 2. Nothing was changed to make it pass. Resolutions, for the owner:
+
+1. *(Recommended.)* Record `TestFirstRunSetup/CRLF` as red for the defect, passing after P2, with A12's count a guard
+   in `CR` and `LF` and checked in `CRLF` from P2 on; mutation 1's must-fail list gains it. Cost: a dated amendment of
+   step 2, A12 and row R71's test cell; no code.
+2. Leave `TestFirstRunSetup` at `CR` and `LF`, the `CRLF` path being `TestFirstRunKeyOnlyProviderWaits`'s. Cost: step
+   2's "with each form" is narrowed for one test: less coverage, close to a workaround.
+3. Split the test: its existing body over `CR` and `LF` as the guard, and a `CRLF` twin named red for the defect. Cost:
+   as 1, with one more test name in the records.
+
+Doing nothing leaves step 6's gate failed, so P1 cannot close.
+
+~~**Not done in this pass, and why:** P1b (the gobble-mode cases in `cmd/gobble`, `internal/cli/conpty_windows_test.go`,
+`internal/cli/pty_linux_test.go`, `make probe-pty`), `probe-ctrlc`'s `first=` word and the re-run of step 0b's five
+probes, and the `run-on-host` runs of `make probe-conpty` and `make probe-pty`: all wait for the owner's answer to the
+stop above.~~ *(2026-11-20: done after the owner's answer, below, in the same pass.)*
+
+**Gates, on the session host:** `gofmt -l internal/cli/` exit 0, no file; `go vet ./internal/cli/` exit 0;
+`golangci-lint run --config .golangci.yml ./internal/cli/` (v2.15.0) exit 0, `0 issues.` (a first run found 17:
+`unlambda` on the seam, `perfsprint` in the tests, and `confusing-naming` on three `testX` helpers, renamed; fixed,
+and the package run again with the same 54 failures); `npx markdownlint-cli2@0.23.2` on the two docs exit 0.
+
+**The owner's answers (2026-11-20), relayed by the coordinator; the same build pass goes on.**
+
+* `TestFirstRunSetup/CRLF`: "Red for the defect in CR+LF; guard in CR and LF (Recommended)". Recorded as dated
+  amendments of step 2, A12 and mutation 1's must-fail list here, and of row R71 in the MADR.
+* The seam: "`login.go` only; amend step 1 (Recommended)". Recorded as a dated note on step 1.
+
+**P1's gate, as amended:** met. Every test marked red fails at the base for the reason given (the table above, with
+`TestFirstRunSetup/CRLF` now red for the defect); every guard and every other existing test passes; `go vet
+./internal/cli/` exit 0. P1 has no blocker; its plants are P3's.
+
+**P1b, built** (uncommitted, unstaged):
+
+* `cmd/gobble/conpty_windows_test.go`: `probe-ctrlc` expects `eof` (Deviation 1) and its line gains `first=` (D20); the
+  pseudo console's screen is kept in memory for the cases and never printed; gobble mode (`TestConptyGobble`), which
+  runs gobble's main in a pseudo console per case, with `GOBBLE_HOME` a temporary directory, every credential
+  variable empty and the proxy variables naming a closed local port, and the cases `report`, `masked`, `key-ctrlc`,
+  `empty-key`, `menu-ctrlc`, `decline`, `typeahead`, `login-no-loop`, `method-menu`, `key-ctrlz`, `setup`,
+  `acp-login`, `offer-ctrlc`, `setup-menu-ctrlc` and `nothing-saved`. `masked` and `key-ctrlz` reach the key prompt by
+  `/login gemini`, which has no menu, so they measure what they name at the base too.
+* `internal/cli/conpty_windows_test.go` (`windows && conpty`): `flush-prompt`, `flush-offer`, `abandoned`,
+  `auth-paste-ctrlc`; and `internal/cli/pty_linux_test.go` (`linux && pty`): `pty-flush-prompt`, `pty-flush-offer`,
+  `pty-abandoned`, `pty-ctrlc-ctrld`. Each child is this package's test binary running `Main` over a scripted agent,
+  with the case's stubbed sign-in; it inherits the parent's environment, the network guard's proxy among it, so a
+  request would reach the guard and fail the run. The two files share their last part word for word, each keeping
+  its own copy.
+* `Makefile`: `probe-conpty` runs both Windows files (`PROBE=1` the probes alone); `probe-pty` runs the Linux file;
+  neither in `preflight` or CI. Docs: `make probe-pty` added beside `make probe-conpty` in `docs/guides/developing.md`
+  and in `docs/architecture.md`'s sentence.
+* Words. A case's observed word is the one the MADR's item 5 (A) gives when it passes. At the base, a case that cannot
+  pass names what it saw: `cancel-line-before-key` (the table's "the cancel line before a key"), `turn` ("the held
+  line becomes a turn"), `reached-turn` ("`partial` or `hello` reaches a turn"), `no-offer-again` (no repeated
+  offer), `ended`. `result=` compares the word with the case's word after P2b, so at the base the cases expected to
+  fail read `fail`, and the runs exit non-zero.
+
+**Runs, on the tree at `473a29e` with P1's and P1b's files uncommitted, read by their `0063 case=` lines only.**
+
+`run-on-host --need windows --label 0063-probe -- make probe-conpty PROBE=1` (step 0b's probes again, with `first=`),
+on the Windows test laptop: exit 0.
+
+```text
+0063 case=probe-crlf result=pass observed=crlf
+0063 case=probe-typeahead result=pass observed=one-line-per-read
+0063 case=probe-ctrlc result=pass observed=eof first=read
+0063 case=probe-ctrlz-line result=pass observed=eof
+0063 case=probe-ctrlz-raw result=pass observed=eof
+```
+
+`first=read`: the read returned before the probe child had the interrupt, so D20's 100 ms wait for the mark is what
+keeps D19 working on this console. Recorded, as D20 asks; not a stop.
+
+`run-on-host --need windows --label 0063-conpty -- make probe-conpty`, on the Windows test laptop: exit 2, 24 lines.
+
+```text
+0063 case=probe-crlf result=pass observed=crlf
+0063 case=probe-typeahead result=pass observed=one-line-per-read
+0063 case=probe-ctrlc result=pass observed=eof first=read
+0063 case=probe-ctrlz-line result=pass observed=eof
+0063 case=probe-ctrlz-raw result=pass observed=eof
+0063 case=report result=fail observed=cancel-line-before-key
+0063 case=masked result=pass observed=masked
+0063 case=key-ctrlc result=fail observed=cancel-line-before-key
+0063 case=empty-key result=fail observed=cancel-line-before-key
+0063 case=menu-ctrlc result=fail observed=ended
+0063 case=decline result=fail observed=cancel-line-before-key
+0063 case=typeahead result=fail observed=cancel-line-before-key
+0063 case=login-no-loop result=pass observed=no-offer
+0063 case=method-menu result=fail observed=cancel-line-before-key
+0063 case=key-ctrlz result=pass observed=ended
+0063 case=setup result=fail observed=cancel-line-before-key
+0063 case=acp-login result=fail observed=cancel-line-before-key
+0063 case=offer-ctrlc result=fail observed=ended
+0063 case=setup-menu-ctrlc result=pass observed=ended
+0063 case=nothing-saved result=pass observed=none
+0063 case=flush-prompt result=fail observed=turn
+0063 case=flush-offer result=fail observed=no-offer-again
+0063 case=abandoned result=fail observed=reached-turn
+0063 case=auth-paste-ctrlc result=pass observed=ended
+```
+
+`run-on-host --need linux --label 0063-pty -- make probe-pty`, on a Linux target (the dispatcher chose a WSL distro;
+no race is run, so any Linux target is taken): exit 2, 4 lines.
+
+```text
+0063 case=pty-flush-prompt result=fail observed=turn
+0063 case=pty-flush-offer result=fail observed=no-offer-again
+0063 case=pty-abandoned result=fail observed=reached-turn
+0063 case=pty-ctrlc-ctrld result=fail observed=no-offer-again
+```
+
+**Against the table for the base.** As the table says: the probes; `report`, `method-menu`, `setup`, `acp-login` and
+`typeahead` (the cancel line before a key); `masked`, `login-no-loop` and `nothing-saved` passing; `menu-ctrlc`,
+`offer-ctrlc` and `setup-menu-ctrlc` `ended` (Deviation 1's base); `key-ctrlz` `ended`; `flush-prompt`, `abandoned`,
+`auth-paste-ctrlc` and the `pty-` twins of the first two; `pty-ctrlc-ctrld` with no repeated offer. Two rows fail,
+as the table expects, but for another reason than the one it gives:
+
+* `key-ctrlc`, `empty-key` and `decline` ("fail (no loop)") read `cancel-line-before-key`: on a console every first-run
+  round passes the provider menu, whose CRLF answer cancels the key prompt at the base before any key, so the loop is
+  never reached. Their loop reason can show only after P2.
+* `flush-offer` and `pty-flush-offer` ("the repeated offer is answered") read `no-offer-again`: at the base there is no
+  repeated offer to answer. Their flush reason can show only after P2b.
+
+Neither word is a stop word (`probe-ctrlc` `error`, `menu-ctrlc` `ended` after P2); both are put to the coordinator
+as findings on the table's wording for the base, not worked around.
+
+**Gates, on the session host:** `gofmt -l cmd internal` exit 0, no file; `go vet ./...` exit 0; `make lint`
+(golangci-lint v2.15.0, both modules) exit 0, `0 issues.` each; `GOOS=windows golangci-lint run --build-tags conpty
+./cmd/gobble/ ./internal/cli/` exit 0, `0 issues.`; `CGO_ENABLED=0 GOOS=linux golangci-lint run --build-tags pty
+./internal/cli/` exit 0, `0 issues.` (one earlier `unused` finding, a helper only the Windows file uses, moved out of
+the shared part); `GOOS=windows go vet -tags conpty` and `go test -tags conpty -c` of both packages exit 0;
+`CGO_ENABLED=0 GOOS=linux go vet -tags pty` and `go test -tags pty -c` of `internal/cli` exit 0; `make
+check-records` exit 0; markdownlint on the two docs exit 0.
+
+**Review, 2026-11-21.** An independent review of P1 and P1b passed: no blocker; it ran the package again on its own
+copy and found the same 54 failing leaf tests, each for the reason recorded above. Its record follow-ups are applied
+(the dated correction of the base words under P1b's amendment, with Deviation 1's "after P2" for `menu-ctrlc`
+corrected there, at step 0b's gate and in Deviation 1's gate; and the dated Scope amendment for the two docs). Its
+test findings are follow-ups for P2, the tests unchanged now:
+
+1. `report` and `typeahead` (`cmd/gobble/conpty_windows_test.go:774-878`) and `TestFirstRunTypeAhead`
+   (`internal/cli/login_test.go:823`) pick Gemini, the provider menu's default item, so a stray `\n` answering the
+   menu still reaches Gemini's key prompt and passes. In P2: check that nothing follows the key prompt, or pick a
+   provider other than the default.
+2. `TestFirstRunInstantFailureClosedInputEnds` (`internal/cli/firstrun_test.go:366`) never reaches `noSignIn`: the
+   provider menu reads the end of input first. In P2: answer the menu before closing the input.
+3. No P1 test delivers the owed `\n` after a delay, so an `lfOwed` that lapsed after a fixed wait would pass P1. In
+   P2: pin it in `terminput_test` with a stub whose read blocks until the test gives it the `\n`.
+4. (Found while correcting the table.) `menu-ctrlc`'s drive reads `other` on the P2 tree, where no repeated offer comes
+   and gobble goes on; in P2 it should name that `no-offer-again`, as the corrected table gives.

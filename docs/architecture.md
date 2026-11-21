@@ -227,8 +227,8 @@ and no `tool` directive: its gates run the root's tools.
   advisory for one does not count against the other). An entry that names no known module (no package, no
   name, or a name that is no listed module's path) counts against every library of its repository, and the
   report says to fix the advisory's package name. To have an advisory matched, write its package name as the
-  module path. `make probe-conhost` and `make completion-shells` run checks that need a console or the real
-  shells.
+  module path. `make probe-conhost`, `make probe-conpty`, `make probe-pty` and `make completion-shells` run checks
+  that need a console, a pseudo console, a pseudo-terminal or the real shells.
 - `make check-test-isolation`: the tests of both modules again, outside `preflight`. Every file a test was found to read
   from above its temp root (`AGENTS.md`, `.agents/skills`, `.git`, a `.gitignore` of `*`) is planted above two temp
   roots of 130 characters or more, one for `TMPDIR`, `TMP` and `TEMP` and one for `GOTMPDIR`. It fails on any failing

@@ -93,8 +93,13 @@ func (e *runEnv) signIn(ctx context.Context, q *questions, want string) (string,
 // through the reader that owns stdin, a secret in raw mode; the caller has
 // checked that there is a terminal (onTerminal).
 func (e *runEnv) terminalQuestions(ctx context.Context) *questions {
-	return &questions{ctx: ctx, in: inline.NewReader(e.stdin), out: e.out.err, raw: func() (func() error, error) { return editor.Raw(e.stdin) }}
+	return &questions{ctx: ctx, in: inline.NewReader(e.stdin), out: e.out.err, raw: func() (func() error, error) { return termRaw(e.stdin) }}
 }
+
+// termRaw puts the terminal on f into raw mode for a sign-in's secret; tests
+// replace it, as trustRaw is replaced, so a sign-in outside the line session
+// can be read from a pipe (0063-PLAN P1 step 1).
+var termRaw = editor.Raw
 
 // onTerminal reports whether e can ask a question: a terminal on stdin.
 func (e *runEnv) onTerminal() bool { return e.out.caps.In && e.stdin != nil }

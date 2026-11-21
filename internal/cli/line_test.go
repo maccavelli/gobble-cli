@@ -32,8 +32,15 @@ type lineHarness struct {
 	stdout, stderr *syncBuffer
 	done           chan error
 	// answer is pressed for the sign-in offered when no provider has a
-	// credential; "" declines it (0025-MADR D7).
+	// credential; "" declines it (0025-MADR D7), with "n" and enter.
 	answer string
+	// enter is the line end the harness's questions are answered with,
+	// "\r" unless a test sets it: a POSIX terminal's cooked Enter is "\n",
+	// a Windows console's line read gives "\r\n" (0063-PLAN P1 step 2).
+	enter string
+	// noAnswer leaves the first offer unanswered, for a test that answers
+	// it itself.
+	noAnswer bool
 
 	mu             sync.Mutex
 	raws, restores int
@@ -122,10 +129,13 @@ func (h *lineHarness) start(first Prompt) {
 	offered := !slices.ContainsFunc(provider.KeyProviders(), h.e.hasCredential)
 	go func() { h.done <- ls.run(first) }()
 	h.t.Cleanup(func() { keysW.Close() }) //nolint:errcheck,gosec // test cleanup
-	if offered {
-		h.press(cmp.Or(h.answer, "n\r"))
+	if offered && !h.noAnswer {
+		h.press(cmp.Or(h.answer, "n"+h.enterKey()))
 	}
 }
+
+// enterKey is the line end the harness answers a question with.
+func (h *lineHarness) enterKey() string { return cmp.Or(h.enter, "\r") }
 
 func (h *lineHarness) raw() (func() error, error) {
 	h.mu.Lock()
