@@ -94,7 +94,7 @@ extension contract. It holds the names and shapes of the `_gobble/*` requests an
 `_meta.gobble`, the auth providers and the error data, a failed turn's kind, limit and reset time among it
 ([0049-MADR](decisions/0049-MADR-structured-quota-and-rate-limit-errors-for-acp-clients.md)), and no behaviour,
 and imports only the standard library. Its error kinds and retry causes are, in the tree and in the `v0.5.0` version line (first tagged as
-`acpext/v0.5.0-rc.1`), the eighteen words of the SDK's auth contract, copied and not imported, and `AuthenticateMeta` is the `_meta.gobble` of an `authenticate`
+`acpext/v0.5.0-rc.1`, then `acpext/v0.5.0`), the eighteen words of the SDK's auth contract, copied and not imported, and `AuthenticateMeta` is the `_meta.gobble` of an `authenticate`
 request ([0051-MADR](decisions/0051-MADR-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md) D6, D7).
 `acpserver` serves from it, `acpclient` decodes with it, and `internal/cli`
 keeps its provider list equal to the registry's; magic-cli-remote imports it too. It is tagged `acpext/vX.Y.Z`, and the root requires it at a tag, with no
@@ -195,7 +195,7 @@ The direct requirements in `go.mod`:
 | :--- | :--- |
 | `github.com/alecthomas/kong` | `v1.16.1` |
 | `github.com/maccavelli/acp-go-sdk2` | `v1.36.0` |
-| `github.com/maccavelli/gobble-cli/acpext` | `v0.5.0-rc.1` |
+| `github.com/maccavelli/gobble-cli/acpext` | `v0.5.0` |
 | `github.com/modelcontextprotocol/go-sdk` | `v1.8.0` |
 | `github.com/maccavelli/go-llmprovider-sdk` | `v1.31.0` |
 | `github.com/maccavelli/go-selfupdate-lib` | `v1.26.3` |

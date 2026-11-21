@@ -855,6 +855,7 @@ part is to pass `WithClientInfo` on its call (N6, above).
   another agent there for 1455 or 1457, and cannot wait on a listener its person can never reach.
 * *(2026-11-11, later.)* Bad, because a remote client cannot sign in to grok by browser: only its device method, until
   the SDK states a paste for grok (U1, its D12 probe); a client that names the browser method gets `unsupported`.
+  *(2026-11-21, a records-only fact: at go-llmprovider-sdk `v1.31.0` Grok's browser sign-in is `browser_paste`, so a remote client signs in to grok by browser too, by pasting a bare code, and L3 passed on it; the bullet states the 2026-11-11 premise, which the notes at D2, the Confirmation and "Not verified" had already superseded. 0051-PLAN's "P8a record (2026-11-21)".)*
 * *(2026-11-12; D9.)* Good, because every request gobble sends to an identity provider names gobble where the vendor
   lets it: Grok's `referrer`, and the User-Agent of every sign-in, refresh, revocation and revocation discovery.
 * *(2026-11-12; D9.)* Neutral, because Grok's client id stays the Grok CLI's, which xAI requires, and the User-Agent
@@ -925,7 +926,7 @@ owner, with D8's text, which that record drafts as a command.
    `gobble auth logout grok` after L1 and after L2 printed no revoke warning (C4 not triggered).
 
 Not part of the items, kept as they were: D8 is the owner's to run, and the `acpext` row of `docs/architecture.md`
-stays `v0.5.0-rc.1` until P8a's pin commit.
+stays `v0.5.0-rc.1` until P8a's pin commit. *(2026-11-21: the pin commit is made; the root requires `v0.5.0` and the row reads `v0.5.0`; 0051-PLAN's "P8a record (2026-11-21)".)*
 
 ## Pros and Cons of the Options
 

@@ -1,6 +1,6 @@
 ---
-status: in-progress
-date: 2026-11-20
+status: complete
+date: 2026-11-21
 associated-madr: "0051-MADR-sign-in-through-acp-elicitation-on-the-sdk-auth-contract.md"
 ---
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
@@ -3462,9 +3462,9 @@ answer channel.'
 **Docs (C9).** Rows:
 
 * `docs/README.md:119` (0051 MADR row) — fixed: the 2026-11-21 acceptance, Confirmation 1 to 9 met and the Completion section.
-* `docs/README.md:120` (0051 PLAN row) — fixed: "probes L1 to L3 not run" is struck and the 2026-11-21 state added (P8 run at `fa35986`, L1 to L3 passed, P8a still to come, issue #16 still open for the owner).
+* `docs/README.md:120` (0051 PLAN row) — fixed: "probes L1 to L3 not run" is struck and the 2026-11-21 state added (P8 run at `fa35986`, L1 to L3 passed, P8a still to come, issue #16 still open for the owner). *(2026-11-21, later: the owner closed #16, `CLOSED COMPLETED`; "P8a record (2026-11-21)".)*
 * `README.md:46-47` (the `gobble acp --login` bullet, the sign-in section) — fixed: a remote client's browser sign-in for Grok completes by a pasted code or address, as the credentials guide says.
-* `docs/architecture.md:198` (the acpext row of the version table) — open: stays `v0.5.0-rc.1`, true until P8a's pin commit, which changes it (P8a step 3).
+* `docs/architecture.md:198` (the acpext row of the version table) — open: stays `v0.5.0-rc.1`, true until P8a's pin commit, which changes it (P8a step 3). *(2026-11-21, later: fixed by P8a's pin commit, the row reads `v0.5.0`.)*
 * `docs/architecture.md:17-23`, `:97-98`, `:128`, `:133` (sign-in rows) — checked, true now: no change.
 * docs: searched `README.md`, `docs/architecture.md`, `docs/README.md` and `docs/guides/credentials.md` for `sign-in`, `authenticate`, `elicit`, `paste`, `127.0.0.1`, `bare code`, `url_or_code`, `acpext/v0.5.0`, `0051`.
 
@@ -3482,3 +3482,59 @@ the three result files under `<scratch>/live-0051` were opened.
 | Gate | Start | End | Exit |
 | :--- | :--- | :--- | :--- |
 | `make check-records markdownlint`, after the last record edit | 13:30:12 | 13:30:14 | 0 ("Summary: 0 issues in 0 files"; `check_records.py --check-all` printed nothing), and again after this row was filled |
+
+### P8a record (2026-11-21)
+
+Built by a mainstream model at medium effort, on the coordinator's message after the owner committed the P8 record as `4de3c45`, pushed it, tagged `acpext/v0.5.0` and closed #16. Steps 2 and 3 and the C6 gates are this phase's;
+step 1 is the owner's, recorded below. Times are the session machine's local time. Edited in the working tree: `go.mod`, `go.sum`, `docs/architecture.md` and the records; **the owner commits**. No Go file changed. No tag, push, merge or
+issue close was made by this phase.
+
+**Start state.** Branch `main`, `HEAD` `4de3c45` (the P8 record), level with the remote, `git status --porcelain` printed nothing.
+
+**Step 1, the tag (recorded, the owner's).** `acpext/v0.5.0` is an annotated tag (`git cat-file -t acpext/v0.5.0` prints `tag`) whose commit is `4de3c45` (`git rev-parse --short 'acpext/v0.5.0^{commit}'`). `git diff --quiet acpext/v0.5.0-rc.1 4de3c45 -- acpext/` exits 0,
+so the tag names the same `acpext/` as the candidate. `go list -m github.com/maccavelli/gobble-cli/acpext@v0.5.0` prints `github.com/maccavelli/gobble-cli/acpext v0.5.0` through the proxy, exit 0. Issue #16 is `CLOSED COMPLETED` (the owner closed it with MADR D8's text).
+
+**Step 2, apidiff from `acpext/v0.4.0` to `acpext/v0.5.0`** (exit 0): the root's `golang.org/x/exp/cmd/apidiff` built to scratch, export data of `git archive acpext/v0.4.0` and of `git archive acpext/v0.5.0`, each loaded from its own extracted `acpext/`.
+The build, both archives, both exports and the diff each exit 0. The lists are P3 step 5's and the P8 record's, with nothing added and nothing removed, so there is no addition and no deviation to name:
+
+* Incompatible: `KindContextOverflow`, `KindEmptyReply`, `KindNotPermitted`, `KindRateLimited`, `RetryEmptyReply`, `RetryNotPermitted`, `RetryRateLimited`: value changed; `RetryEmpty`: removed.
+* Compatible: `AuthenticateMeta`, `ErrorData.Consent`, `KindDenied`, `KindExpired`, `KindInvalidProvider`, `KindInvalidRequest`, `MetaMethods`, `MetaStep`: added.
+
+**Step 3, the pin commit's change (working tree).** `go get github.com/maccavelli/gobble-cli/acpext@v0.5.0` exit 0, `go mod tidy` exit 0. `git diff go.mod go.sum`: `go.mod` `acpext v0.5.0-rc.1` becomes `v0.5.0`; `go.sum` drops the two `v0.5.0-rc.1` lines and adds
+`acpext v0.5.0 h1:gwrAqNx5EK4CfULMcPph2yFnVQUM7t6yw9ehtRwnBr4=` and its `/go.mod` line (`h1:yNoZruhuuNrybUQHCPtIZfRKGUDc7Hho/jHGqRFE6Cs=`, the same as the candidate's, since `acpext/go.mod` did not change). Nothing else in either file moved.
+`git status --porcelain` before the records: `go.mod`, `go.sum`, `docs/architecture.md` only; no Go file.
+
+**Gates (C6) on the changed tree**, each exit status taken from the command's own run before any filter:
+
+| Gate | Where | Start to end | Exit | Decisive line |
+| :--- | :--- | :--- | :--- | :--- |
+| `grep -rn 'v0.5.0-rc.1' go.mod` | this Mac | 13:38:11 | 1 (no match, as required) | no output |
+| `make check-acpext-deps` | this Mac | 13:38:11 to 13:38:12 | 0 | `check-acpext-deps: ok` |
+| `make preflight`, `run-heavy` | this Mac | 13:38:12 to 13:39:08 | 0 | `preflight passed` |
+| `make race`, `run-heavy` | this Mac | 13:39:08 to 13:40:28 | 0 | 39 `ok` lines |
+| `make check-test-isolation`, `run-heavy` | this Mac | 13:40:28 to 13:42:22 | 0 | `check-test-isolation: ok` |
+| `go test -count=1 ./...`, `CGO_ENABLED=1 go test -count=1 -race ./...`, `go -C acpext test -count=1 ./...`, `run-on-host --need linux --race`, `sh -c` | the Linux machine (not a WSL distro), scratch copy | 13:42:22 to 13:49:17 | 0 | 77 `ok` lines, no `FAIL` |
+| the same three, `run-on-host --need windows --race`, `sh -c` | the Windows test laptop, scratch copy | 13:49:17 to 13:54:01 | 0 | 77 `ok` lines, no `FAIL` |
+| `make check-libs` (network) | this Mac | 13:54:01 to 14:02:17 | 0 | `0 failing checks; scratch removed`, five libraries each `advisories: ok` |
+
+**Documents that state what the root requires.** Searched `go.mod`, `go.sum`, `README.md`, `docs/architecture.md`, `docs/README.md`, `docs/guides/`, `.github/` for `v0.5.0-rc.1`: `docs/architecture.md:198` — fixed, `v0.5.0`;
+`docs/architecture.md:97` — fixed: "first tagged as `acpext/v0.5.0-rc.1`, then `acpext/v0.5.0`" (history, not a requirement); the rest of `docs/decisions/` names the candidate as history and is not changed, except by the dated annotations here and in the
+P8 record and the MADR. `go.mod` and `go.sum` hold no `v0.5.0-rc.1`.
+
+**Acceptance (P8a).**
+
+* the tag served: met (step 1; `go list -m ...@v0.5.0` exit 0).
+* the root requires `v0.5.0`: met (`go.mod`).
+* every C6 gate green: met (the table).
+* no `v0.5.0-rc.1` left in `go.mod` or in a document that states what the root requires: met (the grep exit 1; `docs/architecture.md` fixed).
+
+All four met. **This PLAN is set `complete`** (front matter `status: complete`, `date: 2026-11-21`; the repository has no `tools/records.py`, so by hand), and `docs/README.md`'s 0051 PLAN row reads `complete 2026-11-21`.
+The MADR's Consequences bullet of 2026-11-11 on Grok's browser carries a one-line dated note (a records-only fact), and the P8 record's "still open" cells are annotated: #16 is closed.
+
+**Not verified.** A gobble release (`v0.7.0`) is outside this PLAN. Magic's import of `acpext/v0.5.0` is that repository's.
+
+**Gates after the last record edit (C6).** `make check-records markdownlint`: see the row below.
+
+| Gate | Start | End | Exit |
+| :--- | :--- | :--- | :--- |
+| `make check-records markdownlint`, after the last record edit | 14:03:01 | 14:03:03 | 0 ("Summary: 0 issues in 0 files"), and again after this row was filled |
