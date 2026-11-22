@@ -4856,6 +4856,7 @@ and Pi `312184edb`:
    The entry above's decision 2, "xAI Grok's login is 1.x", is reversed.
 2. **The ChatGPT login is F4-3d,** through OpenAI's Sign in with ChatGPT for open-source agents alone, made executable
    once go-llmprovider-sdk releases it (go-llmprovider-sdk issue 2). F4-3c stays ACP auth and import.
+   *(2026-11-22, the note 0052-PLAN's P6 step 3 calls for. F4-3d is built by [0052-PLAN-finish-the-chatgpt-plan-sign-in-on-the-sdk-engine.md](0052-PLAN-finish-the-chatgpt-plan-sign-in-on-the-sdk-engine.md) on go-llmprovider-sdk's sign-in engine: the plan sign-in on every surface, the consent and its command, the host id, the reused issued client, the session's kind and consents in `auth.json`, `auth status --json`'s `sessionKind` and `consents`, and the one-time migration. The owner's live checks of that PLAN, L4 to L8, are recorded as fixed words in its "P6 record (2026-11-22)". The PLAN's status and the release tag `v0.7.0` are that PLAN's to state; this note claims neither.)*
 3. **A login is an `oauth` entry in `auth.json`,** in Pi's shape, `{type: "oauth", access, refresh, expires}`,
    `expires` in milliseconds, with the SDK session's `issuer`, `clientId`, `accountId`, `tokenUrl`, and `fedramp`
    when true (0015-REPORT F5). A save re-reads the entry under `auth.json.lock`, sets these fields and keeps every

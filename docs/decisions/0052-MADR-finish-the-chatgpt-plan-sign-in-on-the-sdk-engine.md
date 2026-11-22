@@ -790,6 +790,30 @@ Amended by them: D9's steps (the note of this date under step 6), D4 (its note o
 * **M35, and M14's second plant:** the Windows plants (written without `securePrivate`) ran on a scratch clone on the Windows laptop through `run-on-host`, not through `tools/plant.py`, which runs on this Mac. Both were caught on the owner-only assertion.
 * **M14 to M21, M23 and M57's `TestMigrateAdoptsIDs`, and M24 to M64's `TestMigrateCarriesConsent`:** their subtests are top-level helpers (`adoptIDs…`, `carries…`), for the linter's complexity limit. The test and subtest names are as the tables give them.
 
+#### Amendment of 2026-11-22: the live checks L4 to L8 decided
+
+*(2026-11-22, a dated amendment; records only.)* The owner ran the live checks on this Mac, through the PLAN's kits ("P6 kits (2026-11-22)"), and the coordinator relayed their output verbatim. The kit prints fixed words only. This amendment moves rows L4, L5, L6, L7 and L8 from "open: awaits live evidence" to **decided**. It changes no decision, no status and no owner answer; the rows above stay as written, and this entry is the latest word on each. **Counts, with it:** 79 decided, 5 out of scope, 0 open, 0 awaiting live evidence; 84 rows. The status stays `accepted`.
+
+| Row | Status | Evidence (the kit's words) | Decided by |
+| --- | --- | --- | --- |
+| L4 | decided | Run 1, group `l4-l7`: `elicit_first=confirm`, `confirm_text=gobbles`, `authenticate=ok`, `session_kind=chatgpt_plan`, `consent=granted`, `host_id_file=present`, `client_record=present`, `client_host_matches_host_id=same`, `ports_bound=none`, `backup_files=0`, `migration_warning=no`, `scratch_home_deleted=yes`. Every word is the row's expected one. | Run 1 |
+| L5 | decided | Run 1, group `l5-l6`: `login_exit=0`, `session_kind=chatgpt_plan`, `consent=granted`, `host_id_file=present`, `client_record=present`, `client_host_matches_host_id=same`. Run 2 (`--only l5-l6`) printed the same words. Every word is the row's expected one. | Runs 1 and 2 |
+| L6 | decided | See "L6, from runs 1 and 2 together" below. | Runs 1 and 2 together |
+| L7 | decided | Run 1, group `l4-l7`: `deny_exit=0`, `deny_answer=declined`, `title_updates_after_deny=0`, `allow_exit=0`, `allow_answer=granted`, `allow_stderr_lines=0`, `title_updates_after_allow=1`. Every word is the row's expected one. The title model was named at run time by the owner's answer "You name it at run time (Recommended)" (the PLAN's "P6 kits (2026-11-22)"). | Run 1 |
+| L8 | decided | The owner's run of the L8 kit on copies of their own `auth.json` and `settings.yaml`, made by the kit: `home_is_scratch=yes`, `run1_exit=0`, `keys_dropped=0`, `backup_made=no`, `host_id=none`, `client_record=none`, `consent_carried=none`, `run2_exit=0`, `run2_wrote=nothing`, `run2_backup=no`, `other_members_unchanged=yes`, `migration_warning=no`, `scratch_home_deleted=yes`; no `check_failed` line. Every word is the row's expected one. The owner's files held no dormant key, no plan entry with ids to adopt and no consent to carry, and no `host-id` or `clients.json`, so the migration was a no-op on them: the run shows no write, no backup and a second run that wrote nothing, and does not show a backup, a drop, an adoption or a carry on the owner's shapes (the copies of real-shaped files of Confirmation 6 hold those). | The PLAN's "L8 result (2026-11-22)" |
+
+**L6, from runs 1 and 2 together.** Run 1 gave, for `l5-l6`: `logout_result=logged-out`, `revoke_warning=no`, `client_record_after_logout=kept`, `host_id_after_logout=same`, `client_reused=same`, `consent_asked_again=yes`, `backup_files=0`, `migration_warning=no`, `scratch_home_deleted=yes`, and `account_second_client=yes` with `check_failed=account_second_client`; the second sign-in completed (no `login2_exit` failure). The coordinator found run 1's `account_second_client` question **confounded**: each kit group registers its own client, so the account's page lists several gobble entries whatever L6 does. The owner chose "Fix the kit, re-run L5-L6 (Recommended)"; the kit now asks the count of connected apps named gobble after L5's sign-in and after L6's second sign-in, and passes when the count did not grow. Run 2 (`--only l5-l6`) gave every word as in run 1 except `account_second_client=no` (the count did not grow: the client was reused, no second entry) and `check_failed=login2_exit`: the second sign-in ended non-zero after the owner opened the address on another device and pasted the failed loopback address, as designed, and gobble's message was not captured. (A first attempt of run 2 printed `check_failed=usage` before doing anything, since the coordinator's command wrongly passed `--small-model` to the `l5-l6` group; nothing ran.) The row is decided as follows. `logout_result`, `revoke_warning`, `client_record_after_logout`, `host_id_after_logout`, `client_reused` and `consent_asked_again` are decided by both runs, which agree. `account_second_client=no` is decided by run 2 alone, the only run whose question was not confounded. Run 1 shows the second sign-in completing (client reused, no revoke warning, consent asked again). Run 2's `login2_exit` is recorded as a one-off whose cause was not captured; the record does not claim it was explained. Testing ended there on the owner's direction, in the owner's words, quoted exactly: "this is annoying as fuck. it works. why do we keep testing this over and over when we already know it works?"
+
+**What the live checks settle in the rows and the Confirmation.** A8 (decided by Q8) has its evidence: L8 above. Confirmation 2 holds live over ACP (`elicit_first=confirm`, `confirm_text=gobbles`, no port bound); Confirmation 3 holds live for the consent end to end (L7); Confirmation 4 holds live across a logout (`host_id_after_logout=same`, `client_reused=same`; the key switch's test is not built, see the PLAN's "P6 record (2026-11-22)"); Confirmation 6's real-shape evidence is L8, a no-op run, as stated above; Confirmation 8, "the owner's live probes of the PLAN are recorded", is met for L4 to L8 by this amendment. Confirmations 1, 5 and 7 are not settled by live checks and are open in the PLAN's record.
+
+#### Amendment of 2026-11-22: A1 closed, and the Windows flake handed off (the owner's rulings)
+
+*(Dated addition, records only; the owner's rulings of 2026-11-22, relayed by the coordinator.)* Three rulings, each as recommended.
+
+1. **A1's accounting: "Rely on P1's recorded run (Recommended)".** A1's "P1's sort script, run again at P6's start commit" is closed by P1's recorded run (`UNACCOUNTED 0`, the PLAN's "P1 record (2026-11-11)") and each later phase's tests. The script was a scratch script of P1 and no copy of it exists; it is not re-run and not rebuilt. What that does not prove is what P1's record already says it does not prove: that a group in the tree is in the right place.
+2. **A1's grep: "No hit outside the migration (Recommended)".** A1 now reads: the whole-word grep `grep -rnw -e chatgptPlanBackground -e askPlanBackground -e planNotice --include=*.go .` has no hit outside the migration's three files, `internal/auth/migrate.go`, `internal/cli/migrate.go` and `internal/cli/migrate_test.go`. P5's migration (D9) must read the retired setting by its name to carry its value, so the grep cannot exit 1 any more; the evidence is P6 pass 2's run at `894b6d9`: exit 0 over the tree, and exit 1 once those three files are excluded (the PLAN's "P6 record, pass 2 (2026-11-22)", item 2).
+3. **The Windows flake: "Investigate under its own record (Recommended)".** The test is `TestSignInTypeAheadNotSentAsPrompt` (`internal/cli/login_test.go:856`, 0063's). It failed once on the Windows laptop in P5's first suite run and once in P6 pass 2's run 1, each with `auth.json: ... The process cannot access the file because it is being used by another process`, and passed on the next run each time (P5 also passed `-count=20`). It is a known Windows-only flake, outside this record's scope, handed to a separate future record. It is not fixed here and no 0052 acceptance item waits on it.
+
 ### Consequences
 
 * Good, because the plan sign-in ships with one disclosure on every surface, asked once, withdrawn from the next
@@ -810,6 +834,7 @@ Amended by them: D9's steps (the note of this date under step 6), D4 (its note o
 ### Confirmation
 
 1. Every WIP part of D1's table is where the table says, checked hunk by hunk against the P1 patch.
+   *(2026-11-22: met by P1's recorded sort run and each later phase's tests, and by the grep as the owner amended it; see "Amendment of 2026-11-22: A1 closed, and the Windows flake handed off" under Decision Outcome.)*
 2. A first plan sign-in on each surface (`auth login`, `/login`, setup, first run, `acp --login`, ACP `authenticate`)
    shows gobble's wording before any `open_url`, against `planIssuer`; `--json` refuses it with exit 2.
 3. A "no" then a "yes" through `gobble auth consent` changes the next background request, in a second process too.
@@ -825,6 +850,7 @@ Amended by them: D9's steps (the note of this date under step 6), D4 (its note o
    logs one line per dropped key, and keeps every other byte.
 7. Each new test is seen failing on its planted break; `make preflight` and `make race` pass on three hosts.
 8. The owner's live probes of the PLAN are recorded.
+   *(2026-11-22: L4 to L8 are recorded, as fixed words, in "Amendment of 2026-11-22: the live checks L4 to L8 decided" under Decision Outcome. L6's second sign-in ended non-zero once, in run 2, with its cause not captured; the amendment says how the row was decided.)*
 
 ## Pros and Cons of the Options
 
@@ -988,6 +1014,18 @@ question numbers; the PLAN's "Third draft of the readiness pass (2026-11-21)" ho
 The owner answered Q1 to Q8 the same day, each as recommended: "The owner's answers (2026-11-21)" under the state
 table, with the latest row for each row they decide and L8; dated notes on D4 and on D9's steps. No row is open. The
 PLAN's "The owner's answers: P5 and P6 settled (2026-11-21)" holds the steps and tests.
+
+### Close-out of the live checks (2026-11-22)
+
+Records only. L4 to L8 are decided from the owner's runs of the PLAN's kits: "Amendment of 2026-11-22: the live checks L4 to L8 decided" under Decision Outcome, with Confirmation 8's note. No decision, status or owner answer changed. This record carries no Completion section: P6's other steps are open (the PLAN's "P6 record (2026-11-22)").
+
+### P6, pass 2 (2026-11-22)
+
+Records only. A4's key switch now has its test, `TestKeySwitchKeepsHostAndClient`, seen failing on its plant; Confirmation 5 was re-checked and holds; the C6 gates ran at `894b6d9` on three hosts (the PLAN's "P6 record, pass 2 (2026-11-22)" has the outputs). Two findings change no decision and are open: A1's whole-word grep exits 0, not 1, because P5's migration reads the retired setting's name (`internal/auth/migrate.go`, `internal/cli/migrate.go`, `internal/cli/migrate_test.go`), and the A1 sort script of P1 no longer exists; and `TestSignInTypeAheadNotSentAsPrompt` (0063's) failed once on the Windows laptop with a file-in-use error and passed on the second run. This record carries no Completion section.
+
+### Completion (2026-11-22)
+
+Every acceptance criterion of this record's Confirmation 1 to 8 is met, as the PLAN's "P6 record, pass 2 (2026-11-22)" and "P6 record, close-out (2026-11-22)" show: 1 by the owner's ruling on A1; 2, 3 and 5 by their existing tests (item 5 re-checked at `894b6d9`); 4 by the four plan sign-in tests and `TestKeySwitchKeepsHostAndClient`, seen failing on its plant; 6 and 7 by P5's tests and plants and the C6 gates on three hosts at `894b6d9` (one Windows run failed on a known flake and passed on the next, the flake handed to a record of its own); 8 by L4 to L8. One step is not done and is not this record's to do: **the owner's `v0.7.0` tag**, which waits on the SDK tag being adopted and on the acp-go-sdk2 lockstep with magic-cli-remote (0055-MADR D2). There is no `v0.7.0` tag (`git tag -l` lists `v0.6.0` last).
 
 ### Related
 

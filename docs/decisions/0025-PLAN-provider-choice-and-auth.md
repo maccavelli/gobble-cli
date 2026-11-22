@@ -136,6 +136,7 @@ session (D4), and signed in to from the session, ChatGPT's plan and Grok's subsc
 4. **Records:** 0005-PLAN F4-3d's execution record; a dated note in 0005-MADR's ChatGPT row; `README.md`.
 5. **Live check** by the owner's own sign-in: `gobble auth login openai --method chatgpt-plan`, then one turn on a plan
    model; recorded without any credential.
+   *(2026-11-22, the note 0052-PLAN's P6 step 3 calls for. P6's plan sign-in was finished by [0052-PLAN-finish-the-chatgpt-plan-sign-in-on-the-sdk-engine.md](0052-PLAN-finish-the-chatgpt-plan-sign-in-on-the-sdk-engine.md): its consent, host id (D6), reused client and migration are built there, and the owner's live checks of the sign-in on another device, the terminal paste, the reuse after a logout and the consent end to end are recorded in that PLAN's "P6 record (2026-11-22)". The release tag `v0.7.0` is the owner's step, named in that PLAN.)*
 
 ### P7 — cycling a scoped set (D8, Q5 taken)
 
