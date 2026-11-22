@@ -96,8 +96,10 @@ run `go test -artifacts -outputdir <dir>` to keep it.
 | :--- | :--- | :--- |
 | `make completion-shells` | Completion scripts in real shells. A missing shell fails the suite. | Windows: Git Bash, `pwsh`, `powershell.exe`. Linux: bash, fish. macOS: zsh, bash, `/bin/bash`. |
 | `make probe-conhost` | The line editor in a real Console Host window. It borrows the clipboard, and saves and restores it. | Windows only |
+| `make probe-conpty` | The test binary started again in a pseudo console, typed into through its input pipe; its screen is never kept. It prints one `0063 case=<name> result=<pass\|fail> observed=<word>` line per case. `PROBE=1` runs only the cases that measure the console itself. | Windows only |
+| `make probe-pty` | The test binary started again on a pseudo-terminal, as its controlling terminal; its screen is never kept. It prints the same `0063 case=` lines as `make probe-conpty`. | Linux and macOS |
 
-Neither is part of `make preflight` or CI.
+None of them is part of `make preflight` or CI.
 
 ## The gates
 

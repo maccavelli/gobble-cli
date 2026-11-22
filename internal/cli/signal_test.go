@@ -2,9 +2,14 @@ package cli
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"os"
 	"syscall"
 	"testing"
+	"time"
+
+	"github.com/maccavelli/gobble-cli/internal/cli/term"
 )
 
 // fakeNotify delivers sig on the channel watchSignals registers.
@@ -109,6 +114,64 @@ func TestInterruptReleased(t *testing.T) {
 	release()
 	if n != 2 {
 		t.Fatalf("cancel called %d times, want 2", n)
+	}
+}
+
+// blockedConsole is a console whose read says it started, then gives what
+// the test sends.
+type blockedConsole struct {
+	started chan struct{}
+	results chan stubResult
+}
+
+func (c *blockedConsole) Read(p []byte) (int, error) {
+	c.started <- struct{}{}
+	r := <-c.results
+	return copy(p, r.b), r.err
+}
+
+// A31 (row R110): watchSignals marks each interrupt for the console read
+// that waits, before it hands it on, whether a prompt takes it or not: the
+// read that then gives nothing is read again (0063-MADR D19).
+func TestWatchSignalsMarksInterrupt(t *testing.T) {
+	for _, taken := range []bool{true, false} {
+		t.Run(map[bool]string{true: "taken", false: "not taken"}[taken], func(t *testing.T) {
+			intr := &interrupts{}
+			notify, ch := captureNotify()
+			ctx, stop := watchSignals(t.Context(), []os.Signal{os.Interrupt}, notify, intr)
+			defer stop()
+			handed := make(chan struct{}, 1)
+			if taken {
+				defer intr.during(func() { handed <- struct{}{} })()
+			}
+			console := &blockedConsole{started: make(chan struct{}, 4), results: make(chan stubResult)}
+			r := term.NewConsoleReader(console, true, intr.consoleMark(), term.MarkWait)
+			done := make(chan string, 1)
+			go func() {
+				buf := make([]byte, 16)
+				n, err := r.Read(buf)
+				done <- fmt.Sprintf("%q, %v", buf[:n], err)
+			}()
+			<-console.started
+			ch() <- os.Interrupt
+			if taken {
+				<-handed
+			} else {
+				<-ctx.Done() // the interrupt nobody took: handed on after the mark
+			}
+			console.results <- stubResult{err: io.EOF}
+			select {
+			case <-console.started:
+			case s := <-done:
+				t.Fatalf("the empty read after the interrupt gave %s; want it read again", s)
+			case <-time.After(2 * time.Second):
+				t.Fatal("the console was not read again")
+			}
+			console.results <- stubResult{b: "n\r\n"}
+			if s := <-done; s != `"n\r\n", <nil>` {
+				t.Fatalf("the reader gave %s; want \"n\\r\\n\"", s)
+			}
+		})
 	}
 }
 

@@ -10,8 +10,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/maccavelli/go-tui-lib/v2/inline"
-
 	"github.com/maccavelli/gobble-cli/internal/auth"
 	"github.com/maccavelli/gobble-cli/internal/cli/editor"
 	"github.com/maccavelli/gobble-cli/llm/catalog"
@@ -90,11 +88,16 @@ func (e *runEnv) signIn(ctx context.Context, q *questions, want string) (string,
 }
 
 // terminalQuestions are the questions a sign-in asks on e's terminal, read
-// through the reader that owns stdin, a secret in raw mode; the caller has
-// checked that there is a terminal (onTerminal).
+// through the process's one terminal input, a secret in raw mode; the
+// caller has checked that there is a terminal (onTerminal) (0063-MADR D1).
 func (e *runEnv) terminalQuestions(ctx context.Context) *questions {
-	return &questions{ctx: ctx, in: inline.NewReader(e.stdin), out: e.out.err, raw: func() (func() error, error) { return editor.Raw(e.stdin) }}
+	return &questions{ctx: ctx, in: e.terminalIn(), out: e.out.err, raw: func() (func() error, error) { return termRaw(e.stdin) }}
 }
+
+// termRaw puts the terminal on f into raw mode for a sign-in's secret; tests
+// replace it, as trustRaw is replaced, so a sign-in outside the line session
+// can be read from a pipe (0063-PLAN P1 step 1).
+var termRaw = editor.Raw
 
 // onTerminal reports whether e can ask a question: a terminal on stdin.
 func (e *runEnv) onTerminal() bool { return e.out.caps.In && e.stdin != nil }
@@ -209,9 +212,10 @@ const (
 	pasteOn  = "\x1b[?2004h"
 )
 
-// ask runs f with the line session's questions: through the reader that
-// owns stdin, with bracketed paste off, and with the first Ctrl+C ending f
-// rather than gobble. A Ctrl+C is errCancelled.
+// ask runs f with the line session's questions: through the session's one
+// terminal input, whose read-ahead and line-end state outlive the ask
+// (0063-MADR D2, D4), with bracketed paste off, and with the first Ctrl+C
+// ending f rather than gobble. A Ctrl+C is errCancelled.
 func (ls *lineSession) ask(f func(context.Context, *questions) error) error {
 	e := ls.e
 	ctx, cancel := context.WithCancel(e.ctx)
@@ -230,9 +234,9 @@ func (ls *lineSession) ask(f func(context.Context, *questions) error) error {
 	return err
 }
 
-// login is /login [provider] in the line session (0025-MADR D6): the
-// sign-in; then the credentials read again, the provider listed, and its
-// models shown by the agent's /models, numbered for /model N.
+// login is /login [provider] in the line session (0025-MADR D6): one
+// sign-in round, which does not loop; a provider refused before any question
+// is no round (0063-MADR D8, D17, row R103).
 func (ls *lineSession) login(arg string, turn func(Prompt) error) error {
 	e := ls.e
 	want := ""
@@ -244,22 +248,36 @@ func (ls *lineSession) login(arg string, turn func(Prompt) error) error {
 		}
 		want = id
 	}
+	_, err := ls.signInRound(want, turn)
+	return err
+}
+
+// signInRound is one sign-in round (0063-MADR D8): the sign-in, then its
+// line: the cancel line, or `Error: ` and the sign-in's error; or, signed
+// in, the credentials read again, the provider listed, and its models shown
+// by the agent's /models through turn, numbered for /model N. It reports
+// whether it signed in; err is only that turn's. A round, whatever its
+// outcome, marks the session's next prompt to flush the terminal's queue
+// (0063-MADR D17, rows R103, R106).
+func (ls *lineSession) signInRound(want string, turn func(Prompt) error) (signedIn bool, err error) {
+	e := ls.e
 	var id string
-	err := ls.ask(func(ctx context.Context, q *questions) (err error) {
+	serr := ls.ask(func(ctx context.Context, q *questions) (err error) {
 		id, err = e.signIn(ctx, q, want)
 		return err
 	})
+	ls.keys.signedInRound()
 	switch {
-	case errors.Is(err, errCancelled):
+	case errors.Is(serr, errCancelled):
 		e.out.Notef("Sign-in cancelled; nothing was saved.")
-		return nil
-	case err != nil:
-		e.out.Errorf("%v", err)
-		return nil
+		return false, nil
+	case serr != nil:
+		e.out.Errorf("%v", serr)
+		return false, nil
 	}
 	e.refreshCredentials(id)
 	e.modelListing(provider.Selection{ID: id}).get()
-	return turn(Prompt{Text: "/models " + id})
+	return true, turn(Prompt{Text: "/models " + id})
 }
 
 // logout is /logout [provider] in the line session (0025-MADR D6).
@@ -295,24 +313,55 @@ func (ls *lineSession) logout(arg string) error {
 const firstRunQuestion = "No provider has a credential yet. Sign in to one now?"
 
 // firstRun is the line session's offer when no provider has a credential
-// (0025-MADR D7): /login's sign-in, before the first prompt. Declined, the
-// session goes on as before, with the warning naming the variables.
+// (0025-MADR D7), before the first prompt, made again until a sign-in
+// succeeds or the offer is declined (0063-MADR D8). Each round: from the
+// second on, what was read and not given is dropped and the terminal's
+// queue is flushed after the offer is written (D8, D12, row R79); the offer,
+// [Y/n] the first time and [y/N] after (Q9); then /login's sign-in round.
+// The loop ends on a successful round, on n, Enter at a repeated offer or
+// Ctrl+C at an offer, on the end of input (ended()), or on the run's own
+// end; ended without a credential, the lead and the warning naming the
+// variables, once. No round counter is kept: each repeated offer reads
+// afresh from the terminal. However it ends, it marks the session's first
+// prompt to flush the terminal's queue (D17, row R104).
 func (ls *lineSession) firstRun() error {
 	e := ls.e
-	var yes bool
-	err := ls.ask(func(_ context.Context, q *questions) (err error) {
-		yes, err = q.confirm(firstRunQuestion, true)
-		return err
-	})
-	if err != nil && !errors.Is(err, errCancelled) {
-		return err
+	defer ls.keys.signedInRound()
+	for first := true; ; first = false {
+		if !first {
+			ls.keys.discard()
+			ls.keys.flushNext()
+		}
+		var yes bool
+		err := ls.ask(func(_ context.Context, q *questions) (err error) {
+			yes, err = q.confirm(firstRunQuestion, first)
+			return err
+		})
+		if err != nil && !errors.Is(err, errCancelled) {
+			return err
+		}
+		if ls.keys.ended() || !yes {
+			ls.noCredential()
+			return nil
+		}
+		signedIn, err := ls.signInRound("", ls.turn)
+		switch {
+		case signedIn:
+			return err
+		case e.ctx.Err() != nil:
+			return context.Cause(e.ctx)
+		case ls.keys.ended():
+			ls.noCredential()
+			return nil
+		}
 	}
-	if !yes {
-		e.out.Lead(ls.spoken(), personality.LeadNoCredential)
-		e.out.Warnf("%s", e.noCredentialMessage())
-		return nil
-	}
-	return ls.login("", ls.turn)
+}
+
+// noCredential is the lead and the warning a first run that ends without a
+// credential prints, once (0025-MADR D7; 0063-MADR D8).
+func (ls *lineSession) noCredential() {
+	ls.e.out.Lead(ls.spoken(), personality.LeadNoCredential)
+	ls.e.out.Warnf("%s", ls.e.noCredentialMessage())
 }
 
 // SetupCmd is gobble setup: the sign-in the first run offers, at any time

@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/maccavelli/go-tui-lib/v2/inline"
+
 	"github.com/maccavelli/gobble-cli/acpclient/acptest"
 	"github.com/maccavelli/gobble-cli/internal/cli/term"
 	"github.com/maccavelli/gobble-cli/internal/cli/term/termtest"
@@ -26,14 +28,31 @@ type lineHarness struct {
 	t              testing.TB
 	agent          *acptest.ScriptAgent
 	e              *runEnv
-	keys           *io.PipeWriter
+	keys           io.WriteCloser
 	cwd            string
 	voice          *personality.Voice // the session's lines; nil is boring
 	stdout, stderr *syncBuffer
 	done           chan error
 	// answer is pressed for the sign-in offered when no provider has a
-	// credential; "" declines it (0025-MADR D7).
+	// credential; "" declines it (0025-MADR D7), with "n" and enter.
 	answer string
+	// enter is the line end the harness's questions are answered with,
+	// "\r" unless a test sets it: a POSIX terminal's cooked Enter is "\n",
+	// a Windows console's line read gives "\r\n" (0063-PLAN P1 step 2).
+	enter string
+	// noAnswer leaves the first offer unanswered, for a test that answers
+	// it itself.
+	noAnswer bool
+	// flushes gives the session's terminal input the flush a terminal's
+	// has, through termFlush, which the test stubs (0063-PLAN P2, A24, A29).
+	flushes bool
+	// tty, when set, is the session's input in place of the pipe: a
+	// terminal's queue, which a stubbed termFlush can empty.
+	tty *ttyQueue
+	// tell gives the session's terminal input the warning writer the
+	// process's has, so a queued fallback warning is written before a
+	// question's text (0063-MADR D23, row R156; P2b build pass 2).
+	tell bool
 
 	mu             sync.Mutex
 	raws, restores int
@@ -63,6 +82,62 @@ func (c *rawCheckedInput) Read(p []byte) (int, error) {
 	}
 	c.h.mu.Unlock()
 	return c.r.Read(p)
+}
+
+// ttyQueue is a terminal's input queue: what is written waits there until
+// a read takes it, never blocking the writer, and flush empties it, as
+// tcflush or FlushConsoleInputBuffer empty a terminal's (0063-MADR D12).
+type ttyQueue struct {
+	mu     sync.Mutex
+	more   *sync.Cond
+	buf    []byte
+	closed bool
+}
+
+func newTTYQueue() *ttyQueue {
+	q := &ttyQueue{}
+	q.more = sync.NewCond(&q.mu)
+	return q
+}
+
+func (q *ttyQueue) Write(p []byte) (int, error) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if q.closed {
+		return 0, io.ErrClosedPipe
+	}
+	q.buf = append(q.buf, p...)
+	q.more.Broadcast()
+	return len(p), nil
+}
+
+func (q *ttyQueue) Read(p []byte) (int, error) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	for len(q.buf) == 0 && !q.closed {
+		q.more.Wait()
+	}
+	if len(q.buf) == 0 {
+		return 0, io.EOF
+	}
+	n := copy(p, q.buf)
+	q.buf = q.buf[n:]
+	return n, nil
+}
+
+func (q *ttyQueue) Close() error {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.closed = true
+	q.more.Broadcast()
+	return nil
+}
+
+// flush drops what waits in the queue.
+func (q *ttyQueue) flush() {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.buf = nil
 }
 
 func newLineHarness(t testing.TB, agent *acptest.ScriptAgent) *lineHarness {
@@ -106,14 +181,30 @@ func newModelHarness(t *testing.T, s *llmtest.Script, cwd string) *lineHarness {
 // first with answer, declining it unless a test set it (0025-MADR D7), so
 // the session goes on as it did before the offer.
 func (h *lineHarness) start(first Prompt) {
-	keysR, keysW := io.Pipe()
-	h.keys = keysW
+	var keysR io.Reader
+	if h.tty != nil {
+		keysR, h.keys = h.tty, h.tty
+	} else {
+		keysR, h.keys = io.Pipe()
+	}
+	keysW := h.keys
 	cwd := h.cwd
 	if cwd == "" {
 		cwd = acptest.Abs("/work")
 	}
 	h.resize = make(chan struct{}, 1)
-	ls := &lineSession{e: h.e, cwd: cwd, base: cwd, in: &rawCheckedInput{h: h, r: keysR}, raw: h.raw, voice: h.voice,
+	// The pipe reaches the session as the process's one terminal input
+	// (0063-PLAN P2 step 6); with flushes set, it flushes through termFlush,
+	// which the test stubs, as a terminal's does.
+	var flush func() error
+	if h.flushes {
+		flush = h.e.flushTerminal
+	}
+	h.e.termIn = newTerminalInput(inline.NewReader(&rawCheckedInput{h: h, r: keysR}), flush)
+	if h.tell {
+		h.e.termIn.tell = h.e.tellWaitWarn
+	}
+	ls := &lineSession{e: h.e, cwd: cwd, base: cwd, raw: h.raw, voice: h.voice,
 		resize: h.resize, termWidth: h.termWidth}
 	if h.noResize {
 		ls.resize = nil
@@ -122,10 +213,13 @@ func (h *lineHarness) start(first Prompt) {
 	offered := !slices.ContainsFunc(provider.KeyProviders(), h.e.hasCredential)
 	go func() { h.done <- ls.run(first) }()
 	h.t.Cleanup(func() { keysW.Close() }) //nolint:errcheck,gosec // test cleanup
-	if offered {
-		h.press(cmp.Or(h.answer, "n\r"))
+	if offered && !h.noAnswer {
+		h.press(cmp.Or(h.answer, "n"+h.enterKey()))
 	}
 }
+
+// enterKey is the line end the harness answers a question with.
+func (h *lineHarness) enterKey() string { return cmp.Or(h.enter, "\r") }
 
 func (h *lineHarness) raw() (func() error, error) {
 	h.mu.Lock()

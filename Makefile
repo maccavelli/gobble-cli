@@ -95,7 +95,7 @@ LDFLAGS := -X $(BUILDINFO).version=$(VERSION) -X $(BUILDINFO).kind=$(BUILD_KIND)
 
 .PHONY: build install test race vet fmt lint staticcheck vulncheck tidy clean \
 	pre-add-check preflight check-cgo-off verify-build-metadata fix-check archtest apidiff check-acpext-deps \
-	check-records check-icon check-libs check-test-isolation markdownlint probe-conhost completion-shells perf $(BIN)
+	check-records check-icon check-libs check-test-isolation markdownlint probe-conhost probe-conpty probe-pty completion-shells perf $(BIN)
 
 # Shipped binaries are pure Go. check-cgo-off refuses CGO_ENABLED other than 0
 # and any `import "C"` in a .go file (0004-PLAN phase 0 accept).
@@ -280,6 +280,21 @@ markdownlint:
 # saves and restores. Not part of preflight.
 probe-conhost:
 	go test -tags conhost -run '^TestConhost$$' -count=1 -v ./internal/cli/editor/
+
+# The pseudo-console tests (0063-PLAN P1b). Windows only: each starts its test
+# binary again inside a pseudo console and prints one line per case,
+# "0063 case=<name> result=<pass|fail> observed=<word>", and nothing of the
+# screen. PROBE=1 runs only the probe cases (0063-PLAN P1 step 0b). Not part
+# of preflight or CI.
+probe-conpty:
+	$(if $(PROBE),go test -tags conpty -run '^TestConptyProbe$$' -count=1 -v ./cmd/gobble/,go test -tags conpty -run '^TestConpty' -count=1 -v ./cmd/gobble/ ./internal/cli/)
+
+# The pseudo-terminal tests (0063-PLAN P1b; 0063-MADR D22, Q26). Linux and
+# macOS: the cases of internal/cli/pty_unix_test.go, with each system's opener
+# in pty_linux_test.go and pty_darwin_test.go, each on a pseudo-terminal of its
+# own, printed as probe-conpty prints them. Not part of preflight or CI.
+probe-pty:
+	go test -tags pty -run '^TestPty' -count=1 -v ./internal/cli/
 
 # Real-shell completion tests (0008-PLAN P5). Each host runs the shells the
 # plan assigns it, and a missing one fails. Not part of preflight.

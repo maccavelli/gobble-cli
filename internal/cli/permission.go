@@ -240,10 +240,10 @@ func askOn(ctx context.Context, q ask.Question, width int, unicodeOK bool, w io.
 
 // askPermission is the line session's answer to session/request_permission:
 // the question drawn by go-tui-lib's ask, in the session's voice, on stderr,
-// with its keys read in raw mode (0008-MADR D16, as 0029-MADR D1 and D2 lay
-// it out). [f] reads a reason up to Enter, and rejects once with it;
-// Ctrl+C or the end of input cancels instead (0005-PLAN F6-2b decisions A
-// and F).
+// with its keys read in raw mode through the session's terminal input
+// (0008-MADR D16, as 0029-MADR D1 and D2 lay it out; 0063-MADR D2). [f]
+// reads a reason up to Enter, and rejects once with it; Ctrl+C or the end
+// of input cancels instead (0005-PLAN F6-2b decisions A and F).
 func (ls *lineSession) askPermission(ctx context.Context, r acpclient.PermissionRequest) acpclient.PermissionAnswer {
 	ls.mu.Lock()
 	v, keysIn := ls.view, ls.keys
@@ -254,12 +254,21 @@ func (ls *lineSession) askPermission(ctx context.Context, r acpclient.Permission
 	if keysIn == nil {
 		return acpclient.PermissionAnswer{}
 	}
+	keysIn.warnQueued() // before raw mode and the question's text (0063-MADR D23, row R156)
 	restore, err := ls.raw()
 	if err != nil {
 		return acpclient.PermissionAnswer{}
 	}
 	out := ls.e.out
 	resp, rows, werr := askOn(ctx, permissionQuestion(ls.spoken(), r), promptWidth(out), out.caps.Unicode, out.err, keysIn.Read)
+	if resp.Canceled && ctx.Err() != nil && ls.e.ctx.Err() == nil {
+		// The request was withdrawn, not cancelled by the person's Ctrl+C,
+		// which is a key in raw mode: the read left waiting is dropped when
+		// it completes (0063-MADR D13, D17), and on a POSIX terminal what was
+		// typed into the prompt is flushed now (D22, Q23).
+		keysIn.abandon()
+		keysIn.flushGiveUp()
+	}
 	rerr := restore()
 	if rec := out.rec; rec != nil { // the question and its answer, as shown (0030-MADR D4)
 		rec.fixed(strings.Join(rows, "\n") + "\n")

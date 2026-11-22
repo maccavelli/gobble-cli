@@ -103,7 +103,7 @@ const (
 // the paste notice, the history, writing the reprint once resizes settle, and the
 // 120-column cap (0035-MADR D14 step 4; 0035-PLAN P17, PQ7).
 type Editor struct {
-	in   *inline.Reader
+	in   Input
 	out  io.Writer
 	errw io.Writer
 	opts Options
@@ -140,10 +140,18 @@ type Editor struct {
 	external    *string
 }
 
+// Input is what the Editor reads the terminal through: go-tui-lib's
+// inline.Reader, or a layer over it that reads only when asked, as the line
+// session's shared terminal input is (0063-MADR D2). Read waits until ctx
+// ends; a read it gave up on is the next Read's.
+type Input interface {
+	Read(ctx context.Context, p []byte) (int, error)
+}
+
 // New returns an Editor reading in, the process's one reader of the
 // terminal, and drawing on out. Notices go to errw. The first ReadPrompt
 // turns bracketed paste on; Restore turns it off.
-func New(in *inline.Reader, out, errw io.Writer, opts Options) *Editor {
+func New(in Input, out, errw io.Writer, opts Options) *Editor {
 	if opts.Prompt == "" {
 		opts.Prompt = "> "
 	}

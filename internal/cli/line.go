@@ -13,8 +13,6 @@ import (
 
 	xterm "golang.org/x/term"
 
-	"github.com/maccavelli/go-tui-lib/v2/inline"
-
 	"github.com/maccavelli/gobble-cli/acpclient"
 	"github.com/maccavelli/gobble-cli/internal/appdirs"
 	"github.com/maccavelli/gobble-cli/internal/cli/editor"
@@ -36,9 +34,6 @@ type lineSession struct {
 	base   string
 	opts   display
 	choice sessionChoice
-	// in is the terminal's input, owned by one inline.Reader for the life
-	// of the process (0008-MADR D6).
-	in io.Reader
 	// raw puts the terminal in raw mode and returns the restore.
 	raw func() (restore func() error, err error)
 	// resize notices the terminal's resizes; nil off a terminal
@@ -64,9 +59,9 @@ type lineSession struct {
 	voice *personality.Voice
 	// amb is the ambient text, made when the session runs (0022-PLAN P4).
 	amb *ambient
-	// keys is the editor's reader, which the permission prompt reads a
-	// key from while a turn runs.
-	keys *inline.Reader
+	// keys is the process's one terminal input, which the editor, the
+	// questions and the permission prompt read through (0063-MADR D1, D2).
+	keys *terminalInput
 	// pasting is whether the editor turned bracketed paste on, which a
 	// question turns off while it reads (0025-PLAN deviation 7).
 	pasting bool
@@ -82,7 +77,7 @@ func runLine(e *runEnv, c *ChatCmd, first Prompt, cwd, base string) error {
 func newLineSession(e *runEnv, c *ChatCmd, cwd, base string) *lineSession {
 	stdout, _ := e.out.out.(*os.File) //nolint:errcheck // not a file means no terminal to watch
 	return &lineSession{
-		e: e, cwd: cwd, base: base, opts: displayFor(c), voice: e.runVoice(cwd), in: e.stdin, choice: c.sessionChoice(),
+		e: e, cwd: cwd, base: base, opts: displayFor(c), voice: e.runVoice(cwd), choice: c.sessionChoice(),
 		raw:    func() (func() error, error) { return editor.Raw(e.stdin) },
 		resize: term.WatchResize(e.ctx, stdout),
 	}
@@ -160,7 +155,7 @@ func (ls *lineSession) run(first Prompt) error {
 		e.out.Notef("%s", line)
 	}
 
-	r := inline.NewReader(ls.in)
+	r := e.terminalIn()
 	ls.mu.Lock()
 	ls.keys = r
 	ls.mu.Unlock()
@@ -227,6 +222,15 @@ func (ls *lineSession) run(first Prompt) error {
 		}
 	}
 	for {
+		// A warning a fallback queued is written before the prompt, out of
+		// raw mode (0063-MADR D23, row R156).
+		if err := e.tellWaitWarnOutOfRaw(outOfRaw); err != nil {
+			return err
+		}
+		// Nothing read during a sign-in becomes a turn; at the first prompt
+		// after a sign-in or the first run, the terminal's own queue is
+		// emptied too (0063-MADR D4, D12, D17).
+		r.beforePrompt()
 		text, err := ed.ReadPrompt(e.ctx)
 		switch {
 		case errors.Is(err, io.EOF), errors.Is(err, editor.ErrExit):

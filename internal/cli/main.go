@@ -89,7 +89,9 @@ func run(ctx context.Context, k *kong.Kong, root *Root, args []string, stdin *os
 	}
 	e := &runEnv{ctx: ctx, out: out, stdin: stdin, logs: logs, intr: intr, now: clock, overrides: overrides}
 	e.ownListings()
-	code = exitCode(ctx, out, kctx.Run(e))
+	err = kctx.Run(e)
+	e.tellWaitWarn() // a warning a fallback queued, when no prompt's text came after it (0063-MADR D23, row R156)
+	code = exitCode(ctx, out, err)
 	e.endListings(ctx) // before the log closes: a listing may still log (0046-MADR D1)
 	if err := logs.close(); err != nil {
 		out.Warnf("close log file: %v", err)
@@ -224,6 +226,22 @@ type runEnv struct {
 	logs  *lazyLog
 	// intr lets a line-session turn take the first Ctrl+C (0008-MADR D5).
 	intr *interrupts
+	// termIn is the process's one terminal input, which every prompt reads
+	// through, made on first use by terminalIn; termInMu guards it
+	// (0063-MADR D1). flushWarn gives a failed flush's warning once (D17).
+	termInMu  sync.Mutex
+	termIn    *terminalInput
+	flushWarn sync.Once
+	// waitWarn gives Q24's warning once: the terminal is read as built
+	// because gobble cannot wait on it without reading it (0063-MADR D22).
+	waitWarn sync.Once
+	// waitQueued is that warning's error when a fallback on inline.Reader's
+	// goroutine queued it, until tellWaitWarn writes it on the main flow;
+	// waitMu guards it. posixTerm says standard input is a POSIX terminal,
+	// gated or fallen back (0063-MADR D23, rows R156, R157).
+	waitMu     sync.Mutex
+	waitQueued error
+	posixTerm  bool
 	// now is the clock, for stream-json's session timestamp.
 	now func() time.Time
 	// listingsMu guards listings, the process's model listings by

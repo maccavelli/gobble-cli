@@ -9,11 +9,15 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/maccavelli/gobble-cli/acpclient/acptest"
 	"github.com/maccavelli/gobble-cli/internal/auth"
+	"github.com/maccavelli/gobble-cli/internal/cli/term"
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/llm/llmtest"
 	"github.com/maccavelli/gobble-cli/llm/provider"
@@ -35,13 +39,14 @@ func (r *chunks) Read(ctx context.Context, p []byte) (int, error) {
 	return n, nil
 }
 
-// asked is questions over chunks, writing to a buffer, with a raw mode
-// that counts its entries and restores.
+// asked is questions over chunks, through a terminal input with no
+// terminal to flush (0063-PLAN P2 step 4), writing to a buffer, with a raw
+// mode that counts its entries and restores.
 func asked(t *testing.T, in ...string) (*questions, *bytes.Buffer, *[2]int) {
 	t.Helper()
 	var out bytes.Buffer
 	var raws [2]int
-	q := &questions{ctx: t.Context(), in: &chunks{in}, out: &out, raw: func() (func() error, error) {
+	q := &questions{ctx: t.Context(), in: newTerminalInput(&chunks{in}, nil), out: &out, raw: func() (func() error, error) {
 		raws[0]++
 		return func() error { raws[1]++; return nil }, nil
 	}}
@@ -283,12 +288,17 @@ func TestLoginInterrupt(t *testing.T) {
 // its credential's source; a sign-in the provider refused says so in
 // gobble's words, with nothing saved.
 func TestLoginMenuAndRefusals(t *testing.T) {
+	eachEnter(t, loginMenuAndRefusals)
+}
+
+func loginMenuAndRefusals(t *testing.T, enter string) {
 	var signedIn string
 	replace(t, &signInWith, func(_ context.Context, id string, _ provider.Prompter, _ provider.SignInOptions, _ provider.LoginStore) (provider.Credential, error) {
 		signedIn = id
 		return provider.Credential{}, &provider.SignInError{ID: id, Keys: 3}
 	})
 	h := newModelHarness(t, llmtest.NewScript(), t.TempDir())
+	h.enter = enter
 	h.start(Prompt{})
 	h.press("/login\r")
 	waitUntil(t, func() bool { return strings.Contains(h.stderr.String(), "Number [1]: ") })
@@ -298,7 +308,7 @@ func TestLoginMenuAndRefusals(t *testing.T) {
 			t.Errorf("the menu lacks %q:\n%s", want, h.stderr)
 		}
 	}
-	h.press(fmt.Sprintf("%d\r", n))
+	h.press(fmt.Sprintf("%d%s", n, enter))
 	waitUntil(t, func() bool { return strings.Contains(h.stderr.String(), "claude refused 3 keys; none was saved") })
 	h.press("\x04")
 	if err := h.wait(); err != nil {
@@ -313,6 +323,10 @@ func TestLoginMenuAndRefusals(t *testing.T) {
 // on its own line; a login the wizard saved is reported as one. A key from
 // a public listing, typed, is noted as not checked (0031-MADR D7).
 func TestLoginAsksThroughQuestions(t *testing.T) {
+	eachEnter(t, loginAsksThroughQuestions)
+}
+
+func loginAsksThroughQuestions(t *testing.T, enter string) {
 	replace(t, &signInWith, func(ctx context.Context, id string, p provider.Prompter, _ provider.SignInOptions, store provider.LoginStore) (provider.Credential, error) {
 		if id == "kilo" {
 			key, err := p.Secret("Enter your Kilo key")
@@ -326,13 +340,14 @@ func TestLoginAsksThroughQuestions(t *testing.T) {
 		return provider.Credential{}, store.Save(ctx, id, &provider.Login{Access: "a", Refresh: "r"})
 	})
 	h := newModelHarness(t, llmtest.NewScript(), t.TempDir())
+	h.enter = enter
 	h.start(Prompt{})
 	h.press("/login grok\r")
 	waitUntil(t, func() bool { return strings.Contains(h.stderr.String(), "Number [1]: ") })
 	if !strings.Contains(h.stderr.String(), "Choose how to authenticate with Grok:\n  1  Key\n  2  Browser\n  3  Device   a code\n") {
 		t.Errorf("the menu:\n%s", h.stderr)
 	}
-	h.press("3\r")
+	h.press("3" + enter)
 	waitUntil(t, func() bool { return strings.Contains(h.stdout.String(), "Logged in to grok") })
 	h.press("/login kilo\r")
 	waitUntil(t, func() bool { return strings.Contains(h.stderr.String(), "Enter your Kilo key: ") })
@@ -413,14 +428,19 @@ func TestModelOffersLogin(t *testing.T) {
 // its first prompt; taken, it signs in and lists the provider's models;
 // declined, the session goes on with the warning (0025-MADR D7).
 func TestFirstRunSetup(t *testing.T) {
+	eachEnter(t, firstRunSetup)
+}
+
+func firstRunSetup(t *testing.T, enter string) {
 	withLister(t, keyLister("sk-test-GOOD"))
 	var o provider.SignInOptions
 	replace(t, &signInWith, typedKeySignIn(&o))
 	h := newModelHarness(t, llmtest.NewScript(), t.TempDir())
-	h.answer = "\r"
+	h.enter = enter
+	h.answer = enter
 	h.start(Prompt{})
 	waitUntil(t, func() bool { return strings.Contains(h.stderr.String(), "Sign in to which provider?") })
-	h.press(fmt.Sprintf("%d\r", slices.Index(provider.KeyProviders(), "claude")+1))
+	h.press(fmt.Sprintf("%d%s", slices.Index(provider.KeyProviders(), "claude")+1, enter))
 	waitUntil(t, func() bool { return strings.Contains(h.stderr.String(), "Enter your Claude (Anthropic) API key: ") })
 	h.press("sk-test-GOOD\r")
 	waitUntil(t, func() bool { return strings.Contains(h.stdout.String(), "claude/claude-x1") })
@@ -431,8 +451,14 @@ func TestFirstRunSetup(t *testing.T) {
 	if !strings.HasPrefix(h.stderr.String(), firstRunQuestion+" [Y/n]: ") || strings.Contains(h.stderr.String(), "Warning: no model credential") {
 		t.Fatalf("stderr:\n%s", h.stderr)
 	}
+	// A12 (row R71): a sign-in that succeeds ends the first run; the offer
+	// was asked once.
+	if n := offerCount(h); n != 1 {
+		t.Fatalf("the offer was asked %d times; want once:\n%s", n, h.stderr)
+	}
 
 	d := newModelHarness(t, llmtest.NewScript(), t.TempDir())
+	d.enter = enter
 	d.start(Prompt{}) // declines
 	waitUntil(t, func() bool { return strings.Contains(d.stderr.String(), "Warning: no model credential") })
 	d.press("\x04")
@@ -477,6 +503,411 @@ func TestAuthLoginMethod(t *testing.T) {
 	}
 	if r := c.run("auth", "login", "grok", "--method", "device", "--device"); r.code != ExitUsage {
 		t.Fatalf("--method with --device: %+v", r)
+	}
+}
+
+// eachEnter runs f once per line end a terminal sends for Enter at a
+// question read out of raw mode: CR, LF (a POSIX terminal's cooked Enter)
+// and CRLF (a Windows console's line read) (0063-PLAN P1 step 2).
+func eachEnter(t *testing.T, f func(t *testing.T, enter string)) {
+	t.Helper()
+	for _, e := range []struct{ name, enter string }{{"CR", "\r"}, {"LF", "\n"}, {"CRLF", "\r\n"}} {
+		t.Run(e.name, func(t *testing.T) { f(t, e.enter) })
+	}
+}
+
+// errKeyRecorded is what recordingPrompter gives the sign-in once a key was
+// typed: the real wizard stops there, before it lists anything.
+var errKeyRecorded = errors.New("the test stopped the sign-in once the key was read")
+
+// recordedSecret is what one Secret gave.
+type recordedSecret struct {
+	key string
+	err error
+}
+
+// recordingPrompter wraps a sign-in's prompter and records what each
+// Secret returned, so a test runs the real provider.SignIn and sees the key
+// it was given. A key read is not handed on: the sign-in ends with
+// errKeyRecorded, so nothing is listed or saved.
+type recordingPrompter struct {
+	provider.Prompter
+	mu      sync.Mutex
+	secrets []recordedSecret
+}
+
+func (r *recordingPrompter) Secret(prompt string) (string, error) {
+	s, err := r.Prompter.Secret(prompt)
+	r.mu.Lock()
+	r.secrets = append(r.secrets, recordedSecret{s, err})
+	r.mu.Unlock()
+	if err != nil {
+		return s, err
+	}
+	return "", errKeyRecorded
+}
+
+func (r *recordingPrompter) recorded() []recordedSecret {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.secrets)
+}
+
+// realSignIn replaces signInWith with the real provider.SignIn behind a
+// recordingPrompter, which it returns.
+func realSignIn(t *testing.T) *recordingPrompter {
+	t.Helper()
+	rp := &recordingPrompter{}
+	replace(t, &signInWith, func(ctx context.Context, id string, p provider.Prompter, o provider.SignInOptions, store provider.LoginStore) (provider.Credential, error) {
+		rp.mu.Lock()
+		rp.Prompter = p
+		rp.mu.Unlock()
+		return provider.SignIn(ctx, id, rp, o, store)
+	})
+	return rp
+}
+
+// wantKey waits for the first secret the sign-in read, and checks it is
+// key, read with no error.
+func wantKey(t *testing.T, rp *recordingPrompter, key string) {
+	t.Helper()
+	waitUntil(t, func() bool { return len(rp.recorded()) > 0 })
+	got := rp.recorded()
+	if len(got) == 0 {
+		t.Fatal("no secret was asked")
+	}
+	if got[0].key != key || got[0].err != nil {
+		t.Fatalf("secret = %q, %v; want %q", got[0].key, got[0].err, key)
+	}
+}
+
+// providerNumber is id's number in the provider menu.
+func providerNumber(id string) int { return slices.Index(provider.KeyProviders(), id) + 1 }
+
+// offerCount counts the first-run offer in the harness's stderr.
+func offerCount(h *lineHarness) int { return strings.Count(h.stderr.String(), firstRunQuestion) }
+
+// warningCount counts the no-credential warning in the harness's stderr.
+func warningCount(h *lineHarness) int {
+	return strings.Count(h.stderr.String(), "Warning: no model credential")
+}
+
+// methodItem is the number of the item naming an API key in the last menu
+// printed in s.
+func methodItem(t *testing.T, s string) string {
+	t.Helper()
+	menu := s[strings.LastIndex(s[:strings.LastIndex(s, "Number [")], "\n\n")+1:]
+	for line := range strings.Lines(menu) {
+		f := strings.Fields(line)
+		if len(f) > 1 && strings.Contains(strings.ToLower(line), "api key") {
+			if _, err := fmt.Sscan(f[0], new(int)); err == nil {
+				return f[0]
+			}
+		}
+	}
+	t.Fatalf("no API key item in the menu:\n%s", menu)
+	return ""
+}
+
+// endSession closes the harness's input and waits for the session's end.
+func endSession(t *testing.T, h *lineHarness) error {
+	t.Helper()
+	if err := h.keys.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return h.wait()
+}
+
+// The first run's key prompt, after the offer and the provider menu, waits
+// for the key, with each line end (the owner's report). Red for the
+// defect with CRLF: the secret is cancelled before the key is pressed.
+func TestFirstRunKeyOnlyProviderWaits(t *testing.T) {
+	eachEnter(t, func(t *testing.T, enter string) {
+		rp := realSignIn(t)
+		h := newModelHarness(t, llmtest.NewScript(), t.TempDir())
+		h.enter, h.answer = enter, "y"+enter
+		h.start(Prompt{})
+		waitUntil(t, func() bool { return strings.Contains(h.stderr.String(), "Number [1]: ") })
+		h.press(strconv.Itoa(providerNumber("gemini")) + enter)
+		waitUntil(t, func() bool { return strings.Contains(h.stderr.String(), "Enter your Gemini (Google) API key: ") })
+		h.press("sk-test-typed\r")
+		wantKey(t, rp, "sk-test-typed")
+		if err := endSession(t, h); err != nil {
+			t.Fatal(err)
+		}
+	})
+}
+
+// As above, through a method menu: OpenAI's, answered by the item naming
+// an API key. Red for the defect with CRLF.
+func TestFirstRunMethodMenuProviderWaits(t *testing.T) {
+	eachEnter(t, func(t *testing.T, enter string) {
+		rp := realSignIn(t)
+		h := newModelHarness(t, llmtest.NewScript(), t.TempDir())
+		h.enter, h.answer = enter, "y"+enter
+		h.start(Prompt{})
+		waitUntil(t, func() bool { return strings.Contains(h.stderr.String(), "Number [1]: ") })
+		h.press(strconv.Itoa(providerNumber("openai")) + enter)
+		waitUntil(t, func() bool { return strings.Count(h.stderr.String(), "Number [") == 2 })
+		h.press(methodItem(t, h.stderr.String()) + enter)
+		waitUntil(t, func() bool { return strings.Contains(h.stderr.String(), "Enter your OpenAI API key: ") })
+		h.press("sk-test-typed\r")
+		wantKey(t, rp, "sk-test-typed")
+		if err := endSession(t, h); err != nil {
+			t.Fatal(err)
+		}
+	})
+}
+
+// /login with no provider: the menu, then the key prompt waits. Red for
+// the defect with CRLF. /login gemini, with no menu, waits: a guard.
+func TestLoginNoArgumentMenuWaits(t *testing.T) {
+	eachEnter(t, func(t *testing.T, enter string) {
+		rp := realSignIn(t)
+		h := newModelHarness(t, llmtest.NewScript(), t.TempDir())
+		h.enter = enter
+		h.start(Prompt{})
+		h.press("/login\r")
+		waitUntil(t, func() bool { return strings.Contains(h.stderr.String(), "Number [1]: ") })
+		h.press(strconv.Itoa(providerNumber("gemini")) + enter)
+		waitUntil(t, func() bool { return strings.Contains(h.stderr.String(), "Enter your Gemini (Google) API key: ") })
+		h.press("sk-test-typed\r")
+		wantKey(t, rp, "sk-test-typed")
+		if err := endSession(t, h); err != nil {
+			t.Fatal(err)
+		}
+	})
+	t.Run("named", func(t *testing.T) {
+		rp := realSignIn(t)
+		h := newModelHarness(t, llmtest.NewScript(), t.TempDir())
+		h.start(Prompt{})
+		h.press("/login gemini\r")
+		waitUntil(t, func() bool { return strings.Contains(h.stderr.String(), "Enter your Gemini (Google) API key: ") })
+		h.press("sk-test-typed\r")
+		wantKey(t, rp, "sk-test-typed")
+		if err := endSession(t, h); err != nil {
+			t.Fatal(err)
+		}
+	})
+}
+
+// A5 (row R21): /login openai, with a method menu: the key prompt waits
+// after it. Red for the defect with CRLF.
+func TestLoginProviderMethodMenuWaits(t *testing.T) {
+	eachEnter(t, func(t *testing.T, enter string) {
+		rp := realSignIn(t)
+		h := newModelHarness(t, llmtest.NewScript(), t.TempDir())
+		h.enter = enter
+		h.start(Prompt{})
+		h.press("/login openai\r")
+		waitUntil(t, func() bool { return strings.Contains(h.stderr.String(), "Number [1]: ") })
+		h.press(methodItem(t, h.stderr.String()) + enter)
+		waitUntil(t, func() bool { return strings.Contains(h.stderr.String(), "Enter your OpenAI API key: ") })
+		h.press("sk-test-typed\r")
+		wantKey(t, rp, "sk-test-typed")
+		if err := endSession(t, h); err != nil {
+			t.Fatal(err)
+		}
+	})
+}
+
+// pipeEnv is a runEnv on a terminal whose input is a pipe: caps.In true,
+// stdin the pipe's read end, raw mode stubbed by termRaw. It returns the
+// pipe's write end, where a test types.
+func pipeEnv(t *testing.T) (*runEnv, *os.File, *syncBuffer) {
+	t.Helper()
+	t.Setenv("GOBBLE_HOME", t.TempDir())
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = w.Close()
+		_ = r.Close()
+	})
+	replace(t, &termRaw, func(*os.File) (func() error, error) { return func() error { return nil }, nil })
+	stdout, stderr := &syncBuffer{}, &syncBuffer{}
+	caps := term.Caps{In: true, Out: term.Stream{TTY: true, Width: 80}, Err: term.Stream{Width: 80}}
+	out := &Output{out: stdout, err: stderr, caps: caps}
+	e := &runEnv{ctx: t.Context(), out: out, stdin: r, logs: &lazyLog{out: out}, intr: &interrupts{}, now: time.Now}
+	t.Cleanup(func() {
+		if err := e.logs.close(); err != nil {
+			t.Error(err)
+		}
+	})
+	ownListings(t, e)
+	return e, w, stderr
+}
+
+// typeInto writes s to w.
+func typeInto(t *testing.T, w *os.File, s string) {
+	t.Helper()
+	if _, err := io.WriteString(w, s); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// runAsync runs f and returns its result on a channel.
+func runAsync(f func() error) <-chan error {
+	done := make(chan error, 1)
+	go func() { done <- f() }()
+	return done
+}
+
+// waitDone waits for done within the harness's bound.
+func waitDone(t *testing.T, done <-chan error, stderr *syncBuffer) error {
+	t.Helper()
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(10 * time.Second):
+		t.Fatalf("the command did not end; stderr %q", stderr.String())
+		return nil
+	}
+}
+
+// gobble setup, on a terminal: the key prompt waits after the provider
+// menu. Red for the defect with CRLF.
+func TestSetupKeyWaits(t *testing.T) {
+	eachEnter(t, func(t *testing.T, enter string) {
+		rp := realSignIn(t)
+		e, w, stderr := pipeEnv(t)
+		done := runAsync(func() error { return (&SetupCmd{}).Run(e) })
+		waitUntil(t, func() bool { return strings.Contains(stderr.String(), "Number [1]: ") })
+		typeInto(t, w, strconv.Itoa(providerNumber("gemini"))+enter)
+		waitUntil(t, func() bool { return strings.Contains(stderr.String(), "Enter your Gemini (Google) API key: ") })
+		typeInto(t, w, "sk-test-typed\r")
+		wantKey(t, rp, "sk-test-typed")
+		_ = w.Close()
+		_ = waitDone(t, done, stderr)
+	})
+}
+
+// gobble acp --login openai, on a terminal: the key prompt waits after the
+// method menu. Red for the defect with CRLF. A13 (row R72): Ctrl+C at the
+// key prompt cancels with acp's words, and nothing offers a sign-in again.
+func TestAcpLoginMethodMenuWaits(t *testing.T) {
+	eachEnter(t, func(t *testing.T, enter string) {
+		rp := realSignIn(t)
+		e, w, stderr := pipeEnv(t)
+		done := runAsync(func() error { return e.acpLogin("openai", false) })
+		waitUntil(t, func() bool { return strings.Contains(stderr.String(), "Number [1]: ") })
+		typeInto(t, w, methodItem(t, stderr.String())+enter)
+		waitUntil(t, func() bool { return strings.Contains(stderr.String(), "Enter your OpenAI API key: ") })
+		typeInto(t, w, "sk-test-typed\r")
+		wantKey(t, rp, "sk-test-typed")
+		_ = w.Close()
+		_ = waitDone(t, done, stderr)
+	})
+	t.Run("cancel", func(t *testing.T) {
+		realSignIn(t)
+		e, w, stderr := pipeEnv(t)
+		done := runAsync(func() error { return e.acpLogin("openai", false) })
+		waitUntil(t, func() bool { return strings.Contains(stderr.String(), "Number [1]: ") })
+		typeInto(t, w, methodItem(t, stderr.String())+"\r")
+		waitUntil(t, func() bool { return strings.Contains(stderr.String(), "Enter your OpenAI API key: ") })
+		typeInto(t, w, "\x03")
+		err := waitDone(t, done, stderr)
+		if err == nil || !strings.Contains(err.Error(), "sign-in cancelled; nothing was saved") {
+			t.Fatalf("acp --login after Ctrl+C: %v", err)
+		}
+		if strings.Contains(stderr.String(), firstRunQuestion) {
+			t.Fatalf("acp --login offered a sign-in:\n%s", stderr)
+		}
+	})
+}
+
+// Weakness (a): the offer's answer and the menu's, typed ahead in one
+// press, both count: the key prompt appears with no second press. Red for
+// the defect with every line end: the menu waits, the typed-ahead answer
+// dropped with the first ask. (2026-11-21, P2, the P1 review's follow-up 1:
+// the menu is answered with Claude, not its default, Gemini, so a stray
+// line end answering the menu shows; and nothing follows the key prompt.)
+func TestFirstRunTypeAhead(t *testing.T) {
+	eachEnter(t, func(t *testing.T, enter string) {
+		var o provider.SignInOptions
+		replace(t, &signInWith, typedKeySignIn(&o))
+		h := newModelHarness(t, llmtest.NewScript(), t.TempDir())
+		h.enter = enter
+		h.answer = "y" + enter + strconv.Itoa(providerNumber("claude")) + enter
+		h.start(Prompt{})
+		const keyPrompt = "Enter your Claude (Anthropic) API key: "
+		waitUntil(t, func() bool { return strings.Contains(h.stderr.String(), keyPrompt) })
+		time.Sleep(300 * time.Millisecond)
+		if s := h.stderr.String(); !strings.HasSuffix(s, keyPrompt) {
+			t.Errorf("something followed the key prompt:\n%s", s)
+		}
+		_ = endSession(t, h)
+	})
+}
+
+// Q3: keys typed past a key in one press are dropped when the session's
+// prompt reads again; the agent never receives them as a prompt.
+func TestSignInTypeAheadNotSentAsPrompt(t *testing.T) {
+	withLister(t, keyLister("sk-test-GOOD"))
+	var o provider.SignInOptions
+	replace(t, &signInWith, typedKeySignIn(&o))
+	agent := &acptest.ScriptAgent{Turns: []acptest.Turn{{}, {}}}
+	h := newLineHarness(t, agent)
+	h.start(Prompt{})
+	h.press("/login claude\r")
+	waitUntil(t, func() bool { return strings.Contains(h.stderr.String(), "Enter your Claude (Anthropic) API key: ") })
+	h.press("sk-test-GOOD\rhello\r")
+	waitUntil(t, func() bool { return storedKey(t, "claude") == "sk-test-GOOD" })
+	waitUntil(t, func() bool { return len(agent.Prompts()) >= 1 }) // /login's /models turn
+	h.press("\x04")
+	if err := h.wait(); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range agent.Prompts() {
+		if strings.Contains(p, "hello") {
+			t.Fatalf("the agent received the typed-ahead keys as a prompt: %q", agent.Prompts())
+		}
+	}
+}
+
+// Q4: Enter on an empty key prompt cancels the sign-in, with today's words.
+func TestEmptyKeyCancels(t *testing.T) {
+	var o provider.SignInOptions
+	replace(t, &signInWith, typedKeySignIn(&o))
+	h := newModelHarness(t, llmtest.NewScript(), t.TempDir())
+	h.start(Prompt{})
+	h.press("/login gemini\r")
+	waitUntil(t, func() bool { return strings.Contains(h.stderr.String(), "Enter your Gemini (Google) API key: ") })
+	h.press("\r")
+	waitUntil(t, func() bool { return strings.Contains(h.stderr.String(), "Sign-in cancelled; nothing was saved.") })
+	h.press("\x04")
+	if err := h.wait(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A6 (row R56): keys typed in the same press as /login stay the editor's:
+// the provider menu waits and does not take them, and they are the next
+// prompt the agent receives.
+func TestEditorKeepsKeysTypedWithLogin(t *testing.T) {
+	var o provider.SignInOptions
+	replace(t, &signInWith, typedKeySignIn(&o))
+	agent := &acptest.ScriptAgent{Turns: []acptest.Turn{{}, {}}}
+	h := newLineHarness(t, agent)
+	h.start(Prompt{})
+	h.press("/login\r1\r")
+	waitUntil(t, func() bool { return strings.Contains(h.stderr.String(), "Number [1]: ") })
+	time.Sleep(300 * time.Millisecond)
+	if strings.Contains(h.stderr.String(), "API key: ") || strings.Contains(h.stderr.String(), "No choice") {
+		t.Fatalf("the provider menu took the keys typed with /login:\n%s", h.stderr)
+	}
+	h.press(strconv.Itoa(providerNumber("gemini")) + "\r")
+	waitUntil(t, func() bool { return strings.Contains(h.stderr.String(), "Enter your Gemini (Google) API key: ") })
+	h.press("sk-test-typed\r")
+	waitUntil(t, func() bool { return len(agent.Prompts()) == 2 })
+	h.press("\x04")
+	if err := h.wait(); err != nil {
+		t.Fatal(err)
+	}
+	p := agent.Prompts()
+	if len(p) != 2 || !strings.Contains(p[0], "/models gemini") || !strings.Contains(p[1], `"text":"1"`) {
+		t.Fatalf("prompts %q; want /login's /models turn, then 1", p)
 	}
 }
 

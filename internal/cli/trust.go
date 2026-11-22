@@ -163,9 +163,13 @@ func (e *runEnv) decideTrustHere(cwd string) {
 
 // askTrust is decision 5's question on stderr, drawn by go-tui-lib's ask
 // as 0029-MADR D2 lays it out, its answer one key read in raw mode; c,
-// Ctrl+C and the end of input cancel. stdin is read with no deadline, so a
-// key the asker waits on the clock for waits for the next key instead.
+// Ctrl+C and the end of input cancel. Its keys are read through the
+// process's one terminal input (0063-MADR D2), with the run's context and
+// no deadline, so a key the asker waits on the clock for waits for the next
+// key instead, and no read is left waiting for the next reader (D15, row
+// R50).
 func (e *runEnv) askTrust(root string) trustAnswer {
+	e.tellWaitWarn() // before the question's text (0063-MADR D23, row R156)
 	parent := filepath.Dir(root)
 	opts := []acpclient.PermissionOption{{ID: answerTrust, Name: "Trust", Kind: kindAllowAlways}}
 	if resolved, err := filepath.EvalSymlinks(parent); err == nil && !permission.TooBroad(resolved, "") {
@@ -181,7 +185,7 @@ func (e *runEnv) askTrust(root string) trustAnswer {
 	if err != nil {
 		return trustAnswer{}
 	}
-	read := func(_ context.Context, p []byte) (int, error) { return e.stdin.Read(p) }
+	read := func(_ context.Context, p []byte) (int, error) { return e.trustKeys(p) }
 	resp, _, werr := askOn(e.ctx, permissionQuestion(nil, r), promptWidth(e.out), e.out.caps.Unicode, e.out.err, read)
 	rerr := restore()
 	if werr != nil || rerr != nil {
@@ -205,6 +209,11 @@ func (e *runEnv) askTrust(root string) trustAnswer {
 	}
 	return trustAnswer{}
 }
+
+// trustKeys is one read of the trust question's keys: through the
+// process's one terminal input, with the run's context and no deadline,
+// whatever the asker waits for (0063-MADR D15, Q12).
+func (e *runEnv) trustKeys(p []byte) (int, error) { return e.terminalIn().Read(e.ctx, p) }
 
 // trustRaw puts the terminal in raw mode for the question; tests replace
 // it.

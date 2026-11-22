@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/maccavelli/go-tui-lib/v2/inline"
+
 	"github.com/maccavelli/gobble-cli/internal/cli/complete"
 	"github.com/maccavelli/gobble-cli/internal/cli/term"
 	"github.com/maccavelli/gobble-cli/llm"
@@ -324,7 +326,8 @@ func TestLineSessionResumedLine(t *testing.T) {
 	e := &runEnv{ctx: t.Context(), out: out, logs: &lazyLog{out: out}, intr: &interrupts{}, now: time.Now}
 	t.Cleanup(func() { e.logs.close() }) //nolint:errcheck,gosec // test cleanup
 	keysR, keysW := io.Pipe()
-	ls := &lineSession{e: e, cwd: cwd, in: keysR, raw: func() (func() error, error) { return func() error { return nil }, nil },
+	e.termIn = newTerminalInput(inline.NewReader(keysR), nil) // the session's one terminal input (0063-PLAN P2 step 6)
+	ls := &lineSession{e: e, cwd: cwd, raw: func() (func() error, error) { return func() error { return nil }, nil },
 		choice: sessionChoice{resume: "s1"}}
 	done := make(chan error, 1)
 	go func() { done <- ls.run(Prompt{}) }()
