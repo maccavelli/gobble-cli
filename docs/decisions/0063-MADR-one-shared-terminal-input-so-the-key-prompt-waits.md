@@ -10,6 +10,7 @@ informed: none
 # One shared terminal input for every prompt in a session, so a menu answered with CR+LF no longer skips the API key prompt
 
 *(2026-11-21, status note: accepted 2026-11-19; built through P5 of the plan, ready for P6, the owner's check on a Windows console. No decision or asserted fact changes.)*
+*(2026-11-21, later, status note: P6 passed, the owner's check on a real Windows console in PowerShell 5.1 and 7; Confirmation item 5 met; the plan is `complete`. The release is the owner's decision, Q8.)*
 
 ## Context and Problem Statement
 

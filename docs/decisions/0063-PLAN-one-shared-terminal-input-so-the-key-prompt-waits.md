@@ -1,6 +1,6 @@
 ---
-status: in-progress
-date: 2026-11-20
+status: complete
+date: 2026-11-21
 associated-madr: "0063-MADR-one-shared-terminal-input-so-the-key-prompt-waits.md"
 ---
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
@@ -3437,3 +3437,34 @@ the first run, the key prompt, type-ahead and the terminal's input; the other gu
 
 **Status:** the PLAN's status note and the MADR's now say the build is complete through P5 and P6, the owner's Windows
 console check, is next; the PLAN is not `complete`.
+
+### P6, the owner's check on a Windows console (2026-11-21)
+
+Recorded by the coordinator, as P6 step 3 (amended 2026-11-20) says.
+
+**Step 1, the build** (a mid-tier agent, effort low): `CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o gobble.exe
+./cmd/gobble` from `21b49e6` (P5's commit, branch `feature/0063-shared-terminal-input`), built on the Windows test
+laptop and placed at `%USERPROFILE%\gobble-check\gobble.exe`; SHA-256
+`4F519F0D9E17C9AE983B15BF027C4C612CE7CDE56071CA09E9C4FED39E051C54`, the agent's `Get-FileHash` and the coordinator's own
+`sha256sum` of the placed file agreeing. The binary was not run by an agent.
+
+**Step 2, the owner's real-console confirmation**, the MADR's Confirmation item 5 (B), steps 1 to 8, in Console Host
+with Windows PowerShell 5.1 and in Windows Terminal with PowerShell 7, from a step-by-step sheet the coordinator placed in
+the owner's home folder on the laptop (not part of the repository). The owner, relayed by the coordinator: "Phase 6
+passed on the [Windows test laptop] with flying colors. Both powershell 5.1 and powershell 7 worked perfectly and every
+item gave successful, expected results" (the laptop's name redacted). Every step's word is therefore the one item 5 (B)
+expects: (B) 2 the key prompt waits; (B) 3 only `*` shown, and the offer came back; (B) 4 the offer came back (not
+"gobble ended", so row R40's named stop did not occur); (B) 5 nothing printed after gobble's prompt; (B) 6 gobble ended
+on Ctrl+Z; (B) 7 steps 2 and 4 the same in Windows Terminal; (B) 8 every row `none`. The owner reported a single verdict
+for all steps rather than one word per step; no key and no screen text was reported.
+
+**Versions**, read by the coordinator from the laptop (not reported by the owner): Windows PowerShell `5.1.26100.9818`,
+PowerShell `7.6.6`, Windows `10.0.26200` (display version `25H2`, update build revision `9974`).
+
+**Gate (amended):** met; every step as item 5 (B) expects, in both terminals. **Stop (amended):** did not occur.
+
+**Completion.** The MADR's Confirmation items 1 to 4 were met by P1 to P4 (their records above) and item 5 by (A), the
+agent-run cases of P1 step 0b, P1b and P4 step 6, and now (B). Q9 was answered (b) and recorded. The guides,
+architecture, README and docs index are current (P5). This plan is `complete`. Then the plan stops, as P6 says: the
+release is the owner's decision (MADR Q8); no release, tag or `v0.6.1` work is part of this plan. The branch
+`feature/0063-shared-terminal-input` is not merged into `main` by this plan; merging is the owner's.
