@@ -90,6 +90,44 @@ func TestNoStderrUnderACP(t *testing.T) {
 	}
 }
 
+// The file-only view writes a record to the log file and nothing to the
+// Stderr writer Open was given, a Warn included, which the logger Open
+// returns shows there (0052-PLAN P5, row M55).
+func TestFileOnlyView(t *testing.T) {
+	var stderr bytes.Buffer
+	path := filepath.Join(t.TempDir(), "state", "logs", "gobble.log")
+	logger, file, closer, err := OpenFileView(Options{Level: slog.LevelInfo, File: path, Stderr: &stderr, Warn: &stderr})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := closer.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	file.WarnContext(t.Context(), "file only", slog.String("message", "view"))
+	if got := readFile(t, path); !strings.Contains(got, `"msg":"file only"`) || !strings.Contains(got, `"message":"view"`) {
+		t.Errorf("the log file lacks the view's Warn record:\n%s", got)
+	}
+	if stderr.Len() != 0 {
+		t.Errorf("the view's Warn reached stderr: %q", stderr.String())
+	}
+	logger.WarnContext(t.Context(), "shared")
+	if !strings.Contains(stderr.String(), "shared") {
+		t.Errorf("the shared logger's Warn did not reach stderr: %q", stderr.String())
+	}
+	_, view, c, err := OpenFileView(Options{Stderr: &stderr})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if view.Enabled(t.Context(), slog.LevelError) {
+		t.Error("with no file the view is enabled; want a view that writes nothing")
+	}
+	if err := c.Close(); err != nil {
+		t.Error(err)
+	}
+}
+
 func TestNoSinksDiscards(t *testing.T) {
 	log, closer, err := Open(Options{})
 	if err != nil {

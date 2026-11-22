@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strings"
 	"sync"
 	"testing"
 
@@ -68,6 +69,79 @@ func TestHostIDIsStable(t *testing.T) {
 		if got, err := HostID(race); err != nil || got != ids[0] {
 			t.Fatalf("round %d: read back %q, %v; want %q", round, got, err, ids[0])
 		}
+	}
+}
+
+// An empty host-id, left by a create that was interrupted, counts as absent:
+// HostID replaces it with a new id, and the migration writes the plan
+// entry's id over it (0052-MADR D4's note of 2026-11-21, row M58).
+func TestHostIDReplacesEmptyFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "host-id")
+	if err := os.WriteFile(path, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	id, err := HostID(dir)
+	if err != nil || !urnUUID.MatchString(id) {
+		t.Fatalf("HostID over an empty file = %q, %v; want a new urn:uuid", id, err)
+	}
+	if got, _ := os.ReadFile(path); strings.TrimSpace(string(got)) != id {
+		t.Errorf("host-id holds %q, want %q", got, id)
+	}
+
+	f := newMfix(t)
+	f.write(f.auth, authFile(planMember()))
+	f.write(filepath.Join(f.state, "host-id"), "")
+	if _, err := f.run(); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.read(filepath.Join(f.state, "host-id")); got != hostA+"\n" {
+		t.Errorf("after the migration host-id holds %q, want the plan entry's %q", got, hostA)
+	}
+}
+
+// Two callers that both find no id, or an empty file, keep one: the second
+// to take host-id.lock reads the first's id under it and returns it, so the
+// file holds one id and both calls return it (row M58, M43).
+func TestHostIDLockedReplaceKeepsFirst(t *testing.T) {
+	for _, start := range []string{"absent", "empty"} {
+		t.Run(start, func(t *testing.T) {
+			dir := t.TempDir()
+			if start == "empty" {
+				if err := os.WriteFile(filepath.Join(dir, "host-id"), nil, 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			var inner string
+			var innerErr error
+			fired := false
+			hostIDHooks.afterRead = func() {
+				if fired {
+					return
+				}
+				fired = true
+				done := make(chan struct{})
+				go func() {
+					defer close(done)
+					inner, innerErr = HostID(dir)
+				}()
+				<-done
+			}
+			t.Cleanup(func() { hostIDHooks.afterRead = nil })
+			outer, err := HostID(dir)
+			if !fired {
+				t.Fatal("the second caller never started: the hook did not fire")
+			}
+			if err != nil || innerErr != nil {
+				t.Fatalf("errors: first %v, second %v", err, innerErr)
+			}
+			if outer != inner {
+				t.Errorf("first returned %q, second %q; want one id", outer, inner)
+			}
+			if got, _ := os.ReadFile(filepath.Join(dir, "host-id")); strings.TrimSpace(string(got)) != inner {
+				t.Errorf("host-id holds %q, want the second caller's %q, which took the lock first", got, inner)
+			}
+		})
 	}
 }
 

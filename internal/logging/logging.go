@@ -37,16 +37,28 @@ type Options struct {
 // File is set and cannot be opened; the caller decides whether that is
 // fatal (an explicit path) or a warning (the default path).
 func Open(opts Options) (*slog.Logger, io.Closer, error) {
-	var (
-		handlers []slog.Handler
-		closer   io.Closer = nopCloser{}
-	)
+	logger, _, closer, err := OpenFileView(opts)
+	return logger, closer, err
+}
+
+// OpenFileView is Open, and also file, a view of the same logger that
+// writes to the log file alone, through the one file handler Open builds:
+// a record given to file never reaches Stderr or Show. With no File, file
+// writes nothing. It opens one rolling writer, as Open does, so the view is
+// not a second writer on the file (0052-PLAN P5, the owner's approval of
+// 2026-11-21).
+func OpenFileView(opts Options) (logger, file *slog.Logger, closer io.Closer, err error) {
+	var handlers []slog.Handler
+	closer = nopCloser{}
+	file = slog.New(slog.DiscardHandler)
 	if opts.File != "" {
-		r, err := openRolling(opts.File, opts.Warn)
-		if err != nil {
-			return nil, nil, fmt.Errorf("logging: %w", err)
+		r, rerr := openRolling(opts.File, opts.Warn)
+		if rerr != nil {
+			return nil, nil, nil, fmt.Errorf("logging: %w", rerr)
 		}
-		handlers = append(handlers, slog.NewJSONHandler(r, &slog.HandlerOptions{Level: opts.Level, ReplaceAttr: redact}))
+		fh := slog.NewJSONHandler(r, &slog.HandlerOptions{Level: opts.Level, ReplaceAttr: redact})
+		handlers = append(handlers, fh)
+		file = slog.New(fh)
 		closer = r
 	}
 	switch {
@@ -67,7 +79,7 @@ func Open(opts Options) (*slog.Logger, io.Closer, error) {
 	default:
 		h = slog.NewMultiHandler(handlers...)
 	}
-	return slog.New(h), closer, nil
+	return slog.New(h), file, closer, nil
 }
 
 // ParseLevel reads debug, info, warn or error, in any case.

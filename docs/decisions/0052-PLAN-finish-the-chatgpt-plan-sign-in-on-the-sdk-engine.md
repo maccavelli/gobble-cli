@@ -478,6 +478,7 @@ words (`provider openai has an OAuth login in auth.json, which gobble does not u
 * *(2026-11-21, second draft.)* The open rows are now those of the MADR's "Second draft": M9, M10, M12, M15, M16, M18, M19, M29, M33, M36, M45, M56 to M64 and A8, put to the owner as that draft's Q1 to Q8; P5 waits for Q1 to Q7. Step 1's signature gains a lazy file-only `Log`, a `Now` and test hooks, decided now; see "Second draft of the readiness pass (2026-11-21)" at the end of "Execution record".
 * *(2026-11-21, third draft.)* The open rows are unchanged; the questions are the MADR's third draft's Q1 to Q8, and P5 waits for Q1 to Q7. `Log` is `lazyLog`'s file-only view of its one file handler, the call site silences `auth status --json` and `auth login --json` before `Migrate`, and `internal/logging/logging.go` joins this phase; see "Third draft of the readiness pass (2026-11-21)" at the end of "Execution record".
 * *(2026-11-21, the owner's answers.)* The owner answered Q1 to Q8, each as recommended, and approved the logging file, "Approve: add logging.go to P5 (Recommended)". No row of the MADR's state table is open, and nothing in the state table holds P5 back. Its steps, signature, files and tests are settled in "The owner's answers: P5 and P6 settled (2026-11-21)" at the end of "Execution record", which this phase executes, after its step 0, on the owner's word to start it.
+* *(2026-11-22.)* Built in pass 1, unstaged: "P5 record (2026-11-22), pass 1" at the end of "Execution record". Its Deviation 5 adds `internal/auth/clients.go` and the MADR's rows M66 and M67. Every decided M row is tested, every plant is caught, and the gates pass on the three hosts.
 
 1. `internal/auth/migrate.go`: `Migrate(ctx, MigrateOptions{AuthPath, StateDir, Settings func() (bool, bool),
    CarryConsent func(ctx context.Context) error, Log *slog.Logger}) (Report, error)`, MADR D9's steps in order; the
@@ -2004,3 +2005,175 @@ The duplicated-key case of the review's finding 1m was not checked against the s
 **9. P5's start.** No row is open, and P5's dependencies on the owner's answers are met. P5 starts on the owner's word to start it, with its step 0, the re-grounding at its start commit. Its exit criterion: no blocker, every row tested, plants caught.
 
 **10. Not done.** No code; no test run; no kit built; `docs/README.md` not edited (the row text is in the hand-back); nothing staged or committed. `make check-records` was run after this entry was written; its exit status is in the hand-back.
+
+### P5 record (2026-11-22), pass 1
+
+Built by an agent on the coordinator's brief, on the owner's word relayed by the coordinator, "send an agent to work gobble P5". **Start state:** branch `main`, `HEAD` `0589454`. `git --no-optional-locks status --short` showed only another agent's files, written at the same time (`docs/decisions/0004-MADR-go-module-architecture.md` and new `docs/decisions/0065-*`); this phase does not touch them. Nothing staged or committed by this phase.
+
+#### Deviation 5 (2026-11-22): the migration's warning doubles a command's own report of an unreadable `auth.json`; and the client record's check-then-save window
+
+**Found** during pass 1, after every P5 test was green in `internal/auth`, `internal/logging` and `internal/archtest`. `go test ./internal/cli/` failed one test, `TestAuthConsentCommand` (`internal/cli/consent_test.go:84-95`). It was in the tree before P5 and pins 0052-MADR D3's note, "Every error is one line on stderr". With `auth.json` holding `{"openai": `, `gobble auth consent openai` and its `allow` and `deny` forms printed two lines: `Warning: auth.json migration: …invalid auth.json…`, then `Error: …invalid auth.json…`. The decided rows meet there and no row settles it:
+
+* Q1 (a): `auth consent` migrates.
+* M3: an unreadable `auth.json` is a migration error.
+* M48: that error is one stderr warning line.
+* D3: the command allows one error line.
+
+The same doubling happens in every command that reads `auth.json` itself. Only D3's test pins it.
+
+**Also found:** step 4's client record was written by `Clients.Load`, then `Clients.Save`, with no lock between the two. `Clients.Save` replaces a record, so a record another process saved in that window would be overwritten. That is against D9's note of 2026-11-20, "an existing client record is left". `internal/auth/clients.go` was outside P5's file list.
+
+**Decisions (owner, 2026-11-22, relayed by the coordinator):**
+
+1. The doubled report: **"Command reports it; log keeps it (Recommended)"**. An `auth.json` that cannot be read or parsed is reported by the command, not by the migration. `Migrate` still returns the error and writes nothing (M3 stands). The call site tells this case apart by a sentinel from `internal/auth` and writes it to the log's file-only view only, never to stderr. Every other migration error stays one stderr warning (M48). This is the MADR's row M66.
+2. The client record's window: **"Guard it in P5 (Recommended)"**. The record's read-modify-save runs under `clients.json.lock`. This is the MADR's row M67.
+
+**Files added to this phase:** `internal/auth/clients.go`, which gains a save-if-absent under `clients.json.lock`. `internal/auth/clients_test.go` is not changed; M67's test is in `internal/auth/migrate_test.go`.
+
+**Tests added.** Each is seen failing first, each with its plant:
+
+| Row | Test (package) | Asserts | Planted break |
+| :--- | :--- | :--- | :--- |
+| M66 | `TestMigrateUnreadableAuthJSONIsTheCommands` (`internal/cli`) | `auth.json` holding `{"openai": `: `gobble version` exits 0 with nothing on stderr; the log file holds one Warn record of the migration naming `auth.json`; `auth.json` unchanged. `TestAuthConsentCommand` passes unchanged | the call site writing the unreadable-file error to stderr, as any other |
+| M66 | `TestMigrateUnreadableFileWritesNothing`, extended (`internal/auth`) | each unreadable case's error is `ErrUnreadable` (`errors.Is`) | the read's and the parse's errors returned without the sentinel |
+| M67 | `TestMigrateClientRaceKeepsFirst` (`internal/auth`) | another process's `Clients.Save` of an `openai` record, run from `migrateHooks.beforeClientSave` between step 4's check and its save: that record is kept; `Report.ClientRecord` is false | the save made with no check, under the lock, that the record is still absent |
+
+#### Pass 1, execution (2026-11-22)
+
+**Step 0, re-grounding at `0589454`: nothing moved.** `git diff --stat 4c3e397 0589454` touches only this pair and `docs/README.md`. Every file, line and symbol that P5, D9 and the settled entry cite was re-read and holds. Among them: `internal/cli/main.go:45-47, 57-59, 87-94, 149-171, 350-353, 382-407`; `internal/auth/store.go:28, 61, 90-92, 220, 286, 293, 358-375, 387-390, 412-425`; `hostid.go:23, 35, 59-75, 86-87`; `clients.go:17, 47, 56-59, 66`; `logins.go:9, 15`; `resolve.go:38-40`; `secure_windows.go:7`; `secure_other.go:6`; `internal/logging/logging.go:12, 44-68`; `internal/cli/auth.go:72-73, 411, 522-523`; `llm/provider/consent.go:115-130, 168-179`; `internal/archtest/check.go:304, 308, 315, 318-319`; `check_test.go:14, 50`; `internal/config/diag.go:44`; `resolve_test.go:267`; `internal/appdirs/dirs.go:157-161`; `internal/cli/signal.go:91-92`; `models.go:90-94`; `llm/provider/ambient.go:83`; `internal/fsx/regular.go:35`; `acpserver/authconsent_test.go:57`; `SessionKindOf` at `llm/provider/signinrun.go:75`.
+
+**What was built** (unstaged; the coordinator stages, the owner commits):
+
+* `internal/auth/migrate.go` (new): `Migrate`, `MigrateOptions` (the settled signature), `Report`, `ErrUnreadable` (M66), and `migrateHooks`. `migrateHooks` holds the settled five hooks, plus `beforeClientSave` for M67 (Deviation 5). The steps are those of the settled entry's item 3.
+* `internal/auth/hostid.go`: `placeHostID`, the rename under `host-id.lock`. `HostID` places through it. The `O_EXCL` create and `awaitHostID` are removed. `hostIDHooks{afterRead}` is added. `validHostID` is the one `urn:uuid` rule, used by `readHostID` and by the migration.
+* `internal/auth/clients.go` (Deviation 5): `Save` and the new `saveIfAbsent` share one read-modify-write under `clients.json.lock` (`update`).
+* `internal/logging/logging.go`: `OpenFileView`, the file-only view over the one file handler. `Open` is unchanged for its callers.
+* `internal/cli/main.go`: `migrateAuth`, called between `e.ownListings()` and `kctx.Run`. It holds the exemption of `auth status` and `auth check`, the silencing under `auth login --json`, M48/M52/M55/M66's outputs, and M51's skip. `loginJSON` reads `--json` from the parsed command. `lazyLog` gains `fileOnly()`, and its "no log file" line is not written when the log has no stderr.
+* `internal/cli/migrate.go` (new): the `Settings`, `PlanSession` and `CarryConsent` closures of the settled entry's item 6.
+* Tests: `internal/auth/migrate_test.go` (new), `hostid_test.go`, `internal/archtest/check_test.go` (rule 4 for `internal/auth`), `internal/cli/migrate_test.go` (new), `internal/logging/logging_test.go`.
+* Docs: `docs/guides/credentials.md` (the host id under `host-id.lock`; the files an unfinished sign-in leaves; a new section, "The one-time migration of `auth.json`") and `docs/architecture.md` (the `internal/logging`, `internal/auth` and `internal/cli` rows).
+
+**Red first.** Every test was written before its code. `go test` ran against stubs: `Migrate` a no-op; `hostIDHooks` declared and unused; `OpenFileView` with a discarding view; the cli closures returning zero, and no call in `run`; `ErrUnreadable` declared and not wrapped; `beforeClientSave` placed between a `Load` and a `Save`. Each test failed for its stated reason, never a build failure: a missing backup or state file, an error not returned, a record not kept, stderr not empty, and so on. Seven tests pass against a no-op stub, so their only red is their plant: `TestMigrateNothingToDo`, `TestMigrateNothingToDoTakesNoLock`, `TestMigrateCallsOnlyItsHooks`, `TestImportRules`' new case (the existing whole-tree rule 4 already rejects the import), and `TestCompletionModeDoesNotMigrate`.
+
+**Rows to tests,** as the MADR's state table, its answers and this record's Deviation 5 map them. M1, M2, M6: `TestMigrateNothingToDo`. M3, M66: `TestMigrateUnreadableFileWritesNothing`. M4, M5, M49, M50, M60: `TestMigrateDropsDormantKey`. M7, M8, M9: `TestMigrateKeepsEverythingElse`. M10, M61: `TestMigrateLayout`. M11: `TestMigrateIsIdempotent`. M13: `TestMigrateSkipsForeignEntry`. M14 to M21, M23, M57: `TestMigrateAdoptsIDs`. M22: `TestMigrateBadClientsFileIsAnError`. M24 to M27, M32, M33, M59, M62, M64: `TestMigrateCarriesConsent`. M24 end to end: `TestMigrateCarriesConsentEndToEnd`. M28, M29: `TestMigrateUnreadableSettingsWritesNothing`. M30, M53, M65: `TestMigrateSettingsIsGlobalOnly`. M12: `TestPlanSessionHook`, `TestMigrateCallsOnlyItsHooks`. M34, M35, M38, M59: `TestMigrateBacksUpFirst`. M36: `TestMigrateBackupNameTaken`. M37: `TestMigrateBackupFailureWritesNothing`. M39: `TestMigrateStateWriteFailureIsAnError`. M40: `TestMigrateCompletesAfterInterruption`. M41: `TestMigrateNothingToDoTakesNoLock`. M42: `TestMigrateConcurrentRunsWriteOnce`. M43: `TestMigrateHostIDRaceKeepsFirst`. M58: `TestHostIDReplacesEmptyFile`, `TestHostIDLockedReplaceKeepsFirst`. M44: `TestCompletionModeDoesNotMigrate`. M45, M56: `TestMigrateRunsExceptStatusAndCheck`. M46: `TestACPStartMigrates`. M48: `TestMigrateErrorIsAWarning`. M51: `TestMigrateStopsWhenCancelled`, `TestMigrateSignalSkipsTheCommand`. M52: `TestMigrateSkippedWithoutDirs`. M54: `TestMigrateRunsOnAnyBuild`. M55: `TestMigrateSilentUnderJSONAndACP`, `TestFileOnlyView`. M66: `TestMigrateUnreadableAuthJSONIsTheCommands`, with `TestAuthConsentCommand` unchanged. M67: `TestMigrateClientRaceKeepsFirst`. M31: `TestUnknownKeyReported` (existing). No decided M row is without a test.
+
+**Plants.** Each was run through go-llmprovider-sdk's `tools/plant.py --root <this repo>` on a scratch clone. There is one spec per target test, whose command is `go test -count=1 -run '^<Test>$' <package>`, so "caught" means that test failed. The tool's own summary lines were all read, and no catch was a build failure. 79 plant runs: 78 caught by their target test; the 79th is the expected miss below. The first plant run, one spec per package, counted five plants as caught on a build failure (a variable they left unused: M13, M18, M25, M26, M62). They were fixed to compile and run again; the table is the second run.
+
+| Plant | Caught by | Caught |
+| :--- | :--- | :--- |
+| rule 4: checkRule4 exempting internal/auth | `TestImportRules` | yes |
+| M43/M58 the rename made without the read again under host-id.lock | `TestHostIDIsStable`, `TestHostIDLockedReplaceKeepsFirst`, `TestMigrateHostIDRaceKeepsFirst` | yes |
+| M58 an empty host-id treated as present | `TestHostIDReplacesEmptyFile` | yes |
+| M14 host-id written 0644 | `TestMigrateAdoptsIDs` | yes |
+| M17/M18 an existing host-id replaced | `TestMigrateAdoptsIDs` | yes |
+| M21 clients.json written with openai's record alone | `TestMigrateAdoptsIDs` | yes |
+| M23 a backup made whenever any step has work | `TestMigrateAdoptsIDs` | yes |
+| M15 a record with an empty clientId | `TestMigrateAdoptsIDs` | yes |
+| M16 a record with an empty hostId | `TestMigrateAdoptsIDs` | yes |
+| M18 the record written with the entry's hostId | `TestMigrateAdoptsIDs` | yes |
+| M19 the invalid host-id replaced | `TestMigrateAdoptsIDs` | yes |
+| M57 the entry's hostId copied unchecked | `TestMigrateAdoptsIDs` | yes |
+| M38 the backup written after | `TestMigrateBacksUpFirst` | yes |
+| M34 the name formatted in local time | `TestMigrateBacksUpFirst` | yes |
+| M35 the backup created 0644 | `TestMigrateBacksUpFirst` | yes |
+| M59 a backup skipped when one already exists | `TestMigrateBacksUpFirst` | yes |
+| M37 auth.json written after a failed backup | `TestMigrateBackupFailureWritesNothing` | yes |
+| M37 the temporary file not removed on failure | `TestMigrateBackupFailureWritesNothing` | yes |
+| M36 the rename made over an existing name, with no check | `TestMigrateBackupNameTaken` | yes |
+| M22 the error from Clients dropped | `TestMigrateBadClientsFileIsAnError` | yes |
+| hooks only: Migrate calling AcceptsLogin | `TestMigrateCallsOnlyItsHooks` | yes |
+| hooks only: a call to provider.SetConsent | `TestMigrateCallsOnlyItsHooks` | yes |
+| M25 a declined answer overwritten | `TestMigrateCarriesConsent` | yes |
+| M26 the carry made whenever the file was read, the value ignored | `TestMigrateCarriesConsent` | yes |
+| M27 the carry made whenever the setting is true | `TestMigrateCarriesConsent` | yes |
+| M32 CarryConsent's error dropped | `TestMigrateCarriesConsent` | yes |
+| M64 a backup made when only step 5 has work | `TestMigrateCarriesConsent` | yes |
+| M33 CarryConsent called while auth.json.lock is held | `TestMigrateCarriesConsent` | yes |
+| M62 the kind presence check dropped | `TestMigrateCarriesConsent` | yes |
+| M67 the save made with no check that the record is still absent | `TestMigrateClientRaceKeepsFirst` | yes |
+| M40 step 1 computing step 3's changes alone | `TestMigrateCompletesAfterInterruption` | yes |
+| M42 the changes written as computed from the read before the lock | `TestMigrateConcurrentRunsWriteOnce` | yes |
+| M4 the log line printing the key | `TestMigrateDropsDormantKey` | yes |
+| M4 one record naming every provider | `TestMigrateDropsDormantKey` | yes |
+| M5 removal only when both members are present | `TestMigrateDropsDormantKey` | yes |
+| M49 step 3 limited to a fixed list of gobble's providers | `TestMigrateDropsDormantKey` | yes |
+| M50 the dormant member found by e.Key != "" \|\| e.Workspace != "" | `TestMigrateDropsDormantKey` | yes |
+| M60 Report naming nothing when there is no logger | `TestMigrateDropsDormantKey` | yes |
+| M63 the path not resolved | `TestMigrateFollowsSymlink` | yes |
+| M63 the lock taken beside the target | `TestMigrateFollowsSymlink` | yes |
+| M11 the backup made on every run | `TestMigrateIsIdempotent` | yes |
+| M8 step 3's removal dropping an unknown field of the edited entry | `TestMigrateKeepsEverythingElse` | yes |
+| M7 step 3 applied to every entry, whatever its type | `TestMigrateKeepsEverythingElse` | yes |
+| M9 step 3 written through File.encode as it stands | `TestMigrateKeepsEverythingElse` | yes |
+| M61 the file's own CRLF kept at the top level | `TestMigrateLayout` | yes |
+| M10 the edited entry written compact | `TestMigrateLayout` | yes |
+| M1/M2 a state file created anyway | `TestMigrateNothingToDo` | yes |
+| M2 a backup made for a file with no members | `TestMigrateNothingToDo` | yes |
+| M6 a backup made whenever an oauth entry exists | `TestMigrateNothingToDo` | yes |
+| M41 the lock taken before the first read | `TestMigrateNothingToDoTakesNoLock` | yes |
+| M13 step 4 adopting from any openai oauth entry | `TestMigrateSkipsForeignEntry` | yes |
+| M39 the state write's error dropped | `TestMigrateStateWriteFailureIsAnError` | yes |
+| M51 the steps going on after the cancellation | `TestMigrateStopsWhenCancelled` | yes |
+| M3 Load's error dropped, the migration going on as for an empty file | `TestMigrateUnreadableFileWritesNothing` | yes |
+| M66 the parse's error returned without the sentinel | `TestMigrateUnreadableFileWritesNothing` | yes |
+| M28 (false, false) taken as (false, true) | `TestMigrateUnreadableSettingsWritesNothing` | yes |
+| M29 Settings asked on every run that has work | `TestMigrateUnreadableSettingsWritesNothing` | yes |
+| M46 the call skipped for acp | `TestACPStartMigrates` | yes |
+| M66 the unreadable-file error written to stderr as any other | `TestAuthConsentCommand`, `TestMigrateUnreadableAuthJSONIsTheCommands` | yes |
+| M44 the call made in Main before the completion check | `TestCompletionModeDoesNotMigrate` | yes |
+| M24 the closure passing false | `TestMigrateCarriesConsentEndToEnd` | yes |
+| M48 run returning on Migrate's error | `TestMigrateErrorIsAWarning` | yes |
+| M55 the call site's Warn record through the shared logger | `TestMigrateErrorIsAWarning` | yes, by the test named; not by `TestMigrateSilentUnderJSONAndACP` (expected, see the note below) |
+| M45/M56 auth check left out of the exemption list | `TestMigrateRunsExceptStatusAndCheck` | yes |
+| M54 the call gated on a tagged version | `TestMigrateRunsOnAnyBuild` | yes |
+| M30 the closure reading the project's settings.yaml | `TestMigrateSettingsIsGlobalOnly` | yes |
+| M53 the closure taking the string true as true | `TestMigrateSettingsIsGlobalOnly` | yes |
+| M65 the closure taking the last value of a duplicated key | `TestMigrateSettingsIsGlobalOnly` | yes |
+| M51 run going on to kctx.Run after a cancelled migration | `TestMigrateSignalSkipsTheCommand` | yes |
+| M55 the error written with Output.Warnf whatever the command | `TestMigrateSilentUnderJSONAndACP` | yes |
+| M55 the silencing not applied before Migrate under auth login --json | `TestMigrateSilentUnderJSONAndACP` | yes |
+| M55 the 'no log file' line reaching stderr when the log has no stderr | `TestMigrateSilentUnderJSONAndACP` | yes |
+| M52 the skip warning written under --json | `TestMigrateSkippedWithoutDirs` | yes |
+| M12 the closure deciding the plan from the stored kind alone | `TestPlanSessionHook` | yes |
+| M55 the view built over the fan-out handler | `TestFileOnlyView` | yes |
+| M35 the backup written without `securePrivate` (Windows; a scratch clone with the plant, run on the Windows laptop through `run-on-host`, since plant.py runs on this Mac) | `TestMigrateBacksUpFirst` (`backup owner-only false`) | yes |
+| M14 `host-id` written without `securePrivate` (Windows, the same way) | `TestMigrateAdoptsIDs` (`host-id owner-only false`), `TestHostIDIsStable` | yes |
+
+Plant notes:
+
+* **M43.** `migrateHooks.beforeHostIDCreate` fires inside the placement, after `placeHostID`'s first read finds no id and before it takes `host-id.lock`. That is "between the check and the create". It is why `TestMigrateHostIDRaceKeepsFirst` catches the settled plant, "the rename made without the read again under `host-id.lock`" (the table above). A hook run before the placement would let the placement's own first read see `HostID`'s file, and that plant could not fail the test.
+* **M55's shared-logger plant.** It was built as the call site's Warn record given to the shared logger instead of the file-only view: `Migrate` itself writes only Info records, which never reach stderr. The call site writes that record to the file-only view in every command. Under `auth login --json` and `gobble acp` the shared logger has no stderr either, so `TestMigrateSilentUnderJSONAndACP` passes with the plant (exit 0, as expected and recorded before the run). `TestMigrateErrorIsAWarning` catches it, with two stderr lines where one is allowed.
+* **Plants worded against a name `migrate.go` may not use.** M49's "limited to `provider.KeyProviders()`" was built as a fixed list of providers, since `migrate.go` imports no `llm/provider`. M30's "the closure reading the merged settings" was built as the closure reading the project's `settings.yaml`, since the typed merged loader ignores the key.
+
+**Gates.** Each exit status was captured directly; long output went to scratch files.
+
+| Command | Host | Exit |
+| :--- | :--- | :--- |
+| `make pre-add-check FILES="<the 11 Go files>"` | this Mac | 0, after the lint fixes below (first runs: 2) |
+| `go test -race -count=1 ./internal/auth/ ./internal/cli/` (`run-heavy`) | this Mac | 0 |
+| `make preflight` (`run-heavy`; live tree, the other agent's records present) | this Mac | 0, `preflight passed` |
+| `make check-test-isolation` (`run-heavy`) | this Mac | 0, `files written above the temp roots: 0` |
+| `go test -count=1 ./...` (`run-on-host --need linux --race`; `--race` only keeps the run off the WSL distros, so it reaches the Linux machine) | the Linux machine | 0 |
+| `go test -race -count=1 ./internal/auth/ ./internal/cli/` (`run-on-host --need linux --race`) | the Linux machine | 0 |
+| `go test -count=1 ./...` (`run-on-host --need windows`) | the Windows laptop | 0 (second run; see below) |
+| `go test -count=1 ./...` (`run-on-host --need linux`, which chose a distro) | the Windows laptop's `Ubuntu-24.04` (WSL) | 0; extra, not the Linux machine's run |
+| go-llmprovider-sdk `tools/denyscan.py --root <this repo> --changed` | this Mac | 0, `deny-scan: 0 hit(s) in 18 file(s)` |
+| `make check-records markdownlint` | this Mac | 0 (before and after these records) |
+
+**The Windows laptop's first suite run** (before the lint fixes) failed one test: `TestSignInTypeAheadNotSentAsPrompt`, `login_test.go:856`, `auth.json: open …: The process cannot access the file because it is being used by another process`. That test's harness builds a `runEnv` itself and never calls `run`, so the migration does not run in it. Its poll of `auth.json` raced the key's save by rename. With P5, the second suite run passed, and `go test -count=20 -run TestSignInTypeAheadNotSentAsPrompt ./internal/cli/` passed. The same 20 runs at `0589454`, on a scratch clone, also passed. It is recorded as a Windows timing flake in a path P5 does not touch; it is not fixed here.
+
+**Lint fixes inside the phase's files** (`make pre-add-check`'s first two runs):
+
+* `contextcheck`: `placeHostIDAfter` takes the migration's `ctx`. `placeHostID` keeps the settled `(dir, id string)` and waits for the lock with `context.Background()`, under a `//nolint:contextcheck` doc directive, because `HostID`'s callers give it no context.
+* The closures' two `provider.PlanConsent` calls carry a line `//nolint:contextcheck`, because `PlanConsent` takes no context.
+* `goconst`: `jsonFlag`.
+* `gocritic` `typeDefFirst`: `migrateAuth` moved below `runEnv`.
+* `gocognit`: `TestMigrateAdoptsIDs`' and `TestMigrateCarriesConsent`'s subtests became top-level helpers (`adoptIDs…`, `carries…`); the subtest names are unchanged.
+
+**Deviations:** Deviation 5 above, the only one. The build pass count is 1: the stop on Deviation 5 came mid-pass, and the code built and went green on its first build.
+
+**Not done by this phase:**
+
+* `docs/README.md`'s 0052 rows are not edited (outside this phase's files); the text is in the hand-back.
+* P6 and the owner's L8 are not started; L8 runs after P5's commit.
+* Nothing is staged or committed.

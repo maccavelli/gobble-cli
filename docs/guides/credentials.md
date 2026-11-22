@@ -249,7 +249,10 @@ Three providers let you sign in with your account instead of pasting a key:
   installation's host id, a random `urn:uuid`, in `host-id` in its state directory (`gobble config path`
   shows the directory), registers the plan's client under it, and keeps the issued client in
   `clients.json` beside it, so that signing out and in again reuses the client instead of registering
-  another. When the state directory cannot be read or written, the sign-in goes on with no host id of
+  another. The host id is written once, to a temporary file renamed into place under the lock file
+  `host-id.lock` beside it, so two gobble processes keep one id; an empty `host-id`, left by a write that
+  was interrupted, is replaced, and one that holds anything but a `urn:uuid` is an error and is left as
+  it is. When the state directory cannot be read or written, the sign-in goes on with no host id of
   gobble's own, the SDK makes one for that sign-in, and gobble warns once: on stderr for a terminal
   sign-in, in the agent's log for an ACP one. Neither warning names an id.
 
@@ -349,6 +352,47 @@ or a list; exit 2 is a usage error: an unknown provider, a provider with no stor
 the stored sign-in does not have, a consent with no `allow` or `deny`, or any other third word; exit 1
 is an `auth.json` that cannot be read, parsed or locked, with nothing written. Every error is one line
 on stderr, with nothing on stdout.
+
+### The one-time migration of `auth.json`
+
+A gobble build of the ChatGPT plan sign-in tidies `auth.json` once, when a command starts. Every command
+does it, except `gobble auth status` and `gobble auth check`, with or without `--json`, which read the file
+as it is; shell completion never does. A development build does it as a release would. It does three
+things, and only what is still to do:
+
+- **A dormant key leaves a sign-in.** An OAuth entry never holds a `key` or a `workspace`; one left there
+  from an earlier key is a secret beside the tokens that nothing uses. gobble removes both members from
+  every OAuth entry, whatever their value and whatever the provider. Before that it copies `auth.json`,
+  unchanged, to `auth.json.bak-<time>` beside it, the time in UTC (`auth.json.bak-20261122T090807Z`),
+  readable by you alone as `auth.json` is. The log file gets one Info record per provider, naming the
+  provider and the backup's file name, never a value. At `--log-level warn` or `error` that record is not
+  kept, and the backup is the trace. gobble never removes a backup: delete it once you no longer want it.
+  Every other entry and field keeps its bytes. The file is written with LF line ends, two spaces deep and
+  a final newline, as gobble always writes it.
+- **A ChatGPT plan sign-in's ids move to the state directory.** A plan sign-in stored by an earlier build
+  holds its host id and client id in `auth.json`. With no `host-id`, or an empty one, gobble writes the
+  entry's host id there. When the entry holds both ids, `host-id` then holds the same host id and
+  `clients.json` has no `openai` record, it writes that record as well. An existing `host-id` or record is
+  never replaced. A host id that is not a `urn:uuid`, in the entry or in `host-id`, is an error, and
+  nothing is adopted.
+- **The old background setting becomes the consent.** An earlier build kept the answer as
+  `chatgptPlanBackground: true` in the global `settings.yaml`. When that file says so, and the plan
+  sign-in has no answer and no `kind` member, which only that build left, gobble records the consent as
+  granted, the same as `gobble auth consent openai background allow`. A project's `settings.yaml` is not
+  read. `settings.yaml` is not edited; gobble reports the key as one it does not use. To withdraw the
+  grant, run `gobble auth consent openai background deny`.
+
+With nothing to do, gobble writes nothing and creates nothing, not even a lock file. With something to
+do, it waits for `auth.json`'s lock as a sign-in's save does, up to 30 seconds. A symbolic link at
+`auth.json` is followed: its target is migrated and backed up beside the target, and the link stays.
+
+A migration that fails leaves the file as it was, or with what it finished, and the command runs on. The
+next start does what remains. The failure is one warning on stderr, `auth.json migration: …`, and a
+record in the log file; under `gobble auth login --json` and `gobble acp` it is the log record alone. An
+`auth.json` that cannot be read or parsed is the exception: the command that reads the file reports
+that itself, so the migration says nothing on stderr and only the log keeps it. A `settings.yaml` that
+cannot be read stops a migration that has a consent to carry, with nothing written. When gobble's
+directories cannot be resolved, the migration is skipped with one warning, `auth.json not migrated: …`.
 
 ## Signing in from a session
 
@@ -561,8 +605,8 @@ lock, not by it. A client's `$/cancel_request` cancels the sign-in and its pendi
 sign-in's own listener and run, and stores no credential: a sign-in is saved only while its request is
 still live. If the save had begun when the cancel arrived, the credential is stored, so gobble tells its
 run of the change as for any sign-in, and the client, which has cancelled, gets no answer to act on. A
-sign-in that does not complete can leave two files, neither holding a credential: `host-id` in the state
-directory, which gobble creates before the engine starts, and `clients.json` beside it, the issued OAuth
+sign-in that does not complete can leave files, none holding a credential: `host-id` in the state
+directory, which gobble creates before the engine starts, with its lock file `host-id.lock`, and `clients.json` beside it, the issued OAuth
 client record that a ChatGPT plan sign-in writes when the provider issues its client, which the next
 sign-in reuses; so "changes nothing" above means `auth.json`, not those files. gobble holds no lock while the client is
 answering, so other requests, `session/cancel` included, are served meanwhile. When the sign-in

@@ -89,7 +89,11 @@ func run(ctx context.Context, k *kong.Kong, root *Root, args []string, stdin *os
 	}
 	e := &runEnv{ctx: ctx, out: out, stdin: stdin, logs: logs, intr: intr, now: clock, overrides: overrides}
 	e.ownListings()
-	err = kctx.Run(e)
+	if e.migrateAuth(kctx.Command(), loginJSON(kctx)) {
+		err = kctx.Run(e)
+	} else {
+		err = ctx.Err() // a signal ended the run during the migration (0052-MADR D9, row M51)
+	}
 	e.tellWaitWarn() // a warning a fallback queued, when no prompt's text came after it (0063-MADR D23, row R156)
 	code = exitCode(ctx, out, err)
 	e.endListings(ctx) // before the log closes: a listing may still log (0046-MADR D1)
@@ -339,6 +343,76 @@ type runEnv struct {
 
 func (e *runEnv) log() *slog.Logger { return e.logs.get() }
 
+// migrateAuth runs auth.json's one-time migration before the command
+// (0052-MADR D9, as the owner's answers of 2026-11-21 amend it): for every
+// command run dispatches but auth status and auth check, with or without
+// --json, which read the file as it is; completion mode never reaches run
+// (Q1). Under auth login --json it first silences the command as its Run
+// does, so nothing of the migration reaches stderr there or under gobble
+// acp (row M55). Directories that cannot be resolved skip it with one
+// warning (M52). A failure is a Warn record in the log file alone, through
+// the log's file-only view, and, but under those two commands, one warning
+// line on stderr; the command runs on with the file as it is (M48). An
+// auth.json that cannot be read or parsed is the command's to report, so
+// that failure goes to the log file alone (M66). It reports false when the
+// run's context ended, so the command is not run (M51).
+func (e *runEnv) migrateAuth(command string, loginJSON bool) bool {
+	if strings.HasPrefix(command, "auth status") || strings.HasPrefix(command, "auth check") {
+		return true
+	}
+	if loginJSON {
+		e.out.err = io.Discard
+		e.logs.stderr = nil
+	}
+	silent := e.logs.stderr == nil
+	dirs, _, err := systemDirs()
+	if err != nil {
+		if !silent {
+			e.out.Warnf("auth.json not migrated: %v", err)
+		}
+		return e.ctx.Err() == nil
+	}
+	path := filepath.Join(dirs.Config, "auth.json")
+	_, err = auth.Migrate(e.ctx, auth.MigrateOptions{
+		AuthPath:     path,
+		StateDir:     dirs.State,
+		Settings:     globalSetting(dirs.Config),
+		PlanSession:  planSessionHook(path),
+		CarryConsent: carryConsentHook(path),
+		Log:          e.logs.fileOnly,
+	})
+	if e.ctx.Err() != nil {
+		return false
+	}
+	if err != nil {
+		e.logs.fileOnly().WarnContext(e.ctx, "auth.json migration", slog.String("message", err.Error()))
+		if !silent && !errors.Is(err, auth.ErrUnreadable) {
+			e.out.Warnf("auth.json migration: %v", err)
+		}
+	}
+	return true
+}
+
+// jsonFlag is the name of a command's --json flag.
+const jsonFlag = "json"
+
+// loginJSON reports whether the parsed command is auth login with --json,
+// read from the parsed command as jsonLoginParseFailure reads it from the
+// parser's context.
+func loginJSON(kctx *kong.Context) bool {
+	sel := kctx.Selected()
+	if sel == nil || sel.FullPath() != "gobble auth login" {
+		return false
+	}
+	for _, f := range sel.Flags {
+		if f.Name == jsonFlag {
+			set, isBool := kctx.FlagValue(f).(bool)
+			return isBool && set
+		}
+	}
+	return false
+}
+
 // stdinReader is stdin as a reader, or nil when the process has none.
 func (e *runEnv) stdinReader() io.Reader {
 	if e.stdin == nil {
@@ -350,7 +424,8 @@ func (e *runEnv) stdinReader() io.Reader {
 // lazyLog opens the logger on its first use, so commands that never log
 // (version, config path, help) create no state directory or log file. After
 // close it opens nothing and writes nothing: a record then is dropped
-// (0046-MADR D5). mu guards opened, closed, logger and closer.
+// (0046-MADR D5). mu guards opened, closed, logger, file and closer. file is
+// the same log's file-only view (0052-PLAN P5).
 type lazyLog struct {
 	mu     sync.Mutex
 	opened bool
@@ -359,6 +434,7 @@ type lazyLog struct {
 	out    *Output
 	stderr io.Writer // nil under `gobble acp`
 	logger *slog.Logger
+	file   *slog.Logger
 	closer io.Closer
 }
 
@@ -378,7 +454,25 @@ func (l *lazyLog) get() *slog.Logger {
 	return l.logger
 }
 
-// open opens the logger; l.mu is held.
+// fileOnly is a logger over the log file's handler alone, opening the log on
+// its first use as get does: a record given to it never reaches stderr. With
+// no log file it writes nothing (0052-MADR D9, row M55).
+func (l *lazyLog) fileOnly() *slog.Logger {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.closed {
+		return discardLogger
+	}
+	if !l.opened {
+		l.opened = true
+		l.open()
+	}
+	return l.file
+}
+
+// open opens the logger; l.mu is held. Its "no log file" warning is not
+// written when the log has no stderr: under `gobble acp`, and auth status
+// --json and auth login --json once they silence it (0052-MADR D9, row M55).
 func (l *lazyLog) open() {
 	opts := logging.Options{Level: l.level, Stderr: l.stderr, Warn: l.stderr}
 	// On a terminal a record is a diagnostic, as D3's are (0024-MADR D6),
@@ -388,22 +482,27 @@ func (l *lazyLog) open() {
 		opts.Show = l.out.logRecord
 		opts.Home, _ = os.UserHomeDir() //nolint:errcheck // with no home, paths are shown whole
 	}
+	warn := func(err error) {
+		if l.stderr != nil {
+			l.out.Warnf("no log file: %v", err)
+		}
+	}
 	if d, _, err := systemDirs(); err != nil {
-		l.out.Warnf("no log file: %v", err)
+		warn(err)
 	} else {
 		opts.File = filepath.Join(d.State, "logs", "gobble.log")
 	}
-	logger, closer, err := logging.Open(opts)
+	logger, file, closer, err := logging.OpenFileView(opts)
 	if err != nil {
 		// The default path failing is a warning, not a stop
 		// (magic-cli-remote 0157-MADR D8).
-		l.out.Warnf("no log file: %v", err)
+		warn(err)
 		opts.File = ""
-		if logger, closer, err = logging.Open(opts); err != nil {
-			logger, closer = slog.New(slog.DiscardHandler), nil
+		if logger, file, closer, err = logging.OpenFileView(opts); err != nil {
+			logger, file, closer = slog.New(slog.DiscardHandler), discardLogger, nil
 		}
 	}
-	l.logger, l.closer = logger, closer
+	l.logger, l.file, l.closer = logger, file, closer
 }
 
 // close closes the log file, once; after it the log opens and writes nothing.

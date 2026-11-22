@@ -52,6 +52,13 @@ func TestImportRules(t *testing.T) {
 			ImportPath: modulePath + "/llm",
 			Imports:    []string{"github.com/maccavelli/go-llmprovider-sdk/llmprovider"},
 		}}},
+		// 0052-MADR D9 step 5: the migration in internal/auth reaches the SDK
+		// only through its hooks, so internal/auth importing any package of
+		// it is a violation (0052-PLAN P5 step 3).
+		{name: "rule 4 auth provider sdk", rule: 4, want: "go-llmprovider-sdk/llmprovider/auth", pkgs: []modPkg{{
+			ImportPath: modulePath + "/internal/auth",
+			Imports:    []string{"github.com/maccavelli/go-llmprovider-sdk/llmprovider/auth"},
+		}}},
 		{name: "rule 4 vendor sdk", rule: 4, want: "anthropic-sdk-go", pkgs: []modPkg{{
 			ImportPath: modulePath + "/llm/provider",
 			Imports:    []string{"github.com/anthropics/anthropic-sdk-go"},

@@ -769,6 +769,27 @@ Amended by them: D9's steps (the note of this date under step 6), D4 (its note o
 | --- | --- | --- | --- | --- |
 | L8 | The migration run on copies of the owner's own `auth.json`, global `settings.yaml`, `host-id` and `clients.json` (where present), in a scratch home, by the owner, twice | open: awaits live evidence | `home_is_scratch=yes`; `run1_exit=0`; `keys_dropped=` a count (recorded); `backup_made=yes` when that count is above 0, else `no`; `backup_owner_only=yes` when one is made; `host_id`, `client_record` and `consent_carried` each `written`, `left` or `none` (recorded); `run2_exit=0`; `run2_wrote=nothing`; `run2_backup=no`; `other_members_unchanged=yes`; `migration_warning=no`; `scratch_home_deleted=yes` | Q8; D9 as amended this date; M8, M11; Q4 (a backup only for a dropped key) |
 
+#### Amendment of 2026-11-22: two rows from P5's first build pass
+
+*(2026-11-22, a dated amendment.)* P5's first pass found two cases no row decided (the PLAN's "Deviation 5 (2026-11-22)"). The owner answered both, relayed by the coordinator: **"Command reports it; log keeps it (Recommended)"** and **"Guard it in P5 (Recommended)"**. **Counts, with them:** 74 decided, 5 out of scope, 0 open, 5 awaiting live evidence (L4 to L8); 84 rows.
+
+| Row | Input or state | Status | Outcome (what a test checks) | Decided by | Test (PLAN phase) |
+| --- | --- | --- | --- | --- | --- |
+| M66 | An `auth.json` that cannot be read or parsed (M3), under a command that migrates | decided | `Migrate` returns an error marked `auth.ErrUnreadable` and writes nothing (M3 stands). The call site writes it as one Warn record to the log's file-only view and nothing to stderr, whatever the command. A command that reads `auth.json` reports the file's error itself: D3's one error line for `auth consent`, the resolver's warning, `auth status --json`'s error object. A command that never reads the file, such as `gobble version`, prints nothing of it; the log keeps it | the owner, 2026-11-22, "Command reports it; log keeps it (Recommended)"; D3's note ("Every error is one line on stderr") | `TestMigrateUnreadableAuthJSONIsTheCommands` (`internal/cli`); `TestMigrateUnreadableFileWritesNothing`, extended (`internal/auth`); `TestAuthConsentCommand` (existing, unchanged) (P5) |
+| M67 | Another process saves `clients.json`'s `openai` record between step 4's check and its save | decided | The record is saved only when, under `clients.json.lock`, the file still has no `openai` record. Another process's record is kept, and `Report.ClientRecord` is false | the owner, 2026-11-22, "Guard it in P5 (Recommended)"; D9's note of 2026-11-20 ("an existing client record is left") | `TestMigrateClientRaceKeepsFirst` (`internal/auth`, P5) |
+
+**M48, annotated (2026-11-22):** "An error from `Migrate` in any other command" now excludes M66's case, an `auth.json` that cannot be read or parsed, which goes to the log file only. Every other migration error stays one stderr warning line.
+
+**Rows whose test or plant differs from the tables, as built in P5 (2026-11-22, annotations; the PLAN's "P5 record (2026-11-22), pass 1" has the evidence):**
+
+* **M43:** `migrateHooks.beforeHostIDCreate` fires inside the placement, after its first read finds no id and before `host-id.lock`. With it there, `TestMigrateHostIDRaceKeepsFirst` catches the plant "the rename made without the read again under `host-id.lock`".
+* **M55:** the plant "`Migrate`'s `Log` given the shared logger" was built as the call site's Warn record through the shared logger, since `Migrate` writes only Info records. `TestMigrateErrorIsAWarning` catches it; `TestMigrateSilentUnderJSONAndACP` does not, since the log there has no stderr.
+* **M49:** the plant "limited to `provider.KeyProviders()`" is a fixed list of providers, since `migrate.go` imports no `llm/provider`.
+* **M30:** the plant "the closure reading the merged settings" is the closure reading the project's `settings.yaml`, since the typed loader ignores the key.
+* **M24:** `TestMigrateCarriesConsent` checks "the session reads granted" through its stub `CarryConsent`. The SDK's own write is checked by `TestMigrateCarriesConsentEndToEnd`.
+* **M35, and M14's second plant:** the Windows plants (written without `securePrivate`) ran on a scratch clone on the Windows laptop through `run-on-host`, not through `tools/plant.py`, which runs on this Mac. Both were caught on the owner-only assertion.
+* **M14 to M21, M23 and M57's `TestMigrateAdoptsIDs`, and M24 to M64's `TestMigrateCarriesConsent`:** their subtests are top-level helpers (`adoptIDs…`, `carries…`), for the linter's complexity limit. The test and subtest names are as the tables give them.
+
 ### Consequences
 
 * Good, because the plan sign-in ships with one disclosure on every surface, asked once, withdrawn from the next

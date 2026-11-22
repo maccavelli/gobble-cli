@@ -44,27 +44,58 @@ func (c Clients) Load(_ context.Context, id string) (ClientRecord, error) {
 
 // Save stores r as id's record, keeping every other provider's; a zero r
 // removes id's member.
-func (c Clients) Save(ctx context.Context, id string, r ClientRecord) (err error) {
+func (c Clients) Save(ctx context.Context, id string, r ClientRecord) error {
+	_, err := c.update(ctx, func(m map[string]ClientRecord) bool {
+		if r == (ClientRecord{}) {
+			if _, ok := m[id]; !ok {
+				return false
+			}
+			delete(m, id)
+		} else {
+			m[id] = r
+		}
+		return true
+	})
+	return err
+}
+
+// saveIfAbsent stores r as id's record only when, under clients.json.lock,
+// the file has none for id, and reports whether it did: a record another
+// process saved first is kept (0052-MADR D9, row M67).
+func (c Clients) saveIfAbsent(ctx context.Context, id string, r ClientRecord) (bool, error) {
+	return c.update(ctx, func(m map[string]ClientRecord) bool {
+		if _, ok := m[id]; ok {
+			return false
+		}
+		m[id] = r
+		return true
+	})
+}
+
+// update applies change to the file's records under clients.json.lock, read
+// under the lock, and writes them when change reports a change, as auth.json
+// is written. A file that cannot be read is an error and is not replaced.
+func (c Clients) update(ctx context.Context, change func(map[string]ClientRecord) bool) (changed bool, err error) {
 	if err := os.MkdirAll(filepath.Dir(c.Path), 0o700); err != nil {
-		return fmt.Errorf("clients.json: %w", err)
+		return false, fmt.Errorf("clients.json: %w", err)
 	}
 	release, err := filelock.Lock(ctx, c.Path+".lock", authPolicy)
 	if err != nil {
-		return fmt.Errorf("clients.json: %w", err)
+		return false, fmt.Errorf("clients.json: %w", err)
 	}
 	defer func() { err = errors.Join(err, release()) }()
 	m, err := c.read()
 	if err != nil {
-		return err
+		return false, err
 	}
-	if r == (ClientRecord{}) {
-		if _, ok := m[id]; !ok {
-			return nil
-		}
-		delete(m, id)
-	} else {
-		m[id] = r
+	if !change(m) {
+		return false, nil
 	}
+	return true, c.write(m)
+}
+
+// write replaces clients.json with m, sorted by provider, two spaces deep.
+func (c Clients) write(m map[string]ClientRecord) error {
 	var b bytes.Buffer
 	b.WriteString("{")
 	for i, k := range slices.Sorted(maps.Keys(m)) {
