@@ -2177,3 +2177,76 @@ Plant notes:
 * `docs/README.md`'s 0052 rows are not edited (outside this phase's files); the text is in the hand-back.
 * P6 and the owner's L8 are not started; L8 runs after P5's commit.
 * Nothing is staged or committed.
+
+### P6 kits (2026-11-22)
+
+*(Dated addition, by the coordinator.)* Both kits are owner-run and live outside the repository, in the session's
+scratch folder; they build gobble at `dfaa1ac` from `git archive` and never run it outside a fresh scratch
+`GOBBLE_HOME` whose resolution they verify first (`home_is_scratch`).
+
+* **L8 kit** (`l8.py`, instructions, `test_l8.py`): built and self-tested on synthetic files only, 24 passed, 0 failed
+  (re-run by the coordinator, the same result); five plants each turned a check to its failure word. It prints the MADR
+  L8 row's words only. The kit cannot exercise M67 (the `clients.json` race) from outside the process; P5's race test
+  holds it.
+* **L7's title model, the owner's answer** (2026-11-22, relayed by the coordinator): "You name it at run time
+  (Recommended)". After L4's sign-in and before the L7 sessions, the kit writes the scratch home's `settings.yaml` as
+  `defaultProvider: openai`, `smallModel: openai/<id>`, `defaultModel` empty. `<id>` comes only from a required
+  `--small-model <id>` argument the owner supplies, shape-checked, never guessed and with no default; without it, or
+  malformed, the kit stops before the build (`check_failed=small_model_required` or `small_model_shape`). Recorded
+  because no row said which model L7's title uses, and that model spends the owner's plan quota.
+* **L4-L7 kit** (`l4l7.py`, instructions, `test_l4l7.py` with a stand-in gobble): one command on this Mac
+  (`--small-model <id>`), two groups, each in its own scratch home: L4 then L7 in one home (L7 needs L4's sign-in), and
+  L5 then L6. Re-run switch per group; results to one file of fixed words. Self-test: 94 passed, 0 failed, 19 plants
+  each turning its check to its failure word; a real build and a real ACP `initialize` found the `chatgpt_plan` method.
+  Not exercised: a real sign-in (the owner's). The owner's standing direction of 2026-11-22 applies: everything around
+  the owner's own sign-ins and keypresses is scripted.
+* **Disclosure by the kit builder.** While checking an output format, the builder ran the built gobble's `gobble config
+  path --json` once outside a scratch home. `config path` is not one of the commands the migration skips
+  (`internal/cli/main.go:359-362`), so that run could have migrated the owner's own `auth.json` ahead of L8. The
+  coordinator checked names and times only, no contents: no `auth.json.bak-*` exists (so no dormant key was dropped),
+  and the state folder holds no `host-id` or `clients.json` (so no ids were adopted); `auth.json`'s last change shares
+  its second with `auth.json.grok.refresh.lock`, the pattern of a Grok token refresh. The evidence is that the migration
+  changed nothing there; the exact time of the builder's run is not known, so this is not proof. L8 stands as planned.
+
+* **The kits copy for the owner** (2026-11-22, the owner, relayed by the coordinator: "for the file copies, those
+  should be scripted to copy into whatever my cwd is. i should not have to copy files that can easily be scripted.").
+  This replaces item 8's "*The owner:* copies their own `auth.json` ... into a fresh scratch home": when the owner runs
+  the L8 kit, the kit itself resolves the owner's config and state directories in Python as `internal/appdirs` does at
+  `dfaa1ac` (never by running gobble), copies `auth.json` (required) and `settings.yaml`, `host-id`, `clients.json`
+  where present, read-only on the source with symlinked sources refused, and prints only `copied=<names>`; one prompt
+  remains ("Run the check now? [y/N]"). The copy runs in the owner's own process; no agent reads the files. Both kits make
+  their scratch home under the owner's current directory (`--home-parent` overrides) and refuse a parent inside the
+  owner's gobble directories (`home_parent_unsafe`). The L4-L7 kit also refuses a parent whose enclosing repository has
+  a project `.gobble/settings.yaml` (`project_settings_present`), since `session/new` reads the project file of its
+  working directory (`internal/config/resolve.go:54-63`, `acpserver/agent.go:131-132`); L8 runs only `version` and
+  `config path`, which read no project file. Self-tests, re-run by the coordinator: L8 94 passed, 0 failed; L4-L7 123
+  passed, 0 failed; plants on the directory resolver and the project check each caught.
+
+### L8 result (2026-11-22)
+
+*(Dated addition, by the coordinator.)* The owner ran the L8 kit on this Mac against copies of their own files, made by
+the kit itself, and relayed its output verbatim (the kit prints fixed words only):
+
+```text
+built: gobble 0.0.0-dev (source commit dfaa1ac)
+copied=auth.json,settings.yaml
+home_is_scratch=yes
+run1_exit=0
+keys_dropped=0
+backup_made=no
+host_id=none
+client_record=none
+consent_carried=none
+run2_exit=0
+run2_wrote=nothing
+run2_backup=no
+other_members_unchanged=yes
+migration_warning=no
+scratch_home_deleted=yes
+```
+
+Every word is the expected one and no `check_failed` line was printed: L8 passes. The owner's `auth.json` carried no
+dormant `key`/`workspace`, no plan entry with ids to adopt and no consent to carry, so the migration is a no-op on it:
+the first run wrote no backup and changed nothing, and the second run wrote nothing. The owner had no `host-id` or
+`clients.json` to copy. This agrees with the coordinator's earlier check of names and times only, recorded under "P6
+kits (2026-11-22)". The MADR's L8 row moves from awaiting live evidence to decided at P6's close-out, with L4 to L7.
