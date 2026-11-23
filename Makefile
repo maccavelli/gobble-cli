@@ -95,7 +95,7 @@ LDFLAGS := -X $(BUILDINFO).version=$(VERSION) -X $(BUILDINFO).kind=$(BUILD_KIND)
 
 .PHONY: build install test race vet fmt lint staticcheck vulncheck tidy clean \
 	pre-add-check preflight check-cgo-off verify-build-metadata fix-check archtest apidiff check-acpext-deps \
-	check-records check-icon check-libs check-test-isolation markdownlint probe-conhost probe-conpty probe-pty completion-shells perf $(BIN)
+	check-records check-go-precheck check-icon check-libs check-test-isolation markdownlint probe-conhost probe-conpty probe-pty completion-shells perf $(BIN)
 
 # Shipped binaries are pure Go. check-cgo-off refuses CGO_ENABLED other than 0
 # and any `import "C"` in a .go file (0004-PLAN phase 0 accept).
@@ -204,6 +204,7 @@ preflight: check-cgo-off
 	@echo "==> apidiff"; $(MAKE) --no-print-directory apidiff
 	@echo "==> verify-build-metadata"; $(MAKE) --no-print-directory verify-build-metadata
 	@echo "==> check-records"; $(MAKE) --no-print-directory check-records
+	@echo "==> check-go-precheck"; $(MAKE) --no-print-directory check-go-precheck
 	@echo "==> check-icon"; $(MAKE) --no-print-directory check-icon
 	@echo "==> markdownlint"; $(MAKE) --no-print-directory markdownlint
 	@echo "preflight passed"
@@ -255,6 +256,11 @@ check-acpext-deps:
 # Records and docs links (0007-MADR D6).
 check-records:
 	$(PYTHON) scripts/check_records.py --check-all
+
+# scripts/go-precheck.sh against its contract, offline, with stubs for go and
+# golangci-lint; each planted break must turn its test red (0069-MADR G1-G19).
+check-go-precheck:
+	$(PYTHON) scripts/check_go_precheck.py --self-test
 
 # assets/gobble.svg is what scripts/gen_icon.py writes, byte for byte, on
 # every platform (0044-MADR D3).

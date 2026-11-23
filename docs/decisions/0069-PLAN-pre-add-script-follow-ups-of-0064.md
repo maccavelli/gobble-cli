@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: in-progress
 date: 2026-11-23
 associated-madr: "0069-MADR-pre-add-script-follow-ups-of-0064.md"
 ---
@@ -13,6 +13,9 @@ Associated MADR: [0069-MADR-pre-add-script-follow-ups-of-0064.md](0069-MADR-pre-
 (Recommended)", Q2 "Skip with a notice, exit 0 (Recommended)", Q3 "Own record later, if text found
 (Recommended)", so the five code-quality items are outside this plan. The plan stays `proposed` until the owner
 approves it.)*
+
+*(2026-11-23, approved: the owner, relayed by the coordinator: "Approve both; 0069 then 0068 (Recommended)". 0069 is
+built first; 0068 waits for it. Status `in-progress`; execution starts at `3a33d36`.)*
 
 ## Goal
 
@@ -100,5 +103,45 @@ script's exit codes (`0`, `1`, `2`) and variables do not change.
 
 ## Execution record
 
-*(Empty. Pass 1 of each phase is recorded here with its verification output, each deviation with a date, and what was
-not done and why.)*
+### 2026-11-23, execution at `3a33d36`, pass 1 of P0 to P5
+
+* **P0, re-ground.** Every cited line holds: `scripts/go-precheck.sh:39`, `:44`, `:47-48`, `:62`, `:105`;
+  `Makefile:175` (`pre-add-check`), `:196` (the preflight step); `AGENTS.md` "Pre-add checks"; `docs/guides/developing.md`
+  "The gates". F1 live on a scratch copy: `bad.go` containing `package`, both skip variables set: gofmt's message on
+  standard error, then `go-precheck: 1 file(s) clean (gofmt, golangci-lint, govulncheck).`, exit 0. A named missing
+  `.go` path: exit 0, no word.
+* **P1, tests first.** `scripts/check_go_precheck.py` written (T1 to T9, plants PL1 to PL7). The first run against the
+  unchanged script was not a valid red: it ran the real `go` and `golangci-lint`, because `BASH_ENV` (set on this host)
+  is sourced by a non-interactive bash and rewrites `PATH` in front of the stub directory. That was a harness defect
+  (G19's kind), not the expected red; the harness now removes `BASH_ENV` and `ENV` from the child environment and the
+  step was re-run. Valid red against the unchanged script: T1 fails (exit 0 and `1 file(s) clean`), T3 fails (no gofmt
+  error line; the unformatted list still prints), T5 fails (closing line names `golangci-lint` with the lint step
+  skipped), T6 fails (no notice). T2, T4, T7, T8 and T9 (under `/bin/bash` 3.2) green, as the plan expected. The fix of
+  the harness is the only rework inside P1; it is not a second build pass.
+* **P2, the script.** `go-precheck.sh`: `add_go` prints `go-precheck: skipping <path>: no such file (deleted?)` for a
+  missing `.go` path in both modes; gofmt's standard error goes to a `mktemp` file (removed on exit) and its status is
+  read; a non-zero status prints `gofmt: failed with exit status N:` and the message and sets `failed`; the closing line
+  is `go-precheck: N file(s) clean (<steps that ran>).` built from a string (no empty-array expansion). Header comment
+  updated. `bash -n` exit 0 under `bash` 5 and `/bin/bash` 3.2.
+* **P3, wiring.** `Makefile`: `check-go-precheck` (`$(PYTHON) scripts/check_go_precheck.py --self-test`), in `.PHONY`
+  and in `preflight` after `check-records`.
+* **P4, docs.** `AGENTS.md` ("Pre-add checks", the preflight list) and `docs/guides/developing.md` ("The gates", the
+  preflight list, now eleven items) state the closing-line rule, gofmt's own failure and the deleted-path rule. The
+  sample line in the guide was checked against a real run: `make pre-add-check FILES="internal/archtest/check.go
+  internal/archtest/check_test.go"` printed `go-precheck: 2 file(s) clean (gofmt, golangci-lint, govulncheck).`.
+  `docs/README.md` row 0069 PLAN set to `in-progress`.
+* **P5, gates.** Green: `--self-test` exit 0 with PL1 to PL7 caught by T1, T5, T6, T7, T8, T2, T9 (each plant on a scratch
+  copy of the script, caught only by its named test failing). `make check-records` exit 0. `make markdownlint` 0
+  issues. Identifier scan (`denyscan.py --changed`): 0 hits in 7 files. `make preflight` through `run-on-host`:
+  macOS, Linux (landed in WSL `Ubuntu-24.04` of the Windows laptop, chosen by `pick-host`, not the Linux machine) and
+  Windows (git-bash, the harness's first Windows run: T1 to T8 green under Git's bash; no bash older than 4.4 there,
+  so T9 skipped and PL7 reported not catchable, not counted as caught). Each pre-add step ended `(gofmt)`. G17: a
+  `git archive` copy with an unparseable `broken_g17.go` made `make preflight` exit 2 at the pre-add step with
+  `gofmt: failed with exit status 2:`.
+* **Readings, not deviations.** (1) T9 and PL7 need a bash older than 4.4; on a host without one the harness prints
+  `skip T9` or `n/a` and does not count it as a pass or a catch (CI's Linux and Windows jobs). The plan's "a run that
+  cannot find it says so and is not a pass" is met without failing preflight there. PL7 was caught on the macOS host,
+  where `/bin/bash` is 3.2. (2) The Windows host prints `CYG_SYS_BASHRC: unbound variable` from `/etc/bash.bashrc` on
+  every bash start under the queue; it is the host's startup file, present on steps this record does not touch.
+* **Not done.** No run on the Linux machine natively (pick-host chose WSL); nothing staged or committed (the brief
+  forbids it; the owner stages and commits).

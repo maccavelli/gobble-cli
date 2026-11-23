@@ -133,14 +133,20 @@ It runs `scripts/go-precheck.sh`: plain `gofmt` (not `gofumpt`) on the files,
 `golangci-lint` over both modules whole (the exact `make lint` command, so the
 two cannot drift), and `govulncheck ./...` (`GO_PRECHECK_SKIP_VULN=1` skips it
 offline; `GO_PRECHECK_SKIP_LINT=1` skips lint, and `make preflight` sets both). `FILES` that name no Go file
-exit 0 at once. `govulncheck` runs from the `tool` directives in `go.mod`
+exit 0 at once. gofmt's own failure (a file that does not parse) fails the add. The closing line names only the
+steps that ran, so with both skip variables set it ends `(gofmt)`. A `.go` path that is not a file (a deletion
+being staged, a mistyped path, or one written relative to a subdirectory, since the script works from the
+repository root) is skipped with a notice on standard error and is not counted, with exit 0 when nothing else
+fails; the same holds for a tracked file missing from the working tree when `FILES` is empty.
+`scripts/check_go_precheck.py` tests the script offline (`make check-go-precheck`, part of `make preflight`).
+`govulncheck` runs from the `tool` directives in `go.mod`
 (`go tool govulncheck`), not from a global install. A file
 that fails is not committed.
 
 Before every commit, run `make preflight`. It runs every gate: gofmt drift,
 `go mod tidy`, the pre-add check, `go vet`, `staticcheck` for linux, darwin and
 windows, `golangci-lint` (v2.15.0), `govulncheck`, `go fix -diff`, `archtest`,
-`apidiff`, `verify-build-metadata`, `check-records`, and `markdownlint`.
+`apidiff`, `verify-build-metadata`, `check-records`, `check-go-precheck`, and `markdownlint`.
 
 Run `make` from Git Bash, or from PowerShell. The Makefile uses Git's bash when
 `OS` is `Windows_NT` (set `GIT_BASH` if Git is installed elsewhere) and

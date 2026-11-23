@@ -153,7 +153,7 @@
 | 0068 | MADR | [Adopt go-llmprovider-sdk v1.32.0: what gobble must change, may use, and can ignore](decisions/0068-MADR-adopt-go-llmprovider-sdk-v1-32-0.md) | accepted 2026-11-23 (after an independent review; the owner's "Yes, take the SDK's question (Recommended)" and "Treat it as no key (Recommended)"; the plan tests' switch ruled by 0052; release `v0.8.0` by 0055's rule) |
 | 0068 | PLAN | [Implement adopting go-llmprovider-sdk v1.32.0](decisions/0068-PLAN-adopt-go-llmprovider-sdk-v1-32-0.md) | proposed 2026-11-23 (awaits the owner's approval; Phase 0 re-ground and the reds-by-bump; Phase 1 red tests at v1.31.0; Phase 2 the bump, the changes and plants P1 to P18; Phase 3 docs; staged only) |
 | 0069 | MADR | [Close the three loose ends of the pre-add script that 0064 left, and test the script](decisions/0069-MADR-pre-add-script-follow-ups-of-0064.md) | accepted 2026-11-23 (after an independent review; the owner's "Fix in bash now, port later (Recommended)", "Skip with a notice, exit 0 (Recommended)" and "Own record later, if text found (Recommended)") |
-| 0069 | PLAN | [Implement closing the pre-add script's three loose ends and testing the script](decisions/0069-PLAN-pre-add-script-follow-ups-of-0064.md) | proposed 2026-11-23 (awaits the owner's approval; P0-P5, seven plants; staged only) |
+| 0069 | PLAN | [Implement closing the pre-add script's three loose ends and testing the script](decisions/0069-PLAN-pre-add-script-follow-ups-of-0064.md) | in-progress 2026-11-23 (approved by the owner: "Approve both; 0069 then 0068 (Recommended)"; P0-P5, seven plants; staged only) |
 
 0003-MADR has no PLAN of its own. 0004-PLAN Phase 2 and 0005-PLAN F10 implement it.
 

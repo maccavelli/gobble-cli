@@ -115,7 +115,14 @@ go-precheck: 2 file(s) clean (gofmt, golangci-lint, govulncheck).
 With no `FILES` it checks every tracked Go file; `FILES` that name no Go file exit 0 at once. Lint output
 prints only for a module whose run fails, whole, under `golangci-lint (<module>):`. `GO_PRECHECK_SKIP_VULN=1`
 skips govulncheck when you are offline; `GO_PRECHECK_SKIP_LINT=1` skips golangci-lint (`make preflight` sets both,
-because its own `lint` and `vulncheck` steps follow).
+because its own `lint` and `vulncheck` steps follow). The closing line names only the steps that ran: with both
+skipped it reads `go-precheck: N file(s) clean (gofmt).` gofmt's own failure, such as a file that does not
+parse, fails the add under a `gofmt: failed with exit status` header. A `.go` path that is not a file (a deletion
+being staged, a mistyped path, or one written relative to a subdirectory, since the script works from the
+repository root) is skipped with a `go-precheck: skipping <path>: no such file (deleted?)` notice on standard
+error and is not counted; the exit status stays 0 when nothing else fails, and a tracked file missing from the
+working tree is treated the same when `FILES` is empty. `make check-go-precheck` tests the script offline, with
+stubs for `go` and `golangci-lint`, and plants a break for each rule; `make preflight` runs it.
 
 Before you commit, run every gate:
 
@@ -134,8 +141,9 @@ It ends with `preflight passed`. In order, it runs:
 7. `verify-build-metadata`, which builds `cmd/gobble` stamped and unstamped and checks that the Makefile's `VERSION`
    describes only `v*` tags;
 8. `check-records`, the records' names, pairs and links;
-9. `check-icon`, which checks that `assets/gobble.svg` is what its generator writes;
-10. `markdownlint`.
+9. `check-go-precheck`, which tests `scripts/go-precheck.sh` against its contract;
+10. `check-icon`, which checks that `assets/gobble.svg` is what its generator writes;
+11. `markdownlint`.
 
 Any one of them fails the run. Each is also a target of its own (`make archtest`, `make lint`, …),
 for a quicker loop.
