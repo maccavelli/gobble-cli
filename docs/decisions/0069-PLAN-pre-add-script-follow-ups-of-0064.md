@@ -160,3 +160,33 @@ gofmt sharing a directory. `--self-test` gained a case that plants a second gofm
 gofmt) and shows the old single-directory logic still sees gofmt while the new logic does not. `--self-test` passed on
 macOS, Windows (git-bash) and Linux (the second-gofmt case ran on each), and `make check-go-precheck` passed on macOS. This
 plan's acceptance is met only once CI passes on the fix commit.
+
+### 2026-11-23, deviation 2: PL5 not caught on Ubuntu CI
+
+CI run 45263844075 on `4e07a74`: windows-2025 and macos-15 pass; ubuntu-24.04 fails in `make check-go-precheck`
+(Makefile:263) with `ok T1..T8 [/usr/bin/bash]`, `ok T8 second gofmt: old logic fooled, new logic hides every gofmt`,
+`plant PL5: NOT caught: T8 stayed green`, `self-test: FAILED`. PL5 (`scripts/check_go_precheck.py`) turns
+`need gofmt || exit 2` into `need gofmt || true`.
+
+Cause, confirmed by a read-only probe (a PL5 copy of the real script run through the harness's own `run_case`, T8's
+case; the CI log itself was not read, so the runner's layout is inferred from the reproduction):
+
+* On the macOS dev host (gofmt in its own directory, `mktemp` in `/usr/bin`) the PL5 copy exits 1: stderr is
+  `go-precheck: gofmt not found in PATH.`, `gofmt: failed with exit status 127:`, `line 89: gofmt: command not found`,
+  then the two skip lines. T8's `rc == 2` check is red there, so PL5 is caught on this host.
+* With one directory holding gofmt, `mktemp`, `sed`, `rm` and `git` and nothing else on `PATH` (a layout where gofmt sits
+  in a system directory, as the Ubuntu runner image is inferred to have), hiding every gofmt directory also hides
+  `mktemp`. The PL5 copy then exits 2: stderr is `go-precheck: gofmt not found in PATH.` and `pl5.sh: line 87: mktemp:
+  command not found`. The exit 2 comes from `gofmt_err="$(mktemp)" || exit 2` (`scripts/go-precheck.sh:87`), with no gofmt
+  run at all. T8 checks only the exit code and the guard's line, so it stays green.
+* The brief's first reading (the gofmt run fails and also exits 2) was wrong: that path exits 1. An assertion that
+  forbids only a `gofmt: failed` line would not catch the CI case.
+
+Owner ruling (2026-11-23, relayed by the coordinator): "Exact stderr + CI-layout case (Recommended)": T8 requires stderr
+to be exactly the guard's line; a second T8 case rebuilds CI's layout (gofmt sharing a folder with mktemp and the other
+tools), so PL5 is shown caught on this Mac, the Linux machine and the Windows laptop before the push.
+
+Files in scope: `scripts/check_go_precheck.py` and the 0069 records. The script is unchanged. Changes: T8 asserts
+stderr is exactly `go-precheck: gofmt not found in PATH.`; new test T8b runs the same assertions on a `PATH` whose only
+directory holds gofmt together with `mktemp`, `sed`, `rm` and `git`; new plant PL5b (the PL5 text) must turn T8b red.
+Row G11 in the MADR is amended to match. 0069 is not complete: it closes only when CI is green on the fix commit.

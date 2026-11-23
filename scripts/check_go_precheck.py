@@ -111,6 +111,7 @@ def run_case(
     track: tuple[str, ...] = (),
     remove: tuple[str, ...] = (),
     no_gofmt: bool = False,
+    base_path: str | None = None,
 ) -> Result:
     """Run the script once in a fresh scratch repository."""
     with tempfile.TemporaryDirectory(prefix="goprecheck-") as td:
@@ -137,7 +138,7 @@ def run_case(
         for rel in remove:
             (repo / rel).unlink()
 
-        base = os.environ.get("PATH", "")
+        base = os.environ.get("PATH", "") if base_path is None else base_path
         if no_gofmt:
             if not _gofmt_dirs(base):
                 raise HarnessError("gofmt is not on PATH; the harness needs the real one")
@@ -263,11 +264,59 @@ def t7(script: Path, bash: str) -> None:
     need("go-precheck: 1 file(s) clean" in r.out, "T7: mixed: one file expected", r)
 
 
+GOFMT_MISSING = "go-precheck: gofmt not found in PATH."
+
+
+def _check_gofmt_missing(r: Result, tag: str) -> None:
+    """G11: exit 2, and standard error is exactly the guard's line.
+
+    The guard must be what stops the script. Without the guard the script goes
+    on: with gofmt hidden alone the gofmt run fails (exit 1, a `gofmt: failed`
+    block); with gofmt's directory also holding `mktemp` the `mktemp` call
+    fails (exit 2, a `command not found` line). Exact standard error rejects
+    both.
+    """
+    need(r.rc == 2, "%s: exit 2 expected" % tag, r)
+    need(GOFMT_MISSING in r.err, "%s: message missing" % tag, r)
+    need(r.err.strip() == GOFMT_MISSING,
+         "%s: standard error must be the guard's line and nothing else" % tag, r)
+
+
 def t8(script: Path, bash: str) -> None:
     """G11: gofmt missing from PATH."""
     r = run_case(script, bash, {"a.go": CLEAN}, ["a.go"], SKIP_BOTH, no_gofmt=True)
-    need(r.rc == 2, "T8: exit 2 expected", r)
-    need("go-precheck: gofmt not found in PATH." in r.err, "T8: message missing", r)
+    _check_gofmt_missing(r, "T8")
+
+
+def _shared_tool_dir(td: Path) -> str:
+    """A directory holding a gofmt together with `mktemp`, `sed`, `rm` and `git`.
+
+    Mimics a runner where gofmt sits in a system directory: hiding it hides the
+    tools the script needs next. gofmt is a copy of the real one; the others
+    are one-line `sh` wrappers (no symlinks, which are fragile on Windows).
+    """
+    real = shutil.which("gofmt")
+    if not real:
+        raise HarnessError("gofmt is not on PATH; the harness needs the real one")
+    d = td / "shared"
+    d.mkdir()
+    shutil.copy2(real, d / os.path.basename(real))
+    for tool in ("mktemp", "sed", "rm", "git"):
+        exe = shutil.which(tool)
+        if exe is None:
+            raise HarnessError("%s is not on PATH; the harness needs it" % tool)
+        with open(d / tool, "w", newline="\n") as fh:
+            fh.write('#!/bin/sh\nexec "%s" "$@"\n' % Path(exe).as_posix())
+        (d / tool).chmod(0o755)
+    return str(d)
+
+
+def t8b(script: Path, bash: str) -> None:
+    """G11 on CI's layout: gofmt shares a directory with mktemp and the other tools."""
+    with tempfile.TemporaryDirectory(prefix="goprecheck-shared-") as td:
+        r = run_case(script, bash, {"a.go": CLEAN}, ["a.go"], SKIP_BOTH,
+                     no_gofmt=True, base_path=_shared_tool_dir(Path(td)))
+    _check_gofmt_missing(r, "T8b")
 
 
 def t8_second_gofmt() -> None:
@@ -307,7 +356,7 @@ def t9(script: Path, bash: str) -> None:
 
 TESTS: list[tuple[str, Callable[[Path, str], None]]] = [
     ("T1", t1), ("T2", t2), ("T3", t3), ("T4", t4), ("T5", t5),
-    ("T6", t6), ("T7", t7), ("T8", t8),
+    ("T6", t6), ("T7", t7), ("T8", t8), ("T8b", t8b),
 ]
 
 
@@ -364,6 +413,7 @@ PLANTS: list[tuple[str, str, str, str]] = [
     ("PL3", "T6", 'echo "go-precheck: skipping $1: no such file (deleted?)" >&2', ":"),
     ("PL4", "T7", '[ "${#files[@]}" -eq 0 ] && exit 0', '[ "${#files[@]}" -eq 0 ] && true'),
     ("PL5", "T8", "need gofmt || exit 2", "need gofmt || true"),
+    ("PL5b", "T8b", "need gofmt || exit 2", "need gofmt || true"),
     ("PL6", "T2", "sed 's/^/  /' >&2\n    failed=1", "sed 's/^/  /' >&2"),
     ("PL7", "T9", "\nfailed=0\n", '\nfailed=0\nnone=()\n: "${none[@]}"\n'),
 ]
