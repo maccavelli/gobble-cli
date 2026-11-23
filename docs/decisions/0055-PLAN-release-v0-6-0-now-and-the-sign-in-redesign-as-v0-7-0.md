@@ -587,3 +587,24 @@ failed run fixed forward) and developing.md's "After each `v*` release":
 * **Next step, not done.** magic-cli-remote's G2 step (its 0246-PLAN: recapture its fixtures against `v0.7.0` and
   move 0246 out of `proposed`) is that repository's, on the owner's word. This note does not do it.
 * **D4.** The run did not fail, so no fix-forward `v0.7.1` was needed.
+
+### Note (2026-11-23): Windows post-release check for v0.7.0
+
+The Windows sequence left open in the note above was run on the Windows laptop over ssh, from PowerShell 5.1 with
+`-ExecutionPolicy Bypass` for the one process. No laptop setting changed, and no provider call or sign-in was made.
+
+* **Setup.** `v0.6.0`'s `gobble-windows-amd64.exe` was downloaded to a fresh scratch folder under the Windows home
+  directory as `gobble.exe`. Its SHA-256 matched the `SHA256SUMS` line of that release. `GOBBLE_HOME` was a new
+  directory inside the scratch folder, the four `GOBBLE_*_DIR` variables were unset, and the working directory was the
+  scratch folder. `gobble config path --json` (exit 0) put `config`, `data`, `state`, `cache` and `settings` in that
+  directory and `project` at `.gobble\settings.yaml` under the scratch folder, so no path was outside it. A first
+  attempt stopped there because the check looked only at the home directory; it was widened to the scratch folder
+  and rerun. Two earlier attempts stopped on script errors; each removed its own scratch folder.
+* **Steps.** `gobble acp` started from that file with its standard input held open, and was still running.
+  `gobble update --yes`: exit 0, printed `gobble: updated v0.6.0 -> v0.7.0` (`selected ... target=v0.7.0
+  asset=gobble-windows-amd64.exe`, `verified`, `installing`, and a pending `.gobble.exe.selfupdate-bak-*` backup
+  "validated and removed before the next download"). `gobble acp` stopped by closing its stdin: exit 0. Plain
+  `gobble update` from the installed binary: exit 0, printed `gobble: up to date (v0.7.0)`.
+* **Result.** No `.gobble.exe.selfupdate-*` file remained beside the binary; the folder held `gobble.exe`, the scratch
+  home and a `.gobble.exe.selfupdate.lock` file. `gobble version` printed `gobble 0.7.0`. The scratch folder was
+  removed and its absence confirmed. The Windows step in the "Not run" bullet above is now met.
