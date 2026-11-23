@@ -25,7 +25,8 @@ go build ./...          # every package
 make bin/gobble.exe     # the stamped binary; bin/gobble on Linux and macOS
 ```
 
-`make bin/gobble` stamps the build with `git describe` and the kind `local`, with cgo off. Shipped
+`make bin/gobble` stamps the build with `git describe` over the `v*` tags (the nested `acpext/v*` tags are not
+release versions) and the kind `local`, with cgo off. Shipped
 binaries are pure Go, and `make check-cgo-off` refuses a build with cgo on.
 
 ```console
@@ -130,7 +131,8 @@ It ends with `preflight passed`. In order, it runs:
 4. `golangci-lint`, `govulncheck`, and `go fix -diff`;
 5. `archtest`, the import rules;
 6. `apidiff`, a no-op below `v1.0.0`;
-7. `verify-build-metadata`, which builds `cmd/gobble` stamped and unstamped;
+7. `verify-build-metadata`, which builds `cmd/gobble` stamped and unstamped and checks that the Makefile's `VERSION`
+   describes only `v*` tags;
 8. `check-records`, the records' names, pairs and links;
 9. `check-icon`, which checks that `assets/gobble.svg` is what its generator writes;
 10. `markdownlint`.

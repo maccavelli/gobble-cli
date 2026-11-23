@@ -88,7 +88,7 @@ PYTHON ?= python3
 # Build identity is go-selfupdate-lib buildinfo's two stamps; commit and date
 # come from the checkout, which go build records (0004-MADR amendment of
 # 2026-10-05). A release build sets VERSION to its tag and BUILD_KIND=release.
-VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo 0.0.0-dev)
+VERSION ?= $(shell git describe --tags --always --dirty --match 'v*' 2>/dev/null || echo 0.0.0-dev)
 BUILD_KIND ?= local
 BUILDINFO := github.com/maccavelli/go-selfupdate-lib/buildinfo
 LDFLAGS := -X $(BUILDINFO).version=$(VERSION) -X $(BUILDINFO).kind=$(BUILD_KIND)

@@ -534,3 +534,24 @@ the proxy are all as the acceptance lists. The one change is the attestation com
    maccavelli/go-selfupdate-lib`, which any record of another repository that copies this PLAN's command should carry.
 7. **Not done, by the PLAN.** No commit, push or tag by this agent; the coordinator commits, and the push is docs-only,
    on the owner's word. Staged, by path: this PLAN, the MADR, 0054-MADR and `docs/README.md`.
+
+### Note (2026-11-22): v0.7.0 release preparation
+
+This PLAN is `complete` and unchanged above; v0.7.0 is cut by the same procedure (MADR D2, D4: an annotated tag on
+`main`'s head, a failed run fixed forward as the next patch). Preparation at `5962276`, tag `v0.6.0` the latest `v*` tag:
+
+1. **The Makefile's VERSION.** `Makefile`'s `VERSION` ran `git describe --tags --always --dirty`, which also matches the
+   nested module's `acpext/vX.Y.Z` tags: at `9a22518` it printed `acpext/v0.5.0-13-g9a22518`, and at `5962276`
+   `acpext/v0.5.0-15-g5962276-dirty`. Per the owner's ruling of 2026-11-22 ("Accept all as recommended (Recommended)")
+   the line now ends `--dirty --match 'v*' 2>/dev/null`, and prints `v0.6.0-72-g5962276-dirty`. Release builds set
+   `VERSION` to their tag and are unaffected; a local build's version was the only thing wrong.
+2. **The check.** `scripts/verify_build_metadata.py` (the `verify-build-metadata` gate of `make preflight`) gained
+   `makefile_checks`: it reads the Makefile's `VERSION` line, requires `--match 'v*'` among the describe's arguments,
+   runs that describe as written and requires that it does not print an `acpext/` tag. Seen failing on a scratch clone
+   of `5962276` carrying the new script and the old Makefile line: both checks `False` ("describe arguments ['describe',
+   '--tags', '--always', '--dirty']", "git describe printed 'acpext/v0.5.0-15-g5962276-dirty'"); both `True` with the
+   new line.
+3. **Lockstep (MADR D3 through 0246-PLAN G2),** read only: gobble's `go.mod` pins acp-go-sdk2 `v1.36.0`;
+   magic-cli-remote's `origin/master` (`5ace3995`, after a fetch) and its working tree pin `v1.36.0`; the newest
+   acp-go-sdk2 tag, from `git ls-remote --tags`, is `v1.36.0`. Equal, so the rule holds for v0.7.0. v0.7.0 ships on
+   go-llmprovider-sdk `v1.31.0` and acpext `v0.5.0` (the owner's "Now, on SDK v1.31.0 (Recommended)").

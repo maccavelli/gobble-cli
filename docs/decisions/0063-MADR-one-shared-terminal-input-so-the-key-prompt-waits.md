@@ -1311,6 +1311,11 @@ below, put to the owner as one prompt before P1. None changes the decision or an
   * (c) Decided after the owner's check (PLAN P6), with its result in hand.
   * **Answer (2026-11-19): (c),** "Decide after the Windows check has passed", not the recommended option. The PLAN
     builds and verifies on today's code and stops after P6; no `v0.6.1` work is planned now.
+  * **Answer (2026-11-22), after the Windows check passed (P6, 2026-11-21): (b),** "Carried by v0.7.0 (Recommended)",
+    the owner's ruling relayed by the coordinator. The Windows key-prompt fix ships in v0.7.0, with the sign-in
+    redesign; no `v0.6.1` is cut. The release itself stays the owner's tag, under
+    [0055-PLAN-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md](0055-PLAN-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md)'s
+    note of 2026-11-22.
 * **Q9. The default answer of a repeated first-run offer (D8).** The first offer keeps `[Y/n]`, as today.
   * (a) The repeated offer keeps `[Y/n]`: Enter starts another sign-in.
   * (b) The repeated offer is `[y/N]`: Enter ends the loop with the warning, and `y` starts another sign-in.

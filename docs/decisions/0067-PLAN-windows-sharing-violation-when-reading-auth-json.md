@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: complete
 date: 2026-11-22
 associated-madr: "0067-MADR-windows-sharing-violation-when-reading-auth-json.md"
 ---
@@ -264,3 +264,13 @@ no existing test, golden or fixture changed.
    does not tag.
 4. Docs: one sentence in `docs/architecture.md`'s `internal/fsx` row naming the retries of `ReadRegularFile` and
    `ReplaceFile` on Windows (note 4). The new exported names, `ReplaceFile` and `SetOpenFile`, carry doc comments.
+
+### Phase 2, close-out (2026-11-22, after the commit)
+
+The owner committed the build as `5962276` (`fix(fsx): retry Windows sharing violations on config reads and auth.json
+replace`), on top of the records commit `b6eb169`. Phase 2 step 1 said this PLAN stays `in-progress` until that commit;
+it is made, so this PLAN's `status` is `complete` (set by an assertion that the old line occurred once), and
+`docs/README.md`'s 0067 PLAN row follows. The MADR stays `accepted`. Row O1's follow-up stays the named open item of the
+index row: whether to open its record is the owner's. 0067 gated v0.7.0 (the owner's "Yes; fix 0067 first"); that gate
+is met, and the v0.7.0 tag stays the owner's, under
+[0055-PLAN](0055-PLAN-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md)'s note of this date.

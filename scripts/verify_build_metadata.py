@@ -13,6 +13,9 @@ Builds cmd/gobble twice into a temporary directory and checks
    highest such tag, since go build records the tag as the module's version
    (0008-PLAN amendment of 2026-10-19). Only a v0 or v1 tag is: the module
    path has no /vN suffix, so Go ignores a tag of a higher major version.
+3. The Makefile's VERSION describe names only release tags, `--match 'v*'`:
+   acpext/vX.Y.Z tags are nested-module tags, and without the match a local
+   build's version is `acpext/v0.5.0-13-g...` (0055-PLAN note of 2026-11-22).
 
 Standard library only. Exit status 0 when every check passes, 1 otherwise.
 """
@@ -21,6 +24,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -115,9 +119,24 @@ def checks(tmp: Path) -> list[Check]:
     ]
 
 
+def makefile_checks() -> list[Check]:
+    """The Makefile's VERSION describe, run as written (0055-PLAN note of 2026-11-22)."""
+    text = (ROOT / "Makefile").read_text()
+    m = re.search(r"^VERSION\s*\??=\s*\$\(shell\s+(git describe[^|)]*?)\s*(?:2>/dev/null)?\s*(?:\|\||\))", text, re.M)
+    if m is None:
+        return [Check("Makefile VERSION runs git describe", False, "no `VERSION ?= $(shell git describe ...)` line found")]
+    args = shlex.split(m.group(1))
+    matched = any(a == "--match" and i + 1 < len(args) and args[i + 1] == "v*" for i, a in enumerate(args)) or "--match=v*" in args
+    out = git(*args[1:])
+    return [
+        Check("Makefile VERSION describe has --match 'v*'", matched, f"describe arguments {args[1:]}"),
+        Check("Makefile VERSION is not an acpext tag", not out.startswith("acpext/"), f"git describe printed {out!r}"),
+    ]
+
+
 def main() -> int:
     with tempfile.TemporaryDirectory(prefix="gobble-verify-") as d:
-        results = checks(Path(d))
+        results = checks(Path(d)) + makefile_checks()
     for c in results:
         print(f"verify-build-metadata: {'ok  ' if c.ok else 'FAIL'} {c.name}" + ("" if c.ok else f": {c.detail}"))
     return 0 if all(c.ok for c in results) else 1
