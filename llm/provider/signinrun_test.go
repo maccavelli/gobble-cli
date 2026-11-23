@@ -1056,3 +1056,140 @@ func lateRenewals(base http.RoundTripper, refused bool, renewals *counter) round
 		return base.RoundTrip(r)
 	}
 }
+
+// A pasted redirect address with no scheme, as an address bar shows it, is read
+// as the address with every check it meets, through the ACP engine: the
+// sign-in completes on the first paste (0068-MADR W9; go-llmprovider-sdk
+// 0083-MADR D11).
+func TestStartSignInPasteWithoutScheme(t *testing.T) {
+	ti, o := signInIssuer(t)
+	o.Remote = true
+	ownCache(t, &o)
+	rec := &uaRecorder{}
+	rec.atIssuer(ti)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	store := &memLogins{}
+	run, err := StartSignIn(ctx, "grok", "browser_oauth", o, store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(run.Cancel)
+	var redirect, state string
+	pastes := 0
+	for s := range run.Steps() {
+		switch s.Kind {
+		case authcontract.StepOpenURL:
+			redirect, state = ti.authorizeParams(t, s.URL)
+		case authcontract.StepPaste:
+			pastes++
+			if pastes > 1 {
+				run.Cancel() // asked again: the address was refused
+				continue
+			}
+			cb := strings.TrimPrefix(redirect, "http://") + "?code=c1&state=" + url.QueryEscape(state)
+			if cb == redirect || !strings.HasPrefix(cb, "127.0.0.1:") {
+				t.Fatalf("the paste %q still has a scheme, or names no loopback host", cb)
+			}
+			if err := run.Answer(ctx, authcontract.Answer{SchemaVersion: authcontract.SchemaVersion, Seq: s.Seq, Paste: cb}); err != nil {
+				t.Fatalf("answering the paste: %v", err)
+			}
+		}
+	}
+	if _, err := run.Wait(ctx); err != nil || pastes != 1 {
+		t.Fatalf("a paste with no scheme: %v after %d pastes, want the sign-in on the first", err, pastes)
+	}
+	if l, _ := store.Load(t.Context(), "grok"); l == nil || l.Access != "access-1" {
+		t.Errorf("stored %+v, want the new session", l)
+	}
+	// The issuer takes any code: the address was read as an address only if
+	// the code exchanged is the one its query carried.
+	var codes []string
+	for _, r := range rec.requests() {
+		if v, err := url.ParseQuery(r.form); err == nil && v.Get("grant_type") == "authorization_code" {
+			codes = append(codes, v.Get("code"))
+		}
+	}
+	if !slices.Equal(codes, []string{"c1"}) {
+		t.Errorf("the codes exchanged %q, want the callback's c1 alone: the paste was not read as the address", codes)
+	}
+}
+
+// A Kilo device key over ACP is checked at Kilo's profile, with the run's own
+// options (its header-wrapped client, base URL and cache), whose listing answers
+// every key: a 401 refuses it, a profile that cannot say passes it, the
+// caller's ended context ends the wait at once while the profile stalls, and
+// options the check rejects fail the sign-in (0068-MADR L5, L9;
+// go-llmprovider-sdk 0080-MADR D10).
+func TestSignInRunKiloKeyVerified(t *testing.T) {
+	const key = "kilo-token-0123456789"
+	for _, tc := range []string{"refused", "cannot say", "stalled", "bad options"} {
+		t.Run(tc, func(t *testing.T) {
+			ti, o := signInIssuer(t)
+			ownCache(t, &o)
+			o.Headers = func(context.Context, string) (map[string]string, error) {
+				return map[string]string{"X-Gobble-Test": "1"}, nil
+			}
+			u, err := url.Parse(ti.URL)
+			if err != nil {
+				t.Fatal(err)
+			}
+			base := toIssuer{u}
+			o.HTTPClient = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+				if r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/models") {
+					// Kilo's listing answers every key.
+					return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"application/json"}}, Request: r,
+						Body: io.NopCloser(strings.NewReader(`{"data":[{"id":"kilo/test-model"}]}`))}, nil
+				}
+				return base.RoundTrip(r)
+			})}
+			switch tc {
+			case "refused":
+				ti.profile(http.StatusUnauthorized)
+			case "cannot say":
+				ti.profile(http.StatusServiceUnavailable)
+			case "stalled":
+				ti.with(func() { ti.profileStall = true })
+			case "bad options":
+				o.BaseURL = "http://[::1" // does not parse
+			}
+			store := &memLogins{}
+			run, err := StartSignIn(t.Context(), "kilo", "device_code", o, store)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(run.Cancel)
+			for range run.Steps() {
+			}
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			if tc == "stalled" {
+				time.AfterFunc(300*time.Millisecond, cancel)
+			}
+			start := time.Now()
+			res, err := run.Wait(ctx)
+			took := time.Since(start)
+			switch tc {
+			case "refused":
+				if err == nil || res.Key != "" || ErrorKind(err) != string(authcontract.FailureAuth) {
+					t.Errorf("a key the profile refuses: %+v, %v (kind %q); want no key and kind auth", res, err, ErrorKind(err))
+				}
+			case "cannot say":
+				if err != nil || res.Key != key {
+					t.Errorf("a profile that cannot say: %+v, %v; want the key", res, err)
+				}
+			case "stalled":
+				if err == nil || ErrorKind(err) != string(authcontract.FailureCanceled) || took > 2*time.Second {
+					t.Errorf("a cancel while the profile stalls: %+v, %v (kind %q) after %s; want canceled within about a second", res, err, ErrorKind(err), took)
+				}
+			case "bad options":
+				if err == nil || !errors.Is(err, llmprovider.ErrInvalidRequest) || res.Key != "" {
+					t.Errorf("options the check rejects: %+v, %v; want the sign-in failed with an invalid request", res, err)
+				}
+			}
+			if l, _ := store.Load(t.Context(), "kilo"); l != nil {
+				t.Errorf("a session was saved for a key sign-in: %v", l)
+			}
+		})
+	}
+}

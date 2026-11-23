@@ -582,7 +582,7 @@ Counts: 43 decided, 4 out of scope, 13 open, 4 awaiting live evidence.
 
 | Row | Input or state | Status | Reason |
 | --- | --- | --- | --- |
-| O1 | A held session that adopts a foreign entry; the wizard's no-listener option | out of scope | Not this phase: neither is in the go-llmprovider-sdk `v1.31.0` tag this repository requires (the PLAN's P5 note of 2026-11-20); each is a step of the phase that bumps the SDK pin (P4 steps 1c and 1d) |
+| O1 | A held session that adopts a foreign entry; the wizard's no-listener option | out of scope | Not this phase: neither is in the go-llmprovider-sdk `v1.31.0` tag this repository requires (the PLAN's P5 note of 2026-11-20); each is a step of the phase that bumps the SDK pin (P4 steps 1c and 1d). *2026-11-23: done by 0068-PLAN-adopt-go-llmprovider-sdk-v1-32-0.md at go-llmprovider-sdk `v1.32.0`: the two terminal plan tests answer "On another device" and bind no listener; the held session refuses a foreign entry, held by `TestHeldPlanSessionRefusesAForeignEntry`* |
 | O2 | Restoring `auth.json` from a backup, or removing old backups | out of scope | Q22 asks that the backup be kept; this record gives gobble no command that reads or removes one |
 | O3 | A `v0.6.0` binary run on a migrated `auth.json` | out of scope for P5's and P6's tests | The PLAN's "Rollback after `v0.6.0`" (as dated 2026-11-12) decides it by reading (`jsonx.StrictOptions`, `merge`); neither phase builds the earlier binary |
 | O4 | An agent running the migration on the owner's real files | out of scope | The PLAN's Scope ("reading the owner's real `auth.json`, `settings.yaml` or state directory") and C10 |

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"slices"
@@ -14,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/maccavelli/go-llmprovider-sdk/authcontract"
 	"github.com/maccavelli/go-llmprovider-sdk/llmprovider"
 	"github.com/maccavelli/go-llmprovider-sdk/llmprovider/auth"
 	"github.com/maccavelli/go-llmprovider-sdk/llmprovider/providers"
@@ -52,7 +54,13 @@ type script struct {
 	choose  func(title string, choices []Choice) int
 	secrets []string
 	input   func(ctx context.Context, prompt string) (string, error)
+	// fail, when set, is the error a menu titled title gives instead of an
+	// answer, nil to answer it (a person's Ctrl+C at it).
+	fail func(title string) error
+	// confirm, when set, answers a yes-or-no question.
+	confirm func(question string) (bool, error)
 	menus   [][]Choice
+	titles  []string
 	inputs  int
 	notes   []string
 }
@@ -60,7 +68,13 @@ type script struct {
 func (s *script) Choose(title string, choices []Choice, _ int) (int, error) {
 	s.mu.Lock()
 	s.menus = append(s.menus, choices)
+	s.titles = append(s.titles, title)
 	s.mu.Unlock()
+	if s.fail != nil {
+		if err := s.fail(title); err != nil {
+			return 0, err
+		}
+	}
 	if s.choose == nil {
 		s.t.Errorf("asked %q with no answer", title)
 		return 0, errors.New("no answer")
@@ -69,9 +83,35 @@ func (s *script) Choose(title string, choices []Choice, _ int) (int, error) {
 }
 
 func (s *script) Confirm(question string, _ bool) (bool, error) {
+	if s.confirm != nil {
+		return s.confirm(question)
+	}
 	s.t.Errorf("asked %q with no answer", question)
 	return false, errors.New("no answer")
 }
+
+// asked are the titles of the menus s was asked, in order.
+func (s *script) asked() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Clone(s.titles)
+}
+
+// noted are the notices s was given, in order.
+func (s *script) noted() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Clone(s.notes)
+}
+
+// browserQuestion is the question go-llmprovider-sdk's wizard asks, from
+// v1.32.0, before a browser sign-in at a terminal with a paste offered, and
+// its two answers (0083-MADR D3; 0068-MADR W1).
+const (
+	browserQuestion  = "Where is the browser you will sign in with?"
+	browserHere      = "On this machine"
+	browserElsewhere = "On another device: I will paste the address back"
+)
 
 func (s *script) Input(ctx context.Context, prompt string) (string, error) {
 	s.mu.Lock()
@@ -197,7 +237,9 @@ func TestSignInGrokBrowser(t *testing.T) {
 	store := &memLogins{}
 	// The user presses Enter after 5 s, which a sign-in that cannot give up
 	// its read waits for.
-	s := &script{t: t, input: func(ctx context.Context, _ string) (string, error) {
+	// The browser is on this machine: the first answer to the SDK's question
+	// (0068-MADR W6).
+	s := &script{t: t, choose: func(string, []Choice) int { return 0 }, input: func(ctx context.Context, _ string) (string, error) {
 		select {
 		case <-ctx.Done():
 			return "", ctx.Err()
@@ -209,6 +251,9 @@ func TestSignInGrokBrowser(t *testing.T) {
 	c, err := SignIn(t.Context(), "grok", s, o, store)
 	if err != nil || c.Key != "" || store.logins["grok"] == nil || store.logins["grok"].Access != "access-1" {
 		t.Fatalf("grok's browser sign-in: %+v, %v, saved %v", c, err, store.logins)
+	}
+	if got := s.asked(); !slices.Equal(got, []string{browserQuestion}) {
+		t.Errorf("the sign-in asked %q, want the SDK's question where the browser is, once", got)
 	}
 	if s.inputs != 1 || time.Since(start) > 4*time.Second {
 		t.Errorf("the paste prompt was read %d times in %s, want once, given up", s.inputs, time.Since(start))
@@ -252,6 +297,13 @@ func TestSignInDevice(t *testing.T) {
 		shown[1].Code != "KILO-1" || shown[1].Expires.IsZero() {
 		t.Errorf("shown %+v", shown)
 	}
+	// Kilo's profile refusing the device key refuses the sign-in: the SDK
+	// reads it once to check the key (0068-MADR L4).
+	ti.profile(http.StatusUnauthorized)
+	if c, err := SignIn(t.Context(), "kilo", &script{t: t}, o, store); err == nil || c.Key != "" || !errors.Is(err, llm.ErrAuth) {
+		t.Errorf("kilo's device key the profile refuses: %+v, %v; want no key and an auth failure", c, err)
+	}
+	ti.profile(0)
 	stop := errors.New("stop")
 	o.ShowDeviceCode = func(DeviceCode) error { return stop }
 	if _, err := SignIn(t.Context(), "grok", &script{t: t}, o, &memLogins{}); !errors.Is(err, stop) {
@@ -422,5 +474,426 @@ func TestSignInNamesGobble(t *testing.T) {
 	}
 	if got := u.Query().Get("referrer"); got != "gobble" {
 		t.Errorf("the authorize URL %q has referrer %q, want gobble", authorize, got)
+	}
+}
+
+// shownURL is the authorize URL among the notices s was given, or "".
+func shownURL(s *script) string {
+	for _, n := range s.noted() {
+		for f := range strings.FieldsSeq(n) {
+			if strings.Contains(f, "/oauth2/authorize?") {
+				return strings.Trim(f, ".,;()<>\"'")
+			}
+		}
+	}
+	return ""
+}
+
+// dial reports whether something listens at host, a redirect address's.
+func dial(ctx context.Context, host string) error {
+	c, err := (&net.Dialer{Timeout: time.Second}).DialContext(ctx, "tcp", host)
+	if err == nil {
+		_ = c.Close()
+	}
+	return err
+}
+
+// browserRecord is what a test's browser saw: how often it was opened, and
+// whether the redirect address answered a dial while the sign-in waited.
+type browserRecord struct {
+	mu      sync.Mutex
+	opened  int
+	dialErr error
+}
+
+func (b *browserRecord) get() (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.opened, b.dialErr
+}
+
+// waitForCtx is an Input that answers nothing until its context ends, as a
+// person who presses nothing.
+func waitForCtx(ctx context.Context, _ string) (string, error) {
+	<-ctx.Done()
+	return "", ctx.Err()
+}
+
+// A browser sign-in at a terminal with a paste offered asks where the browser
+// is, with "On this machine" first; that answer binds the listener (the
+// redirect address answers a dial while the sign-in waits) and opens the
+// browser, which completes it (0068-MADR W1, W2; Q1).
+func TestSignInAsksWhereTheBrowserIs(t *testing.T) {
+	ti, o := signInIssuer(t)
+	o.Method = MethodBrowser
+	rec := &browserRecord{}
+	o.OpenURL = func(u string) error {
+		redirect, state := ti.authorizeParams(t, u)
+		ru, err := url.Parse(redirect)
+		if err != nil {
+			return err
+		}
+		derr := dial(t.Context(), ru.Host)
+		rec.mu.Lock()
+		rec.opened++
+		rec.dialErr = derr
+		rec.mu.Unlock()
+		go func() {
+			resp, err := http.Get(redirect + "?code=c1&state=" + url.QueryEscape(state)) //nolint:noctx // the test's browser
+			if err == nil {
+				_ = resp.Body.Close()
+			}
+		}()
+		return nil
+	}
+	store := &memLogins{}
+	s := &script{t: t, choose: func(string, []Choice) int { return 0 }, input: waitForCtx}
+	c, err := SignIn(t.Context(), "grok", s, o, store)
+	if got := s.asked(); !slices.Equal(got, []string{browserQuestion}) {
+		t.Errorf("the sign-in asked %q, want the question where the browser is", got)
+	} else if m := s.menus[0]; len(m) != 2 || m[0].Label != browserHere || m[1].Label != browserElsewhere {
+		t.Errorf("the question's choices %+v, want %q then %q", m, browserHere, browserElsewhere)
+	}
+	if opened, derr := rec.get(); opened != 1 || derr != nil {
+		t.Errorf("the browser was opened %d times and the redirect address answered %v; want once, and a listener", opened, derr)
+	}
+	if err != nil || c.Key != "" || store.logins["grok"] == nil {
+		t.Fatalf("the sign-in: %+v, %v, saved %v", c, err, store.logins)
+	}
+}
+
+// "On another device" binds no listener (the redirect address is refused), does
+// not open the browser, shows the URL, and a pasted callback completes the
+// sign-in. Grok's sign-in names a port of its own, so no test holds 1455 or
+// 1457 (0068-MADR W3; Q1).
+func TestSignInAnotherDeviceNeedsNoListener(t *testing.T) {
+	ti, o := signInIssuer(t)
+	o.Method = MethodBrowser
+	rec := &browserRecord{}
+	o.OpenURL = func(string) error {
+		rec.mu.Lock()
+		rec.opened++
+		rec.mu.Unlock()
+		return nil
+	}
+	store := &memLogins{}
+	s := &script{t: t, choose: func(string, []Choice) int { return 1 }}
+	s.input = func(ctx context.Context, _ string) (string, error) {
+		u := shownURL(s)
+		if u == "" {
+			return "", errors.New("no URL was shown before the paste")
+		}
+		redirect, state := ti.authorizeParams(t, u)
+		ru, err := url.Parse(redirect)
+		if err != nil {
+			return "", err
+		}
+		derr := dial(ctx, ru.Host)
+		rec.mu.Lock()
+		rec.dialErr = derr
+		rec.mu.Unlock()
+		return redirect + "?code=c1&state=" + url.QueryEscape(state), nil
+	}
+	c, err := SignIn(t.Context(), "grok", s, o, store)
+	if got := s.asked(); !slices.Equal(got, []string{browserQuestion}) {
+		t.Errorf("the sign-in asked %q, want the question where the browser is", got)
+	}
+	if opened, derr := rec.get(); opened != 0 || derr == nil {
+		t.Errorf("the browser was opened %d times and the redirect address answered a dial (%v); want neither: no listener", opened, derr)
+	}
+	if err != nil || store.logins["grok"] == nil {
+		t.Fatalf("the sign-in by paste: %+v, %v, saved %v", c, err, store.logins)
+	}
+}
+
+// Where no paste is offered, with no terminal (NoPaste) or a step driver
+// (--json, an ACP driver), the SDK asks no such question (0068-MADR W4; a
+// guard, plant P13).
+func TestSignInNoPasteAsksNoBrowserQuestion(t *testing.T) {
+	ti, o := signInIssuer(t)
+	o.Method = MethodBrowser
+	quiet := o
+	quiet.OpenURL, quiet.NoPaste = browser(t, ti), true
+	s := &script{t: t}
+	if _, err := SignIn(t.Context(), "grok", s, quiet, &memLogins{}); err != nil || len(s.asked()) != 0 {
+		t.Errorf("NoPaste: %v, asked %q; want a sign-in and no question", err, s.asked())
+	}
+	driven := o
+	open := browser(t, ti)
+	driven.Steps = func(st authcontract.Step) error {
+		if st.Kind == authcontract.StepOpenURL {
+			return open(st.URL)
+		}
+		return nil
+	}
+	s = &script{t: t}
+	if _, err := SignIn(t.Context(), "grok", s, driven, &memLogins{}); err != nil || len(s.asked()) != 0 {
+		t.Errorf("a step driver: %v, asked %q; want a sign-in and no question", err, s.asked())
+	}
+}
+
+// A device sign-in asks no question where the browser is: Grok's and Kilo's,
+// with the method named, ask nothing (0068-MADR W5; the SDK's rule, a guard
+// with no plant).
+func TestSignInDeviceAsksNoBrowserQuestion(t *testing.T) {
+	_, o := signInIssuer(t)
+	o.Method = MethodDevice
+	o.ShowDeviceCode = func(DeviceCode) error { return nil }
+	for _, id := range []string{"grok", "kilo"} {
+		s := &script{t: t}
+		if _, err := SignIn(t.Context(), id, s, o, &memLogins{}); err != nil || len(s.asked()) != 0 {
+			t.Errorf("%s's device sign-in: %v, asked %q; want no question", id, err, s.asked())
+		}
+	}
+}
+
+// "On another device", then three empty pastes: the sign-in ends with an error
+// of the kind invalid_request, in gobble's words, and nothing is saved
+// (0068-MADR W13).
+func TestSignInAnotherDeviceEmptyPastes(t *testing.T) {
+	_, o := signInIssuer(t)
+	o.Method = MethodBrowser
+	o.OpenURL = func(string) error { return nil }
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	store := &memLogins{}
+	empties := 0
+	s := &script{t: t, choose: func(string, []Choice) int { return 1 }}
+	s.input = func(ctx context.Context, _ string) (string, error) {
+		if empties < 3 {
+			empties++
+			return "", nil
+		}
+		<-ctx.Done()
+		return "", ctx.Err()
+	}
+	_, err := SignIn(ctx, "grok", s, o, store)
+	if err == nil || !errors.Is(err, llmprovider.ErrInvalidRequest) || ErrorKind(err) != "invalid_request" ||
+		err.Error() != "grok sign-in failed (invalid_request)" {
+		t.Errorf("three empty pastes: %v (kind %q); want grok sign-in failed (invalid_request)", err, ErrorKind(err))
+	}
+	if len(store.logins) != 0 {
+		t.Errorf("saved %v", store.logins)
+	}
+}
+
+// Ctrl+C at the question where the browser is: the prompter's own error comes
+// back as it is, nothing is saved and no browser is opened (0068-MADR W14).
+func TestSignInCancelAtBrowserQuestion(t *testing.T) {
+	_, o := signInIssuer(t)
+	o.Method = MethodBrowser
+	rec := &browserRecord{}
+	o.OpenURL = func(string) error {
+		rec.mu.Lock()
+		rec.opened++
+		rec.mu.Unlock()
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	interrupted := errors.New("the person pressed Ctrl+C")
+	s := &script{t: t, choose: func(string, []Choice) int { return 0 }, input: waitForCtx, fail: func(title string) error {
+		if title == browserQuestion {
+			return interrupted
+		}
+		return nil
+	}}
+	store := &memLogins{}
+	_, err := SignIn(ctx, "grok", s, o, store)
+	if err != interrupted { //nolint:errorlint // the caller's own error, returned as it is
+		t.Errorf("Ctrl+C at the question: %v, want the prompter's own error as it is", err)
+	}
+	if opened, _ := rec.get(); opened != 0 || len(store.logins) != 0 {
+		t.Errorf("opened %d times, saved %v; want neither", opened, store.logins)
+	}
+}
+
+// A sign-in whose context ends during the model listing saves nothing and
+// returns the context's error (0068-MADR V1; go-llmprovider-sdk 0081-MADR).
+func TestSignInCancelledSavesNothing(t *testing.T) {
+	ti, o := signInIssuer(t)
+	ownCache(t, &o)
+	u, err := url.Parse(ti.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := toIssuer{u}
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	o.HTTPClient = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		if r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/v1/") {
+			cancel() // the person's cancel arrives while the listing runs
+			<-r.Context().Done()
+			return nil, r.Context().Err()
+		}
+		return base.RoundTrip(r)
+	})}
+	o.Method = MethodDevice
+	o.ShowDeviceCode = func(DeviceCode) error { return nil }
+	store := &memLogins{}
+	_, err = SignIn(ctx, "grok", &script{t: t}, o, store)
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("a sign-in cancelled during its listing: %v, want the context's error", err)
+	}
+	if len(store.logins) != 0 {
+		t.Errorf("a cancelled sign-in saved %v", store.logins)
+	}
+}
+
+// errHeldTooLong is a test locker's own give-up, past its window.
+var errHeldTooLong = errors.New("the refresh lock is still held")
+
+// heldLocker is memLogins whose refresh lock another process holds until
+// release: a try with a done context fails at once wrapping its error, as
+// auth.RefreshLocker documents for a held lock (and gobble's Logins does), and a
+// wait gives up after window with errHeldTooLong. With releaseAfter set, the
+// hold ends that long after the first wait begins.
+type heldLocker struct {
+	*memLogins
+	window       time.Duration
+	releaseAfter time.Duration
+	release      chan struct{}
+
+	mu    sync.Mutex
+	held  bool
+	tries int
+	once  sync.Once
+}
+
+func (h *heldLocker) LockRefresh(ctx context.Context, _ string) (func(), error) {
+	h.mu.Lock()
+	h.tries++
+	held := h.held
+	h.mu.Unlock()
+	if !held {
+		return func() {}, nil
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("held by another process: %w", err)
+	}
+	if h.releaseAfter > 0 {
+		time.AfterFunc(h.releaseAfter, h.let)
+	}
+	timer := time.NewTimer(h.window)
+	defer timer.Stop()
+	select {
+	case <-h.release:
+		return func() {}, nil
+	case <-ctx.Done():
+		return nil, fmt.Errorf("held by another process: %w", ctx.Err())
+	case <-timer.C:
+		return nil, errHeldTooLong
+	}
+}
+
+// let ends the other process's hold.
+func (h *heldLocker) let() {
+	h.once.Do(func() {
+		h.mu.Lock()
+		h.held = false
+		h.mu.Unlock()
+		close(h.release)
+	})
+}
+
+// A new sign-in is saved under the store's refresh lock: while another
+// process's refresh holds it, the wizard says it waits, and saves once it is
+// released (0068-MADR V3; go-llmprovider-sdk 0082-MADR).
+func TestSignInWaitsForAHeldRefreshLock(t *testing.T) {
+	_, o := signInIssuer(t)
+	o.Method = MethodDevice
+	o.ShowDeviceCode = func(DeviceCode) error { return nil }
+	store := &heldLocker{memLogins: &memLogins{}, window: 10 * time.Second, releaseAfter: 300 * time.Millisecond,
+		release: make(chan struct{}), held: true}
+	s := &script{t: t}
+	if _, err := SignIn(t.Context(), "grok", s, o, store); err != nil {
+		t.Fatalf("the sign-in: %v", err)
+	}
+	if !slices.ContainsFunc(s.noted(), func(n string) bool { return strings.Contains(n, "waiting for another process to finish refreshing") }) {
+		t.Errorf("no notice that the save waits: %q", s.noted())
+	}
+	store.mu.Lock()
+	tries := store.tries
+	store.mu.Unlock()
+	if l, _ := store.Load(t.Context(), "grok"); l == nil || tries < 2 {
+		t.Errorf("saved %v after %d tries of the lock; want the session saved once the lock was taken", l, tries)
+	}
+}
+
+// With the lock held past the store's own bound and no answer to the
+// question whether to try again, the sign-in ends with the store's error and
+// saves nothing (0068-MADR V4).
+func TestSignInHeldLockUnasked(t *testing.T) {
+	_, o := signInIssuer(t)
+	o.Method = MethodDevice
+	o.ShowDeviceCode = func(DeviceCode) error { return nil }
+	store := &heldLocker{memLogins: &memLogins{}, window: 200 * time.Millisecond, release: make(chan struct{}), held: true}
+	s := &script{t: t, confirm: func(string) (bool, error) { return false, errors.New("no terminal to ask on") }}
+	_, err := SignIn(t.Context(), "grok", s, o, store)
+	if !errors.Is(err, errHeldTooLong) {
+		t.Errorf("the sign-in: %v, want the store's error", err)
+	}
+	if l, _ := store.Load(t.Context(), "grok"); l != nil {
+		t.Errorf("saved %v", l)
+	}
+}
+
+// SignInError.Keys counts the keys that were typed, not the asks: a blank
+// one asked again is not a key (0068-MADR K3).
+func TestSignInKeysCountsNonBlank(t *testing.T) {
+	_, o := signInIssuer(t)
+	o.Method = MethodAPIKey
+	s := &script{t: t, secrets: []string{"refused-1", "   ", "refused-2", "refused-3"}}
+	_, err := SignIn(t.Context(), "grok", s, o, &memLogins{})
+	if err == nil || err.Error() != "grok refused 3 keys; none was saved" || !errors.Is(err, llm.ErrAuth) {
+		t.Errorf("three refused keys and a blank: %v, want grok refused 3 keys; none was saved", err)
+	}
+}
+
+// A refused key, then three blanks: the error matches no sentinel, so it is
+// "other", and no key is counted (0068-MADR K4; go-llmprovider-sdk 0085-MADR).
+func TestSignInRefusedThenBlanks(t *testing.T) {
+	_, o := signInIssuer(t)
+	o.Method = MethodAPIKey
+	s := &script{t: t, secrets: []string{"refused-1", "", " ", "\t"}}
+	_, err := SignIn(t.Context(), "grok", s, o, &memLogins{})
+	se, ok := errors.AsType[*SignInError](err)
+	if err == nil || err.Error() != "grok sign-in failed (other)" || errors.Is(err, llm.ErrAuth) || !ok || se.Keys != 0 {
+		t.Errorf("a refused key, then three blanks: %v; want grok sign-in failed (other), no auth failure, no keys counted", err)
+	}
+}
+
+// A typed Kilo key that Kilo's profile refuses is asked for again, up to
+// three, and none is saved (0068-MADR L1; go-llmprovider-sdk 0080-MADR).
+func TestSignInKiloWrongKey(t *testing.T) {
+	ti, o := signInIssuer(t)
+	ti.profile(http.StatusUnauthorized)
+	o.Method = MethodAPIKey
+	s := &script{t: t, secrets: []string{"kilo-wrong-1", "kilo-wrong-2", "kilo-wrong-3"}}
+	c, err := SignIn(t.Context(), "kilo", s, o, &memLogins{})
+	if err == nil || err.Error() != "kilo refused 3 keys; none was saved" || !errors.Is(err, llm.ErrAuth) || c.Key != "" {
+		t.Errorf("three keys the profile refuses: %+v, %v; want kilo refused 3 keys; none was saved", c, err)
+	}
+}
+
+// A profile that cannot say is one warning, and the key is kept (0068-MADR
+// L2).
+func TestSignInKiloUnverifiedKeyWarns(t *testing.T) {
+	ti, o := signInIssuer(t)
+	ti.profile(http.StatusServiceUnavailable)
+	o.Method = MethodAPIKey
+	s := &script{t: t, secrets: []string{"kilo-key-0123456789"}}
+	c, err := SignIn(t.Context(), "kilo", s, o, &memLogins{})
+	if err != nil || c.Key != "kilo-key-0123456789" {
+		t.Fatalf("a key the profile cannot check: %+v, %v; want the key", c, err)
+	}
+	n := 0
+	for _, note := range s.noted() {
+		if strings.Contains(note, "could not verify the Kilo key") {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Errorf("%d warnings that the key was not verified in %q, want one", n, s.noted())
 	}
 }

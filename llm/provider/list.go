@@ -53,6 +53,16 @@ var publicListings = []string{"opencode-zen", "opencode-go", "huggingface", "kil
 // (0025-MADR D4).
 func PublicListing(id string) bool { return slices.Contains(publicListings, id) }
 
+// keysCheckedAtSignIn are the public-listing providers whose key a sign-in
+// checks anyway: Kilo's, at Kilo's profile (go-llmprovider-sdk v1.32.0,
+// 0080-MADR; 0068-MADR D2 b).
+var keysCheckedAtSignIn = []string{"kilo"}
+
+// KeyCheckedAtSignIn reports whether a sign-in to provider id checks a typed
+// key although its listing needs none, so the key is not "unchecked": Kilo's
+// (0068-MADR D2 b). PublicListing does not change.
+func KeyCheckedAtSignIn(id string) bool { return slices.Contains(keysCheckedAtSignIn, id) }
+
 // Search is the ids of models that match query, best first, by the SDK's
 // matcher: the id exactly, as a prefix or substring, then its label, then a
 // subsequence (0025-MADR D5).

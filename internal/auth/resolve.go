@@ -87,16 +87,39 @@ func (r *Resolver) Credential(id string) (Credential, bool, error) {
 			// Its variables are unset: no key, as Pi counts one (provider-composer.ts).
 		case err != nil:
 			return Credential{}, false, fmt.Errorf("models.json: provider %s: apiKey: %w", id, err)
+		case blank(key):
+			// Only white space: no key, as an empty one (0068-MADR Q2).
 		default:
 			return Credential{Key: key, Source: SourceModelsJSON}, true, nil
 		}
 	}
 	if name := r.varOf(id); name != "" {
-		if v, ok := r.LookupEnv(name); ok && v != "" {
+		if v, ok := r.LookupEnv(name); ok && !blank(v) {
 			return Credential{Key: v, Source: Source(name)}, true, nil
 		}
 	}
 	return Credential{}, false, nil
+}
+
+// blank reports whether a key is empty once trimmed: only spaces, tabs, line
+// breaks or a non-breaking space. Such a key is no key, at every source, as an
+// empty one is (0068-MADR Q2, "Treat it as no key (Recommended)"); the SDK
+// would store it as empty from v1.32.0 (go-llmprovider-sdk 0085-MADR D9).
+func blank(key string) bool { return strings.TrimSpace(key) == "" }
+
+// storedKeyBlank reports whether an auth.json key is no key: blank as
+// written, or a value with no command whose variables are set and resolve to
+// a blank one. A command is not run, and one whose variables are unset still
+// counts, as before, for Credential to report.
+func (r *Resolver) storedKeyBlank(raw string) bool {
+	if blank(raw) {
+		return true
+	}
+	if strings.HasPrefix(raw, "!") {
+		return false
+	}
+	v, err := catalog.ResolveValue(raw, r.LookupEnv, nil)
+	return err == nil && blank(v)
 }
 
 // Has is where provider id's credential would come from, without running a
@@ -110,18 +133,18 @@ func (r *Resolver) Has(id string) (Source, bool) {
 		return SourceFlag, true
 	}
 	if e, ok := r.entry(id); ok {
-		return SourceFile, (e.Type == TypeAPIKey && e.Key != "") || (e.Type == TypeOAuth && r.usesLogin(id, e))
+		return SourceFile, (e.Type == TypeAPIKey && !r.storedKeyBlank(e.Key)) || (e.Type == TypeOAuth && r.usesLogin(id, e))
 	}
 	if raw := r.modelsJSONKey(id); raw != "" {
 		if strings.HasPrefix(raw, "!") {
 			return SourceModelsJSON, true
 		}
-		if _, err := catalog.ResolveValue(raw, r.LookupEnv, nil); err == nil {
+		if v, err := catalog.ResolveValue(raw, r.LookupEnv, nil); err == nil && !blank(v) {
 			return SourceModelsJSON, true
 		}
 	}
 	if name := r.varOf(id); name != "" {
-		if v, ok := r.LookupEnv(name); ok && v != "" {
+		if v, ok := r.LookupEnv(name); ok && !blank(v) {
 			return Source(name), true
 		}
 	}
@@ -138,12 +161,15 @@ func (r *Resolver) stored(id string, e Entry) (Credential, bool, error) {
 		return Credential{Source: SourceFile, Login: true}, true, nil
 	case e.Type == TypeOAuth:
 		return Credential{}, false, fmt.Errorf("provider %s has an OAuth login in auth.json, which gobble does not use (0005-PLAN F4-3b)", id)
-	case e.Type != TypeAPIKey || e.Key == "":
+	case e.Type != TypeAPIKey || blank(e.Key):
 		return Credential{}, false, nil
 	}
 	key, err := catalog.ResolveValue(e.Key, r.LookupEnv, r.cachedRun)
 	if err != nil {
 		return Credential{}, false, fmt.Errorf("auth.json: provider %s: %w", id, err)
+	}
+	if blank(key) {
+		return Credential{}, false, nil // only white space: no key (0068-MADR Q2)
 	}
 	return Credential{Key: key, Source: SourceFile, Workspace: e.Workspace}, true, nil
 }

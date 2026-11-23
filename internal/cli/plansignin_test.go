@@ -3,7 +3,6 @@ package cli
 import (
 	"bytes"
 	"context"
-	"errors"
 	"net/http"
 	"net/url"
 	"os"
@@ -247,12 +246,14 @@ func logoutAt(t *testing.T, ti *loginIssuer) {
 
 // terminalPlan is gobble auth login openai on a terminal, the real wizard
 // behind provider.SignIn against the plan issuer, as one person at it: each of
-// answers is a line typed at a question, in order, and then, when the browser
-// is opened, the callback the browser lands on is pasted (the wizard's own
-// loopback listener is the SDK's; the paste wins it). It returns the authorize
-// URL's query, what the wizard had put on stderr in all and when the browser was
-// opened, and the error.
-func terminalPlan(t *testing.T, e *runEnv, ti *loginIssuer, answers ...string) (authorize url.Values, shown, beforeURL string, err error) {
+// answers is a line typed at a question, in order. The person answers the
+// SDK's question where the browser is with "On another device", so the wizard
+// binds no listener and opens no browser (0068-MADR W7, as 0052-PLAN step 1c
+// ruled), and once the sign-in shows its address, the callback the browser
+// lands on is pasted. It returns the authorize URL's query, what the wizard
+// had put on stderr in all and when the address was shown, whether the
+// browser was opened, and the error.
+func terminalPlan(t *testing.T, e *runEnv, ti *loginIssuer, answers ...string) (authorize url.Values, shown, beforeURL string, opened bool, err error) {
 	t.Helper()
 	target, perr := url.Parse(ti.URL)
 	if perr != nil {
@@ -277,28 +278,58 @@ func terminalPlan(t *testing.T, e *runEnv, ti *loginIssuer, answers ...string) (
 			t.Fatal(werr)
 		}
 	}
+	stderr := &pasteOnAddress{t: t, ti: ti, paste: w}
+	e.out.err = stderr
 	e.out.caps.In, e.stdin = true, r
-	opened := false
-	replace(t, &openURL, func(_ context.Context, u string) error {
-		parsed, uerr := url.Parse(u)
-		if uerr != nil {
-			return uerr
-		}
-		authorize = parsed.Query()
-		if !opened { // the first time the browser opens
-			opened, beforeURL = true, e.out.err.(*bytes.Buffer).String() // what the person had been shown by then
-		}
-		redirect, state := ti.nonceOf(t, u)
-		cb := redirect + "?code=c1&state=" + url.QueryEscape(state) + "&client_id=" + url.QueryEscape(issuedClient)
-		_, werr := w.WriteString(cb + "\n")
-		return werr
+	replace(t, &openURL, func(context.Context, string) error {
+		opened = true
+		return nil
 	})
 	replace(t, &signInWith, func(ctx context.Context, id string, p provider.Prompter, o provider.SignInOptions, store provider.LoginStore) (provider.Credential, error) {
 		o.HTTPClient, o.Cache = &http.Client{Transport: loginTransport{target}}, cache
 		return provider.SignIn(ctx, id, p, o, store)
 	})
 	err = e.loginWith(t.Context(), "openai", false, nil)
-	return authorize, e.out.err.(*bytes.Buffer).String(), beforeURL, err
+	return stderr.authorize, stderr.buf.String(), stderr.before, opened, err
+}
+
+// pasteOnAddress is a terminal's stderr: the first time a sign-in's authorize
+// address is written to it, it pastes the callback the browser would land on
+// into the terminal's input, as the person does, and keeps what had been
+// shown before the address.
+type pasteOnAddress struct {
+	t     *testing.T
+	ti    *loginIssuer
+	paste *os.File
+
+	buf       bytes.Buffer
+	before    string
+	authorize url.Values
+}
+
+func (p *pasteOnAddress) Write(b []byte) (int, error) {
+	before := p.buf.String()
+	n, err := p.buf.Write(b)
+	if p.authorize != nil {
+		return n, err
+	}
+	for f := range strings.FieldsSeq(p.buf.String()) {
+		if !strings.Contains(f, "redirect_uri=") {
+			continue
+		}
+		u, perr := url.Parse(strings.Trim(f, ".,;()<>\"'"))
+		if perr != nil {
+			return n, perr
+		}
+		p.authorize, p.before = u.Query(), before
+		redirect, state := p.ti.nonceOf(p.t, u.String())
+		cb := redirect + "?code=c1&state=" + url.QueryEscape(state) + "&client_id=" + url.QueryEscape(issuedClient)
+		if _, werr := p.paste.WriteString(cb + "\n"); werr != nil {
+			return n, werr
+		}
+		break
+	}
+	return n, err
 }
 
 // A first plan sign-in on the terminal (provider.SignIn, the wizard behind
@@ -315,11 +346,17 @@ func TestSignInChatGPTPlanTerminal(t *testing.T) {
 	ti := newPlanLoginIssuer(t)
 	e := envHere(t)
 
-	first, shown, beforeURL, err := terminalPlan(t, e, ti, "1")
-	signInFailed(t, "the first plan sign-in on the terminal", err)
+	// On another device, then allow (0068-MADR W7).
+	first, shown, beforeURL, opened, err := terminalPlan(t, e, ti, "2", "1")
+	if err != nil {
+		t.Fatalf("the first plan sign-in on the terminal: %v", err)
+	}
+	if opened {
+		t.Error("the first plan sign-in opened the browser, though the person said it is on another device")
+	}
 	want := provider.ConsentText[planConsentID]
 	if !strings.Contains(beforeURL, want) {
-		t.Errorf("when the browser was opened the terminal had shown\n%s\nwant gobble's wording in it first: the consent comes before the browser (the whole output: %q)", beforeURL, shown)
+		t.Errorf("when the address was shown the terminal had shown\n%s\nwant gobble's wording in it first: the consent comes before the address (the whole output: %q)", beforeURL, shown)
 	}
 	b, err := os.ReadFile(hostIDFile(t))
 	if err != nil {
@@ -342,8 +379,10 @@ func TestSignInChatGPTPlanTerminal(t *testing.T) {
 		t.Errorf("clients.json holds %+v, %v; want the issued client and the host id", rec, err)
 	}
 
-	second, shown, _, err := terminalPlan(t, envHere(t), ti)
-	signInFailed(t, "the second plan sign-in on the terminal", err)
+	second, shown, _, opened, err := terminalPlan(t, envHere(t), ti, "2")
+	if err != nil || opened {
+		t.Fatalf("the second plan sign-in on the terminal: %v, the browser opened %v; want a sign-in by paste", err, opened)
+	}
 	if strings.Contains(shown, provider.ConsentText[planConsentID]) {
 		t.Error("the second sign-in asked the consent again, though the session holds the answer")
 	}
@@ -360,8 +399,9 @@ func TestPlanAfterLogoutReusesClientTerminal(t *testing.T) {
 	c := newCfgEnv(t)
 	ti := newPlanLoginIssuer(t)
 	logoutAt(t, ti)
-	_, _, _, err := terminalPlan(t, envHere(t), ti, "1")
-	signInFailed(t, "the first plan sign-in on the terminal", err)
+	if _, _, _, opened, err := terminalPlan(t, envHere(t), ti, "2", "1"); err != nil || opened {
+		t.Fatalf("the first plan sign-in on the terminal: %v, the browser opened %v; want a sign-in by paste", err, opened)
+	}
 	r := c.run("auth", "logout", "openai")
 	if r.code != ExitOK || r.stdout != "Logged out of openai\n" || strings.Contains(r.stderr, "could not be revoked") {
 		t.Fatalf("auth logout openai: exit %d, stdout %q, stderr %q", r.code, r.stdout, r.stderr)
@@ -375,33 +415,14 @@ func TestPlanAfterLogoutReusesClientTerminal(t *testing.T) {
 	if rec, err := clients.Load(t.Context(), "openai"); err != nil || rec.ClientID != issuedClient || rec.HostID != host {
 		t.Fatalf("clients.json after the logout holds %+v, %v; want the issued client kept", rec, err)
 	}
-	again, _, beforeURL, err := terminalPlan(t, envHere(t), ti, "1")
-	signInFailed(t, "the plan sign-in after the logout", err)
+	again, _, beforeURL, opened, err := terminalPlan(t, envHere(t), ti, "2", "1")
+	if err != nil || opened {
+		t.Fatalf("the plan sign-in after the logout: %v, the browser opened %v; want a sign-in by paste", err, opened)
+	}
 	if !strings.Contains(beforeURL, provider.ConsentText[planConsentID]) {
-		t.Errorf("the sign-in after a logout had shown %q when the browser opened, want the consent asked first", beforeURL)
+		t.Errorf("the sign-in after a logout had shown %q when the address was shown, want the consent asked first", beforeURL)
 	}
 	if again.Get("client_id") != issuedClient || again.Has("agent_name_hint") || again.Get("ext_agent_host_id") != host {
 		t.Errorf("the authorize query after the logout %v, want the stored client, the host and no agent_name_hint", again)
 	}
-}
-
-// signInFailed fails the test when a terminal sign-in failed, and says what
-// that is: when the SDK's wizard could not bind its registered callback ports,
-// 1455 and 1457, which it does for a terminal sign-in and an option to skip is
-// not yet offered (0052-PLAN P4, the owner's ruling of 2026-11-17, relayed by
-// the coordinator), the message names the collision, which is not a defect of
-// gobble's. It is still a failure, never a skip: the sign-in did not happen.
-func signInFailed(t *testing.T, what string, err error) {
-	t.Helper()
-	if err == nil {
-		return
-	}
-	for e := err; e != nil; e = errors.Unwrap(e) {
-		if strings.Contains(e.Error(), "registered callback ports unavailable") {
-			t.Fatalf("%s failed because both callback ports, 1455 and 1457, are in use on this machine: the SDK's wizard binds them "+
-				"for a terminal sign-in (another process holds them: a Codex login, or another run of these tests). Nothing is wrong with gobble; "+
-				"free the ports and run again. The SDK said: %v", what, e)
-		}
-	}
-	t.Fatalf("%s: %v", what, err)
 }

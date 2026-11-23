@@ -84,12 +84,6 @@ run `go test -artifacts -outputdir <dir>` to keep it.
 
   `localhost` and loopback addresses are never proxied, so an `httptest` server works as usual.
 - Each test sets its own `GOBBLE_HOME`, and writes nothing outside it.
-- Two tests in `internal/cli`, `TestSignInChatGPTPlanTerminal` and `TestPlanAfterLogoutReusesClientTerminal`, run the SDK's
-  real sign-in wizard against an issuer in process, and the wizard binds its first registered callback port, 1455, on
-  both loopback address families, and the second, 1457, only when 1455 is taken (a person's paste ends the sign-in, but the listener is the SDK's and has no off switch yet). They
-  keep those ports until go-llmprovider-sdk offers a wizard option to skip the listener. If one of them fails with "both
-  callback ports, 1455 and 1457, are in use on this machine", another process holds the ports (a Codex login, another run of
-  these tests): free them and run again. Nothing is wrong with gobble, and the test is a failure, not a skip.
 
 ### Suites outside the default run
 

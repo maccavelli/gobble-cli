@@ -377,6 +377,8 @@ turn naming the cause; test the kind before the `signature` match, which is wher
 holding calls to the dropped tool is accepted (the SDK draft's O5, not established), and how a drop interacts with
 `tool_search` and loaded deferred tools.
 
+*(2026-11-23: its pin precondition is met by 0068-PLAN-adopt-go-llmprovider-sdk-v1-32-0.md: gobble requires go-llmprovider-sdk `v1.32.0`, and `TestToolSchemaRefusalIsTyped` pins that Grok's refusal matches `ErrToolSchemaRefused` and `ErrInvalidRequest`, names the tool in `APIError.Tool`, and is still `llm.Kind` `other`. The two prerequisites above stay open, and the record is not drafted.)*
+
 ### D7. Where it lands (Q6, decided as re-put)
 
 Next, before 0052-PLAN P5, on `p3-acpext-v0.5.0`, with a fresh draft pull request to `main` so CI runs on every push.

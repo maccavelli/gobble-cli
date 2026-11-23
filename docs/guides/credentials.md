@@ -18,7 +18,8 @@ For each provider, gobble takes the first of these that has a key:
 4. **The provider's variable,** such as `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`.
 
 With no `--model` and no `defaultProvider`, gobble uses the first provider, in its own order, that
-has a key from any of these.
+has a key from any of these. A key of only white space, in `auth.json`, in `models.json` or in a
+variable, written there or a variable's value, is no key, as an empty one is.
 
 A key in `auth.json` or `models.json` can name a variable or run a command, as Pi's can:
 `"$OPENAI_KEY"`, `"${OPENAI_KEY}"`, or `"!pass show openai"`, which keeps the key out of the file.
@@ -225,12 +226,15 @@ Three providers let you sign in with your account instead of pasting a key:
   gobble, paste the URL the browser ends on when asked. `gobble auth login grok --device` shows a
   code to enter at xAI instead, for a machine with no browser at all; the line that shows the code
   names when it stops working, `(expires 14:05)`, in your machine's local time. `/login grok`,
-  `gobble setup` and the first-run offer open the browser and show the code the same way. Either way gobble says
+  `gobble setup` and the first-run offer open the browser and show the code the same way (the browser question below
+  comes first). Either way gobble says
   `Logged in to grok`, keeps the login in `auth.json`, and refreshes it as it runs. gobble signs in
   with the Grok CLI's public client id: xAI offers third-party tools no id of their own, so if xAI
   restricts that id, the login stops working, and a key still works.
 - **Kilo.** `gobble auth login kilo` shows a code to enter at Kilo, with its expiry as Grok's does. Kilo answers with a key, which
-  gobble stores as Kilo's API key and says `Saved API key for kilo`.
+  gobble checks at Kilo's profile, stores as Kilo's API key and says `Saved API key for kilo`. A key Kilo refuses
+  is not saved; when the profile cannot answer, the key is saved, with a warning at a terminal. A key typed for
+  Kilo is checked the same way, and one Kilo refuses is asked for again, up to three.
 - **OpenAI, with your ChatGPT plan.** `gobble auth login openai` signs in under gobble's own name,
   `gobble`, and not as the Codex client; `--method chatgpt-plan` names it with no menu. Before the
   browser opens, gobble shows what it stores and where, how to remove the sign-in, and what a
@@ -255,6 +259,13 @@ Three providers let you sign in with your account instead of pasting a key:
   it is. When the state directory cannot be read or written, the sign-in goes on with no host id of
   gobble's own, the SDK makes one for that sign-in, and gobble warns once: on stderr for a terminal
   sign-in, in the agent's log for an ACP one. Neither warning names an id.
+
+Before a browser sign-in at a terminal, Grok's or the ChatGPT plan's, gobble asks where the browser you
+will sign in with is (the question is go-llmprovider-sdk's, from `v1.32.0`; for the plan it comes after the
+method and before the consent): `On this machine`, the default, opens it here and waits for it to come
+back to gobble; `On another device: I will paste the address back` opens nothing and listens on no port of
+this machine: gobble prints the address, and the sign-in ends when you paste the address the browser lands
+on. With no terminal, with `--json` and from an ACP client the question is not asked.
 
 gobble names itself to xAI's sign-in service in the requests it makes for a Grok login, as
 `gobble/<version>`, the running build's version, ahead of the SDK's own name: such a request's
@@ -309,9 +320,9 @@ Error: claude has no login; use --api-key -
 An OAuth entry gobble does not sign in to, for another provider such as one copied from Pi, or an
 OpenAI entry of another application's ChatGPT login, is kept, and gobble says it does not use it.
 
-Gobble refuses such an entry when it loads one. A session a running gobble already holds can still adopt one
-that another program writes into gobble's own `auth.json` while gobble runs, at its next refresh, and then
-sends that login's token.
+Gobble refuses such an entry when it loads one. A session a running gobble already holds refuses one that
+another program writes into gobble's own `auth.json` while gobble runs: at its next refresh the request fails
+as a refused login, none of the other login's tokens is sent, and gobble asks you to sign in again.
 
 ### Allowing background requests under a ChatGPT plan
 
@@ -402,7 +413,8 @@ Kilo's device sign-in, OpenAI's ChatGPT plan. A browser sign-in is opened in you
 opens it, and a device code is shown with its expiry. `/login claude` asks no provider. A typed key echoes a `*` for each character,
 and gobble checks it by listing the provider's models, which spends nothing: a key the provider
 refuses is asked for again, up to three keys, and a key the listing cannot check is saved with a
-note. Then gobble lists the provider's models, numbered for `/model N`. Ctrl+C leaves the sign-in,
+note. A Kilo key is checked at Kilo's profile instead, since Kilo's listing answers every key: one
+Kilo refuses is asked for again, and one the profile cannot check is saved with a warning. Then gobble lists the provider's models, numbered for `/model N`. Ctrl+C leaves the sign-in,
 not gobble. Here gobble had no credential, and no network, and a key was typed at the key prompt:
 
 ```text
@@ -418,7 +430,7 @@ answer the next question of the same sign-in; what is still unread when the sess
 back is dropped, and so is what was typed into a prompt gobble gave up, such as a paste prompt that
 a browser sign-in finished while it waited: on Linux and macOS gobble also clears the terminal's own
 queue then, so that text is never a turn, an answer, or the shell's input after gobble exits. An
-empty key cancels the sign-in.
+empty key cancels the sign-in, and so does a key of only spaces, which gobble reads as an empty one.
 
 On Linux and macOS gobble waits for a prompt's keys without reading the terminal until a prompt
 asks, so a key typed while a sign-in finishes is kept for the question that asks. When a terminal

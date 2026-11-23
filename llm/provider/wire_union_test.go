@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,6 +14,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/maccavelli/go-llmprovider-sdk/llmprovider"
 
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/mcpclient"
@@ -156,7 +159,9 @@ func TestWireRootUnionSchema(t *testing.T) {
 
 	// The schema as the server sends it, handed to the provider as is.
 	o, c := run(toolsOf(t, name, read("magictools-execute-pipeline.json")))
-	const refused = "llm: api status 400: llmprovider: invalid request: grok HTTP 400 invalid-argument: Failed to start sampling: " +
+	// go-llmprovider-sdk v1.32.0 names the refusal's own kind,
+	// ErrToolSchemaRefused (0068-MADR E1).
+	const refused = "llm: api status 400: llmprovider: tool schema refused: grok HTTP 400 invalid-argument: Failed to start sampling: " +
 		"[invalid_client_tool_schema] " + name + ": tool parameter root must be an object type " +
 		"(root schema is an anyOf/oneOf union with a non-object branch)"
 	if o.err == nil || o.err.Error() != refused {
@@ -223,4 +228,46 @@ func loadedSpec(t *testing.T, server, name string) tool.Spec {
 	}
 	t.Fatalf("no tool %s", want)
 	return tool.Spec{}
+}
+
+// Grok's refusal of a tool's schema is typed from go-llmprovider-sdk v1.32.0:
+// gobble's error matches ErrToolSchemaRefused and, beneath it,
+// ErrInvalidRequest, names the refused tool in the SDK's APIError.Tool, and is
+// still of llm's kind other, so 0060-MADR D6's record starts from a pinned
+// fact (0068-MADR E1; written after the bump, the named exception to red
+// first; plant P8).
+func TestToolSchemaRefusalIsTyped(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("..", "..", "mcpclient", "testdata", "magictools-execute-pipeline.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	const name = "mcp__magictools__execute_pipeline"
+	p, err := New("grok", Options{APIKey: "k", Model: "grok-4.6", HTTPClient: &http.Client{Transport: &xaiWire{inner: &cannedWire{}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := wireRequest()
+	req.Model, req.Tools = "grok-4.6", toolsOf(t, name, b)
+	var got error
+	for _, err := range p.Stream(t.Context(), req) {
+		if err != nil {
+			got = err
+			break
+		}
+	}
+	if got == nil {
+		t.Fatal("the refused schema gave no error")
+	}
+	if !strings.HasPrefix(got.Error(), "llm: api status 400: llmprovider: tool schema refused: ") {
+		t.Errorf("the refusal's text %q, want it to begin with the SDK's new kind", got)
+	}
+	if !errors.Is(got, llmprovider.ErrToolSchemaRefused) || !errors.Is(got, llmprovider.ErrInvalidRequest) {
+		t.Errorf("the refusal %v does not match ErrToolSchemaRefused and ErrInvalidRequest", got)
+	}
+	if ae, ok := errors.AsType[*llmprovider.APIError](got); !ok || ae.Tool != name {
+		t.Errorf("the SDK's APIError %+v, want Tool %q", ae, name)
+	}
+	if k := llm.Kind(got); k != "other" {
+		t.Errorf("llm.Kind = %q, want other: llm has no kind for a refused schema", k)
+	}
 }

@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -320,8 +322,9 @@ func loginMenuAndRefusals(t *testing.T, enter string) {
 }
 
 // The wizard's questions are the line session's: a menu numbered, a notice
-// on its own line; a login the wizard saved is reported as one. A key from
-// a public listing, typed, is noted as not checked (0031-MADR D7).
+// on its own line; a login the wizard saved is reported as one. A Kilo key,
+// typed, is not noted as unchecked: the SDK checks it at Kilo's profile
+// (0068-MADR L3; TestUncheckedKeyNotice holds the notice of the others).
 func TestLoginAsksThroughQuestions(t *testing.T) {
 	eachEnter(t, loginAsksThroughQuestions)
 }
@@ -357,11 +360,11 @@ func loginAsksThroughQuestions(t *testing.T, enter string) {
 	if err := h.wait(); err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"Open https://example.test/device and enter the code ABCD-1234\n",
-		provider.Label("kilo") + " lists its models without a key, so the key was not checked.\n"} {
-		if !strings.Contains(h.stderr.String(), want) {
-			t.Errorf("stderr lacks %q:\n%s", want, h.stderr)
-		}
+	if want := "Open https://example.test/device and enter the code ABCD-1234\n"; !strings.Contains(h.stderr.String(), want) {
+		t.Errorf("stderr lacks %q:\n%s", want, h.stderr)
+	}
+	if strings.Contains(h.stderr.String(), "so the key was not checked") {
+		t.Errorf("a Kilo key was noted as not checked:\n%s", h.stderr)
 	}
 	if storedKey(t, "kilo") != "kilo-typed" {
 		t.Errorf("kilo's key %q", storedKey(t, "kilo"))
@@ -933,6 +936,58 @@ func TestStartWarnsRunProviderOnly(t *testing.T) {
 	for _, id := range []string{"openai", "claude", "grok"} {
 		if !strings.Contains(string(b), `"provider":"`+id+`"`) {
 			t.Errorf("the log file has no record of %s's listing:\n%s", id, b)
+		}
+	}
+}
+
+// A typed key for a provider whose listing needs no key is noted as not
+// checked, except Kilo's, which the SDK checks at Kilo's profile at sign-in
+// (0068-MADR L3; go-llmprovider-sdk 0080-MADR). The key is stored either way.
+func TestUncheckedKeyNotice(t *testing.T) {
+	for id, noted := range map[string]bool{"opencode-zen": true, "opencode-go": true, "huggingface": true, "kilo": false} {
+		t.Run(id, func(t *testing.T) {
+			e, _ := modelEnv(t)
+			replace(t, &signInWith, func(context.Context, string, provider.Prompter, provider.SignInOptions, provider.LoginStore) (provider.Credential, error) {
+				return provider.Credential{Key: "typed-key-0123456789"}, nil
+			})
+			var notes bytes.Buffer
+			if err := e.signInTo(t.Context(), unasked{out: &notes}, id, provider.SignInOptions{}, nil); err != nil {
+				t.Fatal(err)
+			}
+			want := provider.Label(id) + " lists its models without a key, so the key was not checked.\n"
+			if got := strings.Contains(notes.String(), want); got != noted {
+				t.Errorf("%s's notices %q: the unchecked notice given %v, want %v", id, notes.String(), got, noted)
+			}
+			if storedKey(t, id) != "typed-key-0123456789" {
+				t.Errorf("%s's key %q, want the typed key", id, storedKey(t, id))
+			}
+		})
+	}
+}
+
+// Spaces typed at gobble's own terminal are the empty key: the secret is read
+// trimmed, so the sign-in is cancelled at the first ask, as an empty key
+// cancels it, and nothing is saved; the SDK never sees them (0068-MADR K6 as
+// amended, the owner's "Record what happens (Recommended)").
+func TestSignInTerminalSpacesCancel(t *testing.T) {
+	t.Setenv("GOBBLE_HOME", t.TempDir())
+	ti := newLoginIssuer(t)
+	target, err := url.Parse(ti.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	q, out, _ := asked(t, "   \n", "   \n", "   \n")
+	o := provider.SignInOptions{Method: provider.MethodAPIKey, HTTPClient: &http.Client{Transport: loginTransport{target}}}
+	c, err := provider.SignIn(t.Context(), "claude", prompter{q}, o, auth.Logins{Path: authPath()})
+	if !errors.Is(err, errCancelled) || c.Key != "" {
+		t.Errorf("a key of spaces: %+v, %v; want the sign-in cancelled, as an empty key cancels it", c, err)
+	}
+	if n := strings.Count(out.String(), "API key: "); n != 1 {
+		t.Errorf("the key was asked %d times, want once:\n%s", n, out)
+	}
+	if f, ferr := auth.Load(authPath()); ferr == nil {
+		if e, ok := f.Entry("claude"); ok {
+			t.Errorf("a cancelled sign-in stored %+v", e)
 		}
 	}
 }

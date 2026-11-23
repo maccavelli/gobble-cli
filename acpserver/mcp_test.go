@@ -521,8 +521,9 @@ func TestMCPUnionSchemaProviderRefusal(t *testing.T) {
 		got = err
 	}
 	// The owner's paste reads "llm: api status 400: … grok HTTP 400 …"; the
-	// ellipsis is the SDK's own words.
-	want := "llm: api status 400: llmprovider: invalid request: " + refusalText("mcp__fx__execute_pipeline")
+	// ellipsis is the SDK's own words, which name the refusal's kind from
+	// go-llmprovider-sdk v1.32.0 (0068-MADR E1).
+	want := "llm: api status 400: llmprovider: tool schema refused: " + refusalText("mcp__fx__execute_pipeline")
 	if got == nil || got.Error() != want {
 		t.Fatalf("the original schema: %v\nwant text %q", got, want)
 	}

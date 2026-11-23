@@ -1,7 +1,9 @@
 package auth
 
 import (
+	"encoding/json/v2"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -175,5 +177,56 @@ func TestResolverAcceptsOnlyOfferedKinds(t *testing.T) {
 				t.Errorf("Has(%s) = %v, want %v", c.id, has, c.usable)
 			}
 		})
+	}
+}
+
+// blanks are keys of only white space, which are no key (0068-MADR Q2, "Treat it
+// as no key (Recommended)"): spaces, a tab, a line break, a non-breaking space.
+var blanks = []string{"   ", "\t", "\n", " "}
+
+// noKey fails t unless r gives provider id no key, by Credential and by Has
+// alike.
+func noKey(t *testing.T, r *Resolver, id, what string) {
+	t.Helper()
+	if c, ok, err := r.Credential(id); ok || err != nil || c.Key != "" {
+		t.Errorf("%s: Credential(%s) = %+v, %v, %v; want no key", what, id, c, ok, err)
+	}
+	if src, ok := r.Has(id); ok {
+		t.Errorf("%s: Has(%s) = %q, true; want none", what, id, src)
+	}
+}
+
+// A provider's variable that holds only white space is no key, as an empty one
+// is (0068-MADR K1).
+func TestBlankEnvKeyIsUnset(t *testing.T) {
+	for _, b := range blanks {
+		r, _ := resolverFor(t, `{}`, nil, map[string]string{"OPENAI_API_KEY": b})
+		noKey(t, r, "openai", fmt.Sprintf("OPENAI_API_KEY=%q", b))
+	}
+}
+
+// An auth.json api_key whose key, literal or a variable's value, is only white
+// space is no key (0068-MADR K1a).
+func TestBlankStoredKeyIsUnset(t *testing.T) {
+	for _, b := range blanks {
+		lit, err := json.Marshal(b)
+		if err != nil {
+			t.Fatal(err)
+		}
+		r, _ := resolverFor(t, `{"openai": {"type": "api_key", "key": `+string(lit)+`}}`, nil, nil)
+		noKey(t, r, "openai", fmt.Sprintf("auth.json key %q", b))
+		r, _ = resolverFor(t, `{"openai": {"type": "api_key", "key": "$BLANK_KEY"}}`, nil, map[string]string{"BLANK_KEY": b})
+		noKey(t, r, "openai", fmt.Sprintf("auth.json key $BLANK_KEY=%q", b))
+	}
+}
+
+// A models.json key, literal or a variable's value, that is only white space is
+// no key (0068-MADR K1b).
+func TestBlankModelsJSONKeyIsUnset(t *testing.T) {
+	for _, b := range blanks {
+		r, _ := resolverFor(t, `{}`, map[string]string{"openai": b}, nil)
+		noKey(t, r, "openai", fmt.Sprintf("models.json key %q", b))
+		r, _ = resolverFor(t, `{}`, map[string]string{"openai": "$BLANK_KEY"}, map[string]string{"BLANK_KEY": b})
+		noKey(t, r, "openai", fmt.Sprintf("models.json key $BLANK_KEY=%q", b))
 	}
 }

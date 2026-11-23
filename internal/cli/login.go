@@ -130,7 +130,7 @@ func (e *runEnv) signInTo(ctx context.Context, p provider.Prompter, id string, o
 		return e.saved(js, id, auth.TypeOAuth)
 	case c.Device:
 		c.Key = catalog.QuoteValue(c.Key)
-	case provider.PublicListing(id):
+	case provider.PublicListing(id) && !provider.KeyCheckedAtSignIn(id):
 		p.Notify("%s lists its models without a key, so the key was not checked.", provider.Label(id))
 	}
 	if err := auth.SetKey(ctx, path, id, c.Key, c.Workspace); err != nil {

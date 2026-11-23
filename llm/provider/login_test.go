@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json/v2"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -89,7 +90,17 @@ type testIssuer struct {
 	kiloPolls int
 	// listStatus, when set, is the status every model listing answers with.
 	listStatus int
+	// profileStatus, when set, is the status Kilo's profile answers with;
+	// otherwise it answers 200 with a personal account (0068-PLAN step 1a).
+	profileStatus int
+	// profileStall makes Kilo's profile answer nothing until the request
+	// ends.
+	profileStall bool
 }
+
+// profile makes Kilo's profile answer status: 401 refuses the key, 503 cannot
+// say (go-llmprovider-sdk v1.32.0, signin.VerifyKilo).
+func (ti *testIssuer) profile(status int) { ti.with(func() { ti.profileStatus = status }) }
 
 // issuerKey is every test issuer's signing key: the SDK caches an issuer's
 // keys by its URL, so issuers answering as one origin must sign alike.
@@ -170,6 +181,22 @@ func newTestIssuer(t *testing.T) *testIssuer {
 			w.WriteHeader(http.StatusAccepted)
 		default:
 			writeJSON(w, http.StatusOK, map[string]string{"token": "kilo-token-0123456789"})
+		}
+	})
+	// Kilo's profile, which the SDK reads to check a Kilo key from v1.32.0:
+	// GET {origin}/api/profile (auth.KiloProfile).
+	mux.HandleFunc("GET /api/profile", func(w http.ResponseWriter, r *http.Request) {
+		ti.mu.Lock()
+		status, stall := ti.profileStatus, ti.profileStall
+		ti.mu.Unlock()
+		switch {
+		case stall:
+			<-r.Context().Done()
+		case status != 0:
+			writeJSON(w, status, map[string]any{"error": map[string]string{"message": serviceText}})
+		default:
+			writeJSON(w, http.StatusOK, map[string]any{"user": map[string]string{"email": "person@example.test"},
+				"organizations": []any{}, "hasPersonalAccount": true})
 		}
 	})
 	// A provider's model listing: refused, with the service's own text, for a
@@ -576,5 +603,106 @@ func TestLogoutReadsTheStoredMethod(t *testing.T) {
 	ti.with(func() { revoked = append(revoked, ti.revoked...) })
 	if revoke != nil || err != nil || store.logins["openai"] != nil || len(revoked) != 0 {
 		t.Errorf("logout: %v, %v, stored %v, revoked %q; want it deleted and never revoked", revoke, err, store.logins["openai"], revoked)
+	}
+}
+
+// tokensSeen records the credentials each request to an issuer carried: its
+// Authorization header and its form's refresh_token.
+type tokensSeen struct {
+	mu   sync.Mutex
+	seen []string
+}
+
+// at makes ts see each request that reaches ti, whatever client sent it.
+func (ts *tokensSeen) at(ti *testIssuer) {
+	next := ti.Config.Handler
+	ti.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = r.ParseForm() //nolint:errcheck // a malformed form is recorded as it parsed
+		ts.mu.Lock()
+		ts.seen = append(ts.seen, r.Header.Get("Authorization"), r.Form.Get("refresh_token"))
+		ts.mu.Unlock()
+		next.ServeHTTP(w, r)
+	})
+}
+
+// carried reports whether any request carried value.
+func (ts *tokensSeen) carried(value string) bool {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+	return slices.ContainsFunc(ts.seen, func(s string) bool { return strings.Contains(s, value) })
+}
+
+// A held session adopts its own rotation from the store, through gobble's
+// store, but refuses a store that now holds another sign-in (another client):
+// its next refresh fails with an auth failure, gobble says LoginRejected's
+// sentence, and neither of the other sign-in's tokens is sent (0068-MADR V5;
+// go-llmprovider-sdk 0082-MADR).
+func TestRefreshRefusesAnotherSignIn(t *testing.T) {
+	ti := newTestIssuer(t)
+	ts := &tokensSeen{}
+	ts.at(ti)
+	tokenURL := ti.URL + "/oauth2/token"
+	a := &Login{Access: "a-access", Refresh: "a-refresh", Expires: time.Now().Add(time.Hour), Issuer: ti.URL,
+		ClientID: auth.DefaultGrokOAuthClientID, TokenURL: tokenURL, Kind: string(auth.SessionGrok)}
+	store := &memLogins{logins: map[string]*Login{"grok": a}}
+	u, err := url.Parse(ti.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	o := Options{Logins: store, Sessions: &Sessions{}, HTTPClient: &http.Client{Transport: toIssuer{u}}}
+	held, err := o.login(t.Context(), "grok")
+	if err != nil || held == nil {
+		t.Fatalf("the held session: %v, %v", held, err)
+	}
+	// Its own rotations, twice: the second reads back the first, which gobble's
+	// store kept.
+	for i := range 2 {
+		held.Invalidate()
+		if tok, err := held.Token(t.Context()); err != nil || tok.Value != "access-1" {
+			t.Fatalf("own rotation %d: %+v, %v; want access-1", i+1, tok, err)
+		}
+	}
+	b := &Login{Access: "b-access", Refresh: "b-refresh", Expires: time.Now().Add(time.Hour), Issuer: ti.URL,
+		ClientID: "another-client", TokenURL: tokenURL, Kind: string(auth.SessionGrok)}
+	if err := store.Save(t.Context(), "grok", b); err != nil {
+		t.Fatal(err)
+	}
+	held.Invalidate()
+	p, err := New("grok", o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got error
+	for _, err := range p.Stream(t.Context(), &llm.Request{Model: "grok-4.6", Messages: []llm.Message{text(llm.RoleUser, "hi")}}) {
+		if err != nil {
+			got = err
+			break
+		}
+	}
+	if got == nil || !strings.HasPrefix(got.Error(), LoginRejected("grok")) || !errors.Is(got, llm.ErrAuth) {
+		t.Errorf("a turn after the store took another sign-in: %v; want an auth failure led by %q", got, LoginRejected("grok"))
+	}
+	if ts.carried("b-access") || ts.carried("b-refresh") {
+		t.Error("a request carried the other sign-in's token")
+	}
+}
+
+// Pi's imported Grok login, stored with no kind, still refreshes after the
+// bump: the SDK infers its kind from its issuer and client, and the rotation
+// is saved (0068-MADR V6; a guard, plant P14).
+func TestPiGrokLoginRefreshesAfterTheBump(t *testing.T) {
+	_, o := signInIssuer(t)
+	l, ok := PiLogin("grok", "pi-access", "pi-refresh", time.Now().Add(-time.Minute))
+	if !ok {
+		t.Fatal("no Pi login for grok")
+	}
+	store := &memLogins{logins: map[string]*Login{"grok": l}}
+	sess := l.session("grok", store, o.HTTPClient, nil)
+	tok, err := sess.Token(t.Context())
+	if err != nil || tok.Value != "access-1" {
+		t.Fatalf("Pi's grok login's refresh: %+v, %v; want access-1 from the issuer", tok, err)
+	}
+	if got, _ := store.Load(t.Context(), "grok"); got == nil || got.Access != "access-1" || got.Refresh != "refresh-1" {
+		t.Errorf("stored %v, want the rotation saved", got)
 	}
 }

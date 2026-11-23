@@ -216,7 +216,7 @@ func (r *SignInRun) finish(ctx context.Context) (SignInResult, error) {
 // refusedCredential is the wizard's predicate for a listing's failure that is
 // the service refusing the credential: an authentication failure that is not
 // a refusal to permit something (wizard/configure.go at go-llmprovider-sdk
-// v1.31.0). Its other refusal, of a workspace, is Anthropic's and a prompt's,
+// v1.32.0). Its other refusal, of a workspace, is Anthropic's and a prompt's,
 // and cannot arise here: no Claude sign-in is one gobble drives.
 func refusedCredential(err error) bool {
 	return errors.Is(err, llmprovider.ErrAuthFailure) && !errors.Is(err, llmprovider.ErrNotPermitted)
@@ -228,8 +228,19 @@ func refusedCredential(err error) bool {
 // listing's (refusedCredential). An outage, a refusal to permit and an empty
 // listing do not fail a sign-in, and a session of a provider whose listing
 // needs no key cannot be refused by it. Kilo's listing is public, but the SDK
-// sends a key it is given, so the device key is listed with.
+// sends a key it is given, so the device key is listed with. Kilo's listing
+// answers every key, so a Kilo key is first checked at Kilo's profile with the
+// run's own options and no organization, as the wizard's Discover checks it
+// (signin.VerifyKilo, go-llmprovider-sdk v1.32.0, 0080-MADR D10; 0068-MADR D3
+// a): its refusal is returned, a profile that cannot say passes, and the
+// caller's ended context is returned. Options the check rejects fail the
+// sign-in, since passing them would skip the check unseen (L9).
 func checkListing(ctx context.Context, id, key string, sess *auth.OAuthSession, o Options) error {
+	if id == string(llmprovider.ProviderKilo) && key != "" {
+		if err := signin.VerifyKilo(ctx, key, "", o.sdkOptions()...); err != nil {
+			return err // a refusal, ctx's end, or options it rejects (ErrInvalidRequest)
+		}
+	}
 	if PublicListing(id) && key == "" {
 		return nil
 	}

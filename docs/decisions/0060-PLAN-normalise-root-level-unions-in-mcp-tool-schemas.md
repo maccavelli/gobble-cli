@@ -688,6 +688,7 @@ quoted exactly:
   go-llmprovider-sdk tags the release with `ErrToolSchemaRefused` and `APIError.Tool` (the MADR's Follow-ups); the
   magictools server's own record now exists in that repository, `docs/decisions/0005-MADR-make-execute-pipeline-schema-and-handler-agree.md`,
   accepted there (outside this plan). The `main` fast-forward is the owner's word, asked by the coordinator.
+  *(2026-11-23: its pin precondition is met by 0068-PLAN-adopt-go-llmprovider-sdk-v1-32-0.md, the bump to `v1.32.0`; the record itself is still future, its two prerequisites open, MADR D6.)*
 * **Not verified.** That any route other than Grok accepts the rewritten form; steps 1 and 2 beyond the owner's sentence;
   the live step against the commit that carries the tenth keyword, which rests on the byte comparison.
 * **Staged, not committed.** This pass's files staged by path for the coordinator.

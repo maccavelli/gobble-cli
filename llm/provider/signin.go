@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"sync"
 
 	"github.com/maccavelli/go-llmprovider-sdk/authcontract"
@@ -169,7 +170,7 @@ const asksText = "this sign-in asks a question, which a program that reads its s
 // own failed step states it for the same error: the API error's Retryable
 // when err holds one, which honours the service's x-should-retry and a final
 // reply, and otherwise whether the kind is rate_limited, offline or
-// unavailable (signinflow.Failure at go-llmprovider-sdk v1.31.0).
+// unavailable (signinflow.Failure at go-llmprovider-sdk v1.32.0).
 func Retryable(err error) bool {
 	if ae, ok := errors.AsType[*llmprovider.APIError](err); ok {
 		return ae.Retryable()
@@ -406,7 +407,9 @@ func (w *wizardPrompter) mark(err error) error {
 	return &ownError{err}
 }
 
-// secrets is how many secrets were asked.
+// secrets is how many keys were given: secrets that are not blank once
+// trimmed. The SDK asks again for a blank one, which is no key, so "refused N
+// keys" counts only keys the provider could refuse (0068-MADR D2 c; K3).
 func (w *wizardPrompter) secrets() int {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -452,10 +455,12 @@ func (w *wizardPrompter) InputContext(ctx context.Context, prompt, def string) (
 }
 
 func (w *wizardPrompter) Secret(prompt string) (string, error) {
-	w.mu.Lock()
-	w.keys++
-	w.mu.Unlock()
 	s, err := w.p.Secret(prompt)
+	if err == nil && strings.TrimSpace(s) != "" {
+		w.mu.Lock()
+		w.keys++
+		w.mu.Unlock()
+	}
 	return s, w.mark(err)
 }
 

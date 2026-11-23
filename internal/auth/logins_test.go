@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"testing"
 	"time"
@@ -75,5 +76,42 @@ func TestRefreshWaitOutlastsAHold(t *testing.T) {
 	const longestHold = 3*15*time.Second + 200*time.Millisecond + 400*time.Millisecond
 	if refreshPolicy.Deadline <= longestHold {
 		t.Errorf("refreshPolicy.Deadline = %v, want more than a refresh's longest hold, %v", refreshPolicy.Deadline, longestHold)
+	}
+}
+
+// The SDK tries the refresh lock once with a context already done before it
+// saves a new sign-in (go-llmprovider-sdk v1.32.0, 0082-MADR): a lock nobody
+// holds is given at once (0068-MADR V2; a guard, plant P9).
+func TestLogins_LockRefreshFreeWithDoneContext(t *testing.T) {
+	l := Logins{Path: filepath.Join(t.TempDir(), "auth.json")}
+	done, cancel := context.WithCancel(t.Context())
+	cancel()
+	unlock, err := l.LockRefresh(done, "grok")
+	if err != nil || unlock == nil {
+		t.Fatalf("a free lock with a done context: %v; want it taken", err)
+	}
+	unlock()
+}
+
+// A lock another process holds, tried with a context already done, fails at
+// once with an error that wraps the context's, which is how the SDK tells a
+// held lock (auth.RefreshLocker; 0068-MADR V3; a guard, plant P10).
+func TestLogins_LockRefreshHeldWithDoneContext(t *testing.T) {
+	l := Logins{Path: filepath.Join(t.TempDir(), "auth.json")}
+	unlock, err := l.LockRefresh(t.Context(), "grok")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer unlock()
+	done, cancel := context.WithCancel(t.Context())
+	cancel()
+	start := time.Now()
+	second, err := l.LockRefresh(done, "grok")
+	if err == nil {
+		second()
+		t.Fatal("a held lock was taken")
+	}
+	if !errors.Is(err, context.Canceled) || time.Since(start) > time.Second {
+		t.Errorf("a held lock with a done context: %v after %s; want an error wrapping context.Canceled, at once", err, time.Since(start))
 	}
 }

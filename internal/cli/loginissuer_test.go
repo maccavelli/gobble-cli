@@ -59,6 +59,17 @@ type loginIssuer struct {
 	scope string
 	// revoked are the tokens the revocation endpoint was sent.
 	revoked []string
+	// profileStatus, when set, is the status Kilo's profile answers with;
+	// otherwise it answers 200 with a personal account (0068-PLAN step 1a).
+	profileStatus int
+}
+
+// profile makes Kilo's profile answer status: 401 refuses the key, 503 cannot
+// say (go-llmprovider-sdk v1.32.0, signin.VerifyKilo).
+func (ti *loginIssuer) profile(status int) {
+	ti.mu.Lock()
+	defer ti.mu.Unlock()
+	ti.profileStatus = status
 }
 
 // loginIssuerKey is every loginIssuer's signing key: the SDK caches an
@@ -170,6 +181,19 @@ func newLoginIssuerAs(t *testing.T, origin, scope string) *loginIssuer {
 		write(w, http.StatusUnauthorized, map[string]any{"error": map[string]string{"message": "the credential is refused"}})
 		return true
 	}
+	// Kilo's profile, which the SDK reads to check a Kilo key from v1.32.0:
+	// GET {origin}/api/profile (auth.KiloProfile).
+	mux.HandleFunc("GET /api/profile", func(w http.ResponseWriter, _ *http.Request) {
+		ti.mu.Lock()
+		status := ti.profileStatus
+		ti.mu.Unlock()
+		if status != 0 {
+			write(w, status, map[string]any{"error": map[string]string{"message": "the profile's own answer"}})
+			return
+		}
+		write(w, http.StatusOK, map[string]any{"user": map[string]string{"email": "person@example.test"},
+			"organizations": []any{}, "hasPersonalAccount": true})
+	})
 	mux.HandleFunc("GET /api/gateway/models", func(w http.ResponseWriter, _ *http.Request) {
 		if !refused(w) {
 			w.WriteHeader(http.StatusNotFound)

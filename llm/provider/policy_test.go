@@ -169,18 +169,20 @@ func TestOfferedConsentTextIsGobbles(t *testing.T) {
 
 	// A first plan sign-in's confirm step has the same text and link: the
 	// wizard shows the step's text and its first link as the question's
-	// title, and the test ends the sign-in at it by cancelling.
-	var title string
-	s := &script{t: t, choose: func(title2 string, _ []Choice) int {
-		title = title2
+	// title, and the test ends the sign-in at it by cancelling. Before it the
+	// SDK asks where the browser is, answered "On this machine" (0068-MADR W6).
+	s := &script{t: t, choose: func(title string, _ []Choice) int {
+		if title == browserQuestion {
+			return 0
+		}
 		return 2 // cancel the sign-in
 	}}
 	o := SignInOptions{Method: MethodChatGPTPlan, HTTPClient: &http.Client{Transport: refusingTransport{}}}
 	if _, err := SignIn(t.Context(), "openai", s, o, &memLogins{}); err == nil {
 		t.Fatal("a cancelled sign-in succeeded")
 	}
-	if wantTitle := c.Text + " " + c.Links[0].URL; title != wantTitle {
-		t.Errorf("the confirm step asked %q, want Offered's text and link %q", title, wantTitle)
+	if want := []string{browserQuestion, c.Text + " " + c.Links[0].URL}; !slices.Equal(s.asked(), want) {
+		t.Errorf("the sign-in asked %q, want the question where the browser is, then Offered's text and link %q", s.asked(), want[1])
 	}
 }
 

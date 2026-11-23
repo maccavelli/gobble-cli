@@ -59,7 +59,9 @@ func TestACPLoginOffersMenu(t *testing.T) {
 		var cancel context.CancelFunc
 		e.ctx, cancel = context.WithTimeout(t.Context(), 15*time.Second) // a break that asks again ends here, not at the suite's timeout
 		defer cancel()
-		e.out.caps.In, e.stdin = true, answers(t, "2\n3\n") // the plan, then cancel at its consent
+		// The plan, the browser on this machine (the SDK's question from
+		// v1.32.0, 0068-MADR W6), then cancel at its consent.
+		e.out.caps.In, e.stdin = true, answers(t, "2\n1\n3\n")
 		if err := e.acpLogin("openai", false); !signInDeclined(err) {
 			t.Fatalf("acp --login openai on a terminal: %v, want the sign-in declined at the plan's consent", err)
 		}

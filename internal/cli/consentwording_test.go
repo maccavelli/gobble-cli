@@ -134,10 +134,16 @@ func TestConsentWordingOnEverySurface(t *testing.T) {
 	const (
 		plan   = "2\r" // OpenAI's menu: its key, then its ChatGPT plan
 		cancel = "3\r" // the wizard's consent: allow, do not allow, cancel the sign-in
+		// here answers the question go-llmprovider-sdk v1.32.0 asks after the
+		// method menu and before the consent: the browser is on this machine
+		// (0068-MADR W6, F14).
+		here = "1\r"
 	)
 	methodMenu := func(h *lineHarness) {
 		waitUntil(t, func() bool { return strings.Contains(h.stderr.String(), "Choose how to authenticate with OpenAI:") })
 		h.press(plan)
+		waitUntil(t, func() bool { return strings.Contains(h.stderr.String(), "Where is the browser you will sign in with?") })
+		h.press(here)
 	}
 
 	t.Run("/login", func(t *testing.T) {
@@ -186,7 +192,7 @@ func TestConsentWordingOnEverySurface(t *testing.T) {
 		run := &planRun{}
 		replace(t, &signInWith, planSignIn(run))
 		e, _ := modelEnv(t)
-		q, out, _ := asked(t, fmt.Sprintf("%d\n", openai), "2\n", "3\n")
+		q, out, _ := asked(t, fmt.Sprintf("%d\n", openai), "2\n", "1\n", "3\n") // the browser on this machine, then cancel
 		if _, err := e.signIn(t.Context(), q, ""); !signInDeclined(err) {
 			t.Fatalf("setup's sign-in: %v, want the sign-in declined", err)
 		}
@@ -200,7 +206,7 @@ func TestConsentWordingOnEverySurface(t *testing.T) {
 		run := &planRun{}
 		replace(t, &signInWith, planSignIn(run))
 		e, _ := modelEnv(t)
-		e.out.caps.In, e.stdin = true, answers(t, "3\n")
+		e.out.caps.In, e.stdin = true, answers(t, "1\n3\n") // the browser on this machine, then cancel
 		if err := e.loginWith(t.Context(), "openai", false, nil); !signInDeclined(err) {
 			t.Fatalf("auth login openai on a terminal: %v, want the sign-in declined", err)
 		}
@@ -212,8 +218,9 @@ func TestConsentWordingOnEverySurface(t *testing.T) {
 		run := &planRun{}
 		replace(t, &signInWith, planSignIn(run))
 		e, _ := modelEnv(t)
-		// The menu first (0051-PLAN P7): the plan, then the consent's cancel.
-		e.out.caps.In, e.stdin = true, answers(t, "2\n3\n")
+		// The menu first (0051-PLAN P7): the plan, the browser on this machine,
+		// then the consent's cancel.
+		e.out.caps.In, e.stdin = true, answers(t, "2\n1\n3\n")
 		if err := e.acpLogin("openai", false); !signInDeclined(err) {
 			t.Fatalf("acp --login openai on a terminal: %v, want the sign-in declined", err)
 		}

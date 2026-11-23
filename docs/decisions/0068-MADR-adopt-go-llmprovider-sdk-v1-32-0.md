@@ -69,10 +69,17 @@ Facts read at `84dad4a` (every line is re-read by the PLAN's Phase 0):
   Changed). `loginIssuer` (`internal/cli/loginissuer_test.go:89-190`) and `signInIssuer` (`llm/provider`) answer the device poll and `/api/gateway/models` only, so the profile is a 404, which
   is "cannot say" and a warning on stderr (a `Notify`; `--json` uses `unasked`, whose notices go to stderr). `TestAuthLoginJSONKiloKey` (`loginjson_test.go:135`) and the kilo cases of
   `TestAuthLoginJSONRetryable` (`:480`) and `TestAuthLoginJSONDoneFollowsTheStore` (`:515`) assert empty stderr.
+  *(Amended 2026-11-23, the PLAN's Phase 0 pass 1 and the owner's ruling "Pin what happens (Recommended)": the terminal half holds (a scripted
+  prompter with no driver gets the warning as a notice), but under `--json` (a step driver) the profile is read and **stderr stays empty**, with the profile
+  answering 404 or 503; the three `--json` tests named here do not turn red at the bump. See row L8 as amended.)*
 * **F16. The key sources.** `--api-key -` trims and refuses blank (`credentials.go:228`); a `!command` value is trimmed and a blank output is an error (`llm/catalog/value.go:28`).
   A literal or `$VAR` value in `auth.json`'s `key` (`resolve.go:141`, `Has` `:113`) or `models.json` (`:83-91`, `:115-121`), and an environment variable (`:95`, `:124`), are used when non-empty,
   so spaces pass.
-* **F17. Spaces typed at gobble's own terminal reach the SDK.** `prompter.Secret` cancels only on `""` (`prompt.go:69-75`), so `"   "` is returned to the wizard, which now notices and asks again.
+* **F17. ~~Spaces typed at gobble's own terminal reach the SDK.~~** ~~`prompter.Secret` cancels only on `""` (`prompt.go:69-75`), so `"   "` is returned to the wizard, which now notices and asks again.~~
+  *(Amended 2026-11-23, the PLAN's Phase 1 pass 1 and the owner's ruling "Record what happens (Recommended)": spaces typed at gobble's own terminal
+  do not reach the SDK. The secret is read in raw mode by `questions.readSecret`, which returns the line trimmed (`internal/cli/prompt.go:276`), so a key of
+  spaces is the empty key and `prompter.Secret` cancels the sign-in (`prompt.go:69-75`), as K2's empty key does; a probe at `v1.32.0` asked once and returned
+  `cancelled`. See row K6 as amended.)*
 * **F12. gobble does not use `TextPrompter`** (no non-test reference), the only caller of 0087's fix; its terminal input is its own (0063-MADR-one-shared-terminal-input-so-the-key-prompt-waits.md).
 * **F13. Release rule.** 0055-MADR-release-v0-6-0-now-and-the-sign-in-redesign-as-v0-7-0.md: "Below `v1.0.0` a minor bump is the release that may add or change behaviour; a patch is a fix."
   Tags exist through `v0.7.0`, which carries 0067 (commit `5962276`). SDK 0088 and 0089 (output limits) are not in `v1.32.0` and not tagged; they are 0065-MADR-output-limit-ownership-between-gobble-and-the-sdk.md and 0066-MADR-set-each-session-model-up-from-discovered-limits.md's, which need a second pin bump later.
@@ -157,9 +164,9 @@ Two questions were put to the owner as three options each; both are answered ("O
 | W1 | terminal, browser sign-in (OpenAI, Grok, plan), paste offered | decided | asked, the SDK's question (Q1, "Yes, take the SDK's question (Recommended)", 2026-11-23) | `TestSignInAsksWhereTheBrowserIs` |
 | W2 | answer "On this machine", an empty line | decided | Q1: the listener binds (the test dials the authorize URL's redirect address while the sign-in waits and connects), `OpenURL` is called | same test |
 | W3 | answer "On another device" | decided | Q1: no listener (the same dial is refused; Grok's sign-in is used, which listens on an OS-chosen port, so no test holds 1455 or 1457 and the plan tests in parallel cannot collide), `OpenURL` not called, the URL shown, a paste completes it | `TestSignInAnotherDeviceNeedsNoListener` |
-| W4 | `NoPaste` (no terminal) or `Steps` (`--json`, ACP-driver) | decided | no question: the SDK asks none under `NoPastePrompt` or a driver; unchanged behaviour | `TestSignInNoPasteAsksNoBrowserQuestion` (a guard: green at the base; plant P12) |
+| W4 | `NoPaste` (no terminal) or `Steps` (`--json`, ACP-driver) | decided | no question: the SDK asks none under `NoPastePrompt` or a driver; unchanged behaviour | `TestSignInNoPasteAsksNoBrowserQuestion` (a guard: green at the base; plant P12; *annotated 2026-11-23 by the coordinator's decision that the PLAN's numbering is authoritative: plant P13*) |
 | W5 | a device or API-key method | decided | no question; this is the SDK's rule and no gobble line decides it, so the test is a guard with no plant | `TestSignInDeviceAsksNoBrowserQuestion` |
-| W6 | scripted prompters of gobble's tests that meet a browser sign-in | decided | Q1: each answers the question (index 0) where it reaches it: `TestSignInGrokBrowser` (`signin_test.go:194`), and the five terminal surfaces of `TestConsentWordingOnEverySurface` (F14), whose answers become method, browser question, then consent | the tests the PLAN's Phase 0 finds red |
+| W6 | scripted prompters of gobble's tests that meet a browser sign-in | decided | Q1: each answers the question (index 0) where it reaches it: `TestSignInGrokBrowser` (`signin_test.go:194`), and the five terminal surfaces of `TestConsentWordingOnEverySurface` (F14), whose answers become method, browser question, then consent | the tests the PLAN's Phase 0 finds red; *2026-11-23, the owner's "Yes, under W6 (Recommended)": also `TestOfferedConsentTextIsGobbles` (`llm/provider/policy_test.go`) and `TestACPLoginOffersMenu/the_menu` (`internal/cli/acp_test.go`), which Phase 0 found red* |
 | W7 | the two terminal plan tests | decided | switch to no listener, as 0052 ruled (F3) and Q1 makes possible: each answers "On another device" and finishes by the paste they already use; `signInFailed` and `developing.md`'s caveat go | `TestSignInChatGPTPlanTerminal`, `TestPlanAfterLogoutReusesClientTerminal` |
 | W8 | the ACP sign-in with `Remote` | decided | unchanged: `x/signin` `NoLoopback` | `TestStartSignInRemoteSetsNoLoopback` (exists) |
 | W9 | a schemeless pasted redirect address in the ACP paste step | decided | taken as the address with every check; a bare host and port is refused and asked again | D4; `TestStartSignInPasteWithoutScheme` |
@@ -180,7 +187,7 @@ Two questions were put to the owner as three options each; both are answered ("O
 | V5 | a session whose store now holds another sign-in (other client or account) | decided | the refresh fails with an auth failure; gobble says `LoginRejected`'s sentence; the other sign-in's token is not sent | D5; `TestRefreshRefusesAnotherSignIn` |
 | V6 | Pi's imported Grok login (no `Kind`) refreshes | decided | accepted, as the SDK infers its kind | D5; `TestPiGrokLoginRefreshesAfterTheBump` (a guard; plant P14) |
 | V7 | `Logins` drops a field that names a sign-in | decided | cannot happen today; stays pinned | `TestLoginCarriesEverySessionField` (exists) |
-| V8 | a held ChatGPT plan session while another process writes another application's login into `auth.json` (0052-PLAN step 1d) | decided | at its next refresh the token request fails with an auth failure, sends no foreign token, and the session stays `chatgpt_plan`; docs corrected (F3a) | D2 (d); `TestReviewCachedSessionAdoptsAForeignEntry` adopted from 0052-PLAN's "Third review"; plant P17 |
+| V8 | a held ChatGPT plan session while another process writes another application's login into `auth.json` (0052-PLAN step 1d) | decided | at its next refresh the token request fails with an auth failure, sends no foreign token, and the session stays `chatgpt_plan`; docs corrected (F3a) | D2 (d); `TestReviewCachedSessionAdoptsAForeignEntry` adopted from 0052-PLAN's "Third review"; plant P17 (*annotated 2026-11-23: plant P18, by the PLAN's numbering; built as `TestHeldPlanSessionRefusesAForeignEntry` in `llm/provider/foreignlogin_test.go`, the text's `TestHeldSessionRefusesAForeignEntry` renamed*) |
 
 **Keys (0085, 0087)**
 
@@ -189,13 +196,13 @@ Two questions were put to the owner as three options each; both are answered ("O
 | K1 | a whitespace-only environment variable (`resolve.go:95`, `:124`) | decided | none: treated as no key (Q2, "Treat it as no key (Recommended)", 2026-11-23); `Credential` and `Has` agree | `TestBlankEnvKeyIsUnset` |
 | K1a | `auth.json` `key`, literal or `$VAR` resolving to spaces (`:141`, `Has` `:113`) | decided | treated as no key (Q2) | `TestBlankStoredKeyIsUnset` |
 | K1b | `models.json` key, literal or `$VAR` resolving to spaces (`:83-91`, `:115-121`) | decided | treated as no key (Q2) | `TestBlankModelsJSONKeyIsUnset` |
-| K1c | a `!command` whose output is blank | decided | an error already (`value.go:28`); unchanged | the existing `ResolveValue` tests (Phase 0 names them) |
-| K1d | `--api-key -` with spaces | decided | refused already (`credentials.go:228`); unchanged | the existing `--api-key` tests (Phase 0 names them) |
+| K1c | a `!command` whose output is blank | decided | an error already (`value.go:28`); unchanged | the existing `ResolveValue` tests (Phase 0 names them) (*annotated 2026-11-23: `TestResolveValue`, `llm/catalog/value_test.go:31`, the case `"!   "`*) |
+| K1d | `--api-key -` with spaces | decided | refused already (`credentials.go:228`); unchanged | the existing `--api-key` tests (Phase 0 names them) (*annotated 2026-11-23: `TestAuthLogin`, `internal/cli/auth_test.go:56`, a key of spaces on stdin*) |
 | K2 | the terminal's empty secret | decided | still cancels (`prompter.Secret`) | `prompt.go:69-75`; `TestLFThenCRIsTwoEnds` (exists, `lineend_test.go:166`) |
 | K3 | a whitespace-only secret from another prompter | decided | the wizard asks again, up to three asks; gobble's `Keys` counts only non-blank secrets | D2 (c); `TestSignInKeysCountsNonBlank` |
 | K4 | a refused key then three blanks | decided | the error matches no sentinel: text "<id> sign-in failed (other)", `Keys` 0 | D2 (c); `TestSignInRefusedThenBlanks` |
 | K5 | `TextPrompter`'s late LF | out of scope | gobble does not use it (F12) | grep, Phase 0 |
-| K6 | spaces typed at gobble's own terminal (F17) | decided | reach the wizard, which notices and asks again, up to three asks, then an error with no sentinel | `TestSignInTerminalSpacesAskedAgain` over the real `prompter` |
+| K6 | spaces typed at gobble's own terminal (F17) | decided | ~~reach the wizard, which notices and asks again, up to three asks, then an error with no sentinel~~ *Amended 2026-11-23 (the owner's "Record what happens (Recommended)"): the terminal reads them as the empty key (`readSecret` trims, `prompt.go:276`), so the sign-in is cancelled at the first ask, as K2's empty key is: one ask, `errCancelled`, nothing saved* | ~~`TestSignInTerminalSpacesAskedAgain` over the real `prompter`~~ `TestSignInTerminalSpacesCancel` over the real `prompter` (a guard, green before and after the bump; plant P19: `readSecret` stops trimming) |
 
 **Kilo (0080)**
 
@@ -208,14 +215,14 @@ Two questions were put to the owner as three options each; both are answered ("O
 | L5 | Kilo device key over ACP (`SignInRun.finish`), the run's real options (Cache and Headers set) | decided | `VerifyKilo`: profile 401 refuses with `ErrAuthFailure` and nothing is saved; cannot say passes; ended context returned within about a second while the profile stalls | D3 (a); `TestSignInRunKiloKeyVerified`; the double answers the models listing 200 and the profile 401, so only `VerifyKilo` can refuse |
 | L6 | a Kilo key valid only for an organization, typed with none | out of scope | the SDK's own recorded, unprobed limit; gobble sets no organization | SDK 0085-MADR |
 | L7 | `listingState` for a Kilo listing | decided | unchanged: a public listing is "not checked" as a listing | `TestPublicListing` (exists) |
-| L8 | `auth login kilo --json` (a driver): the profile is read, and cannot answer | decided | the SDK's warning goes to stderr (`unasked` writes there); stdout's steps are unchanged; both test issuers serve a profile, so the tests that assert empty stderr stay valid | F15; `TestAuthLoginJSONKiloKey`, the kilo cases of `TestAuthLoginJSONRetryable` and `TestAuthLoginJSONDoneFollowsTheStore` (edited: the issuers); `TestAuthLoginJSONKiloUnverifiedWarnsOnStderr` (profile 503) |
+| L8 | `auth login kilo --json` (a driver): the profile is read, and cannot answer | decided | ~~the SDK's warning goes to stderr (`unasked` writes there); stdout's steps are unchanged; both test issuers serve a profile, so the tests that assert empty stderr stay valid~~ *Amended 2026-11-23 (the owner's "Pin what happens (Recommended)"): the profile is read and stderr stays empty; a 503 profile still signs in and stores the key (exit 0, a done step yielding `device_key`); a 401 profile ends in a failed step of kind `auth` and nothing is stored* | F15 as amended; `TestAuthLoginJSONKiloKey`, the kilo cases of `TestAuthLoginJSONRetryable` and `TestAuthLoginJSONDoneFollowsTheStore` (edited: the issuers); ~~`TestAuthLoginJSONKiloUnverifiedWarnsOnStderr` (profile 503)~~ `TestAuthLoginJSONKiloUnverifiedKeepsStderrEmpty` (profile 503, and the 401 case) |
 | L9 | options `VerifyKilo` rejects (`ErrInvalidRequest`, no request) | decided | the sign-in fails with that error and saves nothing; never "passes" | D3 (a); the fourth case of `TestSignInRunKiloKeyVerified` (a base URL that does not parse; if the run fails earlier, the case is the seam's, named by Phase 0) |
 
 **Errors**
 
 | Row | Input or state | Status | Outcome | Decided by / test |
 | :--- | :--- | :--- | :--- | :--- |
-| E1 | Grok's refused tool schema | decided | text begins "llmprovider: tool schema refused"; `errors.Is` `ErrToolSchemaRefused` and `ErrInvalidRequest`; `APIError.Tool` names the tool; `llm.Kind` stays `other` | D2 (a); `wire_union_test.go:159` and `mcp_test.go:525` edited first (red at the base); `TestToolSchemaRefusalIsTyped`, which names `ErrToolSchemaRefused` and `APIError.Tool`, is written after the bump (they do not exist at `v1.31.0`), the one test of this record with no red at the base; its plant is P8 |
+| E1 | Grok's refused tool schema | decided | text begins "llmprovider: tool schema refused"; `errors.Is` `ErrToolSchemaRefused` and `ErrInvalidRequest`; `APIError.Tool` names the tool; `llm.Kind` stays `other` | D2 (a); `wire_union_test.go:159` and `mcp_test.go:525` edited first (red at the base); `TestToolSchemaRefusalIsTyped`, which names `ErrToolSchemaRefused` and `APIError.Tool`, is written after the bump (they do not exist at `v1.31.0`), the one test of this record with no red at the base; its plant is P8 (*annotated 2026-11-23: in `llm/provider/wire_union_test.go`*) |
 | E2 | the typed fallback, the `signature` misfire | out of scope | 0060-MADR D6's own record, open prerequisites | F4 |
 | E3 | a quota body between 64 KiB and 1 MiB | out of scope | the SDK's kind; gobble maps by the same table | D4 |
 | E4 | Together's listing header | out of scope | not gobble's path | D4 |
@@ -239,6 +246,13 @@ Counts: 3 + 14 + 8 + 10 + 9 + 4 + 4 = 52 rows; 43 decided, 9 out of scope (S3, W
 * **Q2, "Treat it as no key (Recommended)".** A key of only spaces from an environment variable, `auth.json` or `models.json` is no key, at every source, like an empty one. Decides K1, K1a, K1b. The other options were: leave it to the SDK, and refuse it with gobble's own message naming the source.
 
 No question remains open, and the record is `accepted` (2026-11-23) by the state-table rule.
+
+*(2026-11-23, after the PLAN's Phase 0 pass 1 stopped, the owner's answers, relayed by the coordinator; the labels are exact.)*
+
+* **L8, "Pin what happens (Recommended)".** Under `--json` the Kilo profile is read but stderr stays empty; a 503 profile still signs in and stores the key; a 401 profile is a failed step of kind `auth`, nothing stored. Amends F15 and L8. The other options were: gobble warns on stderr itself, by its own `VerifyKilo` call; and take L8 out of scope.
+* **W6, "Yes, under W6 (Recommended)".** `TestOfferedConsentTextIsGobbles` and `TestACPLoginOffersMenu/the_menu`, red at the bump, are W6's: each answers the browser question with index 0. The other option was a row for each.
+* **K6, "Record what happens (Recommended)"** (2026-11-23, after the PLAN's Phase 1 pass 1 stopped). Spaces typed at gobble's own terminal are the empty key and cancel the sign-in, as K2's does; F17 and K6 amended; the test is `TestSignInTerminalSpacesCancel`, a guard with plant P19 (`readSecret` stops trimming). The other options were: `readSecret` stops trimming, so the SDK asks again; and gobble's prompter asks again on a blank secret itself.
+* **Decided by the coordinator, from evidence:** the PLAN's plant numbering is authoritative (W4's guard is P13, V8's is P18, annotated in the rows); P18 is replaced by `sdkStore.Load` dropping the stored entry if that turns V8's test red on a scratch clone, else it is reported.
 
 ## Pros and Cons of the Options
 

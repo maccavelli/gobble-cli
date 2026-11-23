@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json/v2"
 	"maps"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -742,4 +743,54 @@ func TestAuthLoginJSONStdinReadError(t *testing.T) {
 	if r.code != ExitFailure || r.stderr != "" || len(lines) != 1 || lines[0].Step == nil || lines[0].Step.Kind != authcontract.StepFailed || lines[0].Step.Seq != 1 {
 		t.Errorf("exit %d, stdout %q, stderr %q; want exit 1 and one failed step, seq 1, no method line", r.code, r.stdout, r.stderr)
 	}
+}
+
+// Under --json, Kilo's device sign-in reads Kilo's profile to check the key
+// (go-llmprovider-sdk v1.32.0), and stderr stays empty: a profile that cannot
+// say (503) still signs in, prints a done step that yields device_key and
+// stores the key; a profile that refuses the key (401) prints a failed step of
+// kind auth and stores nothing (0068-MADR L8, the owner's "Pin what happens
+// (Recommended)").
+func TestAuthLoginJSONKiloUnverifiedKeepsStderrEmpty(t *testing.T) {
+	t.Run("cannot say", func(t *testing.T) {
+		c, ti, _ := issuerEnv(t)
+		ti.profile(http.StatusServiceUnavailable)
+		r := c.run("auth", "login", "kilo", "--json")
+		if r.code != ExitOK || r.stderr != "" {
+			t.Fatalf("exit %d, stderr %q; want 0 and nothing", r.code, r.stderr)
+		}
+		steps := wantSteps(t, jsonLines(t, r.stdout), "kilo", "device_code", authcontract.StepShowCode, authcontract.StepWaiting, authcontract.StepDone)
+		if len(steps) == 3 && steps[2].Yields != authcontract.YieldsDeviceKey {
+			t.Errorf("the done step %+v, want it to yield device_key", steps[2])
+		}
+		f, err := auth.Load(c.authFile())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if e, ok := f.Entry("kilo"); !ok || e.Type != auth.TypeAPIKey || e.Key == "" {
+			t.Errorf("kilo's entry %+v, %v; want the key stored", e, ok)
+		}
+	})
+	t.Run("refused", func(t *testing.T) {
+		c, ti, _ := issuerEnv(t)
+		ti.profile(http.StatusUnauthorized)
+		r := c.run("auth", "login", "kilo", "--json")
+		lines := jsonLines(t, r.stdout)
+		if r.code != ExitFailure || r.stderr != "" || len(lines) == 0 {
+			t.Fatalf("exit %d, stdout %q, stderr %q; want exit 1, a failed last step and nothing on stderr", r.code, r.stdout, r.stderr)
+		}
+		last := lines[len(lines)-1].Step
+		if last == nil || last.Kind != authcontract.StepFailed || last.Error == nil || last.Error.Kind != authcontract.FailureAuth {
+			t.Errorf("the last line %+v, want a failed step of kind auth", lines[len(lines)-1])
+		}
+		if _, err := os.Stat(c.authFile()); err == nil {
+			f, err := auth.Load(c.authFile())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if e, ok := f.Entry("kilo"); ok {
+				t.Errorf("a refused key was stored: %+v", e)
+			}
+		}
+	})
 }
