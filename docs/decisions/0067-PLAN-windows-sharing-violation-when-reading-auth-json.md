@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: in-progress
 date: 2026-11-22
 associated-madr: "0067-MADR-windows-sharing-violation-when-reading-auth-json.md"
 ---
@@ -124,3 +124,143 @@ Records only; second draft after independent review 1. The reproduction (200 run
 all `login_test.go:856: auth.json: open ...\auth.json: The process cannot access the file because it is being used by another process.`)
 and the probes (i), (ii), (iii) and the writer's are in the MADR. The probes were temp programs in a scratch module; no file
 of the repository was changed; no phase has started.
+
+### Approval (2026-11-22)
+
+The owner approved this PLAN, relayed by the coordinator: "Approve; build after the commit (Recommended)". The records
+commit is `b6eb169`.
+
+### Phase 0, pass 1 (2026-11-22, base `b6eb169`)
+
+1. Citations: `git diff --stat 9a22518 b6eb169` changes only `docs/README.md` and this pair, so no cited source line can
+   have moved. Each `path:line` of step 1 was printed at `b6eb169` and reads as the MADR says, including
+   `store.go:28` (the 30 s lock deadline), `:79`, `:421-423` and the follow-up lines of row O1. `write.go:131-133` is the
+   start of the hard-link branch; the branch itself is `:132-139`. `grep -rn 'ReadRegularFile(' --include=*.go .`,
+   tests and the definition excluded, counts **16**, the MADR's list.
+2. Go: `go.mod` says `go 1.27.4`, the probes' version; the probes were not run again.
+3. `docs/architecture.md`: the `internal/fsx` row (line 150) says "atomic writes" and the `internal/auth` row (line 144)
+   says `auth.json` is written owner-only and locked; neither describes a read or a rename retry, so the change makes no
+   line false. Phase 2 step 4 records "none needed" unless the owner asks for a line.
+
+Exit: met; only this file changed.
+
+### Phase 1, pass 1 (2026-11-22): stopped before step 1a, no source changed
+
+Stop condition "a row cannot be met as written" (rows X2, X4; the test `TestReplaceFileGivesUpAndNotTransient`):
+
+* Step 1a fixes `ReplaceFile` as `rename(osFS{}, tmp, name)`, so no test can give `ReplaceFile` a filesystem that
+  returns an injected error; a test that calls `rename` with a fake filesystem does not exercise `ReplaceFile`, and
+  plant P5 (a change to `ReplaceFile`) cannot turn it red.
+* `rename` retries only when `transient(err)` (`internal/fsx/write.go:201`), and off Windows `transient` is `false` for
+  every error (`internal/fsx/rename_other.go:6`). A portable test whose fake rename returns "a transient error forever"
+  sees one call and an immediate return on Linux and macOS, so its give-up half fails there on the finished tree.
+
+Also found, for the same prompt (none blocks alone): `Clients.List` does not exist (`internal/auth/clients.go:36` has
+`Clients.Load`, which calls `read`); the loop test replaces `retriable`, so plant P2 can only be the loop's use of the
+predicate, not the variable's default; and P1's `-count=200` entry is the base's red run (the same reader). Waiting for
+the owner's resolution.
+
+### Deviation 1 (2026-11-22): the writer's give-up test is split
+
+Found: Phase 1, pass 1 above. Decision: the owner ruled, relayed by the coordinator, "Split it; Windows give-up
+(Recommended)". The row of step 1b for X2 and X4 is replaced:
+
+* ~~`TestReplaceFileGivesUpAndNotTransient` (portable, through `bounded`), `internal/fsx/write_test.go`: the filesystem
+  seam of `rename` returns a transient error forever~~
+* **X2:** `TestReplaceFileGivesUp` (Windows), new `internal/fsx/write_windows_test.go`: the target is held with `os.Open`
+  for the whole call, `renameWindow` is 50 ms, the call runs through `bounded`; `ReplaceFile` must return `Access is
+  denied` after at least the window. A guard at 1a (`ReplaceFile` is `rename`'s loop); its worth is shown by P5.
+* **X4:** `TestReplaceFileNotTransient` (portable), `internal/fsx/write_test.go`: a missing temp file returns
+  `fs.ErrNotExist` well inside a 5 s `renameWindow`, through `bounded`.
+* P5 is caught on the laptop by `TestReplaceFileGivesUp` and `TestSetKeyReplaceSurvivesAReader`.
+* Files added to the phase: `internal/fsx/write_windows_test.go`.
+
+### Notes (2026-11-22, decided by the coordinator from evidence and the owner's standing directions)
+
+1. The auth held-handle table's `clients.json` row reads through `Clients.Load` (which calls `read`); `Clients.List`
+   does not exist.
+2. Plant P2 is made in the loop's use of the predicate (every error treated as retriable), because
+   `TestReadRegularFileRetryLoop` replaces `retriable` itself.
+3. Plant P1's `-count=200` entry cites the base red run (7 of 200 under `-race` at `9a22518`; 4 of 200 in this build's
+   red run, below; the same reader) instead of running it again (the owner's direction against repeating runs that
+   prove nothing new).
+4. Phase 2 step 4: one sentence goes into `docs/architecture.md`, where `internal/fsx` and `internal/auth` are
+   described, stating the read and replace retries on Windows (docs are kept complete).
+5. Staging: nothing is staged by the building agent; the coordinator stages after its own gate and the owner commits.
+
+### Phase 1, pass 2 (2026-11-22, base `b6eb169`, after deviation 1)
+
+**Step 1a, the seams.** `internal/fsx/regular.go`: `openFunc`, the variables `openFile` (`os.OpenFile`), `retriable`
+(`sharingViolation`) and `readWindow` (2 s), and the exported test seam `SetOpenFile(open) (restore func())`;
+`ReadRegularFile` called `openFile` once. New `read_windows.go` (`errors.Is(err, windows.ERROR_SHARING_VIOLATION)`) and
+`read_other.go` (`false`). `internal/fsx/write.go`: `renameWindow` a variable; `ReplaceFile(tmp, name)` is
+`rename(osFS{}, tmp, name)`. `auth.write` unchanged. Checked by `go vet` of `internal/fsx` and `internal/auth` for
+darwin, linux and windows (exit 0 each) and by the red run below; `make preflight` ran once, on the finished tree.
+
+**Step 1b, red at 1a** (macOS for the portable tests, the Windows laptop through `run-on-host --need windows`; temp paths
+shown as `<tmp>`):
+
+| Row | Test | Red at 1a (failing line) |
+| :--- | :--- | :--- |
+| R1, R2, R4, R5, R6 | `TestReadRegularFileRetryLoop` (`internal/fsx/regular_retry_test.go`) | `regular_retry_test.go:95: open called 1 times; want 3` (released); `:87: gave up after 1 calls and 0s; want more than one call and at least the 50ms window` (held past); `:95: open called 1 times; want 2` (held then gone; held then another error); "another error first" passes, as planned |
+| R3 | `TestSharingViolationPredicate` (`read_windows_test.go`) | passes (a guard; P4b) |
+| R8 | `TestSharingViolationNever` (`read_other_test.go`) | passes (a guard; P4a) |
+| R1, R9, R10 | `TestReadRegularFileSurvivesAHeldHandle` (`read_windows_test.go`) | `read_windows_test.go:85: ReadRegularFile under a held handle = "", open <tmp>\...\auth.json: The process cannot access the file because it is being used by another process.` |
+| C1 to C3, C8 | `TestAuthReadersSurviveAHeldHandle` (`internal/auth/held_windows_test.go`; rows `auth.Load`, `Clients.Load`, `readHostID`) | `held_windows_test.go:105:` for each row: `auth.json: open ...`, `clients.json: open ...`, `host-id: open ...`, each the sharing-violation text |
+| X1 | `TestSetKeyReplaceSurvivesAReader` (`internal/auth/store_windows_test.go`) | `store_windows_test.go:39: SetKey under a reader: auth.json: rename <tmp>\...\.auth.json.<n>.tmp <tmp>\...\auth.json: Access is denied.` |
+| X3 | `TestClientsSaveReplaceSurvivesAReader` (same file) | `store_windows_test.go:62: Clients.Save under a reader: auth.json: rename ... clients.json: Access is denied.` |
+| X2 | `TestReplaceFileGivesUp` (`internal/fsx/write_windows_test.go`) | passes (a guard; P5) |
+| X4 | `TestReplaceFileNotTransient` (`internal/fsx/write_test.go`) | passes (a guard) |
+| R9, R10 | `go test -race -count=200 -run '^TestSignInTypeAheadNotSentAsPrompt$' ./internal/cli/`, the laptop | **4 of 200** failed, each `login_test.go:856: auth.json: open <test temp dir>\auth.json: The process cannot access the file because it is being used by another process.` (the MADR's run at `9a22518`: 7 of 200) |
+
+Every red test failed on its assertion; none failed to compile.
+
+**Step 1c, the changes.** `ReadRegularFile` opens through `openRetrying`: `openFile` again while `retriable(err)` and
+`readWindow` has not passed, pauses 1 ms doubling to 100 ms, any other error at once, the last error at the deadline.
+`auth.write`: `os.Rename(name, path)` became `fsx.ReplaceFile(name, path)`; the wrapping and the temp file's removal are
+unchanged. Nothing in `internal/cli`, `hostid.go` or `migrate.go` changed. One lint finding on the first pre-add check
+(revive `var-declaration` on `retriable`'s explicit type) was fixed by dropping the type.
+
+**Green.** Every test above passes on the laptop; the portable ones on macOS and Linux.
+
+**Plants** (SDK `tools/plant.py --root <this repo>`, each on a scratch clone; the laptop's through `run-on-host --need
+windows` from the clone; exit 0 for each spec, "all plant(s) caught"):
+
+| Plant | Where run | Caught by (failing line) |
+| :--- | :--- | :--- |
+| P1 one open | macOS; the laptop | `regular_retry_test.go:95: open called 1 times; want 3`, `:87`; `read_windows_test.go:85: ... being used by another process.`; `held_windows_test.go:105` for each row. The `-count=200` entry cites the base red run above (note 3) |
+| P2 every error retried | macOS | `regular_retry_test.go:95: open called 57 times; want 2` (held then gone), `56 times; want 2` (another error), `56 times; want 1` (first error) |
+| P3 no read deadline | macOS | `regular_retry_test.go:73: still blocked after 10s` (`bounded`, held past the window) |
+| P4a `sharingViolation` true off Windows | macOS; a Linux host | `read_other_test.go:20: sharingViolation(device or resource busy) = true; want false off Windows`, and each other case |
+| P4b `sharingViolation` false on Windows | the laptop | `read_windows_test.go:29: sharingViolation(The process cannot access the file because it is being used by another process.) = false; want true`; also `read_windows_test.go:85`, `held_windows_test.go:105` |
+| P5 `ReplaceFile` is `os.Rename` | the laptop | `write_windows_test.go:39: ReplaceFile gave up after 0s; want at least the 50ms window`; `store_windows_test.go:39`, `:62` |
+| P6 `auth.write` back to `os.Rename` | the laptop | `store_windows_test.go:39: SetKey under a reader: ... Access is denied.`; `:62` |
+| P7 `auth.Load` by `os.ReadFile` | the laptop | `held_windows_test.go:102: auth.Load did not open through fsx's seam, or was not refused with a sharing violation (<nil>)` |
+
+**Gates** (each status captured before any filter):
+
+| Command | Host | Exit |
+| :--- | :--- | :--- |
+| `make pre-add-check FILES=<the 12 Go files>` (`run-heavy`) | macOS | 2 (the revive finding), then 0 |
+| `go test -race -count=200 -run '^TestSignInTypeAheadNotSentAsPrompt$' ./internal/cli/` (`--need windows --race`), 19:24 | the Windows laptop | 0 (0 of 200) |
+| `go test -race -count=20 ./internal/auth/ ./internal/fsx/` | the Windows laptop | 0 |
+| `make preflight` | the Windows laptop | 0 |
+| the `-count=200` run again, 19:34 | the Windows laptop | 0 (0 of 200) |
+| `go test -count=1 ./internal/fsx/ ./internal/auth/` | a Linux host; macOS | 0; 0 |
+| `make preflight` | a Linux host (`run-on-host`); macOS (`run-heavy`) | 0; 0 |
+| `make check-test-isolation` (the whole suite, both modules; not a PLAN gate, run because `ReadRegularFile` has 16 callers) | the Windows laptop (`pick-host`'s choice) | 0 ("check-test-isolation: ok") |
+| `make check-records`, `make markdownlint`, SDK `tools/denyscan.py --root <this repo> --changed` | macOS | 0, 0, 0 (0 hits in 16 files) |
+
+Exit: met for Phase 1: no blocker, every row tested (X5, X6 and C3 are rows with no change, as planned), plants caught;
+no existing test, golden or fixture changed.
+
+### Phase 2, pass 1 (2026-11-22): close-out
+
+1. Confirmation: (1) the reader's and the writer's held-handle tests failed at the base and pass after (above); (2) 0 of
+   200 twice on the laptop, against 4 of 200 at the base; (3) each plant turned its test red; (4) `make preflight`
+   passed on the three hosts. The MADR stays `accepted`; this PLAN stays `in-progress` until the owner's commit.
+2. Row O1's follow-up is written into `docs/README.md`'s 0067 PLAN row as a named open item.
+3. The v0.7.0 tag: this record's build is done, unstaged, for the coordinator's gate and the owner's commit; this PLAN
+   does not tag.
+4. Docs: one sentence in `docs/architecture.md`'s `internal/fsx` row naming the retries of `ReadRegularFile` and
+   `ReplaceFile` on Windows (note 4). The new exported names, `ReplaceFile` and `SetOpenFile`, carry doc comments.

@@ -418,7 +418,7 @@ func write(path string, data []byte) error {
 	if err := writeTemp(tmp, data); err != nil {
 		return errors.Join(fmt.Errorf("auth.json: %w", err), os.Remove(name))
 	}
-	if err := os.Rename(name, path); err != nil {
+	if err := fsx.ReplaceFile(name, path); err != nil {
 		return errors.Join(fmt.Errorf("auth.json: %w", err), os.Remove(name))
 	}
 	return nil

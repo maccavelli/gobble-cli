@@ -186,8 +186,18 @@ func fill(f *os.File, r io.Reader) error {
 }
 
 // renameWindow is how long a rename keeps retrying an error that another
-// process holding the file causes, as Go's cmd/go robustio does.
-const renameWindow = 2 * time.Second
+// process holding the file causes, as Go's cmd/go robustio does. A
+// variable, so a test can shorten it (0067-PLAN step 1a).
+var renameWindow = 2 * time.Second
+
+// ReplaceFile moves tmp onto name, a file outside any workspace that its
+// caller writes through a temporary file of its own, as the atomic writes
+// do: on Windows, a refusal caused by another process holding name is
+// retried with growing pauses until renameWindow has passed, and the last
+// error is returned (0067-MADR D4).
+func ReplaceFile(tmp, name string) error {
+	return rename(osFS{}, tmp, name)
+}
 
 // rename moves tmp onto name. Windows refuses to replace a file another
 // process has open without FILE_SHARE_DELETE, an editor or a reader in the

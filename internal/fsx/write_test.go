@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 )
 
 // symlink makes link point at target, or skips where the platform cannot
@@ -165,5 +166,25 @@ func TestWriteNewFileAtomic(t *testing.T) {
 	}
 	if b, _ := os.ReadFile(p); string(b) != "new\n" { //nolint:gosec // test file
 		t.Fatalf("in.txt = %q, want the new bytes", b)
+	}
+}
+
+// A replace that fails for a reason no holder causes, here a temporary file
+// that does not exist, returns at once, well inside the window, on every
+// platform (0067-MADR X4, D4; 0067-PLAN deviation 1).
+func TestReplaceFileNotTransient(t *testing.T) {
+	dir := t.TempDir()
+	old := renameWindow
+	renameWindow = 5 * time.Second
+	t.Cleanup(func() { renameWindow = old })
+	start := time.Now()
+	err := bounded(t, 10*time.Second, func() error {
+		return ReplaceFile(filepath.Join(dir, ".missing.tmp"), filepath.Join(dir, "auth.json"))
+	})
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Errorf("ReplaceFile of a missing file took %v; want an immediate return, inside the %v window", elapsed, renameWindow)
+	}
+	if !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("ReplaceFile of a missing file = %v; want not-exist", err)
 	}
 }

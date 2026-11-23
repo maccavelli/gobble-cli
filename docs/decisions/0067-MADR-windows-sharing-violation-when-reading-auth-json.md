@@ -142,6 +142,10 @@ sites including the test's, and one exported rename covers `auth.json` and `clie
   `hostid.go:98` and `migrate.go:328` need no change (they never replace an existing file).
 * **D5.** `TestSignInTypeAheadNotSentAsPrompt` and `storedKey` are not changed.
 * **D6.** Tests: a portable loop test through seams (the open, the predicate, the window), per-platform predicate tests, a Windows held-handle test of the reader whose seam releases the holder on the first refusal (no sleep), a Windows writer test (hold `auth.json` with `os.Open`, call `auth.SetKey`), and one held-handle table over `auth.Load`, `Clients.read` and `readHostID`. The PLAN names each.
+  *(Note, 2026-11-22, build: the writer's give-up test is split, by the owner's ruling "Split it; Windows give-up
+  (Recommended)": X2 is `TestReplaceFileGivesUp` (Windows, a real `os.Open` holder for the whole call), X4 is the
+  portable `TestReplaceFileNotTransient`; a portable fake could not reach `ReplaceFile`, and off Windows `transient` is
+  never true (0067-PLAN deviation 1). The table reads `Clients.read` through `Clients.Load`.)*
 * **D7.** The readers that do not use `ReadRegularFile` (`choice.go:152`, `:245`, `editor/history.go:31`, the workspace path) and their writers (`choice.go:284`, `history.go:89`) are a **named follow-up**, not this record: none has been seen to fail, the workspace's own test already tolerates the refusal, and each is a different file with a different owner of the question.
 * **D8.** The v0.7.0 tag waits for this record's build (the owner's ruling, above).
 

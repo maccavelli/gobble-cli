@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"strconv"
+	"time"
 )
 
 // fileError is an error about what a file is, or how big: fs.ErrInvalid,
@@ -29,10 +30,33 @@ var (
 // (0037-MADR D10).
 const ConfigLimit = 1 << 20
 
+// openFunc is os.OpenFile's shape.
+type openFunc func(name string, flag int, perm fs.FileMode) (*os.File, error)
+
+// The read's seams (0067-MADR D6): how ReadRegularFile opens a file, which
+// open errors it retries, and for how long.
+var (
+	openFile   openFunc = os.OpenFile
+	retriable           = sharingViolation
+	readWindow          = 2 * time.Second
+)
+
+// SetOpenFile makes ReadRegularFile open files through open until restore
+// is called. It is a test seam (0067-MADR D6), for a test in another
+// package that must see a refused open and release the file's holder on
+// it; nothing else calls it, and no two tests may use it at once.
+func SetOpenFile(open func(name string, flag int, perm fs.FileMode) (*os.File, error)) (restore func()) {
+	old := openFile
+	openFile = open
+	return func() { openFile = old }
+}
+
 // ReadRegularFile reads abs, a file outside any workspace, when it is a
-// regular file of at most limit bytes.
+// regular file of at most limit bytes. On Windows an open refused by a
+// sharing violation, a replace of abs in the middle of its move, is tried
+// again until readWindow has passed (0067-MADR D1).
 func ReadRegularFile(abs string, limit int) ([]byte, error) {
-	f, err := os.OpenFile(abs, os.O_RDONLY|nonblock, 0) //nolint:gosec // G304: a file the caller names, outside any workspace
+	f, err := openRetrying(abs)
 	if err != nil {
 		return nil, err
 	}
@@ -42,6 +66,24 @@ func ReadRegularFile(abs string, limit int) ([]byte, error) {
 	}
 	defer f.Close() //nolint:errcheck // read-only
 	return readAtMost(f, abs, info.Size(), limit)
+}
+
+// openRetrying opens abs for reading. An error retriable reports is tried
+// again with growing pauses, from 1 ms to 100 ms, as rename's are, until
+// readWindow has passed, and the last one is returned then; any other error
+// is returned at once, so a file that went away in the window reads as
+// absent (0067-MADR D1, D2).
+func openRetrying(abs string) (*os.File, error) {
+	deadline := time.Now().Add(readWindow)
+	pause := time.Millisecond
+	for {
+		f, err := openFile(abs, os.O_RDONLY|nonblock, 0)
+		if err == nil || !retriable(err) || time.Now().After(deadline) {
+			return f, err
+		}
+		time.Sleep(pause)
+		pause = min(2*pause, 100*time.Millisecond)
+	}
 }
 
 // regular is the info of f, opened as name, when it is a regular file.
