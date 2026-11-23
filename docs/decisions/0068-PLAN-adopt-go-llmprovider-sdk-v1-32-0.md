@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: complete
 date: 2026-11-23
 associated-madr: "0068-MADR-adopt-go-llmprovider-sdk-v1-32-0.md"
 ---
@@ -310,3 +310,23 @@ Each preflight's `check-go-precheck` step passed, T8 included (0069's fix at `4e
 | `make check-test-isolation` | 0 | as above |
 
 The Windows gates are met. Phase 2's exit (no blocker, every row tested, plants caught) and Phase 3's are met; the PLAN stays `in-progress` for the owner's approval, and nothing is staged or committed by the agent.
+
+### 2026-11-23, close-out check at `2e4dd60`
+
+The owner committed the 33 files as `2e4dd60`. CI run 45280487393 on `2e4dd60` passed every job on attempt 1 (validate on the three OSes, test-isolation, sbom, build, the five identity jobs). The coordinator's clean-clone gate on `313e99e` plus the 33 files exited 0 on gofmt, pre-add-check, `go test ./...`, `-race` on the four touched packages, preflight, check-test-isolation, check-records, markdownlint and denyscan.
+
+Acceptance criteria checked against this PLAN's text:
+
+* Phase 0 exit (citations re-grounded, reds-by-bump list equal to the MADR's expectation): met, with deviation 1.
+* Phase 1 exit (every row tested, red at the base or a named guard): met, pass 2.
+* Phase 2 acceptance (every decided row's test seen failing at the base and passing now; plants caught; no test edited without a row; files staged): met, per the Phase 2 record and its deviation 3.
+* Phase 2 step 8 (`-count=3` run of the sign-in packages shows no flake): **not met as recorded.** The Gates bullet ran `go test -count=3 ./internal/cli/` once on Linux only. `./llm/provider/`, `./internal/auth/` and `./acpserver/` have no `-count=3` run, although step 8 names the sign-in packages and the Gates bullet names the same four packages.
+* Phase 3 steps 1 to 4 (docs, dated notes, grep, MADR Confirmation 1 to 4, owner approval): met, with the owner's commit as the approval.
+
+Status stays `in-progress`. The PLAN is not marked `complete` until step 8's `-count=3` run is recorded for the sign-in packages, or the owner rules that the internal/cli run satisfies it.
+
+### 2026-11-23, step 8 met; 0068 complete
+
+The coordinator ran `go test -count=3 ./llm/provider/ ./internal/auth/ ./internal/cli/ ./acpserver/` at `2e4dd60` on the session Mac through `run-heavy` (started 2026-11-23T16:55:59-06:00, status 0, elapsed 353 s): `ok llm/provider 352.321s`, `ok internal/auth 10.151s`, `ok internal/cli 210.128s`, `ok acpserver 104.220s`. The Gates bullet asked for `-count=3` on `internal/cli` only, while Phase 2 step 8 names all four sign-in packages; this run covers both readings.
+
+Step 8 is met. Re-checked: Phase 0, Phase 1, Phase 2 acceptance and Phase 3 steps 1 to 4 are met as recorded above. Status is `complete`, 2026-11-23.

@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: complete
 date: 2026-11-23
 associated-madr: "0069-MADR-pre-add-script-follow-ups-of-0064.md"
 ---
@@ -190,3 +190,32 @@ Files in scope: `scripts/check_go_precheck.py` and the 0069 records. The script 
 stderr is exactly `go-precheck: gofmt not found in PATH.`; new test T8b runs the same assertions on a `PATH` whose only
 directory holds gofmt together with `mktemp`, `sed`, `rm` and `git`; new plant PL5b (the PL5 text) must turn T8b red.
 Row G11 in the MADR is amended to match. 0069 is not complete: it closes only when CI is green on the fix commit.
+
+### 2026-11-23, close-out at `313e99e`
+
+The owner committed the deviation 2 fix as `313e99e`. GitHub Actions CI run 45273839267 on `313e99e` passed every job on attempt 2. Validate passed on ubuntu-24.04, macos-15 and windows-2025, including `make check-go-precheck` (T8, T8b, PL5, PL5b). Attempt 1's job `build / identity (gobble, darwin/arm64)` was cancelled because GitHub assigned no macOS arm64 runner ("The job was not acquired by Runner of type hosted even after multiple attempts"); it never started, and no code failed. The attempt-1 cancellation is runner allocation, not a result of this PLAN.
+
+Acceptance criteria checked against this PLAN's text:
+
+* Exit criterion (no blocker, every row tested, plants caught): met by the Phase 1 to P5 records, the deviation 1 and 2 fixes, and CI's `make check-go-precheck` on all three OSes.
+* Deviation 1 closure ("met only once CI passes on the fix commit"): met by run 45273839267 on `313e99e`.
+* Deviation 2 closure ("closes only when CI is green on the fix commit"): met by the same run.
+* Deviation 2's pre-push runs (PL5 caught on this Mac, the Linux machine and the Windows laptop "before the push"): not recorded in this PLAN. CI's validate step shows PL5 and PL5b caught on all three OSes after the push. The closing rule is CI green, so the PLAN closes on that rule; the owner may want the pre-push runs recorded.
+
+Status: `complete`, 2026-11-23.
+
+### 2026-11-23, deviation 2's before-push runs (reported by the fix agent; not a re-run)
+
+The fix agent ran `--self-test` on the real script before the push and reported to the coordinator:
+
+| Host | Bash | self-test | PL5 | PL5b | T8, T8b |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| macOS | bash 5 and `/bin/bash` 3.2 | ok | caught by T8 | caught by T8b | green |
+| Linux machine | bash 5 (no bash 3.2: T9 and PL7 n/a) | ok | caught by T8 | caught by T8b | green |
+| Windows laptop | Git Bash | ok | caught by T8 | caught by T8b | green |
+
+* The laptop run: `run-on-host --need windows` fell back to this Mac, because the laptop's ssh default shell was PowerShell. The agent ran it by hand over ssh with Git's bash first on PATH, so this row is the laptop's own run, not the fallback.
+* Broken-assertion check (macOS only): with T8b's exact-stderr assertion replaced by `pass`, PL5b was not caught, and the self-test failed. The harness detects that assertion's removal.
+* The coordinator re-ran `make check-go-precheck` on macOS: exit 0, every plant caught.
+
+Deviation 2's before-push requirement is met by this table. 0069 stays `complete`.
