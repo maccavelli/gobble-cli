@@ -148,6 +148,8 @@
 | 0065 | PLAN | [Implement letting the SDK choose each agent turn's output limit from gobble's own catalogue](decisions/0065-PLAN-output-limit-ownership-between-gobble-and-the-sdk.md) | proposed 2026-11-22 (no phase started; waits for the owner's approval and the SDK tag carrying 0088 and 0089) |
 | 0066 | MADR | [Set each session's model up from the SDK's discovered limits, show their sources, and keep the caps a service states](decisions/0066-MADR-set-each-session-model-up-from-discovered-limits.md) | accepted 2026-11-22 (the owner's answers through go-llmprovider-sdk 0089, including "models.json only, for now (Recommended)") |
 | 0066 | PLAN | [Implement setting each session's model up from the SDK's discovered limits](decisions/0066-PLAN-set-each-session-model-up-from-discovered-limits.md) | proposed 2026-11-22 (no phase started; follows 0065's SDK bump) |
+| 0067 | MADR | [Retry a config file's read, and auth.json's replace, when Windows refuses them for a moment](decisions/0067-MADR-windows-sharing-violation-when-reading-auth-json.md) | accepted 2026-11-22 (reproduced 7 of 200 under `-race` on the Windows laptop; the mechanism shown by probe; gates v0.7.0 by the owner's "Yes; fix 0067 first"; the owner's "Retry reads and the save (Recommended)" and "2 seconds (Recommended)") |
+| 0067 | PLAN | [Implement retrying a config file's read and auth.json's replace on Windows](decisions/0067-PLAN-windows-sharing-violation-when-reading-auth-json.md) | proposed 2026-11-22 (no phase started; waits for the owner's approval; built before the v0.7.0 tag) |
 
 0003-MADR has no PLAN of its own. 0004-PLAN Phase 2 and 0005-PLAN F10 implement it.
 
