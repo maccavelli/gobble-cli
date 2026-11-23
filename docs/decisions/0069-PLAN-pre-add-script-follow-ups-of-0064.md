@@ -145,3 +145,18 @@ script's exit codes (`0`, `1`, `2`) and variables do not change.
   every bash start under the queue; it is the host's startup file, present on steps this record does not touch.
 * **Not done.** No run on the Linux machine natively (pick-host chose WSL); nothing staged or committed (the brief
   forbids it; the owner stages and commits).
+
+### 2026-11-23, deviation: T8 fails on CI hosts with a second gofmt
+
+CI run 45259145746 on `f6c6b47` failed on ubuntu-24.04 and windows-2025 with `FAIL T8 ... T8: exit 2 expected`
+(rc=0, stdout `go-precheck: 1 file(s) clean (gofmt).`); macOS passed. Cause: `scripts/check_go_precheck.py` T8 (G11,
+gofmt missing from PATH) hid gofmt by removing only the directory of the first `gofmt` found, and those runner images
+carry a second gofmt on PATH, so the script under test still found one. The dev hosts have a single Go install each,
+which is why the case passed there. Owner ruling (2026-11-23): "Hide every gofmt on PATH (Recommended)". Fix: the
+harness now removes every PATH directory that holds a gofmt, found with the lookup the script uses (`command -v`),
+mirrored as `shutil.which("gofmt", path=<entry>)` per entry, which also tries the Windows `.exe` names. When git lives
+in a removed directory, a `git` wrapper in the stubs directory reaches it, so the case no longer depends on git and
+gofmt sharing a directory. `--self-test` gained a case that plants a second gofmt directory (a scratch copy of the real
+gofmt) and shows the old single-directory logic still sees gofmt while the new logic does not. `--self-test` passed on
+macOS, Windows (git-bash) and Linux (the second-gofmt case ran on each), and `make check-go-precheck` passed on macOS. This
+plan's acceptance is met only once CI passes on the fix commit.

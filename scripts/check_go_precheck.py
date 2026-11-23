@@ -81,11 +81,21 @@ def _stub(path: Path, name: str) -> None:
     path.chmod(0o755)
 
 
-def _gofmt_dir() -> str:
-    g = shutil.which("gofmt")
-    if not g:
-        raise HarnessError("gofmt is not on PATH; the harness needs the real one")
-    return os.path.dirname(g)
+def _gofmt_dirs(path: str) -> list[str]:
+    """Every directory on `path` that holds a gofmt.
+
+    Found as the script finds it (`command -v gofmt`): shutil.which over each
+    entry, which also tries the Windows executable suffixes. Hosts can carry
+    more than one Go install, so hiding one directory is not enough.
+    """
+    return [p for p in path.split(os.pathsep) if p and shutil.which("gofmt", path=p)]
+
+
+def _without_gofmt(path: str) -> str:
+    """`path` with every directory that holds a gofmt removed."""
+    gds = _gofmt_dirs(path)
+    return os.pathsep.join(
+        p for p in path.split(os.pathsep) if p and not any(_same_dir(p, g) for g in gds))
 
 
 def _same_dir(a: str, b: str) -> bool:
@@ -129,11 +139,18 @@ def run_case(
 
         base = os.environ.get("PATH", "")
         if no_gofmt:
-            gd = _gofmt_dir()
-            kept = [p for p in base.split(os.pathsep) if p and not _same_dir(p, gd)]
-            base = os.pathsep.join(kept)
+            if not _gofmt_dirs(base):
+                raise HarnessError("gofmt is not on PATH; the harness needs the real one")
+            real_git = shutil.which("git")
+            base = _without_gofmt(base)
             if shutil.which("git", path=base) is None:
-                raise HarnessError("git shares a directory with gofmt; cannot hide gofmt")
+                # git shares a directory with a gofmt: reach it through a
+                # wrapper in the stubs directory instead.
+                if real_git is None:
+                    raise HarnessError("git is not on PATH")
+                with open(stubs / "git", "w", newline="\n") as fh:
+                    fh.write('#!/bin/sh\nexec "%s" "$@"\n' % Path(real_git).as_posix())
+                (stubs / "git").chmod(0o755)
         full = dict(os.environ)
         # BASH_ENV is sourced by a non-interactive bash and may rewrite PATH,
         # which would put the real tools in front of the stubs.
@@ -253,6 +270,24 @@ def t8(script: Path, bash: str) -> None:
     need("go-precheck: gofmt not found in PATH." in r.err, "T8: message missing", r)
 
 
+def t8_second_gofmt() -> None:
+    """The fix matters: with a second gofmt on PATH, hiding only the first
+    install's directory (the old T8 logic) leaves gofmt visible; hiding every
+    directory that holds one does not."""
+    real = shutil.which("gofmt")
+    if not real:
+        raise HarnessError("gofmt is not on PATH; the harness needs the real one")
+    with tempfile.TemporaryDirectory(prefix="goprecheck-gofmt2-") as td:
+        shutil.copy2(real, Path(td) / os.path.basename(real))
+        path = td + os.pathsep + os.environ.get("PATH", "")
+        first = os.path.dirname(shutil.which("gofmt", path=path))
+        old = os.pathsep.join(p for p in path.split(os.pathsep) if p and not _same_dir(p, first))
+        need(shutil.which("gofmt", path=old) is not None,
+             "T8 second gofmt: the old logic should still see a gofmt")
+        need(shutil.which("gofmt", path=_without_gofmt(path)) is None,
+             "T8 second gofmt: every gofmt directory should be hidden")
+
+
 def bash_version(bash: str) -> tuple[int, int]:
     p = subprocess.run(
         [bash, "-c", "echo ${BASH_VERSINFO[0]} ${BASH_VERSINFO[1]}"], capture_output=True)
@@ -346,6 +381,12 @@ def self_test(script: Path, bashes: list[str]) -> int:
     if failed:
         print("self-test: the script fails %s" % ", ".join(sorted(failed)))
         bad += 1
+    try:
+        t8_second_gofmt()
+        print("ok   T8 second gofmt: old logic fooled, new logic hides every gofmt")
+    except Fail as exc:
+        bad += 1
+        print("FAIL %s" % exc)
     olds = old_bashes(bashes)
     src = script.read_text()
     with tempfile.TemporaryDirectory(prefix="goprecheck-plant-") as td:
