@@ -1027,6 +1027,36 @@ Records only. A4's key switch now has its test, `TestKeySwitchKeepsHostAndClient
 
 Every acceptance criterion of this record's Confirmation 1 to 8 is met, as the PLAN's "P6 record, pass 2 (2026-11-22)" and "P6 record, close-out (2026-11-22)" show: 1 by the owner's ruling on A1; 2, 3 and 5 by their existing tests (item 5 re-checked at `894b6d9`); 4 by the four plan sign-in tests and `TestKeySwitchKeepsHostAndClient`, seen failing on its plant; 6 and 7 by P5's tests and plants and the C6 gates on three hosts at `894b6d9` (one Windows run failed on a known flake and passed on the next, the flake handed to a record of its own); 8 by L4 to L8. One step is not done and is not this record's to do: **the owner's `v0.7.0` tag**, which waits on the SDK tag being adopted and on the acp-go-sdk2 lockstep with magic-cli-remote (0055-MADR D2). There is no `v0.7.0` tag (`git tag -l` lists `v0.6.0` last).
 
+### Completion note (2026-11-23): the tag
+
+*(Dated addition, records only; status unchanged. It closes "the owner's `v0.7.0` tag" of the Completion of 2026-11-22,
+which that Completion named as not this record's to do.)* The owner tagged `v0.7.0`; the migration of D9 ships in it.
+
+* **The tag.** `v0.7.0` is an annotated tag, made by the owner on `861ba39` and pushed 2026-11-23. Tag CI run
+  `45196405850` concluded `success`.
+* **The Release.** <https://github.com/maccavelli/gobble-cli/releases/tag/v0.7.0>, published 2026-11-23T15:00:08Z by the
+  release workflow, not a draft, with seven assets: `gobble-darwin-arm64`, `gobble-linux-amd64`, `gobble-linux-arm64`,
+  `gobble-windows-amd64.exe`, `gobble-windows-arm64.exe`, `gobble.spdx.json` and `SHA256SUMS`.
+* **The proxy.** `go list -m github.com/maccavelli/gobble-cli@v0.7.0` through proxy.golang.org resolves, `Version v0.7.0`.
+* **Attestation.** `gh attestation verify gobble-darwin-arm64 --repo maccavelli/gobble-cli --signer-repo
+  maccavelli/go-selfupdate-lib`: exit 0 (verified).
+* **The pins at the tag** (`git show v0.7.0:go.mod`): acp-go-sdk2 `v1.36.0`, go-llmprovider-sdk `v1.31.0`
+  (authcontract `v0.1.0`) and acpext `v0.5.0`.
+* **developing.md's "After each `v*` release" checks,** run read-only on 2026-11-23:
+  * The rule-suite query (`gh api 'repos/maccavelli/gobble-cli/rulesets/rule-suites?ref=refs/tags/v0.7.0&time_period=day'
+    --jq '[.[] | select(.result == "bypass")] | length'`) printed `0`, exit 0. The tag push's own output was the
+    owner's and is not read here.
+  * `gh release view v0.7.0 --json isImmutable` printed `{"isImmutable":true}`, exit 0.
+  * `gobble update --check` from the previous release: `v0.6.0`'s `gobble-darwin-arm64` was downloaded to a new scratch
+    directory, its checksum matched `SHA256SUMS` (`OK`), and a copy was run from under a scratch home directory (the
+    updater accepts only a binary under home) with the home and config directories set to scratch. It exit 10 and
+    printed `gobble: update available: v0.6.0 -> v0.7.0`, with `selected ... target=v0.7.0 asset=gobble-darwin-arm64`.
+  * **Not run:** the Windows sequence (`gobble acp` held open, `gobble update --yes`, then a plain `gobble update` that
+    must exit 0 and leave no `.gobble.exe.selfupdate-*` file). No Windows host was used for this note. It is open, not
+    met.
+* **Next step, not done.** magic-cli-remote's G2 step (its 0246-PLAN: recapture its fixtures against `v0.7.0` and
+  move 0246 out of `proposed`) is that repository's, on the owner's word. This note does not do it.
+
 ### Related
 
 * PLAN: [0052-PLAN-finish-the-chatgpt-plan-sign-in-on-the-sdk-engine.md](0052-PLAN-finish-the-chatgpt-plan-sign-in-on-the-sdk-engine.md).

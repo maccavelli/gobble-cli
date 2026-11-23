@@ -3538,3 +3538,34 @@ The MADR's Consequences bullet of 2026-11-11 on Grok's browser carries a one-lin
 | Gate | Start | End | Exit |
 | :--- | :--- | :--- | :--- |
 | `make check-records markdownlint`, after the last record edit | 14:03:01 | 14:03:03 | 0 ("Summary: 0 issues in 0 files"), and again after this row was filled |
+
+### Note (2026-11-23): v0.7.0 released
+
+*(Dated addition, records only; the PLAN's status `complete` is unchanged. It closes the item this PLAN left outside
+itself: the gobble release `v0.7.0` and the owner's tag.)* The release is 0055-PLAN's; its full note is that PLAN's
+"Note (2026-11-23): v0.7.0 released".
+
+* **The tag.** `v0.7.0` is an annotated tag, made by the owner on `861ba39` and pushed 2026-11-23. Tag CI run
+  `45196405850` concluded `success`.
+* **The Release.** <https://github.com/maccavelli/gobble-cli/releases/tag/v0.7.0>, published 2026-11-23T15:00:08Z by the
+  release workflow, not a draft, with seven assets: `gobble-darwin-arm64`, `gobble-linux-amd64`, `gobble-linux-arm64`,
+  `gobble-windows-amd64.exe`, `gobble-windows-arm64.exe`, `gobble.spdx.json` and `SHA256SUMS`.
+* **The proxy.** `go list -m github.com/maccavelli/gobble-cli@v0.7.0` through proxy.golang.org resolves, `Version v0.7.0`.
+* **Attestation.** `gh attestation verify gobble-darwin-arm64 --repo maccavelli/gobble-cli --signer-repo
+  maccavelli/go-selfupdate-lib`: exit 0 (verified).
+* **The pins at the tag** (`git show v0.7.0:go.mod`): acp-go-sdk2 `v1.36.0`, go-llmprovider-sdk `v1.31.0`
+  (authcontract `v0.1.0`) and acpext `v0.5.0`.
+* **developing.md's "After each `v*` release" checks,** run read-only on 2026-11-23:
+  * The rule-suite query (`gh api 'repos/maccavelli/gobble-cli/rulesets/rule-suites?ref=refs/tags/v0.7.0&time_period=day'
+    --jq '[.[] | select(.result == "bypass")] | length'`) printed `0`, exit 0. The tag push's own output was the
+    owner's and is not read here.
+  * `gh release view v0.7.0 --json isImmutable` printed `{"isImmutable":true}`, exit 0.
+  * `gobble update --check` from the previous release: `v0.6.0`'s `gobble-darwin-arm64` was downloaded to a new scratch
+    directory, its checksum matched `SHA256SUMS` (`OK`), and a copy was run from under a scratch home directory (the
+    updater accepts only a binary under home) with the home and config directories set to scratch. It exit 10 and
+    printed `gobble: update available: v0.6.0 -> v0.7.0`, with `selected ... target=v0.7.0 asset=gobble-darwin-arm64`.
+  * **Not run:** the Windows sequence (`gobble acp` held open, `gobble update --yes`, then a plain `gobble update` that
+    must exit 0 and leave no `.gobble.exe.selfupdate-*` file). No Windows host was used for this note. It is open, not
+    met.
+* **Next step, not done.** magic-cli-remote's G2 step (its 0246-PLAN: recapture its fixtures against `v0.7.0` and
+  move 0246 out of `proposed`) is that repository's, on the owner's word. This note does not do it.
