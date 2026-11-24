@@ -377,20 +377,23 @@ func TestLimitRefusalLine_0071(t *testing.T) {
 }
 
 // A credit or rate failure of a capped call fails the turn with its error
-// text byte-identical: a 402, a 429 after the SDK's retries, Kilo's 503 for
-// an upstream's 402 and another provider's 503. D8 (d)'s line rides
-// acpext.ErrorData's outputLimitNote from acpext's next minor tag, Phase 1b
-// (0071-MADR D8 (d) as amended 2026-11-24, "Move the line into a new field";
-// L15).
+// text byte-identical, and D8 (d)'s line in the error data's outputLimitNote:
+// a 402, a 429 after the SDK's retries and Kilo's 503 for an upstream's 402
+// carry it; another provider's 503 and a turn whose calls carried no limit do
+// not (0071-MADR D8 (d) as amended 2026-11-24, "Move the line into a new
+// field"; L15, L43).
 func TestCreditRefusalLine_0071(t *testing.T) {
+	note := "gobble asked for at most 32,000 output tokens (stated); some services hold credit or rate against that number; " +
+		"set maxTokens for m1 under modelOverrides in models.json to ask for less"
 	for _, c := range []struct {
 		name string
 		turn llmtest.Turn
+		note string // "" for no member
 	}{
-		{"quota_402", apiError(402, "fake", "insufficient credits", llm.ErrQuota)},
-		{"rate_429", llmtest.RateLimited(0)},
-		{"kilo_503", apiError(503, "kilo", "upstream unavailable", llm.ErrUnavailable)},
-		{"other_503", apiError(503, "fake", "unavailable", llm.ErrUnavailable)},
+		{"quota_402", apiError(402, "fake", "insufficient credits", llm.ErrQuota), note},
+		{"rate_429", llmtest.RateLimited(0), note},
+		{"kilo_503", apiError(503, "kilo", "upstream unavailable", llm.ErrUnavailable), note},
+		{"other_503", apiError(503, "fake", "unavailable", llm.ErrUnavailable), ""},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			h := newLimitHarness(t, SessionSettings{}, map[string]llm.Model{"fake/m1": {ContextWindow: 200000, MaxTokens: 32000}}, c.turn)
@@ -400,10 +403,17 @@ func TestCreditRefusalLine_0071(t *testing.T) {
 			}
 			_, data := wireData(t, err)
 			var d struct {
-				Error string `json:"error"`
+				Error           string `json:"error"`
+				OutputLimitNote string `json:"outputLimitNote"`
 			}
 			if jerr := jsonx.Unmarshal([]byte(data), &d); jerr != nil || d.Error != c.turn.Err.Error() {
 				t.Errorf("error data's text %q (%v), want the failure's own %q", d.Error, jerr, c.turn.Err.Error())
+			}
+			if d.OutputLimitNote != c.note {
+				t.Errorf("outputLimitNote %q, want %q", d.OutputLimitNote, c.note)
+			}
+			if has := strings.Contains(data, "outputLimitNote"); has != (c.note != "") {
+				t.Errorf("the member is present: %v, want %v, in %s", has, c.note != "", data)
 			}
 		})
 	}
@@ -412,6 +422,9 @@ func TestCreditRefusalLine_0071(t *testing.T) {
 		quota := &llm.APIError{Status: 402, Err: llm.ErrQuota}
 		if got := limitLine(quota, llm.OutputLimit{}, "m1"); !errors.Is(got, quota) || got.Error() != quota.Error() {
 			t.Errorf("a turn whose calls carried no limit: %v, want the error as it was", got)
+		}
+		if got := creditNote(quota, llm.OutputLimit{}, "m1"); got != "" {
+			t.Errorf("a turn whose calls carried no limit: note %q, want none", got)
 		}
 	})
 	// 0071 new names: end

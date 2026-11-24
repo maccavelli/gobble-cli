@@ -109,8 +109,10 @@ Exit: citations re-grounded; the red list equal to the expectation; nothing but 
 | L11 | `TestOverflowResendRecomputesCap_0071` | `agent/outputlimit_test.go` | new | the resend reuses the first value |
 | L12, L13, L14 | `TestLimitRefusalLine_0071` (`names_field`, `other_invalid`, `fills_context`, `refused_after_resend`) | `acpserver/outputlimit_test.go` | no line | the line omitted; then, apart, on every invalid request |
 | ~~L15~~ | ~~`TestCreditRefusalLine_0071` (`quota_402`, `rate_429`, `kilo_503`, `uncapped_call`)~~ *(2026-11-24: replaced by the two rows below, "Move the line into a new field")* | `acpserver/outputlimit_test.go` | no line | the line omitted; then, apart, on an uncapped call |
-| L15 (pass 2, before acpext's tag) | `TestCreditRefusalLine_0071` (`quota_402`, `rate_429`, `kilo_503`, `other_503`: the error text byte-identical, no line); `TestPromptQuotaData` unchanged | `acpserver/outputlimit_test.go`; `acpserver/errordata_test.go` | a guard | the line appended to the error text, as pass 1 built it |
+| L15 (pass 2, before acpext's tag) | `TestCreditRefusalLine_0071` (`quota_402`, `rate_429`, `kilo_503`, `other_503`: the error text byte-identical, no line); `TestPromptQuotaData` unchanged *(2026-11-24, Phase 1b: "unchanged" holds for pass 2, where no line is set; from Phase 1b its expected data is each frame plus the note, "Expect frame plus note (Recommended)", see the deviation below)* | `acpserver/outputlimit_test.go`; `acpserver/errordata_test.go` | a guard | the line appended to the error text, as pass 1 built it |
 | L15, L43 (Phase 1b, after `acpext/v0.6.0`) | `TestCreditRefusalLine_0071` gains `outputLimitNote` on each capped failure and none on `uncapped_call` and `other_503`; the terminal client's line after the error | `acpserver`; `internal/cli/limit_test.go` | new | the member not set; then, apart, on an uncapped call; the CLI's line omitted |
+| L15 (guard, Phase 1b, 2026-11-24) | `TestPromptQuotaData`: each frame decoded, its expected `OutputLimitNote` set on a quota or rate frame whose call is capped, re-encoded, compared byte for byte | `acpserver/errordata_test.go` | red at Phase 1b's code, on its assertion, before the edit | the note dropped from a capped quota frame; P2 to P4 |
+| L45 (Phase 1b, 2026-11-24) | `TestPrintErrorDataNote_0071`: print mode's JSON `errorData` carries the note of a capped credit refusal and the text output prints no note | `internal/cli/print_test.go` | a guard over unchanged code | `finishPrint` writing no `errorData`; then, apart, the note printed in the text output *(file: `internal/cli/limit_test.go`, beside `TestPrintErrorData`; subtests `json` and `text`)* |
 | L42 | `TestRoundTrip`'s new frame `prompt-output-limit-note.error.json`; the sorted-members test; `ExampleErrorData_outputLimitNote` | `acpext/roundtrip_test.go`, `acpext/types_test.go`, `acpext/example_test.go` | new | the tag misspelled; then `omitzero` dropped, which changes every existing frame |
 | L44 *(2026-11-24)* | `TestStatedCapHeldForTurn_0071` (`overflow_resend`: a refusal states 16,000, an overflow compacts, the resend asks 16,000, not the cap computed again; `next_call`: the call after a tool round asks 16,000; `computed_below`: a computed cap below M is sent as computed) | `agent/outputlimit_test.go` | the later call asks the full cap again | the hold dropped |
 | L17 | `TestSummaryCaps`, its cases rewritten: no window, `C` 100,000 → 64,000 and 64,000 `ceiling`; `C` 6,000 → 6,000 and 6,000; a 20,000 window → `R` each | `compaction/auto_test.go:107-142` | the shares (8,000 and 5,000; 6,000 and 5,000) | the 80 % share kept |
@@ -341,3 +343,84 @@ The independent review passed Phase 1 with notes, relayed by the coordinator; th
 * **Coverage closed (2026-11-24, the delta check):** L44's test gains `offline_wait` and `empty_reply`, the two other retries
   the ruling's case names, each in a `synctest` bubble; green. P46 fails both, with `overflow_resend` and `next_call`:
   `outputlimit_test.go:194: caps [60002 16000 60002], want [60002 16000 16000]` in each of the four.
+
+### Phase 1b, pass 1 (2026-11-24, from `ba8f623`): the owner's word
+
+The owner's word the 1b split waited for, relayed by the coordinator, quoted exactly: **"sdk committed and pushed, acpext
+tag pushed"**. The tag `acpext/v0.6.0` is on `ba8f623`, the commit that carries `ErrorData.OutputLimitNote` (L42); the
+agent pushed no tag. The tree was clean at `ba8f623` when Phase 1b started. Built next, in the PLAN's order: (2) `go.mod`
+to `acpext v0.6.0`, no `replace`; (3) `acpserver` sets `outputLimitNote` and `internal/cli` shows it on the line after the
+error; (4) the tests of L15's 1b row and L43, red first, each with a plant; (5) docs; (6) the gates.
+
+* **Step 1.** `go get github.com/maccavelli/gobble-cli/acpext@v0.6.0` and `go mod tidy`: exit 0, the module proxy resolved the
+  tag (`go: upgraded … acpext v0.5.0 => v0.6.0`); `go.mod` and `go.sum` change in those lines alone; no `replace`.
+* **Steps 2 and 3, built, unstaged.** `acpserver/outputlimit.go`: `creditNote` (D8 (d)'s line for a capped call's 402 or
+  `ErrQuota`, 429 or `ErrRateLimited`, or a 503 whose `APIError.Provider` is `kilo`) and `creditOrRate`;
+  `acpserver/prompt.go`: `promptErrorNoted`; `acpserver/agent.go`: the failed turn's `promptErrorNoted` with the note;
+  `internal/cli/line.go`: the data's `outputLimitNote`, after the error and the limit line. The error text is untouched.
+* **Step 4, reds at the base** (a scratch clone of `ba8f623` with `go.mod` and `go.sum` at `acpext v0.6.0` and the two test
+  files, the regions marked `// 0071 new names` left out; `<scratch>/b0071b/redbase.py`): `TestCreditRefusalLine_0071`
+  `quota_402`, `rate_429`, `kilo_503`: `outputlimit_test.go:402: outputLimitNote "", want "gobble asked for at most 32,000
+  output tokens (stated); some services hold credit or rate against that number; …"`, and `:405: the member is present:
+  false, want true`; `other_503` a guard. `TestLineSessionOutputLimitNote_0071/with_note`: `limit_test.go:128: stderr "…
+  Credits used up on kilo\n", want it to hold "… Credits used up on kilo\ngobble asked for at most 64,000 output tokens
+  (ceiling); …"`; `without_note` a guard. `uncapped_call` names `creditNote`: its red is P2's.
+* **Step 4, plants** (`<scratch>/b0071b/plants.py`, one production edit each on a scratch clone, `go test -count=1` on the
+  row's package): P1 the member never set (`promptError` for `promptErrorNoted`), `outputlimit_test.go:413: outputLimitNote
+  "", want "gobble asked for at most 32,000 …"`; P2 the note on an uncapped call, `outputlimit_test.go:427: a turn whose calls
+  carried no limit: note "gobble asked for at most 0 output tokens (); …", want none`; P3 the note on any 503 (the Kilo
+  test dropped), `outputlimit_test.go:413: outputLimitNote "gobble asked for at most 32,000 output tokens (stated); …", want
+  ""` (`other_503`); P4 the wording changed, `outputlimit_test.go:413: … to ask for fewer", want "…"`; P5 (L43) the CLI omits
+  the note, `limit_test.go:128: stderr "… Credits used up on kilo\n", want it to hold "… \ngobble asked for at most 64,000
+  …"`. Each is caught by its own test; P2 to P4 also turn `TestPromptQuotaData` red, which is red already, below.
+* **Stop (2026-11-24): an existing test needing a change no row names.** With the member set, `go test -count=1 ./acpserver/`
+  turns `TestPromptQuotaData` red on three of its four frames (`errordata_test.go:220`): the test runs a prompt on a model the
+  catalog does not know, so the failing call is capped (16,384, assumed) and the data now carries `outputLimitNote`, while the
+  test compares the data byte for byte with `acpext/testdata/prompt-quota.error.json`, `prompt-rate-over-cap.error.json` and
+  `prompt-weekly.error.json`, which have none. L15's 1b row says the test stays unchanged; it cannot, while L15 and L43 decide
+  that a capped call's quota or rate failure carries the line. The frames are not at fault (the member is optional and absent
+  from them). Resolutions went to the owner. The docs steps were done; the gates were not run.
+
+### Deviation (2026-11-24): the owner's rulings on the stop, Phase 1b pass 1 continuing
+
+Relayed by the coordinator, quoted exactly: **"Expect frame plus note (Recommended)"** and **"Test the JSON note, text as
+is (Recommended)"**. The MADR carries both (L15 annotated, the "unchanged" text kept; new row L45; Counts 49 decided, 55 rows).
+
+* **Scope added to Phase 1b:** `acpserver/errordata_test.go`, `TestPromptQuotaData` alone; `internal/cli/limit_test.go`,
+  `TestPrintErrorDataNote_0071` (L45). The acpext frames and `TestCreditRefusalLine_0071` are untouched.
+* **`TestPromptQuotaData`.** Its expected data is each frame decoded strictly, `OutputLimitNote` set (the note of a capped,
+  assumed 16,384 call on `m1`) on the quota, rate-over-cap and weekly frames and none on `prompt-after-retries` (claude's 503),
+  re-encoded, compared byte for byte with the prompt error's data. It also fails if a frame itself carries a note. Red before
+  the edit, on its assertion (`errordata_test.go:220: prompt error -32603 {…"outputLimitNote":"gobble asked for at most 16,384
+  output tokens (assumed); …"…}, want -32603 {…}`, three frames), green after.
+* **L45.** `TestPrintErrorDataNote_0071` (`json`: the result's `errorData.outputLimitNote` equals the frame's; `text`: no
+  "gobble asked for" in stdout or stderr). It tests code that is already built (`finishPrint` writes `errorData` from the
+  prompt error), so it is green at the base of Phase 1b by construction; its red is its plants'.
+* **Plants** (`<scratch>/b0071b/plants2.py`, one production edit each on a scratch clone, the package run whole):
+  P1 member never set: `TestCreditRefusalLine_0071` and `TestPromptQuotaData` (`errordata_test.go:234`); P2 note on an uncapped
+  call: `TestCreditRefusalLine_0071` alone (`outputlimit_test.go:427`); P3 note on any 503: both (`errordata_test.go:234` on
+  `prompt-after-retries`); P4 wording: both; P5 CLI omits the note: `TestLineSessionOutputLimitNote_0071`
+  (`limit_test.go:128`); **P6 the note dropped from a capped quota frame that states a reset time (the quota, rate and weekly
+  frames): `TestPromptQuotaData` alone** (`errordata_test.go:234`); P7 quota failures lose the note: both; P8 print mode writes
+  no `errorData`: `TestPrintErrorDataNote_0071` and the existing `TestPrintErrorData` (`limit_test.go:155: errorData null`);
+  P9 print mode's text output prints the note: `TestPrintErrorDataNote_0071/text` alone (`limit_test.go:200: text output
+  carries the note: stdout "", stderr "gobble asked for at most 64,000 …`).
+* **Lint, same pass.** `make pre-add-check` first found `unused` on `frameData` (`errordata_test.go`), whose one caller the
+  rewritten `TestPromptQuotaData` no longer has; the helper is removed (no suppression, no other caller), and the check re-run.
+* **Gates, Phase 1b.** `make pre-add-check FILES=…` (the seven changed `.go` files), `run-heavy`, this Mac: exit 0 (after the
+  `frameData` fix). `go test -count=1 ./...`, `run-heavy`, this Mac: exit 0. `make preflight`, `run-heavy`, this Mac:
+  "preflight passed", exit 0. `make preflight race`, `run-on-host --need linux --race`, target the Linux machine
+  (linux/amd64, not WSL; the distro excluded for a race run): "preflight passed", `go test -race` on the root module and
+  acpext, remote status 0. `make preflight`, `run-on-host --need windows`, target the Windows laptop (windows/amd64):
+  "preflight passed", remote status 0. No log has a fallback line. `make check-records`, `make markdownlint`, `denyscan.py
+  --changed`: ~~see the hand-back~~ *(2026-11-24, closed after the review)*: `make check-records` exit 0, no finding;
+  `make markdownlint` exit 0, no finding; `denyscan.py --changed` exit 0, "0 hit(s) in 14 file(s)".
+* **Not built, noted:** print mode's text output prints no limit line and so no note, by L45's ruling.
+* **Notes (2026-11-24, after the review).** (1) L15's "Kilo's 503 for a 402" is built as *any* 503 from Kilo on a capped
+  call: the SDK's error cannot tell an upstream's 402 from another 503 (the MADR's F14 and 0065 R34: through Kilo an
+  upstream's 402 arrives as a 503), so `creditOrRate` tests the status and `APIError.Provider` alone. `other_503` covers a
+  non-Kilo 503. (2) L45's test, `TestPrintErrorDataNote_0071`, lives in `internal/cli/limit_test.go`, beside
+  `TestPrintErrorData`, as the table row's annotation says.
+
+Exit of Phase 1b: every row of the phase tested (L15's 1b row, L43, L45), plants caught, gates recorded. The independent
+review is the coordinator's.

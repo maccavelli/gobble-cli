@@ -72,14 +72,43 @@ const fillsWindow = "fills the context window"
 // its last call asked for, when the failure is a refusal of that limit
 // (0071-MADR D8 (c)). A turn whose calls carried no limit gains nothing. A
 // credit or rate failure's line, D8 (d)'s, rides acpext.ErrorData's
-// outputLimitNote from acpext's next minor tag, and the error text is left
-// as it is (0071-MADR, amendment of 2026-11-24).
+// outputLimitNote (creditNote), and the error text is left as it is
+// (0071-MADR, amendment of 2026-11-24).
 func limitLine(err error, lim llm.OutputLimit, model string) error {
 	if lim.Tokens <= 0 || !limitRefusal(err, lim) {
 		return err
 	}
 	return fmt.Errorf("%w; gobble asked for at most %s output tokens (%s); to send less, set maxTokens for %s under modelOverrides in models.json",
 		err, thousands(int64(lim.Tokens)), lim.Basis, model)
+}
+
+// kiloProvider is gobble's id of Kilo, whose gateway answers an upstream's
+// 402 with a 503 (0065-MADR R34).
+const kiloProvider = "kilo"
+
+// creditNote is D8 (d)'s line for a failed turn whose last call asked for
+// the limit lim: a 402 or quota failure, a 429 or rate-limit failure that
+// outlasted the SDK's retries, or Kilo's 503 for an upstream's 402, each
+// held by some services against the number asked for. It is the member
+// acpext.ErrorData.OutputLimitNote and never part of the error's text. A turn
+// whose calls carried no limit, and any other failure, gets "" (0071-MADR D8
+// (d) as amended 2026-11-24; L15).
+func creditNote(err error, lim llm.OutputLimit, model string) string {
+	if lim.Tokens <= 0 || !creditOrRate(err) {
+		return ""
+	}
+	return fmt.Sprintf("gobble asked for at most %s output tokens (%s); some services hold credit or rate against that number; "+
+		"set maxTokens for %s under modelOverrides in models.json to ask for less", thousands(int64(lim.Tokens)), lim.Basis, model)
+}
+
+// creditOrRate reports a quota or rate-limit failure, or Kilo's 503 for an
+// upstream's 402.
+func creditOrRate(err error) bool {
+	if errors.Is(err, llm.ErrQuota) || errors.Is(err, llm.ErrRateLimited) {
+		return true
+	}
+	ae, ok := errors.AsType[*llm.APIError](err)
+	return ok && ae.Status == http.StatusServiceUnavailable && ae.Provider == kiloProvider
 }
 
 // limitRefusal reports a refusal of the limit lim (D8 (c)): an invalid

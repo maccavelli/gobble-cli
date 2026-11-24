@@ -398,10 +398,14 @@ func (ls *lineSession) turn(p Prompt) error {
 			return nil
 		}
 		// The agent's message, and the limit it names on a line of its own
-		// (0049-MADR Q3 (a)).
+		// (0049-MADR Q3 (a)), then the output limit's note on the line
+		// after it (0071-MADR D8 (d), L43).
 		e.out.Errorf("%s", pe.Error())
 		if line, ok := limitLine(pe.Data, e.now()); ok {
 			e.out.Notef("%s", line)
+		}
+		if pe.Data.OutputLimitNote != "" {
+			e.out.Notef("%s", pe.Data.OutputLimitNote)
 		}
 		return nil
 	}

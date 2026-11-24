@@ -89,6 +89,51 @@ func TestLineSessionLimitError(t *testing.T) {
 	}
 }
 
+// A turn refused on credit by a call that asked for an output limit prints
+// the agent's message, the limit line and, on the line after, the member
+// outputLimitNote; a refusal that carries none prints no note (0071-MADR
+// D8 (d) as amended 2026-11-24; L43).
+func TestLineSessionOutputLimitNote_0071(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("..", "..", "acpext", "testdata", "prompt-output-limit-note.error.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var d acpext.ErrorData
+	if err := jsonx.Unmarshal(b, &d); err != nil {
+		t.Fatal(err)
+	}
+	if d.OutputLimitNote == "" {
+		t.Fatal("acpext's example frame carries no outputLimitNote")
+	}
+	quota, _ := quotaFrame(t)
+	for _, c := range []struct {
+		name, data, want string // want "" for no note
+	}{
+		{"with_note", string(b), "Error: " + d.Error + "\nCredits used up on kilo\n" + d.OutputLimitNote + "\n"},
+		{"without_note", quota, ""},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			agent := &acptest.ScriptAgent{Turns: []acptest.Turn{{ErrCode: -32603, ErrMessage: "Internal error", ErrData: c.data}}}
+			h := newLineHarness(t, agent)
+			h.e.now = func() time.Time { return time.Date(2026, 11, 9, 13, 0, 0, 0, time.UTC) }
+			h.start(Prompt{})
+			h.press("one\r")
+			waitUntil(t, func() bool { return strings.Contains(h.stderr.String(), "Error: ") })
+			h.press("\x04")
+			if err := h.wait(); err != nil {
+				t.Fatal(err)
+			}
+			got := h.stderr.String()
+			if c.want != "" && !strings.Contains(got, c.want) {
+				t.Errorf("stderr %q, want it to hold %q", got, c.want)
+			}
+			if c.want == "" && strings.Contains(got, "gobble asked for") {
+				t.Errorf("stderr %q, want no note", got)
+			}
+		})
+	}
+}
+
 // Print mode's JSON result carries the agent's message as error and its
 // data as errorData (0049-MADR Q3 (a)).
 func TestPrintErrorData(t *testing.T) {
@@ -114,4 +159,45 @@ func TestPrintErrorData(t *testing.T) {
 	if res.Error != d.Error || string(gb) != string(wb) {
 		t.Fatalf("result error %q, errorData %s; want %q and %s", res.Error, gb, d.Error, wb)
 	}
+}
+
+// A capped call's credit refusal, in print mode: the JSON result's errorData
+// carries the note, and the text output is as it was, with no note line
+// (0071-MADR L45).
+func TestPrintErrorDataNote_0071(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("..", "..", "acpext", "testdata", "prompt-output-limit-note.error.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var d acpext.ErrorData
+	if err := jsonx.Unmarshal(b, &d); err != nil || d.OutputLimitNote == "" {
+		t.Fatalf("acpext's example frame: note %q, %v", d.OutputLimitNote, err)
+	}
+	turn := acptest.Turn{ErrCode: -32603, ErrMessage: "Internal error", ErrData: string(b)}
+	t.Run("json", func(t *testing.T) {
+		withAgent(t, &acptest.ScriptAgent{Turns: []acptest.Turn{turn}})
+		r := runMain(t, nil, "-p", "--output-format", "json", "x")
+		if r.code != ExitFailure {
+			t.Fatalf("exit %d, stderr %q", r.code, r.stderr)
+		}
+		var res struct {
+			ErrorData acpext.ErrorData `json:"errorData"`
+		}
+		if err := json.Unmarshal([]byte(strings.TrimSpace(r.stdout)), &res); err != nil {
+			t.Fatalf("stdout %q: %v", r.stdout, err)
+		}
+		if res.ErrorData.OutputLimitNote != d.OutputLimitNote {
+			t.Errorf("errorData's outputLimitNote %q, want %q", res.ErrorData.OutputLimitNote, d.OutputLimitNote)
+		}
+	})
+	t.Run("text", func(t *testing.T) {
+		withAgent(t, &acptest.ScriptAgent{Turns: []acptest.Turn{turn}})
+		r := runMain(t, nil, "-p", "x")
+		if r.code != ExitFailure {
+			t.Fatalf("exit %d, stderr %q", r.code, r.stderr)
+		}
+		if strings.Contains(r.stdout+r.stderr, "gobble asked for") {
+			t.Errorf("text output carries the note: stdout %q, stderr %q", r.stdout, r.stderr)
+		}
+	})
 }

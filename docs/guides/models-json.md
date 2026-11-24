@@ -101,6 +101,12 @@ Every turn and every compaction summary names an output limit, reasoning include
   the value it states, whatever that is, from 1 up, before any compaction; every later call of that
   turn asks for at most that value. A refusal of the limit gobble cannot mend ends the turn with a
   line naming the limit asked and the `maxTokens` to set.
+- **A refusal for credit or rate** (a 402, a 429 that outlasts the retries, or Kilo's 503 for an
+  upstream's 402) of a call that asked for a limit is not mended or retried: the error text is the
+  service's as before, and the terminal client adds a line after it naming the limit asked, that some
+  services hold credit or rate against it, and the `maxTokens` to set. An ACP client reads the same
+  line from the error data's `outputLimitNote`, and `-p --output-format json` carries it in the
+  result's `errorData`; print mode's text output prints no such line.
 
 To ask for less, for example where a gateway holds credit against the limit, set `maxTokens` lower:
 

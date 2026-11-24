@@ -62,6 +62,8 @@ This record decides every case of the interim on `v1.32.0` (the L rows) and what
 | Q4: after `v1.33.0`, name a limit on every call, optional wires included, as gobble's own policy | "Always, gobble's policy (Recommended)" | V2 |
 | *(2026-11-24)* Phase 1's stop: D8 (d)'s line goes in a new `acpext.ErrorData` member, not the error text, which stays byte-identical, so acpext's example frames stay as they are | "Move the line into a new field" | L15, L42, L43 |
 | *(2026-11-24)* Phase 1's review: after an L39 resend at a stated value M, a later call of the same turn asked the full cap again, and a second refusal ended a turn that would have succeeded; every later call of the turn keeps the stated value | "Keep the stated value (Recommended)" | L44 |
+| *(2026-11-24)* Phase 1b's stop: `TestPromptQuotaData` runs capped calls, so its data carries the note and cannot equal the acpext frames, which have none; its expected data is each frame with the expected note set | "Expect frame plus note (Recommended)" | L15 |
+| *(2026-11-24)* Phase 1b: print mode's JSON `errorData` carries the note on a capped call's credit or rate refusal; print mode's text output is unchanged | "Test the JSON note, text as is (Recommended)" | L45 |
 
 ### Facts read at 97fa1f6
 
@@ -347,7 +349,7 @@ Out of scope: **V10** probing (the ruling's option 3), a later record.
 | L12 | An invalid request naming an output-limit field, no form read | decided | the turn fails; D8 (c)'s line | D8 (c) |
 | L13 | An invalid request naming no output-limit field | decided | as today, no line | D8 (c) |
 | L14 | The SDK's "fills the context window" reason | decided | as L12 | D8 (c) |
-| L15 | A 402, a 429 after the SDK's retries, or Kilo's 503 for a 402, on a capped call | decided | the turn fails; D8 (d)'s line *(2026-11-24: in `ErrorData.outputLimitNote`, the error text byte-identical; "Move the line into a new field")* | D8 (d) |
+| L15 | A 402, a 429 after the SDK's retries, or Kilo's 503 for a 402, on a capped call | decided | the turn fails; D8 (d)'s line *(2026-11-24: in `ErrorData.outputLimitNote`, the error text byte-identical; "Move the line into a new field")* *(2026-11-24, Phase 1b: the PLAN's "`TestPromptQuotaData` unchanged" is annotated, not erased. Its four prompts run capped calls, so a quota or rate failure's data carries the note, which the acpext frames have not. Ruled "Expect frame plus note (Recommended)": the test's expected data is each frame decoded, with the expected `OutputLimitNote` set, then re-encoded, so every other member is still compared byte for byte; the frames stay as they are)* | D8 (d) |
 | L16 | A Messages route's budget raise | out of scope | the SDK's wire (F9); only when D2 sends at most 4,096 | |
 | L17 | A summary and a turn prefix | decided | each request `llm.FitOutput` over its own estimate; the shares go | D6 |
 | L18 | A summary, `C` unknown | decided | as L5 | Q2; D6 |
@@ -377,6 +379,7 @@ Out of scope: **V10** probing (the ruling's option 3), a later record.
 | L42 *(2026-11-24)* | acpext's contract for D8 (d)'s line | decided | `ErrorData.OutputLimitNote`, `outputLimitNote`, a string, `omitzero`, in its sorted place; documented in `types.go` and `doc.go`; an example frame of its own; the existing frames unchanged; a client that does not know it ignores it | "Move the line into a new field"; the amendment below |
 | L43 *(2026-11-24)* | gobble's use of the member, after acpext's next minor tag | decided | a capped call's credit or rate failure carries the line in `outputLimitNote`, the error text byte-identical; the terminal client shows it on the line after the error, as it shows the limit's line | "Move the line into a new field"; the amendment below |
 | L44 *(2026-11-24)* | A later call of a turn in which a refusal stated M (L39): a retry after an offline wait, an empty reply or an overflow's compaction, or the next call after a tool round | decided | its cap computed again (L11), then held to at most M, basis `refusal` when held; a smaller stated M' lowers it again | "Keep the stated value (Recommended)"; D8 (a) as amended |
+| L45 *(2026-11-24)* | Print mode (`-p`), a capped call's credit or rate refusal | decided | the JSON result's `errorData` carries `outputLimitNote` (L43's member, as the prompt error gave it); the text output is unchanged: no note line | "Test the JSON note, text as is (Recommended)"; the amendment below |
 | V1 | `v1.33.0`: the facts a call reads | decided | `CachedLimits`' `StreamedOutput` and `Window` (else `Input`), with the source | V1 |
 | V2 | `v1.33.0`: a limit on an optional wire (Together, OpenCode Go's chat route) | decided *(2026-11-24: Q4)* | every turn and summary names D2's value, basis `request` | Q4 "Always, gobble's policy (Recommended)"; V2 |
 | V3 | `v1.33.0`: fit and ceiling where gobble names a limit | decided | D2, D3 with V1's facts | V3 |
@@ -391,7 +394,8 @@ Out of scope: **V10** probing (the ruling's option 3), a later record.
 Counts: 44 decided, 6 out of scope (three left by name to the adoption amendments), 1 open; 51 rows. *(2026-11-24,
 after Q4's answer: 45 decided, 6 out of scope, 0 open; 51 rows.)* *(2026-11-24, after "Move the line into a new field":
 47 decided, 6 out of scope, 0 open; 53 rows.)* *(2026-11-24, after "Keep the stated value (Recommended)": 48 decided,
-6 out of scope, 0 open; 54 rows.)*
+6 out of scope, 0 open; 54 rows.)* *(2026-11-24, after "Test the JSON note, text as is (Recommended)": 49 decided, 6 out of
+scope, 0 open; 55 rows.)*
 
 ## Every number this record uses
 
@@ -483,6 +487,12 @@ contract's example frames. The owner's ruling, relayed by the coordinator: **"Mo
 * **The terminal client** shows the member on the line after the error, as it shows the limit's line (`internal/cli/limit.go`),
   once gobble's pin carries it (L43).
 * **D13** gains `acpext.ErrorData.OutputLimitNote`; L15 is amended, and L42 and L43 added.
+* **Print mode (2026-11-24, Phase 1b; L45).** Print mode's JSON result already writes the failed turn's data as
+  `errorData` (`internal/cli/print.go`), so the member reaches it with no new code; its text output prints no limit line
+  today and prints no note. Ruled "Test the JSON note, text as is (Recommended)": L45 pins the JSON and the unchanged text.
+* **`TestPromptQuotaData` (2026-11-24, Phase 1b).** The test's four prompts run on a model the catalog does not know, so each
+  call is capped (16,384, assumed) and a quota or rate frame's data carries the note. Ruled "Expect frame plus note
+  (Recommended)": see L15.
 
 ### What could not be established offline
 

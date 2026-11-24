@@ -91,12 +91,6 @@ func readFrame(t *testing.T, name string) []byte {
 	return b
 }
 
-// frameData is an acpext frame's error data in its canonical encoding.
-func frameData(t *testing.T, name string) string {
-	t.Helper()
-	return encodeData(t, strictData(t, name, readFrame(t, name)))
-}
-
 // canonicalNotice is b, a _gobble/retry notice, decoded refusing a member
 // it does not name and encoded as gobble sends it, its session id id when
 // id is not empty.
@@ -202,22 +196,36 @@ func TestErrorData(t *testing.T) {
 
 // A prompt failing on each of 0049-MADR's limits answers -32603 whose data
 // is, byte for byte, the acpext frame of that failure (Confirmation 2, 4).
+//
+// Each prompt runs a capped call (m1's 16,384 is assumed, 0071-MADR L5), so
+// the data of a quota or rate failure is its frame plus the outputLimitNote
+// the call earns, and every other member is still compared byte for byte; the
+// frame of a plain 503 gains none (0071-MADR L15, "Expect frame plus note
+// (Recommended)").
 func TestPromptQuotaData(t *testing.T) {
+	const note = "gobble asked for at most 16,384 output tokens (assumed); some services hold credit or rate against that number; " +
+		"set maxTokens for m1 under modelOverrides in models.json to ask for less"
 	for _, c := range []struct {
 		frame, provider string
 		err             error
+		note            string // "" for no member
 	}{
-		{"prompt-quota.error.json", "opencode-zen", quotaErr()},
-		{"prompt-rate-over-cap.error.json", "openai", overCapErr()},
-		{"prompt-after-retries.error.json", "claude", afterRetriesErr()},
-		{"prompt-weekly.error.json", "openai", weeklyErr()},
+		{"prompt-quota.error.json", "opencode-zen", quotaErr(), note},
+		{"prompt-rate-over-cap.error.json", "openai", overCapErr(), note},
+		{"prompt-after-retries.error.json", "claude", afterRetriesErr(), ""},
+		{"prompt-weekly.error.json", "openai", weeklyErr(), note},
 	} {
 		t.Run(c.frame, func(t *testing.T) {
+			want := strictData(t, c.frame, readFrame(t, c.frame))
+			if want.OutputLimitNote != "" {
+				t.Fatalf("frame %s carries a note; the frames stay as acpext has them", c.frame)
+			}
+			want.OutputLimitNote = c.note
 			conn := limitAgent(t, c.provider, llmtest.NewScript(llmtest.Turn{Err: c.err}))
 			id := newSession(t, conn, t.TempDir(), nil).SessionId
 			_, err := prompt(t, conn, id, "go")
-			if code, got := wireData(t, err); code != -32603 || got != frameData(t, c.frame) {
-				t.Fatalf("prompt error %d %s, want -32603 %s", code, got, frameData(t, c.frame))
+			if code, got := wireData(t, err); code != -32603 || got != encodeData(t, want) {
+				t.Fatalf("prompt error %d %s, want -32603 %s", code, got, encodeData(t, want))
 			}
 		})
 	}

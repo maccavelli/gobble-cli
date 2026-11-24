@@ -270,7 +270,15 @@ const workspaceAdvice = "claude needs an Anthropic workspace for this key: run /
 // auth_required for a missing or refused credential, otherwise an internal
 // error, each carrying errorData (0049-MADR D7).
 func promptError(provider string, err error) error {
-	d := errData(errorData(provider, err))
+	return promptErrorNoted(provider, err, "")
+}
+
+// promptErrorNoted is promptError with the error data's outputLimitNote set
+// to note when it is not empty (0071-MADR D8 (d), creditNote).
+func promptErrorNoted(provider string, err error, note string) error {
+	ed := errorData(provider, err)
+	ed.OutputLimitNote = note
+	d := errData(ed)
 	if errors.Is(err, llm.ErrAuth) && !errors.Is(err, llm.ErrWorkspace) {
 		return acp.NewAuthRequired(d)
 	}

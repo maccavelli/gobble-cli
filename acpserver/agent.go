@@ -833,7 +833,7 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 			// (0005-PLAN F5-2 decision 3; 0037-MADR D15).
 			a.replayFile(s)
 			a.markFailure(a.provOf(s), err)
-			return acp.PromptResponse{}, promptError(a.provOf(s), limitLine(err, limits.last, chosen))
+			return acp.PromptResponse{}, promptErrorNoted(a.provOf(s), limitLine(err, limits.last, chosen), creditNote(err, limits.last, chosen))
 		}
 		w.event(ev)
 		if w.err != nil {
