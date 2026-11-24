@@ -17,6 +17,8 @@ Associated MADR: [0065-MADR-output-limit-ownership-between-gobble-and-the-sdk.md
 
 *(2026-11-22, fourth note: Q1 is decided (its option (2): no ceiling from gobble), so Phase 3's Q1 rows are `TestCompaction_NoCeiling_0065` only; Q3's rows and Phase 4's `TestProvider_LogsSentLimit_0065` and `TestAgent_KeepsLearnedCaps_0065` move to [0066-PLAN-set-each-session-model-up-from-discovered-limits.md](0066-PLAN-set-each-session-model-up-from-discovered-limits.md); R42's, R44's and R45's tests are replaced by that PLAN's `TestProvider_SnapshotNotHanded_0066`; Phase 1 hands the provider models.json only, through the wrapper, and D14's step is not built (revised after record review 3). Phase 2's expected values follow go-llmprovider-sdk 0089-MADR's OQ1. See the MADR's note of that date.)*
 
+*(2026-11-24, note from [0071-MADR-send-each-turn-the-models-output-cap-and-own-the-limit-policy.md](0071-MADR-send-each-turn-the-models-output-cap-and-own-the-limit-policy.md) D12: Phase 1's steps that set the turn and the summary to 0 are not built while 0071 holds; 0071-PLAN builds the interim on `v1.32.0`, and its Phase 2 follows this PLAN's Phase 2 bump.)*
+
 ## Goal
 
 After this PLAN, no call gobble makes names an output limit of its own: the

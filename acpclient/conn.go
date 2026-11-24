@@ -269,6 +269,18 @@ type Result struct {
 	// in, from the response's _meta.gobble.switchTo: gobble's /fork and
 	// /clone (0002-PLAN Phase 6).
 	SwitchTo string
+	// OutputLimit is the output limit the turn's last model call asked for,
+	// from the response's _meta.gobble.outputLimit; nil when the agent gives
+	// none (0071-MADR D10).
+	OutputLimit *OutputLimit
+}
+
+// OutputLimit is a model call's output limit, in tokens, and why the agent
+// asked for it: gobble's basis, such as stated, ceiling or window
+// (0071-MADR D10).
+type OutputLimit struct {
+	Tokens int    `json:"tokens"`
+	Basis  string `json:"basis"`
 }
 
 // toInt is an ACP count as an int: a count past an int's range is its
@@ -338,6 +350,9 @@ func (s *Session) Prompt(ctx context.Context, p Prompt) (Result, error) {
 	r := Result{StopReason: string(resp.StopReason)}
 	if g, ok := jsonx.Member[map[string]any](resp.Meta, metaGobble); ok {
 		r.SwitchTo, _ = jsonx.Member[string](g, "switchTo") //nolint:errcheck // absent is none
+		if l, ok := jsonx.Member[OutputLimit](g, "outputLimit"); ok && l.Tokens > 0 {
+			r.OutputLimit = &l
+		}
 	}
 	//lint:ignore SA1019 acp-go-sdk2 keeps this unstable-schema name under v1 (0035-MADR D6)
 	if u := resp.Usage; u != nil { //nolint:staticcheck // as the lint:ignore above

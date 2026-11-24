@@ -108,7 +108,11 @@ Exit: citations re-grounded; the red list equal to the expectation; nothing but 
 | L10 | `TestCapPerCall_0071` (a tool round: two requests, each with its value) | `agent/outputlimit_test.go` | new | computed once per turn |
 | L11 | `TestOverflowResendRecomputesCap_0071` | `agent/outputlimit_test.go` | new | the resend reuses the first value |
 | L12, L13, L14 | `TestLimitRefusalLine_0071` (`names_field`, `other_invalid`, `fills_context`, `refused_after_resend`) | `acpserver/outputlimit_test.go` | no line | the line omitted; then, apart, on every invalid request |
-| L15 | `TestCreditRefusalLine_0071` (`quota_402`, `rate_429`, `kilo_503`, `uncapped_call`) | `acpserver/outputlimit_test.go` | no line | the line omitted; then, apart, on an uncapped call |
+| ~~L15~~ | ~~`TestCreditRefusalLine_0071` (`quota_402`, `rate_429`, `kilo_503`, `uncapped_call`)~~ *(2026-11-24: replaced by the two rows below, "Move the line into a new field")* | `acpserver/outputlimit_test.go` | no line | the line omitted; then, apart, on an uncapped call |
+| L15 (pass 2, before acpext's tag) | `TestCreditRefusalLine_0071` (`quota_402`, `rate_429`, `kilo_503`, `other_503`: the error text byte-identical, no line); `TestPromptQuotaData` unchanged | `acpserver/outputlimit_test.go`; `acpserver/errordata_test.go` | a guard | the line appended to the error text, as pass 1 built it |
+| L15, L43 (Phase 1b, after `acpext/v0.6.0`) | `TestCreditRefusalLine_0071` gains `outputLimitNote` on each capped failure and none on `uncapped_call` and `other_503`; the terminal client's line after the error | `acpserver`; `internal/cli/limit_test.go` | new | the member not set; then, apart, on an uncapped call; the CLI's line omitted |
+| L42 | `TestRoundTrip`'s new frame `prompt-output-limit-note.error.json`; the sorted-members test; `ExampleErrorData_outputLimitNote` | `acpext/roundtrip_test.go`, `acpext/types_test.go`, `acpext/example_test.go` | new | the tag misspelled; then `omitzero` dropped, which changes every existing frame |
+| L44 *(2026-11-24)* | `TestStatedCapHeldForTurn_0071` (`overflow_resend`: a refusal states 16,000, an overflow compacts, the resend asks 16,000, not the cap computed again; `next_call`: the call after a tool round asks 16,000; `computed_below`: a computed cap below M is sent as computed) | `agent/outputlimit_test.go` | the later call asks the full cap again | the hold dropped |
 | L17 | `TestSummaryCaps`, its cases rewritten: no window, `C` 100,000 → 64,000 and 64,000 `ceiling`; `C` 6,000 → 6,000 and 6,000; a 20,000 window → `R` each | `compaction/auto_test.go:107-142` | the shares (8,000 and 5,000; 6,000 and 5,000) | the 80 % share kept |
 | L17 (ladder) | `TestSummaryCapPerLadderStep_0071` (an overflow drops tool results; the next request's cap is recomputed over its smaller prompt) | `compaction` | new | the first step's cap reused |
 | L19 | `TestAutoCompactPreviousModel` (unchanged: 4,096 and 2,048) | `acpserver/autocompact_test.go:552-580` | a guard | the session's model's cap for the previous model |
@@ -194,3 +198,146 @@ Build: the per-prompt functions read `catalog.CachedLimits`; D8 (a)'s cap forms 
 ## Execution record
 
 *(2026-11-24, execution entry.)* The owner approved this PLAN and Phase 1's start, 2026-11-24: "Approve; start Phase 1 now (Recommended)". The 0070 and 0071 pairs are placed in the records; 0070-PLAN stays `proposed` (not yet approved). Phase 1 is built next, each step its own commit, staged by the coordinator after a clean-clone gate and a code review. Nothing has run yet.
+
+### Phase 0, pass 1 (2026-11-24, at `bf816c1`)
+
+* **Step 1, re-ground.** Every gobble `path:line` the MADR and this PLAN cite reads as cited at `bf816c1` (F1 to F18, D3, D4, D12's `0004-MADR-go-module-architecture.md:745`, `internal/config/keys.go:107`, `docs/guides/models-json.md:70-75`, the PLAN's test files and lines). One moved path: the go-llmprovider-sdk paths written `internal/wire/…` (F13, F17, the Rules' "Seams") are under the module's `llmprovider/` directory, `llmprovider/internal/wire/limit_refusal.go` and `llmprovider/window_0088_record_test.go` at `33e6f09`; their lines are as cited.
+* **Step 2, the red list.** A stub of D2, D3 and D6 on a scratch clone (`llm.FitOutput`, the shared estimator in the trigger and the turn, each summary request's cap by `FitOutput`), with D4's `Compact` parameter and `render.Stats`' limit argument. `go test -count=1 ./llm/... ./agent ./compaction ./acpserver ./acpclient/... ./internal/cli/...` through `run-heavy` on this Mac: every package `ok` but `compaction`, whose one red is `TestSummaryCaps` (L17), on its assertion: `auto_test.go:139: the reserve's shares: caps [64000 64000], want 8000 then 5000`, `the model's limit: caps [6000 6000], want 6000 then 5000`, `unknown limit: caps [16384 16384], want 0 then 0`. Compile-only changes, no assertion touched: `agent/compact_test.go`'s fake `Compact` (D4) and `TestStats`' call (L27), as expected; and one not listed, below. Green as expected: every `acpserver/autocompact_test.go` test, `TestTitleFirstPrompt`, `llm/provider/model_test.go:62`.
+* **Deviation (2026-11-24), compile-only.** `compaction/summary_test.go`'s `TestSummaryLadder` calls `summariseFitting` three times (`:184`, `:218`, `:225`) with the cap argument D6 removes (`replyCap` and the shares go; each step computes its own cap, L17's ladder plant). Resolution taken: the three call sites drop the argument; no assertion changes. It is the same kind as the two compile-only changes this phase lists.
+* **Step 3, docs.** `docs/guides/models-json.md:4`, `:72`, `:74`; `docs/architecture.md:110` (`llm`), `:120` (`compaction`, "a summary request capped at 80 percent of `reserveTokens`"), `:128` (`acpserver`); `internal/config/keys.go:108`'s `reserveTokens` doc ("A summary's reply is capped at 80 percent of it"); `docs/README.md:159-160`.
+
+Exit: met; nothing but scratch changed.
+
+### Phase 1, pass 1 (2026-11-24, from `bf816c1`): stopped
+
+Built in the tree, unstaged: steps 1 to 5 (`llm/limit.go`, `llm/limitrefusal.go`, `Model.MaxTokensFrom`, `Facts.MaxTokensStated`, `defaultMaxTokens` from `llm.AssumedMaxTokens`; `compaction.EstimateContext`, `Model.Window` and `MaxTokensFrom`, each request's cap and D8 (a) in the ladder; `agent.Config.OutputLimit`, `Compact`'s tools, D8 (a)'s resend; `acpserver/outputlimit.go`, the shared estimator, D8 (c) and (d)'s lines, `/context`, `_meta.gobble.outputLimit`; `acpclient.Result.OutputLimit`, `--stats`), the `reserveTokens` doc and the schema it generates, and the tests of the Phase 1 table, each green. `acptest.Turn` gains `Meta`, a test fixture's scripted `_meta`, for L27 and L28 (a seam, not product API).
+
+**Stop.** The module's `go test -count=1 ./...` through `run-heavy` on this Mac turns three existing `acpserver` tests red, none named by a row; each red is a decided row's output, and none is pre-existing (green at `bf816c1`, Phase 0's run):
+
+* `TestPromptQuotaData` (`errordata_test.go:216-220`), three of its four frames: the prompt error's `error` now ends with D8 (d)'s line, "…; gobble asked for at most 16,384 output tokens (assumed); some services hold credit or rate against that number; set maxTokens for m1 under modelOverrides in models.json to ask for less", while the test compares byte for byte with `acpext/testdata/prompt-quota.error.json`, `prompt-rate-over-cap.error.json` and `prompt-weekly.error.json`, the acpext contract's frames (L15).
+* `TestSession` (`agent_test.go:128`): `testdata/session.golden`'s record 11, the prompt response, now carries `"_meta":{"gobble":{"outputLimit":{"basis":"assumed","tokens":16384}}}` (L27).
+* `TestCancelClearsQueue` (`extensions_test.go:330`): the cancelled response's `_meta` is now `{"gobble":{"cleared":{…},"outputLimit":{"basis":"assumed","tokens":16384}}}`, step 4's merge (L27).
+
+Not yet done in this pass: the red-at-base runs, the plants, the records and docs steps 6 and 7, the live calls (step 8) and the gates. The resolution goes to the owner.
+
+### Deviation (2026-11-24): the owner's ruling on the stop, "Move the line into a new field"
+
+Relayed by the coordinator, quoted exactly: **"Move the line into a new field".** D8 (d)'s line goes in a new
+`acpext.ErrorData` member, not the error text, which stays byte-identical, so `TestPromptQuotaData` and acpext's example
+frames stay as they are. The MADR carries the amendment (D8 (d), D13, L15, new L42 and L43, "Amendment of 2026-11-24").
+
+* **Scope added to Phase 1:** the acpext module, `acpext/types.go` (`OutputLimitNote`, `outputLimitNote`, `omitzero`, in its
+  sorted place), `acpext/doc.go`, `acpext/testdata/prompt-output-limit-note.error.json` (new), `acpext/roundtrip_test.go`,
+  `acpext/example_test.go` (L42).
+* **Split, as 0049-PLAN's P5a and P5b were:** gobble pins `acpext v0.5.0` with no `replace`, so it cannot set the member
+  until acpext is tagged. Phase 1 now ends with D8 (d) adding nothing (L15's pass-2 row: the error text byte-identical).
+  **Phase 1b**, after the owner's word: (1) the owner pushes `acpext/v0.6.0` (an annotated tag on the commit that carries
+  the member; the agent pushes no tag); (2) gobble's `go.mod` moves to `acpext v0.6.0`; (3) `acpserver` sets
+  `outputLimitNote` on a capped call's quota, rate, credit or Kilo 503 failure, and `internal/cli` shows it on the line
+  after the error; (4) `TestCreditRefusalLine_0071` gains the member's assertions and `uncapped_call`, and
+  `internal/cli/limit_test.go` the line's; each with its plant (L15 and L43 rows of the table); (5) the gates of Phase 1.
+* **Expected changes named here** (each the decided output of L27 and step 4, nothing more): `TestSession`'s
+  `acpserver/testdata/session.golden` record 11 (line 12) carries `"_meta":{"gobble":{"outputLimit":{"basis":"assumed","tokens":16384}}}`;
+  `TestCancelClearsQueue`'s expected `_meta` is `{"gobble":{"cleared":{"followUp":["f"],"steering":["s"]},"outputLimit":{"basis":"assumed","tokens":16384}}}`.
+  Each test's other assertions are unchanged.
+
+### Phase 1, pass 2 (2026-11-24)
+
+The D8 (d) line is out of `acpserver/outputlimit.go` (`creditOrRate` gone); D8 (c)'s stays. `go test -count=1 ./acpserver/` is
+`ok`, `TestPromptQuotaData`, `TestSession` and `TestCancelClearsQueue` among it; `go test ./...` in `acpext` is `ok`.
+
+* **Reds at the base.** The tests of existing behaviour, copied onto a scratch clone of `bf816c1` with the regions marked
+  `// 0071 new names` left out (`<scratch>/b0071/base_copy.py`), fail there on their assertions, never on a build:
+  `TestTurnSendsCap_0071` (each case `outputlimit_test.go:223: the turn asked for 0, want 64000`, and the `_meta` line),
+  `TestTurnCapHeldToWindow_0071` (`the turn asked for 0 … want the room 44379`), `TestTurnCapSameAtEveryLevel_0071`,
+  `TestOneEstimate_0071` (`1 summaries: the trigger counted the system prompt twice`; `0 summaries, want 1: the trigger did not
+  count the tools`), `TestLimitRefusalLine_0071` (three of four; `other_invalid` a guard), `TestCapAfterModelSwitch_0071`,
+  `TestCapConcurrentSessions_0071`, `TestContextShowsOutputLimit_0071`, `TestPromptResponseOutputLimit_0071`,
+  `TestNoCallNoOutputLimit_0071`, `TestCapWhenPrepareRefuses_0071`, `TestCapSmallReserve_0071`, `TestTitleCapUnchanged_0071`
+  (its turn's line; the title's 128 a guard) and `TestSummaryCaps` (`caps [8000 5000], want 64000 then 64000`). Guards green at
+  the base: `TestCreditRefusalLine_0071` (pass 2's row), `TestAutoCompactPreviousModel`, `TestModelInfoModelsJSON`. Every other
+  test names a name this phase adds; its red is its plant's.
+* **Plants.** 47, each one production change on a scratch copy (`<scratch>/b0071/plant.py`, `plants_0071.py`), each caught by
+  its own row's test; the failing lines are in `<scratch>/b0071/logs/plants*.log`. The harness was seen to report a plant not
+  caught (P08b and P35 at first: see below). Rows L1 to L41's plants as the table names them, and L42's two, except:
+  * **L36's plant** as written ("the ceiling raised to the window") cannot turn its test red: the case's 4,096 is below both
+    the ceiling and the 1,000,000 window. Substituted: a listed cap below the ceiling raised to it (P32), caught,
+    `outputlimit_test.go:223: the turn asked for 64000, want 32000`.
+  * **L6's `AssumedMaxTokens` 0** was not caught at first by `TestModelsJSONDefaultIsAssumed_0071`, which compared with the
+    constant itself; its expected value is now the literal 16,384, and the plant is caught (`cap 0 from "assumed", want 16384`).
+  * **L39's Anthropic cap form**, first planted as "output token", still matched by prefix; replanted as "allowd", caught.
+  * **L31, L32:** a dated note's link mistyped on a scratch copy fails `scripts/check_records.py --check-all`: "broken
+    relative link: …0065-MADR-…md:22: 0071-MADR-send-each-turn-the-model-output-…".
+* **Lint, same pass.** `make pre-add-check` found `gocognit` 51 on `(*turn).next` and an `errorlint` comparison in a test; fixed
+  without a suppression (`limitRefused` returns the overflow, so `next`'s case reads as before), and the agent plants re-run,
+  caught.
+* **L34, the six live calls** (`go test -tags live -run TestLive_GLMCapAccepted_0071 ./llm/provider/`, this Mac, keys from the
+  environment by name):
+
+  | Provider | Model | Sent | Status | Finish | Tokens in / out / reasoning |
+  | :--- | :--- | ---: | ---: | :--- | :--- |
+  | kilo | `z-ai/glm-5.3` | 64,000 (ceiling) | 200 | end_turn | 20 / 39 / 42 |
+  | kilo | `z-ai/glm-5.3-flash` | 64,000 (ceiling) | 200 | end_turn | 20 / 96 / 104 |
+  | opencode-go | `glm-5.3` | 64,000 (ceiling) | 200 | end_turn | 20 / 63 / 60 |
+  | opencode-go | `glm-5.3-flash` | 64,000 (ceiling) | 200 | end_turn | 20 / 3 / 0 |
+  | together | `zai-org/GLM-5.3` | 64,000 (ceiling) | 200 | end_turn | 20 / 40 / 36 |
+  | together | `zai-org/GLM-5.3-Flash` | 64,000 (ceiling) | 200 | end_turn | 20 / 49 / 46 |
+
+  No refusal, 402 or 429 at the cap. *(2026-11-24, after the review: the Status column is inferred from each call's
+  success, not read; the test then logged "status 200" without a status to read, and now logs "ok". The calls were not
+  re-run.)*
+* **Gates.** `go test -count=1 ./...` through `run-heavy`, this Mac: exit 0. `make pre-add-check FILES=…` (the 36 changed `.go`
+  files), `run-heavy`, this Mac: exit 0. `make preflight`, `run-heavy`, this Mac: "preflight passed", exit 0. `make preflight
+  race` through `run-on-host --need linux --race`, target the Linux machine (linux/amd64, not WSL), "preflight passed", every
+  module `ok` under `-race`, remote status 0. `make preflight` through `run-on-host --need windows`, target the Windows laptop
+  (windows/amd64), "preflight passed", remote status 0. No log has a fallback line. `make check-records`, `make markdownlint`:
+  exit 0. `denyscan.py --changed`: 0 hits in 51 files. Observed, not built: the Windows preflight's gofmt step counted 305
+  files where this Mac's and the Linux machine's counted 752; a follow-up for the host tooling, outside this record's rows.
+* **Docs and records** (steps 6 and 7): `docs/guides/models-json.md` (`maxTokens`, "The output limit"); `docs/architecture.md`
+  (acpext's member, `llm`, `agent`, `llm/catalog`, `compaction`, `acpserver`, `acpclient`); `internal/config/keys.go`'s
+  `reserveTokens` doc and its schema; `docs/README.md`'s 0071 rows; D12's dated notes in 0065 (MADR, PLAN), 0066 (MADR,
+  PLAN), 0070 (MADR, PLAN) and 0004 (`:746`). L29 is 0070's: 0070 is built second.
+* **Other notes.** `TestContextShowsOutputLimit_0071` is in `acpserver/outputlimit_test.go`, beside its harness, not
+  `commands_test.go`. `acptest.Turn` gains `Meta`, a test fixture's scripted `_meta`, for L27 and L28.
+
+Exit of Phase 1 (pass 2): every row of the phase tested except L15's Phase 1b row and L43, which wait on `acpext/v0.6.0`;
+plants caught; gates recorded. An independent review is the coordinator's. Phase 1b waits on the owner's tag.
+
+### Deviation (2026-11-24): the review's notes, pass 2 continuing
+
+The independent review passed Phase 1 with notes, relayed by the coordinator; they are closed in pass 2 (no third pass).
+
+* **The owner's ruling, quoted exactly: "Keep the stated value (Recommended)".** The case: after an L39 resend at a stated
+  value M, a later call of the same turn, an offline wait's, an empty reply's or an overflow compaction's, asked the full cap
+  again (`agent/agent.go:739`, `t.limit, t.resendAt = req.MaxTokens, 0`), and a second refusal ended at `case at > 0:`
+  (`:538`) a turn that would have succeeded. The MADR's D8 (a) is amended and row L44 added: every later call of the turn
+  asks for at most M, its cap computed again (L11) and then held to M. Red first: `TestStatedCapHeldForTurn_0071` fails on
+  the tree before the fix; then the hold in `turn.call`; then its plant.
+* **Docs.** `docs/architecture.md`'s `llm` row and `docs/guides/models-json.md` said the limit is never below 1,024; the code
+  sends `min(C', 1,024)` with less room (`llm/limit.go:94`), so a cap below 1,024 is sent as it is, and a refusal's resend may
+  be any stated value of at least 1 (`agent/agent.go:621`). Both reworded.
+* **L34's status column.** `llm/provider/live_glm_cap_test.go` logged "status 200" without reading a status: the SDK
+  `v1.32.0` path gobble streams through gives a successful stream no HTTP status: only a failure carries one, an
+  `llm.APIError`'s `Status` (`llm/errors.go:53-66`) or a retried failure's `llm.ProviderRetry.Status` (`llm/event.go:17-26`). The test now logs "ok"; the table's 200s are inferred from each call's success, see the note
+  under it. The calls are not re-run.
+* **Follow-ups, recorded, not built** (outside the decided rows):
+  * Kilo's window form, "Your request contains approximately T tokens": gobble reads T as the request's total, input plus
+    the limit sent (`llm/limitrefusal.go:59`), as go-llmprovider-sdk does (its 0088-MADR ST92, decided under its OQ14). The
+    only source is Kilo's documentation (its C97, `kilocode:packages/kilo-docs/pages/gateway/api-reference.md:392`); no
+    recorded Kilo reply shows whether T includes the limit. A recorded reply would settle it.
+  * `llm.ReadLimitRefusal` reads the seven forms from any error's text. It does not take the SDK's V1 (a text matching a cap
+    form and a window form rejected), V2 (a cap form's N equal to the limit sent), the per-route form sets, or the
+    invalid-request kind check (go-llmprovider-sdk `llmprovider/internal/wire/limit_refusal.go` at `33e6f09`). The MADR's
+    D8 (a) decides "reads the forms of F17 from the error's message" and nothing of those checks: a follow-up for a later
+    amendment, or for Phase 2, where the SDK's own reader is used.
+  * D8 (a) resends at any stated room or cap of at least 1 below the limit sent, as L39 decides: no change; noted only.
+* **Result, pass 2 continued.** Red before the fix, on its assertion: `outputlimit_test.go:182: caps [60002 16000 60002],
+  want [60002 16000 16000]` (`overflow_resend` and `next_call`; `computed_below` a guard). The fix: `turn.stated`, set at an
+  L39 resend, and `turn.call` holds a larger computed limit to it, asked of `Config.OutputLimit` as the refusal's. Green
+  after. Plant P46 (the hold's condition never true) caught with the same line; P12, P14, P15 and P42 re-run and caught.
+  `make pre-add-check` on the three changed `.go` files through `run-heavy`: exit 0; `go vet -tags live ./llm/provider/`:
+  exit 0; `make check-records`, `make markdownlint`: exit 0; `denyscan.py --changed`: 0 hits; `go test -count=1 ./...`
+  through `run-heavy`, this Mac: exit 0.
+* **Coverage closed (2026-11-24, the delta check):** L44's test gains `offline_wait` and `empty_reply`, the two other retries
+  the ruling's case names, each in a `synctest` bubble; green. P46 fails both, with `overflow_resend` and `next_call`:
+  `outputlimit_test.go:194: caps [60002 16000 60002], want [60002 16000 16000]` in each of the four.

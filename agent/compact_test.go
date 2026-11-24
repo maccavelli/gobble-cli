@@ -2,6 +2,7 @@ package agent_test
 
 import (
 	"context"
+	"encoding/json/jsontext"
 	"errors"
 	"slices"
 	"testing"
@@ -26,7 +27,7 @@ type compactAnswer struct {
 	during    func() // run before answering
 }
 
-func (c *compactor) compact(_ context.Context, overflow bool) (*agent.Compacted, error) {
+func (c *compactor) compact(_ context.Context, overflow bool, _ jsontext.Value) (*agent.Compacted, error) {
 	n := len(c.asks)
 	c.asks = append(c.asks, overflow)
 	if n >= len(c.answers) {

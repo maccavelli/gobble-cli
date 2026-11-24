@@ -2,6 +2,7 @@ package acpserver
 
 import (
 	"context"
+	"encoding/json/jsontext"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -82,7 +83,7 @@ type autoCompaction struct {
 // over a threshold, or after the call overflowed. A threshold compaction
 // that Prepare refuses, or that fails, lets the call go ahead; an overflow
 // that cannot be compacted ends the turn.
-func (c *autoCompaction) compact(ctx context.Context, overflow bool) (*agent.Compacted, error) {
+func (c *autoCompaction) compact(ctx context.Context, overflow bool, tools jsontext.Value) (*agent.Compacted, error) {
 	a, s := c.a, c.s
 	a.mu.Lock()
 	off, pause, why, settings := s.autoCompactOff, s.pause, s.pauseErr, s.compaction
@@ -101,7 +102,7 @@ func (c *autoCompaction) compact(ctx context.Context, overflow bool) (*agent.Com
 			return nil, nil
 		}
 		chosen, _ := a.choices(s)
-		used := compaction.EstimateText(a.systemText(s)) + compaction.EstimateEntries(s.tree.Path())
+		used := a.contextEstimate(s, tools) // the output limit's estimate too (0071-MADR D3)
 		if !compaction.Over(used, a.modelOf(c.providerID, chosen).ContextWindow, settings) {
 			return nil, nil
 		}
@@ -170,15 +171,15 @@ func (c *autoCompaction) compact(ctx context.Context, overflow bool) (*agent.Com
 // (0005-PLAN F5-2 decision 12): the model that wrote the context's last
 // assistant message, when it is another of the session's provider's that
 // the provider still offers, since it can read the context the session's
-// model may not; otherwise the session's model.
+// model may not; otherwise the session's model. Its output cap and window
+// are that model's (0071-MADR D6, L19).
 func (a *Agent) summaryModel(s *liveSession, p llm.Provider, providerID string) compaction.Model {
 	chosen, think := a.choices(s)
-	m := compaction.Model{Provider: p, Model: chosen, Thinking: think, MaxTokens: a.modelOf(providerID, chosen).MaxTokens}
 	prev, provider := lastAssistantModel(s.tree.Path())
 	if prev != "" && prev != chosen && provider == providerID && slices.Contains(a.modelsOf(providerID), prev) {
-		m.Model, m.Thinking, m.MaxTokens = prev, catalog.Clamp(a.levelsOf(providerID, prev), think), a.modelOf(providerID, prev).MaxTokens
+		return a.compactionModel(p, providerID, prev, catalog.Clamp(a.levelsOf(providerID, prev), think))
 	}
-	return m
+	return a.compactionModel(p, providerID, chosen, think)
 }
 
 // lastAssistantModel is the model and provider of path's last assistant

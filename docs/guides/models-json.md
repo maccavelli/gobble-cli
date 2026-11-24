@@ -73,11 +73,42 @@ key that is not one of those providers, `api` may be left out or be `openai-comp
 - **`modelOverrides`** changes only the fields it gives, over what gobble knows of the model:
   `name`, `reasoning`, `thinkingLevelMap`, `input`, `cost`, `contextWindow`, `maxTokens` and
   `headers`. A cost's rates are each optional, and `tiers`, when given, replace the model's.
+- **`maxTokens`**, in a `models` entry or an override, is the output limit gobble asks for on every
+  turn and every compaction summary for that model, reasoning included. See
+  [The output limit](#the-output-limit).
 - **`thinkingLevelMap`** turns thinking levels on or off: a string turns a level on, and `null`
   turns it off. gobble uses the level's own name with the provider; the string is not used.
 - **`apiKey`** is the provider's key when `auth.json` has none for it, ahead of the provider's
   variable ([credentials](credentials.md)). It takes the values below; a command runs each time the
   provider is built, and a value whose variables are unset counts as no key.
+
+## The output limit
+
+Every turn and every compaction summary names an output limit, reasoning included
+([0071-MADR](../decisions/0071-MADR-send-each-turn-the-models-output-cap-and-own-the-limit-policy.md)):
+
+- **The model's cap**, from gobble's catalog or the provider's listing, held to **64,000** tokens. A
+  model whose listed cap is larger, such as GLM-5.3's, asks for 64,000, so an answer longer than
+  that is cut. To lift the ceiling for one model, set its `maxTokens`: a value you set is sent as
+  you set it, with no ceiling.
+- **A model no source gives a cap for** asks for 16,384, shown as assumed; a `models` entry without
+  `maxTokens` takes the same 16,384.
+- **Each call is held to the room the window leaves:** the window, less gobble's estimate of the
+  context, less 4,096 tokens. With less room than 1,024, it asks for 1,024, or for the cap when the
+  cap is smaller, so a cap below 1,024 is sent as it is; with no room, it sends the cap, so the
+  service's refusal starts compaction. `compaction.reserveTokens` keeps that room free.
+- **A refusal that states the room or the cap**, in the forms gobble reads, is sent again once at
+  the value it states, whatever that is, from 1 up, before any compaction; every later call of that
+  turn asks for at most that value. A refusal of the limit gobble cannot mend ends the turn with a
+  line naming the limit asked and the `maxTokens` to set.
+
+To ask for less, for example where a gateway holds credit against the limit, set `maxTokens` lower:
+
+```jsonc
+{"providers": {"kilo": {"modelOverrides": {"z-ai/glm-5.3": {"maxTokens": 32000}}}}}
+```
+
+`/context` and `/session` show the last call's limit and why; `--stats` adds it as `out-limit`.
 
 ## Values
 

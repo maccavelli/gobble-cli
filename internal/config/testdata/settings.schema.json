@@ -147,7 +147,7 @@
         },
         "reserveTokens": {
           "type": "integer",
-          "description": "The room, in tokens, kept free in the model's window: the conversation is compacted once it is over the window less this. A summary's reply is capped at 80 percent of it.",
+          "description": "The room, in tokens, kept free in the model's window: the conversation is compacted once it is over the window less this. It also bounds the room a model call has for its reply: each turn and summary asks for the model's output limit, held to the room the window leaves.",
           "default": 16384,
           "minimum": 1
         },

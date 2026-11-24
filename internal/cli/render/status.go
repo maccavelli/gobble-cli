@@ -39,11 +39,15 @@ func StatusLine(elapsed time.Duration, used, size int64, cost *float64, s term.S
 
 // Stats is the --stats suffix of the status line: the time to the first
 // token, then tokens per second when both the output tokens and the time
-// spent generating them are known.
-func Stats(ttft time.Duration, outputTokens int64, gen time.Duration, g glyph.Set) string {
+// spent generating them are known, then the output limit the turn's last
+// call asked for, when the agent gave one (0071-MADR D10).
+func Stats(ttft time.Duration, outputTokens int64, gen time.Duration, outLimit int64, g glyph.Set) string {
 	s := "ttft " + ttft.Round(100*time.Millisecond).String()
 	if outputTokens > 0 && gen > 0 {
 		s += fmt.Sprintf(" %s %.0f tok/s", g.Bullet, float64(outputTokens)/gen.Seconds())
+	}
+	if outLimit > 0 {
+		s += " " + g.Bullet + " out-limit " + tokens(outLimit)
 	}
 	return s
 }

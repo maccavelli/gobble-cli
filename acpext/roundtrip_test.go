@@ -88,6 +88,10 @@ var frames = map[string]frame{
 	// A turn refused because a consent is not granted: kind not_permitted,
 	// and consent, the consent's id (0051-MADR D7).
 	"prompt-plan-consent.error.json": {"", of[acpext.ErrorData]()},
+	// A credit failure of a call that asked for an output limit: the limit
+	// asked for and how to ask for less, in outputLimitNote, written from its
+	// JSON tag (gobble-cli 0071-MADR D8 (d), L42).
+	"prompt-output-limit-note.error.json": {"", of[acpext.ErrorData]()},
 
 	// The value of _meta.gobble on an authenticate request (0051-MADR D4,
 	// D7), written from its JSON tags.
@@ -210,14 +214,15 @@ func TestCapabilitiesMetaIsRequests(t *testing.T) {
 func TestErrorDataSortedMembers(t *testing.T) {
 	retryable := false
 	b, err := jsonv2.Marshal(acpext.ErrorData{Attempts: 3, Code: "c", Command: "c",
-		Consent: "chatgpt_plan.background_use", Error: "e", HTTPStatus: 429, Kind: acpext.KindQuota, Limit: acpext.LimitFreeTier, Provider: "p", ProviderMessage: "m", Reason: "r",
+		Consent: "chatgpt_plan.background_use", Error: "e", HTTPStatus: 429, Kind: acpext.KindQuota, Limit: acpext.LimitFreeTier,
+		OutputLimitNote: "n", Provider: "p", ProviderMessage: "m", Reason: "r",
 		ResetAt: "2026-11-09T14:05:00Z", RetryAfterMs: 5601000, Retryable: &retryable, SessionID: "s",
 		WindowMinutes: 10080})
 	if err != nil {
 		t.Fatal(err)
 	}
 	const want = `{"attempts":3,"code":"c","command":"c","consent":"chatgpt_plan.background_use","error":"e","httpStatus":429,"kind":"quota","limit":"free_tier",` +
-		`"provider":"p","providerMessage":"m","reason":"r","resetAt":"2026-11-09T14:05:00Z","retryAfterMs":5601000,` +
+		`"outputLimitNote":"n","provider":"p","providerMessage":"m","reason":"r","resetAt":"2026-11-09T14:05:00Z","retryAfterMs":5601000,` +
 		`"retryable":false,"sessionId":"s","windowMinutes":10080}`
 	if string(b) != want {
 		t.Errorf("ErrorData encodes as %s, want %s", b, want)

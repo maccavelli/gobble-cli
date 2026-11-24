@@ -407,6 +407,10 @@ const (
 // never when the stored answer could not be read. WindowMinutes is the limit's window as the service stated it, in
 // whole minutes, whatever Limit is; it is absent when the service stated no
 // length, and is never taken from the wait (gobble-cli 0049-MADR Q9).
+// OutputLimitNote is set when a quota, rate or credit failure came from a
+// call that asked for an output limit, which some services hold credit or
+// rate against: the limit asked for, why, and how to ask for less; Error
+// does not repeat it (gobble-cli 0071-MADR D8 (d)).
 //
 // Its fields are in their JSON names' sorted order, which is the order
 // gobble writes them.
@@ -419,6 +423,7 @@ type ErrorData struct {
 	HTTPStatus      int        `json:"httpStatus,omitzero"`
 	Kind            ErrorKind  `json:"kind,omitzero"`
 	Limit           LimitScope `json:"limit,omitzero"`
+	OutputLimitNote string     `json:"outputLimitNote,omitzero"`
 	Provider        string     `json:"provider,omitzero"`
 	ProviderMessage string     `json:"providerMessage,omitzero"`
 	Reason          string     `json:"reason,omitzero"`

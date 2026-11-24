@@ -74,3 +74,22 @@ func ExampleErrorData_window() {
 	// Output:
 	// true 10080 2026-11-10T21:00:00Z
 }
+
+// A credit failure of a call that asked for an output limit: OutputLimitNote
+// names the limit asked for and how to ask for less, and Error does not
+// repeat it (gobble-cli 0071-MADR D8 (d)).
+func ExampleErrorData_outputLimitNote() {
+	data := []byte(`{"error":"llm: api status 402: llm: quota exhausted","kind":"quota","limit":"credits",` +
+		`"outputLimitNote":"gobble asked for at most 64,000 output tokens (ceiling); some services hold credit or rate against that number; ` +
+		`set maxTokens for z-ai/glm-5.3 under modelOverrides in models.json to ask for less","provider":"kilo"}`)
+	var e acpext.ErrorData
+	if err := json.Unmarshal(data, &e); err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println(e.Limit == acpext.LimitCredits, e.Provider)
+	fmt.Println(e.OutputLimitNote)
+	// Output:
+	// true kilo
+	// gobble asked for at most 64,000 output tokens (ceiling); some services hold credit or rate against that number; set maxTokens for z-ai/glm-5.3 under modelOverrides in models.json to ask for less
+}

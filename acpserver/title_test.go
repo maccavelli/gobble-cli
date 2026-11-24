@@ -149,6 +149,30 @@ func TestTitleFirstPrompt(t *testing.T) {
 	}
 }
 
+// The title's limit is unchanged by 0071: min(128, C) with C the small
+// model's raw cap, never fitted, while the turn asks for its model's cap
+// (0071-MADR D7, L20).
+func TestTitleCapUnchanged_0071(t *testing.T) {
+	small := llmtest.NewScript(llmtest.Text("A title"))
+	main := llmtest.NewScript(llmtest.Text("ok"))
+	h := newTitleHarness(t, t.TempDir(), main, small, func(o *Options) {
+		o.ModelInfo = func(provider, model string) llm.Model {
+			return llm.Model{Provider: provider, ID: model, ContextWindow: 200000, MaxTokens: 8192}
+		}
+	})
+	id := newSession(t, h.c, t.TempDir(), nil).SessionId
+	if _, err := prompt(t, h.c, id, "Name this session"); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool { return h.titled("A title") })
+	if got := small.Requests()[0].MaxTokens; got != 128 {
+		t.Errorf("the title asked for %d, want 128", got)
+	}
+	if got := main.Requests()[0].MaxTokens; got != 8192 {
+		t.Errorf("the turn asked for %d, want the model's 8,192", got)
+	}
+}
+
 // No title without a small model, for a session named at its start, for a
 // resumed session with a conversation, or for a first prompt that is a
 // command; the first prompt after such a command names it (decision 4).

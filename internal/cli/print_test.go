@@ -258,6 +258,22 @@ func TestPrintStats(t *testing.T) {
 	}
 }
 
+// Headless --stats ends with the output limit the turn's last call asked
+// for, from the response's _meta.gobble.outputLimit; a turn with none shows
+// none (0071-MADR D10, L28).
+func TestPrintStatsShowsOutputLimit_0071(t *testing.T) {
+	limited := scriptedTurn()
+	limited.Meta = `{"gobble":{"outputLimit":{"tokens":64000,"basis":"ceiling"}}}`
+	withAgent(t, &acptest.ScriptAgent{Turns: []acptest.Turn{limited, scriptedTurn()}})
+	r := runMain(t, nil, "-p", "--stats", "x")
+	if r.code != ExitOK || !strings.Contains(r.stderr, "out-limit 64.0k") {
+		t.Fatalf("exit %d, stderr %q; want out-limit 64.0k", r.code, r.stderr)
+	}
+	if r := runMain(t, nil, "-p", "--stats", "x"); r.code != ExitOK || strings.Contains(r.stderr, "out-limit") {
+		t.Fatalf("no limit given: exit %d, stderr %q", r.code, r.stderr)
+	}
+}
+
 // A cancelled context during a turn sends session/cancel to the agent.
 func TestPrintCancelSendsSessionCancel(t *testing.T) {
 	agent := &acptest.ScriptAgent{Turns: []acptest.Turn{{WaitCancel: true}}}

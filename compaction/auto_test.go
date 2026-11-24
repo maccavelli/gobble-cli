@@ -2,6 +2,8 @@ package compaction
 
 import (
 	"errors"
+	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -104,42 +106,160 @@ func TestRefusalsWrap(t *testing.T) {
 	}
 }
 
-// A summary's output is capped at 80 percent of the reserve, and a split
-// turn's prefix at half, each no more than the model's MaxTokens; an
-// unknown MaxTokens caps nothing (0005-PLAN F5-2 decision 7).
+// splitPath is a split turn with history to summarise.
+func splitPath() []session.Entry {
+	return (&path{}).
+		add(text(session.RoleUser, chars(400))).
+		add(text(session.RoleAssistant, chars(400))).
+		add(text(session.RoleUser, chars(400))).
+		add(text(session.RoleAssistant, chars(400))).
+		add(text(session.RoleToolResult, chars(400))).
+		add(text(session.RoleAssistant, chars(400))).entries
+}
+
+// A summary and a split turn's prefix each ask for the model's output cap,
+// under the 64,000 ceiling, fitted to the room the window leaves over that
+// request's own estimate; an unknown cap is the assumed 16,384; the
+// reserve's 80 and 50 percent shares are gone (0071-MADR D6, L17, L18,
+// replacing 0005-PLAN F5-2 decision 7's shares).
 func TestSummaryCaps(t *testing.T) {
-	split := func() []session.Entry {
-		return (&path{}).
-			add(text(session.RoleUser, chars(400))).
-			add(text(session.RoleAssistant, chars(400))).
-			add(text(session.RoleUser, chars(400))).
-			add(text(session.RoleAssistant, chars(400))).
-			add(text(session.RoleToolResult, chars(400))).
-			add(text(session.RoleAssistant, chars(400))).entries
-	}
 	for _, c := range []struct {
 		name            string
-		reserve, max    int
+		max             int
 		summary, prefix int
 	}{
-		{"the reserve's shares", 10000, 100000, 8000, 5000},
-		{"the model's limit", 10000, 6000, 6000, 5000},
-		{"unknown limit", 10000, 0, 0, 0},
+		{"no_window_ceiling", 100000, 64000, 64000},
+		{"model_limit", 6000, 6000, 6000},
+		{"unknown", 0, 16384, 16384},
 	} {
-		prep, err := Prepare(split(), Settings{ReserveTokens: c.reserve, KeepRecentTokens: 150})
-		if err != nil || !prep.SplitTurn || len(prep.toSummarize) == 0 {
-			t.Fatalf("%s: a split turn with history, %+v, %v", c.name, prep, err)
+		t.Run(c.name, func(t *testing.T) {
+			prep, err := Prepare(splitPath(), Settings{ReserveTokens: 10000, KeepRecentTokens: 150})
+			if err != nil || !prep.SplitTurn || len(prep.toSummarize) == 0 {
+				t.Fatalf("a split turn with history, %+v, %v", prep, err)
+			}
+			s := llmtest.NewScript(llmtest.Text("H"), llmtest.Text("P"))
+			if _, err := Compact(t.Context(), prep, Model{Provider: s, MaxTokens: c.max}, Request{}); err != nil {
+				t.Fatal(err)
+			}
+			reqs := s.Requests()
+			if len(reqs) != 2 || reqs[0].MaxTokens != c.summary || reqs[1].MaxTokens != c.prefix {
+				t.Errorf("caps %v, want %d then %d", caps(reqs), c.summary, c.prefix)
+			}
+		})
+	}
+	// 0071 new names: begin
+	t.Run("window", func(t *testing.T) {
+		prep, err := Prepare(splitPath(), Settings{ReserveTokens: 10000, KeepRecentTokens: 150})
+		if err != nil {
+			t.Fatal(err)
 		}
 		s := llmtest.NewScript(llmtest.Text("H"), llmtest.Text("P"))
-		if _, err := Compact(t.Context(), prep, Model{Provider: s, MaxTokens: c.max}, Request{}); err != nil {
+		if _, err := Compact(t.Context(), prep, Model{Provider: s, MaxTokens: 100000, Window: 20000}, Request{}); err != nil {
 			t.Fatal(err)
 		}
 		reqs := s.Requests()
-		if len(reqs) != 2 || reqs[0].MaxTokens != c.summary || reqs[1].MaxTokens != c.prefix {
-			t.Errorf("%s: caps %v, want %d then %d", c.name, caps(reqs), c.summary, c.prefix)
+		if len(reqs) != 2 {
+			t.Fatalf("%d requests, want 2", len(reqs))
+		}
+		for i, r := range reqs {
+			if want := 20000 - requestEstimate(r) - llm.ContextSafetyTokens; r.MaxTokens != want || want >= 64000 || want < llm.MinOutputTokens {
+				t.Errorf("request %d: cap %d, want the room %d", i, r.MaxTokens, want)
+			}
+		}
+		if reqs[0].MaxTokens == reqs[1].MaxTokens {
+			t.Errorf("caps %v: each request's room is its own", caps(reqs))
+		}
+	})
+	// 0071 new names: end
+}
+
+// requestEstimate is a summary request's own estimate: its system prompt
+// and its prompt (0071-MADR D6).
+func requestEstimate(r *llm.Request) int {
+	n := 0
+	for _, m := range r.Messages {
+		for _, c := range m.Content {
+			n += EstimateText(c.Text)
 		}
 	}
+	return n
 }
+
+// 0071 new names: begin
+
+// Each step of the ladder asks for its own cap: after an overflow drops
+// tool results, the next request's room is computed over its smaller
+// prompt (0071-MADR D6, L17).
+func TestSummaryCapPerLadderStep_0071(t *testing.T) {
+	overflow := llmtest.Turn{Err: llm.ErrContextOverflow}
+	s := llmtest.NewScript(overflow, llmtest.Text("DONE"))
+	msgs := toolMsgs(10)
+	for _, m := range msgs {
+		m.SetText(chars(4000))
+	}
+	if _, _, err := summariseFitting(t.Context(), Model{Provider: s, MaxTokens: 64000, Window: 30000}, "SYS", msgs,
+		func(c string) string { return c }, "Summarization", false); err != nil {
+		t.Fatal(err)
+	}
+	reqs := s.Requests()
+	if len(reqs) != 2 {
+		t.Fatalf("%d requests, want 2", len(reqs))
+	}
+	for i, r := range reqs {
+		if want := 30000 - requestEstimate(r) - llm.ContextSafetyTokens; r.MaxTokens != want {
+			t.Errorf("request %d: cap %d, want its room %d", i, r.MaxTokens, want)
+		}
+	}
+	if reqs[1].MaxTokens <= reqs[0].MaxTokens {
+		t.Errorf("caps %v: the smaller prompt's room is larger", caps(reqs))
+	}
+}
+
+// A summary refused in a form that states the room is sent again once at
+// that room, the same prompt and no tool result dropped; a cap form at its
+// cap; an overflow the cap did not cause still takes the ladder
+// (0071-MADR D6, D8 (a), L40).
+func TestSummaryCapRefusalResent_0071(t *testing.T) {
+	window := func(input, sent int) llmtest.Turn { // the OpenRouter form: a room of 131,072 less input
+		msg := fmt.Sprintf("This endpoint's maximum context length is 131072 tokens. However, you requested about %d tokens (%d of text input, %d in the output).", input+sent, input, sent)
+		return llmtest.Turn{Err: &llm.APIError{Status: 400, Message: msg, Err: fmt.Errorf("%w: %s", llm.ErrContextOverflow, msg)}}
+	}
+	capForm := llmtest.Turn{Err: &llm.APIError{Status: 400, Message: "max_tokens: 64000 > 8192, which is the maximum allowed number of output tokens"}}
+	for _, c := range []struct {
+		name  string
+		first llmtest.Turn
+		want  []int // each request's cap
+	}{
+		{"window_form", window(111072, 64000), []int{64000, 20000}},
+		{"cap_form", capForm, []int{64000, 8192}},
+		{"input_overflow", llmtest.Turn{Err: llm.ErrContextOverflow}, []int{64000, 64000}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			s := llmtest.NewScript(c.first, llmtest.Text("DONE"))
+			got, _, err := summariseFitting(t.Context(), Model{Provider: s, MaxTokens: 100000}, "SYS", toolMsgs(4),
+				func(c string) string { return c }, "Summarization", false)
+			if err != nil || got != "DONE" {
+				t.Fatalf("%q, %v", got, err)
+			}
+			reqs := s.Requests()
+			if !slices.Equal(caps(reqs), c.want) {
+				t.Errorf("caps %v, want %v", caps(reqs), c.want)
+			}
+			dropped := strings.Count(promptOf(reqs[len(reqs)-1]), omittedResult)
+			if resent := c.name != "input_overflow"; resent == (dropped > 0) {
+				t.Errorf("the second request left out %d tool results; resent at the stated limit %v", dropped, resent)
+			}
+		})
+	}
+	// Refused again for its limit: the summary fails, with no ladder.
+	s := llmtest.NewScript(window(111072, 64000), window(121072, 20000), llmtest.Text("never"))
+	if _, _, err := summariseFitting(t.Context(), Model{Provider: s, MaxTokens: 100000}, "SYS", toolMsgs(4),
+		func(c string) string { return c }, "Summarization", false); err == nil || len(s.Requests()) != 2 {
+		t.Errorf("refused again: %v after %d requests, want the refusal after 2", err, len(s.Requests()))
+	}
+}
+
+// 0071 new names: end
 
 func caps(reqs []*llm.Request) []int {
 	out := make([]int, len(reqs))

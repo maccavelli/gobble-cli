@@ -111,10 +111,11 @@ var piAliases = map[string]string{"anthropic": "claude", "google": "gemini", "xa
 // models.json may also name an id the caller passes that is not among them.
 func ProviderIDs() []string { return slices.Sorted(maps.Keys(providerAPIs)) }
 
-// Pi's defaults for a model models.json defines (provider-composer.ts).
+// Pi's defaults for a model models.json defines (provider-composer.ts); the
+// output cap is gobble's assumed one (0071-MADR D1, Q2).
 const (
 	defaultWindow    = 128000
-	defaultMaxTokens = 16384
+	defaultMaxTokens = llm.AssumedMaxTokens
 )
 
 // jsonComments and trailingCommas are Pi's stripJsonComments: each leaves
@@ -420,12 +421,15 @@ func (mj *ModelsJSON) Headers(id, model string) map[string]string {
 
 // Facts are what models.json says of one model, each nil where it says
 // nothing. Tiers replace a model's; LevelMap is its merged thinkingLevelMap,
-// a null value turning a level off.
+// a null value turning a level off. MaxTokensStated reports a maxTokens the
+// file states, an entry's or an override's, not Pi's default
+// (0071-MADR D1).
 type Facts struct {
 	Name                                                 *string
 	Reasoning                                            *bool
 	Input                                                *[]string
 	ContextWindow, MaxTokens                             *int
+	MaxTokensStated                                      bool
 	CostInput, CostOutput, CostCacheRead, CostCacheWrite *float64
 	Tiers                                                *[]llm.CostTier
 	LevelMap                                             map[string]*string
@@ -483,6 +487,7 @@ func (f *Facts) override(m mjModel) {
 	}
 	set(&f.ContextWindow, m.ContextWindow)
 	set(&f.MaxTokens, m.MaxTokens)
+	f.MaxTokensStated = f.MaxTokensStated || m.MaxTokens != nil
 	if c := m.Cost; c != nil {
 		for _, r := range []struct {
 			dst **float64

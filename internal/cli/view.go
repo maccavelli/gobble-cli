@@ -486,7 +486,11 @@ func statusLine(c turnClock, u *acpclient.ContextUsage, res acpclient.Result, st
 		if res.Usage != nil {
 			out = int64(res.Usage.OutputTokens)
 		}
-		line += " " + g.Bullet + " " + render.Stats(c.first.Sub(c.start), out, c.end.Sub(c.first), g)
+		var limit int64
+		if res.OutputLimit != nil {
+			limit = int64(res.OutputLimit.Tokens)
+		}
+		line += " " + g.Bullet + " " + render.Stats(c.first.Sub(c.start), out, c.end.Sub(c.first), limit, g)
 	}
 	if res.StopReason != "" && res.StopReason != "end_turn" {
 		line += " " + g.Bullet + " " + stopText(voice, res.StopReason)

@@ -105,7 +105,7 @@ var Keys = []Key{
 	{Path: "compaction.enabled", Kind: KindBool, Default: boolTrue, Read: ReadSession,
 		Doc: "Whether gobble compacts the conversation on its own: before a model call once it nears the model's window, and once when the model says it is over it."},
 	{Path: "compaction.reserveTokens", Kind: KindInt, Default: "16384", Min: 1, Read: ReadSession,
-		Doc: "The room, in tokens, kept free in the model's window: the conversation is compacted once it is over the window less this. A summary's reply is capped at 80 percent of it."},
+		Doc: "The room, in tokens, kept free in the model's window: the conversation is compacted once it is over the window less this. It also bounds the room a model call has for its reply: each turn and summary asks for the model's output limit, held to the room the window leaves."},
 	{Path: "compaction.keepRecentTokens", Kind: KindInt, Default: "20000", Min: 1, Read: ReadSession,
 		Doc: "The recent conversation, in tokens, that a compaction keeps word for word."},
 	{Path: "compaction.thresholdPercent", Kind: KindInt, Default: "0", Min: 0, Max: 100, Read: ReadSession,

@@ -28,6 +28,10 @@ decided: every turn and summary names its limit on every wire, as gobble's own p
 ruling "Only where required (Recommended)" (its 0089 OQ1) still governs the SDK's own choice for other callers. No row is
 open; by the records rule this record is `accepted`. Its PLAN stays `proposed` until the owner approves it.)*
 
+*(2026-11-24, amendment after Phase 1's first pass stopped: the owner's "Move the line into a new field", relayed by the
+coordinator. D8 (d)'s line rides a new `acpext.ErrorData` member and not the error text; D13 gains it; L15 is amended and
+L42 and L43 added. See "Amendment of 2026-11-24: D8 (d)'s line in an acpext member" under More Information.)*
+
 ## Context and Problem Statement
 
 The owner drives GLM-5.3 and GLM-5.3-flash at thinking `high` through gobble, mainly on Kilo and OpenCode Go, and on every
@@ -56,6 +60,8 @@ This record decides every case of the interim on `v1.32.0` (the L rows) and what
 | Q2: no source states the cap: Pi's 16,384, fitted, shown as assumed | "16,384, fitted, shown 'assumed' (Recommended)" | L5, L6, L18 |
 | Q3: a ceiling of 64,000 on any cap the user did not set; an answer over 64,000 is cut until the user sets `maxTokens` for that model in models.json | "64,000 unless you set maxTokens (Recommended)" | L33, L36 |
 | Q4: after `v1.33.0`, name a limit on every call, optional wires included, as gobble's own policy | "Always, gobble's policy (Recommended)" | V2 |
+| *(2026-11-24)* Phase 1's stop: D8 (d)'s line goes in a new `acpext.ErrorData` member, not the error text, which stays byte-identical, so acpext's example frames stay as they are | "Move the line into a new field" | L15, L42, L43 |
+| *(2026-11-24)* Phase 1's review: after an L39 resend at a stated value M, a later call of the same turn asked the full cap again, and a second refusal ended a turn that would have succeeded; every later call of the turn keeps the stated value | "Keep the stated value (Recommended)" | L44 |
 
 ### Facts read at 97fa1f6
 
@@ -223,6 +229,10 @@ refused for credit or rate (F14). D was rejected by the ruling.
   form gives the room `W − I` (I the input it states, or its total less `sent`), a cap form gives `M`. When the room or
   `M` is at least 1 and below `sent`, the call is resent once, before any compaction, at that value, basis `refusal`. A
   room at or below 0 is an input overflow, and takes (b).
+  *(2026-11-24, amendment, the owner's "Keep the stated value (Recommended)": once a refusal has stated a room or cap M in a
+  turn, every later call of that turn asks for at most M: its cap is computed again, as (b) and L11 say, then held to M,
+  so a retry for another cause (an offline wait, an empty reply, an overflow's compaction, the next call after a tool
+  round) does not ask again for what the service refused (L44).)*
   (b) **An input overflow** takes today's path: compact once and resend, the resend's cap computed again (D2 runs per call).
   (c) **Any other refusal of the cap.** An invalid request whose message names an output-limit field (`max_tokens`,
   `max_completion_tokens`, `max_output_tokens`, `maxOutputTokens`, without case), the SDK's "fills the context window"
@@ -232,6 +242,9 @@ refused for credit or rate (F14). D was rejected by the ruling.
   503 for an upstream 402, on a call that carried gobble's cap, fail the turn as today, and the error text gains: "gobble
   asked for at most N output tokens (B); some services hold credit or rate against that number; set maxTokens for MODEL
   under modelOverrides in models.json to ask for less." Nothing is retried at a guessed smaller value.
+  *(2026-11-24, amended by the owner's "Move the line into a new field": the line is not added to the error text, which
+  stays byte-identical; it rides a new `acpext.ErrorData` member, `OutputLimitNote` (`outputLimitNote`). See "Amendment
+  of 2026-11-24: D8 (d)'s line in an acpext member".)*
   Nothing is kept across calls (F8).
 * **D9. The user's override** is models.json `maxTokens` (F5): source `user`, no ceiling, fitted. No setting and no ACP
   option (the owner's "models.json only, for now (Recommended)", 0066 S32, S33). `docs/guides/models-json.md` says so, and
@@ -255,7 +268,9 @@ refused for credit or rate (F14). D was rejected by the ruling.
   `llm.MinOutputTokens` (1,024), `llm.AssumedMaxTokens` (16,384), `llm.ReadLimitRefusal` and `llm.LimitRefusal`;
   `llm.Model.MaxTokensFrom` (`json:"-"`); `catalog.Facts.MaxTokensStated`; `agent.Config.OutputLimit` and
   `agent.Config.Compact`'s new parameter; `compaction.Model.Window` and `MaxTokensFrom`; `compaction.EstimateContext`;
-  `acpclient.Result.OutputLimit` and its type.
+  `acpclient.Result.OutputLimit` and its type. *(2026-11-24, amendment: and, in the acpext module,
+  `acpext.ErrorData.OutputLimitNote`, JSON `outputLimitNote`, a new optional member, which gobble uses from acpext's next
+  minor tag; see the amendment below.)*
 
 ### The decisions: the convergence, on `v1.33.0`
 
@@ -332,7 +347,7 @@ Out of scope: **V10** probing (the ruling's option 3), a later record.
 | L12 | An invalid request naming an output-limit field, no form read | decided | the turn fails; D8 (c)'s line | D8 (c) |
 | L13 | An invalid request naming no output-limit field | decided | as today, no line | D8 (c) |
 | L14 | The SDK's "fills the context window" reason | decided | as L12 | D8 (c) |
-| L15 | A 402, a 429 after the SDK's retries, or Kilo's 503 for a 402, on a capped call | decided | the turn fails; D8 (d)'s line | D8 (d) |
+| L15 | A 402, a 429 after the SDK's retries, or Kilo's 503 for a 402, on a capped call | decided | the turn fails; D8 (d)'s line *(2026-11-24: in `ErrorData.outputLimitNote`, the error text byte-identical; "Move the line into a new field")* | D8 (d) |
 | L16 | A Messages route's budget raise | out of scope | the SDK's wire (F9); only when D2 sends at most 4,096 | |
 | L17 | A summary and a turn prefix | decided | each request `llm.FitOutput` over its own estimate; the shares go | D6 |
 | L18 | A summary, `C` unknown | decided | as L5 | Q2; D6 |
@@ -359,6 +374,9 @@ Out of scope: **V10** probing (the ruling's option 3), a later record.
 | L39 | A refusal in a form of F17, a room or cap below what was sent and at least 1 | decided | resent once at it, basis `refusal`, before any compaction; refused again, L12 | D8 (a) |
 | L40 | A summary request refused in a form of F17 | decided | resent once at its stated room or cap before the ladder drops tool results | D6, D8 (a) |
 | L41 | The trigger's estimate | decided | D3's: no system text twice on an anchored count; tools counted on an unanchored one | D3 |
+| L42 *(2026-11-24)* | acpext's contract for D8 (d)'s line | decided | `ErrorData.OutputLimitNote`, `outputLimitNote`, a string, `omitzero`, in its sorted place; documented in `types.go` and `doc.go`; an example frame of its own; the existing frames unchanged; a client that does not know it ignores it | "Move the line into a new field"; the amendment below |
+| L43 *(2026-11-24)* | gobble's use of the member, after acpext's next minor tag | decided | a capped call's credit or rate failure carries the line in `outputLimitNote`, the error text byte-identical; the terminal client shows it on the line after the error, as it shows the limit's line | "Move the line into a new field"; the amendment below |
+| L44 *(2026-11-24)* | A later call of a turn in which a refusal stated M (L39): a retry after an offline wait, an empty reply or an overflow's compaction, or the next call after a tool round | decided | its cap computed again (L11), then held to at most M, basis `refusal` when held; a smaller stated M' lowers it again | "Keep the stated value (Recommended)"; D8 (a) as amended |
 | V1 | `v1.33.0`: the facts a call reads | decided | `CachedLimits`' `StreamedOutput` and `Window` (else `Input`), with the source | V1 |
 | V2 | `v1.33.0`: a limit on an optional wire (Together, OpenCode Go's chat route) | decided *(2026-11-24: Q4)* | every turn and summary names D2's value, basis `request` | Q4 "Always, gobble's policy (Recommended)"; V2 |
 | V3 | `v1.33.0`: fit and ceiling where gobble names a limit | decided | D2, D3 with V1's facts | V3 |
@@ -371,7 +389,9 @@ Out of scope: **V10** probing (the ruling's option 3), a later record.
 | V10 | Probing | out of scope | a later record | V10 |
 
 Counts: 44 decided, 6 out of scope (three left by name to the adoption amendments), 1 open; 51 rows. *(2026-11-24,
-after Q4's answer: 45 decided, 6 out of scope, 0 open; 51 rows.)*
+after Q4's answer: 45 decided, 6 out of scope, 0 open; 51 rows.)* *(2026-11-24, after "Move the line into a new field":
+47 decided, 6 out of scope, 0 open; 53 rows.)* *(2026-11-24, after "Keep the stated value (Recommended)": 48 decided,
+6 out of scope, 0 open; 54 rows.)*
 
 ## Every number this record uses
 
@@ -435,6 +455,34 @@ after Q4's answer: 45 decided, 6 out of scope, 0 open; 51 rows.)*
 At go-llmprovider-sdk 33e6f09, a refused `Request.MaxOutputTokens` keeps the stated cap in the process memo but reports no
 `WarningLimitLearned`, which rides only a `Response` (`internal/wire/limit_rule.go:198-253`). The SDK's 0089 amendment (OQ5,
 with the owner) adds a caller's path; V4 uses it, with `CachedLimits` as the fallback.
+
+### Amendment of 2026-11-24: D8 (d)'s line in an acpext member
+
+Phase 1's first pass stopped (the PLAN's execution record): D8 (d)'s line, added to the error text, turned three of
+`acpserver`'s `TestPromptQuotaData` frames red, because that test compares the prompt error's data byte for byte with
+`acpext/testdata/prompt-quota.error.json`, `prompt-rate-over-cap.error.json` and `prompt-weekly.error.json`, the acpext
+contract's example frames. The owner's ruling, relayed by the coordinator: **"Move the line into a new field".**
+
+* **The member.** `acpext.ErrorData` gains `OutputLimitNote string` with the tag `json:"outputLimitNote,omitzero"`, between
+  `limit` and `provider` in its JSON names' sorted order. It holds D8 (d)'s line as written there, from "gobble asked for
+  at most N output tokens (B)" to "to ask for less", and is absent on every other failure. Its doc, in `types.go` and in
+  `doc.go`'s failed-turn paragraph: "OutputLimitNote is set when a quota, rate or credit failure came from a call that asked
+  for an output limit, which some services hold credit or rate against: the limit asked for, why, and how to ask for less
+  (gobble-cli 0071-MADR D8 (d))."
+* **Compatibility.** The member is optional and new: acpext's rule is that a client takes a member it does not know
+  (`acpext/doc.go`, "Versions"), and `omitzero` leaves it out of every frame that has none, so every existing frame is
+  unchanged byte for byte. A client built on `v0.5.0` decodes a failure that carries it with the member ignored, unless
+  it decodes rejecting unknown members; magic-cli-remote's fixture test does so against acpext's frames, but of the same
+  acpext version as its types, so the new frame arrives with the type that names it.
+* **The release.** Each change to acpext's contract is a new minor tag (`acpext/doc.go`, "Versions";
+  `0042-MADR-acpext-extension-contract-module.md`), and gobble pins `acpext v0.5.0` (`go.mod:20`) with no `replace`. So
+  gobble sets the member only after the owner pushes `acpext/v0.6.0` and gobble's pin moves to it, as 0049-PLAN's P5a and
+  P5b did for `windowMinutes`. Until then gobble adds no line (D8 (d)), and the error text is byte-identical.
+* **D8 (c) is unchanged:** a refusal of the limit still gains its line in the error text; no frame of acpext is such a
+  refusal.
+* **The terminal client** shows the member on the line after the error, as it shows the limit's line (`internal/cli/limit.go`),
+  once gobble's pin carries it (L43).
+* **D13** gains `acpext.ErrorData.OutputLimitNote`; L15 is amended, and L42 and L43 added.
 
 ### What could not be established offline
 

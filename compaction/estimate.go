@@ -291,6 +291,16 @@ func entryTokens(p Projected) int {
 // (Pi's estimateProjectedContextTokens, with no system message: gobble
 // writes none into a session, and projects none).
 func EstimateEntries(path []session.Entry) int {
+	n, _ := EstimateContext(path)
+	return n
+}
+
+// EstimateContext is EstimateEntries, and whether it is anchored on a valid
+// assistant usage. Anchored, the count holds the system prompt and the
+// tools that usage measured; otherwise it is the messages' estimates alone,
+// and a caller adds the system prompt and the tools its request carries
+// (pi's estimate.ts; 0071-MADR D3).
+func EstimateContext(path []session.Entry) (tokens int, anchored bool) {
 	proj := Project(Context(path))
 	var flat []*session.Message
 	var owner []string
@@ -323,13 +333,13 @@ func EstimateEntries(path []session.Entry) int {
 		for _, m := range flat[i+1:] {
 			used += Estimate(m)
 		}
-		return used
+		return used, true
 	}
 	total := 0
 	for _, m := range flat {
 		total += Estimate(m)
 	}
-	return total
+	return total, false
 }
 
 // assistantUsage is an assistant message's context tokens, or 0 when it

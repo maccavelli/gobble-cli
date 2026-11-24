@@ -250,11 +250,14 @@ type liveSession struct {
 	cancel   context.CancelFunc
 	// idle is closed when the running turn releases; nil with no turn
 	// (0005-PLAN F4-3c-1).
-	idle  chan struct{}
-	mcp   *liveMCP
-	mode  string
-	used  int // the context's tokens, as the last usage_update said
-	queue *queue
+	idle chan struct{}
+	mcp  *liveMCP
+	mode string
+	used int // the context's tokens, as the last usage_update said
+	// outLimit is the output limit the session's last model call asked for,
+	// under the agent's mu; zero before its first (0071-MADR D4, D10).
+	outLimit llm.OutputLimit
+	queue    *queue
 	// compaction is /compact's settings, from the session's settings.
 	compaction compaction.Settings
 	// retry is the session's retry settings; retryAbort, while a turn
@@ -781,6 +784,7 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 		loaded = append(loaded, fresh...)
 	}
 	auto := &autoCompaction{a: a, s: s, provider: model, providerID: w.provider}
+	limits := &turnLimits{a: a, s: s, provider: w.provider, model: chosen}
 	cfg := agent.Config{
 		Provider: model,
 		Tools:    tools,
@@ -799,6 +803,7 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 		Logger:      a.logger,
 		Warned:      s.warningLog(),
 		SaveRefusal: savedRefusal(a, w.provider),
+		OutputLimit: limits.limit,
 	}
 	ag := agent.New(cfg)
 	out := newUpdates(ctx, conn, p.SessionId)
@@ -828,7 +833,7 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 			// (0005-PLAN F5-2 decision 3; 0037-MADR D15).
 			a.replayFile(s)
 			a.markFailure(a.provOf(s), err)
-			return acp.PromptResponse{}, promptError(a.provOf(s), err)
+			return acp.PromptResponse{}, promptError(a.provOf(s), limitLine(err, limits.last, chosen))
 		}
 		w.event(ev)
 		if w.err != nil {
@@ -855,13 +860,10 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 			}
 			//lint:ignore SA1019 acp-go-sdk2 keeps this unstable-schema name under v1 (0035-MADR D6)
 			resp := acp.PromptResponse{StopReason: acp.StopReason(end.StopReason), Usage: acpUsage(end.Usage)} //nolint:staticcheck // as the lint:ignore above
-			if end.StopReason == agent.StopCancelled {
-				return withCleared(s, resp)
-			}
-			return resp, nil
+			return withTurnMeta(s, resp, end.StopReason == agent.StopCancelled, limits.last)
 		}
 	}
-	return cancelled(s)
+	return withTurnMeta(s, acp.PromptResponse{StopReason: acp.StopReasonCancelled}, true, limits.last)
 }
 
 // claimTurn makes the caller's work the session's one running turn, or
@@ -891,17 +893,38 @@ func (a *Agent) claimTurn(ctx context.Context, s *liveSession) (context.Context,
 // _meta.gobble.cleared, so a client can restore the text, as Pi's terminal
 // does (owner's decision of 2026-10-07). It is nil when both were empty.
 func clearedMeta(s *liveSession) (map[string]any, error) {
-	steering, followUp := s.queue.clear()
-	if len(steering) == 0 && len(followUp) == 0 {
+	return turnMeta(s, true, llm.OutputLimit{})
+}
+
+// turnMeta is a turn's response _meta: with cancelled, the session's
+// queues emptied into _meta.gobble.cleared; and the output limit of the
+// turn's last model call as _meta.gobble.outputLimit, which a turn with no
+// call carries none of (0071-MADR D10). It is nil when there is neither.
+func turnMeta(s *liveSession, cancelled bool, lim llm.OutputLimit) (map[string]any, error) {
+	var g turnGobble
+	if cancelled {
+		if steering, followUp := s.queue.clear(); len(steering) > 0 || len(followUp) > 0 {
+			g.Cleared = &clearedQueues{FollowUp: followUp, Steering: steering}
+		}
+	}
+	if lim.Tokens > 0 {
+		g.OutputLimit = &lim
+	}
+	if g.Cleared == nil && g.OutputLimit == nil {
 		return nil, nil
 	}
-	return jsonx.SetMember(nil, gobble, clearedGobble{Cleared: clearedQueues{FollowUp: followUp, Steering: steering}})
+	return jsonx.SetMember(nil, gobble, g)
 }
 
 // withCleared is resp with the session's queues emptied into its
 // _meta.gobble.cleared, for a cancelled turn.
 func withCleared(s *liveSession, resp acp.PromptResponse) (acp.PromptResponse, error) {
-	meta, err := clearedMeta(s)
+	return withTurnMeta(s, resp, true, llm.OutputLimit{})
+}
+
+// withTurnMeta is resp with turnMeta's _meta.
+func withTurnMeta(s *liveSession, resp acp.PromptResponse, cancelled bool, lim llm.OutputLimit) (acp.PromptResponse, error) {
+	meta, err := turnMeta(s, cancelled, lim)
 	if err != nil {
 		return acp.PromptResponse{}, acp.NewInternalError(errData(acpext.ErrorData{Reason: err.Error()}))
 	}
@@ -909,10 +932,13 @@ func withCleared(s *liveSession, resp acp.PromptResponse) (acp.PromptResponse, e
 	return resp, nil
 }
 
-// clearedGobble is a cancelled turn's _meta.gobble (0039-MADR D15). An
-// empty queue is [], as queue.clear gives it and v1 wrote it.
-type clearedGobble struct {
-	Cleared clearedQueues `json:"cleared"`
+// turnGobble is a turn's _meta.gobble (0039-MADR D15): a cancelled turn's
+// cleared queues, an empty queue being [], as queue.clear gives it and v1
+// wrote it; and the last call's output limit, {tokens, basis}
+// (0071-MADR D10).
+type turnGobble struct {
+	Cleared     *clearedQueues   `json:"cleared,omitzero"`
+	OutputLimit *llm.OutputLimit `json:"outputLimit,omitzero"`
 }
 
 // clearedQueues are the queues' texts.

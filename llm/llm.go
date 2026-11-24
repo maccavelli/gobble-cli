@@ -79,8 +79,9 @@ type Request struct {
 	Thinking string         `json:"thinking,omitzero"`
 	// Cache asks the service to cache the prompt; CacheNone asks for nothing.
 	Cache CacheRetention `json:"cache,omitzero"`
-	// MaxTokens caps the reply's tokens; zero is the provider's default
-	// (0005-PLAN F5-2).
+	// MaxTokens caps the reply's tokens, reasoning included; zero is the
+	// provider's default (0005-PLAN F5-2). gobble names one on every turn
+	// and summary (0071-MADR D1, D6).
 	MaxTokens int `json:"maxTokens,omitzero"`
 }
 
@@ -160,6 +161,11 @@ type Model struct {
 	// tokens; 0 is unknown.
 	ContextWindow int `json:"contextWindow,omitzero"`
 	MaxTokens     int `json:"maxTokens,omitzero"`
+	// MaxTokensFrom is where MaxTokens came from: models.json's maxTokens
+	// (CapUser), Pi's default for a model models.json defines without one
+	// (CapAssumed), or the catalog. Zero is CapCatalog when MaxTokens is
+	// known (0071-MADR D1).
+	MaxTokensFrom CapSource `json:"-"`
 	// Input are the modalities the model reads, such as text and image.
 	Input []string `json:"input,omitzero"`
 	// Reasoning reports whether the model reasons, when ReasoningKnown;

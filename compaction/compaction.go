@@ -15,8 +15,8 @@ import (
 
 // Settings are Pi's compaction settings, and the two thresholds gobble
 // adds (0005-PLAN F5-2 decision 1). ReserveTokens leaves room for the
-// reply in the automatic trigger, and sets a summary's output cap;
-// KeepRecentTokens is the recent context a compaction keeps;
+// reply in the automatic trigger, and only decides when compaction starts:
+// a summary's output cap is llm.FitOutput's (0071-MADR D6); KeepRecentTokens is the recent context a compaction keeps;
 // ThresholdPercent, a percentage of the window, and ThresholdTokens, a
 // count of tokens, compact sooner, each 0 being off.
 type Settings struct {
@@ -87,7 +87,6 @@ type Preparation struct {
 	TokensBefore    int64
 	previousSummary string
 	files           fileOps
-	reserve         int
 	// todos is the path's last todo list, for the reminder (0005-PLAN F5-4
 	// decision 5).
 	todos string
@@ -121,7 +120,6 @@ func Prepare(path []session.Entry, s Settings) (*Preparation, error) {
 		TokensBefore:     int64(EstimateEntries(path)),
 		previousSummary:  previous,
 		files:            newFileOps(),
-		reserve:          s.ReserveTokens,
 		todos:            todoList(path),
 	}
 	if cut.split {
@@ -273,12 +271,16 @@ func recoverySuffix(suffix []Projected) bool {
 
 // Model is the model a summary is asked of: the session's own, or the one
 // before a model switch (0005-PLAN F5-2 decision 12). MaxTokens is its
-// output limit, 0 unknown.
+// output limit, 0 unknown, and MaxTokensFrom where it came from; Window is
+// its context window, 0 unknown: each summary request is sent
+// llm.FitOutput over them and its own estimate (0071-MADR D6).
 type Model struct {
-	Provider  llm.Provider
-	Model     string
-	Thinking  string
-	MaxTokens int
+	Provider      llm.Provider
+	Model         string
+	Thinking      string
+	MaxTokens     int
+	MaxTokensFrom llm.CapSource
+	Window        int
 }
 
 // Result is a compaction to record.
@@ -306,21 +308,21 @@ func Compact(ctx context.Context, p *Preparation, m Model, r Request) (Result, e
 			before = "No prior history."
 		}
 		if len(p.toSummarize) > 0 {
-			text, u, err := summariseFitting(ctx, m, r.system(), p.toSummarize, history, "Summarization", replyCap(p.reserve*4/5, m.MaxTokens), true)
+			text, u, err := summariseFitting(ctx, m, r.system(), p.toSummarize, history, "Summarization", true)
 			if err != nil {
 				return Result{}, err
 			}
 			before, usage = text, u
 		}
 		prefix := func(conv string) string { return "# Conversation\n" + conv + "\n\n# Instructions\n" + r.turnPrefix() }
-		text, u, err := summariseFitting(ctx, m, r.system(), p.turnPrefix, prefix, "Turn prefix summarization", replyCap(p.reserve/2, m.MaxTokens), false)
+		text, u, err := summariseFitting(ctx, m, r.system(), p.turnPrefix, prefix, "Turn prefix summarization", false)
 		if err != nil {
 			return Result{}, err
 		}
 		summary = before + turnRequest(p.turnPrefix) + "\n\n---\n\n**Turn Context (split turn):**\n\n" + text
 		usage = addUsage(usage, u)
 	} else {
-		text, u, err := summariseFitting(ctx, m, r.system(), p.toSummarize, history, "Summarization", replyCap(p.reserve*4/5, m.MaxTokens), true)
+		text, u, err := summariseFitting(ctx, m, r.system(), p.toSummarize, history, "Summarization", true)
 		if err != nil {
 			return Result{}, err
 		}
@@ -373,11 +375,15 @@ func (errTooLarge) Error() string {
 func (errTooLarge) Unwrap() error { return llm.ErrContextOverflow }
 
 // summariseFitting asks for the summary of msgs, prompt being the request
-// for their serialised text. Over the model's window, it asks again with
-// more of their tool results left out, taken from the middle outward, each
-// time its prompt led by omittedNote. floor applies F5-2's summary floor.
+// for their serialised text. Each request's output limit is llm.FitOutput
+// over m and that request's own estimate, and a refusal the limit caused,
+// not the input, is asked again once at the room or cap it states, before
+// the ladder reads it (0071-MADR D6, D8 (a)). Over the model's window, it
+// asks again with more of their tool results left out, taken from the
+// middle outward, each time its prompt led by omittedNote. floor applies
+// F5-2's summary floor.
 func summariseFitting(ctx context.Context, m Model, system string, msgs []*session.Message, prompt func(string) string,
-	label string, maxTokens int, floor bool) (string, llm.Usage, error) {
+	label string, floor bool) (string, llm.Usage, error) {
 	order := middleOut(toolResults(msgs))
 	var usage llm.Usage
 	last := -1
@@ -403,14 +409,38 @@ func summariseFitting(ctx context.Context, m Model, system string, msgs []*sessi
 		if floor {
 			source = utf8.RuneCountInString(conv)
 		}
-		summary, u, err := summarise(ctx, m, system, text, label, maxTokens, source)
+		sent := llm.FitOutput(m.MaxTokens, m.MaxTokensFrom, m.Window, EstimateText(system)+EstimateText(text)).Tokens
+		summary, u, err := summarise(ctx, m, system, text, label, sent, source)
 		usage = addUsage(usage, u)
-		if !errors.Is(err, llm.ErrContextOverflow) {
+		if at, _ := limitRefused(err, sent); at > 0 {
+			sent = at
+			summary, u, err = summarise(ctx, m, system, text, label, sent, source)
+			usage = addUsage(usage, u)
+			if again, _ := limitRefused(err, sent); again > 0 {
+				return "", usage, err // refused again: no ladder helps (D8 (c))
+			}
+		}
+		if _, input := limitRefused(err, sent); !input && !errors.Is(err, llm.ErrContextOverflow) {
 			return summary, usage, err
 		}
 		last = k
 	}
 	return "", usage, errTooLarge{}
+}
+
+// limitRefused reads err as a refusal of the output limit sent (0071-MADR
+// D8 (a), (b)): at is the room or cap it states when that is at least 1 and
+// below sent, for one request again; input reports a window form whose room
+// is 0 or less, an overflow of the input.
+func limitRefused(err error, sent int) (at int, input bool) {
+	r, ok := llm.ReadLimitRefusal(err, sent)
+	switch {
+	case !ok:
+		return 0, false
+	case r.Tokens >= 1 && r.Tokens < sent:
+		return r.Tokens, false
+	}
+	return 0, r.Window && r.Tokens <= 0
 }
 
 // toolResults are the indexes of msgs' tool results.
@@ -465,16 +495,6 @@ func historyPrompt(conv string, r Request, previous string) string {
 	}
 	b.WriteString(base)
 	return b.String()
-}
-
-// replyCap is a summary's output cap (Pi's, 0005-PLAN F5-2 decision 7):
-// share, a part of the reserve, no more than the model's maxTokens. An
-// unknown maxTokens, or no reserve, caps nothing.
-func replyCap(share, maxTokens int) int {
-	if maxTokens <= 0 || share <= 0 {
-		return 0
-	}
-	return min(share, maxTokens)
 }
 
 // summarise asks for a summary, capped at maxTokens, of source characters

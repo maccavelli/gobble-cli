@@ -11,6 +11,8 @@ Associated MADR: [0066-MADR-set-each-session-model-up-from-discovered-limits.md]
 
 *(2026-11-22, second draft, after record review 3: discovery through the stated-only wrapper; no snapshot handed; scoped, expiring caps; the order of discovery and the turn asserted; Claude named as the provider where a sent limit is asserted; cancel, close and thinking-only rows.)*
 
+*(2026-11-24, note from [0071-MADR-send-each-turn-the-models-output-cap-and-own-the-limit-policy.md](0071-MADR-send-each-turn-the-models-output-cap-and-own-the-limit-policy.md) D12 and V6: this PLAN's phases that build discovery, the observation store and the notices come before 0071-PLAN's Phase 2, which uses them; D8's line is 0071 D10's.)*
+
 ## Goal
 
 After this PLAN, every session discovers its model's limits before its first

@@ -28,6 +28,9 @@ type Turn struct {
 	StopReason string
 	// Usage is the response's usage object as JSON, or empty for none.
 	Usage string
+	// Meta is the response's _meta object as JSON, such as gobble's
+	// {"gobble":{"outputLimit":{...}}}, or empty for none (0071-MADR D10).
+	Meta string
 	// ErrCode, when not zero, answers the prompt with this JSON-RPC error
 	// after the updates are sent.
 	ErrCode    int
@@ -205,6 +208,11 @@ func (a *ScriptAgent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.Prom
 		//lint:ignore SA1019 acp-go-sdk2 keeps this unstable-schema name under v1 (0035-MADR D6)
 		if err := jsonx.Unmarshal([]byte(turn.Usage), resp.Usage); err != nil { //nolint:staticcheck // as the lint:ignore above
 			return acp.PromptResponse{}, acp.NewInternalError(jsonx.Strings(map[string]string{"usage": err.Error()}))
+		}
+	}
+	if turn.Meta != "" {
+		if err := jsonx.Unmarshal([]byte(turn.Meta), &resp.Meta); err != nil {
+			return acp.PromptResponse{}, acp.NewInternalError(jsonx.Strings(map[string]string{"meta": err.Error()}))
 		}
 	}
 	if wait != nil {

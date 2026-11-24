@@ -181,7 +181,7 @@ func TestSummaryLadder(t *testing.T) {
 	overflow := llmtest.Turn{Err: llm.ErrContextOverflow}
 	s := llmtest.NewScript(overflow, overflow, overflow, overflow, llmtest.Text("DONE"))
 	got, usage, err := summariseFitting(t.Context(), Model{Provider: s}, "SYS", toolMsgs(10), func(c string) string { return c },
-		"Summarization", 0, false)
+		"Summarization", false)
 	if err != nil || got != "DONE" || usage.InputTokens != 10 {
 		t.Fatalf("%q, %+v, %v", got, usage, err)
 	}
@@ -215,14 +215,14 @@ func TestSummaryLadder(t *testing.T) {
 			turns[i] = overflow
 		}
 		s := llmtest.NewScript(turns...)
-		_, _, err := summariseFitting(t.Context(), Model{Provider: s}, "SYS", toolMsgs(c.msgs), func(c string) string { return c }, "S", 0, false)
+		_, _, err := summariseFitting(t.Context(), Model{Provider: s}, "SYS", toolMsgs(c.msgs), func(c string) string { return c }, "S", false)
 		if !errors.Is(err, llm.ErrContextOverflow) || errors.Is(err, ErrSummaryRefused) || len(s.Requests()) != c.requests ||
 			err.Error() != "the conversation is too large to summarise with this model: start a new session, or choose a model with a larger window" {
 			t.Errorf("%s: %v, %d requests, want %d", c.name, err, len(s.Requests()), c.requests)
 		}
 	}
 	other := llmtest.NewScript(llmtest.Turn{Err: errors.New("boom")})
-	if _, _, err := summariseFitting(t.Context(), Model{Provider: other}, "SYS", toolMsgs(3), func(c string) string { return c }, "S", 0, false); err == nil ||
+	if _, _, err := summariseFitting(t.Context(), Model{Provider: other}, "SYS", toolMsgs(3), func(c string) string { return c }, "S", false); err == nil ||
 		errors.Is(err, llm.ErrContextOverflow) || len(other.Requests()) != 1 {
 		t.Fatalf("another error: %v, %d requests", err, len(other.Requests()))
 	}

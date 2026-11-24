@@ -1,0 +1,11 @@
+{
+  "code": "insufficient_credits",
+  "error": "llm: api status 402: llm: quota exhausted: llmprovider: quota exhausted: kilo HTTP 402 insufficient_credits: Insufficient credits",
+  "httpStatus": 402,
+  "kind": "quota",
+  "limit": "credits",
+  "outputLimitNote": "gobble asked for at most 64,000 output tokens (ceiling); some services hold credit or rate against that number; set maxTokens for z-ai/glm-5.3 under modelOverrides in models.json to ask for less",
+  "provider": "kilo",
+  "providerMessage": "Insufficient credits",
+  "retryable": false
+}

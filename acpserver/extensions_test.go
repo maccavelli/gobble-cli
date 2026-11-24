@@ -307,7 +307,10 @@ func TestClearQueue(t *testing.T) {
 }
 
 // A cancelled turn empties both queues into _meta.gobble.cleared, and the
-// next prompt sees neither (owner's decision of 2026-10-07).
+// next prompt sees neither (owner's decision of 2026-10-07). Its call's
+// output limit rides beside them, as _meta.gobble.outputLimit: no model is
+// known here, so the assumed 16,384 (0071-MADR D10, L27; 0071-PLAN Phase 1,
+// deviation of 2026-11-24).
 func TestCancelClearsQueue(t *testing.T) {
 	model := llmtest.NewScript(writeCall(t), llmtest.Text("next"))
 	client := newHoldClient()
@@ -326,7 +329,7 @@ func TestCancelClearsQueue(t *testing.T) {
 		t.Fatalf("stop %s", resp.StopReason)
 	}
 	b, err := json.Marshal(resp.Meta, json.Deterministic(true))
-	if err != nil || string(b) != `{"gobble":{"cleared":{"followUp":["f"],"steering":["s"]}}}` {
+	if err != nil || string(b) != `{"gobble":{"cleared":{"followUp":["f"],"steering":["s"]},"outputLimit":{"basis":"assumed","tokens":16384}}}` {
 		t.Fatalf("cancelled response _meta %s, %v", b, err)
 	}
 	if _, err := prompt(t, c, id, "again"); err != nil {

@@ -36,6 +36,8 @@ hidden "Continue…" entry is gone. C4's premise is corrected (F20). D13 now ame
 pi-compatibility "Bad" bullet is removed. Q6 is moot: a half-written call is thrown away with its attempt, and no tool
 ran (`agent/agent.go:738-744`); C5 is decided so. No row is open, so the record is `accepted`.)*
 
+*(2026-11-24, note from [0071-MADR-send-each-turn-the-models-output-cap-and-own-the-limit-policy.md](0071-MADR-send-each-turn-the-models-output-cap-and-own-the-limit-policy.md) D11 and D12: 0071's Phase 1 is built first, so this record, built second, updates T13's expected `limit` to the request's `MaxTokens`, which every turn now sets, not 0 (0071 L29).)*
+
 ## Context and Problem Statement
 
 Two ideas from the upstream comparison (go-llmprovider-sdk `docs/reports/0091-REPORT-responses-api-across-providers.md`,

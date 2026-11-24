@@ -300,7 +300,7 @@ func (a *Agent) usageText(s *liveSession, voice *personality.Voice, entries []se
 
 // cmdContext is /context and /session: Pi's Session Info, with the mode,
 // the model and the context's use, the same figure as the last
-// usage_update.
+// usage_update, then the output limit (0071-MADR D10).
 func (a *Agent) cmdContext(_ context.Context, t *cmdTurn, _ string) error {
 	s := t.s
 	st := s.state()
@@ -333,6 +333,7 @@ func (a *Agent) cmdContext(_ context.Context, t *cmdTurn, _ string) error {
 	} else {
 		fmt.Fprintf(&b, "\nContext: %s tokens (estimated) of an unknown window\n", thousands(int64(used)))
 	}
+	b.WriteString(a.outputLimitLine(s, prov, model))
 	t.say(b.String())
 	return nil
 }

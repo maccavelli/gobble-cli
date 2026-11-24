@@ -68,6 +68,51 @@ func TestModelInfoModelsJSON(t *testing.T) {
 	}
 }
 
+// A model's output cap carries its source (0071-MADR D1, L5, L6, L7): a
+// model models.json defines without maxTokens takes Pi's 16,384, assumed; a
+// maxTokens it states, an entry's or an override's, is the user's; the
+// snapshot's cap is the catalog's; a model nothing knows has no cap and no
+// source, for llm.FitOutput to assume.
+func TestModelsJSONDefaultIsAssumed_0071(t *testing.T) {
+	mj, _, err := gcatalog.ParseModelsJSON([]byte(`{"providers": {"openai": {
+  "modelOverrides": {"over": {"maxTokens": 100000}, "gpt-4o": {"contextWindow": 200000}},
+  "models": [{"id": "mine"}, {"id": "set", "maxTokens": 2048}]}}}`), SDKVersion(), (*Set)(nil).IDs())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		model string
+		mj    *gcatalog.ModelsJSON
+		cap   int
+		from  llm.CapSource
+	}{
+		{"mine", mj, 16384, llm.CapAssumed}, // Q2's 16,384, not the constant, so the constant is held too
+		{"set", mj, 2048, llm.CapUser},
+		{"over", mj, 100000, llm.CapUser},
+		{"gpt-4o", mj, 16384, llm.CapCatalog}, // an override without maxTokens leaves the snapshot's
+		{"gpt-4o", nil, 16384, llm.CapCatalog},
+		{"no-such-model", nil, 0, ""},
+	} {
+		if m := ModelInfo("openai", "", "", nil, c.model, c.mj); m.MaxTokens != c.cap || m.MaxTokensFrom != c.from {
+			t.Errorf("%s (models.json %v): cap %d from %q, want %d from %q", c.model, c.mj != nil, m.MaxTokens, m.MaxTokensFrom, c.cap, c.from)
+		}
+	}
+	// The six GLM-5.3 models of 0071-MADR's table, from the snapshot alone.
+	for _, c := range []struct {
+		provider, model string
+		window, cap     int
+	}{
+		{"kilo", "z-ai/glm-5.3", 1048576, 943718}, {"kilo", "z-ai/glm-5.3-flash", 1048576, 943718},
+		{"opencode-go", "glm-5.3", 1000000, 131072}, {"opencode-go", "glm-5.3-flash", 1000000, 131072},
+		{"together", "zai-org/GLM-5.3", 1048576, 262144}, {"together", "zai-org/GLM-5.3-Flash", 1048575, 400000},
+	} {
+		if m := ModelInfo(c.provider, "", "", nil, c.model, nil); m.ContextWindow != c.window || m.MaxTokens != c.cap || m.MaxTokensFrom != llm.CapCatalog {
+			t.Errorf("%s/%s: window %d, cap %d from %q; want %d, %d from the catalog", c.provider, c.model, m.ContextWindow, m.MaxTokens,
+				m.MaxTokensFrom, c.window, c.cap)
+		}
+	}
+}
+
 // The known models are the curated ones, then the document's that take
 // tools, sorted, each once; one without tools is left out (0005-PLAN F4-2c).
 func TestKnownModels(t *testing.T) {

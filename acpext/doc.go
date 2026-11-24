@@ -50,7 +50,9 @@
 // granted answers with Kind not_permitted and Consent, the consent's id. A
 // wait longer than gobble's retry cap is not taken and sends no MethodRetry:
 // the turn answers at once, with Kind rate_limited, Retryable true and the
-// RetryAfterMs the provider asked for.
+// RetryAfterMs the provider asked for. A quota, rate or credit failure of a
+// call that asked for an output limit carries OutputLimitNote: the limit
+// asked for and how to ask for less, which Error does not repeat.
 //
 // # Methods
 //

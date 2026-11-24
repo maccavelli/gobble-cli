@@ -110,14 +110,31 @@ func modelInfoFrom(ctx context.Context, id string, src llmprovider.TokenSource, 
 		layers = append(layers, *meta)
 	}
 	if mj == nil {
-		return lookupModelWith(ctx, id, src, model, workspace, clientName, clientVersion, sdk, layers...)
+		return capSourced(lookupModelWith(ctx, id, src, model, workspace, clientName, clientVersion, sdk, layers...), gcatalog.Facts{})
 	}
 	m := lookupModelWith(ctx, id, src, model, workspace, clientName, clientVersion, sdk, append(layers, modelsJSONLayer{mj})...)
-	if f, ok := mj.Facts(id, model); ok && len(f.LevelMap) > 0 {
+	f, ok := mj.Facts(id, model)
+	if ok && len(f.LevelMap) > 0 {
 		m.LevelMap = map[string]bool{}
 		for level, v := range f.LevelMap {
 			m.LevelMap[level] = v != nil
 		}
+	}
+	return capSourced(m, f)
+}
+
+// capSourced is m with the source of its output cap (0071-MADR D1):
+// models.json's maxTokens is the user's; Pi's default for a model it defines
+// without one is assumed; any other known cap is the catalog's. An unknown
+// cap is left unsourced, for llm.FitOutput to assume.
+func capSourced(m llm.Model, f gcatalog.Facts) llm.Model {
+	switch {
+	case f.MaxTokens != nil && f.MaxTokensStated:
+		m.MaxTokensFrom = llm.CapUser
+	case f.MaxTokens != nil:
+		m.MaxTokensFrom = llm.CapAssumed
+	case m.MaxTokens > 0:
+		m.MaxTokensFrom = llm.CapCatalog
 	}
 	return m
 }

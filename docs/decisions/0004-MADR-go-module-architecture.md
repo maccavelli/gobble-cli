@@ -744,6 +744,7 @@ Still `proposed`. Three sibling trees were re-read and built in scratch copies:
   * Billed model probes are **on** (up to 6 generations, `options.go:181-190`).
   * `MaxTokens` is 8192.
     *(2026-11-22: never overridden: decision 6's "`MaxOutputTokens` per model from `llm/catalog`" was not built, and agent turns send no limit (`agent/agent.go:685` at `0589454`), so the SDK's 8192 applies; a high-reasoning turn spent all of it and failed. go-llmprovider-sdk's 0088-MADR makes the SDK send the model's own limit when a request names none, and [0065-MADR-output-limit-ownership-between-gobble-and-the-sdk.md](0065-MADR-output-limit-ownership-between-gobble-and-the-sdk.md) proposes how gobble hands it its catalogue and what each side owns.)*
+    *(2026-11-24: carried out for turns and summaries on go-llmprovider-sdk `v1.32.0` by [0071-MADR-send-each-turn-the-models-output-cap-and-own-the-limit-policy.md](0071-MADR-send-each-turn-the-models-output-cap-and-own-the-limit-policy.md) D1, D2 and D6: each names the model's cap from `llm/catalog`, under a 64,000 ceiling and fitted to the window.)*
   * The default client has a 300 s `ResponseHeaderTimeout`.
   * Non-streamed bodies are capped at 1 MiB.
   * The SDK reads `CLAUDE_API_KEY`, not `ANTHROPIC_API_KEY` (`provider.go:180`). Its own 0016-MADR D12 chose the latter.

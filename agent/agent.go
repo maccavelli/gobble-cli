@@ -68,8 +68,18 @@ type Config struct {
 	// goes on from it; the call after an overflow is sent again once. It
 	// returns nil when it did not compact; an overflow it did not compact,
 	// with no error, ends the turn with the overflow. Its error ends the
-	// turn; a cancelled compaction returns ctx's. Nil never compacts.
-	Compact func(ctx context.Context, overflow bool) (*Compacted, error)
+	// turn; a cancelled compaction returns ctx's. Nil never compacts. tools
+	// are the tool specs the next request carries, which an estimate of the
+	// context counts when no usage measured them (0071-MADR D3, D4).
+	Compact func(ctx context.Context, overflow bool, tools jsontext.Value) (*Compacted, error)
+	// OutputLimit is asked each model call's output limit with the request
+	// built for it, and its Tokens are sent as the request's MaxTokens. The
+	// request's MaxTokens is 0, or the room or cap a refusal stated in the
+	// turn, which the function returns with llm.BasisRefusal: when the call is
+	// sent again after that refusal, and when a later call's own limit, asked
+	// first, is larger, which is then held to it (0071-MADR D4, D8 (a), L44). Nil
+	// sends no limit, and nothing is sent again.
+	OutputLimit func(*llm.Request) llm.OutputLimit
 	// Logger receives a model warning, once per kind and model in Warned.
 	// Nil discards them (0036-MADR D3).
 	Logger *slog.Logger
@@ -236,6 +246,12 @@ type turn struct {
 	bad     int
 	badTool string
 	halted  bool
+	// limit is the output limit the last call carried, and resendAt the one
+	// the next call carries after a refusal its limit caused, or 0
+	// (0071-MADR D8 (a)); stated is the least room or cap a refusal stated in
+	// the turn, which every later call of the turn asks for at most, or 0
+	// (L44).
+	limit, resendAt, stated int
 }
 
 // encodeSpecs is specs as a request carries them, or nil for none.
@@ -471,7 +487,7 @@ func (t *turn) compact(overflow bool) (bool, error) {
 	if t.a.cfg.Compact == nil {
 		return false, nil
 	}
-	c, err := t.a.cfg.Compact(t.ctx, overflow)
+	c, err := t.a.cfg.Compact(t.ctx, overflow, t.specs)
 	if err != nil || c == nil {
 		return false, err
 	}
@@ -493,18 +509,22 @@ func (t *turn) fail(err error) {
 // next is call with the waits of 0005-PLAN F5-1 decisions 3 and 4: an
 // offline call waits for the provider's host and is sent again, and an
 // empty reply runs again twice, neither reaching the history. Each wait is
-// reported as Retry events. A call over the model's window is compacted
-// and sent once more (0005-PLAN F5-2 decision 2). ok is false when the
-// turn is over: a failure yielded, the consumer stopped, or the turn
+// reported as Retry events. A call refused for its output limit, in a form
+// that states the room or the cap, is sent once more at it, before any
+// compaction (0071-MADR D8 (a)). A call over the model's window is
+// compacted and sent once more (0005-PLAN F5-2 decision 2). ok is false when
+// the turn is over: a failure yielded, the consumer stopped, or the turn
 // cancelled in a wait or a compaction.
 func (t *turn) next() (*reply, bool) {
 	rt := t.a.cfg.Retry
 	var cause RetryCause // the wait under way, or none
 	var deadline time.Time
 	empties := 0
-	resent := false // the call was sent again after an overflow
+	resent := false    // the call was sent again after an overflow
+	capResent := false // the call was sent again after a refusal of its limit
 	for {
 		r, err := t.call()
+		at, overflow := t.limitRefused(err)
 		switch {
 		case t.stopped:
 			return r, false
@@ -515,7 +535,13 @@ func (t *turn) next() (*reply, bool) {
 			// A call that failed after showing text or thinking is not sent again:
 			// what was shown stays, and the turn ends with the error. A completed
 			// thinking-only reply is still run again (0031-MADR D3, as amended).
-		case errors.Is(err, llm.ErrContextOverflow) && !resent && t.a.cfg.Compact != nil:
+		case at > 0 && !capResent:
+			capResent, t.resendAt, t.stated = true, at, at
+			continue
+		case at > 0:
+			// Refused again: no compaction mends a limit, and the turn ends with
+			// the refusal (D8 (c)).
+		case overflow && !resent && t.a.cfg.Compact != nil:
 			resent = true
 			done, cerr := t.compact(true)
 			if cerr != nil && t.ctx.Err() != nil {
@@ -577,6 +603,28 @@ func (t *turn) next() (*reply, bool) {
 		t.endWait(cause, "")
 		return r, true
 	}
+}
+
+// limitRefused reads err as a refusal of the output limit the call carried
+// (0071-MADR D8): at is the room or cap it states, when that is at least 1
+// and below the limit sent, for the call to be sent again at it; overflow
+// reports an overflow of the input, which takes the overflow's path:
+// llm.ErrContextOverflow the limit did not cause, or a window form whose
+// room is 0 or less. A call that carried no limit is never read as a
+// refusal of it.
+func (t *turn) limitRefused(err error) (at int, overflow bool) {
+	if err == nil {
+		return 0, false
+	}
+	var r llm.LimitRefusal
+	ok := false
+	if t.limit > 0 {
+		r, ok = llm.ReadLimitRefusal(err, t.limit)
+	}
+	if ok && r.Tokens >= 1 && r.Tokens < t.limit {
+		return r.Tokens, false
+	}
+	return 0, errors.Is(err, llm.ErrContextOverflow) || (ok && r.Window && r.Tokens <= 0)
 }
 
 // cutShort ends a wait that w cut short. A cancel ends the turn as
@@ -687,6 +735,17 @@ func (t *turn) call() (*reply, error) {
 	if s := t.a.cfg.Search; s != nil && len(req.Deferred) > 0 && t.tools[s.Spec().Name] != nil {
 		req.Search = s.Spec().Name
 	}
+	if t.a.cfg.OutputLimit != nil {
+		req.MaxTokens = t.resendAt
+		req.MaxTokens = t.a.cfg.OutputLimit(req).Tokens
+		if t.stated > 0 && req.MaxTokens > t.stated {
+			// A refusal stated a smaller limit earlier in the turn: the cap
+			// computed again is held to it, and asked as the refusal's (L44).
+			req.MaxTokens = t.stated
+			req.MaxTokens = t.a.cfg.OutputLimit(req).Tokens
+		}
+	}
+	t.limit, t.resendAt = req.MaxTokens, 0
 	r := &reply{}
 	var retrying RetryCause // the provider's retry under way, ended when its events begin
 	endRetry := func(why string) {

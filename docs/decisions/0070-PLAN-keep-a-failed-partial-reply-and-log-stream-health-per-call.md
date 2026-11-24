@@ -16,6 +16,8 @@ limits (Recommended)", superseding "Auto-continue, with limits (Recommended)"; Q
 is moot. Phase 3 is now the auto-retry phase (design B: one case in `next()`, no SDK work); the continuation's
 `Origin.Continued`, `gobble.continue` entry and `replay.go` change are gone from the scope.)*
 
+*(2026-11-24, note from [0071-MADR-send-each-turn-the-models-output-cap-and-own-the-limit-policy.md](0071-MADR-send-each-turn-the-models-output-cap-and-own-the-limit-policy.md) D11: built after 0071's Phase 1, this PLAN's `TestModelCallRecord` expects `limit` to be the request's `MaxTokens`, not 0 (0071 L29).)*
+
 ## Goal
 
 After this PLAN, a model call a failure ends is always written to the session in pi's shape, with pi's "Error: …" line

@@ -9,6 +9,6 @@
 {"direction":"sent","frame":{"id":3,"jsonrpc":"2.0","method":"session/prompt","params":{"prompt":[{"text":"hello","type":"text"},{"text":"gobble","type":"text"}],"sessionId":"s1"}}}
 {"direction":"received","frame":{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"s1","update":{"content":{"text":"hello gobble","type":"text"},"sessionUpdate":"agent_message_chunk"}}}}
 {"direction":"received","frame":{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"s1","update":{"sessionUpdate":"usage_update","size":0,"used":22}}}}
-{"direction":"received","frame":{"id":3,"jsonrpc":"2.0","result":{"stopReason":"end_turn","usage":{"inputTokens":10,"outputTokens":12,"totalTokens":22}}}}
+{"direction":"received","frame":{"id":3,"jsonrpc":"2.0","result":{"_meta":{"gobble":{"outputLimit":{"basis":"assumed","tokens":16384}}},"stopReason":"end_turn","usage":{"inputTokens":10,"outputTokens":12,"totalTokens":22}}}}
 {"direction":"sent","frame":{"id":4,"jsonrpc":"2.0","method":"session/close","params":{"sessionId":"s1"}}}
 {"direction":"received","frame":{"id":4,"jsonrpc":"2.0","result":{}}}

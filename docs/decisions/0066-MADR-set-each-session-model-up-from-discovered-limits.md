@@ -15,6 +15,8 @@ Associated PLAN: [0066-PLAN-set-each-session-model-up-from-discovered-limits.md]
 
 *(2026-11-22, the owner's answers, relayed by the coordinator: go-llmprovider-sdk 0089-MADR OQ1 "Only where required (Recommended)", OQ2 "Never wait; route's smallest (Recommended)", OQ3 "By default, can turn off (Recommended)", and OQ4, after the owner asked "how about option 1 and option 3? pros vs cons. explain." and the coordinator explained, "models.json only, for now (Recommended)"; and its 0088 OQ18 "Five now; 0088+0089 next (Recommended)". S32 to S34 are decided; D7's learning is the SDK's default, so gobble needs no opt-in; D12's release is the go-llmprovider-sdk release after the next tag, carrying 0088 and 0089. No row is open; by the records rule this record is `accepted`. Its PLAN stays `proposed` until the owner approves it.)*
 
+*(2026-11-24, note from [0071-MADR-send-each-turn-the-models-output-cap-and-own-the-limit-policy.md](0071-MADR-send-each-turn-the-models-output-cap-and-own-the-limit-policy.md) D12: D11 and S29 ("gobble names no limit and no ceiling of its own") are superseded by 0071 V3 for every call where gobble names a limit; S39 by 0071's Q2 answer, "16,384, fitted, shown 'assumed' (Recommended)"; D8's session-report line is merged with 0071 D10's by 0071 V6. This record's adoption amendment decides 0071 V7.)*
+
 ## Context and Problem Statement
 
 On 2026-11-22 the owner asked for a model output-limit discovery feature in

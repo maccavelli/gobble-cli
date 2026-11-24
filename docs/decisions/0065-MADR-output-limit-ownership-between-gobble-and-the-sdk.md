@@ -19,6 +19,8 @@ Associated PLAN: [0065-PLAN-output-limit-ownership-between-gobble-and-the-sdk.md
 
 *(2026-11-22, fourth note: the owner answered go-llmprovider-sdk's 0088 OQ14 (3), which decides Q1 here; the owner asked for model output-limit discovery in the SDK, its 0089-MADR, and gobble's side of it is [0066-MADR-set-each-session-model-up-from-discovered-limits.md](0066-MADR-set-each-session-model-up-from-discovered-limits.md): D10, D11's reported value and R31's move there; D14, D15, R42, R44 and R45 lapse, since gobble hands the SDK no snapshot; Q3 is asked with the SDK's ceiling as go-llmprovider-sdk 0089-MADR OQ4. See "Note (2026-11-22, fourth)" at the end, revised after record review 3.)*
 
+*(2026-11-24, note from [0071-MADR-send-each-turn-the-models-output-cap-and-own-the-limit-policy.md](0071-MADR-send-each-turn-the-models-output-cap-and-own-the-limit-policy.md) D12: on go-llmprovider-sdk `v1.32.0`, gobble's turns and compaction summaries now name an output limit, the catalog's cap under a 64,000 ceiling and fitted to the window (0071 D1, D2, D6). So this record's D1 "Agent turns keep `MaxTokens: 0`", R1, R2, R3, R14 and R17 are superseded for turns by 0071 D1 and D2; D4 and R7 by 0071 D6; R34 by 0071 D8 (d), whose line rides `acpext.ErrorData.outputLimitNote` (0071's amendment of 2026-11-24, the owner's "Move the line into a new field"); D3, R9 and R10 are unchanged until 0071 V8. This record's adoption amendment after `v1.33.0` decides 0071 V8 and V9.)*
+
 ## Context and Problem Statement
 
 A large multi-file turn on Kilo's `kilo-auto/balanced` with thinking `high`
