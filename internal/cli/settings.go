@@ -125,7 +125,7 @@ func rulesOf(rules []config.PermissionRule) []permission.Spec {
 func retryOf(r config.Retry) llm.Retry {
 	ms := func(n int64) time.Duration { return time.Duration(n) * time.Millisecond }
 	return llm.Retry{Off: !r.Enabled, MaxRetries: int(r.MaxRetries), BaseDelay: ms(r.BaseDelayMs), MaxDelay: ms(r.MaxDelayMs),
-		OfflineWait: ms(r.OfflineWaitMs)}
+		OfflineWait: ms(r.OfflineWaitMs), AfterCut: r.RetryAfterCut}
 }
 
 // expandHome expands a leading ~ to the home directory, as the path keys

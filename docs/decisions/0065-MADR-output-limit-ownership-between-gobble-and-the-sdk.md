@@ -257,6 +257,9 @@ on go-llmprovider-sdk's OQ9 to OQ12 say what holds until they are answered.
 * **D11. Telemetry.** gobble logs each call's request limit at debug (0 is
   "the SDK's default"); when the SDK reports the limit sent, gobble logs that
   and `/context` shows it.
+  *(2026-11-24, note from `0070-MADR-keep-a-failed-partial-reply-and-log-stream-health-per-call.md` D19: built by 0070
+  as the `limit` field of its per-call `model call` record, at debug for a healthy call and at info for one that
+  failed or was retried; the value is the request's `MaxTokens`, which 0071 now sets on every turn.)*
 * **D12. Ordering against the SDK.** gobble adopts the go-llmprovider-sdk tag
   that carries 0088 (the tag of six records, 0088 OQ8). D1 to D8 are built
   before it, on `v1.31.0`: with D2's wrapper the only change to a request
@@ -370,7 +373,7 @@ value for a request that names no limit (0088 A2, as its OQ9 answers).
 | R28 | ACP mode | decided | stop reason `max_tokens` as today; the cause's line as an agent message | D8 |
 | R29 | CLI interactive mode | decided | the line of `turn.stop.max_tokens`, `turn.stop.max_tokens_thinking` or `turn.stop.max_tokens_tool` | D8 |
 | R30 | Headless print and JSON | decided | the stop reason and the cause's line, as the CLI | D8 |
-| R31 | The limit a call was sent | decided | *(2026-11-22, fourth: the reported value and the context line move to 0066-MADR D8, S20, S21; the request's 0 logged here stays)* logged at debug: the request's value (0, the SDK's default); the SDK's reported value and its source, and `/context`'s line, when the new SDK record of its OQ12 ("New record, all three") reports it | D11 |
+| R31 | The limit a call was sent | decided | *(2026-11-22, fourth: the reported value and the context line move to 0066-MADR D8, S20, S21; the request's 0 logged here stays)* logged at debug: the request's value (0, the SDK's default); the SDK's reported value and its source, and `/context`'s line, when the new SDK record of its OQ12 ("New record, all three") reports it *(2026-11-24: built by `0070-MADR-keep-a-failed-partial-reply-and-log-stream-health-per-call.md` D19 as its record's `limit`, the request's `MaxTokens`; tested by 0070's `TestModelCallRecord`, T13)* | D11 |
 | R32 | Usage with reasoning tokens | decided | as today (`usageOf`) | `provider.go` `usageOf` |
 | R33 | Anthropic's output-per-minute limit | out of scope | `max_tokens` is not counted (report WS1) | |
 | R34 | A gateway that reserves credit from the limit | out of scope | through `chatcompat` only models.json can raise (R5), and a 402 is `llm.ErrQuota`; through Kilo an upstream's 402 arrives as 503 (0088 C96), `llm.ErrUnavailable`, as today | |

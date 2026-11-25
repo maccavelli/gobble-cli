@@ -236,6 +236,13 @@ its own.
   guard is for a call that fails after showing text or thinking (offline, an empty-answer error, an overflow). A call
   that completes with thinking alone is still run again, its thinking shown again, as 0005-PLAN F5-1 decision 4 has
   it and as it was when replies were buffered.
+
+  *Amended 2026-11-24 by `0070-MADR-keep-a-failed-partial-reply-and-log-stream-health-per-call.md` D13 (the owner's
+  "Auto-retry, with limits (Recommended)"):* a shown-then-cut call is replaced by a rerun when its cut is accidental
+  (`unavailable` or `offline`, after any event, at most 3 in a row, under `retry.retryAfterCut`), and its text is shown
+  again as the reply starts over; any other failure after shown text still ends the turn with the error, and the call
+  is never sent again in part. The "Keep the re-run" amendment stands; the replaced attempts are kept as failed entries
+  (0070 D4).
 - **D4. Provider retries are shown.** The `notify` of D2 reaches the turn as a retry of its own cause, the provider's,
   with its attempt, delay and error class, shown as the offline and empty-reply waits are. This answers 0005-PLAN's
   "once the SDK offers a callback (issue 3)".

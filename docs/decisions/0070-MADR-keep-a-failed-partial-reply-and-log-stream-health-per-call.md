@@ -38,6 +38,20 @@ ran (`agent/agent.go:738-744`); C5 is decided so. No row is open, so the record 
 
 *(2026-11-24, note from [0071-MADR-send-each-turn-the-models-output-cap-and-own-the-limit-policy.md](0071-MADR-send-each-turn-the-models-output-cap-and-own-the-limit-policy.md) D11 and D12: 0071's Phase 1 is built first, so this record, built second, updates T13's expected `limit` to the request's `MaxTokens`, which every turn now sets, not 0 (0071 L29).)*
 
+*(2026-11-24, amendment B, after the PLAN's Phase 0 stop at `50bf28a`: the owner answered the stop's four questions,
+relayed by the coordinator, recorded here as Q8 to Q11 (asked as Q1 to Q4 of the stop). Q8 "Exactly what the cut call
+sent (Recommended)" annotates D12 (b) and adds C25; Q9 "Same call, they carry over (Recommended)" annotates D12 (e) and
+adds C26 and C27; Q10 "The live text, line included (Recommended)" annotates D2 and adds G41; Q11 "Retarget to a
+non-retried failure (Recommended)" adds G42. See "Owner rulings" and the state table.)*
+
+*(2026-11-24, amendment C, after the PLAN's second stop, relayed by the coordinator: Q12 "Make it not-shown; G7
+elsewhere (Recommended)" adds G43; Q13 "Confirm, with a dated row (Recommended)" adds C28. See "Owner rulings" and the
+state table.)*
+
+*(2026-11-24, amendment D, after the review of the build, relayed by the coordinator: Q14 "Keep the short wait and
+resend" adds C29: an `offline` cut with no prober, or with `offlineWaitMs: 0`, waits the doubled `BaseDelay` and is sent
+again, within the cut cap.)*
+
 ## Context and Problem Statement
 
 Two ideas from the upstream comparison (go-llmprovider-sdk `docs/reports/0091-REPORT-responses-api-across-providers.md`,
@@ -203,6 +217,22 @@ leaves F3.
 * **Q6** is moot under Q1's re-answer: a call half-written at a cut never reached gobble, is thrown away with its
   attempt, and no tool ran (F18). C5 is decided so.
 
+*(2026-11-24, amendment B. Asked after the PLAN's Phase 0 stop at `50bf28a`, once
+`0071-MADR-send-each-turn-the-models-output-cap-and-own-the-limit-policy.md` Phases 1 and 1b had put a per-call output
+limit (`agent/agent.go:738-748`), a once-only resend after a limit refusal (`capResent`, `:524`, `:538-543`) and the
+limit's line in the turn's error (`acpserver/outputlimit.go:77-83`) into the turn; the evidence is in the PLAN's
+execution record. Relayed by the coordinator; the labels are exact.)*
+
+| Question | Answer | Rows |
+| :--- | :--- | :--- |
+| Q8. What output limit does a cut retry ask for? 0071 computes each call's limit again over an estimate of the session file, which counts the D4 entry's text written before the retry, so a window-bound limit comes out smaller | "Exactly what the cut call sent (Recommended)": the cut call's request is resent unchanged, `MaxTokens` included; the output limit is not asked again *(2026-11-24, annotation after the review of the build, read with Q9's "Same call, they carry over (Recommended)" as the coordinator read them: every resend of the cut call until it ends is that call and keeps its `MaxTokens`, the resend after an offline wait that follows a failed cut retry included; a limit refusal's stated value still takes its place (0071 D8 (a)), and an overflow's compacted request asks again (0071 L11); `TestRetryAfterCutKeepsLimitAfterOffline`)* | D12 (b); C25 |
+| Q9. Do 0071's once-only resends count across a cut retry (`capResent`, `resent`, `empties`, local to `next()`)? | "Same call, they carry over (Recommended)": a cut retry is the same call sent again; a limit refusal on it is resent once if the call was not resent for its limit yet, and ends the turn if it was (0071 L39, L12) | D12 (e); C26, C27 |
+| Q10. What `errorMessage` does the D2 entry of a turn ending on a limit refusal hold? 0071 adds its line to the turn's error after the agent emitted the message | "The live text, line included (Recommended)": the text the live error showed, 0071's "gobble asked for at most N …" line included | D2; G41 |
+| Q11. `TestMidStreamFailure` (`agent/agent_test.go:956-981`) asserts no message and one request after text then `llm.ErrUnavailable`, which D2 and D12 contradict | "Retarget to a non-retried failure (Recommended)": its failure becomes an HTTP 400 (a kind this record never retries); it asserts the message carries the error, and still guards "not sent again" | G42 |
+| *(2026-11-24, amendment C)* Q12. `TestEmptyReplyRunsAgain/then_text` (`agent/retry_test.go:191-216`), cited by G5, opens with a thinking delta that is shown, so D4 keeps it and `len(end.Messages)` is 3, not 2 | "Make it not-shown; G7 elsewhere (Recommended)": its first try becomes one that shows nothing, so it guards G5 as G5 cites it; the shown attempt stays with `TestReplacedAttemptsKept` | G43 |
+| *(2026-11-24, amendment C)* Q13. Adding `retry.retryAfterCut` turned `internal/config`'s registry tests red; `TestKeysMatchSettings`'s count is named by no row | "Confirm, with a dated row (Recommended)" | C28 |
+| *(2026-11-24, amendment D, after the review of the build)* Q14. An `offline` cut with no prober, or with `offlineWaitMs: 0`: no row said whether it is retried, and how long it waits | "Keep the short wait and resend": it waits the doubled `BaseDelay`, up to `MaxDelay`, and is sent again, within the cut cap; the offline path proper (an offline failure before any event) still ends the turn at once | D12 (b); C29 |
+
 ### The decisions: G1, keeping what a call produced
 
 * **D1. What "shown" means.** A call has shown something when the agent emitted a non-empty text or thinking delta of
@@ -212,7 +242,9 @@ leaves F3.
   the call it ends on as an `agent.Message` with `Err` set, empty or not: the shown guard (`agent/agent.go:514-517`),
   the reruns running out (`errNoUsableReply`, `:568-569`), an aborted wait (`errEmpty`, `:565-567`), a failure with
   nothing shown, and an accidental cut that is not retried (the cap reached, or the setting off; D12). The writer writes
-  it with `stopReason` `"error"` and `errorMessage` the error's text (F5); the live history is set from the file
+  it with `stopReason` `"error"` and `errorMessage` the error's text (F5) *(2026-11-24, amendment B, Q10: the text the
+  live error showed, `0071-MADR-send-each-turn-the-models-output-cap-and-own-the-limit-policy.md` D8 (c)'s line included
+  when the turn ends on a refusal of its limit; G41)*; the live history is set from the file
   (`replayFile`), as on every failure. A cancel during the empty-reply wait after a shown attempt is not an error: the
   attempt is emitted with no `Err` and its stop reason cleared, appended to the turn's messages, and ends
   `StopCancelled`, so it is written `"aborted"` and `stamped` marks it failed live, as a reload reads it (F4).
@@ -267,7 +299,9 @@ leaves F3.
     `Attempt` the count and `MaxAttempts` 3; it waits, for `unavailable` the session policy's delay (`BaseDelay`
     doubled at each cut retry, capped at `MaxDelay`, `llm.Retry`), for `offline` by `waitOnline` within `OfflineWait`;
     a cancel or an abort ends the wait by `cutShort`; then `continue` resends the same request: the turn's messages are
-    unchanged, so the request is byte-identical to the cut one.
+    unchanged, so the request is byte-identical to the cut one. *(2026-11-24, amendment B, Q8: the cut call's request
+    is resent as it was sent, `MaxTokens` included; `agent.Config.OutputLimit` is not asked again, so the D4 entry the
+    estimate now counts cannot lower it, and a limit held by a refusal stays held; C25.)*
   * **(c) How it is stored.** Only D4's entry. No `Origin` flag, no custom entry, no replay exception (D7).
   * **(d) How it shows (Q7, with the cause `cut`).** Live: the cut part as it streamed, then a `_gobble/retry` start
     notice (cause `cut`, attempt n of 3, its delay), ended at the retry's first event (`Err` empty) or its failure
@@ -282,7 +316,12 @@ leaves F3.
     cut ends the turn `max_tokens` with the notice of `0065-MADR-output-limit-ownership-between-gobble-and-the-sdk.md`
     R21. One that returns an empty reply takes the empty-reply rerun path. One refused for overflow before any event is
     compacted once and resent (G11). A cancel during the wait ends the turn `StopCancelled`, the D4 entry already
-    written; a cancel during the retried call is a cancel during a call (F4).
+    written; a cancel during the retried call is a cancel during a call (F4). *(2026-11-24, amendment B, Q9: a cut retry
+    is the same call sent again, so the call's once-only resend after a limit refusal, its overflow compaction and its
+    empty-reply count carry over it. A retry refused for its limit is resent once at the stated room or cap when the call
+    was not resent for its limit yet (C26), and ends the turn with the refusal when it was
+    (`0071-MADR-send-each-turn-the-models-output-cap-and-own-the-limit-policy.md` L39, L12; C27); "fails otherwise" above
+    means after those.)*
   * **(f) The setting.** `retry.retryAfterCut`, a boolean session setting, default `true`, in `internal/config/keys.go`
     beside the `retry.*` keys, its doc: "Whether a model call cut by a dropped connection, an idle timeout or a server
     error after its reply began is sent again from the start, at most 3 times in a row; the cut part stays in the
@@ -397,6 +436,9 @@ session's next request against the reloaded session's, equal in roles and wire b
 | G33 | A cancel during the empty-reply wait after a shown attempt | decided | the attempt written `"aborted"`, failed live by `stamped` | D2 | `TestFailedCallKept/cancel_in_wait`; plant: keep only on error paths. History test `TestCancelInWaitHistoryIsTheFiles`; plant: emit it with its `end_turn` stop (written `"stop"`, sent again) |
 | G34 | A shown attempt replaced by a rerun that fails before any event | decided | the shown attempt is a D4 entry; the turn's last call the D2 entry (Q3) | D4 | `TestReplacedAttemptsKept/rerun_fails_before_event`; plant: keep replaced attempts only when the rerun succeeds |
 | G35 | A shown attempt, then the rerun overflows before any event and is resent after compaction | decided | the shown attempt is a D4 entry (Q3) | D4 | `TestReplacedAttemptsKept/overflow_resend`; plant: drop it on the compaction path |
+| G41 *(2026-11-24, amendment B)* | A turn that ends on a refusal of its output limit (`0071-MADR-send-each-turn-the-models-output-cap-and-own-the-limit-policy.md` D8 (c)) | decided | the D2 entry's `errorMessage` is the live error's text, 0071's "gobble asked for at most N …" line included (Q10) | D2 as amended | `TestFailedEntryKeepsLimitLine` (acpserver, reads the file); plant: write the agent's error text. *(2026-11-24, after the review: the live text is `errorData`'s, so a workspace refusal keeps the advice the client saw; `TestFailedEntryKeepsWorkspaceAdvice`; plant: build it from `limitLine` alone)* |
+| G43 *(2026-11-24, amendment C)* | The existing `TestEmptyReplyRunsAgain/then_text` (`agent/retry_test.go:191-216`) | decided | its first try shows nothing (an encrypted-only reasoning item, no text), so it guards G5: three requests, no empty reply in the turn's messages or a later request (Q12) | D4; G5 | `TestEmptyReplyRunsAgain/then_text`, retargeted; plant: keep a replaced attempt that showed nothing |
+| G42 *(2026-11-24, amendment B)* | The existing `TestMidStreamFailure` (`agent/agent_test.go:956-981`) | decided | its failure is an HTTP 400 after text, with the cut retry on: one request, an `agent.Message` carrying the error, then the error (Q11) | D2, D12 (a) | `TestMidStreamFailure`, retargeted; plant: the cut retry takes every error kind |
 
 **G1: cancel, length, refusal**
 
@@ -454,7 +496,7 @@ session's next request against the reloaded session's, equal in roles and wire b
 | C9 | The history after a retried turn, live and reloaded | decided | equal; the cut attempt is a failed entry in both and in neither request | D12 (c), D7 | History test `TestRetryAfterCutHistoryIsTheFiles`; plant: emit the cut attempt with no `Err` (written `"stop"`, sent again) |
 | C10 | A cancel during the wait before a retry | decided | `StopCancelled`; the D4 entry stays `"error"`; nothing more written | D12 (e) | `TestRetryAfterCut/cancel_in_wait`; plant: write the cut attempt only after the wait |
 | C11 | A retry that returns an empty reply | decided | the empty-reply rerun path, with its own count | D12 (e) | `TestRetryAfterCut/then_empty`; plant: count empty reruns against the cut cap |
-| C12 | How a retry shows, live and on load | decided | live: the cut part, a `_gobble/retry` notice of cause `cut`, attempt n of 3, ended at the retry's first event or failure, then the reply from its start; on load: the cut part, "Error: …", the retry's reply (Q7) | D12 (d) | `TestRetryAfterCutShows` (acpserver: live updates in order: chunk "half", a retry start of cause `cut`, attempt 1 of 3, its end, chunk "whole"; a load replays "half", the "Error: …" line, "whole"); plant 1: emit no `agent.Retry` before the retry; plant 2: end the notice before the wait |
+| C12 | How a retry shows, live and on load | decided | live: the cut part, a `_gobble/retry` notice of cause `cut`, attempt n of 3, ended at the retry's first event or failure, then the reply from its start; on load: the cut part, "Error: …", the retry's reply (Q7) | D12 (d) | `TestRetryAfterCutShows` (acpserver: live updates in order: chunk "half", a retry start of cause `cut`, attempt 1 of 3, its end, chunk "whole"; a load replays "half", the "Error: …" line, "whole"); plant 1: emit no `agent.Retry` before the retry; plant 2: end the notice before the wait. *(2026-11-24, after the review: a retry that fails before any event ends the notice then, with the failure's text, whichever path follows; `TestRetryAfterCutNoticeEnds/{offline,limit_refused,overflow}`; plant: leave it open to a later call)* |
 | C13 | A retry cut accidentally again | decided | retried again; counted | D12 (e) | `TestRetryAfterCut/chain`; plant: reset the count at each retry |
 | C14 | The cap | decided | at most 3 in a row per turn; the fourth accidental cut ends the turn with its error (D2); a `Done` resets; each turn starts at 0 | D12 (e) | `TestRetryAfterCut/cap` (four cuts; and a reset after a completed call); plant: cap at 4 |
 | C15 | A retry fails otherwise | decided | the turn ends with that error; its entry kept (D2) | D12 (e) | `TestRetryAfterCut/then_fails`; plant: retry on any error after a cut retry |
@@ -467,6 +509,11 @@ session's next request against the reloaded session's, equal in roles and wire b
 | C22 | Q3 and Q4 with a retry | decided | one entry per call: each retried cut attempt that showed something a D4 entry, the last call D2's | D12 (h) | `TestRetryAfterCutWritesOneEntryPerCall`; plant: write a retried attempt twice (as D4 and D2) |
 | C23 | The record of a cut retry | decided | `cut_retry` 1 to 3; at `Info` (retried) | D15, D17 | `TestModelCallRecord/cut_retry`; plant: omit the context value |
 | C24 | Headless output with a retry | decided | text and JSON hold the cut part and the retry's whole reply as streamed; no error when it completes | D12 (i) | `TestPrintAfterCutRetry` (internal/cli over `acptest.ScriptAgent`: chunks, a `_gobble/retry` start and end of cause `cut`, chunks, `end_turn`); plant: the printer drops text before the notice |
+| C28 *(2026-11-24, amendment C)* | The existing `internal/config` tests the new key turns red | decided | the template's retry block (`internal/config/settings.yaml`) gains `retryAfterCut: true` and `TestRenderDocument`'s document (`internal/config/render_test.go:45-51`) its line; the schema golden is regenerated (`go run ./internal/config/genschema`); `TestKeysMatchSettings` counts 33 keys, naming "0070-MADR D12's retry.retryAfterCut" (`internal/config/resolve_test.go:108-109`) (Q13) | D12 (f); C19, C20 | `go test ./internal/config` (`TestRenderDocument`, `TestSchemaCommitted`, `TestKeysMatchSettings`, the template tests); plant: the key with no template line |
+| C29 *(2026-11-24, amendment D)* | An `offline` cut with no prober, or with `offlineWaitMs: 0` | decided | it waits the doubled `BaseDelay`, up to `MaxDelay`, and is sent again, up to the cut cap; the docs of `retry.offlineWaitMs` say so, and that the offline path proper still ends the turn (Q14) | D12 (b) as amended | `TestRetryAfterCutOfflineNoWait/{no_prober,no_offline_wait}` (a cut retry start of delay 2 s, its end at 2 s, two requests); plant: end the turn on such a cut |
+| C25 *(2026-11-24, amendment B)* | A cut retry's output limit, with `agent.Config.OutputLimit` set | decided | the cut call's request resent unchanged, `MaxTokens` included; `OutputLimit` not asked again (Q8) | D12 (b) as amended | `TestRetryAfterCutRequest/keeps_limit` (an `OutputLimit` that answers less at each ask: both requests carry the first answer, asked once); plant: ask `OutputLimit` again on a cut retry. *(2026-11-24, with Q9: also `TestRetryAfterCutKeepsLimitAfterOffline` (the resend after an offline wait that follows a failed cut retry keeps the cut call's limit, asked once); plant: keep it for the first resend only)* |
+| C26 *(2026-11-24, amendment B)* | A cut retry refused for its limit, the call not yet resent for its limit | decided | resent once at the stated room or cap (0071 D8 (a)); the turn goes on (Q9) | D12 (e) as amended | `TestRetryAfterCut/limit_refused_on_retry` (three requests: the cap, the cap, the stated value); plant: end the turn on a limit refusal after a cut retry |
+| C27 *(2026-11-24, amendment B)* | A cut retry refused for its limit, the call already resent for its limit | decided | the turn ends with the refusal (0071 L39, L12); no further resend (Q9) | D12 (e) as amended | `TestRetryAfterCut/limit_refused_after_resend` (three requests, then the refusal); plant: reset the once-only resend at a cut retry |
 
 **G8: the record**
 
@@ -505,7 +552,10 @@ session's next request against the reloaded session's, equal in roles and wire b
 
 Counts: 14 + 8 + 15 + 3 + 24 + 23 + 2 = 89 rows; 84 decided, 5 out of scope (G6, G22, T16, T17, T18), 0 open.
 *(Before the fifth draft: 83 decided, 1 open, C5. Before the Q7 amendment: 82 decided, 2 open.)* No row is open, so by
-the state-table rule the record is `accepted` (2026-11-24).
+the state-table rule the record is `accepted` (2026-11-24). *(2026-11-24, amendment B: G41, G42, C25, C26 and C27
+added, all decided: 94 rows, 89 decided, 5 out of scope, 0 open; the record stays `accepted`.)* *(2026-11-24, amendment
+C: G43 and C28 added: 96 rows, 91 decided, 5 out of scope, 0 open.)* *(2026-11-24, amendment D: C29 added, Q14
+"Keep the short wait and resend": 97 rows, 92 decided, 5 out of scope, 0 open.)*
 
 ## Owner questions
 

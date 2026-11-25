@@ -785,6 +785,10 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 	}
 	auto := &autoCompaction{a: a, s: s, provider: model, providerID: w.provider}
 	limits := &turnLimits{a: a, s: s, provider: w.provider, model: chosen}
+	// The text the live error shows, as promptErrorNoted builds it: the
+	// limit's line, and a workspace's advice in place of the service's words
+	// (0070-MADR D2, Q10).
+	w.errText = func(err error) string { return errorData(a.provOf(s), limitLine(err, limits.last, chosen)).Error }
 	cfg := agent.Config{
 		Provider: model,
 		Tools:    tools,
@@ -1037,6 +1041,14 @@ type writer struct {
 	model    string
 	written  map[string]bool // tool calls whose result is written
 	err      error
+	// errText is a failed call's error as the live error shows it, which its
+	// entry keeps as errorMessage (0070-MADR D2, Q10); nil is the error's own
+	// text.
+	errText func(error) string
+	// held is a failed call's append error: the turn's error that follows it
+	// is answered, not this one, which ends the prompt only if the turn goes
+	// on instead (0070-MADR D5).
+	held error
 }
 
 func (w *writer) add(e session.Entry) {
@@ -1050,6 +1062,25 @@ func (w *writer) add(e session.Entry) {
 func (w *writer) fail(err error) {
 	if w.err == nil {
 		w.err = err
+	}
+}
+
+// failedEntry writes m, a failed call's message, in Pi's shape: stopReason
+// error, with the error the user saw (0070-MADR D2, D4, Q10). When its append
+// fails, the error is logged at warn and held: the turn's error that follows
+// is the one answered (D5).
+func (w *writer) failedEntry(m *session.Message, failure error) {
+	m.StopReason, m.ErrorMessage = piError, failure.Error()
+	if w.errText != nil {
+		m.ErrorMessage = w.errText(failure)
+	}
+	if w.err != nil {
+		return
+	}
+	if err := w.s.append(w.ctx, w.a.now(), session.Entry{Type: session.TypeMessage, Message: m}); err != nil {
+		w.a.logger.WarnContext(w.ctx, "session: a failed call's entry was not written", slog.String("session", string(w.s.id)),
+			slog.String("error", err.Error()))
+		w.held = err
 	}
 }
 
@@ -1067,13 +1098,23 @@ func (w *writer) addEntry(e session.Entry, err error) {
 // update, followed by its plan as a gobble.todo entry when it has one, and
 // at the end the results of calls a cancel cut short.
 func (w *writer) event(ev agent.Event) {
+	if w.held != nil {
+		// The turn went on after a failed call's entry was lost: the append's
+		// error ends the prompt now (0070-MADR D5).
+		w.fail(w.held)
+		return
+	}
 	ts := func() string { return session.Timestamp(w.a.now()) }
 	switch ev := ev.(type) {
 	case agent.Queued:
 		w.add(session.Entry{Type: session.TypeMessage, Message: userEntryMessage(ev.Message, ts())})
 	case agent.Message:
 		m, err := assistantEntryMessage(ev, w.provider, w.model, w.a.modelOf(w.provider, w.model), ts())
-		w.addEntry(session.Entry{Type: session.TypeMessage, Message: m}, err)
+		if err != nil || ev.Err == nil {
+			w.addEntry(session.Entry{Type: session.TypeMessage, Message: m}, err)
+			return
+		}
+		w.failedEntry(m, ev.Err)
 	case agent.ToolEnd:
 		w.written[ev.Call.ID] = true
 		w.add(session.Entry{Type: session.TypeMessage, Message: toolResultWithImages(ev.Call.ID, ev.Call.Name, ev.Result, ts())})

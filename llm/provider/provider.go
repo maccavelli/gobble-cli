@@ -260,7 +260,7 @@ func New(id string, o Options) (llm.Provider, error) {
 		w = llmprovider.WithStreamRetry(p, policyOf(r), notice)
 	}
 	return &adapter{p: w, id: p.ID(), caps: w.Capabilities(), source: o.CredentialSource, login: login != nil,
-		consent: planConsentOf(id, login)}, nil
+		consent: planConsentOf(id, login), logger: o.Logger, session: o.SessionID}, nil
 }
 
 // noticeKey carries a call's hook for the retry notices of its stream.
@@ -296,6 +296,12 @@ type adapter struct {
 	// not carry, whose host Probe dials (0005-PLAN F5-1, deviation 1).
 	mu         sync.Mutex
 	offlineURL string
+	// logger takes each call's stream-health record, and session names the
+	// conversation in it; nil records nothing. now is the record's clock,
+	// time.Now when nil (0070-MADR D15, D16).
+	logger  *slog.Logger
+	session string
+	now     func() time.Time
 }
 
 // providerRetry is n as llm's event: its try, the wait taken, and the
@@ -348,23 +354,33 @@ func (a *adapter) Capabilities() llm.Capabilities {
 // Stream maps the SDK's stream onto llm's sealed events, as llm's package
 // documentation lists. Another model's messages go without its data
 // (0025-MADR D2); a request refused over a signature despite that, before
-// any event, is sent once more with no thinking at all (0025-MADR Q4).
+// any event, is sent once more with no thinking at all (0025-MADR Q4). Each
+// call ends with one stream-health record in the log (0070-MADR D15).
 func (a *adapter) Stream(ctx context.Context, req *llm.Request) iter.Seq2[llm.Event, error] {
 	return func(yield func(llm.Event, error) bool) {
+		h := a.begin(ctx)
+		h.outcome = outcomeDone
 		msgs := replay(req.Messages, string(a.id), req.Model)
-		if a.attempt(ctx, req, msgs, true, yield) {
-			a.attempt(ctx, req, stripThinking(msgs), false, yield)
+		if a.attempt(ctx, req, msgs, true, yield, &h) {
+			h.resent = true
+			a.attempt(ctx, req, stripThinking(msgs), false, yield, &h)
 		}
+		a.record(ctx, req, &h)
 	}
 }
 
 // attempt streams req with msgs, and reports whether it was refused over a
-// signature before any event, when canRetry, instead of yielding that.
-func (a *adapter) attempt(ctx context.Context, req *llm.Request, msgs []llm.Message, canRetry bool, yield func(llm.Event, error) bool) (retry bool) {
+// signature before any event, when canRetry, instead of yielding that. It
+// keeps the call's health in h.
+func (a *adapter) attempt(ctx context.Context, req *llm.Request, msgs []llm.Message, canRetry bool, yield func(llm.Event, error) bool,
+	h *health) (retry bool) {
+	parent := ctx
 	r := *req
 	r.Messages = msgs
 	sreq, err := toRequest(&r)
 	if err != nil {
+		h.refused = true
+		h.failed(err)
 		yield(nil, err)
 		return false
 	}
@@ -385,48 +401,36 @@ func (a *adapter) attempt(ctx context.Context, req *llm.Request, msgs []llm.Mess
 	defer cancel()
 	ctx = context.WithValue(ctx, noticeKey{}, func(n llmprovider.RetryNotice) {
 		tried = n.Attempt
-		if !stopped && !yield(a.providerRetry(n), nil) {
+		pr := a.providerRetry(n)
+		h.retried(n, pr.Kind)
+		if !stopped && !yield(pr, nil) {
 			stopped = true
 			cancel()
 		}
 	})
 	for ev, err := range llmprovider.Stream(ctx, a.p, sreq) {
 		if stopped {
+			h.outcome = outcomeStopped
 			return false
 		}
 		if err != nil {
 			if canRetry && !sent && signatureRefused(mapError(err)) {
 				return true
 			}
-			if ue, ok := errors.AsType[*url.Error](err); ok && errors.Is(err, llmprovider.ErrOffline) {
-				a.mu.Lock()
-				a.offlineURL = ue.URL
-				a.mu.Unlock()
-			}
-			if refusedAnswer(err) { // a refusal, as one with text is (0005-PLAN F5-3 decision 5)
-				yield(llm.Done{StopReason: llm.StopRefusal}, nil)
-				return false
-			}
-			mapped := mapErrorAt(a.id, err, time.Now())
-			if ae, ok := errors.AsType[*llm.APIError](mapped); ok && tried > 0 {
-				ae.Attempts = tried + 1
-			}
-			if a.consent != "" && llm.IsBackground(ctx) && refusedBeforeSending(err) {
-				// The SDK's refusal of a marked request names the consent only in
-				// its text; the error carries its id (0052-MADR D2).
-				mapped = &llm.ConsentError{Consent: a.consent, Err: mapped}
-			}
-			yield(nil, a.rejected(mapped, err))
+			a.streamFailed(ctx, parent, err, tried, yield, h)
 			return false
 		}
 		sent = true
+		h.arrive()
 		var e llm.Event
 		switch ev.Type {
 		case llmprovider.EventTextDelta:
 			out.WriteString(ev.Text)
 			e = llm.TextDelta{Text: ev.Text}
+			h.shown = h.shown || ev.Text != ""
 		case llmprovider.EventReasoningDelta:
 			e = llm.ThinkingDelta{Text: ev.Text}
+			h.shown = h.shown || ev.Text != ""
 		case llmprovider.EventItem:
 			switch it := ev.Item.(type) {
 			case llmprovider.FunctionCallItem:
@@ -436,19 +440,64 @@ func (a *adapter) attempt(ctx context.Context, req *llm.Request, msgs []llm.Mess
 				e = llm.ThinkingDelta{ProviderData: reasoningData(it)}
 			}
 		case llmprovider.EventDone:
+			if h.on && ev.Response != nil {
+				for _, w := range ev.Response.Warnings {
+					h.warnings = append(h.warnings, string(w.Kind))
+				}
+			}
 			if !yieldWarnings(ev.Response, yield) {
+				h.outcome = outcomeStopped
 				return false
 			}
-			if !yield(usageOf(ev.Response, sreq, out.String()), nil) {
+			u := usageOf(ev.Response, sreq, out.String())
+			h.usage, h.used = u, true
+			if !yield(u, nil) {
+				h.outcome = outcomeStopped
 				return false
 			}
-			e = llm.Done{StopReason: stopOf(ev.Response, calls)}
+			h.stop = stopOf(ev.Response, calls)
+			e = llm.Done{StopReason: h.stop}
 		}
 		if e != nil && !yield(e, nil) {
+			h.outcome = outcomeStopped
 			return false
 		}
+		h.handled()
 	}
 	return false
+}
+
+// streamFailed yields the stream's failure err, after tried notified tries,
+// as llm's error, or a refusal as a Done, and keeps the outcome in h: a
+// failure after parent ended is a cancel (0070-MADR D17).
+func (a *adapter) streamFailed(ctx, parent context.Context, err error, tried int, yield func(llm.Event, error) bool, h *health) {
+	if ue, ok := errors.AsType[*url.Error](err); ok && errors.Is(err, llmprovider.ErrOffline) {
+		a.mu.Lock()
+		a.offlineURL = ue.URL
+		a.mu.Unlock()
+	}
+	if refusedAnswer(err) { // a refusal, as one with text is (0005-PLAN F5-3 decision 5)
+		h.stop = llm.StopRefusal
+		if !yield(llm.Done{StopReason: llm.StopRefusal}, nil) {
+			h.outcome = outcomeStopped
+		}
+		return
+	}
+	mapped := mapErrorAt(a.id, err, time.Now())
+	if ae, ok := errors.AsType[*llm.APIError](mapped); ok && tried > 0 {
+		ae.Attempts = tried + 1
+	}
+	if a.consent != "" && llm.IsBackground(ctx) && refusedBeforeSending(err) {
+		// The SDK's refusal of a marked request names the consent only in
+		// its text; the error carries its id (0052-MADR D2).
+		mapped = &llm.ConsentError{Consent: a.consent, Err: mapped}
+	}
+	failure := a.rejected(mapped, err)
+	h.failed(failure)
+	if parent.Err() != nil {
+		h.outcome = outcomeCancelled
+	}
+	yield(nil, failure)
 }
 
 // refusedBeforeSending reports that err is the SDK's own refusal of a

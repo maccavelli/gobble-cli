@@ -52,7 +52,10 @@ Early, and built in the order [docs/README.md](docs/README.md#build-order) gives
   deferred tools; the MCP resource tools; `bash`, and `powershell` on Windows, run as process trees
   that stop whole.
 - **Model calls that recover:** a failed call is retried by the provider; with the network down, a turn waits
-  for it to come back and resends; an empty reply runs twice more (`retry.*` settings). Compaction runs on its own
+  for it to come back and resends; an empty reply runs twice more; a reply cut by a dropped connection or a server
+  error is sent again from the start, up to three times, after the retry delay even when the turn does not wait
+  for the network, and the cut part stays in the session as a failed attempt (`retry.*` settings). Compaction
+  runs on its own
   near the model's window and once on an overflow (`compaction.*`), on a summary template from opencode. Three
   identical calls in a row ask whether to go on, and three calls in a row whose arguments are refused end the turn.
 - **Session titles:** with `smallModel` set, a small model names a new session from its first prompt.

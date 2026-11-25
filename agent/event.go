@@ -39,10 +39,18 @@ type Usage struct{ llm.Usage }
 // Message is the assistant message of one model call, complete, with that
 // call's usage and stop reason. It comes before the call's tools run, so a
 // caller can record it first (0008-MADR D19 item 6).
+//
+// Err is set on a failed call's message, which is never sent to a model
+// (0070-MADR D2, D4, D7): the call a turn ends on, emitted just before the
+// turn's error, empty or not; and an attempt the turn replaced after it
+// showed something (an empty reply run again, a call sent again after a
+// cut), after which the turn goes on. Its text is why it failed or was
+// replaced. Its calls never ran.
 type Message struct {
 	Message    llm.Message
 	Usage      llm.Usage
 	StopReason llm.StopReason
+	Err        error
 }
 
 // Queued is a queued user message entering the turn, before the model call
@@ -61,8 +69,10 @@ type Loaded struct {
 // Retry is a wait the turn takes before it calls the model again
 // (0005-PLAN F5-1 decision 5): a Start before each wait, and one End when
 // the call after it succeeds, the wait is cut short, or the retries run
-// out. Cause is RetryOffline, RetryEmptyReply, or, for a retry the provider
-// makes, the failure's class (0031-MADR D4, as amended). An offline wait has one
+// out. Cause is RetryOffline, RetryEmptyReply, RetryCut, or, for a retry the provider
+// makes, the failure's class (0031-MADR D4, as amended). A cut's End comes
+// at the first event of the call sent again, or at its failure (0070-MADR
+// D12 (d)). An offline wait has one
 // Start and one End, and no Attempt. Delay is the wait about to start, for
 // an empty reply; Err is why the End is not a success, or "".
 //
@@ -103,6 +113,11 @@ type RetryCause string
 const (
 	RetryOffline    RetryCause = "offline"
 	RetryEmptyReply RetryCause = "empty_answer"
+	// RetryCut is a call sent again from the start after a dropped
+	// connection, an idle timeout or a server error cut it once its reply
+	// had begun (0070-MADR D12). acpext's RetryCause is an open set, and
+	// has no constant for it.
+	RetryCut RetryCause = "cut"
 )
 
 // End is the turn's last event. Messages are the turn's messages, the

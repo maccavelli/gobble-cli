@@ -230,3 +230,5 @@ No phase has run.
   commit.
 
 *(2026-11-22, the owner's answers: Phase 3 builds OQ4 (1)'s `TestConfig_NoOutputLimitKey_0066` only. The SDK release this PLAN needs is the one after the next tag, which carries 0088 and 0089 together (go-llmprovider-sdk 0088 OQ18 "Five now; 0088+0089 next (Recommended)"); this PLAN follows 0065's Phase 2 bump to it and ships with 0065's Phases 1 and 2.)*
+
+*(2026-11-24, note from `0070-PLAN-keep-a-failed-partial-reply-and-log-stream-health-per-call.md` Phase 2: S21's per-call debug line is 0070's `model call` record (`llm/provider/record.go`); this PLAN adds its `out_limit*` fields to that record, and 0070's `TestModelCallRecordHoldsNoContent/no_out_limit` and its allowlist then take them.)*

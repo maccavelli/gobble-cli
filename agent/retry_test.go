@@ -2,6 +2,7 @@ package agent_test
 
 import (
 	"context"
+	"encoding/json/jsontext"
 	"errors"
 	"fmt"
 	"slices"
@@ -191,7 +192,13 @@ func TestEmptyReplyRunsAgain(t *testing.T) {
 	t.Run("then text", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			start := time.Now()
-			s := llmtest.NewScript(reasoningOnly(), llmtest.Turn{Err: errEmptyAnswer}, llmtest.Text("ok"))
+			// The first try shows nothing, an encrypted reasoning item alone, so
+			// none of the replaced tries is kept; a shown one is
+			// TestReplacedAttemptsKept's (0070-MADR G5, G43, as the owner's "Make it
+			// not-shown; G7 elsewhere (Recommended)").
+			hidden := llmtest.Turn{Events: []llm.Event{llm.ThinkingDelta{ProviderData: jsontext.Value(`{"encrypted":"e1"}`)},
+				llm.Usage{InputTokens: 10, OutputTokens: 4}, llm.Done{StopReason: llm.StopEndTurn}}}
+			s := llmtest.NewScript(hidden, llmtest.Turn{Err: errEmptyAnswer}, llmtest.Text("ok"))
 			ws, end, err := runRetry(t.Context(), t, agent.New(agent.Config{Provider: s, Retry: &llm.Retry{}}), start)
 			if err != nil {
 				t.Fatal(err)

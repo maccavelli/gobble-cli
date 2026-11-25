@@ -48,6 +48,7 @@ retry:
   baseDelayMs: 2000
   maxDelayMs: 60000
   offlineWaitMs: 300000
+  retryAfterCut: true
 shellPath: ""
 shellCommandPrefix: ""
 tools:

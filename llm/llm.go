@@ -35,11 +35,19 @@ type Retry struct {
 	BaseDelay, MaxDelay time.Duration
 	// OfflineWait bounds a turn's wait for the network; zero does not wait.
 	OfflineWait time.Duration
+	// AfterCut sends a model call cut by a dropped connection, an idle
+	// timeout or a server error after its reply began again from the start,
+	// at most three times in a row, after BaseDelay doubled at each, up to
+	// MaxDelay, or the wait for the network; Off turns it off too
+	// (retry.retryAfterCut, 0070-MADR D12).
+	AfterCut bool
 }
 
 // DefaultRetry is Pi's three retries from two seconds, capped at a minute,
-// and a five-minute wait for the network.
-var DefaultRetry = Retry{MaxRetries: 3, BaseDelay: 2 * time.Second, MaxDelay: 60 * time.Second, OfflineWait: 5 * time.Minute}
+// a five-minute wait for the network, and a call cut after its reply began
+// sent again (0070-MADR D12 (f)).
+var DefaultRetry = Retry{MaxRetries: 3, BaseDelay: 2 * time.Second, MaxDelay: 60 * time.Second, OfflineWait: 5 * time.Minute,
+	AfterCut: true}
 
 // Capabilities says what this process can actually send.
 // ImageInput is true when the provider accepts an image (0036-MADR D7).

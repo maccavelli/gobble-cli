@@ -145,6 +145,9 @@ relies on its (2)), reads one model per session rather than every listed model
   report's context line (`/context`, `/session`) shows the last call's
   ("output limit: 128,000, from listing:claude"; "output limit: none sent, the
   service's default applies"). 0065 D11's reported value and R31 move here.
+  *(2026-11-24, note from `0070-MADR-keep-a-failed-partial-reply-and-log-stream-health-per-call.md` D19: the per-call
+  debug line is 0070's `model call` record; this record adds its `out_limit`, `out_limit_sent`, `out_limit_basis` and
+  `out_limit_source` fields when it is built. The session-report line stays this record's.)*
 * **D9. The window gobble compacts against.** Automatic compaction and the
   session report read `Limits.Window`, else `Limits.Input` where a listing
   states only that (Claude, Gemini), else unknown as today; each with its
@@ -216,7 +219,7 @@ Each decided row's test and plant are in the PLAN.
 | S18 | `gobble models info` | decided | discovers, then prints D5's lines | D5 |
 | S19 | The ACP model option | decided | its description from cached limits; nothing fetched | D6 |
 | S20 | The session report | decided | the last call's output limit and source; the window and its source | D8, D9 |
-| S21 | The debug log | decided | each call's `OutputLimit` | D8 |
+| S21 | The debug log | decided | each call's `OutputLimit` *(2026-11-24: as the `out_limit*` fields of `0070-MADR-keep-a-failed-partial-reply-and-log-stream-health-per-call.md`'s `model call` record, which 0070 built first, D19; absent until this record is built, 0070 T14)* | D8 |
 | S22 | The window compaction uses | decided | `Limits.Window`, else `Limits.Input`, else unknown | D9 |
 | S23 | The listing discovery reads and the request reads | decided | one key: the provider's first request reads discovery's (go-llmprovider-sdk 0089 DL72; 0065 R6) | D1 |
 | S24 | Concurrent sessions, each with its own models.json | decided | each discovery and provider has its session's layer; nothing shared | D1, D3 |

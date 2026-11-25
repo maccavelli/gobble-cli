@@ -213,7 +213,7 @@ func (a *Agent) Run(ctx context.Context, env tool.Env, history []llm.Message, pr
 		t := &turn{a: a, ctx: ctx, env: env, yield: yield, history: history, added: []llm.Message{prompt}, system: a.cfg.System,
 			tools: maps.Clone(a.tools), sent: slices.Clone(a.direct), deferred: slices.Clone(a.deferred)}
 		t.specs = encodeSpecs(t.sent)
-		t.run()
+		t.run(ctx)
 	}
 }
 
@@ -252,6 +252,16 @@ type turn struct {
 	// the turn, which every later call of the turn asks for at most, or 0
 	// (L44).
 	limit, resendAt, stated int
+	// cuts counts the turn's calls sent again in a row after a cut, back to
+	// 0 when a call ends with Done; again says the next call is one, its
+	// place carried for its record; same says every resend of the cut call
+	// until it ends is that call, which keeps the limit it carried, an
+	// offline wait's resend included; cutWait says its wait's End is still to
+	// come, at that call's first event (0070-MADR D12, Q8 with Q9).
+	cuts    int
+	again   bool
+	same    bool
+	cutWait bool
 }
 
 // encodeSpecs is specs as a request carries them, or nil for none.
@@ -328,7 +338,7 @@ func (t *turn) end(reason StopReason) {
 // the prompt and after each reply and its tool results, and the turn goes
 // on while the reply asked for tools or steering came; when it would end,
 // follow-ups are polled, and any keep it going.
-func (t *turn) run() {
+func (t *turn) run(ctx context.Context) {
 	if !t.inject(t.steering()) {
 		return
 	}
@@ -341,7 +351,7 @@ func (t *turn) run() {
 			t.fail(err)
 			return
 		}
-		reply, ok := t.next()
+		reply, ok := t.next(ctx)
 		if !ok {
 			return
 		}
@@ -429,8 +439,11 @@ type reply struct {
 	stop     llm.StopReason
 	usage    llm.Usage
 	// shown is set once the call has shown text or thinking: it is not sent
-	// again, which would show them twice (0031-MADR D3).
-	shown bool
+	// again, which would show them twice (0031-MADR D3), unless a cut ended
+	// it (0070-MADR D12). started is set by every event the provider yields
+	// but its own retry's (D12 (a)); kept, once the call is its own failed
+	// entry (D4), so it is not written again (D12 (h)).
+	shown, started, kept bool
 }
 
 func (r *reply) message() llm.Message {
@@ -512,10 +525,15 @@ func (t *turn) fail(err error) {
 // reported as Retry events. A call refused for its output limit, in a form
 // that states the room or the cap, is sent once more at it, before any
 // compaction (0071-MADR D8 (a)). A call over the model's window is
-// compacted and sent once more (0005-PLAN F5-2 decision 2). ok is false when
-// the turn is over: a failure yielded, the consumer stopped, or the turn
-// cancelled in a wait or a compaction.
-func (t *turn) next() (*reply, bool) {
+// compacted and sent once more (0005-PLAN F5-2 decision 2). A call an
+// accidental failure cut after its reply began is sent again, the same
+// request, at most cutRetries times in a row; a cut retry is the same call,
+// so the once-only resends above carry over it (0070-MADR D12, Q9). ok is
+// false when the turn is over: a failure yielded, the consumer stopped, or
+// the turn cancelled in a wait or a compaction. The call a failure ends the
+// turn on is emitted first as a failed Message, and an attempt the turn
+// replaces after it showed something is kept as one (0070-MADR D2, D4).
+func (t *turn) next(ctx context.Context) (*reply, bool) {
 	rt := t.a.cfg.Retry
 	var cause RetryCause // the wait under way, or none
 	var deadline time.Time
@@ -523,7 +541,8 @@ func (t *turn) next() (*reply, bool) {
 	resent := false    // the call was sent again after an overflow
 	capResent := false // the call was sent again after a refusal of its limit
 	for {
-		r, err := t.call()
+		r, err := t.call(ctx)
+		cause = t.settleCut(cause, r, err)
 		at, overflow := t.limitRefused(err)
 		switch {
 		case t.stopped:
@@ -531,10 +550,19 @@ func (t *turn) next() (*reply, bool) {
 		case err == nil && t.ctx.Err() != nil:
 			t.endWait(cause, turnCancelled)
 			return r, !t.stopped
-		case err != nil && r != nil && r.shown:
+		case t.cutRetry(rt, r, err):
+			if !t.retryCut(rt, r, err, &cause) {
+				return nil, false
+			}
+			if t.again {
+				continue
+			}
+		case err != nil && (r.shown || r.started && accidental(err)):
 			// A call that failed after showing text or thinking is not sent again:
 			// what was shown stays, and the turn ends with the error. A completed
-			// thinking-only reply is still run again (0031-MADR D3, as amended).
+			// thinking-only reply is still run again (0031-MADR D3, as amended). A
+			// cut not retried, its setting off or its cap reached, ends the turn
+			// too (0070-MADR D12 (e), (f)).
 		case at > 0 && !capResent:
 			capResent, t.resendAt, t.stated = true, at, at
 			continue
@@ -550,6 +578,7 @@ func (t *turn) next() (*reply, bool) {
 				return nil, false
 			}
 			if done {
+				t.same = false // a compacted request asks for its limit again (0071 L11)
 				continue
 			}
 			if cerr != nil {
@@ -572,37 +601,171 @@ func (t *turn) next() (*reply, bool) {
 				return nil, false
 			}
 		case t.empty(r, err) && empties < len(emptyDelays):
-			if cause == RetryOffline {
-				t.endWait(cause, "") // the network is back
-			}
-			cause = RetryEmptyReply
-			d := emptyDelays[empties]
-			empties++
-			if !t.emit(Retry{Phase: RetryStart, Cause: RetryEmptyReply, Attempt: empties, MaxAttempts: len(emptyDelays), Delay: d}) {
-				return r, false
-			}
-			w := t.sleep(d)
-			if w == waitDone {
+			var s step
+			s, err = t.rerunEmpty(r, err, &cause, &empties)
+			switch s {
+			case stepAgain:
 				continue
-			}
-			if !t.cutShort(w, &cause) {
+			case stepOver:
 				return nil, false
-			}
-			if err == nil {
-				err = errEmpty
 			}
 		case t.empty(r, err):
 			err = errNoUsableReply
 		}
 		if err != nil {
-			t.endWait(cause, err.Error())
-			t.yield(nil, err)
-			t.stopped = true
-			return r, false
+			return t.failOn(r, err, cause)
 		}
 		t.endWait(cause, "")
 		return r, true
 	}
+}
+
+// step is what next does after a wait: call again, end the turn with the
+// error, or stop, the turn being over.
+type step int
+
+const (
+	stepAgain step = iota
+	stepFail
+	stepOver
+)
+
+// rerunEmpty waits before an empty reply r, failed with err or not, runs
+// again: the empty reply's delay, reported as a Retry; once the wait ends,
+// a shown reply is replaced, its own failed entry (0070-MADR D4). A cancel
+// keeps a shown reply as a cancelled one, aborted, which a reload reads as
+// failed (D2, G33), and ends the turn; an abort ends it with the error it
+// returns.
+func (t *turn) rerunEmpty(r *reply, err error, cause *RetryCause, empties *int) (step, error) {
+	if *cause == RetryOffline || *cause == RetryCut {
+		t.endWait(*cause, "") // the network is back, or the cut call answered
+	}
+	*cause = RetryEmptyReply
+	d := emptyDelays[*empties]
+	*empties++
+	if !t.emit(Retry{Phase: RetryStart, Cause: RetryEmptyReply, Attempt: *empties, MaxAttempts: len(emptyDelays), Delay: d}) {
+		return stepOver, err
+	}
+	w := t.sleep(d)
+	if w == waitDone {
+		if r.shown && !t.replaced(r, cmp.Or(err, errEmpty)) {
+			return stepOver, err
+		}
+		return stepAgain, err
+	}
+	if w == waitCancelled && r.shown {
+		msg := r.message()
+		t.added = append(t.added, msg)
+		if !t.emit(Message{Message: msg, Usage: r.usage}) {
+			return stepOver, err
+		}
+	}
+	if !t.cutShort(w, cause) {
+		return stepOver, err
+	}
+	return stepFail, cmp.Or(err, errEmpty)
+}
+
+// failOn ends the turn on r's failure err: the wait under way ends with it,
+// and r, unless it is already its own entry, is emitted first as a failed
+// Message, empty or not (0070-MADR D2, D12 (h)).
+func (t *turn) failOn(r *reply, err error, cause RetryCause) (*reply, bool) {
+	t.endWait(cause, err.Error())
+	if !r.kept && !t.emit(Message{Message: r.message(), Usage: r.usage, StopReason: r.stop, Err: err}) {
+		return r, false
+	}
+	t.yield(nil, err)
+	t.stopped = true
+	return r, false
+}
+
+// settleCut is the wait under way once the call r sent again after a cut
+// has answered: the cut's End came with its first event, or, when it failed
+// before any event, ends now with that failure, whatever path the turn takes
+// next (0070-MADR D12 (d)). Any other wait is cause unchanged.
+func (t *turn) settleCut(cause RetryCause, r *reply, err error) RetryCause {
+	if cause != RetryCut {
+		return cause
+	}
+	switch {
+	case r.started:
+		return ""
+	case err != nil:
+		t.endWait(cause, err.Error())
+		return ""
+	}
+	return cause
+}
+
+// cutRetries bounds the calls sent again in a row after a cut (0070-MADR
+// D12 (e)).
+const cutRetries = 3
+
+// accidental reports a failure that cuts a call by accident: a dropped
+// connection, an idle timeout, a server error in the stream, or the network
+// gone (0070-MADR F17).
+func accidental(err error) bool {
+	return errors.Is(err, llm.ErrUnavailable) || errors.Is(err, llm.ErrOffline)
+}
+
+// cutRetry reports whether the call r, failed with err, is sent again after
+// a cut: an accidental failure after any event of the call, with retries
+// and retry.retryAfterCut on, under the cap (0070-MADR D12 (a)).
+func (t *turn) cutRetry(rt *llm.Retry, r *reply, err error) bool {
+	return err != nil && r.started && accidental(err) && rt != nil && !rt.Off && rt.AfterCut && t.cuts < cutRetries
+}
+
+// retryCut keeps the cut call r as its own failed entry when it showed
+// something, reports the wait as a Retry of cause cut, and waits: the
+// session's delay, doubled at each cut retry, for a failure of the service,
+// and the wait for the network for one of the network (0070-MADR D12 (b)).
+// When the wait ends, t.again is set and the same request goes again. A
+// cancel ends the turn and it returns false; an abort or an expiry leaves
+// t.again unset, for the caller to end the turn with err.
+func (t *turn) retryCut(rt *llm.Retry, r *reply, err error, cause *RetryCause) bool {
+	t.cuts++
+	if r.shown && !t.replaced(r, err) {
+		return false
+	}
+	if *cause != "" {
+		t.endWait(*cause, "")
+	}
+	*cause = RetryCut
+	online := errors.Is(err, llm.ErrOffline) && t.prober() != nil && rt.OfflineWait > 0
+	d := time.Duration(0)
+	if !online {
+		d = rt.BaseDelay << (t.cuts - 1)
+		if rt.MaxDelay > 0 {
+			d = min(d, rt.MaxDelay)
+		}
+	}
+	if !t.emit(Retry{Phase: RetryStart, Cause: RetryCut, Attempt: t.cuts, MaxAttempts: cutRetries, Delay: d}) {
+		return false
+	}
+	var w waited
+	if online {
+		w = t.waitOnline(time.Now().Add(rt.OfflineWait))
+	} else {
+		w = t.sleep(d)
+	}
+	if w == waitDone {
+		t.again, t.same, t.cutWait = true, true, true
+		return true
+	}
+	return t.cutShort(w, cause)
+}
+
+// replaced keeps r, an attempt the turn replaces after it showed something,
+// as its own failed entry, err why it was replaced: emitted as a failed
+// Message, and in the turn's messages marked failed, which no request
+// carries (0070-MADR D4, D7).
+func (t *turn) replaced(r *reply, err error) bool {
+	r.kept = true
+	m := r.message()
+	failed := m
+	failed.Origin.Failed = true
+	t.added = append(t.added, failed)
+	return t.emit(Message{Message: m, Usage: r.usage, StopReason: r.stop, Err: err})
 }
 
 // limitRefused reads err as a refusal of the output limit the call carried
@@ -648,6 +811,9 @@ func (t *turn) cutShort(w waited, cause *RetryCause) bool {
 // endWait reports the end of the wait under way, if any: a success when
 // why is "".
 func (t *turn) endWait(cause RetryCause, why string) {
+	if cause == RetryCut {
+		t.cutWait = false
+	}
 	if cause != "" {
 		t.emit(Retry{Phase: RetryEnd, Cause: cause, Err: why})
 	}
@@ -724,18 +890,37 @@ func (t *turn) sleep(d time.Duration) waited {
 // call makes one model call, yielding its deltas. err is the stream's
 // failure, not yet yielded, or nil when the turn was cancelled; a consumer
 // that stopped sets t.stopped.
-func (t *turn) call() (*reply, error) {
+func (t *turn) call(ctx context.Context) (*reply, error) {
 	msgs := make([]llm.Message, 0, len(t.history)+len(t.added)+1)
 	if t.system != "" {
 		msgs = append(msgs, llm.Message{Role: llm.RoleSystem, Content: []llm.Content{{Type: llm.ContentText, Text: t.system}}})
 	}
-	msgs = append(append(msgs, t.history...), t.added...)
+	msgs = append(msgs, t.history...)
+	for _, m := range t.added {
+		// An attempt the turn replaced is in its messages, for the history,
+		// and in no request (0070-MADR D4, D7).
+		if !m.Origin.Failed {
+			msgs = append(msgs, m)
+		}
+	}
 	req := &llm.Request{Model: t.a.cfg.Model, Messages: msgs, Tools: t.specs, Thinking: t.a.cfg.Thinking, Cache: t.a.cfg.Cache,
 		Deferred: t.a.deferredSpecs}
 	if s := t.a.cfg.Search; s != nil && len(req.Deferred) > 0 && t.tools[s.Spec().Name] != nil {
 		req.Search = s.Spec().Name
 	}
-	if t.a.cfg.OutputLimit != nil {
+	if t.again {
+		// A call sent again after a cut carries its place in the run of cut
+		// retries, for its stream-health record (0070-MADR D17).
+		t.again = false
+		ctx = llm.WithCutRetry(ctx, t.cuts)
+	}
+	switch {
+	case t.same && t.resendAt == 0:
+		// Every resend of a cut call is the cut call's request, its limit
+		// included: the limit is not asked again (0070-MADR D12 (b), Q8 with
+		// Q9). A refusal's stated limit still takes its place (0071 D8 (a)).
+		req.MaxTokens = t.limit
+	case t.a.cfg.OutputLimit != nil:
 		req.MaxTokens = t.resendAt
 		req.MaxTokens = t.a.cfg.OutputLimit(req).Tokens
 		if t.stated > 0 && req.MaxTokens > t.stated {
@@ -754,7 +939,7 @@ func (t *turn) call() (*reply, error) {
 			retrying = ""
 		}
 	}
-	for ev, err := range t.a.cfg.Provider.Stream(t.ctx, req) {
+	for ev, err := range t.a.cfg.Provider.Stream(ctx, req) {
 		if err != nil {
 			if t.ctx.Err() != nil {
 				endRetry(turnCancelled)
@@ -775,6 +960,15 @@ func (t *turn) call() (*reply, error) {
 			continue
 		}
 		endRetry("")
+		r.started = true
+		if t.cutWait {
+			// The cut call's wait ends at the first event of the call sent
+			// again, before the reply starts over (0070-MADR D12 (d)).
+			t.cutWait = false
+			if !t.emit(Retry{Phase: RetryEnd, Cause: RetryCut}) {
+				return r, nil
+			}
+		}
 		switch ev := ev.(type) {
 		case llm.TextDelta:
 			r.text.WriteString(ev.Text)
@@ -811,6 +1005,7 @@ func (t *turn) call() (*reply, error) {
 			t.note(ev)
 		case llm.Done:
 			r.stop = ev.StopReason
+			t.cuts, t.same = 0, false // a call that ends ends the run of cut retries (0070-MADR D12 (e))
 		}
 	}
 	endRetry("")

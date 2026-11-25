@@ -949,31 +949,38 @@ func TestArgsTakeTheStoresForm(t *testing.T) {
 	}
 }
 
-// A stream that fails after its first delta ends the turn with its error:
-// the delta has reached the consumer, no message or end follows it, and the
-// call is not sent again (0005-PLAN F4-1b, made executable as F4-1b-1;
-// 0031-MADR D3).
+// A stream that fails after its first delta, with a failure no retry
+// takes, ends the turn with its error: the delta has reached the consumer,
+// the call's message carries the error, no end follows, and the call is
+// not sent again, even with the cut retry on (0005-PLAN F4-1b, made
+// executable as F4-1b-1; 0031-MADR D3; 0070-MADR D2, G42, as the owner's
+// "Retarget to a non-retried failure (Recommended)").
 func TestMidStreamFailure(t *testing.T) {
-	s := llmtest.NewScript(llmtest.Turn{Events: []llm.Event{llm.TextDelta{Text: "par"}}, Err: llm.ErrUnavailable},
+	refused := &llm.APIError{Status: 400, Err: errors.New("scripted, not retried")}
+	s := llmtest.NewScript(llmtest.Turn{Events: []llm.Event{llm.TextDelta{Text: "par"}}, Err: refused},
 		llmtest.Text("never"))
-	a := agent.New(agent.Config{Provider: s})
+	a := agent.New(agent.Config{Provider: s, Retry: &llm.Retry{AfterCut: true}})
 	evs, _, err := collect(t.Context(), t, a, tool.Env{}, "hi")
-	if !errors.Is(err, llm.ErrUnavailable) {
-		t.Fatalf("err %v, want llm.ErrUnavailable", err)
+	if !errors.Is(err, refused) {
+		t.Fatalf("err %v, want the 400", err)
 	}
 	var deltas []string
+	var kept []agent.Message
 	for _, ev := range evs {
 		switch e := ev.(type) {
 		case agent.TextDelta:
 			deltas = append(deltas, e.Text)
 		case agent.Message:
-			t.Errorf("an agent.Message after a failed stream: %+v", e)
+			kept = append(kept, e)
 		case agent.End:
 			t.Errorf("an agent.End after a failed stream: %+v", e)
 		}
 	}
 	if !slices.Equal(deltas, []string{"par"}) {
 		t.Errorf("text deltas %q, want [\"par\"]", deltas)
+	}
+	if len(kept) != 1 || !errors.Is(kept[0].Err, refused) || textOf(kept[0].Message) != "par" {
+		t.Errorf("messages %+v, want one carrying the 400 and the text par", kept)
 	}
 	if n := len(s.Requests()); n != 1 {
 		t.Errorf("%d requests, want 1: a call that has shown text is not sent again", n)

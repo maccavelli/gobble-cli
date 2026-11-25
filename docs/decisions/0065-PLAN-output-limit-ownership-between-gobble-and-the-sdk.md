@@ -325,3 +325,5 @@ No phase has run.
   changed; here, the rows named in the note at the top. Records only.
 
 *(2026-11-22, fifth note: Q2 answered "Stop with a notice (Recommended)": Phase 3 builds `TestAgentTurn_CutTextStops_0065` for R21, R22 and R40, and not Q2's other tests; Q1's is `TestCompaction_NoCeiling_0065`; Q3's moved to 0066. Phase 2's bump is to the go-llmprovider-sdk release after the next tag, which carries 0088 and 0089 together (its OQ18 "Five now; 0088+0089 next (Recommended)"); Phases 1 and 2 still ship together, with 0066's phases. The MADR is `accepted`; this PLAN stays `proposed` until the owner approves it.)*
+
+*(2026-11-24, note from `0070-PLAN-keep-a-failed-partial-reply-and-log-stream-health-per-call.md` Phase 2: D11's per-call request limit and R31's logged value are built there, as the `limit` field of the `model call` record in `llm/provider/record.go`; no step here builds that line again.)*

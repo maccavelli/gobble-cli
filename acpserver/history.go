@@ -500,8 +500,18 @@ func replayMessage(e session.Entry, m *session.Message, st state, tools map[stri
 			out = append(out, acp.UpdateUserMessageText(t))
 		}
 	case session.RoleAssistant:
-		if t := assistantText(blocks); t != "" {
+		t := assistantText(blocks)
+		if t != "" {
 			out = append(out, acp.UpdateAgentMessageText(t))
+		}
+		if m.StopReason == piError {
+			// Pi's line for a failed call, on its own paragraph after its text,
+			// or alone (0070-MADR D8).
+			line := "Error: " + m.ErrorMessage
+			if t != "" {
+				line = "\n\n" + line
+			}
+			out = append(out, acp.UpdateAgentMessageText(line))
 		}
 		for _, b := range blocks {
 			if b.Type == session.BlockToolCall {

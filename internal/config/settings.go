@@ -64,6 +64,7 @@ type Retry struct {
 	BaseDelayMs   int64 `yaml:"baseDelayMs" json:"baseDelayMs,omitempty"`
 	MaxDelayMs    int64 `yaml:"maxDelayMs" json:"maxDelayMs,omitempty"`
 	OfflineWaitMs int64 `yaml:"offlineWaitMs" json:"offlineWaitMs,omitempty"`
+	RetryAfterCut bool  `yaml:"retryAfterCut" json:"retryAfterCut,omitempty"`
 }
 
 // Tools is the tool settings.
@@ -155,6 +156,8 @@ func (s *Settings) field(path string) any {
 		return &s.Retry.MaxDelayMs
 	case "retry.offlineWaitMs":
 		return &s.Retry.OfflineWaitMs
+	case "retry.retryAfterCut":
+		return &s.Retry.RetryAfterCut
 	case "shellPath":
 		return &s.ShellPath
 	case "shellCommandPrefix":

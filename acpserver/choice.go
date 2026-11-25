@@ -242,13 +242,16 @@ func canonicalProvider(name string) string {
 
 // stamped is a turn's messages with origin on each assistant one; a
 // cancelled turn's last assistant message is marked failed, so it is not
-// replayed (0025-MADR D2).
+// replayed (0025-MADR D2), and one the turn kept as failed stays failed
+// (0070-MADR D4).
 func stamped(msgs []llm.Message, origin llm.Origin, cancelled bool) []llm.Message {
 	out := slices.Clone(msgs)
 	last := -1
 	for i := range out {
 		if out[i].Role == llm.RoleAssistant {
+			failed := out[i].Origin.Failed
 			out[i].Origin, last = origin, i
+			out[i].Origin.Failed = failed
 		}
 	}
 	if cancelled && last >= 0 {

@@ -201,9 +201,14 @@
         },
         "offlineWaitMs": {
           "type": "integer",
-          "description": "How long, in milliseconds, a turn waits for the network to come back; 0 does not wait.",
+          "description": "How long, in milliseconds, a turn waits for the network to come back; 0 does not wait, and a call that fails offline before its reply ends the turn. A reply cut offline is still sent again after the retry delay (retry.retryAfterCut).",
           "default": 300000,
           "minimum": 0
+        },
+        "retryAfterCut": {
+          "type": "boolean",
+          "description": "Whether a model call cut by a dropped connection, an idle timeout or a server error after its reply began is sent again from the start, at most 3 times in a row; the cut part stays in the session as a failed attempt.",
+          "default": true
         }
       },
       "additionalProperties": false
