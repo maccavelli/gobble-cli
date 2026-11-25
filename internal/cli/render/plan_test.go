@@ -32,6 +32,8 @@ func TestStats(t *testing.T) {
 		// The output limit's suffix, in render.tokens's form (0071-MADR D10, L27).
 		{420 * time.Millisecond, 104, 2 * time.Second, 64000, glyph.Unicode(), "ttft 400ms • 52 tok/s • out-limit 64.0k"},
 		{time.Second, 0, 0, 950, glyph.ASCII(), "ttft 1s " + glyph.ASCII().Bullet + " out-limit 950"},
+		// A call that carried no limit (0071-MADR P22).
+		{time.Second, 0, 0, -1, glyph.Unicode(), "ttft 1s • out-limit none"},
 	}
 	for _, c := range cases {
 		if got := Stats(c.ttft, c.tokens, c.gen, c.limit, c.g); got != c.want {

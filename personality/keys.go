@@ -28,7 +28,14 @@ const (
 	// more output tokens than a cap the service stated, which gobble sends
 	// (0071-MADR P28; 0066-MADR D10).
 	ModelLimitUserOver Key = "model.limit.user_over"
-	LinesHidden        Key = "lines.hidden"
+	// ModelLimitUnknown is the agent's message, once per session and
+	// model, when discovery ends with the model's output limit unknown;
+	// ModelLimitLearned when a service stated the model's cap, which gobble
+	// sent the call again at and keeps for a day (0066-MADR D10, as amended
+	// 2026-11-25; 0071-MADR V7, P19).
+	ModelLimitUnknown Key = "model.limit.unknown"
+	ModelLimitLearned Key = "model.limit.learned"
+	LinesHidden       Key = "lines.hidden"
 	// TranscriptEarlierOutput heads a reprint that leaves earlier output
 	// out: go-tui-lib's transcript.earlier-output (0035-MADR D14 step 5b).
 	TranscriptEarlierOutput Key = "transcript.earlier-output"
@@ -136,7 +143,8 @@ const (
 var Keys = []Key{
 	RetryOffline, RetryEmptyReply, RetryAttempt, CompactionStart, CompactionFailed, CompactionFailedTurn,
 	CompactionFailedSession, TurnWorking, TurnStopMaxTokens, TurnStopMaxRequests, TurnStopRefusal, TurnStopCancelled,
-	TurnStopMaxTokensTool, ModelLimitUserOver, LinesHidden, TranscriptEarlierOutput,
+	TurnStopMaxTokensTool, ModelLimitUserOver, ModelLimitUnknown, ModelLimitLearned, LinesHidden,
+	TranscriptEarlierOutput,
 	CommandUnknown, HelpHeading, UsageHeading, UsageCostUnknown, UsageEstimated, UsageNoAccount, SessionHeading,
 	ModelNone, ModelCurrent, ModelList, ModelUnknown, ModelSet, ThinkingCurrent, ThinkingList, ThinkingUnknown,
 	ThinkingSet, ModeCurrent, ModeList, ModeUnknown, ModeAlreadyPlan, ModePlanOn, ModeSet, NameCurrent, NameUsage,

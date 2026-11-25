@@ -167,8 +167,10 @@ func (e *runEnv) headersFor(mj *catalog.ModelsJSON, id string) func(context.Cont
 }
 
 // providerOptions are o with provider id's base URL and headers from
-// models.json, its stored workspace (0035-MADR D5), and the run's SDK cache
-// and OAuth sessions (0046-MADR D7, D8).
+// models.json, its stored workspace (0035-MADR D5), the run's SDK cache
+// and OAuth sessions (0046-MADR D7, D8), its learned reasoning refusals
+// (0036-MADR D4) and the output caps its services stated on earlier runs
+// (0071-MADR P24).
 func (e *runEnv) providerOptions(id string, o provider.Options) provider.Options {
 	mj := e.modelsJSON()
 	o.Set = e.providerSet()
@@ -177,6 +179,7 @@ func (e *runEnv) providerOptions(id string, o provider.Options) provider.Options
 	o.Workspace = e.knownWorkspace(id)
 	o.Cache, o.Sessions = &e.cache, &e.sessions
 	o.Refusals = e.providerRefusals(id)
+	o.Observations = e.providerObservations(id) // its own saved caps alone (0071-MADR P24, P26)
 	return o
 }
 

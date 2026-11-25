@@ -277,6 +277,10 @@ type runEnv struct {
 	// under refusalMu (0036-MADR D4).
 	refusals       refusalLists
 	refusalsLoaded bool
+	// observations and observationsLoaded are limit-observations.json, read
+	// once, under observationMu (0066-MADR D7; 0071-MADR P24 to P27).
+	observations       []savedObservation
+	observationsLoaded bool
 	// tools are the in-process agent's tools; nil is the built-ins.
 	tools []tool.Tool
 	// mcpOff and mcpAllow are the MCP tools the tool flags select, and

@@ -191,7 +191,7 @@ func (a *Agent) configOptions(s *liveSession) []acp.SessionConfigOption {
 	prov := a.provOf(s)
 	var out []acp.SessionConfigOption
 	if picks := a.choice().picks(); len(picks) > 0 {
-		out = append(out, modelOption(refOf(prov, model), picks))
+		out = append(out, modelOption(refOf(prov, model), picks, a.describeModel))
 	}
 	levels := a.levelsOf(prov, model)
 	return append(out, selectOption(configThinking, "Thinking", acp.SessionConfigOptionCategoryThoughtLevel,
@@ -212,8 +212,8 @@ func selectOption(id, name string, category acp.SessionConfigOptionCategory, cur
 
 // modelOption is the model option, grouped as /model lists it: the recent
 // models, then each usable provider's, its values provider/model refs
-// (0025-MADR D1, D5).
-func modelOption(current string, picks []pick) acp.SessionConfigOption {
+// (0025-MADR D1, D5), each described by describe (0066-MADR D6).
+func modelOption(current string, picks []pick, describe func(provider, model string) *string) acp.SessionConfigOption {
 	var groups acp.SessionConfigSelectOptionsGrouped
 	for _, p := range picks {
 		if len(groups) == 0 || groups[len(groups)-1].Name != p.section {
@@ -225,7 +225,8 @@ func modelOption(current string, picks []pick) acp.SessionConfigOption {
 		}
 		ref := refOf(p.provider, p.model)
 		g := &groups[len(groups)-1]
-		g.Options = append(g.Options, acp.SessionConfigSelectOption{Name: ref, Value: acp.SessionConfigValueId(ref)})
+		g.Options = append(g.Options, acp.SessionConfigSelectOption{Name: ref, Value: acp.SessionConfigValueId(ref),
+			Description: describe(p.provider, p.model)})
 	}
 	category := acp.SessionConfigOptionCategoryModel
 	return acp.SessionConfigOption{Select: &acp.SessionConfigOptionSelect{
@@ -233,6 +234,32 @@ func modelOption(current string, picks []pick) acp.SessionConfigOption {
 		CurrentValue: acp.SessionConfigValueId(current),
 		Options:      acp.SessionConfigSelectOptions{Grouped: &groups},
 	}}
+}
+
+// describeModel is a model option's description, "context N · max-out M",
+// each "unknown" when not known, from Options.CachedLimits, which starts no
+// request; nil with no hook (0066-MADR D6, S19; 0071-MADR P46). The window is
+// Window, else Input; the output a turn's, StreamedOutput, else Output.
+func (a *Agent) describeModel(provider, model string) *string {
+	if a.cachedLimits == nil {
+		return nil
+	}
+	l := a.cachedLimits(provider, model)
+	window, out := l.Window, l.StreamedOutput
+	if !window.Known {
+		window = l.Input
+	}
+	if !out.Known {
+		out = l.Output
+	}
+	count := func(f llm.LimitFact) string {
+		if !f.Known || f.Tokens <= 0 {
+			return "unknown"
+		}
+		return thousands(int64(f.Tokens))
+	}
+	d := "context " + count(window) + " · max-out " + count(out)
+	return &d
 }
 
 // setConfig sets the model or the thinking level from the session's next

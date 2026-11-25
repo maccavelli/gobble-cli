@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/llm/llmtest"
@@ -225,6 +226,11 @@ func TestSummaryCapRefusalResent_0071(t *testing.T) {
 		return llmtest.Turn{Err: &llm.APIError{Status: 400, Message: msg, Err: fmt.Errorf("%w: %s", llm.ErrContextOverflow, msg)}}
 	}
 	capForm := llmtest.Turn{Err: &llm.APIError{Status: 400, Message: "max_tokens: 64000 > 8192, which is the maximum allowed number of output tokens"}}
+	// Kilo's range form, which only the SDK reads: its cap arrives as
+	// Observed, read first (0071-MADR P34).
+	rangeMsg := "The max_tokens parameter is illegal.：限制数值范围[1,9000]"
+	observed := llmtest.Turn{Err: &llm.APIError{Status: 400, Message: rangeMsg, Err: errors.New(rangeMsg),
+		Observed: llm.LimitObservation{Model: "m", Tokens: 9000, Seen: time.Date(2026, 11, 25, 12, 0, 0, 0, time.UTC)}}}
 	for _, c := range []struct {
 		name  string
 		first llmtest.Turn
@@ -232,6 +238,7 @@ func TestSummaryCapRefusalResent_0071(t *testing.T) {
 	}{
 		{"window_form", window(111072, 64000), []int{64000, 20000}},
 		{"cap_form", capForm, []int{64000, 8192}},
+		{"observed", observed, []int{64000, 9000}},
 		{"input_overflow", llmtest.Turn{Err: llm.ErrContextOverflow}, []int{64000, 64000}},
 	} {
 		t.Run(c.name, func(t *testing.T) {

@@ -96,14 +96,27 @@ Every turn and every compaction summary names an output limit, reasoning include
 - **A cap the service stated** for the model, when it refused a larger limit earlier in the run,
   holds what gobble asks, a `maxTokens` you set above it included: gobble sends the service's cap,
   shown as the service's, and says so once per session and model.
+- **A cap a service stated on an earlier run** is kept for a day in the state directory's
+  `limit-observations.json`, with its provider, base URL and workspace, and handed back to that
+  provider alone, at that base URL (models.json's `baseUrl`, else the default), as the service's
+  statement: it ranks below `maxTokens` in models.json and above the provider's listing, so the
+  first call of the next run asks for it. A call whose answer runs past a kept cap, by the count the
+  service reported, drops it. An entry dated more than five minutes ahead of the clock is not read.
+  Two gobble processes keep each other's caps and drops: each write reads the file again first. An
+  unreadable file, or an entry missing its provider, model, cap or time, is one warning and not
+  read.
 - **Each call is held to the room the window leaves:** the window, less gobble's estimate of the
   context, less 4,096 tokens. With less room than 1,024, it asks for 1,024, or for the cap when the
   cap is smaller, so a cap below 1,024 is sent as it is; with no room, it sends the cap, so the
   service's refusal starts compaction. `compaction.reserveTokens` keeps that room free.
-- **A refusal that states the room or the cap**, in the forms gobble reads, is sent again once at
-  the value it states, whatever that is, from 1 up, before any compaction; every later call of that
-  turn asks for at most that value. A refusal of the limit gobble cannot mend ends the turn with a
-  line naming the limit asked and the `maxTokens` to set.
+- **A refusal that states the room or the cap**, in the forms gobble reads or as the cap the SDK
+  read from it, is sent again once at the value it states, whatever that is, from 1 up, before any
+  compaction; every later call of that turn asks for at most that value. A cap the service stated is
+  kept as above, and the session says so once per model. A summary's and a title's refusal are sent
+  again the same way. A refusal of the limit gobble cannot mend ends the turn with a line naming the
+  limit asked and the `maxTokens` to set.
+- **A model no source states a limit for**, once the session has looked it up, gets one line saying
+  that gobble assumes 16,384 tokens and that `maxTokens` changes it.
 - **A refusal for credit or rate** (a 402, a 429 that outlasts the retries, or Kilo's 503 for an
   upstream's 402) of a call that asked for a limit is not mended or retried: the error text is the
   service's as before, and the terminal client adds a line after it naming the limit asked, that some
@@ -117,7 +130,14 @@ To ask for less, for example where a gateway holds credit against the limit, set
 {"providers": {"kilo": {"modelOverrides": {"z-ai/glm-5.3": {"maxTokens": 32000}}}}}
 ```
 
-`/context` and `/session` show the last call's limit and why; `--stats` adds it as `out-limit`.
+`/context` and `/session` show what the last call carried and why: the tokens on the wire, with
+the value gobble asked when a thinking budget raised it; "none sent" on a route that sends none
+(the ChatGPT routes), where the service's default applies; a reason gobble did not choose as
+`sdk:<reason>`; and, when the call failed, the value it asked, marked so. A loaded or forked session
+shows the model's limit until its first call. `--stats` adds the same value as `out-limit`, or
+`out-limit none`. `gobble models info` looks the model up first and names each limit's source, every
+other source on a line of its own, and whether the model's wire requires a limit. An ACP client's model
+picker describes each model as "context N · max-out M" from what is cached, with no request.
 
 ## Values
 

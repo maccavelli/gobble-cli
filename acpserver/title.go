@@ -187,31 +187,19 @@ func (a *Agent) writeTitle(ctx context.Context, s *liveSession, retry llm.Retry,
 	// goroutine, bounded (0071-MADR P40).
 	a.waitDiscovery(ctx, s, a.titles.ProviderID, a.titles.Model)
 	info := a.info(a.titles.ProviderID, a.titles.Model)
+	// The title's cap is min(128, C), C the streamed output a turn reads
+	// (0071-MADR V8; 0065-MADR's amendment of 2026-11-25).
 	maxTokens := titleMaxTokens
-	if info.MaxTokens > 0 {
-		maxTokens = min(maxTokens, info.MaxTokens)
+	if c, _, _ := outputCap(info); c > 0 {
+		maxTokens = min(maxTokens, c)
 	}
 	req := &llm.Request{Model: a.titles.Model, Thinking: catalog.Levels(info)[0], MaxTokens: maxTokens, Messages: []llm.Message{
 		{Role: llm.RoleSystem, Content: []llm.Content{{Type: llm.ContentText, Text: titlePrompt}}},
 		{Role: llm.RoleUser, Content: []llm.Content{{Type: llm.ContentText, Text: "<user_message>\n" + cutRunes(prompt, titleSourceChars) + "\n</user_message>"}}},
 	}}
-	var (
-		text  strings.Builder
-		usage llm.Usage
-		stop  llm.StopReason
-	)
-	for ev, err := range p.Stream(ctx, req) {
-		if err != nil {
-			return err
-		}
-		switch ev := ev.(type) {
-		case llm.TextDelta:
-			text.WriteString(ev.Text)
-		case llm.Usage:
-			usage = ev
-		case llm.Done:
-			stop = ev.StopReason
-		}
+	text, usage, stop, err := a.titleCall(ctx, s, p, req)
+	if err != nil {
+		return err
 	}
 	// closeTitle waits for this to return before the log closes.
 	write := context.WithoutCancel(ctx)
@@ -225,7 +213,7 @@ func (a *Agent) writeTitle(ctx context.Context, s *liveSession, retry llm.Retry,
 		// (Recommended)").
 		return errors.New("the small model's title was cut at its output limit")
 	}
-	title := cleanTitle(text.String())
+	title := cleanTitle(text)
 	if title == "" {
 		return errors.New("the small model gave no title")
 	}
@@ -236,6 +224,44 @@ func (a *Agent) writeTitle(ctx context.Context, s *liveSession, retry llm.Retry,
 	}
 	_, err = a.setNameLocked(write, s, newUpdates(write, a.connection(), s.id), title)
 	return err
+}
+
+// titleCall streams the title's request, and, when the service refuses its
+// limit stating a smaller cap as the error's Observed, learns the cap and
+// sends it once more at it (0071-MADR P34). A completed call's output is
+// reported to the saved caps (P25).
+func (a *Agent) titleCall(ctx context.Context, s *liveSession, p llm.Provider, req *llm.Request) (string, llm.Usage, llm.StopReason, error) {
+	p = watchCalls(p, a.outputSeen(a.titles.ProviderID), nil)
+	for resent := false; ; resent = true {
+		var (
+			text  strings.Builder
+			usage llm.Usage
+			stop  llm.StopReason
+			err   error
+		)
+		for ev, e := range p.Stream(ctx, req) {
+			if e != nil {
+				err = e
+				break
+			}
+			switch ev := ev.(type) {
+			case llm.TextDelta:
+				text.WriteString(ev.Text)
+			case llm.Usage:
+				usage = ev
+			case llm.Done:
+				stop = ev.StopReason
+			}
+		}
+		if ob, ok := observedBelow(err, req.MaxTokens); ok && !resent {
+			a.learnedCap(s, a.titles.ProviderID, req.Model, ob)
+			again := *req
+			again.MaxTokens = ob.Tokens
+			req = &again
+			continue
+		}
+		return text.String(), usage, stop, err
+	}
 }
 
 // thinkBlock is a reasoning block a model may put before its answer.

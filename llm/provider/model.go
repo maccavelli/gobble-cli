@@ -74,11 +74,13 @@ func ModelInfo(id, apiKey, workspace string, logins LoginStore, model string, mj
 // ClientName, the lookup names that application and ClientVersion to the SDK,
 // which names a login's session with them before it reads its token, so a
 // refresh the lookup starts, and the listing it starts in the background,
-// name it (0051-MADR D9, N6). o's other fields are ignored.
+// name it (0051-MADR D9, N6). o's Observations, the caps services stated on
+// earlier runs, are a layer below models.json's (0071-MADR P24). o's other
+// fields are ignored.
 func ModelInfoWith(o Options, id, model string, mj *gcatalog.ModelsJSON) llm.Model {
 	ctx := context.Background()
 	src, workspace, sdk := lookupSource(ctx, o, id)
-	return modelInfoFrom(ctx, id, src, workspace, model, mj, o.ClientName, o.ClientVersion, sdk...)
+	return modelInfoFrom(ctx, id, src, workspace, model, mj, o.ClientName, o.ClientVersion, savedLayer(o, id), sdk...)
 }
 
 // lookupSource is what a lookup of provider id under o reads with: the
@@ -114,24 +116,55 @@ func limitsSource(id string, src llmprovider.TokenSource) llmprovider.TokenSourc
 // own requests, read what the service states (0066-MADR D1, as amended
 // 2026-11-25). It reads with what ModelInfoWith reads with: o's credential,
 // transport, base URL, cache and set, the Claude workspace, gobble's name and
-// version, the embedded snapshot as the "models.dev" layer and models.json
-// above it. It passes no Kilo organization (0066-MADR S43). The SDK bounds
-// it at 10 seconds; ctx ends it sooner. Its error is each source's failure,
-// joined; what the other sources gave is kept either way, and a lookup reads
-// it.
+// version, the embedded snapshot as the "models.dev" layer, o's saved caps
+// as the "service-stated" layer above it, and models.json above both
+// (0071-MADR P24). It passes no Kilo organization (0066-MADR S43). The SDK
+// bounds it at 10 seconds; ctx ends it sooner. Its error is each source's
+// failure, joined; what the other sources gave is kept either way, and a
+// lookup reads it.
 func Discover(ctx context.Context, o Options, id, model string, mj *gcatalog.ModelsJSON) error {
 	src, workspace, sdk := lookupSource(ctx, o, id)
-	opts := lookupOptions(workspace, o.ClientName, o.ClientVersion, sdk, lookupLayers(mj)...)
-	_, err := catalog.LookupLimits(ctx, llmprovider.ProviderID(id), limitsSource(id, src), model, opts...)
+	opts := lookupOptions(workspace, o.ClientName, o.ClientVersion, sdk, lookupLayers(mj, savedLayer(o, id))...)
+	_, err := lookupLimits(ctx, llmprovider.ProviderID(id), limitsSource(id, src), model, opts...)
 	return err
 }
 
+// CachedLimits are model's limits on provider id as they are cached now,
+// with what a lookup reads with (the layers, o's saved caps among them, the
+// run's cache and set, a Claude key's workspace), as the SDK's
+// catalog.CachedLimits reads them: it starts no request. A key's token keys
+// the cached listing; a stored login's is not asked, since it may refresh,
+// so a provider signed in with one reads the layers alone (0066-MADR D6,
+// S19; 0071-MADR P46).
+func CachedLimits(o Options, id, model string, mj *gcatalog.ModelsJSON) llm.Limits {
+	sdk := Options{HTTPClient: o.HTTPClient, Headers: o.Headers, BaseURL: o.BaseURL, Cache: o.Cache, Set: o.Set}.sdkOptions()
+	sdk = append(sdk, Options{BaseURL: o.BaseURL, Set: o.Set}.chatOptions(id)...)
+	var src llmprovider.TokenSource
+	if o.APIKey != "" {
+		src = llmprovider.NewStaticToken(o.APIKey)
+	}
+	opts := lookupOptions(o.Workspace, o.ClientName, o.ClientVersion, sdk, lookupLayers(mj, savedLayer(o, id))...)
+	if ls := limitsSource(id, src); ls != nil {
+		opts = append(opts, llmprovider.WithTokenSource(ls))
+	}
+	return withLimits(llm.Model{}, catalog.CachedLimits(context.Background(), llmprovider.ProviderID(id), model, opts...)).Limits
+}
+
+// lookupLimits is the SDK's catalog.LookupLimits; a test replaces it to read
+// the options discovery hands it.
+var lookupLimits = catalog.LookupLimits
+
 // lookupLayers are a lookup's layers: the embedded snapshot, when it
-// parsed, then models.json, when mj is not nil, which ranks above it.
-func lookupLayers(mj *gcatalog.ModelsJSON) []catalog.Layer {
+// parsed; saved, the caps services stated on earlier runs, when not nil,
+// above it; then models.json, when mj is not nil, above both (0071-MADR
+// P21, P24).
+func lookupLayers(mj *gcatalog.ModelsJSON, saved catalog.Layer) []catalog.Layer {
 	var layers []catalog.Layer
 	if meta, err := snapshot(); err == nil {
 		layers = append(layers, *meta)
+	}
+	if saved != nil {
+		layers = append(layers, saved)
 	}
 	if mj != nil {
 		layers = append(layers, modelsJSONLayer{mj})
@@ -146,15 +179,16 @@ func ModelInfoContext(ctx context.Context, id, apiKey, model string, mj *gcatalo
 	if apiKey != "" {
 		src = llmprovider.NewStaticToken(apiKey)
 	}
-	return modelInfoFrom(ctx, id, src, "", model, mj, "", "")
+	return modelInfoFrom(ctx, id, src, "", model, mj, "", "", nil)
 }
 
 // modelInfoFrom is ModelInfoContext with src, the credential's token source, or
 // nil for none, a Claude key's workspace, the application's name and version
-// (clientName empty names none), and sdk, the SDK options a listing it starts
-// takes (0046-MADR D7).
-func modelInfoFrom(ctx context.Context, id string, src llmprovider.TokenSource, workspace, model string, mj *gcatalog.ModelsJSON, clientName, clientVersion string, sdk ...llmprovider.Option) llm.Model {
-	m := lookupModelWith(ctx, id, src, model, workspace, clientName, clientVersion, sdk, lookupLayers(mj)...)
+// (clientName empty names none), saved, the saved caps' layer or nil, and
+// sdk, the SDK options a listing it starts takes (0046-MADR D7; 0071-MADR
+// P24).
+func modelInfoFrom(ctx context.Context, id string, src llmprovider.TokenSource, workspace, model string, mj *gcatalog.ModelsJSON, clientName, clientVersion string, saved catalog.Layer, sdk ...llmprovider.Option) llm.Model {
+	m := lookupModelWith(ctx, id, src, model, workspace, clientName, clientVersion, sdk, lookupLayers(mj, saved)...)
 	if mj == nil {
 		return capSourced(m, gcatalog.Facts{})
 	}

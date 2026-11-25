@@ -103,17 +103,21 @@ func TestListModelsFlag(t *testing.T) {
 	}
 }
 
-// gobble models info resolves as --model does and prints the model's facts.
+// gobble models info resolves as --model does and prints the model's facts:
+// each limit with its source, and whether the wire requires an output limit
+// (0066-MADR D5, S15, S16, S18; 0071-MADR P45, the owner's "Expect the new
+// output (Recommended)").
 func TestModelsInfo(t *testing.T) {
 	c := listEnv(t)
 	r := c.run("models", "info", "custom-1")
 	want := `provider  openai
 model     custom-1
 name      Custom One
-context   200000
-max-out   8192
+context   200000 (models.json)
+max-out   8192 (models.json)
 input     text, image
 thinking  off, minimal, low, medium, high
+limit     optional on its wire
 cost      input $1, output $2, cache read $0.5, cache write $0, per million tokens
 tier      above 100000: input $3, output $4, cache read $1, cache write $0
 `

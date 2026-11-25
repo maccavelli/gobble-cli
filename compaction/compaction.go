@@ -431,8 +431,13 @@ func summariseFitting(ctx context.Context, m Model, system string, msgs []*sessi
 // limitRefused reads err as a refusal of the output limit sent (0071-MADR
 // D8 (a), (b)): at is the room or cap it states when that is at least 1 and
 // below sent, for one request again; input reports a window form whose room
-// is 0 or less, an overflow of the input.
+// is 0 or less, an overflow of the input. The cap the SDK validated, the
+// error's llm.APIError.Observed, is read first, as the turn reads it
+// (0071-MADR P34).
 func limitRefused(err error, sent int) (at int, input bool) {
+	if ae, ok := errors.AsType[*llm.APIError](err); ok && ae.Observed.Tokens >= 1 && ae.Observed.Tokens < sent {
+		return ae.Observed.Tokens, false
+	}
 	r, ok := llm.ReadLimitRefusal(err, sent)
 	switch {
 	case !ok:

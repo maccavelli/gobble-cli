@@ -116,6 +116,13 @@ var todaysText = map[Key]string{
 		"or set maxTokens for {model} in models.json.",
 	// New with 0071-PLAN Phase 2b: 0071-MADR P28's line.
 	ModelLimitUserOver: "models.json asks for {asked} output tokens for {model}; the service stated {stated}, which gobble sends.",
+	// New with 0071-PLAN Phase 2c: 0066-MADR D10's two notices, as amended
+	// (model.limit.unknown's words are D10's; model.limit.learned's a draft
+	// for the owner).
+	ModelLimitUnknown: "No source states {model}'s output limit; gobble asks for at most 16,384 tokens (assumed), fitted to the " +
+		"window; set maxTokens for {model} in models.json to change it.",
+	ModelLimitLearned: "The service stated {model}'s output limit as {stated} tokens; gobble sent the call again at that and keeps " +
+		"it for a day.",
 }
 
 // The boring catalog holds today's text, word for word, for every key.

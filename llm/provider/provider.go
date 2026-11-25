@@ -17,6 +17,7 @@ import (
 
 	"github.com/maccavelli/go-llmprovider-sdk/llmprovider"
 	"github.com/maccavelli/go-llmprovider-sdk/llmprovider/auth"
+	"github.com/maccavelli/go-llmprovider-sdk/llmprovider/catalog"
 	"github.com/maccavelli/go-llmprovider-sdk/llmprovider/providers/claude"
 
 	"github.com/maccavelli/gobble-cli/jsonx"
@@ -98,6 +99,14 @@ type Options struct {
 	// earlier run. New passes them back, so the first request does not send
 	// them (0036-MADR D4).
 	Refusals []llm.ReasoningRefusal
+	// Observations are the output caps services stated for this provider's
+	// models on earlier runs, newest first. New, every lookup, its limits and
+	// Discover take them as a caller's layer named "service-stated", below
+	// models.json's, for a cap whose model matches in lower case, whose base
+	// URL is BaseURL and whose scope is Workspace for Claude (empty
+	// otherwise), seen within the last 24 hours and not more than five
+	// minutes ahead of now (0071-MADR P21, P24, P48).
+	Observations []llm.LimitObservation
 }
 
 // login is provider id's stored login, as the SDK's session, when o has no
@@ -211,7 +220,9 @@ func withHeaders(c *http.Client, headers func(ctx context.Context, model string)
 // New builds the SDK provider id with o, wrapped in the SDK's retry, as an
 // llm.Provider. Construction makes no network call: model probes are off
 // (0005-MADR), and the SDK fetches no model metadata from v1.33.0. New
-// hands the provider no models.dev document (0071-MADR P2, P6).
+// hands the provider no models.dev document (0071-MADR P2, P6), and, as its
+// one layer, o.Observations, the caps services stated on earlier runs
+// (0071-MADR P24).
 func New(id string, o Options) (llm.Provider, error) {
 	opts := []llmprovider.Option{
 		llmprovider.WithModelProbes(false),
@@ -235,6 +246,11 @@ func New(id string, o Options) (llm.Provider, error) {
 	}
 	if len(o.Refusals) > 0 {
 		opts = append(opts, llmprovider.WithReasoningRefusals(reasoningRefusals(o.Refusals)...))
+	}
+	if saved := savedLayer(o, id); saved != nil {
+		// The caps services stated on earlier runs, as a caller's layer
+		// (0071-MADR P24); New hands no other layer.
+		opts = append(opts, catalog.WithModelLayer(saved))
 	}
 	if o.Logger != nil {
 		opts = append(opts, llmprovider.WithLogger(o.Logger))

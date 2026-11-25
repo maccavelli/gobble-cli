@@ -90,6 +90,11 @@ type Config struct {
 	// SaveRefusal records a learned reasoning refusal. Nil records none
 	// (0036-MADR D4).
 	SaveRefusal func(llm.ReasoningRefusal)
+	// SaveObservation records an output cap a service stated when it refused
+	// a call's limit, which the call is sent again at: the error's
+	// llm.APIError.Observed, at least 1 and below the limit sent. Nil records
+	// none, and the call is still sent again (0071-MADR P19).
+	SaveObservation func(llm.LimitObservation)
 }
 
 // Compacted is the session after a compaction (Config.Compact): its
@@ -543,7 +548,7 @@ func (t *turn) next(ctx context.Context) (*reply, bool) {
 	for {
 		r, err := t.call(ctx)
 		cause = t.settleCut(cause, r, err)
-		at, overflow := t.limitRefused(err)
+		at, overflow, observed := t.limitRefused(err)
 		switch {
 		case t.stopped:
 			return r, false
@@ -565,6 +570,9 @@ func (t *turn) next(ctx context.Context) (*reply, bool) {
 			// too (0070-MADR D12 (e), (f)).
 		case at > 0 && !capResent:
 			capResent, t.resendAt, t.stated = true, at, at
+			if observed.Tokens > 0 && t.a.cfg.SaveObservation != nil {
+				t.a.cfg.SaveObservation(observed) // the cap the service stated (0071-MADR P19)
+			}
 			continue
 		case at > 0:
 			// Refused again: no compaction mends a limit, and the turn ends with
@@ -773,11 +781,16 @@ func (t *turn) replaced(r *reply, err error) bool {
 // and below the limit sent, for the call to be sent again at it; overflow
 // reports an overflow of the input, which takes the overflow's path:
 // llm.ErrContextOverflow the limit did not cause, or a window form whose
-// room is 0 or less. A call that carried no limit is never read as a
-// refusal of it.
-func (t *turn) limitRefused(err error) (at int, overflow bool) {
+// room is 0 or less. The cap the SDK validated and set as the error's
+// llm.APIError.Observed is read first, and returned as observed for the turn
+// to save; then the forms of the error's text (0071-MADR P19, P20). A call
+// that carried no limit is never read as a refusal of it.
+func (t *turn) limitRefused(err error) (at int, overflow bool, observed llm.LimitObservation) {
 	if err == nil {
-		return 0, false
+		return 0, false, llm.LimitObservation{}
+	}
+	if ae, ok := errors.AsType[*llm.APIError](err); ok && t.limit > 0 && ae.Observed.Tokens >= 1 && ae.Observed.Tokens < t.limit {
+		return ae.Observed.Tokens, false, ae.Observed
 	}
 	var r llm.LimitRefusal
 	ok := false
@@ -785,9 +798,9 @@ func (t *turn) limitRefused(err error) (at int, overflow bool) {
 		r, ok = llm.ReadLimitRefusal(err, t.limit)
 	}
 	if ok && r.Tokens >= 1 && r.Tokens < t.limit {
-		return r.Tokens, false
+		return r.Tokens, false, llm.LimitObservation{}
 	}
-	return 0, errors.Is(err, llm.ErrContextOverflow) || (ok && r.Window && r.Tokens <= 0)
+	return 0, errors.Is(err, llm.ErrContextOverflow) || (ok && r.Window && r.Tokens <= 0), llm.LimitObservation{}
 }
 
 // cutShort ends a wait that w cut short. A cancel ends the turn as

@@ -61,6 +61,14 @@ The reply hit the output limit while writing a tool call, so the call was droppe
 
 models.json asks for {asked} output tokens for {model}; the service stated {stated}, which gobble sends.
 
+## model.limit.unknown
+
+No source states {model}'s output limit; gobble asks for at most 16,384 tokens (assumed), fitted to the window; set maxTokens for {model} in models.json to change it.
+
+## model.limit.learned
+
+The service stated {model}'s output limit as {stated} tokens; gobble sent the call again at that and keeps it for a day.
+
 ## lines.hidden
 
 {n} lines hidden (--verbose shows all)

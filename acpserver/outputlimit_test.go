@@ -411,6 +411,8 @@ func TestLimitRefusalLine_0071(t *testing.T) {
 			}
 		})
 	}
+	// 0071-PLAN Phase 2c: a refusal whose cap only Observed states (P34).
+	t.Run("refused_again_observed", refusedAgainObserved)
 }
 
 // A credit or rate failure of a capped call fails the turn with its error
@@ -639,6 +641,8 @@ func TestPromptResponseOutputLimit_0071(t *testing.T) {
 		}
 		// 0071 P2a new names: end
 	})
+	// 0071-PLAN Phase 2c: what the last call carried (P22, P32).
+	t.Run("sent", promptResponseSentLimit)
 }
 
 // A turn with no model call carries no output limit, and /context keeps

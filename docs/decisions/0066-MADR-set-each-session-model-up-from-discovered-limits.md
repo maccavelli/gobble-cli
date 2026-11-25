@@ -397,3 +397,19 @@ Counts after this addition: 42 decided (S42, S44), 1 out of scope, 0 open, 1 lap
   coordinator after 0071-PLAN's Phase 2b stop: discovery's requests name no Kilo organization.
 * **D1's hook.** Discovery is started from `acpserver` through `acpserver.Options.Discover`, which `internal/cli` wires to
   `provider.Discover`: the owner's "Add Options.Discover (Recommended)", 0071-MADR's fourth amendment of this date (P23, P37).
+
+### Note (2026-11-25): Phase 2c's stop
+
+The owner's answers, relayed by the coordinator, recorded in
+[0071-MADR-send-each-turn-the-models-output-cap-and-own-the-limit-policy.md](0071-MADR-send-each-turn-the-models-output-cap-and-own-the-limit-policy.md)'s
+seventh amendment of this date (P43 to P46), quoted exactly:
+
+* **D7, S12 to S14:** "Two Options hooks (Recommended)": `acpserver.Options.SaveObservation` and `Options.CallOutput` carry a
+  learned cap and a completed call's output to `limit-observations.json`; D10's two keys are `personality.ModelLimitUnknown` and
+  `ModelLimitLearned`.
+* **D10, S10, S12:** "Approve all four (Recommended)": the lines of `model.limit.unknown` and `model.limit.learned` in the four
+  built-in personalities, as written, are decided text.
+* **D5, S10, S15, S16, S18:** "Expect the new output (Recommended)": `TestModelsInfo` expects the sources and the `limit` line,
+  and `TestRunEndsListings` S10's line before the reply.
+* **D6, S19:** "A fetch-free cached hook (Recommended)": the description is read through `acpserver.Options.CachedLimits`, which
+  starts no request; its test is `TestACP_ModelOptionDescription_0066`.

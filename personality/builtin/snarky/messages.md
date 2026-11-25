@@ -116,6 +116,14 @@ placeholders.
 
 - models.json wants {asked} output tokens for {model}; the service says {stated}, so {stated} it is.
 
+## model.limit.unknown
+
+- Nobody bothered to state {model}'s output limit, so gobble guesses 16,384 tokens, fitted to the window. Set maxTokens for {model} in models.json if you know better.
+
+## model.limit.learned
+
+- The service refused, then admitted {model} tops out at {stated} output tokens. Fine: gobble sent it again at that and remembers it for a day.
+
 ## lines.hidden
 
 - {n} lines hidden. You're welcome. (--verbose shows all)

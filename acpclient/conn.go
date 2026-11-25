@@ -278,10 +278,13 @@ type Result struct {
 
 // OutputLimit is a model call's output limit, in tokens, and why the agent
 // asked for it: gobble's basis, such as stated, ceiling or window
-// (0071-MADR D10).
+// (0071-MADR D10); "none" when the call carried none, or the SDK's own
+// basis as "sdk:<basis>" (P22, P31). Asked reports that the call failed, so
+// Tokens are what it asked for (P32).
 type OutputLimit struct {
 	Tokens int    `json:"tokens"`
 	Basis  string `json:"basis"`
+	Asked  bool   `json:"asked,omitzero"`
 }
 
 // toInt is an ACP count as an int: a count past an int's range is its

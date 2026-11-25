@@ -71,7 +71,7 @@ func (a *Agent) compactSession(ctx context.Context, s *liveSession, instructions
 		return compaction.Result{}, 0, err
 	}
 	chosen, think := a.choices(s)
-	return a.runCompaction(ctx, s, prep, a.compactionModel(model, a.provOf(s), chosen, think), instructions, report)
+	return a.runCompaction(ctx, s, prep, a.compactionModel(s, model, a.provOf(s), chosen, think), instructions, report)
 }
 
 // prepareCompaction finds what a compaction of s summarises, once its file

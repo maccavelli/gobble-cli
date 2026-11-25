@@ -300,7 +300,11 @@ func TestRunEndsListings(t *testing.T) {
 		return provider.Listing{Live: true, Source: "live", Models: []string{id + "-1"}, FetchedAt: time.Now()}, nil
 	})
 	r := mustRun(t, home, "-p", "hi")
-	if r.stdout != "fine\n" {
+	// openai-1 is a model no source states a limit for: S10's line, in the
+	// terminal's default personality, comes before the reply (0071-MADR
+	// P45, the owner's "Expect the new output (Recommended)").
+	if r.stdout != "Nothing states openai-1's output limit, so gobble assumes 16,384 tokens, fitted to the window. "+
+		"Set maxTokens for openai-1 in models.json to change that.\n\nfine\n" {
 		t.Fatalf("stdout %q", r.stdout)
 	}
 	if !returned.Load() {

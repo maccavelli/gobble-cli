@@ -3,6 +3,7 @@ package cli
 import (
 	"cmp"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strconv"
 	"strings"
@@ -61,7 +62,14 @@ func (c *ModelsInfoCmd) Run(e *runEnv) error {
 	if res.Warning != "" {
 		e.out.Warnf("%s", res.Warning)
 	}
-	return e.out.Result(modelInfo(provider.ModelInfoContext(e.ctx, res.Model.Provider, "", res.Model.ID, mj)))
+	// It discovers the model's limits first, bounded by the SDK, with what a
+	// session's discovery reads with; a failure is a debug record, and the
+	// facts are then what is cached (0066-MADR D5, S18).
+	id, model := res.Model.Provider, res.Model.ID
+	if err := discoverLimits(e.ctx, e.lookupOptions(id), id, model, mj); err != nil {
+		e.log().Debug("model limits discovery", slog.String("provider", id), slog.String("model", model), slog.Any("error", err))
+	}
+	return e.out.Result(modelInfo(modelFacts(e.lookupOptions(id), id, model, mj)))
 }
 
 // printModels prints Pi's --list-models table (cli/list-models.ts) for the
@@ -285,14 +293,22 @@ func liveListings(listings []*modelListing, sels []provider.Selection) map[strin
 }
 
 // modelInfo is a model's facts, one aligned line each, "unknown" for what
-// the catalog does not know.
+// the catalog does not know. The window and the output limit name their
+// source, each other source on a line of its own, "(stale)" past its
+// source's freshness, and a line says whether the model's wire requires an
+// output limit (0066-MADR D5, S15, S16, S18).
 func modelInfo(m llm.Model) []byte {
-	lines := [][2]string{
-		{labelProvider, m.Provider}, {labelModel, m.ID}, {"name", cmp.Or(m.Name, unknownFact)},
-		{"context", countOrUnknown(m.ContextWindow)}, {"max-out", countOrUnknown(m.MaxTokens)},
-		{"input", listOrUnknown(m.Input)}, {"thinking", strings.Join(catalog.Levels(m), ", ")},
-		{"cost", unknownFact},
+	window := m.Limits.Window
+	if !window.Known {
+		window = m.Limits.Input
 	}
+	lines := [][2]string{{labelProvider, m.Provider}, {labelModel, m.ID}, {"name", cmp.Or(m.Name, unknownFact)}}
+	lines = append(lines, limitLines("context", window, m.ContextWindow)...)
+	lines = append(lines, limitLines("max-out", m.Limits.Output, m.MaxTokens)...)
+	lines = append(lines, [][2]string{
+		{"input", listOrUnknown(m.Input)}, {"thinking", strings.Join(catalog.Levels(m), ", ")},
+		{"limit", requiredWords(m.Limits.Required)}, {"cost", unknownFact},
+	}...)
 	if m.Priced {
 		c := m.Cost
 		lines[len(lines)-1][1] = rates(c.Input, c.Output, c.CacheRead, c.CacheWrite) + ", per million tokens"
@@ -316,6 +332,46 @@ const (
 
 // unknownFact is what models info prints for a fact the catalog lacks.
 const unknownFact = "unknown"
+
+// limitLines are a limit's lines: label with the chosen value and its
+// source, then each other source's value, indented; merged, a lookup's value
+// with no limits read, has no source. "(stale)" follows a source read past
+// its freshness (0066-MADR D5).
+func limitLines(label string, f llm.LimitFact, merged int) [][2]string {
+	if !f.Known {
+		return [][2]string{{label, countOrUnknown(merged)}}
+	}
+	out := [][2]string{{label, strconv.Itoa(f.Tokens) + sourceNote(f.Source, f.Stale)}}
+	for _, o := range f.Others {
+		if o.Tokens > 0 {
+			out = append(out, [2]string{"", o.Source + ": " + strconv.Itoa(o.Tokens) + staleNote(o.Stale)})
+		}
+	}
+	return out
+}
+
+// sourceNote is " (source)", with " (stale)" after it when stale.
+func sourceNote(source string, stale bool) string {
+	if source == "" {
+		return staleNote(stale)
+	}
+	return " (" + source + ")" + staleNote(stale)
+}
+
+func staleNote(stale bool) string {
+	if stale {
+		return " (stale)"
+	}
+	return ""
+}
+
+// requiredWords says whether the model's wire requires an output limit.
+func requiredWords(required bool) string {
+	if required {
+		return "required on its wire"
+	}
+	return "optional on its wire"
+}
 
 func countOrUnknown(n int) string {
 	if n <= 0 {

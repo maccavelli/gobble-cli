@@ -98,6 +98,10 @@ Early, and built in the order [docs/README.md](docs/README.md#build-order) gives
   shows where.
 - **`models.json`** in the config directory, in Pi's schema: a provider's base URL and headers, added models, and
   corrections to a model's window, price and thinking levels ([guide](docs/guides/models-json.md)).
+- **State** in the state directory, each file written owner-only: `recent-models.json`, the recent models;
+  `reasoning-refusals.json`, the reasoning settings a model refused; and `limit-observations.json`, the output
+  caps a service stated, kept a day and handed back to that provider
+  ([guide](docs/guides/models-json.md#the-output-limit)).
 - **Choosing a model:** `--model` and `--provider` by Pi's rules, `--thinking` up to `max`, the
   `defaultModel` setting, and `gobble models list|info` ([guide](docs/guides/choosing-a-model.md)).
 - **Browsing providers and catalogs:** `gobble providers [--check] [--json]` lists every provider with its

@@ -85,13 +85,24 @@ var modelFacts = provider.ModelInfoWith
 // that reads nothing: no test reaches a provider through it.
 var discoverLimits = provider.Discover
 
+// cachedLimits reads a model's limits as cached, starting no request, for
+// the agent's CachedLimits hook (0071-MADR P46); a test replaces it to see
+// its calls.
+var cachedLimits = provider.CachedLimits
+
 // lookupOptions are what a lookup and a discovery of provider id read with:
 // the run's key, workspace and login for it, found as modelProvider finds
-// them, its cache and sessions, and gobble's name and version (0005-PLAN
-// F4-2a, F4-3a, F4-3b; 0046-MADR D7).
+// them, models.json's base URL, which the saved caps are matched on, and
+// headers, as the run's listing sends them (providerOptions), its cache and
+// sessions, gobble's name and version, and the output caps its services
+// stated on earlier runs (0005-PLAN F4-2a, F4-3a, F4-3b; 0041-MADR D1, D2;
+// 0046-MADR D7; 0071-MADR P24, P26, P47; 0071-PLAN's review deviation of
+// 2026-11-25, R1, R8).
 func (e *runEnv) lookupOptions(id string) provider.Options {
-	o := provider.Options{APIKey: e.knownKey(id), Workspace: e.knownWorkspace(id), Cache: &e.cache, Sessions: &e.sessions,
-		ClientName: appName, ClientVersion: identity().Version, Set: e.providerSet()}
+	mj := e.modelsJSON()
+	o := provider.Options{APIKey: e.knownKey(id), Workspace: e.knownWorkspace(id), BaseURL: mj.BaseURL(id), Headers: e.headersFor(mj, id),
+		Cache: &e.cache, Sessions: &e.sessions, ClientName: appName, ClientVersion: identity().Version, Set: e.providerSet(),
+		Observations: e.providerObservations(id)}
 	if e.knownLogin(id) {
 		o.Logins = e.logins()
 	}
@@ -130,6 +141,21 @@ func (e *runEnv) agentOptions() acpserver.Options {
 		ModelInfo: func(id, model string) llm.Model {
 			return modelFacts(e.lookupOptions(id), id, model, e.modelsJSON())
 		},
+		// The limits cached now, for the model option's descriptions: no
+		// request, a login's token not asked; models.json's base URL, which
+		// the saved caps are matched on, and headers, as the lookups read
+		// with (0066-MADR D6; 0071-MADR P46, P47).
+		CachedLimits: func(id, model string) llm.Limits {
+			mj := e.modelsJSON()
+			o := provider.Options{APIKey: e.knownKey(id), Workspace: e.knownWorkspace(id), BaseURL: mj.BaseURL(id),
+				Headers: e.headersFor(mj, id), Cache: &e.cache, Set: e.providerSet(), ClientName: appName,
+				ClientVersion: identity().Version, Observations: e.providerObservations(id)}
+			return cachedLimits(o, id, model, e.modelsJSON())
+		},
+		// The caps services state, kept a day, and a completed call's output,
+		// which drops one it exceeds (0066-MADR D7; 0071-MADR P43).
+		SaveObservation: e.rememberObservation,
+		CallOutput:      e.dropExceeded,
 		// Each session's model's limits, discovered when it is set, with
 		// what the lookup reads with (0066-MADR D1; 0071-MADR P37).
 		Discover: func(ctx context.Context, id, model string) error {

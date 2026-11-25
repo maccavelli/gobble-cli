@@ -51,4 +51,22 @@ func TestPromptResponseOutputLimit_0071(t *testing.T) {
 			t.Errorf("OutputLimit %+v, want %+v", r.OutputLimit, want)
 		}
 	})
+	// A failed call's limit is what it asked for, marked (0071-MADR P32).
+	t.Run("asked", func(t *testing.T) {
+		agent := &acptest.ScriptAgent{Turns: []acptest.Turn{{Meta: `{"gobble":{"outputLimit":{"tokens":32000,"basis":"stated","asked":true}}}`}}}
+		c := start(t, agent, acpclient.Options{Name: "test", Version: "0.0.0"})
+		s, err := c.NewSession(t.Context(), acptest.Abs("/w"), func(acpclient.Update) {})
+		if err != nil {
+			t.Fatal(err)
+		}
+		r, err := s.Prompt(t.Context(), acpclient.Prompt{Text: "go"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		// 0071 2c new names: begin
+		if want := (acpclient.OutputLimit{Tokens: 32000, Basis: "stated", Asked: true}); r.OutputLimit == nil || *r.OutputLimit != want {
+			t.Errorf("OutputLimit %+v, want %+v", r.OutputLimit, want)
+		}
+		// 0071 2c new names: end
+	})
 }

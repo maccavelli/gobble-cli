@@ -122,6 +122,19 @@ type Options struct {
 	// several sessions and models. Its error is logged at debug. Nil
 	// discovers nothing (0066-MADR D1, D2, S8, S40; 0071-MADR P37, P40).
 	Discover func(ctx context.Context, provider, model string) error
+	// SaveObservation records a cap a service stated for providerID's model
+	// when it refused a call's output limit, which the call (a turn's, a
+	// summary's or a title's) was sent again at, for later runs; CallOutput a
+	// completed call's output tokens, as the service reported them, which drop
+	// a saved cap of its model they exceed; model is the one a cap learned for
+	// the call's model was saved under, else the call's. Nil records nothing
+	// (0066-MADR D7; 0071-MADR P19, P25, P34, P43, P49, P52).
+	SaveObservation func(providerID string, o llm.LimitObservation)
+	CallOutput      func(providerID, model string, outputTokens int)
+	// CachedLimits are a provider's model's limits as they are cached now:
+	// it must start no request. The model option's descriptions read it.
+	// Nil describes nothing (0066-MADR D6, S19; 0071-MADR P46).
+	CachedLimits func(provider, model string) llm.Limits
 	// Override is the run's own model and thinking level, which win over
 	// every session's, new, forked, loaded or resumed (0005-PLAN F4-2c).
 	// Zero leaves each session its own.
@@ -187,7 +200,17 @@ type Agent struct {
 	models        func() ModelChoice
 	rememberModel func(ref string)
 	saveRefusal   func(providerID string, refusal llm.ReasoningRefusal)
-	search        func(provider string, models []string, query string) []string
+	// saveObservation and callOutput are Options.SaveObservation and
+	// Options.CallOutput; cachedLimits Options.CachedLimits (0071-MADR P43,
+	// P46).
+	saveObservation func(providerID string, o llm.LimitObservation)
+	callOutput      func(providerID, model string, outputTokens int)
+	cachedLimits    func(provider, model string) llm.Limits
+	// savedAs is, by provider/model asked, the model a cap learned for
+	// such a request was saved under, when that is another (0071-PLAN's
+	// review deviation of 2026-11-25, R6); guarded by mu.
+	savedAs map[string]string
+	search  func(provider string, models []string, query string) []string
 	// marksMu guards marks, the providers a turn saw refused (0025-MADR D4).
 	marksMu sync.Mutex
 	marks   map[string]mark
@@ -269,8 +292,22 @@ type liveSession struct {
 	mode string
 	used int // the context's tokens, as the last usage_update said
 	// outLimit is the output limit the session's last model call asked for,
-	// under the agent's mu; zero before its first (0071-MADR D4, D10).
-	outLimit llm.OutputLimit
+	// under the agent's mu; zero before its first (0071-MADR D4, D10). Once
+	// the call's done event reports what it carried, it is that: the wire's
+	// tokens with gobble's basis, "none" for a call that carried none, or
+	// the SDK's own basis raw as "sdk:<basis>"; raisedFrom is gobble's value
+	// when a thinking budget raised it; outFailed says the call failed after
+	// asking it (0071-MADR P22, P31, P32).
+	outLimit   llm.OutputLimit
+	raisedFrom int
+	outFailed  bool
+	// said are the notes kept once per session, by kind and provider/model,
+	// and notes those not yet said, which the next turn says before its
+	// reply, under the agent's mu (0066-MADR D10; 0071-MADR P19, V7). sdkBasis
+	// are the provider/model refs whose raw SDK basis was logged (P31).
+	said     map[string]bool
+	notes    []string
+	sdkBasis map[string]bool
 	// userOver are the provider/model refs whose models.json maxTokens a
 	// service's stated cap held, already said, under the agent's mu
 	// (0071-MADR P28).
@@ -377,7 +414,7 @@ func (s *liveSession) warningLog() *agent.WarningLog {
 // the first request, so it can send session updates.
 func New(opts Options) *Agent {
 	a := &Agent{version: opts.Version, newID: opts.NewID, provider: opts.Provider, providerFor: opts.ProviderFor, models: opts.Models, info: opts.ModelInfo,
-		discover:      opts.Discover,
+		discover: opts.Discover, saveObservation: opts.SaveObservation, callOutput: opts.CallOutput, cachedLimits: opts.CachedLimits,
 		rememberModel: opts.Remember, saveRefusal: opts.SaveRefusal, search: opts.SearchModels, credGen: opts.CredentialGeneration,
 		planConsent: opts.PlanConsent,
 		override:    opts.Override, tools: opts.Tools, noGrants: opts.NoRequestPermissions, store: opts.Store, now: opts.Now, mcp: opts.MCP, logger: opts.Logger, prompt: opts.Prompt,
@@ -817,7 +854,7 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 	// limit's line, and a workspace's advice in place of the service's words
 	// (0070-MADR D2, Q10).
 	w.errText = func(err error) string { return errorData(a.provOf(s), limitLine(err, limits.last, chosen)).Error }
-	called, cuts := watchCuts(model)
+	called, cuts := a.turnProvider(model, w.provider, limits)
 	cfg := agent.Config{
 		Provider: called,
 		Tools:    tools,
@@ -837,6 +874,9 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 		Warned:      s.warningLog(),
 		SaveRefusal: savedRefusal(a, w.provider),
 		OutputLimit: limits.limit,
+		// A cap a service stated, which the call was sent again at, is
+		// learned (0071-MADR P19).
+		SaveObservation: func(o llm.LimitObservation) { a.learnedCap(s, w.provider, chosen, o) },
 	}
 	ag := agent.New(cfg)
 	out := newUpdates(ctx, conn, p.SessionId)
@@ -845,7 +885,7 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 	// The first call waits for its model's discovery (0066-MADR D1;
 	// 0071-MADR P40), before the turn reads its model's facts, image input
 	// included; cancelled meanwhile, the turn ends before any call.
-	a.waitDiscovery(turnCtx, s, w.provider, chosen)
+	a.waitTurnDiscovery(turnCtx, s, w.provider, chosen)
 	if turnCtx.Err() != nil {
 		return a.cancelledWaiting(s, w.provider, w.model, prompt)
 	}
@@ -889,6 +929,7 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 			return acp.PromptResponse{}, appendFailed(w.err)
 		}
 		limits.sayNote(out)
+		a.sayNotes(out, s)
 		if r, ok := ev.(agent.Retry); ok {
 			a.mu.Lock()
 			s.waiting = r.Phase == agent.RetryStart
@@ -919,10 +960,10 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 			}
 			//lint:ignore SA1019 acp-go-sdk2 keeps this unstable-schema name under v1 (0035-MADR D6)
 			resp := acp.PromptResponse{StopReason: acp.StopReason(end.StopReason), Usage: acpUsage(end.Usage)} //nolint:staticcheck // as the lint:ignore above
-			return withTurnMeta(s, resp, end.StopReason == agent.StopCancelled, limits.last)
+			return withTurnMetaAsked(s, resp, end.StopReason == agent.StopCancelled, limits.shown, limits.failed)
 		}
 	}
-	return withTurnMeta(s, acp.PromptResponse{StopReason: acp.StopReasonCancelled}, true, limits.last)
+	return withTurnMetaAsked(s, acp.PromptResponse{StopReason: acp.StopReasonCancelled}, true, limits.shown, limits.failed)
 }
 
 // cancelledWaiting ends a turn cancelled while its first call waited for
@@ -973,6 +1014,12 @@ func clearedMeta(s *liveSession) (map[string]any, error) {
 // call carries none of (0071-MADR D10); a call that carried no limit
 // carries {0, "none"} (P35). It is nil when there is neither.
 func turnMeta(s *liveSession, cancelled bool, lim llm.OutputLimit) (map[string]any, error) {
+	return turnMetaAsked(s, cancelled, lim, false)
+}
+
+// turnMetaAsked is turnMeta with asked: the last call failed, and lim is
+// what it asked for, marked asked: true (0071-MADR P32).
+func turnMetaAsked(s *liveSession, cancelled bool, lim llm.OutputLimit, asked bool) (map[string]any, error) {
 	var g turnGobble
 	if cancelled {
 		if steering, followUp := s.queue.clear(); len(steering) > 0 || len(followUp) > 0 {
@@ -980,7 +1027,7 @@ func turnMeta(s *liveSession, cancelled bool, lim llm.OutputLimit) (map[string]a
 		}
 	}
 	if lim.Basis != "" {
-		g.OutputLimit = &lim
+		g.OutputLimit = &limitMeta{Tokens: lim.Tokens, Basis: lim.Basis, Asked: asked}
 	}
 	if g.Cleared == nil && g.OutputLimit == nil {
 		return nil, nil
@@ -996,7 +1043,12 @@ func withCleared(s *liveSession, resp acp.PromptResponse) (acp.PromptResponse, e
 
 // withTurnMeta is resp with turnMeta's _meta.
 func withTurnMeta(s *liveSession, resp acp.PromptResponse, cancelled bool, lim llm.OutputLimit) (acp.PromptResponse, error) {
-	meta, err := turnMeta(s, cancelled, lim)
+	return withTurnMetaAsked(s, resp, cancelled, lim, false)
+}
+
+// withTurnMetaAsked is resp with turnMetaAsked's _meta.
+func withTurnMetaAsked(s *liveSession, resp acp.PromptResponse, cancelled bool, lim llm.OutputLimit, asked bool) (acp.PromptResponse, error) {
+	meta, err := turnMetaAsked(s, cancelled, lim, asked)
 	if err != nil {
 		return acp.PromptResponse{}, acp.NewInternalError(errData(acpext.ErrorData{Reason: err.Error()}))
 	}
@@ -1009,8 +1061,17 @@ func withTurnMeta(s *liveSession, resp acp.PromptResponse, cancelled bool, lim l
 // wrote it; and the last call's output limit, {tokens, basis}
 // (0071-MADR D10).
 type turnGobble struct {
-	Cleared     *clearedQueues   `json:"cleared,omitzero"`
-	OutputLimit *llm.OutputLimit `json:"outputLimit,omitzero"`
+	Cleared     *clearedQueues `json:"cleared,omitzero"`
+	OutputLimit *limitMeta     `json:"outputLimit,omitzero"`
+}
+
+// limitMeta is _meta.gobble.outputLimit: the last call's tokens and basis,
+// and asked: true when that call failed, so the tokens are what it asked
+// for (0071-MADR D10, P32).
+type limitMeta struct {
+	Tokens int            `json:"tokens"`
+	Basis  llm.LimitBasis `json:"basis"`
+	Asked  bool           `json:"asked,omitzero"`
 }
 
 // clearedQueues are the queues' texts.

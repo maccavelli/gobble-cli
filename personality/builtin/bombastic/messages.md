@@ -116,6 +116,14 @@ placeholders.
 
 - models.json demands {asked} output tokens for {model}, but the service decrees {stated}, so gobble sends {stated}.
 
+## model.limit.unknown
+
+- No oracle reveals {model}'s output limit, so gobble boldly assumes 16,384 tokens, fitted to the window! Set maxTokens for {model} in models.json to decree otherwise.
+
+## model.limit.learned
+
+- The service has spoken: {model} yields at most {stated} output tokens! gobble sent the call again at that and keeps it for a day.
+
 ## lines.hidden
 
 - {n} lines hidden, because you couldn't handle them (--verbose shows all)

@@ -1199,3 +1199,360 @@ images after"**, recorded as the MADR's sixth amendment of this date (P41 decide
   stop is resolved: no code changes, no test or plant applies beyond the rows P42 names (`TestMentionImage`,
   `TestSession_CancelAndCloseWhileWaiting_0066/cancel`), and the gates above stand for the code. Follow-up for 0072: its
   refreshed built-in copy narrows the gap, a model the copy does not know with image input.)*
+
+### Phase 2c, pass 1 (2026-11-25, from `cf3504d`): stopped
+
+The owner's approval of the Phase 2 build stands, relayed by the coordinator, quoted exactly: **"Approve; build 0071 Phase 2
+now (Recommended)"**. The tree was clean at `cf3504d` (Phase 2b committed). go-llmprovider-sdk `v1.33.0` read only with `git
+show v1.33.0:<path>`. This pass builds 2c's rows as this PLAN's table, its second deviation of this date and Phase 2b's note
+assign them (P18 to P22, P24 to P27, P31, P32, P34, V7, V8; P21 and P24 by Q6's answer, **"Hand them in as a caller layer
+(Recommended)"**), with 0066-PLAN's Phases 2 and 3 as its notes of this date re-point them (S10, S12 to S19, S28, S32 to S34,
+S42, S44), and stops on the cases below. Nothing is staged.
+
+* **Re-ground.** At `cf3504d`: `compaction/compaction.go:415-422` (the ladder's D8 (a)) as cited; `acpserver/outputlimit.go:123`
+  (D8 (c)'s check) is `limitRefusal`, `:209-228`; `compaction/compaction.go:556-558` is `:557`; `acpserver/agent.go:914`
+  (`turnMeta`) is `:982`; `acpclient/conn.go:353` is `:354`; `acpserver/title.go:187-191` is `:190-193`; `agent/agent.go:778-791`
+  (`limitRefused`) as cited; `llm/provider/model.go:82-90` (the lookup's credential) is `lookupSource`, `:88-99`. The SDK at the
+  tag: `catalog/limits.go:335-347` (a caller's layer ranks `rankCaller+i`, a later layer above an earlier), `:446-467`
+  (`observedOutput`), `:494-507` (`rememberedEvidence`); `limit_observation.go:30-50`; `internal/limitmemo/limitmemo.go:133-136`
+  (`Observe`, DL39, the memo's alone); `providers/kilo/kilo.go:531-534`; `internal/wire/limit_rule.go:226-228`; Kilo's range
+  form at `internal/wire/limit_refusal.go:118` (DL95). No SDK fact changed.
+* **Built** (unstaged):
+  * `llm/provider`: `Options.Observations` (P23); `savedcaps.go`, the "service-stated" layer (a cap whose model matches in lower
+    case, whose base URL is `Options.BaseURL` and whose scope is a Claude key's workspace, else empty, seen within 24 hours),
+    handed after the snapshot and before models.json to every lookup and its `CachedLimits`, to `Discover` and to `New` (P21,
+    P24); `Discover` reads through a package variable, `lookupLimits`, that a test replaces.
+  * `agent`: `Config.SaveObservation` (P23); `limitRefused` reads `llm.APIError.Observed` first, a cap of at least 1 below the
+    limit sent, and the resend hands it to `SaveObservation` (P19); a window form or an unvalidated cap form is read from its
+    text as L39 builds it and nothing is saved (P20).
+  * `compaction`: the ladder reads `Observed` first (P34).
+  * `acpserver`: `observation.go`: each turn's provider watched for each call's end (`callWatch`): its done event's
+    `OutputLimit` sets what `/context`, `/session` and `_meta.gobble.outputLimit` show (P22: the wire's tokens with gobble's
+    basis, and "raised from M for the thinking budget"; "none sent on the last call; the service's default applies"; P31: any
+    other SDK basis as `sdk:<basis>`, logged at warn once per session and model; P32: a call that failed shows "N tokens asked on
+    the last call, which failed (…)", and `_meta` carries `asked: true`; a cancelled call is not marked, it did not fail); a
+    completed call's output tokens go to the run's store (P25); a summary's refusal whose `Observed` the ladder resends at is
+    learned (P34); the title resends once at its refusal's `Observed` and learns it (P34), and asks `min(128, C)` with `C` the
+    streamed output (V8); `learnedCap` hands the cap to the store and says `model.limit.learned` once per session and model
+    before the reply (S12, P19); a discovery that ends with the output unknown says `model.limit.unknown` once per session and
+    model (S10, V7: `waitDiscovery` reports a discovery that ended). The store is reached through two unexported fields,
+    `saveObservation` and `callOutput`, which nothing outside the tests sets: their exported name is Q-F.
+  * `acpclient`: `OutputLimit.Asked` (P23). `internal/cli/render`: `Stats` shows `out-limit none` for `NoOutputLimit`.
+  * `internal/cli`: `observation.go`, `limit-observations.json` (0066 D7): read once; older than a day dropped (S14); unreadable,
+    one warning, none handed (S13); entries with no provider, model, a cap below 1 or no time dropped with one warning (P27);
+    `rememberObservation` (newest first, replacing the same model's, ten per provider, base URL and scope, owner-only; S12);
+    `dropExceeded` (P25); `providerOptions` and `lookupOptions` hand each provider its own (P24, P26). `gobble models info`
+    discovers first and prints each limit's source, every other source on a line of its own, "(stale)", and "limit
+    required|optional on its wire" (S15, S16, S18); `gobble models` is unchanged, cached only (S17).
+  * `personality`: `ModelLimitUnknown`, `ModelLimitLearned` and a line each in the four built-ins (Q-F, Q-G).
+* **Rows to tests.** P18 `TestExplicitLimit_0071` (`turn`, `summary`; Together, OpenCode Go's chat route, Messages;
+  `llm/provider/savedcaps_test.go`). P19 `TestRefusedCapLearned_0071` (`agent`; `acpserver`). P20 `TestRefusalNoStatedCap_0071`
+  (`window`, `unvalidated`; `agent`). P21, P24, S28, S42, S44 `TestSavedCapLayer_0071` (`lookup`, `limits`, `discover`, `new`,
+  `not_stated`: 25 hours old, another base URL, another scope, another model). P22, P31, P32 `TestContextShowsSentLimit_0071`
+  (`request`, `raised`, `chatgpt_none`, `failed_asked`, `sdk_basis_raw`, `loaded_session`, `forked_session`);
+  `TestPromptResponseOutputLimit_0071/sent` (`none_sent`, `raised`, `asked`) and `/asked` in `acpclient`; `TestStats`'s none
+  case. P25 `TestSavedCapDroppedWhenExceeded_0071` (`acpserver`: the report; `internal/cli`: the drop). P26
+  `TestSavedCapPerProvider_0071`. P27, S13 `TestAgent_UnreadableObservations_0066` (`malformed`, `bad_entry`). P34
+  `TestSummaryCapRefusalResent_0071/observed` (`compaction`) and `/observed_saved` (`acpserver`), `TestTitleObservedResent_0071`,
+  `TestAPIErrorCarriesObserved_0071/kilo_range`, `TestLimitRefusalLine_0071/refused_again_observed`. V8
+  `TestTitleCapFromLimits_0071` (`streamed`, `unknown`); `TestTitleCapUnchanged_0071` unchanged. S10
+  `TestNotice_LimitUnknown_0066` (`acpserver`: `unknown`, `switch_back`, `known`; `internal/cli`: `headless_text`,
+  `headless_json`). S12 `TestNotice_LimitLearned_0066`; S12, S14 `TestAgent_SavesLearnedCap_0066` (the store's part).
+  S10 to S12's keys `TestPersonality_LimitKeys_0066`. S15, S16, S18 `TestModelsCmd_InfoShowsEvidence_0066`. S17
+  `TestModelsCmd_TableCachedOnly_0066`. S32 to S34 `TestConfig_NoOutputLimitKey_0066` (`acpserver`).
+* **Reds at the base** (a clone of `cf3504d` with the tests that compile there, the regions marked `// 0071 2c new names` left
+  out; `<scratch>/b0071p2c/base_copy.py`, `redrun.py`, `logs/redbase.summary`), each on its assertion: `agent`
+  `outputlimit_test.go:330: the turn failed: … 限制数值范围[1,16000]; want it sent again at the stated cap`; `compaction`
+  `auto_test.go:249: "", Summarization failed: … 限制数值范围[1,9000]` (`observed`); `acpserver` `refused_again_observed`
+  (the line missing), `TestPromptResponseOutputLimit_0071/sent/none_sent` (`map[basis:stated tokens:32000], want {tokens 0,
+  basis none}`) and `/raised`, `TestContextShowsSentLimit_0071` `raised`, `chatgpt_none`, `failed_asked`, `sdk_basis_raw`,
+  `TestRefusedCapLearned_0071` and `TestNotice_LimitLearned_0066` (`prompt "one": … 限制数值范围[1,16000]`),
+  `TestTitleObservedResent_0071` (`the session took no title`), `TestTitleCapFromLimits_0071/streamed` (`the title asked for
+  128, want 100`), `TestNotice_LimitUnknown_0066/unknown` (`agent messages ["one" "two"]`); `internal/cli`
+  `TestModelsCmd_InfoShowsEvidence_0066` (`stdout lacks "context   200000 (listing:claude) (stale)\n"`),
+  `TestNotice_LimitUnknown_0066` (`stdout "ok\n"`; `result text "ok"`); `render` `plan_test.go:40: Stats(1s, 0, 0s, -1) =
+  "ttft 1s"`. Guards green at the base: P18, P20, `kilo_range`, `request`, `loaded_session`, `forked_session`,
+  `TestTitleCapFromLimits_0071/unknown`, `/known`, `TestConfig_NoOutputLimitKey_0066`, `TestModelsCmd_TableCachedOnly_0066`.
+  Every other test names a 2c name; its red is its plant's. The title test's first base run was red on a wait's timeout; it now
+  waits for the title's end either way, then asserts.
+* **Plants** (`<scratch>/b0071p2c/plants.py`: one production edit at a time on a scratch copy of the tree, undone before the
+  next; logs `logs/plants*/`, summary `logs/plants*.out`). The control was reported not caught. Every plant caught by its own
+  row's test: P24a the layer off `New` (`savedcaps_test.go:87: … no source states an output limit for model
+  "claude-saved-1"`); P24b off the lookups' limits (`:41: MaxTokens 0`); P24c off `Discover` (`:74`); P21a after models.json
+  (`:58: streamed {Tokens:16000 … Source:service-stated …}`); P21b no age, P21c no scope, P21d no base URL (`:106`); P18a 0 on a
+  summary, P18b 0 on a turn on an optional wire (`:141: together: Done.OutputLimit {Tokens:0 Sent:false Basis:none}`); P15a
+  (`kilo_range`, `sentlimit_test.go:150`); P19a no resend from `Observed` (`agent` `outputlimit_test.go:334`); P19b nothing
+  saved (`:344: saved []`); P20 a window form saved (`:377`); P34a the ladder ignores `Observed` (`auto_test.go:249`); P34b the
+  title does not resend (`sentlimit_test.go:284`); P34c D8 (c) ignores `Observed` (`:271`, first not caught: Kilo's range text
+  names `max_tokens`, so the field check found it; the refused-again text is now one naming no field, as only `Observed` tells
+  it); P34d the summary's cap not learned (`:424`); S12 no learned line (`:217`); P19c not handed to the store (`:212`); P25a
+  output not reported (`:250`); P25b no drop (`observation_test.go:196`); P22a the asked value shown (`:171`, `:105`); P22b the
+  raise not named (`:105`); P22c `--stats` none (`plan_test.go:40`); P31a gobble's words (`:118`); P31b warned each turn
+  (`:122: 2 warnings`); P32a a failed call shows no line (`:105`); P32b a loaded session shows a stored value (`:140`, `:163`);
+  P32c `asked` not marked (`:186`); P32d `acpclient`'s tag misspelled (`outputlimit_test.go:68`); V8 the title reads `Output`
+  (`:341`); S10a no notice (`:361`, `:378`, `observation_test.go:279`, `:291`); S10b once dropped (`:236`, `:361`, `:378`);
+  S10c snarky's line without `{stated}` (`builtins_test.go:281`); S13 a warning per read (`observation_test.go:89`); P27 entries
+  not checked (`:112: 3 saved output caps`, first not caught: the expiry also drops a zero time; the test now counts the
+  warning's four); S14a no expiry (`:158`); S12b scope ignored (`:138`); S12c save skipped (`:130`); P26 another provider's
+  handed (`:168`); S17 the table discovers (`:216`); S15 other sources dropped, S16 stale dropped (`:250`); S18 no discovery
+  (`:254: order ["facts"]`); S32 an output-limit option (`sentlimit_test.go:399`).
+* **Lint.** `make pre-add-check` found `gocognit` 53 on `(*Agent).Prompt` and `goconst` on `"claude"`; fixed without a
+  suppression (`turnProvider` and `waitTurnDiscovery` moved out of `Prompt`; the store's scope is the stored key's workspace,
+  which only a Claude key carries), re-run: exit 0.
+* **Docs.** `docs/guides/models-json.md`, "The output limit" (the saved caps; the learned and unknown lines; what `/context`,
+  `--stats` and `gobble models info` show); `docs/architecture.md`'s `agent`, `llm/provider`, `compaction`, `acpserver`,
+  `acpclient` and `internal/cli` rows; `README.md`, a "State" bullet naming the three state files (2b's open row); the doc
+  comments of `New`, `ModelInfoWith`, `Options.Observations`, `acpclient.OutputLimit`, `render.Stats`.
+* **Follow-ups, recorded, not built.** `internal/cli`'s `lookupOptions` sets no models.json base URL (as at `cf3504d`), so a
+  cap saved at a custom base URL reaches `New` but not the lookups, whose layer compares the options' empty base URL. A title's
+  learned line is kept on the session and said by its next turn.
+
+**Stop (2026-11-25).** The cases below go to the owner in one prompt.
+
+* **Q-F, exported names P23 does not list.** (a) The run's store is `internal/cli`'s; `acpserver` hands it a learned cap (P19,
+  P34) and a completed call's output (P25) through two unexported fields nothing sets; P23 lists `agent.Config.SaveObservation`
+  and `provider.Options.Observations`, no `acpserver` name. Until it is named, production saves nothing and drops nothing, and
+  P19's next-prompt case, P20's and P25's end-to-end cases and S12's `APIError` feed are not built. (b)
+  `personality.ModelLimitUnknown` and `personality.ModelLimitLearned`, 0066 D10's keys, built.
+* **Q-G, text no row decides.** `model.limit.learned` in the four built-ins and `model.limit.unknown` in dry, snarky and
+  bombastic, as written; boring's `model.limit.unknown` is 0066 D10's words as amended.
+* **Q-H, existing tests needing a change no row names.** `TestModelsInfo` (`internal/cli/modelscmd_test.go:121`): S18's lines
+  change `models info`'s output (`context   200000 (models.json)`, `max-out   8192 (models.json)`, a new `limit     optional on
+  its wire`). `TestRunEndsListings` (`internal/cli/models_test.go:304`): its stdout gains S10's line before `fine`, since its
+  model, `openai-1`, is one nothing states and TestMain's offline discovery ends. These are the module run's only reds.
+* **Q-I, a row that cannot be met as written.** S19: the ACP model option's description "from cached limits; nothing is fetched
+  to build it". `acpserver`'s only limits read is `Options.ModelInfo`, whose lookup (`catalog.CachedModel`) starts a listing
+  fetch when one is missing or stale, and the description needs a lookup for every listed model at each build of the options.
+  Not built.
+
+
+#### Phase 2c gates at the stop (2026-11-25)
+
+Exit codes taken before any filter; logs `<scratch>/b0071p2c/logs/gate-*.log`; every heavy run through `run-heavy`.
+
+| Command | Where | Exit |
+| :--- | :--- | ---: |
+| `make pre-add-check FILES=…` (the 32 changed `.go` files), `run-heavy` | this Mac | 2 (gocognit, goconst), then 0 |
+| `go test -count=1 ./...`, `run-heavy` | this Mac | 1: `TestModelsInfo` and `TestRunEndsListings` alone (Q-H) |
+| `make check-test-isolation`, `run-heavy` | this Mac | 2: the same two tests; 0 files written above the temp roots |
+| `make check-records`, `make markdownlint` | this Mac | 0, 0 issues |
+| `denyscan.py --root <gobble> --changed` | this Mac | 0, 0 hits in 40 files |
+| `github-disclosure.py redact` (dry run) | this Mac | 0, would edit 0 files |
+
+Not run at the stop: `make preflight` on this Mac, the Linux machine (`preflight race`) and the Windows laptop. The module run is
+red on Q-H's two tests, so each would fail on them; they run when the answers are built. Plants: 46 of 46 caught on the final
+tree, the control not caught (`logs/plants4.out`).
+
+### Deviation (2026-11-25): the owner's answers to Phase 2c's stop, pass 1 continuing
+
+Relayed by the coordinator, quoted exactly, and recorded in the MADR's seventh amendment of this date (P23 re-pointed, P43 to
+P46) and a dated note in 0066-MADR: Q-F **"Two Options hooks (Recommended)"**; Q-G **"Approve all four (Recommended)"** (for
+both notices); Q-H **"Expect the new output (Recommended)"**; Q-I **"A fetch-free cached hook (Recommended)"**.
+
+* **Scope added to 2c:** `acpserver.Options.SaveObservation`, `Options.CallOutput` and `Options.CachedLimits`, and their wiring
+  in `internal/cli`; `provider.CachedLimits`; the ACP model option's description (S19); `TestLimitNoticeLines_0071`
+  (`personality/builtins_test.go`); `TestModelsInfo` (`internal/cli/modelscmd_test.go`) and `TestRunEndsListings`
+  (`internal/cli/models_test.go`), their expected output as P45 says; the CLI's end-to-end cases of P19, P20, P25 and S12.
+
+| Part | Rows | Test | File | Red at the part's base because | Plant |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| 2c | P43 (P19) | `TestRefusedCapLearned_0071` (a run whose call is refused with `Observed`: the file holds it; the next run's provider, lookups and limits are given it back) | `internal/cli/observation_test.go` | new | `Options.SaveObservation` left unwired |
+| 2c | P43 (P20) | `TestRefusalNoStatedCap_0071` (a window form: resent, the file not written) | `internal/cli` | a guard | a window form saved |
+| 2c | P43 (P25) | `TestSavedCapDroppedWhenExceeded_0071/run` (a run whose reply reports 20,000 output tokens over a saved 16,000: the entry gone) | `internal/cli` | new | `Options.CallOutput` left unwired |
+| 2c | P43 (S12) | `TestAgent_SavesLearnedCap_0066/apierror` (an `llm.APIError` with `Observed`: saved with its scope and time) | `internal/cli` | new | the provider id dropped from the save |
+| 2c | P44 | `TestLimitNoticeLines_0071` | `personality/builtins_test.go` | new key | one personality's line changed |
+| 2c | P46 (S19) | `TestACP_ModelOptionDescription_0066` (`described`: "context 200,000 · max-out 32,000"; `unknown`: "context unknown · max-out unknown"; `no_request`: through `provider.CachedLimits` over a counting transport, no request) | `acpserver`, `internal/cli` | new | the fetching lookup used for the description |
+
+### Phase 2c, pass 1 continued (2026-11-25): the owner's answers built
+
+* **Built** (unstaged): `acpserver.Options.SaveObservation`, `Options.CallOutput` (P43) and `Options.CachedLimits` (P46);
+  `internal/cli` wires the first two to `limit-observations.json`'s save and drop, and the third to `provider.CachedLimits`
+  (new, P23 as re-pointed: `catalog.CachedLimits` over the lookup's layers, the run's cache and set and the saved caps, with a
+  key's token alone, no login's) with the run's key, workspace and saved caps. `acpserver`'s model option describes each model
+  "context N · max-out M", "unknown" for a limit not known: the window, else the input limit; the streamed output, else the
+  output; nil `CachedLimits` describes nothing (S19). `TestModelsInfo` and `TestRunEndsListings` take P45's expected output; no
+  other assertion changed.
+* **Rows to tests.** P43: `TestRefusedCapLearned_0071` (`internal/cli`: a run refused with `Observed` 16,000 resends at it,
+  prints dry's learned line, and the file holds `openai/gpt-6-luna 16000`; the next run's provider options, lookup options and
+  `provider.CachedLimits` are given it back, service-stated), `TestRefusalNoStatedCap_0071` (`internal/cli`: a window form,
+  resent, no file), `TestSavedCapDroppedWhenExceeded_0071/run` (a run whose reply reports 20,000 output tokens drops the saved
+  16,000 of its model, keeps another model's), `TestAgent_SavesLearnedCap_0066/apierror` (saved, seen now). P44:
+  `TestLimitNoticeLines_0071` (eight lines, word for word). P45: `TestModelsInfo`, `TestRunEndsListings`. P46:
+  `TestACP_ModelOptionDescription_0066` (`described`; `no_request`: a cold cache, a counting Claude service, no request once the
+  cache's close has waited for any listing a lookup started).
+* **Reds.** Each names a name 2c adds (`Options.SaveObservation`, `Options.CallOutput`, `Options.CachedLimits`,
+  `provider.CachedLimits`, the keys), so its red is its plant's; `TestRefusalNoStatedCap_0071` (`internal/cli`) is a guard.
+  `TestModelsInfo` and `TestRunEndsListings` were red at the pass's stop on the old expectations, as Q-H recorded.
+* **Plants** (`plants.py`, the earlier 46 and six new, each one production edit on a scratch copy of the final tree; the
+  control not caught; `logs/plants5.out`, `logs/plants6.out`): every one caught by its own row's test. New: P43a
+  `SaveObservation` unwired (`observation_test.go:354: open …/limit-observations.json: no such file or directory`, and
+  `:169`); P43b `CallOutput` unwired (`:410: the file holds ["openai/gpt-6-luna  16000" "openai/gpt-6-terra  16000"]`); P43c
+  the provider id dropped (`sentlimit_test.go:221: saved ["/m1 16000" "/m1 12000"]`, and the CLI's); P20c a window form saved
+  (`observation_test.go:391: limit-observations.json: <nil>; want no file`); P44 dry's line changed (`builtins_test.go:317`);
+  P46a the fetching lookup (`sentlimit_test.go:510: requests ["GET models"] while describing …`); P46b no description
+  (`:482`). P24c's anchor was re-pointed at `Discover`'s call, which `provider.CachedLimits` now repeats in part; caught as
+  before (`savedcaps_test.go:74`).
+* **Docs.** `docs/architecture.md`'s `llm/provider`, `acpserver` and `internal/cli` rows (the hooks, `provider.CachedLimits`,
+  the description); `docs/guides/models-json.md` (the picker's description). The saved caps' sentences of the stop's docs row,
+  open there, are true now that the store is wired.
+* **Lint.** `make pre-add-check` found `acpserver/agent.go` not gofmt'd (the `New` literal's line); `gofmt -w`, re-run: exit 0.
+  The Linux machine's first preflight ran on a copy taken before that fix and failed on its gofmt step, after its `-race` tests
+  passed; the Windows laptop's ran at the same moment; both ran again on the final tree.
+* **Plants, final tree:** 52 of 52 caught, the control not caught (`logs/plants7.out`).
+
+#### Phase 2c gates (2026-11-25, the final tree)
+
+Exit codes taken before any filter (`<scratch>/b0071p2c/gates.py`, one gate after another); logs `<scratch>/b0071p2c/logs/`;
+no log has a fallback line; every heavy run through `run-heavy` or `run-on-host`.
+
+| Command | Where | Exit |
+| :--- | :--- | ---: |
+| `make pre-add-check FILES=…` (the 35 changed `.go` files), `run-heavy` | this Mac | 2 (gofmt), then 0 |
+| `go test -count=1 ./...`, `run-heavy` | this Mac | 0 |
+| `make check-test-isolation`, `run-heavy` | this Mac | 0; 0 files written above the temp roots |
+| `make preflight`, `run-on-host --need darwin` | this Mac | 0, "preflight passed" |
+| `make preflight race`, `run-on-host --need linux --race` | the Linux machine (linux/amd64, not WSL) | 2 (gofmt, the copy before the fix), then 0, "preflight passed" |
+| `make preflight`, `run-on-host --need windows` | the Windows laptop (windows/amd64) | 0, "preflight passed" (run again on the final tree: 0) |
+| `make check-records`, `make markdownlint` | this Mac | 0, 0 issues |
+| `denyscan.py --root <gobble> --changed` | this Mac | 0, 0 hits in 45 files |
+| `github-disclosure.py redact` (dry run) | this Mac | 0, would edit 0 files |
+
+Exit of Phase 2c (pass 1): every row of 2c tested, red at the base or held by its plant; plants caught; gates recorded; docs
+rows returned. An independent review is the coordinator's.
+
+### Deviation (2026-11-25): Phase 2c's review, pass 1 continuing
+
+The coordinator relayed `code-reviewer`'s findings on Phase 2c and classed each as a fix inside P21, P24, P25, S44 and 0066 D7:
+a lost or misapplied cap costs extra provider requests, and the owner's standing rule is to conserve tokens and requests without
+losing features. Each is closed in pass 1 with a test red without its fix and a plant caught only by that test. The MADR's
+eighth amendment of this date records what changes a decision or a stated fact (R2's skew, R5's merge, R6's key, R7).
+
+* **R1 (Important).** `lookupOptions` and the `CachedLimits` hook (`internal/cli/agent.go:98`, `:141`) set no base URL, but the
+  layer compares `trimBase(o.BaseURL)` (`llm/provider/savedcaps.go:43`, `:52`) and a cap is saved under models.json's
+  (`internal/cli/modelsjson.go:177`, `observation.go:157`): a cap saved at a models.json base URL never reached a lookup, a
+  limits read or a discovery. Both now set models.json's base URL, as `providerOptions` does, so a lookup also lists at that
+  base, as the run's listing (`internal/cli/models.go:322`) already does. Test `TestSavedCapAtModelsJSONBase_0071`
+  (`internal/cli`). `TestSavedCapLayer_0071/its_own_base` is kept.
+* **R2.** A `Seen` after now passed both age checks (`internal/cli/observation.go:95`, `llm/provider/savedcaps.go:53`).
+  Decided: an entry seen more than five minutes after now is not fresh; the store drops it on load as it drops an expired one
+  (no warning), and the layer does not state it. Five minutes allows a clock step between a write and a read on the host that
+  keeps the file. Test `TestSavedCapSeenAhead_0071` (`llm/provider`, `internal/cli`).
+* **R3.** `outputSeen` (`acpserver/observation.go:96`) reported an estimated usage (`llm/provider/provider.go:642`), whose
+  output tokens are a byte count over four, to P25's drop. It now skips `u.Estimated`. Test
+  `TestSavedCapDroppedWhenExceeded_0071/estimated` (`acpserver`).
+* **R4.** `turnLimits.sent` (`acpserver/outputlimit.go:137`) named a raise whenever the wire's tokens differed from gobble's.
+  "raised from M" is now shown only when the wire's tokens are greater; a lower value shows the wire's tokens with gobble's basis.
+  Test `TestContextShowsSentLimit_0071/lowered`.
+* **R5.** Each process rewrote its whole in-memory list (`internal/cli/observation.go:116-128`, `:143-148`), so the last writer
+  won. Each write now re-reads the file under `observationMu` and applies its one change to what the file holds: a save
+  replaces the entry of its key (provider, base URL, scope, model) unless the file's is newer (the newest `Seen` wins) and keeps
+  ten per provider, base URL and scope; a drop removes from what the file holds, so an entry another process dropped stays
+  dropped. The result is written with the same rename (`writePrivate`) and becomes the run's list. A drop re-reads only when the
+  run's list holds a cap the output exceeds. Test `TestSavedCapsTwoWriters_0071` (`two_saves`, `drop_kept`, `newest_wins`).
+* **R6.** Yes: the SDK's `Observed.Model` is `cmp.Or(req.Model, p.model)` (go-llmprovider-sdk `v1.33.0`
+  `providers/claude/claude.go:418-423`, `providers/chatcompat/limit.go:52-55`, and each provider's `limitRetry`), so a request
+  that names no model (a model choice with no default) saves the cap under the provider's own model, while P25's report named
+  `req.Model`, empty, and never matched. `acpserver` now keeps, per provider and asked model, the model a learned cap was
+  saved under, and reports a completed call's output under it. Test `TestSavedCapDroppedWhenExceeded_0071/saved_under`
+  (`acpserver`).
+* **R7.** The MADR's eighth amendment adds the sentence on the 24-hour expiry as the real recovery and the note on `New`'s
+  fixed layer.
+* **Files added to the phase's scope:** none; every change is in a file 2c already changes.
+
+### Phase 2c, pass 1 continued (2026-11-25): the review's findings closed
+
+* **Built** (unstaged): `internal/cli`: `lookupOptions` and the `CachedLimits` hook set models.json's base URL (R1);
+  `readObservations` reads the file's fresh caps, an entry more than `observationSkew` (5 minutes) ahead not fresh (R2);
+  `updateObservations` re-reads the file under `observationMu` and applies one change, which `rememberObservation` (by
+  `sameKey`, the newest `Seen` winning) and `dropExceeded` (only when the run's list holds an exceeded cap) hand it (R5).
+  `llm/provider`: `savedCapSkew` (5 minutes) in the layer (R2). `acpserver`: `outputSeen` skips `u.Estimated` (R3) and
+  reports under `savedUnder`, which `learnedCap`, now given the asked model, keeps in `Agent.savedAs` (R6); `turnLimits.sent`
+  names a raise only when the wire's tokens are greater (R4). No exported name added.
+* **Reds before the fixes, on the built tree** (`<scratch>/b0071p2c/review_red.py`, `logs/review-red.out`), each on its
+  assertion: R1 `observation_test.go:411: lookup of claude-saved-1: output {Tokens:0 Known:false …}; want service-stated true
+  (16000)`, the same for the hook, and `claude-saved-2` stated at 12,000 to both; R2 `savedcaps_test.go:122: an hour ahead: …
+  stated true; want false` and `observation_test.go:427: handed [{Model:ahead-an-hour …} {Model:ahead-a-minute …}]`; R3
+  `sentlimit_test.go:274: outputs ["fake/m1 20000"], want none from an estimated usage`; R4 `sentlimit_test.go:118` (the line
+  read "Output limit: 30,000 tokens on the last call (the model's stated limit); raised from 32,000 for the thinking budget");
+  R5 `observation_test.go:450: the file holds ["kilo/m2  12000"], want both runs' caps`, `:462: … ["kilo/m2  12000" "kilo/m1
+  16000"], want m1's drop kept and m2 saved`, `:470: … ["kilo/m1  12000"], want the newer 16,000`; R6
+  `sentlimit_test.go:294: saved ["fake/fake-own-1 9000"], outputs ["fake/ 2" "fake/ 20000"]`. After the fixes: 32 of 32 pass
+  (`logs/review-green2.out`).
+* **Plants** (`plants.py`, eleven added, each one production edit on the scratch clone synced from the final tree; P21b, S14a,
+  P22b and P25a re-pointed at their moved lines; `logs/plants-review1.out`): R1a the lookups without the base URL and R1b the
+  hook without it (`observation_test.go:411`); R2a the layer's skew (`savedcaps_test.go:122`); R2b the store's skew
+  (`observation_test.go:427`); R3 an estimated usage reported (`sentlimit_test.go:274`); R4 `!=` again (`sentlimit_test.go:118`,
+  `lowered`); R5a the write from the run's list (`:450`, `:462`, `:470`); R5b the newest `Seen` not compared (`:470`); R5c the
+  run's list merged back (`:462`, and P25's `run` case at `:490`); R6a the output under the asked model and R6b the saved model
+  not kept (`sentlimit_test.go:294`). 63 of 63 caught, the control not caught.
+* **Lint.** `make pre-add-check` found `errcheck` and `nilerr` on the first `readObservations`; fixed without a suppression (the
+  state file's path is the caller's, and an unreadable file is none by its error checked); re-run: exit 0.
+* **Docs.** `docs/guides/models-json.md`, "The output limit" (the base URL a kept cap is handed at, the reported count, the
+  entry dated ahead, two processes); `docs/architecture.md`'s `acpserver` and `internal/cli` rows; the doc comments of
+  `provider.Options.Observations` and `acpserver.Options.SaveObservation`/`CallOutput`. `README.md`'s state-file sentence stays
+  true.
+* ~~**Follow-up, recorded, not built.** The lookups now list at models.json's base URL without models.json's `headers`, which
+  `providerOptions` adds to the run's listing and requests; a proxy that needs a header refuses a lookup's own listing, though
+  the run's listing, with the headers, fills the cache it reads.~~ *(2026-11-25: replaced by R8, below.)*
+* **Deviation (2026-11-25), R8: models.json's headers on the lookups.** The coordinator made the follow-up above a fix, since
+  R1 caused it and the owner's standing rule is to waste no provider request: a proxy that requires a header refused every
+  lookup's own listing. `lookupOptions` and the `CachedLimits` hook now set `Headers: e.headersFor(mj, id)`, as
+  `providerOptions` does for the run's listing and requests (`internal/cli/modelsjson.go:178`, `models.go:322`); the lookups,
+  `Discover` and `provider.CachedLimits` already put `o.Headers` on the SDK's HTTP client (`llm/provider/model.go:91`, `:140`,
+  through `sdkOptions` and `withHeaders`, `provider.go:163-164`, `:202-207`; 0041-MADR D1, D2). Test
+  `TestLookupSendsModelsJSONHeaders_0071` (`internal/cli`: a listing server that refuses a request without models.json's header;
+  discovery through `lookupOptions` succeeds, states the listed cap, and no request lacked the header). The hook starts no
+  request (P46), so its headers are for parity and no test can observe them. Plant: the headers dropped from `lookupOptions`.
+
+#### Phase 2c gates after the review (2026-11-25, the final tree)
+
+Exit codes taken before any filter (`<scratch>/b0071p2c/preadd.py`, `gates.py`, `localgates.py`); logs
+`<scratch>/b0071p2c/logs/` (`gate-review-*`, and `gate-test.log`, `gate-iso.log`, `gate-preflight-*.log`; pass 1's copies in
+`logs/pass1-final/`); no log has a fallback line; every heavy run through `run-heavy` or `run-on-host`.
+
+| Command | Where | Exit |
+| :--- | :--- | ---: |
+| `make pre-add-check FILES=…` (the 35 changed `.go` files), `run-heavy` | this Mac | 2 (errcheck, nilerr), then 0 |
+| `go test -count=1 ./...`, `run-heavy` | this Mac | 0 |
+| `make check-test-isolation`, `run-heavy` | this Mac | 0; 0 files written above the temp roots |
+| `make preflight`, `run-on-host --need darwin` | this Mac | 0, "preflight passed" |
+| `make preflight race`, `run-on-host --need linux --race` | the Linux machine (linux/amd64, not WSL) | 0, "preflight passed" |
+| `make preflight`, `run-on-host --need windows` | the Windows laptop (windows/amd64) | 0, "preflight passed" |
+| `make check-records`, `make markdownlint` | this Mac | 0, 0 issues |
+| `denyscan.py --root <gobble> --changed` | this Mac | 0, 0 hits in 45 files |
+| `github-disclosure.py redact` (dry run) | this Mac | 0, would edit 0 files |
+
+Exit of Phase 2c (pass 1, after the review): R1 to R6 tested, each red before its fix and held by its plants; R7 recorded; 63
+plants caught; gates recorded; docs rows returned.
+
+### Phase 2c, pass 1 continued (2026-11-25): R8 built
+
+* **Built** (unstaged): `lookupOptions` and the `CachedLimits` hook set `Headers: e.headersFor(mj, id)` beside the base URL
+  (R8, the deviation entry above). The MADR's eighth amendment records R8 under P47, and R5's window as an accepted limit with
+  its cost (one cap relearned by one refused request); no cross-process lock.
+* **Red before the fix** (`review_red.py`, `logs/review-r8-red.out`), on its assertions: `observation_test.go:448: discovery:
+  model limits: listing claude: llmprovider: authentication failed: claude HTTP 401 authentication_error: no proxy key`;
+  `:451: the lookup's output {Tokens:0 Known:false …}`; `:456: requests ["GET /v1/models key="]`. After: 33 of 33 pass.
+* **Plants** (`logs/plants-review2.out`, the clone synced from the final tree): R8, the headers dropped from `lookupOptions`,
+  caught by `TestLookupSendsModelsJSONHeaders_0071` alone (`:448`, the 401 above); R1a and R1b re-pointed at their moved lines,
+  caught as before (`:415`); the control not caught.
+* **Docs.** `docs/architecture.md`'s `internal/cli` row: the `Discover` and `CachedLimits` hooks read with models.json's headers.
+
+#### Phase 2c gates after R8 (2026-11-25, the final tree)
+
+Exit codes taken before any filter; logs `<scratch>/b0071p2c/logs/` (`gate-review-preadd3.log`, `gates-r8.out`, `gate-r8-*`;
+the earlier review run's copies in `logs/review-pass/`); no log has a fallback line.
+
+| Command | Where | Exit |
+| :--- | :--- | ---: |
+| `make pre-add-check FILES=…` (the 35 changed `.go` files), `run-heavy` | this Mac | 0 |
+| `go test -count=1 ./...`, `run-heavy` | this Mac | 0 |
+| `make check-test-isolation`, `run-heavy` | this Mac | 0; 0 files written above the temp roots |
+| `make preflight`, `run-on-host --need darwin` | this Mac | 0, "preflight passed" |
+| `make preflight race`, `run-on-host --need linux --race` | the Linux machine (linux/amd64, not WSL) | 0, "preflight passed" |
+| `make preflight`, `run-on-host --need windows` | the Windows laptop (windows/amd64) | 0, "preflight passed" |
+| `make check-records`, `make markdownlint` | this Mac | 0, 0 issues |
+| `denyscan.py --root <gobble> --changed` | this Mac | 0, 0 hits in 45 files |
+| `github-disclosure.py redact` (dry run) | this Mac | 0, would edit 0 files |
+
+Exit of Phase 2c (pass 1, after R8): R8 tested, red before its fix and held by its plant; gates recorded; docs rows returned.

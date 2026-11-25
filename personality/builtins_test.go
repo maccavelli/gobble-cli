@@ -259,3 +259,63 @@ func TestUserOverLines_0071(t *testing.T) {
 		}
 	}
 }
+
+// Each built-in personality has a line for each of 0066-MADR D10's limit
+// keys: model.limit.unknown, model.limit.learned and model.limit.user_over,
+// each keeping boring's placeholders (0066-MADR S10, S12; 0071-MADR P28;
+// model.limit.fallback is not added, S11 lapsed).
+func TestPersonality_LimitKeys_0066(t *testing.T) {
+	for _, name := range Builtins {
+		for _, k := range []Key{ModelLimitUnknown, ModelLimitLearned, ModelLimitUserOver} {
+			got := builtins()[name].catalog.Variants(k)
+			if len(got) == 0 {
+				t.Errorf("%s has no line for %s", name, k)
+			}
+			for _, v := range got {
+				for _, ph := range []string{"{model}"} {
+					if !strings.Contains(v, ph) {
+						t.Errorf("%s's %s %q lacks %s", name, k, v, ph)
+					}
+				}
+				if k != ModelLimitUnknown && !strings.Contains(v, "{stated}") {
+					t.Errorf("%s's %s %q lacks {stated}", name, k, v)
+				}
+			}
+		}
+	}
+}
+
+// limitNoticeLines are model.limit.unknown's and model.limit.learned's
+// decided lines, by built-in personality (0066-MADR D10; 0071-MADR P44, the
+// owner's "Approve all four (Recommended)").
+var limitNoticeLines = map[Key]map[string]string{
+	ModelLimitUnknown: {
+		Boring: "No source states {model}'s output limit; gobble asks for at most 16,384 tokens (assumed), fitted to the window; " +
+			"set maxTokens for {model} in models.json to change it.",
+		Dry: "Nothing states {model}'s output limit, so gobble assumes 16,384 tokens, fitted to the window. " +
+			"Set maxTokens for {model} in models.json to change that.",
+		Snarky: "Nobody bothered to state {model}'s output limit, so gobble guesses 16,384 tokens, fitted to the window. " +
+			"Set maxTokens for {model} in models.json if you know better.",
+		Bombastic: "No oracle reveals {model}'s output limit, so gobble boldly assumes 16,384 tokens, fitted to the window! " +
+			"Set maxTokens for {model} in models.json to decree otherwise.",
+	},
+	ModelLimitLearned: {
+		Boring:    "The service stated {model}'s output limit as {stated} tokens; gobble sent the call again at that and keeps it for a day.",
+		Dry:       "The service says {model} stops at {stated} output tokens. gobble sent the call again at that, and keeps it for a day.",
+		Snarky:    "The service refused, then admitted {model} tops out at {stated} output tokens. Fine: gobble sent it again at that and remembers it for a day.",
+		Bombastic: "The service has spoken: {model} yields at most {stated} output tokens! gobble sent the call again at that and keeps it for a day.",
+	},
+}
+
+// Each built-in personality says model.limit.unknown and model.limit.learned
+// in its one decided line, word for word (0071-MADR P44).
+func TestLimitNoticeLines_0071(t *testing.T) {
+	for key, lines := range limitNoticeLines {
+		for _, name := range Builtins {
+			got := builtins()[name].catalog.Variants(key)
+			if want := lines[name]; len(got) != 1 || got[0] != want {
+				t.Errorf("%s %s: %q, want %q", name, key, got, want)
+			}
+		}
+	}
+}

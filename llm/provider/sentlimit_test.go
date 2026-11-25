@@ -139,4 +139,15 @@ func TestAPIErrorCarriesObserved_0071(t *testing.T) {
 			t.Errorf("Observed %+v, want none for a window form", ae.Observed)
 		}
 	})
+	// Kilo's range form ("限制数值范围[1,M]") arrives only as Observed: the
+	// SDK reads M, inclusive, and the adapter carries it (0071-MADR P34;
+	// go-llmprovider-sdk 0089-MADR DL95).
+	t.Run("kilo_range", func(t *testing.T) {
+		const model = "z-ai/glm-5.3-flashx"
+		ae := refused(t, "kilo", model, `{"error":{"message":"The max_tokens parameter is illegal.：限制数值范围[1,131072]",`+
+			`"type":"AI_APICallError","param":{"error":null,"statusCode":null,"name":null,"message":null,"isRetryable":null,"type":null}}}`, 200000)
+		if ob := ae.Observed; ob.Model != model || ob.Tokens != 131072 || ob.Seen.IsZero() {
+			t.Errorf("Observed %+v, want %s at the range's 131,072, seen now", ob, model)
+		}
+	})
 }

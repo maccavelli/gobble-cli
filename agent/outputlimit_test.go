@@ -307,3 +307,76 @@ func TestCutCallAfterText_0071(t *testing.T) {
 		t.Errorf("%d Warn records, want the warning once", got)
 	}
 }
+
+// observedRefusal is a refusal of the limit sent in a form gobble's own
+// reader does not read, Kilo's range form, with the cap the SDK validated
+// set as the error's Observed, as go-llmprovider-sdk v1.33.0 sets it.
+func observedRefusal(stated int) (llmtest.Turn, llm.LimitObservation) {
+	msg := fmt.Sprintf("The max_tokens parameter is illegal.：限制数值范围[1,%d]", stated)
+	ob := llm.LimitObservation{Model: "m1", Tokens: stated, Seen: time.Date(2026, 11, 25, 12, 0, 0, 0, time.UTC)}
+	return llmtest.Turn{Err: &llm.APIError{Status: 400, Message: msg, Err: fmt.Errorf("invalid request: %s", msg), Observed: ob}}, ob
+}
+
+// A refusal whose Observed states a cap below the limit sent is sent once
+// more at it, basis refusal, before any compaction, and the observation is
+// saved once (0071-MADR P19, V4).
+func TestRefusedCapLearned_0071(t *testing.T) {
+	refusal, ob := observedRefusal(16000)
+	s := llmtest.NewScript(refusal, llmtest.Text("ok"))
+	cp := &compactor{}
+	l := &limiter{}
+	cfg := agent.Config{Provider: s, System: "sys", Compact: cp.compact, OutputLimit: l.limit}
+	// 0071 2c new names: begin
+	var saved []llm.LimitObservation
+	cfg.SaveObservation = func(o llm.LimitObservation) { saved = append(saved, o) }
+	// 0071 2c new names: end
+	if _, _, err := collect(t.Context(), t, agent.New(cfg), tool.Env{}, "go"); err != nil {
+		t.Fatalf("the turn failed: %v; want it sent again at the stated cap", err)
+	}
+	if got := sentCaps(s.Requests()); !slices.Equal(got, []int{60002, 16000}) || !slices.Equal(l.asked, []int{0, 16000}) {
+		t.Errorf("caps %v, asked %v; want 60,002, then the stated 16,000 asked as the refusal's", got, l.asked)
+	}
+	if slices.Contains(cp.asks, true) {
+		t.Errorf("compaction asks %v, want no overflow's", cp.asks)
+	}
+	// 0071 2c new names: begin
+	if !slices.Equal(saved, []llm.LimitObservation{ob}) {
+		t.Errorf("saved %+v, want the observation once", saved)
+	}
+	// 0071 2c new names: end
+}
+
+// A refusal with no Observed, a window form or a cap form the SDK did not
+// validate, is read from its text as L39 reads it, sent again once, and
+// nothing is saved (0071-MADR P20, V4).
+func TestRefusalNoStatedCap_0071(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		turn llmtest.Turn
+		caps []int
+	}{
+		{"window", refused("This endpoint's maximum context length is 131072 tokens. However, you requested about 160002 tokens "+
+			"(100000 of text input, 60002 in the output).", llm.ErrContextOverflow), []int{60002, 31072}},
+		{"unvalidated", refused("max_tokens: 60002 > 32000, which is the maximum allowed number of output tokens for m1", nil), []int{60002, 32000}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			s := llmtest.NewScript(c.turn, llmtest.Text("ok"))
+			cfg := agent.Config{Provider: s, System: "sys", OutputLimit: (&limiter{}).limit}
+			// 0071 2c new names: begin
+			var saved []llm.LimitObservation
+			cfg.SaveObservation = func(o llm.LimitObservation) { saved = append(saved, o) }
+			// 0071 2c new names: end
+			if _, _, err := collect(t.Context(), t, agent.New(cfg), tool.Env{}, "go"); err != nil {
+				t.Fatal(err)
+			}
+			if got := sentCaps(s.Requests()); !slices.Equal(got, c.caps) {
+				t.Errorf("caps %v, want %v", got, c.caps)
+			}
+			// 0071 2c new names: begin
+			if len(saved) > 0 {
+				t.Errorf("saved %+v, want nothing: no cap was observed", saved)
+			}
+			// 0071 2c new names: end
+		})
+	}
+}

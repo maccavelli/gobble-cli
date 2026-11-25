@@ -83,14 +83,16 @@ func (a *Agent) discoverModels(ctx context.Context, s *liveSession, provider, mo
 // started before its call, or for ctx, the call's, to end; a cancel then
 // ends the call as it does today. A discovery that has ended is dropped, so
 // a later call finds none and does not wait (0066-MADR D1, S9; 0071-MADR
-// P40).
-func (a *Agent) waitDiscovery(ctx context.Context, s *liveSession, provider, model string) {
+// P40). ended reports that a discovery of the model ended before the call,
+// waited for or not, for the notice of an unknown limit (0066-MADR S10).
+func (a *Agent) waitDiscovery(ctx context.Context, s *liveSession, provider, model string) (ended bool) {
 	ref := provider + "/" + model
 	a.mu.Lock()
 	var mine []chan struct{}
 	s.disc.pending = slices.DeleteFunc(s.disc.pending, func(p pendingDiscovery) bool {
 		select {
 		case <-p.done:
+			ended = ended || p.ref == ref
 			return true
 		default:
 		}
@@ -103,10 +105,12 @@ func (a *Agent) waitDiscovery(ctx context.Context, s *liveSession, provider, mod
 	for _, done := range mine {
 		select {
 		case <-done:
+			ended = true
 		case <-ctx.Done():
-			return
+			return false
 		}
 	}
+	return ended
 }
 
 // endDiscovery ends s's discoveries, at its close, and waits for their hooks

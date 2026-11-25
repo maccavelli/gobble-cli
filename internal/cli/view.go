@@ -15,6 +15,7 @@ import (
 	"github.com/maccavelli/gobble-cli/acpext"
 	"github.com/maccavelli/gobble-cli/internal/cli/render"
 	"github.com/maccavelli/gobble-cli/internal/cli/term"
+	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/personality"
 )
 
@@ -486,11 +487,7 @@ func statusLine(c turnClock, u *acpclient.ContextUsage, res acpclient.Result, st
 		if res.Usage != nil {
 			out = int64(res.Usage.OutputTokens)
 		}
-		var limit int64
-		if res.OutputLimit != nil {
-			limit = int64(res.OutputLimit.Tokens)
-		}
-		line += " " + g.Bullet + " " + render.Stats(c.first.Sub(c.start), out, c.end.Sub(c.first), limit, g)
+		line += " " + g.Bullet + " " + render.Stats(c.first.Sub(c.start), out, c.end.Sub(c.first), statsLimit(res.OutputLimit), g)
 	}
 	if res.StopReason != "" && res.StopReason != "end_turn" {
 		line += " " + g.Bullet + " " + stopText(voice, res.StopReason)
@@ -505,6 +502,19 @@ var stopKeys = map[string]personality.Key{
 	"max_turn_requests": personality.TurnStopMaxRequests,
 	"refusal":           personality.TurnStopRefusal,
 	"cancelled":         personality.TurnStopCancelled,
+}
+
+// statsLimit is the turn's last call's output limit for --stats: its tokens,
+// render.NoOutputLimit for a call that carried none, 0 when the agent gave
+// none (0071-MADR D10, P22).
+func statsLimit(l *acpclient.OutputLimit) int64 {
+	switch {
+	case l == nil:
+		return 0
+	case l.Basis == string(llm.BasisNone):
+		return render.NoOutputLimit
+	}
+	return int64(l.Tokens)
 }
 
 func stopText(voice *personality.Voice, reason string) string {

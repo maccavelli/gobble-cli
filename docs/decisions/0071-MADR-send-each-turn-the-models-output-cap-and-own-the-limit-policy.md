@@ -1024,3 +1024,100 @@ the code is as built.)*
 
 Counts after this amendment: 89 decided, 7 out of scope, 1 open; 97 rows (P41, P42 added).
 *(2026-11-25, after the owner's answer: 89 decided, 7 out of scope, 0 open; 97 rows, P41 struck.)*
+
+## Amendment of 2026-11-25, seventh: Phase 2c's stop
+
+*(2026-11-25. Additions only. Phase 2c's first pass stopped on four cases (0071-PLAN, "Phase 2c, pass 1"); the owner answered
+all four, relayed by the coordinator. No row is open.)*
+
+### Owner answers, quoted exactly
+
+| Question | The owner's answer | Rows |
+| :--- | :--- | :--- |
+| Q-F. The run's store of saved caps is `internal/cli`'s; `acpserver` hands it a learned cap and a completed call's output through a name P23 does not list; and the two notice keys 0066 D10 names are exported names P23 does not list | "Two Options hooks (Recommended)" | P23, P43 |
+| Q-G. The lines of `model.limit.learned` in the four built-in personalities and of `model.limit.unknown` in dry, snarky and bombastic, written in Phase 2c | "Approve all four (Recommended)" (for both notices) | P44 |
+| Q-H. `TestModelsInfo` and `TestRunEndsListings` need changes no row names: S18's source lines and `limit` line, and S10's line before a reply | "Expect the new output (Recommended)" | P45 |
+| Q-I. S19's description "from cached limits; nothing is fetched to build it": `acpserver`'s only limits read, `Options.ModelInfo`, starts a listing fetch when one is missing or stale | "A fetch-free cached hook (Recommended)" | P23, P46 |
+
+### Decided
+
+* **P23, re-pointed.** Added: `acpserver.Options.SaveObservation func(providerID string, o llm.LimitObservation)`,
+  `acpserver.Options.CallOutput func(providerID, model string, outputTokens int)`, `acpserver.Options.CachedLimits func(provider,
+  model string) llm.Limits`; `personality.ModelLimitUnknown` and `personality.ModelLimitLearned`; and, as Q-I's hook needs a
+  reader `internal/cli` can call, `provider.CachedLimits(o Options, id, model string, mj *catalog.ModelsJSON) llm.Limits`.
+* **P43 (Q-F).** `acpserver` hands a cap a turn, a summary or the title learned (P19, P34) to `Options.SaveObservation` with
+  its provider, and each completed call's output tokens to `Options.CallOutput` with its provider and model (P25); nil records
+  nothing. `internal/cli` wires them to `limit-observations.json`'s save and drop, so production saves and drops caps. The two
+  keys are 0066 D10's, as built.
+* **P44 (Q-G).** The eight lines in `personality/builtin/*/messages.md`, `model.limit.unknown` and `model.limit.learned` in
+  boring, dry, snarky and bombastic, are decided text, word for word, each built-in personality's one variant; pinned by
+  `TestLimitNoticeLines_0071`.
+* **P45 (Q-H).** Expected changes, each the decided output of the row that adds it: `TestModelsInfo`'s expected text gains the
+  sources, `context   200000 (models.json)` and `max-out   8192 (models.json)`, and the line `limit     optional on its wire`
+  (S15, S16, S18); `TestRunEndsListings`' expected stdout is S10's line, in the terminal's default personality, then `fine`
+  (S10). Each test's other assertions are unchanged.
+* **P46 (Q-I).** The ACP model option's description, "context N · max-out M", "unknown" for a limit not known, is read through
+  `Options.CachedLimits`, which `internal/cli` wires to `provider.CachedLimits`: the SDK's `catalog.CachedLimits` over the
+  lookup's layers and the run's cache, with a key's token alone (a login's token may refresh, a request), so it starts no
+  request; nil describes nothing (0066 D6, S19).
+
+### State table: Phase 2c's stop
+
+| Row | Input or state | Status | Outcome | Test | Decided by |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| P43 | A learned cap and a completed call's output, in production | decided | handed to `Options.SaveObservation` and `Options.CallOutput`; the CLI saves and drops them | `TestRefusedCapLearned_0071` (`internal/cli`: the next run's provider and lookups given it back), `TestRefusalNoStatedCap_0071` (`internal/cli`), `TestSavedCapDroppedWhenExceeded_0071` (`internal/cli`, a run), `TestAgent_SavesLearnedCap_0066/apierror` | "Two Options hooks (Recommended)" |
+| P44 | The two notices' lines in each built-in personality | decided | the eight lines as written, word for word | `TestLimitNoticeLines_0071` | "Approve all four (Recommended)" |
+| P45 | `TestModelsInfo`, `TestRunEndsListings` | decided | expect the new output | the two tests | "Expect the new output (Recommended)" |
+| P46 | The ACP model option's description | decided | from `Options.CachedLimits`, no request | `TestACP_ModelOptionDescription_0066` | "A fetch-free cached hook (Recommended)" |
+
+Counts after this amendment: 93 decided, 7 out of scope, 0 open; 101 rows (P43 to P46 added).
+
+## Amendment of 2026-11-25, eighth: Phase 2c's review
+
+*(2026-11-25. Additions only. The coordinator relayed `code-reviewer`'s findings on Phase 2c and classed each as a fix inside
+P21, P24, P25, S44 and 0066 D7: a lost or misapplied cap costs extra provider requests, and the owner's standing rule is to
+conserve tokens and requests without losing features. 0071-PLAN, "Deviation (2026-11-25): Phase 2c's review", names them R1 to
+R7; P47 to P52 below are R1 to R6. No owner question; no row is open.)*
+
+### Decided
+
+* **P47 (R1, P24).** The lookups, discovery and `acpserver.Options.CachedLimits`' reader read with models.json's base URL, as
+  `New` does, so a cap saved at that base is stated to them and a cap saved at the default base is not; a lookup also lists at
+  that base, as the run's listing does. *(2026-11-25, R8:)* they also send models.json's `headers`, as the run's listing and
+  requests do (0041-MADR D1, D2), so a proxy that requires one serves the lookups' own listings.
+* **P48 (R2, P21, 0066 S14).** A saved cap whose `Seen` is more than five minutes after now is not fresh: the store drops it on
+  load as it drops an expired one, without a warning, and the layer does not state it. Five minutes allows a clock step between
+  a write and a read on the host that keeps the file.
+* **P49 (R3, P25).** A completed call whose usage is estimated (`llm.Usage.Estimated`: the service reported no counts, and
+  gobble's adapter counted the bytes) drops no cap.
+* **P50 (R4, P22).** "raised from M for the thinking budget" is shown only when the wire's tokens are above gobble's value; a
+  lower wire value is shown as the wire's tokens with gobble's basis.
+* **P51 (R5, 0066 D7).** Each write of `limit-observations.json` re-reads the file and applies its one change to what the file
+  holds, then writes with the same rename: a save replaces the entry of its key (provider, base URL, scope, model) unless the
+  file's is newer, the newest `Seen` winning, and keeps ten per provider, base URL and scope; a drop removes from what the file
+  holds, so an entry another process dropped stays dropped. The result becomes the run's list. There is no lock across
+  processes: two writes between one's read and its rename still lose the earlier. *(2026-11-25, the coordinator: an accepted
+  limit; no cross-process lock is built.)* Its cost is one cap relearned by one refused request: the call that next meets the
+  lost cap is refused, sent again at the cap the refusal states, and the cap is saved again.
+* **P52 (R6, P25).** The SDK's `Observed.Model` is `cmp.Or(req.Model, the provider's own model)` (go-llmprovider-sdk `v1.33.0`,
+  each provider's `limitRetry`), so a request that names no model saves its cap under the provider's own. P25 keys on the model
+  the cap was saved under: `acpserver` keeps, per provider and asked model, the model of a cap learned for such a request, and
+  reports a completed call's output under it. A cap saved on an earlier run for a request that names no model is not dropped by
+  output, since gobble does not know the provider's own model; its 24 hours end it.
+* **R7, the recovery.** Once the layer holds the turn's limit, the turn's own output cannot exceed it, so the 24-hour expiry is
+  the real recovery from a wrong saved cap, and P25 fires on the calls that ask for more (the title, another model). In-process:
+  `New`'s layer is fixed when the provider is built, so a cap saved or dropped later in the run reaches only a provider built
+  after it; that matters only on routes where gobble sends no explicit limit.
+
+### State table: Phase 2c's review
+
+| Row | Input or state | Status | Outcome | Test | Decided by |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| P47 | A cap saved at a models.json base URL; a default-base cap at a run with one | decided | stated to the lookups and the limits reader; not handed | `TestSavedCapAtModelsJSONBase_0071` | P24; R1 |
+| P48 | A saved cap whose `Seen` is after now | decided | more than five minutes ahead: dropped on load, not stated; within: kept | `TestSavedCapSeenAhead_0071` (`llm/provider`, `internal/cli`) | P21, S14; R2 |
+| P49 | A completed call with an estimated usage | decided | no drop | `TestSavedCapDroppedWhenExceeded_0071/estimated` | P25; R3 |
+| P50 | A wire value below gobble's | decided | the wire's tokens, gobble's basis, no raise | `TestContextShowsSentLimit_0071/lowered` | P22; R4 |
+| P51 | Two processes writing `limit-observations.json` | decided | each write re-reads and merges by key; newest `Seen` wins; drops kept | `TestSavedCapsTwoWriters_0071` (`two_saves`, `drop_kept`, `newest_wins`) | 0066 D7; R5 |
+| P52 | A request that names no model | decided | its output reported under the model its cap was saved under | `TestSavedCapDroppedWhenExceeded_0071/saved_under` | P25; R6 |
+
+Counts after this amendment: 99 decided, 7 out of scope, 0 open; 107 rows (P47 to P52 added).

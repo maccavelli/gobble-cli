@@ -116,6 +116,14 @@ precision (0022-MADR D7). Every variant keeps boring's placeholders.
 
 - models.json asks for {asked} output tokens for {model}; the service has stated {stated}, so that is what gobble sends.
 
+## model.limit.unknown
+
+- Nothing states {model}'s output limit, so gobble assumes 16,384 tokens, fitted to the window. Set maxTokens for {model} in models.json to change that.
+
+## model.limit.learned
+
+- The service says {model} stops at {stated} output tokens. gobble sent the call again at that, and keeps it for a day.
+
 ## lines.hidden
 
 - {n} lines omitted for brevity (--verbose shows all)

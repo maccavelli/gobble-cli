@@ -177,9 +177,9 @@ func (a *Agent) summaryModel(s *liveSession, p llm.Provider, providerID string) 
 	chosen, think := a.choices(s)
 	prev, provider := lastAssistantModel(s.tree.Path())
 	if prev != "" && prev != chosen && provider == providerID && slices.Contains(a.modelsOf(providerID), prev) {
-		return a.compactionModel(p, providerID, prev, catalog.Clamp(a.levelsOf(providerID, prev), think))
+		return a.compactionModel(s, p, providerID, prev, catalog.Clamp(a.levelsOf(providerID, prev), think))
 	}
-	return a.compactionModel(p, providerID, chosen, think)
+	return a.compactionModel(s, p, providerID, chosen, think)
 }
 
 // lastAssistantModel is the model and provider of path's last assistant
