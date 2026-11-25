@@ -23,6 +23,11 @@ go-llmprovider-sdk `v1.33.0`.)*
 for that session, rebuilds a session that began with none once when the first download lands, and pins the cost of a refresh
 (M62, M71 to M73).)*
 
+*(2026-11-25, deviation, the owner's "gobble: v1.33.0 pin first, then 0072 (Recommended)": gobble pins go-llmprovider-sdk
+`v1.33.0` in 0071-PLAN's Phase 2 before this PLAN starts, so every phase here runs on `v1.33.0`; M22's step is struck; Phase 4
+is built as Phase 2b, between Phases 2 and 3, and is no longer the pin. See "Deviation (2026-11-25): pin first" under the
+execution record. Steps and rows are struck or annotated in place, not deleted.)*
+
 ## Goal
 
 After Phases 1 and 2, gobble downloads `https://models.dev/api.json` itself, keeps the nine sections in its cache directory,
@@ -50,6 +55,10 @@ and commits nothing: each phase ends with its files ready, its gates recorded, a
   `WithModelMetadataURL`, so gobble does not compile on `v1.33.0` without Phase 4. The order is: this PLAN's Phases 1 to 3;
   the SDK's 0093 build and its `v1.33.0` tag; gobble's pin with Phase 4 in the same change (as 0065-PLAN's Phase 2 begins the
   pin); then 0071's Phase 2 (and the 0066-PLAN phases it waits for), which reads `CachedLimits` over the handed document.
+* *(2026-11-25, superseding the three bullets above by "gobble: v1.33.0 pin first, then 0072 (Recommended)".)* **Base:** the
+  commit that ends 0071-PLAN's Phase 2c, on `v1.33.0` (0070 is built, in 073fd1f). **Order:** 0071-PLAN's Phases 2.0, 2a (the
+  pin), 2b and 2c; then this PLAN's Phases 0, 1, 2, 2b (was 4) and 3, each on `v1.33.0`. gobble compiles at every step: the pin
+  removes `WithModelMetadataURL` and `WithoutModelMetadata` itself (0071 P2). Phase 3 depends on Phase 2b; Phase 2b on Phase 2.
 
 ## Scope
 
@@ -57,7 +66,9 @@ and commits nothing: each phase ends with its files ready, its gates recorded, a
 
 * `llm/provider`: `FetchModelData`, `ModelData`, `ParseModelData`, `CurrentModelData`, `SetCurrentModelData`,
   `Options.ModelData`; the atomic holder in place of `snapshot`; a `TestMain` with the network guard; the listing's URL
-  (Phases 2) and the hand-in (Phase 4).
+  (Phases 2) and the hand-in (Phase 4). *(2026-11-25: ~~the listing's URL~~ is not built; `ModelData`, `ParseModelData` and
+  `Options.ModelData` exist from 0071's pin (its P3), and this PLAN adds `Stamp()`, `Sections()` and the rest of D21; the
+  hand-in is Phase 2b.)*
 * `internal/cli`: the store, `attempt.json`, the engine, the trigger in `modelProvider`'s provider and the `models` commands,
   the load at `runEnv`'s start, the exits, the warnings, `gobble models refresh [--force]`, the `data` line, `ModelDataLine`;
   `TestMain`'s seams.
@@ -104,6 +115,7 @@ and commits nothing: each phase ends with its files ready, its gates recorded, a
 ### Phase 0: re-ground and confirm (records and a scratch clone only)
 
 1. Re-read the MADR's citations (F1 to F12, D1 to D21) at ba8f623 and the SDK's `v1.32.0`; record each moved line.
+   *(2026-11-25: at this PLAN's base and the SDK's `v1.33.0`; the MADR's amendment of that date records the moves to 073fd1f.)*
 2. On a scratch clone, by a throwaway test there, confirm: a `jsontext.Value` field written by `jsonx.MarshalStrict` compact
    and read back by `jsonx.UnmarshalStrict` keeps `document`'s bytes exactly (M2), else D2's sha256 is taken over the
    re-encoded form and the MADR gets a dated note; `Encode` of a document with one malformed section drops it (M15, F5); Go's
@@ -118,7 +130,8 @@ and commits nothing: each phase ends with its files ready, its gates recorded, a
    `internal/archtest` allows each new import.
 6. Grep `README.md`, `docs/guides/choosing-a-model.md`, `docs/architecture.md`, `docs/README.md`, `NOTICE`,
    `llm/catalog/doc.go` and `llm/provider/provider.go` for the snapshot, `gen_catalog`, `ModelMetadataURL` and the models
-   commands; note the lines Phases 2 and 3 change.
+   commands; note the lines Phases 2 and 3 change. *(2026-11-25: `ModelMetadataURL` is gone with 0071's pin; grep instead for
+   `Options.ModelData`, the built-in copy's use in the listings (0071 P6) and `WithMetadata`.)*
 
 Exit: citations re-grounded; the confirmations and lists recorded; nothing but the records changed.
 
@@ -149,7 +162,11 @@ Build:
 
 1. `llm/provider`: `ModelData` (immutable: the parsed `catalog.Metadata` and its stamp), `ParseModelData`, the atomic holder
    (`CurrentModelData`, `SetCurrentModelData`) replacing `snapshot` for `modelInfoFrom` and `KnownModels`, with the built-in
-   copy as the fallback until Phase 3; `FetchModelData` (D4); `TestMain` with the guard.
+   copy as the fallback until Phase 3; `FetchModelData` (D4); `TestMain` with the guard. *(2026-11-25: `ModelData` and
+   `ParseModelData` exist (0071 P3); this step adds `Stamp()`, `Sections()` and the holder. Where 0071's pin hands the
+   listings the built-in copy (its P6 under Q5 (1)), `internal/cli` hands `CurrentModelData()` instead; M19's test gains a
+   `listing` case: a listing's `Options.ModelData` is the current document. Under Q5 (2) the listings start reading a document
+   here; under (3) `New` and the lookups too, until Phase 2b hands each session its own.)*
 2. `internal/cli`: the store (path, file, write with D2's temporary file and `fsx.ReplaceFile`, read with
    `fsx.ReadRegularFile` and D3's checks, the sweep); D6's guards; `attempt.json` (D18); the engine goroutine; the seams
    `fetchModelData` and `loadModelData`, set in `TestMain` (D10).
@@ -166,7 +183,7 @@ Docs: `llm/provider`'s package and `ModelInfo` comments (the current document); 
 | :--- | :--- | :--- | :--- | :--- |
 | M20 | `TestModelDataLoadedFirst_0072` (`--model` naming a model only the copy knows resolves with no custom-id warning; `initialize`, `defaultModel`, the picker, completion and `auth status --check` read it; the load counted once; no fetch) | `internal/cli` | `--model` resolves with the custom-id warning | the load after model resolution |
 | M21 | `TestModelDataSwapForNewSessions_0072` (`-race`) | `acpserver` | new name | the session reads the current document per call |
-| M22 | `TestListingUsesModelsDev_0072` (the listing's metadata GET goes to models.dev's URL, served in memory) | `llm/provider`, `internal/cli` | the listing names no URL in production | the URL left unset outside tests |
+| ~~M22~~ | ~~`TestListingUsesModelsDev_0072` (the listing's metadata GET goes to models.dev's URL, served in memory)~~ *(2026-11-25: struck with M22; no URL exists at `v1.33.0`)* | `llm/provider`, `internal/cli` | the listing names no URL in production | the URL left unset outside tests |
 | M24, M25, M26, M27, M30, M31, M32, M67 | `TestModelDataRefreshTrigger_0072` (`model_call`, `models_cmds`, `initialize_no_fetch`, `context_no_fetch`, `one_in_flight`, `attempt_within_hour`, `other_process_attempt`, `recheck`, `pinned`, `clock_ahead`, `first_run`, `refused_waits`) | `internal/cli` | new name | the trigger in `modelFacts` (fetches on `initialize`); then no in-flight flag; then `attempt.json` not read; then no re-read; then 0 read as "always due"; then a refusal not recorded |
 | M28 | `TestModelDataRunEnd_0072` (`acp`, `interactive`: cancelled at once, the exit not waiting; `headless`, `models`: a 1 s fetch and write finish, a blocked one cancelled at 5 s; `synctest`) | `internal/cli` | new name | every exit waits 5 s |
 | M29 | `TestCompletionStartsNoRefresh_0072` | `internal/cli` | new name | completion through the triggering read |
@@ -193,8 +210,8 @@ Build:
    `acpserver`.
 3. `acpserver`: each session's `*provider.ModelData` at create, load and fork (D19), passed through `Options.ModelInfo`'s
    `provider.Options.ModelData`; `cmdContext`'s line after 0071's.
-4. `llm/provider`: production sets `Options.ModelMetadataURL` to models.dev's URL for every listing (D17); `provider.go:53-55`'s
-   "for tests" corrected.
+4. ~~`llm/provider`: production sets `Options.ModelMetadataURL` to models.dev's URL for every listing (D17); `provider.go:53-55`'s
+   "for tests" corrected.~~ *(2026-11-25: struck; the field is gone with 0071's pin, and the listing's document is Phase 1's.)*
 5. The binary tests (M64).
 6. Records: D16's dated notes in `0005-MADR-v1-feature-scope.md` (the "Catalog refresh" row),
    `0066-MADR-set-each-session-model-up-from-discovered-limits.md` (D3) and
@@ -208,6 +225,9 @@ block; `docs/architecture.md` (`internal/cli`'s row, the cache directory's files
 (`:6-8`) until Phase 3.
 
 ### Phase 3: no built-in model data (M19's last case, M33, M47 to M49), on `v1.32.0`
+
+*(2026-11-25: on `v1.33.0`, after Phase 2b. The fallback it removes is the holder's built-in copy; where 0071's pin handed it
+to the listings or the lookups (0071 Q5), the current copy has replaced it since Phases 1 and 2b.)*
 
 | Rows | Test | Package | Red at the base because | Plant |
 | :--- | :--- | :--- | :--- | :--- |
@@ -228,6 +248,12 @@ Docs: `NOTICE`; `llm/catalog/doc.go:4-8`; `docs/architecture.md:114`, `:268`, `:
 
 ### Phase 4: gobble's pin of go-llmprovider-sdk `v1.33.0` (M54, M55, M62, M71 to M73)
 
+*(2026-11-25: built as **Phase 2b, the hand-in**, after Phase 2 and before Phase 3, on `v1.33.0`, which 0071's pin already
+holds; it is not the pin. F4 is re-grounded at the tag in the MADR's amendment of this date: the hand-in is
+`catalog.WithMetadata`; a difference found at this phase's start is a stop. The rows' "red at the base" is at Phase 2's end:
+on its assertion where the code exists (the lookups hold the built-in copy as a layer, or none; `New` none), by the plant
+where a name is new. M54's row is `TestTurnCapFromLimits_0071` with a `session_document` case.)*
+
 Starts when the SDK tags `v1.33.0` with its 0093 built. It is the same change as the pin. First re-ground F4 at the tag: the
 removed names and the hand-in's name and contract as the SDK's 0093-MADR and its build record them; a difference is a stop.
 
@@ -245,6 +271,13 @@ Build: replace `WithModelMetadataURL` (`list.go:129-130`, `:159-160`) and the la
 hand-in; remove `Options.ModelMetadataURL`; `provider.New` given `Options.ModelData` (the session's document) in place of
 `WithoutModelMetadata` (`provider.go:215`), for every provider built for a session; D22's rebuild of a none-session's
 provider when the first download lands. Then 0071's Phase 2 begins.
+
+*(2026-11-25, Phase 2b's build: ~~replace `WithModelMetadataURL`~~, ~~remove `Options.ModelMetadataURL`~~ and ~~in place of
+`WithoutModelMetadata`~~ are done by 0071's pin. Phase 2b replaces the built-in copy's layer in the lookups and the limits
+calls (`model.go:107-111`) with `catalog.WithMetadata` of the session's document; hands the session's document to `New` for
+every provider built for a session, where the pin handed none (or, under 0071 Q5 (3), the built-in copy); D22's rebuild. ~~Then
+0071's Phase 2 begins~~: it is already built. Docs: `llm/provider`'s comments, the `llm/provider` row of `docs/architecture.md`,
+the guide's line on what the listing reads.)*
 
 Gates: as Phase 1.
 
@@ -267,7 +300,44 @@ Docs: `llm/provider`'s comments; `docs/architecture.md`'s `llm/provider` row; th
 * Rollback: `modelData.refreshHours: 0` stops every automatic download at once. Deleting `<cache>/model-data/` makes the next
   model call download afresh. Reverting Phase 3 restores the built-in fallback; reverting Phases 1 and 2 restores the
   embedded copy alone, and the cache files are then ignored. Phase 4 cannot be reverted apart from the pin.
+* *(2026-11-25: Phases 1, 2, 2b and 3 ship in one gobble release on `v1.33.0`, after the release that carries 0071's Phase 2.
+  Phase 2b reverts on its own: the lookups return to the built-in copy's layer, or to none (0071 Q5), and `New` to none.)*
 
 ## Execution record
 
 *(Empty: nothing is built before the owner's approval.)*
+
+### Deviation (2026-11-25): pin first
+
+The owner's ruling, relayed by the coordinator, quoted exactly: **"gobble: v1.33.0 pin first, then 0072 (Recommended)"**.
+Found: this PLAN ran Phases 1 to 3 on `v1.32.0` and made Phase 4 the pin; the ruling pins `v1.33.0` first, in
+[0071-PLAN-send-each-turn-the-models-output-cap-and-own-the-limit-policy.md](0071-PLAN-send-each-turn-the-models-output-cap-and-own-the-limit-policy.md)'s
+Phase 2, with 0065's and 0066's adoption amendments. Decision, recorded in the MADR's amendment of this date:
+
+* **Order:** 0071-PLAN's Phases 2.0, 2a (the pin), 2b, 2c; then this PLAN's Phase 0, Phase 1, Phase 2, Phase 2b (was Phase 4,
+  the hand-in) and Phase 3, all on `v1.33.0`. The base is the commit that ends 0071's Phase 2c.
+* **Struck, not deleted:** M22's row in Phase 2's table and Phase 2's build step 4 (the `v1.32.0` listing URL); the Scope's
+  "the listing's URL"; Phase 4's "same change as the pin", its removals and its "Then 0071's Phase 2 begins".
+* **Annotated:** "Dependencies and order"; Phase 0's steps 1 and 6; Phase 1's build step 1 (M19's `listing` case); Phase 3's
+  heading; Phase 4's heading and build; "Rollout and Rollback".
+* **Moved to 0071's pin (its P2 to P5):** the removal of `WithModelMetadataURL`, `Options.ModelMetadataURL` and
+  `WithoutModelMetadata` at `llm/provider/list.go:129-130`, `:159-160`, `provider.go:53-55`, `:215`, `model.go:176`,
+  `signin.go:344`; `ModelData`, `ParseModelData`, `Options.ModelData` (D21's first three, nil handing none); the tests that
+  served a document by URL.
+* **Re-pointed:** M54 (0071's Phase 2 first; `TestTurnCapFromLimits_0071/session_document` in Phase 2b), M55 and M62 (built
+  in Phase 2b, their reds at Phase 2's end), M71 to M73 (Phase 2b).
+* **Files added to any phase's scope:** none beyond the rows' own.
+* **Waits on:** 0071's Q5, which sets what Phase 1 and Phase 2b replace. No row here is open.
+
+### Deviation (2026-11-25, second): 0071's Q5 and Q6 answered
+
+0071's Q5, "Built-in copy to listings only (Recommended)", and Q6, "Hand them in as a caller layer (Recommended)", relayed by
+the coordinator, are answered; nothing waits. The MADR's second addition adds M74 to M76.
+
+| Phase | Rows | Test | Red at the phase's base because | Plant |
+| :--- | :--- | :--- | :--- | :--- |
+| 1 | M74 | `TestModelDataCurrent_0072/listing` (a listing's `Options.ModelData` is the current document, a copy that differs from the built-in one); 0071's `TestListingRanksByBuiltInCopy_0071` is re-pointed to it, its name in the execution record | the pin hands the built-in copy | the listing keeps the built-in copy |
+| 2b | M75 | `TestLookupGetsSessionModelData_0072`; 0066's `TestLimits_BuiltInCopyBelowListing_0066` retired, its name in the execution record | the lookups hold the built-in copy's layer | M55's plant, as written |
+| 2b | M76 | `TestProviderGetsSessionModelData_0072/saved_caps` (each `New` for a session gets the saved caps' layer below models.json beside the session's document) | a guard: the pin hands the layer | the layer left off `New` when the document is handed |
+
+Phase 1's build step 1 and Phase 2b's build are as annotated; the struck `Q5 (2)` and `Q5 (3)` clauses in them are void.

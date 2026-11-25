@@ -17,6 +17,11 @@ Associated PLAN: [0066-PLAN-set-each-session-model-up-from-discovered-limits.md]
 
 *(2026-11-24, note from [0071-MADR-send-each-turn-the-models-output-cap-and-own-the-limit-policy.md](0071-MADR-send-each-turn-the-models-output-cap-and-own-the-limit-policy.md) D12: D11 and S29 ("gobble names no limit and no ceiling of its own") are superseded by 0071 V3 for every call where gobble names a limit; S39 by 0071's Q2 answer, "16,384, fitted, shown 'assumed' (Recommended)"; D8's session-report line is merged with 0071 D10's by 0071 V6. This record's adoption amendment decides 0071 V7.)*
 
+*(2026-11-25, amendment: the owner's "gobble: v1.33.0 pin first, then 0072 (Recommended)". The adoption amendment is written:
+V7 decided, D3 re-pointed to the document gobble hands in, the store fed from `APIError.Observed`, this record's phases built as
+0071-PLAN's Phases 2b and 2c. S42 and S44 are open under 0071's Q5 and Q6. See "Amendment (2026-11-25)" at the end.)*
+*(2026-11-25, second: Q5 and Q6 answered; S42 and S44 decided; no row is open.)*
+
 ## Context and Problem Statement
 
 On 2026-11-22 the owner asked for a model output-limit discovery feature in
@@ -299,3 +304,89 @@ OQ4 (rows S32 to S34). 0065's Q1 is decided (D11); its Q2 stays in 0065.
 
 * How long a listing read takes on each service; the first call's wait is
   bounded by the SDK, not measured.
+
+## Amendment (2026-11-25): adoption on go-llmprovider-sdk v1.33.0, pinned first
+
+Additions only; nothing above is rewritten. The owner's ruling of 2026-11-25, relayed by the coordinator, quoted exactly:
+**"gobble: v1.33.0 pin first, then 0072 (Recommended)"**. gobble pins `v1.33.0` (tagged at `138d52f`) in
+[0071-PLAN-send-each-turn-the-models-output-cap-and-own-the-limit-policy.md](0071-PLAN-send-each-turn-the-models-output-cap-and-own-the-limit-policy.md)'s
+Phase 2a, and builds this record in its Phases 2b and 2c, before any of 0072. This is the adoption amendment that
+[0071-MADR-send-each-turn-the-models-output-cap-and-own-the-limit-policy.md](0071-MADR-send-each-turn-the-models-output-cap-and-own-the-limit-policy.md)
+names for its V7, and it takes what
+[0072-MADR-keep-a-refreshed-models-dev-copy-on-disk.md](0072-MADR-keep-a-refreshed-models-dev-copy-on-disk.md) D17 requires.
+Read at gobble 073fd1f and the SDK's tag; 0071's amendment of this date holds the measured facts (its F19 to F25). S42 and S44
+are open, so this amendment is `proposed` until the owner answers 0071's Q5 and Q6; every other row stands `accepted`.
+
+### Decided
+
+* **D1, measured.** `catalog.LookupLimits(ctx, provider, src, model, opts...)` (the SDK's `llmprovider/catalog/limits.go:172-200`),
+  bounded at 10 s (`modelListingTimeout`, `catalog/discovery.go:118`), as `provider.Discover`, with the options and credential
+  the lookup uses (`llm/provider/model.go:78-91`: the transport, header transport, base URL, the run's cache, the stored login or
+  key), `catalog.WithClaudeWorkspace` (`:180-182`), the layers of D3 as amended, and `WithLimitObservations` of the saved caps.
+  gobble passes no Kilo organization, so a Kilo cap's scope is empty (S43). Otherwise as decided.
+* **D3, re-pointed.** At `v1.33.0` the SDK fetches no document and embeds no extract (its 0093-MADR D6, D7), so "the SDK reads
+  models.dev itself and embeds its own limits-only extract" is no longer true. gobble hands discovery and every limits call:
+  models.json as today's layer, not through 0065 D2's wrapper, which lapses with 0065's V9 (Pi's default is told apart by
+  `Facts.MaxTokensStated`, 0071 P17); and a document: before 0072, as 0071's Q5 decides (S42); from 0072, the session's
+  document by `catalog.WithMetadata` (0072 M55), which supersedes this D3's "not handed".
+* **D4.** `llm.Model.Limits` also carries `StreamedOutput` (the SDK's `Limits.StreamedOutput`, `limits.go:37-44`), which a
+  turn reads (0071 P17); `MaxTokens` keeps `Output`'s chosen value and `ContextWindow` `Window`'s, else `Input`'s. The SDK's
+  `RouteFallback` is not carried: gobble names every limit (0071 F21).
+* **D7.** A cap is saved from `llm.APIError.Observed` (0071 P15, P19). A `WarningLimitLearned` never reaches gobble: the SDK
+  delivers one only on a response after it resent a limit it chose, and gobble's are its own (0071 P15). Learning is the SDK's
+  default; gobble passes no `WithoutLimitLearning`. What a saved cap does on the next run: S44.
+* **D8.** As 0071 V6 merged it: the line is 0071 P22's; the debug fields are 0071 P16's.
+* **D10 and 0071's V7.** Under 0071 V2 gobble always asks a limit, so D10's "gobble names none, and the service's own default
+  applies" is no longer true. `model.limit.unknown`, once per session and model, when discovery ends with the output unknown:
+  "No source states MODEL's output limit; gobble asks for at most 16,384 tokens (assumed), fitted to the window; set maxTokens
+  for MODEL in models.json to change it." `model.limit.fallback` is not added: gobble's calls carry basis `request`, never
+  `fallback` (0071 P18), so S11 lapses and the keys are two.
+* **D12.** Superseded by the ruling: this record's Phase 1 is 0071-PLAN's Phase 2b, its Phases 2 and 3 its Phase 2c, after the
+  pin in 2a, in the release that carries 0071's Phase 2.
+
+### Rows
+
+| Row | Change, 2026-11-25 |
+| :--- | :--- |
+| S10 | the notice's words are D10's as amended (0071 V7) |
+| S11 | lapses: no call of gobble's has basis `fallback` |
+| S12 | the cap comes from `APIError.Observed`; saved as decided; one `model.limit.learned` |
+| S14 | the saved caps are handed back as decided; what they change on the next run is S44 |
+| S20, S21 | 0071 P22 and P16 |
+| S25 to S27 | re-pointed: the SDK has no registry of its own at the tag; the registry evidence is what gobble hands (S42; then 0072 M55), below the listing (`limits.go:105-117`, `:340`) |
+| S28 | models.json's `maxTokens` is the caller's statement and the turn's cap, basis `user` (0071 L7); no wrapper |
+| S34 | the SDK does not resend a caller's value (its `internal/wire/limit_rule.go:226-227`); gobble resends once at `Observed` and says so (0071 P19) |
+| S36 | `v1.33.0`, pinned by 0071-PLAN's Phase 2a |
+| S39 | as 0071's Q2 answer and P17: Pi's 16,384 is `assumed`; Pi's 128,000 stays the window, as 0071's Phase 1 uses it |
+
+| Row | Input or state | Status | Outcome | Decided by |
+| :--- | :--- | :--- | :--- | :--- |
+| S42 | The document discovery and the limits calls read before 0072 | open | 0071 Q5; recommended: the built-in copy as a "models.dev" layer, registry evidence below the listing | 0071 Q5 |
+| S43 | A Kilo cap's scope | decided | empty: gobble passes no Kilo organization (0071 F25) | D1 as amended |
+| S44 | A saved cap on the next run | open | 0071 Q6; recommended: gobble holds its limit to a cap saved within 24 hours for that model, base URL and scope | 0071 Q6 |
+
+Counts after this amendment: 40 decided (S43 added; S11 lapsed), 1 out of scope, 2 open (S42, S44), 1 lapsed; 44 rows.
+
+### Second addition (2026-11-25): the owner's answers
+
+The owner answered 0071's Q5, "Built-in copy to listings only (Recommended)", and Q6, "Hand them in as a caller layer
+(Recommended)", relayed by the coordinator; with them the review's cases and gaps that touch this record (0071's second
+amendment of this date, P21 and P24 to P28).
+
+| Row | Input or state | Status | Outcome | Test | Decided by |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| S42 | *(decided)* The document discovery and the limits calls read before 0072 | decided | the built-in copy as today's "models.dev" layer, registry evidence below the listing; the listings get it as their document; `New` none | `TestLimits_BuiltInCopyBelowListing_0066` (retired by 0072's Phase 2b, which hands the session's document in its place) | 0071 Q5 "Built-in copy to listings only (Recommended)" |
+| S44 | *(decided)* A saved cap on the next run | decided | the saved caps of a provider are a caller layer, "service-stated", below models.json, handed to every lookup, limits call, discovery and `New`; the SDK ranks it above the listing and the document | `TestSavedCapLayer_0071` | 0071 Q6 "Hand them in as a caller layer (Recommended)" |
+
+* **D7, re-pointed.** The saved caps go back as P24's layer, not with `WithLimitObservations`; each entry carries its provider
+  id and is handed to that provider only (0071 P26); an entry a completed call's output exceeds is dropped (0071 P25, the SDK's
+  DL39 applied by gobble, since the SDK's acts on its memo only).
+* **S12 and S14.** As D7 re-pointed; tested by `TestAgent_SavesLearnedCap_0066` with 0071's `TestSavedCapPerProvider_0071` and
+  `TestSavedCapDroppedWhenExceeded_0071`.
+* **S13.** A readable file with a bad entry (no provider, no model, `Tokens` below 1, a zero `Seen`) drops that entry with S13's
+  one warning (0071 P27; `TestAgent_UnreadableObservations_0066/bad_entry`).
+* **S28.** models.json's `maxTokens` above a cap the service stated: the service's cap is sent and shown as the service's, with
+  one note (0071 P28, case 10, "The service's cap wins, shown as such (Recommended)"). D10's personality keys are three:
+  `model.limit.unknown`, `model.limit.learned` and `model.limit.user_over`.
+
+Counts after this addition: 42 decided (S42, S44), 1 out of scope, 0 open, 1 lapsed; 44 rows.

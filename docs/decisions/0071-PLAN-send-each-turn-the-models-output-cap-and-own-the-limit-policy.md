@@ -21,6 +21,13 @@ the credit line added (L35 to L41). Q4 is open: Phase 2's V2 tests are written t
 open. V2's test and plant are those of option (1); the rows for options (2) and (3) are struck. This PLAN stays `proposed`
 until the owner approves it.)*
 
+*(2026-11-25, deviation, the owner's "gobble: v1.33.0 pin first, then 0072 (Recommended)": Phase 2 is re-planned as the pin
+of go-llmprovider-sdk `v1.33.0` and the convergence, in four parts, 2.0 to 2c, before any of 0072; it no longer waits for
+0065-PLAN's Phase 2 or for 0066-PLAN's phases, which it builds. See "Deviation (2026-11-25): pin first" and "Phase 2 as
+re-planned" below the original Phase 2. The MADR's rows P1 to P23 are its amendment of this date; P6 and P21 wait on Q5 and
+Q6, so the parts that build them wait too.)* *(2026-11-25, second: Q5 and Q6 answered; nothing waits. See "Deviation
+(2026-11-25, second)".)*
+
 ## Goal
 
 After Phase 1, on go-llmprovider-sdk `v1.32.0`, every agent turn and every compaction summary asks for the model's stated
@@ -50,6 +57,8 @@ and commits nothing: each phase ends with its files ready and its gates recorded
 ### Out of scope
 
 * The title's cap (D7) until V8. Probing (V10). Any SDK change. The SDK bump itself (0065-PLAN's Phase 2, as amended).
+  *(2026-11-25: the bump is now in scope, as Phase 2a, by "gobble: v1.33.0 pin first, then 0072 (Recommended)"; the title's
+  cap is V8, decided in 0065's amendment of that date and built in Phase 2c.)*
 
 ## Rules for Every Phase
 
@@ -165,7 +174,8 @@ Return docs rows: `path:line — fixed` or `path:line — open: <reason>`, then 
 ### Phase 2: the convergence, on `v1.33.0` (V rows), after the SDK's tag
 
 Starts when go-llmprovider-sdk `v1.33.0` is tagged and gobble pins it (0065-PLAN's Phase 2, as amended), after the 0066-PLAN
-phases that build discovery, the observation store and the notices (V6).
+phases that build discovery, the observation store and the notices (V6). *(2026-11-25: superseded by "Phase 2 as re-planned"
+below: the pin is Phase 2a, 0066's phases are 2b and 2c; the table below stands as each V row's test, re-pointed there.)*
 
 1. Records first: the adoption amendments of 0065 and 0066, dated, deciding V7 to V9 with their own rows and tests.
 2. Re-ground F13's SDK lines at the tag, and the caller's refused-cap path of the SDK's 0089 amendment; a change is a stop.
@@ -182,6 +192,143 @@ phases that build discovery, the observation store and the notices (V6).
 
 Build: the per-prompt functions read `catalog.CachedLimits`; D8 (a)'s cap forms take the SDK's path where it reports them;
 `/context`, `/session`, `--stats` read the last `Response.OutputLimit`. Gates: as Phase 1.
+
+### Deviation (2026-11-25): pin first
+
+The owner's ruling, relayed by the coordinator, quoted exactly: **"gobble: v1.33.0 pin first, then 0072 (Recommended)"**.
+gobble pins go-llmprovider-sdk `v1.33.0` (tagged at `138d52f`) first, with this Phase 2 and the adoption amendments of 0065
+and 0066, then builds 0072 on it. The MADR carries the amendment (rows P1 to P23, Q5 and Q6); 0065, 0066 and 0072 carry theirs
+of the same date.
+
+* **What moves into this Phase 2:** the pin itself (0065-PLAN's Phase 2, which is not built as written there); 0066-PLAN's
+  Phases 1 and 2, as 0066's amendment re-scopes them; 0065's V8 (the title) and the two 0065-PLAN Phase 2 tests that survive
+  (R20's and R24's); from 0072, the removal of `WithModelMetadataURL`, `Options.ModelMetadataURL` and `WithoutModelMetadata`
+  (its Phase 4 build's first half) and three of its D21 names, `ModelData`, `ParseModelData`, `Options.ModelData` (P3).
+* **What is dropped:** 0072's `v1.32.0` listing URL (its M22) is never built; 0065-PLAN's Phase 2 raise cases and its
+  `TestAgentTurn_RaisedLimitRefusedResent_0065` (R26) are superseded by 0071 (0065's amendment).
+* **Order:** 2.0, 2a, 2b, 2c, each its own pass record and gate; then 0072's Phases 0, 1, 2, 2b (was 4) and 3 on `v1.33.0`
+  (0072-PLAN's deviation of this date). Parts that build P6 or P21 wait for Q5 or Q6; the rest do not.
+
+### Phase 2 as re-planned (2026-11-25): pin first
+
+Rules: this PLAN's "Rules for Every Phase", unchanged. gobble still has no `tools/plant.py`; each plant is one recorded
+production edit on a scratch clone, as Phase 1's were. The base of 2.0 and 2a is 073fd1f; each later part's base is the
+commit that ends the part before it.
+
+#### Phase 2.0: re-ground and list the reds (records and a scratch clone only)
+
+1. Re-read every citation of the MADR (F1 to F26, D1 to D13, every row) at 073fd1f, and the SDK's at `v1.33.0`; record each
+   moved line. A changed SDK fact (F13, F19 to F25) is a stop.
+2. On a scratch clone of 073fd1f: `go.mod` at `v1.33.0`, P2's deletions and P3's seam as stubs, nothing else. Run `go vet
+   ./...` and `go test -count=1 ./...` on every module through `run-heavy`. Expected reds, exactly: P5's
+   `TestListFetchesMetadata` (deleted in 2a) and `TestListFullCatalog`'s request count; P8's tests, each "refused before
+   sending" on a Messages route (at least F21's five); the P9 and P10 tests do not yet exist. Any other red is a stop, with the
+   failing line quoted.
+3. Grep `README.md`, `docs/architecture.md`, `docs/guides/models-json.md`, `docs/guides/choosing-a-model.md` and the doc
+   comments of `llm/provider` for `ModelMetadataURL`, "metadata fetch", "8192", `opencode.ai/api.json` and `v1.32.0`; note the
+   lines 2a to 2c change.
+
+Exit: citations re-grounded; the red list equal to the expectation; nothing but scratch changed.
+
+#### Phase 2a: the pin (P1 to P16)
+
+| Rows | Test | File | Red at 073fd1f because | Plant |
+| :--- | :--- | :--- | :--- | :--- |
+| P1, P2 | the build: `go vet ./...` on every module at the tag | all | the removed names do not compile at the tag | `go.mod` back at `v1.32.0`: "undefined: catalog.WithMetadata"; then, apart, `provider.go:215`'s option restored: "undefined: llmprovider.WithoutModelMetadata" |
+| P3 | `TestListHandsModelData_0071` (`handed`: `Options.ModelData` holding `factDoc` reaches `List`'s ranking and facts; `chat`: the same through `listChat`; `none`: nil hands none; no metadata request in any case) | `llm/provider/list_test.go` | new names | `listWith` drops `o.ModelData`; then, apart, `listChat` drops it |
+| P4 | `TestListFullCatalog`, `TestListSourceAndUsable`, `TestListServesLastGood`, `TestListingSearchByFacts`, the `sdkcache_test.go` and `chatserver_test.go` tests, `TestModelsSearchListsFactsFirst`: each hands the bytes it served | `llm/provider`, `internal/cli` | do not compile at the tag (`ModelMetadataURL`) | `listWith` drops `o.ModelData`: `TestListingSearchByFacts` and `TestModelsSearchListsFactsFirst` lose the document's facts *(2026-11-25, second: `chatserver_test.go:122` deletes the field; it served nothing)* |
+| P5 | `TestListFullCatalog`: one request, the listing's, with the key; `TestListFetchesMetadata` deleted, its name in the execution record | `llm/provider/list_test.go` | two requests at 073fd1f (the fetch) | `listWith` lists with no credential: "the listing with the key" fails |
+| P6 (Q5 (1)) | `TestListingRanksByBuiltInCopy_0071` (production's listing `Options` carry the parsed built-in copy: a listing served in memory ranks as the copy ranks it; the lookups keep the layer; `New` and the wizard get none) | `internal/cli` | new | the copy left off the listing's `Options`; then, apart, handed to `New` |
+| P6 (Q5 (2) or (3)) | `TestListingRanksWithoutDocument_0071` (2), or `TestEveryCallHandsBuiltInCopy_0071` (3); only the chosen option's test is built | `internal/cli`, `llm/provider` | new | a copy handed (2); `New` given none (3) |
+| P7 | `TestEveryCallNamesLimit_0071` (`turn`, `summary`, `title`: a recording provider; each request's `MaxTokens` at least 1, the title's with its model's cap unknown included) | `acpserver/outputlimit_test.go` | a guard: green at 073fd1f | the title's `maxTokens` 0 when the cap is unknown |
+| P8 | each test 2.0 listed, its request given `MaxTokens: llm.AssumedMaxTokens` | as listed | "refused before sending" at the tag | `toRequest` drops `MaxOutputTokens`: each refused again |
+| P9 | `TestAgentTurn_SalvageCompleteCalls_0065` (a Chat Completions stream through gobble's adapter: a whole call, then a cut call, `finish_reason` `length`: one `ToolCallDone`, a `tool_call_cut` warning, `Done{StopToolUse}`; the turn runs the call and makes the next model call; the warning logged once at warn; no result for the cut call) | `llm/provider/cut_test.go`, `agent/outputlimit_test.go` | at `v1.32.0` the SDK returns `ErrIncomplete`: the raw error | `stopOf` tests `FinishLength` before calls: `max_tokens`, no tool run |
+| P10 | `TestResponsesCutTextStops_0071` (a Responses stream: text, then `response.incomplete`, `max_output_tokens`: the text and `Done{StopMaxTokens}`) | `llm/provider/cut_test.go` | at `v1.32.0`, `llm.ErrIncomplete` | `stopOf`'s `FinishLength` case removed: `end_turn` |
+| P11 | `TestReasoningOnlyCutUnchanged_0071` (reasoning deltas, then `length` with no text: `llm.ErrIncomplete`) | `llm/provider/cut_test.go` | a guard | the adapter maps that error to `Done{StopMaxTokens}` |
+| P12 | `TestAgentTurn_KiloWindowFormCompacts_0065`, reworded (`room`: Kilo's message stating a room of at least 1: one resend at it, no summary; `over`: the input alone past the window: a summary, then the turn resent); and its kind, `llm.ErrContextOverflow`, through the adapter | `agent/outputlimit_test.go`, `llm/provider/cut_test.go` | a guard for `room`; `over`'s kind is `ErrInvalidRequest` at `v1.32.0` | `limitRefused` reads the overflow before the window form: `room` compacts |
+| P14 | `TestDoneCarriesOutputLimit_0071` (a Claude stream asked 32,000: `{32000, true, "request", ""}`; thinking `high` asked 2,000 on Messages: the raised value, F9) | `llm/provider` | new names | `Done.OutputLimit` left zero; then the request's value copied for the wire's |
+| P15 | `TestAPIErrorCarriesObserved_0071` (Anthropic's `max_tokens: 64000 > 32000` refusing a caller's 64,000: `Observed` {model, "", "", 32000, a time}; through `WithStreamRetry`; OpenRouter's window form: zero) | `llm/provider` | new names | `Observed` not copied; then copied with a zero `Seen` |
+| P16 | `TestModelCallRecordOutLimit_0071` (a completed call's four fields; a call failed before its done event: none); 0070's `no_out_limit` subtest replaced by it, its name in the execution record | `llm/provider/record_test.go` | new | `out_limit` 0 written on a failed call; then `out_limit_basis` omitted |
+
+Build, in order: `go get` the tag and `go mod tidy` (`go.mod`, `go.sum` alone); P2's six sites; P3's seam and its two readers;
+P4's and P5's test edits; Q5's option (P6); P8's test edits; P14 to P16 in `llm/provider` and `llm`. Records: the execution
+record. Docs: every line 2.0 step 3 found that names the fetch or the field.
+
+#### Phase 2b: discovery and the facts a call reads (P17, V3; 0066 S1 to S9, S22 to S28, S30, S31, S35, S37, S39 to S43)
+
+| Rows | Test | File | Red at 2a's end because | Plant |
+| :--- | :--- | :--- | :--- | :--- |
+| 0066's rows | 0066-PLAN's Phase 1 tests as its amendment of this date re-points them | as there | as there | as there |
+| P17 (V1) | `TestTurnCapFromLimits_0071` (`streamed`: a kept stream cap makes `StreamedOutput` differ from `Output`, and the turn asks `StreamedOutput`; `user`: models.json `maxTokens` 20,000 over a listing of 128,000; `assumed_default`: a model models.json defines without `maxTokens`; `unknown`; `input_only`: Claude's input limit as `W`) | `acpserver`, `llm/provider` | 2a reads `a.modelOf`'s merged `MaxTokens` | `Output` read for `StreamedOutput`; then the source read as `catalog` for Pi's default |
+| V3 | `TestFitOutput`, `TestTurnCapHeldToWindow_0071` over P17's facts | `llm`, `acpserver` | guards | the window read from `Output` |
+
+Build: 0066-PLAN Phase 1's code as amended (`provider.Discover` over `catalog.LookupLimits`, the session's wait, `llm.Model.Limits`
+with `StreamedOutput`, compaction's window); `modelInfoFrom` fills `Limits` from `catalog.CachedLimits`; `turnLimits.limit`
+and `compactionModel` read it.
+
+#### Phase 2c: the convergence and what is shown, kept and told (P18 to P22, V2, V4 to V8; 0066 S10, S12 to S21)
+
+| Rows | Test | File | Red at 2b's end because | Plant |
+| :--- | :--- | :--- | :--- | :--- |
+| P18 (V2) | `TestExplicitLimit_0071`, as Phase 2's V2 row | `llm/provider` | a guard at the tag (2a made it true) | as Phase 2's V2 row |
+| P19 (V4) | `TestRefusedCapLearned_0071` (`observed`: a refusal whose `Observed` is 16,000 under 64,000 sent: two requests, the second at 16,000, basis `refusal`; saved with model, base URL, scope, tokens and time; `model.limit.learned` once; the next prompt's provider and `CachedLimits` given it back) | `agent`, `acpserver`, `internal/cli` | no resend from `Observed`, nothing saved | no resend from `Observed`; then, apart, nothing saved |
+| P20 (V4) | `TestRefusalNoStatedCap_0071` (`window`: OpenRouter's form: resent at the room, nothing saved; `unvalidated`: a cap form with no `Observed`: resent, nothing saved) | `agent`, `internal/cli` | a guard over L39 | a saved entry from a window form |
+| P21 (Q6 (1)) | `TestSavedCapHoldsLimit_0071` (a cap saved 1 hour ago for the model, base URL and scope: the first call asks it, basis `remembered`; 25 hours ago, or another scope: the computed cap) | `acpserver`, `llm/provider` | new | the remembered evidence ignored; then the scope not compared |
+| P21 (Q6 (2) or (3)) | `TestSavedCapFillsGapOnly_0071` (2), or `TestNoObservationFile_0071` (3); only the chosen option's test is built | as above | new | a saved cap applied to a stated model (2); a file written (3) |
+| P22 (V5, V6) | `TestContextShowsSentLimit_0071` (`request`; `raised`; `chatgpt_none`); `TestPromptResponseOutputLimit_0071` and `TestStats` gain the `none` basis | `acpserver`, `internal/cli/render` | 2b shows the asked value | the asked value shown; then the raise not named |
+| V7 (0066 S10) | `TestNotice_LimitUnknown_0066`, re-worded by 0066's amendment | `acpserver`, `internal/cli` | as there | as there |
+| V8 (0065's amendment) | `TestTitleCapFromLimits_0071` (`min(128, C)` with P17's `C`; unknown: 128); `TestTitleCapUnchanged_0071` unchanged | `acpserver/title_test.go` | 2b reads the merged `MaxTokens` | the title reads `Output`, not `StreamedOutput` |
+| 0066's rows | 0066-PLAN's Phase 2 tests as its amendment re-points them | as there | as there | as there |
+
+Build: `agent.Config.SaveObservation`; `internal/cli`'s `limit-observations.json` (0066 D7) and `provider.Options.Observations`;
+the `Observed` read before L39's in `limitRefused`; Q6's option; `/context`, `/session`, `_meta.gobble.outputLimit` and
+`--stats` from `Done.OutputLimit`; 0066's notices and displays; the title.
+
+Gates of every part: as Phase 1's. Docs of 2c: `docs/guides/models-json.md` (the saved caps; what the line says),
+`docs/architecture.md`'s `llm`, `llm/provider`, `agent`, `acpserver` and `internal/cli` rows, `README.md`'s state files.
+
+Exit of each part: no blocker, every row of the part tested, plants caught, gates recorded, docs rows returned.
+
+### Deviation (2026-11-25, second): the owner's answers and the review
+
+The owner's answers, relayed by the coordinator and quoted in the MADR's second amendment of this date: Q5 "Built-in copy to
+listings only (Recommended)"; Q6 "Hand them in as a caller layer (Recommended)"; case 10 "The service's cap wins, shown as such
+(Recommended)"; case 4 "End the turn, keep the text, notify (Recommended)"; case 5 "Discard a cut title (Recommended)"; case 7
+"gobble's basis, wire value (Recommended)"; case 9 "Show what was asked, marked (Recommended)". No row is open.
+
+* **Struck in Phase 2a's table:** the `P6 (Q5 (2) or (3))` row; P6 builds Q5 (1)'s `TestListingRanksByBuiltInCopy_0071`
+  alone. In Phase 2c's table: the `P21 (Q6 (1))` and `P21 (Q6 (2) or (3))` rows, replaced by P21's and P24's row below.
+* **Re-pointed in Phase 2a:**
+  * P4: `chatserver_test.go:122` deletes the field (it named a closed address and served nothing); the other sites hand the
+    bytes they served.
+  * P8: the fix is one line in `wireStream` (`llm/provider/wire_test.go:137`): `req.MaxTokens = llm.AssumedMaxTokens` when
+    the request names none, which covers `TestWireDeferral`, `TestDeferralAfterCancelledTurn`, `TestWireDeferralGrokCall`,
+    `TestWireLimits`, `TestWireLongWaitIsNotAWindow`, `TestWireOffline`, `TestWireEmptyAnswer`, `TestWireRefusal`,
+    `TestWireReplay`, `TestWireCases`, `TestWireRateLimitResets`, `TestWireOverflowSplit`, `TestWireToolResultError` and
+    `TestWireStrict`; the five direct `New` sites take the same value. Phase 2.0's expected reds are these tests' Claude and
+    OpenCode messages-route cases and the five direct sites; any other red is a stop.
+  * P7: one plant per case: `turn`, `acpserver`'s `agent.Config.OutputLimit` left nil; `summary`, the ladder's `FitOutput`
+    result replaced by 0; `title`, as written.
+  * P9: an agent-side plant beside the adapter's: the turn treats a `tool_call_cut` warning as its end, so the whole call does
+    not run.
+* **Re-pointed in Phase 2c:** P19's saved caps reach later runs by P24's layer, not `WithLimitObservations`. V8's fixture is a
+  title model whose `StreamedOutput` (100, from a kept stream cap) is below 128 and differs from its `Output` (8,192), so the
+  plant "the title reads `Output`" (128 sent) is caught.
+
+| Part | Rows | Test | File | Red at the part's base because | Plant |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| 2a | P29 | `TestCutCallAfterText_0071` (`chat`, `messages`: text, then a cut call, `length`: the text, a `tool_call_cut` warning, `Done{StopMaxTokens}`; the turn ends with `turn.stop.max_tokens_tool`'s line over ACP, in the CLI and in headless JSON); `TestOnlyCutCall_0071` (only a cut call: `llm.ErrIncomplete`) | `llm/provider/cut_test.go`, `agent`, `acpserver`, `internal/cli` | at `v1.32.0` the SDK returns `ErrIncomplete`; the key is new | the notice omitted; then `turn.stop.max_tokens`'s line shown; then the text dropped |
+| 2a | P30 | `TestTitleCutDiscarded_0071` (a title reply ending `max_tokens`: usage written, no name set) | `acpserver/title_test.go` | the cut title is used today | the stop reason ignored |
+| 2a | P35 | `TestPromptResponseOutputLimit_0071/none` (`_meta.gobble.outputLimit` `{0, "none"}`; `acpclient.Result.OutputLimit` holds it) | `acpserver`, `acpclient` | `Tokens > 0` drops it at `acpserver/agent.go:914` and `acpclient/conn.go:353` | each check kept, apart |
+| 2b | P33 | `TestTurnCapFromLimits_0071/listing_only` (a model only the cached listing states, behind a key: its cap is read) | `acpserver`, `llm/provider` | new case | `CachedLimits` without `WithTokenSource` |
+| 2b | P28 | `TestTurnCapFromLimits_0071/user_over_observed`, `/user_over_saved` (models.json 100,000; the service stated 16,000 in this process, or in a saved entry: 16,000 sent, basis `service`, the note once) | `acpserver` | new cases | the models.json value sent; then the note on every call |
+| 2c | P21, P24 | `TestSavedCapLayer_0071` (`lookup`, `limits`, `discover`, `new`: each receives the "service-stated" layer below models.json; an entry 25 hours old, of another base URL or of another scope is not stated) | `llm/provider`, `internal/cli` | new | the layer left off `New`; then off `CachedLimits`; then added after models.json |
+| 2c | P25 | `TestSavedCapDroppedWhenExceeded_0071` (a completed call reporting 20,000 output tokens over a saved 16,000: the entry gone; at 15,000: kept) | `internal/cli` | new | no drop |
+| 2c | P26 | `TestSavedCapPerProvider_0071` (an opencode-zen cap is not handed to claude) | `internal/cli` | new | the provider id not compared |
+| 2c | P27 | `TestAgent_UnreadableObservations_0066/bad_entry` (entries with no provider, no model, 0 tokens or a zero `Seen`: dropped, one warning; the good ones handed) | `internal/cli` | new case | entries not checked: the zero-`Seen` entry handed |
+| 2c | P31 | `TestContextShowsSentLimit_0071/sdk_basis_raw` (an SDK basis `fact`: shown `sdk:fact`, logged once at warn) | `acpserver` | new case | shown in gobble's words |
+| 2c | P32 | `TestContextShowsSentLimit_0071/failed_asked`, `/loaded_session`, `/forked_session` | `acpserver` | new cases | a failed call shows no line; then a loaded session shows the stored call's |
+| 2c | P34 | `TestSummaryCapRefusalResent_0071/observed`; `TestTitleObservedResent_0071`; `TestAPIErrorCarriesObserved_0071/kilo_range` (Kilo's range form through the adapter: `Observed` M); `TestLimitRefusalLine_0071/refused_again_observed` | `compaction`, `acpserver`, `llm/provider` | new cases | the ladder ignores `Observed`; then the title does not resend; then D8 (c)'s check ignores `Observed` |
 
 ## Verification
 

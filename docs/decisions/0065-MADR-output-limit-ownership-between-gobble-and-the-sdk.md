@@ -21,6 +21,10 @@ Associated PLAN: [0065-PLAN-output-limit-ownership-between-gobble-and-the-sdk.md
 
 *(2026-11-24, note from [0071-MADR-send-each-turn-the-models-output-cap-and-own-the-limit-policy.md](0071-MADR-send-each-turn-the-models-output-cap-and-own-the-limit-policy.md) D12: on go-llmprovider-sdk `v1.32.0`, gobble's turns and compaction summaries now name an output limit, the catalog's cap under a 64,000 ceiling and fitted to the window (0071 D1, D2, D6). So this record's D1 "Agent turns keep `MaxTokens: 0`", R1, R2, R3, R14 and R17 are superseded for turns by 0071 D1 and D2; D4 and R7 by 0071 D6; R34 by 0071 D8 (d), whose line rides `acpext.ErrorData.outputLimitNote` (0071's amendment of 2026-11-24, the owner's "Move the line into a new field"); D3, R9 and R10 are unchanged until 0071 V8. This record's adoption amendment after `v1.33.0` decides 0071 V8 and V9.)*
 
+*(2026-11-25, amendment: the owner's "gobble: v1.33.0 pin first, then 0072 (Recommended)". The adoption amendment is written:
+V8 and V9 decided, this record's Phase 2 bump moved into 0071-PLAN's Phase 2a, and what `v1.33.0` does to R20 to R26 and R43.
+See "Amendment (2026-11-25)" at the end.)*
+
 ## Context and Problem Statement
 
 A large multi-file turn on Kilo's `kilo-auto/balanced` with thinking `high`
@@ -551,3 +555,60 @@ rule it is `accepted`. Its PLAN stays `proposed` until the owner approves it.
 
 Counts after this note: 35 decided, 6 out of scope, 0 open, 3 moved to
 0066-MADR (R15, R16, R27, now decided there), 1 lapsed (R45); 45 rows.
+
+## Amendment (2026-11-25): adoption of go-llmprovider-sdk v1.33.0, pinned first
+
+Additions only. The owner's ruling of 2026-11-25, relayed by the coordinator, quoted exactly: **"gobble: v1.33.0 pin first,
+then 0072 (Recommended)"**. gobble pins `v1.33.0` (tagged at `138d52f`) in
+[0071-PLAN-send-each-turn-the-models-output-cap-and-own-the-limit-policy.md](0071-PLAN-send-each-turn-the-models-output-cap-and-own-the-limit-policy.md)'s
+Phase 2a, before any of 0072, so this record's Phase 2 bump is built there and not as this PLAN wrote it. This is the adoption
+amendment that [0071-MADR-send-each-turn-the-models-output-cap-and-own-the-limit-policy.md](0071-MADR-send-each-turn-the-models-output-cap-and-own-the-limit-policy.md)
+names for its V8 and V9. Read at 073fd1f and at the SDK's tag; 0071's amendment of this date holds the measured facts (its F19
+to F25) and the pin's rows (P1 to P23).
+
+### Decided
+
+* **V8, the title.** The title names a limit: `min(128, C)`, `C` 0071's `StreamedOutput` (its P17), 128 when unknown, never 0
+  (`acpserver/title.go:187-191` sends 128 when the cap is unknown today). This record's D3, "no limit (0)", is superseded by
+  0071's Q4, "Always, gobble's policy (Recommended)": at `v1.33.0` a Claude or OpenCode messages-route request that names no
+  limit, with no listing and no document, is refused before sending (the SDK's 0093 D8, MH18). D3's cancel once the title's line
+  is read is unchanged and stays this record's Phase 1. R9 and R10: the outcome is `min(128, C)`, not 0. Test:
+  `TestTitleCapFromLimits_0071`, with 0071's `TestEveryCallNamesLimit_0071/title`.
+* **V9, D1 and D2's layers to the provider.** Not built. Every call gobble makes names its limit (0071 V2, its F21), so the
+  SDK's choice from a provider's layers never applies to one, and `provider.New` takes no layers. D1, D2, R1, R3, R4, R5, R17,
+  R18, R39 and R41 lapse; R6's shared listing key is 0066 S23.
+* **D12 and R37, the order.** Superseded: the bump is 0071-PLAN's Phase 2a, on `v1.33.0`; 0066's phases are its 2b and 2c.
+  This record's Phase 1 (D3's cancel, D5 to D8's causes and notices) is built when the owner schedules it, on `v1.33.0`; its
+  tests' "at the base" column is then taken at the tag, where R22's and R24's reds no longer hold (below).
+* **What the tag does to this record's rows with no code of gobble's** (0071 F22):
+  * R20: Kilo's window form is `ErrContextOverflow` at the tag; gobble resends once at a stated room of at least 1 (0071
+    L39), else compacts and resends (0071 L11). 0071 P12; test `TestAgentTurn_KiloWindowFormCompacts_0065`, reworded there.
+  * R22: a Responses or Interactions text cut is a response finishing `length`; the turn ends `max_tokens` with its text, as
+    R22 decides, before D5's cause line exists. 0071 P10.
+  * R23, R25: unchanged at the tag (the raw `llm.ErrIncomplete`) until this record's Phase 1. 0071 P11.
+  * R24: complete calls of a cut answer run and the turn goes on; the cut call is dropped, no result written, and
+    `tool_call_cut` logged once at warn by `agent.note` (`agent/warning.go:40-56`). 0071 P9; test
+    `TestAgentTurn_SalvageCompleteCalls_0065`, moved there.
+  * R26: superseded. gobble's limit is the caller's, which the SDK never resends (its `limit_rule.go:226-227`); 0071 P19 and
+    P20 resend once at the stated cap or room.
+  * R43: no limit sent on the ChatGPT routes, as before; 0071 P22 shows "none sent".
+* **R31's reported value and D11's.** 0070's record gains the `out_limit*` fields at the pin (0071 P16).
+
+Counts after this amendment: 27 decided (V8 and V9 added), 6 out of scope, 0 open, 4 moved (R15, R16 and R27 to 0066-MADR;
+R6 to its S23), 9 lapsed (R45; R1, R3, R4, R5, R17, R18, R39 and R41), 1 superseded (R26, by 0071 P19 and P20); 47 rows.
+
+### Second addition (2026-11-25): the owner's answers on cut answers and the title
+
+Relayed by the coordinator, quoted exactly; each is a row of 0071's second amendment of this date.
+
+* **Case 4, "End the turn, keep the text, notify (Recommended)"** (0071 P29). Text, then a cut tool call, on Chat Completions or
+  Messages: at the tag the turn ends `max_tokens` with the text kept and `tool_call_cut` logged, and the user is told with
+  D7's key `turn.stop.max_tokens_tool`, whose line R21 and R25 had not written and which is now: "The reply hit the output
+  limit while writing a tool call, so the call was dropped. Ask again, or set maxTokens for MODEL in models.json." The channel is
+  D8's. This key and its four personality lines are built at the pin (0071-PLAN's Phase 2a), ahead of this record's Phase 1. A
+  reply that is only a cut call stays the raw `llm.ErrIncomplete` at the pin; R25's cause for it is still this record's
+  Phase 1.
+* **Case 5, "Discard a cut title (Recommended)"** (0071 P30). A title whose call ends `max_tokens` is not used, as a summary's
+  is not; R9 and R10 gain that outcome. D3's cancel once the line is read stays this record's Phase 1.
+
+Counts after this addition: unchanged; 47 rows.

@@ -32,6 +32,14 @@ open; by the records rule this record is `accepted`. Its PLAN stays `proposed` u
 coordinator. D8 (d)'s line rides a new `acpext.ErrorData` member and not the error text; D13 gains it; L15 is amended and
 L42 and L43 added. See "Amendment of 2026-11-24: D8 (d)'s line in an acpext member" under More Information.)*
 
+*(2026-11-25, amendment: the owner's "gobble: v1.33.0 pin first, then 0072 (Recommended)". gobble pins go-llmprovider-sdk
+`v1.33.0` first, with this record's Phase 2 and the adoption amendments of 0065 and 0066, then builds 0072 on it. Re-grounded
+at 073fd1f and at the SDK's tag; rows P1 to P23 added; Q5 and Q6 asked. See "Amendment of 2026-11-25: pin v1.33.0 first, and
+adopt it" at the end. Rows P6 and P21 are open, so that amendment is `proposed`; every row above it stands `accepted`.)*
+
+*(2026-11-25, second amendment: the owner answered Q5, Q6 and cases 4, 5, 7, 9 and 10; P6 and P21 decided, P24 to P35 added,
+stale claims corrected. No row is open. See "Amendment of 2026-11-25, second" at the end.)*
+
 ## Context and Problem Statement
 
 The owner drives GLM-5.3 and GLM-5.3-flash at thinking `high` through gobble, mainly on Kilo and OpenCode Go, and on every
@@ -64,6 +72,7 @@ This record decides every case of the interim on `v1.32.0` (the L rows) and what
 | *(2026-11-24)* Phase 1's review: after an L39 resend at a stated value M, a later call of the same turn asked the full cap again, and a second refusal ended a turn that would have succeeded; every later call of the turn keeps the stated value | "Keep the stated value (Recommended)" | L44 |
 | *(2026-11-24)* Phase 1b's stop: `TestPromptQuotaData` runs capped calls, so its data carries the note and cannot equal the acpext frames, which have none; its expected data is each frame with the expected note set | "Expect frame plus note (Recommended)" | L15 |
 | *(2026-11-24)* Phase 1b: print mode's JSON `errorData` carries the note on a capped call's credit or rate refusal; print mode's text output is unchanged | "Test the JSON note, text as is (Recommended)" | L45 |
+| *(2026-11-25)* Pin go-llmprovider-sdk `v1.33.0` first, with this record's Phase 2 and the 0065 and 0066 adoption amendments; then build 0072 on `v1.33.0`, dropping its `v1.32.0`-only steps | "gobble: v1.33.0 pin first, then 0072 (Recommended)" | P1 to P23 |
 
 ### Facts read at 97fa1f6
 
@@ -395,7 +404,9 @@ Counts: 44 decided, 6 out of scope (three left by name to the adoption amendment
 after Q4's answer: 45 decided, 6 out of scope, 0 open; 51 rows.)* *(2026-11-24, after "Move the line into a new field":
 47 decided, 6 out of scope, 0 open; 53 rows.)* *(2026-11-24, after "Keep the stated value (Recommended)": 48 decided,
 6 out of scope, 0 open; 54 rows.)* *(2026-11-24, after "Test the JSON note, text as is (Recommended)": 49 decided, 6 out of
-scope, 0 open; 55 rows.)*
+scope, 0 open; 55 rows.)* *(2026-11-25, after "gobble: v1.33.0 pin first, then 0072 (Recommended)": rows P1 to P23 in the
+amendment of that date; 69 decided, 7 out of scope, 2 open (P6 under Q5, P21 under Q6); 78 rows.)* *(2026-11-25, second:
+the owner's answers and the review; 83 decided, 7 out of scope, 0 open; 90 rows.)*
 
 ## Every number this record uses
 
@@ -498,3 +509,323 @@ contract's example frames. The owner's ruling, relayed by the coordinator: **"Mo
 
 * Whether each service accepts 64,000 for GLM-5.3, and whether a gateway holds credit or rate against it: Q1's live calls.
 * How far chars/4 runs from GLM's tokenizer on code; the 4,096 margin is pi's, not a measurement.
+
+## Amendment of 2026-11-25: pin v1.33.0 first, and adopt it
+
+*(2026-11-25. Additions only; nothing above is rewritten. Rows P6 and P21 wait on Q5 and Q6 below, so this amendment is
+`proposed` until the owner answers them; every row above it stands `accepted`.)*
+
+### The ruling
+
+The owner's ruling of 2026-11-25, relayed by the coordinator, quoted exactly: **"gobble: v1.33.0 pin first, then 0072
+(Recommended)"**. gobble pins go-llmprovider-sdk `v1.33.0` (tagged at `138d52f`) first, together with this record's Phase 2
+and the adoption amendments of `0065-MADR-output-limit-ownership-between-gobble-and-the-sdk.md` and
+`0066-MADR-set-each-session-model-up-from-discovered-limits.md`, and then builds all of
+`0072-MADR-keep-a-refreshed-models-dev-copy-on-disk.md` on `v1.33.0`. 0072's steps that exist only for `v1.32.0` are dropped,
+and its Phase 4 hand-in becomes one of its main phases (0072's amendment of this date).
+
+### Why an amendment and not a new record
+
+The pin takes no new architectural choice. Who owns the limit is V1 to V9; discovery, the kept caps and the notices are 0066's;
+the hand-in is 0072 D17's. The ruling changes the order, and with it what gobble hands the SDK before 0072's copy exists; and
+`v1.33.0`'s API is now measured where V4 and V5 could only name it. Each of those is a case of a decision already taken, so each
+is a state row here, and this PLAN's Phase 2 maps them one to one. A new record would split one convergence across five numbers.
+
+### Re-grounded at 073fd1f and at go-llmprovider-sdk v1.33.0
+
+gobble at `073fd1f` (tag `v0.9.0`), tree clean; the SDK at `v1.33.0`, `138d52f`, its checkout's HEAD, tree clean; both read
+only. The SDK's paths below are under its `llmprovider/` directory.
+
+* **F13, moved to the tag.** A caller's `Request.MaxOutputTokens` is sent as given, basis `request`, never held
+  (`internal/wire/limit_rule.go:54-61`); refused, it is not resent (`:226-227`); a validated cap form is kept in the process
+  memo (`:215-225`) and set on the error that ends the call as `APIError.Observed` (`:251-265`, `:281-290`;
+  `api_error.go:189-199`). That field is the caller's path of the SDK's 0089 amendment that V4 waited for. `catalog.CachedLimits`
+  is `catalog/limits.go:202-216`; `Limits.StreamedOutput` `:37-44`; an "observed" cap of this process bounds whatever is
+  chosen (`:450-475`); `Response.OutputLimit` is `item.go:147`, a `SentLimit` (`sent_limit.go:9-22`); `WithLimitObservations`
+  is `limit_observation.go:30-50`.
+* **F19. The eight removed names** (the SDK's CHANGELOG `[v1.33.0]`, "Removed"; its 0093-MADR D10) and gobble's uses, by
+  `git grep` over `*.go`: `llmprovider.WithoutModelMetadata` at `llm/provider/provider.go:215` (`New`), `llm/provider/model.go:176`
+  (the lookups), `llm/provider/signin.go:344` (the sign-in wizard's listings) and `llm/provider/image_test.go:209` (a test);
+  `llmprovider.WithModelMetadataURL` at `llm/provider/list.go:130` and `:160`, behind gobble's own `Options.ModelMetadataURL`
+  (`provider.go:53-55`), which eight test sites set to serve a document by URL: `llm/provider/list_test.go:103`, `:155`,
+  `:204`, `:227`, `:277`, `sdkcache_test.go:45`, `chatserver_test.go:122`, `internal/cli/modelscmd_test.go:193`. gobble calls
+  none of the other six.
+* **F20. What `v1.32.0`'s production listing read.** No production `Options` sets `ModelMetadataURL`, so every listing but
+  Kilo's and Ollama's fetched `https://models.opencode.ai/api.json` (0072 F3). At `v1.33.0` nothing is fetched: a listing ranks
+  by the document its options hand in (`catalog.WithMetadata`, `catalog/model_metadata.go:242-260`), else by the curated order
+  and the name rules (0093-MADR D3, MH11). The pin changes production's ranking unless gobble hands a document (Q5).
+* **F21. Every model call gobble makes names a limit.** One stream call site (`llm/provider/provider.go:411`) and three
+  `llm.Request`s: the turn, whose `MaxTokens` is `agent.Config.OutputLimit`'s (`agent/agent.go:917-933`), set on gobble's one
+  `agent.Config` (`acpserver/agent.go:792-811`, `:810`); the summary, `llm.FitOutput`'s, at least 1
+  (`compaction/compaction.go:412`, `:531`); the title, `min(128, C)` or 128 (`acpserver/title.go:187-191`). So `v1.33.0`'s
+  refusal of a cold Messages-route request that names no limit (`internal/wire/limit_rule.go:78-81`; 0093 D8, MH18) and Kilo's
+  cold "none" (MH51) never meet a production call. Tests do: `llm/provider/record_test.go:381`, `:484`, `replay_test.go:184`,
+  `:206` and `workspace_test.go:18` build a Claude provider and send no `MaxTokens` (by `git grep`; Phase 2.0's red run lists
+  every one).
+* **F22. Cut answers at `v1.33.0`** (CHANGELOG, "Changed"): a cut with whole tool calls is a response finishing `length` with
+  them, the cut call dropped and named in a `WarningToolCallCut`; a Responses or Interactions text cut is a `length` response; a
+  cut with nothing usable is `ErrEmptyAnswer`, which matches `ErrIncomplete`, as at `v1.32.0`. Kilo's window form is
+  `ErrContextOverflow` where it was `ErrInvalidRequest`. gobble's stream loop yields each whole call as `llm.ToolCallDone`
+  (`llm/provider/provider.go:434-438`); `stopOf` returns `StopToolUse` when a call was yielded, else `StopMaxTokens` on
+  `FinishLength` (`:549-559`); `agent.note` logs any warning kind at warn, once per kind and model (`agent/warning.go:40-56`).
+* **F23. gobble's types carry none of `v1.33.0`'s reports.** `llm.Done` holds a stop reason only (`llm/event.go:137-140`);
+  `llm.APIError` has no observed cap (`llm/errors.go:53-66`); `llm` imports no SDK (0072 F7). 0070's `model call` record writes
+  `limit` (`llm/provider/record.go:128`) and no `out_limit*` field, which `TestModelCallRecordHoldsNoContent/no_out_limit`
+  pins (`llm/provider/record_test.go:526`; 0070 T14).
+* **F24. A remembered cap fills a gap; an observed one bounds.** `CachedLimits` reads a cap passed back with
+  `WithLimitObservations` as the evidence "remembered", rank 1000, below every caller (10,000), service (5,000) and registry
+  source (a "models.dev" layer 4,000, the document 3,000), so it is chosen only where nothing else states the output
+  (`catalog/limits.go:105-117`, `:497-510`); a provider uses one only to cut a `WithMaxTokens` value
+  (`limit_observation.go:30-47`), which gobble never passes. A cap the service stated in this process is "observed" and bounds
+  whatever is chosen (`:450-475`). So a cap saved by one run does not lower the next run's first call wherever a listing, the
+  document or models.json states the model's output (Q6).
+* **F25. Scope.** gobble passes no Kilo organization (`git grep`: only a comment, `llm/provider/signinrun.go:233`), so a Kilo
+  observation's scope is empty; a Claude key's workspace reaches lookups as `catalog.WithClaudeWorkspace`
+  (`llm/provider/model.go:180-182`) and `New` as `claude.WithWorkspace` (`provider.go:241-243`).
+* **F26. gobble lines moved since this record's base** that Phase 2 cites: F12's `acpserver/agent.go:783-803` is `:786-811`;
+  D4's `agent/agent.go:685-689` is `:906-933`. Phase 2.0 re-reads every other citation and records each move.
+
+### The decisions of the pin
+
+* **P1. The pin.** `go.mod:16` names `v1.33.0`; `go.sum` follows; no `replace`; acpext's pin is unchanged.
+* **P2. Each removed name's site, and what takes its place.**
+
+  | Site at 073fd1f | At `v1.33.0` |
+  | :--- | :--- |
+  | `llm/provider/provider.go:215`, `New` | deleted. `New` hands no document under Q5 (1) and (2), as at `v1.32.0`, whose requests read none with the fetch off (0093 D3, MH4); under Q5 (3), `catalog.WithMetadata` with the embedded copy |
+  | `llm/provider/model.go:176`, the lookups | deleted. The embedded copy stays a layer (`model.go:108-111`), which `CachedLimits` reads as registry evidence below the listing (`catalog/limits.go:340`), under Q5 (1) and (2); `catalog.WithMetadata` in its place under (3) |
+  | `llm/provider/signin.go:344`, the wizard's listings | deleted; the wizard hands none, as with the fetch off (0093 MH22) |
+  | `llm/provider/list.go:129-130`, `:159-160` | `catalog.WithMetadata` with `o.ModelData`'s document when it is set (P3), nothing otherwise |
+  | `llm/provider/provider.go:53-55`, `Options.ModelMetadataURL` | removed: gobble's own field, for tests; P3 takes its place |
+  | `llm/provider/image_test.go:209` | the option deleted, nothing else changed |
+
+* **P3. A document seam, before 0072.** `provider.ModelData` (an immutable parsed document), `provider.ParseModelData(r
+  io.Reader) (*ModelData, error)` (over `catalog.ParseMetadata`, so its 32 MiB bound and section checks hold) and
+  `provider.Options.ModelData *ModelData`, nil handing none. They are three of 0072 D21's names, built here with this meaning;
+  0072 adds its others. Before 0072 only `List` and its Chat Completions path read `Options.ModelData`.
+* **P4. Tests that served a document by URL** (F19's sites but `list_test.go:155`, which P5 deletes) parse the same bytes with
+  `ParseModelData` and set `Options.ModelData`; their expectations are unchanged.
+* **P5. Tests of the fetch** go with it: `TestListFetchesMetadata` (`llm/provider/list_test.go:143-164`, which pinned
+  0020-MADR D2's F6), and in `TestListFullCatalog` the two assertions that counted the document's request (`:117-122`: two
+  requests, the document's with no credential), which become one request, the listing's, with the key; its model order is
+  unchanged.
+* **P6. Which document gobble hands where before 0072.** Open: Q5. Under its recommended option (1), production's listings
+  (the `Options` of `internal/cli/models.go:323`) get the embedded 2026-10-14 copy, which `internal/cli` parses once with
+  `ParseModelData` from `gcatalog.Snapshot()`; the lookups and the limits calls keep it as a layer; `New` and the wizard hand
+  none. 0072's Phase 1 swaps the copy for its current document.
+* **P7. Production never sends an unnamed limit** (F21): a guard that the turn, the summary and the title each carry a limit on a
+  cold Claude wire, so none is refused before sending.
+* **P8. Tests refused before sending.** A test F21 names, or that Phase 2.0's red run finds refused by `limit_rule.go:78-81`,
+  gives its request `MaxTokens: llm.AssumedMaxTokens` (16,384), what production asks of a model no source states (L5), every
+  assertion unchanged but one that names the limit sent, which then expects 16,384. Any other red is a stop.
+* **P9. A cut answer with whole tool calls** (F22; 0065 R24 after the tag): the calls run, the turn goes on, the cut call is
+  dropped with no result written, and `tool_call_cut` is logged at warn once per kind and model.
+* **P10. A Responses or Interactions text cut** ends the turn `max_tokens` with its text kept (0065 R22); its cause line stays
+  0065's Phase 1.
+* **P11. A cut with only reasoning** is the raw `llm.ErrIncomplete`, as at `v1.32.0` (0065 R23, still 0065's Phase 1).
+* **P12. Kilo's window form, now an overflow**: L39 resends once at a stated room of at least 1; a room at or below 0 compacts
+  (L11); 0065 R20's outcome.
+* **P13. The SDK's paths for a limit it chose** (its resend at a stated cap, its first-payload refusal resend, `Generate` over a
+  stream, the route fallback): out of scope; gobble names every limit and streams.
+* **P14. `Response.OutputLimit` reaches `llm`**: `llm.SentLimit {Tokens int; Sent bool; Basis, Source string}` and
+  `llm.Done.OutputLimit` (`json:"outputLimit,omitzero"`), set from the done event's response.
+* **P15. `APIError.Observed` reaches `llm`**: `llm.LimitObservation {Model, BaseURL, Scope string; Tokens int; Seen
+  time.Time}` and `llm.APIError.Observed`, set in `mapErrorAt` (`provider.go:873`), through `WithStreamRetry`.
+  `llm.WarningToolCallCut` and `llm.WarningLimitLearned` are the SDK's strings. A warning's `Observed` is not carried: the
+  SDK delivers it only on a response after it resent a limit it chose (`limit_rule.go:215-227`, `:267-279`), which no gobble
+  call gets.
+* **P16. 0070's record** gains `out_limit`, `out_limit_sent`, `out_limit_basis` and `out_limit_source` from
+  `Done.OutputLimit` on a call that completes, and none on one that fails before its done event (0066 D8 as 0070 D19 places
+  them; 0070 T14 amended: its `no_out_limit` case becomes these).
+* **P17. V1, measured.** Each call reads `catalog.CachedLimits` with the options the lookup uses (`llm/provider/model.go:175-186`:
+  the transport and the run's cache, the workspace, the layers) and `WithLimitObservations` of the saved caps. `C` is
+  `StreamedOutput.Tokens` when known (gobble streams). Its source is `user` when the chosen evidence is the "models.json" layer
+  and models.json states `maxTokens` (`Facts.MaxTokensStated`); `assumed` when the "models.json" layer gives only Pi's default
+  or nothing is known (16,384, L5, L6); else `catalog` (a listing, the copy, an observed or remembered cap). `W` is `Window`,
+  else `Input`, else unknown. The facts ride 0066 D4's `llm.Model.Limits`, which gains `StreamedOutput`, filled by
+  `modelInfoFrom`; `turnLimits.limit` and `compactionModel` (`acpserver/outputlimit.go:50-61`, `:29-33`) read it. D2 and D3
+  are unchanged.
+* **P18. V2, measured.** Already true at the tag: `toRequest` sets `MaxOutputTokens` (`llm/provider/provider.go:647-648`),
+  which the SDK sends as given, basis `request` (`limit_rule.go:54-61`), on every wire but the ChatGPT routes (L24).
+* **P19. V4, measured.** An error whose `llm.APIError.Observed.Tokens` is at least 1 and below the limit sent: the call is sent
+  again once at it, basis `refusal`, before any compaction (D8 (a), L44's hold); the observation is saved through a new
+  `agent.Config.SaveObservation` to 0066 D7's `limit-observations.json`; `model.limit.learned` is said once (0066 D10). The
+  SDK's observed cap then bounds the process's later calls to that model (F24). The saved caps are passed to `New`, to
+  discovery and to every `CachedLimits` with `WithLimitObservations`.
+* **P20. A refusal with no `Observed`** (a window form, or a cap form the SDK did not validate): L39's reading of the text as
+  built (`agent/agent.go:778-791`); resent once; nothing saved. Refused again: L12.
+* **P21. What a saved cap does on the next run.** Open: Q6 (F24).
+* **P22. V5 and V6, measured.** `/context` and `/session` show the last call's `Done.OutputLimit`: sent, "Output limit: N
+  tokens on the last call (D10's basis words)", N the wire's value, with "; raised from M for the thinking budget" when the
+  SDK raised gobble's M (F9); not sent (a ChatGPT route), "Output limit: none sent on the last call; the service's default
+  applies". `_meta.gobble.outputLimit` and `--stats` carry the same N; not sent, tokens 0 and a new basis `none`
+  (`llm.BasisNone`). Before the session's first call, D10's line as built.
+* **P23. Exported names the pin and Phase 2 add** (gobble is below `v1.0.0`): P3's three; P14's and P15's; `llm.BasisNone`;
+  0066 D4's `llm.Model.Limits` (as `llm.Limits`, with `StreamedOutput`, and `llm.LimitFact`); `agent.Config.SaveObservation`;
+  `provider.Options.Observations`; `provider.Discover` (0066 D1); under Q6 (1), `llm.BasisRemembered`. Any other is a stop.
+
+### State table: the pin
+
+"The tag" is `v1.33.0`; "today" is 073fd1f. Each decided row's plant is in the PLAN, one to one.
+
+| Row | Input or state | Status | Outcome | Test | Decided by |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| P1 | gobble's SDK requirement | decided | `v1.33.0`, no `replace` | the module builds at the tag with P3's and P14's names | the ruling; P1 |
+| P2 | The six production and test sites of the removed names | decided | P2's table | `go vet ./...` on every module at the tag | P2; 0093 D10 |
+| P3 | A document for a listing, before 0072 | decided | `Options.ModelData`, nil none; `ParseModelData` | `TestListHandsModelData_0071` | P3; 0072 D21 |
+| P4 | The tests that served a document by URL | decided | the same bytes handed in; expectations unchanged | their own names | P4; 0093 D12 |
+| P5 | The tests of the fetch | decided | `TestListFetchesMetadata` deleted; `TestListFullCatalog` counts one request | `TestListFullCatalog` | P5; 0093 MH30 |
+| P6 | The document production hands each listing, lookup, limits call and `New` before 0072 | open | Q5 | Q5's option's test | Q5 |
+| P7 | A turn, a summary or a title on a cold Claude wire | decided | each names a limit; none refused before sending | `TestEveryCallNamesLimit_0071` | P7; F21 |
+| P8 | A test refused before sending at the tag | decided | `MaxTokens` 16,384; other assertions unchanged | each listed test, green | P8 |
+| P9 | A cut answer with whole tool calls | decided | the calls run; the turn goes on; `tool_call_cut` logged once | `TestAgentTurn_SalvageCompleteCalls_0065` | P9; 0065 R24 |
+| P10 | A Responses text cut | decided | `max_tokens`, its text kept | `TestResponsesCutTextStops_0071` | P10; 0065 R22 |
+| P11 | A reasoning-only cut | decided | the raw `llm.ErrIncomplete`, as today | `TestReasoningOnlyCutUnchanged_0071` | P11 |
+| P12 | Kilo's window form | decided | room at least 1: resent at it; else compacted and resent | `TestAgentTurn_KiloWindowFormCompacts_0065` | P12; L11, L39 |
+| P13 | The SDK's paths for a limit it chose | out of scope | gobble names every limit and streams | | P13 |
+| P14 | The limit a call carried | decided | `llm.Done.OutputLimit` from `Response.OutputLimit` | `TestDoneCarriesOutputLimit_0071` | P14 |
+| P15 | A refused limit's stated cap | decided | `llm.APIError.Observed`; a window form none | `TestAPIErrorCarriesObserved_0071` | P15 |
+| P16 | 0070's record | decided | the four `out_limit*` fields on a completed call; none on a failed one | `TestModelCallRecordOutLimit_0071` (T14's case replaced) | P16; 0066 D8 |
+| P17 | `v1.33.0`: a call's `C`, its source, and `W` | decided | `StreamedOutput`; `user`, `assumed` or `catalog`; `Window`, else `Input` | `TestTurnCapFromLimits_0071` | P17; V1 |
+| P18 | `v1.33.0`: the turn's and summary's limit on every wire | decided | basis `request`, D2's value | `TestExplicitLimit_0071` | P18; V2 |
+| P19 | `v1.33.0`: a refusal with `Observed` below the limit sent | decided | one resend at it; saved; learned said once | `TestRefusedCapLearned_0071` | P19; V4 |
+| P20 | `v1.33.0`: a refusal with no `Observed` | decided | L39 as built; nothing saved | `TestRefusalNoStatedCap_0071` | P20; V4 |
+| P21 | A saved cap on the next run | open | Q6 | Q6's option's test | Q6 |
+| P22 | `v1.33.0`: the line, `_meta` and `--stats` | decided | the wire's value; the raise named; ChatGPT "none sent" | `TestContextShowsSentLimit_0071` | P22; V5, V6 |
+| P23 | Exported names | decided | P23's list; any other a stop | the PLAN's stop rule; `make apidiff`'s no-op | P23 |
+
+Counts: 20 decided, 1 out of scope, 2 open; 23 rows.
+
+### Owner questions (2026-11-25)
+
+| Question | Options (recommended first) | Cost of each | Rows |
+| :--- | :--- | :--- | :--- |
+| Q5. Until 0072 keeps its own copy, which model document should gobble hand the SDK? Today the model list is ranked by a live copy the SDK downloads from opencode.ai; from `v1.33.0` the SDK downloads nothing. | (1) **Hand the built-in copy to the model lists (Recommended)**: gobble's built-in 2026-10-14 models.dev copy ranks every model list; lookups and limits read it as they do today; a provider's requests read none, as today. (2) **Hand none**: the model lists rank by the SDK's curated order and name rules until 0072; lookups as today. (3) **Hand the built-in copy everywhere**, providers included, which 0072's end state does with its own copy. | (1) the lists rank by models.dev data six weeks old instead of a live copy, so a model released since 2026-10-14 ranks by name; 0072's Phase 1 swaps in its own copy, a few lines. (2) every list but Kilo's and Ollama's changes order now, and again when 0072 lands. (3) requests change now (OpenCode routes and the effort a model is offered come from the copy), and again when 0072 hands each session its own document; more tests to change in the pin. | P6 |
+| Q6. When a service refuses gobble's output limit and states its cap, gobble saves the cap for a day. The SDK uses a saved cap only for a model nothing else describes, so gobble's next run asks the old, larger limit once, is refused once, and learns the cap again. Should gobble apply its saved caps itself? | (1) **Yes, gobble holds its limit to a saved cap (Recommended)**: a cap saved within the last 24 hours for that model, address and workspace bounds the limit gobble asks, shown as "a cap a service stated on an earlier run". (2) **No, as the SDK ranks it**: the saved file only fills in a model no source describes. (3) **Keep no file**: drop the day-long store; each run learns from its first refusal. | (1) one rule and one shown reason more; if the service raises its cap within the day, answers stay cut at the old cap until the entry expires. (2) one refused request per model per run where the stated cap is below what gobble asks; whether a refused request is billed is not known. (3) as (2), and no state file, no `model.limit.learned` on a later run; 0066 D7's store and V4's "saved" are struck. | P21; 0066 D7, S14 |
+
+### Relation to the other records' amendments of 2026-11-25
+
+* `0065-MADR-output-limit-ownership-between-gobble-and-the-sdk.md`: V8 and V9 decided; its Phase 2 bump is this record's Phase 2a.
+* `0066-MADR-set-each-session-model-up-from-discovered-limits.md`: V7 decided; D3 re-pointed to `catalog.WithMetadata`; its
+  Phases 1 and 2 are built as this record's Phases 2b and 2c.
+* `0072-MADR-keep-a-refreshed-models-dev-copy-on-disk.md`: M22 struck; M54, M55, M62 and its Phase 4 re-pointed; P3's names
+  taken from its D21.
+
+### What could not be verified here
+
+* That `v1.33.0` is in the Go module proxy: not fetched, since this records-only step made no network request; Phase 2a's
+  `go get` is the check.
+* The full list of tests the tag turns red: no build was run (a build at the tag writes the module cache); Phase 2.0's red run
+  on a scratch clone lists them, and P8 and the stop rule govern each.
+
+## Amendment of 2026-11-25, second: the owner's answers and the review
+
+*(2026-11-25. Additions only. The owner answered Q5, Q6 and the review's cases 4, 5, 7, 9 and 10, relayed by the
+coordinator; the review's correctness gaps and stale claims are decided or corrected below. No row is open, so both of this
+date's amendments are `accepted` with the rest of the record.)*
+
+### Owner answers, quoted exactly
+
+| Question or case | The owner's answer | Rows |
+| :--- | :--- | :--- |
+| Q5. The document before 0072 | "Built-in copy to listings only (Recommended)" | P6 |
+| Q6. Saved caps on the next run | "Hand them in as a caller layer (Recommended)" | P21, P24 to P27 |
+| Case 10. models.json `maxTokens` above a cap the service stated | "The service's cap wins, shown as such (Recommended)" | P28 |
+| Case 4. Text, then a cut tool call, on Chat Completions or Messages | "End the turn, keep the text, notify (Recommended)" | P29 |
+| Case 5. A title cut at its limit | "Discard a cut title (Recommended)" | P30 |
+| Case 7. What the line shows | "gobble's basis, wire value (Recommended)" | P31 |
+| Case 9. A failed call, and a loaded or forked session | "Show what was asked, marked (Recommended)" | P32 |
+
+### Stale claims corrected
+
+* **F21 and P8.** The red list is far longer than five tests: every test that streams through `wireStream`
+  (`llm/provider/wire_test.go:131-156`) on a Claude or OpenCode messages-route case sends no limit, and is refused at the tag.
+  `wireStream`'s callers are `TestWireDeferral`, `TestDeferralAfterCancelledTurn`, `TestWireDeferralGrokCall`
+  (`deferral_test.go`), `TestWireLimits`, `TestWireLongWaitIsNotAWindow` (`limit_test.go`), `TestWireOffline`,
+  `TestWireEmptyAnswer` (`offline_test.go`), `TestWireRefusal` (`refusal_test.go`), `TestWireReplay` (`replay_test.go`),
+  `TestWireCases`, `TestWireRateLimitResets`, `TestWireOverflowSplit`, `TestWireToolResultError` and `TestWireStrict`
+  (`wire_test.go`), by a scan of `llm/provider/*_test.go` (`<scratch>/g-pin133/wiretests.py`). P8 is re-pointed: the fix is
+  one line in the helper, `wireStream` setting `req.MaxTokens = llm.AssumedMaxTokens` when the request names none (beside
+  `req.Model = model`, `:137`), which covers every caller, `wireRequest()`'s (`:158-160`) and the others' alike; the direct
+  `New` sites F21 names (`record_test.go:381`, `:484`, `replay_test.go:184`, `:206`, `workspace_test.go:18`) take the same
+  value. No test or golden asserts a sent 8,192 (`git grep` over `llm/provider/*_test.go` and both `testdata` trees: none).
+* **F24.** A remembered cap is sent on a route where the SDK chooses the limit (Claude, OpenCode's messages route, Kilo) when no
+  other source states the model's output, and on an optional route it only cuts a given `WithMaxTokens`
+  (`limit_observation.go:39-43`). gobble names every limit, so neither use reaches its calls; the conclusion stands, and Q6's
+  answer replaces `WithLimitObservations` with a caller layer (P24).
+* **P4.** `chatserver_test.go:122` sets `ModelMetadataURL` to a closed address (`http://127.0.0.1:1/v1/meta.json`) and serves
+  no document; its fix is to delete the field, not to hand bytes in.
+* **The DL39 premise.** The SDK's drop of a kept cap that a response's output exceeds (DL39) acts on its process memo only
+  (`internal/limitmemo/limitmemo.go:134`; each provider's `observe`, such as `providers/kilo/kilo.go:531`), not on a caller's
+  layer. A saved cap handed as a layer is therefore not dropped by the SDK; gobble drops it itself (P25), which carries out the
+  owner's answer as intended.
+
+### Decided
+
+* **P6 (Q5).** Production's listings get the built-in 2026-10-14 copy as `Options.ModelData`; the lookups and limits calls keep
+  it as today's layer; `New` and the wizard hand none.
+* **P21 and P24 (Q6).** `provider.Options.Observations` (the saved caps of the provider being looked up or built) becomes an
+  unexported `catalog.Layer` named "service-stated", stating only `FieldMaxOutputTokens`, for an entry whose model matches in
+  lower case, whose base URL and scope are the options' and whose `Seen` is within 24 hours. It is handed with
+  `catalog.WithModelLayer` before the models.json layer, so it ranks under it (`catalog/limits.go:336-345`), to every
+  `modelInfoFrom` lookup, every `CachedLimits`, `provider.Discover`'s `LookupLimits` and every `New`. The SDK's ranking then
+  applies it: a caller's layer outranks the listing and the document. `WithLimitObservations` is not passed.
+* **P25.** When a call that completes reports output tokens above a saved cap of its provider, model, base URL and scope, the
+  store drops that entry, as the SDK's DL39 drops its memo's.
+* **P26.** Each saved cap carries its provider id; `internal/cli` hands each provider only its own.
+* **P27.** On load, an entry with no provider, no model, `Tokens` below 1 or a zero `Seen` is dropped, with one warning per run,
+  as S13 says of an unreadable file.
+* **P28 (case 10).** When models.json's `maxTokens` is above a cap a service stated (this process's "observed" evidence, to
+  which the SDK already holds the chosen value, `catalog/limits.go:450-475`; or a saved cap, which ranks below models.json),
+  gobble sends the service's cap, basis `service` ("the cap the service stated"), and says once per session and model:
+  "models.json asks for N output tokens for MODEL; the service stated M, which gobble sends." (personality key
+  `model.limit.user_over`). For a saved cap this is the one rule gobble adds: the chosen models.json value is held to the
+  "service-stated" evidence below it.
+* **P29 (case 4).** A Chat Completions or Messages answer with text and then a cut call is, at the tag, a `length` response
+  with the text and a `tool_call_cut` warning: the turn ends `max_tokens`, its text kept, the warning logged, and the user told
+  with `turn.stop.max_tokens_tool` (0065 D7's key; 0065 R21 and R25 left its line unwritten, so it is decided here): "The reply
+  hit the output limit while writing a tool call, so the call was dropped. Ask again, or set maxTokens for MODEL in
+  models.json." The channel is 0065 D8's: an ACP agent message after the stop, the CLI's line, headless print and JSON. A reply
+  that is only a cut call stays the raw `llm.ErrIncomplete` (`ErrEmptyAnswer`).
+* **P30 (case 5).** A title whose call ends `max_tokens` is not used, as a summary's is not (`compaction/compaction.go:556-558`):
+  its usage is written, the session takes no name from it, and the title's error is logged.
+* **P31 (case 7).** The line shows the wire's tokens with gobble's own basis. An SDK basis other than `request` or `none` is
+  logged at warn once per session and model and shown raw, as `sdk:<basis>`. "Refusal" has one meaning in gobble's words: its
+  `refusal` basis, a limit held to a room or cap a service stated in the turn; the SDK's `refusal` can appear only raw, as
+  `sdk:refusal`.
+* **P32 (case 9).** A call that fails shows the value asked, marked: "Output limit: N tokens asked on the last call, which
+  failed (basis words)"; `_meta.gobble.outputLimit` carries it with `asked: true`. A loaded or forked session shows D10's "none
+  sent yet" line until its first call in this process.
+* **P33 (review gap 1).** `CachedLimits` and `LookupLimits` get the session's credential (`llmprovider.WithTokenSource`, the
+  stored login or the key, `llm/provider/model.go:82-90`) and `llmprovider.WithClientInfo`, so they key the cached listing as
+  the lookup does (`catalog/limits.go:208-214`).
+* **P34 (review gap 6).** Compaction's ladder (`compaction/compaction.go:415-422`) and the title read `llm.APIError.Observed`
+  first, as the turn does (P19): one resend at it, the cap saved. D8 (c)'s check (`acpserver/outputlimit.go:123`) also reads a
+  refused-again call by `Observed`, since a form `llm.ReadLimitRefusal` does not read, Kilo's range form
+  ("限制数值范围[1,M]", the SDK's 0089 DL95), arrives only as `Observed`.
+* **P35 (review gap 8).** A call with nothing sent carries `{tokens: 0, basis: "none"}` through `turnMeta`
+  (`acpserver/agent.go:914`, which today keeps only `Tokens > 0`) and `acpclient` (`acpclient/conn.go:353`, likewise).
+* **P19, re-pointed.** The saved caps reach later runs by P24's layer, not by `WithLimitObservations`.
+* **P23, re-pointed.** Added: `llm.BasisService`, `personality.TurnStopMaxTokensTool`, the `model.limit.user_over` key,
+  `acpclient.OutputLimit.Asked`. Dropped: `llm.BasisRemembered`.
+
+### State table: the answers and the review
+
+| Row | Input or state | Status | Outcome | Test | Decided by |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| P6 | *(decided 2026-11-25)* The document before 0072 | decided | the built-in copy to the listings only | `TestListingRanksByBuiltInCopy_0071` | Q5 |
+| P21 | *(decided 2026-11-25)* A saved cap on the next run | decided | a caller layer below models.json; the SDK ranks it | `TestSavedCapLayer_0071` | Q6 |
+| P24 | Where the saved caps' layer reaches | decided | every lookup, `CachedLimits`, `Discover` and `New` | `TestSavedCapLayer_0071` (`lookup`, `limits`, `discover`, `new`) | Q6; P24 |
+| P25 | A completed call's output above a saved cap | decided | the entry dropped | `TestSavedCapDroppedWhenExceeded_0071` | Q6; P25 |
+| P26 | A saved cap and another provider | decided | handed only to its own | `TestSavedCapPerProvider_0071` (an opencode-zen cap is not handed to claude) | P26 |
+| P27 | A readable file with a bad entry | decided | the entry dropped; one warning | `TestAgent_UnreadableObservations_0066/bad_entry` | P27; 0066 S13 |
+| P28 | models.json `maxTokens` above a service's cap | decided | the service's cap, basis `service`; one note | `TestTurnCapFromLimits_0071/user_over_observed`, `/user_over_saved` | case 10 |
+| P29 | Text, then a cut call | decided | `max_tokens`, text kept, logged, `turn.stop.max_tokens_tool`; only a cut call: the raw error | `TestCutCallAfterText_0071` (`chat`, `messages`), `TestOnlyCutCall_0071` | case 4 |
+| P30 | A title cut at its limit | decided | not used | `TestTitleCutDiscarded_0071` | case 5 |
+| P31 | The line's tokens and basis | decided | wire tokens, gobble's basis; another SDK basis raw and logged | `TestContextShowsSentLimit_0071/sdk_basis_raw` | case 7 |
+| P32 | A failed call; a loaded or forked session | decided | "asked", marked; D10's line until a call | `TestContextShowsSentLimit_0071/failed_asked`, `/loaded_session`, `/forked_session` | case 9 |
+| P33 | The credential of a limits read | decided | the session's token source and client info | `TestTurnCapFromLimits_0071/listing_only` | P33 |
+| P34 | Compaction, the title and the line on `Observed` | decided | one resend at it, saved; the line reads it | `TestSummaryCapRefusalResent_0071/observed`, `TestTitleObservedResent_0071`, `TestAPIErrorCarriesObserved_0071/kilo_range`, `TestLimitRefusalLine_0071/refused_again_observed` | P34 |
+| P35 | A call with nothing sent, over ACP | decided | `{0, "none"}` in `_meta` and `acpclient` | `TestPromptResponseOutputLimit_0071/none` | P35 |
+
+Counts after this amendment: 83 decided, 7 out of scope, 0 open; 90 rows (P6 and P21 decided; P24 to P35 added).
